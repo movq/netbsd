@@ -1,4 +1,4 @@
-/*	$NetBSD: tree.c,v 1.1 1998/10/05 18:01:58 tron Exp $	*/
+/*	$NetBSD: tree.c,v 1.1.1.1 1998/10/05 18:01:58 tron Exp $	*/
 
 #ifndef LINT
 static char RCSid[] = "Id: tree.c,v 8.6 1997/09/26 17:56:11 halley Exp";

@@ -1,4 +1,4 @@
-/*	$NetBSD: ns_glue.c,v 1.1 1998/10/05 18:02:00 tron Exp $	*/
+/*	$NetBSD: ns_glue.c,v 1.1.1.1 1998/10/05 18:02:00 tron Exp $	*/
 
 #if !defined(lint) && !defined(SABER)
 static char rcsid[] = "Id: ns_glue.c,v 8.7 1998/02/13 19:51:45 halley Exp";

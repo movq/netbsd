@@ -1,4 +1,4 @@
-/*	$NetBSD: db_glue.c,v 1.1 1998/10/05 18:02:00 tron Exp $	*/
+/*	$NetBSD: db_glue.c,v 1.1.1.1 1998/10/05 18:02:00 tron Exp $	*/
 
 #if !defined(lint) && !defined(SABER)
 static char sccsid[] = "@(#)db_glue.c	4.4 (Berkeley) 6/1/90";

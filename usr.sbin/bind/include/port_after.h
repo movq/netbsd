@@ -1,4 +1,4 @@
-/*	$NetBSD: port_after.h,v 1.1 1998/10/05 18:01:58 tron Exp $	*/
+/*	$NetBSD: port_after.h,v 1.1.1.1 1998/10/05 18:01:58 tron Exp $	*/
 
 #define CAN_RECONNECT
 #define USE_POSIX

@@ -1,4 +1,4 @@
-/*	$NetBSD: pathnames.h,v 1.1 1998/10/05 18:02:00 tron Exp $	*/
+/*	$NetBSD: pathnames.h,v 1.1.1.1 1998/10/05 18:02:00 tron Exp $	*/
 
 /*
  *	Id: pathtemplate.h,v 8.1 1998/03/19 19:53:21 halley Exp

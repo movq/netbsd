@@ -1,4 +1,4 @@
-/*	$NetBSD: ns_lexer.c,v 1.1 1998/10/05 18:02:00 tron Exp $	*/
+/*	$NetBSD: ns_lexer.c,v 1.1.1.1 1998/10/05 18:02:00 tron Exp $	*/
 
 #if !defined(lint) && !defined(SABER)
 static char rcsid[] = "Id: ns_lexer.c,v 8.12 1997/12/04 08:11:52 halley Exp";

@@ -1,4 +1,4 @@
-/*	$NetBSD: herror.c,v 1.1 1998/10/05 18:01:58 tron Exp $	*/
+/*	$NetBSD: herror.c,v 1.1.1.1 1998/10/05 18:01:58 tron Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993

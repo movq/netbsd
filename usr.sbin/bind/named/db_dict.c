@@ -1,4 +1,4 @@
-/*	$NetBSD: db_dict.c,v 1.1 1998/10/05 18:02:00 tron Exp $	*/
+/*	$NetBSD: db_dict.c,v 1.1.1.1 1998/10/05 18:02:00 tron Exp $	*/
 
 #if !defined(lint) && !defined(SABER)
 static char rcsid[] = "Id: db_dict.c,v 8.1 1997/09/26 17:55:40 halley Exp";

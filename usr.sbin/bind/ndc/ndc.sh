@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-#	$NetBSD: ndc.sh,v 1.1 1998/10/05 18:02:00 tron Exp $
+#	$NetBSD: ndc.sh,v 1.1.1.1 1998/10/05 18:02:00 tron Exp $
 
 USAGE='echo \
 	"usage: $0 \

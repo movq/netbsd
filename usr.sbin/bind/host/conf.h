@@ -1,4 +1,4 @@
-/*	$NetBSD: conf.h,v 1.1 1998/10/05 18:01:59 tron Exp $	*/
+/*	$NetBSD: conf.h,v 1.1.1.1 1998/10/05 18:01:59 tron Exp $	*/
 
 /*
 ** Various configuration definitions.

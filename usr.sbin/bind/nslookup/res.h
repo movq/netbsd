@@ -1,4 +1,4 @@
-/*	$NetBSD: res.h,v 1.1 1998/10/05 18:01:59 tron Exp $	*/
+/*	$NetBSD: res.h,v 1.1.1.1 1998/10/05 18:01:59 tron Exp $	*/
 
 /*
  * ++Copyright++ 1985, 1989
