@@ -1,4 +1,4 @@
-| $NetBSD: fastboot,v 1.1 2002/05/09 20:03:58 jdolecek Exp $
+| $NetBSD: fastboot,v 1.1.1.1 2002/05/09 20:03:58 jdolecek Exp $
 |
 | Fast boot configuration file, edit by hand, save and run !BtNetBSD
 | Part of !BtNetBSD

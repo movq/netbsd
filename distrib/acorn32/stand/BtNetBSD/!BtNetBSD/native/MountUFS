@@ -1,5 +1,5 @@
 REM >Mountufs
-REM $NetBSD: MountUFS,v 1.1 2002/05/09 20:03:59 jdolecek Exp $
+REM $NetBSD: MountUFS,v 1.1.1.1 2002/05/09 20:03:59 jdolecek Exp $
 REM
 REM Copyright (c) 1997 Mark Brinicombe
 REM All rights reserved
