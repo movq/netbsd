@@ -1,4 +1,4 @@
-/*	$NetBSD: de-kbdmap.c,v 1.1 1996/06/22 20:14:12 leo Exp $	*/
+/*	$NetBSD: de-kbdmap.c,v 1.1.1.1 1996/06/22 20:14:12 leo Exp $	*/
 
 /*
  * Contributed by Thomas Gerner
