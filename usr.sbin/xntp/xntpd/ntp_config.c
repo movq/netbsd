@@ -3,7 +3,6 @@
  */
 #include <stdio.h>
 #include <ctype.h>
-#include <sys/param.h>
 #include <sys/types.h>
 #include <signal.h>
 #if !defined(VMS)
@@ -1067,7 +1066,7 @@ getconfig(argc, argv)
 			peerversion = 0;
 			peerkey = 0;
 			errflg = 0;
-			maskaddr.sin_addr.s_addr = (u_int32_t) ~ (u_long) 0;
+			maskaddr.sin_addr.s_addr = ~ (u_long) 0;
 			for (i = 2; i < ntokens; i++) {
 				switch (matchkey(tokens[i], res_keywords)) {
 				case CONF_RES_MASK:
@@ -1878,18 +1877,8 @@ save_resolve(name, mode, version, minpoll, maxpoll, flags, ttl, keyid)
 			(void) strcat(res_file, "xntpdXXXXXX");
 		}
 #endif /* SYS_WINNT */
-#ifdef BSD4_4
-		{
-			int fd;
-
-			res_fp = NULL;
-			if ((fd = mkstemp(res_file)) != -1)
-				res_fp = fdopen(fd, "w");
-		}
-#else
 		(void) mktemp(res_file);
 		res_fp = fopen(res_file, "w");
-#endif
 		if (res_fp == NULL) {
 			msyslog(LOG_ERR, "open failed for %s: %m", res_file);
 			return;

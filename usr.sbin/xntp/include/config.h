@@ -82,31 +82,31 @@
 /* #undef BANC */
 
 /* ELV/DCF7000 clock */
-#define CLOCK_DCF7000
+/* #undef CLOCK_DCF7000 */
 
 /* HOPF 6021 clock */
-#define CLOCK_HOPF6021
+/* #undef CLOCK_HOPF6021 */
 
 /* Meinberg clocks */
-#define CLOCK_MEINBERG
+/* #undef CLOCK_MEINBERG */
 
 /* DCF77 raw time code */
-#define CLOCK_RAWDCF
+/* #undef CLOCK_RAWDCF */
 
 /* RCC 8000 clock */
-#define CLOCK_RCC8000
+/* #undef CLOCK_RCC8000 */
 
 /* Schmid DCF77 clock */
-#define CLOCK_SCHMID
+/* #undef CLOCK_SCHMID */
 
 /* Trimble GPS receiver/TAIP protocol */
-#define CLOCK_TRIMTAIP
+/* #undef CLOCK_TRIMTAIP */
 
 /* Trimble GPS receiver/TSIP protocol */
-#define CLOCK_TRIMTSIP
+/* #undef CLOCK_TRIMTSIP */
 
 /* Diems Computime Radio Clock */
-#define CLOCK_COMPUTIME
+/* #undef CLOCK_COMPUTIME */
 
 /* Datum Programmable Time System */
 #define DATUM 1
@@ -133,13 +133,13 @@
 #define MSFEES 1
 
 /* Magnavox MX4200 GPS receiver */
-#define MX4200
+/* #undef MX4200 */
 
 /* NMEA GPS receiver */
 #define NMEA 1
 
 /* PARSE driver interface */
-#define PARSE
+/* #undef PARSE */
 
 /* PARSE kernel PLL PPS support */
 /* #undef PPS_SYNC */
@@ -187,7 +187,7 @@
 /* #undef NEED_HPUX_FINDCONFIG */
 
 /* canonical system (cpu-vendor-os) string */
-#define STR_SYSTEM "i386-unknown-netbsd1.3"
+#define STR_SYSTEM "i386-unknown-netbsd1.2D"
 
 /* define if [gs]ettimeofday() only takes 1 argument */
 /* #undef SYSV_TIMEOFDAY */
@@ -232,7 +232,7 @@
 /* #undef UDP_BACKWARDS_SETOWN */
 
 /* must we have a CTTY for fsetown? */
-#define USE_FSETOWNCTTY
+/* #undef USE_FSETOWNCTTY */
 
 /* can we use SIGIO for tcp and udp IO? */
 #define HAVE_SIGNALED_IO 1
@@ -633,9 +633,6 @@
 
 /* Define if you have the kvm library (-lkvm).  */
 #define HAVE_LIBKVM 1
-
-/* Define if you have sysctl() to get the clockrate */
-#define HAVE_SYSCTL_CLOCKRATE 1
 
 /* Define if you have the ld library (-lld).  */
 /* #undef HAVE_LIBLD */

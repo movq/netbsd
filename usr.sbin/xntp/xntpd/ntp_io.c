@@ -113,9 +113,9 @@ static int sigio_block_count = 0;
 volatile u_long full_recvbufs;		/* number of recvbufs on fulllist */
 volatile u_long free_recvbufs;		/* number of recvbufs on freelist */
 
-static	struct recvbuf *volatile freelist;	/* free buffers */
-static	struct recvbuf *volatile fulllist;	/* lifo buffers with data */
-static	struct recvbuf *volatile beginlist;	/* fifo buffers with data */
+volatile static	struct recvbuf *freelist;	/* free buffers */
+volatile static	struct recvbuf *fulllist;	/* lifo buffers with data */
+volatile static	struct recvbuf *beginlist;	/* fifo buffers with data */
 
 u_long total_recvbufs;		/* total recvbufs currently in use */
 u_long lowater_additions;	/* number of times we have added memory */
@@ -207,7 +207,7 @@ init_io()
   freelist = 0;
   for (i = 0; i < RECV_INIT; i++)
     {
-      initial_bufs[i].next = (struct recvbuf *) freelist;
+      initial_bufs[i].next = freelist;
       freelist = &initial_bufs[i];
     }
 
@@ -287,7 +287,7 @@ create_sockets(port)
   inter_list[0].sin.sin_addr.s_addr = htonl(INADDR_ANY);
   (void) strncpy(inter_list[0].name, "wildcard",
 		 sizeof(inter_list[0].name));
-  inter_list[0].mask.sin_addr.s_addr = htonl((u_int32_t) ~ (u_long)0);
+  inter_list[0].mask.sin_addr.s_addr = htonl(~ (u_long)0);
   inter_list[0].received = 0;
   inter_list[0].sent = 0;
   inter_list[0].notsent = 0;
@@ -637,7 +637,7 @@ create_sockets(port)
   /*
    * Blacklist all bound interface addresses
    */
-  resmask.sin_addr.s_addr = (u_int32_t) ~ (u_long)0;
+  resmask.sin_addr.s_addr = ~ (u_long)0;
   for (i = 1; i < ninterfaces; i++)
     restrict(RESTRICT_FLAGS, &inter_list[i].sin, &resmask,
 	     RESM_NTPONLY|RESM_INTERFACE, RES_IGNORE);
@@ -1124,7 +1124,7 @@ getrecvbufs()
   if (debug > 4)
     printf("getrecvbufs returning %ld buffers\n", full_recvbufs);
 #endif
-  rb = (struct recvbuf *) beginlist;
+  rb = beginlist;
   fulllist = 0;
   full_recvbufs = 0;
 
@@ -1145,7 +1145,7 @@ getrecvbufs()
 	    emalloc(RECV_INC*sizeof(struct recvbuf));
 	  for (i = 0; i < RECV_INC; i++)
 	    {
-	      buf->next = (struct recvbuf *) freelist;
+	      buf->next = freelist;
 	      freelist = buf;
 	      buf++;
 	    }
@@ -1172,7 +1172,7 @@ freerecvbuf(rb)
      struct recvbuf *rb;
 {
   BLOCKIO();
-  rb->next = (struct recvbuf *) freelist;
+  rb->next = freelist;
   freelist = rb;
   free_recvbufs++;
   UNBLOCKIO();
@@ -1396,7 +1396,7 @@ input_handler(cts)
 #endif
 			}
 
-		      rb = (struct recvbuf *) freelist;
+		      rb = freelist;
 		      freelist = rb->next;
 		      free_recvbufs--;
 
@@ -1415,7 +1415,7 @@ input_handler(cts)
 		      if (rb->recv_length == -1)
 			{
 			  msyslog(LOG_ERR, "clock read fd %d: %m", fd);
-			  rb->next = (struct recvbuf *) freelist;
+			  rb->next = freelist;
 			  freelist = rb;
 			  free_recvbufs++;
 #if 1
@@ -1533,7 +1533,7 @@ input_handler(cts)
 			    }
 			}
 
-		      rb = (struct recvbuf *) freelist;
+		      rb = freelist;
 
 		      fromlen = sizeof(struct sockaddr_in);
 		      rb->recv_length = recvfrom(fd,
