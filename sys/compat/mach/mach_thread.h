@@ -1,4 +1,4 @@
-/*	$NetBSD: mach_thread.h,v 1.3 2002/12/12 00:29:24 manu Exp $ */
+/*	$NetBSD: mach_thread.h,v 1.4 2002/12/12 23:18:22 manu Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -47,12 +47,19 @@
 #include <compat/mach/mach_types.h>
 #include <compat/mach/mach_message.h>
 
+/* For mach_create_thread_child() */
 struct mach_create_thread_child_args {
 	struct proc **mctc_proc;
 	int mctc_flavor;
 	mach_natural_t *mctc_state;
 	int mctc_child_done;
 };
+
+/* For mach_sys_syscall_thread_switch() */
+#define MACH_SWITCH_OPTION_NONE	0
+#define MACH_SWITCH_OPTION_DEPRESS	1
+#define MACH_SWITCH_OPTION_WAIT	2
+#define MACH_SWITCH_OPTION_IDLE	3
 
 /* thread_policy */
 typedef int mach_policy_t;
