@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_syscall.c,v 1.3 2002/10/30 18:34:15 matt Exp $ */
+/*	$NetBSD: linux_syscall.c,v 1.4 2002/11/03 23:17:18 manu Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -39,7 +39,20 @@
 #include "opt_compat_linux.h"
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: linux_syscall.c,v 1.3 2002/10/30 18:34:15 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_syscall.c,v 1.4 2002/11/03 23:17:18 manu Exp $");
+
+#include <sys/types.h>
+#include <sys/param.h>
+#include <sys/signal.h>
+#include <sys/proc.h>
+
+#include <compat/linux/linux_syscall.h>
+#include <compat/linux/common/linux_types.h>
+#include <compat/linux/common/linux_errno.h>
+#include <compat/linux/common/linux_signal.h>
+#include <compat/linux/common/linux_siginfo.h>
+#include <compat/linux/arch/powerpc/linux_siginfo.h>
+#include <compat/linux/arch/powerpc/linux_machdep.h>
 
 #define EMULNAME(x)	__CONCAT(linux_,x)
 #define EMULNAMEU(x)	__CONCAT(LINUX_,x)
