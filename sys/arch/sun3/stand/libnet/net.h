@@ -1,4 +1,4 @@
-/*	$NetBSD: net.h,v 1.1 1995/06/09 22:26:18 gwr Exp $	*/
+/*	$NetBSD: net.h,v 1.1.1.1 1995/06/09 22:26:18 gwr Exp $	*/
 
 /*
  * Copyright (c) 1993 Adam Glass 
