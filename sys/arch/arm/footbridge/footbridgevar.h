@@ -1,4 +1,4 @@
-/*	$NetBSD: footbridgevar.h,v 1.1 2001/06/09 10:29:13 chris Exp $	*/
+/*	$NetBSD: footbridgevar.h,v 1.2 2002/02/10 12:26:00 chris Exp $	*/
 
 /*
  * Copyright (c) 1997 Mark Brinicombe.
@@ -37,7 +37,7 @@
 #include <machine/bus.h>
 #include <machine/rtc.h>
 #include <dev/pci/pcivar.h>
-#include <arm32/dev/todclockvar.h>
+#include <arm/footbridge/todclockvar.h>
 
 /*
  * DC21285 softc structure.
