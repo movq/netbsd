@@ -1,4 +1,4 @@
-/*	$NetBSD: ibcs2_machdep.c,v 1.3 2002/07/04 23:32:08 thorpej Exp $	*/
+/*	$NetBSD: ibcs2_machdep.c,v 1.4 2003/01/18 07:10:34 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -54,13 +54,13 @@
 #include <compat/ibcs2/ibcs2_signal.h>
 
 void
-ibcs2_setregs(p, epp, stack)
-	struct proc *p;
+ibcs2_setregs(l, epp, stack)
+	struct lwp *l;
 	struct exec_package *epp;
 	u_long stack;
 {
 	/* Don't need to anything special */
-	setregs(p, epp, stack);
+	setregs(l, epp, stack);
 }
 
 /*
