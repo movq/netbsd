@@ -1,4 +1,4 @@
-/*	$NetBSD: dh.c,v 1.1 2001/01/14 04:51:06 itojun Exp $	*/
+/*	$NetBSD: dh.c,v 1.1.1.1 2001/01/14 04:51:06 itojun Exp $	*/
 
 /*
  * Copyright (c) 2000 Niels Provos.  All rights reserved.
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: dh.c,v 1.1 2001/01/14 04:51:06 itojun Exp $");
+__RCSID("$NetBSD: dh.c,v 1.1.1.1 2001/01/14 04:51:06 itojun Exp $");
 #endif
 
 #include "includes.h"
