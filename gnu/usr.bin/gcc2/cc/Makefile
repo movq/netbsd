@@ -1,13 +1,14 @@
-#       @(#)Makefile    6.2 (Berkeley) 3/25/91
+#	from: @(#)Makefile    6.2 (Berkeley) 3/25/91
+#	$Id: Makefile,v 1.6 1993/08/23 09:22:27 cgd Exp $
+
 PROG=           cc
 SRCS=           gcc.c version.c obstack.c
 MAN1=		gcc.0 g++.0
 BINDIR=		/usr/bin
 CFLAGS+=        -I$(.CURDIR) -I$(.CURDIR)/../common \
-                 -I$(.CURDIR)/.. -I$(.CURDIR)/../$(MACHINE)
+                 -I$(.CURDIR)/../arch -I$(.CURDIR)/../arch/$(MACHINE)
 
-LINKS+=	${DESTDIR}${BINDIR}/cc ${DESTDIR}${BINDIR}/gcc
-LINKS+=	${DESTDIR}${BINDIR}/g++ ${DESTDIR}${BINDIR}/c++
+LINKS+=	${BINDIR}/cc ${BINDIR}/gcc
 MLINKS=	gcc.1 cc.1  g++.1 c++.1
 
 .PATH:          $(.CURDIR)/../common 
@@ -15,4 +16,7 @@ MLINKS=	gcc.1 cc.1  g++.1 c++.1
 afterinstall:
 	install -c -o $(BINOWN) -g $(BINGRP) -m $(BINMODE) \
 		$(.CURDIR)/g++.script $(DESTDIR)$(BINDIR)/g++
+	@/bin/rm -rf ${DESTDIR}${BINDIR}/c++
+	@ln ${DESTDIR}${BINDIR}/g++ ${DESTDIR}${BINDIR}/c++
+	@echo ${DESTDIR}${BINDIR}/g++ -\> ${DESTDIR}${BINDIR}/c++
 .include <bsd.prog.mk>

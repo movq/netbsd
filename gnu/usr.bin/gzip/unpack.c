@@ -5,7 +5,7 @@
  */
 
 #ifndef lint
-static char rcsid[] = "$Id: unpack.c,v 1.1 1993/07/09 15:47:39 jtc Exp $";
+static char rcsid[] = "$Id: unpack.c,v 1.1.1.1 1993/07/09 15:47:40 jtc Exp $";
 #endif
 
 #include "tailor.h"

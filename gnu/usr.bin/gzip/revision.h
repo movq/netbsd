@@ -13,4 +13,4 @@
 #  undef LZW
 #endif
 
-/* $Id: revision.h,v 1.1 1993/07/09 15:47:39 jtc Exp $ */
+/* $Id: revision.h,v 1.1.1.1 1993/07/09 15:47:40 jtc Exp $ */

@@ -60,7 +60,7 @@
 #endif
 
 #ifndef lint
-static char rcsid[] = "$Id: bits.c,v 1.1 1993/07/09 15:47:37 jtc Exp $";
+static char rcsid[] = "$Id: bits.c,v 1.1.1.1 1993/07/09 15:47:38 jtc Exp $";
 #endif
 
 /* ===========================================================================
