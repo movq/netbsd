@@ -27,7 +27,7 @@ improvements or extensions that  they  make,  and  to  grant  Carnegie
 Mellon the rights to redistribute these changes without encumbrance.
 */
 
-/* $Header: /cvsroot/src/sys/coda/coda_venus.c,v 1.1 1998/08/29 21:26:45 rvb Exp $ */
+/* $Header: /cvsroot/src/sys/coda/coda_venus.c,v 1.1.1.1 1998/08/29 21:26:45 rvb Exp $ */
 
 #include <sys/param.h>
 #include <sys/systm.h>

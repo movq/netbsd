@@ -27,7 +27,7 @@ improvements or extensions that  they  make,  and  to  grant  Carnegie
 Mellon the rights to redistribute these changes without encumbrance.
 */
 
-/* $Header: /cvsroot/src/sys/cfs/Attic/cfsk.h,v 1.1 1998/08/29 21:26:46 rvb Exp $ */
+/* $Header: /cvsroot/src/sys/cfs/Attic/cfsk.h,v 1.1.1.1 1998/08/29 21:26:46 rvb Exp $ */
 
 /* Macros to manipulate the queue */
 #ifndef INIT_QUEUE
