@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-#	$NetBSD: install.sh,v 1.1 1995/10/08 23:07:50 gwr Exp $
+#	$NetBSD: install.sh,v 1.1.1.1 1995/10/08 23:07:50 gwr Exp $
 #
 # Copyright (c) 1994 Christopher G. Demetriou
 # All rights reserved.

@@ -1,4 +1,4 @@
-#	$NetBSD: RunList.awk,v 1.1 1995/10/08 23:07:46 gwr Exp $
+#	$NetBSD: RunList.awk,v 1.1.1.1 1995/10/08 23:07:46 gwr Exp $
 
 BEGIN {
 	printf("cd ${CURDIR}\n");
