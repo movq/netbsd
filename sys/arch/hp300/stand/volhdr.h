@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 1988 University of Utah.
- * Copyright (c) 1990 The Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1990, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * the Systems Programming Group of the University of Utah Computer
@@ -35,8 +35,9 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)volhdr.h	7.1 (Berkeley) 5/8/90
- *	$Id: volhdr.h,v 1.2 1993/05/22 07:59:26 cgd Exp $
+ * from: @(#)volhdr.h	8.1 (Berkeley) 6/10/93
+ *
+ * $Id: volhdr.h,v 1.3 1994/01/26 02:39:04 brezak Exp $
  */
 
 /*
