@@ -29,7 +29,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID)
-__RCSID("$Id: ipwctl.c,v 1.1 2004/08/23 11:46:18 lukem Exp $");
+__RCSID("$Id: ipwctl.c,v 1.1.1.1 2004/08/23 11:46:18 lukem Exp $");
 #else
 #ifndef lint
 static char rcsid[] = "Id: ipwctl.c,v 1.1.2.1 2004/08/19 16:24:50 damien Exp ";
