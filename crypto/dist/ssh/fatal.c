@@ -1,4 +1,4 @@
-/*	$NetBSD: fatal.c,v 1.1 2002/03/08 01:20:41 itojun Exp $	*/
+/*	$NetBSD: fatal.c,v 1.1.1.1 2002/03/08 01:20:41 itojun Exp $	*/
 /*
  * Copyright (c) 2002 Markus Friedl.  All rights reserved.
  *
