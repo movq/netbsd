@@ -1,4 +1,4 @@
-/*	$NetBSD: uk-kbdmap.c,v 1.1.1.1 1995/07/03 20:49:40 leo Exp $	*/
+/*	$NetBSD: uk-kbdmap.c,v 1.1 1995/07/03 20:49:40 leo Exp $	*/
 
 #include "../../dev/kbdmap.h"
 

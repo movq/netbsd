@@ -1,4 +1,4 @@
-/*	$NetBSD: fdboot.s,v 1.1.1.1 1996/02/29 11:36:52 leo Exp $	*/
+/*	$NetBSD: fdboot.s,v 1.1 1996/02/29 11:36:52 leo Exp $	*/
 
 /*
  * Copyright (c) 1995 Waldi Ravens.

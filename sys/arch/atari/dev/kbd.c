@@ -1,4 +1,4 @@
-/*	$NetBSD: kbd.c,v 1.6 1996/02/22 10:11:32 leo Exp $	*/
+/*	$NetBSD: kbd.c,v 1.1 1995/03/26 07:12:12 leo Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman
@@ -55,14 +55,12 @@
 #include <atari/dev/event_var.h>
 #include <atari/dev/vuid_event.h>
 
-#include "mouse.h"
-
 /*
  * The ringbuffer is the interface between the hard and soft interrupt handler.
  * The hard interrupt runs straight from the MFP interrupt.
  */
-#define KBD_RING_SIZE	256   /* Sz of input ring buffer, must be power of 2 */
-#define KBD_RING_MASK	255   /* Modulo mask for above			     */
+#define KBD_RING_SIZE	16    /* Size of the ring buffer, must be power of 2 */
+#define KBD_RING_MASK	15    /* Modulo mask for above			     */
 
 static u_char		kbd_ring[KBD_RING_SIZE];
 static volatile u_int	kbd_rbput = 0;	/* 'put' index			*/
@@ -73,33 +71,13 @@ struct kbd_softc {
 	int		k_event_mode;	/* if 1, collect events,	*/
 					/*   else pass to ite		*/
 	struct evvar	k_events;	/* event queue state		*/
-	u_char		k_soft_cs;	/* control-reg. copy		*/
-	u_char		k_package[20];	/* XXX package being build	*/
-	u_char		k_pkg_size;	/* Size of the package		*/
-	u_char		k_pkg_idx;
-	u_char		*k_sendp;	/* Output pointer		*/
-	int		k_send_cnt;	/* Chars left for output	*/
 };
 
 static struct kbd_softc kbd_softc;
 
-/* {b,c}devsw[] function prototypes */
-dev_type_open(kbdopen);
-dev_type_close(kbdclose);
-dev_type_read(kbdread);
-dev_type_ioctl(kbdioctl);
-dev_type_select(kbdselect);
-
-/* Interrupt handler */
-void	kbdintr __P((int));
-
-void	kbd_write __P((u_char *, int));
-
 static void kbdsoft __P((void));
 static void kbdattach __P((struct device *, struct device *, void *));
 static int  kbdmatch __P((struct device *, struct cfdata *, void *));
-static int  kbd_write_poll __P((u_char *, int));
-static void kbd_pkg_start __P((struct kbd_softc *, u_char));
 
 struct cfdriver kbdcd = {
 	NULL, "kbd", (cfmatch_t)kbdmatch, kbdattach,
@@ -113,9 +91,9 @@ struct	device *pdp;
 struct	cfdata *cfp;
 void	*auxp;
 {
-	if (!strcmp((char *)auxp, "kbd"))
-		return (1);
-	return (0);
+	if(!strcmp((char *)auxp, "kbd"))
+		return(1);
+	return(0);
 }
 
 /*ARGSUSED*/
@@ -124,82 +102,48 @@ kbdattach(pdp, dp, auxp)
 struct	device *pdp, *dp;
 void	*auxp;
 {
-	int	timeout;
-	u_char	kbd_rst[]  = { 0x80, 0x01 };
-	u_char	kbd_icmd[] = { 0x12, 0x15 };
-
-	/*
-	 * Disable keyboard interrupts from MFP
-	 */
-	MFP->mf_ierb &= ~IB_AINT;
-
-	/*
-	 * Reset ACIA and intialize to:
-	 *    divide by 16, 8 data, 1 stop, no parity, enable RX interrupts
-	 */
-	KBD->ac_cs = A_RESET;
-	delay(100);	/* XXX: enough? */
-	KBD->ac_cs = kbd_softc.k_soft_cs = KBD_INIT | A_RXINT;
-
-	/*
-	 * Clear error conditions
-	 */
-	while (KBD->ac_cs & (A_IRQ|A_RXRDY))
-		timeout = KBD->ac_da;
-
-	/*
-	 * Now send the reset string, and read+ignore it's response
-	 */
-	if (!kbd_write_poll(kbd_rst, 2))
-		printf("kbd: error cannot reset keyboard\n");
-	for (timeout = 1000; timeout > 0; timeout--) {
-		if (KBD->ac_cs & (A_IRQ|A_RXRDY)) {
-			timeout = KBD->ac_da;
-			timeout = 100;
-		}
-		delay(100);
-	}
-	/*
-	 * Send init command: disable mice & joysticks
-	 */
-	kbd_write_poll(kbd_icmd, sizeof(kbd_icmd));
-
 	printf("\n");
 }
 
 /* definitions for atari keyboard encoding. */
-#define KEY_CODE(c)	((u_char)(c) & 0x7f)
-#define KEY_UP(c)	((u_char)(c) & 0x80)
-#define	IS_KEY(c)	((u_char)(c) < 0xf6)
+#define KEY_CODE(c)  ((c) & 0x7f)
+#define KEY_UP(c)    ((c) & 0x80)
 
 void
 kbdenable()
 {
-	int	s, code;
+	int s, code;
 
 	s = spltty();
-
 	/*
-	 * Clear error conditions...
+	 * Initialize ACIA port
 	 */
-	while (KBD->ac_cs & (A_IRQ|A_RXRDY))
-		code = KBD->ac_da;
+	code = KBD->ac_da;	/* Clear error conditions	*/
+
+	/* divide by 16, 8 data, 1 stop, no parity, enable interrupts */
+	KBD->ac_cs = KBD_INIT | A_RXINT;
+#if 0 /* XXX Turn off mouse??? */
+	KBD->ac_da = 0x12;
+#endif
+
 	/*
 	 * Enable interrupts from MFP
 	 */
 	MFP->mf_iprb &= ~IB_AINT;
 	MFP->mf_ierb |= IB_AINT;
 	MFP->mf_imrb |= IB_AINT;
+	code = KBD->ac_da;	/* Clear error conditions	*/
 
 	kbd_softc.k_event_mode   = 0;
 	kbd_softc.k_events.ev_io = 0;
-	kbd_softc.k_pkg_size     = 0;
 	splx(s);
 }
 
 int kbdopen(dev_t dev, int flags, int mode, struct proc *p)
 {
-	if (kbd_softc.k_events.ev_io)
+	int s, error;
+
+	if(kbd_softc.k_events.ev_io)
 		return EBUSY;
 
 	kbd_softc.k_events.ev_io = p;
@@ -223,6 +167,12 @@ kbdread(dev_t dev, struct uio *uio, int flags)
 	return ev_read(&kbd_softc.k_events, uio, flags);
 }
 
+/* this routine should not exist, but is convenient to write here for now */
+int kbdwrite(dev_t dev, struct uio *uio, int flags)
+{
+	return EOPNOTSUPP;
+}
+
 int
 kbdioctl(dev_t dev,u_long cmd,register caddr_t data,int flag,struct proc *p)
 {
@@ -230,7 +180,7 @@ kbdioctl(dev_t dev,u_long cmd,register caddr_t data,int flag,struct proc *p)
 
 	switch (cmd) {
 		case KIOCTRANS:
-			if (*(int *)data == TR_UNTRANS_EVENT)
+			if(*(int *)data == TR_UNTRANS_EVENT)
 				return 0;
 			break;
 
@@ -253,7 +203,7 @@ kbdioctl(dev_t dev,u_long cmd,register caddr_t data,int flag,struct proc *p)
 				return 0;
 
 		case TIOCSPGRP:
-			if (*(int *)data != k->k_events.ev_io->p_pgid)
+			if(*(int *)data != k->k_events.ev_io->p_pgid)
 				return EPERM;
 			return 0;
 
@@ -274,56 +224,31 @@ kbdselect (dev_t dev, int rw, struct proc *p)
 }
 
 /*
- * Keyboard interrupt handler called straight from MFP at spl6.
+ * Keyboard interrupt handler called straight from MFP.
  */
-void
+int
 kbdintr(sr)
 int sr;	/* sr at time of interrupt	*/
 {
 	int	code;
-	int	got_char = 0;
 
 	/*
 	 * There may be multiple keys available. Read them all.
 	 */
-	while (KBD->ac_cs & (A_RXRDY|A_OE|A_PE)) {
-		got_char = 1;
-		if (KBD->ac_cs & (A_OE|A_PE)) {
-			code = KBD->ac_da;	/* Silently ignore errors */
+	while(KBD->ac_cs & (A_IRQ|A_RXRDY)) {
+		if(KBD->ac_cs & (A_OE|A_PE)) {
+			code = KBD->ac_da;	/* Silently ignore overruns */
 			continue;
 		}
 		kbd_ring[kbd_rbput++ & KBD_RING_MASK] = KBD->ac_da;
 	}
-
-	/*
-	 * If characters are waiting for transmit, send them.
-	 */
-	if ((kbd_softc.k_soft_cs & A_TXINT) && (KBD->ac_cs & A_TXRDY)) {
-		if (kbd_softc.k_sendp != NULL)
-			KBD->ac_da = *kbd_softc.k_sendp++;
-		if (--kbd_softc.k_send_cnt <= 0) {
-			/*
-			 * The total package has been transmitted,
-			 * wakeup anyone waiting for it.
-			 */
-			KBD->ac_cs = (kbd_softc.k_soft_cs &= ~A_TXINT);
-			kbd_softc.k_sendp    = NULL;
-			kbd_softc.k_send_cnt = 0;
-			wakeup((caddr_t)&kbd_softc.k_send_cnt);
-		}
+	if(!BASEPRI(sr)) {
+		if(!kbd_soft++)
+			add_sicallback(kbdsoft, 0, 0);
 	}
-
-	/*
-	 * Activate software-level to handle possible input.
-	 */
-	if (got_char) {
-		if (!BASEPRI(sr)) {
-			if (!kbd_soft++)
-				add_sicallback(kbdsoft, 0, 0);
-		} else {
-			spl1();
-			kbdsoft();
-		}
+	else {
+		spl1();
+		kbdsoft();
 	}
 }
 
@@ -343,48 +268,23 @@ kbdsoft()
 	kbd_soft = 0;
 	get      = kbd_rbget;
 
-	for (;;) {
+	for(;;) {
 		n = kbd_rbput;
-		if (get == n) /* We're done	*/
+		if(get == n) /* We're done	*/
 			break;
 		n -= get;
-		if (n > KBD_RING_SIZE) { /* Ring buffer overflow	*/
+		if(n > KBD_RING_SIZE) { /* Ring buffer overflow	*/
 			get += n - KBD_RING_SIZE;
 			n    = KBD_RING_SIZE;
 		}
-		while (--n >= 0) {
+		while(--n >= 0) {
 			code = kbd_ring[get++ & KBD_RING_MASK];
 
-			/*
-			 * If collecting a package, stuff it in and
-			 * continue.
-			 */
-			if (k->k_pkg_size && (k->k_pkg_idx < k->k_pkg_size)) {
-				k->k_package[k->k_pkg_idx++] = code;
-				if (k->k_pkg_idx == k->k_pkg_size) {
-				    k->k_pkg_size = 0;
-#if NMOUSE > 0
-				    /*
-				     * Package is complete, we can now
-				     * send it to the mouse driver...
-				     */
-				    mouse_soft(k->k_package, k->k_pkg_size);
-#endif /* NMOUSE */
-				}
-				continue;
-			}
-			/*
-			 * If this is a package header, init pkg. handling.
-			 */
-			if (!IS_KEY(code)) {
-				kbd_pkg_start(k, code);
-				continue;
-			}
 			/*
 			 * if not in event mode, deliver straight to ite to
 			 * process key stroke
 			 */
-			if (!k->k_event_mode) {
+			if(!k->k_event_mode) {
 				/* Gets to spltty() by itself	*/
 				ite_filter(code, ITEFILT_TTY);
 				continue;
@@ -399,7 +299,7 @@ kbdsoft()
 			put = k->k_events.ev_put;
 			fe  = &k->k_events.ev_q[put];
 			put = (put + 1) % EV_QSIZE;
-			if (put == k->k_events.ev_get) {
+			if(put == k->k_events.ev_get) {
 				log(LOG_WARNING,
 					"keyboard event queue overflow\n");
 				splx(s);
@@ -421,151 +321,33 @@ static	char sound[] = {
 	0xF8,0x10,0x10,0x10,0x00,0x20,0x03
 };
 
-void
+int
 kbdbell()
 {
-	register int	i, sps;
+  register int	i, sps;
 
-	sps = spltty();
-	for (i = 0; i < sizeof(sound); i++) {
-		SOUND->sd_selr = i;
-		SOUND->sd_wdat = sound[i];
-	}
-	splx(sps);
+  sps = spltty();
+  for(i = 0; i < sizeof(sound); i++) {
+	SOUND->sd_selr = i;
+	SOUND->sd_wdat = sound[i];
+  }
+  splx(sps);
 }
 
 int
 kbdgetcn()
 {
 	u_char	code;
-	int	s = spltty();
-	int	ints_active;
+	int		s = spltty();
 
-	ints_active = 0;
-	if (MFP->mf_imrb & IB_AINT) {
-		ints_active   = 1;
-		MFP->mf_imrb &= ~IB_AINT;
-	}
-	for (;;) {
-		while (!((KBD->ac_cs & (A_IRQ|A_RXRDY)) == (A_IRQ|A_RXRDY)))
-			;	/* Wait for key	*/
-		if (KBD->ac_cs & (A_OE|A_PE)) {
-			code = KBD->ac_da;	/* Silently ignore errors */
-			continue;
-		}
-		break;
-	}
+	MFP->mf_imrb &= ~IB_AINT;
+	while(!(KBD->ac_cs & A_IRQ))
+		;	/* Wait for key	*/
+
+	MFP->mf_iprb &= ~IB_AINT;
+	MFP->mf_imrb |=  IB_AINT;
 
 	code = KBD->ac_da;
-	if (ints_active) {
-		MFP->mf_iprb &= ~IB_AINT;
-		MFP->mf_imrb |=  IB_AINT;
-	}
-
 	splx (s);
 	return code;
-}
-
-/*
- * Write a command to the keyboard in 'polled' mode.
- */
-static int
-kbd_write_poll(cmd, len)
-u_char	*cmd;
-int	len;
-{
-	int	timeout;
-
-	while (len-- > 0) {
-		KBD->ac_da = *cmd++;
-		for (timeout = 100; !(KBD->ac_cs & A_TXRDY); timeout--)
-			delay(10);
-		if (!(KBD->ac_cs & A_TXRDY))
-			return (0);
-	}
-	return (1);
-}
-
-/*
- * Write a command to the keyboard. Return when command is send.
- */
-void
-kbd_write(cmd, len)
-u_char	*cmd;
-int	len;
-{
-	struct kbd_softc	*k = &kbd_softc;
-	int			sps;
-
-	/*
-	 * Get to splhigh, 'real' interrupts arrive at spl6!
-	 */
-	sps = splhigh();
-
-	/*
-	 * Make sure any privious write has ended...
-	 */
-	while (k->k_sendp != NULL)
-		tsleep((caddr_t)&k->k_sendp, TTOPRI, "kbd_write1", 0);
-
-	/*
-	 * If the KBD-acia is not currently busy, send the first
-	 * character now.
-	 */
-	KBD->ac_cs = (k->k_soft_cs |= A_TXINT);
-	if (KBD->ac_cs & A_TXRDY) {
-		KBD->ac_da = *cmd++;
-		len--;
-	}
-
-	/*
-	 * If we're not yet done, wait until all characters are send.
-	 */
-	if (len > 0) {
-		k->k_sendp    = cmd;
-		k->k_send_cnt = len;
-		tsleep((caddr_t)&k->k_send_cnt, TTOPRI, "kbd_write2", 0);
-	}
-	splx(sps);
-
-	/*
-	 * Wakeup all procs waiting for us.
-	 */
-	wakeup((caddr_t)&k->k_sendp);
-}
-
-/*
- * Setup softc-fields to assemble a keyboard package.
- */
-static void
-kbd_pkg_start(kp, msg_start)
-struct kbd_softc *kp;
-u_char		 msg_start;
-{
-	kp->k_pkg_idx    = 1;
-	kp->k_package[0] = msg_start;
-	switch (msg_start) {
-		case 0xf6:
-			kp->k_pkg_size = 8;
-			break;
-		case 0xf7:
-			kp->k_pkg_size = 6;
-			break;
-		case 0xf8:
-		case 0xf9:
-		case 0xfa:
-		case 0xfb:
-			kp->k_pkg_size = 3;
-			break;
-		case 0xfc:
-			kp->k_pkg_size = 7;
-			break;
-		case 0xfe:
-		case 0xff:
-			kp->k_pkg_size = 2;
-			break;
-		default:
-			printf("kbd: Unknown packet 0x%x\n", msg_start);
-			break;
-	}
 }

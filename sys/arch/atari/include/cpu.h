@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.10 1996/01/19 13:46:56 leo Exp $	*/
+/*	$NetBSD: cpu.h,v 1.1 1995/03/26 07:12:07 leo Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -53,9 +53,13 @@
  * definitions of cpu-dependent requirements
  * referenced in generic code
  */
+#define	COPY_SIGCODE		/* copy sigcode above user stack in exec */
+
+#define	cpu_exec(p)			/* nothing */
 #define	cpu_swapin(p)			/* nothing */
 #define	cpu_wait(p)			/* nothing */
-#define cpu_swapout(p)			/* nothing */
+#define cpu_setstack(p, ap)		(p)->p_md.md_regs[SP] = ap
+#define cpu_set_init_frame(p, fp)	(p)->p_md.md_regs = fp
 
 /*
  * Arguments to hardclock and gatherstats encapsulate the previous
@@ -105,8 +109,18 @@ struct clockframe {
 extern int	astpending;	/* need trap before returning to user mode */
 extern int	want_resched;	/* resched() was called */
 
-/* include support for software interrupts */
-#include <machine/mtpr.h>
+/*
+ * simulated software interrupt register
+ */
+extern unsigned char ssir;
+
+#define SIR_NET		0x1
+#define SIR_CLOCK	0x2
+
+#define siroff(x)	ssir &= ~(x)
+#define setsoftnet()	ssir |= SIR_NET
+#define setsoftclock()	ssir |= SIR_CLOCK
+
 
 /*
  * The rest of this should probably be moved to ../atari/ataricpu.h,
@@ -117,18 +131,13 @@ extern int	want_resched;	/* resched() was called */
 /*
  * Values for machineid.
  */
-#define	ATARI_68000	1		/* 68000 CPU			*/
-#define	ATARI_68010	(1<<1)		/* 68010 CPU			*/
-#define ATARI_68020	(1L<<2)		/* 68020 CPU			*/
-#define ATARI_68030	(1L<<3)		/* 68030 CPU			*/
-#define ATARI_68040	(1L<<4)		/* 68040 CPU			*/
-#define	ATARI_TT	(1L<<11)
-#define	ATARI_FALCON	(1L<<12)
+#define ATARI_68020	(1L<<2)
+#define ATARI_68030	(1L<<3)
+#define ATARI_68040	(1L<<4)
+#define ATARI_68881	(1L<<8)
+#define ATARI_68882	(1L<<9)
+#define	ATARI_FPU40	(1L<<10)
 
-#define	ATARI_CLKBROKEN	(1L<<16)
-
-#define	ATARI_ANYCPU	(ATARI_68000|ATARI_68010|ATARI_68020|ATARI_68030 \
-			|ATARI_68040)
 
 /*
  * Values for mmutype (assigned for quick testing)
@@ -137,8 +146,15 @@ extern int	want_resched;	/* resched() was called */
 #define	MMU_68851	 1	/* Motorola 68851			*/
 #define MMU_68040	-2	/* 68040 on-chip subsubset		*/
 
-#ifdef _KERNEL
-extern int machineid, mmutype, cpu040, fputype;
+/* values for cpuspeed (not really related to clock speed due to caches) */
+#define	MHZ_8		1
+#define	MHZ_16		2
+#define	MHZ_25		3
+#define	MHZ_33		4
+#define	MHZ_50		6
+
+#ifdef KERNEL
+extern int machineid, mmutype, cpu040;
 #endif
 
 /*

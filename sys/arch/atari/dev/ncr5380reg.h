@@ -1,4 +1,4 @@
-/*	$NetBSD: ncr5380reg.h,v 1.8 1996/02/22 21:07:11 leo Exp $	*/
+/*	$NetBSD: ncr5380reg.h,v 1.1 1995/03/26 07:12:15 leo Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman.
@@ -33,20 +33,59 @@
 #ifndef _NCR5380REG_H
 #define _NCR5380REG_H
 /*
- * NCR5380 common interface definitions.
+ * Atari TT hardware:
+ * SCSI interface + DMA.
+ * The SCSI chip is an NCR5380
  */
 
+
+#define	SCSI_DMA	((struct scsi_dma *)AD_SCSI_DMA)
+#define	SCSI_5380	((struct scsi_5380 *)AD_NCR5380)
+
+struct scsi_dma {
+	volatile u_char		s_dma_ptr[8];	/* use only the odd bytes */
+	volatile u_char		s_dma_cnt[8];	/* use only the odd bytes */
+	volatile u_char		s_dma_res[4];	/* data residue register  */
+	volatile u_char		s_dma_gap;	/* not used		  */
+	volatile u_char		s_dma_ctrl;	/* control register	  */
+};
+
+#define	set_scsi_dma(addr, val)	(void)(					\
+	{								\
+	u_char	*address = (u_char*)addr+1;				\
+	u_long	nval	 = (u_long)val;					\
+	__asm("movepl	%0, %1@(0)": :"d" (nval), "a" (address));	\
+	})
+
+#define	get_scsi_dma(addr, res)	(					\
+	{								\
+	u_char	*address = (u_char*)addr+1;				\
+	u_long	nval;							\
+	__asm("movepl	%1@(0), %0": "=d" (nval) : "a" (address));	\
+	res = (u_long)nval;						\
+	})
+
 /*
- * Register numbers: (first argument to GET/SET_5380_REG )
+ * Defines for DMA control register
  */
-#define	NCR5380_DATA	0		/* Data register		*/
-#define	NCR5380_ICOM	1		/* Initiator command register	*/
-#define	NCR5380_MODE	2		/* Mode register		*/
-#define	NCR5380_TCOM	3		/* Target command register	*/
-#define	NCR5380_IDSTAT	4		/* Bus status register		*/
-#define	NCR5380_DMSTAT	5		/* DMA status register		*/
-#define	NCR5380_TRCV	6		/* Target receive register	*/
-#define	NCR5380_IRCV	7		/* Initiator receive register	*/
+#define	SD_BUSERR	0x80		/* 1 = transfer caused bus error*/
+#define	SD_ZERO		0x40		/* 1 = byte counter is zero	*/
+#define	SD_ENABLE	0x02		/* 1 = Enable DMA		*/
+#define	SD_OUT		0x01		/* Direction: memory to SCSI	*/
+#define	SD_IN		0x00		/* Direction: SCSI to memory	*/
+
+struct scsi_5380 {
+	volatile u_char	scsi_5380[16];	/* use only the odd bytes	*/
+};
+
+#define	scsi_data	scsi_5380[ 1]	/* Data register		*/
+#define	scsi_icom	scsi_5380[ 3]	/* Initiator command register	*/
+#define	scsi_mode	scsi_5380[ 5]	/* Mode register		*/
+#define	scsi_tcom	scsi_5380[ 7]	/* Target command register	*/
+#define	scsi_idstat	scsi_5380[ 9]	/* Bus status register		*/
+#define	scsi_dmstat	scsi_5380[11]	/* DMA status register		*/
+#define	scsi_trcv	scsi_5380[13]	/* Target receive register	*/
+#define	scsi_ircv	scsi_5380[15]	/* Initiator receive register	*/
 
 /*
  * Definitions for Initiator command register.
@@ -108,7 +147,7 @@
 #define	SC_S_SEND	0x00	/* W  - Start DMA output		*/
 
 #define	SC_CLINT	{ 		/* Clear interrupts	*/	\
-			int i = GET_5380_REG(NCR5380_IRCV);		\
+			int i = SCSI_5380->scsi_ircv;			\
 			}
 
 
@@ -139,55 +178,5 @@
  * Base setting for 5380 mode register
  */
 #define	IMODE_BASE	SC_E_PAR
-
-/*
- * SCSI completion status codes, should move to sys/scsi/????
- */
-#define SCSMASK		0x1e	/* status code mask			*/
-#define SCSGOOD		0x00	/* good status				*/
-#define SCSCHKC		0x02	/* check condition			*/
-#define SCSBUSY		0x08	/* busy status				*/
-#define SCSCMET		0x04	/* condition met / good			*/
-
-/*
- * Return values of check_intr()
- */
-#define	INTR_SPURIOUS	0
-#define	INTR_RESEL	2
-#define	INTR_DMA	3
-
-struct ncr_softc;
-struct req_q;
-/*
- * Function decls:
- */
-static int  transfer_pio __P((u_char *, u_char *, u_long *, int));
-static int  wait_req_true __P((void));
-static int  wait_req_false __P((void));
-static int  scsi_select __P((struct req_q *, int));
-static int  handle_message __P((struct req_q *, u_int));
-static void ack_message __P((void));
-static void nack_message __P((struct req_q *, u_char));
-static int  information_transfer __P((struct ncr_softc *));
-static void reselect __P((struct ncr_softc *));
-static int  dma_ready __P((void));
-static void transfer_dma __P((struct req_q *, u_int, int));
-static int  check_autosense __P((struct req_q *, int));
-static int  reach_msg_out __P((struct ncr_softc *, u_long));
-static int  check_intr __P((struct ncr_softc *));
-       void scsi_reset __P((void));
-static void scsi_reset_verbose __P((struct ncr_softc *, const char *));
-static int  scsi_dmaok __P((struct req_q *));
-static void run_main __P((struct ncr_softc *));
-static void scsi_main __P((struct ncr_softc *));
-static void ncr_ctrl_intr __P((struct ncr_softc *));
-static void ncr_dma_intr __P((struct ncr_softc *));
-static void ncr_tprint __P((struct req_q *, char *, ...));
-static void ncr_aprint __P((struct ncr_softc *, char *, ...));
-
-       void scsi_show __P((void));
-static void show_request __P((struct req_q *, char *));
-/* static void show_phase __P((struct req_q *, int)); */
-static void show_signals __P((u_char, u_char));
 
 #endif /* _NCR5380REG_H */

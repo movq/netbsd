@@ -1,5 +1,5 @@
 #
-#	$NetBSD: Makefile.inc,v 1.1.1.1 1995/04/17 19:08:50 leo Exp $
+#	$NetBSD: Makefile.inc,v 1.1 1995/04/17 19:08:50 leo Exp $
 #
 
 # TOP is assumed to be defined by Makefile including this one.

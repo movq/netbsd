@@ -1,4 +1,4 @@
-/*	$NetBSD: atari_init.c,v 1.9 1995/12/16 21:40:28 leo Exp $	*/
+/*	$NetBSD: atari_init.c,v 1.1 1995/03/26 07:12:21 leo Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman
@@ -56,22 +56,32 @@
 #include <machine/iomap.h>
 #include <machine/mfp.h>
 #include <machine/scu.h>
-#include <machine/video.h>
 #include <atari/atari/misc.h>
 
 extern u_int 	lowram;
-extern u_int	Sysptmap, Sysptsize, Sysseg, proc0paddr;
+extern u_int	Sysptmap, Sysptsize, Sysseg, Umap, proc0paddr;
 u_int		*Sysmap;
-int		machineid, mmutype, cpu040, astpending;
+int		machineid, mmutype, cpu040, astpending, cpuspeed;
 char		*vmmap;
 pv_entry_t	pv_table;
 
 /*
  * Need-to-know for kernel reload code.
  */
-u_long	boot_ttphystart, boot_ttphysize, boot_stphysize;
+static u_long	boot_ttphystart, boot_ttphysize, boot_stphysize;
 
 extern char	*esym;
+
+/*
+ * The following vars become valid just before pmap_bootstrap is called.
+ * They give info about free memory with the kernel and the tables allocated
+ * in 'start_c' excluded.
+ */
+extern vm_offset_t st_ramstart;	/* First available ST RAM address	*/
+extern vm_offset_t st_ramend;	/* First ST RAM address	not available	*/
+extern vm_offset_t tt_ramstart;	/* First available TT RAM address	*/
+extern vm_offset_t tt_ramend;	/* First TT RAM address	not available	*/
+
 
 /*
  * This is the virtual address of physical page 0. Used by 'do_boot()'.
@@ -85,12 +95,36 @@ vm_offset_t	page_zero;
  * setup the controller at the time the vm-system is not yet operational so
  * 'kvtop()' cannot be used.
  */
-#ifndef ST_POOL_SIZE
-#define	ST_POOL_SIZE	40			/* XXX: enough? */
-#endif
+#define	ST_POOL_SIZE	(40*NBPG)	/* XXX: enough? */
 
-u_long	st_pool_size = ST_POOL_SIZE * NBPG;	/* Patchable	*/
+u_long	st_pool_size = ST_POOL_SIZE;	/* Patchable	*/
 u_long	st_pool_virt, st_pool_phys;
+
+#if 0
+void
+*stmem_steal(amount, phys)
+long amount;
+vm_offset_t	*phys;
+{
+	/*
+	 * steal from top of st-memory, so we don't collide with 
+	 * the kernel loaded into st-memory in the not-yet-mapped state.
+	 */
+	vm_offset_t p = st_pool_virt;
+
+	if(amount & 1)
+		amount++;
+	if(amount > st_pool_size)
+		panic("not enough ST memory");
+	*phys = st_pool_phys;
+
+	st_pool_virt  += amount;
+	st_pool_phys  += amount;
+	st_pool_size  -= amount;
+
+	return((void *)p);
+}
+#endif
 
 /*
  * this is the C-level entry function, it's called from locore.s.
@@ -126,9 +160,10 @@ char	*esym_addr;		/* Address of kernel '_esym' symbol	*/
 	u_int		avail;
 	u_int		pt, ptsize;
 	u_int		tc, i;
-	u_int		*sg, *pg;
+	u_int		*sg, *pg, *pg2;
 	u_int		sg_proto, pg_proto;
-	u_int		end_loaded;
+	u_int		umap;
+	u_int		p0_pt, p0_u_area, end_loaded;
 	u_int		ptextra;
 	u_long		kbase;
 
@@ -140,10 +175,7 @@ char	*esym_addr;		/* Address of kernel '_esym' symbol	*/
 	 * The following is a hack. We do not know how much ST memory we
 	 * really need until after configuration has finished. At this
 	 * time I have no idea how to grab ST memory at that time.
-	 * The round_page() call is ment to correct errors made by
-	 * binpatching!
 	 */
-	st_pool_size   = atari_round_page(st_pool_size);
 	st_pool_phys   = stphysize - st_pool_size;
 	stphysize      = st_pool_phys;
 
@@ -249,12 +281,46 @@ char	*esym_addr;		/* Address of kernel '_esym' symbol	*/
 	}
 	/* 
 	 * invalidate the remainder of the tables
+	 * (except last entry)
 	 */
 	do {
 		*sg++ = SG_NV;
 		*pg++ = PG_NV;
-	} while(sg < (u_int *)(Sysseg + ATARI_STSIZE));
+	} while(sg < (u_int *)(Sysseg + ATARI_STSIZE - 4));
 
+	/*
+	 * the end of the last segment (0xFF000000) 
+	 * of KVA space is used to map the u-area of
+	 * the current process (u + kernel stack).
+	 */
+	sg_proto = (pstart + kbase) | SG_RW | SG_V; /* use next availabe PA */
+	pg_proto = (pstart + kbase) | PG_RW | PG_CI | PG_V;
+	umap     = pstart;	/* remember for later map entry */
+
+	/*
+	 * enter the page into the segment table 
+	 * (and page table map)
+	 */
+	*sg++     = sg_proto;
+	*pg++     = pg_proto;
+
+	/*
+	 * invalidate all pte's (will validate u-area afterwards)
+	 */
+	for(pg = (u_int *) pstart; pg < (u_int *) (pstart + NBPG); )
+		*pg++ = PG_NV;
+
+	/*
+	 * account for the allocated page
+	 */
+	pstart   += NBPG;
+	avail    -= NBPG;
+
+	/*
+	 * record KVA at which to access current u-area PTE(s)
+	 */
+	Umap = (u_int)Sysmap + ATARI_MAX_PTSIZE - UPAGES * 4;
+  
 	/*
 	 * initialize kernel page table page(s).
 	 * Assume load at VA 0.
@@ -272,9 +338,9 @@ char	*esym_addr;		/* Address of kernel '_esym' symbol	*/
 
 	/*
 	 * go till end of data allocated so far
-	 * plus proc0 u-area (to be allocated)
+	 * plus proc0 PT/u-area (to be allocated)
 	 */
-	for(; i < pstart + USPACE; i += NBPG, pg_proto += NBPG)
+	for(; i < pstart + (UPAGES + 1)*NBPG; i += NBPG, pg_proto += NBPG)
 		*pg++ = pg_proto;
 
 	/*
@@ -294,16 +360,43 @@ char	*esym_addr;		/* Address of kernel '_esym' symbol	*/
 	}
 
 	/*
-	 * Clear proc0 user-area
+	 * Setup page table for process 0.
+	 * We set up page table access for the kernel via Usrptmap (usrpt)
+	 * [no longer used?] and access to the u-area itself via Umap (u).
+	 * First available page (pstart) is used for proc0 page table.
+	 * Next UPAGES page(s) following are for u-area.
 	 */
-	bzero((u_char *)pstart, USPACE);
+  
+	p0_pt   = pstart;
+	pstart += NBPG;
+	avail  -= NBPG;
+
+	p0_u_area = pstart;		/* base of u-area and end of PT */
+  
+	/*
+	 * invalidate entire page table
+	 */
+	for(pg = (u_int *)p0_pt; pg < (u_int *) p0_u_area; )
+		*pg++ = PG_NV;
 
 	/*
-	 * Save KVA of proc0 user-area and allocate it
+	 * now go back and validate u-area PTE(s) in PT and in Umap
+	 */
+	pg  -= UPAGES;
+	pg2  = (u_int *) (umap + 4*(NPTEPG - UPAGES));
+	pg_proto = (p0_u_area + kbase) | PG_RW | PG_V;
+	for(i = 0; i < UPAGES; i++, pg_proto += NBPG) {
+		*pg++  = pg_proto;
+		*pg2++ = pg_proto;
+	}
+	bzero((u_char *)p0_u_area, UPAGES * NBPG);
+
+	/*
+	 * save KVA of proc0 u-area
 	 */
 	proc0paddr = pstart;
-	pstart    += USPACE;
-	avail     -= USPACE;
+	pstart    += UPAGES * NBPG;
+	avail     -= UPAGES * NBPG;
 
 	/*
 	 * At this point, virtual and physical allocation starts to divert.
@@ -336,22 +429,18 @@ char	*esym_addr;		/* Address of kernel '_esym' symbol	*/
 	lowram  = 0 >> PGSHIFT; /* XXX */
 
 	/*
-	 * Fill in segments. The page indexes will be initialized
-	 * later when all reservations are made.
+	 * Initialize memory sizes
 	 */
-	phys_segs[0].start       = 0;
-	phys_segs[0].end         = stphysize;
-	phys_segs[1].start       = ttphystart;
-	phys_segs[1].end         = ttphystart + ttphysize;
-	phys_segs[2].start       = 0; /* End of segments! */
-
+	st_ramstart    = 0;
+	st_ramend      = stphysize;
+	tt_ramstart    = ttphystart;
+	tt_ramend      = ttphystart + ttphysize;
 	if(kbase) {
 		/*
-		 * First page of ST-ram is unusable, reserve the space
-		 * for the kernel in the TT-ram segment.
+		 * First page of ST-ram is unusable.
 		 */
-		phys_segs[0].start  = NBPG;
-		phys_segs[1].start += pstart;
+		st_ramstart  = NBPG;
+		tt_ramstart += pstart;
 	}
 	else {
 		/*
@@ -381,31 +470,20 @@ char	*esym_addr;		/* Address of kernel '_esym' symbol	*/
 
 
 		/*
-		 * Reserve space for page 0, and allocate the kernel
-		 * space from the ST-ram segment.
+		 * Reserve space for page 0
 		 */
 		pstart += NBPG;
-		phys_segs[0].start += pstart;
+
+		st_ramstart += pstart;
 	}
 
-	/*
-	 * As all segment sizes are now valid, calculate page indexes and
-	 * available physical memory.
-	 */
-	phys_segs[0].first_page = 0;
-	for (i = 1; phys_segs[i].start; i++) {
-		phys_segs[i].first_page  = phys_segs[i-1].first_page;
-		phys_segs[i].first_page +=
-			(phys_segs[i-1].end - phys_segs[i-1].start) / NBPG;
-	}
-	for (i = 0, physmem = 0; phys_segs[i].start; i++)
-		physmem += phys_segs[i].end - phys_segs[i].start;
-	physmem >>= PGSHIFT;
+	physmem = ((st_ramend-st_ramstart)+(tt_ramend-tt_ramstart)) >> PGSHIFT;
   
 	/*
 	 * get the pmap module in sync with reality.
 	 */
 	pmap_bootstrap(vstart);
+
 
 	/*
 	 * Prepare to enable the MMU.
@@ -451,45 +529,24 @@ char	*esym_addr;		/* Address of kernel '_esym' symbol	*/
 	*(volatile int *)proc0paddr = i;
 
 	/*
-	 * Initialize the sound-chip YM2149:
-	 *   All sounds off, both ports output.
-	 */
-	SOUND->sd_selr = YM_MFR;
-	SOUND->sd_wdat = 0xff;
-
-	/*
-	 * Initialize both MFP chips (if both present!) to generate
-	 * auto-vectored interrupts with EOI. The active-edge registers are
-	 * set up. The interrupt enable registers are set to disable all
-	 * interrupts.
-	 * A test on presence on the second MFP determines if this is a
-	 * TT030 or a Falcon. This is added to 'machineid'.
+	 * Initialize both MFP chips to generate auto-vectored interrupts
+	 * with EOI. The active-edge registers are set up. The interrupt
+	 * enable registers are set to disable all interrupts.
 	 */
 	MFP->mf_iera  = MFP->mf_ierb = 0;
 	MFP->mf_imra  = MFP->mf_imrb = 0;
 	MFP->mf_aer   = 0;
 	MFP->mf_vr    = 0x40;
-	if(!badbaddr(&MFP2->mf_gpip)) {
-		machineid |= ATARI_TT;
-		MFP2->mf_iera = MFP2->mf_ierb = 0;
-		MFP2->mf_imra = MFP2->mf_imrb = 0;
-		MFP2->mf_aer  = 0x80;
-		MFP2->mf_vr   = 0x50;
+	MFP2->mf_iera = MFP2->mf_ierb = 0;
+	MFP2->mf_imra = MFP2->mf_imrb = 0;
+	MFP2->mf_aer  = 0x80;
+	MFP2->mf_vr   = 0x50;
 
-		/*
-		 * Initialize the SCU, to enable interrupts on the SCC (ipl5),
-		 * MFP (ipl6) and softints (ipl1).
-		 */
-		SCU->sys_mask = SCU_MFP | SCU_SCC | SCU_SYS_SOFT;
-#ifdef DDB
-		/*
-		 * This allows people with the correct hardware modification
-		 * to drop into the debugger from an NMI.
-		 */
-		SCU->sys_mask |= SCU_IRQ7;
-#endif
-	}
-	else machineid |= ATARI_FALCON;
+	/*
+	 * Initialize the SCU, to enable interrupts on the SCC (ipl5),
+	 * MFP (ipl6) and softints (ipl1).
+	 */
+	SCU->sys_mask = SCU_MFP | SCU_SCC | SCU_SYS_SOFT;
 
 	/*
 	 * Initialize stmem allocator

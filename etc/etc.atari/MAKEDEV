@@ -1,6 +1,6 @@
 #!/bin/sh -
 #
-#	$NetBSD: MAKEDEV,v 1.7 1996/01/11 21:34:48 leo Exp $
+#	$NetBSD: MAKEDEV,v 1.1 1995/03/30 05:44:08 leo Exp $
 #
 # Copyright (c) 1990 The Regents of the University of California.
 # All rights reserved.
@@ -49,11 +49,10 @@
 #	st*	SCSI tapes
 #
 # Disks:
-#	fd*	Floppy disks (fdxa: 360Kb, fdxb: 720Kb, fdxc: 1.44Mb)
+#	fd*	Floppy disks
 #	sd*	SCSI disks, includes flopticals
 #	cd*	SCSI cdrom discs
 #	vnd*	"file" pseudo-disks
-#	ccd*	concatedated disk driver
 #
 # Console ports:
 #	ttye*	ite bitmapped consoles
@@ -75,7 +74,6 @@
 #	aconf	autoconfig information (not yet)
 #	lkm	loadable kernel modules interface.
 #	bpf*	Berkeley Packet Filter
-#	tun*	network tunnel driver
 
 PATH=/sbin:/bin:/usr/sbin:/usr/bin
 umask 77
@@ -83,36 +81,33 @@ for i
 do
 case $i in
 all)
-	sh MAKEDEV std fd st0 ttye0 ttye1 ttye2 ttye3 ttye4 ttye5 grf0 grf1
-	sh MAKEDEV grf2 grf3 grf4 grf5 mouse0 mouse1
+	sh MAKEDEV std fd st0 ttye0 ttye1 ttye2 mouse0 mouse1 grf0 grf1 grf2
 	sh MAKEDEV kbd sd0 sd1 sd2 sd3 sd4 sd5 sd6 sd7 sd8 sd9 vnd0 vnd1 vnd2
 	sh MAKEDEV vnd3 vnd4 view00 view01 view02 view03 view04 view05 pty0 
 	sh MAKEDEV vnd5 vnd6 cd0 fd0 fd1 fd2 fd3 bpf0 bpf1 bpf2 bpf3
-	sh MAKEDEV ccd0 ccd1 ccd2 ccd3
-	sh MAKEDEV tun0 tun1 lkm ser02 mdm02 local
+	sh MAKEDEV lkm ser02 mdm02 local
 	;;
 
 floppy)
-	sh MAKEDEV std st0 ttye0 ttye1 ttye2 grf0 grf1 grf2 kbd tun0 tun1
-	sh MAKEDEV sd0 sd1 sd2 sd3 sd4 sd5 sd6 cd0 fd0 fd1 rd0
+	sh MAKEDEV std st0 ttye0 ttye1 ttye2 grf0 grf1 grf2 kbd
+	sh MAKEDEV sd0 sd1 sd2 sd3 sd4 sd5 sd6 cd0 fd0 fd1
 	;;
 
 std)
-	rm -f console drum kmem mem nvram reload null zero tty
+	rm -f console drum kmem mem reload null zero tty
 	rm -f klog stdin stdout stderr
 	mknod console		c 0 0
 	mknod drum		c 3 0	; chmod 640 drum ; chgrp kmem drum
 	mknod kmem		c 2 1	; chmod 640 kmem ; chgrp kmem kmem
 	mknod mem		c 2 0	; chmod 640 mem ; chgrp kmem mem
-	mknod nvram		c 2 11	; chmod 640 nvram ; chgrp kmem nvram
-	mknod reload		c 2 20	; chmod 640 reload ; chgrp kmem reload
+	mknod reload		c 2 20	; chmod 640 mem ; chgrp kmem mem
 	mknod zero		c 2 12	; chmod 666 zero
 	mknod null		c 2 2	; chmod 666 null
 	mknod tty		c 1 0	; chmod 666 tty
 	mknod klog		c 6 0	; chmod 600 klog
-	mknod stdin		c 18 0	; chmod 666 stdin
-	mknod stdout		c 18 1	; chmod 666 stdout
-	mknod stderr		c 18 2	; chmod 666 stderr
+	mknod stdin		c 21 0	; chmod 666 stdin
+	mknod stdout		c 21 1	; chmod 666 stdout
+	mknod stderr		c 21 2	; chmod 666 stderr
 	;;
 
 fd)
@@ -130,13 +125,11 @@ fd)
 ser02)
 	rm -f ser02
 	mknod ser02 c 7 0
-	chown uucp:wheel ser02
 	;;
 
 mdm02)
 	rm -f mdm02
 	mknod mdm02 c 7 16
-	chown uucp:wheel mdm02
 	;;
 
 st*)
@@ -179,10 +172,8 @@ fd*)
 	0|1|2|3)
 		mknod fd${unit}a b 2 `expr $unit '*' 16`
 		mknod fd${unit}b b 2 `expr $unit '*' 16 + 1`
-		mknod fd${unit}c b 2 `expr $unit '*' 16 + 2`
 		mknod rfd${unit}a c 16 `expr $unit '*' 16`
 		mknod rfd${unit}b c 16 `expr $unit '*' 16 + 1`
-		mknod rfd${unit}c c 16 `expr $unit '*' 16 + 2`
 		chgrp operator fd$unit? rfd$unit?
 		chmod 640 fd$unit? rfd$unit?
 		;;
@@ -193,18 +184,11 @@ fd*)
 	umask 77
 	;;
 
-rd0)	# Ramdisk, only usefull for boot-floppy
-	umask 2; rm -f rd0
-	mknod rd0 b 1 0
-	umask 77
-	;;
-
-sd*|vnd*|ccd*)
+sd*|vnd*)
 	umask 2 ; unit=`expr $i : '.*[^0-9]\([0-9]*\)'`
 	case $i in
 	sd*) name=sd; blk=4; chr=8;;
 	vnd*) name=vnd; blk=0; chr=17;;
-	ccd*) name=ccd; blk=13; chr=27;;
 	esac
 	rm -f $name$unit? r$name$unit?
 	case $unit in
@@ -280,7 +264,7 @@ ttye*)
 	rm -f ttye${unit}
 	rm -f ite*
 	case $unit in
-	0|1|2|3|4|5|6|7|8|9)
+	0|1|2)
 		mknod ttye${unit} c 12 ${unit}
 		;;
 	*)
@@ -293,7 +277,7 @@ grf*)
 	unit=`expr $i : 'grf\(.*\)'`
 	rm -f grf${unit}
 	case $unit in
-	0|1|2|3|4|5|6|7|8|9)
+	0|1|2)
 		mknod grf${unit} c 11 ${unit}; chmod 666 grf${unit}
 		;;
 	*)
@@ -369,14 +353,6 @@ bpf*)
 	rm -f bpf$unit
 	mknod bpf$unit c 19 $unit
 	chown root.wheel bpf$unit
-	;;
-
-tun*)
-	unit=`expr $i : 'tun\(.*\)'`
-	rm -f tun$unit
-	mknod tun$unit c 28 $unit
-	chmod 600 tun$unit
-	chown root.wheel tun$unit
 	;;
 
 lkm)

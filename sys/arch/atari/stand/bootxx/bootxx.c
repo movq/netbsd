@@ -1,4 +1,4 @@
-/*	$NetBSD: bootxx.c,v 1.1.1.1 1996/02/29 11:35:05 leo Exp $	*/
+/*	$NetBSD: bootxx.c,v 1.1 1996/02/29 11:35:05 leo Exp $	*/
 
 /*
  * Copyright (c) 1995 Waldi Ravens.
@@ -64,7 +64,7 @@ bootxx(readsector, disklabel, autoboot)
 
 	bzero(edata, end - edata);
 
-	printf("\033v\nNetBSD/Atari boot loader ($Revision: 1.1.1.1 $)\n\n");
+	printf("\033v\nNetBSD/Atari boot loader ($Revision: 1.1 $)\n\n");
 
 	if (init_dskio(readsector, disklabel, -1))
 		return(-1);

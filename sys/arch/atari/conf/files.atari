@@ -1,8 +1,6 @@
 #
-#	$NetBSD: files.atari,v 1.14 1996/01/06 20:11:02 leo Exp $
+#	$NetBSD: files.atari,v 1.1 1995/03/26 07:12:16 leo Exp $
 #
-
-maxpartitions 16
 
 maxusers 2 8 64
 
@@ -28,10 +26,6 @@ file	arch/atari/dev/zs.c		zs needs-count
 device	ramd at mainbus
 file	arch/atari/dev/ramd.c		ramd needs-flag
 
-# nvram
-device	nvr at mainbus
-file	arch/atari/dev/nvram.c		nvr needs-flag
-
 device	fdc at mainbus { unit = -1 }
 
 device	fd at fdc
@@ -48,8 +42,6 @@ device	grf at grfb {}
 file	arch/atari/dev/grf.c		grf needs-count
 file	arch/atari/dev/ite_cc.c		grf ite
 file	arch/atari/dev/grfabs.c		grf ite
-file	arch/atari/dev/grfabs_tt.c	grf ite
-file	arch/atari/dev/grfabs_fal.c	grf ite
 
 device	ite at grf
 file	arch/atari/dev/ite.c		ite needs-flag
@@ -61,14 +53,11 @@ file	arch/atari/dev/font_8x16.c	ite
 pseudo-device	view
 file	arch/atari/dev/view.c		view grf needs-count
 
-pseudo-device	mouse
-file	arch/atari/dev/ms.c		mouse needs-count
-
 define	scsi {}
 
 # ncr 5380 controller
 device	ncrscsi at mainbus: scsi
-file	arch/atari/dev/atari5380.c	ncrscsi
+file	arch/atari/dev/ncr5380.c	ncrscsi
 
 device	scsibus at scsi	{target = -1, lun = -1}
 
@@ -91,7 +80,6 @@ file	scsi/su.c			su needs-flag
 
 # list of standard files...
 file	dev/cons.c				ite
-file	dev/cninit.c				ite
 file	scsi/scsi_base.c			scsi
 file	scsi/scsi_ioctl.c			scsi
 file	scsi/scsiconf.c				scsi
@@ -107,16 +95,8 @@ file	arch/atari/atari/sys_machdep.c
 file	arch/atari/atari/trap.c
 file	arch/atari/atari/misc.c
 file	arch/atari/atari/vm_machdep.c
-file	arch/atari/atari/db_memrw.c		ddb
-file	arch/atari/atari/fpu.c
 file	arch/m68k/m68k/copy.s
-
-# Emulation modules
-# 6888x emulator (FPU_EMULATE)
-include "../../m68k/fpe/files.fpe"
-
-# Compatibility modules
-
-# SunOS Binary Compatibility (COMPAT_SUNOS)
-include "../../../compat/sunos/files.sunos"
-file	arch/m68k/m68k/sunos_machdep.c	compat_sunos
+file	compat/sunos/sun_misc.c			compat_sunos
+file	compat/sunos/sun_sysent.c		compat_sunos
+file	compat/sunos/sun_ioctl.c		compat_sunos
+file	compat/sunos/sun_exec.c			compat_sunos

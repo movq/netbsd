@@ -1,4 +1,4 @@
-/*	$NetBSD: ramd.c,v 1.6 1996/01/07 22:02:06 thorpej Exp $	*/
+/*	$NetBSD: ramd.c,v 1.1 1995/03/26 07:12:13 leo Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman.
@@ -48,7 +48,7 @@
  * Misc. defines:
  */
 #define	RAMD_CHUNK	(9 * 512)	/* Chunk-size for auto-load	*/
-#define	RAMD_NDEV	2		/* Number of devices configured	*/
+#define	RAMD_NDEV	1		/* Number of devices configured	*/
 
 struct   ramd_info {
 	u_long	ramd_size;  /* Size of disk in bytes			*/
@@ -101,8 +101,6 @@ struct read_info {
     void	(*strat)();	/* strategy function for read		*/
 };
 
-static	struct disk ramd_disks[RAMD_NDEV];	/* XXX Ick. */
-
 /*
  * Autoconfig stuff....
  */
@@ -113,10 +111,6 @@ static void	ramdattach __P((struct device *, struct device *, void *));
 struct cfdriver ramdcd = {
 	NULL, "rd", (cfmatch_t)ramdmatch, ramdattach, DV_DULL,
 	sizeof(struct device), NULL, 0 };
-
-void	rdstrategy __P((struct buf *));
-
-struct	dkdriver ramddkdriver = { rdstrategy };
 
 static int
 ramdmatch(pdp, cfp, auxp)
@@ -135,28 +129,9 @@ struct device	*pdp, *dp;
 void		*auxp;
 {
 	int	i;
-	struct	disk *diskp;
 
-	/*
-	 * XXX It's not really clear to me _exactly_ what's going
-	 * on here, so this might need to be adjusted.  --thorpej
-	 */
-
-	for(i = 0; i < RAMD_NDEV; i++) {
-		/*
-		 * Initialize and attach the disk structure.
-		 */
-		diskp = &ramd_disks[i];
-		bzero(diskp, sizeof(struct disk));
-		if ((diskp->dk_name = malloc(8, M_DEVBUF, M_NOWAIT)) == NULL)
-			panic("ramdattach: can't allocate space for name");
-		bzero(diskp->dk_name, 8);
-		sprintf(diskp->dk_name, "rd%d", i);
-		diskp->dk_driver = &ramddkdriver;
-		disk_attach(diskp);
-
+	for(i = 0; i < RAMD_NDEV; i++)
 		config_found(dp, (void*)i, ramdprint);
-	}
 }
 
 static int
@@ -168,6 +143,7 @@ char	*pnp;
 }
 
 static int  loaddisk __P((struct  ramd_info *, struct proc *));
+static void rdminphys __P((struct buf *));
 static int  ramd_norm_read __P((struct read_info *));
 static int  cpy_uncompressed __P((caddr_t, int, struct read_info *));
 static int  rd_compressed __P((caddr_t, int, struct read_info *));
@@ -188,7 +164,7 @@ struct proc	*p;
 	ri = &rd_info[DISKUNIT(dev)];
 	if(ri->ramd_state & RAMD_OPEN)
 		return(0);
-
+	
 	/*
 	 * If someone is busy opening, wait for it to complete.
 	 */
@@ -252,6 +228,32 @@ dev_t	dev;
    return(-1);
 }
 
+int
+rdread(dev, uio)
+dev_t		dev;
+struct uio	*uio;
+{
+   return (physio(cdevsw[major(dev)].d_strategy, (struct buf *)NULL,
+       dev, B_READ, rdminphys, uio));
+}
+
+int
+rdwrite(dev, uio)
+dev_t		dev;
+struct uio	*uio;
+{
+   return(physio(cdevsw[major(dev)].d_strategy, (struct buf *)NULL,
+       dev, B_WRITE, rdminphys, uio));
+}
+
+/* XXX: Limit to 64k. */
+static void
+rdminphys(bp)
+struct buf *bp;
+{
+	bp->b_bcount = min(bp->b_bcount, (64 * 1024));
+}
+
 void
 rdstrategy(bp)
 struct buf *bp;
@@ -289,22 +291,6 @@ struct buf *bp;
 done:
 	bp->b_resid = bp->b_bcount;
 	biodone(bp);
-}
-
-int
-rdread(dev, uio)
-dev_t		dev;
-struct uio	*uio;
-{
-   return (physio(rdstrategy, NULL, dev, B_READ, minphys, uio));
-}
-
-int
-rdwrite(dev, uio)
-dev_t		dev;
-struct uio	*uio;
-{
-   return (physio(rdstrategy, NULL, dev, B_WRITE, minphys, uio));
 }
 
 static int
@@ -384,7 +370,7 @@ struct read_info	*rsp;
 		bp->b_blkno  = btodb(rsp->offset);
 		bp->b_bcount = rsp->chunk;
 		bp->b_data   = rsp->bufp;
-
+		
 		/* Initiate read */
 		(*rsp->strat)(bp);
 
@@ -398,7 +384,7 @@ struct read_info	*rsp;
 
 		/* Dot counter */
 		printf(".");
-		if(!(++dotc % 40))
+		if(!(++dotc % 40))	
 			printf("\n");
 
 		done = bp->b_bcount - bp->b_resid;
@@ -468,7 +454,7 @@ int			nbyte;
 		bp->b_blkno  = btodb(rsp->offset);
 		bp->b_bcount = min(rsp->chunk, nbyte);
 		bp->b_data   = buf;
-
+		
 		/* Initiate read */
 		(*rsp->strat)(bp);
 
@@ -482,7 +468,7 @@ int			nbyte;
 
 		/* Dot counter */
 		printf(".");
-		if(!(++dotc % 40))
+		if(!(++dotc % 40))	
 			printf("\n");
 
 		done = bp->b_bcount - bp->b_resid;

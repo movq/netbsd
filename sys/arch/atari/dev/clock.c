@@ -1,4 +1,4 @@
-/*	$NetBSD: clock.c,v 1.9 1996/02/22 10:11:19 leo Exp $	*/
+/*	$NetBSD: clock.c,v 1.1 1995/03/26 07:12:13 leo Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -44,33 +44,33 @@
 
 #include <sys/param.h>
 #include <sys/kernel.h>
-#include <sys/systm.h>
 #include <sys/device.h>
-#include <sys/cpu.h>
 #include <machine/psl.h>
 #include <machine/cpu.h>
 #include <machine/iomap.h>
 #include <machine/mfp.h>
 #include <atari/dev/clockreg.h>
 
-#if defined(GPROF) && defined(PROFTIMER)
-#include <machine/profile.h>
+#if defined(PROF) && defined(PROFTIMER)
+#include <sys/PROF.h>
 #endif
 
-/*
- * The MFP clock runs at 2457600Hz. We use a {system,stat,prof}clock divider
- * of 200. Therefore the timer runs at an effective rate of:
- * 2457600/200 = 12288Hz.
- */
-#define CLOCK_HZ	12288
 
 /*
  * Machine-dependent clock routines.
+ *
+ * Startrtclock restarts the real-time clock, which provides
+ * hardclock interrupts to kern_clock.c.
  *
  * Inittodr initializes the time of day hardware which provides
  * date functions.
  *
  * Resettodr restores the time of day hardware after a time change.
+ *
+ * A note on the real-time clock:
+ * We actually load the clock with CLK_INTERVAL-1 instead of CLK_INTERVAL.
+ * This is because the counter decrements to zero after N+1 enabled clock
+ * periods where N is the value loaded into the counter.
  */
 
 int	clockmatch __P((struct device *, struct cfdata *, void *));
@@ -81,27 +81,10 @@ struct cfdriver clockcd = {
 	DV_DULL, sizeof(struct device), NULL, 0
 };
 
-void statintr __P((struct clockframe *));
-
 static u_long	gettod __P((void));
 static int	settod __P((u_long));
 
-static int	divisor;	/* Systemclock divisor	*/
-
-/*
- * Statistics and profile clock intervals and variances. Variance must
- * be a power of 2. Since this gives us an even number, not an odd number,
- * we discard one case and compensate. That is, a variance of 64 would
- * give us offsets in [0..63]. Instead, we take offsets in [1..63].
- * This is symetric around the point 32, or statvar/2, and thus averages
- * to that value (assuming uniform random numbers).
- */
-#ifdef STATCLOCK
-static int	statvar = 32;	/* {stat,prof}clock variance		*/
-static int	statmin;	/* statclock divisor - variance/2	*/
-static int	profmin;	/* profclock divisor - variance/2	*/
-static int	clk2min;	/* current, from above choises		*/
-#endif
+static int	divisor;
 
 int
 clockmatch(pdp, cfp, auxp)
@@ -122,125 +105,70 @@ struct device	*pdp, *dp;
 void			*auxp;
 {
 	/*
-	 * Initialize Timer-A in the ST-MFP. We use a divisor of 200.
-	 * The MFP clock runs at 2457600Hz. Therefore the timer runs
-	 * at an effective rate of: 2457600/200 = 12288Hz. The
-	 * following expression works for 48, 64 or 96 hz.
+	 * Initialize Timer-A in the TT-MFP. An exact reduce to HZ is not
+	 * possible by hardware. We use a divisor of 64 and reduce by software
+	 * with a factor of 4. The MFP clock runs at 2457600Hz. Therefore the
+	 * timer runs at an effective rate of: 2457600/(64*4) = 9600Hz. The
+	 * following expression works for all 'normal' values of hz.
 	 */
-	divisor       = CLOCK_HZ/hz;
-	MFP->mf_tacr  = 0;		/* Stop timer			*/
-	MFP->mf_iera &= ~IA_TIMA;	/* Disable timer interrupts	*/
-	MFP->mf_tadr  = divisor;	/* Set divisor			*/
+	divisor        = 9600/hz;
+	MFP2->mf_tacr  = 0;		/* Stop timer			*/
+	MFP2->mf_iera &= ~IA_TIMA2;	/* Disable timer interrupts	*/
+	MFP2->mf_tadr  = divisor;	/* Set divisor			*/
 
-	if (hz != 48 && hz != 64 && hz != 96) { /* XXX */
-		printf (": illegal value %d for systemclock, reset to %d\n\t",
-								hz, 64);
-		hz = 64;
-	}
-	printf(": system hz %d timer-A divisor 200/%d\n", hz, divisor);
-
-#ifdef STATCLOCK
-	if ((stathz == 0) || (stathz > hz) || (CLOCK_HZ % stathz))
-		stathz = hz;
-	if ((profhz == 0) || (profhz > (hz << 1)) || (CLOCK_HZ % profhz))
-		profhz = hz << 1;
-
-	MFP->mf_tcdcr &= 0x7;			/* Stop timer		*/
-	MFP->mf_ierb  &= ~IB_TIMC;		/* Disable timer inter.	*/
-	MFP->mf_tcdr   = CLOCK_HZ/stathz;	/* Set divisor		*/
-
-	statmin  = (CLOCK_HZ/stathz) - (statvar >> 1);
-	profmin  = (CLOCK_HZ/profhz) - (statvar >> 1);
-	clk2min  = statmin;
-#endif /* STATCLOCK */
+	printf(": system hz %d timer-A divisor %d\n", hz, divisor);
 
 	/*
-	 * Initialize Timer-B in the ST-MFP. This timer is used by the 'delay'
+	 * Initialize Timer-B in the TT-MFP. This timer is used by the 'delay'
 	 * function below. This time is setup to be continueously counting from 
 	 * 255 back to zero at a frequency of 614400Hz.
 	 */
-	MFP->mf_tbcr  = 0;		/* Stop timer			*/
-	MFP->mf_iera &= ~IA_TIMB;	/* Disable timer interrupts	*/
-	MFP->mf_tbdr  = 0;	
-	MFP->mf_tbcr  = T_Q004;	/* Start timer			*/
+	MFP2->mf_tbcr  = 0;		/* Stop timer			*/
+	MFP2->mf_iera &= ~IA_TIMB2;	/* Disable timer interrupts	*/
+	MFP2->mf_tbdr  = 0;	
+	MFP2->mf_tbcr  = T_Q004;	/* Start timer			*/
 	
 }
 
 void cpu_initclocks()
 {
-	MFP->mf_tacr  = T_Q200;		/* Start timer			*/
-	MFP->mf_ipra &= ~IA_TIMA;	/* Clear pending interrupts	*/
-	MFP->mf_iera |= IA_TIMA;	/* Enable timer interrupts	*/
-	MFP->mf_imra |= IA_TIMA;	/*    .....			*/
-
-#ifdef STATCLOCK
-	MFP->mf_tcdcr = (MFP->mf_tcdcr & 0x7) | (T_Q200<<4); /* Start	*/
-	MFP->mf_iprb &= ~IB_TIMC;	/* Clear pending interrupts	*/
-	MFP->mf_ierb |= IB_TIMC;	/* Enable timer interrupts	*/
-	MFP->mf_imrb |= IB_TIMC;	/*    .....			*/
-#endif /* STATCLOCK */
+	MFP2->mf_tacr  = T_Q064;	/* Start timer			*/
+	MFP2->mf_ipra &= ~IA_TIMA2;	/* Clear pending interrupts	*/
+	MFP2->mf_iera |= IA_TIMA2;	/* Enable timer interrupts	*/
+	MFP2->mf_imra |= IA_TIMA2;	/*    .....			*/
 }
 
-void
-setstatclockrate(newhz)
-	int newhz;
+setstatclockrate(hz)
+	int hz;
 {
-#ifdef STATCLOCK
-	if (newhz == stathz)
-		clk2min = statmin;
-	else clk2min = profmin;
-#endif /* STATCLOCK */
 }
-
-#ifdef STATCLOCK
-void
-statintr(frame)
-	register struct clockframe *frame;
-{
-	register int	var, r;
-
-	var = statvar - 1;
-	do {
-		r = random() & var;
-	} while(r == 0);
-
-	/*
-	 * Note that we are always lagging behind as the new divisor
-	 * value will not be loaded until the next interrupt. This
-	 * shouldn't disturb the median frequency (I think ;-) ) as
-	 * only the value used when switching frequencies is used
-	 * twice. This shouldn't happen very often.
-	 */
-	MFP->mf_tcdr = clk2min + r;
-
-	statclock(frame);
-}
-#endif /* STATCLOCK */
 
 /*
  * Returns number of usec since last recorded clock "tick"
  * (i.e. clock interrupt).
  */
-long
 clkread()
 {
-	u_int	delta;
-
-	delta = ((divisor - MFP->mf_tadr) * tick) / divisor;
+	extern	short	clk_div;
+			u_int	delta, elapsed;
+   
+	elapsed = (divisor - MFP2->mf_tadr) + ((4 - clk_div) * divisor);
+	delta   = (elapsed * tick) / (divisor << 2);
+	
 	/*
 	 * Account for pending clock interrupts
 	 */
-	if(MFP->mf_iera & IA_TIMA)
+	if(MFP2->mf_iera & IA_TIMA2)
 		return(delta + tick);
 	return(delta);
 }
 
-#define TIMB_FREQ	614400
-#define TIMB_LIMIT	256
+#define TIMB2_FREQ	614400
+#define TIMB2_LIMIT	256
 
 /*
  * Wait "n" microseconds.
- * Relies on MFP-Timer B counting down from TIMB_LIMIT at TIMB_FREQ Hz.
+ * Relies on MFP2-Timer B counting down from TIMB2_LIMIT at TIMB2_FREQ Hz.
  * Note: timer had better have been programmed before this is first used!
  */
 void delay(n)
@@ -252,7 +180,7 @@ int	n;
 	 * Read the counter first, so that the rest of the setup overhead is
 	 * counted.
 	 */
-	otick = MFP->mf_tbdr;
+	otick = MFP2->mf_tbdr;
 
 	/*
 	 * Calculate ((n * TIMER_FREQ) / 1e6) using explicit assembler code so
@@ -266,21 +194,310 @@ int	n;
 	    u_int	temp;
 		
 	    __asm __volatile ("mulul %2,%1:%0" : "=d" (n), "=d" (temp)
-					       : "d" (TIMB_FREQ));
+					       : "d" (TIMB2_FREQ));
 	    __asm __volatile ("divul %1,%2:%0" : "=d" (n)
 					       : "d"(1000000),"d"(temp),"0"(n));
 	}
 
 	while(n > 0) {
-		tick = MFP->mf_tbdr;
+		tick = MFP2->mf_tbdr;
 		if(tick > otick)
-			n -= TIMB_LIMIT - (tick - otick);
+			n -= TIMB2_LIMIT - (tick - otick);
 		else n -= otick - tick;
 		otick = tick;
 	}
 }
 
-#ifdef GPROF
+#ifdef notyet
+/*
+ * Needs to be calibrated for use, its way off most of the time
+ */
+void
+DELAY(mic)
+	int mic;
+{
+	u_long	n;
+	short	hpos;
+
+	/*
+	 * this function uses HSync pulses as base units. The custom chips 
+	 * display only deals with 31.6kHz/2 refresh, this gives us a
+	 * resolution of 1/15800 s, which is ~63us (add some fuzz so we really
+	 * wait awhile, even if using small timeouts)
+	 */
+	n = mic/63 + 2;
+	do {
+		hpos = custom.vhposr & 0xff00;
+		while (hpos == (custom.vhposr & 0xff00))
+			;
+	} while (n--);
+}
+#endif /* notyet */
+
+#if notyet
+
+/* implement this later. I'd suggest using both timers in CIA-A, they're
+   not yet used. */
+
+#include "clock.h"
+#if NCLOCK > 0
+/*
+ * /dev/clock: mappable high resolution timer.
+ *
+ * This code implements a 32-bit recycling counter (with a 4 usec period)
+ * using timers 2 & 3 on the 6840 clock chip.  The counter can be mapped
+ * RO into a user's address space to achieve low overhead (no system calls),
+ * high-precision timing.
+ *
+ * Note that timer 3 is also used for the high precision profiling timer
+ * (PROFTIMER code above).  Care should be taken when both uses are
+ * configured as only a token effort is made to avoid conflicting use.
+ */
+#include <sys/proc.h>
+#include <sys/resourcevar.h>
+#include <sys/ioctl.h>
+#include <sys/malloc.h>
+#include <vm/vm.h>
+#include <amiga/amiga/clockioctl.h>
+#include <sys/specdev.h>
+#include <sys/vnode.h>
+#include <sys/mman.h>
+
+int clockon = 0;		/* non-zero if high-res timer enabled */
+#ifdef PROFTIMER
+int  profprocs = 0;		/* # of procs using profiling timer */
+#endif
+#ifdef DEBUG
+int clockdebug = 0;
+#endif
+
+/*ARGSUSED*/
+clockopen(dev, flags)
+	dev_t dev;
+{
+#ifdef PROFTIMER
+#ifdef PROF
+	/*
+	 * Kernel profiling enabled, give up.
+	 */
+	if (profiling)
+		return(EBUSY);
+#endif
+	/*
+	 * If any user processes are profiling, give up.
+	 */
+	if (profprocs)
+		return(EBUSY);
+#endif
+	if (!clockon) {
+		startclock();
+		clockon++;
+	}
+	return(0);
+}
+
+/*ARGSUSED*/
+clockclose(dev, flags)
+	dev_t dev;
+{
+	(void) clockunmmap(dev, (caddr_t)0, curproc);	/* XXX */
+	stopclock();
+	clockon = 0;
+	return(0);
+}
+
+/*ARGSUSED*/
+clockioctl(dev, cmd, data, flag, p)
+	dev_t		dev;
+	u_long		cmd;
+	caddr_t		data;
+	struct proc	*p;
+{
+	int error = 0;
+	
+	switch (cmd) {
+
+	case CLOCKMAP:
+		error = clockmmap(dev, (caddr_t *)data, p);
+		break;
+
+	case CLOCKUNMAP:
+		error = clockunmmap(dev, *(caddr_t *)data, p);
+		break;
+
+	case CLOCKGETRES:
+		*(int *)data = CLK_RESOLUTION;
+		break;
+
+	default:
+		error = EINVAL;
+		break;
+	}
+	return(error);
+}
+
+/*ARGSUSED*/
+clockmap(dev, off, prot)
+	dev_t dev;
+{
+	return((off + (INTIOBASE+CLKBASE+CLKSR-1)) >> PGSHIFT);
+}
+
+clockmmap(dev, addrp, p)
+	dev_t dev;
+	caddr_t *addrp;
+	struct proc *p;
+{
+	int error;
+	struct vnode vn;
+	struct specinfo si;
+	int flags;
+
+	flags = MAP_FILE|MAP_SHARED;
+	if (*addrp)
+		flags |= MAP_FIXED;
+	else
+		*addrp = (caddr_t)0x1000000;	/* XXX */
+	vn.v_type = VCHR;			/* XXX */
+	vn.v_specinfo = &si;			/* XXX */
+	vn.v_rdev = dev;			/* XXX */
+	error = vm_mmap(&p->p_vmspace->vm_map, (vm_offset_t *)addrp,
+			PAGE_SIZE, VM_PROT_ALL, flags, (caddr_t)&vn, 0);
+	return(error);
+}
+
+clockunmmap(dev, addr, p)
+	dev_t dev;
+	caddr_t addr;
+	struct proc *p;
+{
+	int rv;
+
+	if (addr == 0)
+		return(EINVAL);		/* XXX: how do we deal with this? */
+	rv = vm_deallocate(p->p_vmspace->vm_map, (vm_offset_t)addr, PAGE_SIZE);
+	return(rv == KERN_SUCCESS ? 0 : EINVAL);
+}
+
+startclock()
+{
+	register struct clkreg *clk = (struct clkreg *)clkstd[0];
+
+	clk->clk_msb2 = -1; clk->clk_lsb2 = -1;
+	clk->clk_msb3 = -1; clk->clk_lsb3 = -1;
+
+	clk->clk_cr2 = CLK_CR3;
+	clk->clk_cr3 = CLK_OENAB|CLK_8BIT;
+	clk->clk_cr2 = CLK_CR1;
+	clk->clk_cr1 = CLK_IENAB;
+}
+
+stopclock()
+{
+	register struct clkreg *clk = (struct clkreg *)clkstd[0];
+
+	clk->clk_cr2 = CLK_CR3;
+	clk->clk_cr3 = 0;
+	clk->clk_cr2 = CLK_CR1;
+	clk->clk_cr1 = CLK_IENAB;
+}
+#endif
+
+#endif
+
+
+#ifdef PROFTIMER
+/*
+ * This code allows the amiga kernel to use one of the extra timers on
+ * the clock chip for profiling, instead of the regular system timer.
+ * The advantage of this is that the profiling timer can be turned up to
+ * a higher interrupt rate, giving finer resolution timing. The profclock
+ * routine is called from the lev6intr in locore, and is a specialized
+ * routine that calls addupc. The overhead then is far less than if
+ * hardclock/softclock was called. Further, the context switch code in
+ * locore has been changed to turn the profile clock on/off when switching
+ * into/out of a process that is profiling (startprofclock/stopprofclock).
+ * This reduces the impact of the profiling clock on other users, and might
+ * possibly increase the accuracy of the profiling. 
+ */
+int  profint   = PRF_INTERVAL;	/* Clock ticks between interrupts */
+int  profscale = 0;		/* Scale factor from sys clock to prof clock */
+char profon    = 0;		/* Is profiling clock on? */
+
+/* profon values - do not change, locore.s assumes these values */
+#define PRF_NONE	0x00
+#define	PRF_USER	0x01
+#define	PRF_KERNEL	0x80
+
+initprofclock()
+{
+#if NCLOCK > 0
+	struct proc *p = curproc;		/* XXX */
+
+	/*
+	 * If the high-res timer is running, force profiling off.
+	 * Unfortunately, this gets reflected back to the user not as
+	 * an error but as a lack of results.
+	 */
+	if (clockon) {
+		p->p_stats->p_prof.pr_scale = 0;
+		return;
+	}
+	/*
+	 * Keep track of the number of user processes that are profiling
+	 * by checking the scale value.
+	 *
+	 * XXX: this all assumes that the profiling code is well behaved;
+	 * i.e. profil() is called once per process with pcscale non-zero
+	 * to turn it on, and once with pcscale zero to turn it off.
+	 * Also assumes you don't do any forks or execs.  Oh well, there
+	 * is always adb...
+	 */
+	if (p->p_stats->p_prof.pr_scale)
+		profprocs++;
+	else
+		profprocs--;
+#endif
+	/*
+	 * The profile interrupt interval must be an even divisor
+	 * of the CLK_INTERVAL so that scaling from a system clock
+	 * tick to a profile clock tick is possible using integer math.
+	 */
+	if (profint > CLK_INTERVAL || (CLK_INTERVAL % profint) != 0)
+		profint = CLK_INTERVAL;
+	profscale = CLK_INTERVAL / profint;
+}
+
+startprofclock()
+{
+  unsigned short interval;
+
+  /* stop timer B */
+  ciab.crb = ciab.crb & 0xc0;
+
+  /* load interval into registers.
+     the clocks run at NTSC: 715.909kHz or PAL: 709.379kHz */
+
+  interval = profint - 1;
+
+  /* order of setting is important ! */
+  ciab.tblo = interval & 0xff;
+  ciab.tbhi = interval >> 8;
+
+  /* enable interrupts for timer B */
+  ciab.icr = (1<<7) | (1<<1);
+
+  /* start timer B in continuous shot mode */
+  ciab.crb = (ciab.crb & 0xc0) | 1;
+}
+
+stopprofclock()
+{
+  /* stop timer B */
+  ciab.crb = ciab.crb & 0xc0;
+}
+
+#ifdef PROF
 /*
  * profclock() is expanded in line in lev6intr() unless profiling kernel.
  * Assumes it is called with clock interrupts blocked.
@@ -319,32 +536,12 @@ profclock(pc, ps)
 	}
 }
 #endif
-
-/***********************************************************************
- *                   Real Time Clock support                           *
- ***********************************************************************/
-
-u_int mc146818_read(rtc, regno)
-void	*rtc;
-u_int	regno;
-{
-	((struct rtc *)rtc)->rtc_regno = regno;
-	return(((struct rtc *)rtc)->rtc_data & 0377);
-}
-
-void mc146818_write(rtc, regno, value)
-void	*rtc;
-u_int	regno, value;
-{
-	((struct rtc *)rtc)->rtc_regno = regno;
-	((struct rtc *)rtc)->rtc_data  = value;
-}
+#endif
 
 /*
  * Initialize the time of day register, based on the time base which is, e.g.
  * from a filesystem.
  */
-void
 inittodr(base)
 time_t base;
 {
@@ -361,7 +558,6 @@ time_t base;
 	time.tv_sec = timbuf;
 }
 
-void
 resettodr()
 {
 	if(settod(time.tv_sec) == 1)
@@ -379,45 +575,68 @@ static	char	ldmsize[12] =
 	31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31
 };
 
+static __inline__ int rtc_getclkreg(regno)
+int	regno;
+{
+	RTC->rtc_regno = RTC_REGA;
+	RTC->rtc_regno = regno;
+	return(RTC->rtc_data & 0377);
+}
+
+static __inline__ void rtc_setclkreg(regno, value)
+int	regno, value;
+{
+	RTC->rtc_regno = regno;
+	RTC->rtc_data  = value;
+}
+
 static u_long
 gettod()
 {
-	int		i, sps;
-	u_long		new_time = 0;
-	char		*msize;
-	mc_todregs	clkregs;
+	int		i, year, mon, day, hour, min, sec;
+	u_long	new_time = 0;
+	char	*msize;
 
-	sps = splhigh();
-	MC146818_GETTOD(RTC, &clkregs);
-	splx(sps);
+	/*
+	 * Hold clock
+	 */
+	rtc_setclkreg(RTC_REGB, rtc_getclkreg(RTC_REGB) | RTC_B_SET);
 
-	if(clkregs[MC_SEC] > 59)
-		return(0);
-	if(clkregs[MC_MIN] > 59)
-		return(0);
-	if(clkregs[MC_HOUR] > 23)
-		return(0);
-	if(range_test(clkregs[MC_DOM], 1, 31))
-		return(0);
-	if (range_test(clkregs[MC_MONTH], 1, 12))
-		return(0);
-	if(clkregs[MC_YEAR] > (2000 - GEMSTARTOFTIME))
-		return(0);
-	clkregs[MC_YEAR] += GEMSTARTOFTIME;
+	/*
+	 * Read clock
+	 */
+	sec  = rtc_getclkreg(RTC_SEC);
+	min  = rtc_getclkreg(RTC_MIN);
+	hour = rtc_getclkreg(RTC_HOUR);
+	day  = rtc_getclkreg(RTC_DAY) - 1;
+	mon  = rtc_getclkreg(RTC_MONTH) - 1;
+	year = rtc_getclkreg(RTC_YEAR) + STARTOFTIME;
 
-	for(i = BSDSTARTOFTIME; i < clkregs[MC_YEAR]; i++) {
+	/*
+	 * Let it run again..
+	 */
+	rtc_setclkreg(RTC_REGB, rtc_getclkreg(RTC_REGB) & ~RTC_B_SET);
+
+	if(range_test(hour, 0, 23))
+		return(0);
+	if(range_test(day, 0, 30))
+		return(0);
+	if (range_test(mon, 0, 11))
+		return(0);
+	if(range_test(year, STARTOFTIME, 2000))
+		return(0);
+
+	for(i = STARTOFTIME; i < year; i++) {
 		if(is_leap(i))
 			new_time += 366;
 		else new_time += 365;
 	}
 
-	msize = is_leap(clkregs[MC_YEAR]) ? ldmsize : dmsize;
-	for(i = 0; i < (clkregs[MC_MONTH] - 1); i++)
+	msize = is_leap(year) ? ldmsize : dmsize;
+	for(i = 0; i < mon; i++)
 		new_time += msize[i];
-	new_time += clkregs[MC_DOM] - 1;
-	new_time *= SECS_DAY;
-	new_time += (clkregs[MC_HOUR] * 3600) + (clkregs[MC_MIN] * 60);
-	return(new_time + clkregs[MC_SEC]);
+	new_time += day;
+	return((new_time * SECS_DAY) + (hour * 3600) + (min * 60) + sec);
 }
 
 static int
@@ -426,10 +645,9 @@ u_long	newtime;
 {
 	register long	days, rem, year;
 	register char	*ml;
-		 int	sps, sec, min, hour, month;
-	mc_todregs	clkregs;
+			 int	sec, min, hour, month;
 
-	/* Number of days since Jan. 1 'BSDSTARTOFTIME'	*/
+	/* Number of days since Jan. 1 1970	*/
 	days = newtime / SECS_DAY;
 	rem  = newtime % SECS_DAY;
 
@@ -444,10 +662,14 @@ u_long	newtime;
 	/*
 	 * Figure out the year. Day in year is left in 'days'.
 	 */
-	year = BSDSTARTOFTIME;
+	year = STARTOFTIME;
 	while(days >= (rem = is_leap(year) ? 366 : 365)) {
-		++year;
-		days -= rem;
+	  ++year;
+	  days -= rem;
+	}
+	while(days < 0) {
+	  --year;
+	  days += is_leap(year) ? 366 : 365;
 	}
 
 	/*
@@ -460,18 +682,16 @@ u_long	newtime;
 	/*
 	 * Now that everything is calculated, program the RTC
 	 */
-	mc146818_write(RTC, MC_REGA, MC_BASE_32_KHz);
-	mc146818_write(RTC, MC_REGB, MC_REGB_24HR | MC_REGB_BINARY);
-	sps = splhigh();
-	MC146818_GETTOD(RTC, &clkregs);
-	clkregs[MC_SEC]   = sec;
-	clkregs[MC_MIN]   = min;
-	clkregs[MC_HOUR]  = hour;
-	clkregs[MC_DOM]   = days+1;
-	clkregs[MC_MONTH] = month+1;
-	clkregs[MC_YEAR]  = year - GEMSTARTOFTIME;
-	MC146818_PUTTOD(RTC, &clkregs);
-	splx(sps);
+	rtc_setclkreg(RTC_REGB, RTC_B_SET);
+	rtc_setclkreg(RTC_REGA, RTC_A_DV1|RTC_A_RS2|RTC_A_RS3);
+	rtc_setclkreg(RTC_REGB, RTC_B_SET|RTC_B_SQWE|RTC_B_DM|RTC_B_24_12);
+	rtc_setclkreg(RTC_SEC, sec);
+	rtc_setclkreg(RTC_MIN, min);
+	rtc_setclkreg(RTC_HOUR, hour);
+	rtc_setclkreg(RTC_DAY, days+1);
+	rtc_setclkreg(RTC_MONTH, month+1);
+	rtc_setclkreg(RTC_YEAR, year-1970);
+	rtc_setclkreg(RTC_REGB, RTC_B_SQWE|RTC_B_DM|RTC_B_24_12);
 
 	return(1);
 }

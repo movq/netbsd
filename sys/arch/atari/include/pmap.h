@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.h,v 1.6 1995/06/09 19:43:41 leo Exp $	*/
+/*	$NetBSD: pmap.h,v 1.1 1995/03/26 07:12:05 leo Exp $	*/
 
 /* 
  * Copyright (c) 1987 Carnegie-Mellon University
@@ -59,6 +59,7 @@ struct pmap {
 };
 
 typedef struct pmap *pmap_t;
+extern pmap_t kernel_pmap;
 
 /*
  * Macros for speed
@@ -66,7 +67,7 @@ typedef struct pmap *pmap_t;
 #define PMAP_ACTIVATE(pmapp, pcbp, iscurproc) \
 	if ((pmapp) != NULL && (pmapp)->pm_stchanged) { \
 		(pcbp)->pcb_ustp = \
-		    atari_btop(pmap_extract(pmap_kernel(), \
+		    atari_btop(pmap_extract(kernel_pmap, \
 		    cpu040 ? (vm_offset_t)(pmapp)->pm_rtab : \
 		    (vm_offset_t)(pmapp)->pm_stab)); \
 		if (iscurproc) \
@@ -74,18 +75,6 @@ typedef struct pmap *pmap_t;
 		(pmapp)->pm_stchanged = FALSE; \
 	}
 #define PMAP_DEACTIVATE(pmapp, pcbp)
-
-/*
- * Description of the memory segments. Build in atari_init/start_c().
- * This gives a better separation between machine dependent stuff and
- * the pmap-module.
- */
-#define	NPHYS_SEGS	8
-struct physeg {
-	vm_offset_t	start;		/* PA of first page in segment	*/
-	vm_offset_t	end;		/* PA of last  page in segment	*/
-	int		first_page;	/* relative page# of 'start'	*/
-};
 
 /*
  * For each vm_page_t, there is a list of all currently valid virtual
@@ -103,21 +92,14 @@ typedef struct pv_entry {
 #define	PV_CI		0x01	/* all entries must be cache inhibited */
 #define PV_PTPAGE	0x02	/* entry maps a page table page */
 
-#ifdef	_KERNEL
-struct physeg	phys_segs[NPHYS_SEGS];
-pv_entry_t	pv_table;	/* array of entries, one per page */
-u_int		*Sysmap;
-char		*vmmap;		/* map for mem, dumps, etc. */
-struct pmap	kernel_pmap_store;
+#ifdef	KERNEL
+extern pv_entry_t	pv_table;	/* array of entries, one per page */
+extern u_int		*Sysmap;
+extern char		*vmmap;		/* map for mem, dumps, etc. */
 
-#ifdef MACHINE_NONCONTIG
-#define	pa_index(pa)			pmap_page_index(pa)
-#else
-#define pa_index(pa)			atop(pa - vm_first_phys)
-#endif /* MACHINE_NONCONTIG */
-#define pa_to_pvh(pa)			(&pv_table[pa_index(pa)])
-#define	pmap_kernel()			(&kernel_pmap_store)
+#define pa_index(pa)		atop(pa - vm_first_phys)
+#define pa_to_pvh(pa)		(&pv_table[pa_index(pa)])
 #define	pmap_resident_count(pmap)	((pmap)->pm_stats.resident_count)
-#endif	/* _KERNEL */
+#endif	KERNEL
 
 #endif	/* !_MACHINE_PMAP_H_ */

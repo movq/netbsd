@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.s,v 1.15 1996/02/02 02:36:20 mycroft Exp $	*/
+/*	$NetBSD: locore.s,v 1.1 1995/03/26 07:12:19 leo Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -49,7 +49,7 @@
  * Atari Modifications: Leo Weppelman
  */
 
-#include "assym.h"
+#include "assym.s"
 #include <atari/atari/vectors.s>
 
 	.text
@@ -198,33 +198,38 @@ Lstkadj:
  * FP exceptions.
  */
 _fpfline:
-	tstl	_cpu040		|  an 040 FPU
-	jeq	fpfline_not40	|  no, do 6888? emulation
+#if defined(M68040)
 	cmpw	#0x202c,sp@(6)	|  format type 2?
 	jne	_illinst	|  no, not an FP emulation
 #ifdef FPSP
 	.globl fpsp_unimp
 	jmp	fpsp_unimp	|  yes, go handle it
-#endif
-fpfline_not40:
+#else
 	clrl	sp@-		|  stack adjust count
 	moveml	#0xFFFF,sp@-	|  save registers
 	moveq	#T_FPEMULI,d0	|  denote as FP emulation trap
 	jra	fault		|  do it
+#endif
+#else
+	jra	_illinst
+#endif
 
 _fpunsupp:
-	tstl	_cpu040		|  an 040 FPU?
-	jeq	fpunsupp_not40
+#if defined(M68040)
+	cmpl	#-2,_mmutype	|  68040?
+	jne	_illinst	|  no, treat as illinst
 #ifdef FPSP
 	.globl	fpsp_unsupp
 	jmp	fpsp_unsupp	|  yes, go handle it
-#endif
-fpunsupp_not40:
+#else
 	clrl	sp@-		|  stack adjust count
 	moveml	#0xFFFF,sp@-	|  save registers
 	moveq	#T_FPEMULD,d0	|  denote as FP emulation trap
 	jra	fault		|  do it
-
+#endif
+#else
+	jra	_illinst
+#endif
 /*
  * Handles all other FP coprocessor exceptions.
  * Note that since some FP exceptions generate mid-instruction frames
@@ -233,6 +238,7 @@ fpunsupp_not40:
  */
 	.globl	_fpfault
 _fpfault:
+#ifdef FPCOPROC
 	clrl	sp@-		|  stack adjust count
 	moveml	#0xFFFF,sp@-	|  save user registers
 	movl	usp,a0		|  and save
@@ -251,6 +257,9 @@ Lfptnull:
 	frestore a0@		|  restore state
 	movl	#T_FPERR,sp@-	|  push type arg
 	jra	Ltrapnstkadj	|  call trap and deal with stack cleanup
+#else
+	jra	_badtrap	|  treat as an unexpected trap
+#endif
 
 /*
  * Coprocessor and format errors can generate mid-instruction stack
@@ -327,12 +336,9 @@ fault:
 	jra	rei			|  all done
 
 	.globl	_straytrap
-
-_lev4intr:				| HBL & VBL interrupts can not
-_lev2intr:				|  be turned off on a Falcon, so
-	rte				|  just ignore them.
-
+_lev2intr:
 _lev3intr:
+_lev4intr:
 _lev5intr:
 _lev6intr:
 _badtrap:
@@ -497,8 +503,12 @@ _spurintr:
 	addql	#1,_cnt+V_INTR
 	jra	rei
 
-	/* MFP timer A handler --- System clock --- */
-mfp_tima:
+	/* MFP2 timer A handler --- System clock --- */
+	/* Note: Reduce by factor 4 before handling  */
+mfp2_tima:
+	subqw	#1,_clk_div		|  time for another clock tick?
+	jgt	clk_ret			|  no, return
+	movw	#4,_clk_div		|  reset divide counter
 	moveml	d0-d1/a0-a1,sp@-	|  save scratch registers
 	lea	sp@(16),a1		|  get pointer to PS
 	movl	a1,sp@-			|  push pointer to PS, PC
@@ -508,21 +518,10 @@ mfp_tima:
 	moveml	sp@+,d0-d1/a0-a1	|  restore scratch regs	
 	addql	#1,_cnt+V_INTR		|  chalk up another interrupt
 	jra	rei			|  all done
-
-#ifdef STATCLOCK
-	/* MFP timer C handler --- Stat/Prof clock --- */
-mfp_timc:
-	moveml	d0-d1/a0-a1,sp@-	|  save scratch registers
-	lea	sp@(16),a1		|  get pointer to PS
-	movl	a1,sp@-			|  push pointer to PS, PC
-	jbsr	_statintr		|  call statistics clock handler
-	addql	#4,sp			|  pop params
-	addql	#1,_intrcnt+36		|  add another stat clock interrupt
-	moveml	sp@+,d0-d1/a0-a1	|  restore scratch regs	
-	addql	#1,_cnt+V_INTR		|  chalk up another interrupt
-	jra	rei			|  all done
-#endif /* STATCLOCK */
-
+clk_ret:
+	rte
+	
+	
 	/* MFP ACIA handler --- keyboard/midi --- */
 mfp_kbd:
 	addql	#1,_intrcnt+8		|  add another kbd/mouse interrupt
@@ -593,27 +592,12 @@ _lev1intr:
 	moveb	#0, SOFTINT_ADDR	|  Turn off software interrupt
 	moveml	d0-d1/a0-a1,sp@-
 	addql	#1,_intrcnt+16		|  add another software interrupt
-	jbsr	_softint		|  handle software interrupts
+	jbsr	_call_sicallbacks	|  handle call-backs
 	moveml	sp@+,d0-d1/a0-a1
 	addql	#1,_cnt+V_INTR		|  chalk up another interrupt
 	jra	rei
 
-	/*
-	 * Should never occur, except when special hardware modification
-	 * is installed. In this case, one expects to be dropped into
-	 * the debugger.
-	 */
-_lev7intr:
-#ifdef DDB
-	/*
-	 * Note that the nmi has to be turned off while handling it because
-	 * the hardware modification has no de-bouncing logic....
-	 */
-	movb	SYSMASK_ADDR, sp@-	|  save current sysmask
-	movb	#0, SYSMASK_ADDR	|  disable all interrupts
-	trap	#15			|  drop into the debugger
-	movb	sp@+, SYSMASK_ADDR	|  restore sysmask
-#endif
+_lev7intr:	/* Should never occur */
 	addql	#1,_intrcnt+28		|  add another nmi interrupt
 	rte				|  all done
 
@@ -705,9 +689,16 @@ Lnosir:
 Ldorte:
 	rte				|  real return	
 
+/*
+ * Kernel access to the current processes kernel stack is via a fixed
+ * virtual address.  It is at the same address as in the users VA space.
+ * Umap contains the KVA of the first of UPAGES PTEs mapping VA _kstack.
+ */
 	.data
+	.set	_kstack,-(UPAGES*NBPG)
+_Umap:	.long	0
 _esym:	.long	0
-	.globl	_esym
+	.globl	_kstack, _Umap, _esym
 
 
 /*
@@ -821,21 +812,19 @@ Lstartnot040:
 	/*
 	 * set kernel stack, user SP, and initial pcb
 	 */
-	movl	_proc0paddr,a1		| proc0 kernel stack
-	lea	a1@(USPACE),sp		| set kernel stack to end of area
+	lea	_kstack,a1		|  proc0 kernel stack
+	lea	a1@(UPAGES*NBPG-4),sp	|  set kernel stack to end of area
 	movl	#USRSTACK-4,a2
-	movl	a2,usp			| init user SP
-	movl	a2,a1@(PCB_USP)		| and save it
-	movl	a1,_curpcb		| proc0 is running
-	clrw	a1@(PCB_FLAGS)		| clear flags
-| LWP: The next part can be savely ommitted I think. The fpu probing
-|      code resets the m6888? fpu. How about a 68040 fpu?
-|
-|	clrl	a1@(PCB_FPCTX)		|  ensure null FP context
-|	pea	a1@(PCB_FPCTX)
-|	jbsr	_m68881_restore		|  restore it (does not kill a1)
-|	addql	#4,sp
-
+	movl	a2,usp			|  init user SP
+	movl	_proc0paddr,a1		|  get proc0 pcb addr
+	movl	a1,_curpcb		|  proc0 is running
+	clrw	a1@(PCB_FLAGS)		|  clear flags
+#ifdef FPCOPROC
+	clrl	a1@(PCB_FPCTX)		|  ensure null FP context
+	pea	a1@(PCB_FPCTX)
+	jbsr	_m68881_restore		|  restore it (does not kill a1)
+	addql	#4,sp
+#endif
 	/* flush TLB and turn on caches */
 	jbsr	_TBIA			|  invalidate TLB
 	movl	#CACHE_ON,d0
@@ -867,17 +856,12 @@ Lcacheon:
 	 * successfully faked the "execve()".  We load up the registers from
 	 * that set; the "rte" loads the PC and PSR, which jumps to "init".
  	 */
-	.globl	_proc0
 	movl	#0,a6			|  make DDB stack_trace() work
   	clrw	sp@-			|  vector offset/frame type
 	clrl	sp@-			|  PC - filled in by "execve"
   	movw	#PSL_USER,sp@-		|  in user mode
 	clrl	sp@-			|  stack adjust count
 	lea	sp@(-64),sp		|  construct space for D0-D7/A0-A7
-	lea	_proc0,a0		| proc0 in a0
-	movl	sp,a0@(P_MD + MD_REGS)	| save frame for proc0
-	movl	usp,a1
-	movl	a1,sp@(FR_SP)		| save user stack pointer in frame
 	pea	sp@			|  addr of space for D0
 	jbsr	_main			|  main(r0)
 	addql	#4,sp			|  pop args
@@ -891,25 +875,6 @@ Lnoflush:
 	moveml	sp@+,#0x7FFF		|  load most registers (all but SSP)
 	addql	#8,sp			|  pop SSP and stack adjust count
   	rte
-
-/*
- * proc_trampoline call function in register a2 with a3 as an arg
- * and then rei.  Note we restore the stack before calling thus giving
- * "a2" more stack  (e.g. if curproc had a deeply nested call chain...)
- * cpu_fork() also depends on struct frame being a second arg to the
- * function in a2.
- */
-	.globl	_proc_trampoline
-_proc_trampoline:
-	movl	a3@(P_MD + MD_REGS),sp	| process' frame pointer in sp
-	movl	a3,sp@-			| push function arg (curproc)
-	jbsr	a2@			| call function
-	addql	#4,sp			| pop arg
-	movl	sp@(FR_SP),a0		| usp to a0
-	movl	a0,usp			| setup user stack pointer
-	moveml	sp@+,#0x7FFF		| restore all but sp
-	addql	#8,sp			| pop sp and stack adjust
-	jra	rei			| all done
 
 /*
  * Signal "trampoline" code (18 bytes).  Invoked from RTE setup by sendsig().
@@ -937,6 +902,58 @@ _sigcode:
 	trap	#0			|  exit(errno)		 (2 bytes)
 	.align	2
 _esigcode:
+
+/*
+ * Icode is copied out to process 1 to exec init.
+ * If the exec fails, process 1 exits.
+ */
+	.globl	_icode,_szicode
+	.text
+_icode:
+	jra	st1
+init:
+	.asciz	"/sbin/init"
+	.byte	0			|  GNU ``as'' bug won't
+					|  allow an .even directive
+					|  here, says something about
+					|  non constant, which is crap.
+argv:
+	.long	init+6-_icode		|  argv[0] = "init" ("/sbin/init" + 6)
+	.long	eicode-_icode		|  argv[1] follows icode after copyout
+	.long	0
+
+st1:
+	clrl	sp@-
+	.set	argvrpc,argv-.-2	|  avoids PCREL bugs in ``as''
+					|  otherwise it assebles different
+					|  depending on your version of
+					|  GNU ``as''.  Markus' as has a 
+					|  nice one:
+					|  	a:	pea pc@(0)
+					| is equivelent to:
+					| 	a:	pea pc@(a-.)
+					| is equivelent to!:
+					| 	a:	pea pc@(b-.)
+					| 	b:	....
+					| ---
+					|  Mine (2.2.1) doesn't work right
+					|  for #3 mine puts out
+					| 	a:	pea pc@(2)
+					|  and it should be pc@(4).
+					|  cest la vie.
+	pea	pc@(argvrpc)
+	.set	initrpc,init-.-2	|  avoids PCREL bugs in ``as''
+					|  see above comment
+	pea	pc@(initrpc)
+	clrl	sp@-
+	moveq	#SYS_execve,d0
+	trap	#0
+	moveq	#SYS_exit,d0
+	trap	#0
+eicode:
+
+_szicode:
+	.long	_szicode-_icode
 
 /*
  * Primitives
@@ -1136,21 +1153,14 @@ pcbflag:
 	.text
 
 /*
- * At exit of a process, do a switch for the last time.
- * Switch to a safe stack and PCB, and deallocate the process's user area.
+ * At exit of a process, do a cpu_switch for the last time.
+ * The mapping of the pcb at p->p_addr has already been deleted,
+ * and the memory for the pcb+stack has been freed.
+ * The ipl is high enough to prevent the memory from being reallocated.
  */
 ENTRY(switch_exit)
-	movl	sp@(4),a0
-	movl	#nullpcb,_curpcb	| save state into garbage pcb
-	lea	tmpstk,sp		| goto a tmp stack
-
-	/* Free old process's user area. */
-	movl	#USPACE,sp@-		| size of u-area
-	movl	a0@(P_ADDR),sp@-	| address of process's u-area
-	movl	_kernel_map,sp@-	| map it was allocated in
-	jbsr	_kmem_free		| deallocate it
-	lea	sp@(12),sp		| pop args
-
+	movl	#nullpcb,_curpcb	|  save state into garbage pcb
+	lea	tmpstk,sp		|  goto a tmp stack
 	jra	_cpu_switch
 
 /*
@@ -1254,8 +1264,7 @@ Lsw2:
 	movl	usp,a2			|  grab USP (a2 has been saved)
 	movl	a2,a1@(PCB_USP)		|  and save it
 	movl	_CMAP2,a1@(PCB_CMAP2)	|  save temporary map PTE
-	tstl	_fputype		|  do we have an FPU?
-	jeq	Lswnofpsave		|  no? don't attempt to save
+#ifdef FPCOPROC
 	lea	a1@(PCB_FPCTX),a2	|  pointer to FP save area
 	fsave	a2@			|  save FP state
 	tstb	a2@			|  null state frame?
@@ -1263,6 +1272,7 @@ Lsw2:
 	fmovem	fp0-fp7,a2@(216)	|  save FP general registers
 	fmovem	fpcr/fpsr/fpi,a2@(312)	|  save FP control registers
 Lswnofpsave:
+#endif
 
 #ifdef DIAGNOSTIC
 	tstl	a0@(P_WCHAN)
@@ -1290,7 +1300,24 @@ Lswnofpsave:
 	addql	#8,sp
 	movl	_curpcb,a1		|  restore p_addr 
 Lswnochg:
+	movl	#PGSHIFT,d1
+	movl	a1,d0
+	lsrl	d1,d0			|  convert p_addr to page number 
+	lsll	#2,d0			|  and now to Systab offset 
+	addl	_Sysmap,d0		|  add Systab base to get PTE addr 
+#ifdef notdef
+	movw	#PSL_HIGHIPL,sr		|  go crit while changing PTEs 
+#endif
 	lea	tmpstk,sp		|  now goto a tmp stack for NMI 
+	movl	d0,a0			|  address of new context 
+	movl	_Umap,a2		|  address of PTEs for kstack 
+	moveq	#UPAGES-1,d0		|  sizeof kstack 
+Lres1:
+	movl	a0@+,d1			|  get PTE 
+	andl	#~PG_PROT,d1		|  mask out old protection 
+	orl	#PG_RW+PG_V,d1		|  ensure valid and writable 
+	movl	d1,a2@+			|  load it up 
+	dbf	d0,Lres1		|  til done 
 	tstl	_cpu040
 	jne	Lres2
 	movl	#CACHE_CLR,d0
@@ -1318,8 +1345,7 @@ Lres5:
 	moveml	a1@(PCB_REGS),#0xFCFC	|  and registers
 	movl	a1@(PCB_USP),a0
 	movl	a0,usp			|  and USP
-	tstl	_fputype		|  do we have an FPU?
-	jeq	Lnofprest		|  no, don't attempt to restore
+#ifdef FPCOPROC
 	lea	a1@(PCB_FPCTX),a0	|  pointer to FP save area
 	tstb	a0@			|  null state frame?
 	jeq	Lresfprest		|  yes, easy
@@ -1327,15 +1353,15 @@ Lres5:
 	fmovem	a0@(216),fp0-fp7	|  restore FP general registers
 Lresfprest:
 	frestore a0@			|  restore state
-
-Lnofprest:
+#endif
 	movw	a1@(PCB_PS),sr		|  no, restore PS
 	moveq	#1,d0			|  return 1 (for alternate returns)
 	rts
 
 /*
- * savectx(pcb)
- * Update pcb, saving current processor state
+ * savectx(pcb, altreturn)
+ * Update pcb, saving current processor state and arranging
+ * for alternate return ala longjmp in cpu_switch() if altreturn is true.
  */
 ENTRY(savectx)
 	movl	sp@(4),a1
@@ -1344,14 +1370,21 @@ ENTRY(savectx)
 	movl	a0,a1@(PCB_USP)		|  and save it 
 	moveml	#0xFCFC,a1@(PCB_REGS)	|  save non-scratch registers 
 	movl	_CMAP2,a1@(PCB_CMAP2)	|  save temporary map PTE 
-	tstl	_fputype		|  do we have an FPU?
-	jeq	Lsavedone		|  no, don't attempt to save
+#ifdef FPCOPROC
 	lea	a1@(PCB_FPCTX),a0	|  pointer to FP save area 
 	fsave	a0@			|  save FP state 
 	tstb	a0@			|  null state frame? 
-	jeq	Lsavedone		|  yes, all done 
+	jeq	Lsvnofpsave		|  yes, all done 
 	fmovem	fp0-fp7,a0@(216)	|  save FP general registers 
 	fmovem	fpcr/fpsr/fpi,a0@(312)	|  save FP control registers 
+Lsvnofpsave:
+#endif
+	tstl	sp@(8)			|  altreturn? 
+	jeq	Lsavedone
+	movl	sp,d0			|  relocate current sp relative to a1 
+	subl	#_kstack,d0		|    (sp is relative to kstack): 
+	addl	d0,a1			|    a1 += sp - kstack; 
+	movl	sp@,a1@			|  write return pc at (relocated) sp@ 
 Lsavedone:
 	moveq	#0,d0			|  return 0 
 	rts
@@ -1774,6 +1807,205 @@ ENTRY(_remque)
 	rts
 
 /*
+ * bzero(addr, count)
+ */
+ALTENTRY(blkclr, _bzero)
+ENTRY(bzero)
+	movl	sp@(4),a0		|  address
+	movl	sp@(8),d0		|  count
+	jeq	Lbzdone					|  if zero, nothing to do
+	movl	a0,d1
+	btst	#0,d1			|  address odd?
+	jeq	Lbzeven			|  no, can copy words
+	clrb	a0@+			|  yes, zero byte to get to even boundary
+	subql	#1,d0			|  decrement count
+	jeq	Lbzdone			|  none left, all done
+Lbzeven:
+	movl	d0,d1
+	andl	#31,d0
+	lsrl	#5,d1			|  convert count to 8*longword count
+	jeq	Lbzbyte			|  no such blocks, zero byte at a time
+Lbzloop:
+	clrl	a0@+; clrl	a0@+; clrl	a0@+; clrl	a0@+;
+	clrl	a0@+; clrl	a0@+; clrl	a0@+; clrl	a0@+;
+	subql	#1,d1			|  one more block zeroed
+	jne	Lbzloop			|  more to go, do it
+	tstl	d0			|  partial block left?
+	jeq	Lbzdone			|  no, all done
+Lbzbyte:
+	clrb	a0@+
+	subql	#1,d0			|  one more byte cleared
+	jne	Lbzbyte			|  more to go, do it
+Lbzdone:
+	rts
+
+/*
+ * strlen(str)
+ */
+ENTRY(strlen)
+	moveq	#-1,d0
+	movl	sp@(4),a0		|  string
+Lslloop:
+	addql	#1,d0			|  increment count
+	tstb	a0@+			|  null?
+	jne	Lslloop			|  no, keep going
+	rts
+
+/*
+ * bcmp(s1, s2, len)
+ *
+ * WARNING!  This guy only works with counts up to 64K
+ */
+ENTRY(bcmp)
+	movl	sp@(4),a0		|  string 1
+	movl	sp@(8),a1		|  string 2
+	moveq	#0,d0
+	movw	sp@(14),d0		|  length
+	jeq	Lcmpdone		|  if zero, nothing to do
+	subqw	#1,d0			|  set up for DBcc loop
+Lcmploop:
+	cmpmb	a0@+,a1@+		|  equal?
+	dbne	d0,Lcmploop		|  yes, keep going
+	addqw	#1,d0			|  +1 gives zero on match
+Lcmpdone:
+	rts
+
+/*
+ * {ov}bcopy(from, to, len)
+ *
+ * Works for counts up to 128K.
+ */
+ALTENTRY(ovbcopy, _bcopy)
+ENTRY(bcopy)
+	movl	sp@(12),d0		|  get count
+	jeq	Lcpyexit		|  if zero, return
+	movl	sp@(4),a0		|  src address
+	movl	sp@(8),a1		|  dest address
+	cmpl	a1,a0			|  src before dest?
+	jlt	Lcpyback		|  yes, copy backwards (avoids overlap)
+	movl	a0,d1
+	btst	#0,d1			|  src address odd?
+	jeq	Lcfeven			|  no, go check dest
+	movb	a0@+,a1@+		|  yes, copy a byte
+	subql	#1,d0			|  update count
+	jeq	Lcpyexit		|  exit if done
+Lcfeven:
+	movl	a1,d1
+	btst	#0,d1			|  dest address odd?
+	jne	Lcfbyte			|  yes, must copy by bytes
+	movl	d0,d1			|  no, get count
+	lsrl	#2,d1			|  convert to longwords
+	jeq	Lcfbyte			|  no longwords, copy bytes
+	subql	#1,d1			|  set up for dbf
+Lcflloop:
+	movl	a0@+,a1@+		|  copy longwords
+	dbf	d1,Lcflloop		|  til done
+	andl	#3,d0			|  get remaining count
+	jeq	Lcpyexit		|  done if none
+Lcfbyte:
+	subql	#1,d0			|  set up for dbf
+Lcfbloop:
+	movb	a0@+,a1@+		|  copy bytes
+	dbf	d0,Lcfbloop		|  til done
+Lcpyexit:
+	rts
+Lcpyback:
+	addl	d0,a0			|  add count to src
+	addl	d0,a1			|  add count to dest
+	movl	a0,d1
+	btst	#0,d1			|  src address odd?
+	jeq	Lcbeven			|  no, go check dest
+	movb	a0@-,a1@-		|  yes, copy a byte
+	subql	#1,d0			|  update count
+	jeq	Lcpyexit		|  exit if done
+Lcbeven:
+	movl	a1,d1
+	btst	#0,d1			|  dest address odd?
+	jne	Lcbbyte			|  yes, must copy by bytes
+	movl	d0,d1			|  no, get count
+	lsrl	#2,d1			|  convert to longwords
+	jeq	Lcbbyte			|  no longwords, copy bytes
+	subql	#1,d1			|  set up for dbf
+Lcblloop:
+	movl	a0@-,a1@-		|  copy longwords
+	dbf	d1,Lcblloop		|  til done
+	andl	#3,d0			|  get remaining count
+	jeq	Lcpyexit		|  done if none
+Lcbbyte:
+	subql	#1,d0			|  set up for dbf
+Lcbbloop:
+	movb	a0@-,a1@-		|  copy bytes
+	dbf	d0,Lcbbloop		|  til done
+	rts
+
+/*
+ * Emulate fancy VAX string operations:
+ *	scanc(count, startc, table, mask)
+ *	skpc(mask, count, startc)
+ *	locc(mask, count, startc)
+ */
+ENTRY(scanc)
+	movl	sp@(4),d0		|  get length
+	jeq	Lscdone			|  nothing to do, return
+	movl	sp@(8),a0		|  start of scan
+	movl	sp@(12),a1		|  table to compare with
+	movb	sp@(19),d1		|  and mask to use
+	movw	d2,sp@-			|  need a scratch register
+	clrw	d2			|  clear it out
+	subqw	#1,d0			|  adjust for dbra
+Lscloop:
+	movb	a0@+,d2			|  get character
+	movb	a1@(0,d2:w),d2		|  get table entry
+	andb	d1,d2			|  mask it
+	dbne	d0,Lscloop		|  keep going til no more or non-zero
+	addqw	#1,d0			|  overshot by one
+	movw	sp@+,d2			|  restore scratch
+Lscdone:
+	rts
+
+ENTRY(skpc)
+	movl	sp@(8),d0		|  get length
+	jeq	Lskdone			|  nothing to do, return
+	movb	sp@(7),d1		|  mask to use
+	movl	sp@(12),a0		|  where to start
+	subqw	#1,d0			|  adjust for dbcc
+Lskloop:
+	cmpb	a0@+,d1			|  compate with mask
+	dbne	d0,Lskloop		|  keep going til no more or zero
+	addqw	#1,d0			|  overshot by one
+Lskdone:
+	rts
+
+ENTRY(locc)
+	movl	sp@(8),d0		|  get length
+	jeq	Llcdone			|  nothing to do, return
+	movb	sp@(7),d1		|  mask to use
+	movl	sp@(12),a0		|  where to start
+	subqw	#1,d0			|  adjust for dbcc
+Llcloop:
+	cmpb	a0@+,d1			|  compate with mask
+	dbeq	d0,Llcloop		|  keep going til no more or non-zero
+	addqw	#1,d0			|  overshot by one
+Llcdone:
+	rts
+
+/*
+ * Emulate VAX FFS (find first set) instruction.
+ */
+ENTRY(ffs)
+	moveq	#-1,d0
+	movl	sp@(4),d1
+	jeq	Lffsdone
+Lffsloop:
+	addql	#1,d0
+	btst	d0,d1
+	jeq	Lffsloop
+Lffsdone:
+	addql	#1,d0
+	rts
+
+#ifdef FPCOPROC
+/*
  * Save and restore 68881 state.
  * Pretty awful looking since our assembler does not
  * recognize FP mnemonics.
@@ -1797,6 +2029,7 @@ ENTRY(m68881_restore)
 Lm68881rdone:
 	frestore a0@			|  restore state
 	rts
+#endif
 
 /*
  * Handle the nitty-gritty of rebooting the machine.
@@ -1876,6 +2109,9 @@ _cold:
 	.globl	_proc0paddr
 _proc0paddr:
 	.long	0			|  KVA of proc0 u-area
+	.globl	_clk_div
+_clk_div:
+	.word	4			| Clock divisor
 #ifdef DEBUG
 	.globl	fulltflush, fullcflush
 fulltflush:
@@ -1898,9 +2134,8 @@ _intrnames:
 	.asciz	"5380-DMA"
 	.asciz	"nmi"
 	.asciz	"8530-SCC"
-	.asciz	"statclock"
 _eintrnames:
 	.even
 _intrcnt:
-	.long	0,0,0,0,0,0,0,0,0,0
+	.long	0,0,0,0,0,0,0,0,0
 _eintrcnt:

@@ -1,4 +1,4 @@
-/*	$NetBSD: dev.c,v 1.1.1.1 1996/02/29 11:36:12 leo Exp $	*/
+/*	$NetBSD: dev.c,v 1.1 1996/02/29 11:36:12 leo Exp $	*/
 
 /*-
  * Copyright (c) 1993

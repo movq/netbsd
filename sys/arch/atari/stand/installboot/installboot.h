@@ -1,4 +1,4 @@
-/*	$NetBSD: installboot.h,v 1.1.1.1 1996/02/29 11:35:47 leo Exp $	*/
+/*	$NetBSD: installboot.h,v 1.1 1996/02/29 11:35:47 leo Exp $	*/
 
 /*
  * Copyright (c) 1995 Waldi Ravens

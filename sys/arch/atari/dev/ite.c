@@ -1,4 +1,4 @@
-/*	$NetBSD: ite.c,v 1.8 1996/02/22 10:11:27 leo Exp $	*/
+/*	$NetBSD: ite.c,v 1.1 1995/03/26 07:12:10 leo Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -60,7 +60,6 @@
 #include <dev/cons.h>
 
 #include <atari/atari/kdassert.h>
-#include <atari/dev/kbdmap.h>
 #include <atari/dev/iteioctl.h>
 #include <atari/dev/itevar.h>
 #include <atari/dev/grfioctl.h>
@@ -68,6 +67,13 @@
 #include <atari/dev/grfvar.h>
 #include <atari/dev/viewioctl.h>
 #include <atari/dev/viewvar.h>
+#include <atari/dev/kbdmap.h>
+
+/*
+ * XXX go ask sys/kern/tty.c:ttselect()
+ */
+#include "grf.h"		/* Get definition of NGRF */	
+struct tty *ite_tty[NGRF];
 
 #define ITEUNIT(dev)	(minor(dev))
 
@@ -91,14 +97,11 @@ u_char	cons_tabs[MAX_TABS];
 struct ite_softc *kbd_ite;
 int kbd_init;
 
-static void iteprecheckwrap __P((struct ite_softc *));
-static void itecheckwrap __P((struct ite_softc *));
-
 static char	*index __P((const char *, int));
-static __inline__ int	atoi __P((const char *));
+static int	inline atoi __P((const char *));
 static void	ite_switch __P((int));
 void iteputchar __P((int c, struct ite_softc *ip));
-void ite_putstr __P((const u_char * s, int len, dev_t dev));
+void ite_putstr __P((const char * s, int len, dev_t dev));
 void iteattach __P((struct device *, struct device *, void *));
 int itematch __P((struct device *, struct cfdata *, void *));
 
@@ -145,6 +148,7 @@ iteattach(pdp, dp, auxp)
 struct device	*pdp, *dp;
 void		*auxp;
 {
+	extern int		hz;
 	struct grf_softc	*gp;
 	struct ite_softc	*ip;
 	int			s;
@@ -216,7 +220,7 @@ getitesp(dev)
  * is called before any devices have been probed.
  */
 void
-itecnprobe(cd)
+ite_cnprobe(cd)
 	struct consdev *cd;
 {
 	/*
@@ -237,7 +241,7 @@ itecnprobe(cd)
 }
 
 void
-itecninit(cd)
+ite_cninit(cd)
 	struct consdev *cd;
 {
 	struct ite_softc *ip;
@@ -265,7 +269,7 @@ ite_cnfinish(ip)
 }
 
 int
-itecngetc(dev)
+ite_cngetc(dev)
 	dev_t dev;
 {
 	int c;
@@ -283,7 +287,7 @@ itecngetc(dev)
 }
 
 void
-itecnputc(dev, c)
+ite_cnputc(dev, c)
 	dev_t dev;
 	int c;
 {
@@ -308,26 +312,19 @@ itecnputc(dev, c)
 
 /* 
  * iteinit() is the standard entry point for initialization of
- * an ite device, it is also called from itecninit().
+ * an ite device, it is also called from ite_cninit().
  *
  */
 void
 iteinit(dev)
 	dev_t dev;
 {
-	extern int		atari_realconfig;
-	struct ite_softc	*ip;
+	struct ite_softc *ip;
 
 	ip = getitesp(dev);
-	if (ip->flags & ITE_INITED)
+	if(ip->flags & ITE_INITED)
 		return;
-	if (atari_realconfig) {
-		if (ip->kbdmap && ip->kbdmap != &ascii_kbdmap)
-			free(ip->kbdmap, M_DEVBUF);
-		ip->kbdmap = malloc(sizeof(struct kbdmap), M_DEVBUF, M_WAITOK);
-		bcopy(&ascii_kbdmap, ip->kbdmap, sizeof(struct kbdmap));
-	}
-	else ip->kbdmap = &ascii_kbdmap;
+	bcopy(&ascii_kbdmap, &kbdmap, sizeof(struct kbdmap));
 
 	ip->cursorx = 0;
 	ip->cursory = 0;
@@ -358,7 +355,7 @@ iteopen(dev, mode, devtype, p)
 	ip = getitesp(dev);
 
 	if (ip->tp == NULL)
-		tp = ip->tp = ttymalloc();
+		tp = ite_tty[unit] = ip->tp = ttymalloc();
 	else
 		tp = ip->tp;
 	if ((tp->t_state & (TS_ISOPEN | TS_XCLUDE)) == (TS_ISOPEN | TS_XCLUDE)
@@ -441,26 +438,11 @@ itewrite(dev, uio, flag)
 	return ((*linesw[tp->t_line].l_write) (tp, uio, flag));
 }
 
-void
-itestop(tp, flag)
-	struct tty *tp;
-	int flag;
-{
-
-}
-
-struct tty *
-itetty(dev)
-	dev_t	dev;
-{
-	return(getitesp(dev)->tp);
-}
-
 int
 iteioctl(dev, cmd, addr, flag, p)
 	dev_t		dev;
 	u_long		cmd;
-	int		flag;
+	int			flag;
 	caddr_t		addr;
 	struct proc	*p;
 {
@@ -475,7 +457,7 @@ iteioctl(dev, cmd, addr, flag, p)
 	KDASSERT(tp);
 
 	error = (*linesw[tp->t_line].l_ioctl) (tp, cmd, addr, flag, p);
-	if(error >= 0)
+	if (error >= 0)
 		return (error);
 	error = ttioctl(tp, cmd, addr, flag, p);
 	if (error >= 0)
@@ -485,34 +467,33 @@ iteioctl(dev, cmd, addr, flag, p)
 	case ITEIOCSKMAP:
 		if (addr == 0)
 			return(EFAULT);
-		bcopy(addr, ip->kbdmap, sizeof(struct kbdmap));
-		return(0);
-	case ITEIOCSSKMAP:
-		if (addr == 0)
-			return(EFAULT);
-		bcopy(addr, &ascii_kbdmap, sizeof(struct kbdmap));
+		bcopy(addr, &kbdmap, sizeof(struct kbdmap));
 		return(0);
 	case ITEIOCGKMAP:
 		if (addr == NULL)
 			return(EFAULT);
-		bcopy(ip->kbdmap, addr, sizeof(struct kbdmap));
+		bcopy(&kbdmap, addr, sizeof(struct kbdmap));
 		return(0);
 	case ITEIOCGREPT:
 		irp = (struct iterepeat *)addr;
 		irp->start = start_repeat_timeo;
 		irp->next = next_repeat_timeo;
-		return(0);
 	case ITEIOCSREPT:
 		irp = (struct iterepeat *)addr;
-		if (irp->start < ITEMINREPEAT || irp->next < ITEMINREPEAT)
+		if (irp->start < ITEMINREPEAT && irp->next < ITEMINREPEAT)
 			return(EINVAL);
 		start_repeat_timeo = irp->start;
 		next_repeat_timeo = irp->next;
 		return(0);
 	}
-	error = ite_grf_ioctl(ip, cmd, addr, flag, p);
-	if(error >= 0)
-		return(error);
+#ifdef notyet /* LWP */
+	/* XXX */
+	if (minor(dev) == 0) {
+		error = ite_grf_ioctl(ip, cmd, addr, flag, p);
+		if (error >= 0)
+			return (error);
+	}
+#endif
 	return (ENOTTY);
 }
 
@@ -523,7 +504,7 @@ itestart(tp)
 	struct clist *rbp;
 	struct ite_softc *ip;
 	u_char buf[ITEBURST];
-	int s, len;
+	int s, len, n;
 
 	ip = getitesp(tp->t_dev);
 
@@ -593,7 +574,7 @@ ite_on(dev, flag)
 	return (0);
 }
 
-void
+int
 ite_off(dev, flag)
 dev_t	dev;
 int	flag;
@@ -702,7 +683,6 @@ u_int		c;
 enum caller	caller;
 {
 	struct key	key;
-	struct kbdmap	*kbdmap;
 	u_char		code, up, mask;
 	int		s;
 
@@ -710,7 +690,6 @@ enum caller	caller;
 	c    = KBD_SCANCODE(c);
 	code = 0;
 	mask = 0;
-	kbdmap = (kbd_ite == NULL) ? &ascii_kbdmap : kbd_ite->kbdmap;
 
 	s = spltty();
 
@@ -735,7 +714,7 @@ enum caller	caller;
 			if(!up)
 				key_mod ^= KBD_MOD_CAPS;
 			splx(s);
-			return -1;
+			return;
 			break;
 	}
 	if(mask) {
@@ -758,18 +737,18 @@ enum caller	caller;
 	/* translate modifiers */
 	if(key_mod & KBD_MOD_SHIFT) {
 		if(key_mod & KBD_MOD_ALT)
-			key = kbdmap->alt_shift_keys[c];
-		else key = kbdmap->shift_keys[c];
+			key = kbdmap.alt_shift_keys[c];
+		else key = kbdmap.shift_keys[c];
 	}
 	else if(key_mod & KBD_MOD_ALT)
-			key = kbdmap->alt_keys[c];
+			key = kbdmap.alt_keys[c];
 	else {
-		key = kbdmap->keys[c];
+		key = kbdmap.keys[c];
 		/*
 		 * If CAPS and key is CAPable (no pun intended)
 		 */
 		if((key_mod & KBD_MOD_CAPS) && (key.mode & KBD_MODE_CAPS))
-			key = kbdmap->shift_keys[c];
+			key = kbdmap.shift_keys[c];
 	}
 	code = key.code;
 
@@ -835,7 +814,6 @@ u_int		c;
 enum caller	caller;
 {
 	struct tty	*kbd_tty;
-	struct kbdmap	*kbdmap;
 	u_char		code, *str, up, mask;
 	struct key	key;
 	int		s, i;
@@ -844,7 +822,6 @@ enum caller	caller;
 		return;
 
 	kbd_tty = kbd_ite->tp;
-	kbdmap  = kbd_ite->kbdmap;
 
 	up   = KBD_RELEASED(c);
 	c    = KBD_SCANCODE(c);
@@ -930,7 +907,7 @@ enum caller	caller;
 	 */
 	if(key_mod == (KBD_MOD_ALT | KBD_MOD_LSHIFT) && c == 0x3b) {
 		/* ALT + LSHIFT + F1 */
-		bcopy(&ascii_kbdmap, kbdmap, sizeof(struct kbdmap));
+		bcopy(&ascii_kbdmap, &kbdmap, sizeof(struct kbdmap));
 		splx(s);
 		return;
 #ifdef DDB
@@ -957,18 +934,18 @@ enum caller	caller;
 	 */
 	if(key_mod & KBD_MOD_SHIFT) {
 		if(key_mod & KBD_MOD_ALT)
-			key = kbdmap->alt_shift_keys[c];
-		else key = kbdmap->shift_keys[c];
+			key = kbdmap.alt_shift_keys[c];
+		else key = kbdmap.shift_keys[c];
 	}
 	else if(key_mod & KBD_MOD_ALT)
-			key = kbdmap->alt_keys[c];
+			key = kbdmap.alt_keys[c];
 	else {
-		key = kbdmap->keys[c];
+		key = kbdmap.keys[c];
 		/*
 		 * If CAPS and key is CAPable (no pun intended)
 		 */
 		if((key_mod & KBD_MOD_CAPS) && (key.mode & KBD_MODE_CAPS))
-			key = kbdmap->shift_keys[c];
+			key = kbdmap.shift_keys[c];
 	}
 	code = key.code;
 
@@ -1042,7 +1019,7 @@ enum caller	caller;
 		    3, 27, 'O', 'C',
 		    3, 27, 'O', 'D'};
 
-		str = kbdmap->strings + code;
+		str = kbdmap.strings + code;
 		/* 
 		 * if this is a cursor key, AND it has the default
 		 * keymap setting, AND we're in app-cursor mode, switch
@@ -1071,7 +1048,7 @@ enum caller	caller;
 }
 
 /* helper functions, makes the code below more readable */
-static __inline__ void
+static void inline
 ite_sendstr(str)
 	char *str;
 {
@@ -1096,7 +1073,7 @@ alignment_display(ip)
   SUBR_CURSOR(ip, DRAW_CURSOR);
 }
 
-static __inline__ void
+static void inline
 snap_cury(ip)
 	struct ite_softc *ip;
 {
@@ -1109,7 +1086,7 @@ snap_cury(ip)
     }
 }
 
-static __inline__ void
+static void inline
 ite_dnchar(ip, n)
      struct ite_softc *ip;
      int n;
@@ -1127,7 +1104,7 @@ ite_dnchar(ip, n)
   SUBR_CURSOR(ip, DRAW_CURSOR);
 }
 
-static __inline__ void
+static void inline
 ite_inchar(ip, n)
      struct ite_softc *ip;
      int n;
@@ -1145,7 +1122,7 @@ ite_inchar(ip, n)
   SUBR_CURSOR(ip, DRAW_CURSOR);
 }
 
-static __inline__ void
+static void inline
 ite_clrtoeol(ip)
      struct ite_softc *ip;
 {
@@ -1158,7 +1135,7 @@ ite_clrtoeol(ip)
     }
 }
 
-static __inline__ void
+static void inline
 ite_clrtobol(ip)
      struct ite_softc *ip;
 {
@@ -1168,7 +1145,7 @@ ite_clrtobol(ip)
   SUBR_CURSOR(ip, DRAW_CURSOR);
 }
 
-static __inline__ void
+static void inline
 ite_clrline(ip)
      struct ite_softc *ip;
 {
@@ -1180,7 +1157,7 @@ ite_clrline(ip)
 
 
 
-static __inline__ void
+static void inline
 ite_clrtoeos(ip)
      struct ite_softc *ip;
 {
@@ -1193,7 +1170,7 @@ ite_clrtoeos(ip)
     }
 }
 
-static __inline__ void
+static void inline
 ite_clrtobos(ip)
      struct ite_softc *ip;
 {
@@ -1206,7 +1183,7 @@ ite_clrtobos(ip)
     }
 }
 
-static __inline__ void
+static void inline
 ite_clrscreen(ip)
      struct ite_softc *ip;
 {
@@ -1217,7 +1194,7 @@ ite_clrscreen(ip)
 
 
 
-static __inline__ void
+static void inline
 ite_dnline(ip, n)
      struct ite_softc *ip;
      int n;
@@ -1239,7 +1216,7 @@ ite_dnline(ip, n)
   SUBR_CURSOR(ip, DRAW_CURSOR);
 }
 
-static __inline__ void
+static void inline
 ite_inline(ip, n)
      struct ite_softc *ip;
      int n;
@@ -1261,7 +1238,7 @@ ite_inline(ip, n)
   SUBR_CURSOR(ip, DRAW_CURSOR);
 }
 
-static __inline__ void
+static void inline
 ite_lf (ip)
      struct ite_softc *ip;
 {
@@ -1276,7 +1253,7 @@ ite_lf (ip)
   clr_attr(ip, ATTR_INV);
 }
 
-static __inline__ void
+static void inline 
 ite_crlf (ip)
      struct ite_softc *ip;
 {
@@ -1284,7 +1261,7 @@ ite_crlf (ip)
   ite_lf (ip);
 }
 
-static __inline__ void
+static void inline
 ite_cr (ip)
      struct ite_softc *ip;
 {
@@ -1295,7 +1272,7 @@ ite_cr (ip)
     }
 }
 
-static __inline__ void
+static void inline
 ite_rlf (ip)
      struct ite_softc *ip;
 {
@@ -1310,7 +1287,7 @@ ite_rlf (ip)
   clr_attr(ip, ATTR_INV);
 }
 
-static __inline__ int
+static int inline
 atoi (cp)
     const char *cp;
 {
@@ -1333,7 +1310,7 @@ index (cp, ch)
 
 
 
-static __inline__ int
+static int inline
 ite_argnum (ip)
     struct ite_softc *ip;
 {
@@ -1351,11 +1328,11 @@ ite_argnum (ip)
   return n;
 }
 
-static __inline__ int
+static int inline
 ite_zargnum (ip)
     struct ite_softc *ip;
 {
-  char ch;
+  char ch, *cp;
   int n;
 
   /* convert argument string into number */
@@ -1369,9 +1346,20 @@ ite_zargnum (ip)
   return n;	/* don't "n ? n : 1" here, <CSI>0m != <CSI>1m ! */
 }
 
+static int inline
+strncmp (a, b, l)
+    const char *a, *b;
+    int l;
+{
+  for (;l--; a++, b++)
+    if (*a != *b)
+      return *a - *b;
+  return 0;
+}
+
 void
 ite_putstr(s, len, dev)
-	const u_char *s;
+	const char *s;
 	int len;
 	dev_t dev;
 {
@@ -1408,6 +1396,7 @@ iteputchar(c, ip)
 
 	if (ip->escape) 
 	  {
+doesc:
 	    switch (ip->escape) 
 	      {
 	      case ESC:
@@ -2312,7 +2301,6 @@ iteputchar(c, ip)
 	}
 }
 
-static void
 iteprecheckwrap(ip)
 	struct ite_softc *ip;
 {
@@ -2329,7 +2317,6 @@ iteprecheckwrap(ip)
 	}
 }
 
-static void
 itecheckwrap(ip)
 	struct ite_softc *ip;
 {

@@ -1,4 +1,4 @@
-/*	$NetBSD: xexit.c,v 1.1.1.1 1996/01/07 21:50:50 leo Exp $	*/
+/*	$NetBSD: xexit.c,v 1.1 1996/01/07 21:50:50 leo Exp $	*/
 
 /*
  * Copyright (c) 1995 Waldi Ravens.

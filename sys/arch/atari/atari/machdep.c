@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.19 1996/02/22 10:10:51 leo Exp $	*/
+/*	$NetBSD: machdep.c,v 1.1 1995/03/26 07:12:19 leo Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -86,15 +86,10 @@
 #include <machine/psl.h>
 #include <machine/pte.h>
 #include <machine/iomap.h>
+#include <machine/scu.h>
 #include <dev/cons.h>
 
-#include "ether.h"
-#include "ppp.h"
-
-static void call_sicallbacks __P((void));
-static void identifycpu __P((void));
-static void netintr __P((void));
-
+/* vm_map_t buffer_map; */
 extern vm_offset_t avail_end;
 
 /*
@@ -115,13 +110,14 @@ int	safepri = PSL_LOWIPL;
 extern  int   freebufspace;
 extern	u_int lowram;
 
-/*
- * For the fpu emulation and the fpu driver
- */
-int	fputype = 0;
-
+/* used in init_main.c */
+char *cpu_type = "m68k";
 /* the following is used externally (sysctl_hw) */
 char machine[] = "atari";
+
+#ifdef COMPAT_SUNOS
+void sunos_sendsig ();
+#endif
 
  /*
  * Console initialization: called early on from main,
@@ -131,6 +127,14 @@ char machine[] = "atari";
 void
 consinit()
 {
+
+	/*
+	 * Set cpuspeed immediately since cninit() called routines
+	 * might use delay.[
+	 */
+
+	cpuspeed = MHZ_33;	/* XXX */
+
 	/*
 	 * Initialize the console before we print anything out.
 	 */
@@ -150,7 +154,8 @@ consinit()
 void
 cpu_startup()
 {
-	extern	 u_long		boot_ttphysize, boot_stphysize;
+	extern	 long		Usrptsize;
+	extern	 struct map	*useriomap;
 	register unsigned	i;
 	register caddr_t	v, firstaddr;
 		 int		base, residual;
@@ -160,7 +165,7 @@ cpu_startup()
 		 int		opmapdebug = pmapdebug;
 #endif
 		 vm_offset_t	minaddr, maxaddr;
-		 vm_size_t	size = 0;
+		 vm_size_t	size;
 
 	/*
 	 * Initialize error message buffer (at end of core).
@@ -170,7 +175,7 @@ cpu_startup()
 #endif
 	/* avail_end was pre-decremented in pmap_bootstrap to compensate */
 	for(i = 0; i < btoc(sizeof (struct msgbuf)); i++)
-		pmap_enter(pmap_kernel(), (vm_offset_t)msgbufp, 
+		pmap_enter(kernel_pmap, (vm_offset_t)msgbufp, 
 		    avail_end + i * NBPG, VM_PROT_ALL, TRUE);
 	msgbufmapped = 1;
 
@@ -179,9 +184,7 @@ cpu_startup()
 	 */
 	printf(version);
 	identifycpu();
-
-	i = boot_ttphysize + boot_stphysize;
-	printf("real  mem = %d (%d pages)\n", i, i/NBPG);
+	printf("real  mem = %d (%d pages)\n",ctob(physmem),ctob(physmem)/NBPG);
 
 	/*
 	 * Allocate space for system data structures.
@@ -337,6 +340,11 @@ again:
 		nbuf, bufpages * CLBYTES);
 	
 	/*
+	 * Set up CPU-specific registers, cache, etc.
+	 */
+	initcpu();
+
+	/*
 	 * Set up buffers, so they can be used to read disk labels.
 	 */
 	bufinit();
@@ -353,23 +361,21 @@ again:
  * but would break init; should be fixed soon.
  */
 void
-setregs(p, pack, stack, retval)
+setregs(p, entry, stack, retval)
 	register struct proc *p;
-	struct exec_package *pack;
+	u_long entry;
 	u_long stack;
 	register_t *retval;
 {
 	struct frame *frame = (struct frame *)p->p_md.md_regs;
 	
-	frame->f_pc = pack->ep_entry & ~1;
+	frame->f_pc = entry & ~1;
 	frame->f_regs[SP] = stack;
-	frame->f_regs[A2] = (int)PS_STRINGS;
-
+#ifdef FPCOPROC
 	/* restore a null state frame */
 	p->p_addr->u_pcb.pcb_fpregs.fpf_null = 0;
-
-	if(fputype)
-		m68881_restore(&p->p_addr->u_pcb.pcb_fpregs);
+	m68881_restore(&p->p_addr->u_pcb.pcb_fpregs);
+#endif
 }
 
 /*
@@ -378,41 +384,40 @@ setregs(p, pack, stack, retval)
 char cpu_model[120];
 extern char version[];
  
-static void
 identifycpu()
 {
-	extern char	*fpu_describe();
-	extern int	fpu_probe();
-	       char	*mach, *mmu, *fpu, *cpu;
+        /* there's alot of XXX in here... */
+	char *mach, *mmu, *fpu;
 
-	if (machineid & ATARI_TT)
-		mach = "Atari TT";
-	else if (machineid & ATARI_FALCON)
-		mach = "Atari Falcon";
-	else mach = "Atari UNKNOWN";
+	mach = "Atari TT";
 
-	cpu     = "m68k";
-	fputype = fpu_probe();
-	fpu     = fpu_describe(fputype);
-
+	fpu = NULL;
 	if (machineid & ATARI_68040) {
-		cpu     = "m68040";
-		mmu     = "/MMU";
+		cpu_type = "m68040";
+		mmu = "/MMU";
+		fpu = "/FPU";
 	} else if (machineid & ATARI_68030) {
-		cpu = "m68030";
+		cpu_type = "m68030";	/* XXX */
 		mmu = "/MMU";
 	} else {
-		cpu = "m68020";
+		cpu_type = "m68020";
 		mmu = " m68851 MMU";
 	}
-	sprintf(cpu_model, "%s (%s CPU%s%s FPU)", mach, cpu, mmu, fpu);
+	if (fpu == NULL) {
+		if (machineid & ATARI_68882)
+			fpu = " m68882 FPU";
+		else if (machineid & ATARI_68881)
+			fpu = " m68881 FPU";
+		else
+			fpu = " no FPU";
+	}
+	sprintf(cpu_model, "%s (%s CPU%s%s)", mach, cpu_type, mmu, fpu);
 	printf("%s\n", cpu_model);
 }
 
 /*
  * machine dependent system variables.
  */
-int
 cpu_sysctl(name, namelen, oldp, oldlenp, newp, newlen, p)
 	int *name;
 	u_int namelen;
@@ -464,6 +469,26 @@ struct sigframe {
 	struct	sigcontext sf_sc;	/* actual context */
 };
 
+#ifdef COMPAT_SUNOS
+/* sigh.. I guess it's too late to change now, but "our" sigcontext
+   is plain vax, not very 68000 (ap, for example..) */
+struct sunos_sigcontext {
+	int 	sc_onstack;		/* sigstack state to restore */
+	int	sc_mask;		/* signal mask to restore */
+	int	sc_sp;			/* sp to restore */
+	int	sc_pc;			/* pc to restore */
+	int	sc_ps;			/* psl to restore */
+};
+struct sunos_sigframe {
+	int	ssf_signum;		/* signo for handler */
+	int	ssf_code;		/* additional info for handler */
+	struct sunos_sigcontext *ssf_scp;	/* context pointer for handler */
+	u_int	ssf_addr;		/* even more info for handler */
+	struct sunos_sigcontext ssf_sc;	/* I don't know if that's what 
+					   comes here */
+};
+#endif	
+ 
 #ifdef DEBUG
 int sigdebug = 0x0;
 int sigpid = 0;
@@ -495,8 +520,17 @@ sendsig(catcher, sig, mask, code)
 
 	frame = (struct frame *)p->p_md.md_regs;
 	ft = frame->f_format;
-	oonstack = psp->ps_sigstk.ss_flags & SS_ONSTACK;
+	oonstack = psp->ps_sigstk.ss_flags & SA_ONSTACK;
 
+#ifdef COMPAT_SUNOS
+	if (p->p_emul == EMUL_SUNOS) {
+		/*
+		 * build the short SunOS frame instead
+		 */
+		sunos_sendsig(catcher, sig, mask, code);
+		return;
+	}
+#endif
 	/*
 	 * Allocate and validate space for the signal handler
 	 * context. Note that if the stack is in P0 space, the
@@ -506,9 +540,9 @@ sendsig(catcher, sig, mask, code)
 	 */
 	if ((psp->ps_flags & SAS_ALTSTACK) && oonstack == 0 &&
 	    (psp->ps_sigonstack & sigmask(sig))) {
-		fp = (struct sigframe *)(psp->ps_sigstk.ss_sp +
+		fp = (struct sigframe *)(psp->ps_sigstk.ss_base +
 		    psp->ps_sigstk.ss_size - sizeof(struct sigframe));
-		psp->ps_sigstk.ss_flags |= SS_ONSTACK;
+		psp->ps_sigstk.ss_flags |= SA_ONSTACK;
 	} else
 		fp = (struct sigframe *)frame->f_regs[SP] - 1;
 	if ((unsigned)fp <= USRSTACK - ctob(p->p_vmspace->vm_ssize)) 
@@ -581,15 +615,15 @@ sendsig(catcher, sig, mask, code)
 			       p->p_pid, exframesize[ft], ft);
 #endif
 	}
-	if(fputype) {
-		kfp->sf_state.ss_flags |= SS_FPSTATE;
-		m68881_save(&kfp->sf_state.ss_fpstate);
-	}
+#ifdef FPCOPROC
+	kfp->sf_state.ss_flags |= SS_FPSTATE;
+	m68881_save(&kfp->sf_state.ss_fpstate);
 #ifdef DEBUG
 	if ((sigdebug & SDB_FPSTATE) && *(char *)&kfp->sf_state.ss_fpstate)
 		printf("sendsig(%d): copy out FP state (%x) to %x\n",
 		       p->p_pid, *(u_int *)&kfp->sf_state.ss_fpstate,
 		       &kfp->sf_state.ss_fpstate);
+#endif
 #endif
 	/*
 	 * Build the signal context to be used by sigreturn.
@@ -621,6 +655,106 @@ sendsig(catcher, sig, mask, code)
 	free((caddr_t)kfp, M_TEMP);
 }
 
+#ifdef COMPAT_SUNOS
+/*
+ * much simpler sendsig() for SunOS processes, as SunOS does the whole
+ * context-saving in usermode. For now, no hardware information (ie.
+ * frames for buserror etc) is saved. This could be fatal, so I take 
+ * SIG_DFL for "dangerous" signals.
+ */
+void
+sunos_sendsig(catcher, sig, mask, code)
+	sig_t catcher;
+	int sig, mask;
+	unsigned code;
+{
+	register struct proc *p = curproc;
+	register struct sunos_sigframe *fp;
+	struct sunos_sigframe kfp;
+	register struct frame *frame;
+	register struct sigacts *psp = p->p_sigacts;
+	register short ft;
+	int oonstack, fsize;
+
+	frame = (struct frame *)p->p_md.md_regs;
+	ft = frame->f_format;
+	oonstack = psp->ps_sigstk.ss_flags & SA_ONSTACK;
+	/*
+	 * Allocate and validate space for the signal handler
+	 * context. Note that if the stack is in P0 space, the
+	 * call to grow() is a nop, and the useracc() check
+	 * will fail if the process has not already allocated
+	 * the space with a `brk'.
+	 */
+	fsize = sizeof(struct sunos_sigframe);
+	if ((psp->ps_flags & SAS_ALTSTACK) && oonstack == 0 &&
+	    (psp->ps_sigonstack & sigmask(sig))) {
+		fp = (struct sunos_sigframe *)(psp->ps_sigstk.ss_base +
+		    psp->ps_sigstk.ss_size - sizeof(struct sunos_sigframe));
+		psp->ps_sigstk.ss_flags |= SA_ONSTACK;
+	} else
+		fp = (struct sunos_sigframe *)frame->f_regs[SP] - 1;
+	if ((unsigned)fp <= USRSTACK - ctob(p->p_vmspace->vm_ssize)) 
+		(void)grow(p, (unsigned)fp);
+#ifdef DEBUG
+	if ((sigdebug & SDB_KSTACK) && p->p_pid == sigpid)
+		printf("sunos_sendsig(%d): sig %d ssp %x usp %x scp %x ft %d\n",
+		       p->p_pid, sig, &oonstack, fp, &fp->ssf_sc, ft);
+#endif
+	if (useracc((caddr_t)fp, fsize, B_WRITE) == 0) {
+#ifdef DEBUG
+		if ((sigdebug & SDB_KSTACK) && p->p_pid == sigpid)
+			printf("sunos_sendsig(%d): useracc failed on sig %d\n",
+			       p->p_pid, sig);
+#endif
+		/*
+		 * Process has trashed its stack; give it an illegal
+		 * instruction to halt it in its tracks.
+		 */
+		SIGACTION(p, SIGILL) = SIG_DFL;
+		sig = sigmask(SIGILL);
+		p->p_sigignore &= ~sig;
+		p->p_sigcatch &= ~sig;
+		p->p_sigmask &= ~sig;
+		psignal(p, SIGILL);
+		return;
+	}
+	/* 
+	 * Build the argument list for the signal handler.
+	 */
+	kfp.ssf_signum = sig;
+	kfp.ssf_code = code;
+	kfp.ssf_scp = &fp->ssf_sc;
+	kfp.ssf_addr = ~0;		/* means: not computable */
+
+	/*
+	 * Build the signal context to be used by sigreturn.
+	 */
+	kfp.ssf_sc.sc_onstack = oonstack;
+	kfp.ssf_sc.sc_mask = mask;
+	kfp.ssf_sc.sc_sp = frame->f_regs[SP];
+	kfp.ssf_sc.sc_pc = frame->f_pc;
+	kfp.ssf_sc.sc_ps = frame->f_sr;
+	(void) copyout(&kfp, fp, fsize);
+	frame->f_regs[SP] = (int)fp;
+#ifdef DEBUG
+	if (sigdebug & SDB_FOLLOW)
+		printf("sunos_sendsig(%d): sig %d scp %x sc_sp %x\n",
+		       p->p_pid, sig, kfp.ssf_sc.sc_sp);
+#endif
+
+	/* have the user-level trampoline code sort out what registers it
+	   has to preserve. */
+	frame->f_pc = (u_int) catcher;
+#ifdef DEBUG
+	if ((sigdebug & SDB_KSTACK) && p->p_pid == sigpid)
+		printf("sunos_sendsig(%d): sig %d returns\n",
+		       p->p_pid, sig);
+#endif
+}
+
+#endif	/* COMPAT_SUNOS */
+
 
 /*
  * System call to cleanup state after a signal
@@ -633,20 +767,23 @@ sendsig(catcher, sig, mask, code)
  * a machine fault.
  */
 /* ARGSUSED */
-int
-sys_sigreturn(p, v, retval)
+sigreturn(p, uap, retval)
 	struct proc *p;
-	void *v;
+	struct sigreturn_args /* {
+		syscallarg(struct sigcontext *)sigcntxp;
+		} */ *uap;
 	register_t *retval;
 {
-	struct sys_sigreturn_args /* {
-		syscallarg(struct sigcontext *)sigcntxp;
-	} */ *uap = v;
 	struct sigcontext *scp, context;
 	struct frame *frame;
 	int rf, flags;
 	struct sigstate tstate;
 	extern short exframesize[];
+
+#ifdef COMPAT_SUNOS
+	if (p->p_emul == EMUL_SUNOS)
+		return(sunos_sigreturn(p, uap, retval));
+#endif
 
 	scp = SCARG(uap, sigcntxp);
 #ifdef DEBUG
@@ -669,9 +806,9 @@ sys_sigreturn(p, v, retval)
 	 * Restore the user supplied information
 	 */
 	if (scp->sc_onstack & 1)
-		p->p_sigacts->ps_sigstk.ss_flags |= SS_ONSTACK;
+		p->p_sigacts->ps_sigstk.ss_flags |= SA_ONSTACK;
 	else 
-		p->p_sigacts->ps_sigstk.ss_flags &= ~SS_ONSTACK;
+		p->p_sigacts->ps_sigstk.ss_flags &= ~SA_ONSTACK;
 	p->p_sigmask = scp->sc_mask &~ sigcantmask;
 	frame = (struct frame *) p->p_md.md_regs;
 	frame->f_regs[SP] = scp->sc_sp;
@@ -736,6 +873,7 @@ sys_sigreturn(p, v, retval)
 			       p->p_pid, sz, tstate.ss_frame.f_format);
 #endif
 	}
+#ifdef FPCOPROC
 	/*
 	 * Finally we restore the original FP context
 	 */
@@ -746,6 +884,9 @@ sys_sigreturn(p, v, retval)
 		printf("sigreturn(%d): copied in FP state (%x) at %x\n",
 		       p->p_pid, *(u_int *)&tstate.ss_fpstate,
 		       &tstate.ss_fpstate);
+#endif
+#endif
+#ifdef DEBUG
 	if ((sigdebug & SDB_FOLLOW) ||
 	    ((sigdebug & SDB_KSTACK) && p->p_pid == sigpid))
 		printf("sigreturn(%d): returns\n", p->p_pid);
@@ -753,16 +894,95 @@ sys_sigreturn(p, v, retval)
 	return (EJUSTRETURN);
 }
 
+#ifdef COMPAT_SUNOS
+/*
+ * this is a "light weight" version of the NetBSD sigreturn, just for
+ * SunOS processes. We don't have to restore any hardware frames,
+ * registers, fpu stuff, that's all done in user space.
+ */
+struct sunos_sigreturn_args {
+	struct sunos_sigcontext *sigcntxp;
+};
+
+int
+sunos_sigreturn(p, uap, retval)
+	struct proc *p;
+	struct sunos_sigreturn_args *uap;
+	register_t *retval;
+{
+	register struct sunos_sigcontext *scp;
+	register struct frame *frame;
+	register int rf;
+	struct sunos_sigcontext tsigc;
+	int flags;
+
+	scp = uap->sigcntxp;
+#ifdef DEBUG
+	if (sigdebug & SDB_FOLLOW)
+		printf("sunos_sigreturn: pid %d, scp %x\n", p->p_pid, scp);
+#endif
+	if ((int)scp & 1)
+		return (EINVAL);
+	/*
+	 * Test and fetch the context structure.
+	 * We grab it all at once for speed.
+	 */
+	if (useracc((caddr_t)scp, sizeof (*scp), B_WRITE) == 0 ||
+	    copyin((caddr_t)scp, (caddr_t)&tsigc, sizeof tsigc))
+		return (EINVAL);
+	scp = &tsigc;
+	if ((scp->sc_ps & (PSL_MBZ|PSL_IPL|PSL_S)) != 0)
+		return (EINVAL);
+	/*
+	 * Restore the user supplied information
+	 */
+	if (scp->sc_onstack & 1)
+		p->p_sigacts->ps_sigstk.ss_flags |= SA_ONSTACK;
+	else 
+		p->p_sigacts->ps_sigstk.ss_flags &= ~SA_ONSTACK;
+	p->p_sigmask = scp->sc_mask &~ sigcantmask;
+	frame = (struct frame *) p->p_md.md_regs;
+	frame->f_regs[SP] = scp->sc_sp;
+	frame->f_pc = scp->sc_pc;
+	frame->f_sr = scp->sc_ps;
+
+	return EJUSTRETURN;
+}
+#endif /* COMPAT_SUNOS */
+
 static int waittime = -1;
 
 void
 bootsync(void)
 {
 	if (waittime < 0) {
+		register struct buf *bp;
+		int iter, nbusy;
+
 		waittime = 0;
+		(void) spl0();
+		printf("syncing disks... ");
+		/*
+		 * Release vnodes held by texts before sync.
+		 */
+		if (panicstr == 0)
+			vnode_pager_umount(NULL);
+		sync(&proc0, (void *)NULL, (int *)NULL);
 
-		vfs_shutdown();
-
+		for (iter = 0; iter < 20; iter++) {
+			nbusy = 0;
+			for (bp = &buf[nbuf]; --bp >= buf; )
+				if ((bp->b_flags & (B_BUSY|B_INVAL)) == B_BUSY)
+					nbusy++;
+			if (nbusy == 0)
+				break;
+			printf("%d ", nbusy);
+			delay(40000 * iter);
+		}
+		if (nbusy)
+			printf("giving up\n");
+		else
+			printf("done\n");
 		/*
 		 * If we've been adjusting the clock, the todr
 		 * will be out of synch; adjust it now.
@@ -777,18 +997,11 @@ boot(howto)
 {
 	/* take a snap shot before clobbering any registers */
 	if (curproc)
-		savectx(curproc->p_addr);
+		savectx(curproc->p_addr, 0);
 
 	boothowto = howto;
-	if((howto & RB_NOSYNC) == 0)
+	if((howto&RB_NOSYNC) == 0)
 		bootsync();
-
-	/*
-	 * Call shutdown hooks. Do this _before_ anything might be
-	 * asked to the user in case nobody is there....
-	 */
-	doshutdownhooks();
-
 	splhigh();			/* extreme priority */
 	if(howto & RB_HALT) {
 		printf("halted\n\n");
@@ -797,41 +1010,27 @@ boot(howto)
 	else {
 		if(howto & RB_DUMP)
 			dumpsys();
-
 		doboot();
 		/*NOTREACHED*/
 	}
 	/*NOTREACHED*/
 }
 
-#define	BYTES_PER_DUMP	NBPG		/* Must be a multiple of NBPG	*/
-static vm_offset_t	dumpspace;	/* Virt. space to map dumppages	*/
+unsigned	dumpmag = 0x8fca0101;	/* magic number for savecore */
+int	dumpsize = 0;		/* also for savecore */
+long	dumplo = 0;
 
-vm_offset_t
-reserve_dumppages(p)
-vm_offset_t	p;
-{
-	dumpspace = p;
-	return(p + BYTES_PER_DUMP);
-}
-
-unsigned	dumpmag  = 0x8fca0101;	/* magic number for savecore	*/
-int		dumpsize = 0;		/* also for savecore		*/
-long		dumplo   = 0;
-
-void
 dumpconf()
 {
-	extern	 u_long	boot_ttphysize, boot_stphysize;
-		 int	nblks;
+	int nblks;
 
-	dumpsize = (boot_ttphysize + boot_stphysize) / NBPG;
+	dumpsize = physmem;
 	if (dumpdev != NODEV && bdevsw[major(dumpdev)].d_psize) {
 		nblks = (*bdevsw[major(dumpdev)].d_psize)(dumpdev);
 		if (dumpsize > btoc(dbtob(nblks - dumplo)))
 			dumpsize = btoc(dbtob(nblks - dumplo));
 		else if (dumplo == 0)
-			dumplo = nblks - btodb(ctob(dumpsize));
+			dumplo = nblks - btodb(ctob(physmem));
 	}
 	/*
 	 * Don't dump on the first CLBYTES (why CLBYTES?)
@@ -848,17 +1047,8 @@ dumpconf()
  */
 dumpsys()
 {
-	extern	 u_long	boot_ttphysize, boot_ttphystart, boot_stphysize;
 
-	daddr_t	blkno;		/* Current block to write	*/
-	int	(*dump) __P((dev_t, daddr_t, caddr_t, size_t));
-				/* Dumping function		*/
-	u_long	maddr;		/* PA being dumped		*/
-	int	segbytes;	/* Number of bytes in this seg.	*/
-	int	nbytes;		/* Bytes left to dump		*/
-	int	i, n, error;
-
-	error = msgbufmapped = 0;
+	msgbufmapped = 0;
 	if (dumpdev == NODEV)
 		return;
 	/*
@@ -870,64 +1060,8 @@ dumpsys()
 	if (dumplo < 0)
 		return;
 	printf("\ndumping to dev %x, offset %d\n", dumpdev, dumplo);
-
-#if defined(DDB) || defined(PANICWAIT)
-	printf("Do you want to dump memory? [y]");
-	cnputc(i = cngetc());
-	switch (i) {
-		case 'n':
-		case 'N':
-			return(0);
-		case '\n':
-			break;
-		default :
-			cnputc('\n');
-	}
-#endif /* defined(DDB) || defined(PANICWAIT) */
-
-	maddr    = 0;
-	segbytes = boot_stphysize;
-	blkno    = dumplo;
-	dump     = bdevsw[major(dumpdev)].d_dump;
-	nbytes   = dumpsize * NBPG;
-
 	printf("dump ");
-
-	for (i = 0; i < nbytes; i += n, segbytes -= n) {
-		/*
-		 * Skip the hole
-		 */
-		if (segbytes == 0) {
-			maddr    = boot_ttphystart;
-			segbytes = boot_ttphysize;
-		}
-		/*
-		 * Print Mb's to go
-		 */
-		n = nbytes - i;
-		if (n && (n % (1024*1024)) == 0)
-			printf("%d ", n / (1024 * 1024));
-
-		/*
-		 * Limit transfer to BYTES_PER_DUMP
-		 */
-		if (n > BYTES_PER_DUMP)
-			n = BYTES_PER_DUMP;
-
-		/*
-		 * Map to a VA and write it
-		 */
-		if (maddr != 0) { /* XXX kvtop chokes on this	*/
-			(void)pmap_map(dumpspace, maddr, maddr+n, VM_PROT_READ);
-			error = (*dump)(dumpdev, blkno, (caddr_t)dumpspace, n);
-			if (error)
-				break;
-		}
-
-		maddr += n;
-		blkno += btodb(n);
-	}
-	switch (error) {
+	switch ((*bdevsw[major(dumpdev)].d_dump)(dumpdev)) {
 
 	case ENXIO:
 		printf("device bad\n");
@@ -949,8 +1083,6 @@ dumpsys()
 		printf("succeeded\n");
 		break;
 	}
-	printf("\n\n");
-	delay(5000000);		/* 5 seconds */
 }
 
 /*
@@ -985,7 +1117,10 @@ void microtime(tvp)
 	splx(s);
 }
 
-void
+initcpu()
+{
+}
+
 straytrap(pc, evec)
 int pc;
 u_short evec;
@@ -1000,7 +1135,6 @@ u_short evec;
 	}
 }
 
-void
 straymfpint(pc, evec)
 int		pc;
 u_short	evec;
@@ -1009,33 +1143,8 @@ u_short	evec;
 	       evec & 0xFFF, pc);
 }
 
-/*
- * Simulated software interrupt handler
- */
-void
-softint()
-{
-	if(ssir & SIR_NET) {
-		siroff(SIR_NET);
-		cnt.v_soft++;
-		netintr();
-	}
-	if(ssir & SIR_CLOCK) {
-		siroff(SIR_CLOCK);
-		cnt.v_soft++;
-		/* XXXX softclock(&frame.f_stackadj); */
-		softclock();
-	}
-	if (ssir & SIR_CBACK) {
-		siroff(SIR_CBACK);
-		cnt.v_soft++;
-		call_sicallbacks();
-	}
-}
-
 int	*nofault;
 
-int
 badbaddr(addr)
 	register caddr_t addr;
 {
@@ -1055,7 +1164,6 @@ badbaddr(addr)
 	return(0);
 }
 
-static void
 netintr()
 {
 #ifdef INET
@@ -1080,12 +1188,6 @@ netintr()
 	if (netisr & (1 << NETISR_ISO)) {
 		netisr &= ~(1 << NETISR_ISO);
 		clnlintr();
-	}
-#endif
-#ifdef NPPP
-	if (netisr & (1 << NETISR_PPP)) {
-		netisr &= ~(1 << NETISR_PPP);
-		pppintr();
 	}
 #endif
 }
@@ -1113,12 +1215,29 @@ static int ncb;		/* number of callback blocks allocated */
 static int ncbd;	/* number of callback blocks dynamically allocated */
 #endif
 
+void alloc_sicallback()
+{
+	struct si_callback	*si;
+	int					s;
+
+	si = (struct si_callback *)malloc(sizeof(*si), M_TEMP, M_NOWAIT);
+	if(si == NULL)
+		return;
+	s = splhigh();
+	si->next = si_free;
+	si_free  = si;
+	splx(s);
+#ifdef DIAGNOSTIC
+	++ncb;
+#endif
+}
+
 void add_sicallback (function, rock1, rock2)
 void	(*function) __P((void *rock1, void *rock2));
 void	*rock1, *rock2;
 {
 	struct si_callback	*si;
-	int			s;
+	int					s;
 
 	/*
 	 * this function may be called from high-priority interrupt handlers.
@@ -1130,7 +1249,7 @@ void	*rock1, *rock2;
 	splx(s);
 
 	if(si == NULL) {
-		si = (struct si_callback *)malloc(sizeof(*si),M_TEMP,M_NOWAIT);
+		si = (struct si_callback *)malloc(sizeof(*si), M_TEMP, M_NOWAIT);
 #ifdef DIAGNOSTIC
 		if(si)
 			++ncbd;		/* count # dynamically allocated */
@@ -1153,14 +1272,14 @@ void	*rock1, *rock2;
 	 * and cause a software interrupt (spl1). This interrupt might
 	 * happen immediately, or after returning to a safe enough level.
 	 */
-	setsoftcback();
+	SCU->sys_int = 1;
 }
 
 void rem_sicallback(function)
 void (*function) __P((void *rock1, void *rock2));
 {
 	struct si_callback	*si, *psi, *nsi;
-	int			s;
+	int					s;
 
 	s = splhigh();
 	for(psi = 0, si = si_callbacks; si; ) {
@@ -1181,20 +1300,20 @@ void (*function) __P((void *rock1, void *rock2));
 }
 
 /* purge the list */
-static void call_sicallbacks()
+void call_sicallbacks()
 {
 	struct si_callback	*si;
-	int			s;
-	void			*rock1, *rock2;
-	void			(*function) __P((void *, void *));
+	int					s;
+	void				*rock1, *rock2;
+	void				(*function) __P((void *, void *));
 
 	do {
 		s = splhigh ();
-		if (si = si_callbacks)
+		if(si = si_callbacks)
 			si_callbacks = si->next;
 		splx(s);
 
-		if (si) {
+		if(si) {
 			function = si->function;
 			rock1    = si->rock1;
 			rock2    = si->rock2;
@@ -1204,9 +1323,9 @@ static void call_sicallbacks()
 			splx(s);
 			function(rock1, rock2);
 		}
-	} while (si);
+	} while(si);
 #ifdef DIAGNOSTIC
-	if (ncbd) {
+	if(ncbd) {
 #ifdef DEBUG
 		printf("call_sicallback: %d more dynamic structures %d total\n",
 		    ncbd, ncb);
@@ -1231,7 +1350,6 @@ candbtimer()
 }
 #endif
 
-void
 regdump(fp, sbytes)
 	struct frame *fp; /* must not be register */
 	int sbytes;
@@ -1272,11 +1390,12 @@ regdump(fp, sbytes)
 	splx(s);
 }
 
-#define KSADDR	((int *)((u_int)curproc->p_addr + USPACE - NBPG))
+extern char kstack[];
+#define KSADDR	((int *)&(kstack[(UPAGES-1)*NBPG]))
 
 dumpmem(ptr, sz, ustack)
 	register int *ptr;
-	int sz, ustack;
+	int sz;
 {
 	register int i, val;
 	extern char *hexstr();
@@ -1302,7 +1421,7 @@ dumpmem(ptr, sz, ustack)
 
 char *
 hexstr(val, len)
-	register int val, len;
+	register int val;
 {
 	static char nbuf[9];
 	register int x, i;
@@ -1327,15 +1446,12 @@ hexstr(val, len)
  * ZMAGIC always worked the `right' way (;-)) just ignore the missing
  * MID and proceed to new zmagic code ;-)
  */
-int
 cpu_exec_aout_makecmds(p, epp)
 	struct proc *p;
 	struct exec_package *epp;
 {
 	int error = ENOEXEC;
-#ifdef COMPAT_NOMID
 	struct exec *execp = epp->ep_hdr;
-#endif
 
 #ifdef COMPAT_NOMID
 	if (!((execp->a_midmag >> 16) & 0x0fff)
@@ -1347,6 +1463,8 @@ cpu_exec_aout_makecmds(p, epp)
 		extern sunos_exec_aout_makecmds
 		    __P((struct proc *, struct exec_package *));
 		if ((error = sunos_exec_aout_makecmds(p, epp)) == 0)
+			return(0);
+	}
 #endif
 	return(error);
 }
