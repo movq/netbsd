@@ -38,28 +38,34 @@
  * from: Utah $Hdr: grfvar.h 1.9 91/01/21$
  *
  *	@(#)grfvar.h	7.3 (Berkeley) 5/7/91
- *	$Id: grfvar.h,v 1.6 1994/02/11 07:01:45 chopps Exp $
+ *	$Id: grfvar.h,v 1.7 1994/05/08 05:53:10 chopps Exp $
  */
 
-/* internal structure of lock page */
-#define GRFMAXLCK	256
-struct	grf_lockpage {
-	u_char	gl_locks[GRFMAXLCK];
-};
-#define gl_lockslot gl_locks[0]
+struct ite_softc;
 
-/* per display info */
+/* 
+ * this struct is owned by the driver (grfcc, grfrt)
+ * and is passed to grf when grf is configed. The ite also 
+ * uses it... 
+ */
 struct	grf_softc {
-	int	g_flags;		/* software flags */
-	int	g_type;			/* type of display */
+	struct device  g_device;	/* config sets this up. */
+	struct grfinfo g_display;	/* hardware description (for ioctl) */
 	volatile caddr_t g_regkva;	/* KVA of registers */
 	volatile caddr_t g_fbkva;	/* KVA of framebuffer */
-	struct	grfinfo g_display;	/* hardware description (for ioctl) */
-	struct	grf_lockpage *g_lock;	/* lock page associated with device */
-	struct	proc *g_lockp;		/* process holding lock */
-	short	*g_pid;			/* array of pids with device open */
-	int	g_lockpslot;		/* g_pid entry of g_lockp */
-	caddr_t	g_data;			/* device dependent data */
+	int     g_flags;		/* software flags */
+	int	g_unit;			/* grf unit we want/have */
+	dev_t	g_itedev;		/* ite device number */
+	dev_t	g_grfdev;		/* grf device number */
+	caddr_t g_data;			/* device dependent data */
+	int  (*g_mode)();
+	int    g_conpri;		/* priority of ite as console */
+	void (*g_iteinit)	__P((struct ite_softc *));
+	void (*g_itedeinit)	__P((struct ite_softc *));
+	void (*g_iteclear)	__P((struct ite_softc *,int,int,int,int));
+	void (*g_iteputc)	__P((struct ite_softc *,int,int,int,int));
+	void (*g_itecursor)	__P((struct ite_softc *,int));
+	void (*g_itescroll)	__P((struct ite_softc *,int,int,int,int));
 };
 
 /* flags */
@@ -69,22 +75,9 @@ struct	grf_softc {
 #define GF_WANTED	0x08
 #define GF_GRFON	0x10
 
-/* display types - indices into grfdev */
-#define GT_CUSTOMCHIPS	0
-#define GT_TIGA_A2410	1
-#define GT_RETINA	2
-
-struct	grfdev {
-	int	gd_manuf;
-	int	gd_prod;	/* autoconfig® parameters */
-	int	(*gd_init)();	/* boot time initialization */
-	int	(*gd_mode)();	/* misc functions */
-	char	*gd_desc;	/* text description */
-};
-
 /* software ids defined in grfioctl.h */
 
-/* requests to mode routine */
+/* requests to mode routine (g_mode())*/
 #define GM_GRFON	1
 #define GM_GRFOFF	2
 #define GM_GRFOVON	3
@@ -99,10 +92,14 @@ struct	grfdev {
 #define GM_GRFIOCTL	12
 
 /* minor device interpretation */
-#define GRFOVDEV	0x10	/* overlay planes */
-#define GRFIMDEV	0x20	/* images planes */
+#define GRFOVDEV	0x10	/* XXX no driver uses yet, overlay planes */
+#define GRFIMDEV	0x20	/* XXX no driver uses yet, images planes */
 #define GRFUNIT(d)	((d) & 0x7)
 
-#ifdef KERNEL
-extern	struct grf_softc grf_softc[];
-#endif
+/*
+ * unit numbers for devices
+ */
+enum grfunits {
+	GRF_CC_UNIT,
+	GRF_RETINAII_UNIT
+};

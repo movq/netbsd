@@ -31,7 +31,7 @@
  * SUCH DAMAGE.
  *
  *	@(#)dmavar.h	7.2 (Berkeley) 11/4/90
- *	$Id: dmavar.h,v 1.6 1994/02/11 07:01:32 chopps Exp $
+ *	$Id: dmavar.h,v 1.7 1994/05/08 05:53:02 chopps Exp $
  */
 
 /* dmago flags */
@@ -43,13 +43,4 @@ typedef void (*dmafree_t) (void *dev);
 typedef int  (*dmago_t)   (void *dev, char *, int, int);
 typedef int  (*dmanext_t) (void *dev);
 typedef void (*dmastop_t) (void *dev);
-
-extern void dma3000init (struct amiga_ctlr *, dmafree_t *, dmago_t *, 
-			 dmanext_t *, dmastop_t *);
-
-extern void dma2091init (struct amiga_ctlr *, dmafree_t *, dmago_t *, 
-			 dmanext_t *, dmastop_t *);
-
-extern void dmagvp11init (struct amiga_ctlr *, dmafree_t *, dmago_t *, 
-			  dmanext_t *, dmastop_t *);
 #endif
