@@ -1,4 +1,4 @@
-.\"	$NetBSD: copy.9,v 1.1 1996/01/09 01:44:43 thorpej Exp $
+.\"	$NetBSD: copy.9,v 1.2 1996/01/09 03:23:04 thorpej Exp $
 .\"
 .\" Copyright (c) 1996 Jason R. Thorpe.
 .\" All rights reserved.
@@ -52,7 +52,9 @@
 .Ft int
 .Fn copyoutstr "void *kaddr" "void *uaddr" "size_t len" "size_t *done"
 .Sh DESCRIPTION
-The copy functions are designed to copy contiguous data from one address
+The
+.Nm
+functions are designed to copy contiguous data from one address
 to another.  All but
 .Fn copystr
 copy data from user-space to kernel-space or vice-versa.
@@ -109,3 +111,14 @@ NULL, is returned in
 The
 .Nm
 functions return 0 on success or EFAULT if a bad address is encountered.
+In addition, the
+.Fn copystr ,
+.Fn copyinstr ,
+and
+.Fn copyoutstr
+funtions return ENAMETOOLONG if the string is longer than
+.Pa len
+bytes.
+.Sh SEE ALSO
+.Xr fetch 9 ,
+.Xr store 9 .
