@@ -1,8 +1,8 @@
-#	$NetBSD: GENERIC,v 1.15 2001/02/16 19:48:05 soren Exp $
+#	$NetBSD: GENERIC,v 1.20 2001/09/01 23:08:42 atatat Exp $
 
 include 	"arch/cobalt/conf/std.cobalt"
 
-#ident 		"GENERIC-$Revision: 1.15 $"
+#ident 		"GENERIC-$Revision: 1.20 $"
 
 maxusers	32
 
@@ -10,6 +10,10 @@ maxusers	32
 options 	KTRACE		# system call tracing support
 options 	SYSVMSG		# System V message queues
 options 	SYSVSEM		# System V semaphores
+#options	SEMMNI=10	# number of semaphore identifiers
+#options	SEMMNS=60	# number of semaphores in system
+#options	SEMUME=10	# max number of undo entries per process
+#options	SEMMNU=30	# number of undo structures in system
 options 	SYSVSHM		# System V shared memory
 #options 	SHMMAXPGS=1024	# 1024 pages is the default
 #options 	LKM		# loadable kernel modules
@@ -34,6 +38,7 @@ options 	COMPAT_43	# compatibility with 4.3BSD binaries
 #options 	COMPAT_14	# NetBSD 1.4 binary compatibility
 #options 	EXEC_ECOFF	# exec ECOFF binaries
 #options 	COMPAT_ULTRIX	# binary compatibility with Ultrix
+#options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
 
 # File systems
 file-system	FFS		# Berkeley Fast Filesystem
@@ -80,9 +85,7 @@ options 	INET		# Internet protocols
 #options 	PPP_FILTER	# Active filter support for PPP (requires bpf)
 #options 	PFIL_HOOKS	# pfil(9) packet filter hooks
 #options 	IPFILTER_LOG	# ipmon(8) log support
-
-# Compatibility with 4.2BSD implementation of TCP/IP.  Not recommended.
-#options 	TCP_COMPAT_42
+#options 	TCP_DEBUG	# Record last TCP_NDEBUG packets with SO_DEBUG
 
 # These options enable verbose messages for several subsystems.
 # Warning, these may compile large string tables into the kernel!
@@ -170,7 +173,7 @@ wd* 		at pciide? channel ? drive ? flags 0x0000
 #de*		at pci? dev ? function ?	# DEC 21x4x-based Ethernet
 #en*		at pci? dev ? function ?	# ENI/Adaptec ATM
 #ep*		at pci? dev ? function ?	# 3Com 3c59x
-#ex*		at pci? dev ? function ?	# 3Com 90x[B]
+#ex*		at pci? dev ? function ?	# 3Com 90x[BC]
 #epic*		at pci? dev ? function ?	# SMC EPIC/100 Ethernet
 #esh*		at pci? dev ? function ?	# Essential HIPPI card
 #fpa*		at pci? dev ? function ?	# DEC DEFPA FDDI
@@ -234,6 +237,7 @@ pseudo-device	loop				# network loopback
 #pseudo-device	faith		1		# IPv[46] tcp relay translation 
 #pseudo-device	stf		1		# 6to4 IPv6 over IPv4 encapsulation
 pseudo-device	vlan			# IEEE 802.1q encapsulation
+#pseudo-device	bridge			# simple inter-network bridging
 
 # Miscellaneous pseudo-devices
 pseudo-device	pty				# pseudo-terminals

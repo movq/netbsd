@@ -1,4 +1,5 @@
-/* $NetBSD: maple.h,v 1.2 2001/01/21 22:45:57 marcus Exp $ */
+/*	$NetBSD: maple.h,v 1.4 2002/03/25 18:59:40 uch Exp $	*/
+
 /*-
  * Copyright (c) 2001 Marcus Comstedt
  * All rights reserved.
@@ -30,6 +31,11 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
+#ifndef _DREAMCAST_DEV_MAPLE_MAPLE_H_
+#define _DREAMCAST_DEV_MAPLE_MAPLE_H_
+
+#include <sys/device.h>
 
 #define MAPLE_PORTS 4
 #define MAPLE_SUBUNITS 6
@@ -89,6 +95,10 @@ struct maple_unit {
 	struct maple_devinfo devinfo;
 };
 
-extern void	maple_set_condition_callback __P((struct device *, int, int, u_int32_t, void (*)(void *, void *, int), void *));
-extern u_int32_t maple_get_function_data __P((struct maple_devinfo *, u_int32_t));
-extern void	maple_run_polling __P((struct device *));
+extern void	maple_set_condition_callback(struct device *, int, int,
+		    u_int32_t, void (*)(void *, void *, int), void *);
+extern u_int32_t maple_get_function_data(struct maple_devinfo *, u_int32_t);
+extern void	maple_run_polling(struct device *);
+
+#endif /* _DREAMCAST_DEV_MAPLE_MAPLE_H_ */
+

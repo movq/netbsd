@@ -1,4 +1,4 @@
-/*	$NetBSD: rcons.c,v 1.48 2001/01/22 17:18:32 ad Exp $	*/
+/*	$NetBSD: rcons.c,v 1.51 2001/09/19 19:04:17 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1995
@@ -53,7 +53,7 @@
 #include <dev/rasops/rasops.h>
 #include <dev/rcons/rcons.h>
 
-#include <machine/fbio.h>
+#include <dev/sun/fbio.h>
 #include <machine/fbvar.h>
 #include <machine/conf.h>
 
@@ -100,7 +100,7 @@ rcons_connect (info)
 	int cookie, epwf, bior;
 
 	/* XXX */
-	switch (info->fi_type.fb_boardtype) {
+	switch (info->fi_type.fb_type) {
 	case PMAX_FBTYPE_MFB:
 		ri.ri_depth = 8;
 		ri.ri_flg = RI_CLEAR | RI_FORCEMONO;
@@ -141,7 +141,7 @@ rcons_connect (info)
 	if (rasops_init(&ri, 5000, 80))
 		panic("rcons_connect: rasops_init failed");
 
-	if (ri.ri_depth == 8 && info->fi_type.fb_boardtype != PMAX_FBTYPE_MFB)
+	if (ri.ri_depth == 8 && info->fi_type.fb_type != PMAX_FBTYPE_MFB)
 		info->fi_driver->fbd_putcmap(info, rasops_cmap, 0, 256);
 
 	fbconstty = &rcons_tty [0];
@@ -363,6 +363,18 @@ rconswrite(dev, uio, flag)
 	return ((*tp->t_linesw->l_write)(tp, uio, flag));
 }
 
+int
+rconspoll(dev, events, p)
+	dev_t dev;
+	int events;
+	struct proc *p;
+{
+	struct tty *tp;
+
+	tp = &rcons_tty [0];
+	return ((*tp->t_linesw->l_poll)(tp, events, p));
+}
+
 struct tty *
 rconstty(dev)
         dev_t dev;
@@ -398,15 +410,6 @@ rconsstop(tp, rw)
 	int rw;
 {
 
-}
-
-int
-rconspoll(dev, events, p)
-	dev_t dev;
-	int events;
-	struct proc *p;
-{
-	return (ttpoll(dev, events, p));
 }
 
 /*ARGSUSED*/
@@ -450,7 +453,7 @@ rconsstart(tp)
 	if (cl->c_cc <= tp->t_lowat) {
 		if (tp->t_state & TS_ASLEEP) {
 			tp->t_state &= ~TS_ASLEEP;
-			wakeup((caddr_t)cl);
+			wakeup(cl);
 		}
 		selwakeup(&tp->t_wsel);
 	}

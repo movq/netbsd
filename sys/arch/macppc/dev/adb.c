@@ -1,4 +1,4 @@
-/*	$NetBSD: adb.c,v 1.7 2000/12/19 02:50:11 tsubai Exp $	*/
+/*	$NetBSD: adb.c,v 1.9 2001/06/08 00:32:01 matt Exp $	*/
 
 /*-
  * Copyright (C) 1994	Bradley A. Grantham
@@ -44,6 +44,8 @@
 #include <macppc/dev/adbvar.h>
 #include <macppc/dev/akbdvar.h>
 #include <macppc/dev/viareg.h>
+
+#include <dev/ofw/openfirm.h>
 
 #include "aed.h"
 
@@ -102,13 +104,13 @@ adbattach(parent, self, aux)
 {
 	struct adb_softc *sc = (struct adb_softc *)self;
 	struct confargs *ca = aux;
-
+	int irq = ca->ca_intr[0];
+	int node;
 	ADBDataBlock adbdata;
 	struct adb_attach_args aa_args;
 	int totaladbs;
 	int adbindex, adbaddr;
 
-	extern adb_intr();
 	extern volatile u_char *Via1Base;
 
 	ca->ca_reg[0] += ca->ca_baseaddr;
@@ -121,10 +123,16 @@ adbattach(parent, self, aux)
 	else if (strcmp(ca->ca_name, "via-pmu") == 0)
 		adbHardware = ADB_HW_PB;
 
+	node = getnodebyname(OF_parent(ca->ca_node), "extint-gpio1");
+	if (node)
+		OF_getprop(node, "interrupts", &irq, 4);
+
+	printf(" irq %d: ", irq);
+
 	adb_polling = 1;
 	ADBReInit();
 
-	intr_establish(ca->ca_intr[0], IST_LEVEL, IPL_HIGH, adb_intr, sc);
+	intr_establish(irq, IST_LEVEL, IPL_HIGH, (int (*)(void *))adb_intr, sc);
 
 #ifdef ADB_DEBUG
 	if (adb_debug)
@@ -132,8 +140,7 @@ adbattach(parent, self, aux)
 #endif
 	totaladbs = CountADBs();
 
-	printf(" irq %d", ca->ca_intr[0]);
-	printf(": %d targets\n", totaladbs);
+	printf("%d targets\n", totaladbs);
 
 #if NAED > 0
 	/* ADB event device for compatibility */

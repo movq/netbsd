@@ -1,4 +1,4 @@
-/*	$NetBSD: db_interface.c,v 1.2 2001/03/04 05:40:03 matt Exp $	*/
+/*	$NetBSD: db_interface.c,v 1.8 2001/11/09 07:21:37 thorpej Exp $	*/
 
 /* 
  * Copyright (c) 1996 Scott K. Stevens
@@ -190,7 +190,7 @@ db_validate_address(addr)
 	 * otherwise use the kernel pmap's page directory.
 	 */
 	if (!p || !p->p_vmspace || !p->p_vmspace->vm_map.pmap)
-		pdep = kernel_pmap->pm_pdir;
+		pdep = pmap_kernel()->pm_pdir;
 	else
 		pdep = p->p_vmspace->vm_map.pmap->pm_pdir;
 
@@ -301,7 +301,6 @@ cpu_Debugger()
 	asm(".word	0xe7ffffff");
 }
 
-void db_show_vmstat_cmd __P((db_expr_t addr, int have_addr, db_expr_t count, char *modif));
 void db_show_intrchain_cmd	__P((db_expr_t addr, int have_addr, db_expr_t count, char *modif));
 void db_show_panic_cmd	__P((db_expr_t addr, int have_addr, db_expr_t count, char *modif));
 void db_show_frame_cmd	__P((db_expr_t addr, int have_addr, db_expr_t count, char *modif));
@@ -310,7 +309,6 @@ const struct db_command db_machine_command_table[] = {
 	{ "frame",	db_show_frame_cmd,	0, NULL },
 	{ "intrchain",	db_show_intrchain_cmd,	0, NULL },
 	{ "panic",	db_show_panic_cmd,	0, NULL },
-	{ "vmstat",	db_show_vmstat_cmd,	0, NULL },
 #ifdef ARM32_DB_COMMANDS
 	ARM32_DB_COMMANDS,
 #endif
@@ -325,7 +323,6 @@ db_trapper(addr, inst, frame, fault_code)
 	int		fault_code;
 {
 	if (fault_code == 0) {
-		frame->tf_pc -= INSN_SIZE;
 		if ((inst & ~INSN_COND_MASK) == (BKPT_INST & ~INSN_COND_MASK))
 			kdb_trap(T_BREAKPOINT, frame);
 		else
@@ -338,9 +335,12 @@ db_trapper(addr, inst, frame, fault_code)
 extern u_int esym;
 extern u_int end;
 
+static struct undefined_handler db_uh;
+
 void
 db_machine_init()
 {
+#ifndef __ELF__
 	struct exec *kernexec = (struct exec *)KERNEL_TEXT_BASE;
 	int len;
 
@@ -350,7 +350,7 @@ db_machine_init()
 	 */
 
 	if (kernexec->a_syms == 0) {
-		printf("[No symbol table]\n");
+		printf("ddb: No symbol table\n");
 	} else {
 		/* cover the symbols themselves (what is the int for?? XXX) */
 		esym = (int)&end + kernexec->a_syms + sizeof(int);
@@ -362,8 +362,14 @@ db_machine_init()
 		len = *((u_int *)esym);
 		esym += (len + (sizeof(u_int) - 1)) & ~(sizeof(u_int) - 1);
 	}
+#endif
 
-	install_coproc_handler(0, db_trapper);
+	/*
+	 * We get called before malloc() is available, so supply a static
+	 * struct undefined_handler.
+	 */
+	db_uh.uh_handler = db_trapper;
+	install_coproc_handler_static(0, &db_uh);
 }
 
 u_int

@@ -25,6 +25,7 @@ powerpc*)		gdb_target_cpu=powerpc ;;
 sparc*)			gdb_target_cpu=sparc ;;
 thumb*)			gdb_target_cpu=arm ;;
 strongarm*)		gdb_target_cpu=arm ;;
+sh*)			gdb_target_cpu=sh ;;
 v850*)			gdb_target_cpu=v850 ;;
 *)			gdb_target_cpu=$target_cpu ;;
 
@@ -46,6 +47,7 @@ a29k-*-vxworks*)        gdb_target=vx29k ;;
 
 alpha*-*-osf*)		gdb_target=alpha-osf1 ;;
 alpha*-*-linux*)	gdb_target=alpha-linux ;;
+alpha*-*-netbsd*)	gdb_target=nbsd ;;
 
 arc-*-*)		gdb_target=arc ;;
 
@@ -53,6 +55,7 @@ arm*-wince-pe)		gdb_target=wince ;;
 arm*-*-linux*)		gdb_target=linux 
 			configdirs="$configdirs gdbserver"
 			;;
+arm*-*-netbsd*)		gdb_target=nbsd ;;
 arm*-*-* | thumb*-*-* | strongarm*-*-*)
 			gdb_target=embed
                         configdirs="$configdirs rdi-share"
@@ -170,6 +173,9 @@ m88*-motorola-*)	gdb_target=delta88 ;;
 m88*-*-*)		gdb_target=m88k ;;
 
 mcore*-*-*)		gdb_target=mcore ;;
+
+mipseb-*-netbsd*)	gdb_target=nbsdeb ;;
+mipsel-*-netbsd*)	gdb_target=nbsdel ;;
 mips64*-big-*)		gdb_target=bigmips64 ;;
 mips*-big-*)		gdb_target=bigmips ;;
 mips*-dec-mach3*)	gdb_target=mach3 ;;
@@ -237,6 +243,7 @@ powerpcle-*-eabi* | powerpcle-*-sysv* | powerpcle-*-elf*)
 			fi ;;
 powerpc-*-linux*)	gdb_target=linux ;;
 powerpc-*-vxworks*)	gdb_target=vxworks ;;
+powerpc-*-netbsd*)	gdb_target=nbsd ;;
 
 # OBSOLETE pyramid-*-*)		gdb_target=pyramid ;;
 
@@ -245,6 +252,7 @@ rs6000-*-aix4*)		gdb_target=aix4 ;;
 rs6000-*-*)		gdb_target=rs6000 ;;
 
 sh*-*-pe)		gdb_target=wince ;;
+sh*-*-netbsdelf*)	gdb_target=nbsd ;;
 sh-*-*)			gdb_target=sh ;;
 
 sparc-*-aout*)		gdb_target=sparc-em ;;
@@ -275,6 +283,8 @@ sparc64-*-*)		gdb_target=sp64 ;;
 
 tic80-*-*)		gdb_target=tic80
 			configdirs="${configdirs} gdbserver" ;;
+
+vax-*-netbsd*)		gdb_target=nbsd ;;
 
 vax-*-*)		gdb_target=vax ;;
 

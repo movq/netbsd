@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.26 2001/02/05 13:18:28 tsutsui Exp $	*/
+/*	$NetBSD: machdep.c,v 1.35 2001/09/10 21:19:22 chris Exp $	*/
 
 /*
  * Copyright (c) 2000 Soren S. Jorvang.  All rights reserved.
@@ -75,6 +75,7 @@
 
 #include <dev/cons.h>
 
+
 /* For sysctl. */
 char machine[] = MACHINE;
 char machine_arch[] = MACHINE_ARCH;
@@ -84,20 +85,28 @@ char cpu_model[] = "Cobalt Microserver";
 struct cpu_info cpu_info_store;
 
 /* Maps for VM objects. */
-vm_map_t exec_map = NULL;
-vm_map_t mb_map = NULL;
-vm_map_t phys_map = NULL;
+struct vm_map *exec_map = NULL;
+struct vm_map *mb_map = NULL;
+struct vm_map *phys_map = NULL;
 
 int	physmem;		/* Total physical memory */
 
 char	bootstring[512];	/* Boot command */
 int	netboot;		/* Are we netbooting? */
 
+char *	nfsroot_bstr = NULL;
+char *	root_bstr = NULL;
+int	bootunit = -1;
+int	bootpart = -1;
+
+
 phys_ram_seg_t mem_clusters[VM_PHYSSEG_MAX];
 int mem_cluster_cnt;
 
 void	configure(void);
 void	mach_init(unsigned int);
+void	decode_bootstring(void);
+static char *	strtok_light(char *, const char);
 
 /*
  * safepri is a safe priority for sleep to set for a spin-wait during
@@ -107,6 +116,8 @@ int	safepri = MIPS1_PSL_LOWIPL;
 
 extern caddr_t esym;
 extern struct user *proc0paddr;
+
+
 
 /*
  * Do all the stuff that locore normally does before calling main().
@@ -119,7 +130,6 @@ mach_init(memsize)
         u_long first, last;
 	vsize_t size;
 	extern char edata[], end[];
-	int i;
 
 	/*
 	 * Clear the BSS segment.
@@ -130,7 +140,7 @@ mach_init(memsize)
 		esym = end;
 		esym += ((Elf_Ehdr *)end)->e_entry;
 		kernend = (caddr_t)mips_round_page(esym);
-		bzero(edata, end - edata);
+		memset(edata, 0, end - edata);
 	} else
 #endif
 	{
@@ -163,26 +173,7 @@ mach_init(memsize)
 	memset((char *)(memsize - 512), 0, 512);
 	bootstring[511] = '\0';
 
-	for (i = 0; i < 512; i++) {
-		switch (bootstring[i]) {
-		case '\0':
-			break;
-		case ' ':
-			continue;
-		case '-':
-			while (bootstring[i] != ' ' && bootstring[i] != '\0') {
-				BOOT_FLAG(bootstring[i], boothowto);
-				i++;
-			}
-		}
-		if (memcmp("single", bootstring + i, 5) == 0)
-			boothowto |= RB_SINGLE;
-		if (memcmp("nfsroot=", bootstring + i, 8) == 0)
-			netboot = 1;
-		/*
-		 * XXX Select root device from 'root=/dev/hd[abcd][1234]' too.
-		 */
-	}
+	decode_bootstring();
 
 #ifdef DDB
 	if (boothowto & RB_KDB)
@@ -203,9 +194,17 @@ mach_init(memsize)
 	mips_init_msgbuf();
 
 	/*
+	 * Compute the size of system data structures.  pmap_bootstrap()
+	 * needs some of this information.
+	 */
+	size = (vsize_t)allocsys(NULL, NULL);
+
+	pmap_bootstrap();
+
+	/*
 	 * Allocate space for proc0's USPACE.
 	 */
-	v = (caddr_t)pmap_steal_memory(USPACE, NULL, NULL); 
+	v = (caddr_t)uvm_pageboot_alloc(USPACE); 
 	proc0.p_addr = proc0paddr = (struct user *)v;
 	proc0.p_md.md_regs = (struct frame *)(v + USPACE) - 1;
 	curpcb = &proc0.p_addr->u_pcb;
@@ -217,12 +216,9 @@ mach_init(memsize)
 	 * memory is directly addressable.  We don't have to map these into
 	 * virtual address space.
 	 */
-	size = (vsize_t)allocsys(NULL, NULL);
-	v = (caddr_t)pmap_steal_memory(size, NULL, NULL); 
+	v = (caddr_t)uvm_pageboot_alloc(size); 
 	if ((allocsys(v, NULL) - v) != size)
 		panic("mach_init: table size inconsistency");
-
-	pmap_bootstrap();
 }
 
 /*
@@ -253,7 +249,7 @@ cpu_startup()
 	if (uvm_map(kernel_map, (vaddr_t *)&buffers, round_page(size),
 		    NULL, UVM_UNKNOWN_OFFSET, 0,
 		    UVM_MAPFLAG(UVM_PROT_NONE, UVM_PROT_NONE, UVM_INH_NONE,
-		    UVM_ADV_NORMAL, 0)) != KERN_SUCCESS)
+		    UVM_ADV_NORMAL, 0)) != 0)
 		panic("startup: cannot allocate VM for buffers");
 	minaddr = (vaddr_t)buffers;
 	base = bufpages / nbuf;
@@ -283,6 +279,7 @@ cpu_startup()
 			curbufsize -= PAGE_SIZE;
 		}
 	}
+	pmap_update(pmap_kernel());
 
 	/*
 	 * Allocate a submap for exec arguments.  This map effectively
@@ -523,3 +520,85 @@ cpu_intr(status, cause, pc, ipending)
 		softclock(NULL);
 	}
 }
+
+
+void
+decode_bootstring(void)
+{
+	char * work;
+	char * equ;
+	int i;
+
+	/* break apart bootstring on ' ' boundries  and itterate*/
+	work = strtok_light(bootstring, ' ');
+	while (work != '\0') {
+		/* if starts with '-', we got options, walk its decode */
+		if (work[0] == '-') {
+			i = 1;
+			while (work[i] != ' ' && work[i] != '\0') {
+				BOOT_FLAG(work[i], boothowto);
+				i++;
+			}
+		} else
+
+		/* if it has a '=' its an assignment, switch and set */
+		if ((equ = strchr(work,'=')) != '\0') {
+			if(0 == memcmp("nfsroot=", work, 8)) {
+				nfsroot_bstr = (equ +1);
+			} else
+			if(0 == memcmp("root=", work, 5)) {
+				root_bstr = (equ +1);
+			} 
+		} else
+
+		/* else it a single value, switch and process */
+		if (memcmp("single", work, 5) == 0) {
+			boothowto |= RB_SINGLE;
+		} else
+		if (memcmp("ro", work, 2) == 0) {
+			/* this is also inserted by the firmware */
+		}
+
+		/* grab next token */
+		work = strtok_light(NULL, ' ');
+	}
+
+	if (root_bstr != NULL) {
+		/* this should be of the form "/dev/hda1" */
+		/* [abcd][1234]    drive partition  linux probe order */
+		if ((memcmp("/dev/hd",root_bstr,7) == 0) &&
+		    (strlen(root_bstr) == 9) ){
+			bootunit = root_bstr[7] - 'a';
+			bootpart = root_bstr[8] - '1';
+		}
+	}
+}
+
+
+static char *
+strtok_light(str, sep)
+	char * str;
+	const char sep;
+{
+	static char * proc;
+	char * head;
+	char * work;
+
+	if (str != NULL)
+		proc = str;
+	if (proc == NULL)  /* end of string return NULL */
+		return proc;
+
+	head = proc;
+
+	work = strchr (proc, sep);
+	if (work == NULL) {  /* we hit the end */
+		proc = work;
+	} else {
+		proc = (work +1 );
+		*work = '\0';
+	}
+
+	return head;
+}
+

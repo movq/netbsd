@@ -1,4 +1,4 @@
-/*	$NetBSD: types.h,v 1.4 2001/01/03 10:09:03 takemura Exp $	*/
+/*	$NetBSD: types.h,v 1.10 2002/04/28 17:10:37 uch Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -35,11 +35,11 @@
  *	@(#)types.h	7.5 (Berkeley) 3/9/91
  */
 
-#ifndef	_MACHTYPES_H_
-#define	_MACHTYPES_H_
+#ifndef	_SH3_TYPES_H_
+#define	_SH3_TYPES_H_
 
 #include <sys/cdefs.h>
-#include <machine/int_types.h>
+#include <sh3/int_types.h>
 
 #if defined(_KERNEL)
 typedef struct label_t {
@@ -58,22 +58,11 @@ typedef unsigned long	vaddr_t;
 typedef unsigned long	vsize_t;
 #endif
 
-/*
- * Basic integral types.  Omit the typedef if
- * not possible for a machine/compiler combination.
- */
-#define	__BIT_TYPES_DEFINED__
-typedef	__int8_t	   int8_t;
-typedef	__uint8_t	 u_int8_t;
-typedef	__int16_t	  int16_t;
-typedef	__uint16_t	u_int16_t;
-typedef	__int32_t	  int32_t;
-typedef	__uint32_t	u_int32_t;
-typedef	__int64_t	  int64_t;
-typedef	__uint64_t	u_int64_t;
+typedef int		register_t;
 
-typedef int32_t			register_t;
+#define	__SWAP_BROKEN
+#define	__HAVE_AST_PERPROC
+#define	__HAVE_GENERIC_SOFT_INTERRUPTS
+#define	__BROKEN_CONFIG_UNIT_USAGE	/* scif, sci driver */
 
-#define __BROKEN_CONFIG_UNIT_USAGE
-
-#endif	/* _MACHTYPES_H_ */
+#endif	/* !_SH3_TYPES_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: stubs.c,v 1.1 2001/02/23 03:48:13 ichiro Exp $	*/
+/*	$NetBSD: stubs.c,v 1.7 2001/08/12 08:35:32 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.
@@ -54,49 +54,6 @@
 
 extern dev_t dumpdev;
 extern BootConfig bootconfig;
-
-/* These queue functions are candiates for arm32/machdep.c */
-struct queue {
-	struct queue *q_next, *q_prev;
-};
-
-/*
- * insert an element into a queue
- */
-
-void
-_insque(v1, v2)
-	void *v1;
-	void *v2;
-{
-	struct queue *elem = v1, *head = v2;
-	struct queue *next;
-
-	next = head->q_next;
-	elem->q_next = next;
-	head->q_next = elem;
-	elem->q_prev = head;
-	next->q_prev = elem;
-}
-
-/*
- * remove an element from a queue
- */
-
-void
-_remque(v)
-	void *v;
-{
-	struct queue *elem = v;
-	struct queue *next, *prev;
-
-	next = elem->q_next;
-	prev = elem->q_prev;
-	next->q_prev = prev;
-	prev->q_next = next;
-	elem->q_prev = 0;
-}
-
 
 /*
  * These variables are needed by /sbin/savecore
@@ -164,7 +121,7 @@ dumpsys()
 	int addr;
 	int block;
 	int len;
-	vm_offset_t dumpspace;
+	vaddr_t dumpspace;
 
 	/* Save registers. */
 	savectx(&dumppcb);
@@ -244,7 +201,7 @@ dumpsys()
 /* This is interrupt / SPL related */
 
 int current_spl_level = _SPL_HIGH;
-u_int spl_masks[_SPL_LEVELS];
+u_int spl_masks[_SPL_LEVELS + 1];
 u_int spl_smasks[_SPL_LEVELS];
 int safepri = _SPL_0;
 
@@ -253,20 +210,23 @@ set_spl_masks()
 {
 	int loop;
 
-	for (loop = 0; loop < _SPL_LEVELS; ++loop) {
-		spl_masks[loop] = 0xffffffff;
+	for (loop = 0; loop < _SPL_LEVELS; ++loop)
 		spl_smasks[loop] = 0;
-	}
 
+	for (loop = 0; loop <= _SPL_SOFTCLOCK; loop++)
+		spl_masks[loop]	   = imask[IPL_SOFTCLOCK];
+
+	spl_masks[_SPL_SOFTNET]	   = imask[IPL_SOFTNET];
 	spl_masks[_SPL_BIO]	   = imask[IPL_BIO];
 	spl_masks[_SPL_NET]	   = imask[IPL_NET];
-	spl_masks[_SPL_SOFTSERIAL] = imask[IPL_TTY];
+	spl_masks[_SPL_SOFTSERIAL] = imask[IPL_SOFTSERIAL];
 	spl_masks[_SPL_TTY]	   = imask[IPL_TTY];
 	spl_masks[_SPL_IMP]	   = imask[IPL_IMP];
 	spl_masks[_SPL_AUDIO]	   = imask[IPL_AUDIO];
 	spl_masks[_SPL_CLOCK]	   = imask[IPL_CLOCK];
 	spl_masks[_SPL_HIGH]	   = imask[IPL_HIGH];
 	spl_masks[_SPL_SERIAL]	   = imask[IPL_SERIAL];
+	spl_masks[_SPL_LEVELS]	   = 0;
 
 	spl_smasks[_SPL_0] = 0xffffffff;
 	for (loop = 0; loop < _SPL_SOFTSERIAL; ++loop)
@@ -275,6 +235,40 @@ set_spl_masks()
 		spl_smasks[loop] |= SOFTIRQ_BIT(SOFTIRQ_NET);
 	for (loop = 0; loop < _SPL_SOFTCLOCK; ++loop)
 		spl_smasks[loop] |= SOFTIRQ_BIT(SOFTIRQ_CLOCK);
+}
+
+int
+ipl_to_spl(ipl)
+	int ipl;
+{
+
+	switch(ipl) {
+	case IPL_SOFTCLOCK:
+		return _SPL_SOFTCLOCK;
+	case IPL_SOFTNET:
+		return _SPL_SOFTNET;
+	case IPL_BIO:
+		return _SPL_BIO;
+	case IPL_NET:
+		return _SPL_NET;
+	case IPL_SOFTSERIAL:
+		return _SPL_SOFTSERIAL;
+	case IPL_TTY:
+		return _SPL_TTY;
+	case IPL_IMP:
+		return _SPL_IMP;
+	case IPL_AUDIO:
+		return _SPL_AUDIO;
+	case IPL_CLOCK:
+		return _SPL_CLOCK;
+	case IPL_HIGH:
+		return _SPL_HIGH;
+	case IPL_SERIAL:
+		return _SPL_SERIAL;
+	
+	default:
+		panic("bogus ipl\n");
+	}
 }
 
 #ifdef DIAGNOSTIC

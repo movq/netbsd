@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.94 2001/03/01 17:11:13 minoura Exp $	*/
+/*	$NetBSD: machdep.c,v 1.100 2001/09/10 21:19:30 chris Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -43,6 +43,7 @@
  */
 
 #include "opt_ddb.h"
+#include "opt_kgdb.h"
 #include "opt_compat_netbsd.h"
 #include "opt_m680x0.h"
 #include "opt_fpuemulate.h"
@@ -74,6 +75,10 @@
 #include <sys/syscallargs.h>
 #include <sys/core.h>
 #include <sys/kcore.h>
+
+#if defined(DDB) && defined(__ELF__)
+#include <sys/exec_elf.h>
+#endif
 
 #include <net/netisr.h>
 #undef PS	/* XXX netccitt/pk.h conflict with machine/reg.h? */
@@ -113,9 +118,9 @@ char	machine[] = MACHINE;	/* from <machine/param.h> */
 /* Our exported CPU info; we can have only one. */  
 struct cpu_info cpu_info_store;
 
-vm_map_t exec_map = NULL;  
-vm_map_t mb_map = NULL;
-vm_map_t phys_map = NULL;
+struct vm_map *exec_map = NULL;  
+struct vm_map *mb_map = NULL;
+struct vm_map *phys_map = NULL;
 
 extern paddr_t avail_start, avail_end;
 extern vaddr_t virtual_avail;
@@ -189,7 +194,12 @@ consinit()
 	zs_kgdb_init();			/* XXX */
 #endif
 #ifdef DDB
+#ifndef __ELF__
 	ddb_init(*(int *)&end, ((int *)&end) + 1, esym);
+#else
+	ddb_init((int)esym - (int)&end - sizeof(Elf32_Ehdr),
+		 (void *)&end, esym);
+#endif
 	if (boothowto & RB_KDB)
 		Debugger();
 #endif
@@ -236,6 +246,7 @@ cpu_startup()
 		pmap_enter(pmap_kernel(), (vaddr_t)msgbufaddr + i * NBPG,
 		    avail_end + i * NBPG, VM_PROT_READ|VM_PROT_WRITE,
 		    VM_PROT_READ|VM_PROT_WRITE|PMAP_WIRED);
+	pmap_update(pmap_kernel());
 	initmsgbuf(msgbufaddr, m68k_round_page(MSGBUFSIZE));
 
 	/*
@@ -269,7 +280,7 @@ cpu_startup()
 	if (uvm_map(kernel_map, (vaddr_t *) &buffers, round_page(size),
 		    NULL, UVM_UNKNOWN_OFFSET, 0,
 		    UVM_MAPFLAG(UVM_PROT_NONE, UVM_PROT_NONE, UVM_INH_NONE,
-				UVM_ADV_NORMAL, 0)) != KERN_SUCCESS)
+				UVM_ADV_NORMAL, 0)) != 0)
 		panic("startup: cannot allocate VM for buffers");
 	minaddr = (vaddr_t)buffers;
 #if 0
@@ -305,6 +316,8 @@ cpu_startup()
 			curbufsize -= PAGE_SIZE;
 		}
 	}
+	pmap_update(pmap_kernel());
+
 	/*
 	 * Allocate a submap for exec arguments.  This map effectively
 	 * limits the number of processes exec'ing at any time.
@@ -796,6 +809,7 @@ dumpsys()
 		}
 		pmap_enter(pmap_kernel(), (vaddr_t)vmmap, maddr,
 		    VM_PROT_READ, VM_PROT_READ|PMAP_WIRED);
+		pmap_update(pmap_kernel());
 
 		error = (*dump)(dumpdev, blkno, vmmap, NBPG);
  bad:
@@ -1114,6 +1128,7 @@ mem_exists(mem, basemax)
 	DPRINTF ((" pmap_enter(%p, %p) for target... ", mem_v, mem));
 	pmap_enter(pmap_kernel(), mem_v, (paddr_t)mem,
 		   VM_PROT_READ|VM_PROT_WRITE, VM_PROT_READ|PMAP_WIRED);
+	pmap_update(pmap_kernel());
 	DPRINTF ((" done.\n"));
 
 	/* only 24bits are significant on normal X680x0 systems */
@@ -1121,6 +1136,7 @@ mem_exists(mem, basemax)
 	DPRINTF ((" pmap_enter(%p, %p) for shadow... ", base_v, base));
 	pmap_enter(pmap_kernel(), base_v, (paddr_t)base,
 		   VM_PROT_READ|VM_PROT_WRITE, VM_PROT_READ|PMAP_WIRED);
+	pmap_update(pmap_kernel());
 	DPRINTF ((" done.\n"));
 
 	m = (void*)mem_v;
@@ -1142,6 +1158,7 @@ mem_exists(mem, basemax)
 		nofault = (int *) 0;
 		pmap_remove(pmap_kernel(), mem_v, mem_v+NBPG);
 		pmap_remove(pmap_kernel(), base_v, base_v+NBPG);
+		pmap_update(pmap_kernel());
 		DPRINTF (("Fault!!! Returning 0.\n"));
 		return 0;
 	}
@@ -1195,6 +1212,7 @@ asm("end_check_mem:");
 	nofault = (int *)0;
 	pmap_remove(pmap_kernel(), mem_v, mem_v+NBPG);
 	pmap_remove(pmap_kernel(), base_v, base_v+NBPG);
+	pmap_update(pmap_kernel());
 
 	DPRINTF ((" End.\n"));
 

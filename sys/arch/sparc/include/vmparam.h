@@ -1,4 +1,4 @@
-/*	$NetBSD: vmparam.h,v 1.26 2001/02/27 22:40:08 pk Exp $ */
+/*	$NetBSD: vmparam.h,v 1.29 2001/06/02 01:19:29 chs Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -130,10 +130,12 @@
 #endif
 #endif /* _LKM */
 
+#define	__HAVE_PMAP_PHYSSEG
+
 /*
  * pmap specific data stored in the vm_physmem[] array
  */
-struct pvlist{};
+struct pvlist;
 struct pmap_physseg {
 	struct pvlist *pvhead;
 };

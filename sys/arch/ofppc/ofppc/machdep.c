@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.62 2001/02/24 22:39:19 matt Exp $	*/
+/*	$NetBSD: machdep.c,v 1.73 2001/10/29 19:04:26 thorpej Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -55,20 +55,27 @@
 
 #include <net/netisr.h>
 
+#include <machine/db_machdep.h>
+#include <ddb/db_extern.h>
+
+#include <dev/ofw/openfirm.h>
+
+#include <machine/autoconf.h>
 #include <machine/bat.h>
 #include <machine/pmap.h>
 #include <machine/powerpc.h>
 #include <machine/trap.h>
 
-/* Our exported CPU info; we can have only one. */  
-struct cpu_info cpu_info_store;
+#include <machine/platform.h>
+
+#include <dev/cons.h>
 
 /*
  * Global variables used here and there
  */
-vm_map_t exec_map = NULL;
-vm_map_t mb_map = NULL;
-vm_map_t phys_map = NULL;
+struct vm_map *exec_map = NULL;
+struct vm_map *mb_map = NULL;
+struct vm_map *phys_map = NULL;
 
 struct pcb *curpcb;
 struct pmap *curpm;
@@ -87,74 +94,50 @@ vaddr_t msgbuf_vaddr;
 
 int	lcsplx(int);			/* called from locore.S */
 
-static int fake_spl __P((void));
-static int fake_splx __P((int));
-static void fake_setsoft __P((void));
+static int fake_spl __P((int));
+static void fake_splx __P((int));
+static void fake_setsoft __P((int));
 static void fake_clock_return __P((struct clockframe *, int));
-static void fake_irq_establish __P((int, int, void (*)(void *), void *));
+static void *fake_intr_establish __P((int, int, int, int (*)(void *), void *));
+static void fake_intr_disestablish __P((void *));
 
 struct machvec machine_interface = {
 	fake_spl,
 	fake_spl,
-	fake_spl,
-	fake_spl,
-	fake_spl,
-	fake_spl,
-	fake_spl,
-	fake_spl,
-	fake_spl,
-	fake_spl,
 	fake_splx,
 	fake_setsoft,
-	fake_setsoft,
 	fake_clock_return,
-	fake_irq_establish,
+	fake_intr_establish,
+	fake_intr_disestablish,
 };
+
+void	ofppc_bootstrap_console(void);
 
 void
 initppc(startkernel, endkernel, args)
 	u_int startkernel, endkernel;
 	char *args;
 {
-	int phandle, qhandle;
-	char name[32];
-	struct machvec *mp;
-	extern trapcode, trapsize;
-	extern alitrap, alisize;
-	extern dsitrap, dsisize;
-	extern isitrap, isisize;
-	extern decrint, decrsize;
-	extern tlbimiss, tlbimsize;
-	extern tlbdlmiss, tlbdlmsize;
-	extern tlbdsmiss, tlbdsmsize;
+	extern int trapcode, trapsize;
+	extern int alitrap, alisize;
+	extern int dsitrap, dsisize;
+	extern int isitrap, isisize;
+	extern int decrint, decrsize;
+	extern int tlbimiss, tlbimsize;
+	extern int tlbdlmiss, tlbdlmsize;
+	extern int tlbdsmiss, tlbdsmsize;
 #ifdef DDB
-	extern ddblow, ddbsize;
+	extern int ddblow, ddbsize;
 	extern void *startsym, *endsym;
 #endif
 #ifdef IPKDB
-	extern ipkdblow, ipkdbsize;
+	extern int ipkdblow, ipkdbsize;
 #endif
-	extern void consinit __P((void));
-	extern void callback __P((void *));
 	int exc, scratch;
 
-	proc0.p_addr = proc0paddr;
-	bzero(proc0.p_addr, sizeof *proc0.p_addr);
+	/* Initialize the bootstrap console. */
+	ofppc_bootstrap_console();
 
-	curpcb = &proc0paddr->u_pcb;
-
-	curpm = curpcb->pcb_pmreal = curpcb->pcb_pm = pmap_kernel();
-
-	/*
-	 * i386 port says, that this shouldn't be here,
-	 * but I really think the console should be initialized
-	 * as early as possible.
-	 */
-	consinit();
-
-#ifdef	__notyet__		/* Needs some rethinking regarding real/virtual OFW */
-	OF_set_callback(callback);
-#endif
 	/*
 	 * Initialize BAT registers to unmapped to not generate
 	 * overlapping mappings below.
@@ -188,12 +171,29 @@ initppc(startkernel, endkernel, args)
 		      :: "r"(battable[0].batl), "r"(battable[0].batu));
 
 	/*
+	 * Initialize the platform structure.  This may add entries
+	 * to the BAT table.
+	 */
+	platform_init();
+
+	proc0.p_addr = proc0paddr;
+	memset(proc0.p_addr, 0, sizeof *proc0.p_addr);
+
+	curpcb = &proc0paddr->u_pcb;
+
+	curpm = curpcb->pcb_pmreal = curpcb->pcb_pm = pmap_kernel();
+
+#ifdef __notyet__	/* Needs some rethinking regarding real/virtual OFW */
+	OF_set_callback(callback);
+#endif
+
+	/*
 	 * Set up trap vectors
 	 */
 	for (exc = EXC_RSVD; exc <= EXC_LAST; exc += 0x100)
 		switch (exc) {
 		default:
-			bcopy(&trapcode, (void *)exc, (size_t)&trapsize);
+			memcpy((void *)exc, &trapcode, (size_t)&trapsize);
 			break;
 		case EXC_EXI:
 			/*
@@ -201,34 +201,34 @@ initppc(startkernel, endkernel, args)
 			 */
 			break;
 		case EXC_ALI:
-			bcopy(&alitrap, (void *)EXC_ALI, (size_t)&alisize);
+			memcpy((void *)EXC_ALI, &alitrap, (size_t)&alisize);
 			break;
 		case EXC_DSI:
-			bcopy(&dsitrap, (void *)EXC_DSI, (size_t)&dsisize);
+			memcpy((void *)EXC_DSI, &dsitrap, (size_t)&dsisize);
 			break;
 		case EXC_ISI:
-			bcopy(&isitrap, (void *)EXC_ISI, (size_t)&isisize);
+			memcpy((void *)EXC_ISI, &isitrap, (size_t)&isisize);
 			break;
 		case EXC_DECR:
-			bcopy(&decrint, (void *)EXC_DECR, (size_t)&decrsize);
+			memcpy((void *)EXC_DECR, &decrint, (size_t)&decrsize);
 			break;
 		case EXC_IMISS:
-			bcopy(&tlbimiss, (void *)EXC_IMISS, (size_t)&tlbimsize);
+			memcpy((void *)EXC_IMISS, &tlbimiss, (size_t)&tlbimsize);
 			break;
 		case EXC_DLMISS:
-			bcopy(&tlbdlmiss, (void *)EXC_DLMISS, (size_t)&tlbdlmsize);
+			memcpy((void *)EXC_DLMISS, &tlbdlmiss, (size_t)&tlbdlmsize);
 			break;
 		case EXC_DSMISS:
-			bcopy(&tlbdsmiss, (void *)EXC_DSMISS, (size_t)&tlbdsmsize);
+			memcpy((void *)EXC_DSMISS, &tlbdsmiss, (size_t)&tlbdsmsize);
 			break;
 #if defined(DDB) || defined(IPKDB)
 		case EXC_PGM:
 		case EXC_TRC:
 		case EXC_BPT:
 #if defined(DDB)
-			bcopy(&ddblow, (void *)exc, (size_t)&ddbsize);
+			memcpy((void *)exc, &ddblow, (size_t)&ddbsize);
 #else
-			bcopy(&ipkdblow, (void *)exc, (size_t)&ipkdbsize);
+			memcpy((void *)exc, &ipkdblow, (size_t)&ipkdbsize);
 #endif
 			break;
 #endif /* DDB || IPKDB */
@@ -243,6 +243,12 @@ initppc(startkernel, endkernel, args)
 		      : "=r"(scratch) : "K"(PSL_IR|PSL_DR|PSL_ME|PSL_RI));
 
 	/*
+	 * Now that translation is enabled (and we can access bus space),
+	 * initialize the console.
+	 */
+	(*platform.cons_init)();
+
+	/*
 	 * Parse arg string.
 	 */
 	bootpath = args;
@@ -251,18 +257,6 @@ initppc(startkernel, endkernel, args)
 		for(*args++ = 0; *args; args++)
 			BOOT_FLAG(*args, boothowto);
 	}
-
-#ifdef DDB
-	/* ddb_init((int)(endsym - startsym), startsym, endsym); */
-#endif
-#ifdef IPKDB
-	/*
-	 * Now trap to IPKDB
-	 */
-	ipkdb_init();
-	if (boothowto & RB_KDB)
-		ipkdb_connect(0);
-#endif
 
 	/*
 	 * Set the page size.
@@ -273,65 +267,34 @@ initppc(startkernel, endkernel, args)
 	 * Initialize pmap module.
 	 */
 	pmap_bootstrap(startkernel, endkernel);
+
+#ifdef DDB
+	ddb_init((int)((u_int)endsym - (u_int)startsym), startsym, endsym);
+	if (boothowto & RB_KDB)
+		Debugger();
+#endif
+#ifdef IPKDB
+	/*
+	 * Now trap to IPKDB
+	 */
+	ipkdb_init();
+	if (boothowto & RB_KDB)
+		ipkdb_connect(0);
+#endif
 }
 
 /*
  * This should probably be in autoconf!				XXX
  */
 int cpu;
-char cpu_model[80];
 char machine[] = MACHINE;		/* from <machine/param.h> */
 char machine_arch[] = MACHINE_ARCH;	/* from <machine/param.h> */
-
-void
-identifycpu()
-{
-	int phandle, pvr;
-	char name[32];
-
-	/*
-	 * Find cpu type (Do it by OpenFirmware?)
-	 */
-	asm ("mfpvr %0" : "=r"(pvr));
-	cpu = pvr >> 16;
-	switch (cpu) {
-	case 1:
-		sprintf(cpu_model, "601");
-		break;
-	case 3:
-		sprintf(cpu_model, "603");
-		break;
-	case 4:
-		sprintf(cpu_model, "604");
-		break;
-	case 5:
-		sprintf(cpu_model, "602");
-		break;
-	case 6:
-		sprintf(cpu_model, "603e");
-		break;
-	case 7:
-		sprintf(cpu_model, "603ev");
-		break;
-	case 9:
-		sprintf(cpu_model, "604ev");
-		break;
-	case 20:
-		sprintf(cpu_model, "620");
-		break;
-	default:
-		sprintf(cpu_model, "Version %x", cpu);
-		break;
-	}
-	sprintf(cpu_model + strlen(cpu_model), " (Revision %x)", pvr & 0xffff);
-	printf("CPU: %s\n", cpu_model);
-}
 
 void
 install_extint(handler)
 	void (*handler) __P((void));
 {
-	extern extint, extsize;
+	extern int extint, extsize;
 	extern u_long extint_call;
 	u_long offset = (u_long)handler - (u_long)&extint_call;
 	int omsr, msr;
@@ -343,7 +306,7 @@ install_extint(handler)
 	asm volatile ("mfmsr %0; andi. %1,%0,%2; mtmsr %1"
 		      : "=r"(omsr), "=r"(msr) : "K"((u_short)~PSL_EE));
 	extint_call = (extint_call & 0xfc000003) | offset;
-	bcopy(&extint, (void *)EXC_EXI, (size_t)&extsize);
+	memcpy((void *)EXC_EXI, &extint, (size_t)&extsize);
 	__syncicache((void *)&extint_call, sizeof extint_call);
 	__syncicache((void *)EXC_EXI, (int)&extsize);
 	asm volatile ("mtmsr %0" :: "r"(omsr));
@@ -373,10 +336,11 @@ cpu_startup()
 		pmap_enter(pmap_kernel(), msgbuf_vaddr + i * NBPG,
 		    msgbuf_paddr + i * NBPG, VM_PROT_READ|VM_PROT_WRITE,
 		    VM_PROT_READ|VM_PROT_WRITE|PMAP_WIRED);
+	pmap_update(pmap_kernel());
 	initmsgbuf((caddr_t)msgbuf_vaddr, round_page(MSGBUFSIZE));
 
 	printf("%s", version);
-	identifycpu();
+	cpu_identify(NULL, 0);
 
 	format_bytes(pbuf, sizeof(pbuf), ctob(physmem));
 	printf("total memory = %s\n", pbuf);
@@ -399,7 +363,7 @@ cpu_startup()
 	if (uvm_map(kernel_map, (vaddr_t *)&buffers, round_page(sz),
 		    NULL, UVM_UNKNOWN_OFFSET, 0,
 		    UVM_MAPFLAG(UVM_PROT_NONE, UVM_PROT_NONE, UVM_INH_NONE,
-				UVM_ADV_NORMAL, 0)) != KERN_SUCCESS)
+				UVM_ADV_NORMAL, 0)) != 0)
 		panic("startup: cannot allocate VM for buffers");
 	minaddr = (vaddr_t)buffers;
 	base = bufpages / nbuf;
@@ -428,13 +392,13 @@ cpu_startup()
 			if (pg == NULL)
 				panic("startup: not enough memory for "
 					"buffer cache");
-			pmap_enter(kernel_map->pmap, curbuf,
-			    VM_PAGE_TO_PHYS(pg), VM_PROT_READ|VM_PROT_WRITE,
-			    VM_PROT_READ|VM_PROT_WRITE|PMAP_WIRED);
+			pmap_kenter_pa(curbuf, VM_PAGE_TO_PHYS(pg),
+			    VM_PROT_READ | VM_PROT_WRITE);
 			curbuf += PAGE_SIZE;
 			curbufsize -= PAGE_SIZE;
 		}
 	}
+	pmap_update(kernel_map->pmap);
 
 	/*
 	 * Allocate a submap for exec arguments.  This map effectively
@@ -466,15 +430,6 @@ cpu_startup()
 	bufinit();
 
 	/*
-	 * For now, use soft spl handling.
-	 */
-	{
-		extern struct machvec soft_machvec;
-
-		machine_interface = soft_machvec;
-	}
-
-	/*
 	 * Now allow hardware interrupts.
 	 */
 	{
@@ -486,19 +441,67 @@ cpu_startup()
 	}
 }
 
-/*
- * consinit
- * Initialize system console.
- */
 void
 consinit()
 {
-	static int initted;
 
-	if (initted)
-		return;
-	initted = 1;
-	cninit();
+	/* Nothing to do; console is already initialized. */
+}
+
+int	ofppc_cngetc(dev_t);
+void	ofppc_cnputc(dev_t, int);
+
+struct consdev ofppc_bootcons = {
+	NULL, NULL, ofppc_cngetc, ofppc_cnputc, nullcnpollc, NULL,
+	    makedev(0,0), 1,
+};
+
+int	ofppc_stdin_ihandle, ofppc_stdout_ihandle;
+int	ofppc_stdin_phandle, ofppc_stdout_phandle;
+
+void
+ofppc_bootstrap_console(void)
+{
+	int chosen;
+	char data[4];
+
+	chosen = OF_finddevice("/chosen");
+
+	if (OF_getprop(chosen, "stdin", data, sizeof(data)) != sizeof(int))
+		goto nocons;
+	ofppc_stdin_ihandle = of_decode_int(data);
+	ofppc_stdin_phandle = OF_instance_to_package(ofppc_stdin_ihandle);
+
+	if (OF_getprop(chosen, "stdout", data, sizeof(data)) != sizeof(int))
+		goto nocons;
+	ofppc_stdout_ihandle = of_decode_int(data);
+	ofppc_stdout_phandle = OF_instance_to_package(ofppc_stdout_ihandle);
+
+	cn_tab = &ofppc_bootcons;
+
+ nocons:
+	return;
+}
+
+int
+ofppc_cngetc(dev_t dev)
+{
+	u_char ch = '\0';
+	int l;
+
+	while ((l = OF_read(ofppc_stdin_ihandle, &ch, 1)) != 1)
+		if (l != -2 && l != 0)
+			return (-1);
+
+	return (ch);
+}
+
+void
+ofppc_cnputc(dev_t dev, int c)
+{
+	char ch = c;
+
+	OF_write(ofppc_stdout_ihandle, &ch, 1);
 }
 
 /*
@@ -589,6 +592,7 @@ cpu_reboot(howto, what)
 	ppc_boot(str);
 }
 
+#ifdef notyet
 /*
  * OpenFirmware callback routine
  */
@@ -598,6 +602,7 @@ callback(p)
 {
 	panic("callback");	/* for now			XXX */
 }
+#endif
 
 /*
  * Perform an `splx()' for locore.
@@ -606,14 +611,14 @@ int
 lcsplx(int ipl)
 {
 
-	return (splx(ipl));
+	return (_spllower(ipl));
 }
 
 /*
  * Initial Machine Interface.
  */
 static int
-fake_spl()
+fake_spl(int new)
 {
 	int scratch;
 
@@ -623,16 +628,17 @@ fake_spl()
 }
 
 static void
-fake_setsoft()
+fake_setsoft(int ipl)
 {
 	/* Do nothing */
 }
 
-static int
+static void
 fake_splx(new)
 	int new;
 {
-	return (fake_spl());
+
+	(void) fake_spl(0);
 }
 
 static void
@@ -643,11 +649,20 @@ fake_clock_return(frame, nticks)
 	/* Do nothing */
 }
 
-static void
-fake_irq_establish(irq, level, handler, arg)
-	int irq, level;
-	void (*handler) __P((void *));
+static void *
+fake_intr_establish(irq, level, ist, handler, arg)
+	int irq, level, ist;
+	int (*handler) __P((void *));
 	void *arg;
 {
-	panic("fake_irq_establish");
+
+	panic("fake_intr_establish");
+}
+
+static void
+fake_intr_disestablish(cookie)
+	void *cookie;
+{
+
+	panic("fake_intr_disestablish");
 }

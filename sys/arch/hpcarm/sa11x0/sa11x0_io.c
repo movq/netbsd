@@ -1,4 +1,4 @@
-/*	$NetBSD: sa11x0_io.c,v 1.1 2001/02/23 03:48:21 ichiro Exp $	*/
+/*	$NetBSD: sa11x0_io.c,v 1.6 2001/09/10 21:19:36 chris Exp $	*/
 
 /*
  * Copyright (c) 1997 Mark Brinicombe.
@@ -42,7 +42,13 @@
 
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/queue.h>
+
+#include <uvm/uvm.h>
+
 #include <machine/bus.h>
+#include <machine/pmap.h>
+#include <machine/pte.h>
 
 /* Proto types for all the bus_space structure functions */
 
@@ -66,6 +72,9 @@ struct bus_space sa11x0_bs_tag = {
 
 	/* get kernel virtual address */
 	sa11x0_bs_vaddr,
+
+	/* mmap bus space for userland */
+	bs_notimpl_bs_mmap,
 
 	/* barrier */
 	sa11x0_bs_barrier,
@@ -135,14 +144,39 @@ sa11x0_bs_map(t, bpa, size, cacheable, bshp)
 	int cacheable;
 	bus_space_handle_t *bshp;
 {
-	/*
-	 * Temporary implementation as all I/O is already mapped etc.
-	 *
-	 * Eventually this function will do the mapping check for multiple maps
-	 */
-	*bshp = bpa;
-	return(0);
+	u_long startpa, endpa, pa;
+	vaddr_t va;
+	pt_entry_t *pte;
+
+	if ((u_long)bpa > (u_long)KERNEL_SPACE_START) {
+		/* XXX This is a temporary hack to aid transition. */
+		*bshp = bpa;
+		return(0);
 	}
+
+	startpa = trunc_page(bpa);
+	endpa = round_page(bpa + size);
+
+	/* XXX use extent manager to check duplicate mapping */
+
+	va = uvm_km_valloc(kernel_map, endpa - startpa);
+	if (! va)
+		return(ENOMEM);
+
+	*bshp = (bus_space_handle_t)(va + (bpa - startpa));
+
+	for(pa = startpa; pa < endpa; pa += PAGE_SIZE, va += PAGE_SIZE) {
+		pmap_kenter_pa(va, pa, VM_PROT_READ | VM_PROT_WRITE);
+		pte = pmap_pte(pmap_kernel(), va);
+		if (cacheable)
+			*pte |= PT_CACHEABLE;
+		else
+			*pte &= ~PT_CACHEABLE;
+	}
+	pmap_update(pmap_kernel());
+
+	return(0);
+}
 
 int
 sa11x0_bs_alloc(t, rstart, rend, size, alignment, boundary, cacheable,
@@ -189,7 +223,7 @@ sa11x0_bs_subregion(t, bsh, offset, size, nbshp)
 	bus_space_handle_t *nbshp;
 {
 
-	*nbshp = bsh + (offset << ((int)t));
+	*nbshp = bsh + offset;
 	return (0);
 }
 

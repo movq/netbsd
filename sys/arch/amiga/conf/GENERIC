@@ -1,4 +1,4 @@
-#	$NetBSD: GENERIC,v 1.156 2001/02/02 21:52:13 is Exp $
+#	$NetBSD: GENERIC,v 1.162 2001/09/01 21:52:24 atatat Exp $
 
 #
 #if 0
@@ -16,7 +16,7 @@
 
 include "arch/amiga/conf/std.amiga"
 
-#ident 		"GENERIC-$Revision: 1.156 $"
+#ident 		"GENERIC-$Revision: 1.162 $"
 
 #ifdef INSTALL_CONFIGURATION
 makeoptions	COPTS="-Os"
@@ -73,6 +73,7 @@ options 	ISO,TPIP	# OSI
 #options 	EON		# OSI tunneling over IP
 options 	CCITT,LLC,HDLC	# X.25
 options 	NETATALK	# AppleTalk networking protocols
+#options 	TCP_DEBUG	# Record last TCP_NDEBUG packets with SO_DEBUG
 #endif
 
 options 	PPP_BSDCOMP	# BSD-Compress compression support for PPP
@@ -121,11 +122,11 @@ options 	NFSSERVER	# Network File System server side code
 				# immutable) behave as system flags.
 
 #
-# Compatability options for various existing systems
+# Compatibility options for various existing systems
 #
 
 #ifndef INSTALL_CONFIGURATION
-options 	TCP_COMPAT_42	# compatibility with 4.2BSD TCP/IP
+#options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
 options 	COMPAT_43	# compatibility with 4.3BSD interfaces
 options 	COMPAT_09	# compatibility with NetBSD 0.9
 options 	COMPAT_10	# compatibility with NetBSD 1.0
@@ -146,6 +147,10 @@ options 	EXEC_ELF32	# 32-bit ELF executables (Linux, SVR4)
 options 	SYSVSHM		# System V-like shared memory
 options 	SYSVMSG		# System V-like messages
 options 	SYSVSEM		# System V-like semaphores
+#options	SEMMNI=10	# number of semaphore identifiers
+#options	SEMMNS=60	# number of semaphores in system
+#options	SEMUME=10	# max number of undo entries per process
+#options	SEMMNU=30	# number of undo structures in system
 #endif
 
 #
@@ -299,10 +304,12 @@ hyper*		at zbus?		# zbus HyperCom3/3+/4/4+
 com*		at hyper? port ?	# Hypercom3/4 serial ports
 lpt*		at hyper? port ?	# Hypercom3+/4+ parallel port
 
-# not enabled yet... needs more testing and clock frequency autodetection
-#iobl*		at zbus?		# zbus IOBlix
-#com*		at iobl? port ?		# IOBlix serial ports
-#lpt*		at iobl? port ?		# IOBlix parallel ports
+#options IOBZCLOCK=22118400 		# default, uncomment the next line
+#options IOBZCLOCK=24000000		# if needed.
+
+iobl*		at zbus?		# zbus IOBlix
+com*		at iobl? port ?		# IOBlix serial ports
+lpt*		at iobl? port ?		# IOBlix parallel ports
 
 
 #
@@ -350,6 +357,9 @@ lpt0		at drsupio? port ?	# DraCo parallel
 melody* 	at zbus0		# Melody MPEG audio decoder
 audio*		at melody?
 #endif
+
+repulse*	at zbus0		# ALiENDESiGN Repulse
+audio*		at repulse?
 
 # Ethernet cards:
 le*		at zbus0		# A2065, Ameristar, Ariadne
@@ -463,6 +473,7 @@ pseudo-device	gif		4	# IPv[46] over IPv[46] tunnel (RFC1933)
 #pseudo-device	faith		1	# IPv[46] tcp relay translation i/f
 #pseudo-device	stf		1	# 6to4 IPv6 over IPv4 encapsulation
 pseudo-device	vlan			# IEEE 802.1q encapsulation
+pseudo-device	bridge			# simple inter-network bridging
 
 pseudo-device	view		4	# views (needed for grfcc)
 pseudo-device	pty			# pseudo-terminals

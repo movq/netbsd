@@ -17,9 +17,11 @@ hppa*)			gdb_host_cpu=pa ;;
 i[3456]86*)		gdb_host_cpu=i386 ;;
 m68*)			gdb_host_cpu=m68k ;;
 m88*)			gdb_host_cpu=m88k ;;
+mips*)			gdb_host_cpu=mips ;;
 # OBSOLETE pyramid)		gdb_host_cpu=pyr ;;
 powerpc*)		gdb_host_cpu=powerpc ;;
 sparc64)		gdb_host_cpu=sparc ;;
+sh*)			gdb_host_cpu=sh ;;
 *)			gdb_host_cpu=$host_cpu ;;
 
 esac
@@ -34,8 +36,10 @@ alpha*-*-osf1*)		gdb_host=alpha-osf1 ;;
 alpha*-*-osf2*)		gdb_host=alpha-osf2 ;;
 alpha*-*-osf[3456789]*)	gdb_host=alpha-osf3 ;;
 alpha*-*-linux*)	gdb_host=alpha-linux ;;
+alpha*-*-netbsd*)	gdb_host=nbsd ;;
 
 arm*-*-linux*)		gdb_host=linux ;;
+arm*-*-netbsd*)		gdb_host=nbsd ;;
 arm*-*-*)		gdb_host=arm ;;
 
 # OBSOLETE c[12]-*-*)		gdb_host=convex ;;
@@ -123,6 +127,7 @@ mips-*-mach3*)		gdb_host=mipsm3 ;;
 mips-*-sysv4*)		gdb_host=mipsv4 ;;
 mips-*-sysv*)		gdb_host=riscos ;;
 mips-*-riscos*)		gdb_host=riscos ;;
+mips*-*-netbsd*)	gdb_host=nbsd ;;
 
 none-*-*)		gdb_host=none ;;
 
@@ -135,6 +140,7 @@ powerpc-*-aix*)		gdb_host=aix ;;
 powerpcle-*-cygwin*)	gdb_host=cygwin ;;
 powerpcle-*-solaris*)	gdb_host=solaris ;;
 powerpc-*-linux*)	gdb_host=linux ;;
+powerpc-*-netbsd*)	gdb_host=nbsd ;;
 
 # OBSOLETE pn-*-*)		gdb_host=pn ;;
 
@@ -146,10 +152,11 @@ rs6000-*-lynxos*)	gdb_host=rs6000lynx ;;
 rs6000-*-aix4*)		gdb_host=aix4 ;;
 rs6000-*-*)		gdb_host=rs6000 ;;
 
+sh*-*-netbsdelf*)	gdb_host=nbsd ;;
+
 sparc-*-linux*)		gdb_host=linux ;;
 sparc-*-lynxos*)	gdb_host=sparclynx ;;
 sparc-*-netbsdelf*)	gdb_host=nbsdelf ;;
-sparc-*-netbsdaout*)	gdb_host=nbsd ;;
 sparc-*-netbsd*)	gdb_host=nbsd ;;
 sparc64-*-netbsd*)	gdb_host=nbsd64 ;;
 sparc-*-solaris2*)	gdb_host=sun4sol2 ;;
@@ -162,6 +169,7 @@ strongarm-*-*)		gdb_host=arm ;;
 
 # OBSOLETE tahoe-*-*)		gdb_host=tahoe ;;
 
+vax-*-netbsd*)		gdb_host=nbsd ;;
 vax-*-bsd*)		gdb_host=vaxbsd ;;
 vax-*-ultrix2*)		gdb_host=vaxult2 ;;
 vax-*-ultrix*)		gdb_host=vaxult ;;

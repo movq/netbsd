@@ -1,4 +1,4 @@
-/*	$NetBSD: le_poll.c,v 1.2 2000/07/24 18:40:02 jdolecek Exp $	*/
+/*	$NetBSD: le_poll.c,v 1.4 2001/11/08 21:40:25 scw Exp $	*/
 
 /*
  * Copyright (c) 1993 Adam Glass
@@ -75,12 +75,12 @@ le_reset(myea)
     struct lereg1 *ler1 = le_softc.sc_r1;
     struct lereg2 *ler2 = le_softc.sc_r2;
     unsigned int a;
-    int timo = 100000, stat, i;
+    int timo = 100000, stat = 0, i;
 
     ler1->ler1_rap = LE_CSR0;
     ler1->ler1_rdp = LE_C0_STOP;	/* do nothing until we are finished */
 
-    bzero(ler2, sizeof(*ler2));
+    memset(ler2, 0, sizeof(*ler2));
 
     ler2->ler2_mode = LE_MODE_NORMAL;
     ler2->ler2_padr[0] = myea[1];
@@ -185,7 +185,7 @@ le_poll(pkt, len)
     if (!length) goto cleanup;
     length -= 4;
     if (length > 0)
-	bcopy((char *)&ler2->ler2_rbuf[le_softc.next_rmd], pkt, length);
+	memcpy(pkt, (char *)&ler2->ler2_rbuf[le_softc.next_rmd], length);
 
  cleanup: 
     a = (u_int)&ler2->ler2_rbuf[le_softc.next_rmd];
@@ -205,7 +205,7 @@ int le_put(pkt, len)
     struct lereg1 *ler1 = le_softc.sc_r1;
     struct lereg2 *ler2 = le_softc.sc_r2;
     struct letmd *tmd;
-    int timo = 100000, stat;
+    int timo = 100000, stat = 0;
     unsigned int a;
 
     ler1->ler1_rap = LE_CSR0;
@@ -215,7 +215,7 @@ int le_put(pkt, len)
     while(tmd->tmd1_bits & LE_T1_OWN) {
 	printf("le0: output buffer busy\n");
     }
-    bcopy(pkt, (char *)ler2->ler2_tbuf[le_softc.next_tmd], len);
+    memcpy((char *)ler2->ler2_tbuf[le_softc.next_tmd], pkt, len);
     if (len < 64) 
 	tmd->tmd2 = -64;
     else 
@@ -311,7 +311,7 @@ void le_init()
     myea[3] = e;
     printf("le0: ethernet address: %x:%x:%x:%x:%x:%x\n",
       myea[0], myea[1], myea[2], myea[3], myea[4], myea[5]);
-    bzero(&le_softc, sizeof(le_softc));
+    memset(&le_softc, 0, sizeof(le_softc));
     le_softc.sc_r1 = (struct lereg1 *) LANCE_REG_ADDR;
     le_softc.sc_r2 = (struct lereg2 *)(*eram - (1024*1024));
     le_reset(myea);

@@ -1,4 +1,4 @@
-/*	$NetBSD: wrtvid.c,v 1.2 2000/12/04 21:24:34 scw Exp $	*/
+/*	$NetBSD: wrtvid.c,v 1.4 2001/10/19 17:09:16 scw Exp $	*/
 
 #include <sys/types.h>
 #include <fcntl.h>
@@ -24,6 +24,7 @@ main(int argc, char **argv)
 	char *filebuff;
 	char fileext[256];
 	u_long marks[MARK_MAX];
+	u_long entry;
 	size_t len;
 
 	if (argc == 0)
@@ -40,7 +41,8 @@ main(int argc, char **argv)
 	len *= 256;
 	filebuff = malloc(len);
 
-	marks[MARK_START] = (u_long)(filebuff - marks[MARK_START]);
+	entry = marks[MARK_START];
+	marks[MARK_START] = (u_long)(filebuff - entry);
 
 	if ((fd = loadfile(filename, marks, LOAD_TEXT|LOAD_DATA)) == -1)
 		return NULL;
@@ -52,7 +54,7 @@ main(int argc, char **argv)
 	tape_exe = open(fileext, O_WRONLY|O_CREAT|O_TRUNC,0644);
 
 	pcpul = (struct cpu_disklabel *)malloc(sizeof(struct cpu_disklabel));
-	bzero(pcpul, sizeof(struct cpu_disklabel));
+	memset(pcpul, 0, sizeof(struct cpu_disklabel));
 
 	strcpy(pcpul->vid_id, "NBSD");
 
@@ -62,21 +64,8 @@ main(int argc, char **argv)
 		pcpul->vid_oss = 2;
 	}
 	pcpul->vid_osl = len / 256;
-
-	/* check this, it may not work in both endian. */
-	{
-		union {
-			struct s {
-				unsigned short s1;
-				unsigned short s2;
-			} s;
-			unsigned long l;
-		} a;
-		a.l = marks[MARK_ENTRY];
-		pcpul->vid_osa_u = a.s.s1;
-		pcpul->vid_osa_l = a.s.s2;
-
-	}
+	pcpul->vid_osa_u = entry >> 16;
+	pcpul->vid_osa_l = entry & 0xffff;
 	pcpul->vid_cas = 1;
 	pcpul->vid_cal = 1;
 	/* do not want to write past end of structure, not null terminated */

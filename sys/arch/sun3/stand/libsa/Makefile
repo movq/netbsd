@@ -1,44 +1,42 @@
-#	$NetBSD: Makefile,v 1.27 2001/02/26 01:42:51 chs Exp $
+#	$NetBSD: Makefile,v 1.34 2001/10/31 01:51:46 thorpej Exp $
 
 LIB=sa
 
 # 
-# We're not actually building a lint version, but this way the separate object
-# files get built
+# We're not actually building a profiled version,
+# but this way the separate object files get built
 #
 
-LOBJS=SRT0.o SRT1.o
+POBJS=SRT0.o SRT1.o
 
 MKLINT=no
 MKPIC=no
 MKPROFILE=no
-NOPROFILE=
-NOPIC=
-NOLINT=
 
 # Logically src/sys
 S=${.CURDIR}/../../../..
-DIR_SA=$S/lib/libsa
-DIR_KERN=$S/lib/libkern
+DIR_SA=${S}/lib/libsa
+DIR_KERN=${S}/lib/libkern
 
 .PATH:  ${DIR_SA} ${DIR_KERN}
 
-# DBG= -DDEBUG -DNETIF_DEBUG -DNFS_DEBUG -DRPC_DEBUG \
+# DEBUG= -DDEBUG -DNETIF_DEBUG -DNFS_DEBUG -DRPC_DEBUG \
 #  -DNET_DEBUG -DRARP_DEBUG -DETHER_DEBUG -DDEBUG_PROM
 
 DEFS= -Dsun3 -D_STANDALONE
 INCL= -I. -I${.CURDIR} -I${S}/lib/libsa -I${S}
-CFLAGS= -O2 -msoft-float -fno-defer-pop
-CPPFLAGS= ${DEFS} ${DBG} ${INCL}
-CLEANFILES= SRT0.o SRT1.o machine m68k vers.c
+CFLAGS= -Os -msoft-float -fno-defer-pop
+CPPFLAGS= ${DEFS} ${DEBUG} ${INCL}
+CLEANFILES= SRT0.o SRT1.o vers.c
 
 SRC_net= net.c ether.c arp.c in_cksum.c rarp.c
 
-SRC_sa = alloc.c bcopy.c close.c getfile.c loadfile.c lseek.c memcpy.c open.c \
-	 printf.c read.c sprintf.c strerror.c subr_prf.c twiddle.c
+SRC_sa = alloc.c bcmp.c bcopy.c bzero.c close.c getfile.c loadfile.c \
+	loadfile_aout.c loadfile_elf32.c lseek.c memcmp.c memcpy.c \
+	memset.c open.c printf.c read.c sprintf.c strerror.c subr_prf.c \
+	twiddle.c
 
-SRC_kern= ashrdi3.c bcmp.c bzero.c inet_addr.c intoa.c \
-	memcmp.c memset.c strcmp.c strlen.c strncmp.c
+SRC_kern= ashldi3.c ashrdi3.c inet_addr.c intoa.c strcmp.c strlen.c strncmp.c
 
 SRC_here= clock.c dev_disk.c devopen.c \
 	 gets.c idprom.c netif_sun.c panic.c \
@@ -59,8 +57,6 @@ POBJS=
 SOBJS=
 
 # Customized rules...
-
-${OBJS} SRT0.o SRT1.o : machine m68k
 
 vers.c: ${.CURDIR}/version
 	sh ${S}/conf/newvers_stand.sh -MD ${.CURDIR}/version "sun3"

@@ -1,4 +1,4 @@
-/*	$NetBSD: aucc.c,v 1.26 2000/09/03 02:04:53 mhitch Exp $	*/
+/*	$NetBSD: aucc.c,v 1.28 2001/10/03 00:04:47 augustss Exp $	*/
 
 /*
  * Copyright (c) 1999 Bernardo Innocenti
@@ -66,6 +66,8 @@
 #include <amiga/amiga/custom.h>
 #include <amiga/amiga/device.h>
 #include <amiga/dev/auccvar.h>
+
+#include "opt_lev6_defer.h"
 
 
 #ifdef LEV6_DEFER
@@ -259,6 +261,9 @@ struct audio_hw_if sa_hw_if = {
 	NULL,
 	NULL,
 	aucc_get_props,
+	NULL,
+	NULL,
+	NULL,
 };
 
 /* autoconfig routines */

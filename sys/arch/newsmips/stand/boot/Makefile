@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.8 2000/02/01 05:25:43 tsutsui Exp $
+#	$NetBSD: Makefile,v 1.10 2001/11/14 00:58:50 tv Exp $
 
 S= ${.CURDIR}/../../../..
 
@@ -8,11 +8,12 @@ MKMAN= no
 STRIPFLAG=
 BINMODE= 444
 
-OBJCOPY?= objcopy
 SIZE?= size
 STRIP?= strip
 
-COMMON!=  cd ${.CURDIR}/../common && ${MAKE} print-objdir
+.include <bsd.own.mk>
+
+COMMON!=  cd ${.CURDIR}/../common && ${PRINTOBJDIR}
 
 CLEANFILES+= ${PROG}.elf ${PROG}.tmp
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: devopen.c,v 1.7 2000/07/13 03:13:40 matt Exp $ */
+/*	$NetBSD: devopen.c,v 1.9 2001/05/01 13:08:09 ragge Exp $ */
 /*
  * Copyright (c) 1997 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -122,8 +122,10 @@ devopen(f, fname, file)
 		c = (char *)fname;
 	}
 
-	if (!dp->dv_open)
+	if (!dp->dv_open) {
+		printf("Can't open device type %d\n", dev);
 		return(ENODEV);
+	}
 	f->f_dev = dp;
 	bootrpb.unit = unit;
 	bootrpb.devtyp = dev;
@@ -168,6 +170,11 @@ devopen(f, fname, file)
 		else
 			nexaddr = BI_BASE(adapt, ctlr);
 		break;
+	case VAX_BTYP_610:
+		nexaddr = 0; /* No map regs */
+		csrbase = 0x20000000;
+		break;
+
 	default:
 		nexaddr = 0; /* No map regs */
 		csrbase = 0x20000000;

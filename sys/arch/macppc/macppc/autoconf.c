@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.22 2000/09/29 10:14:20 tsubai Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.26 2001/07/22 11:29:47 wiz Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -51,7 +51,7 @@
 #include <dev/ic/wdcvar.h>
 
 void canonicalize_bootpath __P((void));
-int OF_interpret __P((char *cmd, int nreturns, ...));
+void ofw_stack __P((void));
 
 extern char bootpath[256];
 char cbootpath[256];
@@ -123,7 +123,7 @@ canonicalize_bootpath()
 	else
 		last[0] = 0;
 
-	bzero(cbootpath, sizeof(cbootpath));
+	memset(cbootpath, 0, sizeof(cbootpath));
 	OF_package_to_path(node, cbootpath, sizeof(cbootpath) - 1);
 
 	/*
@@ -240,13 +240,9 @@ device_register(dev, aux)
 		   DEVICE_IS(dev->dv_parent, "atapibus")) {
 		struct scsipibus_attach_args *sa = aux;
 
-		if (dev->dv_parent->dv_xname[0] == 's') {
-			if (addr != sa->sa_sc_link->scsipi_scsi.target)
-				return;
-		} else {
-			if (addr != sa->sa_sc_link->scsipi_atapi.drive)
-				return;
-		}
+		/* periph_target is target for scsi, drive # for atapi */
+		if (addr != sa->sa_periph->periph_target)
+			return;
 	} else if (DEVICE_IS(dev->dv_parent, "pciide")) {
 		struct ata_atapi_attach *aa = aux;
 
@@ -379,4 +375,33 @@ pcidev_to_ofdev(pc, tag)
 		}
 	}
 	return 0;
+}
+
+int
+getnodebyname(start, target)
+	int start;
+	const char *target;
+{
+	int node, next;
+	char name[64];
+
+	if (start == 0)
+		start = OF_peer(0);
+
+	for (node = start; node; node = next) {
+		memset(name, 0, sizeof name);
+		OF_getprop(node, "name", name, sizeof name - 1);
+		if (strcmp(name, target) == 0)
+			break;
+
+		if ((next = OF_child(node)) != 0)
+			continue;
+		while (node) {
+			if ((next = OF_peer(node)) != 0)
+				break;
+			node = OF_parent(node);
+		}
+	}
+
+	return node;
 }

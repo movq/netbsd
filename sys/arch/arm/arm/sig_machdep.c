@@ -1,4 +1,4 @@
-/*	$NetBSD: sig_machdep.c,v 1.4 2001/02/28 18:15:43 bjh21 Exp $	*/
+/*	$NetBSD: sig_machdep.c,v 1.7 2001/08/07 22:56:09 bjh21 Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.
@@ -45,7 +45,7 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: sig_machdep.c,v 1.4 2001/02/28 18:15:43 bjh21 Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sig_machdep.c,v 1.7 2001/08/07 22:56:09 bjh21 Exp $");
 
 #include <sys/mount.h>		/* XXX only needed by syscallargs.h */
 #include <sys/proc.h>
@@ -101,6 +101,7 @@ sendsig(sig_t catcher, int sig, sigset_t *mask, u_long code)
 	else
 		fp = (struct sigframe *)tf->tf_usr_sp;
 	fp--;
+	(u_int)fp = STACKALIGN(fp);
 
 	/* Build stack frame for signal trampoline. */
 	frame.sf_signum = sig;
@@ -200,9 +201,13 @@ sys___sigreturn14(struct proc *p, void *v, register_t *retval)
 	if (copyin((caddr_t)scp, &context, sizeof(*scp)) != 0)
 		return (EFAULT);
 
-	/* Make sure the processor mode has not been tampered with. */
+	/*
+	 * Make sure the processor mode has not been tampered with and
+	 * interrupts have not been disabled.
+	 */
 #ifdef PROG32
-	if ((context.sc_spsr & PSR_MODE) != PSR_USR32_MODE)
+	if ((context.sc_spsr & PSR_MODE) != PSR_USR32_MODE ||
+	    (context.sc_spsr & (I32_bit | F32_bit)) != 0)
 		return (EINVAL);
 #else /* PROG26 */
 	if ((context.sc_pc & R15_MODE) != R15_MODE_USR ||

@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.144 2001/03/01 16:14:25 pk Exp $ */
+/*	$NetBSD: autoconf.c,v 1.157 2001/10/13 08:25:57 mrg Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -47,10 +47,12 @@
  *	@(#)autoconf.c	8.4 (Berkeley) 10/1/93
  */
 #include "opt_ddb.h"
+#include "opt_kgdb.h"
 #include "opt_multiprocessor.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/proc.h>
 #include <sys/map.h>
 #include <sys/buf.h>
 #include <sys/disklabel.h>
@@ -122,6 +124,15 @@ static	void bootpath_print __P((struct bootpath *));
 static	struct bootpath	*bootpath_store __P((int, struct bootpath *));
 int	find_cpus __P((void));
 
+#ifdef DEBUG
+#define ACDB_BOOTDEV	0x1
+#define	ACDB_PROBE	0x2
+int autoconf_debug = 0;
+#define DPRINTF(l, s)   do { if (autoconf_debug & l) printf s; } while (0)
+#else
+#define DPRINTF(l, s)
+#endif
+
 /*
  * Most configuration on the SPARC is done by matching OPENPROM Forth
  * device names with our internal names.
@@ -149,7 +160,7 @@ find_cpus()
 	n = 0;
 	node = findroot();
 	for (node = firstchild(node); node; node = nextsibling(node)) {
-		if (strcmp(getpropstring(node, "device_type"), "cpu") == 0)
+		if (strcmp(PROM_getpropstring(node, "device_type"), "cpu") == 0)
 			n++;
 	}
 	return (n);
@@ -273,7 +284,7 @@ bootstrap()
 
 		vaddrs = vstore;
 		nvaddrs = sizeof(vstore)/sizeof(vstore[0]);
-		if (getprop(node, "address", sizeof(int),
+		if (PROM_getprop(node, "address", sizeof(int),
 			    &nvaddrs, (void **)&vaddrs) != 0) {
 			printf("bootstrap: could not get interrupt properties");
 			prom_halt();
@@ -328,9 +339,10 @@ bootstrap()
 
 	if (CPU_ISSUN4OR4C) {
 		/* Map Interrupt Enable Register */
-		pmap_enter(pmap_kernel(), INTRREG_VA,
+		pmap_kenter_pa(INTRREG_VA,
 		    INT_ENABLE_REG_PHYSADR | PMAP_NC | PMAP_OBIO,
-		    VM_PROT_READ | VM_PROT_WRITE, PMAP_WIRED);
+		    VM_PROT_READ | VM_PROT_WRITE);
+		pmap_update(pmap_kernel());
 		/* Disable all interrupts */
 		*((unsigned char *)INTRREG_VA) = 0;
 	}
@@ -377,6 +389,7 @@ bootpath_build()
 		break;
 	case PROM_OBP_V2:
 	case PROM_OBP_V3:
+	case PROM_OPENFIRM:
 		while (cp != NULL && *cp == '/') {
 			/* Step over '/' */
 			++cp;
@@ -385,6 +398,35 @@ bootpath_build()
 			while (*cp != '@' && *cp != '/' && *cp != '\0')
 				*pp++ = *cp++;
 			*pp = '\0';
+#if defined(SUN4M)
+			/*
+			 * JS1/OF does not have iommu node in the device
+			 * tree, so bootpath will start with the sbus entry.
+			 * Add entry for iommu to match attachment. See also
+			 * mainbus_attach and iommu_attach.
+			 */
+			if (CPU_ISSUN4M && bp == bootpath
+			    && strcmp(bp->name, "sbus") == 0) {
+				printf("bootpath_build: inserting iommu entry\n");
+				strcpy(bootpath[0].name, "iommu");
+				bootpath[0].val[0] = 0;
+				bootpath[0].val[1] = 0x10000000;
+				bootpath[0].val[2] = 0;
+				++nbootpath;
+
+				strcpy(bootpath[1].name, "sbus");
+				if (*cp == '/') {
+					/* complete sbus entry */
+					bootpath[1].val[0] = 0;
+					bootpath[1].val[1] = 0x10001000;
+					bootpath[1].val[2] = 0;
+					++nbootpath;
+					bp = &bootpath[2];
+					continue;
+				} else 
+					bp = &bootpath[1];
+			}
+#endif /* SUN4M */
 			if (*cp == '@') {
 				cp = str2hex(++cp, &bp->val[0]);
 				if (*cp == ',')
@@ -682,7 +724,7 @@ crazymap(prop, map)
 		 * which contains the mapping for us to use. v2 proms do not
 		 * require remapping.
 		 */
-		propval = getpropstringA(optionsnode, prop, buf, sizeof(buf));
+		propval = PROM_getpropstringA(optionsnode, prop, buf, sizeof(buf));
 		if (propval == NULL || strlen(propval) != 8) {
  build_default_map:
 			printf("WARNING: %s map is bogus, using default\n",
@@ -751,6 +793,9 @@ cpu_configure()
 {
 	extern struct user *proc0paddr;	/* XXX see below */
 
+	/* initialise the softintr system */
+	softintr_init();
+
 	/* build the bootpath */
 	bootpath_build();
 
@@ -774,7 +819,7 @@ cpu_configure()
 	if (CPU_ISSUN4C) {
 		char *cp, buf[32];
 		int node = findroot();
-		cp = getpropstringA(node, "device_type", buf, sizeof buf);
+		cp = PROM_getpropstringA(node, "device_type", buf, sizeof buf);
 		if (strcmp(cp, "cpu") != 0)
 			panic("PROM root device type = %s (need CPU)\n", cp);
 	}
@@ -809,14 +854,17 @@ void
 cpu_rootconf()
 {
 	struct bootpath *bp;
-	struct device *bootdv;
 	int bootpartition;
 
 	bp = nbootpath == 0 ? NULL : &bootpath[nbootpath-1];
-	bootdv = bp == NULL ? NULL : bp->dev;
-	bootpartition = bootdv == NULL ? 0 : bp->val[2];
+	if (bp == NULL) 
+		bootpartition = 0;
+	else if (booted_device != bp->dev)
+		bootpartition = 0;
+	else
+		bootpartition = bp->val[2];
 
-	setroot(bootdv, bootpartition);
+	setroot(booted_device, bootpartition);
 }
 
 /*
@@ -880,12 +928,12 @@ mainbus_match(parent, cf, aux)
 /* 
  * Helper routines to get some of the more common properties. These
  * only get the first item in case the property value is an array.
- * Drivers that "need to know it all" can call getprop() directly.
+ * Drivers that "need to know it all" can call PROM_getprop() directly.
  */
 #if defined(SUN4C) || defined(SUN4M)
-static int	getprop_reg1 __P((int, struct openprom_addr *));
-static int	getprop_intr1 __P((int, int *));
-static int	getprop_address1 __P((int, void **));
+static int	PROM_getprop_reg1 __P((int, struct openprom_addr *));
+static int	PROM_getprop_intr1 __P((int, int *));
+static int	PROM_getprop_address1 __P((int, void **));
 #endif
 
 /*
@@ -947,6 +995,7 @@ extern struct sparc_bus_space_tag mainbus_space_tag;
 		"SUNW,sx",		/* XXX: no driver for SX yet */
 		"virtual-memory",
 		"aliases",
+		"chosen",		/* OpenFirmware */
 		"memory",
 		"openprom",
 		"options",
@@ -961,7 +1010,7 @@ extern struct sparc_bus_space_tag mainbus_space_tag;
 	if (CPU_ISSUN4)
 		printf(": SUN-4/%d series\n", cpuinfo.classlvl);
 	else
-		printf(": %s\n", getpropstringA(findroot(), "name",
+		printf(": %s\n", PROM_getpropstringA(findroot(), "name",
 						namebuf, sizeof(namebuf)));
 
 	/* Establish the first component of the boot path */
@@ -1016,7 +1065,7 @@ extern struct sparc_bus_space_tag mainbus_space_tag;
 		const char *cp;
 
 		for (node = firstchild(node); node; node = nextsibling(node)) {
-			cp = getpropstringA(node, "device_type",
+			cp = PROM_getpropstringA(node, "device_type",
 					    namebuf, sizeof namebuf);
 			if (strcmp(cp, "cpu") == 0) {
 				bzero(&ma, sizeof(ma));
@@ -1056,18 +1105,18 @@ extern struct sparc_bus_space_tag mainbus_space_tag;
 		bzero(&ma, sizeof ma);
 		ma.ma_bustag = &mainbus_space_tag;
 		ma.ma_dmatag = &mainbus_dma_tag;
-		ma.ma_name = getpropstringA(node, "name",
+		ma.ma_name = PROM_getpropstringA(node, "name",
 					    namebuf, sizeof namebuf);
 		ma.ma_node = node;
-		if (getprop_reg1(node, &romreg) != 0)
+		if (PROM_getprop_reg1(node, &romreg) != 0)
 			continue;
 
 		ma.ma_paddr = (bus_addr_t)romreg.oa_base;
 		ma.ma_iospace = (bus_type_t)romreg.oa_space;
 		ma.ma_size = romreg.oa_size;
-		if (getprop_intr1(node, &ma.ma_pri) != 0)
+		if (PROM_getprop_intr1(node, &ma.ma_pri) != 0)
 			continue;
-		if (getprop_address1(node, &ma.ma_promvaddr) != 0)
+		if (PROM_getprop_address1(node, &ma.ma_promvaddr) != 0)
 			continue;
 
 		if (config_found(dev, (void *)&ma, mbprint) == NULL)
@@ -1083,15 +1132,17 @@ extern struct sparc_bus_space_tag mainbus_space_tag;
 		const char *cp;
 		struct openprom_addr romreg;
 
+		DPRINTF(ACDB_PROBE, ("Node: %x", node));
 #if defined(SUN4M)
 		if (CPU_ISSUN4M) {	/* skip the CPUs */
-			if (strcmp(getpropstringA(node, "device_type",
+			if (strcmp(PROM_getpropstringA(node, "device_type",
 						  namebuf, sizeof namebuf),
 				   "cpu") == 0)
 				continue;
 		}
 #endif
-		cp = getpropstringA(node, "name", namebuf, sizeof namebuf);
+		cp = PROM_getpropstringA(node, "name", namebuf, sizeof namebuf);
+		DPRINTF(ACDB_PROBE, (" name %s\n", namebuf));
 		for (ssp = openboot_special; (sp = *ssp) != NULL; ssp++)
 			if (strcmp(cp, sp) == 0)
 				break;
@@ -1101,20 +1152,43 @@ extern struct sparc_bus_space_tag mainbus_space_tag;
 		bzero(&ma, sizeof ma);
 		ma.ma_bustag = &mainbus_space_tag;
 		ma.ma_dmatag = &mainbus_dma_tag;
-		ma.ma_name = getpropstringA(node, "name",
+		ma.ma_name = PROM_getpropstringA(node, "name",
 					    namebuf, sizeof namebuf);
 		ma.ma_node = node;
-		if (getprop_reg1(node, &romreg) != 0)
+
+#if defined(SUN4M)
+		/*
+		 * JS1/OF does not have iommu node in the device tree,
+		 * so if on sun4m we see sbus node under root - attach
+		 * implicit iommu.  See also bootpath_build where we
+		 * adjust bootpath accordingly and iommu_attach where
+		 * we arrange for this sbus node to be attached.
+		 */
+		if (CPU_ISSUN4M && strcmp(ma.ma_name, "sbus") == 0) {
+			printf("mainbus_attach: sbus node under root on sun4m - assuming iommu\n");
+			ma.ma_name = "iommu";
+			ma.ma_iospace = (bus_type_t) 0;
+			ma.ma_paddr = (bus_addr_t) 0x10000000;
+			ma.ma_size = 0x300;
+			ma.ma_pri = 0;
+			ma.ma_promvaddr = 0;
+
+			(void) config_found(dev, (void *)&ma, mbprint);
+			continue;
+		}
+#endif /* SUN4M */
+
+		if (PROM_getprop_reg1(node, &romreg) != 0)
 			continue;
 
 		ma.ma_paddr = (bus_addr_t)romreg.oa_base;
 		ma.ma_iospace = (bus_type_t)romreg.oa_space;
 		ma.ma_size = romreg.oa_size;
 
-		if (getprop_intr1(node, &ma.ma_pri) != 0)
+		if (PROM_getprop_intr1(node, &ma.ma_pri) != 0)
 			continue;
 
-		if (getprop_address1(node, &ma.ma_promvaddr) != 0)
+		if (PROM_getprop_address1(node, &ma.ma_promvaddr) != 0)
 			continue;
 
 		(void) config_found(dev, (void *)&ma, mbprint);
@@ -1209,6 +1283,8 @@ makememarr(ap, max, which)
 
 	case PROM_OPENFIRM:
 		node = OF_finddevice("/memory");
+		if (node == -1)
+		    node = 0;
 
 	case_common:
 		if (node == 0)
@@ -1234,7 +1310,7 @@ makememarr(ap, max, which)
 
 		len = MAXMEMINFO;
 		p = v2rmi;
-		if (getprop(node, prop, sizeof(struct v2rmi), &len, &p) != 0)
+		if (PROM_getprop(node, prop, sizeof(struct v2rmi), &len, &p) != 0)
 			panic("makememarr: cannot get property");
 
 		for (i = 0; i < len; i++) {
@@ -1265,7 +1341,7 @@ overflow:
 
 #if defined(SUN4C) || defined(SUN4M)
 int
-getprop_reg1(node, rrp)
+PROM_getprop_reg1(node, rrp)
 	int node;
 	struct openprom_addr *rrp;
 {
@@ -1273,11 +1349,11 @@ getprop_reg1(node, rrp)
 	struct openprom_addr *rrp0 = NULL;
 	char buf[32];
 
-	error = getprop(node, "reg", sizeof(struct openprom_addr),
+	error = PROM_getprop(node, "reg", sizeof(struct openprom_addr),
 			&n, (void **)&rrp0);
 	if (error != 0) {
 		if (error == ENOENT &&
-		    strcmp(getpropstringA(node, "device_type", buf, sizeof buf),
+		    strcmp(PROM_getpropstringA(node, "device_type", buf, sizeof buf),
 			   "hierarchical") == 0) {
 			bzero(rrp, sizeof(struct openprom_addr));
 			error = 0;
@@ -1291,14 +1367,14 @@ getprop_reg1(node, rrp)
 }
 
 int
-getprop_intr1(node, ip)
+PROM_getprop_intr1(node, ip)
 	int node;
 	int *ip;
 {
 	int error, n;
 	struct rom_intr *rip = NULL;
 
-	error = getprop(node, "intr", sizeof(struct rom_intr),
+	error = PROM_getprop(node, "intr", sizeof(struct rom_intr),
 			&n, (void **)&rip);
 	if (error != 0) {
 		if (error == ENOENT) {
@@ -1314,14 +1390,14 @@ getprop_intr1(node, ip)
 }
 
 int
-getprop_address1(node, vpp)
+PROM_getprop_address1(node, vpp)
 	int node;
 	void **vpp;
 {
 	int error, n;
 	void **vp = NULL;
 
-	error = getprop(node, "address", sizeof(u_int32_t), &n, (void **)&vp);
+	error = PROM_getprop(node, "address", sizeof(u_int32_t), &n, (void **)&vp);
 	if (error != 0) {
 		if (error == ENOENT) {
 			*vpp = 0;
@@ -1449,6 +1525,7 @@ static struct {
 	char	*cfname;
 } dev_compat_tab[] = {
 	{ "espdma",	"dma" },
+	{ "SUNW,fas",   "esp" },
 	{ "QLGC,isp",	"isp" },
 	{ "PTI,isp",	"isp" },
 	{ "ptisp",	"isp" },
@@ -1521,18 +1598,30 @@ instance_match(dev, aux, bp)
 	switch (bus_class(dev->dv_parent)) {
 	case BUSCLASS_MAINBUS:
 		ma = aux;
-		if (bp->val[0] == ma->ma_iospace && bp->val[1] == ma->ma_paddr)
+		DPRINTF(ACDB_BOOTDEV, ("instance_match: mainbus device, "
+		    "want space %#x addr %#x have space %#lx addr %#llx\n",
+		    bp->val[0], bp->val[1], ma->ma_iospace, (unsigned long long)ma->ma_paddr));
+		if ((bus_type_t)(u_long)bp->val[0] == ma->ma_iospace &&
+		    (bus_addr_t)(u_long)bp->val[1] == ma->ma_paddr)
 			return (1);
 		break;
 	case BUSCLASS_SBUS:
 		sa = aux;
-		if (bp->val[0] == sa->sa_slot && bp->val[1] == sa->sa_offset)
+		DPRINTF(ACDB_BOOTDEV, ("instance_match: sbus device, "
+		    "want slot %#x offset %#x have slot %#x offset %#x\n",
+		     bp->val[0], bp->val[1], sa->sa_slot, sa->sa_offset));
+		if ((u_int32_t)bp->val[0] == sa->sa_slot &&
+		    (u_int32_t)bp->val[1] == sa->sa_offset)
 			return (1);
 		break;
 	case BUSCLASS_IOMMU:
 		iom = aux;
-		if (bp->val[0] == iom->iom_reg[0].ior_iospace &&
-		    bp->val[1] == iom->iom_reg[0].ior_pa)
+		DPRINTF(ACDB_BOOTDEV, ("instance_match: iommu device, "
+		    "want space %#x pa %#x have space %#x pa %#x\n",
+		     bp->val[0], bp->val[1], iom->iom_reg[0].ior_iospace,
+		     iom->iom_reg[0].ior_pa));
+		if ((u_int32_t)bp->val[0] == iom->iom_reg[0].ior_iospace &&
+		    (u_int32_t)bp->val[1] == iom->iom_reg[0].ior_pa)
 			return (1);
 		break;
 	case BUSCLASS_XDC:
@@ -1544,6 +1633,9 @@ instance_match(dev, aux, bp)
 		 */
 		struct xxxx_attach_args { int driveno; } *aap = aux;
 
+		DPRINTF(ACDB_BOOTDEV,
+		    ("instance_match: x[dy]c device, want drive %#x have %#x\n",
+		     bp->val[0], aap->driveno));
 		if (aap->driveno == bp->val[0])
 			return (1);
 
@@ -1604,12 +1696,15 @@ device_register(dev, aux)
 	 * Translate PROM name in case our drivers are named differently
 	 */
 	bpname = bus_compatible(bp->name);
+	dvname = dev->dv_cfdata->cf_driver->cd_name;
+
+	DPRINTF(ACDB_BOOTDEV,
+	    ("\n%s: device_register: dvname %s(%s) bpname %s(%s)\n",
+	    dev->dv_xname, dvname, dev->dv_xname, bpname, bp->name));
 
 	/* First, match by name */
-	dvname = dev->dv_cfdata->cf_driver->cd_name;
 	if (strcmp(dvname, bpname) != 0)
 		return;
-
 
 	if (bus_class(dev) != BUSCLASS_NONE) {
 		/*
@@ -1630,16 +1725,21 @@ device_register(dev, aux)
 				strcpy(bootpath[nbootpath].name, "fd");
 				nbootpath++;
 			}
-			bp->dev = dev;
+			booted_device = bp->dev = dev;
 			bootpath_store(1, bp + 1);
+			DPRINTF(ACDB_BOOTDEV, ("\t-- found bus controller %s\n",
+			    dev->dv_xname));
 			return;
 		}
-	} else if (strcmp(dvname, "le") == 0) {
+	} else if (strcmp(dvname, "le") == 0 || strcmp(dvname, "hme") == 0 ||
+	    strcmp(dvname, "be") == 0) {
 		/*
-		 * LANCE ethernet device
+		 * LANCE, Happy Meal, or BigMac ethernet device
 		 */
 		if (instance_match(dev, aux, bp) != 0) {
 			nail_bootdev(dev, bp);
+			DPRINTF(ACDB_BOOTDEV, ("\t-- found ethernet controller %s\n",
+			    dev->dv_xname));
 			return;
 		}
 	} else if (strcmp(dvname, "sd") == 0 || strcmp(dvname, "cd") == 0) {
@@ -1651,7 +1751,8 @@ device_register(dev, aux)
 		 * correct controller in our boot path.
 		 */
 		struct scsipibus_attach_args *sa = aux;
-		struct scsipi_link *sc_link = sa->sa_sc_link;
+		struct scsipi_periph *periph = sa->sa_periph;
+		struct scsipi_channel *chan = periph->periph_channel;
 		struct scsibus_softc *sbsc =
 			(struct scsibus_softc *)dev->dv_parent;
 		u_int target = bp->val[0];
@@ -1664,15 +1765,15 @@ device_register(dev, aux)
 		/*
 		 * Bounds check: we know the target and lun widths.
 		 */
-		if (target > sc_link->scsipi_scsi.max_target ||
-		    lun > sc_link->scsipi_scsi.max_lun) {
+		if (target >= chan->chan_ntargets || lun >= chan->chan_nluns) {
 			printf("SCSI disk bootpath component not accepted: "
 			       "target %u; lun %u\n", target, lun);
 			return;
 		}
 
 		if (CPU_ISSUN4 && dvname[0] == 's' &&
-		    target == 0 && sbsc->sc_link[0][0] == NULL) {
+		    target == 0 &&
+		    scsipi_lookup_periph(chan, target, lun) == NULL) {
 			/*
 			 * disk unit 0 is magic: if there is actually no
 			 * target 0 scsi device, the PROM will call
@@ -1686,9 +1787,11 @@ device_register(dev, aux)
 		if (CPU_ISSUN4C && dvname[0] == 's')
 			target = sd_crazymap(target);
 
-		if (sc_link->scsipi_scsi.target == target &&
-		    sc_link->scsipi_scsi.lun == lun) {
+		if (periph->periph_target == target &&
+		    periph->periph_lun == lun) {
 			nail_bootdev(dev, bp);
+			DPRINTF(ACDB_BOOTDEV, ("\t-- found [cs]d disk %s\n",
+			    dev->dv_xname));
 			return;
 		}
 
@@ -1697,6 +1800,8 @@ device_register(dev, aux)
 		/* A Xylogic disk */
 		if (instance_match(dev, aux, bp) != 0) {
 			nail_bootdev(dev, bp);
+			DPRINTF(ACDB_BOOTDEV, ("\t-- found x[dy] disk %s\n",
+			    dev->dv_xname));
 			return;
 		}
 
@@ -1709,6 +1814,8 @@ device_register(dev, aux)
 		 * to the bootpath, so just accept that as the boot device.
 		 */
 		nail_bootdev(dev, bp);
+		DPRINTF(ACDB_BOOTDEV, ("\t-- found floppy drive %s\n",
+		    dev->dv_xname));
 		return;
 	} else {
 		/*

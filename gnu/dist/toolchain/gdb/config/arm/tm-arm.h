@@ -47,6 +47,12 @@ CORE_ADDR arm_addr_bits_remove (CORE_ADDR);
 
 #define ADDR_BITS_REMOVE(val)	(arm_addr_bits_remove (val))
 
+#ifdef ARM_26BIT_R15
+/* Functions to unpack and pack R15 on 26-bit ARMs. */
+void arm_supply_26bit_r15 (char *);
+void arm_read_26bit_r15 (char *);
+#endif
+
 /* Offset from address of function to start of its code.  Zero on most
    machines.  */
 
@@ -92,11 +98,10 @@ extern CORE_ADDR arm_saved_pc_after_call (struct frame_info *);
    Even this may only true if the condition predicate is true. The
    following use a condition predicate of ALWAYS so it is always TRUE.
    
-   There are other ways of forcing a breakpoint.  ARM Linux, RisciX,
-   and I suspect NetBSD will all use a software interrupt rather than
-   an undefined instruction to force a trap.  This can be handled by
-   redefining some or all of the following in a target dependent
-   fashion.  */
+   There are other ways of forcing a breakpoint.  ARM Linux and
+   RISC iX will use a software interrupt rather than an undefined
+   instruction to force a trap.  This can be handled by redefining
+   some or all of the following in a target dependent fashion.  */
 
 #define ARM_LE_BREAKPOINT {0xFE,0xDE,0xFF,0xE7}
 #define ARM_BE_BREAKPOINT {0xE7,0xFF,0xDE,0xFE}
@@ -470,6 +475,16 @@ extern int arm_call_dummy_breakpoint_offset (void);
 void arm_fix_call_dummy (char *dummy, CORE_ADDR pc, CORE_ADDR fun,
 			 int nargs, struct value ** args,
 			 struct type * type, int gcc_p);
+
+/* Most ARMs don't have single stepping capability, so provide a 
+   single-stepping mechanism by default */
+#ifndef SOFTWARE_SINGLE_STEP_P
+#define SOFTWARE_SINGLE_STEP_P 1
+#endif
+#if SOFTWARE_SINGLE_STEP_P
+#define SOFTWARE_SINGLE_STEP(sig,bpt) arm_software_single_step((sig), (bpt))
+void arm_software_single_step PARAMS((int, int));
+#endif
 
 CORE_ADDR arm_get_next_pc (CORE_ADDR pc);
 

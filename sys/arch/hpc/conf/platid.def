@@ -1,4 +1,4 @@
-/*	$NetBSD: platid.def,v 1.5 2001/03/04 03:40:39 takemura Exp $	*/
+/*	$NetBSD: platid.def,v 1.13 2001/09/04 08:46:39 sato Exp $	*/
 
 /*-
  * Copyright (c) 1999-2001
@@ -45,6 +45,10 @@ MIPS {
       4102
       4111
       4121
+      4181
+      4122
+      4131
+      4181A
     }
   }
   TX {
@@ -52,7 +56,7 @@ MIPS {
       3911 3912 
     }
     3920 {
-      3922
+      3922 3927
     }
   }
 }
@@ -106,6 +110,8 @@ NEC {
       CPU=MIPS_VR_4111 500A --" MobilePro 750c"
       CPU=MIPS_VR_4121 530 -"530" 430 -"430" 530A --" MobilePro 780"
                        sigmarion ---"DoCoMo sigmarion"
+                       550 -"550" 450 -"450"
+      CPU=MIPS_VR_4131 sigmarion2 ---"DoCoMo sigmarionII"
     }
     7XX "700 series" {
       CPU=MIPS_VR_4121 700 -"700" 700A --" MobilePro 800"
@@ -127,8 +133,8 @@ Everex {
 }
 #endif /* hpcmips */
 
-#ifdef hpcmips
 CASIO {
+#ifdef hpcmips
   CassiopeiaE " Cassiopeia" {
     EXX {
       CPU=MIPS_VR_4111 E10 E11 E15
@@ -144,8 +150,16 @@ CASIO {
     CPU=MIPS_VR_4121
     PocketPostPet -" PocketPostPet"
   }
-}
 #endif /* hpcmips */
+#ifdef hpcsh
+  CassiopeiaA " Cassiopeia" {
+    AXX {
+      CPU=SH_3_7709
+		      A55V -" A-55V"
+    }
+  }
+#endif /* hpcsh */
+}
 
 #ifdef hpcmips
 Sharp {
@@ -175,6 +189,14 @@ Fujitsu {
   INTERTOP {
     ITXXX {
       CPU=MIPS_VR_4121 IT300 IT310
+    }
+  }
+  PenCentra {
+    CPU=MIPS_VR_4121 130 {
+      130TM 130RF
+    }
+    CPU=MIPS_TX_3922 200 {
+      200CTM 200CRF
     }
   }
 }
@@ -216,8 +238,15 @@ Compaq {
 #endif /* hpcmips */
 #ifdef hpcarm
   IPAQ " iPAQ" {
-    CPU=ARM_STRONGARM_SA1110
-    H3600
+	H31XX {
+		CPU=ARM_STRONGARM_SA1110
+		H3100
+	}
+	H36XX {
+		CPU=ARM_STRONGARM_SA1110
+		H3600
+		H3660
+	}
   }
 #endif /* hpcarm */
 }
@@ -227,6 +256,7 @@ Victor {
   InterLink {
     MP {
       CPU=MIPS_TX_3922 MPC101
+      CPU=MIPS_VR_4122 MPC303 MPC304
     }
   }
 }
@@ -267,8 +297,12 @@ HP {
 			CPU=SH_3_7709A 
 			680
 			680JP -" 680 (Japanese)"
+			680HU -" 680 (Hungarian)"
+			680DE -" 680 (German)"
 			690
 			690JP -" 690 (Japanese)"
+			690HU -" 690 (Hungarian)"
+			690DE -" 690 (German)"
 		}
 #endif /* hpcsh */
 #ifdef hpcarm
@@ -291,15 +325,38 @@ HITACHI {
 	PERSONA {
 		CPU=SH_3_7709
 			HPW230JC
+			HPW50PAD
+		CPU=SH_4_7750
+			HPW650PA
 	}
 }
 #endif /* hpcsh */
 
 #ifdef hpcsh
 LGE {
-	Phenom "Phenom" {
+	Phenom " Phenom" {
 		CPU=SH_3_7709
 			H220C	-" H-220C"
 	}
 }
 #endif /* hpcsh */
+
+#ifdef hpcmips
+LASER5 {
+	L " L-" {
+		CPU=MIPS_VR_4181
+			CARD	"CARD+"
+		CPU=MIPS_VR_4122
+			BOARD	"BOARD"
+	}
+}
+#endif /* hpcmips */
+
+#ifdef hpcmips
+AGENDA {
+	VR " VR" {
+		CPU=MIPS_VR_4181
+			VR3	-" VR3+"
+	}
+}
+#endif /* hpcmips */

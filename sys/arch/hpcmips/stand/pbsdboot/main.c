@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.53 2001/03/04 05:38:19 takemura Exp $	*/
+/*	$NetBSD: main.c,v 1.58 2001/07/17 01:41:39 toshii Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000 Shin Takemura.
@@ -59,7 +59,7 @@
  */
 TCHAR *version_string = 
 	TEXT("PocketBSD boot loader\r\n")
-	TEXT("Version 1.17.2 2001.03.04\r\n")
+	TEXT("Version 1.17.5 2001.05.05\r\n")
 #if ( _WIN32_WCE < 200 )
 	TEXT("Compiled for WinCE 1.01\r\n")
 #else
@@ -163,8 +163,13 @@ int fb_bpl[] = {
 
 struct fb_setting fb_settings[] = {
 	/*
-	 * You must choose fb_type to make the screen look black-on-white.
-	 * (Foreground color is black and background color is white.)
+	 * You must choose fb_type to make the screen looks like:
+	 *   black-on-white on monochrome or gray scale screen
+	 *   white-on-black on color screen
+	 * without 'reverse video' on the properties daialog.
+	 *
+	 * 'black-on-white' means that Foreground color is black and 
+	 * background color is white.
 	 */
 	{ NULL, BIFB_D2_M2L_3,
 		320, 240, 80, 0xa000000,
@@ -277,6 +282,9 @@ struct fb_setting fb_settings[] = {
 	{ TEXT("INTERTOP CX310"), BIFB_D8_00,
 		640, 480, 640, 0xa000000,
 		PLATID_CPU_MIPS_VR_4121, PLATID_MACH_FUJITSU_INTERTOP_IT310 },
+	{ TEXT("PenCentra 130"), BIFB_D8_00,
+		640, 480, 640, 0x10201e00,
+		PLATID_CPU_MIPS_VR_4121, PLATID_MACH_FUJITSU_PENCENTRA_130 },
 	{ TEXT("IBM WorkPad z50"), BIFB_D16_0000,
 		640, 480, 1280, 0xa000000,
 		PLATID_CPU_MIPS_VR_4121, PLATID_MACH_IBM_WORKPAD_26011AU },
@@ -1193,7 +1201,7 @@ BOOL BootKernel(int directboot)
 			bi.fb_type = reverse_fb_type(bi.fb_type);
 		}
 		/* 
-		* Set system infomation
+		* Set system information
 		*/
 		platid.dw.dw0 = bi.platid_cpu;
 		platid.dw.dw1 = bi.platid_machine;

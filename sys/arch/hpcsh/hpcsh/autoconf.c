@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.3 2001/02/24 20:17:45 uch Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.9 2002/05/09 12:40:03 uch Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -42,63 +42,58 @@
  *	@(#)autoconf.c	8.1 (Berkeley) 6/10/93
  */
 
-#include <sys/cdefs.h>
-/*
- * Setup the system to run on the current machine.
- *
- * Configure() is called at boot time.  Available
- * devices are determined (from possibilities mentioned in ioconf.c),
- * and the drivers are initialized.
- */
-
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/map.h>
-#include <sys/buf.h>
-#include <sys/dkstat.h>
 #include <sys/conf.h>
 #include <sys/disklabel.h>
-#include <sys/reboot.h>
 #include <sys/device.h>
 
-#include <machine/cpu.h>
+#include <sh3/exception.h>
 #include <machine/bus.h>
+#include <machine/intr.h>
 
 #include <machine/config_hook.h>
 #include <machine/autoconf.h>
+
+#include <hpcsh/dev/hd64461/hd64461var.h>
+#include <hpcsh/dev/hd64465/hd64465var.h>
 
 static struct device *booted_device;
 static int booted_partition;
 static char booted_device_name[16];
 static void get_device(char *name);
 
-/*
- * Determine mass storage and memory configuration for a machine.
- * Print cpu type, and then iterate over an array of devices
- * found on the baseboard or in turbochannel option slots.
- * Once devices are configured, enable interrupts, and probe
- * for attached scsi devices.
- */
 void
 cpu_configure()
 {
-	/* Kick off autoconfiguration. */
-	(void)splhigh();
 
 	config_hook_init();
+	softintr_init();
+	hd6446x_intr_init();
+#ifdef SH3
+	if (CPU_IS_SH3)	/* HD64461 (Jornada 690, HP620LX, HPW-50PA) */
+		intc_intr_establish(SH7709_INTEVT2_IRQ4, IST_LEVEL, IPL_TTY,
+		    (void *)1/* fake. see intc_intr(). */, 0);
+#endif
+#ifdef SH4
+	if (CPU_IS_SH4)	/* HD64465 (HPW-650PA) */
+		intc_intr_establish(SH_INTEVT_IRL11, IST_LEVEL, IPL_TTY,
+		    (void *)1/* fake. see intc_intr(). */, 0);
+#endif
 
-	startrtclock();
-
+	/* Kick off autoconfiguration. */
+	splhigh();
 	if (config_rootfound("mainbus", "mainbus") == NULL)
 		panic("no mainbus found");
 
 	/* Configuration is finished, turn on interrupts. */
-	spl0();	/* enable all source forcing SOFT_INTs cleared */
+	spl0();
 }
 
 void
 cpu_rootconf()
 {
+
 	get_device(booted_device_name);
 
 	printf("boot device: %s\n",
@@ -110,6 +105,7 @@ cpu_rootconf()
 void
 makebootdev(const char *cp)
 {
+
 	strncpy(booted_device_name, cp, 16);
 }
 
@@ -149,5 +145,5 @@ get_device(char *name)
 				}
 			}
 		}
-	} 
+	}
 }

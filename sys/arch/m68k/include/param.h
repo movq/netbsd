@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.8 2000/06/30 17:55:14 itojun Exp $	*/
+/*	$NetBSD: param.h,v 1.10 2001/05/30 12:28:45 mrg Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -47,9 +47,13 @@
 /*
  * Machine independent constants for m68k
  */
+#ifndef	MACHINE_ARCH
 #define	_MACHINE_ARCH	m68k
 #define	MACHINE_ARCH	"m68k"
+#endif
+#ifndef	MID_MACHINE
 #define	MID_MACHINE	MID_M68K
+#endif
 
 /*
  * Round p (pointer or byte index) up to a correctly-aligned value for all
@@ -102,9 +106,9 @@
 #define	MCLOFSET	(MCLBYTES - 1)
 #ifndef NMBCLUSTERS
 
-#if defined(_KERNEL) && !defined(_LKM)
+#if defined(_KERNEL_OPT)
 #include "opt_gateway.h"
-#endif /* _KERNEL && ! _LKM */
+#endif
 
 #ifdef GATEWAY
 # define	NMBCLUSTERS	512	/* map size, max cluster allocation */

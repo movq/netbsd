@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.h,v 1.41 2000/11/21 05:49:07 chs Exp $	   */
+/*	$NetBSD: pmap.h,v 1.49 2001/09/24 01:48:15 chs Exp $	   */
 
 /* 
  * Copyright (c) 1987 Carnegie-Mellon University
@@ -76,7 +76,7 @@ typedef struct pmap {
 } *pmap_t;
 
 /*
- * For each vm_page_t, there is a list of all currently valid virtual
+ * For each struct vm_page, there is a list of all currently valid virtual
  * mappings of that page.  An entry is a pv_entry_t, the list is pv_table.
  */
 
@@ -153,10 +153,11 @@ pmap_extract(pmap_t pmap, vaddr_t va, paddr_t *pap)
 /* Routines that are best to define as macros */
 #define pmap_phys_address(phys)		((u_int)(phys) << PGSHIFT)
 #define pmap_copy(a,b,c,d,e)		/* Dont do anything */
-#define pmap_update()	mtpr(0,PR_TBIA) /* Update buffes */
+#define pmap_update(pmap)		/* nothing (yet) */
 #define pmap_collect(pmap)		/* No need so far */
 #define pmap_remove(pmap, start, slut)	pmap_protect(pmap, start, slut, 0)
 #define pmap_resident_count(pmap)	((pmap)->pm_stats.resident_count)
+#define pmap_wired_count(pmap)		((pmap)->pm_stats.wired_count)
 #define pmap_deactivate(p)		/* Dont do anything */
 #define pmap_reference(pmap)		(pmap)->ref_count++
 
@@ -173,6 +174,5 @@ pmap_extract(pmap_t pmap, vaddr_t va, paddr_t *pap)
 /* Prototypes */
 void	pmap_bootstrap __P((void));
 vaddr_t pmap_map __P((vaddr_t, vaddr_t, vaddr_t, int));
-void	pmap_pinit __P((pmap_t));
 
-#endif PMAP_H
+#endif /* PMAP_H */

@@ -1,4 +1,4 @@
-/* $NetBSD: pmap.c,v 1.17 2001/02/17 19:09:51 bjh21 Exp $ */
+/* $NetBSD: pmap.c,v 1.33 2001/10/13 14:23:31 bjh21 Exp $ */
 /*-
  * Copyright (c) 1997, 1998, 2000 Ben Harris
  * All rights reserved.
@@ -105,7 +105,7 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.17 2001/02/17 19:09:51 bjh21 Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.33 2001/10/13 14:23:31 bjh21 Exp $");
 
 #include <sys/kernel.h> /* for cold */
 #include <sys/malloc.h>
@@ -137,16 +137,20 @@ struct pv_entry {
 	u_int8_t	pv_ppl;  /* Actual PPL */
 	u_int8_t	pv_vflags; /* Per-mapping flags */
 #define PV_WIRED	0x01 /* This is a wired mapping */
+#define PV_UNMANAGED	0x02 /* Mapping was entered by pmap_kenter_*() */
 	u_int8_t	pv_pflags; /* Per-physical-page flags */
 #define PV_REFERENCED	0x01
 #define PV_MODIFIED	0x02
 };
 
+#define PM_NENTRIES 1024
+
 struct pmap {
 	int	pm_count;	/* Reference count */
 	int	pm_flags;
 #define PM_ACTIVE 0x00000001
-	struct	pv_entry *pm_entries[1024];
+	struct	pmap_statistics pm_stats;
+	struct	pv_entry **pm_entries;
 };
 
 /*
@@ -169,10 +173,11 @@ struct pv_entry *pv_table;
 /* Kernel pmap -- statically allocated to make life slightly less odd. */
 
 struct pmap kernel_pmap_store;
+struct pv_entry *kernel_pmap_entries[PM_NENTRIES];
 
 static boolean_t pmap_initialised = FALSE;
 
-static struct pool *pmap_pool;
+static struct pool pmap_pool;
 
 static pmap_t active_pmap;
 
@@ -189,11 +194,11 @@ static void pv_free(struct pv_entry *pv);
 static struct pv_entry *pv_get(pmap_t pmap, int ppn, int lpn);
 static void pv_release(pmap_t pmap, int ppn, int lpn);
 
+static int pmap_enter1(pmap_t, vaddr_t, paddr_t, vm_prot_t, int, int);
+
 static caddr_t pmap_find(paddr_t);
 
 static void pmap_update_page(int);
-
-void pmap_virtual_space(vaddr_t *, vaddr_t *);
 
 /*
  * No-one else wanted to take responsibility for the MEMC control register,
@@ -238,7 +243,7 @@ pmap_bootstrap(int npages, paddr_t zp_physaddr)
 	/* Set up the bootstrap pv_table */
 	pv_table_size = round_page(physmem * sizeof(struct pv_entry));
 	pv_table =
-	    (struct pv_entry *)pmap_steal_memory(pv_table_size, NULL, NULL);
+	    (struct pv_entry *)uvm_pageboot_alloc(pv_table_size);
 	bzero(pv_table, pv_table_size);
 
 	/* Set up the kernel's pmap */
@@ -246,6 +251,8 @@ pmap_bootstrap(int npages, paddr_t zp_physaddr)
 	bzero(pmap, sizeof(*pmap));
 	pmap->pm_count = 1;
 	pmap->pm_flags = PM_ACTIVE; /* Kernel pmap always is */
+	pmap->pm_entries = kernel_pmap_entries;
+	bzero(pmap->pm_entries, sizeof(struct pv_entry *) * PM_NENTRIES);
 	/* pmap_pinit(pmap); */
 	/* Clear the MEMC's page table */
 	/* XXX Maybe we should leave zero page alone? */
@@ -283,8 +290,6 @@ pmap_steal_memory(vsize_t size, vaddr_t *vstartp, vaddr_t *vendp)
 			break;
 		}
 	}
-
-	pmap_virtual_space(vstartp, vendp);
 
 	return addr;
 }
@@ -340,7 +345,7 @@ pmap_init2()
 	    PMAP_UNMAP_POOLPAGE((vaddr_t)old_pv_table)));
 
 	/* Create pmap pool */
-	pmap_pool = pool_create(sizeof(struct pmap), 0, 0, 0,
+	pool_init(&pmap_pool, sizeof(struct pmap), 0, 0, 0,
 	    "pmappool", 0, NULL, NULL, M_VMPMAP);
 	pmap_initialised = 1;
 }
@@ -354,8 +359,11 @@ pmap_create()
 	UVMHIST_CALLED(pmaphist);
 	if (!pmap_initialised) 
 		pmap_init2();
-	pmap = pool_get(pmap_pool, PR_WAITOK);
+	pmap = pool_get(&pmap_pool, PR_WAITOK);
 	bzero(pmap, sizeof(*pmap));
+	MALLOC(pmap->pm_entries, struct pv_entry **,
+	    sizeof(struct pv_entry *) * PM_NENTRIES, M_VMPMAP, M_WAITOK);
+	bzero(pmap->pm_entries, sizeof(struct pv_entry *) * PM_NENTRIES);
 	pmap->pm_count = 1;
 	return pmap;
 }
@@ -371,14 +379,30 @@ pmap_destroy(pmap_t pmap)
 	UVMHIST_CALLED(pmaphist);
 	if (--pmap->pm_count > 0)
 		return;
+	KASSERT((pmap->pm_flags & PM_ACTIVE) == 0);
+	KASSERT(pmap->pm_stats.resident_count == 0);
+	KASSERT(pmap->pm_stats.wired_count == 0);
 #ifdef DIAGNOSTIC
-	if (pmap->pm_flags & PM_ACTIVE)
-		panic("pmap_destroy: pmap is active");
 	for (i = 0; i < 1024; i++)
 		if (pmap->pm_entries[i] != NULL)
 			panic("pmap_destroy: pmap isn't empty");
 #endif
-	pool_put(pmap_pool, pmap);
+	FREE(pmap->pm_entries, M_VMPMAP);
+	pool_put(&pmap_pool, pmap);
+}
+
+long
+_pmap_resident_count(pmap_t pmap)
+{
+
+	return pmap->pm_stats.resident_count;
+}
+
+long
+_pmap_wired_count(pmap_t pmap)
+{
+
+	return pmap->pm_stats.wired_count;
 }
 
 void
@@ -438,6 +462,8 @@ pmap_unwire(pmap_t pmap, vaddr_t va)
 	if (pmap == NULL) return;
 	pv = pmap->pm_entries[atop(va)];
 	if (pv == NULL) return;
+	if ((pv->pv_vflags & PV_WIRED) == 0) return;
+	pmap->pm_stats.wired_count--;
 	pv->pv_vflags &= ~PV_WIRED;
 }
 
@@ -503,8 +529,9 @@ pv_alloc()
 {
 	struct pv_entry *pv;
 
-	MALLOC(pv, struct pv_entry *, sizeof(*pv), M_VMPMAP, M_WAITOK);
-	bzero(pv, sizeof(*pv));
+	MALLOC(pv, struct pv_entry *, sizeof(*pv), M_VMPMAP, M_NOWAIT);
+	if (pv != NULL)
+		bzero(pv, sizeof(*pv));
 	return pv;
 }
 
@@ -527,6 +554,7 @@ pv_get(pmap_t pmap, int ppn, int lpn)
 	pv = &pv_table[ppn];
 	if (pv->pv_pmap == NULL) {
 		UVMHIST_LOG(pmaphist, "<-- head (pv=%p)", pv, 0, 0, 0);
+		pmap->pm_stats.resident_count++;
 		return pv;
 	}
 	/* If this mapping exists already, use that. */
@@ -538,8 +566,11 @@ pv_get(pmap_t pmap, int ppn, int lpn)
 		}
 	/* Otherwise, allocate a new entry and link it in after the head. */
 	pv = pv_alloc();
+	if (pv == NULL)
+		return NULL;
 	pv->pv_next = pv_table[ppn].pv_next;
 	pv_table[ppn].pv_next = pv;
+	pmap->pm_stats.resident_count++;
 	UVMHIST_LOG(pmaphist, "<-- new (pv=%p)", pv, 0, 0, 0);
 	return pv;
 }
@@ -573,7 +604,7 @@ pv_release(pmap_t pmap, int ppn, int lpn)
 			pv_free(npv);
 		} else {
 			UVMHIST_LOG(pmaphist, "pv=%p; empty", pv, 0, 0, 0);
-			pv->pv_pmap = NULL;
+			bzero(pv, sizeof(*pv));
 		}
 	} else {
 		for (npv = pv->pv_next; npv; npv = npv->pv_next) {
@@ -587,6 +618,7 @@ pv_release(pmap_t pmap, int ppn, int lpn)
 		pv_free(npv);
 	}
 	pmap->pm_entries[lpn] = NULL;
+	pmap->pm_stats.resident_count--;
 }
 
 
@@ -599,8 +631,19 @@ pv_release(pmap_t pmap, int ppn, int lpn)
  * information.  That is, this routine must actually insert this page
  * into the given map NOW.
  */
+
 int
 pmap_enter(pmap_t pmap, vaddr_t va, paddr_t pa, vm_prot_t prot, int flags)
+{
+	UVMHIST_FUNC("pmap_enter");
+
+	UVMHIST_CALLED(pmaphist);
+	return pmap_enter1(pmap, va, pa, prot, flags, 0);
+}
+
+static int
+pmap_enter1(pmap_t pmap, vaddr_t va, paddr_t pa, vm_prot_t prot, int flags,
+    int unmanaged)
 {
 	int ppn, lpn, s;
 	struct pv_entry *pv, *ppv;
@@ -620,6 +663,10 @@ pmap_enter(pmap_t pmap, vaddr_t va, paddr_t pa, vm_prot_t prot, int flags)
 
 	/* Make a note */
 	pv = pv_get(pmap, ppn, lpn);
+	if (pv == NULL)
+		panic("pmap_enter1");
+	if (pv->pv_vflags & PV_WIRED)
+		pmap->pm_stats.wired_count--;
 	ppv = &pv_table[ppn];
 	pv->pv_pmap = pmap;
 	pv->pv_ppn = ppn;
@@ -627,20 +674,28 @@ pmap_enter(pmap_t pmap, vaddr_t va, paddr_t pa, vm_prot_t prot, int flags)
 	pv->pv_prot = prot;
 	pv->pv_vflags = 0;
 	/* pv->pv_pflags = 0; */
-	if (flags & PMAP_WIRED)
+	if (flags & PMAP_WIRED) {
 		pv->pv_vflags |= PV_WIRED;
-	if (flags & VM_PROT_WRITE)
-		ppv->pv_pflags |= PV_REFERENCED | PV_MODIFIED;
-	else if (flags & (VM_PROT_ALL))
-		ppv->pv_pflags |= PV_REFERENCED;
-	pv_update(pv);
+	}
+	if (unmanaged)
+		pv->pv_vflags |= PV_UNMANAGED;
+	else {
+		/* According to pmap(9), unmanaged mappings don't track r/m */
+		if (flags & VM_PROT_WRITE)
+			ppv->pv_pflags |= PV_REFERENCED | PV_MODIFIED;
+		else if (flags & (VM_PROT_ALL))
+			ppv->pv_pflags |= PV_REFERENCED;
+	}
+	pmap_update_page(ppn);
 	pmap->pm_entries[lpn] = pv;
+	if (pv->pv_vflags & PV_WIRED)
+		pmap->pm_stats.wired_count++;
 	splx(s);
 	/* Poke the MEMC */
 	if (pmap->pm_flags & PM_ACTIVE)
 		MEMC_WRITE(pv->pv_activate);
 
-	return KERN_SUCCESS;
+	return 0;
 }
 
 /* Remove a range of virtual mappings from a pmap */
@@ -664,6 +719,8 @@ pmap_remove(pmap_t pmap, vaddr_t sva, vaddr_t eva)
 				cpu_cache_flush();
 			}
 			pmap->pm_entries[lpn] = NULL;
+			if (pv->pv_vflags & PV_WIRED)
+				pmap->pm_stats.wired_count--;
 			pv_release(pmap, pv->pv_ppn, lpn);
 		}
 	}
@@ -690,21 +747,7 @@ pmap_kenter_pa(vaddr_t va, paddr_t pa, vm_prot_t prot)
 	UVMHIST_FUNC("pmap_kenter_pa");
 
 	UVMHIST_CALLED(pmaphist);
-	pmap_enter(pmap_kernel(), va, pa, prot, prot | PMAP_WIRED);
-}
-
-void
-pmap_kenter_pgs(vaddr_t va, struct vm_page **pages, int npages)
-{
-	UVMHIST_FUNC("pmap_kenter_pgs");
-
-	UVMHIST_CALLED(pmaphist);
-	while (npages > 0) {
-		pmap_kenter_pa(va, (*pages)->phys_addr, VM_PROT_ALL);
-		va += NBPG;
-		pages++;
-		npages--;
-	}
+	pmap_enter1(pmap_kernel(), va, pa, prot, prot | PMAP_WIRED, 1);
 }
 
 void
@@ -808,19 +851,10 @@ pmap_fault(struct pmap *pmap, vaddr_t va, vm_prot_t atype)
 		return FALSE;
 	ppn = pv->pv_ppn;
 	ppv = &pv_table[ppn];
-	if (pmap == pmap_kernel()) {
-		/*
-		 * If we allow the kernel to access the page, we can't
-		 * stop it writing to it as well, so we have to handle
-		 * referenced and modified bits together.
-		 */
-		if ((ppv->pv_pflags & PV_REFERENCED) == 0 ||
-		    (ppv->pv_pflags & PV_MODIFIED) == 0) {
-			ppv->pv_pflags |= PV_REFERENCED | PV_MODIFIED;
-			pmap_update_page(ppn);
-			return TRUE;
-		}
-	} else {
+	UVMHIST_LOG(pmaphist,
+	    "pmap = %p, lpn = %d, ppn = %d, atype = 0x%x",
+	    pmap, lpn, ppn, atype);
+	if (pmap != pmap_kernel()) {
 		if ((ppv->pv_pflags & PV_REFERENCED) == 0) {
 			ppv->pv_pflags |= PV_REFERENCED;
 			pmap_update_page(ppn);
@@ -839,9 +873,6 @@ pmap_fault(struct pmap *pmap, vaddr_t va, vm_prot_t atype)
 	 * the mapping back into the MEMC.
 	 */
 	if ((atype & ~pv->pv_prot) == 0) {
-		UVMHIST_LOG(pmaphist,
-		    "MEMC miss; pmap = %p, lpn = %d, ppn = %d",
-		    pmap, lpn, ppn, 0);
 		MEMC_WRITE(pv->pv_activate);
 		/*
 		 * If the new mapping is writeable, we should flush the cache
@@ -856,29 +887,44 @@ pmap_fault(struct pmap *pmap, vaddr_t va, vm_prot_t atype)
 	return FALSE;
 }
 
+/*
+ * Change access permissions on a given physical page.
+ *
+ * Pages mapped using pmap_kenter_*() are exempt.
+ */
 void
 pmap_page_protect(struct vm_page *page, vm_prot_t prot)
 {
 	int ppn;
-	struct pv_entry *pv;
+	struct pv_entry *pv, *npv;
 	UVMHIST_FUNC("pmap_page_protect");
 
 	UVMHIST_CALLED(pmaphist);
 	ppn = atop(page->phys_addr);
 	if (prot == VM_PROT_NONE) {
 		UVMHIST_LOG(pmaphist, "removing ppn %d\n", ppn, 0, 0, 0);
-		pv = &pv_table[ppn];
-		while (pv->pv_pmap != NULL) {
+		npv = pv = &pv_table[ppn];
+		while (pv != NULL && pv->pv_pmap != NULL) {
+			if (pv->pv_vflags & PV_UNMANAGED) {
+				pv = pv->pv_next;
+				continue;
+			}
 			if (pv->pv_pmap->pm_flags & PM_ACTIVE) {
 				MEMC_WRITE(pv->pv_deactivate);
 				cpu_cache_flush();
 			}
+			if (pv != &pv_table[ppn])
+				npv = pv->pv_next;
 			pv->pv_pmap->pm_entries[pv->pv_lpn] = NULL;
-			pv_release(pv->pv_pmap, pv->pv_ppn, pv->pv_lpn);
+			if (pv->pv_vflags & PV_WIRED)
+				pv->pv_pmap->pm_stats.wired_count--;
+			pv_release(pv->pv_pmap, ppn, pv->pv_lpn);
+			pv = npv;
 		}
 	} else if (prot != VM_PROT_ALL) {
 		for (pv = &pv_table[ppn]; pv != NULL; pv = pv->pv_next)
-			if (pv->pv_pmap != NULL) {
+			if (pv->pv_pmap != NULL &&
+			    (pv->pv_vflags & PV_UNMANAGED) == 0) {
 				pv->pv_prot &= prot;
 				pv_update(pv);
 				if (pv->pv_pmap->pm_flags & PM_ACTIVE)
@@ -942,7 +988,7 @@ pmap_reference(pmap_t pmap)
  * now.
  */
 void
-pmap_update()
+pmap_update(struct pmap *pmap)
 {
 	UVMHIST_FUNC("pmap_update");
 
@@ -976,22 +1022,30 @@ pmap_find(paddr_t pa)
 void
 pmap_zero_page(paddr_t pa)
 {
+	int ppn;
 	UVMHIST_FUNC("pmap_zero_page");
 
 	UVMHIST_CALLED(pmaphist);
 	bzero(pmap_find(pa), PAGE_SIZE);
-	pv_table[atop(pa)].pv_pflags |= PV_MODIFIED | PV_REFERENCED;
+	ppn = atop(pa);
+	pv_table[ppn].pv_pflags |= PV_MODIFIED | PV_REFERENCED;
+	pmap_update_page(ppn);
 }
 
 void
 pmap_copy_page(paddr_t src, paddr_t dest)
 {
+	int sppn, dppn;
 	UVMHIST_FUNC("pmap_copy_page");
 
 	UVMHIST_CALLED(pmaphist);
 	memcpy(pmap_find(dest), pmap_find(src), PAGE_SIZE);
-	pv_table[atop(src)].pv_pflags |= PV_REFERENCED;
-	pv_table[atop(dest)].pv_pflags |= PV_MODIFIED | PV_REFERENCED;
+	sppn = atop(src);
+	dppn = atop(dest);
+	pv_table[sppn].pv_pflags |= PV_REFERENCED;
+	pmap_update_page(sppn);
+	pv_table[dppn].pv_pflags |= PV_MODIFIED | PV_REFERENCED;
+	pmap_update_page(dppn);
 }
 
 /*
@@ -1024,8 +1078,10 @@ pmap_dump(struct pmap *pmap)
 	int pflags;
 
 	db_printf("PMAP %p:\n", pmap);
-	db_printf("\tcount = %d, flags = %d\n",
-		  pmap->pm_count, pmap->pm_flags);
+	db_printf("\tcount = %d, flags = %d, "
+	    "resident_count = %ld, wired_count = %ld\n",
+	    pmap->pm_count, pmap->pm_flags,
+	    pmap->pm_stats.resident_count, pmap->pm_stats.wired_count);
 	for (i = 0; i < 1024; i++)
 		if ((pv = pmap->pm_entries[i]) != NULL) {
 			db_printf("\t%03d->%p: ", i, pv);

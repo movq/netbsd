@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.1 2001/02/23 03:48:08 ichiro Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.4 2001/09/09 08:07:36 toshii Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.
@@ -48,6 +48,8 @@
 
 #include <machine/bootconfig.h>
 #include <machine/irqhandler.h>
+
+#include "sacom.h"
 
 struct device *booted_device;
 int booted_partition;
@@ -115,13 +117,9 @@ set_root_device()
             
 	if (boot_file)
 		get_device(boot_file);
-	if (boot_args) {
-		ptr = strstr(boot_args, "root=");
-		if (ptr) {
-			ptr += 5;
-			get_device(ptr);
-		}
-	}
+	if (boot_args &&
+	    get_bootconf_option(boot_args, "root", BOOTOPT_TYPE_STRING, &ptr))
+		get_device(ptr);
 }
 #endif /* ifndef MEMORY_DISK_IS_ROOT */
 
@@ -188,4 +186,22 @@ void
 device_register(struct device *dev, void *aux)
 {
 }
-/* End of autoconf.c */
+
+/*
+ * This entire table could be autoconfig()ed but that would mean that
+ * the kernel's idea of the console would be out of sync with that of
+ * the standalone boot.  I think it best that they both use the same
+ * known algorithm unless we see a pressing need otherwise.
+ */
+
+#include <dev/cons.h>
+
+cons_decl(com);   
+cons_decl(sacom);
+
+struct consdev constab[] = {
+#if (NSACOM > 0)
+	cons_init(sacom),
+#endif
+	{ 0 },
+};

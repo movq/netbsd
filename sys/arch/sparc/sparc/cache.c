@@ -1,4 +1,4 @@
-/*	$NetBSD: cache.c,v 1.53 2000/06/08 14:45:18 pk Exp $ */
+/*	$NetBSD: cache.c,v 1.57 2001/07/10 15:03:46 mrg Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -62,6 +62,7 @@
 
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/kernel.h>
 
 #include <machine/ctlreg.h>
 #include <machine/pte.h>
@@ -918,6 +919,9 @@ viking_pcache_flush_page(pa, invalidate_only)
  * message. This assumes the allocation of CPU contextses is a global
  * operation (remember that the actual context tables for the CPUs
  * are distinct).
+ *
+ * We don't do cross calls if we're cold or we're accepting them
+ * ourselves (CPUFLG_READY).
  */
 
 void
@@ -927,19 +931,25 @@ smp_vcache_flush_page(va)
 	int n, s;
 
 	cpuinfo.sp_vcache_flush_page(va);
+	if (cold || (cpuinfo.flags & CPUFLG_READY) == 0)
+		return;
+	LOCK_XPMSG();
 	for (n = 0; n < ncpu; n++) {
 		struct cpu_info *cpi = cpus[n];
-		struct xpmsg_flush_page *p = &cpi->msg.u.xpmsg_flush_page;
-		if (cpuinfo.mid == cpi->mid)
+		struct xpmsg_flush_page *p;
+
+		if (CPU_READY(cpi))
 			continue;
+		p = &cpi->msg.u.xpmsg_flush_page;
 		s = splhigh();
 		simple_lock(&cpi->msg.lock);
 		cpi->msg.tag = XPMSG_VCACHE_FLUSH_PAGE;
 		p->ctx = getcontext4m();
 		p->va = va;
-		raise_ipi(cpi);
+		raise_ipi_wait_and_unlock(cpi);
 		splx(s);
 	}
+	UNLOCK_XPMSG();
 }
 
 void
@@ -949,20 +959,26 @@ smp_vcache_flush_segment(vr, vs)
 	int n, s;
 
 	cpuinfo.sp_vcache_flush_segment(vr, vs);
+	if (cold || (cpuinfo.flags & CPUFLG_READY) == 0)
+		return;
+	LOCK_XPMSG();
 	for (n = 0; n < ncpu; n++) {
 		struct cpu_info *cpi = cpus[n];
-		struct xpmsg_flush_segment *p = &cpi->msg.u.xpmsg_flush_segment;
-		if (cpuinfo.mid == cpi->mid)
+		struct xpmsg_flush_segment *p;
+
+		if (CPU_READY(cpi))
 			continue;
+		p = &cpi->msg.u.xpmsg_flush_segment;
 		s = splhigh();
 		simple_lock(&cpi->msg.lock);
 		cpi->msg.tag = XPMSG_VCACHE_FLUSH_SEGMENT;
 		p->ctx = getcontext4m();
 		p->vr = vr;
 		p->vs = vs;
-		raise_ipi(cpi);
+		raise_ipi_wait_and_unlock(cpi);
 		splx(s);
 	}
+	UNLOCK_XPMSG();
 }
 
 void
@@ -972,19 +988,25 @@ smp_vcache_flush_region(vr)
 	int n, s;
 
 	cpuinfo.sp_vcache_flush_region(vr);
+	if (cold || (cpuinfo.flags & CPUFLG_READY) == 0)
+		return;
+	LOCK_XPMSG();
 	for (n = 0; n < ncpu; n++) {
 		struct cpu_info *cpi = cpus[n];
-		struct xpmsg_flush_region *p = &cpi->msg.u.xpmsg_flush_region;
-		if (cpuinfo.mid == cpi->mid)
+		struct xpmsg_flush_region *p;
+
+		if (CPU_READY(cpi))
 			continue;
+		p = &cpi->msg.u.xpmsg_flush_region;
 		s = splhigh();
 		simple_lock(&cpi->msg.lock);
 		cpi->msg.tag = XPMSG_VCACHE_FLUSH_REGION;
 		p->ctx = getcontext4m();
 		p->vr = vr;
-		raise_ipi(cpi);
+		raise_ipi_wait_and_unlock(cpi);
 		splx(s);
 	}
+	UNLOCK_XPMSG();
 }
 
 void
@@ -993,18 +1015,24 @@ smp_vcache_flush_context()
 	int n, s;
 
 	cpuinfo.sp_vcache_flush_context();
+	if (cold || (cpuinfo.flags & CPUFLG_READY) == 0)
+		return;
+	LOCK_XPMSG();
 	for (n = 0; n < ncpu; n++) {
 		struct cpu_info *cpi = cpus[n];
-		struct xpmsg_flush_context *p = &cpi->msg.u.xpmsg_flush_context;
-		if (cpuinfo.mid == cpi->mid)
+		struct xpmsg_flush_context *p;
+
+		if (CPU_READY(cpi))
 			continue;
+		p = &cpi->msg.u.xpmsg_flush_context;
 		s = splhigh();
 		simple_lock(&cpi->msg.lock);
 		cpi->msg.tag = XPMSG_VCACHE_FLUSH_CONTEXT;
 		p->ctx = getcontext4m();
-		raise_ipi(cpi);
+		raise_ipi_wait_and_unlock(cpi);
 		splx(s);
 	}
+	UNLOCK_XPMSG();
 }
 
 void
@@ -1015,19 +1043,25 @@ smp_cache_flush(va, size)
 	int n, s;
 
 	cpuinfo.sp_cache_flush(va, size);
+	if (cold || (cpuinfo.flags & CPUFLG_READY) == 0)
+		return;
+	LOCK_XPMSG();
 	for (n = 0; n < ncpu; n++) {
 		struct cpu_info *cpi = cpus[n];
-		struct xpmsg_flush_range *p = &cpi->msg.u.xpmsg_flush_range;
-		if (cpuinfo.mid == cpi->mid)
+		struct xpmsg_flush_range *p;
+
+		if (CPU_READY(cpi))
 			continue;
+		p = &cpi->msg.u.xpmsg_flush_range;
 		s = splhigh();
 		simple_lock(&cpi->msg.lock);
 		cpi->msg.tag = XPMSG_VCACHE_FLUSH_RANGE;
 		p->ctx = getcontext4m();
 		p->va = va;
 		p->size = size;
-		raise_ipi(cpi);
+		raise_ipi_wait_and_unlock(cpi);
 		splx(s);
 	}
+	UNLOCK_XPMSG();
 }
 #endif /* MULTIPROCESSOR */

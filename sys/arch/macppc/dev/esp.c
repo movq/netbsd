@@ -1,4 +1,4 @@
-/*	$NetBSD: esp.c,v 1.11 2000/06/26 14:59:03 mrg Exp $	*/
+/*	$NetBSD: esp.c,v 1.13 2001/04/25 17:53:15 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -250,10 +250,12 @@ espattach(parent, self, aux)
 	shutdownhook_establish(esp_shutdownhook, sc);
 
 	/* Do the common parts of attachment. */
-	ncr53c9x_attach(sc, NULL, NULL);
+	sc->sc_adapter.adapt_minphys = minphys;
+	sc->sc_adapter.adapt_request = ncr53c9x_scsipi_request;
+	ncr53c9x_attach(sc);
 
 	/* Turn on target selection using the `dma' method */
-	ncr53c9x_dmaselect = 1;
+	sc->sc_features |= NCR_F_DMASELECT;
 }
 
 /*

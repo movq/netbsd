@@ -1,4 +1,4 @@
-/*      $NetBSD: sa11x0_com.c,v 1.2 2001/02/23 04:31:19 ichiro Exp $        */
+/*      $NetBSD: sa11x0_com.c,v 1.11 2001/06/29 17:22:51 toshii Exp $        */
 
 /*-
  * Copyright (c) 1998, 1999, 2001 The NetBSD Foundation, Inc.
@@ -74,9 +74,10 @@
  *	@(#)com.c	7.5 (Berkeley) 5/16/91
  */
 
+#include "opt_com.h"
 #include "opt_ddb.h"
 #include "opt_ddbparam.h"
-#include "opt_com.h"
+#include "opt_kgdb.h"
 
 #include "rnd.h"
 #if NRND > 0 && defined(RND_COM)
@@ -167,7 +168,7 @@ void		sacomcnpollc(dev_t, int);
 void		sacomcnprobe(struct consdev *);
 void		sacomcninit(struct consdev *);
 
-extern struct bus_space mainbus_bs_tag;
+extern struct bus_space sa11x0_bs_tag;
 
 static bus_space_tag_t sacomconstag;
 static bus_space_handle_t sacomconsioh;
@@ -203,7 +204,7 @@ sacom_match(parent, match, aux)
 	struct cfdata *match;
 	void *aux;
 {
-	return(0);
+	return (1);
 }
 
 void
@@ -215,12 +216,14 @@ sacom_attach(parent, self, aux)
 	struct sacom_softc *sc = (struct sacom_softc*)self;
 	struct sa11x0_attach_args *sa = aux;
 
+	printf("\n");
+
 	sc->sc_iot = sa->sa_iot;
 	sc->sc_baseaddr = sa->sa_addr;
 
 	if(bus_space_map(sa->sa_iot, sa->sa_addr, sa->sa_size, 0,
 			&sc->sc_ioh)) {
-		printf(": can't map bus space\n");
+		printf("%s: unable to map registers\n", sc->sc_dev.dv_xname);
 		return;
 	}
 
@@ -670,6 +673,21 @@ sacomwrite(dev, uio, flag)
 		return (EIO);
  
 	return ((*tp->t_linesw->l_write)(tp, uio, flag));
+}
+
+int
+sacompoll(dev, events, p)
+	dev_t dev;
+	int events;
+	struct proc *p;
+{
+	struct sacom_softc *sc = device_lookup(&sacom_cd, COMUNIT(dev));
+	struct tty *tp = sc->sc_tty;
+
+	if (COM_ISALIVE(sc) == 0)
+		return (EIO);
+ 
+	return ((*tp->t_linesw->l_poll)(tp, events, p));
 }
 
 struct tty *
@@ -1338,9 +1356,12 @@ sacomintr(arg)
 		COM_UNLOCK(sc);
 		return (0);
 	}
+	if (ISSET(sr0, SR0_EIF))
+		/* XXX silently discard error bits */
+		bus_space_read_4(iot, ioh, SACOM_DR);
 	if (ISSET(sr0, SR0_RBB))
 		bus_space_write_4(iot, ioh, SACOM_SR0, SR0_RBB);
-	if (ISSET(sr1, SR0_REB)) {
+	if (ISSET(sr0, SR0_REB)) {
 		bus_space_write_4(iot, ioh, SACOM_SR0, SR0_REB);
 #if defined(DDB) || defined(KGDB)
 #ifndef DDB_BREAK_CHAR
@@ -1516,19 +1537,17 @@ sacomcninit(cp)
 {
 	if (cp == NULL) {
 		/* XXX cp == NULL means that MMU is disabled. */
-		if (sacominit(&mainbus_bs_tag, SACOM3_HW_BASE,
-				  CONSPEED, CONMODE, &sacomconsioh))
-			panic("can't init serial console @%x", CONADDR);
-		sacomconstag = &mainbus_bs_tag;
+		sacomconsioh = SACOM3_HW_BASE;
+		sacomconstag = &sa11x0_bs_tag;
 		cn_tab = &sacomcons;
 		return;
 	}
 
-	if (sacominit(&mainbus_bs_tag, CONADDR, CONSPEED,
+	if (sacominit(&sa11x0_bs_tag, CONADDR, CONSPEED,
 			  CONMODE, &sacomconsioh))
 		panic("can't init serial console @%x", CONADDR);
 	cn_tab = &sacomcons;
-	sacomconstag = &mainbus_bs_tag;
+	sacomconstag = &sa11x0_bs_tag;
 }
 
 int
@@ -1540,8 +1559,25 @@ sacomcngetc(dev)
 	s = spltty();	/* XXX do we need this? */
 
 	while(! (bus_space_read_4(sacomconstag, sacomconsioh, SACOM_SR1)
-		 & SR1_RNE))
-		;
+		 & SR1_RNE)) {
+#if defined(DDB) || defined(KGDB)
+#ifndef DDB_BREAK_CHAR
+		u_int sr0;
+		extern int db_active;
+
+		sr0 = bus_space_read_4(sacomconstag, sacomconsioh, SACOM_SR0);
+		if (ISSET(sr0, SR0_RBB))
+			bus_space_write_4(sacomconstag, sacomconsioh,
+					  SACOM_SR0, SR0_RBB);
+		if (ISSET(sr0, SR0_REB)) {
+			bus_space_write_4(sacomconstag, sacomconsioh,
+					  SACOM_SR0, SR0_REB);
+			if (db_active == 0)
+				console_debugger();
+		}
+#endif
+#endif /* DDB || KGDB */
+	}
 
 	c = bus_space_read_4(sacomconstag, sacomconsioh, SACOM_DR);
 	c &= 0xff;

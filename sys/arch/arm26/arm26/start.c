@@ -1,4 +1,4 @@
-/* $NetBSD: start.c,v 1.8 2001/01/22 22:10:43 bjh21 Exp $ */
+/* $NetBSD: start.c,v 1.12 2001/08/25 17:55:24 bjh21 Exp $ */
 /*-
  * Copyright (c) 1998, 2000 Ben Harris
  * All rights reserved.
@@ -32,7 +32,7 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: start.c,v 1.8 2001/01/22 22:10:43 bjh21 Exp $");
+__KERNEL_RCSID(0, "$NetBSD: start.c,v 1.12 2001/08/25 17:55:24 bjh21 Exp $");
 
 #include <sys/msgbuf.h>
 #include <sys/user.h>
@@ -40,6 +40,7 @@ __KERNEL_RCSID(0, "$NetBSD: start.c,v 1.8 2001/01/22 22:10:43 bjh21 Exp $");
 #include <sys/systm.h>
 
 #include <arm/armreg.h>
+#include <arm/undefined.h>
 #include <machine/boot.h>
 #include <machine/machdep.h>
 #include <machine/memcreg.h>
@@ -60,6 +61,10 @@ extern void main __P((void)); /* XXX Should be in a header file */
 struct bootconfig bootconfig;
 
 struct user *proc0paddr;
+
+/* We don't pass a command line yet. */
+char *boot_args = "";
+char *boot_file = "";
 
 #ifdef DIAGNOSTIC
 #define BOOT_SANITY 0x89345846
@@ -188,24 +193,11 @@ start(initbootconfig)
 	/* Get the MEMC set up and map zero page */
 	pmap_bootstrap(bootconfig.npages, ZP_PHYSADDR);
 
-	/*
-	 * This is a nasty bit.  Because the kernel uses a 26-bit APCS
-	 * variant, the CPU interrupt disable flags get munged on
-	 * every function return.  Thus, we need to enable interrupts
-	 * at the CPU now since this is the last function we control
-	 * that won't return.  In order to be able to do this, we need
-	 * to ensure we won't get any interrupts before we're ready
-	 * for them.  For now, I'll assume we've got an IOC doing all
-	 * this at the usual location, but it should be done more
-	 * elegantly.
-	 */
+	/* Set up the undefined instruction handlers. */
+	undefined_init();
 
-#if NIOC > 0
-	*(volatile u_char *)(0x03200000 + (IOC_IRQMSKA << 2)) = 0;
-	*(volatile u_char *)(0x03200000 + (IOC_IRQMSKB << 2)) = 0;
-	*(volatile u_char *)(0x03200000 + (IOC_FIQMSK << 2)) = 0;
-#endif
-	int_on();
+	splhigh();
+	fiq_off();
 
 	/*
 	 * Locate process 0's user structure, in the bottom of its kernel

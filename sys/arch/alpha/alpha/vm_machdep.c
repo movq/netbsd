@@ -1,4 +1,4 @@
-/* $NetBSD: vm_machdep.c,v 1.64 2001/01/03 22:15:39 thorpej Exp $ */
+/* $NetBSD: vm_machdep.c,v 1.73 2001/08/19 17:34:01 chs Exp $ */
 
 /*
  * Copyright (c) 1994, 1995, 1996 Carnegie-Mellon University.
@@ -29,7 +29,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.64 2001/01/03 22:15:39 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.73 2001/08/19 17:34:01 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -71,7 +71,7 @@ cpu_coredump(struct proc *p, struct vnode *vp, struct ucred *cred,
 			fpusave_proc(p, 1);
 		cpustate.md_fpstate = p->p_addr->u_pcb.pcb_fp;
 	} else
-		bzero(&cpustate.md_fpstate, sizeof(cpustate.md_fpstate));
+		memset(&cpustate.md_fpstate, 0, sizeof(cpustate.md_fpstate));
 
 	CORE_SETMAGIC(cseg, CORESEGMAGIC, MID_MACHINE, CORE_CPU);
 	cseg.c_addr = 0;
@@ -143,7 +143,8 @@ cpu_fork(struct proc *p1, struct proc *p2, void *stack, size_t stacksize,
 	struct user *up = p2->p_addr;
 
 	p2->p_md.md_tf = p1->p_md.md_tf;
-	p2->p_md.md_flags = p1->p_md.md_flags & MDP_FPUSED;
+
+	p2->p_md.md_flags = p1->p_md.md_flags & (MDP_FPUSED | MDP_FP_C);
 
 	/*
 	 * Cache the physical address of the pcb, so we can
@@ -160,9 +161,14 @@ cpu_fork(struct proc *p1, struct proc *p2, void *stack, size_t stacksize,
 
 	/*
 	 * Copy pcb and user stack pointer from proc p1 to p2.
+	 * If specificed, give the child a different stack.
 	 */
 	p2->p_addr->u_pcb = p1->p_addr->u_pcb;
-	p2->p_addr->u_pcb.pcb_hw.apcb_usp = alpha_pal_rdusp();
+	if (stack != NULL)
+		p2->p_addr->u_pcb.pcb_hw.apcb_usp = (u_long)stack + stacksize;
+	else
+		p2->p_addr->u_pcb.pcb_hw.apcb_usp = alpha_pal_rdusp();
+	simple_lock_init(&p2->p_addr->u_pcb.pcb_fpcpu_slock);
 
 	/*
 	 * Arrange for a non-local goto when the new process
@@ -192,7 +198,7 @@ cpu_fork(struct proc *p1, struct proc *p2, void *stack, size_t stacksize,
 		 */
 		p2tf = p2->p_md.md_tf = (struct trapframe *)
 		    ((char *)p2->p_addr + USPACE - sizeof(struct trapframe));
-		bcopy(p1->p_md.md_tf, p2->p_md.md_tf,
+		memcpy(p2->p_md.md_tf, p1->p_md.md_tf,
 		    sizeof(struct trapframe));
 
 		/*
@@ -201,12 +207,6 @@ cpu_fork(struct proc *p1, struct proc *p2, void *stack, size_t stacksize,
 		p2tf->tf_regs[FRAME_V0] = p1->p_pid;	/* parent's pid */
 		p2tf->tf_regs[FRAME_A3] = 0;		/* no error */
 		p2tf->tf_regs[FRAME_A4] = 1;		/* is child */
-
-		/*
-		 * If specificed, give the child a different stack.
-		 */
-		if (stack != NULL)
-			p2tf->tf_regs[FRAME_SP] = (u_long)stack + stacksize;
 
 		up->u_pcb.pcb_hw.apcb_ksp = (u_int64_t)p2tf;	
 		up->u_pcb.pcb_context[0] =
@@ -217,6 +217,7 @@ cpu_fork(struct proc *p1, struct proc *p2, void *stack, size_t stacksize,
 		    (u_int64_t)arg;			/* s2: arg */
 		up->u_pcb.pcb_context[7] =
 		    (u_int64_t)proc_trampoline;		/* ra: assembly magic */
+		up->u_pcb.pcb_context[8] = ALPHA_PSL_IPL_0; /* ps: IPL */
 	}
 }
 
@@ -262,6 +263,7 @@ pagemove(caddr_t from, caddr_t to, size_t size)
 {
 	long fidx, tidx;
 	ssize_t todo;
+	PMAP_TLB_SHOOTDOWN_CPUSET_DECL
 
 	if (size % NBPG)
 		panic("pagemove");
@@ -284,6 +286,8 @@ pagemove(caddr_t from, caddr_t to, size_t size)
 		from += NBPG;
 		to += NBPG;
 	}
+
+	PMAP_TLB_SHOOTNOW();
 }
 
 /*
@@ -316,6 +320,7 @@ vmapbuf(struct buf *bp, vsize_t len)
 		faddr += PAGE_SIZE;
 		taddr += PAGE_SIZE;
 	}
+	pmap_update();
 }
 
 /*
@@ -331,6 +336,8 @@ vunmapbuf(struct buf *bp, vsize_t len)
 	addr = trunc_page((vaddr_t)bp->b_data);
 	off = (vaddr_t)bp->b_data - addr;
 	len = round_page(off + len);
+	pmap_remove(vm_map_pmap(phys_map), addr, addr + len);
+	pmap_update();
 	uvm_km_free_wakeup(phys_map, addr, len);
 	bp->b_data = bp->b_saveaddr;
 	bp->b_saveaddr = NULL;

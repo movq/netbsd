@@ -1,4 +1,4 @@
-/* $NetBSD: api_up1000.c,v 1.4 2000/06/20 03:48:53 matt Exp $ */
+/* $NetBSD: api_up1000.c,v 1.8 2001/06/05 04:53:11 thorpej Exp $ */
 
 /*
  * Copyright (c) 1995, 1996, 1997 Carnegie-Mellon University.
@@ -30,9 +30,11 @@
  * Additional Copyright (c) 1997 by Matthew Jacob for NASA/Ames Research Center
  */
 
+#include "opt_kgdb.h"
+
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: api_up1000.c,v 1.4 2000/06/20 03:48:53 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: api_up1000.c,v 1.8 2001/06/05 04:53:11 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -77,6 +79,15 @@ void api_up1000_init __P((void));
 static void api_up1000_cons_init __P((void));
 static void api_up1000_device_register __P((struct device *, void *));
 
+#ifdef KGDB
+#include <machine/db_machdep.h>
+
+static const char *kgdb_devlist[] = {
+	"com",
+	NULL,
+};
+#endif /* KGDB */
+
 void
 api_up1000_init()
 {
@@ -106,7 +117,7 @@ api_up1000_cons_init()
 	ctb = (struct ctb *)(((caddr_t)hwrpb) + hwrpb->rpb_ctb_off);
 
 	switch (ctb->ctb_term_type) {
-	case 2: 
+	case CTB_PRINTERPORT: 
 		/* serial console ... */
 		/* XXX */
 		{
@@ -125,7 +136,7 @@ api_up1000_cons_init()
 			break;
 		}
 
-	case 3:
+	case CTB_GRAPHICS:
 #if NPCKBD > 0
 		/* display console ... */
 		/* XXX */
@@ -151,6 +162,10 @@ api_up1000_cons_init()
 		panic("consinit: unknown console type %ld\n",
 		    ctb->ctb_term_type);
 	}
+#ifdef KGDB
+	/* Attach the KGDB device. */
+	alpha_kgdb_init(kgdb_devlist, &icp->ic_iot);
+#endif /* KGDB */
 }
 
 static void
@@ -224,11 +239,11 @@ api_up1000_device_register(dev, aux)
 		if (parent->dv_parent != scsipidev)
 			return;
 
-		if (sa->sa_sc_link->type == BUS_SCSI
-		    && b->unit / 100 != sa->sa_sc_link->scsipi_scsi.target)
-			return;
-		if (sa->sa_sc_link->type == BUS_ATAPI
-		    && b->unit / 100 != sa->sa_sc_link->scsipi_atapi.drive) 
+		if ((sa->sa_periph->periph_channel->chan_bustype->bustype_type
+		     == SCSIPI_BUSTYPE_SCSI ||
+		     sa->sa_periph->periph_channel->chan_bustype->bustype_type
+		     == SCSIPI_BUSTYPE_ATAPI)
+		    && b->unit / 100 != sa->sa_periph->periph_target)
 			return;
 
 		/* XXX LUN! */

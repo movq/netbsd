@@ -1,4 +1,4 @@
-/*	$NetBSD: grf_rh.c,v 1.29 1999/03/25 23:19:59 is Exp $	*/
+/*	$NetBSD: grf_rh.c,v 1.31 2001/08/20 12:20:04 wiz Exp $	*/
 
 /*
  * Copyright (c) 1994 Markus Wild
@@ -100,7 +100,7 @@ extern unsigned char kernel_font_8x11[];
  * graphics-board manufactured by MS MacroSystem GmbH from within NetBSD
  * for the Amiga.
  *
- * Thanks to MacroSystem for providing me with the neccessary information
+ * Thanks to MacroSystem for providing me with the necessary information
  * to create theese routines. The sparse documentation of this code
  * results from the agreements between MS and me.
  */
@@ -1655,7 +1655,7 @@ rh_getvmode(gp, vm)
 	 * that the horizontal timings are in units of longwords. Hence, I 
 	 * get the pixels by multiplication with 32 and division by the depth.
 	 * The text modes, apparently marked by depth == 4, are even more 
-	 * wierd. According to a comment above, they are computed from a 
+	 * weird. According to a comment above, they are computed from a 
 	 * depth==8 mode thats for us: * 32 / 8) by applying another factor 
 	 * of 4 / font width.
 	 * Reverse applying the latter formula most of the constants cancel	

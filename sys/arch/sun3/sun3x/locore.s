@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.s,v 1.45 2001/02/22 07:11:12 chs Exp $	*/
+/*	$NetBSD: locore.s,v 1.48 2001/07/22 14:11:05 scw Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -44,6 +44,7 @@
 #include "opt_compat_netbsd.h"
 #include "opt_compat_svr4.h"
 #include "opt_compat_sunos.h"
+#include "opt_kgdb.h"
 #include "opt_lockdebug.h"
 
 #include "assym.h"
@@ -482,7 +483,11 @@ Lbrkpt2:
  * for which the CPU provides the vector=0x18+level.
  * These are installed in the interrupt vector table.
  */
+#ifdef __ELF__
+	.align	4
+#else
 	.align	2
+#endif
 GLOBAL(_isr_autovec)
 	INTERRUPT_SAVEREG
 	jbsr	_C_LABEL(isr_autovec)
@@ -490,7 +495,11 @@ GLOBAL(_isr_autovec)
 	jra	_ASM_LABEL(rei)
 
 /* clock: see clock.c */
+#ifdef __ELF__
+	.align	4
+#else
 	.align	2
+#endif
 GLOBAL(_isr_clock)
 	INTERRUPT_SAVEREG
 	jbsr	_C_LABEL(clock_intr)
@@ -498,7 +507,11 @@ GLOBAL(_isr_clock)
 	jra	_ASM_LABEL(rei)
 
 | Handler for all vectored interrupts (i.e. VME interrupts)
+#ifdef __ELF__
+	.align	4
+#else
 	.align	2
+#endif
 GLOBAL(_isr_vectored)
 	INTERRUPT_SAVEREG
 	jbsr	_C_LABEL(isr_vectored)
@@ -1029,6 +1042,7 @@ ENTRY(getcrp)
 ENTRY(ptest_addr)
 	movl	%sp@(4),%a1		| VA
 	ptestr	#5,%a1@,#7,%a0		| %a0 = addr of PTE
+	movl	%a0,%d0			| Result in %d0 (not a pointer return)
 	rts
 
 /*
@@ -1108,7 +1122,11 @@ GLOBAL(_delay)
 	 * operations and that the loop will run from a single cache
 	 * half-line.
 	 */
+#ifdef __ELF__
 	.align	8
+#else
+	.align	3
+#endif
 L_delay:
 	subl	%d1,%d0
 	jgt	L_delay

@@ -1,4 +1,4 @@
-/*	$NetBSD: pcctwo.c,v 1.9 2000/12/03 15:37:46 scw Exp $ */
+/*	$NetBSD: pcctwo.c,v 1.16 2001/08/12 19:16:18 scw Exp $ */
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -48,8 +48,6 @@
 #include <machine/cpu.h>
 #include <machine/bus.h>
 
-#include <mvme68k/mvme68k/isr.h>
-
 #include <mvme68k/dev/mainbus.h>
 #include <mvme68k/dev/pcctworeg.h>
 #include <mvme68k/dev/pcctwovar.h>
@@ -93,14 +91,11 @@ struct pcctwo_device {
  * Devices that live on the PCCchip2, attached in this order.
  */
 static struct pcctwo_device pcctwo_devices[] = {
-	{"clock", PCCTWO_RTC_OFF},
-	{"memc", PCCTWO_MEMC1_OFF},
-	{"memc", PCCTWO_MEMC2_OFF},
+	{"clock", 0},
 	{"clmpcc", PCCTWO_SCC_OFF},
 	{"ie", PCCTWO_IE_OFF},
-	{"ncrsc", PCCTWO_NCRSC_OFF},
+	{"osiop", PCCTWO_NCRSC_OFF},
 	{"lpt", PCCTWO_LPT_OFF},
-	{"nvram", PCCTWO_NVRAM_OFF},
 	{NULL, 0}
 };
 
@@ -129,14 +124,11 @@ static int pcctwo_vec2icsr_1x7[] = {
  * Devices that live on the MCchip, attached in this order.
  */
 static struct pcctwo_device mcchip_devices[] = {
-	{"clock", PCCTWO_RTC_OFF},
-	{"memc", PCCTWO_MEMC1_OFF},
-	{"memc", PCCTWO_MEMC2_OFF},
+	{"clock", 0},
 	{"zsc", MCCHIP_ZS0_OFF},
 	{"zsc", MCCHIP_ZS1_OFF},
 	{"ie", PCCTWO_IE_OFF},
-	{"ncrsc", PCCTWO_NCRSC_OFF},
-	{"nvram", PCCTWO_NVRAM_OFF},
+	{"osiop", PCCTWO_NCRSC_OFF},
 	{NULL, 0}
 };
 
@@ -159,7 +151,10 @@ static int pcctwo_vec2icsr_1x2[] = {
 	-1
 };
 
-static int pcctwoabortintr(void *);
+static	int pcctwoabortintr(void *);
+void	pcctwosoftintrinit(void);
+static	int pcctwosoftintr(void *);
+static	void pcctwosoftintrassert(void);
 #endif
 
 /* ARGSUSED */
@@ -254,7 +249,10 @@ pcctwoattach(parent, self, args)
 		pd = mcchip_devices;
 		sc->sc_vec2icsr = pcctwo_vec2icsr_1x2;
 
-		pcctwointr_establish(MCCHIPV_ABORT, pcctwoabortintr, 7, NULL);
+		evcnt_attach_dynamic(&sc->sc_evcnt, EVCNT_TYPE_INTR,
+		    isrlink_evcnt(7), "nmi", "abort sw");
+		pcctwointr_establish(MCCHIPV_ABORT, pcctwoabortintr, 7, NULL,
+		    &sc->sc_evcnt);
 	} else
 #endif
 	{
@@ -305,10 +303,11 @@ pcctwoprint(aux, cp)
  * pcctwointr_establish: Establish PCCChip2 Interrupt
  */
 void
-pcctwointr_establish(vec, hand, lvl, arg)
+pcctwointr_establish(vec, hand, lvl, arg, evcnt)
 	int vec;
 	int (*hand) __P((void *)), lvl;
 	void *arg;
+	struct evcnt *evcnt;
 {
 	int vec2icsr;
 
@@ -331,7 +330,7 @@ pcctwointr_establish(vec, hand, lvl, arg)
 	pcc2_reg_write(sys_pcctwo, VEC2ICSR_REG(vec2icsr), 0);
 
 	/* Hook the interrupt */
-	isrlink_vectored(hand, arg, lvl, vec + PCCTWO_VECBASE);
+	isrlink_vectored(hand, arg, lvl, vec + PCCTWO_VECBASE, evcnt);
 
 	/* Enable it in hardware */
 	pcc2_reg_write(sys_pcctwo, VEC2ICSR_REG(vec2icsr),
@@ -369,5 +368,54 @@ pcctwoabortintr(void *frame)
 	    pcc2_reg_read(sys_pcctwo, MCCHIPREG_ABORT_ICSR));
 
 	return (nmihand(frame));
+}
+
+void
+pcctwosoftintrinit(void)
+{
+
+	/*
+	 * Since the VMEChip2 is normally used to generate
+	 * software interrupts to the CPU, we have to deal
+	 * with 162/172 boards which have the "No VMEChip2"
+	 * build option.
+	 *
+	 * When such a board is found, the VMEChip2 probe code
+	 * calls this function to implement software interrupts
+	 * the hard way; using tick timer 4 ...
+	 */
+	pcctwointr_establish(MCCHIPV_TIMER4, pcctwosoftintr,
+	    1, sys_pcctwo, &sys_pcctwo->sc_evcnt);
+	pcc2_reg_write(sys_pcctwo, MCCHIPREG_TIMER4_CTRL, 0);
+	pcc2_reg_write32(sys_pcctwo, MCCHIPREG_TIMER4_COMP, 1);
+	pcc2_reg_write32(sys_pcctwo, MCCHIPREG_TIMER4_CNTR, 0);
+	_softintr_chipset_assert = pcctwosoftintrassert;
+}
+
+static int
+pcctwosoftintr(void *arg)
+{
+	struct pcctwo_softc *sc = arg;
+
+	pcc2_reg_write32(sc, MCCHIPREG_TIMER4_CNTR, 0);
+	pcc2_reg_write(sc, MCCHIPREG_TIMER4_CTRL, 0);
+	pcc2_reg_write(sc, MCCHIPREG_TIMER4_ICSR,
+	    PCCTWO_ICR_ICLR | PCCTWO_ICR_IEN | 1);
+
+	softintr_dispatch();
+
+	return (1);
+}
+
+static void
+pcctwosoftintrassert(void)
+{
+
+	/*
+	 * Schedule a timer interrupt to happen in ~1uS.
+	 * This is more than adequate on any available m68k platform
+	 * for simulating software interrupts.
+	 */
+	pcc2_reg_write(sys_pcctwo, MCCHIPREG_TIMER4_CTRL, PCCTWO_TT_CTRL_CEN);
 }
 #endif

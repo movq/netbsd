@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.54 2000/12/23 09:35:52 jdolecek Exp $	*/
+/*	$NetBSD: trap.c,v 1.61 2001/09/10 21:19:19 chris Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -44,6 +44,7 @@
 
 #include "opt_ddb.h"
 #include "opt_execfmt.h"
+#include "opt_kgdb.h"
 #include "opt_compat_sunos.h"
 #include "opt_compat_hpux.h"
 
@@ -294,6 +295,7 @@ trap(type, code, v, frame)
 	int i, s;
 	u_int ucode;
 	u_quad_t sticks = 0 /* XXX initialiser works around compiler bug */;
+	static int panicing = 0;
 
 	uvmexp.traps++;
 	p = curproc;
@@ -316,15 +318,16 @@ trap(type, code, v, frame)
 
 	default:
 	dopanic:
-		printf("trap type %d, code = 0x%x, v = 0x%x\n", type, code, v);
-		printf("%s program counter = 0x%x\n",
-		    (type & T_USER) ? "user" : "kernel", frame.f_pc);
 		/*
 		 * Let the kernel debugger see the trap frame that
 		 * caused us to panic.  This is a convenience so
 		 * one can see registers at the point of failure.
 		 */
 		s = splhigh();
+		panicing = 1;
+		printf("trap type %d, code = 0x%x, v = 0x%x\n", type, code, v);
+		printf("%s program counter = 0x%x\n",
+		    (type & T_USER) ? "user" : "kernel", frame.f_pc);
 #ifdef KGDB
 		/* If connected, step or cont returns 1 */
 		if (kgdb_trap(type, &frame))
@@ -545,29 +548,6 @@ trap(type, code, v, frame)
 
 	case T_ASTFLT|T_USER:	/* user async trap */
 		astpending = 0;
-		/*
-		 * We check for software interrupts first.  This is because
-		 * they are at a higher level than ASTs, and on a VAX would
-		 * interrupt the AST.  We assume that if we are processing
-		 * an AST that we must be at IPL0 so we don't bother to
-		 * check.  Note that we ensure that we are at least at SIR
-		 * IPL while processing the SIR.
-		 */
-		spl1();
-		/* fall into... */
-
-	case T_SSIR:		/* software interrupt */
-	case T_SSIR|T_USER:
-		softintr_dispatch();
-
-		/*
-		 * If this was not an AST trap, we are all done.
-		 */
-		if (type != (T_ASTFLT|T_USER)) {
-			uvmexp.traps--;
-			return;
-		}
-		spl0();
 		if (p->p_flag & P_OWEUPC) {
 			p->p_flag &= ~P_OWEUPC;
 			ADDUPROF(p);
@@ -588,10 +568,10 @@ trap(type, code, v, frame)
 	    {
 		vaddr_t va;
 		struct vmspace *vm = p->p_vmspace;
-		vm_map_t map;
+		struct vm_map *map;
 		int rv;
 		vm_prot_t ftype;
-		extern vm_map_t kernel_map;
+		extern struct vm_map *kernel_map;
 
 #ifdef DEBUG
 		if ((mmudebug & MDB_WBFOLLOW) || MDB_ISPID(p->p_pid))
@@ -626,16 +606,23 @@ trap(type, code, v, frame)
 			goto dopanic;
 		}
 
+#ifdef DIAGNOSTIC
+		if (interrupt_depth && !panicing) {
+			printf("trap: calling uvm_fault() from interrupt!\n");
+			goto dopanic;
+		}
+#endif
+
 #ifdef COMPAT_HPUX
 		if (ISHPMMADDR(va)) {
 			int pmap_mapmulti __P((pmap_t, vaddr_t));
 			vaddr_t bva;
 
 			rv = pmap_mapmulti(map->pmap, va);
-			if (rv != KERN_SUCCESS) {
+			if (rv != 0) {
 				bva = HPMMBASEADDR(va);
 				rv = uvm_fault(map, bva, 0, ftype);
-				if (rv == KERN_SUCCESS)
+				if (rv == 0)
 					(void) pmap_mapmulti(map->pmap, va);
 			}
 		} else
@@ -655,16 +642,16 @@ trap(type, code, v, frame)
 		 */
 		if ((vm != NULL && (caddr_t)va >= vm->vm_maxsaddr)
 		    && map != kernel_map) {
-			if (rv == KERN_SUCCESS) {
+			if (rv == 0) {
 				unsigned nss;
 
 				nss = btoc(USRSTACK-(unsigned)va);
 				if (nss > vm->vm_ssize)
 					vm->vm_ssize = nss;
-			} else if (rv == KERN_PROTECTION_FAILURE)
-				rv = KERN_INVALID_ADDRESS;
+			} else if (rv == EACCES)
+				rv = EFAULT;
 		}
-		if (rv == KERN_SUCCESS) {
+		if (rv == 0) {
 			if (type == T_MMUFLT) {
 #ifdef M68040
 #if defined(M68030) || defined(M68060)
@@ -686,7 +673,7 @@ trap(type, code, v, frame)
 			goto dopanic;
 		}
 		ucode = v;
-		if (rv == KERN_RESOURCE_SHORTAGE) {
+		if (rv == ENOMEM) {
 			printf("UVM: pid %d (%s), uid %d killed: out of swap\n",
 			       p->p_pid, p->p_comm,
 			       p->p_cred && p->p_ucred ?
@@ -724,7 +711,7 @@ char wberrstr[] =
 #endif
 
 /*
- * Because calling bcopy() for 16 bytes is *way* too much overhead ...
+ * Because calling memcpy() for 16 bytes is *way* too much overhead ...
  */
 static __inline void fastcopy16(u_int *, u_int *);
 static __inline void
@@ -788,12 +775,14 @@ writeback(fp, docachepush)
 			pmap_enter(pmap_kernel(), (vaddr_t)vmmap,
 			    trunc_page(f->f_fa), VM_PROT_WRITE,
 			    VM_PROT_WRITE|PMAP_WIRED);
+			pmap_update(pmap_kernel());
 			fa = (u_int)&vmmap[(f->f_fa & PGOFSET) & ~0xF];
 			fastcopy16(&f->f_pd0, (u_int *)fa);
 			(void) pmap_extract(pmap_kernel(), (vaddr_t)fa, &pa);
 			DCFL_40(pa);
 			pmap_remove(pmap_kernel(), (vaddr_t)vmmap,
 				    (vaddr_t)&vmmap[NBPG]);
+			pmap_update(pmap_kernel());
 		} else
 			printf("WARNING: pid %d(%s) uid %d: CPUSH not done\n",
 			       p->p_pid, p->p_comm, p->p_ucred->cr_uid);

@@ -1,4 +1,4 @@
-/*	$NetBSD: z8530tty.c,v 1.7 2000/11/02 00:37:57 eeh Exp $	*/
+/*	$NetBSD: z8530tty.c,v 1.10 2001/06/20 02:01:56 briggs Exp $	*/
 
 /*-
  * Copyright (c) 1993, 1994, 1995, 1996, 1997, 1998, 1999
@@ -97,6 +97,8 @@
  * The driver was massively overhauled in November 1997 by Charles Hannum,
  * fixing *many* bugs, and substantially improving performance.
  */
+
+#include "opt_kgdb.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -279,7 +281,7 @@ zstty_attach(parent, self, aux)
 		DELAY(20000);
 		cn_tab->cn_dev = dev;
 	} else
-#ifdef KGDB
+#ifdef KGDB_needs_support_in_zs_c
 	if (zs_check_kgdb(cs, dev)) {
 		/*
 		 * Allow kgdb to "take over" this port.  Returns true
@@ -615,6 +617,18 @@ zswrite(dev, uio, flags)
 	struct tty *tp = zst->zst_tty;
 
 	return ((*tp->t_linesw->l_write)(tp, uio, flags));
+}
+
+int
+zspoll(dev, events, p)
+	dev_t dev;
+	int events;
+	struct proc *p;
+{
+	struct zstty_softc *zst = zstty_cd.cd_devs[ZSUNIT(dev)];
+	struct tty *tp = zst->zst_tty;
+ 
+	return ((*tp->t_linesw->l_poll)(tp, events, p));
 }
 
 int

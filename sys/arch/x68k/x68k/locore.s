@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.s,v 1.64 2000/12/08 02:59:12 itohy Exp $	*/
+/*	$NetBSD: locore.s,v 1.66 2001/09/27 09:55:10 minoura Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -47,6 +47,7 @@
 #include "opt_compat_sunos.h"
 #include "opt_ddb.h"
 #include "opt_fpsp.h"
+#include "opt_kgdb.h"
 #include "opt_lockdebug.h"
 
 #include "ite.h"
@@ -717,6 +718,11 @@ Ldorte:
  */
 BSS(lowram,4)
 BSS(esym,4)
+
+GLOBAL(_verspad)
+	.word	0
+GLOBAL(boot_version)
+	.word	X68K_BOOTIF_VERS
 
 ASENTRY_NOPROFILE(start)
 	movw	#PSL_HIGHIPL,%sr	| no interrupts

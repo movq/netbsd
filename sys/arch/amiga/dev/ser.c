@@ -1,4 +1,4 @@
-/*	$NetBSD: ser.c,v 1.55 2001/01/13 02:09:27 aymeric Exp $	*/
+/*	$NetBSD: ser.c,v 1.58 2001/11/05 21:30:16 aymeric Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990 The Regents of the University of California.
@@ -38,6 +38,9 @@
  * XXX This file needs major cleanup it will never service more than one
  * XXX unit.
  */
+
+#include "opt_amigacons.h"
+#include "opt_kgdb.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -108,7 +111,7 @@ void	sercnpollc __P((dev_t, int));
 
 int	nser = NSER;
 #ifdef SERCONSOLE
-int	serconsole = SERCONSOLE;
+int	serconsole = 0;
 #else
 int	serconsole = -1;
 #endif
@@ -450,6 +453,17 @@ serwrite(dev, uio, flag)
 	/* ARGSUSED */
 
 	return ser_tty->t_linesw->l_write(ser_tty, uio, flag);
+}
+
+int
+serpoll(dev, events, p)
+	dev_t dev;
+	int events;
+	struct proc *p;
+{
+	/* ARGSUSED */
+ 
+	return ser_tty->t_linesw->l_poll(ser_tty, events, p);
 }
 
 struct tty *

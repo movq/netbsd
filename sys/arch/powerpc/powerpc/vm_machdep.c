@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.23 2001/02/04 17:38:11 briggs Exp $	*/
+/*	$NetBSD: vm_machdep.c,v 1.36 2001/09/10 21:19:37 chris Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -30,7 +30,10 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
 #include "opt_altivec.h"
+#include "opt_multiprocessor.h"
+#include "opt_ppcarch.h"
 
 #include <sys/param.h>
 #include <sys/core.h>
@@ -44,6 +47,15 @@
 
 #include <machine/fpu.h>
 #include <machine/pcb.h>
+
+#if !defined(MULTIPROCESSOR) && defined(PPC_HAVE_FPU)
+#define save_fpu_proc(p) save_fpu(p)		/* XXX */
+#endif
+
+#ifdef PPC_IBM4XX
+vaddr_t vmaprange(struct proc *, vaddr_t, vsize_t, int);
+void vunmaprange(vaddr_t, vsize_t);
+#endif
 
 /*
  * Finish a fork operation, with process p2 nearly set up.
@@ -68,26 +80,28 @@ cpu_fork(p1, p2, stack, stacksize, func, arg)
 	struct proc *p1, *p2;
 	void *stack;
 	size_t stacksize;
-	void (*func) __P((void *));
+	void (*func)(void *);
 	void *arg;
 {
 	struct trapframe *tf;
 	struct callframe *cf;
 	struct switchframe *sf;
 	caddr_t stktop1, stktop2;
-	extern void fork_trampoline __P((void));
+	void fork_trampoline(void);
 	struct pcb *pcb = &p2->p_addr->u_pcb;
 
 #ifdef DIAGNOSTIC
 	/*
-	 * if p1 != curproc && p1 == &proc, we're creating a kernel thread.
+	 * if p1 != curproc && p1 == &proc0, we're creating a kernel thread.
 	 */
 	if (p1 != curproc && p1 != &proc0)
 		panic("cpu_fork: curproc");
 #endif
 
-	if (p1 == fpuproc)
-		save_fpu(p1);
+#ifdef PPC_HAVE_FPU
+	if (p1->p_addr->u_pcb.pcb_fpcpu)
+		save_fpu_proc(p1);
+#endif
 	*pcb = p1->p_addr->u_pcb;
 #ifdef ALTIVEC
 	if (p1->p1_addr->u_pcb.pcb_vr != NULL) {
@@ -99,21 +113,27 @@ cpu_fork(p1, p2, stack, stacksize, func, arg)
 #endif
 
 	pcb->pcb_pm = p2->p_vmspace->vm_map.pmap;
+#ifdef NEWPMAP
+	pcb->pcb_pmreal = pcb->pcb_pm;		/* XXX */
+#else
 	(void) pmap_extract(pmap_kernel(), (vaddr_t)pcb->pcb_pm,
 	    (paddr_t *)&pcb->pcb_pmreal);
+#endif
 
 	/*
 	 * Setup the trap frame for the new process
 	 */
 	stktop1 = (caddr_t)trapframe(p1);
 	stktop2 = (caddr_t)trapframe(p2);
-	bcopy(stktop1, stktop2, sizeof(struct trapframe));
+	memcpy(stktop2, stktop1, sizeof(struct trapframe));
 
 	/*
 	 * If specified, give the child a different stack.
 	 */
-	if (stack != NULL)
+	if (stack != NULL) {
+		tf = trapframe(p2);
 		tf->fixreg[1] = (register_t)stack + stacksize;
+	}
 
 	stktop2 = (caddr_t)((u_long)stktop2 & ~15);	/* Align stack pointer */
 
@@ -136,9 +156,11 @@ cpu_fork(p1, p2, stack, stacksize, func, arg)
 	 */
 	stktop2 -= roundup(sizeof *sf, 16);	/* must match SFRAMELEN in genassym */
 	sf = (struct switchframe *)stktop2;
-	bzero((void *)sf, sizeof *sf);		/* just in case */
+	memset((void *)sf, 0, sizeof *sf);		/* just in case */
 	sf->sp = (int)cf;
+#ifndef PPC_IBM4XX
 	sf->user_sr = pmap_kernel()->pm_sr[USER_SR]; /* again, just in case */
+#endif
 	pcb->pcb_sp = (int)stktop2;
 	pcb->pcb_spl = 0;
 }
@@ -149,8 +171,12 @@ cpu_swapin(p)
 {
 	struct pcb *pcb = &p->p_addr->u_pcb;
 
+#ifdef NEWPMAP
+	pcb->pcb_pmreal = pcb->pcb_pm;		/* XXX */
+#else
 	(void) pmap_extract(pmap_kernel(), (vaddr_t)pcb->pcb_pm,
 	    (paddr_t *)&pcb->pcb_pmreal);
+#endif
 }
 
 /*
@@ -166,13 +192,12 @@ pagemove(from, to, size)
 
 	for (va = (vaddr_t)from; size > 0; size -= NBPG) {
 		(void) pmap_extract(pmap_kernel(), va, &pa);
-		pmap_remove(pmap_kernel(), va, va + NBPG);
-		pmap_enter(pmap_kernel(), (vaddr_t)to, pa,
-		    VM_PROT_READ|VM_PROT_WRITE,
-		    VM_PROT_READ|VM_PROT_WRITE|PMAP_WIRED);
+		pmap_kremove(va, NBPG);
+		pmap_kenter_pa((vaddr_t)to, pa, VM_PROT_READ|VM_PROT_WRITE);
 		va += NBPG;
 		to += NBPG;
 	}
+	pmap_update(pmap_kernel());
 }
 
 /*
@@ -187,14 +212,17 @@ void
 cpu_exit(p)
 	struct proc *p;
 {
-	void switchexit __P((struct proc *));	/* Defined in locore.S */
+	void switchexit(struct proc *);		/* Defined in locore.S */
 #ifdef ALTIVEC
 	struct pcb *pcb = &p->p_addr->u_pcb;
 #endif
-	if (p == fpuproc)	/* release the FPU */
+
+#ifdef PPC_HAVE_FPU
+	if (p->p_addr->u_pcb.pcb_fpcpu)		/* release the FPU */
 		fpuproc = NULL;
+#endif
 #ifdef ALTIVEC
-	if (p == vecproc)	/* release the AltiVEC */
+	if (p == vecproc)			/* release the AltiVEC */
 		vecproc = NULL;
 	if (pcb->pcb_vr != NULL)
 		pool_put(vecpl, pcb->pcb_vr);
@@ -216,7 +244,6 @@ cpu_coredump(p, vp, cred, chdr)
 {
 	struct coreseg cseg;
 	struct md_coredump md_core;
-	struct trapframe *tf;
 	struct pcb *pcb = &p->p_addr->u_pcb;
 	int error;
 
@@ -225,14 +252,15 @@ cpu_coredump(p, vp, cred, chdr)
 	chdr->c_seghdrsize = ALIGN(sizeof cseg);
 	chdr->c_cpusize = sizeof md_core;
 
-	tf = trapframe(p);
-	bcopy(tf, &md_core.frame, sizeof md_core.frame);
+	md_core.frame = *trapframe(p);
 	if (pcb->pcb_flags & PCB_FPU) {
-		if (p == fpuproc)
-			save_fpu(p);
+#ifdef PPC_HAVE_FPU
+		if (p->p_addr->u_pcb.pcb_fpcpu)
+			save_fpu_proc(p);
+#endif
 		md_core.fpstate = pcb->pcb_fpu;
 	} else
-		bzero(&md_core.fpstate, sizeof(md_core.fpstate));
+		memset(&md_core.fpstate, 0, sizeof(md_core.fpstate));
 
 #ifdef ALTIVEC
 	if (pcb->pcb_flags & PCB_ALTIVEC) {
@@ -241,7 +269,7 @@ cpu_coredump(p, vp, cred, chdr)
 		md_core.vstate = *pcb->pcb_vr;
 	} else
 #endif
-		bzero(&md_core.vstate, sizeof(md_core.vstate));
+		memset(&md_core.vstate, 0, sizeof(md_core.vstate));
 
 	CORE_SETMAGIC(cseg, CORESEGMAGIC, MID_MACHINE, CORE_CPU);
 	cseg.c_addr = 0;
@@ -260,10 +288,58 @@ cpu_coredump(p, vp, cred, chdr)
 	return 0;
 }
 
+#ifdef PPC_IBM4XX
+/*
+ * Map a range of user addresses into the kernel.
+ */
+vaddr_t
+vmaprange(p, uaddr, len, prot)
+	struct proc *p;
+	vaddr_t uaddr;
+	vsize_t len;
+	int prot;
+{
+	vaddr_t faddr, taddr, kaddr;
+	vsize_t off;
+	paddr_t pa;
+
+	faddr = trunc_page(uaddr);
+	off = uaddr - faddr;
+	len = round_page(off + len);
+	taddr = uvm_km_valloc_wait(phys_map, len);
+	kaddr = taddr + off;
+	for (; len > 0; len -= NBPG) {
+		(void) pmap_extract(vm_map_pmap(&p->p_vmspace->vm_map),
+		    faddr, &pa);
+		pmap_kenter_pa(taddr, pa, prot);
+		faddr += NBPG;
+		taddr += NBPG;
+	}
+	return (kaddr);
+}
+
+/*
+ * Undo vmaprange.
+ */
+void
+vunmaprange(kaddr, len)
+	vaddr_t kaddr;
+	vsize_t len;
+{
+	vaddr_t addr;
+	vsize_t off;
+
+	addr = trunc_page(kaddr);
+	off = kaddr - addr;
+	len = round_page(off + len);
+	pmap_kremove(addr, len);
+	uvm_km_free_wakeup(phys_map, addr, len);
+}
+#endif /* PPC_IBM4XX */
+
 /*
  * Map a user I/O request into kernel virtual address space.
- * Note: the pages are already locked by uvm_vslock(), so we
- * do not need to pass an access_type to pmap_enter().
+ * Note: these pages have already been locked by uvm_vslock.
  */
 void
 vmapbuf(bp, len)
@@ -278,6 +354,9 @@ vmapbuf(bp, len)
 	if (!(bp->b_flags & B_PHYS))
 		panic("vmapbuf");
 #endif
+	/*
+	 * XXX Reimplement this with vmaprange (on at least PPC_IBM4XX CPUs).
+	 */
 	faddr = trunc_page((vaddr_t)bp->b_saveaddr = bp->b_data);
 	off = (vaddr_t)bp->b_data - faddr;
 	len = round_page(off + len);
@@ -286,11 +365,11 @@ vmapbuf(bp, len)
 	for (; len > 0; len -= NBPG) {
 		(void) pmap_extract(vm_map_pmap(&bp->b_proc->p_vmspace->vm_map),
 		    faddr, &pa);
-		pmap_enter(vm_map_pmap(phys_map), taddr, pa,
-		    VM_PROT_READ|VM_PROT_WRITE, PMAP_WIRED);
+		pmap_kenter_pa(taddr, pa, VM_PROT_READ|VM_PROT_WRITE);
 		faddr += NBPG;
 		taddr += NBPG;
 	}
+	pmap_update(pmap_kernel());
 }
 
 /*
@@ -311,6 +390,8 @@ vunmapbuf(bp, len)
 	addr = trunc_page((vaddr_t)bp->b_data);
 	off = (vaddr_t)bp->b_data - addr;
 	len = round_page(off + len);
+	pmap_kremove(addr, len);
+	pmap_update(pmap_kernel());
 	uvm_km_free_wakeup(phys_map, addr, len);
 	bp->b_data = bp->b_saveaddr;
 	bp->b_saveaddr = 0;

@@ -1,4 +1,4 @@
-/*	$NetBSD: vmparam.h,v 1.19 2001/01/11 13:18:36 minoura Exp $	*/
+/*	$NetBSD: vmparam.h,v 1.22 2001/10/28 07:05:51 isaki Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -50,7 +50,7 @@
  */
 
 /*
- * We use 4K pages on the X86K.  Override the PAGE_* definitions
+ * We use 4K pages on the X68K.  Override the PAGE_* definitions
  * to be compile-time constants.
  */
 #define	PAGE_SHIFT	12
@@ -144,6 +144,8 @@
 
 #define	VM_NFREELIST		1
 #define	VM_FREELIST_DEFAULT	0
+
+#define	__HAVE_PMAP_PHYSSEG
 
 /*
  * pmap-specific data stored in the vm_physmem[] array.

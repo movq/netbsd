@@ -1,4 +1,4 @@
-/*	$NetBSD: vmparam.h,v 1.17 2000/12/01 17:57:44 tsutsui Exp $	*/
+/*	$NetBSD: vmparam.h,v 1.21 2001/05/01 02:19:17 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -56,6 +56,16 @@
 #define	PAGE_SHIFT	12
 #define	PAGE_SIZE	(1 << PAGE_SHIFT)
 #define	PAGE_MASK	(PAGE_SIZE - 1)
+
+/*
+ * Need a small pager map for the benefit of low-memory models.
+ * To avoid using a needlessly small value on larger memory models,
+ * this is calculated at runtime.
+ */
+#ifndef PAGER_MAP_SIZE
+extern int mvme68k_pager_map_size;
+#define PAGER_MAP_SIZE	((vsize_t) mvme68k_pager_map_size)
+#endif
 
 /*
  * USRTEXT is the start of the user text/data space, while USRSTACK
@@ -158,6 +168,8 @@
 #define	VM_NFREELIST		2
 #define	VM_FREELIST_DEFAULT	0
 #define	VM_FREELIST_VMEMEM	1
+
+#define	__HAVE_PMAP_PHYSSEG
 
 /*
  * pmap-specific data stored in the vm_physmem[] array.

@@ -1,4 +1,4 @@
-/*	$Id: vrc4172pwmvar.h,v 1.5 2001/02/27 08:48:38 sato Exp $	*/
+/*	$NetBSD: vrc4172pwmvar.h,v 1.8 2001/04/13 08:09:08 itojun Exp $	*/
 
 /*
  * Copyright (c) 2000,2001 SATO Kazumi.  All rights reserved.
@@ -32,11 +32,11 @@
 
 
 struct vrc4172pwm_param {
-	int brokenprobe;
-	int n_brightness;
-	int bvalues[VRC2_PWM_N_BRIGHTNESS];
-	int n_contrast;
-	int cvalues[VRC2_PWM_N_CONTRAST];
+	int8_t brokenprobe;
+	int8_t n_brightness;
+	int8_t bvalues[VRC2_PWM_N_BRIGHTNESS];
+	int8_t n_contrast;
+	int8_t cvalues[VRC2_PWM_N_CONTRAST];
 };
 
 struct vrc4172pwm_softc {
@@ -49,9 +49,11 @@ struct vrc4172pwm_softc {
 	config_hook_tag sc_getmaxhook;
 	config_hook_tag sc_sethook;
 	config_hook_tag sc_pmhook;
-	int sc_brightness;
-	int sc_raw_duty;
-	int sc_raw_freq;
+	int sc_light;			/* backlight on/off */
+	int sc_light_save;		/* backlight on/off value when suspend*/
+	int sc_brightness;		/* backlight brightness */
+	int sc_raw_duty;		/* backlight plus gen. duty */
+	int sc_raw_freq;		/* backligjy plus gen. freq. */
 	struct vrc4172pwm_param *sc_param;
 };
 

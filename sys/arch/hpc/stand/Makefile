@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.3 2001/03/04 16:51:04 uch Exp $
+#	$NetBSD: Makefile,v 1.8 2001/06/19 16:50:06 uch Exp $
 #
 
 PROJECT_DIRS	= hpcboot libz libsa
@@ -41,6 +41,7 @@ vc5:
 	sh dspgen/gen_workspace.sh vc5 hpc_stand.dsw $(PROJECT_DIRS)
 
 clean:
+	rm -f hpcboot/opt_spec_platform.h
 # evc3 temporary files
 	rm -f hpc_stand.vcb hpc_stand.vcw hpc_stand.vco
 	find . -name "*.vcp" -print |xargs rm -f
@@ -52,8 +53,7 @@ clean:
 	rm -f hpcboot/hpcboot.plg
 # compile directory
 	rm -rf compile/ARMDebug compile/ARMRelease			\
-	compile/SH3Debug compile/SH3Release				\
-	compile/SHDebug compile/SHRelease				\
+	compile/SH*Debug compile/SH*Release				\
 	compile/MIPSDebug compile/MIPSRelease
 	find . -name "hpcboot.exe" -print |xargs rm -f
 
@@ -74,6 +74,11 @@ install1:
 uuencode:
 	find binary -name "hpcboot*.exe" -print | \
 	awk '{ print "uuencode", $$1, $$1, ">", $$1".uu ; rm -f", $$1 }' | sh
-
-
-
+	cp binary/build_number.h build_number.h
+	awk '{if (/HPCBOOT_BUILD_NUMBER/)				\
+		{ i = $$3 + 1;						\
+			printf("#define HPCBOOT_BUILD_NUMBER	%d\n", i);\
+		} else {						\
+			printf("%s\n", $$0);				\
+		}}' build_number.h > binary/build_number.h
+	rm -f build_number.h

@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_machdep.c,v 1.2 2001/02/07 05:49:17 briggs Exp $	*/
+/*	$NetBSD: pci_machdep.c,v 1.7 2001/10/29 23:37:37 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -41,6 +41,7 @@
  * using `options PCI_CONF_MODE=N', where `N' is the configuration mode
  * as defined section 3.6.4.1, `Generating Configuration Cycles'.
  */
+#include "opt_openpic.h"
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -54,7 +55,7 @@
 
 #include <uvm/uvm.h>
 
-#define _SANDPOINT_BUS_DMA_PRIVATE
+#define _POWERPC_BUS_DMA_PRIVATE
 #include <machine/bus.h>
 #include <machine/pio.h>
 #include <machine/intr.h>
@@ -66,7 +67,7 @@
 
 #include <sandpoint/isa/icu.h>
 
-struct sandpoint_bus_dma_tag pci_bus_dma_tag = {
+struct powerpc_bus_dma_tag pci_bus_dma_tag = {
 	0,			/* _bounce_thresh */
 	_bus_dmamap_create,
 	_bus_dmamap_destroy,
@@ -208,7 +209,7 @@ pci_intr_map(pa, ihp)
 	} else {
 		/*
 		 * Sandpoint has 4 PCI slots.
-		 * Sandpoint rev. X2 has them in a wierd order.  Counting
+		 * Sandpoint rev. X2 has them in a weird order.  Counting
 		 * from center out toward the edge, we have:
 		 * 	Slot 1 (dev 14?) (labelled 1)
 		 * 	Slot 0 (dev 13?) (labelled 2)
@@ -228,7 +229,11 @@ pci_intr_map(pa, ihp)
 	 * interrupt, but subtract off the lowest dev (13) to get
 	 * the IRQ.
 	 */
+#if defined(OPENPIC_SERIAL_MODE)
+	line -= 11;
+#else
 	line -= 13;
+#endif
 	
 	*ihp = line;
 	return 0;
@@ -270,8 +275,10 @@ pci_intr_establish(pc, ih, level, func, arg)
 	int level, (*func) __P((void *));
 	void *arg;
 {
-	if (ih < 0 || ih >= 4)
+#if 0
+	if (ih < SANDPOINT_INTR_PCI0 || ih > SANDPOINT_INTR_PCI3)
 		panic("pci_intr_establish: bogus handle 0x%x\n", ih);
+#endif
 
 	/*
 	 * ih is the value assigned in pci_intr_map(), above.
@@ -286,11 +293,11 @@ pci_intr_disestablish(pc, cookie)
 	pci_chipset_tag_t pc;
 	void *cookie;
 {
-	return intr_disestablish(cookie);
+	intr_disestablish(cookie);
 }
 
 void
-pci_conf_interrupt(pci_chipset_tag_t pc, int bus, int dev, int func, int swiz,
+pci_conf_interrupt(pci_chipset_tag_t pc, int bus, int dev, int pin, int swiz,
     int *iline)
 {
 	if (bus == 0) {

@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.101 2001/02/11 00:37:22 eeh Exp $ */
+/*	$NetBSD: machdep.c,v 1.112 2001/09/24 23:49:33 eeh Exp $ */
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -132,15 +132,15 @@
 
 /* #include "fb.h" */
 
-int bus_space_debug = 1; /* This may be used by macros elsewhere. */
+int bus_space_debug = 0; /* This may be used by macros elsewhere. */
 #ifdef DEBUG
 #define DPRINTF(l, s)   do { if (bus_space_debug & l) printf s; } while (0)
 #else
 #define DPRINTF(l, s)
 #endif
 
-vm_map_t exec_map = NULL;
-vm_map_t mb_map = NULL;
+struct vm_map *exec_map = NULL;
+struct vm_map *mb_map = NULL;
 extern vaddr_t avail_end;
 
 int	physmem;
@@ -264,7 +264,7 @@ cpu_startup()
         if (uvm_map(kernel_map, (vaddr_t *) &buffers, round_page(size),
                     NULL, UVM_UNKNOWN_OFFSET, 0,
                     UVM_MAPFLAG(UVM_PROT_NONE, UVM_PROT_NONE, UVM_INH_NONE,
-                                UVM_ADV_NORMAL, 0)) != KERN_SUCCESS)
+                                UVM_ADV_NORMAL, 0)) != 0)
         	panic("cpu_startup: cannot allocate VM for buffers");
 
         minaddr = (vaddr_t) buffers;
@@ -294,13 +294,13 @@ cpu_startup()
 			if (pg == NULL)
 				panic("cpu_startup: "
 				    "not enough RAM for buffer cache");
-			pmap_enter(kernel_map->pmap, curbuf,
-			    VM_PAGE_TO_PHYS(pg), VM_PROT_READ|VM_PROT_WRITE,
-			    VM_PROT_READ|VM_PROT_WRITE|PMAP_WIRED);
+			pmap_kenter_pa(curbuf, VM_PAGE_TO_PHYS(pg),
+			    VM_PROT_READ | VM_PROT_WRITE);
 			curbuf += PAGE_SIZE;
 			curbufsize -= PAGE_SIZE;
 		}
 	}
+	pmap_update(kernel_map->pmap);
 
 	/*
 	 * Allocate a submap for exec arguments.  This map effectively
@@ -577,7 +577,11 @@ sendsig(catcher, sig, mask, code)
 	sf.sf_sc.sc_sp = (long)tf->tf_out[6];
 	sf.sf_sc.sc_pc = tf->tf_pc;
 	sf.sf_sc.sc_npc = tf->tf_npc;
+#ifdef __arch64__
 	sf.sf_sc.sc_tstate = tf->tf_tstate; /* XXX */
+#else
+	sf.sf_sc.sc_psr = TSTATECCR_TO_PSR(tf->tf_tstate); /* XXX */
+#endif
 	sf.sf_sc.sc_g1 = tf->tf_global[1];
 	sf.sf_sc.sc_o0 = tf->tf_out[0];
 
@@ -676,14 +680,11 @@ sys___sigreturn14(p, v, retval)
 
 	/* First ensure consistent stack state (see sendsig). */
 	write_user_windows();
-if (p->p_addr->u_pcb.pcb_nsaved) 
-printf("sigreturn14: pid %d nsaved %d\n",
-       p->p_pid, (p->p_addr->u_pcb.pcb_nsaved));
 	if (rwindow_save(p)) {
 #ifdef DEBUG
 		printf("sigreturn14: rwindow_save(%p) failed, sending SIGILL\n", p);
 #ifdef DDB
-		Debugger();
+		if (sigdebug & SDB_DDB) Debugger();
 #endif
 #endif
 		sigexit(p, SIGILL);
@@ -703,7 +704,7 @@ printf("sigreturn14: pid %d nsaved %d\n",
 	{
 		printf("sigreturn14: copyin failed: scp=%p\n", scp);
 #ifdef DDB
-		Debugger();
+		if (sigdebug & SDB_DDB) Debugger();
 #endif
 		return (error);
 	}
@@ -725,7 +726,7 @@ printf("sigreturn14: pid %d nsaved %d\n",
 		   (void *)(unsigned long)sc.sc_pc,
 		   (void *)(unsigned long)sc.sc_npc);
 #ifdef DDB
-		Debugger();
+		if (sigdebug & SDB_DDB) Debugger();
 #endif
 		return (EINVAL);
 	}
@@ -733,7 +734,11 @@ printf("sigreturn14: pid %d nsaved %d\n",
 		return (EINVAL);
 #endif
 	/* take only psr ICC field */
+#ifdef __arch64__
 	tf->tf_tstate = (u_int64_t)(tf->tf_tstate & ~TSTATE_CCR) | (scp->sc_tstate & TSTATE_CCR);
+#else
+	tf->tf_tstate = (u_int64_t)(tf->tf_tstate & ~TSTATE_CCR) | PSRCC_TO_TSTATE(scp->sc_psr);
+#endif
 	tf->tf_pc = (u_int64_t)scp->sc_pc;
 	tf->tf_npc = (u_int64_t)scp->sc_npc;
 	tf->tf_global[1] = (u_int64_t)scp->sc_g1;
@@ -825,14 +830,15 @@ haltsys:
 
 	if (howto & RB_HALT) {
 		printf("halted\n\n");
-		romhalt();
+		OF_exit();
+		panic("PROM exit failed");
 	}
 
 	printf("rebooting\n\n");
 	if (user_boot_string && *user_boot_string) {
 		i = strlen(user_boot_string);
 		if (i > sizeof(str))
-			romboot(user_boot_string);	/* XXX */
+			OF_boot(user_boot_string);	/* XXX */
 		bcopy(user_boot_string, str, i);
 	} else {
 		i = 1;
@@ -849,7 +855,7 @@ haltsys:
 		str[i] = 0;
 	} else
 		str[0] = 0;
-	romboot(str);
+	OF_boot(str);
 	panic("cpu_reboot -- failed");
 	/*NOTREACHED*/
 }
@@ -973,9 +979,11 @@ printf("starting dump, blkno %d\n", blkno);
 				printf("%d ", i / (1024*1024));
 			(void) pmap_enter(pmap_kernel(), dumpspace, maddr,
 					VM_PROT_READ, VM_PROT_READ|PMAP_WIRED);
+			pmap_update(pmap_kernel());
 			error = (*dump)(dumpdev, blkno,
 					(caddr_t)dumpspace, (int)n);
 			pmap_remove(pmap_kernel(), dumpspace, dumpspace + n);
+			pmap_update(pmap_kernel());
 			if (error)
 				break;
 			maddr += n;
@@ -1341,7 +1349,7 @@ _bus_dmamap_load_uio(t, map, uio, flags)
 		if (__predict_false(uvm_vslock(p, vaddr, buflen,
 			    (uio->uio_rw == UIO_WRITE) ?
 			    VM_PROT_READ | VM_PROT_WRITE : VM_PROT_READ)
-			    != KERN_SUCCESS)) {
+			    != 0)) {
 				goto after_vsunlock;
 			}
 		
@@ -1412,7 +1420,7 @@ _bus_dmamap_unload(t, map)
 	bus_dmamap_t map;
 {
 	int i;
-	vm_page_t m;
+	struct vm_page *m;
 	struct pglist *mlist;
 	paddr_t pa;
 
@@ -1454,7 +1462,7 @@ _bus_dmamap_sync(t, map, offset, len, ops)
 	int ops;
 {
 	int i;
-	vm_page_t m;
+	struct vm_page *m;
 	struct pglist *mlist;
 
 	/*
@@ -1621,7 +1629,7 @@ _bus_dmamem_map(t, segs, nsegs, size, kvap, flags)
 	r = uvm_map(kernel_map, &sva, oversize, NULL, UVM_UNKNOWN_OFFSET, 0,
 	    UVM_MAPFLAG(UVM_PROT_NONE, UVM_PROT_NONE, UVM_INH_NONE,
 	    UVM_ADV_NORMAL, 0));
-	if (r != KERN_SUCCESS)
+	if (r != 0)
 		return (ENOMEM);
 
 	/* Compute start of aligned region */
@@ -1709,14 +1717,17 @@ static int	sparc_bus_unmap __P((bus_space_tag_t, bus_space_handle_t,
 static int	sparc_bus_subregion __P((bus_space_tag_t, bus_space_handle_t,
 					 bus_size_t, bus_size_t,
 					 bus_space_handle_t *));
-static int	sparc_bus_mmap __P((bus_space_tag_t, bus_type_t,
-				    bus_addr_t, int, bus_space_handle_t *));
+static paddr_t	sparc_bus_mmap __P((bus_space_tag_t, bus_addr_t, off_t, int, int));
 static void	*sparc_mainbus_intr_establish __P((bus_space_tag_t, int, int,
 						   int, int (*) __P((void *)),
 						   void *));
-static void     sparc_bus_barrier __P(( bus_space_tag_t, bus_space_handle_t,
-					bus_size_t, bus_size_t, int));
-
+static void     sparc_bus_barrier __P((bus_space_tag_t, bus_space_handle_t,
+				       bus_size_t, bus_size_t, int));
+static int	sparc_bus_alloc __P((bus_space_tag_t, bus_addr_t, bus_addr_t,
+				     bus_size_t, bus_size_t, bus_size_t, int,
+				     bus_addr_t *, bus_space_handle_t *));
+static void	sparc_bus_free __P((bus_space_tag_t, bus_space_handle_t,
+				    bus_size_t));
 
 vaddr_t iobase = IODEV_BASE;
 struct extent *io_space = NULL;
@@ -1809,6 +1820,7 @@ sparc_bus_map(t, iospace, addr, size, flags, vaddr, hp)
 		v += PAGE_SIZE;
 		pa += PAGE_SIZE;
 	} while ((size -= PAGE_SIZE) > 0);
+	pmap_update(pmap_kernel());
 	return (0);
 }
 
@@ -1840,17 +1852,16 @@ sparc_bus_unmap(t, bh, size)
 	return (0);
 }
 
-int
-sparc_bus_mmap(t, iospace, paddr, flags, hp)
+paddr_t
+sparc_bus_mmap(t, paddr, off, prot, flags)
 	bus_space_tag_t t;
-	bus_type_t	iospace;
 	bus_addr_t	paddr;
+	off_t		off;
+	int		prot;
 	int		flags;
-	bus_space_handle_t *hp;
 {
-
-	*hp = (bus_space_handle_t)(paddr>>PGSHIFT);
-	return (0);
+	/* Devices are un-cached... although the driver should do that */
+	return ((paddr+off)|PMAP_NC);
 }
 
 /*
@@ -1904,7 +1915,8 @@ sparc_mainbus_intr_establish(t, pil, level, flags, handler, arg)
 	return (ih);
 }
 
-void sparc_bus_barrier (t, h, offset, size, flags)
+void
+sparc_bus_barrier(t, h, offset, size, flags)
 	bus_space_tag_t	t;
 	bus_space_handle_t h;
 	bus_size_t	offset;
@@ -1928,10 +1940,36 @@ void sparc_bus_barrier (t, h, offset, size, flags)
 	return;
 }
 
+int
+sparc_bus_alloc(t, rs, re, s, a, b, f, ap, hp)
+	bus_space_tag_t t;
+	bus_addr_t	rs;
+	bus_addr_t	re;
+	bus_size_t	s;
+	bus_size_t	a;
+	bus_size_t	b;
+	int		f;
+	bus_addr_t	*ap;
+	bus_space_handle_t *hp;
+{
+	return (ENOTTY);
+}
+
+void
+sparc_bus_free(t, h, s)
+	bus_space_tag_t	t;
+	bus_space_handle_t	h;
+	bus_size_t	s;
+{
+	return;
+}
+
 struct sparc_bus_space_tag mainbus_space_tag = {
 	NULL,				/* cookie */
 	NULL,				/* parent bus tag */
 	UPA_BUS_SPACE,			/* type */
+	sparc_bus_alloc,
+	sparc_bus_free,
 	sparc_bus_map,			/* bus_space_map */
 	sparc_bus_unmap,		/* bus_space_unmap */
 	sparc_bus_subregion,		/* bus_space_subregion */

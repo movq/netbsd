@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.3 2000/08/14 17:51:41 nonaka Exp $
+#	$NetBSD: Makefile,v 1.5 2001/06/19 11:56:28 nonaka Exp $
 
 COMMON= ${.CURDIR}/../common
 .ifnmake(print-objdir)

@@ -1,9 +1,14 @@
 #
-#	$NetBSD: files.atari,v 1.71 2001/01/17 00:07:22 fvdl Exp $
+#	$NetBSD: files.atari,v 1.89 2001/09/08 11:19:06 thomas Exp $
 
 maxpartitions 16
 
 maxusers 2 8 64
+
+defopt	opt_mbtype.h			_MILANHW_ _ATARIHW_
+
+defopt	opt_atariscsi.h			TT_SCSI FALCON_SCSI
+defopt	opt_atariscsi.h			TRY_SCSI_LINKED_COMMANDS
 
 device	mainbus {}
 attach	mainbus at root
@@ -13,6 +18,10 @@ attach	cpu at mainbus
 
 define	event {}
 file	arch/atari/dev/event.c		event
+
+# Mainbus shared DMA
+define	mbdma
+file	arch/atari/dev/dma.c		mbdma
 
 device	clock
 attach	clock at mainbus
@@ -55,10 +64,9 @@ device	fdc { unit = -1 }
 attach	fdc at mainbus
 
 # TT/Falcon floppy driver
-device	fd: disk
+device	fd: disk, mbdma
 attach	fd at fdc
 file	arch/atari/dev/fd.c		fd needs-flag
-file	arch/atari/dev/dma.c
 major	{fd = 2}
 
 # Hades floppy driver
@@ -119,8 +127,9 @@ device	ite: tty
 attach	ite at grfcc,grfet 
 file	arch/atari/dev/ite.c		ite needs-flag
 file	arch/atari/dev/kbdmap.c		ite
-file	arch/atari/dev/font_8x8.c	ite
-file	arch/atari/dev/font_8x16.c	ite
+#					XXX  pci_vga needs to download the font
+file	arch/atari/dev/font_8x8.c	ite | pci
+file	arch/atari/dev/font_8x16.c	ite | pci
 
 
 defpseudo	view
@@ -136,8 +145,11 @@ include "dev/i2o/files.i2o"
 # PCI-devices
 #
 file	arch/atari/pci/pci_machdep.c	pci | grfet
+file	arch/atari/pci/pci_hades.c	pci & _atarihw_
+file 	arch/atari/pci/pci_milan.c	pci & _milanhw_
 file	arch/atari/pci/pci_vga.c	pci
 file	arch/atari/pci/pci_tseng.c	pci
+file	arch/atari/pci/pciide_machdep.c	pciide
 
 device	pcibus
 attach	pcibus at mainbus
@@ -148,6 +160,9 @@ include "dev/pci/files.pci"
 # ISA-devices
 #
 file	arch/atari/isa/isa_machdep.c	isa
+file	arch/atari/isa/isa_hades.c	isa & _atarihw_
+file	arch/atari/isa/isa_milan.c	isa & _milanhw_
+file	arch/atari/isa/isa_dma.c	isadma
 
 device	isabus
 attach	isabus at mainbus
@@ -155,7 +170,16 @@ attach	isabus at mainbus
 include "dev/isa/files.isa"
 include "dev/ata/files.ata"
 
-attach	wdc at mainbus with wdc_mb
+# Milan floppy driver - uses 'generic' isa version of fd.c
+device  fdcisa  {drive = -1}: isadma
+file    arch/atari/isa/fdcisa.c		fdcisa
+attach  fdcisa at isa
+device  fdisa: disk
+attach  fdisa at fdcisa
+file    dev/isa/fd.c			fdisa needs-flag
+major   {fdisa = 2}
+
+attach	wdc at mainbus with wdc_mb: mbdma
 file	arch/atari/dev/wdc_mb.c		wdc_mb
 major	{wd = 14}
 
@@ -167,9 +191,9 @@ major   {sd = 4}
 major   {cd = 6}
 
 # ncr 5380 controller
-device	ncrscsi: scsi
+device	ncrscsi: scsi, mbdma
 attach	ncrscsi at mainbus
-file	arch/atari/dev/atari5380.c	ncrscsi
+file	arch/atari/dev/atari5380.c	ncrscsi needs-flag
 
 # list of standard files...
 file	dev/cons.c				ite | ser
@@ -193,7 +217,7 @@ file	arch/atari/atari/stalloc.c
 file	arch/atari/atari/vm_machdep.c
 file	arch/atari/atari/db_memrw.c		ddb
 file	arch/atari/atari/fpu.c
-file	arch/atari/dev/ym2149.c
+file	arch/atari/dev/ym2149.c			_atarihw_
 file	arch/atari/atari/intr.c
 file	arch/m68k/m68k/cacheops.c
 
@@ -206,6 +230,9 @@ include "arch/m68k/060sp/files.060sp"
 
 # Compatibility modules
 
+# a.out compatibility
+include "compat/aoutm68k/files.aoutm68k"
+
 # SunOS Binary Compatibility (COMPAT_SUNOS)
 include "compat/sunos/files.sunos"
 file	arch/m68k/m68k/sunos_machdep.c	compat_sunos
@@ -216,9 +243,14 @@ include "compat/svr4/files.svr4"
 # Linux binary compatibility (COMPAT_LINUX)
 include "compat/linux/files.linux"
 include "compat/linux/arch/m68k/files.linux_m68k"
+file arch/m68k/m68k/linux_trap.c		compat_linux
 
 # OSS audio driver compatibility
 include "compat/ossaudio/files.ossaudio"
 
 # network devices MII bus
 include "dev/mii/files.mii"
+
+# Wscons related includes
+include	"dev/pckbc/files.pckbc"
+include "dev/wscons/files.wscons"

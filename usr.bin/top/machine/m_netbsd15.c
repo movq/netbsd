@@ -1,4 +1,4 @@
-/*	$NetBSD: m_netbsd15.c,v 1.14 2001/01/30 13:29:58 enami Exp $	*/
+/*	$NetBSD: m_netbsd15.c,v 1.16 2002/03/23 01:28:11 thorpej Exp $	*/
 
 /*
  * top - a top users display for Unix
@@ -12,12 +12,13 @@
  * NetBSD-1.3 port by Luke Mewburn, based on code by Matthew Green.
  * NetBSD-1.4/UVM port by matthew green.
  * NetBSD-1.5 port by Simon Burge.
+ * NetBSD-1.6/UBC port by Tomas Svensson.
  * -
  * This is the machine-dependent module for NetBSD-1.5 and later
  * works for:
- *	NetBSD-1.4Z
+ *	NetBSD-1.5ZC
  * and should work for:
- *	NetBSD-1.5	(when released)
+ *	NetBSD-1.6	(when released)
  * -
  * top does not need to be installed setuid or setgid with this module.
  *
@@ -32,9 +33,10 @@
  *		Luke Mewburn <lukem@netbsd.org>
  *		matthew green <mrg@eterna.com.au>
  *		Simon Burge <simonb@netbsd.org>
+ *		Tomas Svensson <ts@unix1.net>
  *
  *
- * $Id: m_netbsd15.c,v 1.14 2001/01/30 13:29:58 enami Exp $
+ * $Id: m_netbsd15.c,v 1.16 2002/03/23 01:28:11 thorpej Exp $
  */
 
 #include <sys/param.h>
@@ -135,8 +137,14 @@ char *cpustatenames[] = {
 
 int memory_stats[7];
 char *memorynames[] = {
-	"K Act, ", "K Inact, ", "K Wired, ", "K Free, ",
-	"K Swp, ", "K Swp free, ",
+	"K Act, ", "K Inact, ", "K Wired, ", "K Exec, ", "K File, ",
+	"K Free, ",
+	NULL
+};
+
+int swap_stats[4];
+char *swapnames[] = {
+	"K Total, ", "K Used, ", "K Free, ",
 	NULL
 };
 
@@ -240,6 +248,7 @@ machine_init(statics)
 	statics->procstate_names = procstatenames;
 	statics->cpustate_names = cpustatenames;
 	statics->memory_names = memorynames;
+	statics->swap_names = swapnames;
 	statics->order_names = ordernames;
 
 	/* all done! */
@@ -305,8 +314,11 @@ get_system_info(si)
 	memory_stats[0] = pagetok(uvmexp.active);
 	memory_stats[1] = pagetok(uvmexp.inactive);
 	memory_stats[2] = pagetok(uvmexp.wired);
-	memory_stats[3] = pagetok(uvmexp.free);
-	memory_stats[4] = memory_stats[5] = 0;
+	memory_stats[3] = pagetok(uvmexp.execpages);
+	memory_stats[4] = pagetok(uvmexp.filepages);
+	memory_stats[5] = pagetok(uvmexp.free);
+
+	swap_stats[0] = swap_stats[1] = swap_stats[2] = 0;
 
 	seporig = NULL;
 	do {
@@ -332,8 +344,9 @@ get_system_info(si)
 			totalsize += size;
 			totalinuse += inuse;
 		}
-		memory_stats[4] = dbtob(totalinuse) / 1024;
-		memory_stats[5] = dbtob(totalsize) / 1024 - memory_stats[4];
+		swap_stats[0] = dbtob(totalsize) / 1024;
+		swap_stats[1] = dbtob(totalinuse) / 1024;
+		swap_stats[2] = dbtob(totalsize) / 1024 - swap_stats[1];
 		/* Free here, before we malloc again in the next
 		 * iteration of this loop.
 		 */
@@ -349,10 +362,12 @@ get_system_info(si)
 		free(seporig);
 
 	memory_stats[6] = -1;
+	swap_stats[3] = -1;
 
 	/* set arrays and strings */
 	si->cpustates = cpu_states;
 	si->memory = memory_stats;
+	si->swap = swap_stats;
 	si->last_pid = -1;
 }
 
@@ -453,6 +468,7 @@ format_next_process(handle, get_userid)
 #endif
 	char wmesg[KI_WMESGLEN + 1];
 	static char fmt[128];		/* static area where result is built */
+	char *pretty = "";
 
 	/* find and remember the next proc structure */
 	hp = (struct handle *)handle;
@@ -460,18 +476,24 @@ format_next_process(handle, get_userid)
 	hp->remaining--;
 
 	/* get the process's user struct and set cputime */
-	if ((pp->p_flag & P_INMEM) == 0) {
+	if ((pp->p_flag & P_INMEM) == 0)
+		pretty = "<>";
+	else if ((pp->p_flag & P_SYSTEM) != 0)
+		pretty = "[]";
+
+	if (pretty[0] != '\0') {
 		/*
-		 * Print swapped processes as <pname>
+		 * Print swapped processes as <pname> and
+		 * system processes as [pname]
 		 */
 		char *comm = pp->p_comm;
 #define COMSIZ sizeof(pp->p_comm)
 		char buf[COMSIZ];
 		(void) strncpy(buf, comm, COMSIZ);
-		comm[0] = '<';
+		comm[0] = pretty[0];
 		(void) strncpy(&comm[1], buf, COMSIZ - 2);
 		comm[COMSIZ - 2] = '\0';
-		(void) strncat(comm, ">", COMSIZ - 1);
+		(void) strncat(comm, &pretty[1], COMSIZ - 1);
 		comm[COMSIZ - 1] = '\0';
 	}
 

@@ -1,4 +1,4 @@
-.\"	$NetBSD: ps.1,v 1.42 2001/01/15 21:02:58 christos Exp $
+.\"	$NetBSD: ps.1,v 1.50 2002/03/04 13:19:33 wiz Exp $
 .\"
 .\" Copyright (c) 1980, 1990, 1991, 1993, 1994
 .\"	The Regents of the University of California.  All rights reserved.
@@ -169,7 +169,7 @@ device.  Use an question mark (``?'') for processes not attached to a
 terminal device and a minus sign (``-'') for processes that have
 been revoked from their terminal device.
 .It Fl U
-Displays processes belonging to the user whose username or uid has 
+Displays processes belonging to the user whose username or uid has
 been given to the
 .Fl U
 switch.
@@ -220,9 +220,9 @@ option or kvm-based reasons), it currently uses an experimental
 fallback method to gather as much information as possible through the
 limited
 .Dq Pa /proc
-interface, if the 
+interface, if the
 .Dq Pa /proc
-filesystem is mounted.  See 
+filesystem is mounted.  See
 .Xr mount_procfs 8
 for more details.
 .Nm
@@ -318,11 +318,11 @@ information:
 .Bl -tag -width indent -compact
 .It +
 The process is in the foreground process group of its control terminal.
-.It <
+.It \*[Lt]
 The process has raised
 .Tn CPU
 scheduling priority.
-.It >
+.It \*[Gt]
 The process has specified a soft limit on memory requirements and is
 currently exceeding that limit; such a process is (necessarily) not
 swapped.
@@ -379,8 +379,8 @@ as 324000.
 .Pp
 When printing using the command keyword, a process that has exited and
 has a parent that has not yet waited for the process (in other words, a zombie)
-is listed as ``<defunct>'', and a process which is blocked while trying
-to exit is listed as ``<exiting>''.
+is listed as ``\*[Lt]defunct\*[Gt]'', and a process which is blocked while trying
+to exit is listed as ``\*[Lt]exiting\*[Gt]''.
 .Pp
 .Nm
 will try to locate the processes' argument vector from the user
@@ -389,14 +389,15 @@ is not reliable because a process is allowed to destroy this
 information. The ucomm (accounting) keyword will always contain
 the real command name as contained in the process structure's p_comm field.
 .Pp
+If the command vector cannot be located (usually because it has not
+been set, as is the case of system processes and/or kernel threads)
+the command name is printed within square brackets.
+.Pp
 To indicate that the argument vector has been tampered with,
 .Nm
 will append the real command name to the output within parentheses
 if the basename of the first argument in the argument vector
-does not match the contents of the real command name.  A special
-case of the above is system processes and/or kernel threads
-which are shown within parentheses because they do not set their
-argument vector.
+does not match the contents of the real command name.
 .Pp
 In addition,
 .Nm
@@ -406,7 +407,7 @@ real command name parenthesized:
 .It -shellname
 The login process traditionally adds a
 .Sq -
-in front of the shell name to indicate a login shell. 
+in front of the shell name to indicate a login shell.
 .Nm
 will not append parenthesized the command name if it matches with
 the name in the the first argument of the argument vector, skipping
@@ -416,8 +417,8 @@ the leading
 Daemon processes frequently report their current activity by setting
 their name to be like ``daemonname: current-activity''.
 .Nm
-will not append parenthesized the command name, if the string preceeding the
-.Sq \:
+will not append parenthesized the command name, if the string preceding the
+.Sq \&:
 in the first argument of the argument vector matches the command name.
 .El
 .Sh KEYWORDS
@@ -479,7 +480,9 @@ total blocks written (alias oublock)
 .It p_ru
 resource usage (valid only for zombie)
 .It paddr
-swap address
+kernel virtual address of the
+.Tn "struct proc"
+belonging to the process.
 .It pagein
 pageins (same as majflt)
 .It pgid
@@ -578,6 +581,8 @@ filesystem for obtaining process information
 .El
 .Sh SEE ALSO
 .Xr kill 1 ,
+.Xr pgrep 1 ,
+.Xr pkill 1 ,
 .Xr sh 1 ,
 .Xr w 1 ,
 .Xr kvm 3 ,

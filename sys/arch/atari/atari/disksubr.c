@@ -1,4 +1,4 @@
-/*	$NetBSD: disksubr.c,v 1.19 2000/11/20 08:24:13 chs Exp $	*/
+/*	$NetBSD: disksubr.c,v 1.23 2001/09/16 16:34:28 wiz Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman.
@@ -139,7 +139,9 @@ readdisklabel(dev, strat, lp, clp)
 {
 	int			e;
 
-	bzero(clp, sizeof *clp);
+	if (clp != NULL)
+		bzero(clp, sizeof *clp);
+	else printf("Warning: clp == NULL\n");
 
 	/*
 	 * Give some guaranteed validity to the disk label.
@@ -168,7 +170,7 @@ readdisklabel(dev, strat, lp, clp)
 
 #ifdef DISKLABEL_NBDA
 	/* Try the native NetBSD/Atari format first. */
-	e = bsd_label(dev, strat, lp, 0, &clp->cd_label);
+	e = bsd_label(dev, strat, lp, 0, clp != NULL ? &clp->cd_label : NULL);
 #endif
 #if 0
 	/* Other label formats go here. */
@@ -177,7 +179,7 @@ readdisklabel(dev, strat, lp, clp)
 #endif
 #ifdef DISKLABEL_AHDI
 	/* The unprotected AHDI format comes last. */
-	if (e > 0)
+	if (e > 0 && (clp != NULL))
 		e = ahdi_label(dev, strat, lp, clp);
 #endif
 	if (e < 0)
@@ -306,16 +308,16 @@ writedisklabel(dev, strat, lp, clp)
  * if it contains a valid NetBSD disk label.
  *
  * Returns:  0 if successfull,
- *          -1 if an I/O error occured,
+ *          -1 if an I/O error occurred,
  *          +1 if no valid label was found.
  */
 static int
-bsd_label(dev, strat, label, blkno, offset)
+bsd_label(dev, strat, label, blkno, offsetp)
 	dev_t			dev;
 	void			(*strat)(struct buf *);
 	struct disklabel	*label;
 	u_int			blkno,
-				*offset;
+				*offsetp;
 {
 	struct buf		*bp;
 	int			rv;
@@ -354,9 +356,10 @@ bsd_label(dev, strat, label, blkno, offset)
 			   && dl->d_magic  == DISKMAGIC
 		  	   && dkcksum(dl)  == 0
 			   )	{
-				*offset = (char *)dl - (char *)bb;
-				*label  = *dl;
-				rv      = 0;
+				if (offsetp != NULL)
+					*offsetp = (char *)dl - (char *)bb;
+				*label = *dl;
+				rv     = 0;
 				break;
 			}
 		}
@@ -368,8 +371,8 @@ bsd_label(dev, strat, label, blkno, offset)
 #ifdef DISKLABEL_AHDI
 /*
  * Check for consistency between the NetBSD partition table
- * and the AHDI auxilary root sectors. There's no good reason
- * to force such consistency, but issueing a warning may help
+ * and the AHDI auxiliary root sectors. There's no good reason
+ * to force such consistency, but issuing a warning may help
  * an inexperienced sysadmin to prevent corruption of AHDI
  * partitions.
  */
@@ -395,7 +398,7 @@ ck_label(dl, cdl)
 			if (*rp >= p->p_offset
 			  && *rp < p->p_offset + p->p_size) {
 				uprintf("Warning: NetBSD partition %c"
-				" includes AHDI auxilary root\n", 'a'+i);
+				" includes AHDI auxiliary root\n", 'a'+i);
 			}
 		}
 	}
@@ -407,7 +410,7 @@ ck_label(dl, cdl)
  * create a fake NetBSD label based on the AHDI label.
  *
  * Returns:  0 if successful,
- *          -1 if an I/O error occured,
+ *          -1 if an I/O error occurred,
  *          +1 if no valid AHDI label was found.
  */
 int
@@ -596,7 +599,7 @@ ahdi_to_bsd(dl, apt)
 }
 
 /*
- * Fetch the AHDI partitions and auxilary roots.
+ * Fetch the AHDI partitions and auxiliary roots.
  *
  * Returns:  0 if successful,
  *           otherwise an I/O error occurred, and the

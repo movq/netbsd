@@ -1,4 +1,4 @@
-/*	$NetBSD: platid_mask.h,v 1.5 2001/03/04 03:40:39 takemura Exp $	*/
+/*	$NetBSD: platid_mask.h,v 1.13 2001/09/04 08:47:00 sato Exp $	*/
 
 /*-
  * Copyright (c) 1999-2001
@@ -61,6 +61,22 @@ extern platid_t platid_mask_CPU_MIPS_VR_4121;
 #ifdef PLATID_DEFINE_MASK_NICKNAME
 #  define GENERIC_MIPS_VR_4121 ((int)&platid_mask_CPU_MIPS_VR_4121)
 #endif
+extern platid_t platid_mask_CPU_MIPS_VR_4181;
+#ifdef PLATID_DEFINE_MASK_NICKNAME
+#  define GENERIC_MIPS_VR_4181 ((int)&platid_mask_CPU_MIPS_VR_4181)
+#endif
+extern platid_t platid_mask_CPU_MIPS_VR_4122;
+#ifdef PLATID_DEFINE_MASK_NICKNAME
+#  define GENERIC_MIPS_VR_4122 ((int)&platid_mask_CPU_MIPS_VR_4122)
+#endif
+extern platid_t platid_mask_CPU_MIPS_VR_4131;
+#ifdef PLATID_DEFINE_MASK_NICKNAME
+#  define GENERIC_MIPS_VR_4131 ((int)&platid_mask_CPU_MIPS_VR_4131)
+#endif
+extern platid_t platid_mask_CPU_MIPS_VR_4181A;
+#ifdef PLATID_DEFINE_MASK_NICKNAME
+#  define GENERIC_MIPS_VR_4181A ((int)&platid_mask_CPU_MIPS_VR_4181A)
+#endif
 extern platid_t platid_mask_CPU_MIPS_TX;
 #ifdef PLATID_DEFINE_MASK_NICKNAME
 #  define GENERIC_MIPS_TX ((int)&platid_mask_CPU_MIPS_TX)
@@ -84,6 +100,10 @@ extern platid_t platid_mask_CPU_MIPS_TX_3920;
 extern platid_t platid_mask_CPU_MIPS_TX_3922;
 #ifdef PLATID_DEFINE_MASK_NICKNAME
 #  define GENERIC_MIPS_TX_3922 ((int)&platid_mask_CPU_MIPS_TX_3922)
+#endif
+extern platid_t platid_mask_CPU_MIPS_TX_3927;
+#ifdef PLATID_DEFINE_MASK_NICKNAME
+#  define GENERIC_MIPS_TX_3927 ((int)&platid_mask_CPU_MIPS_TX_3927)
 #endif
 #endif /* hpcmips */
 #ifdef hpcsh
@@ -223,6 +243,18 @@ extern platid_t platid_mask_MACH_NEC_MCR_SIGMARION;
 #ifdef PLATID_DEFINE_MASK_NICKNAME
 #  define NEC_MCR_SIGMARION ((int)&platid_mask_MACH_NEC_MCR_SIGMARION)
 #endif
+extern platid_t platid_mask_MACH_NEC_MCR_550;
+#ifdef PLATID_DEFINE_MASK_NICKNAME
+#  define NEC_MCR_550 ((int)&platid_mask_MACH_NEC_MCR_550)
+#endif
+extern platid_t platid_mask_MACH_NEC_MCR_450;
+#ifdef PLATID_DEFINE_MASK_NICKNAME
+#  define NEC_MCR_450 ((int)&platid_mask_MACH_NEC_MCR_450)
+#endif
+extern platid_t platid_mask_MACH_NEC_MCR_SIGMARION2;
+#ifdef PLATID_DEFINE_MASK_NICKNAME
+#  define NEC_MCR_SIGMARION2 ((int)&platid_mask_MACH_NEC_MCR_SIGMARION2)
+#endif
 extern platid_t platid_mask_MACH_NEC_MCR_7XX;
 #ifdef PLATID_DEFINE_MASK_NICKNAME
 #  define NEC_MCR_7XX ((int)&platid_mask_MACH_NEC_MCR_7XX)
@@ -270,11 +302,11 @@ extern platid_t platid_mask_MACH_EVEREX_FREESTYLE_A20;
 #  define EVEREX_FREESTYLE_A20 ((int)&platid_mask_MACH_EVEREX_FREESTYLE_A20)
 #endif
 #endif /* hpcmips */
-#ifdef hpcmips
 extern platid_t platid_mask_MACH_CASIO;
 #ifdef PLATID_DEFINE_MASK_NICKNAME
 #  define CASIO ((int)&platid_mask_MACH_CASIO)
 #endif
+#ifdef hpcmips
 extern platid_t platid_mask_MACH_CASIO_CASSIOPEIAE;
 #ifdef PLATID_DEFINE_MASK_NICKNAME
 #  define CASIO_CASSIOPEIAE ((int)&platid_mask_MACH_CASIO_CASSIOPEIAE)
@@ -336,6 +368,20 @@ extern platid_t platid_mask_MACH_CASIO_POCKETPOSTPET_POCKETPOSTPET;
 #  define CASIO_POCKETPOSTPET_POCKETPOSTPET ((int)&platid_mask_MACH_CASIO_POCKETPOSTPET_POCKETPOSTPET)
 #endif
 #endif /* hpcmips */
+#ifdef hpcsh
+extern platid_t platid_mask_MACH_CASIO_CASSIOPEIAA;
+#ifdef PLATID_DEFINE_MASK_NICKNAME
+#  define CASIO_CASSIOPEIAA ((int)&platid_mask_MACH_CASIO_CASSIOPEIAA)
+#endif
+extern platid_t platid_mask_MACH_CASIO_CASSIOPEIAA_AXX;
+#ifdef PLATID_DEFINE_MASK_NICKNAME
+#  define CASIO_CASSIOPEIAA_AXX ((int)&platid_mask_MACH_CASIO_CASSIOPEIAA_AXX)
+#endif
+extern platid_t platid_mask_MACH_CASIO_CASSIOPEIAA_A55V;
+#ifdef PLATID_DEFINE_MASK_NICKNAME
+#  define CASIO_CASSIOPEIAA_A55V ((int)&platid_mask_MACH_CASIO_CASSIOPEIAA_A55V)
+#endif
+#endif /* hpcsh */
 #ifdef hpcmips
 extern platid_t platid_mask_MACH_SHARP;
 #ifdef PLATID_DEFINE_MASK_NICKNAME
@@ -410,6 +456,34 @@ extern platid_t platid_mask_MACH_FUJITSU_INTERTOP_IT300;
 extern platid_t platid_mask_MACH_FUJITSU_INTERTOP_IT310;
 #ifdef PLATID_DEFINE_MASK_NICKNAME
 #  define FUJITSU_INTERTOP_IT310 ((int)&platid_mask_MACH_FUJITSU_INTERTOP_IT310)
+#endif
+extern platid_t platid_mask_MACH_FUJITSU_PENCENTRA;
+#ifdef PLATID_DEFINE_MASK_NICKNAME
+#  define FUJITSU_PENCENTRA ((int)&platid_mask_MACH_FUJITSU_PENCENTRA)
+#endif
+extern platid_t platid_mask_MACH_FUJITSU_PENCENTRA_130;
+#ifdef PLATID_DEFINE_MASK_NICKNAME
+#  define FUJITSU_PENCENTRA_130 ((int)&platid_mask_MACH_FUJITSU_PENCENTRA_130)
+#endif
+extern platid_t platid_mask_MACH_FUJITSU_PENCENTRA_130TM;
+#ifdef PLATID_DEFINE_MASK_NICKNAME
+#  define FUJITSU_PENCENTRA_130TM ((int)&platid_mask_MACH_FUJITSU_PENCENTRA_130TM)
+#endif
+extern platid_t platid_mask_MACH_FUJITSU_PENCENTRA_130RF;
+#ifdef PLATID_DEFINE_MASK_NICKNAME
+#  define FUJITSU_PENCENTRA_130RF ((int)&platid_mask_MACH_FUJITSU_PENCENTRA_130RF)
+#endif
+extern platid_t platid_mask_MACH_FUJITSU_PENCENTRA_200;
+#ifdef PLATID_DEFINE_MASK_NICKNAME
+#  define FUJITSU_PENCENTRA_200 ((int)&platid_mask_MACH_FUJITSU_PENCENTRA_200)
+#endif
+extern platid_t platid_mask_MACH_FUJITSU_PENCENTRA_200CTM;
+#ifdef PLATID_DEFINE_MASK_NICKNAME
+#  define FUJITSU_PENCENTRA_200CTM ((int)&platid_mask_MACH_FUJITSU_PENCENTRA_200CTM)
+#endif
+extern platid_t platid_mask_MACH_FUJITSU_PENCENTRA_200CRF;
+#ifdef PLATID_DEFINE_MASK_NICKNAME
+#  define FUJITSU_PENCENTRA_200CRF ((int)&platid_mask_MACH_FUJITSU_PENCENTRA_200CRF)
 #endif
 #endif /* hpcmips */
 #ifdef hpcmips
@@ -505,9 +579,25 @@ extern platid_t platid_mask_MACH_COMPAQ_IPAQ;
 #ifdef PLATID_DEFINE_MASK_NICKNAME
 #  define COMPAQ_IPAQ ((int)&platid_mask_MACH_COMPAQ_IPAQ)
 #endif
+extern platid_t platid_mask_MACH_COMPAQ_IPAQ_H31XX;
+#ifdef PLATID_DEFINE_MASK_NICKNAME
+#  define COMPAQ_IPAQ_H31XX ((int)&platid_mask_MACH_COMPAQ_IPAQ_H31XX)
+#endif
+extern platid_t platid_mask_MACH_COMPAQ_IPAQ_H3100;
+#ifdef PLATID_DEFINE_MASK_NICKNAME
+#  define COMPAQ_IPAQ_H3100 ((int)&platid_mask_MACH_COMPAQ_IPAQ_H3100)
+#endif
+extern platid_t platid_mask_MACH_COMPAQ_IPAQ_H36XX;
+#ifdef PLATID_DEFINE_MASK_NICKNAME
+#  define COMPAQ_IPAQ_H36XX ((int)&platid_mask_MACH_COMPAQ_IPAQ_H36XX)
+#endif
 extern platid_t platid_mask_MACH_COMPAQ_IPAQ_H3600;
 #ifdef PLATID_DEFINE_MASK_NICKNAME
 #  define COMPAQ_IPAQ_H3600 ((int)&platid_mask_MACH_COMPAQ_IPAQ_H3600)
+#endif
+extern platid_t platid_mask_MACH_COMPAQ_IPAQ_H3660;
+#ifdef PLATID_DEFINE_MASK_NICKNAME
+#  define COMPAQ_IPAQ_H3660 ((int)&platid_mask_MACH_COMPAQ_IPAQ_H3660)
 #endif
 #endif /* hpcarm */
 #ifdef hpcmips
@@ -526,6 +616,14 @@ extern platid_t platid_mask_MACH_VICTOR_INTERLINK_MP;
 extern platid_t platid_mask_MACH_VICTOR_INTERLINK_MPC101;
 #ifdef PLATID_DEFINE_MASK_NICKNAME
 #  define VICTOR_INTERLINK_MPC101 ((int)&platid_mask_MACH_VICTOR_INTERLINK_MPC101)
+#endif
+extern platid_t platid_mask_MACH_VICTOR_INTERLINK_MPC303;
+#ifdef PLATID_DEFINE_MASK_NICKNAME
+#  define VICTOR_INTERLINK_MPC303 ((int)&platid_mask_MACH_VICTOR_INTERLINK_MPC303)
+#endif
+extern platid_t platid_mask_MACH_VICTOR_INTERLINK_MPC304;
+#ifdef PLATID_DEFINE_MASK_NICKNAME
+#  define VICTOR_INTERLINK_MPC304 ((int)&platid_mask_MACH_VICTOR_INTERLINK_MPC304)
 #endif
 #endif /* hpcmips */
 #ifdef hpcmips
@@ -603,6 +701,14 @@ extern platid_t platid_mask_MACH_HP_JORNADA_680JP;
 #ifdef PLATID_DEFINE_MASK_NICKNAME
 #  define HP_JORNADA_680JP ((int)&platid_mask_MACH_HP_JORNADA_680JP)
 #endif
+extern platid_t platid_mask_MACH_HP_JORNADA_680HU;
+#ifdef PLATID_DEFINE_MASK_NICKNAME
+#  define HP_JORNADA_680HU ((int)&platid_mask_MACH_HP_JORNADA_680HU)
+#endif
+extern platid_t platid_mask_MACH_HP_JORNADA_680DE;
+#ifdef PLATID_DEFINE_MASK_NICKNAME
+#  define HP_JORNADA_680DE ((int)&platid_mask_MACH_HP_JORNADA_680DE)
+#endif
 extern platid_t platid_mask_MACH_HP_JORNADA_690;
 #ifdef PLATID_DEFINE_MASK_NICKNAME
 #  define HP_JORNADA_690 ((int)&platid_mask_MACH_HP_JORNADA_690)
@@ -610,6 +716,14 @@ extern platid_t platid_mask_MACH_HP_JORNADA_690;
 extern platid_t platid_mask_MACH_HP_JORNADA_690JP;
 #ifdef PLATID_DEFINE_MASK_NICKNAME
 #  define HP_JORNADA_690JP ((int)&platid_mask_MACH_HP_JORNADA_690JP)
+#endif
+extern platid_t platid_mask_MACH_HP_JORNADA_690HU;
+#ifdef PLATID_DEFINE_MASK_NICKNAME
+#  define HP_JORNADA_690HU ((int)&platid_mask_MACH_HP_JORNADA_690HU)
+#endif
+extern platid_t platid_mask_MACH_HP_JORNADA_690DE;
+#ifdef PLATID_DEFINE_MASK_NICKNAME
+#  define HP_JORNADA_690DE ((int)&platid_mask_MACH_HP_JORNADA_690DE)
 #endif
 #endif /* hpcsh */
 #ifdef hpcarm
@@ -651,6 +765,14 @@ extern platid_t platid_mask_MACH_HITACHI_PERSONA_HPW230JC;
 #ifdef PLATID_DEFINE_MASK_NICKNAME
 #  define HITACHI_PERSONA_HPW230JC ((int)&platid_mask_MACH_HITACHI_PERSONA_HPW230JC)
 #endif
+extern platid_t platid_mask_MACH_HITACHI_PERSONA_HPW50PAD;
+#ifdef PLATID_DEFINE_MASK_NICKNAME
+#  define HITACHI_PERSONA_HPW50PAD ((int)&platid_mask_MACH_HITACHI_PERSONA_HPW50PAD)
+#endif
+extern platid_t platid_mask_MACH_HITACHI_PERSONA_HPW650PA;
+#ifdef PLATID_DEFINE_MASK_NICKNAME
+#  define HITACHI_PERSONA_HPW650PA ((int)&platid_mask_MACH_HITACHI_PERSONA_HPW650PA)
+#endif
 #endif /* hpcsh */
 #ifdef hpcsh
 extern platid_t platid_mask_MACH_LGE;
@@ -666,3 +788,35 @@ extern platid_t platid_mask_MACH_LGE_PHENOM_H220C;
 #  define LGE_PHENOM_H220C ((int)&platid_mask_MACH_LGE_PHENOM_H220C)
 #endif
 #endif /* hpcsh */
+#ifdef hpcmips
+extern platid_t platid_mask_MACH_LASER5;
+#ifdef PLATID_DEFINE_MASK_NICKNAME
+#  define LASER5 ((int)&platid_mask_MACH_LASER5)
+#endif
+extern platid_t platid_mask_MACH_LASER5_L;
+#ifdef PLATID_DEFINE_MASK_NICKNAME
+#  define LASER5_L ((int)&platid_mask_MACH_LASER5_L)
+#endif
+extern platid_t platid_mask_MACH_LASER5_L_CARD;
+#ifdef PLATID_DEFINE_MASK_NICKNAME
+#  define LASER5_L_CARD ((int)&platid_mask_MACH_LASER5_L_CARD)
+#endif
+extern platid_t platid_mask_MACH_LASER5_L_BOARD;
+#ifdef PLATID_DEFINE_MASK_NICKNAME
+#  define LASER5_L_BOARD ((int)&platid_mask_MACH_LASER5_L_BOARD)
+#endif
+#endif /* hpcmips */
+#ifdef hpcmips
+extern platid_t platid_mask_MACH_AGENDA;
+#ifdef PLATID_DEFINE_MASK_NICKNAME
+#  define AGENDA ((int)&platid_mask_MACH_AGENDA)
+#endif
+extern platid_t platid_mask_MACH_AGENDA_VR;
+#ifdef PLATID_DEFINE_MASK_NICKNAME
+#  define AGENDA_VR ((int)&platid_mask_MACH_AGENDA_VR)
+#endif
+extern platid_t platid_mask_MACH_AGENDA_VR_VR3;
+#ifdef PLATID_DEFINE_MASK_NICKNAME
+#  define AGENDA_VR_VR3 ((int)&platid_mask_MACH_AGENDA_VR_VR3)
+#endif
+#endif /* hpcmips */

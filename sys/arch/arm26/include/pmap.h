@@ -1,4 +1,4 @@
-/* $NetBSD: pmap.h,v 1.3 2000/12/27 18:38:50 bjh21 Exp $ */
+/* $NetBSD: pmap.h,v 1.5 2001/05/05 14:20:06 bjh21 Exp $ */
 /*-
  * Copyright (c) 1997, 1998 Ben Harris
  * All rights reserved.
@@ -48,6 +48,13 @@ extern struct pmap kernel_pmap_store;
 #define pmap_kernel()	(&kernel_pmap_store)
 
 extern boolean_t pmap_fault(pmap_t, vaddr_t, vm_prot_t);
+
+/* These have to be macros, whatever pmap(9) says. */
+#define pmap_resident_count(pmap)	_pmap_resident_count(pmap)
+#define pmap_wired_count(pmap)		_pmap_wired_count(pmap)
+
+extern long _pmap_resident_count(pmap_t);
+extern long _pmap_wired_count(pmap_t);
 
 /* Save on hassle and kernel VM */
 #define PMAP_MAP_POOLPAGE(pa)	((vaddr_t)MEMC_PHYS_BASE + (pa))

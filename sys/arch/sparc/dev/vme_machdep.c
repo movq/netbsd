@@ -1,4 +1,4 @@
-/*	$NetBSD: vme_machdep.c,v 1.30 2000/07/04 22:22:56 pk Exp $	*/
+/*	$NetBSD: vme_machdep.c,v 1.34 2001/09/26 20:53:05 eeh Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -441,7 +441,7 @@ vmeattach_iommu(parent, self, aux)
 	/*
 	 * Get "range" property.
 	 */
-	if (getprop(node, "ranges", sizeof(struct rom_range),
+	if (PROM_getprop(node, "ranges", sizeof(struct rom_range),
 		    &sc->sc_nrange, (void **)&sc->sc_range) != 0) {
 		panic("%s: can't get ranges property", self->dv_xname);
 	}
@@ -607,7 +607,8 @@ sparc_vme_mmap_cookie(addr, mod, hp)
 	if (error != 0)
 		return (error);
 
-	return (bus_space_mmap(sc->sc_bustag, iospace, paddr, 0, hp));
+	return (bus_space_mmap(sc->sc_bustag, BUS_ADDR(iospace, paddr), 0, 
+		0/*prot is ignored*/, 0));
 }
 
 #if defined(SUN4M)
@@ -956,6 +957,7 @@ sparc_vme4_dmamap_load(t, map, buf, buflen, p, flags)
 		va += pagesz;
 		sgsize -= pagesz;
 	}
+	pmap_update(pmap_kernel());
 
 	return (0);
 }
@@ -987,6 +989,7 @@ sparc_vme4_dmamap_unload(t, map)
 		if (error != 0)
 			printf("warning: %ld of DVMA space lost\n", len);
 	}
+	pmap_update(pmap_kernel());
 
 	/* Mark the mappings as invalid. */
 	map->dm_mapsize = 0;

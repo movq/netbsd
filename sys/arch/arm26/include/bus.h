@@ -1,4 +1,4 @@
-/* $NetBSD: bus.h,v 1.3 2000/12/09 18:47:15 bjh21 Exp $ */
+/* $NetBSD: bus.h,v 1.6 2001/09/11 11:38:59 bjh21 Exp $ */
 
 /*-
  * Copyright (c) 2000 Ben Harris
@@ -34,6 +34,8 @@
 #ifndef _ARM26_BUS_H_
 #define _ARM26_BUS_H_
 
+#include <arm/blockio.h>
+
 /*
  * I believe that there's only one sensible bus space on the Archimedes,
  * which corresponds to the system I/O bus.
@@ -48,7 +50,10 @@ typedef u_int bus_size_t;
 
 /* Access methods for bus space. */
 typedef int bus_space_tag_t;
-typedef bus_addr_t bus_space_handle_t;
+typedef struct bus_space_handle {
+	bus_addr_t a1; /* Address for 8-bit operations */
+	bus_addr_t a2; /* Address for 16-bit operations */
+} bus_space_handle_t;
 
 /* Mapping and unmapping operations. */
 #define	BUS_SPACE_MAP_CACHEABLE		0x01
@@ -65,6 +70,9 @@ extern int bus_space_shift(bus_space_tag_t, bus_space_handle_t, int,
 #define bus_space_alloc(t, rs, re, s, a, b, c, ap, hp) (-1)
 #define bus_space_free(t, h, s) /* Do nothing */
 
+/* Mapping bus space into user address space (impossible on arm26) */
+#define bus_space_mmap(t, a, o, p, f) (-1)
+
 /* Used by ne2000.c */
 #define BUS_SPACE_ALIGNED_POINTER ALIGNED_POINTER
 
@@ -74,25 +82,27 @@ extern int bus_space_shift(bus_space_tag_t, bus_space_handle_t, int,
 #define	bus_space_barrier(t, h, o, l, f) /* Do nothing */
 
 /* Bus read (single) operations. */
-#define	bus_space_read_1(t, h, o) (*(volatile u_int8_t *)((h) + ((o) << (t))))
-#define	bus_space_read_2(t, h, o) (*(volatile u_int16_t *)((h) + ((o) << (t))))
+#define	bus_space_read_1(t, h, o)					\
+    (*(volatile u_int8_t *)((h.a1) + ((o) << (t))))
+#define	bus_space_read_2(t, h, o)					\
+    (*(volatile u_int16_t *)((h.a2) + ((o) << (t))))
 
 /* Bus write (single) operations. */
 #define	bus_space_write_1(t, h, o, v)					\
-    (*(volatile u_int8_t *)((h) + ((o) << (t))) = (v))
+    (*(volatile u_int8_t *)((h.a1) + ((o) << (t))) = (v))
 #define	bus_space_write_2(t, h, o, v)					\
-    (*(volatile u_int32_t *)((h) + ((o) << (t))) = (v) | ((v) << 16))
+    (*(volatile u_int32_t *)((h.a2) + ((o) << (t))) = (v) | ((v) << 16))
 
 /* Bus read multiple operations. */
-extern void bus_space_read_multi_1(bus_space_tag_t, bus_space_handle_t,
-				   bus_size_t, u_int8_t *, bus_size_t);
+#define bus_space_read_multi_1(t, h, o, d, c)				\
+    (read_multi_1((h.a1) + ((o) << (t)), (d), (c)))
 extern void bus_space_read_multi_2(bus_space_tag_t, bus_space_handle_t,
 				   bus_size_t, u_int16_t *, bus_size_t);
 #define bus_space_read_multi_4(t, h, o, d, s) panic("bus_space_read_multi_4")
 
 /* Bus write multiple operations. */
-extern void bus_space_write_multi_1(bus_space_tag_t, bus_space_handle_t,
-				    bus_size_t, u_int8_t const *, bus_size_t);
+#define bus_space_write_multi_1(t, h, o, d, c)				\
+    (write_multi_1((h.a1) + ((o) << (t)), (d), (c)))
 extern void bus_space_write_multi_2(bus_space_tag_t, bus_space_handle_t,
 				    bus_size_t, u_int16_t const *, bus_size_t);
 #define bus_space_write_multi_4(t, h, o, d, s) panic("bus_space_write_multi_4")

@@ -1,4 +1,4 @@
-/* $NetBSD: machdep.c,v 1.5 2000/09/13 15:00:17 thorpej Exp $ */
+/* $NetBSD: machdep.c,v 1.12 2001/09/10 21:19:32 chris Exp $ */
 
 /*-
  * Copyright (c) 1998 Ben Harris
@@ -33,10 +33,12 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.5 2000/09/13 15:00:17 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.12 2001/09/10 21:19:32 chris Exp $");
 
 #include <sys/buf.h>
+#include <sys/kernel.h>
 #include <sys/mbuf.h>
+#include <sys/mount.h>
 #include <sys/reboot.h>
 #include <sys/systm.h>
 
@@ -52,19 +54,53 @@ char cpu_model[] = "Archimedes";
 /* Our exported CPU info; we can have only one. */
 struct cpu_info cpu_info_store;
 
-vm_map_t exec_map = NULL;
-vm_map_t phys_map = NULL;
-vm_map_t mb_map = NULL; /* and ever more shall be so */
+struct vm_map *exec_map = NULL;
+struct vm_map *phys_map = NULL;
+struct vm_map *mb_map = NULL; /* and ever more shall be so */
+
+int waittime = -1;
 
 void
 cpu_reboot(howto, b)
 	int howto;
 	char *b;
 {
-	/* FIXME This needs much more sophistication */
+
+	/* If "always halt" was specified as a boot flag, obey. */
+	if ((boothowto & RB_HALT) != 0)
+		howto |= RB_HALT;
+
+	boothowto = howto;
+
+	/* If system is cold, just halt. */
+	if (cold) {
+		boothowto |= RB_HALT;
+		goto haltsys;
+	}
+
+	if ((boothowto & RB_NOSYNC) == 0 && waittime < 0) {
+		waittime = 0;
+		vfs_shutdown();
+		/*
+		 * If we've been adjusting the clock, the todr
+		 * will be out of synch; adjust it now.
+		 */
+		resettodr();
+	}
+
+	/* Disable interrupts. */
 	splhigh();
-	/* XXX Temporary measure */
-	howto |= RB_HALT;
+
+#if 0
+	/* XXX Need to implement this */
+	if (boothowto & RB_DUMP)
+		dumpsys();
+#endif
+
+	/* run any shutdown hooks */
+	doshutdownhooks();
+
+haltsys:
 	if (howto & RB_HALT) {
 		printf("system halted\n");
 		for (;;);
@@ -138,7 +174,7 @@ cpu_startup()
 	if (uvm_map(kernel_map, (vaddr_t *) &buffers, round_page(size),
 		    NULL, UVM_UNKNOWN_OFFSET, 0,
 		    UVM_MAPFLAG(UVM_PROT_NONE, UVM_PROT_NONE, UVM_INH_NONE,
-				UVM_ADV_NORMAL, 0)) != KERN_SUCCESS)
+				UVM_ADV_NORMAL, 0)) != 0)
 		panic("cpu_startup: cannot allocate VM for buffers");
 	base = bufpages / nbuf;
 	residual = bufpages % nbuf;
@@ -161,11 +197,13 @@ cpu_startup()
 			if (pg == NULL)
 				panic("cpu_startup: not enough memory for "
 				    "buffer cache");
-			pmap_kenter_pgs(curbuf, &pg, 1);
+			pmap_kenter_pa(curbuf, VM_PAGE_TO_PHYS(pg),
+			    VM_PROT_READ|VM_PROT_WRITE);
 			curbuf += PAGE_SIZE;
 			curbufsize -= PAGE_SIZE;
 		}
 	}
+	pmap_update(pmap_kernel());
 
 	/*
 	 * Allocate a submap for exec arguments.  This map effectively
@@ -205,4 +243,20 @@ cpu_startup()
 	*(volatile int *)(0x00008000) = 0; /* data abort */
 	*(volatile int *)(0x10000000) = 0; /* address exception */
 #endif
+}
+
+/*
+ * machine dependent system variables.
+ */
+
+int
+cpu_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
+    size_t newlen, struct proc *p)
+{
+
+	/* all sysctl names at this level are terminal */
+	if (namelen != 1)
+		return (ENOTDIR);		/* overloaded */
+
+	return (EOPNOTSUPP);
 }

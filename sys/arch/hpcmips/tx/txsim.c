@@ -1,4 +1,4 @@
-/*	$NetBSD: txsim.c,v 1.3 2000/10/22 10:42:33 uch Exp $ */
+/*	$NetBSD: txsim.c,v 1.5 2001/06/14 11:09:56 uch Exp $ */
 
 /*-
  * Copyright (c) 1999, 2000 The NetBSD Foundation, Inc.
@@ -36,6 +36,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "opt_vr41xx.h"
+#include "opt_tx39xx.h"
 /*
  * TX System Internal Module.
  */
@@ -47,6 +49,8 @@
 
 #include <machine/bus.h>
 #include <machine/autoconf.h>
+#include <machine/platid.h>
+#include <machine/platid_mask.h>
 
 #include <hpcmips/tx/tx39var.h>
 #include <hpcmips/tx/txsnd.h>
@@ -70,9 +74,15 @@ txsim_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
     
+#ifdef VR41XX
+	if (!platid_match(&platid, &platid_mask_CPU_MIPS_TX_3900)
+	    && !platid_match(&platid, &platid_mask_CPU_MIPS_TX_3920))
+		return (1);
+#endif /* !TX39XX */
 	if (strcmp(ma->ma_name, match->cf_driver->cd_name))
-		return 0;
-	return 1;
+		return (0);
+
+	return (1);
 }
 
 void
@@ -105,7 +115,7 @@ txsim_attach(struct device *parent, struct device *self, void *aux)
 int
 txsim_print(void *aux, const char *pnp)
 {
-	return pnp ? QUIET : UNCONF;
+	return (pnp ? QUIET : UNCONF);
 }
 
 int
@@ -116,9 +126,8 @@ txsim_search(struct device *parent, struct cfdata *cf, void *aux)
 	
 	ta.ta_tc = tx_conf_get_tag();
 	
-	if ((*cf->cf_attach->ca_match)(parent, cf, &ta) == sc->sc_pri) {
+	if ((*cf->cf_attach->ca_match)(parent, cf, &ta) == sc->sc_pri)
 		config_attach(parent, cf, &ta, txsim_print);
-	}
 
-	return 0;
+	return (0);
 }

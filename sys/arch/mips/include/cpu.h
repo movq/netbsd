@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.50 2001/01/14 21:18:39 thorpej Exp $	*/
+/*	$NetBSD: cpu.h,v 1.57 2001/11/14 18:15:19 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -41,9 +41,27 @@
 #ifndef _CPU_H_
 #define _CPU_H_
 
+#include <mips/cpuregs.h>
+
 /*
  * Exported definitions unique to NetBSD/mips cpu support.
  */
+
+#ifndef _LOCORE
+#include <sys/sched.h>
+
+#if defined(_KERNEL_OPT)
+#include "opt_lockdebug.h"
+#endif
+
+struct cpu_info {
+	struct schedstate_percpu ci_schedstate; /* scheduler state */
+#if defined(DIAGNOSTIC) || defined(LOCKDEBUG)
+	u_long ci_spin_locks;		/* # of spin locks held */
+	u_long ci_simple_locks;		/* # of simple locks held */
+#endif
+};
+#endif /* !defined(_LOCORE) */
 
 /*
  * CTL_MACHDEP definitions.
@@ -53,7 +71,7 @@
 #define CPU_ROOT_DEVICE		3	/* string: root device name */
 
 /*
- * Platform can override, but note this breaks userland compatability
+ * Platform can override, but note this breaks userland compatibility
  * with other mips platforms.
  */
 #ifndef CPU_MAXID
@@ -69,6 +87,10 @@
 
 #ifdef _KERNEL
 #ifndef _LOCORE
+extern struct cpu_info cpu_info_store;
+
+#define	curcpu()	(&cpu_info_store)
+#define	cpu_number()	(0)
 
 /*
  * Macros to find the CPU architecture we're on at run-time,
@@ -116,6 +138,7 @@ void cpu_intr __P((u_int32_t, u_int32_t, u_int32_t, u_int32_t));
 struct clockframe {
 	int	pc;	/* program counter at time of interrupt */
 	int	sr;	/* status register at time of interrupt */
+	int	ppl;	/* previous priority level at time of interrupt */
 };
 
 /*
@@ -135,6 +158,10 @@ struct clockframe {
 #define	MIPS3_CLKF_BASEPRI(framep)	\
 	((~(framep)->sr & (MIPS_INT_MASK | MIPS_SR_INT_IE)) == 0)
 
+#ifdef IPL_ICU_MASK
+#define ICU_CLKF_BASEPRI(framep)	((framep)->ppl == 0)
+#endif
+
 #define	CLKF_PC(framep)		((framep)->pc)
 #define	CLKF_INTR(framep)	(0)
 
@@ -146,6 +173,11 @@ struct clockframe {
 #if !defined(MIPS3) && defined(MIPS1)
 #define	CLKF_USERMODE(framep)	MIPS1_CLKF_USERMODE(framep)
 #define	CLKF_BASEPRI(framep)	MIPS1_CLKF_BASEPRI(framep)
+#endif
+
+#ifdef IPL_ICU_MASK
+#undef CLKF_BASEPRI
+#define CLKF_BASEPRI(framep)	ICU_CLKF_BASEPRI(framep)
 #endif
 
 #if defined(MIPS3) && defined(MIPS1)
@@ -193,11 +225,6 @@ do {									\
 #define aston(p)	((p)->p_md.md_astpending = 1)
 
 extern int want_resched;		/* resched() was called */
-#ifdef MIPS3
-extern u_int	mips_L2CacheSize;
-extern int	mips_L2CacheIsSnooping; /* L2 cache snoops uncached writes ? */
-extern int	mips_L2CacheMixed;
-#endif /* MIPS3 */
 
 /*
  * Misc prototypes and variable declarations.
@@ -208,7 +235,6 @@ struct user;
 extern struct proc *fpcurproc;
 
 /* trap.c */
-void	child_return __P((void *));
 void	netintr __P((void));
 int	kdbpeek __P((vaddr_t));
 

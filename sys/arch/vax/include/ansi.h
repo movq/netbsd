@@ -1,4 +1,4 @@
-/*	$NetBSD: ansi.h,v 1.13 2001/01/13 03:48:26 matt Exp $	*/
+/*	$NetBSD: ansi.h,v 1.16 2001/09/17 05:40:38 simonb Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -52,23 +52,24 @@
  *
  * Thanks, ANSI!
  */
-#define	_BSD_CLOCK_T_		unsigned long int /* clock() */
 #ifdef __ELF__
+#define	_BSD_CLOCK_T_		unsigned int	/* clock() */
 #define	_BSD_PTRDIFF_T_		long int	/* ptr1 - ptr2 */
 #define	_BSD_SIZE_T_		unsigned long int /* sizeof() */
 #define	_BSD_SSIZE_T_		long int	/* byte count or error */
+#define	_BSD_TIME_T_		int		/* time() */
 #else
+#define	_BSD_CLOCK_T_		unsigned long int /* clock() */
 #define	_BSD_PTRDIFF_T_		int		/* ptr1 - ptr2 */
 #define	_BSD_SIZE_T_		unsigned int	/* sizeof() */
 #define	_BSD_SSIZE_T_		int		/* byte count or error */
-#endif
 #define	_BSD_TIME_T_		long		/* time() */
+#endif
 #if __GNUC_PREREQ__(2,96)
 #define	_BSD_VA_LIST_		__builtin_va_list /* va_list */
 #else
 #define	_BSD_VA_LIST_		char *		/* va_list */
 #endif
-#define	_BSD_WCHAR_T_		int		/* wchar_t */
 #define	_BSD_WINT_T_		int		/* wint_t */
 #define	_BSD_CLOCKID_T_		int		/* clockid_t */
 #define	_BSD_TIMER_T_		int		/* timer_t */

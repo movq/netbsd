@@ -1,4 +1,4 @@
-/*	$NetBSD: mappedcopy.c,v 1.12 2000/06/29 08:13:52 mrg Exp $	*/
+/*	$NetBSD: mappedcopy.c,v 1.15 2001/09/10 21:19:16 chris Exp $	*/
 
 /*
  * XXX This doesn't work yet.  Soon.  --thorpej@netbsd.org
@@ -110,7 +110,7 @@ mappedcopyin(f, t, count)
 		if (fubyte(fromp) == -1)
 			return (EFAULT);
 		/*
-		 * Map in the page and bcopy data in from it
+		 * Map in the page and memcpy data in from it
 		 */
 		if (pmap_extract(upmap, trunc_page((vaddr_t)fromp), &upa)
 		    == FALSE)
@@ -118,16 +118,18 @@ mappedcopyin(f, t, count)
 		len = min(count, (PAGE_SIZE - off));
 		pmap_enter(pmap_kernel(), kva, upa,
 		    VM_PROT_READ, VM_PROT_READ | PMAP_WIRED);
+		pmap_update(pmap_kernel());
 		if (len == PAGE_SIZE && alignable && off == 0)
 			copypage((caddr_t)kva, top);
 		else
-			bcopy((void *)(kva + off), top, len);
+			memcpy(top, (void *)(kva + off), len);
 		fromp += len;
 		top += len;
 		count -= len;
 		off = 0;
 	}
 	pmap_remove(pmap_kernel(), kva, kva + PAGE_SIZE);
+	pmap_update(pmap_kernel());
 	return (0);
 #undef CADDR1
 }
@@ -167,7 +169,7 @@ mappedcopyout(f, t, count)
 		if (subyte(top, *((char *)fromp)) == -1)
 			return (EFAULT);
 		/*
-		 * Map in the page and bcopy data out to it
+		 * Map in the page and memcpy data out to it
 		 */
 		if (pmap_extract(upmap, trunc_page((vaddr_t)top), &upa)
 		    == FALSE)
@@ -176,16 +178,18 @@ mappedcopyout(f, t, count)
 		pmap_enter(pmap_kernel(), kva, upa,
 		    VM_PROT_READ|VM_PROT_WRITE,
 		    VM_PROT_READ|VM_PROT_WRITE|PMAP_WIRED);
+		pmap_update(pmap_kernel());
 		if (len == PAGE_SIZE && alignable && off == 0)
 			copypage(fromp, (caddr_t)kva);
 		else
-			bcopy(fromp, (void *)(kva + off), len);
+			memcpy((void *)(kva + off), fromp, len);
 		fromp += len;
 		top += len;
 		count -= len;
 		off = 0;
 	}
 	pmap_remove(pmap_kernel(), kva, kva + PAGE_SIZE);
+	pmap_update(pmap_kernel());
 	return (0);
 #undef CADDR2
 }

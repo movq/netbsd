@@ -1,5 +1,8 @@
-/*	$NetBSD: vmparam.h,v 1.3 2000/12/30 07:10:21 tsutsui Exp $	*/
+/*	$NetBSD: vmparam.h,v 1.6 2001/06/17 16:01:29 nonaka Exp $	*/
 
+#ifdef NEWPMAP
+#include <powerpc/mpc6xx/vmparam.h>
+#else
 /*-
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
  * Copyright (C) 1995, 1996 TooLs GmbH.
@@ -101,10 +104,14 @@
 
 #define	VM_PHYS_SIZE		(USRIOSIZE * NBPG)
 
+#define	__HAVE_PMAP_PHYSSEG
+
+#ifndef _LOCORE
 struct pmap_physseg {
 	struct pv_entry *pvent;
 	char *attrs;
 };
+#endif /* _LOCORE */
 
 #define VM_PHYSSEG_MAX		32
 #define VM_PHYSSEG_STRAT	VM_PSTRAT_BSEARCH
@@ -114,3 +121,4 @@ struct pmap_physseg {
 #define VM_FREELIST_DEFAULT	0
 
 #endif /* _MACHINE_VMPARAM_H_ */
+#endif

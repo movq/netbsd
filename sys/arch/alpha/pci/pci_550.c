@@ -1,4 +1,4 @@
-/* $NetBSD: pci_550.c,v 1.19 2000/12/28 22:59:07 sommerfeld Exp $ */
+/* $NetBSD: pci_550.c,v 1.22 2001/07/27 00:25:20 thorpej Exp $ */
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -66,7 +66,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: pci_550.c,v 1.19 2000/12/28 22:59:07 sommerfeld Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_550.c,v 1.22 2001/07/27 00:25:20 thorpej Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -120,16 +120,15 @@ void	*dec_550_pciide_compat_intr_establish __P((void *, struct device *,
 /*
  * Some Miata models, notably models with a Cypress PCI-ISA bridge, have
  * a PCI device (the OHCI USB controller) with interrupts tied to ISA IRQ
- * lines.  This IRQ is encoded as:
- *
- *	line = 0xe0 | isa_irq;
+ * lines.  This IRQ is encoded as: line = FLAG | isa_irq. Usually FLAG
+ * is 0xe0, however, it can be 0xf0.  We don't allow 0xf0 | irq15.
  */
-#define	DEC_550_LINE_IS_ISA(line)	((line) >= 0xe0 && (line) <= 0xef)
+#define	DEC_550_LINE_IS_ISA(line)	((line) >= 0xe0 && (line) <= 0xfe)
 #define	DEC_550_LINE_ISA_IRQ(line)	((line) & 0x0f)
 
 struct alpha_shared_intr *dec_550_pci_intr;
 
-void	dec_550_iointr __P((void *framep, unsigned long vec));
+void	dec_550_iointr __P((void *arg, unsigned long vec));
 void	dec_550_intr_enable __P((int irq));
 void	dec_550_intr_disable __P((int irq));
 
@@ -176,8 +175,6 @@ pci_550_pickintr(ccp)
 #if NSIO
 	sio_intr_setup(pc, iot);
 #endif
-
-	set_iointr(dec_550_iointr);
 }
 
 int     
@@ -252,10 +249,11 @@ dec_550_intr_map(pa, ihp)
 	}
 #endif
 
-	if (DEC_550_LINE_IS_ISA(line) == 0 && line >= DEC_550_MAX_IRQ)
-		panic("dec_550_intr_map: dec 550 irq too large (%d)\n",
-		    line);
-
+	if (DEC_550_LINE_IS_ISA(line) == 0 && line >= DEC_550_MAX_IRQ) {
+		printf("dec_550_intr_map: irq %d out of range %d/%d/%d\n",
+		    line, bus, device, function);
+		return (1);
+	}
 	*ihp = line;
 	return (0);
 }
@@ -327,8 +325,11 @@ dec_550_intr_establish(ccv, ih, level, func, arg)
 	cookie = alpha_shared_intr_establish(dec_550_pci_intr, ih, IST_LEVEL,
 	    level, func, arg, "dec 550 irq");
 
-	if (cookie != NULL && alpha_shared_intr_isactive(dec_550_pci_intr, ih))
+	if (cookie != NULL &&
+	    alpha_shared_intr_firstactive(dec_550_pci_intr, ih)) {
+		scb_set(0x900 + SCB_IDXTOVEC(ih), dec_550_iointr, NULL);
 		dec_550_intr_enable(ih);
+	}
 	return (cookie);
 }
 
@@ -362,6 +363,7 @@ dec_550_intr_disestablish(ccv, cookie)
 		dec_550_intr_disable(irq);
 		alpha_shared_intr_set_dfltsharetype(dec_550_pci_intr, irq,
 		    IST_NONE);
+		scb_free(0x900 + SCB_IDXTOVEC(irq));
 	}
  
 	splx(s);
@@ -401,33 +403,23 @@ dec_550_pciide_compat_intr_establish(v, dev, pa, chan, func, arg)
 }
 
 void
-dec_550_iointr(framep, vec)
-	void *framep;
+dec_550_iointr(arg, vec)
+	void *arg;
 	unsigned long vec;
 {
 	int irq; 
 
-	if (vec >= 0x900) {
-		irq = ((vec - 0x900) >> 4);
+	irq = SCB_VECTOIDX(vec - 0x900);
 
-		if (irq >= DEC_550_MAX_IRQ)
-			panic("550_iointr: vec 0x%lx out of range\n", vec);
+	if (irq >= DEC_550_MAX_IRQ)
+		panic("550_iointr: vec 0x%lx out of range\n", vec);
 
-		if (!alpha_shared_intr_dispatch(dec_550_pci_intr, irq)) {
-			alpha_shared_intr_stray(dec_550_pci_intr, irq,
-			    "dec 550 irq");
-			if (ALPHA_SHARED_INTR_DISABLE(dec_550_pci_intr, irq))
-				dec_550_intr_disable(irq);
-		}
-		return;
+	if (!alpha_shared_intr_dispatch(dec_550_pci_intr, irq)) {
+		alpha_shared_intr_stray(dec_550_pci_intr, irq,
+		    "dec 550 irq");
+		if (ALPHA_SHARED_INTR_DISABLE(dec_550_pci_intr, irq))
+			dec_550_intr_disable(irq);
 	}
-#if NSIO
-	if (vec >= 0x800) {
-		sio_iointr(framep, vec);
-		return;
-	}
-#endif
-	panic("dec_550_iointr: weird vec 0x%lx\n", vec);
 }
 
 void

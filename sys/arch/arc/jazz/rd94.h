@@ -1,4 +1,4 @@
-/*	$NetBSD: rd94.h,v 1.1 2000/12/24 09:25:29 ur Exp $	*/
+/*	$NetBSD: rd94.h,v 1.4 2001/06/13 15:11:38 soda Exp $	*/
 /*	$OpenBSD: pica.h,v 1.4 1996/09/14 15:58:28 pefo Exp $ */
 
 /*
@@ -76,7 +76,8 @@
 
 #define RD94LB RD94_V_LOCAL_IO_BASE
 #define	RD94_SYS_SONIC		(RD94LB+0x1000)	/* SONIC base address */
-#define	RD94_SYS_SCSI		(RD94LB+0x2000)	/* SCSI base address */
+#define	RD94_SYS_SCSI0		(RD94LB+0x2000)	/* SCSI0 base address */
+#define	RD94_SYS_SCSI1		(RD94LB+0x3000)	/* SCSI1 base address */
 #define	RD94_SYS_CLOCK		(RD94LB+0x4000)	/* Clock base address */
 #define	RD94_SYS_KBD		(RD94LB+0x5000)	/* Keybrd/mouse base address */
 #define	RD94_SYS_COM1		(RD94LB+0x6000)	/* Com port 1 */
@@ -90,16 +91,8 @@
 #define	RD94_SYS_THERMOMETER	(RD94LB+0x12000)/* DS1620 thermometer */
 
 #define	RD94_SYS_LB_LED		(RD94LB+0xE000)	/* LED/self-test register */
-#define	RD94_SYS_LB_IE		(RD94LB+0xF000)	/* Local bus int enable */
-#define RD94_SYS_LB_IE_PAR1	0x0001		/* Parallel port enable */
-#define	RD94_SYS_LB_IE_FLOPPY	0x0002		/* Floppy ctrl enable */
-#define	RD94_SYS_LB_IE_SOUND	0x0004		/* Sound port enable */
-#define	RD94_SYS_LB_IE_SONIC	0x0008		/* Ethernet ctrl enable */
-#define	RD94_SYS_LB_IE_SCSI	0x0010		/* Scsi crtl enable */
-#define RD94_SYS_LB_IE_KBD	0x0040		/* Keyboard ctrl enable */
-#define RD94_SYS_LB_IE_MOUSE	0x0080		/* Mouse ctrl enable */
-#define	RD94_SYS_LB_IE_COM1	0x0100		/* Serial port 1 enable */
-#define	RD94_SYS_LB_IE_COM2	0x0200		/* Serial port 2 enable */
+#define	RD94_SYS_LB_IE1		(RD94LB+0xF000)	/* Local bus int enable */
+#define	RD94_SYS_LB_IE2		(RD94LB+0xF002)	/* Local bus int enable */
 
 #define	RD94_P_PCI_IO		0x90000000	/* PCI I/O control */
 #define	RD94_V_PCI_IO		0xe2000000

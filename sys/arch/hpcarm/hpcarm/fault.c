@@ -1,4 +1,4 @@
-/*	$NetBSD: fault.c,v 1.2 2001/02/28 18:15:44 bjh21 Exp $	*/
+/*	$NetBSD: fault.c,v 1.10 2001/07/19 16:13:01 wiz Exp $	*/
 
 /*
  * Copyright (c) 1994-1997 Mark Brinicombe.
@@ -70,9 +70,9 @@
 extern int pmap_debug_level;
 #endif	/* PMAP_DEBUG */
 
-int pmap_modified_emulation __P((pmap_t, vm_offset_t));
-int pmap_handled_emulation __P((pmap_t, vm_offset_t));
-pt_entry_t *pmap_pte __P((pmap_t pmap, vm_offset_t va));
+int pmap_modified_emulation __P((pmap_t, vaddr_t));
+int pmap_handled_emulation __P((pmap_t, vaddr_t));
+pt_entry_t *pmap_pte __P((pmap_t pmap, vaddr_t va));
 int cowfault __P((vaddr_t));
 
 int fetchuserword __P((u_int address, u_int *location));
@@ -125,7 +125,7 @@ report_abort(prefix, fault_status, fault_address, fault_pc)
  * void data_abort_handler(trapframe_t *frame)
  *
  * Abort handler called when read/write occurs at an address of
- * a non existant or restricted (access permissions) memory page.
+ * a non existent or restricted (access permissions) memory page.
  * We first need to identify the type of page fault.
  */
 
@@ -217,8 +217,11 @@ copyfault:
 	error = cpu_dataabt_fixup(frame);
 	if (error == ABORT_FIXUP_RETURN)
 		return;
-	if (error == ABORT_FIXUP_FAILED)
+	if (error == ABORT_FIXUP_FAILED) {
+		printf("pc = 0x%08x, insn = ", fault_pc);
+		disassemble(fault_pc);
 		panic("data abort fixup failed\n");
+	}
 
 #ifdef PMAP_DEBUG
 	if (pmap_debug_level >= 0)
@@ -305,7 +308,7 @@ copyfault:
 	we_re_toast:
 		/*
 		 * Were are dead, try and provide some debug
-		 * infomation before dying
+		 * information before dying.
 		 */
 #ifdef DDB
 		printf("Unhandled trap (frame = %p)\n", frame);
@@ -325,14 +328,14 @@ copyfault:
 	 * the page and possibly the page table page.
 	 */
 	{
-		register vm_offset_t va;
+		register vaddr_t va;
 		register struct vmspace *vm = p->p_vmspace;
-		register vm_map_t map;
+		register struct vm_map *map;
 		int rv;
 		vm_prot_t ftype;
-		extern vm_map_t kernel_map;
+		extern struct vm_map *kernel_map;
 
-		va = trunc_page((vm_offset_t)fault_address);
+		va = trunc_page((vaddr_t)fault_address);
 
 #ifdef PMAP_DEBUG
 		if (pmap_debug_level >= 0)
@@ -427,7 +430,7 @@ copyfault:
 		pcb->pcb_onfault = NULL;
 		rv = uvm_fault(map, va, 0, ftype);
 		pcb->pcb_onfault = onfault;
-		if (rv == KERN_SUCCESS)
+		if (rv == 0)
 			goto out;
 
 		if (user == 0) {
@@ -439,7 +442,7 @@ copyfault:
 		}
 
 		report_abort("", fault_status, fault_address, fault_pc);
-		if (rv == KERN_RESOURCE_SHORTAGE) {
+		if (rv == ENOMEM) {
 			printf("UVM: pid %d (%s), uid %d killed: "
 			       "out of swap\n", p->p_pid, p->p_comm,
 			       p->p_cred && p->p_ucred ?
@@ -462,7 +465,7 @@ out:
  * void prefetch_abort_handler(trapframe_t *frame)
  *
  * Abort handler called when instruction execution occurs at
- * a non existant or restricted (access permissions) memory page.
+ * a non existent or restricted (access permissions) memory page.
  * If the address is invalid and we were in SVC mode then panic as
  * the kernel should never prefetch abort.
  * If the address is invalid and the page is mapped then the user process
@@ -567,7 +570,7 @@ prefetch_abort_handler(frame)
 
 	/* Is the page already mapped ? */
 	/* This is debugging for rev K SA110 silicon */
-	pte = pmap_pte(p->p_vmspace->vm_map.pmap, (vm_offset_t)fault_pc);
+	pte = pmap_pte(p->p_vmspace->vm_map.pmap, (vaddr_t)fault_pc);
 	if (pte && *pte != 0) {
 		if (kernel_debug & 1) {
 			printf("prefetch_abort: page is already mapped - pte=%p *pte=%08x\n",
@@ -601,7 +604,7 @@ prefetch_abort_handler(frame)
 			disassemble(fault_pc);
 			printf("return addr=%08x", frame->tf_pc);
 			pte = pmap_pte(p->p_vmspace->vm_map.pmap,
-			    (vm_offset_t)fault_pc);
+			    (vaddr_t)fault_pc);
 			if (pte)
 				printf(" pte=%p *pte=%08x\n", pte, *pte);
 			else
@@ -620,16 +623,17 @@ cowfault(va)
 	vaddr_t va;
 {
 	struct vmspace *vm;
+	int error;
 
 	if (va >= VM_MAXUSER_ADDRESS)
 		return (EFAULT);
 
-	vm = curproc->p_vmspace;
-	if (uvm_fault(&vm->vm_map, va, 0, VM_PROT_READ | VM_PROT_WRITE)
-	    != KERN_SUCCESS)
-		return (EFAULT);
+	/* uvm_fault can't be called from within an interrupt */
+	KASSERT(current_intr_depth == 0);
 
-	return (0);
+	vm = curproc->p_vmspace;
+	error = uvm_fault(&vm->vm_map, va, 0, VM_PROT_READ | VM_PROT_WRITE);
+	return error;
 }
 
 /* End of fault.c */

@@ -1,4 +1,4 @@
-#	$NetBSD: INSTALL,v 1.9 2000/10/02 18:43:35 abs Exp $
+#	$NetBSD: INSTALL,v 1.13 2001/08/26 02:47:36 matt Exp $
 #
 # First try for BEBOX config file
 #
@@ -28,8 +28,9 @@ options 		MINIROOTSIZE=3074	# size of memory disk, in blocks
 #options 	DDB
 #options 	DDB_HISTORY_SIZE=100	# Enable history editing in DDB
 #options 	KTRACE
+options 	NEWPMAP
 
-options 	TCP_COMPAT_42
+#options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
 #options 	COMPAT_43
 #options 	COMPAT_09
 options 	COMPAT_10
@@ -63,6 +64,8 @@ options 	INET
 
 #options 	NFS_BOOT_BOOTPARAM
 
+#options 	TCP_DEBUG	# Record last TCP_NDEBUG packets with SO_DEBUG
+
 config		netbsd	root on ? type ffs
 
 #pseudo-device	vnd		4
@@ -81,6 +84,7 @@ options 	PCIVERBOSE	# verbose PCI device messages
 
 mainbus0 at root
 
+cpu*	at mainbus0
 pci0	at mainbus0 bus ?
 
 ppb*	at pci? dev ? function ?	# PCI-PCI bridges
@@ -107,8 +111,8 @@ lpt0	at isa? port 0x378 irq 7	# standard PC parallel ports
 #mms1	at isa? port 0x238 irq 5
 #pms0	at pckbd? irq 12		# PS/2 auxiliary port mouse
 
-#ncr*	at pci? dev ? function ?	# NCR 538XX SCSI controllers
-#scsibus* at ncr?
+#siop*	at pci? dev ? function ?	# NCR 538XX SCSI controllers
+#scsibus* at siop?
 
 #sd*	at scsibus? target ? lun ?	# SCSI disk drives
 #st*	at scsibus? target ? lun ?	# SCSI tape drives

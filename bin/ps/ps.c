@@ -1,4 +1,4 @@
-/*	$NetBSD: ps.c,v 1.41 2000/06/16 03:51:00 simonb Exp $	*/
+/*	$NetBSD: ps.c,v 1.46 2001/12/20 20:10:34 soren Exp $	*/
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -79,7 +79,7 @@ __COPYRIGHT("@(#) Copyright (c) 1990, 1993, 1994\n\
 #if 0
 static char sccsid[] = "@(#)ps.c	8.4 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: ps.c,v 1.41 2000/06/16 03:51:00 simonb Exp $");
+__RCSID("$NetBSD: ps.c,v 1.46 2001/12/20 20:10:34 soren Exp $");
 #endif
 #endif /* not lint */
 
@@ -391,7 +391,7 @@ main(argc, argv)
 	}
 	if (nentries == 0) {
 		printheader();
-		exit(0);
+		exit(1);
 	}
 	/*
 	 * sort proc list
@@ -445,11 +445,11 @@ main(argc, argv)
 }
 
 static struct kinfo_proc2 *
-getkinfo_kvm(kd, what, flag, nentriesp)
-	kvm_t *kd;
+getkinfo_kvm(kdp, what, flag, nentriesp)
+	kvm_t *kdp;
 	int what, flag, *nentriesp;
 {
-	return (kvm_getproc2(kd, what, flag, sizeof(struct kinfo_proc2),
+	return (kvm_getproc2(kdp, what, flag, sizeof(struct kinfo_proc2),
 	    nentriesp));
 }
 
@@ -461,8 +461,10 @@ scanvars()
 
 	for (vent = vhead; vent; vent = vent->next) {
 		v = vent->var;
-		if (v->flag & COMM)
+		if (v->flag & COMM) {
 			needcomm = 1;
+			break;
+		}
 	}
 }
 
@@ -481,8 +483,6 @@ pscomp(a, b)
 	if (sortby == SORTMEM)
 		return (VSIZE(kb) - VSIZE(ka));
 	i =  ka->p_tdev - kb->p_tdev;
-	if (i == 0)
-		i = ka->p_pid - kb->p_pid;
 
 	if (i == 0)
 		i = ka->p_pid - kb->p_pid;
@@ -558,7 +558,7 @@ usage()
 
 	(void)fprintf(stderr,
 	    "usage:\t%s\n\t   %s\n\t%s\n",
-	    "ps [-aChjKlmrSTuvwx] [-O|o fmt] [-p pid] [-t tty]",
+	    "ps [-acCehjKlmrSTuvwx] [-O|o fmt] [-p pid] [-t tty]",
 	    "[-M core] [-N system] [-W swap] [-U username]",
 	    "ps [-L]");
 	exit(1);

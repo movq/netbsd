@@ -1,4 +1,4 @@
-/*	$NetBSD: ite.c,v 1.24 2000/11/13 15:20:28 minoura Exp $	*/
+/*	$NetBSD: ite.c,v 1.26 2001/10/21 03:46:30 isaki Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -455,6 +455,17 @@ itewrite(dev, uio, flag)
 	return ((*tp->t_linesw->l_write)(tp, uio, flag));
 }
 
+int
+itepoll(dev, events, p)
+	dev_t dev;
+	int events;
+	struct proc *p;
+{
+	register struct tty *tp = ite_tty[UNIT(dev)];
+ 
+	return ((*tp->t_linesw->l_poll)(tp, events, p));
+}
+
 struct tty *
 itetty(dev)
 	dev_t dev;
@@ -510,6 +521,7 @@ iteioctl(dev, cmd, addr, flag, p)
 	case ITELOADFONT:
 		if (addr) {
 			bcopy(addr, kern_font, 4096 /*sizeof (kernel_font)*/);
+			ite_set_glyph();
 			return 0;
 		} else
 			return EFAULT;

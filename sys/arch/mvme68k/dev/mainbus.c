@@ -1,4 +1,4 @@
-/*	$NetBSD: mainbus.c,v 1.7 2000/12/03 15:37:46 scw Exp $	*/
+/*	$NetBSD: mainbus.c,v 1.11 2001/08/12 18:33:13 scw Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -40,6 +40,8 @@
  * Derived from the mainbus code in mvme68k/autoconf.c by Chuck Cranor.
  */
 
+#include "vmetwo.h"
+
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/systm.h>
@@ -54,6 +56,13 @@
 
 #include <mvme68k/dev/mainbus.h>
 
+#if defined(MVME162) || defined(MVME172) || defined(MVME167) || defined(MVME177)
+#if NVMETWO == 0
+#include <dev/vme/vmevar.h>
+#include <mvme68k/dev/mvmebus.h>
+#include <mvme68k/dev/vme_twovar.h>
+#endif
+#endif
 
 void mainbus_attach __P((struct device *, struct device *, void *));
 int mainbus_match __P((struct device *, struct cfdata *, void *));
@@ -72,6 +81,7 @@ struct mainbus_devices {
 #ifdef MVME147
 static struct mainbus_devices mainbusdevs_147[] = {
 	{"pcc", MAINBUS_PCC_OFFSET},
+	{"timekeeper", MAINBUS_TK147_OFFSET},
 	{NULL, 0}
 };
 #endif
@@ -80,10 +90,10 @@ static struct mainbus_devices mainbusdevs_147[] = {
 static struct mainbus_devices mainbusdevs_1x7[] = {
 	{"pcctwo", MAINBUS_PCCTWO_OFFSET},
 	{"vmetwo", MAINBUS_VMETWO_OFFSET},
+	{"timekeeper", MAINBUS_TIMEKEEPER_OFFSET},
 	{NULL, 0}
 };
 #endif
-
 
 struct mvme68k_bus_dma_tag _mainbus_dma_tag = {
 	NULL,
@@ -176,6 +186,62 @@ mainbus_attach(parent, self, args)
 
 		(void) config_found(self, &ma, mainbus_print);
 	}
+
+	/*
+	 * On mvme162 and up, if the kernel config file had no vmetwo0
+	 * device, we have to do some manual initialisation on the
+	 * VMEChip2 to get local interrupts working (ABORT switch,
+	 * hardware assisted soft interrupts).
+	 */
+#if defined(MVME162) || defined(MVME172) || defined(MVME167) || defined(MVME177)
+#if NVMETWO == 0
+#if defined(MVME147)
+	if (machineid != MVME_147)
+#endif
+	{
+		(void) vmetwo_probe(&_mainbus_space_tag,
+		    intiobase_phys + MAINBUS_VMETWO_OFFSET);
+	}
+#endif
+#endif
+
+	/*
+	 * Attach the memory controllers on mvme162->mvme177.
+	 * Note: These *must* be attached after the PCCChip2/MCChip.
+	 * They must also be attached *after* the VMEchip2 has been
+	 * initialised (either by the driver, or the vmetwo_probe()
+	 * call above).
+	 */
+#if defined(MVME162) || defined(MVME172) || defined(MVME167) || defined(MVME177)
+#if defined(MVME147)
+	if (machineid != MVME_147)
+#endif
+	{
+		ma.ma_name = "memc";
+		ma.ma_dmat = &_mainbus_dma_tag;
+		ma.ma_bust = &_mainbus_space_tag;
+		ma.ma_offset = MAINBUS_MEMC1_OFFSET + intiobase_phys;
+		(void) config_found(self, &ma, mainbus_print);
+		ma.ma_offset = MAINBUS_MEMC2_OFFSET + intiobase_phys;
+		(void) config_found(self, &ma, mainbus_print);
+	}
+#endif
+
+	/*
+	 * Attach Industry Pack modules on mvme162 and mvme172
+	 */
+#if defined(MVME162) || defined(MVME172)
+#if defined(MVME147) || defined(MVME167) || defined(MVME177)
+	if (machineid == MVME_162 || machineid == MVME_172)
+#endif
+	{
+		ma.ma_name = "ipack";
+		ma.ma_dmat = &_mainbus_dma_tag;
+		ma.ma_bust = &_mainbus_space_tag;
+		ma.ma_offset = MAINBUS_IPACK_OFFSET + intiobase_phys;
+		(void) config_found(self, &ma, mainbus_print);
+	}
+#endif
 }
 
 int
@@ -190,7 +256,7 @@ mainbus_print(aux, cp)
 	if (cp)
 		printf("%s at %s", ma->ma_name, cp);
 
-	printf(" offset 0x%lx", ma->ma_offset - intiobase_phys);
+	printf(" address 0x%lx", ma->ma_offset);
 
 	return (UNCONF);
 }

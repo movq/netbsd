@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.s,v 1.122 2001/03/02 16:29:41 mhitch Exp $	*/
+/*	$NetBSD: locore.s,v 1.126 2001/11/07 23:25:03 aymeric Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -52,7 +52,10 @@
 #include "opt_compat_svr4.h"
 #include "opt_compat_sunos.h"
 #include "opt_fpsp.h"
+#include "opt_kgdb.h"
 #include "opt_lockdebug.h"
+
+#include "opt_lev6_defer.h"
 
 #include "assym.h"
 #include <machine/asm.h>
@@ -228,7 +231,7 @@ Lbe10:
 	btst	#8,%d0			| data fault?
 	jne	Lbe10a
 	movql	#1,%d0			| user program access FC
-					| (we dont seperate data/program)
+					| (we dont separate data/program)
 	btst	#5,%sp@(FR_HW+8)	| supervisor mode?
 	jeq	Lbe10a			| if no, done
 	movql	#5,%d0			| else supervisor program access
@@ -444,11 +447,14 @@ ENTRY_NOPROFILE(trace)
  */
 
 ENTRY_NOPROFILE(spurintr)
+	addql	#1,_C_LABEL(interrupt_depth)
 	addql	#1,_C_LABEL(intrcnt)+0
 	addql	#1,_C_LABEL(uvmexp)+UVMEXP_INTRS
+	subql	#1,_C_LABEL(interrupt_depth)
 	jra	_ASM_LABEL(rei)
 
 ENTRY_NOPROFILE(lev5intr)
+	addql	#1,_C_LABEL(interrupt_depth)
 	moveml	%d0/%d1/%a0/%a1,%sp@-
 #include "ser.h"
 #if NSER > 0
@@ -460,10 +466,12 @@ ENTRY_NOPROFILE(lev5intr)
 	moveml	%sp@+,%d0/%d1/%a0/%a1
 	addql	#1,_C_LABEL(intrcnt)+20
 	addql	#1,_C_LABEL(uvmexp)+UVMEXP_INTRS
+	subql	#1,_C_LABEL(interrupt_depth)
 	jra	_ASM_LABEL(rei)
 
 #ifdef DRACO
 ENTRY_NOPROFILE(DraCoLev2intr)
+	addql	#1,_C_LABEL(interrupt_depth)
 	moveml	%d0/%d1/%a0/%a1,%sp@-
 
 	CIAAADDR(%a0)
@@ -487,10 +495,12 @@ ENTRY_NOPROFILE(DraCoLev2intr)
 Ldraciaend:
 	moveml	%sp@+,%d0/%d1/%a0/%a1
 	addql	#1,_C_LABEL(uvmexp)+UVMEXP_INTRS
+	subql	#1,_C_LABEL(interrupt_depth)
 	jra	_ASM_LABEL(rei)
 
 /* XXX on the DraCo rev. 4 or later, lev 1 is vectored here. */
 ENTRY_NOPROFILE(DraCoLev1intr)
+	addql	#1,_C_LABEL(interrupt_depth)
 	moveml	%d0/%d1/%a0/%a1,%sp@-
 	movl	_C_LABEL(draco_ioct),%a0
 	btst	#5,%a0@(7)
@@ -519,10 +529,12 @@ Ldrclockretry:
 
 	moveml	%sp@+,%d0/%d1/%a0/%a1
 	addql	#1,_C_LABEL(uvmexp)+UVMEXP_INTRS
+	subql	#1,_C_LABEL(interrupt_depth)
 	jra	_ASM_LABEL(rei)	| XXXX: shouldn't we call the normal lev1?
 
 /* XXX on the DraCo, lev 1, 3, 4, 5 and 6 are vectored here by initcpu() */
 ENTRY_NOPROFILE(DraCoIntr)
+	addql	#1,_C_LABEL(interrupt_depth)
 	moveml  %d0/%d1/%a0/%a1,%sp@-
 Ldrintrcommon:
 	lea	_ASM_LABEL(Drintrcnt)-4,%a0
@@ -535,6 +547,7 @@ Ldrintrcommon:
 	addql	#4,%sp			| pop SR
 	moveml	%sp@+,%d0/%d1/%a0/%a1
 	addql	#1,_C_LABEL(uvmexp)+UVMEXP_INTRS
+	subql	#1,_C_LABEL(interrupt_depth)
 	jra	_ASM_LABEL(rei)
 #endif
 	
@@ -545,6 +558,7 @@ ENTRY_NOPROFILE(lev3intr)
 #ifndef LEV6_DEFER
 ENTRY_NOPROFILE(lev4intr)
 #endif
+	addql	#1,_C_LABEL(interrupt_depth)
 	moveml	%d0/%d1/%a0/%a1,%sp@-
 Lintrcommon:
 	lea	_C_LABEL(intrcnt),%a0
@@ -557,6 +571,7 @@ Lintrcommon:
 	addql	#4,%sp			| pop SR
 	moveml	%sp@+,%d0/%d1/%a0/%a1
 	addql	#1,_C_LABEL(uvmexp)+UVMEXP_INTRS
+	subql	#1,_C_LABEL(interrupt_depth)
 	jra	_ASM_LABEL(rei)
 
 /* XXX used to be ifndef DRACO; vector will be overwritten by initcpu() */
@@ -568,6 +583,7 @@ ENTRY_NOPROFILE(lev6intr)
 	 * as we return. Block generation of level 6 ints until
 	 * we have dealt with this one.
 	 */
+	addql	#1,_C_LABEL(interrupt_depth)
 	moveml	%d0/%a0,%sp@-
 	INTREQRADDR(%a0)
 	movew	%a0@,%d0
@@ -579,15 +595,18 @@ ENTRY_NOPROFILE(lev6intr)
 	movew	#INTF_EXTER,%a0@
 	movew	#INTF_SETCLR+INTF_AUD3,%a0@	| make sure THIS one is ok...
 	moveml	%sp@+,%d0/%a0
+	subql	#1,_C_LABEL(interrupt_depth)
 	rte
 Llev6spur:
 	addql	#1,_C_LABEL(intrcnt)+36	| count spurious level 6 interrupts
 	moveml	%sp@+,%d0/%a0
+	subql	#1,_C_LABEL(interrupt_depth)
 	rte
 
 ENTRY_NOPROFILE(lev4intr)
 ENTRY_NOPROFILE(fake_lev6intr)
 #endif
+	addql	#1,_C_LABEL(interrupt_depth)
 	moveml	%d0/%d1/%a0/%a1,%sp@-
 #ifdef LEV6_DEFER
 	/*
@@ -631,6 +650,7 @@ Lskipciab:
 Llev6done:
 	moveml	%sp@+,%d0/%d1/%a0/%a1	| restore scratch regs
 	addql	#1,_C_LABEL(uvmexp)+UVMEXP_INTRS
+	subql	#1,_C_LABEL(interrupt_depth)
 	jra	_ASM_LABEL(rei)		| all done [can we do rte here?]
 Lchkexter:
 | check to see if EXTER request is really set?

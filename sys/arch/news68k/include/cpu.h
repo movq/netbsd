@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.8 2000/12/19 21:09:57 scw Exp $	*/
+/*	$NetBSD: cpu.h,v 1.10 2001/05/30 12:28:47 mrg Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -49,7 +49,7 @@
  * Exported definitions unique to news68k cpu support.
  */
 
-#if defined(_KERNEL) && !defined(_LKM)
+#if defined(_KERNEL_OPT)
 #include "opt_lockdebug.h"
 #endif
 
@@ -58,7 +58,6 @@
  */
 #include <m68k/cpu.h>
 
-#ifdef news1700
 /*
  * XXX news1700 L2 cache would be corrupted with DC_BE and IC_BE...
  * XXX Should these be defined in machine/cpu.h?
@@ -74,8 +73,6 @@
 
 #define DCIC_CLR	(DC_CLR|IC_CLR)
 #define CACHE_BE	(DC_BE|IC_BE)
-
-#endif
 
 /*
  * Get interrupt glue.

@@ -1,4 +1,4 @@
-/*	$NetBSD: vmparam.h,v 1.16 2001/02/16 16:00:29 eeh Exp $ */
+/*	$NetBSD: vmparam.h,v 1.19 2001/11/15 18:06:18 soren Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -126,17 +126,6 @@
 #endif
 
 /*
- * The time for a process to be blocked before being very swappable.
- * This is a number of seconds which the system takes as being a non-trivial
- * amount of real time.  You probably shouldn't change this;
- * it is used in subtle ways (fractions and multiples of it are, that is, like
- * half of a ``long time'', almost a long time, etc.)
- * It is related to human patience and other factors which don't really
- * change over time.
- */
-#define	MAXSLP 		20
-
-/*
  * Mach derived constants
  */
 
@@ -157,6 +146,8 @@
 
 #define	VM_NFREELIST		1
 #define	VM_FREELIST_DEFAULT	0
+
+#define	__HAVE_PMAP_PHYSSEG
 
 /*
  * pmap specific data stored in the vm_physmem[] array

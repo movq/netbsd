@@ -1,4 +1,4 @@
-/* $NetBSD: scc.c,v 1.52 2000/11/10 11:08:32 itojun Exp $ */
+/* $NetBSD: scc.c,v 1.54 2001/05/02 10:32:12 scw Exp $ */
 
 /*
  * Copyright (c) 1991,1990,1989,1994,1995,1996 Carnegie Mellon University
@@ -64,7 +64,7 @@
  */
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
-__KERNEL_RCSID(0, "$NetBSD: scc.c,v 1.52 2000/11/10 11:08:32 itojun Exp $");
+__KERNEL_RCSID(0, "$NetBSD: scc.c,v 1.54 2001/05/02 10:32:12 scw Exp $");
 
 #include "opt_ddb.h"
 #ifdef alpha
@@ -738,6 +738,20 @@ sccwrite(dev, uio, flag)
 	return ((*tp->t_linesw->l_write)(tp, uio, flag));
 }
 
+int
+sccpoll(dev, events, p)
+	dev_t dev;
+	int events;
+	struct proc *p;
+{
+	register struct scc_softc *sc;
+	register struct tty *tp;
+
+	sc = scc_cd.cd_devs[SCCUNIT(dev)];	/* XXX*/
+	tp = sc->scc_tty[SCCLINE(dev)];
+	return ((*tp->t_linesw->l_poll)(tp, events, p));
+}
+
 struct tty *
 scctty(dev)
 	dev_t dev;
@@ -1050,10 +1064,7 @@ sccintr(xxxsc)
 					(caddr_t) tp->t_outq.c_cf);
 				dp->p_end = dp->p_mem = tp->t_outq.c_cf;
 			}
-			if (tp->t_linesw)
-				(*tp->t_linesw->l_start)(tp);
-			else
-				sccstart(tp);
+			(*tp->t_linesw->l_start)(tp);
 			if (tp->t_outq.c_cc == 0 || !(tp->t_state & TS_BUSY)) {
 				SCC_READ_REG(regs, chan, SCC_RR15, cc);
 				cc &= ~ZSWR15_TXUEOM_IE;

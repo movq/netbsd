@@ -1,4 +1,4 @@
-/*      $NetBSD: pccons.c,v 1.13 2000/11/02 00:31:16 eeh Exp $       */
+/*      $NetBSD: pccons.c,v 1.17 2001/09/18 18:15:50 wiz Exp $       */
 
 /*
  * Copyright 1997
@@ -868,7 +868,7 @@ pcprobe(struct device *parent,
         if ( I8042_MAP(iot, iobase, ioh) == 0 ) 
         {
             /*
-            ** Initalise keyboard controller.  We don't fail the 
+            ** Initialise keyboard controller.  We don't fail the 
             ** probe even if the init failed.  This allows the
             ** console device to be used even if a keyboard
             ** isn't connected.
@@ -1210,7 +1210,7 @@ pcclose(dev_t       dev,
     ** Set up our pointers to the softc and tty structures.
     **
     ** Note : This all assumes that the system wont call us with 
-    **        an invalid (ie. non-existant), device identifier.
+    **        an invalid (ie. non-existent), device identifier.
     */
     struct pc_softc *sc = pc_cd.cd_devs[PCUNIT(dev)];
     struct tty      *tp = sc->sc_tty;
@@ -1317,6 +1317,52 @@ pcwrite(dev_t      dev,
     
     return ((*tp->t_linesw->l_write)(tp, uio, flag));
 } /* End pcwrite() */
+
+
+
+/*
+**++
+**  FUNCTIONAL DESCRIPTION:
+**
+**      Handles a poll operation on the device.  We just
+**      locate the tty device associated with the unit specified
+**      and pass everything on to the line driver.
+**
+**  FORMAL PARAMETERS:
+**      
+**      dev    - Device identifier consisting of major and minor numbers.
+**      events - Events to poll for
+**      p      - The process performing the poll
+**
+**  IMPLICIT INPUTS:
+**
+**      pc_cd - The console driver global anchor structure containing
+**               pointers to all of the softc structures for each unit
+**               (amoung other things).
+**
+**  IMPLICIT OUTPUTS:
+**
+**      none
+**
+**  FUNCTION VALUE:
+**
+**      Returns zero on success and an errno on failure.
+**
+**  SIDE EFFECTS:
+**
+**      none
+**--
+*/
+int
+pcpoll(dev_t       dev, 
+       int         events,
+       struct proc *p)
+{
+    struct pc_softc *sc = pc_cd.cd_devs[PCUNIT(dev)];
+    struct tty      *tp = sc->sc_tty;
+    
+    return ((*tp->t_linesw->l_poll)(tp, events, p));
+} /* End pcpoll() */
 
 
 
@@ -1933,7 +1979,7 @@ pccnprobe(struct consdev *cp)
 	    == 0) 
         {
 	    /*  
-	    ** Initalise the keyboard.  Look for another device if
+	    ** Initialise the keyboard.  Look for another device if
             ** keyboard wont initialise but leave us as a backup display
 	    ** unit.
 	    */

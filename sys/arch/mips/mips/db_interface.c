@@ -1,4 +1,4 @@
-/*	$NetBSD: db_interface.c,v 1.35 2001/01/22 13:56:57 jdolecek Exp $	*/
+/*	$NetBSD: db_interface.c,v 1.38 2001/11/14 18:15:21 thorpej Exp $	*/
 
 /*
  * Mach Operating System
@@ -28,6 +28,7 @@
 
 #include "opt_cputype.h"	/* which mips CPUs do we support? */
 #include "opt_ddb.h"
+#include "opt_kgdb.h"
 
 #include <sys/types.h>
 #include <sys/systm.h>
@@ -38,6 +39,7 @@
 
 #include <uvm/uvm_extern.h>
 
+#include <mips/cache.h>
 #include <mips/pte.h>
 #include <mips/cpu.h>
 #include <mips/locore.h>
@@ -57,38 +59,40 @@
 int	db_active = 0;
 mips_reg_t kdbaux[11]; /* XXX struct switchframe: better inside curpcb? XXX */
 
-void db_tlbdump_cmd __P((db_expr_t, int, db_expr_t, char *));
-void db_kvtophys_cmd __P((db_expr_t, int, db_expr_t, char *));
+void db_tlbdump_cmd(db_expr_t, int, db_expr_t, char *);
+void db_kvtophys_cmd(db_expr_t, int, db_expr_t, char *);
 
-static void	kdbpoke_4 __P((vaddr_t addr, int newval));
-static void	kdbpoke_2 __P((vaddr_t addr, short newval));
-static void	kdbpoke_1 __P((vaddr_t addr, char newval));
-static short	kdbpeek_2 __P((vaddr_t addr));
-static char	kdbpeek_1 __P((vaddr_t addr));
-extern vaddr_t	MachEmulateBranch __P((struct frame *, vaddr_t, unsigned, int));
+static void	kdbpoke_4(vaddr_t addr, int newval);
+static void	kdbpoke_2(vaddr_t addr, short newval);
+static void	kdbpoke_1(vaddr_t addr, char newval);
+static short	kdbpeek_2(vaddr_t addr);
+static char	kdbpeek_1(vaddr_t addr);
+extern vaddr_t	MachEmulateBranch(struct frame *, vaddr_t, unsigned, int);
 
-extern paddr_t kvtophys __P((vaddr_t));
+extern paddr_t kvtophys(vaddr_t);
 
 #ifdef DDB_TRACE
 int
-kdbpeek(addr)
-	vaddr_t addr;
+kdbpeek(vaddr_t addr)
 {
+
 	if (addr == 0 || (addr & 3))
 		return 0;
 	return *(int *)addr;
 }
 #endif
+
 static short
-kdbpeek_2(addr)
-	vaddr_t addr;
+kdbpeek_2(vaddr_t addr)
 {
+
 	return *(short *)addr;
 }
+
 static char
-kdbpeek_1(addr)
-	vaddr_t addr;
+kdbpeek_1(vaddr_t addr)
 {
+
 	return *(char *)addr;
 }
 
@@ -100,6 +104,7 @@ kdbpeek_1(addr)
 static void
 kdbpoke_4(vaddr_t addr, int newval)
 {
+
 	*(int*) addr = newval;
 	wbflush();
 }
@@ -107,6 +112,7 @@ kdbpoke_4(vaddr_t addr, int newval)
 static void
 kdbpoke_2(vaddr_t addr, short newval)
 {
+
 	*(short*) addr = newval;
 	wbflush();
 }
@@ -123,9 +129,9 @@ kdbpoke_1(vaddr_t addr, char newval)
  * Received keyboard interrupt sequence.
  */
 void
-kdb_kbd_trap(tf)
-	int *tf;
+kdb_kbd_trap(int *tf)
 {
+
 	if (db_active == 0 && (boothowto & RB_KDB)) {
 		printf("\n\nkernel: keyboard interrupt\n");
 		ddb_trap(-1, tf);
@@ -135,10 +141,9 @@ kdb_kbd_trap(tf)
 
 #ifndef KGDB
 int
-kdb_trap(type, tfp)
-	int type;
-	mips_reg_t *tfp;	/* struct trapframe */
+kdb_trap(int type, mips_reg_t /* struct trapframe */ *tfp)
 {
+
 	struct frame *f = (struct frame *)&ddb_regs;
 
 #ifdef notyet
@@ -207,16 +212,15 @@ kdb_trap(type, tfp)
 }
 
 void
-cpu_Debugger()
+cpu_Debugger(void)
 {
+
 	asm("break");
 }
 #endif	/* !KGDB */
 
 void
-db_set_ddb_regs(type, tfp)
-	int type;
-	mips_reg_t *tfp;
+db_set_ddb_regs(int type, mips_reg_t *tfp)
 {
 	struct frame *f = (struct frame *)&ddb_regs;
 	
@@ -266,11 +270,9 @@ db_set_ddb_regs(type, tfp)
  * Read bytes from kernel address space for debugger.
  */
 void
-db_read_bytes(addr, size, data)
-	vaddr_t addr;
-	size_t size;
-	char *data;
+db_read_bytes(vaddr_t addr, size_t size, char *data)
 {
+
 	while (size >= 4)
 		*((int*)data)++ = kdbpeek(addr), addr += 4, size -= 4;
 	while (size >= 2)
@@ -283,13 +285,11 @@ db_read_bytes(addr, size, data)
  * Write bytes to kernel address space for debugger.
  */
 void
-db_write_bytes(addr, size, data)
-	vaddr_t addr;
-	size_t size;
-	char *data;
+db_write_bytes(vaddr_t addr, size_t size, char *data)
 {
 	vaddr_t p = addr;
 	size_t n = size;
+
 #ifdef DEBUG_DDB
 	printf("db_write_bytes(%lx, %d, %p, val %x)\n", addr, size, data,
 	       	(addr &3 ) == 0? *(u_int*)addr: -1);
@@ -310,26 +310,15 @@ db_write_bytes(addr, size, data)
 	if (n == 1) {
 		kdbpoke_1(p, *(char*)data);
 	}
-#ifdef MIPS1
-	if (!CPUISMIPS3)
-		mips1_FlushICache((vaddr_t) addr, size);
-#endif
-#ifdef MIPS3
-	if (CPUISMIPS3) {
-		MachHitFlushDCache((vaddr_t) addr, size);
-		MachFlushICache((vaddr_t) addr, size);
-	}
-#endif
+
+	mips_icache_sync_range((vaddr_t) addr, size);
 }
 
 #ifndef KGDB
 void
-db_tlbdump_cmd(addr, have_addr, count, modif)
-	db_expr_t addr;
-	int have_addr;
-	db_expr_t count;
-	char *modif;
+db_tlbdump_cmd(db_expr_t addr, int have_addr, db_expr_t count, char *modif)
 {
+
 #ifdef MIPS1
 	if (!CPUISMIPS3) {
 		struct mips1_tlb {
@@ -337,7 +326,7 @@ db_tlbdump_cmd(addr, have_addr, count, modif)
 			u_int32_t tlb_lo;
 		} tlb;
 		int i;
-		void mips1_TLBRead __P((int, struct mips1_tlb *));
+		void mips1_TLBRead(int, struct mips1_tlb *);
 
 		for (i = 0; i < mips_num_tlb_entries; i++) {
 			mips1_TLBRead(i, &tlb);
@@ -379,12 +368,9 @@ db_tlbdump_cmd(addr, have_addr, count, modif)
 }
 
 void
-db_kvtophys_cmd(addr, have_addr, count, modif)
-	db_expr_t addr;
-	int have_addr;
-	db_expr_t count;
-	char *modif;
+db_kvtophys_cmd(db_expr_t addr, int have_addr, db_expr_t count, char *modif)
 {
+
 	if (!have_addr)
 		return;
 	if (MIPS_KSEG2_START <= addr) {
@@ -403,15 +389,13 @@ const struct db_command db_machine_command_table[] = {
 	{ "tlb",	db_tlbdump_cmd,		0,	0 },
 	{ (char *)0, }
 };
-
 #endif	/* !KGDB */
 
 /*
  * Determine whether the instruction involves a delay slot.
  */
 boolean_t
-inst_branch(inst)
-	int inst;
+inst_branch(int inst)
 {
 	InstFmt i;
 	int delay;
@@ -454,8 +438,7 @@ inst_branch(inst)
  * Determine whether the instruction calls a function.
  */
 boolean_t
-inst_call(inst)
-	int inst;
+inst_call(int inst)
 {
 	boolean_t call;
 	InstFmt i;
@@ -478,8 +461,7 @@ inst_call(inst)
  * This lets the ddb "next" command to work (also need inst_trap_return()).
  */
 boolean_t
-inst_return(inst)
-	int inst;
+inst_return(int inst)
 {
 	InstFmt i;
 
@@ -493,8 +475,7 @@ inst_return(inst)
  * Determine whether the instruction makes a jump.
  */
 boolean_t
-inst_unconditional_flow_transfer(inst)
-	int inst;
+inst_unconditional_flow_transfer(int inst)
 {
 	InstFmt i;
 	boolean_t jump;
@@ -509,8 +490,7 @@ inst_unconditional_flow_transfer(inst)
  * Determine whether the instruction is a load/store as appropriate.
  */
 boolean_t
-inst_load(inst)
-	int inst;
+inst_load(int inst)
 {
 	InstFmt i;
 
@@ -537,8 +517,7 @@ inst_load(inst)
 }
 
 boolean_t
-inst_store(inst)
-	int inst;
+inst_store(int inst)
 {
 	InstFmt i;
 
@@ -566,10 +545,7 @@ inst_store(inst)
  * MachEmulateBranch() runs analysis for branch delay slot.
  */
 db_addr_t
-branch_taken(inst, pc, regs)
-	int inst;
-	db_addr_t pc;
-	db_regs_t *regs;
+branch_taken(int inst, db_addr_t pc, db_regs_t *regs)
 {
 	vaddr_t ra;
 	unsigned fpucsr;
@@ -583,9 +559,7 @@ branch_taken(inst, pc, regs)
  * Return the next pc of an arbitrary instruction.
  */
 db_addr_t
-next_instr_address(pc, bd)
-	db_addr_t pc;
-	boolean_t bd;
+next_instr_address(db_addr_t pc, boolean_t bd)
 {
 	unsigned ins;
 

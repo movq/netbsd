@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.s,v 1.76 2001/02/15 11:49:25 scw Exp $	*/
+/*	$NetBSD: locore.s,v 1.88 2001/07/27 18:58:23 scw Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -47,6 +47,7 @@
 #include "opt_compat_sunos.h"
 #include "opt_fpsp.h"
 #include "opt_ddb.h"
+#include "opt_kgdb.h"
 #include "opt_lockdebug.h"
 
 #include "assym.h"
@@ -159,7 +160,7 @@ ASENTRY_NOPROFILE(start)
 	RELOC(boardid,%a0)
 1:	movb	%a1@+,%a0@+
 	subql	#1,%d0
-	bne	1b
+	jbne	1b
 
 	/*
 	 * Grab the model number from _boardid and use the value
@@ -174,10 +175,10 @@ ASENTRY_NOPROFILE(start)
 	ASRELOC(Lbrdid2mach,%a0)
 Lbrdmatch:
 	cmpw	%a0@+,%d0
-	beqs	Lgotmatch
+	jbeq	Lgotmatch
 	addw	#0x12,%a0		| Each entry is 20-2 bytes long
 	tstw	%a0@
-	bnes	Lbrdmatch
+	jbne	Lbrdmatch
 
 	/*
 	 * If we fall to here, the board is not supported.
@@ -316,14 +317,14 @@ Linit147:
 	movl	#NBPG-1,%d0
 	addl	0xfffe0764,%d0		| Start of offboard segment
 	andl	#-NBPG,%d0		| Round up to page boundary
-	beq	Lsavmaxmem		| Jump if none defined
+	jbeq	Lsavmaxmem		| Jump if none defined
 	movl	#NBPG,%d1		| Note: implicit '+1'
 	addl	0xfffe0768,%d1		| End of offboard segment
 	andl	#-NBPG,%d1		| Round up to page boundary
 	cmpl	%d1,%d0			| Quick and dirty validity check
-	bcss	Loff_ok			| Yup, looks good.
+	jbcs	Loff_ok			| Yup, looks good.
 	movel	%a0@(4),%d1		| Just use onboard RAM otherwise
-	bras	Lsavmaxmem
+	jbra	Lsavmaxmem
 Loff_ok:
 	movl	%d0,%a0@(0x0c)		| phys_seg_list[1].ps_start
 	movl	%d1,%a0@(0x10)		| phys_seg_list[1].ps_end
@@ -338,7 +339,7 @@ Loff_ok:
 Lclearoff:
 	clrl	%a0@+			| zap a word
 	cmpl	%a0,%d1			| reached end?
-	bnes	Lclearoff
+	jbne	Lclearoff
 
 Lsavmaxmem:
 	moveq	#PGSHIFT,%d2
@@ -352,11 +353,27 @@ Lsavmaxmem:
 Linit1x2:
 	/* MVME-162 - 68040 CPU/MMU/FPU */
 	/* MVME-172 - 68060 CPU/MMU/FPU */
+
+	/*
+	 * Verify the user has removed the GPIO#0 jumper...
+	 */
+	btst	#0,0xfff4202d		| Clear == jumper installed
+	jne	1f			| Ok.
+
+	movl	#Le1x2jump,%sp@-
+	movl	#L1x2jump,%sp@-
+	CALLBUG(MVMEPROM_OUTSTRCRLF)
+	addql	#8,%sp			| clean up stack after call
+
+	CALLBUG(MVMEPROM_EXIT)
+	/* NOTREACHED */
+
+1:
 	/*
 	 * Determine if this board has a VMEchip2
 	 */
 	btst	#1,0xfff4202e		| VMEchip2 presence detect
-	jne	1f			| Jump if it doesn't exist.
+	jne	2f			| Jump if it doesn't exist.
 
 	/*
 	 * Disable all interrupts from VMEchip2. This is especially
@@ -368,7 +385,7 @@ Linit1x2:
 	movl	0xfff40088,%d0
 	andl	#0xff7fffff,%d0		| Clear 'MIEN'
 	movl	%d0,0xfff40088
-1:
+2:
 	/*
 	 * Determine how much onboard memory is installed
 	 */
@@ -393,6 +410,14 @@ ASLOCAL(Ldramsize1x2)
 	.long	0x00800000
 	.long	0x00000000
 	.long	0x01000000
+
+L1x2jump:
+	.ascii	"You must remove the jumper from pins 15-16 of J22 (mvme162)"
+	.ascii	"or pins 1-2\015\012"
+	.ascii	"J11 (mvme162-LX) first! See NetBSD/mvme68k FAQ for details."
+Le1x2jump:
+	.even
+
 	.text
 #endif
 
@@ -401,6 +426,22 @@ Linit1x7:
 	/* MVME-167 - 68040 CPU/MMU/FPU */
 	/* MVME-177 - 68060 CPU/MMU/FPU */
 
+	/*
+	 * Verify the user has removed the GPIO#0 jumper...
+	 */
+	movel	#0x00000001,%d0
+	andl	0xfff40088,%d0		| Clear == jumper installed
+	jne	1f			| Ok.
+
+	movl	#Le1x7jump,%sp@-
+	movl	#L1x7jump,%sp@-
+	CALLBUG(MVMEPROM_OUTSTRCRLF)
+	addql	#8,%sp			| clean up stack after call
+
+	CALLBUG(MVMEPROM_EXIT)
+	/* NOTREACHED */
+
+1:
 	/*
 	 * Disable all interrupts from VMEchip2. This is especially
 	 * useful when the kernel doesn't have the VMEchip2 driver
@@ -411,6 +452,16 @@ Linit1x7:
 	movl	0xfff40088,%d0
 	andl	#0xff7fffff,%d0		| Clear 'MIEN'
 	movl	%d0,0xfff40088
+
+	.data
+	.even
+L1x7jump:
+	.ascii	"You must remove the jumper from pins 1-2 of J1!\015\012"
+	.ascii	"See NetBSD/mvme68k FAQ for details."
+Le1x7jump:
+	.even
+
+	.text
 #endif
 
 #if defined(MVME162) || defined(MVME167) || defined(MVME172) || defined(MVME177)
@@ -420,11 +471,11 @@ Lmemcquery:
 	 * the memory controller ASIC(s)
 	 */
 	lea	0xfff43008,%a0		| MEMC040/MEMECC Controller #1
-	bsr	memc040read
+	jbsr	memc040read
 	movl	%d0,%d1
 
 	lea	0xfff43108,%a0		| MEMC040/MEMECC Controller #2
-	bsr	memc040read
+	jbsr	memc040read
 	addl	%d0,%d1
 
 Lis1xx_common:
@@ -460,14 +511,14 @@ Lis1xx_common:
 	movl	#NBPG-1,%d0
 	addl	0xfffc0000,%d0		| Start of offboard segment
 	andl	#-NBPG,%d0		| Round up to page boundary
-	beq	Ldone1xx		| Jump if none defined
+	jbeq	Ldone1xx		| Jump if none defined
 	movl	#NBPG,%d1		| Note: implicit '+1'
 	addl	0xfffc0004,%d1		| End of offboard segment
 	andl	#-NBPG,%d1		| Round up to page boundary
 	cmpl	%d1,%d0			| Quick and dirty validity check
-	bcss	Lramsave1xx		| Yup, looks good.
+	jbcs	Lramsave1xx		| Yup, looks good.
 	movel	%a0@(4),%d1		| Just use onboard RAM otherwise
-	bras	Ldone1xx
+	jbra	Ldone1xx
 
 Lramsave1xx:
 	movl	%d0,%a0@(0x0c)		| phys_seg_list[1].ps_start
@@ -483,7 +534,7 @@ Lramsave1xx:
 Lramclr1xx:
 	clrl	%a0@+			| zap a word
 	cmpl	%a0,%d1			| reached end?
-	bnes	Lramclr1xx
+	jbne	Lramclr1xx
 
 Ldone1xx:
 	moveq	#PGSHIFT,%d2
@@ -655,7 +706,7 @@ Lmemc040ret:
 Lmemc040berr:
 	movl	%d0,%sp			| Get rid of the exception frame
 	movql	#0,%d0			| No ASIC at this location, then!
-	bra	Lmemc040ret		| Done
+	jbra	Lmemc040ret		| Done
 #endif
 
 /*
@@ -807,7 +858,7 @@ Lbe10:
 	btst	#8,%d0			| data fault?
 	jne	Lbe10a
 	movql	#1,%d0			| user program access FC
-					| (we dont seperate data/program)
+					| (we dont separate data/program)
 	btst	#5,%sp@(FR_HW+8)	| supervisor mode?
 	jeq	Lbe10a			| if no, done
 	movql	#5,%d0			| else supervisor program access
@@ -938,14 +989,8 @@ ENTRY_NOPROFILE(trap0)
 	movl	%d0,%sp@-		| push syscall number
 	jbsr	_C_LABEL(syscall)	| handle it
 	addql	#4,%sp			| pop syscall arg
-	tstl	_C_LABEL(astpending)
-	jne	Lrei2
-	tstb	_C_LABEL(ssir)
-	jne	Ltrap1
-	movw	#SPL1,%sr
-	tstb	_C_LABEL(ssir)
-	jeq	Lsir1
-Ltrap1:
+	tstl	_C_LABEL(astpending)	| AST pending?
+	jne	Lrei1			| Yup, go deal with it.
 	movl	%sp@(FR_SP),%a0		| grab and restore
 	movl	%a0,%usp		|   user SP
 	moveml	%sp@+,#0x7FFF		| restore most registers
@@ -1022,7 +1067,7 @@ Lkbrkpt: | Kernel-mode breakpoint or trace trap. (d0=trap_type)
 Lbrkpt1:
 	movl	%a0@+,%a1@+
 	subql	#4,%d1
-	bgt	Lbrkpt1
+	jbgt	Lbrkpt1
 
 Lbrkpt2:
 	| Call the trap handler for the kernel debugger.
@@ -1075,60 +1120,45 @@ Lbrkpt3:
  * Interrupt handlers.
  *
  * For auto-vectored interrupts, the CPU provides the
- * vector 0x18+level.  Note we count spurious interrupts,
- * but don't do anything else with them.
+ * vector 0x18+level.
  *
- * _intrhand_autovec is the entry point for auto-vectored
+ * intrhand_autovec is the entry point for auto-vectored
  * interrupts.
  *
  * For vectored interrupts, we pull the pc, evec, and exception frame
  * and pass them to the vectored interrupt dispatcher.  The vectored
  * interrupt dispatcher will deal with strays.
  *
- * _intrhand_vectored is the entry point for vectored interrupts.
+ * intrhand_vectored is the entry point for vectored interrupts.
  */
 
 #define INTERRUPT_SAVEREG	moveml  #0xC0C0,%sp@-
 #define INTERRUPT_RESTOREREG	moveml  %sp@+,#0x0303
 
-ENTRY_NOPROFILE(spurintr)	/* Level 0 */
-	addql	#1,_C_LABEL(intrcnt)+0
-	addql	#1,_C_LABEL(uvmexp)+UVMEXP_INTRS
-	jra	_ASM_LABEL(rei)
-
-ENTRY_NOPROFILE(intrhand_autovec)	/* Levels 1 through 6 */
-	INTERRUPT_SAVEREG
-	movw	%sp@(22),%sp@-		| push exception vector
-	clrw	%sp@-
-	jbsr	_C_LABEL(isrdispatch_autovec) | call dispatcher
-	addql	#4,%sp
-	INTERRUPT_RESTOREREG
-	jra	_ASM_LABEL(rei)		| all done
-
-ENTRY_NOPROFILE(lev7intr)		/* Level 7: NMI */
-	addql	#1,_C_LABEL(intrcnt)+32
-	clrl	%sp@-
-	moveml	#0xFFFF,%sp@-		| save registers
-	movl	%usp,%a0		| and save
-	movl	%a0,%sp@(FR_SP)		|   the user stack pointer
-	jbsr	_C_LABEL(nmintr)	| call handler: XXX wrapper
-	movl	%sp@(FR_SP),%a0		| restore
-	movl	%a0,%usp		|   user SP
-	moveml	%sp@+,#0x7FFF		| and remaining registers
-	addql	#8,%sp			| pop SP and stack adjust
-	jra	_ASM_LABEL(rei)		| all done
-
-ENTRY_NOPROFILE(intrhand_vectored)
+ENTRY_NOPROFILE(intrhand_autovec)
+	addql	#1,_C_LABEL(interrupt_depth)
 	INTERRUPT_SAVEREG
 	lea	%sp@(16),%a1		| get pointer to frame
 	movl	%a1,%sp@-
-	movw	%sp@(26),%d0
-	movl	%d0,%sp@-		| push exception vector info
-	movl	%sp@(26),%sp@-		| and PC
+	jbsr	_C_LABEL(isrdispatch_autovec)  | call dispatcher
+	addql	#4,%sp
+	jbra	Lintrhand_exit
+
+ENTRY_NOPROFILE(intrhand_vectored)
+	addql	#1,_C_LABEL(interrupt_depth)
+	INTERRUPT_SAVEREG
+	lea	%sp@(16),%a1		| get pointer to frame
+	movl	%a1,%sp@-
+	movw	%sr,%d0
+	bfextu	%d0,21,3,%d0		| Get current ipl
+	movl	%d0,%sp@-		| Push it
 	jbsr	_C_LABEL(isrdispatch_vectored) | call dispatcher
-	lea	%sp@(12),%sp		| pop value args
+	addql	#8,%sp
+Lintrhand_exit:
 	INTERRUPT_RESTOREREG
-	jra	_ASM_LABEL(rei)		| all done
+	subql	#1,_C_LABEL(interrupt_depth)
+
+	/* FALLTHROUGH to rei */
 
 #undef INTERRUPT_SAVEREG
 #undef INTERRUPT_RESTOREREG
@@ -1137,35 +1167,24 @@ ENTRY_NOPROFILE(intrhand_vectored)
  * Emulation of VAX REI instruction.
  *
  * This code deals with checking for and servicing ASTs
- * (profiling, scheduling) and software interrupts (network, softclock).
- * We check for ASTs first, just like the VAX.  To avoid excess overhead
- * the T_ASTFLT handling code will also check for software interrupts so we
- * do not have to do it here.  After identifing that we need an AST we
- * drop the IPL to allow device interrupts.
+ * (profiling, scheduling).
+ * After identifing that we need an AST we drop the IPL to allow device
+ * interrupts.
  *
  * This code is complicated by the fact that sendsig may have been called
  * necessitating a stack cleanup.
- *
- * Note that 'ssir' is zero when a soft interrupt is pending, otherwise it
- * is non-zero. This is because it is tested elsewhere using the m68k `tas'
- * instruction.
  */
-
-BSS(ssir,1)
-
 ASENTRY_NOPROFILE(rei)
 	tstl	_C_LABEL(astpending)	| AST pending?
-	jeq	Lchksir			| no, go check for SIR
-Lrei1:
-	btst	#5,%sp@			| yes, are we returning to user mode?
-	jne	Lchksir			| no, go check for SIR
+	jeq	Ldorte			| Nope. Just return.
+	btst	#5,%sp@			| Returning to kernel mode?
+	jne	Ldorte			| Yup. Can't do ASTs
 	movw	#PSL_LOWIPL,%sr		| lower SPL
 	clrl	%sp@-			| stack adjust
 	moveml	#0xFFFF,%sp@-		| save all registers
 	movl	%usp,%a1		| including
 	movl	%a1,%sp@(FR_SP)		|    the users SP
-Lrei2:
-	clrl	%sp@-			| VA == none
+Lrei1:	clrl	%sp@-			| VA == none
 	clrl	%sp@-			| code == none
 	movl	#T_ASTFLT,%sp@-		| type == async system trap
 	jbsr	_C_LABEL(trap)		| go handle it
@@ -1176,7 +1195,8 @@ Lrei2:
 	jne	Laststkadj		| yes, go to it
 	moveml	%sp@+,#0x7FFF		| no, restore most user regs
 	addql	#8,%sp			| toss SP and stack adjust
-	rte				| and do real RTE
+Ldorte:	rte				| and do real RTE
+
 Laststkadj:
 	lea	%sp@(FR_HW),%a1		| pointer to HW frame
 	addql	#8,%a1			| source pointer
@@ -1188,50 +1208,6 @@ Laststkadj:
 	moveml	%sp@+,#0x7FFF		| restore user registers
 	movl	%sp@,%sp		| and our SP
 	rte				| and do real RTE
-Lchksir:
-	tstb	_C_LABEL(ssir)		| SIR pending?
-	jne	Ldorte			| no, all done
-	movl	%d0,%sp@-		| need a scratch register
-	movw	%sp@(4),%d0		| get SR
-	andw	#PSL_IPL7,%d0		| mask all but IPL
-	jne	Lnosir			| came from interrupt, no can do
-	movl	%sp@+,%d0		| restore scratch register
-Lgotsir:
-	movw	#SPL1,%sr		| prevent others from servicing int
-	tstb	_C_LABEL(ssir)		| too late?
-	jne	Ldorte			| yes, oh well...
-	clrl	%sp@-			| stack adjust
-	moveml	#0xFFFF,%sp@-		| save all registers
-	movl	%usp,%a1		| including
-	movl	%a1,%sp@(FR_SP)		|    the users SP
-Lsir1:
-	clrl	%sp@-			| VA == none
-	clrl	%sp@-			| code == none
-	movl	#T_SSIR,%sp@-		| type == software interrupt
-	jbsr	_C_LABEL(trap)		| go handle it
-	lea	%sp@(12),%sp		| pop value args
-	movl	%sp@(FR_SP),%a0		| restore
-	movl	%a0,%usp		|   user SP
-	moveml	%sp@+,#0x7FFF		| and all remaining registers
-	addql	#8,%sp			| pop SP and stack adjust
-	rte
-Lnosir:
-	movl	%sp@+,%d0		| restore scratch register
-Ldorte:
-	rte				| real return
-
-/*
- * Set processor priority level calls.  Most are implemented with
- * inline asm expansions.  However, spl0 requires special handling
- * as we need to check for our emulated software interrupts.
- */
-
-ENTRY(mvme68k_dossir)
-	subql	#4,%sp			| make room for RTE frame
-	movl	%sp@(4),%sp@(2)		| position return address
-	clrw	%sp@(6)			| set frame type 0
-	movw	#PSL_LOWIPL,%sp@	| and new SR
-	jra	Lgotsir			| go handle it
 
 /*
  * Use common m68k sigcode.
@@ -1265,7 +1241,11 @@ GLOBAL(masterpaddr)		| XXXcompatibility (debuggers)
 
 ASLOCAL(mdpflag)
 	.byte	0		| copy of proc md_flags low byte
+#ifdef __ELF__
+	.align	4
+#else
 	.align	2
+#endif
 
 ASBSS(nullpcb,SIZEOF_PCB)
 
@@ -1450,9 +1430,8 @@ Lswnofpsave:
 	moveml	%a1@(PCB_REGS),#0xFCFC	| and registers
 	movl	%a1@(PCB_USP),%a0
 	movl	%a0,%usp		| and USP
-
-	tstl	_C_LABEL(fputype)	| If we don't have an FPU,
-	jeq	Lnofprest		|  don't try to restore it.
+	tstl	_C_LABEL(fputype)	| Do we have an FPU?
+	jeq	Lnofprest		| No  Then don't attempt restore.
 	lea	%a1@(PCB_FPCTX),%a0	| pointer to FP save area
 #if defined(M68020) || defined(M68030) || defined(M68040)
 #if defined(M68060)
@@ -1463,28 +1442,26 @@ Lswnofpsave:
 	jeq	Lresfprest		| yes, easy
 	fmovem	%a0@(FPF_FPCR),%fpcr/%fpsr/%fpi | restore FP control registers
 	fmovem	%a0@(FPF_REGS),%fp0-%fp7	| restore FP general registers
-Lresfprest:
+#if defined(M68060)
+	jra	Lresfprest
 #endif
-	frestore %a0@			| restore state
-Lnofprest:
-	movw	%a1@(PCB_PS),%sr	| restore PS
-	moveq	#1,%d0			| return 1 (for alternate returns)
-	rts
+#endif
 
 #if defined(M68060)
 Lresfp60rest1:
 	tstb	%a0@(2)			| null state frame?
-	jeq	Lresfp60rest2		| yes, easy
+	jeq	Lresfprest		| yes, easy
 	fmovem	%a0@(FPF_FPCR),%fpcr	| restore FP control registers
 	fmovem	%a0@(FPF_FPSR),%fpsr
 	fmovem	%a0@(FPF_FPI),%fpi
 	fmovem	%a0@(FPF_REGS),%fp0-%fp7 | restore FP general registers
-Lresfp60rest2:
+#endif
+Lresfprest:
 	frestore %a0@			| restore state
+Lnofprest:
 	movw	%a1@(PCB_PS),%sr	| no, restore PS
 	moveq	#1,%d0			| return 1 (for alternate returns)
 	rts
-#endif
 
 /*
  * savectx(pcb)
@@ -1653,7 +1630,11 @@ ENTRY_NOPROFILE(_delay)
 	 * operations and that the loop will run from a single cache
 	 * half-line.
 	 */
+#ifdef __ELF__
 	.align	8
+#else
+	.align	3
+#endif
 L_delay:
 	subl	%d1,%d0
 	jgt	L_delay
@@ -1762,10 +1743,10 @@ Lbootcommon:
 	ASRELOC(tmpstk, %sp)		| physical SP in case of NMI
 	movc	%d3,%vbr		| Restore Bug's VBR
 	andl	#RB_SBOOT, %d1		| mask off
-	bne	Lsboot			| sboot?
+	jbne	Lsboot			| sboot?
 	/* NOT sboot */
 	tstl	%d2			| autoboot?
-	beq	Ldoreset		| yes!
+	jbeq	Ldoreset		| yes!
 	CALLBUG(MVMEPROM_EXIT)		| return to bug
 	/* NOTREACHED */
 
@@ -1777,7 +1758,7 @@ Ldoreset:
 
 Lsboot: /* sboot */
 	tstl	%d2			| autoboot?
-	beq	1f			| yes!
+	jbeq	1f			| yes!
 	jmp 	0x4000			| back to sboot
 1:	jmp	0x400a			| tell sboot to reboot us
 
@@ -1834,7 +1815,10 @@ GLOBAL(intiobase_phys)
 GLOBAL(intiotop_phys)
 	.long	0		| PA of top of board's I/O registers
 
-/* interrupt counters */
+/*
+ * interrupt counters.
+ * XXXSCW: Will go away soon; kept here to keep vmstat happy
+ */
 GLOBAL(intrnames)
 	.asciz	"spur"
 	.asciz	"lev1"

@@ -1,4 +1,4 @@
-/* $NetBSD: intr.h,v 1.7 2001/01/15 20:19:52 thorpej Exp $ */
+/* $NetBSD: intr.h,v 1.10 2001/08/21 22:47:18 bjh21 Exp $ */
 /*-
  * Copyright (c) 1998, 2000 Ben Harris
  * All rights reserved.
@@ -59,7 +59,7 @@
 #define IPL_HIGH	12
 #define NIPL		IPL_HIGH + 1
 
-#if defined(_KERNEL) && !defined(ASSEMBLER)
+#if defined(_KERNEL) && !defined(_LOCORE)
 
 #define splsoftnet()	raisespl(IPL_SOFTNET)
 #define splsoft()	splsoftnet()
@@ -69,13 +69,11 @@
 #define splnet()	raisespl(IPL_NET)
 #define spltty()	raisespl(IPL_TTY)
 #define spllpt()	raisespl(IPL_LPT)
-#define splimp()	raisespl(IPL_IMP)
 #define splvm()		raisespl(IPL_IMP)
 #define	splaudio()	raisespl(IPL_AUDIO)
 #define splserial()	raisespl(IPL_SERIAL)
 #define splclock()	raisespl(IPL_CLOCK)
 #define splstatclock()	raisespl(IPL_STATCLOCK)
-#define splhigh()	raisespl(IPL_HIGH)
 
 #define	splsched()	splhigh()
 #define spllock()	splhigh()
@@ -86,6 +84,7 @@
 
 extern int current_spl_level; /* XXX tautological name */
 
+extern int splhigh(void);
 extern int raisespl(int);
 extern void lowerspl(int);
 extern int hardsplx(int);

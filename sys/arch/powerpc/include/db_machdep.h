@@ -1,5 +1,5 @@
 /*	$OpenBSD: db_machdep.h,v 1.2 1997/03/21 00:48:48 niklas Exp $	*/
-/*	$NetBSD: db_machdep.h,v 1.8 2000/08/02 09:06:56 tsubai Exp $	*/
+/*	$NetBSD: db_machdep.h,v 1.10 2001/06/20 02:40:14 briggs Exp $	*/
 
 /* 
  * Mach Operating System
@@ -37,6 +37,10 @@
 #include <uvm/uvm_param.h>
 #include <machine/trap.h>
 
+#ifdef _KERNEL
+#include "opt_ppcarch.h"
+#endif
+
 #define	DB_ELF_SYMBOLS
 #define	DB_ELFSIZE	32
 
@@ -46,6 +50,13 @@ struct powerpc_saved_state {
 	u_int32_t	r[32];		/* data registers */
 	u_int32_t	iar;
 	u_int32_t	msr;
+	u_int32_t	lr;
+	u_int32_t	ctr;
+	u_int32_t	cr;
+	u_int32_t	xer;
+	u_int32_t	dear;
+	u_int32_t	esr;
+	u_int32_t	pid;
 };
 typedef struct powerpc_saved_state db_regs_t;
 db_regs_t	ddb_regs;		/* register state */
@@ -90,10 +101,39 @@ db_regs_t	ddb_regs;		/* register state */
 #define inst_load(ins)		0
 #define inst_store(ins)		0
 
+/*
+ * GDB's register array is:
+ *  32 4-byte GPRs
+ *  32 8-byte FPRs
+ *   7 4-byte UISA special-purpose registers
+ *  16 4-byte segment registers
+ *  32 4-byte standard OEA special-purpose registers,
+ * and up to 64 4-byte non-standard OES special-purpose registers.
+ * GDB keeps some extra space, so the total size of the register array
+ * they use is 880 bytes (gdb-5.0).
+ */
+typedef long	kgdb_reg_t;
+#define KGDB_NUMREGS	220	/* Treat all registers as 4-byte */
+#define KGDB_BUFLEN	512
+#define KGDB_PPC_PC_REG		96	/* first UISA SP register */
+#define KGDB_PPC_MSR_REG	97
+#define KGDB_PPC_CR_REG		98
+#define KGDB_PPC_LR_REG		99
+#define KGDB_PPC_CTR_REG	100
+#define KGDB_PPC_XER_REG	101
+#define KGDB_PPC_MQ_REG		102
+
 #ifdef _KERNEL
 
 void	kdb_kintr __P((void *));
 int	kdb_trap __P((int, void *));
+
+#ifdef PPC_IBM4XX
+/*
+ * We have machine-dependent commands.
+ */
+#define	DB_MACHINE_COMMANDS
+#endif
 
 #endif /* _KERNEL */
 

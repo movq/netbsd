@@ -1,4 +1,4 @@
-/*	$NetBSD: zs.c,v 1.28 2000/12/03 14:49:50 fvdl Exp $	*/
+/*	$NetBSD: zs.c,v 1.31 2001/10/05 21:53:56 eeh Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -45,6 +45,7 @@
  */
 
 #include "opt_ddb.h"
+#include "opt_kgdb.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -60,7 +61,6 @@
 
 #include <machine/autoconf.h>
 #include <machine/openfirm.h>
-#include <machine/bsd_openprom.h>
 #include <machine/conf.h>
 #include <machine/cpu.h>
 #include <machine/eeprom.h>
@@ -257,7 +257,7 @@ zs_attach_mainbus(parent, self, aux)
 	}
 	zsc->zsc_bustag = sa->sa_bustag;
 	zsc->zsc_dmatag = sa->sa_dmatag;
-	zsc->zsc_promunit = getpropint(sa->sa_node, "slave", -2);
+	zsc->zsc_promunit = PROM_getpropint(sa->sa_node, "slave", -2);
 	zsc->zsc_node = sa->sa_node;
 	zs_attach(zsc, zsaddr[zs_unit], sa->sa_pri);
 }
@@ -320,8 +320,8 @@ zs_attach(zsc, zsd, pri)
 		if ((zsc_args.hwflags & ZS_HWFLAG_CONSOLE_OUTPUT) != 0) {
 			zs_conschan_put = zc;
 		}
-		/* Childs need to set cn_dev, etc */
 
+		/* Children need to set cn_dev, etc */
 		cs->cs_reg_csr  = &zc->zc_csr;
 		cs->cs_reg_data = &zc->zc_data;
 
@@ -368,7 +368,7 @@ zs_attach(zsc, zsd, pri)
 		 */
 		if (child 
 		    && (child->dv_cfdata->cf_driver == &zstty_cd) 
-		    && (getproplen(zsc->zsc_node, "keyboard") == 0)) {
+		    && (PROM_getproplen(zsc->zsc_node, "keyboard") == 0)) {
 			struct kbd_ms_tty_attach_args kma;
 			struct zstty_softc {	
 				/* The following are the only fields we need here */

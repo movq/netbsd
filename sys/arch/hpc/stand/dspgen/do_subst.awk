@@ -1,4 +1,4 @@
-# $NetBSD: do_subst.awk,v 1.2 2001/03/04 16:51:05 uch Exp $
+# $NetBSD: do_subst.awk,v 1.4 2001/04/15 12:27:32 takemura Exp $
 #
 # Copyright (c) 1999, 2000 Christopher G. Demetriou.  All rights reserved.
 #
@@ -82,6 +82,7 @@ BEGIN {
 
 	SRCFILES_ARM = setup_md_files("ARM", "SRCFILE_LIST_ARM", SRCFILES_ARM)
 	SRCFILES_SH3 = setup_md_files("SH3", "SRCFILE_LIST_SH3", SRCFILES_SH3)
+	SRCFILES_SH4 = setup_md_files("SH4", "SRCFILE_LIST_SH3", SRCFILES_SH3)
 	SRCFILES_SH = setup_md_files("SH", "SRCFILE_LIST_SH3", SRCFILES_SH3)
 	SRCFILES_MIPS = setup_md_files("MIPS", "SRCFILE_LIST_MIPS",
 				       SRCFILES_MIPS)
@@ -95,7 +96,9 @@ BEGIN {
 		if (CPPDEFS != "") {
 			CPPDEFS=CPPDEFS " "
 		}
-		CPPDEFS=CPPDEFS "/D \"" a[i] "\""
+		a[i] = gensub("([^\\\\]|^)#", "\\1 ", "g", a[i])
+		a[i] = gensub("\\\\#", "#", "g", a[i])
+		CPPDEFS=CPPDEFS "/D " a[i]
 	}
 	sz = split(ENVIRON["CPPDEF_LIST"], a, "[ \t\n]+");
 	for (i = 1; i <= sz; i++) {
@@ -105,7 +108,9 @@ BEGIN {
 		if (CPPDEFS != "") {
 			CPPDEFS=CPPDEFS " "
 		}
-		CPPDEFS=CPPDEFS "/D \"" a[i] "\""
+		a[i] = gensub("([^\\\\]|^)#", "\\1 ", "g", a[i])
+		a[i] = gensub("\\\\#", "#", "g", a[i])
+		CPPDEFS=CPPDEFS "/D " a[i]
 	}
 
 	INCDIRS=""
@@ -191,6 +196,7 @@ BEGIN {
 	gsub("%%% SRCFILES %%%", SRCFILES)
 	gsub("%%% SRCFILES_ARM %%%", SRCFILES_ARM)
 	gsub("%%% SRCFILES_SH3 %%%", SRCFILES_SH3)
+	gsub("%%% SRCFILES_SH4 %%%", SRCFILES_SH4)
 	gsub("%%% SRCFILES_SH %%%", SRCFILES_SH)
 	gsub("%%% SRCFILES_MIPS %%%", SRCFILES_MIPS)
 	gsub("%%% CPPDEFS %%%", CPPDEFS)

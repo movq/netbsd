@@ -1,4 +1,4 @@
-/*	$NetBSD: cpufunc.h,v 1.1 2001/02/23 21:23:47 reinoud Exp $	*/
+/*	$NetBSD: cpufunc.h,v 1.11 2001/11/14 01:00:06 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1997 Mark Brinicombe.
@@ -166,7 +166,7 @@ extern u_int cputype;
 
 #define cpu_dataabt_fixup(a)		cpufuncs.cf_dataabt_fixup(a)
 #define cpu_prefetchabt_fixup(a)	cpufuncs.cf_prefetchabt_fixup(a)
-#define ABORT_FIXUP_OK		0	/* fixup suceeded */
+#define ABORT_FIXUP_OK		0	/* fixup succeeded */
 #define ABORT_FIXUP_FAILED	1	/* fixup failed */
 #define ABORT_FIXUP_RETURN	2	/* abort handler should return */
 
@@ -177,11 +177,19 @@ int	set_cpufuncs		__P((void));
 #define ARCHITECTURE_NOT_SUPPORTED	2	/* not known */
 
 void	cpufunc_nullop		__P((void));
+int	cpufunc_null_fixup	__P((void *));
+int	early_abort_fixup	__P((void *));
+int	late_abort_fixup	__P((void *));
 u_int	cpufunc_id		__P((void));
 u_int	cpufunc_control		__P((u_int clear, u_int bic));
 void	cpufunc_domains		__P((u_int domains));
 u_int	cpufunc_faultstatus	__P((void));
 u_int	cpufunc_faultaddress	__P((void));
+
+#ifdef CPU_ARM3
+u_int	arm3_control		__P((u_int clear, u_int bic));
+void	arm3_cache_flush	__P((void));
+#endif	/* CPU_ARM3 */
 
 #if defined(CPU_ARM6) || defined(CPU_ARM7)
 void	arm67_setttb		__P((u_int ttb));
@@ -192,16 +200,22 @@ void	arm67_context_switch	__P((void));
 #endif	/* CPU_ARM6 || CPU_ARM7 */
 
 #ifdef CPU_ARM6
-int	arm6_dataabt_fixup	__P((void *arg));
-int	arm6_prefetchabt_fixup	__P((void *arg));
 void	arm6_setup		__P((char *string));
 #endif	/* CPU_ARM6 */
 
 #ifdef CPU_ARM7
-int	arm7_dataabt_fixup	__P((void *arg));
-int	arm7_prefetchabt_fixup	__P((void *arg));
 void	arm7_setup		__P((char *string));
 #endif	/* CPU_ARM7 */
+
+#ifdef CPU_ARM7TDMI
+int	arm7_dataabt_fixup	__P((void *arg));
+void	arm7tdmi_setup		__P((char *string));
+void	arm7tdmi_setttb		__P((u_int ttb));
+void	arm7tdmi_tlb_flushID	__P((void));
+void	arm7tdmi_tlb_flushID_SE	__P((u_int va));
+void	arm7tdmi_cache_flushID	__P((void));
+void	arm7tdmi_context_switch	__P((void));
+#endif /* CPU_ARM7TDMI */
 
 #ifdef CPU_ARM8
 void	arm8_setttb		__P((u_int ttb));
@@ -221,9 +235,6 @@ void	arm8_cache_purgeID_rng	__P((u_int start, u_int end));
 void	arm8_cache_purgeD_rng	__P((u_int start, u_int end));
 void	arm8_cache_syncI_rng	__P((u_int start, u_int end));
 
-int	arm8_dataabt_fixup	__P((void *arg));
-int	arm8_prefetchabt_fixup	__P((void *arg));
-
 void	arm8_context_switch	__P((void));
 
 void	arm8_setup		__P((char *string));
@@ -231,13 +242,43 @@ void	arm8_setup		__P((char *string));
 u_int	arm8_clock_config	__P((u_int, u_int));
 #endif
 
+#ifdef CPU_ARM9
+void	arm9_setttb		__P((u_int));
+
+void	arm9_tlb_flushID_SE	__P((u_int va));
+
+void	arm9_cache_flushID	__P((void));
+void	arm9_cache_flushID_SE	__P((u_int));
+void	arm9_cache_flushI	__P((void));
+void	arm9_cache_flushI_SE	__P((u_int));
+void	arm9_cache_flushD	__P((void));
+void	arm9_cache_flushD_SE	__P((u_int));
+
+void	arm9_cache_cleanID	__P((void));
+
+void	arm9_cache_syncI	__P((void));
+void	arm9_cache_flushID_rng	__P((u_int, u_int));
+void	arm9_cache_flushD_rng	__P((u_int, u_int));
+void	arm9_cache_syncI_rng	__P((u_int, u_int));
+
+void	arm9_context_switch	__P((void));
+
+void	arm9_setup		__P((char *string));
+#endif
+
+#if defined(CPU_ARM9) || defined(CPU_SA110) || defined(CPU_XSCALE)
+void	armv4_tlb_flushID	__P((void));
+void	armv4_tlb_flushI	__P((void));
+void	armv4_tlb_flushD	__P((void));
+void	armv4_tlb_flushD_SE	__P((u_int va));
+
+void	armv4_drain_writebuf	__P((void));
+#endif
+
 #ifdef CPU_SA110
 void	sa110_setttb		__P((u_int ttb));
-void	sa110_tlb_flushID	__P((void));
+
 void	sa110_tlb_flushID_SE	__P((u_int va));
-void	sa110_tlb_flushI	__P((void));
-void	sa110_tlb_flushD	__P((void));
-void	sa110_tlb_flushD_SE	__P((u_int va));
 
 void	sa110_cache_flushID	__P((void));
 void	sa110_cache_flushI	__P((void));
@@ -253,8 +294,6 @@ void	sa110_cache_purgeID_E	__P((u_int entry));
 void	sa110_cache_purgeD	__P((void));
 void	sa110_cache_purgeD_E	__P((u_int entry));
 
-void	sa110_drain_writebuf	__P((void));
-
 void	sa110_cache_syncI	__P((void));
 void	sa110_cache_cleanID_rng	__P((u_int start, u_int end));
 void	sa110_cache_cleanD_rng	__P((u_int start, u_int end));
@@ -262,13 +301,43 @@ void	sa110_cache_purgeID_rng	__P((u_int start, u_int end));
 void	sa110_cache_purgeD_rng	__P((u_int start, u_int end));
 void	sa110_cache_syncI_rng	__P((u_int start, u_int end));
 
-int	sa110_dataabt_fixup	__P((void *arg));
-int	sa110_prefetchabt_fixup	__P((void *arg));
-
 void	sa110_context_switch	__P((void));
 
 void	sa110_setup		__P((char *string));
 #endif	/* CPU_SA110 */
+
+#ifdef CPU_XSCALE
+u_int	xscale_control		__P((u_int clear, u_int bic));
+
+void	xscale_setttb		__P((u_int ttb));
+
+void	xscale_tlb_flushID_SE	__P((u_int va));
+
+void	xscale_cache_flushID	__P((void));
+void	xscale_cache_flushI	__P((void));
+void	xscale_cache_flushD	__P((void));
+void	xscale_cache_flushD_SE	__P((u_int entry));
+
+void	xscale_cache_cleanID	__P((void));
+void	xscale_cache_cleanD	__P((void));
+void	xscale_cache_cleanD_E	__P((u_int entry));
+
+void	xscale_cache_purgeID	__P((void));
+void	xscale_cache_purgeID_E	__P((u_int entry));
+void	xscale_cache_purgeD	__P((void));
+void	xscale_cache_purgeD_E	__P((u_int entry));
+
+void	xscale_cache_syncI	__P((void));
+void	xscale_cache_cleanID_rng	__P((u_int start, u_int end));
+void	xscale_cache_cleanD_rng	__P((u_int start, u_int end));
+void	xscale_cache_purgeID_rng	__P((u_int start, u_int end));
+void	xscale_cache_purgeD_rng	__P((u_int start, u_int end));
+void	xscale_cache_syncI_rng	__P((u_int start, u_int end));
+
+void	xscale_context_switch	__P((void));
+
+void	xscale_setup		__P((char *string));
+#endif	/* CPU_XSCALE */
 
 #define tlb_flush	cpu_tlb_flushID
 #define setttb		cpu_setttb
@@ -292,7 +361,7 @@ void	sa110_setup		__P((char *string));
 
 /*
  * Functions to manipulate the CPSR
- * (in arm32/arm32/setcpsr.S)
+ * (in arm/arm32/setcpsr.S)
  */
 
 u_int SetCPSR		__P((u_int bic, u_int eor));
@@ -300,11 +369,17 @@ u_int GetCPSR		__P((void));
 
 /*
  * Functions to manipulate cpu r13
- * (in arm32/arm32/setstack.S)
+ * (in arm/arm32/setstack.S)
  */
 
 void set_stackptr	__P((u_int mode, u_int address));
 u_int get_stackptr	__P((u_int mode));
+
+/*
+ * Miscellany
+ */
+
+int get_pc_str_offset	__P((void));
 
 /*
  * CPU functions from locore.S

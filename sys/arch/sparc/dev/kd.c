@@ -1,4 +1,4 @@
-/*	$NetBSD: kd.c,v 1.16 2000/11/02 00:42:40 eeh Exp $	*/
+/*	$NetBSD: kd.c,v 1.20 2001/09/26 20:53:05 eeh Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -45,6 +45,9 @@
  * be a keyboard driver (see sys/dev/sun/kbd.c)
  */
 
+#include "opt_kgdb.h"
+#include "fb.h"
+
 #include <sys/param.h>
 #include <sys/proc.h>
 #include <sys/systm.h>
@@ -64,7 +67,7 @@
 #include <machine/autoconf.h>
 #include <machine/conf.h>
 
-#ifdef RASTERCONSOLE
+#if defined(RASTERCONSOLE) && NFB > 0
 #include <dev/sun/fbio.h>
 #include <dev/sun/fbvar.h>
 #endif
@@ -119,7 +122,7 @@ kd_init(kd)
 	/*
 	 * Get the console struct winsize.
 	 */
-#ifdef RASTERCONSOLE
+#if defined(RASTERCONSOLE) && NFB > 0
 	/* If the raster console driver is attached, copy its size */
 	kd->rows = fbrcons_rows();
 	kd->cols = fbrcons_cols();
@@ -144,7 +147,7 @@ kd_init(kd)
 	case PROM_OPENFIRM:
 
 		if (kd->rows == 0 &&
-		    (prop = getpropstring(optionsnode, "screen-#rows"))) {
+		    (prop = PROM_getpropstring(optionsnode, "screen-#rows"))) {
 			int i = 0;
 
 			while (*prop != '\0')
@@ -152,7 +155,7 @@ kd_init(kd)
 			kd->rows = (unsigned short)i;
 		}
 		if (kd->cols == 0 &&
-		    (prop = getpropstring(optionsnode, "screen-#columns"))) {
+		    (prop = PROM_getpropstring(optionsnode, "screen-#columns"))) {
 			int i = 0;
 
 			while (*prop != '\0')
@@ -291,6 +294,21 @@ kdwrite(dev, uio, flag)
 	tp = kd->kd_tty;
 
 	return ((*tp->t_linesw->l_write)(tp, uio, flag));
+}
+
+int
+kdpoll(dev, events, p)
+	dev_t dev;
+	int events;
+	struct proc *p;
+{
+	struct kd_softc *kd;
+	struct tty *tp;
+
+	kd = &kd_softc; 	/* XXX */
+	tp = kd->kd_tty;
+ 
+	return ((*tp->t_linesw->l_poll)(tp, events, p));
 }
 
 int
@@ -623,7 +641,7 @@ prom_get_device_args(prop, args, sz)
 {
 	char *cp, buffer[128];
 
-	cp = getpropstringA(findroot(), (char *)prop, buffer, sizeof buffer);
+	cp = PROM_getpropstringA(findroot(), (char *)prop, buffer, sizeof buffer);
 
 	/*
 	 * Extract device-specific arguments from a PROM device path (if any)

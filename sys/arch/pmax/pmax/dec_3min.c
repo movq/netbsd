@@ -1,4 +1,4 @@
-/* $NetBSD: dec_3min.c,v 1.44 2001/02/11 17:49:08 tsutsui Exp $ */
+/* $NetBSD: dec_3min.c,v 1.49 2001/09/18 16:15:20 tsutsui Exp $ */
 
 /*
  * Copyright (c) 1998 Jonathan Stone.  All rights reserved.
@@ -73,7 +73,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: dec_3min.c,v 1.44 2001/02/11 17:49:08 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dec_3min.c,v 1.49 2001/09/18 16:15:20 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -126,7 +126,7 @@ dec_3min_init()
 	platform.cons_init = dec_3min_cons_init;
 	platform.iointr = dec_3min_intr;
 	platform.intr_establish = dec_3min_intr_establish;
-	platform.memsize = memsize_scan;
+	platform.memsize = memsize_bitmap;
 	platform.clkread = kn02ba_clkread;
 
 	/* clear any memory errors */
@@ -144,7 +144,7 @@ dec_3min_init()
 	splvec.splbio = MIPS_SPL_0_1_2_3;
 	splvec.splnet = MIPS_SPL_0_1_2_3;
 	splvec.spltty = MIPS_SPL_0_1_2_3;
-	splvec.splimp = MIPS_SPL_0_1_2_3;
+	splvec.splvm = MIPS_SPL_0_1_2_3;
 	splvec.splclock = MIPS_SPL_0_1_2_3;
 	splvec.splstatclock = MIPS_SPL_0_1_2_3;
 
@@ -183,7 +183,7 @@ dec_3min_init()
 }
 
 /*
- * Initalize the memory system and I/O buses.
+ * Initialize the memory system and I/O buses.
  */
 static void
 dec_3min_bus_reset()
@@ -362,8 +362,10 @@ dec_3min_intr(status, cause, pc, ipending)
 		if (turnoff)
 			*(u_int32_t *)(ioasic_base + IOASIC_INTR) = ~turnoff;
 
-		if (intr & KMIN_INTR_TIMEOUT)
+		if (intr & KMIN_INTR_TIMEOUT) {
 			kn02ba_errintr();
+			pmax_memerr_evcnt.ev_count++;
+		}
 
 		if (intr & KMIN_INTR_CLOCK) {
 			struct clockframe cf;
@@ -378,7 +380,7 @@ dec_3min_intr(status, cause, pc, ipending)
 			cf.pc = pc;
 			cf.sr = status;
 			hardclock(&cf);
-			intrcnt[HARDCLOCK]++;
+			pmax_clock_evcnt.ev_count++;
 		}
 
 		/* If clock interrups were enabled, re-enable them ASAP. */

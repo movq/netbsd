@@ -1,4 +1,4 @@
-/*	$NetBSD: sid.h,v 1.16 2001/02/04 20:36:27 ragge Exp $	*/
+/*	$NetBSD: sid.h,v 1.21 2001/09/18 16:41:25 ragge Exp $	*/
 
 /*
  * Copyright (c) 1994 Ludd, University of Lule}, Sweden.
@@ -146,7 +146,6 @@
 #define VAX_TYP_MARIAH	18
 #define VAX_TYP_V12	18
  
-#define VAX_BTYP_690	0x12000001	/* VAX 4000 model 400 */
 #define VAX_BTYP_1202	0x12000002	/* VAX 6000 model 510-560 */
 #define VAX_BTYP_46	0x12000004	/* VAXstation 4000/60, 3100/80 */
  
@@ -159,12 +158,18 @@
 #define VAX_BTYP_680	0x13000001	/* VAX 4000 model [45]00 */
 #define	VAX_STYP_675	0x0c		/* VAX 4000 model 400 */
 #define	VAX_STYP_680	0x06		/* VAX 4000 model 500 */
+#define	VAX_STYP_690	0x07		/* VAX 4000 model 600 */
 #define VAX_BTYP_1302	0x13000002
-#define VAX_BTYP_53	0x13000003	/* VAX 4000 model 105A */
+#define VAX_BTYP_53	0x13000003	/* VAX 4000 model 105x, MV 3100/9x */
 #define	VAX_STYP_51	0x09		/* MicroVAX 3100 model 90 / 95 */
 #define	VAX_STYP_52	0x0a		/* VAX 4000 model 100 */
-#define	VAX_STYP_53	0x0b		/* VAX 4000 model 105A */
-#define VAX_BTYP_49	0x13000004	/* MicroVAX 3100 model 90 */
+#define	VAX_STYP_53	0x0b		/* VAX 4000 model 10[568] */
+#define	VAX_STYP_55	0x08		/* MicroVAX 3100 model 85 */
+#define VAX_BTYP_49	0x13000004	/* VAXstation 4000 model 90 */
+#define	VAX_BTYP_681	0x13000005	/* VAX 4000 model 500A/705A */
+#define	VAX_STYP_681	0x0e		/* VAX 4000 model 500A */
+#define	VAX_STYP_691	0x0f		/* VAX 4000 model 605A */
+#define	VAX_STYP_694	0x10		/* VAX 4000 model 705A */
 
 /*
  * SOC chip series (1991)

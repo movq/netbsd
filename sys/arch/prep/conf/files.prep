@@ -1,4 +1,4 @@
-#	$NetBSD: files.prep,v 1.16 2001/01/23 14:12:25 nonaka Exp $
+#	$NetBSD: files.prep,v 1.20 2001/06/20 14:35:23 nonaka Exp $
 #
 # prep-specific configuration info
 #
@@ -6,8 +6,14 @@ maxpartitions 8
 
 maxusers 2 8 64
 
+# IBM
+file    arch/prep/prep/ibm_machdep.c
+file    arch/prep/prep/ibm_6050.c
+file    arch/prep/prep/ibm_7248.c
+
+file    arch/prep/prep/platform.c
+
 file	arch/prep/prep/autoconf.c
-file	arch/prep/prep/bus_dma.c
 file	arch/prep/prep/bus_space.c
 file	arch/prep/prep/clock.c
 file	arch/prep/prep/conf.c
@@ -15,6 +21,10 @@ file	arch/prep/prep/disksubr.c		disk
 file	arch/prep/prep/extintr.c
 file	arch/prep/prep/machdep.c
 file	arch/prep/prep/procfs_machdep.c		procfs
+
+file	arch/powerpc/powerpc/bus_dma.c
+
+# General files
 file	dev/clock_subr.c
 file	dev/cons.c
 
@@ -28,7 +38,8 @@ include "compat/ossaudio/files.ossaudio"
 # Linux binary compatibility (COMPAT_LINUX)
 include "compat/linux/files.linux"
 include "compat/linux/arch/powerpc/files.linux_powerpc"
-file arch/powerpc/powerpc/linux_sigcode.S        compat_linux
+file arch/powerpc/powerpc/linux_sigcode.S	compat_linux
+file arch/powerpc/powerpc/linux_trap.c		compat_linux
 
 #
 # Machine-independent I2O drivers

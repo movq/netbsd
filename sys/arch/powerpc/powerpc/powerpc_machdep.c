@@ -1,9 +1,9 @@
-/*-
- * Copyright (c) 2001 The NetBSD Foundation, Inc.
+/*	$NetBSD: powerpc_machdep.c,v 1.8 2001/08/26 02:47:39 matt Exp $	*/
+
+/*
+ * Copyright (C) 1995, 1996 Wolfgang Solfrank.
+ * Copyright (C) 1995, 1996 TooLs GmbH.
  * All rights reserved.
- *
- * This code is derived from software contributed to The NetBSD Foundation
- * by Matt Thomas <matt@3am-software.com>.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -15,68 +15,61 @@
  *    documentation and/or other materials provided with the distribution.
  * 3. All advertising materials mentioning features or use of this software
  *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
+ *	This product includes software developed by TooLs GmbH.
+ * 4. The name of TooLs GmbH may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
- * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
- * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
- * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY TOOLS GMBH ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL TOOLS GMBH BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-
-__KERNEL_RCSID(0, "$NetBSD: powerpc_machdep.c,v 1.2 2001/02/24 22:39:20 matt Exp $");
-
 #include <sys/param.h>
-#include <sys/types.h>
 #include <sys/conf.h>
-#include <sys/exec.h>
-#include <sys/proc.h>
-#include <sys/user.h>
-#include <sys/sysctl.h>
 #include <sys/disklabel.h>
-#include <uvm/uvm_extern.h>
+#include <sys/exec.h>
+#include <sys/sysctl.h>
+#include <sys/user.h>
 
-#include <machine/frame.h>
-#include <machine/pcb.h>
+int cpu_timebase;
+int cpu_printfataltraps;
 
 /*
  * Set set up registers on exec.
  */
 void
-setregs(struct proc *p, struct exec_package *pack, u_long stack)
+setregs(p, pack, stack)
+	struct proc *p;
+	struct exec_package *pack;
+	u_long stack;
 {
 	struct trapframe *tf = trapframe(p);
 	struct ps_strings arginfo;
 
-	bzero(tf, sizeof *tf);
+	memset(tf, 0, sizeof *tf);
 	tf->fixreg[1] = -roundup(-stack + 8, 16);
 
 	/*
 	 * XXX Machine-independent code has already copied arguments and
 	 * XXX environment to userland.  Get them back here.
 	 */
-	(void)copyin((char *)PS_STRINGS, &arginfo, sizeof(arginfo));
+	(void)copyin((char *)PS_STRINGS, &arginfo, sizeof (arginfo));
 
 	/*
 	 * Set up arguments for _start():
 	 *	_start(argc, argv, envp, obj, cleanup, ps_strings);
 	 *
 	 * Notes:
-	 *	- obj and cleanup are the auxilliary and termination
+	 *	- obj and cleanup are the auxiliary and termination
 	 *	  vectors.  They are fixed up by ld.elf_so.
-	 *	- ps_strings is a NetBSD extention, and will be
+	 *	- ps_strings is a NetBSD extension, and will be
 	 * 	  ignored by executables which are strictly
 	 *	  compliant with the SVR4 ABI.
 	 *
@@ -115,30 +108,33 @@ cpu_sysctl(name, namelen, oldp, oldlenp, newp, newlen, p)
 	switch (name[0]) {
 	case CPU_CACHELINE:
 		return sysctl_rdint(oldp, oldlenp, newp, CACHELINESIZE);
+	case CPU_TIMEBASE:
+		if (cpu_timebase)
+			return sysctl_rdint(oldp, oldlenp, newp, cpu_timebase);
+		break;
+	case CPU_PRINTFATALTRAPS:
+		return sysctl_int(oldp, oldlenp, newp, newlen,
+				  &cpu_printfataltraps);
 	default:
-		return EOPNOTSUPP;
+		break;
 	}
+	return EOPNOTSUPP;
 }
-
 
 /*
  * Crash dump handling.
  */
 u_long dumpmag = 0x8fca0101;		/* magic number */
-long dumplo = -1;			/* blocks */
 int dumpsize = 0;			/* size of dump in pages */
+long dumplo = -1;			/* blocks */
 
 /*
  * This is called by main to set dumplo and dumpsize.
- * Dumps always skip the first NBPG of disk space
- * in case there might be a disk label stored there.
- * If there is extra space, put dump at the end to
- * reduce the chance that swapping trashes it.
  */
 void
-cpu_dumpconf(void)
+cpu_dumpconf()
 {
-	int nblks;	/* size of dump area */
+	int nblks;		/* size of dump device */
 	int skip;
 	int maj;
 
@@ -155,15 +151,14 @@ cpu_dumpconf(void)
 
 	dumpsize = physmem;
 
-	/* Skip enough block at the start of disk to preserve an eventual disklabel */
-	skip = LABELSECTOR + ctod(1);
+	/* Skip enough blocks at start of disk to preserve an eventual disklabel. */
+	skip = LABELSECTOR + 1;
+	skip += ctod(1) - 1;
 	skip = ctod(dtoc(skip));
-
-	/* Always skip the first NBPG, in case there is a label there. */
 	if (dumplo < skip)
 		dumplo = skip;
 
-	/* Put dump at end of partition, and make it fit. */
+	/* Put dump at end of partition */
 	if (dumpsize > dtoc(nblks - dumplo))
 		dumpsize = dtoc(nblks - dumplo);
 	if (dumplo < nblks - ctod(dumpsize))

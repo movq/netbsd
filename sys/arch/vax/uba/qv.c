@@ -1,4 +1,4 @@
-/*	$NetBSD: qv.c,v 1.4 2000/11/02 00:42:41 eeh Exp $	*/
+/*	$NetBSD: qv.c,v 1.6 2001/07/22 13:34:08 wiz Exp $	*/
 
 /*-
  * Copyright (c) 1988
@@ -219,7 +219,7 @@ struct qv_info qv_scn_defaults[] = {
  * Screen controller initialization parameters. The definations and use
  * of these parameters can be found in the Motorola 68045 crtc specs. In
  * essence they set the display parameters for the chip. The first set is
- * for the 15" screen and the second is for the 19" seperate sync. There
+ * for the 15" screen and the second is for the 19" separate sync. There
  * is also a third set for a 19" composite sync monitor which we have not
  * tested and which is not supported.
  */
@@ -495,6 +495,26 @@ qvwrite(dev, uio)
 	return ((*tp->t_linesw->l_write)(tp, uio));
 }
 
+int
+qvpoll(dev, events, p)
+	dev_t dev;
+	int events;
+	struct proc *p;
+{
+	register struct tty *tp;
+	int unit = minor( dev );
+
+	/*
+	 * XXX Should perform similar checks to deprecated `qvselect()'
+	 */
+	tp = &qv_tty[unit];
+	return ((*tp->t_linesw->l_poll)(tp, events, p));
+}
+
+/*
+ * XXX Is qvselect() even useful now?
+ * This driver looks to have suffered some serious bit-rot...
+ */
 
 /*
  * Mouse activity select routine

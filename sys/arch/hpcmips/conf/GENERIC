@@ -2,19 +2,22 @@
 # Distribution kernel (NEC VR based model) kernel config file
 
 #
-# 	$NetBSD: GENERIC,v 1.79 2001/03/02 09:14:36 sato Exp $
+# 	$NetBSD: GENERIC,v 1.96 2001/11/13 17:54:49 augustss Exp $
 #
 include		"arch/hpcmips/conf/std.hpcmips"
 
-#ident 		"GENERIC-$Revision: 1.79 $"
+#ident 		"GENERIC-$Revision: 1.96 $"
 
-maxusers	8
+maxusers	10
 
 options 	MIPS3			# R4000/R4400/R4600 CPUs
 
 # Support for specific models of H/PC MIPS
-options 	VR41X1			# NEC VR41x1 series
 options 	MIPS3_4100		# VR4100 core
+options 	VR41XX			# NEC VR41xx series
+options 	VR4102			# NEC VR4102
+options 	VR4111			# NEC VR4111
+options 	VR4121			# NEC VR4121
 options 	NOFPU			# No FPU
 options 	SOFTFLOAT		# emulate FPU insn
 options 	MIPS3_L2CACHE_ABSENT
@@ -22,10 +25,11 @@ options 	MIPS3_L2CACHE_ABSENT
 # Standard system options
 options 	DDB			# in-kernel debugger
 #options 	DDB_ONPANIC=0		# don't enter debugger on panic
-#options	KGDB			# remote debugger
+#options 	KGDB			# remote debugger
 #options 	DIAGNOSTIC		# extra kernel debugging checks
 #options 	DEBUG			# extra kernel debugging support
 options 	KTRACE			# system call tracing support
+options 	MSGBUFSIZE=8192		# dmesg buffer size
 
 ## UVM options.
 #options 	UVM_PAGE_TRKOWN
@@ -52,7 +56,7 @@ options 	NTP			# network time protocol
 #options 	HPCMIPS_FLUSHCACHE_XXX	# for debug
 
 # Filesystem options
-file-system 	FFS             # fast filesystem with user and group quotas
+file-system 	FFS		# fast filesystem with user and group quotas
 file-system 	MFS		# memory-based filesystem
 file-system 	NFS		# Sun NFS-compatible filesystem (client)
 #file-system	LFS		# Log-based filesystem (still experimental)
@@ -68,7 +72,7 @@ file-system 	PROCFS		# /proc
 file-system 	UNION
 
 #options 	NFSSERVER	# Sun NFS-compatible filesystem (server)
-options 	SOFTDEP         # FFS soft updates support.
+options 	SOFTDEP		# FFS soft updates support.
 #options 	QUOTA		# UFS quotas
 options 	VNODE_OP_NOINLINE # don't inline vnode op calls
 
@@ -94,7 +98,7 @@ config		netbsd		root on ? type ?
 
 # WS console uses SUN or VT100 terminal emulation
 options 	WSEMUL_VT100
-options 	WSDISPLAY_DEFAULTSCREENS=4
+#options 	WSDISPLAY_DEFAULTSCREENS=4
 #options 	FONT_VT220L8x8
 options 	FONT_VT220L8x10
 # compatibility to other console drivers
@@ -106,7 +110,7 @@ options 	WSDISPLAY_COMPAT_RAWKBD		# can get raw scancodes
 # Hpckbd will set key board layout appropriately. You can use option
 # 'PCKBD_LAYOUT' to overrite the default layout.
 #
-#options	PCKBD_LAYOUT="(KB_US | KB_SWAPCTRLCAPS | KB_MACHDEP)"
+#options 	PCKBD_LAYOUT="(KB_US | KB_SWAPCTRLCAPS | KB_MACHDEP)"
 
 # temporally power management
 hpcapm0	at mainbus0			# power management
@@ -127,6 +131,8 @@ vrdsu*	at vrip? addr 0x0b0000e0 size 0x08
 vrpiu*	at vrip? addr 0x0b000120 size 0x1a0 intr 5
 vrled*  at vrip? addr 0x0b000240 size 0x10 intr 17
 
+options 	MQ200_DEBUG
+#options 	MQ200_USECRT
 mqvideo0 at vrip? addr 0x0a000000 size 0x800000	# MQ200 video controller
 hpcfb*		at	mqvideo?
 
@@ -134,6 +140,9 @@ ite8181video0 at vrip? addr 0x0a000000 size 0x800000 # ITE8181 video controller
 hpcfb*		at	ite8181video?
 
 vrc4172pwm*  at vrip? addr 0x15003880 size 0x6 platform NEC_MCR_430
+vrc4172pwm*  at vrip? addr 0x15003880 size 0x6 platform NEC_MCR_510
+vrc4172pwm*  at vrip? addr 0x15003880 size 0x6 platform NEC_MCR_520
+vrc4172pwm*  at vrip? addr 0x15003880 size 0x6 platform NEC_MCR_520A
 vrc4172pwm*  at vrip? addr 0x15003880 size 0x6 platform NEC_MCR_530
 vrc4172pwm*  at vrip? addr 0x15003880 size 0x6 platform NEC_MCR_SIGMARION
 vrc4172pwm*  at vrip? addr 0x15003880 size 0x6 platform NEC_MCR_530A
@@ -176,7 +185,7 @@ wskbd*		at	btnmgr0 mux 1
 #  + Open/Close button: 3
 #  + Application button: 2
 # (PCIC-ISA : 9)
-# (COM power:14)
+# (COM power:46)
 #
 # MC-R700
 # Button to GPIO port # mapping
@@ -201,7 +210,9 @@ button0 at vrgiu? platform IBM_WORKPAD id BTN_REC port 1 active 0
 button1 at vrgiu? platform NEC_MCR_430 id BTN_COVER port 3
 button1 at vrgiu? platform NEC_MCR_510 id BTN_COVER port 3
 button1 at vrgiu? platform NEC_MCR_520 id BTN_COVER port 3
+#button1 at vrgiu? platform NEC_MCR_520A id BTN_COVER port 3
 button1 at vrgiu? platform NEC_MCR_530 id BTN_COVER port 3
+#button1 at vrgiu? platform NEC_MCR_530A id BTN_COVER port 3
 button1 at vrgiu? platform NEC_MCR_SIGMARION id BTN_COVER port 3
 button1 at vrgiu? platform NEC_MCR_7XX id BTN_COVER port 3
 button1 at vrgiu? platform NEC_MCR_3XX id BTN_COVER port 6
@@ -213,15 +224,14 @@ pwctl0 at vrgiu? platform NEC_MCR_3XX id PWCTL_COM0 port 14
 pwctl0 at vrgiu? platform NEC_MCR_430 id PWCTL_COM0 port 46
 pwctl0 at vrgiu? platform NEC_MCR_500 id PWCTL_COM0 port 14
 pwctl0 at vrgiu? platform NEC_MCR_530 id PWCTL_COM0 port 46
+pwctl0 at vrgiu? platform NEC_MCR_530A id PWCTL_COM0 port 46
 #pwctl0 at vrgiu? platform NEC_MCR_SIGMARION id PWCTL_COM0 port 46
 pwctl0 at vrgiu? platform NEC_MCR_7XX id PWCTL_COM0 port 46
 pwctl0 at vrgiu? platform NEC_MCCS id PWCTL_COM0 port 14
-pwctl1 at vrgiu? platform NEC_MCR_300 id PWCTL_LCDLIGHT port 45
-pwctl1 at vrgiu? platform NEC_MCR_FORDOCOMO id PWCTL_LCDLIGHT port 45
+pwctl1 at vrgiu? platform NEC_MCR_3XX id PWCTL_LCDLIGHT port 45
 pwctl1 at vrgiu? platform NEC_MCR_500 id PWCTL_LCDLIGHT port 45
 pwctl1 at vrgiu? platform NEC_MCCS id PWCTL_LCDLIGHT port 45
-pwctl2 at vrgiu? platform NEC_MCR_300 id PWCTL_LCD port 10
-pwctl2 at vrgiu? platform NEC_MCR_FORDOCOMO id PWCTL_LCD port 10
+pwctl2 at vrgiu? platform NEC_MCR_3XX id PWCTL_LCD port 10
 pwctl2 at vrgiu? platform NEC_MCR_500 id PWCTL_LCD port 10
 pwctl2 at vrgiu? platform NEC_MCCS id PWCTL_LCD port 10
 pwctl3 at vrgiu? platform NEC_MCR_3XX id PWCTL_SPEAKER port 12
@@ -229,7 +239,10 @@ pwctl3 at vrgiu? platform NEC_MCR_430 id PWCTL_SPEAKER port 44
 pwctl3 at vrgiu? platform NEC_MCR_500 id PWCTL_SPEAKER port 12
 pwctl3 at vrgiu? platform NEC_MCR_510 id PWCTL_SPEAKER port 44
 pwctl3 at vrgiu? platform NEC_MCR_520 id PWCTL_SPEAKER port 44
+#pwctl3 at vrgiu? platform NEC_MCR_520A id PWCTL_SPEAKER port 44
 pwctl3 at vrgiu? platform NEC_MCR_530 id PWCTL_SPEAKER port 44
+#pwctl3 at vrgiu? platform NEC_MCR_530A id PWCTL_SPEAKER port 44
+#pwctl3 at vrgiu? platform NEC_MCR_SIGMARION id PWCTL_SPEAKER port 44
 pwctl3 at vrgiu? platform IBM_WORKPAD id PWCTL_SPEAKER port 49
 #pwctl4 at vrgiu? platform NEC_MCR_430 id PWCTL_COM1 port 47
 #pwctl4 at vrgiu? platform NEC_MCR_530 id PWCTL_COM1 port 47
@@ -302,15 +315,20 @@ button6 at vrgiu? platform CASIO_CASSIOPEIAE_E55 id BTN_DOWN active 0 port 12
 button7 at vrgiu? platform CASIO_CASSIOPEIAE_E55 id BTN_UP active 0 port 13
 pwctl0 at vrgiu? platform CASIO_CASSIOPEIAE_E55 id PWCTL_COM0 port 38
 pwctl1 at vrgiu? platform CASIO_CASSIOPEIAE_E55 id PWCTL_LCDLIGHT port 26
-vrisab4 at vrgiu? platform CASIO_CASSIOPEIAE_E55 isaportoffset 0xc000
+
+# 'CF hack' for all CASSIOPEIA E series
+vrisab4 at vrgiu? platform CASIO_CASSIOPEIAE_EXX isaportoffset 0xc000
+vrisab4 at vrgiu? platform CASIO_CASSIOPEIAE_EXXX isaportoffset 0xc000
 isa4    at vrisab4
-wdc0    at isa4 port 0x170 irq 0x02000003 flags 0x0010  # AT_POLL
+wdc0    at isa4 port 0x170 irq 0x02000003 flags 0x0002  # single drive
 
 #
-# Unknown machines
+# Fujitsu PenCentra 130
 #
-vrisab4 at vrgiu?
-isa4	at vrisab4
+vrc4172gpio0 at vrgiu? platform FUJITSU_PENCENTRA_130 addr 0x15001080 size 0x4a port 10
+vrisab5 at vrc4172gpio0 isaportoffset 0x1000000
+isa5	at vrisab5
+pcic0   at isa5 port 0x3e0 iomem 0x70000 iosiz 0x4000 irq 0x00010003
 
 # PCMCIA bus support
 pcmcia*	at pcic? controller 0 socket ?
@@ -358,14 +376,19 @@ pseudo-device	vnd		4	# virtual disk ick
 pseudo-device   rnd                     # /dev/random and in-kernel generator
 
 pseudo-device	biconsdev	1	# build-in console device
-pseudo-device	wsmux		2	# mouse & keyboard multiplexor
+pseudo-device	wsmux			# mouse & keyboard multiplexor
 #pseudo-device	md		1	# memory disk device (ramdisk)
 
 #pseudo-device	raid		4	# RAIDframe disk driver
-#options	RAID_AUTOCONFIG		# auto-configuration of RAID components
+#options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
 
 # for IPv6
 pseudo-device	gif		4	# IPv[46] over IPv[46] tunnel (RFC1933)
 #pseudo-device	faith		1	# IPv[46] tcp relay translation i/f
 #pseudo-device	stf		1	# 6to4 IPv6 over IPv4 encapsulation
-pseudo-device	vlan			# IEEE 802.1q encapsulation
+
+## IEEE 802.1Q Virtual LAN encapsulation, see vlan(4).
+pseudo-device	vlan
+
+## Simple inter-network traffic bridging
+#pseudo-device	bridge

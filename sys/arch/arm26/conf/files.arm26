@@ -1,4 +1,4 @@
-# $NetBSD: files.arm26,v 1.23 2001/03/04 20:47:03 matt Exp $
+# $NetBSD: files.arm26,v 1.39 2001/09/20 21:54:11 bjh21 Exp $
 
 # Copyright (c) 1997, 1998, 2000 Ben Harris
 # All rights reserved.
@@ -39,6 +39,8 @@ major { wd = 4 }
 include "dev/scsipi/files.scsipi"
 major   {sd = 5}
 major   {cd = 6}
+
+define fiq
 
 # CPU
 #device	cpu { }
@@ -84,9 +86,10 @@ file	arch/arm26/ioc/ioeb.c			ioeb		needs-flag
 device joy
 attach joy at ioeb
 
-# Latches (random internal use) (usually at bank 5 offset 0x18 and 0x40)
-device	latch
-attach	latch at ioc
+# Latches (random internal use) (usually at ioc0 bank 5)
+device	latches
+attach	latches at ioc
+file	arch/arm26/ioc/latches.c		latches
 
 # On-board keyboard interface
 device	arckbd { }
@@ -108,13 +111,22 @@ attach	wf at wfdc
 #major	{...}
 
 # Econet module (Motorola 6854) (usually at bank 2 fiq 2)
-device	ec: ifnet, arp
-attach	ec at ioc
+device	eca: fiq, eco, ifnet
+attach	eca at ioc
+file	arch/arm26/ioc/if_eca.c			eca		needs-flag
+file	arch/arm26/ioc/if_eca_fiq.S		eca
 
 # On-board Rockwell 6551 serial (usually at bank 3 irq 10/1)
 device	rs: tty
 attach	rs at ioc
 file	arch/arm26/arm26/rscons.c	rs needs-flag
+
+# On-board printer port (usually at bank 5 addr 0x10 irq 0/2)
+device	arcpp
+attach	arcpp at ioc
+file	arch/arm26/ioc/arcpp.c			arcpp		needs-flag
+
+include "dev/podulebus/files.podulebus"
 
 # Podule interface (podules listed later) (usually at bank 4 irq 13 fiq 6)
 #  Unix backplanes also use bank 6
@@ -122,9 +134,7 @@ file	arch/arm26/arm26/rscons.c	rs needs-flag
 # XXX How on Earth do we codify all that?
 device	unixbp
 attach	unixbp at ioc
-device	podulebus { [slot = -1] }
 attach	podulebus at ioc
-define	podloader
 file	arch/arm26/podulebus/podulebus.c	podulebus
 file	arch/arm26/podulebus/podloader_asm.S	podloader	needs-flag
 file	arch/arm26/podulebus/unixbp.c		unixbp		needs-flag
@@ -136,10 +146,6 @@ attach	hdc at podulebus with hdc_podulebus
 device	hd: disk
 attach	hd at hdc
 #major	{hd = ?}
-
-# On-board printer port (usually at bank 5 addr 0x10 irq 0/2)
-device	arclpt
-attach	arclpt at ioc
 
 # VIDC/MEMC audio/video subsystems.
 device	arcvideo: rasops1, rasops2, rasops4, rasops8, wsemuldisplaydev
@@ -168,35 +174,15 @@ file	arch/arm26/iobus/upc_iobus.c		upc_iobus
 # Assorted podules
 #
 
-# Acorn Ether1
-device	ei: ether, ifnet, arp, i82586
-attach	ei at podulebus
-file	arch/arm26/podulebus/if_ei.c		ei
-
-# Acorn/Atomwide Ether3
-device	ea: ether, ifnet, arp, seeq8005
-attach	ea at podulebus
-file	arch/arm26/podulebus/if_ea.c		ea
-
 # i-cubed EtherLAN 100, 200 and 500
 device	eh: ether, ifnet, arp, dp8390nic, podloader
 attach	eh at podulebus
 file	arch/arm26/podulebus/if_eh.c		eh
 
-# D.T. software IDE
-device	dtide {[channel = -1]}: wdc_base, ata, atapi
-attach	dtide at podulebus
-file	arch/arm26/podulebus/dtide.c		dtide
-
-# Generic sbic (WD3393) driver
-define	sbic
-file	arch/arm26/podulebus/sbic.c		sbic
-
-# Acorn SCSI I specific layer for sbic
-device  asc: scsi, sbic
-attach	asc at podulebus
-file	arch/arm26/podulebus/asc.c		asc needs-flag
-
+# PowerROM test driver
+device	powerrom: podloader
+attach	powerrom at podulebus
+file	arch/arm26/podulebus/powerrom.c		powerrom
 
 # Memory disk for installation (or ROM versions?)
 file	dev/md_root.c				memory_disk_hooks
@@ -211,7 +197,6 @@ file	dev/cninit.c
 
 file	arch/arm26/arm26/db_interface.c		ddb
 file	arch/arm26/arm26/db_machdep.c		ddb
-file	arch/arm26/arm26/db_trace.c		ddb
 
 file	arch/arm26/arm26/start.c
 file	arch/arm26/arm26/autoconf.c
@@ -220,13 +205,19 @@ file	arch/arm26/arm26/conf.c
 file	arch/arm26/arm26/cons_machdep.c
 file	arch/arm26/arm26/copyinout.S
 file	arch/arm26/arm26/except.c
+file	arch/arm26/arm26/fiq.c			fiq		needs-flag
+file	arch/arm26/arm26/fiq_util.S		fiq
 file	arch/arm26/arm26/irq.c
 file	arch/arm26/arm26/Locore.c
 file	arch/arm26/arm26/machdep.c
 file	arch/arm26/arm26/mem.c
 file	arch/arm26/arm26/pmap.c
-file	arch/arm26/arm26/procfs_machdep.c	procfs
 #file	arch/arm26/arm26/rscons.c
 file 	arch/arm26/arm26/softintr.c
 file	arch/arm26/arm26/stubs.c
+file	arch/arm26/arm26/sys_machdep.c
 file	arch/arm26/arm26/vm_machdep.c
+
+file	arch/arm/arm/disksubr.c			disk
+file	arch/arm/arm/disksubr_acorn.c		disk
+file	arch/arm/arm/disksubr_mbr.c		disk

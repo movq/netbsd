@@ -1,4 +1,4 @@
-/*	$NetBSD: sw.c,v 1.3 2000/07/09 20:57:47 pk Exp $	*/
+/*	$NetBSD: sw.c,v 1.5 2001/08/20 12:00:51 wiz Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -142,7 +142,6 @@
 
 #ifdef	DEBUG
 int sw_debug = 0;
-static int sw_link_flags = 0 /* | SDEV_DB2 */ ;
 #endif
 
 /*
@@ -373,12 +372,9 @@ sw_attach(parent, self, aux)
 			bitmask_snprintf(sc->sc_options, SW_OPTIONS_BITS,
 			    bits, sizeof(bits)));
 	}
-#ifdef	DEBUG
-	ncr_sc->sc_link.flags |= sw_link_flags;
-#endif
 
-	ncr_sc->sc_link.scsipi_scsi.adapter_target = 7;
-	ncr_sc->sc_adapter.scsipi_minphys = sw_minphys;
+	ncr_sc->sc_channel.chan_id = 7;
+	ncr_sc->sc_adapter.adapt_minphys = sw_minphys;
 
 	/* Initialize sw board */
 	sw_reset_adapter(ncr_sc);
@@ -399,7 +395,7 @@ sw_minphys(struct buf *bp)
 #endif
 		bp->b_bcount = MAX_DMA_LEN;
 	}
-	return (minphys(bp));
+	minphys(bp);
 }
 
 #define CSR_WANT (SW_CSR_SBC_IP | SW_CSR_DMA_IP | \
@@ -680,7 +676,7 @@ sw_intr_off(ncr_sc)
 
 /*
  * This function is called during the COMMAND or MSG_IN phase
- * that preceeds a DATA_IN or DATA_OUT phase, in case we need
+ * that precedes a DATA_IN or DATA_OUT phase, in case we need
  * to setup the DMA engine before the bus enters a DATA phase.
  *
  * On the OBIO version we just clear the DMA count and address

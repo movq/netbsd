@@ -1,6 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2001/01/28 02:52:16 uch Exp $
-
-SUBDIR=	platid_gen
+#	$NetBSD: Makefile,v 1.4 2001/09/24 14:29:30 takemura Exp $
 
 HOST_CC ?= /usr/bin/cc
 
@@ -9,13 +7,13 @@ test: platid_test
 	diff  platid_test.out  platid_test.canon
 
 platid_test: platid.c platid_mask.c platid_test.c platid_name.c
-	ln -sf ./ ./machine
-	ln -sf ../../mips/include ./mips
-	$(HOST_CC) -I. -DPLATID_TEST platid.c platid_mask.c platid_name.c platid_test.c -o $@
+	ln -sf ../../hpcmips/include ./machine
+	$(HOST_CC) -Dhpcmips -Dhpcarm -Dhpcsh -I/usr/include -I. -I../.. -DPLATID_TEST \
+	    platid.c platid_mask.c platid_name.c platid_test.c -o $@
 
 CLEANFILES+=	platid_test platid_test.out machine mips
 
 clean:
-	rm -f machine mips platid_test.out platid_test
+	rm -f machine platid_test.out platid_test
 
 .include <bsd.subdir.mk>

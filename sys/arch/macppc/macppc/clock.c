@@ -1,4 +1,4 @@
-/*	$NetBSD: clock.c,v 1.15 2001/01/01 05:28:54 tsubai Exp $	*/
+/*	$NetBSD: clock.c,v 1.17 2001/06/08 00:32:03 matt Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -39,6 +39,7 @@
 
 #include <dev/ofw/openfirm.h>
 #include <machine/cpu.h>
+#include <machine/autoconf.h>
 
 #include "adb.h"
 
@@ -90,7 +91,7 @@ inittodr(base)
 		return;
 	}
 	clockinitted = 1;
-	time.tv_sec = rtc_time - DIFF19041970;
+	time.tv_sec = rtc_time - DIFF19041970 + rtc_offset * 60;
 
 	deltat = time.tv_sec - base;
 	if (deltat < 0)
@@ -114,15 +115,14 @@ resettodr()
 	u_int rtc_time;
 
 	if (clockinitted) {
-		rtc_time = time.tv_sec + DIFF19041970;
+		rtc_time = time.tv_sec + DIFF19041970 - rtc_offset * 60;
 		adb_set_date_time(rtc_time);
 	}
 #endif
 }
 
 void
-decr_intr(frame)
-	struct clockframe *frame;
+decr_intr(struct clockframe *frame)
 {
 	u_long tb;
 	long tick;
@@ -181,12 +181,12 @@ decr_intr(frame)
 }
 
 void
-cpu_initclocks()
+cpu_initclocks(void)
 {
 }
 
 void
-calc_delayconst()
+calc_delayconst(void)
 {
 	int qhandle, phandle;
 	char type[32];
@@ -230,8 +230,8 @@ found:
 	asm volatile ("mtmsr %0" :: "r"(msr));
 }
 
-static inline u_quad_t
-mftb()
+static __inline u_quad_t
+mftb(void)
 {
 	u_long scratch;
 	u_quad_t tb;
@@ -271,7 +271,7 @@ microtime(tvp)
  */
 void
 delay(n)
-	unsigned n;
+	unsigned int n;
 {
 	u_quad_t tb;
 	u_long tbh, tbl, scratch;

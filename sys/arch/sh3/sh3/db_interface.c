@@ -1,6 +1,7 @@
-/*	$NetBSD: db_interface.c,v 1.3 2000/09/08 10:15:24 tsubai Exp $	*/
+/*	$NetBSD: db_interface.c,v 1.19 2002/05/13 20:30:10 matt Exp $	*/
 
 /*-
+ * Copyright (C) 2002 UCHIYAMA Yasushi.  All rights reserved.
  * Copyright (c) 2000 Tsubai Masanari.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,18 +28,33 @@
  */
 
 #include "opt_ddb.h"
+#include "opt_kgdb.h"
+#include "opt_kstack_debug.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/user.h>
 
 #include <uvm/uvm_extern.h>
 
 #include <dev/cons.h>
 
-#include <machine/cpufunc.h>
 #include <machine/db_machdep.h>
+#include <ddb/db_run.h>
+#include <ddb/db_sym.h>
 
 #include <sh3/ubcreg.h>
+
+extern char *exp_type[];
+extern int exp_types;
+
+#ifndef KGDB
+#include <sh3/cache.h>
+#include <sh3/cache_sh3.h>
+#include <sh3/cache_sh4.h>
+#include <sh3/mmu.h>
+#include <sh3/mmu_sh3.h>
+#include <sh3/mmu_sh4.h>
 
 #include <ddb/db_command.h>
 #include <ddb/db_extern.h>
@@ -48,36 +64,54 @@
 
 void kdb_printtrap(u_int, int);
 
-extern label_t *db_recover;
-extern char *trap_type[];
-extern int trap_types;
+void db_tlbdump_cmd(db_expr_t, int, db_expr_t, char *);
+void __db_tlbdump_page_size_sh4(u_int32_t);
+void __db_tlbdump_pfn(u_int32_t);
+void db_cachedump_cmd(db_expr_t, int, db_expr_t, char *);
+
+void __db_cachedump_sh3(vaddr_t);
+void __db_cachedump_sh4(vaddr_t);
+
+void db_stackcheck_cmd(db_expr_t, int, db_expr_t, char *);
+void db_frame_cmd(db_expr_t, int, db_expr_t, char *);
+void __db_print_symbol(db_expr_t);
+char *__db_procname_by_asid(int);
+
+const struct db_command db_machine_command_table[] = {
+	{ "tlb",	db_tlbdump_cmd,		0,	0 },
+	{ "cache",	db_cachedump_cmd,	0,	0 },
+	{ "frame",	db_frame_cmd,		0,	0 },
+#ifdef KSTACK_DEBUG
+	{ "stack",	db_stackcheck_cmd,	0,	0 },
+#endif
+	{ 0 }
+};
 
 int db_active;
 
 void
-kdb_printtrap(type, code)
-	u_int type;
-	int code;
+kdb_printtrap(u_int type, int code)
 {
-	db_printf("kernel mode trap: ");
-	if (type >= trap_types)
-		db_printf("type %d", type);
+	int i;
+	i = type >> 5;
+
+	db_printf("%s mode trap: ", type & 1 ? "user" : "kernel");
+	if (i >= exp_types)
+		db_printf("type 0x%03x", type & ~1);
 	else
-		db_printf("%s", trap_type[type]);
-	db_printf(" (code = 0x%x)\n", code);
+		db_printf("%s", exp_type[i]);
+
+	db_printf(" code = 0x%x\n", code);
 }
 
 int
-kdb_trap(type, code, regs)
-	int type, code;
-	db_regs_t *regs;
+kdb_trap(int type, int code, db_regs_t *regs)
 {
 	int s;
 
 	switch (type) {
-	case T_NMI:		/* NMI interrupt */
-	case T_TRAP:		/* trapa instruction */
-	case T_USERBREAK:	/* UBC */
+	case EXPEVT_TRAPA:	/* trapa instruction */
+	case EXPEVT_BREAK:	/* UBC */
 	case -1:		/* keyboard interrupt */
 		break;
 	default:
@@ -111,25 +145,26 @@ kdb_trap(type, code, regs)
 void
 cpu_Debugger()
 {
-	breakpoint();
-}
 
-#define M_BSR	0xf000
-#define I_BSR	0xb000
-#define M_BSRF	0xf0ff
-#define I_BSRF	0x0003
-#define M_JSR	0xf0ff
-#define I_JSR	0x400b
-#define M_RTS	0xffff
-#define I_RTS	0x000b
-#define M_RTE	0xffff
-#define I_RTE	0x002b
+	__asm__ __volatile__("trapa %0" :: "i"(_SH_TRA_BREAK));
+}
+#endif /* !KGDB */
+
+#define	M_BSR	0xf000
+#define	I_BSR	0xb000
+#define	M_BSRF	0xf0ff
+#define	I_BSRF	0x0003
+#define	M_JSR	0xf0ff
+#define	I_JSR	0x400b
+#define	M_RTS	0xffff
+#define	I_RTS	0x000b
+#define	M_RTE	0xffff
+#define	I_RTE	0x002b
 
 boolean_t
-inst_call(inst)
-	int inst;
+inst_call(int inst)
 {
-#if BYTE_ORDER == BIG_ENDIAN
+#if _BYTE_ORDER == BIG_ENDIAN
 	inst >>= 16;
 #endif
 	return (inst & M_BSR) == I_BSR || (inst & M_BSRF) == I_BSRF ||
@@ -137,41 +172,445 @@ inst_call(inst)
 }
 
 boolean_t
-inst_return(inst)
-	int inst;
+inst_return(int inst)
 {
-#if BYTE_ORDER == BIG_ENDIAN
+#if _BYTE_ORDER == BIG_ENDIAN
 	inst >>= 16;
 #endif
 	return (inst & M_RTS) == I_RTS;
 }
 
 boolean_t
-inst_trap_return(inst)
-	int inst;
+inst_trap_return(int inst)
 {
-#if BYTE_ORDER == BIG_ENDIAN
+#if _BYTE_ORDER == BIG_ENDIAN
 	inst >>= 16;
 #endif
 	return (inst & M_RTE) == I_RTE;
 }
 
 void
-db_set_single_step(regs)
-	db_regs_t *regs;
+db_set_single_step(db_regs_t *regs)
 {
-	SHREG_BBRA = 0;		/* disable break */
-	SHREG_BARA = 0;		/* break address */
-	SHREG_BASRA = 0;	/* break ASID */
-	SHREG_BAMRA = 0x07;	/* break always */
-	SHREG_BRCR = 0x400;	/* break after each execution */
+
+	_reg_write_2(SH_(BBRA), 0);		/* disable break */
+	_reg_write_4(SH_(BARA), 0);		/* break address */
+	_reg_write_1(SH_(BASRA), 0);		/* break ASID */
+	_reg_write_1(SH_(BAMRA), 0x07);		/* break always */
+	_reg_write_2(SH_(BRCR),  0x400);	/* break after each execution */
 
 	regs->tf_ubc = 0x0014;	/* will be written to BBRA */
 }
 
 void
-db_clear_single_step(regs)
-	db_regs_t *regs;
+db_clear_single_step(db_regs_t *regs)
 {
+
 	regs->tf_ubc = 0;
 }
+
+#ifndef KGDB
+/*
+ * MMU
+ */
+#define	ON(x, c)	((x) & (c) ? '|' : '.')
+void
+db_tlbdump_cmd(db_expr_t addr, int have_addr, db_expr_t count, char *modif)
+{
+	static const char *pr[] = { "_r", "_w", "rr", "ww" };
+	static const char title[] =
+	    "   VPN      ASID    PFN  AREA VDCGWtPR  SZ";
+	static const char title2[] =
+	    "          U/K                       U/K";
+	u_int32_t r, e;
+	int i;
+#ifdef SH3
+	if (CPU_IS_SH3) {
+		/* MMU configuration. */
+		r = _reg_read_4(SH3_MMUCR);
+		db_printf("%s-mode, %s virtual storage mode\n",
+		    r & SH3_MMUCR_IX
+		    ? "ASID + VPN" : "VPN only",
+		    r & SH3_MMUCR_SV ? "single" : "multiple");
+		i = _reg_read_4(SH3_PTEH) & SH3_PTEH_ASID_MASK;
+		db_printf("ASID=%d (%s)", i, __db_procname_by_asid(i));
+
+		db_printf("---TLB DUMP---\n%s\n%s\n", title, title2);
+		for (i = 0; i < SH3_MMU_WAY; i++) {
+			db_printf(" [way %d]\n", i);
+			for (e = 0; e < SH3_MMU_ENTRY; e++) {
+				u_int32_t a;
+				/* address/data array common offset. */
+				a = (e << SH3_MMU_VPN_SHIFT) |
+				    (i << SH3_MMU_WAY_SHIFT);
+
+				r = _reg_read_4(SH3_MMUAA | a);
+				if (r == 0) {
+					db_printf("---------- - --- ----------"
+					    " - ----x --  --\n");
+				} else {
+					vaddr_t va;
+					int asid;
+					asid = r & SH3_MMUAA_D_ASID_MASK;
+					r &= SH3_MMUAA_D_VPN_MASK_1K;
+					va = r | (e << SH3_MMU_VPN_SHIFT);
+					db_printf("0x%08lx %c %3d", va,
+					    (int)va < 0 ? 'K' : 'U', asid);
+
+					r = _reg_read_4(SH3_MMUDA | a);
+					__db_tlbdump_pfn(r);
+
+					db_printf(" %c%c%c%cx %s %2dK\n",
+					    ON(r, SH3_MMUDA_D_V),
+					    ON(r, SH3_MMUDA_D_D),
+					    ON(r, SH3_MMUDA_D_C),
+					    ON(r, SH3_MMUDA_D_SH),
+					    pr[(r & SH3_MMUDA_D_PR_MASK) >>
+						SH3_MMUDA_D_PR_SHIFT],
+					    r & SH3_MMUDA_D_SZ ? 4 : 1);
+				}
+			}
+		}
+	}
+#endif /* SH3 */
+#ifdef SH4
+	if (CPU_IS_SH4) {
+		/* MMU configuration */
+		r = _reg_read_4(SH4_MMUCR);
+		db_printf("%s virtual storage mode, SQ access: (kernel%s)\n",
+		    r & SH3_MMUCR_SV ? "single" : "multiple",
+		    r & SH4_MMUCR_SQMD ? "" : "/user");
+		db_printf("random counter limit=%d\n", (r & SH4_MMUCR_URB_MASK) >>
+		    SH4_MMUCR_URB_SHIFT);
+		i = _reg_read_4(SH4_PTEH) & SH4_PTEH_ASID_MASK;
+		db_printf("ASID=%d (%s)", i, __db_procname_by_asid(i));
+
+		/* Dump ITLB */
+		db_printf("---ITLB DUMP ---\n%s TC SA\n%s\n", title, title2);
+		for (i = 0; i < 4; i++) {
+			e = i << SH4_ITLB_E_SHIFT;
+			r = _reg_read_4(SH4_ITLB_AA | e);
+			db_printf("0x%08x %3d",
+			    r & SH4_ITLB_AA_VPN_MASK,
+			    r & SH4_ITLB_AA_ASID_MASK);
+			r = _reg_read_4(SH4_ITLB_DA1 | e);
+			__db_tlbdump_pfn(r);
+			db_printf(" %c_%c%c_ %s ",
+			    ON(r, SH4_ITLB_DA1_V),
+			    ON(r, SH4_ITLB_DA1_C),
+			    ON(r, SH4_ITLB_DA1_SH),
+			    pr[(r & SH4_ITLB_DA1_PR) >>
+				SH4_UTLB_DA1_PR_SHIFT]);
+			__db_tlbdump_page_size_sh4(r);
+			r = _reg_read_4(SH4_ITLB_DA2 | e);
+			db_printf(" %c  %d\n",
+			    ON(r, SH4_ITLB_DA2_TC),
+			    r & SH4_ITLB_DA2_SA_MASK);
+		}
+		/* Dump UTLB */
+		db_printf("---UTLB DUMP---\n%s TC SA\n%s\n", title, title2);
+		for (i = 0; i < 64; i++) {
+			e = i << SH4_UTLB_E_SHIFT;
+			r = _reg_read_4(SH4_UTLB_AA | e);
+			db_printf("0x%08x %3d",
+			    r & SH4_UTLB_AA_VPN_MASK,
+			    r & SH4_UTLB_AA_ASID_MASK);
+			r = _reg_read_4(SH4_UTLB_DA1 | e);
+			__db_tlbdump_pfn(r);
+			db_printf(" %c%c%c%c%c %s ",
+			    ON(r, SH4_UTLB_DA1_V),
+			    ON(r, SH4_UTLB_DA1_D),
+			    ON(r, SH4_UTLB_DA1_C),
+			    ON(r, SH4_UTLB_DA1_SH),
+			    ON(r, SH4_UTLB_DA1_WT),
+			    pr[(r & SH4_UTLB_DA1_PR_MASK) >>
+				SH4_UTLB_DA1_PR_SHIFT]
+			    );
+			__db_tlbdump_page_size_sh4(r);
+			r = _reg_read_4(SH4_UTLB_DA2 | e);
+			db_printf(" %c  %d\n",
+			    ON(r, SH4_UTLB_DA2_TC),
+			    r & SH4_UTLB_DA2_SA_MASK);
+		}
+	}
+#endif /* SH4 */
+}
+
+void
+__db_tlbdump_pfn(u_int32_t r)
+{
+	u_int32_t pa = (r & SH3_MMUDA_D_PPN_MASK);
+
+	db_printf(" 0x%08x %d", pa, (pa >> 26) & 7);
+}
+
+char *
+__db_procname_by_asid(int asid)
+{
+	static char notfound[] = "---";
+	struct proc *p;
+
+	LIST_FOREACH(p, &allproc, p_list) {
+		if (p->p_vmspace->vm_map.pmap->pm_asid == asid)
+			return (p->p_comm);
+	}
+
+	return (notfound);
+}
+
+#ifdef SH4
+void
+__db_tlbdump_page_size_sh4(u_int32_t r)
+{
+	switch (r & SH4_PTEL_SZ_MASK) {
+	case SH4_PTEL_SZ_1K:
+		db_printf(" 1K");
+		break;
+	case SH4_PTEL_SZ_4K:
+		db_printf(" 4K");
+		break;
+	case SH4_PTEL_SZ_64K:
+		db_printf("64K");
+		break;
+	case SH4_PTEL_SZ_1M:
+		db_printf(" 1M");
+		break;
+	}
+}
+#endif /* SH4 */
+
+/*
+ * CACHE
+ */
+void
+db_cachedump_cmd(db_expr_t addr, int have_addr, db_expr_t count, char *modif)
+{
+#ifdef SH3
+	if (CPU_IS_SH3)
+		__db_cachedump_sh3(have_addr ? addr : 0);
+#endif
+#ifdef SH4
+	if (CPU_IS_SH4)
+		__db_cachedump_sh4(have_addr ? addr : 0);
+#endif
+}
+
+#ifdef SH3
+void
+__db_cachedump_sh3(vaddr_t va_start)
+{
+	u_int32_t r;
+	vaddr_t va, va_end, cca;
+	int entry, way;
+
+	RUN_P2;
+	/* disable cache */
+	_reg_write_4(SH3_CCR,
+	    _reg_read_4(SH3_CCR) & ~SH3_CCR_CE);
+
+	if (va_start) {
+		va = va_start & ~(sh_cache_line_size - 1);
+		va_end = va + sh_cache_line_size;
+	} else {
+		va = 0;
+		va_end = sh_cache_way_size;
+	}
+
+	db_printf("%d-way, way-size=%dB, way-shift=%d, entry-mask=%08x, "
+	    "line-size=%dB \n", sh_cache_ways, sh_cache_way_size,
+	    sh_cache_way_shift, sh_cache_entry_mask, sh_cache_line_size);
+	db_printf("Entry  Way 0  UV   Way 1  UV   Way 2  UV   Way 3  UV\n");
+	for (; va < va_end; va += sh_cache_line_size) {
+		entry = va & sh_cache_entry_mask;
+		cca = SH3_CCA | entry;
+		db_printf(" %3d ", entry >> CCA_ENTRY_SHIFT);
+		for (way = 0; way < sh_cache_ways; way++) {
+			r = _reg_read_4(cca | (way << sh_cache_way_shift));
+			db_printf("%08x %c%c ", r & CCA_TAGADDR_MASK,
+			    ON(r, CCA_U), ON(r, CCA_V));
+		}
+		db_printf("\n");
+	}
+
+	/* enable cache */
+	_reg_write_4(SH3_CCR, _reg_read_4(SH3_CCR) | SH3_CCR_CE);
+	sh_icache_sync_all();
+
+	RUN_P1;
+}
+#endif /* SH3 */
+
+#ifdef SH4
+void
+__db_cachedump_sh4(vaddr_t va)
+{
+	u_int32_t r, e;
+	int i, istart, iend;
+
+	RUN_P2; /* must access from P2 */
+
+	/* disable I/D-cache */
+	_reg_write_4(SH4_CCR,
+	    _reg_read_4(SH4_CCR) & ~(SH4_CCR_ICE | SH4_CCR_OCE));
+
+	if (va) {
+		istart = ((va & CCIA_ENTRY_MASK) >> CCIA_ENTRY_SHIFT) & ~3;
+		iend = istart + 4;
+	} else {
+		istart = 0;
+		iend = SH4_ICACHE_SIZE / SH4_CACHE_LINESZ;
+	}
+
+	db_printf("[I-cache]\n");
+	db_printf("  Entry             V           V           V           V\n");
+	for (i = istart; i < iend; i++) {
+		if ((i & 3) == 0)
+			db_printf("\n[%3d-%3d] ", i, i + 3);
+		r = _reg_read_4(SH4_CCIA | (i << CCIA_ENTRY_SHIFT));
+		db_printf("%08x _%c ", r & CCIA_TAGADDR_MASK, ON(r, CCIA_V));
+	}
+
+	db_printf("\n[D-cache]\n");
+	db_printf("  Entry            UV          UV          UV          UV\n");
+	for (i = istart; i < iend; i++) {
+		if ((i & 3) == 0)
+			db_printf("\n[%3d-%3d] ", i, i + 3);
+		e = (i << CCDA_ENTRY_SHIFT);
+		r = _reg_read_4(SH4_CCDA | e);
+		db_printf("%08x %c%c ", r & CCDA_TAGADDR_MASK, ON(r, CCDA_U),
+		    ON(r, CCDA_V));
+
+	}
+	db_printf("\n");
+
+	_reg_write_4(SH4_CCR,
+	    _reg_read_4(SH4_CCR) | SH4_CCR_ICE | SH4_CCR_OCE);
+	sh_icache_sync_all();
+
+	RUN_P1;
+}
+#endif /* SH4 */
+#undef ON
+
+void
+db_frame_cmd(db_expr_t addr, int have_addr, db_expr_t count, char *modif)
+{
+	struct switchframe *sf = &curpcb->pcb_sf;
+	struct trapframe *tf, *tftop;
+
+	/* Print switch frame */
+	db_printf("[switch frame]\n");
+#define	SF(x)	db_printf("sf_" #x "\t\t0x%08x\t", sf->sf_ ## x);	\
+	__db_print_symbol(sf->sf_ ## x)
+	SF(sr);
+	SF(r15);
+	SF(r14);
+	SF(r13);
+	SF(r12);
+	SF(r11);
+	SF(r10);
+	SF(r9);
+	SF(r8);
+	SF(pr);
+#undef	SF
+	db_printf("sf_r6_bank\t0x%08x\n", sf->sf_r6_bank);
+	db_printf("sf_r7_bank\t0x%08x\n", sf->sf_r7_bank);
+
+	tftop = (struct trapframe *)((vaddr_t)curpcb + NBPG);
+
+	/* Print trap frame stack */
+	db_printf("[trap frame]\n");
+	__asm__ __volatile__("stc r6_bank, %0" :: "r"(tf));
+	for (; tf != tftop; tf++) {
+		db_printf("-- %p-%p --\n", tf, tf + 1);
+		db_printf("tf_expevt\t0x%08x\n", tf->tf_expevt);
+#define	TF(x)	db_printf("tf_" #x "\t\t0x%08x\t", tf->tf_ ## x);	\
+	__db_print_symbol(tf->tf_ ## x)
+		TF(ubc);
+		TF(spc);
+		TF(ssr);
+		TF(macl);
+		TF(mach);
+		TF(pr);
+		TF(r13);
+		TF(r12);
+		TF(r11);
+		TF(r10);
+		TF(r9);
+		TF(r8);
+		TF(r7);
+		TF(r6);
+		TF(r5);
+		TF(r4);
+		TF(r3);
+		TF(r2);
+		TF(r1);
+		TF(r0);
+		TF(r15);
+		TF(r14);
+#undef	TF
+	}
+}
+
+void
+__db_print_symbol(db_expr_t value)
+{
+	char *name;
+	db_expr_t offset;
+
+	db_find_xtrn_sym_and_offset((db_addr_t)value, &name, &offset);
+
+	if (name != 0 && offset <= db_maxoff && offset != value)
+		db_print_loc_and_inst(value);
+	else
+		db_printf("\n");
+
+}
+
+#ifdef KSTACK_DEBUG
+/*
+ * Stack overflow check
+ */
+void
+db_stackcheck_cmd(db_expr_t addr, int have_addr, db_expr_t count, char *modif)
+{
+	struct proc *p;
+	struct user *u;
+	struct pcb *pcb;
+	u_int32_t *t32;
+	u_int8_t *t8;
+	int i, j;
+#define	MAX_STACK	(USPACE - NBPG)
+#define	MAX_FRAME	(NBPG - sizeof(struct user))
+	db_printf("stack max: %d byte, frame max %d byte,"
+	    " sizeof(struct trapframe) %d byte\n", MAX_STACK, MAX_FRAME,
+	    sizeof(struct trapframe));
+	db_printf("PID    stack top    max used    frame top     max used"
+	    "  nest\n");
+	LIST_FOREACH(p, &allproc, p_list) {
+		u = p->p_addr;
+		pcb = &u->u_pcb;
+		/* stack */
+		t32 = (u_int32_t *)(pcb->pcb_sf.sf_r7_bank - MAX_STACK);
+		for (i = 0; *t32++ == 0xa5a5a5a5; i++)
+			;
+		i = MAX_STACK - i * sizeof(int);
+
+		/* frame */
+		t8 = (u_int8_t *)((vaddr_t)pcb + NBPG - MAX_FRAME);
+		for (j = 0; *t8++ == 0x5a; j++)
+			;
+		j = MAX_FRAME - j;
+
+		db_printf("%-6d 0x%08x %6d (%3d%%) 0x%08lx %6d (%3d%%) %d %s\n",
+		    p->p_pid,
+		    pcb->pcb_sf.sf_r7_bank, i, i * 100 / MAX_STACK,
+		    (vaddr_t)pcb + NBPG, j, j * 100 / MAX_FRAME,
+		    j / sizeof(struct trapframe),
+		    p->p_comm);
+	}
+#undef	MAX_STACK
+#undef	MAX_FRAME
+}
+#endif /* KSTACK_DEBUG */
+#endif /* !KGDB */

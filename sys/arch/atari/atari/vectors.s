@@ -1,4 +1,4 @@
-/*	$NetBSD: vectors.s,v 1.14 2001/02/09 21:47:46 leo Exp $	*/
+/*	$NetBSD: vectors.s,v 1.18 2001/09/24 13:19:54 jdc Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah
@@ -64,7 +64,11 @@ GLOBAL(vectab)
 	VECTOR(spurintr)	| 24: spurious interrupt
 
 GLOBAL(autovects)
+#ifdef _ATARIHW_
 	VECTOR(lev1intr)	| 25: level 1 interrupt autovector
+#else
+	VECTOR(badtrap)		| 25: Not supported by hardware
+#endif
 	VECTOR(lev2intr)	| 26: level 2 interrupt autovector
 	VECTOR(lev3intr)	| 27: level 3 interrupt autovector
 	VECTOR(lev4intr)	| 28: level 4 interrupt autovector
@@ -75,7 +79,7 @@ GLOBAL(autovects)
 #ifdef COMPAT_13
 	VECTOR(trap1)		| 33: compat_13_sigreturn
 #else
-	VECTOR(illinst
+	VECTOR(illinst)		| 33: TRAP instruction vector
 #endif
 	VECTOR(trap2)		| 34: trace
 	VECTOR(trap3)		| 35: sigreturn special syscall
@@ -133,7 +137,11 @@ GLOBAL(uservects)
 #else
 	VECTOR(badmfpint)	|  69: Timer C
 #endif /* STATCLOCK */
-	ASVECTOR(mfp_kbd)		|  70: KBD/MIDI IRQ
+#if NKBD > 0
+	ASVECTOR(mfp_kbd)	|  70: KBD/MIDI IRQ
+#else
+	VECTOR(badmfpint)	|  70:
+#endif /* NKBD > 0 */
 	VECTOR(intr_glue)	|  71: FDC/ACSI DMA
 	VECTOR(badmfpint)	|  72: Display enable counter
 	VECTOR(badmfpint)	|  73: modem port 1 - XMIT error
@@ -154,7 +162,11 @@ GLOBAL(uservects)
 	VECTOR(badmfpint)	|  84: serial port 1 baudgen (Timer D)
 	VECTOR(badmfpint)	|  85: TCCLC SCC (Timer C)
 	VECTOR(badmfpint)	|  86: FDC Drive Ready
+#if NNCRSCSI > 0
 	ASVECTOR(mfp2_5380dm)	|  87: SCSI DMA
+#else
+	VECTOR(badmfpint)	|  87:
+#endif /* NNCRSCSI > 0 */
 	VECTOR(badmfpint)	|  88: Display enable (Timer B)
 	VECTOR(badmfpint)	|  89: serial port 1 - XMIT error
 	VECTOR(badmfpint)	|  90: serial port 1 - XMIT buffer empty
@@ -162,8 +174,13 @@ GLOBAL(uservects)
 	VECTOR(badmfpint)	|  92: serial port 1 - RCV buffer full
 	VECTOR(badmfpint)	|  93: Timer A
 	VECTOR(badmfpint)	|  94: RTC
+#if NNCRSCSI > 0
 	ASVECTOR(mfp2_5380)	|  95: SCSI 5380
+#else
+	VECTOR(badmfpint)	|  95:
+#endif /* NNCRSCSI > 0 */
 
+#if NZS > 0
 	/*
 	 * Interrupts from the 8530 SCC
 	 */
@@ -183,6 +200,24 @@ GLOBAL(uservects)
 	VECTOR(badtrap)		| 109: Not used
 	ASVECTOR(sccint)	| 110: SCC Special Rx cond.  Channel A
 	VECTOR(badtrap)		| 111: Not used
+#else
+	VECTOR(badtrap)		|  96: Not used
+	VECTOR(badtrap)		|  97: Not used
+	VECTOR(badtrap)		|  98: Not used
+	VECTOR(badtrap)		|  99: Not used
+	VECTOR(badtrap)		| 100: Not used
+	VECTOR(badtrap)		| 101: Not used
+	VECTOR(badtrap)		| 102: Not used
+	VECTOR(badtrap)		| 103: Not used
+	VECTOR(badtrap)		| 104: Not used
+	VECTOR(badtrap)		| 105: Not used
+	VECTOR(badtrap)		| 106: Not used
+	VECTOR(badtrap)		| 107: Not used
+	VECTOR(badtrap)		| 108: Not used
+	VECTOR(badtrap)		| 109: Not used
+	VECTOR(badtrap)		| 110: Not used
+	VECTOR(badtrap)		| 111: Not used
+#endif /* NZS > 0 */
 
 #define BADTRAP16	VECTOR(badtrap) ; VECTOR(badtrap) ; \
 			VECTOR(badtrap) ; VECTOR(badtrap) ; \

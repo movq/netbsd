@@ -1,4 +1,4 @@
-/*	$NetBSD: if_le.c,v 1.32 1999/01/10 12:56:25 tron Exp $	*/
+/*	$NetBSD: if_le.c,v 1.34 2001/06/20 10:10:12 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -118,7 +118,7 @@ struct cfattach le_zbus_ca = {
 	sizeof(struct le_softc), le_zbus_match, le_zbus_attach
 };
 
-#if defined(_KERNEL) && !defined(_LKM)
+#if defined(_KERNEL_OPT)
 #include "opt_ddb.h"
 #endif
 
@@ -269,12 +269,12 @@ ariadne_mediachange(sc)
 	switch (IFM_SUBTYPE(ifm->ifm_media)) {
 	    case IFM_10_T:
 		sc->sc_initmodemedia = 1;
-		lance_init(sc);
+		lance_init(&sc->sc_ethercom.ec_if);
 		break;
 
 	    case IFM_10_2:
 		sc->sc_initmodemedia = 0;
-		lance_init(sc);
+		lance_init(&sc->sc_ethercom.ec_if);
 		break;
 
 	    case IFM_AUTO:

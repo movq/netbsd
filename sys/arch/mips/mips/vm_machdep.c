@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.72 2000/10/31 21:21:11 jeffs Exp $	*/
+/*	$NetBSD: vm_machdep.c,v 1.85 2001/11/14 18:15:27 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -42,8 +42,10 @@
  *	@(#)vm_machdep.c	8.3 (Berkeley) 1/4/94
  */
 
+#include "opt_ddb.h"
+
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.72 2000/10/31 21:21:11 jeffs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.85 2001/11/14 18:15:27 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -57,9 +59,11 @@ __KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.72 2000/10/31 21:21:11 jeffs Exp $"
 
 #include <uvm/uvm_extern.h>
 
+#include <mips/cache.h>
 #include <mips/regnum.h>
 #include <mips/locore.h>
 #include <mips/pte.h>
+#include <mips/psl.h>
 #include <machine/cpu.h>
 
 paddr_t kvtophys __P((vaddr_t));	/* XXX */
@@ -100,9 +104,11 @@ cpu_fork(p1, p2, stack, stacksize, func, arg)
 	 * To eliminate virtual aliases created by pmap_zero_page(),
 	 * this cache flush operation is necessary.
 	 * VCED on kernel stack is not allowed.
+	 * XXXJRT Confirm that this is necessry, and/or fix
+	 * XXXJRT pmap_zero_page().
 	 */
-	if (CPUISMIPS3 && mips_L2CachePresent)
-		MachHitFlushDCache((vaddr_t)p2->p_addr, USPACE);
+	if (CPUISMIPS3 && mips_sdcache_line_size)
+		mips_dcache_wbinv_range((vaddr_t) p2->p_addr, USPACE);
 #endif
 
 #ifdef DIAGNOSTIC
@@ -143,6 +149,10 @@ cpu_fork(p1, p2, stack, stacksize, func, arg)
 	pcb->pcb_context[8] = (int)f - 24;		/* SP */
 	pcb->pcb_context[0] = (int)func;		/* S0 */
 	pcb->pcb_context[1] = (int)arg;			/* S1 */
+	pcb->pcb_context[11] |= PSL_LOWIPL;		/* SR */
+#ifdef IPL_ICU_MASK
+	pcb->pcb_ppl = 0;	/* machine depenedend interrupt mask */
+#endif
 }
 
 /*
@@ -257,9 +267,9 @@ pagemove(from, to, size)
 	fpte = kvtopte(from);
 	tpte = kvtopte(to);
 #ifdef MIPS3
-	if (CPUISMIPS3 && (mips_indexof(from) != mips_indexof(to))) {
-		MachHitFlushDCache((vaddr_t)from, size);
-	}
+	if (CPUISMIPS3 &&
+	    (mips_cache_indexof(from) != mips_cache_indexof(to)))
+		mips_dcache_wbinv_range((vaddr_t) from, size);
 #endif
 	invalid = (CPUISMIPS3) ? MIPS3_PG_NV | MIPS3_PG_G : MIPS1_PG_NV;
 	while (size > 0) {
@@ -274,7 +284,7 @@ pagemove(from, to, size)
 	}
 }
 
-extern vm_map_t phys_map;
+extern struct vm_map *phys_map;
 
 /*
  * Map a user I/O request into kernel virtual address space.
@@ -309,6 +319,7 @@ vmapbuf(bp, len)
 		faddr += PAGE_SIZE;
 		taddr += PAGE_SIZE;
 	}
+	pmap_update(vm_map_pmap(phys_map));
 }
 
 /*
@@ -326,6 +337,8 @@ vunmapbuf(bp, len)
 	addr = trunc_page((vaddr_t)bp->b_data);
 	off = (vaddr_t)bp->b_data - addr;
 	len = round_page(off + len);
+	pmap_remove(pmap_kernel(), addr, addr + len);
+	pmap_update(pmap_kernel());
 	uvm_km_free_wakeup(phys_map, addr, len);
 	bp->b_data = bp->b_saveaddr;
 	bp->b_saveaddr = NULL;

@@ -1,4 +1,4 @@
-/*	$NetBSD: armreg.h,v 1.6 2001/03/04 14:26:26 bjh21 Exp $	*/
+/*	$NetBSD: armreg.h,v 1.8 2001/07/18 16:31:17 rjs Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Ben Harris
@@ -63,6 +63,7 @@
 #define F32_bit (1 << 6)	/* FIQ disable */
 
 #define PSR_T_bit (1 << 5)	/* Thumb state */
+#define PSR_J_bit (1 << 24)	/* Java mode */
 
 #define PSR_MODE	0x0000001f	/* mode mask */
 #define PSR_USR26_MODE	0x00000000
@@ -118,8 +119,8 @@
 #define CPU_ID_INTEL		0x69000000 /* 'i' */
 
 /* How to decide what format the CPUID is in. */
-#define CPU_ID_ISOLD(x)		((x) & 0x0000f000 == 0x00000000)
-#define CPU_ID_IS7(x)		((x) & 0x0000f000 == 0x00007000)
+#define CPU_ID_ISOLD(x)		(((x) & 0x0000f000) == 0x00000000)
+#define CPU_ID_IS7(x)		(((x) & 0x0000f000) == 0x00007000)
 #define CPU_ID_ISNEW(x)		(!CPU_ID_ISOLD(x) && !CPU_ID_IS7(x))
 
 /* On ARM3 and ARM6, this byte holds the foundry ID. */

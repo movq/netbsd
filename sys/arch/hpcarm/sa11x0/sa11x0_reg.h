@@ -1,4 +1,4 @@
-/*	$NetBSD: sa11x0_reg.h,v 1.3 2001/02/24 12:43:52 toshii Exp $	*/
+/*	$NetBSD: sa11x0_reg.h,v 1.8 2001/08/01 06:43:50 ichiro Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.  All rights reserved.
@@ -45,7 +45,12 @@
 #define SARCR_BASE		0x90030000	/* Reset Controller */
 #define SAGPIO_BASE		0x90040000	/* GPIO */
 #define SAIPIC_BASE		0x90050000	/* Interrupt Controller */
+#define SAPPC_BASE		0x90060000	/* Peripheral Pin Controller */
+#define SAUDC_BASE		0x80000000	/* USB Device Controller*/
+#define SACOM1_BASE		0x80010000	/* GPCLK/UART 1 */
 #define SACOM3_HW_BASE		0x80050000	/* UART 3  */
+#define SAMCP_BASE		0x80060000	/* MCP Controller */
+#define SASSP_BASE		0x80070000	/* Synchronous serial port */
 
 #define SADMAC_BASE		0xB0000000	/* DMA Controller */
 #define SALCD_BASE		0xB0100000	/* LCD */
@@ -54,13 +59,13 @@
 #define SACOM3_BASE             0xd000d000
 
 /* Interrupt controller registers */
-#define SAIPIC_NPORTS		6
-#define SAIPIC_IP		0		/* IRQ pending register */
-#define SAIPIC_MR		1		/* Mask register */
-#define SAIPIC_LR		2		/* Level register */
-#define SAIPIC_FP		3		/* FIQ pending register */
-#define SAIPIC_PR		4		/* Pending register */
-#define SAIPIC_CR		5		/* Control register */
+#define SAIPIC_NPORTS		9
+#define SAIPIC_IP		0x00		/* IRQ pending register */
+#define SAIPIC_MR		0x04		/* Mask register */
+#define SAIPIC_LR		0x08		/* Level register */
+#define SAIPIC_FP		0x10		/* FIQ pending register */
+#define SAIPIC_PR		0x20		/* Pending register */
+#define SAIPIC_CR		0x0C		/* Control register */
 
 /* width of interrupt controller */
 #define ICU_LEN			32

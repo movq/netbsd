@@ -1,4 +1,4 @@
-/*	$NetBSD: mem.c,v 1.1 2001/02/23 03:48:11 ichiro Exp $	*/
+/*	$NetBSD: mem.c,v 1.5 2001/09/10 21:19:37 chris Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -89,7 +89,7 @@ mmrw(dev, uio, flags)
 	struct uio *uio;
 	int flags;
 {
-	register vm_offset_t o, v;
+	register vaddr_t o, v;
 	register int c;
 	register struct iovec *iov;
 	int error = 0;
@@ -122,13 +122,15 @@ mmrw(dev, uio, flags)
 			v = uio->uio_offset;
 			prot = uio->uio_rw == UIO_READ ? VM_PROT_READ :
 			    VM_PROT_WRITE;
-			pmap_enter(pmap_kernel(), (vm_offset_t)memhook,
+			pmap_enter(pmap_kernel(), (vaddr_t)memhook,
 			    trunc_page(v), prot, prot|PMAP_WIRED);
+			pmap_update(pmap_kernel());
 			o = uio->uio_offset & PGOFSET;
 			c = min(uio->uio_resid, (int)(NBPG - o));
 			error = uiomove((caddr_t)memhook + o, c, uio);
-			pmap_remove(pmap_kernel(), (vm_offset_t)memhook,
-			    (vm_offset_t)memhook + NBPG);
+			pmap_remove(pmap_kernel(), (vaddr_t)memhook,
+			    (vaddr_t)memhook + NBPG);
+			pmap_update(pmap_kernel());
 			continue;
 
 		/* minor device 1 is kernel memory */
@@ -156,7 +158,7 @@ mmrw(dev, uio, flags)
 			if (zeropage == NULL) {
 				zeropage = (caddr_t)
 				    malloc(NBPG, M_TEMP, M_WAITOK);
-				bzero(zeropage, NBPG);
+				memset(zeropage, 0, NBPG);
 			}
 			c = min(iov->iov_len, NBPG);
 			error = uiomove(zeropage, c, uio);

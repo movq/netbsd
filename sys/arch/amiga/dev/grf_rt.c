@@ -1,4 +1,4 @@
-/*	$NetBSD: grf_rt.c,v 1.37 1999/03/25 23:20:00 is Exp $	*/
+/*	$NetBSD: grf_rt.c,v 1.39 2001/08/20 12:20:04 wiz Exp $	*/
 
 /*
  * Copyright (c) 1993 Markus Wild
@@ -73,7 +73,7 @@ int retina_inited;
  * This code offers low-level routines to access the Retina graphics-board
  * manufactured by MS MacroSystem GmbH from within NetBSD for the Amiga.
  * 
- * Thanks to MacroSystem for providing me with the neccessary information
+ * Thanks to MacroSystem for providing me with the necessary information
  * to create theese routines. The sparse documentation of this code
  * results from the agreements between MS and me.
  */
@@ -922,7 +922,7 @@ rt_getvmode (gp, vm)
 	 * From observation of the monitor definition table above, I guess that
 	 * the horizontal timings are in units of longwords. Hence, I get the
 	 * pixels by multiplication with 32 and division by the depth.
-	 * The text modes, apparently marked by depth == 4, are even more wierd.
+	 * The text modes, apparently marked by depth == 4, are even more weird.
 	 * According to a comment above, they are computed from a depth==8 mode
 	 * (thats for us: * 32 / 8) by applying another factor of 4 / font width.
 	 * Reverse applying the latter formula most of the constants cancel

@@ -1,4 +1,4 @@
-/*	$NetBSD: rbus_machdep.c,v 1.7 2000/08/02 09:02:46 tsubai Exp $	*/
+/*	$NetBSD: rbus_machdep.c,v 1.10 2001/06/10 15:32:58 tsubai Exp $	*/
 
 /*
  * Copyright (c) 1999
@@ -39,6 +39,7 @@
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcidevs.h>
 #include <dev/cardbus/rbus.h>
+#include <dev/ofw/openfirm.h>
 
 static void macppc_cardbus_init __P((pci_chipset_tag_t, pcitag_t));
 

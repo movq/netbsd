@@ -1,7 +1,8 @@
-#	$NetBSD: Makefile,v 1.23 2000/10/31 23:29:36 pk Exp $
+#	$NetBSD: Makefile,v 1.26 2001/09/22 03:34:20 tv Exp $
 
 STRIPFLAG=
-PROGSOURCE=	boot.c net.c netif_sun.c conf.c openfirm.c bootinfo.c vers.c
+PROGSOURCE=	boot.c net.c netif_sun.c conf.c openfirm.c bootinfo.c \
+		prompatch.c vers.c
 NEWVERSWHAT=	"Secondary Boot"
 FILES=		boot.net ${RELOCS:S/^/boot./g}
 CLEANFILES:=	vers.c ${FILES}
@@ -12,11 +13,15 @@ SAMISCMAKEFLAGS= SA_USE_CREAD=yes
 
 .include "../Makefile.buildboot"
 
+.if ${MACHINE} == sparc64
+CFLAGS+=	-m32
+LDFLAGS+=	-m elf32_sparc
+AFLAGS+=	-Wa,-32
+.endif
+
 .include <bsd.own.mk>
 
 OBJS=${SRCS:N*.h:N*.sh:N*.fth:R:S/$/.o/g}
-
-OBJCOPY?=	objcopy
 
 LINKFLAGS=-N -e start
 
@@ -35,7 +40,7 @@ boot.${RELOC}: ${OBJS} ${LIBSA} ${LIBZ} ${LIBKERN}
 	${OBJCOPY} -O binary ${.TARGET}.tmp ${.TARGET}
 	rm -f ${.TARGET}.tmp
 .endfor
- 
+
 # conjure up a magic header that is accepted by all Sun PROMS;
 # see installboot.c for details.
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: top.c,v 1.6 2000/10/04 20:09:05 mjl Exp $	*/
+/*	$NetBSD: top.c,v 1.11 2002/03/23 01:28:10 thorpej Exp $	*/
 
 char *copyright =
     "Copyright (c) 1984 through 1996, William LeFebvre";
@@ -78,6 +78,7 @@ void (*d_loadave) __P((int, double *)) = i_loadave;
 void (*d_procstates) __P((int, int *)) = i_procstates;
 void (*d_cpustates) __P((int *)) = i_cpustates;
 void (*d_memory) __P((int *)) = i_memory;
+void (*d_swap) __P((int *)) = i_swap;
 void (*d_message) __P((void)) = i_message;
 void (*d_header) __P((char *)) = i_header;
 void (*d_process) __P((int, char *)) = i_process;
@@ -139,9 +140,9 @@ char *argv[];
     fd_set readfds;
 
 #ifdef ORDER
-    static char command_chars[] = "\f qh?en#sdkriIuo";
+    static char command_chars[] = "\f qh?en#sdkrSiIuo";
 #else
-    static char command_chars[] = "\f qh?en#sdkriIu";
+    static char command_chars[] = "\f qh?en#sdkrSiIu";
 #endif
 /* these defines enumerate the "strchr"s of the commands in command_chars */
 #define CMD_redraw	0
@@ -157,11 +158,12 @@ char *argv[];
 #define CMD_displays	9
 #define CMD_kill	10
 #define CMD_renice	11
-#define CMD_idletog     12
-#define CMD_idletog2    13
-#define CMD_user	14
+#define CMD_system	12
+#define CMD_idletog     13
+#define CMD_idletog2    14
+#define CMD_user	15
 #ifdef ORDER
-#define CMD_order       15
+#define CMD_order       16
 #endif
 
     /* set the buffer for stdout */
@@ -188,7 +190,7 @@ char *argv[];
 
     /* initialize some selection options */
     ps.idle    = Yes;
-    ps.system  = No;
+    ps.system  = Yes;
     ps.uid     = -1;
     ps.command = NULL;
 
@@ -269,10 +271,10 @@ char *argv[];
 		break;
 
 	      case 's':
-		if ((delay = atoi(optarg)) < 0)
+		if ((delay = atoi(optarg)) < 0 || (delay == 0 && getuid() != 0))
 		{
 		    fprintf(stderr,
-			"%s: warning: seconds delay should be non-negative -- using default\n",
+			"%s: warning: seconds delay should be positive -- using default\n",
 			myname);
 		    delay = Default_DELAY;
 		    warnings++;
@@ -533,6 +535,9 @@ Usage: %s [-ISbinqu] [-d x] [-s x] [-o field] [-U username] [number]\n",
 	/* display memory stats */
 	(*d_memory)(system_info.memory);
 
+	/* display swap stats */
+	(*d_swap)(system_info.swap); 
+
 	/* handle message area */
 	(*d_message)();
 
@@ -544,7 +549,7 @@ Usage: %s [-ISbinqu] [-d x] [-s x] [-o field] [-U username] [number]\n",
 	    /* determine number of processes to actually display */
 	    /* this number will be the smallest of:  active processes,
 	       number user requested, number current screen accomodates */
-	    active_procs = system_info.p_active;
+	    active_procs = system_info.P_ACTIVE;
 	    if (active_procs > topn)
 	    {
 		active_procs = topn;
@@ -569,7 +574,13 @@ Usage: %s [-ISbinqu] [-d x] [-s x] [-o field] [-U username] [number]\n",
 	u_endscreen(i);
 
 	/* now, flush the output buffer */
-	fflush(stdout);
+	if (fflush(stdout) != 0)
+	{
+	    new_message(MT_standout, " Write error on stdout");
+	    putchar('\r');
+	    quit(1);
+	    /*NOTREACHED*/
+	}
 
 	/* only do the rest if we have more displays to show */
 	if (displays)
@@ -587,6 +598,7 @@ Usage: %s [-ISbinqu] [-d x] [-s x] [-o field] [-U username] [number]\n",
 		    d_procstates = u_procstates;
 		    d_cpustates = u_cpustates;
 		    d_memory = u_memory;
+		    d_swap = u_swap;
 		    d_message = u_message;
 		    d_header = u_header;
 		    d_process = u_process;
@@ -625,7 +637,14 @@ Usage: %s [-ISbinqu] [-d x] [-s x] [-o field] [-U username] [number]\n",
 
 		    /* now read it and convert to command strchr */
 		    /* (use "change" as a temporary to hold strchr) */
-		    (void) read(0, &ch, 1);
+		    if (read(0, &ch, 1) != 1)
+		    {
+			/* read error: either 0 or -1 */
+			new_message(MT_standout, " Read error on stdin");
+			putchar('\r');
+			quit(1);
+			/*NOTREACHED*/
+		    }
 		    if ((iptr = strchr(command_chars, ch)) == NULL)
 		    {
 			/* illegal command */
@@ -728,7 +747,10 @@ Usage: %s [-ISbinqu] [-d x] [-s x] [-o field] [-U username] [number]\n",
 				new_message(MT_standout, "Seconds to delay: ");
 				if ((i = readline(tempbuf1, 8, Yes)) > -1)
 				{
-				    delay = i;
+				    if ((delay = i) == 0 && getuid() != 0)
+				    {
+					delay = 1;
+				    }
 				}
 				clear_message();
 				break;
@@ -781,6 +803,13 @@ Usage: %s [-ISbinqu] [-d x] [-s x] [-o field] [-U username] [number]\n",
 				{
 				    clear_message();
 				}
+				break;
+
+			    case CMD_system:
+				ps.system = !ps.system;
+				new_message(MT_standout | MT_delayed,
+				    " %sisplaying system processes.",
+				    ps.system ? "D" : "Not d");
 				break;
 
 			    case CMD_idletog:
@@ -879,6 +908,7 @@ reset_display()
     d_procstates = i_procstates;
     d_cpustates  = i_cpustates;
     d_memory     = i_memory;
+    d_swap       = i_swap;
     d_message	 = i_message;
     d_header	 = i_header;
     d_process	 = i_process;

@@ -1,4 +1,4 @@
-/*	$NetBSD: conf.c,v 1.3 2001/02/09 19:54:11 uch Exp $	*/
+/*	$NetBSD: conf.c,v 1.9 2002/06/17 16:33:05 christos Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -33,15 +33,10 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "opt_systrace.h"
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/buf.h>
-#include <sys/ioctl.h>
-#include <sys/tty.h>
 #include <sys/conf.h>
-#include <sys/vnode.h>
-
-#include <dev/cons.h>
 
 /*
  * Block devices.
@@ -125,22 +120,16 @@ cdev_decl(wsmux);
 /* misc */
 #include "rnd.h"
 
-/* SH specific */
-#define scicnpollc	nullcnpollc
-cons_decl(sci);
-#define scifcnpollc	nullcnpollc
-cons_decl(scif);
-cons_decl(com);
-
 #include "sci.h"
 cdev_decl(sci);
 #include "scif.h"
 cdev_decl(scif);
-
+#include "com.h"
+cdev_decl(com);
 #include "biconsdev.h"
 cdev_decl(biconsdev);
-#define biconscnpollc	nullcnpollc
-cons_decl(bicons);
+#include "clockctl.h"
+cdev_decl(clockctl);
 
 struct bdevsw bdevsw[] =
 {
@@ -166,7 +155,7 @@ struct cdevsw cdevsw[] =
 	cdev_log_init(1,log),           /*  5: /dev/klog */
 	cdev_ptc_init(NPTY,ptc),        /*  6: pseudo-tty master */
 	cdev_tty_init(NPTY,pts),        /*  7: pseudo-tty slave */
-	cdev_notdef(),			/*  8: (reserved) NS16550 compatible */
+	cdev_tty_init(NCOM,com),	/*  8: NS16550 compatible */
 	cdev_notdef(),		        /*  9: (reserved) parallel printer*/
 	cdev_disk_init(NWD, wd),        /* 10: ST506/ESDI/IDE disk */
 	cdev_notdef(),			/* 11: (reserved) floppy diskette */
@@ -195,7 +184,13 @@ struct cdevsw cdevsw[] =
 	cdev_tty_init(NSCIF,scif),	/* 31: SH internal serial with FIFO */
 	cdev_tty_init(NSCI,sci),	/* 32: SH internal serial */
 	cdev_tty_init(NBICONSDEV,
-		      biconsdev),	/* 34: bicons pseudo-dev */
+		      biconsdev),	/* 33: bicons pseudo-dev */
+	cdev_clockctl_init(NCLOCKCTL, clockctl),/* 34: clockctl pseudo device */
+#ifdef SYSTRACE
+	cdev_systrace_init(1, systrace),/* 35: system call tracing */
+#else
+	cdev_notdef(),			/* 35: system call tracing */
+#endif
 };
 
 static int chrtoblktbl[] =  {
@@ -242,22 +237,6 @@ static int chrtoblktbl[] =  {
 	/* 38 */	NODEV,
 	/* 39 */	NODEV,
 	/* 40 */	NODEV,
-};
-
-struct consdev constab[] = {
-#if NBICONSDEV > 0
-	cons_init(bicons),
-#endif
-#if NSCI > 0
-	cons_init(sci),
-#endif
-#if NSCIF > 0
-	cons_init(scif),
-#endif
-#if NCOM > 0
-	cons_init(com),
-#endif
-	{ 0 },
 };
 
 /*

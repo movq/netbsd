@@ -1,4 +1,4 @@
-/*	$NetBSD: com_ebus.c,v 1.4 2000/12/20 16:19:09 mrg Exp $	*/
+/*	$NetBSD: com_ebus.c,v 1.8 2001/10/22 07:06:20 mrg Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000 Matthew R. Green
@@ -43,7 +43,7 @@
 #include <machine/autoconf.h>
 #include <machine/openfirm.h>
 
-#include <sparc64/dev/ebusreg.h>
+#include <dev/ebus/ebusreg.h>
 #include <sparc64/dev/ebusvar.h>
 
 #include <dev/cons.h>
@@ -57,7 +57,6 @@ cdev_decl(com); /* XXX this belongs elsewhere */
 
 int	com_ebus_match __P((struct device *, struct cfdata *, void *));
 void	com_ebus_attach __P((struct device *, struct device *, void *));
-int	com_ebus_isconsole __P((int node));
 
 struct cfattach com_ebus_ca = {
 	sizeof(struct com_softc), com_ebus_match, com_ebus_attach
@@ -82,29 +81,19 @@ com_ebus_match(parent, match, aux)
 		if (strcmp(ea->ea_name, com_names[i]) == 0)
 			return (1);
 
-	return (0);
-}
+	if (strcmp(ea->ea_name, "serial") == 0) {
+		char compat[80];
 
-int
-com_ebus_isconsole(node)
-	int node;
-{
-	u_int chosen;
-
-	/*
-	 * We'll just to the OBP grovelling down here since that's
-	 * the only type of firmware we support.
-	 */
-	chosen = OF_finddevice("/chosen");
-
-	if (node == OF_instance_to_package(OF_stdin())) {
-		return (1);
+		/* Could be anything. */
+		if ((i = OF_getproplen(ea->ea_node, "compatible")) &&
+			OF_getprop(ea->ea_node, "compatible", compat,
+				sizeof(compat)) == i) {
+			if (strcmp(compat, "su16550") == 0 || 
+				strcmp(compat, "su") == 0) {
+				return (1);
+			}
+		}
 	}
-
-	if (node == OF_instance_to_package(OF_stdout())) { 
-		return (1);
-	}
-
 	return (0);
 }
 
@@ -122,6 +111,8 @@ com_ebus_attach(parent, self, aux)
 	int maj;
 #endif
 	int i;
+	int com_is_input;
+	int com_is_output;
 
 	sc->sc_iot = ea->ea_bustag;
 	sc->sc_iobase = EBUS_PADDR_FROM_REG(&ea->ea_regs[0]);
@@ -150,20 +141,44 @@ com_ebus_attach(parent, self, aux)
 	sc->sc_frequency = BAUD_BASE;
 
 	for (i = 0; i < ea->ea_nintrs; i++)
-		bus_intr_establish(ea->ea_bustag, ea->ea_intrs[i], 0,
-		    IPL_SERIAL, comintr, sc);
-
-	com_attach_subr(sc);
+		bus_intr_establish(ea->ea_bustag, ea->ea_intrs[i],
+		    IPL_SERIAL, 0, comintr, sc);
 
 	kma.kmta_consdev = NULL;
-	if (com_ebus_isconsole(ea->ea_node)) {
+
+	/* Figure out if we're the console. */
+	com_is_input = (ea->ea_node == OF_instance_to_package(OF_stdin()));
+	com_is_output = (ea->ea_node == OF_instance_to_package(OF_stdout()));
+
+	if (com_is_input || com_is_output) {
 		extern struct consdev comcons;
+		struct consdev *cn_orig;
 
 		/* Record some info to attach console. */
 		kma.kmta_baud = 9600;
 		kma.kmta_cflag = (CREAD | CS8 | HUPCL);
-		kma.kmta_consdev = &comcons;
+
+		/* Attach com as the console. */
+		cn_orig = cn_tab;
+		if (comcnattach(sc->sc_iot, sc->sc_iobase, kma.kmta_baud,
+			sc->sc_frequency, kma.kmta_cflag)) {
+			printf("Error: comcnattach failed\n");
+		}
+		cn_tab = cn_orig;
+		if (com_is_input) {
+			cn_tab->cn_dev = comcons.cn_dev;
+			cn_tab->cn_probe = comcons.cn_probe;
+			cn_tab->cn_init = comcons.cn_init;
+			cn_tab->cn_getc = comcons.cn_getc;
+			cn_tab->cn_pollc = comcons.cn_pollc;
+		}
+		if (com_is_output) {
+			cn_tab->cn_putc = comcons.cn_putc;
+		}
+		kma.kmta_consdev = cn_tab;
 	}
+	/* Now attach the driver */
+	com_attach_subr(sc);
 
 #if (NKBD > 0) || (NMS > 0)
 	kma.kmta_tp = sc->sc_tty;
@@ -179,23 +194,18 @@ com_ebus_attach(parent, self, aux)
 /* Attach 'em if we got 'em. */
 #if (NKBD > 0)
 	kma.kmta_name = "keyboard";
-	if (getproplen(ea->ea_node, kma.kmta_name) == 0) {
+	if (OF_getproplen(ea->ea_node, kma.kmta_name) == 0) {
 		config_found(self, (void *)&kma, NULL);
 	}
 #endif
 #if (NMS > 0)
 	kma.kmta_name = "mouse";
-	if (getproplen(ea->ea_node, kma.kmta_name) == 0) {
+	if (OF_getproplen(ea->ea_node, kma.kmta_name) == 0) {
 		config_found(self, (void *)&kma, NULL);
 	}
 #endif
 #endif
 	if (kma.kmta_consdev) {
-		/* Attach com as the console. */
-		if (comcnattach(sc->sc_iot, sc->sc_iobase, kma.kmta_baud,
-			sc->sc_frequency, kma.kmta_cflag)) {
-			printf("Error: comcnattach failed\n");
-		}
 		/*
 		 * If we're the keyboard then we need the original
 		 * cn_tab w/prom I/O, which sunkbd copied into kma.

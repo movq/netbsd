@@ -1,4 +1,4 @@
-/*	$NetBSD: kd.c,v 1.34 2000/11/02 00:42:40 eeh Exp $	*/
+/*	$NetBSD: kd.c,v 1.36 2001/09/05 13:27:53 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -238,6 +238,21 @@ kdwrite(dev, uio, flag)
 }
 
 int
+kdpoll(dev, events, p)
+	dev_t dev;
+	int events;
+	struct proc *p;
+{
+	struct kd_softc *kd;
+	struct tty *tp;
+
+	kd = &kd_softc; 	/* XXX */
+	tp = kd->kd_tty;
+ 
+	return ((*tp->t_linesw->l_poll)(tp, events, p));
+}
+
+int
 kdioctl(dev, cmd, data, flag, p)
 	dev_t dev;
 	u_long cmd;
@@ -296,7 +311,7 @@ kdstart(tp)
 	struct tty *tp;
 {
 	struct clist *cl;
-	register int s;
+	int s;
 
 	s = spltty();
 	if (tp->t_state & (TS_BUSY|TS_TTSTOP|TS_TIMEOUT))
@@ -347,7 +362,7 @@ kd_later(tpaddr)
 	void *tpaddr;
 {
 	struct tty *tp = tpaddr;
-	register int s;
+	int s;
 
 	kd_putfb(tp);
 

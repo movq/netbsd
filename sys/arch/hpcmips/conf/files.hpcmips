@@ -1,9 +1,15 @@
-#	$NetBSD: files.hpcmips,v 1.52 2001/02/26 09:34:22 sato Exp $
+#	$NetBSD: files.hpcmips,v 1.61 2001/09/17 17:03:44 uch Exp $
 
 # maxpartitions must be first item in files.${ARCH}.
 maxpartitions 8
 
 maxusers 2 8 64
+
+#
+# Machine-independent I2O drivers.
+#
+
+include "dev/i2o/files.i2o"
 
 #
 # Machine-independent SCSI drivers
@@ -24,7 +30,7 @@ major	{wd = 1}
 #
 # Bus-independent devices
 #
-device mainbus { }			# no locators
+device mainbus { [id = -1] }
 attach mainbus at root
 
 device cpu				# not optional
@@ -32,24 +38,25 @@ attach cpu at mainbus
 file arch/hpcmips/hpcmips/cpu.c		cpu
 
 # CPU support option headers
-defopt	VR41X1
-defopt	TX39XX
+defopt	opt_vr41xx.h	VR41XX VR4101 VR4102 VR4111 VR4121 VR4122 VR4181 VR4131
+defopt	opt_tx39xx.h	TX39XX TX3911 TX3912 TX3922
 
 #
 # CPU-dependent files
 #
-file	arch/hpcmips/vr/vr.c		vr41x1	# NEC VR4000 series
-file	arch/hpcmips/vr/vr_idle.S	vr41x1
+file	arch/hpcmips/vr/vr.c		vr41xx	# NEC VR4000 series
+file	arch/hpcmips/vr/vr_idle.S	vr41xx
 file	arch/hpcmips/tx/tx39.c		tx39xx	# TOSHIBA TX3900 series
 
 file	arch/mips/mips/fp.S		softfloat
 
 file	arch/hpcmips/hpcmips/autoconf.c
+file	arch/hpcmips/hpcmips/bus_dma.c
+file	arch/hpcmips/hpcmips/bus_space.c
 file	arch/hpcmips/hpcmips/conf.c
+file	arch/hpcmips/hpcmips/interrupt.c
 file	arch/hpcmips/hpcmips/machdep.c
 file	arch/hpcmips/hpcmips/mainbus.c
-file	arch/hpcmips/hpcmips/bus_space.c
-file	arch/hpcmips/hpcmips/bus_dma.c
 file	arch/hpcmips/hpcmips/procfs_machdep.c	procfs
 
 #
@@ -81,10 +88,11 @@ file	arch/hpcmips/dev/hpcapm.c	hpcapm
 #
 # ISA bus support
 #
+include "dev/pci/files.pci"	# XXX some ISA devs are 'at pci' too.
 include "dev/isa/files.isa"
 
 #
-#  Vr41x1 integrated peripherals
+#  Vr41xx integrated peripherals
 #
 device vrip { [addr=-1], [size=-1], [addr2=-1], [size2=-1], [intr=-1], [pwctl=-1], [platform = -1] }
 attach vrip at mainbus
@@ -102,29 +110,16 @@ device vrcmu
 attach vrcmu at vrip
 file arch/hpcmips/vr/cmu.c			vrcmu needs-flag
 
+include "dev/hpc/files.hpcio"
 device	vrisabif {[platform = -1], [isaportoffset=0], [isamemoffset=0]}		# GIU attachment
-device  gpbusif {[platform = -1], [comctrl = -1], [button0 = -1], [button1 = -1], [button2 = -1], [button3 = -1], [button4 = -1], [button5 = -1], [button6 = -1], [button7 = -1], [button8 = -1], [button9 = -1], [button10 = -1], [button11 = -1]} 
-device  newgpbusif { [platform = -1], [id = -1], [port = -1], [active = 1], [level = -1], [initvalue = -1] }
 
-device vrgiu: vrisabif, gpbusif, newgpbusif
+device vrgiu: vrisabif, hpcioif
 attach vrgiu at vrip
 file arch/hpcmips/vr/vrgiu.c			vrgiu
-
-device gpbus
-attach gpbus at gpbusif
-file arch/hpcmips/vr/gpbus.c			gpbus
 
 device vrisab: isabus
 attach vrisab at vrisabif
 file arch/hpcmips/isa/isa_machdep.c		vrisab
-
-device pwctl
-attach pwctl at newgpbusif with pwctl_vrgiu
-file arch/hpcmips/vr/pwctl_vrgiu.c		pwctl_vrgiu
-
-device button
-attach button at newgpbusif with button_vrgiu
-file arch/hpcmips/vr/button_vrgiu.c		button_vrgiu
 
 device vrkiu: hpckbdif
 attach vrkiu at vrip
@@ -149,10 +144,21 @@ file arch/hpcmips/vr/vrpiu.c			vrpiu
 attach ohci at vrip with ohci_vrip
 file arch/hpcmips/dev/ohci_vrip.c		ohci_vrip
 
+device vrpciu: pcibus
+attach vrpciu at vrip
+file arch/hpcmips/vr/vrpciu.c			vrpciu needs-flag
+
+defopt opt_mq200.h	MQ200_DEBUG MQ200_USECRT
 device mqvideo: hpcfbif
 attach mqvideo at vrip with mqvideo_vrip
 file arch/hpcmips/vr/mq200_vrip.c		mqvideo_vrip
 file arch/hpcmips/dev/mq200.c			mqvideo
+file arch/hpcmips/dev/mq200subr.c		mqvideo
+file arch/hpcmips/dev/mq200debug.c		mqvideo
+file arch/hpcmips/dev/mq200machdep.c		mqvideo
+
+attach mqvideo at pci with mqvideo_pci
+file arch/hpcmips/pci/mq200_pci.c		mqvideo_pci
 
 device ite8181video: hpcfbif
 attach ite8181video at vrip with ite8181video_vrip
@@ -162,6 +168,32 @@ file arch/hpcmips/dev/ite8181.c			ite8181video
 device vrc4172pwm
 attach vrc4172pwm at vrip
 file arch/hpcmips/vr/vrc4172pwm.c		vrc4172pwm needs-flag
+
+device vrc4172gpio: hpcioif, vrisabif
+attach vrc4172gpio at hpcioif
+file arch/hpcmips/vr/vrc4172gpio.c		vrc4172gpio
+
+device vrc4173cardu: pcmciabus
+attach vrc4173cardu at pci
+file arch/hpcmips/pci/vrc4173cardu.c		vrc4173cardu
+
+device vrc4173if {}
+
+device vrc4173bcu: vrc4173if
+attach vrc4173bcu at pci
+file arch/hpcmips/vr/vrc4173bcu.c		vrc4173bcu
+
+device vrc4173cmu
+attach vrc4173cmu at vrc4173if
+file arch/hpcmips/vr/vrc4173cmu.c		vrc4173cmu
+
+device vrc4173piu
+attach vrc4173piu at vrc4173if
+file arch/hpcmips/vr/vrc4173piu.c		vrc4173piu
+
+device vrc4173kiu
+attach vrc4173kiu at vrc4173if
+file arch/hpcmips/vr/vrc4173kiu.c		vrc4173kiu
 
 #
 #	TOSHIBA TX3912/3922
@@ -175,13 +207,12 @@ defopt TX39POWERDEBUG
 defopt TX39UARTDEBUG
 defopt USE_POLL
 
-device txsim {[platform = -1]}
+device txsim { }
 device txcsbusif {[platform = -1]}
 device txcomif {[slot = -1]}
 device txsibif {[slot = -1]}
 device ucbif { }
 device irif { }
-device txiomanif {[evtype = -1], [id = -1], [group = -1], [port = -1], [edge = -1], [initial = -1]}
 
 attach txsim at mainbus
 file arch/hpcmips/tx/txsim.c		txsim
@@ -215,17 +246,9 @@ device tx39io
 attach tx39io at txsim
 file arch/hpcmips/tx/tx39io.c		tx39io
 
-device txioman: txiomanif
+device txioman: hpcioif
 attach txioman at txsim
 file arch/hpcmips/tx/txioman.c		txioman
-
-device txin
-attach txin at txiomanif
-file arch/hpcmips/tx/txioman_in.c	txin
-
-device txout
-attach txout at txiomanif
-file arch/hpcmips/tx/txioman_out.c	txout
 
 device tx39sib: txsibif
 attach tx39sib at txsim

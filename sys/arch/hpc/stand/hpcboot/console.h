@@ -1,4 +1,4 @@
-/* -*-C++-*-	$NetBSD: console.h,v 1.1 2001/02/09 18:34:36 uch Exp $	*/
+/* -*-C++-*-	$NetBSD: console.h,v 1.6 2001/06/19 16:48:49 uch Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -45,21 +45,26 @@
 class Console {
 private:
 	static Console *_instance;
+	int16_t _boot_console;
 
 protected:
 	enum { CONSOLE_BUFSIZE = 256 };
+	TCHAR _bufw[CONSOLE_BUFSIZE];	// wide char buffer.
 	BOOL _on;
 
 protected:
-	Console(void) { /* NO-OP */ }
+	Console(void);
 	~Console(void) { /* NO-OP */ }
 
 public:
 	static Console *Instance(void);
 	static void Destroy(void);
 	virtual void print(const TCHAR *fmt, ...);
-	virtual BOOL init(void) { return TRUE; };
+	virtual BOOL init(void) { return TRUE; }
 	BOOL &on(void) { return _on; }
+
+	void setBootConsole(u_int16_t cnuse) { _boot_console = cnuse; }
+	int16_t getBootConsole(void) const { return _boot_console; }
 };
 
 class SerialConsole : public Console
@@ -68,17 +73,27 @@ private:
 	HANDLE _handle;
 
 protected:
-	TCHAR _bufw[CONSOLE_BUFSIZE];
-	char _bufm[CONSOLE_BUFSIZE];
+	char _bufm[CONSOLE_BUFSIZE];	// multibyte char buffer.
 
 protected:
-	SerialConsole(void) { _handle = INVALID_HANDLE_VALUE; }
+	SerialConsole(void);
+	~SerialConsole(void) { /* NO-OP */ };
 	BOOL openCOM1(void);
-	BOOL setupBuffer(void);
+	BOOL setupMultibyteBuffer(void);
 
 public:
-	virtual BOOL init(void) { return TRUE; };
+	void genericPrint(const char *);
+	virtual BOOL init(void);
+	virtual void print(const TCHAR *fmt, ...);
 };
+
+#define SETUP_WIDECHAR_BUFFER()						\
+__BEGIN_MACRO								\
+	va_list ap;							\
+	va_start(ap, fmt);						\
+	wvsprintf(_bufw, fmt, ap);					\
+	va_end(ap);							\
+__END_MACRO
 
 #define DPRINTF_SETUP()		Console *_cons = Console::Instance()
 #define DPRINTFN(level, x)						\

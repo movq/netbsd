@@ -1,4 +1,4 @@
-/*	$NetBSD: mfc.c,v 1.22 2001/01/13 02:09:27 aymeric Exp $ */
+/*	$NetBSD: mfc.c,v 1.24 2001/05/30 15:24:27 lukem Exp $ */
 
 /*
  * Copyright (c) 1994 Michael L. Hitch
@@ -33,6 +33,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+
+#include "opt_kgdb.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -625,6 +627,20 @@ mfcswrite(dev, uio, flag)
 	if (tp == NULL)
 		return(ENXIO);
 	return tp->t_linesw->l_write(tp, uio, flag);
+}
+
+int
+mfcspoll(dev, events, p)
+	dev_t dev;
+	int events;
+	struct proc *p;
+{
+	struct mfcs_softc *sc = mfcs_cd.cd_devs[dev & 31];
+	struct tty *tp = sc->sc_tty;
+
+	if (tp == NULL)
+		return(ENXIO);
+	return ((*tp->t_linesw->l_poll)(tp, events, p));
 }
 
 struct tty *

@@ -1,4 +1,4 @@
-/*	$NetBSD: scr.c,v 1.8 2000/03/19 19:14:42 tron Exp $	*/
+/*	$NetBSD: scr.c,v 1.10 2001/06/05 05:14:19 thorpej Exp $	*/
 
 /*
  * Copyright 1997
@@ -1084,6 +1084,47 @@ int         flag;
 
 
 
+/*
+**++
+**  FUNCTIONAL DESCRIPTION:
+**
+**      scrpoll
+**
+**      not supported
+**
+**  FORMAL PARAMETERS:
+**      
+**      dev  - input : Device identifier consisting of major and minor numbers.
+**      events -input: Events to poll for
+**      p    - input : Process requesting the poll.
+**
+**  IMPLICIT INPUTS:
+**
+**
+**  IMPLICIT OUTPUTS:
+**
+**      none
+**
+**  FUNCTION VALUE:
+**
+**      Returns ENODEV
+**
+**  SIDE EFFECTS:
+**
+**      none
+**--
+*/
+int
+scrpoll(dev, events, p)
+dev_t       dev;
+int         events;
+struct proc *p;
+{
+    return ENODEV;
+} 
+
+
+
 
 /*
 **++
@@ -1341,7 +1382,7 @@ struct proc  *p;
                 while (1)
                 {
                     // check that we have not looped too many times 
-                    if(masterDoneRetries >= MAX_FIQ_TIME * HZ)  
+                    if(masterDoneRetries >= MAX_FIQ_TIME * hz)  
                     {
 //printf("MAX_FIQ_TIME reached \n");
                         // big problems, so reset bottom 
@@ -1489,7 +1530,7 @@ struct proc  *p;
                while (1)
                {
                      // check that we have not looped too many times 
-                     if(masterDoneRetries >= MAX_FIQ_TIME * HZ)  
+                     if(masterDoneRetries >= MAX_FIQ_TIME * hz)  
                      {
 //printf("MAX_FIQ_TIME reached \n");
                         // big problems, so reset bottom 

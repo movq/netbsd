@@ -1,4 +1,4 @@
-/*	$NetBSD: com_vrip.c,v 1.5 2000/10/27 08:12:18 sato Exp $	*/
+/*	$NetBSD: com_vrip.c,v 1.10 2001/09/28 10:25:16 sato Exp $	*/
 
 /*-
  * Copyright (c) 1999 SASAKI Takesi. All rights reserved.
@@ -34,31 +34,24 @@
  *
  */
 
+#include "opt_kgdb.h"
+
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/ioctl.h>
-#include <sys/termios.h>
-#include <sys/select.h>
-#include <sys/tty.h>
-#include <sys/proc.h>
-#include <sys/user.h>
-#include <sys/conf.h>
-#include <sys/file.h>
-#include <sys/uio.h>
-#include <sys/kernel.h>
-#include <sys/syslog.h>
-#include <sys/types.h>
 #include <sys/device.h>
 #include <sys/reboot.h>
 
+#include <sys/termios.h>
+
 #include <machine/intr.h>
 #include <machine/bus.h>
-/* For serial console */
+
 #include <machine/platid.h>
 #include <machine/platid_mask.h>
 #include <machine/config_hook.h>
 
 #include <hpcmips/vr/vr.h>
+#include <hpcmips/vr/vrcpudef.h>
 #include <hpcmips/vr/vripvar.h>
 #include <hpcmips/vr/cmureg.h>
 #include <hpcmips/vr/siureg.h>
@@ -66,6 +59,8 @@
 #include <dev/ic/comvar.h>
 #include <dev/ic/comreg.h>
 
+#include "opt_vr41xx.h"
+#include <hpcmips/vr/vrgiuvar.h>
 #include <hpcmips/vr/com_vripvar.h>
 
 #include "locators.h"
@@ -85,14 +80,14 @@ struct com_vrip_softc {
 	int sc_pwctl;
 };
 
-static int com_vrip_probe __P((struct device *, struct cfdata *, void *));
-static void com_vrip_attach __P((struct device *, struct device *, void *));
-static int com_vrip_common_probe __P((bus_space_tag_t iot, int iobase));
-int find_comenableport_from_cfdata __P((int *));
+static int com_vrip_probe(struct device *, struct cfdata *, void *);
+static void com_vrip_attach(struct device *, struct device *, void *);
+static int com_vrip_common_probe(bus_space_tag_t, int);
+int find_comenableport_from_cfdata(int *);
 
-void vrcmu_init __P((void));
-void vrcmu_supply __P((int));
-void vrcmu_mask __P((int));
+void vrcmu_init(void);
+void vrcmu_supply(int);
+void vrcmu_mask(int);
 
 struct cfattach com_vrip_ca = {
 	sizeof(struct com_vrip_softc), com_vrip_probe, com_vrip_attach
@@ -111,34 +106,30 @@ find_comenableport_from_cfdata(int *port)
 	for (cf = cfdata; cf->cf_driver; cf++) {
 		if (strcmp(cf->cf_driver->cd_name, "pwctl"))
 			continue;
-		mask = PLATID_DEREF(cf->cf_loc[NEWGPBUSIFCF_PLATFORM]);
-		id = cf->cf_loc[NEWGPBUSIFCF_ID];
+		mask = PLATID_DEREF(cf->cf_loc[HPCIOIFCF_PLATFORM]);
+		id = cf->cf_loc[HPCIOIFCF_ID];
 		if (platid_match(&platid, &mask) &&
 		    id == CONFIG_HOOK_POWERCONTROL_COM0)
 			goto found;
 	}
 	*port = -1;
 	printf ("not found\n");
-	return 1;
+	return (0);
  found:
-	*port = cf->cf_loc[NEWGPBUSIFCF_PORT];
+	*port = cf->cf_loc[HPCIOIFCF_PORT];
 	printf ("#%d\n", *port);
 
-	return *port == GPBUSIFCF_COMCTRL_DEFAULT;
+	return (1);
 }
 
 int
-com_vrip_cndb_attach(iot, iobase, rate, frequency, cflag, kgdb)
-	bus_space_tag_t iot;
-	int iobase;
-	int rate, frequency;
-	tcflag_t cflag;
-	int kgdb;
+com_vrip_cndb_attach(bus_space_tag_t iot, int iobase, int rate, int frequency,
+    tcflag_t cflag, int kgdb)
 {
 	int port;
 	/* Platform dependent setting */
-	__vrcmu_supply(CMUMSKSSIU | CMUMSKSIU, 1);
-	if (find_comenableport_from_cfdata(&port) == 0)
+	__vrcmu_supply(CMUMASK_SIU, 1);
+	if (find_comenableport_from_cfdata(&port))
 		__vrgiu_out(port, 1);	
 
 	if (!com_vrip_common_probe(iot, iobase))
@@ -152,9 +143,7 @@ com_vrip_cndb_attach(iot, iobase, rate, frequency, cflag, kgdb)
 }
 
 static int
-com_vrip_common_probe(iot, iobase)
-	bus_space_tag_t iot;
-	int iobase;
+com_vrip_common_probe(bus_space_tag_t iot, int iobase)
 {
 	bus_space_handle_t ioh;
 	int rv;
@@ -169,10 +158,7 @@ com_vrip_common_probe(iot, iobase)
 }
 
 static int
-com_vrip_probe(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+com_vrip_probe(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct vrip_attach_args *va = aux;
 	bus_space_tag_t iot = va->va_iot;
@@ -189,7 +175,7 @@ com_vrip_probe(parent, cf, aux)
 	if (!va->va_cf || !va->va_cf->cf_clock)
 		return 0; /* not yet CMU attached. Try again later. */
 
-	va->va_cf->cf_clock(va->va_cc, CMUMSKSSIU | CMUMSKSIU, 1);
+	va->va_cf->cf_clock(va->va_cc, CMUMASK_SIU, 1);
 
 	if (com_is_console(iot, va->va_addr, 0)) {
 		/*
@@ -210,9 +196,7 @@ com_vrip_probe(parent, cf, aux)
 
 
 static void
-com_vrip_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+com_vrip_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct com_vrip_softc *vsc = (void *) self;
 	struct com_softc *sc = &vsc->sc_com;
@@ -238,9 +222,9 @@ com_vrip_attach(parent, self, aux)
 
 	sc->sc_frequency = VRCOM_FREQ;
 	/* Power management */
-	va->va_cf->cf_clock(va->va_cc, CMUMSKSSIU | CMUMSKSIU, 1);
+	va->va_cf->cf_clock(va->va_cc, CMUMASK_SIU, 1);
 	/*
-	va->va_gf->gf_portwrite(va->va_gc, GIUPORT_COM, 1);
+	  va->va_gf->gf_portwrite(va->va_gc, GIUPORT_COM, 1);
 	*/
 	/* XXX, locale 'ID' must be need */
 	config_hook_call(CONFIG_HOOK_POWERCONTROL, vsc->sc_pwctl, (void*)1);

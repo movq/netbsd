@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.42 2001/01/21 07:48:29 christos Exp $ */
+/*	$NetBSD: cpu.h,v 1.45 2001/09/27 02:05:42 mrg Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -69,6 +69,7 @@
 #endif
 
 #include <machine/psl.h>
+#include <machine/intr.h>
 #include <sparc/sparc/cpuvar.h>
 #include <sparc/sparc/intreg.h>
 
@@ -117,18 +118,6 @@ extern int eintstack[];
 #define	CLKF_INTR(framep)	((framep)->fp < (u_int)eintstack)
 #endif
 
-/*
- * Software interrupt request `register'.
- */
-extern union sir {
-	int	sir_any;
-	char	sir_which[4];
-} sir;
-
-#define SIR_NET		0
-#define SIR_CLOCK	1
-#define SIR_SERIAL	2
-
 #if defined(SUN4M)
 extern void	raise __P((int, int));
 #if !(defined(SUN4) || defined(SUN4C))
@@ -140,9 +129,10 @@ extern void	raise __P((int, int));
 #define setsoftint()	ienab_bis(IE_L1)
 #endif /* SUN4M */
 
-#define setsoftnet()	(sir.sir_which[SIR_NET] = 1, setsoftint())
-#define setsoftclock()	(sir.sir_which[SIR_CLOCK] = 1, setsoftint())
-#define setsoftserial()	(sir.sir_which[SIR_SERIAL] = 1, setsoftint())
+void	softintr_init __P((void));
+void	*softnet_cookie;
+
+#define setsoftnet()	softintr_schedule(softnet_cookie);
 
 extern int	want_ast;
 
@@ -190,6 +180,7 @@ extern struct intrhand {
 } *intrhand[15];
 
 void	intr_establish __P((int level, struct intrhand *));
+void	intr_disestablish __P((int level, struct intrhand *));
 
 /*
  * intr_fasttrap() is a lot like intr_establish, but is used for ``fast''
@@ -197,6 +188,9 @@ void	intr_establish __P((int level, struct intrhand *));
  * trap window).  Such functions must be written in assembly.
  */
 void	intr_fasttrap __P((int level, void (*vec)(void)));
+
+void	intr_lock_kernel __P((void));
+void	intr_unlock_kernel __P((void));
 
 /* disksubr.c */
 struct dkbad;
@@ -232,7 +226,6 @@ void	remrunqueue __P((struct proc *));
 /* trap.c */
 void	kill_user_windows __P((struct proc *));
 int	rwindow_save __P((struct proc *));
-void	child_return __P((void *));
 /* amd7930intr.s */
 void	amd7930_trap __P((void));
 /* cons.c */

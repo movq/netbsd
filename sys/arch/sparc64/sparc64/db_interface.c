@@ -1,4 +1,4 @@
-/*	$NetBSD: db_interface.c,v 1.55 2001/01/22 13:57:00 jdolecek Exp $ */
+/*	$NetBSD: db_interface.c,v 1.61 2001/07/31 06:55:47 eeh Exp $ */
 
 /*
  * Mach Operating System
@@ -76,12 +76,77 @@ extern struct traptrace {
 
 static int nil;
 
+static int
+db__char_value(const struct db_variable *var, db_expr_t *expr, int mode)
+{
+
+	switch (mode) {
+	case DB_VAR_SET:
+		*var->valuep = *(char *)expr;
+		break;
+	case DB_VAR_GET:
+		*expr = *(char *)var->valuep;
+		break;
+#ifdef DIAGNOSTIC
+	default:
+		printf("db__char_value: mode %d\n", mode);
+		break;
+#endif
+	}
+
+	return 0;
+}
+
+#ifdef notdef_yet
+static int
+db__short_value(const struct db_variable *var, db_expr_t *expr, int mode)
+{
+
+	switch (mode) {
+	case DB_VAR_SET:
+		*var->valuep = *(short *)expr;
+		break;
+	case DB_VAR_GET:
+		*expr = *(short *)var->valuep;
+		break;
+#ifdef DIAGNOSTIC
+	default:
+		printf("db__short_value: mode %d\n", mode);
+		break;
+#endif
+	}
+
+	return 0;
+}
+#endif
+
+static int
+db__int_value(const struct db_variable *var, db_expr_t *expr, int mode)
+{
+
+	switch (mode) {
+	case DB_VAR_SET:
+		*var->valuep = *(int *)expr;
+		break;
+	case DB_VAR_GET:
+		*expr = *(int *)var->valuep;
+		break;
+#ifdef DIAGNOSTIC
+	default:
+		printf("db__int_value: mode %d\n", mode);
+		break;
+#endif
+	}
+
+	return 0;
+}
+
 const struct db_variable db_regs[] = {
 	{ "tstate", (long *)&DDB_TF->tf_tstate, FCN_NULL, },
 	{ "pc", (long *)&DDB_TF->tf_pc, FCN_NULL, },
 	{ "npc", (long *)&DDB_TF->tf_npc, FCN_NULL, },
-	{ "ipl", (long *)&DDB_TF->tf_oldpil, FCN_NULL, },
-	{ "y", (long *)&DDB_TF->tf_y, FCN_NULL, },
+	{ "ipl", (long *)&DDB_TF->tf_oldpil, db__char_value, },
+	{ "y", (long *)&DDB_TF->tf_y, db__int_value, },
 	{ "g0", (long *)&nil, FCN_NULL, },
 	{ "g1", (long *)&DDB_TF->tf_global[1], FCN_NULL, },
 	{ "g2", (long *)&DDB_TF->tf_global[2], FCN_NULL, },
@@ -114,6 +179,41 @@ const struct db_variable db_regs[] = {
 	{ "i5", (long *)&DDB_FR->fr_arg[5], FCN_NULL, },
 	{ "i6", (long *)&DDB_FR->fr_arg[6], FCN_NULL, },
 	{ "i7", (long *)&DDB_FR->fr_arg[7], FCN_NULL, },
+	{ "f0", (long *)&DDB_FP->fs_regs[0], FCN_NULL, },
+	{ "f2", (long *)&DDB_FP->fs_regs[2], FCN_NULL, },
+	{ "f4", (long *)&DDB_FP->fs_regs[4], FCN_NULL, },
+	{ "f6", (long *)&DDB_FP->fs_regs[6], FCN_NULL, },
+	{ "f8", (long *)&DDB_FP->fs_regs[8], FCN_NULL, },
+	{ "f10", (long *)&DDB_FP->fs_regs[10], FCN_NULL, },
+	{ "f12", (long *)&DDB_FP->fs_regs[12], FCN_NULL, },
+	{ "f14", (long *)&DDB_FP->fs_regs[14], FCN_NULL, },
+	{ "f16", (long *)&DDB_FP->fs_regs[16], FCN_NULL, },
+	{ "f18", (long *)&DDB_FP->fs_regs[18], FCN_NULL, },
+	{ "f20", (long *)&DDB_FP->fs_regs[20], FCN_NULL, },
+	{ "f22", (long *)&DDB_FP->fs_regs[22], FCN_NULL, },
+	{ "f24", (long *)&DDB_FP->fs_regs[24], FCN_NULL, },
+	{ "f26", (long *)&DDB_FP->fs_regs[26], FCN_NULL, },
+	{ "f28", (long *)&DDB_FP->fs_regs[28], FCN_NULL, },
+	{ "f30", (long *)&DDB_FP->fs_regs[30], FCN_NULL, },
+	{ "f32", (long *)&DDB_FP->fs_regs[32], FCN_NULL, },
+	{ "f34", (long *)&DDB_FP->fs_regs[34], FCN_NULL, },
+	{ "f36", (long *)&DDB_FP->fs_regs[36], FCN_NULL, },
+	{ "f38", (long *)&DDB_FP->fs_regs[38], FCN_NULL, },
+	{ "f40", (long *)&DDB_FP->fs_regs[40], FCN_NULL, },
+	{ "f42", (long *)&DDB_FP->fs_regs[42], FCN_NULL, },
+	{ "f44", (long *)&DDB_FP->fs_regs[44], FCN_NULL, },
+	{ "f46", (long *)&DDB_FP->fs_regs[46], FCN_NULL, },
+	{ "f48", (long *)&DDB_FP->fs_regs[48], FCN_NULL, },
+	{ "f50", (long *)&DDB_FP->fs_regs[50], FCN_NULL, },
+	{ "f52", (long *)&DDB_FP->fs_regs[52], FCN_NULL, },
+	{ "f54", (long *)&DDB_FP->fs_regs[54], FCN_NULL, },
+	{ "f56", (long *)&DDB_FP->fs_regs[56], FCN_NULL, },
+	{ "f58", (long *)&DDB_FP->fs_regs[58], FCN_NULL, },
+	{ "f60", (long *)&DDB_FP->fs_regs[60], FCN_NULL, },
+	{ "f62", (long *)&DDB_FP->fs_regs[62], FCN_NULL, },
+	{ "fsr", (long *)&DDB_FP->fs_fsr, FCN_NULL, },
+	{ "gsr", (long *)&DDB_FP->fs_gsr, FCN_NULL, },
+
 };
 const struct db_variable * const db_eregs = db_regs + sizeof(db_regs)/sizeof(db_regs[0]);
 
@@ -130,6 +230,7 @@ void db_ctx_cmd __P((db_expr_t, int, db_expr_t, char *));
 void db_dump_window __P((db_expr_t, int, db_expr_t, char *));
 void db_dump_stack __P((db_expr_t, int, db_expr_t, char *));
 void db_dump_trap __P((db_expr_t, int, db_expr_t, char *));
+void db_dump_fpstate __P((db_expr_t, int, db_expr_t, char *));
 void db_dump_ts __P((db_expr_t, int, db_expr_t, char *));
 void db_dump_pcb __P((db_expr_t, int, db_expr_t, char *));
 void db_dump_pv __P((db_expr_t, int, db_expr_t, char *));
@@ -182,7 +283,6 @@ kdb_trap(type, tf)
 #if NFB > 0
 	fb_unblank();
 #endif
-
 	switch (type) {
 	case T_BREAKPOINT:	/* breakpoint */
 		printf("kdb breakpoint at %llx\n",
@@ -206,6 +306,11 @@ kdb_trap(type, tf)
 	write_all_windows();
 
 	ddb_regs.ddb_tf = *tf;
+	if (fpproc) {
+		savefpstate(fpproc->p_md.md_fpstate);
+		ddb_regs.ddb_fpstate = *fpproc->p_md.md_fpstate;
+		loadfpstate(fpproc->p_md.md_fpstate);
+	}
 	/* We should do a proper copyin and xlate 64-bit stack frames, but... */
 /*	if (tf->tf_tstate & TSTATE_PRIV) { */
 	
@@ -246,6 +351,10 @@ kdb_trap(type, tf)
 	db_active--;
 	splx(s);
 
+	if (fpproc) {	
+		*fpproc->p_md.md_fpstate = ddb_regs.ddb_fpstate;
+		loadfpstate(fpproc->p_md.md_fpstate);
+	}
 #if 0
 	/* We will not alter the machine's running state until we get everything else working */
 	*(struct frame *)tf->tf_out[6] = ddb_regs.ddb_fr;
@@ -342,11 +451,15 @@ db_dump_dtlb(addr, have_addr, count, modif)
 		p = buf;
 		for (i=0; i<64;) {
 #ifdef __arch64__
-			db_printf("%2d:%16.16lx %16.16lx ", i++, *p++, *p++);
-			db_printf("%2d:%16.16lx %16.16lx\n", i++, *p++, *p++);
+			db_printf("%2d:%16.16lx %16.16lx ", i++, p[0], p[1]);
+			p += 2;
+			db_printf("%2d:%16.16lx %16.16lx\n", i++, p[0], p[1]);
+			p += 2;
 #else
-			db_printf("%2d:%16.16qx %16.16qx ", i++, *p++, *p++);
-			db_printf("%2d:%16.16qx %16.16qx\n", i++, *p++, *p++);
+			db_printf("%2d:%16.16qx %16.16qx ", i++, p[0], p[1]);
+			p += 2;
+			db_printf("%2d:%16.16qx %16.16qx\n", i++, p[0], p[1]);
+			p += 2;
 #endif
 		}
 	} else {
@@ -524,18 +637,19 @@ db_lock(addr, have_addr, count, modif)
 	char *modif;
 {
 #if 0
-	lock_t l = (lock_t)addr;
+	struct lock *l;
 
-	if (have_addr) {
-		db_printf("interlock=%x want_write=%x want_upgrade=%x\n"
-			  "waiting=%x can_sleep=%x read_count=%x\n"
-			  "thread=%p recursion_depth=%x\n",
-			  l->interlock.lock_data, l->want_write, l->want_upgrade,
-			  l->waiting, l->can_sleep, l->read_count,
-			  l->thread, l->recursion_depth);
+	if (!have_addr) {
+		db_printf("What lock address?\n");
+		return;
 	}
 
-	db_printf("What lock address?\n");
+	l = (struct lock *)addr;
+	db_printf("interlock=%x flags=%x\n waitcount=%x sharecount=%x "
+	    "exclusivecount=%x\n wmesg=%s recurselevel=%x\n",
+	    l->lk_interlock.lock_data, l->lk_flags, l->lk_waitcount,
+	    l->lk_sharecount, l->lk_exclusivecount, l->lk_wmesg,
+	    l->lk_recurselevel);
 #else
 	db_printf("locks unsupported\n");
 #endif
@@ -556,14 +670,14 @@ db_dump_dtsb(addr, have_addr, count, modif)
 	db_printf("TSB:\n");
 	for (i=0; i<TSBENTS; i++) {
 		db_printf("%4d:%4d:%08x %08x:%08x ", i, 
-			  (int)((tsb[i].tag.tag&TSB_TAG_G)?-1:TSB_TAG_CTX(tsb[i].tag.tag)),
-			  (int)((i<<13)|TSB_TAG_VA(tsb[i].tag.tag)),
-			  (int)(tsb[i].data.data>>32), (int)tsb[i].data.data);
+			  (int)((tsb[i].tag&TSB_TAG_G)?-1:TSB_TAG_CTX(tsb[i].tag)),
+			  (int)((i<<13)|TSB_TAG_VA(tsb[i].tag)),
+			  (int)(tsb[i].data>>32), (int)tsb[i].data);
 		i++;
 		db_printf("%4d:%4d:%08x %08x:%08x\n", i,
-			  (int)((tsb[i].tag.tag&TSB_TAG_G)?-1:TSB_TAG_CTX(tsb[i].tag.tag)),
-			  (int)((i<<13)|TSB_TAG_VA(tsb[i].tag.tag)),
-			  (int)(tsb[i].data.data>>32), (int)tsb[i].data.data);
+			  (int)((tsb[i].tag&TSB_TAG_G)?-1:TSB_TAG_CTX(tsb[i].tag)),
+			  (int)((i<<13)|TSB_TAG_VA(tsb[i].tag)),
+			  (int)(tsb[i].data>>32), (int)tsb[i].data);
 	}
 }
 
@@ -615,7 +729,8 @@ db_proc_cmd(addr, have_addr, count, modif)
 	db_printf("profile timer: %ld sec %ld usec\n",
 		  p->p_stats->p_timer[ITIMER_PROF].it_value.tv_sec,
 		  p->p_stats->p_timer[ITIMER_PROF].it_value.tv_usec);
-	db_printf("pcb: %p\n", &p->p_addr->u_pcb);
+	db_printf("pcb: %p fpstate: %p\n", &p->p_addr->u_pcb, 
+		p->p_md.md_fpstate);
 	return;
 }
 
@@ -632,11 +747,13 @@ db_ctx_cmd(addr, have_addr, count, modif)
 	for (p = allproc.lh_first; p != 0; p = p->p_list.le_next) {
 		if (p->p_stat) {
 			db_printf("process %p:", p);
-			db_printf("pid:%d pmap:%p ctx:%x tf:%p lastcall:%s\n",
-				  p->p_pid, p->p_vmspace->vm_map.pmap, 
-				  p->p_vmspace->vm_map.pmap->pm_ctx,
-				  p->p_md.md_tf, 
-				  (p->p_addr->u_pcb.lastcall)?p->p_addr->u_pcb.lastcall:"Null");
+			db_printf("pid:%d pmap:%p ctx:%x tf:%p fpstate %p "
+				"lastcall:%s\n",
+				p->p_pid, p->p_vmspace->vm_map.pmap,
+				p->p_vmspace->vm_map.pmap->pm_ctx,
+				p->p_md.md_tf, p->p_md.md_fpstate,
+				(p->p_addr->u_pcb.lastcall)?
+				p->p_addr->u_pcb.lastcall : "Null");
 		}
 	}
 	return;
@@ -870,6 +987,7 @@ const struct db_command db_machine_command_table[] = {
 #if NESP_SBUS
 	{ "esp",	db_esp,		0,	0 },
 #endif
+	{ "fpstate",	db_dump_fpstate,0,	0 },
 	{ "kmap",	db_pmap_kernel,	0,	0 },
 	{ "lock",	db_lock,	0,	0 },
 	{ "pcb",	db_dump_pcb,	0,	0 },

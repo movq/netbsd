@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.h,v 1.49 2001/03/01 15:56:47 pk Exp $ */
+/*	$NetBSD: pmap.h,v 1.58 2001/09/10 21:19:24 chris Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -138,13 +138,12 @@ TAILQ_HEAD(mmuhd,mmuentry);
 struct pmap {
 	union	ctxinfo *pm_ctx;	/* current context, if any */
 	int	pm_ctxnum;		/* current context's number */
-	simple_lock_data_t pm_lock;	/* spinlock */
+	struct simplelock pm_lock;	/* spinlock */
 	int	pm_refcount;		/* just what it says */
 
 	struct mmuhd	pm_reglist;	/* MMU regions on this pmap (4/4c) */
 	struct mmuhd	pm_seglist;	/* MMU segments on this pmap (4/4c) */
 
-	void		*pm_regstore;
 	struct regmap	*pm_regmap;
 
 	int		**pm_reg_ptps;	/* SRMMU-edible region tables for 4m */
@@ -249,7 +248,6 @@ void		pmap_bootstrap __P((int nmmu, int nctx, int nregion));
 int		pmap_count_ptes __P((struct pmap *));
 void		pmap_prefer __P((vaddr_t, vaddr_t *));
 int		pmap_pa_exists __P((paddr_t));
-void		*pmap_bootstrap_alloc __P((int));
 void		pmap_unwire __P((pmap_t, vaddr_t));
 void		pmap_collect __P((pmap_t));
 void		pmap_copy __P((pmap_t, pmap_t, vaddr_t, vsize_t, vaddr_t));
@@ -258,12 +256,9 @@ void		pmap_destroy __P((pmap_t));
 void		pmap_init __P((void));
 vaddr_t		pmap_map __P((vaddr_t, paddr_t, paddr_t, int));
 paddr_t		pmap_phys_address __P((int));
-void		pmap_pinit __P((pmap_t));
 void		pmap_reference __P((pmap_t));
-void		pmap_release __P((pmap_t));
 void		pmap_remove __P((pmap_t, vaddr_t, vaddr_t));
-void		pmap_update __P((void));
-void		pmap_init __P((void));
+#define		pmap_update(pmap)		/* nothing (yet) */
 void		pmap_virtual_space __P((vaddr_t *, vaddr_t *));
 void		pmap_redzone __P((void));
 void		kvm_uncache __P((caddr_t, int));
@@ -285,7 +280,6 @@ boolean_t	pmap_extract4_4c __P((pmap_t, vaddr_t, paddr_t *));
 boolean_t	pmap_is_modified4_4c __P((struct vm_page *));
 boolean_t	pmap_is_referenced4_4c __P((struct vm_page *));
 void		pmap_kenter_pa4_4c __P((vaddr_t, paddr_t, vm_prot_t));
-void		pmap_kenter_pgs4_4c __P((vaddr_t, struct vm_page **, int));
 void		pmap_kremove4_4c __P((vaddr_t, vsize_t));
 void		pmap_page_protect4_4c __P((struct vm_page *, vm_prot_t));
 void		pmap_protect4_4c __P((pmap_t, vaddr_t, vaddr_t, vm_prot_t));
@@ -308,7 +302,6 @@ boolean_t	pmap_extract4m __P((pmap_t, vaddr_t, paddr_t *));
 boolean_t	pmap_is_modified4m __P((struct vm_page *));
 boolean_t	pmap_is_referenced4m __P((struct vm_page *));
 void		pmap_kenter_pa4m __P((vaddr_t, paddr_t, vm_prot_t));
-void		pmap_kenter_pgs4m __P((vaddr_t, struct vm_page **, int));
 void		pmap_kremove4m __P((vaddr_t, vsize_t));
 void		pmap_page_protect4m __P((struct vm_page *, vm_prot_t));
 void		pmap_protect4m __P((pmap_t, vaddr_t, vaddr_t, vm_prot_t));
@@ -328,7 +321,6 @@ void		pmap_changeprot4m __P((pmap_t, vaddr_t, vm_prot_t, int));
 #define		pmap_is_modified	pmap_is_modified4_4c
 #define		pmap_is_referenced	pmap_is_referenced4_4c
 #define		pmap_kenter_pa		pmap_kenter_pa4_4c
-#define		pmap_kenter_pgs		pmap_kenter_pgs4_4c
 #define		pmap_kremove		pmap_kremove4_4c
 #define		pmap_page_protect	pmap_page_protect4_4c
 #define		pmap_protect		pmap_protect4_4c
@@ -343,7 +335,6 @@ void		pmap_changeprot4m __P((pmap_t, vaddr_t, vm_prot_t, int));
 #define		pmap_is_modified	pmap_is_modified4m
 #define		pmap_is_referenced	pmap_is_referenced4m
 #define		pmap_kenter_pa		pmap_kenter_pa4m
-#define		pmap_kenter_pgs		pmap_kenter_pgs4m
 #define		pmap_kremove		pmap_kremove4m
 #define		pmap_page_protect	pmap_page_protect4m
 #define		pmap_protect		pmap_protect4m
@@ -359,7 +350,6 @@ extern boolean_t (*pmap_extract_p) __P((pmap_t, vaddr_t, paddr_t *));
 extern boolean_t(*pmap_is_modified_p) __P((struct vm_page *));
 extern boolean_t(*pmap_is_referenced_p) __P((struct vm_page *));
 extern void	(*pmap_kenter_pa_p) __P((vaddr_t, paddr_t, vm_prot_t));
-extern void	(*pmap_kenter_pgs_p) __P((vaddr_t, struct vm_page **, int));
 extern void	(*pmap_kremove_p) __P((vaddr_t, vsize_t));
 extern void	(*pmap_page_protect_p) __P((struct vm_page *, vm_prot_t));
 extern void	(*pmap_protect_p) __P((pmap_t, vaddr_t, vaddr_t, vm_prot_t));
@@ -372,7 +362,6 @@ extern void	(*pmap_changeprot_p) __P((pmap_t, vaddr_t, vm_prot_t, int));
 #define		pmap_is_modified	(*pmap_is_modified_p)
 #define		pmap_is_referenced	(*pmap_is_referenced_p)
 #define		pmap_kenter_pa		(*pmap_kenter_pa_p)
-#define		pmap_kenter_pgs		(*pmap_kenter_pgs_p)
 #define		pmap_kremove		(*pmap_kremove_p)
 #define		pmap_page_protect	(*pmap_page_protect_p)
 #define		pmap_protect		(*pmap_protect_p)
@@ -383,6 +372,24 @@ extern void	(*pmap_changeprot_p) __P((pmap_t, vaddr_t, vm_prot_t, int));
 /* pmap_{zero,copy}_page() may be assisted by specialized hardware */
 #define		pmap_zero_page		(*cpuinfo.zero_page)
 #define		pmap_copy_page		(*cpuinfo.copy_page)
+
+#if defined(SUN4M)
+/*
+ * Macros which implement SRMMU TLB flushing/invalidation
+ */
+#define tlb_flush_page_real(va)    \
+	sta(((vaddr_t)(va) & ~0xfff) | ASI_SRMMUFP_L3, ASI_SRMMUFP, 0)
+
+#define tlb_flush_segment_real(vr, vs) \
+	sta(((vr)<<RGSHIFT) | ((vs)<<SGSHIFT) | ASI_SRMMUFP_L2, ASI_SRMMUFP,0)
+
+#define tlb_flush_region_real(vr) \
+	sta(((vr) << RGSHIFT) | ASI_SRMMUFP_L1, ASI_SRMMUFP, 0)
+
+#define tlb_flush_context_real()	sta(ASI_SRMMUFP_L0, ASI_SRMMUFP, 0)
+#define tlb_flush_all_real()		sta(ASI_SRMMUFP_LN, ASI_SRMMUFP, 0)
+
+#endif /* SUN4M */
 
 #endif /* _KERNEL */
 

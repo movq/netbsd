@@ -1,4 +1,4 @@
-/*	$NetBSD: sun3x.c,v 1.3 1998/06/29 20:06:34 gwr Exp $	*/
+/*	$NetBSD: sun3x.c,v 1.5 2001/09/11 07:30:51 chs Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -223,7 +223,7 @@ dvma3x_free(char *dvma, int len)
 
 u_int
 get_pte(va)
-	vm_offset_t va;	/* virt. address */
+	vaddr_t va;	/* virt. address */
 {
 	u_int	pn;
 	mmu_short_pte_t *tbl;
@@ -248,7 +248,7 @@ get_pte(va)
 
 void
 set_pte(va, pa)
-	vm_offset_t va;	/* virt. address */
+	vaddr_t va;	/* virt. address */
 	u_int pa;	/* phys. address */
 {
 	u_int	pn;

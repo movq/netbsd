@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.54 1999/09/17 20:07:19 thorpej Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.56 2001/09/05 13:21:09 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -263,7 +263,7 @@ scsi_find(name, ctlr, unit)
 {
 	struct device *scsibus;
 	struct scsibus_softc *sbsc;
-	struct scsipi_link *sc_link;
+	struct scsipi_periph *periph;
 	int target, lun;
 	char tname[16];
 
@@ -278,11 +278,11 @@ scsi_find(name, ctlr, unit)
 
 	/* Find the device at this target/LUN */
 	sbsc = (struct scsibus_softc *)scsibus;
-	sc_link = sbsc->sc_link[target][lun];
-	if (sc_link == NULL)
+	periph = sbsc->sc_channel->chan_periphs[target][lun];
+	if (periph == NULL)
 		return (NULL);
 
-	return (sc_link->device_softc);
+	return (periph->periph_dev);
 }
 
 /*
@@ -363,10 +363,10 @@ bus_peek(bustype, pa, sz)
 /* from hp300: badbaddr() */
 int
 peek_byte(addr)
-	register caddr_t addr;
+	caddr_t addr;
 {
-	label_t 	faultbuf;
-	register int x;
+	label_t faultbuf;
+	int x;
 
 	nofault = &faultbuf;
 	if (setjmp(&faultbuf))
@@ -380,10 +380,10 @@ peek_byte(addr)
 
 int
 peek_word(addr)
-	register caddr_t addr;
+	caddr_t addr;
 {
-	label_t		faultbuf;
-	register int x;
+	label_t faultbuf;
+	int x;
 
 	nofault = &faultbuf;
 	if (setjmp(&faultbuf))
@@ -397,10 +397,10 @@ peek_word(addr)
 
 int
 peek_long(addr)
-	register caddr_t addr;
+	caddr_t addr;
 {
-	label_t		faultbuf;
-	register int x;
+	label_t faultbuf;
+	int x;
 
 	nofault = &faultbuf;
 	if (setjmp(&faultbuf))

@@ -1,4 +1,4 @@
-/*	$NetBSD: intvec.s,v 1.59 2001/02/18 10:44:22 ragge Exp $   */
+/*	$NetBSD: intvec.s,v 1.63 2001/09/16 12:51:03 ragge Exp $   */
 
 /*
  * Copyright (c) 1994, 1997 Ludd, University of Lule}, Sweden.
@@ -35,8 +35,13 @@
 #include <sys/cdefs.h>
 #include <net/netisr.h>
 
+#define	__HAVE_GENERIC_SOFT_INTERRUPTS	/* XXX - cannot include types.h! */
+
+#include "opt_ddb.h"
 #include "opt_cputype.h"
 #include "opt_emulate.h"
+#include "opt_multiprocessor.h"
+#include "opt_lockdebug.h"
 #include "leds.h"
 
 #define SCBENTRY(name) \
@@ -304,7 +309,7 @@ SCBENTRY(softnet)
 #	tstl	_C_LABEL(netisr)			# any netisr's set
 #	beql	2f			# no, skip looking at them one by one
 #define DONETISR(bit, fn) \
-	bbcc	$bit,_C_LABEL(netisr),1f; \
+	bbcci	$bit,_C_LABEL(netisr),1f; \
 	calls	$0,_C_LABEL(fn); \
 	1:
 
@@ -330,6 +335,11 @@ SCBENTRY(softserial)
 
 	.align	2
 softintr_dispatch:
+#if defined(MULTIPROCESSOR) || defined(LOCKDEBUG)
+	pushl	r0
+	calls	$0,_C_LABEL(krnlock)
+	movl	(sp)+,r0
+#endif
 	movl	SHD_INTRS(r0), r0	# anything to do? (get first handler)
 	beql	3f			# nope return
 	pushl	r7			# we need to use r7 so save it
@@ -342,16 +352,27 @@ softintr_dispatch:
 2:	movl	SH_NEXT(r7), r7		# get next handler
 	bneq	1b			# if not null, process it
 	movl	(sp)+, r7		# done, restore r7
-3:	rsb				# return to caller
+3:
+#if defined(MULTIPROCESSOR) || defined(LOCKDEBUG)
+	calls	$0,_C_LABEL(krnunlock)
+#endif
+	rsb				# return to caller
 
 TRAPCALL(ddbtrap, T_KDBTRAP)
 
 SCBENTRY(hardclock)
 	mtpr	$0xc1,$PR_ICCS		# Reset interrupt flag
-	pushr	$0x3f
+#ifdef DDB
+	tstl	0x80000100		# rpb wait element
+	beql	1f			# set, jmp to debugger
+	pushl	$0
+	pushl	$T_KDBTRAP
+	jbr	Xtrap
+#endif
+1:	pushr	$0x3f
 	incl	_C_LABEL(clock_intrcnt)+EV_COUNT	# count the number of clock interrupts
 	adwc	$0,_C_LABEL(clock_intrcnt)+EV_COUNT+4
-#if VAX46
+#if VAX46 || VAXANY
 	cmpl	_C_LABEL(vax_boardtype),$VAX_BTYP_46
 	bneq	1f
 	movl	_C_LABEL(ka46_cpu),r0

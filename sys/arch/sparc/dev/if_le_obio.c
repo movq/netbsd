@@ -1,4 +1,4 @@
-/*	$NetBSD: if_le_obio.c,v 1.8 2000/07/09 20:57:47 pk Exp $	*/
+/*	$NetBSD: if_le_obio.c,v 1.12 2001/05/30 12:28:50 mrg Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -92,7 +92,7 @@ struct cfattach le_obio_ca = {
 
 extern struct cfdriver le_cd;
 
-#if defined(_KERNEL) && !defined(_LKM)
+#if defined(_KERNEL_OPT)
 #include "opt_ddb.h"
 #endif
 
@@ -202,9 +202,9 @@ leattach_obio(parent, self, aux)
 		return;
 	}
 	/* Load DMA buffer */
-	if ((error = bus_dmamap_load_raw(dmatag, lesc->sc_dmamap,
-				&seg, rseg,
-				MEMSIZE, BUS_DMA_NOWAIT)) != 0) {
+	if ((error = bus_dmamap_load(dmatag, lesc->sc_dmamap,
+				     sc->sc_mem, MEMSIZE, NULL,
+				     BUS_DMA_NOWAIT)) != 0) {
 		printf("%s: DMA buffer map load error %d\n",
 			self->dv_xname, error);
 		bus_dmamem_unmap(dmatag, (caddr_t)sc->sc_mem, MEMSIZE);

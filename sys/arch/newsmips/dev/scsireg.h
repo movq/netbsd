@@ -1,4 +1,4 @@
-/*	$NetBSD: scsireg.h,v 1.4 2000/12/03 01:42:30 matt Exp $	*/
+/*	$NetBSD: scsireg.h,v 1.6 2001/04/26 15:52:01 tsubai Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -248,7 +248,7 @@ struct sc_scb {
 
 struct sc_softc {
 	struct device sc_dev;
-	struct scsipi_link sc_link;
+	struct scsipi_channel sc_channel;
 	struct scsipi_adapter sc_adapter;
 
 	TAILQ_HEAD(scb_list, sc_scb) ready_list, free_list;
@@ -262,8 +262,8 @@ struct sc_softc {
 	int scsi_1185AQ;
 	int pad_start;
 
-	int	wbc;	/* # of channel that is waiting for scsi bus free */	
-	int	wrc;	/* # of channel that is waiting for reselection */	
+	int	wbc;	/* # of channel that is waiting for scsi bus free */
+	int	wrc;	/* # of channel that is waiting for reselection */
 	struct sc_chan_stat *ip;
 			/* In progress channel. Same as ISTAT.IP */
 	int	ipc;		/* number of in progress channel. */

@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.7 2001/01/14 02:00:38 thorpej Exp $	*/
+/*	$NetBSD: intr.h,v 1.10 2001/06/13 15:08:06 soda Exp $	*/
 
 /*
  * Copyright (c) 1998 Jonathan Stone.  All rights reserved.
@@ -96,8 +96,7 @@ extern void _clrsoftintr __P((int));
 #define splbio()	(_splraise(splvec.splbio))
 #define splnet()	(_splraise(splvec.splnet))
 #define spltty()	(_splraise(splvec.spltty))
-#define splimp()	(_splraise(splvec.splimp))
-#define splvm()		(_splraise(splvec.splimp))
+#define splvm()		(_splraise(splvec.splvm))
 #define splclock()	(_splraise(splvec.splclock))
 #define splstatclock()	(_splraise(splvec.splstatclock))
 #define splhigh()	_splraise(MIPS_INT_MASK_SPLHIGH)
@@ -114,7 +113,7 @@ struct splvec {
 	int	splbio;
 	int	splnet;
 	int	spltty;
-	int	splimp;
+	int	splvm;
 	int	splclock;
 	int	splstatclock;
 };
@@ -129,7 +128,7 @@ extern struct splvec splvec;
 extern u_long intrcnt[];
 
 struct clockframe;
-void set_intr __P((int, int(*)(u_int, struct clockframe *), int));
+void arc_set_intr __P((int, int(*)(u_int, struct clockframe *), int));
 
 /* XXX - revisit here */
 int imask[NIPL];

@@ -1,4 +1,4 @@
-/* $NetBSD: machdep.c,v 1.13 2000/12/12 04:07:35 nisimura Exp $ */
+/* $NetBSD: machdep.c,v 1.19 2001/09/10 21:19:32 chris Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -38,9 +38,10 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.13 2000/12/12 04:07:35 nisimura Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.19 2001/09/10 21:19:32 chris Exp $");
 
 #include "opt_ddb.h"
+#include "opt_kgdb.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -100,9 +101,9 @@ struct cpu_info cpu_info_store;
 extern char kernel_text[];
 extern char etext[];
 
-vm_map_t exec_map = NULL;  
-vm_map_t mb_map = NULL;
-vm_map_t phys_map = NULL;
+struct vm_map *exec_map = NULL;  
+struct vm_map *mb_map = NULL;
+struct vm_map *phys_map = NULL;
 
 caddr_t	msgbufaddr;
 int	maxmem;			/* max memory per process */
@@ -176,6 +177,7 @@ luna68k_init()
 		pmap_enter(pmap_kernel(), (vaddr_t)msgbufaddr + i * NBPG,
 		    avail_end + i * NBPG, VM_PROT_READ|VM_PROT_WRITE,
 		    VM_PROT_READ|VM_PROT_WRITE|PMAP_WIRED);
+	pmap_update(pmap_kernel());
 	initmsgbuf(msgbufaddr, m68k_round_page(MSGBUFSIZE));
 
 
@@ -279,7 +281,7 @@ cpu_startup()
 	if (uvm_map(kernel_map, (vaddr_t *) &buffers, round_page(size),
 		    NULL, UVM_UNKNOWN_OFFSET, 0,
 		    UVM_MAPFLAG(UVM_PROT_NONE, UVM_PROT_NONE, UVM_INH_NONE,
-				UVM_ADV_NORMAL, 0)) != KERN_SUCCESS)
+				UVM_ADV_NORMAL, 0)) != 0)
 		panic("startup: cannot allocate VM for buffers");
 	minaddr = (vaddr_t)buffers;
 	if ((bufpages / nbuf) >= btoc(MAXBSIZE)) {
@@ -313,6 +315,7 @@ cpu_startup()
 			curbufsize -= PAGE_SIZE;
 		}
 	}
+	pmap_update(pmap_kernel());
 
 	/*
 	 * Allocate a submap for exec arguments.  This map effectively
@@ -347,7 +350,7 @@ cpu_startup()
 	 * XXX but not right now.
 	 */
 	if (uvm_map_protect(kernel_map, 0, round_page((vaddr_t)&kernel_text),
-	    UVM_PROT_NONE, TRUE) != KERN_SUCCESS)
+	    UVM_PROT_NONE, TRUE) != 0)
 		panic("can't mark pre-text pages off-limits");
 
 	/*
@@ -356,7 +359,7 @@ cpu_startup()
 	 */
 	if (uvm_map_protect(kernel_map, trunc_page((vaddr_t)&kernel_text),
 	    trunc_page((vaddr_t)&etext), UVM_PROT_READ|UVM_PROT_EXEC, TRUE)
-	    != KERN_SUCCESS)
+	    != 0)
 		panic("can't protect kernel text");
 
 	/*
@@ -736,6 +739,7 @@ dumpsys()
 		pmap_enter(pmap_kernel(), (vaddr_t)vmmap, maddr,
 		    VM_PROT_READ, VM_PROT_READ|PMAP_WIRED);
 
+		pmap_update(pmap_kernel());
 		error = (*dump)(dumpdev, blkno, vmmap, NBPG);
  bad:
 		switch (error) {
@@ -948,15 +952,15 @@ struct consdev *cn_tab = &romcons;
 ({					\
 	register _r;			\
 	asm volatile ("			\
-		movc	vbr,%0		; \
-		movel	%0,sp@-		; \
+		movc	%%vbr,%0	; \
+		movel	%0,%%sp@-	; \
 		clrl	%0		; \
-		movc	%0,vbr"		\
+		movc	%0,%%vbr"	\
 		: "=r" (_r));		\
 	PUTC(x);			\
 	asm volatile ("			\
-		movel	sp@+,%0		; \
-		movc	%0,vbr"		\
+		movel	%%sp@+,%0	; \
+		movc	%0,%%vbr"	\
 		: "=r" (_r));		\
 })
 
@@ -964,15 +968,15 @@ struct consdev *cn_tab = &romcons;
 ({					\
 	register _r, _c;		\
 	asm volatile ("			\
-		movc	vbr,%0		; \
-		movel	%0,sp@-		; \
+		movc	%%vbr,%0	; \
+		movel	%0,%%sp@-	; \
 		clrl	%0		; \
-		movc	%0,vbr"		\
+		movc	%0,%%vbr"	\
 		: "=r" (_r));		\
 	_c = GETC();			\
 	asm volatile ("			\
-		movel	sp@+,%0		; \
-		movc	%0,vbr"		\
+		movel	%%sp@+,%0	; \
+		movc	%0,%%vbr"	\
 		: "=r" (_r));		\
 	_c;				\
 })

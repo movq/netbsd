@@ -1,5 +1,5 @@
-#	$NetBSD: Makefile.x68k,v 1.49 2000/12/29 15:18:37 minoura Exp $
-
+#	$NetBSD: Makefile.x68k,v 1.53 2001/10/26 06:45:41 jmc Exp $
+#
 # Makefile for NetBSD
 #
 # This makefile is constructed from a machine description:
@@ -11,6 +11,9 @@
 # Machine generic makefile changes should be made in
 #	/sys/arch/x68k/conf/Makefile.x68k
 # after which config should be rerun for all machines of that type.
+
+MACHINE_ARCH=m68k
+USETOOLS?=	no
 
 .include <bsd.own.mk>
 
@@ -34,13 +37,14 @@ COPTS?=	-O2
 
 # source tree is located via $S relative to the compilation directory
 .ifndef S
-S!=	cd ../../../..; pwd
+#S!=	cd ../../../..; pwd
+S=	../../../..
 .endif
 X68K=	$S/arch/x68k
 
-HAVE_EGCS!=	${CC} --version | egrep "^(2\.8|egcs)" ; echo
+HAVE_EGCS!=	${CC} --version | egrep "^(2\.[89]|egcs)" ; echo
 INCLUDES=	-I. -I$S/arch -I$S -nostdinc
-CPPFLAGS=	${INCLUDES} ${IDENT} ${PARAM} -D_KERNEL -Dx68k
+CPPFLAGS=	${INCLUDES} ${IDENT} ${PARAM} -D_KERNEL -D_KERNEL_OPT -Dx68k
 CMACHFLAGS?=	-m68020-60 -Wa,-m68030 -Wa,-m68851
 CWARNFLAGS?=	-Werror -Wstrict-prototypes -Wmissing-prototypes \
 		-Wpointer-arith

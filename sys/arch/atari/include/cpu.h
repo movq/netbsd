@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.36 2001/01/07 21:08:03 leo Exp $	*/
+/*	$NetBSD: cpu.h,v 1.38 2001/09/08 11:16:43 thomas Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -49,7 +49,7 @@
  * Exported definitions unique to atari/68k cpu support.
  */
 
-#if defined(_KERNEL) && !defined(_LKM)
+#if defined(_KERNEL_OPT)
 #include "opt_lockdebug.h"
 #endif
 
@@ -92,7 +92,7 @@ struct clockframe {
 	u_short	cf_sr;		/* sr at time of interrupt	*/
 	u_long	cf_pc;		/* pc at time of interrupt	*/
 	u_short	cf_vo;		/* vector offset (4-word frame)	*/
-};
+} __attribute__((packed));
 
 #define	CLKF_USERMODE(framep)	(((framep)->cf_sr & PSL_S) == 0)
 #define	CLKF_BASEPRI(framep)	(((framep)->cf_sr & PSL_IPL) == 0)

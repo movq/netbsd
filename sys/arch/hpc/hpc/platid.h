@@ -1,4 +1,4 @@
-/*	$NetBSD: platid.h,v 1.1 2001/01/28 02:52:21 uch Exp $	*/
+/*	$NetBSD: platid.h,v 1.6 2001/09/24 14:29:31 takemura Exp $	*/
 
 /*-
  * Copyright (c) 1999-2001
@@ -33,6 +33,9 @@
  * SUCH DAMAGE.
  *
  */
+
+#ifndef _HPC_PLATID_H_
+#define _HPC_PLATID_H_
 
 #include <sys/cdefs.h>
 
@@ -140,8 +143,13 @@ void platid_dump(char *, void *);
 int platid_match(platid_t *, platid_mask_t *);
 int platid_match_sub(platid_t *, platid_mask_t *, int);
 tchar* platid_name(platid_t *);
-struct platid_data *platid_search(platid_t *, struct platid_data *);
+struct platid_data *platid_search_data(platid_t *, struct platid_data *);
+void *platid_search(platid_t *, void *, int, int);
 __END_DECLS
 
+#if defined(_KERNEL_OPT)
+#include "opt_spec_platform.h"
+#endif
 #include <machine/platid_generated.h>
 
+#endif /* _HPC_PLATID_H_ */

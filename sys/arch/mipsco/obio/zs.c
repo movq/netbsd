@@ -1,4 +1,4 @@
-/*	$NetBSD: zs.c,v 1.8 2001/02/21 09:20:56 wdk Exp $	*/
+/*	$NetBSD: zs.c,v 1.10 2001/07/08 04:25:36 wdk Exp $	*/
 
 /*-
  * Copyright (c) 1996, 2000 The NetBSD Foundation, Inc.
@@ -164,7 +164,7 @@ struct cfattach zsc_ca = {
 extern struct	cfdriver zsc_cd;
 
 static int	zshard __P((void *));
-static void	zssoft __P((void *));
+void		zssoft __P((void *));
 static int	zs_get_speed __P((struct zs_chanstate *));
 struct		zschan *zs_get_chan_addr (int zs_unit, int channel);
 int		zs_getc __P((void *));
@@ -249,8 +249,8 @@ zs_attach(parent, self, aux)
 		}
 		ch->cs_bustag = ca->ca_bustag;
 
-		bcopy(zs_init_reg, cs->cs_creg, 16);
-		bcopy(zs_init_reg, cs->cs_preg, 16);
+		memcpy(cs->cs_creg, zs_init_reg, 16);
+		memcpy(cs->cs_preg, zs_init_reg, 16);
 
 		if (zsc_args.hwflags & ZS_HWFLAG_CONSOLE)
 			cs->cs_defspeed = zs_get_speed(cs);
@@ -287,7 +287,8 @@ zs_attach(parent, self, aux)
 		}
 	}
 
-	/* bus_intr_establish(zssoft, NULL, ZSSOFT_PRI); */
+
+	zsc->sc_si = softintr_establish(IPL_SOFTSERIAL, zssoft, zsc);
 	bus_intr_establish(zsc->zsc_bustag, SYS_INTR_SCC0, 0, 0, zshard, NULL);
 
 	evcnt_attach_dynamic(&zsc->zs_intrcnt, EVCNT_TYPE_INTR, NULL,
@@ -333,29 +334,27 @@ zshard(arg)
 	register struct zsc_softc *zsc;
 	register int unit, rval, softreq;
 
-	rval = softreq = 0;
+	rval = 0;
 	for (unit = 0; unit < zsc_cd.cd_ndevs; unit++) {
 		zsc = zsc_cd.cd_devs[unit];
 		if (zsc == NULL)
 			continue;
 		rval |= zsc_intr_hard(zsc);
-		softreq |= zsc->zsc_cs[0]->cs_softreq;
+		softreq = zsc->zsc_cs[0]->cs_softreq;
 		softreq |= zsc->zsc_cs[1]->cs_softreq;
+		if (softreq && (zssoftpending == 0)) {
+		    zssoftpending = 1;
+		    softintr_schedule(zsc->sc_si);
+		}
 		zsc->zs_intrcnt.ev_count++;
 	}
-
-	/* We are at splzs here, so no need to lock. */
-	if (softreq && (zssoftpending == 0)) {
-		zssoftpending = 1;
-		zssoft(arg);	/*isr_soft_request(ZSSOFT_PRI);*/
-	}
-	return 0;
+	return rval;
 }
 
 /*
  * Similar scheme as for zshard (look at all of them)
  */
-static void
+void
 zssoft(arg)
 	void *arg;
 {
@@ -373,7 +372,7 @@ zssoft(arg)
 	 * the soft intr bit just after zshard has set it.
 	 */
 	/*isr_soft_clear(ZSSOFT_PRI);*/
-	/*zssoftpending = 0;*/
+	zssoftpending = 0;
 
 	/* Make sure we call the tty layer at spltty. */
 	s = spltty();
@@ -384,7 +383,6 @@ zssoft(arg)
 		(void) zsc_intr_soft(zsc);
 	}
 	splx(s);
-	zssoftpending = 0;
 	return;
 }
 
@@ -413,7 +411,7 @@ zs_set_speed(cs, bps)
 {
 	int tconst, real_bps;
 
-#if 1
+#if 0
 	while (!(zs_read_csr(cs) & ZSRR0_TX_READY))
 	        {/*nop*/}
 #endif
@@ -567,7 +565,9 @@ void
 zs_abort(cs)
 	struct zs_chanstate *cs;
 {
-#ifdef DDB
+#if defined(KGDB)
+	zskgdb(cs);
+#elif defined(DDB)
 	Debugger();
 #endif
 }

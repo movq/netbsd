@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.6 2001/01/26 17:30:15 minoura Exp $
+#	$NetBSD: Makefile,v 1.8 2001/09/22 03:34:21 tv Exp $
 
 BOOT=		mboot
 VERSION=	0.1
@@ -14,7 +14,6 @@ MKMAN=		no
 STRIPFLAG=
 
 STRIP?=		/usr/bin/strip
-OBJCOPY?=	/usr/bin/objcopy
 
 SRCS=		srt0.S mboot.c
 KERN!=		cd ${.CURDIR}/../../../..; pwd
@@ -25,7 +24,7 @@ CPPFLAGS+=	-DTEXTADDR="0x${TEXT}"
 CPPFLAGS+=	-DBOOT=\"${BOOT}\" -DBOOT_VERS=\"${VERSION}\"
 CFLAGS=		-Wno-main -Os -m68000
 
-LDFLAGS=	-N -static -T ${TEXT}
+LDFLAGS=	-N -static -Ttext ${TEXT}
 
 .PHONY:	machine-links
 beforedepend: machine-links

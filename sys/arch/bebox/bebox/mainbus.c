@@ -1,4 +1,4 @@
-/*	$NetBSD: mainbus.c,v 1.6 2001/02/12 05:58:55 briggs Exp $	*/
+/*	$NetBSD: mainbus.c,v 1.8 2001/08/26 02:47:35 matt Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -39,17 +39,23 @@
 #include <machine/bus.h>
 
 #include "opt_pci.h"
+#include "mainbus.h"
 #include "pci.h"
 #include <dev/pci/pcivar.h>
+#include <dev/pci/pciconf.h>
 
-int	mainbus_match __P((struct device *, void *, void *));
-void	mainbus_attach __P((struct device *, struct device *, void *));
+#if NCPU == 0
+#error	A cpu device is now required
+#endif
+
+static int	mainbus_match (struct device *, struct cfdata *, void *);
+static void	mainbus_attach (struct device *, struct device *, void *);
 
 struct cfattach mainbus_ca = {
-	sizeof(struct device), (cfmatch_t)mainbus_match, mainbus_attach
+	sizeof(struct device), mainbus_match, mainbus_attach
 };
 
-int	mainbus_print __P((void *, const char *));
+int	mainbus_print (void *, const char *);
 
 union mainbus_attach_args {
 	const char *mba_busname;		/* first elem of all */
@@ -60,11 +66,8 @@ union mainbus_attach_args {
  * Probe for the mainbus; always succeeds.
  */
 int
-mainbus_match(parent, match, aux)
-	struct device *parent;
-	void *match, *aux;
+mainbus_match(struct device *parent, struct cfdata *match, void *aux)
 {
-
 	return 1;
 }
 
@@ -72,9 +75,7 @@ mainbus_match(parent, match, aux)
  * Attach the mainbus.
  */
 void
-mainbus_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+mainbus_attach(struct device *parent, struct device *self, void *aux)
 {
 	union mainbus_attach_args mba;
 #if defined(PCI_NETBSD_CONFIGURE)
@@ -82,6 +83,12 @@ mainbus_attach(parent, self, aux)
 #endif
 
 	printf("\n");
+
+	/*
+	 * Always find the CPU
+	 */
+	mba.mba_busname = "cpu";
+	config_found(self, &mba, mainbus_print);
 
 	/*
 	 * XXX Note also that the presence of a PCI bus should
@@ -100,20 +107,46 @@ mainbus_attach(parent, self, aux)
 	extent_destroy(memext);
 #endif
 	mba.mba_pba.pba_busname = "pci";
-	mba.mba_pba.pba_iot = (bus_space_tag_t)BEBOX_BUS_SPACE_IO;
-	mba.mba_pba.pba_memt = (bus_space_tag_t)BEBOX_BUS_SPACE_MEM;
+	mba.mba_pba.pba_iot = &bebox_io_bs_tag;
+	mba.mba_pba.pba_memt = &bebox_mem_bs_tag;
 	mba.mba_pba.pba_dmat = &pci_bus_dma_tag;
 	mba.mba_pba.pba_bus = 0;
-	mba.mba_pba.pba_flags = PCI_FLAGS_IO_ENABLED |
-	    PCI_FLAGS_MEM_ENABLED;
+	mba.mba_pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED;
 	config_found(self, &mba.mba_pba, mainbus_print);
 #endif
 }
 
+static int	cpu_match(struct device *, struct cfdata *, void *);
+static void	cpu_attach(struct device *, struct device *, void *);
+
+struct cfattach cpu_ca = {
+	sizeof(struct device), cpu_match, cpu_attach
+};
+
+extern struct cfdriver cpu_cd;
+
 int
-mainbus_print(aux, pnp)
-	void *aux;
-	const char *pnp;
+cpu_match(struct device *parent, struct cfdata *cf, void *aux)
+{
+	union mainbus_attach_args *mba = aux;
+
+	if (strcmp(mba->mba_busname, cpu_cd.cd_name) != 0)
+		return 0;
+
+	if (cpu_info_store.ci_dev != NULL)
+		return 0;
+
+	return 1;
+}
+
+void
+cpu_attach(struct device *parent, struct device *self, void *aux)
+{
+	(void) cpu_attach_common(self, 0);
+}
+
+int
+mainbus_print(void *aux, const char *pnp)
 {
 	union mainbus_attach_args *mba = aux;
 

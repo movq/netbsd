@@ -1,4 +1,4 @@
-/* $NetBSD: irq.c,v 1.14 2001/02/11 14:46:11 bjh21 Exp $ */
+/* $NetBSD: irq.c,v 1.23 2001/10/20 22:15:02 bjh21 Exp $ */
 
 /*-
  * Copyright (c) 2000, 2001 Ben Harris
@@ -33,12 +33,13 @@
 
 #include <sys/param.h>
 
-__RCSID("$NetBSD: irq.c,v 1.14 2001/02/11 14:46:11 bjh21 Exp $");
+__RCSID("$NetBSD: irq.c,v 1.23 2001/10/20 22:15:02 bjh21 Exp $");
 
 #include <sys/device.h>
 #include <sys/kernel.h> /* for cold */
 #include <sys/malloc.h>
 #include <sys/queue.h>
+#include <sys/syslog.h>
 #include <sys/systm.h>
 
 #include <uvm/uvm_extern.h>
@@ -53,11 +54,15 @@ __RCSID("$NetBSD: irq.c,v 1.14 2001/02/11 14:46:11 bjh21 Exp $");
 #include <arch/arm26/iobus/iocvar.h>
 
 #include "opt_ddb.h"
+#include "fiq.h"
 #include "ioeb.h"
 #include "unixbp.h"
 
 #ifdef DDB
 #include <ddb/db_output.h>
+#endif
+#if NFIQ > 0
+#include <machine/fiq.h>
 #endif
 #if NIOEB > 0
 #include <arch/arm26/ioc/ioebvar.h>
@@ -68,6 +73,12 @@ __RCSID("$NetBSD: irq.c,v 1.14 2001/02/11 14:46:11 bjh21 Exp $");
 
 #define NIRQ 20
 extern char *irqnames[];
+
+int current_intr_depth = 0;
+
+#if NFIQ > 0
+int fiq_want_downgrade;
+#endif
 
 /*
  * Interrupt masks are held in 32-bit integers.  At present, the
@@ -95,6 +106,8 @@ struct irq_handler {
 
 volatile static int current_spl = IPL_HIGH;
 
+__inline int hardsplx(int);
+
 void
 irq_init(void)
 {
@@ -116,6 +129,7 @@ irq_handler(struct irqframe *irqf)
 	int s, status, result, stray;
 	struct irq_handler *h;
 
+	current_intr_depth++;
 	KASSERT(the_ioc != NULL);
 	/* Get the current interrupt state */
 	status = ioc_irq_status_full();
@@ -123,9 +137,8 @@ irq_handler(struct irqframe *irqf)
 	status |= unixbp_irq_status_full() << IRQ_UNIXBP_BASE;
 #endif
 
-	/* Get interrupt-disabling back to the IOC */
+	/* We're already in splhigh, but make sure the kernel knows that. */
 	s = splhigh();
-	int_on();
 
 #if 0
 	printf("*");
@@ -133,11 +146,20 @@ irq_handler(struct irqframe *irqf)
 	uvmexp.intrs++;
 
 	stray = 1;
+#if NFIQ > 0
+	/* Check for downgraded FIQs. */
+	if (fiq_want_downgrade) {
+		KASSERT(fiq_downgrade_handler != NULL);
+		fiq_want_downgrade = 0;
+		(fiq_downgrade_handler)();
+		goto handled;
+	}
+#endif
 	/* Find the highest-priority requested interrupt. */
 	for (h = irq_list_head.lh_first;
 	     h != NULL && h->ipl > s;
 	     h = h->link.le_next)
-		if (h->enabled && ((status & h->mask) != 0)) {
+		if (h->enabled && ((status & h->mask) == h->mask)) {
 			splx(h->ipl);
 #if 0
 			printf("IRQ %d...", h->irqnum);
@@ -162,17 +184,24 @@ irq_handler(struct irqframe *irqf)
 				stray = 0;
 		}
 
-	if (stray) {
-		panic("Stray IRQ, status = 0x%x, spl = %d, mask = 0x%x",
-		      status, s, irqmask[s]);
+	if (__predict_false(stray)) {
+		log(LOG_WARNING, "Stray IRQ, status = 0x%x, spl = %d, "
+		    "mask = 0x%x\n", status, s, irqmask[s]);
+#ifdef DDB
+		Debugger();
+#endif
 	}
+#if NFIQ > 0
+handled:
+#endif	/* NFIQ > 0 */
+
 #if 0
 	printf(" handled\n");
 #endif
 	dosoftints(s); /* May lower spl to s + 1, but no lower. */
 
-	int_off();
 	hardsplx(s);
+	current_intr_depth--;
 }
 
 struct irq_handler *
@@ -282,6 +311,47 @@ void irq_genmasks()
 	splx(s);
 }
 
+__inline int
+hardsplx(int s)
+{
+	int was;
+	u_int32_t mask;
+
+	KASSERT(s < IPL_HIGH);
+	int_off();
+	was = current_spl;
+	mask = irqmask[s];
+#if NFIQ > 0
+	if (fiq_want_downgrade)
+		mask |= IOC_IRQ_1;
+#endif
+	/* Don't try this till we've found the IOC */
+	if (the_ioc != NULL)
+		ioc_irq_setmask(mask);
+#if NUNIXBP > 0
+	unixbp_irq_setmask(mask >> IRQ_UNIXBP_BASE);
+#endif
+	current_spl = s;
+	int_on();
+	return was;
+}
+
+int
+splhigh(void)
+{
+	int was;
+
+	int_off();
+	was = current_spl;
+	current_spl = IPL_HIGH;
+#ifdef DEBUG
+	/* Make sure that anything that turns off the I flag gets spotted. */
+	if (the_ioc != NULL)
+		ioc_irq_setmask(0xffff);
+#endif
+	return was;
+}
+
 int
 raisespl(int s)
 {
@@ -300,24 +370,6 @@ lowerspl(int s)
 		dosoftints(s);
 		hardsplx(s);
 	}
-}
-
-int
-hardsplx(int s)
-{
-	int was;
-
-	int_off();
-	was = current_spl;
-	/* Don't try this till we've found the IOC */
-	if (the_ioc != NULL)
-		ioc_irq_setmask(irqmask[s]);
-#if NUNIXBP > 0
-	unixbp_irq_setmask(irqmask[s] >> IRQ_UNIXBP_BASE);
-#endif
-	current_spl = s;
-	int_on();
-	return was;
 }
 
 #ifdef DDB

@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.1 2001/02/04 18:32:17 briggs Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.5 2001/08/30 02:08:44 briggs Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -55,13 +55,14 @@
 #include <sys/reboot.h>
 #include <sys/device.h>
 
-#include <machine/pte.h>
-#include <machine/intr.h>
+#include <powerpc/mpc6xx/pte.h>
 
 struct device *booted_device;
 int booted_partition;
 
 void findroot __P((void));
+void disable_intr(void);
+void enable_intr(void);
 
 /*
  * Determine i/o configuration for a machine.
@@ -71,12 +72,16 @@ cpu_configure()
 {
 	/* startrtclock(); */
 
+	disable_intr();
+
 	if (config_rootfound("mainbus", NULL) == NULL)
 		panic("configure: mainbus not configured");
 
 	printf("biomask %x netmask %x ttymask %x\n",
 	    (u_short)imask[IPL_BIO], (u_short)imask[IPL_NET],
 	    (u_short)imask[IPL_TTY]);
+
+	enable_intr();
 
 	spl0();
 }

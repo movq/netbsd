@@ -1,4 +1,4 @@
-/*	$NetBSD: kgdb_stub.c,v 1.4 2000/06/29 07:37:57 mrg Exp $ */
+/*	$NetBSD: kgdb_stub.c,v 1.6 2001/09/16 16:34:34 wiz Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -51,6 +51,8 @@
 /*
  * "Stub" to allow remote cpu to debug over a serial line using gdb.
  */
+#include "opt_kgdb.h"
+
 #ifdef KGDB
 
 #include <sys/param.h>
@@ -475,7 +477,7 @@ kgdb_trap(type, tf)
 	}
 	/*
 	 * Stick frame regs into our reg cache then tell remote host
-	 * that an exception has occured.
+	 * that an exception has occurred.
 	 */
 	regs_to_gdb(tf, gdb_regs);
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: scc.c,v 1.67 2000/11/03 15:01:10 simonb Exp $	*/
+/*	$NetBSD: scc.c,v 1.70 2001/07/07 14:21:01 simonb Exp $	*/
 
 /*
  * Copyright (c) 1991,1990,1989,1994,1995,1996 Carnegie Mellon University
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
-__KERNEL_RCSID(0, "$NetBSD: scc.c,v 1.67 2000/11/03 15:01:10 simonb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: scc.c,v 1.70 2001/07/07 14:21:01 simonb Exp $");
 
 /*
  * Intel 82530 dual usart chip driver. Supports the serial port(s) on the
@@ -666,8 +666,7 @@ sccopen(dev, flag, mode, p)
 	while (!(flag & O_NONBLOCK) && !(tp->t_cflag & CLOCAL) &&
 	    !(tp->t_state & TS_CARR_ON)) {
 		tp->t_wopen++;
-		error = ttysleep(tp, (caddr_t)&tp->t_rawq, TTIPRI | PCATCH,
-		    ttopen, 0);
+		error = ttysleep(tp, &tp->t_rawq, TTIPRI | PCATCH, ttopen, 0);
 		tp->t_wopen--;
 		if (error != 0)
 			break;
@@ -735,6 +734,20 @@ sccwrite(dev, uio, flag)
 	sc = scc_cd.cd_devs[SCCUNIT(dev)];	/* XXX*/
 	tp = sc->scc_tty[SCCLINE(dev)];
 	return ((*tp->t_linesw->l_write)(tp, uio, flag));
+}
+
+int
+sccpoll(dev, events, p)
+	dev_t dev;
+	int events;
+	struct proc *p;
+{
+	struct scc_softc *sc;
+	struct tty *tp;
+
+	sc = scc_cd.cd_devs[SCCUNIT(dev)];	/* XXX*/
+	tp = sc->scc_tty[SCCLINE(dev)];
+	return ((*tp->t_linesw->l_poll)(tp, events, p));
 }
 
 struct tty *
@@ -999,10 +1012,7 @@ scc_txintr(sc, chan, regs)
 				(caddr_t) tp->t_outq.c_cf);
 			dp->p_end = dp->p_mem = tp->t_outq.c_cf;
 		}
-		if (tp->t_linesw)
-			(*tp->t_linesw->l_start)(tp);
-		else
-			sccstart(tp);
+		(*tp->t_linesw->l_start)(tp);
 		if (tp->t_outq.c_cc == 0 || !(tp->t_state & TS_BUSY)) {
 			SCC_READ_REG(regs, chan, SCC_RR15, cc);
 			cc &= ~ZSWR15_TXUEOM_IE;
@@ -1080,7 +1090,7 @@ scc_rxintr(sc, chan, regs, unit)
 		return;
 	}
 	if (!(tp->t_state & TS_ISOPEN)) {
-		wakeup((caddr_t)&tp->t_rawq);
+		wakeup(&tp->t_rawq);
 #ifdef PORTSELECTOR
 		if (!(tp->t_state & TS_WOPEN))
 #endif
@@ -1198,7 +1208,7 @@ sccstart(tp)
 	if (tp->t_outq.c_cc <= tp->t_lowat) {
 		if (tp->t_state & TS_ASLEEP) {
 			tp->t_state &= ~TS_ASLEEP;
-			wakeup((caddr_t)&tp->t_outq);
+			wakeup(&tp->t_outq);
 		}
 		selwakeup(&tp->t_wsel);
 	}

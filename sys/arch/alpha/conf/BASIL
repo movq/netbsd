@@ -1,10 +1,10 @@
-# $NetBSD: BASIL,v 1.2 2000/11/26 17:44:07 ad Exp $
+# $NetBSD: BASIL,v 1.4 2001/08/22 15:39:04 hubertf Exp $
 #
 # basil.shagadelic.org -- thorpej's API UP1000
 
 include	"arch/alpha/conf/std.alpha"
 
-#ident 		"BASIL-$Revision: 1.2 $"
+#ident 		"BASIL-$Revision: 1.4 $"
 
 maxusers 64
 
@@ -216,12 +216,11 @@ eap*	at	pci? dev ? function ?		# Ensoniq AudioPCI
 #ep*	at	pci? dev ? function ?		# 3COM 3c59x
 epic*	at	pci? dev ? function ?		# SMC EPIC/100 Ethernet
 #eso*	at	pci? dev ? function ?		# ESS Solo-1 PCI AudioDrive
-ex*	at	pci? dev ? function ?		# 3COM 3c90x[B] Ethernet
+ex*	at	pci? dev ? function ?		# 3COM 3c90x[BC] Ethernet
 #fpa*	at	pci? dev ? function ?		# DEC DEFPA FDDI
 fxp*	at	pci? dev ? function ?		# Intel EEPRO 10+/100B
 isp*	at	pci? dev ? function ?		# Qlogic ISP 10x0 SCSI
 #le*	at	pci? dev ? function ?		# PCI LANCE Ethernet (untested)
-#ncr*	at	pci? dev ? function ?		# NCR 53c8xx SCSI
 siop*	at	pci? dev ? function ?		# Symbios 53c8xx SCSI
 ne*	at	pci? dev ? function ?		# NE2000-compatible Ethernet
 ohci*	at	pci? dev ? function ?		# USB Open Host Controller

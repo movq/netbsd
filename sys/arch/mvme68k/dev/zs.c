@@ -1,4 +1,4 @@
-/*	$NetBSD: zs.c,v 1.26 2000/11/21 11:41:37 scw Exp $	*/
+/*	$NetBSD: zs.c,v 1.28 2001/07/07 07:51:38 scw Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -159,14 +159,14 @@ zs_config(zsc, zs, vector, pclk)
 		 * adjust the console channel pointer.
 		 */
 		if (zsc_args.hwflags & ZS_HWFLAG_CONSOLE) {
-			bcopy(zs_conschan, cs, sizeof(struct zs_chanstate));
+			memcpy(cs, zs_conschan, sizeof(struct zs_chanstate));
 			zs_conschan = cs;
 		} else {
 			zc = (channel == 0) ? &zs->zs_chan_a : &zs->zs_chan_b;
 			cs->cs_reg_csr  = zc->zc_csr;
 			cs->cs_reg_data = zc->zc_data;
-			bcopy(zs_init_reg, cs->cs_creg, 16);
-			bcopy(zs_init_reg, cs->cs_preg, 16);
+			memcpy(cs->cs_creg, zs_init_reg, 16);
+			memcpy(cs->cs_preg, zs_init_reg, 16);
 			cs->cs_defspeed = zs_defspeed[zsc_unit][channel];
 		}
 
@@ -251,8 +251,12 @@ zshard_unshared(arg)
 
 	rval = zsc_intr_hard(zsc);
 
-	if ((zsc->zsc_cs[0]->cs_softreq) || (zsc->zsc_cs[1]->cs_softreq))
-		softintr_schedule(zsc->zsc_softintr_cookie);
+	if (rval) {
+		if ((zsc->zsc_cs[0]->cs_softreq) ||
+		    (zsc->zsc_cs[1]->cs_softreq))
+			softintr_schedule(zsc->zsc_softintr_cookie);
+		zsc->zsc_evcnt.ev_count++;
+	}
 
 	return (rval);
 }
@@ -273,12 +277,13 @@ zshard_shared(arg)
 	rval = 0;
 	for (unit = 0; unit < zsc_cd.cd_ndevs; unit++) {
 		zsc = zsc_cd.cd_devs[unit];
-		if (zsc == NULL)
-			continue;
-		rval |= zsc_intr_hard(zsc);
-		if ((zsc->zsc_cs[0]->cs_softreq) ||
-		    (zsc->zsc_cs[1]->cs_softreq))
-			softintr_schedule(zsc->zsc_softintr_cookie);
+		if (zsc != NULL && zsc_intr_hard(zsc)) {
+			if ((zsc->zsc_cs[0]->cs_softreq) ||
+			    (zsc->zsc_cs[1]->cs_softreq))
+				softintr_schedule(zsc->zsc_softintr_cookie);
+			zsc->zsc_evcnt.ev_count++;
+			rval++;
+		}
 	}
 	return (rval);
 }
@@ -532,7 +537,7 @@ zs_cnconfig(zsc_unit, channel, zs, pclk)
 	cs->cs_reg_data = zc->zc_data;
 
 	/* Initialize the pending registers. */
-	bcopy(zs_init_reg, cs->cs_preg, 16);
+	memcpy(cs->cs_preg, zs_init_reg, 16);
 	cs->cs_preg[5] |= (ZSWR5_DTR | ZSWR5_RTS);
 
 #if 0

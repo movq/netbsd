@@ -1,4 +1,4 @@
-/*	$NetBSD: kvm_proc.c,v 1.43 2000/12/22 23:11:19 jdolecek Exp $	*/
+/*	$NetBSD: kvm_proc.c,v 1.45 2001/03/24 10:02:45 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -78,7 +78,7 @@
 #if 0
 static char sccsid[] = "@(#)kvm_proc.c	8.3 (Berkeley) 9/23/93";
 #else
-__RCSID("$NetBSD: kvm_proc.c,v 1.43 2000/12/22 23:11:19 jdolecek Exp $");
+__RCSID("$NetBSD: kvm_proc.c,v 1.45 2001/03/24 10:02:45 jdolecek Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -1070,6 +1070,7 @@ kvm_doargv2(kd, pid, type, nchr)
 		return NULL;
 
 	bp = kd->argspc;
+	bp[kd->arglen-1] = '\0';	/* make sure the string ends with nul */
 	ap = kd->argv;
 	endp = bp + MIN(nchr, bufs);
 
@@ -1080,6 +1081,7 @@ kvm_doargv2(kd, pid, type, nchr)
 			kd->argc *= 2;
 			kd->argv = _kvm_realloc(kd, kd->argv,
 			    kd->argc * sizeof(*kd->argv));
+			ap = kd->argv;
 		}
 		bp += strlen(bp) + 1;
 	}

@@ -1,7 +1,7 @@
-/*	$NetBSD: debug.c,v 1.1 2001/02/21 16:28:03 uch Exp $	*/
+/*	$NetBSD: debug.c,v 1.7 2002/03/28 15:24:24 uch Exp $	*/
 
 /*-
- * Copyright (c) 2001 The NetBSD Foundation, Inc.
+ * Copyright (c) 2001, 2002 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -36,45 +36,50 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifdef DEBUG
+#include "debug_hpc.h"
+
 #include <sys/param.h>
 #include <sys/systm.h>
 
-#include <hpcsh/hpcsh/debug.h>
+#include <machine/debug.h>
+#include <machine/bootinfo.h>
 
-#define BANNER_LENGTH		80
-
-static const char onoff[2] = "_x";
-static void __dbg_draw_line(int);
-
-void
-dbg_bit_print(u_int32_t reg, u_int32_t mask, const char *name)
-{
-	printf("%s[%c] ", name, onoff[reg & mask ? 1 : 0]);
-}
-
-void
-dbg_banner_start(const char *name, size_t len)
-{
-	int n = (BANNER_LENGTH - (len + 2)) >> 1;
-	__dbg_draw_line(n);
-	printf("[%s]", name);
-	__dbg_draw_line(n);
-	printf("\n");
-}
+#ifdef HPC_DEBUG_INTERRUPT_MONITOR
+static struct intr_state_rgb16 {
+	int cnt;
+	int phase;
+	/* R:G:B = [15:11][10:5][4:0] */
+	u_int16_t color;
+} __intr_state_rgb16[] = {
+	{ 0, 0, RGB565_BLACK },
+	{ 0, 0, RGB565_RED },
+	{ 0, 0, RGB565_GREEN },
+	{ 0, 0, RGB565_YELLOW },
+	{ 0, 0, RGB565_BLUE },
+	{ 0, 0, RGB565_MAGENTA },
+	{ 0, 0, RGB565_CYAN },
+	{ 0, 0, RGB565_WHITE },
+};
 
 void
-dbg_banner_end()
+__dbg_heart_beat(enum heart_beat cause) /* 16bpp R:G:B = 5:6:5 only */
 {
-	__dbg_draw_line(BANNER_LENGTH);
-	printf("\n");
-}
-
-void
-__dbg_draw_line(int n)
-{
+#define LINE_STEP	2
+	struct intr_state_rgb16 *intr_state_rgb16 = 
+	    &__intr_state_rgb16[cause & 0x7];
+	u_int16_t *fb = (u_int16_t *)bootinfo->fb_addr;
+	int hline = bootinfo->fb_width;
+	u_int16_t color = intr_state_rgb16->color;
 	int i;
-	for (i = 0; i < n; i++)
-		printf("-");
+
+	fb += (cause & 0x7) * bootinfo->fb_line_bytes * LINE_STEP;
+	if (++intr_state_rgb16->cnt > hline)
+		intr_state_rgb16->cnt = 0, intr_state_rgb16->phase ^= 1;
+	
+	for (i = 0; i < 8; i++)
+		*(fb + i) = color;
+	*(fb + intr_state_rgb16->cnt) =
+	    intr_state_rgb16->phase ? ~color : color;
+#undef LINE_STEP
 }
-#endif /* DEBUG */
+#endif /* HPC_DEBUG_INTERRUPT_MONITOR */

@@ -1,4 +1,4 @@
-#	$NetBSD: POWERMAC,v 1.28 2000/11/27 08:55:42 soren Exp $
+#	$NetBSD: POWERMAC,v 1.30 2001/06/10 15:41:13 tsubai Exp $
 #
 # POWERMAC config file
 #
@@ -9,6 +9,7 @@ maxusers	32
 
 # Standard system options
 options 	KTRACE		# system call tracing via ktrace(1)
+options 	RTC_OFFSET=0	# hardware clock is this many mins. west of GMT
 
 # Diagnostic/debugging support options
 options 	DIAGNOSTIC	# cheap kernel consistency checks
@@ -38,7 +39,6 @@ file-system 	PROCFS		# /proc
 # Networking options
 options 	INET		# IP + ICMP + TCP + UDP
 options 	IPFILTER_LOG	# ipmon(8) log support
-options 	NMBCLUSTERS=1024
 
 # These options enable verbose messages for several subsystems.
 options 	SCSIVERBOSE	# Verbose SCSI errors

@@ -1,4 +1,4 @@
-/*	$NetBSD: profile.h,v 1.2 2000/08/22 11:25:49 tsubai Exp $	*/
+/*	$NetBSD: profile.h,v 1.4 2002/04/28 17:10:36 uch Exp $	*/
 
 /*-
  * Copyright (c) 2000 Tsubai Masanari.  All rights reserved.
@@ -26,9 +26,13 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#define _MCOUNT_DECL static void mcount
+#if defined(__ELF__) && defined(__NO_LEADING_UNDERSCORES__)
+#define	_MCOUNT_DECL static void _mcount
+#else
+#define	_MCOUNT_DECL static void mcount
+#endif
 
-#define MCOUNT __asm ("			\n\
+#define	MCOUNT __asm ("			\n\
 	.text				\n\
 	.align	2			\n\
 	.globl	__mcount		\n\
@@ -64,6 +68,6 @@ __mcount:				\n\
 1:	.long	_mcount			");
 
 #ifdef _KERNEL
-#define MCOUNT_ENTER	s = splhigh()
-#define MCOUNT_EXIT	splx(s)
+#define	MCOUNT_ENTER	s = splhigh()
+#define	MCOUNT_EXIT	splx(s)
 #endif

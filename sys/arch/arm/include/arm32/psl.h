@@ -1,4 +1,4 @@
-/*	$NetBSD: psl.h,v 1.1 2001/02/23 21:23:49 reinoud Exp $	*/
+/*	$NetBSD: psl.h,v 1.5 2001/10/27 16:37:24 rearnsha Exp $	*/
 
 /*
  * Copyright (c) 1995 Mark Brinicombe.
@@ -42,6 +42,8 @@
  * Created      : 21/07/95
  */
 
+#ifndef _ARM_PSL_H_
+#define _ARM_PSL_H_
 #include <machine/intr.h>
 
 /*
@@ -61,9 +63,10 @@
 #define _SPL_IMP	7
 #define _SPL_AUDIO	8
 #define _SPL_CLOCK	9
-#define _SPL_HIGH	10
-#define _SPL_SERIAL	11
-#define _SPL_LEVELS	12
+#define _SPL_STATCLOCK	10
+#define _SPL_HIGH	11
+#define _SPL_SERIAL	12
+#define _SPL_LEVELS	13
 
 #define spl0()		splx(_SPL_0)
 /*#define splsoft()	raisespl(_SPL_SOFT)*/
@@ -75,11 +78,10 @@
 #define splsoftserial()	raisespl(_SPL_SOFTSERIAL)
 #define spltty()	raisespl(_SPL_TTY)
 #define spllpt()	spltty()
-#define splimp()	raisespl(_SPL_IMP)
 #define splvm()		raisespl(_SPL_IMP)
 #define splaudio()	raisespl(_SPL_AUDIO)
 #define splclock()	raisespl(_SPL_CLOCK)
-#define splstatclock()	raisespl(_SPL_CLOCK)
+#define splstatclock()	raisespl(_SPL_STATCLOCK)
 #define splserial()	raisespl(_SPL_SERIAL)
 #define splhigh()	raisespl(_SPL_HIGH)
 
@@ -100,9 +102,10 @@ void setsoftintr	__P((u_int intrmask));
 
 extern int current_spl_level;
 
-extern u_int spl_masks[_SPL_LEVELS];
+extern u_int spl_masks[_SPL_LEVELS + 1];
 extern u_int spl_smasks[_SPL_LEVELS];
 #endif /* _LOCORE */
 #endif /* _KERNEL */
 
+#endif /* _ARM_PSL_H_ */
 /* End of psl.h */

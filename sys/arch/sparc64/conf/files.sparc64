@@ -1,4 +1,4 @@
-#	$NetBSD: files.sparc64,v 1.45 2001/02/11 00:42:08 eeh Exp $
+#	$NetBSD: files.sparc64,v 1.53 2001/10/25 23:07:50 eeh Exp $
 
 # @(#)files.sparc64	8.1 (Berkeley) 7/19/93
 # sparc64-specific configuration info
@@ -47,13 +47,7 @@ file	arch/sparc64/dev/pci_machdep.c		psycho
 # IOMMU is for both
 file	arch/sparc64/dev/iommu.c		sbus | psycho
 
-# can't use ppb for SUNW,simba
-device  simba: pcibus
-attach  simba at pci
-file	arch/sparc64/dev/simba.c		simba
-
 include "dev/ata/files.ata"
-file	arch/sparc64/dev/pciide_machdep.c	pciide
 
 device ebus {[addr = -1]}: pcibus
 attach ebus at pci
@@ -65,6 +59,9 @@ include "dev/mii/files.mii"
 device clock: mk48txx
 attach clock at mainbus, sbus with clock_sbus
 attach clock at ebus with clock_ebus
+
+device rtc
+attach rtc at ebus with rtc_ebus
 
 device timer
 attach timer at mainbus, sbus
@@ -193,8 +190,8 @@ file	arch/sparc64/sparc64/autoconf.c
 file	arch/sparc64/sparc64/cache.c
 file	arch/sparc64/sparc64/conf.c
 file	arch/sparc64/sparc64/emul.c
-file	arch/sparc64/sparc64/in_cksum.c
-file	netinet/in4_cksum.c		inet
+file	arch/sparc64/sparc64/in_cksum.S
+file	arch/sparc64/sparc64/in4_cksum.c	inet
 file	arch/sparc64/sparc64/intr.c
 file	arch/sparc64/sparc64/kgdb_machdep.c kgdb
 # sparc/sparc/locore.s is handled specially in the makefile,
@@ -223,10 +220,16 @@ file	arch/sparc64/sparc64/db_disasm.c	ddb
 #file	ddb/db_elf.c			ddb
 
 #
-# Raster Console
+# Raster Console support
 #
-include "dev/rcons/files.rcons"
 include "dev/wsfont/files.wsfont"
+include "dev/rcons/files.rcons"
+
+# USB Support
+include "dev/usb/files.usb"
+
+# IEEE1394 Support
+include "dev/ieee1394/files.ieee1394"
 
 #
 # Compatibility modules
@@ -238,6 +241,7 @@ file	arch/sparc64/sparc64/compat_13_machdep.c compat_13
 # NetBSD/sparc 32-bit Binary compatibility (COMPAT_NETBSD32)
 include "compat/netbsd32/files.netbsd32"
 file	arch/sparc64/sparc64/netbsd32_machdep.c	compat_netbsd32
+file	arch/sparc64/sparc64/netbsd32_sigcode.s	compat_netbsd32
 
 # NetBSD a.out Binary Compatibility (COMPAT_AOUT)
 include "compat/aout/files.aout"
@@ -245,14 +249,17 @@ include "compat/aout/files.aout"
 # SVR4 Binary Compatibility (COMPAT_SVR4)
 include "compat/svr4/files.svr4"
 file	arch/sparc64/sparc64/svr4_machdep.c	compat_svr4
+file	arch/sparc64/sparc64/svr4_sigcode64.s	compat_svr4 & exec_elf64
 
 # 32-bit SVR4 Binary Compatibility (COMPAT_SVR4_32)
 include "compat/svr4_32/files.svr4_32"
 file	arch/sparc64/sparc64/svr4_32_machdep.c	compat_svr4_32
+file	arch/sparc64/sparc64/svr4_32_sigcode.s	compat_svr4_32 | (compat_svr4 & !exec_elf64)
 
 # SunOS Binary Compatibility (COMPAT_SUNOS), 32-bit & 64-bit kernel
 # (64-bit also depends on COMPAT_NETBSD32)
 include "compat/sunos/files.sunos"
+file	arch/sparc64/sparc64/sunos_sigcode.s	compat_sunos
 file	arch/sparc64/sparc64/sunos_machdep.c	compat_sunos & !compat_netbsd32
 include "compat/sunos32/files.sunos32"
 file	arch/sparc64/sparc64/sunos32_machdep.c	compat_sunos & compat_netbsd32

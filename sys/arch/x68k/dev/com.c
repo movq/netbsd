@@ -1,4 +1,4 @@
-/*	$NetBSD: com.c,v 1.18 2000/11/02 00:42:41 eeh Exp $	*/
+/*	$NetBSD: com.c,v 1.21 2001/05/30 15:24:39 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -77,6 +77,7 @@
  */
 
 #include "opt_ddb.h"
+#include "opt_kgdb.h"
 #include "opt_com.h"
 
 #include <sys/param.h>
@@ -151,21 +152,16 @@ struct callout com_poll_ch = CALLOUT_INITIALIZER;
 
 int comprobe __P((struct device *, struct cfdata *, void *));
 void comattach __P((struct device *, struct device *, void *));
-int comprobe1 __P((int));
-int comopen __P((dev_t, int, int, struct proc *));
-int comclose __P((dev_t, int, int, struct proc *));
-int comread __P((dev_t, struct uio *, int));
-int comwrite __P((dev_t, struct uio *, int));
-int comioctl __P((dev_t, u_long, caddr_t, int, struct proc *));
-struct tty *comtty __P((dev_t));
-void comstop __P((struct tty *, int));
-void comdiag __P((void *));
-int comintr __P((void *));
-void compoll __P((void *));
-int comparam __P((struct tty *, struct termios *));
-void comstart __P((struct tty *));
-void cominit __P((int, int));
-int comspeed __P((long));
+cdev_decl(com);
+
+static int comprobe1 __P((int));
+static void comdiag __P((void *));
+static int comintr __P((void *));
+static void compollin __P((void *));
+static int comparam __P((struct tty *, struct termios *));
+static void comstart __P((struct tty *));
+static void cominit __P((int, int));
+static int comspeed __P((long));
 
 static u_char tiocm_xxx2mcr __P((int));
 
@@ -206,7 +202,7 @@ extern int kgdb_debug_init;
 #define	CLR(t, f)	(t) &= ~(f)
 #define	ISSET(t, f)	((t) & (f))
 
-int
+static int
 comspeed(speed)
 	long speed;
 {
@@ -231,7 +227,7 @@ comspeed(speed)
 #undef	divrnd(n, q)
 }
 
-int
+static int
 comprobe1(iobase)
 	int iobase;
 {
@@ -489,7 +485,7 @@ comopen(dev, flag, mode, p)
 		ttsetwater(tp);
 
 		if (comsopen++ == 0)
-			callout_reset(&com_poll_ch, 1, compoll, NULL);
+			callout_reset(&com_poll_ch, 1, compollin, NULL);
 
 		sc->sc_ibufp = sc->sc_ibuf = sc->sc_ibufs[0];
 		sc->sc_ibufhigh = sc->sc_ibuf + COM_IHIGHWATER;
@@ -625,6 +621,18 @@ comwrite(dev, uio, flag)
 	struct tty *tp = sc->sc_tty;
  
 	return ((*tp->t_linesw->l_write)(tp, uio, flag));
+}
+
+int
+compoll(dev, events, p)
+	dev_t dev;
+	int events;
+	struct proc *p;
+{
+	struct com_softc *sc = xcom_cd.cd_devs[COMUNIT(dev)];
+	struct tty *tp = sc->sc_tty;
+ 
+	return ((*tp->t_linesw->l_poll)(tp, events, p));
 }
 
 struct tty *
@@ -765,7 +773,7 @@ comioctl(dev, cmd, data, flag, p)
 	return 0;
 }
 
-int
+static int
 comparam(tp, t)
 	struct tty *tp;
 	struct termios *t;
@@ -878,7 +886,7 @@ comparam(tp, t)
 
 int comdebug = 0;
 
-void
+static void
 comstart(tp)
 	struct tty *tp;
 {
@@ -958,7 +966,7 @@ comstop(tp, flag)
 	splx(s);
 }
 
-void
+static void
 comdiag(arg)
 	void *arg;
 {
@@ -980,8 +988,8 @@ comdiag(arg)
 	    floods, floods == 1 ? "" : "s");
 }
 
-void
-compoll(arg)
+static void
+compollin(arg)
 	void *arg;
 {
 	int unit;
@@ -1057,10 +1065,10 @@ compoll(arg)
 	}
 
 out:
-	callout_reset(&com_poll_ch, 1, compoll, NULL);
+	callout_reset(&com_poll_ch, 1, compollin, NULL);
 }
 
-int
+static int
 comintr(arg)
 	void *arg;
 {
@@ -1196,7 +1204,7 @@ comcninit(cp)
 	comconsinit = 0;
 }
 
-void
+static void
 cominit(unit, rate)
 	int unit, rate;
 {

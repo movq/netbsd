@@ -1,4 +1,4 @@
-/*	$NetBSD: db_machdep.c,v 1.2 2001/03/04 05:40:03 matt Exp $	*/
+/*	$NetBSD: db_machdep.c,v 1.5 2001/09/05 17:08:41 matt Exp $	*/
 
 /* 
  * Copyright (c) 1996 Mark Brinicombe
@@ -39,58 +39,7 @@
 #include <ddb/db_sym.h>
 #include <ddb/db_output.h>
 
-#include <machine/irqhandler.h>
-
-void
-db_show_vmstat_cmd(addr, have_addr, count, modif)
-	db_expr_t       addr;
-	int             have_addr;
-	db_expr_t       count;
-	char            *modif;
-{
-
-	db_printf("Current UVM status:\n");
-	db_printf("  pagesize=%d (0x%x), pagemask=0x%x, pageshift=%d\n",
-	    uvmexp.pagesize, uvmexp.pagesize, uvmexp.pagemask,
-	    uvmexp.pageshift);
-	db_printf("  %d VM pages: %d active, %d inactive, %d wired, %d free\n",
-	    uvmexp.npages, uvmexp.active, uvmexp.inactive, uvmexp.wired,
-	    uvmexp.free);
-	db_printf("  freemin=%d, free-target=%d, inactive-target=%d, "
-	    "wired-max=%d\n", uvmexp.freemin, uvmexp.freetarg, uvmexp.inactarg,
-	    uvmexp.wiredmax);
-	db_printf("  faults=%d, traps=%d, intrs=%d, ctxswitch=%d\n",
-	    uvmexp.faults, uvmexp.traps, uvmexp.intrs, uvmexp.swtch);
-	db_printf("  softint=%d, syscalls=%d, swapins=%d, swapouts=%d\n",
-	    uvmexp.softs, uvmexp.syscalls, uvmexp.swapins, uvmexp.swapouts);
-
-	db_printf("  fault counts:\n");
-	db_printf("    noram=%d, noanon=%d, pgwait=%d, pgrele=%d\n",
-	    uvmexp.fltnoram, uvmexp.fltnoanon, uvmexp.fltpgwait,
-	    uvmexp.fltpgrele);
-	db_printf("    ok relocks(total)=%d(%d), anget(retrys)=%d(%d), "
-	    "amapcopy=%d\n", uvmexp.fltrelckok, uvmexp.fltrelck,
-	    uvmexp.fltanget, uvmexp.fltanretry, uvmexp.fltamcopy);
-	db_printf("    neighbor anon/obj pg=%d/%d, gets(lock/unlock)=%d/%d\n",
-	    uvmexp.fltnamap, uvmexp.fltnomap, uvmexp.fltlget, uvmexp.fltget);
-	db_printf("    cases: anon=%d, anoncow=%d, obj=%d, prcopy=%d, przero=%d\n",
-	    uvmexp.flt_anon, uvmexp.flt_acow, uvmexp.flt_obj, uvmexp.flt_prcopy,
-	    uvmexp.flt_przero);
-
-	db_printf("  daemon and swap counts:\n");
-	db_printf("    woke=%d, revs=%d, scans=%d, swout=%d\n", uvmexp.pdwoke,
-	    uvmexp.pdrevs, uvmexp.pdscans, uvmexp.pdswout);
-	db_printf("    busy=%d, freed=%d, reactivate=%d, deactivate=%d\n",
-	    uvmexp.pdbusy, uvmexp.pdfreed, uvmexp.pdreact, uvmexp.pddeact);
-	db_printf("    pageouts=%d, pending=%d, nswget=%d\n", uvmexp.pdpageouts,
-	    uvmexp.pdpending, uvmexp.nswget);
-	db_printf("    nswapdev=%d, nanon=%d, nfreeanon=%d\n", uvmexp.nswapdev,
-	    uvmexp.nanon, uvmexp.nfreeanon);
-
-	db_printf("  kernel pointers:\n");
-	db_printf("    objs(kmem/mb)=%p/%p\n", uvmexp.kmem_object,
-	    uvmexp.mb_object);
-}
+#include <machine/intr.h>
 
 void
 db_show_intrchain_cmd(addr, have_addr, count, modif)
@@ -99,8 +48,9 @@ db_show_intrchain_cmd(addr, have_addr, count, modif)
 	db_expr_t       count;
 	char            *modif;
 {
+#ifndef NEWINTR
 	int loop;
-	irqhandler_t *ptr;
+	struct irqhandler *ptr;
 	char *name;
 	db_expr_t offset;
 
@@ -123,6 +73,7 @@ db_show_intrchain_cmd(addr, have_addr, count, modif)
 			}
 		}
 	}
+#endif	/* NEWINTR */
 }
 
 

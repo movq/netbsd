@@ -1,4 +1,4 @@
-/* $NetBSD: if_eh.c,v 1.13 2001/02/13 18:20:57 bjh21 Exp $ */
+/* $NetBSD: if_eh.c,v 1.20 2001/08/11 20:42:45 bjh21 Exp $ */
 
 /*-
  * Copyright (c) 2000 Ben Harris
@@ -53,7 +53,7 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: if_eh.c,v 1.13 2001/02/13 18:20:57 bjh21 Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_eh.c,v 1.20 2001/08/11 20:42:45 bjh21 Exp $");
 
 #include <sys/systm.h>
 #include <sys/device.h>
@@ -83,8 +83,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_eh.c,v 1.13 2001/02/13 18:20:57 bjh21 Exp $");
 #include <dev/ic/dp8390reg.h>
 #include <dev/ic/dp8390var.h>
 
-#include <arch/arm26/podulebus/podulebus.h>
-#include <arch/arm32/podulebus/podules.h>
+#include <dev/podulebus/podulebus.h>
+#include <dev/podulebus/podules.h>
 #include <arch/arm26/podulebus/if_ehreg.h>
 
 #if BYTE_ORDER == BIG_ENDIAN
@@ -104,7 +104,7 @@ struct eh_softc {
 	bus_space_handle_t	sc_ctlh;
 	bus_space_tag_t		sc_ctl2t;
 	bus_space_handle_t	sc_ctl2h;
-	struct		irq_handler *sc_ih;
+	void			*sc_ih;
 	struct		evcnt	sc_intrcnt;
 	int			sc_flags;
 #define EHF_16BIT	0x01
@@ -156,7 +156,7 @@ eh_match(struct device *parent, struct cfdata *cf, void *aux)
 	return 0;
 }
 
-/* XXX 10baseFL on E513 */
+/* XXX 10BASE-FL on E513 */
 static int media_only2[] = { IFM_ETHER | IFM_10_2 };
 static int media_onlyt[] = { IFM_ETHER | IFM_10_T };
 static int media_2andt[] =
@@ -215,11 +215,11 @@ eh_attach(struct device *parent, struct device *self, void *aux)
 	}
 
 	/* Set up bus spaces */
-	dsc->sc_regt = pa->pa_memc_t;
-	bus_space_subregion(dsc->sc_regt, pa->pa_memc_h, EH_DP8390, 0x10,
+	dsc->sc_regt = pa->pa_mod_t;
+	bus_space_subregion(dsc->sc_regt, pa->pa_mod_h, EH_DP8390, 0x10,
 	    &dsc->sc_regh);
-	sc->sc_datat = pa->pa_memc_t;
-	bus_space_subregion(sc->sc_datat, pa->pa_memc_h, EH_DATA, 1,
+	sc->sc_datat = pa->pa_mod_t;
+	bus_space_subregion(sc->sc_datat, pa->pa_mod_h, EH_DATA, 1,
 	    &sc->sc_datah);
 	sc->sc_ctlt = pa->pa_fast_t;
 	bus_space_subregion(sc->sc_ctlt, pa->pa_fast_h, EH_CTRL, 1,
@@ -259,11 +259,11 @@ eh_attach(struct device *parent, struct device *self, void *aux)
 		mautype = eh_identifymau(sc);
 		switch (mautype) {
 		case EH200_MAUID_10_2:
-			printf(", 10base2 MAU");
+			printf(", 10BASE2 MAU");
 			mediaset = EH_MEDIA_2;
 			break;
 		case EH200_MAUID_10_T:
-			printf(", 10baseT MAU");
+			printf(", 10BASE-T MAU");
 			mediaset = EH_MEDIA_T;
 			break;
 		default:
@@ -275,13 +275,13 @@ eh_attach(struct device *parent, struct device *self, void *aux)
 		mediaset = eh_availmedia(sc);
 		switch (mediaset) {
 		case EH_MEDIA_2:
-			printf(", 10base2 only");
+			printf(", 10BASE2 only");
 			break;
 		case EH_MEDIA_T:
-			printf(", 10baseT only");
+			printf(", 10BASE-T only");
 			break;
 		case EH_MEDIA_2_T:
-			printf(", combo 10base2/T");
+			printf(", combo 10BASE2/-T");
 			break;
 		}
 	}
@@ -320,8 +320,8 @@ eh_attach(struct device *parent, struct device *self, void *aux)
 
 	evcnt_attach_dynamic(&sc->sc_intrcnt, EVCNT_TYPE_INTR, NULL,
 	    self->dv_xname, "intr");
-	sc->sc_ih = podulebus_irq_establish(self->dv_parent, pa->pa_slotnum,
-	    IPL_NET, dp8390_intr, self, &sc->sc_intrcnt);
+	sc->sc_ih = podulebus_irq_establish(pa->pa_ih, IPL_NET, dp8390_intr,
+	    self, &sc->sc_intrcnt);
 	if (bootverbose)
 		printf("%s: interrupting at %s\n",
 		       self->dv_xname, irq_string(sc->sc_ih));
@@ -696,7 +696,7 @@ eh_writemem(struct eh_softc *sc, u_int8_t *src, int dst, size_t len)
 	if (maxwait == 0)
 		printf("eh_writemem: failed to complete "
 		    "(RSAR=0x%04x, RBCR=0x%04x, CRDA=0x%02x%02x)\n",
-		    dst, len,
+		    dst, (u_int)len,
 		    bus_space_read_1(nict, nich, ED_P0_CRDA1),
 		    bus_space_read_1(nict, nich, ED_P0_CRDA0));
 }
@@ -704,7 +704,7 @@ eh_writemem(struct eh_softc *sc, u_int8_t *src, int dst, size_t len)
 /*
  * Work out the media types available on the current card.
  *
- * We try to switch to each of 10base2 and 10baseT in turn.  If the card
+ * We try to switch to each of 10BASE2 and 10BASE-T in turn.  If the card
  * only supports one type, the media select line will be tied to select
  * that, so it won't move when we push it.
  *
@@ -716,7 +716,7 @@ int
 eh_availmedia(struct eh_softc *sc)
 {
 
-	/* Set the card to use AUI (10b2 or 10bFL) */
+	/* Set the card to use AUI (10BASE2 or 10BASE-FL) */
 	bus_space_write_1(sc->sc_ctlt, sc->sc_ctlh, 0,
 	    sc->sc_ctrl & ~EH_CTRL_MEDIA);
 	/* Check whether that worked */
@@ -726,7 +726,7 @@ eh_availmedia(struct eh_softc *sc)
 		return EH_MEDIA_T;
 	}
 
-	/* Try 10bT and see if that works */
+	/* Try 10BASE-T and see if that works */
 	bus_space_write_1(sc->sc_ctlt, sc->sc_ctlh, 0,
 	    sc->sc_ctrl | EH_CTRL_MEDIA);
 	if ((bus_space_read_1(sc->sc_ctl2t, sc->sc_ctl2h, 0) &
@@ -833,16 +833,17 @@ eh_mediastatus(struct dp8390_softc *dsc, struct ifmediareq *ifmr)
 	struct eh_softc *sc = (struct eh_softc *)dsc;
 	int ctrl2;
 
-	/* XXX 10baseFL on E513? */
+	/* XXX 10BASE-FL on E513? */
 	/* Read the actual medium currently in use. */
 	ctrl2 = bus_space_read_1(sc->sc_ctl2t, sc->sc_ctl2h, 0);
 	if (ctrl2 & EH_CTRL2_10B2) {
 		ifmr->ifm_active = IFM_ETHER | IFM_10_2;
 	} else {
-		ifmr->ifm_active = IFM_ETHER | IFM_10_T | IFM_AVALID;
+		ifmr->ifm_active = IFM_ETHER | IFM_10_T;
+		ifmr->ifm_status = IFM_AVALID;
 		if ((bus_space_read_1(sc->sc_ctlt, sc->sc_ctlh, 0) &
 		    EH_CTRL_NOLINK) == 0)
-			ifmr->ifm_active |= IFM_ACTIVE;
+			ifmr->ifm_status |= IFM_ACTIVE;
 	}
 
 }
