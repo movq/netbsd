@@ -31,18 +31,21 @@
  * SUCH DAMAGE.
  *
  *	from: @(#)vm_meter.c	7.11 (Berkeley) 4/20/91
- *	$Id: vm_meter.c,v 1.4 1993/08/27 23:47:12 brezak Exp $
+ *	$Id: vm_meter.c,v 1.7 1993/12/20 12:40:11 cgd Exp $
  */
 
-#include "param.h"
-#include "proc.h"
-#include "systm.h"
-#include "kernel.h"
+#include <sys/param.h>
+#include <sys/proc.h>
+#include <sys/systm.h>
+#include <sys/kernel.h>
+#include <sys/vmmeter.h>
 
-#include "vm_param.h"
-#include "vmmeter.h"
+#include <vm/vm_param.h>
 
-fixpt_t	averunnable[3];		/* load average, of runnable procs */
+struct loadavg averunnable;
+#if defined(COMPAT_43) && (defined(vax) || defined(tahoe))
+double avenrun[3];
+#endif /* COMPAT_43 */
 
 int	maxslp = MAXSLP;
 
@@ -75,7 +78,7 @@ vmtotal()
 	total.t_pw = 0;
 	total.t_sl = 0;
 	total.t_sw = 0;
-	for (p = allproc; p != NULL; p = p->p_nxt) {
+	for (p = (struct proc *)allproc; p != NULL; p = p->p_nxt) {
 		if (p->p_flag & SSYS)
 			continue;
 		if (p->p_stat) {
@@ -114,7 +117,9 @@ active:
 			}
 		}
 	}
-	loadav(averunnable, nrun);
+	/* XXXX */
+	loadav(averunnable.ldavg, nrun);
+	averunnable.fscale = FSCALE;
 }
 
 /*
@@ -142,6 +147,6 @@ loadav(avg, n)
 		         >> FSHIFT;
 #if defined(COMPAT_43) && (defined(vax) || defined(tahoe))
 	for (i = 0; i < 3; i++)
-		avenrun[i] = (double) averunnable[i] / FSCALE;
+		avenrun[i] = (double) averunnable.ldavg[i] / FSCALE;
 #endif /* COMPAT_43 */
 }

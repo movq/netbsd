@@ -31,9 +31,20 @@
  * SUCH DAMAGE.
  *
  *	from: @(#)endian.h	7.8 (Berkeley) 4/3/91
- *	$Id: endian.h,v 1.4 1993/08/16 18:30:35 jtc Exp $
+ *	$Id: endian.h,v 1.8 1993/12/20 05:25:11 mycroft Exp $
  */
 
+#ifndef _MACHINE_ENDIAN_H_
+#define _MACHINE_ENDIAN_H_
+
+/*
+ * Define the order of 32-bit words in 64-bit words.
+ */
+#define _QUAD_HIGHWORD 1
+#define _QUAD_LOWWORD 0
+
+
+#ifndef _POSIX_SOURCE
 /*
  * Definitions for byte order, according to byte significance from low
  * address to high.
@@ -44,9 +55,7 @@
 
 #define	BYTE_ORDER	LITTLE_ENDIAN
 
-#ifndef KERNEL
 #include <sys/cdefs.h>
-#endif
 
 __BEGIN_DECLS
 unsigned long   htonl __P((unsigned long));
@@ -56,8 +65,10 @@ unsigned short  ntohs __P((unsigned short));
 __END_DECLS
 
 
-#if __GNUC__
+#ifdef __GNUC__
+
 #if __GNUC__ >= 2
+
 #if defined(KERNEL) && ((defined(I486_CPU) || defined(I586_CPU)) && !defined(I386_CPU))
 #define __byte_swap_long(x) \
 ({ register unsigned long X = (x); \
@@ -79,7 +90,9 @@ __END_DECLS
 	: "=q" (X) \
 	: "0" (X)); \
    X; })
+
 #else	/* __GNUC__ >= 2 */
+
 #if defined(KERNEL) && ((defined(I486_CPU) || defined(I586_CPU)) && !defined(I386_CPU))
 #define __byte_swap_long(x) \
 ({ register unsigned long X = (x); \
@@ -101,33 +114,25 @@ __END_DECLS
 	: "=r" (X) \
 	: "0" (X)); \
    X; })
+
 #endif	/* __GNUC__ >= 2 */
 
 #define	ntohl(x)	__byte_swap_long(x)
 #define	ntohs(x)	__byte_swap_word(x)
 #define	htonl(x)	__byte_swap_long(x)
 #define	htons(x)	__byte_swap_word(x)
+
 #endif	/* __GNUC__ */
 
 
 /*
  * Macros for network/external number representation conversion.
  */
-#if BYTE_ORDER == BIG_ENDIAN && !defined(lint)
-#define	ntohl(x)	(x)
-#define	ntohs(x)	(x)
-#define	htonl(x)	(x)
-#define	htons(x)	(x)
-
-#define	NTOHL(x)	(x)
-#define	NTOHS(x)	(x)
-#define	HTONL(x)	(x)
-#define	HTONS(x)	(x)
-
-#else
-
 #define	NTOHL(x)	(x) = ntohl((u_long)x)
 #define	NTOHS(x)	(x) = ntohs((u_short)x)
 #define	HTONL(x)	(x) = htonl((u_long)x)
 #define	HTONS(x)	(x) = htons((u_short)x)
-#endif
+
+#endif /* _POSIX_SOURCE */
+
+#endif /* _MACHINE_ENDIAN_H_ */

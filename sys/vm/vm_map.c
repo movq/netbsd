@@ -67,12 +67,13 @@
  *	Virtual memory mapping module.
  */
 
-#include "param.h"
-#include "malloc.h"
-#include "systm.h"
-#include "vm.h"
-#include "vm_page.h"
-#include "vm_object.h"
+#include <sys/param.h>
+#include <sys/malloc.h>
+#include <sys/systm.h>
+
+#include <vm/vm.h>
+#include <vm/vm_page.h>
+#include <vm/vm_object.h>
 
 /*
  *	Virtual memory maps provide for the mapping, protection,
@@ -277,10 +278,10 @@ vm_map_entry_t vm_map_entry_create(map)
 	vm_map_t	map;
 {
 	vm_map_entry_t	entry;
-	extern vm_map_t	kernel_map, kmem_map, mb_map, buffer_map, pager_map;
+	extern vm_map_t	kernel_map, kmem_map, mb_map, pager_map;
 
 	if (map == kernel_map || map == kmem_map || map == mb_map
-		|| map == buffer_map || map == pager_map) {
+		|| map == pager_map) {
 		if (entry = kentry_free)
 			kentry_free = kentry_free->next;
 	} else
@@ -302,10 +303,10 @@ vm_map_entry_dispose(map, entry)
 	vm_map_t	map;
 	vm_map_entry_t	entry;
 {
-	extern vm_map_t		kernel_map, kmem_map, mb_map, buffer_map, pager_map;
+	extern vm_map_t		kernel_map, kmem_map, mb_map, pager_map;
 
 	if (map == kernel_map || map == kmem_map || map == mb_map
-		|| map == buffer_map || map == pager_map) {
+		|| map == pager_map) {
 		entry->next = kentry_free;
 		kentry_free = entry;
 	} else
@@ -1543,7 +1544,7 @@ vm_map_copy_entry(src_map, dst_map, src_entry, dst_entry)
 		return;
 
 	if (dst_entry->object.vm_object != NULL &&
-	    !dst_entry->object.vm_object->internal)
+	    !(dst_entry->object.vm_object->flags & OBJ_INTERNAL))
 		printf("vm_map_copy_entry: copying over permanent data!\n");
 
 	/*
@@ -2428,7 +2429,7 @@ vm_map_simplify(map, start)
 	vm_map_unlock(map);
 }
 
-#ifdef DDB
+#if	defined(DDB) || defined(DIAGNOSTIC)
 /*
  *	vm_map_print:	[ debug ]
  */
@@ -2437,10 +2438,21 @@ vm_map_print(map, full)
 	register vm_map_t	map;
 	boolean_t		full;
 {
+        extern void _vm_map_print();
+        
+        _vm_map_print(map, full, printf);
+}
+
+void
+_vm_map_print(map, full, pr)
+	register vm_map_t	map;
+	boolean_t		full;
+        int			(*pr)();
+{
 	register vm_map_entry_t	entry;
 	extern int indent;
 
-	iprintf("%s map 0x%x: pmap=0x%x,ref=%d,nentries=%d,version=%d\n",
+	iprintf(pr, "%s map 0x%x: pmap=0x%x,ref=%d,nentries=%d,version=%d\n",
 		(map->is_main_map ? "Task" : "Share"),
  		(int) map, (int) (map->pmap), map->ref_count, map->nentries,
 		map->timestamp);
@@ -2451,21 +2463,21 @@ vm_map_print(map, full)
 	indent += 2;
 	for (entry = map->header.next; entry != &map->header;
 				entry = entry->next) {
-		iprintf("map entry 0x%x: start=0x%x, end=0x%x, ",
+		iprintf(pr, "map entry 0x%x: start=0x%x, end=0x%x, ",
 			(int) entry, (int) entry->start, (int) entry->end);
 		if (map->is_main_map) {
 		     	static char *inheritance_name[4] =
 				{ "share", "copy", "none", "donate_copy"};
-			db_printf("prot=%x/%x/%s, ",
+			(*pr)("prot=%x/%x/%s, ",
                                   entry->protection,
                                   entry->max_protection,
                                   inheritance_name[entry->inheritance]);
 			if (entry->wired_count != 0)
-				db_printf("wired, ");
+				(*pr)("wired, ");
 		}
 
 		if (entry->is_a_map || entry->is_sub_map) {
-		 	db_printf("share=0x%x, offset=0x%x\n",
+		 	(*pr)("share=0x%x, offset=0x%x\n",
                                   (int) entry->object.share_map,
                                   (int) entry->offset);
 			if ((entry->prev == &map->header) ||
@@ -2479,20 +2491,20 @@ vm_map_print(map, full)
 				
 		}
 		else {
-			db_printf("object=0x%x, offset=0x%x",
+			(*pr)("object=0x%x, offset=0x%x",
                                   (int) entry->object.vm_object,
                                   (int) entry->offset);
 			if (entry->copy_on_write)
-				db_printf(", copy (%s)",
+				(*pr)(", copy (%s)",
                                           entry->needs_copy ? "needed" : "done");
-			db_printf("\n");
+			(*pr)("\n");
 
 			if ((entry->prev == &map->header) ||
 			    (entry->prev->is_a_map) ||
 			    (entry->prev->object.vm_object !=
 			     entry->object.vm_object)) {
 				indent += 2;
-				vm_object_print(entry->object.vm_object, full);
+				_vm_object_print(entry->object.vm_object, full, pr);
 				indent -= 2;
 			}
 		}
