@@ -1,4 +1,4 @@
-#	$NetBSD: files.pci,v 1.54 1999/03/25 00:51:53 explorer Exp $
+#	$NetBSD: files.pci,v 1.54.6.1 1999/06/28 06:36:51 itojun Exp $
 #
 # Config file and device description for machine-independent PCI code.
 # Included by ports that need it.  Requires that the SCSI files be
@@ -110,6 +110,11 @@ file	dev/pci/if_ne_pci.c		ne_pci
 device  tl: ether, ifnet, arp, i2c, i2c_eeprom, mii
 attach  tl at pci
 file    dev/pci/if_tl.c     		tl
+
+# Invertix AEON crypto/compression card
+device	aeon: crypto
+attach	aeon at pci
+file	dev/pci/aeon.c			aeon
 
 # SDL Communications N2 PCI Network Interface
 device	ntwoc: ifnet, hd64570

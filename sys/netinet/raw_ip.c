@@ -1,4 +1,4 @@
-/*	$NetBSD: raw_ip.c,v 1.42 1999/01/30 21:43:16 thorpej Exp $	*/
+/*	$NetBSD: raw_ip.c,v 1.42.6.1 1999/06/28 06:37:01 itojun Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1988, 1993
@@ -60,6 +60,10 @@
 
 #include <machine/stdarg.h>
 
+#ifdef IPSEC
+#include <netinet6/ipsec.h>
+#endif /*IPSEC*/
+
 struct inpcbtable rawcbtable;
 
 int	 rip_bind __P((struct inpcb *, struct mbuf *));
@@ -86,6 +90,8 @@ rip_init()
 	in_pcbinit(&rawcbtable, 1, 1);
 }
 
+static struct	sockaddr_in ripsrc = { sizeof(ripsrc), AF_INET };
+
 /*
  * Setup generic address and protocol structures
  * for raw_input routine, then pass them along with
@@ -100,11 +106,18 @@ rip_input(m, va_alist)
 	va_dcl
 #endif
 {
+	int off, proto;
 	register struct ip *ip = mtod(m, struct ip *);
 	register struct inpcb *inp;
 	struct inpcb *last = 0;
 	struct mbuf *opts = 0;
 	struct sockaddr_in ripsrc;
+	va_list ap;
+
+	va_start(ap, m);
+	off = va_arg(ap, int);
+	proto = va_arg(ap, int);
+	va_end(ap);
 
 	ripsrc.sin_family = AF_INET;
 	ripsrc.sin_len = sizeof(struct sockaddr_in);
@@ -121,7 +134,7 @@ rip_input(m, va_alist)
 	for (inp = rawcbtable.inpt_queue.cqh_first;
 	    inp != (struct inpcb *)&rawcbtable.inpt_queue;
 	    inp = inp->inp_queue.cqe_next) {
-		if (inp->inp_ip.ip_p && inp->inp_ip.ip_p != ip->ip_p)
+		if (inp->inp_ip.ip_p && inp->inp_ip.ip_p != proto)
 			continue;
 		if (!in_nullhost(inp->inp_laddr) &&
 		    !in_hosteq(inp->inp_laddr, ip->ip_dst))
@@ -164,6 +177,7 @@ rip_input(m, va_alist)
 		ipstat.ips_noproto++;
 		ipstat.ips_delivered--;
 	}
+	return;
 }
 
 /*
@@ -229,6 +243,9 @@ rip_output(m, va_alist)
 		flags |= IP_RAWOUTPUT;
 		ipstat.ips_rawout++;
 	}
+#ifdef IPSEC
+	m->m_pkthdr.rcvif = (struct ifnet *)inp->inp_socket;	/*XXX*/
+#endif /*IPSEC*/
 	return (ip_output(m, opts, &inp->inp_route, flags, inp->inp_moptions, &inp->inp_errormtu));
 }
 
@@ -409,6 +426,9 @@ rip_usrreq(so, req, m, nam, control, p)
 			break;
 		inp = sotoinpcb(so);
 		inp->inp_ip.ip_p = (long)nam;
+#ifdef IPSEC
+		error = ipsec_init_policy(&inp->inp_sp);
+#endif /*IPSEC*/
 		break;
 
 	case PRU_DETACH:

@@ -1,4 +1,4 @@
-/* $NetBSD: machdep.c,v 1.167.2.4 1999/04/29 14:41:58 perry Exp $ */
+/* $NetBSD: machdep.c,v 1.167.2.4.4.1 1999/06/28 06:36:46 itojun Exp $ */
 
 /*-
  * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
@@ -82,7 +82,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.167.2.4 1999/04/29 14:41:58 perry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.167.2.4.4.1 1999/06/28 06:36:46 itojun Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -152,6 +152,13 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.167.2.4 1999/04/29 14:41:58 perry Exp 
 #if NARP > 0
 #include <netinet/if_inarp.h>
 #endif
+#endif
+#ifdef INET6
+# ifndef INET
+#  include <netinet/in.h>
+# endif
+#include <netinet6/ip6.h>
+#include <netinet6/ip6_var.h>
 #endif
 #ifdef NS
 #include <netns/ns_var.h>
@@ -1975,6 +1982,9 @@ netintr()
 	DONETISR(NETISR_ARP, arpintr());
 #endif
 	DONETISR(NETISR_IP, ipintr());
+#endif
+#ifdef INET6
+	DONETISR(NETISR_IPV6, ip6intr());
 #endif
 #ifdef NETATALK
 	DONETISR(NETISR_ATALK, atintr());

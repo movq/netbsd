@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.133.2.1 1999/04/16 16:14:40 chs Exp $	*/
+/*	$NetBSD: machdep.c,v 1.133.2.1.4.1 1999/06/28 06:36:46 itojun Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -133,6 +133,13 @@
 #endif
 #include <netinet/ip_var.h>
 #endif 
+#ifdef INET6
+# ifndef INET
+#  include <netinet/in.h>
+# endif
+#include <netinet6/ip6.h>
+#include <netinet6/ip6_var.h>
+#endif
 #ifdef NS
 #include <netns/ns_var.h>
 #endif
@@ -1141,6 +1148,12 @@ netintr()
 	if (netisr & (1 << NETISR_IP)) {
 		netisr &= ~(1 << NETISR_IP);
 		ipintr();
+	}
+#endif
+#ifdef INET6
+	if (netisr & (1 << NETISR_IPV6)) {
+		netisr &= ~(1 << NETISR_IPV6);
+		ip6intr();
 	}
 #endif
 #ifdef NETATALK
