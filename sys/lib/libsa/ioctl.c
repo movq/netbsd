@@ -61,11 +61,12 @@
  * any improvements or extensions that they make and grant Carnegie the
  * rights to redistribute these changes.
  *
- *	$Id: ioctl.c,v 1.1 1994/01/26 02:03:48 brezak Exp $
+ * 	$Id: ioctl.c,v 1.2 1994/05/08 16:11:25 brezak Exp $
  */
 
 #include "stand.h"
 
+int
 ioctl(fd, cmd, arg)
 	int fd;
 	int cmd;
@@ -83,5 +84,6 @@ ioctl(fd, cmd, arg)
 			return (-1);
 		return (0);
 	}
+	errno = EIO;
 	return (-1);
 }
