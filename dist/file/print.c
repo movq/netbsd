@@ -1,4 +1,4 @@
-/*	$NetBSD: print.c,v 1.1.1.1 2003/02/23 23:08:26 pooka Exp $	*/
+/*	$NetBSD: print.c,v 1.1 2003/02/23 23:08:26 pooka Exp $	*/
 
 /*
  * print.c - debugging printout routines
@@ -40,7 +40,7 @@
 #if 0
 FILE_RCSID("@(#)Id: print.c,v 1.39 2002/07/09 15:46:23 christos Exp ")
 #else
-__RCSID("$NetBSD: print.c,v 1.1.1.1 2003/02/23 23:08:26 pooka Exp $");
+__RCSID("$NetBSD: print.c,v 1.1 2003/02/23 23:08:26 pooka Exp $");
 #endif
 #endif  /* lint */
 

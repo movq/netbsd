@@ -1,4 +1,4 @@
-/*	$NetBSD: names.h,v 1.1.1.1 2003/02/23 23:08:25 pooka Exp $	*/
+/*	$NetBSD: names.h,v 1.1 2003/02/23 23:08:25 pooka Exp $	*/
 
 /*
  * Names.h - names and types used by ascmagic in file(1).

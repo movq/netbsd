@@ -1,4 +1,4 @@
-/*	$NetBSD: fsmagic.c,v 1.1.1.1 2003/02/23 23:08:25 pooka Exp $	*/
+/*	$NetBSD: fsmagic.c,v 1.1 2003/02/23 23:08:25 pooka Exp $	*/
 
 /*
  * fsmagic - magic based on filesystem info - directory, special files, etc.
@@ -56,7 +56,7 @@
 #if 0
 FILE_RCSID("@(#)Id: fsmagic.c,v 1.36 2002/07/03 19:00:41 christos Exp ")
 #else
-__RCSID("$NetBSD: fsmagic.c,v 1.1.1.1 2003/02/23 23:08:25 pooka Exp $");
+__RCSID("$NetBSD: fsmagic.c,v 1.1 2003/02/23 23:08:25 pooka Exp $");
 #endif
 #endif	/* lint */
 

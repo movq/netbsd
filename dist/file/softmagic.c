@@ -1,4 +1,4 @@
-/*	$NetBSD: softmagic.c,v 1.1.1.1 2003/02/23 23:08:28 pooka Exp $	*/
+/*	$NetBSD: softmagic.c,v 1.1 2003/02/23 23:08:28 pooka Exp $	*/
 
 /*
  * softmagic - interpret variable magic from MAGIC
@@ -39,7 +39,7 @@
 #if 0
 FILE_RCSID("@(#)Id: softmagic.c,v 1.52 2003/02/08 18:33:53 christos Exp ")
 #else
-__RCSID("$NetBSD: softmagic.c,v 1.1.1.1 2003/02/23 23:08:28 pooka Exp $");
+__RCSID("$NetBSD: softmagic.c,v 1.1 2003/02/23 23:08:28 pooka Exp $");
 #endif
 #endif	/* lint */
 

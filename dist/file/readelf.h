@@ -1,6 +1,6 @@
-/*	$NetBSD: readelf.h,v 1.1.1.1 2003/02/23 23:08:27 pooka Exp $	*/
+/*	$NetBSD: readelf.h,v 1.1 2003/02/23 23:08:27 pooka Exp $	*/
 
-/*	$NetBSD: readelf.h,v 1.1.1.1 2003/02/23 23:08:27 pooka Exp $	*/
+/*	$NetBSD: readelf.h,v 1.1 2003/02/23 23:08:27 pooka Exp $	*/
 
 /*
  * readelf.h 

@@ -1,4 +1,4 @@
-/*	$NetBSD: file.h,v 1.1.1.1 2003/02/23 23:08:25 pooka Exp $	*/
+/*	$NetBSD: file.h,v 1.1 2003/02/23 23:08:25 pooka Exp $	*/
 
 /*
  * file.h - definitions for file(1) program

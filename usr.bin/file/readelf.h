@@ -1,8 +1,6 @@
-/*	$NetBSD: readelf.h,v 1.10 2002/07/09 14:59:55 pooka Exp $	*/
-
 /*
  * readelf.h 
- * @(#)Id: readelf.h,v 1.9 2002/05/16 18:45:56 christos Exp 
+ * @(#)$Id: readelf.h,v 1.1 1996/10/05 20:20:31 christos Exp $
  *
  * Provide elf data structures for non-elf machines, allowing file
  * non-elf hosts to determine if an elf binary is stripped.
@@ -11,29 +9,18 @@
 #ifndef __fake_elf_h__
 #define __fake_elf_h__
 
-#if HAVE_STDINT_H
-#include <stdint.h>
-#endif
+typedef unsigned int	Elf32_Addr;
+typedef unsigned short	Elf32_Half;
+typedef unsigned int	Elf32_Off;
+typedef unsigned int	Elf32_Word;
+typedef unsigned char	Elf32_Char;
 
-typedef uint32_t	Elf32_Addr;
-typedef uint32_t	Elf32_Off;
-typedef uint16_t	Elf32_Half;
-typedef uint32_t	Elf32_Word;
-typedef uint8_t		Elf32_Char;
-
-#if SIZEOF_UINT64_T != 8
-#define USE_ARRAY_FOR_64BIT_TYPES
-typedef	uint32_t 	Elf64_Addr[2];
-typedef	uint32_t 	Elf64_Off[2];
-typedef uint32_t 	Elf64_Xword[2];
-#else
-typedef	uint64_t 	Elf64_Addr;
-typedef	uint64_t 	Elf64_Off;
-typedef uint64_t 	Elf64_Xword;
-#endif
-typedef uint16_t	Elf64_Half;
-typedef uint32_t	Elf64_Word;
-typedef uint8_t		Elf64_Char;
+/* XXX: We need 64 bit numbers here */
+typedef unsigned int	Elf64_Addr[2];
+typedef unsigned short	Elf64_Half;
+typedef unsigned int	Elf64_Off[2];
+typedef unsigned int	Elf64_Word;
+typedef unsigned char	Elf64_Char;
 
 #define EI_NIDENT	16
 
@@ -72,13 +59,11 @@ typedef struct {
 } Elf64_Ehdr;
 
 /* e_type */
-#define ET_EXEC		2
 #define ET_CORE		4
 
 /* sh_type */
 #define SHT_SYMTAB	2
 #define SHT_NOTE	7
-#define SHT_DYNSYM	11
 
 /* elf type */
 #define ELFDATANONE	0		/* e_ident[EI_DATA] */
@@ -106,9 +91,6 @@ typedef struct {
 #define	ELFMAG3		'F'
 #define	ELFMAG		"\177ELF"
 
-#define	OLFMAG1		'O'
-#define	OLFMAG		"\177OLF"
-
 typedef struct {
     Elf32_Word	p_type;
     Elf32_Off	p_offset;
@@ -119,17 +101,6 @@ typedef struct {
     Elf32_Word	p_flags;
     Elf32_Word	p_align;
 } Elf32_Phdr;
-
-typedef struct {
-    Elf64_Word	p_type;
-    Elf64_Word	p_flags;
-    Elf64_Off	p_offset;
-    Elf64_Addr	p_vaddr;
-    Elf64_Addr	p_paddr;
-    Elf64_Xword	p_filesz;
-    Elf64_Xword	p_memsz;
-    Elf64_Xword	p_align;
-} Elf64_Phdr;
 
 #define	PT_NULL		0		/* p_type */
 #define	PT_LOAD		1
@@ -165,47 +136,5 @@ typedef struct {
     Elf64_Off	sh_addralign;
     Elf64_Off	sh_entsize;
 } Elf64_Shdr;
-
-/* Notes used in ET_CORE */
-#define NT_PRSTATUS	1
-#define NT_PRFPREG	2
-#define NT_PRPSINFO	3
-#define NT_TASKSTRUCT	4
-
-#define	NT_NETBSD_CORE_PROCINFO		1
-
-/* Note header in a PT_NOTE section */
-typedef struct elf_note {
-    Elf32_Word	n_namesz;	/* Name size */
-    Elf32_Word	n_descsz;	/* Content size */
-    Elf32_Word	n_type;		/* Content type */
-} Elf32_Nhdr;
-
-typedef struct {
-    Elf64_Word	n_namesz;
-    Elf64_Word	n_descsz;
-    Elf64_Word	n_type;
-} Elf64_Nhdr;
-
-#define	NT_PRSTATUS	1
-#define	NT_PRFPREG	2
-#define	NT_PRPSINFO	3
-#define	NT_PRXREG	4
-#define	NT_PLATFORM	5
-#define	NT_AUXV		6
-
-/* Note types used in executables */
-/* NetBSD executables (name = "NetBSD") */
-#define NT_NETBSD_VERSION	1
-#define NT_NETBSD_EMULATION	2
-#define NT_FREEBSD_VERSION	1
-#define NT_OPENBSD_VERSION	1
-/* GNU executables (name = "GNU") */
-#define NT_GNU_VERSION		1
-
-/* GNU OS tags */
-#define GNU_OS_LINUX	0
-#define GNU_OS_HURD	1
-#define GNU_OS_SOLARIS	2
 
 #endif

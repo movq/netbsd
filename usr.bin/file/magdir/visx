@@ -1,6 +1,5 @@
-
-#------------------------------------------------------------------------------
-# visx:  file(1) magic for Visx format files
+#
+# magic.visx: Visx format file
 #
 0	short		0x5555		VISX image file
 >2	byte		0		(zero)

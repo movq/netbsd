@@ -1,4 +1,4 @@
-/*	$NetBSD: compress.c,v 1.1.1.1 2003/02/23 23:08:24 pooka Exp $	*/
+/*	$NetBSD: compress.c,v 1.1 2003/02/23 23:08:24 pooka Exp $	*/
 
 /*
  * compress routines:
@@ -24,7 +24,7 @@
 #if 0
 FILE_RCSID("@(#)Id: compress.c,v 1.25 2002/07/03 18:26:37 christos Exp ")
 #else
-__RCSID("$NetBSD: compress.c,v 1.1.1.1 2003/02/23 23:08:24 pooka Exp $");
+__RCSID("$NetBSD: compress.c,v 1.1 2003/02/23 23:08:24 pooka Exp $");
 #endif
 #endif
 

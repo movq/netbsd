@@ -1,5 +1,4 @@
-$NetBSD: MAINT,v 1.5 2000/05/14 22:53:37 christos Exp $
-Id: MAINT,v 1.4 2000/04/11 02:43:51 christos Exp 
+$Id: MAINT,v 1.1 1993/06/10 00:37:57 jtc Exp $
 
 Maintenance notes:
 
@@ -30,5 +29,5 @@ your changed version.
 
 Thank you for your assistance and cooperation.
 
-Christos Zoulas
-christos@astron.com
+Ian Darwin.
+ian@sq.com

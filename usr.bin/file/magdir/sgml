@@ -1,20 +1,6 @@
-
-#------------------------------------------------------------------------------
-# sgml:  file(1) magic for Standard Generalized Markup Language
-# HyperText Markup Language (HTML) is an SGML document type,
-# from Daniel Quinlan (quinlan@yggdrasil.com)
-# adapted to string extenstions by Anthon van der Neut <anthon@mnt.org)
-0   string/cB	\<!doctype\ html	HTML document text
-0   string/c	\<head			HTML document text
-0   string/c	\<title			HTML document text
-0   string/c	\<html			HTML document text
-
-# Extensible markup language (XML), a subset of SGML
-# from Marc Prud'hommeaux (marc@apocalypse.org)
-0   string/c	\<?xml			XML document text
-
-
-# SGML, mostly from rph@sq
-0   string/c	\<!doctype		exported SGML document text
-0   string/c	\<!subdoc		exported SGML subdocument text
-0   string	\<!--			exported SGML document text
+# $Id: sgml,v 1.1 1993/06/10 00:59:29 jtc Exp $
+# SGML goop, mostly from rph@sq.
+0	string		\<!DOCTYPE	Exported SGML document
+0	string		\<!doctype	Exported SGML document
+0	string		\<!SUBDOC	Exported SGML subdocument
+0	string		\<!subdoc	Exported SGML subdocument

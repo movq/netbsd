@@ -1,4 +1,4 @@
-/*	$NetBSD: readelf.c,v 1.1.1.1 2003/02/23 23:08:26 pooka Exp $	*/
+/*	$NetBSD: readelf.c,v 1.1 2003/02/23 23:08:26 pooka Exp $	*/
 
 #include "file.h"
 
@@ -16,7 +16,7 @@
 #if 0
 FILE_RCSID("@(#)Id: readelf.c,v 1.23 2003/02/08 18:33:53 christos Exp ")
 #else
-__RCSID("$NetBSD: readelf.c,v 1.1.1.1 2003/02/23 23:08:26 pooka Exp $");
+__RCSID("$NetBSD: readelf.c,v 1.1 2003/02/23 23:08:26 pooka Exp $");
 #endif
 #endif
 

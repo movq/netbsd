@@ -1,4 +1,4 @@
-/*	$NetBSD: tar.h,v 1.1.1.1 2003/02/23 23:08:28 pooka Exp $	*/
+/*	$NetBSD: tar.h,v 1.1 2003/02/23 23:08:28 pooka Exp $	*/
 
 /*
  * Header file for public domain tar (tape archive) program.
