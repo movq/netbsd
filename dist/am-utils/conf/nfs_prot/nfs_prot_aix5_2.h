@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_prot_aix5_2.h,v 1.1 2003/03/09 01:13:25 christos Exp $	*/
+/*	$NetBSD: nfs_prot_aix5_2.h,v 1.1.1.1 2003/03/09 01:13:25 christos Exp $	*/
 
 /*
  * Copyright (c) 1997-2003 Erez Zadok
