@@ -1,4 +1,4 @@
-/*	$NetBSD: select.h,v 1.21 2005/03/10 00:25:45 kleink Exp $	*/
+/*	$NetBSD: select.h,v 1.22 2005/03/17 20:39:17 kleink Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -38,21 +38,8 @@
 #include <sys/featuretest.h>
 #include <sys/types.h>
 
-#ifdef _NETBSD_SOURCE
-#include <sys/event.h>		/* for struct klist */
-
-/*
- * Used to maintain information about processes that wish to be
- * notified when I/O becomes possible.
- */
-struct selinfo {
-	struct klist	sel_klist;	/* knotes attached to this selinfo */
-	pid_t		sel_pid;	/* process to be notified */
-	uint8_t		sel_collision;	/* non-zero if a collision occurred */
-};
-#endif /* !_NETBSD_SOURCE_ */
-
 #ifdef _KERNEL
+#include <sys/selinfo.h>		/* for struct selinfo */
 #include <sys/signal.h>			/* for sigset_t */
 
 struct lwp;
