@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ether.h,v 1.1 1997/03/29 21:52:18 mellon Exp $	*/
+/*	$NetBSD: if_ether.h,v 1.1.1.1 1997/03/29 21:52:18 mellon Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
