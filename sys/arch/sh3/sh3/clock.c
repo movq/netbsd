@@ -1,4 +1,4 @@
-/*	$NetBSD: clock.c,v 1.14 2001/03/07 00:47:22 itohy Exp $	*/
+/*	$NetBSD: clock.c,v 1.15 2001/04/23 11:20:41 uch Exp $	*/
 
 /*-
  * Copyright (c) 1993, 1994 Charles Hannum.
@@ -108,12 +108,9 @@ WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #include <machine/cpufunc.h>
 #include <machine/shbvar.h>
 
-void	spinwait __P((int));
 void	findcpuspeed __P((void));
 int	clockintr __P((void *));
 int	gettick __P((void));
-void	sysbeepstop __P((void *));
-void	sysbeep __P((int, int));
 void	rtcinit __P((void));
 
 int timer0speed;
@@ -136,9 +133,6 @@ startrtclock()
 					to find the cpu speed */
 }
 
-#if 0
-#define USE_RTCCLK
-#endif
 /*
  * Fill in *tvp with current time with microsecond resolution.
  */
@@ -148,26 +142,9 @@ microtime(tvp)
 {
 	int s = splclock();
 	static struct timeval lasttime;
-#if 0
-	u_long ticks = 0;
-#endif
 
 	*tvp = time;
 
-#if 0
-#ifdef USE_RTCCLK
-	/* ticks = (16384 - SHREG_TCNT1)*1000000/16384; */
-	ticks = 1000000 - SHREG_TCNT1*1000/16;
-#else
-	ticks = (PCLOCK/16 - SHREG_TCNT1)/(PCLOCK/16/1000000);
-#endif
-
-	tvp->tv_usec += ticks;
-	while (tvp->tv_usec >= 1000000) {
-		tvp->tv_usec -= 1000000;
-		tvp->tv_sec++;
-	}
-#endif
 	if (tvp->tv_sec == lasttime.tv_sec &&
 	    tvp->tv_usec <= lasttime.tv_usec &&
 	    (tvp->tv_usec = lasttime.tv_usec + 1) >= 1000000) {
@@ -185,9 +162,8 @@ int
 clockintr(arg)
 	void *arg;
 {
-#if 1
 	struct clockframe *frame = arg;		/* not strictly necessary */
-#endif
+
 #if (NWDOG > 0)
 	unsigned int i;
 
@@ -252,22 +228,6 @@ delay(n)
 			n -= otick - tick;
 		otick = tick;
 	}
-}
-
-void
-sysbeepstop(arg)
-	void *arg;
-{
-#ifdef	TODO
-#endif
-}
-
-void
-sysbeep(pitch, period)
-	int pitch, period;
-{
-#ifdef	TODO
-#endif
 }
 
 unsigned int delaycount;	/* calibrated loop variable (1 millisecond) */
@@ -349,13 +309,8 @@ void
 inittodr(base)
 	time_t base;
 {
-#ifdef dreamcast
-	volatile unsigned int *rtc = (volatile unsigned int *)0xa0710000;
-	unsigned int old = 0, new;
-#else
 	struct clock_ymdhms dt;
 	int doreset = 0;
-#endif
 
 	/*
 	 * We mostly ignore the suggested time and go for the RTC clock time
@@ -371,23 +326,6 @@ inittodr(base)
 		base = 17*SECYR + 186*SECDAY + SECDAY/2;
 	}
 
-#ifdef dreamcast
-	for (;;) {
-		int i;
-		for (i = 0; i < 3; i++) {
-			new = ((rtc[0] & 0xffff) << 16) | (rtc[1] & 0xffff);
-			if (new != old)
-				break;
-		}
-		if (i < 3)
-			old = new;
-		else
-			break;
-	}
-
-	/* offset 20 years */
-	time.tv_sec = new + rtc_offset * 60 - 631152000;
-#else
 #ifdef SH4
 #define	FROMBCD2(x)	((((x) & 0xf000) >> 12) * 1000 + \
 			 (((x) & 0x0f00) >> 8) * 100 + \
@@ -431,7 +369,6 @@ inittodr(base)
 		time.tv_sec = 0;
 	} else
 		time.tv_sec = clock_ymdhms_to_secs(&dt) + rtc_offset * 60;
-#endif
 
 #ifndef INITTODR_ALWAYS_USE_RTC
 	if (base < time.tv_sec - 5*SECYR)
