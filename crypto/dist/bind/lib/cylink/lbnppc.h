@@ -1,4 +1,4 @@
-/*	$NetBSD: lbnppc.h,v 1.1 2001/01/27 08:08:33 itojun Exp $	*/
+/*	$NetBSD: lbnppc.h,v 1.1.1.1 2001/01/27 08:08:33 itojun Exp $	*/
 
 #ifndef LBNPPC_H
 #define LBNPPC_H

@@ -1,4 +1,4 @@
-/*	$NetBSD: md5rand.c,v 1.1 2001/01/27 08:09:04 itojun Exp $	*/
+/*	$NetBSD: md5rand.c,v 1.1.1.1 2001/01/27 08:09:04 itojun Exp $	*/
 
 /* Copyright (C) RSA Data Security, Inc. created 1994, 1996.  This is an
    unpublished work protected as such under copyright law.  This work

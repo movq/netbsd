@@ -1,4 +1,4 @@
-/*	$NetBSD: amencdec.h,v 1.1 2001/01/27 08:08:52 itojun Exp $	*/
+/*	$NetBSD: amencdec.h,v 1.1.1.1 2001/01/27 08:08:52 itojun Exp $	*/
 
 /* Copyright (C) RSA Data Security, Inc. created 1994, 1996.  This is an
    unpublished work protected as such under copyright law.  This work

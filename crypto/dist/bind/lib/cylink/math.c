@@ -1,4 +1,4 @@
-/*	$NetBSD: math.c,v 1.1 2001/01/27 08:08:36 itojun Exp $	*/
+/*	$NetBSD: math.c,v 1.1.1.1 2001/01/27 08:08:36 itojun Exp $	*/
 
 /*
  * Cylink Corporation © 1998

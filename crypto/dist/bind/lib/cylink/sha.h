@@ -1,4 +1,4 @@
-/*	$NetBSD: sha.h,v 1.1 2001/01/27 08:08:41 itojun Exp $	*/
+/*	$NetBSD: sha.h,v 1.1.1.1 2001/01/27 08:08:41 itojun Exp $	*/
 
 /*
  * Cylink Corporation © 1998

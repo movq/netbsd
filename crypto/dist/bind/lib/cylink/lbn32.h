@@ -1,4 +1,4 @@
-/*	$NetBSD: lbn32.h,v 1.1 2001/01/27 08:08:26 itojun Exp $	*/
+/*	$NetBSD: lbn32.h,v 1.1.1.1 2001/01/27 08:08:26 itojun Exp $	*/
 
 #ifndef LBN32_H
 #define LBN32_H

@@ -1,4 +1,4 @@
-/*	$NetBSD: c_asm.h,v 1.1 2001/01/27 08:07:42 itojun Exp $	*/
+/*	$NetBSD: c_asm.h,v 1.1.1.1 2001/01/27 08:07:42 itojun Exp $	*/
 
 /*
  * Cylink Corporation © 1998
