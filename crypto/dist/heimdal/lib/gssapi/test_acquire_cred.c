@@ -34,7 +34,7 @@
 #include <err.h>
 
 __RCSID("$Heimdal: test_acquire_cred.c,v 1.2 2003/04/06 00:20:37 lha Exp $"
-        "$NetBSD: test_acquire_cred.c,v 1.1 2003/05/15 20:28:46 lha Exp $");
+        "$NetBSD: test_acquire_cred.c,v 1.1.1.1 2003/05/15 20:28:46 lha Exp $");
 
 static void
 print_time(OM_uint32 time_rec)

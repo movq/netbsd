@@ -34,7 +34,7 @@
 #include "gssapi_locl.h"
 
 __RCSID("$Heimdal: process_context_token.c,v 1.1 2003/03/16 18:19:05 lha Exp $"
-        "$NetBSD: process_context_token.c,v 1.1 2003/05/15 20:28:46 lha Exp $");
+        "$NetBSD: process_context_token.c,v 1.1.1.1 2003/05/15 20:28:46 lha Exp $");
 
 OM_uint32 gss_process_context_token (
 	OM_uint32          *minor_status,

@@ -34,7 +34,7 @@
 #include "gssapi_locl.h"
 
 __RCSID("$Heimdal: compat.c,v 1.2.2.2 2003/04/28 13:58:09 lha Exp $"
-        "$NetBSD: compat.c,v 1.1 2003/05/15 20:28:46 lha Exp $");
+        "$NetBSD: compat.c,v 1.1.1.1 2003/05/15 20:28:46 lha Exp $");
 
 
 static krb5_error_code

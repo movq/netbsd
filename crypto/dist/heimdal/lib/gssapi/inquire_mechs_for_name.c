@@ -34,7 +34,7 @@
 #include "gssapi_locl.h"
 
 __RCSID("$Heimdal: inquire_mechs_for_name.c,v 1.1 2003/03/16 18:12:33 lha Exp $"
-        "$NetBSD: inquire_mechs_for_name.c,v 1.1 2003/05/15 20:28:46 lha Exp $");
+        "$NetBSD: inquire_mechs_for_name.c,v 1.1.1.1 2003/05/15 20:28:46 lha Exp $");
 
 OM_uint32 gss_inquire_mechs_for_name (
             OM_uint32 * minor_status,

@@ -32,7 +32,7 @@
  */
 
 /* $Heimdal: krb5-v4compat.h,v 1.2 2003/03/18 03:08:20 lha Exp $
-   $NetBSD: krb5-v4compat.h,v 1.1 2003/05/15 20:28:47 lha Exp $ */
+   $NetBSD: krb5-v4compat.h,v 1.1.1.1 2003/05/15 20:28:47 lha Exp $ */
 
 #ifndef __KRB5_V4COMPAT_H__
 #define __KRB5_V4COMPAT_H__

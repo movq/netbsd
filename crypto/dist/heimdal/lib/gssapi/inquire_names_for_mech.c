@@ -34,7 +34,7 @@
 #include "gssapi_locl.h"
 
 __RCSID("$Heimdal: inquire_names_for_mech.c,v 1.1 2003/03/16 18:15:29 lha Exp $"
-        "$NetBSD: inquire_names_for_mech.c,v 1.1 2003/05/15 20:28:46 lha Exp $");
+        "$NetBSD: inquire_names_for_mech.c,v 1.1.1.1 2003/05/15 20:28:46 lha Exp $");
 
 
 static gss_OID *name_list[] = {

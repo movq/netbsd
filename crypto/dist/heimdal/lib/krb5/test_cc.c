@@ -34,7 +34,7 @@
 #include <err.h>
 
 __RCSID("$Heimdal: test_cc.c,v 1.1 2003/03/10 00:26:40 lha Exp $"
-        "$NetBSD: test_cc.c,v 1.1 2003/05/15 20:28:48 lha Exp $");
+        "$NetBSD: test_cc.c,v 1.1.1.1 2003/05/15 20:28:48 lha Exp $");
 
 #define TEST_CC_NAME "/tmp/foo"
 

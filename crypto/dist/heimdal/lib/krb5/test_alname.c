@@ -35,7 +35,7 @@
 #include <err.h>
 
 __RCSID("$Heimdal: test_alname.c,v 1.4 2003/04/17 05:46:45 lha Exp $"
-        "$NetBSD: test_alname.c,v 1.1 2003/05/15 20:28:48 lha Exp $");
+        "$NetBSD: test_alname.c,v 1.1.1.1 2003/05/15 20:28:48 lha Exp $");
 
 static void
 test_alname(krb5_context context, krb5_realm realm,

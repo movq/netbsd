@@ -42,7 +42,7 @@
 #include "check-common.h"
 
 __RCSID("$Heimdal: check-common.c,v 1.1 2003/01/23 10:21:36 lha Exp $"
-        "$NetBSD: check-common.c,v 1.1 2003/05/15 20:28:45 lha Exp $");
+        "$NetBSD: check-common.c,v 1.1.1.1 2003/05/15 20:28:45 lha Exp $");
 
 static void
 print_bytes (unsigned const char *buf, size_t len)
