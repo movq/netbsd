@@ -1,4 +1,4 @@
-/*	$NetBSD: chap-md5.h,v 1.1 2005/02/20 10:28:37 cube Exp $	*/
+/*	$NetBSD: chap-md5.h,v 1.1.1.1 2005/02/20 10:28:37 cube Exp $	*/
 
 /*
  * chap-md5.h - New CHAP/MD5 implementation.

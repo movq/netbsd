@@ -1,4 +1,4 @@
-/*	$NetBSD: pppd.h,v 1.1 2005/02/20 10:28:52 cube Exp $	*/
+/*	$NetBSD: pppd.h,v 1.1.1.1 2005/02/20 10:28:52 cube Exp $	*/
 
 /*
  * pppd.h - PPP daemon global declarations.

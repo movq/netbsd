@@ -1,4 +1,4 @@
-/*	$NetBSD: pppstats.c,v 1.1 2005/02/20 10:28:35 cube Exp $	*/
+/*	$NetBSD: pppstats.c,v 1.1.1.1 2005/02/20 10:28:35 cube Exp $	*/
 
 /*
  * print PPP statistics:
@@ -42,7 +42,7 @@
 #if 0
 static const char rcsid[] = "Id: pppstats.c,v 1.29 2002/10/27 12:56:26 fcusack Exp";
 #else
-__RCSID("$NetBSD: pppstats.c,v 1.1 2005/02/20 10:28:35 cube Exp $");
+__RCSID("$NetBSD: pppstats.c,v 1.1.1.1 2005/02/20 10:28:35 cube Exp $");
 #endif
 #endif
 

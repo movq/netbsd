@@ -1,4 +1,4 @@
-/*	$NetBSD: utils.c,v 1.1 2005/02/20 10:28:53 cube Exp $	*/
+/*	$NetBSD: utils.c,v 1.1.1.1 2005/02/20 10:28:53 cube Exp $	*/
 
 /*
  * utils.c - various utility functions used in pppd.
@@ -35,7 +35,7 @@
 #if 0
 #define RCSID	"Id: utils.c,v 1.24 2004/11/04 10:02:26 paulus Exp"
 #else
-__RCSID("$NetBSD: utils.c,v 1.1 2005/02/20 10:28:53 cube Exp $");
+__RCSID("$NetBSD: utils.c,v 1.1.1.1 2005/02/20 10:28:53 cube Exp $");
 #endif
 #endif
 

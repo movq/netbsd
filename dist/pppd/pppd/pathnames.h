@@ -1,4 +1,4 @@
-/*	$NetBSD: pathnames.h,v 1.1 2005/02/20 10:28:50 cube Exp $	*/
+/*	$NetBSD: pathnames.h,v 1.1.1.1 2005/02/20 10:28:50 cube Exp $	*/
 
 /*
  * define path names

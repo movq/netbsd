@@ -1,4 +1,4 @@
-/*	$NetBSD: chap-md5.c,v 1.1 2005/02/20 10:28:37 cube Exp $	*/
+/*	$NetBSD: chap-md5.c,v 1.1.1.1 2005/02/20 10:28:37 cube Exp $	*/
 
 /*
  * chap-md5.c - New CHAP/MD5 implementation.
@@ -35,7 +35,7 @@
 #if 0
 #define RCSID	"Id: chap-md5.c,v 1.4 2004/11/09 22:39:25 paulus Exp"
 #else
-__RCSID("$NetBSD: chap-md5.c,v 1.1 2005/02/20 10:28:37 cube Exp $");
+__RCSID("$NetBSD: chap-md5.c,v 1.1.1.1 2005/02/20 10:28:37 cube Exp $");
 #endif
 #endif
 

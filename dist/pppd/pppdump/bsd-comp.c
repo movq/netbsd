@@ -1,4 +1,4 @@
-/*	$NetBSD: bsd-comp.c,v 1.1 2005/02/20 10:28:54 cube Exp $	*/
+/*	$NetBSD: bsd-comp.c,v 1.1.1.1 2005/02/20 10:28:54 cube Exp $	*/
 
 /* Because this code is derived from the 4.3BSD compress source:
  *

@@ -1,4 +1,4 @@
-/*	$NetBSD: ecp.h,v 1.1 2005/02/20 10:28:43 cube Exp $	*/
+/*	$NetBSD: ecp.h,v 1.1.1.1 2005/02/20 10:28:43 cube Exp $	*/
 
 /*
  * ecp.h - Definitions for PPP Encryption Control Protocol.

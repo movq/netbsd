@@ -1,4 +1,4 @@
-/*	$NetBSD: chap_ms.h,v 1.1 2005/02/20 10:28:42 cube Exp $	*/
+/*	$NetBSD: chap_ms.h,v 1.1.1.1 2005/02/20 10:28:42 cube Exp $	*/
 
 /*
  * chap_ms.h - Challenge Handshake Authentication Protocol definitions.

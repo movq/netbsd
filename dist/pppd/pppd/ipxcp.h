@@ -1,4 +1,4 @@
-/*	$NetBSD: ipxcp.h,v 1.1 2005/02/20 10:28:49 cube Exp $	*/
+/*	$NetBSD: ipxcp.h,v 1.1.1.1 2005/02/20 10:28:49 cube Exp $	*/
 
 /*
  * ipxcp.h - IPX Control Protocol definitions.

@@ -1,4 +1,4 @@
-/*	$NetBSD: chap-new.h,v 1.1 2005/02/20 10:28:41 cube Exp $	*/
+/*	$NetBSD: chap-new.h,v 1.1.1.1 2005/02/20 10:28:41 cube Exp $	*/
 
 /*
  * chap-new.c - New CHAP implementation.
