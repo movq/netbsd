@@ -1,7 +1,7 @@
-/*	$NetBSD: vripvar.h,v 1.5 2001/09/16 05:32:21 uch Exp $	*/
+/*	$NetBSD: vripvar.h,v 1.6 2002/01/26 10:50:44 takemura Exp $	*/
 
 /*-
- * Copyright (c) 1999
+ * Copyright (c) 1999, 2002
  *         Shin Takemura and PocketBSD Project. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the PocketBSD project
- *	and its contributors.
- * 4. Neither the name of the project nor the names of its contributors
+ * 3. Neither the name of the project nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -39,30 +35,11 @@ typedef void *vrip_chipset_tag_t;
 #include <hpcmips/vr/cmuvar.h>
 #include <dev/hpc/hpciovar.h>
 
-/*
- * Vrip bus attach arguments
- */
-struct vripbus_attach_args {
-	char *vba_busname;
-	bus_space_tag_t vba_iot;	/* vrip i/o space tag */
-};
-
 /* Vrip GPIO chips */
 enum vrip_iochip {
 	VRIP_IOCHIP_VRGIU = 0,
 	VRIP_IOCHIP_VRC4172GPIO,
 	VRIP_NIOCHIPS
-};
-
-struct vrip_softc {
-	struct	device sc_dv;
-	bus_space_tag_t sc_iot;
-	bus_space_handle_t sc_ioh;
-	hpcio_chip_t sc_gpio_chips[VRIP_NIOCHIPS];
-	vrcmu_chipset_tag_t sc_cc;
-	vrcmu_function_tag_t sc_cf;
-	int sc_pri; /* attaching device priority */
-	u_int32_t sc_intrmask;
 };
 
 /* 
@@ -100,10 +77,3 @@ void vrip_intr_resume(void);
 void vrip_cmu_function_register(vrip_chipset_tag_t, vrcmu_function_tag_t,
     vrcmu_chipset_tag_t);
 void vrip_gpio_register(vrip_chipset_tag_t, hpcio_chip_t);
-    
-/*
- * Debuggin utility
- */    
-void bitdisp16(u_int16_t);
-void bitdisp32(u_int32_t);
-void bitdisp64(u_int32_t[2]);
