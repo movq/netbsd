@@ -1,5 +1,5 @@
 # bootp/bootpef/Makefile
-# $Id: Makefile,v 1.1 1994/05/27 21:46:37 gwr Exp $
+# $Id: Makefile,v 1.1.1.1 1994/05/27 21:46:38 gwr Exp $
 
 PROG=	bootpef
 
