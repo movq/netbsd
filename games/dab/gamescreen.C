@@ -1,4 +1,4 @@
-/*	$NetBSD: gamescreen.C,v 1.1 2003/12/26 17:57:03 christos Exp $	*/
+/*	$NetBSD: gamescreen.C,v 1.1.1.1 2003/12/26 17:57:03 christos Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -40,7 +40,7 @@
  * gamescreen.C: Common screen functions
  */
 #include "defs.h"
-RCSID("$Id: gamescreen.C,v 1.1 2003/12/26 17:57:03 christos Exp $")
+RCSID("$Id: gamescreen.C,v 1.1.1.1 2003/12/26 17:57:03 christos Exp $")
 
 #include "gamescreen.h"
 
