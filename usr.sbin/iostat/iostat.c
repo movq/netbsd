@@ -1,6 +1,6 @@
 /*-
- * Copyright (c) 1986, 1991 The Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1986, 1991, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,30 +32,33 @@
  */
 
 #ifndef lint
-char copyright[] =
-"@(#) Copyright (c) 1986, 1991 The Regents of the University of California.\n\
- All rights reserved.\n";
+static char copyright[] =
+"@(#) Copyright (c) 1986, 1991, 1993\n\
+	The Regents of the University of California.  All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-static char sccsid[] = "@(#)iostat.c	5.9 (Berkeley) 6/27/91";
+static char sccsid[] = "@(#)iostat.c	8.2 (Berkeley) 1/26/94";
 #endif /* not lint */
 
 #include <sys/param.h>
 #include <sys/buf.h>
 #include <sys/dkstat.h>
-#include <signal.h>
-#include <fcntl.h>
-#include <nlist.h>
-#include <unistd.h>
-#include <stdio.h>
+
+#include <err.h>
 #include <ctype.h>
+#include <fcntl.h>
+#include <kvm.h>
+#include <limits.h>
+#include <nlist.h>
+#include <paths.h>
+#include <signal.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <paths.h>
-#include <kvm.h>
+#include <unistd.h>
 
-struct nlist nl[] = {
+struct nlist namelist[] = {
 #define	X_DK_TIME	0
 	{ "_dk_time" },
 #define	X_DK_XFER	1
@@ -74,14 +77,18 @@ struct nlist nl[] = {
 	{ "_dk_wpms" },
 #define	X_HZ		8
 	{ "_hz" },
-#define	X_PHZ		9
-	{ "_phz" },
+#define	X_STATHZ	9
+	{ "_stathz" },
 #define	X_DK_NDRIVE	10
 	{ "_dk_ndrive" },
 #define	X_END		10
-#ifdef hp300
+#if defined(hp300) || defined(luna68k)
 #define	X_HPDINIT	(X_END+1)
 	{ "_hp_dinit" },
+#endif
+#ifdef mips
+#define	X_SCSI_DINIT	(X_END+1)
+	{ "_scsi_dinit" },
 #endif
 #ifdef tahoe
 #define	X_VBDINIT	(X_END+1)
@@ -93,10 +100,6 @@ struct nlist nl[] = {
 	{ "_ubdinit" },
 #define X_UBDINIT	(X_END+2)
 #endif
-#ifdef __386BSD__
-#define	X_ISA_BIO	(X_END+1)
-	{ "_isa_devtab_bio" },
-#endif /* __386BSD__ */
 	{ NULL },
 };
 
@@ -110,43 +113,50 @@ struct _disk {
 	long	tk_nout;
 } cur, last;
 
-double etime;
-long *dk_wpms;
-int dk_ndrive, *dr_select, hz, kmemfd, ndrives;
-char **dr_name;
+kvm_t	 *kd;
+double	  etime;
+long	 *dk_wpms;
+int	  dk_ndrive, *dr_select, hz, kmemfd, ndrives;
+char	**dr_name;
 
 #define nlread(x, v) \
-	kvm_read((void *)nl[x].n_value, (void *)&(v), sizeof(v))
+	kvm_read(kd, namelist[x].n_value, &(v), sizeof(v))
 
 #include "names.c"				/* XXX */
 
-static void cpustats __P((void)), dkstats __P((void)), phdr __P((int));
-static void usage __P((void)), err __P((const char *, ...));
+void cpustats __P((void));
+void dkstats __P((void));
+void phdr __P((int));
+void usage __P((void));
 
+int
 main(argc, argv)
 	int argc;
-	char **argv;
+	char *argv[];
 {
 	register int i;
 	long tmp;
-	int ch, hdrcnt, reps, interval, phz, ndrives;
-	char **cp, *memfile, *namelist, buf[30];
+	int ch, hdrcnt, reps, interval, stathz, ndrives;
+	char **cp, *memf, *nlistf, buf[30];
+        char errbuf[_POSIX2_LINE_MAX];
 
 	interval = reps = 0;
-	namelist = memfile = NULL;
+	nlistf = memf = NULL;
 	while ((ch = getopt(argc, argv, "c:M:N:w:")) != EOF)
 		switch(ch) {
 		case 'c':
-			reps = atoi(optarg);
+			if ((reps = atoi(optarg)) <= 0)
+				errx(1, "repetition count <= 0.");
 			break;
 		case 'M':
-			memfile = optarg;
+			memf = optarg;
 			break;
 		case 'N':
-			namelist = optarg;
+			nlistf = optarg;
 			break;
 		case 'w':
-			interval = atoi(optarg);
+			if ((interval = atoi(optarg)) <= 0)
+				errx(1, "interval <= 0.");
 			break;
 		case '?':
 		default:
@@ -155,15 +165,23 @@ main(argc, argv)
 	argc -= optind;
 	argv += optind;
 
-	if (kvm_openfiles(namelist, memfile, NULL) == -1)
-		err("kvm_openfiles: %s", kvm_geterr());
-	if (kvm_nlist(nl) == -1)
-		err("kvm_nlist: %s", kvm_geterr());
-	if (nl[X_DK_NDRIVE].n_type == 0)
-		err("dk_ndrive not found in namelist");
+	/*
+	 * Discard setgid privileges if not the running kernel so that bad
+	 * guys can't print interesting stuff from kernel memory.
+	 */
+	if (nlistf != NULL || memf != NULL)
+		setgid(getgid());
+
+        kd = kvm_openfiles(nlistf, memf, NULL, O_RDONLY, errbuf);
+	if (kd == 0)
+		errx(1, "kvm_openfiles: %s", errbuf);
+	if (kvm_nlist(kd, namelist) == -1)
+		errx(1, "kvm_nlist: %s", kvm_geterr(kd));
+	if (namelist[X_DK_NDRIVE].n_type == 0)
+		errx(1, "dk_ndrive not found in namelist");
 	(void)nlread(X_DK_NDRIVE, dk_ndrive);
 	if (dk_ndrive <= 0)
-		err("invalid dk_ndrive %d\n", dk_ndrive);
+		errx(1, "invalid dk_ndrive %d\n", dk_ndrive);
 
 	cur.dk_time = calloc(dk_ndrive, sizeof(long));
 	cur.dk_wds = calloc(dk_ndrive, sizeof(long));
@@ -181,12 +199,13 @@ main(argc, argv)
 		(void)sprintf(buf, "dk%d", i);
 		dr_name[i] = strdup(buf);
 	}
-	read_names();
+	if (!read_names())
+		exit(1);
 	(void)nlread(X_HZ, hz);
-	(void)nlread(X_PHZ, phz);
-	if (phz)
-		hz = phz;
-	(void)kvm_read((void *)nl[X_DK_WPMS].n_value, dk_wpms,
+	(void)nlread(X_STATHZ, stathz);
+	if (stathz)
+		hz = stathz;
+	(void)kvm_read(kd, namelist[X_DK_WPMS].n_value, dk_wpms,
 		dk_ndrive * sizeof(dk_wpms));
 
 	/*
@@ -250,19 +269,19 @@ main(argc, argv)
 			phdr(0);
 			hdrcnt = 20;
 		}
-		(void)kvm_read((void *)nl[X_DK_TIME].n_value,
+		(void)kvm_read(kd, namelist[X_DK_TIME].n_value,
 		    cur.dk_time, dk_ndrive * sizeof(long));
-		(void)kvm_read((void *)nl[X_DK_XFER].n_value,
+		(void)kvm_read(kd, namelist[X_DK_XFER].n_value,
 		    cur.dk_xfer, dk_ndrive * sizeof(long));
-		(void)kvm_read((void *)nl[X_DK_WDS].n_value,
+		(void)kvm_read(kd, namelist[X_DK_WDS].n_value,
 		    cur.dk_wds, dk_ndrive * sizeof(long));
-		(void)kvm_read((void *)nl[X_DK_SEEK].n_value,
+		(void)kvm_read(kd, namelist[X_DK_SEEK].n_value,
 		    cur.dk_seek, dk_ndrive * sizeof(long));
-		(void)kvm_read((void *)nl[X_TK_NIN].n_value,
+		(void)kvm_read(kd, namelist[X_TK_NIN].n_value,
 		    &cur.tk_nin, sizeof(cur.tk_nin));
-		(void)kvm_read((void *)nl[X_TK_NOUT].n_value,
+		(void)kvm_read(kd, namelist[X_TK_NOUT].n_value,
 		    &cur.tk_nout, sizeof(cur.tk_nout));
-		(void)kvm_read((void *)nl[X_CP_TIME].n_value,
+		(void)kvm_read(kd, namelist[X_CP_TIME].n_value,
 		    cur.cp_time, sizeof(cur.cp_time));
 		for (i = 0; i < dk_ndrive; i++) {
 			if (!dr_select[i])
@@ -303,8 +322,8 @@ main(argc, argv)
 
 /* ARGUSED */
 void
-phdr(notused)
-	int notused;
+phdr(signo)
+	int signo;
 {
 	register int i;
 
@@ -369,33 +388,4 @@ usage()
 	(void)fprintf(stderr,
 "usage: iostat [-c count] [-M core] [-N system] [-w wait] [drives]\n");
 	exit(1);
-}
-
-#if __STDC__
-#include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
-
-void
-#if __STDC__
-err(const char *fmt, ...)
-#else
-err(fmt, va_alist)
-	char *fmt;
-        va_dcl
-#endif
-{
-	va_list ap;
-#if __STDC__
-	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
-	(void)fprintf(stderr, "iostat: ");
-	(void)vfprintf(stderr, fmt, ap);
-	va_end(ap);
-	(void)fprintf(stderr, "\n");
-	exit(1);
-	/* NOTREACHED */
 }
