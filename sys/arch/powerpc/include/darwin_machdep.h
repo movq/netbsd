@@ -1,7 +1,7 @@
-/*	$NetBSD: darwin_machdep.h,v 1.3 2003/09/07 07:50:31 manu Exp $ */
+/*	$NetBSD: darwin_machdep.h,v 1.4 2003/11/11 17:31:59 manu Exp $ */
 
 /*-
- * Copyright (c) 2002 The NetBSD Foundation, Inc.
+ * Copyright (c) 2002-2003 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -40,56 +40,24 @@
 #define	_DARWIN_MACHDEP_H_
 
 #include <compat/darwin/darwin_signal.h>
+#include <machine/mach_machdep.h>
 
 void darwin_fork_child_return(void *);
 
-struct darwin_ppc_exception_state {
-	unsigned long dar;
-	unsigned long dsisr;
-	unsigned long exception;
-	unsigned long pad[5];
-};
-
-struct darwin_ppc_thread_state {
-	unsigned int srr0;
-	unsigned int srr1;
-	unsigned int gpreg[32];
-	unsigned int cr;
-	unsigned int xer;
-	unsigned int lr;
-	unsigned int ctr;
-	unsigned int mq;
-	unsigned int vrsave;
-};
-
-struct darwin_ppc_float_state {
-	double  fpregs[32];
-	unsigned int fpscr_pad;
-	unsigned int fpscr;
-};
-
-struct darwin_ppc_vector_state {
-	unsigned long vr[32][4];
-	unsigned long vscr[4];
-	unsigned int pad1[4];
-	unsigned int vrvalid;
-	unsigned int pad2[7];
-};
-
 struct darwin_mcontext {
-	struct darwin_ppc_exception_state es;   
-	struct darwin_ppc_thread_state ss;
-	struct darwin_ppc_float_state fs;
-	struct darwin_ppc_vector_state vs;			
+	struct mach_ppc_exception_state es;   
+	struct mach_ppc_thread_state ss;
+	struct mach_ppc_float_state fs;
+	struct mach_ppc_vector_state vs;			
 };
 
 struct darwin_sigframe {
 	int nocopy1[30];
 	/* struct darwin_mcontext without the vs field */
 	struct darwin__mcontext {
-		struct darwin_ppc_exception_state es;
-		struct darwin_ppc_thread_state ss;
-		struct darwin_ppc_float_state fs;
+		struct mach_ppc_exception_state es;
+		struct mach_ppc_thread_state ss;
+		struct mach_ppc_float_state fs;
 	} dmc;
 	int nocopy2[144];
 	/* struct darwin_ucontext with some padding */
