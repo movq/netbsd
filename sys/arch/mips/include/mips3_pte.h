@@ -1,5 +1,3 @@
-/*	$NetBSD: mips3_pte.h,v 1.7 1997/06/16 23:41:44 jonathan Exp $	*/
-
 /*
  * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1992, 1993
@@ -40,14 +38,15 @@
  * from: Utah Hdr: pte.h 1.11 89/09/03
  *
  *	from: @(#)pte.h	8.1 (Berkeley) 6/10/93
+ *      $Id: mips3_pte.h,v 1.1 1996/03/13 04:58:08 jonathan Exp $
  */
 
 /*
  * R4000 hardware page table entry
  */
 
-#ifndef _LOCORE
-struct mips3_pte {
+#ifndef LOCORE
+struct pte {
 #if BYTE_ORDER == BIG_ENDIAN
 unsigned int	pg_prot:2,		/* SW: access control */
 		pg_pfnum:24,		/* HW: core page frame number or 0 */
@@ -76,52 +75,60 @@ struct tlb {
 	int	tlb_lo0;
 	int	tlb_lo1;
 };
-#endif /* _LOCORE */
 
-#define MIPS3_PG_WIRED	0x80000000	/* SW */
-#define MIPS3_PG_RO	0x40000000	/* SW */
+typedef union pt_entry {
+	unsigned int	pt_entry;	/* for copying, etc. */
+	struct pte	pt_pte;		/* for getting to bits by name */
+} pt_entry_t;	/* Mach page table entry */
+#endif /* LOCORE */
 
-#define	MIPS3_PG_SVPN	0xfffff000	/* Software page no mask */
-#define	MIPS3_PG_HVPN	0xffffe000	/* Hardware page no mask */
-#define	MIPS3_PG_ODDPG	0x00001000	/* Odd even pte entry */
-#define	MIPS3_PG_ASID	0x000000ff	/* Address space ID */
-#define	MIPS3_PG_G	0x00000001	/* Global; ignore ASID if in lo0 & lo1 */
-#define	MIPS3_PG_V	0x00000002	/* Valid */
-#define	MIPS3_PG_NV	0x00000000
-#define	MIPS3_PG_M	0x00000004	/* Dirty; i.e. writable */
-#define	MIPS3_PG_ATTR	0x0000003f
-#define	MIPS3_PG_UNCACHED 0x00000010
-#define	MIPS3_PG_CACHED	0x00000018	/* Cacheable noncoherent */
-#define	MIPS3_PG_CACHEMODE 0x00000038
-/* Write protected */
-#define	MIPS3_PG_ROPAGE	(MIPS3_PG_V | MIPS3_PG_RO | MIPS3_PG_CACHED)
+#define	PT_ENTRY_NULL	((pt_entry_t *) 0)
 
-/* Not wr-prot not clean */
-#define	MIPS3_PG_RWPAGE	(MIPS3_PG_V | MIPS3_PG_M | MIPS3_PG_CACHED)
+#define PG_WIRED	0x80000000	/* SW */
+#define PG_RO		0x40000000	/* SW */
 
-/* Not wr-prot but clean */
-#define	MIPS3_PG_CWPAGE	(MIPS3_PG_V | MIPS3_PG_CACHED)
-#define	MIPS3_PG_IOPAGE \
-	(MIPS3_PG_G | MIPS3_PG_V | MIPS3_PG_M | MIPS3_PG_UNCACHED)
-#define	MIPS3_PG_FRAME	0x3fffffc0
-#define MIPS3_PG_SHIFT	6
+#define	PG_SVPN		0xfffff000	/* Software page no mask */
+#define	PG_HVPN		0xffffe000	/* Hardware page no mask */
+#define	PG_ODDPG	0x00001000	/* Odd even pte entry */
+#define	PG_ASID		0x000000ff	/* Address space ID */
+#define	PG_G		0x00000001	/* HW */
+#define	PG_V		0x00000002
+#define	PG_NV		0x00000000
+#define	PG_M		0x00000004
+#define	PG_ATTR		0x0000003f
+#define	PG_UNCACHED	0x00000010
+#define	PG_CACHED	0x00000018
+#define	PG_CACHEMODE	0x00000038
+#define	PG_ROPAGE	(PG_V | PG_RO | PG_CACHED) /* Write protected */
+#define	PG_RWPAGE	(PG_V | PG_M | PG_CACHED)  /* Not wr-prot not clean */
+#define	PG_CWPAGE	(PG_V | PG_CACHED)	   /* Not wr-prot but clean */
+#define	PG_IOPAGE	(PG_G | PG_V | PG_M | PG_UNCACHED)
+#define	PG_FRAME	0x3fffffc0
+#define PG_SHIFT	6
+#define vad_to_pfn(x) (((unsigned)(x) >> PG_SHIFT) & PG_FRAME)
+#define pfn_to_vad(x) (((x) & PG_FRAME) << PG_SHIFT)
+#define vad_to_vpn(x) ((unsigned)(x) & PG_SVPN)
+#define vpn_to_vad(x) ((x) & PG_SVPN)
+/* User viritual to pte page entry */
+#define uvtopte(adr) (((adr) >> PGSHIFT) & (NPTEPG -1))
 
-/* pte accessor macros */
+#define	PG_SIZE_4K	0x00000000
+#define	PG_SIZE_16K	0x00006000
+#define	PG_SIZE_64K	0x0001e000
+#define	PG_SIZE_256K	0x0007e000
+#define	PG_SIZE_1M	0x001fe000
+#define	PG_SIZE_4M	0x007fe000
+#define	PG_SIZE_16M	0x01ffe000
 
-#define mips3_vad_to_pfn(x) (((unsigned)(x) >> MIPS3_PG_SHIFT) & MIPS3_PG_FRAME)
-#define mips3_pfn_to_vad(x) (((x) & MIPS3_PG_FRAME) << MIPS3_PG_SHIFT)
-#define mips3_vad_to_vpn(x) ((unsigned)(x) & MIPS3_PG_SVPN)
-#define mips3_vpn_to_vad(x) ((x) & MIPS3_PG_SVPN)
+#if defined(_KERNEL) && !defined(LOCORE)
+/*
+ * Kernel virtual address to page table entry and visa versa.
+ */
+#define	kvtopte(va) \
+	(Sysmap + (((vm_offset_t)(va) - VM_MIN_KERNEL_ADDRESS) >> PGSHIFT))
+#define	ptetokv(pte) \
+	((((pt_entry_t *)(pte) - Sysmap) << PGSHIFT) + VM_MIN_KERNEL_ADDRESS)
 
-#define MIPS3_PTE_TO_PADDR(pte) (mips3_pfn_to_vad(pte))
-#define MIPS3_PAGE_IS_RDONLY(pte,va) \
-    (pmap_is_page_ro(pmap_kernel(), mips_trunc_page(va), (pte)))
-
-
-#define	MIPS3_PG_SIZE_4K	0x00000000
-#define	MIPS3_PG_SIZE_16K	0x00006000
-#define	MIPS3_PG_SIZE_64K	0x0001e000
-#define	MIPS3_PG_SIZE_256K	0x0007e000
-#define	MIPS3_PG_SIZE_1M	0x001fe000
-#define	MIPS3_PG_SIZE_4M	0x007fe000
-#define	MIPS3_PG_SIZE_16M	0x01ffe000
+extern	pt_entry_t *Sysmap;		/* kernel pte table */
+extern	u_int Sysmapsize;		/* number of pte's in Sysmap */
+#endif

@@ -1,5 +1,3 @@
-/*	$NetBSD: param.h,v 1.7 1997/09/20 12:09:01 leo Exp $	*/
-
 /*
  * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1992, 1993
@@ -41,12 +39,8 @@
  *
  *
  *	from: @(#)param.h	8.1 (Berkeley) 6/10/93
+ *      $Id: param.h,v 1.1 1996/03/13 04:58:08 jonathan Exp $
  */
-
-/*
- * Machine-dependent constants (VM, etc) common across MIPS cpus
- */
-#include <mips/mips_param.h>
 
 /*
  * Machine dependent constants for Acer Labs PICA_61.
@@ -60,16 +54,9 @@
  * Round p (pointer or byte index) up to a correctly-aligned value for all
  * data types (int, long, ...).   The result is u_int and must be cast to
  * any desired pointer type.
- *
- * ALIGNED_POINTER is a boolean macro that checks whether an address
- * is valid to fetch data elements of type t from on this architecture.
- * This does not reflect the optimal alignment, just the possibility
- * (within reasonable limits). 
- *
  */
-#define	ALIGNBYTES		7
-#define	ALIGN(p)		(((u_int)(p) + ALIGNBYTES) &~ ALIGNBYTES)
-#define ALIGNED_POINTER(p,t)	((((u_long)(p)) & (sizeof(t)-1)) == 0)
+#define	ALIGNBYTES	7
+#define	ALIGN(p)	(((u_int)(p) + ALIGNBYTES) &~ ALIGNBYTES)
 
 #define	NBPG		4096		/* bytes/page */
 #define	PGOFSET		(NBPG-1)	/* byte offset into page */
@@ -157,14 +144,23 @@
 #define pica_ptob(x)		((unsigned)(x) << PGSHIFT)
 
 #ifdef _KERNEL
-#ifndef _LOCORE
+#ifndef LOCORE
+extern int (*Mach_splnet)(), (*Mach_splbio)(), (*Mach_splimp)(),
+	   (*Mach_spltty)(), (*Mach_splclock)(), (*Mach_splstatclock)();
+#define	splnet()	((*Mach_splnet)())
+#define	splbio()	((*Mach_splbio)())
+#define	splimp()	((*Mach_splimp)())
+#define	spltty()	((*Mach_spltty)())
+#define	splclock()	((*Mach_splclock)())
+#define	splstatclock()	((*Mach_splstatclock)())
+
 /*
  *   Delay is based on an assumtion that each time in the loop
  *   takes 3 clocks. Three is for branch and subtract in the delay slot.
  */
 extern	int cpuspeed;
 #define	DELAY(n)	{ register int N = cpuspeed * (n); while ((N -= 3) > 0); }
-#endif /*!_LOCORE */
+#endif
 
 #else /* !_KERNEL */
 #define	DELAY(n)	{ register int N = (n); while (--N > 0); }

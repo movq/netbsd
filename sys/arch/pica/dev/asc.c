@@ -1,4 +1,4 @@
-/*	$NetBSD: asc.c,v 1.13 1998/01/12 20:04:25 thorpej Exp $	*/
+/*	$NetBSD: asc.c,v 1.1 1996/03/13 04:58:05 jonathan Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -131,13 +131,11 @@
 #include <sys/errno.h>
 #include <sys/device.h>
 
-#include <dev/scsipi/scsi_all.h>
-#include <dev/scsipi/scsipi_all.h>
-#include <dev/scsipi/scsiconf.h>
+#include <scsi/scsi_all.h>
+#include <scsi/scsiconf.h>
 
 #include <machine/cpu.h>
 #include <machine/autoconf.h>
-#include <machine/bus.h>
 
 #include <pica/dev/dma.h>
 #include <pica/dev/scsi.h>
@@ -418,15 +416,15 @@ struct asc_softc {
 	int		state;		/* current SCSI connection state */
 	int		target;		/* target SCSI ID if busy */
 	script_t	*script;	/* next expected interrupt & action */
-	struct scsipi_xfer *cmdq[ASC_NCMD];/* Pointer to queued commands */
-	struct scsipi_xfer *cmd[ASC_NCMD];/* Pointer to current active command */
+	struct scsi_xfer *cmdq[ASC_NCMD];/* Pointer to queued commands */
+	struct scsi_xfer *cmd[ASC_NCMD];/* Pointer to current active command */
 	State		st[ASC_NCMD];	/* state info for each active command */
 	int		min_period;	/* Min transfer period clk/byte */
 	int		max_period;	/* Max transfer period clk/byte */
 	int		ccf;		/* CCF, whatever that really is? */
 	int		timeout_250;	/* 250ms timeout */
 	int		tb_ticks;	/* 4ns. ticks/tb channel ticks */
-	struct scsipi_link sc_link;	/* scsi link struct */
+	struct scsi_link sc_link;	/* scsi link struct */
 };
 
 #define	ASC_STATE_IDLE		0	/* idle state */
@@ -441,27 +439,29 @@ typedef struct asc_softc *asc_softc_t;
  */
 int	ascmatch __P((struct device *, void *, void *));
 void	ascattach __P((struct device *, struct device *, void *));
+int	ascprint(void *, char *);
 
 int	asc_doprobe __P((void *, int, int, struct device *));
 
-struct cfattach asc_ca = {
-	sizeof(struct asc_softc), ascmatch, ascattach
+extern struct cfdriver asccd;
+struct cfdriver asccd = {
+	NULL, "asc", ascmatch, ascattach, DV_DULL, sizeof(struct asc_softc), 0
 };
 
 /*
  *  Glue to the machine dependent scsi
  */
-int asc_scsi_cmd __P((struct scsipi_xfer *));
+int asc_scsi_cmd __P((struct scsi_xfer *));
 void asc_minphys __P((struct buf *));
 
-struct scsipi_adapter asc_switch = {
+struct scsi_adapter asc_switch = {
 	asc_scsi_cmd,
 /*XXX*/	asc_minphys,	/* no max transfer size, DMA driver negotiates */
 	NULL,
 	NULL,
 };
 
-struct scsipi_device asc_dev = {
+struct scsi_device asc_dev = {
 /*XXX*/	NULL,		/* Use default error handler */
 /*XXX*/	NULL,		/* have a queue, served by this */
 /*XXX*/	NULL,		/* have no async handler */
@@ -585,21 +585,26 @@ ascattach(parent, self, aux)
 	printf(": NCR53C94, target %d\n", id);
 
 	/*
-	 * Fill in the prototype scsipi link.
+	 * Fill in the prototype scsi link.
 	 */
-	asc->sc_link.scsipi_scsi.channel = SCSI_CHANNEL_ONLY_ONE;
 	asc->sc_link.adapter_softc = asc;
-	asc->sc_link.scsipi_scsi.adapter_target = asc->sc_id;
+	asc->sc_link.adapter_target = asc->sc_id;
 	asc->sc_link.adapter = &asc_switch;
 	asc->sc_link.device = &asc_dev;
 	asc->sc_link.openings = 2;
-	asc->sc_link.scsipi_scsi.max_target = 7;
-	asc->sc_link.type = BUS_SCSI;
 
 	/*
 	 * Now try to attach all the sub devices.
 	 */
-	config_found(self, &asc->sc_link, scsiprint);
+	config_found(self, &asc->sc_link, ascprint);
+}
+
+int
+ascprint(aux, name)
+	void *aux;
+	char *name;
+{
+	return -1;
 }
 
 /*
@@ -618,11 +623,11 @@ asc_minphys(bp)
  */
 int
 asc_scsi_cmd(xs)
-	struct scsipi_xfer *xs;
+	struct scsi_xfer *xs;
 {
-	struct scsipi_link *sc_link = xs->sc_link;
+	struct scsi_link *sc_link = xs->sc_link;
 	struct asc_softc *asc = sc_link->adapter_softc;
-	State *state = &asc->st[sc_link->scsipi_scsi.target];
+	State *state = &asc->st[sc_link->target];
 
 	int flags, s;
 
@@ -632,7 +637,7 @@ asc_scsi_cmd(xs)
 	 *  Flush caches for any data buffer
 	 */
 	if(xs->datalen != 0) {
-		mips3_HitFlushDCache(xs->data, xs->datalen);
+		MachHitFlushDCache(xs->data, xs->datalen);
 	}
 	/*
 	 *  The hack on the next few lines are to avoid buffers
@@ -648,30 +653,30 @@ asc_scsi_cmd(xs)
 	 * separate LUNs.
 	 */
 	s = splbio();
-	if (asc->cmd[sc_link->scsipi_scsi.target]) {
-		if (asc->cmdq[sc_link->scsipi_scsi.target]) {
+	if (asc->cmd[sc_link->target]) {
+		if (asc->cmdq[sc_link->target]) {
 			splx(s);
 			printf("asc_scsi_cmd: called when target busy");
 			xs->error = XS_DRIVER_STUFFUP;
 			return TRY_AGAIN_LATER;
 		}
-		asc->cmdq[sc_link->scsipi_scsi.target] = xs;
+		asc->cmdq[sc_link->target] = xs;
 		splx(s);
 		return SUCCESSFULLY_QUEUED;
 	}
-	asc->cmd[sc_link->scsipi_scsi.target] = xs;
+	asc->cmd[sc_link->target] = xs;
 
 	/*
 	 *  Going to launch.
 	 *  Make a local copy of the command and some pointers.
 	 */
-	asc_startcmd(asc, sc_link->scsipi_scsi.target);
+	asc_startcmd(asc, sc_link->target);
 
 	/*
 	 *  If in startup, interrupts not usable yet.
 	 */
 	if(flags & SCSI_POLL) {
-		return(asc_poll(asc,sc_link->scsipi_scsi.target));
+		return(asc_poll(asc,sc_link->target));
 	}
 	splx(s);
 	return SUCCESSFULLY_QUEUED;
@@ -682,7 +687,7 @@ asc_poll(asc, target)
 	struct asc_softc *asc;
 	int target;
 {
-	struct scsipi_xfer *scsicmd = asc->cmd[target];
+	struct scsi_xfer *scsicmd = asc->cmd[target];
 	int count = scsicmd->timeout * 10;
 
 	while(count) {
@@ -711,17 +716,17 @@ asc_reset(asc, regs)
 	 * Reset chip and wait till done
 	 */
 	regs->asc_cmd = ASC_CMD_RESET;
-	wbflush(); DELAY(25);
+	MachEmptyWriteBuffer(); DELAY(25);
 
 	/* spec says this is needed after reset */
 	regs->asc_cmd = ASC_CMD_NOP;
-	wbflush(); DELAY(25);
+	MachEmptyWriteBuffer(); DELAY(25);
 
 	/*
 	 * Set up various chip parameters
 	 */
 	regs->asc_ccf = asc->ccf;
-	wbflush(); DELAY(25);
+	MachEmptyWriteBuffer(); DELAY(25);
 	regs->asc_sel_timo = asc->timeout_250;
 	/* restore our ID */
 	regs->asc_cnfg1 = asc->sc_id | ASC_CNFG1_P_CHECK;
@@ -732,7 +737,7 @@ asc_reset(asc, regs)
 	ASC_TC_PUT(regs, 0);
 	regs->asc_syn_p = asc->min_period;
 	regs->asc_syn_o = 0;	/* async for now */
-	wbflush();
+	MachEmptyWriteBuffer();
 }
 
 /*
@@ -745,7 +750,7 @@ asc_startcmd(asc, target)
 {
 	asc_regmap_t *regs;
 	State *state;
-	struct scsipi_xfer *scsicmd;
+	struct scsi_xfer *scsicmd;
 	int i, len;
 
 	/*
@@ -841,8 +846,7 @@ asc_startcmd(asc, target)
 #endif
 
 	/* preload the FIFO with the message and command to be sent */
-	regs->asc_fifo = SCSI_DIS_REC_IDENTIFY |
-		(scsicmd->sc_link->scsipi_scsi.lun & 0x07);
+	regs->asc_fifo = SCSI_DIS_REC_IDENTIFY | (scsicmd->sc_link->lun & 0x07);
 
 	for( i = 0; i < len; i++ ) {
 		regs->asc_fifo = ((caddr_t)&state->cmd)[i];
@@ -1249,7 +1253,7 @@ printf("asc_intr: fifo flush %d len %d fifo %x\n", fifo, len, regs->asc_fifo);
 	 */
 
 done:
-	wbflush();
+	MachEmptyWriteBuffer();
 	/*
 	 * If the next interrupt comes in immediatly the interrupt
 	 * dispatcher (which we are returning to) will catch it
@@ -1264,7 +1268,7 @@ abort:
 #if 0
 	panic("asc_intr");
 #else
-	cpu_reboot(4, NULL); /* XXX */
+	boot(4); /* XXX */
 #endif
 }
 
@@ -1337,8 +1341,8 @@ asc_end(asc, status, ss, ir)
 	register asc_softc_t asc;
 	register int status, ss, ir;
 {
-	struct scsipi_xfer *scsicmd;
-	struct scsipi_link *sc_link;
+	struct scsi_xfer *scsicmd;
+	struct scsi_link *sc_link;
 	State *state;
 	int i, target;
 
@@ -1347,7 +1351,7 @@ asc_end(asc, status, ss, ir)
 	asc->target = -1;
 	scsicmd = asc->cmd[target];
 	sc_link = scsicmd->sc_link;
-	asc->cmd[target] = (struct scsipi_xfer *)0;
+	asc->cmd[target] = (struct scsi_xfer *)0;
 	state = &asc->st[target];
 
 #ifdef DEBUG
@@ -1375,20 +1379,20 @@ asc_end(asc, status, ss, ir)
 
 	if(scsicmd->error == XS_NOERROR && !(state->flags & CHECK_SENSE)) {
 		if((state->statusByte & ST_MASK) == SCSI_CHECK) {
-			struct scsipi_sense *ss = (void *)&state->cmd;
+			struct scsi_sense *ss = (void *)&state->cmd;
 			/* Save return values */
 			scsicmd->resid = state->buflen;
 			scsicmd->status = state->statusByte;
 			/* Set up sense request command */
 			bzero(ss, sizeof(*ss));
 			ss->opcode = REQUEST_SENSE;
-			ss->byte2 = sc_link->scsipi_scsi.lun << 5;
-			ss->length = sizeof(struct scsipi_sense_data);
+			ss->byte2 = sc_link->lun << 5;
+			ss->length = sizeof(struct scsi_sense_data);
 			state->cmdlen = sizeof(*ss);
-			state->buf = (vm_offset_t)&scsicmd->sense.scsi_sense;
-			state->buflen = sizeof(struct scsipi_sense_data);
+			state->buf = (vm_offset_t)&scsicmd->sense;
+			state->buflen = sizeof(struct scsi_sense_data);
 			state->flags |= CHECK_SENSE;
-			mips3_HitFlushDCache(state->buf, state->buflen);
+			MachHitFlushDCache(state->buf, state->buflen);
 			asc->cmd[target] = scsicmd;
 			asc_startcmd(asc, target);
 			return(0);
@@ -1424,7 +1428,7 @@ asc_end(asc, status, ss, ir)
 
 	/* signal device driver that the command is done */
 	scsicmd->flags |= ITSDONE;
-	scsipi_done(scsicmd);
+	scsi_done(scsicmd);
 
 	return (0);
 }
@@ -1773,13 +1777,13 @@ asc_sendsync(asc, status, ss, ir)
 
 	/* send the extended synchronous negotiation message */
 	regs->asc_fifo = SCSI_EXTENDED_MSG;
-	wbflush();
+	MachEmptyWriteBuffer();
 	regs->asc_fifo = 3;
-	wbflush();
+	MachEmptyWriteBuffer();
 	regs->asc_fifo = SCSI_SYNCHRONOUS_XFER;
-	wbflush();
+	MachEmptyWriteBuffer();
 	regs->asc_fifo = SCSI_MIN_PERIOD;
-	wbflush();
+	MachEmptyWriteBuffer();
 	regs->asc_fifo = ASC_MAX_OFFSET;
 	/* state to resume after we see the sync reply message */
 	state->script = asc->script + 2;
@@ -1804,13 +1808,13 @@ asc_replysync(asc, status, ss, ir)
 #endif
 	/* send synchronous transfer in response to a request */
 	regs->asc_fifo = SCSI_EXTENDED_MSG;
-	wbflush();
+	MachEmptyWriteBuffer();
 	regs->asc_fifo = 3;
-	wbflush();
+	MachEmptyWriteBuffer();
 	regs->asc_fifo = SCSI_SYNCHRONOUS_XFER;
-	wbflush();
+	MachEmptyWriteBuffer();
 	regs->asc_fifo = asc_to_scsi_period[state->sync_period] * asc->tb_ticks;
-	wbflush();
+	MachEmptyWriteBuffer();
 	regs->asc_fifo = state->sync_offset;
 	regs->asc_cmd = ASC_CMD_XFER_INFO;
 	readback(regs->asc_cmd);

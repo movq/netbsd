@@ -1,5 +1,3 @@
-/*	$NetBSD: conf.c,v 1.11 1997/10/16 23:41:55 christos Exp $	*/
-
 /*
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -36,6 +34,7 @@
  * SUCH DAMAGE.
  *
  *	from: @(#)conf.c	8.2 (Berkeley) 11/14/93
+ *      $Id: conf.c,v 1.1 1996/03/13 04:58:10 jonathan Exp $
  */
 
 #include <sys/param.h>
@@ -46,6 +45,8 @@
 #include <sys/vnode.h>
 #include <sys/tty.h>
 #include <sys/conf.h>
+
+int	ttselect	__P((dev_t, int, struct proc *));
 
 /*
  *	Block devices.
@@ -95,7 +96,7 @@ int	nblkdev = sizeof (bdevsw) / sizeof (bdevsw[0]);
 #define cdev_pc_init(c,n) { \
 	dev_init(c,n,open), dev_init(c,n,close), dev_init(c,n,read), \
 	dev_init(c,n,write), dev_init(c,n,ioctl), dev_init(c,n,stop), \
-	dev_init(c,n,tty), ttpoll, dev_init(c,n,mmap), D_TTY }
+	dev_init(c,n,tty), ttselect, dev_init(c,n,mmap), D_TTY }
 
 /* open, close, write, ioctl */
 #define	cdev_lpt_init(c,n) { \
@@ -134,7 +135,7 @@ bdev_decl(fd);
 cdev_decl(vnd);
 #include "bpfilter.h"
 cdev_decl(bpf);
-#include "pcom.h"
+#include "com.h"
 cdev_decl(com);
 #include "lpt.h"
 cdev_decl(lpt);
@@ -143,9 +144,19 @@ cdev_decl(sd);
 cdev_decl(pc);
 cdev_decl(pms);
 cdev_decl(cd);
-dev_decl(filedesc,open);
-#include "ipfilter.h"
-#include "rnd.h"
+
+/* open, close, read, ioctl */
+cdev_decl(ipl);
+#define	cdev_gen_ipf(c,n) { \
+	dev_init(c,n,open), dev_init(c,n,close), dev_init(c,n,read), \
+	(dev_type_write((*))) enodev, dev_init(c,n,ioctl), \
+	(dev_type_stop((*))) nullop, 0, (dev_type_select((*))) enodev, \
+	(dev_type_mmap((*))) enodev, 0 }
+#ifdef IPFILTER
+#define NIPF 1
+#else
+#define NIPF 0
+#endif
 
 struct cdevsw	cdevsw[] =
 {
@@ -156,7 +167,7 @@ struct cdevsw	cdevsw[] =
 	cdev_tty_init(NPTY,pts),	/* 4: pseudo-tty slave */
 	cdev_ptc_init(NPTY,ptc),	/* 5: pseudo-tty master */
 	cdev_log_init(1,log),		/* 6: /dev/klog */
-	cdev_fd_init(1,filedesc),	/* 7: file descriptor pseudo-dev */
+	cdev_fd_init(1,fd),		/* 7: file descriptor pseudo-dev */
 	cdev_disk_init(NCD,cd),		/* 8: SCSI CD */
 	cdev_disk_init(NSD,sd),		/* 9: SCSI disk */
 	cdev_tape_init(NST,st),		/* 10: SCSI tape */
@@ -168,7 +179,7 @@ struct cdevsw	cdevsw[] =
 	cdev_pc_init(1,pc),		/* 14: builtin pc style console dev */
 	cdev_mouse_init(1,pms),		/* 15: builtin PS2 style mouse */
 	cdev_lpt_init(NLPT,lpt),	/* 16: lpt paralell printer interface */
-	cdev_tty_init(NPCOM,com),	/* 17: com 16C450 serial interface */
+	cdev_tty_init(NCOM,com),	/* 17: com 16C450 serial interface */
 	cdev_notdef(),			/* 18: */
 	cdev_notdef(),			/* 19: */
 	cdev_tty_init(NPTY,pts),	/* 20: pseudo-tty slave */
@@ -182,8 +193,7 @@ struct cdevsw	cdevsw[] =
 	cdev_notdef(),			/* 28: */
 	cdev_notdef(),			/* 29: */
 	cdev_notdef(),			/* 30: */
-	cdev_ipf_init(NIPFILTER,ipl),	/* 31: ip-filter device */
-	cdev_rnd_init(NRND,rnd),	/* 32: random source pseudo-device */
+	cdev_gen_ipf(NIPF,ipl),         /* 31: IP filter log */
 };
 
 int	nchrdev = sizeof (cdevsw) / sizeof (cdevsw[0]);
@@ -206,7 +216,6 @@ dev_t	swapdev = makedev(1, 0);
  *
  * A minimal stub routine can always return 0.
  */
-int
 iskmemdev(dev)
 	dev_t dev;
 {
@@ -223,7 +232,6 @@ iskmemdev(dev)
 /*
  * Returns true if def is /dev/zero
  */
-int
 iszerodev(dev)
 	dev_t dev;
 {
@@ -301,7 +309,6 @@ static int chrtoblktbl[MAXDEV] =  {
  *
  * A minimal stub routine can always return NODEV.
  */
-dev_t
 chrtoblk(dev)
 	dev_t dev;
 {
@@ -327,7 +334,7 @@ struct	consdev constab[] = {
 #if NPC + NVT > 0
 	cons_init(pc),
 #endif
-#if NPCOM > 0
+#if NCOM > 0
 	cons_init(com),
 #endif
 	{ 0 },

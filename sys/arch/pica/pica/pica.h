@@ -1,5 +1,3 @@
-/*	$NetBSD: pica.h,v 1.2 1996/07/16 23:24:53 thorpej Exp $	*/
-
 /*-
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -37,6 +35,7 @@
  * SUCH DAMAGE.
  *
  *	from: @(#)pica.h	8.1 (Berkeley) 6/10/93
+ *      $Id: pica.h,v 1.1 1996/03/13 04:58:12 jonathan Exp $
  */
 
 /*

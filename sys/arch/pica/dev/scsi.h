@@ -1,5 +1,3 @@
-/*	$NetBSD: scsi.h,v 1.2 1996/07/16 23:24:17 thorpej Exp $	*/
-
 /*
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -36,6 +34,7 @@
  * SUCH DAMAGE.
  *
  *	from: @(#)scsi.h	8.1 (Berkeley) 6/10/93
+ *      $Id: scsi.h,v 1.1 1996/03/13 04:58:06 jonathan Exp $
  *
  * scsi.h --
  *
@@ -47,6 +46,7 @@
  *
  * from: Header: /sprite/src/kernel/dev/RCS/scsi.h,
  *	v 9.1 90/02/13 23:11:24 jhh Exp  SPRITE (Berkeley)
+ * $Id: scsi.h,v 1.1 1996/03/13 04:58:06 jonathan Exp $
  */
 
 #ifndef _SCSI_H

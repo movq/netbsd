@@ -1,5 +1,3 @@
-/*	$NetBSD: clock.c,v 1.7 1998/01/12 20:04:30 thorpej Exp $	*/
-
 /*
  * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1992, 1993
@@ -40,6 +38,7 @@
  * from: Utah Hdr: clock.c 1.18 91/01/21
  *
  *	from: @(#)clock.c	8.1 (Berkeley) 6/10/93
+ *      $Id: clock.c,v 1.1 1996/03/13 04:58:10 jonathan Exp $
  */
 
 #include <sys/param.h>
@@ -58,12 +57,9 @@ extern int cputype;	/* What kind of cpu we are running on */
 /* Definition of the driver for autoconfig. */
 static int	clockmatch __P((struct device *, void *, void *));
 static void	clockattach __P((struct device *, struct device *, void *));
-
-struct cfattach clock_ca = {
-	sizeof(struct clock_softc), clockmatch, clockattach
-};
-
-extern struct cfdriver clock_cd;
+struct cfdriver clockcd =
+    { NULL, "clock", clockmatch, clockattach, DV_DULL,
+	sizeof(struct clock_softc) };
 
 void	mcclock_attach __P((struct device *, struct device *, void *));
 
@@ -124,8 +120,7 @@ clockattach(parent, self, aux)
 	/*
 	 * establish the clock interrupt; it's a special case
 	 */
-	BUS_INTR_ESTABLISH((struct confargs *)aux,
-			   (intr_handler_t) hardclock, self);
+	BUS_INTR_ESTABLISH((struct confargs *)aux, hardclock, self);
 
 	printf("\n");
 }
@@ -158,11 +153,10 @@ delay(n)
  * Start the real-time and statistics clocks. Leave stathz 0 since there
  * are no other timers available.
  */
-void
 cpu_initclocks()
 {
 	extern int tickadj;
-	struct clock_softc *csc = (struct clock_softc *)clock_cd.cd_devs[0];
+	struct clock_softc *csc = (struct clock_softc *)clockcd.cd_devs[0];
 
 	hz = 100;		/* 100 Hz */
 	tick = 1000000 / hz;	/* number of micro-seconds between interrupts */
@@ -202,7 +196,7 @@ inittodr(base)
 	time_t base;
 {
 	struct tod_time c;
-	struct clock_softc *csc = (struct clock_softc *)clock_cd.cd_devs[0];
+	struct clock_softc *csc = (struct clock_softc *)clockcd.cd_devs[0];
 	register int days, yr;
 	long deltat;
 	int badbase, s;
@@ -272,7 +266,7 @@ void
 resettodr()
 {
 	struct tod_time c;
-	struct clock_softc *csc = (struct clock_softc *)clock_cd.cd_devs[0];
+	struct clock_softc *csc = (struct clock_softc *)clockcd.cd_devs[0];
 	register int t, t2;
 	int s;
 

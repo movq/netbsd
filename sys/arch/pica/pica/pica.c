@@ -1,4 +1,4 @@
-/*	$NetBSD: pica.c,v 1.7 1998/01/12 20:04:32 thorpej Exp $	*/
+/*	$NetBSD: pica.c,v 1.1 1996/03/13 04:58:12 jonathan Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Carnegie-Mellon University.
@@ -28,7 +28,6 @@
  */
 
 #include <sys/param.h>
-#include <sys/systm.h>
 #include <sys/device.h>
 
 #include <machine/cpu.h>
@@ -47,13 +46,9 @@ struct pica_softc {
 /* Definition of the driver for autoconfig. */
 int	picamatch(struct device *, void *, void *);
 void	picaattach(struct device *, struct device *, void *);
-int	picaprint(void *, const char *);
-
-struct cfattach pica_ca = {
-	sizeof (struct pica_softc), picamatch, picaattach
-};
-
-extern struct cfdriver pica_cd;
+int	picaprint(void *, char *);
+struct cfdriver picacd =
+    { NULL, "pica", picamatch, picaattach, DV_DULL, sizeof (struct pica_softc) };
 
 void	pica_intr_establish __P((struct confargs *, int (*)(void *), void *));
 void	pica_intr_disestablish __P((struct confargs *));
@@ -143,7 +138,7 @@ picamatch(parent, cfdata, aux)
 	struct confargs *ca = aux;
 
         /* Make sure that we're looking for a PICA. */
-        if (strcmp(ca->ca_name, pica_cd.cd_name) != 0)
+        if (strcmp(ca->ca_name, picacd.cd_name) != 0)
                 return (0);
 
         /* Make sure that unit exists. */
@@ -170,7 +165,7 @@ picaattach(parent, self, aux)
 	sc->sc_devs = pica_cpu_devs[cputype];
 
 	/* set up interrupt handlers */
-	set_intr(MIPS_INT_MASK_1, pica_iointr, 2);
+	set_intr(MACH_INT_MASK_1, pica_iointr, 2);
 
 	sc->sc_bus.ab_dv = (struct device *)sc;
 	sc->sc_bus.ab_type = BUS_PICA;
@@ -198,13 +193,13 @@ picaattach(parent, self, aux)
 int
 picaprint(aux, pnp)
 	void *aux;
-	const char *pnp;
+	char *pnp;
 {
 	struct confargs *ca = aux;
 
         if (pnp)
                 printf("%s at %s", ca->ca_name, pnp);
-        printf(" slot %d offset 0x%x", ca->ca_slot, ca->ca_offset);
+        printf(" slot %ld offset 0x%lx", ca->ca_slot, ca->ca_offset);
         return (UNCONF);
 }
 
@@ -212,7 +207,7 @@ caddr_t
 pica_cvtaddr(ca)
 	struct confargs *ca;
 {
-	struct pica_softc *sc = pica_cd.cd_devs[0];
+	struct pica_softc *sc = picacd.cd_devs[0];
 
 	return(sc->sc_devs[ca->ca_slot].ps_base + ca->ca_offset);
 
@@ -224,13 +219,13 @@ pica_intr_establish(ca, handler, val)
 	intr_handler_t handler;
 	void *val;
 {
-	struct pica_softc *sc = pica_cd.cd_devs[0];
+	struct pica_softc *sc = picacd.cd_devs[0];
 
 	int slot;
 
 	slot = ca->ca_slot;
 	if(slot == 0) {		/* Slot 0 is special, clock */
-		set_intr(MIPS_INT_MASK_4, pica_clkintr, 1);
+		set_intr(MACH_INT_MASK_4, pica_clkintr, 1);
 	}
 
 	if(int_table[slot].int_mask != 0) {
@@ -249,12 +244,12 @@ void
 pica_intr_disestablish(ca)
 	struct confargs *ca;
 {
-	struct pica_softc *sc = pica_cd.cd_devs[0];
+	struct pica_softc *sc = picacd.cd_devs[0];
 
 	int slot;
 
 	slot = ca->ca_slot;
-	if(slot == 0) {		/* Slot 0 is special, clock */
+	if(slot = 0) {		/* Slot 0 is special, clock */
 	}
 	else {
 		local_int_mask &= ~int_table[slot].int_mask;
@@ -278,7 +273,7 @@ pica_intrnull(val)
 	void *val;
 {
 
-	panic("uncaught PICA intr for slot %p\n", val);
+	panic("uncaught PICA intr for slot %d\n", val);
 }
 
 /*
@@ -315,8 +310,8 @@ pica_clkintr(mask, pc, statusReg, causeReg)
 	hardclock(&cf);
 
 	/* Re-enable clock interrupts */
-	splx(MIPS_INT_MASK_4 | MIPS_SR_INT_ENAB);
+	splx(MACH_INT_MASK_4 | MACH_SR_INT_ENAB);
 
-	return(~MIPS_INT_MASK_4); /* Keep clock interrupts enabled */
+	return(~MACH_INT_MASK_4); /* Keep clock interrupts enabled */
 }
 

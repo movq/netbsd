@@ -1,4 +1,4 @@
-/*	$NetBSD: disksubr.c,v 1.5 1997/08/27 11:24:11 bouyer Exp $	*/
+/*	$NetBSD: disksubr.c,v 1.1 1996/03/13 04:58:10 jonathan Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Carnegie-Mellon University.
@@ -34,9 +34,8 @@
 #include <sys/disklabel.h>
 #include <sys/disk.h>
 
-#include <dev/scsipi/scsi_all.h>
-#include <dev/scsipi/scsipi_all.h>
-#include <dev/scsipi/scsiconf.h>
+#include <scsi/scsi_all.h>
+#include <scsi/scsiconf.h>
 
 #include <machine/cpu.h>
 #include <machine/autoconf.h>
@@ -44,7 +43,7 @@
 extern struct device *bootdv;
 
 /* was this the boot device ? */
-void
+int
 dk_establish(dk, dev)
 	struct disk *dk;
 	struct device *dev;
@@ -58,14 +57,14 @@ dk_establish(dk, dev)
 
 	if (bp == NULL) {
 		printf("no boot path\n");
-		return;
+		return -1;
 	}
 	sprintf(name, "%s%d", bp->name, CRAZYMAP(bp->val[0]));
 	if (strcmp(name, dev->dv_xname) == 0) {
-		bootdv = dev;		/* got it! */
+		bootdv = dev;
 	}
 #endif
-	return;
+	return 1;
 }
 
 /*

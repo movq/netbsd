@@ -1,5 +1,3 @@
-/*	$NetBSD: dma.c,v 1.9 1997/08/27 11:24:09 bouyer Exp $	*/
-
 /*
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -33,6 +31,7 @@
  * SUCH DAMAGE.
  *
  *	from: @(#)rz.c	8.1 (Berkeley) 7/29/93
+ *      $Id: dma.c,v 1.1 1996/03/13 04:58:05 jonathan Exp $
  */
 
 /*
@@ -54,13 +53,11 @@
 
 #include <machine/cpu.h>
 #include <machine/autoconf.h>
-#include <machine/bus.h>
 #include <machine/pte.h>
 #include <machine/pio.h>
 
-#include <dev/scsipi/scsi_all.h>
-#include <dev/scsipi/scsipi_all.h>
-#include <dev/scsipi/scsiconf.h>
+#include <scsi/scsi_all.h>
+#include <scsi/scsiconf.h>
 
 #include <pica/pica/pica.h>
 #include <pica/dev/dma.h>
@@ -89,7 +86,7 @@ picaDmaInit()
 	free_dma_pte->queue.next = NULL;
 	free_dma_pte->queue.size = PICA_TL_SIZE / sizeof(dma_pte_t);
 
-	out32(PICA_SYS_TL_BASE, MIPS_KSEG1_TO_PHYS(map));
+	out32(PICA_SYS_TL_BASE, MACH_UNCACHED_TO_PHYS(map));
 	out32(PICA_SYS_TL_LIMIT, PICA_TL_SIZE);
 	out32(PICA_SYS_TL_IVALID, 0);
 }
@@ -184,7 +181,6 @@ picaDmaTLBFree(dma_softc_t *dma)
  *  the dma control structure and invalidate dma TLB cache.
  */
 
-void
 picaDmaTLBMap(dma_softc_t *sc)
 {
 	vm_offset_t pa;
@@ -198,7 +194,7 @@ picaDmaTLBMap(dma_softc_t *sc)
 	va = sc->req_va;
 	while(nbytes > 0) {
 		if(va < VM_MIN_KERNEL_ADDRESS) {
-			pa = MIPS_KSEG0_TO_PHYS(va);
+			pa = MACH_CACHED_TO_PHYS(va);
 		}
 		else {
 			pa = pmap_extract(vm_map_pmap(phys_map), va);
@@ -224,6 +220,7 @@ picaDmaStart(sc, addr, size, datain)
 	size_t  size;
 	int     datain;
 {
+	int mode;
 	pDmaReg regs = sc->dma_reg;
 
 	/* Halt DMA */
@@ -254,7 +251,7 @@ picaDmaStart(sc, addr, size, datain)
 		sc->mode |= DMA_DIR_WRITE;
 		regs->dma_enab = PICA_DMA_ENAB_RUN | PICA_DMA_ENAB_WRITE;
 	}
-	wbflush();
+	MachEmptyWriteBuffer();
 }
 
 /*
@@ -327,25 +324,13 @@ picaDmaEnd(dma_softc_t *sc)
 /*
  *  Null call rathole!
  */
-int /* XXX*/
+void
 picaDmaNull(dma_softc_t *sc)
 {
 	pDmaReg regs = sc->dma_reg;
 
 	printf("picaDmaNull called\n");
 }
-
-/*
- *  Null enable-interrupt rathole!
- */
-void /* XXX*/
-picaEnIntrNull(dma_softc_t *sc)
-{
-	pDmaReg regs = sc->dma_reg;
-
-	printf("picaEnIntrNull called\n");
-}
-
 
 /*
  *  dma_init..
@@ -355,7 +340,7 @@ void
 asc_dma_init(dma_softc_t *sc)
 {
 	sc->reset = picaDmaReset;
-	sc->enintr = picaEnIntrNull;
+	sc->enintr = picaDmaNull;
 	sc->start = picaDmaStart;
 	sc->map = picaDmaMap;
 	sc->isintr = picaDmaNull;
@@ -375,7 +360,7 @@ void
 fdc_dma_init(dma_softc_t *sc)
 {
 	sc->reset = picaDmaReset;
-	sc->enintr = picaEnIntrNull;
+	sc->enintr = picaDmaNull;
 	sc->start = picaDmaStart;
 	sc->map = picaDmaMap;
 	sc->isintr = picaDmaNull;
@@ -394,8 +379,8 @@ fdc_dma_init(dma_softc_t *sc)
 void
 sn_dma_init(dma_softc_t *sc, int pages)
 {
-	sc->reset = picaEnIntrNull;	/* XXX*/
-	sc->enintr = picaEnIntrNull;
+	sc->reset = picaDmaNull;
+	sc->enintr = picaDmaNull;
 	sc->start = picaDmaFlush;
 	sc->map = picaDmaMap;
 	sc->isintr = picaDmaNull;
