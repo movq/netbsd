@@ -1,4 +1,4 @@
-/*	$NetBSD: saerrno.h,v 1.6 1995/09/18 21:19:45 pk Exp $	*/
+/*	$NetBSD: saerrno.h,v 1.7 1999/01/12 03:08:14 kleink Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -36,6 +36,8 @@
  */
 
 #include <sys/errno.h>
+
+extern int errno;
 
 /* special stand error codes */
 #define	EADAPT	(ELAST+1)	/* bad adaptor */
