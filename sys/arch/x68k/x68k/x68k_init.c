@@ -1,4 +1,4 @@
-/*	$NetBSD: x68k_init.c,v 1.5 1998/08/05 16:08:39 minoura Exp $	*/
+/*	$NetBSD: x68k_init.c,v 1.6 1999/03/16 16:30:24 minoura Exp $	*/
 
 /*
  * Copyright (c) 1996 Masaru Oki.
@@ -31,7 +31,12 @@
  */
 
 #include <sys/param.h>
+#include <sys/device.h>
 
+#include <machine/bus.h>
+
+#include <arch/x68k/dev/intiovar.h>
+#include <arch/x68k/dev/mfp.h>
 #include <x68k/x68k/iodevice.h>
 #define zsdev IODEVbase->io_inscc
 
@@ -39,6 +44,8 @@ volatile struct IODEVICE *IODEVbase = (volatile struct IODEVICE *) PHYS_IODEV;
 
 void intr_reset __P((void));
 
+extern int iera;
+extern int ierb;
 /*
  * disable all interrupt.
  */
@@ -59,10 +66,11 @@ intr_reset()
 	asm("nop");
 	zsdev.zs_chan_b.zc_csr = 0;
 	asm("nop");
-	while(!(mfp.tsr & MFP_TSR_BE))
-		;
-	mfp.udr = 0x41;
+
+	mfp_send_usart(0x41);
 
 	/* MFP (hard coded interrupt vector XXX) */
-	mfp.vr = 0x40;
+	mfp_set_vr(0x40);
+	mfp_set_iera(0);
+	mfp_set_ierb(0);
 }
