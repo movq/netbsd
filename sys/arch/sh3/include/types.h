@@ -1,4 +1,4 @@
-/*	$NetBSD: types.h,v 1.6 2002/02/28 03:17:35 simonb Exp $	*/
+/*	$NetBSD: types.h,v 1.7 2002/03/17 14:06:39 uch Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -60,6 +60,8 @@ typedef unsigned long	vsize_t;
 
 typedef int		register_t;
 
-#define	__BROKEN_CONFIG_UNIT_USAGE
+#define	__SWAP_BROKEN
+#define	__HAVE_AST_PERPROC
+#define	__BROKEN_CONFIG_UNIT_USAGE	/* scif, sci driver */
 
 #endif	/* _MACHTYPES_H_ */
