@@ -38,7 +38,7 @@ divert(-1)
 # Mailer configuration for minbar.netbsd.org (a.k.a. cvs.fi.netbsd.org).
 
 include(`../m4/cf.m4')
-VERSIONID(`$NetBSD: minbar.mc,v 1.1 2000/02/08 13:45:41 tron Exp $')
+VERSIONID(`$NetBSD: minbar.mc,v 1.1.1.1 2000/02/08 13:45:41 tron Exp $')
 OSTYPE(bsd4.4)dnl
 MAILER(local)dnl
 MAILER(smtp)dnl
