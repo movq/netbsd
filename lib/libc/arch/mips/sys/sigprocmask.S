@@ -1,4 +1,4 @@
-/*	$NetBSD: sigprocmask.S,v 1.5 1996/09/17 01:32:57 jonathan Exp $	*/
+/*	$NetBSD: sigprocmask.S,v 1.6 1998/09/27 22:59:40 jonathan Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -40,7 +40,7 @@
 
 #if defined(LIBC_SCCS) && !defined(lint)
 	ASMSTR("from: @(#)sigprocmask.s	8.1 (Berkeley) 6/4/93")
-	ASMSTR("$NetBSD: sigprocmask.S,v 1.5 1996/09/17 01:32:57 jonathan Exp $")
+	ASMSTR("$NetBSD: sigprocmask.S,v 1.6 1998/09/27 22:59:40 jonathan Exp $")
 #endif /* LIBC_SCCS and not lint */
 
 #ifdef ABICALLS
@@ -59,7 +59,7 @@ LEAF(sigprocmask)	# sigprocmask(how, new, old) sigset_t *new, *old;
 gotptr:
 	lw	a1, 0(a1)		# indirect to new mask arg
 doit:
-	li	v0, SYS_sigprocmask
+	li	v0, SYS_compat_13_sigprocmask13
 	syscall
 	bne	a3, zero, err
 	beq	a2, zero, out		# test if old mask requested
