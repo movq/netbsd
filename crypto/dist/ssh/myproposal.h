@@ -1,4 +1,4 @@
-/*	$NetBSD: myproposal.h,v 1.1 2000/09/28 22:10:04 thorpej Exp $	*/
+/*	$NetBSD: myproposal.h,v 1.1.1.1 2000/09/28 22:10:04 thorpej Exp $	*/
 
 /*
  * Copyright (c) 2000 Markus Friedl.  All rights reserved.

@@ -1,4 +1,4 @@
-/*	$NetBSD: key.c,v 1.1 2000/09/28 22:10:03 thorpej Exp $	*/
+/*	$NetBSD: key.c,v 1.1.1.1 2000/09/28 22:10:03 thorpej Exp $	*/
 
 /*
  * read_bignum():
@@ -43,7 +43,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: key.c,v 1.1 2000/09/28 22:10:03 thorpej Exp $");
+__RCSID("$NetBSD: key.c,v 1.1.1.1 2000/09/28 22:10:03 thorpej Exp $");
 #endif
 
 #include "includes.h"

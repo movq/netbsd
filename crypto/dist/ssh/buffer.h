@@ -1,4 +1,4 @@
-/*	$NetBSD: buffer.h,v 1.1 2000/09/28 22:09:47 thorpej Exp $	*/
+/*	$NetBSD: buffer.h,v 1.1.1.1 2000/09/28 22:09:47 thorpej Exp $	*/
 
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>

@@ -1,4 +1,4 @@
-/*	$NetBSD: compress.c,v 1.1 2000/09/28 22:10:00 thorpej Exp $	*/
+/*	$NetBSD: compress.c,v 1.1.1.1 2000/09/28 22:10:00 thorpej Exp $	*/
 
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
@@ -17,7 +17,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: compress.c,v 1.1 2000/09/28 22:10:00 thorpej Exp $");
+__RCSID("$NetBSD: compress.c,v 1.1.1.1 2000/09/28 22:10:00 thorpej Exp $");
 #endif
 
 #include "includes.h"

@@ -1,4 +1,4 @@
-/*	$NetBSD: auth-options.h,v 1.1 2000/09/28 22:09:39 thorpej Exp $	*/
+/*	$NetBSD: auth-options.h,v 1.1.1.1 2000/09/28 22:09:39 thorpej Exp $	*/
 
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>

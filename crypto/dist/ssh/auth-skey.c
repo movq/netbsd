@@ -1,4 +1,4 @@
-/*	$NetBSD: auth-skey.c,v 1.1 2000/09/28 22:09:41 thorpej Exp $	*/
+/*	$NetBSD: auth-skey.c,v 1.1.1.1 2000/09/28 22:09:41 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1999,2000 Markus Friedl.  All rights reserved.
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: auth-skey.c,v 1.1 2000/09/28 22:09:41 thorpej Exp $");
+__RCSID("$NetBSD: auth-skey.c,v 1.1.1.1 2000/09/28 22:09:41 thorpej Exp $");
 #endif
 
 #include "includes.h"

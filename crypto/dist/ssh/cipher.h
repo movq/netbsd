@@ -1,4 +1,4 @@
-/*	$NetBSD: cipher.h,v 1.1 2000/09/28 22:09:54 thorpej Exp $	*/
+/*	$NetBSD: cipher.h,v 1.1.1.1 2000/09/28 22:09:54 thorpej Exp $	*/
 
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>

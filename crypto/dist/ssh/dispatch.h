@@ -1,4 +1,4 @@
-/*	$NetBSD: dispatch.h,v 1.1 2000/09/28 22:10:01 thorpej Exp $	*/
+/*	$NetBSD: dispatch.h,v 1.1.1.1 2000/09/28 22:10:01 thorpej Exp $	*/
 
 /*
  * Copyright (c) 2000 Markus Friedl.  All rights reserved.

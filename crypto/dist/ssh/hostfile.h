@@ -1,4 +1,4 @@
-/*	$NetBSD: hostfile.h,v 1.1 2000/09/28 22:10:02 thorpej Exp $	*/
+/*	$NetBSD: hostfile.h,v 1.1.1.1 2000/09/28 22:10:02 thorpej Exp $	*/
 
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>

@@ -1,4 +1,4 @@
-/*	$NetBSD: hostfile.c,v 1.1 2000/09/28 22:10:02 thorpej Exp $	*/
+/*	$NetBSD: hostfile.c,v 1.1.1.1 2000/09/28 22:10:02 thorpej Exp $	*/
 
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
@@ -41,7 +41,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hostfile.c,v 1.1 2000/09/28 22:10:02 thorpej Exp $");
+__RCSID("$NetBSD: hostfile.c,v 1.1.1.1 2000/09/28 22:10:02 thorpej Exp $");
 #endif
 
 #include "includes.h"

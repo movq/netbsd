@@ -1,4 +1,4 @@
-/* $NetBSD: pathnames.h,v 1.1 2000/09/28 22:10:08 thorpej Exp $ */
+/* $NetBSD: pathnames.h,v 1.1.1.1 2000/09/28 22:10:08 thorpej Exp $ */
 
 #ifndef _PATHNAMES_H
 #define _PATHNAMES_H

@@ -1,4 +1,4 @@
-/*	$NetBSD: channels.c,v 1.1 2000/09/28 22:09:51 thorpej Exp $	*/
+/*	$NetBSD: channels.c,v 1.1.1.1 2000/09/28 22:09:51 thorpej Exp $	*/
 
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
@@ -45,7 +45,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: channels.c,v 1.1 2000/09/28 22:09:51 thorpej Exp $");
+__RCSID("$NetBSD: channels.c,v 1.1.1.1 2000/09/28 22:09:51 thorpej Exp $");
 #endif
 
 #include "includes.h"

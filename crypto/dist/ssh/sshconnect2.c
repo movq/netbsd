@@ -1,4 +1,4 @@
-/*	$NetBSD: sshconnect2.c,v 1.1 2000/09/28 22:10:38 thorpej Exp $	*/
+/*	$NetBSD: sshconnect2.c,v 1.1.1.1 2000/09/28 22:10:38 thorpej Exp $	*/
 
 /*
  * Copyright (c) 2000 Markus Friedl.  All rights reserved.
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: sshconnect2.c,v 1.1 2000/09/28 22:10:38 thorpej Exp $");
+__RCSID("$NetBSD: sshconnect2.c,v 1.1.1.1 2000/09/28 22:10:38 thorpej Exp $");
 #endif
 
 #include "includes.h"
