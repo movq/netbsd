@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.1 1995/06/01 20:38:08 gwr Exp $ */
+/*	$NetBSD: boot.c,v 1.1.1.1 1995/06/01 20:38:08 gwr Exp $ */
 
 /*-
  * Copyright (c) 1982, 1986, 1990, 1993
