@@ -1,4 +1,4 @@
-/*	$NetBSD: maxfilename.cpp,v 1.1 2003/06/30 17:52:06 wiz Exp $	*/
+/*	$NetBSD: maxfilename.cpp,v 1.1.1.1 2003/06/30 17:52:06 wiz Exp $	*/
 
 // -*- C++ -*-
 /* Copyright (C) 1992, 2001, 2003 Free Software Foundation, Inc.

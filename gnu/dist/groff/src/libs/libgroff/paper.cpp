@@ -1,4 +1,4 @@
-/*	$NetBSD: paper.cpp,v 1.1 2003/06/30 17:52:06 wiz Exp $	*/
+/*	$NetBSD: paper.cpp,v 1.1.1.1 2003/06/30 17:52:06 wiz Exp $	*/
 
 // -*- C++ -*-
 /* Copyright (C) 2002, 2003

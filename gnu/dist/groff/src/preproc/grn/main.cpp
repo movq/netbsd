@@ -1,4 +1,4 @@
-/*	$NetBSD: main.cpp,v 1.1 2003/06/30 17:52:14 wiz Exp $	*/
+/*	$NetBSD: main.cpp,v 1.1.1.1 2003/06/30 17:52:14 wiz Exp $	*/
 
 /* Last non-groff version: main.c 1.23  (Berkeley)  85/08/05
  *

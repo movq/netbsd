@@ -1,4 +1,4 @@
-/*	$NetBSD: tfmtodit.cpp,v 1.1 2003/06/30 17:52:16 wiz Exp $	*/
+/*	$NetBSD: tfmtodit.cpp,v 1.1.1.1 2003/06/30 17:52:16 wiz Exp $	*/
 
 // -*- C++ -*-
 /* Copyright (C) 1989-1992, 2000, 2001 Free Software Foundation, Inc.

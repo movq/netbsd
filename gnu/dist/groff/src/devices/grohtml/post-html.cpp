@@ -1,4 +1,4 @@
-/*	$NetBSD: post-html.cpp,v 1.1 2003/06/30 17:52:16 wiz Exp $	*/
+/*	$NetBSD: post-html.cpp,v 1.1.1.1 2003/06/30 17:52:16 wiz Exp $	*/
 
 // -*- C++ -*-
 /* Copyright (C) 2000, 2001, 2002, 2003 Free Software Foundation, Inc.
