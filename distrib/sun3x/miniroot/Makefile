@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 1997/12/24 09:21:19 jeremy Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 1997/12/24 09:21:19 jeremy Exp $
 
 TOP=		${.CURDIR}/..
 
