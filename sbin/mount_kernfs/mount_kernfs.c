@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 1993 Christoher G. Demetriou
  * Copyright (c) 1990, 1992 Jan-Simon Pendry
- * All rights reserved.
+ * Copyright (c) 1992, 1993, 1994
+ *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Jan-Simon Pendry.
@@ -16,8 +16,8 @@
  *    documentation and/or other materials provided with the distribution.
  * 3. All advertising materials mentioning features or use of this software
  *    must display the following acknowledgement:
- *      This product includes software developed by the University of
- *      California, Berkeley and its contributors.
+ *	This product includes software developed by the University of
+ *	California, Berkeley and its contributors.
  * 4. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
@@ -33,101 +33,68 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- * $Id: mount_kernfs.c,v 1.1 1993/03/28 03:19:41 cgd Exp $
  */
 
-#include <stdio.h>
-#include <string.h>
-#include <unistd.h>
-#include <sys/types.h>
+#ifndef lint
+char copyright[] =
+"@(#) Copyright (c) 1992, 1993, 1994\n\
+	The Regents of the University of California.  All rights reserved.\n";
+#endif /* not lint */
+
+#ifndef lint
+static char sccsid[] = "@(#)mount_kernfs.c	8.2 (Berkeley) 3/27/94";
+#endif /* not lint */
+
+#include <sys/param.h>
 #include <sys/mount.h>
 
-main(c, v)
-int c;
-char *v[];
+#include <err.h>
+#include <unistd.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "mntopts.h"
+
+struct mntopt mopts[] = {
+	MOPT_STDOPTS,
+	{ NULL }
+};
+
+void	usage __P((void));
+
+int
+main(argc, argv)
+	int argc;
+	char *argv[];
 {
-	extern char *optarg;
-	extern int optind;
-	int ch;
-	int usage = 0;
-	int mounttype, mntflags;
-	char *dummy;
-	char *mountpt;
-	int rc;
-	char *pname;
+	int ch, mntflags;
 
-	pname = strrchr(v[0], '/');
-	if (pname == NULL)
-		pname = v[0];
-	else
-		pname++;
+	mntflags = 0;
+	while ((ch = getopt(argc, argv, "o:")) != EOF)
+		switch (ch) {
+		case 'o':
+			getmntopts(optarg, mopts, &mntflags);
+			break;
+		case '?':
+		default:
+			usage();
+		}
+	argc -= optind;
+	argv += optind;
 
-#ifdef MOUNT_DEVFS
-	if (!strcmp(pname, "devfs"))
-		mounttype = MOUNT_DEVFS;
-	else
-#endif
-#ifdef MOUNT_FDESC
-	if (!strcmp(pname, "fdesc"))
-		mounttype = MOUNT_FDESC;
-        else
-#endif
-#ifdef MOUNT_KERNFS
-	if (!strcmp(pname, "kernfs"))
-		mounttype = MOUNT_KERNFS;
-        else
-#endif
-		usage++;
+	if (argc != 2)
+		usage();
 
-	/*
-	 * Crack -F option
-	 */
-	while ((ch = getopt(c, v, "F:")) != EOF)
-	switch (ch) {
-	case 'F':
-		mntflags = atoi(optarg);
-		break;
-	default:
-	case '?':
-		usage++;
-		break;
-	}
-
-	/*
-	 * Need two more arguments
-	 */
-	if (optind != (c - 2))
-		usage++;
-
-	if (usage) {
-		fputs("usage:\n", stderr);
-#if defined(MOUNT_DEVFS) || defined(MOUNT_FDESC) || defined(MOUNT_KERNFS)
-#ifdef MOUNT_DEVFS
-		fputs("   mount_devfs [ fsoptions ] devfs mount-point\n", stderr);
-#endif
-#ifdef MOUNT_FDESC
-		fputs("   mount_fdesc [ fsoptions ] fdesc mount-point\n", stderr);
-#endif
-#ifdef MOUNT_KERNFS
-		fputs("   mount_kernfs [ fsoptions ] kernfs mount-point\n", stderr);
-#endif
-#else /* none of the filesystem types defined */
-		fputs("   no valid uses!!!\n", stderr);
-#endif
-		exit(1);
-	}
-
-	/*
-	 * Get target and mount point
-	 */
-	dummy = v[optind];
-	mountpt = v[optind+1];
-
-	rc = mount(mounttype, mountpt, mntflags, (caddr_t) 0);
-	if (rc < 0) {
-		perror(pname);
-		exit(1);
-	}
+	if (mount(MOUNT_KERNFS, argv[1], mntflags, NULL))
+		err(1, NULL);
 	exit(0);
+}
+
+void
+usage()
+{
+	(void)fprintf(stderr,
+		"usage: mount_kernfs [-o options] /kern mount_point\n");
+	exit(1);
 }

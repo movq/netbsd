@@ -34,14 +34,15 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: Id: pt_file.c,v 1.1 1992/05/25 21:43:09 jsp Exp jsp
- *	from: @(#)pt_file.c	8.1 (Berkeley) 6/5/93
- *	$Id: pt_file.c,v 1.1 1994/01/12 20:02:24 cgd Exp $
+ *	@(#)pt_file.c	8.2 (Berkeley) 3/27/94
+ *
+ * $Id: pt_file.c,v 1.1.1.1 1994/06/13 22:55:50 mycroft Exp $
  */
 
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <string.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/types.h>
@@ -58,7 +59,6 @@ int so;
 int *fdp;
 {
 	int fd;
-	int gid;
 	char pbuf[MAXPATHLEN];
 	int error;
 	int gidset[NGROUPS];

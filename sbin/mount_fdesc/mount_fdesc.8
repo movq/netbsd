@@ -1,11 +1,10 @@
 .\"
-.\" Copyright (c) 1992 Jan-Simon Pendry
+.\" Copyright (c) 1992, 1993, 1994
+.\"	The Regents of the University of California.  All rights reserved.
 .\" All rights reserved.
 .\"
 .\" This code is derived from software donated to Berkeley by
 .\" Jan-Simon Pendry.
-.\"
-.\" (Modified for use in NetBSD by cgd)
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -17,8 +16,8 @@
 .\"    documentation and/or other materials provided with the distribution.
 .\" 3. All advertising materials mentioning features or use of this software
 .\"    must display the following acknowledgement:
-.\"     This product includes software developed by the University of
-.\"     California, Berkeley and its contributors.
+.\"	This product includes software developed by the University of
+.\"	California, Berkeley and its contributors.
 .\" 4. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
@@ -35,20 +34,20 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     $Id: mount_fdesc.8,v 1.1 1993/07/19 23:49:27 cgd Exp $
+.\"	@(#)mount_fdesc.8	8.2 (Berkeley) 3/27/94
 .\"
 .\"
-.Dd March 28, 1993
+.Dd March 27, 1994
 .Dt MOUNT_FDESC 8
-.Os NetBSD 0.8a
+.Os BSD 4.4
 .Sh NAME
 .Nm mount_fdesc
 .Nd mount the file-descriptor file system
 .Sh SYNOPSIS
 .Nm mount_fdesc
-.Op Fl F Ar fsoptions
-.Pa fdesc
-.Pa mount_point
+.Op Fl o Ar options
+.Ar fdesc
+.Ar mount_point
 .Sh DESCRIPTION
 The
 .Nm mount_fdesc
@@ -62,6 +61,17 @@ rather than replace, the existing entries in
 This command is normally executed by
 .Xr mount 8
 at boot time.
+.Pp
+The options are as follows:
+.Bl -tag -width indent
+.It Fl o
+Options are specified with a
+.Fl o
+flag followed by a comma separated string of options.
+See the
+.Xr mount 8
+man page for possible options and their meanings.
+.El
 .Pp
 The contents of the mount point are
 .Pa fd ,
@@ -136,10 +146,26 @@ the real controlling terminal device.
 .Xr mount 2 ,
 .Xr unmount 2 ,
 .Xr tty 4 ,
-.Xr fstab 5
+.Xr fstab 5 ,
+.Xr mount 8
 .Sh CAVEATS
+No
+.Pa .
+and
+.Pa ..
+entries appear when listing the contents of the
+.Pa /dev/fd
+directory.
+This makes sense in the context of this filesystem, but is inconsistent
+with usual filesystem conventions.
+However, it is still possible to refer to both
+.Pa .
+and 
+.Pa ..
+in a pathname.
+.Pp
 This filesystem may not be NFS-exported.
 .Sh HISTORY
 The
 .Nm mount_fdesc
-utility first appeared in NetBSD 0.8a.
+utility first appeared in 4.4BSD.
