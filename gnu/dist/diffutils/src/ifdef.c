@@ -1,4 +1,4 @@
-/*	$NetBSD: ifdef.c,v 1.1 2003/01/26 00:43:17 wiz Exp $	*/
+/*	$NetBSD: ifdef.c,v 1.1.1.1 2003/01/26 00:43:17 wiz Exp $	*/
 
 /* #ifdef-format output routines for GNU DIFF.
 

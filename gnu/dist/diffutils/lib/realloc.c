@@ -1,4 +1,4 @@
-/*	$NetBSD: realloc.c,v 1.1 2003/01/26 00:43:14 wiz Exp $	*/
+/*	$NetBSD: realloc.c,v 1.1.1.1 2003/01/26 00:43:14 wiz Exp $	*/
 
 /* Work around bug on some systems where realloc (NULL, 0) fails.
    Copyright (C) 1997 Free Software Foundation, Inc.

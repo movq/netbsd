@@ -1,4 +1,4 @@
-/*	$NetBSD: system.h,v 1.1 2003/01/26 00:43:16 wiz Exp $	*/
+/*	$NetBSD: system.h,v 1.1.1.1 2003/01/26 00:43:16 wiz Exp $	*/
 
 /* System dependent declarations.
 

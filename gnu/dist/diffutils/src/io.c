@@ -1,4 +1,4 @@
-/*	$NetBSD: io.c,v 1.1 2003/01/26 00:43:17 wiz Exp $	*/
+/*	$NetBSD: io.c,v 1.1.1.1 2003/01/26 00:43:17 wiz Exp $	*/
 
 /* File I/O for GNU DIFF.
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: xstrtol.h,v 1.1 2003/01/26 00:43:14 wiz Exp $	*/
+/*	$NetBSD: xstrtol.h,v 1.1.1.1 2003/01/26 00:43:14 wiz Exp $	*/
 
 /* A more useful interface to strtol.
    Copyright 1995, 1996, 1998, 1999, 2001 Free Software Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: setmode.c,v 1.1 2003/01/26 00:43:15 wiz Exp $	*/
+/*	$NetBSD: setmode.c,v 1.1.1.1 2003/01/26 00:43:15 wiz Exp $	*/
 
 /* Set a file descriptor's mode to binary or to text.
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: getopt.c,v 1.1 2003/01/26 00:43:15 wiz Exp $	*/
+/*	$NetBSD: getopt.c,v 1.1.1.1 2003/01/26 00:43:15 wiz Exp $	*/
 
 /* Getopt for GNU.
    NOTE: getopt is now part of the C library, so if you don't know what

@@ -1,4 +1,4 @@
-/*	$NetBSD: exitfail.h,v 1.1 2003/01/26 00:43:14 wiz Exp $	*/
+/*	$NetBSD: exitfail.h,v 1.1.1.1 2003/01/26 00:43:14 wiz Exp $	*/
 
 /* Failure exit status
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: xstrtoumax.c,v 1.1 2003/01/26 00:43:15 wiz Exp $	*/
+/*	$NetBSD: xstrtoumax.c,v 1.1.1.1 2003/01/26 00:43:15 wiz Exp $	*/
 
 /* xstrtoumax.c -- A more useful interface to strtoumax.
    Copyright 1999 Free Software Foundation, Inc.

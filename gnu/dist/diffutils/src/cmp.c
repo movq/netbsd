@@ -1,4 +1,4 @@
-/*	$NetBSD: cmp.c,v 1.1 2003/01/26 00:43:16 wiz Exp $	*/
+/*	$NetBSD: cmp.c,v 1.1.1.1 2003/01/26 00:43:16 wiz Exp $	*/
 
 /* cmp - compare two files byte by byte
 

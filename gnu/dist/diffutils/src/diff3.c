@@ -1,4 +1,4 @@
-/*	$NetBSD: diff3.c,v 1.1 2003/01/26 00:43:17 wiz Exp $	*/
+/*	$NetBSD: diff3.c,v 1.1.1.1 2003/01/26 00:43:17 wiz Exp $	*/
 
 /* diff3 - compare three files line by line
 

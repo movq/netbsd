@@ -1,4 +1,4 @@
-/*	$NetBSD: normal.c,v 1.1 2003/01/26 00:43:17 wiz Exp $	*/
+/*	$NetBSD: normal.c,v 1.1.1.1 2003/01/26 00:43:17 wiz Exp $	*/
 
 /* Normal-format output routines for GNU DIFF.
 

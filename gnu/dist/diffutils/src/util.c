@@ -1,4 +1,4 @@
-/*	$NetBSD: util.c,v 1.1 2003/01/26 00:43:17 wiz Exp $	*/
+/*	$NetBSD: util.c,v 1.1.1.1 2003/01/26 00:43:17 wiz Exp $	*/
 
 /* Support routines for GNU DIFF.
 

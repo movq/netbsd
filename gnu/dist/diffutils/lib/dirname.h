@@ -1,4 +1,4 @@
-/*	$NetBSD: dirname.h,v 1.1 2003/01/26 00:43:13 wiz Exp $	*/
+/*	$NetBSD: dirname.h,v 1.1.1.1 2003/01/26 00:43:13 wiz Exp $	*/
 
 /*  Copyright (C) 1998, 2001 Free Software Foundation, Inc.
 

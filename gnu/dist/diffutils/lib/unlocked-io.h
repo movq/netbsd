@@ -1,4 +1,4 @@
-/*	$NetBSD: unlocked-io.h,v 1.1 2003/01/26 00:43:14 wiz Exp $	*/
+/*	$NetBSD: unlocked-io.h,v 1.1.1.1 2003/01/26 00:43:14 wiz Exp $	*/
 
 #ifndef UNLOCKED_IO_H
 # define UNLOCKED_IO_H 1

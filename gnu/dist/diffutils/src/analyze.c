@@ -1,4 +1,4 @@
-/*	$NetBSD: analyze.c,v 1.1 2003/01/26 00:43:16 wiz Exp $	*/
+/*	$NetBSD: analyze.c,v 1.1.1.1 2003/01/26 00:43:16 wiz Exp $	*/
 
 /* Analyze file differences for GNU DIFF.
 

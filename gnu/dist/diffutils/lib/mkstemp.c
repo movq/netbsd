@@ -1,4 +1,4 @@
-/*	$NetBSD: mkstemp.c,v 1.1 2003/01/26 00:43:14 wiz Exp $	*/
+/*	$NetBSD: mkstemp.c,v 1.1.1.1 2003/01/26 00:43:14 wiz Exp $	*/
 
 /* Copyright (C) 1998, 1999, 2001 Free Software Foundation, Inc.
    This file is derived from the one in the GNU C Library.

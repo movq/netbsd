@@ -1,4 +1,4 @@
-/*	$NetBSD: dir.c,v 1.1 2003/01/26 00:43:17 wiz Exp $	*/
+/*	$NetBSD: dir.c,v 1.1.1.1 2003/01/26 00:43:17 wiz Exp $	*/
 
 /* Read, sort and compare two directories.  Used for GNU DIFF.
 
