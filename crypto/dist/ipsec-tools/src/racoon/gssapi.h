@@ -1,4 +1,4 @@
-/* $Id: gssapi.h,v 1.1 2005/02/12 11:12:00 manu Exp $ */
+/* $Id: gssapi.h,v 1.1.1.1 2005/02/12 11:12:00 manu Exp $ */
 
 /*
  * Copyright 2000 Wasabi Systems, Inc.

@@ -1,4 +1,4 @@
-# $Id: Makefile.am,v 1.1 2005/02/12 11:11:37 manu Exp $
+# $Id: Makefile.am,v 1.1.1.1 2005/02/12 11:11:37 manu Exp $
 
 sbin_PROGRAMS = racoon racoonctl plainrsa-gen
 noinst_PROGRAMS = eaytest

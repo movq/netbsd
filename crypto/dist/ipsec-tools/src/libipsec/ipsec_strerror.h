@@ -1,4 +1,4 @@
-/* $Id: ipsec_strerror.h,v 1.1 2005/02/12 11:11:30 manu Exp $ */
+/* $Id: ipsec_strerror.h,v 1.1.1.1 2005/02/12 11:11:30 manu Exp $ */
 
 /*
  * Copyright (C) 1995, 1996, 1997, 1998, and 1999 WIDE Project.

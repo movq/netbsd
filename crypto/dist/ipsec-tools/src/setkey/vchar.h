@@ -1,4 +1,4 @@
-/* $Id: vchar.h,v 1.1 2005/02/12 11:14:07 manu Exp $ */
+/* $Id: vchar.h,v 1.1.1.1 2005/02/12 11:14:07 manu Exp $ */
 
 /*
  * Copyright (C) 1995, 1996, 1997, 1998, and 1999 WIDE Project.

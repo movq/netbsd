@@ -1,4 +1,4 @@
-/* $Id: crypto_openssl.h,v 1.1 2005/02/12 11:11:50 manu Exp $ */
+/* $Id: crypto_openssl.h,v 1.1.1.1 2005/02/12 11:11:50 manu Exp $ */
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.

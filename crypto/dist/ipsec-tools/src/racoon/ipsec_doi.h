@@ -1,4 +1,4 @@
-/* $Id: ipsec_doi.h,v 1.1 2005/02/12 11:12:10 manu Exp $ */
+/* $Id: ipsec_doi.h,v 1.1.1.1 2005/02/12 11:12:10 manu Exp $ */
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
