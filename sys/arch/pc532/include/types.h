@@ -32,7 +32,7 @@
  *
  *	@(#)types.h	7.5 (Berkeley) 3/9/91
  *
- *	$Id: types.h,v 1.1 1993/09/09 23:53:45 phil Exp $
+ *	$Id: types.h,v 1.1.1.1 1993/09/09 23:53:46 phil Exp $
  */
 
 #ifndef	_MACHTYPES_H_

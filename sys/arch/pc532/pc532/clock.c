@@ -35,7 +35,7 @@
  *
  *	@(#)clock.c	7.2 (Berkeley) 5/12/91
  *
- *	$Id: clock.c,v 1.1 1993/09/09 23:53:46 phil Exp $
+ *	$Id: clock.c,v 1.1.1.1 1993/09/09 23:53:47 phil Exp $
  */
 
 /*

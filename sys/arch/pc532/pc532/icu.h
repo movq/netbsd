@@ -30,7 +30,7 @@
  *
  *	icu.h
  *
- *	$Id: icu.h,v 1.1 1993/09/09 23:53:47 phil Exp $
+ *	$Id: icu.h,v 1.1.1.1 1993/09/09 23:53:48 phil Exp $
  */
 
 /* icu.h: defines for use with the ns32532 icu. */

@@ -35,7 +35,7 @@
  *
  *	@(#)frame.h	5.2 (Berkeley) 1/18/91
  *
- * 	$Id: frame.h,v 1.1 1993/09/09 23:53:45 phil Exp $
+ * 	$Id: frame.h,v 1.1.1.1 1993/09/09 23:53:46 phil Exp $
  */
 
 #ifndef _MACHINE_FRAME_H_

@@ -35,7 +35,7 @@
  *
  *	@(#)genassym.c	5.11 (Berkeley) 5/10/91
  *
- *	$Id: genassym.c,v 1.1 1993/09/09 23:53:46 phil Exp $
+ *	$Id: genassym.c,v 1.1.1.1 1993/09/09 23:53:47 phil Exp $
  */
 
 #include "sys/param.h"

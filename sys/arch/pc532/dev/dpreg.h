@@ -30,7 +30,7 @@
  *
  *	dp.h:  defines for the dp driver.
  *
- *	$Id: dpreg.h,v 1.1 1993/09/09 23:53:52 phil Exp $
+ *	$Id: dpreg.h,v 1.1.1.1 1993/09/09 23:53:53 phil Exp $
  */
 
 /* Most of this comes from the Minix dp driver by Bruce Culbertson. */

@@ -32,7 +32,7 @@
  *
  *	from: Utah Hdr: in_cksum.c 1.1 90/07/09
  *	from: @(#)in_cksum.c	7.3 (Berkeley) 12/16/90
- *	$Id: in_cksum.c,v 1.1 1993/09/09 23:53:49 phil Exp $
+ *	$Id: in_cksum.c,v 1.1.1.1 1993/09/09 23:53:50 phil Exp $
  */
 
 /*

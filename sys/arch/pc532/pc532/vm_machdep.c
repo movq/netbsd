@@ -37,13 +37,13 @@
  *
  *	@(#)vm_machdep.c	7.3 (Berkeley) 5/13/91
  *
- *	$Id: vm_machdep.c,v 1.1 1993/09/09 23:53:49 phil Exp $
+ *	$Id: vm_machdep.c,v 1.1.1.1 1993/09/09 23:53:50 phil Exp $
  */
 
 /*
  *	Utah $Hdr: vm_machdep.c 1.16.1.1 89/06/23$
  */
-static char rcsid[] = "$Header: /home/mike/src/cvs/netbsd/src/sys/arch/pc532/pc532/Attic/vm_machdep.c,v 1.1 1993/09/09 23:53:49 phil Exp $";
+static char rcsid[] = "$Header: /home/mike/src/cvs/netbsd/src/sys/arch/pc532/pc532/Attic/vm_machdep.c,v 1.1.1.1 1993/09/09 23:53:50 phil Exp $";
 
 #include "param.h"
 #include "systm.h"

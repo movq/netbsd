@@ -35,14 +35,14 @@
  *
  *	@(#)machdep.c	7.4 (Berkeley) 6/3/91
  *
- *	$Id: machdep.c,v 1.1 1993/09/09 23:53:46 phil Exp $
+ *	$Id: machdep.c,v 1.1.1.1 1993/09/09 23:53:47 phil Exp $
  */
 
 /*
  * Modified for the pc532 by Phil Nelson.  2/3/93
  */
 
-static char rcsid[] = "$Header: /home/mike/src/cvs/netbsd/src/sys/arch/pc532/pc532/Attic/machdep.c,v 1.1 1993/09/09 23:53:46 phil Exp $";
+static char rcsid[] = "$Header: /home/mike/src/cvs/netbsd/src/sys/arch/pc532/pc532/Attic/machdep.c,v 1.1.1.1 1993/09/09 23:53:47 phil Exp $";
 
 #include "param.h"
 #include "systm.h"

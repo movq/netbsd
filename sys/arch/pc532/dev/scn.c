@@ -31,7 +31,7 @@
  * SUCH DAMAGE.
  *
  *	from: @(#)com.c	7.5 (Berkeley) 5/16/91
- *	$Id: scn.c,v 1.1 1993/09/09 23:53:51 phil Exp $
+ *	$Id: scn.c,v 1.1.1.1 1993/09/09 23:53:52 phil Exp $
  */
 
 #include "scn.h"

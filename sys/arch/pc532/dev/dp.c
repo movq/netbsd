@@ -17,7 +17,7 @@
  * on the understanding that TFS is not responsible for the correct
  * functioning of this software in any circumstances.
  *
- *	$Id: dp.c,v 1.1 1993/09/09 23:53:51 phil Exp $
+ *	$Id: dp.c,v 1.1.1.1 1993/09/09 23:53:52 phil Exp $
  */
 
 /*

@@ -31,7 +31,7 @@
  *      Modified for NetBSD by Phil Nelson
  *	Hardware trap vectors for ns532.
  *
- *	$Id: trap.h,v 1.1 1993/09/09 23:53:45 phil Exp $
+ *	$Id: trap.h,v 1.1.1.1 1993/09/09 23:53:46 phil Exp $
  */
 
 #ifndef _NS532_TRAP_H_

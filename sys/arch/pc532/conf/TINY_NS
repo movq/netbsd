@@ -1,7 +1,7 @@
 #
 # TINY 532 Distribution, used only for early testing and initial distribution.
 #
-#	$Id: TINY_NS,v 1.1 1993/09/09 23:53:44 phil Exp $
+#	$Id: TINY_NS,v 1.1.1.1 1993/09/09 23:53:45 phil Exp $
 #
 machine		"pc532"
 cpu		"ns532"
