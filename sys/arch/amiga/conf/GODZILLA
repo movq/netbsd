@@ -1,14 +1,18 @@
 machine		"amiga"
-cpu		"A3000"
+cpu		"M68040"
 ident		GODZILLA
+
+#seems cpu-options don't work in files.amiga conditionals..
+options		FPSP
 
 timezone	-1 dst
 maxusers	16
+maxfdescs	2048
 
 # Standard options
 #options	QUOTA
 options		COMPAT_SUNOS
-options		SWAPPAGER,VNODEPAGER,DEVPAGER
+options		SWAPPAGER,VNODEPAGER,DEVPAGER,BANKEDDEVPAGER
 options		INET
 options		NFS,NFSSERVER,NFSCLIENT
 options		MFS
@@ -17,8 +21,19 @@ options		FIFO
 #options		MSDOSFS
 options		KERNFS
 options		FDESC
+options		LOFS,PORTAL,PROCFS
 #options		ISO
 #options		TPIP
+
+# Graphics options
+options		GRF
+options		GRF_CUSTOM_CHIP_MODES
+options		GRF_OCS
+options		GRF_ECS
+#options	GRF_ACS
+options		GRF_NTSC
+options		GRF_PAL
+options		"GRF_A2024"
 
 options		"COMPAT_43"
 options		"TCP_COMPAT_42"
@@ -27,7 +42,7 @@ options		"HAVE_USL_UFS"
 options		"PANICWAIT"
 
 # Options for all HP machines
-#options		SYSVSHM
+options		SYSVSHM,SYSVMSG,SYSVSEM
 #options		HPUXCOMPAT
 
 # Options specific to this host.
@@ -52,9 +67,7 @@ master		a3000scsi0	at manufacturer	1	product	1
 # further builtin devices
 device		ser0	at manufacturer	1	product	3
 #device		clock	at manufacturer	1	product 4
-#device		kbd	at manufacturer	1	product 5
 device		par0	at manufacturer	1	product	6
-#device		mouse	at manufacturer	1	product	8
 
 disk		sd0	at a3000scsi0 slave 0
 #disk		sd0	at a2091scsi0 slave 0
@@ -110,6 +123,9 @@ pseudo-device	sl	1
 pseudo-device	ppp	1
 pseudo-device	bpfilter 16
 pseudo-device	ite	2
+pseudo-device	view	1
+pseudo-device	kbd	1
+pseudo-device	mouse	2
 pseudo-device	pty
 pseudo-device	loop
 pseudo-device	ether
