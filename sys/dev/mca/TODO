@@ -1,6 +1,0 @@
-# $NetBSD: TODO,v 1.14 2001/07/31 13:16:25 jdolecek Exp $
-
-Projects:
-* proper MCA DMA/bus_dma(9) support (primarily for AHA-1640 ATM), using
-  code from edc_mca.c:edc_setup_dma()
-* IBM SCSI Adapter support

@@ -1,8 +1,0 @@
-# 	$NetBSD: POWEROFSEVEN32,v 1.11 2001/09/02 05:53:38 mrg Exp $
-
-include "arch/sparc64/conf/POWEROFSEVEN.inc"
-
-makeoptions 	MACHINE_ARCH=sparc
-makeoptions	CC="cc -m32"
-makeoptions	LD="ld -m elf32_sparc"
-makeoptions	AS="as -32"
