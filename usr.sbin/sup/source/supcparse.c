@@ -27,8 +27,8 @@
  **********************************************************************
  * HISTORY
  * $Log: supcparse.c,v $
- * Revision 1.1  1993/05/21 14:52:17  cgd
- * Initial revision
+ * Revision 1.1.1.1  1993/05/21 14:52:18  cgd
+ * initial import of CMU's SUP to NetBSD
  *
  * Revision 1.6  92/08/11  12:07:38  mrt
  * 	Added use-rel-suffix option corresponding to -u switch.

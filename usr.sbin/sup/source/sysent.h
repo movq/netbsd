@@ -26,8 +26,8 @@
  **********************************************************************
  * HISTORY
  * $Log: sysent.h,v $
- * Revision 1.1  1993/05/21 14:52:18  cgd
- * Initial revision
+ * Revision 1.1.1.1  1993/05/21 14:52:19  cgd
+ * initial import of CMU's SUP to NetBSD
  *
  * Revision 2.4  89/12/05  16:02:00  mrt
  * 	Removed include of sys/features.h as it is no longer

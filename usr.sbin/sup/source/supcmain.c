@@ -169,8 +169,8 @@
  **********************************************************************
  * HISTORY
  * $Log: supcmain.c,v $
- * Revision 1.1  1993/05/21 14:52:17  cgd
- * Initial revision
+ * Revision 1.1.1.1  1993/05/21 14:52:18  cgd
+ * initial import of CMU's SUP to NetBSD
  *
  * Revision 1.6  92/08/11  12:06:59  mrt
  * 	Merged in Brad's changes. Made resource pausing code conditional

@@ -27,8 +27,8 @@
  **********************************************************************
  * HISTORY
  * $Log: log.c,v $
- * Revision 1.1  1993/05/21 14:52:16  cgd
- * Initial revision
+ * Revision 1.1.1.1  1993/05/21 14:52:17  cgd
+ * initial import of CMU's SUP to NetBSD
  *
  * Revision 1.5  92/08/11  12:03:43  mrt
  * 	Brad's delinting and variable argument list usage

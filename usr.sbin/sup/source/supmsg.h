@@ -28,8 +28,8 @@
  **********************************************************************
  * HISTORY
  * $Log: supmsg.h,v $
- * Revision 1.1  1993/05/21 14:52:18  cgd
- * Initial revision
+ * Revision 1.1.1.1  1993/05/21 14:52:19  cgd
+ * initial import of CMU's SUP to NetBSD
  *
  * Revision 1.7  92/08/11  12:08:20  mrt
  * 	Added copyright.

@@ -37,8 +37,8 @@
  *	/usr/bin/sup for exported version of sup.
  *
  * $Log: supfilesrv.c,v $
- * Revision 1.1  1993/05/21 14:52:18  cgd
- * Initial revision
+ * Revision 1.1.1.1  1993/05/21 14:52:19  cgd
+ * initial import of CMU's SUP to NetBSD
  *
  * Revision 1.20  92/09/09  22:05:00  mrt
  * 	Added Brad's change to make sendfile take a va_list.

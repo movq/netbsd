@@ -69,8 +69,8 @@
  *	since Tahoe version of <netinet/in.h> does not define them.
  *
  * $Log: scm.c,v $
- * Revision 1.1  1993/05/21 14:52:16  cgd
- * Initial revision
+ * Revision 1.1.1.1  1993/05/21 14:52:17  cgd
+ * initial import of CMU's SUP to NetBSD
  *
  * Revision 1.13  92/08/11  12:05:35  mrt
  * 	Added changes from stump:

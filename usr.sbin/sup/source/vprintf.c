@@ -28,8 +28,8 @@
  **********************************************************************
  * HISTORY
  * $Log: vprintf.c,v $
- * Revision 1.1  1993/05/21 14:52:18  cgd
- * Initial revision
+ * Revision 1.1.1.1  1993/05/21 14:52:19  cgd
+ * initial import of CMU's SUP to NetBSD
  *
  * Revision 2.5  89/09/08  18:15:55  mbj
  * 	Use _doprnt() for the Multimax (an "old" architecture).
