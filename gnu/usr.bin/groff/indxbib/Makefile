@@ -1,15 +1,23 @@
-# Makefile for indxbib
+#	$NetBSD: Makefile,v 1.1.1.1 2001/04/19 14:33:07 wiz Exp $
+
+.include "../Makefile.lib"
+
+DIST=		${IDIST}/src/utils/indxbib
+.PATH:		${DIST}
 
 PROG=		indxbib
 SRCS=		indxbib.cc dirnamemax.c signal.c
-CFLAGS+=	-I$(.CURDIR)/../include
 LDADD+= 	$(LIBBIB) $(LIBGROFF) -lm
-DPADD+= 	$(LIBBIB) $(LIBGROFF) $(LIBMATH)
+DPADD+= 	$(LIBBIB) $(LIBGROFF) $(LIBM)
 
-afterinstall:
-	install -c -o ${BINOWN} -g ${BINGRP} -m 444 $(.CURDIR)/eign \
-		$(DESTDIR)$(common_words_file)
+COMMON_WORDS_FILE!=awk -F\" '/COMMON_WORDS_FILE/ { print $$2 }' ${.CURDIR}/../include/defs.h
+
+.include <bsd.own.mk>
+
+.if ${MKSHARE} != "no"
+FILES=eign
+FILESNAME=${COMMON_WORDS_FILE:T}
+FILESDIR=${COMMON_WORDS_FILE:H}
+.endif
 
 .include <bsd.prog.mk>
-.include "../../Makefile.inc"
-.include "../Makefile.cfg"

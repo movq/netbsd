@@ -1,17 +1,13 @@
-#	@(#)Makefile	6.1 (Berkeley) 3/3/91
+#	$NetBSD: Makefile,v 1.1.1.1 2001/04/19 14:33:07 wiz Exp $
 
-.include "../Makefile.g++"
+.include "../Makefile.lib"
+
+DIST=		${IDIST}/src/devices/grotty
+.PATH:		${DIST}
 
 PROG=		grotty
-SRCS=		grotty.cc
-LDADD+=		$(.CURDIR)/../libdriver/obj/libdriver.a \
-		$(.CURDIR)/../libgroff/obj/libgroff.a
-# Nuke -Ig++-include when we finally install libg++.
-GXXFLAGS+=	-I$(.CURDIR)/../libdriver -I$(.CURDIR)/../libgroff \
-		-I$(.CURDIR)/../../../lib/libg++/g++-include
+SRCS=		tty.cc
+LDADD+=		$(LIBDRIVER) $(LIBGROFF) -lm
+DPADD+=		$(LIBDRIVER) $(LIBGROFF) $(LIBM)
 
-afterinstall:
-	echo install macros and devices
-
-.include "../../Makefile.inc"
 .include <bsd.prog.mk>
