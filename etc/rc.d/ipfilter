@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: ipfilter,v 1.1 2000/03/10 11:53:25 lukem Exp $
+# $NetBSD: ipfilter,v 1.1.1.1 2000/03/10 11:53:25 lukem Exp $
 #
 
 # PROVIDE: ipfilter

@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: bootconf.sh,v 1.1 2000/03/10 11:53:25 lukem Exp $
+# $NetBSD: bootconf.sh,v 1.1.1.1 2000/03/10 11:53:25 lukem Exp $
 #
 
 # PROVIDE: bootconf

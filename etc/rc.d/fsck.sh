@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: fsck.sh,v 1.1 2000/03/10 11:53:25 lukem Exp $
+# $NetBSD: fsck.sh,v 1.1.1.1 2000/03/10 11:53:25 lukem Exp $
 #
 
 # PROVIDE: fsck

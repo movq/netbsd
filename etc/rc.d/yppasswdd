@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: yppasswdd,v 1.1 2000/03/10 11:53:23 lukem Exp $
+# $NetBSD: yppasswdd,v 1.1.1.1 2000/03/10 11:53:23 lukem Exp $
 #
 
 # PROVIDE: yppasswdd
