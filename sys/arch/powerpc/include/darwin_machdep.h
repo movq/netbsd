@@ -1,4 +1,4 @@
-/*	$NetBSD: darwin_machdep.h,v 1.1 2002/11/26 23:54:09 manu Exp $ */
+/*	$NetBSD: darwin_machdep.h,v 1.2 2002/12/08 21:53:10 manu Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -38,6 +38,8 @@
 
 #ifndef	_DARWIN_MACHDEP_H_
 #define	_DARWIN_MACHDEP_H_
+
+void darwin_fork_child_return(void *);
 
 struct darwin_ppc_exception_state {
 	unsigned long dar;
