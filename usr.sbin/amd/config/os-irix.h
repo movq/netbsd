@@ -37,7 +37,7 @@
  *
  *	@(#)os-irix.h	8.1 (Berkeley) 6/6/93
  *
- * $Id: os-irix.h,v 1.1 1994/06/13 19:55:39 mycroft Exp $
+ * $Id: os-irix.h,v 1.1.1.1 1994/06/13 19:55:40 mycroft Exp $
  *
  * IRIX 3.3 definitions for Amd (automounter)
  * Contributed by Scott R. Presnell <srp@cgl.ucsf.edu>
