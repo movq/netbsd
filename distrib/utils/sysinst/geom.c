@@ -1,4 +1,4 @@
-/*	$NetBSD: geom.c,v 1.3 2000/12/22 10:12:12 mrg Exp $	*/
+/*	$NetBSD: geom.c,v 1.4 2001/01/14 02:38:14 mrg Exp $	*/
 
 /*
  * Copyright (c) 1995, 1997 Jason R. Thorpe.
@@ -41,8 +41,7 @@
 #include <unistd.h>
 #include <util.h>
 
-/* Visible functions */
-int get_geom (char *, struct disklabel *);
+#include "defs.h"
 
 int
 get_geom(disk, l)
@@ -58,6 +57,27 @@ get_geom(disk, l)
 		return 0;
 
 	if (ioctl(fd, DIOCGDEFLABEL, (char *)l) < 0) {
+		(void)close(fd);
+		return 0;
+	}
+	(void)close(fd);
+	return 1;
+}
+
+int
+get_real_geom(disk, l)
+	char *disk;
+	struct disklabel *l;
+{
+	char diskpath[MAXPATHLEN];
+	int fd;
+
+	/* Open the disk. */
+	fd = opendisk(disk, O_RDONLY, diskpath, sizeof(diskpath), 0);
+	if (fd < 0) 
+		return 0;
+
+	if (ioctl(fd, DIOCGDINFO, (char *)l) < 0) {
 		(void)close(fd);
 		return 0;
 	}
