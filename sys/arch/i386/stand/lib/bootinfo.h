@@ -1,4 +1,4 @@
-/*	$NetBSD: bootinfo.h,v 1.3 1999/03/08 00:09:25 fvdl Exp $	*/
+/*	$NetBSD: bootinfo.h,v 1.4 1999/03/08 21:44:48 drochner Exp $	*/
 
 /*
  * Copyright (c) 1997
@@ -53,3 +53,4 @@ extern struct bootinfo *bootinfo;
 
 void bi_add __P((struct btinfo_common*, int, int));
 void bi_getbiosgeom __P((void));
+void bi_getmemmap __P((void));
