@@ -1,5 +1,5 @@
 #	from: @(#)Makefile    6.2 (Berkeley) 3/25/91
-#	$NetBSD: Makefile,v 1.1 1995/12/01 17:59:44 phil Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 1995/12/01 17:59:44 phil Exp $
 
 PROG=           gcc
 SRCS=	gcc.c obstack.c version.c 
