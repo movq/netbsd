@@ -1,4 +1,4 @@
-/*	$NetBSD: par.c,v 1.1 1996/05/05 12:17:09 oki Exp $	*/
+/*	$NetBSD: par.c,v 1.1.1.1 1996/05/05 12:17:03 oki Exp $	*/
 
 /*
  * Copyright (c) 1982, 1990 The Regents of the University of California.

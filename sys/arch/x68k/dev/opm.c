@@ -1,4 +1,4 @@
-/*	$NetBSD: opm.c,v 1.1 1996/05/05 12:17:06 oki Exp $	*/
+/*	$NetBSD: opm.c,v 1.1.1.1 1996/05/05 12:17:03 oki Exp $	*/
 
 /*
  * Copyright (c) 1995 Masanobu Saitoh, Takuya Harakawa.
