@@ -1,4 +1,4 @@
-// $Id: Ssh.java,v 1.1 2001/09/27 02:01:05 itojun Exp $
+// $Id: Ssh.java,v 1.1.1.1 2001/09/27 02:01:05 itojun Exp $
 //
 // Ssh.java
 // SSH / smartcard integration project, smartcard side

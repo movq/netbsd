@@ -1,4 +1,4 @@
-/*	$NetBSD: scard.h,v 1.1 2001/09/27 02:00:48 itojun Exp $	*/
+/*	$NetBSD: scard.h,v 1.1.1.1 2001/09/27 02:00:48 itojun Exp $	*/
 /*
  * Copyright (c) 2001 Markus Friedl.  All rights reserved.
  *
