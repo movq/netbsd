@@ -1,6 +1,6 @@
 /*-
- * Copyright (c) 1991 The Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1991, 1993, 1994
+ *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Keith Muller of the University of California, San Diego and Lance
@@ -34,7 +34,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)dd.h	5.4 (Berkeley) 6/2/92
+ *	@(#)dd.h	8.3 (Berkeley) 4/2/94
  */
 
 /* Input/output stream state. */
@@ -93,3 +93,4 @@ typedef struct {
 #define	C_SYNC		0x20000
 #define	C_UCASE		0x40000
 #define	C_UNBLOCK	0x80000
+#define	C_OSYNC		0x100000
