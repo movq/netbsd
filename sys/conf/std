@@ -1,0 +1,12 @@
+# $NetBSD: std,v 1.3 2005/09/26 14:14:26 yamt Exp $
+#
+# standard MI 'options'
+#
+# this file is for options which can't be off-by-default for some reasons.
+# "it's commonly used" is NOT a good reason to enable options here.
+
+# the following options are on-by-default to keep
+# kernel config file compatibility.
+options	VMSWAP		# Swap device/file support
+options	BUFQ_FCFS	# First-come First-serve strategy
+options	BUFQ_DISKSORT	# Traditional min seek sort strategy
