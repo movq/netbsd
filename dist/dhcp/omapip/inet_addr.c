@@ -1,4 +1,4 @@
-/*	$NetBSD: inet_addr.c,v 1.1 2001/08/03 11:35:37 drochner Exp $	*/
+/*	$NetBSD: inet_addr.c,v 1.1.1.1 2001/08/03 11:35:37 drochner Exp $	*/
 
 /*
  * Copyright (c) 1983, 1990, 1993
@@ -37,13 +37,13 @@
 #if 0
 static char sccsid[] = "@(#)inet_addr.c	8.1 (Berkeley) 6/17/93";
 #else
-static char rcsid[] = "$NetBSD: inet_addr.c,v 1.1 2001/08/03 11:35:37 drochner Exp $";
+static char rcsid[] = "$NetBSD: inet_addr.c,v 1.1.1.1 2001/08/03 11:35:37 drochner Exp $";
 #endif
 #endif /* LIBC_SCCS and not lint */
 
 #ifndef lint
 static char copyright[] =
-"$Id: inet_addr.c,v 1.1 2001/08/03 11:35:37 drochner Exp $ Copyright (c) 1983, 1990, 1993 The Regents of the University of California.  All rights reserved.\n";
+"$Id: inet_addr.c,v 1.1.1.1 2001/08/03 11:35:37 drochner Exp $ Copyright (c) 1983, 1990, 1993 The Regents of the University of California.  All rights reserved.\n";
 #endif /* not lint */
 
 #include "omapip/omapip_p.h"

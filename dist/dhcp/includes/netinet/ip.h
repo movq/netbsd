@@ -1,4 +1,4 @@
-/*	$NetBSD: ip.h,v 1.1 2001/08/03 11:35:35 drochner Exp $	*/
+/*	$NetBSD: ip.h,v 1.1.1.1 2001/08/03 11:35:35 drochner Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
