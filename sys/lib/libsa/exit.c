@@ -1,4 +1,4 @@
-/*	$NetBSD: exit.c,v 1.12 1997/06/26 19:11:38 drochner Exp $	*/
+/*	$NetBSD: exit.c,v 1.13 1999/02/12 10:51:28 drochner Exp $	*/
 
 /*-
  *  Copyright (c) 1993 John Brezak
@@ -27,42 +27,10 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#ifdef __STDC__
-#include <machine/stdarg.h>
-#else
-#include <machine/varargs.h>
-#endif
 
 #include "stand.h"
 
-__dead void
-#ifdef __STDC__
-panic(const char *fmt, ...)
-#else
-panic(fmt /*, va_alist */)
-	char *fmt;
-#endif
-{
-    extern void closeall __P((void));
-    va_list ap;
-    static int paniced;
-    
-    if (!paniced) {
-        paniced = 1;
-        closeall();
-    }
-
-#ifdef __STDC__
-    va_start(ap, fmt);
-#else
-    va_start(ap);
-#endif
-    vprintf(fmt, ap);
-    printf("\n");
-    va_end(ap);
-    _rtt();
-    /*NOTREACHED*/
-}
+__dead void	exit __P((void)) __attribute__((noreturn));
 
 void
 exit()
