@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $Id: pvctxctl.c,v 1.1 1999/07/11 17:28:02 itojun Exp $
+ * $Id: pvctxctl.c,v 1.1.1.1 1999/07/11 17:28:02 itojun Exp $
  */
 
 #include <stdio.h>
