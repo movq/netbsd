@@ -1,4 +1,4 @@
-.\"	$NetBSD: cardbus.4,v 1.11 2001/09/12 18:19:16 wiz Exp $
+.\"	$NetBSD: cardbus.4,v 1.12 2001/11/16 17:08:13 augustss Exp $
 .\"
 .\" Copyright (c) 1999-2001 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -92,12 +92,15 @@ Adaptec ADP-1480
 .El
 .Ss USB controllers
 .Bl -tag -width speaker -offset indent -compact
+.It ehci
+Enhanced Host Controller (2.0)
 .It ohci
 Open Host Controller
 .El
 .Sh SEE ALSO
 .Xr ahc 4 ,
 .Xr com 4 ,
+.Xr ehci 4 ,
 .Xr ex 4 ,
 .Xr fxp 4 ,
 .Xr ohci 4 ,
