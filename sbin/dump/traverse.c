@@ -1,6 +1,6 @@
 /*-
- * Copyright (c) 1980, 1988, 1991 The Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1980, 1988, 1991, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,33 +32,47 @@
  */
 
 #ifndef lint
-/* from: static char sccsid[] = "@(#)traverse.c	5.21 (Berkeley) 7/19/92"; */
-static char *rcsid = "$Id: traverse.c,v 1.1 1993/12/22 10:24:59 cgd Exp $";
+static char sccsid[] = "@(#)traverse.c	8.2 (Berkeley) 9/23/93";
 #endif /* not lint */
 
-#ifdef sunos
-#include <stdio.h>
-#include <ctype.h>
 #include <sys/param.h>
-#include <ufs/fs.h>
-#else
-#include <sys/param.h>
-#include <ufs/fs.h>
-#endif
 #include <sys/time.h>
 #include <sys/stat.h>
-#include <ufs/dir.h>
-#include <ufs/dinode.h>
-#include <protocols/dumprestore.h>
-#ifdef __STDC__
-#include <unistd.h>
-#include <string.h>
+#ifdef sunos
+#include <sys/vnode.h>
+
+#include <ufs/fs.h>
+#include <ufs/fsdir.h>
+#include <ufs/inode.h>
+#else
+#include <ufs/ffs/fs.h>
+#include <ufs/ufs/dir.h>
+#include <ufs/ufs/dinode.h>
 #endif
+
+#include <protocols/dumprestore.h>
+
+#include <ctype.h>
+#include <stdio.h>
+#ifdef __STDC__
+#include <string.h>
+#include <unistd.h>
+#endif
+
 #include "dump.h"
 
-void	dmpindir();
 #define	HASDUMPEDFILE	0x1
 #define	HASSUBDIRS	0x2
+
+#ifdef	FS_44INODEFMT
+typedef	quad_t fsizeT;
+#else
+typedef	long fsizeT;
+#endif
+
+static	int dirindir __P((ino_t ino, daddr_t blkno, int level, long *size));
+static	void dmpindir __P((ino_t ino, daddr_t blk, int level, fsizeT *size));
+static	int searchdir __P((ino_t ino, daddr_t blkno, long size, long filesize));
 
 /*
  * This is an estimation of the number of TP_BSIZE blocks in the file.
@@ -100,6 +114,24 @@ blockest(dp)
 	return (blkest + 1);
 }
 
+/* Auxiliary macro to pick up files changed since previous dump. */
+#ifdef FS_44INODEFMT
+#define	CHANGEDSINCE(dp, t) \
+	((dp)->di_mtime.ts_sec >= (t) || (dp)->di_ctime.ts_sec >= (t))
+#else
+#define	CHANGEDSINCE(dp, t) \
+	((dp)->di_mtime >= (t) || (dp)->di_ctime >= (t))
+#endif
+
+/* The WANTTODUMP macro decides whether a file should be dumped. */
+#ifdef UF_NODUMP
+#define	WANTTODUMP(dp) \
+	(CHANGEDSINCE(dp, spcl.c_ddate) && \
+	 (nonodump || ((dp)->di_flags & UF_NODUMP) != UF_NODUMP))
+#else
+#define	WANTTODUMP(dp) CHANGEDSINCE(dp, spcl.c_ddate)
+#endif
+
 /*
  * Dump pass 1.
  *
@@ -107,6 +139,7 @@ blockest(dp)
  * that have been modified since the previous dump time. Also, find all
  * the directories in the filesystem.
  */
+int
 mapfiles(maxino, tapesize)
 	ino_t maxino;
 	long *tapesize;
@@ -116,30 +149,19 @@ mapfiles(maxino, tapesize)
 	register struct dinode *dp;
 	int anydirskipped = 0;
 
-	for (ino = 0; ino < maxino; ino++) {
+	for (ino = ROOTINO; ino < maxino; ino++) {
 		dp = getino(ino);
 		if ((mode = (dp->di_mode & IFMT)) == 0)
 			continue;
 		SETINO(ino, usedinomap);
 		if (mode == IFDIR)
 			SETINO(ino, dumpdirmap);
-#ifdef BSD44
-		if ((dp->di_mtime.ts_sec >= spcl.c_ddate ||
-		    dp->di_ctime.ts_sec >= spcl.c_ddate)
-#    ifndef sunos
-		    && (dp->di_flags & NODUMP) != NODUMP
-#    endif /* sunos */
-#else
-		if ((dp->di_mtime >= spcl.c_ddate ||
-		    dp->di_ctime >= spcl.c_ddate)
-#endif /* BSD44 */
-		    ) {
+		if (WANTTODUMP(dp)) {
 			SETINO(ino, dumpinomap);
-			if (mode != IFREG && mode != IFDIR && mode != IFLNK) {
+			if (mode != IFREG && mode != IFDIR && mode != IFLNK)
 				*tapesize += 1;
-				continue;
-			}
-			*tapesize += blockest(dp);
+			else
+				*tapesize += blockest(dp);
 			continue;
 		}
 		if (mode == IFDIR)
@@ -165,6 +187,7 @@ mapfiles(maxino, tapesize)
  * its parent may now qualify for the same treatment on this or a later
  * pass using this algorithm.
  */
+int
 mapdirs(maxino, tapesize)
 	ino_t maxino;
 	long *tapesize;
@@ -176,12 +199,12 @@ mapdirs(maxino, tapesize)
 	long filesize;
 	int ret, change = 0;
 
-	for (map = dumpdirmap, ino = 0; ino < maxino; ) {
-		if ((ino % NBBY) == 0)
+	isdir = 0;		/* XXX just to get gcc to shut up */
+	for (map = dumpdirmap, ino = 1; ino < maxino; ino++) {
+		if (((ino - 1) % NBBY) == 0)	/* map is offset by 1 */
 			isdir = *map++;
 		else
 			isdir >>= 1;
-		ino++;
 		if ((isdir & 1) == 0 || TSTINO(ino, dumpinomap))
 			continue;
 		dp = getino(ino);
@@ -222,6 +245,7 @@ mapdirs(maxino, tapesize)
  * as directories. Quit as soon as any entry is found that will
  * require the directory to be dumped.
  */
+static int
 dirindir(ino, blkno, ind_level, filesize)
 	ino_t ino;
 	daddr_t blkno;
@@ -260,6 +284,7 @@ dirindir(ino, blkno, ind_level, filesize)
  * any of the entries are on the dump list and to see if the directory
  * contains any subdirectories.
  */
+static int
 searchdir(ino, blkno, size, filesize)
 	ino_t ino;
 	daddr_t blkno;
@@ -313,7 +338,7 @@ dumpino(dp, ino)
 	ino_t ino;
 {
 	int ind_level, cnt;
-	long size;
+	fsizeT size;
 	char buf[TP_BSIZE];
 
 	if (newtape) {
@@ -324,20 +349,19 @@ dumpino(dp, ino)
 	spcl.c_dinode = *dp;
 	spcl.c_type = TS_INODE;
 	spcl.c_count = 0;
+	switch (dp->di_mode & S_IFMT) {
 
-	switch (IFTODT(dp->di_mode)) {
-
-	case DT_UNKNOWN:
+	case 0:
 		/*
 		 * Freed inode.
 		 */
 		return;
 
-	case DT_LNK:
-#ifdef BSD44
+	case S_IFLNK:
 		/*
 		 * Check for short symbolic link.
 		 */
+#ifdef FS_44INODEFMT
 		if (dp->di_size > 0 &&
 		    dp->di_size < sblock->fs_maxsymlinklen) {
 			spcl.c_addr[0] = 1;
@@ -350,30 +374,18 @@ dumpino(dp, ino)
 			return;
 		}
 #endif
-#ifdef NetBSD
-		if (DFASTLINK(*dp)) {
-			spcl.c_addr[0] = 1;
-			spcl.c_count = 1;
-			writeheader(ino);
-			bcopy((caddr_t)dp->di_symlink, buf,
-			    (u_long)dp->di_size);
-			buf[dp->di_size] = '\0';
-			writerec(buf, 0);
-			return;
-		}
-#endif
 		/* fall through */
 
-	case DT_DIR:
-	case DT_REG:
+	case S_IFDIR:
+	case S_IFREG:
 		if (dp->di_size > 0)
 			break;
 		/* fall through */
 
-	case DT_FIFO:
-	case DT_SOCK:
-	case DT_CHR:
-	case DT_BLK:
+	case S_IFIFO:
+	case S_IFSOCK:
+	case S_IFCHR:
+	case S_IFBLK:
 		writeheader(ino);
 		return;
 
@@ -381,7 +393,6 @@ dumpino(dp, ino)
 		msg("Warning: undefined file type 0%o\n", dp->di_mode & IFMT);
 		return;
 	}
-
 	if (dp->di_size > NDADDR * sblock->fs_bsize)
 		cnt = NDADDR * sblock->fs_frag;
 	else
@@ -399,12 +410,12 @@ dumpino(dp, ino)
 /*
  * Read indirect blocks, and pass the data blocks to be dumped.
  */
-void
+static void
 dmpindir(ino, blk, ind_level, size)
 	ino_t ino;
 	daddr_t blk;
 	int ind_level;
-	long *size;
+	fsizeT *size;
 {
 	int i, cnt;
 	daddr_t idblk[MAXNINDIR];
@@ -521,7 +532,7 @@ getino(inum)
 	curino = inum;
 	if (inum >= minino && inum < maxino)
 		return (&inoblock[inum - minino]);
-	bread(fsbtodb(sblock, itod(sblock, inum)), (char *)inoblock,
+	bread(fsbtodb(sblock, ino_to_fsba(sblock, inum)), (char *)inoblock,
 	    (int)sblock->fs_bsize);
 	minino = inum - (inum % INOPB(sblock));
 	maxino = minino + INOPB(sblock);

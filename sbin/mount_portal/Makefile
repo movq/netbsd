@@ -1,15 +1,15 @@
-#	from: @(#)Makefile	8.1 (Berkeley) 6/5/93
-#	$Id: Makefile,v 1.1 1994/01/12 20:01:27 cgd Exp $
-
-.if exists(${.CURDIR}/../../sys)
-CFLAGS= -I${.CURDIR}/../../sys
-.else
-CFLAGS= -I/sys
-.endif
+#	@(#)Makefile	8.3 (Berkeley) 3/27/94
 
 PROG=	mount_portal
-PTAL=	pt_conf.c pt_exec.c pt_file.c pt_tcp.c
-SRCS=	mount_portal.c conf.c activate.c ${PTAL}
+SRCS=	mount_portal.c activate.c conf.c getmntopts.c pt_conf.c \
+	pt_exec.c pt_file.c pt_tcp.c
 MAN8=	mount_portal.0
+
+MOUNT=	${.CURDIR}/../mount
+CFLAGS+= -I/sys -I${MOUNT}
+.PATH:	${MOUNT}
+
+DPADD=	$(LIBCOMPAT)
+LDADD=	-lcompat
 
 .include <bsd.prog.mk>

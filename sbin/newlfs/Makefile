@@ -1,5 +1,4 @@
-#	from: @(#)Makefile	8.1 (Berkeley) 6/18/93
-#	$Id: Makefile,v 1.1 1994/06/08 19:31:16 mycroft Exp $
+#	@(#)Makefile	8.1 (Berkeley) 6/18/93
 
 PROG=	newlfs
 CFLAGS+=-I/sys/ufs/lfs

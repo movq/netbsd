@@ -34,9 +34,9 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: Id: pt_tcp.c,v 1.1 1992/05/25 21:43:09 jsp Exp jsp
- *	from: @(#)pt_tcp.c	8.1 (Berkeley) 6/5/93
- *	$Id: pt_tcp.c,v 1.1 1994/01/12 20:02:27 cgd Exp $
+ *	@(#)pt_tcp.c	8.3 (Berkeley) 3/27/94
+ *
+ * $Id: pt_tcp.c,v 1.1.1.1 1994/06/13 22:55:52 mycroft Exp $
  */
 
 #include <stdio.h>
@@ -49,6 +49,7 @@
 #include <sys/syslog.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 #include <netdb.h>
 
 #include "portald.h"
@@ -77,6 +78,7 @@ int *fdp;
 	struct in_addr *ip[2];
 	struct in_addr ina;
 	int s_port;
+	int priv = 0;
 	struct sockaddr_in sain;
 
 	q = strchr(p, '/');
@@ -84,14 +86,25 @@ int *fdp;
 		return (EINVAL);
 	*q = '\0';
 	strcpy(host, p);
-	p = q++;
+	p = q + 1;
 
 	q = strchr(p, '/');
-	if (q == 0 || q - p >= sizeof(port))
+	if (q)
+		*q = '\0';
+	if (strlen(p) >= sizeof(port))
 		return (EINVAL);
-	*q = '\0';
 	strcpy(port, p);
-	p = q++;
+	if (q) {
+		p = q + 1;
+		if (strcmp(p, "priv") == 0) {
+			if (pcr->pcr_uid == 0)
+				priv = 1;
+			else
+				return (EPERM);
+		} else {
+			return (EINVAL);
+		}
+	}
 
 	hp = gethostbyname(host);
 	if (hp != 0) {
@@ -122,7 +135,10 @@ int *fdp;
 	while (ipp[0]) {
 		int so;
 
-		so = socket(AF_INET, SOCK_STREAM, 0);
+		if (priv)
+			so = rresvport((int *) 0);
+		else
+			so = socket(AF_INET, SOCK_STREAM, 0);
 		if (so < 0) {
 			syslog(LOG_ERR, "socket: %m");
 			return (errno);
