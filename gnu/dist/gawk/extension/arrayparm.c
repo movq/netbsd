@@ -1,4 +1,4 @@
-/*	$NetBSD: arrayparm.c,v 1.1 2003/10/06 15:50:50 wiz Exp $	*/
+/*	$NetBSD: arrayparm.c,v 1.1.1.1 2003/10/06 15:50:50 wiz Exp $	*/
 
 /*
  * arrayparm.c --- figure out how to make a parameter be an array

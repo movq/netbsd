@@ -1,4 +1,4 @@
-/*	$NetBSD: fork.c,v 1.1 2003/10/06 15:50:50 wiz Exp $	*/
+/*	$NetBSD: fork.c,v 1.1.1.1 2003/10/06 15:50:50 wiz Exp $	*/
 
 /*
  * fork.c - Provide fork and waitpid functions for gawk.

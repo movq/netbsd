@@ -1,4 +1,4 @@
-/*	$NetBSD: ext.c,v 1.1 2003/10/06 15:45:47 wiz Exp $	*/
+/*	$NetBSD: ext.c,v 1.1.1.1 2003/10/06 15:45:47 wiz Exp $	*/
 
 /*
  * ext.c - Builtin function that links external gawk functions and related

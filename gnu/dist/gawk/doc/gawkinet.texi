@@ -1,5 +1,5 @@
 \input texinfo   @c -*-texinfo-*-
-@c $NetBSD: gawkinet.texi,v 1.1 2003/10/06 15:55:26 wiz Exp $
+@c $NetBSD: gawkinet.texi,v 1.1.1.1 2003/10/06 15:55:26 wiz Exp $
 @c %**start of header (This is for running Texinfo on a region.)
 @setfilename gawkinet.info
 @settitle TCP/IP Internetworking With @command{gawk}

@@ -1,4 +1,4 @@
-/*	$NetBSD: awkgram.y,v 1.1 2003/10/06 15:45:41 wiz Exp $	*/
+/*	$NetBSD: awkgram.y,v 1.1.1.1 2003/10/06 15:45:41 wiz Exp $	*/
 
 /*
  * awkgram.y --- yacc/bison parser

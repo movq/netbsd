@@ -1,4 +1,4 @@
-/*	$NetBSD: regex_internal.h,v 1.1 2003/10/06 15:47:33 wiz Exp $	*/
+/*	$NetBSD: regex_internal.h,v 1.1.1.1 2003/10/06 15:47:33 wiz Exp $	*/
 
 /* Extended regular expression matching and search library.
    Copyright (C) 2002, 2003 Free Software Foundation, Inc.

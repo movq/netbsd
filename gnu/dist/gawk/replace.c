@@ -1,4 +1,4 @@
-/*	$NetBSD: replace.c,v 1.1 2003/10/06 15:46:38 wiz Exp $	*/
+/*	$NetBSD: replace.c,v 1.1.1.1 2003/10/06 15:46:38 wiz Exp $	*/
 
 /*
  * Do all necessary includes here, so that we don't have to worry about
