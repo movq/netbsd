@@ -1,4 +1,4 @@
-/*	$NetBSD: event_var.h,v 1.1 1996/01/24 01:15:34 gwr Exp $	*/
+/*	$NetBSD: event_var.h,v 1.1.1.1 1996/01/24 01:15:34 gwr Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
