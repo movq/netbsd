@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_exec.c,v 1.41 2000/12/11 05:29:02 mycroft Exp $	 */
+/*	$NetBSD: svr4_exec.c,v 1.42 2001/02/21 23:53:01 eeh Exp $	 */
 
 /*-
  * Copyright (c) 1994, 2000 The NetBSD Foundation, Inc.
@@ -35,8 +35,6 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-
-#define	ELFSIZE		32				/* XXX should die */
 
 #include <sys/param.h>
 #include <sys/systm.h>
