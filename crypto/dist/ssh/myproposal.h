@@ -1,4 +1,4 @@
-/*	$NetBSD: dsa.h,v 1.1.1.1 2000/09/28 22:10:02 thorpej Exp $	*/
+/*	$NetBSD: myproposal.h,v 1.1.1.1 2000/09/28 22:10:04 thorpej Exp $	*/
 
 /*
  * Copyright (c) 2000 Markus Friedl.  All rights reserved.
@@ -24,25 +24,23 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DSA_H
-#define DSA_H
+#define KEX_DEFAULT_KEX		"diffie-hellman-group1-sha1"
+#define	KEX_DEFAULT_PK_ALG	"ssh-dss"
+#define	KEX_DEFAULT_ENCRYPT	"3des-cbc,blowfish-cbc,arcfour,cast128-cbc"
+#define	KEX_DEFAULT_MAC		"hmac-sha1,hmac-md5,hmac-ripemd160@openssh.com"
+#define	KEX_DEFAULT_COMP	"zlib,none"
+#define	KEX_DEFAULT_LANG	""
 
-Key	*dsa_key_from_blob(char *blob, int blen);
-int	dsa_make_key_blob(Key *key, unsigned char **blobp, unsigned int *lenp);
 
-int
-dsa_sign(
-    Key *key,
-    unsigned char **sigp, int *lenp,
-    unsigned char *data, int datalen);
-
-int
-dsa_verify(
-    Key *key,
-    unsigned char *signature, int signaturelen,
-    unsigned char *data, int datalen);
-
-Key *
-dsa_generate_key(unsigned int bits);
-
-#endif
+static char *myproposal[PROPOSAL_MAX] = {
+	KEX_DEFAULT_KEX,
+	KEX_DEFAULT_PK_ALG,
+	KEX_DEFAULT_ENCRYPT,
+	KEX_DEFAULT_ENCRYPT,
+	KEX_DEFAULT_MAC,
+	KEX_DEFAULT_MAC,
+	KEX_DEFAULT_COMP,
+	KEX_DEFAULT_COMP,
+	KEX_DEFAULT_LANG,
+	KEX_DEFAULT_LANG
+};

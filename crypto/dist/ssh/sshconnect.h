@@ -1,4 +1,4 @@
-/*	$NetBSD: dsa.h,v 1.1.1.1 2000/09/28 22:10:02 thorpej Exp $	*/
+/*	$NetBSD: sshconnect.h,v 1.1.1.1 2000/09/28 22:10:36 thorpej Exp $	*/
 
 /*
  * Copyright (c) 2000 Markus Friedl.  All rights reserved.
@@ -24,25 +24,19 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DSA_H
-#define DSA_H
+#ifndef SSHCONNECT_H
+#define SSHCONNECT_H
 
-Key	*dsa_key_from_blob(char *blob, int blen);
-int	dsa_make_key_blob(Key *key, unsigned char **blobp, unsigned int *lenp);
+void
+check_host_key(char *host, struct sockaddr *hostaddr, Key *host_key,
+    const char *user_hostfile, const char *system_hostfile);
 
-int
-dsa_sign(
-    Key *key,
-    unsigned char **sigp, int *lenp,
-    unsigned char *data, int datalen);
+void	ssh_kex(char *host, struct sockaddr *hostaddr);
+void
+ssh_userauth(const char* local_user, const char* server_user, char *host,
+    int host_key_valid, RSA *own_host_key);
 
-int
-dsa_verify(
-    Key *key,
-    unsigned char *signature, int signaturelen,
-    unsigned char *data, int datalen);
-
-Key *
-dsa_generate_key(unsigned int bits);
+void	ssh_kex2(char *host, struct sockaddr *hostaddr);
+void	ssh_userauth2(const char *server_user, char *host);
 
 #endif

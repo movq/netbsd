@@ -1,4 +1,4 @@
-/*	$NetBSD: util.c,v 1.1.1.1 2000/09/28 22:10:43 thorpej Exp $	*/
+/*	$NetBSD: hmac.c,v 1.1.1.1 2000/09/28 22:10:02 thorpej Exp $	*/
 
 /*
  * Copyright (c) 2000 Markus Friedl.  All rights reserved.
@@ -24,81 +24,41 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/* from OpenBSD: util.c,v 1.5 2000/09/07 20:27:55 deraadt Exp */
+/* from OpenBSD: hmac.c,v 1.4 2000/09/07 20:27:51 deraadt Exp */
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: util.c,v 1.1.1.1 2000/09/28 22:10:43 thorpej Exp $");
+__RCSID("$NetBSD: hmac.c,v 1.1.1.1 2000/09/28 22:10:02 thorpej Exp $");
 #endif
 
 #include "includes.h"
+
+#include "xmalloc.h"
 #include "ssh.h"
+#include "getput.h"
 
-char *
-chop(char *s)
+#include <openssl/hmac.h>
+
+#include "hmac.h"
+
+unsigned char *
+hmac(
+    EVP_MD *evp_md,
+    unsigned int seqno,
+    unsigned char *data, int datalen,
+    unsigned char *key, int keylen)
 {
-	char *t = s;
-	while (*t) {
-		if(*t == '\n' || *t == '\r') {
-			*t = '\0';
-			return s;
-		}
-		t++;
-	}
-	return s;
+	HMAC_CTX c;
+	static unsigned char m[EVP_MAX_MD_SIZE];
+	unsigned char b[4];
 
-}
-
-void
-set_nonblock(int fd)
-{
-	int val;
-	if (isatty(fd)) {
-		/* do not mess with tty's */
-		debug("no set_nonblock for tty fd %d", fd);
-		return;
-	}
-	val = fcntl(fd, F_GETFL, 0);
-	if (val < 0) {
-		error("fcntl(%d, F_GETFL, 0): %s", fd, strerror(errno));
-		return;
-	}
-	if (val & O_NONBLOCK)
-		return;
-	debug("fd %d setting O_NONBLOCK", fd);
-	val |= O_NONBLOCK;
-	if (fcntl(fd, F_SETFL, val) == -1)
-		if (errno != ENODEV)
-			error("fcntl(%d, F_SETFL, O_NONBLOCK): %s",
-			    fd, strerror(errno));
-}
-
-/* Characters considered whitespace in strsep calls. */
-#define WHITESPACE " \t\r\n"
-
-char *
-strdelim(char **s)
-{
-	char *old;
-	int wspace = 0;
-
-	if (*s == NULL)
-		return NULL;
-
-	old = *s;
-
-	*s = strpbrk(*s, WHITESPACE "=");
-	if (*s == NULL)
-		return (old);
-
-	/* Allow only one '=' to be skipped */
-	if (*s[0] == '=')
-		wspace = 1;
-	*s[0] = '\0';
-
-	*s += strspn(*s + 1, WHITESPACE) + 1;
-	if (*s[0] == '=' && !wspace)
-		*s += strspn(*s + 1, WHITESPACE) + 1;
-
-	return (old);
+	if (key == NULL)
+		fatal("hmac: no key");
+	HMAC_Init(&c, key, keylen, evp_md);
+	PUT_32BIT(b, seqno);
+	HMAC_Update(&c, b, sizeof b);
+	HMAC_Update(&c, data, datalen);
+	HMAC_Final(&c, m, NULL);
+	HMAC_cleanup(&c);
+	return(m);
 }

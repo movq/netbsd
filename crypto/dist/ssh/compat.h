@@ -1,7 +1,7 @@
-/*	$NetBSD: dsa.h,v 1.1.1.1 2000/09/28 22:10:02 thorpej Exp $	*/
+/*	$NetBSD: compat.h,v 1.1.1.1 2000/09/28 22:10:00 thorpej Exp $	*/
 
 /*
- * Copyright (c) 2000 Markus Friedl.  All rights reserved.
+ * Copyright (c) 1999 Markus Friedl.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -24,25 +24,27 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DSA_H
-#define DSA_H
+/* from OpenBSD: compat.h,v 1.10 2000/09/07 20:27:50 deraadt Exp */
 
-Key	*dsa_key_from_blob(char *blob, int blen);
-int	dsa_make_key_blob(Key *key, unsigned char **blobp, unsigned int *lenp);
+#ifndef COMPAT_H
+#define COMPAT_H
 
-int
-dsa_sign(
-    Key *key,
-    unsigned char **sigp, int *lenp,
-    unsigned char *data, int datalen);
+#define	SSH_PROTO_UNKNOWN 	0x00
+#define	SSH_PROTO_1		0x01
+#define	SSH_PROTO_1_PREFERRED	0x02
+#define	SSH_PROTO_2		0x04
 
-int
-dsa_verify(
-    Key *key,
-    unsigned char *signature, int signaturelen,
-    unsigned char *data, int datalen);
+#define SSH_BUG_SIGBLOB		0x01
+#define SSH_BUG_PUBKEYAUTH	0x02
+#define SSH_BUG_HMAC		0x04
+#define SSH_BUG_X11FWD		0x08
+#define SSH_COMPAT_SESSIONID_ENCODING		0x10
 
-Key *
-dsa_generate_key(unsigned int bits);
-
+void    enable_compat13(void);
+void    enable_compat20(void);
+void    compat_datafellows(const char *s);
+int	proto_spec(const char *spec);
+extern int compat13;
+extern int compat20;
+extern int datafellows;
 #endif

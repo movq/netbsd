@@ -1,4 +1,4 @@
-/*	$NetBSD: dsa.h,v 1.1.1.1 2000/09/28 22:10:02 thorpej Exp $	*/
+/*	$NetBSD: session.h,v 1.1.1.1 2000/09/28 22:10:23 thorpej Exp $	*/
 
 /*
  * Copyright (c) 2000 Markus Friedl.  All rights reserved.
@@ -24,25 +24,17 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DSA_H
-#define DSA_H
+#ifndef SESSION_H
+#define SESSION_H
 
-Key	*dsa_key_from_blob(char *blob, int blen);
-int	dsa_make_key_blob(Key *key, unsigned char **blobp, unsigned int *lenp);
+/* SSH1 */
+void	do_authenticated(struct passwd * pw);
 
-int
-dsa_sign(
-    Key *key,
-    unsigned char **sigp, int *lenp,
-    unsigned char *data, int datalen);
-
-int
-dsa_verify(
-    Key *key,
-    unsigned char *signature, int signaturelen,
-    unsigned char *data, int datalen);
-
-Key *
-dsa_generate_key(unsigned int bits);
+/* SSH2 */
+void	do_authenticated2(void);
+int	session_open(int id);
+void	session_input_channel_req(int id, void *arg);
+void	session_close_by_pid(pid_t pid, int status);
+void	session_close_by_channel(int id, void *arg);
 
 #endif

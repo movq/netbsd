@@ -1,7 +1,7 @@
-/*	$NetBSD: dsa.h,v 1.1.1.1 2000/09/28 22:10:02 thorpej Exp $	*/
+/*	$NetBSD: uuencode.h,v 1.1.1.1 2000/09/28 22:10:45 thorpej Exp $	*/
 
 /*
- * Copyright (c) 2000 Markus Friedl.  All rights reserved.
+ * Copyright (c) 1999 Markus Friedl.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -24,25 +24,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DSA_H
-#define DSA_H
-
-Key	*dsa_key_from_blob(char *blob, int blen);
-int	dsa_make_key_blob(Key *key, unsigned char **blobp, unsigned int *lenp);
-
-int
-dsa_sign(
-    Key *key,
-    unsigned char **sigp, int *lenp,
-    unsigned char *data, int datalen);
-
-int
-dsa_verify(
-    Key *key,
-    unsigned char *signature, int signaturelen,
-    unsigned char *data, int datalen);
-
-Key *
-dsa_generate_key(unsigned int bits);
-
+#ifndef UUENCODE_H
+#define UUENCODE_H
+int	uuencode(unsigned char *src, unsigned int srclength, char *target, size_t targsize);
+int	uudecode(const char *src, unsigned char *target, size_t targsize);
+void	dump_base64(FILE *fp, unsigned char *data, int len);
 #endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: dsa.h,v 1.1.1.1 2000/09/28 22:10:02 thorpej Exp $	*/
+/*	$NetBSD: auth.h,v 1.1.1.1 2000/09/28 22:09:41 thorpej Exp $	*/
 
 /*
  * Copyright (c) 2000 Markus Friedl.  All rights reserved.
@@ -24,25 +24,20 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DSA_H
-#define DSA_H
+#ifndef AUTH_H
+#define AUTH_H
 
-Key	*dsa_key_from_blob(char *blob, int blen);
-int	dsa_make_key_blob(Key *key, unsigned char **blobp, unsigned int *lenp);
+void	do_authentication(void);
+void	do_authentication2(void);
 
-int
-dsa_sign(
-    Key *key,
-    unsigned char **sigp, int *lenp,
-    unsigned char *data, int datalen);
+struct passwd *
+auth_get_user(void);
 
-int
-dsa_verify(
-    Key *key,
-    unsigned char *signature, int signaturelen,
-    unsigned char *data, int datalen);
+int allowed_user(struct passwd *);
 
-Key *
-dsa_generate_key(unsigned int bits);
+#define AUTH_FAIL_MAX 6
+#define AUTH_FAIL_LOG (AUTH_FAIL_MAX/2)
+#define AUTH_FAIL_MSG "Too many authentication failures for %.100s"
 
 #endif
+

@@ -1,4 +1,4 @@
-/*	$NetBSD: dsa.h,v 1.1.1.1 2000/09/28 22:10:02 thorpej Exp $	*/
+/*	$NetBSD: key.h,v 1.1.1.1 2000/09/28 22:10:03 thorpej Exp $	*/
 
 /*
  * Copyright (c) 2000 Markus Friedl.  All rights reserved.
@@ -24,25 +24,28 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DSA_H
-#define DSA_H
+#ifndef KEY_H
+#define KEY_H
 
-Key	*dsa_key_from_blob(char *blob, int blen);
-int	dsa_make_key_blob(Key *key, unsigned char **blobp, unsigned int *lenp);
+typedef struct Key Key;
+enum types {
+	KEY_RSA,
+	KEY_DSA,
+	KEY_EMPTY
+};
+struct Key {
+	int	type;
+	RSA	*rsa;
+	DSA	*dsa;
+};
 
-int
-dsa_sign(
-    Key *key,
-    unsigned char **sigp, int *lenp,
-    unsigned char *data, int datalen);
-
-int
-dsa_verify(
-    Key *key,
-    unsigned char *signature, int signaturelen,
-    unsigned char *data, int datalen);
-
-Key *
-dsa_generate_key(unsigned int bits);
+Key	*key_new(int type);
+void	key_free(Key *k);
+int	key_equal(Key *a, Key *b);
+char	*key_fingerprint(Key *k);
+char	*key_type(Key *k);
+int	key_write(Key *key, FILE *f);
+unsigned int	key_read(Key *key, char **cpp);
+unsigned int	key_size(Key *k);
 
 #endif
