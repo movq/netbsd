@@ -1,4 +1,4 @@
-$Id: FEATURES,v 1.1 1994/01/05 20:40:11 jtc Exp $
+$Id: FEATURES,v 1.1.1.1 1994/01/05 20:40:12 jtc Exp $
 
 Features of Vixie's cron relative to BSD 4.[23] and SysV crons:
 

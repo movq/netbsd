@@ -24,7 +24,7 @@
  */
 
 #ifndef lint
-static char rcsid[] = "$Id: popen.c,v 1.1 1994/01/05 20:40:15 jtc Exp $";
+static char rcsid[] = "$Id: popen.c,v 1.1.1.1 1994/01/05 20:40:16 jtc Exp $";
 static char sccsid[] = "@(#)popen.c	5.7 (Berkeley) 2/14/89";
 #endif /* not lint */
 

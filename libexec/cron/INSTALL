@@ -1,4 +1,4 @@
-$Id: INSTALL,v 1.1 1994/01/05 20:40:11 jtc Exp $
+$Id: INSTALL,v 1.1.1.1 1994/01/05 20:40:12 jtc Exp $
 
 *** This does not work on ATT SysV yet, and given the feature overlap,
     it may never do so.
