@@ -1,4 +1,4 @@
-.\"	$NetBSD: kvm.3,v 1.5.10.2 2002/04/23 20:29:25 wiz Exp $
+.\"	$NetBSD: kvm.3,v 1.5.10.3 2002/12/19 02:26:14 thorpej Exp $
 .\"
 .\" Copyright (c) 1992, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -37,7 +37,7 @@
 .\"
 .\"     @(#)kvm.3	8.1 (Berkeley) 6/4/93
 .\"
-.Dd June 4, 1993
+.Dd August 18, 2002
 .Dt KVM 3
 .Os
 .Sh NAME
@@ -47,7 +47,7 @@
 .Lb libkvm
 .Sh DESCRIPTION
 The
-.Xr kvm 3
+.Nm
 library provides a uniform interface for accessing kernel virtual memory
 images, including live systems and crashdumps.
 Access to live systems is via
@@ -62,9 +62,9 @@ be gathered.
 .Fn kvm_open
 is first called to obtain a descriptor for all subsequent calls.
 .Sh COMPATIBILITY
-The kvm interface was first introduced in SunOS.  A considerable
-number of programs have been developed that use this interface,
-making backward compatibility highly desirable.
+The kvm interface was first introduced in SunOS.
+A considerable number of programs have been developed that use this
+interface, making backward compatibility highly desirable.
 In most respects, the Sun kvm interface is consistent and clean.
 Accordingly, the generic portion of the interface (i.e.,
 .Fn kvm_open ,
@@ -75,13 +75,13 @@ and
 .Fn kvm_nlist )
 has been incorporated into the
 .Bx
-interface.  Indeed, many kvm
-applications (i.e., debuggers and statistical monitors) use only
-this subset of the interface.
+interface.
+Indeed, many kvm applications (i.e., debuggers and statistical monitors)
+use only this subset of the interface.
 .Pp
-The process interface was not kept.  This is not a portability
-issue since any code that manipulates processes is inherently
-machine dependent.
+The process interface was not kept.
+This is not a portability issue since any code that manipulates
+processes is inherently machine dependent.
 .Pp
 Finally, the Sun kvm error reporting semantics are poorly defined.
 The library can be configured either to print errors to stderr automatically,
@@ -89,12 +89,15 @@ or to print no error messages at all.
 In the latter case, the nature of the error cannot be determined.
 To overcome this, the
 .Bx
-interface includes a
-routine,
+interface includes a routine,
 .Xr kvm_geterr 3 ,
-to return (not print out) the error message
-corresponding to the most recent error condition on the
-given descriptor.
+to return (not print out) the error message corresponding to the most
+recent error condition on the given descriptor.
+.Sh FILES
+.Bl -tag -width /dev/mem -compact
+.It Pa /dev/mem
+interface to physical memory
+.El
 .Sh SEE ALSO
 .Xr kvm_close 3 ,
 .Xr kvm_getargv 3 ,
