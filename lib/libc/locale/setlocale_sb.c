@@ -1,4 +1,4 @@
-/*	$NetBSD: setlocale_sb.c,v 1.3 2000/08/10 09:55:32 kleink Exp $	*/
+/*	$NetBSD: setlocale_sb.c,v 1.4 2000/12/21 11:29:48 itojun Exp $	*/
 
 /*-
  * Copyright (c)1999 Citrus Project,
@@ -33,6 +33,7 @@
 #include "namespace.h"
 #define __SETLOCALE_SOURCE__
 #include <locale.h>
+#include "runetype.h"
 
 __warn_references(setlocale,
     "warning: reference to compatibility setlocale(); include <locale.h> for correct reference")
@@ -46,5 +47,7 @@ setlocale(category, locale)
 	int category;
 	const char *locale;
 {
-	return __setlocale_mb_len_max_32(category, locale);
+
+	__mb_len_max_runtime = 1;
+	return __setlocale(category, locale);
 }
