@@ -1,4 +1,4 @@
-.\"	$NetBSD: output.0,v 1.1 2004/11/27 01:00:48 christos Exp $
+.\"	$NetBSD: output.0,v 1.1.1.1 2004/11/27 01:00:48 christos Exp $
 .\"
 @%:@! /bin/sh
 @%:@ From configure.in Revision: 1.71 .

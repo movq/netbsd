@@ -1,4 +1,4 @@
-/*	$NetBSD: readdir.c,v 1.1 2004/11/27 01:00:42 christos Exp $	*/
+/*	$NetBSD: readdir.c,v 1.1.1.1 2004/11/27 01:00:42 christos Exp $	*/
 
 /*
  * Copyright (c) 1997-2004 Erez Zadok

@@ -1,4 +1,4 @@
-.\"	$NetBSD: traces.0,v 1.1 2004/11/27 01:00:51 christos Exp $
+.\"	$NetBSD: traces.0,v 1.1.1.1 2004/11/27 01:00:51 christos Exp $
 .\"
 m4trace:aclocal.m4:2638: -1- AH_OUTPUT([HAVE_AMU_FS_AUTO], [/* Define if have automount filesystem */
 #undef HAVE_AMU_FS_AUTO])
