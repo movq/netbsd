@@ -1,4 +1,4 @@
-# $NetBSD: _i386.mk,v 1.1 1997/09/26 04:37:02 gwr Exp $
+# $NetBSD: _i386.mk,v 1.1.1.1 1997/09/26 04:37:02 gwr Exp $
 
 # From gdb/config/i386/nbsd.mh
 NM_FILE= config/i386/nm-nbsd.h
