@@ -27,7 +27,7 @@ improvements or extensions that  they  make,  and  to  grant  Carnegie
 Mellon the rights to redistribute these changes without encumbrance.
 */
 
-/* $Header: /home/mike/src/cvs/netbsd/src/sys/cfs/Attic/cfs_subr.h,v 1.1 1998/08/29 21:26:45 rvb Exp $ */
+/* $Header: /home/mike/src/cvs/netbsd/src/sys/cfs/Attic/cfs_subr.h,v 1.1.1.1 1998/08/29 21:26:45 rvb Exp $ */
 
 struct cnode *cfs_alloc(void);
 void  cfs_free(struct cnode *cp);

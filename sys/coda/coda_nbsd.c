@@ -27,7 +27,7 @@ improvements or extensions that  they  make,  and  to  grant  Carnegie
 Mellon the rights to redistribute these changes without encumbrance.
 */
 
-/* $Header: /home/mike/src/cvs/netbsd/src/sys/coda/Attic/coda_nbsd.c,v 1.1 1998/08/29 21:26:45 rvb Exp $ */
+/* $Header: /home/mike/src/cvs/netbsd/src/sys/coda/Attic/coda_nbsd.c,v 1.1.1.1 1998/08/29 21:26:45 rvb Exp $ */
 
 /* 
  * Mach Operating System
@@ -46,8 +46,8 @@ Mellon the rights to redistribute these changes without encumbrance.
 /* 
  * HISTORY
  * $Log: coda_nbsd.c,v $
- * Revision 1.1  1998/08/29 21:26:45  rvb
- * Initial revision
+ * Revision 1.1.1.1  1998/08/29 21:26:45  rvb
+ * Very Preliminary Coda
  *
  * Revision 1.21  1998/08/28 18:12:17  rvb
  * Now it also works on FreeBSD -current.  This code will be
