@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2000/02/08 13:45:38 tron Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 2000/02/08 13:45:38 tron Exp $
 #	install these sources in /usr/share/sendmail/hack
 
 DIST=		${.CURDIR}/../../../../dist

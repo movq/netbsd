@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.1 2000/02/08 13:45:34 tron Exp $
+#	$NetBSD: Makefile.inc,v 1.1.1.1 2000/02/08 13:45:34 tron Exp $
 
 WARNS?=	0
 CPPFLAGS+=	-DNETINET6 -DNETISO
