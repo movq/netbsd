@@ -1,4 +1,4 @@
-/*	$NetBSD: movefile.c,v 1.1 2001/01/27 06:20:13 itojun Exp $	*/
+/*	$NetBSD: movefile.c,v 1.1.1.1 2001/01/27 06:20:13 itojun Exp $	*/
 
 /*
  * Copyright (c) 2000 by Internet Software Consortium, Inc.
