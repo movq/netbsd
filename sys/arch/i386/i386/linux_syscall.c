@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_syscall.c,v 1.6 2000/12/10 19:29:30 mycroft Exp $	*/
+/*	$NetBSD: linux_syscall.c,v 1.7 2000/12/11 05:28:59 mycroft Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -105,10 +105,21 @@
 #include <machine/trap.h>
 #include <machine/userret.h>
 
-#include <compat/ibcs2/ibcs2_errno.h>
-#include <compat/ibcs2/ibcs2_exec.h>
+#include <compat/linux/arch/i386/linux_errno.h>
+#include <compat/linux/linux_syscall.h>
+#include <compat/linux/arch/i386/linux_signal.h>
+#include <compat/linux/arch/i386/linux_machdep.h>
 
 void linux_syscall __P((struct trapframe));
+extern struct sysent linux_sysent[];
+
+void
+linux_syscall_intern(p)
+	struct proc *p;
+{
+
+	p->p_md.md_syscall = linux_syscall;
+}
 
 /*
  * syscall(frame):
@@ -133,10 +144,9 @@ linux_syscall(frame)
 #endif
 	
 	p = curproc;
-	p->p_md.md_regs = &frame;
 
 	code = frame.tf_eax;
-	callp = p->p_emul->e_sysent;
+	callp = linux_sysent;
 
 #ifdef VM86
 	/*
@@ -149,10 +159,7 @@ linux_syscall(frame)
 	else
 #endif /* VM86 */
 
-	if ((u_int)code >= (u_int)p->p_emul->e_nsysent)
-		callp += p->p_emul->e_nosys;		/* illegal */
-	else
-		callp += code;
+	callp += (code & (LINUX_SYS_NSYSENT - 1));
 	argsize = callp->sy_argsize;
 	if (argsize) {
 		/*
@@ -204,7 +211,7 @@ linux_syscall(frame)
 		/* nothing to do */
 		break;
 	default:
-		error = p->p_emul->e_errno[error];
+		error = native_to_linux_errno[error];
 		frame.tf_eax = error;
 		frame.tf_eflags |= PSL_C;	/* carry bit */
 		break;
