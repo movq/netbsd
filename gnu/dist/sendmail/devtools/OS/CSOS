@@ -1,4 +1,4 @@
-#	$Id: CSOS,v 1.1 2000/05/03 09:27:18 itojun Exp $
+#	$Id: CSOS,v 1.1.1.1 2000/05/03 09:27:18 itojun Exp $
 define(`confLIBS', `-lnet')
 define(`confMBINDIR', `/usr/lib')
 define(`confSBINDIR', `/usr/etc')

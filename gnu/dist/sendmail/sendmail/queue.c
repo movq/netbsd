@@ -15,9 +15,9 @@
 
 #ifndef lint
 # if QUEUE
-static char id[] = "@(#)$Id: queue.c,v 1.1 2000/05/03 09:27:23 itojun Exp $ (with queueing)";
+static char id[] = "@(#)$Id: queue.c,v 1.1.1.1 2000/05/03 09:27:23 itojun Exp $ (with queueing)";
 # else /* QUEUE */
-static char id[] = "@(#)$Id: queue.c,v 1.1 2000/05/03 09:27:23 itojun Exp $ (without queueing)";
+static char id[] = "@(#)$Id: queue.c,v 1.1.1.1 2000/05/03 09:27:23 itojun Exp $ (without queueing)";
 # endif /* QUEUE */
 #endif /* ! lint */
 
