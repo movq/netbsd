@@ -1,4 +1,4 @@
-/*	$NetBSD: bf_cbc_m.c,v 1.1 2000/06/14 19:45:33 thorpej Exp $	*/
+/*	$NetBSD: bf_cbc_m.c,v 1.1.1.1 2000/06/14 19:45:33 thorpej Exp $	*/
 /*	$KAME: bf_cbc_m.c,v 1.4 2000/06/14 10:41:16 itojun Exp $	*/
 
 /*

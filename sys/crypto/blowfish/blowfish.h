@@ -1,4 +1,4 @@
-/*	$NetBSD: blowfish.h,v 1.1 2000/06/14 19:45:34 thorpej Exp $	*/
+/*	$NetBSD: blowfish.h,v 1.1.1.1 2000/06/14 19:45:34 thorpej Exp $	*/
 /*	$KAME: blowfish.h,v 1.4 2000/06/14 10:41:16 itojun Exp $	*/
 
 /* crypto/bf/blowfish.h */

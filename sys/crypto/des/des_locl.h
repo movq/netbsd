@@ -1,4 +1,4 @@
-/*	$NetBSD: des_locl.h,v 1.1 2000/06/14 19:45:35 thorpej Exp $	*/
+/*	$NetBSD: des_locl.h,v 1.1.1.1 2000/06/14 19:45:35 thorpej Exp $	*/
 /*	$KAME: des_locl.h,v 1.4 2000/03/27 04:43:46 sumikawa Exp $	*/
 
 /* lib/des/des_locl.h */
