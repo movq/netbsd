@@ -1,4 +1,4 @@
-/*	$NetBSD: amfs_union.c,v 1.1 1998/08/08 22:05:27 christos Exp $	*/
+/*	$NetBSD: amfs_union.c,v 1.1.1.1 1998/08/08 22:05:27 christos Exp $	*/
 
 /*
  * Copyright (c) 1997-1998 Erez Zadok

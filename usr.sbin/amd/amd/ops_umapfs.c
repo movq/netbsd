@@ -1,4 +1,4 @@
-/*	$NetBSD: ops_umapfs.c,v 1.1 1998/08/08 22:05:32 christos Exp $	*/
+/*	$NetBSD: ops_umapfs.c,v 1.1.1.1 1998/08/08 22:05:32 christos Exp $	*/
 
 /*
  * Copyright (c) 1997-1998 Erez Zadok
