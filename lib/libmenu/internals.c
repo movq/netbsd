@@ -1,4 +1,4 @@
-/*      $Id: internals.c,v 1.1 1999/11/23 11:12:36 blymn Exp $ */
+/*      $Id: internals.c,v 1.1.1.1 1999/11/23 11:12:36 blymn Exp $ */
 
 /*-
  * Copyright (c) 1998-1999 Brett Lymn (blymn@baea.com.au, brett_lymn@yahoo.com)
