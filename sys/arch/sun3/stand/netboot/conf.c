@@ -1,4 +1,4 @@
-/*	$NetBSD: conf.c,v 1.1 1995/06/09 22:02:40 gwr Exp $	*/
+/*	$NetBSD: conf.c,v 1.1.1.1 1995/06/09 22:02:40 gwr Exp $	*/
 
 #include <sys/types.h>
 #include <stand.h>
