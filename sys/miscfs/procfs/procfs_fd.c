@@ -1,11 +1,11 @@
-/*	$NetBSD: scsipi_base.h,v 1.10.6.3 2003/01/07 21:34:50 thorpej Exp $	*/
+/*	$NetBSD: procfs_fd.c,v 1.1.2.2 2003/01/07 21:41:13 thorpej Exp $	*/
 
 /*-
- * Copyright (c) 1998 The NetBSD Foundation, Inc.
+ * Copyright (c) 2003 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Charles M. Hannum.
+ * by Christos Zoulas.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -35,54 +35,40 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: procfs_fd.c,v 1.1.2.2 2003/01/07 21:41:13 thorpej Exp $");
 
-#ifndef _DEV_SCSIPI_SCSIPI_BASE_H_
-#define _DEV_SCSIPI_SCSIPI_BASE_H_
+#include <sys/param.h>
+#include <sys/systm.h>
+#include <sys/time.h>
+#include <sys/kernel.h>
+#include <sys/proc.h>
+#include <sys/vnode.h>
+#include <sys/file.h>
+#include <miscfs/procfs/procfs.h>
 
-struct scsipi_xfer *scsipi_get_xs __P((struct scsipi_periph *, int));
-void	scsipi_put_xs __P((struct scsipi_xfer *));
-
-static __inline struct scsipi_xfer *scsipi_make_xs __P((struct scsipi_periph *,
-	    struct scsipi_generic *, int cmdlen, u_char *data_addr,
-	    int datalen, int retries, int timeout, struct buf *,
-	    int flags)) __attribute__ ((__unused__));
-
-/*
- * Make a scsipi_xfer, and return a pointer to it.
- */
-
-static __inline struct scsipi_xfer *
-scsipi_make_xs(periph, scsipi_cmd, cmdlen, data_addr, datalen,
-    retries, timeout, bp, flags)
-	struct scsipi_periph *periph;
-	struct scsipi_generic *scsipi_cmd;
-	int cmdlen;
-	u_char *data_addr;
-	int datalen;
-	int retries;
-	int timeout;
-	struct buf *bp;
-	int flags;
+int
+procfs_dofd(curp, p, pfs, uio)
+	struct proc *curp;
+	struct proc *p;
+	struct pfsnode *pfs;
+	struct uio *uio;
 {
-	struct scsipi_xfer *xs;
+	int error;
+	struct file *fp;
+	off_t offs;
 
-	if ((xs = scsipi_get_xs(periph, flags)) == NULL)
-		return (NULL);
+	if ((error = procfs_getfp(pfs, &fp)) != 0)
+		return error;
 
-	/*
-	 * Fill out the scsipi_xfer structure.  We don't know whose context
-	 * the cmd is in, so copy it.
-	 */
-	memcpy(&xs->cmdstore, scsipi_cmd, cmdlen);
-	xs->cmd = &xs->cmdstore;
-	xs->cmdlen = cmdlen;
-	xs->data = data_addr;
-	xs->datalen = datalen;
-	xs->xs_retries = retries;
-	xs->timeout = timeout;
-	xs->bp = bp;
+	offs = fp->f_offset;
 
-	return (xs);
+	switch (uio->uio_rw) {
+	case UIO_READ:
+		return (*fp->f_ops->fo_read)(fp, &offs, uio, curp->p_ucred, 0);
+	case UIO_WRITE:
+		return (*fp->f_ops->fo_write)(fp, &offs, uio, curp->p_ucred, 0);
+	default:
+		panic("bad uio op");
+	}
 }
-
-#endif /* _DEV_SCSIPI_SCSIPI_BASE_H_ */
