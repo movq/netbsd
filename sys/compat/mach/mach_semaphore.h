@@ -1,11 +1,11 @@
-/*	$NetBSD: darwin_machdep.c,v 1.1.2.3 2002/12/19 00:33:47 thorpej Exp $ */
+/*	$NetBSD: mach_semaphore.h,v 1.2.6.2 2002/12/19 00:44:34 thorpej Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Emmanuel Dreyfus.
+ * by Emmanuel Dreyfus
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -36,71 +36,65 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: darwin_machdep.c,v 1.1.2.3 2002/12/19 00:33:47 thorpej Exp $");
+#ifndef	_MACH_SEMAPHORE_H_
+#define	_MACH_SEMAPHORE_H_
 
-#include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/proc.h>
-#include <sys/signal.h>
-#include <sys/mount.h>
+#include <sys/lock.h>
+#include <sys/queue.h>
 
-#include <compat/mach/mach_types.h>
-#include <compat/mach/mach_vm.h>
+extern int mach_semaphore_cold;
 
-#include <compat/darwin/darwin_signal.h>
-#include <compat/darwin/darwin_syscallargs.h>
+struct mach_waiting_proc {
+	TAILQ_ENTRY(mach_waiting_proc) mwp_list;
+	struct proc *mwp_p;
+};
 
-#include <machine/darwin_machdep.h>
+struct mach_semaphore {
+	int ms_value;
+	int ms_policy;
+	LIST_ENTRY(mach_semaphore) ms_list;
+	TAILQ_HEAD(ms_waiting, mach_waiting_proc) ms_waiting;
+	struct lock ms_lock;
+};
 
-void
-darwin_sendsig(sig, mask, code)
-	int sig;
-	sigset_t *mask; 
-	u_long code;
-{
-	printf("darwin_sendsig: sig = %d\n", sig);
-	return;
-}
+/* semaphore_create */
 
-int
-darwin_sys_sigreturn(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
-{
+#define MACH_SYNC_POLICY_FIFO 0
+#define MACH_SYNC_POLICY_FIXED_PRIORITY 1
 
-	struct darwin_sys_sigreturn_args /* {
-		syscallarg(struct darwin_ucontext *) uctx;
-	} */ *uap = v;
+typedef struct {
+	mach_msg_header_t req_msgh;
+	mach_ndr_record_t req_ndr;
+	int req_policy;
+	int req_value;
+} mach_semaphore_create_request_t;
 
-	printf("darwin_sys_sigreturn: uctx = %p\n", SCARG(uap, uctx));
+typedef struct {
+	mach_msg_header_t rep_msgh;
+	mach_msg_body_t rep_body;
+	mach_msg_port_descriptor_t rep_sem;
+	mach_msg_trailer_t rep_trailer;
+} mach_semaphore_create_reply_t;
 
-	return 0;
-}
+/* semaphore_destroy */
 
-/*
- * Set the return value for darwin binaries after a fork(). The userland
- * libSystem stub expects the child pid to be in retval[0] for the parent
- * and the child as well. It will perform the required operation to transform 
- * it in the POSIXly correct value: zero for the child.
- * We also need to skip the next instruction because the system call
- * was successful (We also do this in the syscall handler, Darwin 
- * works that way).
- */
-void
-darwin_fork_child_return(arg)
-	void *arg;
-{
-#ifdef notyet
-	struct proc * const p = arg;
-	struct trapframe * const tf = trapframe(p);
+typedef struct {
+	mach_msg_header_t req_msgh;
+	mach_msg_body_t req_body;
+	mach_msg_port_descriptor_t req_sem;
+} mach_semaphore_destroy_request_t;
 
-	child_return(arg);
+typedef struct {
+	mach_msg_header_t rep_msgh;
+	mach_ndr_record_t rep_ndr;
+	mach_kern_return_t rep_retval;
+	mach_msg_trailer_t rep_trailer;
+} mach_semaphore_destroy_reply_t;
 
-	tf->fixreg[FIRSTARG] = p->p_pid;
-	tf->srr0 +=4;
-#else
-	printf("darwin_fork_child_return: proc = %p\n", arg);
-#endif
-}
+void mach_semaphore_init(void);
+void mach_semaphore_cleanup(struct proc *);
+int mach_semaphore_create(struct mach_trap_args *);
+int mach_semaphore_destroy(struct mach_trap_args *);
+
+#endif /* _MACH_SEMAPHORE_H_ */
+

@@ -1,11 +1,11 @@
-/*	$NetBSD: mach_bootstrap.c,v 1.2.2.3 2002/12/19 00:44:32 thorpej Exp $ */
+/*	$NetBSD: sa1111_var.h,v 1.1.8.2 2002/12/19 00:30:45 thorpej Exp $	*/
 
 /*-
- * Copyright (c) 2002 The NetBSD Foundation, Inc.
+ * Copyright (c) 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Emmanuel Dreyfus
+ * by IWAMOTO Toshihiro.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -17,8 +17,8 @@
  *    documentation and/or other materials provided with the distribution.
  * 3. All advertising materials mentioning features or use of this software
  *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
+ *	This product includes software developed by the NetBSD
+ *	Foundation, Inc. and its contributors.
  * 4. Neither the name of The NetBSD Foundation nor the names of its
  *    contributors may be used to endorse or promote products derived
  *    from this software without specific prior written permission.
@@ -35,49 +35,52 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#ifndef _SA1111_VAR_H
+#define _SA1111_VAR_H
 
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mach_bootstrap.c,v 1.2.2.3 2002/12/19 00:44:32 thorpej Exp $");
 
-#include <sys/types.h>
-#include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/signal.h>
-#include <sys/proc.h>
+struct sacc_intrhand {
+	void *ih_soft;
+	int ih_irq;
+	struct sacc_intrhand *ih_next;
+};
 
-#include <compat/mach/mach_types.h>
-#include <compat/mach/mach_message.h>
-#include <compat/mach/mach_bootstrap.h>
-#include <compat/mach/mach_errno.h>
+struct sacc_intrvec {
+	u_int32_t lo;	/* bits 0..31 */
+	u_int32_t hi;	/* bits 32..54 */
+};
 
-int 
-mach_bootstrap_look_up(args)
-	struct mach_trap_args *args;
-{
-	mach_bootstrap_look_up_request_t *req = args->smsg;
-	mach_bootstrap_look_up_reply_t *rep = args->rmsg;
-	size_t *msglen = args->rsize;
-	const char service_name[] = "lookup\21"; /* XXX Why */
-	int service_name_len;
+struct sacc_softc {
+	struct device sc_dev;
+	bus_space_tag_t sc_iot;
+	bus_space_handle_t sc_ioh;
+	bus_space_tag_t sc_piot;	/* parent(SA1110)'s iot */
+	bus_space_handle_t sc_gpioh;
 
-	/* The trailer is word aligned  */
-	service_name_len = (sizeof(service_name) + 1) & ~0x7UL; 
-	*msglen = sizeof(rep->rep_msgh) + sizeof(rep->rep_count) + 
-	    sizeof(rep->rep_bootstrap_port) + service_name_len *
-	    sizeof(rep->rep_trailer);
+	u_int32_t sc_gpiomask;	/* SA1110 GPIO mask */
 
-	rep->rep_msgh.msgh_bits =
-	    MACH_MSGH_REPLY_LOCAL_BITS(MACH_MSG_TYPE_MOVE_SEND_ONCE) |
-	    MACH_MSGH_BITS_COMPLEX;
-	rep->rep_msgh.msgh_size = *msglen - sizeof(rep->rep_trailer);
-	rep->rep_msgh.msgh_local_port = req->req_msgh.msgh_local_port;
-	rep->rep_msgh.msgh_id = req->req_msgh.msgh_id + 100;
-	rep->rep_count = 1; /* XXX Why? */
-	rep->rep_bootstrap_port = 0x21b; /* XXX Why? */
-	strcpy((char *)&rep->rep_service_name, service_name); 
-	/* XXX This is the trailer. We should find something better */
-	rep->rep_service_name[service_name_len + 7] = 8;
+	struct sacc_intrvec sc_imask;
+	struct sacc_intrhand *sc_intrhand[SACCIC_LEN];
+	int sc_intrtype[SACCIC_LEN];
+};
 
-	return 0;
-}
+typedef void *sacc_chipset_tag_t;
 
+struct sa1111_attach_args {
+	bus_addr_t		sa_addr;	/* i/o address  */
+	bus_size_t		sa_size;
+#if 0
+	bus_addr_t		sa_membase;	/* mem address  */
+	bus_size_t		sa_memsize;
+#endif
+	int			sa_intr;
+};
+
+#define IST_EDGE_RAISE	6
+#define IST_EDGE_FALL	7
+
+void *sacc_intr_establish(sacc_chipset_tag_t *, int, int, int,
+			  int (*)(void *), void *);
+void sacc_intr_disestablish(sacc_chipset_tag_t *, void *);
+
+#endif /* _SA1111_VAR_H */
