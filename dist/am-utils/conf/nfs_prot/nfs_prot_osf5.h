@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_prot_osf5.h,v 1.1 2002/11/29 22:58:36 christos Exp $	*/
+/*	$NetBSD: nfs_prot_osf5.h,v 1.1.1.1 2002/11/29 22:58:36 christos Exp $	*/
 
 /*
  * Copyright (c) 1997-2002 Erez Zadok

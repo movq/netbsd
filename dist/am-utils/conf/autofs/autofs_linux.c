@@ -1,4 +1,4 @@
-/*	$NetBSD: autofs_linux.c,v 1.1 2002/11/29 22:58:26 christos Exp $	*/
+/*	$NetBSD: autofs_linux.c,v 1.1.1.1 2002/11/29 22:58:26 christos Exp $	*/
 
 /*
  * Copyright (c) 1999-2002 Ion Badulescu

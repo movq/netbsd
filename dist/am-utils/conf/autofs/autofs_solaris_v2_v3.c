@@ -1,4 +1,4 @@
-/*	$NetBSD: autofs_solaris_v2_v3.c,v 1.1 2002/11/29 22:58:28 christos Exp $	*/
+/*	$NetBSD: autofs_solaris_v2_v3.c,v 1.1.1.1 2002/11/29 22:58:28 christos Exp $	*/
 
 /*
  * Copyright (c) 1999-2002 Ion Badulescu
