@@ -86,7 +86,8 @@ Parse tree:
  OP ","
  address
    atom "venema"
- comment "("wietse )"
+ comment
+   text ""wietse "
  OP ","
  address
    quoted string ")"
@@ -134,7 +135,11 @@ Parse tree:
    OP "."
    atom "org"
    OP ")"
- comment "( ("wietse ) venema")"
+ comment
+   text " "
+   comment
+     text ""wietse "
+   text " venema""
 
 Internalized:
 wietse venema@porcupine.org) ( ("wietse ) venema")
@@ -258,22 +263,4 @@ named group: foo@bar, baz@barf;
 Externalized, newlines inserted:
 named group: foo@bar,
 baz@barf;
-
->>>wietse@foo (wietse	venema)<<<
-
-Parse tree:
- address
-   atom "wietse"
-   OP "@"
-   atom "foo"
- comment "(wietse	venema)"
-
-Internalized:
-wietse@foo (wietse	venema)
-
-Externalized, no newlines inserted:
-wietse@foo (wietse	venema)
-
-Externalized, newlines inserted:
-wietse@foo (wietse	venema)
 

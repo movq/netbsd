@@ -19,7 +19,7 @@ href="rewrite.html"> Address Manipulation </a>
 
 <h2> Introduction </h2>
 
-Postfix has several hundred configuration parameters that are controlled
+Postfix has about 100 configuration parameters that are controlled
 via the <b>main.cf</b> file.  Fortunately, they have sensible
 default values.  In most cases, you need to configure only two or
 three parameters before you can use the Postfix mail system:
@@ -32,18 +32,15 @@ three parameters before you can use the Postfix mail system:
 
 <li> <a href="#mydestination"> What domains to receive mail for
 </a>
-<p>
-
-<li> <a href="#relaying"> What clients to relay mail for </a>
 
 </ul>
 
 The default values for many other configuration parameters are
-derived from just these.
+derived from just these two.
 
 <p>
 
-The next parameter of interest controls the amount of mail sent
+The third parameter of interest controls the amount of mail sent
 to the local postmaster:
 
 <ul>
@@ -54,18 +51,6 @@ to the local postmaster:
 </ul>
 
 <p>
-
-Be sure to set the following correctly if you're behind a proxy or
-network address translator, and you are running a backup MX host
-for some other domain:
-
-<p>
-
-<ul>
-
-<li> <a href="#proxy_interfaces"> Proxy/NAT network addresses </a>
-
-</ul>
 
 By the way, if you change parameters of a running Postfix system,
 don't forget to issue a <b>postfix reload</b> command.
@@ -106,12 +91,6 @@ domain of the machine name.
 
 <p>
 
-For the sake of consistency between sender and recipient addresses,
-<b>myorigin</b> also specifies the default domain name that is
-appended to an unqualified recipient address.
-
-<p>
-
 <dl>
 
 <dt> Examples:
@@ -136,7 +115,8 @@ machine. The default is to receive mail for the machine itself.
 You can specify zero or more domain names, <i>/file/name</i> patterns
 and/or <i>type:name</i> lookup tables, separated by whitespace
 and/or commas.  A <i>/file/name</i> is replaced by its contents;
-<i>type:name</i> requests that a table lookup is done.
+<i>type:name</i> requests that a table lookup is done, typically
+from a <a href="rewrite.html#virtual">virtual</a> database.
 
 <p>
 
@@ -177,18 +157,6 @@ Caution: in order to avoid mail delivery loops, you must list all
 hostnames of the machine, including $myhostname, and localhost.$mydomain.
 
 </dl>
-
-<a name="relaying"> <h2> What clients to relay mail for </h2> </a>
-
-By default, Postfix will relay mail for clients in authorized
-networks.
-
-<p>
-
-Authorized client networks are defined by the <a
-href="#mynetworks">mynetworks</a> parameter. The default is to
-authorize all clients in the IP subnetworks that the local machine
-is attached to.
 
 <a name="notify"> <h2> What trouble to report to the postmaster
 </h2> </a>
@@ -266,43 +234,6 @@ due to software problems.
 
 </dl>
 
-<a name="proxy_interfaces"> <h2> Proxy/NAT network addresses </h2> </a>
-
-The <b>proxy_interfaces</b> parameter specifies all network addresses
-that the Postfix receives mail on by way of a proxy or network
-address translation unit. You may specify symbolic hostnames instead
-of network addresses.
-
-<p>
-
-You must specify your proxy/NAT addresses when your system is a
-backup MX host for other domains, otherwise mail delivery loops
-will happen when the primary MX host is down.
-
-<p>
-
-<dl>
-
-<dt> Examples:
-
-<p>
-
-<dl>
-
-<dt> Default:
-
-<dd> <b>proxy_interfaces = </b>
-
-<p>
-
-<dt> Host running backup MTA:
-
-<dd> <b>proxy_interfaces = 1.2.3.4</b> (the proxy/NAT network address)
-
-</dl>
-
-</dl>
-
 <a name="myhostname"> <h2> My own hostname </h2> </a>
 
 The <b>myhostname</b> parameter describes the fully-qualified domain
@@ -355,70 +286,23 @@ top-level domain).
 <a name="mynetworks"> <h2> My own networks </h2> </a>
 
 The <b>mynetworks</b> parameter lists all networks that this machine
-somehow trusts. This information can be used by the <a href="uce.html">
-anti-UCE</a> features to recognize trusted SMTP clients that are
-allowed to relay mail through Postfix.
+is attached to. This information can be used by the <a href="uce.html">
+anti-UCE</a> features to distinguish between local systems and
+strangers.
 
 <p>
 
-You can specify the list of trusted networks in the <b>main.cf</b>
-file, or you can let Postfix deduce the list for you. The default
-is to let Postfix do the work for you.
-
-<p>
-
-<dl>
-
-<dt> Default:
-
-<dd> <b>mynetworks_style = subnet</b>
-
-<p>
-
-<dt>The meaning of the styles is as follows:
-
-<p>
-
-<dl>
-
-<dt> <b>class</b> <dd> Trust SMTP clients in the class A/B/C networks
-that Postfix is connected to. <b>Don't do this with a dialup site
-- it would cause Postfix to "trust" your entire provider's network.
-Instead, specify an explicit mynetworks list by hand, as described
-below</b>.
-
-<p>
-
-<dt> <b>subnet</b> (default) <dd> Trust SMTP clients in the IP
-subnetworks that Postfix is connected to.
-
-<p>
-
-<dt> <b>host</b> <dd> Trust only the local machine.
-
-</dl>
-
-</dl>
-
-<p>
-
-Alternatively, you can specify the <b>mynetworks</b> list by hand,
-in which case Postfix ignores the <b>mynetworks_style</b> setting.
-To specify the list of trusted networks by hand, specify network
-blocks in CIDR (network/mask) notation, for example:
-
-<p>
+By default, <b>mynetworks</b> is set to the class A, B or C networks
+that the machine is attached to. For example, for my machines at
+home, the result is: <b>168.100.0.0/16 127.0.0.0/8.  </b> However,
+network <b>168.100</b> is owned by my ISP. Of course I do not want
+to consider all their customer systems as local, so I use instead:
 
 <dl>
 
 <dd> <b>mynetworks = 168.100.189.0/28, 127.0.0.0/8</b>
 
 </dl>
-
-<p>
-
-You can also specify the absolute pathname of a pattern file instead
-of listing the patterns in the <b>main.cf</b> file.
 
 <a name="inet_interfaces"> <h2> My own network addresses </h2> </a>
 
@@ -432,14 +316,9 @@ as if it is addressed to a domain listed in <b> $mydestination.
 
 The default is to listen on all active interfaces.  If you run
 mailers on virtual interfaces, you will have to specify what
-interfaces to listen on. 
-
-<p>
-
-You even have to specify explicit machine interfaces for the
-non-virtual mailer that receives mail for the machine itself: the
-non-virtual mailer should never listen on the virtual interfaces
-or you would have a mailer loop.
+interfaces to listen on. This includes the non-virtual mailer that
+receives mail for the machine itself as well: it should never listen
+on the virtual interfaces or you would have a mailer loop.
 
 <dl>
 
@@ -457,7 +336,7 @@ or you would have a mailer loop.
 
 <dt> Host running virtual mailers:
 
-<dd> <b>inet_interfaces = virtual.host.tld</b> (virtual domain)
+<dd> <b>inet_interfaces = virtual.host.name</b> (virtual domain)
 
 <dd> <b>inet_interfaces = $myhostname localhost.$mydomain</b>
 (non-virtual mailer)
@@ -465,10 +344,6 @@ or you would have a mailer loop.
 </dl>
 
 </dl>
-
-<p>
-
-<b>Note: you need to stop and start Postfix when this parameter changes.</b>
 
 <hr>
 

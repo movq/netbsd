@@ -33,11 +33,11 @@
 /*	or when it appears to be a shell built-in command, otherwise
 /*	the command is executed without invoking a shell.
 /*	One of PIPE_CMD_COMMAND or PIPE_CMD_ARGV must be specified.
-/*	See also the PIPE_CMD_SHELL attribute below.
 /* .IP "PIPE_CMD_ARGV (char **)"
 /*	The command is specified as an argument vector. This vector is
 /*	passed without further inspection to the \fIexecvp\fR() routine.
 /*	One of PIPE_CMD_COMMAND or PIPE_CMD_ARGV must be specified.
+/*	See also the PIPE_CMD_SHELL attribute below.
 /* .IP "PIPE_CMD_ENV (char **)"
 /*	Additional environment information, in the form of a null-terminated
 /*	list of name, value, name, value, ... elements. By default only the
@@ -51,9 +51,6 @@
 /* .IP "PIPE_CMD_SENDER (char *)"
 /*	The envelope sender address, which is passed on to the
 /*	\fImail_copy\fR() routine.
-/* .IP "PIPE_CMD_ORIG_RCPT (char *)"
-/*	The original recipient envelope address, which is passed on
-/*	to the \fImail_copy\fR() routine.
 /* .IP "PIPE_CMD_DELIVERED (char *)"
 /*	The recipient envelope address, which is passed on to the
 /*	\fImail_copy\fR() routine.
@@ -91,11 +88,8 @@
 /*	The command indicated that the message was not acceptable,
 /*	or the command did not finish within the time limit.
 /*	The reason is given via the \fIwhy\fR argument.
-/* .IP PIPE_STAT_CORRUPT
-/*	The queue file is corrupted.
 /* SEE ALSO
 /*	mail_copy(3) deliver to any.
-/*	mark_corrupt(3) mark queue file as corrupt.
 /*	sys_exits(3) sendmail-compatible exit status codes.
 /* LICENSE
 /* .ad
@@ -148,7 +142,6 @@
 struct pipe_args {
     int     flags;			/* see mail_copy.h */
     char   *sender;			/* envelope sender */
-    char   *orig_rcpt;			/* original recipient */
     char   *delivered;			/* envelope recipient */
     char   *eol;			/* carriagecontrol */
     char  **argv;			/* either an array */
@@ -175,7 +168,6 @@ static void get_pipe_args(struct pipe_args * args, va_list ap)
      */
     args->flags = 0;
     args->sender = 0;
-    args->orig_rcpt = 0;
     args->delivered = 0;
     args->eol = "\n";
     args->argv = 0;
@@ -198,9 +190,6 @@ static void get_pipe_args(struct pipe_args * args, va_list ap)
 	    break;
 	case PIPE_CMD_SENDER:
 	    args->sender = va_arg(ap, char *);
-	    break;
-	case PIPE_CMD_ORIG_RCPT:
-	    args->orig_rcpt = va_arg(ap, char *);
 	    break;
 	case PIPE_CMD_DELIVERED:
 	    args->delivered = va_arg(ap, char *);
@@ -376,7 +365,6 @@ int     pipe_command(VSTREAM *src, VSTRING *why,...)
 	 * system a chance to recover, and try again later.
 	 */
     case -1:
-	msg_warn("fork: %m");
 	vstring_sprintf(why, "Delivery failed: %m");
 	return (PIPE_STAT_DEFER);
 
@@ -461,8 +449,7 @@ int     pipe_command(VSTREAM *src, VSTRING *why,...)
 	 */
 #define DONT_CARE_WHY	((VSTRING *) 0)
 
-	write_status = mail_copy(args.sender, args.orig_rcpt,
-				 args.delivered, src,
+	write_status = mail_copy(args.sender, args.delivered, src,
 				 cmd_in_stream, args.flags,
 				 args.eol, DONT_CARE_WHY);
 
@@ -522,8 +509,6 @@ int     pipe_command(VSTREAM *src, VSTRING *why,...)
 			      log_len ? ". Command output: " : "", log_buf);
 		return (PIPE_STAT_BOUNCE);
 	    }
-	} else if (write_status & MAIL_COPY_STAT_CORRUPT) {
-	    return (PIPE_STAT_CORRUPT);
 	} else if (write_status && errno != EPIPE) {
 	    vstring_sprintf(why, "Command failed: %m: \"%s\"", args.command);
 	    return (PIPE_STAT_DEFER);

@@ -47,7 +47,6 @@
 
 #include <mail_stream.h>
 #include <cleanup_user.h>
-#include <mail_proto.h>
 
 /* Application-specific. */
 
@@ -73,7 +72,7 @@ QMQPD_STATE *qmqpd_state_alloc(VSTREAM *stream)
     state->reason = 0;
     state->sender = 0;
     state->recipient = 0;
-    state->protocol = MAIL_PROTO_QMQP;
+    state->protocol = "QMQP";
     state->where = "initializing client connection";
     state->why_rejected = vstring_alloc(10);
     return (state);

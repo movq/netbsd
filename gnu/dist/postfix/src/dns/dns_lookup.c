@@ -132,7 +132,6 @@ typedef struct DNS_REPLY {
 } DNS_REPLY;
 
 #define INET_ADDR_LEN	4		/* XXX */
-#define INET6_ADDR_LEN	16		/* XXX */
 
 /* dns_query - query name server and pre-parse the reply */
 
@@ -169,8 +168,8 @@ static int dns_query(const char *name, int type, int flags,
     len = res_search((char *) name, C_IN, type, reply->buf, sizeof(reply->buf));
     if (len < 0) {
 	if (why)
-	    vstring_sprintf(why, "Name service error for name=%s type=%s: %s",
-			    name, dns_strtype(type), dns_strerror(h_errno));
+	    vstring_sprintf(why, "Name service error for %s: %s",
+			    name, dns_strerror(h_errno));
 	if (msg_verbose)
 	    msg_info("dns_query: %s (%s): %s",
 		     name, dns_strtype(type), dns_strerror(h_errno));
@@ -186,15 +185,6 @@ static int dns_query(const char *name, int type, int flags,
     }
     if (msg_verbose)
 	msg_info("dns_query: %s (%s): OK", name, dns_strtype(type));
-
-    /*
-     * Paranoia.
-     */
-    if (len > sizeof(reply->buf)) {
-	msg_warn("reply length %d > buffer length %d for name=%s type=%s",
-		 len, sizeof(reply->buf), name, dns_strtype(type));
-	len = sizeof(reply->buf);
-    }
 
     /*
      * Initialize the reply structure. Some structure members are filled on
@@ -347,19 +337,6 @@ static DNS_RR *dns_get_rr(DNS_REPLY *reply, unsigned char *pos,
 	memcpy(temp, pos, fixed->length);
 	data_len = fixed->length;
 	break;
-#ifdef T_AAAA
-    case T_AAAA:
-	if (fixed->length != INET6_ADDR_LEN) {
-	    msg_warn("extract_answer: bad address length: %d", fixed->length);
-	    return (0);
-	}
-	if (fixed->length > sizeof(temp))
-	    msg_panic("dns_get_rr: length %d > DNS_NAME_LEN",
-		      fixed->length);
-	memcpy(temp, pos, fixed->length);
-	data_len = fixed->length;
-	break;
-#endif
     case T_TXT:
 	data_len = MIN2(pos[0] + 1, MIN2(fixed->length + 1, sizeof(temp)));
 	for (src = pos + 1, dst = (unsigned char *) (temp);
@@ -400,7 +377,6 @@ static int dns_get_answer(DNS_REPLY *reply, int type,
     DNS_RR *rr;
     int     resource_found = 0;
     int     cname_found = 0;
-    int     not_found_status = DNS_NOTFOUND;
 
     /*
      * Initialize. Skip over the name server query if we haven't yet.
@@ -461,14 +437,12 @@ static int dns_get_answer(DNS_REPLY *reply, int type,
 	if (pos + fixed.length > reply->end)
 	    CORRUPT;
 	if (type == fixed.type || type == T_ANY) {	/* requested type */
+	    resource_found++;
 	    if (rrlist) {
-		if ((rr = dns_get_rr(reply, pos, rr_name, &fixed)) != 0) {
-		    resource_found++;
-		    *rrlist = dns_rr_append(*rrlist, rr);
-		} else
-		    not_found_status = DNS_RETRY;
-	    } else
-		resource_found++;
+		if ((rr = dns_get_rr(reply, pos, rr_name, &fixed)) == 0)
+		    CORRUPT;
+		*rrlist = dns_rr_append(*rrlist, rr);
+	    }
 	} else if (fixed.type == T_CNAME) {	/* cname resource */
 	    cname_found++;
 	    if (cname && c_len > 0)
@@ -487,7 +461,7 @@ static int dns_get_answer(DNS_REPLY *reply, int type,
 	return (DNS_OK);
     if (cname_found)
 	return (DNS_RECURSE);
-    return (not_found_status);
+    return (DNS_NOTFOUND);
 }
 
 /* dns_lookup - DNS lookup user interface */
@@ -506,19 +480,7 @@ int     dns_lookup(const char *name, unsigned type, unsigned flags,
      */
     if (!valid_hostname(name, DONT_GRIPE)) {
 	if (why)
-	    vstring_sprintf(why,
-		   "Name service error for %s: invalid host or domain name",
-			    name);
-	return (DNS_NOTFOUND);
-    }
-
-    /*
-     * DJBDNS produces a bogus A record when given a numerical hostname.
-     */
-    if (valid_hostaddr(name, DONT_GRIPE)) {
-	if (why)
-	    vstring_sprintf(why,
-		   "Name service error for %s: invalid host or domain name",
+	    vstring_sprintf(why, "Name service error for %s: invalid name",
 			    name);
 	return (DNS_NOTFOUND);
     }
@@ -543,9 +505,7 @@ int     dns_lookup(const char *name, unsigned type, unsigned flags,
 	switch (status) {
 	default:
 	    if (why)
-		vstring_sprintf(why, "Name service error for name=%s type=%s: "
-				"Malformed name server reply",
-				name, dns_strtype(type));
+		vstring_sprintf(why, "%s: Malformed name server reply", name);
 	case DNS_NOTFOUND:
 	case DNS_OK:
 	    return (status);

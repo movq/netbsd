@@ -84,7 +84,7 @@ static const char *dict_dbm_lookup(DICT *dict, const char *name)
      * Acquire an exclusive lock.
      */
     if ((dict->flags & DICT_FLAG_LOCK)
-	&& myflock(dict->lock_fd, INTERNAL_LOCK, MYFLOCK_OP_SHARED) < 0)
+	&& myflock(dict->fd, INTERNAL_LOCK, MYFLOCK_OP_SHARED) < 0)
 	msg_fatal("%s: lock dictionary: %m", dict_dbm->dict.name);
 
     /*
@@ -122,7 +122,7 @@ static const char *dict_dbm_lookup(DICT *dict, const char *name)
      * Release the exclusive lock.
      */
     if ((dict->flags & DICT_FLAG_LOCK)
-	&& myflock(dict->lock_fd, INTERNAL_LOCK, MYFLOCK_OP_NONE) < 0)
+	&& myflock(dict->fd, INTERNAL_LOCK, MYFLOCK_OP_NONE) < 0)
 	msg_fatal("%s: unlock dictionary: %m", dict_dbm->dict.name);
 
     return (result);
@@ -167,7 +167,7 @@ static void dict_dbm_update(DICT *dict, const char *name, const char *value)
      * Acquire an exclusive lock.
      */
     if ((dict->flags & DICT_FLAG_LOCK)
-	&& myflock(dict->lock_fd, INTERNAL_LOCK, MYFLOCK_OP_EXCLUSIVE) < 0)
+	&& myflock(dict->fd, INTERNAL_LOCK, MYFLOCK_OP_EXCLUSIVE) < 0)
 	msg_fatal("%s: lock dictionary: %m", dict_dbm->dict.name);
 
     /*
@@ -189,7 +189,7 @@ static void dict_dbm_update(DICT *dict, const char *name, const char *value)
      * Release the exclusive lock.
      */
     if ((dict->flags & DICT_FLAG_LOCK)
-	&& myflock(dict->lock_fd, INTERNAL_LOCK, MYFLOCK_OP_NONE) < 0)
+	&& myflock(dict->fd, INTERNAL_LOCK, MYFLOCK_OP_NONE) < 0)
 	msg_fatal("%s: unlock dictionary: %m", dict_dbm->dict.name);
 }
 
@@ -206,7 +206,7 @@ static int dict_dbm_delete(DICT *dict, const char *name)
      * Acquire an exclusive lock.
      */
     if ((dict->flags & DICT_FLAG_LOCK)
-	&& myflock(dict->lock_fd, INTERNAL_LOCK, MYFLOCK_OP_EXCLUSIVE) < 0)
+	&& myflock(dict->fd, INTERNAL_LOCK, MYFLOCK_OP_EXCLUSIVE) < 0)
 	msg_fatal("%s: lock dictionary: %m", dict_dbm->dict.name);
 
     /*
@@ -247,7 +247,7 @@ static int dict_dbm_delete(DICT *dict, const char *name)
      * Release the exclusive lock.
      */
     if ((dict->flags & DICT_FLAG_LOCK)
-	&& myflock(dict->lock_fd, INTERNAL_LOCK, MYFLOCK_OP_NONE) < 0)
+	&& myflock(dict->fd, INTERNAL_LOCK, MYFLOCK_OP_NONE) < 0)
 	msg_fatal("%s: unlock dictionary: %m", dict_dbm->dict.name);
 
     return (status);
@@ -270,7 +270,7 @@ static int dict_dbm_sequence(DICT *dict, const int function,
      * Acquire an exclusive lock.
      */
     if ((dict->flags & DICT_FLAG_LOCK)
-	&& myflock(dict->lock_fd, INTERNAL_LOCK, MYFLOCK_OP_EXCLUSIVE) < 0)
+	&& myflock(dict->fd, INTERNAL_LOCK, MYFLOCK_OP_EXCLUSIVE) < 0)
 	msg_fatal("%s: lock dictionary: %m", dict_dbm->dict.name);
 
     /*
@@ -291,7 +291,7 @@ static int dict_dbm_sequence(DICT *dict, const int function,
      * Release the exclusive lock.
      */
     if ((dict->flags & DICT_FLAG_LOCK)
-	&& myflock(dict->lock_fd, INTERNAL_LOCK, MYFLOCK_OP_NONE) < 0)
+	&& myflock(dict->fd, INTERNAL_LOCK, MYFLOCK_OP_NONE) < 0)
 	msg_fatal("%s: unlock dictionary: %m", dict_dbm->dict.name);
 
     if (dbm_key.dptr != 0 && dbm_key.dsize > 0) {
@@ -371,15 +371,8 @@ DICT   *dict_dbm_open(const char *path, int open_flags, int dict_flags)
     char   *dbm_path;
     int     lock_fd;
 
-    /*
-     * Note: DICT_FLAG_LOCK is used only by programs that do fine-grained (in
-     * the time domain) locking while accessing individual database records.
-     * 
-     * Programs such as postmap/postalias use their own large-grained (in the
-     * time domain) locks while rewriting the entire file.
-     */
     if (dict_flags & DICT_FLAG_LOCK) {
-	dbm_path = concatenate(path, ".dir", (char *) 0);
+	dbm_path = concatenate(path, ".pag", (char *) 0);
 	if ((lock_fd = open(dbm_path, open_flags, 0644)) < 0)
 	    msg_fatal("open database %s: %m", dbm_path);
 	if (myflock(lock_fd, INTERNAL_LOCK, MYFLOCK_OP_SHARED) < 0)
@@ -397,6 +390,7 @@ DICT   *dict_dbm_open(const char *path, int open_flags, int dict_flags)
 	    msg_fatal("unlock database %s for open: %m", dbm_path);
 	if (close(lock_fd) < 0)
 	    msg_fatal("close database %s: %m", dbm_path);
+	myfree(dbm_path);
     }
     dict_dbm = (DICT_DBM *) dict_alloc(DICT_TYPE_DBM, path, sizeof(*dict_dbm));
     dict_dbm->dict.lookup = dict_dbm_lookup;
@@ -404,24 +398,10 @@ DICT   *dict_dbm_open(const char *path, int open_flags, int dict_flags)
     dict_dbm->dict.delete = dict_dbm_delete;
     dict_dbm->dict.sequence = dict_dbm_sequence;
     dict_dbm->dict.close = dict_dbm_close;
-    dict_dbm->dict.lock_fd = dbm_dirfno(dbm);
-    dict_dbm->dict.stat_fd = dbm_pagfno(dbm);
-    if (dict_dbm->dict.lock_fd == dict_dbm->dict.stat_fd)
-	msg_fatal("open database %s: cannot support GDBM", path);
-    if (fstat(dict_dbm->dict.stat_fd, &st) < 0)
+    dict_dbm->dict.fd = dbm_pagfno(dbm);
+    if (fstat(dict_dbm->dict.fd, &st) < 0)
 	msg_fatal("dict_dbm_open: fstat: %m");
     dict_dbm->dict.mtime = st.st_mtime;
-
-    /*
-     * Warn if the source file is newer than the indexed file, except when
-     * the source file changed only seconds ago.
-     */
-    if ((dict_flags & DICT_FLAG_LOCK) != 0
-	&& stat(path, &st) == 0
-	&& st.st_mtime > dict_dbm->dict.mtime
-	&& st.st_mtime < time((time_t *) 0) - 100)
-	msg_warn("database %s is older than source file %s", dbm_path, path);
-
     close_on_exec(dbm_pagfno(dbm), CLOSE_ON_EXEC);
     close_on_exec(dbm_dirfno(dbm), CLOSE_ON_EXEC);
     dict_dbm->dict.flags = dict_flags | DICT_FLAG_FIXED;
@@ -429,10 +409,7 @@ DICT   *dict_dbm_open(const char *path, int open_flags, int dict_flags)
 	dict_dbm->dict.flags |= (DICT_FLAG_TRY0NULL | DICT_FLAG_TRY1NULL);
     dict_dbm->dbm = dbm;
 
-    if ((dict_flags & DICT_FLAG_LOCK))
-	myfree(dbm_path);
-
-    return (DICT_DEBUG (&dict_dbm->dict));
+    return (DICT_DEBUG(&dict_dbm->dict));
 }
 
 #endif

@@ -170,8 +170,7 @@ static int attr_scan64_string(VSTREAM *fp, VSTRING *plain_buf, const char *conte
     VSTRING_RESET(base64_buf);
     while ((ch = VSTREAM_GETC(fp)) != ':' && ch != '\n') {
 	if (ch == VSTREAM_EOF) {
-	    msg_warn("%s on %s while reading %s",
-		vstream_ftimeout(fp) ? "timeout" : "premature end-of-input",
+	    msg_warn("premature end-of-input from %s while reading %s",
 		     VSTREAM_PATH(fp), context);
 	    return (-1);
 	}
@@ -327,7 +326,7 @@ int     attr_vscan64(VSTREAM *fp, int flags, va_list ap)
 		    && strcmp(wanted_name, STR(name_buf)) == 0))
 		break;
 	    if ((flags & ATTR_FLAG_EXTRA) != 0) {
-		msg_warn("unexpected attribute %s in input from %s",
+		msg_warn("spurious attribute %s in input from %s",
 			 STR(name_buf), VSTREAM_PATH(fp));
 		return (conversions);
 	    }

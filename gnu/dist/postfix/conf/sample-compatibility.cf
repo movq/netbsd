@@ -4,16 +4,6 @@
 # This file contains example settings of Postfix configuration
 # parameters that control compatibility with broken software.
 
-# The broken_sasl_auth_clients controls inter-operability with SMTP
-# clients that do not recognize that Postfix supports RFC 2554 (AUTH
-# command).  Examples of such clients are MicroSoft Outlook Express
-# version 4 and MicroSoft Exchange version 5.0.
-# 
-# Specify broken_sasl_auth_clients=yes to have Postfix advertise 
-# AUTH support in a non-standard way.
-# 
-broken_sasl_auth_clients = no
-
 # The ignore_mx_lookup_error parameter controls what happens when a
 # name server fails to respond to an MX lookup request. By default,
 # Postfix defers delivery and tries again after some delay. Specify
@@ -24,14 +14,18 @@ ignore_mx_lookup_error = no
 # The smtp_always_send_ehlo parameter specifies that the SMTP client
 # should always send EHLO at the start of an SMTP session.
 # 
-# If you specify "no", Postfix sends EHLO only when the word "ESMTP" 
-# appears in the server greeting banner (example: 220 spike.porcupine.org
+# By default, Postfix sends EHLO only when the word "ESMTP" appears
+# in the server greeting banner (example: 220 spike.porcupine.org
 # ESMTP Postfix).
 #
-smtp_always_send_ehlo = yes
+smtp_always_send_ehlo = no
 
 # The smtp_never_send_ehlo parameter specifies that the SMTP client 
 # should never send EHLO at the start of an SMTP session.
+#
+# By default, Postfix sends EHLO whenever the word "ESMTP" appears
+# in the server greeting banner (example: 220 spike.porcupine.org
+# ESMTP Postfix).
 #
 smtp_never_send_ehlo = no
 

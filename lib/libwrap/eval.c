@@ -1,5 +1,3 @@
-/*	$NetBSD: eval.c,v 1.6 2002/06/06 21:42:42 itojun Exp $	*/
-
  /*
   * Routines for controlled evaluation of host names, user names, and so on.
   * They are, in fact, wrappers around the functions that are specific for
@@ -20,13 +18,8 @@
   * Author: Wietse Venema, Eindhoven University of Technology, The Netherlands.
   */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
 static char sccsid[] = "@(#) eval.c 1.3 95/01/30 19:51:45";
-#else
-__RCSID("$NetBSD: eval.c,v 1.6 2002/06/06 21:42:42 itojun Exp $");
-#endif
 #endif
 
 /* System libraries. */
@@ -53,7 +46,7 @@ char   *eval_user(request)
 struct request_info *request;
 {
     if (request->user[0] == 0) {
-	(void)strlcpy(request->user, unknown, sizeof(request->user));
+	strcpy(request->user, unknown);
 	if (request->sink == 0 && request->client->sin && request->server->sin)
 	    rfc931(request->client->sin, request->server->sin, request->user);
     }
@@ -66,7 +59,7 @@ char   *eval_hostaddr(host)
 struct host_info *host;
 {
     if (host->addr[0] == 0) {
-	(void)strlcpy(host->addr, unknown, sizeof(host->addr));
+	strcpy(host->addr, unknown);
 	if (host->request->hostaddr != 0)
 	    host->request->hostaddr(host);
     }
@@ -79,7 +72,7 @@ char   *eval_hostname(host)
 struct host_info *host;
 {
     if (host->name[0] == 0) {
-	(void)strlcpy(host->name, unknown, sizeof(host->name));
+	strcpy(host->name, unknown);
 	if (host->request->hostname != 0)
 	    host->request->hostname(host);
     }
@@ -118,7 +111,7 @@ struct request_info *request;
 	return (hostinfo);
 #endif
     if (STR_NE(eval_user(request), unknown)) {
-	(void)snprintf(both, sizeof both, "%s@%s", request->user, hostinfo);
+	sprintf(both, "%s@%s", request->user, hostinfo);
 	return (both);
     } else {
 	return (hostinfo);
@@ -135,7 +128,7 @@ struct request_info *request;
     char   *daemon = eval_daemon(request);
 
     if (STR_NE(host, unknown)) {
-	(void)snprintf(both, sizeof both, "%s@%s", daemon, host);
+	sprintf(both, "%s@%s", daemon, host);
 	return (both);
     } else {
 	return (daemon);

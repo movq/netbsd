@@ -1,9 +1,9 @@
 SHELL	= /bin/sh
 SRCS	= smtp.c smtp_connect.c smtp_proto.c smtp_chat.c smtp_session.c \
-	smtp_addr.c smtp_trouble.c smtp_state.c \
+	smtp_addr.c smtp_trouble.c smtp_unalias.c smtp_state.c \
 	smtp_sasl_proto.c smtp_sasl_glue.c
 OBJS	= smtp.o smtp_connect.o smtp_proto.o smtp_chat.o smtp_session.o \
-	smtp_addr.o smtp_trouble.o smtp_state.o \
+	smtp_addr.o smtp_trouble.o smtp_unalias.o smtp_state.o \
 	smtp_sasl_proto.o smtp_sasl_glue.o
 HDRS	= smtp.h smtp_sasl.h
 TESTSRC	= 
@@ -26,8 +26,6 @@ Makefile: Makefile.in
 	(set -e; echo "# DO NOT EDIT"; $(OPTS) $(SHELL) ../../makedefs && cat $?) >$@
 
 test:	$(TESTPROG)
-
-tests:	test
 
 update: ../../libexec/$(PROG)
 
@@ -82,7 +80,6 @@ smtp.o: ../../include/mail_error.h
 smtp.o: ../../include/deliver_pass.h
 smtp.o: ../../include/mail_proto.h
 smtp.o: ../../include/iostuff.h
-smtp.o: ../../include/attr.h
 smtp.o: ../../include/mail_server.h
 smtp.o: smtp.h
 smtp.o: smtp_sasl.h
@@ -94,7 +91,6 @@ smtp_addr.o: ../../include/vbuf.h
 smtp_addr.o: ../../include/mymalloc.h
 smtp_addr.o: ../../include/inet_addr_list.h
 smtp_addr.o: ../../include/stringops.h
-smtp_addr.o: ../../include/myrand.h
 smtp_addr.o: ../../include/mail_params.h
 smtp_addr.o: ../../include/own_inet_addr.h
 smtp_addr.o: ../../include/dns.h
@@ -136,7 +132,6 @@ smtp_connect.o: ../../include/inet_addr_list.h
 smtp_connect.o: ../../include/iostuff.h
 smtp_connect.o: ../../include/timed_connect.h
 smtp_connect.o: ../../include/stringops.h
-smtp_connect.o: ../../include/host_port.h
 smtp_connect.o: ../../include/mail_params.h
 smtp_connect.o: ../../include/own_inet_addr.h
 smtp_connect.o: ../../include/dns.h
@@ -154,8 +149,6 @@ smtp_proto.o: ../../include/vstream.h
 smtp_proto.o: ../../include/vstring_vstream.h
 smtp_proto.o: ../../include/stringops.h
 smtp_proto.o: ../../include/mymalloc.h
-smtp_proto.o: ../../include/iostuff.h
-smtp_proto.o: ../../include/split_at.h
 smtp_proto.o: ../../include/mail_params.h
 smtp_proto.o: ../../include/smtp_stream.h
 smtp_proto.o: ../../include/mail_queue.h
@@ -170,11 +163,6 @@ smtp_proto.o: ../../include/rec_type.h
 smtp_proto.o: ../../include/off_cvt.h
 smtp_proto.o: ../../include/mark_corrupt.h
 smtp_proto.o: ../../include/quote_821_local.h
-smtp_proto.o: ../../include/quote_flags.h
-smtp_proto.o: ../../include/mail_proto.h
-smtp_proto.o: ../../include/attr.h
-smtp_proto.o: ../../include/mime_state.h
-smtp_proto.o: ../../include/header_opts.h
 smtp_proto.o: smtp.h
 smtp_proto.o: ../../include/argv.h
 smtp_proto.o: smtp_sasl.h
@@ -189,8 +177,6 @@ smtp_sasl_glue.o: ../../include/split_at.h
 smtp_sasl_glue.o: ../../include/name_mask.h
 smtp_sasl_glue.o: ../../include/mail_params.h
 smtp_sasl_glue.o: ../../include/string_list.h
-smtp_sasl_glue.o: ../../include/match_list.h
-smtp_sasl_glue.o: ../../include/match_ops.h
 smtp_sasl_glue.o: ../../include/maps.h
 smtp_sasl_glue.o: ../../include/dict.h
 smtp_sasl_glue.o: ../../include/vstream.h
@@ -230,8 +216,6 @@ smtp_state.o: ../../include/vstring.h
 smtp_state.o: ../../include/vbuf.h
 smtp_state.o: ../../include/vstream.h
 smtp_state.o: ../../include/mail_conf.h
-smtp_state.o: ../../include/mime_state.h
-smtp_state.o: ../../include/header_opts.h
 smtp_state.o: smtp.h
 smtp_state.o: ../../include/argv.h
 smtp_state.o: ../../include/deliver_request.h

@@ -4,26 +4,25 @@
 .SH NAME
 postdrop
 \-
-Postfix mail posting utility
+Postfix mail posting agent
 .SH SYNOPSIS
 .na
 .nf
-\fBpostdrop\fR [\fB-rv\fR] [\fB-c \fIconfig_dir\fR]
+\fBpostdrop\fR [\fIoption ...\fR]
 .SH DESCRIPTION
 .ad
 .fi
 The \fBpostdrop\fR command creates a file in the \fBmaildrop\fR
 directory and copies its standard input to the file.
 
+The command is designed to run with set-gid privileges, and with
+group write permission to the \fBmaildrop\fR queue directory.
+
+The \fBpostdrop\fR command is automatically invoked by the
+\fBsendmail\fR(1) mail posting agent when the \fBmaildrop\fR
+queue directory is not world-writable.
+
 Options:
-.IP \fB-c \fIconfig_dir\fR
-The \fBmain.cf\fR configuration file is in the named directory
-instead of the default configuration directory. See also the
-MAIL_CONFIG environment setting below.
-.IP \fB-r\fR
-Use a Postfix-internal protocol for reading the message from
-standard input, and for reporting status information on standard
-output. This is currently the only supported method.
 .IP \fB-v\fR
 Enable verbose logging for debugging purposes. Multiple \fB-v\fR
 options make the software increasingly verbose.
@@ -32,9 +31,8 @@ options make the software increasingly verbose.
 .nf
 .ad
 .fi
-The command is designed to run with set-group ID privileges, so
-that it can write to the \fBmaildrop\fR queue directory and so that
-it can connect to Postfix daemon processes.
+This program is designed so that it can run with set-user (or
+group) id privileges.
 .SH DIAGNOSTICS
 .ad
 .fi
@@ -47,16 +45,8 @@ INT, QUIT or TERM signal, the queue file is deleted.
 .nf
 .ad
 .fi
-.IP MAIL_CONFIG
-Directory with the \fBmain.cf\fR file. In order to avoid exploitation
-of set-group ID privileges, it is not possible to specify arbitrary
-directory names.
-
-A non-standard directory is allowed only if the name is listed in the
-standard \fBmain.cf\fR file, in the \fBalternate_config_directories\fR
-configuration parameter value.
-
-Only the superuser is allowed to specify arbitrary directory names.
+The program deletes all environment information, because the C
+library can't be trusted.
 .SH FILES
 .na
 .nf
@@ -70,9 +60,6 @@ Only the superuser is allowed to specify arbitrary directory names.
 See the Postfix \fBmain.cf\fR file for syntax details and for
 default values. Use the \fBpostfix reload\fR command after a
 configuration change.
-.IP \fBimport_environment\fR
-List of names of environment parameters that can be imported
-from non-Postfix processes.
 .IP \fBqueue_directory\fR
 Top-level directory of the Postfix queue. This is also the root
 directory of Postfix daemons that run chrooted.

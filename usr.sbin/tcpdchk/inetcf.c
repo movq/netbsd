@@ -1,5 +1,3 @@
-/*	$NetBSD: inetcf.c,v 1.7 2002/06/06 21:27:49 itojun Exp $	*/
-
  /*
   * Routines to parse an inetd.conf or tlid.conf file. This would be a great
   * job for a PERL script.
@@ -7,13 +5,8 @@
   * Author: Wietse Venema, Eindhoven University of Technology, The Netherlands.
   */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static char sccsid[] = "@(#) inetcf.c 1.7 97/02/12 02:13:23";
-#else
-__RCSID("$NetBSD: inetcf.c,v 1.7 2002/06/06 21:27:49 itojun Exp $");
-#endif
+static char sccsid[] = "@(#) inetcf.c 1.6 96/02/11 17:01:29";
 #endif
 
 #include <sys/types.h>
@@ -21,31 +14,12 @@ __RCSID("$NetBSD: inetcf.c,v 1.7 2002/06/06 21:27:49 itojun Exp $");
 #include <stdio.h>
 #include <errno.h>
 #include <string.h>
-#include <stdlib.h>
+
+extern int errno;
+extern void exit();
 
 #include "tcpd.h"
 #include "inetcf.h"
-#include "percent_m.h"
-#include "scaffold.h"
-
-static void inet_chk __P((char *, char *, char *, char *));
-static char *base_name __P((char *));
-
- /*
-  * Programs that use libwrap directly are not in inetd.conf, and so must
-  * be added here in a similar format. (We pretend we found them in
-  * /etc/inetd.conf.) Each one is a set of three strings that correspond
-  * to fields in /etc/inetd.conf:
-  *    protocol (field 3),  path (field 6), arg0 (field 7)
-  * The last entry should be a NULL.
-  */
-char   *uses_libwrap[] = {
-    "tcp", "/usr/sbin/sendmail",	"sendmail",
-    "tcp", "/usr/sbin/sshd",		"sshd",
-    "udp", "/usr/sbin/syslogd",		"syslogd",
-    "udp", "/usr/sbin/rpcbind",		"rpcbind",
-    (char *) NULL
-};
 
  /*
   * Network configuration files may live in unusual places. Here are some
@@ -61,6 +35,9 @@ char   *inet_files[] = {
     "/etc/tlid.conf",			/* SYSV4?? */
     0,
 };
+
+static void inet_chk();
+static char *base_name();
 
  /*
   * Structure with everything we know about a service.
@@ -81,8 +58,7 @@ char   *inet_cfg(conf)
 char   *conf;
 {
     char    buf[BUFSIZ];
-    FILE   *fp = NULL;
-    char   **wrapped;
+    FILE   *fp;
     char   *service;
     char   *protocol;
     char   *user;
@@ -90,6 +66,7 @@ char   *conf;
     char   *arg0;
     char   *arg1;
     struct tcpd_context saved_context;
+    char   *percent_m();
     int     i;
     struct stat st;
 
@@ -118,15 +95,6 @@ char   *conf;
     }
 
     /*
-     * Process the list of programs that use libwrap directly.
-     */
-    wrapped = uses_libwrap;
-    while (*wrapped != NULL)  {
-	inet_chk(wrapped[0], wrapped[1], wrapped[2], "");
-	wrapped += 3;
-    }
-
-    /*
      * Process the file. After the 7.0 wrapper release it became clear that
      * there are many more inetd.conf formats than the 8 systems that I had
      * studied. EP/IX uses a two-line specification for rpc services; HP-UX
@@ -150,8 +118,6 @@ char   *conf;
 	    if ((path = strtok((char *) 0, whitespace)) == 0)
 		continue;
 	}
-	if (path[0] == '?')			/* IRIX optional service */
-	    path++;
 	if (STR_EQ(path, "internal"))
 	    continue;
 	if (path[strspn(path, "-0123456789")] == 0) {
@@ -296,10 +262,6 @@ char   *arg1;
      */
     if (wrap_status == WR_YES && STR_EQ(protocol, "rpc/tcp"))
 	tcpd_warn("%s: cannot wrap rpc/tcp services", tcpd_proc_name);
-
-    /* NetBSD inetd wraps all programs */
-    if (! STR_EQ(protocol, "rpc/tcp"))
-	wrap_status = WR_YES;
 
     inet_set(tcpd_proc_name, wrap_status);
 }

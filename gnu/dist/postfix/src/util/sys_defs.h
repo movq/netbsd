@@ -26,7 +26,7 @@
 #if defined(FREEBSD2) || defined(FREEBSD3) || defined(FREEBSD4) \
     || defined(FREEBSD5) \
     || defined(BSDI2) || defined(BSDI3) || defined(BSDI4) \
-    || defined(OPENBSD2) || defined(OPENBSD3) || defined(NETBSD1)
+    || defined(OPENBSD2) || defined(NETBSD1)
 #define SUPPORTED
 #include <sys/types.h>
 #include <sys/param.h>
@@ -52,19 +52,13 @@
 #define STATFS_IN_SYS_MOUNT_H
 #define HAS_POSIX_REGEXP
 #define HAS_ST_GEN	/* struct stat contains inode generation number */
-#define NATIVE_SENDMAIL_PATH "/usr/sbin/sendmail"
-#define NATIVE_MAILQ_PATH "/usr/bin/mailq"
-#define NATIVE_NEWALIAS_PATH "/usr/bin/newaliases"
-#define NATIVE_COMMAND_DIR "/usr/sbin"
-#define NATIVE_DAEMON_DIR "/usr/libexec/postfix"
 #endif
 
 #if defined(FREEBSD2) || defined(FREEBSD3) || defined(FREEBSD4)
 #define HAS_DUPLEX_PIPE
 #endif
 
-#if defined(OPENBSD2) || defined(OPENBSD3) \
-    || defined(FREEBSD3) || defined(FREEBSD4)
+#if defined(OPENBSD2) || defined(FREEBSD3) || defined(FREEBSD4)
 #define HAS_ISSETUGID
 #endif
 
@@ -99,11 +93,6 @@
 #define PRINTFLIKE(x,y)
 #define SCANFLIKE(x,y)
 #define HAS_NETINFO
-#define NATIVE_SENDMAIL_PATH "/usr/sbin/sendmail"
-#define NATIVE_MAILQ_PATH "/usr/bin/mailq"
-#define NATIVE_NEWALIAS_PATH "/usr/bin/newaliases"
-#define NATIVE_COMMAND_DIR "/usr/sbin"
-#define NATIVE_DAEMON_DIR "/usr/libexec/postfix"
 #endif
 
  /*
@@ -152,9 +141,6 @@ extern int h_errno;
 #define DUP2_DUPS_CLOSE_ON_EXEC
 #define MISSING_USLEEP
 #define NO_HERRNO
-#define NATIVE_SENDMAIL_PATH "/usr/lib/sendmail"
-#define NATIVE_COMMAND_DIR "/usr/etc"
-#define NATIVE_DAEMON_DIR "/usr/libexec/postfix"
 #endif
 
  /*
@@ -221,11 +207,6 @@ extern int opterr;
 #define STATFS_IN_SYS_VFS_H
 #define memmove(d,s,l)	bcopy(s,d,l)
 #define NO_HERRNO
-#define NATIVE_SENDMAIL_PATH "/usr/lib/sendmail"
-#define NATIVE_MAILQ_PATH "/usr/ucb/mailq"
-#define NATIVE_NEWALIAS_PATH "/usr/ucb/newaliases"
-#define NATIVE_COMMAND_DIR "/usr/etc"
-#define NATIVE_DAEMON_DIR "/usr/libexec/postfix"
 #endif
 
  /*
@@ -260,14 +241,6 @@ extern int opterr;
 #define LOCAL_CONNECT	stream_connect
 #define LOCAL_TRIGGER	stream_trigger
 #define HAS_VOLATILE_LOCKS
-/*
- * Allow build environment to override paths.
- */
-#define NATIVE_SENDMAIL_PATH "/usr/lib/sendmail"
-#define NATIVE_MAILQ_PATH "/usr/bin/mailq"
-#define NATIVE_NEWALIAS_PATH "/usr/bin/newaliases"
-#define NATIVE_COMMAND_DIR "/usr/sbin"
-#define NATIVE_DAEMON_DIR "/usr/libexec/postfix"
 #endif
 
  /*
@@ -330,39 +303,6 @@ extern int opterr;
   * AIX: a SYSV-flavored hybrid. NB: fcntl() and flock() access the same
   * underlying locking primitives.
   */
-#ifdef AIX5
-#define SUPPORTED
-#include <sys/types.h>
-#define MISSING_SETENV
-#define _PATH_BSHELL	"/bin/sh"
-#define _PATH_MAILDIR   "/var/spool/mail"	/* paths.h lies */
-#define _PATH_DEFPATH	"/usr/bin:/usr/ucb"
-#define _PATH_STDPATH	"/usr/bin:/usr/sbin:/usr/ucb"
-#define HAS_FCNTL_LOCK
-#define INTERNAL_LOCK	MYFLOCK_STYLE_FCNTL
-#define DEF_MAILBOX_LOCK "fcntl, dotlock"
-#define USE_SYS_SELECT_H
-#define HAS_FSYNC
-#define HAS_DBM
-#define DEF_DB_TYPE	"dbm"
-#define ALIAS_DB_MAP	"dbm:/etc/aliases"
-#define HAS_NIS
-#define HAS_SA_LEN
-#define GETTIMEOFDAY(t)	gettimeofday(t,(struct timezone *) 0)
-#define RESOLVE_H_NEEDS_STDIO_H
-#define ROOT_PATH	"/bin:/usr/bin:/sbin:/usr/sbin:/usr/ucb"
-#define SOCKADDR_SIZE	size_t
-#define SOCKOPT_SIZE	size_t
-#define USE_STATVFS
-#define STATVFS_IN_SYS_STATVFS_H
-#define STRCASECMP_IN_STRINGS_H
-#define NATIVE_SENDMAIL_PATH "/usr/lib/sendmail"
-#define NATIVE_MAILQ_PATH "/usr/sbin/mailq"
-#define NATIVE_NEWALIAS_PATH "/usr/sbin/newaliases"
-#define NATIVE_COMMAND_DIR "/usr/sbin"
-#define NATIVE_DAEMON_DIR "/usr/libexec/postfix"
-#endif
-
 #ifdef AIX4
 #define SUPPORTED
 #include <sys/types.h>
@@ -389,17 +329,10 @@ extern int opterr;
 #define USE_STATVFS
 #define STATVFS_IN_SYS_STATVFS_H
 #define STRCASECMP_IN_STRINGS_H
-#if 0
 extern time_t time(time_t *);
 extern int seteuid(uid_t);
 extern int setegid(gid_t);
 extern int initgroups(const char *, int);
-#endif
-#define NATIVE_SENDMAIL_PATH "/usr/lib/sendmail"
-#define NATIVE_MAILQ_PATH "/usr/sbin/mailq"
-#define NATIVE_NEWALIAS_PATH "/usr/sbin/newaliases"
-#define NATIVE_COMMAND_DIR "/usr/sbin"
-#define NATIVE_DAEMON_DIR "/usr/libexec/postfix"
 
 #endif
 
@@ -433,7 +366,6 @@ extern time_t time(time_t *);
 extern int seteuid(uid_t);
 extern int setegid(gid_t);
 extern int initgroups(const char *, int);
-#define NATIVE_SENDMAIL_PATH "/usr/lib/sendmail"
 
 #endif
 
@@ -469,11 +401,6 @@ extern int initgroups(const char *, int);
 #define MISSING_USLEEP
 #endif
 
-#if defined(IRIX6)
-#define HAS_POSIX_REGEXP
-#define PIPES_CANT_FIONREAD
-#endif
-
  /*
   * LINUX.
   */
@@ -484,7 +411,7 @@ extern int initgroups(const char *, int);
 #define HAS_FLOCK_LOCK
 #define HAS_FCNTL_LOCK
 #define INTERNAL_LOCK	MYFLOCK_STYLE_FLOCK
-#define DEF_MAILBOX_LOCK "fcntl, dotlock"	/* RedHat >= 4.x */
+#define DEF_MAILBOX_LOCK "flock, dotlock"
 #define HAS_FSYNC
 #define HAS_DB
 #define DEF_DB_TYPE	"hash"
@@ -498,39 +425,6 @@ extern int initgroups(const char *, int);
 #define UNIX_DOMAIN_CONNECT_BLOCKS_FOR_ACCEPT
 #define PREPEND_PLUS_TO_OPTSTRING
 #define HAS_POSIX_REGEXP
-#define NATIVE_SENDMAIL_PATH "/usr/sbin/sendmail"
-#define NATIVE_MAILQ_PATH "/usr/bin/mailq"
-#define NATIVE_NEWALIAS_PATH "/usr/bin/newaliases"
-#define NATIVE_COMMAND_DIR "/usr/sbin"
-#define NATIVE_DAEMON_DIR "/usr/libexec/postfix"
-#endif
-
-#ifdef LINUX1
-#define SUPPORTED
-#include <sys/types.h>
-#define USE_PATHS_H
-#define HAS_FLOCK_LOCK
-#define HAS_FCNTL_LOCK
-#define INTERNAL_LOCK	MYFLOCK_STYLE_FLOCK
-#define DEF_MAILBOX_LOCK "dotlock"	/* verified RedHat 3.03 */
-#define HAS_FSYNC
-#define HAS_DB
-#define DEF_DB_TYPE	"hash"
-#define ALIAS_DB_MAP	"hash:/etc/aliases"
-#define HAS_NIS
-#define GETTIMEOFDAY(t)	gettimeofday(t,(struct timezone *) 0)
-#define ROOT_PATH	"/bin:/usr/bin:/sbin:/usr/sbin"
-#define FIONREAD_IN_TERMIOS_H		/* maybe unnecessary */
-#define USE_STATFS
-#define STATFS_IN_SYS_VFS_H
-#define UNIX_DOMAIN_CONNECT_BLOCKS_FOR_ACCEPT	/* unverified */
-#define PREPEND_PLUS_TO_OPTSTRING
-#define HAS_POSIX_REGEXP
-#define NATIVE_SENDMAIL_PATH "/usr/sbin/sendmail"
-#define NATIVE_MAILQ_PATH "/usr/bin/mailq"
-#define NATIVE_NEWALIAS_PATH "/usr/bin/newaliases"
-#define NATIVE_COMMAND_DIR "/usr/sbin"
-#define NATIVE_DAEMON_DIR "/usr/libexec/postfix"
 #endif
 
  /*
@@ -564,11 +458,6 @@ extern int h_errno;			/* <netdb.h> imports too much stuff */
 #define USE_STATFS
 #define STATFS_IN_SYS_VFS_H
 #define HAS_POSIX_REGEXP
-#define NATIVE_SENDMAIL_PATH "/usr/sbin/sendmail"
-#define NATIVE_MAILQ_PATH "/usr/bin/mailq"
-#define NATIVE_NEWALIAS_PATH "/usr/bin/newaliases"
-#define NATIVE_COMMAND_DIR "/usr/sbin"
-#define NATIVE_DAEMON_DIR "/usr/libexec/postfix"
 #endif
 
 #ifdef HPUX10
@@ -599,11 +488,6 @@ extern int h_errno;			/* <netdb.h> imports too much stuff */
 #define USE_STATFS
 #define STATFS_IN_SYS_VFS_H
 #define HAS_POSIX_REGEXP
-#define NATIVE_SENDMAIL_PATH "/usr/sbin/sendmail"
-#define NATIVE_MAILQ_PATH "/usr/bin/mailq"
-#define NATIVE_NEWALIAS_PATH "/usr/bin/newaliases"
-#define NATIVE_COMMAND_DIR "/usr/sbin"
-#define NATIVE_DAEMON_DIR "/usr/libexec/postfix"
 #endif
 
 #ifdef HPUX9
@@ -636,10 +520,6 @@ extern int h_errno;
 #define USE_STATFS
 #define STATFS_IN_SYS_VFS_H
 #define HAS_POSIX_REGEXP
-#define NATIVE_SENDMAIL_PATH "/usr/bin/sendmail"
-#define NATIVE_MAILQ_PATH "/usr/bin/mailq"
-#define NATIVE_NEWALIAS_PATH "/usr/bin/newaliases"
-#define NATIVE_DAEMON_DIR "/usr/libexec/postfix"
 #endif
 
  /*
@@ -683,7 +563,6 @@ extern int h_errno;
 /* It's amazing what is all missing...	*/
 #define isascii(c)	((unsigned)(c)<=0177)
 extern int opterr;
-typedef unsigned short  mode_t;
 
 #define MISSING_PID_T
 #define MISSING_STRFTIME_E
@@ -734,7 +613,6 @@ typedef unsigned short  mode_t;
 /* It's amazing what is all missing...	*/
 #define isascii(c)	((unsigned)(c)<=0177)
 extern int opterr;
-typedef unsigned short  mode_t;
 
 #define MISSING_PID_T
 #define MISSING_STRFTIME_E
@@ -841,39 +719,6 @@ extern int h_errno;
   */
 #ifndef SUPPORTED
 #error "unsupported platform"
-#endif
-
- /*
-  * Allow command line flags to override native settings
-  */
-#ifndef DEF_COMMAND_DIR
-#ifdef NATIVE_COMMAND_DIR
-#define DEF_COMMAND_DIR NATIVE_COMMAND_DIR
-#endif
-#endif
-
-#ifndef DEF_DAEMON_DIR
-#ifdef NATIVE_DAEMON_DIR
-#define DEF_DAEMON_DIR NATIVE_DAEMON_DIR
-#endif
-#endif
-
-#ifndef DEF_SENDMAIL_PATH
-#ifdef NATIVE_SENDMAIL_PATH
-#define DEF_SENDMAIL_PATH NATIVE_SENDMAIL_PATH
-#endif
-#endif
-
-#ifndef DEF_MAILQ_PATH
-#ifdef NATIVE_MAILQ_PATH
-#define DEF_MAILQ_PATH NATIVE_MAILQ_PATH
-#endif
-#endif
-
-#ifndef DEF_NEWALIAS_PATH
-#ifdef NATIVE_NEWALIAS_PATH
-#define DEF_NEWALIAS_PATH NATIVE_NEWALIAS_PATH
-#endif
 #endif
 
 #define CAST_CHAR_PTR_TO_INT(cptr)	((int) (long) (cptr))
@@ -1025,28 +870,13 @@ typedef int pid_t;
 #endif
 
  /*
-  * Memory alignment of memory allocator results. By default we align for
-  * doubles.
-  */
-#ifndef ALIGN_TYPE
-# ifdef __ia64__
-# define ALIGN_TYPE	long double
-# else
-# define ALIGN_TYPE	double
-# endif
-#endif
-
- /*
   * Need to specify what functions never return, so that the compiler can
   * warn for missing initializations and other trouble. However, OPENSTEP4
   * gcc 2.7.x cannot handle this so we define this only if NORETURN isn't
   * already defined above.
-  * 
-  * Data point: gcc 2.7.2 has __attribute__ (Wietse Venema) but gcc 2.6.3 does
-  * not (Clive Jones). So we'll set the threshold at 2.7.
   */
 #ifndef NORETURN
-#if __GNUC__ == 2 && __GNUC_MINOR__ >= 7 || __GNUC__ >= 3
+#if __GNUC__ == 2 && __GNUC_MINOR__ >= 5 || __GNUC__ >= 3
 #define NORETURN	void __attribute__((__noreturn__))
 #endif
 #endif

@@ -13,8 +13,8 @@ Postfix local mail pickup
 .ad
 .fi
 The \fBpickup\fR daemon waits for hints that new mail has been
-dropped into the \fBmaildrop\fR directory, and feeds it into the
-\fBcleanup\fR(8) daemon.
+dropped into the world-writable \fBmaildrop\fR directory, and
+feeds it into the \fBcleanup\fR(8) daemon.
 Ill-formatted files are deleted without notifying the originator.
 This program expects to be run from the \fBmaster\fR(8) process
 manager.
@@ -29,12 +29,13 @@ None. The \fBpickup\fR daemon does not interact with the outside world.
 .nf
 .ad
 .fi
-The \fBpickup\fR daemon is moderately security sensitive. It runs
-with fixed low privilege and can run in a chrooted environment.
-However, the program reads files from potentially hostile users.
-The \fBpickup\fR daemon opens no files for writing, is careful about
-what files it opens for reading, and does not actually touch any data
-that is sent to its public service endpoint.
+The \fBpickup\fR daemon runs with superuser privileges so that it
+1) can open a queue file with the rights of the submitting user
+and 2) can access the Postfix private IPC channels.
+On the positive side, the program can run chrooted, opens no files
+for writing, is careful about what files it opens for reading, and
+does not actually touch any data that is sent to its public service
+endpoint.
 .SH DIAGNOSTICS
 .ad
 .fi
@@ -55,17 +56,13 @@ The following \fBmain.cf\fR parameters are especially relevant to
 this program. See the Postfix \fBmain.cf\fR file for syntax details
 and for default values. Use the \fBpostfix reload\fR command after
 a configuration change.
-.SH "Content inspection controls"
-.IP \fBcontent_filter\fR
-The name of a mail delivery transport that filters mail and that
-either bounces mail or re-injects the result back into Postfix.
-This parameter uses the same syntax as the right-hand side of
-a Postfix transport table.
 .SH Miscellaneous
 .ad
 .fi
 .IP \fBalways_bcc\fR
 Address to send a copy of each message that enters the system.
+.IP \fBmail_owner\fR
+The process privileges used while not opening a \fBmaildrop\fR file.
 .IP \fBqueue_directory\fR
 Top-level directory of the Postfix queue.
 .SH SEE ALSO
@@ -73,7 +70,6 @@ Top-level directory of the Postfix queue.
 .nf
 cleanup(8) message canonicalization
 master(8) process manager
-sendmail(1), postdrop(8) mail posting agent
 syslogd(8) system logging
 .SH LICENSE
 .na

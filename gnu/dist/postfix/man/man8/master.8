@@ -9,8 +9,7 @@ Postfix master process
 .na
 .nf
 .fi
-\fBmaster\fR [\fB-Dtv\fR] [\fB-c \fIconfig_dir\fR]
-[\fB-e \fIexit_time\fR]
+\fBmaster\fR [\fB-c \fIconfig_dir\fR] [\fB-D\fR] [\fB-t\fR] [\fB-v\fR]
 .SH DESCRIPTION
 .ad
 .fi
@@ -34,10 +33,7 @@ respective daemons.
 Options:
 .IP "\fB-c \fIconfig_dir\fR"
 Read the \fBmain.cf\fR and \fBmaster.cf\fR configuration files in
-the named directory instead of the default configuration directory.
-.IP "\fB-e \fIexit_time\fR"
-Terminate the master process after \fIexit_time\fR seconds. Child
-processes terminate at their convenience.
+the named directory.
 .IP \fB-D\fR
 After initialization, run a debugger on the master process. The
 debugging command is specified with the \fBdebugger_command\fR in
@@ -97,10 +93,6 @@ a configuration change.
 .SH Miscellaneous
 .ad
 .fi
-.IP \fBimport_environment\fR
-.IP \fBexport_environment\fR
-Lists of names of environment parameters that can be imported
-from (exported to) non-Postfix processes.
 .IP \fBmail_owner\fR
 The owner of the mail queue and of most Postfix processes.
 .IP \fBcommand_directory\fR
@@ -110,9 +102,6 @@ Directory with Postfix daemon programs.
 .IP \fBqueue_directory\fR
 Top-level directory of the Postfix queue. This is also the root
 directory of Postfix daemons that run chrooted.
-.IP \fBinet_interfaces\fR
-The network interface addresses that this system receives mail on.
-You need to stop and start Postfix when this parameter changes.
 .SH "Resource controls"
 .ad
 .fi

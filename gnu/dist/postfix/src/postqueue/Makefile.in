@@ -23,8 +23,6 @@ Makefile: Makefile.in
 
 test:	$(TESTPROG)
 
-tests:	test
-
 update: ../../bin/$(PROG)
 
 ../../bin/$(PROG): $(PROG)

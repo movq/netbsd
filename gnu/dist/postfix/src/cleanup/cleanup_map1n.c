@@ -6,14 +6,10 @@
 /* SYNOPSIS
 /*	#include <cleanup.h>
 /*
-/*	ARGV	*cleanup_map1n_internal(state, addr, maps, propagate)
-/*	CLEANUP_STATE *state;
-/*	const char *addr;
-/*	MAPS	*maps;
-/*	int	propagate;
+/*	ARGV	*cleanup_map1n_internal(addr)
+/*	char	*addr;
 /* DESCRIPTION
 /*	This module implements one-to-many table mapping via table lookup.
-/*	Table lookups are done with quoted (externalized) address forms.
 /*	The process is recursive. The recursion terminates when the
 /*	left-hand side appears in its own expansion, or when a maximal
 /*	nesting level is reached.
@@ -66,7 +62,7 @@
 
 /* cleanup_map1n_internal - one-to-many table lookups */
 
-ARGV   *cleanup_map1n_internal(CLEANUP_STATE *state, const char *addr,
+ARGV   *cleanup_map1n_internal(CLEANUP_STATE *state, char *addr,
 			               MAPS *maps, int propagate)
 {
     ARGV   *argv;
@@ -105,19 +101,14 @@ ARGV   *cleanup_map1n_internal(CLEANUP_STATE *state, const char *addr,
 	    break;
 	}
 	for (count = 0; /* void */ ; count++) {
-
-	    /*
-	     * Don't expand an address that already expanded into itself.
-	     */
-	    if (been_here_check_fixed(been_here, argv->argv[arg]) != 0)
+	    if (been_here_fixed(been_here, argv->argv[arg]) != 0)
 		break;
 	    if (count >= MAX_RECURSION) {
 		msg_warn("%s: unreasonable %s map nesting for %s",
 			 state->queue_id, maps->title, addr);
 		break;
 	    }
-	    quote_822_local(state->temp1, argv->argv[arg]);
-	    if ((lookup = mail_addr_map(maps, STR(state->temp1), propagate)) != 0) {
+	    if ((lookup = mail_addr_map(maps, argv->argv[arg], propagate)) != 0) {
 		saved_lhs = mystrdup(argv->argv[arg]);
 		for (i = 0; i < lookup->argc; i++) {
 		    unquote_822_local(state->temp1, lookup->argv[i]);
@@ -127,12 +118,6 @@ ARGV   *cleanup_map1n_internal(CLEANUP_STATE *state, const char *addr,
 			argv_add(argv, STR(state->temp1), ARGV_END);
 			argv_terminate(argv);
 		    }
-
-		    /*
-		     * Allow an address to expand into itself once.
-		     */
-		    if (strcasecmp(saved_lhs, STR(state->temp1)) == 0)
-			been_here_fixed(been_here, saved_lhs);
 		}
 		myfree(saved_lhs);
 		argv_free(lookup);

@@ -23,8 +23,7 @@
 #
 # In order to enable server-side authentication, build Postfix with
 # SASL support, and install a configuration file /usr/lib/sasl/smtpd.conf
-# (SASL version 1) or /usr/lib/sasl2/smtpd.conf (SASL version 2) with
-# as contents, for example,
+# with as contents, for example,
 #
 #	pwcheck_method:  sasldb
 #
@@ -52,10 +51,6 @@ smtpd_sasl_auth_enable = no
 # nodictionary:	disallow methods subject to passive (dictionary) attack
 # noanonymous:	disallow methods that allow anonymous authentication
 # 
-# An additional option is available in SASL version 2:
-#
-# mutual_auth:	only allow methods that provide mutual authentication
-#
 # By default, the Postfix SMTP server accepts plaintext passwords but
 # not anonymous logins. 
 #
@@ -75,7 +70,7 @@ smtpd_sasl_security_options = noanonymous
 # By default, the local authentication realm name is the name of the
 # machine.
 # 
-#smtpd_sasl_local_domain = $mydomain
+# smtpd_sasl_local_domain = $mydomain
 smtpd_sasl_local_domain = $myhostname
 
 # SMTP CLIENT CONTROLS
@@ -109,10 +104,6 @@ smtp_sasl_password_maps = hash:/etc/postfix/saslpass
 # nodictionary:	disallow methods subject to passive (dictionary) attack
 # noanonymous:	disallow methods that allow anonymous authentication
 # 
-# An additional option is available in SASL version 2:
-#
-# mutual_auth:	only allow methods that provide mutual authentication
-#
 # By default, the Postfix SMTP client will not use plaintext passwords.
 #
 #smtp_sasl_security_options = 

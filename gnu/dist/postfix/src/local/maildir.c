@@ -80,8 +80,7 @@ int     deliver_maildir(LOCAL_STATE state, USER_ATTR usr_attr, char *path)
     VSTRING *why;
     VSTRING *buf;
     VSTREAM *dst;
-    int     mail_copy_status;
-    int     deliver_status;
+    int     status;
     int     copy_flags;
     static int count;
 
@@ -99,11 +98,11 @@ int     deliver_maildir(LOCAL_STATE state, USER_ATTR usr_attr, char *path)
     if (vstream_fseek(state.msg_attr.fp, state.msg_attr.offset, SEEK_SET) < 0)
 	msg_fatal("seek message file %s: %m", VSTREAM_PATH(state.msg_attr.fp));
     state.msg_attr.delivered = state.msg_attr.recipient;
-    mail_copy_status = MAIL_COPY_STAT_WRITE;
+    status = -1;
     buf = vstring_alloc(100);
     why = vstring_alloc(100);
 
-    copy_flags = MAIL_COPY_TOFILE | MAIL_COPY_RETURN_PATH | MAIL_COPY_ORIG_RCPT;
+    copy_flags = MAIL_COPY_TOFILE | MAIL_COPY_RETURN_PATH;
     if (local_deliver_hdr_mask & DELIVER_HDR_FILE)
 	copy_flags |= MAIL_COPY_DELIVERED;
 
@@ -138,14 +137,14 @@ int     deliver_maildir(LOCAL_STATE state, USER_ATTR usr_attr, char *path)
 	    || (dst = vstream_fopen(tmpfile, O_WRONLY | O_CREAT | O_EXCL, 0600)) == 0)) {
 	vstring_sprintf(why, "create %s: %m", tmpfile);
     } else {
-	if ((mail_copy_status = mail_copy(COPY_ATTR(state.msg_attr),
-					dst, copy_flags, "\n", why)) == 0) {
+	if (mail_copy(COPY_ATTR(state.msg_attr), dst, copy_flags, "\n", why) == 0) {
 	    if (sane_link(tmpfile, newfile) < 0
 		&& (errno != ENOENT
 		    || (make_dirs(curdir, 0700), make_dirs(newdir, 0700)) < 0
 		    || sane_link(tmpfile, newfile) < 0)) {
 		vstring_sprintf(why, "link to %s: %m", newfile);
-		mail_copy_status = MAIL_COPY_STAT_WRITE;
+	    } else {
+		status = 0;
 	    }
 	}
 	if (unlink(tmpfile) < 0)
@@ -153,19 +152,12 @@ int     deliver_maildir(LOCAL_STATE state, USER_ATTR usr_attr, char *path)
     }
     set_eugid(var_owner_uid, var_owner_gid);
 
-    /*
-     * As the mail system, bounce or defer delivery.
-     */
-    if (mail_copy_status & MAIL_COPY_STAT_CORRUPT) {
-	deliver_status = DEL_STAT_DEFER;
-    } else if (mail_copy_status != 0) {
-	deliver_status = (errno == ENOSPC || errno == ESTALE ?
-			  defer_append : bounce_append)
+    if (status)
+	status = (errno == ENOSPC ? defer_append : bounce_append)
 	    (BOUNCE_FLAG_KEEP, BOUNCE_ATTR(state.msg_attr),
 	     "maildir delivery failed: %s", vstring_str(why));
-    } else {
-	deliver_status = sent(SENT_ATTR(state.msg_attr), "maildir");
-    }
+    else
+	status = sent(SENT_ATTR(state.msg_attr), "maildir");
     vstring_free(buf);
     vstring_free(why);
     myfree(newdir);
@@ -173,5 +165,5 @@ int     deliver_maildir(LOCAL_STATE state, USER_ATTR usr_attr, char *path)
     myfree(curdir);
     myfree(tmpfile);
     myfree(newfile);
-    return (deliver_status);
+    return (status);
 }

@@ -14,13 +14,9 @@
 /*	char	*var_transit_origin;
 /*	char	*var_transit_dest;
 /*	char	*var_mail_name;
-/*	int	var_helpful_warnings;
-/*	char	*var_syslog_name;
 /*	char	*var_mail_owner;
 /*	uid_t	var_owner_uid;
 /*	gid_t	var_owner_gid;
-/*	char	*var_sgid_group;
-/*	gid_t	var_sgid_gid;
 /*	char	*var_default_privs;
 /*	uid_t	var_default_uid;
 /*	gid_t	var_default_gid;
@@ -38,13 +34,11 @@
 /*	char	*var_pid_dir;
 /*	int	var_dont_remove;
 /*	char	*var_inet_interfaces;
-/*	char	*var_proxy_interfaces;
 /*	char	*var_mynetworks;
 /*	char	*var_double_bounce_sender;
 /*	int	var_line_limit;
 /*	char	*var_alias_db_map;
 /*	int	var_message_limit;
-/*	char	*var_mail_release;
 /*	char	*var_mail_version;
 /*	int	var_ipc_idle_limit;
 /*	char	*var_db_type;
@@ -65,39 +59,11 @@
 /*	char	*var_syslog_facility;
 /*	char	*var_relay_domains;
 /*	char	*var_fflush_domains;
+/*	char	*var_def_transport;
 /*	char	*var_mynetworks_style;
-/*	char	*var_verp_delims;
-/*	char	*var_verp_filter;
-/*	char	*var_par_dom_match;
-/*	char	*var_config_dirs;
 /*
 /*	char	*var_import_environ;
 /*	char	*var_export_environ;
-/*	char	*var_debug_peer_list;
-/*	int	var_debug_peer_level;
-/*	int	var_in_flow_delay;
-/*	int	var_fault_inj_code;
-/*	char   *var_bounce_service;
-/*	char   *var_cleanup_service;
-/*	char   *var_defer_service;
-/*	char   *var_pickup_service;
-/*	char   *var_queue_service;
-/*	char   *var_rewrite_service;
-/*	char   *var_showq_service;
-/*	char   *var_error_service;
-/*	char   *var_flush_service;
-/*	int	var_db_create_buf;
-/*	int	var_db_read_buf;
-/*	int	var_mime_maxdepth;
-/*	int	var_mime_bound_len;
-/*	int	var_header_limit;
-/*	int	var_token_limit;
-/*	int	var_disable_mime_input;
-/*	int	var_disable_mime_oconv;
-/*	int     var_strict_8bitmime;
-/*	int     var_strict_7bit_hdrs;
-/*	int     var_strict_8bit_body;
-/*	int     var_strict_encoding;
 /*
 /*	void	mail_params_init()
 /* DESCRIPTION
@@ -126,10 +92,8 @@
 
 #include <sys_defs.h>
 #include <unistd.h>
-#include <stdlib.h>
 #include <string.h>
 #include <pwd.h>
-#include <grp.h>
 #include <time.h>
 
 #ifdef STRCASECMP_IN_STRINGS_H
@@ -143,10 +107,6 @@
 #include <get_hostname.h>
 #include <valid_hostname.h>
 #include <stringops.h>
-#include <safe.h>
-#ifdef HAS_DB
-#include <dict_db.h>
-#endif
 
 /* Global library. */
 
@@ -154,7 +114,6 @@
 #include "mail_conf.h"
 #include "mail_version.h"
 #include "mail_proto.h"
-#include "verp_sender.h"
 #include "mail_params.h"
 
  /*
@@ -168,13 +127,9 @@ char   *var_relayhost;
 char   *var_transit_origin;
 char   *var_transit_dest;
 char   *var_mail_name;
-int     var_helpful_warnings;
-char   *var_syslog_name;
 char   *var_mail_owner;
 uid_t   var_owner_uid;
 gid_t   var_owner_gid;
-char   *var_sgid_group;
-gid_t   var_sgid_gid;
 char   *var_default_privs;
 uid_t   var_default_uid;
 gid_t   var_default_gid;
@@ -192,13 +147,11 @@ int     var_ipc_timeout;
 char   *var_pid_dir;
 int     var_dont_remove;
 char   *var_inet_interfaces;
-char   *var_proxy_interfaces;
 char   *var_mynetworks;
 char   *var_double_bounce_sender;
 int     var_line_limit;
 char   *var_alias_db_map;
 int     var_message_limit;
-char   *var_mail_release;
 char   *var_mail_version;
 int     var_ipc_idle_limit;
 char   *var_db_type;
@@ -219,39 +172,11 @@ int     var_daemon_timeout;
 char   *var_syslog_facility;
 char   *var_relay_domains;
 char   *var_fflush_domains;
+char   *var_def_transport;
 char   *var_mynetworks_style;
-char   *var_verp_delims;
-char   *var_verp_filter;
-int     var_in_flow_delay;
-char   *var_par_dom_match;
-char   *var_config_dirs;
 
 char   *var_import_environ;
 char   *var_export_environ;
-char   *var_debug_peer_list;
-int     var_debug_peer_level;
-int     var_fault_inj_code;
-char   *var_bounce_service;
-char   *var_cleanup_service;
-char   *var_defer_service;
-char   *var_pickup_service;
-char   *var_queue_service;
-char   *var_rewrite_service;
-char   *var_showq_service;
-char   *var_error_service;
-char   *var_flush_service;
-int     var_db_create_buf;
-int     var_db_read_buf;
-int     var_mime_maxdepth;
-int     var_mime_bound_len;
-int     var_header_limit;
-int     var_token_limit;
-int     var_disable_mime_input;
-int     var_disable_mime_oconv;
-int     var_strict_8bitmime;
-int     var_strict_7bit_hdrs;
-int     var_strict_8bit_body;
-int     var_strict_encoding;
 
 /* check_myhostname - lookup hostname and validate */
 
@@ -274,11 +199,9 @@ static const char *check_myhostname(void)
     name = get_hostname();
     if ((dot = strchr(name, '.')) == 0) {
 	if ((domain = mail_conf_lookup_eval(VAR_MYDOMAIN)) == 0)
-	    msg_warn("My hostname %s is not a fully qualified name - set %s or %s in %s/%s",
-		     name, VAR_MYHOSTNAME, VAR_MYDOMAIN,
-		     var_config_dir, MAIN_CONF_FILE);
-	else
-	    name = concatenate(name, ".", domain, (char *) 0);
+	    msg_fatal("My hostname %s is not a fully qualified name - set %s or %s in %s/main.cf",
+		      name, VAR_MYHOSTNAME, VAR_MYDOMAIN, var_config_dir);
+	name = concatenate(name, ".", domain, (char *) 0);
     }
     return (name);
 }
@@ -305,16 +228,13 @@ static void check_default_privs(void)
     struct passwd *pwd;
 
     if ((pwd = getpwnam(var_default_privs)) == 0)
-	msg_fatal("file %s/%s: parameter %s: unknown user name value: %s",
-		  var_config_dir, MAIN_CONF_FILE,
+	msg_fatal("unknown %s configuration parameter value: %s",
 		  VAR_DEFAULT_PRIVS, var_default_privs);
     if ((var_default_uid = pwd->pw_uid) == 0)
-	msg_fatal("file %s/%s: parameter %s: user %s has privileged user ID",
-		  var_config_dir, MAIN_CONF_FILE,
+	msg_fatal("%s: %s: privileged user is not allowed",
 		  VAR_DEFAULT_PRIVS, var_default_privs);
     if ((var_default_gid = pwd->pw_gid) == 0)
-	msg_fatal("file %s/%s: parameter %s: user %s has privileged group ID",
-		  var_config_dir, MAIN_CONF_FILE,
+	msg_fatal("%s: %s: privileged group is not allowed",
 		  VAR_DEFAULT_PRIVS, var_default_privs);
 }
 
@@ -325,91 +245,14 @@ static void check_mail_owner(void)
     struct passwd *pwd;
 
     if ((pwd = getpwnam(var_mail_owner)) == 0)
-	msg_fatal("file %s/%s: parameter %s: unknown user name value: %s",
-		  var_config_dir, MAIN_CONF_FILE,
+	msg_fatal("unknown %s configuration parameter value: %s",
 		  VAR_MAIL_OWNER, var_mail_owner);
     if ((var_owner_uid = pwd->pw_uid) == 0)
-	msg_fatal("file %s/%s: parameter %s: user %s has privileged user ID",
-		  var_config_dir, MAIN_CONF_FILE,
+	msg_fatal("%s: %s: privileged user is not allowed",
 		  VAR_MAIL_OWNER, var_mail_owner);
     if ((var_owner_gid = pwd->pw_gid) == 0)
-	msg_fatal("file %s/%s: parameter %s: user %s has privileged group ID",
-		  var_config_dir, MAIN_CONF_FILE,
-		  VAR_MAIL_OWNER, var_mail_owner);
-
-    /*
-     * This detects only some forms of sharing. Enumerating the entire
-     * password file name space could be expensive. The purpose of this code
-     * is to discourage user ID sharing by developers and package
-     * maintainers.
-     */
-    if ((pwd = getpwuid(var_owner_uid)) != 0
-	&& strcmp(pwd->pw_name, var_mail_owner) != 0)
-	msg_fatal("file %s/%s: parameter %s: user %s has same user ID as %s",
-		  var_config_dir, MAIN_CONF_FILE,
-		  VAR_MAIL_OWNER, var_mail_owner, pwd->pw_name);
-}
-
-/* check_sgid_group - lookup setgid group attributes and validate */
-
-static void check_sgid_group(void)
-{
-    struct group *grp;
-
-    if ((grp = getgrnam(var_sgid_group)) == 0)
-	msg_fatal("file %s/%s: parameter %s: unknown group name: %s",
-		  var_config_dir, MAIN_CONF_FILE,
-		  VAR_SGID_GROUP, var_sgid_group);
-    if ((var_sgid_gid = grp->gr_gid) == 0)
-	msg_fatal("file %s/%s: parameter %s: group %s has privileged group ID",
-		  var_config_dir, MAIN_CONF_FILE,
-		  VAR_SGID_GROUP, var_sgid_group);
-
-    /*
-     * This detects only some forms of sharing. Enumerating the entire group
-     * file name space could be expensive. The purpose of this code is to
-     * discourage group ID sharing by developers and package maintainers.
-     */
-    if ((grp = getgrgid(var_sgid_gid)) != 0
-	&& strcmp(grp->gr_name, var_sgid_group) != 0)
-	msg_fatal("file %s/%s: parameter %s: group %s has same group ID as %s",
-		  var_config_dir, MAIN_CONF_FILE,
-		  VAR_SGID_GROUP, var_sgid_group, grp->gr_name);
-}
-
-/* check_overlap - disallow UID or GID sharing */
-
-static void check_overlap(void)
-{
-    if (strcmp(var_default_privs, var_mail_owner) == 0)
-	msg_fatal("file %s/%s: parameters %s and %s specify the same user %s",
-		  var_config_dir, MAIN_CONF_FILE,
-		  VAR_DEFAULT_PRIVS, VAR_MAIL_OWNER,
-		  var_default_privs);
-    if (var_default_uid == var_owner_uid)
-	msg_fatal("file %s/%s: parameters %s and %s: users %s and %s have the same user ID: %ld",
-		  var_config_dir, MAIN_CONF_FILE,
-		  VAR_DEFAULT_PRIVS, VAR_MAIL_OWNER,
-		  var_default_privs, var_mail_owner,
-		  (long) var_owner_uid);
-    if (var_default_gid == var_owner_gid)
-	msg_fatal("file %s/%s: parameters %s and %s: users %s and %s have the same group ID: %ld",
-		  var_config_dir, MAIN_CONF_FILE,
-		  VAR_DEFAULT_PRIVS, VAR_MAIL_OWNER,
-		  var_default_privs, var_mail_owner,
-		  (long) var_owner_gid);
-    if (var_default_gid == var_sgid_gid)
-	msg_fatal("file %s/%s: parameters %s and %s: user %s and group %s have the same group ID: %ld",
-		  var_config_dir, MAIN_CONF_FILE,
-		  VAR_DEFAULT_PRIVS, VAR_SGID_GROUP,
-		  var_default_privs, var_sgid_group,
-		  (long) var_sgid_gid);
-    if (var_owner_gid == var_sgid_gid)
-	msg_fatal("file %s/%s: parameters %s and %s: user %s and group %s have the same group ID: %ld",
-		  var_config_dir, MAIN_CONF_FILE,
-		  VAR_MAIL_OWNER, VAR_SGID_GROUP,
-		  var_mail_owner, var_sgid_group,
-		  (long) var_sgid_gid);
+	msg_fatal("%s: %s: privileged group is not allowed",
+		  VAR_DEFAULT_PRIVS, var_mail_owner);
 }
 
 /* mail_params_init - configure built-in parameters */
@@ -427,9 +270,7 @@ void    mail_params_init()
     };
     static CONFIG_STR_TABLE other_str_defaults[] = {
 	VAR_MAIL_NAME, DEF_MAIL_NAME, &var_mail_name, 1, 0,
-	VAR_SYSLOG_NAME, DEF_SYSLOG_NAME, &var_syslog_name, 1, 0,
 	VAR_MAIL_OWNER, DEF_MAIL_OWNER, &var_mail_owner, 1, 0,
-	VAR_SGID_GROUP, DEF_SGID_GROUP, &var_sgid_group, 1, 0,
 	VAR_MYDEST, DEF_MYDEST, &var_mydest, 0, 0,
 	VAR_MYORIGIN, DEF_MYORIGIN, &var_myorigin, 1, 0,
 	VAR_RELAYHOST, DEF_RELAYHOST, &var_relayhost, 0, 0,
@@ -439,11 +280,9 @@ void    mail_params_init()
 	VAR_QUEUE_DIR, DEF_QUEUE_DIR, &var_queue_dir, 1, 0,
 	VAR_PID_DIR, DEF_PID_DIR, &var_pid_dir, 1, 0,
 	VAR_INET_INTERFACES, DEF_INET_INTERFACES, &var_inet_interfaces, 1, 0,
-	VAR_PROXY_INTERFACES, DEF_PROXY_INTERFACES, &var_proxy_interfaces, 0, 0,
 	VAR_DOUBLE_BOUNCE, DEF_DOUBLE_BOUNCE, &var_double_bounce_sender, 1, 0,
 	VAR_DEFAULT_PRIVS, DEF_DEFAULT_PRIVS, &var_default_privs, 1, 0,
 	VAR_ALIAS_DB_MAP, DEF_ALIAS_DB_MAP, &var_alias_db_map, 0, 0,
-	VAR_MAIL_RELEASE, DEF_MAIL_RELEASE, &var_mail_release, 1, 0,
 	VAR_MAIL_VERSION, DEF_MAIL_VERSION, &var_mail_version, 1, 0,
 	VAR_DB_TYPE, DEF_DB_TYPE, &var_db_type, 1, 0,
 	VAR_HASH_QUEUE_NAMES, DEF_HASH_QUEUE_NAMES, &var_hash_queue_names, 1, 0,
@@ -452,21 +291,8 @@ void    mail_params_init()
 	VAR_FFLUSH_DOMAINS, DEF_FFLUSH_DOMAINS, &var_fflush_domains, 0, 0,
 	VAR_EXPORT_ENVIRON, DEF_EXPORT_ENVIRON, &var_export_environ, 0, 0,
 	VAR_IMPORT_ENVIRON, DEF_IMPORT_ENVIRON, &var_import_environ, 0, 0,
+	VAR_DEF_TRANSPORT, DEF_DEF_TRANSPORT, &var_def_transport, 0, 0,
 	VAR_MYNETWORKS_STYLE, DEF_MYNETWORKS_STYLE, &var_mynetworks_style, 1, 0,
-	VAR_DEBUG_PEER_LIST, DEF_DEBUG_PEER_LIST, &var_debug_peer_list, 0, 0,
-	VAR_VERP_DELIMS, DEF_VERP_DELIMS, &var_verp_delims, 2, 2,
-	VAR_VERP_FILTER, DEF_VERP_FILTER, &var_verp_filter, 1, 0,
-	VAR_PAR_DOM_MATCH, DEF_PAR_DOM_MATCH, &var_par_dom_match, 0, 0,
-	VAR_CONFIG_DIRS, DEF_CONFIG_DIRS, &var_config_dirs, 0, 0,
-	VAR_BOUNCE_SERVICE, DEF_BOUNCE_SERVICE, &var_bounce_service, 1, 0,
-	VAR_CLEANUP_SERVICE, DEF_CLEANUP_SERVICE, &var_cleanup_service, 1, 0,
-	VAR_DEFER_SERVICE, DEF_DEFER_SERVICE, &var_defer_service, 1, 0,
-	VAR_PICKUP_SERVICE, DEF_PICKUP_SERVICE, &var_pickup_service, 1, 0,
-	VAR_QUEUE_SERVICE, DEF_QUEUE_SERVICE, &var_queue_service, 1, 0,
-	VAR_REWRITE_SERVICE, DEF_REWRITE_SERVICE, &var_rewrite_service, 1, 0,
-	VAR_SHOWQ_SERVICE, DEF_SHOWQ_SERVICE, &var_showq_service, 1, 0,
-	VAR_ERROR_SERVICE, DEF_ERROR_SERVICE, &var_error_service, 1, 0,
-	VAR_FLUSH_SERVICE, DEF_FLUSH_SERVICE, &var_flush_service, 1, 0,
 	0,
     };
     static CONFIG_STR_FN_TABLE function_str_defaults_2[] = {
@@ -481,14 +307,6 @@ void    mail_params_init()
 	VAR_HASH_QUEUE_DEPTH, DEF_HASH_QUEUE_DEPTH, &var_hash_queue_depth, 1, 0,
 	VAR_FORK_TRIES, DEF_FORK_TRIES, &var_fork_tries, 1, 0,
 	VAR_FLOCK_TRIES, DEF_FLOCK_TRIES, &var_flock_tries, 1, 0,
-	VAR_DEBUG_PEER_LEVEL, DEF_DEBUG_PEER_LEVEL, &var_debug_peer_level, 1, 0,
-	VAR_FAULT_INJ_CODE, DEF_FAULT_INJ_CODE, &var_fault_inj_code, 0, 0,
-	VAR_DB_CREATE_BUF, DEF_DB_CREATE_BUF, &var_db_create_buf, 1, 0,
-	VAR_DB_READ_BUF, DEF_DB_READ_BUF, &var_db_read_buf, 1, 0,
-	VAR_HEADER_LIMIT, DEF_HEADER_LIMIT, &var_header_limit, 1, 0,
-	VAR_TOKEN_LIMIT, DEF_TOKEN_LIMIT, &var_token_limit, 1, 0,
-	VAR_MIME_MAXDEPTH, DEF_MIME_MAXDEPTH, &var_mime_maxdepth, 1, 0,
-	VAR_MIME_BOUND_LEN, DEF_MIME_BOUND_LEN, &var_mime_bound_len, 1, 0,
 	0,
     };
     static CONFIG_TIME_TABLE time_defaults[] = {
@@ -500,23 +318,14 @@ void    mail_params_init()
 	VAR_FLOCK_DELAY, DEF_FLOCK_DELAY, &var_flock_delay, 1, 0,
 	VAR_FLOCK_STALE, DEF_FLOCK_STALE, &var_flock_stale, 1, 0,
 	VAR_DAEMON_TIMEOUT, DEF_DAEMON_TIMEOUT, &var_daemon_timeout, 1, 0,
-	VAR_IN_FLOW_DELAY, DEF_IN_FLOW_DELAY, &var_in_flow_delay, 0, 10,
 	0,
     };
     static CONFIG_BOOL_TABLE bool_defaults[] = {
 	VAR_DISABLE_DNS, DEF_DISABLE_DNS, &var_disable_dns,
 	VAR_SOFT_BOUNCE, DEF_SOFT_BOUNCE, &var_soft_bounce,
 	VAR_OWNREQ_SPECIAL, DEF_OWNREQ_SPECIAL, &var_ownreq_special,
-	VAR_STRICT_8BITMIME, DEF_STRICT_8BITMIME, &var_strict_8bitmime,
-	VAR_STRICT_7BIT_HDRS, DEF_STRICT_7BIT_HDRS, &var_strict_7bit_hdrs,
-	VAR_STRICT_8BIT_BODY, DEF_STRICT_8BIT_BODY, &var_strict_8bit_body,
-	VAR_STRICT_ENCODING, DEF_STRICT_ENCODING, &var_strict_encoding,
-	VAR_DISABLE_MIME_INPUT, DEF_DISABLE_MIME_INPUT, &var_disable_mime_input,
-	VAR_DISABLE_MIME_OCONV, DEF_DISABLE_MIME_OCONV, &var_disable_mime_oconv,
-	VAR_HELPFUL_WARNINGS, DEF_HELPFUL_WARNINGS, &var_helpful_warnings,
 	0,
     };
-    const char *cp;
 
     /*
      * Extract syslog_facility early, so that from here on all errors are
@@ -525,8 +334,7 @@ void    mail_params_init()
     get_mail_conf_str_table(first_str_defaults);
 
     if (!msg_syslog_facility(var_syslog_facility))
-	msg_fatal("file %s/%s: parameter %s: unrecognized value: %s",
-		  var_config_dir, MAIN_CONF_FILE,
+	msg_fatal("unknown %s configuration parameter value: %s",
 		  VAR_SYSLOG_FACILITY, var_syslog_facility);
 
     /*
@@ -535,14 +343,10 @@ void    mail_params_init()
      * the domain.
      */
     get_mail_conf_str_fn_table(function_str_defaults);
-    if (!valid_hostname(var_myhostname, DO_GRIPE))
-	msg_fatal("file %s/%s: parameter %s: bad parameter value: %s",
-		  var_config_dir, MAIN_CONF_FILE,
-		  VAR_MYHOSTNAME, var_myhostname);
-    if (!valid_hostname(var_mydomain, DO_GRIPE))
-	msg_fatal("file %s/%s: parameter %s: bad parameter value: %s",
-		  var_config_dir, MAIN_CONF_FILE,
-		  VAR_MYDOMAIN, var_mydomain);
+    if (!valid_hostname(var_myhostname, DO_GRIPE)
+	|| !valid_hostname(var_mydomain, DO_GRIPE))
+	msg_fatal("main.cf configuration error: bad %s or %s parameter value",
+		  VAR_MYHOSTNAME, VAR_MYDOMAIN);
 
     /*
      * Variables that are needed by almost every program.
@@ -553,11 +357,6 @@ void    mail_params_init()
     get_mail_conf_time_table(time_defaults);
     check_default_privs();
     check_mail_owner();
-    check_sgid_group();
-    check_overlap();
-#ifdef HAS_DB
-    dict_db_cache_size = var_db_read_buf;
-#endif
 
     /*
      * Variables whose defaults are determined at runtime, after other
@@ -578,25 +377,8 @@ void    mail_params_init()
     time(&var_starttime);
 
     /*
-     * Export the syslog name so children can inherit and use it before they
-     * have initialized.
-     */
-    if ((cp = safe_getenv(CONF_ENV_LOGTAG)) == 0
-	|| strcmp(cp, var_syslog_name) != 0)
-	if (setenv(CONF_ENV_LOGTAG, var_syslog_name, 1) < 0)
-	    msg_fatal("setenv %s %s: %m", CONF_ENV_LOGTAG, var_syslog_name);
-
-    /*
      * I have seen this happen just too often.
      */
     if (strcasecmp(var_myhostname, var_relayhost) == 0)
 	msg_fatal("myhostname == relayhost");
-
-    /*
-     * One more sanity check.
-     */
-    if ((cp = verp_delims_verify(var_verp_delims)) != 0)
-	msg_fatal("file %s/%s: parameters %s and %s: %s",
-		  var_config_dir, MAIN_CONF_FILE,
-		  VAR_VERP_DELIMS, VAR_VERP_FILTER, cp);
 }

@@ -34,11 +34,9 @@
 # .ti +5
 #	\fIname\fR: \fIvalue1\fR, \fIvalue2\fR, \fI...\fR
 # .IP \(bu
-#	Empty lines and whitespace-only lines are ignored, as
-#	are lines whose first non-whitespace character is a `#'.
+#	Lines that begin with whitespace continue the previous line.
 # .IP \(bu
-#	A logical line starts with non-whitespace text. A line that
-#	starts with whitespace continues a logical line.
+#	Blank lines are ignored, as are lines beginning with `#'.
 # .PP
 #	The \fIname\fR is a local address (no domain part).
 #	Use double quotes when the name contains any special characters
@@ -108,17 +106,11 @@
 #	addresses.
 # .IP \fBrecipient_delimiter\fR
 #	Delimiter that separates recipients from address extensions.
-# BUGS
-#	Regular expression alias lookup tables are allowed, but
-#	substitution of $1 etc. is forbidden because that would
-#	open a security loophole.
 # STANDARDS
 #	RFC 822 (ARPA Internet Text Messages)
 # SEE ALSO
 #	local(8) local delivery agent
-#	newaliases(1) alias database management
-#	regexp_table(5) POSIX regular expression table format
-#	pcre_table(5) Perl Compatible Regular Expression table format
+#	postalias(1) alias database management
 # LICENSE
 # .ad
 # .fi

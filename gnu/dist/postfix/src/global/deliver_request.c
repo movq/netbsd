@@ -15,7 +15,6 @@
 /*		long	data_offset;
 /*		long	data_size;
 /*		char	*nexthop;
-/*		char	*encoding;
 /*		char	*sender;
 /*		char	*errors_to;
 /*		char	*return_receipt;
@@ -68,7 +67,7 @@
 /*	Warnings: bad data sent by the client. Fatal errors: out of
 /*	memory, queue file open errors.
 /* SEE ALSO
-/*	attr_scan(3) low-level intra-mail input routines
+/*	mail_scan(3) low-level intra-mail input routines
 /* LICENSE
 /* .ad
 /* .fi
@@ -86,7 +85,6 @@
 #include <sys/stat.h>
 #include <string.h>
 #include <unistd.h>
-#include <errno.h>
 
 /* Utility library. */
 
@@ -119,9 +117,7 @@ static int deliver_request_initial(VSTREAM *stream)
      */
     if (msg_verbose)
 	msg_info("deliver_request_initial: send initial status");
-    attr_print(stream, ATTR_FLAG_NONE,
-	       ATTR_TYPE_NUM, MAIL_ATTR_STATUS, 0,
-	       ATTR_TYPE_END);
+    mail_print(stream, "%d", 0);
     if ((err = vstream_fflush(stream)) != 0)
 	if (msg_verbose)
 	    msg_warn("send initial status: %m");
@@ -141,10 +137,7 @@ static int deliver_request_final(VSTREAM *stream, char *reason, int status)
 	reason = "";
     if (msg_verbose)
 	msg_info("deliver_request_final: send: \"%s\" %d", reason, status);
-    attr_print(stream, ATTR_FLAG_NONE,
-	       ATTR_TYPE_STR, MAIL_ATTR_WHY, reason,
-	       ATTR_TYPE_NUM, MAIL_ATTR_STATUS, status,
-	       ATTR_TYPE_END);
+    mail_print(stream, "%s %d", reason, status);
     if ((err = vstream_fflush(stream)) != 0)
 	if (msg_verbose)
 	    msg_warn("send final status: %m");
@@ -170,8 +163,6 @@ static int deliver_request_get(VSTREAM *stream, DELIVER_REQUEST *request)
     static VSTRING *queue_name;
     static VSTRING *queue_id;
     static VSTRING *nexthop;
-    static VSTRING *encoding;
-    static VSTRING *orig_addr;
     static VSTRING *address;
     static VSTRING *errors_to;
     static VSTRING *return_receipt;
@@ -186,8 +177,6 @@ static int deliver_request_get(VSTREAM *stream, DELIVER_REQUEST *request)
 	queue_name = vstring_alloc(10);
 	queue_id = vstring_alloc(10);
 	nexthop = vstring_alloc(10);
-	encoding = vstring_alloc(10);
-	orig_addr = vstring_alloc(10);
 	address = vstring_alloc(10);
 	errors_to = vstring_alloc(10);
 	return_receipt = vstring_alloc(10);
@@ -197,22 +186,12 @@ static int deliver_request_get(VSTREAM *stream, DELIVER_REQUEST *request)
      * Extract the queue file name, data offset, and sender address. Abort
      * the conversation when they send bad information.
      */
-    if (attr_scan(stream, ATTR_FLAG_STRICT | ATTR_FLAG_MORE,
-		  ATTR_TYPE_NUM, MAIL_ATTR_FLAGS, &request->flags,
-		  ATTR_TYPE_STR, MAIL_ATTR_QUEUE, queue_name,
-		  ATTR_TYPE_STR, MAIL_ATTR_QUEUEID, queue_id,
-		  ATTR_TYPE_LONG, MAIL_ATTR_OFFSET, &request->data_offset,
-		  ATTR_TYPE_LONG, MAIL_ATTR_SIZE, &request->data_size,
-		  ATTR_TYPE_STR, MAIL_ATTR_NEXTHOP, nexthop,
-		  ATTR_TYPE_STR, MAIL_ATTR_ENCODING, encoding,
-		  ATTR_TYPE_STR, MAIL_ATTR_SENDER, address,
-		  ATTR_TYPE_STR, MAIL_ATTR_ERRTO, errors_to,
-		  ATTR_TYPE_STR, MAIL_ATTR_RRCPT, return_receipt,
-		  ATTR_TYPE_LONG, MAIL_ATTR_TIME, &request->arrival_time,
-		  ATTR_TYPE_END) != 11) {
-	msg_warn("%s: error receiving common attributes", myname);
+    if (mail_scan(stream, "%d %s %s %ld %ld %s %s %s %s %ld",
+		  &request->flags,
+		  queue_name, queue_id, &request->data_offset,
+		  &request->data_size, nexthop, address,
+		  errors_to, return_receipt, &request->arrival_time) != 10)
 	return (-1);
-    }
     if (mail_open_ok(vstring_str(queue_name),
 		     vstring_str(queue_id), &st, &path) == 0)
 	return (-1);
@@ -220,34 +199,21 @@ static int deliver_request_get(VSTREAM *stream, DELIVER_REQUEST *request)
     request->queue_name = mystrdup(vstring_str(queue_name));
     request->queue_id = mystrdup(vstring_str(queue_id));
     request->nexthop = mystrdup(vstring_str(nexthop));
-    request->encoding = mystrdup(vstring_str(encoding));
     request->sender = mystrdup(vstring_str(address));
     request->errors_to = mystrdup(vstring_str(errors_to));
     request->return_receipt = mystrdup(vstring_str(return_receipt));
 
     /*
-     * Extract the recipient offset and address list. Skip over any
-     * attributes from the sender that we do not understand.
+     * Extract the recipient offset and address list.
      */
     for (;;) {
-	if (attr_scan(stream, ATTR_FLAG_MORE | ATTR_FLAG_STRICT,
-		      ATTR_TYPE_LONG, MAIL_ATTR_OFFSET, &offset,
-		      ATTR_TYPE_END) != 1) {
-	    msg_warn("%s: error receiving offset attribute", myname);
+	if (mail_scan(stream, "%ld", &offset) != 1)
 	    return (-1);
-	}
 	if (offset == 0)
 	    break;
-	if (attr_scan(stream, ATTR_FLAG_MORE | ATTR_FLAG_STRICT,
-		      ATTR_TYPE_STR, MAIL_ATTR_ORCPT, orig_addr,
-		      ATTR_TYPE_STR, MAIL_ATTR_RECIP, address,
-		      ATTR_TYPE_END) != 2) {
-	    msg_warn("%s: error receiving recipient attributes", myname);
+	if (mail_scan(stream, "%s", address) != 1)
 	    return (-1);
-	}
-	recipient_list_add(&request->rcpt_list, offset,
-			   vstring_str(orig_addr),
-			   vstring_str(address));
+	recipient_list_add(&request->rcpt_list, offset, vstring_str(address));
     }
 
     /*
@@ -264,12 +230,8 @@ static int deliver_request_get(VSTREAM *stream, DELIVER_REQUEST *request)
 
     request->fp =
 	mail_queue_open(request->queue_name, request->queue_id, O_RDWR, 0);
-    if (request->fp == 0) {
-	if (errno != ENOENT)
-	    msg_fatal("open %s %s: %m", request->queue_name, request->queue_id);
-	msg_warn("open %s %s: %m", request->queue_name, request->queue_id);
-	return (-1);
-    }
+    if (request->fp == 0)
+	msg_fatal("open %s %s: %m", request->queue_name, request->queue_id);
     if (msg_verbose)
 	msg_info("%s: file %s", myname, VSTREAM_PATH(request->fp));
     if (myflock(vstream_fileno(request->fp), INTERNAL_LOCK, DELIVER_LOCK_MODE) < 0)
@@ -290,7 +252,6 @@ static DELIVER_REQUEST *deliver_request_alloc(void)
     request->queue_name = 0;
     request->queue_id = 0;
     request->nexthop = 0;
-    request->encoding = 0;
     request->sender = 0;
     request->errors_to = 0;
     request->return_receipt = 0;
@@ -313,8 +274,6 @@ static void deliver_request_free(DELIVER_REQUEST *request)
 	myfree(request->queue_id);
     if (request->nexthop)
 	myfree(request->nexthop);
-    if (request->encoding)
-	myfree(request->encoding);
     if (request->sender)
 	myfree(request->sender);
     if (request->errors_to)
@@ -350,11 +309,9 @@ DELIVER_REQUEST *deliver_request_read(VSTREAM *stream)
     /*
      * Allocate and read the queue manager's delivery request.
      */
-#define XXX_DEFER_STATUS	-1
-
     request = deliver_request_alloc();
     if (deliver_request_get(stream, request) < 0) {
-	deliver_request_done(stream, request, XXX_DEFER_STATUS);
+	deliver_request_free(request);
 	request = 0;
     }
     return (request);

@@ -1,18 +1,11 @@
-/*	$NetBSD: misc.c,v 1.9 2002/12/02 22:08:44 jdolecek Exp $	*/
-
  /*
   * Misc routines that are used by tcpd and by tcpdchk.
   * 
   * Author: Wietse Venema, Eindhoven University of Technology, The Netherlands.
   */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
 static char sccsic[] = "@(#) misc.c 1.2 96/02/11 17:01:29";
-#else
-__RCSID("$NetBSD: misc.c,v 1.9 2002/12/02 22:08:44 jdolecek Exp $");
-#endif
 #endif
 
 #include <sys/types.h>
@@ -24,6 +17,12 @@ __RCSID("$NetBSD: misc.c,v 1.9 2002/12/02 22:08:44 jdolecek Exp $");
 
 #include "tcpd.h"
 
+extern char *fgets();
+
+#ifndef	INADDR_NONE
+#define	INADDR_NONE	(-1)		/* XXX should be 0xffffffff */
+#endif
+
 /* xgets - fgets() with backslash-newline stripping */
 
 char   *xgets(ptr, len, fp)
@@ -34,7 +33,7 @@ FILE   *fp;
     int     got;
     char   *start = ptr;
 
-    while (len > 1 && fgets(ptr, len, fp)) {
+    while (fgets(ptr, len, fp)) {
 	got = strlen(ptr);
 	if (got >= 1 && ptr[got - 1] == '\n') {
 	    tcpd_context.line++;
@@ -57,40 +56,32 @@ char   *split_at(string, delimiter)
 char   *string;
 int     delimiter;
 {
-    char *cp;
-    int bracket;
+    char   *cp;
 
-    bracket = 0;
-    for (cp = string; cp && *cp; cp++) {
-	switch (*cp) {
-	case '[':
-	    bracket++;
-	    break;
-	case ']':
-	    bracket--;
-	    break;
-	default:
-	    if (bracket == 0 && *cp == delimiter) {
-		*cp++ = 0;
-		return cp;
-	    }
-	    break;
-	}
-    }
-    return NULL;
+    if ((cp = strchr(string, delimiter)) != 0)
+	*cp++ = 0;
+    return (cp);
 }
 
 /* dot_quad_addr - convert dotted quad to internal form */
 
-int dot_quad_addr(str, addr)
+unsigned long dot_quad_addr(str)
 char   *str;
-unsigned long *addr;
 {
-    struct in_addr a;
+    int     in_run = 0;
+    int     runs = 0;
+    char   *cp = str;
 
-    if (!inet_aton(str, &a))
-	return -1;
-    if (addr)
-	*addr = a.s_addr;
-    return 0;
+    /* Count the number of runs of non-dot characters. */
+
+    while (*cp) {
+	if (*cp == '.') {
+	    in_run = 0;
+	} else if (in_run == 0) {
+	    in_run = 1;
+	    runs++;
+	}
+	cp++;
+    }
+    return (runs == 4 ? inet_addr(str) : INADDR_NONE);
 }

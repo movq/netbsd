@@ -117,7 +117,6 @@
 #include <off_cvt.h>
 #include <mark_corrupt.h>
 #include <quote_821_local.h>
-#include <mail_proto.h>
 
 /* Application-specific. */
 
@@ -140,9 +139,6 @@
   * same code that implements command pipelining, so that we can borrow from
   * the existing code for exception handling and error reporting.
   * 
-  * Client states that are associated with sending mail (up to and including
-  * SMTP_STATE_DOT) must have smaller numerical values than the non-sending
-  * states (SMTP_STATE_ABORT .. SMTP_STATE_LAST).
   */
 #define LMTP_STATE_MAIL		0
 #define LMTP_STATE_RCPT		1
@@ -173,25 +169,18 @@ char   *xfer_states[LMTP_STATE_LAST] = {
     "sending QUIT",
 };
 
-char   *xfer_request[LMTP_STATE_LAST] = {
-    "MAIL FROM command",
-    "RCPT TO command",
-    "DATA command",
-    "end of DATA command",
-    "final RSET command",
-    "QUIT command",
-};
-
 /* lmtp_lhlo - perform initial handshake with LMTP server */
 
 int     lmtp_lhlo(LMTP_STATE *state)
 {
+    char   *myname = "lmtp_lhlo";
     LMTP_SESSION *session = state->session;
     LMTP_RESP *resp;
     int     except;
     char   *lines;
     char   *words;
     char   *word;
+    SOCKOPT_SIZE optlen = sizeof(state->sndbufsize);
 
     /*
      * Prepare for disaster.
@@ -228,7 +217,7 @@ int     lmtp_lhlo(LMTP_STATE *state)
     lines = resp->str;
     (void) mystrtok(&lines, "\n");
     while ((words = mystrtok(&lines, "\n")) != 0) {
-	if (mystrtok(&words, "- ") && (word = mystrtok(&words, " \t=")) != 0) {
+	if (mystrtok(&words, "- ") && (word = mystrtok(&words, " \t")) != 0) {
 	    if (strcasecmp(word, "8BITMIME") == 0)
 		state->features |= LMTP_FEATURE_8BITMIME;
 	    else if (strcasecmp(word, "PIPELINING") == 0)
@@ -245,7 +234,7 @@ int     lmtp_lhlo(LMTP_STATE *state)
 	msg_info("server features: 0x%x", state->features);
 
 #ifdef USE_SASL_AUTH
-    if (var_lmtp_sasl_enable && (state->features & LMTP_FEATURE_AUTH))
+    if (var_lmtp_sasl_enable && (state->features & SMTP_FEATURE_AUTH))
 	return (lmtp_sasl_helo_login(state));
 #endif
 
@@ -304,11 +293,12 @@ static int lmtp_loop(LMTP_STATE *state, int send_state, int recv_state)
      * Macros for readability. XXX Aren't LMTP addresses supposed to be case
      * insensitive?
      */
-#define REWRITE_ADDRESS(dst, src) do { \
-	  if (*(src)) { \
-	      quote_821_local(dst, src); \
-	  } else { \
-	      vstring_strcpy(dst, src); \
+#define REWRITE_ADDRESS(addr) do { \
+	  if (*(addr)) { \
+	      quote_821_local(state->scratch, addr); \
+	      myfree(addr); \
+	      addr = mystrdup(vstring_str(state->scratch)); \
+	      lowercase(addr); \
 	  } \
     } while (0)
 
@@ -324,9 +314,6 @@ static int lmtp_loop(LMTP_STATE *state, int send_state, int recv_state)
 
 #define SENDER_IN_WAIT_STATE \
 	(send_state == LMTP_STATE_DOT || send_state == LMTP_STATE_LAST)
-
-#define SENDING_MAIL \
-	(recv_state <= LMTP_STATE_DOT)
 
     /*
      * Pipelining support requires two loops: one loop for sending and one
@@ -366,21 +353,12 @@ static int lmtp_loop(LMTP_STATE *state, int send_state, int recv_state)
 	     * Build the MAIL FROM command.
 	     */
 	case LMTP_STATE_MAIL:
-	    REWRITE_ADDRESS(state->scratch, request->sender);
-	    vstring_sprintf(next_command, "MAIL FROM:<%s>",
-			    vstring_str(state->scratch));
-	    if (state->features & LMTP_FEATURE_SIZE)	/* RFC 1652 */
+	    if (*request->sender)
+		REWRITE_ADDRESS(request->sender);
+	    vstring_sprintf(next_command, "MAIL FROM:<%s>", request->sender);
+	    if (state->features & LMTP_FEATURE_SIZE)
 		vstring_sprintf_append(next_command, " SIZE=%lu",
 				       request->data_size);
-	    if (state->features & LMTP_FEATURE_8BITMIME) {
-		if (strcmp(request->encoding, MAIL_ATTR_ENC_8BIT) == 0)
-		    vstring_strcat(next_command, " BODY=8BITMIME");
-		else if (strcmp(request->encoding, MAIL_ATTR_ENC_7BIT) == 0)
-		    vstring_strcat(next_command, " BODY=7BIT");
-		else if (strcmp(request->encoding, MAIL_ATTR_ENC_NONE) != 0)
-		    msg_warn("%s: unknown content encoding: %s",
-			     request->queue_id, request->encoding);
-	    }
 	    next_state = LMTP_STATE_RCPT;
 	    break;
 
@@ -390,9 +368,8 @@ static int lmtp_loop(LMTP_STATE *state, int send_state, int recv_state)
 	     */
 	case LMTP_STATE_RCPT:
 	    rcpt = request->rcpt_list.info + send_rcpt;
-	    REWRITE_ADDRESS(state->scratch, rcpt->address);
-	    vstring_sprintf(next_command, "RCPT TO:<%s>",
-			    vstring_str(state->scratch));
+	    REWRITE_ADDRESS(rcpt->address);
+	    vstring_sprintf(next_command, "RCPT TO:<%s>", rcpt->address);
 	    if ((next_rcpt = send_rcpt + 1) == request->rcpt_list.len)
 		next_state = LMTP_STATE_DATA;
 	    break;
@@ -479,8 +456,8 @@ static int lmtp_loop(LMTP_STATE *state, int send_state, int recv_state)
 		smtp_timeout_setup(state->session->stream,
 				   *xfer_timeouts[recv_state]);
 		if ((except = vstream_setjmp(state->session->stream)) != 0)
-		    RETURN(SENDING_MAIL ? lmtp_stream_except(state, except,
-					     xfer_states[recv_state]) : -1);
+		    RETURN(lmtp_stream_except(state, except,
+					      xfer_states[recv_state]));
 		resp = lmtp_chat_resp(state);
 
 		/*
@@ -496,10 +473,8 @@ static int lmtp_loop(LMTP_STATE *state, int send_state, int recv_state)
 		case LMTP_STATE_MAIL:
 		    if (resp->code / 100 != 2) {
 			lmtp_mesg_fail(state, resp->code,
-				       "host %s said: %s (in reply to %s)",
-				       session->namaddr,
-				       translit(resp->str, "\n", " "),
-				       xfer_request[LMTP_STATE_MAIL]);
+				       "host %s said: %s", session->namaddr,
+				       translit(resp->str, "\n", " "));
 			mail_from_rejected = 1;
 		    }
 		    recv_state = LMTP_STATE_RCPT;
@@ -510,19 +485,9 @@ static int lmtp_loop(LMTP_STATE *state, int send_state, int recv_state)
 		     * rejected, ignore RCPT TO responses: all recipients are
 		     * dead already. When all recipients are rejected the
 		     * receiver may apply a course correction.
-		     * 
-		     * XXX 2821: Section 4.5.3.1 says that a 552 RCPT TO reply
-		     * must be treated as if the server replied with 452.
-		     * However, this causes "too much mail data" to be
-		     * treated as a recoverable error, which is wrong. I'll
-		     * stick with RFC 821.
 		     */
 		case LMTP_STATE_RCPT:
 		    if (!mail_from_rejected) {
-#ifdef notdef
-			if (resp->code == 552)
-			    resp->code = 452;
-#endif
 			rcpt = request->rcpt_list.info + recv_rcpt;
 			if (resp->code / 100 == 2) {
 			    if (survivors == 0)
@@ -532,10 +497,8 @@ static int lmtp_loop(LMTP_STATE *state, int send_state, int recv_state)
 			    survivors[nrcpt++] = recv_rcpt;
 			} else {
 			    lmtp_rcpt_fail(state, resp->code, rcpt,
-					"host %s said: %s (in reply to %s)",
-					   session->namaddr,
-					   translit(resp->str, "\n", " "),
-					   xfer_request[LMTP_STATE_RCPT]);
+				       "host %s said: %s", session->namaddr,
+					   translit(resp->str, "\n", " "));
 			    rcpt->offset = 0;	/* in case deferred */
 			}
 		    }
@@ -552,10 +515,8 @@ static int lmtp_loop(LMTP_STATE *state, int send_state, int recv_state)
 		    if (resp->code / 100 != 3) {
 			if (nrcpt > 0)
 			    lmtp_mesg_fail(state, resp->code,
-					"host %s said: %s (in reply to %s)",
-					   session->namaddr,
-					   translit(resp->str, "\n", " "),
-					   xfer_request[LMTP_STATE_DATA]);
+				       "host %s said: %s", session->namaddr,
+					   translit(resp->str, "\n", " "));
 			nrcpt = -1;
 		    }
 		    recv_state = LMTP_STATE_DOT;
@@ -575,19 +536,17 @@ static int lmtp_loop(LMTP_STATE *state, int send_state, int recv_state)
 			rcpt = request->rcpt_list.info + survivors[recv_dot];
 			if (resp->code / 100 == 2) {
 			    if (rcpt->offset) {
-				sent(request->queue_id, rcpt->orig_addr,
-				     rcpt->address, session->namaddr,
-				     request->arrival_time, "%s", resp->str);
+				sent(request->queue_id, rcpt->address,
+				     session->namaddr, request->arrival_time,
+				     "%s", resp->str);
 				if (request->flags & DEL_REQ_FLAG_SUCCESS)
 				    deliver_completed(state->src, rcpt->offset);
 				rcpt->offset = 0;
 			    }
 			} else {
 			    lmtp_rcpt_fail(state, resp->code, rcpt,
-					"host %s said: %s (in reply to %s)",
-					   session->namaddr,
-					   translit(resp->str, "\n", " "),
-					   xfer_request[LMTP_STATE_DOT]);
+				       "host %s said: %s", session->namaddr,
+					   translit(resp->str, "\n", " "));
 			    rcpt->offset = 0;	/* in case deferred */
 			}
 		    }

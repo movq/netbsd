@@ -22,7 +22,6 @@
 #include <tok822.h>
 #include <deliver_request.h>
 #include <mbox_conf.h>
-#include <maps.h>
 
  /*
   * User attributes: these control the privileges for delivery to external
@@ -68,9 +67,7 @@ typedef struct DELIVER_ATTR {
     char   *queue_name;			/* mail queue id */
     char   *queue_id;			/* mail queue id */
     long    offset;			/* data offset */
-    char   *encoding;			/* MIME encoding */
     char   *sender;			/* taken from envelope */
-    char   *orig_rcpt;			/* from submission */
     char   *recipient;			/* taken from resolver */
     char   *domain;			/* recipient domain */
     char   *local;			/* recipient full localpart */
@@ -121,17 +118,12 @@ typedef struct LOCAL_STATE {
  /*
   * Bundle up some often-user attributes.
   */
-#define BOUNCE_ATTR(attr)	attr.queue_id, attr.orig_rcpt, attr.recipient, \
-					attr.relay, attr.arrival_time
-#define BOUNCE_ONE_ATTR(attr)	attr.queue_name, attr.queue_id, attr.encoding, \
-					attr.sender, attr.orig_rcpt, \
-					attr.recipient, attr.relay, \
+#define BOUNCE_ATTR(attr)	attr.queue_id, attr.recipient, attr.relay, \
 					attr.arrival_time
-#define SENT_ATTR(attr)		attr.queue_id, attr.orig_rcpt, attr.recipient, \
-					attr.relay, attr.arrival_time
+#define SENT_ATTR(attr)		attr.queue_id, attr.recipient, attr.relay, \
+					attr.arrival_time
 #define OPENED_ATTR(attr)	attr.queue_id, attr.sender
-#define COPY_ATTR(attr)		attr.sender, attr.orig_rcpt, attr.delivered, \
-					attr.fp
+#define COPY_ATTR(attr)		attr.sender, attr.delivered, attr.fp
 
 #define MSG_LOG_STATE(m, p) \
 	msg_info("%s[%d]: local %s recip %s exten %s deliver %s exp_from %s", \
@@ -160,7 +152,7 @@ extern int deliver_resolve_addr(LOCAL_STATE, USER_ATTR, char *);
   * "leaf" nodes of the delivery graph.
   */
 extern int deliver_mailbox(LOCAL_STATE, USER_ATTR, int *);
-extern int deliver_command(LOCAL_STATE, USER_ATTR, const char *);
+extern int deliver_command(LOCAL_STATE, USER_ATTR, char *);
 extern int deliver_file(LOCAL_STATE, USER_ATTR, char *);
 extern int deliver_indirect(LOCAL_STATE);
 extern int deliver_maildir(LOCAL_STATE, USER_ATTR, char *);
@@ -217,11 +209,6 @@ extern int feature_control(const char *);
 int     local_expand(VSTRING *, const char *, LOCAL_STATE *, USER_ATTR *, const char *);
 
 #define LOCAL_EXP_EXTENSION_MATCHED	(1<<MAC_PARSE_USER)
-
- /*
-  * alias.c
-  */
-extern MAPS *alias_maps;
 
 /* LICENSE
 /* .ad

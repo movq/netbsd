@@ -6,32 +6,27 @@
 /* SYNOPSIS
 /*	#include <defer.h>
 /*
-/*	int	defer_append(flags, id, orig_rcpt, recipient, relay,
-/*				entry, format, ...)
+/*	int	defer_append(flags, id, recipient, relay, entry, format, ...)
 /*	int	flags;
 /*	const char *id;
-/*	const char *orig_rcpt;
 /*	const char *recipient;
 /*	const char *relay;
 /*	time_t	entry;
 /*	const char *format;
 /*
-/*	int	vdefer_append(flags, id, orig_rcpt, recipient, relay,
-/*				entry, format, ap)
+/*	int	vdefer_append(flags, id, recipient, relay, entry, format, ap)
 /*	int	flags;
 /*	const char *id;
-/*	const char *orig_rcpt;
 /*	const char *recipient;
 /*	const char *relay;
 /*	time_t	entry;
 /*	const char *format;
 /*	va_list	ap;
 /*
-/*	int	defer_flush(flags, queue, id, encoding, sender)
+/*	int	defer_flush(flags, queue, id, sender)
 /*	int	flags;
 /*	const char *queue;
 /*	const char *id;
-/*	const char *encoding;
 /*	const char *sender;
 /*
 /*	int	defer_warn(flags, queue, id, sender)
@@ -72,14 +67,9 @@
 /*	The message queue name of the original message file.
 /* .IP id
 /*	The queue id of the original message file.
-/* .IP orig_rcpt
-/*	The original envelope recipient address. If unavailable,
-/*	specify a null string or null pointer.
 /* .IP recipient
 /*	A recipient address that is being deferred. The domain part
 /*	of the address is marked dead (for a limited amount of time).
-/* .IP encoding
-/*	The body content encoding: MAIL_ATTR_ENC_{7BIT,8BIT,NONE}.
 /* .IP sender
 /*	The sender envelope address.
 /* .IP relay
@@ -116,10 +106,6 @@
 #include <stdarg.h>
 #include <string.h>
 
-#ifdef STRCASECMP_IN_STRINGS_H
-#include <strings.h>
-#endif
-
 /* Utility library. */
 
 #include <msg.h>
@@ -127,7 +113,6 @@
 
 /* Global library. */
 
-#include "mail_params.h"
 #include "mail_queue.h"
 #include "mail_proto.h"
 #include "flush_clnt.h"
@@ -138,48 +123,34 @@
 
 /* defer_append - defer message delivery */
 
-int     defer_append(int flags, const char *id, const char *orig_rcpt,
-		             const char *recipient, const char *relay,
-		             time_t entry, const char *fmt,...)
+int     defer_append(int flags, const char *id, const char *recipient,
+	               const char *relay, time_t entry, const char *fmt,...)
 {
     va_list ap;
     int     status;
 
     va_start(ap, fmt);
-    status = vdefer_append(flags, id, orig_rcpt, recipient,
-			   relay, entry, fmt, ap);
+    status = vdefer_append(flags, id, recipient, relay, entry, fmt, ap);
     va_end(ap);
     return (status);
 }
 
 /* vdefer_append - defer delivery of queue file */
 
-int     vdefer_append(int flags, const char *id, const char *orig_rcpt,
-		              const char *recipient, const char *relay,
-		              time_t entry, const char *fmt, va_list ap)
+int     vdefer_append(int flags, const char *id, const char *recipient,
+               const char *relay, time_t entry, const char *fmt, va_list ap)
 {
     VSTRING *why = vstring_alloc(100);
     int     delay = time((time_t *) 0) - entry;
     const char *rcpt_domain;
 
     vstring_vsprintf(why, fmt, ap);
-    if (orig_rcpt == 0)
-	orig_rcpt = "";
-    if (mail_command_client(MAIL_CLASS_PRIVATE, var_defer_service,
-			   ATTR_TYPE_NUM, MAIL_ATTR_NREQ, BOUNCE_CMD_APPEND,
-				ATTR_TYPE_NUM, MAIL_ATTR_FLAGS, flags,
-				ATTR_TYPE_STR, MAIL_ATTR_QUEUEID, id,
-				ATTR_TYPE_STR, MAIL_ATTR_ORCPT, orig_rcpt,
-				ATTR_TYPE_STR, MAIL_ATTR_RECIP, recipient,
-			     ATTR_TYPE_STR, MAIL_ATTR_WHY, vstring_str(why),
-				ATTR_TYPE_END) != 0)
-	    msg_warn("%s: defer service failure", id);
-    if (*orig_rcpt && strcasecmp(recipient, orig_rcpt) != 0)
-	msg_info("%s: to=<%s>, orig_to=<%s>, relay=%s, delay=%d, status=deferred (%s)",
-		 id, recipient, orig_rcpt, relay, delay, vstring_str(why));
-    else
-	msg_info("%s: to=<%s>, relay=%s, delay=%d, status=deferred (%s)",
-		 id, recipient, relay, delay, vstring_str(why));
+    if (mail_command_write(MAIL_CLASS_PRIVATE, MAIL_SERVICE_DEFER,
+			   "%d %d %s %s %s", BOUNCE_CMD_APPEND,
+			   flags, id, recipient, vstring_str(why)) != 0)
+	msg_warn("%s: defer service failure", id);
+    msg_info("%s: to=<%s>, relay=%s, delay=%d, status=deferred (%s)",
+	     id, recipient, relay, delay, vstring_str(why));
     vstring_free(why);
 
     /*
@@ -187,14 +158,8 @@ int     vdefer_append(int flags, const char *id, const char *orig_rcpt,
      * bounce/defer daemon? Well, doing it here is more robust.
      */
     if ((rcpt_domain = strrchr(recipient, '@')) != 0 && *++rcpt_domain != 0)
-	switch (flush_add(rcpt_domain, id)) {
-	case FLUSH_STAT_OK:
-	case FLUSH_STAT_DENY:
-	    break;
-	default:
+	if (flush_add(rcpt_domain, id) != FLUSH_STAT_OK)
 	    msg_warn("unable to talk to fast flush service");
-	    break;
-	}
 
     return (-1);
 }
@@ -202,16 +167,11 @@ int     vdefer_append(int flags, const char *id, const char *orig_rcpt,
 /* defer_flush - flush the defer log and deliver to the sender */
 
 int     defer_flush(int flags, const char *queue, const char *id,
-		            const char *encoding, const char *sender)
+		            const char *sender)
 {
-    if (mail_command_client(MAIL_CLASS_PRIVATE, var_defer_service,
-			    ATTR_TYPE_NUM, MAIL_ATTR_NREQ, BOUNCE_CMD_FLUSH,
-			    ATTR_TYPE_NUM, MAIL_ATTR_FLAGS, flags,
-			    ATTR_TYPE_STR, MAIL_ATTR_QUEUE, queue,
-			    ATTR_TYPE_STR, MAIL_ATTR_QUEUEID, id,
-			    ATTR_TYPE_STR, MAIL_ATTR_ENCODING, encoding,
-			    ATTR_TYPE_STR, MAIL_ATTR_SENDER, sender,
-			    ATTR_TYPE_END) == 0) {
+    if (mail_command_write(MAIL_CLASS_PRIVATE, MAIL_SERVICE_DEFER,
+			   "%d %d %s %s %s", BOUNCE_CMD_FLUSH,
+			   flags, queue, id, sender) == 0) {
 	return (0);
     } else {
 	return (-1);
@@ -224,13 +184,9 @@ int     defer_flush(int flags, const char *queue, const char *id,
 int     defer_warn(int flags, const char *queue, const char *id,
 		           const char *sender)
 {
-    if (mail_command_client(MAIL_CLASS_PRIVATE, var_defer_service,
-			    ATTR_TYPE_NUM, MAIL_ATTR_NREQ, BOUNCE_CMD_WARN,
-			    ATTR_TYPE_NUM, MAIL_ATTR_FLAGS, flags,
-			    ATTR_TYPE_STR, MAIL_ATTR_QUEUE, queue,
-			    ATTR_TYPE_STR, MAIL_ATTR_QUEUEID, id,
-			    ATTR_TYPE_STR, MAIL_ATTR_SENDER, sender,
-			    ATTR_TYPE_END) == 0) {
+    if (mail_command_write(MAIL_CLASS_PRIVATE, MAIL_SERVICE_DEFER,
+			   "%d %d %s %s %s", BOUNCE_CMD_WARN,
+			   flags, queue, id, sender) == 0) {
 	return (0);
     } else {
 	return (-1);

@@ -9,8 +9,7 @@ Postfix lookup table management
 .na
 .nf
 .fi
-\fBpostmap\fR [\fB-Nfinorvw\fR] [\fB-c \fIconfig_dir\fR]
-[\fB-d \fIkey\fR] [\fB-q \fIkey\fR]
+\fBpostmap\fR [\fB-Ninvw\fR] [\fB-c \fIconfig_dir\fR] [\fB-q \fIkey\fR]
 [\fIfile_type\fR:]\fIfile_name\fR ...
 .SH DESCRIPTION
 .ad
@@ -22,9 +21,6 @@ file formats are expected to be compatible with:
 .ti +4
 \fBmakemap \fIfile_type\fR \fIfile_name\fR < \fIfile_name\fR
 
-If the result files do not exist they will be created with the
-same group and other read permissions as the source file.
-
 While the table update is in progress, signal delivery is
 postponed, and an exclusive, advisory, lock is placed on the
 entire table, in order to avoid surprises in spectator
@@ -32,16 +28,14 @@ programs.
 
 The format of a lookup table input file is as follows:
 .IP \(bu
+Blank lines are ignored. So are lines beginning with `#'.
+.IP \(bu
 A table entry has the form
 .sp
 .ti +5
 \fIkey\fR whitespace \fIvalue\fR
 .IP \(bu
-Empty lines and whitespace-only lines are ignored, as
-are lines whose first non-whitespace character is a `#'.
-.IP \(bu
-A logical line starts with non-whitespace text. A line that
-starts with whitespace continues a logical line.
+A line that starts with whitespace continues the preceding line.
 .PP
 The \fIkey\fR and \fIvalue\fR are processed as is, except that
 surrounding white space is stripped off. Unlike with Postfix alias
@@ -55,18 +49,7 @@ Include the terminating null character that terminates lookup keys
 and values. By default, Postfix does whatever is the default for
 the host operating system.
 .IP "\fB-c \fIconfig_dir\fR"
-Read the \fBmain.cf\fR configuration file in the named directory
-instead of the default configuration directory.
-.IP "\fB-d \fIkey\fR"
-Search the specified maps for \fIkey\fR and remove one entry per map.
-The exit status is zero when the requested information was found.
-
-If a key value of \fB-\fR is specified, the program reads key
-values from the standard input stream. The exit status is zero
-when at least one of the requested keys was found.
-.IP \fB-f\fR
-Do not fold the lookup key to lower case while creating or querying
-a map.
+Read the \fBmain.cf\fR configuration file in the named directory.
 .IP \fB-i\fR
 Incremental mode. Read entries from standard input and do not
 truncate an existing database. By default, \fBpostmap\fR creates
@@ -75,28 +58,15 @@ a new database from the entries in \fBfile_name\fR.
 Don't include the terminating null character that terminates lookup
 keys and values. By default, Postfix does whatever is the default for
 the host operating system.
-.IP \fB-o\fR
-Do not release root privileges when processing a non-root
-input file. By default, \fBpostmap\fR drops root privileges
-and runs as the source file owner instead.
 .IP "\fB-q \fIkey\fR"
 Search the specified maps for \fIkey\fR and print the first value
-found on the standard output stream. The exit status is zero
-when the requested information was found.
-
-If a key value of \fB-\fR is specified, the program reads key
-values from the standard input stream and prints one line of
-\fIkey value\fR output for each key that was found. The exit
-status is zero when at least one of the requested keys was found.
-.IP \fB-r\fR
-When updating a table, do not warn about duplicate entries; silently
-replace them.
+found on the standard output stream. The exit status is non-zero
+if the requested information was not found.
 .IP \fB-v\fR
 Enable verbose logging for debugging purposes. Multiple \fB-v\fR
 options make the software increasingly verbose.
 .IP \fB-w\fR
-When updating a table, do not warn about duplicate entries; silently
-ignore them.
+Do not warn about duplicate entries; silently ignore them.
 .PP
 Arguments:
 .IP \fIfile_type\fR
@@ -113,12 +83,8 @@ This is available only on systems with support for \fBdbm\fR databases.
 The output file is a hashed file, named \fIfile_name\fB.db\fR.
 This is available only on systems with support for \fBdb\fR databases.
 .PP
-Use the command \fBpostconf -m\fR to find out what types of database
-your Postfix installation can support.
-
 When no \fIfile_type\fR is specified, the software uses the database
-type specified via the \fBdefault_database_type\fR configuration
-parameter.
+type specified via the \fBdatabase_type\fR configuration parameter.
 .RE
 .IP \fIfile_name\fR
 The name of the lookup table source file when rebuilding a database.
@@ -128,10 +94,6 @@ The name of the lookup table source file when rebuilding a database.
 Problems and transactions are logged to the standard error
 stream. No output means no problems. Duplicate entries are
 skipped and are flagged with a warning.
-
-\fBpostmap\fR terminates with zero exit status in case of success
-(including successful \fBpostmap -q\fR lookup) and terminates
-with non-zero exit status in case of failure.
 .SH ENVIRONMENT
 .na
 .nf
@@ -146,16 +108,10 @@ Enable verbose logging for debugging purposes.
 .nf
 .ad
 .fi
-.IP \fBdefault_database_type\fR
+.IP \fBdatabase_type\fR
 Default output database type.
 On many UNIX systems, the default database type is either \fBhash\fR
 or \fBdbm\fR.
-.IP \fBberkeley_db_create_buffer_size\fR
-Amount of buffer memory to be used when creating a Berkeley DB
-\fBhash\fR or \fBbtree\fR lookup table.
-.IP \fBberkeley_db_read_buffer_size\fR
-Amount of buffer memory to be used when reading a Berkeley DB
-\fBhash\fR or \fBbtree\fR lookup table.
 .SH LICENSE
 .na
 .nf

@@ -9,20 +9,19 @@ format of the Postfix alias database
 .na
 .nf
 .fi
-\fBnewaliases\fR
+\fBpostalias\fR [\fB-c\fR \fIconfig_dir\fR] [\fB-v\fR]
+[\fIfile_type\fR:]\fIinput_file\fR
 .SH DESCRIPTION
 .ad
 .fi
-The \fBaliases\fR table provides a system-wide mechanism to
-redirect mail for local recipients. The redirections are
-processed by the Postfix \fBlocal\fR(8) delivery agent.
+The \fBaliases\fR file provides a system-wide mechanism to
+redirect mail for local recipients.
 
-Normally, the \fBaliases\fR table is specified as a text file
-that serves as input to the \fBpostalias\fR(1) command. The
+The file serves as input to the \fBpostalias\fR(1) command. The
 result, an indexed file in \fBdbm\fR or \fBdb\fR format, is
-used for fast lookup by the mail system. Execute the command
-\fBnewaliases\fR in order to rebuild the indexed file after
-changing the Postfix alias database.
+used for fast lookup by the mail system. After an update
+it may take a minute or so before the change becomes visible.
+Issue a \fBpostfix reload\fR command to eliminate the delay.
 
 The input and output file formats are expected to be compatible
 with Sendmail version 8, and are expected to be suitable for the
@@ -40,11 +39,9 @@ An alias definition has the form
 .ti +5
 \fIname\fR: \fIvalue1\fR, \fIvalue2\fR, \fI...\fR
 .IP \(bu
-Empty lines and whitespace-only lines are ignored, as
-are lines whose first non-whitespace character is a `#'.
+Lines that begin with whitespace continue the previous line.
 .IP \(bu
-A logical line starts with non-whitespace text. A line that
-starts with whitespace continues a logical line.
+Blank lines are ignored, as are lines beginning with `#'.
 .PP
 The \fIname\fR is a local address (no domain part).
 Use double quotes when the name contains any special characters
@@ -109,21 +106,11 @@ List of alias databases.
 Restrict the usage of mail delivery to external command.
 .IP \fBallow_mail_to_files\fR
 Restrict the usage of mail delivery to external file.
-.IP \fBexpand_owner_alias\fR
-When delivering to an alias that has an \fBowner-\fR companion alias,
-set the envelope sender address to the right-hand side of the
-owner alias, instead using of the left-hand side address.
 .IP \fBowner_request_special\fR
 Give special treatment to \fBowner-\fIxxx\fR and \fIxxx\fB-request\fR
 addresses.
 .IP \fBrecipient_delimiter\fR
 Delimiter that separates recipients from address extensions.
-.SH BUGS
-.ad
-.fi
-Regular expression alias lookup tables are allowed, but
-substitution of $1 etc. is forbidden because that would
-open a security loophole.
 .SH STANDARDS
 .na
 .nf
@@ -132,9 +119,7 @@ RFC 822 (ARPA Internet Text Messages)
 .na
 .nf
 local(8) local delivery agent
-newaliases(1) alias database management
-regexp_table(5) POSIX regular expression table format
-pcre_table(5) Perl Compatible Regular Expression table format
+postalias(1) alias database management
 .SH LICENSE
 .na
 .nf

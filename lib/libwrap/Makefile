@@ -1,20 +1,21 @@
-#	$NetBSD: Makefile,v 1.9 2002/05/24 05:38:19 itojun Exp $
+#	$NetBSD: Makefile,v 1.1 1996/11/26 16:48:09 mrg Exp $
 
-LIB=	wrap
+LIB=	wrap 
 
 SRCS=	hosts_access.c options.c shell_cmd.c rfc931.c eval.c hosts_ctl.c \
 	refuse.c percent_x.c clean_exit.c fix_options.c socket.c \
-	update.c misc.c diag.c
+	workarounds.c update.c misc.c diag.c percent_m.c
 MAN=	hosts_access.3 hosts_access.5 hosts_options.5
-MLINKS+=hosts_access.5 hosts.allow.5
-MLINKS+=hosts_access.5 hosts.deny.5
-MLINKS+=hosts_access.3 hosts_ctl.3
-MLINKS+=hosts_access.3 request_init.3
-MLINKS+=hosts_access.3 request_set.3
 
-INCS= tcpd.h
-INCSDIR=/usr/include
+CFLAGS+= -DFACILITY=LOG_AUTHPRIV -DSEVERITY=LOG_INFO -DPARANOID
+CFLAGS+= -DREAL_DAEMON_DIR=\"/usr/libexec\" -DHOSTS_ACCESS -DDAEMON_UMASK=022
+CFLAGS+= -DRFC931_TIMEOUT=10 -DALWAYS_HOSTNAME -DSYS_ERRLIST_DEFINED
+CFLAGS+= -DHOSTS_ALLOW=\"/etc/hosts.allow\" -DHOSTS_DENY=\"/etc/hosts.deny\"
 
-.include "Makefile.cflags"
+includes:
+	-cd ${.CURDIR}; cmp -s tcpd.h ${DESTDIR}/usr/include/tcpd.h > \
+	    /dev/null 2>&1 || \
+	    ${INSTALL} -c -o ${BINOWN} -g ${BINGRP} -m 444 tcpd.h \
+	    ${DESTDIR}/usr/include
 
 .include <bsd.lib.mk>

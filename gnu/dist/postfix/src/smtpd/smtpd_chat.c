@@ -107,9 +107,6 @@ static void smtp_chat_append(SMTPD_STATE *state, char *direction)
 {
     char   *line;
 
-    if (state->notify_mask == 0)
-	return;
-
     if (state->history == 0)
 	state->history = argv_alloc(10);
     line = concatenate(direction, STR(state->buffer), (char *) 0);
@@ -139,7 +136,6 @@ void    smtpd_chat_query(SMTPD_STATE *state)
 void    smtpd_chat_reply(SMTPD_STATE *state, char *format,...)
 {
     va_list ap;
-    int     delay = 0;
 
     va_start(ap, format);
     vstring_vsprintf(state->buffer, format, ap);
@@ -158,10 +154,9 @@ void    smtpd_chat_reply(SMTPD_STATE *state, char *format,...)
      * errors within a session.
      */
     if (state->error_count > var_smtpd_soft_erlim)
-	sleep(delay = (state->error_count > var_smtpd_err_sleep ?
-		       state->error_count : var_smtpd_err_sleep));
+	sleep(state->error_count);
     else if (STR(state->buffer)[0] == '4' || STR(state->buffer)[0] == '5')
-	sleep(delay = var_smtpd_err_sleep);
+	sleep(var_smtpd_err_sleep);
 
     smtp_fputs(STR(state->buffer), LEN(state->buffer), state->client);
 
@@ -170,16 +165,8 @@ void    smtpd_chat_reply(SMTPD_STATE *state, char *format,...)
      * timeouts with pipelined SMTP sessions that have lots of server-side
      * delays (tarpit delays or DNS lookups for UCE restrictions).
      */
-    if (delay || time((time_t *) 0) - vstream_ftime(state->client) > 10)
+    if (time((time_t *) 0) - vstream_ftime(state->client) > 10)
 	vstream_fflush(state->client);
-
-    /*
-     * Abort immediately if the connection is broken.
-     */
-    if (vstream_ftimeout(state->client))
-	vstream_longjmp(state->client, SMTP_ERR_TIME);
-    if (vstream_ferror(state->client))
-	vstream_longjmp(state->client, SMTP_ERR_EOF);
 }
 
 /* print_line - line_wrap callback */
@@ -220,7 +207,7 @@ void    smtpd_chat_notify(SMTPD_STATE *state)
 
     notice = post_mail_fopen_nowait(mail_addr_double_bounce(),
 				    var_error_rcpt,
-				    NULL_CLEANUP_FLAGS);
+				    NULL_CLEANUP_FLAGS, "NOTICE");
     if (notice == 0) {
 	msg_warn("postmaster notify: %m");
 	return;
@@ -240,5 +227,7 @@ void    smtpd_chat_notify(SMTPD_STATE *state)
     post_mail_fputs(notice, "");
     if (state->reason)
 	post_mail_fprintf(notice, "Session aborted, reason: %s", state->reason);
+    else
+	post_mail_fputs(notice, "No message was collected successfully.");
     (void) post_mail_fclose(notice);
 }

@@ -41,9 +41,8 @@
 /*	Panic: interface violations.
 /*
 /*	A null result means there was a problem.  The nature of the
-/*	problem is returned via the \fIwhy\fR buffer; when an error
-/*	cannot be reported via \fIerrno\fR, the generic value EPERM
-/*	(operation not permitted) is used instead.
+/*	problem is returned via the \fIwhy\fR buffer; some errors
+/*	cannot be reported via \fIerrno\fR.
 /* HISTORY
 /* .fi
 /* .ad
@@ -55,7 +54,7 @@
 /*	be fooled by delaying the open() until the inode found with
 /*	lstat() has been re-used for a sensitive file (article
 /*	<20000103212443.A5807@monad.swb.de> posted to bugtraq on
-/*	Jan 3, 2000).  This can be a concern for a set-ugid process
+/*	Jan 3, 2000).  This can be a concern for a set-uid process
 /*	that runs under the control of a user and that can be
 /*	manipulated with start/stop signals.
 /* LICENSE
@@ -92,16 +91,13 @@ static VSTREAM *safe_open_exist(const char *path, int flags,
 {
     struct stat local_statbuf;
     struct stat lstat_st;
-    int     saved_errno;
     VSTREAM *fp;
 
     /*
      * Open an existing file.
      */
     if ((fp = vstream_fopen(path, flags & ~(O_CREAT | O_EXCL), 0)) == 0) {
-	saved_errno = errno;
 	vstring_sprintf(why, "cannot open file: %m");
-	errno = saved_errno;
 	return (0);
     }
 
@@ -117,10 +113,8 @@ static VSTREAM *safe_open_exist(const char *path, int flags,
     } else if (fstat_st->st_nlink != 1) {
 	vstring_sprintf(why, "file has %d hard links",
 			(int) fstat_st->st_nlink);
-	errno = EPERM;
     } else if (S_ISDIR(fstat_st->st_mode)) {
 	vstring_sprintf(why, "file is a directory");
-	errno = EISDIR;
     }
 
     /*
@@ -141,12 +135,10 @@ static VSTREAM *safe_open_exist(const char *path, int flags,
      */
     else if (lstat(path, &lstat_st) < 0) {
 	vstring_sprintf(why, "file status changed unexpectedly: %m");
-	errno = EPERM;
     } else if (S_ISLNK(lstat_st.st_mode)) {
 	if (lstat_st.st_uid == 0)
 	    return (fp);
 	vstring_sprintf(why, "file is a symbolic link");
-	errno = EPERM;
     } else if (fstat_st->st_dev != lstat_st.st_dev
 	       || fstat_st->st_ino != lstat_st.st_ino
 #ifdef HAS_ST_GEN
@@ -155,7 +147,6 @@ static VSTREAM *safe_open_exist(const char *path, int flags,
 	       || fstat_st->st_nlink != lstat_st.st_nlink
 	       || fstat_st->st_mode != lstat_st.st_mode) {
 	vstring_sprintf(why, "file status changed unexpectedly");
-	errno = EPERM;
     }
 
     /*
@@ -167,7 +158,9 @@ static VSTREAM *safe_open_exist(const char *path, int flags,
 
     /*
      * End up here in case of fstat()/lstat() problems or inconsistencies.
+     * Reset errno to reduce confusion.
      */
+    errno = 0;
     vstream_fclose(fp);
     return (0);
 }
@@ -197,7 +190,7 @@ static VSTREAM *safe_open_create(const char *path, int flags, int mode,
 
     if (CHANGE_OWNER(user, group)
 	&& fchown(vstream_fileno(fp), user, group) < 0) {
-	msg_warn("%s: cannot change file ownership: %m", path);
+	vstring_sprintf(why, "cannot change file ownership: %m");
     }
 
     /*

@@ -9,7 +9,7 @@
 /*	int	deliver_command(state, usr_attr, command)
 /*	LOCAL_STATE state;
 /*	USER_ATTR exp_attr;
-/*	const char *command;
+/*	char	*command;
 /* DESCRIPTION
 /*	deliver_command() runs a command with a message as standard
 /*	input.  A limited amount of standard output and standard error
@@ -79,7 +79,7 @@
 
 /* deliver_command - deliver to shell command */
 
-int     deliver_command(LOCAL_STATE state, USER_ATTR usr_attr, const char *command)
+int     deliver_command(LOCAL_STATE state, USER_ATTR usr_attr, char *command)
 {
     char   *myname = "deliver_command";
     VSTRING *why;
@@ -107,6 +107,16 @@ int     deliver_command(LOCAL_STATE state, USER_ATTR usr_attr, const char *comma
 	return (0);
 
     /*
+     * DELIVERY POLICY
+     * 
+     * Do we permit mail to shell commands? Allow delivery via mailbox_command.
+     */
+    if (command != var_mailbox_command
+	&& (local_cmd_deliver_mask & state.msg_attr.exp_type) == 0)
+	return (bounce_append(BOUNCE_FLAG_KEEP, BOUNCE_ATTR(state.msg_attr),
+			      "mail to command is restricted"));
+
+    /*
      * DELIVERY RIGHTS
      * 
      * Choose a default uid and gid when none have been selected (i.e. values
@@ -120,8 +130,7 @@ int     deliver_command(LOCAL_STATE state, USER_ATTR usr_attr, const char *comma
     /*
      * Deliver.
      */
-    copy_flags = MAIL_COPY_FROM | MAIL_COPY_RETURN_PATH
-	| MAIL_COPY_ORIG_RCPT;
+    copy_flags = MAIL_COPY_FROM | MAIL_COPY_RETURN_PATH;
     if (local_deliver_hdr_mask & DELIVER_HDR_CMD)
 	copy_flags |= MAIL_COPY_DELIVERED;
 
@@ -169,7 +178,6 @@ int     deliver_command(LOCAL_STATE state, USER_ATTR usr_attr, const char *comma
 			      PIPE_CMD_COMMAND, command,
 			      PIPE_CMD_COPY_FLAGS, copy_flags,
 			      PIPE_CMD_SENDER, state.msg_attr.sender,
-			      PIPE_CMD_ORIG_RCPT, state.msg_attr.orig_rcpt,
 			      PIPE_CMD_DELIVERED, state.msg_attr.delivered,
 			      PIPE_CMD_TIME_LIMIT, var_command_maxtime,
 			      PIPE_CMD_ENV, env->argv,
@@ -196,9 +204,6 @@ int     deliver_command(LOCAL_STATE state, USER_ATTR usr_attr, const char *comma
 	deliver_status = defer_append(BOUNCE_FLAG_KEEP,
 				      BOUNCE_ATTR(state.msg_attr),
 				      "%s", vstring_str(why));
-	break;
-    case PIPE_STAT_CORRUPT:
-	deliver_status = DEL_STAT_DEFER;
 	break;
     default:
 	msg_panic("%s: bad status %d", myname, cmd_status);

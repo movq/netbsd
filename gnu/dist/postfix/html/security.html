@@ -79,11 +79,11 @@ per-process file system name spaces.
 
 <p>
 
-Initially, the <b>maildrop</b> queue directory was world-writable,
-so that local processes could submit mail without assistance from
-a set-uid or set-gid command or from a mail daemon process.  The
-maildrop directory was not used for mail coming in via the network,
-and its queue files were not readable for unprivileged users.
+By default, the <b>maildrop</b> queue directory is world-writable,
+so that local processes can submit mail without assistance from a
+set-uid or set-gid command or from a mail daemon process.  The
+maildrop directory is not used for mail coming in via the network,
+and queue files are not readable for other users.
 
 <p>
 
@@ -99,9 +99,10 @@ Postfix queue file.
 
 <p>
 
-Because of the potential for misbehavior, Postfix has abandoned
-the world-writable <b>maildrop</b> directory, and uses a small
-set-gid <b>postdrop</b> helper program for mail submission.
+If a world-writable <b>maildrop</b> directory is not acceptable,
+sites can revoke world write permission, and enable <b>set-gid</b>
+privileges for a small helper program that is provided for this
+purpose.
 
 <h2>Trust</h2>
 

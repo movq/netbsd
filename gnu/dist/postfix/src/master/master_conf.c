@@ -36,7 +36,6 @@
 
 #include <sys_defs.h>
 #include <unistd.h>
-#include <string.h>
 
 /* Utility library. */
 

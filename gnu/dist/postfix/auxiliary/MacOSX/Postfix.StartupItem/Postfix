@@ -3,18 +3,7 @@
 # Gerben Wierda, Oct 2001. Adapted from an existing example. I waive every
 # copyright on this and I also do not give any warranty.
 
-# Updated Sepember 29, 2002
-# To work properly, the POSTFIX variable needs to be set to -YES-
-#	in /etc/hostconfig
-
 . /etc/rc.common
-
-if [ "${POSTFIX:=-NO-}" = "-YES-" -a "${MAILSERVER:=-NO-}" = "-YES-" ]
-then
-	ConsoleMessage "Cannot run concurrent postfix and sendmail"
-	sleep 2
-	exit
-fi
 
 ##
 # Start mail server
@@ -22,7 +11,7 @@ fi
 
 if [ "$1" == "start" ]
 then
-	if [ "${POSTFIX:=-NO-}" = "-YES-" ]
+	if [ "${MAILSERVER:=-NO-}" = "-YES-" ]
 	then
 		ConsoleMessage "Starting Postfix mail services"
 		/usr/sbin/postfix start
@@ -33,7 +22,7 @@ then
 	/usr/sbin/postfix stop
 elif [ "$1" == "restart" ]
 then
-	if [ "${POSTFIX:=-NO-}" = "-YES-" ]
+	if [ "${MAILSERVER:=-NO-}" = "-YES-" ]
 	then
 		ConsoleMessage "Reloading Postfix configuration"
 		/usr/sbin/postfix reload

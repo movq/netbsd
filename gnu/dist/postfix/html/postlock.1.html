@@ -1,30 +1,26 @@
 <html> <head> </head> <body> <pre>
 
+
+
 POSTLOCK(1)                                           POSTLOCK(1)
+
 
 <b>NAME</b>
        postlock - lock mail folder and execute command
 
 <b>SYNOPSIS</b>
-       <b>postlock</b> [<b>-c</b> <i>config_dir</i><b>]</b> <b>[-l</b> <i>lock_style</i><b>]</b> <b>[-v</b>] <i>file</i> <i>com-</i>
-       <i>mand...</i>
+       <b>postlock</b> [<b>-c</b> <i>config_dir</i><b>]</b> <b>[-v</b>] <i>file</i> <i>command...</i>
 
 <b>DESCRIPTION</b>
-       The <b>postlock</b> command locks <i>file</i> for exclusive access,  and
-       executes  <i>command</i>.  The  locking method is compatible with
+       The  <b>postlock</b> command locks <i>file</i> for exclusive access, and
+       executes <i>command</i>. The locking method  is  compatible  with
        the Postfix UNIX-style local delivery agent.
 
        Options:
 
        <b>-c</b> <i>config_dir</i>
-              Read the <b>main.cf</b> configuration file  in  the  named
-              directory  instead  of  the  default  configuration
-              directory.
-
-       <b>-l</b> <i>lock_style</i>
-              Override the locking method specified via the <b>mail-</b>
-              <b>box</b><i>_</i><b>delivery</b><i>_</i><b>lock</b>   configuration   parameter  (see
-              below).
+              Read  configuration information from <b>main.cf</b> in the
+              named configuration directory.
 
        <b>-v</b>     Enable verbose logging for debugging purposes. Mul-
               tiple  <b>-v</b>  options  make  the software increasingly
@@ -42,9 +38,11 @@ POSTLOCK(1)                                           POSTLOCK(1)
               command interpreter.
 
 <b>DIAGNOSTICS</b>
-       The result status is 75 (EX_TEMPFAIL) when <b>postlock</b>  could
-       not  perform the requested operation.  Otherwise, the exit
-       status is the exit status from the command.
+       The result status is 75 (EX_TEMPFAIL)  when  the  file  is
+       locked  by another process, 255 (on some systems: -1) when
+       <b>postlock</b> could not perform the requested operation.   Oth-
+       erwise,  the  exit status is the exit status from the com-
+       mand.
 
 <b>BUGS</b>
        With remote file systems, the ability to  acquire  a  lock
@@ -61,6 +59,18 @@ POSTLOCK(1)                                           POSTLOCK(1)
 <b>CONFIGURATION</b> <b>PARAMETERS</b>
        The following <b>main.cf</b> parameters are  especially  relevant
        to  this  program. See the Postfix <b>main.cf</b> file for syntax
+
+
+
+                                                                1
+
+
+
+
+
+POSTLOCK(1)                                           POSTLOCK(1)
+
+
        details and for default values.
 
 <b>Locking</b> <b>controls</b>
@@ -75,23 +85,17 @@ POSTLOCK(1)                                           POSTLOCK(1)
        <b>stale</b><i>_</i><b>lock</b><i>_</i><b>time</b>
               Limit the time after which a stale lock is removed.
 
-       <b>mailbox</b><i>_</i><b>delivery</b><i>_</i><b>lock</b>
-              What  file locking method(s) to use when delivering
-              to a UNIX-style mailbox.  The  default  setting  is
-              system  dependent.   For  a  list of available file
-              locking methods, use the <b>postconf</b> <b>-l</b> command.
-
 <b>Resource</b> <b>controls</b>
        <b>fork</b><i>_</i><b>attempts</b>
-              Number of attempts to <b>fork</b>() a process before  giv-
+              Number  of attempts to <b>fork</b>() a process before giv-
               ing up.
 
        <b>fork</b><i>_</i><b>delay</b>
-              Delay   in   seconds   between   successive  <b>fork</b>()
+              Delay  in   seconds   between   successive   <b>fork</b>()
               attempts.
 
 <b>LICENSE</b>
-       The Secure Mailer license must be  distributed  with  this
+       The  Secure  Mailer  license must be distributed with this
        software.
 
 <b>AUTHOR(S)</b>
@@ -100,6 +104,31 @@ POSTLOCK(1)                                           POSTLOCK(1)
        P.O. Box 704
        Yorktown Heights, NY 10598, USA
 
-                                                                1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                2
+
 
 </pre> </body> </html>
