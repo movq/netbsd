@@ -1,4 +1,4 @@
-/*	$NetBSD: memcpy.c,v 1.1 2003/10/06 16:44:06 wiz Exp $	*/
+/*	$NetBSD: memcpy.c,v 1.1.1.1 2003/10/06 16:44:06 wiz Exp $	*/
 
 /*
  * memcpy --- copy strings.

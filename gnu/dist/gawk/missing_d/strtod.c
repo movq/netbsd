@@ -1,4 +1,4 @@
-/*	$NetBSD: strtod.c,v 1.1 2003/10/06 16:44:11 wiz Exp $	*/
+/*	$NetBSD: strtod.c,v 1.1.1.1 2003/10/06 16:44:11 wiz Exp $	*/
 
 /*
  * gawk wrapper for strtod

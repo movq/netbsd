@@ -1,4 +1,4 @@
-/*	$NetBSD: strchr.c,v 1.1 2003/10/06 16:44:06 wiz Exp $	*/
+/*	$NetBSD: strchr.c,v 1.1.1.1 2003/10/06 16:44:06 wiz Exp $	*/
 
 /*
  * strchr --- search a string for a character

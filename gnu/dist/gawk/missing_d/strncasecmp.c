@@ -1,4 +1,4 @@
-/*	$NetBSD: strncasecmp.c,v 1.1 2003/10/06 16:44:11 wiz Exp $	*/
+/*	$NetBSD: strncasecmp.c,v 1.1.1.1 2003/10/06 16:44:11 wiz Exp $	*/
 
 /*
  * Copyright (c) 1987 Regents of the University of California.

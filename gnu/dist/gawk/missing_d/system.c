@@ -1,4 +1,4 @@
-/*	$NetBSD: system.c,v 1.1 2003/10/06 16:44:11 wiz Exp $	*/
+/*	$NetBSD: system.c,v 1.1.1.1 2003/10/06 16:44:11 wiz Exp $	*/
 
 /* system.c --- replacement system() for systems missing one
 
