@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.10.2.2 2000/02/22 23:07:07 he Exp $
+#	$NetBSD: Makefile,v 1.10.2.3 2000/03/01 00:23:07 he Exp $
 
 TOP=		${.CURDIR}/..
 MINIROOT=	${.CURDIR}/../../miniroot
@@ -59,7 +59,8 @@ unconfig:
 netbsd.ram.gz: ${KERN} ${RAMDISK}
 	cp ${KERN} netbsd.tmp
 	mdsetimage -v netbsd.tmp ${RAMDISK}
-	gzip netbsd.tmp
+	strip netbsd.tmp
+	gzip -9 netbsd.tmp
 	mv netbsd.tmp.gz ${.TARGET}
 
 clean cleandir distclean:
@@ -69,5 +70,15 @@ depend install:
 
 real-floppy:
 	dd if=${IMAGE} of=${FD_RDEV} bs=32k
+
+.ifndef RELEASEDIR
+release:
+	@echo setenv RELEASEDIR first
+	@false
+.else
+release: $(IMAGE)
+	gzip -c -9 < $(.OBJDIR)/${IMAGE} \
+		> $(RELEASEDIR)/installation/bootfs/${IMAGE}.gz
+.endif	# RELEASEDIR check
 
 .include <bsd.obj.mk>
