@@ -20,10 +20,15 @@ config		"netbsd"	root on rd0
 
 controller	rd0
 
+#controller	ncr0
+#disk		sd0	at ncr0 flags 0 drive ? bio
+#disk		sd1	at ncr0 flags 0 drive ? bio
+#tape		st0	at ncr0 flags 1 drive ? bio
+
 controller	dp0
-disk		sd0	at dp0 flags 0 drive 000 bio
-disk		sd1	at dp0 flags 0 drive 010 bio
-tape		st0	at dp0 flags 1 drive ?   bio
+disk		sd0	at dp0 flags 0 drive ? bio
+disk		sd1	at dp0 flags 0 drive ? bio
+tape		st0	at dp0 flags 1 drive ? bio
 
 controller	scn0
 device		com0 	at scn0 port 0 tty
