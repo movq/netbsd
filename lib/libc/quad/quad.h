@@ -34,8 +34,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)quad.h	8.1 (Berkeley) 6/4/93
- *	$Id: quad.h,v 1.1 1993/09/16 06:06:08 mycroft Exp $
+ *	@(#)quad.h	8.1 (Berkeley) 6/4/93
  */
 
 /*
@@ -63,7 +62,7 @@
  */
 union uu {
 	quad_t	q;		/* as a (signed) quad */
-	u_quad_t uq;		/* as an unsigned quad */
+	quad_t	uq;		/* as an unsigned quad */
 	long	sl[2];		/* as two signed longs */
 	u_long	ul[2];		/* as two unsigned longs */
 };
