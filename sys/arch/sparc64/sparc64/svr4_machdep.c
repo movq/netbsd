@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_machdep.c,v 1.16 2000/12/22 22:58:56 jdolecek Exp $	 */
+/*	$NetBSD: svr4_machdep.c,v 1.17 2001/02/11 00:39:37 eeh Exp $	 */
 
 /*-
  * Copyright (c) 1994 The NetBSD Foundation, Inc.
@@ -79,8 +79,12 @@ svr4_setregs(p, epp, stack)
 	struct exec_package *epp;
 	u_long stack;
 {
+	register struct trapframe64 *tf = p->p_md.md_tf;
 
 	setregs(p, epp, stack);
+	
+	/* This should be the exit function, not PS_STRINGS. */
+	tf->tf_global[1] = (vaddr_t)0;
 }
 
 #ifdef DEBUG
