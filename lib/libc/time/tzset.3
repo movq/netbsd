@@ -1,11 +1,11 @@
-.\"	$NetBSD: tzset.3,v 1.8 1996/01/30 19:54:36 jtc Exp $
-.TH TZSET 3
+.TH NEWTZSET 3
 .SH NAME
 tzset \- initialize time conversion information
 .SH SYNOPSIS
 .nf
 .B void tzset()
 .PP
+.B cc ... -lz
 .fi
 .SH DESCRIPTION
 .I Tzset
@@ -214,24 +214,23 @@ environment variable does not specify a
 and cannot be interpreted as a direct specification,
 UTC is used.
 .SH FILES
-.ta \w'/usr/share/zoneinfo/posixrules\0\0'u
-/etc/localtime	local time zone file
+.ta \w'/usr/local/etc/zoneinfo/posixrules\0\0'u
+/usr/local/etc/zoneinfo	time zone information directory
 .br
-/usr/share/zoneinfo	time zone information directory
+/usr/local/etc/zoneinfo/localtime	local time zone file
 .br
-/usr/share/zoneinfo/posixrules	used with POSIX-style TZ's
+/usr/local/etc/zoneinfo/posixrules	used with POSIX-style TZ's
 .br
-/usr/share/zoneinfo/GMT	for UTC leap seconds
+/usr/local/etc/zoneinfo/GMT	for UTC leap seconds
 .sp
 If
-.B /usr/share/zoneinfo/GMT
+.B /usr/local/etc/zoneinfo/GMT
 is absent,
 UTC leap seconds are loaded from
-.BR /usr/share/zoneinfo/posixrules .
+.BR /usr/local/etc/zoneinfo/posixrules .
 .SH SEE ALSO
 getenv(3),
-ctime(3),
-strftime(3),
-time(3),
+newctime(3),
+time(2),
 tzfile(5)
-.\" @(#)newtzset.3	7.4
+.\" @(#)newtzset.3	7.3

@@ -1,8 +1,6 @@
-/*	$NetBSD: zdump.c,v 1.4 1997/01/23 14:02:31 mrg Exp $	*/
-
 #ifndef lint
 #ifndef NOID
-static char	elsieid[] = "@(#)zdump.c	7.24";
+static char	elsieid[] = "@(#)zdump.c	7.20";
 #endif /* !defined NOID */
 #endif /* !defined lint */
 
@@ -70,11 +68,6 @@ static char	elsieid[] = "@(#)zdump.c	7.24";
 #define isleap(y) ((((y) % 4) == 0 && ((y) % 100) != 0) || ((y) % 400) == 0)
 #endif /* !defined isleap */
 
-#if HAVE_GETTEXT - 0
-#include "locale.h"	/* for setlocale */
-#include "libintl.h"
-#endif /* HAVE_GETTEXT - 0 */
-
 #ifndef GNUC_or_lint
 #ifdef lint
 #define GNUC_or_lint
@@ -94,24 +87,6 @@ static char	elsieid[] = "@(#)zdump.c	7.24";
 #define INITIALIZE(x)
 #endif /* !defined GNUC_or_lint */
 #endif /* !defined INITIALIZE */
-
-/*
-** For the benefit of GNU folk...
-** `_(MSGID)' uses the current locale's message library string for MSGID.
-** The default is to use gettext if available, and use MSGID otherwise.
-*/
-
-#ifndef _
-#if HAVE_GETTEXT - 0
-#define _(msgid) gettext(msgid)
-#else /* !(HAVE_GETTEXT - 0) */
-#define _(msgid) msgid
-#endif /* !(HAVE_GETTEXT - 0) */
-#endif /* !defined _ */
-
-#ifndef TZ_DOMAIN
-#define TZ_DOMAIN "tz"
-#endif /* !defined TZ_DOMAIN */
 
 extern char **	environ;
 extern int	getopt();
@@ -147,13 +122,6 @@ char *	argv[];
 	struct tm		newtm;
 
 	INITIALIZE(cuttime);
-#if HAVE_GETTEXT - 0
-	(void) setlocale(LC_MESSAGES, "");
-#ifdef TZ_DOMAINDIR
-	(void) bindtextdomain(TZ_DOMAIN, TZ_DOMAINDIR);
-#endif /* defined(TEXTDOMAINDIR) */
-	(void) textdomain(TZ_DOMAIN);
-#endif /* HAVE_GETTEXT - 0 */
 	progname = argv[0];
 	vflag = 0;
 	cutoff = NULL;
@@ -164,7 +132,7 @@ char *	argv[];
 	if (c != EOF ||
 		(optind == argc - 1 && strcmp(argv[optind], "=") == 0)) {
 			(void) fprintf(stderr,
-_("%s: usage is %s [ -v ] [ -c cutoff ] zonename ...\n"),
+"%s: usage is %s [ -v ] [ -c cutoff ] zonename ...\n",
 				argv[0], argv[0]);
 			(void) exit(EXIT_FAILURE);
 	}
@@ -199,7 +167,7 @@ _("%s: usage is %s [ -v ] [ -c cutoff ] zonename ...\n"),
 					(void) exit(EXIT_FAILURE);
 		}
 		to = 0;
-		(void)strcpy(fakeenv[to++], "TZ=");	/* XXX strcpy is safe */
+		(void) strcpy(fakeenv[to++], "TZ=");
 		for (from = 0; environ[from] != NULL; ++from)
 			if (strncmp(environ[from], "TZ=", 3) != 0)
 				fakeenv[to++] = environ[from];
@@ -209,11 +177,10 @@ _("%s: usage is %s [ -v ] [ -c cutoff ] zonename ...\n"),
 	for (i = optind; i < argc; ++i) {
 		static char	buf[MAX_STRING_LENGTH];
 
-		(void) strcpy(&fakeenv[0][3], argv[i]);	/* XXX strcpy is safe */
-		if (!vflag) {
-			show(argv[i], now, FALSE);
+		(void) strcpy(&fakeenv[0][3], argv[i]);
+		show(argv[i], now, FALSE);
+		if (!vflag)
 			continue;
-		}
 		/*
 		** Get lowest value of t.
 		*/
@@ -257,9 +224,9 @@ _("%s: usage is %s [ -v ] [ -c cutoff ] zonename ...\n"),
 		show(argv[i], t, TRUE);
 	}
 	if (fflush(stdout) || ferror(stdout)) {
-		(void) fprintf(stderr, _("%s: Error writing standard output "),
+		(void) fprintf(stderr, "%s: Error writing standard output ",
 			argv[0]);
-		(void) perror(_("standard output"));
+		(void) perror("standard output");
 		(void) exit(EXIT_FAILURE);
 	}
 	exit(EXIT_SUCCESS);

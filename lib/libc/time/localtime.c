@@ -1,13 +1,6 @@
-/*	$NetBSD: localtime.c,v 1.9 1997/04/22 12:33:19 mrg Exp $	*/
-
-/*
-** This file is in the public domain, so clarified as of
-** June 5, 1996 by Arthur David Olson (arthur_david_olson@nih.gov).
-*/
-
 #ifndef lint
 #ifndef NOID
-static char	elsieid[] = "@(#)localtime.c	7.58";
+static char	elsieid[] = "@(#)localtime.c	7.43";
 #endif /* !defined NOID */
 #endif /* !defined lint */
 
@@ -195,32 +188,19 @@ detzcode(codep)
 const char * const	codep;
 {
 	register long	result;
+	register int	i;
 
-	/*
-        ** The first character must be sign extended on systems with >32bit
-        ** longs.  This was solved differently in the master tzcode sources
-        ** (the fix first appeared in tzcode95c.tar.gz).  But I believe 
-	** that this implementation is superior.
-        */
-
-#ifdef __STDC__
-#define SIGN_EXTEND_CHAR(x)	((signed char) x)
-#else
-#define SIGN_EXTEND_CHAR(x)	((x & 0x80) ? ((~0 << 8) | x) : x)
-#endif
-
-	result = (SIGN_EXTEND_CHAR(codep[0]) << 24) \
-	       | (codep[1] & 0xff) << 16 \
-	       | (codep[2] & 0xff) << 8
-	       | (codep[3] & 0xff);
+	result = 0;
+	for (i = 0; i < 4; ++i)
+		result = (result << 8) | (codep[i] & 0xff);
 	return result;
 }
 
 static void
 settzname P((void))
 {
-	register struct state * const	sp = lclptr;
-	register int			i;
+	register struct state * const		sp = lclptr;
+	register int				i;
 
 	tzname[0] = wildabbr;
 	tzname[1] = wildabbr;
@@ -277,7 +257,6 @@ register struct state * const	sp;
 
 	if (name == NULL && (name = TZDEFAULT) == NULL)
 		return -1;
-
 	{
 		register int	doaccess;
 		/*
@@ -297,9 +276,9 @@ register struct state * const	sp;
 				return -1;
 			if ((strlen(p) + strlen(name) + 1) >= sizeof fullname)
 				return -1;
-			(void) strcpy(fullname, p);	/* XXX strcpy is safe */
-			(void) strcat(fullname, "/");	/* XXX strcat is safe */
-			(void) strcat(fullname, name);	/* XXX strcat is safe */
+			(void) strcpy(fullname, p);
+			(void) strcat(fullname, "/");
+			(void) strcat(fullname, name);
 			/*
 			** Set doaccess if '.' (as in "../") shows up in name.
 			*/
@@ -309,12 +288,6 @@ register struct state * const	sp;
 		}
 		if (doaccess && access(name, R_OK) != 0)
 			return -1;
-		/*
-		 * XXX potential security problem here if user of a set-id
-		 * program has set TZ (which is passed in as name) here,
-		 * and uses a race condition trick to defeat the access(2)
-		 * above.
-		 */
 		if ((fid = open(name, OPEN_MODE)) == -1)
 			return -1;
 	}
@@ -442,7 +415,7 @@ register const char *	strp;
 {
 	register char	c;
 
-	while ((c = *strp) != '\0' && !is_digit(c) && c != ',' && c != '-' &&
+	while ((c = *strp) != '\0' && !isdigit(c) && c != ',' && c != '-' &&
 		c != '+')
 			++strp;
 	return strp;
@@ -465,15 +438,15 @@ const int		max;
 	register char	c;
 	register int	num;
 
-	if (strp == NULL || !is_digit(c = *strp))
+	if (strp == NULL || !isdigit(*strp))
 		return NULL;
 	num = 0;
-	do {
+	while ((c = *strp) != '\0' && isdigit(c)) {
 		num = num * 10 + (c - '0');
 		if (num > max)
 			return NULL;	/* illegal value */
-		c = *++strp;
-	} while (is_digit(c));
+		++strp;
+	}
 	if (num < min)
 		return NULL;		/* illegal value */
 	*nump = num;
@@ -535,13 +508,14 @@ getoffset(strp, offsetp)
 register const char *	strp;
 long * const		offsetp;
 {
-	register int	neg = 0;
+	register int	neg;
 
 	if (*strp == '-') {
 		neg = 1;
 		++strp;
-	} else if (*strp == '+')
-		++strp;
+	} else if (isdigit(*strp) || *strp++ == '+')
+		neg = 0;
+	else	return NULL;		/* illegal offset */
 	strp = getsecs(strp, offsetp);
 	if (strp == NULL)
 		return NULL;		/* illegal time */
@@ -586,7 +560,7 @@ register struct rule * const	rulep;
 		if (*strp++ != '.')
 			return NULL;
 		strp = getnum(strp, &rulep->r_day, 0, DAYSPERWEEK - 1);
-	} else if (is_digit(*strp)) {
+	} else if (isdigit(*strp)) {
 		/*
 		** Day of year.
 		*/
@@ -828,8 +802,7 @@ const int			lastditch;
 			for (i = 0; i < sp->timecnt; ++i) {
 				j = sp->types[i];
 				if (!sp->ttis[j].tt_isdst) {
-					theirstdoffset =
-						-sp->ttis[j].tt_gmtoff;
+					theirstdoffset = -sp->ttis[j].tt_gmtoff;
 					break;
 				}
 			}
@@ -837,8 +810,7 @@ const int			lastditch;
 			for (i = 0; i < sp->timecnt; ++i) {
 				j = sp->types[i];
 				if (sp->ttis[j].tt_isdst) {
-					theirdstoffset =
-						-sp->ttis[j].tt_gmtoff;
+					theirdstoffset = -sp->ttis[j].tt_gmtoff;
 					break;
 				}
 			}
@@ -894,7 +866,6 @@ const int			lastditch;
 			sp->ttis[1].tt_gmtoff = -dstoffset;
 			sp->ttis[1].tt_isdst = TRUE;
 			sp->ttis[1].tt_abbrind = stdlen + 1;
-			sp->typecnt = 2;
 		}
 	} else {
 		dstlen = 0;
@@ -971,7 +942,7 @@ tzset P((void))
 		return;
 	lcl_is_set = (strlen(name) < sizeof(lcl_TZname));
 	if (lcl_is_set)
-		(void)strncpy(lcl_TZname, name, sizeof(lcl_TZname) - 1);
+		(void) strcpy(lcl_TZname, name);
 
 #ifdef ALL_STATE
 	if (lclptr == NULL) {
@@ -990,7 +961,7 @@ tzset P((void))
 		lclptr->timecnt = 0;
 		lclptr->ttis[0].tt_gmtoff = 0;
 		lclptr->ttis[0].tt_abbrind = 0;
-		(void)strncpy(lclptr->chars, gmt, sizeof(lclptr->chars) - 1);
+		(void) strcpy(lclptr->chars, gmt);
 	} else if (tzload(name, lclptr) != 0)
 		if (name[0] == ':' || tzparse(name, lclptr, FALSE) != 0)
 			(void) gmtload(lclptr);
@@ -1191,27 +1162,30 @@ register struct tm * const		tmp;
 	tmp->tm_hour = (int) (rem / SECSPERHOUR);
 	rem = rem % SECSPERHOUR;
 	tmp->tm_min = (int) (rem / SECSPERMIN);
-	/*
-	** A positive leap second requires a special
-	** representation.  This uses "... ??:59:60" et seq.
-	*/
-	tmp->tm_sec = (int) (rem % SECSPERMIN) + hit;
+	tmp->tm_sec = (int) (rem % SECSPERMIN);
+	if (hit)
+		/*
+		** A positive leap second requires a special
+		** representation.  This uses "... ??:59:60" et seq.
+		*/
+		tmp->tm_sec += hit;
 	tmp->tm_wday = (int) ((EPOCH_WDAY + days) % DAYSPERWEEK);
 	if (tmp->tm_wday < 0)
 		tmp->tm_wday += DAYSPERWEEK;
 	y = EPOCH_YEAR;
-#define LEAPS_THRU_END_OF(y)	((y) / 4 - (y) / 100 + (y) / 400)
-	while (days < 0 || days >= (long) year_lengths[yleap = isleap(y)]) {
-		register int	newy;
-
-		newy = y + days / DAYSPERNYEAR;
-		if (days < 0)
-			--newy;
-		days -= (newy - y) * DAYSPERNYEAR +
-			LEAPS_THRU_END_OF(newy - 1) -
-			LEAPS_THRU_END_OF(y - 1);
-		y = newy;
-	}
+	if (days >= 0)
+		for ( ; ; ) {
+			yleap = isleap(y);
+			if (days < (long) year_lengths[yleap])
+				break;
+			++y;
+			days = days - (long) year_lengths[yleap];
+		}
+	else do {
+		--y;
+		yleap = isleap(y);
+		days = days + (long) year_lengths[yleap];
+	} while (days < 0);
 	tmp->tm_year = y - TM_YEAR_BASE;
 	tmp->tm_yday = (int) days;
 	ip = mon_lengths[yleap];
@@ -1240,8 +1214,7 @@ const time_t * const	timep;
 /*
 ** Adapted from code provided by Robert Elz, who writes:
 **	The "best" way to do mktime I think is based on an idea of Bob
-**	Kridle's (so its said...) from a long time ago.
-**	[kridle@xinet.com as of 1996-01-16.]
+**	Kridle's (so its said...) from a long time ago. (mtxinu!kridle now).
 **	It does a binary search of the time_t space.  Since time_t's are
 **	just 32 bits, its a max of 32 iterations (even at 64 bits it
 **	would still be very reasonable).
@@ -1331,12 +1304,10 @@ int * const		okayp;
 	while (yourtm.tm_mday <= 0) {
 		if (increment_overflow(&yourtm.tm_year, -1))
 			return WRONG;
-		i = yourtm.tm_year + (1 < yourtm.tm_mon);
-		yourtm.tm_mday += year_lengths[isleap(i)];
+		yourtm.tm_mday += year_lengths[isleap(yourtm.tm_year)];
 	}
 	while (yourtm.tm_mday > DAYSPERLYEAR) {
-		i = yourtm.tm_year + (1 < yourtm.tm_mon);
-		yourtm.tm_mday -= year_lengths[isleap(i)];
+		yourtm.tm_mday -= year_lengths[isleap(yourtm.tm_year)];
 		if (increment_overflow(&yourtm.tm_year, 1))
 			return WRONG;
 	}
@@ -1371,16 +1342,17 @@ int * const		okayp;
 		yourtm.tm_sec = 0;
 	}
 	/*
-	** Divide the search space in half
-	** (this works whether time_t is signed or unsigned).
+	** Calculate the number of magnitude bits in a time_t
+	** (this works regardless of whether time_t is
+	** signed or unsigned, though lint complains if unsigned).
 	*/
-	bits = TYPE_BIT(time_t) - 1;
+	for (bits = 0, t = 1; t > 0; ++bits, t <<= 1)
+		continue;
 	/*
-	** If time_t is signed, then 0 is just above the median,
-	** assuming two's complement arithmetic.
-	** If time_t is unsigned, then (1 << bits) is just above the median.
+	** If time_t is signed, then 0 is the median value,
+	** if time_t is unsigned, then 1 << bits is median.
 	*/
-	t = TYPE_SIGNED(time_t) ? 0 : (((time_t) 1) << bits);
+	t = (t < 0) ? 0 : ((time_t) 1 << bits);
 	for ( ; ; ) {
 		(*funcp)(&t, offset, &mytm);
 		dir = tmcomp(&mytm, &yourtm);
@@ -1388,10 +1360,10 @@ int * const		okayp;
 			if (bits-- < 0)
 				return WRONG;
 			if (bits < 0)
-				--t; /* may be needed if new t is minimal */
+				--t;
 			else if (dir > 0)
-				t -= ((time_t) 1) << bits;
-			else	t += ((time_t) 1) << bits;
+				t -= (time_t) 1 << bits;
+			else	t += (time_t) 1 << bits;
 			continue;
 		}
 		if (yourtm.tm_isdst < 0 || mytm.tm_isdst == yourtm.tm_isdst)
@@ -1412,10 +1384,10 @@ int * const		okayp;
 		if (sp == NULL)
 			return WRONG;
 #endif /* defined ALL_STATE */
-		for (i = sp->typecnt - 1; i >= 0; --i) {
+		for (i = 0; i < sp->typecnt; ++i) {
 			if (sp->ttis[i].tt_isdst != yourtm.tm_isdst)
 				continue;
-			for (j = sp->typecnt - 1; j >= 0; --j) {
+			for (j = 0; j < sp->typecnt; ++j) {
 				if (sp->ttis[j].tt_isdst == yourtm.tm_isdst)
 					continue;
 				newt = t + sp->ttis[j].tt_gmtoff -
@@ -1447,7 +1419,7 @@ label:
 static time_t
 time1(tmp, funcp, offset)
 struct tm * const	tmp;
-void (* const		funcp) P((const time_t *, long, struct tm *));
+void (* const		funcp) P((const time_t*, long, struct tm*));
 const long		offset;
 {
 	register time_t			t;
@@ -1486,10 +1458,10 @@ const long		offset;
 	if (sp == NULL)
 		return WRONG;
 #endif /* defined ALL_STATE */
-	for (samei = sp->typecnt - 1; samei >= 0; --samei) {
+	for (samei = 0; samei < sp->typecnt; ++samei) {
 		if (sp->ttis[samei].tt_isdst != tmp->tm_isdst)
 			continue;
-		for (otheri = sp->typecnt - 1; otheri >= 0; --otheri) {
+		for (otheri = 0; otheri < sp->typecnt; ++otheri) {
 			if (sp->ttis[otheri].tt_isdst == tmp->tm_isdst)
 				continue;
 			tmp->tm_sec += sp->ttis[otheri].tt_gmtoff -

@@ -1,8 +1,6 @@
-/*	$NetBSD: scheck.c,v 1.3 1996/01/08 22:50:58 jtc Exp $	*/
-
 #ifndef lint
 #ifndef NOID
-static char	elsieid[] = "@(#)scheck.c	8.13";
+static char	elsieid[] = "@(#)scheck.c	8.12";
 #endif /* !defined lint */
 #endif /* !defined NOID */
 
@@ -44,7 +42,7 @@ char * const		format;
 		*tp++ = '*';
 		if (*fp == '*')
 			++fp;
-		while (is_digit(*fp))
+		while (isascii(*fp) && isdigit(*fp))
 			*tp++ = *fp++;
 		if (*fp == 'l' || *fp == 'h')
 			*tp++ = *fp++;

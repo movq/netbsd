@@ -1,5 +1,3 @@
-/*	$NetBSD: ialloc.c,v 1.3 1997/01/23 14:02:28 mrg Exp $	*/
-
 #ifndef lint
 #ifndef NOID
 static char	elsieid[] = "@(#)ialloc.c	8.28";
@@ -59,11 +57,10 @@ const char * const	new;
 		oldsize = 0;
 	else if (newsize == 0)
 		return old;
-	else
-		oldsize = strlen(old);
+	else	oldsize = strlen(old);
 	if ((result = irealloc(old, oldsize + newsize + 1)) != NULL)
 		if (new != NULL)
-			(void) strcpy(result + oldsize, new); /* XXX strcpy is safe */
+			(void) strcpy(result + oldsize, new);
 	return result;
 }
 
