@@ -1,5 +1,5 @@
 
-#	$Id: Makefile,v 1.1 1997/03/16 22:23:37 cjs Exp $
+#	$Id: Makefile,v 1.1.1.1 1997/03/16 22:23:37 cjs Exp $
 
 PROG=	mopa.out
 SRCS=	mopa.out.c file.c

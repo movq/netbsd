@@ -28,7 +28,7 @@
  */
 
 #ifndef LINT
-static char rcsid[] = "$Id: device.c,v 1.1 1997/03/16 22:23:35 cjs Exp $";
+static char rcsid[] = "$Id: device.c,v 1.1.1.1 1997/03/16 22:23:35 cjs Exp $";
 #endif
 
 #include "os.h"

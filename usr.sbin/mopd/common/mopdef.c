@@ -28,7 +28,7 @@
  */
 
 #ifndef LINT
-static char rcsid[] = "$Id: mopdef.c,v 1.1 1997/03/16 22:23:36 cjs Exp $";
+static char rcsid[] = "$Id: mopdef.c,v 1.1.1.1 1997/03/16 22:23:36 cjs Exp $";
 #endif
 
 #define MOPDEF_SURPESS_EXTERN

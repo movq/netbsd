@@ -1,4 +1,4 @@
-#	$Id: Makefile,v 1.1 1997/03/16 22:23:38 cjs Exp $
+#	$Id: Makefile,v 1.1.1.1 1997/03/16 22:23:38 cjs Exp $
 
 PROG=	mopprobe
 SRCS=	mopprobe.c device.c get.c cmp.c mopdef.c version.c pf.c loop-bsd.c

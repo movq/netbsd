@@ -1,4 +1,4 @@
-#	$Id: Makefile,v 1.1 1997/03/16 22:23:38 cjs Exp $
+#	$Id: Makefile,v 1.1.1.1 1997/03/16 22:23:38 cjs Exp $
 
 PROG=	mopd
 SRCS=	mopd.c process.c print.c cmp.c get.c put.c mopdef.c nma.c device.c \
