@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_ptrace.c,v 1.1.2.3 2001/11/14 19:13:07 nathanw Exp $ */
+/*	$NetBSD: linux_ptrace.c,v 1.1.2.4 2001/12/06 09:30:55 wdk Exp $ */
 
 /*-
  * Copyright (c) 1999, 2001 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_ptrace.c,v 1.1.2.3 2001/11/14 19:13:07 nathanw Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_ptrace.c,v 1.1.2.4 2001/12/06 09:30:55 wdk Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -65,8 +65,8 @@ __KERNEL_RCSID(0, "$NetBSD: linux_ptrace.c,v 1.1.2.3 2001/11/14 19:13:07 nathanw
 #include <lib/libkern/libkern.h>	/* for offsetof() */
 
 int
-linux_sys_ptrace_arch(p, v, retval)	/* XXX write me! */
-	struct proc *p;
+linux_sys_ptrace_arch(l, v, retval)	/* XXX write me! */
+	struct lwp *l;
 	void *v;
 	register_t *retval;
 {
