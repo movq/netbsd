@@ -1,4 +1,4 @@
-/*	$NetBSD: wdc_isa.c,v 1.14 1999/04/11 20:50:29 bouyer Exp $ */
+/*	$NetBSD: wdc_isa.c,v 1.13.2.1 1999/04/12 09:14:31 bouyer Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.

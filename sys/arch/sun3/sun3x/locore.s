@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.s,v 1.35 1999/04/30 09:21:54 christos Exp $	*/
+/*	$NetBSD: locore.s,v 1.33.2.1 1999/04/30 17:17:25 perry Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -42,7 +42,6 @@
  */
 
 #include "opt_compat_netbsd.h"
-#include "opt_compat_svr4.h"
 #include "opt_compat_sunos.h"
 
 #include "assym.h"

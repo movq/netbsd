@@ -1,4 +1,4 @@
-/*	$NetBSD: bandit.c,v 1.11 1999/05/06 19:16:45 thorpej Exp $	*/
+/*	$NetBSD: bandit.c,v 1.8.2.2 1999/05/06 19:38:49 perry Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.

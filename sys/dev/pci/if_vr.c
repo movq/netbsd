@@ -1,4 +1,4 @@
-/*	$NetBSD: if_vr.c,v 1.21 1999/04/26 23:19:10 thorpej Exp $	*/
+/*	$NetBSD: if_vr.c,v 1.19.2.2 1999/04/26 23:54:36 perry Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.

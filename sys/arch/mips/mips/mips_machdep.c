@@ -1,4 +1,4 @@
-/*	$NetBSD: mips_machdep.c,v 1.51 1999/04/25 02:56:28 simonb Exp $	*/
+/*	$NetBSD: mips_machdep.c,v 1.48 1999/03/24 05:51:05 mrg Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -52,7 +52,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: mips_machdep.c,v 1.51 1999/04/25 02:56:28 simonb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mips_machdep.c,v 1.48 1999/03/24 05:51:05 mrg Exp $");
 
 #include "opt_bufcache.h"
 #include "opt_compat_netbsd.h"
@@ -67,7 +67,7 @@ __KERNEL_RCSID(0, "$NetBSD: mips_machdep.c,v 1.51 1999/04/25 02:56:28 simonb Exp
 #include <sys/mount.h>			/* fsid_t for syscallargs */
 #include <sys/proc.h>
 #include <sys/buf.h>
-#include <sys/clist.h>
+#include <sys/clist.h>  
 #include <sys/callout.h>
 #include <sys/signal.h>
 #include <sys/signalvar.h>
@@ -76,7 +76,7 @@ __KERNEL_RCSID(0, "$NetBSD: mips_machdep.c,v 1.51 1999/04/25 02:56:28 simonb Exp
 #include <sys/msgbuf.h>
 #include <sys/conf.h>
 #include <sys/core.h>
-#include <sys/kcore.h>
+#include <sys/kcore.h>  
 #include <machine/kcore.h>
 #ifdef SYSVMSG
 #include <sys/msg.h>
@@ -251,7 +251,7 @@ mips3_ConfigCache()
 {
 	u_int32_t config = mips3_read_config();
 	static int snoop_check = 0;
-	int i;
+	register int i;
 
 	mips_L1ICacheSize = MIPS3_CONFIG_CACHE_SIZE(config,
 	    MIPS3_CONFIG_IC_MASK, MIPS3_CONFIG_IC_SHIFT);
@@ -350,7 +350,7 @@ mips3_vector_init()
  * cod into the CPU exception-vector entries and the jump tables
  * used to  hide the differences in cache and TLB handling in
  * different MIPS CPUs.
- *
+ * 
  * This should be the very first thing called by each port's
  * init_main() function.
  */
@@ -417,7 +417,7 @@ mips_vector_init()
 	case MIPS_R5000:
 #endif
 	case MIPS_RM5230:
-		cpu_arch = 4;
+		cpu_arch = 4; 
 		mips_num_tlb_entries = MIPS3_TLB_NUM_TLB_ENTRIES;
 		mips3_L1TwoWayCache = 1;
 		mips3_cacheflush_bug = 0;
@@ -558,13 +558,13 @@ cpu_identify()
 #ifdef MIPS1
 	if (cpu_arch == 1) {
 		printf("%dkb Instruction, %dkb Data, direct mapped cache",
-		    mips_L1ICacheSize / 1024, mips_L1DCacheSize / 1024);
+		    mips_L1ICacheSize / 1024, mips_L1DCacheSize / 1024);	
 	}
 #endif
 #ifdef MIPS3
 	if (cpu_arch >= 3) {
 		printf("L1 cache: %dkb/%db Instruction, %dkb/%db Data",
-		    mips_L1ICacheSize / 1024, mips_L1ICacheLSize,
+		    mips_L1ICacheSize / 1024, mips_L1ICacheLSize, 
 		    mips_L1DCacheSize / 1024, mips_L1DCacheLSize);
 		if (mips3_L1TwoWayCache)
 			printf(", two way set associative");
@@ -711,7 +711,7 @@ sendsig(catcher, sig, mask, code)
 	f = (struct frame *)p->p_md.md_regs;
 
 	/* Do we need to jump onto the signal stack? */
-	onstack =
+	onstack = 
 	    (psp->ps_sigstk.ss_flags & (SS_DISABLE | SS_ONSTACK)) == 0 &&
 	    (psp->ps_sigact[sig].sa_flags & SA_ONSTACK) != 0;
 
@@ -995,10 +995,10 @@ cpu_dumpconf()
 	if (bdevsw[maj].d_psize == NULL)
 		goto bad;
 	nblks = (*bdevsw[maj].d_psize)(dumpdev);
-	if (nblks <= ctod(1))
+	if (nblks <= ctod(1)) 
 		goto bad;
 
-	dumpblks = cpu_dumpsize();
+	dumpblks = cpu_dumpsize(); 
 	if (dumpblks < 0)
 		goto bad;
 	dumpblks += ctod(cpu_dump_mempagecnt());
@@ -1140,14 +1140,17 @@ dumpsys()
  * allocate that much and fill it with zeroes, and the call
  * allocsys() again with the correct base virtual address.
  */
-caddr_t
-allocsys(v)
+caddr_t  
+allocsys(v) 
 	caddr_t v;
-{
+{                       
 
 #define valloc(name, type, num) \
 	    (name) = (type *)v; v = (caddr_t)ALIGN((name)+(num))
 
+#ifdef REAL_CLISTS
+	valloc(cfree, struct cblock, nclist);
+#endif
 	valloc(callout, struct callout, ncallout);
 #ifdef SYSVSHM
 	valloc(shmsegs, struct shmid_ds, shminfo.shmmni);
@@ -1164,7 +1167,7 @@ allocsys(v)
 	valloc(msghdrs, struct msg, msginfo.msgtql);
 	valloc(msqids, struct msqid_ds, msginfo.msgmni);
 #endif
-
+	
 	/*
 	 * Determine how many buffers to allocate.
 	 * We allocate bufcache % of memory for buffer space.  Ensure a

@@ -1,4 +1,4 @@
-/*	$NetBSD: adb_direct.c,v 1.22 1999/05/06 06:01:27 scottr Exp $	*/
+/*	$NetBSD: adb_direct.c,v 1.21.2.1 1999/05/06 06:53:49 cgd Exp $	*/
 
 /* From: adb_direct.c 2.02 4/18/97 jpw */
 

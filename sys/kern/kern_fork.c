@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_fork.c,v 1.59 1999/05/13 21:58:37 thorpej Exp $	*/
+/*	$NetBSD: kern_fork.c,v 1.54 1999/03/24 05:51:23 mrg Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1991, 1993
@@ -58,7 +58,6 @@
 #include <sys/ktrace.h>
 #include <sys/vmmeter.h>
 #include <sys/sched.h>
-#include <sys/signalvar.h>
 
 #include <sys/syscallargs.h>
 
@@ -77,7 +76,7 @@ sys_fork(p, v, retval)
 	register_t *retval;
 {
 
-	return (fork1(p, 0, SIGCHLD, NULL, 0, retval, NULL));
+	return (fork1(p, 0, retval, NULL));
 }
 
 /*
@@ -92,7 +91,7 @@ sys_vfork(p, v, retval)
 	register_t *retval;
 {
 
-	return (fork1(p, FORK_PPWAIT, SIGCHLD, NULL, 0, retval, NULL));
+	return (fork1(p, FORK_PPWAIT, retval, NULL));
 }
 
 /*
@@ -107,17 +106,13 @@ sys___vfork14(p, v, retval)
 	register_t *retval;
 {
 
-	return (fork1(p, FORK_PPWAIT|FORK_SHAREVM, SIGCHLD, NULL, 0,
-	    retval, NULL));
+	return (fork1(p, FORK_PPWAIT|FORK_SHAREVM, retval, NULL));
 }
 
 int
-fork1(p1, flags, exitsig, stack, stacksize, retval, rnewprocp)
+fork1(p1, flags, retval, rnewprocp)
 	register struct proc *p1;
 	int flags;
-	int exitsig;
-	void *stack;
-	size_t stacksize;
 	register_t *retval;
 	struct proc **rnewprocp;
 {
@@ -237,9 +232,6 @@ again:
 	/* Record the pid we've allocated. */
 	p2->p_pid = nextpid;
 
-	/* Record the signal to be delivered to the parent on exit. */
-	p2->p_exitsig = exitsig;
-
 	/*
 	 * Put the proc on allproc before unlocking PID allocation
 	 * so that waiters won't grab it as soon as we unlock.
@@ -283,16 +275,7 @@ again:
 	if (p2->p_textvp)
 		VREF(p2->p_textvp);
 
-	if (flags & FORK_SHAREFILES)
-		fdshare(p1, p2);
-	else
-		p2->p_fd = fdcopy(p1);
-
-	if (flags & FORK_SHARECWD)
-		cwdshare(p1, p2);
-	else
-		p2->p_cwdi = cwdinit(p1);
-
+	p2->p_fd = fdcopy(p1);
 	/*
 	 * If p_limit is still copy-on-write, bump refcnt,
 	 * otherwise get a copy that won't be modified.
@@ -329,14 +312,6 @@ again:
 	scheduler_fork_hook(p1, p2);
 
 	/*
-	 * Create signal actions for the child process.
-	 */
-	if (flags & FORK_SHARESIGS)
-		sigactsshare(p1, p2);
-	else
-		p2->p_sigacts = sigactsinit(p1);
-
-	/*
 	 * This begins the section where we must prevent the parent
 	 * from being swapped.
 	 */
@@ -347,8 +322,7 @@ again:
 	 * different path later.
 	 */
 	p2->p_addr = (struct user *)uaddr;
-	uvm_fork(p1, p2, (flags & FORK_SHAREVM) ? TRUE : FALSE,
-	    stack, stacksize);
+	uvm_fork(p1, p2, (flags & FORK_SHAREVM) ? TRUE : FALSE);
 
 	/*
 	 * Make child runnable, set start time, and add to run queue.

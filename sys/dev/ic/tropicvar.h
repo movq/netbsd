@@ -1,4 +1,4 @@
-/*	$NetBSD: tropicvar.h,v 1.3 1999/04/29 15:47:02 bad Exp $	*/
+/*	$NetBSD: tropicvar.h,v 1.2.2.1 1999/04/29 22:22:08 perry Exp $	*/
 
 /* 
  * Mach Operating System
@@ -33,6 +33,9 @@
 /*
  * HISTORY
  * $Log: tropicvar.h,v $
+ * Revision 1.2.2.1  1999/04/29 22:22:08  perry
+ * pullup 1.2->1.3 (bad)
+ *
  * Revision 1.3  1999/04/29 15:47:02  bad
  * From Onno van der Linden:
  * Reorganise the driver some what.
@@ -58,11 +61,11 @@
  * 
  */
 
-/* $Header: /home/mike/src/cvs/netbsd/src/sys/dev/ic/Attic/tropicvar.h,v 1.3 1999/04/29 15:47:02 bad Exp $ */
+/* $Header: /home/mike/src/cvs/netbsd/src/sys/dev/ic/Attic/tropicvar.h,v 1.2.2.1 1999/04/29 22:22:08 perry Exp $ */
 /* $ACIS:if_lanvar.h 12.0$ */
 
 #if !defined(lint) && !defined(LOCORE)  && defined(RCS_HDRS)
-static char    *rcsidif_lanvar = "$Header: /home/mike/src/cvs/netbsd/src/sys/dev/ic/Attic/tropicvar.h,v 1.3 1999/04/29 15:47:02 bad Exp $";
+static char    *rcsidif_lanvar = "$Header: /home/mike/src/cvs/netbsd/src/sys/dev/ic/Attic/tropicvar.h,v 1.2.2.1 1999/04/29 22:22:08 perry Exp $";
 #endif
 
 /*

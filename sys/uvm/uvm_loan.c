@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_loan.c,v 1.15 1999/04/11 04:04:11 chs Exp $	*/
+/*	$NetBSD: uvm_loan.c,v 1.14.2.1 1999/04/16 16:29:09 chs Exp $	*/
 
 /*
  *

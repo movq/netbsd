@@ -1,4 +1,4 @@
-/*	$NetBSD: lfs_segment.c,v 1.26 1999/04/12 00:25:13 perseant Exp $	*/
+/*	$NetBSD: lfs_segment.c,v 1.23.2.1 1999/04/13 21:33:56 perseant Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_map.c,v 1.39 1999/05/12 19:11:23 thorpej Exp $	*/
+/*	$NetBSD: uvm_map.c,v 1.36.2.1 1999/04/19 16:02:52 perry Exp $	*/
 
 /* 
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -1704,6 +1704,7 @@ uvm_map_submap(map, start, end, submap)
  *
  * => set_max means set max_protection.
  * => map must be unlocked.
+ * => XXXCDC: does not work properly with share maps.  rethink.
  */
 
 #define MASK(entry)     (UVM_ET_ISCOPYONWRITE(entry) ? \
@@ -1739,10 +1740,10 @@ uvm_map_protect(map, start, end, new_prot, set_max)
 	current = entry;
 	while ((current != &map->header) && (current->start < end)) {
 		if (UVM_ET_ISSUBMAP(current))
-			return (KERN_INVALID_ARGUMENT);
+			return(KERN_INVALID_ARGUMENT);
 		if ((new_prot & current->max_protection) != new_prot) {
 			vm_map_unlock(map);
-			return (KERN_PROTECTION_FAILURE);
+			return(KERN_PROTECTION_FAILURE);
 		}
 			current = current->next;
 	}
@@ -1792,6 +1793,7 @@ uvm_map_protect(map, start, end, new_prot, set_max)
  * => map must be unlocked
  * => note that the inherit code is used during a "fork".  see fork
  *	code for details.
+ * => XXXCDC: currently only works in main map.  what about share map?
  */
 
 int
@@ -1813,7 +1815,7 @@ uvm_map_inherit(map, start, end, new_inheritance)
 		break;
 	default:
 		UVMHIST_LOG(maphist,"<- done (INVALID ARG)",0,0,0,0);
-		return (KERN_INVALID_ARGUMENT);
+		return(KERN_INVALID_ARGUMENT);
 	}
 
 	vm_map_lock(map);
@@ -2005,7 +2007,7 @@ uvm_map_pageable(map, start, end, new_pageable)
 			}
 			vm_map_unlock(map);
 			UVMHIST_LOG(maphist,"<- done (INVALID WIRE)",0,0,0,0);
-			return (KERN_INVALID_ARGUMENT);
+			return(KERN_INVALID_ARGUMENT);
 		}
 		entry = entry->next;
 	}
@@ -2087,6 +2089,7 @@ uvm_map_pageable(map, start, end, new_pageable)
  * => called from sys_msync()
  * => caller must not write-lock map (read OK).
  * => we may sleep while cleaning if SYNCIO [with map read-locked]
+ * => XXX: does this handle share maps properly?
  */
 
 int
@@ -2117,12 +2120,12 @@ uvm_map_clean(map, start, end, flags)
 	for (current = entry; current->start < end; current = current->next) {
 		if (UVM_ET_ISSUBMAP(current)) {
 			vm_map_unlock_read(map);
-			return (KERN_INVALID_ARGUMENT);
+			return(KERN_INVALID_ARGUMENT);
 		}
 		if (end > current->end && (current->next == &map->header ||
 		    current->end != current->next->start)) {
 			vm_map_unlock_read(map);
-			return (KERN_INVALID_ADDRESS);
+			return(KERN_INVALID_ADDRESS);
 		}
 	}
 
@@ -2756,10 +2759,6 @@ uvmspace_fork(vm1)
 #ifdef SYSVSHM
 	if (vm1->vm_shm)
 		shmfork(vm1, vm2);
-#endif
-
-#ifdef PMAP_FORK
-	pmap_fork(vm1->vm_map.pmap, vm2->vm_map.pmap);
 #endif
 
 	UVMHIST_LOG(maphist,"<- done",0,0,0,0);

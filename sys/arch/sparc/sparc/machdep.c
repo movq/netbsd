@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.146 1999/05/03 16:17:57 christos Exp $ */
+/*	$NetBSD: machdep.c,v 1.143.2.1 1999/04/16 16:23:50 chs Exp $ */
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -167,6 +167,8 @@ int	bufpages = 0;
 
 int	physmem;
 
+extern	caddr_t msgbufaddr;
+
 /*
  * safepri is a safe priority for sleep to set for a spin-wait
  * during autoconfiguration or after a panic.
@@ -307,7 +309,7 @@ cpu_startup()
 	 * Finally, allocate mbuf cluster submap.
 	 */
         mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-	    nmbclusters * mclbytes, FALSE, FALSE, NULL);
+            VM_MBUF_SIZE, FALSE, FALSE, NULL);
 
 	/*
 	 * Initialize callouts

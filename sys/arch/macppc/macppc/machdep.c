@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.44 1999/05/07 22:20:38 wrstuden Exp $	*/
+/*	$NetBSD: machdep.c,v 1.38.2.2 1999/05/06 19:41:25 perry Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -155,10 +155,6 @@ void install_extint __P((void (*)(void)));
 
 int cold = 1;
 
-#ifdef DDB
-void *startsym, *endsym;
-#endif
-
 void
 initppc(startkernel, endkernel, args)
 	u_int startkernel, endkernel;
@@ -173,6 +169,7 @@ initppc(startkernel, endkernel, args)
 	extern tlbdsmiss, tlbdsmsize;
 #ifdef DDB
 	extern ddblow, ddbsize;
+	extern void *startsym, *endsym;
 #endif
 #if NIPKDB > 0
 	extern ipkdblow, ipkdbsize;
@@ -298,7 +295,7 @@ initppc(startkernel, endkernel, args)
 	 */
 	install_extint(ext_intr);
 
-	__syncicache((void *)EXC_RST, EXC_LAST - EXC_RST + 0x100);
+	syncicache((void *)EXC_RST, EXC_LAST - EXC_RST + 0x100);
 
 	/*
 	 * Now enable translation (and machine checks/recoverable interrupts).
@@ -311,13 +308,6 @@ initppc(startkernel, endkernel, args)
 	/*
 	 * Parse arg string.
 	 */
-#ifdef DDB
-	bcopy(args + strlen(args) + 1, &startsym, sizeof(startsym));
-	bcopy(args + strlen(args) + 5, &endsym, sizeof(endsym));
-	if (startsym == NULL || endsym == NULL)
-		startsym = endsym = NULL;
-#endif
-
 	bootpath = args;
 	while (*++args && *args != ' ');
 	if (*args) {
@@ -338,7 +328,7 @@ initppc(startkernel, endkernel, args)
 	}
 
 #ifdef DDB
-	ddb_init((int)((u_int)endsym - (u_int)startsym), startsym, endsym);
+	/* ddb_init((int)(endsym - startsym), startsym, endsym); */
 #endif
 #if NIPKDB > 0
 	/*
@@ -487,8 +477,8 @@ install_extint(handler)
 		      : "=r"(omsr), "=r"(msr) : "K"((u_short)~PSL_EE));
 	extint_call = (extint_call & 0xfc000003) | offset;
 	bcopy(&extint, (void *)EXC_EXI, (size_t)&extsize);
-	__syncicache((void *)&extint_call, sizeof extint_call);
-	__syncicache((void *)EXC_EXI, (int)&extsize);
+	syncicache((void *)&extint_call, sizeof extint_call);
+	syncicache((void *)EXC_EXI, (int)&extsize);
 	asm volatile ("mtmsr %0" :: "r"(omsr));
 }
 
@@ -577,10 +567,10 @@ cpu_startup()
 				 VM_PHYS_SIZE, TRUE, FALSE, NULL);
 
 	/*
-	 * No need to allocate an mbuf cluster submap.  Mbuf clusters
-	 * are allocated via the pool allocator, and we use direct-mapped
-	 * pool pages.
+	 * Finally, allocate mbuf cluster submap.
 	 */
+	mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
+			       VM_MBUF_SIZE, FALSE, FALSE, NULL);
 
 	/*
 	 * Initialize callouts.
@@ -724,9 +714,9 @@ setregs(p, pack, stack)
 	p->p_addr->u_pcb.pcb_flags = 0;
 
 	/* sync I-cache for signal trampoline code */
-	__syncicache((void *)pmap_extract(p->p_addr->u_pcb.pcb_pm,
-					  (vaddr_t)p->p_sigacts->ps_sigcode),
-		     pack->ep_emul->e_esigcode - pack->ep_emul->e_sigcode);
+	syncicache((void *)pmap_extract(p->p_addr->u_pcb.pcb_pm,
+					(vaddr_t)p->p_sigacts->ps_sigcode),
+		   pack->ep_emul->e_esigcode - pack->ep_emul->e_sigcode);
 }
 
 /*
@@ -851,6 +841,7 @@ sys___sigreturn14(p, v, retval)
 
 /*
  * Machine dependent system variables.
+ * None for now.
  */
 int
 cpu_sysctl(name, namelen, oldp, oldlenp, newp, newlen, p)
@@ -865,10 +856,7 @@ cpu_sysctl(name, namelen, oldp, oldlenp, newp, newlen, p)
 	/* all sysctl names at this level are terminal */
 	if (namelen != 1)
 		return ENOTDIR;
-
 	switch (name[0]) {
-	case CPU_CACHELINE:
-		return sysctl_rdint(oldp, oldlenp, newp, CACHELINESIZE);
 	default:
 		return EOPNOTSUPP;
 	}
@@ -1117,6 +1105,12 @@ cninit()
 	int stdout;
 	char type[16];
 
+	/*
+	 * Initialize the PCI chipsets; can't map configuration
+	 * space registers yet!
+	 */
+	pci_init(0);
+
 	l = OF_getprop(chosen, "stdout", &stdout, sizeof(stdout));
 	if (l != sizeof(stdout))
 		goto nocons;
@@ -1151,7 +1145,7 @@ cninit()
 			return;
 		}
 
-		node = OF_instance_to_package(stdin);
+		node = OF_instance_to_package(stdout);
 		bzero(type, sizeof(type));
 		l = OF_getprop(node, "name", type, sizeof(type));
 		if (l == -1 || l >= sizeof(type) - 1) {
@@ -1183,12 +1177,6 @@ cninit()
 #endif
 			return;
 		}
-
-		/*
-		 * Initialize the PCI chipsets; can't map configuration
-		 * space registers yet!
-		 */
-		pci_init(0);
 
 		/*
 		 * We're not an ADB keyboard; must be USB.  The parent

@@ -1,4 +1,4 @@
-/* $NetBSD: tga.c,v 1.14 1999/04/28 23:24:33 ross Exp $ */
+/* $NetBSD: tga.c,v 1.13.2.1 1999/04/29 14:25:11 perry Exp $ */
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.

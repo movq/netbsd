@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.135 1999/04/26 22:46:44 thorpej Exp $	*/
+/*	$NetBSD: machdep.c,v 1.133.2.1 1999/04/16 16:14:40 chs Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -439,7 +439,7 @@ again:
 	 * Finally, allocate mbuf cluster submap.
 	 */
 	mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				 nmbclusters * mclbytes, FALSE, FALSE, NULL);
+			         VM_MBUF_SIZE, FALSE, FALSE, NULL);
 
 	/*
 	 * Initialize callouts

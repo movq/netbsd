@@ -1,4 +1,4 @@
-/*	$NetBSD: sqphy.c,v 1.9 1999/04/23 04:24:32 thorpej Exp $	*/
+/*	$NetBSD: sqphy.c,v 1.8.6.1 1999/04/23 15:41:25 perry Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_glue.c,v 1.20 1999/05/13 21:58:38 thorpej Exp $	*/
+/*	$NetBSD: uvm_glue.c,v 1.18 1999/03/26 21:58:39 mycroft Exp $	*/
 
 /* 
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -256,8 +256,6 @@ uvm_vsunlock(p, addr, len)
  * - the address space is copied as per parent map's inherit values
  * - a new "user" structure is allocated for the child process
  *	[filled in by MD layer...]
- * - if specified, the child gets a new user stack described by
- *	stack and stacksize
  * - NOTE: the kernel stack may be at a different location in the child
  *	process, and thus addresses of automatic variables may be invalid
  *	after cpu_fork returns in the child process.  We do nothing here
@@ -266,11 +264,9 @@ uvm_vsunlock(p, addr, len)
  *   than just hang
  */
 void
-uvm_fork(p1, p2, shared, stack, stacksize)
+uvm_fork(p1, p2, shared)
 	struct proc *p1, *p2;
 	boolean_t shared;
-	void *stack;
-	size_t stacksize;
 {
 	struct user *up = p2->p_addr;
 	int rv;
@@ -292,10 +288,13 @@ uvm_fork(p1, p2, shared, stack, stacksize)
 		panic("uvm_fork: uvm_fault_wire failed: %d", rv);
 
 	/*
-	 * p_stats currently points at a field in the user struct.  Copy
-	 * parts of p_stats, and zero out the rest.
+	 * p_stats and p_sigacts currently point at fields in the user
+	 * struct but not at &u, instead at p_addr.  Copy p_sigacts and
+	 * parts of p_stats; zero the rest of p_stats (statistics).
 	 */
 	p2->p_stats = &up->u_stats;
+	p2->p_sigacts = &up->u_sigacts;
+	up->u_sigacts = *p1->p_sigacts;
 	memset(&up->u_stats.pstat_startzero, 0,
 	(unsigned) ((caddr_t)&up->u_stats.pstat_endzero -
 		    (caddr_t)&up->u_stats.pstat_startzero));
@@ -308,7 +307,7 @@ uvm_fork(p1, p2, shared, stack, stacksize)
 	 * the child ready to run.  The child will exit directly to user
 	 * mode on its first time slice, and will not return here.
 	 */
-	cpu_fork(p1, p2, stack, stacksize);
+	cpu_fork(p1, p2);
 }
 
 /*

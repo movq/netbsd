@@ -1,4 +1,4 @@
-/*	$NetBSD: lpt.c,v 1.15 1999/04/06 19:31:37 pk Exp $ */
+/*	$NetBSD: lpt.c,v 1.14.6.1 1999/04/07 08:12:40 pk Exp $ */
 
 /*
  * Copyright (c) 1996 Leo Weppelman

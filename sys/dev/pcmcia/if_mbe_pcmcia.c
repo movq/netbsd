@@ -1,4 +1,4 @@
-/*	$NetBSD: if_mbe_pcmcia.c,v 1.7 1999/04/27 04:56:18 thorpej Exp $	*/
+/*	$NetBSD: if_mbe_pcmcia.c,v 1.6.4.1 1999/04/27 13:55:52 perry Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.

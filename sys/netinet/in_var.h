@@ -1,4 +1,4 @@
-/*	$NetBSD: in_var.h,v 1.33 1999/05/03 22:12:45 thorpej Exp $	*/
+/*	$NetBSD: in_var.h,v 1.32.2.1 1999/05/03 22:24:49 perry Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.

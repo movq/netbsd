@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.21 1999/04/28 09:14:07 christos Exp $
+#	$NetBSD: Makefile,v 1.19 1999/03/14 00:04:22 fvdl Exp $
 
 S=	${.CURDIR}/../../../../
 
@@ -11,7 +11,7 @@ SRCS= main.c devopen.c conf.c exec.c
 
 CLEANFILES+= ${BSSTART}
 
-CPPFLAGS+= -DCOMPAT_OLDBOOT -DCOMPAT_386BSD_MBRPART -DDEBUG
+CPPFLAGS+= -DCOMPAT_OLDBOOT -DCOMPAT_386BSD_MBRPART
 
 #Sample use of serial line debugger
 #CPPFLAGS+= -DSUPPORT_SERIAL=CONSDEV_COM0KBD
@@ -30,7 +30,11 @@ CPPFLAGS+= -DPASS_BIOSGEOM
 #CPPFLAGS+= -DPRIM_LOADSZ=9
 
 #CFLAGS= -O2 -fomit-frame-pointer -fno-defer-pop
-CFLAGS+= -Wall -Wmissing-prototypes -Wstrict-prototypes -Wno-main
+CFLAGS+= -Wall
+
+# XXX should go into library
+SRCS+= ls.c
+.PATH: ${.CURDIR}/../libsa
 
 SAMISCCPPFLAGS+= -DHEAP_START=0x10000 -DHEAP_LIMIT=0x40000
 SAMISCMAKEFLAGS= SA_USE_CREAD=yes SA_INCLUDE_NET=no

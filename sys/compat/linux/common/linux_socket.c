@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_socket.c,v 1.20 1999/05/05 20:01:03 thorpej Exp $	*/
+/*	$NetBSD: linux_socket.c,v 1.19 1999/03/25 04:26:45 sommerfe Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -513,8 +513,7 @@ linux_sys_connect(p, v, retval)
 		register struct socket *so;
 		int s, state, prflags;
 		
-		/* getsock() will use the descriptor for us */
-	    	if (getsock(p->p_fd, SCARG(uap, s), &fp) != 0)
+	    	if (getsock(p->p_fd, SCARG(uap, s), &fp)!= 0)
 		    	return EISCONN;
 
 		s = splsoftnet();
@@ -522,7 +521,6 @@ linux_sys_connect(p, v, retval)
 		state = so->so_state;
 		prflags = so->so_proto->pr_flags;
 		splx(s);
-		FILE_UNUSE(fp, p);
 		/*
 		 * We should only let this call succeed once per
 		 * non-blocking connect; however we don't have
@@ -535,3 +533,4 @@ linux_sys_connect(p, v, retval)
 
 	return error;
 }
+

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.32 1999/05/07 14:28:51 drochner Exp $
+#	$NetBSD: Makefile,v 1.29 1999/04/01 05:12:20 simonb Exp $
 
 LIB=	sa
 MKPIC=	no
@@ -6,20 +6,17 @@ MKPROFILE=no
 
 SA_USE_CREAD?= no
 SA_INCLUDE_NET?= yes
-SA_USE_LOADFILE?= no
 
 #DEBUGCPPFLAGS= -DBOOTP_DEBUG -DNETIF_DEBUG -DETHER_DEBUG -DNFS_DEBUG -DRPC_DEBUG -DRARP_DEBUG -DDEBUG -DPARANOID
-CPPFLAGS=	-I${SADIR} ${SACPPFLAGS} ${SAMISCCPPFLAGS} \
+CPPFLAGS=	-I. ${SACPPFLAGS} ${SAMISCCPPFLAGS} \
 		-DCOMPAT_UFS ${DEBUGCPPFLAGS}
 
 #COPTS+= -ansi -pedantic -Wall
 
-.PATH.c: ${SADIR}
-
 # stand routines
 SRCS+=	alloc.c bcmp.c bcopy.c bzero.c errno.c exit.c exec.c getfile.c gets.c \
-	globals.c memcmp.c memcpy.c memset.c panic.c printf.c \
-	snprintf.c sprintf.c strerror.c subr_prf.c twiddle.c vsprintf.c
+	globals.c memcmp.c memcpy.c memset.c panic.c printf.c snprintf.c \
+	sprintf.c strerror.c subr_prf.c twiddle.c vsprintf.c
 
 # io routines
 SRCS+=	closeall.c dev.c disklabel.c dkcksum.c ioctl.c nullfs.c stat.c fstat.c
@@ -29,9 +26,6 @@ CPPFLAGS+= -D__INTERNAL_LIBSA_CREAD
 SRCS+=	cread.c
 .endif
 
-.if (${SA_USE_LOADFILE} == "yes")
-SRCS+=	loadfile.c
-.endif
 .if (${SA_INCLUDE_NET} == "yes")
 # network routines
 SRCS+=	arp.c ether.c in_cksum.c net.c netif.c rpc.c
@@ -42,7 +36,7 @@ SRCS+=	bootp.c rarp.c bootparam.c
 # boot filesystems
 SRCS+=	nfs.c tftp.c
 .endif
-SRCS+=	ufs.c ufs_ls.c cd9660.c ustarfs.c
+SRCS+=	ufs.c cd9660.c ustarfs.c
 
 # only needed during build
 libinstall::

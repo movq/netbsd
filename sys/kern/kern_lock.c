@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_lock.c,v 1.17 1999/05/04 15:58:53 sommerfe Exp $	*/
+/*	$NetBSD: kern_lock.c,v 1.16.2.1 1999/05/04 17:05:42 perry Exp $	*/
 
 /* 
  * Copyright (c) 1995

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.13 1999/04/28 09:14:22 christos Exp $
+#	$NetBSD: Makefile,v 1.12 1999/03/14 05:50:39 sommerfe Exp $
 
 # XXX: bsd.own.mk included so LDSTATIC can be overwridden
 .include <bsd.own.mk>
@@ -6,16 +6,14 @@
 CFLAGS=-g
 BINDIR=	/usr/mdec
 PROG=	installboot
-LIBSA=${.CURDIR}/../../../../lib/libsa
-
-.PATH.c: ${LIBSA}
+.PATH.c: ${.CURDIR}/../lib
 
 SRCS=	installboot.c bootblks.c getmount.c loadfile.c
 
 MKMAN=	no
 
 CPPFLAGS+= -I${.CURDIR}/../lib/crt/bootsect
-CPPFLAGS+= -I${LIBSA}
+CPPFLAGS+= -I${.CURDIR}/../lib
 CFLAGS+= -Wall -Wmissing-prototypes -Wstrict-prototypes
 LDSTATIC?=-static
 

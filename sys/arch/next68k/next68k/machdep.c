@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.22 1999/04/26 22:46:47 thorpej Exp $	*/
+/*	$NetBSD: machdep.c,v 1.19.2.1 1999/04/16 16:21:11 chs Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -421,7 +421,7 @@ cpu_startup()
 	 * Finally, allocate mbuf cluster submap.
 	 */
 	mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				 nmbclusters * mclbytes, FALSE, FALSE, NULL);
+				 VM_MBUF_SIZE, FALSE, FALSE, NULL);
 
 	/*
 	 * Initialize callouts
@@ -488,6 +488,9 @@ allocsys(v)
 #define valloclim(name, type, num, lim) \
 	    (name) = (type *)v; v = (caddr_t)((lim) = ((name)+(num)))
 
+#ifdef REAL_CLISTS
+	valloc(cfree, struct cblock, nclist);
+#endif
 	valloc(callout, struct callout, ncallout);
 #ifdef SYSVSHM
 	valloc(shmsegs, struct shmid_ds, shminfo.shmmni);

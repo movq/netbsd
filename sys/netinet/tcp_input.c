@@ -1,4 +1,4 @@
-/*	$NetBSD: tcp_input.c,v 1.81 1999/05/03 23:30:27 thorpej Exp $	*/
+/*	$NetBSD: tcp_input.c,v 1.77.2.3 1999/05/03 23:51:53 perry Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 1999 The NetBSD Foundation, Inc.

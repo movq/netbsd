@@ -1,4 +1,4 @@
-/*	$NetBSD: dec_3100.c,v 1.10 1999/04/26 09:23:21 nisimura Exp $	*/
+/*	$NetBSD: dec_3100.c,v 1.8 1999/03/25 19:55:37 simonb Exp $	*/
 
 /*
  * Copyright (c) 1998 Jonathan Stone.  All rights reserved.
@@ -119,8 +119,6 @@ dec_3100_intr_establish __P((void* cookie, int level,
 			 int (*handler) __P((intr_arg_t)), intr_arg_t arg));
 void	dec_3100_intr_disestablish __P((struct ibus_attach_args *ia));
 
-extern unsigned nullclkread __P((void));
-extern unsigned (*clkread) __P((void));
 
 /*
  * Fill in platform struct.
@@ -160,9 +158,6 @@ dec_3100_os_init()
 	mcclock_addr = (volatile struct chiptime *)
 		MIPS_PHYS_TO_KSEG1(KN01_SYS_CLOCK);
 	mc_cpuspeed(mcclock_addr, MIPS_INT_MASK_3);
-
-	/* no high resolution timer circuit; possibly never called */
-	clkread = nullclkread;
 }
 
 
@@ -200,7 +195,7 @@ dec_3100_device_register(dev, aux)
  */
 void
 dec_3100_enable_intr(slotno, handler, sc, on)
-	unsigned int slotno;
+	register unsigned int slotno;
 	int (*handler) __P((void* softc));
 	void *sc;
 	int on;
@@ -226,7 +221,7 @@ dec_3100_intr(mask, pc, statusReg, causeReg)
 	unsigned statusReg;
 	unsigned causeReg;
 {
-	volatile struct chiptime *c =
+	register volatile struct chiptime *c =
 	    (volatile struct chiptime *)MIPS_PHYS_TO_KSEG1(KN01_SYS_CLOCK);
 	struct clockframe cf;
 	int temp;
@@ -244,7 +239,7 @@ dec_3100_intr(mask, pc, statusReg, causeReg)
 	}
 
 	/* If clock interrupts were enabled, re-enable them ASAP. */
-	splx(MIPS_SR_INT_IE | (statusReg & MIPS_INT_MASK_3));
+	splx(MIPS_SR_INT_ENA_CUR | (statusReg & MIPS_INT_MASK_3));
 
 #if NSII > 0
 	if (mask & MIPS_INT_MASK_0) {
@@ -277,7 +272,8 @@ dec_3100_intr(mask, pc, statusReg, causeReg)
 		dec_3100_errintr();
 		intrcnt[ERROR_INTR]++;
 	}
-	return(MIPS_SR_INT_IE | (statusReg & ~causeReg & MIPS_HARD_INT_MASK));
+	return ((statusReg & ~causeReg & MIPS_HARD_INT_MASK) |
+		MIPS_SR_INT_ENA_CUR);
 }
 
 void

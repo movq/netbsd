@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.boot,v 1.2 1999/04/02 06:36:30 gwr Exp $
+#	$NetBSD: Makefile.boot,v 1.1 1996/11/07 22:59:39 gwr Exp $
 #	from: @(#)Makefile	8.2 (Berkeley) 4/19/94
 #
 # a very simple makefile...
@@ -9,7 +9,7 @@ CC=gcc -O
 CFLAGS= -I. -DMAKE_BOOTSTRAP
 
 # Uncomment this if your system does not have strtoul (i.e. SunOS)
-# STRTOUL= -Dstrtoul=strtol
+STRTOUL= -Dstrtoul=strtol
 
 # Note: The scanner here uses features specific to "flex" so
 # do not bother even trying to make lex build the scanner.
@@ -20,20 +20,18 @@ LEX=flex -l
 YACC=yacc
 
 OBJS=	files.o hash.o main.o mkheaders.o mkioconf.o mkmakefile.o \
-	mkswap.o pack.o sem.o util.o gram.o lex.yy.o strerror.o
+	mkswap.o pack.o sem.o util.o y.tab.o lex.yy.o strerror.o
 
 config: ${OBJS}
 	${CC} -o $@ ${OBJS}
 
-gram.o : gram.c
-	${CC} ${CFLAGS} -c gram.c
+y.tab.o : y.tab.c
+	${CC} ${CFLAGS} -c y.tab.c
 
-gram.c gram.h : gram.y
+y.tab.c y.tab.h : gram.y
 	${YACC} -d gram.y
-	-mv -f y.tab.c gram.c
-	-mv -f y.tab.h gram.h
 
-lex.yy.o : lex.yy.c gram.h
+lex.yy.o : lex.yy.c
 	${CC} ${CFLAGS} ${STRTOUL} -c lex.yy.c
 
 lex.yy.c : scan.l
@@ -42,7 +40,7 @@ lex.yy.c : scan.l
 ${OBJS} : config.h
 
 y.tab.o mkmakefile.o mkswap.o sem.o : sem.h
-lex.yy.o : gram.h
+lex.yy.o : y.tab.h
 
 .c.o:
 	${CC} ${CFLAGS} -c $<

@@ -1,6 +1,4 @@
-/*	$NetBSD: rcons_subr.h,v 1.2 1999/04/13 18:43:17 ad Exp $ */
-
-/* XXX this header is depreciated - do not use */
+/*	$NetBSD: rcons_subr.h,v 1.1 1995/10/04 23:57:28 pk Exp $ */
 
 /*
  * Copyright (c) 1991, 1993

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_token.h,v 1.3 1999/04/08 15:53:31 bad Exp $	*/
+/*	$NetBSD: if_token.h,v 1.2.2.1 1999/04/08 21:44:00 bad Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993

@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_machdep.h,v 1.8 1999/05/06 19:16:44 thorpej Exp $	*/
+/*	$NetBSD: pci_machdep.h,v 1.6.2.2 1999/05/06 19:36:12 perry Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.

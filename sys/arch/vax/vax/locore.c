@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.c,v 1.36 1999/05/02 17:28:43 ragge Exp $	*/
+/*	$NetBSD: locore.c,v 1.35.2.1 1999/05/03 12:56:07 perry Exp $	*/
 /*
  * Copyright (c) 1994, 1998 Ludd, University of Lule}, Sweden.
  * All rights reserved.

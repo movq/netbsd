@@ -1,4 +1,4 @@
-/*	$NetBSD: grf.c,v 1.33 1999/04/10 14:28:22 drochner Exp $	*/
+/*	$NetBSD: grf.c,v 1.32.2.1 1999/04/15 21:38:11 kleink Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.

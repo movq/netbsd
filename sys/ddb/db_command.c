@@ -1,4 +1,4 @@
-/*	$NetBSD: db_command.c,v 1.31 1999/05/10 21:13:05 thorpej Exp $	*/
+/*	$NetBSD: db_command.c,v 1.28.2.2 1999/04/12 21:27:07 pk Exp $	*/
 
 /* 
  * Mach Operating System
@@ -35,7 +35,6 @@
 #include <sys/systm.h>
 #include <sys/reboot.h>
 #include <sys/proc.h>
-#include <sys/pool.h>
 
 #include <machine/db_machdep.h>		/* type definitions */
 
@@ -339,18 +338,6 @@ db_page_print_cmd(addr, have_addr, count, modif)
 	uvm_page_printit((struct vm_page *) addr, full, db_printf);
 }
 
-/*ARGSUSED*/
-void
-db_pool_print_cmd(addr, have_addr, count, modif)
-	db_expr_t	addr;
-	int		have_addr;
-	db_expr_t	count;
-	char *		modif;
-{
-
-	pool_printit((struct pool *) addr, modif, db_printf);
-}
-
 /*
  * 'show' commands
  */
@@ -369,7 +356,6 @@ struct db_command db_show_cmds[] = {
 	{ "map",	db_map_print_cmd,	0,	NULL },
 	{ "object",	db_object_print_cmd,	0,	NULL },
 	{ "page",	db_page_print_cmd,	0,	NULL },
-	{ "pool",	db_pool_print_cmd,	0,	NULL },
 	{ NULL,		NULL,			0,	NULL, }
 };
 

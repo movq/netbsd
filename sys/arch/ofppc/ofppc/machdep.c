@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.39 1999/05/05 00:03:10 thorpej Exp $	*/
+/*	$NetBSD: machdep.c,v 1.35.2.1 1999/04/16 16:21:48 chs Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -87,8 +87,7 @@ int astpending;
 
 char *bootpath;
 
-paddr_t msgbuf_paddr;
-vaddr_t msgbuf_vaddr;
+#define MSGBUFADDR 0x3000
 
 caddr_t allocsys __P((caddr_t));
 
@@ -236,7 +235,7 @@ initppc(startkernel, endkernel, args)
 #endif /* DDB || NIPKDB > 0 */
 		}
 
-	__syncicache((void *)EXC_RST, EXC_LAST - EXC_RST + 0x100);
+	syncicache((void *)EXC_RST, EXC_LAST - EXC_RST + 0x100);
 
 	/*
 	 * Now enable translation (and machine checks/recoverable interrupts).
@@ -358,8 +357,8 @@ install_extint(handler)
 		      : "=r"(omsr), "=r"(msr) : "K"((u_short)~PSL_EE));
 	extint_call = (extint_call & 0xfc000003) | offset;
 	bcopy(&extint, (void *)EXC_EXI, (size_t)&extsize);
-	__syncicache((void *)&extint_call, sizeof extint_call);
-	__syncicache((void *)EXC_EXI, (int)&extsize);
+	syncicache((void *)&extint_call, sizeof extint_call);
+	syncicache((void *)EXC_EXI, (int)&extsize);
 	asm volatile ("mtmsr %0" :: "r"(omsr));
 }
 
@@ -374,19 +373,13 @@ cpu_startup()
 	paddr_t minaddr, maxaddr;
 	int base, residual;
 
-	proc0.p_addr = proc0paddr;
-	v = (caddr_t)proc0paddr + USPACE;
-
 	/*
 	 * Initialize error message buffer (at end of core).
 	 */
-	if (!(msgbuf_vaddr = uvm_km_alloc(kernel_map, round_page(MSGBUFSIZE))))
-		panic("startup: no room for message buffer");
-	for (i = 0; i < btoc(MSGBUFSIZE); i++)
-		pmap_enter(pmap_kernel(), msgbuf_vaddr + i * NBPG,
-		    msgbuf_paddr + i * NBPG, VM_PROT_READ|VM_PROT_WRITE, TRUE,
-		    VM_PROT_READ|VM_PROT_WRITE);
-	initmsgbuf((caddr_t)msgbuf_vaddr, round_page(MSGBUFSIZE));
+	initmsgbuf((caddr_t)MSGBUFADDR, round_page(MSGBUFSIZE));
+
+	proc0.p_addr = proc0paddr;
+	v = (caddr_t)proc0paddr + USPACE;
 
 	printf("%s", version);
 	identifycpu();
@@ -462,10 +455,10 @@ cpu_startup()
 				 VM_PHYS_SIZE, TRUE, FALSE, NULL);
 
 	/*
-	 * No need to allocate an mbuf cluster submap.  Mbuf clusters
-	 * are allocated via the pool allocator, and we use direct-mapped
-	 * pool pages.
+	 * Finally, allocate mbuf cluster submap.
 	 */
+	mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
+			       VM_MBUF_SIZE, FALSE, FALSE, NULL);
 
 	/*
 	 * Initialize callouts.
@@ -734,6 +727,7 @@ sys___sigreturn14(p, v, retval)
 
 /*
  * Machine dependent system variables.
+ * None for now.
  */
 int
 cpu_sysctl(name, namelen, oldp, oldlenp, newp, newlen, p)
@@ -748,10 +742,7 @@ cpu_sysctl(name, namelen, oldp, oldlenp, newp, newlen, p)
 	/* all sysctl names at this level are terminal */
 	if (namelen != 1)
 		return (ENOTDIR);
-
 	switch (name[0]) {
-	case CPU_CACHELINE:
-		return sysctl_rdint(oldp, oldlenp, newp, CACHELINESIZE);
 	default:
 		return (EOPNOTSUPP);
 	}

@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.25 1999/04/11 04:04:08 chs Exp $	*/
+/*	$NetBSD: machdep.c,v 1.24.2.1 1999/04/16 16:20:49 chs Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -43,7 +43,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.25 1999/04/11 04:04:08 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.24.2.1 1999/04/16 16:20:49 chs Exp $");
 
 /* from: Utah Hdr: machdep.c 1.63 91/04/24 */
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: db_trace.c,v 1.12 1999/04/12 20:38:20 pk Exp $ */
+/*	$NetBSD: db_trace.c,v 1.10.6.2 1999/04/12 21:27:06 pk Exp $ */
 
 /*
  * Mach Operating System

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.5 1999/04/29 03:16:20 tsubai Exp $
+#	$NetBSD: Makefile,v 1.4 1999/02/13 02:54:47 lukem Exp $
 
 S=	${.CURDIR}/../../../..
 
@@ -22,15 +22,11 @@ ENTRY=		_start
 
 CLEANFILES+=	vers.c vers.o ${PROG}.elf
 
-CPPFLAGS+=	-I. -I${.CURDIR}/../../.. -I${.CURDIR}/../../../..
+CPPFLAGS+=	-I${.CURDIR}/../../.. -I${.CURDIR}/../../../..
 CPPFLAGS+=	-DRELOC=0x${RELOC}
+CPPFLAGS+=	-DPOWERPC_BOOT_AOUT
+CPPFLAGS+=	-DPOWERPC_BOOT_ELF
 #CPPFLAGS+=	-DXCOFF_GLUE		# for booting PCI Powermacs
-
-CLEANFILES+= ${.OBJDIR}/machine ${.OBJDIR}/powerpc
-
-.BEGIN:
-	@[ -h machine ] || ln -s ${S}/arch/${MACHINE}/include machine
-	@[ -h powerpc ] || ln -s ${S}/arch/powerpc/include powerpc
 
 ### find out what to use for libkern
 KERN_AS=	library
@@ -44,7 +40,7 @@ LIBZ=		${ZLIB}
 
 ### find out what to use for libsa
 SA_AS=		library
-SAMISCMAKEFLAGS= SA_USE_CREAD=yes SA_USE_LOADFILE=yes
+SAMISCMAKEFLAGS= SA_USE_CREAD=yes
 .include "${S}/lib/libsa/Makefile.inc"
 LIBSA=		${SALIB}
 
@@ -54,7 +50,7 @@ ${PROG}: ${OBJS} ${LIBSA} ${LIBZ} ${LIBKERN}
 	${LD} -s -N -Ttext ${RELOC} -Bstatic -o ${PROG} \
 	    ${OBJS} vers.o ${LIBSA} ${LIBZ} ${LIBKERN}
 	mv ${PROG} ${PROG}.elf
-	${OBJCOPY} -O binary ${PROG}.elf ${PROG}
+	tail -c +117 ${PROG}.elf > ${PROG}
 #	${OBJCOPY} --input-target=elf32-powerpc \
 #	    --output-target=xcoff-powermac ${PROG}.elf ${PROG}.xcf
 

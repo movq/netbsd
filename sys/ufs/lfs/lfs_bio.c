@@ -1,4 +1,4 @@
-/*	$NetBSD: lfs_bio.c,v 1.10 1999/04/12 00:36:47 perseant Exp $	*/
+/*	$NetBSD: lfs_bio.c,v 1.9.2.1 1999/04/13 21:33:55 perseant Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.

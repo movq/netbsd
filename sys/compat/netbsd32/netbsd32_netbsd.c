@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_netbsd.c,v 1.12 1999/05/05 20:01:04 thorpej Exp $	*/
+/*	$NetBSD: netbsd32_netbsd.c,v 1.11 1999/03/25 16:58:40 mrg Exp $	*/
 
 /*
  * Copyright (c) 1998 Matthew R. Green
@@ -1102,7 +1102,6 @@ recvit32(p, s, mp, iov, namelenp, retsize)
 	struct iovec *ktriov = NULL;
 #endif
 	
-	/* getsock() will use the descriptor for us */
 	if ((error = getsock(p->p_fd, s, &fp)) != 0)
 		return (error);
 	auio.uio_iov = (struct iovec *)(u_long)mp->msg_iov;
@@ -1115,10 +1114,8 @@ recvit32(p, s, mp, iov, namelenp, retsize)
 	for (i = 0; i < mp->msg_iovlen; i++, iov++) {
 #if 0
 		/* cannot happen iov_len is unsigned */
-		if (iov->iov_len < 0) {
-			error = EINVAL;
-			goto out1;
-		}
+		if (iov->iov_len < 0)
+			return (EINVAL);
 #endif
 		/*
 		 * Reads return ssize_t because -1 is returned on error.
@@ -1126,10 +1123,8 @@ recvit32(p, s, mp, iov, namelenp, retsize)
 		 * avoid garbage return values.
 		 */
 		auio.uio_resid += iov->iov_len;
-		if (iov->iov_len > SSIZE_MAX || auio.uio_resid > SSIZE_MAX) {
-			error = EINVAL;
-			goto out1;
-		}
+		if (iov->iov_len > SSIZE_MAX || auio.uio_resid > SSIZE_MAX)
+			return (EINVAL);
 	}
 #ifdef KTRACE
 	if (KTRPOINT(p, KTR_GENIO)) {
@@ -1235,13 +1230,11 @@ recvit32(p, s, mp, iov, namelenp, retsize)
 		}
 		mp->msg_controllen = len;
 	}
- out:
+out:
 	if (from)
 		m_freem(from);
 	if (control)
 		m_freem(control);
- out1:
-	FILE_UNUSE(fp);
 	return (error);
 }
 
@@ -3119,19 +3112,15 @@ compat_netbsd32_fstatfs(p, v, retval)
 	struct netbsd32_statfs s32;
 	int error;
 
-	/* getvnode() will use the descriptor for us */
 	if ((error = getvnode(p->p_fd, SCARG(uap, fd), &fp)) != 0)
 		return (error);
 	mp = ((struct vnode *)fp->f_data)->v_mount;
 	sp = &mp->mnt_stat;
 	if ((error = VFS_STATFS(mp, sp, p)) != 0)
-		goto out;
+		return (error);
 	sp->f_flags = mp->mnt_flag & MNT_VISFLAGMASK;
 	netbsd32_from_statfs(sp, &s32);
-	error = copyout(&s32, (caddr_t)(u_long)SCARG(uap, buf), sizeof(s32));
- out:
-	FILE_UNUSE(fp);
-	return (error);
+	return (copyout(&s32, (caddr_t)(u_long)SCARG(uap, buf), sizeof(s32)));
 }
 
 #if defined(NFS) || defined(NFSSERVER)
@@ -3889,14 +3878,11 @@ compat_netbsd32_futimes(p, v, retval)
 	int error;
 	struct file *fp;
 
-	/* getvnode() will use the descriptor for us */
 	if ((error = getvnode(p->p_fd, SCARG(uap, fd), &fp)) != 0)
 		return (error);
 
-	error = change_utimes32((struct vnode *)fp->f_data, 
-				(struct timeval *)(u_long)SCARG(uap, tptr), p);
-	FILE_UNUSE(fp);
-	return (error);
+	return (change_utimes32((struct vnode *)fp->f_data, 
+				(struct timeval *)(u_long)SCARG(uap, tptr), p));
 }
 
 int
@@ -4619,18 +4605,13 @@ compat_netbsd32_getdents(p, v, retval)
 	struct file *fp;
 	int error, done;
 
-	/* getvnode() will use the descriptor for us */
 	if ((error = getvnode(p->p_fd, SCARG(uap, fd), &fp)) != 0)
 		return (error);
-	if ((fp->f_flag & FREAD) == 0) {
-		error = EBADF;
-		goto out;
-	}
+	if ((fp->f_flag & FREAD) == 0)
+		return (EBADF);
 	error = vn_readdir(fp, (caddr_t)(u_long)SCARG(uap, buf), UIO_USERSPACE,
 			SCARG(uap, count), &done, p, 0, 0);
 	*retval = done;
- out:
-	FILE_UNUSE(fp);
 	return (error);
 }
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_sppp.h,v 1.4 1999/04/04 06:57:03 explorer Exp $	*/
+/*	$NetBSD: if_sppp.h,v 1.2.2.1 1999/04/04 06:57:39 explorer Exp $	*/
 
 /*
  * Defines for synchronous PPP/Cisco link level subroutines.

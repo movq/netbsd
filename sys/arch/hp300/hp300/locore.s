@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.s,v 1.96 1999/05/01 19:11:34 kleink Exp $	*/
+/*	$NetBSD: locore.s,v 1.93.2.1 1999/04/30 16:24:44 perry Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Gordon W. Ross
@@ -44,7 +44,6 @@
  */
 
 #include "opt_compat_netbsd.h"
-#include "opt_compat_svr4.h"
 #include "opt_compat_sunos.h"
 #include "opt_ddb.h"
 
@@ -842,7 +841,7 @@ Ltrap1:
  * command in d0, addr in a1, length in d1
  */
 ENTRY_NOPROFILE(trap12)
-	movl	_C_LABEL(curproc),sp@-	| push current proc pointer
+	movl	_curproc,sp@-		| push current proc pointer
 	movl	d1,sp@-			| push length
 	movl	a1,sp@-			| push addr
 	movl	d0,sp@-			| push command

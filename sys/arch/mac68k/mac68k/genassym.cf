@@ -1,4 +1,4 @@
-#	$NetBSD: genassym.cf,v 1.14 1999/05/06 14:16:08 kleink Exp $
+#	$NetBSD: genassym.cf,v 1.12 1999/03/24 22:28:49 ender Exp $
 
 #
 # Copyright (c) 1990 The Regents of the University of California.
@@ -35,8 +35,6 @@
 #	@(#)genassym.c	7.8 (Berkeley) 5/7/91
 #
 
-include "opt_compat_svr4.h"
-
 include	<sys/param.h>
 include	<sys/buf.h>
 include	<sys/map.h>
@@ -49,11 +47,6 @@ include	<sys/user.h>
 include	<vm/vm.h>
 
 include <uvm/uvm_extern.h>
-
-ifdef COMPAT_SVR4
-include <compat/svr4/svr4_syscall.h>
-include <compat/svr4/svr4_ucontext.h>
-endif
 
 include	<machine/cpu.h>
 include	<machine/psl.h>
@@ -164,12 +157,3 @@ define	SYS_compat_13_sigreturn13 SYS_compat_13_sigreturn13
 define	ENOENT			ENOENT
 define	EFAULT			EFAULT
 define	ENAMETOOLONG		ENAMETOOLONG
-
-# SVR4 binary compatibility
-ifdef COMPAT_SVR4
-define SVR4_SIGF_HANDLER	offsetof(struct svr4_sigframe, sf_handler)
-define SVR4_SIGF_UC		offsetof(struct svr4_sigframe, sf_uc)
-define SVR4_SYS_context		SVR4_SYS_context
-define SVR4_SYS_exit		SVR4_SYS_exit
-define SVR4_SETCONTEXT		SVR4_SETCONTEXT
-endif

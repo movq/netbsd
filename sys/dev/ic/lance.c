@@ -1,4 +1,4 @@
-/*	$NetBSD: lance.c,v 1.8 1999/04/30 18:15:04 thorpej Exp $	*/
+/*	$NetBSD: lance.c,v 1.7.2.1 1999/04/30 18:57:36 perry Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.

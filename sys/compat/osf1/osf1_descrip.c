@@ -1,4 +1,4 @@
-/* $NetBSD: osf1_descrip.c,v 1.4 1999/05/05 20:01:04 thorpej Exp $ */
+/* $NetBSD: osf1_descrip.c,v 1.4.4.3 1999/06/26 01:52:34 cgd Exp $ */
 
 /*
  * Copyright (c) 1999 Christopher G. Demetriou.  All rights reserved.
@@ -92,8 +92,13 @@ osf1_sys_fcntl(p, v, retval)
 {
 	struct osf1_sys_fcntl_args *uap = v;
 	struct sys_fcntl_args a;
+	struct osf1_flock oflock;
+	struct flock nflock;
 	unsigned long xfl, leftovers;
+	caddr_t sg;
 	int error;
+
+	sg = stackgap_init(p->p_emul);
 
 	SCARG(&a, fd) = SCARG(uap, fd);
 
@@ -132,11 +137,29 @@ osf1_sys_fcntl(p, v, retval)
 
 	case OSF1_F_GETOWN:		/* XXX not yet supported */
 	case OSF1_F_SETOWN:		/* XXX not yet supported */
-	case OSF1_F_GETLK:		/* XXX not yet supported */
-	case OSF1_F_SETLK:		/* XXX not yet supported */
-	case OSF1_F_SETLKW:		/* XXX not yet supported */
 		/* XXX translate. */
 		return (EINVAL);
+		
+	case OSF1_F_GETLK:
+	case OSF1_F_SETLK:
+	case OSF1_F_SETLKW:
+		if (SCARG(uap, cmd) == OSF1_F_GETLK)
+			SCARG(&a, cmd) = F_GETLK;
+		else if (SCARG(uap, cmd) == OSF1_F_SETLK)
+			SCARG(&a, cmd) = F_SETLK;
+		else if (SCARG(uap, cmd) == OSF1_F_SETLKW)
+			SCARG(&a, cmd) = F_SETLKW;
+		SCARG(&a, arg) = stackgap_alloc(&sg, sizeof nflock);
+
+		error = copyin(SCARG(uap, arg), &oflock, sizeof oflock);
+		if (error == 0)
+			error = osf1_cvt_flock_to_native(&oflock, &nflock);
+		if (error == 0)
+			error = copyout(&nflock, SCARG(&a, arg),
+			    sizeof nflock);
+		if (error != 0)
+			return (error);
+		break;
 		
 	case OSF1_F_RGETLK:		/* [lock mgr op] XXX not supported */
 	case OSF1_F_RSETLK:		/* [lock mgr op] XXX not supported */
@@ -168,6 +191,15 @@ osf1_sys_fcntl(p, v, retval)
 		xfl |= emul_flags_translate(osf1_fcntl_getsetfl_flags_rxtab,
 		    leftovers, NULL);
 		retval[0] = xfl;
+		break;
+
+	case OSF1_F_GETLK:
+		error = copyin(SCARG(&a, arg), &nflock, sizeof nflock);
+		if (error == 0) {
+			osf1_cvt_flock_from_native(&nflock, &oflock);
+			error = copyout(&oflock, SCARG(uap, arg),
+			    sizeof oflock);
+		}
 		break;
 	}
 
@@ -212,12 +244,8 @@ osf1_sys_fstat(p, v, retval)
 	int error;
 
 	if ((unsigned)SCARG(uap, fd) >= fdp->fd_nfiles ||
-	    (fp = fdp->fd_ofiles[SCARG(uap, fd)]) == NULL ||
-	    (fp->f_iflags & FIF_WANTCLOSE) != 0)
+	    (fp = fdp->fd_ofiles[SCARG(uap, fd)]) == NULL)
 		return (EBADF);
-
-	FILE_USE(fp);
-
 	switch (fp->f_type) {
 
 	case DTYPE_VNODE:
@@ -236,8 +264,6 @@ osf1_sys_fstat(p, v, retval)
 	if (error == 0)
 		error = copyout((caddr_t)&oub, (caddr_t)SCARG(uap, sb),
 		    sizeof (oub));
-
-	FILE_UNUSE(fp, p);
 	return (error);
 }
 

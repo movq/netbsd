@@ -1,4 +1,4 @@
-/* $NetBSD: pmap.h,v 1.27 1999/04/15 22:15:39 thorpej Exp $ */
+/* $NetBSD: pmap.h,v 1.26.2.1 1999/04/16 23:29:02 thorpej Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: lock.h,v 1.18 1999/04/06 23:08:48 thorpej Exp $	*/
+/*	$NetBSD: lock.h,v 1.17.2.1 1999/04/07 00:34:34 thorpej Exp $	*/
 
 /* 
  * Copyright (c) 1995

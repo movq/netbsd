@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.15 1999/05/07 14:28:51 drochner Exp $
+#	$NetBSD: Makefile.inc,v 1.14 1998/09/05 15:15:19 lukem Exp $
 #
 #	Configuration variables (default values are below):
 #
@@ -18,9 +18,8 @@
 # Default values:
 COMPATDST?=		${.OBJDIR}/lib/compat
 COMPAT_AS?=		library
-COMPATDOTDIR?= ../../.
 
-COMPATDIR=		${S:S@^.@${COMPATDOTDIR}@:Q}/compat/common
+COMPATDIR=		$S/compat/common
 .if (${COMPAT_AS} == "obj")
 COMPATLIB=		${COMPATDST}/libcompat.o
 COMPATLIB_PROF=	${COMPATDST}/libcompat.po
@@ -30,8 +29,7 @@ COMPATLIB_PROF=	${COMPATDST}/libcompat_p.a
 .endif
 
 COMPATMAKE= \
-	cd ${COMPATDST} && ${MAKE} -f ${COMPATDIR:Q}/Makefile \
-	    COMPATDIR=${COMPATDIR:Q} \
+	cd ${COMPATDIR} && MAKEOBJDIR=${COMPATDST} ${MAKE} \
 	    CC=${CC:Q} CFLAGS=${CFLAGS:Q} \
 	    AS=${AS:Q} AFLAGS=${AFLAGS:Q} \
 	    AR=${AR:Q} NM=${NM:Q} \
@@ -40,7 +38,7 @@ COMPATMAKE= \
 	    RANLIB=${RANLIB:Q} \
 	    LD=${LD:Q} STRIP=${STRIP:Q} \
 	    MACHINE=${MACHINE} MACHINE_ARCH=${MACHINE_ARCH:Q} \
-	    COMPATCPPFLAGS=${CPPFLAGS:S@^-I.@-I${COMPATDOTDIR}@g:Q} \
+	    COMPATCPPFLAGS=${CPPFLAGS:S@^-I.@-I../../.@g:Q} \
 	    ${COMPATMISCMAKEFLAGS}
 
 ${COMPATLIB}:		.NOTMAIN __always_make_compatlib
@@ -76,6 +74,3 @@ dependcompatlib:	.NOTMAIN __always_make_compatlib
 
 __always_make_compatlib: .NOTMAIN
 	@mkdir -p ${COMPATDST}
-
-.PHONY: __always_make_compatlib
-.PHONY: cleancompatlib cleandircompatlib dependcompatlib

@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.new.c,v 1.12 1999/04/17 20:03:39 chs Exp $	*/
+/*	$NetBSD: pmap.new.c,v 1.10.2.2 1999/04/19 04:34:55 cjs Exp $	*/
 
 /*
  *
