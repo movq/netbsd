@@ -1,4 +1,4 @@
-/*	$NetBSD: platid.c,v 1.2 1999/12/23 06:26:09 takemura Exp $	*/
+/*	$NetBSD: platid.c,v 1.3 2000/02/06 08:47:05 takemura Exp $	*/
 
 /*-
  * Copyright (c) 1999
@@ -106,4 +106,25 @@ platid_match_sub(platid_t *platid, platid_mask_t *mask, int unknown_is_match)
 	return (match_count);
 
 #undef PLATID_MATCH
+}
+
+char*
+platid_name(platid_t *platid)
+{
+	int match_level;
+	struct platid_name *p, *match, *pe;
+
+	match_level = 0;
+	pe = &platid_name_table[platid_name_table_size];
+	for (p = platid_name_table; p < pe; p++) {
+		int res = platid_match(platid, p->mask);
+		if (match_level < res) {
+			match = p;
+			match_level = res;
+		}
+	}
+	if (0 < match_level)
+		return (match->name);
+	else
+		return ("UNKNOWN");
 }
