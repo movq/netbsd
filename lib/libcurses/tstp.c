@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 1981 Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1981, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,8 +32,7 @@
  */
 
 #ifndef lint
-/*static char sccsid[] = "from: @(#)tstp.c	5.7 (Berkeley) 8/23/92";*/
-static char rcsid[] = "$Id: tstp.c,v 1.4 1993/08/10 02:12:47 mycroft Exp $";
+static char sccsid[] = "@(#)tstp.c	8.2 (Berkeley) 11/2/93";
 #endif /* not lint */
 
 #include <curses.h>
@@ -42,42 +41,84 @@ static char rcsid[] = "$Id: tstp.c,v 1.4 1993/08/10 02:12:47 mycroft Exp $";
 #include <termios.h>
 #include <unistd.h>
 
+
 /*
- * tstp --
- *	Handle stop and start signals.
+ * stop_signal_handler --
+ *	Handle stop signals.
  */
 void
-tstp(signo)
+__stop_signal_handler(signo)
 	int signo;
 {
 	struct termios save;
-	sigset_t set;
+	sigset_t oset, set;
 
-	/* Get the current terminal state. */
+	/* Get the current terminal state (which the user may have changed). */
 	if (tcgetattr(STDIN_FILENO, &save))
 		return;
 
-	/* Move the cursor to the end of the screen. */
-	mvcur(0, COLS - 1, LINES - 1, 0);
-
-	/* End the window. */
+	/*
+	 * Block window change and timer signals.  The latter is because
+	 * applications use timers to decide when to repaint the screen.
+	 */
+	(void)sigemptyset(&set);
+	(void)sigaddset(&set, SIGALRM);
+	(void)sigaddset(&set, SIGWINCH);
+	(void)sigprocmask(SIG_BLOCK, &set, &oset);
+	
+	/*
+	 * End the window, which also resets the terminal state to the
+	 * original modes.
+	 */
 	endwin();
 
-	/* Stop ourselves. */
+	/* Unblock SIGTSTP. */
 	(void)sigemptyset(&set);
-	(void)sigaddset(&set, signo);
+	(void)sigaddset(&set, SIGTSTP);
 	(void)sigprocmask(SIG_UNBLOCK, &set, NULL);
-	(void)signal(signo, SIG_DFL);
-	(void)kill(0, signo);
+
+	/* Stop ourselves. */
+	__restore_stophandler();
+	(void)kill(0, SIGTSTP);
 
 	/* Time passes ... */
 
-	/* Reset the signal handler. */
-	(void)signal(signo, tstp);
+	/* Reset the curses SIGTSTP signal handler. */
+	__set_stophandler();
 
-	/* Reset the terminal state. */
-	(void)tcsetattr(STDIN_FILENO, TCSADRAIN, &save);
+	/* save the new "default" terminal state */
+	(void)tcgetattr(STDIN_FILENO, &__orig_termios);
+
+	/* Reset the terminal state to the mode just before we stopped. */
+	(void)tcsetattr(STDIN_FILENO, __tcaction ?
+	    TCSASOFT | TCSADRAIN : TCSADRAIN, &save);
 
 	/* Restart the screen. */
+	__startwin();
+
+	/* Repaint the screen. */
 	wrefresh(curscr);
+
+	/* Reset the signals. */
+	(void)sigprocmask(SIG_SETMASK, &oset, NULL);
+}
+
+static void (*otstpfn)() = SIG_DFL;
+
+/*
+ * Set the TSTP handler.
+ */
+void
+__set_stophandler()
+{
+	otstpfn = signal(SIGTSTP, __stop_signal_handler);
+}
+
+/*
+ * Restore the TSTP handler.
+ */
+void
+__restore_stophandler()
+{
+	(void)signal(SIGTSTP, otstpfn);
 }
