@@ -98,7 +98,7 @@ case "$1" in
 	restart
 	;;
   *)
-	echo "Usage: ipfboot {start|stop|status|restart|reload}"
+	echo "Usage: ipfilter {start|stop|status|restart|reload}"
 	RETVAL=1
 esac
 
