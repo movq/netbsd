@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 1996/01/07 21:54:16 leo Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 1996/01/07 21:54:16 leo Exp $
 
 PROG	= aptck.ttp
 
