@@ -1,4 +1,4 @@
-/* $NetBSD: intrnames.S,v 1.1 2000/05/09 21:55:56 bjh21 Exp $ */
+/* $NetBSD: intrnames.S,v 1.2 2000/12/09 17:52:45 bjh21 Exp $ */
 /*-
  * Copyright (c) 2000 Ben Harris
  * All rights reserved.
@@ -32,7 +32,7 @@
 
 #include <machine/asm.h>
 
-RCSID("$NetBSD: intrnames.S,v 1.1 2000/05/09 21:55:56 bjh21 Exp $")
+RCSID("$NetBSD: intrnames.S,v 1.2 2000/12/09 17:52:45 bjh21 Exp $")
 
 	.text
 	.global _C_LABEL(intrnames)
@@ -57,6 +57,14 @@ Lirq\irq:
 	irqname 13
 	irqname 14
 	irqname 15
+Lirq13_0:
+	.asciz	"IRQ 13.0"
+Lirq13_1:
+	.asciz	"IRQ 13.1"
+Lirq13_2:
+	.asciz	"IRQ 13.2"
+Lirq13_3:
+	.asciz	"IRQ 13.3"
 	.global	_C_LABEL(eintrnames)
 _C_LABEL(eintrnames):
 	.global	_C_LABEL(irqnames)
@@ -77,10 +85,14 @@ _C_LABEL(irqnames):
 	.word	Lirq13
 	.word	Lirq14
 	.word	Lirq15
+	.word	Lirq13_0
+	.word	Lirq13_1
+	.word	Lirq13_2
+	.word	Lirq13_3
 
 	.data
 	.global	_C_LABEL(intrcnt)
 _C_LABEL(intrcnt):
-	.fill	16, 4
+	.fill	20, 4
 	.global	_C_LABEL(eintrcnt)
 _C_LABEL(eintrcnt):
