@@ -31,7 +31,7 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/* $Id: snprintf-test.h,v 1.1 2001/09/17 12:25:07 assar Exp $ */
+/* $Id: snprintf-test.h,v 1.1.1.1 2001/09/17 12:25:07 assar Exp $ */
 
 #ifndef __SNPRINTF_TEST_H__
 #define __SNPRINTF_TEST_H__

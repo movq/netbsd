@@ -1,5 +1,5 @@
 dnl
-dnl $Id: with-all.m4,v 1.1 2001/09/17 12:25:13 assar Exp $
+dnl $Id: with-all.m4,v 1.1.1.1 2001/09/17 12:25:13 assar Exp $
 dnl
 
 dnl AC_WITH_ALL(name)
