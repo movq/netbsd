@@ -1,4 +1,4 @@
-/*	$NetBSD: trap_subr.s,v 1.9 2003/08/07 16:28:19 agc Exp $	*/
+/*	$NetBSD: trap_subr.s,v 1.10 2003/09/22 14:18:44 cl Exp $	*/
 
 /*
  * Copyright (c) 1980, 1990, 1993
@@ -152,11 +152,13 @@ ENTRY_NOPROFILE(trap1)
 ENTRY_NOPROFILE(trap2)
 	jra	_C_LABEL(trace)
 
+#if defined(COMPAT_16)
 /*
  * Trap 3 - sigreturn system call
  */
 ENTRY_NOPROFILE(trap3)
-	jra	_C_LABEL(m68k_sigreturn_stub)
+	jra	_C_LABEL(m68k_compat_16_sigreturn14_stub)
+#endif
 
 /*
  * The following exceptions only cause four and six word stack frames
