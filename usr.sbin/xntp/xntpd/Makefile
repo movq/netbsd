@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 1997/04/18 13:29:14 christos Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 1997/04/18 13:29:14 christos Exp $
 
 PROG= xntpd
 SRCS=	map_vme.c ntp_config.c ntp_control.c ntp_filegen.c ntp_intres.c ntp_io.c \
