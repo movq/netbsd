@@ -1,4 +1,4 @@
-# $NetBSD: _m68k.mk,v 1.1 1997/09/26 02:38:49 gwr Exp $
+# $NetBSD: _m68k.mk,v 1.1.1.1 1997/09/26 02:38:49 gwr Exp $
 
 BFD_BACKENDS =	m68knetbsd.c m68k4knetbsd.c sunos.c aout32.c
 BFD_MACHINES =	cpu-m68k.c

@@ -1,4 +1,4 @@
-/*	$NetBSD: ansidecl.h,v 1.1 1997/09/26 02:38:49 gwr Exp $	*/
+/*	$NetBSD: ansidecl.h,v 1.1.1.1 1997/09/26 02:38:49 gwr Exp $	*/
 
 /* ANSI and traditional C compatability macros
    Copyright 1991, 1992, 1996 Free Software Foundation, Inc.

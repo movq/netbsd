@@ -1,4 +1,4 @@
-# $NetBSD: _sparc.mk,v 1.1 1997/09/26 02:38:49 gwr Exp $
+# $NetBSD: _sparc.mk,v 1.1.1.1 1997/09/26 02:38:49 gwr Exp $
 
 BFD_BACKENDS =	sparcnetbsd.c sunos.c aout32.c
 BFD_MACHINES =	cpu-sparc.c
