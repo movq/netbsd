@@ -30,8 +30,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)netstat.h	8.2 (Berkeley) 1/4/94
- *	$Id: netstat.h,v 1.1 1994/05/13 08:06:36 mycroft Exp $
+ *	@(#)netstat.h	8.2 (Berkeley) 1/4/94
  */
 
 #include <sys/cdefs.h>

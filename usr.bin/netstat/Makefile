@@ -1,20 +1,13 @@
-#	@(#)Makefile	5.14 (Berkeley) 6/18/90
+#	@(#)Makefile	8.1 (Berkeley) 6/12/93
 
 PROG=	netstat
-SRCS=	inet.c if.c main.c mbuf.c route.c unix.c
-#
-#SRCS+=	host.c
-#CFLAGS+= -DIMP
-#
-#SRCS+=	ns.c
-#CFLAGS+= -DNS
-#
-#SRCS+=	iso.c
-#CFLAGS+= -DISO
-#
+SRCS=	if.c inet.c iso.c main.c mbuf.c mroute.c ns.c route.c \
+	tp_astring.c unix.c
+CFLAGS+=-I/sys
+.PATH:	${.CURDIR}/../../sys/netiso
 BINGRP=	kmem
 BINMODE=2555
-LDADD=	-lutil
-DPADD=	${LIBUTIL}
+LDADD=	-lkvm
+DPADD=	${LIBKVM}
 
 .include <bsd.prog.mk>
