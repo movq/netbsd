@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 1993 Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1987, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,18 +32,23 @@
  */
 
 #if defined(LIBC_SCCS) && !defined(lint)
-static char rcsid[] = "$Id: remque.c,v 1.1 1993/08/13 02:49:44 brezak Exp $";
+static char sccsid[] = "@(#)remque.c	8.1 (Berkeley) 6/4/93";
 #endif /* LIBC_SCCS and not lint */
 
-struct qelem {
-        struct qelem *q_forw;
-        struct qelem *q_back;
+/*
+ * remque -- vax remque instruction
+ *
+ * NOTE: this implementation is non-atomic!!
+ */
+
+struct vaxque {		/* queue format expected by VAX queue instructions */
+	struct vaxque	*vq_next;
+	struct vaxque	*vq_prev;
 };
 
-struct qelem *
-remque(struct qelem *elt)
+remque(e)
+	register struct vaxque *e;
 {
-	(elt->q_forw)->q_back = elt->q_back;
-	(elt->q_back)->q_forw = elt->q_forw;
-	return(elt);
+	e->vq_prev->vq_next = e->vq_next;
+	e->vq_next->vq_prev = e->vq_prev;
 }
