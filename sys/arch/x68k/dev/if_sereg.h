@@ -1,13 +1,13 @@
 /*
  * National Semiconductor DS8390 NIC register definitions 
  *
- * $Id: if_sereg.h,v 1.1 1996/05/05 12:17:09 oki Exp $
+ * $Id: if_sereg.h,v 1.1.1.1 1996/05/05 12:17:03 oki Exp $
  *
  * Modification history
  *
  * $Log: if_sereg.h,v $
- * Revision 1.1  1996/05/05 12:17:09  oki
- * Initial revision
+ * Revision 1.1.1.1  1996/05/05 12:17:03  oki
+ * NetBSD/x68k, by Masaru Oki.
  *
  * Revision 1.1  1995/05/16  19:54:23  oki
  * *** empty log message ***

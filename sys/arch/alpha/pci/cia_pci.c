@@ -1,4 +1,4 @@
-/* $NetBSD: cia_pci.c,v 1.11 1997/04/07 23:40:31 cgd Exp $ */
+/* $NetBSD: cia_pci.c,v 1.15 1997/09/15 22:35:54 thorpej Exp $ */
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
@@ -27,10 +27,9 @@
  * rights to redistribute these changes.
  */
 
-#include <machine/options.h>		/* Config options headers */
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: cia_pci.c,v 1.11 1997/04/07 23:40:31 cgd Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cia_pci.c,v 1.15 1997/09/15 22:35:54 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -42,8 +41,6 @@ __KERNEL_RCSID(0, "$NetBSD: cia_pci.c,v 1.11 1997/04/07 23:40:31 cgd Exp $");
 #include <dev/pci/pcivar.h>
 #include <alpha/pci/ciareg.h>
 #include <alpha/pci/ciavar.h>
-
-#include <machine/rpb.h>	/* XXX for eb164 CIA firmware workarounds. */
 
 void		cia_attach_hook __P((struct device *, struct device *,
 		    struct pcibus_attach_args *));
@@ -119,37 +116,30 @@ cia_conf_read(cpv, tag, offset)
 	pcireg_t *datap, data;
 	int s, secondary, ba;
 	int32_t old_haxr2;					/* XXX */
-#ifdef DEC_EB164
-	extern int cputype;					/* XXX */
-#endif
 
 #ifdef DIAGNOSTIC
 	s = 0;					/* XXX gcc -Wuninitialized */
 	old_haxr2 = 0;				/* XXX gcc -Wuninitialized */
 #endif
 
-#ifdef DEC_EB164
 	/*
-	 * Some (apparently-common) revisions of EB164 firmware do the
-	 * Wrong thing with PCI master aborts, which are caused by
-	 * accesing the configuration space of devices that don't
-	 * exist (for example).
+	 * Some (apparently-common) revisions of EB164 and AlphaStation
+	 * firmware do the Wrong thing with PCI master aborts, which are
+	 * caused by accesing the configuration space of devices that
+	 * don't exist (for example).
 	 *
-	 * On EB164's we clear the CIA error register's PCI master
-	 * abort bit before touching PCI configuration space and
+	 * To work around this, we clear the CIA error register's PCI
+	 * master abort bit before touching PCI configuration space and
 	 * check it afterwards.  If it indicates a master abort,
 	 * the device wasn't there so we return 0xffffffff.
 	 */
-	if (cputype == ST_EB164) {
-		/* clear the PCI master abort bit in CIA error register */
-		REGVAL(CIA_CSR_CIA_ERR) = 0x00000080;		/* XXX */
-		alpha_mb();
-		alpha_pal_draina();	
-	}
-#endif
+	/* clear the PCI master abort bit in CIA error register */
+	REGVAL(CIA_CSR_CIA_ERR) = CIA_ERR_RCVD_MAS_ABT;
+	alpha_mb();
+	alpha_pal_draina();	
 
 	/* secondary if bus # != 0 */
-	pci_decompose_tag(&ccp->cc_pc, tag, &secondary, 0, 0);
+	alpha_pci_decompose_tag(&ccp->cc_pc, tag, &secondary, 0, 0);
 	if (secondary) {
 		s = splhigh();
 		old_haxr2 = REGVAL(CIA_CSRS + 0x480);		/* XXX */
@@ -174,16 +164,12 @@ cia_conf_read(cpv, tag, offset)
 		splx(s);
 	}
 
-#ifdef DEC_EB164
-	if (cputype == ST_EB164) {
-		alpha_pal_draina();	
-		/* check CIA error register for PCI master abort */
-		if (REGVAL(CIA_CSR_CIA_ERR) & 0x00000080) {	/* XXX */
-			ba = 1;
-			data = 0xffffffff;
-		}
+	alpha_pal_draina();	
+	/* check CIA error register for PCI master abort */
+	if (REGVAL(CIA_CSR_CIA_ERR) & CIA_ERR_RCVD_MAS_ABT) {
+		ba = 1;
+		data = 0xffffffff;
 	}
-#endif
 
 #if 0
 	printf("cia_conf_read: tag 0x%lx, reg 0x%lx -> %x @ %p%s\n", tag, reg,
@@ -211,7 +197,7 @@ cia_conf_write(cpv, tag, offset, data)
 #endif
 
 	/* secondary if bus # != 0 */
-	pci_decompose_tag(&ccp->cc_pc, tag, &secondary, 0, 0);
+	alpha_pci_decompose_tag(&ccp->cc_pc, tag, &secondary, 0, 0);
 	if (secondary) {
 		s = splhigh();
 		old_haxr2 = REGVAL(CIA_CSRS + 0x480);		/* XXX */
