@@ -1,4 +1,4 @@
-/* $NetBSD: common.h,v 1.8 1999/04/02 03:19:08 cgd Exp $ */
+/* $NetBSD: common.h,v 1.9 1999/04/02 03:23:49 cgd Exp $ */
 
 /*
  * Copyright (c) 1999 Christopher G. Demetriou.  All rights reserved.
@@ -58,3 +58,10 @@ extern long	booted_dev_fd;
 #if defined(PRIMARY_BOOTBLOCK) || defined(UNIFIED_BOOTBLOCK)
 extern char	booted_dev_name[BOOTED_DEV_MAXNAMELEN];
 #endif
+
+
+/*
+ * putstr.c
+ */
+
+void		putstr(const char *s);
