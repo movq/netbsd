@@ -1,4 +1,4 @@
-/*	$NetBSD: realloc.c,v 1.1 2003/01/26 23:15:13 wiz Exp $	*/
+/*	$NetBSD: realloc.c,v 1.1.1.1 2003/01/26 23:15:13 wiz Exp $	*/
 
 /* rpl_realloc.c -- a replacement for broken realloc implementations
    Copyright (C) 2001 Free Software Foundation, Inc.

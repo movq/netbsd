@@ -1,4 +1,4 @@
-/*	$NetBSD: localename.c,v 1.1 2003/01/26 23:15:11 wiz Exp $	*/
+/*	$NetBSD: localename.c,v 1.1.1.1 2003/01/26 23:15:11 wiz Exp $	*/
 
 /* Determine the current selected locale.
    Copyright (C) 1995-1999, 2000, 2001 Free Software Foundation, Inc.

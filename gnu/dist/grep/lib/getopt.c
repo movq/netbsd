@@ -1,4 +1,4 @@
-/*	$NetBSD: getopt.c,v 1.1 2003/01/26 23:15:12 wiz Exp $	*/
+/*	$NetBSD: getopt.c,v 1.1.1.1 2003/01/26 23:15:12 wiz Exp $	*/
 
 /* Getopt for GNU.
    NOTE: The canonical source of this file is maintained with the GNU

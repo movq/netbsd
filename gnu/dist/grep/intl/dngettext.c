@@ -1,4 +1,4 @@
-/*	$NetBSD: dngettext.c,v 1.1 2003/01/26 23:15:11 wiz Exp $	*/
+/*	$NetBSD: dngettext.c,v 1.1.1.1 2003/01/26 23:15:11 wiz Exp $	*/
 
 /* Implementation of the dngettext(3) function.
    Copyright (C) 1995-1997, 2000, 2001 Free Software Foundation, Inc.

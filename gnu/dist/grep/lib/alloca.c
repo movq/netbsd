@@ -1,4 +1,4 @@
-/*	$NetBSD: alloca.c,v 1.1 2003/01/26 23:15:11 wiz Exp $	*/
+/*	$NetBSD: alloca.c,v 1.1.1.1 2003/01/26 23:15:11 wiz Exp $	*/
 
 /* alloca.c -- allocate automatically reclaimed memory
    (Mostly) portable public-domain implementation -- D A Gwyn
