@@ -1,7 +1,7 @@
-/*	$NetBSD: smc90cx6reg.h,v 1.4 1995/06/07 00:16:59 cgd Exp $ */
+/*	$NetBSD: smc90cx6reg.h,v 1.5 1998/09/02 22:32:08 is Exp $ */
 
 /*
- * Copyright (c) 1994, 1995 Ignatios Souvatzis
+ * Copyright (c) 1994, 1995, 1998 Ignatios Souvatzis
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,51 +32,32 @@
  */
 
 /*
- * The A2060/A560 card use the SMC COM90C26 Arcnet chipset.
- * First or last 16k segment, resp., write a fifo which drives the reset line.
- * 2nd 16k segment contains the registers.
- * 3rd 16k segment contains the buffer RAM.
- * All are only accessible at even addresses.
+ * chip offsets and bits for the SMC Arcnet chipset.
  */
 
-/* CBM Arcnet board */
-#define MANUFACTURER_1 514
-#define PRODUCT_1        9
+#ifndef _SMC90CXVAR_H_
+#define _SMC90CXVAR_H_
 
-/* Ameristar board */
-#define MANUFACTURER_2 1053
-#define PRODUCT_2         9
+/* register offsets */
 
-struct a2060 {
-	volatile u_int8_t kick1;
-	u_int8_t	  pad1[16383];
-	volatile u_int8_t status;		/* also intmask */
-	u_int8_t	  pad2;
-	volatile u_int8_t command;
-	u_int8_t	  pad3[16381];
-	volatile u_int8_t buffers[4096];	/* even bytes only */
-	u_int8_t	  pad4[12228];
-	volatile u_int8_t kick2;
-	u_int8_t	  pad5[16383];
-};
+#define BAHSTAT	0
+#define	BAHCMD	1
 
-#define checkbyte	buffers[0]
-#define dipswitches	buffers[2]
+/* memory offsets */
+#define BAHCHECKBYTE 0
+#define BAHMACOFF 1
 
-/* calculate address for board b, buffer no n and offset o */
-#define BUFPTR(b,n,o) (&(b)->buffers[(n)*512+(o)*2])
+#define BAH_TXDIS	0x01
+#define BAH_RXDIS	0x02
+#define BAH_TX(x)	(0x03 | ((x)<<3))
+#define BAH_RX(x)	(0x04 | ((x)<<3))
+#define BAH_RXBC(x)	(0x84 | ((x)<<3))
 
-#define ARC_TXDIS	0x01
-#define ARC_RXDIS	0x02
-#define ARC_TX(x)	(0x03 | ((x)<<3))
-#define ARC_RX(x)	(0x04 | ((x)<<3))
-#define ARC_RXBC(x)	(0x84 | ((x)<<3))
-
-#define ARC_CONF(x)  	(0x05 | (x))
+#define BAH_CONF(x)  	(0x05 | (x))
 #define CLR_POR		0x08
 #define CLR_RECONFIG	0x10
 
-#define ARC_CLR(x)	(0x06 | (x))
+#define BAH_CLR(x)	(0x06 | (x))
 #define CONF_LONG	0x08
 #define CONF_SHORT	0x00
 
@@ -85,15 +66,17 @@ struct a2060 {
  * packet driver by Philippe Prindeville and Russel Nelson. 
  */
 
-#define ARC_LDTST(x)	(0x07 | (x))
+#define BAH_LDTST(x)	(0x07 | (x))
 #define TEST_ON		0x08
 #define TEST_OFF	0x00
 
-#define ARC_TA		1	/* int mask also */
-#define ARC_TMA		2	
-#define ARC_RECON	4	/* int mask also */
-#define ARC_TEST	8	/* not in the COM90C65 docs (see above) */
-#define ARC_POR		0x10	/* non maskable interrupt */
-#define ARC_ET1		0x20	/* timeout value bits, normally 1 */
-#define ARC_ET2		0x40	/* timeout value bits, normally 1 */
-#define ARC_RI		0x80	/* int mask also */
+#define BAH_TA		1	/* int mask also */
+#define BAH_TMA		2	
+#define BAH_RECON	4	/* int mask also */
+#define BAH_TEST	8	/* not in the COM90C65 docs (see above) */
+#define BAH_POR		0x10	/* non maskable interrupt */
+#define BAH_ET1		0x20	/* timeout value bits, normally 1 */
+#define BAH_ET2		0x40	/* timeout value bits, normally 1 */
+#define BAH_RI		0x80	/* int mask also */
+
+#endif
