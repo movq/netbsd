@@ -1,8 +1,7 @@
-/*	$NetBSD: linux_exec.c,v 1.13 1996/04/05 00:01:10 christos Exp $	*/
+/*	$NetBSD: linux_exec.c,v 1.1 1995/02/28 23:24:46 fvdl Exp $	*/
 
 /*
  * Copyright (c) 1995 Frank van der Linden
- * Copyright (c) 1994 Christos Zoulas
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -13,7 +12,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed for the NetBSD Project
+ *      by Frank van der Linden
+ * 4. The name of the author may not be used to endorse or promote products
  *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
@@ -27,139 +30,37 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- * based on exec_aout.c, sunos_exec.c and svr4_exec.c
+ * based on kern/exec_aout.c and compat/sunos/sunos_exec.c
  */
 
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/filedesc.h>
 #include <sys/kernel.h>
 #include <sys/proc.h>
+#include <sys/mount.h>
 #include <sys/malloc.h>
 #include <sys/namei.h>
 #include <sys/vnode.h>
-#include <sys/mount.h>
-#include <sys/exec_elf.h>
+#include <sys/file.h>
+#include <sys/resourcevar.h>
+#include <sys/wait.h>
 
 #include <sys/mman.h>
-#include <sys/syscallargs.h>
-
 #include <vm/vm.h>
 #include <vm/vm_param.h>
 #include <vm/vm_map.h>
+#include <vm/vm_kern.h>
+#include <vm/vm_pager.h>
 
 #include <machine/cpu.h>
 #include <machine/reg.h>
 #include <machine/exec.h>
-#include <machine/linux_machdep.h>
 
 #include <compat/linux/linux_types.h>
-#include <compat/linux/linux_syscall.h>
-#include <compat/linux/linux_signal.h>
 #include <compat/linux/linux_syscallargs.h>
 #include <compat/linux/linux_util.h>
 #include <compat/linux/linux_exec.h>
-
-static void *linux_aout_copyargs __P((struct exec_package *,
-	struct ps_strings *, void *, void *));
-
-#define	LINUX_AOUT_AUX_ARGSIZ	2
-#define LINUX_ELF_AUX_ARGSIZ (sizeof(AuxInfo) * 8 / sizeof(char *))
-
-
-const char linux_emul_path[] = "/emul/linux";
-extern int linux_error[];
-extern char linux_sigcode[], linux_esigcode[];
-extern struct sysent linux_sysent[];
-extern char *linux_syscallnames[];
-
-int exec_linux_aout_prep_zmagic __P((struct proc *, struct exec_package *));
-int exec_linux_aout_prep_nmagic __P((struct proc *, struct exec_package *));
-int exec_linux_aout_prep_omagic __P((struct proc *, struct exec_package *));
-int exec_linux_aout_prep_qmagic __P((struct proc *, struct exec_package *));
-
-struct emul emul_linux_aout = {
-	"linux",
-	linux_error,
-	linux_sendsig,
-	LINUX_SYS_syscall,
-	LINUX_SYS_MAXSYSCALL,
-	linux_sysent,
-	linux_syscallnames,
-	LINUX_AOUT_AUX_ARGSIZ,
-	linux_aout_copyargs,
-	setregs,
-	linux_sigcode,
-	linux_esigcode,
-};
-
-struct emul emul_linux_elf = {
-	"linux",
-	linux_error,
-	linux_sendsig,
-	LINUX_SYS_syscall,
-	LINUX_SYS_MAXSYSCALL,
-	linux_sysent,
-	linux_syscallnames,
-	LINUX_ELF_AUX_ARGSIZ,
-	elf_copyargs,
-	setregs,
-	linux_sigcode,
-	linux_esigcode,
-};
-
-
-static void *
-linux_aout_copyargs(pack, arginfo, stack, argp)
-	struct exec_package *pack;
-	struct ps_strings *arginfo;
-	void *stack;
-	void *argp;
-{
-	char **cpp = stack;
-	char **stk = stack;
-	char *dp, *sp;
-	size_t len;
-	void *nullp = NULL;
-	int argc = arginfo->ps_nargvstr;
-	int envc = arginfo->ps_nenvstr;
-
-	if (copyout(&argc, cpp++, sizeof(argc)))
-		return NULL;
-
-	/* leave room for envp and argv */
-	cpp += 2;
-	if (copyout(&cpp, &stk[1], sizeof (cpp)))
-		return NULL;
-
-	dp = (char *) (cpp + argc + envc + 2);
-	sp = argp;
-
-	/* XXX don't copy them out, remap them! */
-	arginfo->ps_argvstr = cpp; /* remember location of argv for later */
-
-	for (; --argc >= 0; sp += len, dp += len)
-		if (copyout(&dp, cpp++, sizeof(dp)) ||
-		    copyoutstr(sp, dp, ARG_MAX, &len))
-			return NULL;
-
-	if (copyout(&nullp, cpp++, sizeof(nullp)))
-		return NULL;
-
-	if (copyout(&cpp, &stk[2], sizeof (cpp)))
-		return NULL;
-
-	arginfo->ps_envstr = cpp; /* remember location of envp for later */
-
-	for (; --envc >= 0; sp += len, dp += len)
-		if (copyout(&dp, cpp++, sizeof(dp)) ||
-		    copyoutstr(sp, dp, ARG_MAX, &len))
-			return NULL;
-
-	if (copyout(&nullp, cpp++, sizeof(nullp)))
-		return NULL;
-
-	return cpp;
-}
 
 int
 exec_linux_aout_makecmds(p, epp)
@@ -192,7 +93,7 @@ exec_linux_aout_makecmds(p, epp)
 		break;
 	}
 	if (error == 0)
-		epp->ep_emul = &emul_linux_aout;
+		epp->ep_emul = EMUL_LINUX;
 	return error;
 }
 
@@ -362,33 +263,10 @@ exec_linux_aout_prep_qmagic(p, epp)
 	return exec_aout_setup_stack(p, epp);
 }
 
-int
-linux_elf_probe(p, epp, itp, pos)
-	struct proc *p;
-	struct exec_package *epp;
-	char *itp;
-	u_long *pos;
-{
-	char *bp;
-	int error;
-	size_t len;
-
-	if (itp[0]) {
-		if ((error = emul_find(p, NULL, linux_emul_path, itp, &bp, 0)))
-			return error;
-		if ((error = copystr(bp, itp, MAXPATHLEN, &len)))
-			return error;
-		free(bp, M_TEMP);
-	}
-	epp->ep_emul = &emul_linux_elf;
-	*pos = ELF32_NO_ADDR;
-	return 0;
-}
-
 /*
- * The Linux system call to load shared libraries, a.out version. The
- * a.out shared libs are just files that are mapped onto a fixed
- * address in the process' address space. The address is given in
+ * The Linux system call to load shared libraries. The current shared
+ * libraries are just (QMAGIC) a.out files that are mapped onto a fixed
+ * address * in the process' address space. The address is given in
  * a_entry. Read in the header, set up some VM commands and run them.
  *
  * Yes, both text and data are mapped at once, so we're left with
@@ -398,19 +276,18 @@ linux_elf_probe(p, epp, itp, pos)
  * Yuck.
  *
  * Because of the problem with ZMAGIC executables (text starts
- * at 0x400 in the file, but needs to be mapped at 0), ZMAGIC
+ * at 0x400 in the file, but needs t be mapped at 0), ZMAGIC
  * shared libs are not handled very efficiently :-(
  */
 
 int
-linux_sys_uselib(p, v, retval)
+linux_uselib(p, uap, retval)
 	struct proc *p;
-	void *v;
+	struct linux_uselib_args /* {
+		syscallarg(char *) path;
+	} */ *uap;
 	register_t *retval;
 {
-	struct linux_sys_uselib_args /* {
-		syscallarg(char *) path;
-	} */ *uap = v;
 	caddr_t sg;
 	long bsize, dsize, tsize, taddr, baddr, daddr;
 	struct nameidata ni;
@@ -419,8 +296,8 @@ linux_sys_uselib(p, v, retval)
 	struct exec_vmcmd_set vcset;
 	int rem, i, magic, error;
 
-	sg = stackgap_init(p->p_emul);
-	LINUX_CHECK_ALT_EXIST(p, &sg, SCARG(uap, path));
+	sg = stackgap_init();
+	CHECK_ALT(p, &sg, SCARG(uap, path));
 
 	NDINIT(&ni, LOOKUP, FOLLOW, UIO_USERSPACE, SCARG(uap, path), p);
 
@@ -440,9 +317,6 @@ linux_sys_uselib(p, v, retval)
 		vrele(vp);
 		return ENOEXEC;
 	}
-
-	if (LINUX_N_MACHTYPE(&hdr) != LINUX_MID_MACHINE)
-		return ENOEXEC;
 
 	magic = LINUX_N_MAGIC(&hdr);
 	taddr = hdr.a_entry & (~(NBPG - 1));
@@ -491,20 +365,19 @@ linux_sys_uselib(p, v, retval)
  * to the NetBSD execve().
  */
 int
-linux_sys_execve(p, v, retval)
+linux_execve(p, uap, retval)
 	struct proc *p;
-	void *v;
-	register_t *retval;
-{
-	struct linux_sys_execve_args /* {
+	struct linux_execve_args /* {
 		syscallarg(char *) path;
 		syscallarg(char **) argv;
 		syscallarg(char **) envp;
-	} */ *uap = v;
+	} */ *uap;
+	register_t *retval;
+{
 	caddr_t sg;
 
-	sg = stackgap_init(p->p_emul);
-	LINUX_CHECK_ALT_EXIST(p, &sg, SCARG(uap, path));
+	sg = stackgap_init();
+	CHECK_ALT(p, &sg, SCARG(uap, path));
 
-	return sys_execve(p, uap, retval);
+	return execve(p, uap, retval);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_sockmod.h,v 1.3 1995/03/31 03:06:32 christos Exp $	 */
+/*	$NetBSD: svr4_sockmod.h,v 1.1 1994/11/14 06:13:19 christos Exp $	 */
 
 /*
  * Copyright (c) 1994 Christos Zoulas
@@ -32,7 +32,7 @@
 
 #define	SVR4_SIMOD 		('I' << 8)
 
-#define	SVR4_SI_OGETUDATA	(SVR4_SIMOD|101)
+#define	SVR4_SI_GETUDATA	(SVR4_SIMOD|101)
 #define	SVR4_SI_SHUTDOWN	(SVR4_SIMOD|102)
 #define	SVR4_SI_LISTEN		(SVR4_SIMOD|103)
 #define	SVR4_SI_SETMYNAME	(SVR4_SIMOD|104)
@@ -40,29 +40,7 @@
 #define	SVR4_SI_GETINTRANSIT	(SVR4_SIMOD|106)
 #define	SVR4_SI_TCL_LINK	(SVR4_SIMOD|107)
 #define	SVR4_SI_TCL_UNLINK	(SVR4_SIMOD|108)
-#define SVR4_SI_SOCKPARAMS	(SVR4_SIMOD|109)
-#define SVR4_SI_GETUDATA	(SVR4_SIMOD|110)
 
-
-#define SVR4_SOCK_RAW		1
-#define SVR4_SOCK_STREAM	2
-#define SVR4_SOCK_DGRAM		3
-
-struct svr4_si_sockparms {
-	int	family;
-	int	type;
-	int	protocol;
-};
-
-struct svr4_si_oudata {
-	int	tidusize;
-	int	addrsize;
-	int	optsize;
-	int	etsdusize;
-	int	servtype;
-	int	so_state;
-	int	so_options;
-};
 
 struct svr4_si_udata {
 	int	tidusize;
@@ -72,7 +50,38 @@ struct svr4_si_udata {
 	int	servtype;
 	int	so_state;
 	int	so_options;
-	int	tsdusize;
-	struct svr4_si_sockparms sockparms;
 };
+
+/*
+ * The following structure is determined empirically.
+ */
+struct svr4_sockctl {
+	long	cmd;	/* command ? */
+	long	unk1;	
+	long	unk2;
+	long	unk3;
+	long	unk4;
+	u_short	family;
+	u_short	port;
+	u_long	addr;
+	long	unk5;
+	long	unk6;
+};
+
+struct svr4_sockctl1 {
+	long	cmd;	/* command ? */
+	long	unk1;	
+	long	unk2;
+	long	unk3;
+	long	unk4;
+	long	unk5;
+	u_short	family;
+	u_short	port;
+	u_long	addr;
+	long	unk6;
+	long	unk7;
+};
+#define SVR4_SC_CMD_CONNECT	0x0
+#define SVR4_SC_CMD_SENDTO	0x8
+
 #endif /* !_SVR4_SOCKMOD_H_ */

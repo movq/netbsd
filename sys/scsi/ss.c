@@ -1,4 +1,4 @@
-/*	$NetBSD: ss.c,v 1.9 1996/03/30 21:47:00 christos Exp $	*/
+/*	$NetBSD: ss.c,v 1.1 1996/02/18 20:32:46 mycroft Exp $	*/
 
 /*
  * Copyright (c) 1995 Kenneth Stailey.  All rights reserved.
@@ -41,7 +41,7 @@
 #include <sys/proc.h>
 #include <sys/user.h>
 #include <sys/device.h>
-#include <sys/conf.h>
+#include <sys/conf.h>		/* for cdevsw */
 #include <sys/scanio.h>
 
 #include <scsi/scsi_all.h>
@@ -66,17 +66,12 @@
 int ssmatch __P((struct device *, void *, void *));
 void ssattach __P((struct device *, struct device *, void *));
 
-struct cfattach ss_ca = {
-	sizeof(struct ss_softc), ssmatch, ssattach
-};
-
-struct cfdriver ss_cd = {
-	NULL, "ss", DV_DULL
+struct cfdriver sscd = {
+	NULL, "ss", ssmatch, ssattach, DV_DULL, sizeof(struct ss_softc)
 };
 
 void    ssstrategy __P((struct buf *));
 void    ssstart __P((void *));
-void	ssminphys __P((struct buf *));
 
 struct scsi_device ss_switch = {
 	NULL,
@@ -162,28 +157,28 @@ ssattach(parent, self, aux)
 int
 ssopen(dev, flag, mode, p)
 	dev_t dev;
-	int flag;
+	int flag
 	int mode;
 	struct proc *p;
 {
 	int unit;
-	u_int ssmode;
+	u_int mode;
 	int error = 0;
 	struct ss_softc *ss;
 	struct scsi_link *sc_link;
 
 	unit = SSUNIT(dev);
-	if (unit >= ss_cd.cd_ndevs)
+	if (unit >= sscd.cd_ndevs)
 		return (ENXIO);
-	ss = ss_cd.cd_devs[unit];
+	ss = sscd.cd_devs[unit];
 	if (!ss)
 		return (ENXIO);
 
-	ssmode = SSMODE(dev);
+	mode = SSMODE(dev);
 	sc_link = ss->sc_link;
 
 	SC_DEBUG(sc_link, SDEV_DB1, ("open: dev=0x%x (unit %d (of %d))\n", dev,
-	    unit, ss_cd.cd_ndevs));
+	    unit, sscd.cd_ndevs));
 
 	if (sc_link->flags & SDEV_OPEN) {
 		printf("%s: already open\n", ss->sc_dev.dv_xname);
@@ -199,7 +194,7 @@ ssopen(dev, flag, mode, p)
 	 */
 	error = scsi_test_unit_ready(sc_link,
 	    SCSI_IGNORE_MEDIA_CHANGE | SCSI_IGNORE_ILLEGAL_REQUEST |
-	    (ssmode == MODE_CONTROL ? SCSI_IGNORE_NOT_READY : 0));
+	    (mode == MODE_CONTROL ? SCSI_IGNORE_NOT_READY : 0));
 	if (error)
 		goto bad;
 
@@ -210,7 +205,7 @@ ssopen(dev, flag, mode, p)
 	 * then the device has been opened to set defaults
 	 * This mode does NOT ALLOW I/O, only ioctls
 	 */
-	if (ssmode == MODE_CONTROL)
+	if (mode == MODE_CONTROL)
 		return (0);
 
 	SC_DEBUG(sc_link, SDEV_DB2, ("open complete\n"));
@@ -226,13 +221,10 @@ bad:
  * occurence of an open device
  */
 int
-ssclose(dev, flag, mode, p)
+ssclose(dev)
 	dev_t dev;
-	int flag;
-	int mode;
-	struct proc *p;
 {
-	struct ss_softc *ss = ss_cd.cd_devs[SSUNIT(dev)];
+	struct ss_softc *ss = sscd.cd_devs[SSUNIT(dev)];
 	int error;
 
 	SC_DEBUG(ss->sc_link, SDEV_DB1, ("closing\n"));
@@ -245,8 +237,8 @@ ssclose(dev, flag, mode, p)
 				return (error);
 		} else {
 			/* XXX add code to restart a SCSI2 scanner, if any */
+			ss->sio.scan_window_size = 0;
 		}
-		ss->sio.scan_window_size = 0;
 		ss->flags &= ~SSF_TRIGGERED;
 	}
 	ss->sc_link->flags &= ~SDEV_OPEN;
@@ -264,7 +256,7 @@ void
 ssminphys(bp)
 	struct buf *bp;
 {
-	register struct ss_softc *ss = ss_cd.cd_devs[SSUNIT(bp->b_dev)];
+	register struct ss_softc *ss = sscd.cd_devs[SSUNIT(bp->b_dev)];
 
 	(ss->sc_link->adapter->scsi_minphys)(bp);
 
@@ -289,7 +281,7 @@ ssread(dev, uio, flag)
 	struct uio *uio;
 	int flag;
 {
-	struct ss_softc *ss = ss_cd.cd_devs[SSUNIT(dev)];
+	struct ss_softc *ss = sscd.cd_devs[SSUNIT(dev)];
 	int error;
 
 	/* if the scanner has not yet been started, do it now */
@@ -300,6 +292,26 @@ ssread(dev, uio, flag)
 				return (error);
 		}
 		ss->flags |= SSF_TRIGGERED;
+	}
+
+	/* in any case, trim it down to window_size */
+	if (uio->uio_iov->iov_len > ss->sio.scan_window_size) {
+		uio->uio_iov->iov_len = ss->sio.scan_window_size;
+
+		SC_DEBUG(ss->sc_link, SDEV_DB1,
+		    ("ssread: bytes wanted exceeds window size\n"));
+		SC_DEBUG(ss->sc_link, SDEV_DB1,
+		    ("ssread: xfer reduced to %d\n", uio->uio_iov->iov_len));
+	}
+
+	/*
+	 * EOF detection
+	 */
+
+	if (ss->sio.scan_window_size == 0) {
+		uio->uio_iov++;
+		uio->uio_iovcnt--;
+		return (0);
 	}
 
 	return (physio(ssstrategy, NULL, dev, B_READ, ssminphys, uio));
@@ -314,15 +326,12 @@ void
 ssstrategy(bp)
 	struct buf *bp;
 {
-	struct ss_softc *ss = ss_cd.cd_devs[SSUNIT(bp->b_dev)];
+	struct ss_softc *ss = sscd.cd_devs[SSUNIT(bp->b_dev)];
 	struct buf *dp;
 	int s;
 
 	SC_DEBUG(ss->sc_link, SDEV_DB1,
 	    ("ssstrategy %d bytes @ blk %d\n", bp->b_bcount, bp->b_blkno));
-
-	if (bp->b_bcount > ss->sio.scan_window_size)
-		bp->b_bcount = ss->sio.scan_window_size;
 
 	/*
 	 * If it's a null transfer, return immediatly
@@ -352,6 +361,7 @@ ssstrategy(bp)
 
 	splx(s);
 	return;
+bad:
 	bp->b_flags |= B_ERROR;
 done:
 	/*
@@ -429,16 +439,16 @@ ssioctl(dev, cmd, addr, flag, p)
 	int flag;
 	struct proc *p;
 {
-	struct ss_softc *ss = ss_cd.cd_devs[SSUNIT(dev)];
+	struct ss_softc *ss = sscd.cd_devs[SSUNIT(dev)];
 	int error = 0;
+	int unit;
 	struct scan_io *sio;
 
 	switch (cmd) {
 	case SCIOCGET:
 		if (ss->special->get_params) {
 			/* call special handler */
-			error = (ss->special->get_params)(ss);
-			if (error)
+			if ((error = (ss->special->get_params)(ss)) > 0)
 				return (error);
 		} else {
 			/* XXX add code for SCSI2 scanner, if any */
@@ -451,8 +461,7 @@ ssioctl(dev, cmd, addr, flag, p)
 
 		if (ss->special->set_params) {
 			/* call special handler */
-			error = (ss->special->set_params)(ss, sio);
-			if (error)
+			if ((error = (ss->special->set_params)(ss, sio)) > 0)
 				return (error);
 		} else {
 			/* XXX add code for SCSI2 scanner, if any */
@@ -462,8 +471,7 @@ ssioctl(dev, cmd, addr, flag, p)
 	case SCIOCRESTART:
 		if (ss->special->rewind_scanner ) {
 			/* call special handler */
-			error = (ss->special->rewind_scanner)(ss);
-			if (error)
+			if ((error = (ss->special->rewind_scanner)(ss)) > 0)
 				return (error);
 		} else
 			/* XXX add code for SCSI2 scanner, if any */

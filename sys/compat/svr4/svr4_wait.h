@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_wait.h,v 1.5 1995/03/31 03:06:50 christos Exp $	 */
+/*	$NetBSD: svr4_wait.h,v 1.1 1994/11/18 02:56:21 christos Exp $	 */
 
 /*
  * Copyright (c) 1994 Christos Zoulas
@@ -51,5 +51,46 @@
 
 #define SVR4_WOPTMASK   (SVR4_WEXITED|SVR4_WTRAPPED|SVR4_WSTOPPED|\
 			 SVR4_WCONTINUED|SVR4_WNOHANG|SVR4_WNOWAIT)
+
+struct svr4_siginfo {
+	int	si_signo;
+	int	si_code;
+	int	si_errno;
+
+	union {
+		int	_pad[(128 / sizeof(int)) - 3];
+		struct {
+			svr4_pid_t	_pid;
+			union {
+				struct {
+					svr4_uid_t	_uid;
+				} _kill;
+				struct {
+					svr4_clock_t	_utime;
+					int		_status;
+					svr4_clock_t	_stime;
+				} _cld;
+			} _pdata;
+		} _proc;
+
+		struct {
+			svr4_caddr_t _addr;
+		} _fault;
+
+		struct {
+			int	_fd;
+			long	_band;
+		} _file;
+	} _data;
+};
+
+#define si_band		_data._file._band
+#define si_fd		_data._file._fd
+#define si_addr		_data._fault._addr
+#define si_stime	_data._proc._pdata._cld._stime
+#define si_status	_data._proc._pdata._cld._status
+#define si_utime	_data._proc._pdata._cld._utime
+#define si_uid		_data._proc._pdata._kill._uid
+#define si_pid		_data._proc._pid;
 
 #endif /* !_SVR4_WAIT_H_ */

@@ -1,58 +1,55 @@
-/*	$NetBSD: if_le.c,v 1.43 1996/04/22 02:53:28 christos Exp $	*/
+/*
+ * LANCE Ethernet driver
+ *
+ * Copyright (c) 1994 Charles Hannum.
+ *
+ * Copyright (C) 1993, Paul Richards. This software may be used, modified,
+ *   copied, distributed, and sold, in both source and binary form provided
+ *   that the above copyright and these terms are retained. Under no
+ *   circumstances is the author responsible for the proper functioning
+ *   of this software, nor does the author assume any responsibility
+ *   for damages incurred with its use.
+ *
+ *	$Id: if_le.c,v 1.1 1994/07/01 20:25:25 mycroft Exp $
+ */
 
-/*-
- * Copyright (c) 1995 Charles M. Hannum.  All rights reserved.
- * Copyright (c) 1992, 1993
- *	The Regents of the University of California.  All rights reserved.
- *
- * This code is derived from software contributed to Berkeley by
- * Ralph Campbell and Rick Macklem.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- *	@(#)if_le.c	8.2 (Berkeley) 11/16/93
+/* TODO
+ * 1) Advertise for more packets until all transmit buffers are full
+ * 2) Add more of the timers/counters e.g. arpcom.opackets etc.
  */
 
 #include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/errno.h>
+#include <sys/ioctl.h>
 #include <sys/mbuf.h>
-#include <sys/syslog.h>
 #include <sys/socket.h>
+#include <sys/syslog.h>
 #include <sys/device.h>
 
 #include <net/if.h>
+#include <net/if_dl.h>
+#include <net/if_types.h>
+#include <net/netisr.h>
 
 #ifdef INET
 #include <netinet/in.h>
+#include <netinet/in_systm.h>
+#include <netinet/in_var.h>
+#include <netinet/ip.h>
 #include <netinet/if_ether.h>
+#endif
+
+#ifdef NS
+#include <netns/ns.h>
+#include <netns/ns_if.h>
+#endif
+
+#if NBPFILTER > 0
+#include <net/bpf.h>
+#include <net/bpfdesc.h>
 #endif
 
 #include <vm/vm.h>
@@ -60,194 +57,237 @@
 #include <machine/cpu.h>
 #include <machine/pio.h>
 
-#include "isa.h"
-#include "pci.h"
+#include <i386/isa/isavar.h>
+#include <i386/isa/dmavar.h>
+#include <i386/isa/icu.h>
+#include <i386/isa/if_lereg.h>
 
-#if NISA > 0
-#include <dev/isa/isareg.h>
-#include <dev/isa/isavar.h>
-#include <dev/isa/isadmavar.h>
-#include <i386/isa/isa_machdep.h>
+
+#define	ETHER_MIN_LEN	64
+#define	ETHER_MAX_LEN	1518
+#define	ETHER_ADDR_LEN	6
+
+char *card_type[] = {"unknown", "BICC Isolan", "NE2100", "DEPCA"};
+char *chip_type[] = {"unknown", "Am7990 LANCE", "Am79960 PCnet-ISA"};
+
+
+/*
+ * Ethernet software status per interface.
+ *
+ * Each interface is referenced by a network interface structure,
+ * arpcom.ac_if, which the routing code uses to locate the interface.
+ * This structure contains the output queue for the interface, its address, ...
+ */
+struct le_softc {
+	struct	device sc_dev;
+	struct	intrhand sc_ih;
+
+	struct	arpcom sc_arpcom;	/* Ethernet common part */
+	u_short	sc_iobase;		/* IO base address of card */
+	u_short	sc_rap, sc_rdp;
+	int	sc_chip, sc_card;
+	void	*sc_mem;
+	struct	init_block *sc_init;	/* Lance initialisation block */
+	struct	mds *sc_rd, *sc_td;
+	u_char	*sc_rbuf, *sc_tbuf;
+	int	sc_last_rd, sc_last_td;
+	int	sc_no_td;
+#ifdef ISDEBUG
+	int	sc_debug;
 #endif
+};
 
-#if NPCI > 0
-#include <dev/pci/pcireg.h>
-#include <dev/pci/pcivar.h>
+int leintr __P((struct le_softc *));
+int le_ioctl __P((struct ifnet *, int, caddr_t));
+int le_start __P((struct ifnet *));
+int le_watchdog __P((/* short */));
+void lewrcsr __P((/* struct le_softc *, u_short, u_short */));
+u_short lerdcsr __P((/* struct le_softc *, u_short */));
+void le_init __P((struct le_softc *));
+void init_mem __P((struct le_softc *));
+void le_reset __P((struct le_softc *));
+void le_stop __P((struct le_softc *));
+void le_tint __P((struct le_softc *));
+void le_rint __P((struct le_softc *));
+void le_read __P((struct le_softc *, u_char *, int));
+struct mbuf *le_get __P((u_char *, int, struct ifnet *));
+#ifdef ISDEBUG
+void recv_print __P((struct le_softc *, int));
+void xmit_print __P((struct le_softc *, int));
 #endif
+void le_setladrf __P((struct arpcom *, u_long *));
 
-#include <dev/isa/if_levar.h>
-#include <dev/ic/am7990reg.h>
-#define LE_NEED_BUF_CONTIG
-#include <dev/ic/am7990var.h>
-
-char *card_type[] = {"unknown", "BICC Isolan", "NE2100", "DEPCA", "PCnet-ISA", "PCnet-PCI"};
-
-#define	LE_SOFTC(unit)	le_cd.cd_devs[unit]
-#define	LE_DELAY(x)	delay(x)
-
-int leprobe __P((struct device *, void *, void *));
-int depca_probe __P((struct le_softc *, struct isa_attach_args *));
+int leprobe();
 int ne2100_probe __P((struct le_softc *, struct isa_attach_args *));
 int bicc_probe __P((struct le_softc *, struct isa_attach_args *));
 int lance_probe __P((struct le_softc *));
-void leattach __P((struct device *, struct device *, void *));
-int leintr __P((void *));
-int leintredge __P((void *));
-void leshutdown __P((void *));
+void leattach();
 
-/* XXX the following two structs should be different. */
-struct cfattach le_isa_ca = {
-	sizeof(struct le_softc), leprobe, leattach
+struct cfdriver lecd = {
+	NULL, "le", leprobe, leattach, DV_IFNET, sizeof(struct le_softc)
 };
 
-struct cfattach le_pci_ca = {
-	sizeof(struct le_softc), leprobe, leattach
-};
-
-struct cfdriver le_cd = {
-	NULL, "le", DV_IFNET
-};
-
-integrate void
-lehwinit(sc)
-	struct le_softc *sc;
-{
-}
-
-integrate void
+void
 lewrcsr(sc, port, val)
 	struct le_softc *sc;
-	u_int16_t port, val;
+	u_short port;
+	u_short val;
 {
 
 	outw(sc->sc_rap, port);
 	outw(sc->sc_rdp, val);
 }
 
-integrate u_int16_t
+u_short
 lerdcsr(sc, port)
 	struct le_softc *sc;
-	u_int16_t port;
+	u_short port;
 {
-	u_int16_t val;
-
+	
 	outw(sc->sc_rap, port);
-	val = inw(sc->sc_rdp);
-	return (val);
-}
+	return inw(sc->sc_rdp);
+} 
 
 int
-leprobe(parent, match, aux)
-	struct device *parent;
-	void *match, *aux;
+leprobe(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
-	struct le_softc *sc = match;
-	extern struct cfdriver isa_cd, pci_cd;
+	struct le_softc *sc = (void *)self;
+	struct isa_attach_args *ia = aux;
 
-#if NISA > 0
-	if (parent->dv_cfdata->cf_driver == &isa_cd) {
-		struct isa_attach_args *ia = aux;
+	if (bicc_probe(sc, ia))
+		goto found;
+	if (ne2100_probe(sc, ia))
+		goto found;
+	if (depca_probe(sc, ia))
+		goto found;
+	return 0;
 
-		if (bicc_probe(sc, ia))
-			return (1);
-		if (ne2100_probe(sc, ia))
-			return (1);
-		if (depca_probe(sc, ia))
-			return (1);
+found:
+	/*
+	 * XXX - hopefully have better way to get dma'able memory later,
+	 * this code assumes that the physical memory address returned
+	 * from malloc will be below 16Mb. The Lance's address registers
+	 * are only 16 bits wide!
+	 */
+#define MAXMEM ((NRBUF + NTBUF) * (BUFSIZE + sizeof(struct mds)) + \
+		sizeof(struct init_block))
+	if (sc->sc_card == DEPCA) {
+		u_char *mem;
+		int i;
+
+		mem = sc->sc_mem = ia->ia_maddr;
+		/* XXX This is somewhat bogus. */
+		if (ia->ia_msize < MAXMEM) {
+			printf("%s: not enough memory configured\n",
+			    sc->sc_dev.dv_xname);
+			return 0;
+		}
+
+		for (i = 0; i < ia->ia_msize; i++)
+			mem[i] = 0xff;
+		for (i = 0; i < ia->ia_msize; i++)
+			if (mem[i] != 0xff) {
+				printf("%s: failed to clear memory\n",
+				    sc->sc_dev.dv_xname);
+				return 0;
+			}
+
+		for (i = 0; i < ia->ia_msize; i++)
+			mem[i] = 0xaa;
+		for (i = 0; i < ia->ia_msize; i++)
+			if (mem[i] != 0xaa) {
+				printf("%s: failed to clear memory\n",
+				    sc->sc_dev.dv_xname);
+				return 0;
+			}
+
+		for (i = 0; i < ia->ia_msize; i++)
+			mem[i] = 0x55;
+		for (i = 0; i < ia->ia_msize; i++)
+			if (mem[i] != 0x55) {
+				printf("%s: failed to clear memory\n",
+				    sc->sc_dev.dv_xname);
+				return 0;
+			}
+
+		for (i = 0; i < ia->ia_msize; i++)
+			mem[i] = 0x00;
+		for (i = 0; i < ia->ia_msize; i++)
+			if (mem[i] != 0x00) {
+				printf("%s: failed to clear memory\n",
+				    sc->sc_dev.dv_xname);
+				return 0;
+			}
+	} else {
+		sc->sc_mem = malloc(MAXMEM, M_TEMP, M_NOWAIT);
+		if (!sc->sc_mem) {
+			printf("%s: couldn't allocate memory for card\n",
+			    sc->sc_dev.dv_xname);
+			return 0;
+		}
 	}
-#endif
 
-#if NPCI > 0
-	if (parent->dv_cfdata->cf_driver == &pci_cd) {
-		struct pci_attach_args *pa = aux;
-
-		if (pa->pa_id == 0x20001022)
-			return (1);
-	}
-#endif
-
-	return (0);
+	return 1;
 }
 
-#if NISA > 0
 int
 depca_probe(sc, ia)
 	struct le_softc *sc;
 	struct isa_attach_args *ia;
 {
-	int iobase = ia->ia_iobase, port;
-	u_long sum, rom_sum;
+	u_short iobase = ia->ia_iobase;
 	u_char x;
 	int i;
 
+	sc->sc_iobase = iobase;
 	sc->sc_rap = iobase + DEPCA_RAP;
 	sc->sc_rdp = iobase + DEPCA_RDP;
 	sc->sc_card = DEPCA;
 
-	if (lance_probe(sc) == 0)
+	if (!(sc->sc_chip = lance_probe(sc)))
 		return 0;
 
 	outb(iobase + DEPCA_CSR, DEPCA_CSR_DUM);
 
 	/*
 	 * Extract the physical MAC address from the ROM.
-	 *
-	 * The address PROM is 32 bytes wide, and we access it through
-	 * a single I/O port.  On each read, it rotates to the next
-	 * position.  We find the ethernet address by looking for a
-	 * particular sequence of bytes (0xff, 0x00, 0x55, 0xaa, 0xff,
-	 * 0x00, 0x55, 0xaa), and then reading the next 8 bytes (the
-	 * ethernet address and a checksum).
-	 *
-	 * It appears that the PROM can be at one of two locations, so
-	 * we just try both.
 	 */
-	port = iobase + DEPCA_ADP;
 	for (i = 0; i < 32; i++)
-		if (inb(port) == 0xff && inb(port) == 0x00 &&
-		    inb(port) == 0x55 && inb(port) == 0xaa &&
-		    inb(port) == 0xff && inb(port) == 0x00 &&
-		    inb(port) == 0x55 && inb(port) == 0xaa)
+		if (inb(iobase + DEPCA_ADP) == 0xff &&
+		    inb(iobase + DEPCA_ADP) == 0x00 &&
+		    inb(iobase + DEPCA_ADP) == 0x55 &&
+		    inb(iobase + DEPCA_ADP) == 0xaa &&
+		    inb(iobase + DEPCA_ADP) == 0xff &&
+		    inb(iobase + DEPCA_ADP) == 0x00 &&
+		    inb(iobase + DEPCA_ADP) == 0x55 &&
+		    inb(iobase + DEPCA_ADP) == 0xaa)
 			goto found;
-	port = iobase + DEPCA_ADP + 1;
 	for (i = 0; i < 32; i++)
-		if (inb(port) == 0xff && inb(port) == 0x00 &&
-		    inb(port) == 0x55 && inb(port) == 0xaa &&
-		    inb(port) == 0xff && inb(port) == 0x00 &&
-		    inb(port) == 0x55 && inb(port) == 0xaa)
+		if (inb(iobase + DEPCA_ADP + 1) == 0xff &&
+		    inb(iobase + DEPCA_ADP + 1) == 0x00 &&
+		    inb(iobase + DEPCA_ADP + 1) == 0x55 &&
+		    inb(iobase + DEPCA_ADP + 1) == 0xaa &&
+		    inb(iobase + DEPCA_ADP + 1) == 0xff &&
+		    inb(iobase + DEPCA_ADP + 1) == 0x00 &&
+		    inb(iobase + DEPCA_ADP + 1) == 0x55 &&
+		    inb(iobase + DEPCA_ADP + 1) == 0xaa)
 			goto found;
-	printf("%s: address not found\n", sc->sc_dev.dv_xname);
+	printf("%s: address not found; data:", sc->sc_dev.dv_xname);
+	for (i = 0; i < 32; i++)
+		printf(" %02x", inb(iobase + DEPCA_ADP));
+	for (i = 0; i < 32; i++)
+		printf(" %02x", inb(iobase + DEPCA_ADP + 1));
+	printf("\n");
 	return 0;
-
 found:
-	for (i = 0; i < sizeof(sc->sc_arpcom.ac_enaddr); i++)
-		sc->sc_arpcom.ac_enaddr[i] = inb(port);
-
-#if 0
-	sum =
-	    (sc->sc_arpcom.ac_enaddr[0] <<  2) +
-	    (sc->sc_arpcom.ac_enaddr[1] << 10) +
-	    (sc->sc_arpcom.ac_enaddr[2] <<  1) +
-	    (sc->sc_arpcom.ac_enaddr[3] <<  9) +
-	    (sc->sc_arpcom.ac_enaddr[4] <<  0) +
-	    (sc->sc_arpcom.ac_enaddr[5] <<  8);
-	sum = (sum & 0xffff) + (sum >> 16);
-	sum = (sum & 0xffff) + (sum >> 16);
-
-	rom_sum = inb(port);
-	rom_sum |= inb(port) << 8;
-
-	if (sum != rom_sum) {
-		printf("%s: checksum mismatch; calculated %04x != read %04x",
-		    sc->sc_dev.dv_xname, sum, rom_sum);
-		return 0;
-	}
-#endif
+	for (i = 0; i < ETHER_ADDR_LEN; i++)
+		sc->sc_arpcom.ac_enaddr[i] = inb(iobase + DEPCA_ADP);
 
 	outb(iobase + DEPCA_CSR, DEPCA_CSR_NORMAL);
 
 	ia->ia_iosize = 16;
-	ia->ia_drq = DRQUNK;
 	return 1;
 }
 
@@ -256,20 +296,21 @@ ne2100_probe(sc, ia)
 	struct le_softc *sc;
 	struct isa_attach_args *ia;
 {
-	int iobase = ia->ia_iobase;
+	u_short iobase = ia->ia_iobase;
 	int i;
 
+	sc->sc_iobase = iobase;
 	sc->sc_rap = iobase + NE2100_RAP;
 	sc->sc_rdp = iobase + NE2100_RDP;
 	sc->sc_card = NE2100;
 
-	if (lance_probe(sc) == 0)
+	if (!(sc->sc_chip = lance_probe(sc)))
 		return 0;
 
 	/*
 	 * Extract the physical MAC address from the ROM.
 	 */
-	for (i = 0; i < sizeof(sc->sc_arpcom.ac_enaddr); i++)
+	for (i = 0; i < ETHER_ADDR_LEN; i++)
 		sc->sc_arpcom.ac_enaddr[i] = inb(iobase + i);
 
 	ia->ia_iosize = 24;
@@ -281,21 +322,22 @@ bicc_probe(sc, ia)
 	struct le_softc *sc;
 	struct isa_attach_args *ia;
 {
-	int iobase = ia->ia_iobase;
+	u_short iobase = ia->ia_iobase;
 	int i;
 
+	sc->sc_iobase = iobase;
 	sc->sc_rap = iobase + BICC_RAP;
 	sc->sc_rdp = iobase + BICC_RDP;
 	sc->sc_card = BICC;
 
-	if (lance_probe(sc) == 0)
+	if (!(sc->sc_chip = lance_probe(sc)))
 		return 0;
 
 	/*
 	 * Extract the physical MAC address from the ROM.
 	 */
-	for (i = 0; i < sizeof(sc->sc_arpcom.ac_enaddr); i++)
-		sc->sc_arpcom.ac_enaddr[i] = inb(iobase + i * 2);
+	for (i = 0; i < ETHER_ADDR_LEN; i++)
+		sc->sc_arpcom.ac_enaddr[i] = inb(iobase + (i * 2));
 
 	ia->ia_iosize = 16;
 	return 1;
@@ -308,155 +350,897 @@ int
 lance_probe(sc)
 	struct le_softc *sc;
 {
+	int type;
 
 	/* Stop the LANCE chip and put it in a known state. */
-	lewrcsr(sc, LE_CSR0, LE_C0_STOP);
-	LE_DELAY(100);
+	lewrcsr(sc, 0, STOP);
+	delay(100);
 
-	if (lerdcsr(sc, LE_CSR0) != LE_C0_STOP)
+	if (lerdcsr(sc, 0) != STOP)
 		return 0;
 
-	lewrcsr(sc, LE_CSR3, sc->sc_conf3);
-	return 1;
-}
-#endif
+	/*
+	 * The PCnet-ISA chip doesn't allow some bits to be set.
+	 */
+	lewrcsr(sc, 3, PROBE_MASK);
 
+	switch (lerdcsr(sc, 3) & PROBE_MASK) {
+	case LANCE_MASK:
+		type = LANCE;
+		break;
+	case PCnet_ISA_MASK:
+		type = PCnet_ISA;
+		break;
+	default:
+		type = 0;
+		break;
+	}
+
+	lewrcsr(sc, 3, sc->sc_card == DEPCA ? ACON : 0);
+	return type;
+}
+
+/*
+ * Interface exists: make available by filling in network interface
+ * record.  System will initialize the interface when it is ready
+ * to accept packets.  We get the ethernet address here.
+ */
 void
 leattach(parent, self, aux)
 	struct device *parent, *self;
 	void *aux;
 {
 	struct le_softc *sc = (void *)self;
-	extern struct cfdriver isa_cd, pci_cd;
+	struct isa_attach_args *ia = aux;
+	struct ifnet *ifp = &sc->sc_arpcom.ac_if;
 
-#if NPCI > 0
-	if (parent->dv_cfdata->cf_driver == &pci_cd) {
-		struct pci_attach_args *pa = aux;
-		int iobase;
+	ifp->if_unit = sc->sc_dev.dv_unit;
+	ifp->if_name = lecd.cd_name;
+	ifp->if_output = ether_output;
+	ifp->if_start = le_start;
+	ifp->if_ioctl = le_ioctl;
+	ifp->if_watchdog = le_watchdog;
+	ifp->if_flags =
+	    IFF_BROADCAST | IFF_SIMPLEX | IFF_NOTRAILERS | IFF_MULTICAST;
 
-		if (pa->pa_id == 0x20001022) {
-			int i;
+	if (sc->sc_card != DEPCA)
+		isa_dmacascade(ia->ia_drq);
 
-			if (pci_map_io(pa->pa_tag, 0x10, &iobase))
-				return;
+	/* Attach the interface. */
+	if_attach(ifp);
+	ether_ifattach(ifp);
 
-			sc->sc_rap = iobase + NE2100_RAP;
-			sc->sc_rdp = iobase + NE2100_RDP;
-			sc->sc_card = PCnet_PCI;
+	printf(": address %s, type %s %s\n",
+	    ether_sprintf(sc->sc_arpcom.ac_enaddr),
+	    card_type[sc->sc_card], chip_type[sc->sc_chip]);
 
-			/*
-			 * Extract the physical MAC address from the ROM.
-			 */
-			for (i = 0; i < sizeof(sc->sc_arpcom.ac_enaddr); i++)
-				sc->sc_arpcom.ac_enaddr[i] = inb(iobase + i);
-		}
-	}
+#if NBPFILTER > 0
+	bpfattach(&sc->sc_arpcom.ac_if.if_bpf, ifp, DLT_EN10MB, sizeof(struct ether_header));
 #endif
 
-#if NISA > 0
-	if (sc->sc_card == DEPCA) {
-		struct isa_attach_args *ia = aux;
-		u_char *mem, val;
-		int i;
-
-		mem = sc->sc_mem = ISA_HOLE_VADDR(ia->ia_maddr);
-
-		val = 0xff;
-		for (;;) {
-			for (i = 0; i < ia->ia_msize; i++)
-				mem[i] = val;
-			for (i = 0; i < ia->ia_msize; i++)
-				if (mem[i] != val) {
-					printf("%s: failed to clear memory\n",
-					    sc->sc_dev.dv_xname);
-					return;
-				}
-			if (val == 0x00)
-				break;
-			val -= 0x55;
-		}
-
-		sc->sc_conf3 = LE_C3_ACON;
-		sc->sc_addr = 0;
-		sc->sc_memsize = ia->ia_msize;
-	} else
-#endif
-	{
-		sc->sc_mem = malloc(16384, M_DEVBUF, M_NOWAIT);
-		if (sc->sc_mem == 0) {
-			printf("%s: couldn't allocate memory for card\n",
-			    sc->sc_dev.dv_xname);
-			return;
-		}
-
-		sc->sc_conf3 = 0;
-		sc->sc_addr = kvtop(sc->sc_mem);
-		sc->sc_memsize = 16384;
-	}
-
-	sc->sc_copytodesc = am7990_copytobuf_contig;
-	sc->sc_copyfromdesc = am7990_copyfrombuf_contig;
-	sc->sc_copytobuf = am7990_copytobuf_contig;
-	sc->sc_copyfrombuf = am7990_copyfrombuf_contig;
-	sc->sc_zerobuf = am7990_zerobuf_contig;
-
-	sc->sc_arpcom.ac_if.if_name = le_cd.cd_name;
-	leconfig(sc);
-
-	printf("%s: type %s\n", sc->sc_dev.dv_xname, card_type[sc->sc_card]);
-
-#if NISA > 0
-	if (parent->dv_cfdata->cf_driver == &isa_cd) {
-		struct isa_attach_args *ia = aux;
-
-		if (ia->ia_drq != DRQUNK)
-			isa_dmacascade(ia->ia_drq);
-
-		sc->sc_ih = isa_intr_establish(ia->ia_ic, ia->ia_irq, IST_EDGE,
-		    IPL_NET, leintredge, sc);
-	}
-#endif
-
-#if NPCI > 0
-	if (parent->dv_cfdata->cf_driver == &pci_cd) {
-		struct pci_attach_args *pa = aux;
-		pcireg_t csr;
-
-		csr = pci_conf_read(pa->pa_bc, pa->pa_tag,
-		    PCI_COMMAND_STATUS_REG);
-		pci_conf_write(pa->pa_bc, pa->pa_tag, PCI_COMMAND_STATUS_REG,
-		    csr | PCI_COMMAND_MASTER_ENABLE);
-
-		sc->sc_ih = pci_map_int(pa->pa_tag, IPL_NET, leintr, sc);
-	}
-#endif
-
-	sc->sc_sh = shutdownhook_establish(leshutdown, sc);
+	sc->sc_ih.ih_fun = leintr;
+	sc->sc_ih.ih_arg = sc;
+	sc->sc_ih.ih_level = IPL_NET;
+	intr_establish(ia->ia_irq, &sc->sc_ih);
 }
 
 void
-leshutdown(arg)
-	void *arg;
+le_reset(sc)
+	struct le_softc *sc;
 {
-	struct le_softc *sc = arg;
 
-	lestop(sc);
+	log(LOG_NOTICE, "%s: reset\n", sc->sc_dev.dv_xname);
+	le_init(sc);
+}
+ 
+int
+le_watchdog(unit)
+	short unit;
+{
+	struct le_softc *sc = lecd.cd_devs[unit];
+
+	log(LOG_ERR, "%s: device timeout\n", sc->sc_dev.dv_xname);
+	++sc->sc_arpcom.ac_if.if_oerrors;
+	le_reset(sc);
 }
 
-#if NISA > 0
+#define	LANCE_ADDR(sc, a) \
+	(sc->sc_card == DEPCA ?	((u_long)(a) - (u_long)sc->sc_mem) : kvtop(a))
+
+/* Lance initialisation block set up. */
+void
+init_mem(sc)
+	struct le_softc *sc;
+{
+	struct ifnet *ifp = &sc->sc_arpcom.ac_if;
+	int i;
+	void *mem;
+	u_long a;
+
+	/*
+	 * At this point we assume that the memory allocated to the Lance is
+	 * quadword aligned.  If it isn't then the initialisation is going
+	 * fail later on.
+	 */
+
+	/* 
+	 * Set up lance initialisation block.
+	 */
+	mem = sc->sc_mem;
+
+	sc->sc_init = mem;
+#if NBPFILTER > 0
+	if (ifp->if_flags & IFF_PROMISC)
+		sc->sc_init->mode = PROM;
+	else
+#endif
+		sc->sc_init->mode = 0;
+	for (i = 0; i < ETHER_ADDR_LEN; i++) 
+		sc->sc_init->padr[i] = sc->sc_arpcom.ac_enaddr[i];
+	le_setladrf(&sc->sc_arpcom, sc->sc_init->ladrf);
+	mem += sizeof(struct init_block);
+
+	sc->sc_rd = mem;
+	a = LANCE_ADDR(sc, mem);
+	sc->sc_init->rdra = a;
+	sc->sc_init->rlen = ((a >> 16) & 0xff) | (RLEN << 13);
+	mem += NRBUF * sizeof(struct mds);
+
+	sc->sc_td = mem;
+	a = LANCE_ADDR(sc, mem);
+	sc->sc_init->tdra = a;
+	sc->sc_init->tlen = ((a >> 16) & 0xff) | (TLEN << 13);
+	mem += NTBUF * sizeof(struct mds);
+
+	/* 
+	 * Set up receive ring descriptors.
+	 */
+	sc->sc_rbuf = mem;
+	for (i = 0; i < NRBUF; i++) {
+		a = LANCE_ADDR(sc, mem);
+		sc->sc_rd[i].addr = a;
+		sc->sc_rd[i].flags = ((a >> 16) & 0xff) | OWN;
+		sc->sc_rd[i].bcnt = -BUFSIZE;
+		sc->sc_rd[i].mcnt = 0;
+		mem += BUFSIZE;
+	}
+
+	/* 
+	 * Set up transmit ring descriptors.
+	 */
+	sc->sc_tbuf = mem;
+	for (i = 0; i < NTBUF; i++) {
+		a = LANCE_ADDR(sc, mem);
+		sc->sc_td[i].addr = a;
+		sc->sc_td[i].flags= ((a >> 16) & 0xff);
+		sc->sc_td[i].bcnt = 0xf000;
+		sc->sc_td[i].mcnt = 0;
+		mem += BUFSIZE;
+	}
+}
+
+void
+le_stop(sc)
+	struct le_softc *sc;
+{
+
+	lewrcsr(sc, 0, STOP);
+}
+
+/*
+ * Initialization of interface; set up initialization block
+ * and transmit/receive descriptor rings.
+ */
+void
+le_init(sc)
+	struct le_softc *sc;
+{
+	struct ifnet *ifp = &sc->sc_arpcom.ac_if;
+	int s;
+	register i;
+	u_long a;
+
+	/* Address not known. */
+ 	if (!ifp->if_addrlist)
+		return;
+
+	s = splimp();
+
+	/* 
+	 * Lance must be stopped to access registers.
+	 */
+	le_stop(sc);
+
+	sc->sc_last_rd = sc->sc_last_td = sc->sc_no_td = 0;
+
+	/* Set up lance's memory area. */
+	init_mem(sc);
+
+	/* No byte swapping etc. */
+	lewrcsr(sc, 3, sc->sc_card == DEPCA ? ACON : 0);
+
+	/* Give lance the physical address of its init block. */
+	a = LANCE_ADDR(sc, sc->sc_init);
+	lewrcsr(sc, 1, a);
+	lewrcsr(sc, 2, (a >> 16) & 0xff);
+
+	/* OK, let's try and initialise the Lance. */
+	lewrcsr(sc, 0, INIT);
+
+	/* Wait for initialisation to finish. */
+	for (i = 0; i < 1000; i++)
+		if (lerdcsr(sc, 0) & IDON)
+			break;
+
+	if (lerdcsr(sc, 0) & IDON) {
+		/* Start the lance. */
+		lewrcsr(sc, 0, INEA | STRT | IDON);
+		ifp->if_flags |= IFF_RUNNING;
+		ifp->if_flags &= ~IFF_OACTIVE;
+		le_start(ifp);
+	} else 
+		printf("%s: card failed to initialise\n", sc->sc_dev.dv_xname);
+	
+	(void) splx(s);
+}
+
+/*
+ * Setup output on interface.
+ * Get another datagram to send off of the interface queue, and map it to the
+ * interface before starting the output.
+ * Called only at splimp or interrupt level.
+ */
+int
+le_start(ifp)
+	struct ifnet *ifp;
+{
+	register struct le_softc *sc = lecd.cd_devs[ifp->if_unit];
+	struct mbuf *m0, *m;
+	u_char *buffer;
+	int len;
+	int i;
+	struct mds *cdm;
+
+	if ((sc->sc_arpcom.ac_if.if_flags ^ IFF_RUNNING) &
+	    (IFF_RUNNING | IFF_OACTIVE))
+		return;
+
+outloop:
+	if (++sc->sc_no_td > NTBUF) {
+		sc->sc_no_td = NTBUF;
+		sc->sc_arpcom.ac_if.if_flags |= IFF_OACTIVE;
+#ifdef ISDEBUG
+		if (sc->sc_debug)
+			printf("no_td = %x, last_td = %x\n", sc->sc_no_td,
+			    sc->sc_last_td);
+#endif
+		return;
+	}
+
+	cdm = &sc->sc_td[sc->sc_last_td];
+#if 0 /* XXX redundant */
+	if (cdm->flags & OWN)
+		return;
+#endif
+	
+	IF_DEQUEUE(&sc->sc_arpcom.ac_if.if_snd, m);
+	if (!m) {
+		--sc->sc_no_td;
+		return;
+	}
+
+	/*
+	 * Copy the mbuf chain into the transmit buffer.
+	 */
+	buffer = sc->sc_tbuf + (BUFSIZE * sc->sc_last_td);
+	len = 0;
+	for (m0 = m; m; m = m->m_next) {
+		bcopy(mtod(m, caddr_t), buffer, m->m_len);
+		buffer += m->m_len;
+		len += m->m_len;
+	}
+
+#if NBPFILTER > 0
+	if (sc->sc_arpcom.ac_if.if_bpf)
+		bpf_mtap(sc->sc_arpcom.ac_if.if_bpf, m0);
+#endif
+
+	m_freem(m0);
+	len = max(len, ETHER_MIN_LEN);
+
+	/*
+	 * Init transmit registers, and set transmit start flag.
+	 */
+	cdm->bcnt = -len;
+	cdm->mcnt = 0;
+	cdm->flags |= OWN | STP | ENP;
+
+#ifdef ISDEBUG
+	if (sc->sc_debug)
+		xmit_print(sc, sc->sc_last_td);
+#endif
+		
+	lewrcsr(sc, 0, INEA | TDMD);
+
+	/* possible more packets */
+	if (++sc->sc_last_td >= NTBUF)
+		sc->sc_last_td = 0;
+	goto outloop;
+}
+
+
 /*
  * Controller interrupt.
  */
-leintredge(arg)
-	void *arg;
+int
+leintr(sc)
+	register struct le_softc *sc;
 {
+	u_short isr;
 
-	if (leintr(arg) == 0)
-		return (0);
-	for (;;)
-		if (leintr(arg) == 0)
-			return (1);
+	isr = lerdcsr(sc, 0);
+#ifdef ISDEBUG
+	if (sc->sc_debug)
+		printf("%s: leintr entering with isr=%04x\n",
+		    sc->sc_dev.dv_xname, isr);
+#endif
+	if ((isr & INTR) == 0)
+		return 0;
+
+	if (sc->sc_card == DEPCA)
+		outb(sc->sc_iobase + DEPCA_CSR, DEPCA_CSR_NORMAL|DEPCA_CSR_IM);
+
+	do {
+		lewrcsr(sc, 0,
+		    isr & (INEA | BABL | MISS | MERR | RINT | TINT | IDON));
+		if (isr & (BABL | CERR | MISS | MERR)) {
+			if (isr & BABL){
+				printf("%s: BABL\n", sc->sc_dev.dv_xname);
+				sc->sc_arpcom.ac_if.if_oerrors++;
+			}
+#if 0
+			if (isr & CERR) {
+				printf("%s: CERR\n", sc->sc_dev.dv_xname);
+				sc->sc_arpcom.ac_if.if_collisions++;
+			}
+#endif
+			if (isr & MISS) {
+				printf("%s: MISS\n", sc->sc_dev.dv_xname);
+				sc->sc_arpcom.ac_if.if_ierrors++;
+			}
+			if (isr & MERR) {
+				printf("%s: MERR\n", sc->sc_dev.dv_xname);
+				le_reset(sc);
+				return 1;
+			}
+		}
+
+		if ((isr & RXON) == 0) {
+			printf("%s: receiver disabled\n", sc->sc_dev.dv_xname);
+			sc->sc_arpcom.ac_if.if_ierrors++;
+			le_reset(sc);
+			return 1;
+		}
+		if ((isr & TXON) == 0) {
+			printf("%s: transmitter disabled\n", sc->sc_dev.dv_xname);
+			sc->sc_arpcom.ac_if.if_oerrors++;
+			le_reset(sc);
+			return 1;
+		}
+
+		if (isr & RINT) {
+			/* Reset watchdog timer. */
+			sc->sc_arpcom.ac_if.if_timer = 0;
+			le_rint(sc);
+		}
+		if (isr & TINT) {
+			/* Reset watchdog timer. */
+			sc->sc_arpcom.ac_if.if_timer = 0;
+			le_tint(sc);
+		}
+
+		isr = lerdcsr(sc, 0);
+	} while ((isr & INTR) != 0);
+
+#ifdef ISDEBUG
+	if (sc->sc_debug)
+		printf("%s: leintr returning with isr=%04x\n",
+		    sc->sc_dev.dv_xname, isr);
+#endif
+	if (sc->sc_card == DEPCA)
+		outb(sc->sc_iobase + DEPCA_CSR, DEPCA_CSR_NORMAL);
+	return 1;
 }
+
+#define NEXTTDS \
+	if (++tmd == NTBUF) tmd=0, cdm=sc->sc_td; else ++cdm
+	
+void
+le_tint(sc) 
+	struct le_softc *sc;
+{
+	register int tmd = (sc->sc_last_td - sc->sc_no_td + NTBUF) % NTBUF;
+	struct mds *cdm = &sc->sc_td[tmd];
+
+	if (cdm->flags & OWN) {
+		/* Race condition with loop below. */
+#ifdef ISDEBUG
+		if (sc->sc_debug)
+			printf("%s: extra tint\n", sc->sc_dev.dv_xname);
+#endif
+		return;
+	}
+
+	sc->sc_arpcom.ac_if.if_flags &= ~IFF_OACTIVE;
+
+	do {
+		if (sc->sc_no_td <= 0)
+			break;
+#ifdef ISDEBUG
+		if (sc->sc_debug)
+			printf("trans cdm = %x\n", cdm);
+#endif
+		sc->sc_arpcom.ac_if.if_opackets++;
+		--sc->sc_no_td;
+		if (cdm->flags & (TBUFF | UFLO | LCOL | LCAR | RTRY)) {
+			if (cdm->flags & TBUFF)
+				printf("%s: TBUFF\n", sc->sc_dev.dv_xname);
+			if ((cdm->flags & (TBUFF | UFLO)) == UFLO)
+				printf("%s: UFLO\n", sc->sc_dev.dv_xname);
+			if (cdm->flags & UFLO) {
+				le_reset(sc);
+				return;
+			}
+#if 0
+			if (cdm->flags & LCOL) {
+				printf("%s: late collision\n", sc->sc_dev.dv_xname);
+				sc->sc_arpcom.ac_if.if_collisions++;
+			}
+			if (cdm->flags & LCAR)
+				printf("%s: lost carrier\n", sc->sc_dev.dv_xname);
+			if (cdm->flags & RTRY) {
+				printf("%s: excessive collisions, tdr %d\n",
+				    sc->sc_dev.dv_xname, cdm->flags & 0x1ff);
+				sc->sc_arpcom.ac_if.if_collisions++;
+			}
+#endif
+		}
+		NEXTTDS;
+	} while ((cdm->flags & OWN) == 0);
+
+	le_start(&sc->sc_arpcom.ac_if);
+}
+
+#define NEXTRDS \
+	if (++rmd == NRBUF) rmd=0, cdm=sc->sc_rd; else ++cdm
+	
+/* only called from one place, so may as well integrate */
+void
+le_rint(sc)
+	struct le_softc *sc;
+{
+	register int rmd = sc->sc_last_rd;
+	struct mds *cdm = &sc->sc_rd[rmd];
+
+	if (cdm->flags & OWN) {
+		/* Race condition with loop below. */
+#ifdef ISDEBUG
+		if (sc->sc_debug)
+			printf("%s: extra rint\n", sc->sc_dev.dv_xname);
+#endif
+		return;
+	}
+
+	/* Process all buffers with valid data. */
+	do {
+		if (cdm->flags & (FRAM | OFLO | CRC | RBUFF)) {
+			if ((cdm->flags & (FRAM | OFLO | ENP)) == (FRAM | ENP))
+				printf("%s: FRAM\n", sc->sc_dev.dv_xname);
+			if ((cdm->flags & (OFLO | ENP)) == OFLO)
+				printf("%s: OFLO\n", sc->sc_dev.dv_xname);
+			if ((cdm->flags & (CRC | OFLO | ENP)) == (CRC | ENP))
+				printf("%s: CRC\n", sc->sc_dev.dv_xname);
+			if (cdm->flags & RBUFF)
+				printf("%s: RBUFF\n", sc->sc_dev.dv_xname);
+		} else if (cdm->flags & (STP | ENP) != (STP | ENP)) {
+			do {
+				cdm->mcnt = 0;
+				cdm->flags |= OWN;	
+				NEXTRDS;
+			} while ((cdm->flags & (OWN | ERR | STP | ENP)) == 0);
+			sc->sc_last_rd = rmd;
+			printf("%s: chained buffer\n", sc->sc_dev.dv_xname);
+			if ((cdm->flags & (OWN | ERR | STP | ENP)) != ENP) {
+				le_reset(sc);
+				return;
+			}
+		} else {
+#ifdef ISDEBUG
+			if (sc->sc_debug)
+				recv_print(sc, sc->sc_last_rd);
+#endif
+			le_read(sc, sc->sc_rbuf + (BUFSIZE * rmd),
+			    (int)cdm->mcnt);
+			sc->sc_arpcom.ac_if.if_ipackets++;
+		}
+			
+		cdm->mcnt = 0;
+		cdm->flags |= OWN;
+		NEXTRDS;
+#ifdef ISDEBUG
+		if (sc->sc_debug)
+			printf("sc->sc_last_rd = %x, cdm = %x\n",
+			    sc->sc_last_rd, cdm);
+#endif
+	} while ((cdm->flags & OWN) == 0);
+
+	sc->sc_last_rd = rmd;
+} /* le_rint */
+
+
+/*
+ * Pass a packet to the higher levels.
+ */
+void 
+le_read(sc, buf, len)
+	struct le_softc *sc;
+	u_char *buf;
+	int len;
+{
+	struct ether_header *eh;
+	struct mbuf *m;
+
+	eh = (struct ether_header *)buf;
+	len -= sizeof(struct ether_header) + 4;
+	if (len <= 0)
+		return;
+
+	/* Pull packet off interface. */
+	m = le_get(buf, len, &sc->sc_arpcom.ac_if);
+	if (m == 0)
+		return;
+
+#if NBPFILTER > 0
+	/*
+	 * Check if there's a BPF listener on this interface.
+	 * If so, hand off the raw packet to bpf. 
+	 */
+	if (sc->sc_arpcom.ac_if.if_bpf) {
+		bpf_mtap(sc->sc_arpcom.ac_if.if_bpf, m);
+
+		/*
+		 * Note that the interface cannot be in promiscuous mode if
+		 * there are no BPF listeners.  And if we are in promiscuous
+		 * mode, we have to check if this packet is really ours.
+		 */
+		if ((sc->sc_arpcom.ac_if.if_flags & IFF_PROMISC) &&
+		    (eh->ether_dhost[0] & 1) == 0 && /* !mcast and !bcast */
+		    bcmp(eh->ether_dhost, sc->sc_arpcom.ac_enaddr,
+			    sizeof(eh->ether_dhost)) != 0) {
+			m_freem(m);
+			return;
+		}
+	}
 #endif
 
-#include <dev/ic/am7990.c>
+	ether_input(&sc->sc_arpcom.ac_if, eh, m);
+}
+
+/*
+ * Supporting routines
+ */
+
+/*
+ * Pull read data off a interface.
+ * Len is length of data, with local net header stripped.
+ * We copy the data into mbufs.  When full cluster sized units are present
+ * we copy into clusters.
+ */
+struct mbuf *
+le_get(buf, totlen, ifp)
+	u_char *buf;
+	int totlen;
+	struct ifnet *ifp;
+{
+	struct mbuf *top, **mp, *m, *p;
+	int len;
+	register caddr_t cp = buf;
+	char *epkt;
+
+	buf += sizeof(struct ether_header);
+	cp = buf;
+	epkt = cp + totlen;
+
+	MGETHDR(m, M_DONTWAIT, MT_DATA);
+	if (m == 0)
+		return 0;
+	m->m_pkthdr.rcvif = ifp;
+	m->m_pkthdr.len = totlen;
+	m->m_len = MHLEN;
+	top = 0;
+	mp = &top;
+
+	while (totlen > 0) {
+		if (top) {
+			MGET(m, M_DONTWAIT, MT_DATA);
+			if (m == 0) {
+				m_freem(top);
+				return 0;
+			}
+			m->m_len = MLEN;
+		}
+		len = min(totlen, epkt - cp);
+		if (len >= MINCLSIZE) {
+			MCLGET(m, M_DONTWAIT);
+			if (m->m_flags & M_EXT)
+				m->m_len = len = min(len, MCLBYTES);
+			else
+				len = m->m_len;
+		} else {
+			/*
+			 * Place initial small packet/header at end of mbuf.
+			 */
+			if (len < m->m_len) {
+				if (top == 0 && len + max_linkhdr <= m->m_len)
+					m->m_data += max_linkhdr;
+				m->m_len = len;
+			} else
+				len = m->m_len;
+		}
+		bcopy(cp, mtod(m, caddr_t), (unsigned)len);
+		cp += len;
+		*mp = m;
+		mp = &m->m_next;
+		totlen -= len;
+		if (cp == epkt)
+			cp = buf;
+	}
+
+	return top;
+}
+
+/*
+ * Process an ioctl request.
+ */
+int
+le_ioctl(ifp, cmd, data)
+	struct ifnet *ifp;
+	int cmd;
+	caddr_t data;
+{
+	struct le_softc *sc = lecd.cd_devs[ifp->if_unit];
+	struct ifaddr *ifa = (struct ifaddr *)data;
+	struct ifreq *ifr = (struct ifreq *)data;
+	int s, error = 0;
+
+	s = splimp();
+
+	switch (cmd) {
+
+	case SIOCSIFADDR:
+		ifp->if_flags |= IFF_UP;
+
+		switch (ifa->ifa_addr->sa_family) {
+#ifdef INET
+		case AF_INET:
+			le_init(sc);	/* before arpwhohas */
+			/*
+			 * See if another station has *our* IP address.
+			 * i.e.: There is an address conflict! If a
+			 * conflict exists, a message is sent to the
+			 * console.
+			 */
+			sc->sc_arpcom.ac_ipaddr = IA_SIN(ifa)->sin_addr;
+			arpwhohas(&sc->sc_arpcom, &IA_SIN(ifa)->sin_addr);
+			break;
+#endif
+#ifdef NS
+		/* XXX - This code is probably wrong. */
+		case AF_NS:
+		    {
+			register struct ns_addr *ina = &IA_SNS(ifa)->sns_addr;
+
+			if (ns_nullhost(*ina))
+				ina->x_host =
+				    *(union ns_host *)(sc->sc_arpcom.ac_enaddr);
+			else {
+				/* 
+				 *
+				 */
+				bcopy(ina->x_host.c_host,
+				    sc->sc_arpcom.ac_enaddr,
+				    sizeof(sc->sc_arpcom.ac_enaddr));
+			}
+			/* Set new address. */
+			le_init(sc); 
+			break;
+		    }
+#endif
+		default:
+			le_init(sc);
+			break;
+		}
+		break;
+
+	case SIOCSIFFLAGS:
+		/*
+		 * If interface is marked down and it is running, then stop it
+		 */
+		if ((ifp->if_flags & IFF_UP) == 0 &&
+		    (ifp->if_flags & IFF_RUNNING) != 0) {
+			/*
+			 * If interface is marked down and it is running, then
+			 * stop it.
+			 */
+			le_stop(sc);
+			ifp->if_flags &= ~IFF_RUNNING;
+		} else if ((ifp->if_flags & IFF_UP) != 0 &&
+		    	   (ifp->if_flags & IFF_RUNNING) == 0) {
+			/*
+			 * If interface is marked up and it is stopped, then
+			 * start it.
+			 */
+			le_init(sc);
+		} else {
+			/*
+			 * Reset the interface to pick up changes in any other
+			 * flags that affect hardware registers.
+			 */
+			/*le_stop(sc);*/
+			le_init(sc);
+		}
+#ifdef ISDEBUG
+		if (ifp->if_flags & IFF_DEBUG)
+			sc->sc_debug = 1;
+		else
+			sc->sc_debug = 0;
+#endif
+		break;
+
+	case SIOCADDMULTI:
+	case SIOCDELMULTI:
+		error = (cmd == SIOCADDMULTI) ?
+		    ether_addmulti(ifr, &sc->sc_arpcom):
+		    ether_delmulti(ifr, &sc->sc_arpcom);
+
+		if (error == ENETRESET) {
+			/*
+			 * Multicast list has changed; set the hardware filter
+			 * accordingly.
+			 */
+			le_init(sc);
+			error = 0;
+		}
+		break;
+
+	default:
+		error = EINVAL;
+	}
+	(void) splx(s);
+	return error;
+}
+
+#ifdef ISDEBUG
+void
+recv_print(sc, no)
+	struct le_softc *sc;
+	int no;
+{
+	struct mds *rmd;
+	int i, printed = 0;
+	u_short len;
+	
+	rmd = &sc->sc_rd[no];
+	len = rmd->mcnt;
+	printf("%s: receive buffer %d, len = %d\n", sc->sc_dev.dv_xname, no,
+	    len);
+	printf("%s: status %x\n", sc->sc_dev.dv_xname, lerdcsr(sc, 0));
+	for (i = 0; i < len; i++) {
+		if (!printed) {
+			printed = 1;
+			printf("%s: data: ", sc->sc_dev.dv_xname);
+		}
+		printf("%x ", *(sc->sc_rbuf + (BUFSIZE*no) + i));
+	}
+	if (printed)
+		printf("\n");
+}
+		
+void
+xmit_print(sc, no)
+	struct le_softc *sc;
+	int no;
+{
+	struct mds *rmd;
+	int i, printed=0;
+	u_short len;
+	
+	rmd = &sc->sc_td[no];
+	len = -rmd->bcnt;
+	printf("%s: transmit buffer %d, len = %d\n", sc->sc_dev.dv_xname, no,
+	    len);
+	printf("%s: status %x\n", sc->sc_dev.dv_xname, lerdcsr(sc, 0));
+	printf("%s: addr %x, flags %x, bcnt %x, mcnt %x\n",
+	    sc->sc_dev.dv_xname, rmd->addr, rmd->flags, rmd->bcnt, rmd->mcnt);
+	for (i = 0; i < len; i++)  {
+		if (!printed) {
+			printed = 1;
+			printf("%s: data: ", sc->sc_dev.dv_xname);
+		}
+		printf("%x ", *(sc->sc_tbuf + (BUFSIZE*no) + i));
+	}
+	if (printed)
+		printf("\n");
+}
+#endif /* ISDEBUG */
+
+/*
+ * Set up the logical address filter.
+ */
+void
+le_setladrf(ac, af)
+	struct arpcom *ac;
+	u_long *af;
+{
+	struct ifnet *ifp = &ac->ac_if;
+	struct ether_multi *enm;
+	register u_char *cp, c;
+	register u_long crc;
+	register int i, len;
+	struct ether_multistep step;
+
+	/*
+	 * Set up multicast address filter by passing all multicast addresses
+	 * through a crc generator, and then using the high order 6 bits as an
+	 * index into the 64 bit logical address filter.  The high order bit
+	 * selects the word, while the rest of the bits select the bit within
+	 * the word.
+	 */
+
+	if (ifp->if_flags & IFF_PROMISC) {
+		ifp->if_flags |= IFF_ALLMULTI;
+		af[0] = af[1] = 0xffffffff;
+		return;
+	}
+
+	af[0] = af[1] = 0;
+	ETHER_FIRST_MULTI(step, ac, enm);
+	while (enm != NULL) {
+		if (bcmp(enm->enm_addrlo, enm->enm_addrhi,
+		    sizeof(enm->enm_addrlo)) != 0) {
+			/*
+			 * We must listen to a range of multicast addresses.
+			 * For now, just accept all multicasts, rather than
+			 * trying to set only those filter bits needed to match
+			 * the range.  (At this time, the only use of address
+			 * ranges is for IP multicast routing, for which the
+			 * range is big enough to require all bits set.)
+			 */
+			ifp->if_flags |= IFF_ALLMULTI;
+			af[0] = af[1] = 0xffffffff;
+			return;
+		}
+
+		cp = enm->enm_addrlo;
+		crc = 0xffffffff;
+		for (len = sizeof(enm->enm_addrlo); --len >= 0;) {
+			c = *cp++;
+			for (i = 8; --i >= 0;) {
+				if (((crc & 0x80000000) ? 1 : 0) ^ (c & 0x01)) {
+					crc <<= 1;
+					crc ^= 0x04c11db6 | 1;
+				} else
+					crc <<= 1;
+				c >>= 1;
+			}
+		}
+		/* Just want the 6 most significant bits. */
+		crc >>= 26;
+
+		/* Turn on the corresponding bit in the filter. */
+		af[crc >> 5] |= 1 << ((crc & 0x1f) ^ 24);
+
+		ETHER_NEXT_MULTI(step, enm);
+	}
+	ifp->if_flags &= ~IFF_ALLMULTI;
+}

@@ -1,7 +1,3 @@
-/*	$NetBSD: cy.c,v 1.12 1995/06/28 04:31:32 cgd Exp $	*/
-
-/* XXX THIS DRIVER IS BROKEN.  IT WILL NOT EVEN COMPILE. */
-
 /*
  * cyclades cyclom-y serial driver
  *	Andrew Herbert <andrew@werple.apana.org.au>, 17 August 1993
@@ -30,6 +26,8 @@
  * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
  * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ *	$Id: cy.c,v 1.1 1993/10/06 09:30:16 andrew Exp $
  */
 
 /*
@@ -61,28 +59,25 @@
 #include "cy.h"
 #if NCY > 0
 
-#include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/kernel.h>
-#include <sys/malloc.h>
-#include <sys/ioctl.h>
-#include <sys/tty.h>
-#include <sys/proc.h>
-#include <sys/user.h>
-#include <sys/conf.h>
-#include <sys/file.h>
-#include <sys/uio.h>
-#include <sys/kernel.h>
-#include <sys/syslog.h>
+#include "param.h"
+#include "systm.h"
+#include "kernel.h"
+#include "malloc.h"
+#include "ioctl.h"
+#include "tty.h"
+#include "proc.h"
+#include "user.h"
+#include "conf.h"
+#include "file.h"
+#include "uio.h"
+#include "kernel.h"
+#include "syslog.h"
 
-#include <machine/cpu.h>
-#include <machine/pio.h>
-#include <machine/cpufunc.h>
+#include "i386/include/cpufunc.h"
+#include "i386/isa/isa_device.h"
+#include "i386/isa/ic/cd1400.h"
 
-#include <i386/isa/isa_device.h>	/* XXX BROKEN */
-#include <dev/ic/cd1400reg.h>
-
-#define RxFifoThreshold	3	/* 3 characters (out of 12) in the receive
+#define RxFifoThreshold	8	/* 8 characters (out of 12) in the receive
 				 * FIFO before an interrupt is generated
 				 */
 #define	FastRawInput	/* bypass the regular char-by-char canonical input
@@ -95,11 +90,17 @@
 			 * XXX cyclom-8y doesn't work without this defined
 			 * either (!)
 			 */
-#undef	LogOverruns	/* log receive fifo overruns */
+#define	LogOverruns	/* log receive fifo overruns */
 #undef	TxBuffer	/* buffer driver output, to be slightly more
 			 * efficient
 			 *
 			 * XXX presently buggy
+			 */
+#undef	FastIntr	/* use bde's FAST_INTR mode for cyintr()
+			 *
+			 * XXX timeout() requests are occassionally lost in
+			 * this mode, resulting in the upper receive layer
+			 * stalling.
 			 */
 #undef	Smarts		/* enable slightly more CD1400 intelligence.  Mainly
 			 * the output CR/LF processing, plus we can avoid a
@@ -149,7 +150,7 @@ int		cyspeed(int speed, int *prescaler_io);
 static void	cy_channel_init(dev_t dev, int reset);
 static void	cd1400_channel_cmd(cy_addr base, u_char cmd);
 
-void		delay(int delay);
+void		DELAY(int delay);
 
 extern unsigned int	delaycount;	/* calibrated 1 ms cpu-spin delay */
 
@@ -160,10 +161,10 @@ struct	isa_driver cydriver = {
 /* low-level ping-pong buffer structure */
 
 struct cy_buf {
-	u_char		*next_char;	/* location of next char to write */
-	u_int		free;		/* free chars remaining in buffer */
-	struct cy_buf	*next_buf;	/* circular, you know */
 	u_char		buf[CY_RX_BUF_SIZE];	/* start of the buffer */
+	u_char		*next_char;	/* location of next char to write */
+	unsigned	free;		/* free chars remaining in buffer */
+	struct cy_buf	*next_buf;	/* circular, you know */
 };
 
 /* low-level ring buffer */
@@ -174,7 +175,7 @@ struct cy_ring {
 	u_char		*head;
 	u_char		*tail;		/* next pos. to insert char */
 	u_char		*endish;	/* physical end of buf */
-	u_int		used;		/* no. of chars in queue */
+	unsigned	used;		/* no. of chars in queue */
 };
 #endif
 
@@ -209,9 +210,7 @@ struct cy {
 	u_char		modem_sig;	/* CD1400 modem signal shadow */
 	u_char		channel_control;/* CD1400 CCR control command shadow */
 	u_char		cor[3];		/* CD1400 COR1-3 shadows */
-#ifdef Smarts
 	u_char		spec_char[4];	/* CD1400 SCHR1-4 shadows */
-#endif
 	struct cy_buf	*rx_buf;		/* current receive buffer */
 	struct cy_buf	rx_buf_pool[CY_RX_BUFS];/* receive ping-pong buffers */
 #ifdef TxBuffer
@@ -219,17 +218,15 @@ struct cy {
 #endif
 };
 
+int	cy_timeouts = 0;
 int	cydefaultrate = TTYDEF_SPEED;
 cy_addr	cyclom_base;			/* base address of the card */
 static	struct cy *info[NCY*PORTS_PER_CYCLOM];
 struct	tty *cy_tty[NCY*PORTS_PER_CYCLOM];
-static	volatile u_char timeout_scheduled = 0;	/* true if a timeout has been scheduled */
+static	volatile int timeout_scheduled = 0;	/* true if a timeout has been scheduled */
 
-#ifdef CyDebug
-u_int	cy_svrr_probes = 0;		/* debugging */
-u_int	cy_timeouts = 0;
-u_int	cy_timeout_req = 0;
-#endif
+int	cy_svrr_probes = 0;		/* debugging */
+int	cy_timeout_req = 0;
 
 /**********************************************************************/
 
@@ -242,14 +239,14 @@ cyprobe(struct isa_device *dev)
     /* Cyclom-16Y hardware reset (Cyclom-8Ys don't care) */
     i = *(cy_addr)(dev->id_maddr + CYCLOM_RESET_16);
 
-    delay(500);	/* wait for the board to get its act together (500 us) */
+    DELAY(500);	/* wait for the board to get its act together (500 us) */
 
     for (i = 0; i < CD1400s_PER_CYCLOM; i++) {
 	cy_addr	base = dev->id_maddr + i * CD1400_MEMSIZE;
 
 	/* wait for chip to become ready for new command */
 	for (j = 0; j < 100; j += 50) {
-	    delay(50);	/* wait 50 us */
+	    DELAY(50);	/* wait 50 us */
 
 	    if (!*(base + CD1400_CCR))
 	    	break;
@@ -263,7 +260,7 @@ cyprobe(struct isa_device *dev)
 
 	/* wait for the CD1400 to initialise itself */
 	for (j = 0; j < 1000; j += 50) {
-	    delay(50);	/* wait 50 us */
+	    DELAY(50);	/* wait 50 us */
 
 	    /* retrieve firmware version */
 	    version = *(base + CD1400_GFRCR);
@@ -354,8 +351,8 @@ cyopen(dev_t dev, int flag, int mode, struct proc *p)
 			tp->t_lflag = TTYDEF_LFLAG;
 			tp->t_ispeed = tp->t_ospeed = cydefaultrate;
 		}
-
 		(void) spltty();
+
 		cy_channel_init(unit, 1);	/* reset the hardware */
 
 		/*
@@ -432,10 +429,8 @@ cyclose(dev_t dev, int flag, int mode, struct proc *p)
 	splx(s);
 
 	ttyclose(tp);
-#ifdef broken /* session holds a ref to the tty; can't deallocate */
 	ttyfree(tp);
 	infop->tty = cy_tty[unit] = (struct tty *)NULL;
-#endif
 
 	if (infop->dtrwait) {
 		int error;
@@ -646,18 +641,20 @@ cytimeout(caddr_t ptr)
 {
 	int	unit;
 
-	timeout_scheduled = 0;
-
-#ifdef CyDebug
-	cy_timeouts++;
+#ifdef FastIntr
+	/* prevent this from clobbering something set by the lower layer */
+	disable_intr();
 #endif
+	timeout_scheduled = 0;
+#ifdef FastIntr
+	enable_intr();
+#endif
+
+	cy_timeouts++;
 
 	/* check each port in turn */
 	for (unit = 0; unit < NCY*PORTS_PER_CYCLOM; unit++) {
 		struct	cy *ip = info[unit];
-#ifndef TxBuffer
-		struct	tty *tp = ip->tty;
-#endif
 
 		/* ignore anything that is not open */
 		if (!ip->tty)
@@ -674,35 +671,25 @@ cytimeout(caddr_t ptr)
 		/* anything to add to the transmit buffer (low-water mark)? */
 		if (ip->tx_buf.used < CY_TX_BUF_SIZE/2)
 			service_upper_tx(unit);
-#else
-		if (tp->t_outq.c_cc <= tp->t_lowat) {
-			if (tp->t_state&TS_ASLEEP) {
-				tp->t_state &= ~TS_ASLEEP;
-				wakeup((caddr_t)&tp->t_outq);
-			}
-			selwakeup(&tp->t_wsel);
-		}
 #endif
 
 		/* anything modem signals altered? */
 		service_upper_mdm(unit);
 
 		/* any overruns to log? */
-#ifdef LogOverruns
 		if (ip->fifo_overrun) {
 			/*
 			 * turn off the alarm - not important enough to bother
-			 * with interrupt protection.
+			 * with disable_intr() protection.
 			 */
 			ip->fifo_overrun = 0;
 
 			log(LOG_WARNING, "cy%d: receive fifo overrun\n", unit);
 		}
-#endif
 		if (ip->rx_buf_overrun) {
 			/*
 			 * turn off the alarm - not important enough to bother
-			 * with interrupt protection.
+			 * with disable_intr() protection.
 			 */
 			ip->rx_buf_overrun = 0;
 
@@ -712,12 +699,10 @@ cytimeout(caddr_t ptr)
 } /* cytimeout() */
 
 
-inline static void
+static void
 schedule_upper_service(void)
 {
-#ifdef CyDebug
     cy_timeout_req++;
-#endif
 
     if (!timeout_scheduled) {
 	timeout(cytimeout, (caddr_t)0, 1);	/* call next tick */
@@ -742,6 +727,14 @@ cy_channel_init(dev_t dev, int reset)
 	u_char	cd1400_unit;
 #endif
 
+#ifdef FastIntr
+	/*
+	 * already protected by spltty() where appropriate, but FAST_INTR
+	 * doesn't notice this
+	 */
+	disable_intr();
+#endif
+
 	/* clear the structure and refill it */
 	bzero(ip, sizeof(struct cy));
 	ip->base_addr = base;
@@ -753,6 +746,9 @@ cy_channel_init(dev_t dev, int reset)
 
 	if (reset)
 		cd1400_channel_cmd(base, 0x80);	/* reset the channel */
+#ifdef FastIntr
+	enable_intr();
+#endif
 
 	/* set LIVR to 0 - intr routines depend on this */
 	*(base + CD1400_LIVR) = 0;
@@ -800,7 +796,7 @@ inline static void
 service_rx(int cd, caddr_t base)
 {
 	struct cy	*infop;
-	unsigned	count;
+	unsigned	count, chars_in;
 	int		ch;
 	u_char		serv_type, channel;
 #ifdef PollMode
@@ -818,12 +814,10 @@ service_rx(int cd, caddr_t base)
 	serv_type = *(base + CD1400_SVCACKR);	/* ack receive service */
 	channel = ((u_char)*(base + CD1400_RICR)) >> 2;	/* get cyclom channel # */
 
-#ifdef CyDebug
 	if (channel >= PORTS_PER_CYCLOM) {
 	    printf("cy: service_rx - channel %02x\n", channel);
 	    panic("cy: service_rx - bad channel");
 	}
-#endif
 #endif
 
 	infop = info[channel];
@@ -861,11 +855,12 @@ service_rx(int cd, caddr_t base)
 		}
 		else {
 			/* slurp it into our low-level buffer */
-			buf->free -= count;
+			chars_in = count;
 			while (count--) {
 				ch = (u_char)*(base + CD1400_RDSR);	/* read the char */
 				*(buf->next_char++) = ch;
 			}
+			buf->free -= chars_in;	/* be safe... */
 		}
 	}
 
@@ -873,6 +868,9 @@ service_rx(int cd, caddr_t base)
 	*(base + CD1400_RIR) = (u_char)(save_rir & 0x3f);	/* terminate service context */
 #else
 	*(base + CD1400_EOSRR) = (u_char)0;	/* terminate service context */
+#endif
+#ifdef FastIntr
+	/* XXX restore CAR, in case we interrupted cyparam() */
 #endif
 } /* end of service_rx */
 
@@ -904,12 +902,10 @@ service_tx(int cd, caddr_t base)
 	vector = *(base + CD1400_SVCACKT);	/* ack transmit service */
 	channel = ((u_char)*(base + CD1400_TICR)) >> 2;	/* get cyclom channel # */
 
-#ifdef CyDebug
 	if (channel >= PORTS_PER_CYCLOM) {
 	    printf("cy: service_tx - channel %02x\n", channel);
 	    panic("cy: service_tx - bad channel");
 	}
-#endif
 #endif
 
 	ip = info[channel];
@@ -918,7 +914,7 @@ service_tx(int cd, caddr_t base)
 
 	if (txq->used > 0) {
 		cy_addr	base = ip->base_addr;
-		int	count = min(CD1400_FIFOSIZE, txq->used);
+		int	count = MIN(CD1400_FIFOSIZE, txq->used);
 		int	chars_done = count;
 		u_char	*cp = txq->head;
 		u_char	*buf_end = txq->endish;
@@ -946,21 +942,32 @@ service_tx(int cd, caddr_t base)
 #else
 	tp = ip->tty;
 
-	if (!(tp->t_state & TS_TTSTOP) && (tp->t_outq.c_cc > 0)) {
-		cy_addr	base = ip->base_addr;
-		int	count = min(CD1400_FIFOSIZE, tp->t_outq.c_cc);
+	/* stop everything */
+	if (!(tp->t_state & TS_TTSTOP)) {
+		if (tp->t_outq.c_cc <= tp->t_lowat) {
+			if (tp->t_state&TS_ASLEEP) {
+				tp->t_state &= ~TS_ASLEEP;
+				wakeup((caddr_t)&tp->t_outq);
+			}
+			selwakeup(&tp->t_wsel);
+		}
 
-		ip->xmit += count;
-		tp->t_state |= TS_BUSY;
-		while (count--)
-			*(base + CD1400_TDR) = getc(&tp->t_outq);
+		if (tp->t_outq.c_cc > 0) {
+			cy_addr	base = ip->base_addr;
+			int	count = MIN(CD1400_FIFOSIZE, tp->t_outq.c_cc);
+
+			ip->xmit += count;
+			tp->t_state |= TS_BUSY;
+			while (count--)
+				*(base + CD1400_TDR) = getc(&tp->t_outq);
+		}
 	}
 
 	/*
-	 * disable tx intrs if no more chars to send.  we re-enable them
-	 * in cystart()
+	 * disable tx intrs if no more chars to send, or we've been stopped.
+	 * we re-enable them in cystart()
 	 */
-	if (!tp->t_outq.c_cc) {
+	if ((tp->t_state & TS_TTSTOP) || !tp->t_outq.c_cc) {
 		ip->intr_enable &=~ (1 << 2);
 		*(base + CD1400_SRER) = ip->intr_enable;
 		tp->t_state &= ~TS_BUSY;
@@ -971,6 +978,9 @@ service_tx(int cd, caddr_t base)
 	*(base + CD1400_TIR) = (u_char)(save_tir & 0x3f);	/* terminate service context */
 #else
 	*(base + CD1400_EOSRR) = (u_char)0;	/* terminate service context */
+#endif
+#ifdef FastIntr
+	/* XXX restore CAR, in case we interrupted cyparam() */
 #endif
 } /* end of service_tx */
 
@@ -997,12 +1007,10 @@ service_mdm(int cd, caddr_t base)
 	vector = *(base + CD1400_SVCACKM);	/* ack modem service */
 	channel = ((u_char)*(base + CD1400_MICR)) >> 2;	/* get cyclom channel # */
 
-#ifdef CyDebug
 	if (channel >= PORTS_PER_CYCLOM) {
 	    printf("cy: service_mdm - channel %02x\n", channel);
 	    panic("cy: service_mdm - bad channel");
 	}
-#endif
 #endif
 
 	infop = info[channel];
@@ -1023,6 +1031,9 @@ service_mdm(int cd, caddr_t base)
 #else
 	*(base + CD1400_EOSRR) = (u_char)0;
 #endif
+#ifdef FastIntr
+	/* XXX restore CAR, in case we interrupted cyparam() */
+#endif
 } /* end of service_mdm */
 
 
@@ -1032,15 +1043,21 @@ cyintr(int unit)
     int		cd;
     u_char	status;
 
+#ifdef FastIntr
+    /*
+     * this routine is entered with interrupts disabled.  re-enable them
+     * to be sociable - there isn't anything to worry about as far as
+     * reentrancy or whatever, so this is OK.
+     */
+    enable_intr();
+#endif
+
     /* check each CD1400 in turn */
     for (cd = 0; cd < CD1400s_PER_CYCLOM; cd++) {
 	cy_addr	base = cyclom_base + cd*CD1400_MEMSIZE;
 
 	/* poll to see if it has any work */
-	while (status = (u_char)*(base + CD1400_SVRR)) {
-#ifdef CyDebug
-	    cy_svrr_probes++;
-#endif
+	while (cy_svrr_probes++, status = (u_char)*(base + CD1400_SVRR)) {
 	    /* service requests as appropriate, giving priority to RX */
 	    if (status & CD1400_SVRR_RX)
 		    service_rx(cd, base);
@@ -1050,6 +1067,17 @@ cyintr(int unit)
 		    service_mdm(cd, base);
 	}
     }
+
+#ifdef FastIntr
+    /*
+     * to avoid any interaction with the following irq enable, in case
+     * we're also using AUTO_EOI.  the schedule_upper_service also likes
+     * this, as this fast intrs ignore spl()s  the FAST_INTR code will
+     * re-enable interrupts when it does a reti.
+     */
+
+    disable_intr();	 
+#endif
 
     /* request upper level service to deal with whatever happened */
     schedule_upper_service();
@@ -1062,17 +1090,17 @@ cyintr(int unit)
 
 
 int
-cyioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
+cyioctl(dev_t dev, int cmd, caddr_t data, int flag, struct proc *p)
 {
 	int		unit = UNIT(dev);
 	struct cy	*infop = info[unit];
 	struct tty	*tp = infop->tty;
 	int		error;
 
-	error = (*linesw[(u_char)tp->t_line].l_ioctl)(tp, cmd, data, flag, p);
+	error = (*linesw[(u_char)tp->t_line].l_ioctl)(tp, cmd, data, flag);
 	if (error >= 0)
 		return (error);
-	error = ttioctl(tp, cmd, data, flag, p);
+	error = ttioctl(tp, cmd, data, flag);
 	if (error >= 0)
 		return (error);
 
@@ -1163,7 +1191,11 @@ cyparam(struct tty *tp, struct termios *t)
 	if (!t->c_ispeed)
 	    t->c_ispeed = t->c_ospeed;
 
+#ifdef FastIntr
+	sigh
+#else
 	s = spltty();
+#endif
 
 	/* select the appropriate channel on the CD1400 */
 	*(base + CD1400_CAR) = unit & 0x03;
@@ -1390,7 +1422,11 @@ cyparam(struct tty *tp, struct termios *t)
 	opt = (cflag & CLOCAL) ? 0 : 1 << 4;	/* CD */
 	*(base + CD1400_MCOR2) = opt;
 
+#ifdef FastIntr
+	sigh
+#else
 	splx(s);
+#endif
 
 	return 0;
 } /* end of cyparam */
@@ -1402,13 +1438,15 @@ cystart(struct tty *tp)
 	u_char		unit = UNIT(tp->t_dev);
 	struct cy	*infop = info[unit];
 	cy_addr		base = infop->base_addr;
+#ifndef FastIntr
 	int		s;
+#endif
 
 #ifdef CyDebug
 	infop->start_count++;
 #endif
 
-	/* check the flow-control situation */
+	/* check on the flow-control situation */
 	if (tp->t_state & (TS_TIMEOUT | TS_TTSTOP))
 		return;
 
@@ -1424,8 +1462,11 @@ cystart(struct tty *tp)
 	service_upper_tx(unit);		/* feed the monster */
 #endif
 
+#ifdef FastIntr
+	disable_intr();
+#else
 	s = spltty();
-
+#endif
 	if (!(infop->intr_enable & (1 << 2))) {
 	    /* select the channel */
 	    *(base + CD1400_CAR) = unit & (u_char)3;
@@ -1436,8 +1477,11 @@ cystart(struct tty *tp)
 
 	    infop->start_real++;
 	}
-
+#ifdef FastIntr
+	enable_intr();
+#else
 	splx(s);
+#endif
 } /* end of cystart() */
 
 

@@ -1,5 +1,3 @@
-/*	$NetBSD: __main.c,v 1.4 1996/03/14 18:52:03 christos Exp $	*/
-
 /*
  * Copyright (c) 1993 Christopher G. Demetriou
  * All rights reserved.
@@ -16,7 +14,7 @@
  *    must display the following acknowledgement:
  *      This product includes software developed by Christopher G. Demetriou.
  * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
+ *    derived from this software withough specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -28,13 +26,10 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ *	$Id: __main.c,v 1.1 1993/10/15 06:20:46 cgd Exp $
  */
 
-#include <sys/types.h>
-
-void __main __P((void));
-
-void
 __main()
 {
 }

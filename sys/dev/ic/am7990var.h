@@ -1,4 +1,4 @@
-/*	$NetBSD: am7990var.h,v 1.6 1996/04/22 02:40:49 christos Exp $	*/
+/*	$NetBSD: am7990var.h,v 1.1 1995/06/28 02:24:56 cgd Exp $	*/
 
 /*
  * Copyright (c) 1995 Charles M. Hannum.  All rights reserved.
@@ -32,7 +32,7 @@
 #ifdef DDB
 #define	integrate
 #else
-#define	integrate	static __inline
+#define	integrate	static inline
 #endif
 
 void leconfig __P((struct le_softc *));
@@ -43,11 +43,10 @@ void lereset __P((struct le_softc *));
 void lesetladrf __P((struct arpcom *, u_int16_t *));
 void lestart __P((struct ifnet *));
 void lestop __P((struct le_softc *));
-void lewatchdog __P((int));
+void lewatchdog __P((/* short */));
 
-integrate void lehwinit __P((struct le_softc *));
-integrate u_int16_t lerdcsr __P((struct le_softc *, u_int16_t));
-integrate void lewrcsr __P((struct le_softc *, u_int16_t, u_int16_t));
+integrate u_int16_t lerdcsr __P((/* struct le_softc *, u_int16_t */));
+integrate void lewrcsr __P((/* struct le_softc *, u_int16_t, u_int16_t */));
 
 integrate void lerint __P((struct le_softc *));
 integrate void letint __P((struct le_softc *));
@@ -56,24 +55,9 @@ integrate int leput __P((struct le_softc *, int, struct mbuf *));
 integrate struct mbuf *leget __P((struct le_softc *, int, int));
 integrate void leread __P((struct le_softc *, int, int));
 
-/*
- * The following functions are only useful on certain cpu/bus
- * combinations.  They should be written in assembly language for
- * maximum efficiency, but machine-independent versions are provided
- * for drivers that have not yet been optimized.
- */
-#ifdef LE_NEED_BUF_CONTIG
-void am7990_copytobuf_contig __P((struct le_softc *, void *, int, int));
-void am7990_copyfrombuf_contig __P((struct le_softc *, void *, int, int));
-void am7990_zerobuf_contig __P((struct le_softc *, int, int));
-#endif /* LE_NEED_BUF_CONTIG */
-#ifdef LE_NEED_BUF_GAP2
-void am7990_copytobuf_gap2 __P((struct le_softc *, void *, int, int));
-void am7990_copyfrombuf_gap2 __P((struct le_softc *, void *, int, int));
-void am7990_zerobuf_gap2 __P((struct le_softc *, int, int));
-#endif /* LE_NEED_BUF_GAP2 */
-#ifdef LE_NEED_BUF_GAP16
-void am7990_copytobuf_gap16 __P((struct le_softc *, void *, int, int));
-void am7990_copyfrombuf_gap16 __P((struct le_softc *, void *, int, int));
-void am7990_zerobuf_gap16 __P((struct le_softc *, int, int));
-#endif /* LE_NEED_BUF_GAP16 */
+void copytodesc_contig(), copyfromdesc_contig();
+void copytobuf_contig(), copyfrombuf_contig(), zerobuf_contig();
+#ifdef 0
+void copytobuf_gap2(), copyfrombuf_gap2(), zerobuf_gap2();
+void copytobuf_gap16(), copyfrombuf_gap16(), zerobuf_gap16();
+#endif

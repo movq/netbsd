@@ -1,5 +1,3 @@
-/*	$NetBSD: aic7xxxvar.h,v 1.3 1996/03/29 00:25:02 mycroft Exp $	*/
-
 /*
  * Interface to the generic driver for the aic7xxx based adaptec 
  * SCSI controllers.  This is used to implement product specific 
@@ -21,10 +19,14 @@
  *    Justin T. Gibbs.
  * 4. Modifications may be freely made to this file if the above conditions
  *    are met.
+ *
+ *	$Id: aic7xxxvar.h,v 1.1 1995/10/09 09:49:31 mycroft Exp $
  */
 
 #ifndef _AIC7XXX_H_
 #define _AIC7XXX_H_
+
+/*#include "ahc.h"                /* for NAHC from config */
 
 #define	AHC_NSEG	256	/* number of dma segments supported */
 

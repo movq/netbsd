@@ -1,45 +1,35 @@
-#	$NetBSD: Makefile,v 1.26 1996/04/18 02:14:48 cgd Exp $
+#	$Id: Makefile,v 1.1 1993/10/13 05:40:34 cgd Exp $
 
 LIB=	kern
+LIBDIR=	${.CURDIR}/../arch/${MACHINE}/compile
 NOPIC=
 
-DIR=	${KERNREL}${KERNDIR}
-
-CPPFLAGS=	-I${DIR}/arch/${MACHINE_ARCH} \
-		${KERNCPPFLAGS:S@-I.@-I${KERNREL}.@g}
-
-.if exists (${DIR}/arch/${MACHINE_ARCH}/Makefile.inc)
-.PATH:	${DIR}/arch/${MACHINE_ARCH}
-.include "${DIR}/arch/${MACHINE_ARCH}/Makefile.inc"
+.if exists (${.CURDIR}/${MACHINE}/Makefile.inc)
+.PATH:	${.CURDIR}/${MACHINE}
+.include "${.CURDIR}/${MACHINE}/Makefile.inc"
 .endif
 
-.PATH: ${DIR}
-
-.if (${MACHINE_ARCH} != "alpha")
-# Quad support
-SRCS+=	adddi3.c anddi3.c ashldi3.c ashrdi3.c cmpdi2.c divdi3.c iordi3.c \
-	lshldi3.c lshrdi3.c moddi3.c muldi3.c negdi2.c notdi2.c qdivrem.c \
-	subdi3.c  ucmpdi2.c udivdi3.c umoddi3.c xordi3.c
+.if defined(ARCH) && !empty(ARCH)
+.if exists (${.CURDIR}/${ARCH}/Makefile.inc)
+.PATH:	${.CURDIR}/${ARCH}
+.include "${.CURDIR}/${ARCH}/Makefile.inc"
+.endif
 .endif
 
-# Other stuff
-SRCS+=	
-
-# mcount cannot be compiled with profiling
-mcount.po: mcount.o
-	cp mcount.o mcount.po
+LIBC=	${.CURDIR}/../../lib/libc
+.PATH: ${LIBC}/string ${LIBC}/arch/${MACHINE}/string
+.PATH: ${LIBC}/net ${LIBC}/arch/${MACHINE}/net
+.PATH: ${LIBC}/gen ${LIBC}/arch/${MACHINE}/gen
+.PATH: ${LIBC}/stdlib ${LIBC}/arch/${MACHINE}/stdlib
+.PATH: ${LIBC}/sys ${LIBC}/arch/${MACHINE}/sys
+AINC+=	-I${LIBC}/arch/${MACHINE}
 
 install:
+	install ${COPY} lib${LIB}.a ${LIBDIR}
+	${RANLIB} -t ${LIBDIR}/lib${LIB}.a
+.if !defined(NOPROFILE)
+	install ${COPY} lib${LIB}_p.a ${LIBDIR}
+	${RANLIB} -t ${LIBDIR}/lib${LIB}_p.a
+.endif
 
 .include <bsd.lib.mk>
-
-lib${LIB}.o:: ${OBJS}
-	@echo building standard ${LIB} library
-	@rm -f lib${LIB}.o
-	@${LD} -r -o lib${LIB}.o `lorder ${OBJS} | tsort`
-
-POBJS+=	${OBJS:.o=.po} mcount.po
-lib${LIB}.po:: ${POBJS}
-	@echo building profiled ${LIB} library
-	@rm -f lib${LIB}.po
-	@${LD} -r -o lib${LIB}.po `lorder ${POBJS} | tsort`

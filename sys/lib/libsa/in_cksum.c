@@ -1,5 +1,3 @@
-/*	$NetBSD: in_cksum.c,v 1.3 1995/04/22 13:53:48 cgd Exp $	*/
-
 /*
  * Copyright (c) 1992 Regents of the University of California.
  * All rights reserved.
@@ -36,7 +34,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * @(#) Header: in_cksum.c,v 1.1 92/09/11 01:15:55 leres Exp  (LBL)
+ * from @(#) Header: in_cksum.c,v 1.1 92/09/11 01:15:55 leres Exp  (LBL)
+ *    $Id: in_cksum.c,v 1.1 1994/05/08 16:11:24 brezak Exp $
  */
 
 #include <sys/types.h>
@@ -61,7 +60,7 @@ in_cksum(p, len)
 			sum += v + *cp++;
 			len--;
 		}
-		if (((long)cp & 1) == 0) {
+		if (((int)cp & 1) == 0) {
 			while ((len -= 2) >= 0) {
 				sum += *(u_short *)cp;
 				cp += 2;

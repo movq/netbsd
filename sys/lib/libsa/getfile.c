@@ -1,5 +1,3 @@
-/*	$NetBSD: getfile.c,v 1.3 1994/10/26 05:44:45 cgd Exp $	*/
-
 /*-
  * Copyright (c) 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -32,11 +30,10 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)getfile.c	8.1 (Berkeley) 6/11/93
+ *	from: @(#)getfile.c	8.1 (Berkeley) 6/11/93
+ *	     $Id: getfile.c,v 1.1 1994/01/26 02:03:45 brezak Exp $
  */
-#include "stand.h"
 
-int
 getfile(prompt, mode)
 	char *prompt;
 	int mode;

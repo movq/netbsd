@@ -1,5 +1,3 @@
-/*	$NetBSD: locc.c,v 1.2 1994/10/26 06:42:29 cgd Exp $	*/
-
 /*
  * Copyright (c) 1982, 1986, 1989 Regents of the University of California.
  * All rights reserved.
@@ -32,7 +30,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)ufs_subr.c	7.13 (Berkeley) 6/28/90
+ *	from: @(#)ufs_subr.c	7.13 (Berkeley) 6/28/90
+ *	$Id: locc.c,v 1.1 1993/10/13 05:40:41 cgd Exp $
  */
 
 #include <sys/types.h>

@@ -1,5 +1,3 @@
-/*	$NetBSD: ibcs2_dirent.h,v 1.3 1995/10/09 11:23:57 mycroft Exp $	*/
-
 /*
  * Copyright (c) 1994 Scott Bartram
  * All rights reserved.
@@ -37,16 +35,21 @@
 #include <compat/ibcs2/ibcs2_types.h>
 
 #define IBCS2_MAXNAMLEN		512
+#define IBCS2_DIRBUF		1048
+
+typedef struct {
+	int	dd_fd;
+	int	dd_loc;
+	int	dd_size;
+	char	*dd_buf;
+} IBCS2_DIR;
 
 struct ibcs2_dirent {
 	ibcs2_ino_t	d_ino;
 	short		d_pad;
 	ibcs2_off_t	d_off;
 	u_short		d_reclen;
-	char		d_name[IBCS2_MAXNAMLEN + 1];
+	char		d_name[1];
 };
-
-#define IBCS2_NAMEOFF(dp)       ((char *)&(dp)->d_name - (char *)dp)
-#define IBCS2_RECLEN(de,namlen) ALIGN((IBCS2_NAMEOFF(de) + (namlen) + 1))
 
 #endif /* _IBCS2_DIRENT_H */

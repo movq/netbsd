@@ -1,5 +1,3 @@
-/*	$NetBSD: i82586reg.h,v 1.5 1995/04/04 01:59:34 mycroft Exp $	*/
-
 /*-
  * Copyright (c) 1992, University of Vermont and State Agricultural College.
  * Copyright (c) 1992, Garrett A. Wollman.
@@ -32,6 +30,8 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
+ *
+ *	$Id: i82586reg.h,v 1.1 1993/11/08 20:15:31 mycroft Exp $
  */
 
 /*
@@ -105,9 +105,9 @@ struct ie_sys_ctl_block {
 #define IE_CU_ABORT	0x0400	/* abort current command */
 
 #define IE_ACK_COMMAND	0xf000	/* mask for ACK command */
-#define IE_ACK_CX	0x8000	/* ack IE_ST_CX */
-#define IE_ACK_FR	0x4000	/* ack IE_ST_FR */
-#define IE_ACK_CNA	0x2000	/* ack IE_ST_CNA */
+#define IE_ACK_CX	0x8000	/* ack IE_ST_DONE */
+#define IE_ACK_FR	0x4000	/* ack IE_ST_RECV */
+#define IE_ACK_CNA	0x2000	/* ack IE_ST_ALLDONE */
 #define IE_ACK_RNR	0x1000	/* ack IE_ST_RNR */
 
 #define IE_ACTION_COMMAND(x) (((x) & IE_CU_COMMAND) == IE_CU_START)
@@ -115,9 +115,9 @@ struct ie_sys_ctl_block {
 
 /* Status values */
 #define IE_ST_WHENCE	0xf000	/* mask for cause of interrupt */
-#define IE_ST_CX	0x8000	/* command with I bit completed */
-#define IE_ST_FR	0x4000	/* frame received */
-#define IE_ST_CNA	0x2000	/* all commands completed */
+#define IE_ST_DONE	0x8000	/* command with I bit completed */
+#define IE_ST_RECV	0x4000	/* frame received */
+#define IE_ST_ALLDONE	0x2000	/* all commands completed */
 #define IE_ST_RNR	0x1000	/* receive not ready */
 
 #define IE_CU_STATUS	0x700	/* mask for command unit status */
@@ -176,7 +176,6 @@ struct ie_cmd_common {
 #define IE_STAT_COMPL	0x8000	/* command is completed */
 #define IE_STAT_BUSY	0x4000	/* command is running now */
 #define IE_STAT_OK	0x2000	/* command completed successfully */
-#define IE_STAT_ABORT	0x1000  /* command was aborted */
 
 #define IE_CMD_NOP	0x0000	/* NOP */
 #define IE_CMD_IASETUP	0x0001	/* initial address setup */
@@ -211,7 +210,7 @@ struct ie_xmit_cmd {
 #define IE_XS_UNDERRUN	0x0100	/* DMA underrun */
 #define IE_XS_LOSTCTS	0x0200	/* Lost CTS */
 #define IE_XS_NOCARRIER	0x0400	/* No Carrier */
-#define	IE_XS_LATECOLL	0x0800	/* Late collision */
+#define IE_XS_LATECOLL	0x0800	/* Late collision */
 
 /*
  * This is a buffer descriptor for a frame to be transmitted.
@@ -230,7 +229,7 @@ struct ie_xmit_buf {
  * Multicast setup command.
  */
 
-#define MAXMCAST 250		/* must fit in transmit buffer */
+#define MAXMCAST 50		/* must fit in transmit buffer */
 
 struct ie_mcast_cmd {
 	struct ie_cmd_common com;	/* common part */

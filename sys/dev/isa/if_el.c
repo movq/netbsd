@@ -1,23 +1,19 @@
-/*	$NetBSD: if_el.c,v 1.36 1996/04/11 22:29:07 cgd Exp $	*/
-
-/*
- * Copyright (c) 1994, Matthew E. Kimmel.  Permission is hereby granted
+/* Copyright (c) 1994, Matthew E. Kimmel.  Permission is hereby granted
  * to use, copy, modify and distribute this software provided that both
  * the copyright notice and this permission notice appear in all copies
  * of the software, derivative works or modified versions, and any
  * portions thereof.
  */
-
-/*
- * 3COM Etherlink 3C501 device driver
+/* 3COM Etherlink 3C501 device driver */
+/* Yeah, I know these cards suck, but you can also get them for free
+ * really easily...
  */
-
-/*
- * Bugs/possible improvements:
+/* Bugs/possible improvements:
  *	- Does not currently support DMA
  *	- Does not currently support multicasts
  */
-
+#include "el.h"
+#if NEL > 0
 #include "bpfilter.h"
 
 #include <sys/param.h>
@@ -26,7 +22,6 @@
 #include <sys/mbuf.h>
 #include <sys/socket.h>
 #include <sys/syslog.h>
-#include <sys/device.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -50,582 +45,647 @@
 #include <net/bpfdesc.h>
 #endif
 
-#include <machine/cpu.h>
 #include <machine/pio.h>
 
-#include <dev/isa/isavar.h>
-#include <dev/isa/if_elreg.h>
+#include <i386/isa/isa.h>
+#include <i386/isa/isa_device.h>
+#include <i386/isa/icu.h>
+#include <i386/isa/if_elreg.h>
 
 #define ETHER_MIN_LEN	64
 #define ETHER_MAX_LEN	1518
-#define	ETHER_ADDR_LEN	6
 
-/* for debugging convenience */
+/* For debugging convenience */
 #ifdef EL_DEBUG
 #define dprintf(x) printf x
 #else
 #define dprintf(x)
 #endif
 
-/*
- * per-line info and status
- */
+/* el_softc: per line info and status */
 struct el_softc {
-	struct device sc_dev;
-	void *sc_ih;
+	struct arpcom arpcom;	/* Ethernet common */
+	u_short el_base;	/* Base I/O addr */
+	caddr_t bpf;		/* BPF magic cookie */
+	char el_pktbuf[EL_BUFSIZ]; 	/* Frame buffer */
+} el_softc[NEL];
 
-	struct arpcom sc_arpcom;	/* ethernet common */
-	int sc_iobase;			/* base I/O addr */
+/* Prototypes */
+int elintr(int);
+static int el_attach __P((struct isa_device *));
+static int el_init __P((int));
+static int el_ioctl __P((struct ifnet *,int,caddr_t));
+static int el_probe __P((struct isa_device *));
+static int el_start __P((struct ifnet *));
+static int el_watchdog __P((int));
+
+static void el_reset __P((int,int));
+static void el_stop __P((int));
+static int el_xmit __P((struct el_softc *,int));
+static inline void elread __P((struct el_softc *,caddr_t,int));
+static struct mbuf *elget __P((caddr_t,int,int,struct ifnet *));
+
+/* isa_driver structure for autoconf */
+struct isa_driver eldriver = {
+	el_probe, el_attach, "el"
 };
 
-/*
- * prototypes
- */
-int elintr __P((void *));
-int elinit __P((struct el_softc *));
-int elioctl __P((struct ifnet *, u_long, caddr_t));
-void elstart __P((struct ifnet *));
-void elwatchdog __P((int));
-void elreset __P((struct el_softc *));
-void elstop __P((struct el_softc *));
-static int el_xmit __P((struct el_softc *));
-void elread __P((struct el_softc *, int));
-struct mbuf *elget __P((struct el_softc *sc, int));
-static inline void el_hardreset __P((struct el_softc *));
-
-int elprobe __P((struct device *, void *, void *));
-void elattach __P((struct device *, struct device *, void *));
-
-struct cfattach el_ca = {
-	sizeof(struct el_softc), elprobe, elattach
-};
-
-struct cfdriver el_cd = {
-	NULL, "el", DV_IFNET
-};
-
-/*
- * Probe routine.
- *
- * See if the card is there and at the right place.
- * (XXX - cgd -- needs help)
- */
-int
-elprobe(parent, match, aux)
-	struct device *parent;
-	void *match, *aux;
+/* Probe routine.  See if the card is there and at the right place. */
+static int
+el_probe(struct isa_device *idev)
 {
-	struct el_softc *sc = match;
-	struct isa_attach_args *ia = aux;
-	int iobase = ia->ia_iobase;
+	struct el_softc *sc;
+	u_short base; /* Just for convenience */
 	u_char station_addr[ETHER_ADDR_LEN];
 	int i;
 
-	/* First check the base. */
-	if (iobase < 0x280 || iobase > 0x3f0)
-		return 0;
+	/* Grab some info for our structure */
+	sc = &el_softc[idev->id_unit];
+	sc->el_base = idev->id_iobase;
+	base = sc->el_base;
 
-	/* Grab some info for our structure. */
-	sc->sc_iobase = iobase;
+	/* First check the base */
+	if((base < 0x280) || (base > 0x3f0)) {
+		printf("el%d: ioaddr must be between 0x280 and 0x3f0\n",
+			idev->id_unit);
+		return(0);
+		}
 
-	/*
-	 * Now attempt to grab the station address from the PROM and see if it
-	 * contains the 3com vendor code.
+	/* Now attempt to grab the station address from the PROM
+	 * and see if it contains the 3com vendor code.
 	 */
-	dprintf(("Probing 3c501 at 0x%x...\n", iobase));
-
-	/* Reset the board. */
+	dprintf(("Probing 3c501 at 0x%x...\n",base));
+	/* Reset the board */
 	dprintf(("Resetting board...\n"));
-	outb(iobase+EL_AC, EL_AC_RESET);
-	delay(5);
-	outb(iobase+EL_AC, 0);
-
-	/* Now read the address. */
+	outb(base+EL_AC,EL_AC_RESET);
+	DELAY(5);
+	outb(base+EL_AC,0);
 	dprintf(("Reading station address...\n"));
-	for (i = 0; i < ETHER_ADDR_LEN; i++) {
-		outb(iobase+EL_GPBL, i);
-		station_addr[i] = inb(iobase+EL_EAW);
+	/* Now read the address */
+	for(i=0;i<ETHER_ADDR_LEN;i++) {
+		outb(base+EL_GPBL,i);
+		station_addr[i] = inb(base+EL_EAW);
 	}
-	dprintf(("Address is %s\n", ether_sprintf(station_addr)));
+	dprintf(("Address is %s\n",ether_sprintf(station_addr)));
 
-	/*
-	 * If the vendor code is ok, return a 1.  We'll assume that whoever
-	 * configured this system is right about the IRQ.
+	/* If the vendor code is ok, return a 1.  We'll assume that
+	 * whoever configured this system is right about the IRQ.
 	 */
-	if (station_addr[0] != 0x02 || station_addr[1] != 0x60 ||
-	    station_addr[2] != 0x8c) {
+	if((station_addr[0] != 0x02) || (station_addr[1] != 0x60)
+	   || (station_addr[2] != 0x8c)) {
 		dprintf(("Bad vendor code.\n"));
-		return 0;
+		return(0);
+	} else {
+		dprintf(("Vendor code ok.\n"));
+		/* Copy the station address into the arpcom structure */
+		bcopy(station_addr,sc->arpcom.ac_enaddr,ETHER_ADDR_LEN);
+		return(1);
 	}
-
-	dprintf(("Vendor code ok.\n"));
-	/* Copy the station address into the arpcom structure. */
-	bcopy(station_addr, sc->sc_arpcom.ac_enaddr, ETHER_ADDR_LEN);
-
-	ia->ia_iosize = 4;	/* XXX */
-	ia->ia_msize = 0;
-	return 1;
 }
 
-/*
- * Attach the interface to the kernel data structures.  By the time this is
- * called, we know that the card exists at the given I/O address.  We still
- * assume that the IRQ given is correct.
+/* Attach the interface to the kernel data structures.  By the time
+ * this is called, we know that the card exists at the given I/O address.
+ * We still assume that the IRQ given is correct.
  */
-void
-elattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+static int
+el_attach(struct isa_device *idev)
 {
-	struct el_softc *sc = (void *)self;
-	struct isa_attach_args *ia = aux;
-	struct ifnet *ifp = &sc->sc_arpcom.ac_if;
+	struct el_softc *sc;
+	struct ifnet *ifp;
+	struct ifaddr *ifa;
+	struct sockaddr_dl *sdl;
+	u_short base;
+	int t;
 
-	dprintf(("Attaching %s...\n", sc->sc_dev.dv_xname));
+	dprintf(("Attaching el%d...\n",idev->id_unit));
 
-	/* Stop the board. */
-	elstop(sc);
+	/* Get things pointing to the right places. */
+	sc = &el_softc[idev->id_unit];
+	ifp = &sc->arpcom.ac_if;
+	base = sc->el_base;
 
-	/* Initialize ifnet structure. */
-	ifp->if_unit = sc->sc_dev.dv_unit;
-	ifp->if_name = el_cd.cd_name;
-	ifp->if_start = elstart;
-	ifp->if_ioctl = elioctl;
-	ifp->if_watchdog = elwatchdog;
-	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_NOTRAILERS;
+	/* Now reset the board */
+	dprintf(("Resetting board...\n"));
+	outb(base+EL_AC,EL_AC_RESET);
+	DELAY(5);
+	outb(base+EL_AC,0);
 
-	/* Now we can attach the interface. */
+	/* Initialize ifnet structure */
+	ifp->if_unit = idev->id_unit;
+	ifp->if_name = "el";
+	ifp->if_mtu = ETHERMTU;
+	ifp->if_output = ether_output;
+	ifp->if_start = el_start;
+	ifp->if_ioctl = el_ioctl;
+	ifp->if_watchdog = el_watchdog;
+	ifp->if_flags = (IFF_BROADCAST | IFF_SIMPLEX | IFF_NOTRAILERS);
+
+	/* Now we can attach the interface */
 	dprintf(("Attaching interface...\n"));
 	if_attach(ifp);
-	ether_ifattach(ifp);
 
-	/* Print out some information for the user. */
-	printf(": address %s\n", ether_sprintf(sc->sc_arpcom.ac_enaddr));
+	/* Put the station address in the ifa address list's AF_LINK
+	 * entry, if any.
+	 */
+	ifa = ifp->if_addrlist;
+	while ((ifa != NULL) && (ifa->ifa_addr != NULL) && 
+	  (ifa->ifa_addr->sa_family != AF_LINK))
+		ifa = ifa->ifa_next;
+	if((ifa != NULL) && (ifa->ifa_addr != NULL)) {
+		sdl = (struct sockaddr_dl *)ifa->ifa_addr;
+		sdl->sdl_type = IFT_ETHER;
+		sdl->sdl_alen = ETHER_ADDR_LEN;
+		sdl->sdl_slen = 0;
+		bcopy(sc->arpcom.ac_enaddr,LLADDR(sdl),ETHER_ADDR_LEN);
+	}
+
+	/* Print out some information for the user */
+	printf("el%d: 3c501 address %s\n",idev->id_unit,
+	  ether_sprintf(sc->arpcom.ac_enaddr));
 
 	/* Finally, attach to bpf filter if it is present. */
 #if NBPFILTER > 0
 	dprintf(("Attaching to BPF...\n"));
-	bpfattach(&ifp->if_bpf, ifp, DLT_EN10MB, sizeof(struct ether_header));
+	bpfattach(&sc->bpf,ifp,DLT_EN10MB,sizeof(struct ether_header));
 #endif
 
-	sc->sc_ih = isa_intr_establish(ia->ia_ic, ia->ia_irq, IST_EDGE,
-	    IPL_NET, elintr, sc);
-
-	dprintf(("elattach() finished.\n"));
+	dprintf(("el_attach() finished.\n"));
+	return(1);
 }
 
-/*
- * Reset interface.
- */
-void
-elreset(sc)
-	struct el_softc *sc;
+/* This routine resets the interface. */
+static void
+el_reset(int unit,int uban)
 {
 	int s;
 
 	dprintf(("elreset()\n"));
-	s = splnet();
-	elstop(sc);
-	elinit(sc);
+	s = splimp();
+	el_stop(unit);
+	el_init(unit);
 	splx(s);
 }
 
-/*
- * Stop interface.
- */
-void
-elstop(sc)
-	struct el_softc *sc;
+static void
+el_stop(int unit)
 {
+	struct el_softc *sc;
 
-	outb(sc->sc_iobase+EL_AC, 0);
+	sc = &el_softc[unit];
+	outb(sc->el_base+EL_AC,0);
 }
 
-/*
- * Do a hardware reset of the board, and upload the ethernet address again in
- * case the board forgets.
- */
-static inline void
-el_hardreset(sc)
-	struct el_softc *sc;
+/* Initialize interface.  */
+static int
+el_init(int unit)
 {
-	int iobase = sc->sc_iobase;
-	int i;
-
-	outb(iobase+EL_AC, EL_AC_RESET);
-	delay(5);
-	outb(iobase+EL_AC, 0);
-
-	for (i = 0; i < ETHER_ADDR_LEN; i++)
-		outb(iobase+i, sc->sc_arpcom.ac_enaddr[i]);
-}
-
-/*
- * Initialize interface.
- */
-int
-elinit(sc)
 	struct el_softc *sc;
-{
-	struct ifnet *ifp = &sc->sc_arpcom.ac_if;
-	int iobase = sc->sc_iobase;
+	struct ifnet *ifp;
+	int s;
+	u_short base;
+
+	/* Set up pointers */
+	sc = &el_softc[unit];
+	ifp = &sc->arpcom.ac_if;
+	base = sc->el_base;
+
+	/* If address not known, do nothing. */
+	if(ifp->if_addrlist == (struct ifaddr *)0)
+		return;
+
+	s = splimp();
 
 	/* First, reset the board. */
-	el_hardreset(sc);
+	dprintf(("Resetting board...\n"));
+	outb(base+EL_AC,EL_AC_RESET);
+	DELAY(5);
+	outb(base+EL_AC,0);
 
-	/* Configure rx. */
+	/* Configure rx */
 	dprintf(("Configuring rx...\n"));
-	if (ifp->if_flags & IFF_PROMISC)
-		outb(iobase+EL_RXC, EL_RXC_AGF | EL_RXC_DSHORT | EL_RXC_DDRIB | EL_RXC_DOFLOW | EL_RXC_PROMISC);
+	if(ifp->if_flags & IFF_PROMISC)
+		outb(base+EL_RXC,(EL_RXC_PROMISC|EL_RXC_AGF|EL_RXC_DSHORT|EL_RXC_DDRIB|EL_RXC_DOFLOW));
 	else
-		outb(iobase+EL_RXC, EL_RXC_AGF | EL_RXC_DSHORT | EL_RXC_DDRIB | EL_RXC_DOFLOW | EL_RXC_ABROAD);
-	outb(iobase+EL_RBC, 0);
+		outb(base+EL_RXC,(EL_RXC_ABROAD|EL_RXC_AGF|EL_RXC_DSHORT|EL_RXC_DDRIB|EL_RXC_DOFLOW));
+	outb(base+EL_RBC,0);
 
-	/* Configure TX. */
+	/* Configure TX */
 	dprintf(("Configuring tx...\n"));
-	outb(iobase+EL_TXC, 0);
+	outb(base+EL_TXC,0);
 
-	/* Start reception. */
+	/* Start reception */
 	dprintf(("Starting reception...\n"));
-	outb(iobase+EL_AC, EL_AC_IRQE | EL_AC_RX);
+	outb(base+EL_AC,(EL_AC_IRQE|EL_AC_RX));
 
-	/* Set flags appropriately. */
+	/* Set flags appropriately */
 	ifp->if_flags |= IFF_RUNNING;
 	ifp->if_flags &= ~IFF_OACTIVE;
 
 	/* And start output. */
-	elstart(ifp);
-}
+	el_start(ifp);
 
-/*
- * Start output on interface.  Get datagrams from the queue and output them,
- * giving the receiver a chance between datagrams.  Call only from splnet or
- * interrupt level!
- */
-void
-elstart(ifp)
-	struct ifnet *ifp;
-{
-	struct el_softc *sc = el_cd.cd_devs[ifp->if_unit];
-	int iobase = sc->sc_iobase;
-	struct mbuf *m, *m0;
-	int s, i, off, retries;
-
-	dprintf(("elstart()...\n"));
-	s = splnet();
-
-	/* Don't do anything if output is active. */
-	if ((ifp->if_flags & IFF_OACTIVE) != 0) {
-		splx(s);
-		return;
-	}
-
-	ifp->if_flags |= IFF_OACTIVE;
-
-	/*
-	 * The main loop.  They warned me against endless loops, but would I
-	 * listen?  NOOO....
-	 */
-	for (;;) {
-		/* Dequeue the next datagram. */
-		IF_DEQUEUE(&ifp->if_snd, m0);
-
-		/* If there's nothing to send, return. */
-		if (m0 == 0)
-			break;
-
-#if NBPFILTER > 0
-		/* Give the packet to the bpf, if any. */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m0);
-#endif
-
-		/* Disable the receiver. */
-		outb(iobase+EL_AC, EL_AC_HOST);
-		outb(iobase+EL_RBC, 0);
-
-		/* Transfer datagram to board. */
-		dprintf(("el: xfr pkt length=%d...\n", m0->m_pkthdr.len));
-		off = EL_BUFSIZ - max(m0->m_pkthdr.len, ETHER_MIN_LEN);
-		outb(iobase+EL_GPBL, off);
-		outb(iobase+EL_GPBH, off >> 8);
-
-		/* Copy the datagram to the buffer. */
-		for (m = m0; m != 0; m = m->m_next)
-			outsb(iobase+EL_BUF, mtod(m, caddr_t), m->m_len);
-
-		m_freem(m0);
-
-		/* Now transmit the datagram. */
-		retries = 0;
-		for (;;) {
-			outb(iobase+EL_GPBL, off);
-			outb(iobase+EL_GPBH, off >> 8);
-			if (el_xmit(sc)) {
-				ifp->if_oerrors++;
-				break;
-			}
-			/* Check out status. */
-			i = inb(iobase+EL_TXS);
-			dprintf(("tx status=0x%x\n", i));
-			if ((i & EL_TXS_READY) == 0) {
-				dprintf(("el: err txs=%x\n", i));
-				if (i & (EL_TXS_COLL | EL_TXS_COLL16)) {
-					ifp->if_collisions++;
-					if ((i & EL_TXC_DCOLL16) == 0 &&
-					    retries < 15) {
-						retries++;
-						outb(iobase+EL_AC, EL_AC_HOST);
-					}
-				} else {
-					ifp->if_oerrors++;
-					break;
-				}
-			} else {
-				ifp->if_opackets++;
-				break;
-			}
-		}
-
-		/*
-		 * Now give the card a chance to receive.
-		 * Gotta love 3c501s...
-		 */
-		(void)inb(iobase+EL_AS);
-		outb(iobase+EL_AC, EL_AC_IRQE | EL_AC_RX);
-		splx(s);
-		/* Interrupt here. */
-		s = splnet();
-	}
-
-	(void)inb(iobase+EL_AS);
-	outb(iobase+EL_AC, EL_AC_IRQE | EL_AC_RX);
-	ifp->if_flags &= ~IFF_OACTIVE;
 	splx(s);
 }
 
-/*
- * This function actually attempts to transmit a datagram downloaded to the
- * board.  Call at splnet or interrupt, after downloading data!  Returns 0 on
- * success, non-0 on failure.
+/* Start output on interface.  Get datagrams from the queue and output
+ * them, giving the receiver a chance between datagrams.  Call only
+ * from splimp or interrupt level!
  */
 static int
-el_xmit(sc)
-	struct el_softc *sc;
+el_start(struct ifnet *ifp)
 {
-	int iobase = sc->sc_iobase;
-	int i;
+	struct el_softc *sc;
+	u_short base;
+	struct mbuf *m, *m0;
+	int s, i, len, retries, done;
 
-	/*
-	 * XXX
-	 * This busy-waits for the tx completion.  Can we get an interrupt
-	 * instead?
+	/* Get things pointing in the right directions */
+	sc = &el_softc[ifp->if_unit];
+	base = sc->el_base;
+
+	dprintf(("el_start()...\n"));
+	s = splimp();
+
+	/* Don't do anything if output is active */
+	if(sc->arpcom.ac_if.if_flags & IFF_OACTIVE)
+		return;
+	sc->arpcom.ac_if.if_flags |= IFF_OACTIVE;
+
+	/* The main loop.  They warned me against endless loops, but
+	 * would I listen?  NOOO....
 	 */
+	while(1) {
+		/* Dequeue the next datagram */
+		IF_DEQUEUE(&sc->arpcom.ac_if.if_snd,m0);
 
-	dprintf(("el: xmit..."));
-	outb(iobase+EL_AC, EL_AC_TXFRX);
-	i = 20000;
-	while ((inb(iobase+EL_AS) & EL_AS_TXBUSY) && (i > 0))
-		i--;
-	if (i == 0) {
-		dprintf(("tx not ready\n"));
-		return -1;
+		/* If there's nothing to send, return. */
+		if(m0 == NULL) {
+			sc->arpcom.ac_if.if_flags &= ~IFF_OACTIVE;
+			splx(s);
+			return;
+		}
+
+		/* Disable the receiver */
+		outb(base+EL_AC,EL_AC_HOST);
+		outb(base+EL_RBC,0);
+
+		/* Copy the datagram to the buffer. */
+		len = 0;
+		for(m = m0; m != NULL; m = m->m_next) {
+			if(m->m_len == 0)
+				continue;
+			bcopy(mtod(m,caddr_t),sc->el_pktbuf+len,m->m_len);
+			len += m->m_len;
+		}
+		m_freem(m0);
+
+		len = MAX(len,ETHER_MIN_LEN);
+
+		/* Give the packet to the bpf, if any */
+#if NBPFILTER > 0
+		if(sc->bpf)
+			bpf_tap(sc->bpf,sc->el_pktbuf,len);
+#endif
+
+		/* Transfer datagram to board */
+		dprintf(("el: xfr pkt length=%d...\n",len));
+		i = EL_BUFSIZ - len;
+		outb(base+EL_GPBL,(i & 0xff));
+		outb(base+EL_GPBH,((i>>8)&0xff));
+		outsb(base+EL_BUF,sc->el_pktbuf,len);
+
+		/* Now transmit the datagram */
+		retries=0;
+		done=0;
+		while(!done) {
+			if(el_xmit(sc,len)) { /* Something went wrong */
+				done = -1;
+				break;
+			}
+			/* Check out status */
+			i = inb(base+EL_TXS);
+			dprintf(("tx status=0x%x\n",i));
+			if(!(i & EL_TXS_READY)) {
+				dprintf(("el: err txs=%x\n",i));
+				sc->arpcom.ac_if.if_oerrors++;
+				if(i & (EL_TXS_COLL|EL_TXS_COLL16)) {
+					if((!(i & EL_TXC_DCOLL16)) && retries < 15) {
+						retries++;
+						outb(base+EL_AC,EL_AC_HOST);
+					}
+				}
+				else
+					done = 1;
+			} 
+			else
+				done = 1;
+		}
+		if(done == -1)  /* Packet not transmitted */
+			continue;
+
+		/* Now give the card a chance to receive.
+		 * Gotta love 3c501s...
+		 */
+		(void)inb(base+EL_AS);
+		outb(base+EL_AC,(EL_AC_IRQE|EL_AC_RX));
+		splx(s);
+		/* Interrupt here */
+		s = splimp();
 	}
-	dprintf(("%d cycles.\n", 20000 - i));
-	return 0;
 }
 
-/*
- * Controller interrupt.
+/* This function actually attempts to transmit a datagram downloaded
+ * to the board.  Call at splimp or interrupt, after downloading data!
+ * Returns 0 on success, non-0 on failure
  */
-int
-elintr(arg)
-	void *arg;
+static int
+el_xmit(struct el_softc *sc,int len)
 {
-	register struct el_softc *sc = arg;
-	int iobase = sc->sc_iobase;
-	int rxstat, len;
+	int gpl;
+	int i;
+
+	gpl = EL_BUFSIZ - len;
+	dprintf(("el: xmit..."));
+	outb((sc->el_base)+EL_GPBL,(gpl & 0xff));
+	outb((sc->el_base)+EL_GPBH,((gpl>>8)&0xff));
+	outb((sc->el_base)+EL_AC,EL_AC_TXFRX);
+	i = 20000;
+	while((inb((sc->el_base)+EL_AS) & EL_AS_TXBUSY) && (i>0))
+		i--;
+	if(i == 0) {
+		dprintf(("tx not ready\n"));
+		sc->arpcom.ac_if.if_oerrors++;
+		return(-1);
+	}
+	dprintf(("%d cycles.\n",(20000-i)));
+	return(0);
+}
+
+/* controller interrupt */
+int
+elintr(int unit)
+{
+	register struct el_softc *sc;
+	register base;
+	int stat, rxstat, len, done;
+
+	/* Get things pointing properly */
+	sc = &el_softc[unit];
+	base = sc->el_base;
 
 	dprintf(("elintr: "));
 
-	/* Check board status. */
-	if ((inb(iobase+EL_AS) & EL_AS_RXBUSY) != 0) {
-		(void)inb(iobase+EL_RXC);
-		outb(iobase+EL_AC, EL_AC_IRQE | EL_AC_RX);
-		return 0;
+	/* Check board status */
+	stat = inb(base+EL_AS);
+	if(stat & EL_AS_RXBUSY) {
+		(void)inb(base+EL_RXC);
+		outb(base+EL_AC,(EL_AC_IRQE|EL_AC_RX));
+		return;
 	}
 
-	for (;;) {
-		rxstat = inb(iobase+EL_RXS);
-		if (rxstat & EL_RXS_STALE)
-			break;
-
-		/* If there's an overflow, reinit the board. */
-		if ((rxstat & EL_RXS_NOFLOW) == 0) {
-			dprintf(("overflow.\n"));
-			el_hardreset(sc);
-			/* Put board back into receive mode. */
-			if (sc->sc_arpcom.ac_if.if_flags & IFF_PROMISC)
-				outb(iobase+EL_RXC, EL_RXC_AGF | EL_RXC_DSHORT | EL_RXC_DDRIB | EL_RXC_DOFLOW | EL_RXC_PROMISC);
-			else
-				outb(iobase+EL_RXC, EL_RXC_AGF | EL_RXC_DSHORT | EL_RXC_DDRIB | EL_RXC_DOFLOW | EL_RXC_ABROAD);
-			(void)inb(iobase+EL_AS);
-			outb(iobase+EL_RBC, 0);
-			break;
+	done = 0;
+	while(!done) {
+		rxstat = inb(base+EL_RXS);
+		if(rxstat & EL_RXS_STALE) {
+			(void)inb(base+EL_RXC);
+			outb(base+EL_AC,(EL_AC_IRQE|EL_AC_RX));
+			return;
 		}
 
-		/* Incoming packet. */
-		len = inb(iobase+EL_RBL);
-		len |= inb(iobase+EL_RBH) << 8;
-		dprintf(("receive len=%d rxstat=%x ", len, rxstat));
-		outb(iobase+EL_AC, EL_AC_HOST);
+		/* If there's an overflow, reinit the board. */
+		if(!(rxstat & EL_RXS_NOFLOW)) {
+			dprintf(("overflow.\n"));
+			outb(base+EL_AC,EL_AC_RESET);
+			DELAY(5);
+			outb(base+EL_AC,0);
+			/* Put board back into receive mode */
+			if(sc->arpcom.ac_if.if_flags & IFF_PROMISC)
+				outb(base+EL_RXC,(EL_RXC_PROMISC|EL_RXC_AGF|EL_RXC_DSHORT|EL_RXC_DDRIB|EL_RXC_DOFLOW));
+			else
+				outb(base+EL_RXC,(EL_RXC_ABROAD|EL_RXC_AGF|EL_RXC_DSHORT|EL_RXC_DDRIB|EL_RXC_DOFLOW));
+			(void)inb(base+EL_AS);
+			outb(base+EL_RBC,0);
+			(void)inb(base+EL_RXC);
+			outb(base+EL_AC,(EL_AC_IRQE|EL_AC_RX));
+			return;
+		}
 
-		/* Pass data up to upper levels. */
-		elread(sc, len);
+		/* Incoming packet */
+		len = inb(base+EL_RBL);
+		len |= inb(base+EL_RBH) << 8;
+		dprintf(("receive len=%d rxstat=%x ",len,rxstat));
+		outb(base+EL_AC,EL_AC_HOST);
+
+		/* If packet too short or too long, restore rx mode and return
+		 */
+		if((len <= sizeof(struct ether_header)) || (len > ETHER_MAX_LEN)) {
+			if(sc->arpcom.ac_if.if_flags & IFF_PROMISC)
+				outb(base+EL_RXC,(EL_RXC_PROMISC|EL_RXC_AGF|EL_RXC_DSHORT|EL_RXC_DDRIB|EL_RXC_DOFLOW));
+			else
+				outb(base+EL_RXC,(EL_RXC_ABROAD|EL_RXC_AGF|EL_RXC_DSHORT|EL_RXC_DDRIB|EL_RXC_DOFLOW));
+			(void)inb(base+EL_AS);
+			outb(base+EL_RBC,0);
+			(void)inb(base+EL_RXC);
+			outb(base+EL_AC,(EL_AC_IRQE|EL_AC_RX));
+			return;
+		}
+
+		sc->arpcom.ac_if.if_ipackets++;
+
+		/* Copy the data into our buffer */
+		outb(base+EL_GPBL,0);
+		outb(base+EL_GPBH,0);
+		insb(base+EL_BUF,sc->el_pktbuf,len);
+		outb(base+EL_RBC,0);
+		outb(base+EL_AC,EL_AC_RX);
+		dprintf(("%s-->",ether_sprintf(sc->el_pktbuf+6)));
+		dprintf(("%s\n",ether_sprintf(sc->el_pktbuf)));
+
+		/* Pass data up to upper levels */
+		len -= sizeof(struct ether_header);
+		elread(sc,(caddr_t)(sc->el_pktbuf),len);
 
 		/* Is there another packet? */
-		if ((inb(iobase+EL_AS) & EL_AS_RXBUSY) != 0)
-			break;
+		stat = inb(base+EL_AS);
 
-		dprintf(("<rescan> "));
+		/* If so, do it all again (i.e. don't set done to 1) */
+		if(!(stat & EL_AS_RXBUSY)) 
+			dprintf(("<rescan> "));
+		else
+			done = 1;
 	}
 
-	(void)inb(iobase+EL_RXC);
-	outb(iobase+EL_AC, EL_AC_IRQE | EL_AC_RX);
-	return 1;
+	(void)inb(base+EL_RXC);
+	outb(base+EL_AC,(EL_AC_IRQE|EL_AC_RX));
+	return;
 }
 
-/*
- * Pass a packet to the higher levels.
- */
-void
-elread(sc, len)
-	register struct el_softc *sc;
-	int len;
+/* Pass a packet up to the higher levels.  Deal with trailer protocol. */
+static inline void
+elread(struct el_softc *sc,caddr_t buf,int len)
 {
-	struct ifnet *ifp = &sc->sc_arpcom.ac_if;
+	register struct ether_header *eh;
 	struct mbuf *m;
-	struct ether_header *eh;
+	int off, resid;
 
-	if (len <= sizeof(struct ether_header) ||
-	    len > ETHER_MAX_LEN) {
-		printf("%s: invalid packet size %d; dropping\n",
-		    sc->sc_dev.dv_xname, len);
-		ifp->if_ierrors++;
-		return;
+	/* Deal with trailer protocol: if type is trailer type
+	 * get true type from first 16-bit word past data.
+	 * Remember that type was trailer by setting off.
+	 */
+	eh = (struct ether_header *)buf;
+	eh->ether_type = ntohs((u_short)eh->ether_type);
+#define eldataaddr(eh,off,type)	((type)(((caddr_t)((eh)+1)+(off))))
+	if(eh->ether_type >= ETHERTYPE_TRAIL &&
+	   eh->ether_type < ETHERTYPE_TRAIL+ETHERTYPE_NTRAILER) {
+		off = (eh->ether_type - ETHERTYPE_TRAIL) * 512;
+		if(off >= ETHERMTU)
+			return;
+		eh->ether_type = ntohs(*eldataaddr(eh,off,u_short *));
+		resid = ntohs(*(eldataaddr(eh,off+2,u_short *)));
+		if((off+resid) > len)
+			return;
+		len = off + resid;
 	}
+	else
+		off = 0;
 
-	/* Pull packet off interface. */
-	m = elget(sc, len);
-	if (m == 0) {
-		ifp->if_ierrors++;
+	if(len <= 0)
 		return;
-	}
-
-	ifp->if_ipackets++;
-
-	/* We assume that the header fit entirely in one mbuf. */
-	eh = mtod(m, struct ether_header *);
 
 #if NBPFILTER > 0
 	/*
-	 * Check if there's a BPF listener on this interface.
-	 * If so, hand off the raw packet to BPF.
+	 * Check if there's a bpf filter listening on this interface.
+	 * If so, hand off the raw packet to bpf, which must deal with
+	 * trailers in its own way.
 	 */
-	if (ifp->if_bpf) {
-		bpf_mtap(ifp->if_bpf, m);
+	if(sc->bpf) {
+		eh->ether_type = htons((u_short)eh->ether_type);
+		bpf_tap(sc->bpf,buf,(len+sizeof(struct ether_header));
+		eh->ether_type = ntohs((u_short)eh->ether_type);
 
 		/*
 		 * Note that the interface cannot be in promiscuous mode if
-		 * there are no BPF listeners.  And if we are in promiscuous
-		 * mode, we have to check if this packet is really ours.
+		 * there are no bpf listeners.  And if el are in promiscuous
+		 * mode, el have to check if this packet is really ours.
+		 *
+		 * This test does not support multicasts.
 		 */
-		if ((ifp->if_flags & IFF_PROMISC) &&
-		    (eh->ether_dhost[0] & 1) == 0 && /* !mcast and !bcast */
-		    bcmp(eh->ether_dhost, sc->sc_arpcom.ac_enaddr,
-			    sizeof(eh->ether_dhost)) != 0) {
-			m_freem(m);
+		if((sc->arpcom.ac_if.if_flags & IFF_PROMISC)
+		   && bcmp(eh->ether_dhost,sc->arpcom.ac_enaddr,
+			   sizeof(eh->ether_dhost)) != 0
+		   && bcmp(eh->ether_dhost,etherbroadcastaddr,
+			   sizeof(eh->ether_dhost)) != 0)
 			return;
-		}
 	}
 #endif
 
-	/* We assume that the header fit entirely in one mbuf. */
-	m_adj(m, sizeof(struct ether_header));
-	ether_input(ifp, eh, m);
+	/*
+	 * Pull packet off interface.  Off is nonzero if packet
+	 * has trailing header; neget will then force this header
+	 * information to be at the front, but we still have to drop
+	 * the type and length which are at the front of any trailer data.
+	 */
+	m = elget(buf,len,off,&sc->arpcom.ac_if);
+	if(m == 0)
+		return;
+
+	ether_input(&sc->arpcom.ac_if,eh,m);
 }
 
 /*
- * Pull read data off a interface.  Len is length of data, with local net
- * header stripped.  We copy the data into mbufs.  When full cluster sized
- * units are present we copy into clusters.
+ * Pull read data off a interface.
+ * Len is length of data, with local net header stripped.
+ * Off is non-zero if a trailer protocol was used, and
+ * gives the offset of the trailer information.
+ * We copy the trailer information and then all the normal
+ * data into mbufs.  When full cluster sized units are present
+ * we copy into clusters.
  */
 struct mbuf *
-elget(sc, totlen)
-	struct el_softc *sc;
-	int totlen;
+elget(buf, totlen, off0, ifp)
+        caddr_t buf;
+        int totlen, off0;
+        struct ifnet *ifp;
 {
-	struct ifnet *ifp = &sc->sc_arpcom.ac_if;
-	int iobase = sc->sc_iobase;
-	struct mbuf *top, **mp, *m;
-	int len;
+        struct mbuf *top, **mp, *m, *p;
+        int off = off0, len;
+        register caddr_t cp = buf;
+        char *epkt;
 
-	MGETHDR(m, M_DONTWAIT, MT_DATA);
-	if (m == 0)
-		return 0;
-	m->m_pkthdr.rcvif = ifp;
-	m->m_pkthdr.len = totlen;
-	len = MHLEN;
-	top = 0;
-	mp = &top;
+        buf += sizeof(struct ether_header);
+        cp = buf;
+        epkt = cp + totlen;
 
-	outb(iobase+EL_GPBL, 0);
-	outb(iobase+EL_GPBH, 0);
 
-	while (totlen > 0) {
-		if (top) {
-			MGET(m, M_DONTWAIT, MT_DATA);
-			if (m == 0) {
-				m_freem(top);
-				return 0;
-			}
-			len = MLEN;
-		}
-		if (totlen >= MINCLSIZE) {
-			MCLGET(m, M_DONTWAIT);
-			if (m->m_flags & M_EXT)
-				len = MCLBYTES;
-		}
-		m->m_len = len = min(totlen, len);
-		insb(iobase+EL_BUF, mtod(m, caddr_t), len);
-		totlen -= len;
-		*mp = m;
-		mp = &m->m_next;
-	}
+        if (off) {
+                cp += off + 2 * sizeof(u_short);
+                totlen -= 2 * sizeof(u_short);
+        }
 
-	outb(iobase+EL_RBC, 0);
-	outb(iobase+EL_AC, EL_AC_RX);
-
-	return top;
+        MGETHDR(m, M_DONTWAIT, MT_DATA);
+        if (m == 0)
+                return (0);
+        m->m_pkthdr.rcvif = ifp;
+        m->m_pkthdr.len = totlen;
+        m->m_len = MHLEN;
+        top = 0;
+        mp = &top;
+        while (totlen > 0) {
+                if (top) {
+                        MGET(m, M_DONTWAIT, MT_DATA);
+                        if (m == 0) {
+                                m_freem(top);
+                                return (0);
+                        }
+                        m->m_len = MLEN;
+                }
+                len = min(totlen, epkt - cp);
+                if (len >= MINCLSIZE) {
+                        MCLGET(m, M_DONTWAIT);
+                        if (m->m_flags & M_EXT)
+                                m->m_len = len = min(len, MCLBYTES);
+                        else
+                                len = m->m_len;
+                } else {
+                        /*
+                         * Place initial small packet/header at end of mbuf.
+                         */
+                        if (len < m->m_len) {
+                                if (top == 0 && len + max_linkhdr <= m->m_len)
+                                        m->m_data += max_linkhdr;
+                                m->m_len = len;
+                        } else
+                                len = m->m_len;
+                }
+                bcopy(cp, mtod(m, caddr_t), (unsigned)len);
+                cp += len;
+                *mp = m;
+                mp = &m->m_next;
+                totlen -= len;
+                if (cp == epkt)
+                        cp = buf;
+        }
+        return (top);
 }
 
 /*
- * Process an ioctl request. This code needs some work - it looks pretty ugly.
+ * Process an ioctl request. This code needs some work - it looks
+ *	pretty ugly.
  */
-int
-elioctl(ifp, cmd, data)
+static int
+el_ioctl(ifp, command, data)
 	register struct ifnet *ifp;
-	u_long cmd;
+	int command;
 	caddr_t data;
 {
-	struct el_softc *sc = el_cd.cd_devs[ifp->if_unit];
-	struct ifaddr *ifa = (struct ifaddr *)data;
+	register struct ifaddr *ifa = (struct ifaddr *)data;
+	struct el_softc *sc = &el_softc[ifp->if_unit];
 	struct ifreq *ifr = (struct ifreq *)data;
 	int s, error = 0;
 
-	s = splnet();
+	s = splimp();
 
-	switch (cmd) {
+	switch (command) {
 
 	case SIOCSIFADDR:
 		ifp->if_flags |= IFF_UP;
@@ -633,79 +693,92 @@ elioctl(ifp, cmd, data)
 		switch (ifa->ifa_addr->sa_family) {
 #ifdef INET
 		case AF_INET:
-			elinit(sc);
-			arp_ifinit(&sc->sc_arpcom, ifa);
+			el_init(ifp->if_unit);	/* before arpwhohas */
+			/*
+			 * See if another station has *our* IP address.
+			 * i.e.: There is an address conflict! If a
+			 * conflict exists, a message is sent to the
+			 * console.
+			 */
+			((struct arpcom *)ifp)->ac_ipaddr = IA_SIN(ifa)->sin_addr;
+			arpwhohas((struct arpcom *)ifp, &IA_SIN(ifa)->sin_addr);
 			break;
 #endif
 #ifdef NS
-		/* XXX - This code is probably wrong. */
+		/*
+		 * XXX - This code is probably wrong
+		 */
 		case AF_NS:
 		    {
-			register struct ns_addr *ina = &IA_SNS(ifa)->sns_addr;
+			register struct ns_addr *ina = &(IA_SNS(ifa)->sns_addr);
 
 			if (ns_nullhost(*ina))
 				ina->x_host =
-				    *(union ns_host *)(sc->sc_arpcom.ac_enaddr);
-			else
-				bcopy(ina->x_host.c_host,
-				    sc->sc_arpcom.ac_enaddr,
-				    sizeof(sc->sc_arpcom.ac_enaddr));
-			/* Set new address. */
-			elinit(sc);
+					*(union ns_host *)(sc->arpcom.ac_enaddr);
+			else {
+				/* 
+				 * 
+				 */
+				bcopy((caddr_t)ina->x_host.c_host,
+				      (caddr_t)sc->arpcom.ac_enaddr,
+				      sizeof(sc->arpcom.ac_enaddr));
+			}
+			/*
+			 * Set new address
+			 */
+			el_init(ifp->if_unit);
 			break;
 		    }
 #endif
 		default:
-			elinit(sc);
+			el_init(ifp->if_unit);
 			break;
 		}
 		break;
 
-	case SIOCSIFFLAGS:
-		if ((ifp->if_flags & IFF_UP) == 0 &&
-		    (ifp->if_flags & IFF_RUNNING) != 0) {
-			/*
-			 * If interface is marked down and it is running, then
-			 * stop it.
-			 */
-			elstop(sc);
-			ifp->if_flags &= ~IFF_RUNNING;
-		} else if ((ifp->if_flags & IFF_UP) != 0 &&
-		    	   (ifp->if_flags & IFF_RUNNING) == 0) {
-			/*
-			 * If interface is marked up and it is stopped, then
-			 * start it.
-			 */
-			elinit(sc);
-		} else {
-			/*
-			 * Some other important flag might have changed, so
-			 * reset.
-			 */
-			elreset(sc);
+	case SIOCGIFADDR:
+		{
+			struct sockaddr *sa;
+			sa = (struct sockaddr *)&ifr->ifr_data;
+			bcopy((caddr_t)sc->arpcom.ac_enaddr,
+			    (caddr_t) sa->sa_data, ETHER_ADDR_LEN);
 		}
 		break;
 
+	case SIOCSIFFLAGS:
+		/*
+		 * If interface is marked down and it is running, then stop it
+		 */
+		if (((ifp->if_flags & IFF_UP) == 0) &&
+		    (ifp->if_flags & IFF_RUNNING)) {
+			el_stop(ifp->if_unit);
+			ifp->if_flags &= ~IFF_RUNNING;
+		} else {
+		/*
+		 * If interface is marked up and it is stopped, then start it
+		 */
+			if ((ifp->if_flags & IFF_UP) &&
+		    	    ((ifp->if_flags & IFF_RUNNING) == 0))
+				el_init(ifp->if_unit);
+		}
+
 	default:
 		error = EINVAL;
-		break;
 	}
-
-	splx(s);
-	return error;
+	(void) splx(s);
+	return (error);
 }
 
-/*
- * Device timeout routine.
- */
-void
-elwatchdog(unit)
-	int unit;
+/* Device timeout routine */
+static int
+el_watchdog(int unit)
 {
-	struct el_softc *sc = el_cd.cd_devs[unit];
+	struct el_softc *sc;
 
-	log(LOG_ERR, "%s: device timeout\n", sc->sc_dev.dv_xname);
-	sc->sc_arpcom.ac_if.if_oerrors++;
+	sc = &el_softc[unit];
 
-	elreset(sc);
+	log(LOG_ERR,"el%d: device timeout\n",unit);
+	sc->arpcom.ac_if.if_oerrors++;
+	el_reset(unit,0);
 }
+#endif

@@ -1,5 +1,3 @@
-/*	$NetBSD: open.c,v 1.10 1996/01/13 22:25:41 leo Exp $	*/
-
 /*-
  * Copyright (c) 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -35,7 +33,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)open.c	8.1 (Berkeley) 6/11/93
+ *	From: @(#)open.c	8.1 (Berkeley) 6/11/93
  *  
  *
  * Copyright (c) 1989, 1990, 1991 Carnegie Mellon University
@@ -62,19 +60,26 @@
  * 
  * any improvements or extensions that they make and grant Carnegie the
  * rights to redistribute these changes.
+ * 
+ *	$Id: open.c,v 1.1 1994/01/26 02:03:52 brezak Exp $
  */
 
 #include "stand.h"
-
-struct open_file files[SOPEN_MAX];
+#include "ufs.h"
 
 /*
  *	File primitives proper
  */
 
-int
+struct fs_ops file_system[] = {
+	{ ufs_open, ufs_close, ufs_read, ufs_write, ufs_seek, ufs_stat }
+};
+#define	NFSYS	(sizeof(file_system) / sizeof(struct fs_ops))
+
+struct open_file files[SOPEN_MAX];
+
 open(fname, mode)
-	const char *fname;
+	char *fname;
 	int mode;
 {
 	register struct open_file *f;
@@ -85,7 +90,6 @@ open(fname, mode)
 	for (fd = 0, f = files; fd < SOPEN_MAX; fd++, f++)
 		if (f->f_flags == 0)
 			goto fnd;
-	errno = EMFILE;
 	return (-1);
 fnd:
 	/*
@@ -94,21 +98,19 @@ fnd:
 	 */
 	f->f_flags = mode + 1;
 	f->f_dev = (struct devsw *)0;
-	f->f_ops = (struct fs_ops *)0;
 	file = (char *)0;
 	error = devopen(f, fname, &file);
-	if (error ||
-	    (((f->f_flags & F_NODEV) == 0) && f->f_dev == (struct devsw *)0))
+	if (error || f->f_dev == (struct devsw *)0)
 		goto err;
 
 	/* see if we opened a raw device; otherwise, 'file' is the file name. */
-	if (file == (char *)0 || *file == '\0') {
+	if (file == (char *)0) {
 		f->f_flags |= F_RAW;
 		return (0);
 	}
 
 	/* pass file name to the different filesystem open routines */
-	for (i = 0; i < nfsys; i++) {
+	for (i = 0; i < NFSYS; i++) {
 		/* convert mode (0,1,2) to FREAD, FWRITE. */
 		error = (file_system[i].open)(file, f);
 		if (error == 0) {
@@ -120,7 +122,6 @@ fnd:
 		error = ENOENT;
 
 err:
-	f->f_flags = 0;
 	errno = error;
 	return (-1);
 }

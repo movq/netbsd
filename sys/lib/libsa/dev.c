@@ -1,5 +1,3 @@
-/*	$NetBSD: dev.c,v 1.4 1994/10/30 21:48:23 cgd Exp $	*/
-
 /*-
  * Copyright (c) 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -32,7 +30,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)dev.c	8.1 (Berkeley) 6/11/93
+ *	from: @(#)dev.c	8.1 (Berkeley) 6/11/93
+ *	      $Id: dev.c,v 1.1 1994/01/26 02:03:41 brezak Exp $
  */
 
 #include <sys/param.h>
@@ -42,7 +41,6 @@
 
 int errno;
 
-int
 nodev()
 {
 	return (ENXIO);
@@ -54,10 +52,9 @@ nullsys()
 }
 
 /* ARGSUSED */
-int
 noioctl(f, cmd, data)
 	struct open_file *f;
-	u_long cmd;
+	int cmd;
 	void *data;
 {
 	return (EINVAL);

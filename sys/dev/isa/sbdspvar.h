@@ -1,4 +1,4 @@
-/*	$NetBSD: sbdspvar.h,v 1.12 1996/03/16 04:00:13 jtk Exp $	*/
+/*	$NetBSD: sbdspvar.h,v 1.1 1995/02/21 02:28:09 brezak Exp $	*/
 
 /*
  * Copyright (c) 1991-1993 Regents of the University of California.
@@ -32,30 +32,29 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
+ *	$Id: sbdspvar.h,v 1.1 1995/02/21 02:28:09 brezak Exp $
  */
 
 #define SB_MIC_PORT	0
 #define SB_SPEAKER	1
-#define SB_INPUT_CLASS	2
-#define SB_OUTPUT_CLASS	3
-#define SB_LINE_IN_PORT	4
-#define SB_DAC_PORT	5
-#define SB_FM_PORT	6
-#define SB_CD_PORT	7
-#define SB_MASTER_VOL	8
-#define SB_TREBLE	9
-#define SB_BASS		10
-#define SB_NDEVS	11		/* XXX include classes above for
-					   contiguous number space on
-					   original SB */
+#define SB_LINE_IN_PORT	2
+#define SB_DAC_PORT	3
+#define SB_FM_PORT	4
+#define SB_CD_PORT	5
+#define SB_MASTER_VOL	6
+#define SB_TREBLE	7
+#define SB_BASS		8
+#define SB_NDEVS	9
 
-/*#define SB_OUTPUT_MODE	9
+#define SB_OUTPUT_MODE	9
 #define 	SB_SPKR_MONO	0
-#define 	SB_SPKR_STEREO	1*/
+#define 	SB_SPKR_STEREO	1
 
-#define	SB_RECORD_SOURCE 11
+#define	SB_RECORD_SOURCE 10
 
-#define SB_RECORD_CLASS	12
+#define SB_INPUT_CLASS	11
+#define SB_OUTPUT_CLASS	12
+#define SB_RECORD_CLASS	13
 
 
 /*
@@ -75,14 +74,18 @@
 struct sbdsp_softc {
 	struct	device sc_dev;		/* base device */
 	struct	isadev sc_id;		/* ISA device */
-	void	*sc_ih;			/* interrupt vectoring */
+	struct	intrhand sc_ih;		/* interrupt vectoring */
 
-	int	sc_iobase;		/* I/O port base address */
-	int	sc_irq;			/* interrupt */
-	int	sc_drq;			/* DMA (8-bit) */
-	int	sc_drq16;		/* DMA (16-bit) */
+	u_short	sc_iobase;		/* I/O port base address */
+	u_short sc_irq;			/* interrupt */
+	u_short sc_drq;			/* DMA */
 
 	u_short	sc_open;		/* reference count of open calls */
+	u_short	sc_locked;		/* true when doing HS DMA  */
+ 	u_short	sc_adacmode;		/* low/high speed mode indicator */
+
+	u_long	sc_irate;		/* Sample rate for input */
+	u_long	sc_orate;		/* ...and output */
 
 	u_int	gain[SB_NDEVS];		/* kept in SB levels: right/left each
 					   in a nibble */
@@ -91,18 +94,12 @@ struct sbdsp_softc {
 
 	u_int	out_port;		/* output port */
 	u_int	in_port;		/* input port */
-	u_int	in_filter;		/* one of SB_TREBLE_EQ, SB_BASS_EQ, 0 */
 
 	u_int	spkr_state;		/* non-null is on */
 	
-	int	sc_irate, sc_itc;	/* Sample rate for input */
-	int	sc_orate, sc_otc;	/* ...and output */
-
-	int	sc_imode;
-	int	sc_omode;
 #define SB_ADAC_LS 0
 #define SB_ADAC_HS 1
-
+ 	u_short	sc_adactc;		/* current adac time constant */
 	u_long	sc_interrupts;		/* number of interrupts taken */
 	void	(*sc_intr)(void*);	/* dma completion intr handler */
 	void	(*sc_mintr)(void*, int);/* midi input intr handler */
@@ -111,79 +108,66 @@ struct sbdsp_softc {
 	int	dmaflags;
 	caddr_t	dmaaddr;
 	vm_size_t	dmacnt;
-	int	sc_last_hs_size;	/* last HS dma size */
-	int	sc_precision;		/* size of samples */
-	int	sc_channels;		/* # of channels */
-	int	sc_dmadir;		/* DMA direction */
-#define	SB_DMA_NONE	0
-#define	SB_DMA_IN	1
-#define	SB_DMA_OUT	2
+	int	sc_last_hsw_size;	/* last HS dma size */
+	int	sc_last_hsr_size;	/* last HS dma size */
+	int	sc_chans;		/* # of channels */
+	char	sc_dmain_inprogress;	/* DMA input in progress? */
+	char	sc_dmaout_inprogress;	/* DMA output in progress? */
 
 	u_int	sc_model;		/* DSP model */
-#define SBVER_MAJOR(v)	(((v)>>8) & 0xff)
+#define SBVER_MAJOR(v)	((v)>>8)
 #define SBVER_MINOR(v)	((v)&0xff)
-
-#define MODEL_JAZZ16 0x80000000
 };
-
-#define ISSBPROCLASS(sc) \
-	(SBVER_MAJOR((sc)->sc_model) > 2)
 
 #define ISSBPRO(sc) \
 	(SBVER_MAJOR((sc)->sc_model) == 3)
 
-#define ISSB16CLASS(sc) \
-	(SBVER_MAJOR((sc)->sc_model) > 3)
+#define ISSBPROCLASS(sc) \
+	(SBVER_MAJOR((sc)->sc_model) > 2)
 
-#define ISJAZZ16(sc) \
-	((sc)->sc_model & MODEL_JAZZ16)
-
-
-#ifdef _KERNEL
+#ifdef KERNEL
 int	sbdsp_open __P((struct sbdsp_softc *, dev_t, int));
-void	sbdsp_close __P((void *));
+void	sbdsp_close __P((caddr_t));
 
 int	sbdsp_probe __P((struct sbdsp_softc *));
 void	sbdsp_attach __P((struct sbdsp_softc *));
 
-int	sbdsp_set_in_gain __P((void *, u_int, u_char));
-int	sbdsp_set_in_gain_real __P((void *, u_int, u_char));
-int	sbdsp_get_in_gain __P((void *));
-int	sbdsp_set_out_gain __P((void *, u_int, u_char));
-int	sbdsp_set_out_gain_real __P((void *, u_int, u_char));
-int	sbdsp_get_out_gain __P((void *));
-int	sbdsp_set_monitor_gain __P((void *, u_int));
-int	sbdsp_get_monitor_gain __P((void *));
-int	sbdsp_set_in_sr __P((void *, u_long));
-int	sbdsp_set_in_sr_real __P((void *, u_long));
-u_long	sbdsp_get_in_sr __P((void *));
-int	sbdsp_set_out_sr __P((void *, u_long));
-int	sbdsp_set_out_sr_real __P((void *, u_long));
-u_long	sbdsp_get_out_sr __P((void *));
-int	sbdsp_query_encoding __P((void *, struct audio_encoding *));
-int	sbdsp_set_encoding __P((void *, u_int));
-int	sbdsp_get_encoding __P((void *));
-int	sbdsp_set_precision __P((void *, u_int));
-int	sbdsp_get_precision __P((void *));
-int	sbdsp_set_channels __P((void *, int));
-int	sbdsp_get_channels __P((void *));
-int	sbdsp_set_ifilter __P((void *, int));
-int	sbdsp_get_ifilter __P((void *));
-int	sbdsp_round_blocksize __P((void *, int));
-int	sbdsp_set_out_port __P((void *, int));
-int	sbdsp_get_out_port __P((void *));
-int	sbdsp_set_in_port __P((void *, int));
-int	sbdsp_get_in_port __P((void *));
-int	sbdsp_get_avail_in_ports __P((void *));
-int	sbdsp_get_avail_out_ports __P((void *));
-int	sbdsp_speaker_ctl __P((void *, int));
-int	sbdsp_commit_settings __P((void *));
+int	sbdsp_set_in_gain __P((caddr_t, u_int, u_char));
+int	sbdsp_set_in_gain_real __P((caddr_t, u_int, u_char));
+int	sbdsp_get_in_gain __P((caddr_t));
+int	sbdsp_set_out_gain __P((caddr_t, u_int, u_char));
+int	sbdsp_set_out_gain_real __P((caddr_t, u_int, u_char));
+int	sbdsp_get_out_gain __P((caddr_t));
+int	sbdsp_set_monitor_gain __P((caddr_t, u_int));
+int	sbdsp_get_monitor_gain __P((caddr_t));
+int	sbdsp_set_in_sr __P((caddr_t, u_long));
+int	sbdsp_set_in_sr_real __P((caddr_t, u_long));
+u_long	sbdsp_get_in_sr __P((caddr_t));
+int	sbdsp_set_out_sr __P((caddr_t, u_long));
+int	sbdsp_set_out_sr_real __P((caddr_t, u_long));
+u_long	sbdsp_get_out_sr __P((caddr_t));
+int	sbdsp_query_encoding __P((caddr_t, struct audio_encoding *));
+int	sbdsp_set_encoding __P((caddr_t, u_int));
+int	sbdsp_get_encoding __P((caddr_t));
+int	sbdsp_set_precision __P((caddr_t, u_int));
+int	sbdsp_get_precision __P((caddr_t));
+int	sbdsp_set_channels __P((caddr_t, int));
+int	sbdsp_get_channels __P((caddr_t));
+int	sbdsp_round_blocksize __P((caddr_t, int));
+int	sbdsp_set_out_port __P((caddr_t, int));
+int	sbdsp_get_out_port __P((caddr_t));
+int	sbdsp_set_in_port __P((caddr_t, int));
+int	sbdsp_get_in_port __P((caddr_t));
+int	sbdsp_get_avail_in_ports __P((caddr_t));
+int	sbdsp_get_avail_out_ports __P((caddr_t));
+int	sbdsp_speaker_ctl __P((caddr_t, int));
+int	sbdsp_commit_settings __P((caddr_t));
 
-int	sbdsp_dma_output __P((void *, void *, int, void (*)(), void*));
-int	sbdsp_dma_input __P((void *, void *, int, void (*)(), void*));
+int	sbdsp_dma_output __P((caddr_t, void *, int, void (*)(), void*));
+int	sbdsp_dma_input __P((caddr_t, void *, int, void (*)(), void*));
 
-int	sbdsp_haltdma __P((void *));
-int	sbdsp_contdma __P((void *));
+int	sbdsp_haltdma __P((caddr_t));
+int	sbdsp_contdma __P((caddr_t));
 
 u_int	sbdsp_get_silence __P((int));
 void	sbdsp_compress __P((int, u_char *, int));
@@ -193,20 +177,20 @@ int	sbdsp_reset __P((struct sbdsp_softc *));
 void	sbdsp_spkron __P((struct sbdsp_softc *));
 void	sbdsp_spkroff __P((struct sbdsp_softc *));
 
-int	sbdsp_wdsp(int iobase, int v);
-int	sbdsp_rdsp(int iobase);
+int	sbdsp_wdsp(u_short iobase, int v);
+int	sbdsp_rdsp(u_short iobase);
 
-int	sbdsp_intr __P((void *));
+int	sbdsp_intr __P((struct sbdsp_softc *));
 short	sbversion __P((struct sbdsp_softc *));
 
 int	sbdsp_set_sr __P((struct sbdsp_softc *, u_long *, int));
-int	sbdsp_setfd __P((void *, int));
+int	sbdsp_setfd __P((caddr_t, int));
 
 void	sbdsp_mix_write __P((struct sbdsp_softc *, int, int));
 int	sbdsp_mix_read __P((struct sbdsp_softc *, int));
 
-int	sbdsp_mixer_set_port __P((void *, mixer_ctrl_t *));
-int	sbdsp_mixer_get_port __P((void *, mixer_ctrl_t *));
-int	sbdsp_mixer_query_devinfo __P((void *, mixer_devinfo_t *));
+int	sbdsp_mixer_set_port __P((caddr_t, mixer_ctrl_t *));
+int	sbdsp_mixer_get_port __P((caddr_t, mixer_ctrl_t *));
+int	sbdsp_mixer_query_devinfo __P((caddr_t, mixer_devinfo_t *));
 
 #endif

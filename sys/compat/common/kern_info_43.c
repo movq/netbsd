@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_info_43.c,v 1.5 1996/02/21 00:11:12 cgd Exp $	*/
+/*	$NetBSD: kern_info_43.c,v 1.1 1995/06/24 20:16:13 christos Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1991, 1993
@@ -58,9 +58,9 @@
 #include <sys/syscallargs.h>
 
 int
-compat_43_sys_getdtablesize(p, v, retval)
+compat_43_getdtablesize(p, uap, retval)
 	struct proc *p;
-	void *v;
+	void *uap;
 	register_t *retval;
 {
 
@@ -71,9 +71,9 @@ compat_43_sys_getdtablesize(p, v, retval)
 
 /* ARGSUSED */
 int
-compat_43_sys_gethostid(p, v, retval)
+compat_43_gethostid(p, uap, retval)
 	struct proc *p;
-	void *v;
+	void *uap;
 	register_t *retval;
 {
 
@@ -84,21 +84,19 @@ compat_43_sys_gethostid(p, v, retval)
 
 /*ARGSUSED*/
 int
-compat_43_sys_gethostname(p, v, retval)
+compat_43_gethostname(p, uap, retval)
 	struct proc *p;
-	void *v;
-	register_t *retval;
-{
-	struct compat_43_sys_gethostname_args /* {
+	struct compat_43_gethostname_args /* {
 		syscallarg(char *) hostname;
 		syscallarg(u_int) len;
-	} */ *uap = v;
+	} */ *uap;
+	register_t *retval;
+{
 	int name;
-	size_t sz;
 
 	name = KERN_HOSTNAME;
-	sz = SCARG(uap, len);
-	return (kern_sysctl(&name, 1, SCARG(uap, hostname), &sz, 0, 0, p));
+	return (kern_sysctl(&name, 1, SCARG(uap, hostname), &SCARG(uap, len),
+	    0, 0));
 }
 
 #define	KINFO_PROC		(0<<8)
@@ -110,17 +108,16 @@ compat_43_sys_gethostname(p, v, retval)
 #define	KINFO_CLOCKRATE		(6<<8)
 
 int
-compat_43_sys_getkerninfo(p, v, retval)
+compat_43_getkerninfo(p, uap, retval)
 	struct proc *p;
-	void *v;
-	register_t *retval;
-{
-	register struct compat_43_sys_getkerninfo_args /* {
+	register struct compat_43_getkerninfo_args /* {
 		syscallarg(int) op;
 		syscallarg(char *) where;
 		syscallarg(int *) size;
 		syscallarg(int) arg;
-	} */ *uap = v;
+	} */ *uap;
+	register_t *retval;
+{
 	int error, name[5];
 	size_t size;
 
@@ -193,17 +190,16 @@ compat_43_sys_getkerninfo(p, v, retval)
 
 /* ARGSUSED */
 int
-compat_43_sys_sethostid(p, v, retval)
+compat_43_sethostid(p, uap, retval)
 	struct proc *p;
-	void *v;
+	struct compat_43_sethostid_args /* {
+		syscallarg(int32_t) hostid;
+	} */ *uap;
 	register_t *retval;
 {
-	struct compat_43_sys_sethostid_args /* {
-		syscallarg(int32_t) hostid;
-	} */ *uap = v;
 	int error;
 
-	if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
+	if (error = suser(p->p_ucred, &p->p_acflag))
 		return (error);
 	hostid = SCARG(uap, hostid);
 	return (0);
@@ -212,18 +208,17 @@ compat_43_sys_sethostid(p, v, retval)
 
 /* ARGSUSED */
 int
-compat_43_sys_sethostname(p, v, retval)
+compat_43_sethostname(p, uap, retval)
 	struct proc *p;
-	void *v;
+	register struct compat_43_sethostname_args *uap;
 	register_t *retval;
 {
-	struct compat_43_sys_sethostname_args *uap = v;
 	int name;
 	int error;
 
-	if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
+	if (error = suser(p->p_ucred, &p->p_acflag))
 		return (error);
 	name = KERN_HOSTNAME;
 	return (kern_sysctl(&name, 1, 0, 0, SCARG(uap, hostname),
-			    SCARG(uap, len), p));
+	    SCARG(uap, len)));
 }

@@ -1,5 +1,3 @@
-/*	$NetBSD: nfs.c,v 1.14 1996/02/26 23:05:21 gwr Exp $	*/
-
 /*-
  *  Copyright (c) 1993 John Brezak
  *  All rights reserved.
@@ -26,6 +24,8 @@
  * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
+ *
+ *	$Id: nfs.c,v 1.1 1994/05/08 16:11:31 brezak Exp $
  */
 
 #include <sys/param.h>
@@ -37,8 +37,9 @@
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
 
-#include "rpcv2.h"
-#include "nfsv2.h"
+#include <nfs/rpcv2.h>
+#include <nfs/nfsv2.h>
+#undef NFSX_FATTR
 
 #include "stand.h"
 #include "net.h"
@@ -46,320 +47,531 @@
 #include "nfs.h"
 #include "rpc.h"
 
-/* Define our own NFS attributes without NQNFS stuff. */
-struct nfsv2_fattrs {
-	n_long	fa_type;
-	n_long	fa_mode;
-	n_long	fa_nlink;
-	n_long	fa_uid;
-	n_long	fa_gid;
-	n_long	fa_size;
-	n_long	fa_blocksize;
-	n_long	fa_rdev;
-	n_long	fa_blocks;
-	n_long	fa_fsid;
-	n_long	fa_fileid;
-	struct nfsv2_time fa_atime;
-	struct nfsv2_time fa_mtime;
-	struct nfsv2_time fa_ctime;
-};
-
-
-struct nfs_read_args {
+struct nfs_call_data {
 	u_char	fh[NFS_FHSIZE];
-	n_long	off;
-	n_long	len;
-	n_long	xxx;			/* XXX what's this for? */
+	u_long	off;
+	u_long	len;
+	u_long	xxx;			/* XXX what's this for? */
 };
 
 /* Data part of nfs rpc reply (also the largest thing we receive) */
-#define NFSREAD_SIZE 1024
-struct nfs_read_repl {
-	n_long	errno;
-	struct	nfsv2_fattrs fa;
-	n_long	count;
-	u_char	data[NFSREAD_SIZE];
+struct nfs_reply_data {
+	u_long	errno;
+#ifndef NFSX_FATTR
+	struct	nfsv2_fattr fa;
+#else
+	u_char	fa[NFSX_FATTR(0)];
+#endif
+	u_long	count;
+	u_char	data[1200];
 };
+#define NFSREAD_SIZE sizeof(((struct nfs_reply_data *)0)->data)
+
+/* max number of nfs reads pending */
+#define NFS_COUNT 10
+
+static struct nfsstate {
+	u_long	off;
+	u_long	len;
+	int	done;
+	void	*addr;
+	u_long	xid;
+} nfsstate[NFS_COUNT];
+
+static u_long nfscc;
 
 struct nfs_iodesc {
-	struct	iodesc	*iodesc;
 	off_t	off;
-	u_char	fh[NFS_FHSIZE];
-	struct nfsv2_fattrs fa;	/* all in network order */
+	size_t	size;
+	u_char	*fh;
+	struct	iodesc	*iodesc;
 };
 
-struct nfs_iodesc nfs_root_node;
-
-
-/*
- * Fetch the root file handle (call mount daemon)
- * On error, return non-zero and set errno.
- */
-int
-nfs_getrootfh(d, path, fhp)
+/* Fetch (mount) file handle */
+static int
+getmountfh(d, path, fhp)
 	register struct iodesc *d;
 	char *path;
 	u_char *fhp;
 {
 	register int len;
-	struct args {
-		n_long	len;
+	struct {
+		u_long	len;
 		char	path[FNAME_SIZE];
-	} *args;
-	struct repl {
-		n_long	errno;
-		u_char	fh[NFS_FHSIZE];
-	} *repl;
-	struct {
-		n_long	h[RPC_HEADER_WORDS];
-		struct args d;
 	} sdata;
 	struct {
-		n_long	h[RPC_HEADER_WORDS];
-		struct repl d;
+		u_long	errno;
+		u_char	fh[NFS_FHSIZE];
 	} rdata;
-	size_t cc;
+	int cc;
 	
 #ifdef NFS_DEBUG
 	if (debug)
-		printf("nfs_getrootfh: %s\n", path);
+	    printf("getmountfh: called\n");
 #endif
-
-	args = &sdata.d;
-	repl = &rdata.d;
-
-	bzero(args, sizeof(*args));
+	bzero(&sdata, sizeof(sdata));
 	len = strlen(path);
-	if (len > sizeof(args->path))
-		len = sizeof(args->path);
-	args->len = htonl(len);
-	bcopy(path, args->path, len);
-	len = 4 + roundup(len, 4);
+	if (len > sizeof(sdata.path))
+		len = sizeof(sdata.path);
+	bcopy(path, sdata.path, len);
+	sdata.len = htonl(len);
+	len = sizeof(sdata) - sizeof(sdata.path) + roundup(len, sizeof(long));
 
-	cc = rpc_call(d, RPCPROG_MNT, RPCMNT_VER1, RPCMNT_MOUNT,
-	    args, len, repl, sizeof(*repl));
-	if (cc == -1) {
-		/* errno was set by rpc_call */
-		return (-1);
-	}
-	if (cc < 4) {
-		errno = EBADRPC;
-		return (-1);
-	}
-	if (repl->errno) {
-		errno = ntohl(repl->errno);
-		return (-1);
-	}
-	bcopy(repl->fh, fhp, sizeof(repl->fh));
-	return (0);
-}
-
-/*
- * Lookup a file.  Store handle and attributes.
- * Return zero or error number.
- */
-int
-nfs_lookupfh(d, name, newfd)
-	struct nfs_iodesc *d;
-	char *name;
-	struct nfs_iodesc *newfd;
-{
-	register int len, rlen;
-	struct args {
-		u_char	fh[NFS_FHSIZE];
-		n_long	len;
-		char	name[FNAME_SIZE];
-	} *args;
-	struct repl {
-		n_long	errno;
-		u_char	fh[NFS_FHSIZE];
-		struct	nfsv2_fattrs fa;
-	} *repl;
-	struct {
-		n_long	h[RPC_HEADER_WORDS];
-		struct args d;
-	} sdata;
-	struct {
-		n_long	h[RPC_HEADER_WORDS];
-		struct repl d;
-	} rdata;
-	ssize_t cc;
-	
-#ifdef NFS_DEBUG
-	if (debug)
-		printf("lookupfh: called\n");
-#endif
-
-	args = &sdata.d;
-	repl = &rdata.d;
-
-	bzero(args, sizeof(*args));
-	bcopy(d->fh, args->fh, sizeof(args->fh));
-	len = strlen(name);
-	if (len > sizeof(args->name))
-		len = sizeof(args->name);
-	bcopy(name, args->name, len);
-	args->len = htonl(len);
-	len = 4 + roundup(len, 4);
-	len += NFS_FHSIZE;
-
-	rlen = sizeof(*repl);
-
-	cc = rpc_call(d->iodesc, NFS_PROG, NFS_VER2, NFSPROC_LOOKUP,
-	    args, len, repl, rlen);
-	if (cc == -1)
-		return (errno);		/* XXX - from rpc_call */
-	if (cc < 4)
-		return (EIO);
-	if (repl->errno) {
-		/* saerrno.h now matches NFS error numbers. */
-		return (ntohl(repl->errno));
-	}
-	bcopy( repl->fh, &newfd->fh, sizeof(newfd->fh));
-	bcopy(&repl->fa, &newfd->fa, sizeof(newfd->fa));
-	return (0);
-}
-
-/*
- * Read data from a file.
- * Return transfer count or -1 (and set errno)
- */
-ssize_t
-nfs_readdata(d, off, addr, len)
-	struct nfs_iodesc *d;
-	off_t off;
-	void *addr;
-	size_t len;
-{
-	struct nfs_read_args *args;
-	struct nfs_read_repl *repl;
-	struct {
-		n_long	h[RPC_HEADER_WORDS];
-		struct nfs_read_args d;
-	} sdata;
-	struct {
-		n_long	h[RPC_HEADER_WORDS];
-		struct nfs_read_repl d;
-	} rdata;
-	size_t cc;
-	long x;
-	int hlen, rlen;
-
-	args = &sdata.d;
-	repl = &rdata.d;
-
-	bcopy(d->fh, args->fh, NFS_FHSIZE);
-	args->off = htonl((n_long)off);
-	if (len > NFSREAD_SIZE)
-		len = NFSREAD_SIZE;
-	args->len = htonl((n_long)len);
-	args->xxx = htonl((n_long)0);
-	hlen = sizeof(*repl) - NFSREAD_SIZE;
-
-	cc = rpc_call(d->iodesc, NFS_PROG, NFS_VER2, NFSPROC_READ,
-	    args, sizeof(*args),
-	    repl, sizeof(*repl));
-	if (cc == -1) {
-		/* errno was already set by rpc_call */
-		return (-1);
-	}
-	if (cc < hlen) {
-		errno = EBADRPC;
-		return (-1);
-	}
-	if (repl->errno) {
-		errno = ntohl(repl->errno);
-		return (-1);
-	}
-	rlen = cc - hlen;
-	x = ntohl(repl->count);
-	if (rlen < x) {
-		printf("nfsread: short packet, %d < %d\n", rlen, x);
-		errno = EBADRPC;
+	if ((cc = callrpc(d, RPCPROG_MNT, RPCMNT_VER1, RPCMNT_MOUNT,
+	    &sdata, len, &rdata, sizeof(rdata))) < 0)
+		    return(-1);
+	if (cc < sizeof(rdata.errno))
+		panic("getmountfh: callrpc small read");
+	if (rdata.errno) {
+		errno = ntohl(rdata.errno);
 		return(-1);
 	}
-	bcopy(repl->data, addr, x);
-	return (x);
+	bcopy(rdata.fh, fhp, sizeof(rdata.fh));
+	return(0);
 }
+
+/* Fetch file timestamp and size */
+static int
+getnfsinfo(d, tp, sp, fp, mp, up, gp)
+	register struct nfs_iodesc *d;
+	register time_t *tp;
+	u_long *sp, *fp;
+	mode_t *mp;
+	uid_t *up;
+	gid_t *gp;
+{
+	register int rlen;
+	register u_long t;
+	struct {
+		u_long	errno;
+		struct	nfsv2_fattr fa;
+	} rdata;
+	int cc;
+
+#ifdef NFS_DEBUG
+ 	if (debug)
+ 	    printf("getnfsinfo: called\n");
+#endif
+	rlen = sizeof(rdata);
+#if 0
+#ifdef NFSX_FATTR
+#if NFSX_FATTR(1) > NFSX_FATTR(0)
+	/* nqnfs makes this more painful than it needs to be */
+	rlen -= NFSX_FATTR(1) - NFSX_FATTR(0);
+#endif
+#endif
+#endif
+	if ((cc = callrpc(d->iodesc, NFS_PROG, NFS_VER2, NFSPROC_GETATTR,
+		          d->fh, NFS_FHSIZE, &rdata, rlen)) < 0)
+		return(-1);
+	if (cc < sizeof(rdata.errno))
+		panic("getnfsinfo: callrpc small read");
+	if (rdata.errno) {
+		errno = ntohl(rdata.errno);
+		return(-1);
+	}
+	if (tp) {
+		*tp = ntohl(rdata.fa.fa_mtime.tv_sec);
+		t = ntohl(rdata.fa.fa_atime.tv_sec);
+		if (*tp < t)
+			*tp = t;
+	}
+	if (sp)
+		*sp = ntohl(rdata.fa.fa_size);
+	if (fp)
+		*fp = ntohl(rdata.fa.fa_type);
+	if (mp)
+		*mp = ntohl(rdata.fa.fa_mode);
+	if (up)
+		*up = ntohl(rdata.fa.fa_uid);
+	if (gp)
+		*gp = ntohl(rdata.fa.fa_gid);
+	return(0);
+}
+
+/* Lookup a file. Optionally return timestamp and size */
+static int
+lookupfh(d, name, fhp, tp, sp, fp)
+	struct nfs_iodesc *d;
+	char *name;
+	u_char *fhp;
+	time_t *tp;
+	u_long *sp, *fp;
+{
+	register int len, rlen;
+	struct {
+		u_char	fh[NFS_FHSIZE];
+		u_long	len;
+		char	name[FNAME_SIZE];
+	} sdata;
+	struct {
+		u_long	errno;
+		u_char	fh[NFS_FHSIZE];
+		struct	nfsv2_fattr fa;
+	} rdata;
+	int cc;
+	
+#ifdef NFS_DEBUG
+	if (debug)
+	    printf("lookupfh: called\n");
+#endif
+
+	bzero(&sdata, sizeof(sdata));
+	bcopy(d->fh, sdata.fh, sizeof(sdata.fh));
+	len = strlen(name);
+	if (len > sizeof(sdata.name))
+		len = sizeof(sdata.name);
+	bcopy(name, sdata.name, len);
+	sdata.len = htonl(len);
+	len = sizeof(sdata) - sizeof(sdata.name) + roundup(len, sizeof(long));
+
+	rlen = sizeof(rdata);
+#if 0
+#ifdef NFSX_FATTR
+#if NFSX_FATTR(1) > NFSX_FATTR(0)
+	/* nqnfs makes this more painful than it needs to be */
+	rlen -= NFSX_FATTR(1) - NFSX_FATTR(0);
+#endif
+#endif
+#endif
+	if ((cc = callrpc(d->iodesc, NFS_PROG, NFS_VER2, NFSPROC_LOOKUP,
+	    &sdata, len, &rdata, rlen)) < 0)
+		return (-1);
+	if (cc < sizeof(rdata.errno))
+		panic("lookupfh: callrpc small read");
+	if (rdata.errno) {
+		errno = ntohl(rdata.errno);
+		return(-1);
+	}
+	bcopy(rdata.fh, fhp, sizeof(rdata.fh));
+	if (tp)
+		*tp = ntohl(rdata.fa.fa_ctime.tv_sec);
+	if (sp)
+		*sp = ntohl(rdata.fa.fa_size);
+	if (fp)
+		*fp = ntohl(rdata.fa.fa_type);
+	return (0);
+}
+
+static int
+sendreaddata(d, pkt, len)
+	register struct nfs_iodesc *d;
+	register void *pkt;
+	register int len;
+{
+	register int i;
+	register u_long cc;
+	register struct rpc_call *rpc;
+	register struct nfs_call_data *nfs;
+	register struct nfsstate *ns;
+
+#ifdef NFS_DEBUG
+	if (debug)
+	    printf("sendreaddata: called\n");
+#endif
+
+	if (len != sizeof(*rpc) + sizeof(*nfs))
+		panic("sendreaddata: bad buffer (%d != %d)",
+		    len, sizeof(*rpc) + sizeof(*nfs));
+	rpc = pkt;
+	nfs = (struct nfs_call_data *)(rpc + 1);
+	for (i = 0, ns = nfsstate; i < NFS_COUNT; ++i, ++ns) {
+		if (ns->done)
+			continue;
+
+		rpc->rp_xid = ns->xid;
+		nfs->off = htonl(ns->off);
+		nfs->len = htonl(ns->len);
+		cc = sendudp(d->iodesc, rpc, len);
+
+		if (cc != len)
+			panic("sendreaddata: short write (%d != %d)", cc, len);
+	}
+	/* XXX we may have actually sent a lot more bytes... */
+
+	return (len);
+}
+
+/* Returns char count if done else -1 (and errno == 0) */
+static int
+recvreaddata(d, pkt, len)
+	register struct nfs_iodesc *d;
+	register void *pkt;
+	int len;
+{
+	register int i;
+	register struct rpc_reply *rpc;
+	register struct nfs_reply_data *nfs;
+	register struct nfsstate *ns;
+
+#ifdef NFS_DEBUG
+	if (debug)
+	    printf("recvreaddata: called\n");
+#endif
+	rpc = (struct rpc_reply *)checkudp(d->iodesc, pkt, &len);
+	if (rpc == NULL || len < sizeof(*rpc)) {
+		errno = 0;
+		return (-1);
+	}
+	len -= sizeof(*rpc);
+
+	NTOHL(rpc->rp_direction);
+	NTOHL(rpc->rp_stat);
+
+	if (rpc->rp_direction != REPLY || rpc->rp_stat != MSG_ACCEPTED) {
+		errno = 0;
+		return (-1);
+	}
+
+	for (i = 0, ns = nfsstate; i < NFS_COUNT; ++i, ++ns)
+		if (rpc->rp_xid == ns->xid)
+			break;
+	if (i >= NFS_COUNT) {
+		errno = 0;
+		return (-1);
+	}
+
+	if (ns->done) {
+		errno = 0;
+		return (-1);
+	}
+#ifdef NFS_DEBUG
+	if (debug)
+	    printf("recvreaddata: ns=%x\n", (u_int)ns);
+#endif
+	nfs = (struct nfs_reply_data *)(rpc + 1);
+	if (len < sizeof(nfs->errno))
+		panic("recvreaddata: bad read %d", len);
+	if (nfs->errno) {
+		errno = ntohl(nfs->errno);
+		return (-1);
+	}
+	if (len < sizeof(*nfs) - sizeof(nfs->data))
+		panic("recvreaddata: less than nfs sized %d", len);
+	len -= sizeof(*nfs) - sizeof(nfs->data);
+
+	if (len < nfs->count)
+		panic("recvreaddata: short read (%d < %d)", len, nfs->count);
+	len = nfs->count;
+	if (len > ns->len)
+		panic("recvreaddata: huge read (%d > %d)", len, ns->len);
+
+	
+#ifdef NFS_DEBUG
+	if (debug)
+	    printf("recvreaddata: read %d bytes.\n", len);
+#endif
+	bcopy(nfs->data, ns->addr, len);
+	ns->done = 1;
+	nfscc += len;
+
+	if (len < ns->len) {
+		/* If first packet assume no more data to read */
+		if (i == 0)
+			return (0);
+
+		/* Short read, assume we are at EOF */
+		++i;
+		++ns;
+		while (i < NFS_COUNT) {
+			ns->done = 1;
+			++i;
+			++ns;
+		}
+	}
+
+	for (i = 0, ns = nfsstate; i < NFS_COUNT; ++i, ++ns)
+		if (!ns->done) {
+			errno = 0;
+			return (-1);
+		}
+
+	/* Return data count (thus indicating success) */
+	return (nfscc);
+}
+
+/* Read data from a file */
+static int
+readdata(d, off, addr, len)
+	register struct nfs_iodesc *d;
+	register u_long off;
+	register void *addr;
+	register u_long len;
+{
+	register int i, cc;
+	register struct rpc_call *rpc;
+	register struct nfsstate *ns;
+	struct {
+		u_char	header[HEADER_SIZE];
+		struct	rpc_call rpc;
+		struct	nfs_call_data nfs;
+	} sdata;
+	struct {
+		u_char	header[HEADER_SIZE];
+		struct	rpc_call rpc;
+		struct	nfs_reply_data nfs;
+	} rdata;
+
+#ifdef NFS_DEBUG
+	if (debug)
+	    printf("readdata: addr=%x, off=%d len=%d\n", (u_int)addr, off, len);
+#endif
+	if (len == 0)
+		return (0);
+	d->iodesc->destport = getport(d->iodesc, NFS_PROG, NFS_VER2);
+
+	bzero(&sdata, sizeof(sdata));
+
+	for (i = 0, ns = nfsstate; i < NFS_COUNT; ++i, ++ns) {
+		if (len <= 0) {
+			ns->done = 1;
+			continue;
+		}
+		ns->done = 0;
+
+		ns->xid = d->iodesc->xid;
+		++d->iodesc->xid;
+
+		ns->off = off;
+		ns->len = len;
+		if (ns->len > NFSREAD_SIZE)
+			ns->len = NFSREAD_SIZE;
+#ifdef notdef
+/* XXX to align or not align? It doesn't seem to speed things up... */
+		if ((ns->off % NFSREAD_SIZE) != 0)
+			ns->len -= off % NFSREAD_SIZE;
+#endif
+
+		off += ns->len;
+		len -= ns->len;
+
+		ns->addr = addr;
+		addr += NFSREAD_SIZE;
+	}
+
+	rpc = &sdata.rpc;
+	rpc->rp_rpcvers = htonl(RPC_MSG_VERSION);
+	rpc->rp_prog = htonl(NFS_PROG);
+	rpc->rp_vers = htonl(NFS_VER2);
+	rpc->rp_proc = htonl(NFSPROC_READ);
+	bcopy(d->fh, sdata.nfs.fh, sizeof(sdata.nfs.fh));
+
+	nfscc = 0;
+	cc = sendrecv(d->iodesc,
+		      sendreaddata, &sdata.rpc,
+		      sizeof(struct rpc_call) + sizeof(struct nfs_call_data),
+		      recvreaddata,
+			((u_char *)&rdata.rpc) - HEADER_SIZE, HEADER_SIZE +
+			  sizeof(struct rpc_call) + sizeof(struct nfs_reply_data));
+	return (cc);
+}
+
+static struct iodesc *mountfs;
+static u_char mountfh[NFS_FHSIZE];
+static time_t mounttime;
 
 /*
  * nfs_mount - mount this nfs filesystem to a host
- * On error, return non-zero and set errno.
  */
 int
 nfs_mount(sock, ip, path)
 	int sock;
-	struct in_addr ip;
+	n_long ip;
 	char *path;
 {
 	struct iodesc *desc;
-	struct nfsv2_fattrs *fa;
-
+	struct nfs_iodesc *fp;
+	u_long ftype;
+	
 	if (!(desc = socktodesc(sock))) {
 		errno = EINVAL;
 		return(-1);
 	}
-
-	/* Bind to a reserved port. */
-	desc->myport = htons(--rpc_port);
+	bcopy(&desc->myea[4], &desc->myport, 2);
 	desc->destip = ip;
-	if (nfs_getrootfh(desc, path, nfs_root_node.fh))
-		return (-1);
-	nfs_root_node.iodesc = desc;
-	/* Fake up attributes for the root dir. */
-	fa = &nfs_root_node.fa;
-	fa->fa_type  = htonl(NFDIR);
-	fa->fa_mode  = htonl(0755);
-	fa->fa_nlink = htonl(2);
+	getmountfh(desc, path, mountfh);
 
+	fp = alloc(sizeof(struct nfs_iodesc));
+	fp->iodesc = desc;
+	fp->fh = mountfh;
+	fp->off = 0;
+	if (getnfsinfo(fp, &mounttime, NULL, &ftype, NULL, NULL, NULL) < 0) {
+		free(fp, sizeof(struct nfs_iodesc));
+		return(-1);
+	}
+
+	if (ftype != NFDIR) {
+		free(fp, sizeof(struct nfs_iodesc));
+	    	errno = EINVAL;
+		printf("nfs_mount: bad mount ftype %d", ftype);
+		return(-1);
+	}
 #ifdef NFS_DEBUG
 	if (debug)
-		printf("nfs_mount: got fh for %s\n", path);
+		printf("nfs_mount: got fh for %s, mtime=%d, ftype=%d\n",
+			path, mounttime, ftype);
 #endif
+	mountfs = desc;
+	free(fp, sizeof(struct nfs_iodesc));
 
 	return(0);
 }
 
 /*
  * Open a file.
- * return zero or error number
  */
 int
 nfs_open(path, f)
 	char *path;
 	struct open_file *f;
 {
-	struct nfs_iodesc *newfd;
-	int error = 0;
+	register struct nfs_iodesc *fp;
+	u_char *imagefh;
+	u_long size, ftype;
+	int rc = 0;
 
 #ifdef NFS_DEBUG
  	if (debug)
  	    printf("nfs_open: %s\n", path);
 #endif
-	if (nfs_root_node.iodesc == NULL) {
+	if (!mountfs) {
+		errno = EIO;
 		printf("nfs_open: must mount first.\n");
-		return (ENXIO);
+		return(-1);
 	}
 
 	/* allocate file system specific data structure */
-	newfd = alloc(sizeof(*newfd));
-	newfd->iodesc = nfs_root_node.iodesc;
-	newfd->off = 0;
+	fp = alloc(sizeof(struct nfs_iodesc));
+	fp->iodesc = mountfs;
+	fp->fh = mountfh;
+	fp->off = 0;
+	
+	f->f_fsdata = (void *)fp;
+	imagefh = alloc(NFS_FHSIZE);
+	bzero(imagefh, NFS_FHSIZE);
 
 	/* lookup a file handle */
-	error = nfs_lookupfh(&nfs_root_node, path, newfd);
-	if (!error) {
-		f->f_fsdata = (void *)newfd;
-		return (0);
+	rc = lookupfh(fp, path, imagefh, NULL, &size, &ftype);
+	if (rc < 0) {
+#ifdef NFS_DEBUG
+		if (debug)
+			printf("nfs_open: %s lookupfh failed: %s\n", path, strerror(errno));
+#endif
+		f->f_fsdata = (void *)0;
+		free(fp, sizeof(struct nfs_iodesc));
+		free(imagefh, NFS_FHSIZE);
+		return(rc);
 	}
-
+	fp->fh = imagefh;
+	
 #ifdef NFS_DEBUG
 	if (debug)
-		printf("nfs_open: %s lookupfh failed: %s\n",
-			path, strerror(error));
+		printf("nfs_open: %s success, size=%d ftype=%d\n",
+			path, size, ftype);
 #endif
-	free(newfd, sizeof(*newfd));
-	return (error);
+	fp->size = size;
+
+	return(rc);
 }
 
 int
@@ -370,12 +582,14 @@ nfs_close(f)
 
 #ifdef NFS_DEBUG
 	if (debug)
-		printf("nfs_close: fp=0x%x\n", fp);
+		printf("nfs_close: called\n");
 #endif
-
-	if (fp)
-		free(fp, sizeof(struct nfs_iodesc));
 	f->f_fsdata = (void *)0;
+	if (fp == (struct nfs_iodesc *)0)
+		return (0);
+
+	free(fp->fh, NFS_FHSIZE);
+	free(fp, sizeof(struct nfs_iodesc));
 	
 	return (0);
 }
@@ -384,32 +598,31 @@ nfs_close(f)
  * read a portion of a file
  */
 int
-nfs_read(f, buf, size, resid)
+nfs_read(f, addr, size, resid)
 	struct open_file *f;
-	void *buf;
-	size_t size;
-	size_t *resid;	/* out */
+	char *addr;
+	u_int size;
+	u_int *resid;	/* out */
 {
 	register struct nfs_iodesc *fp = (struct nfs_iodesc *)f->f_fsdata;
-	register ssize_t cc;
-	register char *addr = buf;
+	register int cc;
 	
 #ifdef NFS_DEBUG
 	if (debug)
-		printf("nfs_read: size=%d off=%d\n", size, (int)fp->off);
+		printf("nfs_read: size=%d off=%d\n", size, fp->off);
 #endif
-	while ((int)size > 0) {
-		twiddle();
-		cc = nfs_readdata(fp, fp->off, (void *)addr, size);
-		/* XXX maybe should retry on certain errors */
-		if (cc == -1) {
+	while (size > 0) {
+		cc = readdata(fp->iodesc, fp->off, (void *)addr, size);
+		if (cc <= 0) {
+			/* XXX maybe should retry on certain errors */
+			if (cc < 0) {
 #ifdef NFS_DEBUG
-			if (debug)
-				printf("nfs_read: read: %s", strerror(errno));
+				if (debug)
+					printf("nfs_read: read: %s",
+						strerror(errno));
 #endif
-			return (errno);	/* XXX - from nfs_readdata */
-		}
-		if (cc == 0) {
+				return (-1);
+			}
 			if (debug)
 				printf("nfs_read: hit EOF unexpectantly");
 			goto ret;
@@ -429,13 +642,15 @@ ret:
  * Not implemented.
  */
 int
-nfs_write(f, buf, size, resid)
+nfs_write(f, start, size, resid)
 	struct open_file *f;
-	void *buf;
-	size_t size;
-	size_t *resid;	/* out */
+	char *start;
+	u_int size;
+	u_int *resid;	/* out */
 {
-	return (EROFS);
+	errno = EROFS;
+	
+	return (-1);
 }
 
 off_t
@@ -444,47 +659,62 @@ nfs_seek(f, offset, where)
 	off_t offset;
 	int where;
 {
-	register struct nfs_iodesc *d = (struct nfs_iodesc *)f->f_fsdata;
-	n_long size = ntohl(d->fa.fa_size);
+	register struct nfs_iodesc *fp = (struct nfs_iodesc *)f->f_fsdata;
 
 	switch (where) {
 	case SEEK_SET:
-		d->off = offset;
+		fp->off = offset;
 		break;
 	case SEEK_CUR:
-		d->off += offset;
+		fp->off += offset;
 		break;
 	case SEEK_END:
-		d->off = size - offset;
+		fp->off = fp->size - offset;
 		break;
 	default:
 		return (-1);
 	}
-
-	return (d->off);
+	return (fp->off);
 }
-
-/* NFNON=0, NFREG=1, NFDIR=2, NFBLK=3, NFCHR=4, NFLNK=5 */
-int nfs_stat_types[8] = {
-	0, S_IFREG, S_IFDIR, S_IFBLK, S_IFCHR, S_IFLNK, 0 };
 
 int
 nfs_stat(f, sb)
 	struct open_file *f;
 	struct stat *sb;
 {
-	struct nfs_iodesc *fp = (struct nfs_iodesc *)f->f_fsdata;
-	register n_long ftype, mode;
+	register struct nfs_iodesc *fp = (struct nfs_iodesc *)f->f_fsdata;
+	mode_t mode = 0;
+	u_long ftype = 0;
 
-	ftype = ntohl(fp->fa.fa_type);
-	mode  = ntohl(fp->fa.fa_mode);
-	mode |= nfs_stat_types[ftype & 7];
+#ifdef NFS_DEBUG
+ 	if (debug)
+ 	    printf("nfs_stat: called\n");
+#endif
+	if (getnfsinfo(fp, &mounttime, &sb->st_size, &ftype, &mode, &sb->st_uid, &sb->st_gid) < 0)
+		return(-1);
 
-	sb->st_mode  = mode;
-	sb->st_nlink = ntohl(fp->fa.fa_nlink);
-	sb->st_uid   = ntohl(fp->fa.fa_uid);
-	sb->st_gid   = ntohl(fp->fa.fa_gid);
-	sb->st_size  = ntohl(fp->fa.fa_size);
+	/* create a mode */
+	switch (ftype) {
+	case NFNON:
+		sb->st_mode = 0;
+		break;
+	case NFREG:
+		sb->st_mode = S_IFREG;
+		break;
+	case NFDIR:
+		sb->st_mode = S_IFDIR;
+		break;
+	case NFBLK:
+		sb->st_mode = S_IFBLK;
+		break;
+	case NFCHR:
+		sb->st_mode = S_IFCHR;
+		break;
+	case NFLNK:
+		sb->st_mode = S_IFLNK;
+		break;
+	}
+	sb->st_mode |= mode;
 
 	return (0);
 }

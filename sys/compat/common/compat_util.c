@@ -1,4 +1,4 @@
-/* 	$NetBSD: compat_util.c,v 1.4 1996/03/14 19:31:45 christos Exp $	*/
+/* 	$NetBSD: compat_util.c,v 1.1 1995/06/24 20:16:03 christos Exp $	*/
 
 /*
  * Copyright (c) 1994 Christos Zoulas
@@ -66,13 +66,12 @@ emul_find(p, sgp, prefix, path, pbuf, cflag)
 	struct vattr		 vatroot;
 	int			 error;
 	char			*ptr, *buf, *cp;
-	const char		*pr;
 	size_t			 sz, len;
 
 	buf = (char *) malloc(MAXPATHLEN, M_TEMP, M_WAITOK);
 	*pbuf = path;
 
-	for (ptr = buf, pr = prefix; (*ptr = *pr) != '\0'; ptr++, pr++)
+	for (ptr = buf; (*ptr = *prefix) != '\0'; ptr++, prefix++)
 		continue;
 
 	sz = MAXPATHLEN - (ptr - buf);
@@ -85,12 +84,14 @@ emul_find(p, sgp, prefix, path, pbuf, cflag)
 	else
 		error = copyinstr(path, ptr, sz, &len);
 
-	if (error)
-		goto bad;
+	if (error) {
+		free(buf, M_TEMP);
+		return error;
+	}
 
 	if (*ptr != '/') {
-		error = EINVAL;
-		goto bad;
+		free(buf, M_TEMP);
+		return EINVAL;
 	}
 
 	/*
@@ -102,22 +103,25 @@ emul_find(p, sgp, prefix, path, pbuf, cflag)
 	 */
 
 	if (cflag) {
-		for (cp = &ptr[len] - 1; *cp != '/'; cp--)
-			;
+		for (cp = &ptr[len] - 1; *cp != '/'; cp--);
 		*cp = '\0';
 
 		NDINIT(&nd, LOOKUP, FOLLOW, UIO_SYSSPACE, buf, p);
 
-		if ((error = namei(&nd)) != 0)
-			goto bad;
+		if ((error = namei(&nd)) != 0) {
+			free(buf, M_TEMP);
+			return error;
+		}
 
 		*cp = '/';
 	}
 	else {
 		NDINIT(&nd, LOOKUP, FOLLOW, UIO_SYSSPACE, buf, p);
 
-		if ((error = namei(&nd)) != 0)
-			goto bad;
+		if ((error = namei(&nd)) != 0) {
+			free(buf, M_TEMP);
+			return error;
+		}
 
 		/*
 		 * We now compare the vnode of the emulation root to the one
@@ -131,21 +135,28 @@ emul_find(p, sgp, prefix, path, pbuf, cflag)
 		NDINIT(&ndroot, LOOKUP, FOLLOW, UIO_SYSSPACE, 
 		       (char *) prefix, p);
 
-		if ((error = namei(&ndroot)) != 0)
-			goto bad2;
+		if ((error = namei(&ndroot)) != 0) {
+			/* Cannot happen! */
+			free(buf, M_TEMP);
+			vrele(nd.ni_vp);
+			return error;
+		}
 
-		if ((error = VOP_GETATTR(nd.ni_vp, &vat, p->p_ucred, p)) != 0)
-			goto bad3;
+		if ((error = VOP_GETATTR(nd.ni_vp, &vat, p->p_ucred, p)) != 0) {
+			goto done;
+		}
 
 		if ((error = VOP_GETATTR(ndroot.ni_vp, &vatroot, p->p_ucred, p))
-		    != 0)
-			goto bad3;
+		    != 0) {
+			goto done;
+		}
 
 		if (vat.va_fsid == vatroot.va_fsid &&
 		    vat.va_fileid == vatroot.va_fileid) {
 			error = ENOENT;
-			goto bad3;
+			goto done;
 		}
+
 	}
 	if (sgp == NULL)
 		*pbuf = buf;
@@ -156,16 +167,10 @@ emul_find(p, sgp, prefix, path, pbuf, cflag)
 		free(buf, M_TEMP);
 	}
 
+
+done:
 	vrele(nd.ni_vp);
 	if (!cflag)
 		vrele(ndroot.ni_vp);
-	return error;
-
-bad3:
-	vrele(ndroot.ni_vp);
-bad2:
-	vrele(nd.ni_vp);
-bad:
-	free(buf, M_TEMP);
 	return error;
 }

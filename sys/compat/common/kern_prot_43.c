@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_prot_43.c,v 1.3 1995/10/07 06:26:27 mycroft Exp $	*/
+/*	$NetBSD: kern_prot_43.c,v 1.1 1995/06/24 20:16:17 christos Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1990, 1991, 1993
@@ -54,17 +54,16 @@
 
 /* ARGSUSED */
 int
-compat_43_sys_setregid(p, v, retval)
+compat_43_setregid(p, uap, retval)
 	register struct proc *p;
-	void *v;
-	register_t *retval;
-{
-	struct compat_43_sys_setregid_args /* {
+	struct compat_43_setregid_args /* {
 		syscallarg(int) rgid;
 		syscallarg(int) egid;
-	} */ *uap = v;
-	struct sys_setegid_args segidargs;
-	struct sys_setgid_args sgidargs;
+	} */ *uap;
+	register_t *retval;
+{
+	struct setegid_args segidargs;
+	struct setgid_args sgidargs;
 
 	/*
 	 * There are five cases, described above in osetreuid()
@@ -73,29 +72,28 @@ compat_43_sys_setregid(p, v, retval)
 		if (SCARG(uap, egid) == (gid_t)-1)
 			return (0);				/* -1, -1 */
 		SCARG(&segidargs, egid) = SCARG(uap, egid);	/* -1,  N */
-		return (sys_setegid(p, &segidargs, retval));
+		return (setegid(p, &segidargs, retval));
 	}
 	if (SCARG(uap, egid) == (gid_t)-1) {
 		SCARG(&segidargs, egid) = SCARG(uap, rgid);	/* N, -1 */
-		return (sys_setegid(p, &segidargs, retval));
+		return (setegid(p, &segidargs, retval));
 	}
 	SCARG(&sgidargs, gid) = SCARG(uap, rgid);	/* N, N and N, M */
-	return (sys_setgid(p, &sgidargs, retval));
+	return (setgid(p, &sgidargs, retval));
 }
 
 /* ARGSUSED */
 int
-compat_43_sys_setreuid(p, v, retval)
+compat_43_setreuid(p, uap, retval)
 	register struct proc *p;
-	void *v;
-	register_t *retval;
-{
-	struct compat_43_sys_setreuid_args /* {
+	struct compat_43_setreuid_args /* {
 		syscallarg(int) ruid;
 		syscallarg(int) euid;
-	} */ *uap = v;
-	struct sys_seteuid_args seuidargs;
-	struct sys_setuid_args suidargs;
+	} */ *uap;
+	register_t *retval;
+{
+	struct seteuid_args seuidargs;
+	struct setuid_args suidargs;
 
 	/*
 	 * There are five cases, and we attempt to emulate them in
@@ -114,12 +112,12 @@ compat_43_sys_setreuid(p, v, retval)
 		if (SCARG(uap, euid) == (uid_t)-1)
 			return (0);				/* -1, -1 */
 		SCARG(&seuidargs, euid) = SCARG(uap, euid);	/* -1,  N */
-		return (sys_seteuid(p, &seuidargs, retval));
+		return (seteuid(p, &seuidargs, retval));
 	}
 	if (SCARG(uap, euid) == (uid_t)-1) {
 		SCARG(&seuidargs, euid) = SCARG(uap, ruid);	/* N, -1 */
-		return (sys_seteuid(p, &seuidargs, retval));
+		return (seteuid(p, &seuidargs, retval));
 	}
 	SCARG(&suidargs, uid) = SCARG(uap, ruid);	/* N, N and N, M */
-	return (sys_setuid(p, &suidargs, retval));
+	return (setuid(p, &suidargs, retval));
 }

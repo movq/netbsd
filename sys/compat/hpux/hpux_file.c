@@ -1,4 +1,4 @@
-/*	$NetBSD: hpux_file.c,v 1.3 1996/01/06 12:44:14 thorpej Exp $	*/
+/*	$NetBSD: hpux_file.c,v 1.1 1995/11/28 08:39:58 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1995 Jason R. Thorpe.  All rights reserved.
@@ -116,6 +116,14 @@ hpux_sys_creat(p, v, retval)
 }
 
 /*
+ * XXX extensions to the fd_ofileflags flags.
+ * Hate to put this there, but they do need to be per-file.
+ */
+#define	UF_NONBLOCK_ON		0x10
+#define	UF_FNDELAY_ON		0x20
+#define	UF_FIONBIO_ON		0x40
+
+/*
  * HP-UX open(2) system call.
  *
  * We need to remap some of the bits in the mode mask:
@@ -188,8 +196,7 @@ hpux_sys_open(p, v, retval)
 	 */
 	if ((error == 0) && (nflags & O_NDELAY))
 		p->p_fd->fd_ofileflags[*retval] |=
-		    (flags & HPUXNONBLOCK) ?
-		        HPUX_UF_NONBLOCK_ON : HPUX_UF_FNDELAY_ON;
+		    (flags & HPUXNONBLOCK) ? UF_NONBLOCK_ON : UF_FNDELAY_ON;
 
 	return (error);
 }
@@ -226,16 +233,16 @@ hpux_sys_fcntl(p, v, retval)
 	switch (SCARG(uap, cmd)) {
 	case F_SETFL:
 		if (arg & HPUXNONBLOCK)
-			*pop |= HPUX_UF_NONBLOCK_ON;
+			*pop |= UF_NONBLOCK_ON;
 		else
-			*pop &= ~HPUX_UF_NONBLOCK_ON;
+			*pop &= ~UF_NONBLOCK_ON;
 
 		if (arg & HPUXNDELAY)
-			*pop |= HPUX_UF_FNDELAY_ON;
+			*pop |= UF_FNDELAY_ON;
 		else
-			*pop &= ~HPUX_UF_FNDELAY_ON;
+			*pop &= ~UF_FNDELAY_ON;
 		
-		if (*pop & (HPUX_UF_NONBLOCK_ON|HPUX_UF_FNDELAY_ON|HPUX_UF_FIONBIO_ON))
+		if (*pop & (UF_NONBLOCK_ON|UF_FNDELAY_ON|UF_FIONBIO_ON))
 			arg |= FNONBLOCK;
 		else
 			arg &= ~FNONBLOCK;
@@ -344,10 +351,10 @@ hpux_sys_fcntl(p, v, retval)
 		mode = *retval;
 		*retval &= ~(O_CREAT|O_TRUNC|O_EXCL);
 		if (mode & FNONBLOCK) {
-			if (*pop & HPUX_UF_NONBLOCK_ON)
+			if (*pop & UF_NONBLOCK_ON)
 				*retval |= HPUXNONBLOCK;
 
-			if ((*pop & HPUX_UF_FNDELAY_ON) == 0)
+			if ((*pop & UF_FNDELAY_ON) == 0)
 				*retval &= ~HPUXNDELAY;
 		}
 		if (mode & O_CREAT)
@@ -544,6 +551,22 @@ hpux_sys_stat_6x(p, v, retval)
 	return (copyout(&tmphst, SCARG(uap, sb), sizeof(struct hpux_ostat)));
 }
 
+/* XXX: Set up a machdep callback. */
+#ifdef hp300
+#include "grf.h"
+#define	NHIL	1	/* XXX */
+#endif
+
+#if NGRF > 0
+extern int grfopen __P((dev_t dev, int oflags, int devtype, struct proc *p));
+#endif
+
+#if NHIL > 0
+extern int hilopen __P((dev_t dev, int oflags, int devtype, struct proc *p));
+#endif
+
+#include <sys/conf.h>
+
 /*
  * Convert a NetBSD stat structure to an HP-UX stat structure.
  */
@@ -567,12 +590,24 @@ bsd_to_hpux_stat(sb, hsb)
 	hsb->hst_old_uid = (u_short)sb->st_uid;
 	hsb->hst_old_gid = (u_short)sb->st_gid;
 
-	/*
-	 * Call machine-dependent stat conversion.  Is it just me
-	 * who thinks HP-UX device semantics are strange?!
-	 */
-	hpux_cpu_bsd_to_hpux_stat(sb, hsb);
+	/* MACHDEP CALLBACK SHOULD GO HERE! */
+	/* XXX: I don't want to talk about it... */
+	if ((sb->st_mode & S_IFMT) == S_IFCHR) {
+#if NGRF > 0
+		if (cdevsw[major(sb->st_rdev)].d_open == grfopen) {
+			hsb->hst_rdev = grfdevno(sb->st_rdev);
+			goto xxx_out;
+		}
+#endif
+#if NHIL > 0
+		if (cdevsw[major(sb->st_rdev)].d_open == hilopen) {
+			hsb->hst_rdev = hildevno(sb->st_rdev);
+			goto xxx_out;
+		}
+#endif
+	}
 
+ xxx_out:
 	if (sb->st_size < (off_t)(((off_t)1) << 32))
 		hsb->hst_size = (long)sb->st_size;
 	else

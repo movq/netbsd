@@ -1,5 +1,4 @@
-/*	$NetBSD: svr4_stat.c,v 1.21 1996/04/22 01:16:07 christos Exp $	 */
-
+/* $NetBSD: svr4_stat.c,v 1.1 1994/10/24 17:37:46 deraadt Exp $	*/
 /*
  * Copyright (c) 1994 Christos Zoulas
  * All rights reserved.
@@ -12,19 +11,26 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by the University of
+ *	California, Berkeley and its contributors.
+ * 4. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
- * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
- * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
  */
 
 #include <sys/param.h>
@@ -38,646 +44,323 @@
 #include <sys/kernel.h>
 #include <sys/mount.h>
 #include <sys/malloc.h>
-#include <sys/unistd.h>
-
-#include <sys/time.h>
-#include <sys/ucred.h>
-#include <vm/vm.h>
-#include <sys/sysctl.h>
 
 #include <sys/syscallargs.h>
 
 #include <compat/svr4/svr4_types.h>
-#include <compat/svr4/svr4_signal.h>
 #include <compat/svr4/svr4_syscallargs.h>
 #include <compat/svr4/svr4_util.h>
 #include <compat/svr4/svr4_stat.h>
 #include <compat/svr4/svr4_ustat.h>
 #include <compat/svr4/svr4_fuser.h>
 #include <compat/svr4/svr4_utsname.h>
-#include <compat/svr4/svr4_systeminfo.h>
-#include <compat/svr4/svr4_time.h>
-#include <compat/svr4/svr4_socket.h>
 
-#ifdef sparc
-/* 
- * Solaris-2.4 on the sparc has the old stat call using the new
- * stat data structure...
- */
-# define SVR4_NO_OSTAT
-#endif
-
-static void bsd_to_svr4_xstat __P((struct stat *, struct svr4_xstat *));
-int svr4_ustat __P((struct proc *, void *, register_t *));
-static int svr4_to_bsd_pathconf __P((int));
-
-/*
- * SVR4 uses named pipes as named sockets, so we tell programs
- * that sockets are named pipes with mode 0
- */
-#define BSD_TO_SVR4_MODE(mode) (S_ISSOCK(mode) ? S_IFIFO : (mode))
-
-
-#ifndef SVR4_NO_OSTAT
-static void bsd_to_svr4_stat __P((struct stat *, struct svr4_stat *));
-
+#define syscallarg(x)	union { x datum; register_t pad; }
 static void
 bsd_to_svr4_stat(st, st4)
-	struct stat		*st;
-	struct svr4_stat 	*st4;
+    struct stat *st;
+    struct svr4_stat *st4;
 {
-	bzero(st4, sizeof(*st4));
-	st4->st_dev = st->st_dev;
-	st4->st_ino = st->st_ino;
-	st4->st_mode = BSD_TO_SVR4_MODE(st->st_mode);
-	st4->st_nlink = st->st_nlink;
-	st4->st_uid = st->st_uid;
-	st4->st_gid = st->st_gid;
-	st4->st_rdev = st->st_rdev;
-	st4->st_size = st->st_size;
-	st4->st_atim = st->st_atimespec.tv_sec;
-	st4->st_mtim = st->st_mtimespec.tv_sec;
-	st4->st_ctim = st->st_ctimespec.tv_sec;
+    bzero(st4, sizeof(*st4));
+    st4->st_dev = st->st_dev;
+    st4->st_ino = st->st_ino;
+    st4->st_mode = st->st_mode;
+    st4->st_nlink = st->st_nlink;
+    st4->st_uid = st->st_uid;
+    st4->st_gid = st->st_gid;
+    st4->st_size = st->st_size;
+    st4->st_atim = st->st_atimespec.ts_sec;
+    st4->st_mtim = st->st_mtimespec.ts_sec;
+    st4->st_ctim = st->st_ctimespec.ts_sec;
 }
-#endif
-
 
 
 static void
 bsd_to_svr4_xstat(st, st4)
-	struct stat		*st;
-	struct svr4_xstat	*st4;
+    struct stat *st;
+    struct svr4_xstat *st4;
 {
-	bzero(st4, sizeof(*st4));
-	st4->st_dev = st->st_dev;
-	st4->st_ino = st->st_ino;
-	st4->st_mode = BSD_TO_SVR4_MODE(st->st_mode);
-	st4->st_nlink = st->st_nlink;
-	st4->st_uid = st->st_uid;
-	st4->st_gid = st->st_gid;
-	st4->st_rdev = st->st_rdev;
-	st4->st_size = st->st_size;
-	st4->st_atim = st->st_atimespec;
-	st4->st_mtim = st->st_mtimespec;
-	st4->st_ctim = st->st_ctimespec;
-	st4->st_blksize = st->st_blksize;
-	st4->st_blocks = st->st_blocks;
-	strcpy(st4->st_fstype, "unknown");
+    bzero(st4, sizeof(*st4));
+    st4->st_dev = st->st_dev;
+    st4->st_ino = st->st_ino;
+    st4->st_mode = st->st_mode;
+    st4->st_nlink = st->st_nlink;
+    st4->st_uid = st->st_uid;
+    st4->st_gid = st->st_gid;
+    st4->st_rdev = st->st_rdev;
+    st4->st_size = st->st_size;
+    st4->st_atim = st->st_atimespec;
+    st4->st_mtim = st->st_mtimespec;
+    st4->st_ctim = st->st_ctimespec;
+    st4->st_blksize = st->st_blksize;
+    st4->st_blocks = st->st_blocks;
+    strcpy(st4->st_fstype, "unknown");
 }
 
 
 int
-svr4_sys_stat(p, v, retval)
-	register struct proc *p;
-	void *v;
-	register_t *retval;
+svr4_stat(p, uap, retval)
+    register struct proc *p;
+    register struct svr4_stat_args *uap;
+    register_t *retval;
 {
-	struct svr4_sys_stat_args *uap = v;
-#ifdef SVR4_NO_OSTAT
-	struct svr4_sys_xstat_args cup;
+    struct stat st;
+    struct svr4_stat svr4_st;
+    struct stat_args cup;
+    int error;
 
-	SCARG(&cup, two) = 2;
-	SCARG(&cup, path) = SCARG(uap, path);
-	SCARG(&cup, ub) = (struct svr4_xstat *) SCARG(uap, ub);
-	return svr4_sys_xstat(p, &cup, retval);
-#else
-	struct stat		st;
-	struct svr4_stat	svr4_st;
-	struct sys_stat_args	cup;
-	int			error;
+    SCARG(&cup, path) = SCARG(uap, path);
+    stackgap_init();
+    SCARG(&cup, ub) = stackgap_alloc(sizeof(struct stat));
 
-	caddr_t sg = stackgap_init(p->p_emul);
-	SVR4_CHECK_ALT_EXIST(p, &sg, SCARG(uap, path));
+    CHECKALT(p, SCARG(&cup, path));
 
-	SCARG(&cup, path) = SCARG(uap, path);
-	SCARG(&cup, ub) = stackgap_alloc(&sg, sizeof(struct stat));
+    if ((error = stat(p, &cup, retval)) != 0)
+	return error;
 
+    if ((error = copyin(SCARG(&cup, ub), &st, sizeof st)) != 0)
+	return error;
 
-	if ((error = sys_stat(p, &cup, retval)) != 0)
-		return error;
+    bsd_to_svr4_stat(&st, &svr4_st);
 
-	if ((error = copyin(SCARG(&cup, ub), &st, sizeof st)) != 0)
-		return error;
+    if ((error = copyout(&svr4_st, SCARG(uap, ub), sizeof svr4_st)) != 0)
+	return error;
 
-	bsd_to_svr4_stat(&st, &svr4_st);
-
-	if (S_ISSOCK(st.st_mode))
-		(void) svr4_add_socket(p, SCARG(uap, path), &st);
-
-	if ((error = copyout(&svr4_st, SCARG(uap, ub), sizeof svr4_st)) != 0)
-		return error;
-
-	return 0;
-#endif
+    return 0;
 }
 
 int
-svr4_sys_lstat(p, v, retval)
-	register struct proc *p;
-	void *v;
-	register_t *retval;
+svr4_lstat(p, uap, retval)
+    register struct proc *p;
+    register struct svr4_stat_args *uap;
+    register_t *retval;
 {
-	struct svr4_sys_lstat_args *uap = v;
-#ifdef SVR4_NO_OSTAT
-	struct svr4_sys_lxstat_args cup;
+    struct stat st;
+    struct svr4_stat svr4_st;
+    struct stat_args cup;
+    int error;
 
-	SCARG(&cup, two) = 2;
-	SCARG(&cup, path) = SCARG(uap, path);
-	SCARG(&cup, ub) = (struct svr4_xstat *) SCARG(uap, ub);
-	return svr4_sys_lxstat(p, &cup, retval);
-#else
-	struct stat		st;
-	struct svr4_stat	svr4_st;
-	struct sys_lstat_args	cup;
-	int			error;
+    SCARG(&cup, path) = SCARG(uap, path);
+    stackgap_init();
+    SCARG(&cup, ub) = stackgap_alloc(sizeof(struct stat));
 
-	caddr_t sg = stackgap_init(p->p_emul);
-	SVR4_CHECK_ALT_EXIST(p, &sg, SCARG(uap, path));
+    CHECKALT(p, SCARG(&cup, path));
+    if ((error = lstat(p, &cup, retval)) != 0)
+	return error;
 
-	SCARG(&cup, path) = SCARG(uap, path);
-	SCARG(&cup, ub) = stackgap_alloc(&sg, sizeof(struct stat));
+    if ((error = copyin(SCARG(&cup, ub), &st, sizeof st)) != 0)
+	return error;
 
-	if ((error = sys_lstat(p, &cup, retval)) != 0)
-		return error;
+    bsd_to_svr4_stat(&st, &svr4_st);
 
-	if ((error = copyin(SCARG(&cup, ub), &st, sizeof st)) != 0)
-		return error;
+    if ((error = copyout(&svr4_st, SCARG(uap, ub), sizeof svr4_st)) != 0)
+	return error;
 
-	bsd_to_svr4_stat(&st, &svr4_st);
-
-	if (S_ISSOCK(st.st_mode))
-		(void) svr4_add_socket(p, SCARG(uap, path), &st);
-
-	if ((error = copyout(&svr4_st, SCARG(uap, ub), sizeof svr4_st)) != 0)
-		return error;
-
-	return 0;
-#endif
+    return 0;
 }
 
 int
-svr4_sys_fstat(p, v, retval)
-	register struct proc *p;
-	void *v;
-	register_t *retval;
+svr4_fstat(p, uap, retval)
+    register struct proc *p;
+    register struct svr4_fstat_args *uap;
+    register_t *retval;
 {
-	struct svr4_sys_fstat_args *uap = v;
-#ifdef SVR4_NO_OSTAT
-	struct svr4_sys_fxstat_args cup;
+    struct stat st;
+    struct svr4_stat svr4_st;
+    struct fstat_args cup;
+    int error;
 
-	SCARG(&cup, two) = 2;
-	SCARG(&cup, fd) = SCARG(uap, fd);
-	SCARG(&cup, sb) = (struct svr4_xstat *) SCARG(uap, sb);
-	return svr4_sys_fxstat(p, &cup, retval);
-#else
-	struct stat		st;
-	struct svr4_stat	svr4_st;
-	struct sys_fstat_args	cup;
-	int			error;
+    SCARG(&cup, fd) = SCARG(uap, fd);
+    stackgap_init();
+    SCARG(&cup, sb) = stackgap_alloc(sizeof(struct stat));
 
-	caddr_t sg = stackgap_init(p->p_emul);
+    if ((error = fstat(p, &cup, retval)) != 0)
+	return error;
 
-	SCARG(&cup, fd) = SCARG(uap, fd);
-	SCARG(&cup, sb) = stackgap_alloc(&sg, sizeof(struct stat));
+    if ((error = copyin(SCARG(&cup, sb), &st, sizeof st)) != 0)
+	return error;
 
-	if ((error = sys_fstat(p, &cup, retval)) != 0)
-		return error;
+    bsd_to_svr4_stat(&st, &svr4_st);
 
-	if ((error = copyin(SCARG(&cup, sb), &st, sizeof st)) != 0)
-		return error;
+    if ((error = copyout(&svr4_st, SCARG(uap, sb), sizeof svr4_st)) != 0)
+	return error;
 
-	bsd_to_svr4_stat(&st, &svr4_st);
-
-	if ((error = copyout(&svr4_st, SCARG(uap, sb), sizeof svr4_st)) != 0)
-		return error;
-
-	return 0;
-#endif
+    return 0;
 }
 
 
 int
-svr4_sys_xstat(p, v, retval)
-	register struct proc *p;
-	void *v;
-	register_t *retval;
+svr4_xstat(p, uap, retval)
+    register struct proc *p;
+    register struct svr4_xstat_args *uap;
+    register_t *retval;
 {
-	struct svr4_sys_xstat_args *uap = v;
-	struct stat		st;
-	struct svr4_xstat	svr4_st;
-	struct sys_stat_args	cup;
-	int			error;
+    struct stat st;
+    struct svr4_xstat svr4_st;
+    struct stat_args cup;
+    int error;
 
-	caddr_t sg = stackgap_init(p->p_emul);
-	SVR4_CHECK_ALT_EXIST(p, &sg, SCARG(uap, path));
+    SCARG(&cup, path) = SCARG(uap, path);
+    stackgap_init();
+    SCARG(&cup, ub) = stackgap_alloc(sizeof(struct stat));
 
-	SCARG(&cup, path) = SCARG(uap, path);
-	SCARG(&cup, ub) = stackgap_alloc(&sg, sizeof(struct stat));
+    CHECKALT(p, SCARG(&cup, path));
+    if ((error = stat(p, &cup, retval)) != 0)
+	return error;
 
-	if ((error = sys_stat(p, &cup, retval)) != 0)
-		return error;
+    if ((error = copyin(SCARG(&cup, ub), &st, sizeof st)) != 0)
+	return error;
 
-	if ((error = copyin(SCARG(&cup, ub), &st, sizeof st)) != 0)
-		return error;
+    bsd_to_svr4_xstat(&st, &svr4_st);
 
-	bsd_to_svr4_xstat(&st, &svr4_st);
+    if ((error = copyout(&svr4_st, SCARG(uap, ub), sizeof svr4_st)) != 0)
+	return error;
 
-	if (S_ISSOCK(st.st_mode))
-		(void) svr4_add_socket(p, SCARG(uap, path), &st);
-
-	if ((error = copyout(&svr4_st, SCARG(uap, ub), sizeof svr4_st)) != 0)
-		return error;
-
-	return 0;
+    return 0;
 }
 
 int
-svr4_sys_lxstat(p, v, retval)
-	register struct proc *p;
-	void *v;
-	register_t *retval;
+svr4_lxstat(p, uap, retval)
+    register struct proc *p;
+    register struct svr4_xstat_args *uap;
+    register_t *retval;
 {
-	struct svr4_sys_lxstat_args *uap = v;
-	struct stat		st;
-	struct svr4_xstat	svr4_st;
-	struct sys_lstat_args	cup;
-	int			error;
+    struct stat st;
+    struct svr4_xstat svr4_st;
+    struct stat_args cup;
+    int error;
 
-	caddr_t sg = stackgap_init(p->p_emul);
-	SVR4_CHECK_ALT_EXIST(p, &sg, SCARG(uap, path));
+    SCARG(&cup, path) = SCARG(uap, path);
+    stackgap_init();
+    SCARG(&cup, ub) = stackgap_alloc(sizeof(struct stat));
 
-	SCARG(&cup, path) = SCARG(uap, path);
-	SCARG(&cup, ub) = stackgap_alloc(&sg, sizeof(struct stat));
+    CHECKALT(p, SCARG(&cup, path));
+    if ((error = lstat(p, &cup, retval)) != 0)
+	return error;
 
-	if ((error = sys_lstat(p, &cup, retval)) != 0)
-		return error;
+    if ((error = copyin(SCARG(&cup, ub), &st, sizeof st)) != 0)
+	return error;
 
-	if ((error = copyin(SCARG(&cup, ub), &st, sizeof st)) != 0)
-		return error;
+    bsd_to_svr4_xstat(&st, &svr4_st);
 
-	bsd_to_svr4_xstat(&st, &svr4_st);
+    if ((error = copyout(&svr4_st, SCARG(uap, ub), sizeof svr4_st)) != 0)
+	return error;
 
-	if (S_ISSOCK(st.st_mode))
-		(void) svr4_add_socket(p, SCARG(uap, path), &st);
-
-	if ((error = copyout(&svr4_st, SCARG(uap, ub), sizeof svr4_st)) != 0)
-		return error;
-
-	return 0;
+    return 0;
 }
 
 int
-svr4_sys_fxstat(p, v, retval)
-	register struct proc *p;
-	void *v;
-	register_t *retval;
+svr4_fxstat(p, uap, retval)
+    register struct proc *p;
+    register struct svr4_fxstat_args *uap;
+    register_t *retval;
 {
-	struct svr4_sys_fxstat_args *uap = v;
-	struct stat		st;
-	struct svr4_xstat	svr4_st;
-	struct sys_fstat_args	cup;
-	int			error;
+    struct stat st;
+    struct svr4_xstat svr4_st;
+    struct fstat_args cup;
+    int error;
 
-	caddr_t sg = stackgap_init(p->p_emul);
+    SCARG(&cup, fd) = SCARG(uap, fd);
+    stackgap_init();
+    SCARG(&cup, sb) = stackgap_alloc(sizeof(struct stat));
 
-	SCARG(&cup, fd) = SCARG(uap, fd);
-	SCARG(&cup, sb) = stackgap_alloc(&sg, sizeof(struct stat));
+    if ((error = fstat(p, &cup, retval)) != 0)
+	return error;
 
-	if ((error = sys_fstat(p, &cup, retval)) != 0)
-		return error;
+    if ((error = copyin(SCARG(&cup, sb), &st, sizeof st)) != 0)
+	return error;
 
-	if ((error = copyin(SCARG(&cup, sb), &st, sizeof st)) != 0)
-		return error;
+    bsd_to_svr4_xstat(&st, &svr4_st);
 
-	bsd_to_svr4_xstat(&st, &svr4_st);
+    if ((error = copyout(&svr4_st, SCARG(uap, sb), sizeof svr4_st)) != 0)
+	return error;
 
-	if ((error = copyout(&svr4_st, SCARG(uap, sb), sizeof svr4_st)) != 0)
-		return error;
-
-	return 0;
+    return 0;
 }
 
 struct svr4_ustat_args {
-	syscallarg(svr4_dev_t)		dev;
-	syscallarg(struct svr4_ustat *) name;
+    syscallarg(struct svr4_ustat *) name;
 };
 
 int
-svr4_ustat(p, v, retval)
-	register struct proc *p;
-	void *v;
-	register_t *retval;
+svr4_ustat(p, uap, retval)
+    register struct proc *p;
+    register struct svr4_ustat_args *uap;
+    register_t *retval;
 {
-	struct svr4_ustat_args /* {
-		syscallarg(svr4_dev_t)		dev;
-		syscallarg(struct svr4_ustat *) name;
-	} */ *uap = v;
-	struct svr4_ustat	us;
-	int			error;
+    struct svr4_ustat us;
+    int error;
 
-	bzero(&us, sizeof us);
+    bzero(&us, sizeof us);
 
-	/*
-         * XXX: should set f_tfree and f_tinode at least
-         * How do we translate dev -> fstat? (and then to svr4_ustat)
-         */
-	if ((error = copyout(&us, SCARG(uap, name), sizeof us)) != 0)
-		return (error);
+    /*
+     * XXX: should set f_tfree and f_tinode at least
+     * How do we translate dev -> fstat? (and then to svr4_ustat)
+     */
+    if (error = copyout(&us, SCARG(uap, name), sizeof us))
+	return (error);
 
-	return 0;
+    return 0;
 }
 
 
 
 int
-svr4_sys_uname(p, v, retval)
-	register struct proc *p;
-	void *v;
-	register_t *retval;
+svr4_uname(p, uap, retval)
+    register struct proc *p;
+    register struct svr4_uname_args *uap;
+    register_t *retval;
 {
-	struct svr4_sys_uname_args *uap = v;
-	struct svr4_utsname	sut;
-	extern char ostype[], hostname[], osrelease[], version[], machine[];
+    struct svr4_utsname sut;
+    extern struct utsname utsname;
 
+    /* first update utsname just as with NetBSD uname() */
+    bcopy(hostname, utsname.nodename, sizeof(utsname.nodename));
+    utsname.nodename[sizeof(utsname.nodename)-1] = '\0';
 
-	bzero(&sut, sizeof(sut));
+    /* then copy it over into SVR4 struct utsname */
+    bzero(&sut, sizeof(sut));
+    bcopy(utsname.sysname, sut.sysname, sizeof(utsname.sysname));
+    bcopy(utsname.nodename, sut.nodename, sizeof(utsname.nodename));
+    bcopy(utsname.release, sut.release, sizeof(utsname.release));
+    bcopy(utsname.version, sut.version, sizeof(utsname.version));
+    bcopy(utsname.machine, sut.machine, sizeof(utsname.machine));
 
-	strncpy(sut.sysname, ostype, sizeof(sut.sysname));
-	sut.sysname[sizeof(sut.sysname) - 1] = '\0';
-
-	strncpy(sut.nodename, hostname, sizeof(sut.nodename));
-	sut.nodename[sizeof(sut.nodename) - 1] = '\0';
-
-	strncpy(sut.release, osrelease, sizeof(sut.release));
-	sut.release[sizeof(sut.release) - 1] = '\0';
-
-	strncpy(sut.version, version, sizeof(sut.version));
-	sut.version[sizeof(sut.version) - 1] = '\0';
-
-	strncpy(sut.machine, machine, sizeof(sut.machine));
-	sut.machine[sizeof(sut.machine) - 1] = '\0';
-
-	return copyout((caddr_t) &sut, (caddr_t) SCARG(uap, name),
-		       sizeof(struct svr4_utsname));
+    return copyout((caddr_t)&sut, (caddr_t)SCARG(uap, name),
+		   sizeof(struct svr4_utsname));
 }
 
-int
-svr4_sys_systeminfo(p, v, retval)
-	register struct proc *p;
-	void *v;
-	register_t *retval;
-{
-	struct svr4_sys_systeminfo_args *uap = v;
-	char *str;
-	int name;
-	int error;
-	long len;
-	extern char ostype[], hostname[], osrelease[],
-		    version[], machine[], domainname[], cpu_model[];
-
-	u_int rlen = SCARG(uap, len);
-
-	switch (SCARG(uap, what)) {
-	case SVR4_SI_SYSNAME:
-		str = ostype;
-		break;
-
-	case SVR4_SI_HOSTNAME:
-		str = hostname;
-		break;
-
-	case SVR4_SI_RELEASE:
-		str = osrelease;
-		break;
-
-	case SVR4_SI_VERSION:
-		str = version;
-		break;
-
-	case SVR4_SI_MACHINE:
-		str = machine;
-		break;
-
-	case SVR4_SI_ARCHITECTURE:
-		str = machine;
-		break;
-
-	case SVR4_SI_HW_SERIAL:
-		str = "0";
-		break;
-
-	case SVR4_SI_HW_PROVIDER:
-		str = ostype;
-		break;
-
-	case SVR4_SI_SRPC_DOMAIN:
-		str = domainname;
-		break;
-
-	case SVR4_SI_PLATFORM:
-		str = cpu_model;
-		break;
-
-	case SVR4_SI_KERB_REALM:
-		str = "unsupported";
-		break;
-
-	case SVR4_SI_SET_HOSTNAME:
-		if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
-			return error;
-		name = KERN_HOSTNAME;
-		return kern_sysctl(&name, 1, 0, 0, SCARG(uap, buf), rlen, p);
-
-	case SVR4_SI_SET_SRPC_DOMAIN:
-		if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
-			return error;
-		name = KERN_DOMAINNAME;
-		return kern_sysctl(&name, 1, 0, 0, SCARG(uap, buf), rlen, p);
-
-	case SVR4_SI_SET_KERB_REALM:
-		return 0;
-
-	default:
-		DPRINTF(("Bad systeminfo command %d\n", SCARG(uap, what)));
-		return ENOSYS;
-	}
-
-	len = strlen(str) + 1;
-	if (len > rlen)
-		len = rlen;
-
-	return copyout(str, SCARG(uap, buf), len);
-}
+#ifdef notyet
+struct svr4_utssys_args {
+    union {
+	struct svr4_ustat_args ustat_args;
+	struct svr4_uname_args uname_args;
+	struct svr4_fuser_args fuser_args;
+    } u;
+    int sel;
+    struct svr4_f_user *fuser;
+};
+#endif
 
 
 int
-svr4_sys_utssys(p, v, retval)
-	register struct proc *p;
-	void *v;
-	register_t *retval;
+svr4_utssys(p, uap, retval)
+    register struct proc *p;
+    register struct svr4_utssys_args *uap;
+    register_t *retval;
 {
-	struct svr4_sys_utssys_args *uap = v;
+    switch (SCARG(uap, sel)) {
+    case 0:			/* uname(2) */
+#ifdef notyet
+	return svr4_uname(p, &SCARG(uap, u).uname_args, retval);
+#endif
 
-	switch (SCARG(uap, sel)) {
-	case 0:		/* uname(2)  */
-		{
-			struct svr4_sys_uname_args ua;
-			SCARG(&ua, name) = SCARG(uap, a1);
-			return svr4_sys_uname(p, &ua, retval);
-		}
+    case 2:			/* ustat(2) */
+#ifdef notyet
+	return svr4_ustat(p, &SCARG(uap, u).ustat_args, retval);
+#endif
 
-	case 2:		/* ustat(2)  */
-		{
-			struct svr4_ustat_args ua;
-			SCARG(&ua, dev) = (svr4_dev_t) SCARG(uap, a2);
-			SCARG(&ua, name) = SCARG(uap, a1);
-			return svr4_ustat(p, &ua, retval);
-		}
-
-	case 3:		/* fusers(2) */
-		return ENOSYS;
-
-	default:
-		return ENOSYS;
-	}
+    default:
 	return ENOSYS;
-}
-
-
-int
-svr4_sys_utime(p, v, retval)
-	register struct proc *p;
-	void *v;
-	register_t *retval;
-{
-	struct svr4_sys_utime_args *uap = v;
-	struct svr4_utimbuf ub;
-	struct timeval tbuf[2];
-	struct sys_utimes_args ap;
-	int error;
-	caddr_t sg = stackgap_init(p->p_emul);
-
-	SVR4_CHECK_ALT_EXIST(p, &sg, SCARG(uap, path));
-	SCARG(&ap, path) = SCARG(uap, path);
-	if (SCARG(uap, ubuf) == NULL) {
-		if ((error = copyin(SCARG(uap, ubuf), &ub, sizeof(ub))) != 0)
-			return error;
-		tbuf[0].tv_sec = ub.actime;
-		tbuf[0].tv_usec = 0;
-		tbuf[1].tv_sec = ub.modtime;
-		tbuf[1].tv_usec = 0;
-		SCARG(&ap, tptr) = stackgap_alloc(&sg, sizeof(tbuf));
-		error = copyout(tbuf, SCARG(&ap, tptr), sizeof(tbuf));
-		if (error)
-			return error;
-	}
-	else
-		SCARG(&ap, tptr) = NULL;
-	return sys_utimes(p, &ap, retval);
-}
-
-
-int
-svr4_sys_utimes(p, v, retval)
-	register struct proc *p;
-	void *v;
-	register_t *retval;
-{
-	struct svr4_sys_utimes_args *uap = v;
-	caddr_t sg = stackgap_init(p->p_emul);
-	SVR4_CHECK_ALT_EXIST(p, &sg, SCARG(uap, path));
-	return sys_utimes(p, uap, retval);
-}
-
-
-static int
-svr4_to_bsd_pathconf(name)
-	int name;
-{
-	switch (name) {
-	case SVR4_PC_LINK_MAX:
-	    	return _PC_LINK_MAX;
-
-	case SVR4_PC_MAX_CANON:
-		return _PC_MAX_CANON;
-
-	case SVR4_PC_MAX_INPUT:
-		return _PC_MAX_INPUT;
-
-	case SVR4_PC_NAME_MAX:
-		return _PC_NAME_MAX;
-
-	case SVR4_PC_PATH_MAX:
-		return _PC_PATH_MAX;
-
-	case SVR4_PC_PIPE_BUF:
-		return _PC_PIPE_BUF;
-
-	case SVR4_PC_NO_TRUNC:
-		return _PC_NO_TRUNC;
-
-	case SVR4_PC_VDISABLE:
-		return _PC_VDISABLE;
-
-	case SVR4_PC_CHOWN_RESTRICTED:
-		return _PC_CHOWN_RESTRICTED;
-
-	case SVR4_PC_ASYNC_IO:
-	case SVR4_PC_PRIO_IO:
-	case SVR4_PC_SYNC_IO:
-		/* Not supported */
-		return 0;
-
-	default:
-		/* Invalid */
-		return -1;
-	}
-}
-
-
-int
-svr4_sys_pathconf(p, v, retval)
-	register struct proc *p;
-	void *v;
-	register_t *retval;
-{
-	struct svr4_sys_pathconf_args *uap = v;
-	caddr_t sg = stackgap_init(p->p_emul);
-
-	SVR4_CHECK_ALT_EXIST(p, &sg, SCARG(uap, path));
-
-	SCARG(uap, name) = svr4_to_bsd_pathconf(SCARG(uap, name));
-
-	switch (SCARG(uap, name)) {
-	case -1:
-		*retval = -1;
-		return EINVAL;
-	case 0:
-		*retval = 0;
-		return 0;
-	default:
-		return sys_pathconf(p, uap, retval);
-	}
-}
-
-int
-svr4_sys_fpathconf(p, v, retval)
-	register struct proc *p;
-	void *v;
-	register_t *retval;
-{
-	struct svr4_sys_fpathconf_args *uap = v;
-
-	SCARG(uap, name) = svr4_to_bsd_pathconf(SCARG(uap, name));
-
-	switch (SCARG(uap, name)) {
-	case -1:
-		*retval = -1;
-		return EINVAL;
-	case 0:
-		*retval = 0;
-		return 0;
-	default:
-		return sys_fpathconf(p, uap, retval);
-	}
+    }
 }

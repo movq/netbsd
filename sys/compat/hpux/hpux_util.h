@@ -1,4 +1,4 @@
-/*	$NetBSD: hpux_util.h,v 1.3 1995/12/08 07:45:34 thorpej Exp $	 */
+/*	$NetBSD: hpux_util.h,v 1.1 1995/05/10 16:45:44 christos Exp $	 */
 
 /*
  * Copyright (c) 1995 Christos Zoulas
@@ -30,20 +30,36 @@
 #ifndef	_HPUX_UTIL_H_
 #define	_HPUX_UTIL_H_
 
-#include <compat/common/compat_util.h>
+#include <machine/vmparam.h>
+#include <sys/exec.h>
 
-extern const char hpux_emul_path[];
+extern char     sigcode[], esigcode[];
 
-#define	HPUX_CHECK_ALT_EXIST(p, sgp, path)	\
-	CHECK_ALT_EXIST(p, sgp, hpux_emul_path, path)
+static __inline caddr_t
+stackgap_init()
+{
+#define szsigcode (esigcode - sigcode)
+	return STACKGAPBASE;
+}
 
-#define	HPUX_CHECK_ALT_CREAT(p, sgp, path)	\
-	CHECK_ALT_CREAT(p, sgp, hpux_emul_path, path)
+
+static __inline void *
+stackgap_alloc(sgp, sz)
+	caddr_t	*sgp;
+	size_t   sz;
+{
+	void	*p = (void *) *sgp;
+	*sgp += ALIGN(sz);
+	return p;
+}
 
 #ifdef DEBUG_HPUX
 #define DPRINTF(a)	printf a;
 #else
 #define DPRINTF(a)
 #endif
+
+extern const char hpux_emul_path[];
+extern int hpux_error[];
 
 #endif /* !_HPUX_UTIL_H_ */

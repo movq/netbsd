@@ -1,5 +1,3 @@
-/*	$NetBSD: read.c,v 1.5 1995/09/14 23:45:35 pk Exp $	*/
-
 /*-
  * Copyright (c) 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -35,7 +33,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)read.c	8.1 (Berkeley) 6/11/93
+ *	from: @(#)read.c	8.1 (Berkeley) 6/11/93
  *  
  *
  * Copyright (c) 1989, 1990, 1991 Carnegie Mellon University
@@ -62,25 +60,25 @@
  * 
  * any improvements or extensions that they make and grant Carnegie the
  * rights to redistribute these changes.
+ * 
+ *	$Id: read.c,v 1.1 1994/01/26 02:03:54 brezak Exp $
  */
 
 #include "stand.h"
 
-ssize_t
 read(fd, dest, bcount)
 	int fd;
-	void *dest;
-	size_t bcount;
+	char *dest;
+	u_int bcount;
 {
 	register struct open_file *f = &files[fd];
-	size_t resid;
+	u_int resid;
 
 	if ((unsigned)fd >= SOPEN_MAX || !(f->f_flags & F_READ)) {
 		errno = EBADF;
 		return (-1);
 	}
 	if (f->f_flags & F_RAW) {
-		twiddle();
 		errno = (f->f_dev->dv_strategy)(f->f_devdata, F_READ,
 			(daddr_t)0, bcount, dest, &resid);
 		if (errno)
@@ -88,7 +86,7 @@ read(fd, dest, bcount)
 		return (resid);
 	}
 	resid = bcount;
-	if ((errno = (f->f_ops->read)(f, dest, bcount, &resid)))
+	if (errno = (f->f_ops->read)(f, dest, bcount, &resid))
 		return (-1);
-	return (ssize_t)(bcount - resid);
+	return (bcount - resid);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: rcons_kern.c,v 1.4 1996/03/14 19:02:33 christos Exp $ */
+/*	$NetBSD: rcons_kern.c,v 1.1 1995/09/17 19:56:40 pk Exp $ */
 
 /*
  * Copyright (c) 1991, 1993
@@ -50,7 +50,6 @@
 #include <sys/systm.h>
 #include <sys/ioctl.h>
 #include <sys/tty.h>
-#include <sys/proc.h>
 #include <dev/rcons/raster.h>
 #include <dev/rcons/rcons.h>
 
@@ -58,10 +57,10 @@ extern struct tty *fbconstty;
 
 static void rcons_belltmr(void *);
 
-#include "rcons_subr.h"
+extern void rcons_puts(struct rconsole *, char *, int);
+extern void rcons_font(struct rconsole *);
 
 static struct rconsole *mydevicep;
-static void rcons_output __P((struct tty *));
 
 void
 rcons_cnputc(c)
@@ -81,7 +80,7 @@ static void
 rcons_output(tp)
 	register struct tty *tp;
 {
-	register int s, n;
+	register int s, n, i;
 	char buf[OBUFSIZ];
 
 	s = spltty();
@@ -92,6 +91,8 @@ rcons_output(tp)
 	tp->t_state |= TS_BUSY;
 	splx(s);
 	n = q_to_b(&tp->t_outq, buf, sizeof(buf));
+	for (i = 0; i < n; ++i)
+		buf[i] &= 0177;		/* strip parity (argh) */
 	rcons_puts(mydevicep, buf, n);
 
 	s = spltty();
@@ -187,9 +188,12 @@ rcons_init(rc)
 		return;
 	}
 	rp->linelongs = rc->rc_linebytes >> 2;
-	rp->pixels = (u_int32_t *)rc->rc_pixels;
+	rp->pixels = (u_long *)rc->rc_pixels;
 
 	rc->rc_ras_blank = RAS_CLEAR;
+
+	/* Setup the static font */
+	rcons_font(rc);
 
 	/* Impose upper bounds on rc_max{row,col} */
 	i = rc->rc_height / rc->rc_font->height;
@@ -223,24 +227,12 @@ rcons_init(rc)
 	}
 	rc->rc_emuheight = rc->rc_maxrow * rc->rc_font->height;
 
-#ifdef RASTERCONS_WONB
-	rc->rc_ras_blank = RAS_NOT(rc->rc_ras_blank);
-	rc->rc_bits |= FB_INVERT;
-#endif
-
 	if (rc->rc_row == NULL || rc->rc_col == NULL) {
-		/*
-		 * No address passed; use private copies
-		 * go to LL corner and scroll.
-		 */
+		/* No address passed; use private copies */
 		rc->rc_row = &row;
 		rc->rc_col = &col;
-		row = rc->rc_maxrow;
-		col = 0;
-#if 0
+		row = col = 0;
 		rcons_clear2eop(rc);	/* clear the display */
-#endif
-		rcons_scroll(rc, 1);
 		rcons_cursor(rc);	/* and draw the initial cursor */
 	} else {
 		/* Prom emulator cursor is currently visible */

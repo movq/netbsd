@@ -1,5 +1,3 @@
-/*	$NetBSD: scanc.S,v 1.5 1994/10/26 06:39:13 cgd Exp $	*/
-
 /*
  * Copyright (c) 1994 Charles Hannum.  All rights reserved.
  *
@@ -27,6 +25,8 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ *	$Id: scanc.S,v 1.1 1994/02/24 00:41:04 mycroft Exp $
  */
 
 #include "DEFS.h"
@@ -35,22 +35,21 @@ ENTRY(scanc)
 	movl	4(%esp),%ecx
 	testl	%ecx,%ecx
 	jz	3f
+	pushl	%ebx
 	pushl	%esi
-	pushl	%edi
 	movl	16(%esp),%esi
-	movl	20(%esp),%edi
+	movl	20(%esp),%ebx
 	movb	24(%esp),%dl
-	xorl	%eax,%eax
 	cld
 1:
 	lodsb
-	testb	%dl,(%eax,%edi)
+	xlatb
+	andb	%dl,%al
 	jnz	2f
-	decl	%ecx
-	jnz	1b
+	loop	1b
 2:
-	popl	%edi
 	popl	%esi
+	popl	%ebx
 3:
 	movl	%ecx,%eax
 	ret

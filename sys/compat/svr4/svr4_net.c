@@ -1,18 +1,18 @@
-/*	$NetBSD: svr4_net.c,v 1.9 1996/04/11 12:52:41 christos Exp $	 */
+/*	$NetBSD: svr4_net.c,v 1.1 1994/11/14 06:13:17 christos Exp $	 */
 
 /*
  * Copyright (c) 1994 Christos Zoulas
  * All rights reserved.
  *
- * Redistribution ast use in source ast binary forms, with or without
- * modification, are permitted provided that the following costitions
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
  * are met:
  * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of costitions ast the following disclaimer.
+ *    notice, this list of conditions and the following disclaimer.
  * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of costitions ast the following disclaimer in the
- *    documentation ast/or other materials provided with the distribution.
- * 3. The name of the author may not be used to estorse or promote products
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
  *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
@@ -48,40 +48,27 @@
 #include <sys/proc.h>
 #include <sys/vnode.h>
 #include <sys/device.h>
-#include <sys/conf.h>
 
 
 #include <compat/svr4/svr4_types.h>
 #include <compat/svr4/svr4_util.h>
-#include <compat/svr4/svr4_signal.h>
 #include <compat/svr4/svr4_syscallargs.h>
 #include <compat/svr4/svr4_ioctl.h>
-#include <compat/svr4/svr4_stropts.h>
-#include <compat/svr4/svr4_socket.h>
 
 /*
  * Device minor numbers
  */
 enum {
-	dev_arp			= 26,
-	dev_icmp		= 27,
-	dev_ip			= 28,
-	dev_tcp			= 35,
-	dev_udp			= 36,
-	dev_rawip		= 37,
-	dev_unix_dgram		= 38,
-	dev_unix_stream		= 39,
-	dev_unix_ord_stream	= 40
+	dev_arp		= 26,
+	dev_icmp	= 27,
+	dev_ip		= 28,
+	dev_tcp		= 35,
+	dev_udp		= 36
 };
 
-int svr4_netattach __P((int));
 
-static int svr4_soo_close __P((struct file *fp, struct proc *p));
-
-static struct fileops svr4_netops = {
-	soo_read, soo_write, soo_ioctl, soo_select, svr4_soo_close
-};
-
+static struct	fileops svr4_netops =
+    { soo_read, soo_write, soo_ioctl, soo_select, soo_close };
 
 /*
  * Used by new config, but we don't need it.
@@ -95,68 +82,46 @@ svr4_netattach(n)
 
 
 int
-svr4_netopen(dev, flag, mode, p)
+svr4_netopen(dev, flag, mode, p, fp)
 	dev_t dev;
 	int flag;
 	int mode;
 	struct proc *p;
-{
-	int type, protocol;
-	int fd;
 	struct file *fp;
+{
+	int type;
+	int protocol;
 	struct socket *so;
 	int error;
-	int family;
-	struct svr4_strm *st;
 
 	DPRINTF(("netopen("));
 
-	if (p->p_dupfd >= 0)
+	if (fp == NULL)
 		return ENODEV;
 
 	switch (minor(dev)) {
 	case dev_udp:
-		family = AF_INET;
 		type = SOCK_DGRAM;
 		protocol = IPPROTO_UDP;
 		DPRINTF(("udp, "));
 		break;
 
 	case dev_tcp:
-		family = AF_INET;
 		type = SOCK_STREAM;
 		protocol = IPPROTO_TCP;
 		DPRINTF(("tcp, "));
 		break;
 
 	case dev_ip:
-	case dev_rawip:
-		family = AF_INET;
 		type = SOCK_RAW;
 		protocol = IPPROTO_IP;
 		DPRINTF(("ip, "));
 		break;
 
 	case dev_icmp:
-		family = AF_INET;
 		type = SOCK_RAW;
 		protocol = IPPROTO_ICMP;
 		DPRINTF(("icmp, "));
-		break;
-
-	case dev_unix_dgram:
-		family = AF_UNIX;
-		type = SOCK_DGRAM;
-		protocol = 0;
-		DPRINTF(("unix-dgram, "));
-		break;
-
-	case dev_unix_stream:
-	case dev_unix_ord_stream:
-		family = AF_UNIX;
-		type = SOCK_STREAM;
-		protocol = 0;
-		DPRINTF(("unix-stream, "));
 		break;
 
 	default:
@@ -164,39 +129,17 @@ svr4_netopen(dev, flag, mode, p)
 		return EOPNOTSUPP;
 	}
 
-	if ((error = falloc(p, &fp, &fd)) != 0)
-		return (error);
 
-	if ((error = socreate(family, &so, type, protocol)) != 0) {
+	if ((error = socreate(AF_INET, &so, type, protocol)) != 0) {
 		DPRINTF(("socreate error %d\n", error));
-		p->p_fd->fd_ofiles[fd] = 0;
-		ffree(fp);
 		return error;
 	}
 
 	fp->f_flag = FREAD|FWRITE;
 	fp->f_type = DTYPE_SOCKET;
 	fp->f_ops = &svr4_netops;
-
-	st = malloc(sizeof(struct svr4_strm), M_NETADDR, M_WAITOK);
-	/* XXX: This is unused; ask for a field and make this legal */
-	st->s_family = family;
-	so->so_internal = st;
-	st->s_cmd = ~0;
 	fp->f_data = (caddr_t)so;
 	DPRINTF(("ok);\n"));
 
-	p->p_dupfd = fd;
-	return ENXIO;
-}
-
-static int
-svr4_soo_close(fp, p)
-	struct file *fp;
-	struct proc *p;
-{
-	struct socket *so = (struct socket *) fp->f_data;
-	svr4_delete_socket(p, fp);
-	free(so->so_internal, M_NETADDR);
-	return soo_close(fp, p);
+	return 0;
 }

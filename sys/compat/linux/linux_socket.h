@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_socket.h,v 1.3 1995/05/28 10:16:34 mycroft Exp $	*/
+/*	$NetBSD: linux_socket.h,v 1.1 1995/02/28 23:26:03 fvdl Exp $	*/
 
 /*
  * Copyright (c) 1995 Frank van der Linden
@@ -86,22 +86,11 @@
 #define LINUX_SO_LINGER		13
 
 /*
- * Options vor [gs]etsockopt(2), IP level.
+ * Options vor [gs]etsockopt(2), IP level. Only 2 of them are
+ * currently implemented in Linux
  */
 
-#define LINUX_IP_TOS		1
-#define LINUX_IP_TTL		2
-#define	LINUX_IP_MULTICAST_IF	32
-#define	LINUX_IP_MULTICAST_TTL	33
-#define	LINUX_IP_MULTICAST_LOOP	34
-#define	LINUX_IP_ADD_MEMBERSHIP	35
-#define	LINUX_IP_DROP_MEMBERSHIP 36
-
-/*
- * Options vor [gs]etsockopt(2), TCP level.
- */
-
-#define	LINUX_TCP_NODELAY	1
-#define	LINUX_TCP_MAXSEG	2
+#define LINUX_IP_TOS	1
+#define LINUX_IP_TTL	2
 
 #endif /* _LINUX_SOCKET_H */

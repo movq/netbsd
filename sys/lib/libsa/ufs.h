@@ -1,5 +1,3 @@
-/*	$NetBSD: ufs.h,v 1.5 1995/10/20 01:35:25 cgd Exp $	*/
-
 /*-
  * Copyright (c) 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -32,14 +30,15 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)ufs.h	8.1 (Berkeley) 6/11/93
+ *	from: @(#)ufs.h	8.1 (Berkeley) 6/11/93
+ *	     $Id: ufs.h,v 1.1 1994/01/26 02:04:02 brezak Exp $
  */
 
 int	ufs_open __P((char *path, struct open_file *f));
 int	ufs_close __P((struct open_file *f));
-int	ufs_read __P((struct open_file *f, void *buf,
-		size_t size, size_t *resid));
-int	ufs_write __P((struct open_file *f, void *buf,
-		size_t size, size_t *resid));
+int	ufs_read __P((struct open_file *f, char *buf,
+		u_int size, u_int *resid));
+int	ufs_write __P((struct open_file *f, char *buf,
+		u_int size, u_int *resid));
 off_t	ufs_seek __P((struct open_file *f, off_t offset, int where));
 int	ufs_stat __P((struct open_file *f, struct stat *sb));

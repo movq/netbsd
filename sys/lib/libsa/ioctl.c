@@ -1,5 +1,3 @@
-/*	$NetBSD: ioctl.c,v 1.4 1994/10/30 21:48:24 cgd Exp $	*/
-
 /*-
  * Copyright (c) 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -35,7 +33,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)ioctl.c	8.1 (Berkeley) 6/11/93
+ *	from: @(#)ioctl.c	8.1 (Berkeley) 6/11/93
  *  
  *
  * Copyright (c) 1989, 1990, 1991 Carnegie Mellon University
@@ -62,14 +60,15 @@
  * 
  * any improvements or extensions that they make and grant Carnegie the
  * rights to redistribute these changes.
+ *
+ *	$Id: ioctl.c,v 1.1 1994/01/26 02:03:48 brezak Exp $
  */
 
 #include "stand.h"
 
-int
 ioctl(fd, cmd, arg)
 	int fd;
-	u_long cmd;
+	int cmd;
 	char *arg;
 {
 	register struct open_file *f = &files[fd];
@@ -84,6 +83,5 @@ ioctl(fd, cmd, arg)
 			return (-1);
 		return (0);
 	}
-	errno = EIO;
 	return (-1);
 }

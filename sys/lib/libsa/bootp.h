@@ -1,5 +1,4 @@
-/*	$NetBSD: bootp.h,v 1.2 1994/10/26 05:44:39 cgd Exp $	*/
-
+/* @(#) $Header: /home/mike/src/cvs/netbsd/src/sys/lib/libsa/bootp.h,v 1.1 1994/05/08 16:11:18 brezak Exp $ (LBL) */
 /*
  * Bootstrap Protocol (BOOTP).  RFC951 and RFC1048.
  *

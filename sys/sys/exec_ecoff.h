@@ -1,5 +1,3 @@
-/*	$NetBSD: exec_ecoff.h,v 1.8 1996/03/07 14:29:44 christos Exp $	*/
-
 /*
  * Copyright (c) 1994 Adam Glass
  * All rights reserved.
@@ -14,7 +12,7 @@
  *    documentation and/or other materials provided with the distribution.
  * 3. All advertising materials mentioning features or use of this software
  *    must display the following acknowledgement:
- *      This product includes software developed by Adam Glass.
+ *      This product includes software developed by Adam Glass
  * 4. The name of the author may not be used to endorse or promote products
  *    derived from this software without specific prior written permission
  *
@@ -28,10 +26,14 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ *	$Id: exec_ecoff.h,v 1.1 1994/05/27 09:19:40 glass Exp $
  */
 
 #ifndef	_SYS_EXEC_ECOFF_H_
 #define	_SYS_EXEC_ECOFF_H_
+
+#ifdef KERNEL
 
 #include <machine/ecoff.h>
 
@@ -76,31 +78,13 @@ struct ecoff_scnhdr {		/* needed for size info */
 			sizeof(struct ecoff_aouthdr))
 
 #define ECOFF_OMAGIC 0407
-#define ECOFF_NMAGIC 0410
 #define ECOFF_ZMAGIC 0413
 
-#define ECOFF_ROUND(value, by) \
-        (((value) + by - 1) & ~(by - 1))
-
-#define ECOFF_BLOCK_ALIGN(eap, value) \
-        ((eap)->ea_magic == ECOFF_ZMAGIC ? ECOFF_ROUND(value, ECOFF_LDPGSZ) : \
-	 value)
-
 #define ECOFF_TXTOFF(efp, eap) \
-        ((eap)->ea_magic == ECOFF_ZMAGIC ? 0 : \
-	 ECOFF_ROUND(ECOFF_HDR_SIZE + (efp)->ef_nsecs * \
-		     sizeof(struct ecoff_scnhdr),ECOFF_SEGMENT_ALIGNMENT(eap)))
+        (eap->ea_magic == ECOFF_ZMAGIC ? 0 : \
+	 ((ECOFF_HDR_SIZE + efp->ef_nsecs * sizeof(struct ecoff_scnhdr) + \
+	   ECOFF_TXTOFF_ROUND(eap)) & ~ECOFF_TXTOFF_ROUND(eap)))
 
-#define ECOFF_DATOFF(efp, eap) \
-        (ECOFF_BLOCK_ALIGN(eap, ECOFF_TXTOFF(efp, eap) + (eap)->ea_tsize))
-
-#define ECOFF_SEGMENT_ALIGN(eap, value) \
-        (ECOFF_ROUND(value, ((eap)->ea_magic == ECOFF_ZMAGIC ? ECOFF_LDPGSZ : \
-         ECOFF_SEGMENT_ALIGNMENT(eap))))
-
-#ifdef _KERNEL
 int	exec_ecoff_makecmds __P((struct proc *, struct exec_package *));
-int	cpu_exec_ecoff_hook __P((struct proc *, struct exec_package *,
-				 struct ecoff_aouthdr *));
-#endif /* _KERNEL */
+#endif /* KERNEL */
 #endif /* !_SYS_EXEC_ECOFF_H_ */

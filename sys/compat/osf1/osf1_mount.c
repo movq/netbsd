@@ -1,4 +1,4 @@
-/*	$NetBSD: osf1_mount.c,v 1.6 1996/02/17 23:08:36 jtk Exp $	*/
+/*	$NetBSD: osf1_mount.c,v 1.1 1995/02/13 21:39:07 cgd Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Carnegie-Mellon University.
@@ -29,21 +29,24 @@
 
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/kernel.h>
+#include <sys/exec.h>
+#include <sys/file.h>
+#include <sys/mount.h>
 #include <sys/namei.h>
 #include <sys/proc.h>
-#include <sys/file.h>
-#include <sys/kernel.h>
-#include <sys/mount.h>
 #include <sys/vnode.h>
-#include <sys/syscallargs.h>
-
-#include <compat/osf1/osf1_syscallargs.h>
-#include <compat/osf1/osf1_util.h>
 
 #include <net/if.h>
 #include <netinet/in.h>
 
 #include <machine/vmparam.h>
+
+#include <sys/syscallargs.h>
+#include <compat/osf1/osf1_syscallargs.h>
+
+extern char sigcode[], esigcode[];
+#define	szsigcode	(esigcode - sigcode)
 
 /* File system type numbers. */
 #define	OSF1_MOUNT_NONE		0
@@ -158,11 +161,11 @@ bsd2osf_statfs(bsfs, osfs)
 {
 
 	bzero(osfs, sizeof (struct osf1_statfs));
-	if (!strncmp(MOUNT_FFS, bsfs->f_fstypename, MFSNAMELEN))
+	if (!strncmp(MOUNT_UFS, bsfs->f_fstypename, MFSNAMELEN+1))
 		osfs->f_type = OSF1_MOUNT_UFS;
-	else if (!strncmp(MOUNT_NFS, bsfs->f_fstypename, MFSNAMELEN))
+	else if (!strncmp(MOUNT_NFS, bsfs->f_fstypename, MFSNAMELEN+1))
 		osfs->f_type = OSF1_MOUNT_NFS;
-	else if (!strncmp(MOUNT_MFS, bsfs->f_fstypename, MFSNAMELEN))
+	else if (!strncmp(MOUNT_MFS, bsfs->f_fstypename, MFSNAMELEN+1))
 		osfs->f_type = OSF1_MOUNT_MFS;
 	else
 		/* uh oh...  XXX = PC, CDFS, PROCFS, etc. */
@@ -186,16 +189,15 @@ bsd2osf_statfs(bsfs, osfs)
 }
 
 int
-osf1_sys_statfs(p, v, retval)
+osf1_statfs(p, uap, retval)
 	struct proc *p;
-	void *v;
-	register_t *retval;
-{
-	struct osf1_sys_statfs_args /* {
+	struct osf1_statfs_args /* {
 		syscallarg(char *) path;
 		syscallarg(struct osf1_statfs *) buf;
 		syscallarg(int) len;
-	} */ *uap = v;
+	} */ *uap;
+	register_t *retval;
+{
 	struct mount *mp;
 	struct statfs *sp;
 	struct osf1_statfs osfs;
@@ -217,16 +219,15 @@ osf1_sys_statfs(p, v, retval)
 }
 
 int
-osf1_sys_fstatfs(p, v, retval)
+osf1_fstatfs(p, uap, retval)
 	struct proc *p;
-	void *v;
+	struct osf1_fstatfs_args /* {
+		syscallarg(int) fd;
+		syscallarg(struct osf1_statfs *) buf;
+		syscallarg(int) len;
+	} */ *uap;
 	register_t *retval;
 {
-	struct osf1_sys_fstatfs_args /* {
-		syscallarg(int) fd;
-		syscallarg(struct osf1_statfs *) buf;   
-		syscallarg(int) len;
-	} */ *uap = v;
 	struct file *fp;
 	struct mount *mp;
 	struct statfs *sp;
@@ -246,16 +247,15 @@ osf1_sys_fstatfs(p, v, retval)
 }
 
 int
-osf1_sys_getfsstat(p, v, retval)
+osf1_getfsstat(p, uap, retval)
 	struct proc *p;
-	void *v;
-	register_t *retval;
-{
-	register struct osf1_sys_getfsstat_args /* {
+	register struct osf1_getfsstat_args /* {
 		syscallarg(struct osf1_statfs *) buf;
 		syscallarg(long) bufsize;
 		syscallarg(int) flags;
-	} */ *uap = v;
+	} */ *uap;
+	register_t *retval;
+{
 	struct mount *mp, *nmp;
 	struct statfs *sp;
 	struct osf1_statfs osfs;
@@ -267,9 +267,8 @@ osf1_sys_getfsstat(p, v, retval)
 
 	maxcount = SCARG(uap, bufsize) / sizeof(struct osf1_statfs);
 	osf_sfsp = (caddr_t)SCARG(uap, buf);
-	for (count = 0, mp = mountlist.cqh_first; mp != (void *)&mountlist;
-	    mp = nmp) {
-		nmp = mp->mnt_list.cqe_next;
+	for (count = 0, mp = mountlist.tqh_first; mp != NULL; mp = nmp) {
+		nmp = mp->mnt_list.tqe_next;
 		if (osf_sfsp && count < maxcount &&
 		    ((mp->mnt_flag & MNT_MLOCK) == 0)) {
 			sp = &mp->mnt_stat;
@@ -299,16 +298,15 @@ osf1_sys_getfsstat(p, v, retval)
 }
 
 int
-osf1_sys_unmount(p, v, retval)
+osf1_unmount(p, uap, retval)
 	struct proc *p;
-	void *v;
-	register_t *retval;
-{
-	struct osf1_sys_unmount_args /* {
+	struct osf1_unmount_args /* {
 		syscallarg(char *) path;
 		syscallarg(int) flags;
-	} */ *uap = v;
-	struct sys_unmount_args a;
+	} */ *uap;
+	register_t *retval;
+{
+	struct unmount_args a;
 
 	SCARG(&a, path) = SCARG(uap, path);
 
@@ -319,22 +317,21 @@ osf1_sys_unmount(p, v, retval)
 	    (SCARG(uap, flags) & OSF1_MNT_NOFORCE) == 0)
 		SCARG(&a, flags) |= MNT_FORCE;
 
-	return sys_unmount(p, &a, retval);
+	return unmount(p, &a, retval);
 }
 
 int
-osf1_sys_mount(p, v, retval)
+osf1_mount(p, uap, retval)
 	struct proc *p;
-	void *v;
-	register_t *retval;
-{
-	struct osf1_sys_mount_args /* {
+	struct osf1_mount_args /* {
 		syscallarg(int) type;
 		syscallarg(char *) path;
 		syscallarg(int) flags;
 		syscallarg(caddr_t) data;
-	} */ *uap = v;
-	struct sys_mount_args a;
+	} */ *uap;
+	register_t *retval;
+{
+	struct mount_args a;
 	int error;
 
 	SCARG(&a, path) = SCARG(uap, path);
@@ -379,16 +376,15 @@ osf1_sys_mount(p, v, retval)
 		return (EINVAL);
 	}
 
-	return sys_mount(p, &a, retval);
+	return mount(p, &a, retval);
 }
 
 int
 osf1_mount_mfs(p, osf_argp, bsd_argp)
 	struct proc *p;
-	struct osf1_sys_mount_args *osf_argp;
-	struct sys_mount_args *bsd_argp;
+	struct osf1_mount_args *osf_argp;
+	struct mount_args *bsd_argp;
 {
-	struct emul *e = p->p_emul;
 	struct osf1_mfs_args osf_ma;
 	struct mfs_args bsd_ma;
 	caddr_t cp;
@@ -403,7 +399,7 @@ osf1_mount_mfs(p, osf_argp, bsd_argp)
 	bsd_ma.base = osf_ma.base;
 	bsd_ma.size = osf_ma.size;
 
-	cp = STACKGAPBASE;
+	cp = (caddr_t)ALIGN(PS_STRINGS - szsigcode - STACKGAPLEN);
 	SCARG(bsd_argp, data) = cp;
 	if (error = copyout(&bsd_ma, cp, sizeof bsd_ma))
 		return error;
@@ -419,10 +415,9 @@ osf1_mount_mfs(p, osf_argp, bsd_argp)
 int
 osf1_mount_nfs(p, osf_argp, bsd_argp)
 	struct proc *p;
-	struct osf1_sys_mount_args *osf_argp;
-	struct sys_mount_args *bsd_argp;
+	struct osf1_mount_args *osf_argp;
+	struct mount_args *bsd_argp;
 {
-	struct emul *e = p->p_emul;
 	struct osf1_nfs_args osf_na;
 	struct nfs_args bsd_na;
 	caddr_t cp;
@@ -465,7 +460,7 @@ osf1_mount_nfs(p, osf_argp, bsd_argp)
 	if (osf_na.flags & OSF1_NFSMNT_NOCONN)
 		bsd_na.flags |= NFSMNT_NOCONN;
 
-	cp = STACKGAPBASE;
+	cp = (caddr_t)ALIGN(PS_STRINGS - szsigcode - STACKGAPLEN);
 	SCARG(bsd_argp, data) = cp;
 	if (error = copyout(&bsd_na, cp, sizeof bsd_na))
 		return error;

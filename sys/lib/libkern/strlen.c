@@ -33,14 +33,11 @@
 
 #if defined(LIBC_SCCS) && !defined(lint)
 /*static char *sccsid = "from: @(#)strlen.c	5.5 (Berkeley) 1/26/91";*/
-static char *rcsid = "$Id: strlen.c,v 1.6 1996/04/18 02:20:11 cgd Exp $";
+static char *rcsid = "$Id: strlen.c,v 1.1 1993/10/27 22:00:51 jtc Exp $";
 #endif /* LIBC_SCCS and not lint */
 
-#ifndef _KERNEL
+#include <sys/cdefs.h>
 #include <string.h>
-#else
-#include <lib/libkern/libkern.h>
-#endif
 
 size_t
 strlen(str)

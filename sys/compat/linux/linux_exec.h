@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_exec.h,v 1.5 1995/10/07 06:27:01 mycroft Exp $	*/
+/*	$NetBSD: linux_exec.h,v 1.1 1995/02/28 23:25:37 fvdl Exp $	*/
 
 /*
  * Copyright (c) 1995 Frank van der Linden
@@ -66,9 +66,5 @@
 #define LINUX_N_BSSADDR(x,m) (LINUX_N_DATADDR(x,m) + (x).a_data)
 
 int exec_linux_aout_makecmds __P((struct proc *, struct exec_package *));
-int exec_linux_elf_makecmds __P((struct proc *, struct exec_package *));
-
-int linux_elf_probe __P((struct proc *p, struct exec_package *epp, char *itp,
-	 u_long *pos));
 
 #endif /* !_LINUX_EXEC_H */

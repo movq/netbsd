@@ -1,7 +1,5 @@
-/*	$NetBSD: ibcs2_ioctl.c,v 1.10 1995/12/26 17:56:36 mycroft Exp $	*/
-
 /*
- * Copyright (c) 1994, 1995 Scott Bartram
+ * Copyright (c) 1994 Scott Bartram
  * All rights reserved.
  *
  * based on compat/sunos/sun_ioctl.c
@@ -24,48 +22,28 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
  */
 
 #include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/namei.h>
-#include <sys/dir.h>
 #include <sys/proc.h>
 #include <sys/file.h>
-#include <sys/stat.h>
 #include <sys/filedesc.h>
 #include <sys/ioctl.h>
-#include <sys/kernel.h>
-#include <sys/malloc.h>
-#include <sys/mbuf.h>
-#include <sys/mman.h>
-#include <sys/mount.h>
-#include <sys/reboot.h>
-#include <sys/resource.h>
-#include <sys/resourcevar.h>
-#include <sys/signal.h>
-#include <sys/signalvar.h>
-#include <sys/socket.h>
 #include <sys/termios.h>
-#include <sys/time.h>
-#include <sys/times.h>
 #include <sys/tty.h>
-#include <sys/vnode.h>
-#include <sys/uio.h>
-#include <sys/wait.h>
-#include <sys/utsname.h>
-#include <sys/unistd.h>
-
+#include <sys/socket.h>
+#include <sys/ioctl.h>
 #include <net/if.h>
-#include <sys/syscallargs.h>
 
 #include <compat/ibcs2/ibcs2_types.h>
-#include <compat/ibcs2/ibcs2_signal.h>
-#include <compat/ibcs2/ibcs2_socksys.h>
-#include <compat/ibcs2/ibcs2_stropts.h>
-#include <compat/ibcs2/ibcs2_syscallargs.h>
 #include <compat/ibcs2/ibcs2_termios.h>
-#include <compat/ibcs2/ibcs2_util.h>
+
+#ifdef DEBUG_IBCS2
+#define DPRINTF(s)	printf s
+#else
+#define DPRINTF(s)
+#endif
 
 /*
  * iBCS2 ioctl calls.
@@ -118,92 +96,85 @@ stios2btios(st, bt)
 {
 	register u_long l, r;
 
-	l = st->c_iflag;	r = 0;
-	if (l & IBCS2_IGNBRK)	r |= IGNBRK;
-	if (l & IBCS2_BRKINT)	r |= BRKINT;
-	if (l & IBCS2_IGNPAR)	r |= IGNPAR;
-	if (l & IBCS2_PARMRK)	r |= PARMRK;
-	if (l & IBCS2_INPCK)	r |= INPCK;
-	if (l & IBCS2_ISTRIP)	r |= ISTRIP;
-	if (l & IBCS2_INLCR)	r |= INLCR;
-	if (l & IBCS2_IGNCR)	r |= IGNCR;
-	if (l & IBCS2_ICRNL)	r |= ICRNL;
-	if (l & IBCS2_IXON)	r |= IXON;
-	if (l & IBCS2_IXANY)	r |= IXANY;
-	if (l & IBCS2_IXOFF)	r |= IXOFF;
-	if (l & IBCS2_IMAXBEL)	r |= IMAXBEL;
+	l = st->c_iflag;
+	r = 	((l & IBCS2_IGNBRK) ? IGNBRK	: 0);
+	r |=	((l & IBCS2_BRKINT) ? BRKINT	: 0);
+	r |=	((l & IBCS2_IGNPAR) ? IGNPAR	: 0);
+	r |=	((l & IBCS2_PARMRK) ? PARMRK	: 0);
+	r |=	((l & IBCS2_INPCK) ? INPCK	: 0);
+	r |=	((l & IBCS2_ISTRIP) ? ISTRIP	: 0);
+	r |= 	((l & IBCS2_INLCR) ? INLCR	: 0);
+	r |=	((l & IBCS2_IGNCR) ? IGNCR	: 0);
+	r |=	((l & IBCS2_ICRNL) ? ICRNL	: 0);
+	r |=	((l & IBCS2_IXON) ? IXON	: 0);
+	r |=	((l & IBCS2_IXANY) ? IXANY	: 0);
+	r |=	((l & IBCS2_IXOFF) ? IXOFF	: 0);
+	r |=	((l & IBCS2_IMAXBEL) ? IMAXBEL	: 0);
 	bt->c_iflag = r;
 
-	l = st->c_oflag;	r = 0;
-	if (l & IBCS2_OPOST)	r |= OPOST;
-	if (l & IBCS2_ONLCR)	r |= ONLCR;
-	if (l & IBCS2_TAB3)	r |= OXTABS;
+	l = st->c_oflag;
+	r = 	((l & IBCS2_OPOST) ? OPOST	: 0);
+	r |=	((l & IBCS2_ONLCR) ? ONLCR	: 0);
+	r |=	((l & IBCS2_TAB3) ? OXTABS	: 0);
 	bt->c_oflag = r;
 
-	l = st->c_cflag;	r = 0;
-	switch (l & IBCS2_CSIZE) {
-	case IBCS2_CS5:		r |= CS5; break;
-	case IBCS2_CS6:		r |= CS6; break;
-	case IBCS2_CS7:		r |= CS7; break;
-	case IBCS2_CS8:		r |= CS8; break;
-	}
-	if (l & IBCS2_CSTOPB)	r |= CSTOPB;
-	if (l & IBCS2_CREAD)	r |= CREAD;
-	if (l & IBCS2_PARENB)	r |= PARENB;
-	if (l & IBCS2_PARODD)	r |= PARODD;
-	if (l & IBCS2_HUPCL)	r |= HUPCL;
-	if (l & IBCS2_CLOCAL)	r |= CLOCAL;
+	l = st->c_cflag;
+	r = 	((l & IBCS2_CS6) ? CS6		: 0);
+	r |=	((l & IBCS2_CS7) ? CS7		: 0);
+	r |=	((l & IBCS2_CS8) ? CS8		: 0);
+	r |=	((l & IBCS2_CSTOPB) ? CSTOPB	: 0);
+	r |=	((l & IBCS2_CREAD) ? CREAD	: 0);
+	r |= 	((l & IBCS2_PARENB) ? PARENB	: 0);
+	r |=	((l & IBCS2_PARODD) ? PARODD	: 0);
+	r |=	((l & IBCS2_HUPCL) ? HUPCL	: 0);
+	r |=	((l & IBCS2_CLOCAL) ? CLOCAL	: 0);
 	bt->c_cflag = r;
-
-	l = st->c_lflag;	r = 0;
-	if (l & IBCS2_ISIG)	r |= ISIG;
-	if (l & IBCS2_ICANON)	r |= ICANON;
-	if (l & IBCS2_ECHO)	r |= ECHO;
-	if (l & IBCS2_ECHOE)	r |= ECHOE;
-	if (l & IBCS2_ECHOK)	r |= ECHOK;
-	if (l & IBCS2_ECHONL)	r |= ECHONL;
-	if (l & IBCS2_NOFLSH)	r |= NOFLSH;
-	if (l & IBCS2_TOSTOP)	r |= TOSTOP;
-	bt->c_lflag = r;
 
 	bt->c_ispeed = bt->c_ospeed = s2btab[l & 0x0000000f];
 
-	bt->c_cc[VINTR]	=
-	    st->c_cc[IBCS2_VINTR]  ? st->c_cc[IBCS2_VINTR]  : _POSIX_VDISABLE;
-	bt->c_cc[VQUIT] =
-	    st->c_cc[IBCS2_VQUIT]  ? st->c_cc[IBCS2_VQUIT]  : _POSIX_VDISABLE;
-	bt->c_cc[VERASE] =
-	    st->c_cc[IBCS2_VERASE] ? st->c_cc[IBCS2_VERASE] : _POSIX_VDISABLE;
-	bt->c_cc[VKILL] =
-	    st->c_cc[IBCS2_VKILL]  ? st->c_cc[IBCS2_VKILL]  : _POSIX_VDISABLE;
-	if (bt->c_lflag & ICANON) {
-		bt->c_cc[VEOF] =
-		    st->c_cc[IBCS2_VEOF] ? st->c_cc[IBCS2_VEOF] : _POSIX_VDISABLE;
-		bt->c_cc[VEOL] =
-		    st->c_cc[IBCS2_VEOL] ? st->c_cc[IBCS2_VEOL] : _POSIX_VDISABLE;
-	} else {
-		bt->c_cc[VMIN]  = st->c_cc[IBCS2_VMIN];
-		bt->c_cc[VTIME] = st->c_cc[IBCS2_VTIME];
-	}
-	bt->c_cc[VEOL2] =
-	    st->c_cc[IBCS2_VEOL2]  ? st->c_cc[IBCS2_VEOL2]  : _POSIX_VDISABLE;
+	l = st->c_lflag;
+	r = 	((l & IBCS2_ISIG) ? ISIG	: 0);
+	r |=	((l & IBCS2_ICANON) ? ICANON	: 0);
+	r |=	((l & IBCS2_ECHO) ? ECHO	: 0);
+	r |=	((l & IBCS2_ECHOE) ? ECHOE	: 0);
+	r |=	((l & IBCS2_ECHOK) ? ECHOK	: 0);
+	r |=	((l & IBCS2_ECHONL) ? ECHONL	: 0);
+	r |= 	((l & IBCS2_NOFLSH) ? NOFLSH	: 0);
+	r |=	((l & IBCS2_TOSTOP) ? TOSTOP	: 0);
+	bt->c_lflag = r;
+
+	bt->c_cc[VINTR]	= st->c_cc[IBCS2_VINTR] ? st->c_cc[IBCS2_VINTR]
+		: _POSIX_VDISABLE;
+	bt->c_cc[VQUIT] = st->c_cc[IBCS2_VQUIT] ? st->c_cc[IBCS2_VQUIT]
+		: _POSIX_VDISABLE;
+	bt->c_cc[VERASE] = st->c_cc[IBCS2_VERASE] ? st->c_cc[IBCS2_VERASE]
+		: _POSIX_VDISABLE;
+	bt->c_cc[VKILL] = st->c_cc[IBCS2_VKILL] ? st->c_cc[IBCS2_VKILL]
+		: _POSIX_VDISABLE;
+	bt->c_cc[VEOF] = st->c_cc[IBCS2_VEOF] ? st->c_cc[IBCS2_VEOF]
+		: _POSIX_VDISABLE;
+	bt->c_cc[VEOL] = st->c_cc[IBCS2_VEOL] ? st->c_cc[IBCS2_VEOL]
+		: _POSIX_VDISABLE;
+	bt->c_cc[VEOL2] = st->c_cc[IBCS2_VEOL2] ? st->c_cc[IBCS2_VEOL2]
+		: _POSIX_VDISABLE;
 #if 0
-	bt->c_cc[VSWTCH] =
-	    st->c_cc[IBCS2_VSWTCH] ? st->c_cc[IBCS2_VSWTCH] : _POSIX_VDISABLE;
+	bt->c_cc[VSWTCH] = st->c_cc[IBCS2_VSWTCH] ? st->c_cc[IBCS2_VSWTCH]
+		: _POSIX_VDISABLE;
 #endif
-	bt->c_cc[VSTART] =
-	    st->c_cc[IBCS2_VSTART] ? st->c_cc[IBCS2_VSTART] : _POSIX_VDISABLE;
-	bt->c_cc[VSTOP] =
-	    st->c_cc[IBCS2_VSTOP]  ? st->c_cc[IBCS2_VSTOP]  : _POSIX_VDISABLE;
-	bt->c_cc[VSUSP] =
-	    st->c_cc[IBCS2_VSUSP]  ? st->c_cc[IBCS2_VSUSP]  : _POSIX_VDISABLE;
-	bt->c_cc[VDSUSP]   = _POSIX_VDISABLE;
+	bt->c_cc[VSTART] = st->c_cc[IBCS2_VSTART] ? st->c_cc[IBCS2_VSTART]
+		: _POSIX_VDISABLE;
+	bt->c_cc[VSTOP] = st->c_cc[IBCS2_VSTART] ? st->c_cc[IBCS2_VSTART]
+		: _POSIX_VDISABLE;
+	bt->c_cc[VSUSP] = st->c_cc[IBCS2_VSUSP] ? st->c_cc[IBCS2_VSUSP]
+		: _POSIX_VDISABLE;
+	bt->c_cc[VDSUSP] = _POSIX_VDISABLE;
 	bt->c_cc[VREPRINT] = _POSIX_VDISABLE;
 	bt->c_cc[VDISCARD] = _POSIX_VDISABLE;
 	bt->c_cc[VWERASE]  = _POSIX_VDISABLE;
 	bt->c_cc[VLNEXT]   = _POSIX_VDISABLE;
 	bt->c_cc[VSTATUS]  = _POSIX_VDISABLE;
 }
+
 
 static void
 btios2stios(bt, st)
@@ -212,85 +183,76 @@ btios2stios(bt, st)
 {
 	register u_long l, r;
 
-	l = bt->c_iflag;	r = 0;
-	if (l & IGNBRK)		r |= IBCS2_IGNBRK;
-	if (l & BRKINT)		r |= IBCS2_BRKINT;
-	if (l & IGNPAR)		r |= IBCS2_IGNPAR;
-	if (l & PARMRK)		r |= IBCS2_PARMRK;
-	if (l & INPCK)		r |= IBCS2_INPCK;
-	if (l & ISTRIP)		r |= IBCS2_ISTRIP;
-	if (l & INLCR)		r |= IBCS2_INLCR;
-	if (l & IGNCR)		r |= IBCS2_IGNCR;
-	if (l & ICRNL)		r |= IBCS2_ICRNL;
-	if (l & IXON)		r |= IBCS2_IXON;
-	if (l & IXANY)		r |= IBCS2_IXANY;
-	if (l & IXOFF)		r |= IBCS2_IXOFF;
-	if (l & IMAXBEL)	r |= IBCS2_IMAXBEL;
+	l = bt->c_iflag;
+	r = 	((l &  IGNBRK) ? IBCS2_IGNBRK	: 0);
+	r |=	((l &  BRKINT) ? IBCS2_BRKINT	: 0);
+	r |=	((l &  IGNPAR) ? IBCS2_IGNPAR	: 0);
+	r |=	((l &  PARMRK) ? IBCS2_PARMRK	: 0);
+	r |=	((l &   INPCK) ? IBCS2_INPCK	: 0);
+	r |=	((l &  ISTRIP) ? IBCS2_ISTRIP	: 0);
+	r |=	((l &   INLCR) ? IBCS2_INLCR	: 0);
+	r |=	((l &   IGNCR) ? IBCS2_IGNCR	: 0);
+	r |=	((l &   ICRNL) ? IBCS2_ICRNL	: 0);
+	r |=	((l &    IXON) ? IBCS2_IXON	: 0);
+	r |=	((l &   IXANY) ? IBCS2_IXANY	: 0);
+	r |=	((l &   IXOFF) ? IBCS2_IXOFF	: 0);
+	r |=	((l & IMAXBEL) ? IBCS2_IMAXBEL	: 0);
 	st->c_iflag = r;
 
-	l = bt->c_oflag;	r = 0;
-	if (l & OPOST)		r |= IBCS2_OPOST;
-	if (l & ONLCR)		r |= IBCS2_ONLCR;
-	if (l & OXTABS)		r |= IBCS2_TAB3;
+	l = bt->c_oflag;
+	r =	((l &   OPOST) ? IBCS2_OPOST	: 0);
+	r |=	((l &   ONLCR) ? IBCS2_ONLCR	: 0);
+	r |=	((l &  OXTABS) ? IBCS2_TAB3	: 0);
 	st->c_oflag = r;
 
-	l = bt->c_cflag;	r = 0;
-	switch (l & CSIZE) {
-	case CS5:		r |= IBCS2_CS5; break;
-	case CS6:		r |= IBCS2_CS6; break;
-	case CS7:		r |= IBCS2_CS7; break;
-	case CS8:		r |= IBCS2_CS8; break;
-	}
-	if (l & CSTOPB)		r |= IBCS2_CSTOPB;
-	if (l & CREAD)		r |= IBCS2_CREAD;
-	if (l & PARENB)		r |= IBCS2_PARENB;
-	if (l & PARODD)		r |= IBCS2_PARODD;
-	if (l & HUPCL)		r |= IBCS2_HUPCL;
-	if (l & CLOCAL)		r |= IBCS2_CLOCAL;
+	l = bt->c_cflag;
+	r = 	((l &     CS6) ? IBCS2_CS6	: 0);
+	r |=	((l &     CS7) ? IBCS2_CS7	: 0);
+	r |=	((l &     CS8) ? IBCS2_CS8	: 0);
+	r |=	((l &  CSTOPB) ? IBCS2_CSTOPB	: 0);
+	r |=	((l &   CREAD) ? IBCS2_CREAD	: 0);
+	r |=	((l &  PARENB) ? IBCS2_PARENB	: 0);
+	r |=	((l &  PARODD) ? IBCS2_PARODD	: 0);
+	r |=	((l &   HUPCL) ? IBCS2_HUPCL	: 0);
+	r |=	((l &  CLOCAL) ? IBCS2_CLOCAL	: 0);
 	st->c_cflag = r;
 
-	l = bt->c_lflag;	r = 0;
-	if (l & ISIG)		r |= IBCS2_ISIG;
-	if (l & ICANON)		r |= IBCS2_ICANON;
-	if (l & ECHO)		r |= IBCS2_ECHO;
-	if (l & ECHOE)		r |= IBCS2_ECHOE;
-	if (l & ECHOK)		r |= IBCS2_ECHOK;
-	if (l & ECHONL)		r |= IBCS2_ECHONL;
-	if (l & NOFLSH)		r |= IBCS2_NOFLSH;
-	if (l & TOSTOP)		r |= IBCS2_TOSTOP;
+	l = bt->c_lflag;
+	r =	((l &    ISIG) ? IBCS2_ISIG	: 0);
+	r |=	((l &  ICANON) ? IBCS2_ICANON	: 0);
+	r |=	((l &    ECHO) ? IBCS2_ECHO	: 0);
+	r |=	((l &   ECHOE) ? IBCS2_ECHOE	: 0);
+	r |=	((l &   ECHOK) ? IBCS2_ECHOK	: 0);
+	r |=	((l &  ECHONL) ? IBCS2_ECHONL	: 0);
+	r |=	((l &  NOFLSH) ? IBCS2_NOFLSH	: 0);
+	r |=	((l &  TOSTOP) ? IBCS2_TOSTOP	: 0);
 	st->c_lflag = r;
 
 	l = ttspeedtab(bt->c_ospeed, sptab);
 	if (l >= 0)
 		st->c_cflag |= l;
 
-	st->c_cc[IBCS2_VINTR] =
-	    bt->c_cc[VINTR]  != _POSIX_VDISABLE ? bt->c_cc[VINTR]  : 0;
-	st->c_cc[IBCS2_VQUIT] =
-	    bt->c_cc[VQUIT]  != _POSIX_VDISABLE ? bt->c_cc[VQUIT]  : 0;
-	st->c_cc[IBCS2_VERASE] =
-	    bt->c_cc[VERASE] != _POSIX_VDISABLE ? bt->c_cc[VERASE] : 0;
-	st->c_cc[IBCS2_VKILL] =
-	    bt->c_cc[VKILL]  != _POSIX_VDISABLE ? bt->c_cc[VKILL]  : 0;
-	if (bt->c_lflag & ICANON) {
-		st->c_cc[IBCS2_VEOF] =
-		    bt->c_cc[VEOF] != _POSIX_VDISABLE ? bt->c_cc[VEOF] : 0;
-		st->c_cc[IBCS2_VEOL] =
-		    bt->c_cc[VEOL] != _POSIX_VDISABLE ? bt->c_cc[VEOL] : 0;
-	} else {
-		st->c_cc[IBCS2_VMIN]  = bt->c_cc[VMIN];
-		st->c_cc[IBCS2_VTIME] = bt->c_cc[VTIME];
-	}
-	st->c_cc[IBCS2_VEOL2] =
-	    bt->c_cc[VEOL2]  != _POSIX_VDISABLE ? bt->c_cc[VEOL2]  : 0;
-	st->c_cc[IBCS2_VSWTCH] =
-	    0;
-	st->c_cc[IBCS2_VSUSP] =
-	    bt->c_cc[VSUSP]  != _POSIX_VDISABLE ? bt->c_cc[VSUSP]  : 0;
-	st->c_cc[IBCS2_VSTART] =
-	    bt->c_cc[VSTART] != _POSIX_VDISABLE ? bt->c_cc[VSTART] : 0;
-	st->c_cc[IBCS2_VSTOP] =
-	    bt->c_cc[VSTOP]  != _POSIX_VDISABLE ? bt->c_cc[VSTOP]  : 0;
+	st->c_cc[IBCS2_VINTR] = bt->c_cc[VINTR] != _POSIX_VDISABLE
+		? bt->c_cc[VINTR] : 0;
+	st->c_cc[IBCS2_VQUIT] = bt->c_cc[VQUIT] != _POSIX_VDISABLE
+		? bt->c_cc[VQUIT] : 0;
+	st->c_cc[IBCS2_VERASE] = bt->c_cc[VERASE] != _POSIX_VDISABLE
+		? bt->c_cc[VERASE] : 0;
+	st->c_cc[IBCS2_VKILL] = bt->c_cc[VKILL] != _POSIX_VDISABLE
+		? bt->c_cc[VKILL] : 0;
+	st->c_cc[IBCS2_VEOF] = bt->c_cc[VEOF] != _POSIX_VDISABLE
+		? bt->c_cc[VEOF] : 0;
+	st->c_cc[IBCS2_VEOL] = bt->c_cc[VEOL] != _POSIX_VDISABLE
+		? bt->c_cc[VEOL] : 0;
+	st->c_cc[IBCS2_VEOL2] = bt->c_cc[VEOL2] != _POSIX_VDISABLE
+		? bt->c_cc[VEOL2] : 0;
+	st->c_cc[IBCS2_VSWTCH] = 0;
+	st->c_cc[IBCS2_VSUSP]= bt->c_cc[VSUSP] != _POSIX_VDISABLE
+		? bt->c_cc[VSUSP] : 0;
+	st->c_cc[IBCS2_VSTART] = bt->c_cc[VSTART] != _POSIX_VDISABLE
+		? bt->c_cc[VSTART] : 0;
+	st->c_cc[IBCS2_VSTOP] = bt->c_cc[VSTOP] != _POSIX_VDISABLE
+		? bt->c_cc[VSTOP] : 0;
 
 	st->c_line = 0;
 }
@@ -300,7 +262,6 @@ stios2stio(ts, t)
 	struct ibcs2_termios *ts;
 	struct ibcs2_termio *t;
 {
-
 	t->c_iflag = ts->c_iflag;
 	t->c_oflag = ts->c_oflag;
 	t->c_cflag = ts->c_cflag;
@@ -314,7 +275,6 @@ stio2stios(t, ts)
 	struct ibcs2_termio *t;
 	struct ibcs2_termios *ts;
 {
-
 	ts->c_iflag = t->c_iflag;
 	ts->c_oflag = t->c_oflag;
 	ts->c_cflag = t->c_cflag;
@@ -323,26 +283,26 @@ stio2stios(t, ts)
 	bcopy(t->c_cc, ts->c_cc, IBCS2_NCC);
 }
 
+struct ibcs2_ioctl_args {
+	int	fd;
+	int	cmd;
+	caddr_t	data;
+};
+
 int
-ibcs2_sys_ioctl(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+ibcs2_ioctl(p, uap, retval)
+	register struct proc *p;
+	register struct ibcs2_ioctl_args *uap;
+	int *retval;
 {
-	struct ibcs2_sys_ioctl_args /* {
-		syscallarg(int) fd;
-		syscallarg(int) cmd;
-		syscallarg(caddr_t) data;
-	} */ *uap = v;
-	struct filedesc *fdp = p->p_fd;
-	struct file *fp;
-	int (*ctl)();
+	register struct filedesc *fdp = p->p_fd;
+	register struct file *fp;
+	register int (*ctl)();
 	int error;
 
-	if (SCARG(uap, fd) < 0 || SCARG(uap, fd) >= fdp->fd_nfiles ||
-	    (fp = fdp->fd_ofiles[SCARG(uap, fd)]) == NULL) {
-		DPRINTF(("ibcs2_ioctl(%d): bad fd %d ", p->p_pid,
-			 SCARG(uap, fd)));
+	if ((unsigned)uap->fd >= fdp->fd_nfiles ||
+	    (fp = fdp->fd_ofiles[uap->fd]) == NULL) {
+		DPRINTF(("ibcs2_ioctl(%d): bad fd %d ", p->p_pid, uap->fd));
 		return EBADF;
 	}
 
@@ -353,7 +313,7 @@ ibcs2_sys_ioctl(p, v, retval)
 
 	ctl = fp->f_ops->fo_ioctl;
 
-	switch (SCARG(uap, cmd)) {
+	switch (uap->cmd) {
 	case IBCS2_TCGETA:
 	case IBCS2_XCGETA:
 	case IBCS2_OXCGETA:
@@ -366,20 +326,17 @@ ibcs2_sys_ioctl(p, v, retval)
 			return error;
 	
 		btios2stios (&bts, &sts);
-		if (SCARG(uap, cmd) == IBCS2_TCGETA) {
+		if (uap->cmd == IBCS2_TCGETA) {
 			stios2stio (&sts, &st);
-			error = copyout((caddr_t)&st, SCARG(uap, data),
-					sizeof (st));
+			error = copyout((caddr_t)&st, uap->data, sizeof (st));
 			if (error)
 				DPRINTF(("ibcs2_ioctl(%d): copyout failed ",
 					 p->p_pid));
 			return error;
 		} else
-			return copyout((caddr_t)&sts, SCARG(uap, data),
-					sizeof (sts));
+			return copyout((caddr_t)&sts, uap->data, sizeof (sts));
 		/*NOTREACHED*/
 	    }
-
 	case IBCS2_TCSETA:
 	case IBCS2_TCSETAW:
 	case IBCS2_TCSETAF:
@@ -388,8 +345,8 @@ ibcs2_sys_ioctl(p, v, retval)
 		struct ibcs2_termios sts;
 		struct ibcs2_termio st;
 
-		if ((error = copyin(SCARG(uap, data), (caddr_t)&st,
-				    sizeof(st))) != 0) {
+		if ((error = copyin(uap->data, (caddr_t)&st, sizeof (st)))
+		    != 0) {
 			DPRINTF(("ibcs2_ioctl(%d): TCSET copyin failed ",
 				 p->p_pid));
 			return error;
@@ -398,7 +355,7 @@ ibcs2_sys_ioctl(p, v, retval)
 		/* get full BSD termios so we don't lose information */
 		if ((error = (*ctl)(fp, TIOCGETA, (caddr_t)&bts, p)) != 0) {
 			DPRINTF(("ibcs2_ioctl(%d): TCSET ctl failed fd %d ",
-				 p->p_pid, SCARG(uap, fd)));
+				 p->p_pid, uap->fd));
 			return error;
 		}
 
@@ -410,10 +367,9 @@ ibcs2_sys_ioctl(p, v, retval)
 		stio2stios(&st, &sts);
 		stios2btios(&sts, &bts);
 
-		return (*ctl)(fp, SCARG(uap, cmd) - IBCS2_TCSETA + TIOCSETA,
-			      (caddr_t)&bts, p);
+		return (*ctl)(fp, uap->cmd - IBCS2_TCSETA + TIOCSETA,
+		    (caddr_t)&bts, p);
 	    }
-
 	case IBCS2_XCSETA:
 	case IBCS2_XCSETAW:
 	case IBCS2_XCSETAF:
@@ -421,15 +377,14 @@ ibcs2_sys_ioctl(p, v, retval)
 		struct termios bts;
 		struct ibcs2_termios sts;
 
-		if ((error = copyin(SCARG(uap, data), (caddr_t)&sts,
+		if ((error = copyin(uap->data, (caddr_t)&sts,
 				    sizeof (sts))) != 0) {
 			return error;
 		}
 		stios2btios (&sts, &bts);
-		return (*ctl)(fp, SCARG(uap, cmd) - IBCS2_XCSETA + TIOCSETA,
-			      (caddr_t)&bts, p);
+		return (*ctl)(fp, uap->cmd - IBCS2_XCSETA + TIOCSETA,
+		    (caddr_t)&bts, p);
 	    }
-
 	case IBCS2_OXCSETA:
 	case IBCS2_OXCSETAW:
 	case IBCS2_OXCSETAF:
@@ -437,94 +392,52 @@ ibcs2_sys_ioctl(p, v, retval)
 		struct termios bts;
 		struct ibcs2_termios sts;
 
-		if ((error = copyin(SCARG(uap, data), (caddr_t)&sts,
+		if ((error = copyin(uap->data, (caddr_t)&sts,
 				    sizeof (sts))) != 0) {
 			return error;
 		}
 		stios2btios (&sts, &bts);
-		return (*ctl)(fp, SCARG(uap, cmd) - IBCS2_OXCSETA + TIOCSETA,
-			      (caddr_t)&bts, p);
+		return (*ctl)(fp, uap->cmd - IBCS2_OXCSETA + TIOCSETA,
+		    (caddr_t)&bts, p);
 	    }
-
 	case IBCS2_TCSBRK:
 		DPRINTF(("ibcs2_ioctl(%d): TCSBRK ", p->p_pid));
 		return ENOSYS;
-
 	case IBCS2_TCXONC:
-	    {
-		switch ((int)SCARG(uap, data)) {
-		case 0:
-		case 1:
-			DPRINTF(("ibcs2_ioctl(%d): TCXONC ", p->p_pid));
-			return ENOSYS;
-		case 2:
-			return (*ctl)(fp, TIOCSTOP, (caddr_t)0, p);
-		case 3:
-			return (*ctl)(fp, TIOCSTART, (caddr_t)1, p);
-		default:
-			return EINVAL;
-		}
-	    }
-
+		DPRINTF(("ibcs2_ioctl(%d): TCXONC ", p->p_pid));
+		return ENOSYS;
 	case IBCS2_TCFLSH:
-	    {
-		int arg;
-
-		switch ((int)SCARG(uap, data)) {
-		case 0:
-			arg = FREAD;
-			break;
-		case 1:
-			arg = FWRITE;
-			break;
-		case 2:
-			arg = FREAD | FWRITE;
-			break;
-		default:
-			return EINVAL;
-		}
-		return (*ctl)(fp, TIOCFLUSH, (caddr_t)&arg, p);
-	    }
-
+		DPRINTF(("ibcs2_ioctl(%d): TCFLSH ", p->p_pid));
+		return ENOSYS;
 	case IBCS2_TIOCGWINSZ:
-		SCARG(uap, cmd) = TIOCGWINSZ;
-		return sys_ioctl(p, uap, retval);
+		DPRINTF(("ibcs2_ioctl(%d): TIOCGWINSZ ", p->p_pid));
+		return ENOSYS;
 
 	case IBCS2_TIOCSWINSZ:
-		SCARG(uap, cmd) = TIOCSWINSZ;
-		return sys_ioctl(p, uap, retval);
+		DPRINTF(("ibcs2_ioctl(%d): TIOCSWINSZ ", p->p_pid));
+		return ENOSYS;
 
 	case IBCS2_TIOCGPGRP:
-		return copyout((caddr_t)&p->p_pgrp->pg_id, SCARG(uap, data),
+		return copyout((caddr_t)&p->p_pgrp->pg_id, uap->data,
 				sizeof(p->p_pgrp->pg_id));
 
 	case IBCS2_TIOCSPGRP:	/* XXX - is uap->data a pointer to pgid? */
-	    {
-		struct sys_setpgid_args sa;
+		{
+			struct setpgid_args {
+				int     pid;
+				int     pgid;
+			} sa;
 
-		SCARG(&sa, pid) = 0;
-		SCARG(&sa, pgid) = (int)SCARG(uap, data);
-		if (error = sys_setpgid(p, &sa, retval))
-			return error;
-		return 0;
-	    }
-
-	case IBCS2_TCGETSC:	/* SCO console - get scancode flags */
-		return ENOSYS;
-
-	case IBCS2_TCSETSC:	/* SCO console - set scancode flags */
-		return ENOSYS;
-
-	case IBCS2_SIOCSOCKSYS:
-		return ibcs2_socksys(p, uap, retval);
-
-	case IBCS2_I_NREAD:     /* STREAMS */
-	        SCARG(uap, cmd) = FIONREAD;
-		return sys_ioctl(p, uap, retval);
+			sa.pid = 0;
+			sa.pgid = (int)uap->data;
+			if (error = setpgid(p, &sa, retval))
+				return error;
+			return 0;
+		}
 
 	default:
-		DPRINTF(("ibcs2_ioctl(%d): unknown cmd 0x%lx ",
-			 p->p_pid, SCARG(uap, cmd)));
+		DPRINTF(("ibcs2_ioctl(%d): unknown cmd 0x%x ",
+			 p->p_pid, uap->cmd));
 		return ENOSYS;
 	}
 	return ENOSYS;

@@ -1,5 +1,3 @@
-/*	$NetBSD: scanc.c,v 1.3 1996/03/14 18:52:16 christos Exp $	*/
-
 /*
  * Copyright (c) 1982, 1986, 1989 Regents of the University of California.
  * All rights reserved.
@@ -32,11 +30,11 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)ufs_subr.c	7.13 (Berkeley) 6/28/90
+ *	from: @(#)ufs_subr.c	7.13 (Berkeley) 6/28/90
+ *	$Id: scanc.c,v 1.1 1993/10/13 05:40:45 cgd Exp $
  */
 
 #include <sys/types.h>
-#include <lib/libkern/libkern.h>
 
 int
 scanc(size, cp, table, mask)

@@ -1,4 +1,4 @@
-/*	$NetBSD: rcons.h,v 1.4 1996/03/14 19:02:32 christos Exp $ */
+/*	$NetBSD: rcons.h,v 1.1 1995/09/17 19:56:36 pk Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -44,8 +44,6 @@
  *	@(#)fbvar.h	8.1 (Berkeley) 6/11/93
  */
 
-#include <dev/rcons/raster.h>
-
 struct rconsole {
 	/* Raster console emulator state */
 
@@ -82,13 +80,12 @@ struct rconsole {
 	int	rc_ras_blank;		/* current screen blank raster op */
 
 	struct	raster_font *rc_font;	/* font and related info */
+	int	rc_font_ascent;		/* distance from font to char origin */
 };
 
 #define FB_INESC	0x001		/* processing an escape sequence */
 #define FB_STANDOUT	0x002		/* standout mode */
-#ifdef notyet
-#define FB_BOLD		0x?		/* boldface mode */
-#endif
+/* #define FB_BOLD	0x?		/* boldface mode */
 #define FB_INVERT	0x008		/* white on black mode */
 #define FB_VISBELL	0x010		/* visual bell */
 #define FB_CURSOR	0x020		/* cursor is visible */
@@ -97,24 +94,4 @@ struct rconsole {
 #define FB_P0		0x400		/* working on param 0 */
 #define FB_P1		0x800		/* working on param 1 */
 
-
-/* rcons_kern.c */
-void rcons_cnputc __P((int));
-void rcons_bell __P((struct rconsole *));
-void rcons_init __P((struct rconsole *));
-
-/* rcons_subr.c */
-void rcons_puts __P((struct rconsole *, unsigned char *, int));
-void rcons_text __P((struct rconsole *, unsigned char *, int));
-void rcons_pctrl __P((struct rconsole *, int));
-void rcons_esc __P((struct rconsole *, int));
-void rcons_doesc __P((struct rconsole *, int));
-void rcons_cursor __P((struct rconsole *));
-void rcons_invert __P((struct rconsole *, int));
-void rcons_clear2eop __P((struct rconsole *));
-void rcons_clear2eol __P((struct rconsole *));
-void rcons_scroll __P((struct rconsole *, int));
-void rcons_delchar __P((struct rconsole *, int));
-void rcons_delline __P((struct rconsole *, int));
-void rcons_insertchar __P((struct rconsole *, int));
-void rcons_insertline __P((struct rconsole *, int));
+extern void	rcons_cnputc __P((int));

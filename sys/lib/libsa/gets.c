@@ -1,5 +1,3 @@
-/*	$NetBSD: gets.c,v 1.6 1995/10/11 21:16:57 pk Exp $	*/
-
 /*-
  * Copyright (c) 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -32,12 +30,10 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)gets.c	8.1 (Berkeley) 6/11/93
+ *	from: @(#)gets.c	8.1 (Berkeley) 6/11/93
+ *	     $Id: gets.c,v 1.1 1994/01/26 02:03:47 brezak Exp $
  */
 
-#include "stand.h"
-
-void
 gets(buf)
 	char *buf;
 {
@@ -49,7 +45,6 @@ gets(buf)
 		case '\n':
 		case '\r':
 			*lp = '\0';
-			putchar('\n');
 			return;
 		case '\b':
 		case '\177':
@@ -60,12 +55,10 @@ gets(buf)
 				putchar('\b');
 			}
 			break;
-#if HASH_ERASE
 		case '#':
 			if (lp > buf)
 				--lp;
 			break;
-#endif
 		case 'r'&037: {
 			register char *p;
 
@@ -74,9 +67,7 @@ gets(buf)
 				putchar(*p);
 			break;
 		}
-#if AT_ERASE
 		case '@':
-#endif
 		case 'u'&037:
 		case 'w'&037:
 			lp = buf;
@@ -84,7 +75,6 @@ gets(buf)
 			break;
 		default:
 			*lp++ = c;
-			putchar(c);
 		}
 	/*NOTREACHED*/
 }

@@ -1,5 +1,3 @@
-/*	$NetBSD: net.c,v 1.12 1995/12/13 23:38:10 pk Exp $	*/
-
 /*
  * Copyright (c) 1992 Regents of the University of California.
  * All rights reserved.
@@ -36,7 +34,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * @(#) Header: net.c,v 1.9 93/08/06 19:32:15 leres Exp  (LBL)
+ * from @(#) Header: net.c,v 1.9 93/08/06 19:32:15 leres Exp  (LBL)
  */
 
 #include <sys/param.h>
@@ -54,17 +52,22 @@
 #include <netinet/udp.h>
 #include <netinet/udp_var.h>
 
+#include <errno.h>
+
 #include "stand.h"
 #include "net.h"
+#include "netif.h"
+
+n_long	myip;
 
 /* Caller must leave room for ethernet, ip and udp headers in front!! */
-ssize_t
-sendudp(d, pkt, len)
+int
+sendudp(d, buf, len)
 	register struct iodesc *d;
-	register void *pkt;
-	register size_t len;
+	register void *buf;
+	register int len;
 {
-	register ssize_t cc;
+	register int cc;
 	register struct ip *ip;
 	register struct udpiphdr *ui;
 	register struct udphdr *uh;
@@ -76,15 +79,14 @@ sendudp(d, pkt, len)
 		printf("sendudp: d=%x called.\n", (u_int)d);
 		if (d) {
 			printf("saddr: %s:%d",
-				inet_ntoa(d->myip), ntohs(d->myport));
+				intoa(d->myip), d->myport);
 			printf(" daddr: %s:%d\n",
-				inet_ntoa(d->destip), ntohs(d->destport));
+				intoa(d->destip), d->destport);
 		}
 	}
 #endif
-
-	uh = (struct udphdr *)pkt - 1;
-	ip = (struct ip *)uh - 1;
+	uh = ((struct udphdr *)buf) - 1;
+	ip = ((struct ip *)uh) - 1;
 	len += sizeof(*ip) + sizeof(*uh);
 
 	bzero(ip, sizeof(*ip) + sizeof(*uh));
@@ -94,158 +96,155 @@ sendudp(d, pkt, len)
 	ip->ip_len = htons(len);
 	ip->ip_p = IPPROTO_UDP;			/* char */
 	ip->ip_ttl = IP_TTL;			/* char */
-	ip->ip_src = d->myip;
-	ip->ip_dst = d->destip;
+	ip->ip_src.s_addr = htonl(d->myip);
+	ip->ip_dst.s_addr = htonl(d->destip);
 	ip->ip_sum = in_cksum(ip, sizeof(*ip));	 /* short, but special */
 
-	uh->uh_sport = d->myport;
-	uh->uh_dport = d->destport;
+	uh->uh_sport = htons(d->myport);
+	uh->uh_dport = htons(d->destport);
 	uh->uh_ulen = htons(len - sizeof(*ip));
 
 	/* Calculate checksum (must save and restore ip header) */
 	tip = *ip;
 	ui = (struct udpiphdr *)ip;
-	bzero(ui->ui_x1, sizeof(ui->ui_x1));
+	ui->ui_next = 0;
+	ui->ui_prev = 0;
+	ui->ui_x1 = 0;
 	ui->ui_len = uh->uh_ulen;
 	uh->uh_sum = in_cksum(ui, len);
 	*ip = tip;
 
 	if (ip->ip_dst.s_addr == INADDR_BROADCAST || ip->ip_src.s_addr == 0 ||
-	    netmask == 0 || SAMENET(ip->ip_src, ip->ip_dst, netmask))
-		ea = arpwhohas(d, ip->ip_dst);
+	    mask == 0 || SAMENET(ip->ip_src.s_addr, ip->ip_dst.s_addr, mask))
+		ea = arpwhohas(d, ip->ip_dst.s_addr);
 	else
-		ea = arpwhohas(d, gateip);
+		ea = arpwhohas(d, htonl(gateip));
 
 	cc = sendether(d, ip, len, ea, ETHERTYPE_IP);
-	if (cc == -1)
-		return (-1);
+	if (cc < 0)
+		return (cc);
 	if (cc != len)
 		panic("sendudp: bad write (%d != %d)", cc, len);
 	return (cc - (sizeof(*ip) + sizeof(*uh)));
 }
 
-/*
- * Receive a UDP packet and validate it is for us.
- * Caller leaves room for the headers (Ether, IP, UDP)
- */
-ssize_t
-readudp(d, pkt, len, tleft)
+/* Check that packet is a valid udp packet for us */
+void *
+checkudp(d, pkt, lenp)
 	register struct iodesc *d;
 	register void *pkt;
-	register size_t len;
-	time_t tleft;
+	register int *lenp;
 {
-	register ssize_t n;
-	register size_t hlen;
+	register int hlen, len;
+	register struct ether_header *eh;
 	register struct ip *ip;
 	register struct udphdr *uh;
 	register struct udpiphdr *ui;
 	struct ip tip;
-	u_int16_t etype;	/* host order */
 
 #ifdef NET_DEBUG
 	if (debug)
-		printf("readudp: called\n");
+	    printf("checkudp: called\n");
 #endif
+	eh = pkt;
+	ip = (struct ip *)(eh + 1);
+	uh = (struct udphdr *)(ip + 1);
 
-	uh = (struct udphdr *)pkt - 1;
-	ip = (struct ip *)uh - 1;
-
-	n = readether(d, ip, len + sizeof(*ip) + sizeof(*uh), tleft, &etype);
-	if (n == -1 || n < sizeof(*ip) + sizeof(*uh))
-		return -1;
-
-	/* Ethernet address checks now in readether() */
-
-	/* Need to respond to ARP requests. */
-	if (etype == ETHERTYPE_ARP) {
-		struct arphdr *ah = (void *)ip;
-		if (ah->ar_op == htons(ARPOP_REQUEST)) {
-			/* Send ARP reply */
-			arp_reply(d, ah);
-		}
-		return -1;
-	}
-
-	if (etype != ETHERTYPE_IP) {
+	/* Must be to us */
+	if (bcmp(d->myea, eh->ether_dhost, 6) != 0 &&	/* by byte */
+	    bcmp(bcea, eh->ether_dhost, 6) != 0) {	/* by byte */
 #ifdef NET_DEBUG
 		if (debug)
-			printf("readudp: not IP. ether_type=%x\n", etype);
+			printf("checkudp: not ours. myea=%s bcea=%s\n",
+				ether_sprintf(d->myea), ether_sprintf(bcea));
 #endif
-		return -1;
+		return (NULL);
+	    }
+
+	/* And ip */
+	if (ntohs(eh->ether_type) != ETHERTYPE_IP) {
+#ifdef NET_DEBUG
+		if (debug)
+			printf("checkudp: not IP. ether_type=%x\n", eh->ether_type);
+#endif
+		return (NULL);
 	}
 
 	/* Check ip header */
-	if (ip->ip_v != IPVERSION ||
-	    ip->ip_p != IPPROTO_UDP) {	/* half char */
+	if (ip->ip_v != IPVERSION || ip->ip_p != IPPROTO_UDP) {	/* half char */
 #ifdef NET_DEBUG
 		if (debug)
-			printf("readudp: IP version or not UDP. ip_v=%d ip_p=%d\n", ip->ip_v, ip->ip_p);
+			printf("checkudp: IP version or not UDP. ip_v=%d ip_p=%d\n", ip->ip_v, ip->ip_p);
 #endif
-		return -1;
+		return (NULL);
 	}
 
 	hlen = ip->ip_hl << 2;
-	if (hlen < sizeof(*ip) ||
-	    in_cksum(ip, hlen) != 0) {
+	if (hlen < sizeof(*ip) || in_cksum(ip, hlen) != 0) {
 #ifdef NET_DEBUG
 		if (debug)
-			printf("readudp: short hdr or bad cksum.\n");
+			printf("checkudp: short hdr or bad cksum.\n");
 #endif
-		return -1;
+		return (NULL);
 	}
 	NTOHS(ip->ip_len);
-	if (n < ip->ip_len) {
+	if (*lenp - sizeof(*eh) < ip->ip_len) {
 #ifdef NET_DEBUG
 		if (debug)
-			printf("readudp: bad length %d < %d.\n", n, ip->ip_len);
+			printf("checkudp: bad length %d < %d.\n",
+				*lenp - sizeof(*eh), ip->ip_len);
 #endif
-		return -1;
+		return (NULL);
 	}
-	if (d->myip.s_addr && ip->ip_dst.s_addr != d->myip.s_addr) {
+	if (d->myip && ntohl(ip->ip_dst.s_addr) != d->myip) {
 #ifdef NET_DEBUG
 		if (debug) {
-			printf("readudp: bad saddr %s != ", inet_ntoa(d->myip));
-			printf("%s\n", inet_ntoa(ip->ip_dst));
+			printf("checkudp: bad saddr %s != ",
+				intoa(d->myip));
+			printf("%s\n",
+				intoa(ntohl(ip->ip_dst.s_addr)));
 		}
 #endif
-		return -1;
+		return (NULL);
 	}
 
 	/* If there were ip options, make them go away */
 	if (hlen != sizeof(*ip)) {
-		bcopy(((u_char *)ip) + hlen, uh, len - hlen);
+		bcopy(((u_char *)ip) + hlen, uh,
+		    *lenp - (sizeof(*eh) + hlen));
 		ip->ip_len = sizeof(*ip);
-		n -= hlen - sizeof(*ip);
+		*lenp -= hlen - sizeof(*ip);
 	}
-	if (uh->uh_dport != d->myport) {
+	if (ntohs(uh->uh_dport) != d->myport) {
 #ifdef NET_DEBUG
 		if (debug)
-			printf("readudp: bad dport %d != %d\n",
+			printf("checkudp: bad dport %d != %d\n",
 				d->myport, ntohs(uh->uh_dport));
 #endif
-		return -1;
+		return (NULL);
 	}
 
 	if (uh->uh_sum) {
-		n = ntohs(uh->uh_ulen) + sizeof(*ip);
-		if (n > RECV_SIZE - ETHER_SIZE) {
-			printf("readudp: huge packet, udp len %d\n", n);
-			return -1;
+		len = ntohs(uh->uh_ulen);
+		if (len > RECV_SIZE - (sizeof(*eh) + sizeof(*ip))) {
+			printf("checkudp: huge packet, udp len %d\n", len);
+			return (NULL);
 		}
 
 		/* Check checksum (must save and restore ip header) */
 		tip = *ip;
 		ui = (struct udpiphdr *)ip;
-		bzero(ui->ui_x1, sizeof(ui->ui_x1));
+		ui->ui_next = 0;
+		ui->ui_prev = 0;
+		ui->ui_x1 = 0;
 		ui->ui_len = uh->uh_ulen;
-		if (in_cksum(ui, n) != 0) {
+		if (in_cksum(ui, len + sizeof(*ip)) != 0) {
 #ifdef NET_DEBUG
 			if (debug)
-				printf("readudp: bad cksum\n");
+				printf("checkudp: bad cksum\n");
 #endif
 			*ip = tip;
-			return -1;
+			return (NULL);
 		}
 		*ip = tip;
 	}
@@ -255,14 +254,13 @@ readudp(d, pkt, len, tleft)
 	if (uh->uh_ulen < sizeof(*uh)) {
 #ifdef NET_DEBUG
 		if (debug)
-			printf("readudp: bad udp len %d < %d\n",
+			printf("checkudp: bad udp len %d < %d\n",
 				uh->uh_ulen, sizeof(*uh));
 #endif
-		return -1;
+		return (NULL);
 	}
-
-	n -= sizeof(*ip) + sizeof(*uh);
-	return (n);
+	*lenp -= sizeof(*eh) + sizeof(*ip) + sizeof(*uh);
+	return (uh + 1);
 }
 
 /*
@@ -275,36 +273,30 @@ readudp(d, pkt, len, tleft)
  * non-zero errno to indicate failure; finally, it can return -1 with a
  * zero errno to indicate it isn't done yet.
  */
-ssize_t
+int
 sendrecv(d, sproc, sbuf, ssize, rproc, rbuf, rsize)
 	register struct iodesc *d;
-	register ssize_t (*sproc)(struct iodesc *, void *, size_t);
+	register int (*sproc)(struct iodesc *, void *, int);
 	register void *sbuf;
-	register size_t ssize;
-	register ssize_t (*rproc)(struct iodesc *, void *, size_t, time_t);
+	register int ssize;
+	register int (*rproc)(struct iodesc *, void *, int);
 	register void *rbuf;
-	register size_t rsize;
+	register int rsize;
 {
-	register ssize_t cc;
-	register time_t t, tmo, tlast;
-	long tleft;
+	register int cc;
+	register time_t t, tmo, tlast, tleft;
 
 #ifdef NET_DEBUG
 	if (debug)
-		printf("sendrecv: called\n");
+	    printf("sendrecv: called\n");
 #endif
-
 	tmo = MINTMO;
 	tlast = tleft = 0;
 	t = getsecs();
 	for (;;) {
 		if (tleft <= 0) {
-			if (tmo >= MAXTMO) {
-				errno = ETIMEDOUT;
-				return -1;
-			}
 			cc = (*sproc)(d, sbuf, ssize);
-			if (cc == -1 || cc < ssize)
+			if (cc < ssize)
 				panic("sendrecv: short write! (%d < %d)",
 				    cc, ssize);
 
@@ -315,12 +307,14 @@ sendrecv(d, sproc, sbuf, ssize, rproc, rbuf, rsize)
 			tlast = t;
 		}
 
-		/* Try to get a packet and process it. */
-		cc = (*rproc)(d, rbuf, rsize, tleft);
-		/* Return on data, EOF or real error. */
-		if (cc != -1 || errno != 0)
-			return (cc);
-
+		cc = netif_get(d, rbuf, rsize, tleft);
+		if (cc >= 0) {
+			/* Got a packet, process it */
+			cc = (*rproc)(d, rbuf, cc);
+			/* Return on data, EOF or real error */
+			if (cc >= 0 || errno != 0)
+				return (cc);
+		}
 		/* Timed out or didn't get the packet we're waiting for */
 		t = getsecs();
 		tleft -= t - tlast;
@@ -328,106 +322,16 @@ sendrecv(d, sproc, sbuf, ssize, rproc, rbuf, rsize)
 	}
 }
 
-/*
- * Like inet_addr() in the C library, but we only accept base-10.
- * Return values are in network order.
- */
-n_long
-inet_addr(cp)
-	char *cp;
-{
-	register u_long val;
-	register int n;
-	register char c;
-	u_int parts[4];
-	register u_int *pp = parts;
-
-	for (;;) {
-		/*
-		 * Collect number up to ``.''.
-		 * Values are specified as for C:
-		 * 0x=hex, 0=octal, other=decimal.
-		 */
-		val = 0;
-		while ((c = *cp) != '\0') {
-			if (c >= '0' && c <= '9') {
-				val = (val * 10) + (c - '0');
-				cp++;
-				continue;
-			}
-			break;
-		}
-		if (*cp == '.') {
-			/*
-			 * Internet format:
-			 *	a.b.c.d
-			 *	a.b.c	(with c treated as 16-bits)
-			 *	a.b	(with b treated as 24 bits)
-			 */
-			if (pp >= parts + 3 || val > 0xff)
-				goto bad;
-			*pp++ = val, cp++;
-		} else
-			break;
-	}
-	/*
-	 * Check for trailing characters.
-	 */
-	if (*cp != '\0')
-		goto bad;
-
-	/*
-	 * Concoct the address according to
-	 * the number of parts specified.
-	 */
-	n = pp - parts + 1;
-	switch (n) {
-
-	case 1:				/* a -- 32 bits */
-		break;
-
-	case 2:				/* a.b -- 8.24 bits */
-		if (val > 0xffffff)
-			goto bad;
-		val |= parts[0] << 24;
-		break;
-
-	case 3:				/* a.b.c -- 8.8.16 bits */
-		if (val > 0xffff)
-			goto bad;
-		val |= (parts[0] << 24) | (parts[1] << 16);
-		break;
-
-	case 4:				/* a.b.c.d -- 8.8.8.8 bits */
-		if (val > 0xff)
-			goto bad;
-		val |= (parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8);
-		break;
-	}
-
-	return (htonl(val));
- bad:
-	return (htonl(INADDR_NONE));
-}
-
-char *
-inet_ntoa(ia)
-	struct in_addr ia;
-{
-	return (intoa(ia.s_addr));
-}
-
 /* Similar to inet_ntoa() */
 char *
 intoa(addr)
-	register n_long addr;
+	n_long addr;
 {
 	register char *cp;
 	register u_int byte;
 	register int n;
 	static char buf[17];	/* strlen(".255.255.255.255") + 1 */
 
-	NTOHL(addr);
 	cp = &buf[sizeof buf];
 	*--cp = '\0';
 
@@ -485,5 +389,5 @@ ip_convertaddr(p)
 	if (*p != '\0')
 		return IP_ANYADDR;
 
-	return htonl(addr);
+	return ntohl(addr);
 }

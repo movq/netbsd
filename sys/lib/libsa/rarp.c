@@ -1,43 +1,3 @@
-/*	$NetBSD: rarp.c,v 1.10 1995/09/23 03:36:10 gwr Exp $	*/
-
-/*
- * Copyright (c) 1992 Regents of the University of California.
- * All rights reserved.
- *
- * This software was developed by the Computer Systems Engineering group
- * at Lawrence Berkeley Laboratory under DARPA contract BG 91-66 and
- * contributed to Berkeley.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Lawrence Berkeley Laboratory and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * @(#) Header: arp.c,v 1.5 93/07/15 05:52:26 leres Exp  (LBL)
- */
 #include <sys/param.h>
 #include <sys/socket.h>
 #include <net/if.h>
@@ -46,37 +6,37 @@
 #include <netinet/if_ether.h>
 #include <netinet/in_systm.h>
 
+#include <errno.h>
 #include <string.h>
 
 #include "stand.h"
 #include "net.h"
 #include "netif.h"
 
-static ssize_t rarpsend __P((struct iodesc *, void *, size_t));
-static ssize_t rarprecv __P((struct iodesc *, void *, size_t, time_t));
+static int rarpsend(struct iodesc *, void *, int);
+static int rarprecv(struct iodesc *, void *, int);
 
 /*
  * Ethernet (Reverse) Address Resolution Protocol (see RFC 903, and 826).
  */
-int
+n_long
 rarp_getipaddress(sock)
 	int sock;
 {
 	struct iodesc *d;
 	register struct ether_arp *ap;
+	register void *pkt;
 	struct {
-		u_char header[ETHER_SIZE];
-		struct {
-			struct ether_arp arp;
-			u_char pad[18]; 	/* 60 - sizeof(arp) */
-		} data;
+		u_char header[HEADER_SIZE];
+		struct ether_arp wrarp;
 	} wbuf;
-	struct {
-		u_char header[ETHER_SIZE];
+	union {
+		u_char buffer[RECV_SIZE];
 		struct {
-			struct ether_arp arp;
-			u_char pad[24]; 	/* extra space */
-		} data;
+			u_char header[HEADER_SIZE];
+			struct ether_arp xrrarp;
+		}xrbuf;
+#define rrarp  xrbuf.xrrarp
 	} rbuf;
 
 #ifdef RARP_DEBUG
@@ -85,140 +45,93 @@ rarp_getipaddress(sock)
 #endif
 	if (!(d = socktodesc(sock))) {
 		printf("rarp: bad socket. %d\n", sock);
-		return (-1);
+		return(INADDR_ANY);
 	}
 #ifdef RARP_DEBUG
  	if (debug)
 		printf("rarp: d=%x\n", (u_int)d);
 #endif
+	ap = &wbuf.wrarp;
+	pkt = &rbuf.rrarp;
+	pkt -= HEADER_SIZE;
 
-	bzero((char*)&wbuf.data, sizeof(wbuf.data));
-	ap = &wbuf.data.arp;
+	bzero(ap, sizeof(*ap));
+
 	ap->arp_hrd = htons(ARPHRD_ETHER);
 	ap->arp_pro = htons(ETHERTYPE_IP);
 	ap->arp_hln = sizeof(ap->arp_sha); /* hardware address length */
 	ap->arp_pln = sizeof(ap->arp_spa); /* protocol address length */
-	ap->arp_op = htons(ARPOP_REVREQUEST);
+	ap->arp_op = htons(REVARP_REQUEST);
 	bcopy(d->myea, ap->arp_sha, 6);
 	bcopy(d->myea, ap->arp_tha, 6);
 
 	if (sendrecv(d,
-	    rarpsend, &wbuf.data, sizeof(wbuf.data),
-	    rarprecv, &rbuf.data, sizeof(rbuf.data)) < 0)
-	{
+		     rarpsend, ap, sizeof(*ap),
+		     rarprecv, pkt, RECV_SIZE) < 0) {
 		printf("No response for RARP request\n");
-		return (-1);
+		return(INADDR_ANY);
 	}
 
-	ap = &rbuf.data.arp;
-	bcopy(ap->arp_tpa, (char *)&myip, sizeof(myip));
-#if 0
-	/* XXX - Can NOT assume this is our root server! */
-	bcopy(ap->arp_spa, (char *)&rootip, sizeof(rootip));
-#endif
-
-	/* Compute our "natural" netmask. */
-	if (IN_CLASSA(myip.s_addr))
-		netmask = IN_CLASSA_NET;
-	else if (IN_CLASSB(myip.s_addr))
-		netmask = IN_CLASSB_NET;
-	else
-		netmask = IN_CLASSC_NET;
-
-	d->myip = myip;
-	return (0);
+	return(myip);
 }
 
 /*
  * Broadcast a RARP request (i.e. who knows who I am)
  */
-static ssize_t
+static int
 rarpsend(d, pkt, len)
 	register struct iodesc *d;
 	register void *pkt;
-	register size_t len;
+	register int len;
 {
-
 #ifdef RARP_DEBUG
  	if (debug)
-		printf("rarpsend: called\n");
+ 	    printf("rarpsend: called\n");
 #endif
-
 	return (sendether(d, pkt, len, bcea, ETHERTYPE_REVARP));
 }
 
 /*
- * Returns 0 if this is the packet we're waiting for
- * else -1 (and errno == 0)
+ * Called when packet containing RARP is received
  */
-static ssize_t
-rarprecv(d, pkt, len, tleft)
+static int
+rarprecv(d, pkt, len)
 	register struct iodesc *d;
 	register void *pkt;
-	register size_t len;
-	time_t tleft;
+	register int len;
 {
-	register ssize_t n;
+	register struct ether_header *ep;
 	register struct ether_arp *ap;
-	u_int16_t etype;	/* host order */
 
 #ifdef RARP_DEBUG
  	if (debug)
-		printf("rarprecv: ");
+ 	    printf("rarprecv: called\n");
 #endif
-
-	n = readether(d, pkt, len, tleft, &etype);
-	errno = 0;	/* XXX */
-	if (n == -1 || n < sizeof(struct ether_arp)) {
-#ifdef RARP_DEBUG
-		if (debug)
-			printf("bad len=%d\n", n);
-#endif
+	if (len < sizeof(struct ether_header) + sizeof(struct ether_arp)) {
+		errno = 0;
 		return (-1);
 	}
 
-	if (etype != ETHERTYPE_REVARP) {
-#ifdef RARP_DEBUG
-		if (debug)
-			printf("bad type=0x%x\n", etype);
-#endif
+	ep = (struct ether_header *)pkt;
+	if (ntohs(ep->ether_type) != ETHERTYPE_REVARP) {
+		errno = 0;
 		return (-1);
 	}
 
-	ap = (struct ether_arp *)pkt;
-	if (ap->arp_hrd != htons(ARPHRD_ETHER) ||
-	    ap->arp_pro != htons(ETHERTYPE_IP) ||
-	    ap->arp_hln != sizeof(ap->arp_sha) ||
-	    ap->arp_pln != sizeof(ap->arp_spa) )
-	{
-#ifdef RARP_DEBUG
-		if (debug)
-			printf("bad hrd/pro/hln/pln\n")
-#endif
+	ap = (struct ether_arp *)(ep + 1);
+	if (ntohs(ap->arp_op) != REVARP_REPLY ||
+	    ntohs(ap->arp_pro) != ETHERTYPE_IP)  {
+		errno = 0;
 		return (-1);
 	}
 
-	if (ap->arp_op != htons(ARPOP_REVREPLY)) {
-#ifdef RARP_DEBUG
-		if (debug)
-			printf("bad op=0x%x\n", ntohs(ap->arp_op));
-#endif
-		return (-1);
-	}
-
-	/* Is the reply for our Ethernet address? */
 	if (bcmp(ap->arp_tha, d->myea, 6)) {
-#ifdef RARP_DEBUG
-		if (debug)
-			printf("unwanted address\n");
-#endif
+		errno = 0;
 		return (-1);
 	}
 
-	/* We have our answer. */
-#ifdef RARP_DEBUG
- 	if (debug)
-		printf("got it\n");
-#endif
-	return (n);
+	bcopy(ap->arp_tpa, (char *)&myip, sizeof(myip));
+	bcopy(ap->arp_spa, (char *)&rootip, sizeof(rootip));
+
+	return(0);
 }

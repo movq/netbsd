@@ -1,5 +1,3 @@
-/*	$NetBSD: setjmp.S,v 1.5 1994/10/26 06:39:14 cgd Exp $	*/
-
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
  * All rights reserved.
@@ -34,14 +32,13 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- *	@(#)setjmp.s	5.1 (Berkeley) 4/23/90
  */
 
-#if defined(LIBC_SCCS)
+#if defined(LIBC_SCCS) && !defined(lint)
 	.text
-	.asciz "$NetBSD: setjmp.S,v 1.5 1994/10/26 06:39:14 cgd Exp $"
-#endif
+	/*.asciz "from: @(#)setjmp.s	5.1 (Berkeley) 4/23/90"*/
+	.asciz "$Id: setjmp.S,v 1.1 1993/10/07 00:19:09 cgd Exp $"
+#endif /* LIBC_SCCS and not lint */
 
 /*
  * C library -- _setjmp, _longjmp
@@ -60,7 +57,7 @@ ENTRY(setjmp)
 	pushl	$0
 	call	PIC_PLT(_sigblock)
 	popl	%edx
-	movl	4(%esp),%ecx
+	movl	4(%esp),%ecx 
 	movl	0(%esp),%edx
 	movl	%edx, 0(%ecx)
 	movl	%ebx, 4(%ecx)
@@ -69,7 +66,7 @@ ENTRY(setjmp)
 	movl	%esi,16(%ecx)
 	movl	%edi,20(%ecx)
 	movl	%eax,24(%ecx)
-	xorl	%eax,%eax
+	movl	$0,%eax
 	ret
 
 ENTRY(longjmp)
@@ -85,8 +82,8 @@ ENTRY(longjmp)
 	movl	12(%edx),%ebp
 	movl	16(%edx),%esi
 	movl	20(%edx),%edi
-	testl	%eax,%eax
-	jnz	1f
-	incl	%eax
+	cmpl	$0,%eax
+	jne	1f
+	movl	$1,%eax
 1:	movl	%ecx,0(%esp)
 	ret

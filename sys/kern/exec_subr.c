@@ -1,7 +1,5 @@
-/*	$NetBSD: exec_subr.c,v 1.9 1994/12/04 03:10:42 mycroft Exp $	*/
-
 /*
- * Copyright (c) 1993, 1994 Christopher G. Demetriou
+ * Copyright (c) 1993 Christopher G. Demetriou
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -16,7 +14,7 @@
  *    must display the following acknowledgement:
  *      This product includes software developed by Christopher G. Demetriou.
  * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
+ *    derived from this software withough specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -28,6 +26,8 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ *	$Id: exec_subr.c,v 1.1 1994/01/08 07:15:02 cgd Exp $
  */
 
 #include <sys/param.h>
@@ -35,13 +35,13 @@
 #include <sys/proc.h>
 #include <sys/malloc.h>
 #include <sys/vnode.h>
-#include <sys/filedesc.h>
 #include <sys/exec.h>
 #include <sys/mman.h>
 
 #include <vm/vm.h>
+#include <vm/vm_user.h>
 
-#ifdef DEBUG
+#ifdef EXEC_DEBUG
 /*
  * new_vmcmd():
  *	create a new vmcmd structure and fill in its fields based
@@ -74,7 +74,7 @@ new_vmcmd(evsp, proc, len, addr, vp, offset, prot)
 	vcp->ev_offset = offset;
 	vcp->ev_prot = prot;
 }
-#endif /* DEBUG */
+#endif
 
 void
 vmcmdset_extend(evsp)
@@ -104,6 +104,7 @@ vmcmdset_extend(evsp)
 	evsp->evs_cmds = nvcp;
 }
 
+#ifdef EXEC_DEBUG
 void
 kill_vmcmds(evsp)
 	struct	exec_vmcmd_set *evsp;
@@ -122,6 +123,7 @@ kill_vmcmds(evsp)
 	evsp->evs_used = evsp->evs_cnt = 0;
 	FREE(evsp->evs_cmds, M_EXEC);
 }
+#endif
 
 /*
  * vmcmd_map_pagedvn():
@@ -140,9 +142,14 @@ vmcmd_map_pagedvn(p, cmd)
 	 * VTEXT.  that's handled in the routine which sets up the vmcmd to
 	 * call this routine.
 	 */
+#ifdef EXEC_DEBUG
+	printf("vmcmd_map_pagedvn: mapping file %x+%x into mem %x+%x (%x/%x)\n",
+	    cmd->ev_offset, cmd->ev_len, cmd->ev_addr, cmd->ev_len,
+	    cmd->ev_prot, VM_PROT_ALL);
+#endif
 	return vm_mmap(&p->p_vmspace->vm_map, &cmd->ev_addr, cmd->ev_len,
-	    cmd->ev_prot, VM_PROT_ALL, MAP_FIXED|MAP_COPY, (caddr_t)cmd->ev_vp,
-	    cmd->ev_offset);
+	    cmd->ev_prot, VM_PROT_ALL, MAP_FIXED|MAP_FILE|MAP_COPY,
+	    cmd->ev_vp, cmd->ev_offset);
 }
 
 /*
@@ -158,6 +165,11 @@ vmcmd_map_readvn(p, cmd)
 {
 	int error;
 
+#ifdef EXEC_DEBUG
+	printf("vmcmd_map_readdvn: reading file %x+%x into mem %x+%x (%x/%x)\n",
+	    cmd->ev_offset, cmd->ev_len, cmd->ev_addr, cmd->ev_len,
+	    cmd->ev_prot, VM_PROT_ALL);
+#endif
 	error = vm_allocate(&p->p_vmspace->vm_map, &cmd->ev_addr,
 	    cmd->ev_len, 0);
 	if (error)
@@ -169,8 +181,8 @@ vmcmd_map_readvn(p, cmd)
 	if (error)
 		return error;
 
-	return vm_map_protect(&p->p_vmspace->vm_map, trunc_page(cmd->ev_addr),
-	    round_page(cmd->ev_addr + cmd->ev_len), cmd->ev_prot, FALSE);
+	return vm_protect(&p->p_vmspace->vm_map, cmd->ev_addr, cmd->ev_len,
+	    FALSE, cmd->ev_prot);
 }
 
 /*
@@ -186,11 +198,15 @@ vmcmd_map_zero(p, cmd)
 {
 	int error;
 
+#ifdef EXEC_DEBUG
+	printf("vmcmd_map_zero: mapping into addr %x for len %x (%x/%x)\n",
+	    cmd->ev_addr, cmd->ev_len, cmd->ev_prot, VM_PROT_ALL);
+#endif
 	error = vm_allocate(&p->p_vmspace->vm_map, &cmd->ev_addr,
 	    cmd->ev_len, 0);
 	if (error)
 		return error;
 
-	return vm_map_protect(&p->p_vmspace->vm_map, trunc_page(cmd->ev_addr),
-	    round_page(cmd->ev_addr + cmd->ev_len), cmd->ev_prot, FALSE);
+	return vm_protect(&p->p_vmspace->vm_map, cmd->ev_addr, cmd->ev_len,
+	    FALSE, cmd->ev_prot);
 }

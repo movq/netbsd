@@ -1,7 +1,7 @@
-/*	$NetBSD: comvar.h,v 1.4 1996/04/15 18:54:35 cgd Exp $	*/
+/*	$NetBSD: comvar.h,v 1.1 1996/03/09 01:01:33 cgd Exp $	*/
 
 /*
- * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
+ * Copyright (c) 1994 Christopher G. Demetriou.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,17 +32,6 @@
 
 struct commulti_attach_args {
 	int		ca_slave;		/* slave number */
-
-	bus_chipset_tag_t ca_bc;
-	bus_io_handle_t ca_ioh;
-	int		ca_iobase;
-	int		ca_noien;
 };
 
-int comprobe1 __P((bus_chipset_tag_t, bus_io_handle_t, int));
-
-extern int comconsaddr;
-extern int comconsattached;
-extern bus_chipset_tag_t comconsbc;
-extern bus_io_handle_t comconsioh;
-extern tcflag_t comconscflag;
+int comprobe1 __P((int));

@@ -1,4 +1,4 @@
-/*	$NetBSD: audioio.h,v 1.6 1996/04/09 20:55:22 cgd Exp $	*/
+/*	$NetBSD: audioio.h,v 1.1 1995/02/21 01:37:22 brezak Exp $	*/
 
 /*
  * Copyright (c) 1991-1993 Regents of the University of California.
@@ -32,6 +32,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
+ *	$Header: /home/mike/src/cvs/netbsd/src/sys/sys/audioio.h,v 1.1 1995/02/21 01:37:22 brezak Exp $ (LBL)
  */
 
 #ifndef _AUDIOIO_H_
@@ -59,7 +60,6 @@ struct audio_prinfo {
 	u_char	open;		/* non-zero if currently open */
 	u_char	active;		/* non-zero if I/O is currently active */
 };
-typedef struct audio_prinfo audio_prinfo_t;
 
 struct audio_info {
 	struct	audio_prinfo play;	/* Info for play (output) side */
@@ -70,23 +70,15 @@ struct audio_info {
 	u_int	hiwat;		/* output high water mark */
 	u_int	lowat;		/* output low water mark */
 	u_int	backlog;	/* samples of output backlog to gen. */
-	u_int	mode;		/* current device mode */
-#define AUMODE_PLAY	0x01
-#define AUMODE_RECORD	0x02
-#define AUMODE_PLAY_ALL	0x04	/* play all samples--no real-time correction */
+	u_int	mode;			/* bitmask of AUMODE_* values */
+				/* (Some devices can do both simultaneously) */
+#define AUMODE_PLAY	0
+#define AUMODE_RECORD	1
 };
 typedef struct audio_info audio_info_t;
 
-#ifdef _KERNEL
-#define AUDIO_INITINFO(p)\
-	{ register int n = sizeof(struct audio_info); \
-	  register u_char *q = (u_char *) p; \
-	  while (n-- > 0) *q++ = 0xff; }
-
-#else
 #define AUDIO_INITINFO(p)\
 	(void)memset((void *)(p), 0xff, sizeof(struct audio_info))
-#endif
 
 /*
  * Parameter for the AUDIO_GETDEV ioctl to determine current
@@ -130,9 +122,8 @@ typedef struct audio_encoding {
 #define AUDIO_GETENC	_IOWR('A', 28, struct audio_encoding)
 #define AUDIO_GETFD	_IOR('A', 29, int)
 #define AUDIO_SETFD	_IOWR('A', 30, int)
-#define AUDIO_PERROR	_IOR('A', 31, int)
 
-/*
+/* 
  * Mixer device
  */
 #define AUDIO_MIN_GAIN	0
@@ -234,17 +225,6 @@ typedef struct mixer_ctrl {
 #define AudioNoff	"off"
 #define AudioNmode	"mode"
 #define AudioNsource	"source"
-#define AudioNfmsynth	"fmsynth"
-#define AudioNwave	"wave"
-#define AudioNmidi	"midi"
-#define AudioNmixerout	"mixerout"
-
-#define AudioElinear "linear"
-#define AudioEmulaw "mulaw"
-#define AudioEalaw "alaw"
-#define AudioEpcm16 "PCM-16"
-#define AudioEpcm8 "PCM-8"
-#define AudioEadpcm "ADPCM"
 
 #define AudioCInputs	"Inputs"
 #define AudioCOutputs	"Outputs"

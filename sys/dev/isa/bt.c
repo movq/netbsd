@@ -1,4 +1,4 @@
-/*	$NetBSD: bt.c,v 1.7 1996/04/11 22:28:25 cgd Exp $	*/
+/*	$NetBSD: bt.c,v 1.1 1996/03/24 22:20:47 mycroft Exp $	*/
 
 #define BTDIAG
 #define integrate
@@ -221,7 +221,7 @@ bt_cmd(iobase, sc, icnt, ibuf, ocnt, obuf)
 	 * Wait for the adapter to go idle, unless it's one of
 	 * the commands which don't need this
 	 */
-	if (opcode != BT_MBO_INTR_EN) {
+	if (opcode != BT_MBX_INIT) {
 		for (i = 20000; i; i--) {	/* 1 sec? */
 			sts = inb(iobase + BT_STAT_PORT);
 			if (sts & BT_STAT_IDLE)
@@ -286,19 +286,16 @@ bt_cmd(iobase, sc, icnt, ibuf, ocnt, obuf)
 	 * We may get an extra interrupt for the HACC signal, but this is
 	 * unimportant.
 	 */
-	if (opcode != BT_MBO_INTR_EN) {
-		for (i = 20000; i; i--) {	/* 1 sec? */
-			sts = inb(iobase + BT_INTR_PORT);
-			/* XXX Need to save this in the interrupt handler? */
-			if (sts & BT_INTR_HACC)
-				break;
-			delay(50);
-		}
-		if (!i) {
-			printf("%s: bt_cmd, host not finished(0x%x)\n",
-			    name, sts);
-			return ENXIO;
-		}
+	for (i = 20000; i; i--) {	/* 1 sec? */
+		sts = inb(iobase + BT_INTR_PORT);
+		/* XXX Need to save this in the interrupt handler? */
+		if (sts & BT_INTR_HACC)
+			break;
+		delay(50);
+	}
+	if (!i) {
+		printf("%s: bt_cmd, host not finished(0x%x)\n", name, sts);
+		return ENXIO;
 	}
 	outb(iobase + BT_CTRL_PORT, BT_CTRL_IRST);
 	return 0;
@@ -378,8 +375,8 @@ btattach(parent, self, aux)
 #ifdef NEWCONFIG
 	isa_establish(&sc->sc_id, &sc->sc_dev);
 #endif
-	sc->sc_ih = isa_intr_establish(ia->ia_ic, sc->sc_irq, IST_EDGE,
-	    IPL_BIO, btintr, sc);
+	sc->sc_ih = isa_intr_establish(sc->sc_irq, IST_EDGE, IPL_BIO, btintr,
+	    sc);
 
 	/*
 	 * ask the adapter what subunits are present
@@ -947,7 +944,6 @@ bt_init(sc)
 	struct bt_devices devices;
 	struct bt_setup setup;
 	struct bt_mailbox mailbox;
-	struct bt_period period;
 	int i;
 
 	/* Enable round-robin scheme - appeared at firmware rev. 3.31. */
@@ -974,17 +970,8 @@ bt_init(sc)
 	printf("%s: %s, %s\n",
 	    sc->sc_dev.dv_xname,
 	    setup.reply.sync_neg ? "sync" : "async",
-	    setup.reply.parity ? "parity" : "no parity");
-
-	for (i = 0; i < 8; i++)
-		period.reply.period[i] = setup.reply.sync[i].period * 5 + 20;
-
-	if (sc->sc_firmware[0] >= '3') {
-		period.cmd.opcode = BT_INQUIRE_PERIOD;
-		period.cmd.len = sizeof(period.reply);
-		bt_cmd(iobase, sc, sizeof(period.cmd), (u_char *)&period.cmd,
-		    sizeof(period.reply), (u_char *)&period.reply);
-	}
+	    setup.reply.parity ? "parity" : "no parity",
+	    setup.reply.num_mbx);
 
 	for (i = 0; i < 8; i++) {
 		if (!setup.reply.sync[i].valid ||
@@ -992,7 +979,7 @@ bt_init(sc)
 			continue;
 		printf("%s targ %d: sync, offset %d, period %dnsec\n",
 		    sc->sc_dev.dv_xname, i,
-		    setup.reply.sync[i].offset, period.reply.period[i] * 10);
+		    setup.reply.sync[i].offset, setup.reply.sync[i].period * 50 + 200);
 	}
 
 	/*
@@ -1099,9 +1086,11 @@ bt_scsi_cmd(xs)
 	struct bt_ccb *ccb;
 	struct bt_scat_gath *sg;
 	int seg;		/* scatter gather seg being worked on */
-	u_long thiskv, thisphys, nextphys;
+	int thiskv;
+	u_long thisphys, nextphys;
 	int bytes_this_seg, bytes_this_page, datalen, flags;
 	struct iovec *iovp;
+	struct bt_mbx_out *mbo;
 	int s;
 
 	SC_DEBUG(sc_link, SDEV_DB2, ("bt_scsi_cmd\n"));

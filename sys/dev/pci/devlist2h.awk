@@ -1,7 +1,7 @@
 #! /usr/bin/awk -f
-#	$NetBSD: devlist2h.awk,v 1.2 1996/01/22 21:08:09 cgd Exp $
+#	$NetBSD: devlist2h.awk,v 1.1 1995/06/18 01:07:06 cgd Exp $
 #
-# Copyright (c) 1995, 1996 Christopher G. Demetriou
+# Copyright (c) 1995 Christopher G. Demetriou
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -54,7 +54,7 @@ NR == 1 {
 	printf(" *\t%s\n", VERSION) > hfile
 	printf(" */\n") > hfile
 
-	next
+	continue
 }
 $1 == "vendor" {
 	nvendors++
@@ -99,7 +99,7 @@ $1 == "vendor" {
 		printf(" */") > hfile
 	printf("\n") > hfile
 
-	next
+	continue
 }
 $1 == "product" {
 	nproducts++
@@ -111,6 +111,12 @@ $1 == "product" {
 	    products[nproducts, 2], products[nproducts, 3]) > hfile
 
 	i=4; f = 5;
+
+	# remember if the device is unsupported
+	if ($f == "UNSUPP") {
+		products[nproducts, 1, unsupported] = 1;
+		f++
+	}
 
 	# comments
 	ocomment = oparen = 0
@@ -144,7 +150,7 @@ $1 == "product" {
 		printf(" */") > hfile
 	printf("\n") > hfile
 
-	next
+	continue
 }
 {
 	if ($0 == "")
@@ -165,7 +171,10 @@ END {
 		    products[i, 1], products[i, 1], products[i, 2]) \
 		    > dfile
 		printf("\t    ") > dfile
-		printf("0") > dfile
+		if (products[i, 1, unsupp])
+			printf("PCI_KNOWNDEV_UNSUPP") > dfile
+		else
+			printf("0") > dfile
 		printf(",\n") > dfile
 
 		vendi = vendorindex[products[i, 1]];
@@ -198,7 +207,7 @@ END {
 		printf("\t{\n") > dfile
 		printf("\t    PCI_VENDOR_%s, 0,\n", vendors[i, 1]) \
 		    > dfile
-		printf("\t    PCI_KNOWNDEV_NOPROD,\n") \
+		printf("\t    PCI_KNOWNDEV_UNSUPP | PCI_KNOWNDEV_NOPROD,\n") \
 		    > dfile
 		printf("\t    \"") > dfile
 		j = 3;

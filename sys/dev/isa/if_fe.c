@@ -83,7 +83,7 @@
 
 #include <dev/isa/isareg.h>
 #include <dev/isa/isavar.h>
-#include <dev/ic/mb86960reg.h>
+#include <dev/ic/mb86960.h>
 #include <dev/isa/if_fereg.h>
 
 /*
@@ -227,12 +227,8 @@ void	fe_loadmar	__P((struct fe_softc *));
 void	fe_dump		__P((int, struct fe_softc *));
 #endif
 
-struct cfattach fe_ca = {
-	sizeof(struct fe_softc), feprobe, feattach
-};
-
-struct cfdriver fe_cd = {
-	NULL, "fe", DV_IFNET
+struct cfdriver fecd = {
+	NULL, "fe", feprobe, feattach, DV_IFNET, sizeof(struct fe_softc)
 };
 
 /* Ethernet constants.  To be defined in if_ehter.h?  FIXME. */
@@ -243,6 +239,13 @@ struct cfdriver fe_cd = {
 
 /*
  * Fe driver specific constants which relate to 86960/86965.
+ * They are here (not in if_fereg.h), since selection of those
+ * values depend on driver design.  I want to keep definitions in
+ * if_fereg.h "clean", so that if someone wrote another driver
+ * for 86960/86965, if_fereg.h were usable unchanged.
+ *
+ * The above statement sounds somothing like it's better to name
+ * it "ic/mb86960.h" but "if_fereg.h"...  Should I do so?  FIXME.
  */
 
 /* Interrupt masks. */
@@ -997,12 +1000,11 @@ feattach(parent, self, aux)
 
 	/* Initialize ifnet structure. */
 	ifp->if_unit = sc->sc_dev.dv_unit;
-	ifp->if_name = fe_cd.cd_name;
+	ifp->if_name = fecd.cd_name;
 	ifp->if_start = fe_start;
 	ifp->if_ioctl = fe_ioctl;
 	ifp->if_watchdog = fe_watchdog;
-	ifp->if_flags =
-	    IFF_BROADCAST | IFF_SIMPLEX | IFF_NOTRAILERS | IFF_MULTICAST;
+	ifp->if_flags = IFF_BROADCAST | IFF_NOTRAILERS | IFF_MULTICAST;
 
 	/*
 	 * Set maximum size of output queue, if it has not been set.
@@ -1128,8 +1130,8 @@ feattach(parent, self, aux)
 	bpfattach(&ifp->if_bpf, ifp, DLT_EN10MB, sizeof(struct ether_header));
 #endif
 
-	sc->sc_ih = isa_intr_establish(ia->ia_ic, ia->ia_irq, IST_EDGE,
-	    IPL_NET, feintr, sc);
+	sc->sc_ih = isa_intr_establish(ia->ia_irq, ISA_IST_EDGE, ISA_IPL_NET,
+	    feintr, sc);
 }
 
 /*
@@ -1141,7 +1143,7 @@ fe_reset(sc)
 {
 	int s;
 
-	s = splnet();
+	s = splimp();
 	fe_stop(sc);
 	fe_init(sc);
 	splx(s);
@@ -1202,7 +1204,7 @@ void
 fe_watchdog(unit)
 	int unit;
 {
-	struct fe_softc *sc = fe_cd.cd_devs[unit];
+	struct fe_softc *sc = fecd.cd_devs[unit];
 
 	log(LOG_ERR, "%s: device timeout\n", sc->sc_dev.dv_xname);
 #if FE_DEBUG >= 3
@@ -1216,17 +1218,6 @@ fe_watchdog(unit)
 }
 
 /*
- * Drop (skip) a packet from receive buffer in 86960 memory.
- */
-static inline void
-fe_droppacket(sc)
-	struct fe_softc *sc;
-{
-
-	outb(sc->sc_iobase + FE_BMPR14, FE_B14_FILTER | FE_B14_SKIP);
-}
-
-/*
  * Initialize device.
  */
 void
@@ -1234,12 +1225,24 @@ fe_init(sc)
 	struct fe_softc *sc;
 {
 	struct ifnet *ifp = &sc->sc_arpcom.ac_if;
-	int i;
+	int i, s;
 
 #if FE_DEBUG >= 3
 	log(LOG_INFO, "%s: top of fe_init()\n", sc->sc_dev.dv_xname);
 	fe_dump(LOG_INFO, sc);
 #endif
+
+	/* We need an address. */
+	if (ifp->if_addrlist == 0) {
+#if FE_DEBUG >= 1
+		log(LOG_ERR, "%s: init() without any address\n",
+		    sc->sc_dev.dv_xname);
+#endif
+		return;
+	}
+
+	/* Start initializing 86960. */
+	s = splimp();
 
 	/* Reset transmitter flags. */
 	ifp->if_flags &= ~IFF_OACTIVE;
@@ -1289,7 +1292,7 @@ fe_init(sc)
 	outb(sc->sc_iobase + FE_BMPR11, FE_B11_CTRL_SKIP);
 	outb(sc->sc_iobase + FE_BMPR12, 0x00);
 	outb(sc->sc_iobase + FE_BMPR13, sc->proto_bmpr13);
-	outb(sc->sc_iobase + FE_BMPR14, FE_B14_FILTER);
+	outb(sc->sc_iobase + FE_BMPR14, 0x00);
 	outb(sc->sc_iobase + FE_BMPR15, 0x00);
 
 #if FE_DEBUG >= 3
@@ -1327,7 +1330,7 @@ fe_init(sc)
 	for (i = 0; i < FE_MAX_RECV_COUNT; i++) {
 		if (inb(sc->sc_iobase + FE_DLCR5) & FE_D5_BUFEMP)
 			break;
-		fe_droppacket(sc);
+		outb(sc->sc_iobase + FE_BMPR14, FE_B14_SKIP);
 	}
 #if FE_DEBUG >= 1
 	if (i >= FE_MAX_RECV_COUNT) {
@@ -1380,6 +1383,8 @@ fe_init(sc)
 	log(LOG_INFO, "%s: end of fe_init()\n", sc->sc_dev.dv_xname);
 	fe_dump(LOG_INFO, sc);
 #endif
+
+	splx(s);
 }
 
 /*
@@ -1414,7 +1419,7 @@ fe_xmit(sc)
 /*
  * Start output on interface.
  * We make two assumptions here:
- *  1) that the current priority is set to splnet _before_ this code
+ *  1) that the current priority is set to splimp _before_ this code
  *     is called *and* is returned to the appropriate priority after
  *     return
  *  2) that the IFF_OACTIVE flag is checked before this code is called
@@ -1424,7 +1429,7 @@ void
 fe_start(ifp)
 	struct ifnet *ifp;
 {
-	struct fe_softc *sc = fe_cd.cd_devs[ifp->if_unit];
+	struct fe_softc *sc = fecd.cd_devs[ifp->if_unit];
 	struct mbuf *m;
 
 #if FE_DEBUG >= 1
@@ -1523,23 +1528,27 @@ fe_start(ifp)
 			goto indicate_inactive;
 		}
 
-#if NBPFILTER > 0
-		/* Tap off here if there is a BPF listener. */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif
-
 		/*
 		 * Copy the mbuf chain into the transmission buffer.
 		 * txb_* variables are updated as necessary.
 		 */
 		fe_write_mbufs(sc, m);
 
-		m_freem(m);
-
 		/* Start transmitter if it's idle. */
 		if (sc->txb_sched == 0)
 			fe_xmit(sc);
+
+#if 0 /* Turned of, since our interface is now duplex. */
+		/*
+		 * Tap off here if there is a bpf listener.
+		 */
+#if NBPFILTER > 0
+		if (ifp->if_bpf)
+			bpf_mtap(ifp->if_bpf, m);
+#endif
+#endif
+
+		m_freem(m);
 	}
 
 indicate_inactive:
@@ -1562,6 +1571,15 @@ indicate_active:
 	 */
 	ifp->if_flags |= IFF_OACTIVE;
 	return;
+}
+
+/*
+ * Drop (skip) a packet from receive buffer in 86960 memory.
+ */
+static inline void
+fe_droppacket (struct fe_softc * sc)
+{
+	outb(sc->sc_iobase + FE_BMPR14, FE_B14_SKIP);
 }
 
 /*
@@ -1683,9 +1701,7 @@ fe_tint(sc, tstat)
 		 */
 		ifp->if_opackets += sc->txb_sched;
 		sc->txb_sched = 0;
-	}
 
-	if (sc->txb_sched == 0) {
 		/*
 		 * The transmitter is no more active.
 		 * Reset output active flag and watchdog timer. 
@@ -1925,7 +1941,7 @@ fe_ioctl(ifp, command, data)
 	u_long command;
 	caddr_t data;
 {
-	struct fe_softc *sc = fe_cd.cd_devs[ifp->if_unit];
+	struct fe_softc *sc = fecd.cd_devs[ifp->if_unit];
 	register struct ifaddr *ifa = (struct ifaddr *)data;
 	struct ifreq *ifr = (struct ifreq *)data;
 	int s, error = 0;
@@ -1934,7 +1950,7 @@ fe_ioctl(ifp, command, data)
 	log(LOG_INFO, "%s: ioctl(%x)\n", sc->sc_dev.dv_xname, command);
 #endif
 
-	s = splnet();
+	s = splimp();
 
 	switch (command) {
 
@@ -2053,12 +2069,27 @@ fe_get_packet(sc, len)
 #define	EROUND	((sizeof(struct ether_header) + 3) & ~3)
 #define	EOFF	(EROUND - sizeof(struct ether_header))
 
+#if 0
+	/*
+	 * This function assumes that an Ethernet packet fits in an
+	 * mbuf (with a cluster attached when necessary.)  On FreeBSD
+	 * 2.0 for x86, which is the primary target of this driver, an
+	 * mbuf cluster has 4096 bytes, and we are happy.  On ancient
+	 * BSDs, such as vanilla 4.3 for 386, a cluster size was 1024,
+	 * however.  If the following #error message were printed upon
+	 * compile, you need to rewrite this function.
+	 */
+#if (MCLBYTES < ETHER_MAX_LEN + EOFF)
+#error "Too small MCLBYTES to use fe driver."
+#endif
+#endif
+
 	/*
 	 * Our strategy has one more problem.  There is a policy on
 	 * mbuf cluster allocation.  It says that we must have at
-	 * least MINCLSIZE (208 bytes) to allocate a cluster.  For a
-	 * packet of a size between (MHLEN - 2) to (MINCLSIZE - 2),
-	 * our code violates the rule...
+	 * least MINCLSIZE (208 bytes on FreeBSD 2.0 for x86) to
+	 * allocate a cluster.  For a packet of a size between
+	 * (MHLEN - 2) to (MINCLSIZE - 2), our code violates the rule...
 	 * On the other hand, the current code is short, simle,
 	 * and fast, however.  It does no harmful thing, just waists
 	 * some memory.  Any comments?  FIXME.
@@ -2152,10 +2183,6 @@ fe_write_mbufs(sc, m)
 		sc->txb_padding = 0;
 	}
 #endif
-
-	/* We need to use m->m_pkthdr.len, so require the header */
-	if ((m->m_flags & M_PKTHDR) == 0)
-	  	panic("fe_write_mbufs: no header mbuf");
 
 #if FE_DEBUG >= 2
 	/* First, count up the total number of bytes to copy. */
@@ -2364,9 +2391,10 @@ fe_setmode(sc)
 		 * Multicast filter stored in MARs are ignored
 		 * under this setting, so we don't need to update it.
 		 *
-		 * Promiscuous mode is used solely by BPF, and BPF only
-		 * listens to valid (no error) packets.  So, we ignore
-		 * errornous ones even in this mode.
+		 * Promiscuous mode in FreeBSD 2 is used solely by
+		 * BPF, and BPF only listens to valid (no error) packets.
+		 * So, we ignore errornous ones even in this mode.
+		 * (Older versions of fe driver mistook the point.)
 		 */
 		outb(sc->sc_iobase + FE_DLCR5,
 		    sc->proto_dlcr5 | FE_D5_AFM0 | FE_D5_AFM1);
@@ -2433,7 +2461,7 @@ fe_setmode(sc)
 /*
  * Load a new multicast address filter into MARs.
  *
- * The caller must have splnet'ed befor fe_loadmar.
+ * The caller must have splimp'ed befor fe_loadmar.
  * This function starts the DLC upon return.  So it can be called only
  * when the chip is working, i.e., from the driver's point of view, when
  * a device is RUNNING.  (I mistook the point in previous versions.)

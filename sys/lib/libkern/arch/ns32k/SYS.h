@@ -1,5 +1,3 @@
-/*	$NetBSD: SYS.h,v 1.2 1994/10/26 06:39:44 cgd Exp $	*/
-
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
  * All rights reserved.
@@ -36,6 +34,11 @@
  * SUCH DAMAGE.
  *
  *	@(#)SYS.h	5.5 (Berkeley) 5/7/91
+ *
+ *	$Id: SYS.h,v 1.1 1993/10/07 00:20:06 cgd Exp $
+ *
+ *  Modified for the ns532 by Phil Nelson, 12/1/92
+ *
  */
 
 #include <sys/syscall.h>

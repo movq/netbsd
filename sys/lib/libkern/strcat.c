@@ -33,14 +33,10 @@
 
 #if defined(LIBC_SCCS) && !defined(lint)
 /*static char *sccsid = "from: @(#)strcat.c	5.6 (Berkeley) 2/24/91";*/
-static char *rcsid = "$Id: strcat.c,v 1.7 1996/04/18 02:20:06 cgd Exp $";
+static char *rcsid = "$Id: strcat.c,v 1.1 1993/10/27 22:00:49 jtc Exp $";
 #endif /* LIBC_SCCS and not lint */
 
-#ifndef _KERNEL
 #include <string.h>
-#else
-#include <lib/libkern/libkern.h>
-#endif
 
 char *
 strcat(s, append)
@@ -50,6 +46,6 @@ strcat(s, append)
 	char *save = s;
 
 	for (; *s; ++s);
-	while ((*s++ = *append++) != '\0');
+	while (*s++ = *append++);
 	return(save);
 }

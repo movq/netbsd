@@ -1,5 +1,3 @@
-/*	$NetBSD: exec.c,v 1.11 1995/10/20 00:47:47 cgd Exp $	*/
-
 /*-
  * Copyright (c) 1982, 1986, 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -31,14 +29,15 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
+ *
+ *	$Id: exec.c,v 1.1 1994/05/08 16:11:21 brezak Exp $
  */
 
+#include <unistd.h>
+#include <fcntl.h>
 #include <string.h>
 #include <sys/param.h>
 #include <sys/reboot.h>
-#ifndef INSECURE
-#include <sys/stat.h>
-#endif
 #include <a.out.h>
 
 #include "stand.h"
@@ -47,39 +46,30 @@ static char *ssym, *esym;
 
 extern u_int opendev;
 
-void
+int
 exec(path, loadaddr, howto)
 	char *path;
 	char *loadaddr;
 	int howto;
 {
 	register int io;
-#ifndef INSECURE
-	struct stat sb;
-#endif
 	struct exec x;
 	int i;
 	register char *addr;
 
+	if (machdep_exec(path, loadaddr, howto) < 0)
+		return(0);
+	
 	io = open(path, 0);
 	if (io < 0)
-		return;
-
-#ifndef INSECURE
-	(void) fstat(io, &sb);
-	if (sb.st_uid || (sb.st_mode & 2)) {
-		printf("non-secure file, will not load\n");
-		close(io);
-		errno = EPERM;
-		return;
-	}
-#endif
-
+		return(io);
+	
 	i = read(io, (char *)&x, sizeof(x));
 	if (i != sizeof(x) ||
 	    N_BADMAG(x)) {
-		errno = EFTYPE;
-		return;
+		printf("exec: %s: Bad format\n", path);
+		errno = ENOEXEC;
+		return(-1);
 	}
 
         /* Text */
@@ -95,9 +85,8 @@ exec(path, loadaddr, howto)
 		goto shread;
 	addr += x.a_text;
 	if (N_GETMAGIC(x) == ZMAGIC || N_GETMAGIC(x) == NMAGIC)
-		while ((long)addr & (N_PAGSIZ(x) - 1))
+		while ((int)addr & CLOFSET)
 			*addr++ = 0;
-
         /* Data */
 	printf("+%d", x.a_data);
 	if (read(io, addr, x.a_data) != x.a_data)
@@ -113,7 +102,7 @@ exec(path, loadaddr, howto)
 	ssym = addr;
 	bcopy(&x.a_syms, addr, sizeof(x.a_syms));
 	addr += sizeof(x.a_syms);
-	printf("+[%d", x.a_syms);
+	printf(" [%d+", x.a_syms);
 	if (read(io, addr, x.a_syms) != x.a_syms)
 		goto shread;
 	addr += x.a_syms;
@@ -126,14 +115,13 @@ exec(path, loadaddr, howto)
 		i -= sizeof(int);
 		addr += sizeof(int);
 		if (read(io, addr, i) != i)
-                	goto shread;
+                    goto shread;
 		addr += i;
 	}
 
 	/* and that many bytes of (debug symbols?) */
-	printf("+%d]", i);
 
-	close(io);
+	printf("%d] ", i);
 
 #define	round_to_size(x) \
 	(((int)(x) + sizeof(int) - 1) & ~(sizeof(int) - 1))
@@ -141,10 +129,10 @@ exec(path, loadaddr, howto)
 #undef round_to_size
 
 	/* and note the end address of all this	*/
-	printf(" total=0x%lx", (u_long)addr);
+	printf("total=0x%x ", (u_int)addr);
 
-	x.a_entry += (long)loadaddr;
-	printf(" start=0x%lx\n", x.a_entry);
+	x.a_entry += (int)loadaddr;
+	printf(" start 0x%x\n", x.a_entry);
 
 #ifdef EXEC_DEBUG
         printf("ssym=0x%x esym=0x%x\n", ssym, esym);
@@ -155,11 +143,13 @@ exec(path, loadaddr, howto)
 	machdep_start((char *)x.a_entry, howto, loadaddr, ssym, esym);
 
 	/* exec failed */
+	printf("exec: %s: Cannot exec\n", path);
 	errno = ENOEXEC;
-	return;
+	return(-1);
 
 shread:
 	close(io);
+	printf("exec: %s: Short read\n", path);
 	errno = EIO;
-	return;
+	return(-1);
 }

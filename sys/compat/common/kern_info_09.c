@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_info_09.c,v 1.5 1996/02/21 00:10:59 cgd Exp $	*/
+/*	$NetBSD: kern_info_09.c,v 1.1 1995/06/24 20:16:10 christos Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1991, 1993
@@ -50,43 +50,40 @@
 
 /* ARGSUSED */
 int
-compat_09_sys_getdomainname(p, v, retval)
+compat_09_getdomainname(p, uap, retval)
 	struct proc *p;
-	void *v;
-	register_t *retval;
-{
-	struct compat_09_sys_getdomainname_args /* {
+	struct compat_09_getdomainname_args /* {
 		syscallarg(char *) domainname;
 		syscallarg(int) len;
-	} */ *uap = v;
+	} */ *uap;
+	register_t *retval;
+{
 	int name;
-	size_t sz;
 
 	name = KERN_DOMAINNAME;
-	sz = SCARG(uap,len);
-	return (kern_sysctl(&name, 1, SCARG(uap, domainname), &sz, 0, 0, p));
+	return (kern_sysctl(&name, 1, SCARG(uap, domainname),
+	    &SCARG(uap, len), 0, 0));
 }
 
 
 /* ARGSUSED */
 int
-compat_09_sys_setdomainname(p, v, retval)
+compat_09_setdomainname(p, uap, retval)
 	struct proc *p;
-	void *v;
-	register_t *retval;
-{
-	struct compat_09_sys_setdomainname_args /* {
+	struct compat_09_setdomainname_args /* {
 		syscallarg(char *) domainname;
 		syscallarg(int) len;
-	} */ *uap = v;
+	} */ *uap;
+	register_t *retval;
+{
 	int name;
 	int error;
 
-	if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
+	if (error = suser(p->p_ucred, &p->p_acflag))
 		return (error);
 	name = KERN_DOMAINNAME;
 	return (kern_sysctl(&name, 1, 0, 0, SCARG(uap, domainname),
-			    SCARG(uap, len), p));
+	    SCARG(uap, len)));
 }
 
 struct outsname {
@@ -99,14 +96,13 @@ struct outsname {
 
 /* ARGSUSED */
 int
-compat_09_sys_uname(p, v, retval)
+compat_09_uname(p, uap, retval)
 	struct proc *p;
-	void *v;
+	struct compat_09_uname_args /* {
+		syscallarg(struct outsname *) name;
+	} */ *uap;
 	register_t *retval;
 {
-	struct compat_09_sys_uname_args /* {
-		syscallarg(struct outsname *) name;
-	} */ *uap = v;
 	struct outsname outsname;
 	char *cp, *dp, *ep;
 	extern char ostype[], osrelease[];
@@ -127,5 +123,5 @@ compat_09_sys_uname(p, v, retval)
 	*dp = '\0';
 	strncpy(outsname.machine, MACHINE, sizeof(outsname.machine));
 	return (copyout((caddr_t)&outsname, (caddr_t)SCARG(uap, name),
-			sizeof(struct outsname)));
+	    sizeof(struct outsname)));
 }

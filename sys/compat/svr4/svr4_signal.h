@@ -1,5 +1,4 @@
-/*	$NetBSD: svr4_signal.h,v 1.14 1995/10/14 20:24:41 christos Exp $	 */
-
+/* $NetBSD: svr4_signal.h,v 1.1 1994/10/24 17:37:45 deraadt Exp $	*/
 /*
  * Copyright (c) 1994 Christos Zoulas
  * All rights reserved.
@@ -26,11 +25,8 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-
 #ifndef	_SVR4_SIGNAL_H_
 #define	_SVR4_SIGNAL_H_
-
-#include <compat/svr4/svr4_siginfo.h>
 
 #define	SVR4_SIGHUP	 1
 #define	SVR4_SIGINT	 2
@@ -66,7 +62,6 @@
 #define	SVR4_SIGPROF	29
 #define	SVR4_SIGXCPU	30
 #define	SVR4_SIGXFSZ	31
-#define SVR4_NSIG	32
 
 #define	SVR4_SIGNO_MASK		0x00FF
 #define	SVR4_SIGNAL_MASK	0x0000
@@ -76,53 +71,13 @@
 #define	SVR4_SIGIGNORE_MASK	0x0800
 #define	SVR4_SIGPAUSE_MASK	0x1000
 
-typedef void (*svr4_sig_t) __P((int, svr4_siginfo_t *, void *));
-#define	SVR4_SIG_DFL	(svr4_sig_t)	 0
-#define	SVR4_SIG_ERR	(svr4_sig_t)	-1
-#define	SVR4_SIG_IGN	(svr4_sig_t)	 1
-#define	SVR4_SIG_HOLD	(svr4_sig_t)	 2
+#define	SVR4_SIG_DFL	(void(*)())	 0
+#define	SVR4_SIG_ERR	(void(*)())	-1
+#define	SVR4_SIG_IGN	(void (*)())	 1
+#define	SVR4_SIG_HOLD	(void(*)())	 2
+
 
 #define SVR4_SIGNO(a)	((a) & SVR4_SIGNO_MASK)
 #define SVR4_SIGCALL(a) ((a) & ~SVR4_SIGNO_MASK)
-
-#define SVR4_SIG_BLOCK		1
-#define SVR4_SIG_UNBLOCK	2
-#define SVR4_SIG_SETMASK	3
-
-typedef struct {
-        u_long bits[4];
-} svr4_sigset_t;
-
-struct svr4_sigaction {
-	int		sa_flags;
-	svr4_sig_t	sa_handler;
-	svr4_sigset_t	sa_mask;
-	int 		sa_reserved[2];
-};
-
-struct svr4_sigaltstack {
-	char		*ss_sp;
-	int		ss_size;
-	int		ss_flags;
-};
-
-/* sa_flags */
-#define SVR4_SA_ONSTACK		0x00000001
-#define SVR4_SA_RESETHAND	0x00000002
-#define SVR4_SA_RESTART		0x00000004
-#define SVR4_SA_SIGINFO		0x00000008
-#define SVR4_SA_NODEFER		0x00000010
-#define SVR4_SA_NOCLDWAIT	0x00010000	/* No zombies 	*/
-#define SVR4_SA_NOCLDSTOP	0x00020000	/* No jcl	*/
-
-/* ss_flags */
-#define SVR4_SS_ONSTACK		0x00000001
-#define SVR4_SS_DISABLE		0x00000002
-
-extern int bsd_to_svr4_sig[];
-void bsd_to_svr4_sigaltstack __P((const struct sigaltstack *, struct svr4_sigaltstack *));
-void bsd_to_svr4_sigset __P((const sigset_t *, svr4_sigset_t *));
-void svr4_to_bsd_sigaltstack __P((const struct svr4_sigaltstack *, struct sigaltstack *));
-void svr4_to_bsd_sigset __P((const svr4_sigset_t *, sigset_t *));
 
 #endif /* !_SVR4_SIGNAL_H_ */
