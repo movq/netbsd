@@ -1,5 +1,5 @@
 /*	$OpenBSD: joystick.h,v 1.1 1998/05/05 05:44:43 imp Exp $ */
-/*	$NetBSD: joystick.h,v 1.1 2000/02/22 11:05:21 soda Exp $	*/
+/*	$NetBSD: joystick.h,v 1.1.1.1 2000/02/22 11:05:21 soda Exp $	*/
 
 #ifndef _JOY_IOCTL_H_
 #define _JOY_IOCTL_H_

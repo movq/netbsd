@@ -1,5 +1,5 @@
 /*	$OpenBSD: isapnp_machdep.h,v 1.1 1997/12/27 12:13:12 niklas Exp $	*/
-/*	$NetBSD: isapnp_machdep.h,v 1.1 2000/02/22 11:05:23 soda Exp $	*/
+/*	$NetBSD: isapnp_machdep.h,v 1.1.1.1 2000/02/22 11:05:23 soda Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
