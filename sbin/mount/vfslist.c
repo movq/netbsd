@@ -1,4 +1,4 @@
-/*	$NetBSD: vfslist.c,v 1.2 1997/09/16 12:22:47 lukem Exp $	*/
+/*	$NetBSD: vfslist.c,v 1.3 2000/11/01 04:10:02 enami Exp $	*/
 
 /*
  * Copyright (c) 1995
@@ -38,7 +38,7 @@
 #if 0
 static char sccsid[] = "@(#)vfslist.c	8.1 (Berkeley) 5/8/95";
 #else
-__RCSID("$NetBSD: vfslist.c,v 1.2 1997/09/16 12:22:47 lukem Exp $");
+__RCSID("$NetBSD: vfslist.c,v 1.3 2000/11/01 04:10:02 enami Exp $");
 #endif
 #endif /* not lint */
 
@@ -47,8 +47,8 @@ __RCSID("$NetBSD: vfslist.c,v 1.2 1997/09/16 12:22:47 lukem Exp $");
 #include <string.h>
 #include <unistd.h>
 
-int		  checkvfsname __P((const char *, const char **));
-const char	**makevfslist __P((char *));
+#include "vfslist.h"
+
 static int	  skipvfs;
 
 int
