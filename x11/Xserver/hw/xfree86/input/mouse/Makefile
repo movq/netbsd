@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 2003/12/26 04:15:16 rtr Exp $
+#	$NetBSD: Makefile,v 1.3 2003/12/27 03:14:56 rtr Exp $
 
 XMODULEDIR=	${X11USRLIBDIR}/modules/input
 
@@ -8,7 +8,10 @@ XMODULEDIR=	${X11USRLIBDIR}/modules/input
 
 MODULE=	mouse_drv
 .PATH:	${X11SRCDIR.xc}/programs/Xserver/hw/xfree86/input/mouse
+
 SRCS=	mouse.c pnp.c
+
+XSERVERINCDIR!= cd ${NETBSDSRCDIR}/x11/Xserver/include && ${PRINTOBJDIR}
 
 CPPFLAGS+=	-I${X11SRCDIR.xc}/programs/Xserver/hw/xfree86/input/mouse \
 		-I${X11SRCDIR.xc}/programs/Xserver/hw/xfree86/common \
@@ -18,8 +21,9 @@ CPPFLAGS+=	-I${X11SRCDIR.xc}/programs/Xserver/hw/xfree86/input/mouse \
 		-I${X11SRCDIR.xc}/programs/Xserver/include \
                 -I${DESTDIR}${X11INCDIR}/X11 \
                 -I${DESTDIR}${X11INCDIR}/X11/extensions \
-		-I${X11SRCDIR.xc}/programs/Xserver/hw/xfree86 \
-		-I${X11SRCDIR.xc}/programs/Xserver/hw/xfree86/os-support/bus
+                -I${XSERVERINCDIR}
+
+CPPFLAGS+=	-DPNP_MOUSE
 
 .include <bsd.x11.mk>
 LIBDIR=	${XMODULEDIR}
