@@ -27,7 +27,7 @@
  *	i4b_uframe.c - routines for handling U-frames
  *	-----------------------------------------------
  *
- *	$Id: i4b_uframe.c,v 1.1 2001/01/05 12:50:06 martin Exp $ 
+ *	$Id: i4b_uframe.c,v 1.1.1.1 2001/01/05 12:50:06 martin Exp $ 
  *
  * $FreeBSD$
  *

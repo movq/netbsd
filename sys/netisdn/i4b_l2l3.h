@@ -27,7 +27,7 @@
  *	i4b_l2l3.h - i4b layer 2 / layer 3 interactions
  *	-----------------------------------------------
  *
- *	$Id: i4b_l2l3.h,v 1.1 2001/01/05 12:49:52 martin Exp $
+ *	$Id: i4b_l2l3.h,v 1.1.1.1 2001/01/05 12:49:52 martin Exp $
  *
  * $FreeBSD$
  *

@@ -27,7 +27,7 @@
  *	i4b_rbch.c - device driver for raw B channel data
  *	---------------------------------------------------
  *
- *	$Id: i4b_rbch.c,v 1.1 2001/01/05 12:49:58 martin Exp $
+ *	$Id: i4b_rbch.c,v 1.1.1.1 2001/01/05 12:49:58 martin Exp $
  *
  * $FreeBSD$
  *

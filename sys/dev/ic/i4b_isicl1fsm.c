@@ -27,7 +27,7 @@
  *	i4b_l1fsm.c - isdn4bsd layer 1 I.430 state machine
  *	--------------------------------------------------
  *
- *	$Id: i4b_isicl1fsm.c,v 1.1 2001/01/05 12:50:13 martin Exp $ 
+ *	$Id: i4b_isicl1fsm.c,v 1.1.1.1 2001/01/05 12:50:13 martin Exp $ 
  *
  *      last edit-date: [Fri Jan  5 11:36:11 2001]
  *

@@ -27,7 +27,7 @@
  *	i4btrc - device driver for trace data read device
  *	---------------------------------------------------
  *
- *	$Id: i4b_trace.c,v 1.1 2001/01/05 12:50:00 martin Exp $
+ *	$Id: i4b_trace.c,v 1.1.1.1 2001/01/05 12:50:00 martin Exp $
  *
  *	last edit-date: [Fri Jan  5 11:33:47 2001]
  *

@@ -27,7 +27,7 @@
  *	i4b_global.h - i4b global include file
  *	--------------------------------------
  *
- *	$Id: i4b_global.h,v 1.1 2001/01/05 12:49:52 martin Exp $
+ *	$Id: i4b_global.h,v 1.1.1.1 2001/01/05 12:49:52 martin Exp $
  *
  * $FreeBSD$
  *

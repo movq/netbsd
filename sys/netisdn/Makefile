@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2001/01/05 12:49:52 martin Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 2001/01/05 12:49:52 martin Exp $
 
 KDIR=	/sys/netisdn
 INCSDIR= /usr/include/netisdn

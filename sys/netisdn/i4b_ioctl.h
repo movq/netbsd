@@ -27,7 +27,7 @@
  *	i4b_ioctl.h - messages kernel <--> userland
  *	-------------------------------------------
  *
- *	$Id: i4b_ioctl.h,v 1.1 2001/01/05 12:49:56 martin Exp $ 
+ *	$Id: i4b_ioctl.h,v 1.1.1.1 2001/01/05 12:49:56 martin Exp $ 
  *
  * $FreeBSD$
  *

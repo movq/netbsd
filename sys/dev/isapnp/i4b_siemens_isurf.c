@@ -37,7 +37,7 @@
  *	Siemens I-Surf 2.0 PnP specific routines for isic driver
  *	--------------------------------------------------------
  *
- *	$Id: i4b_siemens_isurf.c,v 1.1 2001/01/05 12:50:18 martin Exp $
+ *	$Id: i4b_siemens_isurf.c,v 1.1.1.1 2001/01/05 12:50:18 martin Exp $
  *
  *      last edit-date: [Fri Jan  5 11:38:29 2001]
  *

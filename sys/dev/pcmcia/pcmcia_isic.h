@@ -33,7 +33,7 @@
  *	pcmcia_isic.h - common definitions for pcmcia isic cards
  *	--------------------------------------------------------
  *
- *	$Id: pcmcia_isic.h,v 1.1 2001/01/05 12:50:21 martin Exp $ 
+ *	$Id: pcmcia_isic.h,v 1.1.1.1 2001/01/05 12:50:21 martin Exp $ 
  *
  *      last edit-date: [Sun Feb 14 10:29:33 1999]
  *

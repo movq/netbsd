@@ -33,7 +33,7 @@
  *	isa_isic.c - ISA bus frontend for i4b_isic driver
  *	--------------------------------------------------
  *
- *	$Id: isa_isic.c,v 1.1 2001/01/05 12:50:14 martin Exp $ 
+ *	$Id: isa_isic.c,v 1.1.1.1 2001/01/05 12:50:14 martin Exp $ 
  *
  *      last edit-date: [Fri Jan  5 11:37:22 2001]
  *
