@@ -1,4 +1,4 @@
-/*	$NetBSD: locore_machdep.S,v 1.1 2000/08/12 22:58:53 wdk Exp $	*/
+/*	$NetBSD: locore_machdep.S,v 1.2 2000/08/19 12:13:47 wdk Exp $	*/
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -59,24 +59,6 @@ LEAF(to_monitor)
 	j	v0
 	nop
 END(to_monitor)
-
-LEAF(prom_printf)
-	la	v0, 0xbfc00080
-	j	v0
-	nop
-END(prom_printf)
-
-LEAF(prom_putchar)
-	la	v0, 0xbfc00060
-	j	v0
-	nop
-END(prom_printf)
-
-LEAF(prom_getchar)
-	la	v0, 0xbfc00058
-	j	v0
-	nop
-END(prom_printf)
 
 	.data
 	.globl _C_LABEL(intrcnt)
