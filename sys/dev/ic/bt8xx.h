@@ -1,4 +1,4 @@
-/*	$NetBSD: bt8xx.h,v 1.1 2000/05/07 00:17:13 wiz Exp $	*/
+/*	$NetBSD: bt8xx.h,v 1.1.1.1 2000/05/07 00:17:13 wiz Exp $	*/
 
 /* This file is merged from ioctl_meteor.h and ioctl_bt848.h from FreeBSD. */
 /* The copyright below only applies to the ioctl_meteor.h part of this file. */
