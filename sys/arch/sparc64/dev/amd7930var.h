@@ -1,4 +1,4 @@
-/*	$NetBSD: amd7930var.h,v 1.1 1998/06/20 04:58:50 eeh Exp $ */
+/*	$NetBSD: amd7930var.h,v 1.1.1.1 1998/06/20 04:58:50 eeh Exp $ */
 
 /*
  * Copyright (c) 1992, 1993

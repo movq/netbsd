@@ -1,4 +1,4 @@
-/*	$NetBSD: i82586.h,v 1.1 1998/06/20 04:58:51 eeh Exp $ */
+/*	$NetBSD: i82586.h,v 1.1.1.1 1998/06/20 04:58:51 eeh Exp $ */
 
 /*-
  * Copyright (c) 1992, University of Vermont and State Agricultural College.

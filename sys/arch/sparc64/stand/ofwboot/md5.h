@@ -1,4 +1,4 @@
-/*	$NetBSD: md5.h,v 1.1 1998/06/20 04:58:53 eeh Exp $	*/
+/*	$NetBSD: md5.h,v 1.1.1.1 1998/06/20 04:58:53 eeh Exp $	*/
 
 /*
  * This file is derived from the RSA Data Security, Inc. MD5 Message-Digest

@@ -1,4 +1,4 @@
-/* $NetBSD: rcons_font.h,v 1.1 1998/06/20 04:58:51 eeh Exp $ */
+/* $NetBSD: rcons_font.h,v 1.1.1.1 1998/06/20 04:58:51 eeh Exp $ */
 
 /*
  * Raster Console font definition; this file exports `console_font',

@@ -1,4 +1,4 @@
-/*	$NetBSD: dma.c,v 1.1 1998/06/20 04:58:51 eeh Exp $ */
+/*	$NetBSD: dma.c,v 1.1.1.1 1998/06/20 04:58:51 eeh Exp $ */
 /* #define BUS_DMA */
 /*
  * Copyright (c) 1994 Paul Kranenburg.  All rights reserved.

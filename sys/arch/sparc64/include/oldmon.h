@@ -1,4 +1,4 @@
-/*	$NetBSD: oldmon.h,v 1.1 1998/06/20 04:58:51 eeh Exp $ */
+/*	$NetBSD: oldmon.h,v 1.1.1.1 1998/06/20 04:58:51 eeh Exp $ */
 
 /*
  * Copyright (C) 1985 Regents of the University of California

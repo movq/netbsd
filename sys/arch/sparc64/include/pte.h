@@ -1,4 +1,4 @@
-/*	$NetBSD: pte.h,v 1.1 1998/06/20 04:58:52 eeh Exp $ */
+/*	$NetBSD: pte.h,v 1.1.1.1 1998/06/20 04:58:52 eeh Exp $ */
 
 /*
  * Copyright (c) 1996

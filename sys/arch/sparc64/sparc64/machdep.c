@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.1 1998/06/20 04:58:52 eeh Exp $ */
+/*	$NetBSD: machdep.c,v 1.1.1.1 1998/06/20 04:58:52 eeh Exp $ */
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.

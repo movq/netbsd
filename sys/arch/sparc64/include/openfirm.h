@@ -1,4 +1,4 @@
-/*	$NetBSD: openfirm.h,v 1.1 1998/06/20 04:58:51 eeh Exp $	*/
+/*	$NetBSD: openfirm.h,v 1.1.1.1 1998/06/20 04:58:51 eeh Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ie.h,v 1.1 1998/06/20 04:58:51 eeh Exp $ */
+/*	$NetBSD: if_ie.h,v 1.1.1.1 1998/06/20 04:58:51 eeh Exp $ */
 
 /*
  * if_sunie.h

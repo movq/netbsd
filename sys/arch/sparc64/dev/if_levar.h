@@ -1,4 +1,4 @@
-/*	$NetBSD: if_levar.h,v 1.1 1998/06/20 04:58:51 eeh Exp $	*/
+/*	$NetBSD: if_levar.h,v 1.1.1.1 1998/06/20 04:58:51 eeh Exp $	*/
 
 /*-
  * Copyright (c) 1995 Charles M. Hannum.  All rights reserved.

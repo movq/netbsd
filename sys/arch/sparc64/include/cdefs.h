@@ -1,4 +1,4 @@
-/*	$NetBSD: cdefs.h,v 1.1 1998/06/20 04:58:51 eeh Exp $	*/
+/*	$NetBSD: cdefs.h,v 1.1.1.1 1998/06/20 04:58:51 eeh Exp $	*/
 
 /*
  * Written by J.T. Conklin <jtc@wimsey.com> 01/17/95.

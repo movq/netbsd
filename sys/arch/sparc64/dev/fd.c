@@ -1,4 +1,4 @@
-/*	$NetBSD: fd.c,v 1.1 1998/06/20 04:58:51 eeh Exp $	*/
+/*	$NetBSD: fd.c,v 1.1.1.1 1998/06/20 04:58:51 eeh Exp $	*/
 
 /*-
  * Copyright (c) 1993, 1994, 1995 Charles Hannum.

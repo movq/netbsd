@@ -1,4 +1,4 @@
-/*	$NetBSD: ofw_machdep.c,v 1.1 1998/06/20 04:58:52 eeh Exp $	*/
+/*	$NetBSD: ofw_machdep.c,v 1.1.1.1 1998/06/20 04:58:52 eeh Exp $	*/
 
 /*
  * Copyright (C) 1996 Wolfgang Solfrank.

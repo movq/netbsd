@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.c,v 1.1 1998/06/20 04:58:52 eeh Exp $	*/
+/*	$NetBSD: pmap.c,v 1.1.1.1 1998/06/20 04:58:52 eeh Exp $	*/
 /* #define NO_VCACHE /* Don't forget the locked TLB in dostart */
 #define HWREF
 /* #define printf	db_printf */

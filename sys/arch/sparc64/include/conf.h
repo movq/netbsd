@@ -1,4 +1,4 @@
-/*	$NetBSD: conf.h,v 1.1 1998/06/20 04:58:51 eeh Exp $	*/
+/*	$NetBSD: conf.h,v 1.1.1.1 1998/06/20 04:58:51 eeh Exp $	*/
 
 /*
  * Copyright (c) 1996 Christos Zoulas.  All rights reserved.
