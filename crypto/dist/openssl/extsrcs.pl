@@ -1,6 +1,6 @@
 #!/usr/local/bin/perl
 #
-#	$NetBSD: extsrcs.pl,v 1.1 2000/06/14 22:44:19 thorpej Exp $
+#	$NetBSD: extsrcs.pl,v 1.1.1.1 2000/06/14 22:44:19 thorpej Exp $
 
 # NAME:
 #	extsrcs - extract SRCS from Makefiles
