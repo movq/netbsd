@@ -1,4 +1,4 @@
-/*	$NetBSD: lastlogin.c,v 1.1 1997/02/11 18:36:51 phil Exp $	*/
+/*	$NetBSD: lastlogin.c,v 1.1.1.1 1997/02/11 18:36:51 phil Exp $	*/
 /*
  * Copyright (c) 1996 John M. Vinopal
  * All rights reserved.
