@@ -1,8 +1,8 @@
-#	$NetBSD: ALPHA,v 1.4 1995/04/22 12:46:06 cgd Exp $
+#	$NetBSD: ALPHA,v 1.5 1995/06/27 00:54:55 cgd Exp $
 #
 # Alpha kernel with all the options you'd want, and more.
 
-include "std.alpha"
+machine		alpha
 
 makeoptions	CC="gcc -Werror"
 makeoptions	DEBUG="-g"
@@ -13,10 +13,10 @@ maxusers 8
 options		GENERIC
 
 # CPU Support
-options		DEC_3000_500	# Flamingo family:	3000/[4-9]00*
-options		DEC_2000_300	# "Jensen":		2000/300
-options		DEC_3000_300	# Pelican family:	3000/300*
-options		DEC_2100_A50	# "Avanti":		AlphaStation 400 4/233
+options		DEC_3000_500	# Flamingo etc:	3000/[4-9]00*
+options		DEC_2000_300	# "Jensen":	2000/300 (DECpc AXP 150)
+options		DEC_3000_300	# Pelican etc:	3000/300*
+options		DEC_2100_A50	# "Avanti":	AlphaStation 400 4/233
 
 # needs to be set per system
 options		TIMEZONE="5*60"		# Minutes west of GMT (for param.c)
@@ -75,12 +75,22 @@ options		SYSVSEM
 options		SYSVSHM
 #options	SHMMAXPGS=1024		# 1024 pages is the default
 
-# Loadable kernel modules
+# Loadable Kernel Modules
 options		LKM
+
+# Disable kernel security.
+#options	INSECURE
+
+# Misc. options
+options		PCIVERBOSE		# recognize "unknown" PCI devices
 
 config		netbsd	swap generic
 #config		netbsd	root on sd0 swap on sd0
 #config		netbsd	root nfs swap nfs
+
+mainbus0 at	root
+
+cpu*	at	mainbus0
 
 tc*	at	mainbus0
 asic0	at	tc? slot ? offset ?
@@ -93,7 +103,24 @@ esp0	at	tcds? slot ?
 esp1	at	tcds? slot ?
 #sfb*	at	tc? slot ? offset ?
 
-scsibus* at esp?
+apecs*	at	mainbus?
+#lca*	at	cpu?
+
+pci*	at	apecs?
+#pci*	at	lca?
+
+de*	at	pci?
+sio*	at	pci?
+#ncr*	at	pci?
+
+isa0	at	sio?
+clock0	at	isa? port 0x70
+#com0	at	isa? port 0x3f8 irq 4		# standard serial ports
+com1	at	isa? port 0x2f8 irq 3
+lpt0	at	isa? port 0x3bc irq 7		# standard parallel port
+
+scsibus* at	esp?
+#scsibus* at	ncr?
 
 sd*	at	scsibus? target ? lun ?
 st*	at	scsibus? target ? lun ?
