@@ -1,5 +1,4 @@
-#	from: @(#)Makefile.inc	8.1 (Berkeley) 6/4/93
-#	$Id: Makefile.inc,v 1.1 1993/09/16 06:05:46 mycroft Exp $
+#	@(#)Makefile.inc	8.1 (Berkeley) 6/4/93
 
 # Quad support
 SRCS+=	adddi3.c anddi3.c ashldi3.c ashrdi3.c cmpdi2.c divdi3.c fixdfdi.c \
