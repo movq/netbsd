@@ -1,4 +1,4 @@
-/*	$NetBSD: udp6_var.h,v 1.14 2003/08/07 16:33:31 agc Exp $	*/
+/*	$NetBSD: udp6_var.h,v 1.15 2003/09/04 09:17:10 itojun Exp $	*/
 /*	$KAME: udp6_var.h,v 1.11 2000/06/05 00:14:31 itojun Exp $	*/
 
 /*
@@ -96,7 +96,6 @@ struct	udp6stat {
 }
 
 #ifdef _KERNEL
-extern	struct	in6pcb udb6;
 extern	struct	udp6stat udp6stat;
 
 void	udp6_ctlinput __P((int, struct sockaddr *, void *));
