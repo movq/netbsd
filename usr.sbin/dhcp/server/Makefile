@@ -1,4 +1,4 @@
-# Makefile.dist
+# Makefile
 #
 # Copyright (c) 1996 The Internet Software Consortium.  All rights reserved.
 #
@@ -32,9 +32,5 @@
 SRCS   = dhcpd.c dhcp.c bootp.c confpars.c db.c
 PROG   = dhcpd
 MAN    = dhcpd.8 dhcpd.conf.5
-
-CFLAGS+= -I${.CURDIR}/.. -I${.CURDIR}/../includes
-LDADD=	${.CURDIR}/../common/libdhcp.a
-DPADD=	${.CURDIR}/../common/libdhcp.a
 
 .include <bsd.prog.mk>
