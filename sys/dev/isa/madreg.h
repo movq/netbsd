@@ -1,4 +1,4 @@
-/*	$NetBSD: madreg.h,v 1.3 1997/07/31 22:33:30 augustss Exp $	*/
+/*	$NetBSD: madreg.h,v 1.4 1998/01/19 22:18:27 augustss Exp $	*/
 /*
  * Copyright (c) 1996 Lennart Augustsson
  * Copyright (c) 1995 Hannu Savolainen
@@ -43,6 +43,7 @@
 #define MAD_82C928	1		/* OPTi 82C928     MAD16 */
 #define MAD_OTI601D	2		/* OAK OTI-601D    Mozart */
 #define MAD_82C929	3		/* OPTi 82C929     MAD16 Pro */
+#define MAD_82C931	4		/* OPTi 82C831     */
 
 /*
  *    Registers
@@ -88,6 +89,7 @@
 
 #define M_PASSWD_928	0xe2
 #define M_PASSWD_929	0xe3
+#define M_PASSWD_931	0xe4
 
 /* Regions of I/O space that the MAD occupies besides
    WSS emulation and MAD_BASE.  Talk about waste. */
