@@ -1,4 +1,4 @@
-/*	$Id: if_iwivar.h,v 1.1 2005/01/11 18:24:24 skrll Exp $ */
+/*	$Id: if_iwivar.h,v 1.1.1.1 2005/01/11 18:24:24 skrll Exp $ */
 
 /*-
  * Copyright (c) 2004, 2005
