@@ -1,8 +1,6 @@
-/*	$NetBSD: vfs_lockf.c,v 1.7 1996/02/04 02:18:21 christos Exp $	*/
-
 /*
- * Copyright (c) 1982, 1986, 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1982, 1986, 1989 Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Scooter Morris at Genentech Inc.
@@ -35,7 +33,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)ufs_lockf.c	8.3 (Berkeley) 1/6/94
+ *	from: @(#)ufs_lockf.c	7.7 (Berkeley) 7/2/91
+ *	$Id: vfs_lockf.c,v 1.1 1994/03/09 21:23:50 ws Exp $
  */
 
 #include <sys/param.h>
@@ -48,27 +47,14 @@
 #include <sys/fcntl.h>
 #include <sys/lockf.h>
 
-/*
- * This variable controls the maximum number of processes that will
- * be checked in doing deadlock detection.
- */
-int maxlockdepth = MAXDEPTH;
 
-#ifdef LOCKF_DEBUG
-int	lockf_debug = 0;
-#endif
-
-#define NOLOCKF (struct lockf *)0
-#define SELF	0x1
-#define OTHERS	0x2
 
 /*
- * Do an advisory lock operation.
+ * Advisory record locking support
  */
-int
 lf_advlock(head, size, id, op, fl, flags)
 	struct lockf **head;
-	off_t size;
+	u_long size;
 	caddr_t id;
 	int op;
 	register struct flock *fl;
@@ -87,6 +73,7 @@ lf_advlock(head, size, id, op, fl, flags)
 			return (0);
 		}
 	}
+
 	/*
 	 * Convert the flock structure into a start and end.
 	 */
@@ -115,7 +102,7 @@ lf_advlock(head, size, id, op, fl, flags)
 	else
 		end = start + fl->l_len - 1;
 	/*
-	 * Create the lockf structure.
+	 * Create the lockf structure
 	 */
 	MALLOC(lock, struct lockf *, sizeof *lock, M_LOCKF, M_WAITOK);
 	lock->lf_start = start;
@@ -129,8 +116,7 @@ lf_advlock(head, size, id, op, fl, flags)
 	/*
 	 * Do the requested operation.
 	 */
-	switch (op) {
-
+	switch(op) {
 	case F_SETLK:
 		return (lf_setlock(lock));
 
@@ -143,18 +129,31 @@ lf_advlock(head, size, id, op, fl, flags)
 		error = lf_getlock(lock, fl);
 		FREE(lock, M_LOCKF);
 		return (error);
-
+	
 	default:
-		FREE(lock, M_LOCKF);
+		free(lock, M_LOCKF);
 		return (EINVAL);
 	}
 	/* NOTREACHED */
 }
 
 /*
+ * This variable controls the maximum number of processes that will
+ * be checked in doing deadlock detection.
+ */
+int maxlockdepth = MAXDEPTH;
+
+#ifdef LOCKF_DEBUG
+int	lockf_debug = 0;
+#endif /* LOCKF_DEBUG */
+
+#define NOLOCKF (struct lockf *)0
+#define SELF	0x1
+#define OTHERS	0x2
+
+/*
  * Set a byte-range lock.
  */
-int
 lf_setlock(lock)
 	register struct lockf *lock;
 {
@@ -179,7 +178,7 @@ lf_setlock(lock)
 	/*
 	 * Scan lock list for this file looking for locks that would block us.
 	 */
-	while ((block = lf_getblock(lock)) != NULL) {
+	while (block = lf_getblock(lock)) {
 		/*
 		 * Free the structure and return if nonblocking.
 		 */
@@ -243,8 +242,7 @@ lf_setlock(lock)
 			lf_printlist("lf_setlock", block);
 		}
 #endif /* LOCKF_DEBUG */
-		error = tsleep((caddr_t)lock, priority, lockstr, 0);
-		if (error) {
+	if (error = tsleep((caddr_t)lock, priority, lockstr, 0)) {
 			/*
 			 * Delete ourselves from the waiting to lock list.
 			 */
@@ -254,17 +252,10 @@ lf_setlock(lock)
 				if (block->lf_block != lock)
 					continue;
 				block->lf_block = block->lf_block->lf_block;
-				break;
+				free(lock, M_LOCKF);
+				return (error);
 			}
-			/*
-			 * If we did not find ourselves on the list, but
-			 * are still linked onto a lock list, then something
-			 * is very wrong.
-			 */
-			if (block == NOLOCKF && lock->lf_next != NOLOCKF)
-				panic("lf_setlock: lost lock");
-			free(lock, M_LOCKF);
-			return (error);
+			panic("lf_setlock: lost lock");
 		}
 	}
 	/*
@@ -279,8 +270,7 @@ lf_setlock(lock)
 	block = *head;
 	needtolink = 1;
 	for (;;) {
-		ovcase = lf_findoverlap(block, lock, SELF, &prev, &overlap);
-		if (ovcase)
+		if (ovcase = lf_findoverlap(block, lock, SELF, &prev, &overlap))
 			block = overlap->lf_next;
 		/*
 		 * Six cases:
@@ -397,7 +387,6 @@ lf_setlock(lock)
  * Generally, find the lock (or an overlap to that lock)
  * and remove it (or shrink it), then wakeup anyone we can.
  */
-int
 lf_clearlock(unlock)
 	register struct lockf *unlock;
 {
@@ -415,8 +404,7 @@ lf_clearlock(unlock)
 		lf_print("lf_clearlock", unlock);
 #endif /* LOCKF_DEBUG */
 	prev = head;
-	while ((ovcase = lf_findoverlap(lf, unlock, SELF,
-					&prev, &overlap)) != 0) {
+	while (ovcase = lf_findoverlap(lf, unlock, SELF, &prev, &overlap)) {
 		/*
 		 * Wakeup the list of locks to be retried.
 		 */
@@ -467,19 +455,19 @@ lf_clearlock(unlock)
  * Check whether there is a blocking lock,
  * and if so return its process identifier.
  */
-int
 lf_getlock(lock, fl)
 	register struct lockf *lock;
 	register struct flock *fl;
 {
 	register struct lockf *block;
+	off_t start, end;
 
 #ifdef LOCKF_DEBUG
 	if (lockf_debug & 1)
 		lf_print("lf_getlock", lock);
 #endif /* LOCKF_DEBUG */
 
-	if ((block = lf_getblock(lock)) != NULL) {
+	if (block = lf_getblock(lock)) {
 		fl->l_type = block->lf_type;
 		fl->l_whence = SEEK_SET;
 		fl->l_start = block->lf_start;
@@ -509,8 +497,7 @@ lf_getblock(lock)
 	int ovcase;
 
 	prev = lock->lf_head;
-	while ((ovcase = lf_findoverlap(lf, lock, OTHERS,
-					&prev, &overlap)) != 0) {
+	while (ovcase = lf_findoverlap(lf, lock, OTHERS, &prev, &overlap)) {
 		/*
 		 * We've found an overlap, see if it blocks us
 		 */
@@ -532,7 +519,6 @@ lf_getblock(lock)
  * NOTE: this returns only the FIRST overlapping lock.  There
  *	 may be more than one.
  */
-int
 lf_findoverlap(lf, lock, type, prev, overlap)
 	register struct lockf *lf;
 	struct lockf *lock;
@@ -605,7 +591,7 @@ lf_findoverlap(lf, lock, type, prev, overlap)
 			return (2);
 		}
 		if (start <= lf->lf_start &&
-		           (end == -1 ||
+			   (end == -1 ||
 			   (lf->lf_end != -1 && end >= lf->lf_end))) {
 			/* Case 3 */
 #ifdef LOCKF_DEBUG
@@ -641,7 +627,6 @@ lf_findoverlap(lf, lock, type, prev, overlap)
 /*
  * Add a lock to the end of the blocked list.
  */
-void
 lf_addblock(lock, blocked)
 	struct lockf *lock;
 	struct lockf *blocked;
@@ -670,7 +655,6 @@ lf_addblock(lock, blocked)
  * Split a lock and a contained region into
  * two or three locks as necessary.
  */
-void
 lf_split(lock1, lock2)
 	register struct lockf *lock1;
 	register struct lockf *lock2;
@@ -717,7 +701,6 @@ lf_split(lock1, lock2)
 /*
  * Wakeup a blocklist
  */
-void
 lf_wakelock(listhead)
 	struct lockf *listhead;
 {
@@ -742,13 +725,12 @@ lf_wakelock(listhead)
 /*
  * Print out a lock.
  */
-void
 lf_print(tag, lock)
 	char *tag;
 	register struct lockf *lock;
 {
 	
-	printf("%s: lock %p for ", tag, lock);
+	printf("%s: lock 0x%lx for ", tag, lock);
 	if (lock->lf_flags & F_POSIX)
 		printf("proc %d", ((struct proc *)(lock->lf_id))->p_pid);
 	else
@@ -762,12 +744,11 @@ lf_print(tag, lock)
 		lock->lf_type == F_UNLCK ? "unlock" :
 		"unknown", lock->lf_start, lock->lf_end);
 	if (lock->lf_block)
-		printf(" block %p\n", lock->lf_block);
+		printf(" block 0x%x\n", lock->lf_block);
 	else
 		printf("\n");
 }
 
-void
 lf_printlist(tag, lock)
 	char *tag;
 	struct lockf *lock;
@@ -779,7 +760,7 @@ lf_printlist(tag, lock)
 		major(lock->lf_inode->i_dev),
 		minor(lock->lf_inode->i_dev));
 	for (lf = lock->lf_inode->i_lockf; lf; lf = lf->lf_next) {
-		printf("\tlock %p for ", lf);
+		printf("\tlock 0x%lx for ", lf);
 		if (lf->lf_flags & F_POSIX)
 			printf("proc %d", ((struct proc *)(lf->lf_id))->p_pid);
 		else
@@ -790,7 +771,7 @@ lf_printlist(tag, lock)
 			lf->lf_type == F_UNLCK ? "unlock" :
 			"unknown", lf->lf_start, lf->lf_end);
 		if (lf->lf_block)
-			printf(" block %p\n", lf->lf_block);
+			printf(" block 0x%x\n", lf->lf_block);
 		else
 			printf("\n");
 	}

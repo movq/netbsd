@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_dirent.h,v 1.3 1995/10/07 06:26:59 mycroft Exp $	*/
+/*	$NetBSD: linux_dirent.h,v 1.1 1995/02/28 23:25:31 fvdl Exp $	*/
 
 /*
  * Copyright (c) 1995 Frank van der Linden
@@ -34,16 +34,16 @@
 #ifndef _LINUX_DIRENT_H
 #define _LINUX_DIRENT_H
 
-#define LINUX_MAXNAMLEN	255
+#define LINUX_NAME_MAX 255
 
 struct linux_dirent {
-	linux_ino_t	d_ino;
-	linux_off_t	d_off;
-	u_short		d_reclen;
-	char		d_name[LINUX_MAXNAMLEN + 1];
+	long		l_dino;
+	linux_off_t	l_doff;
+	unsigned short	l_dreclen;
+	char		l_dname[LINUX_NAME_MAX + 1];
 };
 
-#define LINUX_NAMEOFF(dp)       ((char *)&(dp)->d_name - (char *)dp)
+#define LINUX_NAMEOFF(dp)       ((char *)&(dp)->l_dname - (char *)dp)
 #define LINUX_RECLEN(de,namlen) ALIGN((LINUX_NAMEOFF(de) + (namlen) + 1))
 
-#endif /* !_LINUX_DIRENT_H */
+#endif /* _LINUX_DIRENT_H */

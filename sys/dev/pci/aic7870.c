@@ -1,5 +1,3 @@
-/*	$NetBSD: aic7870.c,v 1.8 1996/03/17 00:55:23 thorpej Exp $	*/
-
 /*
  * Product specific probe and attach routines for:
  *      294X and aic7870 motherboard SCSI controllers
@@ -20,6 +18,8 @@
  *    Justin T. Gibbs.
  * 4. Modifications may be freely made to this file if the above conditions
  *    are met.
+ *
+ *	$Id: aic7870.c,v 1.1 1995/10/09 09:49:33 mycroft Exp $
  */
 
 #include <sys/param.h>
@@ -33,24 +33,20 @@
 
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
-#include <dev/pci/pcidevs.h>
-
 #include <dev/ic/aic7xxxvar.h>
 
 
-#define PCI_BASEADR0		PCI_MAPREG_START
-#define PCI_VENDORID(x)         ((x) & 0xFFFF)
-#define PCI_CHIPID(x)           (((x) >> 16) & 0xFFFF)
+#define PCI_BASEADR0	PCI_MAP_REG_START
+#define PCI_DEVICE_ID_ADAPTEC_2940	0x71789004ul
+#define PCI_DEVICE_ID_ADAPTEC_AIC7870	0x70789004ul
 
-static int aic7870_probe __P((struct device *, void *, void *));
-static void aic7870_attach __P((struct device *, struct device *, void *));
 
-struct cfattach ahc_ca = {
-	sizeof(struct ahc_softc), aic7870_probe, aic7870_attach
-};
+static int aic7870_probe();
+static void aic7870_attach();
 
-struct cfdriver ahc_cd = {
-        NULL, "ahc", DV_DULL
+struct cfdriver ahccd = {
+        NULL, "ahc", aic7870_probe, aic7870_attach, DV_DULL, 
+        sizeof(struct ahc_softc)
 }; 
 
 int ahcintr __P((void *));
@@ -63,17 +59,11 @@ aic7870_probe(parent, match, aux)
 {       
         struct pci_attach_args *pa = aux;
 
-	if (PCI_VENDORID(pa->pa_id) != PCI_VENDOR_ADP)
-		return 0;
+	if (pa->pa_id != PCI_DEVICE_ID_ADAPTEC_2940 &&
+	    pa->pa_id != PCI_DEVICE_ID_ADAPTEC_AIC7870)
+		return (0);
 
-	switch (PCI_CHIPID(pa->pa_id)) {
-	case PCI_PRODUCT_ADP_AIC7870:
-	case PCI_PRODUCT_ADP_2940:
-	case PCI_PRODUCT_ADP_2940U:
-		return 1;
-	default:
-		return 0;
-	}
+	return (1);
 }
 
 void    
@@ -85,16 +75,14 @@ aic7870_attach(parent, self, aux)
         struct ahc_softc *ahc = (void *)self;
 	int iobase; 
 
-	switch (PCI_CHIPID(pa->pa_id)) {
-	case PCI_PRODUCT_ADP_AIC7870:
-		ahc->type = AHC_AIC7870;
-		break;
-
-	case PCI_PRODUCT_ADP_2940:
-	case PCI_PRODUCT_ADP_2940U:
+        switch (pa->pa_id) {
+        case PCI_DEVICE_ID_ADAPTEC_2940:
 		ahc->type = AHC_294;
-		break;
-	}
+                break;
+        case PCI_DEVICE_ID_ADAPTEC_AIC7870:
+		ahc->type = AHC_AIC7870;
+                break;
+        }
 
 	if (pci_map_io(pa->pa_tag, PCI_BASEADR0, &iobase))
 		return;
@@ -109,5 +97,5 @@ aic7870_attach(parent, self, aux)
 
 	ahcattach(ahc);
 
-	ahc->sc_ih = pci_map_int(pa->pa_tag, IPL_BIO, ahcintr, ahc);
-}
+	ahc->sc_ih = pci_map_int(pa->pa_tag, PCI_IPL_BIO, ahcintr, ahc);
+}       

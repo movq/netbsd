@@ -1,5 +1,5 @@
 #! /usr/bin/awk -f
-#	$NetBSD: devlist2h.awk,v 1.2 1996/03/05 23:15:05 cgd Exp $
+#	$NetBSD: devlist2h.awk,v 1.1 1996/03/02 01:16:49 cgd Exp $
 #
 # Copyright (c) 1995, 1996 Christopher G. Demetriou
 # All rights reserved.
@@ -62,17 +62,10 @@ $1 == "device" {
 	devices[ndevices, 0] = $2;		# devices id
 	devices[ndevices, 1] = $2;		# C identifier for device
 	gsub("-", "_", devices[ndevices, 1]);
+	printf("#define\tTC_PRODUCT_%s\t\"", devices[ndevices, 1]) > hfile
 
-	devices[ndevices, 2] = $3;		/* driver name */
-
-	printf("\n") > hfile
-	printf("#define\tTC_DEVICE_%s\t\"%s\"\n", devices[ndevices, 1],
-	    devices[ndevices, 2]) > hfile
-
-	printf("#define\tTC_DESCRIPTION_%s\t\"", devices[ndevices, 1]) > hfile
-
-	f = 4;
-	i = 3;
+	f = 3;
+	i = 2;
 
 	# comments
 	ocomment = oparen = 0
@@ -110,8 +103,7 @@ $1 == "device" {
 {
 	if ($0 == "")
 		blanklines++
-	if (blanklines < 2)
-		print $0 > hfile
+	print $0 > hfile
 	if (blanklines < 2)
 		print $0 > dfile
 }
@@ -125,13 +117,11 @@ END {
 		printf("\t{\n") > dfile
 		printf("\t    \"%-8s\",\n", devices[i, 0]) \
 		    > dfile
-		printf("\t    TC_DEVICE_%s,\n", devices[i, 1]) \
-		    > dfile
-		printf("\t    TC_DESCRIPTION_%s,\n", devices[i, 1]) \
+		printf("\t    TC_PRODUCT_%s,\n", devices[i, 1]) \
 		    > dfile
 
 		printf("\t},\n") > dfile
 	}
-	printf("\t{ NULL, NULL, NULL, }\n") > dfile
+	printf("\t{ NULL, NULL, }\n") > dfile
 	printf("};\n") > dfile
 }

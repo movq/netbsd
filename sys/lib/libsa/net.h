@@ -1,5 +1,3 @@
-/*	$NetBSD: net.h,v 1.10 1995/10/20 00:46:30 cgd Exp $	*/
-
 /*
  * Copyright (c) 1993 Adam Glass 
  * Copyright (c) 1992 Regents of the University of California.
@@ -36,19 +34,16 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
+ *
+ *	$Id: net.h,v 1.1 1994/05/08 16:11:28 brezak Exp $
  */
-
-#ifndef _KERNEL	/* XXX - see <netinet/in.h> */
-#undef __IPADDR
-#define __IPADDR(x)	htonl((u_int32_t)(x))
-#endif
 
 #include "iodesc.h"
 
 #define BA { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff }
 
 /* Returns true if n_long's on the same net */
-#define	SAMENET(a1, a2, m) ((a1.s_addr & m) == (a2.s_addr & m))
+#define	SAMENET(a1, a2, m) ((a1 & m) == (a2 & m))
 
 #define MACPY(s, d) bcopy((char *)s, (char *)d, 6)
 
@@ -59,62 +54,45 @@
 #define	IFNAME_SIZE 16
 #define RECV_SIZE 1536	/* XXX delete this */
 
-/*
- * How much room to leave for headers:
- *  14: struct ether_header
- *  20: struct ip
- *   8: struct udphdr
- * That's 42 but let's pad it out to 48 bytes.
- */
+/* Size of struct ether_header + struct ip + struct udphdr */
 #define ETHER_SIZE 14
-#define	HEADER_SIZE 48
+#define	HEADER_SIZE (ETHER_SIZE + 20 + 8)
 
 extern	u_char bcea[6];
 extern	char rootpath[FNAME_SIZE];
 extern	char bootfile[FNAME_SIZE];
 extern	char hostname[FNAME_SIZE];
-extern	int hostnamelen;
 extern	char domainname[FNAME_SIZE];
-extern	int domainnamelen;
 extern	char ifname[IFNAME_SIZE];
 
-/* All of these are in network order. */
-extern	struct in_addr myip;
-extern	struct in_addr rootip;
-extern	struct in_addr swapip;
-extern	struct in_addr gateip;
-extern	struct in_addr nameip;
-extern	n_long netmask;
+extern	n_long myip;
+extern	n_long rootip;
+extern	n_long swapip;
+extern	n_long gateip;
+extern	n_long nameip;
+extern	n_long mask;
 
 extern	int debug;			/* defined in the machdep sources */
 
 extern struct iodesc sockets[SOPEN_MAX];
 
-/* ARP/RevARP functions: */
-u_char	*arpwhohas __P((struct iodesc *, struct in_addr));
-void	arp_reply __P((struct iodesc *, void *));
-int	rarp_getipaddress __P((int));
+/* ARP functions: */
 
-/* Link functions: */
-ssize_t sendether __P((struct iodesc *d, void *pkt, size_t len,
-			u_char *dea, int etype));
-ssize_t readether __P((struct iodesc *d, void *pkt, size_t len,
-			time_t tleft, u_int16_t *etype));
+u_char	*arpwhohas __P((struct iodesc *, n_long));
 
-ssize_t	sendudp __P((struct iodesc *, void *, size_t));
-ssize_t	readudp __P((struct iodesc *, void *, size_t, time_t));
-ssize_t	sendrecv __P((struct iodesc *,
-		      ssize_t (*)(struct iodesc *, void *, size_t),
-			void *, size_t,
-		        ssize_t (*)(struct iodesc *, void *, size_t, time_t),
-			void *, size_t));
+int	sendether __P((struct iodesc *, void *, int, u_char *, int));
+int	sendudp __P((struct iodesc *, void *, int));
+int	recvudp __P((struct iodesc *, void *, int, time_t));
+int	sendrecv __P((struct iodesc *, int (*)(struct iodesc *, void *, int),
+	    void *, int, int (*)(struct iodesc *, void *, int), void *, int));
+void	*checkudp __P((struct iodesc *, void *, int *));
 
-/* Utilities: */
+/* utilties: */
+
 char	*ether_sprintf __P((u_char *));
 int	in_cksum __P((void *, int));
-char	*inet_ntoa __P((struct in_addr));
-char	*intoa __P((n_long));		/* similar to inet_ntoa */
-n_long	inet_addr __P((char *));
+char	*intoa __P((n_long));			/* similar to inet_ntoa */
 
 /* Machine-dependent functions: */
+
 time_t	getsecs __P((void));

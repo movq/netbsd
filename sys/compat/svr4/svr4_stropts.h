@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_stropts.h,v 1.6 1996/04/11 12:50:31 christos Exp $	 */
+/*	$NetBSD: svr4_stropts.h,v 1.1 1994/11/14 06:13:22 christos Exp $	 */
 
 /*
  * Copyright (c) 1994 Christos Zoulas
@@ -75,58 +75,11 @@ struct svr4_strbuf {
 
 /* Struct passed for SVR4_I_STR */
 struct svr4_strioctl {
-	u_long	 cmd;
+	int	 cmd;
 	int	 timeout;
 	int	 len;
 	char	*buf;
 };
 
 
-/*
- * Our internal state for the stream
- * For now we keep almost nothing... In the future we can keep more
- * streams state.
- */
-struct svr4_strm {
-	int	s_family;	/* socket family */
-	int	s_cmd;		/* last getmsg reply or putmsg request */
-};
-
-/*
- * The following structures are determined empirically.
- */
-struct svr4_strmcmd {
-	long	cmd;		/* command ? 		*/
-	long	len;		/* Address len 		*/
-	long	offs;		/* Address offset	*/
-	long	pad[61];
-};
-
-struct svr4_infocmd {
-	long	cmd;
-	long	tsdu;
-	long	etsdu;
-	long	cdata;
-	long	ddata;
-	long	addr;
-	long	opt;
-	long	tidu;
-	long	serv;
-	long	current;
-	long	provider;
-};
-
-struct svr4_netaddr_in {
-	u_short	family;
-	u_short	port;
-	u_long	addr;
-};
-
-struct svr4_netaddr_un {
-	u_short	family;
-	char 	path[1];
-};
-
-#define SVR4_ADDROF(sc) (void *) (((char *) (sc)) + (sc)->offs)
-
-#endif /* !_SVR4_STROPTS */
+#endif /* !_SVR4_STROPTS_H_ */

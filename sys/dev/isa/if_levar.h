@@ -1,4 +1,4 @@
-/*	$NetBSD: if_levar.h,v 1.3 1995/10/07 09:19:16 mycroft Exp $	*/
+/*	$NetBSD: if_levar.h,v 1.1 1995/07/24 18:04:39 mycroft Exp $	*/
 
 /*
  * LANCE Ethernet driver header file
@@ -19,8 +19,6 @@
 #define	BICC_RAP	0xe
 
 #define	NE2100		2
-#define	PCnet_ISA	4
-#define	PCnet_PCI	5
 #define	NE2100_RDP	0x10
 #define	NE2100_RAP	0x12
 
@@ -36,6 +34,13 @@
 #define	DEPCA_RDP	0x4
 #define	DEPCA_RAP	0x6
 #define	DEPCA_ADP	0xc
+
+/* Chip types */
+#define	PROBE_MASK	0x0007
+#define	LANCE		1
+#define	LANCE_MASK	0x0007
+#define	PCnet_ISA	2
+#define	PCnet_ISA_MASK	0x0000
 
 /*
  * Ethernet software status per interface.
@@ -77,7 +82,6 @@ struct le_softc {
 #endif
 
 	void	*sc_ih;
-	void	*sc_sh;
-	int	sc_card;
+	int	sc_chip, sc_card;
 	int	sc_rap, sc_rdp;		/* LANCE registers */
 };

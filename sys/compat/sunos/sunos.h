@@ -1,5 +1,3 @@
-/*	$NetBSD: sunos.h,v 1.6 1996/02/18 14:46:28 pk Exp $	*/
-
 #define	SUNM_RDONLY	0x01	/* mount fs read-only */
 #define	SUNM_NOSUID	0x02	/* mount fs with setuid disallowed */
 #define	SUNM_NEWTYPE	0x04	/* type is string (char *), not int */
@@ -25,22 +23,20 @@ struct sunos_nfs_args {
 	char	*netname;		/* server's netname */
 	struct	pathcnf *pathconf;	/* static pathconf kludge */
 };
-/* SunOS nfs flag values: */
-#define SUNNFS_SOFT	0x1
-#define SUNNFS_WSIZE	0x2
-#define SUNNFS_RSIZE	0x4
-#define SUNNFS_TIMEO	0x8
-#define SUNNFS_RETRANS	0x10
-#define SUNNFS_HOSTNAME	0x20
-#define SUNNFS_INT	0x40
-#define SUNNFS_NOAC	0x80
-#define SUNNFS_ACREGMIN	0x100
-#define SUNNFS_ACREGMAX	0x200
-#define SUNNFS_ACDIRMIN	0x400
-#define SUNNFS_ACDIRMAX	0x800
-#define SUNNFS_SECURE	0x1000
-#define SUNNFS_NOCTO	0x2000
-#define SUNNFS_POSIX	0x4000
+
+
+/*
+ * Here is the sun layout.  (Compare the BSD layout in <sys/dirent.h>.)
+ * We can assume big-endian, so the BSD d_type field is just the high
+ * byte of the SunOS d_namlen field, after adjusting for the extra "long".
+ */
+struct sunos_dirent {
+	long	d_off;
+	u_long	d_fileno;
+	u_short	d_reclen;
+	u_short	d_namlen;
+	char	d_name[256];
+};
 
 
 struct sunos_ustat {
@@ -108,52 +104,4 @@ struct sunos_termios {
 #define SUNOS_TCSETSF	_IOW('T', 11, struct sunos_termios)
 #define SUNOS_TCSNDBRK	_IO('T', 12)
 #define SUNOS_TCDRAIN	_IO('T', 13)
-
-struct sunos_pollfd {
-	int	fd;
-	short	events;
-	short	revents;
-};
-#define SUNOS_POLLIN	0x0001
-#define SUNOS_POLLPRI	0x0002
-#define SUNOS_POLLOUT	0x0004
-#define SUNOS_POLLERR	0x0008
-#define SUNOS_POLLHUP	0x0010
-#define SUNOS_POLLNVAL	0x0020
-#define SUNOS_POLLRDNORM 0x0040
-#define SUNOS_POLLRDBAND 0x0080
-#define SUNOS_POLLWRBAND 0x0100
-
-/* Sun audio compatibility */
-struct sunos_audio_prinfo {
-	u_int	sample_rate;
-	u_int	channels;
-	u_int	precision;
-	u_int	encoding;
-	u_int	gain;
-	u_int	port;
-	u_int	avail_ports;
-	u_int	reserved0[3];
-	u_int	samples;
-	u_int	eof;
-	u_char	pause;
-	u_char	error;
-	u_char	waiting;
-	u_char	balance;
-	u_short	minordev;
-	u_char	open;
-	u_char	active;
-};
-struct sunos_audio_info {
-	struct sunos_audio_prinfo play;
-	struct sunos_audio_prinfo record;
-	u_int monitor_gain;
-	u_int reserved[4];
-};
-
-/* Values for AUDIO_GETDEV ioctl: */
-#define SUNOS_AUDIO_DEV_UNKNOWN			0
-#define SUNOS_AUDIO_DEV_AMD			1
-#define SUNOS_AUDIO_DEV_SPEAKERBOX		2
-#define SUNOS_AUDIO_DEV_CODEC			3
 

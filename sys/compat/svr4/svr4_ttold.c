@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_ttold.c,v 1.9 1996/04/11 12:54:45 christos Exp $	 */
+/*	$NetBSD: svr4_ttold.c,v 1.1 1994/11/14 06:13:28 christos Exp $	 */
 
 /*
  * Copyright (c) 1994 Christos Zoulas
@@ -45,11 +45,9 @@
 
 #include <compat/svr4/svr4_types.h>
 #include <compat/svr4/svr4_util.h>
-#include <compat/svr4/svr4_signal.h>
 #include <compat/svr4/svr4_syscallargs.h>
 #include <compat/svr4/svr4_stropts.h>
 #include <compat/svr4/svr4_ttold.h>
-#include <compat/svr4/svr4_ioctl.h>
 
 static void svr4_tchars_to_bsd_tchars __P((const struct svr4_tchars *st,
 					   struct tchars *bt));
@@ -147,13 +145,12 @@ bsd_ltchars_to_svr4_ltchars(bl, sl)
 
 
 int
-svr4_ttold_ioctl(fp, p, retval, fd, cmd, data)
-	struct file *fp;
-	struct proc *p;
-	register_t *retval;
-	int fd;
-	u_long cmd;
-	caddr_t data;
+svr4_ttoldioctl(fp, cmd, data, p, retval)
+	struct file 	*fp;
+	int		 cmd;
+	caddr_t		 data;
+	struct proc	*p;
+	register_t	*retval;
 {
 	int			error;
 	int (*ctl) __P((struct file *, u_long,  caddr_t, struct proc *)) =
@@ -163,43 +160,18 @@ svr4_ttold_ioctl(fp, p, retval, fd, cmd, data)
 
 	switch (cmd) {
 	case SVR4_TIOCGPGRP:
-		{
-			pid_t pid;
-
-			if ((error = (*ctl)(fp, TIOCGPGRP,
-					    (caddr_t) &pid, p)) != 0)
-			    return error;
-
-			DPRINTF(("TIOCGPGRP %d", pid));
-
-			if ((error = copyout(&pid, data, sizeof(pid))) != 0)
-				return error;
-
-		}
+		return copyout(&p->p_pgrp->pg_id, data,
+			       sizeof(p->p_pgrp->pg_id));
 
 	case SVR4_TIOCSPGRP:
 		{
-			pid_t pid;
+			struct setpgid_args sa;
 
-			if ((error = copyin(data, &pid, sizeof(pid))) != 0)
+			SCARG(&sa, pid) = 0;
+			SCARG(&sa, pgid) = (int) data;
+			if ((error = setpgid(p, &sa, retval)) != 0)
 				return error;
-
-			DPRINTF(("TIOCSPGRP %d", pid));
-
-			return (*ctl)(fp, TIOCSPGRP, (caddr_t) &pid, p);
-		}
-
-	case SVR4_TIOCGSID:
-		{
-			pid_t pid;
-
-			if ((error = (*ctl)(fp, TIOCGSID,
-					    (caddr_t) &pid, p)) != 0)
-				return error;
-
-			DPRINTF(("TIOCGSID %d", pid));
-
-			return copyout(&pid, data, sizeof(pid));
+			return 0;
 		}
 
 	case SVR4_TIOCGETP:
@@ -282,8 +254,9 @@ svr4_ttold_ioctl(fp, p, retval, fd, cmd, data)
 			return (*ctl)(fp, TIOCSLTC, (caddr_t) &bl, p);
 		}
 
+
 	default:
-		DPRINTF(("Unknown svr4 ttold %lx\n", cmd));
+		DPRINTF(("Unknown svr4 ttold %x\n", cmd));
 		return 0;	/* ENOSYS really */
 	}
 }

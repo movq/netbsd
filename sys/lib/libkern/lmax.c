@@ -1,5 +1,3 @@
-/*	$NetBSD: lmax.c,v 1.3 1996/03/14 18:52:09 christos Exp $	*/
-
 /*
  * Copyright (c) 1982, 1986, 1991 Regents of the University of California.
  * All rights reserved.
@@ -32,11 +30,9 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)subr_xxx.c	7.10 (Berkeley) 4/20/91
+ *	from: @(#)subr_xxx.c	7.10 (Berkeley) 4/20/91
+ *	$Id: lmax.c,v 1.1 1993/10/13 05:40:39 cgd Exp $
  */
-
-#define LIBKERN_INLINE
-#include <lib/libkern/libkern.h>
 
 long
 lmax(a, b)

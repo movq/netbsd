@@ -1,5 +1,4 @@
-/*	$NetBSD: svr4_fcntl.h,v 1.3 1994/10/29 00:43:19 christos Exp $	 */
-
+/* $NetBSD: svr4_fcntl.h,v 1.1 1994/10/24 17:37:39 deraadt Exp $	*/
 /*
  * Copyright (c) 1994 Christos Zoulas
  * All rights reserved.
@@ -26,7 +25,6 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-
 #ifndef	_SVR4_FCNTL_H_
 #define	_SVR4_FCNTL_H_
 
@@ -88,23 +86,23 @@
 #define	SVR4_F_UNLCK	3
 
 struct svr4_flock_svr3 {
-	short		l_type;
-	short		l_whence;
-	svr4_off_t	l_start;
-	svr4_off_t	l_len;
-	short		l_sysid;
-	svr4_o_pid_t	l_pid;
+    short		l_type;
+    short		l_whence;
+    svr4_off_t		l_start;
+    svr4_off_t		l_len;
+    short		l_sysid;
+    svr4_o_pid_t	l_pid;
 };
 
 
 struct svr4_flock {
-	short		l_type;
-	short		l_whence;
-	svr4_off_t	l_start;
-	svr4_off_t	l_len;
-	long		l_sysid;
-	svr4_pid_t	l_pid;
-	long		pad[4];
+    short		l_type;
+    short		l_whence;
+    svr4_off_t		l_start;
+    svr4_off_t		l_len;
+    long		l_sysid;
+    svr4_pid_t		l_pid;
+    long		pad[4];
 };
 
 #endif /* !_SVR4_FCNTL_H_ */

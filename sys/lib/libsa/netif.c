@@ -1,5 +1,3 @@
-/*	$NetBSD: netif.c,v 1.5 1995/09/18 21:19:34 pk Exp $	*/
-
 /*
  * Copyright (c) 1993 Adam Glass
  * All rights reserved.
@@ -29,6 +27,8 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
+ *
+ *	$Id: netif.c,v 1.1 1994/05/08 16:11:29 brezak Exp $
  */
 
 #include <sys/param.h>
@@ -46,9 +46,6 @@
 #include "netif.h"
 
 struct iodesc sockets[SOPEN_MAX];
-#ifdef NETIF_DEBUG
-int netif_debug = 0;
-#endif
 
 /*
  * netif_init:
@@ -219,16 +216,16 @@ netif_detach(nif)
 	drv->netif_end(nif);
 }
 
-ssize_t
+int
 netif_get(desc, pkt, len, timo)
 	struct iodesc *desc;
 	void *pkt;
-	size_t len;
+	int len;
 	time_t timo;
 {
 	struct netif *nif = desc->io_netif;
 	struct netif_driver *drv = desc->io_netif->nif_driver;
-	ssize_t rv;
+	int rv;
 
 #ifdef NETIF_DEBUG
 	if (netif_debug)
@@ -248,15 +245,15 @@ netif_get(desc, pkt, len, timo)
 	return rv;
 }
 
-ssize_t
+int
 netif_put(desc, pkt, len)
 	struct iodesc *desc;
 	void *pkt;
-	size_t len;
+	int len;
 {
 	struct netif *nif = desc->io_netif;
 	struct netif_driver *drv = desc->io_netif->nif_driver;
-	ssize_t rv;
+	int rv;
 
 #ifdef NETIF_DEBUG
 	if (netif_debug)
@@ -281,8 +278,7 @@ socktodesc(sock)
 	int sock;
 {
 	if (sock >= SOPEN_MAX) {
-		errno = EBADF;
-		return (NULL);
+		return(NULL);
 	}
 	return (&sockets[sock]);
 }
@@ -299,7 +295,6 @@ netif_open(machdep_hint)
 	for (fd = 0, s = sockets; fd < SOPEN_MAX; fd++, s++)
 		if (s->io_netif == (struct netif *)0)
 			goto fnd;
-	errno = EMFILE;
 	return (-1);
 
 fnd:

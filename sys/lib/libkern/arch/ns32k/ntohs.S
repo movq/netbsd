@@ -1,5 +1,3 @@
-/*	$NetBSD: ntohs.S,v 1.2 1994/10/26 06:39:48 cgd Exp $	*/
-
 /* 
  * Mach Operating System
  * Copyright (c) 1992 Carnegie Mellon University
@@ -31,6 +29,8 @@
  * HISTORY
  * 11-May-92  Johannes Helander (jvh) at Helsinki University of Technology
  *	Created.
+ *
+ *	$Id: ntohs.S,v 1.1 1993/12/05 01:36:59 cgd Exp $
  */
 
 #include <machine/asm.h>

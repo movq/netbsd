@@ -1,3 +1,3 @@
-/*	$Id: DEFS.h,v 1.4 1995/10/07 09:26:59 mycroft Exp $ */
+/*	$Id: DEFS.h,v 1.1 1993/11/05 22:40:55 cgd Exp $ */
 
 #include <machine/asm.h>

@@ -1,5 +1,3 @@
-/*	$NetBSD: bcopy.c,v 1.6 1996/01/13 22:25:34 leo Exp $	*/
-
 /*-
  * Copyright (c) 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -32,11 +30,9 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)bcopy.c	8.1 (Berkeley) 6/11/93
+ *	from: @(#)bcopy.c	8.1 (Berkeley) 6/11/93
+ *	      $Id: bcopy.c,v 1.1 1994/01/26 02:03:36 brezak Exp $
  */
-
-#include <sys/types.h>
-#include "stand.h"
 
 /*
  * This is designed to be small, not fast.
@@ -45,17 +41,13 @@ void
 bcopy(s1, s2, n)
 	const void *s1;
 	void *s2;
-	size_t n;
+	unsigned n;
 {
 	register const char *f = s1;
 	register char *t = s2;
 
-	if (f < t) {
-		f += n;
-		t += n;
-		while (n-- > 0)
-			*--t = *--f;
-	} else
-		while (n-- > 0)
-			*t++ = *f++;
+	while (n != 0) {
+		*t++ = *f++;
+		n--;
+	}
 }

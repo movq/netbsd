@@ -1,5 +1,4 @@
-/*	$NetBSD: svr4_ustat.h,v 1.3 1994/10/29 00:43:30 christos Exp $	 */
-
+/* $NetBSD: svr4_ustat.h,v 1.1 1994/10/24 17:37:57 deraadt Exp $	*/
 /*
  * Copyright (c) 1994 Christos Zoulas
  * All rights reserved.
@@ -26,17 +25,16 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-
 #ifndef	_SVR4_USTAT_H_
 #define	_SVR4_USTAT_H_
 
 #include <compat/svr4/svr4_types.h>
 
 struct svr4_ustat {
-	svr4_daddr_t	f_tfree;
-	svr4_ino_t	f_tinode;
-	char		f_fname[6];
-	char		f_fpack[6];
+    svr4_daddr_t	f_tfree;
+    svr4_ino_t		f_tinode;
+    char		f_fname[6];
+    char		f_fpack[6];
 };
 
 #endif /* !_SVR4_USTAT_H_ */

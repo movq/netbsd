@@ -1,5 +1,3 @@
-/*	$NetBSD: stand.h,v 1.13 1996/01/13 22:25:42 leo Exp $	*/
-
 /*-
  * Copyright (c) 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -32,11 +30,13 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)stand.h	8.1 (Berkeley) 6/11/93
+ *	from: @(#)stand.h	8.1 (Berkeley) 6/11/93
+ *	     $Id: stand.h,v 1.1 1994/01/26 02:03:58 brezak Exp $
  */
 
 #include <sys/types.h>
 #include <sys/cdefs.h>
+#include <sys/errno.h>
 #include <sys/stat.h>
 #include "saioctl.h"
 #include "saerrno.h"
@@ -54,16 +54,15 @@ struct open_file;
 struct fs_ops {
 	int	(*open) __P((char *path, struct open_file *f));
 	int	(*close) __P((struct open_file *f));
-	int	(*read) __P((struct open_file *f, void *buf,
-			     size_t size, size_t *resid));
-	int	(*write) __P((struct open_file *f, void *buf,
-			     size_t size, size_t *resid));
+	int	(*read) __P((struct open_file *f, char *buf,
+			u_int size, u_int *resid));
+	int	(*write) __P((struct open_file *f, char *buf,
+			u_int size, u_int *resid));
 	off_t	(*seek) __P((struct open_file *f, off_t offset, int where));
 	int	(*stat) __P((struct open_file *f, struct stat *sb));
 };
 
 extern struct fs_ops file_system[];
-extern int nfsys;
 
 /* where values for lseek(2) */
 #define	SEEK_SET	0	/* set file offset to offset */
@@ -74,11 +73,10 @@ extern int nfsys;
 struct devsw {
 	char	*dv_name;
 	int	(*dv_strategy) __P((void *devdata, int rw,
-				    daddr_t blk, size_t size,
-				    void *buf, size_t *rsize));
+			daddr_t blk, u_int size, char *buf, u_int *rsize));
 	int	(*dv_open) __P((struct open_file *f, ...));
 	int	(*dv_close) __P((struct open_file *f));
-	int	(*dv_ioctl) __P((struct open_file *f, u_long cmd, void *data));
+	int	(*dv_ioctl) __P((struct open_file *f, int cmd, void *data));
 };
 
 extern struct devsw devsw[];	/* device array */
@@ -93,55 +91,22 @@ struct open_file {
 };
 
 #define	SOPEN_MAX	4
-extern struct open_file files[];
+extern struct open_file files[SOPEN_MAX];
 
 /* f_flags values */
 #define	F_READ		0x0001	/* file opened for reading */
 #define	F_WRITE		0x0002	/* file opened for writing */
 #define	F_RAW		0x0004	/* raw device open - no file system */
-#define F_NODEV		0x0008	/* network open - no device */
 
 #define isupper(c)	((c) >= 'A' && (c) <= 'Z')
 #define tolower(c)	((c) - 'A' + 'a')
 #define isspace(c)	((c) == ' ' || (c) == '\t')
 #define isdigit(c)	((c) >= '0' && (c) <= '9')
 
-int	devopen __P((struct open_file *, const char *, char **));
-void	*alloc __P((unsigned int));
-void	free __P((void *, unsigned int));
+int	devopen __P((struct open_file *f, char *fname, char **file));
+void	*alloc __P((unsigned size));
+void	free __P((void *ptr, unsigned size));
 struct	disklabel;
-char	*getdisklabel __P((const char *, struct disklabel *));
-int	dkcksum __P((struct disklabel *));
-
-void	printf __P((const char *, ...));
-void	sprintf __P((char *, const char *, ...));
-void	twiddle __P((void));
-void	gets __P((char *));
-__dead void	panic __P((const char *, ...)) __attribute__((noreturn));
-__dead void	_rtt __P((void)) __attribute__((noreturn));
-void	bcopy __P((const void *, void *, size_t));
-void	*memcpy __P((void *, const void *, size_t));
-void	exec __P((char *, char *, int));
-int	open __P((const char *, int));
-int	close __P((int));
-void	closeall __P((void));
-ssize_t	read __P((int, void *, size_t));
-ssize_t	write __P((int, void *, size_t));
-    
-int	nodev __P((void));
-int	noioctl __P((struct open_file *, u_long, void *));
-void	nullsys __P((void));
-
-int	null_open __P((char *path, struct open_file *f));
-int	null_close __P((struct open_file *f));
-ssize_t	null_read __P((struct open_file *f, void *buf,
-			size_t size, size_t *resid));
-ssize_t	null_write __P((struct open_file *f, void *buf,
-			size_t size, size_t *resid));
-off_t	null_seek __P((struct open_file *f, off_t offset, int where));
-int	null_stat __P((struct open_file *f, struct stat *sb));
-
-/* Machine dependent functions */
-void	machdep_start __P((char *, int, char *, char *, char *));
-int	getchar __P((void));
-void	putchar __P((int));    
+char	*getdisklabel __P((const char *buf, struct disklabel *lp));
+int	nodev(), noioctl();
+void	nullsys();

@@ -1,5 +1,3 @@
-/*	$NetBSD: stat.c,v 1.4 1996/01/13 22:25:43 leo Exp $	*/
-
 /*-
  * Copyright (c) 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -32,12 +30,33 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)stat.c	8.1 (Berkeley) 6/11/93
+ *	from: @(#)stat.c	8.1 (Berkeley) 6/11/93
+ *	     $Id: stat.c,v 1.1 1994/01/26 02:03:59 brezak Exp $
  */
 
 #include "stand.h"
 
-int
+fstat(fd, sb)
+	int fd;
+	struct stat *sb;
+{
+	register struct open_file *f = &files[fd];
+
+	if ((unsigned)fd >= SOPEN_MAX || f->f_flags == 0) {
+		errno = EBADF;
+		return (-1);
+	}
+
+	/* operation not defined on raw devices */
+	if (f->f_flags & F_RAW) {
+		errno = EOPNOTSUPP;
+		return (-1);
+	}
+
+	errno = (f->f_ops->stat)(f, sb);
+	return (0);
+}
+
 stat(str, sb)
 	const char *str;
 	struct stat *sb;

@@ -1,4 +1,4 @@
-/*	$NetBSD: aha.c,v 1.7 1996/04/11 22:27:59 cgd Exp $	*/
+/*	$NetBSD: aha.c,v 1.1 1996/03/24 22:20:41 mycroft Exp $	*/
 
 #define AHADIAG
 #define integrate
@@ -221,7 +221,7 @@ aha_cmd(iobase, sc, icnt, ibuf, ocnt, obuf)
 	 * Wait for the adapter to go idle, unless it's one of
 	 * the commands which don't need this
 	 */
-	if (opcode != AHA_MBO_INTR_EN) {
+	if (opcode != AHA_MBX_INIT) {
 		for (i = 20000; i; i--) {	/* 1 sec? */
 			sts = inb(iobase + AHA_STAT_PORT);
 			if (sts & AHA_STAT_IDLE)
@@ -286,19 +286,16 @@ aha_cmd(iobase, sc, icnt, ibuf, ocnt, obuf)
 	 * We may get an extra interrupt for the HACC signal, but this is
 	 * unimportant.
 	 */
-	if (opcode != AHA_MBO_INTR_EN) {
-		for (i = 20000; i; i--) {	/* 1 sec? */
-			sts = inb(iobase + AHA_INTR_PORT);
-			/* XXX Need to save this in the interrupt handler? */
-			if (sts & AHA_INTR_HACC)
-				break;
-			delay(50);
-		}
-		if (!i) {
-			printf("%s: aha_cmd, host not finished(0x%x)\n",
-			    name, sts);
-			return ENXIO;
-		}
+	for (i = 20000; i; i--) {	/* 1 sec? */
+		sts = inb(iobase + AHA_INTR_PORT);
+		/* XXX Need to save this in the interrupt handler? */
+		if (sts & AHA_INTR_HACC)
+			break;
+		delay(50);
+	}
+	if (!i) {
+		printf("%s: aha_cmd, host not finished(0x%x)\n", name, sts);
+		return ENXIO;
 	}
 	outb(iobase + AHA_CTRL_PORT, AHA_CTRL_IRST);
 	return 0;
@@ -378,8 +375,8 @@ ahaattach(parent, self, aux)
 #ifdef NEWCONFIG
 	isa_establish(&sc->sc_id, &sc->sc_dev);
 #endif
-	sc->sc_ih = isa_intr_establish(ia->ia_ic, sc->sc_irq, IST_EDGE,
-	    IPL_BIO, ahaintr, sc);
+	sc->sc_ih = isa_intr_establish(sc->sc_irq, IST_EDGE, IPL_BIO, ahaintr,
+	    sc);
 
 	/*
 	 * ask the adapter what subunits are present
@@ -937,23 +934,22 @@ aha_init(sc)
 	 */
 	if (!strncmp(sc->sc_model, "1542C", 5)) {
 		struct aha_extbios extbios;
-		struct aha_unlock unlock;
+		struct aha_toggle toggle;
 
 		printf("%s: unlocking mailbox interface\n", sc->sc_dev.dv_xname);
 		extbios.cmd.opcode = AHA_EXT_BIOS;
 		aha_cmd(iobase, sc, sizeof(extbios.cmd), (u_char *)&extbios.cmd,
 		    sizeof(extbios.reply), (u_char *)&extbios.reply);
 
-#ifdef AHADEBUG
+#if 1 /* XXXX */
 		printf("%s: flags=%02x, mailboxlock=%02x\n",
 		    sc->sc_dev.dv_xname,
 		    extbios.reply.flags, extbios.reply.mailboxlock);
 #endif /* AHADEBUG */
 
-		unlock.cmd.opcode = AHA_MBX_ENABLE;
-		unlock.cmd.junk = 0;
-		unlock.cmd.magic = extbios.reply.mailboxlock;
-		aha_cmd(iobase, sc, sizeof(unlock.cmd), (u_char *)&unlock.cmd,
+		toggle.cmd.opcode = AHA_MBX_ENABLE;
+		toggle.cmd.enable = extbios.reply.mailboxlock;
+		aha_cmd(iobase, sc, sizeof(toggle.cmd), (u_char *)&toggle.cmd,
 		    0, (u_char *)0);
 	}
 
@@ -979,7 +975,8 @@ aha_init(sc)
 	printf("%s: %s, %s\n",
 	    sc->sc_dev.dv_xname,
 	    setup.reply.sync_neg ? "sync" : "async",
-	    setup.reply.parity ? "parity" : "no parity");
+	    setup.reply.parity ? "parity" : "no parity",
+	    setup.reply.num_mbx);
 
 	for (i = 0; i < 8; i++) {
 		if (!setup.reply.sync[i].valid ||
@@ -1052,7 +1049,7 @@ aha_inquire_setup_information(sc)
 		goto noinquire;
 	}
 
-#ifdef AHADEBUG
+#if 1 /* XXXX */
 	printf("%s: inquire %x, %x, %x, %x\n",
 	    sc->sc_dev.dv_xname,
 	    revision.reply.boardid, revision.reply.spec_opts,
@@ -1114,9 +1111,11 @@ aha_scsi_cmd(xs)
 	struct aha_ccb *ccb;
 	struct aha_scat_gath *sg;
 	int seg;		/* scatter gather seg being worked on */
-	u_long thiskv, thisphys, nextphys;
+	int thiskv;
+	u_long thisphys, nextphys;
 	int bytes_this_seg, bytes_this_page, datalen, flags;
 	struct iovec *iovp;
+	struct aha_mbx_out *mbo;
 	int s;
 
 	SC_DEBUG(sc_link, SDEV_DB2, ("aha_scsi_cmd\n"));

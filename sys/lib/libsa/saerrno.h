@@ -1,8 +1,6 @@
-/*	$NetBSD: saerrno.h,v 1.6 1995/09/18 21:19:45 pk Exp $	*/
-
 /*
- * Copyright (c) 1988, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,22 +30,22 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)saerrno.h	8.1 (Berkeley) 6/11/93
+ *	from: @(#)saerrno.h	7.3 (Berkeley) 6/28/90
+ *	     $Id: saerrno.h,v 1.1 1994/01/26 02:03:56 brezak Exp $
  */
 
-#include <sys/errno.h>
+extern	int errno;	/* just like unix */
 
-/* special stand error codes */
-#define	EADAPT	(ELAST+1)	/* bad adaptor */
-#define	ECTLR	(ELAST+2)	/* bad controller */
-#define	EUNIT	(ELAST+3)	/* bad drive */
-#define	EPART	(ELAST+4)	/* bad partition */
-#define	ERDLAB	(ELAST+5)	/* can't read disk label */
-#define	EUNLAB	(ELAST+6)	/* unlabeled disk */
-#define	EOFFSET	(ELAST+7)	/* relative seek not supported */
-#define	ECMD	(ELAST+8)	/* undefined driver command */
-#define	EBSE	(ELAST+9)	/* bad sector error */
-#define	EWCK	(ELAST+10)	/* write check error */
-#define	EECC	(ELAST+11)	/* uncorrectable ecc error */
-#define	EHER	(ELAST+12)	/* hard error */
-#define	ESALAST	(ELAST+12)	/* */
+/* error codes */
+#define	EADAPT	101	/* bad adaptor */
+#define	ECTLR	102	/* bad controller */
+#define	EUNIT	103	/* bad drive */
+#define	EPART	104	/* bad partition */
+#define	ERDLAB	105	/* can't read disk label */
+#define	EUNLAB	106	/* unlabeled disk */
+#define	EOFFSET	107	/* relative seek not supported */
+#define	ECMD	108	/* undefined driver command */
+#define	EBSE	109	/* bad sector error */
+#define	EWCK	110	/* write check error */
+#define	EECC	111	/* uncorrectable ecc error */
+#define	EHER	112	/* hard error */

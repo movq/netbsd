@@ -1,5 +1,3 @@
-/*	$NetBSD: mcdreg.h,v 1.7 1995/07/10 01:27:27 cgd Exp $	*/
-
 /*
  * Copyright 1993 by Holger Veit (data part)
  * Copyright 1993 by Brian Moore (audio part)
@@ -41,10 +39,17 @@
  * driver, and is thus not complete (and may even be wrong). Some day
  * the manufacturer or anyone else might provide better documentation,
  * so this file (and the driver) will then have a better quality.
+ *
+ *	$Id: mcdreg.h,v 1.1 1993/11/04 09:13:09 cgd Exp $
  */
 
+#ifndef MCD_H
+#define	MCD_H
+
+#ifdef __GNUC__
 #if __GNUC__ >= 2
 #pragma pack(1)
+#endif
 #endif
 
 typedef unsigned char	bcd_t;
@@ -52,14 +57,18 @@ typedef unsigned char	bcd_t;
 #define	S_msf(msf)	msf[1]
 #define	F_msf(msf)	msf[2]
 
-#define	MCD_COMMAND	0
-#define	MCD_STATUS	0
-#define	MCD_RDATA	0
-#define	MCD_RESET	1
-#define	MCD_XFER	1
-#define	MCD_CTL2	2 /* XXX Is this right? */
-#define	MCD_CONFIG	3
+/* io lines used */
+#define	MCD_IO_BASE	0x300
 
+#define	mcd_command	0
+#define	mcd_status	0
+#define	mcd_rdata	0
+
+#define	mcd_reset	1
+#define	mcd_xfer	1
+#define	mcd_ctl2	2 /* XXX Is this right? */
+
+#define	mcd_config	3
 #define	MCD_MASK_DMA	0x07	/* bits 2-0 = DMA channel */
 #define	MCD_MASK_IRQ	0x70	/* bits 6-4 = INT number */
 				/* 001 = int 2,9 */
@@ -67,105 +76,44 @@ typedef unsigned char	bcd_t;
 				/* 011 = int 5 */
 				/* 100 = int 10 */
 				/* 101 = int 11 */
+/* flags */
+#define	STATUS_AVAIL	0xb
+#define	DATA_AVAIL	0xf
+
+/* ports */
+#define	MCD_DATA	0
+#define	MCD_FLAGS	1
+#define	MCD_DONT_KNOW	2	/* What are these two ports for??? */
+#define	CHANNEL		3
 
 /* Status bits */
 #define	MCD_ST_DOOROPEN		0x80
 #define	MCD_ST_DSKIN		0x40
 #define	MCD_ST_DSKCHNG		0x20
-#define	MCD_ST_SPINNING		0x10
-#define	MCD_ST_AUDIODISK	0x08	/* audio disk is in */
-#define	MCD_ST_READERR		0x04
-#define	MCD_ST_AUDIOBSY		0x02	/* audio disk is playing */
-#define	MCD_ST_CMDCHECK		0x01	/* command error */
-
-/* Xfer bits */
-#define	MCD_XF_STATUSUNAVAIL	0x04
-#define	MCD_XF_DATAUNAVAIL	0x02
-
-/* Modes */
-#define	MCD_MD_TESTMODE		0x80	/* 0 = DATALENGTH is valid */
-#define	MCD_MD_DATALENGTH	0x40	/* 1 = read ECC data also */
-#define	MCD_MD_ECCMODE		0x20	/* 1 = disable secondary ECC */
-#define	MCD_MD_SPINDOWN		0x08	/* 1 = spin down */
-#define	MCD_MD_READTOC		0x04	/* 1 = read TOC on GETQCHN */
-#define	MCD_MD_PLAYAUDIO	0x01	/* 1 = play audio through headphones */
-
-#define	MCD_MD_RAW		(MCD_MD_PLAYAUDIO|MCD_MD_ECCMODE|MCD_MD_DATALENGTH)
-#define	MCD_MD_COOKED		(MCD_MD_PLAYAUDIO)
-#define	MCD_MD_TOC		(MCD_MD_PLAYAUDIO|MCD_MD_READTOC)
-#define	MCD_MD_SLEEP		(MCD_MD_PLAYAUDIO|MCD_MD_SPINDOWN)
-
-#define	MCD_BLKSIZE_RAW		sizeof(struct mcd_rawsector)
-#define	MCD_BLKSIZE_COOKED	2048
-
-/* Lock states */
-#define	MCD_LK_UNLOCK		0x00
-#define	MCD_LK_LOCK		0x01
-#define	MCD_LK_TEST		0x02
-
-/* Config commands */
-#define	MCD_CF_IRQENABLE	0x10
-#define	MCD_CF_DMATIMEOUT	0x08
-#define	MCD_CF_READUPC		0x04
-#define	MCD_CF_DMAENABLE	0x02
-#define	MCD_CF_BLOCKSIZE	0x01
-
-/* UPC subcommands */
-#define	MCD_UPC_DISABLE		0x00
-#define	MCD_UPC_ENABLE		0x01
+#define	MCD_ST_BUSY		0x04
+#define	MCD_ST_AUDIOBSY		0x02
 
 /* commands known by the controller */
 #define	MCD_CMDRESET		0x00
 #define	MCD_CMDGETVOLINFO	0x10	/* gets mcd_volinfo */
-#define	MCD_CMDGETDISKINFO	0x11	/* gets mcd_disk */
 #define	MCD_CMDGETQCHN		0x20	/* gets mcd_qchninfo */
-#define	MCD_CMDGETSENSE		0x30	/* gets sense info */
 #define	MCD_CMDGETSTAT		0x40	/* gets a byte of status */
 #define	MCD_CMDSETMODE		0x50	/* set transmission mode, needs byte */
+#define	MCD_MD_RAW		0x60
+#define	MCD_MD_COOKED		0x01
+#define	MCD_MD_TOC		0x05
 #define	MCD_CMDSTOPAUDIO	0x70
-#define	MCD_CMDSTOPAUDIOTIME	0x80
 #define	MCD_CMDGETVOLUME	0x8E	/* gets mcd_volume */
-#define	MCD_CMDCONFIGDRIVE	0x90
-#define	MCD_CMDSETDRIVEMODE	0xa0	/* set drive mode */
-#define	MCD_CMDSETVOLUME	0xae	/* sets mcd_volume */
-#define	MCD_CMDREAD1		0xb0	/* read n sectors */
-#define	MCD_CMDREADSINGLESPEED	0xc0	/* read (single speed) */
-#define	MCD_CMDREADDOUBLESPEED	0xc1	/* read (double speed) */
-#define	MCD_CMDGETDRIVEMODE	0xc2	/* get drive mode */
-#define	MCD_CMDREAD3		0xc3	/* ? */
-#define	MCD_CMDSETINTERLEAVE	0xc8	/* set interleave for read */
-#define	MCD_CMDCONTINFO		0xdc	/* get controller info */
-#define	MCD_CMDSTOP		0xf0	/* stop everything */
-#define	MCD_CMDEJECTDISK	0xf6
-#define	MCD_CMDCLOSETRAY	0xf8
-#define	MCD_CMDSETLOCK		0xfe	/* needs byte */
-
-union mcd_qchninfo {
-	struct {
-		u_char	control:4;
-		u_char	addr_type:4;
-		u_char	trk_no;
-		u_char	idx_no;
-		bcd_t	track_size[3];
-		u_char	:8;
-		bcd_t	absolute_pos[3];
-	} toc;
-	struct {
-		u_char	control:4;
-		u_char	addr_type:4;
-		u_char	trk_no;
-		u_char	idx_no;
-		bcd_t	relative_pos[3];
-		u_char	:8;
-		bcd_t	absolute_pos[3];
-	} current;
-	struct {
-		u_char	control:4;
-		u_char	addr_type:4;
-		u_char	upccode[7];
-		u_char	junk[2];
-	} upc;
-};
+#define	MCD_CMDSETVOLUME	0xAE	/* sets mcd_volume */
+#define	MCD_CMDREAD1		0xB0	/* read n sectors */
+#define	MCD_CMDREAD2		0xC0	/* read from-to */
+#define	MCD_CMDCONTINFO		0xDC	/* Get controller info */
+#define	MCD_CMDEJECTDISK	0xF6
+#define	MCD_CMDCLOSETRAY	0xF8
+#define	MCD_CMDLOCKDRV		0xFE	/* needs byte */
+#define	MCD_LK_UNLOCK	0x00
+#define	MCD_LK_LOCK	0x01
+#define	MCD_LK_TEST	0x02
 
 struct mcd_volinfo {
 	bcd_t	trk_low;
@@ -174,62 +122,13 @@ struct mcd_volinfo {
 	bcd_t	trk1_msf[3];
 };
 
-struct mcd_result {
-	u_char	length;
-	union {
-		struct {
-			u_char	data[1];
-		} raw;
-		struct {
-			u_char	code;
-			u_char	version;
-		} continfo;
-		union mcd_qchninfo qchninfo;
-		struct mcd_volinfo volinfo;
-	} data;
-};
-
-struct mcd_command {
-	u_char	opcode;
-	u_char	length;
-	union {
-		struct {
-			u_char	data[1];
-		} raw;
-		struct {
-			bcd_t	start_msf[3];
-			bcd_t	reserved[3];
-		} seek;
-		struct {
-			bcd_t	start_msf[3];
-			bcd_t	length[3];
-		} read;
-		struct {
-			bcd_t	start_msf[3];
-			bcd_t	end_msf[3];
-		} play;
-		struct {
-			u_char	mode;
-		} datamode;
-		struct {
-			u_char	time;
-		} hold;
-		struct {
-			u_char	mode;
-		} drivemode;
-		struct {
-			u_char	mode;
-		} lockmode;
-		struct {
-			u_char	subcommand;
-			u_char	data1, data2;
-		} config;
-	} data;
-};
-
-struct mcd_mbox {
-	struct mcd_command cmd;
-	struct mcd_result res;
+struct mcd_qchninfo {
+	u_char	ctrl_adr;
+	u_char	trk_no;
+	u_char	idx_no;
+	bcd_t	trk_size_msf[3];
+	u_char	:8;
+	bcd_t	hd_pos_msf[3];
 };
 
 struct mcd_volume {
@@ -239,15 +138,13 @@ struct mcd_volume {
 	u_char	v0ls;
 };
 
-struct mcd_rawsector {
-	u_char	sync1[12];
-	u_char	header[4];
-	u_char	subheader1[4];
-	u_char	subheader2[4];
-	u_char	data[MCD_BLKSIZE_COOKED];
-	u_char	ecc_bits[280];
+struct mcd_read1 {
+	bcd_t	start_msf[3];
+	u_char	nsec[3];
 };
 
-#if __GNUC__ >= 2
-#pragma pack(4)
-#endif
+struct mcd_read2 {
+	bcd_t	start_msf[3];
+	bcd_t	end_msf[3];
+};
+#endif /* MCD_H */

@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_timod.h,v 1.4 1996/04/11 12:52:03 christos Exp $	 */
+/*	$NetBSD: svr4_timod.h,v 1.1 1994/11/14 06:13:27 christos Exp $	 */
 
 /*
  * Copyright (c) 1994 Christos Zoulas
@@ -40,22 +40,6 @@
 #define	SVR4_TI_SETMYNAME	(SVR4_TIMOD|146)
 #define	SVR4_TI_SETPEERNAME	(SVR4_TIMOD|147)
 
-#define SVR4_TI_CONNECT_REQUEST		0x00
-#define SVR4_TI_INFO_REQUEST		0x05
-#define SVR4_TI_BIND_REQUEST		0x06
-#define SVR4_TI_SENDTO_REQUEST		0x08
-
-#define SVR4_TI_ACCEPT_REPLY		0x0b
-#define SVR4_TI_CONNECT_REPLY		0x0c
-#define SVR4_TI_INFO_REPLY		0x10
-#define SVR4_TI_BIND_REPLY		0x11
-#define SVR4_TI_OK_REPLY		0x13
-#define SVR4_TI_RECVFROM_REPLY		0x14
-
-struct svr4_netbuf {
-	u_int 	 maxlen;
-	u_int	 len;
-	char	*buf;
-};
-
 #endif /* !_SVR4_TIMOD_H_ */
+
+

@@ -1,36 +1,5 @@
-/*	$NetBSD: scsiconf.c,v 1.56 1996/04/22 01:46:09 christos Exp $	*/
-
 /*
- * Copyright (c) 1994 Charles Hannum.  All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Charles Hannum.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
- * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
- * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
-/*
- * Originally written by Julian Elischer (julian@tfs.com)
+ * Written by Julian Elischer (julian@tfs.com)
  * for TRW Financial Systems for use under the MACH(2.5) operating system.
  *
  * TRW Financial Systems, in accordance with their agreement with Carnegie
@@ -43,630 +12,747 @@
  * on the understanding that TFS is not responsible for the correct
  * functioning of this software in any circumstances.
  *
+ *
+ * PATCHES MAGIC                LEVEL   PATCH THAT GOT US HERE
+ * --------------------         -----   ----------------------
+ * CURRENT PATCH LEVEL:         1       00098
+ * --------------------         -----   ----------------------
+ *
+ * 16 Feb 93	Julian Elischer		ADDED for SCSI system
+ */
+
+/*
  * Ported to run under 386BSD by Julian Elischer (julian@tfs.com) Sept 1992
  */
 
+/*
+$Log:
+*
+*/
 #include <sys/types.h>
-#include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/malloc.h>
-#include <sys/device.h>
+#include "st.h"
+#include "sd.h"
+#include "ch.h"
+#include "cd.h"
 
+#ifdef	MACH
+#include <i386/machparam.h>
+#endif	MACH
 #include <scsi/scsi_all.h>
 #include <scsi/scsiconf.h>
 
-#if 0
-#if NCALS > 0
-	{ T_PROCESSOR, T_FIXED, 1,
-	  0, 0, 0 },
-#endif	/* NCALS */
+#if !defined(OSF) && !defined(__386BSD__)
+#include "bll.h"
+#include "cals.h"
+#include "kil.h"
+#else
+#define	NBLL 0
+#define	NCALS 0
+#define	NKIL 0
+#endif /* !defined(OSF) && !defined(__386BSD__) */
+
+#if NSD > 0
+extern	sdattach();
+#endif NSD
+#if NST > 0
+extern	stattach();
+#endif NST
+#if NCH > 0
+extern	chattach();
+#endif NCH
+#if NCD > 0
+extern	cdattach();
+#endif NCD
 #if NBLL > 0
-	{ T_PROCESSOR, T_FIXED, 1,
-	  "AEG     ", "READER          ", "V1.0" },
-#endif	/* NBLL */
+extern	bllattach();
+#endif NBLL
+#if NCALS > 0
+extern	calsattach();
+#endif NCALS
 #if NKIL > 0
-	{ T_SCANNER, T_FIXED, 0,
-	  "KODAK   ", "IL Scanner 900  ", 0 },
-#endif	/* NKIL */
-#endif
+extern	kil_attach();
+#endif NKIL
 
-/*
- * Declarations
- */
-void scsi_probedev __P((struct scsibus_softc *, int, int));
-int scsi_probe_bus __P((int bus, int target, int lun));
-
-struct scsi_device probe_switch = {
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-};
-
-int scsibusmatch __P((struct device *, void *, void *));
-void scsibusattach __P((struct device *, struct device *, void *));
-int scsibussubmatch __P((struct device *, void *, void *));
-
-struct cfattach scsibus_ca = {
-	sizeof(struct scsibus_softc), scsibusmatch, scsibusattach
-};
-
-struct cfdriver scsibus_cd = {
-	NULL, "scsibus", DV_DULL
-};
-
-int scsibusprint __P((void *, char *));
-
-int
-scsibusmatch(parent, match, aux)
-        struct device *parent;
-        void *match, *aux;
+/***************************************************************\
+* The structure of pre-configured devices that might be turned	*
+* off and therefore may not show up				*
+\***************************************************************/
+struct	predefined
 {
-
-	return 1;
+	u_char	scsibus;
+	u_char	dev;
+	u_char	lu;
+	int	(*attach_rtn)();
+	char	*devname;
+	char	flags;
 }
-
-/*
- * The routine called by the adapter boards to get all their
- * devices configured in.
- */
-void
-scsibusattach(parent, self, aux)
-        struct device *parent, *self;
-        void *aux;
+pd[] = 
 {
-	struct scsibus_softc *sb = (struct scsibus_softc *)self;
-	struct scsi_link *sc_link_proto = aux;
+#ifdef EXAMPLE_PREDEFINE
+#if NSD > 0
+	{0,0,0,sdattach,"sd",0},/* define a disk at scsibus=0 dev=0 lu=0 */
+#endif NSD
+#endif EXAMPLE_PREDEFINE
+	{0,9,9}			/*illegal dummy end entry */
+};
 
-	sc_link_proto->scsibus = sb->sc_dev.dv_unit;
-	sb->adapter_link = sc_link_proto;
-	printf("\n");
 
-#if defined(SCSI_DELAY) && SCSI_DELAY > 2
-	printf("%s: waiting for scsi devices to settle\n",
-		sb->sc_dev.dv_xname);
-#else	/* SCSI_DELAY > 2 */
-#undef	SCSI_DELAY
+/***************************************************************\
+* The structure of known drivers for autoconfiguration		*
+\***************************************************************/
+static struct scsidevs 
+{
+	int type;
+	int removable;
+	char	*manufacturer;
+	char	*model;
+	char	*version;
+	int	(*attach_rtn)();
+	char	*devname;
+	char	flags;		/* 1 show my comparisons during boot(debug) */
+}
+#define SC_SHOWME	0x01
+#define	SC_ONE_LU	0x00
+#define	SC_MORE_LUS	0x02
+knowndevs[] = {
+#if NSD > 0
+	{ T_DIRECT,T_FIXED,"standard","any"
+			,"any",sdattach,"sd",SC_ONE_LU },
+	{ T_DIRECT,T_FIXED,"MAXTOR  ","XT-4170S        "
+			,"B5A ",sdattach,"mx1",SC_ONE_LU },
+#endif NSD
+#if NST > 0
+	{ T_SEQUENTIAL,T_REMOV,"standard","any"
+			,"any",stattach,"st",SC_ONE_LU },
+#endif NST
+#if NCALS > 0
+	{ T_PROCESSOR,T_FIXED,"standard","any"
+			,"any",calsattach,"cals",SC_MORE_LUS },
+#endif NCALS
+#if NCH > 0
+	{ T_CHANGER,T_REMOV,"standard","any"
+			,"any",chattach,"ch",SC_ONE_LU },
+#endif NCH
+#if NCD > 0
+	{ T_READONLY,T_REMOV,"SONY    ","CD-ROM CDU-8012 "
+			,"3.1a",cdattach,"cd",SC_ONE_LU },
+#endif NCD
+#if NBLL > 0
+	{ T_PROCESSOR,T_FIXED,"AEG     ","READER          "
+			,"V1.0",bllattach,"bll",SC_MORE_LUS },
+#endif NBLL
+#if NKIL > 0
+	{ T_SCANNER,T_FIXED,"KODAK   ","IL Scanner 900  "
+			,"any",kil_attach,"kil",SC_ONE_LU },
+#endif NKIL
+
+{0}
+};
+/***************************************************************\
+* Declarations							*
+\***************************************************************/
+struct	predefined	*scsi_get_predef();
+struct	scsidevs	*scsi_probedev();
+struct	scsidevs	*selectdev();
+
+/* controls debug level within the scsi subsystem */
+/* see scsiconf.h for values			  */
+int	scsi_debug	=	0x0;
+int	scsibus		=	0x0; /* This is the Nth scsibus */
+
+/***************************************************************\
+* The routine called by the adapter boards to get all their	*
+* devices configured in.					*
+\***************************************************************/
+scsi_attachdevs( unit, scsi_addr, scsi_switch)
+int	unit,scsi_addr;
+struct	scsi_switch	*scsi_switch;
+{
+	int	targ,lun;
+	struct	scsidevs	*bestmatch = (struct scsidevs *)0;
+	struct	predefined *predef;
+	int maybe_more;
+
+#ifdef	SCSI_DELAY
+#if 	SCSI_DELAY > 2
+	printf("waiting for scsi devices to settle\n");
+#else	SCSI_DELAY > 2
+#define	SCSI_DELAY 15
+#endif	SCSI_DELAY > 2
+#else
 #define SCSI_DELAY 2
-#endif	/* SCSI_DELAY */
-	delay(1000000 * SCSI_DELAY);
-
-	scsi_probe_bus(sb->sc_dev.dv_unit, -1, -1);
-}
-
-int
-scsibussubmatch(parent, match, aux)
-	struct device *parent;
-	void *match, *aux;
-{
-	struct cfdata *cf = match;
-	struct scsibus_attach_args *sa = aux;
-	struct scsi_link *sc_link = sa->sa_sc_link;
-
-	if (cf->cf_loc[0] != -1 && cf->cf_loc[0] != sc_link->target)
-		return 0;
-	if (cf->cf_loc[1] != -1 && cf->cf_loc[1] != sc_link->lun)
-		return 0;
-	return ((*cf->cf_attach->ca_match)(parent, match, aux));
-}
-
-/*
- * Probe the requested scsi bus. It must be already set up.
- * -1 requests all set up scsi busses.
- * target and lun optionally narrow the search if not -1
- */
-int
-scsi_probe_busses(bus, target, lun)
-	int bus, target, lun;
-{
-
-	if (bus == -1) {
-		for (bus = 0; bus < scsibus_cd.cd_ndevs; bus++)
-			if (scsibus_cd.cd_devs[bus])
-				scsi_probe_bus(bus, target, lun);
-		return 0;
-	} else {
-		return scsi_probe_bus(bus, target, lun);
-	}
-}
-
-/*
- * Probe the requested scsi bus. It must be already set up.
- * target and lun optionally narrow the search if not -1
- */
-int
-scsi_probe_bus(bus, target, lun)
-	int bus, target, lun;
-{
-	struct scsibus_softc *scsi;
-	int maxtarget, mintarget, maxlun, minlun;
-	u_int8_t scsi_addr;
-
-	if (bus < 0 || bus >= scsibus_cd.cd_ndevs)
-		return ENXIO;
-	scsi = scsibus_cd.cd_devs[bus];
-	if (!scsi)
-		return ENXIO;
-
-	scsi_addr = scsi->adapter_link->adapter_target;
-
-	if (target == -1) {
-		maxtarget = 7;
-		mintarget = 0;
-	} else {
-		if (target < 0 || target > 7)
-			return EINVAL;
-		maxtarget = mintarget = target;
-	}
-
-	if (lun == -1) {
-		maxlun = 7;
-		minlun = 0;
-	} else {
-		if (lun < 0 || lun > 7)
-			return EINVAL;
-		maxlun = minlun = lun;
-	}
-
-	for (target = mintarget; target <= maxtarget; target++) {
-		if (target == scsi_addr)
-			continue;
-		for (lun = minlun; lun <= maxlun; lun++) {
-			/*
-			 * See if there's a device present, and configure it.
-			 */
-			scsi_probedev(scsi, target, lun);
-			if ((scsi->moreluns & (1 << target)) == 0)
-				break;
-			/* otherwise something says we should look further */
-		}
-	}
-	return 0;
-}
-
-void
-scsi_strvis(dst, src, len)
-	u_char *dst, *src;
-	int len;
-{
-
-	/* Trim leading and trailing blanks and NULs. */
-	while (len > 0 && (src[0] == ' ' || src[0] == '\0'))
-		++src, --len;
-	while (len > 0 && (src[len-1] == ' ' || src[len-1] == '\0'))
-		--len;
-
-	while (len > 0) {
-		if (*src < 0x20 || *src >= 0x80) {
-			/* non-printable characters */
-			*dst++ = '\\';
-			*dst++ = ((*src & 0300) >> 6) + '0';
-			*dst++ = ((*src & 0070) >> 3) + '0';
-			*dst++ = ((*src & 0007) >> 0) + '0';
-		} else if (*src == '\\') {
-			/* quote characters */
-			*dst++ = '\\';
-			*dst++ = '\\';
-		} else {
-			/* normal characters */
-			*dst++ = *src;
-		}
-		++src, --len;
-	}
-
-	*dst++ = 0;
-}
-
-struct scsi_quirk_inquiry_pattern {
-	struct scsi_inquiry_pattern pattern;
-	u_int8_t quirks;
-};
-
-struct scsi_quirk_inquiry_pattern scsi_quirk_patterns[] = {
-	{{T_CDROM, T_REMOV,
-	 "CHINON  ", "CD-ROM CDS-431  ", ""},     SDEV_NOLUNS},
-	{{T_CDROM, T_REMOV,
-	 "Chinon  ", "CD-ROM CDS-525  ", ""},     SDEV_NOLUNS},
-	{{T_CDROM, T_REMOV,
-	 "CHINON  ", "CD-ROM CDS-535  ", ""},     SDEV_NOLUNS},
-	{{T_CDROM, T_REMOV,
-	 "DENON   ", "DRD-25X         ", "V"},    SDEV_NOLUNS},
-	{{T_CDROM, T_REMOV,
-	 "IMS     ", "CDD521/10       ", "2.06"}, SDEV_NOLUNS},
-	{{T_CDROM, T_REMOV,
-	 "MEDIAVIS", "CDR-H93MV       ", "1.31"}, SDEV_NOLUNS},
-	{{T_CDROM, T_REMOV,
-	 "NEC     ", "CD-ROM DRIVE:55 ", ""},     SDEV_NOLUNS},
-	{{T_CDROM, T_REMOV,
-	 "NEC     ", "CD-ROM DRIVE:83 ", ""},     SDEV_NOLUNS},
-	{{T_CDROM, T_REMOV,
-	 "NEC     ", "CD-ROM DRIVE:84 ", ""},     SDEV_NOLUNS},
-	{{T_CDROM, T_REMOV,
-	 "NEC     ", "CD-ROM DRIVE:841", ""},     SDEV_NOLUNS},
-	{{T_CDROM, T_REMOV,
-	 "SONY    ", "CD-ROM CDU-541  ", ""},     SDEV_NOLUNS},
-	{{T_CDROM, T_REMOV,
-	 "SONY    ", "CD-ROM CDU-55S  ", ""},     SDEV_NOLUNS},
-	{{T_CDROM, T_REMOV,
-	 "SONY    ", "CD-ROM CDU-8003A", ""},     SDEV_NOLUNS},
-	{{T_CDROM, T_REMOV,
-	 "SONY    ", "CD-ROM CDU-8012 ", ""},     SDEV_NOLUNS},
-	{{T_CDROM, T_REMOV,
-	 "TEAC    ", "CD-ROM          ", "1.06"}, SDEV_NOLUNS},
-	{{T_CDROM, T_REMOV,
-	 "TEXEL   ", "CD-ROM          ", "1.06"}, SDEV_NOLUNS},
-	{{T_CDROM, T_REMOV,
-	 "TEXEL   ", "CD-ROM DM-XX24 K", "1.10"}, SDEV_NOLUNS},
-
-	{{T_OPTICAL, T_REMOV,
-	 "EPSON   ", "OMD-5010        ", "3.08"}, SDEV_NOLUNS},
-
-	{{T_DIRECT, T_FIXED,
-	 "DEC     ", "RZ55     (C) DEC", ""},     SDEV_AUTOSAVE},
-	{{T_DIRECT, T_FIXED,
-	 "EMULEX  ", "MD21/S2     ESDI", "A00"},  SDEV_FORCELUNS},
-	{{T_DIRECT, T_FIXED,
-	 "MAXTOR  ", "XT-3280         ", ""},     SDEV_NOLUNS},
-	{{T_DIRECT, T_FIXED,
-	 "MAXTOR  ", "XT-4380S        ", ""},     SDEV_NOLUNS},
-	{{T_DIRECT, T_FIXED,
-	 "MAXTOR  ", "MXT-1240S       ", ""},     SDEV_NOLUNS},
-	{{T_DIRECT, T_FIXED,
-	 "MAXTOR  ", "XT-4170S        ", ""},     SDEV_NOLUNS},
-	{{T_DIRECT, T_FIXED,
-	 "MAXTOR  ", "XT-8760S        ", ""},     SDEV_NOLUNS},
-	{{T_DIRECT, T_FIXED,
-	 "MAXTOR  ", "LXT-213S        ", ""},     SDEV_NOLUNS},
-	{{T_DIRECT, T_FIXED,
-	 "MAXTOR  ", "LXT-213S SUN0207", ""},     SDEV_NOLUNS},
-	{{T_DIRECT, T_FIXED,
-	 "MAXTOR  ", "LXT-200S        ", ""},     SDEV_NOLUNS},
-	{{T_DIRECT, T_FIXED,
-	 "MST     ", "SnapLink        ", ""},     SDEV_NOLUNS},
-	{{T_DIRECT, T_FIXED,
-	 "NEC     ", "D3847           ", "0307"}, SDEV_NOLUNS},
-	{{T_DIRECT, T_FIXED,
-	 "QUANTUM ", "LPS525S         ", ""},     SDEV_NOLUNS},
-	{{T_DIRECT, T_FIXED,
-	 "QUANTUM ", "P105S 910-10-94x", ""},     SDEV_NOLUNS},
-	{{T_DIRECT, T_FIXED,
-	 "QUANTUM ", "PD1225S         ", ""},     SDEV_NOLUNS},
-	{{T_DIRECT, T_FIXED,
-	 "QUANTUM ", "PD210S   SUN0207", ""},     SDEV_NOLUNS},
-	{{T_DIRECT, T_FIXED,
-	 "RODIME  ", "RO3000S         ", ""},     SDEV_NOLUNS},
-	{{T_DIRECT, T_FIXED,
-	 "SEAGATE ", "ST157N          ", ""},     SDEV_NOLUNS},
-	{{T_DIRECT, T_FIXED,
-	 "SEAGATE ", "ST296           ", ""},     SDEV_NOLUNS},
-	{{T_DIRECT, T_FIXED,
-	 "SEAGATE ", "ST296N          ", ""},     SDEV_NOLUNS},
-	{{T_DIRECT, T_FIXED,
-	 "TOSHIBA ", "MK538FB         ", "6027"}, SDEV_NOLUNS},
-
-
-	/* XXX: QIC-36 tape behind Emulex adapter.  Very broken. */
-	{{T_SEQUENTIAL, T_REMOV,
-	 "        ", "                ", "    "}, SDEV_NOLUNS},
-	{{T_SEQUENTIAL, T_REMOV,
-	 "CALIPER ", "CP150           ", ""},     SDEV_NOLUNS},
-	{{T_SEQUENTIAL, T_REMOV,
-	 "EXABYTE ", "EXB-8200        ", ""},     SDEV_NOLUNS},
-	{{T_SEQUENTIAL, T_REMOV,
-	 "SONY    ", "SDT-2000        ", "2.09"}, SDEV_NOLUNS},
-	{{T_SEQUENTIAL, T_REMOV,
-	 "SONY    ", "SDT-5000        ", "3."},   SDEV_NOSYNCWIDE},
-	{{T_SEQUENTIAL, T_REMOV,
-	 "SONY    ", "SDT-5200        ", "3."},   SDEV_NOLUNS},
-	{{T_SEQUENTIAL, T_REMOV,
-	 "TANDBERG", " TDC 3600       ", ""},     SDEV_NOLUNS},
-	/* Following entry reported as a Tandberg 3600; ref. PR1933 */
-	{{T_SEQUENTIAL, T_REMOV,
-	 "ARCHIVE ", "VIPER 150  21247", ""},     SDEV_NOLUNS},
-	{{T_SEQUENTIAL, T_REMOV,
-	 "WANGTEK ", "5099ES SCSI",      ""},     SDEV_NOLUNS},
-	{{T_SEQUENTIAL, T_REMOV,
-	 "WANGTEK ", "5150ES SCSI",      ""},     SDEV_NOLUNS},
-	{{T_SEQUENTIAL, T_REMOV,
-	 "WangDAT ", "Model 1300      ", "02.4"}, SDEV_NOSYNCWIDE},
-	{{T_SEQUENTIAL, T_REMOV,
-	 "WangDAT ", "Model 2600      ", "01.7"}, SDEV_NOSYNCWIDE},
-	{{T_SEQUENTIAL, T_REMOV,
-	 "WangDAT ", "Model 3200      ", "02.2"}, SDEV_NOSYNCWIDE},
-};
-
-/*
- * Print out autoconfiguration information for a subdevice.
- *
- * This is a slight abuse of 'standard' autoconfiguration semantics,
- * because 'print' functions don't normally print the colon and
- * device information.  However, in this case that's better than
- * either printing redundant information before the attach message,
- * or having the device driver call a special function to print out
- * the standard device information.
- */
-int
-scsibusprint(aux, pnp)
-	void *aux;
-	char *pnp;
-{
-	struct scsibus_attach_args *sa = aux;
-	struct scsi_inquiry_data *inqbuf;
-	u_int8_t type;
-	boolean removable;
-	char *dtype, *qtype;
-	char vendor[33], product[65], revision[17];
-	int target, lun;
-
-	if (pnp != NULL)
-		printf("%s", pnp);
-
-	inqbuf = sa->sa_inqbuf;
-
-        target = sa->sa_sc_link->target;
-        lun = sa->sa_sc_link->lun;
-
-        type = inqbuf->device & SID_TYPE;
-        removable = inqbuf->dev_qual2 & SID_REMOVABLE ? 1 : 0;
-
-	/*
-	 * Figure out basic device type and qualifier.
-	 */
-	dtype = 0;
-	switch (inqbuf->device & SID_QUAL) {
-	case SID_QUAL_LU_OK:
-		qtype = "";
-		break;
-
-	case SID_QUAL_LU_OFFLINE:
-		qtype = " offline";
-		break;
-
-	case SID_QUAL_RSVD:
-	case SID_QUAL_BAD_LU:
-		panic("scsibusprint: impossible qualifier");
-
-	default:
-		qtype = "";
-		dtype = "vendor-unique";
-		break;
-	}
-	if (dtype == 0) {
-		switch (type) {
-		case T_DIRECT:
-			dtype = "direct";
-			break;
-		case T_SEQUENTIAL:
-			dtype = "sequential";
-			break;
-		case T_PRINTER:
-			dtype = "printer";
-			break;
-		case T_PROCESSOR:
-			dtype = "processor";
-			break;
-		case T_CDROM:
-			dtype = "cdrom";
-			break;
-		case T_WORM:
-			dtype = "worm";
-			break;
-		case T_SCANNER:
-			dtype = "scanner";
-			break;
-		case T_OPTICAL:
-			dtype = "optical";
-			break;
-		case T_CHANGER:
-			dtype = "changer";
-			break;
-		case T_COMM:
-			dtype = "communication";
-			break;
-		case T_NODEVICE:
-			panic("scsibusprint: impossible device type");
-		default:
-			dtype = "unknown";
-			break;
-		}
-	}
-
-        scsi_strvis(vendor, inqbuf->vendor, 8);
-        scsi_strvis(product, inqbuf->product, 16);
-        scsi_strvis(revision, inqbuf->revision, 4);
-
-        printf(" targ %d lun %d: <%s, %s, %s> SCSI%d %d/%s %s%s",
-            target, lun, vendor, product, revision,
-            inqbuf->version & SID_ANSII, type, dtype,
-            removable ? "removable" : "fixed", qtype);
-
-	return (UNCONF);
-}
-
-/*
- * given a target and lu, ask the device what
- * it is, and find the correct driver table
- * entry.
- */
-void
-scsi_probedev(scsi, target, lun)
-	struct scsibus_softc *scsi;
-	int target, lun;
-{
-	struct scsi_link *sc_link;
-	static struct scsi_inquiry_data inqbuf;
-	struct scsi_quirk_inquiry_pattern *finger;
-	int checkdtype, priority;
-	struct scsibus_attach_args sa;
-	struct cfdata *cf;
-
-	/* Skip this slot if it is already attached. */
-	if (scsi->sc_link[target][lun])
-		return;
-
-	sc_link = malloc(sizeof(*sc_link), M_DEVBUF, M_NOWAIT);
-	*sc_link = *scsi->adapter_link;
-	sc_link->target = target;
-	sc_link->lun = lun;
-	sc_link->device = &probe_switch;
-
-	/*
-	 * Ask the device what it is
-	 */
-#ifdef SCSIDEBUG
-	if (target == DEBUGTARGET && lun == DEBUGLUN)
-		sc_link->flags |= DEBUGLEVEL;
-#endif /* SCSIDEBUG */
-
-	(void) scsi_test_unit_ready(sc_link,
-	    SCSI_AUTOCONF | SCSI_IGNORE_ILLEGAL_REQUEST | SCSI_IGNORE_NOT_READY | SCSI_IGNORE_MEDIA_CHANGE);
-
-#ifdef SCSI_2_DEF
-	/* some devices need to be told to go to SCSI2 */
-	/* However some just explode if you tell them this.. leave it out */
-	scsi_change_def(sc_link, SCSI_AUTOCONF | SCSI_SILENT);
-#endif /* SCSI_2_DEF */
-
-	/* Now go ask the device all about itself. */
-	bzero(&inqbuf, sizeof(inqbuf));
-	if (scsi_inquire(sc_link, &inqbuf, SCSI_AUTOCONF) != 0)
-		goto bad;
-
+#endif	SCSI_DELAY
+	spinwait(1000 * SCSI_DELAY);
+	targ = 0;
+	while(targ < 8)
 	{
-		int len = inqbuf.additional_length;
-		while (len < 3)
-			inqbuf.unused[len++] = '\0';
-		while (len < 3 + 28)
-			inqbuf.unused[len++] = ' ';
-	}
-
-	finger = (struct scsi_quirk_inquiry_pattern *)scsi_inqmatch(&inqbuf,
-	    (caddr_t)scsi_quirk_patterns, 
-	    sizeof(scsi_quirk_patterns)/sizeof(scsi_quirk_patterns[0]),
-	    sizeof(scsi_quirk_patterns[0]), &priority);
-	if (priority != 0)
-		sc_link->quirks |= finger->quirks;
-	if ((inqbuf.version & SID_ANSII) == 0 &&
-	    (sc_link->quirks & SDEV_FORCELUNS) == 0)
-		sc_link->quirks |= SDEV_NOLUNS;
-
-	if ((sc_link->quirks & SDEV_NOLUNS) == 0)
-		scsi->moreluns |= (1 << target);
-
-	/*
-	 * note what BASIC type of device it is
-	 */
-	if ((inqbuf.dev_qual2 & SID_REMOVABLE) != 0)
-		sc_link->flags |= SDEV_REMOVABLE;
-
-	/*
-	 * Any device qualifier that has the top bit set (qualifier&4 != 0)
-	 * is vendor specific and won't match in this switch.
-	 * All we do here is throw out bad/negative responses.
-	 */
-	checkdtype = 0;
-	switch (inqbuf.device & SID_QUAL) {
-	case SID_QUAL_LU_OK:
-	case SID_QUAL_LU_OFFLINE:
-		checkdtype = 1;
-		break;
-
-	case SID_QUAL_RSVD:
-	case SID_QUAL_BAD_LU:
-		goto bad;
-
-	default:
-		break;
-	}
-	if (checkdtype) {
-		switch (inqbuf.device & SID_TYPE) {
-		case T_DIRECT:
-		case T_SEQUENTIAL:
-		case T_PRINTER:
-		case T_PROCESSOR:
-		case T_CDROM:
-		case T_WORM:
-		case T_SCANNER:
-		case T_OPTICAL:
-		case T_CHANGER:
-		case T_COMM:
-		default:
-			break;
-		case T_NODEVICE:
-			goto bad;
+		maybe_more = 0; /* by default only check 1 lun */
+		if (targ == scsi_addr) 
+		{
+			targ++;
+			continue;
 		}
+		lun = 0;
+		while(lun < 8)
+		{
+			predef = scsi_get_predef(scsibus
+						,targ
+						,lun
+						,&maybe_more);
+			bestmatch = scsi_probedev(unit
+						,targ
+						,lun 
+						,scsi_switch
+						,&maybe_more);
+			if((bestmatch) && (predef)) /* both exist */
+			{
+				if(bestmatch->attach_rtn 
+				    != predef->attach_rtn)
+				{
+				    printf("Clash in found/expected devices\n");
+				    printf("will link in FOUND\n");
+				}
+				(*(bestmatch->attach_rtn))(unit,
+						targ,
+						lun,
+						scsi_switch);
+			}
+			if((bestmatch) && (!predef)) /* just FOUND */
+			{
+				(*(bestmatch->attach_rtn))(unit,
+						targ,
+						lun,
+						scsi_switch);
+			}
+			if((!bestmatch) && (predef)) /* just predef */
+			{
+				(*(predef->attach_rtn))(unit,
+						targ,
+						lun,
+						scsi_switch);
+			}
+			if(!(maybe_more)) /* nothing suggests we'll find more */
+			{
+				break;	/* nothing here, skip to next targ */
+			}
+			/* otherwise something says we should look further*/
+			lun++;
+		}
+		targ++;
 	}
-
-	sa.sa_sc_link = sc_link;
-	sa.sa_inqbuf = &inqbuf;
-
-	if ((cf = config_search(scsibussubmatch, (struct device *)scsi, &sa)) != 0) {
-		scsi->sc_link[target][lun] = sc_link;
-		config_attach((struct device *)scsi, cf, &sa, scsibusprint);
-	} else {
-		scsibusprint(&sa, scsi->sc_dev.dv_xname);
-		printf(" not configured\n");
-		goto bad;
-	}
-
-	return;
-
-bad:
-	free(sc_link, M_DEVBUF);
-	return;
-}
-
-/*
- * Return a priority based on how much of the inquiry data matches
- * the patterns for the particular driver.
- */
-caddr_t
-scsi_inqmatch(inqbuf, base, nmatches, matchsize, bestpriority)
-	struct scsi_inquiry_data *inqbuf;
-	caddr_t base;
-	int nmatches, matchsize;
-	int *bestpriority;
-{
-	u_int8_t type;
-	boolean removable;
-	caddr_t bestmatch;
-
-	/* Include the qualifier to catch vendor-unique types. */
-	type = inqbuf->device;
-	removable = inqbuf->dev_qual2 & SID_REMOVABLE ? T_REMOV : T_FIXED;
-
-	for (*bestpriority = 0, bestmatch = 0; nmatches--; base += matchsize) {
-		struct scsi_inquiry_pattern *match = (void *)base;
-		int priority, len;
-
-		if (type != match->type)
-			continue;
-		if (removable != match->removable)
-			continue;
-		priority = 2;
-		len = strlen(match->vendor);
-		if (bcmp(inqbuf->vendor, match->vendor, len))
-			continue;
-		priority += len;
-		len = strlen(match->product);
-		if (bcmp(inqbuf->product, match->product, len))
-			continue;
-		priority += len;
-		len = strlen(match->revision);
-		if (bcmp(inqbuf->revision, match->revision, len))
-			continue;
-		priority += len;
-
-#if SCSIDEBUG
-		printf("scsi_inqmatch: %d/%d/%d <%s, %s, %s>\n",
-		    priority, match->type, match->removable,
-		    match->vendor, match->product, match->revision);
+#if NGENSCSI > 0
+	/***************************************************************\
+	* If available hook up the generic scsi driver, letting it	*
+	* know which target is US. (i.e. illegal or at least special)	*
+	\***************************************************************/
+	genscsi_attach(unit,scsi_addr,0,scsi_switch);
 #endif
-		if (priority > *bestpriority) {
-			*bestpriority = priority;
-			bestmatch = base;
+	scsibus++;	/* next time we are on the NEXT scsi bus */
+}
+
+/***********************************************\
+* given a target and lu, check if there is a	*
+* predefined device for that address		*
+\***********************************************/
+struct	predefined	*scsi_get_predef(unit,target,lu,maybe_more)
+int	unit,target,lu,*maybe_more;
+{
+	int upto,numents;
+
+	numents = (sizeof(pd)/sizeof(struct predefined)) - 1;
+	
+	for(upto = 0;upto < numents;upto++)
+	{
+		if(pd[upto].scsibus != unit)
+			continue;
+		if(pd[upto].dev != target)
+			continue;
+		if(pd[upto].lu != lu)
+			continue;
+		
+		printf("  dev%d,lu%d: %s - PRECONFIGURED -\n"
+			,target
+			,lu
+			,pd[upto].devname);
+		*maybe_more = pd[upto].flags & SC_MORE_LUS;
+		return(&(pd[upto]));
+	}
+	return((struct predefined *)0);
+}
+
+/***********************************************\
+* given a target and lu, ask the device what	*
+* it is, and find the correct driver table	*
+* entry.					*
+\***********************************************/
+struct	scsidevs	*scsi_probedev(unit,target,lu,scsi_switch, maybe_more)
+
+struct	scsi_switch *scsi_switch;
+int	unit,target,lu;
+int *maybe_more;
+{
+	struct	scsidevs	*bestmatch = (struct scsidevs *)0;
+	char	*dtype=(char *)0,*desc;
+	char	*qtype;
+	static	struct scsi_inquiry_data	inqbuf; 
+	int	len,qualifier,type,remov;
+	char	manu[32];
+	char	model[32];
+	char	version[32];
+
+
+	bzero(&inqbuf,sizeof(inqbuf));
+	/***********************************************\
+	* Ask the device what it is			*
+	\***********************************************/
+#ifdef	DEBUG
+	if((target == 0) && (lu == 0))
+		scsi_debug = 0xfff;
+	else
+		scsi_debug = 0;
+#endif	DEBUG
+	if(scsi_ready(	unit,
+			target,
+			lu,
+			scsi_switch,
+			SCSI_NOSLEEP | SCSI_NOMASK) != COMPLETE)
+	{
+		return(struct scsidevs *)0;
+	}
+	if(scsi_inquire(unit,
+			target,
+			lu,
+			scsi_switch,
+			&inqbuf,
+			SCSI_NOSLEEP | SCSI_NOMASK) != COMPLETE)
+	{
+		return(struct scsidevs *)0;
+	}
+
+	/***********************************************\
+	* note what BASIC type of device it is		*
+	\***********************************************/
+	if(scsi_debug & SHOWINQUIRY)
+	{
+		desc=(char *)&inqbuf;
+		printf("inq: %x %x %x %x %x %x %x %x %x %x %x %x %x\n",
+		desc[0], desc[1], desc[2], desc[3],
+		desc[4], desc[5], desc[6], desc[7],
+		desc[8], desc[9], desc[10], desc[11],
+		desc[12]);
+	}
+
+	type = inqbuf.device_type;
+	qualifier = inqbuf.device_qualifier;
+	remov = inqbuf.removable;
+
+	/* Check for a non-existent unit.  If the device is returning
+	 * this much, then we must set the flag that has
+	 * the searcher keep looking on other luns.
+	 */
+	if (qualifier == 3 && type == T_NODEVICE)
+	{
+		*maybe_more = 1;
+		return (struct scsidevs *)0;
+	}
+
+	/* Any device qualifier that has
+	 * the top bit set (qualifier&4 != 0) is vendor specific and
+	 * won't match in this switch.
+	 */
+
+	switch(qualifier)
+	{
+		case 0:
+		qtype="";
+		break;
+		case 1:
+		qtype=", Unit not Connected!";
+		break;
+		case 2:
+		qtype=", Reserved Peripheral Qualifier!";
+		break;
+		case 3:
+		qtype=", The Target can't support this Unit!";
+		break;
+
+		default:
+		dtype="vendor specific";
+		qtype="";
+		*maybe_more = 1;
+		break;
+	}
+
+	if (dtype == 0)
+		switch(type)
+		{
+			case T_DIRECT:
+				dtype="direct";
+				break;
+			case T_SEQUENTIAL:
+				dtype="sequential";
+				break;
+			case T_PRINTER:
+				dtype="printer";
+				break;
+			case T_PROCESSOR:
+				dtype="processor";
+				break;
+			case T_READONLY:
+				dtype="readonly";
+				break;
+			case T_WORM:
+				dtype="worm";
+				break;
+			case T_SCANNER:
+				dtype="scanner";
+				break;
+			case T_OPTICAL:
+				dtype="optical";
+				break;
+			case T_CHANGER:
+				dtype="changer";
+				break;
+			case T_COMM:
+				dtype="communication";
+				break;
+			default:
+				dtype="unknown";
+				break;
+		}
+
+	/***********************************************\
+	* Then if it's advanced enough, more detailed	*
+	* information					*
+	\***********************************************/
+	if(inqbuf.ansii_version > 0) 
+	{
+		if ((len = inqbuf.additional_length 
+				+ ( (char *)inqbuf.unused
+				  - (char *)&inqbuf))
+			> (sizeof(struct scsi_inquiry_data) - 1))
+			len = sizeof(struct scsi_inquiry_data) - 1;
+		desc=inqbuf.vendor;
+		desc[len-(desc - (char *)&inqbuf)] = 0;
+		strncpy(manu,inqbuf.vendor,8);manu[8]=0;
+		strncpy(model,inqbuf.product,16);model[16]=0;
+		strncpy(version,inqbuf.revision,4);version[4]=0;
+	}
+	else
+	/***********************************************\
+	* If not advanced enough, use default values	*
+	\***********************************************/
+	{
+		desc="early protocol device";
+		strncpy(manu,"unknown",8);
+		strncpy(model,"unknown",16);
+		strncpy(version,"????",4);
+	}
+	printf("  dev%d,lu%d: type %d:%d(%s%s),%s '%s%s%s' scsi%d\n"
+		,target
+		,lu
+		,qualifier,type
+		,dtype,qtype
+		,remov?"removable":"fixed"
+		,manu
+		,model
+		,version
+		,inqbuf.ansii_version
+	);
+	/***********************************************\
+	* Try make as good a match as possible with	*
+	* available sub drivers	 			*
+	\***********************************************/
+	bestmatch = (selectdev(unit,target,lu,&scsi_switch,
+		qualifier,type,remov,manu,model,version));
+	if((bestmatch) && (bestmatch->flags & SC_MORE_LUS))
+	{
+		*maybe_more = 1;
+	}
+	return(bestmatch);
+}
+
+/***********************************************\
+* Try make as good a match as possible with	*
+* available sub drivers	 			*
+\***********************************************/
+struct	scsidevs	
+*selectdev(unit,target,lu,dvr_switch,qualifier,type,remov,manu,model,rev)
+int	unit,target,lu;
+struct	scsi_switch *dvr_switch;
+int	qualifier,type,remov;
+char	*manu,*model,*rev;
+{
+	int	numents = (sizeof(knowndevs)/sizeof(struct scsidevs)) - 1;
+	int	count = 0;
+	int			bestmatches = 0;
+	struct	scsidevs	*bestmatch = (struct scsidevs *)0;
+	struct	scsidevs	*thisentry = knowndevs;
+
+	type |= (qualifier << 5);
+
+	thisentry--;
+	while( count++ < numents)
+	{
+		thisentry++;
+		if(type != thisentry->type)
+		{
+			continue;
+		}
+		if(bestmatches < 1)
+		{
+			bestmatches = 1;
+			bestmatch = thisentry;
+		}
+		if(remov != thisentry->removable)
+		{
+			continue;
+		}
+		if(bestmatches < 2)
+		{
+			bestmatches = 2;
+			bestmatch = thisentry;
+		}
+		if(thisentry->flags & SC_SHOWME)
+			printf("\n%s-\n%s-",thisentry->manufacturer, manu);
+		if(strcmp(thisentry->manufacturer, manu))
+		{
+			continue;
+		}
+		if(bestmatches < 3)
+		{
+			bestmatches = 3;
+			bestmatch = thisentry;
+		}
+		if(thisentry->flags & SC_SHOWME)
+			printf("\n%s-\n%s-",thisentry->model, model);
+		if(strcmp(thisentry->model, model))
+		{
+			continue;
+		}
+		if(bestmatches < 4)
+		{
+			bestmatches = 4;
+			bestmatch = thisentry;
+		}
+		if(thisentry->flags & SC_SHOWME)
+			printf("\n%s-\n%s-",thisentry->version, rev);
+		if(strcmp(thisentry->version, rev))
+		{
+			continue;
+		}
+		if(bestmatches < 5)
+		{
+			bestmatches = 5;
+			bestmatch = thisentry;
+			break;
 		}
 	}
 
-	return (bestmatch);
+	if (bestmatch == (struct scsidevs *)0)
+		printf("	No explicit device driver match for \"%s %s\".\n",
+		manu, model);
+
+	return(bestmatch);
 }
+
+static	int recurse = 0;
+/***********************************************\
+* Do a scsi operation asking a device if it is	*
+* ready. Use the scsi_cmd routine in the switch *
+* table.					*
+\***********************************************/
+scsi_ready(unit,target,lu,scsi_switch, flags)
+struct	scsi_switch *scsi_switch;
+{
+	struct	scsi_test_unit_ready scsi_cmd;
+	struct	scsi_xfer scsi_xfer;
+	volatile int rval;
+	int	key;
+
+	bzero(&scsi_cmd, sizeof(scsi_cmd));
+	bzero(&scsi_xfer, sizeof(scsi_xfer));
+	scsi_cmd.op_code = TEST_UNIT_READY;
+
+	scsi_xfer.flags=flags | INUSE;
+	scsi_xfer.adapter=unit;
+	scsi_xfer.targ=target;
+	scsi_xfer.lu=lu;
+	scsi_xfer.cmd=(struct scsi_generic *)&scsi_cmd;
+	scsi_xfer.retries=8;
+	scsi_xfer.timeout=10000;
+	scsi_xfer.cmdlen=sizeof(scsi_cmd);
+	scsi_xfer.data=0;
+	scsi_xfer.datalen=0;
+	scsi_xfer.resid=0;
+	scsi_xfer.when_done=0;
+	scsi_xfer.done_arg=0;
+retry:	scsi_xfer.error=0;
+	/*******************************************************\
+	* do not use interrupts					*
+	\*******************************************************/
+	rval = (*(scsi_switch->scsi_cmd))(&scsi_xfer);
+	if (rval != COMPLETE)
+	{
+		if(scsi_debug)
+		{
+			printf("scsi error, rval = 0x%x\n",rval);
+			printf("code from driver: 0x%x\n",scsi_xfer.error);
+		}
+		switch(scsi_xfer.error)
+		{
+		case	XS_SENSE:
+		/*******************************************************\
+		* Any sense value is illegal except UNIT ATTENTION	*
+		* In which case we need to check again to get the	*
+		* correct response.					*
+		*( especially exabytes)					*
+		\*******************************************************/
+			if(scsi_xfer.sense.error_class == 7 )
+			{
+				key = scsi_xfer.sense.ext.extended.sense_key ;
+				switch(key)
+				{ 
+				case	2:	/* not ready BUT PRESENT! */
+						return(COMPLETE);
+				case	6:
+					spinwait(1000);
+					if(scsi_xfer.retries--)
+					{
+						scsi_xfer.flags &= ~ITSDONE;
+						goto retry;
+					}
+					return(COMPLETE);
+				default:
+					if(scsi_debug)
+						printf("%d:%d,key=%x.",
+						target,lu,key);
+				}
+			}
+			return(HAD_ERROR);
+		case	XS_BUSY:
+			spinwait(1000);
+			if(scsi_xfer.retries--)
+			{
+				scsi_xfer.flags &= ~ITSDONE;
+				goto retry;
+			}
+			return(COMPLETE);	/* it's busy so it's there */
+		case	XS_TIMEOUT:
+		default:
+			return(HAD_ERROR);
+		}
+	}
+	return(COMPLETE);
+}
+/***********************************************\
+* Do a scsi operation asking a device what it is*
+* Use the scsi_cmd routine in the switch table.	*
+\***********************************************/
+scsi_inquire(unit,target,lu,scsi_switch,inqbuf, flags)
+struct	scsi_switch *scsi_switch;
+u_char	*inqbuf;
+{
+	struct	scsi_inquiry scsi_cmd;
+	struct	scsi_xfer scsi_xfer;
+	volatile int rval;
+
+	bzero(&scsi_cmd, sizeof(scsi_cmd));
+	bzero(&scsi_xfer, sizeof(scsi_xfer));
+	scsi_cmd.op_code = INQUIRY;
+	scsi_cmd.length = sizeof(struct scsi_inquiry_data);
+
+	scsi_xfer.flags=flags | SCSI_DATA_IN | INUSE;
+	scsi_xfer.adapter=unit;
+	scsi_xfer.targ=target;
+	scsi_xfer.lu=lu;
+	scsi_xfer.retries=8;
+	scsi_xfer.timeout=10000;
+	scsi_xfer.cmd=(struct scsi_generic *)&scsi_cmd;
+	scsi_xfer.cmdlen= sizeof(struct scsi_inquiry);
+	scsi_xfer.data=inqbuf;
+	scsi_xfer.datalen=sizeof(struct scsi_inquiry_data);
+	scsi_xfer.resid=sizeof(struct scsi_inquiry_data);
+	scsi_xfer.when_done=0;
+	scsi_xfer.done_arg=0;
+retry:	scsi_xfer.error=0;
+	/*******************************************************\
+	* do not use interrupts					*
+	\*******************************************************/
+	if ((*(scsi_switch->scsi_cmd))(&scsi_xfer) != COMPLETE)
+	{
+		if(scsi_debug) printf("inquiry had error(0x%x) ",scsi_xfer.error);
+		switch(scsi_xfer.error)
+		{
+		case	XS_NOERROR:
+			break;
+		case	XS_SENSE:
+		/*******************************************************\
+		* Any sense value is illegal except UNIT ATTENTION	*
+		* In which case we need to check again to get the	*
+		* correct response.					*
+		*( especially exabytes)					*
+		\*******************************************************/
+			if((scsi_xfer.sense.error_class == 7 )
+			 && (scsi_xfer.sense.ext.extended.sense_key == 6))
+			{ /* it's changed so it's there */
+				spinwait(1000);
+				{
+					if(scsi_xfer.retries--)
+					{
+						scsi_xfer.flags &= ~ITSDONE;
+						goto retry;
+					}
+				}
+				return( COMPLETE);
+			}
+			return(HAD_ERROR);
+		case	XS_BUSY:
+			spinwait(1000);
+			if(scsi_xfer.retries--)
+			{
+				scsi_xfer.flags &= ~ITSDONE;
+				goto retry;
+			}
+		case	XS_TIMEOUT:
+		default:
+			return(HAD_ERROR);
+		}
+	}
+	return(COMPLETE);
+}
+
+
+
+
+/***********************************************\
+* Utility routines often used in SCSI stuff	*
+\***********************************************/
+
+/***********************************************\
+* convert a physical address to 3 bytes, 	*
+* MSB at the lowest address,			*
+* LSB at the highest.				*
+\***********************************************/
+
+lto3b(val, bytes)
+u_char *bytes;
+{
+	*bytes++ = (val&0xff0000)>>16;
+	*bytes++ = (val&0xff00)>>8;
+	*bytes = val&0xff;
+}
+
+/***********************************************\
+* The reverse of lto3b				*
+\***********************************************/
+_3btol(bytes)
+u_char *bytes;
+{
+	int rc;
+	rc = (*bytes++ << 16);
+	rc += (*bytes++ << 8);
+	rc += *bytes;
+	return(rc);
+}
+

@@ -1,12 +1,8 @@
-/*	$NetBSD: ibcs2_exec.c,v 1.10 1995/06/24 20:18:55 christos Exp $	*/
-
 /*
- * Copyright (c) 1994, 1995 Scott Bartram
+ * Copyright (c) 1994 Scott Bartram
  * Copyright (c) 1994 Adam Glass
  * Copyright (c) 1993, 1994 Christopher G. Demetriou
  * All rights reserved.
- *
- * originally from kern/exec_ecoff.c
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,6 +28,8 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * originally from kern/exec_ecoff.c
  */
 
 #include <sys/param.h>
@@ -39,14 +37,18 @@
 #include <sys/proc.h>
 #include <sys/malloc.h>
 #include <sys/vnode.h>
+#include <sys/exec.h>
 #include <sys/resourcevar.h>
 #include <sys/namei.h>
 #include <vm/vm.h>
 
-#include <compat/ibcs2/ibcs2_types.h>
 #include <compat/ibcs2/ibcs2_exec.h>
-#include <compat/ibcs2/ibcs2_util.h>
-#include <compat/ibcs2/ibcs2_syscall.h>
+
+#ifdef DEBUG_IBCS2
+#define DPRINTF(s)	printf s
+#else
+#define DPRINTF(s)
+#endif
 
 int exec_ibcs2_coff_prep_omagic __P((struct proc *, struct exec_package *,
 				     struct coff_filehdr *, 
@@ -58,38 +60,6 @@ int exec_ibcs2_coff_prep_zmagic __P((struct proc *, struct exec_package *,
 				     struct coff_filehdr *, 
 				     struct coff_aouthdr *));
 int exec_ibcs2_coff_setup_stack __P((struct proc *, struct exec_package *));
-void cpu_exec_ibcs2_coff_setup __P((int, struct proc *, struct exec_package *,
-				    void *));
-
-int exec_ibcs2_xout_prep_nmagic __P((struct proc *, struct exec_package *,
-				     struct xexec *, struct xext *));
-int exec_ibcs2_xout_prep_zmagic __P((struct proc *, struct exec_package *,
-				     struct xexec *, struct xext *));
-int exec_ibcs2_xout_setup_stack __P((struct proc *, struct exec_package *));
-int coff_load_shlib __P((struct proc *, char *, struct exec_package *));
-
-extern int bsd2ibcs_errno[];
-extern struct sysent ibcs2_sysent[];
-extern char *ibcs2_syscallnames[];
-extern void ibcs2_sendsig __P((sig_t, int, int, u_long));
-extern char sigcode[], esigcode[];
-
-const char ibcs2_emul_path[] = "/emul/ibcs2";
-
-struct emul emul_ibcs2 = {
-	"ibcs2",
-	bsd2ibcs_errno,
-	ibcs2_sendsig,
-	0,
-	IBCS2_SYS_MAXSYSCALL,
-	ibcs2_sysent,
-	ibcs2_syscallnames,
-	0,
-	copyargs,
-	setregs,
-	sigcode,
-	esigcode,
-};
 
 /*
  * exec_ibcs2_coff_makecmds(): Check if it's an coff-format executable.
@@ -136,7 +106,7 @@ exec_ibcs2_coff_makecmds(p, epp)
 	}
 
 	if (error == 0)
-		epp->ep_emul = &emul_ibcs2;
+		error = cpu_exec_ibcs2_coff_hook(p, epp, ap);
 
 	if (error)
 		kill_vmcmds(&epp->ep_vmcmds);
@@ -436,7 +406,7 @@ n	 */
 			/* DPRINTF(("path_index: %d entry_len: %d name: %s\n",
 				 path_index, entry_len, slhdr->sl_name)); */
 
-			error = coff_load_shlib(p, slhdr->sl_name, epp);
+			error = coff_load_shlib(p, slhdr->sl_name);
 			if (error)
 				return ENOEXEC;
 			bufp += entry_len;
@@ -468,18 +438,16 @@ coff_load_shlib(p, path, epp)
 	struct nameidata nd;
 	struct coff_filehdr fh, *fhp = &fh;
 	struct coff_scnhdr sh, *shp = &sh;
-	caddr_t sg = stackgap_init(p->p_emul);
 
 	/*
 	 * 1. open shlib file
 	 * 2. read filehdr
 	 * 3. map text, data, and bss out of it using VM_*
 	 */
-	IBCS2_CHECK_ALT_EXIST(p, &sg, path);
 	NDINIT(&nd, LOOKUP, FOLLOW, UIO_SYSSPACE, path, p);
 	/* first get the vnode */
 	if (error = namei(&nd)) {
-		DPRINTF(("coff_load_shlib: can't find library %s\n", path));
+		DPRINTF(("load_coff_shlib: can't find library %s\n", path));
 		return error;
 	}
 
@@ -493,7 +461,7 @@ coff_load_shlib(p, path, epp)
 	}
 	siz -= resid;
 	if (siz != sizeof(struct coff_filehdr)) {
-	    DPRINTF(("coff_load_shlib: incomplete read: ask=%d, rem=%d got %d\n",
+	    DPRINTF(("load_coff_shlib: incomplete read: ask=%d, rem=%d got %d\n",
 		     sizeof(struct coff_filehdr), resid, siz));
 	    vrele(nd.ni_vp);
 	    return ENOEXEC;
@@ -553,176 +521,33 @@ coff_load_shlib(p, path, epp)
 	return 0;
 }
 
-int
-exec_ibcs2_xout_makecmds(p, epp)
-	struct proc *p;
-	struct exec_package *epp;
+void
+cpu_exec_ibcs2_coff_setup(p, epp)
+        struct proc *p;
+        struct exec_package *epp;
 {
-	u_long midmag, magic;
-	u_short mid;
-	int error;
-	struct xexec *xp = epp->ep_hdr;
-	struct xext *xep;
+#if 0
+        struct coff_aouthdr *ap;
 
-	if (epp->ep_hdrvalid < XOUT_HDR_SIZE)
-		return ENOEXEC;
-
-	if ((xp->x_magic != XOUT_MAGIC) || (xp->x_cpu != XC_386))
-		return ENOEXEC;
-	if ((xp->x_renv & (XE_ABS | XE_VMOD)) || !(xp->x_renv & XE_EXEC))
-		return ENOEXEC;
-
-	xep = epp->ep_hdr + sizeof(struct xexec);
-#ifdef notyet
-	if (xp->x_renv & XE_PURE)
-		error = exec_ibcs2_xout_prep_zmagic(p, epp, xp, xep);
-	else
+        ap = epp->ep_hdr + sizeof(struct coff_filehdr);
+        p->p_md.md_regs[GP] = ap->a_gp_value;
 #endif
-		error = exec_ibcs2_xout_prep_nmagic(p, epp, xp, xep);
-
-	if (error == 0)
-		epp->ep_emul = &emul_ibcs2;
-
-	if (error)
-		kill_vmcmds(&epp->ep_vmcmds);
-
-	return error;
 }
 
 /*
- * exec_ibcs2_xout_prep_nmagic(): Prepare a pure x.out binary's exec package
+ * cpu_exec_ibcs2_coff_hook():
+ *      cpu-dependent COFF format hook for execve().
+ * 
+ * Do any machine-dependent diddling of the exec package when doing COFF.
  *
  */
-
 int
-exec_ibcs2_xout_prep_nmagic(p, epp, xp, xep)
-	struct proc *p;
-	struct exec_package *epp;
-	struct xexec *xp;
-	struct xext *xep;
+cpu_exec_ibcs2_coff_hook(p, epp, ap)
+        struct proc *p;
+        struct exec_package *epp;
+        struct coff_aouthdr *ap;
 {
-	int error, resid, nseg, i;
-	long baddr, bsize;
-	struct xseg *xs;
-
-	/* read in segment table */
-	xs = (struct xseg *)malloc(xep->xe_segsize, M_TEMP, M_WAITOK);
-	error = vn_rdwr(UIO_READ, epp->ep_vp, (caddr_t)xs,
-			xep->xe_segsize, xep->xe_segpos,
-			UIO_SYSSPACE, IO_NODELOCKED, p->p_ucred,
-			&resid, p);
-	if (error) {
-		DPRINTF(("segment table read error %d\n", error));
-		free(xs, M_TEMP);
-		return ENOEXEC;
-	}
-
-	for (nseg = xep->xe_segsize / sizeof(*xs), i = 0; i < nseg; i++) {
-		switch (xs[i].xs_type) {
-		case XS_TTEXT:	/* text segment */
-
-			DPRINTF(("text addr %x psize %d vsize %d off %d\n",
-				 xs[i].xs_rbase, xs[i].xs_psize,
-				 xs[i].xs_vsize, xs[i].xs_filpos));
-
-			epp->ep_taddr = xs[i].xs_rbase;	/* XXX - align ??? */
-			epp->ep_tsize = xs[i].xs_vsize;
-
-			DPRINTF(("VMCMD: addr %x size %d offset %d\n",
-				 epp->ep_taddr, epp->ep_tsize,
-				 xs[i].xs_filpos));
-			NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_readvn,
-				  epp->ep_tsize, epp->ep_taddr,
-				  epp->ep_vp, xs[i].xs_filpos,
-				  VM_PROT_READ|VM_PROT_EXECUTE);
-			break;
-
-		case XS_TDATA:	/* data segment */
-
-			DPRINTF(("data addr %x psize %d vsize %d off %d\n",
-				 xs[i].xs_rbase, xs[i].xs_psize,
-				 xs[i].xs_vsize, xs[i].xs_filpos));
-
-			epp->ep_daddr = xs[i].xs_rbase;	/* XXX - align ??? */
-			epp->ep_dsize = xs[i].xs_vsize;
-
-			DPRINTF(("VMCMD: addr %x size %d offset %d\n",
-				 epp->ep_daddr, xs[i].xs_psize,
-				 xs[i].xs_filpos));
-			NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_readvn,
-				  xs[i].xs_psize, epp->ep_daddr,
-				  epp->ep_vp, xs[i].xs_filpos,
-				  VM_PROT_READ|VM_PROT_WRITE|VM_PROT_EXECUTE);
-
-			/* set up command for bss segment */
-			baddr = round_page(epp->ep_daddr + xs[i].xs_psize);
-			bsize = epp->ep_daddr + epp->ep_dsize - baddr;
-			if (bsize > 0) {
-				DPRINTF(("VMCMD: bss addr %x size %d off %d\n",
-					 baddr, bsize, 0));
-				NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_zero,
-					  bsize, baddr, NULLVP, 0,
-					  VM_PROT_READ|VM_PROT_WRITE|
-					  VM_PROT_EXECUTE);
-			}
-			break;
-
-		default:
-			break;
-		}
-	}
-
-	/* set up entry point */
-	epp->ep_entry = xp->x_entry;
-
-	DPRINTF(("text addr: %x size: %d data addr: %x size: %d entry: %x\n",
-		 epp->ep_taddr, epp->ep_tsize,
-		 epp->ep_daddr, epp->ep_dsize,
-		 epp->ep_entry));
-	
-	free(xs, M_TEMP);
-	return exec_ibcs2_xout_setup_stack(p, epp);
-}
-
-/*
- * exec_ibcs2_xout_setup_stack(): Set up the stack segment for a x.out
- * executable.
- *
- * Note that the ep_ssize parameter must be set to be the current stack
- * limit; this is adjusted in the body of execve() to yield the
- * appropriate stack segment usage once the argument length is
- * calculated.
- *
- * This function returns an int for uniformity with other (future) formats'
- * stack setup functions.  They might have errors to return.
- */
-
-int
-exec_ibcs2_xout_setup_stack(p, epp)
-	struct proc *p;
-	struct exec_package *epp;
-{
-	epp->ep_maxsaddr = USRSTACK - MAXSSIZ;
-	epp->ep_minsaddr = USRSTACK;
-	epp->ep_ssize = p->p_rlimit[RLIMIT_STACK].rlim_cur;
-
-	/*
-	 * set up commands for stack.  note that this takes *two*, one to
-	 * map the part of the stack which we can access, and one to map
-	 * the part which we can't.
-	 *
-	 * arguably, it could be made into one, but that would require the
-	 * addition of another mapping proc, which is unnecessary
-	 *
-	 * note that in memory, things assumed to be: 0 ....... ep_maxsaddr
-	 * <stack> ep_minsaddr
-	 */
-	NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_zero,
-		  ((epp->ep_minsaddr - epp->ep_ssize) - epp->ep_maxsaddr),
-		  epp->ep_maxsaddr, NULLVP, 0, VM_PROT_NONE);
-	NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_zero, epp->ep_ssize,
-		  (epp->ep_minsaddr - epp->ep_ssize), NULLVP, 0,
-		  VM_PROT_READ|VM_PROT_WRITE|VM_PROT_EXECUTE);
-
-	return 0;
+        epp->ep_emul = EMUL_IBCS2_COFF;
+        epp->ep_setup = cpu_exec_ibcs2_coff_setup;
+        return 0;
 }

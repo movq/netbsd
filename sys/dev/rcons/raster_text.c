@@ -1,4 +1,4 @@
-/*	$NetBSD: raster_text.c,v 1.3 1995/11/24 23:50:56 cgd Exp $ */
+/*	$NetBSD: raster_text.c,v 1.1 1995/09/17 19:56:35 pk Exp $ */
 
 /*-
  * Copyright (c) 1991, 1993
@@ -45,7 +45,6 @@
 
 #ifdef _KERNEL
 #include <sys/param.h>
-#include <sys/systm.h>
 #include <dev/rcons/raster.h>
 #ifdef COLORFONT_CACHE
 #include <sys/malloc.h>
@@ -53,13 +52,13 @@
 #endif
 #else
 #include <sys/types.h>
-#include <string.h>
-#include "raster.h"
+#include <dev/rcons/raster.h>
 #ifdef COLORFONT_CACHE
 #include <malloc.h>
 #define NEW(size) malloc(size)
 #endif
 #endif
+
 
 /* Draws text.  Returns 0 on success, -1 on failure. */
 int
@@ -68,7 +67,7 @@ raster_text( r, x, y, rop, rf, text )
     int x, y;
     int rop;
     struct raster_font* rf;
-    unsigned char* text;
+    char* text;
     {
     return raster_textn( r, x, y, rop, rf, text, strlen( text ) );
     }
@@ -80,7 +79,7 @@ raster_textn( r, x, y, rop, rf, text, n )
     int x, y;
     int rop;
     struct raster_font* rf;
-    unsigned char* text;
+    char* text;
     int n;
     {
     int clip;
@@ -88,7 +87,7 @@ raster_textn( r, x, y, rop, rf, text, n )
     struct raster_char* c;
     struct raster* charrast;
     int i;
-    register unsigned char ch;
+    register char ch;
     int thisx, thisy;
     int phase;
 
@@ -235,7 +234,7 @@ raster_alloc( width, height, depth )
 	return (struct raster*) 0;
     linelongs = ( ( width * depth + 31 ) >> 5 );
     r = (struct raster*)
-	NEW( sizeof(struct raster) + height * linelongs * sizeof(u_int32_t));
+	NEW( sizeof(struct raster) + height * linelongs * sizeof(u_long));
     if ( r == (struct raster*) 0 )
 	return (struct raster*) 0;
 
@@ -243,7 +242,7 @@ raster_alloc( width, height, depth )
     r->height = height;
     r->depth = depth;
     r->linelongs = linelongs;
-    r->pixels = (u_int32_t*) (r + 1);
+    r->pixels = (u_long*) (r + 1);
     r->data = (caddr_t) 0;
     return r;
     }

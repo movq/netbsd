@@ -1,4 +1,4 @@
-/*	$NetBSD: exec_elf.c,v 1.6 1996/02/09 18:59:18 christos Exp $	*/
+/*	$NetBSD: exec_elf.c,v 1.1 1995/06/22 21:29:53 fvdl Exp $	*/
 
 /*
  * Copyright (c) 1994 Christos Zoulas
@@ -55,8 +55,7 @@
 #include <compat/svr4/svr4_exec.h>
 #endif
 
-int (*elf_probe_funcs[]) __P((struct proc *, struct exec_package *,
-			      char *, u_long *)) = {
+int (*elf_probe_funcs[])() = {
 #ifdef COMPAT_SVR4
 	svr4_elf_probe,
 #endif
@@ -65,16 +64,15 @@ int (*elf_probe_funcs[]) __P((struct proc *, struct exec_package *,
 #endif
 };
 
-int elf_check_header __P((Elf32_Ehdr *, int));
-int elf_load_file __P((struct proc *, char *, struct exec_vmcmd_set *,
-		       u_long *, struct elf_args *, u_long *));
-
+static int elf_set_segment __P((struct exec_package *, u_long, u_long,
+	int));
 static int elf_read_from __P((struct proc *, struct vnode *, u_long,
 	caddr_t, int));
 static void elf_load_psection __P((struct exec_vmcmd_set *,
 	struct vnode *, Elf32_Phdr *, u_long *, u_long *, int *));
 
 #define ELF_ALIGN(a, b) ((a) & ~((b) - 1))
+#define ELF_AUX_ARGSIZ (sizeof(AuxInfo) * 8 / sizeof(char *))
 
 /*
  * Copy arguments onto the stack in the normal way, but add some
@@ -87,20 +85,48 @@ elf_copyargs(pack, arginfo, stack, argp)
 	void *stack;
 	void *argp;
 {
+	char **cpp = stack;
+	char *dp, *sp;
 	size_t len;
-	AuxInfo ai[ELF_AUX_ENTRIES], *a;
+	void *nullp = NULL;
+	int argc = arginfo->ps_nargvstr;
+	int envc = arginfo->ps_nenvstr;
+	AuxInfo *a;
 	struct elf_args *ap;
 
-	stack = copyargs(pack, arginfo, stack, argp);
-	if (!stack)
+	if (copyout(&argc, cpp++, sizeof(argc)))
+		return NULL;
+
+	dp = (char *) (cpp + argc + envc + 2 + pack->ep_emul->e_arglen);
+	sp = argp;
+
+	/* XXX don't copy them out, remap them! */
+	arginfo->ps_argvstr = cpp; /* remember location of argv for later */
+
+	for (; --argc >= 0; sp += len, dp += len)
+		if (copyout(&dp, cpp++, sizeof(dp)) ||
+		    copyoutstr(sp, dp, ARG_MAX, &len))
+			return NULL;
+
+	if (copyout(&nullp, cpp++, sizeof(nullp)))
+		return NULL;
+
+	arginfo->ps_envstr = cpp; /* remember location of envp for later */
+
+	for (; --envc >= 0; sp += len, dp += len)
+		if (copyout(&dp, cpp++, sizeof(dp)) ||
+		    copyoutstr(sp, dp, ARG_MAX, &len))
+			return NULL;
+
+	if (copyout(&nullp, cpp++, sizeof(nullp)))
 		return NULL;
 
 	/*
 	 * Push extra arguments on the stack needed by dynamically
 	 * linked binaries
 	 */
+	a = (AuxInfo *) cpp;
 	if ((ap = (struct elf_args *) pack->ep_emul_arg)) {
-		a = ai;
 
 		a->au_id = AUX_phdr;
 		a->au_v = ap->arg_phaddr;
@@ -135,12 +161,8 @@ elf_copyargs(pack, arginfo, stack, argp)
 		a++;
 
 		free((char *) ap, M_TEMP);
-		len = ELF_AUX_ENTRIES * sizeof (AuxInfo);
-		if (copyout(ai, stack, len))
-			return NULL;
-		stack += len;
 	}
-	return stack;
+	return a;
 }
 
 /*
@@ -157,8 +179,11 @@ elf_check_header(eh, type)
 	Elf32_Ehdr *eh;
 	int type;
 {
-
-	if (bcmp(eh->e_ident, Elf32_e_ident, Elf32_e_siz) != 0)
+#ifdef sparc
+  /* #$%@#$%@#$%! */
+# define memcmp bcmp
+#endif
+	if (memcmp(eh->e_ident, Elf32_e_ident, Elf32_e_siz) != 0)
 		return ENOEXEC;
 
 	switch (eh->e_machine) {
@@ -239,6 +264,48 @@ elf_load_psection(vcset, vp, ph, addr, size, prot)
 }
 
 /*
+ * elf_set_segment():
+ *
+ * Decide if the segment is text or data, depending on the protection
+ * and set it appropriately
+ */
+static int
+elf_set_segment(epp, vaddr, size, prot)
+	struct exec_package *epp;
+	u_long vaddr;
+	u_long size;
+	int prot;
+{
+	/*
+         * Kludge: Unfortunately the current implementation of
+         * exec package assumes a single text and data segment.
+         * In Elf we can have more, but here we limit ourselves
+         * to two and hope :-(
+         * We also assume that the text is r-x, and data is rwx or rw-.
+         */
+	switch (prot) {
+	case (VM_PROT_READ | VM_PROT_EXECUTE):
+		if (epp->ep_tsize != ELF32_NO_ADDR)
+			return ENOEXEC;
+		epp->ep_taddr = vaddr;
+		epp->ep_tsize = size;
+		break;
+
+	case (VM_PROT_READ | VM_PROT_WRITE):
+	case (VM_PROT_READ | VM_PROT_WRITE | VM_PROT_EXECUTE):
+		if (epp->ep_dsize != ELF32_NO_ADDR)
+			return ENOEXEC;
+		epp->ep_daddr = vaddr;
+		epp->ep_dsize = size;
+		break;
+
+	default:
+		return ENOEXEC;
+	}
+	return 0;
+}
+
+/*
  * elf_read_from():
  *
  *	Read from vnode into buffer at offset.
@@ -262,7 +329,7 @@ elf_read_from(p, vp, off, buf, size)
          * See if we got all of it
          */
 	if (resid != 0)
-		return ENOEXEC;
+		return error;
 	return 0;
 }
 
@@ -325,9 +392,8 @@ elf_load_file(p, path, vcset, entry, ap, last)
 		case Elf32_pt_load:
 			elf_load_psection(vcset, nd.ni_vp, &ph[i], &addr,
 						&size, &prot);
-			/* If entry is within this section it must be text */
-			if (eh.e_entry >= ph[i].p_vaddr &&
-			    eh.e_entry < (ph[i].p_vaddr + size)) {
+			/* Assume that the text segment is r-x only */
+			if ((prot & PROT_WRITE) == 0) {
 				*entry = addr + eh.e_entry;
 				ap->arg_interp = addr;
 			}
@@ -371,8 +437,7 @@ exec_elf_makecmds(p, epp)
 {
 	Elf32_Ehdr *eh = epp->ep_hdr;
 	Elf32_Phdr *ph, *pp;
-	Elf32_Addr phdr = 0;
-	int error, i, n, nload;
+	int error, i, n;
 	char interp[MAXPATHLEN];
 	u_long pos = 0, phsize;
 
@@ -444,7 +509,7 @@ exec_elf_makecmds(p, epp)
 	/*
          * Load all the necessary sections
          */
-	for (i = nload = 0; i < eh->e_phnum; i++) {
+	for (i = 0; i < eh->e_phnum; i++) {
 		u_long  addr = ELF32_NO_ADDR, size = 0;
 		int prot = 0;
 
@@ -452,25 +517,11 @@ exec_elf_makecmds(p, epp)
 
 		switch (ph[i].p_type) {
 		case Elf32_pt_load:
-			/*
-			 * XXX
-			 * Can handle only 2 sections: text and data
-			 */
-			if (nload++ == 2)
-				goto bad;
 			elf_load_psection(&epp->ep_vmcmds, epp->ep_vp,
 				&ph[i], &addr, &size, &prot);
-			/*
-			 * Decide whether it's text or data by looking
-			 * at the entry point.
-			 */
-			if (eh->e_entry >= addr && eh->e_entry < (addr + size)){
-				epp->ep_taddr = addr;
-				epp->ep_tsize = size;
-			} else {
-				epp->ep_daddr = addr;
-				epp->ep_dsize = size;
-			}
+			if ((error = elf_set_segment(epp, addr, size,
+						      prot)) != 0)
+				goto bad;
 			break;
 
 		case Elf32_pt_shlib:
@@ -480,13 +531,9 @@ exec_elf_makecmds(p, epp)
 		case Elf32_pt_interp:
 			/* Already did this one */
 		case Elf32_pt_dynamic:
+		case Elf32_pt_phdr:
 		case Elf32_pt_note:
 			break;
-
-		case Elf32_pt_phdr:
-			/* Note address of program headers (in text segment) */
-			phdr = pp->p_vaddr;
-		break;
 
 		default:
 			/*
@@ -496,14 +543,6 @@ exec_elf_makecmds(p, epp)
 			break;
 		}
 	}
-
-	/*
-	 * If no position to load the interpreter was set by a probe
-	 * function, pick the same address that a non-fixed mmap(0, ..)
-	 * would (i.e. something safely out of the way).
-	 */
-	if (pos == ELF32_NO_ADDR)
-		pos = round_page(epp->ep_daddr + MAXDSIZ);
 
 	/*
          * Check if we found a dynamically linked binary and arrange to load
@@ -519,8 +558,13 @@ exec_elf_makecmds(p, epp)
 			free((char *) ap, M_TEMP);
 			goto bad;
 		}
+		/* Arrange to load the program headers. */
+		pos = ELF_ALIGN(pos + NBPG, NBPG);
+		ap->arg_phaddr = pos;
+		NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_readvn, phsize,
+			  pos, epp->ep_vp, eh->e_phoff,
+			  VM_PROT_READ | VM_PROT_WRITE | VM_PROT_EXECUTE);
 		pos += phsize;
-		ap->arg_phaddr = phdr;
 
 		ap->arg_phentsize = eh->e_phentsize;
 		ap->arg_phnum = eh->e_phnum;

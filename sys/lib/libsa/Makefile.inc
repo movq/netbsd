@@ -1,37 +1,19 @@
-#	$NetBSD: Makefile.inc,v 1.4 1995/10/01 06:00:38 phil Exp $
+#	$Id: Makefile.inc,v 1.1 1994/01/26 02:03:34 brezak Exp $
 #
 #	NOTE: $S must correspond to the top of the 'sys' tree
-SADIR=	$S/lib/libsa
 
-SADST=	lib/sa
-SAREL?=	../../
-SALIB?=	${SADST}/libsa.a
+SA_DIR=	$S/lib/libsa
 
-${SALIB}:		.NOTMAIN __always_make_salib
-	@echo making sure the stand-alone library is up to date...
-.if !defined(NO_NET)
-	@(cd ${SADST} && ${MAKE} -f ${SAREL}${SADIR}/Makefile \
-	  KERNCC="${CC}" \
-	  KERNCFLAGS="${CFLAGS}" \
-	  SAREL="${SAREL}" \
-	  SADIR="${SADIR}" libsa.a)
+.if exists($(SA_DIR)/obj.${MACHINE})
+SA_LIBDIR=	$(SA_DIR)/obj.${MACHINE}
 .else
-	@(cd ${SADST} && ${MAKE} -f ${SAREL}${SADIR}/Makefile \
-	  KERNCC="${CC}" \
-	  KERNCFLAGS="${CFLAGS}" \
-	  SAREL="${SAREL}" \
-	  SADIR="${SADIR}" \
-	  NO_NET="" libsa.a)
+SA_LIBDIR=	$(SA_DIR)
 .endif
 
-clean:: 		.NOTMAIN __always_make_salib
-	@echo cleaning the stand-alone library objects
-	@(cd ${SADST} && ${MAKE} -f ${SAREL}${SADIR}/Makefile \
-	  KERNCC="${CC}" \
-	  KERNCFLAGS="${CFLAGS}" \
-	  SAREL="${SAREL}" \
-	  SADIR="${SADIR}" clean)
+SA_LIB=	$(SA_LIBDIR)/libsa.a
 
-__always_make_salib:	.NOTMAIN
-	@([ -d ${SADST} ] || mkdir -p ${SADST})
+$(SA_LIB):	.NOTMAIN __always_make_sa_lib
+	@echo making sure the stand-alone library is up to date...
+	@(cd $(SA_DIR) ; make)
 
+__always_make_sa_lib: .NOTMAIN

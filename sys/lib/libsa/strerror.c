@@ -1,5 +1,3 @@
-/*	$NetBSD: strerror.c,v 1.9 1996/01/13 22:25:43 leo Exp $	*/
-
 /*-
  * Copyright (c) 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -31,17 +29,20 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
+ *
+ *	$Id: strerror.c,v 1.1 1994/01/26 02:04:00 brezak Exp $
  */
 
-#include <sys/types.h>
+#include <sys/errno.h>
 #include "saerrno.h"
-#include "stand.h"
 
 char *
 strerror(err)
 	int err;
 {
-static	char ebuf[64];
+	char ebuf[1024] = "Unknown error: code ";
+	char *p;
+	int length;
 
 	switch (err) {
 	case EADAPT:
@@ -57,22 +58,21 @@ static	char ebuf[64];
 	case EUNLAB:
 		return "unlabeled";
 	case ENXIO:
-		return "Device not configured";
+		return "bad device specification";
 	case EPERM:
-		return "Operation not permitted";
+		return "Permission Denied";
 	case ENOENT:
 		return "No such file or directory";
 	case ESTALE:
 		return "Stale NFS file handle";
-	case EFTYPE:
-		return "Inappropriate file type or format";
-	case ENOEXEC:
-		return "Exec format error";
-	case EIO:
-		return "Input/output error";
 
 	default:
-		sprintf(ebuf, "Unknown error: code %d", err);
+		length = strlen(ebuf);
+		p = ebuf+length;
+		do {
+			*p++ = "0123456789"[err % 10];
+		} while (err /= 10);
+		*p = '\0';
 		return ebuf;
 	}
 }

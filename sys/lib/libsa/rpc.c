@@ -1,5 +1,3 @@
-/*	$NetBSD: rpc.c,v 1.12 1996/02/26 23:05:26 gwr Exp $	*/
-
 /*
  * Copyright (c) 1992 Regents of the University of California.
  * All rights reserved.
@@ -36,15 +34,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * @(#) Header: rpc.c,v 1.12 93/09/28 08:31:56 leres Exp  (LBL)
- */
-
-/*
- * RPC functions used by NFS and bootparams.
- * Note that bootparams requires the ability to find out the
- * address of the server from which its response has come.
- * This is supported by keeping the IP/UDP headers in the
- * buffer space provided by the caller.  (See rpc_fromaddr)
+ * from @(#) Header: rpc.c,v 1.12 93/09/28 08:31:56 leres Exp  (LBL)
+ *   $Id: rpc.c,v 1.1 1994/05/08 16:11:35 brezak Exp $
  */
 
 #include <sys/param.h>
@@ -53,388 +44,208 @@
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
 
+#include <nfs/rpcv2.h>
+#include <nfs/nfsv2.h>
+#undef NFSX_FATTR
 #include <string.h>
-
-#include "rpcv2.h"
 
 #include "stand.h"
 #include "net.h"
 #include "netif.h"
 #include "rpc.h"
 
-struct auth_info {
-	int32_t 	authtype;	/* auth type */
-	u_int32_t	authlen;	/* auth length */
+/* XXX Data part of nfs rpc reply (also the largest thing we receive) */
+struct nfs_reply_data {
+	u_long	errno;
+#ifndef NFSX_FATTR
+	struct	nfsv2_fattr fa;
+#else
+	u_char	fa[NFSX_FATTR(0)];
+#endif
+	u_long	count;
+	u_char	data[1200];
 };
+#define NFSREAD_SIZE sizeof(((struct nfs_reply_data *)0)->data)
 
-struct auth_unix {
-	int32_t   ua_time;
-	int32_t   ua_hostname;	/* null */
-	int32_t   ua_uid;
-	int32_t   ua_gid;
-	int32_t   ua_gidlist;	/* null */
-};
+/* Cache stuff */
+#define PMAP_NUM 8			/* need at most 5 pmap entries */
 
-struct rpc_call {
-	u_int32_t	rp_xid;		/* request transaction id */
-	int32_t 	rp_direction;	/* call direction (0) */
-	u_int32_t	rp_rpcvers;	/* rpc version (2) */
-	u_int32_t	rp_prog;	/* program */
-	u_int32_t	rp_vers;	/* version */
-	u_int32_t	rp_proc;	/* procedure */
+static struct pmap_list {
+	u_long	addr;			/* address of server */
+	u_long	prog;
+	u_long	vers;
+	u_short	port;			/* cached port for service */
+} pmap_list[PMAP_NUM] = {
+	{ 0, PMAPPROG, PMAPVERS, PMAPPORT }
 };
-
-struct rpc_reply {
-	u_int32_t	rp_xid;		/* request transaction id */
-	int32_t 	rp_direction;	/* call direction (1) */
-	int32_t 	rp_astatus;	/* accept status (0: accepted) */
-	union {
-		u_int32_t	rpu_errno;
-		struct {
-			struct auth_info rok_auth;
-			u_int32_t	rok_status;
-		} rpu_rok;
-	} rp_u;
-};
+static	int pmap_num = 1;
 
 /* Local forwards */
-static	ssize_t recvrpc __P((struct iodesc *, void *, size_t, time_t));
-static	int rpc_getport __P((struct iodesc *, n_long, n_long));
+static	int recvrpc __P((struct iodesc *, void *, int));
 
-int rpc_xid;
-int rpc_port = 0x400;	/* predecrement */
-
-/*
- * Make a rpc call; return length of answer
- * Note: Caller must leave room for headers.
- */
-ssize_t
-rpc_call(d, prog, vers, proc, sdata, slen, rdata, rlen)
+/* Make a rpc call; return length of answer */
+int
+callrpc(d, prog, vers, proc, sdata, slen, rdata, rlen)
 	register struct iodesc *d;
-	register n_long prog, vers, proc;
+	register u_long prog, vers, proc;
 	register void *sdata;
-	register size_t slen;
+	register int slen;
 	register void *rdata;
-	register size_t rlen;
+	register int rlen;
 {
-	register ssize_t cc;
-	struct auth_info *auth;
-	struct rpc_call *call;
-	struct rpc_reply *reply;
-	char *send_head, *send_tail;
-	char *recv_head, *recv_tail;
-	n_long x;
-	int port;	/* host order */
+	register int cc;
+	register struct rpc_call *rpc;
+	struct {
+		u_char	header[HEADER_SIZE];
+		struct	rpc_call wrpc;
+		u_char	data[sizeof(struct nfs_reply_data)]; /* XXX */
+	} wbuf;
+	struct {
+		u_char header[HEADER_SIZE];
+		struct	rpc_reply rrpc;
+		union {
+			u_long	errno;
+			u_char	data[sizeof(struct nfs_reply_data)];
+		} ru;
+	} rbuf;
 
 #ifdef RPC_DEBUG
 	if (debug)
-		printf("rpc_call: prog=0x%x vers=%d proc=%d\n",
-			prog, vers, proc);
+	    printf("callrpc: called\n");
 #endif
+	if (rlen > sizeof(rbuf.ru.data))
+		panic("callrpc: huge read (%d > %d)",
+		    rlen, sizeof(rbuf.ru.data));
 
-	port = rpc_getport(d, prog, vers);
-	if (port == -1)
-		return (-1);
+	d->destport = getport(d, prog, vers);
 
-	d->destport = htons(port);
+	rpc = &wbuf.wrpc;
 
-	/*
-	 * Prepend authorization stuff and headers.
-	 * Note, must prepend things in reverse order.
-	 */
-	send_head = sdata;
-	send_tail = (char *)sdata + slen;
+	bzero(rpc, sizeof(*rpc));
 
-	/* Auth verifier is always auth_null */
-	send_head -= sizeof(*auth);
-	auth = (struct auth_info *)send_head;
-	auth->authtype = htonl(RPCAUTH_NULL);
-	auth->authlen = 0;
+	rpc->rp_xid = d->xid;
+	rpc->rp_rpcvers = htonl(RPC_MSG_VERSION);
+	rpc->rp_prog = htonl(prog);
+	rpc->rp_vers = htonl(vers);
+	rpc->rp_proc = htonl(proc);
+	bcopy(sdata, wbuf.data, slen);
 
-#if 1
-	/* Auth credentials: always auth unix (as root) */
-	send_head -= sizeof(struct auth_unix);
-	bzero(send_head, sizeof(struct auth_unix));
-	send_head -= sizeof(*auth);
-	auth = (struct auth_info *)send_head;
-	auth->authtype = htonl(RPCAUTH_UNIX);
-	auth->authlen = htonl(sizeof(struct auth_unix));
-#else
-	/* Auth credentials: always auth_null (XXX OK?) */
-	send_head -= sizeof(*auth);
-	auth = send_head;
-	auth->authtype = htonl(RPCAUTH_NULL);
-	auth->authlen = 0;
-#endif
+	cc = sendrecv(d, sendudp, rpc, sizeof(*rpc) + slen, recvrpc,
+	    ((u_char *)&rbuf.rrpc) - HEADER_SIZE, sizeof(rbuf) - HEADER_SIZE);
 
-	/* RPC call structure. */
-	send_head -= sizeof(*call);
-	call = (struct rpc_call *)send_head;
-	rpc_xid++;
-	call->rp_xid       = htonl(rpc_xid);
-	call->rp_direction = htonl(RPC_CALL);
-	call->rp_rpcvers   = htonl(RPC_VER2);
-	call->rp_prog = htonl(prog);
-	call->rp_vers = htonl(vers);
-	call->rp_proc = htonl(proc);
-
-	/* Make room for the rpc_reply header. */
-	recv_head = rdata;
-	recv_tail = (char *)rdata + rlen;
-	recv_head -= sizeof(*reply);
-
-	cc = sendrecv(d,
-	    sendudp, send_head, ((int)send_tail - (int)send_head),
-	    recvrpc, recv_head, ((int)recv_tail - (int)recv_head));
-
-#ifdef RPC_DEBUG
-	if (debug)
-		printf("callrpc: cc=%d rlen=%d\n", cc, rlen);
-#endif
-	if (cc == -1)
-		return (-1);
-
-	if (cc <= sizeof(*reply)) {
-		errno = EBADRPC;
-		return (-1);
+	if (cc < rlen) {
+		/* Check for an error return */
+		if (cc >= sizeof(rbuf.ru.errno) && rbuf.ru.errno != 0) {
+			errno = ntohl(rbuf.ru.errno);
+			return (-1);
+		}
+		panic("callrpc: missing data (%d < %d)", cc, rlen);
 	}
-
-	recv_tail = recv_head + cc;
-
-	/*
-	 * Check the RPC reply status.
-	 * The xid, dir, astatus were already checked.
-	 */
-	reply = (struct rpc_reply *)recv_head;
-	auth = &reply->rp_u.rpu_rok.rok_auth;
-	x = ntohl(auth->authlen);
-	if (x != 0) {
-#ifdef RPC_DEBUG
-		if (debug)
-			printf("callrpc: reply auth != NULL\n");
-#endif
-		errno = EBADRPC;
-		return(-1);
-	}
-	x = ntohl(reply->rp_u.rpu_rok.rok_status);
-	if (x != 0) {
-		printf("callrpc: error = %d\n", x);
-		errno = EBADRPC;
-		return(-1);
-	}
-	recv_head += sizeof(*reply);
-
-	return (ssize_t)((int)recv_tail - (int)recv_head);
+	if (cc > sizeof(rbuf.ru.data))
+		panic("callrpc: huge return (%d > %d)",
+		    cc, sizeof(rbuf.ru.data));
+	bcopy(rbuf.ru.data, rdata, cc);
+	return (cc);
 }
 
-/*
- * Returns true if packet is the one we're waiting for.
- * This just checks the XID, direction, acceptance.
- * Remaining checks are done by callrpc
- */
-static ssize_t
-recvrpc(d, pkt, len, tleft)
+/* Returns true if packet is the one we're waiting for */
+static int
+recvrpc(d, pkt, len)
 	register struct iodesc *d;
 	register void *pkt;
-	register size_t len;
-	time_t tleft;
+	int len;
 {
-	register struct rpc_reply *reply;
-	ssize_t	n;
-	long	x;
+	register struct rpc_reply *rpc;
 
 	errno = 0;
 #ifdef RPC_DEBUG
 	if (debug)
-		printf("recvrpc: called len=%d\n", len);
+	    printf("recvrpc: called\n");
 #endif
-
-	n = readudp(d, pkt, len, tleft);
-	if (n <= (4 * 4))
-		return -1;
-
-	reply = (struct rpc_reply *)pkt;
-
-	x = ntohl(reply->rp_xid);
-	if (x != rpc_xid) {
+	rpc = (struct rpc_reply *)checkudp(d, pkt, &len);
+	if (rpc == NULL || len < sizeof(*rpc)) {
 #ifdef RPC_DEBUG
 		if (debug)
-			printf("recvrpc: rp_xid %d != xid %d\n", x, rpc_xid);
+			printf("recvrpc: bad response rpc=%x len=%d\n",
+				(u_int)rpc, len);
 #endif
-		return -1;
+		return (-1);
 	}
 
-	x = ntohl(reply->rp_direction);
-	if (x != RPC_REPLY) {
+	NTOHL(rpc->rp_direction);
+	NTOHL(rpc->rp_stat);
+
+	if (rpc->rp_xid != d->xid || rpc->rp_direction != REPLY ||
+	    rpc->rp_stat != MSG_ACCEPTED) {
 #ifdef RPC_DEBUG
-		if (debug)
-			printf("recvrpc: rp_direction %d != REPLY\n", x);
+		if (debug) {
+			if (rpc->rp_xid != d->xid)
+				printf("recvrpc: rp_xid %d != xid %d\n",
+					rpc->rp_xid, d->xid);
+			if (rpc->rp_direction != REPLY)
+				printf("recvrpc: %d != REPLY\n", rpc->rp_direction);
+			if (rpc->rp_stat != MSG_ACCEPTED)
+				printf("recvrpc: %d != MSG_ACCEPTED\n", rpc->rp_stat);
+		}
 #endif
-		return -1;
+		return (-1);
 	}
 
-	x = ntohl(reply->rp_astatus);
-	if (x != RPC_MSGACCEPTED) {
-		errno = ntohl(reply->rp_u.rpu_errno);
-		printf("recvrpc: reject, astat=%d, errno=%d\n", x, errno);
-		return -1;
-	}
+	/* Bump xid so next request will be unique */
+	++d->xid;
 
 	/* Return data count (thus indicating success) */
-	return (n);
+	return (len - sizeof(*rpc));
 }
 
-/*
- * Given a pointer to a reply just received,
- * dig out the IP address/port from the headers.
- */
-void
-rpc_fromaddr(pkt, addr, port)
-	void		*pkt;
-	struct in_addr	*addr;
-	u_short		*port;
-{
-	struct hackhdr {
-		/* Tail of IP header: just IP addresses */
-		n_long ip_src;
-		n_long ip_dst;
-		/* UDP header: */
-		u_int16_t uh_sport;		/* source port */
-		u_int16_t uh_dport;		/* destination port */
-		int16_t	  uh_ulen;		/* udp length */
-		u_int16_t uh_sum;		/* udp checksum */
-		/* RPC reply header: */
-		struct rpc_reply rpc;
-	} *hhdr;
-
-	hhdr = ((struct hackhdr *)pkt) - 1;
-	addr->s_addr = hhdr->ip_src;
-	*port = hhdr->uh_sport;
-}
-
-/*
- * RPC Portmapper cache
- */
-#define PMAP_NUM 8			/* need at most 5 pmap entries */
-
-int rpc_pmap_num;
-struct pmap_list {
-	struct in_addr	addr;	/* server, net order */
-	u_long	prog;		/* host order */
-	u_long	vers;		/* host order */
-	int 	port;		/* host order */
-} rpc_pmap_list[PMAP_NUM];
-
-/* return port number in host order, or -1 */
-int
-rpc_pmap_getcache(addr, prog, vers)
-	struct in_addr	addr;	/* server, net order */
-	u_long		prog;	/* host order */
-	u_long		vers;	/* host order */
-{
-	struct pmap_list *pl;
-
-	for (pl = rpc_pmap_list; pl < &rpc_pmap_list[rpc_pmap_num]; pl++) {
-		if (pl->addr.s_addr == addr.s_addr &&
-			pl->prog == prog && pl->vers == vers )
-		{
-			return (pl->port);
-		}
-	}
-	return (-1);
-}
-
-void
-rpc_pmap_putcache(addr, prog, vers, port)
-	struct in_addr	addr;	/* server, net order */
-	u_long		prog;	/* host order */
-	u_long		vers;	/* host order */
-	int 		port;	/* host order */
-{
-	struct pmap_list *pl;
-
-	/* Don't overflow cache... */
-	if (rpc_pmap_num >= PMAP_NUM) {
-		/* ... just re-use the last entry. */
-		rpc_pmap_num = PMAP_NUM - 1;
-#ifdef	RPC_DEBUG
-		printf("rpc_pmap_putcache: cache overflow\n");
-#endif
-	}
-
-	pl = &rpc_pmap_list[rpc_pmap_num];
-	rpc_pmap_num++;
-
-	/* Cache answer */
-	pl->addr = addr;
-	pl->prog = prog;
-	pl->vers = vers;
-	pl->port = port;
-}
-
-
-/*
- * Request a port number from the port mapper.
- * Returns the port in host order.
- */
-int
-rpc_getport(d, prog, vers)
+/* Request a port number from the port mapper */
+u_short
+getport(d, prog, vers)
 	register struct iodesc *d;
-	n_long prog;	/* host order */
-	n_long vers;	/* host order */
+	u_long prog;
+	u_long vers;
 {
-	struct args {
-		n_long	prog;		/* call program */
-		n_long	vers;		/* call version */
-		n_long	proto;		/* call protocol */
-		n_long	port;		/* call port (unused) */
-	} *args;
-	struct res {
-		n_long port;
-	} *res;
+	register int i;
+	register struct pmap_list *pl;
+	u_long port;
 	struct {
-		n_long	h[RPC_HEADER_WORDS];
-		struct args d;
+		u_long	prog;		/* call program */
+		u_long	vers;		/* call version */
+		u_long	proto;		/* call protocol */
+		u_long	port;		/* call port (unused) */
 	} sdata;
-	struct {
-		n_long	h[RPC_HEADER_WORDS];
-		struct res d;
-		n_long  pad;
-	} rdata;
-	ssize_t cc;
-	int port;
 
 #ifdef RPC_DEBUG
 	if (debug)
-		printf("getport: prog=0x%x vers=%d\n", prog, vers);
+	    printf("getport: called\n");
 #endif
-
-	/* This one is fixed forever. */
-	if (prog == PMAPPROG)
-		return (PMAPPORT);
-
 	/* Try for cached answer first */
-	port = rpc_pmap_getcache(d->destip, prog, vers);
-	if (port != -1)
-		return (port);
+	for (i = 0, pl = pmap_list; i < pmap_num; ++i, ++pl)
+		if ((pl->addr == d->destip || pl->addr == 0) &&
+		    pl->prog == prog && pl->vers == vers)
+			return (pl->port);
 
-	args = &sdata.d;
-	args->prog = htonl(prog);
-	args->vers = htonl(vers);
-	args->proto = htonl(IPPROTO_UDP);
-	args->port = 0;
-	res = &rdata.d;
+	/* Don't overflow cache */
+	if (pmap_num > PMAP_NUM - 1)
+		panic("getport: overflowed pmap_list!");
 
-	cc = rpc_call(d, PMAPPROG, PMAPVERS, PMAPPROC_GETPORT,
-		args, sizeof(*args), res, sizeof(*res));
-	if (cc < sizeof(*res)) {
+	sdata.prog = htonl(prog);
+	sdata.vers = htonl(vers);
+	sdata.proto = htonl(IPPROTO_UDP);
+	sdata.port = 0;
+
+	if (callrpc(d, PMAPPROG, PMAPVERS, PMAPPROC_GETPORT,
+		&sdata, sizeof(sdata), &port, sizeof(port)) < 0) {
 		printf("getport: %s", strerror(errno));
-		errno = EBADRPC;
-		return (-1);
+		return(-1);
 	}
-	port = (int)ntohl(res->port);
 
-	rpc_pmap_putcache(d->destip, prog, vers, port);
+	/* Cache answer */
+	pl->addr = d->destip;
+	pl->prog = prog;
+	pl->vers = vers;
+	pl->port = port;
+	++pmap_num;
 
-	return (port);
+	return ((u_short)port);
 }

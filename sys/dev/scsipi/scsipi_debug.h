@@ -1,7 +1,8 @@
-/*	$NetBSD: scsipi_debug.h,v 1.5 1994/12/28 19:43:00 mycroft Exp $	*/
-
+/*#define SCSIDEBUG 1*/
 /*
  * Written by Julian Elischer (julian@tfs.com)
+ *
+ *	$Id: scsipi_debug.h,v 1.1 1993/11/24 04:52:47 mycroft Exp $
  */
 #ifndef	_SCSI_SCSI_DEBUG_H
 #define _SCSI_SCSI_DEBUG_H 1
@@ -17,26 +18,36 @@
 #define	SDEV_DB4		0x80	/* level 4 debugging for this dev */
 
 /* target and LUN we want to debug */
-#define	DEBUGTARGET	-1 /* -1 = disable */
-#define	DEBUGLUN	0
-#define	DEBUGLEVEL	(SDEV_DB1|SDEV_DB2)
+#define	DEBUGTARG 9 /*9 = dissable*/
+#define	DEBUGLUN  0
+#define	DEBUGLEVEL  	(SDEV_DB1|SDEV_DB2)
  
 /*
  * This is the usual debug macro for use with the above bits
  */
 #ifdef	SCSIDEBUG
 #define	SC_DEBUG(sc_link,Level,Printstuff) \
-	if ((sc_link)->flags & (Level)) {	\
-		sc_print_addr(sc_link);		\
+	if((sc_link)->flags & (Level))		\
+	{					\
+		printf("%s%d(%s%d:%d:%d): ",	\
+			sc_link->device->name,	\
+			sc_link->dev_unit,	\
+			sc_link->adapter->name,	\
+			sc_link->adapter_unit,	\
+			sc_link->target,	\
+			sc_link->lun);		\
  		printf Printstuff;		\
 	}
 #define	SC_DEBUGN(sc_link,Level,Printstuff) \
-	if ((sc_link)->flags & (Level)) {	\
+	if((sc_link)->flags & (Level))		\
+	{					\
  		printf Printstuff;		\
 	}
 #else
-#define SC_DEBUG(A,B,C)
-#define SC_DEBUGN(A,B,C)
+#define SC_DEBUG(A,B,C) /* not included */
+#define SC_DEBUGN(A,B,C) /* not included */
 #endif
 
-#endif /* _SCSI_SCSI_DEBUG_H */
+#endif /*_SCSI_SCSI_DEBUG_H*/
+/* END OF FILE */
+

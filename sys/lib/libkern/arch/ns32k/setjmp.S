@@ -1,5 +1,3 @@
-/*	$NetBSD: setjmp.S,v 1.3 1995/11/30 01:00:12 jtc Exp $	*/
-
 /* 
  * Copyright (c) 1992 Helsinki University of Technology
  * All Rights Reserved.
@@ -19,6 +17,8 @@
  * HISTORY
  * 29-Apr-92  Johannes Helander (jvh) at Helsinki University of Technology
  *	Created.
+ *
+ *	$Id: setjmp.S,v 1.1 1993/10/07 00:20:24 cgd Exp $
  */
 
 #include <machine/asm.h>

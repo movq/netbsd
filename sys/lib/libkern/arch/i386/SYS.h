@@ -34,15 +34,37 @@
  * SUCH DAMAGE.
  *
  *	from: @(#)SYS.h	5.5 (Berkeley) 5/7/91
- *	$Id: SYS.h,v 1.5 1995/10/07 09:27:00 mycroft Exp $
+ *	$Id: SYS.h,v 1.1 1993/11/05 22:40:57 cgd Exp $
  */
 
 #include <machine/asm.h>
 #include <sys/syscall.h>
 
-#define	SYSCALL(x)	.text; .align 2; 2: jmp PIC_PLT(cerror); ENTRY(x); movl $(SYS_/**/x),%eax; int $0x80; jc 2b
+#ifdef PIC
+#define PIC_PROLOGUE	\
+	pushl	%ebx;	\
+	call	1f;	\
+1:			\
+	popl	%ebx;	\
+	addl	$_GLOBAL_OFFSET_TABLE_+[.-1b], %ebx
+#define PIC_EPILOGUE	\
+	popl	%ebx
+#define PIC_PLT(x)	x@PLT
+#define PIC_GOT(x)	x@GOT(%ebx)
+#define PIC_GOTOFF(x)	x@GOTOFF(%ebx)
+#else
+#define PIC_PROLOGUE
+#define PIC_EPILOGUE
+#define PIC_PLT(x)	x
+#define PIC_GOT(x)	x
+#define PIC_GOTOFF(x)	x
+#endif
+
+#define	SYSCALL(x)	2: jmp cerror; ENTRY(x); lea SYS_/**/x,%eax; LCALL(7,0); jb 2b
 #define	RSYSCALL(x)	SYSCALL(x); ret
-#define	PSEUDO(x,y)	ENTRY(x); movl $(SYS_/**/y),%eax; int $0x80; ret
-#define	CALL(x,y)	call PIC_PLT(_/**/y); addl $4*x,%esp
+#define	PSEUDO(x,y)	ENTRY(x); lea SYS_/**/y, %eax; ; LCALL(7,0); ret
+#define	CALL(x,y)	call _/**/y; addl $4*x,%esp
+/* gas fucks up offset -- although we don't currently need it, do for BCS */
+#define	LCALL(x,y)	.byte 0x9a ; .long y; .word x
 
 	.globl	cerror

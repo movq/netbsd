@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.5 1995/09/15 21:05:21 pk Exp $
+#	$Id: Makefile,v 1.1 1993/07/04 14:02:53 cgd Exp $
 
 SUBDIR+= arch/${MACHINE}
 

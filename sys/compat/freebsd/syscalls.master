@@ -1,4 +1,4 @@
-	$NetBSD: syscalls.master,v 1.3 1995/10/10 18:28:40 mycroft Exp $
+	$NetBSD: syscalls.master,v 1.1 1995/10/10 01:19:39 mycroft Exp $
 
 ;	from: @(#)syscalls.master	8.2 (Berkeley) 1/13/94
 
@@ -99,7 +99,7 @@
 37	NOARGS		{ int sys_kill(int pid, int signum); }
 38	STD		{ int compat_43_freebsd_sys_stat(char *path, \
 			    struct ostat *ub); } ostat
-39	NOARGS		{ pid_t sys_getppid(void); }
+39	NOARGS		{ pid_t getppid(void); }
 40	STD		{ int compat_43_freebsd_sys_lstat(char *path, \
 			    struct ostat *ub); } olstat
 41	NOARGS		{ int sys_dup(u_int fd); }
@@ -237,9 +237,8 @@
 128	STD		{ int freebsd_sys_rename(char *from, char *to); }
 129	STD		{ int compat_43_freebsd_sys_truncate(char *path, \
 			    long length); } otruncate
-130	NOARGS		{ int compat_43_sys_ftruncate(int fd, long length); } \
-			    oftruncate
-131	NOARGS		{ int sys_flock(int fd, int how); }
+130	NOARGS		{ int compat_43_sys_ftruncate(int fd, long length); }
+131	NOARGS		{ int sys_flock(int fd, int how); } oftruncate
 132	STD		{ int freebsd_sys_mkfifo(char *path, int mode); }
 133	NOARGS		{ int sys_sendto(int s, caddr_t buf, size_t len, \
 			    int flags, caddr_t to, int tolen); }

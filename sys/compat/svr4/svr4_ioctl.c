@@ -1,5 +1,3 @@
-/*	$NetBSD: svr4_ioctl.c,v 1.16 1996/04/11 12:54:41 christos Exp $	 */
-
 /*
  * Copyright (c) 1994 Christos Zoulas
  * All rights reserved.
@@ -9,10 +7,7 @@
  * are met:
  * 1. Redistributions of source code must retain the above copyright
  *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
+ * 2. The name of the author may not be used to endorse or promote products
  *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
@@ -25,11 +20,12 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * $Id: svr4_ioctl.c,v 1.1 1994/05/22 10:04:33 deraadt Exp $
  */
 
 #include <sys/param.h>
 #include <sys/proc.h>
-#include <sys/systm.h>
 #include <sys/file.h>
 #include <sys/filedesc.h>
 #include <sys/ioctl.h>
@@ -37,42 +33,39 @@
 #include <sys/tty.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
-#include <sys/mount.h>
 #include <net/if.h>
-#include <sys/malloc.h>
 
-#include <sys/syscallargs.h>
+struct svr4_ioctl_args {
+	int	fd;
+	int	cmd;
+	caddr_t	data;
+};
 
-#include <compat/svr4/svr4_types.h>
-#include <compat/svr4/svr4_util.h>
-#include <compat/svr4/svr4_signal.h>
-#include <compat/svr4/svr4_syscallargs.h>
-#include <compat/svr4/svr4_stropts.h>
-#include <compat/svr4/svr4_ioctl.h>
-#include <compat/svr4/svr4_termios.h>
-#include <compat/svr4/svr4_ttold.h>
-#include <compat/svr4/svr4_filio.h>
-#include <compat/svr4/svr4_sockio.h>
+#define	SVR4_IOC_VOID	0x20000000
+#define	SVR4_IOC_OUT	0x40000000
+#define	SVR4_IOC_IN	0x80000000
+#define	SVR4_IOC_INOUT	(SVR4_IOC_IN|SVR4_IOC_OUT)
 
 #ifdef DEBUG_SVR4
-static void svr4_decode_cmd __P((u_long, char *, char *, int *, int *));
 /*
  * Decode an ioctl command symbolically
  */
 static void
 svr4_decode_cmd(cmd, dir, c, num, argsiz)
-	u_long		  cmd;
-	char		 *dir, *c;
-	int		 *num, *argsiz;
+	int cmd;
+	char **dir, *c;
+	int *num, *argsiz;
 {
+	*dir = "";
 	if (cmd & SVR4_IOC_VOID)
-		*dir++ = 'V';
-	if (cmd & SVR4_IOC_IN)
-		*dir++ = 'R';
-	if (cmd & SVR4_IOC_OUT)
-		*dir++ = 'W';
-	*dir = '\0';
+		*dir = "V";
 	if (cmd & SVR4_IOC_INOUT)
+		*dir = "RW";
+	if (cmd & SVR4_IOC_OUT)
+		*dir = "W";
+	if (cmd & SVR4_IOC_IN)
+		*dir = "R";
+	if (cmd & (SVR4_IOC_INOUT|SVR4_IOC_VOID))
 		*argsiz = (cmd >> 16) & 0xff;
 	else
 		*argsiz = -1;
@@ -83,62 +76,19 @@ svr4_decode_cmd(cmd, dir, c, num, argsiz)
 #endif
 
 int
-svr4_sys_ioctl(p, v, retval)
+svr4_ioctl(p, uap, retval)
 	register struct proc *p;
-	void *v;
-	register_t *retval;
+	register struct svr4_ioctl_args *uap;
+	int *retval;
 {
-	struct svr4_sys_ioctl_args *uap = v;
-	struct file	*fp;
-	struct filedesc	*fdp;
-	u_long		 cmd;
-	int (*fun) __P((struct file *, struct proc *, register_t *,
-			int, u_long, caddr_t));
+	char *dir;
+	char c;
+	int  num;
+	int  argsiz;
 #ifdef DEBUG_SVR4
-	char		 dir[4];
-	char		 c;
-	int		 num;
-	int		 argsiz;
-
-	svr4_decode_cmd(SCARG(uap, com), dir, &c, &num, &argsiz);
-
-	printf("svr4_ioctl(%d, _IO%s(%c, %d, %d), %p);\n", SCARG(uap, fd),
-	       dir, c, num, argsiz, SCARG(uap, data));
+	svr4_decode_cmd(uap->cmd, &dir, &c, &num, &argsiz);
+	printf("svr4_ioctl(%d, _IO%s(%c, %d, %d))\n", uap->fd,
+	       dir, c, num, argsiz);
 #endif
-	fdp = p->p_fd;
-	cmd = SCARG(uap, com);
-
-	if ((u_int)SCARG(uap, fd) >= fdp->fd_nfiles ||
-	    (fp = fdp->fd_ofiles[SCARG(uap, fd)]) == NULL)
-		return EBADF;
-
-	if ((fp->f_flag & (FREAD | FWRITE)) == 0)
-		return EBADF;
-
-	switch (cmd & 0xff00) {
-	case SVR4_tIOC:
-		fun = svr4_ttold_ioctl;
-		break;
-
-	case SVR4_TIOC:
-		fun = svr4_term_ioctl;
-		break;
-
-	case SVR4_STR:
-		fun = svr4_stream_ioctl;
-		break;
-
-	case SVR4_FIOC:
-		fun = svr4_fil_ioctl;
-		break;
-
-	case SVR4_SIOC:
-		fun = svr4_sock_ioctl;
-		break;
-
-	default:
-		DPRINTF(("Unimplemented ioctl %lx\n", cmd));
-		return 0;	/* XXX: really ENOSYS */
-	}
-	return (*fun)(fp, p, retval, SCARG(uap, fd), cmd, SCARG(uap, data));
+	return ENOSYS;
 }

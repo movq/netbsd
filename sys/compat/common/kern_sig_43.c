@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_sig_43.c,v 1.7 1996/03/14 19:31:47 christos Exp $	*/
+/*	$NetBSD: kern_sig_43.c,v 1.1 1995/06/24 20:16:21 christos Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1991, 1993
@@ -68,14 +68,13 @@
 #include <sys/user.h>		/* for coredump */
 
 int
-compat_43_sys_sigblock(p, v, retval)
+compat_43_sigblock(p, uap, retval)
 	register struct proc *p;
-	void *v;
+	struct compat_43_sigblock_args /* {
+		syscallarg(int) mask;
+	} */ *uap;
 	register_t *retval;
 {
-	struct compat_43_sys_sigblock_args /* {
-		syscallarg(int) mask;
-	} */ *uap = v;
 
 	(void) splhigh();
 	*retval = p->p_sigmask;
@@ -86,14 +85,13 @@ compat_43_sys_sigblock(p, v, retval)
 
 
 int
-compat_43_sys_sigsetmask(p, v, retval)
+compat_43_sigsetmask(p, uap, retval)
 	struct proc *p;
-	void *v;
+	struct compat_43_sigsetmask_args /* {
+		syscallarg(int) mask;
+	} */ *uap;
 	register_t *retval;
 {
-	struct compat_43_sys_sigsetmask_args /* {
-		syscallarg(int) mask;
-	} */ *uap = v;
 
 	(void) splhigh();
 	*retval = p->p_sigmask;
@@ -105,36 +103,32 @@ compat_43_sys_sigsetmask(p, v, retval)
 
 /* ARGSUSED */
 int
-compat_43_sys_sigstack(p, v, retval)
+compat_43_sigstack(p, uap, retval)
 	struct proc *p;
-	void *v;
-	register_t *retval;
-{
-	register struct compat_43_sys_sigstack_args /* {
+	register struct compat_43_sigstack_args /* {
 		syscallarg(struct sigstack *) nss;
 		syscallarg(struct sigstack *) oss;
-	} */ *uap = v;
+	} */ *uap;
+	register_t *retval;
+{
 	struct sigstack ss;
 	struct sigacts *psp;
 	int error = 0;
 
 	psp = p->p_sigacts;
-	ss.ss_sp = psp->ps_sigstk.ss_sp;
-	ss.ss_onstack = psp->ps_sigstk.ss_flags & SS_ONSTACK;
+	ss.ss_sp = psp->ps_sigstk.ss_base;
+	ss.ss_onstack = psp->ps_sigstk.ss_flags & SA_ONSTACK;
 	if (SCARG(uap, oss) && (error = copyout((caddr_t)&ss,
 	    (caddr_t)SCARG(uap, oss), sizeof (struct sigstack))))
 		return (error);
-	if (SCARG(uap, nss) == 0)
-		return (0);
-	error = copyin((caddr_t)SCARG(uap, nss), (caddr_t)&ss,
-	    sizeof (ss));
-	if (error)
-		return (error);
-	psp->ps_flags |= SAS_ALTSTACK;
-	psp->ps_sigstk.ss_sp = ss.ss_sp;
-	psp->ps_sigstk.ss_size = 0;
-	psp->ps_sigstk.ss_flags |= ss.ss_onstack & SS_ONSTACK;
-	return (0);
+	if (SCARG(uap, nss) && (error = copyin((caddr_t)SCARG(uap, nss),
+	    (caddr_t)&ss, sizeof (ss))) == 0) {
+		psp->ps_sigstk.ss_base = ss.ss_sp;
+		psp->ps_sigstk.ss_size = 0;
+		psp->ps_sigstk.ss_flags |= ss.ss_onstack & SA_ONSTACK;
+		psp->ps_flags |= SAS_ALTSTACK;
+	}
+	return (error);
 }
 
 /*
@@ -142,16 +136,15 @@ compat_43_sys_sigstack(p, v, retval)
  */
 /* ARGSUSED */
 int
-compat_43_sys_sigvec(p, v, retval)
+compat_43_sigvec(p, uap, retval)
 	struct proc *p;
-	void *v;
-	register_t *retval;
-{
-	register struct compat_43_sys_sigvec_args /* {
+	register struct compat_43_sigvec_args /* {
 		syscallarg(int) signum;
 		syscallarg(struct sigvec *) nsv;
 		syscallarg(struct sigvec *) osv;
-	} */ *uap = v;
+	} */ *uap;
+	register_t *retval;
+{
 	struct sigvec vec;
 	register struct sigacts *ps = p->p_sigacts;
 	register struct sigvec *sv;
@@ -172,20 +165,15 @@ compat_43_sys_sigvec(p, v, retval)
 			sv->sv_flags |= SV_ONSTACK;
 		if ((ps->ps_sigintr & bit) != 0)
 			sv->sv_flags |= SV_INTERRUPT;
-		if ((ps->ps_sigreset & bit) != 0)
-			sv->sv_flags |= SV_RESETHAND;
 		if (p->p_flag & P_NOCLDSTOP)
 			sv->sv_flags |= SA_NOCLDSTOP;
-		sv->sv_mask &= ~bit;
-		error = copyout((caddr_t)sv, (caddr_t)SCARG(uap, osv),
-		    sizeof (vec));
-		if (error)
+		if (error = copyout((caddr_t)sv, (caddr_t)SCARG(uap, osv),
+		    sizeof (vec)))
 			return (error);
 	}
 	if (SCARG(uap, nsv)) {
-		error = copyin((caddr_t)SCARG(uap, nsv), (caddr_t)sv,
-		    sizeof (vec));
-		if (error)
+		if (error = copyin((caddr_t)SCARG(uap, nsv), (caddr_t)sv,
+		    sizeof (vec)))
 			return (error);
 		sv->sv_flags ^= SA_RESTART;	/* opposite of SV_INTERRUPT */
 		setsigvec(p, signum, (struct sigaction *)sv);
@@ -196,15 +184,14 @@ compat_43_sys_sigvec(p, v, retval)
 
 /* ARGSUSED */
 int
-compat_43_sys_killpg(p, v, retval)
+compat_43_killpg(p, uap, retval)
 	struct proc *p;
-	void *v;
-	register_t *retval;
-{
-	register struct compat_43_sys_killpg_args /* {
+	register struct compat_43_killpg_args /* {
 		syscallarg(int) pgid;
 		syscallarg(int) signum;
-	} */ *uap = v;
+	} */ *uap;
+	register_t *retval;
+{
 
 #ifdef COMPAT_09
 	SCARG(uap, pgid) = (short) SCARG(uap, pgid);

@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_sockio.h,v 1.5 1996/03/08 04:56:07 mycroft Exp $	*/
+/*	$NetBSD: linux_sockio.h,v 1.1 1995/02/28 23:26:08 fvdl Exp $	*/
 
 /*
  * Copyright (c) 1995 Frank van der Linden
@@ -33,14 +33,7 @@
 
 #ifndef _LINUX_SOCKIO_H
 #define _LINUX_SOCKIO_H
-
-#define	LINUX_SIOCGIFCONF	_LINUX_IO(0x89, 18)
-#define	LINUX_SIOCGIFFLAGS	_LINUX_IO(0x89, 19)
-#define	LINUX_SIOCGIFADDR	_LINUX_IO(0x89, 21)
-#define	LINUX_SIOCGIFDSTADDR	_LINUX_IO(0x89, 23)
-#define	LINUX_SIOCGIFBRDADDR	_LINUX_IO(0x89, 25)
-#define	LINUX_SIOCGIFNETMASK	_LINUX_IO(0x89, 27)
-#define LINUX_SIOCADDMULTI	_LINUX_IO(0x89, 49)
-#define LINUX_SIOCDELMULTI	_LINUX_IO(0x89, 50)
-
+/*
+ * Empty for the moment, will contain Linux socket ioctl() definitions.
+ */
 #endif /* _LINUX_SOCKIO_H */

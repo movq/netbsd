@@ -1,5 +1,3 @@
-/*	$NetBSD: exit.c,v 1.8 1996/02/09 16:10:59 gwr Exp $	*/
-
 /*-
  *  Copyright (c) 1993 John Brezak
  *  All rights reserved.
@@ -18,7 +16,7 @@
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR `AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT,
+ * DISCLAIMED.	IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT,
  * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
  * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
  * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
@@ -27,46 +25,26 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#ifdef __STDC__
-#include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
 
-#include "stand.h"
+#ifndef lint
+static char rcsid[] = "$Id: exit.c,v 1.1 1994/01/26 02:03:43 brezak Exp $";
+#endif /* not lint */
 
-__dead void
-#ifdef __STDC__
-panic(const char *fmt, ...)
-#else
-panic(fmt /*, va_alist */)
-	char *fmt;
-#endif
-{
-    extern void closeall __P((void));
-    va_list ap;
-    static int paniced;
-    
-    if (!paniced) {
-        paniced = 1;
-        closeall();
-    }
-
-#ifdef __STDC__
-    va_start(ap, fmt);
-#else
-    va_start(ap);
-#endif
-    vprintf(fmt, ap);
-    printf("\n");
-    va_end(ap);
-    _rtt();
-    /*NOTREACHED*/
-}
-
-void
 exit()
 {
     panic("exit");
-    /*NOTREACHED*/
+}
+
+panic(str)
+    char *str;
+{
+    static int paniced;
+    
+    if (!paniced) {
+	paniced = 1;
+	closeall();
+    }
+
+    printf("%s\n",str);
+    _rtt();
 }

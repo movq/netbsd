@@ -1,4 +1,4 @@
-/*	$NetBSD: uipc_syscalls_43.c,v 1.5 1996/03/14 19:31:50 christos Exp $	*/
+/*	$NetBSD: uipc_syscalls_43.c,v 1.1 1995/06/24 20:16:23 christos Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1990, 1993
@@ -54,20 +54,21 @@
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
 
+#define MSG_COMPAT	0x8000	/* XXX */
+
 int
-compat_43_sys_accept(p, v, retval)
+compat_43_accept(p, uap, retval)
 	struct proc *p;
-	void *v;
-	register_t *retval;
-{
-	struct sys_accept_args /* {
+	struct accept_args /* {
 		syscallarg(int) s;
 		syscallarg(caddr_t) name;
 		syscallarg(int *) anamelen;
-	} */ *uap = v;
+	} */ *uap;
+	register_t *retval;
+{
 	int error;
 
-	if ((error = sys_accept(p, uap, retval)) != 0)
+	if ((error = accept(p, uap, retval)) != 0)
 		return error;
 
 	if (SCARG(uap, name)) {
@@ -86,21 +87,20 @@ compat_43_sys_accept(p, v, retval)
 
 
 int
-compat_43_sys_getpeername(p, v, retval)
+compat_43_getpeername(p, uap, retval)
 	struct proc *p;
-	void *v;
-	register_t *retval;
-{
-	struct sys_getpeername_args /* {
+	struct getpeername_args /* {
 		syscallarg(int) fdes;
 		syscallarg(caddr_t) asa;
 		syscallarg(int *) alen;
-	} */ *uap = v;
+	} */ *uap;
+	register_t *retval;
+{
 	struct sockaddr sa;
 
 	int error;
 
-	if ((error = sys_getpeername(p, uap, retval)) != 0)
+	if ((error = getpeername(p, uap, retval)) != 0)
 		return error;
 
 	if ((error = copyin(SCARG(uap, asa), &sa, sizeof(sa))) != 0)
@@ -116,20 +116,19 @@ compat_43_sys_getpeername(p, v, retval)
 
 
 int
-compat_43_sys_getsockname(p, v, retval)
+compat_43_getsockname(p, uap, retval)
 	struct proc *p;
-	void *v;
-	register_t *retval;
-{
-	struct sys_getsockname_args /* {
+	struct getsockname_args /* {
 		syscallarg(int) fdes;
 		syscallarg(caddr_t) asa;
 		syscallarg(int *) alen;
-	} */ *uap = v;
+	} */ *uap;
+	register_t *retval;
+{
 	struct sockaddr sa;
 	int error;
 
-	if ((error = sys_getsockname(p, uap, retval)) != 0)
+	if ((error = getsockname(p, uap, retval)) != 0)
 		return error;
 
 	if ((error = copyin(SCARG(uap, asa), &sa, sizeof(sa))) != 0)
@@ -145,17 +144,16 @@ compat_43_sys_getsockname(p, v, retval)
 
 
 int
-compat_43_sys_recv(p, v, retval)
+compat_43_recv(p, uap, retval)
 	struct proc *p;
-	void *v;
-	register_t *retval;
-{
-	register struct compat_43_sys_recv_args /* {
+	register struct compat_43_recv_args /* {
 		syscallarg(int) s;
 		syscallarg(caddr_t) buf;
 		syscallarg(int) len;
 		syscallarg(int) flags;
-	} */ *uap = v;
+	} */ *uap;
+	register_t *retval;
+{
 	struct msghdr msg;
 	struct iovec aiov;
 
@@ -171,52 +169,46 @@ compat_43_sys_recv(p, v, retval)
 }
 
 
-#ifdef MSG_COMPAT
 int
-compat_43_sys_recvfrom(p, v, retval)
+compat_43_recvfrom(p, uap, retval)
 	struct proc *p;
-	void *v;
-	register_t *retval;
-{
-	struct sys_recvfrom_args /* {
+	struct recvfrom_args /* {
 		syscallarg(int) s;
 		syscallarg(caddr_t) buf;
 		syscallarg(size_t) len;
 		syscallarg(int) flags;
 		syscallarg(caddr_t) from;
 		syscallarg(int *) fromlenaddr;
-	} */ *uap = v;
+	} */ *uap;
+	register_t *retval;
+{
 
 	SCARG(uap, flags) |= MSG_COMPAT;
-	return (sys_recvfrom(p, uap, retval));
+	return (recvfrom(p, uap, retval));
 }
-#endif
 
 
-#ifdef MSG_COMPAT
 /*
  * Old recvmsg.  This code takes advantage of the fact that the old msghdr
  * overlays the new one, missing only the flags, and with the (old) access
  * rights where the control fields are now.
  */
 int
-compat_43_sys_recvmsg(p, v, retval)
+compat_43_recvmsg(p, uap, retval)
 	struct proc *p;
-	void *v;
-	register_t *retval;
-{
-	register struct compat_43_sys_recvmsg_args /* {
+	register struct compat_43_recvmsg_args /* {
 		syscallarg(int) s;
 		syscallarg(struct omsghdr *) msg;
 		syscallarg(int) flags;
-	} */ *uap = v;
+	} */ *uap;
+	register_t *retval;
+{
 	struct msghdr msg;
 	struct iovec aiov[UIO_SMALLIOV], *iov;
 	int error;
 
-	error = copyin((caddr_t)SCARG(uap, msg), (caddr_t)&msg,
-	    sizeof (struct omsghdr));
-	if (error)
+	if (error = copyin((caddr_t)SCARG(uap, msg), (caddr_t)&msg,
+	    sizeof (struct omsghdr)))
 		return (error);
 	if ((u_int)msg.msg_iovlen >= UIO_SMALLIOV) {
 		if ((u_int)msg.msg_iovlen >= UIO_MAXIOV)
@@ -227,9 +219,8 @@ compat_43_sys_recvmsg(p, v, retval)
 	} else
 		iov = aiov;
 	msg.msg_flags = SCARG(uap, flags) | MSG_COMPAT;
-	error = copyin((caddr_t)msg.msg_iov, (caddr_t)iov,
-	    (unsigned)(msg.msg_iovlen * sizeof (struct iovec)));
-	if (error)
+	if (error = copyin((caddr_t)msg.msg_iov, (caddr_t)iov,
+	    (unsigned)(msg.msg_iovlen * sizeof (struct iovec))))
 		goto done;
 	msg.msg_iov = iov;
 	error = recvit(p, SCARG(uap, s), &msg,
@@ -243,20 +234,18 @@ done:
 		FREE(iov, M_IOV);
 	return (error);
 }
-#endif
 
 int
-compat_43_sys_send(p, v, retval)
+compat_43_send(p, uap, retval)
 	struct proc *p;
-	void *v;
-	register_t *retval;
-{
-	register struct compat_43_sys_send_args /* {
+	register struct compat_43_send_args /* {
 		syscallarg(int) s;
 		syscallarg(caddr_t) buf;
 		syscallarg(int) len;
 		syscallarg(int) flags;
-	} */ *uap = v;
+	} */ *uap;
+	register_t *retval;
+{
 	struct msghdr msg;
 	struct iovec aiov;
 
@@ -271,25 +260,22 @@ compat_43_sys_send(p, v, retval)
 	return (sendit(p, SCARG(uap, s), &msg, SCARG(uap, flags), retval));
 }
 
-#ifdef MSG_COMPAT
 int
-compat_43_sys_sendmsg(p, v, retval)
+compat_43_sendmsg(p, uap, retval)
 	struct proc *p;
-	void *v;
-	register_t *retval;
-{
-	register struct compat_43_sys_sendmsg_args /* {
+	register struct compat_43_sendmsg_args /* {
 		syscallarg(int) s;
 		syscallarg(caddr_t) msg;
 		syscallarg(int) flags;
-	} */ *uap = v;
+	} */ *uap;
+	register_t *retval;
+{
 	struct msghdr msg;
 	struct iovec aiov[UIO_SMALLIOV], *iov;
 	int error;
 
-	error = copyin(SCARG(uap, msg), (caddr_t)&msg,
-	    sizeof (struct omsghdr));
-	if (error)
+	if (error = copyin(SCARG(uap, msg), (caddr_t)&msg,
+	    sizeof (struct omsghdr)))
 		return (error);
 	if ((u_int)msg.msg_iovlen >= UIO_SMALLIOV) {
 		if ((u_int)msg.msg_iovlen >= UIO_MAXIOV)
@@ -299,9 +285,8 @@ compat_43_sys_sendmsg(p, v, retval)
 		      M_WAITOK);
 	} else
 		iov = aiov;
-	error = copyin((caddr_t)msg.msg_iov, (caddr_t)iov,
-	    (unsigned)(msg.msg_iovlen * sizeof (struct iovec)));
-	if (error)
+	if (error = copyin((caddr_t)msg.msg_iov, (caddr_t)iov,
+	    (unsigned)(msg.msg_iovlen * sizeof (struct iovec))))
 		goto done;
 	msg.msg_flags = MSG_COMPAT;
 	msg.msg_iov = iov;
@@ -311,4 +296,3 @@ done:
 		FREE(iov, M_IOV);
 	return (error);
 }
-#endif

@@ -1,5 +1,3 @@
-/*	$NetBSD: swapnfs.c,v 1.9 1995/04/30 07:03:13 cgd Exp $	*/
-
 /*
  * Copyright (c) 1991 The Regents of the University of California.
  * All rights reserved.
@@ -35,20 +33,23 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)nfsswapvmunix.c	7.1 (Berkeley) 3/4/91
+ *	from: @(#)nfsswapvmunix.c	7.1 (Berkeley) 3/4/91
+ *	$Id: swapnfs.c,v 1.1 1993/07/07 12:06:40 cgd Exp $
  */
 
 /*
- * NFS parameters are now filled in nfs_mountroot() by
- * nfs_boot().
+ * Sample NFS swapvmunix configuration file.
+ * This should be filled in by the bootstrap program.
+ * See /sys/nfs/nfsdiskless.h for details of the fields.
  */
 
-#include <sys/param.h>
-#include <sys/conf.h>
-#include <sys/socket.h>
-#include <sys/mount.h>
-
-#include <net/if.h>
+#include "../sys/param.h"
+#include "../sys/conf.h"
+#include "../sys/socket.h"
+#include "../sys/mount.h"
+#include "../net/if.h"
+#include "../nfs/nfsv2.h"
+#include "../nfs/nfsdiskless.h"
 
 dev_t	rootdev = NODEV;
 dev_t	argdev  = NODEV;
@@ -56,8 +57,45 @@ dev_t	dumpdev = NODEV;
 
 struct	swdevt swdevt[] = {
 	{ NODEV, 0, 0 },
-        { NODEV, 0, 0 }
+	{ 0, 0, 0 }
 };
 
 extern int nfs_mountroot();
 int (*mountroot)() = nfs_mountroot;
+
+/* We start with transfer sizes of 4K during boot			*/
+/* as the WD8003 has problems to support 8K of back to back packets	*/
+struct nfs_diskless nfs_diskless = {
+	{ 0 },		/* myif */
+	{ 0 },		/* mygateway */
+	{		/* swap_args */
+	    0,		/* addr */
+	    0,		/* sotype */
+	    0,		/* proto */
+	    0,		/* fh */
+	    NFSMNT_WSIZE|NFSMNT_RSIZE,	/* flags */
+	    4096,	/* wsize */
+	    4096,	/* rsize */
+	    0,		/* timeo */
+	    0,		/* retrans */
+	    0		/* hostname */
+	},
+	{ 0 },		/* swap_fh */
+	{ 0 },		/* swap_saddr */
+	{ 0 },		/* swap_hostnam */
+	{		/* root_args */
+	    0,		/* addr */
+	    0,		/* sotype */
+	    0,		/* proto */
+	    0,		/* fh */
+	    NFSMNT_WSIZE|NFSMNT_RSIZE,	/* flags */
+	    4096,	/* wsize */
+	    4096,	/* rsize */
+	    0,		/* timeo */
+	    0,		/* retrans */
+	    0		/* hostname */
+	},
+	{ 0 },		/* root_fh */
+	{ 0 },		/* root_saddr */
+	{ 0 }		/* root_hostnam */
+};

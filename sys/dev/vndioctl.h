@@ -1,5 +1,3 @@
-/*	$NetBSD: vndioctl.h,v 1.5 1995/01/25 04:46:30 cgd Exp $	*/
-
 /*
  * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1990, 1993
@@ -45,16 +43,19 @@
 /*
  * Ioctl definitions for file (vnode) disk pseudo-device.
  */
-struct vnd_ioctl {
-	char	*vnd_file;	/* pathname of file to mount */
-	int	vnd_size;	/* (returned) size of disk */
+
+#define _PATH_VNTAB	"/etc/vntab"	/* default config file */
+
+struct vn_ioctl {
+	char	*vn_file;	/* pathname of file to mount */
+	int	vn_size;	/* (returned) size of disk */
 };
 
 /*
- * Before you can use a unit, it must be configured with VNDIOCSET.
+ * Before you can use a unit, it must be configured with VNIOCSET.
  * The configuration persists across opens and closes of the device;
- * an VNDIOCCLR must be used to reset a configuration.  An attempt to
- * VNDIOCSET an already active unit will return EBUSY.
+ * an VNIOCCLR must be used to reset a configuration.  An attempt to
+ * VNIOCSET an already active unit will return EBUSY.
  */
-#define VNDIOCSET	_IOWR('F', 0, struct vnd_ioctl)	/* enable disk */
-#define VNDIOCCLR	_IOW('F', 1, struct vnd_ioctl)	/* disable disk */
+#define VNIOCSET	_IOWR('F', 0, struct vn_ioctl)	/* enable disk */
+#define VNIOCCLR	_IOW('F', 1, struct vn_ioctl)	/* disable disk */

@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_termios.c,v 1.9 1996/04/11 12:53:48 christos Exp $	 */
+/*	$NetBSD: svr4_termios.c,v 1.1 1994/11/14 06:13:24 christos Exp $	 */
 
 /*
  * Copyright (c) 1994 Christos Zoulas
@@ -45,8 +45,6 @@
 
 #include <compat/svr4/svr4_types.h>
 #include <compat/svr4/svr4_util.h>
-#include <compat/svr4/svr4_signal.h>
-#include <compat/svr4/svr4_ioctl.h>
 #include <compat/svr4/svr4_syscallargs.h>
 #include <compat/svr4/svr4_stropts.h>
 #include <compat/svr4/svr4_termios.h>
@@ -91,14 +89,14 @@ static void svr4_termios_to_termio __P((const struct svr4_termios *ts,
 #define svr4_to_bsd_flag2(f,a,b,c1,t1,c2,t2) \
 	bt->f &= ~__CONCAT(a,b); \
 	switch (st->f & __CONCAT3(SVR4_,a,b)) { \
-	case __CONCAT3(SVR4_,c1,t1): bt->f |= __CONCAT(c1,t1); break; \
+	case __CONCAT3(SVR4_,c1,t1): bt->f |= __CONCAT(c1,t2); break; \
 	case __CONCAT3(SVR4_,c2,t2): bt->f |= __CONCAT(c2,t2); break; \
 	}
 
 #define svr4_to_bsd_flag4(f,a,b,c1,t1,c2,t2,c3,t3,c4,t4) \
 	bt->f &= ~__CONCAT(a,b); \
 	switch (st->f & __CONCAT3(SVR4_,a,b)) { \
-	case __CONCAT3(SVR4_,c1,t1): bt->f |= __CONCAT(c1,t1); break; \
+	case __CONCAT3(SVR4_,c1,t1): bt->f |= __CONCAT(c1,t2); break; \
 	case __CONCAT3(SVR4_,c2,t2): bt->f |= __CONCAT(c2,t2); break; \
 	case __CONCAT3(SVR4_,c3,t3): bt->f |= __CONCAT(c3,t3); break; \
 	case __CONCAT3(SVR4_,c4,t4): bt->f |= __CONCAT(c4,t4); break; \
@@ -433,13 +431,12 @@ svr4_termios_to_termio(ts, t)
 }
 
 int
-svr4_term_ioctl(fp, p, retval, fd, cmd, data)
-	struct file *fp;
-	struct proc *p;
-	register_t *retval;
-	int fd;
-	u_long cmd;
-	caddr_t data;
+svr4_termioctl(fp, cmd, data, p, retval)
+	struct file 	*fp;
+	int		 cmd;
+	caddr_t		 data;
+	struct proc	*p;
+	register_t	*retval;
 {
 	struct termios 		bt;
 	struct svr4_termios	st;
@@ -456,34 +453,9 @@ svr4_term_ioctl(fp, p, retval, fd, cmd, data)
 		if ((error = (*ctl)(fp, TIOCGETA, (caddr_t) &bt, p)) != 0)
 			return error;
 
-#ifdef DEBUG_SVR4
-		{
-			int i;
-			printf("iflag=%o oflag=%o cflag=%o lflag=%o\n",
-			       bt.c_iflag, bt.c_oflag, bt.c_cflag, bt.c_lflag);
-			printf("cc: ");
-			for (i = 0; i < NCCS; i++)
-				printf("%o ", bt.c_cc[i]);
-			printf("\n");
-		}
-#endif
-
 		bsd_to_svr4_termios(&bt, &st);
 
 		DPRINTF(("ioctl(TCGET[A|S]);\n"));
-
-#ifdef DEBUG_SVR4
-		{
-			int i;
-			printf("iflag=%o oflag=%o cflag=%o lflag=%o\n",
-			       bt.c_iflag, bt.c_oflag, bt.c_cflag, bt.c_lflag);
-			printf("cc: ");
-			for (i = 0; i < SVR4_NCCS; i++)
-				printf("%o ", st.c_cc[i]);
-			printf("\n");
-		}
-#endif
-
 		if (cmd == SVR4_TCGETA) {
 		    svr4_termios_to_termio(&st, &t);
 		    return copyout(&t, data, sizeof(t));
@@ -542,26 +514,8 @@ svr4_term_ioctl(fp, p, retval, fd, cmd, data)
 
 		return (*ctl)(fp, cmd, (caddr_t) &bt, p);
 
-	case SVR4_TIOCGWINSZ:
-		{
-			struct svr4_winsize ws;
-
-			error = (*ctl)(fp, TIOCGWINSZ, (caddr_t) &ws, p);
-			if (error)
-				return error;
-			return copyout(&st, data, sizeof(st));
-		}
-
-	case SVR4_TIOCSWINSZ:
-		{
-			struct svr4_winsize ws;
-
-			if ((error = copyin(data, &ws, sizeof(ws))) != 0)
-				return error;
-			return (*ctl)(fp, TIOCSWINSZ, (caddr_t) &ws, p);
-		}
-
 	default:
-		return svr4_stream_ti_ioctl(fp, p, retval, fd, cmd, data);
+		DPRINTF(("Unknown svr4 termios %x\n", cmd));
+		return ENOSYS;
 	}
 }

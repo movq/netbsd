@@ -1,4 +1,4 @@
-/*	$NetBSD: pas.c,v 1.15 1996/04/11 22:29:48 cgd Exp $	*/
+/*	$NetBSD: pas.c,v 1.1 1995/02/21 02:27:18 brezak Exp $	*/
 
 /*
  * Copyright (c) 1991-1993 Regents of the University of California.
@@ -32,6 +32,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
+ *	$Id: pas.c,v 1.1 1995/02/21 02:27:18 brezak Exp $
  */
 /*
  * Todo:
@@ -52,18 +53,19 @@
 
 #include <sys/audioio.h>
 #include <dev/audio_if.h>
-#include <dev/mulaw.h>
 
-#include <dev/isa/isavar.h>
-#include <dev/isa/isadmavar.h>
+#include <i386/isa/isavar.h>
+#include <i386/isa/dmavar.h>
+#include <i386/isa/icu.h>
 
-#include <dev/isa/sbdspvar.h>
-#include <dev/isa/sbreg.h>
+#include <i386/isa/sbdspvar.h>
+#include <i386/isa/sbreg.h>
 
 #define DEFINE_TRANSLATIONS
-#include <dev/isa/pasreg.h>
+#include <i386/isa/pasreg.h>
 
-#ifdef AUDIO_DEBUG
+#define DEBUG	/*XXX*/
+#ifdef DEBUG
 #define DPRINTF(x)	if (pasdebug) printf x
 int	pasdebug = 0;
 #else
@@ -87,11 +89,11 @@ int	pasdebug = 0;
 struct pas_softc {
 	struct	device sc_dev;		/* base device */
 	struct	isadev sc_id;		/* ISA device */
-	void	*sc_ih;			/* interrupt vectoring */
+	struct	intrhand sc_ih;		/* interrupt vectoring */
 
-	int	sc_iobase;		/* PAS iobase */
-	int	sc_irq;			/* PAS irq */
-	int	sc_drq;			/* PAS drq */
+	u_short sc_iobase;		/* PAS iobase */
+	u_short sc_irq;			/* PAS irq */
+	u_short sc_drq;			/* PAS drq */
 
 	int model;
 	int rev;
@@ -100,7 +102,11 @@ struct pas_softc {
 };
 
 int	pasopen __P((dev_t, int));
-int	pas_getdev __P((void *, struct audio_device *));
+
+int	pasprobe();
+void	pasattach();
+
+int	pas_getdev __P((caddr_t, struct audio_device *));
 
 
 /*
@@ -129,8 +135,8 @@ struct audio_hw_if pas_hw_if = {
 	sbdsp_get_in_port,
 	sbdsp_commit_settings,
 	sbdsp_get_silence,
-	mulaw_expand,
-	mulaw_compress,
+	sbdsp_expand,
+	sbdsp_compress,
 	sbdsp_dma_output,
 	sbdsp_dma_input,
 	sbdsp_haltdma,
@@ -154,8 +160,7 @@ static char *pasnames[] = {
 	"",
 	"Plus",
 	"CDPC",
-	"16",
-	"16Basic"
+	"16"
 };
 
 static struct audio_device pas_device = {
@@ -212,7 +217,7 @@ pasconf(int model, int sbbase, int sbirq, int sbdrq)
 	/* Sets mute off and selects filter rate of 17.897 kHz */
 	paswrite(F_F_MIXER_UNMUTE | 0x01, FILTER_FREQUENCY);
 
-	if (model == PAS_16 || model == PAS_16BASIC)
+	if (model == PAS_16) 
 		paswrite(8, PRESCALE_DIVIDER);
 	else
 		paswrite(0, PRESCALE_DIVIDER);
@@ -246,15 +251,8 @@ pasconf(int model, int sbbase, int sbirq, int sbdrq)
 	paswrite(P_M_MV508_INPUTMIX | 30, PARALLEL_MIXER);
 }
 
-int	pasprobe __P((struct device *, void *, void *));
-void	pasattach __P((struct device *, struct device *, void *));
-
-struct cfattach pas_ca = {
-	sizeof(struct pas_softc), pasprobe, pasattach
-};
-
-struct cfdriver pas_cd = {
-	NULL, "pas", DV_DULL
+struct cfdriver pascd = {
+	NULL, "pas", pasprobe, pasattach, DV_DULL, sizeof(struct pas_softc)
 };
 
 /*
@@ -265,13 +263,13 @@ struct cfdriver pas_cd = {
  * Probe for the soundblaster hardware.
  */
 int
-pasprobe(parent, match, aux)
-	struct device *parent;
-	void *match, *aux;
+pasprobe(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
-	register struct pas_softc *sc = match;
+	register struct pas_softc *sc = (void *)self;
 	register struct isa_attach_args *ia = aux;
-	register int iobase;
+	register u_short iobase;
 	u_char id, t;
 
 	/*
@@ -335,13 +333,15 @@ pasprobe(parent, match, aux)
 	}
 
         if (sc->model >= 0) {
-                if (ia->ia_irq == IRQUNK) {
+                int irq = ia->ia_irq;
+                if (irq == IRQUNK) {
                         printf("pas: sb emulation requires known irq\n");
                         return (0);
                 } 
-                pasconf(sc->model, ia->ia_iobase, ia->ia_irq, 1);
+                irq = ffs(ia->ia_irq) - 1;
+                pasconf(sc->model, ia->ia_iobase, irq, 1);
         } else {
-                DPRINTF(("pas: could not probe pas\n"));
+                DPRINTF(("sb: could not probe pas\n"));
                 return (0);
         }
 
@@ -358,7 +358,7 @@ pasprobe(parent, match, aux)
 	 * Cannot auto-discover DMA channel.
 	 */
 	if (!SB_DRQ_VALID(ia->ia_drq)) {
-		printf("pas: configured dma chan %d invalid\n", ia->ia_drq);
+		printf("sb: configured dma chan %d invalid\n", ia->ia_drq);
 		return 0;
 	}
 #ifdef NEWCONFIG
@@ -375,11 +375,12 @@ pasprobe(parent, match, aux)
 	} else
 #endif
 	if (!SB_IRQ_VALID(ia->ia_irq)) {
-		printf("pas: configured irq chan %d invalid\n", ia->ia_irq);
+		int irq = ffs(ia->ia_irq) - 1;
+		printf("pas: configured irq %d invalid\n", irq);
 		return 0;
 	}
 
-	sc->sc_sbdsp.sc_irq = ia->ia_irq;
+	sc->sc_sbdsp.sc_irq = ffs(ia->ia_irq) - 1;
 	sc->sc_sbdsp.sc_drq = ia->ia_drq;
 	
 	if (sbdsp_probe(&sc->sc_sbdsp) == 0) {
@@ -398,7 +399,7 @@ pasforceintr(aux)
 {
 	static char dmabuf;
 	struct isa_attach_args *ia = aux;
-	int iobase = ia->ia_iobase;
+	u_short iobase = ia->ia_iobase;
 
 	/*
 	 * Set up a DMA read of one byte.
@@ -411,7 +412,7 @@ pasforceintr(aux)
 	 * it is needed (and you pay the latency).  Also, you might
 	 * never need the buffer anyway.)
 	 */
-	at_dma(DMAMODE_READ, &dmabuf, 1, ia->ia_drq);
+	at_dma(1, &dmabuf, 1, ia->ia_drq);
 	if (pas_wdsp(iobase, SB_DSP_RDMA) == 0) {
 		(void)pas_wdsp(iobase, 0);
 		(void)pas_wdsp(iobase, 0);
@@ -430,12 +431,31 @@ pasattach(parent, self, aux)
 {
 	register struct pas_softc *sc = (struct pas_softc *)self;
 	struct isa_attach_args *ia = (struct isa_attach_args *)aux;
-	register int iobase = ia->ia_iobase;
-	int err;
-	
+	register u_short iobase = ia->ia_iobase;
+
 	sc->sc_iobase = iobase;
-	sc->sc_ih = isa_intr_establish(ia->ia_ic, ia->ia_irq, IST_EDGE,
-	    IPL_AUDIO, sbdsp_intr, &sc->sc_sbdsp);
+
+#ifdef NEWCONFIG
+	isa_establish(&sc->sc_id, &sc->sc_dev);
+#endif
+	sc->sc_ih.ih_fun = sbdsp_intr;
+	sc->sc_ih.ih_arg = &sc->sc_sbdsp;
+	sc->sc_ih.ih_level = IPL_BIO;
+	intr_establish(ia->ia_irq, IST_EDGE, &sc->sc_ih);
+
+#ifdef NEWCONFIG
+	/*
+	 * We limit DMA transfers to a page, and use the generic DMA handling
+	 * code in isa.c.  This code can end up copying a buffer, but since
+	 * the audio driver uses relative small buffers this isn't likely.
+	 *
+	 * This allocation scheme means that the maximum transfer is limited
+	 * by the page size (rather than 64k).  This is reasonable.  For 4K
+	 * pages, the transfer time at 48KHz is 4096 / 48000 = 85ms.  This
+	 * is plenty long enough to amortize any fixed time overhead.
+	 */
+	at_setup_dmachan(sc->sc_dmachan, NBPG);
+#endif
 
 	printf(" ProAudio Spectrum %s [rev %d] ", pasnames[sc->model], sc->rev);
 	
@@ -444,8 +464,8 @@ pasattach(parent, self, aux)
 	sprintf(pas_device.name, "pas,%s", pasnames[sc->model]);
 	sprintf(pas_device.version, "%d", sc->rev);
 
-	if ((err = audio_hardware_attach(&pas_hw_if, &sc->sc_sbdsp)) != 0)
-		printf("pas: could not attach to audio pseudo-device driver (%d)\n", err);
+	if (audio_hardware_attach(&pas_hw_if, (caddr_t)&sc->sc_sbdsp) != 0)
+		printf("pas: could not attach to audio pseudo-device driver\n");
 }
 
 int
@@ -456,10 +476,10 @@ pasopen(dev, flags)
     struct pas_softc *sc;
     int unit = AUDIOUNIT(dev);
     
-    if (unit >= pas_cd.cd_ndevs)
+    if (unit >= pascd.cd_ndevs)
 	return ENODEV;
     
-    sc = pas_cd.cd_devs[unit];
+    sc = pascd.cd_devs[unit];
     if (!sc)
 	return ENXIO;
     
@@ -468,7 +488,7 @@ pasopen(dev, flags)
 
 int
 pas_getdev(addr, retp)
-	void *addr;
+	caddr_t addr;
 	struct audio_device *retp;
 {
 	*retp = pas_device;

@@ -1,36 +1,3 @@
-/*	$NetBSD: fat.h,v 1.10 1996/02/11 22:48:14 ws Exp $	*/
-
-/*-
- * Copyright (C) 1994 Wolfgang Solfrank.
- * Copyright (C) 1994 TooLs GmbH.
- * All rights reserved.
- * Original code by Paul Popelka (paulp@uts.amdahl.com) (see below).
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by TooLs GmbH.
- * 4. The name of TooLs GmbH may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY TOOLS GMBH ``AS IS'' AND ANY EXPRESS OR
- * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL TOOLS GMBH BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
- * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
- * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
- * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
 /*
  * Written by Paul Popelka (paulp@uts.amdahl.com)
  * 
@@ -45,6 +12,8 @@
  * any damages caused by this software.
  * 
  * October 1992
+ * 
+ *	$Id: fat.h,v 1.1 1993/08/13 11:35:33 cgd Exp $
  */
 
 /*
@@ -64,24 +33,15 @@
 #define	FAT16_MASK	0xffff	/* mask for 16 bit cluster numbers */
 
 /*
- * MSDOSFS:
  * Return true if filesystem uses 12 bit fats. Microsoft Programmer's
  * Reference says if the maximum cluster number in a filesystem is greater
- * than 4078 ((CLUST_RSRVS - CLUST_FIRST) & FAT12_MASK) then we've got a
- * 16 bit fat filesystem. While mounting, the result of this test is stored
- * in pm_fatentrysize.
- * GEMDOS-flavour (atari):
- * If the filesystem is on floppy we've got a 12 bit fat filesystem, otherwise
- * 16 bit. We check the d_type field in the disklabel struct while mounting
- * and store the result in the pm_fatentrysize. Note that this kind of
- * detection gets flakey when mounting a vnd-device.
+ * than 4086 then we've got a 16 bit fat filesystem.
  */
-#define	FAT12(pmp)	(pmp->pm_fatentrysize == 12)
-#define	FAT16(pmp)	(pmp->pm_fatentrysize == 16)
+#define	FAT12(pmp)	(pmp->pm_maxcluster <= 4086)
+#define	FAT16(pmp)	(pmp->pm_maxcluster >  4086)
 
 #define	MSDOSFSEOF(cn)	(((cn) & 0xfff8) == 0xfff8)
 
-#ifdef _KERNEL
 /*
  * These are the values for the function argument to the function
  * fatentry().
@@ -90,18 +50,10 @@
 #define	FAT_SET		0x0002	/* set a fat entry */
 #define	FAT_GET_AND_SET	(FAT_GET | FAT_SET)
 
-/*
- * Flags to extendfile:
- */
-#define	DE_CLEAR	1	/* Zero out the blocks allocated */
-
-int pcbmap __P((struct denode *, u_long, daddr_t *, u_long *, int *));
-int clusterfree __P((struct msdosfsmount *, u_long, u_long *));
-int clusteralloc __P((struct msdosfsmount *, u_long, u_long, u_long, u_long *, u_long *));
-int extendfile __P((struct denode *, u_long, struct buf **, u_long *, int));
-int fatentry __P((int, struct msdosfsmount *, u_long, u_long *, u_long));
-void fc_purge __P((struct denode *, u_int));
-void fc_lookup __P((struct denode *, u_long, u_long *, u_long *));
-int fillinusemap __P((struct msdosfsmount *));
-int freeclusterchain __P((struct msdosfsmount *, u_long));
-#endif	/* _KERNEL */
+#if defined(KERNEL)
+int pcbmap __P((struct denode * dep, u_long findcn, daddr_t * bnp, u_long * cnp));
+int clusterfree __P((struct msdosfsmount * pmp, u_long cn, u_long * oldcnp));
+int clusteralloc __P((struct msdosfsmount * pmp, u_long * retcluster, u_long fillwith));
+int fatentry __P((int function, struct msdosfsmount * pmp, u_long cluster, u_long * oldcontents, u_long newcontents));
+int freeclusterchain __P((struct msdosfsmount * pmp, u_long startchain));
+#endif /* defined(KERNEL) */

@@ -1,4 +1,4 @@
-/*	$NetBSD: ppb.c,v 1.7 1996/03/27 04:08:34 cgd Exp $	*/
+/*	$NetBSD: ppb.c,v 1.1 1996/02/28 01:46:32 cgd Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -49,18 +49,28 @@
 #include <dev/pci/pcidevs.h>
 #include <dev/pci/ppbreg.h>
 
+struct ppb_softc {
+	struct device sc_dev;
+
+	/*
+	 * Primary bus information.
+	 */
+	pcitag_t	sc_p_tag;		/* tag of this device */
+
+	/*
+	 * Secondary bus information.
+	 */
+	int		sc_s_num;		/* secondary bus number */
+};
+
 int	ppbmatch __P((struct device *, void *, void *));
 void	ppbattach __P((struct device *, struct device *, void *));
 
-struct cfattach ppb_ca = {
-	sizeof(struct device), ppbmatch, ppbattach
+struct cfdriver ppbcd = {
+	NULL, "ppb", ppbmatch, ppbattach, DV_DULL, sizeof(struct ppb_softc)
 };
 
-struct cfdriver ppb_cd = {
-	NULL, "ppb", DV_DULL
-};
-
-int	ppbprint __P((void *, char *pnp));
+static int	ppbprint __P((void *, char *pnp));
 
 int
 ppbmatch(parent, match, aux)
@@ -87,18 +97,21 @@ ppbattach(parent, self, aux)
 	struct device *parent, *self;
 	void *aux;
 {
+	struct ppb_softc *sc = (struct ppb_softc *)self;
 	struct pci_attach_args *pa = aux;
-	pci_chipset_tag_t pc = pa->pa_pc;
 	struct pcibus_attach_args pba;
-	pcireg_t busdata;
+	pcireg_t data;
 	char devinfo[256];
+
+	sc->sc_p_tag = pa->pa_tag;
 
 	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo);
 	printf(": %s (rev. 0x%02x)\n", devinfo, PCI_REVISION(pa->pa_class));
 
-	busdata = pci_conf_read(pc, pa->pa_tag, PPB_REG_BUSINFO);
+	data = pci_conf_read(sc->sc_p_tag, PPB_REG_BUSINFO);
 
-	if (PPB_BUSINFO_SECONDARY(busdata) == 0) {
+	sc->sc_s_num = PPB_BUSINFO_SECONDARY(data);
+	if (sc->sc_s_num == 0) {
 		printf("%s: not configured by system firmware\n",
 		    self->dv_xname);
 		return;
@@ -107,29 +120,26 @@ ppbattach(parent, self, aux)
 #if 0
 	/*
 	 * XXX can't do this, because we're not given our bus number
-	 * (we shouldn't need it), and because we've no way to
-	 * decompose our tag.
+	 * (we shouldn't need it) and we can't decompose our tag.
 	 */
+
 	/* sanity check. */
-	if (pa->pa_bus != PPB_BUSINFO_PRIMARY(busdata))
+	if (pa->pa_bus != PPB_BUSINFO_PRIMARY(data))
 		panic("ppbattach: bus in tag (%d) != bus in reg (%d)",
-		    pa->pa_bus, PPB_BUSINFO_PRIMARY(busdata));
+		    pa->pa_bus, PPB_BUSINFO_PRIMARY(data));
 #endif
 
 	/*
 	 * Attach the PCI bus than hangs off of it.
 	 */
 	pba.pba_busname = "pci";
-	pba.pba_bc = pa->pa_bc;
-	pba.pba_pc = pc;
-	pba.pba_bus = PPB_BUSINFO_SECONDARY(busdata);
-	pba.pba_intrswiz = pa->pa_intrswiz;
-	pba.pba_intrtag = pa->pa_intrtag;
+	pba.pba_bus = sc->sc_s_num;
+	pba.pba_maxndevs = PPB_SECONDARY_DEVICES;
 
-	config_found(self, &pba, ppbprint);
+	config_found(self, &pa, ppbprint);
 }
 
-int
+static int
 ppbprint(aux, pnp)
 	void *aux;
 	char *pnp;
@@ -140,5 +150,5 @@ ppbprint(aux, pnp)
 	if (pnp)
 		printf("pci at %s", pnp);
 	printf(" bus %d", pba->pba_bus);
-	return (UNCONF);
+        return (UNCONF);
 }

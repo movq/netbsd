@@ -1,5 +1,3 @@
-/*	$NetBSD: printf.c,v 1.7 1996/02/08 20:19:36 gwr Exp $	*/
-
 /*-
  * Copyright (c) 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -32,7 +30,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)printf.c	8.1 (Berkeley) 6/11/93
+ *	from: @(#)printf.c	8.1 (Berkeley) 6/11/93
+ *	     $Id: printf.c,v 1.1 1994/01/26 02:03:53 brezak Exp $
  */
 
 /*
@@ -60,89 +59,37 @@
 
 #include <sys/cdefs.h>
 #include <sys/types.h>
-#ifdef __STDC__
-#include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
 
-#include "stand.h"
+/*
+ * Note that stdarg.h and the ANSI style va_start macro is used for both
+ * ANSI and traditional C compilers.
+ */
+#define KERNEL
+#include <machine/stdarg.h>
+#undef KERNEL
 
-static void kprintn __P((void (*)(int), u_long, int));
-static void sputchar __P((int));
-static void kprintf __P((void (*)(int), const char *, va_list));
-
-static char *sbuf;
-
-static void
-sputchar(c)
-	int c;
-{
-	*sbuf++ = c;
-}
+static void kprintn __P((u_long, int));
 
 void
-#ifdef __STDC__
-sprintf(char *buf, const char *fmt, ...)
-#else
-sprintf(buf, fmt, va_alist)
-	char *buf, *fmt;
-#endif
-{
-	va_list ap;
-
-	sbuf = buf;
-#ifdef __STDC__
-	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
-	kprintf(sputchar, fmt, ap);
-	va_end(ap);
-	*sbuf = '\0';
-}
-
-void
-#ifdef __STDC__
+#if __STDC__
 printf(const char *fmt, ...)
 #else
-printf(fmt, va_alist)
+printf(fmt /* , va_alist */)
 	char *fmt;
 #endif
-{
-	va_list ap;
-
-#ifdef __STDC__
-	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
-	kprintf(putchar, fmt, ap);
-	va_end(ap);
-}
-
-void
-vprintf(const char *fmt, va_list ap)
-{
-	kprintf(putchar, fmt, ap);
-}
-
-void
-kprintf(put, fmt, ap)
-	void (*put)__P((int));
-	const char *fmt;
-	va_list ap;
 {
 	register char *p;
 	register int ch, n;
 	unsigned long ul;
 	int lflag, set;
+	va_list ap;
 
+	va_start(ap, fmt);
 	for (;;) {
 		while ((ch = *fmt++) != '%') {
 			if (ch == '\0')
 				return;
-			put(ch);
+			putchar(ch);
 		}
 		lflag = 0;
 reswitch:	switch (ch = *fmt++) {
@@ -152,69 +99,68 @@ reswitch:	switch (ch = *fmt++) {
 		case 'b':
 			ul = va_arg(ap, int);
 			p = va_arg(ap, char *);
-			kprintn(put, ul, *p++);
+			kprintn(ul, *p++);
 
 			if (!ul)
 				break;
 
-			for (set = 0; (n = *p++);) {
+			for (set = 0; n = *p++;) {
 				if (ul & (1 << (n - 1))) {
-					put(set ? ',' : '<');
+					putchar(set ? ',' : '<');
 					for (; (n = *p) > ' '; ++p)
-						put(n);
+						putchar(n);
 					set = 1;
 				} else
 					for (; *p > ' '; ++p);
 			}
 			if (set)
-				put('>');
+				putchar('>');
 			break;
 		case 'c':
 			ch = va_arg(ap, int);
-				put(ch & 0x7f);
+				putchar(ch & 0x7f);
 			break;
 		case 's':
 			p = va_arg(ap, char *);
-			while ((ch = *p++))
-				put(ch);
+			while (ch = *p++)
+				putchar(ch);
 			break;
 		case 'd':
 			ul = lflag ?
 			    va_arg(ap, long) : va_arg(ap, int);
 			if ((long)ul < 0) {
-				put('-');
+				putchar('-');
 				ul = -(long)ul;
 			}
-			kprintn(put, ul, 10);
+			kprintn(ul, 10);
 			break;
 		case 'o':
 			ul = lflag ?
 			    va_arg(ap, u_long) : va_arg(ap, u_int);
-			kprintn(put, ul, 8);
+			kprintn(ul, 8);
 			break;
 		case 'u':
 			ul = lflag ?
 			    va_arg(ap, u_long) : va_arg(ap, u_int);
-			kprintn(put, ul, 10);
+			kprintn(ul, 10);
 			break;
 		case 'x':
 			ul = lflag ?
 			    va_arg(ap, u_long) : va_arg(ap, u_int);
-			kprintn(put, ul, 16);
+			kprintn(ul, 16);
 			break;
 		default:
-			put('%');
+			putchar('%');
 			if (lflag)
-				put('l');
-			put(ch);
+				putchar('l');
+			putchar(ch);
 		}
 	}
 	va_end(ap);
 }
 
 static void
-kprintn(put, ul, base)
-	void (*put)__P((int));
+kprintn(ul, base)
 	unsigned long ul;
 	int base;
 {
@@ -226,15 +172,6 @@ kprintn(put, ul, base)
 		*p++ = "0123456789abcdef"[ul % base];
 	} while (ul /= base);
 	do {
-		put(*--p);
+		putchar(*--p);
 	} while (p > buf);
-}
-
-void
-twiddle()
-{
-	static int pos;
-
-	putchar("|/-\\"[pos++ & 3]);
-	putchar('\b');
 }

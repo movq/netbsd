@@ -1,45 +1,7 @@
-/*	$NetBSD: ccdvar.h,v 1.11 1996/02/28 01:08:32 thorpej Exp $	*/
-
-/*-
- * Copyright (c) 1996 The NetBSD Foundation, Inc.
- * All rights reserved.
- *
- * This code is derived from software contributed to The NetBSD Foundation
- * by Jason R. Thorpe.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
- * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
- * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- */
-
 /*
  * Copyright (c) 1988 University of Utah.
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * the Systems Programming Group of the University of Utah Computer
@@ -73,62 +35,35 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * from: Utah $Hdr: cdvar.h 1.1 90/07/09$
- *
- *	@(#)cdvar.h	8.1 (Berkeley) 6/10/93
+ *	from: Utah Hdr: cdvar.h 1.1 90/07/09
+ *	from: @(#)cdvar.h	7.2 (Berkeley) 11/4/90
+ *	$Id: ccdvar.h,v 1.1 1994/06/24 14:11:04 hpeyerl Exp $
  */
 
-/*
- * Dynamic configuration and disklabel support by:
- *	Jason R. Thorpe <thorpej@nas.nasa.gov>
- *	Numerical Aerodynamic Simulation Facility
- *	Mail Stop 258-6
- *	NASA Ames Research Center
- *	Moffett Field, CA 94035
- */
+#define	NCCDISKS	8		/* max # of component disks */
 
 /*
- * A concatenated disk is described at initialization time by this structure.
+ * A concatenated disk is described at config time by this structure.
  */
 struct ccddevice {
-	int		ccd_unit;	/* logical unit of this ccd */
-	int		ccd_interleave;	/* interleave (DEV_BSIZE blocks) */
-	int		ccd_flags;	/* misc. information */
-	struct vnode	**ccd_vpp;	/* array of component vnodes */
-	char		**ccd_cpp;	/* array of component pathnames */
-	int		ccd_ndev;	/* number of component devices */
-};
-
-/*
- * This structure is used to configure a ccd via ioctl(2).
- */
-struct ccd_ioctl {
-	char	**ccio_disks;		/* pointer to component paths */
-	int	ccio_ndisks;		/* number of disks to concatenate */
-	int	ccio_ileave;		/* interleave (DEV_BSIZE blocks) */
-	int	ccio_flags;		/* misc. information */
-	int	ccio_unit;		/* unit number: use varies */
-	size_t	ccio_size;		/* (returned) size of ccd */
+	int	ccd_unit;		/* logical unit of this ccd */
+	int	ccd_interleave;		/* interleave (DEV_BSIZE blocks) */
+	int	ccd_flags;		/* misc. information */
+	int	ccd_dk;			/* disk number */
+	dev_t	ccd_dev[NCCDISKS];	/* component devices */
 };
 
 /* ccd_flags */
-#define	CCDF_SWAP	0x01	/* interleave should be dmmax */
-#define CCDF_UNIFORM	0x02	/* use LCCD of sizes for uniform interleave */
-#define CCDF_MIRROR	0x04	/* enable data mirroring */
-
-/* Mask of user-settable ccd flags. */
-#define CCDF_USERMASK	(CCDF_SWAP|CCDF_UNIFORM|CCDF_MIRROR)
+#define	CDF_SWAP	0x01	/* interleave should be dmmax */
+#define CDF_UNIFORM	0x02	/* use LCD of sizes for uniform interleave */
 
 /*
  * Component info table.
  * Describes a single component of a concatenated disk.
  */
 struct ccdcinfo {
-	struct vnode	*ci_vp;			/* device's vnode */
-	dev_t		ci_dev;			/* XXX: device's dev_t */
-	size_t		ci_size; 		/* size */
-	char		*ci_path;		/* path to component */
-	size_t		ci_pathlen;		/* length of component path */
+	dev_t		ci_dev;	 /* devno */
+	size_t		ci_size; /* size */
 };
 
 /*
@@ -161,49 +96,9 @@ struct ccdiinfo {
 	int	ii_ndisk;	/* # of disks range is interleaved over */
 	daddr_t	ii_startblk;	/* starting scaled block # for range */
 	daddr_t	ii_startoff;	/* starting component offset (block #) */
-	int	*ii_index;	/* ordered list of components in range */
+	char	ii_index[NCCDISKS];/* ordered list of components in range */
 };
 
-/*
- * Concatenated disk pseudo-geometry information.
- */
-struct ccdgeom {
-	u_int32_t	ccg_secsize;	/* # bytes per sector */
-	u_int32_t	ccg_nsectors;	/* # data sectors per track */
-	u_int32_t	ccg_ntracks;	/* # tracks per cylinder */
-	u_int32_t	ccg_ncylinders;	/* # cylinders per unit */
-};
-
-/*
- * A concatenated disk is described after initialization by this structure.
- */
-struct ccd_softc {
-	int		 sc_unit;		/* logical unit number */
-	int		 sc_flags;		/* flags */
-	int		 sc_cflags;		/* configuration flags */
-	size_t		 sc_size;		/* size of ccd */
-	int		 sc_ileave;		/* interleave */
-	int		 sc_nccdisks;		/* number of components */
-	struct ccdcinfo	 *sc_cinfo;		/* component info */
-	struct ccdiinfo	 *sc_itable;		/* interleave table */
-	struct ccdgeom   sc_geom;		/* pseudo geometry info */
-	char		 sc_xname[8];		/* XXX external name */
-	struct disk	 sc_dkdev;		/* generic disk device info */
-};
-
-/* sc_flags */
-#define CCDF_INITED	0x01	/* unit has been initialized */
-#define CCDF_WLABEL	0x02	/* label area is writable */
-#define CCDF_LABELLING	0x04	/* unit is currently being labelled */
-#define CCDF_WANTED	0x40	/* someone is waiting to obtain a lock */
-#define CCDF_LOCKED	0x80	/* unit is locked */
-
-/*
- * Before you can use a unit, it must be configured with CCDIOCSET.
- * The configuration persists across opens and closes of the device;
- * a CCDIOCCLR must be used to reset a configuration.  An attempt to
- * CCDIOCSET an already active unit will return EBUSY.  Attempts to
- * CCDIOCCLR an inactive unit will return ENXIO.
- */
-#define CCDIOCSET	_IOWR('F', 16, struct ccd_ioctl)   /* enable ccd */
-#define CCDIOCCLR	_IOW('F', 17, struct ccd_ioctl)    /* disable ccd */
+#ifdef KERNEL
+extern	struct ccddevice ccddevice[];
+#endif

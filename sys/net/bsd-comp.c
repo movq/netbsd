@@ -1,4 +1,4 @@
-/*	$NetBSD: bsd-comp.c,v 1.4 1996/03/15 02:28:00 paulus Exp $	*/
+/*	$NetBSD: bsd-comp.c,v 1.1 1995/07/04 06:28:17 paulus Exp $	*/
 
 /* Because this code is derived from the 4.3BSD compress source:
  *
@@ -41,11 +41,12 @@
 
 /*
  * This version is for use with mbufs on BSD-derived systems.
+ *
+ * $Id: bsd-comp.c,v 1.1 1995/07/04 06:28:17 paulus Exp $
  */
 
 #include <sys/param.h>
 #include <sys/types.h>
-#include <sys/systm.h>
 #include <sys/mbuf.h>
 #include <sys/socket.h>
 #include <net/if.h>
@@ -187,12 +188,6 @@ struct compressor ppp_bsd_compress = {
 #define RATIO_SCALE	(1<<RATIO_SCALE_LOG)
 #define RATIO_MAX	(0x7fffffff>>RATIO_SCALE_LOG)
 
-static void bsd_clear __P((struct bsd_db *));
-static int bsd_check __P((struct bsd_db *));
-static void *bsd_alloc __P((u_char *, int, int));
-static int bsd_init __P((struct bsd_db *, u_char *, int, int, int, int,
-			 int, int));
-
 /*
  * clear the dictionary
  */
@@ -314,7 +309,7 @@ bsd_alloc(options, opt_len, decomp)
     u_int newlen, hsize, hshift, maxmaxcode;
     struct bsd_db *db;
 
-    if (opt_len < CILEN_BSD_COMPRESS || options[0] != CI_BSD_COMPRESS
+    if (opt_len != CILEN_BSD_COMPRESS || options[0] != CI_BSD_COMPRESS
 	|| options[1] != CILEN_BSD_COMPRESS
 	|| BSD_VERSION(options[2]) != BSD_CURRENT_VERSION)
 	return NULL;
@@ -412,11 +407,11 @@ bsd_init(db, options, opt_len, unit, hdrlen, mru, debug, decomp)
 {
     int i;
 
-    if (opt_len < CILEN_BSD_COMPRESS || options[0] != CI_BSD_COMPRESS
+    if (opt_len != CILEN_BSD_COMPRESS || options[0] != CI_BSD_COMPRESS
 	|| options[1] != CILEN_BSD_COMPRESS
 	|| BSD_VERSION(options[2]) != BSD_CURRENT_VERSION
 	|| BSD_NBITS(options[2]) != db->maxbits
-	|| (decomp && db->lens == NULL))
+	|| decomp && db->lens == NULL)
 	return 0;
 
     if (decomp) {
@@ -486,10 +481,11 @@ bsd_compress(state, mret, mp, slen, maxolen)
     struct bsd_dict *dictp;
     u_char c;
     int hval, disp, ent, ilen;
+    struct mbuf *np;
     u_char *rptr, *wptr;
     u_char *cp_end;
     int olen;
-    struct mbuf *m;
+    struct mbuf *m, **mnp;
 
 #define PUTBYTE(v) {					\
     ++olen;						\
@@ -835,6 +831,7 @@ bsd_decompress(state, cmp, dmpp)
     struct mbuf *m, *dmp, *mret;
     int adrs, ctrl, ilen;
     int space, codelen, extra;
+    struct mbuf *last;
 
     /*
      * Save the address/control from the PPP header
@@ -944,7 +941,7 @@ bsd_decompress(state, cmp, dmpp)
 	}
 
 	if (incode > max_ent + 2 || incode > db->maxmaxcode
-	    || (incode > max_ent && oldcode == CLEAR)) {
+	    || incode > max_ent && oldcode == CLEAR) {
 	    m_freem(mret);
 	    if (db->debug) {
 		printf("bsd_decomp%d: bad code 0x%x oldcode=0x%x ",

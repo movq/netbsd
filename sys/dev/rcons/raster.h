@@ -1,4 +1,4 @@
-/*	$NetBSD: raster.h,v 1.3 1995/11/24 23:50:51 cgd Exp $ */
+/*	$NetBSD: raster.h,v 1.1 1995/09/17 19:56:32 pk Exp $ */
 
 /*-
  * Copyright (c) 1991, 1993
@@ -87,7 +87,7 @@ struct raster {
     int width, height;	/* size in pixels */
     int depth;		/* bits per pixel - 1 or 8 */
     int linelongs;	/* longs from one line to the next - for padding */
-    u_int32_t *pixels;	/* pointer to the actual bits */
+    u_long* pixels;	/* pointer to the actual bits */
     caddr_t data;	/* special pointer for frame buffers and subregions */
     };
 
@@ -115,7 +115,7 @@ struct raster_fontcache {
 
 /* Font struct. */
 struct raster_font {
-    int width, height, ascent;	/* nominal character size */
+    int width, height;	/* nominal character size */
     int flags;
 #define RASFONT_FIXEDWIDTH		0x1
 #define RASFONT_NOVERTICALMOVEMENT	0x2
@@ -212,10 +212,10 @@ extern int raster_replsrc ARGS(( struct raster* dst, int dx, int dy, int w, int 
 extern struct raster_font* raster_fontopen ARGS(( char* fontname ));
 /* Opens a font. Returns (struct raster_font*) 0 on failure. */
 
-extern int raster_text ARGS(( struct raster* r, int x, int y, int rop, struct raster_font* rf, unsigned char* text ));
+extern int raster_text ARGS(( struct raster* r, int x, int y, int rop, struct raster_font* rf, char* text ));
 /* Draws text.  Returns 0 on success, -1 on failure. */
 
-extern int raster_textn ARGS(( struct raster* r, int x, int y, int rop, struct raster_font* rf, unsigned char* text, int len ));
+extern int raster_textn ARGS(( struct raster* r, int x, int y, int rop, struct raster_font* rf, char* text, int len ));
 /* Draws n characters of text.  Returns 0 on success, -1 on failure. */
 
 extern void raster_fontclose ARGS(( struct raster_font* rf ));

@@ -1,5 +1,3 @@
-/*	$NetBSD: disklabel.c,v 1.4 1996/01/13 22:25:36 leo Exp $	*/
-
 /*-
  * Copyright (c) 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -32,18 +30,19 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)disklabel.c	8.1 (Berkeley) 6/11/93
+ *	from: @(#)disklabel.c	8.1 (Berkeley) 6/11/93
+ *	      $Id: disklabel.c,v 1.1 1994/01/26 02:03:42 brezak Exp $
  */
 
 #include <sys/param.h>
 #include <sys/disklabel.h>
-#include "stand.h"
 
 char *
 getdisklabel(buf, lp)
 	const char *buf;
 	struct disklabel *lp;
 {
+	register struct buf *bp;
 	struct disklabel *dlp, *elp;
 	char *msg = (char *)0;
 
@@ -63,4 +62,20 @@ getdisklabel(buf, lp)
 		}
 	}
 	return (msg);
+}
+
+/*
+ * Compute checksum for disk label.
+ */
+dkcksum(lp)
+	register struct disklabel *lp;
+{
+	register u_short *start, *end;
+	register u_short sum = 0;
+
+	start = (u_short *)lp;
+	end = (u_short *)&lp->d_partitions[lp->d_npartitions];
+	while (start < end)
+		sum ^= *start++;
+	return (sum);
 }

@@ -1,5 +1,3 @@
-/*	$NetBSD: exec_script.c,v 1.13 1996/02/04 02:15:06 christos Exp $	*/
-
 /*
  * Copyright (c) 1993, 1994 Christopher G. Demetriou
  * All rights reserved.
@@ -16,7 +14,7 @@
  *    must display the following acknowledgement:
  *      This product includes software developed by Christopher G. Demetriou.
  * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
+ *    derived from this software withough specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -28,6 +26,8 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ *	$Id: exec_script.c,v 1.1 1994/01/16 03:10:03 cgd Exp $
  */
 
 #if defined(SETUIDSCRIPTS) && !defined(FDSCRIPTS)
@@ -92,7 +92,7 @@ exec_script_makecmds(p, epp)
 	 * (The latter requirement means that we have to check
 	 * for both spaces and tabs later on.)
 	 */
-	hdrlinelen = min(epp->ep_hdrvalid, MAXINTERP);
+	hdrlinelen = MIN(epp->ep_hdrvalid, MAXINTERP);
 	for (cp = hdrstr + EXEC_SCRIPT_MAGICLEN; cp < hdrstr + hdrlinelen;
 	    cp++) {
 		if (*cp == '\n') {
@@ -105,7 +105,6 @@ exec_script_makecmds(p, epp)
 
 	shellname = NULL;
 	shellarg = NULL;
-	shellarglen = 0;
 
 	/* strip spaces before the shell name */
 	for (cp = hdrstr + EXEC_SCRIPT_MAGICLEN; *cp == ' ' || *cp == '\t';
@@ -135,6 +134,7 @@ exec_script_makecmds(p, epp)
 	 * behaviour.
 	 */
 	shellarg = cp;
+	shellarglen = 0;
 	for ( /* cp = cp */ ; *cp != '\0'; cp++)
 		shellarglen++;
 	*cp++ = '\0';
@@ -159,11 +159,8 @@ check_shell:
 	 * close all open fd's when the start.  That kills this
 	 * method of implementing "safe" set-id and x-only scripts.
 	 */
-	if (VOP_ACCESS(epp->ep_vp, VREAD, p->p_ucred, p) == EACCES
-#ifdef SETUIDSCRIPTS
-	    || script_sbits
-#endif
-	    ) {
+	if (VOP_ACCESS(epp->ep_vp, VREAD, p->p_ucred, p) == EACCES ||
+	    script_sbits) {
 		struct file *fp;
 		extern struct fileops vnops;
 
@@ -173,7 +170,7 @@ check_shell:
 #endif
 
 		if (error = falloc(p, &fp, &epp->ep_fd))
-			goto fail;
+			return error;
 
 		epp->ep_flags |= EXEC_HASFD;
 		fp->f_type = DTYPE_VNODE;
@@ -202,8 +199,7 @@ check_shell:
 	if ((epp->ep_flags & EXEC_HASFD) == 0) {
 #endif
 		/* normally can't fail, but check for it if diagnostic */
-		error = copyinstr(epp->ep_name, *tmpsap++, MAXPATHLEN,
-		    (size_t *)0);
+		error = copyinstr(epp->ep_name, *tmpsap++, MAXPATHLEN, 0);
 #ifdef DIAGNOSTIC
 		if (error != 0)
 			panic("exec_script: copyinstr couldn't fail\n");
@@ -225,25 +221,18 @@ check_shell:
 	 * them if check_exec() fails.
 	 */
 	scriptvp = epp->ep_vp;
-	oldpnbuf = epp->ep_ndp->ni_cnd.cn_pnbuf;
-
-	VOP_UNLOCK(scriptvp);
+	oldpnbuf = epp->ep_ndp->ni_pnbuf;
 
 	if ((error = check_exec(p, epp)) == 0) {
-		/* note that we've clobbered the header */
-		epp->ep_flags |= EXEC_DESTR;
-
 		/*
 		 * It succeeded.  Unlock the script and
 		 * close it if we aren't using it any more.
-		 * Also, set things up so that the fake args
+		 * Also, et things up so that the fake args
 		 * list will be used.
 		 */
+		VOP_UNLOCK(scriptvp);
 		if ((epp->ep_flags & EXEC_HASFD) == 0)
 			vn_close(scriptvp, FREAD, p->p_ucred, p);
-
-		/* free the old pathname buffer */
-		FREE(oldpnbuf, M_NAMEI);
 
 		epp->ep_flags |= (EXEC_HASARGL | EXEC_SKIPARG);
 		epp->ep_fa = shellargp;
@@ -258,39 +247,22 @@ check_shell:
 		if (script_sbits & VSGID)
 			epp->ep_vap->va_gid = script_gid;
 #endif
-		return (0);
+	} else {
+		/*
+		 * Failed.  restore the vnode ptr and pnbuf so that
+		 * check_exec() will be able to kill them when it punts.
+		 */
+		epp->ep_vp = scriptvp;
+		epp->ep_ndp->ni_pnbuf = oldpnbuf;
+
+		/* free the fake arg list, because we're not returning it */
+		tmpsap = shellargp;
+		while (*tmpsap != NULL) {
+			FREE(*tmpsap, M_EXEC);
+			tmpsap++;
+		}
+		FREE(shellargp, M_EXEC);
 	}
 
-	/* XXX oldpnbuf not set for "goto fail" path */
-	epp->ep_ndp->ni_cnd.cn_pnbuf = oldpnbuf;
-#ifdef FDSCRIPTS
-fail:
-#endif
-	/* note that we've clobbered the header */
-	epp->ep_flags |= EXEC_DESTR;
-
-	/* kill the opened file descriptor, else close the file */
-        if (epp->ep_flags & EXEC_HASFD) {
-                epp->ep_flags &= ~EXEC_HASFD;
-                (void) fdrelease(p, epp->ep_fd);
-        } else
-		vn_close(scriptvp, FREAD, p->p_ucred, p);
-
-        FREE(epp->ep_ndp->ni_cnd.cn_pnbuf, M_NAMEI);
-
-	/* free the fake arg list, because we're not returning it */
-	tmpsap = shellargp;
-	while (*tmpsap != NULL) {
-		FREE(*tmpsap, M_EXEC);
-		tmpsap++;
-	}
-	FREE(shellargp, M_EXEC);
-
-        /*
-         * free any vmspace-creation commands,
-         * and release their references
-         */
-        kill_vmcmds(&epp->ep_vmcmds);
-
-        return error;
+	return error;
 }

@@ -1,5 +1,3 @@
-/*	$NetBSD: bootsect.h,v 1.7 1995/07/24 06:36:23 leo Exp $	*/
-
 /*
  * Written by Paul Popelka (paulp@uts.amdahl.com)
  * 
@@ -14,6 +12,8 @@
  * any damages caused by this software.
  * 
  * October 1992
+ * 
+ * $Id: bootsect.h,v 1.1 1993/08/13 11:35:29 cgd Exp $
  */
 
 /*
@@ -22,46 +22,30 @@
  * first sector of a partitioned hard disk.
  */
 struct bootsector33 {
-	u_int8_t	bsJump[3];		/* jump inst E9xxxx or EBxx90 */
-	int8_t		bsOemName[8];		/* OEM name and version */
-	int8_t		bsBPB[19];		/* BIOS parameter block */
-	int8_t		bsDriveNumber;		/* drive number (0x80) */
-	int8_t		bsBootCode[479];	/* pad so struct is 512b */
-	u_int16_t	bsBootSectSig;
+	char bsJump[3];		/* jump instruction E9xxxx or EBxx90 */
+	char bsOemName[8];	/* OEM name and version */
+	char bsBPB[19];		/* BIOS parameter block */
+	char bsDriveNumber;	/* drive number (0x80) */
+	char bsBootCode[474];	/* pad so structure is 512 bytes long */
+	u_short bsBootSectSig;
 #define	BOOTSIG	0xaa55
 };
 
 struct bootsector50 {
-	u_int8_t	bsJump[3];		/* jump inst E9xxxx or EBxx90 */
-	int8_t		bsOemName[8];		/* OEM name and version */
-	int8_t		bsBPB[25];		/* BIOS parameter block */
-	int8_t		bsDriveNumber;		/* drive number (0x80) */
-	int8_t		bsReserved1;		/* reserved */
-	int8_t		bsBootSignature;	/* ext. boot signature (0x29) */
+	char bsJump[3];		/* jump instruction E9xxxx or EBxx90 */
+	char bsOemName[8];	/* OEM name and version */
+	char bsBPB[25];		/* BIOS parameter block */
+	char bsDriveNumber;	/* drive number (0x80) */
+	char bsReserved1;	/* reserved */
+	char bsBootSignature;	/* extended boot signature (0x29) */
 #define	EXBOOTSIG	0x29
-	int8_t		bsVolumeID[4];		/* volume ID number */
-	int8_t		bsVolumeLabel[11];	/* volume label */
-	int8_t		bsFileSysType[8];	/* fs type (FAT12 or FAT16) */
-	int8_t		bsBootCode[448];	/* pad so structure is 512b */
-	u_int16_t	bsBootSectSig;
+	char bsVolumeID[4];	/* volume ID number */
+	char bsVolumeLabel[11];	/* volume label */
+	char bsFileSysType[8];	/* file system type (FAT12 or FAT16) */
+	char bsBootCode[448];	/* pad so structure is 512 bytes long */
+	u_short bsBootSectSig;
 #define	BOOTSIG	0xaa55
 };
-#ifdef	atari
-/*
- * The boot sector on a gemdos fs is a little bit different from the msdos fs
- * format. Currently there is no need to declare a seperate structure, the
- * bootsector33 struct will do.
- */
-#if 0
-struct bootsec_atari {
-	u_int8_t	bsBranch[2];		/* branch inst if auto-boot	*/
-	int8_t		bsFiller[6];		/* anything or nothing		*/
-	int8_t		bsSerial[3];		/* serial no. for mediachange	*/
-	int8_t		bsBPB[19];		/* BIOS parameter block		*/
-	int8_t		bsBootCode[482];	/* pad so struct is 512b	*/
-};
-#endif
-#endif /* atari */
 
 union bootsector {
 	struct bootsector33 bs33;

@@ -34,19 +34,21 @@
  * SUCH DAMAGE.
  *
  *	from: @(#)htonl.s	5.3 (Berkeley) 12/17/90
- *	$Id: htonl.S,v 1.4 1995/10/07 09:27:04 mycroft Exp $
+ *	$Id: htonl.S,v 1.1 1993/12/04 03:06:12 cgd Exp $
  */
 
-#include <machine/asm.h>
-
 #if defined(LIBC_SCCS)
-RCSID("$Id: htonl.S,v 1.4 1995/10/07 09:27:04 mycroft Exp $")
+	.text
+	.asciz "$Id: htonl.S,v 1.1 1993/12/04 03:06:12 cgd Exp $"
 #endif
 
 /* netorder = htonl(hostorder) */
+
+#include "DEFS.h"
+
 ENTRY(htonl)
 	movl	4(%esp),%eax
-	rorw	$8,%ax
+	xchgb	%al,%ah
 	roll	$16,%eax
-	rorw	$8,%ax
+	xchgb	%al,%ah
 	ret

@@ -1,7 +1,5 @@
-/*	$NetBSD: exec_aout.c,v 1.14 1996/02/04 02:15:01 christos Exp $	*/
-
 /*
- * Copyright (c) 1993, 1994 Christopher G. Demetriou
+ * Copyright (c) 1993 Christopher G. Demetriou
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -16,7 +14,7 @@
  *    must display the following acknowledgement:
  *      This product includes software developed by Christopher G. Demetriou.
  * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
+ *    derived from this software withough specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -28,16 +26,34 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ *	$Id: exec_aout.c,v 1.1 1993/09/05 01:33:35 cgd Exp $
  */
 
-#include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/proc.h>
-#include <sys/malloc.h>
-#include <sys/vnode.h>
-#include <sys/exec.h>
-#include <sys/resourcevar.h>
-#include <vm/vm.h>
+#include "param.h"
+#include "systm.h"
+#include "filedesc.h"
+#include "kernel.h"
+#include "proc.h"
+#include "mount.h"
+#include "malloc.h"
+#include "namei.h"
+#include "vnode.h"
+#include "file.h"
+#include "exec.h"
+#include "resourcevar.h"
+#include "wait.h"
+
+#include "machine/cpu.h"
+#include "machine/reg.h"
+#include "machine/exec.h"
+
+#include "mman.h"
+#include "vm/vm.h"
+#include "vm/vm_param.h"
+#include "vm/vm_map.h"
+#include "vm/vm_kern.h"
+#include "vm/vm_pager.h"
 
 /*
  * exec_aout_makecmds(): Check if it's an a.out-format executable.
@@ -49,6 +65,8 @@
  * This function, in the former case, or the hook, in the latter, is
  * responsible for creating a set of vmcmds which can be used to build
  * the process's vm space and inserting them into the exec package.
+ *
+ * XXX: NMAGIC and OMAGIC are currently not supported.
  */
 
 int
@@ -59,14 +77,15 @@ exec_aout_makecmds(p, epp)
 	u_long midmag, magic;
 	u_short mid;
 	int error;
-	struct exec *execp = epp->ep_hdr;
 
-	if (epp->ep_hdrvalid < sizeof(struct exec))
-		return ENOEXEC;
-
-	midmag = ntohl(execp->a_midmag);
+	midmag = ntohl(epp->ep_execp->a_midmag);
 	mid = (midmag >> 16) & 0x3ff;
 	magic = midmag & 0xffff;
+
+#ifdef EXEC_DEBUG
+	printf("exec_makecmds: a_midmag is %x, magic=%x mid=%x\n",
+	    epp->ep_execp->a_midmag, magic, mid);
+#endif
 
 	midmag = mid << 16 | magic;
 
@@ -74,19 +93,20 @@ exec_aout_makecmds(p, epp)
 	case (MID_MACHINE << 16) | ZMAGIC:
 		error = exec_aout_prep_zmagic(p, epp);
 		break;
-	case (MID_MACHINE << 16) | NMAGIC:
-		error = exec_aout_prep_nmagic(p, epp);
-		break;
 	case (MID_MACHINE << 16) | OMAGIC:
-		error = exec_aout_prep_omagic(p, epp);
-		break;
+	case (MID_MACHINE << 16) | NMAGIC:
 	default:
 		error = cpu_exec_aout_makecmds(p, epp);
 	}
 
-	if (error)
-		kill_vmcmds(&epp->ep_vmcmds);
+	if (error && epp->ep_vcp)
+		kill_vmcmd(&epp->ep_vcp);
 
+bad:
+
+#ifdef EXEC_DEBUG
+	printf("exec_makecmds returning with error = %d\n", error);
+#endif
 	return error;
 }
 
@@ -94,6 +114,10 @@ exec_aout_makecmds(p, epp)
  * exec_aout_prep_zmagic(): Prepare a 'native' ZMAGIC binary's exec package
  *
  * First, set of the various offsets/lengths in the exec package.
+ * Note that the ep_ssize parameter must be set to be the current stack
+ * limit; this is adjusted in the body of execve() to yield the
+ * appropriate stack segment usage once the argument length is
+ * calculated.
  *
  * Then, mark the text image busy (so it can be demand paged) or error
  * out if this is not possible.  Finally, set up vmcmds for the
@@ -105,12 +129,16 @@ exec_aout_prep_zmagic(p, epp)
 	struct proc *p;
 	struct exec_package *epp;
 {
-	struct exec *execp = epp->ep_hdr;
+	struct exec *execp = epp->ep_execp;
+	struct exec_vmcmd *ccmdp;
 
 	epp->ep_taddr = USRTEXT;
 	epp->ep_tsize = execp->a_text;
 	epp->ep_daddr = epp->ep_taddr + execp->a_text;
 	epp->ep_dsize = execp->a_data + execp->a_bss;
+	epp->ep_maxsaddr = USRSTACK - MAXSSIZ;
+	epp->ep_minsaddr = USRSTACK;
+	epp->ep_ssize = p->p_rlimit[RLIMIT_STACK].rlim_cur;
 	epp->ep_entry = execp->a_entry;
 
 	/*
@@ -119,135 +147,42 @@ exec_aout_prep_zmagic(p, epp)
 	 * reasons
 	 */
 	if ((execp->a_text != 0 || execp->a_data != 0) &&
-	    epp->ep_vp->v_writecount != 0) {
+	    (epp->ep_vp->v_flag & VTEXT) == 0 && epp->ep_vp->v_writecount != 0) {
 #ifdef DIAGNOSTIC
 		if (epp->ep_vp->v_flag & VTEXT)
 			panic("exec: a VTEXT vnode has writecount != 0\n");
 #endif
+		epp->ep_vcp = NULL;
 		return ETXTBSY;
 	}
 	epp->ep_vp->v_flag |= VTEXT;
 
 	/* set up command for text segment */
-	NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_pagedvn, execp->a_text,
-	    epp->ep_taddr, epp->ep_vp, 0, VM_PROT_READ|VM_PROT_EXECUTE);
+	epp->ep_vcp = new_vmcmd(vmcmd_map_pagedvn,
+	    execp->a_text,
+	    epp->ep_taddr,
+	    epp->ep_vp,
+	    0,
+	    VM_PROT_READ | VM_PROT_EXECUTE);
+	ccmdp = epp->ep_vcp;
 
 	/* set up command for data segment */
-	NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_pagedvn, execp->a_data,
-	    epp->ep_daddr, epp->ep_vp, execp->a_text,
-	    VM_PROT_READ|VM_PROT_WRITE|VM_PROT_EXECUTE);
+	ccmdp->ev_next = new_vmcmd(vmcmd_map_pagedvn,
+	    execp->a_data,
+	    epp->ep_daddr,
+	    epp->ep_vp,
+	    execp->a_text,
+	    VM_PROT_READ | VM_PROT_WRITE | VM_PROT_EXECUTE);
+	ccmdp = ccmdp->ev_next;
 
 	/* set up command for bss segment */
-	NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_zero, execp->a_bss,
-	    epp->ep_daddr + execp->a_data, NULLVP, 0,
-	    VM_PROT_READ|VM_PROT_WRITE|VM_PROT_EXECUTE);
-
-	return exec_aout_setup_stack(p, epp);
-}
-
-/*
- * exec_aout_prep_nmagic(): Prepare a 'native' NMAGIC binary's exec package
- */
-
-int
-exec_aout_prep_nmagic(p, epp)
-	struct proc *p;
-	struct exec_package *epp;
-{
-	struct exec *execp = epp->ep_hdr;
-	long bsize, baddr;
-
-	epp->ep_taddr = USRTEXT;
-	epp->ep_tsize = execp->a_text;
-	epp->ep_daddr = roundup(epp->ep_taddr + execp->a_text, __LDPGSZ);
-	epp->ep_dsize = execp->a_data + execp->a_bss;
-	epp->ep_entry = execp->a_entry;
-
-	/* set up command for text segment */
-	NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_readvn, execp->a_text,
-	    epp->ep_taddr, epp->ep_vp, sizeof(struct exec),
-	    VM_PROT_READ|VM_PROT_EXECUTE);
-
-	/* set up command for data segment */
-	NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_readvn, execp->a_data,
-	    epp->ep_daddr, epp->ep_vp, execp->a_text + sizeof(struct exec),
-	    VM_PROT_READ|VM_PROT_WRITE|VM_PROT_EXECUTE);
-
-	/* set up command for bss segment */
-	baddr = roundup(epp->ep_daddr + execp->a_data, NBPG);
-	bsize = epp->ep_daddr + epp->ep_dsize - baddr;
-	if (bsize > 0)
-		NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_zero, bsize, baddr,
-		    NULLVP, 0, VM_PROT_READ|VM_PROT_WRITE|VM_PROT_EXECUTE);
-
-	return exec_aout_setup_stack(p, epp);
-}
-
-/*
- * exec_aout_prep_omagic(): Prepare a 'native' OMAGIC binary's exec package
- */
-
-int
-exec_aout_prep_omagic(p, epp)
-	struct proc *p;
-	struct exec_package *epp;
-{
-	struct exec *execp = epp->ep_hdr;
-	long dsize, bsize, baddr;
-
-	epp->ep_taddr = USRTEXT;
-	epp->ep_tsize = execp->a_text;
-	epp->ep_daddr = epp->ep_taddr + execp->a_text;
-	epp->ep_dsize = execp->a_data + execp->a_bss;
-	epp->ep_entry = execp->a_entry;
-
-	/* set up command for text and data segments */
-	NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_readvn,
-	    execp->a_text + execp->a_data, epp->ep_taddr, epp->ep_vp,
-	    sizeof(struct exec), VM_PROT_READ|VM_PROT_WRITE|VM_PROT_EXECUTE);
-
-	/* set up command for bss segment */
-	baddr = roundup(epp->ep_daddr + execp->a_data, NBPG);
-	bsize = epp->ep_daddr + epp->ep_dsize - baddr;
-	if (bsize > 0)
-		NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_zero, bsize, baddr,
-		    NULLVP, 0, VM_PROT_READ|VM_PROT_WRITE|VM_PROT_EXECUTE);
-
-	/*
-	 * Make sure (# of pages) mapped above equals (vm_tsize + vm_dsize);
-	 * obreak(2) relies on this fact. Both `vm_tsize' and `vm_dsize' are
-	 * computed (in execve(2)) by rounding *up* `ep_tsize' and `ep_dsize'
-	 * respectively to page boundaries.
-	 * Compensate `ep_dsize' for the amount of data covered by the last
-	 * text page. 
-	 */
-	dsize = epp->ep_dsize + execp->a_text - roundup(execp->a_text, NBPG);
-	epp->ep_dsize = (dsize > 0) ? dsize : 0;
-	return exec_aout_setup_stack(p, epp);
-}
-
-/*
- * exec_aout_setup_stack(): Set up the stack segment for an a.out
- * executable.
- *
- * Note that the ep_ssize parameter must be set to be the current stack
- * limit; this is adjusted in the body of execve() to yield the
- * appropriate stack segment usage once the argument length is
- * calculated.
- *
- * This function returns an int for uniformity with other (future) formats'
- * stack setup functions.  They might have errors to return.
- */
-
-int
-exec_aout_setup_stack(p, epp)
-	struct proc *p;
-	struct exec_package *epp;
-{
-
-	epp->ep_maxsaddr = USRSTACK - MAXSSIZ;
-	epp->ep_minsaddr = USRSTACK;
-	epp->ep_ssize = p->p_rlimit[RLIMIT_STACK].rlim_cur;
+	ccmdp->ev_next = new_vmcmd(vmcmd_map_zero,
+	    execp->a_bss,
+	    epp->ep_daddr + execp->a_data,
+	    0,
+	    0,
+	    VM_PROT_READ | VM_PROT_WRITE | VM_PROT_EXECUTE);
+	ccmdp = ccmdp->ev_next;
 
 	/*
 	 * set up commands for stack.  note that this takes *two*, one to
@@ -260,12 +195,19 @@ exec_aout_setup_stack(p, epp)
 	 * note that in memory, things assumed to be: 0 ....... ep_maxsaddr
 	 * <stack> ep_minsaddr
 	 */
-	NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_zero,
+	ccmdp->ev_next = new_vmcmd(vmcmd_map_zero,
 	    ((epp->ep_minsaddr - epp->ep_ssize) - epp->ep_maxsaddr),
-	    epp->ep_maxsaddr, NULLVP, 0, VM_PROT_NONE);
-	NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_zero, epp->ep_ssize,
-	    (epp->ep_minsaddr - epp->ep_ssize), NULLVP, 0,
-	    VM_PROT_READ|VM_PROT_WRITE|VM_PROT_EXECUTE);
+	    epp->ep_maxsaddr,
+	    0,
+	    0,
+	    VM_PROT_NONE);
+	ccmdp = ccmdp->ev_next;
+	ccmdp->ev_next = new_vmcmd(vmcmd_map_zero,
+	    epp->ep_ssize,
+	    (epp->ep_minsaddr - epp->ep_ssize),
+	    0,
+	    0,
+	    VM_PROT_READ | VM_PROT_WRITE | VM_PROT_EXECUTE);
 
 	return 0;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: wds.c,v 1.4 1996/04/11 22:30:38 cgd Exp $	*/
+/*	$NetBSD: wds.c,v 1.1 1996/03/29 20:53:40 mycroft Exp $	*/
 
 #define	WDSDIAG
 #define	integrate
@@ -71,10 +71,6 @@
 #include <dev/isa/isavar.h>
 #include <dev/isa/isadmavar.h>
 #include <dev/isa/wdsreg.h>
-
-#ifndef DDB
-#define Debugger() panic("should call debugger here (wds.c)")
-#endif /* ! DDB */
 
 #define WDS_MBX_SIZE	16
 
@@ -153,7 +149,7 @@ void	wds_init __P((struct wds_softc *));
 void	wds_inquire_setup_information __P((struct wds_softc *));
 void    wdsminphys __P((struct buf *));
 int     wds_scsi_cmd __P((struct scsi_xfer *));
-void	wds_sense  __P((struct wds_softc *, struct wds_scb *));
+int     wds_sense  __P((struct wds_softc *, struct wds_scb *));
 int	wds_poll __P((struct wds_softc *, struct scsi_xfer *, int));
 int	wds_ipoll __P((struct wds_softc *, struct wds_scb *, int));
 void	wds_timeout __P((void *));
@@ -295,8 +291,8 @@ wdsattach(parent, self, aux)
 #ifdef NEWCONFIG
 	isa_establish(&sc->sc_id, &sc->sc_dev);
 #endif
-	sc->sc_ih = isa_intr_establish(ia->ia_ic, sc->sc_irq, IST_EDGE,
-	    IPL_BIO, wdsintr, sc);
+	sc->sc_ih = isa_intr_establish(sc->sc_irq, IST_EDGE, IPL_BIO, wdsintr,
+	    sc);
 
 	/*
 	 * ask the adapter what subunits are present
@@ -1155,7 +1151,7 @@ bad:
 /*
  * Send a sense request.
  */
-void
+int
 wds_sense(sc, scb)
 	struct wds_softc *sc;
 	struct wds_scb *scb;

@@ -1,5 +1,3 @@
-/*	$NetBSD: close.c,v 1.6 1996/01/13 22:25:35 leo Exp $	*/
-
 /*-
  * Copyright (c) 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -35,7 +33,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)close.c	8.1 (Berkeley) 6/11/93
+ *	from: @(#)close.c	8.1 (Berkeley) 6/11/93
  *  
  *
  * Copyright (c) 1989, 1990, 1991 Carnegie Mellon University
@@ -62,25 +60,25 @@
  * 
  * any improvements or extensions that they make and grant Carnegie the
  * rights to redistribute these changes.
+ * 
+ *	$Id: close.c,v 1.1 1994/01/26 02:03:38 brezak Exp $
  */
 
 #include "stand.h"
 
-int
 close(fd)
 	int fd;
 {
 	register struct open_file *f = &files[fd];
-	int err1 = 0, err2 = 0;
+	int err1, err2;
 
 	if ((unsigned)fd >= SOPEN_MAX || f->f_flags == 0) {
 		errno = EBADF;
 		return (-1);
 	}
-	if (!(f->f_flags & F_RAW) && f->f_ops)
+	if (!(f->f_flags & F_RAW))
 		err1 = (f->f_ops->close)(f);
-	if (!(f->f_flags & F_NODEV) && f->f_dev)
-		err2 = (f->f_dev->dv_close)(f);
+	err2 = (f->f_dev->dv_close)(f);
 	f->f_flags = 0;
 	if (err1) {
 		errno = err1;
@@ -91,4 +89,14 @@ close(fd)
 		return (-1);
 	}
 	return (0);
+}
+
+
+closeall()
+{
+	int i;
+
+	for (i = 0; i < SOPEN_MAX; i++)
+	    if (files[i].f_flags != 0)
+		(void)close(i);
 }

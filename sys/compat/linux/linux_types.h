@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_types.h,v 1.4 1995/08/21 03:42:11 mycroft Exp $	*/
+/*	$NetBSD: linux_types.h,v 1.1 1995/02/28 23:26:14 fvdl Exp $	*/
 
 /*
  * Copyright (c) 1995 Frank van der Linden
@@ -34,9 +34,6 @@
 #ifndef _LINUX_TYPES_H
 #define _LINUX_TYPES_H
 
-typedef struct {
-	long	val[2];
-} linux_fsid_t;
 
 typedef unsigned short linux_uid_t;
 typedef unsigned short linux_gid_t;
@@ -48,18 +45,11 @@ typedef long linux_time_t;
 typedef long linux_clock_t;
 typedef long linux_off_t;
 typedef int linux_pid_t;
+typedef unsigned long linux_sigset_t;
+typedef void (*linux_handler_t)(int);
 
 struct linux_statfs {
-	long		l_ftype;
-	long		l_fbsize;
-	long		l_fblocks;
-	long		l_fbfree;
-	long		l_fbavail;
-	long		l_ffiles;
-	long		l_fffree;
-	linux_fsid_t	l_ffsid;
-	long		l_fnamelen;
-	long		l_fspare[6];
+	int dummy;	/* Not filled in yet */
 };
 
 /*
@@ -74,20 +64,11 @@ struct linux_utsname {
 	char l_domainname[65];
 };
 
-struct linux_oldutsname {
-	char l_sysname[65];
-	char l_nodename[65];
-	char l_release[65];
-	char l_version[65];
-	char l_machine[65];
-};
-
-struct linux_oldoldutsname {
-	char l_sysname[9];
-	char l_nodename[9];
-	char l_release[9];
-	char l_version[9];
-	char l_machine[9];
+struct linux_sigaction {
+	void (*sa_handler)(int);
+	linux_sigset_t sa_mask;
+	unsigned long sa_flags;
+	void (*sa_restorer)(void);
 };
 
 /*

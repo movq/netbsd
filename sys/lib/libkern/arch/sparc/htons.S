@@ -34,14 +34,12 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * Header: htons.s,v 1.1 92/06/25 12:47:05 torek Exp
+ * from: Header: htons.s,v 1.1 92/06/25 12:47:05 torek Exp
+ * $Id: htons.S,v 1.1 1994/06/30 06:53:09 deraadt Exp $
  */
 
 #if defined(LIBC_SCCS) && !defined(lint)
-#ifdef notdef
 	.asciz "@(#)htons.s	8.1 (Berkeley) 6/4/93"
-#endif
-	.asciz "$NetBSD: htons.S,v 1.2 1994/10/26 06:39:59 cgd Exp $"
 #endif /* LIBC_SCCS and not lint */
 
 /* netorder = htons(hostorder) */

@@ -1,5 +1,3 @@
-/*	$NetBSD: iodesc.h,v 1.4 1995/09/23 03:31:50 gwr Exp $	*/
-
 /*
  * Copyright (c) 1993 Adam Glass 
  * Copyright (c) 1992 Regents of the University of California.
@@ -36,16 +34,18 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
+ *
+ *	$Id: iodesc.h,v 1.1 1994/05/08 16:11:26 brezak Exp $
  */
 
 #ifndef __SYS_LIBNETBOOT_IODESC_H
 #define __SYS_LIBNETBOOT_IODESC_H
 
 struct iodesc {
-	struct	in_addr destip;		/* dest. ip addr, net order */
-	struct	in_addr myip;		/* local ip addr, net order */
-	u_short	destport;		/* dest. port, net order */
-	u_short	myport;			/* local port, net order */
+	n_long	destip;			/* destination ip address */
+	n_long	myip;			/* my ip address */
+	u_short	destport;		/* destination port */
+	u_short	myport;			/* destination port */
 	u_long	xid;			/* transaction identification */
 	u_char	myea[6];		/* my ethernet address */
 	struct netif *io_netif;

@@ -1,5 +1,3 @@
-/*	$NetBSD: ether.c,v 1.6 1995/09/14 23:45:25 pk Exp $	*/
-
 /*
  * Copyright (c) 1992 Regents of the University of California.
  * All rights reserved.
@@ -36,7 +34,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * @(#) Header: net.c,v 1.9 93/08/06 19:32:15 leres Exp  (LBL)
+ * from @(#) Header: net.c,v 1.9 93/08/06 19:32:15 leres Exp  (LBL)
  */
 
 #include <sys/param.h>
@@ -54,80 +52,32 @@
 #include "net.h"
 #include "netif.h"
 
+const u_char bcea[6] = {
+	0xff, 0xff, 0xff, 0xff, 0xff, 0xff
+};
+
 /* Caller must leave room for ethernet header in front!! */
-ssize_t
-sendether(d, pkt, len, dea, etype)
+int
+sendether(d, buf, len, dea, etype)
 	struct iodesc *d;
-	void *pkt;
-	size_t len;
+	void *buf;
+	int len;
 	u_char *dea;
 	int etype;
 {
-	register ssize_t n;
 	register struct ether_header *eh;
 
 #ifdef ETHER_DEBUG
  	if (debug)
 		printf("sendether: called\n");
 #endif
-
-	eh = (struct ether_header *)pkt - 1;
-	len += sizeof(*eh);
+	eh = ((struct ether_header *)buf) - 1;
+	len += ETHER_SIZE;
 
 	MACPY(d->myea, eh->ether_shost);		/* by byte */
 	MACPY(dea, eh->ether_dhost);			/* by byte */
 	eh->ether_type = htons(etype);
-
-	n = netif_put(d, eh, len);
-	if (n == -1 || n < sizeof(*eh))
-		return (-1);
-
-	n -= sizeof(*eh);
-	return (n);
-}
-
-/*
- * Get a packet of any Ethernet type, with our address or
- * the broadcast address.  Save the Ether type in arg 5.
- * NOTE: Caller must leave room for the Ether header.
- */
-ssize_t
-readether(d, pkt, len, tleft, etype)
-	register struct iodesc *d;
-	register void *pkt;
-	register size_t len;
-	time_t tleft;
-	register u_int16_t *etype;
-{
-	register ssize_t n;
-	register struct ether_header *eh;
-
-#ifdef ETHER_DEBUG
- 	if (debug)
-		printf("readether: called\n");
-#endif
-
-	eh = (struct ether_header *)pkt - 1;
-	len += sizeof(*eh);
-
-	n = netif_get(d, eh, len, tleft);
-	if (n == -1 || n < sizeof(*eh))
-		return (-1);
-
-	/* Validate Ethernet address. */
-	if (bcmp(d->myea, eh->ether_dhost, 6) != 0 &&
-	    bcmp(bcea, eh->ether_dhost, 6) != 0) {
-#ifdef ETHER_DEBUG
-		if (debug)
-			printf("readether: not ours (ea=%s)\n",
-				ether_sprintf(eh->ether_dhost));
-#endif
-		return (-1);
-	}
-	*etype = ntohs(eh->ether_type);
-
-	n -= sizeof(*eh);
-	return (n);
+	return (netif_put(d, eh, len) - ETHER_SIZE);
 }
 
 /*

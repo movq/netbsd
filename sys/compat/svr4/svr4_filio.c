@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_filio.c,v 1.5 1996/04/11 12:54:40 christos Exp $	 */
+/*	$NetBSD: svr4_filio.c,v 1.1 1994/11/14 06:13:14 christos Exp $	 */
 
 /*
  * Copyright (c) 1994 Christos Zoulas
@@ -45,7 +45,6 @@
 
 #include <compat/svr4/svr4_types.h>
 #include <compat/svr4/svr4_util.h>
-#include <compat/svr4/svr4_signal.h>
 #include <compat/svr4/svr4_syscallargs.h>
 #include <compat/svr4/svr4_stropts.h>
 #include <compat/svr4/svr4_ioctl.h>
@@ -53,17 +52,17 @@
 
 
 int
-svr4_fil_ioctl(fp, p, retval, fd, cmd, data)
-	struct file *fp;
-	struct proc *p;
-	register_t *retval;
-	int fd;
-	u_long cmd;
-	caddr_t data;
+svr4_filioctl(fp, cmd, data, p, retval)
+	struct file 	*fp;
+	u_long		 cmd;
+	caddr_t		 data;
+	struct proc	*p;
+	register_t	*retval;
 {
-	int error;
-	int num;
 	struct filedesc *fdp = p->p_fd;
+	int error;
+	int fd;
+	int num;
 	int (*ctl) __P((struct file *, u_long,  caddr_t, struct proc *)) =
 			fp->f_ops->fo_ioctl;
 
@@ -71,10 +70,12 @@ svr4_fil_ioctl(fp, p, retval, fd, cmd, data)
 
 	switch (cmd) {
 	case SVR4_FIOCLEX:
+		fd = fp - fdp->fd_ofiles[0]; 
 		fdp->fd_ofileflags[fd] |= UF_EXCLOSE;
 		return 0;
 
 	case SVR4_FIONCLEX:
+		fd = fp - fdp->fd_ofiles[0]; 
 		fdp->fd_ofileflags[fd] &= ~UF_EXCLOSE;
 		return 0;
 
@@ -102,7 +103,7 @@ svr4_fil_ioctl(fp, p, retval, fd, cmd, data)
 		return copyout(&num, data, sizeof(num));
 
 	default:
-		DPRINTF(("Unknown svr4 filio %lx\n", cmd));
+		DPRINTF(("Unknown svr4 filio %x\n", cmd));
 		return 0;	/* ENOSYS really */
 	}
 }

@@ -34,17 +34,19 @@
  * SUCH DAMAGE.
  *
  *	from: @(#)ntohs.s	5.2 (Berkeley) 12/17/90
- *	$Id: ntohs.S,v 1.4 1995/10/07 09:27:07 mycroft Exp $
+ *	$Id: ntohs.S,v 1.1 1993/12/04 03:06:42 cgd Exp $
  */
 
-#include <machine/asm.h>
-
 #if defined(LIBC_SCCS)
-RCSID("$Id: ntohs.S,v 1.4 1995/10/07 09:27:07 mycroft Exp $")
+	.text
+	.asciz "$Id: ntohs.S,v 1.1 1993/12/04 03:06:42 cgd Exp $"
 #endif
 
 /* hostorder = ntohs(netorder) */
+
+#include "DEFS.h"
+
 ENTRY(ntohs)
 	movzwl	4(%esp),%eax
-	rorw	$8,%ax
+	xchgb	%al,%ah
 	ret

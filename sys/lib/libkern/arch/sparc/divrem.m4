@@ -1,5 +1,3 @@
-/*	$NetBSD: divrem.m4,v 1.3 1995/04/22 09:37:39 pk Exp $	*/
-
 /*
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -36,7 +34,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * Header: divrem.m4,v 1.4 92/06/25 13:23:57 torek Exp
+ * from: Header: divrem.m4,v 1.4 92/06/25 13:23:57 torek Exp
+ * $Id: divrem.m4,v 1.1 1994/06/30 06:53:01 deraadt Exp $
  */
 
 /*
@@ -45,10 +44,7 @@
  */
 
 #if defined(LIBC_SCCS) && !defined(lint)
-#ifdef notdef
 	.asciz "@(#)divrem.m4	8.1 (Berkeley) 6/4/93"
-#endif
-	.asciz "$NetBSD: divrem.m4,v 1.3 1995/04/22 09:37:39 pk Exp $"
 #endif /* LIBC_SCCS and not lint */
 
 /*
@@ -140,9 +136,7 @@ ifelse(S, `true',
 `	! compute sign of result; if neither is negative, no problem
 	orcc	divisor, dividend, %g0	! either negative?
 	bge	2f			! no, go do the divide
-	ifelse(OP, `div',
-		`xor	divisor, dividend, SIGN',
-		`mov	dividend, SIGN')	! compute sign in any case
+	xor	divisor, dividend, SIGN	! compute sign in any case
 	tst	divisor
 	bge	1f
 	tst	dividend

@@ -1,4 +1,4 @@
-/*	$NetBSD: z8530reg.h,v 1.5 1996/01/24 19:21:40 gwr Exp $ */
+/*	$NetBSD: z8530reg.h,v 1.1 1995/04/11 02:29:25 mycroft Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -64,19 +64,25 @@
  * differently for the two channels.  We can, however, ignore this much
  * of the time.
  */
-#if 0	/* Example only! */
-/*
- * The layout of this structure is hardware-dependent!
- * Define these in some machine-dependent place.
- */
+#ifndef LOCORE
 struct zschan {
-	volatile u_char	zc_csr;		/* ctrl, status, or reg. number */
-	volatile u_char	zc_data;	/* data or numbered register */
+	u_char	zc_csr;		/* control and status, and indirect access */
+	u_char	zc_xxx0;
+	u_char	zc_data;	/* data */
+	u_char	zc_xxx1;
 };
+
+/*
+ * N.B.: the keyboard is channel 1, the mouse channel 0; ttyb is 1, ttya
+ * is 0.  In other words, the things are BACKWARDS.
+ */
 struct zsdevice {
-	struct	zschan zs_chan[2];
+	struct	zschan zs_chan[2];	/* channel A = 1, B = 0 */
 };
-#endif	/* Example only! */
+
+#define	CHAN_A	1
+#define	CHAN_B	0
+#endif
 
 /*
  * Some of the names in this files were chosen to make the hsis driver
@@ -339,7 +345,7 @@ struct zsdevice {
 
 #define	ZSWR14_LOCAL_LOOPBACK	0x10	/* set local loopback mode */
 #define	ZSWR14_AUTO_ECHO	0x08	/* set auto echo mode */
-#define	ZSWR14_DTR_REQ		0x04	/* DTR* / REQ* pin gives REQ* */
+#define	ZSWR14_DTR_REQ		0x04	/* DTR*/REQ* pin gives REQ* */
 #define	ZSWR14_BAUD_FROM_PCLK	0x02	/* BRG clock taken from PCLK */
 					/* (else from RTxC* pin or xtal osc) */
 #define	ZSWR14_BAUD_ENA		0x01	/* enable BRG countdown */

@@ -33,14 +33,11 @@
 
 #if defined(LIBC_SCCS) && !defined(lint)
 /*static char *sccsid = "from: @(#)strcpy.c	5.7 (Berkeley) 2/24/91";*/
-static char *rcsid = "$Id: strcpy.c,v 1.7 1996/04/18 02:20:09 cgd Exp $";
+static char *rcsid = "$Id: strcpy.c,v 1.1 1993/10/27 22:00:50 jtc Exp $";
 #endif /* LIBC_SCCS and not lint */
 
-#ifndef _KERNEL
+#include <sys/cdefs.h>
 #include <string.h>
-#else
-#include <lib/libkern/libkern.h>
-#endif
 
 char *
 strcpy(to, from)
@@ -49,6 +46,6 @@ strcpy(to, from)
 {
 	char *save = to;
 
-	for (; (*to = *from) != '\0'; ++from, ++to);
+	for (; *to = *from; ++from, ++to);
 	return(save);
 }
