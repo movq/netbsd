@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu_machdep.c,v 1.2 1994/10/26 08:02:59 cgd Exp $	*/
+/*      $NetBSD: cpu_machdep.c,v 1.3 1994/11/25 19:09:50 ragge Exp $      */
 
 /*
  * Copyright (c) 1994 Ludd, University of Lule}, Sweden.
@@ -108,65 +108,4 @@ cpu_notsupp()
 {
 	conout("This cputype not supported.\n");
 	asm("halt");
-}
-
-start()
-{
-	extern int *end, proc0paddr, v_cmap, p_cmap,cpu_type;
-	register curtop,i,maxmem;
-
-	mtpr(0x1f,PR_IPL); /* No interrupts before istack is ok, please */
-
-	asm("movl r10,_bootdev");   /* XXX stack should have been setup */
-	asm("movl r11,_boothowto"); /* in boot, easier to transfer args */
-
-	/* FIRST we must set up kernel stack, directly after end */
-	/* This is the only thing we have to map here, rest in pmap */
-	proc0paddr=vax_round_page(&end);
-	mtpr(proc0paddr+UPAGES*NBPG,PR_KSP);
-/*	asm("mfpr $0, fp"); /* If something not gets into registers XXX */
-
-/*
- * Set logical page size and put Sysmap on its place.
- */
-	PAGE_SIZE = NBPG*2; /* Set logical page size */
-	Sysmap=(mfpr(PR_KSP)+PAGE_SIZE-1)& ~(PAGE_SIZE-1);
-
-
-	/* Be sure we are in system space. XXX should be done in boot */
-	asm("	pushl   $0x001f0000
-		pushl   $to_kmem
-		rei
-to_kmem:
-	");
-
-	/* Be sure some important internal registers have safe values */
-	mtpr(0,PR_P0LR);
-	mtpr(0,PR_P0BR);
-	mtpr(0,PR_P1LR);
-	mtpr(0x80000000,PR_P1BR);
-
-	mtpr(0,PR_MAPEN); /* No memory mapping yet */
-	mtpr(0,PR_SCBB); /* SCB at physical addr 0 */
-	mtpr(0,PR_ESP); /* Must be zero, used in page fault routine */
-	
-	cninit();
-printf("proc0paddr %x, end %x\n",proc0paddr,&end);
-
-	/* Count up memory etc... early machine dependent routines */
-	if((i=MACHID(mfpr(PR_SID)))>VAX_MAX) i=0;
-	maxmem=(cpu_calls[i].cpu_loinit)();
-
-	pmap_bootstrap(0,maxmem);
-
-	cpu_type=mfpr(PR_SID);
-	main();
-	/* XXX det {r dumt att fastna vid att init startar p} 2 */
-	asm("
-		pushl   $0x3c00000
-		pushl   $2
-		rei
-	");
-
-	/* Notreached */
 }
