@@ -1,4 +1,4 @@
-#	$NetBSD: INSTALL,v 1.17 2000/08/22 13:36:14 abs Exp $
+#	$NetBSD: INSTALL,v 1.18 2000/09/04 16:16:18 abs Exp $
 #
 # from: NetBSD: GENERIC,v 1.84 1999/06/06 13:00:03 mrg Exp
 #
@@ -13,7 +13,7 @@ maxusers	32
 options 	MEMORY_DISK_HOOKS
 options 	MEMORY_DISK_IS_ROOT	# force root on memory disk
 options 	MEMORY_DISK_SERVER=0	# no userspace memory disk support
-options 	MINIROOTSIZE=3584	# size of memory disk, in blocks
+options 	MINIROOTSIZE=3960	# size of memory disk, in blocks
 
 pseudo-device	md		1	# memory disk device (ramdisk)
 
