@@ -31,7 +31,7 @@
  * SUCH DAMAGE.
  *
  *	@(#)ser.c	7.12 (Berkeley) 6/27/91
- *	$Id: ser.c,v 1.20 1994/06/16 14:28:55 chopps Exp $
+ *	$Id: ser.c,v 1.22 1994/10/06 19:20:55 chopps Exp $
  */
 /*
  * XXX This file needs major cleanup it will never ervice more than one
@@ -73,7 +73,7 @@ struct cfdriver sercd = {
 #define SEROBUF_SIZE 32
 #define SERIBUF_SIZE 512
 
-int	serstart(), serparam(), serintr();
+int	serstart(), serparam(), serintr(), serhwiflow();
 int	ser_active;
 int	ser_hasfifo;
 int	nser = NSER;
@@ -111,6 +111,7 @@ struct speedtab serspeedtab[] = {
 	38400,	SERBRD(38400),
 	57600,	SERBRD(57600),
 	76800,	SERBRD(76800),
+	115200,	SERBRD(115200),
 	-1,	-1
 };
 
@@ -245,6 +246,7 @@ seropen(dev, flag, mode, p)
 	tp->t_oproc = (void (*) (struct tty *)) serstart;
 	tp->t_param = serparam;
 	tp->t_dev = dev;
+	tp->t_hwiflow = serhwiflow;
 
 	if ((tp->t_state & TS_ISOPEN) == 0) {
 		tp->t_state |= TS_WOPEN;
@@ -301,6 +303,12 @@ seropen(dev, flag, mode, p)
 		}
 	}
 done:
+	/* This is a way to handle lost XON characters */
+	if ((flag & O_TRUNC) && (tp->t_state & TS_TTSTOP)) {
+		tp->t_state &= ~TS_TTSTOP;
+	        ttstart (tp);
+	}
+
 	splx(s);
 	/*
 	 * Reset the tty pointer, as there could have been a dialout
@@ -391,6 +399,7 @@ serwrite(dev, uio, flag)
 static u_short serbuf[SERIBUF_SIZE];
 static u_short *sbrpt = serbuf;
 static u_short *sbwpt = serbuf;
+static u_short sbcnt;
 static u_short sbovfl;
 
 /*
@@ -425,13 +434,8 @@ ser_fastint()
 	/*
 	 * check for buffer overflow.
 	 */
-	if (sbwpt + 1 == sbrpt || 
-	    (sbwpt == serbuf + SERIBUF_SIZE - 1 && sbrpt == serbuf)) {
-#if 0
-		log(LOG_WARNING, "ser_fastint: buffer overflow!");
-#else
+	if (sbcnt == SERIBUF_SIZE) {
 		++sbovfl;
-#endif
 		return;
 	}
 	/*
@@ -440,6 +444,9 @@ ser_fastint()
 	*sbwpt++ = code;
 	if (sbwpt == serbuf + SERIBUF_SIZE)
 		sbwpt = serbuf;
+	++sbcnt;
+	if (sbcnt > SERIBUF_SIZE - 4)
+		CLRRTS(ciab.pra);	/* drop RTS if buffer almost full */
 }
 
 
@@ -448,6 +455,7 @@ serintr(unit)
 	int unit;
 {
 	int s1, s2, ovfl;
+	struct tty *tp = ser_tty[unit];
 
 	/*
 	 * Make sure we're not interrupted by another
@@ -458,16 +466,16 @@ serintr(unit)
 	/*
 	 * pass along any acumulated information
 	 */
-	while (sbrpt != sbwpt) {
+	while (sbcnt > 0 && (tp->t_state & TS_TBLOCK) == 0) {
 		/* 
 		 * no collision with ser_fastint()
 		 */
-		sereint(unit, *sbrpt);
+		sereint(unit, *sbrpt++);
 
 		ovfl = 0;
 		/* lock against ser_fastint() */
 		s2 = spl5();
-		sbrpt++;
+		sbcnt--;
 		if (sbrpt == serbuf + SERIBUF_SIZE)
 			sbrpt = serbuf;
 		if (sbovfl != 0) {
@@ -476,8 +484,11 @@ serintr(unit)
 		}
 		splx(s2);
 		if (ovfl != 0)
-			log(LOG_WARNING, "ser_fastint: %d buffer overflow!\n", ovfl);
+			log(LOG_WARNING, "ser0: %d ring buffer overflows.\n",
+			    ovfl);
 	}
+	if (sbcnt == 0 && (tp->t_state & TS_TBLOCK) == 0)
+		SETRTS(ciab.pra);	/* start accepting data again */
 	splx(s1);
 }
 
@@ -699,6 +710,19 @@ serparam(tp, t)
 	return(0);
 }
 
+int serhwiflow(tp, flag)
+        struct tty *tp;
+        int flag;
+{
+#if 0
+	printf ("serhwiflow %d\n", flag);
+#endif
+        if (flag)
+		CLRRTS(ciab.pra);
+	else
+	        SETRTS(ciab.pra);
+        return 1;
+}
 
 static void
 ser_putchar(tp, c)
@@ -769,6 +793,8 @@ ser_outintr()
 	 */
 	if (ISCTS(ciab.pra))
 		ser_putchar(tp, *sob_ptr++);
+	else
+		CLRCTS(last_ciab_pra);	/* Remember that CTS is off */
 out:
 	splx(s);
 }

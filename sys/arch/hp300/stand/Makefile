@@ -1,5 +1,5 @@
 #	from: @(#)Makefile	8.1 (Berkeley) 6/10/93
-#	     $Id: Makefile,v 1.8 1994/06/27 04:00:52 hpeyerl Exp $
+#	     $Id: Makefile,v 1.11 1994/08/15 06:42:04 mycroft Exp $
 
 # RELOC=FFF00000 allows for boot prog up to FF000 (1044480) bytes long
 RELOC=	FFF00000
@@ -123,8 +123,9 @@ dcopy:	copy.o srt0.o conf.o ${LIBS}
 mkboot: ${.CURDIR}/mkboot.c
 	${CC} ${CFLAGS} -o mkboot ${.CURDIR}/mkboot.c
 
-installboot: ${.CURDIR}/installboot.c
-	${CC} ${CFLAGS} -o installboot ${.CURDIR}/installboot.c
+installboot: ${.CURDIR}/installboot.sh
+	@rm -f installboot
+	cp -p ${.CURDIR}/installboot.sh installboot
 
 # utilities
 
@@ -149,13 +150,15 @@ install: mkboot installboot ${ALL}
 	rm -f ${DESTDIR}/usr/mdec/bootsd
 	ln ${DESTDIR}/usr/mdec/sdboot ${DESTDIR}/usr/mdec/bootsd
 	install -c -o bin -g bin -m 644 tapeboot.lif ${DESTDIR}/usr/mdec/bootct
-	install -o bin -g bin -m 755 -d ${DESTDIR}/sys/hpdist/tp
-	install -o bin -g bin -m 444 netbsdboot.lif ${DESTDIR}/sys/hpdist/tp
-	install -o bin -g bin -m 444 tapeboot.lif ${DESTDIR}/sys/hpdist/tp
-	install -o bin -g bin -m 444 diskboot.lif ${DESTDIR}/sys/hpdist/tp
-	install -o bin -g bin -m 444 ndiskboot.lif ${DESTDIR}/sys/hpdist/tp
+#	install -o bin -g bin -m 755 -d ${DESTDIR}/sys/hpdist/tp
+#	install -o bin -g bin -m 444 netbsdboot.lif ${DESTDIR}/sys/hpdist/tp
+#	install -o bin -g bin -m 444 tapeboot.lif ${DESTDIR}/sys/hpdist/tp
+#	install -o bin -g bin -m 444 diskboot.lif ${DESTDIR}/sys/hpdist/tp
+#	install -o bin -g bin -m 444 ndiskboot.lif ${DESTDIR}/sys/hpdist/tp
 
 .include <bsd.dep.mk>
 .include <bsd.obj.mk>
+# XXX This should not be necessary.
+.include <bsd.subdir.mk>
 
 FRC:

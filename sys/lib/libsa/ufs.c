@@ -61,18 +61,20 @@
  * any improvements or extensions that they make and grant Carnegie the
  * rights to redistribute these changes.
  * 
- *	$Id: ufs.c,v 1.3 1994/06/20 08:39:01 pk Exp $
+ *	$Id: ufs.c,v 1.7 1994/08/22 21:56:15 brezak Exp $
  */
 
 /*
  *	Stand-alone file reading package.
  */
 
+#include <string.h>
 #include <sys/param.h>
 #include <sys/time.h>
 #include <ufs/ffs/fs.h>
 #include <ufs/ufs/dinode.h>
 #include <ufs/ufs/dir.h>
+#include <lib/libkern/libkern.h>
 
 #include "stand.h"
 
@@ -95,6 +97,10 @@ struct file {
 	u_int		f_buf_size;	/* size of data block */
 	daddr_t		f_buf_blkno;	/* block number of data block */
 };
+
+#ifdef COMPAT_UFS
+void ffs_oldfscompat __P((struct fs *));
+#endif
 
 /*
  * Read a new inode into a file structure.
@@ -342,12 +348,10 @@ search_directory(name, f, inumber_p)
 		while (dp < edp) {
 			if (dp->d_ino == (ino_t)0)
 				goto next;
-#if 0
 #if BYTE_ORDER == LITTLE_ENDIAN
 			if (fp->f_fs->fs_maxsymlinklen <= 0)
 				namlen = dp->d_type;
 			else
-#endif
 #endif
 				namlen = dp->d_namlen;
 			if (namlen == length &&
@@ -375,12 +379,12 @@ ufs_open(path, f)
 	register char *cp, *ncp;
 	register int c;
 	ino_t inumber, parent_inumber;
-	int nlinks = 0;
 	struct file *fp;
 	struct fs *fs;
 	int rc;
 	u_int buf_size;
 #if 0
+	int nlinks = 0;
 	char namebuf[MAXPATHLEN+1];
 #endif
 
@@ -402,6 +406,9 @@ ufs_open(path, f)
 		rc = EINVAL;
 		goto out;
 	}
+#ifdef COMPAT_UFS
+	ffs_oldfscompat(fs);
+#endif
 
 	/*
 	 * Calculate indirect block levels.
@@ -655,3 +662,33 @@ ufs_stat(f, sb)
 	sb->st_size = fp->f_di.di_size;
 	return (0);
 }
+
+#ifdef COMPAT_UFS
+/*
+ * Sanity checks for old file systems.
+ *
+ * XXX - goes away some day.
+ */
+void
+ffs_oldfscompat(fs)
+	struct fs *fs;
+{
+	int i;
+
+	fs->fs_npsect = max(fs->fs_npsect, fs->fs_nsect);	/* XXX */
+	fs->fs_interleave = max(fs->fs_interleave, 1);		/* XXX */
+	if (fs->fs_postblformat == FS_42POSTBLFMT)		/* XXX */
+		fs->fs_nrpos = 8;				/* XXX */
+	if (fs->fs_inodefmt < FS_44INODEFMT) {			/* XXX */
+		quad_t sizepb = fs->fs_bsize;			/* XXX */
+								/* XXX */
+		fs->fs_maxfilesize = fs->fs_bsize * NDADDR - 1;	/* XXX */
+		for (i = 0; i < NIADDR; i++) {			/* XXX */
+			sizepb *= NINDIR(fs);			/* XXX */
+			fs->fs_maxfilesize += sizepb;		/* XXX */
+		}						/* XXX */
+		fs->fs_qbmask = ~fs->fs_bmask;			/* XXX */
+		fs->fs_qfmask = ~fs->fs_fmask;			/* XXX */
+	}							/* XXX */
+}
+#endif

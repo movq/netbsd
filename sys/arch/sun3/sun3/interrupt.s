@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 1994 Gordon W. Ross
  * Copyright (c) 1993 Adam Glass
  * All rights reserved.
  *
@@ -13,22 +14,21 @@
  * 3. All advertising materials mentioning features or use of this software
  *    must display the following acknowledgement:
  *	This product includes software developed by Adam Glass.
- * 4. The name of the Author may not be used to endorse or promote products
+ * 4. The name of the authors may not be used to endorse or promote products
  *    derived from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY Adam Glass ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHORS ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- * $Header: /home/mike/src/cvs/netbsd/src/sys/arch/sun3/sun3/Attic/interrupt.s,v 1.10 1994/05/27 14:58:28 gwr Exp $
+ *	$Id: interrupt.s,v 1.13 1994/09/20 16:52:25 gwr Exp $
  */
 
 	.data
@@ -88,16 +88,19 @@ _level5intr:
 	INTERRUPT_HANDLE(5)
 
 /* clock */
-.globl _level5intr_clock, _interrupt_reg, _clock_intr
+.globl _level5intr_clock, _interrupt_reg, _clock_intr, _clock_va
 .align 4
 _level5intr_clock:
-	tstb CLOCK_VA+INTERSIL_INTR_OFFSET
-	andb #~IREG_CLOCK_ENAB_5, INTERREG_VA
-	orb #IREG_CLOCK_ENAB_5, INTERREG_VA
-	tstb CLOCK_VA+INTERSIL_INTR_OFFSET
 	INTERRUPT_SAVEREG 	| save a0, a1, d0, d1
-#define CLOCK_DEBUG
-#ifdef CLOCK_DEBUG
+	movl	_clock_va, a0
+	movl	_interrupt_reg, a1
+	tstb a0@(INTERSIL_INTR_OFFSET)
+	andb #~IREG_CLOCK_ENAB_5, a1@
+	orb #IREG_CLOCK_ENAB_5, a1@
+	tstb a0@(INTERSIL_INTR_OFFSET)
+
+#undef	CLOCK_DEBUG	/* XXX - Broken anyway... -gwr */
+#ifdef	CLOCK_DEBUG
 	.globl	_panicstr, _regdump, _panic
 	tstl	timebomb		| set to go off?
 	jeq	Lnobomb			| no, skip it
@@ -106,6 +109,7 @@ _level5intr_clock:
 	INTERRUPT_RESTORE		| temporarily restore regs
 	jra	Lbomb			| go die
 Lnobomb:
+	/* XXX - Needs to allow sp in tmpstack too. -gwr */
 	cmpl	#_kstack+NBPG,sp	| are we still in stack pages?
 	jcc	Lstackok		| yes, continue normally
 	tstl	_curproc		| if !curproc could have swtch_exit'ed,
@@ -162,3 +166,22 @@ _level7intr:
 #undef	INTERRUPT_BODY
 #undef	INTERRUPT_RESTORE
 #undef	INTERRUPT_HANDLE
+
+/* interrupt counters (needed by vmstat) */
+	.globl	_intrcnt,_eintrcnt,_intrnames,_eintrnames
+_intrnames:
+	.asciz	"spur"	| 0
+	.asciz	"lev1"	| 1
+	.asciz	"lev2"	| 2
+	.asciz	"lev3"	| 3
+	.asciz	"lev4"	| 4
+	.asciz	"clock"	| 5
+	.asciz	"lev6"	| 6
+	.asciz	"nmi"	| 7
+_eintrnames:
+
+	.data
+	.even
+_intrcnt:
+	.long	0,0,0,0,0,0,0,0,0,0
+_eintrcnt:

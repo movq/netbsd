@@ -1,5 +1,36 @@
-/*	$NetBSD: msdosfs_vfsops.c,v 1.15 1994/06/29 06:35:42 cgd Exp $	*/
+/*	$NetBSD: msdosfs_vfsops.c,v 1.19 1994/08/21 18:44:10 ws Exp $	*/
 
+/*-
+ * Copyright (C) 1994 Wolfgang Solfrank.
+ * Copyright (C) 1994 TooLs GmbH.
+ * All rights reserved.
+ * Original code by Paul Popelka (paulp@uts.amdahl.com) (see below).
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by TooLs GmbH.
+ * 4. The name of TooLs GmbH may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY TOOLS GMBH ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL TOOLS GMBH BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 /*
  * Written by Paul Popelka (paulp@uts.amdahl.com)
  * 
@@ -53,38 +84,16 @@ msdosfs_mount(mp, path, data, ndp, p)
 	struct vnode *devvp;	  /* vnode for blk device to mount */
 	struct msdosfs_args args; /* will hold data from mount request */
 	struct msdosfsmount *pmp; /* msdosfs specific mount control block */
+	int error, flags;
+	u_int size;
 	struct ucred *cred, *scred;
 	struct vattr va;
-	int error;
-	u_int size;
 
 	/*
 	 * Copy in the args for the mount request.
 	 */
 	if (error = copyin(data, (caddr_t) & args, sizeof(struct msdosfs_args)))
 		return error;
-
-#ifndef __NetBSD__
-	/*
-	 * Check to see if they want it to be an exportable filesystem via
-	 * nfs.  And, if they do, should it be read only, and what uid is
-	 * root to be mapped to.
-	 *
-	 * This is done in a completely different (and fs-indepdent) way
-	 * in NetBSD.
-	 */
-	if ((args.exflags & MNT_EXPORTED) || (mp->mnt_flag & MNT_EXPORTED)) {
-		if (args.exflags & MNT_EXPORTED)
-			mp->mnt_flag |= MNT_EXPORTED;
-		else
-			mp->mnt_flag &= ~MNT_EXPORTED;
-		if (args.exflags & MNT_EXRDONLY)
-			mp->mnt_flag |= MNT_EXRDONLY;
-		else
-			mp->mnt_flag &= ~MNT_EXRDONLY;
-		mp->mnt_exroot = args.exroot;
-	}
-#endif /* __NetBSD__ */
 
 	/*
 	 * If they just want to update then be sure we can do what is
@@ -94,10 +103,29 @@ msdosfs_mount(mp, path, data, ndp, p)
 	 */
 	if (mp->mnt_flag & MNT_UPDATE) {
 		pmp = (struct msdosfsmount *) mp->mnt_data;
+		error = 0;
+		if (pmp->pm_ronly == 0 && (mp->mnt_flag & MNT_RDONLY)) {
+			flags = WRITECLOSE;
+			if (mp->mnt_flag & MNT_FORCE)
+				flags |= FORCECLOSE;
+			if (vfs_busy(mp))
+				return EBUSY;
+			error = vflush(mp, NULLVP, flags);
+			vfs_unbusy(mp);
+		}
+		if (!error && (mp->mnt_flag & MNT_RELOAD))
+			/* not yet implemented */
+			error = EINVAL;
+		if (error)
+			return error;
 		if (pmp->pm_ronly && (mp->mnt_flag & MNT_RDONLY) == 0)
 			pmp->pm_ronly = 0;
-		if (args.fspec == 0)
-			return 0;
+		if (args.fspec == 0) {
+			/*
+			 * Process export requests.
+			 */
+			return vfs_export(mp, &pmp->pm_export, &args.export);
+		}
 	}
 
 	/*
@@ -113,27 +141,27 @@ msdosfs_mount(mp, path, data, ndp, p)
 	error = VOP_GETATTR(mp->mnt_vnodecovered, &va, cred, p);
 	if (error) {
 		crfree(cred);				/* XXX */
-		return (error);
+		return error;
 	}
-	if ((va.va_uid != cred->cr_uid) &&
-	    (cred->cr_uid != 0)) {
-		error = EACCES;
-		crfree(cred);				/* XXX */
-		return (error);
-        }
+	if (cred->cr_uid != 0) {
+		if (va.va_uid != cred->cr_uid) {
+			error = EACCES;
+			crfree(cred);			/* XXX */
+			return error;
+		}
 
-	/* a user mounted it; we'll verify permissions when unmounting */
-	mp->mnt_flag |= MNT_USER;
+		/* a user mounted it; we'll verify permissions when unmounting */
+		mp->mnt_flag |= MNT_USER;
+	}
 
 	/*
 	 * Now, lookup the name of the block device this mount or name
 	 * update request is to apply to.
 	 */
-	ndp->ni_nameiop = LOOKUP | FOLLOW;
-	ndp->ni_segflg = UIO_USERSPACE;
-	ndp->ni_dirp = args.fspec;
+	NDINIT(ndp, LOOKUP, FOLLOW, UIO_USERSPACE, args.fspec, p);
 	scred = p->p_ucred;				/* XXX */
-	error = namei(ndp, p);
+	p->p_ucred = cred;				/* XXX */
+	error = namei(ndp);
 	p->p_ucred = scred;				/* XXX */
 	crfree(cred);					/* XXX */
 	if (error != 0)
@@ -146,7 +174,7 @@ msdosfs_mount(mp, path, data, ndp, p)
 	 */
 	devvp = ndp->ni_vp;
 	if (devvp->v_type != VBLK) {
-		vrele(devvp);	/* namei() acquires this?	 */
+		vrele(devvp);
 		return ENOTBLK;
 	}
 	if (major(devvp->v_rdev) >= nblkdev) {
@@ -163,8 +191,7 @@ msdosfs_mount(mp, path, data, ndp, p)
 			error = EINVAL;
 		else
 			vrele(devvp);
-	}
-	else {
+	} else {
 
 		/*
 		 * Well, it's not an update, it's a real mount request.
@@ -199,9 +226,9 @@ msdosfs_mount(mp, path, data, ndp, p)
 	pmp->pm_uid = args.uid;
 	pmp->pm_mask = args.mask;
 	(void) msdosfs_statfs(mp, &mp->mnt_stat, p);
-#if defined(MSDOSFSDEBUG)
+#ifdef MSDOSFS_DEBUG
 	printf("msdosfs_mount(): mp %x, pmp %x, inusemap %x\n", mp, pmp, pmp->pm_inusemap);
-#endif				/* defined(MSDOSFSDEBUG) */
+#endif
 	return 0;
 }
 
@@ -214,7 +241,7 @@ mountmsdosfs(devvp, mp, p)
 	int i;
 	int bpc;
 	int bit;
-	int error = 0;
+	int error;
 	int needclose;
 	int ronly = (mp->mnt_flag & MNT_RDONLY) != 0;
 	dev_t dev = devvp->v_rdev;
@@ -228,32 +255,29 @@ mountmsdosfs(devvp, mp, p)
 	 * Multiple mounts of the same block special file aren't allowed.
 	 * Make sure no one else has the special file open.  And flush any
 	 * old buffers from this filesystem.  Presumably this prevents us
-	 * from running into buffers that are the wrong blocksize. NOTE:
-	 * mountedon() is a part of the ufs filesystem. If the ufs
-	 * filesystem is not gen'ed into the system we will get an
-	 * unresolved reference.
+	 * from running into buffers that are the wrong blocksize.
 	 */
-	if (error = mountedon(devvp)) {
+	if (error = vfs_mountedon(devvp))
 		return error;
-	}
 	if (vcount(devvp) > 1)
 		return EBUSY;
-	vinvalbuf(devvp, 1);
+	if (error = vinvalbuf(devvp, V_SAVE, p->p_ucred, p, 0, 0))
+		return error;
 
 	/*
 	 * Now open the block special file.
 	 */
-	if (error = VOP_OPEN(devvp, ronly ? FREAD : FREAD | FWRITE, NOCRED, p))
+	if (error = VOP_OPEN(devvp, ronly ? FREAD : FREAD | FWRITE, FSCRED, p))
 		return error;
 	needclose = 1;
-#if defined(HDSUPPORT)
+#ifdef HDSUPPORT
 	/*
 	 * Put this in when we support reading dos filesystems from
 	 * partitioned harddisks.
 	 */
 	if (VOP_IOCTL(devvp, DIOCGPART, &msdosfspart, FREAD, NOCRED, p) == 0) {
 	}
-#endif				/* defined(HDSUPPORT) */
+#endif
 
 	/*
 	 * Read the boot sector of the filesystem, and then check the boot
@@ -264,7 +288,7 @@ mountmsdosfs(devvp, mp, p)
 	if (error = bread(devvp, 0, 512, NOCRED, &bp0))
 		goto error_exit;
 	bp0->b_flags |= B_AGE;
-	bsp = (union bootsector *) bp0->b_un.b_addr;
+	bsp = (union bootsector *) bp0->b_data;
 	b33 = (struct byte_bpb33 *) bsp->bs33.bsBPB;
 	b50 = (struct byte_bpb50 *) bsp->bs50.bsBPB;
 #ifdef MSDOSFS_CHECKSIG
@@ -280,8 +304,7 @@ mountmsdosfs(devvp, mp, p)
 	}
 
 	pmp = malloc(sizeof *pmp, M_MSDOSFSMNT, M_WAITOK);
-	pmp->pm_inusemap = NULL;
-	pmp->pm_fmod = 0;
+	bzero((caddr_t)pmp, sizeof *pmp);
 	pmp->pm_mountp = mp;
 
 	/*
@@ -311,8 +334,7 @@ mountmsdosfs(devvp, mp, p)
 	if (pmp->pm_Sectors == 0) {
 		pmp->pm_HiddenSects = getulong(b50->bpbHiddenSecs);
 		pmp->pm_HugeSectors = getulong(b50->bpbHugeSectors);
-	}
-	else {
+	} else {
 		pmp->pm_HiddenSects = getushort(b33->bpbHiddenSecs);
 		pmp->pm_HugeSectors = pmp->pm_Sectors;
 	}
@@ -384,8 +406,10 @@ mountmsdosfs(devvp, mp, p)
 	 * Allocate memory for the bitmap of allocated clusters, and then
 	 * fill it in.
 	 */
-	pmp->pm_inusemap = malloc((pmp->pm_maxcluster >> 3) + 1,
-	    M_MSDOSFSFAT, M_WAITOK);
+	pmp->pm_inusemap = malloc(((pmp->pm_maxcluster + N_INUSEBITS - 1)
+				   / N_INUSEBITS)
+				  * sizeof(*pmp->pm_inusemap),
+				  M_MSDOSFSFAT, M_WAITOK);
 
 	/*
 	 * fillinusemap() needs pm_devvp.
@@ -418,7 +442,7 @@ mountmsdosfs(devvp, mp, p)
         mp->mnt_stat.f_fsid.val[0] = (long)dev;
         mp->mnt_stat.f_fsid.val[1] = makefstype(MOUNT_MSDOS);
 	mp->mnt_flag |= MNT_LOCAL;
-#if defined(QUOTA)
+#ifdef QUOTA
 	/*
 	 * If we ever do quotas for DOS filesystems this would be a place
 	 * to fill in the info in the msdosfsmount structure. You dolt,
@@ -426,7 +450,7 @@ mountmsdosfs(devvp, mp, p)
 	 * owners on dos filesystems. of course there is some empty space
 	 * in the directory entry where we could put uid's and gid's.
 	 */
-#endif				/* defined(QUOTA) */
+#endif
 	devvp->v_specflags |= SI_MOUNTEDON;
 
 	return 0;
@@ -472,22 +496,19 @@ msdosfs_unmount(mp, mntflags, p)
 	/* only the mounter, or superuser can unmount */
 	if ((p->p_cred->p_ruid != pmp->pm_mounter) &&
 	    (error = suser(p->p_ucred, &p->p_acflag)))
-		return (error);
+		return error;
 
 	if (mntflags & MNT_FORCE) {
 		if (!msdosfsdoforce)
 			return EINVAL;
 		flags |= FORCECLOSE;
 	}
-	mntflushbuf(mp, 0);
-	if (mntinvalbuf(mp))
-		return EBUSY;
-#if defined(QUOTA)
-#endif				/* defined(QUOTA) */
+#ifdef QUOTA
+#endif
 	if (error = vflush(mp, NULLVP, flags))
 		return error;
 	pmp->pm_devvp->v_specflags &= ~SI_MOUNTEDON;
-#if defined(MSDOSFSDEBUG)
+#ifdef MSDOSFS_DEBUG
 	printf("msdosfs_umount(): just before calling VOP_CLOSE()\n");
 	printf("flag %08x, usecount %d, writecount %d, holdcnt %d\n",
 	    vp->v_flag, vp->v_usecount, vp->v_writecount, vp->v_holdcnt);
@@ -499,7 +520,7 @@ msdosfs_unmount(mp, mntflags, p)
 	    vp->v_cleanblkhd, vp->v_dirtyblkhd, vp->v_numoutput, vp->v_type);
 	printf("union %08x, tag %d, data[0] %08x, data[1] %08x\n",
 	    vp->v_socket, vp->v_tag, vp->v_data[0], vp->v_data[1]);
-#endif				/* defined(MSDOSFSDEBUG) */
+#endif
 	error = VOP_CLOSE(pmp->pm_devvp, pmp->pm_ronly ? FREAD : FREAD | FWRITE,
 	    NOCRED, p);
 	vrele(pmp->pm_devvp);
@@ -520,10 +541,10 @@ msdosfs_root(mp, vpp)
 	int error;
 
 	error = deget(pmp, MSDOSFSROOT, MSDOSFSROOT_OFS, NULL, &ndep);
-#if defined(MSDOSFSDEBUG)
+#ifdef MSDOSFS_DEBUG
 	printf("msdosfs_root(); mp %08x, pmp %08x, ndep %08x, vp %08x\n",
 	    mp, pmp, ndep, DETOV(ndep));
-#endif				/* defined(MSDOSFSDEBUG) */
+#endif
 	if (error == 0)
 		*vpp = DETOV(ndep);
 	return error;
@@ -537,10 +558,10 @@ msdosfs_quotactl(mp, cmds, uid, arg, p)
 	caddr_t arg;
 	struct proc *p;
 {
-#if defined(QUOTA)
+#ifdef QUOTA
 #else
 	return EOPNOTSUPP;
-#endif				/* defined(QUOTA) */
+#endif
 }
 
 int
@@ -564,7 +585,7 @@ msdosfs_statfs(mp, sbp, p)
 	sbp->f_blocks = pmp->pm_nmbrofclusters;
 	sbp->f_bfree = pmp->pm_freeclustercount;
 	sbp->f_bavail = pmp->pm_freeclustercount;
-	sbp->f_files = pmp->pm_RootDirEnts;
+	sbp->f_files = pmp->pm_RootDirEnts;			/* XXX */
 	sbp->f_ffree = 0;	/* what to put in here? */
 
 	/*
@@ -583,9 +604,11 @@ msdosfs_statfs(mp, sbp, p)
 }
 
 int
-msdosfs_sync(mp, waitfor)
+msdosfs_sync(mp, waitfor, cred, p)
 	struct mount *mp;
 	int waitfor;
+	struct ucred *cred;
+	struct proc *p;
 {
 	struct vnode *vp;
 	struct denode *dep;
@@ -618,16 +641,12 @@ loop:
 		if (VOP_ISLOCKED(vp))	/* file is busy		 */
 			continue;
 		dep = VTODE(vp);
-		if ((dep->de_flag & DEUPD) == 0 &&
+		if ((dep->de_flag & DE_UPDATE) == 0 &&
 		    vp->v_dirtyblkhd.lh_first == NULL)
 			continue;
 		if (vget(vp, 1))	/* not there anymore?	 */
 			goto loop;
-		/* flush dirty file blocks */
-		if (vp->v_dirtyblkhd.lh_first != NULL)
-			vflushbuf(vp, 0);
-		if ((dep->de_flag & DEUPD) &&
-		    (error = deupdat(dep, &time, 0)))
+		if (error = VOP_FSYNC(vp, cred, waitfor, p))
 			allerror = error;
 		vput(vp);	/* done with this one	 */
 	}
@@ -640,22 +659,33 @@ loop:
 }
 
 int
-msdosfs_fhtovp(mp, fhp, vpp)
+msdosfs_fhtovp(mp, fhp, nam, vpp, exflagsp, credanonp)
 	struct mount *mp;
 	struct fid *fhp;
+	struct mbuf *nam;
 	struct vnode **vpp;
+	int *exflagsp;
+	struct ucred **credanonp;
 {
 	struct msdosfsmount *pmp = (struct msdosfsmount *) mp->mnt_data;
 	struct defid *defhp = (struct defid *) fhp;
 	struct denode *dep;
+	struct netcred *np;
 	int error;
 
+	np = vfs_export_lookup(mp, &pmp->pm_export, nam);
+	if (np == NULL)
+		return EACCES;
 	error = deget(pmp, defhp->defid_dirclust, defhp->defid_dirofs,
 	    NULL, &dep);
-	if (error)
-		return (error);
+	if (error) {
+		*vpp = NULLVP;
+		return error;
+	}
 	*vpp = DETOV(dep);
-	return (0);
+	*exflagsp = np->netc_exflags;
+	*credanonp = &np->netc_anon;
+	return 0;
 }
 
 
@@ -671,7 +701,16 @@ msdosfs_vptofh(vp, fhp)
 	defhp->defid_dirclust = dep->de_dirclust;
 	defhp->defid_dirofs = dep->de_diroffset;
 	/* defhp->defid_gen = ip->i_gen; */
-	return (0);
+	return 0;
+}
+
+int
+msdosfs_vget(mp, ino, vpp)
+	struct mount *mp;
+	ino_t ino;
+	struct vnode **vpp;
+{
+	return EOPNOTSUPP;
 }
 
 struct vfsops msdosfs_vfsops = {
@@ -683,6 +722,7 @@ struct vfsops msdosfs_vfsops = {
 	msdosfs_quotactl,
 	msdosfs_statfs,
 	msdosfs_sync,
+	msdosfs_vget,
 	msdosfs_fhtovp,
 	msdosfs_vptofh,
 	msdosfs_init

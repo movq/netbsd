@@ -38,7 +38,7 @@
  * from: Utah $Hdr: locore.s 1.58 91/04/22$
  *
  *	@(#)locore.s	7.11 (Berkeley) 5/9/91
- *	$Id: locore.s,v 1.33 1994/07/06 04:33:31 chopps Exp $
+ *	$Id: locore.s,v 1.35 1994/08/30 05:35:31 chopps Exp $
  *
  * Original (hp300) Author: unknown, maybe Mike Hibler?
  * Amiga author: Markus Wild
@@ -106,10 +106,16 @@ _addrerr:
 	andw	#0x0fff,d0
 	cmpw	#12,d0			| is it address error
 	jeq	Lisaerr
-	movl	a1@(20),sp@(4)		| get fault address
+	movl	a1@(20),d1		| get fault address
 	moveq	#0,d0
 	movw	a1@(12),d0		| get SSW
-	movl	d0,sp@			| pass as code
+	btst	#11,d0			| check for mis-aligned
+	jeq	Lbe1stpg		| no skip
+	addl	#3,d1			| get into next page
+	andl	#PG_FRAME,d1		| and truncate
+Lbe1stpg:
+	movl	d1,sp@(4)		| pass fault address.
+	movl	d0,sp@			| pass SSW as code
 	btst	#10,d0			| test ATC
 	jeq	Lisberr			| it's a bus error
 	jra	Lismerr
@@ -673,7 +679,7 @@ start:
 
 	| save the passed parameters. `prepass' them on the stack for
 	| later catch by _start_c
-	movl	d3,sp@			| pass AGA mode
+	movl	d3,sp@-			| pass AGA mode
 	movl	a4,sp@-			| pass address of _esym
 	movl	d1,sp@-			| pass chipmem-size
 	movl	d0,sp@-			| pass fastmem-size
