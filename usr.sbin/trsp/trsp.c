@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 1985 Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1985, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,13 +32,13 @@
  */
 
 #ifndef lint
-char copyright[] =
-"@(#) Copyright (c) 1985 Regents of the University of California.\n\
- All rights reserved.\n";
+static char copyright[] =
+"@(#) Copyright (c) 1985, 1993\n\
+	The Regents of the University of California.  All rights reserved.\n";
 #endif /* not lint */
 
 #ifndef lint
-static char sccsid[] = "@(#)trsp.c	6.8 (Berkeley) 3/2/91";
+static char sccsid[] = "@(#)trsp.c	8.1 (Berkeley) 6/6/93";
 #endif /* not lint */
 
 #include <sys/cdefs.h>
@@ -138,11 +138,17 @@ again:
 		system = *argv;
 		argc--, argv++;
 		mask++;
+		/*
+		 * Discard setgid privileges if not the running kernel so that
+		 * bad guys can't print interesting stuff from kernel memory.
+		 */
+		setgid(getgid());
 	}
 	if (argc > 0) {
 		core = *argv;
 		argc--, argv++;
 		mask++;
+		setgid(getgid());
 	}
 	(void) nlist(system, nl);
 	if (nl[0].n_value == 0) {
