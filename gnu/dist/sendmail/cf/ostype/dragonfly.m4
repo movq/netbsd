@@ -11,7 +11,7 @@ divert(-1)
 
 divert(0)
 VERSIONID(`Id: dragonfly.m4,v 1.1 2004/08/06 03:54:05 gshapiro Exp')
-VERSIONID(`$NetBSD: dragonfly.m4,v 1.1 2005/03/15 02:06:02 atatat Exp $')
+VERSIONID(`$NetBSD: dragonfly.m4,v 1.1.1.1 2005/03/15 02:06:02 atatat Exp $')
 ifdef(`STATUS_FILE',, `define(`STATUS_FILE', `/var/log/sendmail.st')')dnl
 dnl turn on S flag for local mailer
 MODIFY_MAILER_FLAGS(`LOCAL', `+S')dnl

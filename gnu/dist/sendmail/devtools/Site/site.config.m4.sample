@@ -6,7 +6,7 @@ dnl ### how to make your own site configuration file.                 ###
 dnl ###                                                               ###
 dnl #####################################################################
 dnl Id: site.config.m4.sample,v 1.1 2003/01/11 17:09:25 ca Exp
-dnl $NetBSD: site.config.m4.sample,v 1.1 2005/03/15 02:05:33 atatat Exp $
+dnl $NetBSD: site.config.m4.sample,v 1.1.1.1 2005/03/15 02:05:33 atatat Exp $
 
 dnl #####################################################################
 dnl ###                                                               ###

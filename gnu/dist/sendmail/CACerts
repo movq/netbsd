@@ -1,5 +1,5 @@
 # Id: CACerts,v 8.1 2004/03/01 22:05:47 ca Exp
-# $NetBSD: CACerts,v 1.1 2005/03/15 02:05:26 atatat Exp $
+# $NetBSD: CACerts,v 1.1.1.1 2005/03/15 02:05:26 atatat Exp $
 # This file contains some CA certificates that are used to sign the
 # certificates of mail servers of members of the sendmail consortium
 # who may reply to questions etc sent to sendmail.org.

@@ -12,7 +12,7 @@ divert(-1)
 
 divert(0)
 VERSIONID(`Id: unicos.m4,v 1.1 2003/04/21 17:03:51 ca Exp')
-VERSIONID(`$NetBSD: unicos.m4,v 1.1 2005/03/15 02:06:02 atatat Exp $')
+VERSIONID(`$NetBSD: unicos.m4,v 1.1.1.1 2005/03/15 02:06:02 atatat Exp $')
 define(`ALIAS_FILE', `/usr/lib/aliases')
 define(`HELP_FILE', `/usr/lib/sendmail.hf')
 define(`QUEUE_DIR', `/usr/spool/mqueue')

@@ -1,7 +1,7 @@
-/* $NetBSD: ratectrl.c,v 1.1 2005/03/15 02:05:46 atatat Exp $ */
+/* $NetBSD: ratectrl.c,v 1.1.1.1 2005/03/15 02:05:46 atatat Exp $ */
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: ratectrl.c,v 1.1 2005/03/15 02:05:46 atatat Exp $");
+__RCSID("$NetBSD: ratectrl.c,v 1.1.1.1 2005/03/15 02:05:46 atatat Exp $");
 #endif
 
 /*

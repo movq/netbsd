@@ -11,7 +11,7 @@ divert(-1)
 
 divert(0)
 VERSIONID(`Id: conncontrol.m4,v 1.4 2004/02/19 21:31:47 ca Exp')
-VERSIONID(`$NetBSD: conncontrol.m4,v 1.1 2005/03/15 02:06:02 atatat Exp $')
+VERSIONID(`$NetBSD: conncontrol.m4,v 1.1.1.1 2005/03/15 02:06:02 atatat Exp $')
 
 divert(-1)
 ifdef(`_ACCESS_TABLE_', `

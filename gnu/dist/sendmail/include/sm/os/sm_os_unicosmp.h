@@ -1,4 +1,4 @@
-/* $NetBSD: sm_os_unicosmp.h,v 1.1 2005/03/15 02:05:52 atatat Exp $ */
+/* $NetBSD: sm_os_unicosmp.h,v 1.1.1.1 2005/03/15 02:05:52 atatat Exp $ */
 /*
  * Copyright (c) 2003 Sendmail, Inc. and its suppliers.
  *	All rights reserved.
