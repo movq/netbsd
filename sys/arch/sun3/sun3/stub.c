@@ -1,4 +1,4 @@
-/*	$NetBSD: stub.c,v 1.16 1997/02/04 04:57:16 perry Exp $	*/
+/*	$NetBSD: stub.c,v 1.17 1998/07/04 22:18:44 jonathan Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -39,6 +39,8 @@
 /*
  * Stubs to supply things needed when some options are OFF.
  */
+
+#include "opt_ddb.h"
 
 #include <sys/cdefs.h>
 
