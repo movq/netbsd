@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.13 1997/05/31 21:22:15 cjs Exp $
+#	$NetBSD: Makefile,v 1.12 1997/05/26 03:59:47 cjs Exp $
 
 CFLAGS+=-DYP
 
@@ -10,11 +10,13 @@ MLINKS=	rpc.bootparamd.8 bootparamd.8
 DPADD=	${LIBRPCSVC}
 LDADD=	-lrpcsvc
 
-bootparam_prot_svc.c: ${DESTDIR}/usr/include/rpcsvc/bootparam_prot.x
+.include <bsd.own.mk>	# for BUILDDIR
+
+bootparam_prot_svc.c: ${BUILDDIR}/usr/include/rpcsvc/bootparam_prot.x
 	rm -f bootparam_prot.x
-	ln -s ${DESTDIR}/usr/include/rpcsvc/bootparam_prot.x .
+	ln -s ${BUILDDIR}/usr/include/rpcsvc/bootparam_prot.x .
 	rm -f bootparam_prot.h
-	ln -s ${DESTDIR}/usr/include/rpcsvc/bootparam_prot.h .
+	ln -s ${BUILDDIR}/usr/include/rpcsvc/bootparam_prot.h .
 	rpcgen -m -o $@ bootparam_prot.x
 
 CLEANFILES += bootparam_prot_svc.c bootparam_prot.x bootparam_prot.h
