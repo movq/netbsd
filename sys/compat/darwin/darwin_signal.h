@@ -1,4 +1,4 @@
-/*	$NetBSD: darwin_signal.h,v 1.1 2002/11/25 22:25:13 manu Exp $ */
+/*	$NetBSD: darwin_signal.h,v 1.2 2002/11/26 23:54:10 manu Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -41,18 +41,41 @@
 
 #define DARWIN_SA_USERTRAMP 0x0100
 
-struct darwin_ucontext;
-struct darwin___siginfo;
-typedef void darwin_siginfo_t;
+union darwin_sigval {
+	int sigval_int;
+	void *sigval_ptr;
+};
 
-struct  darwin___sigaction {
+typedef struct darwin___siginfo {
+	int si_signo;
+	int si_errno;
+	int si_code;
+	int si_pid;
+	unsigned int si_uid;
+	int si_status;
+	void *si_addr;
+	union darwin_sigval si_value;
+	long si_band;
+	int pad[7];
+} darwin_siginfo_t;
+
+struct darwin_ucontext {
+	int uc_onstack;
+	sigset13_t uc_sigmask;
+	stack_t uc_stack;
+	struct darwin_ucontext *uc_link;
+	size_t uc_mcsize;
+	struct darwin_mcontext *uc_mcontext;
+};
+
+struct darwin___sigaction {
 	union {
 		void (*__sa_handler)(int);
 		void (*__sa_sigaction)(int, struct darwin___siginfo *, void *);
 	} sa_handler;
-        void (*sa_tramp)(void *, int, int, darwin_siginfo_t *, void *);
-        sigset13_t sa_mask;
-        int     sa_flags;
+	void (*sa_tramp)(void *, int, int, darwin_siginfo_t *, void *);
+	sigset13_t sa_mask;
+	int sa_flags;
 };
 
 void darwin_sendsig(int, sigset_t *, u_long);
