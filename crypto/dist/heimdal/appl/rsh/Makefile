@@ -15,13 +15,13 @@
 
 
 # $Heimdal: Makefile.am,v 1.17 2001/07/31 09:12:03 joda Exp $
-# $NetBSD: Makefile,v 1.1 2004/04/02 14:47:25 lha Exp $
+# $NetBSD: Makefile,v 1.1.1.1 2004/04/02 14:47:25 lha Exp $
 
 # $Heimdal: Makefile.am.common,v 1.5 2002/05/19 18:35:37 joda Exp $
-# $NetBSD: Makefile,v 1.1 2004/04/02 14:47:25 lha Exp $
+# $NetBSD: Makefile,v 1.1.1.1 2004/04/02 14:47:25 lha Exp $
 
 # $Heimdal: Makefile.am.common,v 1.37.2.2 2003/10/13 13:15:39 joda Exp $
-# $NetBSD: Makefile,v 1.1 2004/04/02 14:47:25 lha Exp $
+# $NetBSD: Makefile,v 1.1.1.1 2004/04/02 14:47:25 lha Exp $
 
 srcdir = .
 top_srcdir = ../..
