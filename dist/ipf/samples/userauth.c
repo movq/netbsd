@@ -1,4 +1,4 @@
-/*	$NetBSD: userauth.c,v 1.1 1999/12/11 22:24:12 veego Exp $	*/
+/*	$NetBSD: userauth.c,v 1.1.1.1 1999/12/11 22:24:12 veego Exp $	*/
 
 #include <sys/types.h>
 #include <sys/socket.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: sdlpi.c,v 1.1 1999/12/11 22:24:10 veego Exp $	*/
+/*	$NetBSD: sdlpi.c,v 1.1.1.1 1999/12/11 22:24:10 veego Exp $	*/
 
 /*
  * (C)opyright 1992-1998 Darren Reed. (from tcplog)

@@ -1,4 +1,4 @@
-/*	$NetBSD: ioconf.c,v 1.1 1999/12/11 22:24:01 veego Exp $	*/
+/*	$NetBSD: ioconf.c,v 1.1.1.1 1999/12/11 22:24:01 veego Exp $	*/
 
 /*
  * MACHINE GENERATED: DO NOT EDIT

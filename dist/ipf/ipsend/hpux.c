@@ -1,4 +1,4 @@
-/*	$NetBSD: hpux.c,v 1.1 1999/12/11 22:24:07 veego Exp $	*/
+/*	$NetBSD: hpux.c,v 1.1.1.1 1999/12/11 22:24:07 veego Exp $	*/
 
 /*
  * (C)opyright 1997-1998 Darren Reed. (from tcplog)

@@ -1,4 +1,4 @@
-/*	$NetBSD: larp.c,v 1.1 1999/12/11 22:24:10 veego Exp $	*/
+/*	$NetBSD: larp.c,v 1.1.1.1 1999/12/11 22:24:10 veego Exp $	*/
 
 /*
  * larp.c (C) 1995-1998 Darren Reed
