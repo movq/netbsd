@@ -1,4 +1,4 @@
-/*	$NetBSD: joy.c,v 1.1 2000/02/22 11:05:24 soda Exp $	*/
+/*	$NetBSD: joy.c,v 1.1.1.1 2000/02/22 11:05:24 soda Exp $	*/
 
 /*-
  * Copyright (c) 1995 Jean-Marc Zucconi
