@@ -1,4 +1,4 @@
-/*	$NetBSD: Dvi.c,v 1.1 2001/04/19 12:52:29 wiz Exp $	*/
+/*	$NetBSD: Dvi.c,v 1.1.1.1 2001/04/19 12:52:29 wiz Exp $	*/
 
 #ifndef SABER
 #ifndef lint

@@ -1,4 +1,4 @@
-/*	$NetBSD: pfbtops.c,v 1.1 2001/04/19 12:52:27 wiz Exp $	*/
+/*	$NetBSD: pfbtops.c,v 1.1.1.1 2001/04/19 12:52:27 wiz Exp $	*/
 
 /* This translates ps fonts in .pfb format to ASCII ps files. */
 

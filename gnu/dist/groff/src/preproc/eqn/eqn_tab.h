@@ -1,4 +1,4 @@
-/*	$NetBSD: eqn_tab.h,v 1.1 2001/04/19 12:51:41 wiz Exp $	*/
+/*	$NetBSD: eqn_tab.h,v 1.1.1.1 2001/04/19 12:51:41 wiz Exp $	*/
 
 #define OVER 257
 #define SMALLOVER 258

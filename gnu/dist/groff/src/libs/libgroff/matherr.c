@@ -1,4 +1,4 @@
-/*	$NetBSD: matherr.c,v 1.1 2001/04/19 12:50:53 wiz Exp $	*/
+/*	$NetBSD: matherr.c,v 1.1.1.1 2001/04/19 12:50:53 wiz Exp $	*/
 
 /* Copyright (C) 1989, 1990, 1991, 1992 Free Software Foundation, Inc.
      Written by James Clark (jjc@jclark.com)

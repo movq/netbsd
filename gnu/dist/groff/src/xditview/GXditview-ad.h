@@ -1,4 +1,4 @@
-/*	$NetBSD: GXditview-ad.h,v 1.1 2001/04/19 12:52:30 wiz Exp $	*/
+/*	$NetBSD: GXditview-ad.h,v 1.1.1.1 2001/04/19 12:52:30 wiz Exp $	*/
 
 "GXditview.height: 840",
 "GXditview.paned.allowResize:		true",

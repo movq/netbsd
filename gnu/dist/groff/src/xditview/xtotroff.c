@@ -1,4 +1,4 @@
-/*	$NetBSD: xtotroff.c,v 1.1 2001/04/19 12:52:34 wiz Exp $	*/
+/*	$NetBSD: xtotroff.c,v 1.1.1.1 2001/04/19 12:52:34 wiz Exp $	*/
 
 /*
  * xtotroff

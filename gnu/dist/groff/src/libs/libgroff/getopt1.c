@@ -1,4 +1,4 @@
-/*	$NetBSD: getopt1.c,v 1.1 2001/04/19 12:50:52 wiz Exp $	*/
+/*	$NetBSD: getopt1.c,v 1.1.1.1 2001/04/19 12:50:52 wiz Exp $	*/
 
 /* getopt_long and getopt_long_only entry points for GNU getopt.
    Copyright (C) 1987,88,89,90,91,92,93,94,96,97,98
