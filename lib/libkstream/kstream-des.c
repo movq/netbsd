@@ -1,4 +1,4 @@
-/*	$NetBSD: kstream-des.c,v 1.1 2000/06/17 06:24:28 thorpej Exp $	*/
+/*	$NetBSD: kstream-des.c,v 1.1.1.1 2000/06/17 06:24:28 thorpej Exp $	*/
 
 /* DES-encrypted-stream implementation for MIT Kerberos.
    Written by Ken Raeburn (Raeburn@Cygnus.COM), based on algorithms
