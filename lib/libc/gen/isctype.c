@@ -1,4 +1,4 @@
-/*	$NetBSD: isctype.c,v 1.14 1997/07/13 19:46:04 christos Exp $	*/
+/*	$NetBSD: isctype.c,v 1.15 1999/09/12 18:54:34 kleink Exp $	*/
 
 /*
  * Copyright (c) 1989 The Regents of the University of California.
@@ -43,7 +43,7 @@
 #if 0
 static char sccsid[] = "@(#)isctype.c	5.2 (Berkeley) 6/1/90";
 #else
-__RCSID("$NetBSD: isctype.c,v 1.14 1997/07/13 19:46:04 christos Exp $");
+__RCSID("$NetBSD: isctype.c,v 1.15 1999/09/12 18:54:34 kleink Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -144,22 +144,6 @@ isxdigit(c)
 	int c;
 {
 	return((_ctype_ + 1)[c] & (_N|_X));
-}
-
-#undef isascii
-int
-isascii(c)
-	int c;
-{
-	return ((unsigned)(c) <= 0177);
-}
-
-#undef toascii
-int
-toascii(c)
-	int c;
-{
-	return ((c) & 0177);
 }
 
 #undef _toupper
