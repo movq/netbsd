@@ -1,11 +1,11 @@
-/*	$NetBSD: pccvar.h,v 1.3 1997/10/09 08:42:44 jtc Exp $	*/
+/*	$NetBSD: pccvar.h,v 1.4 1999/02/14 17:54:29 scw Exp $	*/
 
 /*-
- * Copyright (c) 1996 The NetBSD Foundation, Inc.
+ * Copyright (c) 1996, 1999 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Jason R. Thorpe.
+ * by Jason R. Thorpe and Steve C. Woodford.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -37,8 +37,8 @@
  */
 
 /*
- * Autoconfiguration definitions for the MVME-147 Peripheral Channel
- * Controller.
+ * Autoconfiguration definitions shared between the MVME-147 Peripheral
+ * Channel Controller (PCC) and the MVME-167's PCCchip2.
  */
 
 /*
@@ -63,5 +63,11 @@ struct pcc_attach_args {
 #include "locators.h"
 #define pcccf_ipl	cf_loc[PCCCF_IPL]
 
+#if NPCC
 void	pccintr_establish __P((int, int (*)(void *), int, void *));
 void	pccintr_disestablish __P((int));
+#endif
+#if NPCCTWO
+void	pcctwointr_establish __P((int, int (*)(void *), int, void *));
+void	pcctwointr_disestablish __P((int));
+#endif
