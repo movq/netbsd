@@ -34,7 +34,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ident "$Header: /home/mike/src/cvs/netbsd/src/sys/arch/i386/isa/pcvt/Util/kbdio/Attic/kbdio.y,v 1.1 1995/10/07 21:11:26 jtc Exp $"
+#ident "$Header: /home/mike/src/cvs/netbsd/src/sys/arch/i386/isa/pcvt/Util/kbdio/Attic/kbdio.y,v 1.1.1.1 1995/10/07 21:11:26 jtc Exp $"
 
 #include <stdio.h>
 #include <stdlib.h>

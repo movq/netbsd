@@ -1,6 +1,6 @@
 %{
 /*
- * Copyright (c) 1994 Joerg Wunsch
+ * Copyright (c) 1994,1995 Joerg Wunsch
  *
  * All rights reserved.
  *
@@ -33,20 +33,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ident "$Header: /home/mike/src/cvs/netbsd/src/sys/arch/i386/isa/pcvt/Util/vgaio/Attic/lex.l,v 1.1 1994/03/29 02:47:20 mycroft Exp $"
-
-/*
- * $Log: lex.l,v $
- * Revision 1.1  1994/03/29 02:47:20  mycroft
- * pcvt 3.0, with some performance enhancements by Joerg Wunsch and me.
- *
- * Revision 1.2  1994/01/08  17:42:58  j
- * cleanup
- * made multiple commands per line work
- * wrote man page
- *
- *
- */
+#ident "$Header: /home/mike/src/cvs/netbsd/src/sys/arch/i386/isa/pcvt/Util/vgaio/Attic/lex.l,v 1.1.1.1 1995/10/07 21:12:05 jtc Exp $"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -69,6 +56,8 @@ ar|AR	{ return AR; }
 gr|GR	{ return GR; }
 
 sr|SR	{ return SR; }
+
+mi|MI	{ return MI; }
 
 {D}({D}*)  { sscanf(yytext, "%x", &yylval.num); return NUM; }
 
