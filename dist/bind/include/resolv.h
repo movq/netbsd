@@ -1,4 +1,4 @@
-/*	$NetBSD: resolv.h,v 1.1 1999/11/20 18:54:03 veego Exp $	*/
+/*	$NetBSD: resolv.h,v 1.1.1.1 1999/11/20 18:54:03 veego Exp $	*/
 
 /*
  * Copyright (c) 1983, 1987, 1989

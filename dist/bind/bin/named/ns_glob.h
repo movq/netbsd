@@ -1,4 +1,4 @@
-/*	$NetBSD: ns_glob.h,v 1.1 1999/11/20 18:53:59 veego Exp $	*/
+/*	$NetBSD: ns_glob.h,v 1.1.1.1 1999/11/20 18:53:59 veego Exp $	*/
 
 /*
  *	from ns.h	4.33 (Berkeley) 8/23/90

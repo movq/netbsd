@@ -1,4 +1,4 @@
-/*	$NetBSD: port_before.h,v 1.1 1999/11/20 18:54:03 veego Exp $	*/
+/*	$NetBSD: port_before.h,v 1.1.1.1 1999/11/20 18:54:03 veego Exp $	*/
 
 #define WANT_IRS_NIS
 #define WANT_IRS_PW

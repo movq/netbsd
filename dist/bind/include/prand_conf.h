@@ -1,4 +1,4 @@
-/*	$NetBSD: prand_conf.h,v 1.1 1999/11/20 18:54:03 veego Exp $	*/
+/*	$NetBSD: prand_conf.h,v 1.1.1.1 1999/11/20 18:54:03 veego Exp $	*/
 
 #ifndef _PRAND_CMD_H_
 #define _PRAND_CMD_H_

@@ -1,4 +1,4 @@
-/*	$NetBSD: ctl_p.h,v 1.1 1999/11/20 18:54:11 veego Exp $	*/
+/*	$NetBSD: ctl_p.h,v 1.1.1.1 1999/11/20 18:54:11 veego Exp $	*/
 
 struct ctl_buf {
 	char *			text;

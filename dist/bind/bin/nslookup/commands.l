@@ -1,4 +1,4 @@
-/*	$NetBSD: commands.l,v 1.1 1999/11/20 18:54:02 veego Exp $	*/
+/*	$NetBSD: commands.l,v 1.1.1.1 1999/11/20 18:54:02 veego Exp $	*/
 
 %{
 
