@@ -1,4 +1,4 @@
-/*	$NetBSD: gvpbusvar.h,v 1.3 1994/10/26 02:03:42 cgd Exp $	*/
+/*	$NetBSD: gvpbusvar.h,v 1.4 1994/12/28 09:25:23 chopps Exp $	*/
 
 /*
  * Copyright (c) 1994 Christian E. Hopps
@@ -55,7 +55,7 @@ enum gvpbusflags {
 };
 
 struct gvpbus_args {
-	struct ztwobus_args zargs;
+	struct zbus_args zargs;
 	enum gvpbusprod prod;
 	int  flags;
 };
