@@ -1,4 +1,4 @@
-/*	$NetBSD: sigpending.S,v 1.3 1997/10/06 00:07:18 mark Exp $	*/
+/*	$NetBSD: sigpending.S,v 1.4 1998/09/29 20:23:26 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -39,7 +39,7 @@
 
 ENTRY(sigpending)
 	mov	r2, r0
-	swi	SYS_sigpending
+	swi	SYS_compat_13_sigpending13
 	bcs	cerror
 	str	r0, [r2]
 	mov	r0, #0x00000000
