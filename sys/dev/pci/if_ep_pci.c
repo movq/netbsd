@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ep_pci.c,v 1.28 1998/08/12 18:51:55 thorpej Exp $	*/
+/*	$NetBSD: if_ep_pci.c,v 1.29 1998/11/04 00:31:05 fvdl Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -136,7 +136,7 @@ struct ep_pci_product {
 	int		epp_flags;	/* initial softc flags */
 	const char	*epp_name;	/* device name */
 } ep_pci_products[] = {
-	{ PCI_PRODUCT_3COM_3C590,	EP_CHIPSET_VORTEX,
+	{ PCI_PRODUCT_3COM_3C590,	ELINK_CHIPSET_VORTEX,
 	  0,				"3c590" },
 
 	/*
@@ -144,21 +144,22 @@ struct ep_pci_product {
 	 * external PHY.  We treat it as `manual' in the
 	 * core driver.
 	 */
-	{ PCI_PRODUCT_3COM_3C595TX,	EP_CHIPSET_VORTEX,
+	{ PCI_PRODUCT_3COM_3C595TX,	ELINK_CHIPSET_VORTEX,
 	  0,				"3c595-TX" },
-	{ PCI_PRODUCT_3COM_3C595T4,	EP_CHIPSET_VORTEX,
+	{ PCI_PRODUCT_3COM_3C595T4,	ELINK_CHIPSET_VORTEX,
 	  0,				"3c595-T4" },
-	{ PCI_PRODUCT_3COM_3C595MII,	EP_CHIPSET_VORTEX,
+	{ PCI_PRODUCT_3COM_3C595MII,	ELINK_CHIPSET_VORTEX,
 	  0,				"3c595-MII" },
-
-	{ PCI_PRODUCT_3COM_3C900TPO,	EP_CHIPSET_BOOMERANG,
+#ifdef EP_DRIVES_90X
+	{ PCI_PRODUCT_3COM_3C900TPO,	ELINK_CHIPSET_BOOMERANG,
 	  0,				"3c900-TPO" },
-	{ PCI_PRODUCT_3COM_3C900COMBO,	EP_CHIPSET_BOOMERANG,
+	{ PCI_PRODUCT_3COM_3C900COMBO,	ELINK_CHIPSET_BOOMERANG,
 	  0,				"3c900-COMBO" },
-	{ PCI_PRODUCT_3COM_3C905TX,	EP_CHIPSET_BOOMERANG,
-	  EP_FLAGS_MII,			"3c905-TX" },
-	{ PCI_PRODUCT_3COM_3C905T4,	EP_CHIPSET_BOOMERANG,
-	  EP_FLAGS_MII,			"3c905-T4" },
+	{ PCI_PRODUCT_3COM_3C905TX,	ELINK_CHIPSET_BOOMERANG,
+	  ELINK_FLAGS_MII,			"3c905-TX" },
+	{ PCI_PRODUCT_3COM_3C905T4,	ELINK_CHIPSET_BOOMERANG,
+	  ELINK_FLAGS_MII,			"3c905-T4" },
+#endif
 
 	{ 0,				0,
 	  0,				NULL },
@@ -226,7 +227,7 @@ ep_pci_attach(parent, self, aux)
 	sc->disable = NULL;
 	sc->enabled = 1;
 
-	sc->bustype = EP_BUS_PCI;
+	sc->bustype = ELINK_BUS_PCI;
 	sc->ep_flags = epp->epp_flags;
 
 	/* Enable the card. */
