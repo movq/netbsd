@@ -38,7 +38,7 @@
  *
  *      %W% (Berkeley) %G%
  *
- * $Id: check_mount.c,v 1.1 1997/07/24 21:24:12 christos Exp $
+ * $Id: check_mount.c,v 1.1.1.1 1997/07/24 21:24:12 christos Exp $
  *
  */
 

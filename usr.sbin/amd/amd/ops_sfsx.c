@@ -38,7 +38,7 @@
  *
  *      %W% (Berkeley) %G%
  *
- * $Id: ops_sfsx.c,v 1.1 1997/07/24 21:21:47 christos Exp $
+ * $Id: ops_sfsx.c,v 1.1.1.1 1997/07/24 21:21:47 christos Exp $
  *
  */
 

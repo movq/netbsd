@@ -38,7 +38,7 @@
  *
  *      %W% (Berkeley) %G%
  *
- * $Id: fixmount.c,v 1.1 1997/07/24 21:24:11 christos Exp $
+ * $Id: fixmount.c,v 1.1.1.1 1997/07/24 21:24:11 christos Exp $
  *
  */
 

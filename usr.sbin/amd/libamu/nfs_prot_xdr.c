@@ -38,7 +38,7 @@
  *
  *      %W% (Berkeley) %G%
  *
- * $Id: nfs_prot_xdr.c,v 1.1 1997/07/24 21:20:08 christos Exp $
+ * $Id: nfs_prot_xdr.c,v 1.1.1.1 1997/07/24 21:20:08 christos Exp $
  *
  */
 

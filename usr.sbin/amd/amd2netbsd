@@ -1,6 +1,6 @@
 #!/usr/local/bin/perl
 #
-#	$NetBSD: amd2netbsd,v 1.1 1997/07/24 21:20:06 christos Exp $
+#	$NetBSD: amd2netbsd,v 1.1.1.1 1997/07/24 21:20:06 christos Exp $
 #
 #  Perl script to convert a standard distribution directory for am-utils into
 #	a NetBSD source tree.

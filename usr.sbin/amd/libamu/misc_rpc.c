@@ -38,7 +38,7 @@
  *
  *      %W% (Berkeley) %G%
  *
- * $Id: misc_rpc.c,v 1.1 1997/07/24 21:20:07 christos Exp $
+ * $Id: misc_rpc.c,v 1.1.1.1 1997/07/24 21:20:07 christos Exp $
  *
  */
 
