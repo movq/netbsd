@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.syspkg.mk,v 1.1 2002/01/07 22:48:30 jwise Exp $
+#	$NetBSD: bsd.syspkg.mk,v 1.1.1.1 2002/01/07 22:48:30 jwise Exp $
 #
 #	This file is derived from:
 #
