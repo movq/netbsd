@@ -1,4 +1,4 @@
-/*	$NetBSD: conf.c,v 1.112.2.1 1999/04/09 17:09:25 drochner Exp $	*/
+/*	$NetBSD: conf.c,v 1.112.2.1.4.1 1999/11/30 13:32:12 itojun Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -354,6 +354,9 @@ struct cdevsw	cdevsw[] =
 	cdev_disk_init(NRAID,raid),	/* 62: RAIDframe disk driver */
 	cdev_esh_init(NESH, esh_fp),	/* 63: HIPPI (esh) raw device */
 	cdev_ugen_init(NUGEN,ugen),	/* 64: USB generic driver */
+#ifdef ALTQ
+	cdev_notdef(),			/* 65: ALTQ */
+#endif
 };
 int	nchrdev = sizeof(cdevsw) / sizeof(cdevsw[0]);
 

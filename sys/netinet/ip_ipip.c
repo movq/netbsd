@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_ipip.c,v 1.3.2.1 1999/04/04 19:24:32 tron Exp $	*/
+/*	$NetBSD: ip_ipip.c,v 1.3.2.1.4.1 1999/11/30 13:35:31 itojun Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -45,6 +45,7 @@
 
 #include "ipip.h"
 #include "opt_mrouting.h"
+#include "opt_ipsec.h"
 
 #if NIPIP > 0 || defined(MROUTING)
 
@@ -108,11 +109,12 @@ ipip_input(m, va_alist)
 #if NIPIP > 0
 	struct ipip_softc *sc;
 #endif
-	int hlen;
+	int hlen, proto;
 	va_list ap;
 
 	va_start(ap, m);
 	hlen = va_arg(ap, int);
+	proto = va_arg(ap, int);
 	va_end(ap);
 
 #if NIPIP > 0
@@ -162,7 +164,7 @@ ipip_input(m, va_alist)
 #endif /* MROUTING */
 
 	/* Last try: give it to raw IP. */
-	rip_input(m);
+	rip_input(m, hlen, proto);
 }
 
 #if NIPIP > 0
@@ -272,6 +274,9 @@ ipip_output(ifp, m0, dst, rt)
 	ifp->if_opackets++;
 	ifp->if_obytes += m0->m_pkthdr.len;
 
+#ifdef IPSEC
+	m0->m_pkthdr.rcvif = NULL;
+#endif
 	error = ip_output(m0, NULL, &sc->sc_route, 0, NULL);
 	if (error)
 		ifp->if_oerrors++;

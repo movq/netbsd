@@ -1,4 +1,4 @@
-/*	$NetBSD: pcmciadevs.h,v 1.36.2.1 1999/04/27 13:54:48 perry Exp $	*/
+/*	$NetBSD: pcmciadevs.h,v 1.36.2.1.4.1 1999/11/30 13:34:24 itojun Exp $	*/
 
 /*
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.
@@ -62,7 +62,9 @@
 #define	PCMCIA_VENDOR_ADAPTEC	0x012f	/* Adaptec Corporation */
 #define	PCMCIA_VENDOR_LINKSYS	0x0149	/* Linksys Corporation */
 #define	PCMCIA_VENDOR_SIMPLETECH	0x014d	/* Simple Technology */
+#define	PCMCIA_VENDOR_LUCENT	0x0156	/* Lucent Technologies */
 #define	PCMCIA_VENDOR_DAYNA	0x0194	/* Dayna Corporation */
+#define	PCMCIA_VENDOR_BAY	0x01eb	/* Bay Networks */
 #define	PCMCIA_VENDOR_IODATA	0x01bf	/* I-O DATA */
 #define	PCMCIA_VENDOR_COMPEX	0x8a01	/* Compex Corporation */
 #define	PCMCIA_VENDOR_COREGA	0xc00f	/* Corega K.K. */
@@ -214,9 +216,12 @@
 #define	PCMCIA_CIS_TDK_XIR_PS_CE2_10	{ NULL, NULL, NULL, NULL }
 #define	PCMCIA_PRODUCT_TDK_XIR_PS_CE2_10	0x010b
 #define	PCMCIA_STR_TDK_XIR_PS_CE2_10	"Xircom CreditCard CE2 Ethernet"
-#define	PCMCIA_CIS_TDK_XIR_CNW	{ NULL, NULL, NULL, NULL }
-#define	PCMCIA_PRODUCT_TDK_XIR_CNW	0x0802
-#define	PCMCIA_STR_TDK_XIR_CNW	"Xircom CreditCard Netwave"
+#define	PCMCIA_CIS_TDK_XIR_CNW_801	{ NULL, NULL, NULL, NULL }
+#define	PCMCIA_PRODUCT_TDK_XIR_CNW_801	0x0801
+#define	PCMCIA_STR_TDK_XIR_CNW_801	"Xircom CreditCard Netwave (Canada)"
+#define	PCMCIA_CIS_TDK_XIR_CNW_802	{ NULL, NULL, NULL, NULL }
+#define	PCMCIA_PRODUCT_TDK_XIR_CNW_802	0x0802
+#define	PCMCIA_STR_TDK_XIR_CNW_802	"Xircom CreditCard Netwave (US)"
 
 /* NewMedia Products */
 #define	PCMCIA_CIS_NEWMEDIA_BASICS	{ NULL, NULL, NULL, NULL }
@@ -227,6 +232,16 @@
 #define	PCMCIA_CIS_SMC_8016	{ NULL, NULL, NULL, NULL }
 #define	PCMCIA_PRODUCT_SMC_8016	0x0105
 #define	PCMCIA_STR_SMC_8016	"SMC 8016 EtherCard"
+
+/* Lucent WaveLAN/IEEE */
+#define	PCMCIA_CIS_LUCENT_WAVELAN_IEEE	{ NULL, NULL, NULL, NULL }
+#define	PCMCIA_PRODUCT_LUCENT_WAVELAN_IEEE	0x0002
+#define	PCMCIA_STR_LUCENT_WAVELAN_IEEE	"WaveLAN/IEEE"
+
+/* Bay Networks */
+#define	PCMCIA_CIS_BAY_STACK_650	{ NULL, NULL, NULL, NULL }
+#define	PCMCIA_PRODUCT_BAY_STACK_650	0x804
+#define	PCMCIA_STR_BAY_STACK_650	"BayStack 650 Wireless LAN"
 
 /* Cards we know only by their cis */
 #define	PCMCIA_VENDOR_PREMAX	-1	/* Premax */
