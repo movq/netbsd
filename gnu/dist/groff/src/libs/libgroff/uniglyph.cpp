@@ -1,4 +1,4 @@
-/*	$NetBSD: uniglyph.cpp,v 1.1 2004/07/30 14:44:52 wiz Exp $	*/
+/*	$NetBSD: uniglyph.cpp,v 1.1.1.1 2004/07/30 14:44:52 wiz Exp $	*/
 
 // -*- C++ -*-
 /* Copyright (C) 2002, 2003, 2004

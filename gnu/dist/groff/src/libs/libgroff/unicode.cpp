@@ -1,4 +1,4 @@
-/*	$NetBSD: unicode.cpp,v 1.1 2004/07/30 14:44:52 wiz Exp $	*/
+/*	$NetBSD: unicode.cpp,v 1.1.1.1 2004/07/30 14:44:52 wiz Exp $	*/
 
 // -*- C++ -*-
 /* Copyright (C) 2002

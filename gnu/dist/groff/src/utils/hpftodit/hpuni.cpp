@@ -1,4 +1,4 @@
-/*	$NetBSD: hpuni.cpp,v 1.1 2004/07/30 14:45:06 wiz Exp $	*/
+/*	$NetBSD: hpuni.cpp,v 1.1.1.1 2004/07/30 14:45:06 wiz Exp $	*/
 
 // -*- C++ -*-
 /* Copyright (C) 2003, 2004 Free Software Foundation, Inc.
