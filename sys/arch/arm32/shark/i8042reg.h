@@ -1,4 +1,4 @@
-/*      $NetBSD: i8042reg.h,v 1.1 1998/05/01 21:08:55 cgd Exp $     */
+/*      $NetBSD: i8042reg.h,v 1.1.1.1 1998/05/01 21:08:55 cgd Exp $     */
 
 /*
  * Copyright 1997

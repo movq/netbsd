@@ -1,4 +1,4 @@
-/*	$NetBSD: lpt.c,v 1.1 1998/05/01 21:08:55 cgd Exp $	*/
+/*	$NetBSD: lpt.c,v 1.1.1.1 1998/05/01 21:08:55 cgd Exp $	*/
 
 /*
  * Copyright (c) 1993, 1994 Charles Hannum.
