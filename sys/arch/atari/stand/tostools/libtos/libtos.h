@@ -1,4 +1,4 @@
-/*	$NetBSD: libtos.h,v 1.3 2001/10/11 07:07:42 leo Exp $	*/
+/*	$NetBSD: libtos.h,v 1.4 2002/02/24 20:51:08 leo Exp $	*/
 
 /*
  * Copyright (c) 1995 Waldi Ravens.
@@ -51,6 +51,15 @@
 
 #include <sys/types.h>
 #include <stdarg.h>
+
+#ifndef int8_t
+/*
+ * My TOS/MiNT installation does not define these (Leo 09/10/2001).
+ */
+typedef	unsigned char	u_int8_t;
+typedef	unsigned short	u_int16_t;
+typedef	unsigned long	u_int32_t;
+#endif /* int8_t */
 
 struct kparamb;
 struct osdsc;
