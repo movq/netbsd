@@ -1,5 +1,5 @@
 dnl
-dnl $Id: krb-bigendian.m4,v 1.1 2001/09/17 12:10:07 assar Exp $
+dnl $Id: krb-bigendian.m4,v 1.1.1.1 2001/09/17 12:10:07 assar Exp $
 dnl
 
 dnl check if this computer is little or big-endian

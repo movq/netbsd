@@ -1,5 +1,5 @@
 #!/bin/sh
-# $Id: make-rpath,v 1.1 2001/09/17 12:10:05 assar Exp $
+# $Id: make-rpath,v 1.1.1.1 2001/09/17 12:10:05 assar Exp $
 rlist=
 rest=
 while test $# -gt 0; do

@@ -38,7 +38,7 @@
 
 #include <popper.h>
 #include <base64.h>
-RCSID("$Id: pop_auth.c,v 1.1 2001/09/17 12:09:48 assar Exp $");
+RCSID("$Id: pop_auth.c,v 1.1.1.1 2001/09/17 12:09:48 assar Exp $");
 
 #ifdef KRB4
 

@@ -1,4 +1,4 @@
-dnl $Id: broken2.m4,v 1.1 2001/09/17 12:10:06 assar Exp $
+dnl $Id: broken2.m4,v 1.1.1.1 2001/09/17 12:10:06 assar Exp $
 dnl
 dnl AC_BROKEN but with more arguments
 

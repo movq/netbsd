@@ -128,13 +128,13 @@ disable_cat_manpages = @disable_cat_manpages@
 install_sh = @install_sh@
 krb_cv_header_netdb_h_broken = @krb_cv_header_netdb_h_broken@
 
-# $Id: Makefile.in,v 1.1 2001/09/17 12:09:58 assar Exp $
+# $Id: Makefile.in,v 1.1.1.1 2001/09/17 12:09:58 assar Exp $
 
 
-# $Id: Makefile.in,v 1.1 2001/09/17 12:09:58 assar Exp $
+# $Id: Makefile.in,v 1.1.1.1 2001/09/17 12:09:58 assar Exp $
 
 
-# $Id: Makefile.in,v 1.1 2001/09/17 12:09:58 assar Exp $
+# $Id: Makefile.in,v 1.1.1.1 2001/09/17 12:09:58 assar Exp $
 
 
 AUTOMAKE_OPTIONS = foreign no-dependencies 1.4b

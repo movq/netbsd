@@ -1,5 +1,5 @@
 dnl
-dnl $Id: krb-irix.m4,v 1.1 2001/09/17 12:10:07 assar Exp $
+dnl $Id: krb-irix.m4,v 1.1.1.1 2001/09/17 12:10:07 assar Exp $
 dnl
 
 dnl requires AC_CANONICAL_HOST

@@ -33,7 +33,7 @@
 
 #include "krb_locl.h"
 
-RCSID("$Id: random_block.c,v 1.1 2001/09/17 12:09:54 assar Exp $");
+RCSID("$Id: random_block.c,v 1.1.1.1 2001/09/17 12:09:54 assar Exp $");
 
 #ifdef HAVE_OPENSSL
 #include <openssl/rand.h>
