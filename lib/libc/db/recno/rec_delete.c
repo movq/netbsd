@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 1990, 1993
+ * Copyright (c) 1990, 1993, 1994
  *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
@@ -35,7 +35,7 @@
  */
 
 #if defined(LIBC_SCCS) && !defined(lint)
-static char sccsid[] = "@(#)rec_delete.c	8.1 (Berkeley) 6/4/93";
+static char sccsid[] = "@(#)rec_delete.c	8.6 (Berkeley) 6/4/94";
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>
@@ -71,6 +71,13 @@ __rec_delete(dbp, key, flags)
 	int status;
 
 	t = dbp->internal;
+
+	/* Toss any page pinned across calls. */
+	if (t->bt_pinned != NULL) {
+		mpool_put(t->bt_mp, t->bt_pinned, 0);
+		t->bt_pinned = NULL;
+	}
+
 	switch(flags) {
 	case 0:
 		if ((nrec = *(recno_t *)key->data) == 0)
@@ -119,10 +126,8 @@ rec_rdelete(t, nrec)
 	int status;
 
 	/* Find the record; __rec_search pins the page. */
-	if ((e = __rec_search(t, nrec, SDELETE)) == NULL) {
-		mpool_put(t->bt_mp, e->page, 0);
+	if ((e = __rec_search(t, nrec, SDELETE)) == NULL)
 		return (RET_ERROR);
-	}
 
 	/* Delete the record. */
 	h = e->page;
@@ -149,12 +154,11 @@ int
 __rec_dleaf(t, h, index)
 	BTREE *t;
 	PAGE *h;
-	int index;
+	u_int32_t index;
 {
-	register RLEAF *rl;
-	register indx_t *ip, offset;
-	register size_t nbytes;
-	register int cnt;
+	RLEAF *rl;
+	indx_t *ip, cnt, offset;
+	u_int32_t nbytes;
 	char *from;
 	void *to;
 

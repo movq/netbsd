@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 1990, 1993
+ * Copyright (c) 1990, 1993, 1994
  *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
@@ -35,7 +35,7 @@
  */
 
 #if defined(LIBC_SCCS) && !defined(lint)
-static char sccsid[] = "@(#)bt_delete.c	8.1 (Berkeley) 6/4/93";
+static char sccsid[] = "@(#)bt_delete.c	8.4 (Berkeley) 5/31/94";
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>
@@ -70,10 +70,18 @@ __bt_delete(dbp, key, flags)
 	int status;
 
 	t = dbp->internal;
+
+	/* Toss any page pinned across calls. */
+	if (t->bt_pinned != NULL) {
+		mpool_put(t->bt_mp, t->bt_pinned, 0);
+		t->bt_pinned = NULL;
+	}
+
 	if (ISSET(t, B_RDONLY)) {
 		errno = EPERM;
 		return (RET_ERROR);
 	}
+
 	switch(flags) {
 	case 0:
 		status = bt_bdelete(t, key);
@@ -271,12 +279,11 @@ int
 __bt_dleaf(t, h, index)
 	BTREE *t;
 	PAGE *h;
-	int index;
+	indx_t index;
 {
 	register BLEAF *bl;
-	register indx_t *ip, offset;
-	register size_t nbytes;
-	register int cnt;
+	register indx_t cnt, *ip, offset;
+	register u_int32_t nbytes;
 	char *from;
 	void *to;
 

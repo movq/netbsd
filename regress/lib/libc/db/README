@@ -1,5 +1,20 @@
-#	@(#)README	5.7 (Berkeley) 5/1/93
+#	@(#)README	8.4 (Berkeley) 6/20/94
 
+To build this portably, try something like:
+
+    make PORTDIR="../PORT/MACH"
+
+where MACH is the machine, i.e. "sunos.4.1.1".
+
+To run the tests, enter "sh run.test".  If your system dictionary isn't
+in /usr/share/dict/words, edit run.test to reflect the correct place.
+
+Fairly large files (the command files) are built in this directory during
+the test runs, and even larger files (the database files) are created in
+"/var/tmp".  If the latter directory doesn't exist, set the environmental
+variable TMPDIR to a directory where the files can be built.
+
+=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 The script file consists of lines with a initial character which is
 the "command" for that line.  Legal characters are as follows:
 

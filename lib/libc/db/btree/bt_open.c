@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 1990, 1993
+ * Copyright (c) 1990, 1993, 1994
  *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
@@ -35,7 +35,7 @@
  */
 
 #if defined(LIBC_SCCS) && !defined(lint)
-static char sccsid[] = "@(#)bt_open.c	8.1 (Berkeley) 6/4/93";
+static char sccsid[] = "@(#)bt_open.c	8.7 (Berkeley) 6/16/94";
 #endif /* LIBC_SCCS and not lint */
 
 /*
@@ -58,7 +58,6 @@ static char sccsid[] = "@(#)bt_open.c	8.1 (Berkeley) 6/4/93";
 #include <string.h>
 #include <unistd.h>
 
-#define	__DBINTERFACE_PRIVATE
 #include <db.h>
 #include "btree.h"
 
@@ -83,18 +82,19 @@ static int tmp __P((void));
  *
  */
 DB *
-__bt_open(fname, flags, mode, openinfo)
+__bt_open(fname, flags, mode, openinfo, dflags)
 	const char *fname;
-	int flags, mode;
+	int flags, mode, dflags;
 	const BTREEINFO *openinfo;
 {
+	struct stat sb;
 	BTMETA m;
 	BTREE *t;
 	BTREEINFO b;
 	DB *dbp;
 	pgno_t ncache;
-	struct stat sb;
-	int machine_lorder, nr;
+	ssize_t nr;
+	int machine_lorder;
 
 	t = NULL;
 
@@ -154,21 +154,19 @@ __bt_open(fname, flags, mode, openinfo)
 		goto einval;
 
 	/* Allocate and initialize DB and BTREE structures. */
-	if ((t = malloc(sizeof(BTREE))) == NULL)
+	if ((t = (BTREE *)malloc(sizeof(BTREE))) == NULL)
 		goto err;
-	t->bt_fd = -1;			/* Don't close unopened fd on error. */
-	if ((t->bt_dbp = dbp = malloc(sizeof(DB))) == NULL)
-		goto err;
+	memset(t, 0, sizeof(BTREE));
 	t->bt_bcursor.pgno = P_INVALID;
-	t->bt_bcursor.index = 0;
-	t->bt_stack = NULL;
-	t->bt_sp = t->bt_maxstack = 0;
-	t->bt_kbuf = t->bt_dbuf = NULL;
-	t->bt_kbufsz = t->bt_dbufsz = 0;
+	t->bt_fd = -1;			/* Don't close unopened fd on error. */
 	t->bt_lorder = b.lorder;
 	t->bt_order = NOT;
 	t->bt_cmp = b.compare;
 	t->bt_pfx = b.prefix;
+	t->bt_rfd = -1;
+
+	if ((t->bt_dbp = dbp = (DB *)malloc(sizeof(DB))) == NULL)
+		goto err;
 	t->bt_flags = 0;
 	if (t->bt_lorder != machine_lorder)
 		SET(t, B_NEEDSWAP);
@@ -199,8 +197,7 @@ __bt_open(fname, flags, mode, openinfo)
 			goto einval;
 		}
 		
-		if ((t->bt_fd =
-		    open(fname, flags & __USE_OPEN_FLAGS, mode)) < 0)
+		if ((t->bt_fd = open(fname, flags, mode)) < 0)
 			goto err;
 
 	} else {
@@ -217,8 +214,7 @@ __bt_open(fname, flags, mode, openinfo)
 	if (fstat(t->bt_fd, &sb))
 		goto err;
 	if (sb.st_size) {
-		nr = read(t->bt_fd, &m, sizeof(BTMETA));
-		if (nr < 0)
+		if ((nr = read(t->bt_fd, &m, sizeof(BTMETA))) < 0)
 			goto err;
 		if (nr != sizeof(BTMETA))
 			goto eftype;
@@ -235,12 +231,12 @@ __bt_open(fname, flags, mode, openinfo)
 			CLR(t, B_NEEDSWAP);
 		else {
 			SET(t, B_NEEDSWAP);
-			BLSWAP(m.m_magic);
-			BLSWAP(m.m_version);
-			BLSWAP(m.m_psize);
-			BLSWAP(m.m_free);
-			BLSWAP(m.m_nrecs);
-			BLSWAP(m.m_flags);
+			M_32_SWAP(m.m_magic);
+			M_32_SWAP(m.m_version);
+			M_32_SWAP(m.m_psize);
+			M_32_SWAP(m.m_free);
+			M_32_SWAP(m.m_nrecs);
+			M_32_SWAP(m.m_flags);
 		}
 		if (m.m_magic != BTREEMAGIC || m.m_version != BTREEVERSION)
 			goto eftype;
@@ -314,6 +310,14 @@ __bt_open(fname, flags, mode, openinfo)
 	if (nroot(t) == RET_ERROR)
 		goto err;
 
+	/* Global flags. */
+	if (dflags & DB_LOCK)
+		SET(t, B_DB_LOCK);
+	if (dflags & DB_SHMEM)
+		SET(t, B_DB_SHMEM);
+	if (dflags & DB_TXN)
+		SET(t, B_DB_TXN);
+
 	return (dbp);
 
 einval:	errno = EINVAL;
@@ -352,8 +356,9 @@ nroot(t)
 		mpool_put(t->bt_mp, meta, 0);
 		return (RET_SUCCESS);
 	}
-	if (errno != EINVAL)
+	if (errno != EINVAL)		/* It's OK to not exist. */
 		return (RET_ERROR);
+	errno = 0;
 
 	if ((meta = mpool_new(t->bt_mp, &npg)) == NULL)
 		return (RET_ERROR);
@@ -397,7 +402,7 @@ tmp()
 static int
 byteorder()
 {
-	u_long x;			/* XXX: 32-bit assumption. */
+	u_int32_t x;
 	u_char *p;
 
 	x = 0x01020304;
@@ -420,6 +425,13 @@ __bt_fd(dbp)
 
 	t = dbp->internal;
 
+	/* Toss any page pinned across calls. */
+	if (t->bt_pinned != NULL) {
+		mpool_put(t->bt_mp, t->bt_pinned, 0);
+		t->bt_pinned = NULL;
+	}
+
+	/* In-memory database can't have a file descriptor. */
 	if (ISSET(t, B_INMEM)) {
 		errno = ENOENT;
 		return (-1);

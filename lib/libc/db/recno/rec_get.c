@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 1990, 1993
+ * Copyright (c) 1990, 1993, 1994
  *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,7 +32,7 @@
  */
 
 #if defined(LIBC_SCCS) && !defined(lint)
-static char sccsid[] = "@(#)rec_get.c	8.1 (Berkeley) 6/4/93";
+static char sccsid[] = "@(#)rec_get.c	8.5 (Berkeley) 6/20/94";
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>
@@ -71,6 +71,15 @@ __rec_get(dbp, key, data, flags)
 	recno_t nrec;
 	int status;
 
+	t = dbp->internal;
+
+	/* Toss any page pinned across calls. */
+	if (t->bt_pinned != NULL) {
+		mpool_put(t->bt_mp, t->bt_pinned, 0);
+		t->bt_pinned = NULL;
+	}
+
+	/* Get currently doesn't take any flags, and keys of 0 are illegal. */
 	if (flags || (nrec = *(recno_t *)key->data) == 0) {
 		errno = EINVAL;
 		return (RET_ERROR);
@@ -80,7 +89,6 @@ __rec_get(dbp, key, data, flags)
 	 * If we haven't seen this record yet, try to find it in the
 	 * original file.
 	 */
-	t = dbp->internal;
 	if (nrec > t->bt_nrecs) {
 		if (ISSET(t, R_EOF | R_INMEM))
 			return (RET_SPECIAL);
@@ -93,7 +101,10 @@ __rec_get(dbp, key, data, flags)
 		return (RET_ERROR);
 
 	status = __rec_ret(t, e, 0, NULL, data);
-	mpool_put(t->bt_mp, e->page, 0);
+	if (ISSET(t, B_DB_LOCK))
+		mpool_put(t->bt_mp, e->page, 0);
+	else
+		t->bt_pinned = e->page;
 	return (status);
 }
 
@@ -118,14 +129,16 @@ __rec_fpipe(t, top)
 	int ch;
 	char *p;
 
-	data.data = t->bt_dbuf;
-	data.size = t->bt_reclen;
-
 	if (t->bt_dbufsz < t->bt_reclen) {
-		if ((t->bt_dbuf = realloc(t->bt_dbuf, t->bt_reclen)) == NULL)
+		t->bt_dbuf = (char *)(t->bt_dbuf == NULL ?
+		    malloc(t->bt_reclen) : realloc(t->bt_dbuf, t->bt_reclen));
+		if (t->bt_dbuf == NULL)
 			return (RET_ERROR);
 		t->bt_dbufsz = t->bt_reclen;
 	}
+	data.data = t->bt_dbuf;
+	data.size = t->bt_reclen;
+
 	for (nrec = t->bt_nrecs; nrec < top; ++nrec) {
 		len = t->bt_reclen;
 		for (p = t->bt_dbuf;; *p++ = ch)
@@ -183,8 +196,10 @@ __rec_vpipe(t, top)
 			if (sz == 0) {
 				len = p - t->bt_dbuf;
 				t->bt_dbufsz += (sz = 256);
-				if ((t->bt_dbuf =
-				    realloc(t->bt_dbuf, t->bt_dbufsz)) == NULL)
+				t->bt_dbuf = (char *)(t->bt_dbuf == NULL ?
+				    malloc(t->bt_dbufsz) :
+				    realloc(t->bt_dbuf, t->bt_dbufsz));
+				if (t->bt_dbuf == NULL)
 					return (RET_ERROR);
 				p = t->bt_dbuf + len;
 			}
@@ -220,16 +235,18 @@ __rec_fmap(t, top)
 	size_t len;
 	char *p;
 
-	sp = t->bt_cmap;
-	ep = t->bt_emap;
-	data.data = t->bt_dbuf;
-	data.size = t->bt_reclen;
-
 	if (t->bt_dbufsz < t->bt_reclen) {
-		if ((t->bt_dbuf = realloc(t->bt_dbuf, t->bt_reclen)) == NULL)
+		t->bt_dbuf = (char *)(t->bt_dbuf == NULL ?
+		    malloc(t->bt_reclen) : realloc(t->bt_dbuf, t->bt_reclen));
+		if (t->bt_dbuf == NULL)
 			return (RET_ERROR);
 		t->bt_dbufsz = t->bt_reclen;
 	}
+	data.data = t->bt_dbuf;
+	data.size = t->bt_reclen;
+
+	sp = t->bt_cmap;
+	ep = t->bt_emap;
 	for (nrec = t->bt_nrecs; nrec < top; ++nrec) {
 		if (sp >= ep) {
 			SET(t, R_EOF);

@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 1990, 1993
+ * Copyright (c) 1990, 1993, 1994
  *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
@@ -35,7 +35,7 @@
  */
 
 #if defined(LIBC_SCCS) && !defined(lint)
-static char sccsid[] = "@(#)hash.c	8.1 (Berkeley) 6/6/93";
+static char sccsid[] = "@(#)hash.c	8.9 (Berkeley) 6/16/94";
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/param.h>
@@ -60,13 +60,13 @@ static int   alloc_segs __P((HTAB *, int));
 static int   flush_meta __P((HTAB *));
 static int   hash_access __P((HTAB *, ACTION, DBT *, DBT *));
 static int   hash_close __P((DB *));
-static int   hash_delete __P((const DB *, const DBT *, u_int));
+static int   hash_delete __P((const DB *, const DBT *, u_int32_t));
 static int   hash_fd __P((const DB *));
-static int   hash_get __P((const DB *, const DBT *, DBT *, u_int));
-static int   hash_put __P((const DB *, DBT *, const DBT *, u_int));
+static int   hash_get __P((const DB *, const DBT *, DBT *, u_int32_t));
+static int   hash_put __P((const DB *, DBT *, const DBT *, u_int32_t));
 static void *hash_realloc __P((SEGMENT **, int, int));
-static int   hash_seq __P((const DB *, DBT *, DBT *, u_int));
-static int   hash_sync __P((const DB *, u_int));
+static int   hash_seq __P((const DB *, DBT *, DBT *, u_int32_t));
+static int   hash_sync __P((const DB *, u_int32_t));
 static int   hdestroy __P((HTAB *));
 static HTAB *init_hash __P((HTAB *, const char *, HASHINFO *));
 static int   init_htab __P((HTAB *, int));
@@ -86,16 +86,16 @@ static void  swap_header_copy __P((HASHHDR *, HASHHDR *));
 #define	ABNORMAL (1)
 
 #ifdef HASH_STATISTICS
-long hash_accesses, hash_collisions, hash_expansions, hash_overflows;
+int hash_accesses, hash_collisions, hash_expansions, hash_overflows;
 #endif
 
 /************************** INTERFACE ROUTINES ***************************/
 /* OPEN/CLOSE */
 
 extern DB *
-__hash_open(file, flags, mode, info)
+__hash_open(file, flags, mode, info, dflags)
 	const char *file;
-	int flags, mode;
+	int flags, mode, dflags;
 	const HASHINFO *info;	/* Special directives for create */
 {
 	HTAB *hashp;
@@ -108,16 +108,17 @@ __hash_open(file, flags, mode, info)
 		return (NULL);
 	}
 
-	if (!(hashp = calloc(1, sizeof(HTAB))))
+	if (!(hashp = (HTAB *)calloc(1, sizeof(HTAB))))
 		return (NULL);
 	hashp->fp = -1;
+
 	/*
-	 * Select flags relevant to us. Even if user wants write only, we need
-	 * to be able to read the actual file, so we need to open it read/write.
-	 * But, the field in the hashp structure needs to be accurate so that
+	 * Even if user wants write only, we need to be able to read
+	 * the actual file, so we need to open it read/write. But, the
+	 * field in the hashp structure needs to be accurate so that
 	 * we can check accesses.
 	 */
-	hashp->flags = flags = flags & __USE_OPEN_FLAGS;
+	hashp->flags = flags;
 
 	new_table = 0;
 	if (!file || (flags & O_TRUNC) ||
@@ -152,7 +153,9 @@ __hash_open(file, flags, mode, info)
 		/* Verify file type, versions and hash function */
 		if (hashp->MAGIC != HASHMAGIC)
 			RETURN_ERROR(EFTYPE, error1);
-		if (hashp->VERSION != HASHVERSION)
+#define	OLDHASHVERSION	1
+		if (hashp->VERSION != HASHVERSION &&
+		    hashp->VERSION != OLDHASHVERSION)
 			RETURN_ERROR(EFTYPE, error1);
 		if (hashp->hash(CHARKEY, sizeof(CHARKEY)) != hashp->H_CHARKEY)
 			RETURN_ERROR(EFTYPE, error1);
@@ -176,7 +179,7 @@ __hash_open(file, flags, mode, info)
 		    (hashp->BSHIFT + BYTE_SHIFT);
 
 		hashp->nmaps = bpages;
-		(void)memset(&hashp->mapp[0], 0, bpages * sizeof(u_long *));
+		(void)memset(&hashp->mapp[0], 0, bpages * sizeof(u_int32_t *));
 	}
 
 	/* Initialize Buffer Manager */
@@ -188,7 +191,7 @@ __hash_open(file, flags, mode, info)
 	hashp->new_file = new_table;
 	hashp->save_file = file && (hashp->flags & O_RDWR);
 	hashp->cbucket = -1;
-	if (!(dbp = malloc(sizeof(DB)))) {
+	if (!(dbp = (DB *)malloc(sizeof(DB)))) {
 		save_errno = errno;
 		hdestroy(hashp);
 		errno = save_errno;
@@ -363,7 +366,7 @@ init_htab(hashp, nelem)
 	hashp->LAST_FREED = 2;
 
 	/* First bitmap page is at: splitpoint l2 page offset 1 */
-	if (__init_bitmap(hashp, OADDR_OF(l2, 1), l2 + 1, 0))
+	if (__ibitmap(hashp, OADDR_OF(l2, 1), l2 + 1, 0))
 		return (-1);
 
 	hashp->MAX_BUCKET = hashp->LOW_MASK = nbuckets - 1;
@@ -430,6 +433,8 @@ hdestroy(hashp)
 	if (hashp->fp != -1)
 		(void)close(hashp->fp);
 
+	free(hashp);
+
 	if (save_errno) {
 		errno = save_errno;
 		return (ERROR);
@@ -446,7 +451,7 @@ hdestroy(hashp)
 static int
 hash_sync(dbp, flags)
 	const DB *dbp;
-	u_int flags;
+	u_int32_t flags;
 {
 	HTAB *hashp;
 
@@ -525,7 +530,7 @@ hash_get(dbp, key, data, flag)
 	const DB *dbp;
 	const DBT *key;
 	DBT *data;
-	u_int flag;
+	u_int32_t flag;
 {
 	HTAB *hashp;
 
@@ -542,7 +547,7 @@ hash_put(dbp, key, data, flag)
 	const DB *dbp;
 	DBT *key;
 	const DBT *data;
-	u_int flag;
+	u_int32_t flag;
 {
 	HTAB *hashp;
 
@@ -563,7 +568,7 @@ static int
 hash_delete(dbp, key, flag)
 	const DB *dbp;
 	const DBT *key;
-	u_int flag;		/* Ignored */
+	u_int32_t flag;		/* Ignored */
 {
 	HTAB *hashp;
 
@@ -590,10 +595,10 @@ hash_access(hashp, action, key, val)
 {
 	register BUFHEAD *rbufp;
 	BUFHEAD *bufp, *save_bufp;
-	register u_short *bp;
+	register u_int16_t *bp;
 	register int n, ndx, off, size;
 	register char *kp;
-	u_short pageno;
+	u_int16_t pageno;
 
 #ifdef HASH_STATISTICS
 	hash_accesses++;
@@ -609,7 +614,7 @@ hash_access(hashp, action, key, val)
 
 	/* Pin the bucket chain */
 	rbufp->flags |= BUF_PIN;
-	for (bp = (u_short *)rbufp->page, n = *bp++, ndx = 1; ndx < n;)
+	for (bp = (u_int16_t *)rbufp->page, n = *bp++, ndx = 1; ndx < n;)
 		if (bp[1] >= REAL_KEY) {
 			/* Real key/data pair */
 			if (size == off - *bp &&
@@ -628,7 +633,7 @@ hash_access(hashp, action, key, val)
 				return (ERROR);
 			}
 			/* FOR LOOP INIT */
-			bp = (u_short *)rbufp->page;
+			bp = (u_int16_t *)rbufp->page;
 			n = *bp++;
 			ndx = 1;
 			off = hashp->BSIZE;
@@ -650,7 +655,7 @@ hash_access(hashp, action, key, val)
 					return (ERROR);
 				}
 				/* FOR LOOP INIT */
-				bp = (u_short *)rbufp->page;
+				bp = (u_int16_t *)rbufp->page;
 				n = *bp++;
 				ndx = 1;
 				off = hashp->BSIZE;
@@ -684,7 +689,7 @@ found:
 		save_bufp->flags &= ~BUF_PIN;
 		return (ABNORMAL);
 	case HASH_GET:
-		bp = (u_short *)rbufp->page;
+		bp = (u_int16_t *)rbufp->page;
 		if (bp[ndx + 1] < REAL_KEY) {
 			if (__big_return(hashp, rbufp, ndx, val, 0))
 				return (ERROR);
@@ -715,12 +720,12 @@ static int
 hash_seq(dbp, key, data, flag)
 	const DB *dbp;
 	DBT *key, *data;
-	u_int flag;
+	u_int32_t flag;
 {
-	register u_int bucket;
+	register u_int32_t bucket;
 	register BUFHEAD *bufp;
 	HTAB *hashp;
-	u_short *bp, ndx;
+	u_int16_t *bp, ndx;
 
 	hashp = (HTAB *)dbp->internal;
 	if (flag && flag != R_FIRST && flag != R_NEXT) {
@@ -745,7 +750,7 @@ hash_seq(dbp, key, data, flag)
 				if (!bufp)
 					return (ERROR);
 				hashp->cpage = bufp;
-				bp = (u_short *)bufp->page;
+				bp = (u_int16_t *)bufp->page;
 				if (bp[0])
 					break;
 			}
@@ -755,7 +760,7 @@ hash_seq(dbp, key, data, flag)
 				return (ABNORMAL);
 			}
 		} else
-			bp = (u_short *)hashp->cpage->page;
+			bp = (u_int16_t *)hashp->cpage->page;
 
 #ifdef DEBUG
 		assert(bp);
@@ -766,7 +771,7 @@ hash_seq(dbp, key, data, flag)
 			    __get_buf(hashp, bp[hashp->cndx], bufp, 0);
 			if (!bufp)
 				return (ERROR);
-			bp = (u_short *)(bufp->page);
+			bp = (u_int16_t *)(bufp->page);
 			hashp->cndx = 1;
 		}
 		if (!bp[0]) {
@@ -805,7 +810,7 @@ extern int
 __expand_table(hashp)
 	HTAB *hashp;
 {
-	u_int old_bucket, new_bucket;
+	u_int32_t old_bucket, new_bucket;
 	int dirsize, new_segnum, spare_ndx;
 
 #ifdef HASH_STATISTICS
@@ -826,8 +831,8 @@ __expand_table(hashp)
 				return (-1);
 			hashp->DSIZE = dirsize << 1;
 		}
-		if (!(hashp->dir[new_segnum] =
-			calloc(hashp->SGSIZE, sizeof(SEGMENT))))
+		if ((hashp->dir[new_segnum] =
+		    (SEGMENT)calloc(hashp->SGSIZE, sizeof(SEGMENT))) == NULL)
 			return (-1);
 		hashp->exsegs++;
 		hashp->nsegs++;
@@ -865,14 +870,14 @@ hash_realloc(p_ptr, oldsize, newsize)
 
 	if (p = malloc(newsize)) {
 		memmove(p, *p_ptr, oldsize);
-		memset(p + oldsize, 0, newsize - oldsize);
+		memset((char *)p + oldsize, 0, newsize - oldsize);
 		free(*p_ptr);
 		*p_ptr = p;
 	}
 	return (p);
 }
 
-extern u_int
+extern u_int32_t
 __call_hash(hashp, k, len)
 	HTAB *hashp;
 	char *k;
@@ -902,15 +907,16 @@ alloc_segs(hashp, nsegs)
 
 	int save_errno;
 
-	if (!(hashp->dir = calloc(hashp->DSIZE, sizeof(SEGMENT *)))) {
+	if ((hashp->dir =
+	    (SEGMENT *)calloc(hashp->DSIZE, sizeof(SEGMENT *))) == NULL) {
 		save_errno = errno;
 		(void)hdestroy(hashp);
 		errno = save_errno;
 		return (-1);
 	}
 	/* Allocate segments */
-	store = calloc(nsegs << hashp->SSHIFT, sizeof(SEGMENT));
-	if (!store) {
+	if ((store =
+	    (SEGMENT)calloc(nsegs << hashp->SSHIFT, sizeof(SEGMENT))) == NULL) {
 		save_errno = errno;
 		(void)hdestroy(hashp);
 		errno = save_errno;
@@ -931,26 +937,26 @@ swap_header_copy(srcp, destp)
 {
 	int i;
 
-	BLSWAP_COPY(srcp->magic, destp->magic);
-	BLSWAP_COPY(srcp->version, destp->version);
-	BLSWAP_COPY(srcp->lorder, destp->lorder);
-	BLSWAP_COPY(srcp->bsize, destp->bsize);
-	BLSWAP_COPY(srcp->bshift, destp->bshift);
-	BLSWAP_COPY(srcp->dsize, destp->dsize);
-	BLSWAP_COPY(srcp->ssize, destp->ssize);
-	BLSWAP_COPY(srcp->sshift, destp->sshift);
-	BLSWAP_COPY(srcp->ovfl_point, destp->ovfl_point);
-	BLSWAP_COPY(srcp->last_freed, destp->last_freed);
-	BLSWAP_COPY(srcp->max_bucket, destp->max_bucket);
-	BLSWAP_COPY(srcp->high_mask, destp->high_mask);
-	BLSWAP_COPY(srcp->low_mask, destp->low_mask);
-	BLSWAP_COPY(srcp->ffactor, destp->ffactor);
-	BLSWAP_COPY(srcp->nkeys, destp->nkeys);
-	BLSWAP_COPY(srcp->hdrpages, destp->hdrpages);
-	BLSWAP_COPY(srcp->h_charkey, destp->h_charkey);
+	P_32_COPY(srcp->magic, destp->magic);
+	P_32_COPY(srcp->version, destp->version);
+	P_32_COPY(srcp->lorder, destp->lorder);
+	P_32_COPY(srcp->bsize, destp->bsize);
+	P_32_COPY(srcp->bshift, destp->bshift);
+	P_32_COPY(srcp->dsize, destp->dsize);
+	P_32_COPY(srcp->ssize, destp->ssize);
+	P_32_COPY(srcp->sshift, destp->sshift);
+	P_32_COPY(srcp->ovfl_point, destp->ovfl_point);
+	P_32_COPY(srcp->last_freed, destp->last_freed);
+	P_32_COPY(srcp->max_bucket, destp->max_bucket);
+	P_32_COPY(srcp->high_mask, destp->high_mask);
+	P_32_COPY(srcp->low_mask, destp->low_mask);
+	P_32_COPY(srcp->ffactor, destp->ffactor);
+	P_32_COPY(srcp->nkeys, destp->nkeys);
+	P_32_COPY(srcp->hdrpages, destp->hdrpages);
+	P_32_COPY(srcp->h_charkey, destp->h_charkey);
 	for (i = 0; i < NCACHED; i++) {
-		BLSWAP_COPY(srcp->spares[i], destp->spares[i]);
-		BSSWAP_COPY(srcp->bitmaps[i], destp->bitmaps[i]);
+		P_32_COPY(srcp->spares[i], destp->spares[i]);
+		P_16_COPY(srcp->bitmaps[i], destp->bitmaps[i]);
 	}
 }
 
@@ -963,26 +969,26 @@ swap_header(hashp)
 
 	hdrp = &hashp->hdr;
 
-	BLSWAP(hdrp->magic);
-	BLSWAP(hdrp->version);
-	BLSWAP(hdrp->lorder);
-	BLSWAP(hdrp->bsize);
-	BLSWAP(hdrp->bshift);
-	BLSWAP(hdrp->dsize);
-	BLSWAP(hdrp->ssize);
-	BLSWAP(hdrp->sshift);
-	BLSWAP(hdrp->ovfl_point);
-	BLSWAP(hdrp->last_freed);
-	BLSWAP(hdrp->max_bucket);
-	BLSWAP(hdrp->high_mask);
-	BLSWAP(hdrp->low_mask);
-	BLSWAP(hdrp->ffactor);
-	BLSWAP(hdrp->nkeys);
-	BLSWAP(hdrp->hdrpages);
-	BLSWAP(hdrp->h_charkey);
+	M_32_SWAP(hdrp->magic);
+	M_32_SWAP(hdrp->version);
+	M_32_SWAP(hdrp->lorder);
+	M_32_SWAP(hdrp->bsize);
+	M_32_SWAP(hdrp->bshift);
+	M_32_SWAP(hdrp->dsize);
+	M_32_SWAP(hdrp->ssize);
+	M_32_SWAP(hdrp->sshift);
+	M_32_SWAP(hdrp->ovfl_point);
+	M_32_SWAP(hdrp->last_freed);
+	M_32_SWAP(hdrp->max_bucket);
+	M_32_SWAP(hdrp->high_mask);
+	M_32_SWAP(hdrp->low_mask);
+	M_32_SWAP(hdrp->ffactor);
+	M_32_SWAP(hdrp->nkeys);
+	M_32_SWAP(hdrp->hdrpages);
+	M_32_SWAP(hdrp->h_charkey);
 	for (i = 0; i < NCACHED; i++) {
-		BLSWAP(hdrp->spares[i]);
-		BSSWAP(hdrp->bitmaps[i]);
+		M_32_SWAP(hdrp->spares[i]);
+		M_16_SWAP(hdrp->bitmaps[i]);
 	}
 }
 #endif
