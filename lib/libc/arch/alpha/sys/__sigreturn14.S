@@ -1,4 +1,4 @@
-/* $NetBSD: __sigreturn14.S,v 1.2 2000/06/14 06:49:03 cgd Exp $ */
+/* $NetBSD: __sigreturn14.S,v 1.3 2003/10/07 17:08:07 skd Exp $ */
 
 /*
  * Copyright (c) 1994, 1995 Carnegie-Mellon University.
@@ -27,6 +27,7 @@
  * rights to redistribute these changes.
  */
 
+#define __HAVE_SIGINFO
 #include "SYS.h"
 
 /*
@@ -35,4 +36,4 @@
  * (XXX PROFILING)
  */
 
-RSYSCALL(__sigreturn14)
+RSYSCALL(compat_16___sigreturn14)
