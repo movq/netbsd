@@ -1,4 +1,4 @@
-/*-
+/*
  * Copyright (c) 1989 The Regents of the University of California.
  * All rights reserved.
  *
@@ -30,10 +30,9 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	from: @(#)pathnames.h	5.2 (Berkeley) 4/18/91
- *	$Id: pathnames.h,v 1.2 1993/08/01 18:11:02 mycroft Exp $
+ *	@(#)pathnames.h	5.2 (Berkeley) 6/1/90
  */
 
 #include <paths.h>
 
-#define	HELPFILE	"/usr/share/misc/omore.help"
+#define	_PATH_HELPFILE	"/usr/share/misc/more.help"
