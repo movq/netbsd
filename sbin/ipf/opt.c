@@ -22,7 +22,7 @@
 
 #if !defined(lint) && defined(LIBC_SCCS)
 static	char	sccsid[] = "@(#)opt.c	1.8 4/10/96 (C) 1993-1995 Darren Reed";
-static	char	rcsid[] = "$Id: opt.c,v 1.1.1.1 1997/01/05 13:09:04 mrg Exp $";
+static	char	rcsid[] = "$Id: opt.c,v 1.1.1.1 1997/01/05 13:06:38 mrg Exp $";
 #endif
 
 extern	int	opts;

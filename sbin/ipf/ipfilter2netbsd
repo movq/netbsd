@@ -1,6 +1,6 @@
 #! /bin/sh
 #
-#	$NetBSD: ipfilter2netbsd,v 1.1 1997/01/05 13:06:38 mrg Exp $
+#	$NetBSD: ipfilter2netbsd,v 1.1.1.1 1997/01/05 13:06:38 mrg Exp $
 #
 # Copyright (c) 1996 Matthew R. Green
 # All rights reserved.
@@ -76,7 +76,7 @@ mv ipf.1 ipf.8
 
 echo creating Makefile
 cat > Makefile<<'__eof_makefile'
-#	$NetBSD: ipfilter2netbsd,v 1.1 1997/01/05 13:06:38 mrg Exp $
+#	$NetBSD: ipfilter2netbsd,v 1.1.1.1 1997/01/05 13:06:38 mrg Exp $
 
 PROG=	ipf
 SRCS=	ipf.c parse.c opt.c
@@ -99,7 +99,7 @@ cd $d/src/usr.sbin/ipfstat
 
 echo creating Makefile
 cat > Makefile<<'__eof_makefile'
-#	$NetBSD: ipfilter2netbsd,v 1.1 1997/01/05 13:06:38 mrg Exp $
+#	$NetBSD: ipfilter2netbsd,v 1.1.1.1 1997/01/05 13:06:38 mrg Exp $
 
 PROG=	ipfstat
 SRCS=	kmem.c fils.c opt.c parse.c
@@ -125,7 +125,7 @@ cd $d/src/usr.sbin/ipmon
 
 echo creating Makefile
 cat > Makefile<<'__eof_makefile'
-#	$NetBSD: ipfilter2netbsd,v 1.1 1997/01/05 13:06:38 mrg Exp $
+#	$NetBSD: ipfilter2netbsd,v 1.1.1.1 1997/01/05 13:06:38 mrg Exp $
 
 PROG=	ipmon
 MAN=	ipmon.8
@@ -150,7 +150,7 @@ mv ipnat.1 ipnat.8
 
 echo creating Makefile
 cat > Makefile<<'__eof_makefile'
-#	$NetBSD: ipfilter2netbsd,v 1.1 1997/01/05 13:06:38 mrg Exp $
+#	$NetBSD: ipfilter2netbsd,v 1.1.1.1 1997/01/05 13:06:38 mrg Exp $
 
 PROG=	ipnat
 SRCS=	kmem.c ipnat.c
@@ -173,7 +173,7 @@ cd $d/src/usr.sbin/ipftest
 
 echo creating Makefile
 cat > Makefile<<'__eof_makefile'
-#	$NetBSD: ipfilter2netbsd,v 1.1 1997/01/05 13:06:38 mrg Exp $
+#	$NetBSD: ipfilter2netbsd,v 1.1.1.1 1997/01/05 13:06:38 mrg Exp $
 
 PROG=	ipftest
 SRCS=	ipt.c ipft_sn.c ipft_ef.c ipft_td.c ipft_pc.c opt.c ipft_tx.c misc.c ip_frag.c ip_state.c ip_nat.c ipft_hx.c
@@ -204,7 +204,7 @@ cd $d/src/sys/lkm/netinet/if_ipl
 
 echo creating Makefile
 cat > Makefile<<'__eof_makefile'
-#	$NetBSD: ipfilter2netbsd,v 1.1 1997/01/05 13:06:38 mrg Exp $
+#	$NetBSD: ipfilter2netbsd,v 1.1.1.1 1997/01/05 13:06:38 mrg Exp $
 
 .include "../Makefile.inc"
 
@@ -228,7 +228,7 @@ find $d -name '*.[ch]' -print | while read c; do
 	< $c > /tmp/ipf2n$$ && mv /tmp/ipf2n$$ $c && echo transformed $c
 	sed 1q < $c | grep '\$NetBSD' || (
 cat <<'__eof_header'
-/*	$NetBSD: ipfilter2netbsd,v 1.1 1997/01/05 13:06:38 mrg Exp $	*/
+/*	$NetBSD: ipfilter2netbsd,v 1.1.1.1 1997/01/05 13:06:38 mrg Exp $	*/
 
 __eof_header
 cat $c

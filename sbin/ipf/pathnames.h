@@ -1,4 +1,4 @@
-/*	$NetBSD: pathnames.h,v 1.1 1997/01/05 13:06:38 mrg Exp $	*/
+/*	$NetBSD: pathnames.h,v 1.1.1.1 1997/01/05 13:06:38 mrg Exp $	*/
 
 /*
  * Copyright (c) 1996 Matthew R. Green
