@@ -1,17 +1,11 @@
-#	$NetBSD: GENERIC,v 1.9 1998/04/15 21:46:23 drochner Exp $
+#	$NetBSD: GENERIC,v 1.10 1998/05/28 08:44:59 sakamoto Exp $
 #
 # First try for BEBOX config file
 #
 
-machine		bebox
+include "arch/bebox/conf/std.bebox"
 
 maxusers	32
-
-# Standard system options (should go into std.powerpc?)
-options 	SWAPPAGER, VNODEPAGER, DEVPAGER
-options 	EXEC_AOUT
-options 	EXEC_ELF32
-options 	EXEC_SCRIPT
 
 #options 	IPKDBUSERHACK	# Allow access to mapped memory via kgdb
 #options 	DEBUG_BY_TOOLS	# Allow debugging from toolsnet
@@ -33,6 +27,7 @@ options 	COMPAT_09
 options 	COMPAT_10
 options 	COMPAT_12
 options 	COMPAT_13
+options 	COMPAT_386BSD_MBRPART	# recognize old partition ID
 
 file-system 	FFS
 file-system 	MFS
@@ -84,8 +79,8 @@ isa*	at pcib?			# ISA on PCI-ISA bridge
 
 com0	at isa? port 0x3f8 irq 4	# standard PC serial ports
 com1	at isa? port 0x2f8 irq 3
-com2	at isa? port 0x380 irq 16
-com3	at isa? port 0x388 irq 17
+#com2	at isa? port 0x380 irq 16
+#com3	at isa? port 0x388 irq 17
   
 lpt0	at isa? port 0x378 irq 7	# standard PC parallel ports
 #lpt1	at isa? port 0x278
@@ -116,9 +111,9 @@ wskbd*		at pckbd? console ?
 #ss*	at scsibus? target ? lun ?	# SCSI scanners
 #uk*	at scsibus? target ? lun ?	# SCSI unknown
 
-#fdc0	at isa? port 0x3f0 irq 6 drq 2	# standard PC floppy controllers
+fdc0	at isa? port 0x3f0 irq 6 drq 2	# standard PC floppy controllers
 #fdc1	at isa? port 0x370 irq ? drq ?
-#fd0	at fdc? drive 1
+fd0	at fdc? drive 1
 #fd*	at fdc? drive ?
 
 wdc0	at isa? port 0x1f0 irq 14	# ST506, ESDI, and IDE controllers
@@ -128,6 +123,7 @@ ne0	at isa? port 0x300 irq 5	# NE[12]000 ethernet cards
 #ipkdbif0 at ne?
 
 #wss0	at isa? port 0x530 irq 10 drq 0	# Windows Sound System
+
 #pcppi0 at isa?
 #spkr0	at pcppi?
 
