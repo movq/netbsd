@@ -33,50 +33,37 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)reg.h	5.5 (Berkeley) 1/18/91
+ *	@(#)SYS.h	5.5 (Berkeley) 5/7/91
  *
- *	$Id: reg.h,v 1.1 1993/09/09 23:53:45 phil Exp $
+ *	$Id: SYS.h,v 1.1 1993/09/17 18:43:45 phil Exp $
+ *
+ *  Modified for the ns532 by Phil Nelson, 12/1/92
+ *
  */
 
-/* Modified for the pc532... 2/1/93 by Phil Nelson
- */
+#include <sys/syscall.h>
 
-#ifndef _MACHINE_REG_H_
-#define _MACHINE_REG_H_
+#ifdef PROF
+#define	ENTRY(x)	.globl _/**/x; \
+			.data; 1:; .long 0; .text; .align 1; _/**/x: \
+			addr $1b,tos; bsr mcount
+#else
+#define	ENTRY(x)	.globl _/**/x; .text; .align 1; _/**/x: 
+#endif PROF
 
-/*
- * Location of the users' stored
- * registers within appropriate frame of 'trap' and 'syscall', relative to
- * base of stack frame.
- * Normal usage is u.u_ar0[XX] in kernel.
- */
+#define	SYSCALL(x)	ENTRY(x); movd SYS_/**/x, r0; svc; bcs cerror
+#define	RSYSCALL(x)	SYSCALL(x); ret 0
+#define	PSEUDO(x,y)	ENTRY(x); movd SYS_/**/y, r0; svc; ret 0
+#define	CALL(x,y)	bsr _/**/y; adjspd -4*x
 
-/* When referenced during a trap/exception and a syscall,
-   registers are at these offsets from p-p_regs*/
+#define	ASMSTR		.asciz
 
-#define	R0	(7)
-#define	R1	(6)
-#define	R2	(5)
-#define	R3	(4)
-#define	R4	(3)
-#define	R5	(2)
-#define	R6	(1)
-#define	R7	(0)
+	.globl	cerror
 
-#define	SP	(8)
-#define	FP	(9)
-#define	PC	(10)
-#define	PSR	(11)
+#define SVC	svc
 
-#define	PS	PSR
+#define S_ARG0	4(sp)
+#define S_ARG1	8(sp)
+#define S_ARG2	12(sp)
+#define S_ARG3	16(sp)
 
-/*
- * Registers accessible to ptrace(2) syscall for debugger
- */
-#ifdef IPCREG
-#define	NIPCREG 12
-int ipcreg[NIPCREG] =
-  { R0,R1,R2,R3,R4,R5,R6,R7,SP,FP,PC,PSR };
-#endif
-
-#endif

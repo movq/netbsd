@@ -30,7 +30,7 @@
  *
  *	con_putc.c
  *
- *	$Id: con_putc.c,v 1.1.1.1 1993/09/09 23:53:47 phil Exp $
+ *	$Id: con_putc.c,v 1.1 1993/09/09 23:53:46 phil Exp $
  */
 /*
  * Small "console" driver for initial use in 532bsd.

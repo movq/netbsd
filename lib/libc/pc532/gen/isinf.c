@@ -1,9 +1,6 @@
 /*-
- * Copyright (c) 1990 The Regents of the University of California.
+ * Copyright (c) 1991 The Regents of the University of California.
  * All rights reserved.
- *
- * This code is derived from software contributed to Berkeley by
- * William Jolitz.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,51 +29,40 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- *	@(#)reg.h	5.5 (Berkeley) 1/18/91
- *
- *	$Id: reg.h,v 1.1 1993/09/09 23:53:45 phil Exp $
  */
 
-/* Modified for the pc532... 2/1/93 by Phil Nelson
- */
+#if defined(LIBC_SCCS) && !defined(lint)
+/*static char sccsid[] = "@(#)isinf.c	5.1 (Berkeley) 3/18/91"; */
+static char rcsid[] = "";
+#endif /* LIBC_SCCS and not lint */
 
-#ifndef _MACHINE_REG_H_
-#define _MACHINE_REG_H_
 
-/*
- * Location of the users' stored
- * registers within appropriate frame of 'trap' and 'syscall', relative to
- * base of stack frame.
- * Normal usage is u.u_ar0[XX] in kernel.
- */
+/* I have not verified that this is correct for the ns32532 -- PAN */
 
-/* When referenced during a trap/exception and a syscall,
-   registers are at these offsets from p-p_regs*/
+#include <sys/types.h>
 
-#define	R0	(7)
-#define	R1	(6)
-#define	R2	(5)
-#define	R3	(4)
-#define	R4	(3)
-#define	R5	(2)
-#define	R6	(1)
-#define	R7	(0)
+isnan(d)
+	double d;
+{
+	register struct IEEEdp {
+		u_int manl : 32;
+		u_int manh : 20;
+		u_int  exp : 11;
+		u_int sign :  1;
+	} *p = (struct IEEEdp *)&d;
 
-#define	SP	(8)
-#define	FP	(9)
-#define	PC	(10)
-#define	PSR	(11)
+	return(p->exp == 2047 && (p->manh || p->manl));
+}
 
-#define	PS	PSR
+isinf(d)
+	double d;
+{
+	register struct IEEEdp {
+		u_int manl : 32;
+		u_int manh : 20;
+		u_int  exp : 11;
+		u_int sign :  1;
+	} *p = (struct IEEEdp *)&d;
 
-/*
- * Registers accessible to ptrace(2) syscall for debugger
- */
-#ifdef IPCREG
-#define	NIPCREG 12
-int ipcreg[NIPCREG] =
-  { R0,R1,R2,R3,R4,R5,R6,R7,SP,FP,PC,PSR };
-#endif
-
-#endif
+	return(p->exp == 2047 && !p->manh && !p->manl);
+}

@@ -33,50 +33,20 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)reg.h	5.5 (Berkeley) 1/18/91
+ *	@(#)DEFS.h	5.1 (Berkeley) 4/23/90
  *
- *	$Id: reg.h,v 1.1 1993/09/09 23:53:45 phil Exp $
+ *	$Id: DEFS.h,v 1.1 1993/09/17 18:43:46 phil Exp $
+ *
+ *  Modified for the ns532 by Phil Nelson, 12/1/92
+ *
  */
 
-/* Modified for the pc532... 2/1/93 by Phil Nelson
- */
-
-#ifndef _MACHINE_REG_H_
-#define _MACHINE_REG_H_
-
-/*
- * Location of the users' stored
- * registers within appropriate frame of 'trap' and 'syscall', relative to
- * base of stack frame.
- * Normal usage is u.u_ar0[XX] in kernel.
- */
-
-/* When referenced during a trap/exception and a syscall,
-   registers are at these offsets from p-p_regs*/
-
-#define	R0	(7)
-#define	R1	(6)
-#define	R2	(5)
-#define	R3	(4)
-#define	R4	(3)
-#define	R5	(2)
-#define	R6	(1)
-#define	R7	(0)
-
-#define	SP	(8)
-#define	FP	(9)
-#define	PC	(10)
-#define	PSR	(11)
-
-#define	PS	PSR
-
-/*
- * Registers accessible to ptrace(2) syscall for debugger
- */
-#ifdef IPCREG
-#define	NIPCREG 12
-int ipcreg[NIPCREG] =
-  { R0,R1,R2,R3,R4,R5,R6,R7,SP,FP,PC,PSR };
-#endif
-
+#ifdef PROF
+#define	ENTRY(x)	.globl _/**/x; _/**/x:  \
+			.data; 1:; .long 0; .text; addr 1b,tos ; bsr mcount
+#define	ASENTRY(x)	.globl x; x: \
+			.data; 1:; .long 0; .text; addr 1b,tos ; bsr mcount
+#else
+#define	ENTRY(x)	.globl _/**/x; _/**/x: 
+#define	ASENTRY(x)	.globl x; x: 
 #endif
