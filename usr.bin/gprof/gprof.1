@@ -1,5 +1,5 @@
-.\" Copyright (c) 1983, 1990 The Regents of the University of California.
-.\" All rights reserved.
+.\" Copyright (c) 1983, 1990, 1993
+.\"	The Regents of the University of California.  All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -29,9 +29,9 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"	@(#)gprof.1	6.8 (Berkeley) 7/24/91
+.\"	@(#)gprof.1	8.1 (Berkeley) 6/6/93
 .\"
-.Dd July 24, 1991
+.Dd June 6, 1993
 .Dt GPROF 1
 .Os BSD 4.2
 .Sh NAME
@@ -113,6 +113,14 @@ The static call graph of the program is discovered by a heuristic
 that examines the text space of the object file.
 Static-only parents or children are shown
 with call counts of 0.
+.It Fl C Ar count
+Find a minimal set of arcs that can be broken to eliminate all cycles with
+.Ar count
+or more members.
+Caution: the algorithm used to break cycles is exponential,
+so using this option may cause 
+.Nm gprof
+to run for a very long time.
 .It Fl e Ar name 
 Suppresses the printing of the graph profile entry for routine
 .Ar name
