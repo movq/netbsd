@@ -1,4 +1,4 @@
-/*	$NetBSD: ipsend.h,v 1.1 1997/05/27 22:18:16 thorpej Exp $	*/
+/*	$NetBSD: ipsend.h,v 1.1.1.1 1997/05/27 22:18:16 thorpej Exp $	*/
 
 /*
  * ipsend.h (C) 1997 Darren Reed
