@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 1988 Stephen Deering.
- * Copyright (c) 1992, 1993 Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1992, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Stephen Deering of Stanford University.
@@ -34,12 +34,11 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)igmp.c	7.2 (Berkeley) 10/11/92
+ *	@(#)igmp.c	8.1 (Berkeley) 7/19/93
  */
 
 /* Internet Group Management Protocol (IGMP) routines. */
 
-#ifdef MULTICAST
 
 #include <sys/param.h>
 #include <sys/mbuf.h>
@@ -80,7 +79,7 @@ igmp_input(m, iphlen)
 {
 	register struct igmp *igmp;
 	register struct ip *ip;
-        register int igmplen;
+	register int igmplen;
 	register struct ifnet *ifp = m->m_pkthdr.rcvif;
 	register int minlen;
 	register struct in_multi *inm;
@@ -267,7 +266,6 @@ igmp_sendreport(inm)
 	register struct ip *ip;
 	register struct ip_moptions *imo;
 	struct ip_moptions simo;
-	extern struct socket *ip_mrouter;
 
 	MGETHDR(m, M_DONTWAIT, MT_HEADER);
 	if (m == NULL)
@@ -288,16 +286,12 @@ igmp_sendreport(inm)
 	ip->ip_src.s_addr = INADDR_ANY;
 	ip->ip_dst = inm->inm_addr;
 
-	m->m_data += sizeof(struct ip);
-	m->m_len -= sizeof(struct ip);
-	igmp = mtod(m, struct igmp *);
+	igmp = (struct igmp *)(ip + 1);
 	igmp->igmp_type = IGMP_HOST_MEMBERSHIP_REPORT;
 	igmp->igmp_code = 0;
 	igmp->igmp_group = inm->inm_addr;
 	igmp->igmp_cksum = 0;
 	igmp->igmp_cksum = in_cksum(m, IGMP_MINLEN);
-	m->m_data -= sizeof(struct ip);
-	m->m_len += sizeof(struct ip);
 
 	imo = &simo;
 	bzero((caddr_t)imo, sizeof(*imo));
@@ -308,13 +302,12 @@ igmp_sendreport(inm)
 	 * router, so that the process-level routing demon can hear it.
 	 */
 #ifdef MROUTING
+    {
+	extern struct socket *ip_mrouter;
 	imo->imo_multicast_loop = (ip_mrouter != NULL);
-#else
-	imo->imo_multicast_loop = 0;
+    }
 #endif
-
-	ip_output(m, NULL, NULL, IP_MULTICASTOPTS, imo);
+	ip_output(m, NULL, NULL, 0, imo);
 
 	++igmpstat.igps_snd_reports;
 }
-#endif

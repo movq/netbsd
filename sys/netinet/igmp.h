@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 1988 Stephen Deering.
- * Copyright (c) 1992 Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1992, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Stephen Deering of Stanford University.
@@ -34,7 +34,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)igmp.h	7.1 (Berkeley) 7/8/92
+ *	@(#)igmp.h	8.1 (Berkeley) 6/10/93
  */
 
 /* Internet Group Management Protocol (IGMP) definitions. */
@@ -57,4 +57,3 @@ struct igmp {
 					   /*  routing protocol            */
 
 #define IGMP_MAX_HOST_REPORT_DELAY   10    /* max delay for response to    */
-					   /*  query (in seconds)          */
