@@ -1,4 +1,4 @@
-/* $NetBSD: bootxx.c,v 1.10 1999/04/01 11:08:39 ross Exp $ */
+/* $NetBSD: bootxx.c,v 1.14 1999/04/02 03:50:47 cgd Exp $ */
 
 /*
  * Copyright (C) 1998 by Ross Harvey
@@ -47,8 +47,6 @@
 
 extern int _end, start;
 
-extern void puts __P((const char *)); /* XXX private, does not append '\n' */
-
 struct bbinfoloc desc = {
 	0xbabefacedeadbeef,
 	(u_int64_t)&start,
@@ -63,7 +61,7 @@ errorstatus(const char *msg, u_int64_t val)
 {
 	int	i, c;
 
-	puts(msg);
+	putstr(msg);
 	for(i=60; i >= 0; i -= 4) {
 		c = val >> i & 0xf;
 		if (c >= 10)
@@ -73,31 +71,6 @@ errorstatus(const char *msg, u_int64_t val)
 	}
 }
 #endif
-
-static int
-open_dev(fd)
-	int *fd;
-{
-	prom_return_t ret;
-	char devname[64];
-	int devlen;
-
-	/*
-	 * XXX
-         * We don't know what device names look like yet,
-         * so we can't change them.
-         */
-        ret.bits = prom_getenv(PROM_E_BOOTED_DEV, devname, sizeof(devname));
-        devlen = ret.u.retval;
-
-        ret.bits = prom_open(devname, devlen);
-
-        if (ret.u.status)
-                return 0;
-	*fd = ret.u.retval;
-
-	return 1;
-}
 
 static int
 load_file(fd, bbinfop, loadaddr)
@@ -112,11 +85,11 @@ load_file(fd, bbinfop, loadaddr)
 	int i, j, n, rv, nextblk, wantblk, blksize;
 
 	if (bbinfop->nblocks <= 0) {
-		puts("invalid number of blocks in boot program description\n");
+		putstr("invalid number of blocks in boot program description\n");
 		return 0;
 	}
 	if (bbinfop->bsize < DEV_BSIZE || bbinfop->bsize > MAXBSIZE) {
-		puts("invalid block size in boot program description\n");
+		putstr("invalid block size in boot program description\n");
 		return 0;
 	}
 
@@ -125,14 +98,14 @@ load_file(fd, bbinfop, loadaddr)
 	    (sizeof(*bbinfop) / sizeof(bbinfop->blocks[0])) - 1;
 	if ((long)&_end - (long)&start + sizeof(bbinfop->blocks[0]) * n >
 	    15 * 512) {
-		puts("way too many blocks\n");
+		putstr("way too many blocks\n");
 		return 0;
 	}
 
 	for (i = 0, cksum = 0; i < n; i++)
 		cksum += *int32p++;
 	if (cksum != 0) {
-		puts("invalid checksum in boot program description\n");
+		putstr("invalid checksum in boot program description\n");
 		return 0;
 	}
 
@@ -157,11 +130,11 @@ load_file(fd, bbinfop, loadaddr)
 		cp      += blksize;
 		if (ret.u.status) {
 			rv = 0;
-			puts("\nBLOCK READ ERROR!\n");
+			putstr("\nBLOCK READ ERROR!\n");
 			break;
 		}
 	}
-	puts(".\n");
+	putstr(".\n");
 
 	return (rv);
 }
@@ -176,7 +149,6 @@ static void printdec(int n)
 void
 main()
 {
-	int fd;
 	char *loadaddr;
 	struct bbinfo *bbinfop;
 	void (*entry) __P((int));
@@ -184,23 +156,23 @@ main()
 	/* Init prom callback vector. */
 	init_prom_calls();
 
-	puts("\nNetBSD/Alpha " NETBSD_VERS " Primary Boot +\n");
+	putstr("\nNetBSD/Alpha " NETBSD_VERS " Primary Boot +\n");
 
 	bbinfop = (struct bbinfo *)&_end;
 	loadaddr = (char *)SECONDARY_LOAD_ADDRESS;
 
-	if (!open_dev(&fd)) {
-		puts("Can't open boot device\n");
+	if (!booted_dev_open()) {
+		putstr("Can't open boot device\n");
 		return;
 	}
-	if (!load_file(fd, bbinfop, loadaddr)) {
-		puts("\nLOAD FAILED!\n\n");
+	if (!load_file(booted_dev_fd, bbinfop, loadaddr)) {
+		putstr("\nLOAD FAILED!\n\n");
 		return;
 	}
 
-	puts("Jumping to entry point...\n");
+	putstr("Jumping to entry point...\n");
 	entry = (void (*)(int))loadaddr;
-	(*entry)(fd);
-	prom_close(fd);
-	puts("SECONDARY BOOT RETURNED!\n");
+	(*entry)(booted_dev_fd);
+	booted_dev_close();
+	putstr("SECONDARY BOOT RETURNED!\n");
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: vmparam.h,v 1.21 1999/02/18 07:13:21 gwr Exp $	*/
+/*	$NetBSD: vmparam.h,v 1.23 1999/04/10 02:15:46 gwr Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -39,7 +39,13 @@
 #ifdef	_SUN3X_
 #include <machine/vmparam3x.h>
 #endif	/* SUN3X */
+#ifdef	_LKM
+#define	USRSTACK KERNBASE
+extern	char KERNBASE[];
+#endif	/* _LKM */
 
+/* This is needed by some LKMs. */
+#define VM_PHYSSEG_MAX		4
 struct pmap_physseg {
 	/* NULL */
 };

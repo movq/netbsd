@@ -1,4 +1,4 @@
-/* $NetBSD: boot.c,v 1.15 1999/04/01 11:08:39 ross Exp $ */
+/* $NetBSD: boot.c,v 1.20 1999/04/05 22:03:56 cgd Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -52,7 +52,10 @@
 #include <machine/pte.h>
 
 #include "common.h"
-#include "stand/boot/disk.h"
+
+#if !defined(UNIFIED_BOOTBLOCK) && !defined(SECONDARY_BOOTBLOCK)
+#error not UNIFIED_BOOTBLOCK and not SECONDARY_BOOTBLOCK
+#endif
 
 int loadfile __P((char *, u_int64_t *));
 
@@ -61,7 +64,7 @@ char boot_flags[128];
 
 struct bootinfo_v1 bootinfo_v1;
 
-extern char bootprog_name[], bootprog_rev[], bootprog_date[], bootprog_maker[];
+extern char bootprog_rev[], bootprog_date[], bootprog_maker[];
 
 paddr_t ffp_save, ptbr_save;
 
@@ -78,8 +81,11 @@ char *kernelnames[] = {
 };
 
 void
-main(fd)
-	int	fd;
+#if defined(UNIFIED_BOOTBLOCK)
+main(void)
+#else /* defined(SECONDARY_BOOTBLOCK) */
+main(long fd)
+#endif
 {
 	char *name, **namep;
 	u_int64_t entry;
@@ -88,14 +94,23 @@ main(fd)
 	/* Init prom callback vector. */
 	init_prom_calls();
 
-
 	/* print a banner */
 	printf("\n");
-	printf("%s, Revision %s\n", bootprog_name, bootprog_rev);
+	printf("NetBSD/alpha " NETBSD_VERS " " BOOT_TYPE_NAME " Bootstrap, Revision %s\n",
+	    bootprog_rev);
 	printf("(%s, %s)\n", bootprog_maker, bootprog_date);
 	printf("\n");
 
-	booted_dev_fd = fd;
+	/* set up the booted device descriptor */
+#if defined(UNIFIED_BOOTBLOCK)
+        if (!booted_dev_open()) {
+                printf("Boot device (%s) open failed.\n",
+		    booted_dev_name[0] ? booted_dev_name : "unknown");
+                goto fail;
+        }
+#else /* defined(SECONDARY_BOOTBLOCK) */
+	booted_dev_setfd(fd);
+#endif
 
 	/* switch to OSF pal code. */
 	OSFpal();
@@ -121,31 +136,37 @@ main(fd)
 		    namep++)
 			win = (loadfile(name = *namep, &entry) == 0);
 
-	close_primary_device(fd);
+	booted_dev_close();
 	printf("\n");
-	if (win) {
-		/*
-		 * Fill in the bootinfo for the kernel.
-		 */
-		bzero(&bootinfo_v1, sizeof(bootinfo_v1));
-		bootinfo_v1.ssym = ssym;
-		bootinfo_v1.esym = esym;
-		bcopy(name, bootinfo_v1.booted_kernel,
-		    sizeof(bootinfo_v1.booted_kernel));
-		bcopy(boot_flags, bootinfo_v1.boot_flags,
-		    sizeof(bootinfo_v1.boot_flags));
-		bootinfo_v1.hwrpb = (void *)HWRPB_ADDR;
-		bootinfo_v1.hwrpbsize = ((struct rpb *)HWRPB_ADDR)->rpb_size;
-		bootinfo_v1.cngetc = NULL;
-		bootinfo_v1.cnputc = NULL;
-		bootinfo_v1.cnpollc = NULL;
-
-		(void)printf("Entering %s at 0x%lx...\n", name, entry);
-		alpha_pal_imb();
-		(*(void (*)())entry)(ffp_save, ptbr_save,
-		    BOOTINFO_MAGIC, &bootinfo_v1, 1, 0);
+	if (!win) {
+		goto fail;
 	}
 
+	/*
+	 * Fill in the bootinfo for the kernel.
+	 */
+	bzero(&bootinfo_v1, sizeof(bootinfo_v1));
+	bootinfo_v1.ssym = ssym;
+	bootinfo_v1.esym = esym;
+	bcopy(name, bootinfo_v1.booted_kernel,
+	    sizeof(bootinfo_v1.booted_kernel));
+	bcopy(boot_flags, bootinfo_v1.boot_flags,
+	    sizeof(bootinfo_v1.boot_flags));
+	bootinfo_v1.hwrpb = (void *)HWRPB_ADDR;
+	bootinfo_v1.hwrpbsize = ((struct rpb *)HWRPB_ADDR)->rpb_size;
+	bootinfo_v1.cngetc = NULL;
+	bootinfo_v1.cnputc = NULL;
+	bootinfo_v1.cnpollc = NULL;
+
+	(void)printf("Entering %s at 0x%lx...\n", name, entry);
+	alpha_pal_imb();
+	(*(void (*)(u_int64_t, u_int64_t, u_int64_t, void *, u_int64_t,
+	    u_int64_t))entry)(ffp_save, ptbr_save, BOOTINFO_MAGIC,
+	    &bootinfo_v1, 1, 0);
+
+	(void)printf("KERNEL RETURNED!\n");
+
+fail:
 	(void)printf("Boot failed!  Halting...\n");
 	halt();
 }

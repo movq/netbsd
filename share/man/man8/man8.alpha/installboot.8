@@ -1,8 +1,6 @@
-.\" $NetBSD: installboot.8,v 1.7 1999/03/17 20:31:20 garbled Exp $
+.\" $NetBSD: installboot.8,v 1.13 1999/04/07 00:43:06 cgd Exp $
 .\"
-.\" Copyright (c) 1996, 1997 Christopher G. Demetriou.  All rights reserved.
-.\" Copyright (c) 1995 Paul Kranenburg
-.\" All rights reserved.
+.\" Copyright (c) 1999 Christopher G. Demetriou.  All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -14,8 +12,9 @@
 .\"    documentation and/or other materials provided with the distribution.
 .\" 3. All advertising materials mentioning features or use of this software
 .\"    must display the following acknowledgement:
-.\"      This product includes software developed by Paul Kranenburg.
-.\" 3. The name of the author may not be used to endorse or promote products
+.\"      This product includes software developed by Christopher G. Demetriou
+.\"      for the NetBSD Project.
+.\" 4. The name of the author may not be used to endorse or promote products
 .\"    derived from this software without specific prior written permission
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
@@ -29,142 +28,164 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd January 31, 1998
-.Dt INSTALLBOOT 8
+.Dd April 3, 1999
+.Dt INSTALLBOOT 8 alpha
 .Os
 .Sh NAME
 .Nm installboot
-.Nd install disk or CD-ROM bootstrap software
+.Nd install and remove Alpha disk and CD-ROM bootstrap software
 .Sh SYNOPSIS
-.Nm installboot
+.Nm /usr/mdec/installboot
 .Op Fl nv
-.Op Fl b Ar bn
-.Ar boot
-.Ar bootxx
-.Ar rawdiskdevice
+.Ar disk
+.Ar bootstrap
+.Nm /usr/mdec/installboot
+.Op Fl nv
+.Fl c
+.Ar disk
 .Sh DESCRIPTION
 The
-.Nm installboot
-utility prepares a disk for bootstrapping.
-.Pp
-The
+.Nm
+utility installs and removes
 .Nx Ns Tn /alpha
-disk bootstrap software is split into two parts:
-a small first-stage boot program that is written into the disklabel
-area of a disk
-.Po
-and hence is limited in size to 7680 bytes
-.Pc ,
-and a second-stage boot program that resides in a FFS, ISO-9660, or USTAR
-file system on a disk, CD-ROM image, or magnetic tape image,
-.Po
-typically with the name 
-.Pa /boot
-.Pc .
-The first-stage boot program is loaded into memory by the SRM console
-software.  After receiving control of the system, it loads the
-second-stage boot program from a set of filesystem block numbers that
-have been
-hard-coded into it by
-.Nm installboot .
-The second-stage boot program locates and loads the kernel.
+disk and CD-ROM bootstrap software.  Installing bootstrap
+software on a device allows the SRM console to boot from
+that device.  As far as the console is concerned, booting
+from disk, CD-ROM, and other random-access block devices
+is the same; in the rest of this manual page, unless
+otherwise noted, the description applies equally to both
+disks and CD-ROMs.
 .Pp
-The second-stage boot program and the prototype code for the
-first-stage boot program can be found in
+.Nx Ns Tn /alpha
+disk bootstrap software consists of two parts: a
+.Dq primary
+bootstrap program written into the disklabel area of the disk, and a
+.Dq secondary
+bootstrap program that resides in a file system on the disk.
+When booting, the primary bootstrap program is loaded and
+invoked by the console.  After receiving control of the system
+it loads and runs the secondary bootstrap program, which in turn
+loads and runs the kernel.
+.Pp
+To make a
+.Nx Ns Tn /alpha
+disk bootable by the SRM console, use
+.Nm
+to install a primary bootstrap program on the disk's raw
+.Pq Dq c
+partition.
+Then copy the secondary bootstrap program
 .Pa /usr/mdec/boot
-and
-.Pa /usr/mdec/bootxx ,
-respectively.
-.Pa /usr/mdec/boot
-may be installed simply by copying it to the root directory of the
-partition you wish to boot from, but after it is installed
-.Nm installboot
-.Em must
-be run.
+to the root directory of the file system that starts at the
+beginning (block 0) of the disk.
+Note that the primary bootstrap program used must support the type of
+file system which contains the secondary bootstrap program, and that
+the secondary bootstrap program must be named
+.Dq boot
+in the root directory of the file system which contains it.
+(Unlike previous versions of
+.Nm installboot ,
+it is no longer necessary to run installboot after changing
+the secondary bootstrap program.)
 .Pp
 The options recognized by
-.Nm installboot
+.Nm
 are as follows:
-.Bl -tag -width -b\ bn
+.Bl -tag -width flag
+.It Fl c
+Instead of installing a primary bootstrap program, remove any existing
+primary bootstrap program.
 .It Fl n
-Do not actually write anything on the disk.
+Do not actually write anything to the disk.
 .It Fl v
-Verbose mode.
-.It Fl b Ar bn
-Ignore the file system type and assume that
-.Pa boot
-is contiguously present with initial block number
-.Ar bn .
+Print information about what
+.Nm
+is doing.
 .El
 .Pp
-The arguments are:
-.Bl -tag -width rawdiskdevice
-.It Ar boot
-The name of the second-stage boot program in the file system
-where the first-stage boot program is to be installed.
-.It Ar bootxx
-The name of the prototype file for the first-stage boot program.
-.It Ar rawdiskdevice
-The name of the device corresponding to the raw whole-disk partition (the
-.Dq raw partition )
-of the disk on which the first-stage boot program is to be installed.
+The arguments given to
+.Nm
+are as follows:
+.Bl -tag -width bootstrap
+.It Ar disk
+The name of the disk on which to install the primary
+bootstrap program.  Typically this will be the raw disk device belonging
+to the disk containing the file system which holds the secondary
+bootstrap program.  In some cases this can be a file, e.g. if
+.Nm
+is being used to install the primary bootstrap program into a
+file containing a ISO 9660 CD-ROM image.
+.It Ar bootstrap
+The primary bootstrap program to install.  (This argument
+may not be specified if the
+.Fl c
+flag is being used.)
+.El
+.Pp
+The
+.Nm
+utility exits 0 on success, and >0 if an error occurs.
+.Sh FILES
+.Bl -tag -width /usr/mdec/bootxx_cd9660 -compact
+.It Pa /usr/mdec/bootxx_cd9660
+primary bootstrap for
+.Dq cd9660
+(ISO 9660) file system
+.It Pa /usr/mdec/bootxx_ffs
+primary bootstrap for
+.Dq ffs
+file system
+(Berkeley Fast File System)
+.It Pa /usr/mdec/boot
+secondary bootstrap
 .El
 .Sh EXAMPLES
-Assuming the second-stage boot program
-.Pa boot
-resides in the FFS file system mounted on
-.Pa /
-from
-.Dq sd0a ,
-you would install the first-stage boot program on the disk
-(and therefore make the disk bootable) by using the command:
-.Bd -literal -offset indent
-installboot /boot /usr/mdec/bootxx /dev/rsd0c
-.Ed
+.Dl installboot /dev/rsd0c /usr/mdec/bootxx_ffs
 .Pp
-Assuming the second-stage boot program
-.Pa boot
-resides in the ISO-9660 file system mounted on
-.Pa /mnt
-from
-.Dq vnd0a ,
-you would install the first-stage boot progam into the CD-ROM image
-(and therefore make the image bootable once burned onto a CD) by using
-the command:
-.Bd -literal -offset indent
-installboot /mnt/boot /usr/mdec/bootxx /dev/rvnd0c
-.Ed
-.Sh BUGS
-The
-.Nx Ns Tn /alpha
-boot blocks can only load kernels from disks'
-.Dq a
-partitions.  (However, the second-stage boot
-program may be located on any FFS file system partition
-on the disk.)
+Install the Berkeley Fast File System primary bootstrap on to disk sd0.
 .Pp
-.Nm Installboot
-requires simultaneous access to the mounted file system and
-the disks' raw partition.
-That is not allowed with the kernel
-.Dv securelevel
-variable
-.Po
-see
-.Xr sysctl 8
-.Pc
-set to a value greater than one, or with
-.Dv securelevel
-set to one if the
-.Dq boot
-program resides in a file system on the disk's raw partition.
-.Sh "SEE ALSO"
-.Xr disklabel 8 ,
-.Xr init 8 ,
-.Xr sysctl 8
+.Dl installboot -c /dev/rsd1c
+.Pp
+Remove the primary bootstrap from disk sd1.
+.Pp
+.Dl installboot /tmp/cd-image /usr/mdec/bootxx_cd9660
+.Pp
+Install the ISO 9660 primary bootstrap in the file
+.Pa /tmp/cd-image .
+.Sh SEE ALSO
+.Xr boot 8 ,
+.Xr mkbootimage 8
 .Sh HISTORY
-The
+The current version of the
 .Nx Ns Tn /alpha
 .Nm
 command first appeared in
+.Nx 1.4 .
+A previous version which operated quite differently was introduced in
 .Nx 1.2 .
+.Sh AUTHORS
+The current version of the
+.Nm
+utility was written by Chris Demetriou.
+The previous version of the
+.Nx Ns Tn /alpha
+.Nm
+utility was originally written by Paul Kranenburg for
+.Nx Ns Tn /sparc
+and modified for use with
+.Nx Ns Tn /alpha
+by Chris Demetriou, Jason Thorpe, Ross Harvey, and others.
+.Sh BUGS
+The
+.Nx Ns Tn /alpha
+primary bootstrap program can only load the secondary bootstrap
+program from file systems starting at the beginning (block 0)
+of disks.  Similarly, the secondary bootstrap program can only
+load kernels from file systems starting at the beginning of disks.
+.Pp
+The size of primary bootstrap programs is restricted to 7.5KB, even
+though some file systems (e.g. ISO 9660) are able to accomodate larger
+ones.
+.Pp
+There are not currently primary bootstraps to support all file systems
+types which are capable of being the root file system.
