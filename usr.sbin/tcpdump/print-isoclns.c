@@ -1,5 +1,3 @@
-/*	$NetBSD: print-isoclns.c,v 1.3 1997/03/15 18:37:52 is Exp $	*/
-
 /*
  * Copyright (c) 1992, 1993, 1994
  *	The Regents of the University of California.  All rights reserved.
@@ -37,11 +35,7 @@ static char rcsid[] =
 #include <net/if.h>
 
 #include <netinet/in.h>
-#ifdef __NetBSD__
-#include <net/if_ether.h>
-#else
 #include <netinet/if_ether.h>
-#endif
 
 #include <stdio.h>
 

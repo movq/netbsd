@@ -1,8 +1,6 @@
-/*	$NetBSD: print-bootp.c,v 1.3 1997/03/15 18:37:46 is Exp $	*/
-
 /*
- * Copyright (c) 1990, 1991, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988-1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that: (1) source code distributions
@@ -21,58 +19,55 @@
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  *
  * Format and print bootp packets.
+ * 
+ * $Id: print-bootp.c,v 1.1 1993/11/14 21:20:35 deraadt Exp $
  */
 #ifndef lint
 static char rcsid[] =
-    "@(#) Header: print-bootp.c,v 1.30 94/06/14 20:17:37 leres Exp (LBL)";
+    "@(#) Header: print-bootp.c,v 1.17 91/11/14 22:21:34 leres Exp (LBL)";
 #endif
+
+#include <stdio.h>
 
 #include <sys/param.h>
-#include <sys/time.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-
 #include <net/if.h>
-
 #include <netinet/in.h>
-#ifdef __NetBSD__
-#include <net/if_ether.h>
-#else
 #include <netinet/if_ether.h>
-#endif
-
-
+#include <strings.h>
 #include <ctype.h>
-#include <stdio.h>
 
 #include "interface.h"
 #include "addrtoname.h"
 #include "bootp.h"
 
-static void rfc1048_print(const u_char *, int);
-static void cmu_print(const u_char *, int);
-
-static char tstr[] = " [|bootp]";
+void rfc1048_print();
+void cmu_print();
 
 /*
  * Print bootp requests
  */
 void
-bootp_print(register const u_char *cp, int length,
-	    u_short sport, u_short dport)
+bootp_print(bp, length, sport, dport)
+	register struct bootp *bp;
+	int length;
+	u_short sport, dport;
 {
-	register const struct bootp *bp;
-	static u_char vm_cmu[4] = VM_CMU;
-	static u_char vm_rfc1048[4] = VM_RFC1048;
-	const u_char *ep;
+	static char tstr[] = " [|bootp]";
+	static unsigned char vm_cmu[4] = VM_CMU;
+	static unsigned char vm_rfc1048[4] = VM_RFC1048;
+	u_char *ep;
 
 #define TCHECK(var, l) if ((u_char *)&(var) > ep - l) goto trunc
 
-	bp = (struct bootp *)cp;
-	/* 'ep' points to the end of avaible data. */
-	ep = snapend;
+	/* Note funny sized packets */
+	if (length != sizeof(struct bootp))
+		(void)printf(" [len=%d]", length);
 
-	TCHECK(bp->bp_op, sizeof(bp->bp_op));
+	/* 'ep' points to the end of avaible data. */
+	ep = (u_char *)snapend;
+
 	switch (bp->bp_op) {
 
 	case BOOTREQUEST:
@@ -91,7 +86,8 @@ bootp_print(register const u_char *cp, int length,
 		printf(" bootp-#%d", bp->bp_op);
 	}
 
-	TCHECK(bp->bp_secs, sizeof(bp->bp_secs));
+	NTOHL(bp->bp_xid);
+	NTOHS(bp->bp_secs);
 
 	/* The usual hardware address type is 1 (10Mb Ethernet) */
 	if (bp->bp_htype != 1)
@@ -105,9 +101,9 @@ bootp_print(register const u_char *cp, int length,
 	if (bp->bp_hops)
 		printf(" hops:%d", bp->bp_hops);
 	if (bp->bp_xid)
-		printf(" xid:0x%x", ntohl(bp->bp_xid));
+		printf(" xid:0x%x", bp->bp_xid);
 	if (bp->bp_secs)
-		printf(" secs:%d", ntohs(bp->bp_secs));
+		printf(" secs:%d", bp->bp_secs);
 
 	/* Client's ip address */
 	TCHECK(bp->bp_ciaddr, sizeof(bp->bp_ciaddr));
@@ -131,53 +127,53 @@ bootp_print(register const u_char *cp, int length,
 
 	/* Client's Ethernet address */
 	if (bp->bp_htype == 1 && bp->bp_hlen == 6) {
-		register const struct ether_header *eh;
-		register const char *e;
+		register struct ether_header *eh;
+		register char *e;
 
 		TCHECK(bp->bp_chaddr[0], 6);
 		eh = (struct ether_header *)packetp;
 		if (bp->bp_op == BOOTREQUEST)
-			e = (const char *)ESRC(eh);
+			e = (char *)ESRC(eh);
 		else if (bp->bp_op == BOOTREPLY)
-			e = (const char *)EDST(eh);
+			e = (char *)EDST(eh);
 		else
 			e = 0;
 		if (e == 0 || bcmp((char *)bp->bp_chaddr, e, 6) != 0)
 			printf(" ether %s", etheraddr_string(bp->bp_chaddr));
 	}
 
-	TCHECK(bp->bp_sname[0], 1);		/* check first char only */
+	TCHECK(bp->bp_sname[0], sizeof(bp->bp_sname));
 	if (*bp->bp_sname) {
 		printf(" sname ");
-		if (fn_print(bp->bp_sname, ep)) {
+		if (printfn(bp->bp_sname, ep)) {
 			fputs(tstr + 1, stdout);
 			return;
 		}
 	}
-	TCHECK(bp->bp_sname[0], 1);		/* check first char only */
+	TCHECK(bp->bp_file[0], sizeof(bp->bp_file));
 	if (*bp->bp_file) {
 		printf(" file ");
-		if (fn_print(bp->bp_file, ep)) {
+		if (printfn(bp->bp_file, ep)) {
 			fputs(tstr + 1, stdout);
 			return;
 		}
 	}
 
-	/* Decode the vendor buffer */
+	/* Don't try to decode the vendor buffer unless we're verbose */
+	if (vflag <= 0)
+		return;
+
 	TCHECK(bp->bp_vend[0], sizeof(bp->bp_vend));
-	length -= sizeof(*bp) - sizeof(bp->bp_vend);
-	if (bcmp((char *)bp->bp_vend, (char *)vm_rfc1048,
-		 sizeof(u_int32)) == 0)
-		rfc1048_print(bp->bp_vend, length);
-	else if (bcmp((char *)bp->bp_vend, (char *)vm_cmu,
-		      sizeof(u_int32)) == 0)
-		cmu_print(bp->bp_vend, length);
+	printf(" vend");
+	if (bcmp(bp->bp_vend, vm_rfc1048, sizeof(u_long)) == 0)
+		rfc1048_print(bp->bp_vend, sizeof(bp->bp_vend));
+	else if (bcmp(bp->bp_vend, vm_cmu, sizeof(u_long)) == 0)
+		cmu_print(bp->bp_vend, sizeof(bp->bp_vend));
 	else {
-		u_int32 ul;
+		u_long ul;
 
 		bcopy((char *)bp->bp_vend, (char *)&ul, sizeof(ul));
-		if (ul != 0)
-			printf("vend-#0x%x", ul);
+		printf("-#0x%x", ul);
 	}
 
 	return;
@@ -186,179 +182,84 @@ trunc:
 #undef TCHECK
 }
 
-/* The first character specifies the format to print */
-static struct token tag2str[] = {
-/* RFC1048 tags */
-	{ TAG_PAD,		" PAD" },
-	{ TAG_SUBNET_MASK,	"iSM" },	/* subnet mask (RFC950) */
-	{ TAG_TIME_OFFSET,	"lTZ" },	/* seconds from UTC */
-	{ TAG_GATEWAY,		"iDG" },	/* default gateway */
-	{ TAG_TIME_SERVER,	"iTS" },	/* time servers (RFC868) */
-	{ TAG_NAME_SERVER,	"iIEN" },	/* IEN name servers (IEN116) */
-	{ TAG_DOMAIN_SERVER,	"iNS" },	/* domain name (RFC1035) */
-	{ TAG_LOG_SERVER,	"iLOG" },	/* MIT log servers */
-	{ TAG_COOKIE_SERVER,	"iCS" },	/* cookie servers (RFC865) */
-	{ TAG_LPR_SERVER,	"iLPR" },	/* lpr server (RFC1179) */
-	{ TAG_IMPRESS_SERVER,	"iIM" },	/* impress servers (Imagen) */
-	{ TAG_RLP_SERVER,	"iRL" },	/* resource location (RFC887) */
-	{ TAG_HOSTNAME,		"aHN" },	/* ascii hostname */
-	{ TAG_BOOTSIZE,		"sBS" },	/* 512 byte blocks */
-	{ TAG_END,		" END" },
-/* RFC1497 tags */
-	{ TAG_DUMPPATH,		"aDP" },
-	{ TAG_DOMAINNAME,	"aDN" },
-	{ TAG_SWAP_SERVER,	"iSS" },
-	{ TAG_ROOTPATH,		"aRP" },
-	{ TAG_EXTPATH,		"aEP" },
-	{ 0,			NULL }
-};
-
-static void
-rfc1048_print(register const u_char *bp, register int length)
+void
+rfc1048_print(bp, length)
+	register u_char *bp;
+	int length;
 {
-	register u_char tag;
-	register const u_char *ep;
-	register u_int len, size;
-	register const char *cp;
-	register char c;
-	int first;
-	u_int32 ul;
-	u_short us;
+	u_char tag;
+	u_char *ep;
+	register int i;
+	u_long ul;
 
-	printf(" vend-rfc1048");
-
-	/* Setup end pointer */
-	ep = bp + length;
+	printf("-rfc1048");
 
 	/* Step over magic cookie */
-	bp += sizeof(int32);
-
-	/* Loop while we there is a tag left in the buffer */
-	while (bp + 1 < ep) {
-		tag = *bp++;
-		if (tag == TAG_PAD)
-			continue;
-		if (tag == TAG_END)
-			return;
-		cp = tok2str(tag2str, "?T%d", tag);
-		c = *cp++;
-		printf(" %s:", cp);
-
-		/* Get the length; check for truncation */
-		if (bp + 1 >= ep) {
-			fputs(tstr, stdout);
-			return;
-		}
-		len = *bp++;
-		if (bp + len >= ep) {
-			fputs(tstr, stdout);
-			return;
-		}
-
-		/* Print data */
-		size = len;
-		if (c == '?') {
-			/* Base default formats for unknown tags on data size */
-			if (size & 1)
-				c = 'b';
-			else if (size & 2)
-				c = 's';
-			else
-				c = 'l';
-		}
-		first = 1;
-		switch (c) {
-
-		case 'a':
-			/* ascii strings */
-			(void)fn_printn(bp, size, NULL);
-			bp += size;
-			size = 0;
-			break;
-
-		case 'i':
-		case 'l':
-			/* ip addresses/32-bit words */
-			while (size >= sizeof(ul)) {
-				if (!first)
-					putchar(',');
-				bcopy((char *)bp, (char *)&ul, sizeof(ul));
-				if (c == 'i')
-					printf("%s", ipaddr_string(&ul));
-				else
-					printf("%lu", ul);
-				bp += sizeof(ul);
-				size -= sizeof(ul);
-				first = 0;
-			}
-			break;
-
-		case 's':
-			/* shorts */
-			while (size >= sizeof(us)) {
-				if (!first)
-					putchar(',');
-				bcopy((char *)bp, (char *)&us, sizeof(us));
-				printf("%d", us);
-				bp += sizeof(us);
-				size -= sizeof(us);
-				first = 0;
-			}
-			break;
-
-		case 'b':
-		default:
-			/* Bytes */
-			while (size > 0) {
-				if (!first)
-					putchar('.');
-				printf("%d", *bp);
-				++bp;
-				--size;
-				first = 0;
-			}
-			break;
-		}
-		/* Data left over? */
-		if (size)
-			printf("[len %d]", len);
-	}
-}
-
-static void
-cmu_print(register const u_char *bp, register int length)
-{
-	register const struct cmu_vend *cmu;
-	register const u_char *ep;
-	char *fmt = " %s:%s";
-
-#define TCHECK(var, l) if ((u_char *)&(var) > ep - l) goto trunc
-#define PRINTCMUADDR(m, s) { TCHECK(cmu->m, sizeof(cmu->m)); \
-    if (cmu->m.s_addr != 0) \
-	printf(fmt, s, ipaddr_string(&cmu->m.s_addr)); }
+	bp += sizeof(long);
 
 	/* Setup end pointer */
 	ep = bp + length;
 
-	printf(" vend-cmu");
-	cmu = (struct cmu_vend *)bp;
+	while (bp < ep) {
+		tag = *bp++;
+		i = *bp++;
+		switch (tag) {
 
-	/* Only print if there are unknown bits */
-	TCHECK(cmu->v_flags, sizeof(cmu->v_flags));
-	if ((cmu->v_flags & ~(VF_SMASK)) != 0)
-		printf(" F:0x%x", cmu->v_flags);
-	PRINTCMUADDR(v_dgate, "DG");
-	PRINTCMUADDR(v_smask, cmu->v_flags & VF_SMASK ? "SM" : "SM*");
-	PRINTCMUADDR(v_dns1, "NS1");
-	PRINTCMUADDR(v_dns2, "NS2");
-	PRINTCMUADDR(v_ins1, "IEN1");
-	PRINTCMUADDR(v_ins2, "IEN2");
-	PRINTCMUADDR(v_ts1, "TS1");
-	PRINTCMUADDR(v_ts2, "TS2");
-	return;
+		case TAG_PAD:
+			/* no-op */
+			break;
 
-trunc:
-	fputs(tstr, stdout);
-#undef TCHECK
-#undef PRINTCMUADDR
+		case TAG_SUBNET_MASK:
+			ul = 0;
+			bcopy((char *)bp, (char *)&ul, i);
+			printf(" SM:%s", ipaddr_string(&ul));
+			break;
+
+		case TAG_TIME_SERVER:
+			ul = 0;
+			bcopy((char *)bp, (char *)&ul, i);
+			printf(" TS:%s", ipaddr_string(&ul));
+			break;
+
+		case TAG_GATEWAY:
+			ul = 0;
+			bcopy((char *)bp, (char *)&ul, i);
+			printf(" G:%s", ipaddr_string(&ul));
+			break;
+
+		case TAG_TIME_OFFSET:
+		case TAG_NAME_SERVER:
+		case TAG_DOMAIN_SERVER:
+		case TAG_LOG_SERVER:
+		case TAG_COOKIE_SERVER:
+		case TAG_LPR_SERVER:
+		case TAG_IMPRESS_SERVER:
+		case TAG_RLP_SERVER:
+		case TAG_HOSTNAME:
+		case TAG_BOOTSIZE:
+			printf(" tag-#%d", tag);
+			if (i == sizeof(long)) {
+				bcopy((char *)bp, (char *)&ul, sizeof(long));
+				printf(":0x%x", ul);
+			} else
+				printf(":?");
+			break;
+
+		case TAG_END:
+			return;
+
+		default:
+			printf("[tag-#%d]", tag);
+			return;
+		}
+	}
+}
+
+void
+cmu_print(bp, length)
+	register u_char *bp;
+	int length;
+{
+	/* XXX not really implemented */
+	printf("-cmu [...]");
 }

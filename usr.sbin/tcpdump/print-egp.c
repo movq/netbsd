@@ -1,8 +1,6 @@
-/*	$NetBSD: print-egp.c,v 1.2 1995/03/06 19:11:09 mycroft Exp $	*/
-
 /*
- * Copyright (c) 1991, 1992, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1991 Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms are permitted
  * provided that the above copyright notice and this paragraph are
@@ -18,24 +16,17 @@
  * WARRANTIES OF MERCHANTIBILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  *
  * Initial contribution from Jeff Honig (jch@MITCHELL.CIT.CORNELL.EDU).
+ * 
+ * $Id: print-egp.c,v 1.1 1993/11/14 21:20:38 deraadt Exp $
  */
-
-#ifndef lint
-static char rcsid[] =
-    "@(#) Header: print-egp.c,v 1.14 94/06/20 19:44:38 leres Exp (LBL)";
-#endif
-
+#include <stdio.h>
 #include <sys/param.h>
-#include <sys/time.h>
 #include <sys/uio.h>
 #include <sys/socket.h>
-
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
 #include <netinet/ip.h>
-
 #include <netdb.h>
-#include <stdio.h>
 
 #include "interface.h"
 #include "addrtoname.h"
@@ -91,7 +82,7 @@ struct egp_packet {
 #define  egp_reason  egp_handg.egpu_reason
 	union {
 		u_short  egpu_poll;
-		u_int32 egpu_sourcenet;
+		u_long egpu_sourcenet;
 	} egp_pands;
 #define  egp_poll  egp_pands.egpu_poll
 #define  egp_sourcenet  egp_pands.egpu_sourcenet
@@ -138,12 +129,14 @@ char *egp_reasons[] = {
 };
 
 static void
-egpnrprint(register const struct egp_packet *egp, register int length)
+egpnrprint(egp, length)
+	register struct egp_packet *egp;
+	register int length;
 {
-	register const u_char *cp, *ep;
+	register u_char *cp, *ep;
 #define TCHECK(n) if (cp > ep - n) goto trunc
-	register u_int32 addr;
-	register u_int32 net;
+	register u_long addr;
+	register u_long net;
 	register int netlen;
 	int gateways, distances, networks;
 	int t_gateways;
@@ -186,9 +179,9 @@ egpnrprint(register const struct egp_packet *egp, register int length)
 		TCHECK(1);
 		distances = *cp++;
 		printf(" %s %s ",
-		       gateways < egp->egp_intgw ? "int" : "ext",
+		       gateways < egp->egp_intgw ? "int" : "ext", 
 		       intoa(addr));
-
+		
 		comma = "";
 		putchar('(');
 		while (--distances >= 0) {
@@ -199,14 +192,14 @@ egpnrprint(register const struct egp_packet *egp, register int length)
 			while (--networks >= 0) {
 				/* Pickup network number */
 				TCHECK(1);
-				addr = (u_int32)*cp++ << 24;
+				addr = (u_long)*cp++ << 24;
 				if (IN_CLASSB(addr)) {
 					TCHECK(1);
-					addr |= (u_int32)*cp++ << 16;
+					addr |= (u_long)*cp++ << 16;
 				} else if (!IN_CLASSA(addr)) {
 					TCHECK(2);
-					addr |= (u_int32)*cp++ << 16;
-					addr |= (u_int32)*cp++ << 8;
+					addr |= (u_long)*cp++ << 16;
+					addr |= (u_long)*cp++ << 8;
 				}
 				printf(" %s", intoa(addr));
 			}
@@ -219,17 +212,15 @@ trunc:
 }
 
 void
-egp_print(register const u_char *bp, register int length,
-	  register const u_char *bp2)
+egp_print(egp, length, ip)
+	register struct egp_packet *egp;
+	register int length;
+	register struct ip *ip;
 {
-	register const struct egp_packet *egp;
-	register const struct ip *ip;
 	register int status;
 	register int code;
 	register int type;
-
-	egp = (struct egp_packet *)bp;
-	ip = (struct ip *)bp2;
+	
         (void)printf("%s > %s: egp: ",
 		     ipaddr_string(&ip->ip_src),
 		     ipaddr_string(&ip->ip_dst));
@@ -239,7 +230,7 @@ egp_print(register const u_char *bp, register int length,
 		return;
 	}
 	printf("as:%d seq:%d", ntohs(egp->egp_as), ntohs(egp->egp_sequence));
-
+	
 	type = egp->egp_type;
 	code = egp->egp_code;
 	status = egp->egp_status;
@@ -257,7 +248,7 @@ egp_print(register const u_char *bp, register int length,
 			case EGPS_PASSIVE:
 				printf(" %s", egp_acquire_status[status]);
 				break;
-
+				
 			default:
 				printf(" [status %d]", status);
 				break;
@@ -266,7 +257,7 @@ egp_print(register const u_char *bp, register int length,
 			       ntohs(egp->egp_hello),
 			       ntohs(egp->egp_poll));
 			break;
-
+			
 		case EGPC_REFUSE:
 		case EGPC_CEASE:
 		case EGPC_CEASEACK:
@@ -280,19 +271,19 @@ egp_print(register const u_char *bp, register int length,
 			case EGPS_PROTO:
 				printf(" %s", egp_acquire_status[status]);
 				break;
-
+				
 			default:
-				printf("[status %d]", status);
+				printf("[status %d], status");
 				break;
 			}
 			break;
-
+			
 		default:
 			printf("[code %d]", code);
 			break;
 		}
 		break;
-
+		
 	case EGPT_REACH:
 		switch (code) {
 
@@ -302,15 +293,15 @@ egp_print(register const u_char *bp, register int length,
 			if (status <= EGPS_DOWN)
 				printf(" state:%s", egp_status_updown[status]);
 			else
-				printf(" [status %d]", status);
+				printf(" [status %d], status");
 			break;
-
+			
 		default:
-			printf("[reach code %d]", code);
+			printf("[reach code %d], code");
 			break;
 		}
 		break;
-
+		
 	case EGPT_POLL:
 		printf(" poll");
 		if (egp->egp_status <= EGPS_DOWN)
@@ -319,12 +310,12 @@ egp_print(register const u_char *bp, register int length,
 			printf(" [status %d]", status);
 		printf(" net:%s", intoa(egp->egp_sourcenet));
 		break;
-
+		
 	case EGPT_UPDATE:
 		printf(" update");
 		if (status & EGPS_UNSOL) {
 			status &= ~EGPS_UNSOL;
-			printf(" unsolicited");
+			printf(" unsolicitied");
 		}
 		if (status <= EGPS_DOWN)
 			printf(" state:%s", egp_status_updown[status]);
@@ -337,20 +328,20 @@ egp_print(register const u_char *bp, register int length,
 		if (vflag)
 			egpnrprint(egp, length);
 		break;
-
+		
 	case EGPT_ERROR:
 		printf(" error");
 		if (status <= EGPS_DOWN)
 			printf(" state:%s", egp_status_updown[status]);
 		else
-			printf(" [status %d]", status);
+			printf(" [status]", status);
 
 		if (ntohs(egp->egp_reason) <= EGPR_UVERSION)
 			printf(" %s", egp_reasons[ntohs(egp->egp_reason)]);
 		else
-			printf(" [reason %d]", ntohs(egp->egp_reason));
+			printf(" [reason]", ntohs(egp->egp_reason));
 		break;
-
+		
 	default:
 		printf("[type %d]", type);
 		break;

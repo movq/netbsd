@@ -1,43 +1,32 @@
-#	$NetBSD: Makefile,v 1.7 1997/03/24 22:03:04 christos Exp $
+# $Id: Makefile,v 1.1 1993/11/14 21:19:50 deraadt Exp $
 #
-#  Copyright (c) 1988, 1989, 1990, 1991, 1992, 1993, 1994
-# 	The Regents of the University of California.  All rights reserved.
+# Possible Options:
+#  -DCSLIP	include support for kernel slip interface
+#  -DPPP	include support for point to point protocol
+#  -DIBMRTPC	enable the MERIT additions to the Stanford Enetfilter
+#  -DNOVFPRINTF	simulate vfprintf() on systems that don't have it
 #
-#  Redistribution and use in source and binary forms, with or without
-#  modification, are permitted provided that: (1) source code distributions
-#  retain the above copyright notice and this paragraph in its entirety, (2)
-#  distributions including binary code include the above copyright notice and
-#  this paragraph in its entirety in the documentation or other materials
-#  provided with the distribution, and (3) all advertising materials mentioning
-#  features or use of this software display the following acknowledgement:
-#  ``This product includes software developed by the University of California,
-#  Lawrence Berkeley Laboratory and its contributors.'' Neither the name of
-#  the University nor the names of its contributors may be used to endorse
-#  or promote products derived from this software without specific prior
-#  written permission.
-#  THIS SOFTWARE IS PROVIDED ``AS IS'' AND WITHOUT ANY EXPRESS OR IMPLIED
-#  WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
-#  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
+# CSLIP and PPP work only under BPF.
 #
-# @(#) $Header: /home/mike/src/cvs/netbsd/src/usr.sbin/tcpdump/Attic/Makefile,v 1.7 1997/03/24 22:03:04 christos Exp $ (LBL)
-
 PROG=	tcpdump
-MAN=	tcpdump.8
-
-CFLAGS+=-DCSLIP -DPPP -DFDDI -DETHER_SERVICE
-
-LDADD+=	-lpcap -ll
-DPADD+=	${LIBPCAP} ${LIBL}
+MAN8=	tcpdump.0
+DEFINES = -DCSLIP -DPPP -DFDDI
+CFLAGS+=-I. -I${.CURDIR} ${DEFINES}
 
 SRCS=	tcpdump.c addrtoname.c \
 	print-ether.c print-ip.c print-arp.c print-tcp.c print-udp.c \
 	print-atalk.c print-domain.c print-tftp.c print-bootp.c print-nfs.c \
-	print-icmp.c print-sl.c print-ppp.c print-rip.c \
+	print-icmp.c nametoaddr.c print-sl.c print-ppp.c print-rip.c \
 	print-snmp.c print-ntp.c print-null.c print-egp.c print-ospf.c \
-	print-fddi.c print-llc.c print-sunrpc.c \
-	print-wb.c print-decnet.c print-isoclns.c print-ipx.c \
-	util.c bpf_dump.c parsenfsfh.c version.c
+	print-fddi.c print-sunrpc.c savefile.c util.c etherent.c inet.c \
+	gencode.c optimize.c bpf_dump.c bpf_filter.c \
+	bpf_image.c tcpgram.y tcplex.l md.c pcap.c version.c
+.PATH:	${.CURDIR}/../../sys/net
 
-AWKS =	atime.awk packetdat.awk send-ack.awk stime.awk
+CLEANFILES+= y.tab.h
+
+
+#SRCS2 = tcpslice.o gwtm2secs.o search.o savefile.o bpf_filter.o md.o util.o
+#tcpslice:	SRSC2
 
 .include <bsd.prog.mk>

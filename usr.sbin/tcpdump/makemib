@@ -1,7 +1,5 @@
 #!/bin/sh
 #
-#	$NetBSD: makemib,v 1.2 1995/03/06 19:10:22 mycroft Exp $
-#
 # Copyright (c) 1990, by John Robert LoVerso.
 # All rights reserved.
 #
@@ -15,8 +13,8 @@
 # IMPLIED WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED
 # WARRANTIES OF MERCHANTIBILITY AND FITNESS FOR A PARTICULAR PURPOSE.
 #
-# @(#) Id: makemib,v 2.1 90/07/10 23:51:54 loverso Exp Locker: loverso (jlv
-)
+# @(#) Id: makemib,v 2.1 90/07/10 23:51:54 loverso Exp Locker: loverso (jlv)
+# $Id: makemib,v 1.1 1993/11/14 21:20:16 deraadt Exp $
 
 #
 # This script will read either ASN.1-style MIB files or the ".defs" files

@@ -1,8 +1,6 @@
-/*	$NetBSD: print-rip.c,v 1.5 1996/11/04 21:33:02 christos Exp $	*/
-
 /*
- * Copyright (c) 1989, 1990, 1991, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988-1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that: (1) source code distributions
@@ -19,85 +17,66 @@
  * THIS SOFTWARE IS PROVIDED ``AS IS'' AND WITHOUT ANY EXPRESS OR IMPLIED
  * WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
+ * 
+ * $Id: print-rip.c,v 1.1 1993/11/14 21:20:51 deraadt Exp $
  */
 
 #ifndef lint
 static char rcsid[] =
-    "@(#) Header: print-rip.c,v 1.20 94/06/14 20:18:47 leres Exp (LBL)";
+    "@(#) Header: print-rip.c,v 1.12 91/04/19 10:46:46 mccanne Exp (LBL)";
 #endif
 
 #include <sys/param.h>
-#include <sys/time.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
 #include <netinet/ip.h>
 #include <netinet/ip_var.h>
 #include <netinet/udp.h>
 #include <netinet/udp_var.h>
-
 #include <protocols/routed.h>
 
 #include <errno.h>
-#include <stdio.h>
 
 #include "interface.h"
 #include "addrtoname.h"
 
 static void
-rip_entry_print(register const struct netinfo *ni)
+rip_entry_print(ni)
+	register struct netinfo *ni;
 {
-	if (ntohs(ni->rip_family) != AF_INET) {
+	if (ntohs(ni->rip_dst.sa_family) != AF_INET) {
 		register int i;
 
-		printf(" [family %d:", ntohs(ni->rip_family));
-		printf(" %04x", ni->rip_dst);
+		printf(" [family %d:", ntohs(ni->rip_dst.sa_family));
+		for (i = 0; i < 14; i += 2)
+			printf(" %02x%02x", ni->rip_dst.sa_data[i],
+				ni->rip_dst.sa_data[i+1]);
 		printf("]");
 	} else {
-		struct sockaddr_in sin;
-		sin.sin_addr.s_addr = ni->rip_dst;
-		printf(" %s", ipaddr_string(&sin.sin_addr));
-
-		/* 
-		 * In RIP V1 the dst_mask and next hop fields are
-		 * supposed to be 0. If they are not, we assume that we are
-		 * dealing with a V2 packet. Some routers (eg. annexes),
-		 * in compatibility mode, advertize V1 packets with the V2
-		 * fields filled.
-		 */
-		if (ni->rip_dst_mask != 0) {
-			u_int32_t mask = ni->rip_dst_mask;
-			int bits = 32;
-
-			while (mask)
-				bits--, mask >>= 1;
-			printf("/%d", bits);
-		}
-
-		if (ni->rip_router != 0) {
-			sin.sin_addr.s_addr = ni->rip_router;
-			printf(" -> %s", ipaddr_string(&sin.sin_addr));
-		}
-
-		if (ni->rip_tag)
-			printf(" [port %d]", ni->rip_tag);
+		register struct sockaddr_in *sin = 
+				(struct sockaddr_in *)&ni->rip_dst;
+		printf(" %s", ipaddr_string(&sin->sin_addr));
+		if (sin->sin_port)
+			printf(" [port %d]", sin->sin_port);
 	}
 	printf("(%d)", ntohl(ni->rip_metric));
 }
 
 void
-rip_print(const u_char *dat, int length)
+rip_print(dat, length)
+	u_char *dat;
+	int length;
 {
-	register const struct rip *rp = (struct rip *)dat;
-	register const struct netinfo *ni;
-	register int amt = snapend - dat;
+	register struct rip *rp = (struct rip *)dat;
+	register struct netinfo *ni;
+	register int amt = (u_char *)snapend - dat;
 	register int i = min(length, amt) -
 			 (sizeof(struct rip) - sizeof(struct netinfo));
 	int j;
 	int trunc;
-
+	
 	if (i < 0)
 		return;
 
@@ -134,6 +113,6 @@ rip_print(const u_char *dat, int length)
 		printf(" rip-%d ?? %d", rp->rip_cmd, length);
 		break;
 	}
-	if (rp->rip_vers != RIP_VERSION_1)
+	if (rp->rip_vers != RIPVERSION)
 		printf(" [vers %d]", rp->rip_vers);
 }

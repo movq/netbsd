@@ -1,8 +1,6 @@
-/*	$NetBSD: print-ppp.c,v 1.3 1995/03/06 19:11:27 mycroft Exp $	*/
-
 /*
- * Copyright (c) 1990, 1991, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that: (1) source code distributions
@@ -19,32 +17,36 @@
  * THIS SOFTWARE IS PROVIDED ``AS IS'' AND WITHOUT ANY EXPRESS OR IMPLIED
  * WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
+ * 
+ * $Id: print-ppp.c,v 1.1 1993/11/14 21:20:50 deraadt Exp $
  */
 
 #ifndef lint
 static  char rcsid[] =
-	"@(#)Header: print-ppp.c,v 1.18 94/06/10 17:01:37 mccanne Exp (LBL)";
+	"@(#) Header: print-ppp.c,v 1.7 91/10/07 20:18:33 leres Exp (LBL)";
 #endif
 
 #ifdef PPP
+#include <stdio.h>
+#include <netdb.h>
+#include <ctype.h>
+#include <signal.h>
+#include <errno.h>
 #include <sys/param.h>
+#include <sys/types.h>
 #include <sys/time.h>
+#include <sys/timeb.h>
 #include <sys/socket.h>
 #include <sys/file.h>
+#include <sys/mbuf.h>
 #include <sys/ioctl.h>
 
 #include <net/if.h>
-
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
 #include <netinet/ip.h>
 
-#include <ctype.h>
-#include <errno.h>
-#include <netdb.h>
-#include <pcap.h>
-#include <signal.h>
-#include <stdio.h>
+#include <net/bpf.h>
 
 #include "interface.h"
 #include "addrtoname.h"
@@ -53,14 +55,15 @@ static  char rcsid[] =
 #define PPP_HDRLEN 4
 
 void
-ppp_if_print(u_char *user, const struct pcap_pkthdr *h,
-	     register const u_char *p)
+ppp_if_print(p, tvp, length, caplen)
+	u_char *p;
+	struct timeval *tvp;
+	int length;
+	int caplen;
 {
-	register int length = h->len;
-	register int caplen = h->caplen;
-	const struct ip *ip;
+	struct ip *ip;
 
-	ts_print(&h->ts);
+	ts_print(tvp);
 
 	if (caplen < PPP_HDRLEN) {
 		printf("[|ppp]");
@@ -72,8 +75,8 @@ ppp_if_print(u_char *user, const struct pcap_pkthdr *h,
 	 * and/or check that they're not walking off the end of the packet.
 	 * Rather than pass them all the way down, we set these globals.
 	 */
-	packetp = p;
-	snapend = p + caplen;
+	packetp = (u_char *)p;
+	snapend = (u_char *)p + caplen;
 
 	if (eflag)
 		printf("%c %4d %02x %04x: ", p[0] ? 'O' : 'I', length,
@@ -81,23 +84,20 @@ ppp_if_print(u_char *user, const struct pcap_pkthdr *h,
 
 	length -= PPP_HDRLEN;
 	ip = (struct ip *)(p + PPP_HDRLEN);
-	ip_print((const u_char *)ip, length);
+	ip_print(ip, length);
 
 	if (xflag)
-		default_print((const u_char *)ip, caplen - PPP_HDRLEN);
+		default_print((u_short *)ip, caplen - PPP_HDRLEN);
 out:
 	putchar('\n');
 }
 #else
-#include <sys/types.h>
-#include <sys/time.h>
-
 #include <stdio.h>
-
-#include "interface.h"
 void
-ppp_if_print(u_char *user, const struct pcap_pkthdr *h, const u_char *p)
+ppp_if_print()
 {
+	void error();
+
 	error("not configured for ppp");
 	/* NOTREACHED */
 }

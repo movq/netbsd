@@ -1,5 +1,3 @@
-/*	$NetBSD: parsenfsfh.c,v 1.3 1996/05/20 00:41:07 fvdl Exp $	*/
-
 #ifndef lint
 static char *RCSid = "Header: parsenfsfh.c,v 1.5 94/01/13 19:06:41 leres Exp";
 #endif
@@ -83,9 +81,8 @@ typedef unsigned int u_int32x;
 static int is_UCX(unsigned char *);
 
 void
-Parse_fh(fh, len, fsidp, inop, osnamep, fsnamep, ourself)
+Parse_fh(fh, fsidp, inop, osnamep, fsnamep, ourself)
 register caddr_t *fh;
-int len;
 my_fsid *fsidp;
 ino_t *inop;
 char **osnamep;		/* if non-NULL, return OS name here */

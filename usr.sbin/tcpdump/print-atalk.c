@@ -1,8 +1,6 @@
-/*	$NetBSD: print-atalk.c,v 1.5 1997/09/26 18:12:35 christos Exp $	*/
-
 /*
- * Copyright (c) 1988, 1989, 1990, 1991, 1992, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1988-1990 The Regents of the University of California.
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that: (1) source code distributions
@@ -21,26 +19,24 @@
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  *
  * Format and print AppleTalk packets.
+ * 
+ * $Id: print-atalk.c,v 1.1 1993/11/14 21:20:34 deraadt Exp $
  */
 #ifndef lint
 static  char rcsid[] =
-	"@(#)Header: print-atalk.c,v 1.36 94/06/20 19:44:34 leres Exp (LBL)";
+	"@(#) Header: print-atalk.c,v 1.22 92/03/26 14:15:34 mccanne Exp (LBL)";
 #endif
+
+#ifdef __STDC__
+#include <stdlib.h>
+#endif
+#include <stdio.h>
 
 #include <sys/param.h>
-#include <sys/time.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-
-#include <net/if.h>
-
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
-#ifdef __NetBSD__
-#include <net/if_ether.h>
-#else
-#include <netinet/if_ether.h>
-#endif
 #include <netinet/ip.h>
 #include <netinet/ip_var.h>
 #include <netinet/udp.h>
@@ -48,199 +44,91 @@ static  char rcsid[] =
 #include <netinet/tcp.h>
 #include <netinet/tcpip.h>
 
-#include <stdio.h>
-#ifdef __STDC__
-#include <stdlib.h>
-#endif
-#include <string.h>
-
 #include "interface.h"
 #include "addrtoname.h"
-#include "ethertype.h"
-#include "extract.h"			/* must come after interface.h */
 #include "appletalk.h"
+#include <strings.h>
+#include "extract.h"
 
-static struct token type2str[] = {
-	{ ddpRTMP,		"rtmp" },
-	{ ddpRTMPrequest,	"rtmpReq" },
-	{ ddpECHO,		"echo" },
-	{ ddpIP,		"IP" },
-	{ ddpARP,		"ARP" },
-	{ ddpKLAP,		"KLAP" },
-	{ 0,			NULL }
-};
-
-struct aarp {
-	u_short htype, ptype;
-	u_char	halen, palen;
-	u_short op;
-	u_char	hsaddr[6];
-	u_char	psaddr[4];
-	u_char	hdaddr[6];
-	u_char	pdaddr[4];
-};
-
-static char tstr[] = "[|atalk]";
-
-static void atp_print(const struct atATP *, int);
-static void atp_bitmap_print(u_char);
-static void nbp_print(const struct atNBP *, int, u_short, u_char, u_char);
-static const char *print_cstring(const char *, const u_char *);
-static const struct atNBPtuple *nbp_tuple_print(const struct atNBPtuple *,
-						const u_char *,
-						u_short, u_char, u_char);
-static const struct atNBPtuple *nbp_name_print(const struct atNBPtuple *,
-					       const u_char *);
-static const char *ataddr_string(u_short, u_char);
-static void ddp_print(const u_char *, int, int, u_short, u_char, u_char);
-static const char *ddpskt_string(int);
-
-void
-llap_print(register const u_char *bp, int length)
-{
-	register const struct LAP *lp;
-	register const struct atDDP *dp;
-	register const struct atShortDDP *sdp;
-	u_short snet;
-
-	lp = (struct LAP *)bp;
-	bp += sizeof(*lp);
-	length -= sizeof(*lp);
-	switch (lp->type) {
-
-	case lapShortDDP:
-		if (length < ddpSSize) {
-			(void)printf(" [|sddp %d]", length);
-			return;
-		}
-		sdp = (const struct atShortDDP *)bp;
-		printf("%s.%s",
-		    ataddr_string(0, lp->src), ddpskt_string(sdp->srcSkt));
-		printf(" > %s.%s:",
-		    ataddr_string(0, lp->dst), ddpskt_string(sdp->dstSkt));
-		bp += ddpSSize;
-		length -= ddpSSize;
-		ddp_print(bp, length, sdp->type, 0, lp->src, sdp->srcSkt);
-		break;
-
-	case lapDDP:
-		if (length < ddpSize) {
-			(void)printf(" [|ddp %d]", length);
-			return;
-		}
-		dp = (const struct atDDP *)bp;
-		snet = EXTRACT_SHORT(&dp->srcNet);
-		printf("%s.%s", ataddr_string(snet, dp->srcNode),
-		    ddpskt_string(dp->srcSkt));
-		printf(" > %s.%s:",
-		    ataddr_string(EXTRACT_SHORT(&dp->dstNet), dp->dstNode),
-		    ddpskt_string(dp->dstSkt));
-		bp += ddpSize;
-		length -= ddpSize;
-		ddp_print(bp, length, dp->type, snet, dp->srcNode, dp->srcSkt);
-		break;
-
-#ifdef notdef
-	case lapKLAP:
-		klap_print(bp, length);
-		break;
-#endif
-
-	default:
-		printf("%d > %d at-lap#%d %d",
-		    lp->src, lp->dst, lp->type, length);
-		break;
-	}
-}
+static char *ataddr_string();
+static struct atNBPtuple *nbp_tuple_print();
+static struct atNBPtuple *nbp_name_print();
+static void atp_print();
+static void nbp_print();
+static void atp_bitmap_print();
 
 /*
  * Print AppleTalk Datagram Delivery Protocol packets.
  */
 void
-atalk_print(register const u_char *bp, int length)
+ddp_print(dp, length)
+	register struct atDDP *dp;
+	int length;
 {
-	register const struct atDDP *dp;
-	u_short snet;
-
 	if (length < ddpSize) {
-	  (void)printf(" [|ddp %d]", length);
-	  return;
+		(void)printf(" truncated-ddp %d", length);
+		return;
 	}
-	dp = (const struct atDDP *)bp;
-	snet = EXTRACT_SHORT(&dp->srcNet);
-	printf("%s.%s", ataddr_string(snet, dp->srcNode),
-	       ddpskt_string(dp->srcSkt));
-	printf(" > %s.%s:",
-	       ataddr_string(EXTRACT_SHORT(&dp->dstNet), dp->dstNode),
-	       ddpskt_string(dp->dstSkt));
-	bp += ddpSize;
+	(void)printf("%s.%d > %s.%d:",
+		     ataddr_string(EXTRACT_SHORT(&dp->srcNet), dp->srcNode),
+		     dp->srcSkt,
+		     ataddr_string(EXTRACT_SHORT(&dp->dstNet), dp->dstNode),
+		     dp->dstSkt);
+
+	/* 'type' is the last field of 'dp' so we need the whole thing.
+	   If we cannot determine the type, bail out.  (This last byte
+	   happens to be *one* byte past the end of tcpdump's minimum
+	   snapshot length.) */
+	if ((u_char *)(dp + 1) > snapend) {
+		printf(" [|atalk]");
+		return;
+	}
+
 	length -= ddpSize;
-	ddp_print(bp, length, dp->type, snet, dp->srcNode, dp->srcSkt);
-}
+	switch (dp->type) {
 
-/* XXX should probably pass in the snap header and do checks like arp_print() */
-void
-aarp_print(register const u_char *bp, int length)
-{
-	register const struct aarp *ap;
-
-#define AT(member) ataddr_string((ap->member[1]<<8)|ap->member[2],ap->member[3])
-
-	printf("aarp ");
-	ap = (const struct aarp *)bp;
-	if (ap->htype == 1 && ap->ptype == ETHERTYPE_ATALK &&
-	    ap->halen == 6 && ap->palen == 4 )
-		switch (ap->op) {
-
-		case 1:				/* request */
-			(void)printf("who-has %s tell %s",
-			    AT(pdaddr), AT(psaddr));
-			return;
-
-		case 2:				/* response */
-			(void)printf("reply %s is-at %s",
-			    AT(pdaddr), etheraddr_string(ap->hdaddr));
-			return;
-
-		case 3:				/* probe (oy!) */
-			(void)printf("probe %s tell %s",
-			    AT(pdaddr), AT(psaddr));
-			return;
-		}
-	(void)printf("len %d op %d htype %d ptype %#x halen %d palen %d",
-	    length, ap->op, ap->htype, ap->ptype, ap->halen, ap->palen );
-}
-
-static void
-ddp_print(register const u_char *bp, register int length, register int t,
-	  register u_short snet, register u_char snode, u_char skt)
-{
-
-	switch (t) {
-
+	case ddpRTMP:
+		(void)printf(" at-rtmp %d", length);
+		break;
+	case ddpRTMPrequest:
+		(void)printf(" at-rtmpReq %d", length);
+		break;
 	case ddpNBP:
-		nbp_print((const struct atNBP *)bp, length, snet, snode, skt);
+		nbp_print((struct atNBP *)((u_char *)dp + ddpSize),
+			  length, dp);
 		break;
-
 	case ddpATP:
-		atp_print((const struct atATP *)bp, length);
+		atp_print((struct atATP *)((u_char *)dp + ddpSize), length);
 		break;
-
+	case ddpECHO:
+		(void)printf(" at-echo %d", length);
+		break;
+	case ddpIP:
+		(void)printf(" at-IP %d", length);
+		break;
+	case ddpARP:
+		(void)printf(" at-ARP %d", length);
+		break;
+	case ddpKLAP:
+		(void)printf(" at-KLAP %d", length);
+		break;
 	default:
-		(void)printf(" at-%s %d", tok2str(type2str, NULL, t), length);
+		(void)printf(" at-#%d %d", length);
 		break;
 	}
 }
 
 static void
-atp_print(register const struct atATP *ap, int length)
+atp_print(ap, length)
+	register struct atATP *ap;
+	int length;
 {
 	char c;
-	u_int32 data;
+	long data;
 
-	if ((const u_char *)(ap + 1) > snapend) {
+	if ((u_char *)(ap + 1) > snapend) {
 		/* Just bail if we don't have the whole chunk. */
-		fputs(tstr, stdout);
+		printf(" [|atalk]");
 		return;
 	}
 	length -= sizeof(*ap);
@@ -315,7 +203,7 @@ atp_print(register const struct atATP *ap, int length)
 		break;
 
 	default:
-		(void)printf(" atp-0x%x  %d (%d)", ap->control,
+		(void)printf(" atp-0x%x  %d (%d)", ap->control, 
 			     EXTRACT_SHORT(&ap->transID), length);
 		break;
 	}
@@ -325,12 +213,13 @@ atp_print(register const struct atATP *ap, int length)
 }
 
 static void
-atp_bitmap_print(register u_char bm)
+atp_bitmap_print(bm)
+	register u_char bm;
 {
 	register char c;
 	register int i;
 
-	/*
+	/* 
 	 * The '& 0xff' below is needed for compilers that want to sign
 	 * extend a u_char, which is the case with the Ultrix compiler.
 	 * (gcc is smart enough to eliminate it, at least on the Sparc).
@@ -356,13 +245,15 @@ atp_bitmap_print(register u_char bm)
 }
 
 static void
-nbp_print(register const struct atNBP *np, int length, register u_short snet,
-	  register u_char snode, register u_char skt)
+nbp_print(np, length, dp)
+	register struct atNBP *np;
+	int length;
+	register struct atDDP *dp;
 {
-	register const struct atNBPtuple *tp =
+	register struct atNBPtuple *tp =
 			(struct atNBPtuple *)((u_char *)np + nbpHeaderSize);
 	int i = length;
-	const u_char *ep;
+	u_char *ep;
 
 	length -= nbpHeaderSize;
 	if (length < 8) {
@@ -372,8 +263,8 @@ nbp_print(register const struct atNBP *np, int length, register u_short snet,
 	}
 	/* ep points to end of available data */
 	ep = snapend;
-	if ((const u_char *)tp > ep) {
-		fputs(tstr, stdout);
+	if ((u_char *)tp > ep) {
+		printf(" [|atalk]");
 		return;
 	}
 	switch (i = np->control & 0xf0) {
@@ -382,8 +273,8 @@ nbp_print(register const struct atNBP *np, int length, register u_short snet,
 	case nbpLkUp:
 		(void)printf(i == nbpLkUp? " nbp-lkup %d:":" nbp-brRq %d:",
 			     np->id);
-		if ((const u_char *)(tp + 1) > ep) {
-			fputs(tstr, stdout);
+		if ((u_char *)(tp + 1) > ep) {
+			printf(" [|atalk]");
 			return;
 		}
 		(void)nbp_name_print(tp, ep);
@@ -396,11 +287,12 @@ nbp_print(register const struct atNBP *np, int length, register u_short snet,
 			(void)printf(" [ntup=%d]", np->control & 0xf);
 		if (tp->enumerator)
 			(void)printf(" [enum=%d]", tp->enumerator);
-		if (EXTRACT_SHORT(&tp->net) != snet ||
-		    tp->node != snode || tp->skt != skt)
+		if (EXTRACT_SHORT(&tp->net) != EXTRACT_SHORT(&dp->srcNet) ||
+		    tp->node != dp->srcNode || tp->skt != dp->srcSkt)
 			(void)printf(" [addr=%s.%d]",
-			    ataddr_string(EXTRACT_SHORT(&tp->net),
-			    tp->node), tp->skt);
+				     ataddr_string(EXTRACT_SHORT(&tp->net), 
+						   tp->node), 
+				     tp->skt);
 		break;
 
 	case nbpLkUpReply:
@@ -408,7 +300,7 @@ nbp_print(register const struct atNBP *np, int length, register u_short snet,
 
 		/* print each of the tuples in the reply */
 		for (i = np->control & 0xf; --i >= 0 && tp; )
-			tp = nbp_tuple_print(tp, ep, snet, snode, skt);
+			tp = nbp_tuple_print(tp, ep, dp);
 		break;
 
 	default:
@@ -419,13 +311,15 @@ nbp_print(register const struct atNBP *np, int length, register u_short snet,
 }
 
 /* print a counted string */
-static const char *
-print_cstring(register const char *cp, register const u_char *ep)
+static char *
+print_cstring(cp, ep)
+	register char *cp;
+	register u_char *ep;
 {
 	register int length;
 
-	if (cp >= (const char *)ep) {
-		fputs(tstr, stdout);
+	if (cp >= (char *)ep) {
+		(void)printf("[|atalk]");
 		return (0);
 	}
 	length = *cp++;
@@ -437,7 +331,7 @@ print_cstring(register const char *cp, register const u_char *ep)
 	}
 	while (--length >= 0) {
 		if (cp >= (char *)ep) {
-			fputs(tstr, stdout);
+			(void)printf("[|atalk]");
 			return (0);
 		}
 		putchar(*cp++);
@@ -445,16 +339,16 @@ print_cstring(register const char *cp, register const u_char *ep)
 	return (cp);
 }
 
-static const struct atNBPtuple *
-nbp_tuple_print(register const struct atNBPtuple *tp,
-		register const u_char *ep,
-		register u_short snet, register u_char snode,
-		register u_char skt)
+static struct atNBPtuple *
+nbp_tuple_print(tp, ep, dp)
+	register struct atNBPtuple *tp;
+	register u_char *ep;
+	register struct atDDP *dp;
 {
-	register const struct atNBPtuple *tpn;
+	register struct atNBPtuple *tpn;
 
-	if ((const u_char *)(tp + 1) > ep) {
-		fputs(tstr, stdout);
+	if ((u_char *)(tp + 1) > ep) {
+		printf(" [|atalk]");
 		return 0;
 	}
 	tpn = nbp_name_print(tp, ep);
@@ -464,37 +358,40 @@ nbp_tuple_print(register const struct atNBPtuple *tp,
 		(void)printf("(%d)", tp->enumerator);
 
 	/* if the socket doesn't match the src socket, print it */
-	if (tp->skt != skt)
+	if (tp->skt != dp->srcSkt)
 		(void)printf(" %d", tp->skt);
 
 	/* if the address doesn't match the src address, it's an anomaly */
-	if (EXTRACT_SHORT(&tp->net) != snet || tp->node != snode)
+	if (EXTRACT_SHORT(&tp->net) != EXTRACT_SHORT(&dp->srcNet) ||
+	    tp->node != dp->srcNode)
 		(void)printf(" [addr=%s]",
-		    ataddr_string(EXTRACT_SHORT(&tp->net), tp->node));
+			     ataddr_string(EXTRACT_SHORT(&tp->net), tp->node));
 
 	return (tpn);
 }
 
-static const struct atNBPtuple *
-nbp_name_print(const struct atNBPtuple *tp, register const u_char *ep)
+static struct atNBPtuple *
+nbp_name_print(tp, ep)
+	struct atNBPtuple *tp;
+	register u_char *ep;
 {
-	register const char *cp = (const char *)tp + nbpTupleSize;
+	register char *cp = (char *)tp + nbpTupleSize;
 
 	putchar(' ');
 
 	/* Object */
 	putchar('"');
-	if ((cp = print_cstring(cp, ep)) != NULL) {
+	if (cp = print_cstring(cp, ep)) {
 		/* Type */
 		putchar(':');
-		if ((cp = print_cstring(cp, ep)) != NULL) {
+		if (cp = print_cstring(cp, ep)) {
 			/* Zone */
 			putchar('@');
-			if ((cp = print_cstring(cp, ep)) != NULL)
+			if (cp = print_cstring(cp, ep))
 				putchar('"');
 		}
 	}
-	return ((const struct atNBPtuple *)cp);
+	return ((struct atNBPtuple *)cp);
 }
 
 
@@ -508,8 +405,10 @@ struct hnamemem {
 
 static struct hnamemem hnametable[HASHNAMESIZE];
 
-static const char *
-ataddr_string(u_short atnet, u_char athost)
+static char *
+ataddr_string(atnet, athost)
+	u_short atnet;
+	u_char athost;
 {
 	register struct hnamemem *tp, *tp2;
 	register int i = (atnet << 8) | athost;
@@ -545,7 +444,8 @@ ataddr_string(u_short atnet, u_char athost)
 				;
 			tp->addr = i3;
 			tp->nxt = (struct hnamemem *)calloc(1, sizeof(*tp));
-			tp->name = savestr(nambuf);
+			i3 = strlen(nambuf) + 1;
+			tp->name = strcpy(malloc((unsigned) i3), nambuf);
 		}
 		fclose(fp);
 	}
@@ -561,7 +461,8 @@ ataddr_string(u_short atnet, u_char athost)
 			tp->addr = (atnet << 8) | athost;
 			tp->nxt = (struct hnamemem *)calloc(1, sizeof(*tp));
 			(void)sprintf(nambuf, "%s.%d", tp2->name, athost);
-			tp->name = savestr(nambuf);
+			i = strlen(nambuf) + 1;
+			tp->name = strcpy(malloc((unsigned) i), nambuf);
 			return (tp->name);
 		}
 
@@ -573,27 +474,7 @@ ataddr_string(u_short atnet, u_char athost)
 	else
 		(void)sprintf(nambuf, "%d.%d", atnet >> 8, atnet & 0xff);
 	i = strlen(nambuf) + 1;
-	tp->name = strcpy(malloc((u_int) i), nambuf);
+	tp->name = strcpy(malloc((unsigned) i), nambuf);
 
 	return (tp->name);
-}
-
-static struct token skt2str[] = {
-	{ rtmpSkt,	"rtmp" },	/* routing table maintenance */
-	{ nbpSkt,	"nis" },	/* name info socket */
-	{ echoSkt,	"echo" },	/* AppleTalk echo protocol */
-	{ zipSkt,	"zip" },	/* zone info protocol */
-	{ 0,		NULL }
-};
-
-static const char *
-ddpskt_string(register int skt)
-{
-	static char buf[8];
-
-	if (nflag) {
-		(void)sprintf(buf, "%d", skt);
-		return (buf);
-	}
-	return (tok2str(skt2str, "%d", skt));
 }
