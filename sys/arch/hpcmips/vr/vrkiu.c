@@ -1,4 +1,4 @@
-/*	$NetBSD: vrkiu.c,v 1.1 1999/09/16 12:23:33 takemura Exp $	*/
+/*	$NetBSD: vrkiu.c,v 1.1.1.1 1999/09/16 12:23:33 takemura Exp $	*/
 
 /*-
  * Copyright (c) 1999 SASAKI Takesi

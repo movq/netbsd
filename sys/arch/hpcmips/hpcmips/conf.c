@@ -1,4 +1,4 @@
-/*	$NetBSD: conf.c,v 1.1 1999/09/16 12:23:20 takemura Exp $	*/
+/*	$NetBSD: conf.c,v 1.1.1.1 1999/09/16 12:23:20 takemura Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993

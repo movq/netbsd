@@ -1,4 +1,4 @@
-/*	$NetBSD: vrpmu.c,v 1.1 1999/09/16 12:23:33 takemura Exp $	*/
+/*	$NetBSD: vrpmu.c,v 1.1.1.1 1999/09/16 12:23:33 takemura Exp $	*/
 
 /*
  * Copyright (c) 1999 M. Warner Losh.  All rights reserved.

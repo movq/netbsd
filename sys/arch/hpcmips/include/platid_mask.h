@@ -1,4 +1,4 @@
-/*	$NetBSD: platid_mask.h,v 1.1 1999/09/16 12:23:23 takemura Exp $	*/
+/*	$NetBSD: platid_mask.h,v 1.1.1.1 1999/09/16 12:23:23 takemura Exp $	*/
 
 /*-
  * Copyright (c) 1999

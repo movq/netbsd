@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.h,v 1.1 1999/09/16 12:23:23 takemura Exp $	*/
+/*	$NetBSD: locore.h,v 1.1.1.1 1999/09/16 12:23:23 takemura Exp $	*/
 
 /*
  * Copyright 1996 The Board of Trustees of The Leland Stanford

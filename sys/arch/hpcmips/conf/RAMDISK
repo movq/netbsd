@@ -2,7 +2,7 @@
 # Distribution kernel (any  model) kernel config file
 
 #
-# 	$NetBSD: RAMDISK,v 1.1 1999/09/16 12:23:19 takemura Exp $
+# 	$NetBSD: RAMDISK,v 1.1.1.1 1999/09/16 12:23:19 takemura Exp $
 #
 include		"arch/hpcmips/conf/std.hpcmips"
 

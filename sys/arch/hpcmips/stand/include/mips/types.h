@@ -1,4 +1,4 @@
-/*	$NetBSD: types.h,v 1.1 1999/09/16 12:23:27 takemura Exp $	*/
+/*	$NetBSD: types.h,v 1.1.1.1 1999/09/16 12:23:27 takemura Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993

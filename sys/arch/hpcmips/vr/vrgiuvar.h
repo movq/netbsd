@@ -1,4 +1,4 @@
-/*	$NetBSD: vrgiuvar.h,v 1.1 1999/09/16 12:23:32 takemura Exp $	*/
+/*	$NetBSD: vrgiuvar.h,v 1.1.1.1 1999/09/16 12:23:32 takemura Exp $	*/
 
 /*-
  * Copyright (c) 1999

@@ -1,4 +1,4 @@
-/*	$NetBSD: fplib_libc.c,v 1.1 1999/09/16 12:18:25 takemura Exp $	*/
+/*	$NetBSD: fplib_libc.c,v 1.1.1.1 1999/09/16 12:18:25 takemura Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: sf_modf.c,v 1.1 1999/09/16 12:18:26 takemura Exp $	*/
+/*	$NetBSD: sf_modf.c,v 1.1.1.1 1999/09/16 12:18:26 takemura Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Carnegie-Mellon University.

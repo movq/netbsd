@@ -1,4 +1,4 @@
-/*	$NetBSD: icureg.h,v 1.1 1999/09/16 12:23:32 takemura Exp $	*/
+/*	$NetBSD: icureg.h,v 1.1.1.1 1999/09/16 12:23:32 takemura Exp $	*/
 
 /*-
  * Copyright (c) 1999 Shin Takemura. All rights reserved.

@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.1 1999/09/16 12:23:22 takemura Exp $	*/
+/*	$NetBSD: intr.h,v 1.1.1.1 1999/09/16 12:23:22 takemura Exp $	*/
 
 /*
  * Copyright (c) 1998 Jonathan Stone.  All rights reserved.

@@ -1,6 +1,6 @@
 #!/bin/sh -
 #
-#	$NetBSD: MAKEDEV,v 1.1 1999/09/16 12:18:27 takemura Exp $
+#	$NetBSD: MAKEDEV,v 1.1.1.1 1999/09/16 12:18:27 takemura Exp $
 #
 # Copyright (c) 1990 The Regents of the University of California.
 # All rights reserved.

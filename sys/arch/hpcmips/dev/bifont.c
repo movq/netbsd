@@ -1,4 +1,4 @@
-/*	$NetBSD: bifont.c,v 1.1 1999/09/16 12:23:19 takemura Exp $	*/
+/*	$NetBSD: bifont.c,v 1.1.1.1 1999/09/16 12:23:19 takemura Exp $	*/
 
 /*-
  * Copyright (c) 1999

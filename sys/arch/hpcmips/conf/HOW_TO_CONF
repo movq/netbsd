@@ -1,4 +1,4 @@
-# $NetBSD: HOW_TO_CONF,v 1.1 1999/09/16 12:23:18 takemura Exp $
+# $NetBSD: HOW_TO_CONF,v 1.1.1.1 1999/09/16 12:23:18 takemura Exp $
 # Written by Shin Takemura. This document is public domain.
 
 If you get many errors like below:

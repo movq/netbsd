@@ -1,4 +1,4 @@
-#	$NetBSD: dot.profile,v 1.1 1999/09/16 12:18:27 takemura Exp $
+#	$NetBSD: dot.profile,v 1.1.1.1 1999/09/16 12:18:27 takemura Exp $
 PATH=/sbin:/bin:/usr/bin:/usr/sbin:/
 export PATH
 

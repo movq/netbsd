@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 1999/09/16 12:23:21 takemura Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 1999/09/16 12:23:21 takemura Exp $
 
 KDIR=	/sys/arch/hpcmips/include
 INCSDIR= /usr/include/hpcmips

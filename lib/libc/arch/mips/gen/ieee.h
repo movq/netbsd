@@ -1,4 +1,4 @@
-/*	$NetBSD: ieee.h,v 1.1 1999/09/16 12:18:26 takemura Exp $	*/
+/*	$NetBSD: ieee.h,v 1.1.1.1 1999/09/16 12:18:26 takemura Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993

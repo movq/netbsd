@@ -1,4 +1,4 @@
-/*	$NetBSD: vrpmureg.h,v 1.1 1999/09/16 12:23:33 takemura Exp $	*/
+/*	$NetBSD: vrpmureg.h,v 1.1.1.1 1999/09/16 12:23:33 takemura Exp $	*/
 
 /*-
  * Copyright (c) 1999 SATO Kazumi. All rights reserved.

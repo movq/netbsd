@@ -1,4 +1,4 @@
-/*	$NetBSD: disksubr.c,v 1.1 1999/09/16 12:23:20 takemura Exp $	*/
+/*	$NetBSD: disksubr.c,v 1.1.1.1 1999/09/16 12:23:20 takemura Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1988 Regents of the University of California.

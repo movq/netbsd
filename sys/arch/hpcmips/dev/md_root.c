@@ -1,4 +1,4 @@
-/*	$NetBSD: md_root.c,v 1.1 1999/09/16 12:23:19 takemura Exp $	*/
+/*	$NetBSD: md_root.c,v 1.1.1.1 1999/09/16 12:23:19 takemura Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: sf_ldexp.c,v 1.1 1999/09/16 12:18:26 takemura Exp $	*/
+/*	$NetBSD: sf_ldexp.c,v 1.1.1.1 1999/09/16 12:18:26 takemura Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -44,7 +44,7 @@
 #if 0
 static const char sccsid[] = "@(#)ldexp.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: sf_ldexp.c,v 1.1 1999/09/16 12:18:26 takemura Exp $");
+__RCSID("$NetBSD: sf_ldexp.c,v 1.1.1.1 1999/09/16 12:18:26 takemura Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 

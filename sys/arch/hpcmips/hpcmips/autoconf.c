@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.1 1999/09/16 12:23:20 takemura Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.1.1.1 1999/09/16 12:23:20 takemura Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.1 1999/09/16 12:23:20 takemura Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.1.1.1 1999/09/16 12:23:20 takemura Exp $");
 
 /*
  * Setup the system to run on the current machine.

@@ -1,4 +1,4 @@
-/*	$NetBSD: endian.h,v 1.1 1999/09/16 12:23:22 takemura Exp $	*/
+/*	$NetBSD: endian.h,v 1.1.1.1 1999/09/16 12:23:22 takemura Exp $	*/
 
 /*
  * Define the order of bytes in a 32-bit word.

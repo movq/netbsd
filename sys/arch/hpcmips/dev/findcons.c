@@ -1,4 +1,4 @@
-/*	$NetBSD: findcons.c,v 1.1 1999/09/16 12:23:19 takemura Exp $	*/
+/*	$NetBSD: findcons.c,v 1.1.1.1 1999/09/16 12:23:19 takemura Exp $	*/
 
 /*-
  * Copyright (c) 1999
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
-__KERNEL_RCSID(0, "$NetBSD: findcons.c,v 1.1 1999/09/16 12:23:19 takemura Exp $");
+__KERNEL_RCSID(0, "$NetBSD: findcons.c,v 1.1.1.1 1999/09/16 12:23:19 takemura Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

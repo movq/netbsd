@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.h,v 1.1 1999/09/16 12:23:20 takemura Exp $	*/
+/*	$NetBSD: machdep.h,v 1.1.1.1 1999/09/16 12:23:20 takemura Exp $	*/
 
 /*
  * Copyright (c) 1998 Jonathan Stone.  All rights reserved.

@@ -1,4 +1,4 @@
-/*	$NetBSD: winfs.c,v 1.1 1999/09/16 12:23:29 takemura Exp $	*/
+/*	$NetBSD: winfs.c,v 1.1.1.1 1999/09/16 12:23:29 takemura Exp $	*/
 
 /*-
  * Copyright (c) 1999 Shin Takemura.

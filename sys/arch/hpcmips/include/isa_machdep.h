@@ -1,4 +1,4 @@
-/*	$NetBSD: isa_machdep.h,v 1.1 1999/09/16 12:23:22 takemura Exp $	*/
+/*	$NetBSD: isa_machdep.h,v 1.1.1.1 1999/09/16 12:23:22 takemura Exp $	*/
 
 /*
  * Copyright (c) 1999, by UCHIYAMA Yasushi

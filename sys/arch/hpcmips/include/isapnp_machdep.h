@@ -1,4 +1,4 @@
-/*	$NetBSD: isapnp_machdep.h,v 1.1 1999/09/16 12:23:23 takemura Exp $	*/
+/*	$NetBSD: isapnp_machdep.h,v 1.1.1.1 1999/09/16 12:23:23 takemura Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.

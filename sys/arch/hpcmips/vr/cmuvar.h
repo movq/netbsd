@@ -1,4 +1,4 @@
-/*	$NetBSD: cmuvar.h,v 1.1 1999/09/16 12:23:31 takemura Exp $	*/
+/*	$NetBSD: cmuvar.h,v 1.1.1.1 1999/09/16 12:23:31 takemura Exp $	*/
 
 /*
  * Copyright (c) 1999, by UCHIYAMA Yasushi

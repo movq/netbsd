@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.1 1999/09/16 12:23:23 takemura Exp $	*/
+/*	$NetBSD: param.h,v 1.1.1.1 1999/09/16 12:23:23 takemura Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.

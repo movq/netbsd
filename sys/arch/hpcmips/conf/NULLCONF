@@ -1,5 +1,5 @@
 #
-# 	$NetBSD: NULLCONF,v 1.1 1999/09/16 12:23:19 takemura Exp $
+# 	$NetBSD: NULLCONF,v 1.1.1.1 1999/09/16 12:23:19 takemura Exp $
 #
 include		"arch/hpcmips/conf/std.hpcmips"
 maxusers	8

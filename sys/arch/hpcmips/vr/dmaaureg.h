@@ -1,4 +1,4 @@
-/*	$NetBSD: dmaaureg.h,v 1.1 1999/09/16 12:23:32 takemura Exp $	*/
+/*	$NetBSD: dmaaureg.h,v 1.1.1.1 1999/09/16 12:23:32 takemura Exp $	*/
 
 /*-
  * Copyright (c) 1999 SATO Kazumi. All rights reserved.

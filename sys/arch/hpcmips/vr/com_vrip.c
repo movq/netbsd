@@ -1,4 +1,4 @@
-/*	$NetBSD: com_vrip.c,v 1.1 1999/09/16 12:23:31 takemura Exp $	*/
+/*	$NetBSD: com_vrip.c,v 1.1.1.1 1999/09/16 12:23:31 takemura Exp $	*/
 
 /*-
  * Copyright (c) 1999 SASAKI Takesi. All rights reserved.

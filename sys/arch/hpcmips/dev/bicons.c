@@ -1,4 +1,4 @@
-/*	$NetBSD: bicons.c,v 1.1 1999/09/16 12:23:19 takemura Exp $	*/
+/*	$NetBSD: bicons.c,v 1.1.1.1 1999/09/16 12:23:19 takemura Exp $	*/
 
 /*-
  * Copyright (c) 1999

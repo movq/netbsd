@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 1999/09/16 12:23:20 takemura Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 1999/09/16 12:23:20 takemura Exp $
 
 HDR=../include/platid_generated.h
 MASK_HDR=../include/platid_mask.h

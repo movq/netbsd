@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.hpcmips,v 1.1 1999/09/16 12:23:18 takemura Exp $
+#	$NetBSD: Makefile.hpcmips,v 1.1.1.1 1999/09/16 12:23:18 takemura Exp $
 
 # Makefile for NetBSD
 #

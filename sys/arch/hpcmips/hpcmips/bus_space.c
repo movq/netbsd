@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_space.c,v 1.1 1999/09/16 12:23:20 takemura Exp $	*/
+/*	$NetBSD: bus_space.c,v 1.1.1.1 1999/09/16 12:23:20 takemura Exp $	*/
 
 /*
  * Copyright (c) 1999, by UCHIYAMA Yasushi
@@ -25,7 +25,7 @@
  * SUCH DAMAGE.
  *
  */
-/*	$NetBSD: bus_space.c,v 1.1 1999/09/16 12:23:20 takemura Exp $	*/
+/*	$NetBSD: bus_space.c,v 1.1.1.1 1999/09/16 12:23:20 takemura Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
