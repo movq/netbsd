@@ -1,4 +1,4 @@
-/*	$NetBSD: fil.c,v 1.1 2004/10/01 15:25:59 christos Exp $	*/
+/*	$NetBSD: fil.c,v 1.1.1.1 2004/12/31 11:30:41 martti Exp $	*/
 
 /*
  * Copyright (C) 1993-2003 by Darren Reed.
@@ -133,13 +133,8 @@ struct file;
 /* END OF INCLUDES */
 
 #if !defined(lint)
-#if defined(__NetBSD__)
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fil.c,v 1.1 2004/10/01 15:25:59 christos Exp $");
-#else
 static const char sccsid[] = "@(#)fil.c	1.36 6/5/96 (C) 1993-2000 Darren Reed";
 static const char rcsid[] = "@(#)Id: fil.c,v 2.243.2.25 2004/06/30 11:26:08 darrenr Exp";
-#endif
 #endif
 
 #ifndef	_KERNEL
@@ -1765,15 +1760,6 @@ u_32_t pass;
 		FR_VERBOSE(("=%s.%d *", fr->fr_group, rulen));
 
 		passt = fr->fr_flags;
-
-		/*
-		 * Allowing a rule with the "keep state" flag set to match
-		 * packets that have been tagged "out of window" by the TCP
-		 * state tracking is foolish as the attempt to add a new
-		 * state entry to the table will fail.
-		 */
-		if ((passt & FR_KEEPSTATE) && (fin->fin_flx & FI_OOW))
-			continue;
 
 		/*
 		 * If the rule is a "call now" rule, then call the function
@@ -4008,14 +3994,6 @@ caddr_t data;
 	}
 
 	/*
-	 * Allowing a rule with both "keep state" and "with oow" is
-	 * pointless because adding a state entry to the table will
-	 * fail with the out of window (oow) flag set.
-	 */
-	if ((fp->fr_flags & FR_KEEPSTATE) && (fp->fr_flx & FI_OOW))
-		return EINVAL;
-
-	/*
 	 * If the rule is being loaded from user space, i.e. we had to copy it
 	 * into kernel space, then do not trust the function pointer in the
 	 * rule.
@@ -5598,8 +5576,7 @@ int len;
 #   endif
 		{
 #   ifdef HAVE_M_PULLDOWN
-			if (m_pulldown(m, 0, len, NULL) == NULL)
-				m = NULL;
+			m = m_pulldown(m, 0, len, NULL);
 #   else
 			FREE_MB_T(m);
 			m = NULL;

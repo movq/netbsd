@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_compat.h,v 1.1 2004/10/01 15:25:59 christos Exp $	*/
+/*	$NetBSD: ip_compat.h,v 1.1.1.1 2004/12/31 11:30:42 martti Exp $	*/
 
 /*
  * Copyright (C) 1993-2001, 2003 by Darren Reed.
@@ -9,8 +9,8 @@
  * Id: ip_compat.h,v 2.142.2.18 2004/07/11 10:38:57 darrenr Exp
  */
 
-#ifndef _NETINET_IP_COMPAT_H_
-#define _NETINET_IP_COMPAT_H_
+#ifndef	__IP_COMPAT_H__
+#define	__IP_COMPAT_H__
 
 #ifndef	__P
 # ifdef	__STDC__
@@ -1402,7 +1402,7 @@ typedef	struct ip6_hdr	ip6_t;
       (__FreeBSD_version >= 300000))
 #   if (defined(__NetBSD_Version__) && (__NetBSD_Version__ >= 105180000)) || \
        (defined(OpenBSD) && (OpenBSD >= 200111))
-/* #    include <uvm/uvm_extern.h> */
+#    include <uvm/uvm_extern.h>
 #   else
 #    include <vm/vm_extern.h>
 extern  vm_map_t        kmem_map;
@@ -2244,4 +2244,4 @@ typedef	struct	tcpiphdr	tcpiphdr_t;
 # define	DPRINT(x)
 #endif
 
-#endif /* _NETINET_IP_COMPAT_H_ */
+#endif	/* __IP_COMPAT_H__ */
