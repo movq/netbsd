@@ -1,4 +1,4 @@
-/*	$NetBSD: darwin_exec.h,v 1.8 2003/10/25 10:43:45 manu Exp $ */
+/*	$NetBSD: darwin_exec.h,v 1.9 2003/11/20 07:12:34 manu Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -50,7 +50,10 @@ struct darwin_emuldata {
 	pid_t ded_fakepid;
 	dev_t ded_wsdev;	/* display to restore on exit */
 	int *ded_hidsystem_finished;	/* iohidsystem thread finished flag */
+	int ded_flags;		/* flags, see below */
 };
+
+#define DARWIN_DED_SIGEXC	1	/* Mach exceptions instead of signals */
 
 int exec_darwin_copyargs(struct proc *, struct exec_package *, 
     struct ps_strings *, char **, void *);
