@@ -27,7 +27,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- *	$Id: grf_cc_a2024_mode.c,v 1.2 1994/01/29 07:00:14 chopps Exp $
+ *	$Id: grf_cc_a2024_mode.c,v 1.3 1994/01/30 08:25:02 chopps Exp $
  */
 #if defined (GRF_A2024)
 
@@ -156,15 +156,15 @@ display_a2024_view (view_t *v)
 	u_byte **plane = inst_plane;
 	u_long full_line = v->bitmap->bytes_per_row+v->bitmap->row_mod;
 	u_long half_plane = full_line * v->bitmap->rows / 2;
-
+	
 	int line_mod = 0xbc;			  /* standard 2024 15khz mod. */
 	int depth = v->bitmap->depth, i, j;
-
+	
 	plane[0] = v->bitmap->plane[0];
 	if (depth == 2) {
 	    plane[1] = v->bitmap->plane[1];
 	}
-
+	
 	if (this_data->current_view) {
 	    VDATA(this_data->current_view)->flags &= ~VF_DISPLAY; /* mark as no longer displayed. */
 	}
@@ -173,38 +173,25 @@ display_a2024_view (view_t *v)
 	tmp = find_copper_inst (cp, CI_MOVE(R_COLOR1F));
 	tmp = find_copper_inst (tmp, CI_MOVE(R_BPLCON0)); /* grab third one. */
 	tmp->cp.inst.operand = this_data->bplcon0 | ((depth & 0x7) << 13); /* times 2 */
-#if 0
-	/* change display wait if 2 bitplanes. */
-	if (depth == 2) {
-	    tmp = find_copper_inst (cp, CI_WAIT(0, 43));
-	    if (tmp) {
-		tmp->cp.inst.opcode = CI_WAIT (0,42);
-	    }
-	} else {
-	    /* XXX does same thing as above */
-	    tmp = find_copper_inst (cp, CI_WAIT(0, 43));
-	    if (tmp) {
-		tmp->cp.inst.opcode = CI_WAIT (0, 42);
-	    }
-#if 0						  /* blows away the coplc data load :^) */
-	    if (depth == 1) {
-		tmp = find_copper_inst (cp, CI_MOVE(R_BPL2PTH));
-		CWAIT (tmp, 255,255);
-		CWAIT (tmp, 255,255);
-	    }
-#endif
-	}
-
-	/* set new modulos FIX: doesn't support larger bitmaps. */
-	tmp = find_copper_inst (cp, CI_MOVE(R_BPLMOD1));
-	tmp[0].cp.inst.operand = 0xbc + v->bitmap->row_mod;
-	tmp[1].cp.inst.operand = 0xbc + v->bitmap->row_mod;
-#endif
 	
 	bcopy (this_data->frames[F_STORE_QUAD0], this_data->frames[F_STORE_QUAD1], std_a2024_copper_list_size);
 	bcopy (this_data->frames[F_STORE_QUAD0], this_data->frames[F_STORE_QUAD2], std_a2024_copper_list_size);
 	bcopy (this_data->frames[F_STORE_QUAD0], this_data->frames[F_STORE_QUAD3], std_a2024_copper_list_size);
 
+	/*
+	 * Mark Id's
+	 */
+	tmp = find_copper_inst (this_data->frames[F_STORE_QUAD1], CI_WAIT (126,21));
+	CBUMP(tmp);
+	CMOVE (tmp, R_COLOR01, QUAD1_ID);
+	tmp = find_copper_inst (this_data->frames[F_STORE_QUAD2], CI_WAIT (126,21));
+	CBUMP(tmp);
+	CMOVE (tmp, R_COLOR01, QUAD2_ID);
+	tmp = find_copper_inst (this_data->frames[F_STORE_QUAD3], CI_WAIT (126,21));
+	CBUMP(tmp);
+	CMOVE (tmp, R_COLOR01, QUAD3_ID);
+
+	
 #define HALF_2024_LINE (512>>3)
 
 	plane[0]--;
@@ -229,6 +216,12 @@ display_a2024_view (view_t *v)
 	    CMOVE (tmp, R_BPL3PTH, HIADDR (PREP_DMA_MEM (&plane[1][full_line])));
 	    CMOVE (tmp, R_BPL3PTL, LOADDR (PREP_DMA_MEM (&plane[1][full_line])));
 	}
+#if defined (GRF_ECS)
+	CMOVE (tmp, R_DIWHIGH, 0x2000);
+#endif
+	CMOVE (tmp, R_COP1LCH, HIADDR (PREP_DMA_MEM (this_data->frames[F_STORE_QUAD1])));
+	CMOVE (tmp, R_COP1LCL, LOADDR (PREP_DMA_MEM (this_data->frames[F_STORE_QUAD1])));
+	CEND (tmp); CEND (tmp);
 	
 	tmp = find_copper_inst (this_data->frames[F_STORE_QUAD1], CI_MOVE (R_BPLMOD2));
 	CBUMP(tmp);
@@ -242,6 +235,12 @@ display_a2024_view (view_t *v)
 	    CMOVE (tmp, R_BPL3PTH, HIADDR (PREP_DMA_MEM (&plane[1][full_line+HALF_2024_LINE])));
 	    CMOVE (tmp, R_BPL3PTL, LOADDR (PREP_DMA_MEM (&plane[1][full_line+HALF_2024_LINE])));
 	}
+#if defined (GRF_ECS)
+	CMOVE (tmp, R_DIWHIGH, 0x2000);
+#endif
+	CMOVE (tmp, R_COP1LCH, HIADDR (PREP_DMA_MEM (this_data->frames[F_STORE_QUAD2])));
+	CMOVE (tmp, R_COP1LCL, LOADDR (PREP_DMA_MEM (this_data->frames[F_STORE_QUAD2])));
+	CEND (tmp); CEND (tmp);
 	
 	tmp = find_copper_inst (this_data->frames[F_STORE_QUAD2], CI_MOVE (R_BPLMOD2));
 	CBUMP(tmp);
@@ -255,6 +254,12 @@ display_a2024_view (view_t *v)
 	    CMOVE (tmp, R_BPL3PTH, HIADDR (PREP_DMA_MEM (&plane[1][half_plane+full_line])));
 	    CMOVE (tmp, R_BPL3PTL, LOADDR (PREP_DMA_MEM (&plane[1][half_plane+full_line])));
 	}
+#if defined (GRF_ECS)
+	CMOVE (tmp, R_DIWHIGH, 0x2000);
+#endif
+	CMOVE (tmp, R_COP1LCH, HIADDR (PREP_DMA_MEM (this_data->frames[F_STORE_QUAD3])));
+	CMOVE (tmp, R_COP1LCL, LOADDR (PREP_DMA_MEM (this_data->frames[F_STORE_QUAD3])));
+	CEND (tmp); CEND (tmp);
 	
 	tmp = find_copper_inst (this_data->frames[F_STORE_QUAD3], CI_MOVE (R_BPLMOD2));
 	CBUMP(tmp);
@@ -268,34 +273,13 @@ display_a2024_view (view_t *v)
 	    CMOVE (tmp, R_BPL3PTH, HIADDR (PREP_DMA_MEM (&plane[1][half_plane+full_line+HALF_2024_LINE])));
 	    CMOVE (tmp, R_BPL3PTL, LOADDR (PREP_DMA_MEM (&plane[1][half_plane+full_line+HALF_2024_LINE])));
 	}
-
-	/*
-	 * Mark Id's
-	 */
-	tmp = find_copper_inst (this_data->frames[F_STORE_QUAD1], CI_WAIT (126,21));
-	CBUMP(tmp);
-	CMOVE (tmp, R_COLOR01, QUAD1_ID);
-	tmp = find_copper_inst (this_data->frames[F_STORE_QUAD2], CI_WAIT (126,21));
-	CBUMP(tmp);
-	CMOVE (tmp, R_COLOR01, QUAD2_ID);
-	tmp = find_copper_inst (this_data->frames[F_STORE_QUAD3], CI_WAIT (126,21));
-	CBUMP(tmp);
-	CMOVE (tmp, R_COLOR01, QUAD3_ID);
-
-	/* set next pointers correctly */
-	tmp = find_copper_inst (this_data->frames[F_STORE_QUAD0], CI_MOVE (R_COP1LCH));
-	tmp[0].cp.inst.operand = HIADDR (PREP_DMA_MEM (this_data->frames[F_STORE_QUAD1]));
-	tmp[1].cp.inst.operand = LOADDR (PREP_DMA_MEM (this_data->frames[F_STORE_QUAD1]));
-	tmp = find_copper_inst (this_data->frames[F_STORE_QUAD1], CI_MOVE (R_COP1LCH));
-	tmp[0].cp.inst.operand = HIADDR (PREP_DMA_MEM (this_data->frames[F_STORE_QUAD2]));
-	tmp[1].cp.inst.operand = LOADDR (PREP_DMA_MEM (this_data->frames[F_STORE_QUAD2]));
-	tmp = find_copper_inst (this_data->frames[F_STORE_QUAD2], CI_MOVE (R_COP1LCH));
-	tmp[0].cp.inst.operand = HIADDR (PREP_DMA_MEM (this_data->frames[F_STORE_QUAD3]));
-	tmp[1].cp.inst.operand = LOADDR (PREP_DMA_MEM (this_data->frames[F_STORE_QUAD3]));
-	tmp = find_copper_inst (this_data->frames[F_STORE_QUAD3], CI_MOVE (R_COP1LCH));
-	tmp[0].cp.inst.operand = HIADDR (PREP_DMA_MEM (this_data->frames[F_STORE_QUAD0]));
-	tmp[1].cp.inst.operand = LOADDR (PREP_DMA_MEM (this_data->frames[F_STORE_QUAD0]));
-
+#if defined (GRF_ECS)
+	CMOVE (tmp, R_DIWHIGH, 0x2000);
+#endif
+	CMOVE (tmp, R_COP1LCH, HIADDR (PREP_DMA_MEM (this_data->frames[F_STORE_QUAD0])));
+	CMOVE (tmp, R_COP1LCL, LOADDR (PREP_DMA_MEM (this_data->frames[F_STORE_QUAD0])));
+	CEND (tmp); CEND (tmp);
+	
 	/* swap new pointers in. */
 	for (i = F_STORE_QUAD0, j = F_QUAD0;
 	     i <= F_STORE_QUAD3; i++, j++) {
