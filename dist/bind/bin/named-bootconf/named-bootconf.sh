@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: named-bootconf.sh,v 1.1 1999/11/20 18:54:01 veego Exp $
+# $NetBSD: named-bootconf.sh,v 1.1.1.1 1999/11/20 18:54:01 veego Exp $
 #
 # Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
 # All rights reserved.

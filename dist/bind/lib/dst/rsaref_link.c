@@ -1,7 +1,7 @@
-/*	$NetBSD: rsaref_link.c,v 1.1 1999/11/20 18:54:07 veego Exp $	*/
+/*	$NetBSD: rsaref_link.c,v 1.1.1.1 1999/11/20 18:54:07 veego Exp $	*/
 
 #ifdef RSAREF
-static const char rcsid[] = "$Header: /home/mike/src/cvs/netbsd/src/dist/bind/lib/dst/Attic/rsaref_link.c,v 1.1 1999/11/20 18:54:07 veego Exp $";
+static const char rcsid[] = "$Header: /home/mike/src/cvs/netbsd/src/dist/bind/lib/dst/Attic/rsaref_link.c,v 1.1.1.1 1999/11/20 18:54:07 veego Exp $";
 
 /*
  * Portions Copyright (c) 1995-1998 by Trusted Information Systems, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: getnameinfo.c,v 1.1 1999/11/20 18:54:09 veego Exp $	*/
+/*	$NetBSD: getnameinfo.c,v 1.1.1.1 1999/11/20 18:54:09 veego Exp $	*/
 
 /*
  * Issues to be discussed:

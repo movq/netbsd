@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.1 1999/11/20 18:54:02 veego Exp $	*/
+/*	$NetBSD: main.c,v 1.1.1.1 1999/11/20 18:54:02 veego Exp $	*/
 
 /*
  * Copyright (c) 1985, 1989

@@ -1,4 +1,4 @@
-/*	$NetBSD: netdb.h,v 1.1 1999/11/20 18:54:03 veego Exp $	*/
+/*	$NetBSD: netdb.h,v 1.1.1.1 1999/11/20 18:54:03 veego Exp $	*/
 
 /*
  * ++Copyright++ 1980, 1983, 1988, 1993

@@ -1,4 +1,4 @@
-/*	$NetBSD: inet_cidr_ntop.c,v 1.1 1999/11/20 18:54:07 veego Exp $	*/
+/*	$NetBSD: inet_cidr_ntop.c,v 1.1.1.1 1999/11/20 18:54:07 veego Exp $	*/
 
 /*
  * Copyright (c) 1998,1999 by Internet Software Consortium.

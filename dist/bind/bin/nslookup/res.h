@@ -1,4 +1,4 @@
-/*	$NetBSD: res.h,v 1.1 1999/11/20 18:54:02 veego Exp $	*/
+/*	$NetBSD: res.h,v 1.1.1.1 1999/11/20 18:54:02 veego Exp $	*/
 
 /*
  * ++Copyright++ 1985, 1989

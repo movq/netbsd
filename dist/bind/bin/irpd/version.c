@@ -1,4 +1,4 @@
-/*	$NetBSD: version.c,v 1.1 1999/11/20 18:53:59 veego Exp $	*/
+/*	$NetBSD: version.c,v 1.1.1.1 1999/11/20 18:53:59 veego Exp $	*/
 
 /*
  * Copyright (c) 1996 by Internet Software Consortium.

@@ -1,4 +1,4 @@
-/*	$NetBSD: dns_ho.c,v 1.1 1999/11/20 18:54:08 veego Exp $	*/
+/*	$NetBSD: dns_ho.c,v 1.1.1.1 1999/11/20 18:54:08 veego Exp $	*/
 
 /*
  * Copyright (c) 1985, 1988, 1993

@@ -1,4 +1,4 @@
-/*	$NetBSD: ns_parser.c,v 1.1 1999/11/20 18:54:00 veego Exp $	*/
+/*	$NetBSD: ns_parser.c,v 1.1.1.1 1999/11/20 18:54:00 veego Exp $	*/
 
 #ifndef lint
 static char yysccsid[] = "@(#)yaccpar	1.9 (Berkeley) 02/21/93 (BSDI)";

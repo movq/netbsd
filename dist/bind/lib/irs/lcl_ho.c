@@ -1,4 +1,4 @@
-/*	$NetBSD: lcl_ho.c,v 1.1 1999/11/20 18:54:10 veego Exp $	*/
+/*	$NetBSD: lcl_ho.c,v 1.1.1.1 1999/11/20 18:54:10 veego Exp $	*/
 
 /*
  * Copyright (c) 1985, 1988, 1993

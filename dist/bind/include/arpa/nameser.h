@@ -1,4 +1,4 @@
-/*	$NetBSD: nameser.h,v 1.1 1999/11/20 18:54:04 veego Exp $	*/
+/*	$NetBSD: nameser.h,v 1.1.1.1 1999/11/20 18:54:04 veego Exp $	*/
 
 /*
  * Copyright (c) 1983, 1989, 1993

@@ -1,4 +1,4 @@
-/*	$NetBSD: pathnames.h,v 1.1 1999/11/20 18:54:02 veego Exp $	*/
+/*	$NetBSD: pathnames.h,v 1.1.1.1 1999/11/20 18:54:02 veego Exp $	*/
 
 /*
  * ++Copyright++ 1990

@@ -1,4 +1,4 @@
-/*	$NetBSD: irp_ng.c,v 1.1 1999/11/20 18:54:09 veego Exp $	*/
+/*	$NetBSD: irp_ng.c,v 1.1.1.1 1999/11/20 18:54:09 veego Exp $	*/
 
 /*
  * Copyright (c) 1996, 1998 by Internet Software Consortium.

@@ -1,4 +1,4 @@
-/*	$NetBSD: db_glue.c,v 1.1 1999/11/20 18:53:59 veego Exp $	*/
+/*	$NetBSD: db_glue.c,v 1.1.1.1 1999/11/20 18:53:59 veego Exp $	*/
 
 #if !defined(lint) && !defined(SABER)
 static const char sccsid[] = "@(#)db_glue.c	4.4 (Berkeley) 6/1/90";

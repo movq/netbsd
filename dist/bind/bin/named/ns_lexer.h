@@ -1,4 +1,4 @@
-/*	$NetBSD: ns_lexer.h,v 1.1 1999/11/20 18:54:00 veego Exp $	*/
+/*	$NetBSD: ns_lexer.h,v 1.1.1.1 1999/11/20 18:54:00 veego Exp $	*/
 
 /*
  * Copyright (c) 1996-1999 by Internet Software Consortium.

@@ -1,4 +1,4 @@
-/*	$NetBSD: assertions.h,v 1.1 1999/11/20 18:54:03 veego Exp $	*/
+/*	$NetBSD: assertions.h,v 1.1.1.1 1999/11/20 18:54:03 veego Exp $	*/
 
 /*
  * Copyright (c) 1997-1999 by Internet Software Consortium.
