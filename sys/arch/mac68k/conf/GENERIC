@@ -1,51 +1,69 @@
-machine		"mac"
-cpu		"mc68020"
-ident		GENERIC
-timezone	5 dst
+# ALLEN
+# Mac II, etc.
 
-options		INET
-options		NS
-#options		KADB
-#options		QUOTA
-#options		FIFO
-#options		NFS
-options		MFS
-options		DIAGNOSTIC
-options		"TCP_COMPAT_42"
-options		"COMPAT_43"
-options		"COMPAT_42"
-options		KTRACE
+include	"std.mac"
+
+maxusers	16
+
+# obsolete timezone spec
+options               TIMEZONE=300, DST=1, MAXFDESCS=2048
+
+# Standard system options
+options		SWAPPAGER, VNODEPAGER #, DEVPAGER	# paging
+options		NEWCONFIG
+options		DIAGNOSTIC		# DEBUG for extra kernel debugging
+options		KTRACE			# system call tracing support
+#options	KGDB			# support for kernel gdb
+#options	GDB			# support for normal gdb
+#options	KGDBDEV=0xc01, KGDBRATE=38400	# device & baud rate
+
+# Filesystem options
+#options	FIFO		# POSIX fifo support (in all filesystems)
+options		FFS
+#options	QUOTA	# fast filesystem with user and group quotas
+options		MFS		# memory-based filesystem
+#options	NFSSERVER	# Sun NFS-compatible filesystem
+#options	NFSCLIENT	# Sun NFS-compatible filesystem
+options		LOFS		# Loop-back filesystem
+options		KERNFS		# kernel data-structure filesystem
+options		FDESC		# user file descriptor filesystem
+#options	UMAPFS		# uid/gid remapping filesystem
+#options	LFS		# Log-based filesystem (still experimental)
+#options	PORTAL		# portal filesystem (still experimental)
+
+# Networking options
 options		SCSI
-options		SWAPPAGER
-options		VNODEPAGER
-#options	GATEWAY		# slip needs this for packet forwarding
-
-# OSI stuff:
-#options	ISO
+options		SCSIDEBUG
+options		INET
+options		TCP_COMPAT_42	# compatibility with 4.2BSD TCP/IP
+options		GATEWAY		# IP packet forwarding
+#options	ISO		# OSI networking
 #options	TPIP
 #options	EON
-
+options		COMPAT_42
+options		COMPAT_43
+options		NS
 options		MAPMEM,SYSVSHM
 
-maxusers	8
-maxfdescs	1024
+config		netbsd	root on sd0 swap on sd0
 
-config		netbsd root on sd0 swap on sd0
+ncr*	at mainbus?		# SCSI NCR 5380
 
-pseudo-device	ser	2
-pseudo-device	con	6
+scsibus0	at scsi? target 7
+sd0	at scsibus0 drive ?
+sd1	at scsibus0 drive ?
+sd2	at scsibus0 drive ?
+sd3	at scsibus0 drive ?
+sd4	at scsibus0 drive ?
+sd5	at scsibus0 drive ?
+sd6	at scsibus0 drive ?
+st0	at scsibus0 drive ?
+st1	at scsibus0 drive ?
+cd0	at scsibus0 drive ?
+cd1	at scsibus0 drive ?
 
-master		ncr0
-disk		sd0	at ncr0 flags 0 drive ?
-disk		sd1	at ncr0 flags 0 drive ?
-disk		sd2	at ncr0 flags 0 drive ?
-disk		sd3	at ncr0 flags 0 drive ?
-disk		sd4	at ncr0 flags 0 drive ?
-disk		sd5	at ncr0 flags 0 drive ?
-disk		sd6	at ncr0 flags 0 drive ?
-tape		st0	at ncr0 flags 1 drive ?
-disk		cd0	at ncr0 flags 2 drive ?
-
-pseudo-device	pty	16
 pseudo-device	loop
-pseudo-device	ether
+pseudo-device	pty	16
+pseudo-device	sl
+
+pseudo-device	con	6
