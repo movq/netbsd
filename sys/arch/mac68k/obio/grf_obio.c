@@ -1,4 +1,4 @@
-/*	$NetBSD: grf_obio.c,v 1.44 2000/02/14 07:01:49 scottr Exp $	*/
+/*	$NetBSD: grf_obio.c,v 1.57 2007/10/17 19:55:16 garbled Exp $	*/
 
 /*
  * Copyright (C) 1998 Scott Reynolds
@@ -59,6 +59,9 @@
  * that don't map it into a fake nubus card.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: grf_obio.c,v 1.57 2007/10/17 19:55:16 garbled Exp $");
+
 #include <sys/param.h>
 #include <sys/device.h>
 #include <sys/ioctl.h>
@@ -73,25 +76,18 @@
 #include <machine/cpu.h>
 #include <machine/grfioctl.h>
 #include <machine/viareg.h>
+#include <machine/video.h>
 
 #include <mac68k/nubus/nubus.h>
 #include <mac68k/obio/obiovar.h>
 #include <mac68k/dev/grfvar.h>
 
-extern u_int32_t	mac68k_vidphys;
-extern u_int32_t	mac68k_vidlen;
-extern long		videoaddr;
-extern long		videorowbytes;
-extern long		videobitdepth;
-extern u_long		videosize;
+static int	grfiv_mode(struct grf_softc *, int, void *);
+static int	grfiv_match(struct device *, struct cfdata *, void *);
+static void	grfiv_attach(struct device *, struct device *, void *);
 
-static int	grfiv_mode __P((struct grf_softc *gp, int cmd, void *arg));
-static int	grfiv_match __P((struct device *, struct cfdata *, void *));
-static void	grfiv_attach __P((struct device *, struct device *, void *));
-
-struct cfattach intvid_ca = {
-	sizeof(struct grfbus_softc), grfiv_match, grfiv_attach
-};
+CFATTACH_DECL(intvid, sizeof(struct grfbus_softc),
+    grfiv_match, grfiv_attach, NULL, NULL);
 
 #define	DAFB_BASE		0xf9000000
 #define DAFB_CONTROL_BASE	0xf9800000
@@ -101,10 +97,7 @@ struct cfattach intvid_ca = {
 #define VALKYRIE_CONTROL_BASE	0x50f2a000
 
 static int
-grfiv_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+grfiv_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct obio_attach_args *oa = (struct obio_attach_args *)aux;
 	bus_space_handle_t bsh;
@@ -123,6 +116,8 @@ grfiv_match(parent, cf, aux)
 			
 			/* Disable interrupts */
 			bus_space_write_1(oa->oa_tag, bsh, 0x18, 0x1);
+
+			bus_space_unmap(oa->oa_tag, bsh, 0x40);
 			break;
 		}
 		/*
@@ -142,27 +137,33 @@ grfiv_match(parent, cf, aux)
 		 */
 		base = DAFB_CONTROL_BASE;
 
-		if (bus_space_map(oa->oa_tag, base, 0x1000, 0, &bsh))
+		if (bus_space_map(oa->oa_tag, base, 0x20, 0, &bsh))
 			return 0;
 
 		if (mac68k_bus_space_probe(oa->oa_tag, bsh, 0x1c, 4) == 0) {
-			bus_space_unmap(oa->oa_tag, bsh, 0x1000);
+			bus_space_unmap(oa->oa_tag, bsh, 0x20);
 			return 0;
 		}
 
-		/* Set "Turbo SCSI" configuration to default */
-		bus_space_write_4(oa->oa_tag, bsh, 0x24, 0x1d1); /* ch0 */
-		bus_space_write_4(oa->oa_tag, bsh, 0x28, 0x1d1); /* ch1 */
+		bus_space_unmap(oa->oa_tag, bsh, 0x20);
+
+		if (bus_space_map(oa->oa_tag, base + 0x100, 0x20, 0, &bsh))
+			return 0;
+
+		if (mac68k_bus_space_probe(oa->oa_tag, bsh, 0x04, 4) == 0) {
+			bus_space_unmap(oa->oa_tag, bsh, 0x20);
+			return 0;
+		}
 
 		/* Disable interrupts */
-		bus_space_write_4(oa->oa_tag, bsh, 0x104, 0);
+		bus_space_write_4(oa->oa_tag, bsh, 0x04, 0);
 
 		/* Clear any interrupts */
-		bus_space_write_4(oa->oa_tag, bsh, 0x10C, 0);
-		bus_space_write_4(oa->oa_tag, bsh, 0x110, 0);
-		bus_space_write_4(oa->oa_tag, bsh, 0x114, 0);
+		bus_space_write_4(oa->oa_tag, bsh, 0x0C, 0);
+		bus_space_write_4(oa->oa_tag, bsh, 0x10, 0);
+		bus_space_write_4(oa->oa_tag, bsh, 0x14, 0);
 
-		bus_space_unmap(oa->oa_tag, bsh, 0x1000);
+		bus_space_unmap(oa->oa_tag, bsh, 0x20);
 		break;
 	case MACH_CLASSAV:
 		base = CIVIC_CONTROL_BASE;
@@ -177,12 +178,12 @@ grfiv_match(parent, cf, aux)
 		break;
 	case MACH_CLASSIIci:
 	case MACH_CLASSIIsi:
-		if (mac68k_vidlen == 0 ||
+		if (mac68k_video.mv_len == 0 ||
 		    (via2_reg(rMonitor) & RBVMonitorMask) == RBVMonIDNone)
 			found = 0;
 		break;
 	default:
-		if (mac68k_vidlen == 0)
+		if (mac68k_video.mv_len == 0)
 			found = 0;
 		break;
 	}
@@ -191,9 +192,7 @@ grfiv_match(parent, cf, aux)
 }
 
 static void
-grfiv_attach(parent, self, aux)
-	struct device *parent, *self;
-	void   *aux;
+grfiv_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct obio_attach_args *oa = (struct obio_attach_args *)aux;
 	struct grfbus_softc *sc;
@@ -211,13 +210,16 @@ grfiv_attach(parent, self, aux)
 			sc->sc_basepa = VALKYRIE_BASE;
 			length = 0x00100000;		/* 1MB */
 
-			if (sc->sc_basepa <= mac68k_vidphys &&
-			    mac68k_vidphys < (sc->sc_basepa + length)) {
-				sc->sc_fbofs = mac68k_vidphys - sc->sc_basepa;
+			if (sc->sc_basepa <= mac68k_video.mv_phys &&
+			    mac68k_video.mv_phys < (sc->sc_basepa + length)) {
+				sc->sc_fbofs =
+				    mac68k_video.mv_phys - sc->sc_basepa;
 			} else {
-				sc->sc_basepa = m68k_trunc_page(mac68k_vidphys);
-				sc->sc_fbofs = m68k_page_offset(mac68k_vidphys);
-				length = mac68k_vidlen + sc->sc_fbofs;
+				sc->sc_basepa =
+				    m68k_trunc_page(mac68k_video.mv_phys);
+				sc->sc_fbofs =
+				    m68k_page_offset(mac68k_video.mv_phys);
+				length = mac68k_video.mv_len + sc->sc_fbofs;
 			}
 
 			printf(" @ %lx: Valkyrie video subsystem\n",
@@ -229,7 +231,7 @@ grfiv_attach(parent, self, aux)
 	case MACH_CLASSQ:
 		base = DAFB_CONTROL_BASE;
 		sc->sc_tag = oa->oa_tag;
-		if (bus_space_map(sc->sc_tag, base, 0x1000, 0, &sc->sc_regh)) {
+		if (bus_space_map(sc->sc_tag, base, 0x20, 0, &sc->sc_regh)) {
 			printf(": failed to map DAFB register space\n");
 			return;
 		}
@@ -265,18 +267,18 @@ grfiv_attach(parent, self, aux)
 		    sc->sc_basepa + sc->sc_fbofs,
 		    (bus_space_read_4(sc->sc_tag, sc->sc_regh, 0x1c) & 0x7));
 
-		bus_space_unmap(sc->sc_tag, sc->sc_regh, 0x1000);
+		bus_space_unmap(sc->sc_tag, sc->sc_regh, 0x20);
 		break;
 	case MACH_CLASSAV:
 		sc->sc_basepa = CIVIC_BASE;
 		length = 0x00200000;		/* 2MB */
-		if (mac68k_vidphys >= sc->sc_basepa &&
-		    mac68k_vidphys < (sc->sc_basepa + length)) {
-			sc->sc_fbofs = mac68k_vidphys - sc->sc_basepa;
+		if (mac68k_video.mv_phys >= sc->sc_basepa &&
+		    mac68k_video.mv_phys < (sc->sc_basepa + length)) {
+			sc->sc_fbofs = mac68k_video.mv_phys - sc->sc_basepa;
 		} else {
-			sc->sc_basepa = m68k_trunc_page(mac68k_vidphys);
-			sc->sc_fbofs = m68k_page_offset(mac68k_vidphys);
-			length = mac68k_vidlen + sc->sc_fbofs;
+			sc->sc_basepa = m68k_trunc_page(mac68k_video.mv_phys);
+			sc->sc_fbofs = m68k_page_offset(mac68k_video.mv_phys);
+			length = mac68k_video.mv_len + sc->sc_fbofs;
 		}
 
 		printf(" @ %lx: CIVIC video subsystem\n",
@@ -284,9 +286,9 @@ grfiv_attach(parent, self, aux)
 		break;
 	case MACH_CLASSIIci:
 	case MACH_CLASSIIsi:
-		sc->sc_basepa = m68k_trunc_page(mac68k_vidphys);
-		sc->sc_fbofs = m68k_page_offset(mac68k_vidphys);
-		length = mac68k_vidlen + sc->sc_fbofs;
+		sc->sc_basepa = m68k_trunc_page(mac68k_video.mv_phys);
+		sc->sc_fbofs = m68k_page_offset(mac68k_video.mv_phys);
+		length = mac68k_video.mv_len + sc->sc_fbofs;
 
 		printf(" @ %lx: RBV video subsystem, ",
 		    sc->sc_basepa + sc->sc_fbofs);
@@ -311,9 +313,9 @@ grfiv_attach(parent, self, aux)
 
 		break;
 	default:
-		sc->sc_basepa = m68k_trunc_page(mac68k_vidphys);
-		sc->sc_fbofs = m68k_page_offset(mac68k_vidphys);
-		length = mac68k_vidlen + sc->sc_fbofs;
+		sc->sc_basepa = m68k_trunc_page(mac68k_video.mv_phys);
+		sc->sc_fbofs = m68k_page_offset(mac68k_video.mv_phys);
+		length = mac68k_video.mv_len + sc->sc_fbofs;
 
 		printf(" @ %lx: On-board video\n",
 		    sc->sc_basepa + sc->sc_fbofs);
@@ -326,21 +328,23 @@ grfiv_attach(parent, self, aux)
 		return;
 	}
 
-	if (sc->sc_basepa <= mac68k_vidphys &&
-	    mac68k_vidphys < (sc->sc_basepa + length))
-		videoaddr = sc->sc_handle + sc->sc_fbofs; /* XXX big ol' hack */
+	if (sc->sc_basepa <= mac68k_video.mv_phys &&
+	    mac68k_video.mv_phys < (sc->sc_basepa + length)) {
+		/* XXX Hack */
+		mac68k_video.mv_kvaddr = sc->sc_handle.base + sc->sc_fbofs;
+	}
 
 	gm = &(sc->curr_mode);
 	gm->mode_id = 0;
-	gm->psize = videobitdepth;
+	gm->psize = mac68k_video.mv_depth;
 	gm->ptype = 0;
-	gm->width = videosize & 0xffff;
-	gm->height = (videosize >> 16) & 0xffff;
-	gm->rowbytes = videorowbytes;
+	gm->width = mac68k_video.mv_width;
+	gm->height = mac68k_video.mv_height;
+	gm->rowbytes = mac68k_video.mv_stride;
 	gm->hres = 80;				/* XXX hack */
 	gm->vres = 80;				/* XXX hack */
 	gm->fbsize = gm->height * gm->rowbytes;
-	gm->fbbase = (caddr_t)sc->sc_handle;	/* XXX yet another hack */
+	gm->fbbase = (void *)sc->sc_handle.base; /* XXX yet another hack */
 	gm->fboff = sc->sc_fbofs;
 
 	/* Perform common video attachment. */
@@ -348,10 +352,7 @@ grfiv_attach(parent, self, aux)
 }
 
 static int
-grfiv_mode(sc, cmd, arg)
-	struct grf_softc *sc;
-	int cmd;
-	void *arg;
+grfiv_mode(struct grf_softc *sc, int cmd, void *arg)
 {
 	switch (cmd) {
 	case GM_GRFON:

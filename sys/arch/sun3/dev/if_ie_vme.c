@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ie_vme.c,v 1.13 1998/10/01 20:05:11 thorpej Exp $	*/
+/*	$NetBSD: if_ie_vme.c,v 1.23 2008/06/28 12:13:38 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,6 +32,9 @@
 /*
  * Machine-dependent glue for the Intel Ethernet (ie) driver.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_ie_vme.c,v 1.23 2008/06/28 12:13:38 tsutsui Exp $");
 
 #include "opt_inet.h"
 
@@ -68,51 +64,46 @@
 #include "if_iereg.h"
 #include "if_ievar.h"
 
-static void ie_vmereset __P((struct ie_softc *));
-static void ie_vmeattend __P((struct ie_softc *));
-static void ie_vmerun __P((struct ie_softc *));
+static void ie_vmereset(struct ie_softc *);
+static void ie_vmeattend(struct ie_softc *);
+static void ie_vmerun(struct ie_softc *);
 
 /*
  * zero/copy functions: OBIO can use the normal functions, but VME
  *    must do only byte or half-word (16 bit) accesses...
  */
-static void *wmemcpy __P((void *dst, const void *src, size_t size));
-static void *wmemset __P((void *dst, int val, size_t size));
+static void *wmemcpy(void *, const void *, size_t);
+static void *wmemset(void *, int, size_t);
 
 
 /*
  * New-style autoconfig attachment
  */
 
-static int  ie_vme_match __P((struct device *, struct cfdata *, void *));
-static void ie_vme_attach __P((struct device *, struct device *, void *));
+static int  ie_vme_match(device_t, cfdata_t, void *);
+static void ie_vme_attach(device_t, device_t, void *);
 
-struct cfattach ie_vme_ca = {
-	sizeof(struct ie_softc), ie_vme_match, ie_vme_attach
-};
+CFATTACH_DECL_NEW(ie_vme, sizeof(struct ie_softc),
+    ie_vme_match, ie_vme_attach, NULL, NULL);
 
-
-static int
-ie_vme_match(parent, cf, args)
-	struct device *parent;
-	struct cfdata *cf;
-	void *args;
+static int 
+ie_vme_match(device_t parent, cfdata_t cf, void *args)
 {
 	struct confargs *ca = args;
 
 	/* No default VME address. */
 	if (ca->ca_paddr == -1)
-		return(0);
+		return 0;
 
 	/* Make sure something is there... */
 	if (bus_peek(ca->ca_bustype, ca->ca_paddr, 2) == -1)
-		return (0);
+		return 0;
 
 	/* Default interrupt priority. */
 	if (ca->ca_intpri == -1)
 		ca->ca_intpri = 3;
 
-	return (1);
+	return 1;
 }
 
 /*
@@ -120,18 +111,16 @@ ie_vme_match(parent, cf, args)
  * a multibus/vme card.   if you want to use a 3E you'll have
  * to fix this.
  */
-void
-ie_vme_attach(parent, self, args)
-	struct device *parent;
-	struct device *self;
-	void *args;
+void 
+ie_vme_attach(device_t parent, device_t self, void *args)
 {
-	struct ie_softc *sc = (void *) self;
+	struct ie_softc *sc = device_private(self);
 	struct confargs *ca = args;
 	volatile struct ievme *iev;
 	u_long  rampaddr;
 	int     lcv, off;
 
+	sc->sc_dev = self;
 	sc->hard_type = IE_VME;
 	sc->reset_586 = ie_vmereset;
 	sc->chan_attn = ie_vmeattend;
@@ -182,7 +171,7 @@ ie_vme_attach(parent, self, args)
 	 * at the end of the RAM on the VME board.
 	 */
 	off = IE_SCP_ADDR & 0xFFFF;
-	sc->scp = (volatile void *) (sc->sc_maddr + off);
+	sc->scp = (volatile void *)((char *)sc->sc_maddr + off);
 
 	/*
 	 * The rest of ram is used for buffers, etc.
@@ -197,8 +186,7 @@ ie_vme_attach(parent, self, args)
 	ie_attach(sc);
 
 	/* Install interrupt handler. */
-	isr_add_vectored(ie_intr, (void *)sc,
-		ca->ca_intpri, ca->ca_intvec);
+	isr_add_vectored(ie_intr, sc, ca->ca_intpri, ca->ca_intvec);
 }
 
 
@@ -206,31 +194,29 @@ ie_vme_attach(parent, self, args)
  * MULTIBUS/VME support
  */
 
-void
-ie_vmeattend(sc)
-	struct ie_softc *sc;
+void 
+ie_vmeattend(struct ie_softc *sc)
 {
-	volatile struct ievme *iev = (struct ievme *) sc->sc_reg;
+	volatile struct ievme *iev = (struct ievme *)sc->sc_reg;
 
 	iev->status |= IEVME_ATTEN;	/* flag! */
 	iev->status &= ~IEVME_ATTEN;	/* down. */
 }
 
-void
-ie_vmereset(sc)
-	struct ie_softc *sc;
+void 
+ie_vmereset(struct ie_softc *sc)
 {
-	volatile struct ievme *iev = (struct ievme *) sc->sc_reg;
+	volatile struct ievme *iev = (struct ievme *)sc->sc_reg;
 
 	iev->status = IEVME_RESET;
 	delay(20);
 	iev->status = (IEVME_ONAIR | IEVME_IENAB | IEVME_PEINT);
 }
 
-void
-ie_vmerun(sc)
-	struct ie_softc *sc;
+void 
+ie_vmerun(struct ie_softc *sc)
 {
+
 	/* do it all in reset */
 }
 
@@ -241,69 +227,63 @@ ie_vmerun(sc)
  */
 
 static void *
-wmemset(vb, val, l)
-	void *vb;
-	int val;
-	size_t l;
+wmemset(void *vb, int val, size_t l)
 {
-	u_char *b = vb;
-	u_char *be = b + l;
-	u_short *sp;
+	uint8_t *b = vb;
+	uint8_t *be = b + l;
+	uint16_t *sp;
 
 	if (l == 0)
-		return (vb);
+		return vb;
 
 	/* front, */
-	if ((u_long)b & 1)
+	if ((uint32_t)b & 1)
 		*b++ = val;
 
 	/* back, */
-	if (b != be && ((u_long)be & 1) != 0) {
+	if (b != be && ((uint32_t)be & 1) != 0) {
 		be--;
 		*be = val;
 	}
 
 	/* and middle. */
-	sp = (u_short *)b;
-	while (sp != (u_short *)be)
+	sp = (uint16_t *)b;
+	while (sp != (uint16_t *)be)
 		*sp++ = val;
 
-	return (vb);
+	return vb;
 }
 
 static void *
-wmemcpy(dst, src, l)
-	void *dst;
-	const void *src;
-	size_t l;
+wmemcpy(void *dst, const void *src, size_t l)
 {
-	const u_char *b1e, *b1 = src;
-	u_char *b2 = dst;
-	u_short *sp;
+	const uint8_t *b1e, *b1 = src;
+	uint8_t *b2 = dst;
+	const uint16_t *sp;
 	int bstore = 0;
 
 	if (l == 0)
-		return (dst);
+		return dst;
 
 	/* front, */
-	if ((u_long)b1 & 1) {
+	if ((uint32_t)b1 & 1) {
 		*b2++ = *b1++;
 		l--;
 	}
 
 	/* middle, */
-	sp = (u_short *)b1;
+	sp = (const uint16_t *)b1;
 	b1e = b1 + l;
 	if (l & 1)
 		b1e--;
-	bstore = (u_long)b2 & 1;
+	bstore = (uint32_t)b2 & 1;
 
-	while (sp < (u_short *)b1e) {
+	while (sp < (const uint16_t *)b1e) {
 		if (bstore) {
 			b2[1] = *sp & 0xff;
 			b2[0] = *sp >> 8;
 		} else
-			*((short *)b2) = *sp;
+			*((uint16_t *)b2) = *sp;
 		sp++;
 		b2 += 2;
 	}
@@ -312,5 +292,5 @@ wmemcpy(dst, src, l)
 	if (l & 1)
 		*b2 = *b1e;
 
-	return (dst);
+	return dst;
 }

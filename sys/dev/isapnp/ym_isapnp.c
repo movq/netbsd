@@ -1,5 +1,4 @@
-/*	$NetBSD: ym_isapnp.c,v 1.11 1999/10/05 03:47:20 itohy Exp $ */
-
+/*	$NetBSD: ym_isapnp.c,v 1.22 2008/04/08 20:09:27 cegger Exp $ */
 
 /*
  * Copyright (c) 1991-1993 Regents of the University of California.
@@ -42,6 +41,9 @@
  *  Original code from OpenBSD.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ym_isapnp.c,v 1.22 2008/04/08 20:09:27 cegger Exp $");
+
 #include "mpu_ym.h"
 
 #include <sys/param.h>
@@ -69,13 +71,11 @@
 #include <dev/isa/wssreg.h>
 #include <dev/isa/ymvar.h>
 
-int	ym_isapnp_match __P((struct device *, struct cfdata *, void *));
-void	ym_isapnp_attach __P((struct device *, struct device *, void *));
+int	ym_isapnp_match(struct device *, struct cfdata *, void *);
+void	ym_isapnp_attach(struct device *, struct device *, void *);
 
-struct cfattach ym_isapnp_ca = {
-	sizeof(struct ym_softc), ym_isapnp_match, ym_isapnp_attach
-};
-
+CFATTACH_DECL(ym_isapnp, sizeof(struct ym_softc),
+    ym_isapnp_match, ym_isapnp_attach, NULL, NULL);
 
 /*
  * Probe / attach routines.
@@ -85,17 +85,15 @@ struct cfattach ym_isapnp_ca = {
  * Probe for the Yamaha hardware.
  */
 int
-ym_isapnp_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+ym_isapnp_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	int pri, variant;
 
 	pri = isapnp_devmatch(aux, &isapnp_ym_devinfo, &variant);
 	if (pri && variant > 0)
 		pri = 0;
-	return (pri);
+	return pri;
 }
 
 /*
@@ -103,18 +101,19 @@ ym_isapnp_match(parent, match, aux)
  * pseudo-device driver.
  */
 void
-ym_isapnp_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+ym_isapnp_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct ym_softc *sc = (struct ym_softc *)self;
-	struct ad1848_softc *ac = &sc->sc_ad1848.sc_ad1848;
-	struct isapnp_attach_args *ipa = aux;
+	struct ym_softc *sc;
+	struct ad1848_softc *ac;
+	struct isapnp_attach_args *ipa;
 
+	sc = device_private(self);
+	ac = &sc->sc_ad1848.sc_ad1848;
+	ipa = aux;
 	printf("\n");
 
 	if (isapnp_config(ipa->ipa_iot, ipa->ipa_memt, ipa)) {
-		printf("%s: error in region allocation\n", self->dv_xname);
+		aprint_error_dev(self, "error in region allocation\n");
 		return;
 	}
 
@@ -136,16 +135,15 @@ ym_isapnp_attach(parent, self, aux)
 	ac->sc_iot = sc->sc_iot;
 	if (bus_space_subregion(sc->sc_iot, sc->sc_ioh, WSS_CODEC, AD1848_NPORT,
 	    &ac->sc_ioh)) {
-		printf("%s: bus_space_subregion failed\n", self->dv_xname);
+		aprint_error_dev(self, "bus_space_subregion failed\n");
 		return;
 	}
 	ac->mode = 2;
 	ac->MCE_bit = MODE_CHANGE_ENABLE;
-	ac->chip_name = "OPL3-SA3";
 
 	sc->sc_ad1848.sc_ic  = sc->sc_ic;
 
-	printf("%s: %s %s", self->dv_xname, ipa->ipa_devident,
+	printf("%s: %s %s", device_xname(self), ipa->ipa_devident,
 	    ipa->ipa_devclass);
 
 	ym_attach(sc);

@@ -1,6 +1,6 @@
 #!/bin/sh -
 #
-#	$NetBSD: newvers.sh,v 1.30 2000/01/23 23:39:19 hubertf Exp $
+#	$NetBSD: newvers.sh,v 1.52 2007/11/17 08:59:51 skrll Exp $
 #
 # Copyright (c) 1984, 1986, 1990, 1993
 #	The Regents of the University of California.  All rights reserved.
@@ -35,32 +35,71 @@
 #
 #	@(#)newvers.sh	8.1 (Berkeley) 4/20/94
 
-if [ ! -r version ]
-then
+if [ ! -e version ]; then
 	echo 0 > version
 fi
 
-touch version
-v=`cat version` u=${USER-root} d=`pwd` h=`hostname` t=`date`
+v=$(cat version)
+t=$(date)
+u=${USER-root}
+h=$(hostname)
+d=$(pwd)
+cwd=$(dirname $0)
+copyright=$(awk '{ printf("\"%s\\n\"", $0); }' ${cwd}/copyright)
+
 if [ -f ident ]; then
-	id="`cat ident`"
+	id="$(cat ident)"
 else
-	id=`basename ${d}`
+	id=$(basename ${d})
 fi
-osrelcmd=`dirname $0`/osrelease.sh
+
+osrelcmd=${cwd}/osrelease.sh
 
 ost="NetBSD"
-osr=`sh $osrelcmd`
+osr=$(sh $osrelcmd)
 
-echo "char ostype[] = \"${ost}\";" > vers.c
-echo "char osrelease[] = \"${osr}\";" >> vers.c
-echo \
-  "char sccs[] = \
-    \"@""(#)${ost} ${osr} (${id}) #${v}: ${t}\\n    ${u}@${h}:${d}\\n\";" \
-  >> vers.c
-echo \
-  "char version[] = \
-    \"${ost} ${osr} (${id}) #${v}: ${t}\\n    ${u}@${h}:${d}\\n\";" \
-  >> vers.c
+fullversion="${ost} ${osr} (${id}) #${v}: ${t}\n\t${u}@${h}:${d}\n"
 
-echo `expr ${v} + 1` > version
+cat << _EOF > vers.c
+/*
+ * Automatically generated file from $0
+ * Do not edit.
+ */
+#include <sys/cdefs.h>
+#include <sys/types.h>
+#include <sys/param.h>
+#include <sys/exec.h>
+#include <sys/exec_elf.h>
+
+const char ostype[] = "${ost}";
+const char osrelease[] = "${osr}";
+const char sccs[] = "@(#)${fullversion}";
+const char version[] = "${fullversion}";
+const char kernel_ident[] = "${id}";
+const char copyright[] =
+${copyright}
+"\n";
+
+/*
+ * NetBSD identity note.
+ */
+#ifdef __arm__
+#define _SHT_NOTE	%note
+#else
+#define _SHT_NOTE	@note
+#endif
+
+#define	_S(TAG)	__STRING(TAG)
+__asm(
+	".section\t\".note.netbsd.ident\", \"\"," _S(_SHT_NOTE) "\n"
+	"\t.p2align\t2\n"
+	"\t.long\t" _S(ELF_NOTE_NETBSD_NAMESZ) "\n"
+	"\t.long\t" _S(ELF_NOTE_NETBSD_DESCSZ) "\n"
+	"\t.long\t" _S(ELF_NOTE_TYPE_NETBSD_TAG) "\n"
+	"\t.ascii\t" _S(ELF_NOTE_NETBSD_NAME) "\n"
+	"\t.long\t" _S(__NetBSD_Version__) "\n"
+	"\t.p2align\t2\n"
+);
+
+_EOF
+echo $(expr ${v} + 1) > version

@@ -1,4 +1,4 @@
-/*	$NetBSD: limits.h,v 1.11 2000/03/07 19:33:01 kleink Exp $ */
+/*	$NetBSD: limits.h,v 1.18 2007/10/17 19:57:13 garbled Exp $ */
 
 /*
  * Copyright (c) 1988 The Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,30 +34,25 @@
 #ifndef	_MACHINE_LIMITS_H_
 #define	_MACHINE_LIMITS_H_
 
+#include <sys/featuretest.h>
+
 #define	CHAR_BIT	8		/* number of bits in a char */
-#define	MB_LEN_MAX	1		/* no multibyte characters */
+#define	MB_LEN_MAX	32		/* no multibyte characters */
 
 #define	SCHAR_MIN	(-0x7f-1)	/* max value for a signed char */
 #define	SCHAR_MAX	0x7f		/* min value for a signed char */
 
-#define	UCHAR_MAX	0xffU		/* max value for an unsigned char */
+#define	UCHAR_MAX	0xff		/* max value for an unsigned char */
 #define	CHAR_MAX	0x7f		/* max value for a char */
 #define	CHAR_MIN	(-0x7f-1)	/* min value for a char */
 
-#define	USHRT_MAX	0xffffU		/* max value for an unsigned short */
+#define	USHRT_MAX	0xffff		/* max value for an unsigned short */
 #define	SHRT_MAX	0x7fff		/* max value for a short */
 #define	SHRT_MIN	(-0x7fff-1)	/* min value for a short */
 
 #define	UINT_MAX	0xffffffffU	/* max value for an unsigned int */
 #define	INT_MAX		0x7fffffff	/* max value for an int */
 #define	INT_MIN		(-0x7fffffff-1)	/* min value for an int */
-
-/* Make sure _LP64 is defined if we have a 64-bit compiler */
-#if	__arch64__||__sparcv9__
-#ifndef _LP64
-#define _LP64
-#endif
-#endif
 
 #ifdef __arch64__
 #define	ULONG_MAX	0xffffffffffffffffUL	/* max value for an unsigned long */
@@ -73,17 +64,18 @@
 #define	LONG_MIN	(-0x7fffffffL-1)	/* min value for a long */
 #endif
 
-#if !defined(_ANSI_SOURCE)
+#if defined(_POSIX_C_SOURCE) || defined(_XOPEN_SOURCE) || \
+    defined(_NETBSD_SOURCE)
 #define	SSIZE_MAX	LONG_MAX	/* max value for a ssize_t */
 
-#if !defined(_POSIX_C_SOURCE) && !defined(_XOPEN_SOURCE) || \
-     defined(_ISOC99_SOURCE) || (__STDC_VERSION__ - 0) >= 199901L
+#if defined(_ISOC99_SOURCE) || (__STDC_VERSION__ - 0) >= 199901L || \
+    defined(_NETBSD_SOURCE)
 #define	ULLONG_MAX	0xffffffffffffffffULL	/* max unsigned long long */
 #define	LLONG_MAX	0x7fffffffffffffffLL	/* max signed long long */
 #define	LLONG_MIN	(-0x7fffffffffffffffLL-1) /* min signed long long */
 #endif
 
-#if !defined(_POSIX_C_SOURCE) && !defined(_XOPEN_SOURCE)
+#if defined(_NETBSD_SOURCE)
 #define	SIZE_T_MAX	ULONG_MAX	/* max value for a size_t */
 
 /* GCC requires that quad constants be written as expressions. */
@@ -92,11 +84,10 @@
 #define	QUAD_MAX	((quad_t)(UQUAD_MAX >> 1))
 #define	QUAD_MIN	(-QUAD_MAX-1)	/* min value for a quad_t */
 
-#endif /* !_POSIX_C_SOURCE && !_XOPEN_SOURCE */
-#endif /* !_ANSI_SOURCE */
+#endif /* _NETBSD_SOURCE */
+#endif /* _POSIX_C_SOURCE || _XOPEN_SOURCE || _NETBSD_SOURCE */
 
-#if !defined(_ANSI_SOURCE) && !defined(_POSIX_C_SOURCE) || \
-    defined(_XOPEN_SOURCE)
+#if defined(_XOPEN_SOURCE) || defined(_NETBSD_SOURCE)
 #ifdef __arch64__
 #define LONG_BIT	64
 #else

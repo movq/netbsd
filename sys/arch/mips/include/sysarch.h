@@ -1,4 +1,4 @@
-/*	$NetBSD: sysarch.h,v 1.3 1999/01/06 04:11:27 nisimura Exp $ */
+/*	$NetBSD: sysarch.h,v 1.8 2005/12/11 12:18:09 christos Exp $ */
 
 #ifndef _MIPS_SYSARCH_H_
 #define _MIPS_SYSARCH_H_
@@ -9,21 +9,23 @@
 #define MIPS_CACHEFLUSH	0
 #define MIPS_CACHECTL	1
 
-
 struct mips_cacheflush_args {
 	vaddr_t va;
-	int nbytes;
+	size_t nbytes;
 	int whichcache;
 };
 
 struct mips_cachectl_args {
 	vaddr_t va;
-	int nbytes;
+	size_t nbytes;
 	int ctl;
 };
 
 #ifndef _KERNEL
-int sysarch __P((int, void *));
-#endif
+#include <sys/cdefs.h>
 
+__BEGIN_DECLS
+int sysarch(int, void *);
+__END_DECLS
+#endif /* !_KERNEL */
 #endif /* !_MIPS_SYSARCH_H_ */

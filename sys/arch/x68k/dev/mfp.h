@@ -1,4 +1,4 @@
-/*	$NetBSD: mfp.h,v 1.2 1999/03/16 16:30:19 minoura Exp $	*/
+/*	$NetBSD: mfp.h,v 1.5 2005/12/11 12:19:37 christos Exp $	*/
 
 /*
  *
@@ -210,6 +210,6 @@ struct mfp_softc {
 #define mfp_bit_set_ierb(bits) mfp_bit_set(MFP_IERB, (bits))
 #define mfp_bit_clear_ierb(bits) mfp_bit_clear(MFP_IERB, (bits))
 
-void mfp_wait_for_hsync __P((void));
-int mfp_send_usart __P((int));
-int mfp_recieve_usart __P((void));
+void mfp_wait_for_hsync(void);
+int mfp_send_usart(int);
+int mfp_receive_usart(void);

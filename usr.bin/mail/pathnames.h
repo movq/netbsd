@@ -1,4 +1,4 @@
-/*	$NetBSD: pathnames.h,v 1.4 1996/06/08 19:48:34 christos Exp $	*/
+/*	$NetBSD: pathnames.h,v 1.8 2006/11/28 18:45:32 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -33,8 +29,11 @@
  * SUCH DAMAGE.
  *
  *	@(#)pathnames.h	8.1 (Berkeley) 6/6/93
- *	$NetBSD: pathnames.h,v 1.4 1996/06/08 19:48:34 christos Exp $
+ *	$NetBSD: pathnames.h,v 1.8 2006/11/28 18:45:32 christos Exp $
  */
+
+#ifndef __PATHNAMES_H__
+#define __PATHNAMES_H__
 
 #include <paths.h>
 
@@ -43,3 +42,8 @@
 #define	_PATH_TILDE	"/usr/share/misc/mail.tildehelp"
 #define	_PATH_MASTER_RC	"/etc/mail.rc"
 #define	_PATH_MORE	"/usr/bin/more"
+#ifdef MIME_SUPPORT
+#define _PATH_FILE	"/usr/bin/file"	/* Used to get mime type/subtype */
+#endif
+
+#endif /* __PATHNAMES_H__ */

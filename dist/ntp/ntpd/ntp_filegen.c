@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_filegen.c,v 1.1.1.1 2000/03/29 12:38:52 simonb Exp $	*/
+/*	$NetBSD: ntp_filegen.c,v 1.3 2006/06/11 19:34:11 kardel Exp $	*/
 
 /*
  * ntp_filegen.c,v 3.12 1994/01/25 19:06:11 kardel Exp
@@ -15,7 +15,7 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#include <config.h>
+# include <config.h>
 #endif
 
 #include <stdio.h>
@@ -56,6 +56,25 @@ static	int	valid_fileref	P((char *, char *));
 #ifdef	UNUSED
 static	FILEGEN *filegen_unregister P((char *));
 #endif	/* UNUSED */
+
+static void	filegen_init	P((char *, const char *, FILEGEN *));
+
+/*
+ * filegen_init
+ */
+
+static void
+filegen_init(char *prefix, const char *basename, FILEGEN *fp)
+{
+	fp->fp       = NULL;
+	fp->prefix   = prefix;		/* Yes, this is TOTALLY lame! */
+	fp->basename = (char*)emalloc(strlen(basename) + 1);
+	strcpy(fp->basename, basename);
+	fp->id       = 0;
+	fp->type     = FILEGEN_DAY;
+	fp->flag     = FGEN_FLAG_LINK; /* not yet enabled !!*/
+}
+
 
 /*
  * open a file generation according to the current settings of gen
@@ -171,7 +190,8 @@ filegen_open(
 					free(savename);
 				} else {
 					/*
-					 * there is at least a second link tpo this file
+					 * there is at least a second link to
+					 * this file.
 					 * just remove the conflicting one
 					 */
 					if (
@@ -216,7 +236,7 @@ filegen_open(
 		 *
 		 * If the file was open before keep the previous generation.
 		 * This will cause output to end up in the 'wrong' file,
-		 * but I think this is still better than loosing output
+		 * but I think this is still better than losing output
 		 *
 		 * ignore errors due to missing directories
 		 */
@@ -318,7 +338,7 @@ filegen_setup(
       
 	    case FILEGEN_MONTH:
 		caljulian(now, &cal);
-		cal.yearday -= cal.monthday - 1;
+		cal.yearday = (u_short) (cal.yearday - cal.monthday + 1);
 		cal.monthday = 1;
 		cal.hour = cal.minute = cal.second = 0;
 		new_gen = caltontp(&cal);
@@ -337,6 +357,11 @@ filegen_setup(
 	 * reopen new file generation file on change of generation id
 	 */
 	if (gen->fp == NULL || gen->id != new_gen) {
+#if DEBUG
+	if (debug)
+		printf("filegen  %0x %lu %lu %lu\n", gen->type, now,
+		    gen->id, new_gen); 
+#endif
 		filegen_open(gen, new_gen);
 	}
 }
@@ -380,8 +405,8 @@ filegen_config(
 		gen->basename = (char*)emalloc(strlen(basename) + 1);
 		strcpy(gen->basename, basename);
 	}
-	gen->type = type;
-	gen->flag = flag;
+	gen->type = (u_char) type;
+	gen->flag = (u_char) flag;
 
 	/*
 	 * make filegen use the new settings
@@ -479,6 +504,7 @@ filegen_get(
 
 void
 filegen_register(
+	char *prefix,
 	const char *name,
 	FILEGEN *filegen
 	)
@@ -489,6 +515,9 @@ filegen_register(
 	if (debug > 3)
 	    printf("filegen_register(\"%s\",%x)\n", name, (u_int)filegen);
 #endif
+
+	filegen_init(prefix, name, filegen);
+
 	while (*f) {
 		if ((*f)->name == name || strcmp(name, (*f)->name) == 0) {
 #ifdef XXX	 /* this gives the Alpha compiler fits */

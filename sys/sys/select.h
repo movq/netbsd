@@ -1,4 +1,4 @@
-/*	$NetBSD: select.h,v 1.10 1995/03/26 20:24:38 jtc Exp $	*/
+/*	$NetBSD: select.h,v 1.33 2008/03/22 18:04:42 ad Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,21 +34,41 @@
 #ifndef _SYS_SELECT_H_
 #define	_SYS_SELECT_H_
 
-/*
- * Used to maintain information about processes that wish to be
- * notified when I/O becomes possible.
- */
-struct selinfo {
-	pid_t	si_pid;		/* process to be notified */
-	short	si_flags;	/* see below */
-};
-#define	SI_COLL	0x0001		/* collision occurred */
+#include <sys/cdefs.h>
+#include <sys/featuretest.h>
+#include <sys/fd_set.h>
 
 #ifdef _KERNEL
-struct proc;
+#include <sys/selinfo.h>		/* for struct selinfo */
+#include <sys/signal.h>			/* for sigset_t */
 
-void	selrecord __P((struct proc *selector, struct selinfo *));
-void	selwakeup __P((struct selinfo *));
-#endif
+struct lwp;
+struct proc;
+struct timeval;
+struct cpu_info;
+struct socket;
+
+int	selcommon(struct lwp *, register_t *, int, fd_set *, fd_set *,
+	    fd_set *, struct timeval *, sigset_t *);
+void	selrecord(struct lwp *selector, struct selinfo *);
+void	selnotify(struct selinfo *, int, long);
+void	selsysinit(struct cpu_info *);
+void	selinit(struct selinfo *);
+void	seldestroy(struct selinfo *);
+int	pollsock(struct socket *, const struct timeval *, int);
+
+#else /* _KERNEL */
+
+#include <sys/sigtypes.h>
+#include <time.h>
+
+__BEGIN_DECLS
+int	pselect(int, fd_set * __restrict, fd_set * __restrict,
+	    fd_set * __restrict, const struct timespec * __restrict,
+	    const sigset_t * __restrict);
+int	select(int, fd_set * __restrict, fd_set * __restrict,
+	    fd_set * __restrict, struct timeval * __restrict);
+__END_DECLS
+#endif /* _KERNEL */
 
 #endif /* !_SYS_SELECT_H_ */

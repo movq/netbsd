@@ -1,4 +1,4 @@
-/*	$NetBSD: types.h,v 1.22 2000/02/05 00:07:31 cgd Exp $	*/
+/*	$NetBSD: types.h,v 1.60 2008/10/26 06:57:30 mrg Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,10 +31,15 @@
  *	@(#)types.h	7.5 (Berkeley) 3/9/91
  */
 
-#ifndef	_MACHTYPES_H_
-#define	_MACHTYPES_H_
+#ifndef	_I386_MACHTYPES_H_
+#define	_I386_MACHTYPES_H_
 
+#ifdef _KERNEL_OPT
+#include "opt_xen.h"
+#endif
 #include <sys/cdefs.h>
+#include <sys/featuretest.h>
+#include <machine/int_types.h>
 
 #if defined(_KERNEL)
 typedef struct label_t {
@@ -47,35 +48,44 @@ typedef struct label_t {
 #endif
 
 /* NB: This should probably be if defined(_KERNEL) */
-#if !defined(_POSIX_C_SOURCE) && !defined(_XOPEN_SOURCE)
+#if defined(_NETBSD_SOURCE)
+#ifdef PAE
+typedef unsigned long long paddr_t;
+typedef unsigned long long psize_t;
+#else
 typedef unsigned long	paddr_t;
 typedef unsigned long	psize_t;
+#endif /* PAE */
 typedef unsigned long	vaddr_t;
 typedef unsigned long	vsize_t;
 #endif
 
-/*
- * Basic integral types.  Omit the typedef if
- * not possible for a machine/compiler combination.
- */
-#define	__BIT_TYPES_DEFINED__
-typedef	__signed char		   int8_t;
-typedef	unsigned char		 u_int8_t;
-typedef	short			  int16_t;
-typedef	unsigned short		u_int16_t;
-typedef	int			  int32_t;
-typedef	unsigned int		u_int32_t;
-/* LONGLONG */
-typedef	long long		  int64_t;
-/* LONGLONG */
-typedef	unsigned long long	u_int64_t;
+typedef int		pmc_evid_t;
+typedef __uint64_t	pmc_ctr_t;
+typedef int		register_t;
 
-typedef int32_t			register_t;
+typedef	volatile unsigned char		__cpu_simple_lock_t;
+
+/* __cpu_simple_lock_t used to be a full word. */
+#define	__CPU_SIMPLE_LOCK_PAD
+
+#define	__SIMPLELOCK_LOCKED	1
+#define	__SIMPLELOCK_UNLOCKED	0
 
 /* The x86 does not have strict alignment requirements. */
 #define	__NO_STRICT_ALIGNMENT
 
-#define __HAVE_DEVICE_REGISTER
-#define __HAVE_NWSCONS
+#define	__HAVE_DEVICE_REGISTER
+#define	__HAVE_CPU_COUNTER
+#define	__HAVE_MD_CPU_OFFLINE
+#define	__HAVE_SYSCALL_INTERN
+#define	__HAVE_MINIMAL_EMUL
+#define	__HAVE_OLD_DISKLABEL
+#define	__HAVE_ATOMIC64_OPS
+#define	__HAVE_ATOMIC_AS_MEMBAR
 
-#endif	/* _MACHTYPES_H_ */
+#if defined(_KERNEL)
+#define __HAVE_RAS
+#endif
+
+#endif	/* _I386_MACHTYPES_H_ */

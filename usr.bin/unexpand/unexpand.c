@@ -1,4 +1,4 @@
-/*	$NetBSD: unexpand.c,v 1.8 1999/02/11 15:29:14 kleink Exp $	*/
+/*	$NetBSD: unexpand.c,v 1.13 2008/07/21 14:19:27 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)unexpand.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: unexpand.c,v 1.8 1999/02/11 15:29:14 kleink Exp $");
+__RCSID("$NetBSD: unexpand.c,v 1.13 2008/07/21 14:19:27 lukem Exp $");
 #endif /* not lint */
 
 /*
@@ -53,30 +49,49 @@ __RCSID("$NetBSD: unexpand.c,v 1.8 1999/02/11 15:29:14 kleink Exp $");
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <errno.h>
+#include <err.h>
 
 char	genbuf[BUFSIZ];
 char	linebuf[BUFSIZ];
 
-int	main __P((int, char **));
-void tabify __P((int));
+int	main(int, char **);
+void	tabify(int, uint);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char **argv)
 {
 	int all, c;
-	char *cp;
+	uint tabsize;
+	ulong l;
+	char *ep;
+
+	setprogname(argv[0]);
 
 	all = 0;
-	while ((c = getopt(argc, argv, "a")) != -1) {
+	tabsize = 8;
+	while ((c = getopt(argc, argv, "at:")) != -1) {
 		switch (c) {
 		case 'a':
 			all++;
 			break;
+		case 't':
+			errno = 0;
+			l = strtoul(optarg, &ep, 0);
+			/*
+			 * If every input char is a tab, the line length
+			 * must not exceed maxuint.
+			 */
+			tabsize = (int)l * BUFSIZ;
+			tabsize /= BUFSIZ;
+			if (*ep != 0 || errno != 0 || (ulong)tabsize != l)
+				errx(EXIT_FAILURE, "Invalid tabstop \"%s\"",
+				    optarg);
+			break;
 		case '?':
 		default:
-			fprintf(stderr, "usage: unexpand [-a] [file ...]\n");
+			fprintf(stderr, "usage: %s [-a] [-t tabstop] [file ...]\n",
+				getprogname());
 			exit(EXIT_FAILURE);
 			/* NOTREACHED */
 		}
@@ -93,11 +108,7 @@ main(argc, argv)
 			argc--, argv++;
 		}
 		while (fgets(genbuf, BUFSIZ, stdin) != NULL) {
-			for (cp = linebuf; *cp; cp++)
-				continue;
-			if (cp > linebuf)
-				cp[-1] = 0;
-			tabify(all);
+			tabify(all, tabsize);
 			printf("%s", linebuf);
 		}
 	} while (argc > 0);
@@ -106,12 +117,12 @@ main(argc, argv)
 }
 
 void
-tabify(c)
-	int c;
+tabify(int all, uint tabsize)
 {
 	char *cp, *dp;
-	int dcol;
-	int ocol;
+	uint dcol;
+	uint ocol;
+	uint tcol;
 
 	ocol = 0;
 	dcol = 0;
@@ -124,28 +135,29 @@ tabify(c)
 			break;
 
 		case '\t':
-			dcol += 8;
-			dcol &= ~07;
+			dcol = (dcol + tabsize) / tabsize * tabsize;
 			break;
 
 		default:
-			while (((ocol + 8) &~ 07) <= dcol) {
-				if (ocol + 1 == dcol)
-					break;
-				*dp++ = '\t';
-				ocol += 8;
-				ocol &= ~07;
+			if (dcol > ocol + 1) {
+				tcol = (ocol + tabsize) / tabsize * tabsize;
+				while (tcol <= dcol) {
+					*dp++ = '\t';
+					ocol = tcol;
+					tcol += tabsize;
+				}
 			}
 			while (ocol < dcol) {
 				*dp++ = ' ';
 				ocol++;
 			}
-			if (*cp == 0 || c == 0) {
-				strcpy(dp, cp);
+			if (*cp == 0 || all == 0) {
+				strlcpy(dp, cp,
+				    sizeof(linebuf) - (dp - linebuf));
 				return;
 			}
 			*dp++ = *cp;
-			ocol++, dcol++;
+			dcol = ++ocol;
 		}
 		cp++;
 	}

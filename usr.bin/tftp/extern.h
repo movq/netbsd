@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.2 1994/12/08 09:51:24 jtc Exp $	*/
+/*	$NetBSD: extern.h,v 1.6 2006/07/21 17:49:00 jmcneill Exp $	*/
 
 /*
  * Copyright (c) 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -34,6 +30,22 @@
  *
  *	@(#)extern.h	8.1 (Berkeley) 6/6/93
  */
+
+extern  int     f;			/* the opened socket */
+extern  int     mf;			/* the opened multicast socket */
+extern  int     trace;
+extern  int     verbose;
+extern  unsigned int     def_rexmtval;
+extern  unsigned int     rexmtval;
+extern  int     maxtimeout;
+extern	int	tsize;
+extern	int	tout;
+extern	size_t	def_blksize;
+extern	size_t	blksize;
+extern	in_addr_t	mcaddr;
+extern	uint16_t	mcport;
+extern	ushort	mcmasterslave;
+extern  struct	sockaddr_storage peeraddr; /* filled in by main */
 
 void	recvfile __P((int, char *, char *));
 void	sendfile __P((int, char *, char *));

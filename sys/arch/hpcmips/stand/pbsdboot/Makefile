@@ -1,12 +1,6 @@
-#	$NetBSD: Makefile,v 1.3 2000/03/19 11:10:57 takemura Exp $
+#	$NetBSD: Makefile,v 1.8 2005/12/11 12:17:34 christos Exp $
 
-all: pbsdboot.exe
-
-pbsdboot.exe: pbsdboot.uu
-	uudecode pbsdboot.uu
-	chmod 755 pbsdboot.exe
-	uudecode pbsdboot1.uu
-	chmod 755 pbsdboot1.exe
+UUDECODE_FILES=	pbsdboot.exe pbsdboot1.exe
 
 uu::
 	if [ X"`strings WMIPSDbg/pbsdboot.exe | grep 'Compiled for WinCE'`" = \
@@ -17,3 +11,5 @@ uu::
           echo This binary is compiled for WinCE 2.00; \
           uuencode WMIPSDbg/pbsdboot.exe pbsdboot.exe > pbsdboot.uu; \
         fi
+
+.include <bsd.files.mk>

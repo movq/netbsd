@@ -1,4 +1,4 @@
-/*	$NetBSD: sigsetjmp.S,v 1.6 1999/10/25 23:48:12 thorpej Exp $	*/
+/*	$NetBSD: sigsetjmp.S,v 1.8 2006/03/09 16:20:27 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -43,7 +39,7 @@
 #if 0
 	RCSID("from: @(#)_setjmp.s	5.1 (Berkeley) 5/12/90")
 #else
-	RCSID("$NetBSD: sigsetjmp.S,v 1.6 1999/10/25 23:48:12 thorpej Exp $")
+	RCSID("$NetBSD: sigsetjmp.S,v 1.8 2006/03/09 16:20:27 christos Exp $")
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -61,21 +57,21 @@
 /* grab _JBLEN */
 #include <m68k/setjmp.h>
 
-ENTRY(sigsetjmp)
+ENTRY(__sigsetjmp14)
 	movl	%sp@(8),%d1	/* grab the mask */
         movl	%sp@(4),%a0	/* grab the area pointer */
-	movl	%d1,%a0@(_JBLEN * 4 )	/* save at end of area */
+	movl	%d1,%a0@(_JBLEN * 4)	/* save at end of area */
 	tstl	%d1
 	bne	dosig
 	jra	PIC_PLT(_C_LABEL(_setjmp))
 dosig:
-	jra	PIC_PLT(_C_LABEL(setjmp))
+	jra	PIC_PLT(_C_LABEL(__setjmp14))
 
 
-ENTRY(siglongjmp)
+ENTRY(__siglongjmp14)
 	movl	%sp@(4),%a0	/* save area pointer */
 	tstl	%a0@(_JBLEN * 4) /* check mask... */
 	bne	didsig
 	jra	PIC_PLT(_C_LABEL(_longjmp))
 didsig:
-	jra	PIC_PLT(_C_LABEL(longjmp))
+	jra	PIC_PLT(_C_LABEL(__longjmp14))

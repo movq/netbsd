@@ -1,4 +1,4 @@
-/*	$NetBSD: limits.h,v 1.12 2000/03/07 19:31:50 kleink Exp $	*/
+/*	$NetBSD: limits.h,v 1.19 2007/10/17 19:55:05 garbled Exp $	*/
 
 /*
  * Copyright (c) 1988 The Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,8 +34,10 @@
 #ifndef	_M68K_MACHINE_LIMITS_H_
 #define	_M68K_MACHINE_LIMITS_H_
 
+#include <sys/featuretest.h>
+
 #define	CHAR_BIT	8		/* number of bits in a char */
-#define	MB_LEN_MAX	1		/* no multibyte characters */
+#define	MB_LEN_MAX	32		/* no multibyte characters */
 
 #define	SCHAR_MIN	(-0x7f-1)	/* max value for a signed char */
 #define	SCHAR_MAX	0x7f		/* min value for a signed char */
@@ -60,28 +58,28 @@
 #define	LONG_MAX	0x7fffffffL	/* max value for a long */
 #define	LONG_MIN	(-0x7fffffffL-1)	/* min value for a long */
 
-#if !defined(_ANSI_SOURCE)
+#if defined(_POSIX_C_SOURCE) || defined(_XOPEN_SOURCE) || \
+    defined(_NETBSD_SOURCE)
 #define SSIZE_MAX	INT_MAX		/* max value for a ssize_t */
 
-#if !defined(_POSIX_C_SOURCE) && !defined(_XOPEN_SOURCE) || \
-     defined(_ISOC99_SOURCE) || (__STDC_VERSION__ - 0) >= 199901L
+#if defined(_ISOC99_SOURCE) || (__STDC_VERSION__ - 0) >= 199901L || \
+    defined(_NETBSD_SOURCE)
 #define	ULLONG_MAX	0xffffffffffffffffULL	/* max unsigned long long */
 #define	LLONG_MAX	0x7fffffffffffffffLL	/* max signed long long */
 #define	LLONG_MIN	(-0x7fffffffffffffffLL-1) /* min signed long long */
 #endif
 
-#if !defined(_POSIX_C_SOURCE) && !defined(_XOPEN_SOURCE)
+#if defined(_NETBSD_SOURCE)
 #define SIZE_T_MAX	UINT_MAX	/* max value for a size_t */
 
 #define	UQUAD_MAX	0xffffffffffffffffULL		/* max unsigned quad */
 #define	QUAD_MAX	0x7fffffffffffffffLL		/* max signed quad */
 #define	QUAD_MIN	(-0x7fffffffffffffffLL-1)	/* min signed quad */
 
-#endif /* !_POSIX_C_SOURCE && !_XOPEN_SOURCE */
-#endif /* !_ANSI_SOURCE */
+#endif /* _NETBSD_SOURCE */
+#endif /* _POSIX_C_SOURCE || _XOPEN_SOURCE || _NETBSD_SOURCE */
 
-#if !defined(_ANSI_SOURCE) && !defined(_POSIX_C_SOURCE) || \
-    defined(_XOPEN_SOURCE)
+#if defined(_XOPEN_SOURCE) || defined(_NETBSD_SOURCE)
 #define LONG_BIT	32
 #define WORD_BIT	32
 

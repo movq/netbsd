@@ -1,4 +1,4 @@
-/*	$NetBSD: lam.c,v 1.3 1997/10/19 03:42:18 lukem Exp $	*/
+/*	$NetBSD: lam.c,v 1.6 2008/07/21 14:19:23 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)lam.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: lam.c,v 1.3 1997/10/19 03:42:18 lukem Exp $");
+__RCSID("$NetBSD: lam.c,v 1.6 2008/07/21 14:19:23 lukem Exp $");
 #endif /* not lint */
 
 /*
@@ -51,6 +47,7 @@ __RCSID("$NetBSD: lam.c,v 1.3 1997/10/19 03:42:18 lukem Exp $");
  *	Author:  John Kunze, UCB
  */
 
+#include <ctype.h>
 #include <err.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -106,9 +103,8 @@ void
 getargs(av)
 	char *av[];
 {
-	struct	openfile *ip = input;
-	char *p;
-	char *c;
+	struct openfile *ip = input;
+	char *p, *c;
 	static char fmtbuf[BUFSIZ];
 	char *fmtp = fmtbuf;
 	int P, S, F, T;
@@ -116,7 +112,8 @@ getargs(av)
 	P = S = F = T = 0;		/* capitalized options */
 	while ((p = *++av) != NULL) {
 		if (*p != '-' || !p[1]) {
-			morefiles++;
+			if (++morefiles >= MAXOFILES)
+				errx(1, "too many input files");
 			if (*p == '-')
 				ip->fp = stdin;
 			else if ((ip->fp = fopen(p, "r")) == NULL)
@@ -131,7 +128,8 @@ getargs(av)
 			ip++;
 			continue;
 		}
-		switch (*(c = ++p) | 040) {
+		c = ++p;
+		switch (tolower((unsigned char) *c)) {
 		case 's':
 			if (*++p || (p = *++av))
 				ip->sepstring = p;
@@ -150,12 +148,19 @@ getargs(av)
 		case 'p':
 			ip->pad = 1;
 			P = (*c == 'P' ? 1 : 0);
+			/* FALLTHROUGH */
 		case 'f':
 			F = (*c == 'F' ? 1 : 0);
 			if (*++p || (p = *++av)) {
 				fmtp += strlen(fmtp) + 1;
-				if (fmtp > fmtbuf + BUFSIZ)
-					error("No more format space", "");
+				if (fmtp >= fmtbuf + sizeof(fmtbuf))
+					errx(1, "no more format space");
+				/* restrict format string to only valid width formatters */
+				if (strspn(p, "-.0123456789") != strlen(p))
+					errx(1, "invalid format string `%s'", p);
+				if (snprintf(fmtp, fmtbuf + sizeof(fmtbuf) - fmtp, "%%%ss", p)
+					>= fmtbuf + sizeof(fmtbuf) - fmtp)
+						errx(1, "no more format space");
 				sprintf(fmtp, "%%%ss", p);
 				ip->format = fmtp;
 			}
@@ -176,13 +181,12 @@ char *
 pad(ip)
 	struct openfile *ip;
 {
-	char *p = ip->sepstring;
 	char *lp = linep;
 
-	while (*p)
-		*lp++ = *p++;
+	strlcpy(lp, ip->sepstring, line + sizeof(line) - lp);
+	lp += strlen(lp);
 	if (ip->pad) {
-		sprintf(lp, ip->format, "");
+		snprintf(lp, line + sizeof(line) - lp, ip->format, "");
 		lp += strlen(lp);
 	}
 	return (lp);
@@ -196,7 +200,7 @@ gatherline(ip)
 	int c;
 	char *p;
 	char *lp = linep;
-	char *end = s + BUFSIZ;
+	char *end = s + sizeof(s) - 1;
 
 	if (ip->eof)
 		return (pad(ip));
@@ -211,10 +215,9 @@ gatherline(ip)
 		morefiles--;
 		return (pad(ip));
 	}
-	p = ip->sepstring;
-	while (*p)
-		*lp++ = *p++;
-	sprintf(lp, ip->format, s);
+	strlcpy(lp, ip->sepstring, line + sizeof(line) - lp);
+	lp += strlen(lp);
+	snprintf(lp, line + sizeof(line) - lp, ip->format, s);
 	lp += strlen(lp);
 	return (lp);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: clnp_options.c,v 1.10 1998/07/05 04:37:42 jonathan Exp $	*/
+/*	$NetBSD: clnp_options.c,v 1.18 2007/03/04 06:03:31 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -62,6 +58,9 @@ SOFTWARE.
  * ARGO Project, Computer Sciences Dept., University of Wisconsin - Madison
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: clnp_options.c,v 1.18 2007/03/04 06:03:31 christos Exp $");
+
 #include "opt_iso.h"
 #ifdef ISO
 
@@ -96,9 +95,9 @@ SOFTWARE.
  * NOTES:		If source routing has been terminated, do nothing.
  */
 void
-clnp_update_srcrt(options, oidx)
-	struct mbuf    *options;/* ptr to options mbuf */
-	struct clnp_optidx *oidx;	/* ptr to option index */
+clnp_update_srcrt(
+	struct mbuf *options,		/* ptr to options mbuf */
+	struct clnp_optidx *oidx)	/* ptr to option index */
 {
 	u_char          len;	/* length of current address */
 	struct iso_addr isoa;	/* copy current address into here */
@@ -112,7 +111,7 @@ clnp_update_srcrt(options, oidx)
 		return;
 	}
 	len = CLNPSRCRT_CLEN(oidx, options);
-	bcopy(CLNPSRCRT_CADDR(oidx, options), (caddr_t) & isoa, len);
+	memcpy(&isoa, CLNPSRCRT_CADDR(oidx, options), len);
 	isoa.isoa_len = len;
 
 #ifdef ARGO_DEBUG
@@ -149,11 +148,11 @@ clnp_update_srcrt(options, oidx)
  * NOTES:
  */
 void
-clnp_dooptions(options, oidx, ifp, isoa)
-	struct mbuf    *options;/* ptr to options mbuf */
-	struct clnp_optidx *oidx;	/* ptr to option index */
-	struct ifnet   *ifp;	/* ptr to interface pkt is leaving on */
-	struct iso_addr *isoa;	/* ptr to our address for this ifp */
+clnp_dooptions(
+    struct mbuf *options,		/* ptr to options mbuf */
+    struct clnp_optidx *oidx,		/* ptr to option index */
+    struct ifnet *ifp,		/* ptr to interface pkt is leaving on */
+    struct iso_addr *isoa)		/* ptr to our address for this ifp */
 {
 	/*
 	 *	If record route is specified, move all
@@ -199,7 +198,7 @@ clnp_dooptions(options, oidx, ifp, isoa)
 				}
 #endif
 
-				bcopy((caddr_t) isoa, rec_start, new_addrlen);
+				bcopy((void *) isoa, rec_start, new_addrlen);
 
 				/* update offset field */
 				*(opt + 1) += new_addrlen;
@@ -231,9 +230,9 @@ clnp_dooptions(options, oidx, ifp, isoa)
  * NOTES:
  */
 int
-clnp_set_opts(options, data)
-	struct mbuf   **options;/* target for option information */
-	struct mbuf   **data;	/* source of option information */
+clnp_set_opts(
+	struct mbuf **options,	/* target for option information */
+	struct mbuf **data)	/* source of option information */
 {
 	int             error = 0;	/* error return value */
 	struct clnp_optidx dummy;	/* dummy index - not used */
@@ -254,7 +253,7 @@ clnp_set_opts(options, data)
 		 *
 		 *	The QOS parameter is checked for the DECBIT.
 		 */
-		if ((clnp_opt_sanity(*data, mtod(*data, caddr_t), (*data)->m_len,
+		if ((clnp_opt_sanity(*data, mtod(*data, void *), (*data)->m_len,
 				     &dummy) != 0) ||
 		    (dummy.cni_securep) ||
 		    (dummy.cni_priorp) ||
@@ -285,16 +284,17 @@ clnp_set_opts(options, data)
  *			actual address.
  */
 int
-clnp_opt_sanity(m, opts, len, oidx)
-	struct mbuf    *m;	/* mbuf options reside in */
-	caddr_t         opts;	/* ptr to buffer containing options */
-	int             len;	/* length of buffer */
-	struct clnp_optidx *oidx;	/* RETURN: filled in with option idx
+clnp_opt_sanity(
+	struct mbuf    *m,	/* mbuf options reside in */
+	void *        optsv,	/* ptr to buffer containing options */
+	int             len,	/* length of buffer */
+	struct clnp_optidx *oidx)	/* RETURN: filled in with option idx
 					 * info */
 {
+	char *opts = optsv;
 	u_char          opcode = 0;	/* code of particular option */
 	u_char          oplen;	/* length of a particular option */
-	caddr_t         opts_end;	/* ptr to end of options */
+	char *opts_end;	/* ptr to end of options */
 	u_char          pad = 0, secure = 0, srcrt = 0, recrt = 0,
 			qos = 0, prior = 0;
 	/* flags for catching duplicate options */
@@ -307,11 +307,11 @@ clnp_opt_sanity(m, opts, len, oidx)
 #endif
 
 	/* clear option index field if passed */
-	bzero((caddr_t) oidx, sizeof(struct clnp_optidx));
+	memset(oidx, 0, sizeof(struct clnp_optidx));
 
 	/*
 	 *	We need to indicate whether the ER option is present. This is done
-	 *	by overloading the er_reason field to also indicate presense of
+	 *	by overloading the er_reason field to also indicate presence of
 	 *	the option along with the option value. I would like ER_INVALREAS
 	 *	to have value 0, but alas, 0 is a valid er reason...
 	 */
@@ -397,7 +397,7 @@ clnp_opt_sanity(m, opts, len, oidx)
 		case CLNPOVAL_SRCRT:{
 				u_char          type, offset;	/* type of rt, offset of
 								 * start */
-				caddr_t         route_end;	/* address of end of
+				char *         route_end;	/* address of end of
 								 * route option */
 
 #ifdef ARGO_DEBUG
@@ -470,7 +470,7 @@ clnp_opt_sanity(m, opts, len, oidx)
 		case CLNPOVAL_RECRT:{
 				u_char          type, offset;	/* type of rt, offset of
 								 * start */
-				caddr_t         record_end;	/* address of end of
+				char *         record_end;	/* address of end of
 								 * record option */
 
 				if (recrt++)	/* duplicate ? */

@@ -1,4 +1,4 @@
-/*	$NetBSD: igmp.c,v 1.6 1997/10/17 10:38:10 lukem Exp $	*/
+/*	$NetBSD: igmp.c,v 1.13 2006/05/11 21:17:02 mrg Exp $	*/
 
 /*
  * The mrouted program is covered by the license in the accompanying file
@@ -18,6 +18,7 @@
  */
 char		*recv_buf; 		     /* input packet buffer         */
 char		*send_buf; 		     /* output packet buffer        */
+size_t		send_buflen; 		     /* output packet buffer        */
 int		igmp_socket;		     /* socket for all network I/O  */
 u_int32_t	allhosts_group;		     /* All hosts addr in net order */
 u_int32_t	allrtrs_group;		     /* All-Routers "  in net order */
@@ -28,23 +29,24 @@ u_int32_t	dvmrp_genid;		     /* IGMP generation id          */
  * Local function definitions.
  */
 /* u_char promoted to u_int */
-static char *	packet_kind __P((u_int type, u_int code));
-static int	igmp_log_level __P((u_int type, u_int code));
+static char *	packet_kind(u_int type, u_int code);
+static int	igmp_log_level(u_int type, u_int code);
 
 /*
  * Open and initialize the igmp socket, and fill in the non-changing
  * IP header fields in the output packet buffer.
  */
 void
-init_igmp()
+init_igmp(void)
 {
     struct ip *ip;
 
     recv_buf = malloc(RECV_BUF_SIZE);
     send_buf = malloc(RECV_BUF_SIZE);
+    send_buflen = RECV_BUF_SIZE;
 
     if ((igmp_socket = socket(AF_INET, SOCK_RAW, IPPROTO_IGMP)) < 0) 
-	log(LOG_ERR, errno, "IGMP socket");
+	logit(LOG_ERR, errno, "IGMP socket");
 
     k_hdr_include(TRUE);	/* include IP header when sending */
     k_set_rcvbuf(48*1024);	/* lots of input buffering        */
@@ -74,8 +76,7 @@ init_igmp()
 #define PIM_GRAFT_ACK    7
 
 static char *
-packet_kind(type, code)
-     u_int type, code;
+packet_kind(u_int type, u_int code)
 {
     switch (type) {
 	case IGMP_HOST_MEMBERSHIP_QUERY:	return "membership query  ";
@@ -120,16 +121,15 @@ packet_kind(type, code)
  * packet buffer.
  */
 void
-accept_igmp(recvlen)
-    int recvlen;
+accept_igmp(int recvlen)
 {
-    register u_int32_t src, dst, group;
+    u_int32_t src, dst, group;
     struct ip *ip;
     struct igmp *igmp;
     int ipdatalen, iphdrlen, igmpdatalen;
 
     if (recvlen < sizeof(struct ip)) {
-	log(LOG_WARNING, 0,
+	logit(LOG_WARNING, 0,
 	    "received packet too short (%u bytes) for IP header", recvlen);
 	return;
     }
@@ -145,7 +145,7 @@ accept_igmp(recvlen)
      */
     if (ip->ip_p == 0) {
 	if (src == 0 || dst == 0)
-	    log(LOG_WARNING, 0, "kernel request not accurate");
+	    logit(LOG_WARNING, 0, "kernel request not accurate");
 	else
 	    add_table_entry(src, dst);
 	return;
@@ -154,9 +154,9 @@ accept_igmp(recvlen)
     iphdrlen  = ip->ip_hl << 2;
     ipdatalen = ip->ip_len;
     if (iphdrlen + ipdatalen != recvlen) {
-	log(LOG_WARNING, 0,
+	logit(LOG_WARNING, 0,
 	    "received packet from %s shorter (%u bytes) than hdr+data length (%u+%u)",
-	    inet_fmt(src, s1), recvlen, iphdrlen, ipdatalen);
+	    inet_fmt(src), recvlen, iphdrlen, ipdatalen);
 	return;
     }
 
@@ -164,15 +164,15 @@ accept_igmp(recvlen)
     group       = igmp->igmp_group.s_addr;
     igmpdatalen = ipdatalen - IGMP_MINLEN;
     if (igmpdatalen < 0) {
-	log(LOG_WARNING, 0,
+	logit(LOG_WARNING, 0,
 	    "received IP data field too short (%u bytes) for IGMP, from %s",
-	    ipdatalen, inet_fmt(src, s1));
+	    ipdatalen, inet_fmt(src));
 	return;
     }
 
-    log(LOG_DEBUG, 0, "RECV %s from %-15s to %s",
+    logit(LOG_DEBUG, 0, "RECV %s from %-15s to %s",
 	packet_kind(igmp->igmp_type, igmp->igmp_code),
-	inet_fmt(src, s1), inet_fmt(dst, s2));
+	inet_fmt(src), inet_fmt(dst));
 
     switch (igmp->igmp_type) {
 
@@ -234,19 +234,19 @@ accept_igmp(recvlen)
 		    return;
 
 		case DVMRP_INFO_REQUEST:
-		    accept_info_request(src, dst, (char *)(igmp+1),
+		    accept_info_request(src, dst, (u_char *)(igmp+1),
 				igmpdatalen);
 		    return;
 
 		case DVMRP_INFO_REPLY:
-		    accept_info_reply(src, dst, (char *)(igmp+1), igmpdatalen);
+		    accept_info_reply(src, dst, (u_char *)(igmp+1), igmpdatalen);
 		    return;
 
 		default:
-		    log(LOG_INFO, 0,
+		    logit(LOG_INFO, 0,
 		     "ignoring unknown DVMRP message code %u from %s to %s",
-		     igmp->igmp_code, inet_fmt(src, s1),
-		     inet_fmt(dst, s2));
+		     igmp->igmp_code, inet_fmt(src),
+		     inet_fmt(dst));
 		    return;
 	    }
 
@@ -262,10 +262,10 @@ accept_igmp(recvlen)
 	    return;
 
 	default:
-	    log(LOG_INFO, 0,
+	    logit(LOG_INFO, 0,
 		"ignoring unknown IGMP message type %x from %s to %s",
-		igmp->igmp_type, inet_fmt(src, s1),
-		inet_fmt(dst, s2));
+		igmp->igmp_type, inet_fmt(src),
+		inet_fmt(dst));
 	    return;
     }
 }
@@ -277,8 +277,7 @@ accept_igmp(recvlen)
  * reachability and someone is trying to, i.e., mrinfo me periodically.
  */
 static int
-igmp_log_level(type, code)
-    u_int type, code;
+igmp_log_level(u_int type, u_int code)
 {
     switch (type) {
 	case IGMP_MTRACE_REPLY:
@@ -300,11 +299,8 @@ igmp_log_level(type, code)
  * the message from the interface with IP address 'src' to destination 'dst'.
  */
 void
-send_igmp(src, dst, type, code, group, datalen)
-    u_int32_t src, dst;
-    int type, code;
-    u_int32_t group;
-    int datalen;
+send_igmp(u_int32_t src, u_int32_t dst, int type, int code, u_int32_t group,
+	  int datalen)
 {
     struct sockaddr_in sdst;
     struct ip *ip;
@@ -322,7 +318,7 @@ send_igmp(src, dst, type, code, group, datalen)
     igmp->igmp_code         = code;
     igmp->igmp_group.s_addr = group;
     igmp->igmp_cksum        = 0;
-    igmp->igmp_cksum        = inet_cksum((u_short *)igmp,
+    igmp->igmp_cksum        = inet_cksum((u_int16_t *)igmp,
 					 IGMP_MINLEN + datalen);
 
     if (IN_MULTICAST(ntohl(dst))) {
@@ -344,14 +340,15 @@ send_igmp(src, dst, type, code, group, datalen)
 	if (errno == ENETDOWN)
 	    check_vif_state();
 	else
-	    log(igmp_log_level(type, code), errno,
+	    logit(igmp_log_level(type, code), errno,
 		"sendto to %s on %s",
-		inet_fmt(dst, s1), inet_fmt(src, s2));
+		inet_fmt(dst), inet_fmt(src));
     }
 
     if (setloop)
 	    k_set_loop(FALSE);
 
-    log(LOG_DEBUG, 0, "SENT %s from %-15s to %s",
-	packet_kind(type, code), inet_fmt(src, s1), inet_fmt(dst, s2));
+    logit(LOG_DEBUG, 0, "SENT %s from %-15s to %s",
+	packet_kind(type, code), inet_fmt(src),
+	inet_fmt(dst));
 }

@@ -1,9 +1,9 @@
-/*	$NetBSD: if_loop.c,v 1.30 2000/03/30 09:45:36 augustss Exp $	*/
+/*	$NetBSD: if_loop.c,v 1.69 2008/10/24 17:07:33 dyoung Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -15,7 +15,7 @@
  * 3. Neither the name of the project nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE PROJECT AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -41,11 +41,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -68,13 +64,16 @@
  * Loopback interface driver for protocol testing and timing.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_loop.c,v 1.69 2008/10/24 17:07:33 dyoung Exp $");
+
 #include "opt_inet.h"
 #include "opt_atalk.h"
 #include "opt_iso.h"
-#include "opt_ns.h"
+#include "opt_ipx.h"
+#include "opt_mbuftrace.h"
 
 #include "bpfilter.h"
-#include "loop.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -85,7 +84,7 @@
 #include <sys/ioctl.h>
 #include <sys/time.h>
 
-#include <machine/cpu.h>
+#include <sys/cpu.h>
 
 #include <net/if.h>
 #include <net/if_types.h>
@@ -107,10 +106,6 @@
 #include <netinet/ip6.h>
 #endif
 
-#ifdef NS
-#include <netns/ns.h>
-#include <netns/ns_if.h>
-#endif
 
 #ifdef IPX
 #include <netipx/ipx.h>
@@ -133,68 +128,104 @@
 
 #if defined(LARGE_LOMTU)
 #define LOMTU	(131072 +  MHLEN + MLEN)
+#define LOMTU_MAX LOMTU
 #else
 #define	LOMTU	(32768 +  MHLEN + MLEN)
+#define	LOMTU_MAX	(65536 +  MHLEN + MLEN)
 #endif
 
-struct	ifnet loif[NLOOP];
+#ifdef ALTQ
+static void	lostart(struct ifnet *);
+#endif
+
+static int	loop_clone_create(struct if_clone *, int);
+static int	loop_clone_destroy(struct ifnet *);
+
+static struct if_clone loop_cloner =
+    IF_CLONE_INITIALIZER("lo", loop_clone_create, loop_clone_destroy);
 
 void
-loopattach(n)
-	int n;
+loopattach(int n)
 {
-	int i;
+
+	(void)loop_clone_create(&loop_cloner, 0);	/* lo0 always exists */
+	if_clone_attach(&loop_cloner);
+}
+
+static int
+loop_clone_create(struct if_clone *ifc, int unit)
+{
 	struct ifnet *ifp;
 
-	for (i = 0; i < NLOOP; i++) {
-		ifp = &loif[i];
-		sprintf(ifp->if_xname, "lo%d", i);
-		ifp->if_softc = NULL;
-		ifp->if_mtu = LOMTU;
-		ifp->if_flags = IFF_LOOPBACK | IFF_MULTICAST;
-		ifp->if_ioctl = loioctl;
-		ifp->if_output = looutput;
-		ifp->if_type = IFT_LOOP;
-		ifp->if_hdrlen = 0;
-		ifp->if_addrlen = 0;
-		if_attach(ifp);
-#if NBPFILTER > 0
-		bpfattach(&ifp->if_bpf, ifp, DLT_NULL, sizeof(u_int));
+	ifp = if_alloc(IFT_LOOP);
+
+	if_initname(ifp, ifc->ifc_name, unit);
+
+	ifp->if_mtu = LOMTU;
+	ifp->if_flags = IFF_LOOPBACK | IFF_MULTICAST | IFF_RUNNING;
+	ifp->if_ioctl = loioctl;
+	ifp->if_output = looutput;
+#ifdef ALTQ
+	ifp->if_start = lostart;
 #endif
-	}
+	ifp->if_type = IFT_LOOP;
+	ifp->if_hdrlen = 0;
+	ifp->if_addrlen = 0;
+	ifp->if_dlt = DLT_NULL;
+	IFQ_SET_READY(&ifp->if_snd);
+	if (unit == 0)
+		lo0ifp = ifp;
+	if_attach(ifp);
+	if_alloc_sadl(ifp);
+#if NBPFILTER > 0
+	bpfattach(ifp, DLT_NULL, sizeof(u_int));
+#endif
+#ifdef MBUFTRACE
+	ifp->if_mowner = malloc(sizeof(struct mowner), M_DEVBUF,
+	    M_WAITOK | M_ZERO);
+	strlcpy(ifp->if_mowner->mo_name, ifp->if_xname,
+	    sizeof(ifp->if_mowner->mo_name));
+	MOWNER_ATTACH(ifp->if_mowner);
+#endif
+
+	return (0);
+}
+
+static int
+loop_clone_destroy(struct ifnet *ifp)
+{
+
+	if (ifp == lo0ifp)
+		return (EPERM);
+
+#ifdef MBUFTRACE
+	MOWNER_DETACH(ifp->if_mowner);
+	free(ifp->if_mowner, M_DEVBUF);
+#endif
+
+#if NBPFILTER > 0
+	bpfdetach(ifp);
+#endif
+	if_detach(ifp);
+
+	free(ifp, M_DEVBUF);
+
+	return (0);
 }
 
 int
-looutput(ifp, m, dst, rt)
-	struct ifnet *ifp;
-	struct mbuf *m;
-	struct sockaddr *dst;
-	struct rtentry *rt;
+looutput(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
+    struct rtentry *rt)
 {
 	int s, isr;
-	struct ifqueue *ifq = 0;
+	struct ifqueue *ifq = NULL;
 
+	MCLAIM(m, ifp->if_mowner);
 	if ((m->m_flags & M_PKTHDR) == 0)
 		panic("looutput: no header mbuf");
-	ifp->if_lastchange = time;
 #if NBPFILTER > 0
-	if (ifp->if_bpf && (ifp->if_flags & IFF_LOOPBACK)) {
-		/*
-		 * We need to prepend the address family as
-		 * a four byte field.  Cons up a dummy header
-		 * to pacify bpf.  This is safe because bpf
-		 * will only read from the mbuf (i.e., it won't
-		 * try to free it or keep a pointer to it).
-		 */
-		struct mbuf m0;
-		u_int af = dst->sa_family;
-
-		m0.m_next = m;
-		m0.m_len = 4;
-		m0.m_data = (char *)&af;
-
-		bpf_mtap(ifp->if_bpf, &m0);
-	}
+	if (ifp->if_bpf && (ifp->if_flags & IFF_LOOPBACK))
+		bpf_mtap_af(ifp->if_bpf, dst->sa_family, m);
 #endif
 	m->m_pkthdr.rcvif = ifp;
 
@@ -204,60 +235,40 @@ looutput(ifp, m, dst, rt)
 			rt->rt_flags & RTF_HOST ? EHOSTUNREACH : ENETUNREACH);
 	}
 
-#ifndef PULLDOWN_TEST
-	/*
-	 * KAME requires that the packet to be contiguous on the
-	 * mbuf.  We need to make that sure.
-	 * this kind of code should be avoided.
-	 * XXX other conditions to avoid running this part?
-	 */
-	if (m->m_len != m->m_pkthdr.len) {
-		struct mbuf *n = NULL;
-		int maxlen;
-
-		MGETHDR(n, M_DONTWAIT, MT_HEADER);
-		maxlen = MHLEN;
-		if (n)
-			M_COPY_PKTHDR(n, m);
-		if (n && m->m_pkthdr.len > maxlen) {
-			MCLGET(n, M_DONTWAIT);
-			maxlen = MCLBYTES;
-			if ((n->m_flags & M_EXT) == 0) {
-				m_free(n);
-				n = NULL;
-			}
-		}
-		if (!n) {
-			printf("looutput: mbuf allocation failed\n");
-			m_freem(m);
-			return ENOBUFS;
-		}
-
-		if (m->m_pkthdr.len <= maxlen) {
-			m_copydata(m, 0, m->m_pkthdr.len, mtod(n, caddr_t));
-			n->m_len = m->m_pkthdr.len;
-			n->m_next = NULL;
-			m_freem(m);
-		} else {
-			m_copydata(m, 0, maxlen, mtod(n, caddr_t));
-			m_adj(m, maxlen);
-			n->m_len = maxlen;
-			n->m_next = m;
-			m->m_flags &= ~M_PKTHDR;
-		}
-		m = n;
-	}
-#if 0
-	if (m && m->m_next != NULL) {
-		printf("loop: not contiguous...\n");
-		m_freem(m);
-		return ENOBUFS;
-	}
-#endif
-#endif
-
 	ifp->if_opackets++;
 	ifp->if_obytes += m->m_pkthdr.len;
+
+#ifdef ALTQ
+	/*
+	 * ALTQ on the loopback interface is just for debugging.  It's
+	 * used only for loopback interfaces, not for a simplex interface.
+	 */
+	if ((ALTQ_IS_ENABLED(&ifp->if_snd) || TBR_IS_ENABLED(&ifp->if_snd)) &&
+	    ifp->if_start == lostart) {
+		struct altq_pktattr pktattr;
+		int error;
+
+		/*
+		 * If the queueing discipline needs packet classification,
+		 * do it before prepending the link headers.
+		 */
+		IFQ_CLASSIFY(&ifp->if_snd, m, dst->sa_family, &pktattr);
+
+		M_PREPEND(m, sizeof(uint32_t), M_DONTWAIT);
+		if (m == NULL)
+			return (ENOBUFS);
+		*(mtod(m, uint32_t *)) = dst->sa_family;
+
+		s = splnet();
+		IFQ_ENQUEUE(&ifp->if_snd, m, &pktattr, error);
+		(*ifp->if_start)(ifp);
+		splx(s);
+		return (error);
+	}
+#endif /* ALTQ */
+
+	m_tag_delete_nonpersistent(m);
+
 	switch (dst->sa_family) {
 
 #ifdef INET
@@ -271,12 +282,6 @@ looutput(ifp, m, dst, rt)
 		m->m_flags |= M_LOOP;
 		ifq = &ip6intrq;
 		isr = NETISR_IPV6;
-		break;
-#endif
-#ifdef NS
-	case AF_NS:
-		ifq = &nsintrq;
-		isr = NETISR_NS;
 		break;
 #endif
 #ifdef ISO
@@ -303,7 +308,7 @@ looutput(ifp, m, dst, rt)
 		m_freem(m);
 		return (EAFNOSUPPORT);
 	}
-	s = splimp();
+	s = splnet();
 	if (IF_QFULL(ifq)) {
 		IF_DROP(ifq);
 		m_freem(m);
@@ -318,16 +323,85 @@ looutput(ifp, m, dst, rt)
 	return (0);
 }
 
+#ifdef ALTQ
+static void
+lostart(struct ifnet *ifp)
+{
+	struct ifqueue *ifq;
+	struct mbuf *m;
+	uint32_t af;
+	int s, isr;
+
+	for (;;) {
+		IFQ_DEQUEUE(&ifp->if_snd, m);
+		if (m == NULL)
+			return;
+
+		af = *(mtod(m, uint32_t *));
+		m_adj(m, sizeof(uint32_t));
+
+		switch (af) {
+#ifdef INET
+		case AF_INET:
+			ifq = &ipintrq;
+			isr = NETISR_IP;
+			break;
+#endif
+#ifdef INET6
+		case AF_INET6:
+			m->m_flags |= M_LOOP;
+			ifq = &ip6intrq;
+			isr = NETISR_IPV6;
+			break;
+#endif
+#ifdef IPX
+		case AF_IPX:
+			ifq = &ipxintrq;
+			isr = NETISR_IPX;
+			break;
+#endif
+#ifdef ISO
+		case AF_ISO:
+			ifq = &clnlintrq;
+			isr = NETISR_ISO;
+			break;
+#endif
+#ifdef NETATALK
+		case AF_APPLETALK:
+			ifq = &atintrq2;
+			isr = NETISR_ATALK;
+			break;
+#endif
+		default:
+			printf("%s: can't handle af%d\n", ifp->if_xname, af);
+			m_freem(m);
+			return;
+		}
+
+		s = splnet();
+		if (IF_QFULL(ifq)) {
+			IF_DROP(ifq);
+			splx(s);
+			m_freem(m);
+			return;
+		}
+		IF_ENQUEUE(ifq, m);
+		schednetisr(isr);
+		ifp->if_ipackets++;
+		ifp->if_ibytes += m->m_pkthdr.len;
+		splx(s);
+	}
+}
+#endif /* ALTQ */
+
 /* ARGSUSED */
 void
-lortrequest(cmd, rt, sa)
-	int cmd;
-	struct rtentry *rt;
-	struct sockaddr *sa;
+lortrequest(int cmd, struct rtentry *rt,
+    const struct rt_addrinfo *info)
 {
 
 	if (rt)
-		rt->rt_rmx.rmx_mtu = LOMTU;
+		rt->rt_rmx.rmx_mtu = lo0ifp->if_mtu;
 }
 
 /*
@@ -335,13 +409,10 @@ lortrequest(cmd, rt, sa)
  */
 /* ARGSUSED */
 int
-loioctl(ifp, cmd, data)
-	struct ifnet *ifp;
-	u_long cmd;
-	caddr_t data;
+loioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
 	struct ifaddr *ifa;
-	struct ifreq *ifr;
+	struct ifreq *ifr = data;
 	int error = 0;
 
 	switch (cmd) {
@@ -349,21 +420,29 @@ loioctl(ifp, cmd, data)
 	case SIOCSIFADDR:
 		ifp->if_flags |= IFF_UP;
 		ifa = (struct ifaddr *)data;
-		if (ifa != 0 /*&& ifa->ifa_addr->sa_family == AF_ISO*/)
+		if (ifa != NULL /*&& ifa->ifa_addr->sa_family == AF_ISO*/)
 			ifa->ifa_rtrequest = lortrequest;
 		/*
 		 * Everything else is done at a higher level.
 		 */
 		break;
 
+	case SIOCSIFMTU:
+		if ((unsigned)ifr->ifr_mtu > LOMTU_MAX)
+			error = EINVAL;
+		else if ((error = ifioctl_common(ifp, cmd, data)) == ENETRESET){
+			/* XXX update rt mtu for AF_ISO? */
+			error = 0;
+		}
+		break;
+
 	case SIOCADDMULTI:
 	case SIOCDELMULTI:
-		ifr = (struct ifreq *)data;
-		if (ifr == 0) {
+		if (ifr == NULL) {
 			error = EAFNOSUPPORT;		/* XXX */
 			break;
 		}
-		switch (ifr->ifr_addr.sa_family) {
+		switch (ifreq_getaddr(cmd, ifr)->sa_family) {
 
 #ifdef INET
 		case AF_INET:

@@ -1,11 +1,18 @@
-#	$NetBSD: Makefile,v 1.7 1999/12/15 20:34:03 garbled Exp $
+#	$NetBSD: Makefile,v 1.12 2007/07/29 14:34:45 nonaka Exp $
 
-.if ${MACHINE} == "i386" || ${MACHINE} == "sparc"
+.if (${MACHINE} == "i386" || \
+     ${MACHINE} == "hpcmips" || \
+     ${MACHINE} == "hpcsh" || \
+     ${MACHINE} == "macppc" || \
+     ${MACHINE} == "sparc" || \
+     ${MACHINE} == "zaurus")
 PROG=	apmd
 SRCS=	apmd.c apmsubr.c
 .endif
 
 MAN=	apmd.8
+
+WARNS=  3
 
 LDADD+=	-lutil
 DPADD+=	${LIBUTIL}

@@ -1,11 +1,4 @@
-/*	$NetBSD: uha.c,v 1.23 2000/02/12 19:12:54 thorpej Exp $	*/
-
-#undef UHADEBUG
-#ifdef DDB
-#define	integrate
-#else
-#define	integrate	static inline
-#endif
+/*	$NetBSD: uha.c,v 1.42 2008/04/28 20:23:51 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -23,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -66,7 +52,16 @@
  * slight mod to make work with 34F as well: Wed Jun  2 18:05:48 WST 1993
  */
 
-#include <sys/types.h>
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: uha.c,v 1.42 2008/04/28 20:23:51 martin Exp $");
+
+#undef UHADEBUG
+#ifdef DDB
+#define	integrate
+#else
+#define	integrate	static inline
+#endif
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
@@ -78,8 +73,10 @@
 #include <sys/proc.h>
 #include <sys/user.h>
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <uvm/uvm_extern.h>
+
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
@@ -94,21 +91,13 @@
 
 #define	UHA_MAXXFER	((UHA_NSEG - 1) << PGSHIFT)
 
-integrate void uha_reset_mscp __P((struct uha_softc *, struct uha_mscp *));
-void uha_free_mscp __P((struct uha_softc *, struct uha_mscp *));
-integrate int uha_init_mscp __P((struct uha_softc *, struct uha_mscp *));
-struct uha_mscp *uha_get_mscp __P((struct uha_softc *, int));
-void uhaminphys __P((struct buf *));
-int uha_scsi_cmd __P((struct scsipi_xfer *));
-int uha_create_mscps __P((struct uha_softc *, struct uha_mscp *, int));
-
-/* the below structure is so we have a default dev struct for out link struct */
-struct scsipi_device uha_dev = {
-	NULL,			/* Use default error handler */
-	NULL,			/* have a queue, served by this */
-	NULL,			/* have no async handler */
-	NULL,			/* Use default 'done' routine */
-};
+integrate void uha_reset_mscp(struct uha_softc *, struct uha_mscp *);
+void uha_free_mscp(struct uha_softc *, struct uha_mscp *);
+integrate int uha_init_mscp(struct uha_softc *, struct uha_mscp *);
+struct uha_mscp *uha_get_mscp(struct uha_softc *);
+void uhaminphys(struct buf *);
+void uha_scsipi_request(struct scsipi_channel *, scsipi_adapter_req_t, void *);
+int uha_create_mscps(struct uha_softc *, struct uha_mscp *, int);
 
 #define	UHA_ABORT_TIMEOUT	2000	/* time to wait for abort (mSec) */
 
@@ -120,32 +109,36 @@ uha_attach(sc, upd)
 	struct uha_softc *sc;
 	struct uha_probe_data *upd;
 {
+	struct scsipi_adapter *adapt = &sc->sc_adapter;
+	struct scsipi_channel *chan = &sc->sc_channel;
 	bus_dma_segment_t seg;
 	int i, error, rseg;
 
 	TAILQ_INIT(&sc->sc_free_mscp);
-	TAILQ_INIT(&sc->sc_queue);
 
 	(sc->init)(sc);
 
 	/*
-	 * Fill in the adapter.
+	 * Fill in the scsipi_adapter.
 	 */
-	sc->sc_adapter.scsipi_cmd = uha_scsi_cmd;
-	sc->sc_adapter.scsipi_minphys = uhaminphys;
+	memset(adapt, 0, sizeof(*adapt));
+	adapt->adapt_dev = &sc->sc_dev;
+	adapt->adapt_nchannels = 1;
+	/* adapt_openings initialized below */
+	/* adapt_max_periph initialized below */
+	adapt->adapt_request = uha_scsipi_request;
+	adapt->adapt_minphys = uhaminphys;
 
 	/*
-	 * fill in the prototype scsipi_link.
+	 * Fill in the scsipi_channel.
 	 */
-	sc->sc_link.scsipi_scsi.channel = SCSI_CHANNEL_ONLY_ONE;
-	sc->sc_link.adapter_softc = sc;
-	sc->sc_link.scsipi_scsi.adapter_target = upd->sc_scsi_dev;
-	sc->sc_link.adapter = &sc->sc_adapter;
-	sc->sc_link.device = &uha_dev;
-	sc->sc_link.openings = 2;
-	sc->sc_link.scsipi_scsi.max_target = 7;
-	sc->sc_link.scsipi_scsi.max_lun = 7;
-	sc->sc_link.type = BUS_SCSI;
+	memset(chan, 0, sizeof(*chan));
+	chan->chan_adapter = adapt;
+	chan->chan_bustype = &scsi_bustype;
+	chan->chan_channel = 0;
+	chan->chan_ntargets = 8;
+	chan->chan_nluns = 8;
+	chan->chan_id = upd->sc_scsi_dev;
 
 #define	MSCPSIZE	(UHA_MSCP_MAX * sizeof(struct uha_mscp))
 
@@ -153,16 +146,16 @@ uha_attach(sc, upd)
 	 * Allocate the MSCPs.
 	 */
 	if ((error = bus_dmamem_alloc(sc->sc_dmat, MSCPSIZE,
-	    NBPG, 0, &seg, 1, &rseg, BUS_DMA_NOWAIT)) != 0) {
-		printf("%s: unable to allocate mscps, error = %d\n",
-		    sc->sc_dev.dv_xname, error);
+	    PAGE_SIZE, 0, &seg, 1, &rseg, BUS_DMA_NOWAIT)) != 0) {
+		aprint_error_dev(&sc->sc_dev, "unable to allocate mscps, error = %d\n",
+		    error);
 		return;
 	}
 	if ((error = bus_dmamem_map(sc->sc_dmat, &seg, rseg,
-	    MSCPSIZE, (caddr_t *)&sc->sc_mscps,
+	    MSCPSIZE, (void **)&sc->sc_mscps,
 	    BUS_DMA_NOWAIT|BUS_DMA_COHERENT)) != 0) {
-		printf("%s: unable to map mscps, error = %d\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(&sc->sc_dev, "unable to map mscps, error = %d\n",
+		    error);
 		return;
 	}
 
@@ -172,14 +165,14 @@ uha_attach(sc, upd)
 	if ((error = bus_dmamap_create(sc->sc_dmat, MSCPSIZE,
 	    1, MSCPSIZE, 0, BUS_DMA_NOWAIT | sc->sc_dmaflags,
 	    &sc->sc_dmamap_mscp)) != 0) {
-		printf("%s: unable to create mscp DMA map, error = %d\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(&sc->sc_dev, "unable to create mscp DMA map, error = %d\n",
+		    error);
 		return;
 	}
 	if ((error = bus_dmamap_load(sc->sc_dmat, sc->sc_dmamap_mscp,
 	    sc->sc_mscps, MSCPSIZE, NULL, BUS_DMA_NOWAIT)) != 0) {
-		printf("%s: unable to load mscp DMA map, error = %d\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(&sc->sc_dev, "unable to load mscp DMA map, error = %d\n",
+		    error);
 		return;
 	}
 
@@ -190,24 +183,24 @@ uha_attach(sc, upd)
 	 */
 	i = uha_create_mscps(sc, sc->sc_mscps, UHA_MSCP_MAX);
 	if (i == 0) {
-		printf("%s: unable to create mscps\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "unable to create mscps\n");
 		return;
 	} else if (i != UHA_MSCP_MAX) {
-		printf("%s: WARNING: only %d of %d mscps created\n",
-		    sc->sc_dev.dv_xname, i, UHA_MSCP_MAX);
+		aprint_error_dev(&sc->sc_dev, "WARNING: only %d of %d mscps created\n",
+		    i, UHA_MSCP_MAX);
 	}
+
+	adapt->adapt_openings = i;
+	adapt->adapt_max_periph = adapt->adapt_openings;
 
 	/*
 	 * ask the adapter what subunits are present
 	 */
-	config_found(&sc->sc_dev, &sc->sc_link, scsiprint);
+	config_found(&sc->sc_dev, &sc->sc_channel, scsiprint);
 }
 
 integrate void
-uha_reset_mscp(sc, mscp)
-	struct uha_softc *sc;
-	struct uha_mscp *mscp;
+uha_reset_mscp(struct uha_softc *sc, struct uha_mscp *mscp)
 {
 
 	mscp->flags = 0;
@@ -224,17 +217,8 @@ uha_free_mscp(sc, mscp)
 	int s;
 
 	s = splbio();
-
 	uha_reset_mscp(sc, mscp);
 	TAILQ_INSERT_HEAD(&sc->sc_free_mscp, mscp, chain);
-
-	/*
-	 * If there were none, wake anybody waiting for one to come free,
-	 * starting with queued entries.
-	 */
-	if (mscp->chain.tqe_next == 0)
-		wakeup(&sc->sc_free_mscp);
-
 	splx(s);
 }
 
@@ -253,8 +237,8 @@ uha_init_mscp(sc, mscp)
 	    0, BUS_DMA_NOWAIT|BUS_DMA_ALLOCNOW | sc->sc_dmaflags,
 	    &mscp->dmamap_xfer);
 	if (error) {
-		printf("%s: can't create mscp DMA map, error = %d\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(&sc->sc_dev, "can't create mscp DMA map, error = %d\n",
+		    error);
 		return (error);
 	}
 
@@ -283,12 +267,12 @@ uha_create_mscps(sc, mscpstore, count)
 	struct uha_mscp *mscp;
 	int i, error;
 
-	bzero(mscpstore, sizeof(struct uha_mscp) * count);
+	memset(mscpstore, 0, sizeof(struct uha_mscp) * count);
 	for (i = 0; i < count; i++) {
 		mscp = &mscpstore[i];
 		if ((error = uha_init_mscp(sc, mscp)) != 0) {
-			printf("%s: unable to initialize mscp, error = %d\n",
-			    sc->sc_dev.dv_xname, error);
+			aprint_error_dev(&sc->sc_dev, "unable to initialize mscp, error = %d\n",
+			    error);
 			goto out;
 		}
 		TAILQ_INSERT_TAIL(&sc->sc_free_mscp, mscp, chain);
@@ -304,33 +288,18 @@ uha_create_mscps(sc, mscpstore, count)
  * hash table too otherwise either return an error or sleep.
  */
 struct uha_mscp *
-uha_get_mscp(sc, flags)
+uha_get_mscp(sc)
 	struct uha_softc *sc;
-	int flags;
 {
 	struct uha_mscp *mscp;
 	int s;
 
 	s = splbio();
-
-	/*
-	 * If we can and have to, sleep waiting for one to come free
-	 * but only if we can't allocate a new one
-	 */
-	for (;;) {
-		mscp = sc->sc_free_mscp.tqh_first;
-		if (mscp) {
-			TAILQ_REMOVE(&sc->sc_free_mscp, mscp, chain);
-			break;
-		}
-		if ((flags & XS_CTL_NOSLEEP) != 0)
-			goto out;
-		tsleep(&sc->sc_free_mscp, PRIBIO, "uhamsc", 0);
+	mscp = TAILQ_FIRST(&sc->sc_free_mscp);
+	if (mscp != NULL) {
+		TAILQ_REMOVE(&sc->sc_free_mscp, mscp, chain);
+		mscp->flags |= MSCP_ALLOC;
 	}
-
-	mscp->flags |= MSCP_ALLOC;
-
-out:
 	splx(s);
 	return (mscp);
 }
@@ -364,10 +333,10 @@ uha_done(sc, mscp)
 	struct uha_mscp *mscp;
 {
 	bus_dma_tag_t dmat = sc->sc_dmat;
-	struct scsipi_sense_data *s1, *s2;
+	struct scsi_sense_data *s1, *s2;
 	struct scsipi_xfer *xs = mscp->xs;
 
-	SC_DEBUG(xs->sc_link, SDEV_DB2, ("uha_done\n"));
+	SC_DEBUG(xs->xs_periph, SCSIPI_DB2, ("uha_done\n"));
 
 	bus_dmamap_sync(dmat, sc->sc_dmamap_mscp,
 	    UHA_MSCP_OFF(mscp), sizeof(struct uha_mscp),
@@ -390,7 +359,7 @@ uha_done(sc, mscp)
 	 * into the xfer and call whoever started it
 	 */
 	if ((mscp->flags & MSCP_ALLOC) == 0) {
-		printf("%s: exiting ccb not allocated!\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "exiting ccb not allocated!\n");
 		Debugger();
 		return;
 	}
@@ -401,8 +370,8 @@ uha_done(sc, mscp)
 				xs->error = XS_SELTIMEOUT;
 				break;
 			default:	/* Other scsi protocol messes */
-				printf("%s: host_stat %x\n",
-				    sc->sc_dev.dv_xname, mscp->host_stat);
+				aprint_error_dev(&sc->sc_dev, "host_stat %x\n",
+				    mscp->host_stat);
 				xs->error = XS_DRIVER_STUFFUP;
 			}
 		} else if (mscp->target_stat != SCSI_OK) {
@@ -417,27 +386,15 @@ uha_done(sc, mscp)
 				xs->error = XS_BUSY;
 				break;
 			default:
-				printf("%s: target_stat %x\n",
-				    sc->sc_dev.dv_xname, mscp->target_stat);
+				aprint_error_dev(&sc->sc_dev, "target_stat %x\n",
+				    mscp->target_stat);
 				xs->error = XS_DRIVER_STUFFUP;
 			}
 		} else
 			xs->resid = 0;
 	}
 	uha_free_mscp(sc, mscp);
-	xs->xs_status |= XS_STS_DONE;
 	scsipi_done(xs);
-
-	/*
-	 * If there are queue entries in the software queue, try to
-	 * run the first one.  We should be more or less guaranteed
-	 * to succeed, since we just freed an MSCP.
-	 *
-	 * NOTE: uha_scsi_cmd() relies on our calling it with
-	 * the first entry in the queue.
-	 */
-	if ((xs = TAILQ_FIRST(&sc->sc_queue)) != NULL)
-		(void) uha_scsi_cmd(xs);
 }
 
 void
@@ -454,221 +411,197 @@ uhaminphys(bp)
  * start a scsi operation given the command and the data address.  Also
  * needs the unit, target and lu.
  */
-int
-uha_scsi_cmd(xs)
-	struct scsipi_xfer *xs;
+
+void
+uha_scsipi_request(chan, req, arg)
+	struct scsipi_channel *chan;
+	scsipi_adapter_req_t req;
+	void *arg;
 {
-	struct scsipi_link *sc_link = xs->sc_link;
-	struct uha_softc *sc = sc_link->adapter_softc;
+	struct scsipi_xfer *xs;
+	struct scsipi_periph *periph;
+	struct uha_softc *sc = (void *)chan->chan_adapter->adapt_dev;
 	bus_dma_tag_t dmat = sc->sc_dmat;
 	struct uha_mscp *mscp;
-	struct uha_dma_seg *sg;
 	int error, seg, flags, s;
-	int fromqueue = 0, dontqueue = 0, nowait = 0;
 
-	SC_DEBUG(sc_link, SDEV_DB2, ("uha_scsi_cmd\n"));
 
-	s = splbio();		/* protect the queue */
+	switch (req) {
+	case ADAPTER_REQ_RUN_XFER:
+		xs = arg;
+		periph = xs->xs_periph;
+		flags = xs->xs_control;
 
-	/*
-	 * If we're running the queue from bha_done(), we've been
-	 * called with the first queue entry as our argument.
-	 */
-	if (xs == TAILQ_FIRST(&sc->sc_queue)) {
-		TAILQ_REMOVE(&sc->sc_queue, xs, adapter_q);
-		fromqueue = 1;
-		nowait = 1;
-		goto get_mscp;
-	}
+		SC_DEBUG(periph, SCSIPI_DB2, ("uha_scsipi_request\n"));
 
-	/* Polled requests can't be queued for later. */
-	dontqueue = xs->xs_control & XS_CTL_POLL;
-
-	/*
-	 * If there are jobs in the queue, run them first.
-	 */
-	if (TAILQ_FIRST(&sc->sc_queue) != NULL) {
+		/* Get an MSCP to use. */
+		mscp = uha_get_mscp(sc);
+#ifdef DIAGNOSTIC
 		/*
-		 * If we can't queue, we have to abort, since
-		 * we have to preserve order.
+		 * This should never happen as we track the resources
+		 * in the mid-layer.
 		 */
-		if (dontqueue) {
-			splx(s);
-			xs->error = XS_DRIVER_STUFFUP;
-			return (TRY_AGAIN_LATER);
+		if (mscp == NULL) {
+			scsipi_printaddr(periph);
+			printf("unable to allocate mscp\n");
+			panic("uha_scsipi_request");
 		}
+#endif
+
+		mscp->xs = xs;
+		mscp->timeout = xs->timeout;
 
 		/*
-		 * Swap with the first queue entry.
+		 * Put all the arguments for the xfer in the mscp
 		 */
-		TAILQ_INSERT_TAIL(&sc->sc_queue, xs, adapter_q);
-		xs = TAILQ_FIRST(&sc->sc_queue);
-		TAILQ_REMOVE(&sc->sc_queue, xs, adapter_q);
-		fromqueue = 1;
-	}
-
- get_mscp:
-	/*
-	 * get a mscp (mbox-out) to use. If the transfer
-	 * is from a buf (possibly from interrupt time)
-	 * then we can't allow it to sleep
-	 */
-	flags = xs->xs_control;
-	if (nowait)
-		flags |= XS_CTL_NOSLEEP;
-	if ((mscp = uha_get_mscp(sc, flags)) == NULL) {
-		/*
-		 * If we can't queue, we lose.
-		 */
-		if (dontqueue) {
-			splx(s);
-			xs->error = XS_DRIVER_STUFFUP;
-			return (TRY_AGAIN_LATER);
-		}
-
-		/*
-		 * Stuff ourselves into the queue, in front
-		 * if we came off in the first place.
-		 */
-		if (fromqueue)
-			TAILQ_INSERT_HEAD(&sc->sc_queue, xs, adapter_q);
-		else
-			TAILQ_INSERT_TAIL(&sc->sc_queue, xs, adapter_q);
-		splx(s);
-		return (SUCCESSFULLY_QUEUED);
-	}
-
-	splx(s);		/* done playing with the queue */
-
-	mscp->xs = xs;
-	mscp->timeout = xs->timeout;
-
-	/*
-	 * Put all the arguments for the xfer in the mscp
-	 */
-	if (flags & XS_CTL_RESET) {
-		mscp->opcode = UHA_SDR;
-		mscp->ca = 0x01;
-	} else {
-		mscp->opcode = UHA_TSP;
-		/* XXX Not for tapes. */
-		mscp->ca = 0x01;
-		bcopy(xs->cmd, &mscp->scsi_cmd, mscp->scsi_cmd_length);
-	}
-	mscp->xdir = UHA_SDET;
-	mscp->dcn = 0x00;
-	mscp->chan = 0x00;
-	mscp->target = sc_link->scsipi_scsi.target;
-	mscp->lun = sc_link->scsipi_scsi.lun;
-	mscp->scsi_cmd_length = xs->cmdlen;
-	mscp->sense_ptr = sc->sc_dmamap_mscp->dm_segs[0].ds_addr +
-	    UHA_MSCP_OFF(mscp) + offsetof(struct uha_mscp, mscp_sense);
-	mscp->req_sense_length = sizeof(mscp->mscp_sense);
-	mscp->host_stat = 0x00;
-	mscp->target_stat = 0x00;
-
-	if (xs->datalen) {
-		sg = mscp->uha_dma;
-		seg = 0;
-#ifdef	TFS
-		if (flags & SCSI_DATA_UIO) {
-			error = bus_dmamap_load_uio(dmat,
-			    mscp->dmamap_xfer, (struct uio *)xs->data,
-			    (flags & XS_CTL_NOSLEEP) ? BUS_DMA_NOWAIT :
-			    BUS_DMA_WAITOK);
-		} else
-#endif /*TFS */
-		{
-			error = bus_dmamap_load(dmat,
-			    mscp->dmamap_xfer, xs->data, xs->datalen, NULL,
-			    (flags & XS_CTL_NOSLEEP) ? BUS_DMA_NOWAIT :
-			    BUS_DMA_WAITOK);
-		}
-
-		if (error) {
-			if (error == EFBIG) {
-				printf("%s: uha_scsi_cmd, more than %d"
-				    " dma segments\n",
-				    sc->sc_dev.dv_xname, UHA_NSEG);
-			} else {
-				printf("%s: uha_scsi_cmd, error %d loading"
-				    " dma map\n",
-				    sc->sc_dev.dv_xname, error);
+		if (flags & XS_CTL_RESET) {
+			mscp->opcode = UHA_SDR;
+			mscp->ca = 0x01;
+		} else {
+			if (xs->cmdlen > sizeof(mscp->scsi_cmd)) {
+				aprint_error_dev(&sc->sc_dev, "cmdlen %d too large for MSCP\n",
+				    xs->cmdlen);
+				xs->error = XS_DRIVER_STUFFUP;
+				goto out_bad;
 			}
-			goto bad;
+			mscp->opcode = UHA_TSP;
+			/* XXX Not for tapes. */
+			mscp->ca = 0x01;
+			memcpy(&mscp->scsi_cmd, xs->cmd, mscp->scsi_cmd_length);
 		}
+		mscp->xdir = UHA_SDET;
+		mscp->dcn = 0x00;
+		mscp->chan = 0x00;
+		mscp->target = periph->periph_target;
+		mscp->lun = periph->periph_lun;
+		mscp->scsi_cmd_length = xs->cmdlen;
+		mscp->sense_ptr = sc->sc_dmamap_mscp->dm_segs[0].ds_addr +
+		    UHA_MSCP_OFF(mscp) + offsetof(struct uha_mscp, mscp_sense);
+		mscp->req_sense_length = sizeof(mscp->mscp_sense);
+		mscp->host_stat = 0x00;
+		mscp->target_stat = 0x00;
 
-		bus_dmamap_sync(dmat, mscp->dmamap_xfer, 0,
-		    mscp->dmamap_xfer->dm_mapsize,
-		    (flags & XS_CTL_DATA_IN) ? BUS_DMASYNC_PREREAD :
-		    BUS_DMASYNC_PREWRITE);
+		if (xs->datalen) {
+			seg = 0;
+#ifdef	TFS
+			if (flags & SCSI_DATA_UIO) {
+				error = bus_dmamap_load_uio(dmat,
+				    mscp->dmamap_xfer, (struct uio *)xs->data,
+				    ((flags & XS_CTL_NOSLEEP) ? BUS_DMA_NOWAIT :
+				     BUS_DMA_WAITOK) | BUS_DMA_STREAMING |
+				     ((flags & XS_CTL_DATA_IN) ? BUS_DMA_READ :
+				      BUS_DMA_WRITE));
+			} else
+#endif /*TFS */
+			{
+				error = bus_dmamap_load(dmat,
+				    mscp->dmamap_xfer, xs->data, xs->datalen,
+				    NULL,
+				    ((flags & XS_CTL_NOSLEEP) ? BUS_DMA_NOWAIT :
+				     BUS_DMA_WAITOK) | BUS_DMA_STREAMING |
+				     ((flags & XS_CTL_DATA_IN) ? BUS_DMA_READ :
+				      BUS_DMA_WRITE));
+			}
+
+			switch (error) {
+			case 0:
+				break;
+
+			case ENOMEM:
+			case EAGAIN:
+				xs->error = XS_RESOURCE_SHORTAGE;
+				goto out_bad;
+
+			default:
+				xs->error = XS_DRIVER_STUFFUP;
+				aprint_error_dev(&sc->sc_dev, "error %d loading DMA map\n",
+				    error);
+ out_bad:
+				uha_free_mscp(sc, mscp);
+				scsipi_done(xs);
+				return;
+			}
+
+			bus_dmamap_sync(dmat, mscp->dmamap_xfer, 0,
+			    mscp->dmamap_xfer->dm_mapsize,
+			    (flags & XS_CTL_DATA_IN) ? BUS_DMASYNC_PREREAD :
+			    BUS_DMASYNC_PREWRITE);
+
+			/*
+			 * Load the hardware scatter/gather map with the
+			 * contents of the DMA map.
+			 */
+			for (seg = 0;
+			     seg < mscp->dmamap_xfer->dm_nsegs; seg++) {
+				mscp->uha_dma[seg].seg_addr =
+				    mscp->dmamap_xfer->dm_segs[seg].ds_addr;
+				mscp->uha_dma[seg].seg_len =
+				    mscp->dmamap_xfer->dm_segs[seg].ds_len;
+			}
+
+			mscp->data_addr =
+			    sc->sc_dmamap_mscp->dm_segs[0].ds_addr +
+			    UHA_MSCP_OFF(mscp) + offsetof(struct uha_mscp,
+			    uha_dma);
+			mscp->data_length = xs->datalen;
+			mscp->sgth = 0x01;
+			mscp->sg_num = seg;
+		} else {		/* No data xfer, use non S/G values */
+			mscp->data_addr = (physaddr)0;
+			mscp->data_length = 0;
+			mscp->sgth = 0x00;
+			mscp->sg_num = 0;
+		}
+		mscp->link_id = 0;
+		mscp->link_addr = (physaddr)0;
+
+		bus_dmamap_sync(sc->sc_dmat, sc->sc_dmamap_mscp,
+		    UHA_MSCP_OFF(mscp), sizeof(struct uha_mscp),
+		    BUS_DMASYNC_PREREAD|BUS_DMASYNC_PREWRITE);
+
+		s = splbio();
+		(sc->start_mbox)(sc, mscp);
+		splx(s);
+
+		if ((flags & XS_CTL_POLL) == 0)
+			return;
 
 		/*
-		 * Load the hardware scatter/gather map with the
-		 * contents of the DMA map.
+		 * If we can't use interrupts, poll on completion
 		 */
-		for (seg = 0; seg < mscp->dmamap_xfer->dm_nsegs; seg++) {
-			mscp->uha_dma[seg].seg_addr =
-			    mscp->dmamap_xfer->dm_segs[seg].ds_addr;
-			mscp->uha_dma[seg].seg_len =
-			    mscp->dmamap_xfer->dm_segs[seg].ds_len;
-		}
-
-		mscp->data_addr = sc->sc_dmamap_mscp->dm_segs[0].ds_addr +
-		    UHA_MSCP_OFF(mscp) + offsetof(struct uha_mscp, uha_dma);
-		mscp->data_length = xs->datalen;
-		mscp->sgth = 0x01;
-		mscp->sg_num = seg;
-	} else {		/* No data xfer, use non S/G values */
-		mscp->data_addr = (physaddr)0;
-		mscp->data_length = 0;
-		mscp->sgth = 0x00;
-		mscp->sg_num = 0;
-	}
-	mscp->link_id = 0;
-	mscp->link_addr = (physaddr)0;
-
-	bus_dmamap_sync(sc->sc_dmat, sc->sc_dmamap_mscp,
-	    UHA_MSCP_OFF(mscp), sizeof(struct uha_mscp),
-	    BUS_DMASYNC_PREREAD|BUS_DMASYNC_PREWRITE);
-
-	s = splbio();
-	(sc->start_mbox)(sc, mscp);
-	splx(s);
-
-	/*
-	 * Usually return SUCCESSFULLY QUEUED
-	 */
-	if ((flags & XS_CTL_POLL) == 0)
-		return (SUCCESSFULLY_QUEUED);
-
-	/*
-	 * If we can't use interrupts, poll on completion
-	 */
-	if ((sc->poll)(sc, xs, mscp->timeout)) {
-		uha_timeout(mscp);
-		if ((sc->poll)(sc, xs, mscp->timeout))
+		if ((sc->poll)(sc, xs, mscp->timeout)) {
 			uha_timeout(mscp);
+			if ((sc->poll)(sc, xs, mscp->timeout))
+				uha_timeout(mscp);
+		}
+		return;
+
+	case ADAPTER_REQ_GROW_RESOURCES:
+		/* XXX Not supported. */
+		return;
+
+	case ADAPTER_REQ_SET_XFER_MODE:
+		/*
+		 * We can't really do this (the UltraStor controllers
+		 * have their own config).
+		 *
+		 * XXX How do we query the config?
+		 */
+		return;
 	}
-	return (COMPLETE);
-
-bad:
-	xs->error = XS_DRIVER_STUFFUP;
-	uha_free_mscp(sc, mscp);
-	return (COMPLETE);
 }
-
 void
 uha_timeout(arg)
 	void *arg;
 {
 	struct uha_mscp *mscp = arg;
 	struct scsipi_xfer *xs = mscp->xs;
-	struct scsipi_link *sc_link = xs->sc_link;
-	struct uha_softc *sc = sc_link->adapter_softc;
+	struct scsipi_periph *periph = xs->xs_periph;
+	struct uha_softc *sc =
+	    (void *)periph->periph_channel->chan_adapter->adapt_dev;
 	int s;
 
-	scsi_print_addr(sc_link);
+	scsipi_printaddr(periph);
 	printf("timed out");
 
 	s = splbio();

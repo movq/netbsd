@@ -1,3 +1,5 @@
+.\"	$NetBSD: le.4,v 1.23 2008/08/10 14:43:53 fair Exp $
+.\"
 .\" Copyright (c) 1992, 1993
 .\"	The Regents of the University of California.  All rights reserved.
 .\"
@@ -13,11 +15,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -35,9 +33,8 @@
 .\"
 .\"	from: Header: le.4,v 1.2 92/10/13 05:31:33 leres Exp
 .\"	from: @(#)le.4	8.1 (Berkeley) 6/9/93
-.\"	$NetBSD: le.4,v 1.10 2000/02/14 00:13:50 augustss Exp $
 .\"
-.Dd June 9, 1993
+.Dd April 27, 2001
 .Dt LE 4
 .Os
 .Sh NAME
@@ -45,16 +42,21 @@
 .Nd AMD 7990, 79C90, 79C960, 79C970 LANCE Ethernet interface driver
 .Sh SYNOPSIS
 .Ss ISA boards
-.Cd "nele0 at isa? port 0x320 irq 9 drq 7    #NE2100"
+.Cd "nele0 at isa? port 0x320 irq 9 drq 7    # NE2100"
 .Cd "le* at nele?"
-.Cd "bicc0 at isa? port 0x320 irq 10 drq 7   #BICC Isolan"
+.Cd "bicc0 at isa? port 0x320 irq 10 drq 7   # BICC Isolan"
 .Cd "le* at bicc?"
-.Cd "depca0 at isa? port 0x300 iomem 0xc8000 iosiz 0x8000 irq 5 #DEC DEPCA"
+.Cd "depca0 at isa? port 0x300 iomem 0xc8000 iosiz 0x8000 irq 5 # DEC DEPCA"
 .Cd "le* at depca?"
-.Cd "le* at isapnp?   #ISA-Plug-and-Play adapters"
+.Cd "le* at isapnp?                          # ISA Plug-and-Play adapters"
+.Ss EISA boards
+.Cd "depca* at eisa? slot ?                  # DEC DE422"
+.Cd "le* at depca?"
+.Ss MCA boards
+.Cd "le* at mca? slot ?                      # SKNET Personal/MC2+"
 .Ss PCI boards and mainboard adapters
 .Cd "le* at pci? dev? function ?"
-.Ss Turbochannel PMAD-A or onboard (alpha, pmax)
+.Ss TURBOchannel PMAD-A or onboard (alpha, pmax)
 .Cd "le* at tc? slot ? offset ?"
 .Ss alpha
 .Cd "le* at ioasic? offset ?"
@@ -84,7 +86,7 @@
 .Ss vax
 .Cd "le0 at vsbus0 csr 0x200e0000"
 .Sh DESCRIPTION
-The 
+The
 .Nm
 interface provides access to a
 .Tn Ethernet
@@ -99,7 +101,7 @@ The
 driver also supports PCnet-PCI cards based on the
 .Tn AMD 79c970
 chipset, which is a single-chip implementation of a
-.Tn LANCE 
+.Tn LANCE
 chip and
 .Tn PCI
 bus interface.
@@ -143,9 +145,9 @@ Ameristar's Ethernet card, manufacturer\ 1053, product\ 1
 Village Tronic's Ethernet card, manufacturer\ 2167, product\ 201
 .El
 .Pp
-The A2065 and Ameristar Ethernet cards supports only manual media selection.
+The A2065 and Ameristar Ethernet cards support only manual media selection.
 .Pp
-The Ariadne card supports a software media selection for it's two
+The Ariadne card supports a software media selection for its two
 different connectors:
 .Pp
 .Bl -tag -width xxxxxxxxxxxxxx
@@ -159,17 +161,34 @@ The Ariadne card uses an autoselect between UTP and BNC, so it uses
 UTP when an active UTP line is connected or otherwise BNC.
 See
 .Xr ifmedia 4
-for media selection options for 
+for media selection options for
 .Xr ifconfig 8 .
 .Ss ISA
 The ISA-bus Ethernet cards supported by the
 .Nm
 interface are:
 .Pp
-.Bl -tag -width -offset indent -compact
-.It BICC Isolan 
+.Bl -tag -width xxxx -offset indent -compact
+.It BICC Isolan
 .It Novell NE2100
 .It Digital DEPCA
+.El
+.Ss EISA
+The EISA-bus Ethernet cards supported by the
+.Nm
+interface are:
+.Pp
+.Bl -tag -width xxxx -offset indent -compact
+.It DEC DE422
+.El
+.Ss MCA
+The MCA-bus Ethernet cards supported by the
+.Nm
+interface are:
+.Pp
+.Bl -tag -width xxxx -offset indent -compact
+.It SKNET Personal MC2
+.It SKNET MC2+
 .El
 .Ss pmax
 All
@@ -179,13 +198,13 @@ interfaces on
 are supported, as are interfaces on
 .Tn "Alpha AXP"
 machines with a
-.Tn TurboChannel
+.Tn TURBOchannel
 bus.
 .Pp
 No support is provided for switching between media ports.
 The
 .Tn DECstation
-3100 provides both AUI and BNC (thinwire or 10base2) connectors.
+3100 provides both AUI and BNC (thinwire or 10BASE2) connectors.
 Port selection is via a manual switch and is not software configurable.
 .Pp
 The
@@ -196,9 +215,9 @@ baseboard device provides only a BNC connector.
 .Pp
 The
 .Nm ioasic
-baseboard devices and the 
+baseboard devices and the
 .Tn PMAD-AA
-.Tn TurboChannel
+.Tn TURBOchannel
 option card provide only an AUI port.
 .Ss sparc
 The
@@ -207,7 +226,7 @@ The
 cards supported by the
 .Nm
 interface include:
-.Bl -tag -width -offset indent -compact
+.Bl -tag -width xxxx -offset indent -compact
 .It SBE/S
 .Tn SCSI
 and Buffered
@@ -219,11 +238,14 @@ Fast
 and Buffered
 .Tn Ethernet
 (sun part 501-2015)
+.It Antares SBus 10Base-T Ethernet
+.Tn Buffered Ethernet
+(antares part 20-050-1007)
 .El
 .Pp
 Interfaces attached to an
 .Sy ledma0
-on SPARC systems typically have have two types of connectors:
+on SPARC systems typically have two types of connectors:
 .Pp
 .Bl -tag -offset indent -width xxxxxxxxxxxxxxxxxx
 .It AUI/DIX
@@ -275,7 +297,7 @@ is
 The
 .Tn LANCE
 TDR value is an internal counter of the interval between the start
-of a transmission, and the occurrence of a collision.
+of a transmission and the occurrence of a collision.
 This value can be used to determine the distance from the Ethernet
 tap to the point on the Ethernet cable that is shorted or open
 (unterminated).
@@ -292,11 +314,11 @@ standard.
 .It "le%d: transmit buffer error"
 .Tn LANCE
 ran out of buffer before finishing the transmission of a packet.
-If this error occurrs, the driver software has a bug.
+If this error occurs, the driver software has a bug.
 .It "le%d: underflow"
 .Tn LANCE
 ran out of buffer before finishing the transmission of a packet.
-If this error occurrs, the driver software has a bug.
+If this error occurs, the driver software has a bug.
 .It "le%d: controller failed to initialize"
 Driver failed to start the AM7990
 .Tn LANCE .
@@ -316,6 +338,44 @@ The
 .Tn LANCE
 transmitter was turned off due to an error.
 .El
+.Sh SEE ALSO
+.Xr arp 4 ,
+.Xr ifmedia 4 ,
+.Xr inet 4 ,
+.Xr intro 4 ,
+.Xr mca 4 ,
+.Xr ifconfig 8
+.Rs
+.%R "Am79C90 - CMOS Local Area Network Controller for Ethernet"
+.%D May 1994
+.%N 17881
+.%O Advanced Micro Devices
+.Re
+.Sh HISTORY
+The pmax
+.Nm
+driver is derived from a
+.Nm
+driver that first appeared in
+.Bx 4.4 .
+Support for multiple bus attachments first appeared in
+.Nx 1.2 .
+.Pp
+The
+.Tn Amiga
+.Nm
+interface first appeared in
+.Nx 1.0
+.Pp
+The Ariadne Ethernet card first appeared with the
+.Tn Amiga
+ae interface in
+.Nx 1.1
+and was converted to the
+.Tn Amiga
+.Nm
+interface in
+.Nx 1.3
 .Sh BUGS
 The Am7990 Revision C chips have a bug which causes garbage to
 be inserted in front of the received packet occasionally.
@@ -332,9 +392,9 @@ is enabled, the
 .Nm
 driver executes one or two calls to an inline Ethernet address
 comparison function for every received packet.
-On the 
+On the
 .Tn mc68000
-it is exactly eight instructions of 16-bits each.
+it is exactly eight instructions of 16 bits each.
 There is one comparison for each unicast packet, and two
 comparisons for each broadcast packet.
 .Pp
@@ -370,49 +430,12 @@ The
 .Nm ioasic
 machines and the
 .Tn DECstation
-3100 must 
+3100 must
 copy packets to and from non-contiguous DMA buffers.
-The 
+The
 .Tn DECstation
 5000/200 and the
-.Tn PMAD-AA 
+.Tn PMAD-AA
 must copy to and from an onboard SRAM DMA buffer.
 The CPU overhead is noticeable, but all machines
 can sustain full 10 Mb/s media speed.
-.Sh HISTORY
-The pmax
-.Nm
-driver is derived from a
-.Nm
-driver that first appeared in
-.Bx 4.4 .
-Support for multiple bus attachments first appeared in
-.Nx 1.2 .
-.Pp
-The
-.Tn Amiga
-.Nm
-interface first appeared in
-.Nx 1.0
-.Pp
-The Ariadne Ethernet card first appeared with the
-.Tn Amiga
-ae interface in
-.Nx 1.1
-and was converted to the
-.Tn Amiga
-.Nm
-interface in
-.Nx 1.3
-.Sh SEE ALSO
-.Xr intro 4 ,
-.Xr inet 4 ,
-.Xr arp 4 ,
-.Xr ifmedia 4 ,
-.Xr ifconfig 8
-.Rs
-.%R "Am79C90 - CMOS Local Area Network Controller for Ethernet"
-.%D May 1994
-.%N 17881
-.%O Advanced Micro Devices
-.Re

@@ -1,4 +1,4 @@
-.\"	$NetBSD: intro.4,v 1.2 1999/12/15 23:44:53 abs Exp $
+.\"	$NetBSD: intro.4,v 1.9 2005/06/20 13:25:25 peter Exp $
 .\"
 .\" Copyright (c) 1990, 1991 Regents of the University of California.
 .\" All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -38,7 +34,7 @@
 .Os
 .Sh NAME
 .Nm intro
-.Nd introduction to special files and hardware support
+.Nd introduction to mvme68k special files and hardware support
 .Sh DESCRIPTION
 This section describes the special files, related driver functions,
 and networking support
@@ -48,7 +44,7 @@ In this part of the manual, the
 section of
 each configurable device gives a sample specification
 for use in constructing a system description for the
-.Xr config 8
+.Xr config 1
 program.
 The
 .Tn DIAGNOSTICS
@@ -96,7 +92,7 @@ The autoconfiguration system is described in
 A list of the supported devices is given below.
 .Sh LIST OF DEVICES
 The devices listed below are supported in this incarnation of
-the system. 
+the system.
 Devices are indicated by their functional interface.
 Not all supported devices are listed.
 .Bl -tag -width "xxxxxx" -compact -offset indent
@@ -116,6 +112,8 @@ Lance-based Ethernet interface
 Onboard parallel printer interface
 .It Em mem
 physical memory
+.It Em mcchip
+MVME162 and MVME172 MCChip (similar to PCCchip2)
 .It Em ncrsc
 .Tn NCR
 53c710 SCSI I/O Processor
@@ -123,16 +121,19 @@ physical memory
 MVME147 PCC Chip
 .It Em pcctwo
 MVME167 and MVME177 PCCchip2
+.It Em vmepcc
+MVME147 VMEbus interface chip
+.It Em vmetwo
+MVME1[67]x Enhanced VMEbus interface chip
 .It Em wdsc
 WD33c93 SCSI Bus Interface Controller
 .It Em zsc
 .Tn Zilog
-Z8530 Dual-port Serial Snterface
+Z8530 Dual-port Serial Interface on MVME147 and MVME162
 .El
 .Sh SEE ALSO
-.Xr intro 4 ,
-.Xr autoconf 4 ,
-.Xr config 8 .
+.Xr config 1 ,
+.Xr autoconf 4
 .Sh HISTORY
 The
 .Tn mvme68k

@@ -1,4 +1,4 @@
-/*	$NetBSD: zs.c,v 1.19 2000/03/18 22:33:05 scw Exp $	*/
+/*	$NetBSD: zs.c,v 1.41 2008/06/13 12:26:02 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,8 +35,11 @@
  * Runs two serial lines per chip using slave drivers.
  * Plain tty/async lines use the zs_async slave.
  *
- * Modified for NetBSD/mvme68k by Jason R. Thorpe <thorpej@NetBSD.ORG>
+ * Modified for NetBSD/mvme68k by Jason R. Thorpe <thorpej@NetBSD.org>
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: zs.c,v 1.41 2008/06/13 12:26:02 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -56,15 +52,17 @@
 #include <sys/tty.h>
 #include <sys/time.h>
 #include <sys/syslog.h>
+#include <sys/cpu.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/cons.h>
 #include <dev/ic/z8530reg.h>
 #include <machine/z8530var.h>
 
-#include <machine/cpu.h>
-#include <machine/bus.h>
-
 #include <mvme68k/dev/zsvar.h>
+
+#include "ioconf.h"
 
 /*
  * Some warts needed by z8530tty.c -
@@ -72,10 +70,6 @@
  * or you can not see messages done with printf during boot-up...
  */
 int zs_def_cflag = (CREAD | CS8 | HUPCL);
-/* XXX Shouldn't hardcode the minor number... */
-int zs_major = 12;
-
-static u_long zs_sir;	/* software interrupt cookie */
 
 /* Flags from zscnprobe() */
 static int zs_hwflags[NZSC][2];
@@ -91,7 +85,7 @@ static int zs_defspeed[NZSC][2] = {
 static struct zs_chanstate zs_conschan_store;
 static struct zs_chanstate *zs_conschan;
 
-u_char zs_init_reg[16] = {
+uint8_t zs_init_reg[16] = {
 	0,	/* 0: CMD (reset, etc.) */
 	0,	/* 1: No interrupts yet. */
 	0x18 + ZSHARD_PRI,	/* IVECT */
@@ -104,7 +98,7 @@ u_char zs_init_reg[16] = {
 	ZSWR9_MASTER_IE,
 	0,	/*10: Misc. TX/RX control bits */
 	ZSWR11_TXCLK_BAUD | ZSWR11_RXCLK_BAUD,
-	((PCLK/32)/9600)-2,	/*12: BAUDLO (default=9600) */
+	0,			/*12: BAUDLO (default=9600) */
 	0,			/*13: BAUDHI (default=9600) */
 	ZSWR14_BAUD_ENA | ZSWR14_BAUD_FROM_PCLK,
 	ZSWR15_BREAK_IE,
@@ -116,15 +110,13 @@ u_char zs_init_reg[16] = {
  ****************************************************************/
 
 /* Definition of the driver for autoconfig. */
-static int	zsc_print __P((void *, const char *name));
-int	zs_getc __P((void *));
-void	zs_putc __P((void *, int));
+static int	zsc_print(void *, const char *name);
+int	zs_getc(void *);
+void	zs_putc(void *, int);
 
 #if 0
-static int zs_get_speed __P((struct zs_chanstate *));
+static int zs_get_speed(struct zs_chanstate *);
 #endif
-
-extern struct cfdriver zsc_cd;
 
 cons_decl(zsc_pcc);
 
@@ -133,21 +125,15 @@ cons_decl(zsc_pcc);
  * Configure children of an SCC.
  */
 void
-zs_config(zsc, bust, bush)
-	struct zsc_softc *zsc;
-	bus_space_tag_t bust;
-	bus_space_handle_t bush;
+zs_config(struct zsc_softc *zsc, struct zsdevice *zs, int vector, int pclk)
 {
 	struct zsc_attach_args zsc_args;
-	struct zsdevice *zs;
 	volatile struct zschan *zc;
 	struct zs_chanstate *cs;
 	int zsc_unit, channel, s;
 
-	zsc_unit = zsc->zsc_dev.dv_unit;
-	printf(": Zilog 8530 SCC\n");
-
-	zs = (struct zsdevice *) bush;	/* XXXXXXXX */
+	zsc_unit = device_unit(zsc->zsc_dev);
+	printf(": Zilog 8530 SCC at vector 0x%x\n", vector);
 
 	/*
 	 * Initialize software state for each channel.
@@ -157,22 +143,29 @@ zs_config(zsc, bust, bush)
 		zsc_args.hwflags = zs_hwflags[zsc_unit][channel];
 		cs = &zsc->zsc_cs_store[channel];
 		zsc->zsc_cs[channel] = cs;
+		zs_lock_init(cs);
 
 		/*
 		 * If we're the console, copy the channel state, and
 		 * adjust the console channel pointer.
 		 */
 		if (zsc_args.hwflags & ZS_HWFLAG_CONSOLE) {
-			bcopy(zs_conschan, cs, sizeof(struct zs_chanstate));
+			memcpy(cs, zs_conschan, sizeof(struct zs_chanstate));
 			zs_conschan = cs;
 		} else {
 			zc = (channel == 0) ? &zs->zs_chan_a : &zs->zs_chan_b;
-			cs->cs_reg_csr  = &zc->zc_csr;
-			cs->cs_reg_data = &zc->zc_data;
-			bcopy(zs_init_reg, cs->cs_creg, 16);
-			bcopy(zs_init_reg, cs->cs_preg, 16);
+			cs->cs_reg_csr  = zc->zc_csr;
+			cs->cs_reg_data = zc->zc_data;
+			memcpy(cs->cs_creg, zs_init_reg, 16);
+			memcpy(cs->cs_preg, zs_init_reg, 16);
 			cs->cs_defspeed = zs_defspeed[zsc_unit][channel];
 		}
+
+		cs->cs_brg_clk = pclk / 16;
+		cs->cs_creg[2] = cs->cs_preg[2] = vector;
+		zs_set_speed(cs, cs->cs_defspeed);
+		cs->cs_creg[12] = cs->cs_preg[12];
+		cs->cs_creg[13] = cs->cs_preg[13];
 		cs->cs_defcflag = zs_def_cflag;
 
 		/* Make these correspond to cs_defcflag (-crtscts) */
@@ -184,24 +177,26 @@ zs_config(zsc, bust, bush)
 		cs->cs_channel = channel;
 		cs->cs_private = NULL;
 		cs->cs_ops = &zsops_null;
-		cs->cs_brg_clk = PCLK / 16;
 
 		/*
 		 * Clear the master interrupt enable.
 		 * The INTENA is common to both channels,
 		 * so just do it on the A channel.
+		 * Write the interrupt vector while we're at it.
 		 */
 		if (channel == 0) {
 			zs_write_reg(cs, 9, 0);
+			zs_write_reg(cs, 2, vector);
 		}
 
 		/*
 		 * Look for a child driver for this channel.
 		 * The child attach will setup the hardware.
 		 */
-		if (!config_found(&zsc->zsc_dev, (void *)&zsc_args, zsc_print)) {
+		if (!config_found(zsc->zsc_dev, (void *)&zsc_args,
+		    zsc_print)) {
 			/* No sub-driver.  Just reset it. */
-			u_char reset = (channel == 0) ?
+			uint8_t reset = (channel == 0) ?
 				ZSWR9_A_RESET : ZSWR9_B_RESET;
 			s = splzs();
 			zs_write_reg(cs,  9, reset);
@@ -210,104 +205,91 @@ zs_config(zsc, bust, bush)
 	}
 
 	/*
-	 * Allocate a software interrupt cookie.  Note that the argument
-	 * "zsc" is never actually used in the software interrupt
-	 * handler.
+	 * Allocate a software interrupt cookie.
 	 */
-	if (zs_sir == 0)
-		zs_sir = allocate_sir(zssoft, zsc);
+	zsc->zsc_softintr_cookie = softint_establish(SOFTINT_SERIAL,
+	    (void (*)(void *)) zsc_intr_soft, zsc);
+#ifdef DEBUG
+	assert(zsc->zsc_softintr_cookie);
+#endif
 }
 
 static int
-zsc_print(aux, name)
-	void *aux;
-	const char *name;
+zsc_print(void *aux, const char *name)
 {
 	struct zsc_attach_args *args = aux;
 
 	if (name != NULL)
-		printf("%s: ", name);
+		aprint_normal("%s: ", name);
 
 	if (args->channel != -1)
-		printf(" channel %d", args->channel);
+		aprint_normal(" channel %d", args->channel);
 
 	return UNCONF;
 }
 
-static int zssoftpending;
-
+#if defined(MVME162) || defined(MVME172)
 /*
- * Our ZS chips all share a common, autovectored interrupt,
+ * Our ZS chips each have their own interrupt vector.
+ */
+int
+zshard_unshared(void *arg)
+{
+	struct zsc_softc *zsc = arg;
+	int rval;
+
+	rval = zsc_intr_hard(zsc);
+
+	if (rval) {
+		if ((zsc->zsc_cs[0]->cs_softreq) ||
+		    (zsc->zsc_cs[1]->cs_softreq))
+			softint_schedule(zsc->zsc_softintr_cookie);
+		zsc->zsc_evcnt.ev_count++;
+	}
+
+	return rval;
+}
+#endif
+
+#ifdef MVME147
+/*
+ * Our ZS chips all share a common, PCC-vectored interrupt,
  * so we have to look at all of them on each interrupt.
  */
 int
-zshard(arg)
-	void *arg;
+zshard_shared(void *arg)
 {
 	struct zsc_softc *zsc;
 	int unit, rval;
 
 	rval = 0;
 	for (unit = 0; unit < zsc_cd.cd_ndevs; unit++) {
-		zsc = zsc_cd.cd_devs[unit];
-		if (zsc == NULL)
-			continue;
-		rval |= zsc_intr_hard(zsc);
-		if ((zsc->zsc_cs[0]->cs_softreq) ||
-			(zsc->zsc_cs[1]->cs_softreq))
-		{
-			/* zsc_req_softint(zsc); */
-			/* We are at splzs here, so no need to lock. */
-			if (zssoftpending == 0) {
-				zssoftpending = zs_sir;
-				setsoftint(zs_sir);
-			}
+		zsc = device_lookup_private(&zsc_cd, unit);
+		if (zsc != NULL && zsc_intr_hard(zsc)) {
+			if ((zsc->zsc_cs[0]->cs_softreq) ||
+			    (zsc->zsc_cs[1]->cs_softreq))
+				softint_schedule(zsc->zsc_softintr_cookie);
+			zsc->zsc_evcnt.ev_count++;
+			rval++;
 		}
 	}
-	return (rval);
+	return rval;
 }
+#endif
 
-/*
- * Similar scheme as for zshard (look at all of them)
- */
-void
-zssoft(arg)
-	void *arg;
-{
-	struct zsc_softc *zsc;
-	int unit;
-
-	/* This is not the only ISR on this IPL. */
-	if (zssoftpending == 0)
-		return;
-
-	/*
-	 * The soft intr. bit will be set by zshard only if
-	 * the variable zssoftpending is zero.
-	 */
-	zssoftpending = 0;
-
-	for (unit = 0; unit < zsc_cd.cd_ndevs; ++unit) {
-		zsc = zsc_cd.cd_devs[unit];
-		if (zsc == NULL)
-			continue;
-		(void) zsc_intr_soft(zsc);
-	}
-}
 
 #if 0
 /*
  * Compute the current baud rate given a ZSCC channel.
  */
 static int
-zs_get_speed(cs)
-	struct zs_chanstate *cs;
+zs_get_speed(struct zs_chanstate *cs)
 {
 	int tconst;
 
 	tconst = zs_read_reg(cs, 12);
 	tconst |= zs_read_reg(cs, 13) << 8;
-	return (TCONST_TO_BPS(cs->cs_brg_clk, tconst));
+	return TCONST_TO_BPS(cs->cs_brg_clk, tconst);
 }
 #endif
 
@@ -315,14 +297,12 @@ zs_get_speed(cs)
  * MD functions for setting the baud rate and control modes.
  */
 int
-zs_set_speed(cs, bps)
-	struct zs_chanstate *cs;
-	int bps;	/* bits per second */
+zs_set_speed(struct zs_chanstate *cs, int bps)
 {
 	int tconst, real_bps;
 
 	if (bps == 0)
-		return (0);
+		return 0;
 
 #ifdef	DIAGNOSTIC
 	if (cs->cs_brg_clk == 0)
@@ -331,26 +311,24 @@ zs_set_speed(cs, bps)
 
 	tconst = BPS_TO_TCONST(cs->cs_brg_clk, bps);
 	if (tconst < 0)
-		return (EINVAL);
+		return EINVAL;
 
 	/* Convert back to make sure we can do it. */
 	real_bps = TCONST_TO_BPS(cs->cs_brg_clk, tconst);
 
-	/* XXX - Allow some tolerance here? */
-	if (real_bps != bps)
-		return (EINVAL);
+	/* Allow 2% tolerance WRT the required bps */
+	if (((abs(real_bps - bps) * 1000) / bps) > 20)
+		return EINVAL;
 
 	cs->cs_preg[12] = tconst;
 	cs->cs_preg[13] = tconst >> 8;
 
 	/* Caller will stuff the pending registers. */
-	return (0);
+	return 0;
 }
 
 int
-zs_set_modes(cs, cflag)
-	struct zs_chanstate *cs;
-	int cflag;	/* bits per second */
+zs_set_modes(struct zs_chanstate *cs, int cflag)
 {
 	int s;
 
@@ -385,7 +363,7 @@ zs_set_modes(cs, cflag)
 	splx(s);
 
 	/* Caller will stuff the pending registers. */
-	return (0);
+	return 0;
 }
 
 
@@ -393,12 +371,10 @@ zs_set_modes(cs, cflag)
  * Read or write the chip with suitable delays.
  */
 
-u_char
-zs_read_reg(cs, reg)
-	struct zs_chanstate *cs;
-	u_char reg;
+uint8_t
+zs_read_reg(struct zs_chanstate *cs, uint8_t reg)
 {
-	u_char val;
+	uint8_t val;
 
 	*cs->cs_reg_csr = reg;
 	ZS_DELAY();
@@ -408,48 +384,47 @@ zs_read_reg(cs, reg)
 }
 
 void
-zs_write_reg(cs, reg, val)
-	struct zs_chanstate *cs;
-	u_char reg, val;
+zs_write_reg(struct zs_chanstate *cs, uint8_t reg, uint8_t val)
 {
+
 	*cs->cs_reg_csr = reg;
 	ZS_DELAY();
 	*cs->cs_reg_csr = val;
 	ZS_DELAY();
 }
 
-u_char zs_read_csr(cs)
-	struct zs_chanstate *cs;
+uint8_t
+zs_read_csr(struct zs_chanstate *cs)
 {
-	u_char val;
+	uint8_t val;
 
 	val = *cs->cs_reg_csr;
 	ZS_DELAY();
 	return val;
 }
 
-void  zs_write_csr(cs, val)
-	struct zs_chanstate *cs;
-	u_char val;
+void
+zs_write_csr(struct zs_chanstate *cs, uint8_t val)
 {
+
 	*cs->cs_reg_csr = val;
 	ZS_DELAY();
 }
 
-u_char zs_read_data(cs)
-	struct zs_chanstate *cs;
+uint8_t
+zs_read_data(struct zs_chanstate *cs)
 {
-	u_char val;
+	uint8_t val;
 
 	val = *cs->cs_reg_data;
 	ZS_DELAY();
 	return val;
 }
 
-void  zs_write_data(cs, val)
-	struct zs_chanstate *cs;
-	u_char val;
+void
+zs_write_data(struct zs_chanstate *cs, uint8_t val)
 {
+
 	*cs->cs_reg_data = val;
 	ZS_DELAY();
 }
@@ -462,8 +437,7 @@ void  zs_write_data(cs, val)
  * Polled input char.
  */
 int
-zs_getc(arg)
-	void *arg;
+zs_getc(void *arg)
 {
 	struct zs_chanstate *cs = arg;
 	int s, c, rr0, stat;
@@ -488,16 +462,14 @@ zs_getc(arg)
 	ZS_DELAY();
 	splx(s);
 
-	return (c);
+	return c;
 }
 
 /*
  * Polled output char.
  */
 void
-zs_putc(arg, c)
-	void *arg;
-	int c;
+zs_putc(void *arg, int c)
 {
 	struct zs_chanstate *cs = arg;
 	int s, rr0;
@@ -518,16 +490,11 @@ zs_putc(arg, c)
  * Common parts of console init.
  */
 void
-zs_cnconfig(zsc_unit, channel, bust, bush)
-	int zsc_unit, channel;
-	bus_space_tag_t bust;
-	bus_space_handle_t bush;
+zs_cnconfig(int zsc_unit, int channel, struct zsdevice *zs, int pclk)
 {
 	struct zs_chanstate *cs;
-	struct zsdevice *zs;
 	struct zschan *zc;
 
-	zs = (struct zsdevice *) bush;	/* XXXXXXXX */
 	zc = (channel == 0) ? &zs->zs_chan_a : &zs->zs_chan_b;
 
 	/*
@@ -539,11 +506,12 @@ zs_cnconfig(zsc_unit, channel, bust, bush)
 	zs_hwflags[zsc_unit][channel] = ZS_HWFLAG_CONSOLE;
 
 	/* Setup temporary chanstate. */
-	cs->cs_reg_csr  = &zc->zc_csr;
-	cs->cs_reg_data = &zc->zc_data;
+	cs->cs_brg_clk = pclk / 16;
+	cs->cs_reg_csr  = zc->zc_csr;
+	cs->cs_reg_data = zc->zc_data;
 
 	/* Initialize the pending registers. */
-	bcopy(zs_init_reg, cs->cs_preg, 16);
+	memcpy(cs->cs_preg, zs_init_reg, 16);
 	cs->cs_preg[5] |= (ZSWR5_DTR | ZSWR5_RTS);
 
 #if 0
@@ -553,6 +521,9 @@ zs_cnconfig(zsc_unit, channel, bust, bush)
 #else
 	cs->cs_defspeed = 9600;	/* XXX */
 #endif
+	zs_set_speed(cs, cs->cs_defspeed);
+	cs->cs_creg[12] = cs->cs_preg[12];
+	cs->cs_creg[13] = cs->cs_preg[13];
 
 	/* Clear the master interrupt enable. */
 	zs_write_reg(cs, 9, 0);
@@ -568,23 +539,20 @@ zs_cnconfig(zsc_unit, channel, bust, bush)
  * Polled console input putchar.
  */
 int
-zsc_pcccngetc(dev)
-	dev_t dev;
+zsc_pcccngetc(dev_t dev)
 {
 	struct zs_chanstate *cs = zs_conschan;
 	int c;
 
 	c = zs_getc(cs);
-	return (c);
+	return c;
 }
 
 /*
  * Polled console output putchar.
  */
 void
-zsc_pcccnputc(dev, c)
-	dev_t dev;
-	int c;
+zsc_pcccnputc(dev_t dev, int c)
 {
 	struct zs_chanstate *cs = zs_conschan;
 
@@ -595,8 +563,7 @@ zsc_pcccnputc(dev, c)
  * Handle user request to enter kernel debugger.
  */
 void
-zs_abort(cs)
-	struct zs_chanstate *cs;
+zs_abort(struct zs_chanstate *cs)
 {
 	int rr0;
 

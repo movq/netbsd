@@ -1,9 +1,14 @@
-/*	$NetBSD: _def_monetary.c,v 1.4 1997/04/29 16:40:15 kleink Exp $	*/
+/*	$NetBSD: _def_monetary.c,v 1.8 2005/06/12 05:21:27 lukem Exp $	*/
 
 /*
- * Written by J.T. Conklin <jtc@netbsd.org>.
+ * Written by J.T. Conklin <jtc@NetBSD.org>.
  * Public domain.
  */
+
+#include <sys/cdefs.h>
+#if defined(LIBC_SCCS) && !defined(lint)
+__RCSID("$NetBSD: _def_monetary.c,v 1.8 2005/06/12 05:21:27 lukem Exp $");
+#endif /* LIBC_SCCS and not lint */
 
 #include <sys/localedef.h>
 #include <limits.h>
@@ -18,14 +23,20 @@ const _MonetaryLocale _DefaultMonetaryLocale =
 	"",
 	"",
 	"",
-	CHAR_MAX,
-	CHAR_MAX,
-	CHAR_MAX,
-	CHAR_MAX,
-	CHAR_MAX,
-	CHAR_MAX,
-	CHAR_MAX,
-	CHAR_MAX
+	(char)CHAR_MAX,
+	(char)CHAR_MAX,
+	(char)CHAR_MAX,
+	(char)CHAR_MAX,
+	(char)CHAR_MAX,
+	(char)CHAR_MAX,
+	(char)CHAR_MAX,
+	(char)CHAR_MAX,
+	(char)CHAR_MAX,
+	(char)CHAR_MAX,
+	(char)CHAR_MAX,
+	(char)CHAR_MAX,
+	(char)CHAR_MAX,
+	(char)CHAR_MAX
 };
 
 const _MonetaryLocale *_CurrentMonetaryLocale = &_DefaultMonetaryLocale;

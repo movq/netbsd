@@ -1,4 +1,4 @@
-/*	$NetBSD: qdioctl.h,v 1.3 1999/06/20 17:58:56 ragge Exp $	*/
+/*	$NetBSD: qdioctl.h,v 1.7 2007/03/04 06:02:29 christos Exp $	*/
 /*-
  * Copyright (c) 1982, 1986
  *	The Regents of the University of California.  All rights reserved.
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -90,24 +86,24 @@
 
 
 #define QD_GETEVENT	_IOR('g', 1, struct _vs_event) /* get oldest event */
-#define QD_WTCURSOR	_IOW('g', 2, short[32])       /* write cursor bitmap */
-#define QD_RDCURSOR	_IOR('g', 3, 64)           /* read cursor bitmap */
-#define QD_CLRSCRN	_IO('g', 4) 		/* clear the screen */
-#define QD_RDCONFIG	_IOR('g', 5, short)        /* read QDSS configuration */
+#define QD_WTCURSOR	_IOW('g', 2, short[32])	/* write cursor bitmap */
+#define QD_RDCURSOR	_IOR('g', 3, 64)	/* read cursor bitmap */
+#define QD_CLRSCRN	_IO('g', 4)		/* clear the screen */
+#define QD_RDCONFIG	_IOR('g', 5, short)	/* read QDSS configuration */
 #define QD_PRGMOUSE	_IOW('g', 6, char)	/* program mouse */
-#define QD_PRGTABLET	_IOW('g', 7, char) 	/* program tablet */
+#define QD_PRGTABLET	_IOW('g', 7, char)	/* program tablet */
 #define QD_PRGKBD	_IOW('g', 8, struct prgkbd) /* program LK201 kbd */
 #define QD_MAPDEVICE	_IOR('g', 9, struct qdmap) /* map device to user */
-#define QD_MAPIOBUF 	_IOWR('g', 10, caddr_t)     /* map DMA iobuf to user */
-#define QD_MAPEVENT	_IOR('g', 11, caddr_t)     /* map event queue to user */
+#define QD_MAPIOBUF	_IOWR('g', 10, void *)	/* map DMA iobuf to user */
+#define QD_MAPEVENT	_IOR('g', 11, void *)	/* map event queue to user */
 #define QD_PRGCURSOR	_IOW('g', 12, struct prg_cursor) /* program cursor */
-#define QD_RESET	_IO('g', 13)  	    /* set device & driver defaults */
+#define QD_RESET	_IO('g', 13)	     /* set device & driver defaults */
 #define QD_POSCURSOR	_IOW('g', 14, struct _vs_cursor) /* position cursor */
-#define QD_SET		_IO('g', 15)  	    /* set DUART & driver defaults */
-#define QD_MAPSCROLL    _IOR('g', 16, caddr_t)  /* map scroll param area */
-#define QD_UNMAPSCROLL  _IO('g', 17)            /* unmap scroll param area */
-#define QD_MAPCOLOR     _IOR('g', 18, caddr_t)  /* map color map write buf */
-#define QD_UNMAPCOLOR   _IO('g', 19)            /* unmap color map write buf */
-#define QD_KERN_LOOP    _IO('g', 20)       /* detour kernel console output */
-#define QD_KERN_UNLOOP  _IO('g', 21)       /* un-detour kernel console output */
+#define QD_SET		_IO('g', 15)	      /* set DUART & driver defaults */
+#define QD_MAPSCROLL	_IOR('g', 16, void *)	/* map scroll param area */
+#define QD_UNMAPSCROLL	_IO('g', 17)		/* unmap scroll param area */
+#define QD_MAPCOLOR	_IOR('g', 18, void *)	/* map color map write buf */
+#define QD_UNMAPCOLOR	_IO('g', 19)		/* unmap color map write buf */
+#define QD_KERN_LOOP	_IO('g', 20)	     /* detour kernel console output */
+#define QD_KERN_UNLOOP	_IO('g', 21)	  /* un-detour kernel console output */
 #define QD_PRGTABRES	_IOW('g', 22, short) /* program tablet resolution */

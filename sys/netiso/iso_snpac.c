@@ -1,4 +1,4 @@
-/*	$NetBSD: iso_snpac.c,v 1.23 2000/03/30 13:10:11 augustss Exp $	*/
+/*	$NetBSD: iso_snpac.c,v 1.51 2008/10/24 21:50:08 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -62,11 +58,15 @@ SOFTWARE.
  * ARGO Project, Computer Sciences Dept., University of Wisconsin - Madison
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: iso_snpac.c,v 1.51 2008/10/24 21:50:08 dyoung Exp $");
+
 #include "opt_iso.h"
 #ifdef ISO
 
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/kernel.h>
 #include <sys/mbuf.h>
 #include <sys/domain.h>
 #include <sys/protosw.h>
@@ -76,6 +76,7 @@ SOFTWARE.
 #include <sys/ioctl.h>
 #include <sys/syslog.h>
 #include <sys/proc.h>
+#include <sys/kauth.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -94,36 +95,47 @@ SOFTWARE.
 #include <netiso/argo_debug.h>
 
 int             iso_systype = SNPA_ES;	/* default to be an ES */
-extern short    esis_holding_time, esis_config_time, esis_esconfig_time;
-extern struct timeval time;
-extern int      hz;
 
 LIST_HEAD(, llinfo_llc) llinfo_llc;
 
 struct callout snpac_age_ch;
 
-struct sockaddr_iso blank_siso = {sizeof(blank_siso), AF_ISO};
+struct sockaddr_iso blank_siso = {
+	.siso_len = sizeof(blank_siso),
+	.siso_family = AF_ISO,
+};
 static struct sockaddr_iso
-	dst = {sizeof(dst), AF_ISO},
-	gte = {sizeof(gte), AF_ISO},
+	dst = {
+		.siso_len = sizeof(dst),
+		.siso_family = AF_ISO,
+	},
+	gte = {
+		.siso_len = sizeof(gte),
+		.siso_family = AF_ISO,
+	},
 #if 0
-	src = {sizeof(src), AF_ISO},
+	src = {
+		.siso_len = sizeof(src),
+		.siso_family = AF_ISO,
+	},
 #endif
-	msk = {sizeof(msk), AF_ISO},
-	zmk = {0, 0};
+	msk = {
+		.siso_len = sizeof(msk),
+		.siso_family = AF_ISO,
+	},
+	zmk = {
+		.siso_len = 0,
+	};
 
 #define zsi blank_siso
 #define zero_isoa	zsi.siso_addr
-#define zap_isoaddr(a, b) {Bzero(&a.siso_addr, sizeof(*r)); r = b; \
-	   Bcopy(r, &a.siso_addr, 1 + (r)->isoa_len);}
+#define zap_isoaddr(a, b) {memset(&a.siso_addr, 0, sizeof(*r)); r = b; \
+	   memmove(&a.siso_addr, r, 1 + (r)->isoa_len);}
 #define S(x) ((struct sockaddr *)&(x))
 
-static struct sockaddr_dl blank_dl = {sizeof(blank_dl), AF_LINK};
 static struct sockaddr_dl gte_dl;
-#define zap_linkaddr(a, b, c, i) \
-	(*a = blank_dl, bcopy(b, a->sdl_data, a->sdl_alen = c), a->sdl_index = i)
 
-static void snpac_fixdstandmask __P((int));
+static void snpac_fixdstandmask (int);
 
 /*
  *	We only keep track of a single IS at a time.
@@ -147,10 +159,10 @@ struct rtentry *known_is;
  *	lan_output() That means that if these multicast addresses change
  *	the token ring driver must be altered.
  */
-char            all_es_snpa[] = {0x09, 0x00, 0x2b, 0x00, 0x00, 0x04};
-char            all_is_snpa[] = {0x09, 0x00, 0x2b, 0x00, 0x00, 0x05};
-char            all_l1is_snpa[] = {0x01, 0x80, 0xc2, 0x00, 0x00, 0x14};
-char            all_l2is_snpa[] = {0x01, 0x80, 0xc2, 0x00, 0x00, 0x15};
+const char all_es_snpa[] = {0x09, 0x00, 0x2b, 0x00, 0x00, 0x04};
+const char all_is_snpa[] = {0x09, 0x00, 0x2b, 0x00, 0x00, 0x05};
+const char all_l1is_snpa[] = {0x01, 0x80, 0xc2, 0x00, 0x00, 0x14};
+const char all_l2is_snpa[] = {0x01, 0x80, 0xc2, 0x00, 0x00, 0x15};
 
 union sockunion {
 	struct sockaddr_iso siso;
@@ -166,10 +178,7 @@ union sockunion {
  * NOTES:		This does a lot of obscure magic;
  */
 void
-llc_rtrequest(req, rt, sa)
-	int             req;
-	struct rtentry *rt;
-	struct sockaddr *sa;
+llc_rtrequest(int req, struct rtentry *rt, const struct rt_addrinfo *info)
 {
 	union sockunion *gate = (union sockunion *) rt->rt_gateway;
 	struct llinfo_llc *lc = (struct llinfo_llc *) rt->rt_llinfo;
@@ -179,7 +188,7 @@ llc_rtrequest(req, rt, sa)
 
 #ifdef ARGO_DEBUG
 	if (argo_debug[D_SNPA]) {
-		printf("llc_rtrequest(%d, %p, %p)\n", req, rt, sa);
+		printf("llc_rtrequest(%d, %p, %p)\n", req, rt, info);
 	}
 #endif
 	if (rt->rt_flags & RTF_GATEWAY)
@@ -192,9 +201,18 @@ llc_rtrequest(req, rt, sa)
 			 * or from a default route.
 			 */
 			if (rt->rt_flags & RTF_CLONING) {
+				union {
+					struct sockaddr sa;
+					struct sockaddr_dl sdl;
+					struct sockaddr_storage ss;
+				} u;
+
 				iso_setmcasts(ifp, req);
-				rt_setgate(rt, rt_key(rt),
-					   (struct sockaddr *) & blank_dl);
+				sockaddr_dl_init(&u.sdl, sizeof(u.ss),
+				    ifp->if_index, ifp->if_type,
+				    NULL, strlen(ifp->if_xname),
+				    NULL, ifp->if_addrlen);
+				rt_setgate(rt, &u.sa);
 				return;
 			}
 			if (lc != 0)
@@ -210,19 +228,21 @@ llc_rtrequest(req, rt, sa)
 				break;
 			}
 			R_Malloc(lc, struct llinfo_llc *, sizeof(*lc));
-			rt->rt_llinfo = (caddr_t) lc;
+			rt->rt_llinfo = (void *) lc;
 			if (lc == 0) {
 				log(LOG_DEBUG, "llc_rtrequest: malloc failed\n");
 				break;
 			}
-			Bzero(lc, sizeof(*lc));
+			memset(lc, 0, sizeof(*lc));
 			lc->lc_rt = rt;
 			rt->rt_flags |= RTF_LLINFO;
 			LIST_INSERT_HEAD(&llinfo_llc, lc, lc_list);
-			if (gate->sdl.sdl_alen == sizeof(struct esis_req) + addrlen) {
+			if (gate->sdl.sdl_alen == sizeof(struct esis_req)
+			    + addrlen) {
 				gate->sdl.sdl_alen -= sizeof(struct esis_req);
-				bcopy(addrlen + LLADDR(&gate->sdl),
-				  (caddr_t) & lc->lc_er, sizeof(lc->lc_er));
+				(void)memcpy(&lc->lc_er,
+				    (const char *)CLLADDR(&gate->sdl) +
+				    addrlen, sizeof(lc->lc_er));
 			} else if (gate->sdl.sdl_alen == addrlen)
 				lc->lc_flags = (SNPA_ES | SNPA_VALID | SNPA_PERM);
 			break;
@@ -251,24 +271,22 @@ llc_rtrequest(req, rt, sa)
  * NOTES:		This also does a lot of obscure magic;
  */
 void
-iso_setmcasts(ifp, req)
-	struct ifnet   *ifp;
-	int             req;
+iso_setmcasts(struct ifnet *ifp, int req)
 {
-	static char    *addrlist[] =
+	static const char * const addrlist[] =
 	{all_es_snpa, all_is_snpa, all_l1is_snpa, all_l2is_snpa, 0};
-	struct ifreq    ifr;
-	caddr_t *cpp;
+	struct ifreq ifr;
+	const char *const *cpp;
 
-	bzero((caddr_t) & ifr, sizeof(ifr));
-	for (cpp = (caddr_t *) addrlist; *cpp; cpp++) {
-		bcopy(*cpp, (caddr_t) ifr.ifr_addr.sa_data, 6);
-		if (req == RTM_ADD && (ifp->if_ioctl == 0 ||
-		    (*ifp->if_ioctl)(ifp, SIOCADDMULTI, (caddr_t)&ifr) != 0))
+	(void)memset(&ifr, 0, sizeof(ifr));
+	for (cpp = addrlist; *cpp; cpp++) {
+		(void)memcpy(ifr.ifr_addr.sa_data, *cpp, 6);
+		if (req == RTM_ADD && (ifp->if_ioctl == NULL ||
+		    (*ifp->if_ioctl)(ifp, SIOCADDMULTI, &ifr) != 0))
 			printf("iso_setmcasts: %s unable to add mcast\n",
 			    ifp->if_xname);
-		else if (req == RTM_DELETE && (ifp->if_ioctl == 0 ||
-		    (*ifp->if_ioctl)(ifp, SIOCDELMULTI, (caddr_t)&ifr) != 0))
+		else if (req == RTM_DELETE && (ifp->if_ioctl == NULL ||
+		    (*ifp->if_ioctl)(ifp, SIOCDELMULTI, &ifr) != 0))
 			printf("iso_setmcasts: %s unable to delete mcast\n",
 			    ifp->if_xname);
 	}
@@ -297,14 +315,14 @@ iso_setmcasts(ifp, req)
  *			being invoked if the system is an IS.
  */
 int
-iso_snparesolve(ifp, dest, snpa, snpa_len)
-	struct ifnet   *ifp;	/* outgoing interface */
-	struct sockaddr_iso *dest;	/* destination */
-	caddr_t         snpa;	/* RESULT: snpa to be used */
-	int            *snpa_len;	/* RESULT: length of snpa */
+iso_snparesolve(
+	struct ifnet   *ifp,		/* outgoing interface */
+	const struct sockaddr_iso *dest,	/* destination */
+	void *        snpa,		/* RESULT: snpa to be used */
+	int            *snpa_len)	/* RESULT: length of snpa */
 {
 	struct llinfo_llc *sc;	/* ptr to snpa table entry */
-	caddr_t         found_snpa;
+	const char *found_snpa;
 	int             addrlen;
 
 	/*
@@ -321,7 +339,7 @@ iso_snparesolve(ifp, dest, snpa, snpa_len)
 		}
 #endif
 		addrlen = dest->siso_nlen - 1;	/* subtract size of AFI */
-		found_snpa = (caddr_t) dest->siso_data + 1;
+		found_snpa = (const char *)dest->siso_data + 1;
 		/*
 		 * If we are an IS, we can't do much with the packet; Check
 		 * if we know about an IS.
@@ -329,9 +347,8 @@ iso_snparesolve(ifp, dest, snpa, snpa_len)
 	} else if (iso_systype != SNPA_IS && known_is != 0 &&
 		   (sc = (struct llinfo_llc *) known_is->rt_llinfo) &&
 		   (sc->lc_flags & SNPA_VALID)) {
-		struct sockaddr_dl *sdl =
-		(struct sockaddr_dl *) (known_is->rt_gateway);
-		found_snpa = LLADDR(sdl);
+		const struct sockaddr_dl *sdl = satocsdl(known_is->rt_gateway);
+		found_snpa = CLLADDR(sdl);
 		addrlen = sdl->sdl_alen;
 	} else if (ifp->if_flags & IFF_BROADCAST) {
 		/*
@@ -345,10 +362,10 @@ iso_snparesolve(ifp, dest, snpa, snpa_len)
 		 * where we always transmit the CLNP packet to "all es"
 		 */
 		addrlen = ifp->if_addrlen;
-		found_snpa = (caddr_t) all_es_snpa;
+		found_snpa = (const char *) all_es_snpa;
 	} else
 		return (ENETUNREACH);
-	bcopy(found_snpa, snpa, *snpa_len = addrlen);
+	memcpy(snpa, found_snpa, *snpa_len = addrlen);
 	return (0);
 }
 
@@ -366,8 +383,8 @@ iso_snparesolve(ifp, dest, snpa, snpa_len)
  *			entry, then delete that as well
  */
 void
-snpac_free(lc)
-	struct llinfo_llc *lc;	/* entry to free */
+snpac_free(
+	struct llinfo_llc *lc)	/* entry to free */
 {
 	struct rtentry *rt = lc->lc_rt;
 
@@ -376,8 +393,8 @@ snpac_free(lc)
 	if (rt && (rt->rt_flags & RTF_UP) &&
 	    (rt->rt_flags & (RTF_DYNAMIC | RTF_MODIFIED))) {
 		RTFREE(rt);
-		rtrequest(RTM_DELETE, rt_key(rt), rt->rt_gateway, rt_mask(rt),
-			  rt->rt_flags, (struct rtentry **) 0);
+		rtrequest(RTM_DELETE, rt_getkey(rt), rt->rt_gateway,
+		    rt_mask(rt), rt->rt_flags, NULL);
 		RTFREE(rt);
 	}
 }
@@ -394,13 +411,13 @@ snpac_free(lc)
  * NOTES:		If entry already exists, then update holding time.
  */
 int
-snpac_add(ifp, nsap, snpa, type, ht, nsellength)
-	struct ifnet   *ifp;	/* interface info is related to */
-	struct iso_addr *nsap;	/* nsap to add */
-	caddr_t         snpa;	/* translation */
-	char            type;	/* SNPA_IS or SNPA_ES */
-	u_short         ht;	/* holding time (in seconds) */
-	int             nsellength;	/* nsaps may differ only in trailing
+snpac_add(
+	struct ifnet   *ifp,		/* interface info is related to */
+	struct iso_addr *nsap,		/* nsap to add */
+	void *        snpa,		/* translation */
+	int             type,		/* SNPA_IS or SNPA_ES */
+	u_short         ht,		/* holding time (in seconds) */
+	int             nsellength)	/* nsaps may differ only in trailing
 					 * bytes */
 {
 	struct llinfo_llc *lc;
@@ -436,23 +453,23 @@ add:
 			flags = RTF_UP | RTF_HOST;
 		}
 		new_entry = 1;
-		zap_linkaddr((&gte_dl), snpa, snpalen, index);
-		gte_dl.sdl_type = iftype;
+		sockaddr_dl_init(&gte_dl, sizeof(gte_dl), index, iftype,
+		    NULL, 0, snpa, snpalen);
+		 
 		if (rtrequest(RTM_ADD, sisotosa(&dst), S(gte_dl), netmask,
 			      flags, &mrt) || mrt == 0)
 			return (0);
 		rt = mrt;
 		rt->rt_refcnt--;
 	} else {
-		struct sockaddr_dl *sdl = (struct sockaddr_dl *) rt->rt_gateway;
+		struct sockaddr_dl *sdl = satosdl(rt->rt_gateway);
 		rt->rt_refcnt--;
 		if ((rt->rt_flags & RTF_LLINFO) == 0)
 			goto add;
 		if (nsellength && (rt->rt_flags & RTF_HOST)) {
 			if (rt->rt_refcnt == 0) {
 				rtrequest(RTM_DELETE, sisotosa(&dst),
-				(struct sockaddr *) 0, (struct sockaddr *) 0,
-					  0, (struct rtentry **) 0);
+				    NULL, NULL, 0, NULL);
 				rt = 0;
 				goto add;
 			} else {
@@ -471,15 +488,14 @@ add:
 				log(LOG_DEBUG, "snpac_add: cant make room for lladdr\n");
 				return (0);
 			}
-			zap_linkaddr(sdl, snpa, snpalen, index);
-			sdl->sdl_len = old_sdl_len;
-			sdl->sdl_type = iftype;
+			sockaddr_dl_init(sdl, sdl->sdl_len, index, iftype,
+			    NULL, 0, snpa, snpalen);
 			new_entry = 1;
 		}
 	}
 	if ((lc = (struct llinfo_llc *) rt->rt_llinfo) == 0)
 		panic("snpac_rtrequest");
-	rt->rt_rmx.rmx_expire = ht + time.tv_sec;
+	rt->rt_rmx.rmx_expire = ht + time_second;
 	lc->lc_flags = SNPA_VALID | type;
 	if ((type & SNPA_IS) && !(iso_systype & SNPA_IS))
 		snpac_logdefis(rt);
@@ -487,8 +503,7 @@ add:
 }
 
 static void
-snpac_fixdstandmask(nsellength)
-	int nsellength;
+snpac_fixdstandmask(int nsellength)
 {
 	char  *cp = msk.siso_data, *cplim;
 
@@ -515,14 +530,13 @@ snpac_fixdstandmask(nsellength)
  * NOTES:
  */
 int
-snpac_ioctl(so, cmd, data, p)
-	struct socket  *so;
-	u_long cmd;	/* ioctl to process */
-	caddr_t data;	/* data for the cmd */
-	struct proc *p;
+snpac_ioctl(
+	struct socket *so,
+	u_long cmd,		/* ioctl to process */
+	void *data,		/* data for the cmd */
+	struct lwp *l)
 {
 	struct systype_req *rq = (struct systype_req *) data;
-	int error;
 
 #ifdef ARGO_DEBUG
 	if (argo_debug[D_IOCTL]) {
@@ -535,7 +549,8 @@ snpac_ioctl(so, cmd, data, p)
 #endif
 
 	if (cmd == SIOCSSTYPE) {
-		if (p == 0 || (error = suser(p->p_ucred, &p->p_acflag)))
+		if (l == NULL || kauth_authorize_generic(l->l_cred,
+		    KAUTH_GENERIC_ISSUSER, NULL))
 			return (EPERM);
 		if ((rq->sr_type & (SNPA_ES | SNPA_IS)) == (SNPA_ES | SNPA_IS))
 			return (EINVAL);
@@ -576,8 +591,7 @@ snpac_ioctl(so, cmd, data, p)
  * NOTES:
  */
 void
-snpac_logdefis(sc)
-	struct rtentry *sc;
+snpac_logdefis(struct rtentry *sc)
 {
 	struct rtentry *rt;
 
@@ -589,13 +603,13 @@ snpac_logdefis(sc)
 	known_is = sc;
 	sc->rt_refcnt++;
 	rt = rtalloc1((struct sockaddr *) & zsi, 0);
-	if (rt == 0)
-		rtrequest(RTM_ADD, sisotosa(&zsi), rt_key(sc), sisotosa(&zmk),
-			  RTF_DYNAMIC | RTF_GATEWAY, 0);
-	else {
+	if (rt == 0) {
+		rtrequest(RTM_ADD, sisotosa(&zsi), rt_getkey(sc),
+		    sisotosa(&zmk), RTF_DYNAMIC | RTF_GATEWAY, NULL);
+	} else {
 		if ((rt->rt_flags & RTF_DYNAMIC) &&
 		    (rt->rt_flags & RTF_GATEWAY) && rt_mask(rt)->sa_len == 0)
-			rt_setgate(rt, rt_key(rt), rt_key(sc));
+			rt_setgate(rt, rt_getkey(sc));
 	}
 }
 
@@ -622,8 +636,7 @@ snpac_logdefis(sc)
  */
 /*ARGSUSED*/
 void
-snpac_age(v)
-	void *v;
+snpac_age(void *v)
 {
 	struct llinfo_llc *lc, *nlc;
 	struct rtentry *rt;
@@ -634,7 +647,8 @@ snpac_age(v)
 		nlc = lc->lc_list.le_next;
 		if (lc->lc_flags & SNPA_VALID) {
 			rt = lc->lc_rt;
-			if (rt->rt_rmx.rmx_expire && rt->rt_rmx.rmx_expire < time.tv_sec)
+			if (rt->rt_rmx.rmx_expire &&
+			    rt->rt_rmx.rmx_expire < time_second)
 				snpac_free(lc);
 		}
 	}
@@ -655,14 +669,12 @@ snpac_age(v)
  *			real multicast addresses can be configured
  */
 int
-snpac_ownmulti(snpa, len)
-	caddr_t         snpa;
-	u_int           len;
+snpac_ownmulti(void *snpa, u_int len)
 {
 	return (((iso_systype & SNPA_ES) &&
-		 (!bcmp(snpa, (caddr_t) all_es_snpa, len))) ||
+		 (!memcmp(snpa, all_es_snpa, len))) ||
 		((iso_systype & SNPA_IS) &&
-		 (!bcmp(snpa, (caddr_t) all_is_snpa, len))));
+		 (!memcmp(snpa, all_is_snpa, len))));
 }
 
 /*
@@ -677,8 +689,7 @@ snpac_ownmulti(snpa, len)
  * NOTES:
  */
 void
-snpac_flushifp(ifp)
-	struct ifnet   *ifp;
+snpac_flushifp(struct ifnet *ifp)
 {
 	struct llinfo_llc *lc;
 
@@ -701,13 +712,8 @@ snpac_flushifp(ifp)
  *			level routing daemon.
  */
 void
-snpac_rtrequest(req, host, gateway, netmask, flags, ret_nrt)
-	int             req;
-	struct iso_addr *host;
-	struct iso_addr *gateway;
-	struct iso_addr *netmask;
-	short           flags;
-	struct rtentry **ret_nrt;
+snpac_rtrequest(int req, struct iso_addr *host, struct iso_addr *gateway,
+	struct iso_addr *netmask, int flags, struct rtentry **ret_nrt)
 {
 	struct iso_addr *r;
 
@@ -757,9 +763,8 @@ snpac_rtrequest(req, host, gateway, netmask, flags, ret_nrt)
  *			the existing route before adding a new one.
  */
 void
-snpac_addrt(ifp, host, gateway, netmask)
-	struct ifnet   *ifp;
-	struct iso_addr *host, *gateway, *netmask;
+snpac_addrt(struct ifnet *ifp, struct iso_addr *host,
+    struct iso_addr *gateway, struct iso_addr *netmask)
 {
 	struct iso_addr *r;
 

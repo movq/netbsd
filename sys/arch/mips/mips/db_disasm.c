@@ -1,4 +1,4 @@
-/*	$NetBSD: db_disasm.c,v 1.5 1999/12/27 21:12:25 castor Exp $	*/
+/*	$NetBSD: db_disasm.c,v 1.19 2007/02/28 04:21:53 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,6 +34,8 @@
  *	from: @(#)kadb.c	8.1 (Berkeley) 6/10/93
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: db_disasm.c,v 1.19 2007/02/28 04:21:53 thorpej Exp $");
 
 #include <sys/types.h>
 #include <sys/systm.h>
@@ -54,7 +52,7 @@
 #include <ddb/db_extern.h>
 #include <ddb/db_sym.h>
 
-static char *op_name[64] = {
+static const char * const op_name[64] = {
 /* 0 */ "spec", "bcond","j",	"jal",	"beq",	"bne",	"blez", "bgtz",
 /* 8 */ "addi", "addiu","slti", "sltiu","andi", "ori",	"xori", "lui",
 /*16 */ "cop0", "cop1", "cop2", "cop3", "beql", "bnel", "blezl","bgtzl",
@@ -65,7 +63,7 @@ static char *op_name[64] = {
 /*56 */ "sc",	"swc1", "swc2", "swc3", "scd",	"sdc1", "sdc2", "sd"
 };
 
-static char *spec_name[64] = {
+static const char * const spec_name[64] = {
 /* 0 */ "sll",	"spec01","srl", "sra",	"sllv", "spec05","srlv","srav",
 /* 8 */ "jr",	"jalr", "spec12","spec13","syscall","break","spec16","sync",
 /*16 */ "mfhi", "mthi", "mflo", "mtlo", "dsllv","spec25","dsrlv","dsrav",
@@ -76,15 +74,19 @@ static char *spec_name[64] = {
 /*56 */ "dsll","spec71","dsrl","dsra","dsll32","spec75","dsrl32","dsra32"
 };
 
-static char *bcond_name[32] = {
+static const char * const spec2_name[4] = {		/* QED RM4650, R5000, etc. */
+/* 0 */ "mad", "madu", "mul", "spec3"
+};
+
+static const char * const bcond_name[32] = {
 /* 0 */ "bltz", "bgez", "bltzl", "bgezl", "?", "?", "?", "?",
 /* 8 */ "tgei", "tgeiu", "tlti", "tltiu", "teqi", "?", "tnei", "?",
 /*16 */ "bltzal", "bgezal", "bltzall", "bgezall", "?", "?", "?", "?",
 /*24 */ "?", "?", "?", "?", "?", "?", "?", "?",
 };
 
-static char *cop1_name[64] = {
-/* 0 */ "fadd", "fsub", "fmpy", "fdiv", "fsqrt","fabs", "fmov", "fneg",
+static const char * const cop1_name[64] = {
+/* 0 */ "fadd",  "fsub", "fmpy", "fdiv", "fsqrt","fabs", "fmov", "fneg",
 /* 8 */ "fop08","fop09","fop0a","fop0b","fop0c","fop0d","fop0e","fop0f",
 /*16 */ "fop10","fop11","fop12","fop13","fop14","fop15","fop16","fop17",
 /*24 */ "fop18","fop19","fop1a","fop1b","fop1c","fop1d","fop1e","fop1f",
@@ -96,39 +98,52 @@ static char *cop1_name[64] = {
 	"fcmp.le","fcmp.ngt"
 };
 
-static char *fmt_name[16] = {
+static const char * const fmt_name[16] = {
 	"s",	"d",	"e",	"fmt3",
 	"w",	"fmt5", "fmt6", "fmt7",
 	"fmt8", "fmt9", "fmta", "fmtb",
 	"fmtc", "fmtd", "fmte", "fmtf"
 };
 
-static char *reg_name[32] = {
+#if defined(__mips_n32) || defined(__mips_n64)
+static const char * const reg_name[32] = {
+	"zero", "at",	"v0",	"v1",	"a0",	"a1",	"a2",	"a3",
+	"a4",	"a5",	"a6",	"a7",	"t0",	"t1",	"t2",	"t3",
+	"s0",	"s1",	"s2",	"s3",	"s4",	"s5",	"s6",	"s7",
+	"t8",	"t9",	"k0",	"k1",	"gp",	"sp",	"s8",	"ra"
+};
+#else
+static const char * const reg_name[32] = {
 	"zero", "at",	"v0",	"v1",	"a0",	"a1",	"a2",	"a3",
 	"t0",	"t1",	"t2",	"t3",	"t4",	"t5",	"t6",	"t7",
 	"s0",	"s1",	"s2",	"s3",	"s4",	"s5",	"s6",	"s7",
 	"t8",	"t9",	"k0",	"k1",	"gp",	"sp",	"s8",	"ra"
 };
+#endif /* __mips_n32 || __mips_n64 */
 
-static char *c0_opname[64] = {
+static const char * const c0_opname[64] = {
 	"c0op00","tlbr",  "tlbwi", "c0op03","c0op04","c0op05","tlbwr", "c0op07",
 	"tlbp",	 "c0op11","c0op12","c0op13","c0op14","c0op15","c0op16","c0op17",
 	"rfe",	 "c0op21","c0op22","c0op23","c0op24","c0op25","c0op26","c0op27",
-	"eret","c0op31","c0op32","c0op33","c0op34","c0op35","c0op36","c0op37",
+	"eret",  "c0op31","c0op32","c0op33","c0op34","c0op35","c0op36","c0op37",
 	"c0op40","c0op41","c0op42","c0op43","c0op44","c0op45","c0op46","c0op47",
 	"c0op50","c0op51","c0op52","c0op53","c0op54","c0op55","c0op56","c0op57",
 	"c0op60","c0op61","c0op62","c0op63","c0op64","c0op65","c0op66","c0op67",
 	"c0op70","c0op71","c0op72","c0op73","c0op74","c0op75","c0op77","c0op77",
 };
 
-static char *c0_reg[32] = {
-	"index","random","tlblo0","tlblo1","context","tlbmask","wired","c0r7",
-	"badvaddr","count","tlbhi","c0r11","sr","cause","epc",	"prid",
-	"config","lladr","watchlo","watchhi","xcontext","c0r21","c0r22","c0r23",
-	"c0r24","c0r25","ecc","cacheerr","taglo","taghi","errepc","c0r31"
+static const char * const c0_reg[32] = {
+	"index",    "random",   "tlblo0",  "tlblo1",
+	"context",  "pagemask", "wired",   "cp0r7",
+	"badvaddr", "count",    "tlbhi",   "compare",
+	"status",   "cause",    "epc",     "prid",
+	"config",   "lladdr",   "watchlo", "watchhi",
+	"xcontext", "cp0r21",   "cp0r22",  "debug",
+	"depc",     "perfcnt",  "ecc",     "cacheerr",
+	"taglo",    "taghi",    "errepc",  "desave"
 };
 
-void print_addr(long);
+static void print_addr(db_addr_t);
 
 /*
  * Disassemble instruction at 'loc'.  'altfmt' specifies an
@@ -140,12 +155,27 @@ void print_addr(long);
  * be executed but the 'linear' next instruction.
  */
 db_addr_t
-db_disasm(loc, altfmt)
-	db_addr_t	loc;
-	boolean_t	altfmt;
-
+db_disasm(db_addr_t loc, bool altfmt)
 {
-	return (db_disasm_insn(*(int*)loc, loc, altfmt));
+	u_int32_t instr;
+
+	/*
+	 * Take some care with addresses to not UTLB here as it
+	 * loses the current debugging context.  KSEG2 not checked.
+	 */
+	if (loc < MIPS_KSEG0_START) {
+		instr = fuword((void *)loc);
+		if (instr == 0xffffffff) {
+			/* "sd ra, -1(ra)" is unlikely */
+			db_printf("invalid address.\n");
+			return loc;
+		}
+	}
+	else {
+		instr =  *(u_int32_t *)loc;
+	}
+
+	return (db_disasm_insn(instr, loc, altfmt));
 }
 
 
@@ -154,12 +184,9 @@ db_disasm(loc, altfmt)
  * 'loc' may in fact contain a breakpoint instruction.
  */
 db_addr_t
-db_disasm_insn(insn, loc, altfmt)
-	int		insn;
-	db_addr_t	loc;
-	boolean_t	altfmt;
+db_disasm_insn(int insn, db_addr_t loc, bool altfmt)
 {
-	boolean_t bdslot = FALSE;
+	bool bdslot = false;
 	InstFmt i;
 
 	i.word = insn;
@@ -170,6 +197,10 @@ db_disasm_insn(insn, loc, altfmt)
 			db_printf("nop");
 			break;
 		}
+		/* XXX
+		 * "addu" is a "move" only in 32-bit mode.  What's the correct
+		 * answer - never decode addu/daddu as "move"?
+		 */
 		if (i.RType.func == OP_ADDU && i.RType.rt == 0) {
 			db_printf("move\t%s,%s",
 			    reg_name[i.RType.rd],
@@ -214,7 +245,7 @@ db_disasm_insn(insn, loc, altfmt)
 		case OP_JR:
 		case OP_JALR:
 			db_printf("\t%s", reg_name[i.RType.rs]);
-			bdslot = TRUE;
+			bdslot = true;
 			break;
 		case OP_MTLO:
 		case OP_MTHI:
@@ -251,6 +282,21 @@ db_disasm_insn(insn, loc, altfmt)
 		}
 		break;
 
+	case OP_SPECIAL2:
+		if (i.RType.func == OP_MUL)
+			db_printf("%s\t%s,%s,%s",
+				spec2_name[i.RType.func & 0x3],
+		    		reg_name[i.RType.rd],
+		    		reg_name[i.RType.rs],
+		    		reg_name[i.RType.rt]);
+		else
+			db_printf("%s\t%s,%s",
+				spec2_name[i.RType.func & 0x3],
+		    		reg_name[i.RType.rs],
+		    		reg_name[i.RType.rt]);
+			
+		break;
+
 	case OP_BCOND:
 		db_printf("%s\t%s,", bcond_name[i.IType.rt],
 		    reg_name[i.IType.rs]);
@@ -278,7 +324,7 @@ db_disasm_insn(insn, loc, altfmt)
 		    reg_name[i.IType.rt]);
 	pr_displ:
 		print_addr(loc + 4 + ((short)i.IType.imm << 2));
-		bdslot = TRUE;
+		bdslot = true;
 		break;
 
 	case OP_COP0:
@@ -363,7 +409,7 @@ db_disasm_insn(insn, loc, altfmt)
 	case OP_JAL:
 		db_printf("%s\t", op_name[i.JType.op]);
 		print_addr((loc & 0xF0000000) | (i.JType.target << 2));
-		bdslot = TRUE;
+		bdslot = true;
 		break;
 
 	case OP_LWC1:
@@ -412,6 +458,14 @@ db_disasm_insn(insn, loc, altfmt)
 		    i.IType.imm);
 		break;
 
+	case OP_CACHE:
+		db_printf("%s\t0x%x,0x%x(%s)",
+		    op_name[i.IType.op],
+		    i.IType.rt,
+		    i.IType.imm,
+		    reg_name[i.IType.rs]);
+		break;
+
 	case OP_ADDI:
 	case OP_DADDI:
 	case OP_ADDIU:
@@ -432,19 +486,18 @@ db_disasm_insn(insn, loc, altfmt)
 	db_printf("\n");
 	if (bdslot) {
 		db_printf("\t\tbdslot:\t");
-		db_print_loc_and_inst(loc+4);
+		db_disasm(loc+4, false);
 		return (loc + 8);
 	}
 	return (loc + 4);
 }
 
-void
-print_addr(loc)
-	long loc;
+static void
+print_addr(db_addr_t loc)
 {
 	db_expr_t diff;
 	db_sym_t sym;
-	char *symname;
+	const char *symname;
 
 	diff = INT_MAX;
 	symname = NULL;

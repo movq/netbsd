@@ -1,4 +1,4 @@
-/*	$NetBSD: supcdefs.h,v 1.9 2000/01/21 17:08:38 mycroft Exp $	*/
+/*	$NetBSD: supcdefs.h,v 1.13 2002/11/30 03:10:58 lukem Exp $	*/
 
 /*
  * Copyright (c) 1992 Carnegie Mellon University
@@ -56,7 +56,7 @@
  */
 
 #include <errno.h>
-#include <libc.h>
+#include "libc.h"
 #include <netdb.h>
 #include <signal.h>
 #include <setjmp.h>
@@ -73,10 +73,7 @@
 #include <sys/ioctl.h>
 #include <sys/resource.h>
 #endif	/* MACH */
-#ifndef NEED_READ_LINE
-#include <util.h>
-#endif /* NEED_READ_LINE */
-#include <c.h>
+#include "c.h"
 #include "sup.h"
 #include "supmsg.h"
 

@@ -10,11 +10,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -33,13 +29,13 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1988, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1988, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 /*static char sccsid[] = "@(#)env.c	8.3 (Berkeley) 4/2/94";*/
-__RCSID("$NetBSD: env.c,v 1.12 1999/11/02 10:56:32 lukem Exp $");
+__RCSID("$NetBSD: env.c,v 1.17 2008/07/21 14:19:22 lukem Exp $");
 #endif /* not lint */
 
 #include <err.h>
@@ -50,16 +46,14 @@ __RCSID("$NetBSD: env.c,v 1.12 1999/11/02 10:56:32 lukem Exp $");
 #include <locale.h>
 #include <errno.h>
 
-int	main __P((int, char **));
-static void usage __P((void));
+int	main(int, char **);
+static void usage(void);
+
+extern char **environ;
 
 int
-main(argc, argv)
-	int argc;
-	char **argv;
+main(int argc, char **argv)
 {
-	extern char **environ;
-	extern int optind;
 	char **ep, *p;
 	char *cleanenv[1];
 	int ch;
@@ -97,8 +91,8 @@ main(argc, argv)
 }
 
 static void
-usage ()
+usage(void)
 {
-	(void) fprintf(stderr, "usage: env [-i] [name=value ...] [command]\n");
-	exit (1);
+	(void)fprintf(stderr, "usage: env [-i] [name=value ...] [command]\n");
+	exit(1);
 }

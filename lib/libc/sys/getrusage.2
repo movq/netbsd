@@ -1,4 +1,4 @@
-.\"	$NetBSD: getrusage.2,v 1.8 1999/12/02 21:42:37 kleink Exp $
+.\"	$NetBSD: getrusage.2,v 1.18 2004/05/13 10:20:58 wiz Exp $
 .\"
 .\" Copyright (c) 1985, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -42,15 +38,14 @@
 .Sh LIBRARY
 .Lb libc
 .Sh SYNOPSIS
-.Fd #include <sys/time.h>
-.Fd #include <sys/resource.h>
+.In sys/resource.h
 .Fd #define	RUSAGE_SELF	 0
-.Fd #define	RUSAGE_CHILDREN	-1
+.Fd #define	RUSAGE_CHILDREN	\-1
 .Ft int
 .Fn getrusage "int who" "struct rusage *rusage"
 .Sh DESCRIPTION
 .Fn getrusage
-returns information describing the resources utilized by the current
+returns information describing the resources used by the current
 process, or all its terminated child processes.
 The
 .Fa who
@@ -91,11 +86,12 @@ the total amount of time spent executing in user mode.
 the total amount of time spent in the system executing on behalf
 of the process(es).
 .It Fa ru_maxrss
-the maximum resident set size utilized (in kilobytes).
+the maximum resident set size used (in kilobytes).
 .It Fa ru_ixrss
 an \*(lqintegral\*(rq value indicating the amount of memory used
 by the text segment
-that was also shared among other processes.  This value is expressed
+that was also shared among other processes.
+This value is expressed
 in units of kilobytes * ticks-of-execution.
 .It Fa ru_idrss
 an integral value of the amount of unshared memory residing in the
@@ -134,16 +130,16 @@ priority process becoming runnable or because the current process
 exceeded its time slice.
 .El
 .Sh NOTES
-The numbers 
+The numbers
 .Fa ru_inblock
-and 
+and
 .Fa ru_oublock
 account only for real
 I/O; data supplied by the caching mechanism is charged only
 to the first process to read or write the data.
 .Sh ERRORS
 .Fn getrusage
-returns -1 on error.
+returns \-1 on error.
 The possible errors are:
 .Bl -tag -width Er
 .It Bq Er EINVAL
@@ -158,11 +154,11 @@ parameter is not in a valid part of the process address space.
 .Sh SEE ALSO
 .Xr gettimeofday 2 ,
 .Xr wait 2
-.Sh BUGS
-There is no way to obtain information about a child process
-that has not yet terminated.
 .Sh HISTORY
 The
 .Fn getrusage
 function call appeared in
 .Bx 4.2 .
+.Sh BUGS
+There is no way to obtain information about a child process
+that has not yet terminated.

@@ -1,4 +1,4 @@
-/*      $NetBSD: lfs_inode.c,v 1.2 1999/10/01 04:35:23 perseant Exp $ */
+/*      $NetBSD: lfs_inode.c,v 1.14 2008/07/20 01:20:22 lukem Exp $ */
 
 /*-
  * Copyright (c) 1980, 1991, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the University of
- *      California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1991, 1993, 1994\n\
-        The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1991, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)main.c      8.6 (Berkeley) 5/1/95";
 #else
-__RCSID("$NetBSD: lfs_inode.c,v 1.2 1999/10/01 04:35:23 perseant Exp $");
+__RCSID("$NetBSD: lfs_inode.c,v 1.14 2008/07/20 01:20:22 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -59,12 +55,11 @@ __RCSID("$NetBSD: lfs_inode.c,v 1.2 1999/10/01 04:35:23 perseant Exp $");
 
 #include <ctype.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <fts.h>
 #include <stdio.h>
-#ifdef __STDC__
 #include <string.h>
 #include <unistd.h>
-#endif
 
 #include "dump.h"
 
@@ -75,27 +70,68 @@ __RCSID("$NetBSD: lfs_inode.c,v 1.2 1999/10/01 04:35:23 perseant Exp $");
 
 struct lfs *sblock;
 
+int is_ufs2 = 0;
+
 /*
  * Read the superblock from disk, and check its magic number.
  * Determine whether byte-swapping needs to be done on this filesystem.
  */
 int
-fs_read_sblock(char *sblock_buf)
+fs_read_sblock(char *superblock)
 {
-	int needswap = 0;
+	char tbuf[LFS_SBPAD];
+	int ns = 0;
+	off_t sboff = LFS_LABELPAD;
 
-	sblock = (struct lfs *)sblock_buf;
-	rawread(LFS_LABELPAD, (char *) sblock, LFS_SBPAD);
-	if (sblock->lfs_magic != LFS_MAGIC) {
+	sblock = (struct lfs *)superblock;
+	while(1) {
+		rawread(sboff, (char *) sblock, LFS_SBPAD);
+		if (sblock->lfs_magic != LFS_MAGIC) {
 #ifdef notyet
-		if (sblock->lfs_magic == bswap32(LFS_MAGIC)) {
-			lfs_sb_swap(sblock, sblock, 0);
-			needswap = 1;
-		} else
+			if (sblock->lfs_magic == bswap32(LFS_MAGIC)) {
+				lfs_sb_swap(sblock, sblock, 0);
+				ns = 1;
+			} else
 #endif
-			quit("bad sblock magic number\n");
+				quit("bad sblock magic number\n");
+		}
+		if (fsbtob(sblock, (off_t)sblock->lfs_sboffs[0]) != sboff) {
+			sboff = fsbtob(sblock, (off_t)sblock->lfs_sboffs[0]);
+			continue;
+		}
+		break;
 	}
-	return needswap;
+
+	/*
+	 * Read the secondary and take the older of the two
+	 */
+	rawread(fsbtob(sblock, (off_t)sblock->lfs_sboffs[1]), tbuf, LFS_SBPAD);
+#ifdef notyet
+	if (ns)
+		lfs_sb_swap(tbuf, tbuf, 0);
+#endif
+	if (((struct lfs *)tbuf)->lfs_magic != LFS_MAGIC) {
+		msg("Warning: secondary superblock at 0x%" PRIx64 " bad magic\n",
+			fsbtodb(sblock, (off_t)sblock->lfs_sboffs[1]));
+	} else {
+		if (sblock->lfs_version > 1) {
+			if (((struct lfs *)tbuf)->lfs_serial < sblock->lfs_serial) {
+				memcpy(sblock, tbuf, LFS_SBPAD);
+				sboff = fsbtob(sblock, (off_t)sblock->lfs_sboffs[1]);
+			}
+		} else {
+			if (((struct lfs *)tbuf)->lfs_otstamp < sblock->lfs_otstamp) {
+				memcpy(sblock, tbuf, LFS_SBPAD);
+				sboff = fsbtob(sblock, (off_t)sblock->lfs_sboffs[1]);
+			}
+		}
+	}
+	if (sboff != LFS_SBPAD) {
+		msg("Using superblock at alternate location 0x%lx\n",
+		    (unsigned long)(btodb(sboff)));
+	}
+
+	return ns;
 }
 
 /*
@@ -110,11 +146,15 @@ fs_parametrize(void)
 	spcl.c_flags = iswap32(iswap32(spcl.c_flags) | DR_NEWINODEFMT);
 
 	ufsi.ufs_dsize = fsbtodb(sblock,sblock->lfs_size);
+	if (sblock->lfs_version == 1) 
+		ufsi.ufs_dsize = sblock->lfs_size >> sblock->lfs_blktodb;
 	ufsi.ufs_bsize = sblock->lfs_bsize;
 	ufsi.ufs_bshift = sblock->lfs_bshift;
 	ufsi.ufs_fsize = sblock->lfs_fsize;
 	ufsi.ufs_frag = sblock->lfs_frag;
-	ufsi.ufs_fsatoda = 0;
+	ufsi.ufs_fsatoda = sblock->lfs_fsbtodb;
+	if (sblock->lfs_version == 1)
+		ufsi.ufs_fsatoda = 0;
 	ufsi.ufs_nindir = sblock->lfs_nindir;
 	ufsi.ufs_inopb = sblock->lfs_inopb;
 	ufsi.ufs_maxsymlinklen = sblock->lfs_maxsymlinklen;
@@ -123,7 +163,7 @@ fs_parametrize(void)
 	ufsi.ufs_fmask = ~(sblock->lfs_ffmask);
 	ufsi.ufs_qfmask = sblock->lfs_ffmask;
 
-	dev_bsize = sblock->lfs_bsize >> sblock->lfs_fsbtodb;
+	dev_bsize = sblock->lfs_bsize >> sblock->lfs_blktodb;
 
 	return &ufsi;
 }
@@ -131,10 +171,19 @@ fs_parametrize(void)
 ino_t
 fs_maxino(void)
 {
-	return ((getino(sblock->lfs_ifile)->di_size
+	return ((getino(sblock->lfs_ifile)->dp1.di_size
 		   - (sblock->lfs_cleansz + sblock->lfs_segtabsz)
 		   * sblock->lfs_bsize)
 		  / sblock->lfs_bsize) * sblock->lfs_ifpb - 1;
+}
+
+void
+fs_mapinodes(ino_t maxino, u_int64_t *tapesz, int *anydirskipped)
+{
+	ino_t ino;
+
+	for (ino = ROOTINO; ino < maxino; ino++)
+		mapfileino(ino, tapesz, anydirskipped);
 }
 
 /*
@@ -148,13 +197,15 @@ fs_maxino(void)
 #define T_UNITS (NINDIR(fs)*NINDIR(fs))
 
 static daddr_t
-lfs_bmap(struct lfs *fs, struct dinode *idinode, ufs_daddr_t lbn)
+lfs_bmap(struct lfs *fs, struct ufs1_dinode *idinode, daddr_t lbn)
 {
-	ufs_daddr_t residue, up;
+	daddr_t residue, up;
 	int off=0;
 	char bp[MAXBSIZE];
+
+	up = UNASSIGNED;	/* XXXGCC -Wunitialized [sh3] */
 	
-	if(lbn > 0 && lbn > (idinode->di_size-1)/dev_bsize) {
+	if(lbn > 0 && lbn > lblkno(fs, idinode->di_size)) {
 		return UNASSIGNED;
 	}
 	/*
@@ -188,8 +239,9 @@ lfs_bmap(struct lfs *fs, struct dinode *idinode, ufs_daddr_t lbn)
 			if(up == UNASSIGNED || up == LFS_UNUSED_DADDR)
 				return UNASSIGNED;
 			/* printf("lbn %d: parent is the triple\n", -lbn); */
-			bread(up, bp, sblock->lfs_bsize);
-			return ((daddr_t *)bp)[off];
+			bread(fsbtodb(sblock, up), bp, sblock->lfs_bsize);
+			/* XXX ondisk32 */
+			return (daddr_t)((int32_t *)bp)[off];
 		} else /* residue == 0 */ {
 			/* Single indirect.  Two cases. */
 			if(lbn < BASE_TINDIR) {
@@ -220,30 +272,34 @@ lfs_bmap(struct lfs *fs, struct dinode *idinode, ufs_daddr_t lbn)
 	up = lfs_bmap(fs,idinode,up);
 	if(up == UNASSIGNED || up == LFS_UNUSED_DADDR)
 		return UNASSIGNED;
-	bread(up, bp, sblock->lfs_bsize);
-	return ((daddr_t *)bp)[off];
+	bread(fsbtodb(sblock, up), bp, sblock->lfs_bsize);
+	/* XXX ondisk32 */
+	return (daddr_t)((int32_t *)bp)[off];
 }
 
 static struct ifile *
 lfs_ientry(ino_t ino)
 {
-    static struct ifile ifileblock[MAXIFPB];
-    static daddr_t ifblkno;
-    ufs_daddr_t lbn;
-    daddr_t blkno;
+	static struct ifile ifileblock[MAXIFPB];
+	static daddr_t ifblkno;
+	daddr_t lbn;
+	daddr_t blkno;
+	union dinode *dp;
     
-    lbn = ino/sblock->lfs_ifpb + sblock->lfs_cleansz + sblock->lfs_segtabsz;
-    blkno = lfs_bmap(sblock,getino(sblock->lfs_ifile),lbn);
-    if(blkno != ifblkno)
-	    bread(blkno, (char *)ifileblock, sblock->lfs_bsize);
-    return ifileblock + (ino%sblock->lfs_ifpb);
+	lbn = ino/sblock->lfs_ifpb + sblock->lfs_cleansz + sblock->lfs_segtabsz;
+	dp = getino(sblock->lfs_ifile);
+	blkno = lfs_bmap(sblock, &dp->dp1 ,lbn);
+	if (blkno != ifblkno)
+		bread(fsbtodb(sblock, blkno), (char *)ifileblock,
+		    sblock->lfs_bsize);
+	return ifileblock + (ino % sblock->lfs_ifpb);
 }
 
 /* Search a block for a specific dinode. */
-static struct dinode *
-lfs_ifind(struct lfs *fs, ino_t ino, struct dinode *dip)
+static struct ufs1_dinode *
+lfs_ifind(struct lfs *fs, ino_t ino, struct ufs1_dinode *dip)
 {
-	register int cnt;
+	int cnt;
 
 	for(cnt=0;cnt<INOPB(fs);cnt++)
 		if(dip[cnt].di_inumber == ino)
@@ -251,40 +307,87 @@ lfs_ifind(struct lfs *fs, ino_t ino, struct dinode *dip)
 	return NULL;
 }
 
-struct dinode *
-getino(inum)
-	ino_t inum;
+union dinode *
+getino(ino_t inum)
 {
 	static daddr_t inoblkno;
 	daddr_t blkno;
-	static struct dinode inoblock[MAXINOPB];
-	static struct dinode ifile_dinode; /* XXX fill this in */
-	static struct dinode empty_dinode; /* Always stays zeroed */
-	struct dinode *dp;
+	static struct ufs1_dinode inoblock[MAXBSIZE / sizeof (struct ufs1_dinode)];
+	static struct ufs1_dinode ifile_dinode; /* XXX fill this in */
+	static struct ufs1_dinode empty_dinode; /* Always stays zeroed */
+	struct ufs1_dinode *dp;
 
 	if(inum == sblock->lfs_ifile) {
 		/* Load the ifile inode if not already */
 		if(ifile_dinode.di_u.inumber == 0) {
 			blkno = sblock->lfs_idaddr;
-			bread(blkno, (char *)inoblock, (int)sblock->lfs_bsize);
+			bread(fsbtodb(sblock, blkno), (char *)inoblock, 
+				(int)sblock->lfs_bsize);
 			dp = lfs_ifind(sblock, inum, inoblock);
 			ifile_dinode = *dp; /* Structure copy */
 		}
-		return &ifile_dinode;
+		return (union dinode *)&ifile_dinode;
 	}
 
 	curino = inum;
 	blkno = lfs_ientry(inum)->if_daddr;
 	if(blkno == LFS_UNUSED_DADDR)
-		return &empty_dinode;
+		return (union dinode *)&empty_dinode;
 
 	if(blkno != inoblkno) {
-		bread(blkno, (char *)inoblock, (int)sblock->lfs_bsize);
+		bread(fsbtodb(sblock, blkno), (char *)inoblock, 
+			(int)sblock->lfs_bsize);
 #ifdef notyet
 		if (needswap)
 			for (i = 0; i < MAXINOPB; i++)
 				ffs_dinode_swap(&inoblock[i], &inoblock[i]);
 #endif
 	}
-	return lfs_ifind(sblock, inum, inoblock);
+	return (union dinode *)lfs_ifind(sblock, inum, inoblock);
+}
+
+/*
+ * Tell the filesystem not to overwrite any currently dirty segments
+ * until we are finished.  (It may still write into clean segments, of course,
+ * since we're not using those.)  This is only called when dump_lfs is called
+ * with -X, i.e. we are working on a mounted filesystem.
+ */
+static int root_fd = -1;
+char *wrap_mpname;
+
+int
+lfs_wrap_stop(char *mpname)
+{
+	int waitfor = 0;
+
+	root_fd = open(mpname, O_RDONLY, 0);
+	if (root_fd < 0)
+		return -1;
+	wrap_mpname = mpname;
+	fcntl(root_fd, LFCNREWIND, -1); /* Ignore return value */
+	if (fcntl(root_fd, LFCNWRAPSTOP, &waitfor) < 0) {
+		perror("LFCNWRAPSTOP");
+		return -1;
+	}
+	msg("Disabled log wrap on %s\n", mpname);
+	return 0;
+}
+
+/*
+ * Allow the filesystem to continue normal operation.
+ * This would happen anyway when we exit; we do it explicitly here
+ * to show the message, for the user's benefit.
+ */
+void
+lfs_wrap_go(void)
+{
+	int waitfor = 0;
+
+	if (root_fd < 0)
+		return;
+
+	fcntl(root_fd, LFCNWRAPGO, &waitfor);
+	close(root_fd);
+	root_fd = -1;
+	msg("Re-enabled log wrap on %s\n", wrap_mpname);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: xbox.c,v 1.3 2000/01/11 12:59:44 pk Exp $ */
+/*	$NetBSD: xbox.c,v 1.15 2008/04/28 20:23:57 martin Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,13 +33,15 @@
  * Sbus expansion box.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: xbox.c,v 1.15 2008/04/28 20:23:57 martin Exp $");
+
 #include <sys/param.h>
 #include <sys/malloc.h>
 #include <sys/systm.h>
 #include <sys/device.h>
-#include <vm/vm.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <dev/sbus/sbusvar.h>
 #include <dev/sbus/xboxvar.h>
 #include <machine/autoconf.h>
@@ -96,13 +91,12 @@ struct xbox_softc {
 };
 
 /* autoconfiguration driver */
-int	xbox_match __P((struct device *, struct cfdata *, void *));
-void	xbox_attach __P((struct device *, struct device *, void *));
-int	xbox_print __P(( void *, const char *));
+int	xbox_match(struct device *, struct cfdata *, void *);
+void	xbox_attach(struct device *, struct device *, void *);
+int	xbox_print( void *, const char *);
 
-struct cfattach xbox_ca = {
-	sizeof(struct xbox_softc), xbox_match, xbox_attach
-};
+CFATTACH_DECL(xbox, sizeof(struct xbox_softc),
+    xbox_match, xbox_attach, NULL, NULL);
 
 int
 xbox_print(args, busname)
@@ -112,7 +106,7 @@ xbox_print(args, busname)
 	struct xbox_attach_args *xa = args;
 
 	if (busname)
-		printf("%s at %s", xa->xa_name, busname);
+		aprint_normal("%s at %s", xa->xa_name, busname);
 	return (UNCONF);
 }
 
@@ -142,12 +136,12 @@ xbox_attach(parent, self, aux)
 	struct xbox_attach_args xa;
 	char *cp;
 
-	sc->sc_key = getpropint(node, "write0-key", -1);
+	sc->sc_key = prom_getpropint(node, "write0-key", -1);
 
-	cp = getpropstring(node, "model");
+	cp = prom_getpropstring(node, "model");
 	printf(": model %s", cp);
 
-	cp = getpropstring(node, "child-present");
+	cp = prom_getpropstring(node, "child-present");
 	if (strcmp(cp, "true") != 0) {
 		printf(": no sbus devices\n");
 		return;

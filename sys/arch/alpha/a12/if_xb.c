@@ -1,4 +1,4 @@
-/* $NetBSD: if_xb.c,v 1.2 2000/03/13 23:52:25 soren Exp $ */
+/* $NetBSD: if_xb.c,v 1.18 2007/10/17 19:52:54 garbled Exp $ */
 
 /* [Notice revision 2.2]
  * Copyright (c) 1997, 1998 Avalon Computer Systems, Inc.
@@ -74,7 +74,7 @@
 #include "opt_avalon_a12.h"		/* Config options headers */
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: if_xb.c,v 1.2 2000/03/13 23:52:25 soren Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_xb.c,v 1.18 2007/10/17 19:52:54 garbled Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -85,7 +85,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_xb.c,v 1.2 2000/03/13 23:52:25 soren Exp $");
 #include <sys/mbuf.h>
 #include <sys/sockio.h>
 
-#include <vm/vm.h>
+#include <uvm/uvm_extern.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -99,7 +99,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_xb.c,v 1.2 2000/03/13 23:52:25 soren Exp $");
 
 #include <dev/isa/isareg.h>
 #include <dev/isa/isavar.h>
-#include <dev/dec/clockvar.h>
+
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
 
@@ -140,9 +140,8 @@ struct xb_softc {
 	struct	device d;
 } xb_softc;
 
-struct cfattach xb_ca = {
-	sizeof(struct xb_softc), xbmatch, xbattach,
-};
+CFATTACH_DECL(xb, sizeof(struct xb_softc),
+    xbmatch, xbattach, NULL, NULL);
 
 extern struct cfdriver xb_cd;
 
@@ -159,7 +158,7 @@ typedef struct ccode_struct {
  * forward the rest of the switch frame.  Obviously, this helps if the second
  * switch word in the frame is the address word for a cascaded switch. (This
  * can be repeated for an arbitrary depth of MSN.) The words aren't quite as
- * wierd as they look: the switch is really lots of narrow switches in an
+ * weird as they look: the switch is really lots of narrow switches in an
  * array, and they don't switch an even number of hex digits.  Also, there is
  * a parity bit on most of the subunits.
  */
@@ -193,16 +192,16 @@ static int xb_debug;
 
 Static void xb_start __P((struct ifnet *));
 Static void xb_mcrp_write __P((long *, int, int));
-static __inline void xb_onefree __P((void));
+static inline void xb_onefree __P((void));
 static long set_interrupt_on_fifo_empty(void);
 static void xb_init(struct ifnet *);
 static int  xb_intr __P((void *));
 static void xb_intr_rcv __P((void));
 Static void quickload __P((volatile long *, long *));
 static void xb_init_config __P((struct xb_config *, int));
-static int  xb_output __P((struct ifnet *, struct mbuf *, struct sockaddr *,
-			struct rtentry *));
-static int  xb_ioctl __P((struct ifnet *, u_long, caddr_t));
+static int  xb_output __P((struct ifnet *, struct mbuf *,
+			const struct sockaddr *, struct rtentry *));
+static int  xb_ioctl __P((struct ifnet *, u_long, void *));
 static void xb_stop __P((void));
 static void a12_xbar_setup __P((void));
 
@@ -216,10 +215,8 @@ xbmatch(parent, match, aux)
 	struct cfdata *match;
 	void *aux;
 {
-	struct pcibus_attach_args *pba = aux;
 
 	return	cputype == ST_AVALON_A12
-	    &&	strcmp(pba->pba_busname, xb_cd.cd_name) == 0
 		&& !xbfound;
 }
 
@@ -230,11 +227,11 @@ xbattach(parent, self, aux)
 {
 	struct xb_config *ccp;
 
-	bcopy(self->dv_xname, xbi.if_xname, IFNAMSIZ);
+	strcpy(xbi.if_xname, self->dv_xname);
 	xbfound = 1;
 	ccp = &xb_configuration;
 	xb_init_config(ccp, 1);
-	printf(": driver %s mtu %d\n", "$Revision: 1.2 $", xbi.if_mtu);
+	printf(": driver %s mtu %lu\n", "$Revision: 1.18 $", xbi.if_mtu);
 }
 
 static void
@@ -359,8 +356,8 @@ int	s = 0;	/* XXX gcc */
 		xb_ibp   += 2;
 		if (xb_intr_rcv_state == XBIR_PKTHDR) {
 			if (XB_DEBUG) {
-				s = splimp();
-				if (s != splimp())
+				s = splnet();
+				if (s != splnet())
 					DIE();
 			}
 		      ++xbi.if_ipackets;
@@ -368,8 +365,8 @@ int	s = 0;	/* XXX gcc */
 				IF_DROP(&ipintrq);
 			      ++xbi.if_iqdrops;
 			} else {
-				m = m_devget((caddr_t)xb_incoming,
-					(caddr_t)xb_ibp - (caddr_t)xb_incoming,
+				m = m_devget((void *)xb_incoming,
+					(char *)xb_ibp - (char *)xb_incoming,
 					0, &xbi, 0L);
 				if (m) {
 					xbi.if_ibytes += m->m_pkthdr.len;
@@ -402,7 +399,7 @@ long	t1,t2;
 /*
  * Verify during debugging that we have not overflowed the FIFO 
  */
-static __inline void
+static inline void
 xb_onefree()
 {
 	if (XB_DEBUG && REGVAL(A12_MCSR) & A12_MCSR_OMFF)
@@ -425,12 +422,12 @@ static int
 xb_ioctl(ifp, cmd, data)
 	struct ifnet *ifp;
 	u_long cmd;
-	caddr_t data;
+	void *data;
 {
 	struct ifaddr *ifa = (struct ifaddr *)data;
 	int s, error = 0;
 
-	s = splimp();
+	s = splnet();
 	switch (cmd) {
 	case SIOCSIFADDR:
 		xbi.if_flags |= IFF_UP;
@@ -469,7 +466,7 @@ xb_ioctl(ifp, cmd, data)
  * 200 or 300 instructions in the time it takes to do the read part of an
  * external bus cycle RMW op. (Or 10 - 20 cache cycles.)
  */
-static __inline long
+static inline long
 xb_fifo_empty(void)
 {
 	return REGVAL(A12_MCSR) & A12_MCSR_OMFE;
@@ -487,15 +484,15 @@ static int
 xb_output(ifp, m0, dst, rt0)
 	struct ifnet *ifp;
 	struct mbuf *m0;
-	struct sockaddr *dst;
+	const struct sockaddr *dst;
 	struct rtentry *rt0;
 {
 	int	i,s;
 	struct	mbuf *m = m0;
-	char	*lladdr;
-	caddr_t	xbh;
+	const char	*lladdr;
+	char	*xbh;
 	long	xbo_framesize;
-	struct	sockaddr_dl *llsa;
+	const struct	sockaddr_dl *llsa;
 	int	xbaddr;
 
 #ifdef DIAGNOSTIC
@@ -506,13 +503,12 @@ xb_output(ifp, m0, dst, rt0)
 		m_freem(m);
 		return ENETDOWN;
 	}
-	ifp->if_lastchange = time;
 	/*
 	 * We want an IP packet with a link level route, on a silver platter.
 	 */
 	if (rt0 == NULL
 	|| (rt0->rt_flags & (RTF_GATEWAY | RTF_LLINFO))
-	|| (llsa = (struct sockaddr_dl *)rt0->rt_gateway) == NULL
+	|| (llsa = satocsdl(rt0->rt_gateway)) == NULL
 	||  llsa->sdl_family != AF_LINK
 	||  llsa->sdl_slen   != 0) {
 	      ++ifp->if_oerrors;
@@ -537,7 +533,7 @@ xb_output(ifp, m0, dst, rt0)
 	 * to emerge on. The address word is eaten by the switch and the
 	 * rest of the packet is routed through.
 	 */
-	lladdr = LLADDR(llsa);
+	lladdr = CLLADDR(llsa);
 	if (llsa->sdl_alen != 1)			/* XXX */
 		DIE();	/* OK someday, but totally unexpected right now */
 	/*
@@ -548,16 +544,16 @@ xb_output(ifp, m0, dst, rt0)
 	M_PREPEND(m, 16 * llsa->sdl_alen + 8, M_DONTWAIT);
 	if (m == NULL)
 		return ENOBUFS;
-	xbh = mtod(m, caddr_t);
+	xbh = mtod(m, char *);
 	for (i=0; i<llsa->sdl_alen; ++i) {
 		xbaddr = (lladdr[i] & 0xff) - 1;
 		if (!(0 <= xbaddr && xbaddr <= 11))	/* XXX */
 			DIE();		/* 12 or 13 will be OK later */
-		bcopy(&channel[xbaddr].lo64, xbh, 16);
+		memcpy(xbh, &channel[xbaddr].lo64, 16);
 		xbh += 16;
 	}
-	bcopy(&xbo_framesize, xbh, 8);
-	s = splimp();
+	memcpy(xbh, &xbo_framesize, 8);
+	s = splnet();
 	if (IF_QFULL(&ifp->if_snd)) {
 		IF_DROP(&ifp->if_snd);
 	      ++ifp->if_oerrors;
@@ -639,10 +635,10 @@ xb_put_blk(m)
 		fillin,		/* amount needed to complete a switch word */
 		full,		/* remember to restart on fifo full */
 		len;		/* amount of mbuf left to do */
-	caddr_t	blk;		/* location we are at in mbuf */
+	char	*blk;		/* location we are at in mbuf */
 	static	int fifo_free;	/* current # of switch words free in fifo */
 
-#define	XFERADJ() ((caddr_t)xfertmp+leftover_len)
+#define	XFERADJ() ((char *)xfertmp + leftover_len)
 
 	/* There is always room for the close word */
 
@@ -670,19 +666,19 @@ restart:
 	len = m->m_len;
 	if (len == 0)
 		return 1;	/* clean finish, nothing left over */
-	blk = mtod(m, caddr_t);
+	blk = mtod(m, char *);
 	if (leftover_len) {
 		/* See function intro comment regarding padding */
 		if (leftover_len + len < sizeof leftover) {
 			/* Heh, not even enough to write out */
-			bcopy(blk, XFERADJ(), len);
+			memcpy(XFERADJ(), blk, len);
 			leftover_len += len;
 			return 1;
 		}
 		xfertmp[0] = leftover[0];
 		xfertmp[1] = leftover[1];
 		fillin = sizeof leftover - leftover_len;
-		bcopy(blk, XFERADJ(), fillin);
+		memcpy(XFERADJ(), blk, fillin);
 		blk += fillin;
 		len -= fillin;
 		xb_mcrp_write(xfertmp, 1, 0);
@@ -701,7 +697,7 @@ restart:
 			full = 1;
 		}
 		frag_len &= ~0xf;
-		bcopy(blk, xfertmp, frag_len);
+		memcpy(xfertmp, blk, frag_len);
 		frag_len >>= 4;		/* Round down to switch word size */
 		xb_mcrp_write(xfertmp, frag_len, 0);
 		fifo_free -= frag_len;
@@ -709,11 +705,11 @@ restart:
 		len -= frag_len;
 		blk += frag_len;
 		if (full) {
-			m_adj(m, blk - mtod(m, caddr_t));
+			m_adj(m, blk - mtod(m, char *));
 			goto restart;
 		}
 	}
-	bcopy(blk, leftover, len);
+	memcpy(leftover, blk, len);
 	leftover_len = len;
 	return 1;
 }
@@ -766,8 +762,6 @@ a12_xbar_setup()
 	xbi.if_flags    = IFF_BROADCAST	/* ha ha */
 		        | IFF_SIMPLEX;
 
-	if_attach(&xbi);
-
 	xbi.if_type     = IFT_A12MPPSWITCH;
 	xbi.if_addrlen  = 32;
 	xbi.if_hdrlen   = 32;
@@ -775,7 +769,10 @@ a12_xbar_setup()
 	xbi.if_output   = xb_output;
 	/* xbi.if_broadcastaddr = (u_int8_t)&xbar_bc_addr; */
 
+	if_attach(&xbi);
+	if_alloc_sadl(&xbi);
+
 #if NBPFILTER > 0
-	bpfattach(&xbi.if_bpf, &xbi, DLT_NULL, 0);
+	bpfattach(&xbi, DLT_NULL, 0);
 #endif
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: yplib.c,v 1.36 2000/01/22 22:19:22 mycroft Exp $	 */
+/*	$NetBSD: yplib.c,v 1.43 2006/11/03 20:18:49 christos Exp $	 */
 
 /*
  * Copyright (c) 1992, 1993 Theo de Raadt <deraadt@fsa.ca>
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Theo de Raadt.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS
  * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -33,10 +28,12 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: yplib.c,v 1.36 2000/01/22 22:19:22 mycroft Exp $");
+__RCSID("$NetBSD: yplib.c,v 1.43 2006/11/03 20:18:49 christos Exp $");
 #endif
 
 #include "namespace.h"
+#include "reentrant.h"
+
 #include <sys/param.h>
 #include <sys/socket.h>
 #include <sys/file.h>
@@ -77,6 +74,15 @@ __weak_alias(yp_unbind, _yp_unbind)
 __weak_alias(yp_get_default_domain, _yp_get_default_domain)
 #endif
 
+#ifdef _REENTRANT
+static 	mutex_t			_ypmutex = MUTEX_INITIALIZER;
+#define YPLOCK()		mutex_lock(&_ypmutex)
+#define YPUNLOCK()		mutex_unlock(&_ypmutex)
+#else
+#define YPLOCK()
+#define YPUNLOCK()
+#endif
+
 int
 _yp_dobind(dom, ypdb)
 	const char     *dom;
@@ -89,8 +95,9 @@ _yp_dobind(dom, ypdb)
 	struct sockaddr_in clnt_sin;
 	int             clnt_sock, fd, gpid;
 	CLIENT         *client;
-	int             new = 0, r;
+	int             new = 0;
 	int             nerrs = 0;
+	ssize_t		r;
 
 	if (dom == NULL || *dom == '\0')
 		return YPERR_BADARGS;
@@ -158,7 +165,7 @@ again:
 			iov[1].iov_len = sizeof ybr;
 
 			r = readv(fd, iov, 2);
-			if (r != iov[0].iov_len + iov[1].iov_len) {
+			if (r != (ssize_t)(iov[0].iov_len + iov[1].iov_len)) {
 				(void)close(fd);
 				ysd->dom_vers = -1;
 				goto again;
@@ -203,7 +210,7 @@ trynet:
 				free(ysd);
 			return YPERR_YPBIND;
 		}
-		r = clnt_call(client, YPBINDPROC_DOMAIN,
+		r = clnt_call(client, (rpcproc_t)YPBINDPROC_DOMAIN,
 		    (xdrproc_t)xdr_ypdomain_wrap_string, &dom,
 		    (xdrproc_t)xdr_ypbind_resp, &ypbr, _yplib_timeout);
 		if (r != RPC_SUCCESS) {
@@ -232,7 +239,7 @@ trynet:
 			bn->ypbind_binding_port;
 gotit:
 		ysd->dom_vers = YPVERS;
-		(void)strncpy(ysd->dom_domain, dom, sizeof(ysd->dom_domain)-1);
+		(void)strlcpy(ysd->dom_domain, dom, sizeof(ysd->dom_domain));
 	}
 	if (ysd->dom_client)
 		clnt_destroy(ysd->dom_client);
@@ -244,7 +251,7 @@ gotit:
 		ysd->dom_vers = -1;
 		goto again;
 	}
-	if (fcntl(ysd->dom_socket, F_SETFD, 1) == -1)
+	if (fcntl(ysd->dom_socket, F_SETFD, FD_CLOEXEC) == -1)
 		perror("fcntl: F_SETFD");
 
 	if (new) {
@@ -322,17 +329,22 @@ _yp_check(dom)
 	char          **dom;
 {
 	char           *unused;
+	int 		good;
+
+	YPLOCK();
 
 	if (_yp_domain[0] == '\0')
-		if (yp_get_default_domain(&unused))
-			return 0;
-
+		if (yp_get_default_domain(&unused)) {
+			good = 0;
+			goto done;
+		}
 	if (dom)
 		*dom = _yp_domain;
 
-	if (yp_bind(_yp_domain) == 0)
-		return 1;
-	return 0;
+	good = yp_bind(_yp_domain) == 0;
+done:
+	YPUNLOCK();
+	return good;
 }
 
 /*

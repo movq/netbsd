@@ -1,4 +1,4 @@
-/*	$NetBSD: globals.c,v 1.9 2000/02/09 22:27:56 jsm Exp $	*/
+/*	$NetBSD: globals.c,v 1.13 2003/08/07 09:37:42 agc Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,10 +34,12 @@
 #if 0
 static char sccsid[] = "@(#)globals.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: globals.c,v 1.9 2000/02/09 22:27:56 jsm Exp $");
+__RCSID("$NetBSD: globals.c,v 1.13 2003/08/07 09:37:42 agc Exp $");
 #endif
 #endif /* not lint */
 
+#include <sys/types.h>
+#include <setjmp.h>
 #include "extern.h"
 
 struct scenario scene[] = {
@@ -548,10 +546,9 @@ const char dc[] = { 0, 0, -1, -1, -1, 0, 1, 1, 1 };
 int mode;
 jmp_buf restart;
 
-char debug;				/* -D */
-char randomize;				/* -x, give first available ship */
-char longfmt;				/* -l, print score in long format */
-char nobells;				/* -b, don't ring bell before Signal */
+int randomize;				/* -x, give first available ship */
+int longfmt;				/* -l, print score in long format */
+int nobells;				/* -b, don't ring bell before Signal */
 
 gid_t gid;
 gid_t egid;
@@ -565,4 +562,4 @@ int turn;
 int game;
 int alive;
 int people;
-char hasdriver;
+int hasdriver;

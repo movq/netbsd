@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_socket.h,v 1.7 1998/12/15 19:31:40 itohy Exp $	*/
+/*	$NetBSD: linux_socket.h,v 1.16 2008/04/28 20:23:44 martin Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -123,12 +116,87 @@
 #define	LINUX_TCP_NODELAY	1
 #define	LINUX_TCP_MAXSEG	2
 
+/* "Socket"-level control message types: */
+#define LINUX_SCM_RIGHTS	1	/* same as SCM_RIGHTS */
+#define LINUX_SCM_CREDENTIALS	2	/* accepts ucred rather than sockcred */
+#define LINUX_SCM_CONNECT	3	/* not supported in NetBSD */
+#define LINUX_SCM_TIMESTAMP	LINUX_SO_TIMESTAMP
+				/* not actually implemented in Linux 2.5.15? */
+
+/*
+ * Message flags (for sendmsg/recvmsg)
+ */
+#define LINUX_MSG_OOB		0x001
+#define LINUX_MSG_PEEK		0x002
+#define LINUX_MSG_DONTROUTE	0x004
+#define LINUX_MSG_TRYHARD	0x004
+#define LINUX_MSG_CTRUNC	0x008
+#define LINUX_MSG_PROBE		0x010	/* Don't send, only probe path */
+#define LINUX_MSG_TRUNC		0x020
+#define LINUX_MSG_DONTWAIT	0x040	/* this msg should be nonblocking */
+#define LINUX_MSG_EOR		0x080	/* data completes record */
+#define LINUX_MSG_WAITALL	0x100	/* wait for full request or error */
+#define LINUX_MSG_FIN		0x200
+#define LINUX_MSG_EOF		LINUX_MSG_FIN
+#define LINUX_MSG_SYN		0x400
+#define LINUX_MSG_CONFIRM	0x800	/* Confirm path validity */
+#define LINUX_MSG_RST		0x1000
+#define LINUX_MSG_ERRQUEUE	0x2000	/* fetch message from error queue */
+#define LINUX_MSG_NOSIGNAL	0x4000	/* do not generate SIGPIPE */
+#define LINUX_MSG_MORE		0x8000	/* Sender will send more */
+
+/*
+ * Linux alignment requirement for CMSG struct manipulation.
+ * Linux aligns on (size_t) boundary on all architectures.
+ * Fortunately for linux, linux_cmsghdr is always size_t aligned !
+ * since no padding is added between the header and data.
+ * XXX: this code isn't right for the compat32 code.
+ */
+struct linux_cmsghdr {
+	size_t	cmsg_len;	/* NB not socklen_t */
+	int	cmsg_level;
+	int	cmsg_type;
+    /*	unsigned char __cmsg_data[0]; */
+};
+
+#define LINUX_CMSG_ALIGN(n)	\
+	(((n) + sizeof(size_t)-1) & ~(sizeof(size_t)-1))
+/* Linux either uses this, or  &((cmsg)->__cmsg_data) */
+#define LINUX_CMSG_DATA(cmsg)	\
+	((u_char *)((struct linux_cmsghdr *)(cmsg) + 1))
+#define	LINUX_CMSG_NXTHDR(mhdr, cmsg)	\
+	((((char *)(cmsg) + LINUX_CMSG_ALIGN((cmsg)->cmsg_len) + \
+			    sizeof(*(cmsg))) > \
+	    (((char *)(mhdr)->msg_control) + (mhdr)->msg_controllen)) ? \
+	    (struct linux_cmsghdr *)NULL : \
+	    (struct linux_cmsghdr *)((char *)(cmsg) + \
+	        LINUX_CMSG_ALIGN((cmsg)->cmsg_len)))
+/* This the number of bytes removed from each item (excl. final padding) */
+#define LINUX_CMSG_ALIGN_DELTA	\
+	(CMSG_ALIGN(sizeof(struct cmsghdr)) - sizeof(struct linux_cmsghdr))
+
+#define LINUX_CMSG_FIRSTHDR(mhdr) \
+	((mhdr)->msg_controllen >= sizeof(struct linux_cmsghdr) ? \
+	(struct linux_cmsghdr *)(mhdr)->msg_control : NULL)
+
+
+/*
+ * Machine specific definitions.
+ */
 #if defined(__i386__)
 #include <compat/linux/arch/i386/linux_socket.h>
 #elif defined(__m68k__)
 #include <compat/linux/arch/m68k/linux_socket.h>
 #elif defined(__alpha__)
 #include <compat/linux/arch/alpha/linux_socket.h>
+#elif defined(__powerpc__)
+#include <compat/linux/arch/powerpc/linux_socket.h>
+#elif defined(__mips__)
+#include <compat/linux/arch/mips/linux_socket.h>
+#elif defined(__arm__)
+#include <compat/linux/arch/arm/linux_socket.h>
+#elif defined(__amd64__)
+#include <compat/linux/arch/amd64/linux_socket.h>
 #else
 #error Undefined linux_socket.h machine type.
 #endif

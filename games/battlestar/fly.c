@@ -1,4 +1,4 @@
-/*	$NetBSD: fly.c,v 1.8 1999/09/08 21:45:25 jsm Exp $	*/
+/*	$NetBSD: fly.c,v 1.14 2007/12/15 19:44:39 perry Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)fly.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: fly.c,v 1.8 1999/09/08 21:45:25 jsm Exp $");
+__RCSID("$NetBSD: fly.c,v 1.14 2007/12/15 19:44:39 perry Exp $");
 #endif
 #endif				/* not lint */
 
@@ -46,20 +42,26 @@ __RCSID("$NetBSD: fly.c,v 1.8 1999/09/08 21:45:25 jsm Exp $");
 #undef UP
 #include <curses.h>
 
-#define abs(a)	((a) < 0 ? -(a) : (a))
 #define MIDR  (LINES/2 - 1)
 #define MIDC  (COLS/2 - 1)
 
-int     row, column;
-int     dr = 0, dc = 0;
-char    destroyed;
+static int     row, column;
+static int     dr = 0, dc = 0;
+static char    destroyed;
 int     ourclock = 120;		/* time for all the flights in the game */
-char    cross = 0;
-sig_t   oldsig;
+static char    cross = 0;
+static sig_t   oldsig;
 
-void
-succumb(dummy)
-	int     dummy __attribute__((__unused__));
+static void blast(void);
+static void endfly(void);
+static void moveenemy(int);
+static void notarget(void);
+static void screen(void);
+static void succumb(int);
+static void target(void);
+
+static void
+succumb(int dummy __unused)
 {
 	if (oldsig == SIG_DFL) {
 		endfly();
@@ -72,7 +74,7 @@ succumb(dummy)
 }
 
 int
-visual()
+visual(void)
 {
 	destroyed = 0;
 	if (initscr() == NULL) {
@@ -80,7 +82,7 @@ visual()
 		return (0);
 	}
 	oldsig = signal(SIGINT, succumb);
-	crmode();
+	cbreak();
 	noecho();
 	screen();
 	row = rnd(LINES - 3) + 1;
@@ -148,7 +150,8 @@ visual()
 			if (torps) {
 				torps -= 2;
 				blast();
-				if (row == MIDR && column - MIDC < 2 && MIDC - column < 2) {
+				if (row == MIDR && column - MIDC < 2 && 
+				    MIDC - column < 2) {
 					destroyed = 1;
 					alarm(0);
 				}
@@ -178,8 +181,8 @@ visual()
 	}
 }
 
-void
-screen()
+static void
+screen(void)
 {
 	int     r, c, n;
 	int     i;
@@ -195,8 +198,8 @@ screen()
 	refresh();
 }
 
-void
-target()
+static void
+target(void)
 {
 	int     n;
 
@@ -208,8 +211,8 @@ target()
 	}
 }
 
-void
-notarget()
+static void
+notarget(void)
 {
 	int     n;
 
@@ -221,8 +224,8 @@ notarget()
 	}
 }
 
-void
-blast()
+static void
+blast(void)
 {
 	int     n;
 
@@ -243,9 +246,8 @@ blast()
 	alarm(1);
 }
 
-void
-moveenemy(dummy)
-	int     dummy __attribute__((__unused__));
+static void
+moveenemy(int dummy __unused)
 {
 	double  d;
 	int     oldr, oldc;
@@ -262,7 +264,8 @@ moveenemy(dummy)
 			fuel = 0;
 			mvaddstr(0, 60, "*** Out of fuel ***");
 		}
-	d = (double) ((row - MIDR) * (row - MIDR) + (column - MIDC) * (column - MIDC));
+	d = (double) ((row - MIDR) * (row - MIDR) + (column - MIDC) * 
+	    (column - MIDC));
 	if (d < 16) {
 		row += (rnd(9) - 4) % (4 - abs(row - MIDR));
 		column += (rnd(9) - 4) % (4 - abs(column - MIDC));
@@ -283,8 +286,8 @@ moveenemy(dummy)
 	alarm(1);
 }
 
-void
-endfly()
+static void
+endfly(void)
 {
 	alarm(0);
 	signal(SIGALRM, SIG_DFL);

@@ -1,7 +1,7 @@
-/*	$NetBSD: if_mcvar.h,v 1.6 1998/12/22 08:47:05 scottr Exp $	*/
+/*	$NetBSD: if_mcvar.h,v 1.15 2007/03/05 21:22:45 he Exp $	*/
 
 /*-
- * Copyright (c) 1997 David Huang <khym@bga.com>
+ * Copyright (c) 1997 David Huang <khym@azeotrope.org>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -30,7 +30,7 @@
 #define	integrate
 #define hide
 #else
-#define	integrate	static __inline
+#define	integrate	static inline
 #define hide		static
 #endif
 
@@ -51,7 +51,7 @@
 #error Must have at least two buffers for DMA!
 #endif
 
-#define	MC_NPAGES	((MC_RXDMABUFS * 0x800 + NBPG - 1) / NBPG)
+#define	MC_NPAGES	((MC_RXDMABUFS * 0x800 + PAGE_SIZE - 1) / PAGE_SIZE)
 
 struct mc_rxframe {
 	u_int8_t	rx_rcvcnt;
@@ -73,21 +73,24 @@ struct mc_softc {
 	u_int8_t	sc_enaddr[6];
 	u_int8_t	sc_pad[2];
 	int		sc_havecarrier; /* carrier status */
-	void		(*sc_bus_init) __P((struct mc_softc *));
-	void		(*sc_putpacket) __P((struct mc_softc *, u_int));
+	void		(*sc_bus_init)(struct mc_softc *);
+	void		(*sc_putpacket)(struct mc_softc *, u_int);
 
 	bus_space_tag_t		sc_regt;
 	bus_space_handle_t	sc_regh;
+	bus_dma_tag_t	sc_dmat;
+	bus_dmamap_t	sc_dmam_tx, sc_dmam_rx;
+	bus_dma_segment_t	sc_dmasegs_tx, sc_dmasegs_rx;
 
-	u_char		*sc_txbuf, *sc_rxbuf;
-	int		sc_txbuf_phys, sc_rxbuf_phys;
+	uint8_t		*sc_txbuf, *sc_rxbuf;
+	bus_addr_t	sc_txbuf_phys, sc_rxbuf_phys;
 	int		sc_tail;
 	int		sc_rxset;
 	int		sc_txset, sc_txseti;
 };
 
-int	mcsetup __P((struct mc_softc *, u_int8_t *));
-void	mcintr __P((void *arg));
-void	mc_rint __P((struct mc_softc *sc));
-u_char	mc_get_enaddr __P((bus_space_tag_t t, bus_space_handle_t h,
-	    bus_size_t o, u_char *dst));
+int	mcsetup(struct mc_softc *, u_int8_t *);
+void	mcintr(void *arg);
+void	mc_rint(struct mc_softc *);
+u_char	mc_get_enaddr(bus_space_tag_t, bus_space_handle_t, bus_size_t,
+		      u_char *);

@@ -1,4 +1,4 @@
-/*	$NetBSD: hdr.h,v 1.8 1999/07/28 23:23:39 hubertf Exp $	*/
+/*	$NetBSD: hdr.h,v 1.11 2005/07/01 00:03:36 jmc Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -17,11 +17,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -87,11 +83,10 @@ extern struct hashtab {		/* hash table for vocabulary */
 }       voc[HTSIZE];
 #define SEED 1815622		/* "Encryption" seed */
 
-struct text
-	{
-		char   *seekadr;/* Msg start in virtual disk */
-		int     txtlen;	/* length of msg starting here */
-	};
+struct text {
+	char   *seekadr;/* Msg start in virtual disk */
+	int     txtlen;	/* length of msg starting here */
+};
 
 #define RTXSIZ  205
 extern	struct text rtext[RTXSIZ];	/* random text messages */
@@ -111,11 +106,11 @@ extern	struct text ltext[LOCSIZ];	/* long loc description */
 extern	struct text stext[LOCSIZ];	/* short loc descriptions */
 
 extern	struct travlist {		/* direcs & conditions of travel */
-		struct travlist *next;	/* ptr to next list entry */
-		int     conditions;	/* m in writeup (newloc / 1000) */
-		int     tloc;		/* n in writeup (newloc % 1000) */
-		int     tverb;		/* the verb that takes you there */
-	}      *travel[LOCSIZ], *tkk;	/* travel is closer to keys(...) */
+	struct travlist *next;	/* ptr to next list entry */
+	int     conditions;	/* m in writeup (newloc / 1000) */
+	int     tloc;		/* n in writeup (newloc % 1000) */
+	int     tverb;		/* the verb that takes you there */
+}      *travel[LOCSIZ], *tkk;	/* travel is closer to keys(...) */
 
 extern	int     atloc[LOCSIZ];
 
@@ -126,7 +121,7 @@ extern	int     actspk[35];		/* rtext msg for verb <n> */
 
 extern	int     cond[LOCSIZ];		/* various condition bits */
 
-	extern int setbit[16];		/* bit defn masks 1,2,4,... */
+extern	int	setbit[16];		/* bit defn masks 1,2,4,... */
 
 extern	int     hntmax;
 extern	int     hints[20][5];		/* info on hints */
@@ -158,6 +153,6 @@ extern	int     turns, lmwarn, iwest, knfloc, detail,	/* various flags and
 	        abbnum, maxdie, numdie, holdng, dkill, foobar, bonus, clock1,
 	        clock2, saved, closng, panic, closed, scorng;
 
-extern	int     demo, newloc, limit;
+extern	int     demo, limit;
 
 #define DECR(a,b,c,d,e) decr(a+'+',b+'-',c+'#',d+'&',e+'%')

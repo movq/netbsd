@@ -1,4 +1,4 @@
-|	$NetBSD: vectors.s,v 1.8 1999/02/14 17:54:30 scw Exp $
+|	$NetBSD: vectors.s,v 1.11 2005/12/11 12:18:17 christos Exp $
 
 | Copyright (c) 1997 Jason R. Thorpe.  All rights reserved.
 | Copyright (c) 1988 University of Utah
@@ -77,14 +77,14 @@ GLOBAL(vectab)
 	VECTOR(badtrap)		/* 21: unassigned, reserved */
 	VECTOR(badtrap)		/* 22: unassigned, reserved */
 	VECTOR(badtrap)		/* 23: unassigned, reserved */
-	VECTOR(spurintr)	/* 24: spurious interrupt */
+	VECTOR(intrhand_autovec)/* 24: spurious autovector interrupt */
 	VECTOR(intrhand_autovec)/* 25: level 1 interrupt autovector */
 	VECTOR(intrhand_autovec)/* 26: level 2 interrupt autovector */
 	VECTOR(intrhand_autovec)/* 27: level 3 interrupt autovector */
 	VECTOR(intrhand_autovec)/* 28: level 4 interrupt autovector */
 	VECTOR(intrhand_autovec)/* 29: level 5 interrupt autovector */
 	VECTOR(intrhand_autovec)/* 30: level 6 interrupt autovector */
-	VECTOR(lev7intr)	/* 31: level 7 interrupt autovector */
+	VECTOR(intrhand_autovec)/* 31: level 7 interrupt autovector */
 	VECTOR(trap0)		/* 32: syscalls */
 #ifdef COMPAT_13
 	VECTOR(trap1)		/* 33: compat_13_sigreturn */
@@ -92,7 +92,11 @@ GLOBAL(vectab)
 	VECTOR(illinst)
 #endif
 	VECTOR(trap2)		/* 34: trace */
-	VECTOR(trap3)		/* 35: sigreturn special syscall */
+#ifdef COMPAT_16
+	VECTOR(trap3)		/* 35: compat_16_sigreturn */
+#else
+	VECTOR(illinst)	
+#endif
 	VECTOR(illinst)		/* 36: TRAP instruction vector */
 	VECTOR(illinst)		/* 37: TRAP instruction vector */
 	VECTOR(illinst)		/* 38: TRAP instruction vector */

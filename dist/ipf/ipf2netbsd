@@ -1,6 +1,6 @@
 #! /bin/sh
 #
-#	$NetBSD: ipf2netbsd,v 1.2 2000/02/01 20:05:54 veego Exp $
+#	$NetBSD: ipf2netbsd,v 1.21 2008/04/30 13:10:47 martin Exp $
 #
 # Copyright (c) 1999 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -13,13 +13,6 @@
 # 2. Redistributions in binary form must reproduce the above copyright
 #    notice, this list of conditions and the following disclaimer in the
 #    documentation and/or other materials provided with the distribution.
-# 3. All advertising materials mentioning features or use of this software
-#    must display the following acknowledgement:
-#	This product includes software developed by the NetBSD
-#	Foundation, Inc. and its contributors.
-# 4. Neither the name of The NetBSD Foundation nor the names of its
-#    contributors may be used to endorse or promote products derived
-#    from this software without specific prior written permission.
 #
 # THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 # ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,7 +27,8 @@
 # POSSIBILITY OF SUCH DAMAGE.
 #
 # ipf2netbsd:  convert a ipf source tree into a netbsd ipf source tree,
-# under basesrc/dist/ipf, syssrc/sys/netinet and syssrc/sys/lkm/netinet/if_ipl
+# under src/dist/ipf, src/sys/dist/ipf/netinet, src/sys/lkm/netinet/if_ipl
+# and src/regress/sys/kern/ipf
 
 if [ $# -ne 2 ]; then echo "ipf2netbsd src dest"; exit 1; fi
 
@@ -49,9 +43,10 @@ case "$dest" in
 		;;
 esac
 
-dbase=$dest/basesrc/dist/ipf
-dsys=$dest/syssrc/sys/netinet
-dlkm=$dest/syssrc/sys/lkm/netinet/if_ipl
+dbase=$dest/src/dist/ipf
+dsys=$dest/src/sys/dist/ipf/netinet
+dlkm=$dest/src/sys/lkm/netinet/if_ipl
+dregress=$dest/src/regress/sys/kern/ipf
 
 case "$r" in
 	/*)
@@ -61,24 +56,64 @@ case "$r" in
 		;;
 esac
 
-echo preparing directory $dbase, $dsys and $dlkm
-rm -rf $dbase $dsys $dlkm
+echo preparing directory $dbase, $dsys, $dlkm and $dregress
+rm -rf $dbase $dsys $dlkm $dregress
 
 ### Copy the files and directories
-mkdir -p $dbase $dsys $dlkm
+mkdir -p $dbase $dsys $dlkm $dregress
 cd $r
 pax -rvw . $dbase
-pax -rvw fil.c ip_auth.c ip_auth.h ip_compat.h ip_fil.c ip_fil.h ip_frag.c ip_frag.h ip_ftp_pxy.c ip_log.c ip_nat.c ip_nat.h ip_proxy.c ip_proxy.h ip_raudio_pxy.c ip_rcmd_pxy.c ip_state.c ip_state.h ipl.h $dsys
+pax -rvw \
+	fil.c \
+	ip_auth.c \
+	ip_auth.h \
+	ip_compat.h \
+	ip_fil.h \
+	ip_fil_netbsd.c \
+	ip_frag.c \
+	ip_frag.h \
+	ip_ftp_pxy.c \
+	ip_h323_pxy.c \
+	ip_htable.c \
+	ip_htable.h \
+	ip_ipsec_pxy.c \
+	ip_irc_pxy.c \
+	ip_log.c \
+	ip_lookup.c \
+	ip_lookup.h \
+	ip_nat.c \
+	ip_nat.h \
+	ip_netbios_pxy.c \
+	ip_pool.c \
+	ip_pool.h \
+	ip_pptp_pxy.c \
+	ip_proxy.c \
+	ip_proxy.h \
+	ip_raudio_pxy.c \
+	ip_rcmd_pxy.c \
+	ip_rpcb_pxy.c \
+	ip_scan.c \
+	ip_scan.h \
+	ip_state.c \
+	ip_state.h \
+	ip_sync.c \
+	ip_sync.h \
+	ipl.h \
+	$dsys
 pax -rvw mln_ipl.c $dlkm
+cd $r/test
+pax -rvw * $dregress
 
-### Remove the $'s around the Id:
+### Remove the $'s around various RCSIDs
 find $dest -type f -print | while read f; do
-	sed -e ' s/\$\(Id.*\) \$/\1/' < $f > /tmp/ipf2f$$ && mv /tmp/ipf2f$$ $f && \
-	echo removed \$Id tag from $f
+	sed -e 's/\$\(Id.*\) \$/\1/' \
+	    -e 's/\$\(Header.*\) \$/\1/' \
+	    $f > /tmp/ipf2f$$ && mv /tmp/ipf2f$$ $f && \
+	echo removed RCS tag from $f
 done
 
 ### Add our NetBSD RCS Id
-find $dest -name '*.[chly]' -print | while read c; do
+find $dest -type f -name '*.[chly]' -print | while read c; do
 	sed 1q < $c | grep -q '\$NetBSD' || (
 echo "/*	\$NetBSD\$	*/" >/tmp/ipf2n$$
 echo "" >>/tmp/ipf2n$$
@@ -87,7 +122,7 @@ mv /tmp/ipf2n$$ $c && echo added RCS tag to $c
 	)
 done
 
-find $dest -name '*.[0-9]' -a \! -name 'example.*' -print | while read m; do
+find $dest -type f -name '*.[0-9]' -a \! -name 'example.*' -a \! -name 'ipv6.*' -print | while read m; do
 	sed 1q < $m | grep -q '\$NetBSD' || (
 echo ".\\\"	\$NetBSD\$" >/tmp/ipf2m$$
 echo ".\\\"" >>/tmp/ipf2m$$
@@ -96,7 +131,7 @@ echo ".\\\"" >>/tmp/ipf2m$$
 	)
 done
 
-find $dest -name 'example.*' -print | while read e; do
+find $dest -type f -name 'example.*' -print | while read e; do
 	sed 1q < $e | grep -q '\$NetBSD' || (
 echo "#	\$NetBSD\$" >/tmp/ipf2e$$
 	cat $e >> /tmp/ipf2e$$

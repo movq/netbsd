@@ -1,4 +1,4 @@
-/*	$NetBSD: hd64570.c,v 1.11 2000/01/09 17:32:58 chopps Exp $	*/
+/*	$NetBSD: hd64570.c,v 1.39 2008/04/08 12:07:26 cegger Exp $	*/
 
 /*
  * Copyright (c) 1999 Christian E. Hopps
@@ -60,9 +60,12 @@
  *	   than cheating and always sync'ing the whole region.
  *
  *	o  perhaps allow rx and tx to be in more than one page
- *	   if not using dma.  currently the assumption is that
+ *	   if not using DMA.  currently the assumption is that
  *	   rx uses a page and tx uses a page.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: hd64570.c,v 1.39 2008/04/08 12:07:26 cegger Exp $");
 
 #include "bpfilter.h"
 #include "opt_inet.h"
@@ -80,11 +83,14 @@
 #include <net/if_types.h>
 #include <net/netisr.h>
 
-#ifdef INET
+#if defined(INET) || defined(INET6)
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
 #include <netinet/in_var.h>
 #include <netinet/ip.h>
+#ifdef INET6
+#include <netinet6/in6_var.h>
+#endif
 #endif
 
 #ifdef ISO
@@ -97,9 +103,9 @@
 #include <net/bpf.h>
 #endif
 
-#include <machine/cpu.h>
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/cpu.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcireg.h>
@@ -163,13 +169,13 @@ static	void sca_port_starttx(sca_port_t *);
 static	void sca_port_up(sca_port_t *);
 static	void sca_port_down(sca_port_t *);
 
-static	int sca_output __P((struct ifnet *, struct mbuf *, struct sockaddr *,
-			    struct rtentry *));
-static	int sca_ioctl __P((struct ifnet *, u_long, caddr_t));
-static	void sca_start __P((struct ifnet *));
-static	void sca_watchdog __P((struct ifnet *));
+static	int sca_output(struct ifnet *, struct mbuf *, const struct sockaddr *,
+			    struct rtentry *);
+static	int sca_ioctl(struct ifnet *, u_long, void *);
+static	void sca_start(struct ifnet *);
+static	void sca_watchdog(struct ifnet *);
 
-static struct mbuf *sca_mbuf_alloc(struct sca_softc *, caddr_t, u_int);
+static struct mbuf *sca_mbuf_alloc(struct sca_softc *, void *, u_int);
 
 #if SCA_DEBUG_LEVEL > 0
 static	void sca_frame_print(sca_port_t *, sca_desc_t *, u_int8_t *);
@@ -181,7 +187,7 @@ static	void sca_frame_print(sca_port_t *, sca_desc_t *, u_int8_t *);
 #define	sca_write_1(sc, reg, val)	(sc)->sc_write_1(sc, reg, val)
 #define	sca_write_2(sc, reg, val)	(sc)->sc_write_2(sc, reg, val)
 
-#define	sca_page_addr(sc, addr)	((bus_addr_t)(addr) & (sc)->scu_pagemask)
+#define	sca_page_addr(sc, addr)	((bus_addr_t)(u_long)(addr) & (sc)->scu_pagemask)
 
 static inline void
 msci_write_1(sca_port_t *scp, u_int reg, u_int8_t val)
@@ -295,7 +301,7 @@ sca_desc_read_buflen(struct sca_softc *sc, struct sca_desc *dp)
 	return (bus_space_read_2(sc->scu_memt, sc->scu_memh,
 	    sca_page_addr(sc, dp) + offsetof(struct sca_desc, sd_buflen)));
 }
-	    
+
 /*
  * write the buffer length
  */
@@ -407,6 +413,7 @@ sca_init(struct sca_softc *sc)
 void
 sca_port_attach(struct sca_softc *sc, u_int port)
 {
+	struct timeval now;
 	sca_port_t *scp = &sc->sc_ports[port];
 	struct ifnet *ifp;
 	static u_int ntwo_unit = 0;
@@ -419,14 +426,14 @@ sca_port_attach(struct sca_softc *sc, u_int port)
 		scp->msci_off = SCA_MSCI_OFF_0;
 		scp->dmac_off = SCA_DMAC_OFF_0;
 		if(sc->sc_parent != NULL)
-			ntwo_unit=sc->sc_parent->dv_unit * 2 + 0;
+			ntwo_unit = device_unit(sc->sc_parent) * 2 + 0;
 		else
 			ntwo_unit = 0;	/* XXX */
 	} else {
 		scp->msci_off = SCA_MSCI_OFF_1;
 		scp->dmac_off = SCA_DMAC_OFF_1;
 		if(sc->sc_parent != NULL)
-			ntwo_unit=sc->sc_parent->dv_unit * 2 + 1;
+			ntwo_unit = device_unit(sc->sc_parent) * 2 + 1;
 		else
 			ntwo_unit = 1;	/* XXX */
 	}
@@ -438,7 +445,7 @@ sca_port_attach(struct sca_softc *sc, u_int port)
 	 * attach to the network layer
 	 */
 	ifp = &scp->sp_if;
-	sprintf(ifp->if_xname, "ntwo%d", ntwo_unit);
+	snprintf(ifp->if_xname, sizeof(ifp->if_xname), "ntwo%d", ntwo_unit);
 	ifp->if_softc = scp;
 	ifp->if_mtu = SCA_MTU;
 	ifp->if_flags = IFF_POINTOPOINT | IFF_MULTICAST;
@@ -452,22 +459,25 @@ sca_port_attach(struct sca_softc *sc, u_int port)
 #ifdef SCA_USE_FASTQ
 	scp->fastq.ifq_maxlen = IFQ_MAXLEN;
 #endif
+	IFQ_SET_READY(&ifp->if_snd);
 	if_attach(ifp);
+	if_alloc_sadl(ifp);
 
 #if NBPFILTER > 0
-	bpfattach(&scp->sp_bpf, ifp, DLT_HDLC, HDLC_HDRLEN);
+	bpfattach(ifp, DLT_HDLC, HDLC_HDRLEN);
 #endif
 
 	if (sc->sc_parent == NULL)
 		printf("%s: port %d\n", ifp->if_xname, port);
 	else
 		printf("%s at %s port %d\n",
-		       ifp->if_xname, sc->sc_parent->dv_xname, port);
+		       ifp->if_xname, device_xname(sc->sc_parent), port);
 
 	/*
 	 * reset the last seen times on the cisco keepalive protocol
 	 */
-	scp->cka_lasttx = time.tv_usec;
+	getmicrotime(&now);
+	scp->cka_lasttx = now.tv_usec;
 	scp->cka_lastrx = 0;
 }
 
@@ -490,7 +500,7 @@ sca_msci_get_baud_rate_values(u_int32_t hz, u_int8_t *tmcp)
 	 * 2 <= TD <= 512		TD is inc of 2
 	 * 4 <= TD <= 1024		TD is inc of 4
 	 * ...
-	 * 512 <= TD <= 256*512		TD is inc of 512 
+	 * 512 <= TD <= 256*512		TD is inc of 512
 	 *
 	 * so note there are overlaps.  We lose prec
 	 * as div increases so we wish to minize div.
@@ -500,7 +510,7 @@ sca_msci_get_baud_rate_values(u_int32_t hz, u_int8_t *tmcp)
 	 * tmc = chip / hz, but have tmc <= 256
 	 */
 
-	/* assume system clock is 9.8304Mhz or 9830400hz */
+	/* assume system clock is 9.8304MHz or 9830400Hz */
 	clock = clock = 9830400 >> 1;
 
 	/* round down */
@@ -598,13 +608,13 @@ sca_msci_init(struct sca_softc *sc, sca_port_t *scp)
 	 * the correct values here are important for avoiding underruns
 	 * for any value less than or equal to TRC0 txrdy is activated
 	 * which will start the dmac transfer to the fifo.
-	 * for buffer size >= TRC1 + 1 txrdy is cleared which will stop dma.
+	 * for buffer size >= TRC1 + 1 txrdy is cleared which will stop DMA.
 	 *
 	 * thus if we are using a very fast clock that empties the fifo
 	 * quickly, delays in the dmac starting to fill the fifo can
 	 * lead to underruns so we want a fairly full fifo to still
 	 * cause the dmac to start.  for cards with on board ram this
-	 * has no effect on system performance.  For cards that dma
+	 * has no effect on system performance.  For cards that DMA
 	 * to/from system memory it will cause more, shorter,
 	 * bus accesses rather than fewer longer ones.
 	 */
@@ -646,10 +656,10 @@ sca_dmac_init(struct sca_softc *sc, sca_port_t *scp)
 	/* make sure that we won't wrap */
 	if ((desc_p & 0xffff0000) !=
 	    ((desc_p + sizeof(*desc) * scp->sp_ntxdesc) & 0xffff0000))
-		panic("sca: tx descriptors cross architecural boundry");
+		panic("sca: tx descriptors cross architecural boundary");
 	if ((buf_p & 0xff000000) !=
 	    ((buf_p + SCA_BSIZE * scp->sp_ntxdesc) & 0xff000000))
-		panic("sca: tx buffers cross architecural boundry");
+		panic("sca: tx buffers cross architecural boundary");
 #endif
 
 	for (i = 0 ; i < scp->sp_ntxdesc ; i++) {
@@ -706,10 +716,10 @@ sca_dmac_init(struct sca_softc *sc, sca_port_t *scp)
 	/* make sure that we won't wrap */
 	if ((desc_p & 0xffff0000) !=
 	    ((desc_p + sizeof(*desc) * scp->sp_nrxdesc) & 0xffff0000))
-		panic("sca: rx descriptors cross architecural boundry");
+		panic("sca: rx descriptors cross architecural boundary");
 	if ((buf_p & 0xff000000) !=
 	    ((buf_p + SCA_BSIZE * scp->sp_nrxdesc) & 0xff000000))
-		panic("sca: rx buffers cross architecural boundry");
+		panic("sca: rx buffers cross architecural boundary");
 #endif
 
 	for (i = 0 ; i < scp->sp_nrxdesc; i++) {
@@ -778,7 +788,7 @@ sca_dmac_rxinit(sca_port_t *scp)
 	/*
 	 * enable receiver DMA
 	 */
-	dmac_write_1(scp, SCA_DIR0, 
+	dmac_write_1(scp, SCA_DIR0,
 		     (SCA_DIR_EOT | SCA_DIR_EOM | SCA_DIR_BOF | SCA_DIR_COF));
 	dmac_write_1(scp, SCA_DSR0, SCA_DSR_DE);
 }
@@ -787,28 +797,33 @@ sca_dmac_rxinit(sca_port_t *scp)
  * Queue the packet for our start routine to transmit
  */
 static int
-sca_output(ifp, m, dst, rt0)
-	struct ifnet *ifp;
-	struct mbuf *m;
-	struct sockaddr *dst;
-	struct rtentry *rt0;
+sca_output(
+    struct ifnet *ifp,
+    struct mbuf *m,
+    const struct sockaddr *dst,
+    struct rtentry *rt0)
 {
 #ifdef ISO
 	struct hdlc_llc_header *llc;
 #endif
 	struct hdlc_header *hdlc;
-	struct ifqueue *ifq;
-	int s, error;
+	struct ifqueue *ifq = NULL;
+	int s, error, len;
+	short mflags;
+	ALTQ_DECL(struct altq_pktattr pktattr;)
 
 	error = 0;
-	ifp->if_lastchange = time;
 
 	if ((ifp->if_flags & IFF_UP) != IFF_UP) {
 		error = ENETDOWN;
 		goto bad;
 	}
 
-	ifq = &ifp->if_snd;
+	/*
+	 * If the queueing discipline needs packet classification,
+	 * do it before prepending link headers.
+	 */
+	IFQ_CLASSIFY(&ifp->if_snd, m, dst->sa_family, &pktattr);
 
 	/*
 	 * determine address family, and priority for this packet
@@ -824,15 +839,28 @@ sca_output(ifp, m, dst, rt0)
 		/*
 		 * Add cisco serial line header. If there is no
 		 * space in the first mbuf, allocate another.
-		 */     
+		 */
 		M_PREPEND(m, sizeof(struct hdlc_header), M_DONTWAIT);
 		if (m == 0)
 			return (ENOBUFS);
 		hdlc = mtod(m, struct hdlc_header *);
 		hdlc->h_proto = htons(HDLC_PROTOCOL_IP);
-		break;  
+		break;
 #endif
-#ifdef ISO     
+#ifdef INET6
+	case AF_INET6:
+		/*
+		 * Add cisco serial line header. If there is no
+		 * space in the first mbuf, allocate another.
+		 */
+		M_PREPEND(m, sizeof(struct hdlc_header), M_DONTWAIT);
+		if (m == 0)
+			return (ENOBUFS);
+		hdlc = mtod(m, struct hdlc_header *);
+		hdlc->h_proto = htons(HDLC_PROTOCOL_IPV6);
+		break;
+#endif
+#ifdef ISO
        case AF_ISO:
                /*
                 * Add cisco llc serial line header. If there is no
@@ -864,21 +892,26 @@ sca_output(ifp, m, dst, rt0)
 	/*
 	 * queue the packet.  If interactive, use the fast queue.
 	 */
+	mflags = m->m_flags;
+	len = m->m_pkthdr.len;
 	s = splnet();
-	if (IF_QFULL(ifq)) {
-		IF_DROP(ifq);
+	if (ifq != NULL) {
+		if (IF_QFULL(ifq)) {
+			IF_DROP(ifq);
+			m_freem(m);
+			error = ENOBUFS;
+		} else
+			IF_ENQUEUE(ifq, m);
+	} else
+		IFQ_ENQUEUE(&ifp->if_snd, m, &pktattr, error);
+	if (error != 0) {
+		splx(s);
 		ifp->if_oerrors++;
 		ifp->if_collisions++;
-		error = ENOBUFS;
-		splx(s);
-		goto bad;
+		return (error);
 	}
-	ifp->if_obytes += m->m_pkthdr.len;
-	IF_ENQUEUE(ifq, m);
-
-	ifp->if_lastchange = time;
-
-	if (m->m_flags & M_MCAST)
+	ifp->if_obytes += len;
+	if (mflags & M_MCAST)
 		ifp->if_omcasts++;
 
 	sca_start(ifp);
@@ -896,7 +929,7 @@ static int
 sca_ioctl(ifp, cmd, addr)
      struct ifnet *ifp;
      u_long cmd;
-     caddr_t addr;
+     void *addr;
 {
 	struct ifreq *ifr;
 	struct ifaddr *ifa;
@@ -911,33 +944,50 @@ sca_ioctl(ifp, cmd, addr)
 
 	switch (cmd) {
 	case SIOCSIFADDR:
+		switch(ifa->ifa_addr->sa_family) {
 #ifdef INET
-		if (ifa->ifa_addr->sa_family == AF_INET) {
+		case AF_INET:
+#endif
+#ifdef INET6
+		case AF_INET6:
+#endif
+#if defined(INET) || defined(INET6)
 			ifp->if_flags |= IFF_UP;
 			sca_port_up(ifp->if_softc);
-		} else
+			break;
 #endif
+		default:
 			error = EAFNOSUPPORT;
+			break;
+		}
 		break;
 
 	case SIOCSIFDSTADDR:
 #ifdef INET
-		if (ifa->ifa_addr->sa_family != AF_INET)
-			error = EAFNOSUPPORT;
-#else
-		error = EAFNOSUPPORT;
+		if (ifa->ifa_addr->sa_family == AF_INET)
+			break;
 #endif
+#ifdef INET6
+		if (ifa->ifa_addr->sa_family == AF_INET6)
+			break;
+#endif
+		error = EAFNOSUPPORT;
 		break;
 
 	case SIOCADDMULTI:
 	case SIOCDELMULTI:
+		/* XXX need multicast group management code */
 		if (ifr == 0) {
 			error = EAFNOSUPPORT;		/* XXX */
 			break;
 		}
-		switch (ifr->ifr_addr.sa_family) {
+		switch (ifreq_getaddr(cmd, ifr)->sa_family) {
 #ifdef INET
 		case AF_INET:
+			break;
+#endif
+#ifdef INET6
+		case AF_INET6:
 			break;
 #endif
 		default:
@@ -1021,7 +1071,7 @@ sca_start(ifp)
 		IF_DEQUEUE(&scp->fastq, mb_head);
 	if (mb_head == NULL)
 #endif
-		IF_DEQUEUE(&ifp->if_snd, mb_head);
+		IFQ_DEQUEUE(&ifp->if_snd, mb_head);
 	if (mb_head == NULL)
 		goto start_xmit;
 
@@ -1077,7 +1127,7 @@ X
 			    ("TX: about to mbuf len %d\n", m->m_len));
 
 			if (sc->sc_usedma)
-				bcopy(mtod(m, u_int8_t *), buf, m->m_len);
+				memcpy(buf, mtod(m, u_int8_t *), m->m_len);
 			else
 				bus_space_write_region_1(sc->scu_memt,
 				    sc->scu_memh, sca_page_addr(sc, buf_p),
@@ -1097,8 +1147,8 @@ X
 	/*
 	 * Pass packet to bpf if there is a listener.
 	 */
-	if (scp->sp_bpf)
-		bpf_mtap(scp->sp_bpf, mb_head);
+	if (ifp->if_bpf)
+		bpf_mtap(ifp->if_bpf, mb_head);
 #endif
 
 	m_freem(mb_head);
@@ -1144,8 +1194,7 @@ X
 }
 
 static void
-sca_watchdog(ifp)
-	struct ifnet *ifp;
+sca_watchdog(struct ifnet *ifp)
 {
 }
 
@@ -1242,7 +1291,7 @@ sca_dmac_intr(sca_port_t *scp, u_int8_t isr)
 			if (dsr & SCA_DSR_COF) {
 				printf("%s: TXDMA counter overflow\n",
 				       scp->sp_if.if_xname);
-				
+
 				scp->sp_if.if_flags &= ~IFF_OACTIVE;
 				scp->sp_txcur = 0;
 				scp->sp_txinuse = 0;
@@ -1364,7 +1413,7 @@ sca_msci_intr(sca_port_t *scp, u_int8_t isr)
 			/* underrun -- try to increase ready control */
 			trc0 = msci_read_1(scp, SCA_TRC00);
 			if (trc0 == 0x1f)
-				printf("TX: underun - fifo depth maxed\n");
+				printf("TX: underrun - fifo depth maxed\n");
 			else {
 				if ((trc0 += 2) > 0x1f)
 					trc0 = 0x1f;
@@ -1421,7 +1470,6 @@ sca_get_packets(sca_port_t *scp)
 static int
 sca_frame_avail(sca_port_t *scp)
 {
-	struct sca_softc *sc;
 	u_int16_t cda;
 	u_int32_t desc_p;	/* physical address (lower 16 bits) */
 	sca_desc_t *desc;
@@ -1431,7 +1479,6 @@ sca_frame_avail(sca_port_t *scp)
 	/*
 	 * Read the current descriptor from the SCA.
 	 */
-	sc = scp->sca;
 	cda = dmac_read_2(scp, SCA_CDAL0);
 
 	/*
@@ -1522,7 +1569,7 @@ sca_frame_process(sca_port_t *scp)
 	u_int16_t len;
 	u_int32_t t;
 
-	t = (time.tv_sec - boottime.tv_sec) * 1000;
+	t = time_uptime * 1000;
 	desc = &scp->sp_rxdesc[scp->sp_rxstart];
 	bufp = scp->sp_rxbuf + SCA_BSIZE * scp->sp_rxstart;
 	len = sca_desc_read_buflen(scp->sca, desc);
@@ -1559,12 +1606,11 @@ sca_frame_process(sca_port_t *scp)
 	}
 
 #if NBPFILTER > 0
-	if (scp->sp_bpf)
-		bpf_mtap(scp->sp_bpf, m);
+	if (scp->sp_if.if_bpf)
+		bpf_mtap(scp->sp_if.if_bpf, m);
 #endif
 
 	scp->sp_if.if_ipackets++;
-	scp->sp_if.if_lastchange = time;
 
 	hdlc = mtod(m, struct hdlc_header *);
 	switch (ntohs(hdlc->h_proto)) {
@@ -1579,9 +1625,20 @@ sca_frame_process(sca_port_t *scp)
 		schednetisr(NETISR_IP);
 		break;
 #endif	/* INET */
+#ifdef INET6
+	case HDLC_PROTOCOL_IPV6:
+		SCA_DPRINTF(SCA_DEBUG_RX, ("Received IP packet\n"));
+		m->m_pkthdr.rcvif = &scp->sp_if;
+		m->m_pkthdr.len -= sizeof(struct hdlc_header);
+		m->m_data += sizeof(struct hdlc_header);
+		m->m_len -= sizeof(struct hdlc_header);
+		ifq = &ip6intrq;
+		schednetisr(NETISR_IPV6);
+		break;
+#endif	/* INET6 */
 #ifdef ISO
 	case HDLC_PROTOCOL_ISO:
-		if (m->m_pkthdr.len < sizeof(struct hdlc_llc_header)) 
+		if (m->m_pkthdr.len < sizeof(struct hdlc_llc_header))
                        goto dropit;
 		m->m_pkthdr.rcvif = &scp->sp_if;
 		m->m_pkthdr.len -= sizeof(struct hdlc_llc_header);
@@ -1665,7 +1722,7 @@ sca_frame_process(sca_port_t *scp)
 			SCA_DPRINTF(SCA_DEBUG_CISCO,
 				    ("Unknown CISCO keepalive protocol 0x%04x\n",
 				     ntohl(cisco->type)));
-			
+
 			scp->sp_if.if_noproto++;
 			goto dropit;
 		}
@@ -1725,7 +1782,7 @@ sca_frame_print(sca_port_t *scp, sca_desc_t *desc, u_int8_t *p)
 		nothing_yet = 0;
 		if (i % 16 == 0)
 			printf("\n");
-		printf("%02x ", 
+		printf("%02x ",
 		    (sc->sc_usedma ? *p
 		    : bus_space_read_1(sc->scu_memt, sc->scu_memh,
 		    sca_page_addr(sc, p))));
@@ -1738,7 +1795,7 @@ sca_frame_print(sca_port_t *scp, sca_desc_t *desc, u_int8_t *p)
 #endif
 
 /*
- * adjust things becuase we have just read the current starting
+ * adjust things because we have just read the current starting
  * frame
  *
  * must be called at splnet()
@@ -1765,6 +1822,7 @@ static void
 sca_port_up(sca_port_t *scp)
 {
 	struct sca_softc *sc = scp->sca;
+	struct timeval now;
 #if 0
 	u_int8_t ier0, ier1;
 #endif
@@ -1812,7 +1870,7 @@ sca_port_up(sca_port_t *scp)
 	if (scp->sp_port == 0) {
 		sca_write_1(sc, SCA_IER0, sca_read_1(sc, SCA_IER0) | 0x0f);
 		sca_write_1(sc, SCA_IER1, sca_read_1(sc, SCA_IER1) | 0x0f);
-	} else {     
+	} else {
 		sca_write_1(sc, SCA_IER0, sca_read_1(sc, SCA_IER0) | 0xf0);
 		sca_write_1(sc, SCA_IER1, sca_read_1(sc, SCA_IER1) | 0xf0);
 	}
@@ -1829,7 +1887,8 @@ sca_port_up(sca_port_t *scp)
 	 */
 	scp->sp_txinuse = 0;
 	scp->sp_txcur = 0;
-	scp->cka_lasttx = time.tv_usec;
+	getmicrotime(&now);
+	scp->cka_lasttx = now.tv_usec;
 	scp->cka_lastrx = 0;
 }
 
@@ -1874,7 +1933,7 @@ sca_port_down(sca_port_t *scp)
 	if (scp->sp_port == 0) {
 		sca_write_1(sc, SCA_IER0, sca_read_1(sc, SCA_IER0) & 0xf0);
 		sca_write_1(sc, SCA_IER1, sca_read_1(sc, SCA_IER1) & 0xf0);
-	} else {     
+	} else {
 		sca_write_1(sc, SCA_IER0, sca_read_1(sc, SCA_IER0) & 0x0f);
 		sca_write_1(sc, SCA_IER1, sca_read_1(sc, SCA_IER1) & 0x0f);
 	}
@@ -1912,11 +1971,8 @@ sca_shutdown(struct sca_softc *sca)
 static void
 sca_port_starttx(sca_port_t *scp)
 {
-	struct sca_softc *sc;
 	u_int32_t	startdesc_p, enddesc_p;
 	int enddesc;
-
-	sc = scp->sca;
 
 	SCA_DPRINTF(SCA_DEBUG_TX, ("TX: starttx\n"));
 
@@ -1955,7 +2011,7 @@ sca_port_starttx(sca_port_t *scp)
  * otherwise let the caller handle copying the data in.
  */
 static struct mbuf *
-sca_mbuf_alloc(struct sca_softc *sc, caddr_t p, u_int len)
+sca_mbuf_alloc(struct sca_softc *sc, void *p, u_int len)
 {
 	struct mbuf *m;
 
@@ -1981,7 +2037,7 @@ sca_mbuf_alloc(struct sca_softc *sc, caddr_t p, u_int len)
 	if (p != NULL) {
 		/* XXX do we need to sync here? */
 		if (sc->sc_usedma)
-			bcopy(p, mtod(m, caddr_t), len);
+			memcpy(mtod(m, void *), p, len);
 		else
 			bus_space_read_region_1(sc->scu_memt, sc->scu_memh,
 			    sca_page_addr(sc, p), mtod(m, u_int8_t *), len);
@@ -1995,7 +2051,7 @@ sca_mbuf_alloc(struct sca_softc *sc, caddr_t p, u_int len)
 /*
  * get the base clock
  */
-void      
+void
 sca_get_base_clock(struct sca_softc *sc)
 {
 	struct timeval btv, ctv, dtv;
@@ -2071,7 +2127,7 @@ sca_print_clock_info(struct sca_softc *sc)
 	u_int32_t mhz, div;
 	int i;
 
-	printf("%s: base clock %d Hz\n", sc->sc_parent->dv_xname,
+	printf("%s: base clock %d Hz\n", device_xname(sc->sc_parent),
 	    sc->sc_baseclock);
 
 	/* print the information about the port clock selection */

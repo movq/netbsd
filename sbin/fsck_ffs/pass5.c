@@ -1,4 +1,4 @@
-/*	$NetBSD: pass5.c,v 1.23 1999/11/28 20:03:17 bouyer Exp $	*/
+/*	$NetBSD: pass5.c,v 1.48 2008/02/23 21:41:48 christos Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)pass5.c	8.9 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: pass5.c,v 1.23 1999/11/28 20:03:17 bouyer Exp $");
+__RCSID("$NetBSD: pass5.c,v 1.48 2008/02/23 21:41:48 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -58,26 +54,28 @@ __RCSID("$NetBSD: pass5.c,v 1.23 1999/11/28 20:03:17 bouyer Exp $");
 #include "fsck.h"
 #include "extern.h"
 
-void print_bmap __P((u_char *,u_int32_t));
+void print_bmap(u_char *,u_int32_t);
 
 void
-pass5()
+pass5(void)
 {
-	int c, blk, frags, basesize, sumsize, mapsize, savednrpos = 0;
+	int c, blk, frags, basesize, sumsize, mapsize, cssize;
 	int inomapsize, blkmapsize;
 	struct fs *fs = sblock;
-	ufs_daddr_t dbase, dmax;
-	ufs_daddr_t d;
+	daddr_t dbase, dmax;
+	daddr_t d;
 	long i, j, k;
 	struct csum *cs;
-	struct csum cstotal;
-	struct inodesc idesc[3];
+	struct csum_total cstotal;
+	struct inodesc idesc[4];
 	char buf[MAXBSIZE];
 	struct cg *newcg = (struct cg *)buf;
 	struct ocg *ocg = (struct ocg *)buf;
-	struct cg *cg = cgrp;
+	struct cg *cg = cgrp, *ncg;
+	struct inostat *info;
+	u_int32_t ncgsize;
 
-	statemap[WINO] = USTATE;
+	inoinfo(WINO)->ino_state = USTATE;
 	memset(newcg, 0, (size_t)fs->fs_cgsize);
 	newcg->cg_niblk = fs->fs_ipg;
 	if (cvtlevel >= 3) {
@@ -91,7 +89,7 @@ pass5()
 			}
 		}
 		if (fs->fs_maxcontig > 1) {
-			char *doit = 0;
+			const char *doit = NULL;
 
 			if (fs->fs_contigsumsize < 1) {
 				doit = "CREAT";
@@ -111,125 +109,210 @@ pass5()
 					if (preen)
 						pwarn("%sING CLUSTER MAPS\n",
 						    doit);
-					fs->fs_cgsize =
-					    fragroundup(fs, CGSIZE(fs));
-					cg = cgrp =
-					    realloc(cgrp, fs->fs_cgsize);
-					if (cg == NULL)
-						errx(EEXIT,
+					ncgsize = fragroundup(fs, CGSIZE(fs));
+					ncg = realloc(cgrp, ncgsize);
+					if (ncg == NULL)
+						errexit(
 						"cannot reallocate cg space");
+					cg = cgrp = ncg;
+					fs->fs_cgsize = ncgsize;
 					doinglevel1 = 1;
 					sbdirty();
 				}
 			}
 		}
 	}
-	switch ((int)fs->fs_postblformat) {
-
-	case FS_42POSTBLFMT:
-		basesize = (char *)(&ocg->cg_btot[0]) -
-		    (char *)(&ocg->cg_firstfield);
-		sumsize = &ocg->cg_iused[0] - (u_int8_t *)(&ocg->cg_btot[0]);
-		mapsize = &ocg->cg_free[howmany(fs->fs_fpg, NBBY)] -
-			(u_char *)&ocg->cg_iused[0];
-		blkmapsize = howmany(fs->fs_fpg, NBBY);
-		inomapsize = &ocg->cg_free[0] - (u_char *)&ocg->cg_iused[0];
-		ocg->cg_magic = CG_MAGIC;
-		savednrpos = fs->fs_nrpos;
-		fs->fs_nrpos = 8;
-		break;
-
-	case FS_DYNAMICPOSTBLFMT:
-		newcg->cg_btotoff =
-		     &newcg->cg_space[0] - (u_char *)(&newcg->cg_firstfield);
-		newcg->cg_boff =
-		    newcg->cg_btotoff + fs->fs_cpg * sizeof(int32_t);
-		newcg->cg_iusedoff = newcg->cg_boff + 
-		    fs->fs_cpg * fs->fs_nrpos * sizeof(int16_t);
-		newcg->cg_freeoff =
-		    newcg->cg_iusedoff + howmany(fs->fs_ipg, NBBY);
-		inomapsize = newcg->cg_freeoff - newcg->cg_iusedoff;
-		newcg->cg_nextfreeoff = newcg->cg_freeoff +
-		    howmany(fs->fs_cpg * fs->fs_spc / NSPF(fs), NBBY);
-		blkmapsize = newcg->cg_nextfreeoff - newcg->cg_freeoff;
-		if (fs->fs_contigsumsize > 0) {
-			newcg->cg_clustersumoff = newcg->cg_nextfreeoff -
-			    sizeof(int32_t);
-			newcg->cg_clustersumoff =
-			    roundup(newcg->cg_clustersumoff, sizeof(int32_t));
-			newcg->cg_clusteroff = newcg->cg_clustersumoff +
-			    (fs->fs_contigsumsize + 1) * sizeof(int32_t);
-			newcg->cg_nextfreeoff = newcg->cg_clusteroff +
-			    howmany(fs->fs_cpg * fs->fs_spc / NSPB(fs), NBBY);
+	basesize = &newcg->cg_space[0] - (u_char *)(&newcg->cg_firstfield);
+	cssize = (u_char *)&cstotal.cs_spare[0] - (u_char *)&cstotal.cs_ndir;
+	sumsize = 0;
+	if (is_ufs2) {
+		newcg->cg_iusedoff = basesize;
+	} else {
+		/*
+		 * We reserve the space for the old rotation summary
+		 * tables for the benefit of old kernels, but do not
+		 * maintain them in modern kernels. In time, they can
+		 * go away.
+		 */
+		newcg->cg_old_btotoff = basesize;
+		newcg->cg_old_boff = newcg->cg_old_btotoff +
+		    fs->fs_old_cpg * sizeof(int32_t);
+		newcg->cg_iusedoff = newcg->cg_old_boff +
+		    fs->fs_old_cpg * fs->fs_old_nrpos * sizeof(u_int16_t);
+		memset(&newcg->cg_space[0], 0, newcg->cg_iusedoff - basesize);
+	}
+	inomapsize = howmany(fs->fs_ipg, CHAR_BIT);
+	newcg->cg_freeoff = newcg->cg_iusedoff + inomapsize;
+	blkmapsize = howmany(fs->fs_fpg, CHAR_BIT);
+	newcg->cg_nextfreeoff = newcg->cg_freeoff + blkmapsize;
+	if (fs->fs_contigsumsize > 0) {
+		newcg->cg_clustersumoff = newcg->cg_nextfreeoff -
+		    sizeof(u_int32_t);
+		if (isappleufs) {
+			/* Apple PR2216969 gives rationale for this change.
+			 * I believe they were mistaken, but we need to
+			 * duplicate it for compatibility.  -- dbj@NetBSD.org
+			 */
+			newcg->cg_clustersumoff += sizeof(u_int32_t);
 		}
-		newcg->cg_magic = CG_MAGIC;
-		basesize = &newcg->cg_space[0] -
-		    (u_char *)(&newcg->cg_firstfield);
-		sumsize = newcg->cg_iusedoff - newcg->cg_btotoff;
-		mapsize = newcg->cg_nextfreeoff - newcg->cg_iusedoff;
-		break;
+		newcg->cg_clustersumoff =
+		    roundup(newcg->cg_clustersumoff, sizeof(u_int32_t));
+		newcg->cg_clusteroff = newcg->cg_clustersumoff +
+		    (fs->fs_contigsumsize + 1) * sizeof(u_int32_t);
+		newcg->cg_nextfreeoff = newcg->cg_clusteroff +
+		    howmany(fragstoblks(fs, fs->fs_fpg), CHAR_BIT);
+	}
+	newcg->cg_magic = CG_MAGIC;
+	mapsize = newcg->cg_nextfreeoff - newcg->cg_iusedoff;
+	if (!is_ufs2 && ((fs->fs_old_flags & FS_FLAGS_UPDATED) == 0)) {
+		switch ((int)fs->fs_old_postblformat) {
 
-	default:
-		inomapsize = blkmapsize = sumsize = 0;	/* keep lint happy */
-		errx(EEXIT, "UNKNOWN ROTATIONAL TABLE FORMAT %d",
-			fs->fs_postblformat);
+		case FS_42POSTBLFMT:
+			basesize = (char *)(&ocg->cg_btot[0]) -
+			    (char *)(&ocg->cg_firstfield);
+			sumsize = &ocg->cg_iused[0] - (u_int8_t *)(&ocg->cg_btot[0]);
+			mapsize = &ocg->cg_free[howmany(fs->fs_fpg, NBBY)] -
+			    (u_char *)&ocg->cg_iused[0];
+			blkmapsize = howmany(fs->fs_fpg, NBBY);
+			inomapsize = &ocg->cg_free[0] - (u_char *)&ocg->cg_iused[0];
+			ocg->cg_magic = CG_MAGIC;
+			newcg->cg_magic = 0;
+			break;
+
+		case FS_DYNAMICPOSTBLFMT:
+			sumsize = newcg->cg_iusedoff - newcg->cg_old_btotoff;
+			break;
+
+		default:
+			errexit("UNKNOWN ROTATIONAL TABLE FORMAT %d",
+			    fs->fs_old_postblformat);
+		}
 	}
 	memset(&idesc[0], 0, sizeof idesc);
-	for (i = 0; i < 3; i++) {
+	for (i = 0; i < 4; i++) {
 		idesc[i].id_type = ADDR;
-		if (doinglevel2)
+		if (!is_ufs2 && doinglevel2)
 			idesc[i].id_fix = FIX;
 	}
-	memset(&cstotal, 0, sizeof(struct csum));
-	j = blknum(fs, fs->fs_size + fs->fs_frag - 1);
-	for (i = fs->fs_size; i < j; i++)
-		setbmap(i);
+	memset(&cstotal, 0, sizeof(struct csum_total));
+	dmax = blknum(fs, fs->fs_size + fs->fs_frag - 1);
+	for (d = fs->fs_size; d < dmax; d++)
+		setbmap(d);
 	for (c = 0; c < fs->fs_ncg; c++) {
+		if (got_siginfo) {
+			fprintf(stderr,
+			    "%s: phase 5: cyl group %d of %d (%d%%)\n",
+			    cdevname(), c, fs->fs_ncg,
+			    c * 100 / fs->fs_ncg);
+			got_siginfo = 0;
+		}
+#ifdef PROGRESS
+		progress_bar(cdevname(), preen ? NULL : "phase 5",
+			    c, fs->fs_ncg);
+#endif /* PROGRESS */
 		getblk(&cgblk, cgtod(fs, c), fs->fs_cgsize);
 		memcpy(cg, cgblk.b_un.b_cg, fs->fs_cgsize);
 		if((doswap && !needswap) || (!doswap && needswap))
-			swap_cg(cgblk.b_un.b_cg, cg);
-		if (!cg_chkmagic(cg, 0))
+			ffs_cg_swap(cgblk.b_un.b_cg, cg, sblock);
+		if (!doinglevel1 && !cg_chkmagic(cg, 0))
 			pfatal("CG %d: PASS5: BAD MAGIC NUMBER\n", c);
 		if(doswap)
 			cgdirty();
+		/*
+		 * While we have the disk head where we want it,
+		 * write back the superblock to the spare at this
+		 * cylinder group.
+		 */
+		if ((cvtlevel && sblk.b_dirty) || doswap) {
+			bwrite(fswritefd, sblk.b_un.b_buf,
+			    fsbtodb(sblock, cgsblock(sblock, c)),
+			    sblock->fs_sbsize);
+		} else {
+			/*
+			 * Read in the current alternate superblock,
+			 * and compare it to the master.  If it's
+			 * wrong, fix it up.
+			 */
+			getblk(&asblk, cgsblock(sblock, c), sblock->fs_sbsize);
+			if (asblk.b_errs)
+				pfatal("CG %d: UNABLE TO READ ALTERNATE "
+				    "SUPERBLK\n", c);
+			else {
+				memmove(altsblock, asblk.b_un.b_fs,
+				    sblock->fs_sbsize);
+				if (needswap)
+					ffs_sb_swap(asblk.b_un.b_fs, altsblock);
+			}
+			sb_oldfscompat_write(sblock, sblocksave);
+			if ((asblk.b_errs || cmpsblks(sblock, altsblock)) &&
+			     dofix(&idesc[3],
+				   "ALTERNATE SUPERBLK(S) ARE INCORRECT")) {
+				bwrite(fswritefd, sblk.b_un.b_buf,
+				    fsbtodb(sblock, cgsblock(sblock, c)),
+				    sblock->fs_sbsize);
+			}
+			sb_oldfscompat_read(sblock, 0);
+		}
 		dbase = cgbase(fs, c);
 		dmax = dbase + fs->fs_fpg;
 		if (dmax > fs->fs_size)
 			dmax = fs->fs_size;
-		newcg->cg_time = cg->cg_time;
+		if (is_ufs2 || (fs->fs_old_flags & FS_FLAGS_UPDATED))
+			newcg->cg_time = cg->cg_time;
+		newcg->cg_old_time = cg->cg_old_time;
 		newcg->cg_cgx = c;
-		if (c == fs->fs_ncg - 1)
-			newcg->cg_ncyl = fs->fs_ncyl % fs->fs_cpg;
-		else
-			newcg->cg_ncyl = fs->fs_cpg;
 		newcg->cg_ndblk = dmax - dbase;
+		if (!is_ufs2) {
+			if (c == fs->fs_ncg - 1) {
+				/* Avoid fighting old fsck for this value.  Its never used
+				 * outside of this check anyway.
+				 */
+				if ((fs->fs_old_flags & FS_FLAGS_UPDATED) == 0)
+					newcg->cg_old_ncyl = fs->fs_old_ncyl % fs->fs_old_cpg;
+				else
+					newcg->cg_old_ncyl = howmany(newcg->cg_ndblk,
+					    fs->fs_fpg / fs->fs_old_cpg);
+			} else
+				newcg->cg_old_ncyl = fs->fs_old_cpg;
+			newcg->cg_old_niblk = fs->fs_ipg;
+			newcg->cg_niblk = 0;
+		}
 		if (fs->fs_contigsumsize > 0)
 			newcg->cg_nclusterblks = newcg->cg_ndblk / fs->fs_frag;
 		newcg->cg_cs.cs_ndir = 0;
 		newcg->cg_cs.cs_nffree = 0;
 		newcg->cg_cs.cs_nbfree = 0;
 		newcg->cg_cs.cs_nifree = fs->fs_ipg;
-		if (cg->cg_rotor < newcg->cg_ndblk)
+		if (cg->cg_rotor >= 0 && cg->cg_rotor < newcg->cg_ndblk)
 			newcg->cg_rotor = cg->cg_rotor;
 		else
 			newcg->cg_rotor = 0;
-		if (cg->cg_frotor < newcg->cg_ndblk)
+		if (cg->cg_frotor >= 0 && cg->cg_frotor < newcg->cg_ndblk)
 			newcg->cg_frotor = cg->cg_frotor;
 		else
 			newcg->cg_frotor = 0;
-		if (cg->cg_irotor < newcg->cg_niblk)
+		if (cg->cg_irotor >= 0 && cg->cg_irotor < fs->fs_ipg)
 			newcg->cg_irotor = cg->cg_irotor;
 		else
 			newcg->cg_irotor = 0;
+		if (!is_ufs2) {
+			newcg->cg_initediblk = 0;
+		} else {
+			if ((unsigned)cg->cg_initediblk > fs->fs_ipg)
+				newcg->cg_initediblk = fs->fs_ipg;
+			else
+				newcg->cg_initediblk = cg->cg_initediblk;
+		}
 		memset(&newcg->cg_frsum[0], 0, sizeof newcg->cg_frsum);
-		memset(&cg_blktot(newcg, 0)[0], 0,
-		      (size_t)(sumsize + mapsize));
-		if (fs->fs_postblformat == FS_42POSTBLFMT)
+		memset(&old_cg_blktot(newcg, 0)[0], 0, (size_t)(sumsize));
+		memset(cg_inosused(newcg, 0), 0, (size_t)(mapsize));
+		if (!is_ufs2 && ((fs->fs_old_flags & FS_FLAGS_UPDATED) == 0) &&
+		    fs->fs_old_postblformat == FS_42POSTBLFMT)
 			ocg->cg_magic = CG_MAGIC;
 		j = fs->fs_ipg * c;
 		for (i = 0; i < fs->fs_ipg; j++, i++) {
-			switch (statemap[j]) {
+			info = inoinfo(j);
+			switch (info->ino_state) {
 
 			case USTATE:
 				break;
@@ -249,8 +332,8 @@ pass5()
 			default:
 				if (j < ROOTINO)
 					break;
-				errx(EEXIT, "BAD STATE %d FOR INODE I=%ld",
-				    statemap[j], (long)j);
+				errexit("BAD STATE %d FOR INODE I=%ld",
+				    info->ino_state, (long)j);
 			}
 		}
 		if (c == 0)
@@ -270,12 +353,14 @@ pass5()
 			}
 			if (frags == fs->fs_frag) {
 				newcg->cg_cs.cs_nbfree++;
-				j = cbtocylno(fs, i);
-				cg_blktot(newcg, 0)[j]++;
-				cg_blks(fs, newcg, j, 0)[cbtorpos(fs, i)]++;
+				if (sumsize) {
+					j = old_cbtocylno(fs, i);
+					old_cg_blktot(newcg, 0)[j]++;
+					old_cg_blks(fs, newcg, j, 0)[old_cbtorpos(fs, i)]++;
+				}
 				if (fs->fs_contigsumsize > 0)
 					setbit(cg_clustersfree(newcg, 0),
-					    i / fs->fs_frag);
+					    fragstoblks(fs, i));
 			} else if (frags > 0) {
 				newcg->cg_cs.cs_nffree += frags;
 				blk = blkmap(fs, cg_blksfree(newcg, 0), i);
@@ -317,9 +402,17 @@ pass5()
 		cstotal.cs_ndir += newcg->cg_cs.cs_ndir;
 		cs = &fs->fs_cs(fs, c);
 		if (memcmp(&newcg->cg_cs, cs, sizeof *cs) != 0) {
+			if (debug) {
+				printf("cg %d: nffree: %d/%d nbfree %d/%d"
+					" nifree %d/%d ndir %d/%d\n",
+					c, cs->cs_nffree,newcg->cg_cs.cs_nffree,
+					cs->cs_nbfree,newcg->cg_cs.cs_nbfree,
+					cs->cs_nifree,newcg->cg_cs.cs_nifree,
+					cs->cs_ndir,newcg->cg_cs.cs_ndir);
+			}
 			if (dofix(&idesc[0], "FREE BLK COUNT(S) WRONG IN SUPERBLK")) {
-			memmove(cs, &newcg->cg_cs, sizeof *cs);
-			sbdirty();
+				memmove(cs, &newcg->cg_cs, sizeof *cs);
+				sbdirty();
 			} else
 				markclean = 0;
 		}
@@ -328,14 +421,14 @@ pass5()
 			cgdirty();
 			continue;
 		}
-		if (memcmp(newcg, cg, basesize) != 0 ||
-		     memcmp(&cg_blktot(newcg, 0)[0],
-				&cg_blktot(cg, 0)[0], sumsize) != 0) {
-		    if (dofix(&idesc[2], "SUMMARY INFORMATION BAD")) {
-			memmove(cg, newcg, (size_t)basesize);
-			memmove(&cg_blktot(cg, 0)[0],
-			       &cg_blktot(newcg, 0)[0], (size_t)sumsize);
-			cgdirty();
+		if ((memcmp(newcg, cg, basesize) != 0) ||
+		    (memcmp(&old_cg_blktot(newcg, 0)[0],
+		        &old_cg_blktot(cg, 0)[0], sumsize) != 0)) {
+		 	if (dofix(&idesc[2], "SUMMARY INFORMATION BAD")) {
+				memmove(cg, newcg, (size_t)basesize);
+				memmove(&old_cg_blktot(cg, 0)[0],
+			       &old_cg_blktot(newcg, 0)[0], (size_t)sumsize);
+				cgdirty();
 			} else
 				markclean = 0;
 		}
@@ -363,7 +456,8 @@ pass5()
 						continue;
 					if (cg_inosused(cg, 0)[i] & (1 << k))
 						continue;
-					pwarn("ALLOCATED FRAG %ld MARKED FREE",
+					pwarn("ALLOCATED FRAG %ld "
+					    "MARKED FREE\n",
 					    c * fs->fs_fpg + i * 8 + k);
 				}
 			}
@@ -375,23 +469,35 @@ pass5()
                         cgdirty();
                 }
 	}
-	if (fs->fs_postblformat == FS_42POSTBLFMT)
-		fs->fs_nrpos = savednrpos;
-	if (memcmp(&cstotal, &fs->fs_cstotal, sizeof *cs) != 0) {
-	    if(dofix(&idesc[0], "FREE BLK COUNT(S) WRONG IN SUPERBLK")) {
-		memmove(&fs->fs_cstotal, &cstotal, sizeof *cs);
-		fs->fs_ronly = 0;
-		fs->fs_fmod = 0;
-		sbdirty();
+	if (memcmp(&cstotal, &fs->fs_cstotal, cssize) != 0) {
+		if (debug) {
+			printf("total: nffree: %lld/%lld nbfree %lld/%lld"
+				" nifree %lld/%lld ndir %lld/%lld\n",
+				(long long int)fs->fs_cstotal.cs_nffree,
+				(long long int)cstotal.cs_nffree,
+				(long long int)fs->fs_cstotal.cs_nbfree,
+				(long long int)cstotal.cs_nbfree,
+				(long long int)fs->fs_cstotal.cs_nifree,
+				(long long int)cstotal.cs_nifree,
+				(long long int)fs->fs_cstotal.cs_ndir,
+				(long long int)cstotal.cs_ndir);
+		}
+		if (dofix(&idesc[0], "FREE BLK COUNT(S) WRONG IN SUPERBLK")) {
+			memmove(&fs->fs_cstotal, &cstotal, sizeof cstotal);
+			fs->fs_ronly = 0;
+			fs->fs_fmod = 0;
+			sbdirty();
 		} else
 			markclean = 0;
 	}
+#ifdef PROGRESS
+	if (!preen)
+		progress_done();
+#endif /* PROGRESS */
 }
 
 void 
-print_bmap(map, size)
-	u_char *map;
-	u_int32_t size;
+print_bmap(u_char *map, u_int32_t size)
 {
 	int i, j;
 

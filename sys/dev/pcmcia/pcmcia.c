@@ -1,6 +1,22 @@
-/*	$NetBSD: pcmcia.c,v 1.21 2000/02/26 19:02:22 uch Exp $	*/
+/*	$NetBSD: pcmcia.c,v 1.87 2008/07/03 19:07:43 drochner Exp $	*/
 
-#define	PCMCIADEBUG
+/*
+ * Copyright (c) 2004 Charles M. Hannum.  All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Charles M. Hannum.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ */
 
 /*
  * Copyright (c) 1997 Marc Horowitz.  All rights reserved.
@@ -31,13 +47,16 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: pcmcia.c,v 1.87 2008/07/03 19:07:43 drochner Exp $");
+
 #include "opt_pcmciaverbose.h"
 
-#include <sys/types.h>
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
+#include <net/if.h>
 
 #include <dev/pcmcia/pcmciareg.h>
 #include <dev/pcmcia/pcmciachip.h>
@@ -51,13 +70,8 @@
 #ifdef PCMCIADEBUG
 int	pcmcia_debug = 0;
 #define	DPRINTF(arg) if (pcmcia_debug) printf arg
-int	pcmciaintr_debug = 0;
-/* this is done this way to avoid doing lots of conditionals
-   at interrupt level.  */
-#define PCMCIA_CARD_INTR (pcmciaintr_debug?pcmcia_card_intrdebug:pcmcia_card_intr)
 #else
 #define	DPRINTF(arg)
-#define PCMCIA_CARD_INTR (pcmcia_card_intr)
 #endif
 
 #ifdef PCMCIAVERBOSE
@@ -66,24 +80,16 @@ int	pcmcia_verbose = 1;
 int	pcmcia_verbose = 0;
 #endif
 
-int	pcmcia_match __P((struct device *, struct cfdata *, void *));
-int	pcmcia_submatch __P((struct device *, struct cfdata *, void *));
-void	pcmcia_attach __P((struct device *, struct device *, void *));
-int	pcmcia_print __P((void *, const char *));
+int	pcmcia_match(struct device *, struct cfdata *, void *);
+void	pcmcia_attach(struct device *, struct device *, void *);
+int	pcmcia_detach(device_t, int);
+int	pcmcia_rescan(struct device *, const char *, const int *);
+void	pcmcia_childdetached(struct device *, struct device *);
+int	pcmcia_print(void *, const char *);
 
-static inline void pcmcia_socket_enable __P((pcmcia_chipset_tag_t,
-					     pcmcia_chipset_handle_t *));
-static inline void pcmcia_socket_disable __P((pcmcia_chipset_tag_t,
-					      pcmcia_chipset_handle_t *));
-
-int pcmcia_card_intr __P((void *));
-#ifdef PCMCIADEBUG
-int pcmcia_card_intrdebug __P((void *));
-#endif
-
-struct cfattach pcmcia_ca = {
-	sizeof(struct pcmcia_softc), pcmcia_match, pcmcia_attach
-};
+CFATTACH_DECL2_NEW(pcmcia, sizeof(struct pcmcia_softc),
+    pcmcia_match, pcmcia_attach, pcmcia_detach, NULL,
+    pcmcia_rescan, pcmcia_childdetached);
 
 int
 pcmcia_ccr_read(pf, ccr)
@@ -92,7 +98,7 @@ pcmcia_ccr_read(pf, ccr)
 {
 
 	return (bus_space_read_1(pf->pf_ccrt, pf->pf_ccrh,
-	    pf->pf_ccr_offset + ccr));
+	    pf->pf_ccr_offset + ccr * 2));
 }
 
 void
@@ -102,21 +108,18 @@ pcmcia_ccr_write(pf, ccr, val)
 	int val;
 {
 
-	if ((pf->ccr_mask) & (1 << (ccr / 2))) {
+	if (pf->ccr_mask & (1 << ccr)) {
 		bus_space_write_1(pf->pf_ccrt, pf->pf_ccrh,
-		    pf->pf_ccr_offset + ccr, val);
+		    pf->pf_ccr_offset + ccr * 2, val);
 	}
 }
 
 int
-pcmcia_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+pcmcia_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct pcmciabus_attach_args *paa = aux;
 
-	if (strcmp(paa->paa_busname, match->cf_driver->cd_name)) {
+	if (strcmp(paa->paa_busname, match->cf_name)) {
 	    return 0;
 	}
 	/* if the autoconfiguration got this far, there's a socket here */
@@ -124,69 +127,84 @@ pcmcia_match(parent, match, aux)
 }
 
 void
-pcmcia_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+pcmcia_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct pcmciabus_attach_args *paa = aux;
-	struct pcmcia_softc *sc = (struct pcmcia_softc *) self;
+	struct pcmcia_softc *sc = device_private(self);
 
-	printf("\n");
+	aprint_naive("\n");
+	aprint_normal("\n");
 
+	sc->dev = self;
 	sc->pct = paa->pct;
 	sc->pch = paa->pch;
 	sc->iobase = paa->iobase;
 	sc->iosize = paa->iosize;
 
 	sc->ih = NULL;
+
+	if (!pmf_device_register(self, NULL, NULL))
+		aprint_error_dev(self, "couldn't establish power handler\n");
+}
+
+int
+pcmcia_detach(device_t self, int flags)
+{
+	int rc;
+
+	if ((rc = config_detach_children(self, flags)) != 0)
+		return rc;
+
+	pmf_device_deregister(self);
+	return 0;
 }
 
 int
 pcmcia_card_attach(dev)
 	struct device *dev;
 {
-	struct pcmcia_softc *sc = (struct pcmcia_softc *) dev;
+	struct pcmcia_softc *sc = device_private(dev);
 	struct pcmcia_function *pf;
-	struct pcmcia_attach_args paa;
-	int attached;
+	int error;
+	static const int wildcard[PCMCIACF_NLOCS] = {
+		PCMCIACF_FUNCTION_DEFAULT
+	};
 
 	/*
 	 * this is here so that when socket_enable calls gettype, trt happens
 	 */
-	sc->card.pf_head.sqh_first = NULL;
+	SIMPLEQ_FIRST(&sc->card.pf_head) = NULL;
 
-	pcmcia_chip_socket_enable(sc->pct, sc->pch);
+	pcmcia_socket_enable(dev);
 
 	pcmcia_read_cis(sc);
-
-	pcmcia_chip_socket_disable(sc->pct, sc->pch);
-
 	pcmcia_check_cis_quirks(sc);
 
+#if 1 /* XXX remove this, done below ??? */
 	/*
 	 * bail now if the card has no functions, or if there was an error in
 	 * the cis.
 	 */
-
-	if (sc->card.error)
-		return (1);
-	if (sc->card.pf_head.sqh_first == NULL)
-		return (1);
+	if (sc->card.error ||
+	    SIMPLEQ_EMPTY(&sc->card.pf_head)) {
+		printf("%s: card appears to have bogus CIS\n",
+		    device_xname(sc->dev));
+		error = EIO;
+		goto done;
+	}
+#endif
 
 	if (pcmcia_verbose)
 		pcmcia_print_cis(sc);
 
-	attached = 0;
-
-	for (pf = sc->card.pf_head.sqh_first; pf != NULL;
-	    pf = pf->pf_list.sqe_next) {
-		if (pf->cfe_head.sqh_first == NULL)
+	SIMPLEQ_FOREACH(pf, &sc->card.pf_head, pf_list) {
+		if (SIMPLEQ_EMPTY(&pf->cfe_head))
 			continue;
 
 #ifdef DIAGNOSTIC
 		if (pf->child != NULL) {
 			printf("%s: %s still attached to function %d!\n",
-			    sc->dev.dv_xname, pf->child->dv_xname,
+			    device_xname(sc->dev), device_xname(pf->child),
 			    pf->number);
 			panic("pcmcia_card_attach");
 		}
@@ -194,26 +212,54 @@ pcmcia_card_attach(dev)
 		pf->sc = sc;
 		pf->child = NULL;
 		pf->cfe = NULL;
-		pf->ih_fct = NULL;
-		pf->ih_arg = NULL;
+		pf->pf_ih = NULL;
 	}
 
-	for (pf = sc->card.pf_head.sqh_first; pf != NULL;
-	    pf = pf->pf_list.sqe_next) {
-		if (pf->cfe_head.sqh_first == NULL)
+	error = pcmcia_rescan(dev, "pcmcia", wildcard);
+done:
+	pcmcia_socket_disable(dev);
+	return (error);
+}
+
+int
+pcmcia_rescan(struct device *self, const char *ifattr,
+    const int *locators)
+{
+	struct pcmcia_softc *sc = device_private(self);
+	struct pcmcia_function *pf;
+	struct pcmcia_attach_args paa;
+	int locs[PCMCIACF_NLOCS];
+
+	if (sc->card.error ||
+	    SIMPLEQ_EMPTY(&sc->card.pf_head)) {
+		/* XXX silently ignore if no card present? */
+		return (EIO);
+	}
+
+	SIMPLEQ_FOREACH(pf, &sc->card.pf_head, pf_list) {
+		if (SIMPLEQ_EMPTY(&pf->cfe_head))
 			continue;
+
+		if ((locators[PCMCIACF_FUNCTION] != PCMCIACF_FUNCTION_DEFAULT)
+		    && (locators[PCMCIACF_FUNCTION] != pf->number))
+			continue;
+
+		if (pf->child)
+			continue;
+
+		locs[PCMCIACF_FUNCTION] = pf->number;
 
 		paa.manufacturer = sc->card.manufacturer;
 		paa.product = sc->card.product;
 		paa.card = &sc->card;
 		paa.pf = pf;
 
-		if ((pf->child = config_found_sm(&sc->dev, &paa, pcmcia_print,
-		    pcmcia_submatch)) != NULL)
-			attached++;
+		pf->child = config_found_sm_loc(self, "pcmcia", locs, &paa,
+						pcmcia_print,
+						config_stdsubmatch);
 	}
 
-	return (attached ? 0 : 1);
+	return (0);
 }
 
 void
@@ -221,7 +267,7 @@ pcmcia_card_detach(dev, flags)
 	struct device *dev;
 	int flags;		/* DETACH_* flags */
 {
-	struct pcmcia_softc *sc = (struct pcmcia_softc *) dev;
+	struct pcmcia_softc *sc = device_private(dev);
 	struct pcmcia_function *pf;
 	int error;
 
@@ -229,28 +275,56 @@ pcmcia_card_detach(dev, flags)
 	 * We are running on either the PCMCIA socket's event thread
 	 * or in user context detaching a device by user request.
 	 */
-	for (pf = SIMPLEQ_FIRST(&sc->card.pf_head); pf != NULL;
-	     pf = SIMPLEQ_NEXT(pf, pf_list)) {
-		if (SIMPLEQ_FIRST(&pf->cfe_head) == NULL)
+	SIMPLEQ_FOREACH(pf, &sc->card.pf_head, pf_list) {
+		pf->pf_flags |= PFF_DETACHED;
+		if (SIMPLEQ_EMPTY(&pf->cfe_head))
 			continue;
 		if (pf->child == NULL)
 			continue;
 		DPRINTF(("%s: detaching %s (function %d)\n",
-		    sc->dev.dv_xname, pf->child->dv_xname, pf->number));
+		    device_xname(sc->dev), device_xname(pf->child), pf->number));
 		if ((error = config_detach(pf->child, flags)) != 0) {
 			printf("%s: error %d detaching %s (function %d)\n",
-			    sc->dev.dv_xname, error, pf->child->dv_xname,
+			    device_xname(sc->dev), error, device_xname(pf->child),
 			    pf->number);
-		} else
-			pf->child = NULL;
+		}
 	}
+
+	if (sc->sc_enabled_count != 0) {
+#ifdef DIAGNOSTIC
+		printf("pcmcia_card_detach: enabled_count should be 0 here??\n");
+#endif
+		pcmcia_chip_socket_disable(sc->pct, sc->pch);
+		sc->sc_enabled_count = 0;
+	}
+}
+
+void
+pcmcia_childdetached(struct device *self, struct device *child)
+{
+	struct pcmcia_softc *sc = device_private(self);
+	struct pcmcia_function *pf;
+
+	SIMPLEQ_FOREACH(pf, &sc->card.pf_head, pf_list) {
+		if (SIMPLEQ_EMPTY(&pf->cfe_head))
+			continue;
+		if (pf->child == child) {
+			KASSERT(device_locator(child, PCMCIACF_FUNCTION)
+				== pf->number);
+			pf->child = NULL;
+			return;
+		}
+	}
+
+	aprint_error_dev(self, "pcmcia_childdetached: %s not found\n",
+	       device_xname(child));
 }
 
 void
 pcmcia_card_deactivate(dev)
 	struct device *dev;
 {
-	struct pcmcia_softc *sc = (struct pcmcia_softc *) dev;
+	struct pcmcia_softc *sc = device_private(dev);
 	struct pcmcia_function *pf;
 
 	/*
@@ -258,31 +332,15 @@ pcmcia_card_deactivate(dev)
 	 * Deactivate the child driver.  The PCMCIA socket's
 	 * event thread will run later to finish the detach.
 	 */
-	for (pf = SIMPLEQ_FIRST(&sc->card.pf_head); pf != NULL;
-	     pf = SIMPLEQ_NEXT(pf, pf_list)) {
-		if (SIMPLEQ_FIRST(&pf->cfe_head) == NULL)
+	SIMPLEQ_FOREACH(pf, &sc->card.pf_head, pf_list) {
+		if (SIMPLEQ_EMPTY(&pf->cfe_head))
 			continue;
 		if (pf->child == NULL)
 			continue;
 		DPRINTF(("%s: deactivating %s (function %d)\n",
-		    sc->dev.dv_xname, pf->child->dv_xname, pf->number));
+		    device_xname(sc->dev), device_xname(pf->child), pf->number));
 		config_deactivate(pf->child);
 	}
-}
-
-int
-pcmcia_submatch(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
-{
-	struct pcmcia_attach_args *paa = aux;
-
-	if (cf->cf_loc[PCMCIACF_FUNCTION] != PCMCIACF_FUNCTION_DEFAULT &&
-	    cf->cf_loc[PCMCIACF_FUNCTION] != paa->pf->number)
-		return (0);
-
-	return ((*cf->cf_attach->ca_match)(parent, cf, aux));
 }
 
 int
@@ -295,11 +353,12 @@ pcmcia_print(arg, pnp)
 	struct pcmcia_card *card = &sc->card;
 	char devinfo[256];
 
-	if (pnp) {
-		pcmcia_devinfo(card, 1, devinfo, sizeof devinfo);
-		printf("%s", devinfo);
-	}
-	printf(" function %d", pa->pf->number);
+	if (pnp)
+		aprint_normal("%s", pnp);
+
+	pcmcia_devinfo(card, !!pnp, devinfo, sizeof(devinfo));
+
+	aprint_normal(" function %d: %s\n", pa->pf->number, devinfo);
 
 	return (UNCONF);
 }
@@ -309,76 +368,91 @@ pcmcia_devinfo(card, showhex, cp, cplen)
 	struct pcmcia_card *card;
 	int showhex;
 	char *cp;
-	int cplen;
+	size_t cplen;
 {
 	int i, n;
 
-	for (i = 0; i < 4 && card->cis1_info[i] != NULL && cplen > 0; i++) {
+	if (cplen > 1) {
+		*cp++ = '<';
+		*cp = '\0';
+		cplen--;
+	}
+
+	for (i = 0; i < 4 && card->cis1_info[i] != NULL && cplen > 1; i++) {
 		n = snprintf(cp, cplen, "%s%s", i ? ", " : "",
 		        card->cis1_info[i]);
 		cp += n;
+		if (cplen < n)
+			return;
 		cplen -= n;
 	}
-	if (showhex && cplen > 0)
-		snprintf(cp, cplen, "%s(manufacturer 0x%04x, product 0x%04x)",
-		    i ? " " : "", card->manufacturer, card->product);
+
+	if (cplen > 1) {
+		*cp++ = '>';
+		*cp = '\0';
+		cplen--;
+	}
+
+	if (showhex && cplen > 1)
+		snprintf(cp, cplen, " (manufacturer 0x%04x, product 0x%04x)",
+		    card->manufacturer, card->product);
 }
 
-const struct pcmcia_product *
-pcmcia_product_lookup(pa, tab, ent_size, matchfn)
+const void *
+pcmcia_product_lookup(pa, tab, nent, ent_size, matchfn)
 	struct pcmcia_attach_args *pa;
-	const struct pcmcia_product *tab;
+	const void *tab;
+	size_t nent;
 	size_t ent_size;
 	pcmcia_product_match_fn matchfn;
 {
-        const struct pcmcia_product *ent;
+        const struct pcmcia_product *pp;
+	int n;
 	int matches;
 
 #ifdef DIAGNOSTIC
-	if (sizeof *ent > ent_size)
-		panic("pcmcia_product_lookup: bogus ent_size %ld", 
+	if (sizeof *pp > ent_size)
+		panic("pcmcia_product_lookup: bogus ent_size %ld",
 		      (long) ent_size);
 #endif
 
-        for (ent = tab;
-	    ent->pp_name != NULL;
-	    ent = (const struct pcmcia_product *)
-	      ((const char *)ent + ent_size)) {
-
-		/* see if it matches vendor/product/function */
-		matches = (pa->manufacturer == ent->pp_vendor) &&
-		    (pa->product == ent->pp_product) &&
-		    (pa->pf->number == ent->pp_expfunc);
+        for (pp = tab, n = nent; n; pp = (const struct pcmcia_product *)
+	      ((const char *)pp + ent_size), n--) {
+		/* see if it matches vendor/product */
+		matches = 0;
+		if ((pp->pp_vendor != PCMCIA_VENDOR_INVALID &&
+		     pp->pp_vendor == pa->manufacturer) &&
+		    (pp->pp_product != PCMCIA_PRODUCT_INVALID &&
+		     pp->pp_product == pa->product))
+			matches = 1;
+		if ((pp->pp_cisinfo[0] && pa->card->cis1_info[0] &&
+		          !strcmp(pp->pp_cisinfo[0], pa->card->cis1_info[0])) &&
+		         (pp->pp_cisinfo[1] && pa->card->cis1_info[1] &&
+		          !strcmp(pp->pp_cisinfo[1], pa->card->cis1_info[1])) &&
+		         (!pp->pp_cisinfo[2] || (pa->card->cis1_info[2] &&
+		           !strcmp(pp->pp_cisinfo[2], pa->card->cis1_info[2]))) &&
+		         (!pp->pp_cisinfo[3] || (pa->card->cis1_info[3] &&
+		           !strcmp(pp->pp_cisinfo[3], pa->card->cis1_info[3]))))
+			matches = 1;
 
 		/* if a separate match function is given, let it override */
-		if (matchfn != NULL)
-			matches = (*matchfn)(pa, ent, matches);
+		if (matchfn)
+			matches = (*matchfn)(pa, pp, matches);
 
 		if (matches)
-                        return (ent);
+                        return (pp);
         }
-        return (NULL);
+        return (0);
 }
 
-int 
-pcmcia_card_gettype(dev)
-	struct device  *dev;
+void
+pcmcia_socket_settype(dev, type)
+	struct device *dev;
+	int type;
 {
-	struct pcmcia_softc *sc = (struct pcmcia_softc *)dev;
-	struct pcmcia_function *pf;
+	struct pcmcia_softc *sc = device_private(dev);
 
-	/*
-	 * set the iftype to memory if this card has no functions (not yet
-	 * probed), or only one function, and that is not initialized yet or
-	 * that is memory.
-	 */
-	pf = SIMPLEQ_FIRST(&sc->card.pf_head);
-	if (pf == NULL ||
-	    (SIMPLEQ_NEXT(pf, pf_list) == NULL &&
-	    (pf->cfe == NULL || pf->cfe->iftype == PCMCIA_IFTYPE_MEMORY)))
-		return (PCMCIA_IFTYPE_MEMORY);
-	else
-		return (PCMCIA_IFTYPE_IO);
+	pcmcia_chip_socket_settype(sc->pct, sc->pch, type);
 }
 
 /*
@@ -397,18 +471,28 @@ pcmcia_function_init(pf, cfe)
 	pf->cfe = cfe;
 }
 
-static inline void pcmcia_socket_enable(pct, pch)
-     pcmcia_chipset_tag_t pct;
-     pcmcia_chipset_handle_t *pch;
+void
+pcmcia_socket_enable(dev)
+	struct device *dev;
 {
-	pcmcia_chip_socket_enable(pct, pch);
+	struct pcmcia_softc *sc = device_private(dev);
+
+	if (sc->sc_enabled_count++ == 0)
+		pcmcia_chip_socket_enable(sc->pct, sc->pch);
+	DPRINTF(("%s: ++enabled_count = %d\n", device_xname(sc->dev),
+		 sc->sc_enabled_count));
 }
 
-static inline void pcmcia_socket_disable(pct, pch)
-     pcmcia_chipset_tag_t pct;
-     pcmcia_chipset_handle_t *pch;
+void
+pcmcia_socket_disable(dev)
+	struct device *dev;
 {
-	pcmcia_chip_socket_disable(pct, pch);
+	struct pcmcia_softc *sc = device_private(dev);
+
+	if (--sc->sc_enabled_count == 0)
+		pcmcia_chip_socket_disable(sc->pct, sc->pch);
+	DPRINTF(("%s: --enabled_count = %d\n", device_xname(sc->dev),
+		 sc->sc_enabled_count));
 }
 
 /* Enable a PCMCIA function */
@@ -416,8 +500,10 @@ int
 pcmcia_function_enable(pf)
 	struct pcmcia_function *pf;
 {
+	struct pcmcia_softc *sc = pf->sc;
 	struct pcmcia_function *tmp;
 	int reg;
+	int error;
 
 	if (pf->cfe == NULL)
 		panic("pcmcia_function_enable: function not initialized");
@@ -426,10 +512,8 @@ pcmcia_function_enable(pf)
 	 * Increase the reference count on the socket, enabling power, if
 	 * necessary.
 	 */
-	if (pf->sc->sc_enabled_count++ == 0)
-		pcmcia_chip_socket_enable(pf->sc->pct, pf->sc->pch);
-	DPRINTF(("%s: ++enabled_count = %d\n", pf->sc->dev.dv_xname,
-		 pf->sc->sc_enabled_count));
+	pcmcia_socket_enable(sc->dev);
+	pcmcia_socket_settype(sc->dev, pf->cfe->iftype);
 
 	if (pf->pf_flags & PFF_ENABLED) {
 		/*
@@ -443,8 +527,7 @@ pcmcia_function_enable(pf)
 	 * underlying page.  Check for that.
 	 */
 
-	for (tmp = pf->sc->card.pf_head.sqh_first; tmp != NULL;
-	    tmp = tmp->pf_list.sqe_next) {
+	SIMPLEQ_FOREACH(tmp, &sc->card.pf_head, pf_list) {
 		if ((tmp->pf_flags & PFF_ENABLED) &&
 		    (pf->ccr_base >= (tmp->ccr_base - tmp->pf_ccr_offset)) &&
 		    ((pf->ccr_base + PCMCIA_CCR_SIZE) <=
@@ -467,100 +550,90 @@ pcmcia_function_enable(pf)
 	}
 
 	if (tmp == NULL) {
-		if (pcmcia_mem_alloc(pf, PCMCIA_CCR_SIZE, &pf->pf_pcmh))
+		error = pcmcia_mem_alloc(pf, PCMCIA_CCR_SIZE, &pf->pf_pcmh);
+		if (error)
 			goto bad;
 
-		if (pcmcia_mem_map(pf, PCMCIA_MEM_ATTR, pf->ccr_base,
+		error = pcmcia_mem_map(pf, PCMCIA_MEM_ATTR, pf->ccr_base,
 		    PCMCIA_CCR_SIZE, &pf->pf_pcmh, &pf->pf_ccr_offset,
-		    &pf->pf_ccr_window)) {
+		    &pf->pf_ccr_window);
+		if (error) {
 			pcmcia_mem_free(pf, &pf->pf_pcmh);
 			goto bad;
 		}
 	}
 
-	reg = (pf->cfe->number & PCMCIA_CCR_OPTION_CFINDEX);
-	reg |= PCMCIA_CCR_OPTION_LEVIREQ;
-	if (pcmcia_mfc(pf->sc)) {
-		reg |= (PCMCIA_CCR_OPTION_FUNC_ENABLE |
-			PCMCIA_CCR_OPTION_ADDR_DECODE);
-		if (pf->ih_fct)
-			reg |= PCMCIA_CCR_OPTION_IREQ_ENABLE;
-
+	if (pcmcia_mfc(sc) || 1) {
+		pcmcia_ccr_write(pf, PCMCIA_CCR_IOBASE0,
+				 (pf->pf_mfc_iobase >>  0) & 0xff);
+		pcmcia_ccr_write(pf, PCMCIA_CCR_IOBASE1,
+				 (pf->pf_mfc_iobase >>  8) & 0xff);
+		pcmcia_ccr_write(pf, PCMCIA_CCR_IOBASE2,
+				 (pf->pf_mfc_iobase >> 16) & 0xff);
+		pcmcia_ccr_write(pf, PCMCIA_CCR_IOBASE3,
+				 (pf->pf_mfc_iobase >> 24) & 0xff);
+		pcmcia_ccr_write(pf, PCMCIA_CCR_IOLIMIT,
+				 pf->pf_mfc_iomax - pf->pf_mfc_iobase);
 	}
-	pcmcia_ccr_write(pf, PCMCIA_CCR_OPTION, reg);
 
 	reg = 0;
-
-	if ((pf->cfe->flags & PCMCIA_CFE_IO16) == 0)
-		reg |= PCMCIA_CCR_STATUS_IOIS8;
 	if (pf->cfe->flags & PCMCIA_CFE_AUDIO)
 		reg |= PCMCIA_CCR_STATUS_AUDIO;
 	pcmcia_ccr_write(pf, PCMCIA_CCR_STATUS, reg);
 
 	pcmcia_ccr_write(pf, PCMCIA_CCR_SOCKETCOPY, 0);
 
-	if (pcmcia_mfc(pf->sc)) {
-		long tmp, iosize;
+	reg = (pf->cfe->number & PCMCIA_CCR_OPTION_CFINDEX);
+	reg |= PCMCIA_CCR_OPTION_LEVIREQ;
+	if (pcmcia_mfc(sc)) {
+		reg |= (PCMCIA_CCR_OPTION_FUNC_ENABLE |
+			PCMCIA_CCR_OPTION_ADDR_DECODE);
+		if (pf->pf_ih)
+			reg |= PCMCIA_CCR_OPTION_IREQ_ENABLE;
 
-		tmp = pf->pf_mfc_iomax - pf->pf_mfc_iobase;
-		/* round up to nearest (2^n)-1 */
-		for (iosize = 1; iosize < tmp; iosize <<= 1)
-			;
-		iosize--;
-
-		pcmcia_ccr_write(pf, PCMCIA_CCR_IOBASE0,
-				 pf->pf_mfc_iobase & 0xff);
-		pcmcia_ccr_write(pf, PCMCIA_CCR_IOBASE1,
-				 (pf->pf_mfc_iobase >> 8) & 0xff);
-		pcmcia_ccr_write(pf, PCMCIA_CCR_IOBASE2, 0);
-		pcmcia_ccr_write(pf, PCMCIA_CCR_IOBASE3, 0);
-
-		pcmcia_ccr_write(pf, PCMCIA_CCR_IOSIZE, iosize);
 	}
+	pcmcia_ccr_write(pf, PCMCIA_CCR_OPTION, reg);
 
 #ifdef PCMCIADEBUG
 	if (pcmcia_debug) {
-		for (tmp = pf->sc->card.pf_head.sqh_first; tmp != NULL;
-		     tmp = tmp->pf_list.sqe_next) {
+		SIMPLEQ_FOREACH(tmp, &sc->card.pf_head, pf_list) {
 			printf("%s: function %d CCR at %d offset %lx: "
 			       "%x %x %x %x, %x %x %x %x, %x\n",
-			       tmp->sc->dev.dv_xname, tmp->number,
+			       device_xname(tmp->sc->dev), tmp->number,
 			       tmp->pf_ccr_window,
 			       (unsigned long) tmp->pf_ccr_offset,
-			       pcmcia_ccr_read(tmp, 0x00),
-			       pcmcia_ccr_read(tmp, 0x02),
-			       pcmcia_ccr_read(tmp, 0x04),
-			       pcmcia_ccr_read(tmp, 0x06),
+			       pcmcia_ccr_read(tmp, 0),
+			       pcmcia_ccr_read(tmp, 1),
+			       pcmcia_ccr_read(tmp, 2),
+			       pcmcia_ccr_read(tmp, 3),
 
-			       pcmcia_ccr_read(tmp, 0x0A),
-			       pcmcia_ccr_read(tmp, 0x0C), 
-			       pcmcia_ccr_read(tmp, 0x0E),
-			       pcmcia_ccr_read(tmp, 0x10),
+			       pcmcia_ccr_read(tmp, 5),
+			       pcmcia_ccr_read(tmp, 6),
+			       pcmcia_ccr_read(tmp, 7),
+			       pcmcia_ccr_read(tmp, 8),
 
-			       pcmcia_ccr_read(tmp, 0x12));
+			       pcmcia_ccr_read(tmp, 9));
 		}
 	}
 #endif
-
-	pf->pf_flags |= PFF_ENABLED;
 
 #ifdef IT8368E_LEGACY_MODE
 	/* return to I/O mode */
 	it8368_mode(pf, IT8368_IO_MODE, IT8368_WIDTH_16);
 #endif
+
+	pf->pf_flags |= PFF_ENABLED;
 	return (0);
 
- bad:
+bad:
 	/*
 	 * Decrement the reference count, and power down the socket, if
 	 * necessary.
 	 */
-	if (--pf->sc->sc_enabled_count == 0)
-		pcmcia_chip_socket_disable(pf->sc->pct, pf->sc->pch);
-	DPRINTF(("%s: --enabled_count = %d\n", pf->sc->dev.dv_xname,
-		 pf->sc->sc_enabled_count));
+	printf("%s: couldn't map the CCR\n", device_xname(pf->child));
+	pcmcia_socket_disable(sc->dev);
 
-	return (1);
+	return (error);
 }
 
 /* Disable PCMCIA function. */
@@ -568,16 +641,27 @@ void
 pcmcia_function_disable(pf)
 	struct pcmcia_function *pf;
 {
+	struct pcmcia_softc *sc = pf->sc;
 	struct pcmcia_function *tmp;
+	int reg;
 
 	if (pf->cfe == NULL)
 		panic("pcmcia_function_enable: function not initialized");
 
 	if ((pf->pf_flags & PFF_ENABLED) == 0) {
 		/*
-		 * Don't do anything if we're already disabled.
+		 * Don't do anything but decrement if we're already disabled.
 		 */
-		return;
+		goto out;
+	}
+
+	if (pcmcia_mfc(sc) &&
+	    (pf->pf_flags & PFF_DETACHED) == 0) {
+		reg = pcmcia_ccr_read(pf, PCMCIA_CCR_OPTION);
+		reg &= ~(PCMCIA_CCR_OPTION_FUNC_ENABLE|
+			 PCMCIA_CCR_OPTION_ADDR_DECODE|
+		         PCMCIA_CCR_OPTION_IREQ_ENABLE);
+		pcmcia_ccr_write(pf, PCMCIA_CCR_OPTION, reg);
 	}
 
 	/*
@@ -587,8 +671,7 @@ pcmcia_function_disable(pf)
 	 */
 
 	pf->pf_flags &= ~PFF_ENABLED;
-	for (tmp = pf->sc->card.pf_head.sqh_first; tmp != NULL;
-	    tmp = tmp->pf_list.sqe_next) {
+	SIMPLEQ_FOREACH(tmp, &sc->card.pf_head, pf_list) {
 		if ((tmp->pf_flags & PFF_ENABLED) &&
 		    (pf->ccr_base >= (tmp->ccr_base - tmp->pf_ccr_offset)) &&
 		    ((pf->ccr_base + PCMCIA_CCR_SIZE) <=
@@ -602,30 +685,31 @@ pcmcia_function_disable(pf)
 		pcmcia_mem_free(pf, &pf->pf_pcmh);
 	}
 
+out:
 	/*
 	 * Decrement the reference count, and power down the socket, if
 	 * necessary.
 	 */
-	if (--pf->sc->sc_enabled_count == 0)
-		pcmcia_chip_socket_disable(pf->sc->pct, pf->sc->pch);
-	DPRINTF(("%s: --enabled_count = %d\n", pf->sc->dev.dv_xname,
-		 pf->sc->sc_enabled_count));
+	pcmcia_socket_disable(sc->dev);
 }
 
 int
-pcmcia_io_map(pf, width, offset, size, pcihp, windowp)
+pcmcia_io_map(pf, width, pcihp, windowp)
 	struct pcmcia_function *pf;
 	int width;
-	bus_addr_t offset;
-	bus_size_t size;
 	struct pcmcia_io_handle *pcihp;
 	int *windowp;
 {
-	int reg;
+	struct pcmcia_softc *sc = pf->sc;
+	int error;
 
-	if (pcmcia_chip_io_map(pf->sc->pct, pf->sc->pch,
-	    width, offset, size, pcihp, windowp))
-		return (1);
+	if (pf->pf_flags & PFF_ENABLED)
+		printf("pcmcia_io_map: function is enabled!\n");
+
+	error = pcmcia_chip_io_map(sc->pct, sc->pch,
+	    width, 0, pcihp->size, pcihp, windowp);
+	if (error)
+		return (error);
 
 	/*
 	 * XXX in the multifunction multi-iospace-per-function case, this
@@ -633,39 +717,25 @@ pcmcia_io_map(pf, width, offset, size, pcihp, windowp)
 	 * don't overlap, and that the ccr's are set correctly
 	 */
 
-	if (pcmcia_mfc(pf->sc)) {
-		long tmp, iosize;
+	if (pcmcia_mfc(sc) || 1) {
+		bus_addr_t iobase = pcihp->addr;
+		bus_addr_t iomax = pcihp->addr + pcihp->size - 1;
 
-		if (pf->pf_mfc_iomax == 0) {
-			pf->pf_mfc_iobase = pcihp->addr + offset;
-			pf->pf_mfc_iomax = pf->pf_mfc_iobase + size;
+		DPRINTF(("window iobase %lx iomax %lx\n", (long)iobase,
+		    (long)iomax));
+		if (pf->pf_mfc_iobase == 0) {
+			pf->pf_mfc_iobase = iobase;
+			pf->pf_mfc_iomax = iomax;
 		} else {
-			/* this makes the assumption that nothing overlaps */
-			if (pf->pf_mfc_iobase > pcihp->addr + offset)
-				pf->pf_mfc_iobase = pcihp->addr + offset;
-			if (pf->pf_mfc_iomax < pcihp->addr + offset + size)
-				pf->pf_mfc_iomax = pcihp->addr + offset + size;
+			if (iobase < pf->pf_mfc_iobase)
+				pf->pf_mfc_iobase = iobase;
+			if (iomax > pf->pf_mfc_iomax)
+				pf->pf_mfc_iomax = iomax;
 		}
-
-		tmp = pf->pf_mfc_iomax - pf->pf_mfc_iobase;
-		/* round up to nearest (2^n)-1 */
-		for (iosize = 1; iosize >= tmp; iosize <<= 1)
-			;
-		iosize--;
-
-		pcmcia_ccr_write(pf, PCMCIA_CCR_IOBASE0,
-				 pf->pf_mfc_iobase & 0xff);
-		pcmcia_ccr_write(pf, PCMCIA_CCR_IOBASE1,
-				 (pf->pf_mfc_iobase >> 8) & 0xff);
-		pcmcia_ccr_write(pf, PCMCIA_CCR_IOBASE2, 0);
-		pcmcia_ccr_write(pf, PCMCIA_CCR_IOBASE3, 0);
-
-		pcmcia_ccr_write(pf, PCMCIA_CCR_IOSIZE, iosize);
-
-		reg = pcmcia_ccr_read(pf, PCMCIA_CCR_OPTION);
-		reg |= PCMCIA_CCR_OPTION_ADDR_DECODE;
-		pcmcia_ccr_write(pf, PCMCIA_CCR_OPTION, reg);
+		DPRINTF(("function iobase %lx iomax %lx\n",
+		    (long)pf->pf_mfc_iobase, (long)pf->pf_mfc_iomax));
 	}
+
 	return (0);
 }
 
@@ -674,127 +744,32 @@ pcmcia_io_unmap(pf, window)
 	struct pcmcia_function *pf;
 	int window;
 {
+	struct pcmcia_softc *sc = pf->sc;
 
-	pcmcia_chip_io_unmap(pf->sc->pct, pf->sc->pch, window);
+	if (pf->pf_flags & PFF_ENABLED)
+		printf("pcmcia_io_unmap: function is enabled!\n");
 
-	/* XXX Anything for multi-function cards? */
+	pcmcia_chip_io_unmap(sc->pct, sc->pch, window);
 }
 
 void *
 pcmcia_intr_establish(pf, ipl, ih_fct, ih_arg)
 	struct pcmcia_function *pf;
 	int ipl;
-	int (*ih_fct) __P((void *));
+	int (*ih_fct)(void *);
 	void *ih_arg;
 {
-	void *ret;
 
-	/* behave differently if this is a multifunction card */
+	if (pf->pf_flags & PFF_ENABLED)
+		printf("pcmcia_intr_establish: function is enabled!\n");
+	if (pf->pf_ih)
+		panic("pcmcia_intr_establish: already done\n");
 
-	if (pcmcia_mfc(pf->sc)) {
-		int s, ihcnt, hiipl, reg;
-		struct pcmcia_function *pf2;
-
-		/*
-		 * mask all the ipl's which are already used by this card,
-		 * and find the highest ipl number (lowest priority)
-		 */
-
-		ihcnt = 0;
-		s = 0;		/* this is only here to keep the compiler
-				   happy */
-		hiipl = 0;	/* this is only here to keep the compiler
-				   happy */
-
-		for (pf2 = pf->sc->card.pf_head.sqh_first; pf2 != NULL;
-		     pf2 = pf2->pf_list.sqe_next) {
-			if (pf2->ih_fct) {
-				DPRINTF(("%s: function %d has ih_fct %p\n",
-					 pf->sc->dev.dv_xname, pf2->number,
-					 pf2->ih_fct));
-
-				if (ihcnt == 0) {
-					hiipl = pf2->ih_ipl;
-				} else {
-					if (pf2->ih_ipl > hiipl)
-						hiipl = pf2->ih_ipl;
-				}
-
-				ihcnt++;
-			}
-		}
-
-		/*
-		 * establish the real interrupt, changing the ipl if
-		 * necessary
-		 */
-
-		if (ihcnt == 0) {
-#ifdef DIAGNOSTIC
-			if (pf->sc->ih != NULL)
-				panic("card has intr handler, but no function does");
-#endif
-			s = splhigh();
-
-			/* set up the handler for the new function */
-
-			pf->ih_fct = ih_fct;
-			pf->ih_arg = ih_arg;
-			pf->ih_ipl = ipl;
-
-			pf->sc->ih = pcmcia_chip_intr_establish(pf->sc->pct,
-			    pf->sc->pch, pf, ipl, PCMCIA_CARD_INTR, pf->sc);
-			splx(s);
-		} else if (ipl > hiipl) {
-#ifdef DIAGNOSTIC
-			if (pf->sc->ih == NULL)
-				panic("functions have ih, but the card does not");
-#endif
-
-			/* XXX need #ifdef for splserial on x86 */
-			s = splhigh();
-
-			pcmcia_chip_intr_disestablish(pf->sc->pct, pf->sc->pch,
-						      pf->sc->ih);
-
-			/* set up the handler for the new function */
-			pf->ih_fct = ih_fct;
-			pf->ih_arg = ih_arg;
-			pf->ih_ipl = ipl;
-
-			pf->sc->ih = pcmcia_chip_intr_establish(pf->sc->pct,
-			    pf->sc->pch, pf, ipl, PCMCIA_CARD_INTR, pf->sc);
-
-			splx(s);
-		} else {
-			s = splhigh();
-
-			/* set up the handler for the new function */
-
-			pf->ih_fct = ih_fct;
-			pf->ih_arg = ih_arg;
-			pf->ih_ipl = ipl;
-
-			splx(s);
-		}
-
-		ret = pf->sc->ih;
-
-		if (ret != NULL) {
-			reg = pcmcia_ccr_read(pf, PCMCIA_CCR_OPTION);
-			reg |= PCMCIA_CCR_OPTION_IREQ_ENABLE;
-			pcmcia_ccr_write(pf, PCMCIA_CCR_OPTION, reg);
-
-			reg = pcmcia_ccr_read(pf, PCMCIA_CCR_STATUS);
-			reg |= PCMCIA_CCR_STATUS_INTRACK;
-			pcmcia_ccr_write(pf, PCMCIA_CCR_STATUS, reg);
-		}
-	} else {
-		ret = pcmcia_chip_intr_establish(pf->sc->pct, pf->sc->pch,
-		    pf, ipl, ih_fct, ih_arg);
-	}
-
-	return (ret);
+	pf->pf_ih = pcmcia_chip_intr_establish(pf->sc->pct, pf->sc->pch,
+	    pf, ipl, ih_fct, ih_arg);
+	if (!pf->pf_ih)
+		aprint_error_dev(pf->child, "interrupt establish failed\n");
+	return (pf->pf_ih);
 }
 
 void
@@ -802,162 +777,192 @@ pcmcia_intr_disestablish(pf, ih)
 	struct pcmcia_function *pf;
 	void *ih;
 {
-	/* behave differently if this is a multifunction card */
 
-	if (pcmcia_mfc(pf->sc)) {
-		int s, ihcnt, hiipl;
-		struct pcmcia_function *pf2;
+	if (pf->pf_flags & PFF_ENABLED)
+		printf("pcmcia_intr_disestablish: function is enabled!\n");
+	if (!pf->pf_ih)
+		panic("pcmcia_intr_distestablish: already done\n");
 
-		/*
-		 * mask all the ipl's which are already used by this card,
-		 * and find the highest ipl number (lowest priority).  Skip
-		 * the current function.
-		 */
-
-		ihcnt = 0;
-		s = 0;		/* this is only here to keep the compipler
-				   happy */
-		hiipl = 0;	/* this is only here to keep the compipler
-				   happy */
-
-		for (pf2 = pf->sc->card.pf_head.sqh_first; pf2 != NULL;
-		     pf2 = pf2->pf_list.sqe_next) {
-			if (pf2 == pf)
-				continue;
-
-			if (pf2->ih_fct) {
-				if (ihcnt == 0) {
-					hiipl = pf2->ih_ipl;
-				} else {
-					if (pf2->ih_ipl > hiipl)
-						hiipl = pf2->ih_ipl;
-				}
-				ihcnt++;
-			}
-		}
-
-		/*
-		 * if the ih being removed is lower priority than the lowest
-		 * priority remaining interrupt, up the priority.
-		 */
-
-		/* ihcnt is the number of interrupt handlers *not* including
-		   the one about to be removed. */
-
-		if (ihcnt == 0) {
-			int reg;
-
-#ifdef DIAGNOSTIC
-			if (pf->sc->ih == NULL)
-				panic("disestablishing last function, but card has no ih");
-#endif
-			pcmcia_chip_intr_disestablish(pf->sc->pct, pf->sc->pch,
-			    pf->sc->ih);
-
-			reg = pcmcia_ccr_read(pf, PCMCIA_CCR_OPTION);
-			reg &= ~PCMCIA_CCR_OPTION_IREQ_ENABLE;
-			pcmcia_ccr_write(pf, PCMCIA_CCR_OPTION, reg);
-
-			pf->ih_fct = NULL;
-			pf->ih_arg = NULL;
-
-			pf->sc->ih = NULL;
-		} else if (pf->ih_ipl > hiipl) {
-#ifdef DIAGNOSTIC
-			if (pf->sc->ih == NULL)
-				panic("changing ih ipl, but card has no ih");
-#endif
-			/* XXX need #ifdef for splserial on x86 */
-			s = splhigh();
-
-			pcmcia_chip_intr_disestablish(pf->sc->pct, pf->sc->pch,
-			    pf->sc->ih);
-			pf->sc->ih = pcmcia_chip_intr_establish(pf->sc->pct,
-			    pf->sc->pch, pf, hiipl, PCMCIA_CARD_INTR, pf->sc);
-
-			/* null out the handler for this function */
-
-			pf->ih_fct = NULL;
-			pf->ih_arg = NULL;
-
-			splx(s);
-		} else {
-			s = splhigh();
-
-			pf->ih_fct = NULL;
-			pf->ih_arg = NULL;
-
-			splx(s);
-		}
-	} else {
-		pcmcia_chip_intr_disestablish(pf->sc->pct, pf->sc->pch, ih);
-	}
+	pcmcia_chip_intr_disestablish(pf->sc->pct, pf->sc->pch, ih);
+	pf->pf_ih = 0;
 }
 
-int 
-pcmcia_card_intr(arg)
-	void *arg;
-{
-	struct pcmcia_softc *sc = arg;
+int
+pcmcia_config_alloc(pf, cfe)
 	struct pcmcia_function *pf;
-	int reg, ret, ret2;
-
-	ret = 0;
-
-	for (pf = sc->card.pf_head.sqh_first; pf != NULL;
-	    pf = pf->pf_list.sqe_next) {
-		if (pf->ih_fct != NULL &&
-		    (pf->ccr_mask & (1 << (PCMCIA_CCR_STATUS / 2)))) {
-			reg = pcmcia_ccr_read(pf, PCMCIA_CCR_STATUS);
-			if (reg & PCMCIA_CCR_STATUS_INTR) {
-				ret2 = (*pf->ih_fct)(pf->ih_arg);
-				if (ret2 != 0 && ret == 0)
-					ret = ret2;
-				reg = pcmcia_ccr_read(pf, PCMCIA_CCR_STATUS);
-				pcmcia_ccr_write(pf, PCMCIA_CCR_STATUS,
-				    reg & ~PCMCIA_CCR_STATUS_INTR);
-			}
-		}
-	}
-
-	return (ret);
-}
-
-#ifdef PCMCIADEBUG
-int 
-pcmcia_card_intrdebug(arg)
-	void *arg;
+	struct pcmcia_config_entry *cfe;
 {
-	struct pcmcia_softc *sc = arg;
-	struct pcmcia_function *pf;
-	int reg, ret, ret2;
+	int error = 0;
+	int n, m;
 
-	ret = 0;
+	for (n = 0; n < cfe->num_iospace; n++) {
+		bus_addr_t start = cfe->iospace[n].start;
+		bus_size_t length = cfe->iospace[n].length;
+		bus_size_t align = cfe->iomask ? (1 << cfe->iomask) :
+		    length;
+		bus_size_t skew = start & (align - 1);
 
-	for (pf = sc->card.pf_head.sqh_first; pf != NULL;
-	    pf = pf->pf_list.sqe_next) {
-		printf("%s: intr flags=%x fct=%d cor=%02x csr=%02x pin=%02x",
-		       sc->dev.dv_xname, pf->pf_flags, pf->number,
-		       pcmcia_ccr_read(pf, PCMCIA_CCR_OPTION),
-		       pcmcia_ccr_read(pf, PCMCIA_CCR_STATUS),
-		       pcmcia_ccr_read(pf, PCMCIA_CCR_PIN));
-		if (pf->ih_fct != NULL &&
-		    (pf->ccr_mask & (1 << (PCMCIA_CCR_STATUS / 2)))) {
-			reg = pcmcia_ccr_read(pf, PCMCIA_CCR_STATUS);
-			if (reg & PCMCIA_CCR_STATUS_INTR) {
-				ret2 = (*pf->ih_fct)(pf->ih_arg);
-				if (ret2 != 0 && ret == 0)
-					ret = ret2;
-				reg = pcmcia_ccr_read(pf, PCMCIA_CCR_STATUS);
-				printf("; csr %02x->%02x",
-				    reg, reg & ~PCMCIA_CCR_STATUS_INTR);
-				pcmcia_ccr_write(pf, PCMCIA_CCR_STATUS,
-				    reg & ~PCMCIA_CCR_STATUS_INTR);
-			}
+		if ((start - skew) == 0 && align < 0x400) {
+			if (skew)
+				printf("Drats!  I need a skew!\n");
+			start = 0;
 		}
-		printf("\n");
+
+		DPRINTF(("pcmcia_config_alloc: io %d start=%lx length=%lx align=%lx skew=%lx\n",
+		    n, (long)start, (long)length, (long)align, (long)skew));
+
+		error = pcmcia_io_alloc(pf, start, length, align,
+		    &cfe->iospace[n].handle);
+		if (error)
+			break;
+	}
+	if (n < cfe->num_iospace) {
+		for (m = 0; m < n; m++)
+			pcmcia_io_free(pf, &cfe->iospace[m].handle);
+		return (error);
 	}
 
-	return (ret);
+	for (n = 0; n < cfe->num_memspace; n++) {
+		bus_size_t length = cfe->memspace[n].length;
+
+		DPRINTF(("pcmcia_config_alloc: mem %d length %lx\n", n,
+		    (long)length));
+
+		error = pcmcia_mem_alloc(pf, length, &cfe->memspace[n].handle);
+		if (error)
+			break;
+	}
+	if (n < cfe->num_memspace) {
+		for (m = 0; m < cfe->num_iospace; m++)
+			pcmcia_io_free(pf, &cfe->iospace[m].handle);
+		for (m = 0; m < n; m++)
+			pcmcia_mem_free(pf, &cfe->memspace[m].handle);
+		return (error);
+	}
+
+	/* This one's good! */
+	return (error);
 }
-#endif
+
+void
+pcmcia_config_free(pf)
+	struct pcmcia_function *pf;
+{
+	struct pcmcia_config_entry *cfe = pf->cfe;
+	int m;
+
+	for (m = 0; m < cfe->num_iospace; m++)
+		pcmcia_io_free(pf, &cfe->iospace[m].handle);
+	for (m = 0; m < cfe->num_memspace; m++)
+		pcmcia_mem_free(pf, &cfe->memspace[m].handle);
+}
+
+int
+pcmcia_config_map(pf)
+	struct pcmcia_function *pf;
+{
+	struct pcmcia_config_entry *cfe = pf->cfe;
+	int error = 0;
+	int n, m;
+
+	for (n = 0; n < cfe->num_iospace; n++) {
+		int width;
+
+		if (cfe->flags & PCMCIA_CFE_IO16)
+			width = PCMCIA_WIDTH_AUTO;
+		else
+			width = PCMCIA_WIDTH_IO8;
+		error = pcmcia_io_map(pf, width, &cfe->iospace[n].handle,
+		    &cfe->iospace[n].window);
+		if (error)
+			break;
+	}
+	if (n < cfe->num_iospace) {
+		for (m = 0; m < n; m++)
+			pcmcia_io_unmap(pf, cfe->iospace[m].window);
+		return (error);
+	}
+
+	for (n = 0; n < cfe->num_memspace; n++) {
+		bus_size_t length = cfe->memspace[n].length;
+		int width;
+
+		DPRINTF(("pcmcia_config_alloc: mem %d length %lx\n", n,
+		    (long)length));
+
+		/*XXX*/
+		width = PCMCIA_WIDTH_MEM8|PCMCIA_MEM_COMMON;
+		error = pcmcia_mem_map(pf, width, 0, length,
+		    &cfe->memspace[n].handle, &cfe->memspace[n].offset,
+		    &cfe->memspace[n].window);
+		if (error)
+			break;
+	}
+	if (n < cfe->num_memspace) {
+		for (m = 0; m < cfe->num_iospace; m++)
+			pcmcia_io_unmap(pf, cfe->iospace[m].window);
+		for (m = 0; m < n; m++)
+			pcmcia_mem_unmap(pf, cfe->memspace[m].window);
+		return (error);
+	}
+
+	/* This one's good! */
+	return (error);
+}
+
+void
+pcmcia_config_unmap(pf)
+	struct pcmcia_function *pf;
+{
+	struct pcmcia_config_entry *cfe = pf->cfe;
+	int m;
+
+	for (m = 0; m < cfe->num_iospace; m++)
+		pcmcia_io_unmap(pf, cfe->iospace[m].window);
+	for (m = 0; m < cfe->num_memspace; m++)
+		pcmcia_mem_unmap(pf, cfe->memspace[m].window);
+}
+
+int
+pcmcia_function_configure(pf, validator)
+	struct pcmcia_function *pf;
+	int (*validator)(struct pcmcia_config_entry *);
+{
+	struct pcmcia_config_entry *cfe;
+	int error = ENOENT;
+
+	SIMPLEQ_FOREACH(cfe, &pf->cfe_head, cfe_list) {
+		error = validator(cfe);
+		if (error)
+			continue;
+		error = pcmcia_config_alloc(pf, cfe);
+		if (!error)
+			break;
+	}
+	if (!cfe) {
+		DPRINTF(("pcmcia_function_configure: no config entry found, error=%d\n",
+		    error));
+		return (error);
+	}
+
+	/* Remember which configuration entry we are using. */
+	pf->cfe = cfe;
+
+	error = pcmcia_config_map(pf);
+	if (error) {
+		DPRINTF(("pcmcia_function_configure: map failed, error=%d\n",
+		    error));
+		return (error);
+	}
+
+	return (0);
+}
+
+void
+pcmcia_function_unconfigure(pf)
+	struct pcmcia_function *pf;
+{
+
+	pcmcia_config_unmap(pf);
+	pcmcia_config_free(pf);
+}

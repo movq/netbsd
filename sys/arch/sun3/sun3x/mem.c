@@ -1,9 +1,41 @@
-/*	$NetBSD: mem.c,v 1.15 1999/12/04 21:21:46 ragge Exp $	*/
+/*	$NetBSD: mem.c,v 1.33 2007/03/04 14:03:03 tsutsui Exp $	*/
 
 /*
- * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1982, 1986, 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Systems Programming Group of the University of Utah Computer
+ * Science Department.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ *	from: @(#)mem.c	8.3 (Berkeley) 1/12/94
+ */
+/*
+ * Copyright (c) 1988 University of Utah.
  *
  * This code is derived from software contributed to Berkeley by
  * the Systems Programming Group of the University of Utah Computer
@@ -44,6 +76,9 @@
  * Memory special file
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: mem.c,v 1.33 2007/03/04 14:03:03 tsutsui Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/buf.h>
@@ -51,10 +86,6 @@
 #include <sys/malloc.h>
 #include <sys/proc.h>
 #include <sys/uio.h>
-
-#include <vm/vm.h>
-#include <vm/vm_kern.h>
-#include <vm/vm_map.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -67,58 +98,48 @@
 
 #include <sun3/sun3/machdep.h>
 
+#define DEV_VME16D16	5	/* minor device 5 is /dev/vme16d16 */
+#define DEV_VME24D16	6	/* minor device 6 is /dev/vme24d16 */
+#define DEV_VME32D16	7	/* minor device 7 is /dev/vme32d16 */
+#define DEV_VME16D32	8	/* minor device 8 is /dev/vme16d32 */
+#define DEV_VME24D32	9	/* minor device 9 is /dev/vme24d32 */
+#define DEV_VME32D32	10	/* minor device 10 is /dev/vme32d32 */
+#define DEV_EEPROM	11 	/* minor device 11 is eeprom */
+#define DEV_LEDS	13 	/* minor device 13 is leds */
+
 /* XXX - Put this in pmap_pvt.h or something? */
-extern vm_offset_t avail_start;
+extern paddr_t avail_start;
 
-#define	mmread	mmrw
-cdev_decl(mm);
-static int promacc __P((caddr_t, int, int));
-static caddr_t devzeropage;
+static int promacc(void *, int, int);
+static void *devzeropage;
 
+dev_type_read(mmrw);
+dev_type_ioctl(mmioctl);
+dev_type_mmap(mmmmap);
 
-/*ARGSUSED*/
-int
-mmopen(dev, flag, mode, p)
-	dev_t dev;
-	int flag, mode;
-	struct proc *p;
-{
-
-	return (0);
-}
+const struct cdevsw mem_cdevsw = {
+	nullopen, nullclose, mmrw, mmrw, mmioctl,
+	nostop, notty, nopoll, mmmmap, nokqfilter,
+};
 
 /*ARGSUSED*/
-int
-mmclose(dev, flag, mode, p)
-	dev_t dev;
-	int flag, mode;
-	struct proc *p;
+int 
+mmrw(dev_t dev, struct uio *uio, int flags)
 {
-
-	return (0);
-}
-
-/*ARGSUSED*/
-int
-mmrw(dev, uio, flags)
-	dev_t dev;
-	struct uio *uio;
-	int flags;
-{
-	register struct iovec *iov;
-	register vm_offset_t o, v;
-	register int c, rw;
+	struct iovec *iov;
+	vaddr_t o, v;
+	int c, rw;
 	int error = 0;
 	static int physlock;
 	vm_prot_t prot;
 
-	if (minor(dev) == 0) {
+	if (minor(dev) == DEV_MEM) {
 		if (vmmap == 0)
 			return (EIO);
 		/* lock against other uses of shared vmmap */
 		while (physlock > 0) {
 			physlock++;
-			error = tsleep((caddr_t)&physlock, PZERO | PCATCH,
+			error = tsleep((void *)&physlock, PZERO | PCATCH,
 			    "mmrw", 0);
 			if (error)
 				return (error);
@@ -136,7 +157,7 @@ mmrw(dev, uio, flags)
 		}
 		switch (minor(dev)) {
 
-		case 0:                        /*  /dev/mem  */
+		case DEV_MEM:
 			v = uio->uio_offset;
 			/* allow reads only in RAM */
 			if (!pmap_pa_exists(v)) {
@@ -158,14 +179,16 @@ mmrw(dev, uio, flags)
 			    VM_PROT_WRITE;
 			pmap_enter(pmap_kernel(), (vaddr_t)vmmap,
 			    trunc_page(v), prot, prot|PMAP_WIRED);
+			pmap_update(pmap_kernel());
 			o = v & PGOFSET;
-			c = min(uio->uio_resid, (int)(NBPG - o));
-			error = uiomove((caddr_t)vmmap + o, c, uio);
+			c = min(uio->uio_resid, (int)(PAGE_SIZE - o));
+			error = uiomove((char *)vmmap + o, c, uio);
 			pmap_remove(pmap_kernel(), (vaddr_t)vmmap,
-			    (vaddr_t)vmmap + NBPG);
+			    (vaddr_t)vmmap + PAGE_SIZE);
+			pmap_update(pmap_kernel());
 			break;
 
-		case 1:                        /*  /dev/kmem  */
+		case DEV_KMEM:
 			v = uio->uio_offset;
 		use_kmem:
 			/*
@@ -173,29 +196,29 @@ mmrw(dev, uio, flags)
 			 * Note that we can get here from case 0 above!
 			 */
 			o = v & PGOFSET;
-			c = min(uio->uio_resid, (int)(NBPG - o));
+			c = min(uio->uio_resid, (int)(PAGE_SIZE - o));
 			rw = (uio->uio_rw == UIO_READ) ? B_READ : B_WRITE;
-			if (!(uvm_kernacc((caddr_t)v, c, rw) ||
-			      promacc((caddr_t)v, c, rw)))
+			if (!(uvm_kernacc((void *)v, c, rw) ||
+			      promacc((void *)v, c, rw)))
 			{
 				error = EFAULT;
 				/* Note: case 0 can get here, so must unlock! */
 				goto unlock;
 			}
-			error = uiomove((caddr_t)v, c, uio);
+			error = uiomove((void *)v, c, uio);
 			break;
 
-		case 2:                        /*  /dev/null  */
+		case DEV_NULL:
 			if (uio->uio_rw == UIO_WRITE)
 				uio->uio_resid = 0;
 			return (0);
 
-		case 11:                        /*  /dev/eeprom  */
+		case DEV_EEPROM:
 			error = eeprom_uio(uio);
 			/* Yes, return (not break) so EOF works. */
 			return (error);
 
-		case 12:                        /*  /dev/zero  */
+		case DEV_ZERO:
 			/* Write to /dev/zero is ignored. */
 			if (uio->uio_rw == UIO_WRITE) {
 				uio->uio_resid = 0;
@@ -206,15 +229,15 @@ mmrw(dev, uio, flags)
 			 * of memory for use with /dev/zero.
 			 */
 			if (devzeropage == NULL) {
-				devzeropage = (caddr_t)
-				    malloc(NBPG, M_TEMP, M_WAITOK);
-				bzero(devzeropage, NBPG);
+				devzeropage = (void *)
+				    malloc(PAGE_SIZE, M_TEMP, M_WAITOK);
+				memset(devzeropage, 0, PAGE_SIZE);
 			}
-			c = min(iov->iov_len, NBPG);
+			c = min(iov->iov_len, PAGE_SIZE);
 			error = uiomove(devzeropage, c, uio);
 			break;
 
-		case 13:                        /*  /dev/leds  */
+		case DEV_LEDS:
 			error = leds_uio(uio);
 			/* Yes, return (not break) so EOF works. */
 			return (error);
@@ -230,62 +253,58 @@ mmrw(dev, uio, flags)
 	 * redirection above jumps here on error to do its unlock.
 	 */
 unlock:
-	if (minor(dev) == 0) {
+	if (minor(dev) == DEV_MEM) {
 		if (physlock > 1)
-			wakeup((caddr_t)&physlock);
+			wakeup((void *)&physlock);
 		physlock = 0;
 	}
 	return (error);
 }
 
-int
-mmmmap(dev, off, prot)
-	dev_t dev;
-	int off, prot;
+paddr_t 
+mmmmap(dev_t dev, off_t off, int prot)
 {
-	register u_int v = off;
-
 	/*
 	 * Check address validity.
 	 */
-	if (v & PGOFSET)
+	if (off & PGOFSET)
 		return (-1);
 
 	switch (minor(dev)) {
 
-	case 0:		/* dev/mem */
+	case DEV_MEM:		/* dev/mem */
 		/* Allow access only in valid memory. */
-		if (!pmap_pa_exists(v))
+		if (!pmap_pa_exists(off))
 			break;
-		return (v);
+		return (off);
 
 #if 0	/* XXX - NOTYET */
 		/* XXX - Move this to bus_subr.c? */
-	case 5: 	/* dev/vme16d16 */
-		if (v & 0xffff0000)
+	case DEV_VME16D16:
+		if (off & 0xffff0000)
 			break;
-		v |= 0xff0000;
+		off |= 0xff0000;
 		/* fall through */
-	case 6: 	/* dev/vme24d16 */
-		if (v & 0xff000000)
+	case DEV_VME24D16:
+		if (off & 0xff000000)
 			break;
-		v |= 0xff000000;
+		off |= 0xff000000;
 		/* fall through */
-	case 7: 	/* dev/vme32d16 */
-		return (v | PMAP_VME16);
+	case DEV_VME32D16:
+		return (off | PMAP_VME16);
 
-	case 8: 	/* dev/vme16d32 */
-		if (v & 0xffff0000)
+	case DEV_VME16D32:
+		if (off & 0xffff0000)
 			break;
-		v |= 0xff0000;
+		off |= 0xff0000;
 		/* fall through */
-	case 9: 	/* dev/vme24d32 */
-		if (v & 0xff000000)
+	case DEV_VME24D32:
+		if (off & 0xff000000)
 			break;
-		v |= 0xff000000;
+		off |= 0xff000000;
 		/* fall through */
-	case 10:	/* dev/vme32d32 */
-		return (v | PMAP_VME32);
+	case DEV_VME32D32:
+		return (off | PMAP_VME32);
 #endif	/* XXX */
 	}
 
@@ -297,15 +316,13 @@ mmmmap(dev, off, prot)
  * Just like uvm_kernacc(), but for the PROM mappings.
  * Return non-zero if access at VA is allowed.
  */
-static int
-promacc(va, len, rw)
-	caddr_t va;
-	int len, rw;
+static int 
+promacc(void *va, int len, int rw)
 {
-	vm_offset_t sva, eva;
+	vaddr_t sva, eva;
 
-	sva = (vm_offset_t)va;
-	eva = (vm_offset_t)va + len;
+	sva = (vaddr_t)va;
+	eva = (vaddr_t)va + len;
 
 	/* Test for the most common case first. */
 	if (sva < SUN3X_PROM_BASE)
@@ -317,7 +334,7 @@ promacc(va, len, rw)
 
 	/* PROM data page is OK for read/write. */
 	if ((sva >= SUN3X_MONDATA) &&
-		(eva <= (SUN3X_MONDATA + NBPG)))
+		(eva <= (SUN3X_MONDATA + PAGE_SIZE)))
 		return (1);
 
 	/* otherwise, not OK to touch */

@@ -1,4 +1,4 @@
-/*	$NetBSD: arithmetic.c,v 1.13 1999/07/17 19:11:30 hubertf Exp $	*/
+/*	$NetBSD: arithmetic.c,v 1.23 2008/07/20 01:03:20 lukem Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,15 +34,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1989, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)arithmetic.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: arithmetic.c,v 1.13 1999/07/17 19:11:30 hubertf Exp $");
+__RCSID("$NetBSD: arithmetic.c,v 1.23 2008/07/20 01:03:20 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -88,14 +84,14 @@ __RCSID("$NetBSD: arithmetic.c,v 1.13 1999/07/17 19:11:30 hubertf Exp $");
 #include <time.h>
 #include <unistd.h>
 
-int	getrandom __P((int, int, int));
-void	intr __P((int)) __attribute__((__noreturn__));
-int	main __P((int, char *[]));
-int	opnum __P((int));
-void	penalise __P((int, int, int));
-int	problem __P((void));
-void	showstats __P((void));
-void	usage __P((void)) __attribute__((__noreturn__));
+int	getrandom(int, int, int);
+void	intr(int) __dead;
+int	main(int, char *[]);
+int	opnum(int);
+void	penalise(int, int, int);
+int	problem(void);
+void	showstats(int);
+void	usage(void) __dead;
 
 const char keylist[] = "+-x/";
 const char defaultkeys[] = "+-";
@@ -118,12 +114,10 @@ main(argc, argv)
 	int argc;
 	char **argv;
 {
-	extern char *optarg;
-	extern int optind;
 	int ch, cnt;
 
 	/* Revoke setgid privileges */
-	setregid(getgid(), getgid());
+	setgid(getgid());
 
 	while ((ch = getopt(argc, argv, "r:o:")) != -1)
 		switch(ch) {
@@ -157,7 +151,7 @@ main(argc, argv)
 		for (cnt = NQUESTS; cnt--;)
 			if (problem() == EOF)
 				exit(0);
-		showstats();
+		showstats(0);
 	}
 	/* NOTREACHED */
 }
@@ -165,15 +159,16 @@ main(argc, argv)
 /* Handle interrupt character.  Print score and exit. */
 void
 intr(dummy)
-	int dummy __attribute__((__unused__));
+	int dummy __unused;
 {
-	showstats();
+	showstats(1);
 	exit(0);
 }
 
 /* Print score.  Original `arithmetic' had a delay after printing it. */
 void
-showstats()
+showstats(bool_sigint)
+	int bool_sigint;
 {
 	if (nright + nwrong > 0) {
 		(void)printf("\n\nRights %d; Wrongs %d; Score %d%%",
@@ -181,6 +176,10 @@ showstats()
 		if (nright > 0)
 	(void)printf("\nTotal time %ld seconds; %.1f seconds per problem\n\n",
 			    (long)qtime, (float)qtime / nright);
+	}
+	if(!bool_sigint) {
+		(void)printf("Press RETURN to continue...\n");
+		while(!getchar()) ;
 	}
 	(void)printf("\n");
 }
@@ -247,8 +246,8 @@ retry:
 			(void)printf("\n");
 			return(EOF);
 		}
-		for (p = line; *p && isspace(*p); ++p);
-		if (!isdigit(*p)) {
+		for (p = line; *p && isspace((unsigned char)*p); ++p);
+		if (!isdigit((unsigned char)*p)) {
 			(void)printf("Please type a number.\n");
 			continue;
 		}
@@ -388,9 +387,7 @@ opnum(op)
 void
 usage()
 {
-	extern char *__progname;	/* from crt0.o */
-
-	(void)fprintf(stderr, "usage: %s [-o +-x/] [-r range]\n",
-		__progname);
+	(void)fprintf(stderr, "Usage: %s [-o +-x/] [-r range]\n",
+		getprogname());
 	exit(1);
 }

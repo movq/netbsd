@@ -10,11 +10,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -33,7 +29,7 @@
 
 #if defined(LIBC_SCCS) && !defined(lint)
 	/* .asciz "@(#)modf.s	8.1 (Berkeley) 6/4/93" */
-	.asciz "$NetBSD: modf.S,v 1.1 1995/04/17 12:23:45 ragge Exp $"
+	.asciz "$NetBSD: modf.S,v 1.4 2003/08/07 16:42:31 agc Exp $"
 #endif /* LIBC_SCCS and not lint */
 
 /*
@@ -47,10 +43,19 @@
 #include "DEFS.h"
 
 ENTRY(modf, 0)
-	emodd	4(ap),$0,$0f1.0,r2,r0
+	emodd	4(%ap),$0,$0f1.0,%r2,%r0
 	jvs	1f			# integer overflow
-	cvtld	r2,*12(ap)
+	cvtld	%r2,*12(%ap)
 	ret
 1:
-	subd3	r0,4(ap),*12(ap)
+	subd3	%r0,4(%ap),*12(%ap)
+	ret
+
+ENTRY(modff, 0)
+	emodf	4(%ap),$0,$0f1.0,%r2,%r0
+	jvs	1f			# integer overflow
+	cvtlf	%r2,*8(%ap)
+	ret
+1:
+	subf3	%r0,4(%ap),*8(%ap)
 	ret

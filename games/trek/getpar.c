@@ -1,4 +1,4 @@
-/*	$NetBSD: getpar.c,v 1.7 1999/07/21 13:19:10 hubertf Exp $	*/
+/*	$NetBSD: getpar.c,v 1.12 2004/01/27 20:30:31 jsm Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,16 +34,17 @@
 #if 0
 static char sccsid[] = "@(#)getpar.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: getpar.c,v 1.7 1999/07/21 13:19:10 hubertf Exp $");
+__RCSID("$NetBSD: getpar.c,v 1.12 2004/01/27 20:30:31 jsm Exp $");
 #endif
 #endif /* not lint */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "getpar.h"
 #include "trek.h"
 
-static int testterm __P((void));
+static int testterm(void);
 
 /**
  **	get integer parameter
@@ -144,7 +141,7 @@ const struct cvntab *getcodpar(s, tab)
 		if (f)
 			cgetc(0);		/* throw out the newline */
 		scanf("%*[ \t;]");
-		if ((c = scanf("%[^ \t;\n]", input)) < 0)
+		if ((c = scanf("%99[^ \t;\n]", input)) < 0)
 			exit(1);
 		if (c == 0)
 			continue;
@@ -290,7 +287,7 @@ testterm()
 
 
 /*
-**  TEST FOR SPECIFIED DELIMETER
+**  TEST FOR SPECIFIED DELIMITER
 **
 **	The standard input is scanned for the parameter.  If found,
 **	it is thrown away and non-zero is returned.  If not found,

@@ -1,4 +1,4 @@
-/*	$NetBSD: moptrace.c,v 1.5 1997/10/16 23:25:28 lukem Exp $	*/
+/*	$NetBSD: moptrace.c,v 1.9 2003/04/20 00:20:29 christos Exp $	*/
 
 /*
  * Copyright (c) 1993-95 Mats O Jansson.  All rights reserved.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: moptrace.c,v 1.5 1997/10/16 23:25:28 lukem Exp $");
+__RCSID("$NetBSD: moptrace.c,v 1.9 2003/04/20 00:20:29 christos Exp $");
 #endif
 
 /*
@@ -50,6 +50,7 @@ __RCSID("$NetBSD: moptrace.c,v 1.5 1997/10/16 23:25:28 lukem Exp $");
 #include "pf.h"
 #include "print.h"
 #include "rc.h"
+#include "log.h"
 
 /*
  * The list of all interfaces that are being listened to. 
@@ -67,8 +68,6 @@ int	Not3Flag = 0;		/* Ignore MOP V3 messages      */
 int	Not4Flag = 0;		/* Ignore MOP V4 messages      */ 
 int	promisc = 1;		/* Need promisc mode           */
 
-extern char *__progname;	/* from crt0.o */
-
 int
 main(argc, argv)
 	int     argc;
@@ -77,9 +76,7 @@ main(argc, argv)
 	int     op;
 	char   *interface;
 
-	/* All error reporting is done through syslogs. */
-	openlog(__progname, LOG_PID | LOG_CONS, LOG_DAEMON);
-
+	mopInteractive = 1;
 	opterr = 0;
 	while ((op = getopt(argc, argv, "34ad")) != -1) {
 		switch (op) {
@@ -121,9 +118,10 @@ main(argc, argv)
 void
 Usage()
 {
-	(void) fprintf(stderr, "usage: %s -a [ -d ] [ -3 | -4 ]\n", __progname);
+	(void) fprintf(stderr, "usage: %s -a [ -d ] [ -3 | -4 ]\n",
+		       getprogname());
 	(void) fprintf(stderr, "       %s [ -d ] [ -3 | -4 ] interface\n",
-		       __progname);
+		       getprogname());
 	exit(1);
 }
 

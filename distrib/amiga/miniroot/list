@@ -1,55 +1,48 @@
-#	$NetBSD: list,v 1.8 1999/07/04 11:46:23 mrg Exp $
+#	$NetBSD: list,v 1.18 2008/10/30 12:39:16 tsutsui Exp $
 
 # Amiga extra's
-LINK	instbin			sbin/mount_ados
-LINK	instbin			sbin/mount_kernfs
-SPECIAL mkdir			kern
-LINK	instbin			usr/bin/printf
-LINK	instbin			usr/bin/vi
-LINK	instbin			usr/sbin/loadkmap
-LINK	instbin			sbin/disklabel
+PROG	sbin/disklabel
+PROG	sbin/mount_ados
+PROG	sbin/mount_kernfs
+PROG	usr/bin/file
+PROG	usr/bin/netstat
+PROG	usr/bin/printf
+PROG	usr/bin/vi
+PROG	usr/sbin/loadkmap
 
-SYMLINK	../../instbin		usr/bin/netstat
-
-# `internal' crunchgen links
-ARGVLINK mount_ados		ados
+# usr/bin/file needs libz
+LIBS	-lz
 
 # crunchgen source directory specials
-CRUNCHSPECIAL	loadkmap srcdir sys/arch/amiga/stand/loadkmap
-CRUNCHSPECIAL	vi srcdir usr.bin/vi/build
+SPECIAL	loadkmap	srcdir sys/arch/amiga/stand/loadkmap
+SPECIAL	vi		srcdir usr.bin/nvi/build
 
 # Minimize use of MFS
 SYMLINK	/tmp	var/tmp
 
-# copy the MAKEDEV script and make some devices
-COPY	${DESTDIR}/dev/MAKEDEV		dev/MAKEDEV
-COPY	${DESTDIR}/dev/MAKEDEV.local	dev/MAKEDEV.local
-SPECIAL	cd dev; sh MAKEDEV floppy
-SPECIAL	/bin/rm dev/MAKEDEV
-
 # various files that we need in /etc for the install
 COPY	${ARCHDIR}/disktab.shadow	etc/disktab.shadow
-COPY	${DESTDIR}/etc/spwd.db		etc/spwd.db
-LINK	etc/spwd.db			etc/pwd.db
 #SYMLINK	/tmp/disktab.shadow		etc/disktab
 SYMLINK	/tmp/fstab.shadow		etc/fstab
 SYMLINK	/tmp/resolv.conf.shadow		etc/resolv.conf
 SYMLINK	/tmp/hosts			etc/hosts
 
 # and the termcap file
-COPY	${ARCHDIR}/termcap.vt usr/share/misc/termcap
+COPY	${ARCHDIR}/termcap.vt		usr/share/misc/termcap
+
+# and the magic file
+COPY	${DESTDIR}/usr/share/misc/magic usr/share/misc/magic
 
 # and the installation scripts
 COPY	${ARCHDIR}/install.md		install.md
 COPY	${ARCHDIR}/dot.profile		.profile
 
 # and the keyboard maps
+MTREE	./usr/share/keymaps	type=dir uname=root gname=wheel mode=0755
 COPYDIR	${DESTDIR}/usr/share/keymaps/amiga	usr/share/keymaps/amiga
 
-# remove the /usr/share/zoneinfo directory, so the installation script
-# can determine that the atari install does not support it.
-# ??? -is
-SPECIAL	rmdir usr/share/zoneinfo
+# boot loader
+COPY	${DESTDIR}/usr/mdec/boot.amiga		boot.amiga
 
-# Generic kernel
-COPY	${CURDIR}/../../sys/arch/amiga/compile/GENERIC/netbsd	netbsd
+# install kernel
+COPY	${KERNOBJDIR}/INSTALL/netbsd	netbsd

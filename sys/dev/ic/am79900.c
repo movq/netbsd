@@ -1,12 +1,72 @@
-/*	$NetBSD: am79900.c,v 1.5 2000/03/30 12:45:29 augustss Exp $	*/
+/*	$NetBSD: am79900.c,v 1.20 2008/04/28 20:23:49 martin Exp $	*/
+
+/*-
+ * Copyright (c) 1997 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * This code is derived from software contributed to The NetBSD Foundation
+ * by Jason R. Thorpe.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*-
+ * Copyright (c) 1992, 1993
+ *	The Regents of the University of California.  All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * Ralph Campbell and Rick Macklem.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ *	@(#)if_le.c	8.2 (Berkeley) 11/16/93
+ */
 
 /*-
  * Copyright (c) 1998
  *	Matthias Drochner.  All rights reserved.
- * Copyright (c) 1997 Jason R. Thorpe.  All rights reserved.
  * Copyright (c) 1995 Charles M. Hannum.  All rights reserved.
- * Copyright (c) 1992, 1993
- *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Ralph Campbell and Rick Macklem.
@@ -42,12 +102,15 @@
  *	@(#)if_le.c	8.2 (Berkeley) 11/16/93
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: am79900.c,v 1.20 2008/04/28 20:23:49 martin Exp $");
+
 #include "bpfilter.h"
 #include "rnd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/mbuf.h> 
+#include <sys/mbuf.h>
 #include <sys/syslog.h>
 #include <sys/socket.h>
 #include <sys/device.h>
@@ -73,34 +136,22 @@
 #include <dev/ic/am79900reg.h>
 #include <dev/ic/am79900var.h>
 
-void am79900_meminit __P((struct lance_softc *));
-void am79900_start __P((struct ifnet *));
+static void	am79900_meminit(struct lance_softc *);
+static void	am79900_start(struct ifnet *);
 
-#if defined(_KERNEL) && !defined(_LKM)
+#if defined(_KERNEL_OPT)
 #include "opt_ddb.h"
 #endif
 
-#ifdef DDB
-#define	integrate
-#define hide
-#else
-#define	integrate	static __inline
-#define hide		static
-#endif
-
-integrate void am79900_rint __P((struct lance_softc *));
-integrate void am79900_tint __P((struct lance_softc *));
-
 #ifdef LEDEBUG
-void am79900_recv_print __P((struct lance_softc *, int));
-void am79900_xmit_print __P((struct lance_softc *, int));
+static void	am79900_recv_print(struct lance_softc *, int);
+static void	am79900_xmit_print(struct lance_softc *, int);
 #endif
 
 #define	ifp	(&sc->sc_ethercom.ec_if)
 
 void
-am79900_config(sc)
-	struct am79900_softc *sc;
+am79900_config(struct am79900_softc *sc)
 {
 	int mem, i;
 
@@ -122,22 +173,21 @@ am79900_config(sc)
 		sc->lsc.sc_tbufaddr[i] = mem;
 
 	if (mem > sc->lsc.sc_memsize)
-		panic("%s: memsize", sc->lsc.sc_dev.dv_xname);
+		panic("%s: memsize", device_xname(sc->lsc.sc_dev));
 }
 
 /*
  * Set up the initialization block and the descriptor rings.
  */
-void
-am79900_meminit(sc)
-	struct lance_softc *sc;
+static void
+am79900_meminit(struct lance_softc *sc)
 {
 	u_long a;
 	int bix;
 	struct leinit init;
 	struct lermd rmd;
 	struct letmd tmd;
-	u_int8_t *myaddr;
+	uint8_t *myaddr;
 
 #if NBPFILTER > 0
 	if (ifp->if_flags & IFF_PROMISC)
@@ -155,7 +205,7 @@ am79900_meminit(sc)
 	 * Update our private copy of the Ethernet address.
 	 * We NEED the copy so we can ensure its alignment!
 	 */
-	bcopy(LLADDR(ifp->if_sadl), sc->sc_enaddr, 6);
+	memcpy(sc->sc_enaddr, CLLADDR(ifp->if_sadl), ETHER_ADDR_LEN);
 	myaddr = sc->sc_enaddr;
 
 	init.init_padr[0] = myaddr[0] | (myaddr[1] << 8)
@@ -201,9 +251,8 @@ am79900_meminit(sc)
 	}
 }
 
-integrate void
-am79900_rint(sc)
-	struct lance_softc *sc;
+static inline void
+am79900_rint(struct lance_softc *sc)
 {
 	int bix;
 	int rp;
@@ -225,25 +274,25 @@ am79900_rint(sc)
 				if ((rmd.rmd1 & LE_R1_OFLO) == 0) {
 					if (rmd.rmd1 & LE_R1_FRAM)
 						printf("%s: framing error\n",
-						    sc->sc_dev.dv_xname);
+						    device_xname(sc->sc_dev));
 					if (rmd.rmd1 & LE_R1_CRC)
 						printf("%s: crc mismatch\n",
-						    sc->sc_dev.dv_xname);
+						    device_xname(sc->sc_dev));
 				}
 #endif
 			} else {
 				if (rmd.rmd1 & LE_R1_OFLO)
 					printf("%s: overflow\n",
-					    sc->sc_dev.dv_xname);
+					    device_xname(sc->sc_dev));
 			}
 			if (rmd.rmd1 & LE_R1_BUFF)
 				printf("%s: receive buffer error\n",
-				    sc->sc_dev.dv_xname);
+				    device_xname(sc->sc_dev));
 			ifp->if_ierrors++;
 		} else if ((rmd.rmd1 & (LE_R1_STP | LE_R1_ENP)) !=
 		    (LE_R1_STP | LE_R1_ENP)) {
 			printf("%s: dropping chained buffer\n",
-			    sc->sc_dev.dv_xname);
+			    device_xname(sc->sc_dev));
 			ifp->if_ierrors++;
 		} else {
 #ifdef LEDEBUG
@@ -274,9 +323,8 @@ am79900_rint(sc)
 	sc->sc_last_rd = bix;
 }
 
-integrate void
-am79900_tint(sc)
-	struct lance_softc *sc;
+static inline void
+am79900_tint(struct lance_softc *sc)
 {
 	int bix;
 	struct letmd tmd;
@@ -305,9 +353,10 @@ am79900_tint(sc)
 		if (tmd.tmd1 & LE_T1_ERR) {
 			if (tmd.tmd2 & LE_T2_BUFF)
 				printf("%s: transmit buffer error\n",
-				    sc->sc_dev.dv_xname);
+				    device_xname(sc->sc_dev));
 			else if (tmd.tmd2 & LE_T2_UFLO)
-				printf("%s: underflow\n", sc->sc_dev.dv_xname);
+				printf("%s: underflow\n",
+				    device_xname(sc->sc_dev));
 			if (tmd.tmd2 & (LE_T2_BUFF | LE_T2_UFLO)) {
 				lance_reset(sc);
 				return;
@@ -318,14 +367,14 @@ am79900_tint(sc)
 					(*sc->sc_nocarrier)(sc);
 				else
 					printf("%s: lost carrier\n",
-					    sc->sc_dev.dv_xname);
+					    device_xname(sc->sc_dev));
 			}
 			if (tmd.tmd2 & LE_T2_LCOL)
 				ifp->if_collisions++;
 			if (tmd.tmd2 & LE_T2_RTRY) {
 #ifdef LEDEBUG
 				printf("%s: excessive collisions\n",
-				    sc->sc_dev.dv_xname);
+				    device_xname(sc->sc_dev));
 #endif
 				ifp->if_collisions += 16;
 			}
@@ -357,18 +406,17 @@ am79900_tint(sc)
  * Controller interrupt.
  */
 int
-am79900_intr(arg)
-	void *arg;
+am79900_intr(void *arg)
 {
 	struct lance_softc *sc = arg;
-	u_int16_t isr;
+	uint16_t isr;
 
 	isr = (*sc->sc_rdcsr)(sc, LE_CSR0) | sc->sc_saved_csr0;
 	sc->sc_saved_csr0 = 0;
-#ifdef LEDEBUG
+#if defined(LEDEBUG) && LEDEBUG > 1
 	if (sc->sc_debug)
 		printf("%s: am79900_intr entering with isr=%04x\n",
-		    sc->sc_dev.dv_xname, isr);
+		    device_xname(sc->sc_dev), isr);
 #endif
 	if ((isr & LE_C0_INTR) == 0)
 		return (0);
@@ -379,37 +427,38 @@ am79900_intr(arg)
 	if (isr & LE_C0_ERR) {
 		if (isr & LE_C0_BABL) {
 #ifdef LEDEBUG
-			printf("%s: babble\n", sc->sc_dev.dv_xname);
+			printf("%s: babble\n", device_xname(sc->sc_dev));
 #endif
 			ifp->if_oerrors++;
 		}
 #if 0
 		if (isr & LE_C0_CERR) {
-			printf("%s: collision error\n", sc->sc_dev.dv_xname);
+			printf("%s: collision error\n",
+			    device_xname(sc->sc_dev));
 			ifp->if_collisions++;
 		}
 #endif
 		if (isr & LE_C0_MISS) {
 #ifdef LEDEBUG
-			printf("%s: missed packet\n", sc->sc_dev.dv_xname);
+			printf("%s: missed packet\n", device_xname(sc->sc_dev));
 #endif
 			ifp->if_ierrors++;
 		}
 		if (isr & LE_C0_MERR) {
-			printf("%s: memory error\n", sc->sc_dev.dv_xname);
+			printf("%s: memory error\n", device_xname(sc->sc_dev));
 			lance_reset(sc);
 			return (1);
 		}
 	}
 
 	if ((isr & LE_C0_RXON) == 0) {
-		printf("%s: receiver disabled\n", sc->sc_dev.dv_xname);
+		printf("%s: receiver disabled\n", device_xname(sc->sc_dev));
 		ifp->if_ierrors++;
 		lance_reset(sc);
 		return (1);
 	}
 	if ((isr & LE_C0_TXON) == 0) {
-		printf("%s: transmitter disabled\n", sc->sc_dev.dv_xname);
+		printf("%s: transmitter disabled\n", device_xname(sc->sc_dev));
 		ifp->if_oerrors++;
 		lance_reset(sc);
 		return (1);
@@ -425,7 +474,7 @@ am79900_intr(arg)
 		am79900_rint(sc);
 	if (isr & LE_C0_TINT)
 		am79900_tint(sc);
-	
+
 #if NRND > 0
 	rnd_add_uint32(&sc->rnd_source, isr);
 #endif
@@ -441,9 +490,8 @@ am79900_intr(arg)
  * interface before starting the output.
  * Called only at splnet or interrupt level.
  */
-void
-am79900_start(ifp)
-	struct ifnet *ifp;
+static void
+am79900_start(struct ifnet *ifp)
 {
 	struct lance_softc *sc = ifp->if_softc;
 	int bix;
@@ -467,7 +515,7 @@ am79900_start(ifp)
 			    sc->sc_no_td, sc->sc_last_td);
 		}
 
-		IF_DEQUEUE(&ifp->if_snd, m);
+		IFQ_DEQUEUE(&ifp->if_snd, m);
 		if (m == 0)
 			break;
 
@@ -522,52 +570,48 @@ am79900_start(ifp)
 }
 
 #ifdef LEDEBUG
-void
-am79900_recv_print(sc, no)
-	struct lance_softc *sc;
-	int no;
+static void
+am79900_recv_print(struct lance_softc *sc, int no)
 {
 	struct lermd rmd;
-	u_int16_t len;
+	uint16_t len;
 	struct ether_header eh;
 
 	(*sc->sc_copyfromdesc)(sc, &rmd, LE_RMDADDR(sc, no), sizeof(rmd));
 	len = (rmd.rmd2  & 0xfff) - 4;
-	printf("%s: receive buffer %d, len = %d\n", sc->sc_dev.dv_xname, no,
-	    len);
-	printf("%s: status %04x\n", sc->sc_dev.dv_xname,
+	printf("%s: receive buffer %d, len = %d\n",
+	    device_xname(sc->sc_dev), no, len);
+	printf("%s: status %04x\n", device_xname(sc->sc_dev),
 	    (*sc->sc_rdcsr)(sc, LE_CSR0));
 	printf("%s: adr %08x, flags/blen %08x\n",
-	    sc->sc_dev.dv_xname, rmd.rmd0, rmd.rmd1);
+	    device_xname(sc->sc_dev), rmd.rmd0, rmd.rmd1);
 	if (len >= sizeof(eh)) {
 		(*sc->sc_copyfrombuf)(sc, &eh, LE_RBUFADDR(sc, no), sizeof(eh));
-		printf("%s: dst %s", sc->sc_dev.dv_xname,
+		printf("%s: dst %s", device_xname(sc->sc_dev),
 			ether_sprintf(eh.ether_dhost));
 		printf(" src %s type %04x\n", ether_sprintf(eh.ether_shost),
 			ntohs(eh.ether_type));
 	}
 }
 
-void
-am79900_xmit_print(sc, no)
-	struct lance_softc *sc;
-	int no;
+static void
+am79900_xmit_print(struct lance_softc *sc, int no)
 {
 	struct letmd tmd;
-	u_int16_t len;
+	uint16_t len;
 	struct ether_header eh;
 
 	(*sc->sc_copyfromdesc)(sc, &tmd, LE_TMDADDR(sc, no), sizeof(tmd));
 	len = -(tmd.tmd1 & 0xfff);
-	printf("%s: transmit buffer %d, len = %d\n", sc->sc_dev.dv_xname, no,
-	    len);
-	printf("%s: status %04x\n", sc->sc_dev.dv_xname,
+	printf("%s: transmit buffer %d, len = %d\n",
+	    device_xname(sc->sc_dev), no, len);
+	printf("%s: status %04x\n", device_xname(sc->sc_dev),
 	    (*sc->sc_rdcsr)(sc, LE_CSR0));
 	printf("%s: adr %08x, flags/blen %08x\n",
-	    sc->sc_dev.dv_xname, tmd.tmd0, tmd.tmd1);
+	    device_xname(sc->sc_dev), tmd.tmd0, tmd.tmd1);
 	if (len >= sizeof(eh)) {
 		(*sc->sc_copyfrombuf)(sc, &eh, LE_TBUFADDR(sc, no), sizeof(eh));
-		printf("%s: dst %s", sc->sc_dev.dv_xname,
+		printf("%s: dst %s", device_xname(sc->sc_dev),
 			ether_sprintf(eh.ether_dhost));
 		printf(" src %s type %04x\n", ether_sprintf(eh.ether_shost),
 		    ntohs(eh.ether_type));

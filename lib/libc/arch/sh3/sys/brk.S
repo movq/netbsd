@@ -1,4 +1,4 @@
-/*	$NetBSD: brk.S,v 1.2 2000/03/27 16:27:16 msaitoh Exp $	*/
+/*	$NetBSD: brk.S,v 1.10 2006/01/06 03:58:31 uwe Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -40,23 +36,35 @@
 
 #include <machine/asm.h>
 #if defined(SYSLIBC_SCCS) && !defined(lint)
-	RCSID("$NetBSD: brk.S,v 1.2 2000/03/27 16:27:16 msaitoh Exp $")
+	RCSID("$NetBSD: brk.S,v 1.10 2006/01/06 03:58:31 uwe Exp $")
 #endif /* SYSLIBC_SCCS and not lint */
 
 #include "SYS.h"
 
-	.globl	_end
-	.globl	curbrk
+#ifdef WEAK_ALIAS
+WEAK_ALIAS(brk,_brk)
+#endif
 
 	.data
-	.globl	minbrk
-	.align 2
-minbrk:	.long	_end
+	.globl	_C_LABEL(__minbrk)
+	.align	2
+_C_LABEL(__minbrk):
+	.long	_end
+
 	.text
 
-ENTRY(brk)
+ENTRY(_brk)
+#ifdef PIC
+	mova	L_GOT, r0
+	mov.l	L_GOT, r2
+	add	r0, r2
+	mov.l	Lminbrk, r0
+	mov.l	@(r0, r2), r0
+	mov.l	@r0, r0
+#else
 	mov.l	Lminbrk, r0
 	mov.l	@r0, r0
+#endif
 	cmp/hs	r4, r0
 	bf	1f
 	mov	r0, r4
@@ -64,20 +72,27 @@ ENTRY(brk)
 	mov.l	LSYS_break, r0
 	trapa	#0x80
 	bf	err
+#ifdef PIC
+	mov.l	Lcurbrk, r0
+	mov.l	@(r0, r2), r1
+	xor	r0, r0
+#else
 	xor	r0, r0
 	mov.l	Lcurbrk, r1
+#endif
 	rts
 	mov.l	r4, @r1
 err:
-	mov.l	Lcerror, r1
-	jmp	@r1
-	nop
+	JUMP_CERROR
 
-
-	.align 2
-Lminbrk:	.long	minbrk
+	.align	2
 LSYS_break:	.long	SYS_break
+#ifdef PIC
+L_GOT:		.long	_GLOBAL_OFFSET_TABLE_
+Lminbrk:	.long	_C_LABEL(__minbrk)@GOT
+Lcurbrk:	.long	curbrk@GOT
+#else
+Lminbrk:	.long	_C_LABEL(__minbrk)
 Lcurbrk:	.long	curbrk
-Lcerror:	.long	cerror
-	
-
+#endif
+	SET_ENTRY_SIZE(_brk)

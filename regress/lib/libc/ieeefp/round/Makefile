@@ -1,7 +1,8 @@
-#	$NetBSD: Makefile,v 1.3 1999/02/13 02:54:32 lukem Exp $
+#	$NetBSD: Makefile,v 1.5 2002/09/18 05:41:39 lukem Exp $
 
-PROG=	round
-MKMAN=	no
+NOMAN=		# defined
+
+PROG=		round
 
 regress: ${PROG}
 	./${PROG}

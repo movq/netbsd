@@ -1,7 +1,7 @@
-#	$NetBSD: Makefile,v 1.19 2000/01/23 22:11:49 mycroft Exp $
+#	$NetBSD: Makefile,v 1.33 2004/02/08 22:14:27 lukem Exp $
 #	@(#)Makefile	8.1 (Berkeley) 5/31/93
 
-.include <bsd.own.mk>		# for UNPRIVILEGED
+.include <bsd.own.mk>
 
 PROG=	phantasia
 SRCS=	fight.c gamesupport.c interplayer.c io.c main.c misc.c phantglobs.c
@@ -12,24 +12,37 @@ HIDEGAME=hidegame
 SETGIDGAME=yes
 USETBL=
 MAN=	phantasia.6
-CLEANFILES+=map setup setup.o host_phantglobs.o
 
-realall: setup phantasia
-
-setup: host_phantglobs.o setup.o monsters.asc ${LIBM} 
-	${HOST_CC} host_phantglobs.o setup.o -o ${.TARGET} -lm
-
-host_phantglobs.o: ${.CURDIR}/phantglobs.c
-	${HOST_COMPILE.c} -o host_phantglobs.o ${.CURDIR}/phantglobs.c
-
-setup.o: ${.CURDIR}/setup.c
-	${HOST_COMPILE.c} ${.CURDIR}/setup.c
-
-afterinstall:
-	DESTDIR=${DESTDIR} ./setup -m ${.CURDIR}/monsters.asc
-.if !defined(UNPRIVILEGED)
-	chown games:games ${DESTDIR}/var/games/phantasia/*
+FILESDIR=/var/games/phantasia
+FILESOWN=games
+FILESGRP=games
+FILESMODE=0660
+ALLFILES=gold lastdead mess monsters void motd characs scoreboard
+FILES=gold lastdead mess monsters void motd
+# don't overwrite existing characters or scorefile
+.for file in characs scoreboard
+.if !exists(${DESTDIR}${FILESDIR}/${file})
+FILES+=${file}
 .endif
+.endfor
+
+CLEANFILES+=map setup setup.lo host_phantglobs.lo ${ALLFILES} files.stamp
+
+realall: ${FILES}
+
+${FILES}: files.stamp
+files.stamp: setup monsters.asc
+	${_MKMSG_CREATE} ${FILES}
+	rm -f ${.TARGET}
+	./setup -m ${.CURDIR}/monsters.asc
+	touch ${.TARGET}
+
+setup: host_phantglobs.lo setup.lo ${LIBM} 
+	${_MKTARGET_LINK}
+	${HOST_LINK.c} -o ${.TARGET} ${.ALLSRC:M*.lo} -lm
+
+BUILDSYMLINKS+=	phantglobs.c host_phantglobs.c
+HOST_CPPFLAGS+=	-I${.CURDIR}
 
 # Make Phantasia map.  Change the map commands reflect your installation.
 # PLOTDEVICE is used for plotting the map.  Change as appropriate.

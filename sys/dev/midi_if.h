@@ -1,11 +1,11 @@
-/*	$NetBSD: midi_if.h,v 1.8 2000/03/21 18:05:55 garbled Exp $	*/
+/*	$NetBSD: midi_if.h,v 1.21 2008/04/28 20:23:47 martin Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Lennart Augustsson (augustss@netbsd.org).
+ * by Lennart Augustsson (augustss@NetBSD.org).
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,34 +33,64 @@
 #define _SYS_DEV_MIDI_IF_H_
 
 struct midi_info {
-	char	*name;		/* Name of MIDI hardware */
+	const char *name;		/* Name of MIDI hardware */
 	int	props;
 };
 #define MIDI_PROP_OUT_INTR  1
 #define MIDI_PROP_CAN_INPUT 2
+#define MIDI_PROP_NO_OUTPUT 4
 
 struct midi_softc;
 
 struct midi_hw_if {
-	int	(*open)__P((void *, int, 	/* open hardware */
-			    void (*)__P((void *, int)), /* input callback */
-			    void (*)__P((void *)), /* output callback */
-			    void *));
-	void	(*close)__P((void *));		/* close hardware */
-	int	(*output)__P((void *, int));	/* output a byte */
-	void	(*getinfo)__P((void *, struct midi_info *));
-	int	(*ioctl)__P((void *, u_long, caddr_t, int, struct proc *));
+	int	(*open)(void *, int, 	/* open hardware */
+			void (*)(void *, int), /* input callback */
+			void (*)(void *), /* output callback */
+			void *);
+	void	(*close)(void *);		/* close hardware */
+	int	(*output)(void *, int);	/* output a byte */
+	void	(*getinfo)(void *, struct midi_info *);
+	int	(*ioctl)(void *, u_long, void *, int, struct lwp *);
 };
 
-void	midi_attach __P((struct midi_softc *, struct device *));
-struct device *midi_attach_mi __P((struct midi_hw_if *, void *, 
-				   struct device *));
+/*
+ * The extended hardware interface is for use by drivers that are better off
+ * getting messages whole to transmit, rather than byte-by-byte through
+ * output().  Two examples are midisyn (which interprets MIDI messages in
+ * software to drive synth chips) and umidi (which has to send messages in the
+ * packet-based USB MIDI protocol).  It is silly for them to have to reassemble
+ * messages midi had to split up to poke through the single-byte interface.
+ *
+ * To register use of the extended interface, a driver will call back midi's
+ * midi_register_hw_if_ext() function during getinfo(); thereafter midi will
+ * deliver channel messages, system common messages other than sysex, and sysex
+ * messages, respectively, through these methods, and use the original output
+ * method only for system realtime messages (all of which are single byte).
+ * Other drivers that have no reason to change from the single-byte interface
+ * simply don't call the register function, and nothing changes for them.
+ *
+ * IMPORTANT: any code that provides a midi_hw_if_ext struct MUST initialize
+ * its members BY NAME (typically with a C99-style initializer with designators)
+ * and assure that any unused members contain zeroes (which is what C99
+ * initializers will do), and make no assumptions about the size or order of
+ * the struct, to allow for further extension of this interface as needed.
+ */
+struct midi_hw_if_ext {
+	int	(*channel)(void *, int, int, u_char *, int);
+	int	(*common)(void *, int, u_char *, int);
+	int	(*sysex)(void *, u_char *, int);
+	int	compress:1; /* if hw wants channel msgs in compressed form */
+};
+void midi_register_hw_if_ext(struct midi_hw_if_ext *);
 
-int	midi_unit_count __P((void));
-void	midi_getinfo __P((dev_t, struct midi_info *));
-int	midi_writebytes __P((int, u_char *, int));
+void	midi_attach(struct midi_softc *, device_t);
+device_t midi_attach_mi(const struct midi_hw_if *, void *, device_t);
 
-#if !defined(__i386__) && !defined(__arm32__) && !defined(prep)
+int	midi_unit_count(void);
+void	midi_getinfo(dev_t, struct midi_info *);
+int	midi_writebytes(int, u_char *, int);
+
+#if !defined(IPL_AUDIO)
 #define splaudio splbio		/* XXX */
 #define IPL_AUDIO IPL_BIO	/* XXX */
 #endif

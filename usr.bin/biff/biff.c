@@ -1,4 +1,4 @@
-/*	$NetBSD: biff.c,v 1.6 1998/07/28 19:26:09 mycroft Exp $	*/
+/*	$NetBSD: biff.c,v 1.10 2008/07/21 14:19:21 lukem Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)biff.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: biff.c,v 1.6 1998/07/28 19:26:09 mycroft Exp $");
+__RCSID("$NetBSD: biff.c,v 1.10 2008/07/21 14:19:21 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -57,13 +53,10 @@ __RCSID("$NetBSD: biff.c,v 1.6 1998/07/28 19:26:09 mycroft Exp $");
 #include <string.h>
 #include <unistd.h>
 
-static void usage __P((void));
-int main __P((int, char **));
+static void usage(void);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	struct stat sb;
 	int ch;
@@ -93,11 +86,11 @@ main(argc, argv)
 	switch(argv[0][0]) {
 	case 'n':
 		if (chmod(name, sb.st_mode & ~0100) < 0)
-			err(2, name);
+			err(2, "%s", name);
 		break;
 	case 'y':
 		if (chmod(name, sb.st_mode | 0100) < 0)
-			err(2, name);
+			err(2, "%s", name);
 		break;
 	default:
 		usage();
@@ -106,7 +99,7 @@ main(argc, argv)
 }
 
 static void
-usage()
+usage(void)
 {
 	(void)fprintf(stderr, "usage: biff [y | n]\n");
 	exit(2);

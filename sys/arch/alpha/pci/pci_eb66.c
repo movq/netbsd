@@ -1,4 +1,4 @@
-/* $NetBSD: pci_eb66.c,v 1.5 1999/02/12 06:25:13 thorpej Exp $ */
+/* $NetBSD: pci_eb66.c,v 1.16 2008/04/28 20:23:11 martin Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -66,7 +59,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: pci_eb66.c,v 1.5 1999/02/12 06:25:13 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_eb66.c,v 1.16 2008/04/28 20:23:11 martin Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -77,7 +70,7 @@ __KERNEL_RCSID(0, "$NetBSD: pci_eb66.c,v 1.5 1999/02/12 06:25:13 thorpej Exp $")
 #include <sys/device.h>
 #include <sys/syslog.h>
 
-#include <vm/vm.h>
+#include <uvm/uvm_extern.h>
 
 #include <machine/autoconf.h>
 
@@ -89,16 +82,15 @@ __KERNEL_RCSID(0, "$NetBSD: pci_eb66.c,v 1.5 1999/02/12 06:25:13 thorpej Exp $")
 
 #include <alpha/pci/pci_eb66.h>
 
-#include <machine/intrcnt.h>
-
 #include "sio.h"
 #if NSIO
 #include <alpha/pci/siovar.h>
 #endif
 
-int	dec_eb66_intr_map __P((void *, pcitag_t, int, int,
+int	dec_eb66_intr_map __P((struct pci_attach_args *,
 	    pci_intr_handle_t *));
 const char *dec_eb66_intr_string __P((void *, pci_intr_handle_t));
+const struct evcnt *dec_eb66_intr_evcnt __P((void *, pci_intr_handle_t));
 void	*dec_eb66_intr_establish __P((void *, pci_intr_handle_t,
 	    int, int (*func)(void *), void *));
 void	dec_eb66_intr_disestablish __P((void *, void *));
@@ -111,7 +103,7 @@ struct alpha_shared_intr *eb66_pci_intr;
 bus_space_tag_t eb66_intrgate_iot;
 bus_space_handle_t eb66_intrgate_ioh;
 
-void	eb66_iointr __P((void *framep, unsigned long vec));
+void	eb66_iointr __P((void *arg, unsigned long vec));
 extern void	eb66_intr_enable __P((int irq));  /* pci_eb66_intr.S */
 extern void	eb66_intr_disable __P((int irq)); /* pci_eb66_intr.S */
 
@@ -121,11 +113,13 @@ pci_eb66_pickintr(lcp)
 {
 	bus_space_tag_t iot = &lcp->lc_iot;
 	pci_chipset_tag_t pc = &lcp->lc_pc;
+	char *cp;
 	int i;
 
         pc->pc_intr_v = lcp;
         pc->pc_intr_map = dec_eb66_intr_map;
         pc->pc_intr_string = dec_eb66_intr_string;
+	pc->pc_intr_evcnt = dec_eb66_intr_evcnt;
         pc->pc_intr_establish = dec_eb66_intr_establish;
         pc->pc_intr_disestablish = dec_eb66_intr_disestablish;
 
@@ -139,27 +133,31 @@ pci_eb66_pickintr(lcp)
 	for (i = 0; i < EB66_MAX_IRQ; i++)
 		eb66_intr_disable(i);	
 
-	eb66_pci_intr = alpha_shared_intr_alloc(EB66_MAX_IRQ);
-	for (i = 0; i < EB66_MAX_IRQ; i++)
+	eb66_pci_intr = alpha_shared_intr_alloc(EB66_MAX_IRQ, 8);
+	for (i = 0; i < EB66_MAX_IRQ; i++) {
 		alpha_shared_intr_set_maxstrays(eb66_pci_intr, i,
 			PCI_STRAY_MAX);
+		
+		cp = alpha_shared_intr_string(eb66_pci_intr, i);
+		sprintf(cp, "irq %d", i);
+		evcnt_attach_dynamic(alpha_shared_intr_evcnt(
+		    eb66_pci_intr, i), EVCNT_TYPE_INTR, NULL,
+		    "eb66", cp);
+	}
 
 #if NSIO
 	sio_intr_setup(pc, iot);
 #endif
-
-	set_iointr(eb66_iointr);
 }
 
 int     
-dec_eb66_intr_map(lcv, bustag, buspin, line, ihp)
-        void *lcv;
-        pcitag_t bustag; 
-        int buspin, line;
+dec_eb66_intr_map(pa, ihp)
+	struct pci_attach_args *pa;
         pci_intr_handle_t *ihp;
 {
-	struct lca_config *lcp = lcv;
-	pci_chipset_tag_t pc = &lcp->lc_pc;
+	pcitag_t bustag = pa->pa_intrtag;
+	int buspin = pa->pa_intrpin, line = pa->pa_intrline;
+	pci_chipset_tag_t pc = pa->pa_pc;
 	int bus, device, function;
 
 	if (buspin == 0) {
@@ -171,7 +169,7 @@ dec_eb66_intr_map(lcv, bustag, buspin, line, ihp)
 		return 1;
 	}
 
-	alpha_pci_decompose_tag(pc, bustag, &bus, &device, &function);
+	pci_decompose_tag(pc, bustag, &bus, &device, &function);
 
 	/*
 	 * The console places the interrupt mapping in the "line" value.
@@ -184,7 +182,7 @@ dec_eb66_intr_map(lcv, bustag, buspin, line, ihp)
 	}
 
 	if (line >= EB66_MAX_IRQ)
-		panic("dec_eb66_intr_map: eb66 irq too large (%d)\n",
+		panic("dec_eb66_intr_map: eb66 irq too large (%d)",
 		    line);
 
 	*ihp = line;
@@ -199,9 +197,20 @@ dec_eb66_intr_string(lcv, ih)
         static char irqstr[15];          /* 11 + 2 + NULL + sanity */
 
 	if (ih >= EB66_MAX_IRQ)
-		panic("dec_eb66_intr_string: bogus eb66 IRQ 0x%lx\n", ih);
+		panic("dec_eb66_intr_string: bogus eb66 IRQ 0x%lx", ih);
 	sprintf(irqstr, "eb66 irq %ld", ih);
 	return (irqstr);
+}
+
+const struct evcnt *
+dec_eb66_intr_evcnt(lcv, ih)
+	void *lcv;
+	pci_intr_handle_t ih;
+{
+
+	if (ih >= EB66_MAX_IRQ)
+		panic("dec_eb66_intr_string: bogus eb66 IRQ 0x%lx", ih);
+	return (alpha_shared_intr_evcnt(eb66_pci_intr, ih));
 }
 
 void *
@@ -214,13 +223,17 @@ dec_eb66_intr_establish(lcv, ih, level, func, arg)
 	void *cookie;
 
 	if (ih >= EB66_MAX_IRQ)
-		panic("dec_eb66_intr_establish: bogus eb66 IRQ 0x%lx\n", ih);
+		panic("dec_eb66_intr_establish: bogus eb66 IRQ 0x%lx", ih);
 
 	cookie = alpha_shared_intr_establish(eb66_pci_intr, ih, IST_LEVEL,
 	    level, func, arg, "eb66 irq");
 
-	if (cookie != NULL && alpha_shared_intr_isactive(eb66_pci_intr, ih))
+	if (cookie != NULL &&
+	    alpha_shared_intr_firstactive(eb66_pci_intr, ih)) {
+		scb_set(0x900 + SCB_IDXTOVEC(ih), eb66_iointr, NULL,
+		    level);
 		eb66_intr_enable(ih);
+	}
 	return (cookie);
 }
 
@@ -240,42 +253,28 @@ dec_eb66_intr_disestablish(lcv, cookie)
 		eb66_intr_disable(irq);
 		alpha_shared_intr_set_dfltsharetype(eb66_pci_intr, irq,
 		    IST_NONE);
+		scb_free(0x900 + SCB_IDXTOVEC(irq));
 	}
  
 	splx(s);
 }
 
 void
-eb66_iointr(framep, vec)
-	void *framep;
+eb66_iointr(arg, vec)
+	void *arg;
 	unsigned long vec;
 {
 	int irq; 
 
-	if (vec >= 0x900) {
-		if (vec >= 0x900 + (EB66_MAX_IRQ << 4))
-			panic("eb66_iointr: vec 0x%lx out of range\n", vec);
-		irq = (vec - 0x900) >> 4;
+	irq = SCB_VECTOIDX(vec - 0x900);
 
-		if (EB66_MAX_IRQ != INTRCNT_EB66_IRQ_LEN)
-			panic("eb66 interrupt counter sizes inconsistent");
-		intrcnt[INTRCNT_EB66_IRQ + irq]++;
-
-		if (!alpha_shared_intr_dispatch(eb66_pci_intr, irq)) {
-			alpha_shared_intr_stray(eb66_pci_intr, irq,
-			    "eb66 irq");
-			if (ALPHA_SHARED_INTR_DISABLE(eb66_pci_intr, irq))
-				eb66_intr_disable(irq);
-		}
-		return;
-	}
-#if NSIO
-	if (vec >= 0x800) {
-		sio_iointr(framep, vec);
-		return;
-	}
-#endif
-	panic("eb66_iointr: weird vec 0x%lx\n", vec);
+	if (!alpha_shared_intr_dispatch(eb66_pci_intr, irq)) {
+		alpha_shared_intr_stray(eb66_pci_intr, irq,
+		    "eb66 irq");
+		if (ALPHA_SHARED_INTR_DISABLE(eb66_pci_intr, irq))
+			eb66_intr_disable(irq);
+	} else
+		alpha_shared_intr_reset_strays(eb66_pci_intr, irq);
 }
 
 #if 0		/* THIS DOES NOT WORK!  see pci_eb66_intr.S. */

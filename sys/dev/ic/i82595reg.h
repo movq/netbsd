@@ -1,4 +1,4 @@
-/*	$NetBSD: i82595reg.h,v 1.4 1999/02/16 23:34:13 is Exp $	*/
+/*	$NetBSD: i82595reg.h,v 1.10 2008/04/28 20:23:50 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,7 +32,7 @@
 /*
  * Intel 82595 Ethernet chip register, bit, and structure definitions.
  *
- * Written by is with reference to Intel's i82595FX data sheet, with some 
+ * Written by is with reference to Intel's i82595FX data sheet, with some
  * clarification coming from looking at the Clarkson Packet Driver code for this
  * chip written by Russ Nelson and others;
  *
@@ -103,6 +96,8 @@
 #define RCV_STOP_LOW 6
 #define RCV_STOP_HIGH 7
 
+#define RCV_COPY_THRESHOLD 8	/* byte */
+
 #define XMT_ADDR_REG 0x0a
 #define HOST_ADDR_REG 0x0c
 #define MEM_PORT_REG 0x0e
@@ -126,7 +121,7 @@
 
 /* reg1, apparently */
 
-#define		XMT_CHAIN_INT	0x20	/* interupt at end of xmt chain */
+#define		XMT_CHAIN_INT	0x20	/* interrupt at end of xmt chain */
 #define		XMT_CHAIN_ERRSTOP 0x40	/* int at end of chain even if err */
 #define		RCV_DISCARD_BAD	0x80	/* Throw bad frames away and continue */
 
@@ -173,7 +168,7 @@
 
 #define EEPPW1		1
 #define		EEPP_Int	0x0007
-#define		EEPP_INTMAP	{3, 5, 9, 10, 11, -1, -1, -1}
+#define		EEPP_INTMAP	{9, 3, 5, 10, 11, -1, -1, -1}
 #define		EEPP_RINTMAP	{0xff, 0xff, 0x02, 0x00, 0xff, 0x01, 0xff, \
 				 0xff, 0xff, 0x02, 0x03, 0x04 }
 
@@ -205,6 +200,11 @@
 
 #define EEPP_LENGTH 0x40
 #define EEPP_CHKSUM 0xBABA /* Intel claim 0x0, but this seems to be wrong */
+
+#define RCV_NO_RSC_REG	11
+	/* How many packets were dropped due to insufficient space */
+
+/* ---- xmt /rcv /exec buffer format ---- */
 
 #define I595_XMT_HDRLEN	8
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: mount_ntfs.c,v 1.3 1999/06/25 19:28:37 perseant Exp $	*/
+/* $NetBSD: mount_ntfs.c,v 1.21 2008/08/05 20:57:45 pooka Exp $ */
 
 /*
  * Copyright (c) 1994 Christopher G. Demetriou
@@ -31,20 +31,17 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * Id: mount_ntfs.c,v 1.1.1.1 1999/02/03 03:51:19 semenu Exp 
- *
  */
-#include <sys/cdefs.h>
-#ifndef lint
-__RCSID("$NetBSD: mount_ntfs.c,v 1.3 1999/06/25 19:28:37 perseant Exp $");
-#endif
 
 #include <sys/cdefs.h>
+#ifndef lint
+__RCSID("$NetBSD: mount_ntfs.c,v 1.21 2008/08/05 20:57:45 pooka Exp $");
+#endif
+
 #include <sys/param.h>
-#define NTFS
 #include <sys/mount.h>
 #include <sys/stat.h>
 #include <ntfs/ntfsmount.h>
-#include <ctype.h>
 #include <err.h>
 #include <grp.h>
 #include <pwd.h>
@@ -53,67 +50,69 @@ __RCSID("$NetBSD: mount_ntfs.c,v 1.3 1999/06/25 19:28:37 perseant Exp $");
 #include <string.h>
 #include <sysexits.h>
 #include <unistd.h>
+#include <util.h>
 
-#include "mntopts.h"
+#include <mntopts.h>
 
-static struct mntopt mopts[] = {
+#include "mountprog.h"
+#include "mount_ntfs.h"
+
+static const struct mntopt mopts[] = {
 	MOPT_STDOPTS,
-	{ NULL }
+	MOPT_GETARGS,
+	MOPT_NULL,
 };
 
-#ifndef __dead2
-#define __dead2 __attribute__((__noreturn__))
-#endif
+static void	usage(void) __dead;
 
-static gid_t	a_gid __P((char *));
-static uid_t	a_uid __P((char *));
-static mode_t	a_mask __P((char *));
-static void	usage __P((void)) __dead2;
-
-int main __P((int, char **));
-
+#ifndef MOUNT_NOMAIN
 int
-main(argc, argv)
-	int argc;
-	char **argv;
+main(int argc, char **argv)
 {
-	struct ntfs_args args;
-	struct stat sb;
-	int c, mntflags, set_gid, set_uid, set_mask;
-	char *dev, *dir, ndir[MAXPATHLEN+1];
-#ifdef __FreeBSD__
-#if __FreeBSD_version >= 300000
-	struct vfsconf vfc;
-#else
-	struct vfsconf *vfc;
-#endif
+
+	setprogname(argv[0]);
+	return mount_ntfs(argc, argv);
+}
 #endif
 
-	mntflags = set_gid = set_uid = set_mask = 0;
-	(void)memset(&args, '\0', sizeof(args));
+void
+mount_ntfs_parseargs(int argc, char **argv,
+	struct ntfs_args *args, int *mntflags,
+	char *canon_dev, char *canon_dir)
+{
+	struct stat sb;
+	int c, set_gid, set_uid, set_mask;
+	char *dev, *dir;
+	mntoptparse_t mp;
+
+	*mntflags = set_gid = set_uid = set_mask = 0;
+	(void)memset(args, '\0', sizeof(*args));
 
 	while ((c = getopt(argc, argv, "aiu:g:m:o:")) !=  -1) {
 		switch (c) {
 		case 'u':
-			args.uid = a_uid(optarg);
+			args->uid = a_uid(optarg);
 			set_uid = 1;
 			break;
 		case 'g':
-			args.gid = a_gid(optarg);
+			args->gid = a_gid(optarg);
 			set_gid = 1;
 			break;
 		case 'm':
-			args.mode = a_mask(optarg);
+			args->mode = a_mask(optarg);
 			set_mask = 1;
 			break;
 		case 'i':
-			args.flag |= NTFS_MFLAG_CASEINS;
+			args->flag |= NTFS_MFLAG_CASEINS;
 			break;
 		case 'a':
-			args.flag |= NTFS_MFLAG_ALLNAMES;
+			args->flag |= NTFS_MFLAG_ALLNAMES;
 			break;
 		case 'o':
-			getmntopts(optarg, mopts, &mntflags, 0);
+			mp = getmntopts(optarg, mopts, mntflags, 0);
+			if (mp == NULL)
+				err(1, "getmntopts");
+			freemntopts(mp);
 			break;
 		case '?':
 		default:
@@ -127,131 +126,50 @@ main(argc, argv)
 
 	dev = argv[optind];
 	dir = argv[optind + 1];
-	if (dir[0] != '/') {
-		warnx("\"%s\" is a relative path", dir);
-		if (getcwd(ndir, sizeof(ndir)) == NULL)
-			err(EX_OSERR, "getcwd");
-		strncat(ndir, "/", sizeof(ndir) - strlen(ndir) - 1);
-		strncat(ndir, dir, sizeof(ndir) - strlen(ndir) - 1);
-		dir = ndir;
-		warnx("using \"%s\" instead", dir);
-	}
 
-	args.fspec = dev;
-	args.export.ex_root = 65534;	/* unchecked anyway on DOS fs */
-	if (mntflags & MNT_RDONLY)
-		args.export.ex_flags = MNT_EXRDONLY;
-	else
-		args.export.ex_flags = 0;
+	pathadj(dev, canon_dev);
+	pathadj(dir, canon_dir);
+
+	args->fspec = dev;
 	if (!set_gid || !set_uid || !set_mask) {
 		if (stat(dir, &sb) == -1)
 			err(EX_OSERR, "stat %s", dir);
 
 		if (!set_uid)
-			args.uid = sb.st_uid;
+			args->uid = sb.st_uid;
 		if (!set_gid)
-			args.gid = sb.st_gid;
+			args->gid = sb.st_gid;
 		if (!set_mask)
-			args.mode = sb.st_mode & (S_IRWXU | S_IRWXG | S_IRWXO);
+			args->mode = sb.st_mode & (S_IRWXU | S_IRWXG | S_IRWXO);
 	}
-#ifdef __FreeBSD__
-#if __FreeBSD_version >= 300000
-	c = getvfsbyname("ntfs", &vfc);
-	if(c && vfsisloadable("ntfs")) {
-		if(vfsload("ntfs"))
-#else
-	vfc = getvfsbyname("ntfs");
-	if(!vfc && vfsisloadable("ntfs")) {
-		if(vfsload("ntfs"))
-#endif
-			err(EX_OSERR, "vfsload(ntfs)");
-		endvfsent();	/* clear cache */
-#if __FreeBSD_version >= 300000
-		c = getvfsbyname("ntfs", &vfc);
-#else
-		vfc = getvfsbyname("ntfs");
-#endif
+}
+
+int
+mount_ntfs(int argc, char *argv[])
+{
+	struct ntfs_args args;
+	int mntflags;
+	char canon_dev[MAXPATHLEN], canon_dir[MAXPATHLEN];
+
+	mount_ntfs_parseargs(argc, argv, &args, &mntflags,
+	    canon_dev, canon_dir);
+
+	if (mount(MOUNT_NTFS, canon_dir, mntflags, &args, sizeof args) == -1)
+		err(EX_OSERR, "%s on %s", canon_dev, canon_dir);
+
+	if (mntflags & MNT_GETARGS) {
+		char buf[1024];
+		(void)snprintb(buf, sizeof(buf), NTFS_MFLAG_BITS, args.flag);
+		printf("uid=%d, gid=%d, mode=0%o, flags=%s\n", args.uid,
+		    args.gid, args.mode, buf);
 	}
-#if __FreeBSD_version >= 300000
-	if (c)
-#else
-	if (!vfc)
-#endif
-		errx(EX_OSERR, "ntfs filesystem is not available");
-
-#if __FreeBSD_version >= 300000
-	if (mount(vfc.vfc_name, dir, mntflags, &args) < 0)
-#else
-	if (mount(vfc->vfc_index, dir, mntflags, &args) < 0)
-#endif
-#else
-	if (mount(MOUNT_NTFS, dir, mntflags, &args) < 0)
-#endif
-		err(EX_OSERR, "%s on %s", dev, dir);
-
 	exit (0);
 }
 
-gid_t
-a_gid(s)
-	char *s;
+static void
+usage(void)
 {
-	struct group *gr;
-	char *gname;
-	gid_t gid;
-
-	if ((gr = getgrnam(s)) != NULL)
-		gid = gr->gr_gid;
-	else {
-		for (gname = s; *s && isdigit(*s); ++s);
-		if (!*s)
-			gid = atoi(gname);
-		else
-			errx(EX_NOUSER, "unknown group id: %s", gname);
-	}
-	return (gid);
-}
-
-uid_t
-a_uid(s)
-	char *s;
-{
-	struct passwd *pw;
-	char *uname;
-	uid_t uid;
-
-	if ((pw = getpwnam(s)) != NULL)
-		uid = pw->pw_uid;
-	else {
-		for (uname = s; *s && isdigit(*s); ++s);
-		if (!*s)
-			uid = atoi(uname);
-		else
-			errx(EX_NOUSER, "unknown user id: %s", uname);
-	}
-	return (uid);
-}
-
-mode_t
-a_mask(s)
-	char *s;
-{
-	int done, rv=0;
-	char *ep;
-
-	done = 0;
-	if (*s >= '0' && *s <= '7') {
-		done = 1;
-		rv = strtol(optarg, &ep, 8);
-	}
-	if (!done || rv < 0 || *ep)
-		errx(EX_USAGE, "invalid file mode: %s", s);
-	return (rv);
-}
-
-void
-usage()
-{
-	fprintf(stderr, "usage: mount_ntfs [-a] [-i] [-u user] [-g group] [-m mask] bdev dir\n");
+	fprintf(stderr, "usage: %s [-a] [-i] [-u user] [-g group] [-m mask] "
+	    "bdev dir\n", getprogname());
 	exit(EX_USAGE);
 }

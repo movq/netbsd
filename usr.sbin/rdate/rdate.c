@@ -1,4 +1,4 @@
-/*	$NetBSD: rdate.c,v 1.10 2000/02/05 22:14:20 kleink Exp $	*/
+/*	$NetBSD: rdate.c,v 1.17 2007/03/10 01:19:55 hubertf Exp $	*/
 
 /*
  * Copyright (c) 1994 Christos Zoulas
@@ -39,8 +39,8 @@
  */
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: rdate.c,v 1.10 2000/02/05 22:14:20 kleink Exp $");
-#endif/* lint */
+__RCSID("$NetBSD: rdate.c,v 1.17 2007/03/10 01:19:55 hubertf Exp $");
+#endif /* lint */
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -48,45 +48,38 @@ __RCSID("$NetBSD: rdate.c,v 1.10 2000/02/05 22:14:20 kleink Exp $");
 
 #include <netinet/in.h>
 
-#include <ctype.h>
 #include <err.h>
 #include <netdb.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <util.h>
 
 /* seconds from midnight Jan 1900 - 1970 */
-#if __STDC__
 #define DIFFERENCE 2208988800UL
-#else
-#define DIFFERENCE 2208988800
-#endif
 
-extern char    *__progname;
-
-	int	main __P((int, char **));
-static	void	usage __P((void));
+	int	main(int, char **);
+static	void	usage(void);
 
 static void
-usage()
+usage(void)
 {
-	(void) fprintf(stderr, "Usage: %s [-psa] host\n", __progname);
+	(void) fprintf(stderr, "usage: %s [-psa] host\n", getprogname());
 	(void) fprintf(stderr, "  -p: just print, don't set\n");
 	(void) fprintf(stderr, "  -s: just set, don't print\n");
 	(void) fprintf(stderr, "  -a: use adjtime instead of instant change\n");
 }
 
 int
-main(argc, argv)
-	int             argc;
-	char           *argv[];
+main(int argc, char *argv[])
 {
 	int             pr = 0, silent = 0, s;
 	int		slidetime = 0;
 	int		adjustment;
 	time_t          tim;
-	char           *hname, *emsg;
+	char           *hname;
+	const char     *emsg = NULL;
 	struct addrinfo	hints, *res, *res0;
 	int             c;
 	int		error;
@@ -142,7 +135,7 @@ main(argc, argv)
 		break;
 	}
 	if (s < 0)
-		err(1, emsg);
+		err(1, "%s", emsg);
 
 	if (read(s, &tim, sizeof(time_t)) != sizeof(time_t))
 		err(1, "Could not read data");
@@ -175,7 +168,7 @@ main(argc, argv)
 		if (slidetime)
 		    (void) fprintf(stdout, 
 				   "%s: adjust local clock by %d seconds\n",
-				   __progname, adjustment);
+				   getprogname(), adjustment);
 	}
 	return 0;
 }

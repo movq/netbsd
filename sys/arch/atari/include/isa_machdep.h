@@ -1,4 +1,4 @@
-/*	$NetBSD: isa_machdep.h,v 1.7 2000/02/07 22:07:29 thorpej Exp $	*/
+/*	$NetBSD: isa_machdep.h,v 1.12 2008/04/28 20:23:15 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -73,9 +66,6 @@
 #include <dev/isa/isadmavar.h>
 #include <atari/atari/intr.h>
 
-#define	ISA_IOSTART	0xfff30000	/* XXX: Range with byte frobbing */
-#define	ISA_MEMSTART	0xff000000	/* XXX: Hades only	*/
-
 struct atari_isa_chipset {
 	struct isa_dma_state ic_dmastate;
 };
@@ -85,7 +75,7 @@ typedef struct atari_isa_chipset *isa_chipset_tag_t;
 typedef struct	{
 	int		slot;	/* 1/2, determines interrupt line	*/
 	int		ipl;	/* ipl requested			*/
-	int		(*ifunc) __P((void *));	/* function to call	*/
+	int		(*ifunc)(void *);	/* function to call	*/
 	void		*iarg;	/* argument for 'ifunc'			*/
 	struct intrhand	*ihand;	/* save this for disestablishing	*/
 } isa_intr_info_t;
@@ -93,12 +83,13 @@ typedef struct	{
 /*
  * Functions provided to machine-independent ISA code.
  */
-void	isa_attach_hook __P((struct device *, struct device *,
-	    struct isabus_attach_args *));
-int	isa_intr_alloc __P((isa_chipset_tag_t, int, int, int *));
-void	*isa_intr_establish __P((isa_chipset_tag_t ic, int irq, int type,
-	    int level, int (*)(void *), void *ih_arg));
-void	isa_intr_disestablish __P((isa_chipset_tag_t ic, void *handler));
+void	isa_attach_hook(struct device *, struct device *,
+	    struct isabus_attach_args *);
+int	isa_intr_alloc(isa_chipset_tag_t, int, int, int *);
+const struct evcnt *isa_intr_evcnt(isa_chipset_tag_t ic, int irq);
+void	*isa_intr_establish(isa_chipset_tag_t ic, int irq, int type,
+	    int level, int (*)(void *), void *ih_arg);
+void	isa_intr_disestablish(isa_chipset_tag_t ic, void *handler);
 
 #define	isa_dmainit(ic, bst, dmat, d)					\
 	_isa_dmainit(&(ic)->ic_dmastate, (bst), (dmat), (d))
@@ -134,6 +125,10 @@ void	isa_intr_disestablish __P((isa_chipset_tag_t ic, void *handler));
 	_isa_dmamem_unmap(&(ic)->ic_dmastate, (c), (k), (s))
 #define	isa_dmamem_mmap(ic, c, a, s, o, p, f)				\
 	_isa_dmamem_mmap(&(ic)->ic_dmastate, (c), (a), (s), (o), (p), (f))
+#define isa_drq_alloc(ic, c)						\
+	_isa_drq_alloc(&(ic)->ic_dmastate, c)
+#define isa_drq_free(ic, c)						\
+	_isa_drq_free(&(ic)->ic_dmastate, c)
 #define	isa_drq_isfree(ic, c)						\
 	_isa_drq_isfree(&(ic)->ic_dmastate, (c))
 #define	isa_malloc(ic, c, s, p, f)					\

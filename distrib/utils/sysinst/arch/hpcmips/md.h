@@ -1,4 +1,4 @@
-/*	$NetBSD: md.h,v 1.4 2000/03/28 00:29:55 thorpej Exp $	*/
+/*	$NetBSD: md.h,v 1.26 2007/11/12 15:07:35 jmmv Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -45,72 +45,23 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-/* i386 uses the mbr code. */
+/* hpcmips uses the mbr code. */
 #include "mbr.h"
 
 /* constants and defines */
 
 
-#define STDNEEDMB	136	/* Min space for non X install */
-#define XNEEDMB		30	/* Extra megs for full X installation */
+#define XNEEDMB		39	/* Extra megs for full X installation */
 
 
 /*
  *  Default filesets to fetch and install during installation
  *  or upgrade. The standard sets are:
- *      base, etc, comp, games, man, misc, text,
- *      xbase, xfont, xserver, xcontrib, xcomp.
- *
- * i386 has the  MD set kern first, because generic kernels are  too
- * big to fit on install floppies. i386 does not yet include the x sets. 
- *
- * Third entry is the last extension name in the split sets for loading
- * from floppy.
+ *      base etc comp games man misc tests text xbase xcomp xetc xfont xserver
  */
-EXTERN distinfo dist_list[]
-#ifdef MAIN
-= {
-    {"kern",	1, "ag", "Kernel       : "},
-    {"base",	1, "bw", "Base         : "},
-    {"etc",	1, "aa", "System (/etc): "},
-    {"comp",	1, "bl", "Compiler     : "},
-    {"games",	1, "am", "Games        : "},
-    {"man",	1, "ar", "Manuals      : "},
-    {"misc",	1, "aj", "Miscellaneous: "},
-    {"text",	1, "af", "Text tools   : "},
-    {"secr",	0, NULL, "Security     : "},
+#define SET_KERNEL_1_NAME	"kern-GENERIC"
+#define SET_KERNEL_2_NAME	"kern-TX3912"
 
-    /* XXX no X11 on floppies, what sets are they?*/
-    {"xbase",	1, "al", "X11 clients  : "},
-    {"xfont",	1, "az", "X11 fonts    : "},
-    {"xserver",	1, "cr", "X11 servers  : "},
-    {"xcontrib",1, "aa", "X11 contrib  : "},
-    {"xcomp",	1, "ah", "X programming: "},
-    {NULL, 0, NULL, NULL }
-}
-#endif
-;
-
-/*
- * Disk names accepted as valid targets for a from-scratch installation.
- *
- * On  i386, we allow "wd"  ST-506/IDE disks and  "sd" scsi disks.
- */
-EXTERN	char *disk_names[]
-#ifdef MAIN
-= {"wd", "sd", NULL}
-#endif
-;
-
-
-/*
- * Legal start character for a disk for checking input. 
- * this must return 1 for a character that matches the first
- * characters of each member of disk_names.
- *
- * On  i386, that means matching 'w' for st-506/ide and 's' for sd.
- */
-#define ISDISKSTART(dn)	(dn == 'w' || dn == 's')
 
 /*
  * Machine-specific command to write a new label to a disk.
@@ -124,45 +75,3 @@ EXTERN	char *disk_names[]
  * On i386, do what the 1.2 install scripts did. 
  */
 #define DISKLABEL_CMD "disklabel -w -r"
-
-
-/*
- * Default fileystem type for floppy disks.
- * On i386, that is  msdos.
- */
-EXTERN	char *fdtype INIT("msdos");
-
-extern struct disklist *disklist;
-extern struct nativedisk_info *nativedisk;
-extern struct biosdisk_info *biosdisk;
-
-#define _PATH_MBR	"/usr/mdec/mbr"
-#define _PATH_BOOTSEL	"/usr/mdec/mbr_bootsel"
-
-struct mbr_bootsel {
-	u_int8_t defkey;
-	u_int8_t flags;
-	u_int16_t timeo;
-	char nametab[4][9];
-	u_int16_t magic;
-} __attribute__((packed));
- 
-extern struct mbr_bootsel *mbs;
- 
-#define BFL_SELACTIVE   0x01
-#define BFL_EXTINT13    0x02
- 
-#define SCAN_ENTER      0x1c
-#define SCAN_F1         0x3b
- 
-#define MBR_BOOTSELOFF  (MBR_PARTOFF - sizeof (struct mbr_bootsel))
-
-extern int defbootselpart, defbootseldisk;
-
-void disp_bootsel __P((struct mbr_partition *, struct mbr_bootsel *));
-
-/*
- *  prototypes for MD code.
- */
-
-

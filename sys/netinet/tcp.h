@@ -1,4 +1,4 @@
-/*	$NetBSD: tcp.h,v 1.11 1999/11/20 00:38:00 thorpej Exp $	*/
+/*	$NetBSD: tcp.h,v 1.28 2007/12/25 18:33:47 perry Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,10 +34,15 @@
 #ifndef _NETINET_TCP_H_
 #define _NETINET_TCP_H_
 
+#include <sys/featuretest.h>
+
+#if defined(_NETBSD_SOURCE)
+
 typedef u_int32_t tcp_seq;
 /*
  * TCP header.
  * Per RFC 793, September, 1981.
+ * Updated by RFC 3168, September, 2001.
  */
 struct tcphdr {
 	u_int16_t th_sport;		/* source port */
@@ -49,10 +50,12 @@ struct tcphdr {
 	tcp_seq	  th_seq;		/* sequence number */
 	tcp_seq	  th_ack;		/* acknowledgement number */
 #if BYTE_ORDER == LITTLE_ENDIAN
+	/*LINTED non-portable bitfields*/
 	u_int8_t  th_x2:4,		/* (unused) */
 		  th_off:4;		/* data offset */
 #endif
 #if BYTE_ORDER == BIG_ENDIAN
+	/*LINTED non-portable bitfields*/
 	u_int8_t  th_off:4,		/* data offset */
 		  th_x2:4;		/* (unused) */
 #endif
@@ -63,10 +66,12 @@ struct tcphdr {
 #define	TH_PUSH	  0x08
 #define	TH_ACK	  0x10
 #define	TH_URG	  0x20
+#define	TH_ECE	  0x40
+#define	TH_CWR	  0x80
 	u_int16_t th_win;			/* window */
 	u_int16_t th_sum;			/* checksum */
 	u_int16_t th_urp;			/* urgent pointer */
-} __attribute__((__packed__));
+} __packed;
 
 #define	TCPOPT_EOL		0
 #define	TCPOPT_NOP		1
@@ -84,13 +89,19 @@ struct tcphdr {
 #define TCPOPT_TSTAMP_HDR	\
     (TCPOPT_NOP<<24|TCPOPT_NOP<<16|TCPOPT_TIMESTAMP<<8|TCPOLEN_TIMESTAMP)
 
+#define	TCPOPT_SIGNATURE	19		/* Keyed MD5: RFC 2385 */
+#define	   TCPOLEN_SIGNATURE		18
+#define    TCPOLEN_SIGLEN		(TCPOLEN_SIGNATURE+2) /* padding */
+
+#define MAX_TCPOPTLEN	40	/* max # bytes that go in options */
+
 /*
  * Default maximum segment size for TCP.
- * With an IP MSS of 576, this is 536,
- * but 512 is probably more convenient.
- * This should be defined as min(512, IP_MSS - sizeof (struct tcpiphdr)).
+ * This is defined by RFC 1112 Sec 4.2.2.6.
  */
-#define	TCP_MSS		512
+#define	TCP_MSS		536
+
+#define	TCP_MINMSS	216
 
 #define	TCP_MAXWIN	65535	/* largest value for (unscaled) window */
 
@@ -98,10 +109,24 @@ struct tcphdr {
 
 #define	TCP_MAXBURST	4	/* maximum segments in a burst */
 
+#endif /* _NETBSD_SOURCE */
+
 /*
  * User-settable options (used with setsockopt).
  */
-#define	TCP_NODELAY	0x01	/* don't delay send to coalesce packets */
-#define	TCP_MAXSEG	0x02	/* set maximum segment size */
+#define	TCP_NODELAY	1	/* don't delay send to coalesce packets */
+#define	TCP_MAXSEG	2	/* set maximum segment size */
+#define	TCP_KEEPIDLE	3
+#ifdef notyet
+#define	TCP_NOPUSH	4	/* reserved for FreeBSD compat */
+#endif
+#define	TCP_KEEPINTVL	5
+#define	TCP_KEEPCNT	6
+#define	TCP_KEEPINIT	7
+#ifdef notyet
+#define	TCP_NOOPT	8	/* reserved for FreeBSD compat */
+#endif
+#define	TCP_MD5SIG	0x10	/* use MD5 digests (RFC2385) */
+#define	TCP_CONGCTL	0x20	/* selected congestion control */
 
-#endif /* _NETINET_TCP_H_ */
+#endif /* !_NETINET_TCP_H_ */

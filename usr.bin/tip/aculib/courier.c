@@ -1,4 +1,4 @@
-/*	$NetBSD: courier.c,v 1.11 1998/12/19 23:02:02 christos Exp $	*/
+/*	$NetBSD: courier.c,v 1.17 2006/12/14 17:09:43 christos Exp $	*/
 
 /*
  * Copyright (c) 1986, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)courier.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: courier.c,v 1.11 1998/12/19 23:02:02 christos Exp $");
+__RCSID("$NetBSD: courier.c,v 1.17 2006/12/14 17:09:43 christos Exp $");
 #endif /* not lint */
 
 /*
@@ -53,89 +49,74 @@ static	int timeout = 0;
 static	int connected = 0;
 static	jmp_buf timeoutbuf;
 
-static	int	cour_connect __P((void));
-static	void	cour_nap __P((void));
-static	void	cour_napx __P((int));
-static	int	cour_swallow __P((char *));
-static	int	coursync __P((void));
+static	int	cour_connect(void);
+static	void	cour_nap(void);
+static	void	cour_napx(int);
+static	int	cour_swallow(const char *);
+static	int	coursync(void);
 #ifdef DEBUG
-static	void	cour_verbose_read __P((void));
+static	void	cour_verbose_read(void);
 #endif
-static	void	cour_write __P((int, char *, int));
-static	void	sigALRM __P((int));
+static	void	cour_write(int, const char *, int);
+static	void	sigALRM(int);
 
 int
-cour_dialer(num, acu)
-	char *num;
-	char *acu;
+cour_dialer(char *num, char *acu)
 {
 	char *cp;
-#ifdef ACULOG
-	char line[80];
-#endif
 	struct termios cntrl;
 
 	if (boolean(value(VERBOSE)))
-		printf("Using \"%s\"\n", acu);
+		(void)printf("Using \"%s\"\n", acu);
 
-	tcgetattr(FD, &cntrl);
+	(void)tcgetattr(FD, &cntrl);
 	cntrl.c_cflag |= HUPCL;
-	tcsetattr(FD, TCSAFLUSH, &cntrl);
+	(void)tcsetattr(FD, TCSAFLUSH, &cntrl);
 	/*
 	 * Get in synch.
 	 */
 	if (!coursync()) {
 badsynch:
-		printf("can't synchronize with courier\n");
-#ifdef ACULOG
-		logent(value(HOST), num, "courier", "can't synch up");
-#endif
+		(void)printf("can't synchronize with courier\n");
 		return (0);
 	}
 	cour_write(FD, "AT E0\r", 6);	/* turn off echoing */
-	sleep(1);
+	(void)sleep(1);
 #ifdef DEBUG
 	if (boolean(value(VERBOSE)))
 		cour_verbose_read();
 #endif
-	tcflush(FD, TCIOFLUSH);
+	(void)tcflush(FD, TCIOFLUSH);
 	cour_write(FD, "AT C1 E0 H0 Q0 X6 V1\r", 21);
 	if (!cour_swallow("\r\nOK\r\n"))
 		goto badsynch;
-	fflush(stdout);
+	(void)fflush(stdout);
 	cour_write(FD, "AT D", 4);
 	for (cp = num; *cp; cp++)
 		if (*cp == '=')
 			*cp = ',';
-	cour_write(FD, num, strlen(num));
+	cour_write(FD, num, (int)strlen(num));
 	cour_write(FD, "\r", 1);
 	connected = cour_connect();
-#ifdef ACULOG
-	if (timeout) {
-		(void)snprintf(line, sizeof line, "%d second dial timeout",
-			(int)number(value(DIALTIMEOUT)));
-		logent(value(HOST), num, "cour", line);
-	}
-#endif
 	if (timeout)
 		cour_disconnect();
 	return (connected);
 }
 
 void
-cour_disconnect()
+cour_disconnect(void)
 {
 
 	/* first hang up the modem*/
-	ioctl(FD, TIOCCDTR, 0);
-	sleep(1);
-	ioctl(FD, TIOCSDTR, 0);
-	coursync();				/* reset */
-	close(FD);
+	(void)ioctl(FD, TIOCCDTR, 0);
+	(void)sleep(1);
+	(void)ioctl(FD, TIOCSDTR, 0);
+	(void)coursync();				/* reset */
+	(void)close(FD);
 }
 
 void
-cour_abort()
+cour_abort(void)
 {
 
 	cour_write(FD, "\r", 1);	/* send anything to abort the call */
@@ -143,57 +124,52 @@ cour_abort()
 }
 
 static void
-sigALRM(dummy)
-	int dummy;
+/*ARGSUSED*/
+sigALRM(int dummy __unused)
 {
 
-	printf("\07timeout waiting for reply\n");
+	(void)printf("\07timeout waiting for reply\n");
 	timeout = 1;
 	longjmp(timeoutbuf, 1);
 }
 
 static int
-cour_swallow(match)
-	char *match;
+cour_swallow(const char * volatile match)
 {
 	sig_t f;
 	char c;
-
-#if __GNUC__	/* XXX pacify gcc */
-	(void)&match;
-#endif
 
 	f = signal(SIGALRM, sigALRM);
 	timeout = 0;
 	do {
 		if (*match =='\0') {
-			signal(SIGALRM, f);
+			(void)signal(SIGALRM, f);
 			return (1);
 		}
 		if (setjmp(timeoutbuf)) {
-			signal(SIGALRM, f);
+			(void)signal(SIGALRM, f);
 			return (0);
 		}
-		alarm(number(value(DIALTIMEOUT)));
-		read(FD, &c, 1);
-		alarm(0);
+		(void)alarm((unsigned)number(value(DIALTIMEOUT)));
+		(void)read(FD, &c, 1);
+		(void)alarm(0);
 		c &= 0177;
 #ifdef DEBUG
 		if (boolean(value(VERBOSE)))
-			putchar(c);
+			(void)putchar(c);
 #endif
 	} while (c == *match++);
 #ifdef DEBUG
 	if (boolean(value(VERBOSE)))
-		fflush(stdout);
+		(void)fflush(stdout);
 #endif
-	signal(SIGALRM, SIG_DFL);
+	(void)signal(SIGALRM, SIG_DFL);
 	return (0);
 }
 
 struct baud_msg {
-	char *msg;
-	int baud;
+	const char *msg;
+	unsigned int baud;
 } baud_msg[] = {
 	{ "",		B300 },
 	{ " 1200",	B1200 },
@@ -204,31 +180,28 @@ struct baud_msg {
 };
 
 static int
-cour_connect()
+cour_connect(void)
 {
 	char c;
-	int nc, nl, n;
+	int volatile nc;
+	int volatile nl;
+	int n;
 	char dialer_buf[64];
 	struct baud_msg *bm;
 	sig_t f;
-
-#if __GNUC__	/* XXX pacify gcc */
-	(void)&nc;
-	(void)&nl;
-#endif
 
 	if (cour_swallow("\r\n") == 0)
 		return (0);
 	f = signal(SIGALRM, sigALRM);
 again:
-	memset(dialer_buf, 0, sizeof(dialer_buf));
+	(void)memset(dialer_buf, 0, sizeof(dialer_buf));
 	timeout = 0;
 	for (nc = 0, nl = sizeof(dialer_buf) - 1 ; nl > 0 ; nc++, nl--) {
 		if (setjmp(timeoutbuf))
 			break;
-		alarm(number(value(DIALTIMEOUT)));
+		(void)alarm((unsigned)number(value(DIALTIMEOUT)));
 		n = read(FD, &c, 1);
-		alarm(0);
+		(void)alarm(0);
 		if (n <= 0)
 			break;
 		c &= 0x7f;
@@ -240,7 +213,7 @@ again:
 			if (strcmp(dialer_buf, "RINGING") == 0 &&
 			    boolean(value(VERBOSE))) {
 #ifdef DEBUG
-				printf("%s\r\n", dialer_buf);
+				(void)printf("%s\r\n", dialer_buf);
 #endif
 				goto again;
 			}
@@ -252,14 +225,14 @@ again:
 				    dialer_buf+sizeof("CONNECT")-1) == 0) {
 					struct termios	cntrl;
 
-					tcgetattr(FD, &cntrl);
-					cfsetospeed(&cntrl, bm->baud);
-					cfsetispeed(&cntrl, bm->baud);
-					tcsetattr(FD, TCSAFLUSH, &cntrl);
-					signal(SIGALRM, f);
+					(void)tcgetattr(FD, &cntrl);
+					(void)cfsetospeed(&cntrl, bm->baud);
+					(void)cfsetispeed(&cntrl, bm->baud);
+					(void)tcsetattr(FD, TCSAFLUSH, &cntrl);
+					(void)signal(SIGALRM, f);
 #ifdef DEBUG
 					if (boolean(value(VERBOSE)))
-						printf("%s\r\n", dialer_buf);
+						(void)printf("%s\r\n", dialer_buf);
 #endif
 					return (1);
 				}
@@ -268,11 +241,11 @@ again:
 		dialer_buf[nc] = c;
 #ifdef notdef
 		if (boolean(value(VERBOSE)))
-			putchar(c);
+			(void)putchar(c);
 #endif
 	}
-	printf("%s\r\n", dialer_buf);
-	signal(SIGALRM, f);
+	(void)printf("%s\r\n", dialer_buf);
+	(void)signal(SIGALRM, f);
 	return (0);
 }
 
@@ -281,25 +254,25 @@ again:
  * the courier in sync.
  */
 static int
-coursync()
+coursync(void)
 {
 	int already = 0;
 	int len;
 	char buf[40];
 
 	while (already++ < MAXRETRY) {
-		tcflush(FD, TCIOFLUSH);
+		(void)tcflush(FD, TCIOFLUSH);
 		cour_write(FD, "\rAT Z\r", 6);	/* reset modem */
-		memset(buf, 0, sizeof(buf));
-		sleep(1);
-		ioctl(FD, FIONREAD, &len);
+		(void)memset(buf, 0, sizeof(buf));
+		(void)sleep(1);
+		(void)ioctl(FD, FIONREAD, &len);
 		if (len) {
 			len = read(FD, buf, sizeof(buf));
 #ifdef DEBUG
 			buf[len] = '\0';
-			printf("coursync: (\"%s\")\n\r", buf);
+			(void)printf("coursync: (\"%s\")\n\r", buf);
 #endif
-			if (strchr(buf, '0') || 
+			if (strchr(buf, '0') ||
 			   (strchr(buf, 'O') && strchr(buf, 'K')))
 				return(1);
 		}
@@ -307,44 +280,41 @@ coursync()
 		 * If not strapped for DTR control,
 		 * try to get command mode.
 		 */
-		sleep(1);
+		(void)sleep(1);
 		cour_write(FD, "+++", 3);
-		sleep(1);
+		(void)sleep(1);
 		/*
 		 * Toggle DTR to force anyone off that might have left
 		 * the modem connected.
 		 */
-		ioctl(FD, TIOCCDTR, 0);
-		sleep(1);
-		ioctl(FD, TIOCSDTR, 0);
+		(void)ioctl(FD, TIOCCDTR, 0);
+		(void)sleep(1);
+		(void)ioctl(FD, TIOCSDTR, 0);
 	}
 	cour_write(FD, "\rAT Z\r", 6);
 	return (0);
 }
 
 static void
-cour_write(fd, cp, n)
-	int fd;
-	char *cp;
-	int n;
+cour_write(int fd, const char *cp, int n)
 {
 
 #ifdef notdef
 	if (boolean(value(VERBOSE)))
-		write(1, cp, n);
+		(void)write(1, cp, n);
 #endif
-	tcdrain(fd);
+	(void)tcdrain(fd);
 	cour_nap();
 	for ( ; n-- ; cp++) {
-		write(fd, cp, 1);
-		tcdrain(fd);
+		(void)write(fd, cp, 1);
+		(void)tcdrain(fd);
 		cour_nap();
 	}
 }
 
 #ifdef DEBUG
 static void
-cour_verbose_read()
+cour_verbose_read(void)
 {
 	int n = 0;
 	char buf[BUFSIZ];
@@ -355,21 +325,21 @@ cour_verbose_read()
 		return;
 	if (read(FD, buf, n) != n)
 		return;
-	write(1, buf, n);
+	(void)write(1, buf, n);
 }
 #endif
 
 #define setsa(sa, a) \
-	sa.sa_handler = a; sigemptyset(&sa.sa_mask); sa.sa_flags = 0
+	sa.sa_handler = a; (void)sigemptyset(&sa.sa_mask); sa.sa_flags = 0
 
 static int napms = 50; /* Give the courier 50 milliseconds between characters */
 
 static int ringring;
 
 void
-cour_nap()
+cour_nap(void)
 {
-	
+
 	struct itimerval itv, oitv;
 	struct itimerval *itp = &itv;
 	struct sigaction sa, osa;
@@ -380,8 +350,8 @@ cour_nap()
 	if (setitimer(ITIMER_REAL, itp, &oitv) < 0)
 		return;
 
-	sigemptyset(&sm);
-	sigaddset(&sm, SIGALRM);
+	(void)sigemptyset(&sm);
+	(void)sigaddset(&sm, SIGALRM);
 	(void)sigprocmask(SIG_BLOCK, &sm, &osm);
 
 	itp->it_value.tv_sec = napms/1000;
@@ -393,10 +363,10 @@ cour_nap()
 	(void)setitimer(ITIMER_REAL, itp, NULL);
 
 	sm = osm;
-	sigdelset(&sm, SIGALRM);
+	(void)sigdelset(&sm, SIGALRM);
 
 	for (ringring = 0; !ringring; )
-		sigsuspend(&sm);
+		(void)sigsuspend(&sm);
 
 	(void)sigaction(SIGALRM, &osa, NULL);
 	(void)setitimer(ITIMER_REAL, &oitv, NULL);
@@ -404,8 +374,8 @@ cour_nap()
 }
 
 static void
-cour_napx(dummy)
-	int dummy;
+/*ARGSUSED*/
+cour_napx(int dummy __unused)
 {
 
 	ringring = 1;

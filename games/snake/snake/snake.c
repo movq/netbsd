@@ -1,4 +1,4 @@
-/*	$NetBSD: snake.c,v 1.15 1999/10/26 06:38:31 cgd Exp $	*/
+/*	$NetBSD: snake.c,v 1.25 2008/08/08 16:10:47 drochner Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif				/* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)snake.c	8.2 (Berkeley) 1/7/94";
 #else
-__RCSID("$NetBSD: snake.c,v 1.15 1999/10/26 06:38:31 cgd Exp $");
+__RCSID("$NetBSD: snake.c,v 1.25 2008/08/08 16:10:47 drochner Exp $");
 #endif
 #endif				/* not lint */
 
@@ -63,7 +59,6 @@ __RCSID("$NetBSD: snake.c,v 1.15 1999/10/26 06:38:31 cgd Exp $");
 #include <curses.h>
 #include <fcntl.h>
 #include <pwd.h>
-#include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -119,29 +114,29 @@ FILE *logfile;
 int	lcnt, ccnt;	/* user's idea of screen size */
 int	chunk;		/* amount of money given at a time */
 
-void		chase __P((struct point *, struct point *));
-int		chk __P((const struct point *));
-void		drawbox __P((void));
-void		flushi __P((void));
-void		home __P((void));
-void		length __P((int));
-void		logit __P((const char *));
-int		main __P((int, char **));
-void		mainloop __P((void)) __attribute__((__noreturn__));
-struct point   *point __P((struct point *, int, int));
-int		post __P((int, int));
-int		pushsnake __P((void));
-void		right __P((const struct point *));
-void		setup __P((void));
-void		snap __P((void));
-void		snrand __P((struct point *));
-void		spacewarp __P((int));
-void		stop __P((int)) __attribute__((__noreturn__));
-int		stretch __P((const struct point *));
-void		surround __P((struct point *));
-void		suspend __P((void));
-void		win __P((const struct point *));
-void		winnings __P((int));
+void		chase(struct point *, struct point *);
+int		chk(const struct point *);
+void		drawbox(void);
+void		flushi(void);
+void		home(void);
+void		length(int);
+void		logit(const char *);
+int		main(int, char **);
+void		mainloop(void) __dead;
+struct point   *point(struct point *, int, int);
+int		post(int, int);
+int		pushsnake(void);
+void		right(const struct point *);
+void		setup(void);
+void		snap(void);
+void		snrand(struct point *);
+void		spacewarp(int);
+void		stop(int) __dead;
+int		stretch(const struct point *);
+void		surround(struct point *);
+void		suspend(void);
+void		win(const struct point *);
+void		winnings(int);
 
 int
 main(argc, argv)
@@ -163,13 +158,13 @@ main(argc, argv)
 		warn("fopen %s", _PATH_LOGFILE);
 		sleep(2);
 	}
-	setregid(getgid(), getgid());
+	setgid(getgid());
 
 	(void) time(&tv);
 
 	while ((ch = getopt(argc, argv, "l:w:t")) != -1)
 		switch ((char) ch) {
-#if 0
+#ifdef DEBUG
 		case 'd':
 			tv = atol(optarg);
 			break;
@@ -185,14 +180,19 @@ main(argc, argv)
 			break;
 		case '?':
 		default:
+#ifdef DEBUG
 			fputs("usage: snake [-d seed] [-w width] [-l length] [-t]\n", stderr);
+#else
+			fputs("usage: snake [-w width] [-l length] [-t]\n", stderr);
+#endif
 			exit(1);
 		}
 
 	srandom((int) tv);
 
 	penalty = loot = 0;
-	initscr();
+	if (!initscr())
+		errx(0, "couldn't initialize screen");;
 	cbreak();
 	noecho();
 #ifdef KEY_LEFT
@@ -541,8 +541,10 @@ post(iscore, flag)
 	read(rawscores, &allbwho, sizeof(short));
 	lseek(rawscores, uid * sizeof(short), SEEK_SET);
 	read(rawscores, &oldbest, sizeof(short));
-	if (!flag)
+	if (!flag) {
+		lseek(rawscores, 0, SEEK_SET);
 		return (score > oldbest ? 1 : 0);
+	}
 
 	/* Update this jokers best */
 	if (score > oldbest) {
@@ -554,17 +556,25 @@ post(iscore, flag)
 
 	/* See if we have a new champ */
 	p = getpwuid(allbwho);
-	if (p == NULL || score > allbscore) {
+	if (score > allbscore) {
 		lseek(rawscores, 0, SEEK_SET);
 		write(rawscores, &score, sizeof(short));
 		write(rawscores, &uid, sizeof(short));
-		if (allbwho)
-			printf("You beat %s's old record of $%d!\n",
-			       p->pw_name, allbscore);
+		if (allbwho) {
+			if (p)
+				printf("You beat %s's old record of $%d!\n",
+				       p->pw_name, allbscore);
+			else
+				printf("You beat (%d)'s old record of $%d!\n",
+				       (int)allbwho, allbscore);
+		}
 		else
 			printf("You set a new record!\n");
-	} else
+	} else if (p)
 		printf("The highest is %s with $%d\n", p->pw_name, allbscore);
+	else
+		printf("The highest is (%d) with $%d\n", (int)allbwho,
+		    allbscore);
 	lseek(rawscores, 0, SEEK_SET);
 	return (1);
 }
@@ -965,7 +975,7 @@ winnings(won)
 
 void
 stop(dummy)
-	int dummy __attribute__((__unused__));
+	int dummy __unused;
 {
 	signal(SIGINT, SIG_IGN);
 	endwin();

@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_mcpair.c,v 1.3 1999/02/05 00:06:13 oster Exp $	*/
+/*	$NetBSD: rf_mcpair.c,v 1.21 2006/11/16 01:33:23 christos Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -31,81 +31,41 @@
  * it's used to block the current thread until some event occurs.
  */
 
-#include "rf_types.h"
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: rf_mcpair.c,v 1.21 2006/11/16 01:33:23 christos Exp $");
+
+#include <dev/raidframe/raidframevar.h>
+
+#include "rf_archs.h"
 #include "rf_threadstuff.h"
 #include "rf_mcpair.h"
 #include "rf_debugMem.h"
-#include "rf_freelist.h"
+#include "rf_general.h"
 #include "rf_shutdown.h"
+#include "rf_netbsd.h"
 
+#include <sys/pool.h>
 #include <sys/proc.h>
 
-static RF_FreeList_t *rf_mcpair_freelist;
-
 #define RF_MAX_FREE_MCPAIR 128
-#define RF_MCPAIR_INC       16
-#define RF_MCPAIR_INITIAL   24
+#define RF_MIN_FREE_MCPAIR  24
 
-static int init_mcpair(RF_MCPair_t *);
-static void clean_mcpair(RF_MCPair_t *);
 static void rf_ShutdownMCPair(void *);
 
-
-
-static int 
-init_mcpair(t)
-	RF_MCPair_t *t;
+static void
+rf_ShutdownMCPair(void *ignored)
 {
-	int     rc;
-
-	rc = rf_mutex_init(&t->mutex);
-	if (rc) {
-		RF_ERRORMSG3("Unable to init mutex file %s line %d rc=%d\n", __FILE__,
-		    __LINE__, rc);
-		return (rc);
-	}
-	rc = rf_cond_init(&t->cond);
-	if (rc) {
-		RF_ERRORMSG3("Unable to init cond file %s line %d rc=%d\n", __FILE__,
-		    __LINE__, rc);
-		rf_mutex_destroy(&t->mutex);
-		return (rc);
-	}
-	return (0);
+	pool_destroy(&rf_pools.mcpair);
 }
 
-static void 
-clean_mcpair(t)
-	RF_MCPair_t *t;
+int
+rf_ConfigureMCPair(RF_ShutdownList_t **listp)
 {
-	rf_mutex_destroy(&t->mutex);
-	rf_cond_destroy(&t->cond);
-}
 
-static void 
-rf_ShutdownMCPair(ignored)
-	void   *ignored;
-{
-	RF_FREELIST_DESTROY_CLEAN(rf_mcpair_freelist, next, (RF_MCPair_t *), clean_mcpair);
-}
+	rf_pool_init(&rf_pools.mcpair, sizeof(RF_MCPair_t),
+		     "rf_mcpair_pl", RF_MIN_FREE_MCPAIR, RF_MAX_FREE_MCPAIR);
+	rf_ShutdownCreate(listp, rf_ShutdownMCPair, NULL);
 
-int 
-rf_ConfigureMCPair(listp)
-	RF_ShutdownList_t **listp;
-{
-	int     rc;
-
-	RF_FREELIST_CREATE(rf_mcpair_freelist, RF_MAX_FREE_MCPAIR,
-	    RF_MCPAIR_INC, sizeof(RF_MCPair_t));
-	rc = rf_ShutdownCreate(listp, rf_ShutdownMCPair, NULL);
-	if (rc) {
-		RF_ERRORMSG3("Unable to add to shutdown list file %s line %d rc=%d\n",
-		    __FILE__, __LINE__, rc);
-		rf_ShutdownMCPair(NULL);
-		return (rc);
-	}
-	RF_FREELIST_PRIME_INIT(rf_mcpair_freelist, RF_MCPAIR_INITIAL, next,
-	    (RF_MCPair_t *), init_mcpair);
 	return (0);
 }
 
@@ -114,34 +74,27 @@ rf_AllocMCPair()
 {
 	RF_MCPair_t *t;
 
-	RF_FREELIST_GET_INIT(rf_mcpair_freelist, t, next, (RF_MCPair_t *), init_mcpair);
-	if (t) {
-		t->flag = 0;
-		t->next = NULL;
-	}
+	t = pool_get(&rf_pools.mcpair, PR_WAITOK);
+	simple_lock_init(&t->mutex);
+	t->cond = 0;
+	t->flag = 0;
+
 	return (t);
 }
 
-void 
-rf_FreeMCPair(t)
-	RF_MCPair_t *t;
+void
+rf_FreeMCPair(RF_MCPair_t *t)
 {
-	RF_FREELIST_FREE_CLEAN(rf_mcpair_freelist, t, next, clean_mcpair);
+	pool_put(&rf_pools.mcpair, t);
 }
-/* the callback function used to wake you up when you use an mcpair to wait for something */
-void 
-rf_MCPairWakeupFunc(mcpair)
-	RF_MCPair_t *mcpair;
+
+/* the callback function used to wake you up when you use an mcpair to
+   wait for something */
+void
+rf_MCPairWakeupFunc(RF_MCPair_t *mcpair)
 {
 	RF_LOCK_MUTEX(mcpair->mutex);
 	mcpair->flag = 1;
-#if 0
-	printf("MCPairWakeupFunc called!\n");
-#endif
-	wakeup(&(mcpair->flag));/* XXX Does this do anything useful!! GO */
-	/* XXX Looks like the following is needed to truly get the
-	 * functionality they were looking for here... This could be a
-	 * side-effect of my using a tsleep in the NetBSD port though... XXX */
-	wakeup(&(mcpair->cond));/* XXX XXX XXX GO */
+	wakeup(&(mcpair->cond));
 	RF_UNLOCK_MUTEX(mcpair->mutex);
 }

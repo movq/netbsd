@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.1 1996/05/17 20:04:47 chuck Exp $ */
+/*	$NetBSD: boot.c,v 1.7 2008/01/12 09:54:30 tsutsui Exp $ */
 
 /*-
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -40,25 +36,28 @@
 
 #include <machine/prom.h>
 
-#include "stand.h"
+#include <lib/libsa/stand.h>
 #include "libsa.h"
 
 int debug;
 int errno;
-extern char *version;
+extern char bootprog_name[], bootprog_rev[];
+
+int main(void);
 
 int
-main()
+main(void)
 {
-	char *cp, *file;
-	int	io, flag;
+	char *file;
+	int	flag, part;
 
-	printf(">> BSD MVME%x bootsd [%s]\n", bugargs.cputyp, version);
+	printf(">> %s MVME%x bootsd [%s]\n",
+	    bootprog_name, bugargs.cputyp, bootprog_rev);
 
-	parse_args(&file, &flag);
+	parse_args(&file, &flag, &part);
 
-	exec_mvme(file, flag);
+	exec_mvme(file, flag, part);
 
 	printf("boot: %s: %s\n", file, strerror(errno));
-	return(0);
+	return 0;
 }

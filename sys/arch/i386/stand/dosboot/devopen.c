@@ -1,4 +1,4 @@
-/*	$NetBSD: devopen.c,v 1.4 1999/04/14 11:53:44 drochner Exp $	 */
+/*	$NetBSD: devopen.c,v 1.10 2005/12/11 12:17:48 christos Exp $	 */
 
 /*
  * Copyright (c) 1996
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed for the NetBSD Project
- *	by Matthias Drochner.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -41,11 +35,8 @@
 #include <dosfile.h>
 #include <bootinfo.h>
 
-extern int parsebootfile __P((const char *, char**, char**, unsigned int*,
-			      unsigned int*, const char**));
-
 struct devsw devsw[] = {
-	{"disk", biosdiskstrategy, biosdiskopen, biosdiskclose, biosdiskioctl},
+	{"disk", biosdisk_strategy, biosdisk_open, biosdisk_close, biosdisk_ioctl},
 };
 int ndevs = sizeof(devsw) / sizeof(struct devsw);
 
@@ -80,7 +71,7 @@ static struct {
 };
 #define NUMBIOSDEVS (sizeof(biosdevtab) / sizeof(biosdevtab[0]))
 
-static int dev2bios __P((char *, unsigned int, int *));
+static int dev2bios(char *, unsigned int, int *);
 
 static int
 dev2bios(devname, unit, biosdev)
@@ -88,7 +79,7 @@ dev2bios(devname, unit, biosdev)
 	unsigned int    unit;
 	int            *biosdev;
 {
-	int             i;
+	unsigned             i;
 
 	for (i = 0; i < NUMBIOSDEVS; i++)
 		if (!strcmp(devname, biosdevtab[i].name)) {
@@ -110,7 +101,7 @@ devopen(f, fname, file)
 {
 	char           *devname;
 	char           *fsmode;
-	unsigned int    unit, partition;
+	int             unit, partition;
 	int             biosdev;
 	int             error;
 	struct devsw   *dp;
@@ -133,7 +124,7 @@ devopen(f, fname, file)
 		strncpy(bibp.bootpath, *file, sizeof(bibp.bootpath));
 		BI_ADD(&bibp, BTINFO_BOOTPATH, sizeof(bibp));
 
-		return (biosdiskopen(f, biosdev, partition));
+		return (biosdisk_open(f, biosdev, partition));
 	} else {
 		printf("no file system\n");
 		return (ENXIO);

@@ -1,4 +1,4 @@
-/*	$NetBSD: cgfour.c,v 1.20 2000/03/19 15:38:45 pk Exp $	*/
+/*	$NetBSD: cgfour.c,v 1.45 2008/06/11 21:25:31 drochner Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,13 +30,8 @@
  */
 
 /*
- * Copyright (c) 1995 Theo de Raadt.  All rights reserved.
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
- *
- * All advertising materials mentioning features or use of this software
- * must display the following acknowledgement:
- *	This product includes software developed by Theo de Raadt.
  *
  * This software was developed by the Computer Systems Engineering group
  * at Lawrence Berkeley Laboratory under DARPA contract BG 91-66 and
@@ -62,11 +50,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -86,12 +70,39 @@
  */
 
 /*
+ * Copyright (c) 1995 Theo de Raadt.  All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
  * color display (cgfour) driver.
  *
  * Does not handle interrupts, even though they can occur.
  *
  * XXX should defer colormap updates to vertical retrace interrupts
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: cgfour.c,v 1.45 2008/06/11 21:25:31 drochner Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -103,70 +114,67 @@
 #include <sys/tty.h>
 #include <sys/conf.h>
 
-#include <vm/vm.h>
-
-#include <machine/fbio.h>
 #include <machine/autoconf.h>
-#include <machine/pmap.h>
-#include <machine/fbvar.h>
 #include <machine/eeprom.h>
-#include <machine/conf.h>
 
-#include <sparc/dev/btreg.h>
-#include <sparc/dev/btvar.h>
-#include <sparc/dev/pfourreg.h>
+#include <dev/sun/fbio.h>
+#include <dev/sun/fbvar.h>
+#include <dev/sun/btreg.h>
+#include <dev/sun/btvar.h>
+#include <dev/sun/pfourreg.h>
 
 /* per-display variables */
 struct cgfour_softc {
 	struct device	sc_dev;		/* base device */
 	struct fbdevice	sc_fb;		/* frame buffer device */
 	bus_space_tag_t	sc_bustag;
-	bus_type_t	sc_btype;	/* phys address description */
-	bus_addr_t	sc_paddr;	/* for device mmap() */
+	bus_addr_t	sc_paddr;	/* phys address for device mmap() */
 
 	volatile struct fbcontrol *sc_fbc;	/* Brooktree registers */
 	union bt_cmap	sc_cmap;	/* Brooktree color map */
 };
 
 /* autoconfiguration driver */
-static void	cgfourattach __P((struct device *, struct device *, void *));
-static int	cgfourmatch __P((struct device *, struct cfdata *, void *));
+static int	cgfourmatch(struct device *, struct cfdata *, void *);
+static void	cgfourattach(struct device *, struct device *, void *);
 
 #if defined(SUN4)
-static void	cgfourunblank __P((struct device *));
+static void	cgfourunblank(struct device *);
 #endif
 
-static int	cg4_pfour_probe __P((void *, void *));
+static int	cg4_pfour_probe(void *, void *);
 
-/* cdevsw prototypes */
-cdev_decl(cgfour);
-
-struct cfattach cgfour_ca = {
-	sizeof(struct cgfour_softc), cgfourmatch, cgfourattach
-};
+CFATTACH_DECL(cgfour, sizeof(struct cgfour_softc),
+    cgfourmatch, cgfourattach, NULL, NULL);
 
 extern struct cfdriver cgfour_cd;
+
+dev_type_open(cgfouropen);
+dev_type_ioctl(cgfourioctl);
+dev_type_mmap(cgfourmmap);
+
+const struct cdevsw cgfour_cdevsw = {
+	cgfouropen, nullclose, noread, nowrite, cgfourioctl,
+	nostop, notty, nopoll, cgfourmmap, nokqfilter,
+};
 
 #if defined(SUN4)
 /* frame buffer generic driver */
 static struct fbdriver cgfourfbdriver = {
-	cgfourunblank, cgfouropen, cgfourclose, cgfourioctl, cgfourpoll,
-	cgfourmmap
+	cgfourunblank, cgfouropen, nullclose, cgfourioctl, nopoll,
+	cgfourmmap, nokqfilter
 };
 
-static void cgfourloadcmap __P((struct cgfour_softc *, int, int));
-static int cgfour_get_video __P((struct cgfour_softc *));
-static void cgfour_set_video __P((struct cgfour_softc *, int));
+static void cgfourloadcmap(struct cgfour_softc *, int, int);
+static int cgfour_get_video(struct cgfour_softc *);
+static void cgfour_set_video(struct cgfour_softc *, int);
 #endif
 
 /*
  * Match a cgfour.
  */
-int
-cgfourmatch(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+static int
+cgfourmatch(struct device *parent, struct cfdata *cf, void *aux)
 {
 	union obio_attach_args *uoba = aux;
 	struct obio4_attach_args *oba;
@@ -175,17 +183,15 @@ cgfourmatch(parent, cf, aux)
 		return (0);
 
 	oba = &uoba->uoba_oba4;
-	return (bus_space_probe(oba->oba_bustag, 0, oba->oba_paddr,
+	return (bus_space_probe(oba->oba_bustag, oba->oba_paddr,
 				4,	/* probe size */
 				0,	/* offset */
 				0,	/* flags */
 				cg4_pfour_probe, NULL));
 }
 
-int
-cg4_pfour_probe(vaddr, arg)
-	void *vaddr;
-	void *arg;
+static int
+cg4_pfour_probe(void *vaddr, void *arg)
 {
 
 	return (fb_pfour_id(vaddr) == PFOUR_ID_COLOR8P1);
@@ -194,13 +200,11 @@ cg4_pfour_probe(vaddr, arg)
 /*
  * Attach a display.  We need to notice if it is the console, too.
  */
-void
-cgfourattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+static void
+cgfourattach(struct device *parent, struct device *self, void *aux)
 {
 #if defined(SUN4)
-	struct cgfour_softc *sc = (struct cgfour_softc *)self;
+	struct cgfour_softc *sc = device_private(self);
 	union obio_attach_args *uoba = aux;
 	struct obio4_attach_args *oba = &uoba->uoba_oba4;
 	bus_space_handle_t bh;
@@ -209,24 +213,22 @@ cgfourattach(parent, self, aux)
 	int ramsize, i, isconsole;
 
 	sc->sc_bustag = oba->oba_bustag;
-	sc->sc_btype = (bus_type_t)0;
 	sc->sc_paddr = (bus_addr_t)oba->oba_paddr;
 
 	/* Map the pfour register. */
-	if (obio_bus_map(oba->oba_bustag, oba->oba_paddr,
-			 0,
-			 sizeof(u_int32_t),
-			 BUS_SPACE_MAP_LINEAR,
-			 0, &bh) != 0) {
+	if (bus_space_map(oba->oba_bustag, oba->oba_paddr,
+			  sizeof(uint32_t),
+			  BUS_SPACE_MAP_LINEAR,
+			  &bh) != 0) {
 		printf("%s: cannot map control registers\n", self->dv_xname);
 		return;
 	}
-	fb->fb_pfour = (volatile u_int32_t *)bh;
+	fb->fb_pfour = (volatile uint32_t *)bh;
 
 	fb->fb_driver = &cgfourfbdriver;
 	fb->fb_device = &sc->sc_dev;
 	fb->fb_type.fb_type = FBTYPE_SUN4COLOR;
-	fb->fb_flags = sc->sc_dev.dv_cfdata->cf_flags & FB_USERMASK;
+	fb->fb_flags = device_cfdata(&sc->sc_dev)->cf_flags & FB_USERMASK;
 	fb->fb_flags |= FB_PFOUR;
 
 	ramsize = PFOUR_COLOR_OFF_END - PFOUR_COLOR_OFF_OVERLAY;
@@ -258,7 +260,7 @@ cgfourattach(parent, self, aux)
 	 * we let the bwtwo driver pick up the overlay plane and
 	 * use it instead.  Rconsole should have better performance
 	 * with the 1-bit depth.
-	 *	-- Jason R. Thorpe <thorpej@NetBSD.ORG>
+	 *	-- Jason R. Thorpe <thorpej@NetBSD.org>
 	 */
 
 	/*
@@ -276,11 +278,11 @@ cgfourattach(parent, self, aux)
 #endif
 
 	/* Map the Brooktree. */
-	if (obio_bus_map(oba->oba_bustag, oba->oba_paddr,
-			 PFOUR_COLOR_OFF_CMAP,
-			 sizeof(struct fbcontrol),
-			 BUS_SPACE_MAP_LINEAR,
-			 0, &bh) != 0) {
+	if (bus_space_map(oba->oba_bustag,
+			  oba->oba_paddr + PFOUR_COLOR_OFF_CMAP,
+			  sizeof(struct fbcontrol),
+			  BUS_SPACE_MAP_LINEAR,
+			  &bh) != 0) {
 		printf("%s: cannot map control registers\n", self->dv_xname);
 		return;
 	}
@@ -309,42 +311,24 @@ cgfourattach(parent, self, aux)
 	 * to notice if we're the console framebuffer.
 	 */
 	fb_attach(fb, isconsole);
-#endif
+#endif /* SUN4 */
 }
 
 int
-cgfouropen(dev, flags, mode, p)
-	dev_t dev;
-	int flags, mode;
-	struct proc *p;
+cgfouropen(dev_t dev, int flags, int mode, struct lwp *l)
 {
 	int unit = minor(dev);
 
-	if (unit >= cgfour_cd.cd_ndevs || cgfour_cd.cd_devs[unit] == NULL)
+	if (device_lookup(&cgfour_cd, unit) == NULL)
 		return (ENXIO);
 	return (0);
 }
 
 int
-cgfourclose(dev, flags, mode, p)
-	dev_t dev;
-	int flags, mode;
-	struct proc *p;
-{
-
-	return (0);
-}
-
-int
-cgfourioctl(dev, cmd, data, flags, p)
-	dev_t dev;
-	u_long cmd;
-	caddr_t data;
-	int flags;
-	struct proc *p;
+cgfourioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
 {
 #if defined(SUN4)
-	struct cgfour_softc *sc = cgfour_cd.cd_devs[minor(dev)];
+	struct cgfour_softc *sc = device_lookup_private(&cgfour_cd, minor(dev));
 	struct fbgattr *fba;
 	int error;
 
@@ -367,12 +351,12 @@ cgfourioctl(dev, cmd, data, flags, p)
 		break;
 
 	case FBIOGETCMAP:
-		return (bt_getcmap((struct fbcmap *)data, &sc->sc_cmap, 256));
+#define p ((struct fbcmap *)data)
+		return (bt_getcmap(p, &sc->sc_cmap, 256, 1));
 
 	case FBIOPUTCMAP:
 		/* copy to software map */
-#define p ((struct fbcmap *)data)
-		error = bt_putcmap(p, &sc->sc_cmap, 256);
+		error = bt_putcmap(p, &sc->sc_cmap, 256, 1);
 		if (error)
 			return (error);
 		/* now blast them into the chip */
@@ -392,18 +376,9 @@ cgfourioctl(dev, cmd, data, flags, p)
 	default:
 		return (ENOTTY);
 	}
-#endif
+#endif /* SUN4 */
+
 	return (0);
-}
-
-int
-cgfourpoll(dev, events, p)
-	dev_t dev;
-	int events;
-	struct proc *p;
-{
-
-	return (seltrue(dev, events, p));
 }
 
 /*
@@ -417,14 +392,11 @@ cgfourpoll(dev, events, p)
  * As well, mapping at an offset of 0x04000000 causes the cg4 to map
  * only it's colour plane, at 0.
  */
-int
-cgfourmmap(dev, off, prot)
-	dev_t dev;
-	int off, prot;
+paddr_t
+cgfourmmap(dev_t dev, off_t off, int prot)
 {
-	struct cgfour_softc *sc = cgfour_cd.cd_devs[minor(dev)];
-	bus_space_handle_t bh;
-	int poff;
+	struct cgfour_softc *sc = device_lookup_private(&cgfour_cd, minor(dev));
+	off_t poff;
 
 #define START_ENABLE	(128*1024)
 #define START_COLOR	((128*1024) + (128*1024))
@@ -468,13 +440,9 @@ cgfourmmap(dev, off, prot)
 	} else
 		return (-1);
 
-	if (bus_space_mmap(sc->sc_bustag,
-			   sc->sc_btype,
-			   sc->sc_paddr + poff,
-			   BUS_SPACE_MAP_LINEAR, &bh))
-		return (-1);
-
-	return ((int)bh);
+	return (bus_space_mmap(sc->sc_bustag,
+		sc->sc_paddr, poff,
+		prot, BUS_SPACE_MAP_LINEAR));
 }
 
 #if defined(SUN4)
@@ -482,25 +450,21 @@ cgfourmmap(dev, off, prot)
  * Undo the effect of an FBIOSVIDEO that turns the video off.
  */
 static void
-cgfourunblank(dev)
-	struct device *dev;
+cgfourunblank(struct device *dev)
 {
 
-	cgfour_set_video((struct cgfour_softc *)dev, 1);
+	cgfour_set_video(device_private(dev), 1);
 }
 
 static int
-cgfour_get_video(sc)
-	struct cgfour_softc *sc;
+cgfour_get_video(struct cgfour_softc *sc)
 {
 
 	return (fb_pfour_get_video(&sc->sc_fb));
 }
 
 static void
-cgfour_set_video(sc, enable)
-	struct cgfour_softc *sc;
-	int enable;
+cgfour_set_video(struct cgfour_softc *sc, int enable)
 {
 
 	fb_pfour_set_video(&sc->sc_fb, enable);
@@ -510,9 +474,7 @@ cgfour_set_video(sc, enable)
  * Load a subset of the current (new) colormap into the Brooktree DAC.
  */
 static void
-cgfourloadcmap(sc, start, ncolors)
-	struct cgfour_softc *sc;
-	int start, ncolors;
+cgfourloadcmap(struct cgfour_softc *sc, int start, int ncolors)
 {
 	volatile struct bt_regs *bt;
 	u_int *ip, i;
@@ -531,4 +493,4 @@ cgfourloadcmap(sc, start, ncolors)
 		bt->bt_cmap = i << 24;
 	}
 }
-#endif
+#endif /* SUN4 */

@@ -1,4 +1,4 @@
-/*	$NetBSD: itime.c,v 1.8 1998/04/22 08:55:18 bouyer Exp $	*/
+/*	$NetBSD: itime.c,v 1.16 2006/05/19 14:52:39 christos Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,65 +34,59 @@
 #if 0
 static char sccsid[] = "@(#)itime.c	8.1 (Berkeley) 6/5/93";
 #else
-__RCSID("$NetBSD: itime.c,v 1.8 1998/04/22 08:55:18 bouyer Exp $");
+__RCSID("$NetBSD: itime.c,v 1.16 2006/05/19 14:52:39 christos Exp $");
 #endif
 #endif /* not lint */
 
 #include <sys/param.h>
+#include <sys/queue.h>
 #include <sys/time.h>
-#ifdef sunos
-#include <sys/vnode.h>
-
-#include <ufs/fsdir.h>
-#include <ufs/inode.h>
-#include <ufs/fs.h>
-#else
 #include <ufs/ufs/dinode.h>
-#endif
 
 #include <protocols/dumprestore.h>
 
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
-#ifdef __STDC__
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
-#endif
 
 #include "dump.h"
 
+struct dumptime {
+	struct	dumpdates dt_value;
+	SLIST_ENTRY(dumptime) dt_list;
+};
+SLIST_HEAD(dthead, dumptime) dthead = SLIST_HEAD_INITIALIZER(dthead);
 struct	dumpdates **ddatev = 0;
 int	nddates = 0;
-int	ddates_in = 0;
-struct	dumptime *dthead = 0;
 
-static	void dumprecout __P((FILE *, struct dumpdates *));
-static	int getrecord __P((FILE *, struct dumpdates *));
-static	int makedumpdate __P((struct dumpdates *, char *));
-static	void readdumptimes __P((FILE *));
+static	void dumprecout(FILE *, struct dumpdates *);
+static	int getrecord(FILE *, struct dumpdates *);
+static	int makedumpdate(struct dumpdates *, char *);
+static	void readdumptimes(FILE *);
 
 void
-initdumptimes()
+initdumptimes(void)
 {
 	FILE *df;
 
 	if ((df = fopen(dumpdates, "r")) == NULL) {
 		if (errno != ENOENT) {
-			quit("cannot read %s: %s\n", dumpdates,
+			msg("WARNING: cannot read %s: %s\n", dumpdates,
 			    strerror(errno));
-			/* NOTREACHED */
+			return;
 		}
 		/*
 		 * Dumpdates does not exist, make an empty one.
 		 */
 		msg("WARNING: no file `%s', making an empty one\n", dumpdates);
 		if ((df = fopen(dumpdates, "w")) == NULL) {
-			quit("cannot create %s: %s\n", dumpdates,
+			msg("WARNING: cannot create %s: %s\n", dumpdates,
 			    strerror(errno));
-			/* NOTREACHED */
+			return;
 		}
 		(void) fclose(df);
 		if ((df = fopen(dumpdates, "r")) == NULL) {
@@ -111,35 +101,34 @@ initdumptimes()
 }
 
 static void
-readdumptimes(df)
-	FILE *df;
+readdumptimes(FILE *df)
 {
 	int i;
 	struct	dumptime *dtwalk;
 
 	for (;;) {
-		dtwalk = (struct dumptime *)calloc(1, sizeof (struct dumptime));
-		if (getrecord(df, &(dtwalk->dt_value)) < 0)
+		dtwalk = (struct dumptime *)xcalloc(1, sizeof(struct dumptime));
+		if (getrecord(df, &(dtwalk->dt_value)) < 0) {
+			free(dtwalk);
 			break;
+		}
 		nddates++;
-		dtwalk->dt_next = dthead;
-		dthead = dtwalk;
+		SLIST_INSERT_HEAD(&dthead, dtwalk, dt_list);
 	}
 
-	ddates_in = 1;
 	/*
 	 *	arrayify the list, leaving enough room for the additional
 	 *	record that we may have to add to the ddate structure
 	 */
 	ddatev = (struct dumpdates **)
-		calloc((unsigned) (nddates + 1), sizeof (struct dumpdates *));
-	dtwalk = dthead;
-	for (i = nddates - 1; i >= 0; i--, dtwalk = dtwalk->dt_next)
+		xcalloc((unsigned) (nddates + 1), sizeof(struct dumpdates *));
+	dtwalk = SLIST_FIRST(&dthead);
+	for (i = nddates - 1; i >= 0; i--, dtwalk = SLIST_NEXT(dtwalk, dt_list))
 		ddatev[i] = &dtwalk->dt_value;
 }
 
 void
-getdumptime()
+getdumptime(void)
 {
 	struct dumpdates *ddp;
 	int i;
@@ -171,7 +160,7 @@ getdumptime()
 }
 
 void
-putdumptime()
+putdumptime(void)
 {
 	FILE *df;
 	struct dumpdates *dtwalk, *dtfound;
@@ -189,8 +178,6 @@ putdumptime()
 	free((char *)ddatev);
 	ddatev = 0;
 	nddates = 0;
-	dthead = 0;
-	ddates_in = 0;
 	readdumptimes(df);
 	if (fseek(df, 0L, 0) < 0)
 		quit("fseek: %s\n", strerror(errno));
@@ -208,10 +195,10 @@ putdumptime()
 	 *	Enough room has been allocated.
 	 */
 	dtwalk = ddatev[nddates] =
-		(struct dumpdates *)calloc(1, sizeof (struct dumpdates));
+		(struct dumpdates *)xcalloc(1, sizeof (struct dumpdates));
 	nddates += 1;
   found:
-	(void) strncpy(dtwalk->dd_name, fname, sizeof (dtwalk->dd_name));
+	(void) strlcpy(dtwalk->dd_name, fname, sizeof(dtwalk->dd_name));
 	dtwalk->dd_level = level;
 	dtwalk->dd_ddate = iswap32(spcl.c_date);
 	dtfound = dtwalk;
@@ -229,9 +216,7 @@ putdumptime()
 }
 
 static void
-dumprecout(file, what)
-	FILE *file;
-	struct dumpdates *what;
+dumprecout(FILE *file, struct dumpdates *what)
 {
 
 	if (fprintf(file, DUMPOUTFMT,
@@ -244,9 +229,7 @@ dumprecout(file, what)
 int	recno;
 
 static int
-getrecord(df, ddatep)
-	FILE *df;
-	struct dumpdates *ddatep;
+getrecord(FILE *df, struct dumpdates *ddatep)
 {
 	char tbuf[BUFSIZ];
 
@@ -266,9 +249,7 @@ getrecord(df, ddatep)
 }
 
 static int
-makedumpdate(ddp, tbuf)
-	struct dumpdates *ddp;
-	char *tbuf;
+makedumpdate(struct dumpdates *ddp, char *tbuf)
 {
 	char un_buf[128];
 

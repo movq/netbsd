@@ -1,4 +1,4 @@
-/*	$NetBSD: grf_gb.c,v 1.15 1998/06/25 23:57:33 thorpej Exp $	*/
+/*	$NetBSD: grf_gb.c,v 1.39 2008/04/28 20:23:19 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,9 +30,43 @@
  */
 
 /*
- * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Systems Programming Group of the University of Utah Computer
+ * Science Department.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ * from: Utah $Hdr: grf_gb.c 1.18 93/08/13$
+ *
+ *	@(#)grf_gb.c	8.4 (Berkeley) 1/12/94
+ */
+/*
+ * Copyright (c) 1988 University of Utah.
  *
  * This code is derived from software contributed to Berkeley by
  * the Systems Programming Group of the University of Utah Computer
@@ -86,7 +113,8 @@
  *       (as in 9837 Gator systems)
  */
 
-#include "opt_compat_hpux.h"
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: grf_gb.c,v 1.39 2008/04/28 20:23:19 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -97,11 +125,14 @@
 #include <sys/proc.h>
 #include <sys/tty.h>
 
+#include <uvm/uvm_extern.h>
+
 #include <machine/autoconf.h>
 #include <machine/cpu.h>
- 
+
 #include <dev/cons.h>
 
+#include <hp300/dev/dioreg.h>
 #include <hp300/dev/diovar.h>
 #include <hp300/dev/diodevs.h>
 #include <hp300/dev/intiovar.h>
@@ -113,131 +144,130 @@
 
 #include <hp300/dev/itevar.h>
 #include <hp300/dev/itereg.h>
- 
+
 #include "ite.h"
 
 #define CRTC_DATA_LENGTH  0x0e
-u_char crtc_init_data[CRTC_DATA_LENGTH] = {
-    0x29, 0x20, 0x23, 0x04, 0x30, 0x0b, 0x30,
-    0x30, 0x00, 0x0f, 0x00, 0x00, 0x00, 0x00
+static uint8_t crtc_init_data[CRTC_DATA_LENGTH] = {
+	0x29, 0x20, 0x23, 0x04, 0x30, 0x0b, 0x30,
+	0x30, 0x00, 0x0f, 0x00, 0x00, 0x00, 0x00
 };
 
-int	gb_init __P((struct grf_data *gp, int, caddr_t));
-int	gb_mode __P((struct grf_data *gp, int, caddr_t));
-void	gb_microcode __P((struct gboxfb *));
+static int	gb_init(struct grf_data *gp, int, uint8_t *);
+static int	gb_mode(struct grf_data *gp, int, void *);
+static void	gb_microcode(struct gboxfb *);
 
-int	gbox_intio_match __P((struct device *, struct cfdata *, void *));
-void	gbox_intio_attach __P((struct device *, struct device *, void *));
+static int	gbox_intio_match(device_t, cfdata_t, void *);
+static void	gbox_intio_attach(device_t, device_t, void *);
 
-int	gbox_dio_match __P((struct device *, struct cfdata *, void *));
-void	gbox_dio_attach __P((struct device *, struct device *, void *));
+static int	gbox_dio_match(device_t, cfdata_t, void *);
+static void	gbox_dio_attach(device_t, device_t, void *);
 
-int	gbox_console_scan __P((int, caddr_t, void *));
-void	gboxcnprobe __P((struct consdev *cp));
-void	gboxcninit __P((struct consdev *cp));
+int	gboxcnattach(bus_space_tag_t, bus_addr_t, int);
 
-struct cfattach gbox_intio_ca = {
-	sizeof(struct grfdev_softc), gbox_intio_match, gbox_intio_attach
-};
+CFATTACH_DECL_NEW(gbox_intio, sizeof(struct grfdev_softc),
+    gbox_intio_match, gbox_intio_attach, NULL, NULL);
 
-struct cfattach gbox_dio_ca = {
-	sizeof(struct grfdev_softc), gbox_dio_match, gbox_dio_attach
-};
+CFATTACH_DECL_NEW(gbox_dio, sizeof(struct grfdev_softc),
+    gbox_dio_match, gbox_dio_attach, NULL, NULL);
 
 /* Gatorbox grf switch */
-struct grfsw gbox_grfsw = {
+static struct grfsw gbox_grfsw = {
 	GID_GATORBOX, GRFGATOR, "gatorbox", gb_init, gb_mode
 };
 
+static int gbconscode;
+static void *gbconaddr;
+
 #if NITE > 0
-void	gbox_init __P((struct ite_data *));
-void	gbox_deinit __P((struct ite_data *));
-void	gbox_putc __P((struct ite_data *, int, int, int, int));
-void	gbox_cursor __P((struct ite_data *, int));
-void	gbox_clear __P((struct ite_data *, int, int, int, int));
-void	gbox_scroll __P((struct ite_data *, int, int, int, int));
-void	gbox_windowmove __P((struct ite_data *, int, int, int, int,
-		int, int, int));
+static void	gbox_init(struct ite_data *);
+static void	gbox_deinit(struct ite_data *);
+static void	gbox_putc(struct ite_data *, int, int, int, int);
+static void	gbox_cursor(struct ite_data *, int);
+static void	gbox_clear(struct ite_data *, int, int, int, int);
+static void	gbox_scroll(struct ite_data *, int, int, int, int);
+static void	gbox_windowmove(struct ite_data *, int, int, int, int,
+			int, int, int);
 
 /* Gatorbox ite switch */
-struct itesw gbox_itesw = {
+static struct itesw gbox_itesw = {
 	gbox_init, gbox_deinit, gbox_clear, gbox_putc,
 	gbox_cursor, gbox_scroll, ite_readbyte, ite_writeglyph
 };
 #endif /* NITE > 0 */
 
-int
-gbox_intio_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+static int
+gbox_intio_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct intio_attach_args *ia = aux;
 	struct grfreg *grf;
 
-	grf = (struct grfreg *)IIOV(GRFIADDR);
-	if (badaddr((caddr_t)grf))
-		return (0);
+	if (strcmp("fb",ia->ia_modname) != 0)
+		return 0;
+
+	if (badaddr((void *)ia->ia_addr))
+		return 0;
+
+	grf = (struct grfreg *)ia->ia_addr;
 
 	if (grf->gr_id == DIO_DEVICE_ID_FRAMEBUFFER &&
 	    grf->gr_id2 == DIO_DEVICE_SECID_GATORBOX) {
-		ia->ia_addr = (bus_addr_t)GRFIADDR;
-		return (1);
+		return 1;
 	}
 
-	return (0);
+	return 0;
 }
 
-void
-gbox_intio_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+static void
+gbox_intio_attach(device_t parent, device_t self, void *aux)
 {
-	struct grfdev_softc *sc = (struct grfdev_softc *)self;
-	caddr_t grf;
+	struct grfdev_softc *sc = device_private(self);
+	struct intio_attach_args *ia = aux;
+	void *grf;
 
-	grf = (caddr_t)IIOV(GRFIADDR);
+	sc->sc_dev = self;
+
+	grf = (void *)ia->ia_addr;
 	sc->sc_scode = -1;	/* XXX internal i/o */
 
+	sc->sc_isconsole = (sc->sc_scode == gbconscode);
 	grfdev_attach(sc, gb_init, grf, &gbox_grfsw);
 }
 
-int
-gbox_dio_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+static int
+gbox_dio_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct dio_attach_args *da = aux;
 
 	if (da->da_id == DIO_DEVICE_ID_FRAMEBUFFER &&
 	    da->da_secid == DIO_DEVICE_SECID_GATORBOX)
-		return (1);
+		return 1;
 
-	return (0);
+	return 0;
 }
 
-void
-gbox_dio_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+static void
+gbox_dio_attach(device_t parent, device_t self, void *aux)
 {
-	struct grfdev_softc *sc = (struct grfdev_softc *)self;
+	struct grfdev_softc *sc = device_private(self);
 	struct dio_attach_args *da = aux;
-	caddr_t grf;
+	bus_space_handle_t bsh;
+	void *grf;
 
+	sc->sc_dev = self;
 	sc->sc_scode = da->da_scode;
-	if (sc->sc_scode == conscode)
-		grf = conaddr;
+	if (sc->sc_scode == gbconscode)
+		grf = gbconaddr;
 	else {
-		grf = iomap(dio_scodetopa(sc->sc_scode), da->da_size);
-		if (grf == 0) {
-			printf("%s: can't map framebuffer\n",
-			    sc->sc_dev.dv_xname);
+		if (bus_space_map(da->da_bst, da->da_addr, da->da_size,
+		    0, &bsh)) {
+			aprint_error(": can't map framebuffer\n");
 			return;
 		}
+		grf = bus_space_vaddr(da->da_bst, bsh);
 	}
 
+	sc->sc_isconsole = (sc->sc_scode == gbconscode);
 	grfdev_attach(sc, gb_init, grf, &gbox_grfsw);
 }
 
@@ -247,24 +277,22 @@ gbox_dio_attach(parent, self, aux)
  * Returns 0 if hardware not present, non-zero ow.
  */
 int
-gb_init(gp, scode, addr)
-	struct grf_data *gp;
-	int scode;
-	caddr_t addr;
+gb_init(struct grf_data *gp, int scode, uint8_t *addr)
 {
 	struct gboxfb *gbp;
 	struct grfinfo *gi = &gp->g_display;
-	u_char *fbp, save;
+	volatile uint8_t *fbp;
+	uint8_t save;
 	int fboff;
 
 	/*
 	 * If the console has been initialized, and it was us, there's
 	 * no need to repeat this.
 	 */
-	if (consinit_active || (scode != conscode)) {
-		gbp = (struct gboxfb *) addr;
+	if (scode != gbconscode) {
+		gbp = (struct gboxfb *)addr;
 		if (ISIIOVA(addr))
-			gi->gd_regaddr = (caddr_t) IIOP(addr);
+			gi->gd_regaddr = (void *)IIOP(addr);
 		else
 			gi->gd_regaddr = dio_scodetopa(scode);
 		gi->gd_regsize = 0x10000;
@@ -272,7 +300,7 @@ gb_init(gp, scode, addr)
 		gi->gd_fbheight = 1024;		/* XXX */
 		gi->gd_fbsize = gi->gd_fbwidth * gi->gd_fbheight;
 		fboff = (gbp->fbomsb << 8) | gbp->fbolsb;
-		gi->gd_fbaddr = (caddr_t) (*((u_char *)addr + fboff) << 16);
+		gi->gd_fbaddr = (void *)(*(addr + fboff) << 16);
 		gp->g_regkva = addr;
 		gp->g_fbkva = iomap(gi->gd_fbaddr, gi->gd_fbsize);
 		gi->gd_dwidth = 1024;		/* XXX */
@@ -281,7 +309,7 @@ gb_init(gp, scode, addr)
 		/*
 		 * The minimal info here is from the Gatorbox X driver.
 		 */
-		fbp = (u_char *) gp->g_fbkva;
+		fbp = gp->g_fbkva;
 		gbp->write_protect = 0;
 		gbp->interrupt = 4;		/** fb_enable ? **/
 		gbp->rep_rule = 3;		/* GXcopy */
@@ -300,18 +328,17 @@ gb_init(gp, scode, addr)
 		gi->gd_colors = *fbp + 1;
 		*fbp = save;
 	}
-	return(1);
+	return 1;
 }
 
 /*
  * Program the 6845.
  */
 void
-gb_microcode(gbp)
-	struct gboxfb *gbp;
+gb_microcode(struct gboxfb *gbp)
 {
 	int i;
-	
+
 	for (i = 0; i < CRTC_DATA_LENGTH; i++) {
 		gbp->crtc_address = i;
 		gbp->crtc_data = crtc_init_data[i];
@@ -324,10 +351,7 @@ gb_microcode(gbp)
  * Return a UNIX error number or 0 for success.
  */
 int
-gb_mode(gp, cmd, data)
-	struct grf_data *gp;
-	int cmd;
-	caddr_t data;
+gb_mode(struct grf_data *gp, int cmd, void *data)
 {
 	struct gboxfb *gbp;
 	int error = 0;
@@ -353,48 +377,11 @@ gb_mode(gp, cmd, data)
 		gp->g_data = 0;
 		break;
 
-#ifdef COMPAT_HPUX
-	case GM_DESCRIBE:
-	{
-		struct grf_fbinfo *fi = (struct grf_fbinfo *)data;
-		struct grfinfo *gi = &gp->g_display;
-		int i;
-
-		/* feed it what HP-UX expects */
-		fi->id = gi->gd_id;
-		fi->mapsize = gi->gd_fbsize;
-		fi->dwidth = gi->gd_dwidth;
-		fi->dlength = gi->gd_dheight;
-		fi->width = gi->gd_fbwidth;
-		fi->length = gi->gd_fbheight;
-		fi->bpp = NBBY;
-		fi->xlen = (fi->width * fi->bpp) / NBBY;
-		fi->npl = gi->gd_planes;
-		fi->bppu = fi->npl;
-		fi->nplbytes = fi->xlen * ((fi->length * fi->bpp) / NBBY);
-		bcopy("HP98700", fi->name, 8);
-		fi->attr = 2;	/* HW block mover */
-		/*
-		 * If mapped, return the UVA where mapped.
-		 */
-		if (gp->g_data) {
-			fi->regbase = gp->g_data;
-			fi->fbbase = fi->regbase + gp->g_display.gd_regsize;
-		} else {
-			fi->fbbase = 0;
-			fi->regbase = 0;
-		}
-		for (i = 0; i < 6; i++)
-			fi->regions[i] = 0;
-		break;
-	}
-#endif
-
 	default:
 		error = EINVAL;
 		break;
 	}
-	return(error);
+	return error;
 }
 
 #if NITE > 0
@@ -406,9 +393,8 @@ gb_mode(gp, cmd, data)
 #define REGBASE     	((struct gboxfb *)(ip->regbase))
 #define WINDOWMOVER 	gbox_windowmove
 
-void
-gbox_init(ip)
-	struct ite_data *ip;
+static void
+gbox_init(struct ite_data *ip)
 {
 	/* XXX */
 	if (ip->regbase == 0) {
@@ -441,7 +427,7 @@ gbox_init(ip)
 	REGBASE->cmap_blu    = 0x00;
 	REGBASE->cmap_write  = 0x00;
 	gbcm_waitbusy(ip->regbase);
-	
+
 	REGBASE->creg_select = 0x01;
 	REGBASE->cmap_red    = 0xFF;
 	REGBASE->cmap_grn    = 0xFF;
@@ -474,33 +460,27 @@ gbox_init(ip)
 			ip->ftwidth, RR_COPYINVERTED);
 }
 
-void
-gbox_deinit(ip)
-	struct ite_data *ip;
+static void
+gbox_deinit(struct ite_data *ip)
 {
 	gbox_windowmove(ip, 0, 0, 0, 0, ip->dheight, ip->dwidth, RR_CLEAR);
 	tile_mover_waitbusy(ip->regbase);
 
-   	ip->flags &= ~ITE_INITED;
+	ip->flags &= ~ITE_INITED;
 }
 
-void
-gbox_putc(ip, c, dy, dx, mode)
-	struct ite_data *ip;
-        int dy, dx;
-	int c, mode;
+static void
+gbox_putc(struct ite_data *ip, int c, int dy, int dx, int mode)
 {
-        int wrr = ((mode == ATTR_INV) ? RR_COPYINVERTED : RR_COPY);
+	int wrr = ((mode == ATTR_INV) ? RR_COPYINVERTED : RR_COPY);
 
 	gbox_windowmove(ip, charY(ip, c), charX(ip, c),
 			    dy * ip->ftheight, dx * ip->ftwidth,
 			    ip->ftheight, ip->ftwidth, wrr);
 }
 
-void
-gbox_cursor(ip, flag)
-	struct ite_data *ip;
-        int flag;
+static void
+gbox_cursor(struct ite_data *ip, int flag)
 {
 	if (flag == DRAW_CURSOR)
 		draw_cursor(ip)
@@ -512,13 +492,11 @@ gbox_cursor(ip, flag)
 		erase_cursor(ip)
 }
 
-void
-gbox_clear(ip, sy, sx, h, w)
-	struct ite_data *ip;
-	int sy, sx, h, w;
+static void
+gbox_clear(struct ite_data *ip, int sy, int sx, int h, int w)
 {
 	gbox_windowmove(ip, sy * ip->ftheight, sx * ip->ftwidth,
-			sy * ip->ftheight, sx * ip->ftwidth, 
+			sy * ip->ftheight, sx * ip->ftwidth,
 			h  * ip->ftheight, w  * ip->ftwidth,
 			RR_CLEAR);
 }
@@ -532,16 +510,14 @@ gbox_clear(ip, sy, sx, h, w)
 			(w)  * ip->ftwidth, \
 			RR_COPY)
 
-void
-gbox_scroll(ip, sy, sx, count, dir)
-        struct ite_data *ip;
-        int sy, dir, sx, count;
+static void
+gbox_scroll(struct ite_data *ip, int sy, int sx, int count, int dir)
 {
 	int height, dy, i;
-	
+
 	tile_mover_waitbusy(ip->regbase);
 	REGBASE->write_protect = 0x0;
-	
+
 	if (dir == SCROLL_UP) {
 		dy = sy - count;
 		height = ip->rows - sy;
@@ -561,13 +537,12 @@ gbox_scroll(ip, sy, sx, count, dir)
 	else {
 		gbox_blockmove(ip, sy, sx, sy, sx - count,
 			       1, ip->cols - sx);
-	}		
+	}
 }
 
-void
-gbox_windowmove(ip, sy, sx, dy, dx, h, w, mask)
-     struct ite_data *ip;
-     int sy, sx, dy, dx, mask, h, w;
+static void
+gbox_windowmove(struct ite_data *ip, int sy, int sx, int dy, int dx, int h,
+    int w, int mask)
 {
 	int src, dest;
 
@@ -593,131 +568,52 @@ gbox_windowmove(ip, sy, sx, dy, dx, h, w, mask)
 /*
  * Gatorbox console support
  */
-
 int
-gbox_console_scan(scode, va, arg)
-	int scode;
-	caddr_t va;
-	void *arg;
+gboxcnattach(bus_space_tag_t bst, bus_addr_t addr, int scode)
 {
-	struct grfreg *grf = (struct grfreg *)va;
-	struct consdev *cp = arg;
-	u_char *dioiidev;
-	int force = 0, pri;
-
-	if ((grf->gr_id == GRFHWID) && (grf->gr_id2 == GID_GATORBOX)) {
-		pri = CN_NORMAL;
-
-#ifdef CONSCODE
-		/*
-		 * Raise our priority, if appropriate.
-		 */
-		if (scode == CONSCODE) {
-			pri = CN_REMOTE;
-			force = conforced = 1;
-		}
-#endif
-
-		/* Only raise priority. */
-		if (pri > cp->cn_pri)
-			cp->cn_pri = pri;
-
-		/*
-		 * If our priority is higher than the currently-remembered
-		 * console, stash our priority.
-		 */
-		if (((cn_tab == NULL) || (cp->cn_pri > cn_tab->cn_pri))
-		    || force) {
-			cn_tab = cp;
-			if (scode >= 132) {
-				dioiidev = (u_char *)va;
-				return ((dioiidev[0x101] + 1) * 0x100000);
-			}
-			return (DIOCSIZE);
-		}
-	}
-	return (0);
-}
-
-void
-gboxcnprobe(cp)
-	struct consdev *cp;
-{
-	int maj;
-	caddr_t va;
+	bus_space_handle_t bsh;
+	void *va;
 	struct grfreg *grf;
-	int force = 0;
+	struct grf_data *gp = &grf_cn;
+	int size;
 
-	maj = ite_major();
-
-	/* initialize required fields */
-	cp->cn_dev = makedev(maj, 0);		/* XXX */
-	cp->cn_pri = CN_DEAD;
-
-	/* Abort early if console already forced. */
-	if (conforced)
-		return;
-
-	/* Look for "internal" framebuffer. */
-	va = (caddr_t)IIOV(GRFIADDR);
+	if (bus_space_map(bst, addr, PAGE_SIZE, 0, &bsh))
+		return 1;
+	va = bus_space_vaddr(bst, bsh);
 	grf = (struct grfreg *)va;
-	if (!badaddr(va) &&
-	    ((grf->gr_id == GRFHWID) && (grf->gr_id2 == GID_GATORBOX))) {
-		cp->cn_pri = CN_INTERNAL;
 
-#ifdef CONSCODE
-		/*
-		 * Raise our priority and save some work, if appropriate.
-		 */
-		if (CONSCODE == -1) {
-			cp->cn_pri = CN_REMOTE;
-			force = conforced = 1;
-		}
-#endif
-
-		/*
-		 * If our priority is higher than the currently
-		 * remembered console, stash our priority, and
-		 * unmap whichever device might be currently mapped.
-		 * Since we're internal, we set the saved size to 0
-		 * so they don't attempt to unmap our fixed VA later.
-		 */
-		if (((cn_tab == NULL) || (cp->cn_pri > cn_tab->cn_pri))
-		    || force) {
-			cn_tab = cp;
-			if (convasize)
-				iounmap(conaddr, convasize);
-			conscode = -1;
-			conaddr = va;
-			convasize = 0;
-		}
+	if (badaddr(va) ||
+	    (grf->gr_id != GRFHWID) || (grf->gr_id2 != GID_GATORBOX)) {
+		bus_space_unmap(bst, bsh, PAGE_SIZE);
+		return 1;
 	}
 
-	console_scan(gbox_console_scan, cp);
-}
+	size = DIO_SIZE(scode, va);
 
-void
-gboxcninit(cp)
-	struct consdev *cp;
-{
-	struct grf_data *gp = &grf_cn;
+	bus_space_unmap(bst, bsh, PAGE_SIZE);
+	if (bus_space_map(bst, addr, size, 0, &bsh))
+		return 1;
+	va = bus_space_vaddr(bst, bsh);
 
 	/*
 	 * Initialize the framebuffer hardware.
 	 */
-	(void)gb_init(gp, conscode, conaddr);
+	(void)gb_init(gp, scode, va);
+	gbconscode = scode;
+	gbconaddr = va;
 
 	/*
 	 * Set up required grf data.
-	 */
+	*/
 	gp->g_sw = &gbox_grfsw;
 	gp->g_display.gd_id = gp->g_sw->gd_swid;
 	gp->g_flags = GF_ALIVE;
 
 	/*
 	 * Initialize the terminal emulator.
-	 */
-	itecninit(gp, &gbox_itesw);
+	*/
+	itedisplaycnattach(gp, &gbox_itesw);
+	return 0;
 }
 
 #endif /* NITE > 0 */

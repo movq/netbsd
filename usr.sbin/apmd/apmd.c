@@ -1,7 +1,7 @@
-/*	$NetBSD: apmd.c,v 1.14 2000/03/04 21:27:18 mycroft Exp $	*/
+/*	$NetBSD: apmd.c,v 1.31 2008/04/28 20:24:15 martin Exp $	*/
 
 /*-
- * Copyright (c) 1996 The NetBSD Foundation, Inc.
+ * Copyright (c) 1996, 2000 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -54,22 +47,23 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/wait.h>
+#include <poll.h>
 #include <machine/apmvar.h>
 #include <err.h>
 #include "pathnames.h"
 #include "apm-proto.h"
 
-#define MAX(a,b) (a > b ? a : b)
 #define TRUE 1
 #define FALSE 0
+
+#define POWER_STATUS_ACON	0x1
+#define POWER_STATUS_LOWBATTNOW	0x2
 
 const char apmdev[] = _PATH_APM_CTLDEV;
 const char sockfile[] = _PATH_APM_SOCKET;
 
 static int debug = 0;
 static int verbose = 0;
-
-extern char *__progname;
 
 void usage (void);
 int power_status (int fd, int force, struct apm_power_info *pinfo);
@@ -92,7 +86,7 @@ sigexit(int signo)
 void
 usage(void)
 {
-    fprintf(stderr,"usage: %s [-adlqsv] [-t seconds] [-S sockname]\n\t[-m sockmode] [-o sockowner:sockgroup] [-f devname]\n", __progname);
+    fprintf(stderr,"usage: %s [-adlqsv] [-t seconds] [-S sockname]\n\t[-m sockmode] [-o sockowner:sockgroup] [-f devname]\n", getprogname());
     exit(1);
 }
 
@@ -103,12 +97,17 @@ power_status(int fd, int force, struct apm_power_info *pinfo)
     struct apm_power_info bstate;
     static struct apm_power_info last;
     int acon = 0;
+    int lowbattnow = 0;
 
+    memset(&bstate, 0, sizeof(bstate));
     if (ioctl(fd, APM_IOC_GETPOWER, &bstate) == 0) {
 	/* various conditions under which we report status:  something changed
 	   enough since last report, or asked to force a print */
 	if (bstate.ac_state == APM_AC_ON)
 	    acon = 1;
+	if (bstate.battery_state != last.battery_state  &&
+	    bstate.battery_state == APM_BATT_LOW)
+		lowbattnow = 1;
 	if (force || 
 	    bstate.ac_state != last.ac_state ||
 	    bstate.battery_state != last.battery_state ||
@@ -135,7 +134,8 @@ power_status(int fd, int force, struct apm_power_info *pinfo)
 	    *pinfo = bstate;
     } else
 	syslog(LOG_ERR, "cannot fetch power status: %m");
-    return acon;
+    return ((acon?POWER_STATUS_ACON:0) |
+	(lowbattnow?POWER_STATUS_LOWBATTNOW:0));
 }
 
 static char *socketname;
@@ -181,7 +181,7 @@ handle_client(int sock_fd, int ctl_fd)
     /* accept a handle from the client, process it, then clean up */
     int cli_fd;
     struct sockaddr_un from;
-    int fromlen = sizeof(from);
+    socklen_t fromlen = sizeof(from);
     struct apm_command cmd;
     struct apm_reply reply;
 
@@ -302,19 +302,19 @@ main(int argc, char *argv[])
     const char *fname = apmdev;
     int ctl_fd, sock_fd, ch, ready;
     int statonly = 0;
-    fd_set devfds;
-    fd_set selcopy;
+    struct pollfd set[2];
     struct apm_event_info apmevent;
     int suspends, standbys, resumes;
+    int ac_is_off;
     int noacsleep = 0;
     int lowbattsleep = 0;
     mode_t mode = 0660;
-    struct timeval tv = {TIMO, 0}, stv;
+    unsigned long timeout = TIMO;
     const char *sockname = sockfile;
     char *user, *group;
     char *scratch;
-    uid_t uid = 0;
-    gid_t gid = 0;
+    uid_t uid = 2; /* operator */
+    gid_t gid = 5; /* operator */
     struct passwd *pw;
     struct group *gr;
 
@@ -342,8 +342,8 @@ main(int argc, char *argv[])
 	    sockname = optarg;
 	    break;
 	case 't':
-	    tv.tv_sec = strtoul(optarg, 0, 0);
-	    if (tv.tv_sec == 0)
+	    timeout = strtoul(optarg, 0, 0);
+	    if (timeout == 0)
 		usage();
 	    break;
 	case 'm':
@@ -388,17 +388,19 @@ main(int argc, char *argv[])
 	}
     argc -= optind;
     argv += optind;
-    if ((ctl_fd = open(fname, O_RDWR)) == -1) {
-	(void)err(1, "cannot open device file `%s'", fname);
-    } 
     if (debug) {
-	openlog(__progname, LOG_CONS, LOG_LOCAL1);
+	openlog("apmd", 0, LOG_LOCAL1);
     } else {
-	openlog(__progname, LOG_CONS, LOG_DAEMON);
-	setlogmask(LOG_UPTO(LOG_NOTICE));
 	daemon(0, 0);
+	openlog("apmd", 0, LOG_DAEMON);
+	setlogmask(LOG_UPTO(LOG_NOTICE));
 	pidfile(NULL);
     }
+    if ((ctl_fd = open(fname, O_RDWR)) == -1) {
+	syslog(LOG_ERR, "cannot open device file `%s'", fname);
+	exit(1);
+    } 
+
     if (statonly) {
         power_status(ctl_fd, 1, 0);
 	exit(0);
@@ -406,6 +408,7 @@ main(int argc, char *argv[])
 	struct apm_power_info pinfo;
 	power_status(ctl_fd, 1, &pinfo);
 	do_ac_state(pinfo.ac_state);
+	ac_is_off = (pinfo.ac_state == APM_AC_OFF);
     }
 
     (void) signal(SIGTERM, sigexit);
@@ -416,23 +419,32 @@ main(int argc, char *argv[])
 
     sock_fd = bind_socket(sockname, mode, uid, gid);
 
-    FD_ZERO(&devfds);
-    FD_SET(ctl_fd, &devfds);
-    FD_SET(sock_fd, &devfds);
-
+    set[0].fd = ctl_fd;
+    set[0].events = POLLIN;
+    set[1].fd = sock_fd;
+    set[1].events = POLLIN;
 
     
-    for (selcopy = devfds, errno = 0, stv = tv; 
-	 (ready = select(MAX(ctl_fd,sock_fd)+1, &selcopy, 0, 0, &stv)) >= 0 ||
-	     errno == EINTR;
-	 selcopy = devfds, errno = 0, stv = tv) {
+    for (errno = 0;
+	 (ready = poll(set, 2, timeout * 1000)) >= 0 || errno == EINTR;
+	 errno = 0) {
 	if (errno == EINTR)
 	    continue;
 	if (ready == 0) {
-	    /* wakeup for timeout: take status */
-	    power_status(ctl_fd, 0, 0);
+		int status;
+		/* wakeup for timeout: take status */
+		status = power_status(ctl_fd, 0, 0);
+		if (lowbattsleep && status&POWER_STATUS_LOWBATTNOW) {
+			if (noacsleep && status&POWER_STATUS_ACON) {
+				if (debug)
+					syslog(LOG_DEBUG,
+					    "not sleeping because "
+					    "AC is connected");
+			} else
+				suspend(ctl_fd);
+		}
 	}
-	if (FD_ISSET(ctl_fd, &selcopy)) {
+	if (set[0].revents & POLLIN) {
 	    suspends = standbys = resumes = 0;
 	    while (ioctl(ctl_fd, APM_IOC_NEXTEVENT, &apmevent) == 0) {
 		if (debug)
@@ -466,7 +478,11 @@ main(int argc, char *argv[])
 		{
 		    struct apm_power_info pinfo;
 		    power_status(ctl_fd, 0, &pinfo);
-		    do_ac_state(pinfo.ac_state);
+		    /* power status can change without ac status changing */
+		    if (ac_is_off != (pinfo.ac_state == APM_AC_OFF)) {
+		    	do_ac_state(pinfo.ac_state);
+			ac_is_off = (pinfo.ac_state == APM_AC_OFF);
+		    }
 		    break;
 		}
 		default:
@@ -474,9 +490,9 @@ main(int argc, char *argv[])
 		}
 	    }
 	    if ((standbys || suspends) && noacsleep &&
-		power_status(ctl_fd, 0, 0)) {
+		(power_status(ctl_fd, 0, 0) & POWER_STATUS_ACON)) {
 		if (debug)
-		    syslog(LOG_DEBUG, "not sleeping cuz AC is connected");
+		    syslog(LOG_DEBUG, "not sleeping because AC is connected");
 	    } else if (suspends) {
 		suspend(ctl_fd);
 	    } else if (standbys) {
@@ -490,7 +506,7 @@ main(int argc, char *argv[])
 	}
 	if (ready == 0)
 	    continue;
-	if (FD_ISSET(sock_fd, &selcopy)) {
+	if (set[1].revents & POLLIN) {
 	    switch (handle_client(sock_fd, ctl_fd)) {
 	    case NORMAL:
 		break;
@@ -503,7 +519,7 @@ main(int argc, char *argv[])
 	    }
 	}
     }
-    syslog(LOG_ERR, "select failed: %m");
+    syslog(LOG_ERR, "poll failed: %m");
     exit(1);
 }
 
@@ -534,8 +550,9 @@ do_etc_file(const char *file)
 	return;
     case 0:
 	/* We are the child. */
-	execl(file, prog, NULL);
-	_exit(-1);
+	if (execl(file, prog, NULL) == -1)
+		syslog(LOG_ERR, "could not execute \"%s\": %m", file);
+	_exit(1);
 	/* NOTREACHED */
     default:
 	/* We are the parent. */
@@ -562,6 +579,6 @@ do_ac_state(int state)
 		do_etc_file(_PATH_APM_ETC_LINE);
 		break;
 	default:
-		/* Silently ignore */
+		/* Silently ignore */ ;
 	}
 }

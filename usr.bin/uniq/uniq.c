@@ -1,4 +1,4 @@
-/*	$NetBSD: uniq.c,v 1.9 1998/12/19 23:23:49 christos Exp $	*/
+/*	$NetBSD: uniq.c,v 1.15 2008/07/21 14:19:27 lukem Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,15 +34,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1989, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)uniq.c	8.3 (Berkeley) 5/4/95";
 #endif
-__RCSID("$NetBSD: uniq.c,v 1.9 1998/12/19 23:23:49 christos Exp $");
+__RCSID("$NetBSD: uniq.c,v 1.15 2008/07/21 14:19:27 lukem Exp $");
 #endif /* not lint */
 
 #include <err.h>
@@ -57,28 +53,25 @@ __RCSID("$NetBSD: uniq.c,v 1.9 1998/12/19 23:23:49 christos Exp $");
 #include <string.h>
 #include <unistd.h>
 
-#define	MAXLINELEN	(8 * 1024)
+static int cflag, dflag, uflag;
+static int numchars, numfields, repeats;
 
-int cflag, dflag, uflag;
-int numchars, numfields, repeats;
-
-FILE	*file __P((char *, char *));
-int	 main __P((int, char **));
-void	 show __P((FILE *, char *));
-char	*skip __P((char *));
-void	 obsolete __P((char *[]));
-void	 usage __P((void));
+static FILE *file(const char *, const char *);
+static void show(FILE *, const char *);
+static const char *skip(const char *);
+static void obsolete(char *[]);
+static void usage(void) __dead;
 
 int
-main (argc, argv)
-	int argc;
-	char *argv[];
+main (int argc, char *argv[])
 {
-	char *t1, *t2;
+	const char *t1, *t2;
 	FILE *ifp, *ofp;
 	int ch;
 	char *prevline, *thisline, *p;
+	size_t prevlinesize, thislinesize, psize;
 
+	setprogname(argv[0]);
 	ifp = ofp = NULL;
 	obsolete(argv);
 	while ((ch = getopt(argc, argv, "-cdf:s:u")) != -1)
@@ -138,15 +131,27 @@ done:	argc -= optind;
 		usage();
 	}
 
-	prevline = malloc(MAXLINELEN);
-	thisline = malloc(MAXLINELEN);
-	if (prevline == NULL || thisline == NULL)
+	if ((p = fgetln(ifp, &psize)) == NULL)
+		return 0;
+	prevlinesize = psize;
+	if ((prevline = malloc(prevlinesize + 1)) == NULL)
+		err(1, "malloc");
+	(void)memcpy(prevline, p, prevlinesize);
+	prevline[prevlinesize] = '\0';
+
+	thislinesize = psize;
+	if ((thisline = malloc(thislinesize + 1)) == NULL)
 		err(1, "malloc");
 
-	if (fgets(prevline, MAXLINELEN, ifp) == NULL)
-		exit(0);
+	while ((p = fgetln(ifp, &psize)) != NULL) {
+		if (psize > thislinesize) {
+			if ((thisline = realloc(thisline, psize + 1)) == NULL)
+				err(1, "realloc");
+			thislinesize = psize;
+		}
+		(void)memcpy(thisline, p, psize);
+		thisline[psize] = '\0';
 
-	while (fgets(thisline, MAXLINELEN, ifp)) {
 		/* If requested get the chosen fields + character offsets. */
 		if (numfields || numchars) {
 			t1 = skip(thisline);
@@ -158,16 +163,24 @@ done:	argc -= optind;
 
 		/* If different, print; set previous to new value. */
 		if (strcmp(t1, t2)) {
+			char *t;
+			size_t ts;
+
 			show(ofp, prevline);
-			t1 = prevline;
+			t = prevline;
 			prevline = thisline;
-			thisline = t1;
+			thisline = t;
+			ts = prevlinesize;
+			prevlinesize = thislinesize;
+			thislinesize = ts;
 			repeats = 0;
 		} else
 			++repeats;
 	}
 	show(ofp, prevline);
-	exit(0);
+	free(prevline);
+	free(thisline);
+	return 0;
 }
 
 /*
@@ -175,10 +188,8 @@ done:	argc -= optind;
  *	Output a line depending on the flags and number of repetitions
  *	of the line.
  */
-void
-show(ofp, str)
-	FILE *ofp;
-	char *str;
+static void
+show(FILE *ofp, const char *str)
 {
 
 	if (cflag && *str)
@@ -187,9 +198,8 @@ show(ofp, str)
 		(void)fprintf(ofp, "%s", str);
 }
 
-char *
-skip(str)
-	char *str;
+static const char *
+skip(const char *str)
 {
 	int infield, nchars, nfields;
 
@@ -201,13 +211,13 @@ skip(str)
 			}
 		} else if (!infield)
 			infield = 1;
-	for (nchars = numchars; nchars-- && *str; ++str);
-	return(str);
+	for (nchars = numchars; nchars-- && *str; ++str)
+		continue;
+	return str;
 }
 
-FILE *
-file(name, mode)
-	char *name, *mode;
+static FILE *
+file(const char *name, const char *mode)
 {
 	FILE *fp;
 
@@ -216,11 +226,9 @@ file(name, mode)
 	return(fp);
 }
 
-void
-obsolete(argv)
-	char *argv[];
+static void
+obsolete(char *argv[])
 {
-	int len;
 	char *ap, *p, *start;
 
 	while ((ap = *++argv) != NULL) {
@@ -236,20 +244,18 @@ obsolete(argv)
 		 * Digit signifies an old-style option.  Malloc space for dash,
 		 * new option and argument.
 		 */
-		len = strlen(ap);
-		if ((start = p = malloc(len + 3)) == NULL)
+		(void)asprintf(&p, "-%c%s", ap[0] == '+' ? 's' : 'f', ap + 1);
+		if (!p)
 			err(1, "malloc");
-		*p++ = '-';
-		*p++ = ap[0] == '+' ? 's' : 'f';
-		(void)strcpy(p, ap + 1);
+		start = p;
 		*argv = start;
 	}
 }
 
-void
-usage()
+static void
+usage(void)
 {
-	(void)fprintf(stderr,
-	    "usage: uniq [-c | -du] [-f fields] [-s chars] [input [output]]\n");
+	(void)fprintf(stderr, "Usage: %s [-c | -du] [-f fields] [-s chars] "
+	    "[input [output]]\n", getprogname());
 	exit(1);
 }

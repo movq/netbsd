@@ -1,4 +1,4 @@
-.\"	$NetBSD: fcntl.2,v 1.18 1999/12/02 21:42:36 kleink Exp $
+.\"	$NetBSD: fcntl.2,v 1.34 2007/01/04 00:02:43 wiz Exp $
 .\"
 .\" Copyright (c) 1983, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -33,7 +29,7 @@
 .\"
 .\"     @(#)fcntl.2	8.2 (Berkeley) 1/12/94
 .\"
-.Dd January 12, 1994
+.Dd January 3, 2007
 .Dt FCNTL 2
 .Os
 .Sh NAME
@@ -42,7 +38,7 @@
 .Sh LIBRARY
 .Lb libc
 .Sh SYNOPSIS
-.Fd #include <fcntl.h>
+.In fcntl.h
 .Ft int
 .Fn fcntl "int fd" "int cmd" "..."
 .Sh DESCRIPTION
@@ -80,14 +76,18 @@ Same file status flags (i.e., both file descriptors
 share the same file status flags).
 .It
 The close-on-exec flag associated with the new file descriptor
-is set to remain open across
+is cleared to remain open across
 .Xr execve 2
 system calls.
 .El
 .It Dv F_GETFD
 Get the close-on-exec flag associated with the file descriptor
-.Fa fd .
-If the low-order bit of the returned value is 0,
+.Fa fd
+as
+.Dv FD_CLOEXEC .
+If the returned value ANDed with
+.Dv FD_CLOEXEC
+is 0,
 the file will remain open across
 .Fn exec ,
 otherwise the file will be closed upon execution of
@@ -97,9 +97,13 @@ is ignored).
 .It Dv F_SETFD
 Set the close-on-exec flag associated with
 .Fa fd
-to the low order bit of
+to
+.Fa arg ,
+where
 .Fa arg
-(0 or 1 as above).
+is either 0 or
+.Dv FD_CLOEXEC ,
+as described above.
 .It Dv F_GETFL
 Get descriptor status flags, as described below
 .Fa ( arg
@@ -127,12 +131,17 @@ and
 signals;
 process groups are specified by supplying
 .Fa arg
-as negative, otherwise 
+as negative, otherwise
 .Fa arg
 is interpreted as a process ID.
 The argument
 .Fa arg
 is interpreted as an int.
+.It Dv F_CLOSEM
+Close all file descriptors greater than or equal to
+.Ar fd .
+.It Dv F_MAXFD
+Return the maximum file descriptor number currently open by the process.
 .El
 .Pp
 The flags for the
@@ -147,7 +156,7 @@ Non-blocking I/O; if no data is available to a
 call, or if a
 .Xr write 2
 operation would block,
-the read or write call returns -1 with the error
+the read or write call returns \-1 with the error
 .Er EAGAIN .
 .It Dv O_APPEND
 Force each write to append at the end of file;
@@ -174,6 +183,7 @@ struct flock {
 	short	l_whence;	/* type of l_start */
 };
 .Ed
+.Pp
 The commands available for advisory record locking are as follows:
 .Bl -tag -width F_SETLKWX
 .It Dv F_GETLK
@@ -190,7 +200,9 @@ in the
 structure.
 If no lock is found that would prevent this lock from being created,
 the structure is left unchanged by this function call except for the
-lock type which is set to
+lock type
+.Fa l_type ,
+which is set to
 .Dv F_UNLCK .
 .It Dv F_SETLK
 Set or clear a file segment lock according to the lock description
@@ -199,13 +211,15 @@ pointed to by the third argument,
 taken as a pointer to a
 .Fa "struct flock"
 (see above).
+As specified by the value of
+.Fa l_type ,
 .Dv F_SETLK
 is used to establish shared (or read) locks
-.Dv (F_RDLCK)
+.Pq Dv F_RDLCK
 or exclusive (or write) locks,
-.Dv (F_WRLCK) ,
+.Pq Dv F_WRLCK ,
 as well as remove either type of lock
-.Dv (F_UNLCK) .
+.Pq Dv F_UNLCK .
 If a shared or exclusive lock cannot be set,
 .Nm
 returns immediately with
@@ -272,7 +286,8 @@ but may not start or extend before the beginning of the file.
 A lock is set to extend to the largest possible value of the
 file offset for that file if
 .Fa l_len
-is set to zero. If
+is set to zero.
+If
 .Fa l_whence
 and
 .Fa l_start
@@ -313,7 +328,7 @@ For example if an application for updating the password file locks the
 password file database while making the update, and then calls
 .Xr getpwnam 3
 to retrieve a record,
-the lock will be lost because 
+the lock will be lost because
 .Xr getpwnam 3
 opens, reads, and closes the password database.
 The database close will release all locks that the process has
@@ -332,10 +347,10 @@ Calling
 is recommended for applications that want to ensure the integrity
 of their locks when using library routines or wish to pass locks
 to their children.
-Note that 
+Note that
 .Xr flock 2
-and 
-.Xr fcntl 2
+and
+.Nm
 locks may be safely used concurrently.
 .Pp
 All locks associated with a file for a given process are
@@ -360,11 +375,13 @@ Value of flag (only the low-order bit is defined).
 Value of flags.
 .It Dv F_GETOWN
 Value of file descriptor owner.
+.It Dv F_MAXFD
+Value of the highest file descriptor open by the process.
 .It other
-Value other than -1.
+Value other than \-1.
 .El
 .Pp
-Otherwise, a value of -1 is returned and
+Otherwise, a value of \-1 is returned and
 .Va errno
 is set to indicate the error.
 .Sh ERRORS
@@ -377,11 +394,11 @@ The argument
 is
 .Dv F_SETLK ,
 the type of lock
-.Fa (l_type)
+.Pq Fa l_type
 is a shared lock
-.Dv (F_RDLCK)
+.Pq Dv F_RDLCK
 or exclusive lock
-.Dv (F_WRLCK) ,
+.Pq Dv F_WRLCK ,
 and the segment of a file to be locked is already
 exclusive-locked by another process;
 or the type is an exclusive lock and some portion of the
@@ -398,9 +415,9 @@ is
 or
 .Dv F_SETLKW ,
 the type of lock
-.Fa (l_type)
+.Pq Fa l_type
 is a shared lock
-.Dv (F_RDLCK) ,
+.Pq Dv F_RDLCK ,
 and
 .Fa fildes
 is not a valid file descriptor open for reading.
@@ -412,18 +429,12 @@ is
 or
 .Dv F_SETLKW ,
 the type of lock
-.Fa (l_type)
+.Pq Fa l_type
 is an exclusive lock
-.Dv (F_WRLCK) ,
+.Pq Dv F_WRLCK ,
 and
 .Fa fildes
 is not a valid file descriptor open for writing.
-.It Bq Er EMFILE
-.Fa cmd
-is
-.Dv F_DUPFD
-and the maximum allowed number of file descriptors are currently
-open.
 .It Bq Er EDEADLK
 The argument
 .Fa cmd
@@ -468,6 +479,12 @@ process are already in use,
 or no file descriptors greater than or equal to
 .Fa arg
 are available.
+.It Bq Er ENFILE
+.Fa cmd
+is
+.Dv F_DUPFD
+and system-wide the maximum allowed number of file descriptors are
+currently open.
 .It Bq Er ENOLCK
 The argument
 .Fa cmd
@@ -489,8 +506,8 @@ the process ID given as argument is not in use.
 .Xr execve 2 ,
 .Xr flock 2 ,
 .Xr open 2 ,
-.Xr getdtablesize 3 ,
-.Xr sigaction 2
+.Xr sigaction 2 ,
+.Xr getdtablesize 3
 .Sh STANDARDS
 The
 .Fn fcntl

@@ -1,4 +1,4 @@
-/*	$NetBSD: cmdtab.c,v 1.5 1997/10/05 15:12:07 mrg Exp $	*/
+/*	$NetBSD: cmdtab.c,v 1.8 2006/10/22 21:09:47 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,11 +34,11 @@
 #if 0
 static char sccsid[] = "@(#)cmdtab.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: cmdtab.c,v 1.5 1997/10/05 15:12:07 mrg Exp $");
+__RCSID("$NetBSD: cmdtab.c,v 1.8 2006/10/22 21:09:47 christos Exp $");
 #endif
 #endif /* not lint */
 
-#include <sys/cdefs.h>
+#include <stdio.h>
 
 #include "lpc.h"
 #include "extern.h"
@@ -50,19 +46,19 @@ __RCSID("$NetBSD: cmdtab.c,v 1.5 1997/10/05 15:12:07 mrg Exp $");
 /*
  * lpc -- command tables
  */
-char	aborthelp[] =	"terminate a spooling daemon immediately and disable printing";
-char	cleanhelp[] =	"remove cruft files from a queue";
-char	enablehelp[] =	"turn a spooling queue on";
-char	disablehelp[] =	"turn a spooling queue off";
-char	downhelp[] =	"do a 'stop' followed by 'disable' and put a message in status";
-char	helphelp[] =	"get help on commands";
-char	quithelp[] =	"exit lpc";
-char	restarthelp[] =	"kill (if possible) and restart a spooling daemon";
-char	starthelp[] =	"enable printing and start a spooling daemon";
-char	statushelp[] =	"show status of daemon and queue";
-char	stophelp[] =	"stop a spooling daemon after current job completes and disable printing";
-char	topqhelp[] =	"put job at top of printer queue";
-char	uphelp[] =	"enable everything and restart spooling daemon";
+#define aborthelp	"terminate a spooling daemon immediately and disable printing"
+#define cleanhelp	"remove cruft files from a queue"
+#define enablehelp	"turn a spooling queue on"
+#define disablehelp	"turn a spooling queue off"
+#define downhelp	"do a 'stop' followed by 'disable' and put a message in status"
+#define helphelp	"get help on commands"
+#define quithelp	"exit lpc"
+#define restarthelp	"kill (if possible) and restart a spooling daemon"
+#define starthelp	"enable printing and start a spooling daemon"
+#define statushelp	"show status of daemon and queue"
+#define stophelp	"stop a spooling daemon after current job completes and disable printing"
+#define topqhelp	"put job at top of printer queue"
+#define uphelp		"enable everything and restart spooling daemon"
 
 struct cmd cmdtab[] = {
 	{ "abort",	aborthelp,	doabort,	1 },
@@ -80,7 +76,7 @@ struct cmd cmdtab[] = {
 	{ "topq",	topqhelp,	topq,		1 },
 	{ "up",		uphelp,		up,		1 },
 	{ "?",		helphelp,	help,		0 },
-	{ 0 },
+	{ .c_name = NULL },
 };
 
 int	NCMDS = sizeof (cmdtab) / sizeof (cmdtab[0]);

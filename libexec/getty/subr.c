@@ -1,4 +1,4 @@
-/*	$NetBSD: subr.c,v 1.23 1998/03/30 01:52:02 mrg Exp $	*/
+/*	$NetBSD: subr.c,v 1.33 2006/11/16 04:31:24 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "from: @(#)subr.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: subr.c,v 1.23 1998/03/30 01:52:02 mrg Exp $");
+__RCSID("$NetBSD: subr.c,v 1.33 2006/11/16 04:31:24 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -53,6 +49,7 @@ __RCSID("$NetBSD: subr.c,v 1.23 1998/03/30 01:52:02 mrg Exp $");
 #include <string.h>
 #include <termios.h>
 #include <unistd.h>
+#include <poll.h>
 
 #include "extern.h"
 #include "gettytab.h"
@@ -60,20 +57,19 @@ __RCSID("$NetBSD: subr.c,v 1.23 1998/03/30 01:52:02 mrg Exp $");
 
 extern	struct termios tmode, omode;
 
-static void	compatflags __P((long));
+static void	compatflags(long);
 
 /*
  * Get a table entry.
  */
 void
-gettable(name, buf)
-	char *name, *buf;
+gettable(char *name, char *buf)
 {
 	struct gettystrs *sp;
 	struct gettynums *np;
 	struct gettyflags *fp;
 	long n;
-	char *dba[2];
+	const char *dba[2];
 	dba[0] = _PATH_GETTYTAB;
 	dba[1] = 0;
 
@@ -81,7 +77,7 @@ gettable(name, buf)
 		return;
 
 	for (sp = gettystrs; sp->field; sp++)
-		cgetstr(buf, sp->field, &sp->value);
+		(void)cgetstr(buf, sp->field, &sp->value);
 	for (np = gettynums; np->field; np++) {
 		if (cgetnum(buf, np->field, &n) == -1)
 			np->set = 0;
@@ -112,7 +108,7 @@ gettable(name, buf)
 }
 
 void
-gendefaults()
+gendefaults(void)
 {
 	struct gettystrs *sp;
 	struct gettynums *np;
@@ -132,7 +128,7 @@ gendefaults()
 }
 
 void
-setdefaults()
+setdefaults(void)
 {
 	struct gettystrs *sp;
 	struct gettynums *np;
@@ -152,20 +148,21 @@ setdefaults()
 static char **
 charnames[] = {
 	&ER, &KL, &IN, &QU, &XN, &XF, &ET, &BK,
-	&SU, &DS, &RP, &FL, &WE, &LN, 0
+	&SU, &DS, &RP, &FL, &WE, &LN, &ST, &B2, 0
 };
 
-static char *
+static cc_t *
 charvars[] = {
 	&tmode.c_cc[VERASE], &tmode.c_cc[VKILL], &tmode.c_cc[VINTR],
 	&tmode.c_cc[VQUIT], &tmode.c_cc[VSTART], &tmode.c_cc[VSTOP],
 	&tmode.c_cc[VEOF], &tmode.c_cc[VEOL], &tmode.c_cc[VSUSP],
 	&tmode.c_cc[VDSUSP], &tmode.c_cc[VREPRINT], &tmode.c_cc[VDISCARD],
-	&tmode.c_cc[VWERASE], &tmode.c_cc[VLNEXT], 0
+	&tmode.c_cc[VWERASE], &tmode.c_cc[VLNEXT], &tmode.c_cc[VSTATUS],
+	&tmode.c_cc[VEOL2], 0
 };
 
 void
-setchars()
+setchars(void)
 {
 	int i;
 	char *p;
@@ -185,8 +182,7 @@ setchars()
 #define	ISSET(t, f)	((t) & (f))
 
 void
-setflags(n)
-	int n;
+setflags(int n)
 {
 	tcflag_t iflag, oflag, cflag, lflag;
 
@@ -367,8 +363,7 @@ out:
  * Old TTY => termios, snatched from <sys/kern/tty_compat.c>
  */
 void
-compatflags(flags)
-	long flags;
+compatflags(long flags)
 {
 	tcflag_t iflag, oflag, cflag, lflag;
 
@@ -535,7 +530,7 @@ struct delayval	tbdelay[] = {
 };
 
 int
-delaybits()
+delaybits(void)
 {
 	int f;
 
@@ -548,9 +543,7 @@ delaybits()
 }
 
 int
-adelay(ms, dp)
-	ms;
-	struct delayval *dp;
+adelay(int ms, struct delayval *dp)
 {
 	if (ms == 0)
 		return (0);
@@ -563,8 +556,7 @@ adelay(ms, dp)
 char	editedhost[MAXHOSTNAMELEN];
 
 void
-edithost(pat)
-	char *pat;
+edithost(char *pat)
 {
 	char *host = HN;
 	char *res = editedhost;
@@ -596,15 +588,15 @@ edithost(pat)
 		pat++;
 	}
 	if (*host)
-		strncpy(res, host, sizeof editedhost - (res - editedhost) - 1);
+		(void)strncpy(res, host,
+		    sizeof editedhost - (res - editedhost) - 1);
 	else
 		*res = '\0';
 	editedhost[sizeof editedhost - 1] = '\0';
 }
 
 void
-makeenv(env)
-	char *env[];
+makeenv(char *env[])
 {
 	static char termbuf[128] = "TERM=";
 	char *p, *q;
@@ -612,8 +604,7 @@ makeenv(env)
 
 	ep = env;
 	if (TT && *TT) {
-		strncat(termbuf, TT, 128);
-		termbuf[127] = (char)NULL;
+		(void)strlcat(termbuf, TT, sizeof(termbuf));
 		*ep++ = termbuf;
 	}
 	if ((p = EV) != NULL) {
@@ -653,13 +644,13 @@ struct	portselect {
 };
 
 char *
-portselector()
+portselector(void)
 {
 	char c, baud[20], *type = "default";
 	struct portselect *ps;
 	int len;
 
-	alarm(5*60);
+	(void)alarm(5*60);
 	for (len = 0; len < sizeof (baud) - 1; len++) {
 		if (read(STDIN_FILENO, &c, 1) <= 0)
 			break;
@@ -676,7 +667,7 @@ portselector()
 			type = ps->ps_type;
 			break;
 		}
-	sleep(2);	/* wait for connection to complete */
+	(void)sleep(2);	/* wait for connection to complete */
 	return (type);
 }
 
@@ -688,25 +679,22 @@ portselector()
 #include <sys/time.h>
 
 char *
-autobaud()
+autobaud(void)
 {
-	int rfds;
-	struct timeval timeout;
+	struct pollfd set[1];
+	struct timespec timeout;
 	char c, *type = "9600-baud";
 
 	(void)tcflush(0, TCIOFLUSH);
-	rfds = 1 << 0;
-	timeout.tv_sec = 5;
-	timeout.tv_usec = 0;
-	if (select(32, (fd_set *)&rfds, (fd_set *)NULL,
-	    (fd_set *)NULL, &timeout) <= 0)
+	set[0].fd = STDIN_FILENO;
+	set[0].events = POLLIN;
+	if (poll(set, 1, 5000) <= 0)
 		return (type);
-	if (read(STDIN_FILENO, &c, sizeof(char)) != sizeof(char))
+	if (read(STDIN_FILENO, &c, 1) != 1)
 		return (type);
 	timeout.tv_sec = 0;
-	timeout.tv_usec = 20;
-	(void) select(32, (fd_set *)NULL, (fd_set *)NULL,
-	    (fd_set *)NULL, &timeout);
+	timeout.tv_nsec = 20000;
+	(void)nanosleep(&timeout, NULL);
 	(void)tcflush(0, TCIOFLUSH);
 	switch (c & 0377) {
 

@@ -1,15 +1,16 @@
 #!/bin/sh
 #
-# $NetBSD: rtsold,v 1.2 2000/03/13 04:04:04 lukem Exp $
+# $NetBSD: rtsold,v 1.7 2006/10/07 21:41:41 rpaulo Exp $
 #
 
 # PROVIDE: rtsold
-# REQUIRE: DAEMON
+# REQUIRE: network mountcritlocal
+# BEFORE:  NETWORKING
 
-. /etc/rc.subr
-. /etc/rc.conf
+$_rc_subr_loaded . /etc/rc.subr
 
 name="rtsold"
+rcvar=$name
 command="/usr/sbin/${name}"
 start_precmd="rtsold_precmd"
 
@@ -21,4 +22,5 @@ rtsold_precmd()
 	fi
 }
 
+load_rc_config $name
 run_rc_command "$1"

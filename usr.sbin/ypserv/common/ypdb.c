@@ -1,4 +1,4 @@
-/*	$NetBSD: ypdb.c,v 1.7 1999/07/26 03:01:09 lukem Exp $	*/
+/*	$NetBSD: ypdb.c,v 1.11 2008/02/29 03:00:47 lukem Exp $	*/
 
 /*
  * Copyright (c) 1990, 1993
@@ -19,11 +19,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -42,39 +38,114 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: ypdb.c,v 1.7 1999/07/26 03:01:09 lukem Exp $");
+__RCSID("$NetBSD: ypdb.c,v 1.11 2008/02/29 03:00:47 lukem Exp $");
 #endif
 
 #include <sys/param.h>
 #include <sys/types.h>
 
 #include <db.h>
+#include <err.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include <rpcsvc/yp.h>
 
 #include "ypdb.h"
 
+static DBM	*_ypdb_dbopen(const char *, int, mode_t);
+
 /*
+ * ypdb_open --
+ *	dbopen(3) file, read-only.
+ *	First ensure that file has a suffix of YPDB_SUFFIX.
+ *	Try opening as a DB_BTREE first, then DB_HASH.
+ *
  * Returns:
- * 	*DBM on success
+ *	*DBM on success
  *	 NULL on failure
  */
 
 DBM *
-ypdb_open(file, flags, mode)
-	const char *file;
-	int flags, mode;
+ypdb_open(const char *file)
 {
-	char path[MAXPATHLEN], *cp;
-	DBM *db;
-	BTREEINFO info;
+	char path[MAXPATHLEN];
+	const char *cp, *suffix;
 
 	cp = strrchr(file, '.');
-	snprintf(path, sizeof(path), "%s%s", file,
-	    (cp != NULL && strcmp(cp, ".db") == 0) ? "" : YPDB_SUFFIX);
+	if (cp != NULL && strcmp(cp, YPDB_SUFFIX) == 0)
+		suffix = "";
+	else
+		suffix = YPDB_SUFFIX;
+	if (strlen(file) + strlen(suffix) > (sizeof(path) - 1)) {
+		warnx("File name `%s' is too long", file);
+		return (NULL);
+	}
+	snprintf(path, sizeof(path), "%s%s", file, suffix);
+	return _ypdb_dbopen(path, O_RDONLY, 0444);
+}
+
+/*
+ * ypdb_mktemp --
+ *	Create a temporary file using mkstemp(3) based on the
+ *	template provided in file.
+ *	dbopen(3) file, read-write, 0644 (modified by umask(2)).
+ *	Try opening as a DB_BTREE first, then DB_HASH.
+ *	file won't have YPDB_SUFFIX.
+ *
+ * Returns:
+ *	*DBM on success; file now exists.
+ *	 NULL on failure
+ */
+
+DBM *
+ypdb_mktemp(char *file)
+{
+	int fd = -1;
+	DBM *db = NULL;
+	mode_t myumask;
+	int save_errno;
+
+	if ((fd = mkstemp(file)) == -1)
+		return NULL;
+
+	myumask = umask(0);
+	(void)umask(myumask);
+	if (fchmod(fd, 0644 & ~myumask) == -1)
+		goto bad;
+
+	(void) close(fd);
+	fd = -1;
+
+	if ((db = _ypdb_dbopen(file, O_RDWR, 0644)) == NULL)
+		goto bad;
+
+	return db;
+
+ bad:
+	save_errno = errno;
+	if (fd != 1)
+		(void) close(fd);
+	(void) unlink(file);
+	errno = save_errno;
+	return NULL;
+}
+
+/*
+ * _ypdb_dbopen --
+ *	dbopen(3) path with the flags & mode.
+ *	Try opening as a DB_BTREE first, then DB_HASH.
+ */
+
+static DBM *
+_ypdb_dbopen(const char *path, int flags, mode_t mode)
+{
+	DBM *db;
+	BTREEINFO info;
 
 		/* try our btree format first */
 	info.flags = 0;
@@ -94,9 +165,13 @@ ypdb_open(file, flags, mode)
 	return (db);
 }
 
+/*
+ * ypdb_close --
+ *	Close the db
+ */
+
 void
-ypdb_close(db)
-	DBM *db;
+ypdb_close(DBM *db)
 {
 	(void)(db->close)(db);
 }
@@ -108,9 +183,7 @@ ypdb_close(db)
  */
 
 datum
-ypdb_fetch(db, key)
-	DBM *db;
-	datum key;
+ypdb_fetch(DBM *db, datum key)
 {
 	datum retkey;
 	DBT nk, nd;
@@ -136,8 +209,7 @@ ypdb_fetch(db, key)
  */
 
 datum
-ypdb_firstkey(db)
-	DBM *db;
+ypdb_firstkey(DBM *db)
 {
 	int status;
 	datum retkey;
@@ -161,8 +233,7 @@ ypdb_firstkey(db)
  */
 
 datum
-ypdb_nextkey(db)
-	DBM *db;
+ypdb_nextkey(DBM *db)
 {
 	int status;
 	datum retkey;
@@ -186,9 +257,7 @@ ypdb_nextkey(db)
  */
 
 datum
-ypdb_setkey(db, key)
-	DBM *db;
-        datum key;
+ypdb_setkey(DBM *db, datum key)
 {
 	int status;
 	DBT nk, nd;
@@ -210,9 +279,7 @@ ypdb_setkey(db, key)
  */
 
 int
-ypdb_delete(db, key)
-	DBM *db;
-	datum key;
+ypdb_delete(DBM *db, datum key)
 {
 	int status;
 	DBT nk;
@@ -234,10 +301,7 @@ ypdb_delete(db, key)
  */
 
 int
-ypdb_store(db, key, content, flags)
-	DBM *db;
-	datum key, content;
-	int flags;
+ypdb_store(DBM *db, datum key, datum content, int flags)
 {
 	DBT nk, nd;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: Lint_ntohl.c,v 1.2 1999/05/03 13:12:34 christos Exp $	*/
+/* $NetBSD: Lint_ntohl.c,v 1.4 2001/08/22 07:42:09 itojun Exp $ */
 
 /*
  * This file placed in the public domain.
@@ -9,9 +9,9 @@
 #undef ntohl
 
 /*ARGSUSED*/
-in_addr_t
+uint32_t
 ntohl(net32)
-	in_addr_t net32;
+	uint32_t net32;
 {
 	return (0);
 }

@@ -1,4 +1,4 @@
-/* $NetBSD: mcpcia_pci.c,v 1.3 1998/05/05 22:01:54 mjacob Exp $ */
+/* $NetBSD: mcpcia_pci.c,v 1.5 2007/03/04 05:59:11 christos Exp $ */
 
 /*
  * Copyright (c) 1998 by Matthew Jacob
@@ -32,20 +32,21 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: mcpcia_pci.c,v 1.3 1998/05/05 22:01:54 mjacob Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mcpcia_pci.c,v 1.5 2007/03/04 05:59:11 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
-#include <vm/vm.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
 #include <alpha/pci/mcpciareg.h>
 #include <alpha/pci/mcpciavar.h>
 
-#define	KV(_addr)	((caddr_t)ALPHA_PHYS_TO_K0SEG((_addr)))
+#define	KV(_addr)	((void *)ALPHA_PHYS_TO_K0SEG((_addr)))
 
 static void mcpcia_attach_hook __P((struct device *, struct device *,
 	struct pcibus_attach_args *));

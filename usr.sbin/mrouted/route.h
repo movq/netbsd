@@ -1,4 +1,4 @@
-/*	$NetBSD: route.h,v 1.4 1995/12/10 10:07:13 mycroft Exp $	*/
+/*	$NetBSD: route.h,v 1.6 2003/03/05 21:05:40 wiz Exp $	*/
 
 /*
  * The mrouted program is covered by the license in the accompanying file

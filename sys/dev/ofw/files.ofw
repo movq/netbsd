@@ -1,4 +1,4 @@
-#	$NetBSD: files.ofw,v 1.10 2000/03/24 17:05:34 ws Exp $
+#	$NetBSD: files.ofw,v 1.13 2007/01/08 06:43:09 macallan Exp $
 #
 # First cut on Openfirmware interface
 #
@@ -6,7 +6,10 @@
 define	ofbus {}
 define	of_network_dev
 
-file	dev/ofw/ofw_subr.c		ofbus
+defpseudo openfirm
+file	dev/ofw/openfirmio.c		openfirm needs-flag
+
+file	dev/ofw/ofw_subr.c		ofbus | openfirm
 
 file	dev/ofw/ofw_network_subr.c	of_network_dev
 
@@ -31,6 +34,6 @@ attach	ofrtc at ofbus
 file	dev/ofw/ofrtc.c			ofrtc needs-flag
 
 # Generic bus support
-device	ofbus
+device	ofbus: ofbus
 attach	ofbus at ofbus
 file	dev/ofw/ofbus.c			ofbus

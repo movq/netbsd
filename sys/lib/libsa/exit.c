@@ -1,9 +1,9 @@
-/*	$NetBSD: exit.c,v 1.13 1999/02/12 10:51:28 drochner Exp $	*/
+/*	$NetBSD: exit.c,v 1.17 2007/11/24 13:20:55 isaki Exp $	*/
 
 /*-
  *  Copyright (c) 1993 John Brezak
  *  All rights reserved.
- * 
+ *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted provided that the following conditions
  *  are met:
@@ -14,7 +14,7 @@
  *     documentation and/or other materials provided with the distribution.
  *  3. The name of the author may not be used to endorse or promote products
  *     derived from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR `AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -30,11 +30,9 @@
 
 #include "stand.h"
 
-__dead void	exit __P((void)) __attribute__((noreturn));
-
 void
-exit()
+exit(int arg)
 {
-    panic("exit");
-    /*NOTREACHED*/
+	panic("exit");
+	/*NOTREACHED*/
 }

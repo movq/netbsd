@@ -1,14 +1,18 @@
-/*	$NetBSD: llscan.c,v 1.5 1994/06/29 06:41:05 cgd Exp $	*/
+/*	$NetBSD: llscan.c,v 1.12 2007/01/18 12:43:38 cbiere Exp $	*/
 
 /*
  * ************************* NOTICE *******************************
  * This code is in the public domain.  It cannot be copyrighted.
- * This scanner was originally written by Keith Thompson for the 
+ * This scanner was originally written by Keith Thompson for the
  * University of Wisconsin Crystal project.
- * It was subsequently modified significantly by Nancy Hall at the 
+ * It was subsequently modified significantly by Nancy Hall at the
  * University of Wisconsin for the ARGO project.
  * ****************************************************************
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: llscan.c,v 1.12 2007/01/18 12:43:38 cbiere Exp $");
+
 #include "xebec.h"
 #include "llparse.h"
 
@@ -16,6 +20,7 @@
 #include <stdio.h>
 #include "procs.h"
 #include "debug.h"
+#include <string.h>
 
 #define EOFILE	0x01
 #define UNUSED	0x02
@@ -63,7 +68,7 @@ int chtype[128] = {
 };
 
 
-extern FILE *astringfile; 
+extern FILE *astringfile;
 static char *buffptr;
 static char buffer[2][LINELEN];
 static int currentbuf = 1;
@@ -72,6 +77,10 @@ static int currentbuf = 1;
 
 static int ch = ' ';
 
+int getch();
+extern void AddCurrentEventName();
+
+void
 skip()
 {
 	while((chtype[ch] == IGNORE) ) {
@@ -79,8 +88,9 @@ skip()
 	}
 }
 
+void
 llaccept(t)
-LLtoken *t;
+	LLtoken *t;
 {
 	switch(t->llstate) {
 	case NORMAL:
@@ -96,7 +106,7 @@ LLtoken *t;
 
 #define	TVAL	(t->llattrib)
 
-
+void
 dump_buffer()
 {
 	register int i;
@@ -135,9 +145,10 @@ char **buf;
 	return(0);
 }
 
-getstr(o,c) 
-	/* c is the string delimiter 
-	 * allow the delimiter to be escaped 
+void
+getstr(o,c)
+	/* c is the string delimiter
+	 * allow the delimiter to be escaped
 	 * the messy part: translate $ID to
 	 *   e->ev_union.ID
 	 * where ID is an event with a non-zero obj_struc
@@ -146,12 +157,12 @@ getstr(o,c)
 char o,c;
 {
 	register int nested = 1;
-	register int allow_nesting = (o==c)?-1:1; 
+	register int allow_nesting = (o==c)?-1:1;
 
 	IFDEBUG(S)
 		fprintf(stdout,"getstr: ch=%c, delimiters %c %c\n",
 			ch,o, c);
-		fprintf(stdout,"getstr: buffptr 0x%x, currentbuf 0x%x\n",
+		fprintf(stdout,"getstr: buffptr %p, currentbuf 0x%x\n",
 			buffptr, currentbuf);
 	ENDDEBUG
 
@@ -170,14 +181,14 @@ char o,c;
 
 			/* assume it's an event */
 			/* addbuf is a macro so this isn't as bad as
-			 * it looks 
+			 * it looks
 			 * add "e->ev_union."
 			 */
 			if( (ch = getch()) == '$' ) {
 				addbuf('e'); addbuf('-'); addbuf('>');
 				addbuf('e'); addbuf('v'); addbuf('_');
 				addbuf('u'); addbuf('n'); addbuf('i');
-				addbuf('o'); addbuf('n'); 
+				addbuf('o'); addbuf('n');
 				addbuf('.');
 				AddCurrentEventName(& buffptr);
 			} else {
@@ -195,7 +206,7 @@ char o,c;
 				} else if( !strncmp(obufp, synonyms[EVENT_SYN],
 										strlen(synonyms[EVENT_SYN]))) {
 					buffptr = obufp;
-					addbuf('e'); 
+					addbuf('e');
 				} else {
 					fprintf(stderr, "Unknown synonym %s\n", obufp);
 					Exit(-1);
@@ -219,7 +230,7 @@ char o,c;
 			if( (ch != o ) && (ch != c) && (ch != '$') ) {
 			/* may need to handle case where \ is last char in file... */
 				/* don't treat is as escape; not open or close so
-				 * don't have to worry about nesting either 
+				 * don't have to worry about nesting either
 				 */
 				addbuf('\\');
 			}
@@ -231,14 +242,14 @@ char o,c;
 		if( ch == o ) nested += allow_nesting;
 		else if( ch == c ) nested--;
 		if ( (buffptr - buffer[currentbuf]) > LINELEN) {
-			fprintf(stderr, 
+			fprintf(stderr,
 			"%s too long.\n", (o=='{')?"Action":"Predicate"); /*}*/
-			fprintf(stderr, 
-			"buffptr, currentbuf 0x%x, 0x%x\n",buffptr,currentbuf );
+			fprintf(stderr,
+			"buffptr, currentbuf %p, 0x%x\n",buffptr,currentbuf );
 			Exit(-1);
 		}
 		IFDEBUG(S)
-			fprintf(stdout,"loop in getstr: ch 0x%x,%c o=%c,c=%c nested=%d\n", 
+			fprintf(stdout,"loop in getstr: ch 0x%x,%c o=%c,c=%c nested=%d\n",
 				ch,ch,o,c,nested);
 		ENDDEBUG
 	}
@@ -247,32 +258,35 @@ char o,c;
 
 	IFDEBUG(S)
 		fprintf(stdout,"exit getstr: got %s\n", buffer[currentbuf]);
-		fprintf(stdout,"exit getstr: buffptr 0x%x, currentbuf 0x%x\n",
+		fprintf(stdout,"exit getstr: buffptr %p, currentbuf 0x%x\n",
 			buffptr, currentbuf);
 	ENDDEBUG
 }
 
+int
 getch()
 {
-	char c;
+	int c;
 	extern FILE *infile;
 	extern int lineno;
 
-	c = fgetc(infile) ;
+	c = fgetc(infile);
 	if (c == '\n') lineno++;
-	if ((int)c ==  EOF) c = (char)0;
-	if (feof(infile)) c = (char) 0;
+	if (c == EOF) c = 0;
+	if (c & ~0x7f) c = 0;
+	if (feof(infile)) c = 0;
 	IFDEBUG(e)
 		fprintf(stdout, "getch: 0x%x\n", c);
-		(void) fputc( c, stdout);
+		(void) fputc(c, stdout);
 		fflush(stdout);
 	ENDDEBUG
 
 	return c;
 }
 
+void
 llscan(t)
-LLtoken *t;
+	LLtoken *t;
 {
 	char c;
 
@@ -324,7 +338,7 @@ again:
 						break;
 					whatchar = (c=='*')?0:(c=='/'?1:2);
 					IFDEBUG(S)
-						fprintf(stdout, 
+						fprintf(stdout,
 							"comment: whatchar = %d, c = 0x%x,%c, oldstate=%d",
 							whatchar, c,c, state);
 					ENDDEBUG
@@ -381,7 +395,7 @@ again:
 			getstr('"', '"');
 			TVAL.FSTRING.address = stash(buffer[currentbuf]);
 			break;
-#endif T_FSTRING
+#endif /* T_FSTRING */
 
 		case '(':
 			t->llterm = T_PREDICATE;
@@ -418,7 +432,7 @@ again:
 			TVAL.ID.address = buffer[currentbuf];
 		}
 		IFDEBUG(S)
-			fprintf(stdout, "llscan: id or keyword 0x%x, %s\n",
+			fprintf(stdout, "llscan: id or keyword %p, %s\n",
 			TVAL.ID.address, TVAL.ID.address);
 		ENDDEBUG
 		break;

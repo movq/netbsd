@@ -1,4 +1,4 @@
-.\"	$NetBSD: mkfifo.2,v 1.11 1999/12/02 21:42:37 kleink Exp $
+.\"	$NetBSD: mkfifo.2,v 1.19 2004/05/13 10:20:58 wiz Exp $
 .\"
 .\" Copyright (c) 1990, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -42,8 +38,7 @@
 .Sh LIBRARY
 .Lb libc
 .Sh SYNOPSIS
-.Fd #include <sys/types.h>
-.Fd #include <sys/stat.h>
+.In sys/stat.h
 .Ft int
 .Fn mkfifo "const char *path" "mode_t mode"
 .Sh DESCRIPTION
@@ -61,8 +56,8 @@ The fifo's owner ID is set to the process's effective user ID.
 The fifo's group ID is set to that of the parent directory in
 which it is created.
 .Sh RETURN VALUES
-A 0 return value indicates success.  A -1 return value
-indicates an error, and an error code is stored in
+A 0 return value indicates success.
+A \-1 return value indicates an error, and an error code is stored in
 .Va errno .
 .Sh ERRORS
 .Fn mkfifo
@@ -73,9 +68,9 @@ The kernel has not been configured to support fifo's.
 .It Bq Er ENOTDIR
 A component of the path prefix is not a directory.
 .It Bq Er ENAMETOOLONG
-A component of a pathname exceeded 
+A component of a pathname exceeded
 .Dv {NAME_MAX}
-characters, or an entire path name exceeded 
+characters, or an entire path name exceeded
 .Dv {PATH_MAX}
 characters.
 .It Bq Er ENOENT

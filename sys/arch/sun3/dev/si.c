@@ -1,4 +1,4 @@
-/*	$NetBSD: si.c,v 1.48 2000/03/25 15:27:57 tsutsui Exp $	*/
+/*	$NetBSD: si.c,v 1.62 2008/04/28 20:23:37 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -76,6 +69,9 @@
  * The autoconfiguration boilerplate came from Adam Glass.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: si.c,v 1.62 2008/04/28 20:23:37 martin Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/errno.h>
@@ -92,6 +88,7 @@
 #include <dev/scsipi/scsiconf.h>
 
 #include <machine/autoconf.h>
+#include <machine/bus.h>
 #include <machine/dvma.h>
 
 /* #define DEBUG XXX */
@@ -110,24 +107,22 @@
 
 int si_debug = 0;
 #ifdef	DEBUG
-static int si_link_flags = 0 /* | SDEV_DB2 */ ;
 #endif
 
 /* How long to wait for DMA before declaring an error. */
 int si_dma_intr_timo = 500;	/* ticks (sec. X 100) */
 
-static void	si_minphys __P((struct buf *));
+static void	si_minphys(struct buf *);
 
 /*
  * New-style autoconfig attachment. The cfattach
  * structures are in si_obio.c and si_vme.c
  */
 
-void
-si_attach(sc)
-	struct si_softc *sc;
+void 
+si_attach(struct si_softc *sc)
 {
-	struct ncr5380_softc *ncr_sc = (void *)sc;
+	struct ncr5380_softc *ncr_sc = &sc->ncr_sc;
 	volatile struct si_regs *regs = sc->sc_regs;
 	int i;
 
@@ -137,9 +132,9 @@ si_attach(sc)
 	 * Interrupts and DMA are per-controller.
 	 */
 	ncr_sc->sc_no_disconnect =
-		(sc->sc_options & SI_NO_DISCONNECT);
+	    (sc->sc_options & SI_NO_DISCONNECT);
 	ncr_sc->sc_parity_disable = 
-		(sc->sc_options & SI_NO_PARITY_CHK) >> 8;
+	    (sc->sc_options & SI_NO_PARITY_CHK) >> 8;
 	if (sc->sc_options & SI_FORCE_POLLING)
 		ncr_sc->sc_flags |= NCR5380_FORCE_POLLING;
 
@@ -151,12 +146,6 @@ si_attach(sc)
 	}
 #endif
 	ncr_sc->sc_min_dma_len = MIN_DMA_LEN;
-
-#ifdef	DEBUG
-	if (si_debug)
-		printf("si: Set TheSoftC=%p TheRegs=%p\n", sc, regs);
-	ncr_sc->sc_link.flags |= si_link_flags;
-#endif
 
 	/*
 	 * Initialize fields used by the MI code
@@ -179,33 +168,33 @@ si_attach(sc)
 	sc->sc_dma = (struct si_dma_handle *)
 		malloc(i, M_DEVBUF, M_WAITOK);
 	if (sc->sc_dma == NULL)
-		panic("si: dvma_malloc failed\n");
+		panic("si: dvma_malloc failed");
 	for (i = 0; i < SCI_OPENINGS; i++)
 		sc->sc_dma[i].dh_flags = 0;
 
-	ncr_sc->sc_adapter.scsipi_scsi.adapter_target = 7;
-	ncr_sc->sc_adapter.scsipi_minphys = si_minphys;
+	ncr_sc->sc_channel.chan_id = 7;
+	ncr_sc->sc_adapter.adapt_minphys = si_minphys;
 
 	/*
 	 *  Initialize si board itself.
 	 */
 	ncr5380_attach(ncr_sc);
-
 }
 
 static void
 si_minphys(struct buf *bp)
 {
+
 	if (bp->b_bcount > MAX_DMA_LEN) {
 #ifdef	DEBUG
 		if (si_debug) {
-			printf("si_minphys len = 0x%lx.\n", bp->b_bcount);
+			printf("%s len = 0x%x.\n", __func__, bp->b_bcount);
 			Debugger();
 		}
 #endif
 		bp->b_bcount = MAX_DMA_LEN;
 	}
-	return (minphys(bp));
+	minphys(bp);
 }
 
 
@@ -229,11 +218,11 @@ si_intr(void *arg)
 
 	if (csr & SI_CSR_DMA_CONFLICT) {
 		dma_error |= SI_CSR_DMA_CONFLICT;
-		printf("si_intr: DMA conflict\n");
+		printf("%s: DMA conflict\n", __func__);
 	}
 	if (csr & SI_CSR_DMA_BUS_ERR) {
 		dma_error |= SI_CSR_DMA_BUS_ERR;
-		printf("si_intr: DMA bus error\n");
+		printf("%s: DMA bus error\n", __func__);
 	}
 	if (dma_error) {
 		if (sc->ncr_sc.sc_state & NCR_DOINGDMA)
@@ -246,7 +235,7 @@ si_intr(void *arg)
 		claimed = ncr5380_intr(&sc->ncr_sc);
 #ifdef	DEBUG
 		if (!claimed) {
-			printf("si_intr: spurious from SBC\n");
+			printf("%s: spurious from SBC\n", __func__);
 			if (si_debug & 4)
 				Debugger();	/* XXX */
 		}
@@ -255,7 +244,7 @@ si_intr(void *arg)
 		claimed = 1;
 	}
 
-	return (claimed);
+	return claimed;
 }
 
 
@@ -268,34 +257,33 @@ si_intr(void *arg)
  * for DMA transfer.  On the Sun3, this means mapping the buffer
  * into DVMA space.  dvma_mapin() flushes the cache for us.
  */
-void
-si_dma_alloc(ncr_sc)
-	struct ncr5380_softc *ncr_sc;
+void 
+si_dma_alloc(struct ncr5380_softc *ncr_sc)
 {
 	struct si_softc *sc = (struct si_softc *)ncr_sc;
 	struct sci_req *sr = ncr_sc->sc_current;
 	struct scsipi_xfer *xs = sr->sr_xs;
 	struct si_dma_handle *dh;
 	int i, xlen;
-	u_long addr;
+	void *addr;
 
 #ifdef	DIAGNOSTIC
 	if (sr->sr_dma_hand != NULL)
-		panic("si_dma_alloc: already have DMA handle");
+		panic("%s: already have DMA handle", __func__);
 #endif
 
-	addr = (u_long) ncr_sc->sc_dataptr;
+	addr = ncr_sc->sc_dataptr;
 	xlen = ncr_sc->sc_datalen;
 
 	/* If the DMA start addr is misaligned then do PIO */
-	if ((addr & 1) || (xlen & 1)) {
-		printf("si_dma_alloc: misaligned.\n");
+	if (((vaddr_t)addr & 1) || (xlen & 1)) {
+		printf("%s: misaligned.\n", __func__);
 		return;
 	}
 
 	/* Make sure our caller checked sc_min_dma_len. */
 	if (xlen < MIN_DMA_LEN)
-		panic("si_dma_alloc: xlen=0x%x\n", xlen);
+		panic("%s: xlen=0x%x", __func__, xlen);
 
 	/*
 	 * Never attempt single transfers of more than 63k, because
@@ -304,7 +292,7 @@ si_dma_alloc(ncr_sc)
 	 * XXX - Should just segment these...
 	 */
 	if (xlen > MAX_DMA_LEN) {
-		printf("si_dma_alloc: excessive xlen=0x%x\n", xlen);
+		printf("%s: excessive xlen=0x%x\n", __func__, xlen);
 		Debugger();
 		ncr_sc->sc_datalen = xlen = MAX_DMA_LEN;
 	}
@@ -320,13 +308,20 @@ found:
 
 	dh = &sc->sc_dma[i];
 	dh->dh_flags = SIDH_BUSY;
-	dh->dh_addr = (u_char*) addr;
-	dh->dh_maplen  = xlen;
-	dh->dh_dvma = 0;
+
+	if (bus_dmamap_load(sc->sc_dmat, sc->sc_dmap, addr, xlen, NULL,
+	    BUS_DMA_NOWAIT) != 0)
+		panic("%s: can't load dmamap", device_xname(ncr_sc->sc_dev));
+	dh->dh_dmaaddr = sc->sc_dmap->dm_segs[0].ds_addr;
+	dh->dh_dmalen  = xlen;
 
 	/* Copy the "write" flag for convenience. */
 	if (xs->xs_control & XS_CTL_DATA_OUT)
 		dh->dh_flags |= SIDH_OUT;
+
+	bus_dmamap_sync(sc->sc_dmat, sc->sc_dmap, 0, dh->dh_dmalen,
+	    (dh->dh_flags & SIDH_OUT) == 0 ?
+	    BUS_DMASYNC_PREREAD : BUS_DMASYNC_PREWRITE);
 
 #if 0
 	/*
@@ -340,15 +335,6 @@ found:
 		dh->dh_flags |= SIDH_PHYS;
 #endif
 
-	dh->dh_dvma = dvma_mapin((char *)addr, xlen, 0);
-	if (!dh->dh_dvma) {
-		/* Can't remap segment */
-		printf("si_dma_alloc: can't remap %p/0x%x\n",
-			dh->dh_addr, dh->dh_maplen);
-		dh->dh_flags = 0;
-		return;
-	}
-
 	/* success */
 	sr->sr_dma_hand = dh;
 
@@ -356,26 +342,27 @@ found:
 }
 
 
-void
-si_dma_free(ncr_sc)
-	struct ncr5380_softc *ncr_sc;
+void 
+si_dma_free(struct ncr5380_softc *ncr_sc)
 {
+	struct si_softc *sc = (struct si_softc *)ncr_sc;
 	struct sci_req *sr = ncr_sc->sc_current;
 	struct si_dma_handle *dh = sr->sr_dma_hand;
 
 #ifdef	DIAGNOSTIC
 	if (dh == NULL)
-		panic("si_dma_free: no DMA handle");
+		panic("%s: no DMA handle", __func__);
 #endif
 
 	if (ncr_sc->sc_state & NCR_DOINGDMA)
-		panic("si_dma_free: free while in progress");
+		panic("%s: free while in progress", __func__);
 
 	if (dh->dh_flags & SIDH_BUSY) {
-		/* XXX - Should separate allocation and mapping. */
-		/* Give back the DVMA space. */
-		dvma_mapout(dh->dh_dvma, dh->dh_maplen);
-		dh->dh_dvma = 0;
+		bus_dmamap_sync(sc->sc_dmat, sc->sc_dmap, 0, dh->dh_dmalen,
+		    (dh->dh_flags & SIDH_OUT) == 0 ?
+		    BUS_DMASYNC_POSTREAD : BUS_DMASYNC_POSTWRITE);
+		bus_dmamap_unload(sc->sc_dmat, sc->sc_dmap);
+		dh->dh_dmaaddr = 0;
 		dh->dh_flags = 0;
 	}
 	sr->sr_dma_hand = NULL;
@@ -392,9 +379,8 @@ si_dma_free(ncr_sc)
  * xx_dma_stop() will be called next.
  * Same for either VME or OBIO.
  */
-void
-si_dma_poll(ncr_sc)
-	struct ncr5380_softc *ncr_sc;
+void 
+si_dma_poll(struct ncr5380_softc *ncr_sc)
 {
 	struct si_softc *sc = (struct si_softc *)ncr_sc;
 	struct sci_req *sr = ncr_sc->sc_current;
@@ -411,7 +397,7 @@ si_dma_poll(ncr_sc)
 	 * XXX: I really doubt that is necessary...
 	 */
 
-	/* Wait for any "dma complete" or error bits. */
+	/* Wait for any "DMA complete" or error bits. */
 	tmo = POLL_TIMO;
 	for (;;) {
 		if (si->si_csr & CSR_MASK)
@@ -429,7 +415,7 @@ si_dma_poll(ncr_sc)
 
 #ifdef	DEBUG
 	if (si_debug & 2) {
-		printf("si_dma_poll: done, csr=0x%x\n", si->si_csr);
+		printf("%s: done, csr=0x%x\n", __func__, si->si_csr);
 	}
 #endif
 }

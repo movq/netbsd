@@ -1,4 +1,4 @@
-/*	$NetBSD: hpibvar.h,v 1.13 1997/10/04 10:00:12 thorpej Exp $	*/
+/*	$NetBSD: hpibvar.h,v 1.20 2008/04/28 20:23:19 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -48,11 +41,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -111,17 +100,17 @@ struct hpibbus_softc;
  * is used by the indirect driver to call controller-specific functions.
  */
 struct	hpib_controller {
-	void	(*hpib_reset) __P((struct hpibbus_softc *));
-	int	(*hpib_send) __P((struct hpibbus_softc *,
-		    int, int, void *, int));
-	int	(*hpib_recv) __P((struct hpibbus_softc *,
-		    int, int, void *, int));
-	int	(*hpib_ppoll) __P((struct hpibbus_softc *));
-	void	(*hpib_ppwatch) __P((void *));
-	void	(*hpib_go) __P((struct hpibbus_softc *,
-		    int, int, void *, int, int, int));
-	void	(*hpib_done) __P((struct hpibbus_softc *));
-	int	(*hpib_intr) __P((void *));
+	void	(*hpib_reset)(struct hpibbus_softc *);
+	int	(*hpib_send)(struct hpibbus_softc *,
+		    int, int, void *, int);
+	int	(*hpib_recv)(struct hpibbus_softc *,
+		    int, int, void *, int);
+	int	(*hpib_ppoll)(struct hpibbus_softc *);
+	void	(*hpib_ppwatch)(void *);
+	void	(*hpib_go)(struct hpibbus_softc *,
+		    int, int, void *, int, int, int);
+	void	(*hpib_done)(struct hpibbus_softc *);
+	int	(*hpib_intr)(void *);
 };
 
 /*
@@ -138,7 +127,7 @@ struct hpibdev_attach_args {
  * Attach an HP-IB device to an HP-IB bus.
  */
 struct hpibbus_attach_args {
-	u_int16_t ha_id;		/* device id */
+	uint16_t ha_id;			/* device id */
 	int	ha_slave;		/* HP-IB bus slave */
 	int	ha_punit;		/* physical unit on slave */
 };
@@ -164,9 +153,9 @@ struct hpibqueue {
 	/*
 	 * Callbacks used to start and stop the slave driver.
 	 */
-	void	(*hq_start) __P((void *));
-	void	(*hq_go) __P((void *));
-	void	(*hq_intr) __P((void *));
+	void	(*hq_start)(void *);
+	void	(*hq_go)(void *);
+	void	(*hq_intr)(void *);
 };
 
 struct dmaqueue;
@@ -175,7 +164,7 @@ struct dmaqueue;
  * Software state per HP-IB bus.
  */
 struct hpibbus_softc {
-	struct	device sc_dev;		/* generic device glue */
+	device_t sc_dev;		/* generic device glue */
 	struct	hpib_controller *sc_ops; /* controller ops vector */
 	volatile int sc_flags;		/* misc flags */
 	struct	dmaqueue *sc_dq;
@@ -202,28 +191,24 @@ struct hpibbus_softc {
 #define	HPIBF_DMA16	0x8000
 
 #ifdef _KERNEL
-extern	caddr_t internalhpib;
+extern	void *internalhpib;
 extern	int hpibtimeout;
 extern	int hpibdmathresh;
 
-void	hpibreset __P((int));
-int	hpibsend __P((int, int, int, void *, int));
-int	hpibrecv __P((int, int, int, void *, int));
-int	hpibustart __P((int));
-void	hpibstart __P((void *));
-void	hpibgo __P((int, int, int, void *, int, int, int));
-void	hpibdone __P((void *));
-int	hpibpptest __P((int, int));
-void	hpibppclear __P((int));
-void	hpibawait __P((int));
-int	hpibswait __P((int, int));
-int	hpibid __P((int, int));
+void	hpibreset(int);
+int	hpibsend(int, int, int, void *, int);
+int	hpibrecv(int, int, int, void *, int);
+int	hpibustart(int);
+void	hpibgo(int, int, int, void *, int, int, int);
+int	hpibpptest(int, int);
+void	hpibppclear(int);
+void	hpibawait(int);
+int	hpibswait(int, int);
+int	hpibid(int, int);
 
-int	hpibreq __P((struct device *, struct hpibqueue *));
-void	hpibfree __P((struct device *, struct hpibqueue *));
-int	hpibbus_alloc __P((struct hpibbus_softc *, int, int));
-void	hpibbus_free __P((struct hpibbus_softc *, int, int));
+int	hpibreq(struct device *, struct hpibqueue *);
+void	hpibfree(struct device *, struct hpibqueue *);
 
-int	hpibintr __P((void *));
-int	hpibdevprint __P((void *, const char *));
+int	hpibintr(void *);
+int	hpibdevprint(void *, const char *);
 #endif

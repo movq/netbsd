@@ -1,4 +1,4 @@
-/*	$NetBSD: globals.c,v 1.9 1999/09/14 19:54:47 jsm Exp $	*/
+/*	$NetBSD: globals.c,v 1.19 2003/08/07 09:37:02 agc Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)globals.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: globals.c,v 1.9 1999/09/14 19:54:47 jsm Exp $");
+__RCSID("$NetBSD: globals.c,v 1.19 2003/08/07 09:37:02 agc Exp $");
 #endif
 #endif				/* not lint */
 
@@ -48,9 +44,9 @@ int     WEIGHT = MAXWEIGHT;
 int     CUMBER = MAXCUMBER;
 
 const char   *const objdes[NUMOFOBJECTS] = {
-	"There is a knife here",
-	"There is an exquisitely crafted sword and scabbard here.",
-	0,			/* can land from here */
+	"There is a knife here.",
+	"There are an exquisitely crafted sword and scabbard here.",
+	NULL,			/* Can land from here. */
 	"There is a fierce woodsman here brandishing a heavy mallet.",
 	"There is an unwieldy two-handed sword here.",
 	"There is a bloody meat cleaver here.",
@@ -62,7 +58,7 @@ const char   *const objdes[NUMOFOBJECTS] = {
 	"There is a Viper ready for launch here.",
 	"A kerosene lantern is burning luridly here.",
 	"An old pair of shoes has been discarded here.",
-	0,			/* cylon */
+	NULL,			/* Cylon. */
 	"There is a pair of pajamas here.",
 	"A kingly robe of royal purple and spun gold is draped here.",
 	"There is a strange golden amulet on the floor here.",
@@ -73,14 +69,14 @@ const char   *const objdes[NUMOFOBJECTS] = {
 	"There is a laser pistol here.",
 	"A flower-like young goddess is bathing in the hot mineral pools. She is \nwatching you, but continues to steep and sing softly.",
 	"The goddess is reclining on a bed of ferns and studying you intently.",
-	"There is a grenade here",
+	"There is a grenade here.",
 	"There is a length of heavy chain here.",
 	"There is a stout rope here.",
 	"There is a pair of Levi's here.",
 	"A bloody mace is lying on the ground here.",
 	"There is a shovel here.",
 	"A long, sharp halberd is propped up here.",
-	"There is a compass here",
+	"There is a compass here.",
 	"Wreckage and smoldering debris from a crash litter the ground here.",
 	"A woodland Elf armed with a shield and deadly halberd lunges toward you!",
 	"I think I hear footsteps behind us.",
@@ -98,13 +94,13 @@ const char   *const objdes[NUMOFOBJECTS] = {
 	"A swarthy woman with stern features pulls you aside from the crowd,\n'I must talk to you -- but not here.  Meet me at midnight in the gardens.'",
 	"The swarthy woman has been awaiting you anxiously. 'I must warn you that the\nIsland has anticipated your Quest.  You will not be welcomed. The Darkness is\nstrong where you must search.  Seek not the shadows save only at night, for\nthen are they the weakest.  In the mountains far from here a canyon winds\nwith ferns and streams and forgotten vines.  There you must go. Take this\nrope.'",
 	"Out from the shadows a figure leaps!  His black cape swirls around, and he\nholds a laser sword at your chest.  'So, you have come to fulfill the Quest.\nHa! Your weapons are no match for me!'",
-	"An old timer with one eye missing and no money for a drink sits at the bar.",
+	"An old-timer with one eye missing and no money for a drink sits at the bar.",
 	"You are flying through an asteroid field!",
 	"A planet is nearby.",
 	"The ground is charred here.",
 	"There is a thermonuclear warhead here.",
 	"The fragile, beautiful young goddess lies here.  You murdered her horribly.",
-	"The old timer is lying here.  He is dead.",
+	"The old-timer is lying here.  He is dead.",
 	"The native girl's body is lying here.",
 	"A native girl is sitting here.",
 	"A gorgeous white stallion is standing here.",
@@ -118,7 +114,7 @@ const char   *const objdes[NUMOFOBJECTS] = {
 const char   *const objsht[NUMOFOBJECTS] = {
 	"knife",
 	"fine sword",
-	0,
+	NULL,			/* Can land from here. */
 	"Woodsman",
 	"two-handed sword",
 	"meat cleaver",
@@ -130,7 +126,7 @@ const char   *const objsht[NUMOFOBJECTS] = {
 	"viper",
 	"lantern",
 	"shoes",
-	0,
+	NULL,			/* Cylon. */
 	"pajamas",
 	"robe",
 	"amulet",
@@ -139,8 +135,8 @@ const char   *const objsht[NUMOFOBJECTS] = {
 	"woodsman's body",
 	"wooden mallet",
 	"laser",
-	0,
-	0,
+	NULL,			/* Bathing goddess. */
+	NULL,			/* Goddess. */
 	"grenade",
 	"chain",
 	"rope",
@@ -149,12 +145,12 @@ const char   *const objsht[NUMOFOBJECTS] = {
 	"shovel",
 	"halberd",
 	"compass",
-	0,
+	NULL,			/* Crash debris. */
 	"Elf",
-	0,
+	NULL,			/* Footsteps. */
 	"coins",
 	"match book",
-	0,
+	NULL,			/* Man and dwarf. */
 	"papayas",
 	"pineapple",
 	"kiwi",
@@ -163,18 +159,18 @@ const char   *const objsht[NUMOFOBJECTS] = {
 	"ring",
 	"potion",
 	"bracelet",
-	0,
-	0,
+	NULL,			/* Swarthy woman. */
+	NULL,			/* Swarthy woman (with message). */
 	"Dark Lord",
-	0,
-	0,
-	0,
-	0,
+	NULL,			/* Old-timer. */
+	NULL,			/* Asteroid field. */
+	NULL,			/* Planet nearby. */
+	NULL,			/* Charred ground. */
 	"warhead",
 	"goddess's body",
-	"old timer's body",
+	"old-timer's body",
 	"girl's body",
-	0,
+	NULL,			/* Native girl. */
 	"stallion",
 	"car",
 	"pot of jewels",
@@ -220,6 +216,25 @@ const int     objcumber[NUMOFOBJECTS] = {
 	10, 8, 8, 10, 10, 3, 1, 2
 };
 
+const int objflags[NUMOFOBJECTS] = {
+	0,		0,	    OBJ_NONOBJ,	    OBJ_PERSON,
+	0,		0,		0,		0,
+	0,		0,		0,		0,
+	0,	    OBJ_PLURAL,	    OBJ_NONOBJ,	    OBJ_PLURAL,
+	0,	      OBJ_AN,		0,		0,
+	0,		0,		0,	    OBJ_PERSON,
+    OBJ_PERSON,		0,		0,		0,
+    OBJ_PLURAL,		0,		0,		0,
+	0,		0,	OBJ_AN|OBJ_PERSON,  OBJ_NONOBJ,
+    OBJ_PLURAL,		0,	    OBJ_PERSON,	    OBJ_PLURAL,
+	0,		0,	    OBJ_PLURAL,		0,
+	0,		0,		0,	    OBJ_PERSON,
+    OBJ_PERSON,	    OBJ_PERSON,	    OBJ_PERSON,	    OBJ_NONOBJ,
+    OBJ_NONOBJ,	    OBJ_NONOBJ,		0,		0,
+      OBJ_AN,		0,	    OBJ_PERSON,		0,
+	0,		0,		0,		0
+};
+
 int     win = 1;
 int     matchcount = 20;
 int     followgod = -1;
@@ -228,7 +243,7 @@ int     followfight = -1;
 struct room *location;
 
  /* current input line */
-char    words[NWORD][15];
+char    words[NWORD][WORDLEN];
 int     wordvalue[NWORD];
 int     wordtype[NWORD];
 int     wordcount, wordnumber;
@@ -256,7 +271,6 @@ unsigned int inven[NUMOFWORDS];
 unsigned int wear[NUMOFWORDS];
 char    beenthere[NUMOFROOMS + 1];
 char    injuries[NUMOFINJURIES];
+int     verbose = 0;
 
-char    username[9];
-
-struct wlist *hashtab[HASHSIZE];
+const char *username;

@@ -1,4 +1,4 @@
-/*	$NetBSD: grf_compat.c,v 1.2 2000/02/14 07:01:46 scottr Exp $	*/
+/*	$NetBSD: grf_compat.c,v 1.21 2008/01/25 08:47:44 dogcow Exp $	*/
 
 /*
  * Copyright (C) 1999 Scott Reynolds
@@ -31,9 +31,11 @@
  * macfb compatibility with legacy grf devices
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: grf_compat.c,v 1.21 2008/01/25 08:47:44 dogcow Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/cdefs.h>
 #include <sys/conf.h>
 #include <sys/device.h>
 #include <sys/errno.h>
@@ -54,17 +56,24 @@
 
 #include <miscfs/specfs/specdev.h>
 
-#include <vm/vm.h>
 #include <uvm/uvm_extern.h>
 #include <uvm/uvm_map.h>
 
-cdev_decl(grf);
+dev_type_open(grfopen);
+dev_type_close(grfclose);
+dev_type_ioctl(grfioctl);
+dev_type_mmap(grfmmap);
 
-void	grf_scinit __P((struct grf_softc *, const char *, int));
-void	grf_init __P((int));
-void	grfattach __P((int));
-int	grfmap __P((dev_t, struct macfb_softc *, caddr_t *, struct proc *));
-int	grfunmap __P((dev_t, struct macfb_softc *, caddr_t, struct proc *));
+const struct cdevsw grf_cdevsw = {
+	grfopen, grfclose, noread, nowrite, grfioctl,
+	nostop, notty, nopoll, grfmmap, nokqfilter,
+};
+
+void	grf_scinit(struct grf_softc *, const char *, int);
+void	grf_init(int);
+void	grfattach(int);
+int	grfmap(dev_t, struct macfb_softc *, void **, struct proc *);
+int	grfunmap(dev_t, struct macfb_softc *, void *, struct proc *);
 
 /* Non-private for the benefit of libkvm. */
 struct	grf_softc *grf_softc;
@@ -74,10 +83,7 @@ int	numgrf = 0;
  * Initialize a softc to sane defaults.
  */
 void
-grf_scinit(sc, name, unit)
-	struct grf_softc *sc;
-	const char *name;
-	int unit;
+grf_scinit(struct grf_softc *sc, const char *name, int unit)
 { 
 	memset(sc, 0, sizeof(struct grf_softc));
 	snprintf(sc->sc_xname, sizeof(sc->sc_xname), "%s%d", name, unit);
@@ -91,8 +97,7 @@ grf_scinit(sc, name, unit)
  * them to avoid problems down the road.
  */
 void
-grf_init(n)
-	int n;
+grf_init(int n)
 {
 	struct grf_softc *sc;
 	int i;
@@ -132,8 +137,7 @@ grf_init(n)
  * so other than a basic sanity check we do nothing.
  */
 void
-grfattach(n)
-	int n;
+grfattach(int n)
 {
 	if (n <= 0) {
 #ifdef DIAGNOSTIC
@@ -153,12 +157,10 @@ grfattach(n)
  * device, the only bit of information we really need is the macfb_softc.
  */
 void
-grf_attach(sc, unit)
-	struct macfb_softc *sc;
-	int unit;
+grf_attach(struct macfb_softc *sc, int unit)
 {
-	grf_init(unit);
 
+	grf_init(unit);
 	if (unit < numgrf)
 		grf_softc[unit].mfb_sc = sc;
 }
@@ -167,11 +169,7 @@ grf_attach(sc, unit)
  * Standard device ops
  */
 int
-grfopen(dev, flag, mode, p)
-	dev_t dev;
-	int flag;
-	int mode;
-	struct proc *p;
+grfopen(dev_t dev, int flag, int mode, struct lwp *l)
 {
 	struct grf_softc *sc;
 	int unit = GRFUNIT(dev);
@@ -188,11 +186,7 @@ grfopen(dev, flag, mode, p)
 }
 
 int
-grfclose(dev, flag, mode, p)
-	dev_t dev;
-	int flag;
-	int mode;
-	struct proc *p;
+grfclose(dev_t dev, int flag, int mode, struct lwp *l)
 {
 	struct grf_softc *sc;
 	int unit = GRFUNIT(dev);
@@ -211,34 +205,13 @@ grfclose(dev, flag, mode, p)
 }
 
 int
-grfread(dev, uio, ioflag)
-	dev_t dev;
-	struct uio *uio;
-	int ioflag;
-{
-	return ENXIO;
-}
-
-int
-grfwrite(dev, uio, ioflag)
-	dev_t dev;
-	struct uio *uio;
-	int ioflag;
-{
-	return ENXIO;
-}
-
-int
-grfioctl(dev, cmd, data, flag, p)
-	dev_t dev;
-	u_long cmd;
-	caddr_t data;
-	int flag;
-	struct proc *p;
+grfioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
 	struct grf_softc *sc;
 	struct macfb_devconfig *dc;
+#if defined(GRF_COMPAT) || (NGRF > 0)
 	struct grfinfo *gd;
+#endif /* GRF_COMPAT || (NGRF > 0) */
 	struct grfmode *gm;
 	int unit = GRFUNIT(dev);
 	int rv;
@@ -253,10 +226,11 @@ grfioctl(dev, cmd, data, flag, p)
 	dc = sc->mfb_sc->sc_dc;
 
 	switch (cmd) {
+#if defined(GRF_COMPAT) || (NGRF > 0)
 	case GRFIOCGINFO:
 		gd = (struct grfinfo *)data;
 		memset(gd, 0, sizeof(struct grfinfo));
-		gd->gd_fbaddr     = (caddr_t)dc->dc_paddr;
+		gd->gd_fbaddr     = (void *)dc->dc_paddr;
 		gd->gd_fbsize     = dc->dc_size;
 		gd->gd_colors     = (short)(1 << dc->dc_depth);
 		gd->gd_planes     = (short)dc->dc_depth;
@@ -267,6 +241,7 @@ grfioctl(dev, cmd, data, flag, p)
 		gd->gd_dheight    = dc->dc_raster.height;
 		rv = 0;
 		break;
+#endif /* GRF_COMPAT || (NGRF > 0) */
 
 	case GRFIOCON:
 	case GRFIOCOFF:
@@ -274,13 +249,15 @@ grfioctl(dev, cmd, data, flag, p)
 		rv = 0;
 		break;
 
+#if defined(GRF_COMPAT) || (NGRF > 0)
 	case GRFIOCMAP:
-		rv = grfmap(dev, sc->mfb_sc, (caddr_t *)data, p);
+		rv = grfmap(dev, sc->mfb_sc, (void **)data, l->l_proc);
 		break;
 
 	case GRFIOCUNMAP:
-		rv = grfunmap(dev, sc->mfb_sc, *(caddr_t *)data, p);
+		rv = grfunmap(dev, sc->mfb_sc, *(void **)data, l->l_proc);
 		break;
+#endif /* GRF_COMPAT || (NGRF > 0) */
 
 	case GRFIOCGMODE:
 		gm = (struct grfmode *)data;
@@ -306,24 +283,11 @@ grfioctl(dev, cmd, data, flag, p)
 	return rv;
 }
 
-int
-grfpoll(dev, events, p)
-	dev_t dev;
-	int events;
-	struct proc *p;
-{
-	return EINVAL;
-}
-
-int
-grfmmap(dev, off, prot)
-	dev_t dev;
-	int off;
-	int prot;
+paddr_t
+grfmmap(dev_t dev, off_t off, int prot)
 {
 	struct grf_softc *sc;
 	struct macfb_devconfig *dc;
-	u_long addr;
 	int unit = GRFUNIT(dev);
 
 	if (grf_softc == NULL || unit >= numgrf)
@@ -335,64 +299,47 @@ grfmmap(dev, off, prot)
 
 	dc = sc->mfb_sc->sc_dc;
 
-	if (off >= 0 &&
-	    off < m68k_round_page(dc->dc_offset + dc->dc_size))
-		addr = m68k_btop(dc->dc_paddr + off);
-	else
-		addr = (-1);	/* XXX bogus */
+	if ((u_int)off < m68k_round_page(dc->dc_offset + dc->dc_size))
+		return m68k_btop(dc->dc_paddr + off);
 
-	return (int)addr;
+	return (-1);
 }
 
 int
-grfmap(dev, sc, addrp, p)
-	dev_t dev;
-	struct macfb_softc *sc;
-	caddr_t *addrp;
-	struct proc *p;
+grfmap(dev_t dev, struct macfb_softc *sc, void **addrp, struct proc *p)
 {
-	struct specinfo si;
 	struct vnode vn;
 	u_long len;
 	int error, flags;
 
-	*addrp = (caddr_t)sc->sc_dc->dc_paddr;
 	len = m68k_round_page(sc->sc_dc->dc_offset + sc->sc_dc->dc_size);
+	*addrp = (void *)VM_DEFAULT_ADDRESS(p->p_vmspace->vm_daddr, len);
 	flags = MAP_SHARED | MAP_FIXED;
 
 	vn.v_type = VCHR;		/* XXX */
-	vn.v_specinfo = &si;		/* XXX */
 	vn.v_rdev = dev;		/* XXX */
 
 	error = uvm_mmap(&p->p_vmspace->vm_map, (vaddr_t *)addrp,
 	    (vsize_t)len, VM_PROT_ALL, VM_PROT_ALL,
-	    flags, (caddr_t)&vn, 0, p->p_rlimit[RLIMIT_MEMLOCK].rlim_cur);
+	    flags, (void *)&vn, 0, p->p_rlimit[RLIMIT_MEMLOCK].rlim_cur);
 
 	/* Offset into page: */
-	*addrp += sc->sc_dc->dc_offset;
+	*addrp = (char*)*addrp + sc->sc_dc->dc_offset;
 
 	return (error);
 }
 
 int
-grfunmap(dev, sc, addr, p)
-	dev_t dev;
-	struct macfb_softc *sc;
-	caddr_t addr;
-	struct proc *p;
+grfunmap(dev_t dev, struct macfb_softc *sc, void *addr, struct proc *p)
 {
 	vm_size_t size;
-	int     rv;
 
-	addr -= sc->sc_dc->dc_offset;
+	addr = (char*)addr - sc->sc_dc->dc_offset;
 
 	if (addr <= 0)
 		return (-1);
 
 	size = m68k_round_page(sc->sc_dc->dc_offset + sc->sc_dc->dc_size);
-
-	rv = uvm_unmap(&p->p_vmspace->vm_map, (vaddr_t)addr,
-	    (vaddr_t)addr + size);
-
-	return (rv == KERN_SUCCESS ? 0 : EINVAL);
+	uvm_unmap(&p->p_vmspace->vm_map, (vaddr_t)addr, (vaddr_t)addr + size);
+	return 0;
 }

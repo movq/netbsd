@@ -1,4 +1,4 @@
-/*	$NetBSD: yp_match.c,v 1.14 2000/01/22 22:19:22 mycroft Exp $	 */
+/*	$NetBSD: yp_match.c,v 1.17 2005/11/29 03:12:01 christos Exp $	 */
 
 /*
  * Copyright (c) 1992, 1993 Theo de Raadt <deraadt@fsa.ca>
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Theo de Raadt.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS
  * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -33,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: yp_match.c,v 1.14 2000/01/22 22:19:22 mycroft Exp $");
+__RCSID("$NetBSD: yp_match.c,v 1.17 2005/11/29 03:12:01 christos Exp $");
 #endif
 
 #include "namespace.h"
@@ -224,13 +219,12 @@ again:
 
 	yprk.domain = indomain;
 	yprk.map = inmap;
-	/* LINTED const castaway */
-	yprk.keydat.dptr = (char *)(void *)inkey;
+	yprk.keydat.dptr = __UNCONST(inkey);
 	yprk.keydat.dsize = inkeylen;
 
 	memset(&yprv, 0, sizeof yprv);
 
-	r = clnt_call(ysd->dom_client, YPPROC_MATCH,
+	r = clnt_call(ysd->dom_client, (rpcproc_t)YPPROC_MATCH,
 		      (xdrproc_t)xdr_ypreq_key, &yprk,
 		      (xdrproc_t)xdr_ypresp_val, &yprv, 
 		      _yplib_timeout);

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_uba.c,v 1.17 2000/03/30 12:45:37 augustss Exp $	*/
+/*	$NetBSD: if_uba.c,v 1.30 2008/03/11 05:34:01 matt Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1988 Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,30 +31,27 @@
  *	@(#)if_uba.c	7.16 (Berkeley) 12/16/90
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_uba.c,v 1.30 2008/03/11 05:34:01 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/malloc.h>
 #include <sys/mbuf.h>
-#include <sys/map.h>
-#include <sys/buf.h>
 #include <sys/socket.h>
-#include <sys/syslog.h>
+#include <sys/device.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <net/if.h>
 
-#include <machine/pte.h>
-#include <machine/mtpr.h>
-#include <machine/vmparam.h>
-#include <machine/cpu.h>
+#include <sys/bus.h>
 
-#include <vax/if/if_uba.h>
-#include <vax/uba/ubareg.h>
-#include <vax/uba/ubavar.h>
+#include <dev/qbus/if_uba.h>
+#include <dev/qbus/ubareg.h>
+#include <dev/qbus/ubavar.h>
 
-static	int if_ubaalloc __P((struct ifubinfo *, struct ifrw *, int));
-static	void rcv_xmtbuf __P((struct ifxmt *));
-static	void restor_xmtbuf __P((struct ifxmt *));
+static	struct mbuf *getmcl(void);
 
 /*
  * Routines supporting UNIBUS network interfaces.
@@ -73,100 +66,114 @@ static	void restor_xmtbuf __P((struct ifxmt *));
  * with the header, and nmr more UNIBUS map registers for i/o on the adapter,
  * doing this once for each read and once for each write buffer.  We also
  * allocate page frames in the mbuffer pool for these pages.
+ *
+ * Recent changes:
+ *	No special "header pages" anymore.
+ *	Recv packets are always put in clusters.
+ *	"size" is the maximum buffer size, may not be bigger than MCLBYTES.
  */
 int
-if_ubaminit(ifu, uh, hlen, nmr, ifr, nr, ifw, nw)
-	struct ifubinfo *ifu;
-	struct uba_softc *uh;
-	int hlen, nmr, nr, nw;
-	struct ifrw *ifr;
-	struct ifxmt *ifw;
+if_ubaminit(struct ifubinfo *ifu, struct uba_softc *uh, int size,
+    struct ifrw *ifr, int nr, struct ifxmt *ifw, int nw)
 {
-	caddr_t p;
-	caddr_t cp;
-	int i, nclbytes, off;
+	struct mbuf *m;
+	int totsz, i, error, rseg, nm = nr;
+	bus_dma_segment_t seg;
+	void *vaddr;
 
-	if (hlen)
-		off = MCLBYTES - hlen;
-	else
-		off = 0;
-	nclbytes = roundup(nmr * VAX_NBPG, MCLBYTES);
-	if (hlen)
-		nclbytes += MCLBYTES;
-	if (ifr[0].ifrw_addr)
-		cp = ifr[0].ifrw_addr - off;
-	else {
-		cp = (caddr_t)malloc((u_long)((nr + nw) * nclbytes), M_DEVBUF,
-		    M_NOWAIT);
-		if (cp == 0)
-			return (0);
-		p = cp;
-		for (i = 0; i < nr; i++) {
-			ifr[i].ifrw_addr = p + off;
-			p += nclbytes;
-		}
-		for (i = 0; i < nw; i++) {
-			ifw[i].ifw_base = p;
-			ifw[i].ifw_addr = p + off;
-			p += nclbytes;
-		}
-		ifu->iff_hlen = hlen;
-		ifu->iff_softc = uh;
-		ifu->iff_uba = uh->uh_uba;
-		ifu->iff_ubamr = uh->uh_mr;
+#ifdef DIAGNOSTIC
+	if (size > MCLBYTES)
+		panic("if_ubaminit: size > MCLBYTES");
+#endif
+	ifu->iff_softc = uh;
+	/*
+	 * Get DMA memory for transmit buffers.
+	 * Buffer size are rounded up to a multiple of the uba page size,
+	 * then allocated contiguous.
+	 */
+	size = (size + UBA_PGOFSET) & ~UBA_PGOFSET;
+	totsz = size * nw;
+	if ((error = bus_dmamem_alloc(uh->uh_dmat, totsz, PAGE_SIZE, 0,
+	    &seg, 1, &rseg, BUS_DMA_NOWAIT)))
+		return error;
+	if ((error = bus_dmamem_map(uh->uh_dmat, &seg, rseg, totsz, &vaddr,
+	    BUS_DMA_NOWAIT|BUS_DMA_COHERENT))) {
+		bus_dmamem_free(uh->uh_dmat, &seg, rseg);
+		return error;
 	}
-	for (i = 0; i < nr; i++)
-		if (if_ubaalloc(ifu, &ifr[i], nmr) == 0) {
+
+	/*
+	 * Create receive and transmit maps.
+	 * Alloc all resources now so we won't fail in the future.
+	 */
+
+	for (i = 0; i < nr; i++) {
+		if ((error = bus_dmamap_create(uh->uh_dmat, size, 1,
+		    size, 0, BUS_DMA_NOWAIT|BUS_DMA_ALLOCNOW,
+		    &ifr[i].ifrw_map))) {
 			nr = i;
-			nw = 0;
+			nm = nw = 0;
 			goto bad;
 		}
-	for (i = 0; i < nw; i++)
-		if (if_ubaalloc(ifu, &ifw[i].ifrw, nmr) == 0) {
-			nw = i;
-			goto bad;
-		}
-	while (--nw >= 0) {
-		for (i = 0; i < nmr; i++)
-			ifw[nw].ifw_wmap[i] = ifw[nw].ifw_mr[i];
-		ifw[nw].ifw_xswapd = 0;
-		ifw[nw].ifw_flags = IFRW_W;
-		ifw[nw].ifw_nmr = nmr;
 	}
-	return (1);
+	for (i = 0; i < nw; i++) {
+		if ((error = bus_dmamap_create(uh->uh_dmat, size, 1,
+		    size, 0, BUS_DMA_NOWAIT|BUS_DMA_ALLOCNOW,
+		    &ifw[i].ifw_map))) {
+			nw = i;
+			nm = 0;
+			goto bad;
+		}
+	}
+	/*
+	 * Preload the rx maps with mbuf clusters.
+	 */
+	for (i = 0; i < nm; i++) {
+		if ((m = getmcl()) == NULL) {
+			nm = i;
+			goto bad;
+		}
+		ifr[i].ifrw_mbuf = m;
+		bus_dmamap_load(uh->uh_dmat, ifr[i].ifrw_map,
+		    m->m_ext.ext_buf, m->m_ext.ext_size, NULL, BUS_DMA_NOWAIT);
+
+	}
+	/*
+	 * Load the tx maps with DMA memory (common case).
+	 */
+	for (i = 0; i < nw; i++) {
+		ifw[i].ifw_vaddr = (char *)vaddr + size * i;
+		ifw[i].ifw_size = size;
+		bus_dmamap_load(uh->uh_dmat, ifw[i].ifw_map,
+		    ifw[i].ifw_vaddr, ifw[i].ifw_size, NULL, BUS_DMA_NOWAIT);
+	}
+	return 0;
 bad:
+	while (--nm >= 0) {
+		bus_dmamap_unload(uh->uh_dmat, ifr[nw].ifrw_map);
+		m_freem(ifr[nm].ifrw_mbuf);
+	}
 	while (--nw >= 0)
-		ubarelse(ifu->iff_softc, &ifw[nw].ifw_info);
+		bus_dmamap_destroy(uh->uh_dmat, ifw[nw].ifw_map);
 	while (--nr >= 0)
-		ubarelse(ifu->iff_softc, &ifr[nr].ifrw_info);
-	free(cp, M_DEVBUF);
-	ifr[0].ifrw_addr = 0;
+		bus_dmamap_destroy(uh->uh_dmat, ifr[nw].ifrw_map);
 	return (0);
 }
 
-/*
- * Setup an ifrw structure by allocating UNIBUS map registers,
- * possibly a buffered data path, and initializing the fields of
- * the ifrw structure to minimize run-time overhead.
- */
-static int
-if_ubaalloc(ifu, ifrw, nmr)
-	struct ifubinfo *ifu;
-	struct ifrw *ifrw;
-	int nmr;
+struct mbuf *
+getmcl(void)
 {
-	int info;
+	struct mbuf *m;
 
-	info =
-	    uballoc(ifu->iff_softc, ifrw->ifrw_addr, nmr*VAX_NBPG + ifu->iff_hlen,
-	        ifu->iff_flags);
-	if (info == 0)
-		return (0);
-	ifrw->ifrw_info = info;
-	ifrw->ifrw_bdp = UBAI_BDP(info);
-	ifrw->ifrw_proto = UBAMR_MRV | (UBAI_BDP(info) << UBAMR_DPSHIFT);
-	ifrw->ifrw_mr = &ifu->iff_ubamr[UBAI_MR(info) + (ifu->iff_hlen? 1 : 0)];
-	return (1);
+	MGETHDR(m, M_DONTWAIT, MT_DATA);
+	if (m == NULL)
+		return 0;
+	MCLGET(m, M_DONTWAIT);
+	if ((m->m_flags & M_EXT) == 0) {
+		m_freem(m);
+		return 0;
+	}
+	return m;
 }
 
 /*
@@ -179,149 +186,42 @@ if_ubaalloc(ifu, ifrw, nmr)
  * so that protocols can determine where incoming packets arrived.
  * Note: we may be called to receive from a transmit buffer by some
  * devices.  In that case, we must force normal mapping of the buffer,
- * so that the correct data will appear (only unibus maps are 
+ * so that the correct data will appear (only unibus maps are
  * changed when remapping the transmit buffers).
  */
 struct mbuf *
-if_ubaget(ifu, ifr, totlen, ifp)
-	struct ifubinfo *ifu;
-	struct ifrw *ifr;
-	int totlen;
-	struct ifnet *ifp;
+if_ubaget(struct ifubinfo *ifu, struct ifrw *ifr, struct ifnet *ifp, int len)
 {
-	struct mbuf *top, **mp;
-	struct mbuf *m;
-	caddr_t cp = ifr->ifrw_addr + ifu->iff_hlen, pp;
-	int len;
-	top = 0;
-	mp = &top;
-	MGETHDR(m, M_DONTWAIT, MT_DATA);
-	if (m == 0){
-		return ((struct mbuf *)NULL);
-	}
+	struct uba_softc *uh = ifu->iff_softc;
+	struct mbuf *m, *mn;
+
+	if ((mn = getmcl()) == NULL)
+		return NULL;	/* Leave the old */
+
+	bus_dmamap_unload(uh->uh_dmat, ifr->ifrw_map);
+	m = ifr->ifrw_mbuf;
+	ifr->ifrw_mbuf = mn;
+	if ((bus_dmamap_load(uh->uh_dmat, ifr->ifrw_map,
+	    mn->m_ext.ext_buf, mn->m_ext.ext_size, NULL, BUS_DMA_NOWAIT)))
+		panic("if_ubaget"); /* Cannot happen */
 	m->m_pkthdr.rcvif = ifp;
-	m->m_pkthdr.len = totlen;
-	m->m_len = MHLEN;
-
-	if (ifr->ifrw_flags & IFRW_W){
-		rcv_xmtbuf((struct ifxmt *)ifr);
-	}
-	while (totlen > 0) {
-		if (top) {
-			MGET(m, M_DONTWAIT, MT_DATA);
-			if (m == 0) {
-				m_freem(top);
-				top = 0;
-				goto out;
-			}
-			m->m_len = MLEN;
-		}
-		len = totlen;
-		if (len >= MINCLSIZE) {
-			struct pte *cpte, *ppte;
-			int x, *ip, i;
-
-			MCLGET(m, M_DONTWAIT);
-			if ((m->m_flags & M_EXT) == 0){
-				goto nopage;
-			}
-			len = min(len, MCLBYTES);
-			m->m_len = len;
-			if (!claligned(cp)){
-				goto copy;
-			}
-			/*
-			 * Switch pages mapped to UNIBUS with new page pp,
-			 * as quick form of copy.  Remap UNIBUS and invalidate.
-			 */
-			pp = mtod(m, char *);
-			cpte = (struct pte *)kvtopte(cp);
-			ppte = (struct pte *)kvtopte(pp);
-			x = vax_btop(cp - ifr->ifrw_addr);
-			ip = (int *)&ifr->ifrw_mr[x];
-			for (i = 0; i < MCLBYTES/VAX_NBPG; i++) {
-				struct pte t;
-				t = *ppte; *ppte++ = *cpte; *cpte = t;
-				*ip++ = cpte++->pg_pfn|ifr->ifrw_proto;
-				mtpr(cp,PR_TBIS);
-				cp += VAX_NBPG;
-				mtpr((caddr_t)pp,PR_TBIS);
-				pp += VAX_NBPG;
-			}
-			goto nocopy;
-		}
-nopage:
-		if (len < m->m_len) {
-			/*
-			 * Place initial small packet/header at end of mbuf.
-			 */
-			if (top == 0 && len + max_linkhdr <= m->m_len)
-				m->m_data += max_linkhdr;
-			m->m_len = len;
-		} else
-			len = m->m_len;
-copy:
-		bcopy(cp, mtod(m, caddr_t), (unsigned)len);
-		cp += len;
-nocopy:
-		*mp = m;
-		mp = &m->m_next;
-		totlen -= len;
-	}
-out:
-	if (ifr->ifrw_flags & IFRW_W){
-		restor_xmtbuf((struct ifxmt *)ifr);
-	}
-	return (top);
+	m->m_len = m->m_pkthdr.len = len;
+	return m;
 }
 
 /*
- * Change the mapping on a transmit buffer so that if_ubaget may
- * receive from that buffer.  Copy data from any pages mapped to Unibus
- * into the pages mapped to normal kernel virtual memory, so that
- * they can be accessed and swapped as usual.  We take advantage
- * of the fact that clusters are placed on the xtofree list
- * in inverse order, finding the last one.
+ * Called after a packet is sent. Releases hold resources.
  */
-static void
-rcv_xmtbuf(ifw)
-	struct ifxmt *ifw;
+void
+if_ubaend(struct ifubinfo *ifu, struct ifxmt *ifw)
 {
-	struct mbuf *m;
-	struct mbuf **mprev;
-	int i;
-	char *cp;
+	struct uba_softc *uh = ifu->iff_softc;
 
-	while ((i = ffs((long)ifw->ifw_xswapd)) != 0) {
-		cp = ifw->ifw_base + i * MCLBYTES;
-		i--;
-		ifw->ifw_xswapd &= ~(1<<i);
-		mprev = &ifw->ifw_xtofree;
-		for (m = ifw->ifw_xtofree; m && m->m_next; m = m->m_next)
-			mprev = &m->m_next;
-		if (m == NULL)
-			break;
-		bcopy(mtod(m, caddr_t), cp, MCLBYTES);
-		(void) m_free(m);
-		*mprev = NULL;
+	if (ifw->ifw_flags & IFRW_MBUF) {
+		bus_dmamap_unload(uh->uh_dmat, ifw->ifw_map);
+		m_freem(ifw->ifw_mbuf);
+		ifw->ifw_mbuf = NULL;
 	}
-	ifw->ifw_xswapd = 0;
-	for (i = 0; i < ifw->ifw_nmr; i++)
-		ifw->ifw_mr[i] = ifw->ifw_wmap[i];
-}
-
-/*
- * Put a transmit buffer back together after doing an if_ubaget on it,
- * which may have swapped pages.
- */
-static void
-restor_xmtbuf(ifw)
-	struct ifxmt *ifw;
-{
-	int i;
-
-	for (i = 0; i < ifw->ifw_nmr; i++)
-		ifw->ifw_wmap[i] = ifw->ifw_mr[i];
 }
 
 /*
@@ -332,64 +232,32 @@ restor_xmtbuf(ifw)
  * i/o space.
  */
 int
-if_ubaput(ifu, ifw, m)
-	struct ifubinfo *ifu;
-	struct ifxmt *ifw;
-	struct mbuf *m;
+if_ubaput(struct ifubinfo *ifu, struct ifxmt *ifw, struct mbuf *m)
 {
-	struct mbuf *mp;
-	caddr_t cp, dp;
-	int i;
-	int xswapd = 0;
-	int x, cc, t;
+	struct uba_softc *uh = ifu->iff_softc;
+	int len;
 
-	cp = ifw->ifw_addr;
-	while (m) {
-		dp = mtod(m, char *);
-		if (claligned(cp) && claligned(dp) &&
-		    (m->m_len == MCLBYTES || m->m_next == (struct mbuf *)0)) {
-			struct pte *pte;
-			int *ip;
-
-			pte = (struct pte *)kvtopte(dp);
-			x = vax_btop(cp - ifw->ifw_addr);
-			ip = (int *)&ifw->ifw_mr[x];
-			for (i = 0; i < MCLBYTES/VAX_NBPG; i++)
-				*ip++ = ifw->ifw_proto | pte++->pg_pfn;
-			xswapd |= 1 << (x>>(MCLSHIFT-VAX_PGSHIFT));
-			mp = m->m_next;
-			m->m_next = ifw->ifw_xtofree;
-			ifw->ifw_xtofree = m;
-			cp += m->m_len;
-		} else {
-			bcopy(mtod(m, caddr_t), cp, (unsigned)m->m_len);
-			cp += m->m_len;
-			MFREE(m, mp);
+	if (/* m->m_next ==*/ 0) {
+		/*
+		 * Map the outgoing packet directly.
+		 */
+		if ((ifw->ifw_flags & IFRW_MBUF) == 0) {
+			bus_dmamap_unload(uh->uh_dmat, ifw->ifw_map);
+			ifw->ifw_flags |= IFRW_MBUF;
 		}
-		m = mp;
-	}
-
-	/*
-	 * Xswapd is the set of clusters we just mapped out.  Ifu->iff_xswapd
-	 * is the set of clusters mapped out from before.  We compute
-	 * the number of clusters involved in this operation in x.
-	 * Clusters mapped out before and involved in this operation
-	 * should be unmapped so original pages will be accessed by the device.
-	 */
-	cc = cp - ifw->ifw_addr;
-	x = ((cc - ifu->iff_hlen) + MCLBYTES - 1) >> MCLSHIFT;
-	ifw->ifw_xswapd &= ~xswapd;
-	while ((i = ffs((long)ifw->ifw_xswapd)) != 0) {
-		i--;
-		if (i >= x)
-			break;
-		ifw->ifw_xswapd &= ~(1<<i);
-		i *= MCLBYTES/VAX_NBPG;
-		for (t = 0; t < MCLBYTES/VAX_NBPG; t++) {
-			ifw->ifw_mr[i] = ifw->ifw_wmap[i];
-			i++;
+		bus_dmamap_load(uh->uh_dmat, ifw->ifw_map, mtod(m, void *),
+		    m->m_len, NULL, BUS_DMA_NOWAIT);
+		ifw->ifw_mbuf = m;
+		len = m->m_len;
+	} else {
+		if (ifw->ifw_flags & IFRW_MBUF) {
+			bus_dmamap_load(uh->uh_dmat, ifw->ifw_map,
+			    ifw->ifw_vaddr, ifw->ifw_size,NULL,BUS_DMA_NOWAIT);
+			ifw->ifw_flags &= ~IFRW_MBUF;
 		}
+		len = m->m_pkthdr.len;
+		m_copydata(m, 0, m->m_pkthdr.len, ifw->ifw_vaddr);
+		m_freem(m);
 	}
-	ifw->ifw_xswapd |= xswapd;
-	return (cc);
+	return len;
 }

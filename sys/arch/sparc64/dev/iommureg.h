@@ -1,4 +1,4 @@
-/*	$NetBSD: iommureg.h,v 1.3 1999/06/04 13:48:48 mrg Exp $	*/
+/*	$NetBSD: iommureg.h,v 1.14 2006/02/13 21:47:12 cdi Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -21,11 +21,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -54,18 +50,20 @@
 
 /* iommmu registers */
 struct iommureg {
-	u_int64_t	iommu_cr;	/* IOMMU control register */
-	u_int64_t	iommu_tsb;	/* IOMMU TSB base register */
-	u_int64_t	iommu_flush;	/* IOMMU flush register */
+	uint64_t	iommu_cr;	/* IOMMU control register */
+	uint64_t	iommu_tsb;	/* IOMMU TSB base register */
+	uint64_t	iommu_flush;	/* IOMMU flush register */
 };
 
 /* streaming buffer registers */
 struct iommu_strbuf {
-	u_int64_t	strbuf_ctl;	/* streaming buffer control reg */
-	u_int64_t	strbuf_pgflush;	/* streaming buffer page flush */
-	u_int64_t	strbuf_flushsync;/* streaming buffer flush sync */
+	uint64_t	strbuf_ctl;	/* streaming buffer control reg */
+	uint64_t	strbuf_pgflush;	/* streaming buffer page flush */
+	uint64_t	strbuf_flushsync;/* streaming buffer flush sync */
 };
 
+#define	IOMMUREG(x)	(offsetof(struct iommureg, x))
+#define	STRBUFREG(x)	(offsetof(struct iommu_strbuf, x))
 /* streaming buffer control register */
 #define STRBUF_EN	0x000000000000000001LL
 #define STRBUF_D	0x000000000000000002LL
@@ -95,19 +93,42 @@ struct iommu_strbuf {
 #define	IOTTE_LOCAL	0x0800000000000000LL	/* Accesses to same bus segment? */
 #define IOTTE_PAMASK	0x000001ffffffe000LL	/* Let's assume this is correct */
 #define IOTTE_C		0x0000000000000010LL	/* Accesses to cacheable space */
-#define IOTTE_W		0x0000000000000002LL	/* Writeable */
+#define IOTTE_W		0x0000000000000002LL	/* Writable */
 
-#define IOTSB_VEND	0xffffe000
-#define IOTSB_VSTART(sz)	(u_int)(IOTSB_VEND << (PGSHIFT + (sz))) 
+/*
+ * On sun4u each bus controller has a separate IOMMU.  The IOMMU has 
+ * a TSB which must be page aligned and physically contiguous.  Mappings
+ * can be of 8K IOMMU pages or 64K IOMMU pages.  We use 8K for compatibility
+ * with the CPU's MMU.
+ *
+ * On sysio, psycho, and psycho+, IOMMU TSBs using 8K pages can map the
+ * following size segments:
+ *
+ *	VA size		VA base		TSB size	tsbsize
+ *	--------	--------	---------	-------
+ *	8MB		ff800000	8K		0
+ *	16MB		ff000000	16K		1
+ *	32MB		fe000000	32K		2
+ *	64MB		fc000000	64K		3
+ *	128MB		f8000000	128K		4
+ *	256MB		f0000000	256K		5
+ *	512MB		e0000000	512K		6
+ *	1GB		c0000000	1MB		7
+ *
+ * Unfortunately, sabres on UltraSPARC IIi and IIe processors does not use
+ * this scheme to determine the IOVA base address.  Instead, bits 31-29 are
+ * used to check against the Target Address Space register in the IIi and
+ * the IOMMU is used if they hit.  God knows what goes on in the IIe.
+ *
+ */
+
+
+#define IOTSB_VEND		(u_int)(0xffffffffffffffffLL<<PGSHIFT)
+#define IOTSB_VSTART(sz)	(u_int)(IOTSB_VEND << ((sz)+10)) 
+#define	IOTSB_VSIZE(sz)		(u_int)(1 << ((sz)+10+PGSHIFT))
 
 #define MAKEIOTTE(pa,w,c,s)	(((pa)&IOTTE_PAMASK)|((w)?IOTTE_W:0)|((c)?IOTTE_C:0)|((s)?IOTTE_STREAM:0)|(IOTTE_V|IOTTE_8K))
-#if 0
-/* This version generates a pointer to a int64_t */
-#define IOTSBSLOT(va,sz)	((((((vaddr_t)(va))-((vaddr_t)IOTSB_VSTART(sz))))>>(PGSHIFT-3))&(~7))
-#else
-/* Here we just try to create an array index */
-#define IOTSBSLOT(va,sz)	((u_int)((((((vaddr_t)(va))-((vaddr_t)IOTSB_VSTART(sz))))>>(PGSHIFT))))
-#endif
+#define IOTSBSLOT(va,sz)	((u_int)(((vaddr_t)(va))-(is->is_dvmabase))>>PGSHIFT)
 
 /*
  * interrupt map stuff.  this belongs elsewhere.
@@ -115,6 +136,7 @@ struct iommu_strbuf {
 
 #define INTMAP_V	0x080000000LL	/* Interrupt valid (enabled) */
 #define INTMAP_TID	0x07c000000LL	/* UPA target ID mask */
+#define INTMAP_TID_SHIFT 26
 #define INTMAP_IGN	0x0000007c0LL	/* Interrupt group no (sbus only). */
 #define INTMAP_INO	0x00000003fLL	/* Interrupt number */
 #define INTMAP_INR	(INTMAP_IGN|INTMAP_INO)

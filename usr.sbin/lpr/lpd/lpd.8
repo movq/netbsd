@@ -1,4 +1,4 @@
-.\"	$NetBSD: lpd.8,v 1.16 1999/12/11 01:59:43 mrg Exp $
+.\"	$NetBSD: lpd.8,v 1.33 2006/01/22 21:31:17 wiz Exp $
 .\"
 .\" Copyright (c) 1983, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -33,19 +29,21 @@
 .\"
 .\"     @(#)lpd.8	8.3 (Berkeley) 4/19/94
 .\"
-.Dd April 19, 1994
+.Dd January 20, 2006
 .Dt LPD 8
 .Os
 .Sh NAME
 .Nm lpd
 .Nd line printer spooler daemon
 .Sh SYNOPSIS
-.Nm ""
-.Op Fl dlsr
+.Nm
+.Op Fl dlsrW
+.Op Fl b Ar bind-address
 .Op Fl n Ar maxchild
 .Op Fl w Ar maxwait
+.Op port
 .Sh DESCRIPTION
-.Nm Lpd
+.Nm
 is the line printer daemon (spool area handler) and is normally invoked
 at boot time from the
 .Xr rc 8
@@ -65,20 +63,43 @@ can continue to listen for more requests.
 .Pp
 Available options:
 .Bl -tag -width Ds
+.It Fl b
+Normally, if the
+.Fl s
+option is not specified,
+.Nm
+will listen on all network interfaces for incoming TCP connections.
+The
+.Fl b
+option, followed by a
+.Ar bind-address
+specifies that
+.Nm
+should listen on that address instead of INADDR_ANY.
+Multiple
+.Fl b
+options are permitted, allowing a list of addresses to be specified.
+Use of this option silently overrides the
+.Fl s
+option if it is also present on the command line.
+.Ar bind-address
+can be a numeric host name in IPv4 or IPv6 notation, or a symbolic host
+name which will be looked up in the normal way.
 .It Fl d
 The
 .Fl d
 option turns on the
 .Dv SO_DEBUG
 .Xr socket 2
-option.  See
+option.
+See
 .Xr setsockopt 2
 for more details.
 .It Fl l
 The
 .Fl l
 flag causes
-.Nm lpd
+.Nm
 to log valid requests received from the network.
 This can be useful for debugging purposes.
 .It Fl n
@@ -88,24 +109,32 @@ flag sets
 .Ar maxchild
 as the maximum number of child processes that
 .Nm
-will spawn.  The default is 32.
+will spawn.
+The default is 32.
 .It Fl r
 The
 .Fl r
-flag allows the ``of'' filter to be use if specified for a remote
-printer.  Traditionally,
+flag allows the
+.Dq of
+and
+.Dq if
+filters to be used if specified for a remote
+printer.
+Traditionally,
 .Nm
-would not use the output filter for remote printers.
+would not use filters for remote printers.
 .It Fl s
 The
 .Fl s
-flag selects ``secure'' mode, in which 
-.Nm lpd
+flag selects
+.Dq secure
+mode, in which
+.Nm
 does not listen on a TCP socket but only takes commands from a
 .Ux
 domain socket.
 This is valuable when the machine on which
-.Nm lpd 
+.Nm
 runs is subject to attack over the network and it is desired that the
 machine be protected from attempts to remotely fill spools and similar
 attacks.
@@ -114,26 +143,49 @@ The
 .Fl w
 flag sets
 .Ar maxwait
-as the wait time (in seconds) for dead remote server detection.  If
-no response is returned from a connected server within this period,
-the connection is closed and a message logged.  The default is
-120 seconds.
+as the wait time (in seconds) for dead remote server detection.
+If no response is returned from a connected server within this period,
+the connection is closed and a message logged.
+The default is 120 seconds.
+.It Fl W
+The
+.Fl W
+option will instruct lpd not to verify a remote tcp connection
+comes from a reserved port (\*[Lt]1024).
 .El
 .Pp
-Access control is provided by two means.
-First, all requests must come from one of the machines listed in
+If the
+.Op port
+parameter is passed,
+.Nm
+listens on this port instead of the usual
+.Dq printer/tcp
+port from
+.Pa /etc/services .
+.Pp
+Access control is provided by three means.
+First,
+.Pa /etc/hosts.allow
+and
+.Pa /etc/hosts.deny
+are consulted as described in
+.Xr hosts_access 5
+with daemon name
+.Nm .
+Second, all requests must come from one of the machines listed in
 the file
 .Pa /etc/hosts.equiv
 or
 .Pa /etc/hosts.lpd .
-Second, if the
+Lastly, if the
 .Li rs
 capability is specified in the
-.Xr printcap
+.Xr printcap 5
 entry for the printer being accessed,
 .Em lpr
 requests will only be honored for those users with accounts on the
 machine with the printer.
+Requests must pass all three tests.
 .Pp
 The file
 .Em minfree
@@ -147,7 +199,7 @@ The daemon begins processing files
 after it has successfully set the lock for exclusive
 access (described a bit later),
 and scans the spool directory
-for files beginning with 
+for files beginning with
 .Em cf .
 Lines in each
 .Em cf
@@ -173,21 +225,23 @@ String to be used as the title for
 .It H
 Host Name.
 Name of the machine where
-.Xr lpr
+.Xr lpr 1
 was invoked.
 .It P
 Person.
 Login name of the person who invoked
-.Xr lpr .
+.Xr lpr 1 .
 This is used to verify ownership by
-.Xr lprm .
+.Xr lprm 1 .
 .It M
 Send mail to the specified user when the current print job completes.
 .It f
 Formatted File.
 Name of a file to print which is already formatted.
 .It l
-Like ``f'' but passes control characters and does not make page breaks.
+Like
+.Dq f
+but passes control characters and does not make page breaks.
 .It p
 Name of a file to print using
 .Xr pr 1
@@ -201,22 +255,24 @@ output (cat phototypesetter commands).
 Ditroff File.
 The file contains device independent troff
 output.
-.It r
+.It d
 DVI File.
 The file contains
 .Tn Tex l
 output
-DVI format from Standford.
+DVI format from Stanford.
 .It g
 Graph File.
 The file contains data produced by
-.Xr plot 3 .
+.Ic plot .
 .It c
 Cifplot File.
 The file contains data produced by
-.Em cifplot .
+.Ic cifplot .
 .It v
 The file contains a raster image.
+.It o
+The file contains PostScript data.
 .It r
 The file contains text data with
 FORTRAN carriage control characters.
@@ -247,7 +303,7 @@ Name of file to remove upon completion of printing.
 File name.
 The name of the file which is being printed, or a blank for the
 standard input (when
-.Xr lpr
+.Xr lpr 1
 is invoked in a pipeline).
 .El
 .Pp
@@ -256,11 +312,11 @@ If a file cannot be opened, a message will be logged via
 using the
 .Em LOG_LPR
 facility.
-.Nm Lpd
+.Nm
 will try up to 20 times to reopen a file it expects to be there,
 after which it will skip the file to be printed.
 .Pp
-.Nm Lpd
+.Nm
 uses
 .Xr flock 2
 to provide exclusive access to the lock file and to prevent multiple
@@ -273,7 +329,7 @@ form and contains two lines.
 The first is the process id of the daemon and the second is the control
 file name of the current job being printed.
 The second line is updated to reflect the current status of
-.Nm lpd
+.Nm
 for the programs
 .Xr lpq 1
 and
@@ -290,6 +346,10 @@ minimum free space to leave
 line printer devices
 .It Pa /var/run/printer
 socket for local requests
+.It Pa /etc/hosts.allow
+explicit remote host access list.
+.It Pa /etc/hosts.deny
+explicit remote host denial of service list.
 .It Pa /etc/hosts.equiv
 lists machine names allowed printer access
 .It Pa /etc/hosts.lpd
@@ -303,6 +363,8 @@ but not under same administrative control.
 .Xr setsockopt 2 ,
 .Xr syslog 3 ,
 .Xr hosts.equiv 5 ,
+.Xr hosts_access 5 ,
+.Xr hosts_options 5 ,
 .Xr printcap 5 ,
 .Xr lpc 8 ,
 .Xr pac 8
@@ -312,4 +374,4 @@ but not under same administrative control.
 .Sh HISTORY
 An
 .Nm
-daemon appeared in Version 6 AT&T UNIX.
+daemon appeared in Version 6 AT\*[Am]T UNIX.

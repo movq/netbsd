@@ -1,7 +1,7 @@
-/*	$NetBSD: macros.h,v 1.17 1998/11/07 17:22:58 ragge Exp $	*/
+/*	$NetBSD: macros.h,v 1.44 2007/11/22 23:02:05 plunky Exp $	*/
 
 /*
- * Copyright (c) 1994, 1998 Ludd, University of Lule}, Sweden.
+ * Copyright (c) 1994, 1998, 2000 Ludd, University of Lule}, Sweden.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,119 +32,119 @@
 
  /* All bugs are subject to removal without further notice */
 
-#if !defined(_VAX_MACROS_H_) && !defined(lint)
+#if !defined(_VAX_MACROS_H_) && !defined(__lint__)
 #define _VAX_MACROS_H_
 
+void	__blkset(void *, int, size_t);
+void	__blkcpy(const void *, void *, size_t);
+
+#if !__GNUC_PREREQ__(4, 1)
 /* Here general macros are supposed to be stored */
 
-static __inline__ int
-ffs(int reg)
+static __inline int __attribute__((__unused__))
+vax_ffs(int reg)
 {
 	register int val;
 
-	__asm__ __volatile ("ffs	$0,$32,%1,%0
-			bneq	1f
-			mnegl	$1,%0
-		1:	incl	%0"
-			: "&=r" (val)
+	__asm volatile ("ffs $0,$32,%1,%0;"
+			    "bneq 1f;"
+			    "mnegl $1,%0;"
+			    "1:;"
+			    "incl %0"
+			: "=&r" (val)
 			: "r" (reg) );
 	return	val;
 }
+#define ffs vax_ffs
+#endif
 
-static __inline__ void 
-_remque(void *p)
+static __inline void __attribute__((__unused__))
+vax_remque(void *p)
 {
-	__asm__ __volatile ("remque (%0),%0;clrl 4(%0)"
+	__asm volatile ("remque (%0),%0;clrl 4(%0)"
 			:
 			: "r" (p)
 			: "memory" );
 }
 
-static __inline__ void 
-_insque(void *p, void *q)
+static __inline void  __attribute__((__unused__))
+vax_insque(void *p, void *q)
 {
-	__asm__ __volatile ("insque (%0), (%1)"
+	__asm volatile ("insque (%0),(%1)"
 			:
 			: "r" (p),"r" (q)
 			: "memory" );
 }
 
-static __inline__ void *
-memcpy(void *toe, const void *from, u_int len)
+#if 0
+static __inline void *__attribute__((__unused__))
+vax_memcpy(void *to, const void *from, size_t len)
 {
-	__asm__ __volatile ("movc3 %0,(%1),(%2)"
-			:
-			: "r" (len),"r" (from),"r"(toe)
+	if (len > 65535) {
+		__blkcpy(from, to, len);
+	} else {
+		__asm volatile ("movc3 %1,(%2),%0"
+			: "=m" (*(char *)to)
+			: "g" (len), "r" (*(const char *)from)
 			:"r0","r1","r2","r3","r4","r5","memory","cc");
-	return toe;
+	}
+	return to;
 }
-static __inline__ void *
-memmove(void *toe, const void *from, u_int len)
+#define memcpy vax_memcpy
+
+static __inline void *__attribute__((__unused__))
+vax_memmove(void *to, const void *from, size_t len)
 {
-	__asm__ __volatile ("movc3 %0,(%1),(%2)"
-			:
-			: "r" (len),"r" (from),"r"(toe)
+	if (len > 65535) {
+		__blkcpy(from, to, len);
+	} else {
+		__asm __volatile ("movc3 %1,%2,%0"
+			: "=m" (*(char *)to)
+			: "g" (len), "mo" (*(const char *)from)
 			:"r0","r1","r2","r3","r4","r5","memory","cc");
-	return toe;
+	}
+	return to;
 }
+#define memmove vax_memmove
+#endif
 
-static __inline__ void
-bcopy(const void *from, void *toe, u_int len)
+static __inline void *__attribute__((__unused__))
+vax_memset(void *block, int c, size_t len)
 {
-	__asm__ __volatile ("movc3 %0,(%1),(%2)"
-			:
-			: "r" (len),"r" (from),"r"(toe)
-			:"r0","r1","r2","r3","r4","r5","memory","cc");
-}
-
-void	blkclr __P((void *, u_int));
-
-static __inline__ void *
-memset(void *block, int c, size_t len)
-{
-	if (len > 65535)
-		blkclr(block, len);
-	else {
-		__asm__ __volatile ("movc5 $0,(%0),%2,%1,(%0)"
-			:
-			: "r" (block), "r" (len), "r"(c)
+	if (len > 65535) {
+		__blkset(block, c, len);
+	} else {
+		__asm __volatile ("movc5 $0,(%%sp),%2,%1,%0"
+			: "=m" (*(char *)block)
+			:  "g" (len), "g" (c)
 			:"r0","r1","r2","r3","r4","r5","memory","cc");
 	}
 	return block;
 }
+#define memset vax_memset
 
-static __inline__ void
-bzero(void *block, u_int len)
-{
-	if (len > 65535)
-		blkclr(block, len);
-	else {
-		__asm__ __volatile ("movc5 $0,(%0),$0,%1,(%0)"
-			:
-			: "r" (block), "r" (len)
-			:"r0","r1","r2","r3","r4","r5","memory","cc");
-	}
-}
-
+#ifdef notdef 
 /* XXX - the return syntax of memcmp is wrong */
-static __inline__ int
+static __inline int __attribute__((__unused__))
 memcmp(const void *b1, const void *b2, size_t len)
 {
 	register int ret;
 
-	__asm__ __volatile("cmpc3 %3,(%1),(%2);movl r0,%0"
+	__asm volatile("cmpc3 %3,(%1),(%2);"
+			   "movl %%r0,%0"
 			: "=r" (ret)
 			: "r" (b1), "r" (b2), "r" (len)
 			: "r0","r1","r2","r3" );
 	return ret;
 }
 
-static __inline__ int
+static __inline int __attribute__((__unused__))
 bcmp(const void *b1, const void *b2, size_t len)
 {
 	register int ret;
 
-	__asm__ __volatile("cmpc3 %3,(%1),(%2);movl r0,%0"
+	__asm volatile("cmpc3 %3,(%1),(%2);"
+			   "movl %%r0,%0"
 			: "=r" (ret)
 			: "r" (b1), "r" (b2), "r" (len)
 			: "r0","r1","r2","r3" );
@@ -152,92 +152,120 @@ bcmp(const void *b1, const void *b2, size_t len)
 }
 
 /* Begin nya */
-static __inline__ size_t
+static __inline size_t __attribute__((__unused__))
 strlen(const char *cp)
 {
         register size_t ret;
 
-        __asm__ __volatile("locc $0,$65535,(%1);subl3 r0,$65535,%0"
+        __asm volatile("locc $0,$65535,(%1);"
+			   "subl3 %%r0,$65535,%0"
                         : "=r" (ret)
                         : "r" (cp)
                         : "r0","r1","cc" );
         return  ret;
 }
 
-static __inline__ char *
+static __inline char * __attribute__((__unused__))
 strcat(char *cp, const char *c2)
 {
-        __asm__ __volatile("locc $0,$65535,(%1);subl3 r0,$65535,r2;incl r2;
-                            locc $0,$65535,(%0);movc3 r2,(%1),(r1)"
+        __asm volatile("locc $0,$65535,(%1);"
+			   "subl3 %%r0,$65535,%%r2;"
+			   "incl %%r2;"
+                           "locc $0,$65535,(%0);"
+			   "movc3 %%r2,(%1),(%%r1)"
                         :
                         : "r" (cp), "r" (c2)
                         : "r0","r1","r2","r3","r4","r5","memory","cc");
         return  cp;
 }
 
-static __inline__ char *
+static __inline char * __attribute__((__unused__))
 strncat(char *cp, const char *c2, size_t count)
 {
-        __asm__ __volatile("locc $0,%2,(%1);subl3 r0,%2,r2;
-                            locc $0,$65535,(%0);movc3 r2,(%1),(r1);movb $0,(r3)"
+        __asm volatile("locc $0,%2,(%1);"
+			   "subl3 %%r0,%2,%%r2;"
+                           "locc $0,$65535,(%0);"
+			   "movc3 %%r2,(%1),(%%r1);"
+			   "movb $0,(%%r3)"
                         :
                         : "r" (cp), "r" (c2), "g"(count)
                         : "r0","r1","r2","r3","r4","r5","memory","cc");
         return  cp;
 }
 
-static __inline__ char *
+static __inline char * __attribute__((__unused__))
 strcpy(char *cp, const char *c2)
 {
-        __asm__ __volatile("locc $0,$65535,(%1);subl3 r0,$65535,r2;
-                            movc3 r2,(%1),(%0);movb $0,(r3)"
+        __asm volatile("locc $0,$65535,(%1);"
+			   "subl3 %%r0,$65535,%%r2;"
+                           "movc3 %%r2,(%1),(%0);"
+			   "movb $0,(%%r3)"
                         :
                         : "r" (cp), "r" (c2)
                         : "r0","r1","r2","r3","r4","r5","memory","cc");
         return  cp;
 }
 
-static __inline__ char *
+static __inline char * __attribute__((__unused__))
 strncpy(char *cp, const char *c2, size_t len)
 {
-        __asm__ __volatile("movl %2,r2;locc $0,r2,(%1);beql 1f;subl3 r0,%2,r2;
-                            clrb (%0)[r2];1:;movc3 r2,(%1),(%0)"
+        __asm volatile("movl %2,%%r2;"
+			   "locc $0,%%r2,(%1);"
+			   "beql 1f;"
+			   "subl3 %%r0,%2,%%r2;"
+                           "clrb (%0)[%%r2];"
+			   "1:;"
+			   "movc3 %%r2,(%1),(%0)"
                         :
                         : "r" (cp), "r" (c2), "g"(len)
                         : "r0","r1","r2","r3","r4","r5","memory","cc");
         return  cp;
 }
 
-static __inline__ void *
+static __inline void *__attribute__((__unused__))
 memchr(const void *cp, int c, size_t len)
 {
         void *ret;
-        __asm__ __volatile("locc %2,%3,(%1);bneq 1f;clrl r1;1:movl r1,%0"
+        __asm volatile("locc %2,%3,(%1);"
+			   "bneq 1f;"
+			   "clrl %%r1;"
+			   "1:;"
+			   "movl %%r1,%0"
                         : "=g"(ret)
                         : "r" (cp), "r" (c), "g"(len)
                         : "r0","r1","cc");
         return  ret;
 }
 
-static __inline__ int
+static __inline int __attribute__((__unused__))
 strcmp(const char *cp, const char *c2)
 {
         register int ret;
-        __asm__ __volatile("locc $0,$65535,(%1);subl3 r0,$65535,r0;incl r0;
-                            cmpc3 r0,(%1),(%2);beql 1f;movl $1,r2;
-                            cmpb (r1),(r3);bcc 1f;movl $-1,r2;1:movl r2,%0"
+        __asm volatile("locc $0,$65535,(%1);"
+			   "subl3 %%r0,$65535,%%r0;"
+			   "incl %%r0;"
+                           "cmpc3 %%r0,(%1),(%2);"
+			   "beql 1f;"
+			   "movl $1,%%r2;"
+                           "cmpb (%%r1),(%%r3);"
+			   "bcc 1f;"
+			   "mnegl $1,%%r2;"
+			   "1:;"
+			   "movl %%r2,%0"
                         : "=g"(ret)
                         : "r" (cp), "r" (c2)
                         : "r0","r1","r2","r3","cc");
         return  ret;
 }
-/* End nya */
+#endif
 
 #if 0 /* unused, but no point in deleting it since it _is_ an instruction */
-static __inline__ int locc(int mask, char *cp,u_int size){
+static __inline int __attribute__((__unused__))
+locc(int mask, char *cp, size_t size){
 	register ret;
 
-	__asm__ __volatile("locc %1,%2,(%3);movl r0,%0"
+	__asm volatile("locc %1,%2,(%3);"
+			   "movl %%r0,%0"
 			: "=r" (ret)
 			: "r" (mask),"r"(size),"r"(cp)
 			: "r0","r1" );
@@ -245,37 +273,141 @@ static __inline__ int locc(int mask, char *cp,u_int size){
 }
 #endif
 
-static __inline__ int
-scanc(u_int size, const u_char *cp, const u_char *table, int mask)
+static __inline int __attribute__((__unused__))
+vax_scanc(u_int size, const u_char *cp, const u_char *table, int mask)
 {
 	register int ret;
 
-	__asm__ __volatile("scanc	%1,(%2),(%3),%4;movl r0,%0"
+	__asm volatile("scanc %1,(%2),(%3),%4;"
+			   "movl %%r0,%0"
 			: "=g"(ret)
 			: "r"(size),"r"(cp),"r"(table),"r"(mask)
 			: "r0","r1","r2","r3" );
 	return ret;
 }
+#define scanc vax_scanc
 
-static __inline__ int
-skpc(int mask, size_t size, u_char *cp)
+static __inline int __attribute__((__unused__))
+vax_skpc(int mask, size_t size, u_char *cp)
 {
 	register int ret;
 
-	__asm__ __volatile("skpc %1,%2,(%3);movl r0,%0"
+	__asm volatile("skpc %1,%2,(%3);"
+			   "movl %%r0,%0"
 			: "=g"(ret)
 			: "r"(mask),"r"(size),"r"(cp)
 			: "r0","r1" );
 	return	ret;
 }
+#define skpc vax_skpc
 
-#define setrunqueue(p)	\
-	__asm__ __volatile("movl %0,r0;jsb Setrq":: "g"(p):"r0","r1","r2");
+/*
+ * Set/clear a bit at a memory position; interlocked.
+ * Return 0 if already set, 1 otherwise.
+ */
+static __inline int __attribute__((__unused__))
+bbssi(int bitnr, long *addr)
+{
+	register int ret;
 
-#define remrunqueue(p)	\
-	__asm__ __volatile("movl %0,r0;jsb Remrq":: "g"(p):"r0","r1","r2");
+	__asm volatile("clrl %%r0;"
+			   "bbssi %1,%2,1f;"
+			   "incl %%r0;"
+			   "1:;"
+			   "movl %%r0,%0"
+		: "=&r"(ret)
+		: "g"(bitnr),"m"(*addr)
+		: "r0","cc","memory");
+	return ret;
+}
 
-#define cpu_switch(p) \
-	__asm__ __volatile("movl %0,r0;movpsl -(sp);jsb Swtch" \
-	    ::"g"(p):"r0","r1","r2","r3");
-#endif	/* _VAX_MACROS_H_ */
+static __inline int __attribute__((__unused__))
+bbcci(int bitnr, long *addr)
+{
+	register int ret;
+
+	__asm volatile("clrl %%r0;"
+			   "bbcci %1,%2,1f;"
+			   "incl %%r0;"
+			   "1:;"
+			   "movl %%r0,%0"
+		: "=&r"(ret)
+		: "g"(bitnr),"m"(*addr)
+		: "r0","cc","memory");
+	return ret;
+}
+
+static inline struct lwp *
+cpu_switchto(struct lwp *oldlwp, struct lwp *newlwp, bool returning)
+{
+	struct lwp *prevlwp;
+	__asm volatile(
+		"movl %1,%%r0;"
+		"movl %2,%%r1;"
+		"movpsl -(%%sp);"
+		"jsb Swtchto;"
+		"movl %%r0,%0"
+	    : "=g"(prevlwp)
+	    : "g" (oldlwp), "g" (newlwp)
+	    : "r0", "r1");
+	return prevlwp;
+}
+
+/*
+ * Interlock instructions. Used both in multiprocessor environments to
+ * lock between CPUs and in uniprocessor systems when locking is required
+ * between I/O devices and the master CPU.
+ */
+/*
+ * Insqti() locks and inserts an element into the end of a queue.
+ * Returns -1 if interlock failed, 1 if inserted OK and 0 if first in queue.
+ */
+static __inline int __attribute__((__unused__))
+insqti(void *entry, void *header) {
+	register int ret;
+
+	__asm volatile(
+		"	mnegl $1,%0;"
+		"	insqti (%1),(%2);"
+		"	bcs 1f;"		/* failed insert */
+		"	beql 2f;"		/* jump if first entry */
+		"	movl $1,%0;"
+		"	brb 1f;"
+		"2:	clrl %0;"
+		"	1:;"
+			: "=&g"(ret)
+			: "r"(entry), "r"(header)
+			: "memory");
+
+	return ret;
+}
+
+/*
+ * Remqhi() removes an element from the head of the queue.
+ * Returns -1 if interlock failed, 0 if queue empty, address of the 
+ * removed element otherwise.
+ */
+static __inline void *__attribute__((__unused__))
+remqhi(void *header) {
+	register void *ret;
+
+	__asm volatile(
+		"	remqhi (%1),%0;"
+		"	bcs 1f;"		/* failed interlock */
+		"	bvs 2f;"		/* nothing was removed */
+		"	brb 3f;"
+		"1:	mnegl $1,%0;"
+		"	brb 3f;"
+		"2:	clrl %0;"
+		"	3:;"
+			: "=&g"(ret)
+			: "r"(header)
+			: "memory");
+
+	return ret;
+}
+#define	ILCK_FAILED	-1	/* Interlock failed */
+#define	Q_EMPTY		0	/* Queue is/was empty */
+#define	Q_OK		1	/* Inserted OK */
+
+#endif	/* !_VAX_MACROS_H_ && !__lint__ */

@@ -1,7 +1,9 @@
-#	$NetBSD: Makefile,v 1.3 1999/12/30 16:27:54 eeh Exp $
+#	$NetBSD: Makefile,v 1.7 2005/12/11 12:19:16 christos Exp $
 
 .if ${MACHINE} == sparc64
-SUBDIR=	ofwboot installboot bootblk 
+SUBDIR=	../../sparc/stand/ofwboot
+SUBDIR+=../../sparc/stand/bootblk
+SUBDIR+=../../sparc/stand/binstall 
 .endif
 
 .include <bsd.subdir.mk>

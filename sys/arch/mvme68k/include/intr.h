@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.2 2000/03/18 22:33:05 scw Exp $	*/
+/*	$NetBSD: intr.h,v 1.19 2008/06/26 02:52:29 isaki Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,64 +32,59 @@
 #ifndef _MVME68K_INTR_H
 #define _MVME68K_INTR_H
 
+#include <sys/device.h>
 #include <machine/psl.h>
 
-/*
- * These are identical to the values used by hp300, but are not meaningful
- * to mvme68k code at this time.
- */
 #define	IPL_NONE	0	/* disable only this interrupt */
-#define	IPL_BIO		1	/* disable block I/O interrupts */
-#define	IPL_NET		2	/* disable network interrupts */
-#define	IPL_TTY		3	/* disable terminal interrupts */
-#define	IPL_TTYNOBUF	4	/* IPL_TTY + higher ISR priority */
-#define	IPL_CLOCK	5	/* disable clock interrupts */
-#define	IPL_HIGH	6	/* disable all interrupts */
+#define	IPL_SOFTCLOCK	1	/* clock software interrupts */
+#define	IPL_SOFTBIO	2	/* block software interrupts */
+#define	IPL_SOFTNET	3	/* network software interrupts */
+#define	IPL_SOFTSERIAL	4	/* serial software interrupts */
+#define	IPL_VM		5
+#define	IPL_SCHED	6
+#define	IPL_HIGH	7
+#define	NIPL		8
 
 #ifdef _KERNEL
-/* spl0 requires checking for software interrupts */
-
-#define spllowersoftclock()	spl1()
+#define spl0()			_spl0()
 #define splsoftclock()		splraise1()
+#define splsoftbio()		splraise1()
 #define splsoftnet()		splraise1()
-#define splbio()		splraise2()
-#define splnet()		splraise3()
-#define spltty()		splraise3()
-#define splimp()		splraise3()
-#define splserial()		splraise4()
-#define splclock()		splraise5()
-#define splstatclock()		splraise5()
-#define splvm()			splraise5()
-#define splhigh()		spl7()
+#define splsoftserial()		splraise1()
+#define splvm()			splraise3()
 #define splsched()		spl7()
-
-/* watch out for side effects */
-#define splx(s)         (s & PSL_IPL ? _spl(s) : spl0())
-
-
-#define SIR_NET		0x1
-#define SIR_CLOCK	0x2
-
-/* Following is from next68k/intr.h */
-#define	siron(mask)	\
-	__asm __volatile ( "orb %1,%0" : "=m" (ssir) : "ir" (mask))
-#define	siroff(mask)	\
-	__asm __volatile ( "andb %1,%0" : "=m" (ssir) : "ir" (~(mask)));
-
-#define setsoftint(x)	siron(x)
-#define setsoftnet()	siron(SIR_NET)
-#define setsoftclock()	siron(SIR_CLOCK)
-
+#define splhigh()		spl7()
 
 #ifndef _LOCORE
-/*
- * simulated software interrupt register
- */
-extern volatile unsigned char ssir;
 
-extern void init_sir __P((void));
-extern unsigned long allocate_sir __P((void (*)(void *), void *));
-extern int spl0 __P((void));
+extern const uint16_t ipl2psl_table[NIPL];
+
+typedef int ipl_t;
+typedef struct {
+	uint16_t _psl;
+} ipl_cookie_t;
+
+static inline ipl_cookie_t
+makeiplcookie(ipl_t ipl)
+{
+
+	return (ipl_cookie_t){._psl = ipl2psl_table[ipl]};
+}
+
+static inline int
+splraiseipl(ipl_cookie_t icookie)
+{
+
+	return _splraise(icookie._psl);
+}
+
+static __inline void
+splx(int sr)
+{
+
+	__asm volatile("movw %0,%%sr" : : "di" (sr));
+}
+
 #endif /* !_LOCORE */
 #endif /* _KERNEL */
 

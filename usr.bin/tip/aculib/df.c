@@ -1,4 +1,4 @@
-/*	$NetBSD: df.c,v 1.5 1997/11/22 07:28:54 lukem Exp $	*/
+/*	$NetBSD: df.c,v 1.10 2006/12/14 17:09:43 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)df.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: df.c,v 1.5 1997/11/22 07:28:54 lukem Exp $");
+__RCSID("$NetBSD: df.c,v 1.10 2006/12/14 17:09:43 christos Exp $");
 #endif /* not lint */
 
 /*
@@ -49,95 +45,90 @@ __RCSID("$NetBSD: df.c,v 1.5 1997/11/22 07:28:54 lukem Exp $");
 
 static jmp_buf Sjbuf;
 
-static	int	df_dialer __P((char *, char *, int));
-static	void	timeout __P((int));
+static	int	df_dialer(char *, char *, int);
+static	void	timeout(int);
 
 int
-df02_dialer(num, acu)
-	char *num, *acu;
+df02_dialer(char *num, char *acu)
 {
 
 	return (df_dialer(num, acu, 0));
 }
 
 int
-df03_dialer(num, acu)
-	char *num, *acu;
+df03_dialer(char *num, char *acu)
 {
 
 	return (df_dialer(num, acu, 1));
 }
 
 static int
-df_dialer(num, acu, df03)
-	char *num, *acu;
-	int df03;
+/*ARGSUSED*/
+df_dialer(char *num, char *acu __unused, int df03)
 {
 	int f = FD;
 	struct termios cntrl;
-	int speed = 0;
-	char c = '\0';
+	speed_t volatile spd;
+	char c;
 
-#if __GNUC__	/* XXX pacify gcc */
-	(void)&speed;
-#endif
-
-	tcgetattr(f, &cntrl);
+	spd = 0;
+	c = '\0';
+	(void)tcgetattr(f, &cntrl);
 	cntrl.c_cflag |= HUPCL;
-	tcsetattr(f, TCSANOW, &cntrl);
+	(void)tcsetattr(f, TCSANOW, &cntrl);
 	if (setjmp(Sjbuf)) {
-		printf("connection timed out\r\n");
+		(void)printf("connection timed out\r\n");
 		df_disconnect();
 		return (0);
 	}
 	if (boolean(value(VERBOSE)))
-		printf("\ndialing...");
-	fflush(stdout);
+		(void)printf("\ndialing...");
+	(void)fflush(stdout);
 #ifdef TIOCMSET
 	if (df03) {
 		int st = TIOCM_ST;	/* secondary Transmit flag */
 
-		tcgetattr(f, &cntrl);
-		speed = cfgetospeed(&cntrl);
-		if (speed != B1200) {	/* must dial at 1200 baud */
-			cfsetospeed(&cntrl, B1200);
-			cfsetispeed(&cntrl, B1200);
-			tcsetattr(f, TCSAFLUSH, &cntrl);
-			ioctl(f, TIOCMBIC, &st); /* clear ST for 300 baud */
+		(void)tcgetattr(f, &cntrl);
+		spd = cfgetospeed(&cntrl);
+		if (spd != B1200) {	/* must dial at 1200 baud */
+			(void)cfsetospeed(&cntrl, B1200);
+			(void)cfsetispeed(&cntrl, B1200);
+			(void)tcsetattr(f, TCSAFLUSH, &cntrl);
+			(void)ioctl(f, TIOCMBIC, &st); /* clear ST for 300 baud */
 		} else
-			ioctl(f, TIOCMBIS, &st); /* set ST for 1200 baud */
+			(void)ioctl(f, TIOCMBIS, &st); /* set ST for 1200 baud */
 	}
 #endif
-	signal(SIGALRM, timeout);
-	alarm(5 * strlen(num) + 10);
-	tcflush(f, TCIOFLUSH);
-	write(f, "\001", 1);
-	sleep(1);
-	write(f, "\002", 1);
-	write(f, num, strlen(num));
-	read(f, &c, 1);
+	(void)signal(SIGALRM, timeout);
+	(void)alarm(5 * strlen(num) + 10);
+	(void)tcflush(f, TCIOFLUSH);
+	(void)write(f, "\001", 1);
+	(void)sleep(1);
+	(void)write(f, "\002", 1);
+	(void)write(f, num, strlen(num));
+	(void)read(f, &c, 1);
 #ifdef TIOCMSET
-	if (df03 && speed != B1200) {
-		cfsetospeed(&cntrl, speed);
-		cfsetispeed(&cntrl, speed);
-		tcsetattr(f, TCSAFLUSH, &cntrl);
+	if (df03 && spd != B1200) {
+		(void)cfsetospeed(&cntrl, spd);
+		(void)cfsetispeed(&cntrl, spd);
+		(void)tcsetattr(f, TCSAFLUSH, &cntrl);
 	}
 #endif
 	return (c == 'A');
 }
 
 void
-df_disconnect()
+df_disconnect(void)
 {
 
-	write(FD, "\001", 1);
-	sleep(1);
-	tcflush(FD, TCIOFLUSH);
+	(void)write(FD, "\001", 1);
+	(void)sleep(1);
+	(void)tcflush(FD, TCIOFLUSH);
 }
 
 
 void
-df_abort()
+df_abort(void)
 {
 
 	df_disconnect();
@@ -145,8 +136,8 @@ df_abort()
 
 
 static void
-timeout(dummy)
-	int dummy;
+/*ARGSUSED*/
+timeout(int dummy __unused)
 {
 
 	longjmp(Sjbuf, 1);

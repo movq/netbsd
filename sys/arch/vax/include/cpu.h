@@ -1,4 +1,4 @@
-/*      $NetBSD: cpu.h,v 1.42 2000/03/19 14:56:53 ragge Exp $      */
+/*      $NetBSD: cpu.h,v 1.85 2008/03/11 05:34:02 matt Exp $      */
 
 /*
  * Copyright (c) 1994 Ludd, University of Lule}, Sweden
@@ -33,16 +33,23 @@
 #ifndef _VAX_CPU_H_
 #define _VAX_CPU_H_
 
-#if defined(_KERNEL) && !defined(_LKM)
+#if defined(_KERNEL_OPT)
 #include "opt_multiprocessor.h"
+#include "opt_lockdebug.h"
 #endif
 
+#define	CPU_PRINTFATALTRAPS	1
+#define	CPU_CONSDEV		2
+#define	CPU_BOOTED_DEVICE	3
+#define	CPU_BOOTED_KERNEL	4
+#define CPU_MAXID		5
 
 #ifdef _KERNEL
 
 #include <sys/cdefs.h>
+#include <sys/queue.h>
 #include <sys/device.h>
-#include <sys/lock.h>
+#include <sys/cpu_data.h>
 
 #include <machine/mtpr.h>
 #include <machine/pcb.h>
@@ -50,93 +57,140 @@
 #include <machine/psl.h>
 
 #define enablertclock()
-#define	cpu_wait(p)
-#define	cpu_swapout(p)
 
 /*
  * All cpu-dependent info is kept in this struct. Pointer to the
  * struct for the current cpu is set up in locore.c.
  */
-struct	cpu_dep {
-	void	(*cpu_steal_pages) __P((void)); /* pmap init before mm is on */
-	int	(*cpu_mchk) __P((caddr_t));   /* Machine check handling */
-	void	(*cpu_memerr) __P((void)); /* Memory subsystem errors */
+struct cpu_info;
+
+struct cpu_dep {
+	void	(*cpu_steal_pages)(void); /* pmap init before mm is on */
+	int	(*cpu_mchk)(void *);   /* Machine check handling */
+	void	(*cpu_memerr)(void); /* Memory subsystem errors */
 	    /* Autoconfiguration */
-	void	(*cpu_conf) __P((void));
-	int	(*cpu_clkread) __P((time_t));	/* Read cpu clock time */
-	void	(*cpu_clkwrite) __P((void));	/* Write system time to cpu */
-	short	cpu_vups;	/* speed of cpu */
-	short	cpu_scbsz;	/* (estimated) size of system control block */
-	void	(*cpu_halt) __P((void)); /* Cpu dependent halt call */
-	void	(*cpu_reboot) __P((int)); /* Cpu dependent reboot call */
-	void	(*cpu_clrf) __P((void)); /* Clear cold/warm start flags */
-	void	(*cpu_subconf) __P((struct device *));/*config cpu dep. devs */
+	void	(*cpu_conf)(void);
+	int	(*cpu_gettime)(volatile struct timeval *);
+					/* Read cpu clock time */
+	void	(*cpu_settime)(volatile struct timeval *);
+					/* Write system time to cpu */
+	short	cpu_vups;		/* speed of cpu */
+	short	cpu_scbsz;		/* (estimated) size of SCB */
+	void	(*cpu_halt)(void);	/* Cpu dependent halt call */
+	void	(*cpu_reboot)(int);	/* Cpu dependent reboot call */
+	void	(*cpu_clrf)(void);	/* Clear cold/warm start flags */
+	const char * const *cpu_devs;	/* mainbus devices */
+	void	(*cpu_attach_cpu)(device_t);	/* print CPU info */
+	void	(*cpu_subconf)(device_t, void *, cfprint_t);	/* attach dep. dev */
+	int     cpu_flags;
+	void	(*cpu_badaddr)(void);	/* cpu-specific badaddr() */
 };
 
-extern struct cpu_dep *dep_call; /* Holds pointer to current CPU struct. */
+#if defined(MULTIPROCESSOR)
+/*
+ * All cpu-dependent calls for multicpu systems goes here.
+ */
+struct cpu_mp_dep {
+	void	(*cpu_startslave)(struct cpu_info *);
+	void	(*cpu_send_ipi)(struct cpu_info *);
+	void	(*cpu_cnintr)(void);
+};
+/*
+ * NOTE: This is not bit mask, this is bit _number_.
+ */
+#define	IPI_START_CNTX	1	/* Start console transmitter, proc out */
+#define	IPI_SEND_CNCHAR	2	/* Write char to console, kernel printf */
+#define	IPI_RUNNING	3	/* This CPU just started to run */
+#define	IPI_TBIA	4	/* Flush the TLB */
+#define	IPI_DDB		5	/* Jump into the DDB loop */
+
+#define	IPI_DEST_MASTER	-1	/* Destination is mastercpu */
+#define	IPI_DEST_ALL	-2	/* Broadcast */
+
+extern const struct cpu_mp_dep *mp_dep_call;
+#endif /* defined(MULTIPROCESSOR) */
+  
+#define	CPU_RAISEIPL	1	/* Must raise IPL until intr is handled */ 
+
+extern const struct cpu_dep *dep_call;
+				/* Holds pointer to current CPU struct. */
 
 struct clockframe {
         int     pc;
         int     ps;
 };
 
-#if defined(MULTIPROCESSOR)
-
 struct cpu_info {
 	/*
 	 * Public members.
 	 */
-	struct proc *ci_curproc;        /* current owner of the processor */
-	struct simplelock ci_slock;     /* lock on this data structure */
-	cpuid_t ci_cpuid;               /* our CPU ID */
-#if defined(DIAGNOSTIC) || defined(LOCKDEBUG)
-	u_long ci_spin_locks;           /* # of spin locks held */
-	u_long ci_simple_locks;         /* # of simple locks held */
-#endif
+	struct cpu_data ci_data;	/* MI per-cpu data */
+	struct device *ci_dev;		/* device struct for this cpu */
+	int ci_mtx_oldspl;		/* saved spl */
+	int ci_mtx_count;		/* negative count of mutexes */
+	int ci_cpuid;			/* h/w specific cpu id */
+	int ci_want_resched;		/* Should change process */
+
 	/*
 	 * Private members.
 	 */
-	int	ci_want_resched;	/* Should change process */
+#if defined(__HAVE_FAST_SOFTINTS)
+	lwp_t *ci_softlwps[SOFTINT_COUNT];
+#endif
+	vaddr_t ci_istack;		/* Interrupt stack location */
+	const char *ci_cpustr;
+	int ci_slotid;			/* cpu slot */
+#if defined(MULTIPROCESSOR)
+	struct lwp *ci_curlwp;		/* current lwp (for other cpus) */
+	volatile int ci_flags;		/* See below */
+	long ci_ipimsgs;		/* Sent IPI bits */
+	struct trapframe *ci_ddb_regs;	/* Used by DDB */
+	SIMPLEQ_ENTRY(cpu_info) ci_next; /* next cpu_info */
+#endif
 };
+#define	CI_MASTERCPU	1		/* Set if master CPU */
+#define	CI_RUNNING	2		/* Set when a slave CPU is running */
+#define	CI_STOPPED	4		/* Stopped (in debugger) */
 
-/*
- * VAX internal CPU numbering is not sequential; therefore have a separate
- * function call that returns the cpu_info struct for this CPU.
- *
- * For the master CPU (or only) this struct is allocated early in startup;
- * for other CPUs it is allocated when the CPU is found.
- */
-extern	int (*vax_cpu_number)(void);
-extern	struct cpu_info *(*vax_curcpu)(void);
+extern int cpu_printfataltraps;
 
-#define	cpu_number()		(*vax_cpu_number)()
-#define	curcpu()		(*vax_curcpu)()
-#define	need_resched() {curcpu()->ci_want_resched++; mtpr(AST_OK,PR_ASTLVL); }
-#define	cpu_boot_secondary_processors()
+#define	curcpu()		(curlwp->l_cpu + 0)
+#define	curlwp			((struct lwp *)mfpr(PR_SSP))
+#define	cpu_number()		(curcpu()->ci_cpuid)
+#define	cpu_need_resched(ci, flags)		\
+	do {					\
+		(ci)->ci_want_resched = 1;	\
+		mtpr(AST_OK,PR_ASTLVL);		\
+	} while (/*CONSTCOND*/ 0)
+#define	cpu_proc_fork(x, y)	do { } while (/*CONSCOND*/0)
+#define	cpu_lwp_free(l, f)	do { } while (/*CONSCOND*/0)
+#define	cpu_lwp_free2(l)	do { } while (/*CONSCOND*/0)
+#define	cpu_idle()		do { } while (/*CONSCOND*/0)
+static inline bool
+cpu_intr_p(void)
+{
+	register_t psl;
+	__asm("movpsl %0" : "=g"(psl));
+	return (psl & PSL_IS) != 0;
+}
+#if defined(MULTIPROCESSOR)
+#define	CPU_IS_PRIMARY(ci)	((ci)->ci_flags & CI_MASTERCPU)
 
-#else /* MULTIPROCESSOR */
+#define	CPU_INFO_ITERATOR	int
+#define	CPU_INFO_FOREACH(cii, ci)	cii = 0, ci = SIMPLEQ_FIRST(&cpus); \
+					ci != NULL; \
+					ci = SIMPLEQ_NEXT(ci, ci_next)
 
-extern	int     want_resched;   /* resched() was called */
-
-#define	cpu_number()			0
-#define need_resched() { want_resched++; mtpr(AST_OK,PR_ASTLVL); }
-
-#endif /* MULTIPROCESSOR */
-
-extern struct device *booted_from;
-extern int mastercpu;
-extern int bootdev;
-
-#define	setsoftnet()	mtpr(12,PR_SIRR)
-#define setsoftclock()	mtpr(8,PR_SIRR)
-#define	todr()		mfpr(PR_TODR)
+extern SIMPLEQ_HEAD(cpu_info_qh, cpu_info) cpus;
+extern char vax_mp_tramp;
+#endif
 
 /*
  * Notify the current process (p) that it has a signal pending,
  * process as soon as possible.
  */
 
-#define signotify(p)     mtpr(AST_OK,PR_ASTLVL);
+#define cpu_signotify(l)     mtpr(AST_OK,PR_ASTLVL)
 
 
 /*
@@ -144,7 +198,7 @@ extern int bootdev;
  * buffer pages are invalid.  On the hp300, request an ast to send us
  * through trap, marking the proc as needing a profiling tick.
  */
-#define need_proftick(p) {(p)->p_flag |= P_OWEUPC; mtpr(AST_OK,PR_ASTLVL); }
+#define cpu_need_proftick(l) do { (l)->l_pflag |= LP_OWEUPC; mtpr(AST_OK,PR_ASTLVL); } while (/*CONSTCOND*/ 0)
 
 /*
  * This defines the I/O device register space size in pages.
@@ -152,24 +206,34 @@ extern int bootdev;
 #define	IOSPSZ	((64*1024) / VAX_NBPG)	/* 64k == 128 pages */
 
 struct device;
+struct buf;
+struct pte;
+
+#include <sys/lwp.h>
 
 /* Some low-level prototypes */
-int	badaddr __P((caddr_t, int));
-void	cpu_swapin __P((struct proc *));
-int	hp_getdev __P((int, int, struct device **));
-int	ra_getdev __P((int, int, int, struct device **));
-void	dumpconf __P((void));
-void	dumpsys __P((void));
-void	swapconf __P((void));
-void	disk_printtype __P((int, int));
-void	disk_reallymapin __P((struct buf *, struct pte *, int, int));
-vaddr_t	vax_map_physmem __P((paddr_t, int));
-void	vax_unmap_physmem __P((vaddr_t, int));
-void	ioaccess __P((vaddr_t, paddr_t, int));
-void	iounaccess __P((vaddr_t, int));
+#if defined(MULTIPROCESSOR)
+void	cpu_slavesetup(device_t, int);
+void	cpu_boot_secondary_processors(void);
+void	cpu_send_ipi(int, int);
+void	cpu_handle_ipi(void);
+#endif
+int	badaddr(volatile void *, int);
+void	dumpconf(void);
+void	dumpsys(void);
+void	swapconf(void);
+void	disk_printtype(int, int);
+void	disk_reallymapin(struct buf *, struct pte *, int, int);
+vaddr_t	vax_map_physmem(paddr_t, size_t);
+void	vax_unmap_physmem(vaddr_t, size_t);
+void	ioaccess(vaddr_t, paddr_t, size_t);
+void	iounaccess(vaddr_t, size_t);
 void	findcpu(void);
 #ifdef DDB
-int	kdbrint __P((int));
+int	kdbrint(int);
 #endif
 #endif /* _KERNEL */
+#ifdef _STANDALONE
+void	findcpu(void);
+#endif
 #endif /* _VAX_CPU_H_ */

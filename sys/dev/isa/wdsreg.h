@@ -1,4 +1,4 @@
-/*	$NetBSD: wdsreg.h,v 1.5 1998/01/05 07:31:11 perry Exp $	*/
+/*	$NetBSD: wdsreg.h,v 1.8 2005/12/11 12:22:03 christos Exp $	*/
 
 typedef u_char physaddr[3];
 typedef u_char physlen[3];
@@ -52,7 +52,7 @@ struct wds_scat_gath {
 struct wds_cmd {
 	u_char opcode;
 	u_char targ;
-	struct scsi_generic scb;
+	u_char scb[12];
 	u_char stat;
 	u_char venderr;
 	physlen len;
@@ -67,7 +67,7 @@ struct wds_scb {
 	struct wds_cmd sense;
 
 	struct wds_scat_gath scat_gath[WDS_NSEG];
-	struct scsipi_sense_data sense_data;
+	struct scsi_sense_data sense_data;
 
 	TAILQ_ENTRY(wds_scb) chain;
 	struct wds_scb *nexthash;

@@ -1,4 +1,4 @@
-/*	$NetBSD: sigsetjmp.S,v 1.5 1999/01/31 00:57:10 castor Exp $	*/
+/*	$NetBSD: sigsetjmp.S,v 1.8 2005/09/17 11:49:39 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993, 1995,
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -43,10 +39,10 @@
 
 #if defined(LIBC_SCCS) && !defined(lint)
 	ASMSTR("from: @(#)setjmp.s	8.1 (Berkeley) 6/4/93")
-	ASMSTR("$NetBSD: sigsetjmp.S,v 1.5 1999/01/31 00:57:10 castor Exp $")
+	ASMSTR("$NetBSD: sigsetjmp.S,v 1.8 2005/09/17 11:49:39 tsutsui Exp $")
 #endif /* LIBC_SCCS and not lint */
 
-#ifdef ABICALLS
+#ifdef __ABICALLS__
 	.abicalls
 #endif
 
@@ -62,8 +58,8 @@
  * signal mask.
  */
 
-LEAF(sigsetjmp)
-#ifdef ABICALLS
+LEAF(__sigsetjmp14)
+#ifdef __ABICALLS__
 	.set	noreorder
 	.cpload	t9
 	.set	reorder
@@ -73,12 +69,12 @@ LEAF(sigsetjmp)
 	la	t9, _setjmp
 	jr t9
 
-1:	la	t9, setjmp
+1:	la	t9, __setjmp14
 	jr t9
-END(sigsetjmp)
+END(__sigsetjmp14)
 
-LEAF(siglongjmp)
-#ifdef ABICALLS
+LEAF(__siglongjmp14)
+#ifdef __ABICALLS__
 	.set	noreorder
 	.cpload	t9
 	.set	reorder
@@ -87,6 +83,6 @@ LEAF(siglongjmp)
 	bne	t0, 0x0, 1f			# restore signal mask?
 	la	t9, _longjmp
 	jr	t9
-1:	la	t9, longjmp
+1:	la	t9, __longjmp14
 	jr	t9
-END(siglongjmp)
+END(__siglongjmp14)

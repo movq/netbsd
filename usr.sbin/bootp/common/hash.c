@@ -22,7 +22,7 @@ SOFTWARE.
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hash.c,v 1.4 1998/03/14 04:39:54 lukem Exp $");
+__RCSID("$NetBSD: hash.c,v 1.7 2007/05/27 16:31:42 tls Exp $");
 #endif
 
 
@@ -40,14 +40,7 @@ __RCSID("$NetBSD: hash.c,v 1.4 1998/03/14 04:39:54 lukem Exp $");
 
 #include <sys/types.h>
 #include <stdlib.h>
-
-#ifndef USE_BFUNCS
-#include <memory.h>
-/* Yes, memcpy is OK here (no overlapped copies). */
-#define bcopy(a,b,c)    memcpy(b,a,c)
-#define bzero(p,l)      memset(p,0,l)
-#define bcmp(a,b,c)     memcmp(a,b,c)
-#endif
+#include <strings.h>
 
 #include "hash.h"
 
@@ -64,15 +57,8 @@ __RCSID("$NetBSD: hash.c,v 1.4 1998/03/14 04:39:54 lukem Exp $");
 #define PRIVATE static
 #endif
 
-#ifdef	__STDC__
-#define P(args) args
-#else
-#define P(args) ()
-#endif
+PRIVATE void hashi_FreeMembers(hash_member *, hash_freefp);
 
-PRIVATE void hashi_FreeMembers P((hash_member *, hash_freefp));
-
-#undef P
 
 
 
@@ -86,11 +72,10 @@ PRIVATE void hashi_FreeMembers P((hash_member *, hash_freefp));
  */
 
 hash_tbl *
-hash_Init(tablesize)
-	unsigned tablesize;
+hash_Init(unsigned int tablesize)
 {
-	register hash_tbl *hashtblptr;
-	register unsigned totalsize;
+	hash_tbl *hashtblptr;
+	unsigned totalsize;
 
 	if (tablesize > 0) {
 		totalsize = sizeof(hash_tbl)
@@ -116,9 +101,7 @@ hash_Init(tablesize)
  */
 
 PRIVATE void
-hashi_FreeMembers(bucketptr, free_data)
-	hash_member *bucketptr;
-	hash_freefp free_data;
+hashi_FreeMembers(hash_member *bucketptr, hash_freefp free_data)
 {
 	hash_member *nextbucket;
 	while (bucketptr) {
@@ -138,9 +121,7 @@ hashi_FreeMembers(bucketptr, free_data)
  */
 
 void
-hash_Reset(hashtable, free_data)
-	hash_tbl *hashtable;
-	hash_freefp free_data;
+hash_Reset(hash_tbl *hashtable, hash_freefp free_data)
 {
 	hash_member **bucketptr;
 	unsigned i;
@@ -177,11 +158,9 @@ hash_Reset(hashtable, free_data)
  */
 
 unsigned
-hash_HashFunction(string, len)
-	unsigned char *string;
-	register unsigned len;
+hash_HashFunction(unsigned char *string, unsigned int len)
 {
-	register unsigned accum;
+	unsigned accum;
 
 	accum = 0;
 	for (; len > 0; len--) {
@@ -199,13 +178,10 @@ hash_HashFunction(string, len)
  */
 
 int
-hash_Exists(hashtable, hashcode, compare, key)
-	hash_tbl *hashtable;
-	unsigned hashcode;
-	hash_cmpfp compare;
-	hash_datum *key;
+hash_Exists(hash_tbl *hashtable, unsigned int hashcode, hash_cmpfp compare,
+	    hash_datum *key)
 {
-	register hash_member *memberptr;
+	hash_member *memberptr;
 
 	memberptr = (hashtable->table)[hashcode % (hashtable->size)];
 	while (memberptr) {
@@ -230,11 +206,8 @@ hash_Exists(hashtable, hashcode, compare, key)
  */
 
 int
-hash_Insert(hashtable, hashcode, compare, key, element)
-	hash_tbl *hashtable;
-	unsigned hashcode;
-	hash_cmpfp compare;
-	hash_datum *key, *element;
+hash_Insert(hash_tbl *hashtable, unsigned int hashcode, hash_cmpfp compare,
+	    hash_datum *key, hash_datum *element)
 {
 	hash_member *temp;
 
@@ -261,12 +234,8 @@ hash_Insert(hashtable, hashcode, compare, key, element)
  */
 
 int
-hash_Delete(hashtable, hashcode, compare, key, free_data)
-	hash_tbl *hashtable;
-	unsigned hashcode;
-	hash_cmpfp compare;
-	hash_datum *key;
-	hash_freefp free_data;
+hash_Delete(hash_tbl *hashtable, unsigned int hashcode, hash_cmpfp compare,
+	    hash_datum *key, hash_freefp free_data)
 {
 	hash_member *memberptr, *tempptr;
 	hash_member *previous = NULL;
@@ -327,11 +296,8 @@ hash_Delete(hashtable, hashcode, compare, key, free_data)
  */
 
 hash_datum *
-hash_Lookup(hashtable, hashcode, compare, key)
-	hash_tbl *hashtable;
-	unsigned hashcode;
-	hash_cmpfp compare;
-	hash_datum *key;
+hash_Lookup(hash_tbl *hashtable, unsigned int hashcode, hash_cmpfp compare,
+	    hash_datum *key)
 {
 	hash_member *memberptr;
 
@@ -352,11 +318,10 @@ hash_Lookup(hashtable, hashcode, compare, key)
  */
 
 hash_datum *
-hash_NextEntry(hashtable)
-	hash_tbl *hashtable;
+hash_NextEntry(hash_tbl *hashtable)
 {
-	register unsigned bucket;
-	register hash_member *memberptr;
+	unsigned bucket;
+	hash_member *memberptr;
 
 	/*
 	 * First try to pick up where we left off.
@@ -405,8 +370,7 @@ hash_NextEntry(hashtable)
  */
 
 hash_datum *
-hash_FirstEntry(hashtable)
-	hash_tbl *hashtable;
+hash_FirstEntry(hash_tbl *hashtable)
 {
 	hashtable->bucketnum = 0;
 	hashtable->member = (hashtable->table)[0];

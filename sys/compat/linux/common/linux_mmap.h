@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_mmap.h,v 1.6 1998/12/15 19:31:39 itohy Exp $	*/
+/*	$NetBSD: linux_mmap.h,v 1.21 2008/04/28 20:23:43 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -43,6 +36,8 @@
 #define LINUX_PROT_READ		0x01
 #define LINUX_PROT_WRITE	0x02
 #define LINUX_PROT_EXEC		0x04
+#define LINUX_PROT_GROWSDOWN	0x01000000
+#define LINUX_PROT_GROWSUP	0x02000000
 
 #define LINUX_MAP_SHARED	0x0001
 #define LINUX_MAP_PRIVATE	0x0002
@@ -53,6 +48,14 @@
 #include <compat/linux/arch/m68k/linux_mmap.h>
 #elif defined(__alpha__)
 #include <compat/linux/arch/alpha/linux_mmap.h>
+#elif defined(__powerpc__)
+#include <compat/linux/arch/powerpc/linux_mmap.h>
+#elif defined(__mips__)
+#include <compat/linux/arch/mips/linux_mmap.h>
+#elif defined(__arm__)
+#include <compat/linux/arch/arm/linux_mmap.h>
+#elif defined(__amd64__)
+#include <compat/linux/arch/amd64/linux_mmap.h>
 /*
  * XXX ERH: All below here are guesses.  The header
  * XXX ERH: files are correct but the defined(*)
@@ -63,11 +66,7 @@
  * XXX ERH: use all the defines, but I don't want to go looking
  * XXX ERH: through all the kernel sources right now.
  */
-#elif defined(__mips__)
-#include <compat/linux/arch/mips/linux_mmap.h>
-#elif defined(__powerpc__)
-#include <compat/linux/arch/powerpc/linux_mmap.h>
-#elif defined(sparc)
+#elif defined(__sparc__)
 #include <compat/linux/arch/sparc/linux_mmap.h>
 #else
 #error Undefined linux_mmap.h machine type.
@@ -76,18 +75,27 @@
 /*
  * Ensure the linux_sys_mmap syscall appears to exist:
  */
+struct linux_sys_mmap_args;
 struct linux_sys_mmap_args {
 	syscallarg(unsigned long) addr;
 	syscallarg(size_t) len;
 	syscallarg(int) prot;
 	syscallarg(int) flags;
 	syscallarg(int) fd;
-	syscallarg(off_t) offset;
+	syscallarg(linux_off_t) offset;
 };
+
+/*
+ * Same arguments, but different meaning for "offset".
+ * See linux_misc.c:linux_sys_mmap2().
+ */
+#define linux_sys_mmap2_args linux_sys_mmap_args
 
 #ifdef _KERNEL
 __BEGIN_DECLS
-int linux_sys_mmap __P((struct proc *p, void *v, register_t *retval));
+int linux_sys_mmap(struct lwp *p, const struct linux_sys_mmap_args *v, register_t *retval);
+int linux_sys_mmap2(struct lwp *p, const struct linux_sys_mmap2_args *v, register_t *retval);
+
 __END_DECLS
 #endif /* !_KERNEL */
 

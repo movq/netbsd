@@ -1,5 +1,5 @@
 #!/bin/sh -
-#	$NetBSD: mktokens,v 1.9 1999/07/09 03:05:50 christos Exp $
+#	$NetBSD: mktokens,v 1.12 2008/10/25 22:18:15 apb Exp $
 #
 # Copyright (c) 1991, 1993
 #	The Regents of the University of California.  All rights reserved.
@@ -15,11 +15,7 @@
 # 2. Redistributions in binary form must reproduce the above copyright
 #    notice, this list of conditions and the following disclaimer in the
 #    documentation and/or other materials provided with the distribution.
-# 3. All advertising materials mentioning features or use of this software
-#    must display the following acknowledgement:
-#	This product includes software developed by the University of
-#	California, Berkeley and its contributors.
-# 4. Neither the name of the University nor the names of its contributors
+# 3. Neither the name of the University nor the names of its contributors
 #    may be used to endorse or promote products derived from this software
 #    without specific prior written permission.
 #
@@ -36,6 +32,9 @@
 # SUCH DAMAGE.
 #
 #	@(#)mktokens	8.1 (Berkeley) 5/31/93
+
+: ${AWK:=awk}
+: ${SED:=sed}
 
 # The following is a list of tokens.  The second column is nonzero if the
 # token marks the end of a list.  The third column is the name to print in
@@ -73,20 +72,20 @@ TNOT	0	"!"
 !
 nl=`wc -l /tmp/ka$$`
 exec > token.h
-awk '{print "#define " $1 " " NR-1}' /tmp/ka$$
+${AWK} '{print "#define " $1 " " NR-1}' /tmp/ka$$
 echo '
 /* Array indicating which tokens mark the end of a list */
 const char tokendlist[] = {'
-awk '{print "\t" $2 ","}' /tmp/ka$$
+${AWK} '{print "\t" $2 ","}' /tmp/ka$$
 echo '};
 
 const char *const tokname[] = {'
-sed -e 's/"/\\"/g' \
+${SED} -e 's/"/\\"/g' \
     -e 's/[^	 ]*[	 ][	 ]*[^	 ]*[	 ][	 ]*\(.*\)/	"\1",/' \
     /tmp/ka$$
 echo '};
 '
-sed 's/"//g' /tmp/ka$$ | awk '
+${SED} 's/"//g' /tmp/ka$$ | ${AWK} '
 /TIF/{print "#define KWDOFFSET " NR-1; print ""; 
       print "const char *const parsekwd[] = {"}
 /TIF/,/neverfound/{print "	\"" $3 "\","}'

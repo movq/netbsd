@@ -1,26 +1,24 @@
-/*	$NetBSD: fight.c,v 1.6 2000/03/30 11:01:13 jdolecek Exp $	*/
+/*	$NetBSD: fight.c,v 1.10 2004/04/11 13:35:06 he Exp $	*/
 
 /*
  * fight.c   Phantasia monster fighting routines
  */
 
 #include "include.h"
+#undef bool
+#include <curses.h>
 
 void
 encounter(particular)
 	int     particular;
 {
-	bool    firsthit = Player.p_blessing;	/* set if player gets the
-						 * first hit */
-	int     flockcnt = 1;	/* how many time flocked */
+	volatile bool    firsthit = Player.p_blessing;	/* set if player gets
+							 * the first hit */
+	volatile int     flockcnt = 1;	/* how many time flocked */
 
 	/* let others know what we are doing */
 	Player.p_status = S_MONSTER;
 	writerecord(&Player, Fileloc);
-
-#if __GNUC__
-	(void)&firsthit;	/* XXX shut up gcc */
-#endif
 
 #ifdef SYS5
 	flushinp();
@@ -396,7 +394,7 @@ monsthits()
 			/* takes some of the player's strength */
 			inflict = ROLL(1.0, (Circle - 1.0) / 2.0);
 			inflict = MIN(Player.p_strength, inflict);
-			mvprintw(Lines++, 0, "%s sapped %0.f of your strength!",
+			mvprintw(Lines++, 0, "%s sapped %.0f of your strength!",
 			    Enemyname, inflict);
 			Player.p_strength -= inflict;
 			Player.p_might -= inflict;

@@ -1,4 +1,4 @@
-/*	$NetBSD: smc90cx6reg.h,v 1.7 1999/02/16 23:34:13 is Exp $ */
+/*	$NetBSD: smc90cx6reg.h,v 1.10 2008/04/28 20:23:51 martin Exp $ */
 
 /*-
  * Copyright (c) 1994, 1995, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -66,9 +59,9 @@
 #define CONF_LONG	0x08
 #define CONF_SHORT	0x00
 
-/* 
+/*
  * These are not in the COM90C65 docs. Derived from the arcnet.asm
- * packet driver by Philippe Prindeville and Russel Nelson. 
+ * packet driver by Philippe Prindeville and Russel Nelson.
  */
 
 #define BAH_LDTST(x)	(0x07 | (x))
@@ -76,7 +69,7 @@
 #define TEST_OFF	0x00
 
 #define BAH_TA		1	/* int mask also */
-#define BAH_TMA		2	
+#define BAH_TMA		2
 #define BAH_RECON	4	/* int mask also */
 #define BAH_TEST	8	/* not in the COM90C65 docs (see above) */
 #define BAH_POR		0x10	/* non maskable interrupt */

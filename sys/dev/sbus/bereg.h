@@ -1,4 +1,4 @@
-/*	$NetBSD: bereg.h,v 1.3 1999/12/20 22:19:11 pk Exp $	*/
+/*	$NetBSD: bereg.h,v 1.8 2008/04/28 20:23:57 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -65,69 +58,75 @@
 
 /*
  * BE Global registers
- *-
+ */
+#if 0
 struct be_bregs {
-	u_int32_t xif_cfg;		// XIF config
-	u_int32_t _unused[63];		// reserved
-	u_int32_t stat;			// status, clear on read
-	u_int32_t imask;		// interrupt mask
-	u_int32_t _unused2[64];		// reserved
-	u_int32_t tx_swreset;		// tx software reset
-	u_int32_t tx_cfg;		// tx config
-	u_int32_t ipkt_gap1;		// inter-packet gap 1
-	u_int32_t ipkt_gap2;		// inter-packet gap 2
-	u_int32_t attempt_limit;	// tx attempt limit
-	u_int32_t stime;		// tx slot time
-	u_int32_t preamble_len;		// size of tx preamble
-	u_int32_t preamble_pattern;	// pattern for tx preamble
-	u_int32_t tx_sframe_delim;	// tx delimiter
-	u_int32_t jsize;		// jam length
-	u_int32_t tx_pkt_max;		// tx max pkt size
-	u_int32_t tx_pkt_min;		// tx min pkt size
-	u_int32_t peak_attempt;		// count of tx peak attempts
-	u_int32_t dt_ctr;		// tx defer timer
-	u_int32_t nc_ctr;		// tx normal collision cntr
-	u_int32_t fc_ctr;		// tx first-collision cntr
-	u_int32_t ex_ctr;		// tx excess-collision cntr
-	u_int32_t lt_ctr;		// tx late-collision cntr
-	u_int32_t rand_seed;		// tx random number seed
-	u_int32_t tx_smachine;		// tx state machine
-	u_int32_t _unused3[44];		// reserved
-	u_int32_t rx_swreset;		// rx software reset
-	u_int32_t rx_cfg;		// rx config register
-	u_int32_t rx_pkt_max;		// rx max pkt size
-	u_int32_t rx_pkt_min;		// rx min pkt size
-	u_int32_t mac_addr2;		// ethernet address 2 (MSB)
-	u_int32_t mac_addr1;		// ethernet address 1
-	u_int32_t mac_addr0;		// ethernet address 0 (LSB)
-	u_int32_t fr_ctr;		// rx frame receive cntr
-	u_int32_t gle_ctr;		// rx giant-len error cntr
-	u_int32_t unale_ctr;		// rx unaligned error cntr
-	u_int32_t rcrce_ctr;		// rx CRC error cntr
-	u_int32_t rx_smachine;		// rx state machine
-	u_int32_t rx_cvalid;		// rx code violation
-	u_int32_t _unused4;		// reserved
-	u_int32_t htable3;		// hash table 3
-	u_int32_t htable2;		// hash table 2
-	u_int32_t htable1;		// hash table 1
-	u_int32_t htable0;		// hash table 0
-	u_int32_t afilter2;		// address filter 2
-	u_int32_t afilter1;		// address filter 1
-	u_int32_t afilter0;		// address filter 0
-	u_int32_t afilter_mask;		// address filter mask
+	u_int32_t xif_cfg;		/* XIF config */
+	u_int32_t _unused[63];		/* reserved */
+	u_int32_t stat;			/* status, clear on read */
+	u_int32_t imask;		/* interrupt mask */
+	u_int32_t _unused2[64];		/* reserved */
+	u_int32_t tx_swreset;		/* tx software reset */
+	u_int32_t tx_cfg;		/* tx config */
+	u_int32_t ipkt_gap1;		/* inter-packet gap 1 */
+	u_int32_t ipkt_gap2;		/* inter-packet gap 2 */
+	u_int32_t attempt_limit;	/* tx attempt limit */
+	u_int32_t stime;		/* tx slot time */
+	u_int32_t preamble_len;		/* size of tx preamble */
+	u_int32_t preamble_pattern;	/* pattern for tx preamble */
+	u_int32_t tx_sframe_delim;	/* tx delimiter */
+	u_int32_t jsize;		/* jam length */
+	u_int32_t tx_pkt_max;		/* tx max pkt size */
+	u_int32_t tx_pkt_min;		/* tx min pkt size */
+	u_int32_t peak_attempt;		/* count of tx peak attempts */
+	u_int32_t dt_ctr;		/* tx defer timer */
+	u_int32_t nc_ctr;		/* tx normal collision cntr */
+	u_int32_t fc_ctr;		/* tx first-collision cntr */
+	u_int32_t ex_ctr;		/* tx excess-collision cntr */
+	u_int32_t lt_ctr;		/* tx late-collision cntr */
+	u_int32_t rand_seed;		/* tx random number seed */
+	u_int32_t tx_smachine;		/* tx state machine */
+	u_int32_t _unused3[44];		/* reserved */
+	u_int32_t rx_swreset;		/* rx software reset */
+	u_int32_t rx_cfg;		/* rx config register */
+	u_int32_t rx_pkt_max;		/* rx max pkt size */
+	u_int32_t rx_pkt_min;		/* rx min pkt size */
+	u_int32_t mac_addr2;		/* ethernet address 2 (MSB) */
+	u_int32_t mac_addr1;		/* ethernet address 1 */
+	u_int32_t mac_addr0;		/* ethernet address 0 (LSB) */
+	u_int32_t fr_ctr;		/* rx frame receive cntr */
+	u_int32_t gle_ctr;		/* rx giant-len error cntr */
+	u_int32_t unale_ctr;		/* rx unaligned error cntr */
+	u_int32_t rcrce_ctr;		/* rx CRC error cntr */
+	u_int32_t rx_smachine;		/* rx state machine */
+	u_int32_t rx_cvalid;		/* rx code violation */
+	u_int32_t _unused4;		/* reserved */
+	u_int32_t htable3;		/* hash table 3 */
+	u_int32_t htable2;		/* hash table 2 */
+	u_int32_t htable1;		/* hash table 1 */
+	u_int32_t htable0;		/* hash table 0 */
+	u_int32_t afilter2;		/* address filter 2 */
+	u_int32_t afilter1;		/* address filter 1 */
+	u_int32_t afilter0;		/* address filter 0 */
+	u_int32_t afilter_mask;		/* address filter mask */
 };
- * register indices: */
+#endif
+/* register indices: */
 #define BE_BRI_XIFCFG	(0*4)
 #define BE_BRI_STAT	(64*4)
 #define BE_BRI_IMASK	(65*4)
 #define BE_BRI_TXCFG	(131*4)
 #define BE_BRI_JSIZE	(139*4)
+#define BE_BRI_TXMAX	(140*4)
+#define BE_BRI_TXMIN	(141*4)
 #define BE_BRI_NCCNT	(144*4)
 #define BE_BRI_FCCNT	(145*4)
 #define BE_BRI_EXCNT	(146*4)
 #define BE_BRI_LTCNT	(147*4)
 #define BE_BRI_RANDSEED	(148*4)
 #define BE_BRI_RXCFG	(195*4)
+#define BE_BRI_RXMAX	(196*4)
+#define BE_BRI_RXMIN	(197*4)
 #define BE_BRI_MACADDR2	(198*4)
 #define BE_BRI_MACADDR1	(199*4)
 #define BE_BRI_MACADDR0	(200*4)
@@ -205,23 +204,25 @@ struct be_bregs {
 
 /*
  * BE Channel registers
- *-
+ */
+#if 0
 struct be_cregs {
-	u_int32_t ctrl;		// control
-	u_int32_t stat;		// status
-	u_int32_t rxds;		// rx descriptor ring ptr
-	u_int32_t txds;		// tx descriptor ring ptr
-	u_int32_t rimask;	// rx interrupt mask
-	u_int32_t timask;	// tx interrupt mask
-	u_int32_t qmask;	// qec error interrupt mask
-	u_int32_t bmask;	// be error interrupt mask
-	u_int32_t rxwbufptr;	// local memory rx write ptr
-	u_int32_t rxrbufptr;	// local memory rx read ptr
-	u_int32_t txwbufptr;	// local memory tx write ptr
-	u_int32_t txrbufptr;	// local memory tx read ptr
-	u_int32_t ccnt;		// collision counter
+	u_int32_t ctrl;		/* control */
+	u_int32_t stat;		/* status */
+	u_int32_t rxds;		/* rx descriptor ring ptr */
+	u_int32_t txds;		/* tx descriptor ring ptr */
+	u_int32_t rimask;	/* rx interrupt mask */
+	u_int32_t timask;	/* tx interrupt mask */
+	u_int32_t qmask;	/* qec error interrupt mask */
+	u_int32_t bmask;	/* be error interrupt mask */
+	u_int32_t rxwbufptr;	/* local memory rx write ptr */
+	u_int32_t rxrbufptr;	/* local memory rx read ptr */
+	u_int32_t txwbufptr;	/* local memory tx write ptr */
+	u_int32_t txrbufptr;	/* local memory tx read ptr */
+	u_int32_t ccnt;		/* collision counter */
 };
- * register indices: */
+#endif
+/* register indices: */
 #define BE_CRI_CTRL	(0*4)
 #define BE_CRI_STAT	(1*4)
 #define BE_CRI_RXDS	(2*4)
@@ -237,7 +238,7 @@ struct be_cregs {
 #define BE_CRI_CCNT	(12*4)
 
 /* be_cregs.ctrl: control. */
-#define	BE_CR_CTRL_TWAKEUP	0x00000001	/* tx dma wakeup */
+#define	BE_CR_CTRL_TWAKEUP	0x00000001	/* tx DMA wakeup */
 
 /* be_cregs.stat: status. */
 #define BE_CR_STAT_BERROR	0x80000000	/* be error */
@@ -266,12 +267,14 @@ struct be_cregs {
 
 /*
  * BE Transceiver registers
- *-
+ */
+#if 0
 struct be_tregs {
-	u_int32_t	tcvr_pal;	// transceiver pal
-	u_int32_t	mgmt_pal;	// management pal
+	u_int32_t	tcvr_pal;	/* transceiver pal */
+	u_int32_t	mgmt_pal;	/* management pal */
 };
- * register indices: */
+#endif
+/* register indices: */
 #define BE_TRI_TCVRPAL	0
 #define BE_TRI_MGMTPAL	4
 

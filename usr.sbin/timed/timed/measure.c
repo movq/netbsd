@@ -1,4 +1,4 @@
-/*	$NetBSD: measure.c,v 1.7 1997/10/17 14:19:29 lukem Exp $	*/
+/*	$NetBSD: measure.c,v 1.16 2007/02/04 21:17:01 cbiere Exp $	*/
 
 /*-
  * Copyright (c) 1985, 1993 The Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,18 +34,15 @@
 #if 0
 static char sccsid[] = "@(#)measure.c	8.2 (Berkeley) 3/26/95";
 #else
-__RCSID("$NetBSD: measure.c,v 1.7 1997/10/17 14:19:29 lukem Exp $");
+__RCSID("$NetBSD: measure.c,v 1.16 2007/02/04 21:17:01 cbiere Exp $");
 #endif
 #endif /* not lint */
-
-#ifdef sgi
-#ident "$Revision: 1.7 $"
-#endif
 
 #include "globals.h"
 #include <netinet/in_systm.h>
 #include <netinet/ip.h>
 #include <netinet/ip_icmp.h>
+#include <util.h>
 
 #define MSEC_DAY	(SECDAY*1000)
 
@@ -62,7 +55,7 @@ extern int sock_raw;
 
 int measure_delta;
 
-extern int in_cksum(u_short*, int);
+extern int in_cksum(const void *, int);
 
 static n_short seqno = 0;
 
@@ -73,23 +66,23 @@ static n_short seqno = 0;
 int					/* status val defined in globals.h */
 measure(u_long maxmsec,			/* wait this many msec at most */
 	u_long wmsec,			/* msec to wait for an answer */
-	char *hname,
-	struct sockaddr_in *addr,
-	int print)			/* print complaints on stderr */
+	const char *hname,
+	const struct sockaddr_in *addr,
+	int printerr)			/* print complaints on stderr */
 {
-	int length;
+	socklen_t length;
 	int measure_status;
 	int rcvcount, trials;
-	int cc, count;
-	fd_set ready;
+	int count;
+	struct pollfd set[1];
 	long sendtime, recvtime, histime1, histime2;
 	long idelta, odelta, total;
 	long min_idelta, min_odelta;
 	struct timeval tdone, tcur, ttrans, twait, tout;
-	u_char packet[PACKET_IN], opacket[64];
-	register struct icmp *icp = (struct icmp *) packet;
-	register struct icmp *oicp = (struct icmp *) opacket;
-	struct ip *ip = (struct ip *) packet;
+	u_char packet[PACKET_IN];
+	struct icmp icp;
+	struct icmp oicp;
+	struct ip ip;
 
 	min_idelta = min_odelta = 0x7fffffff;
 	measure_status = HOSTDOWN;
@@ -106,19 +99,19 @@ measure(u_long maxmsec,			/* wait this many msec at most */
 		}
 	}
 	    
+	set[0].fd = sock_raw;
+	set[0].events = POLLIN;
 
 	/*
 	 * empty the icmp input queue
 	 */
-	FD_ZERO(&ready);
 	for (;;) {
-		tout.tv_sec = tout.tv_usec = 0;
-		FD_SET(sock_raw, &ready);
-		if (select(sock_raw+1, &ready, 0,0, &tout)) {
+		if (poll(set, 1, 0)) {
+			ssize_t ret;
 			length = sizeof(struct sockaddr_in);
-			cc = recvfrom(sock_raw, (char *)packet, PACKET_IN, 0,
+			ret = recvfrom(sock_raw, (char *)packet, PACKET_IN, 0,
 				      0,&length);
-			if (cc < 0)
+			if (ret < 0)
 				goto quit;
 			continue;
 		}
@@ -131,18 +124,12 @@ measure(u_long maxmsec,			/* wait this many msec at most */
 	 * between the two clocks.
 	 */
 
-	oicp->icmp_type = ICMP_TSTAMP;
-	oicp->icmp_code = 0;
-	oicp->icmp_id = getpid();
-	oicp->icmp_rtime = 0;
-	oicp->icmp_ttime = 0;
-	oicp->icmp_seq = seqno;
-
-	FD_ZERO(&ready);
-
-#ifdef sgi
-	sginap(1);			/* start at a clock tick */
-#endif /* sgi */
+	oicp.icmp_type = ICMP_TSTAMP;
+	oicp.icmp_code = 0;
+	oicp.icmp_id = getpid();
+	oicp.icmp_rtime = 0;
+	oicp.icmp_ttime = 0;
+	oicp.icmp_seq = seqno;
 
 	(void)gettimeofday(&tdone, 0);
 	mstotvround(&tout, maxmsec);
@@ -150,6 +137,8 @@ measure(u_long maxmsec,			/* wait this many msec at most */
 
 	mstotvround(&twait, wmsec);
 
+	tout.tv_sec = 0;
+	tout.tv_usec = 0;
 	rcvcount = 0;
 	while (rcvcount < MSGS) {
 		(void)gettimeofday(&tcur, 0);
@@ -158,22 +147,24 @@ measure(u_long maxmsec,			/* wait this many msec at most */
 		 * keep sending until we have sent the max
 		 */
 		if (trials < TRIALS) {
-			trials++;
-			oicp->icmp_otime = htonl((tcur.tv_sec % SECDAY) * 1000
-					    + tcur.tv_usec / 1000);
-			oicp->icmp_cksum = 0;
-			oicp->icmp_cksum = in_cksum((u_short*)oicp,
-						    sizeof(*oicp));
+			uint32_t otime;
 
-			count = sendto(sock_raw, opacket, sizeof(*oicp), 0,
-				       (struct sockaddr*)addr,
+			trials++;
+			otime = (tcur.tv_sec % SECDAY) * 1000  
+                                            + tcur.tv_usec / 1000;
+			oicp.icmp_otime = htonl(otime);
+			oicp.icmp_cksum = 0;
+			oicp.icmp_cksum = in_cksum(&oicp, sizeof(oicp));
+
+			count = sendto(sock_raw, &oicp, sizeof(oicp), 0,
+				       (const struct sockaddr*)addr,
 				       sizeof(struct sockaddr));
 			if (count < 0) {
 				if (measure_status == HOSTDOWN)
 					measure_status = UNREACHABLE;
 				goto quit;
 			}
-			++oicp->icmp_seq;
+			oicp.icmp_seq++;
 
 			timeradd(&tcur, &twait, &ttrans);
 		} else {
@@ -181,46 +172,55 @@ measure(u_long maxmsec,			/* wait this many msec at most */
 		}
 
 		while (rcvcount < trials) {
+			ssize_t ret;
+
 			timersub(&ttrans, &tcur, &tout);
 			if (tout.tv_sec < 0)
 				tout.tv_sec = 0;
 
-			FD_SET(sock_raw, &ready);
-			count = select(sock_raw+1, &ready, (fd_set *)0,
-				       (fd_set *)0, &tout);
+			count = poll(set, 1, tout.tv_sec * 1000 + tout.tv_usec / 1000);
 			(void)gettimeofday(&tcur, (struct timezone *)0);
 			if (count <= 0)
 				break;
 
 			length = sizeof(struct sockaddr_in);
-			cc = recvfrom(sock_raw, (char *)packet, PACKET_IN, 0,
+			ret = recvfrom(sock_raw, (char *)packet, PACKET_IN, 0,
 				      0,&length);
-			if (cc < 0)
+			if (ret < 0)
 				goto quit;
 
 			/* 
 			 * got something.  See if it is ours
 			 */
-			icp = (struct icmp *)(packet + (ip->ip_hl << 2));
-			if (cc < sizeof(*ip)
-			    || icp->icmp_type != ICMP_TSTAMPREPLY
-			    || icp->icmp_id != oicp->icmp_id
-			    || icp->icmp_seq < seqno
-			    || icp->icmp_seq >= oicp->icmp_seq)
+
+			if ((size_t)ret < sizeof(ip))
+				continue;
+			memcpy(&ip, packet, sizeof(ip));
+			if ((size_t)ret < (size_t)ip.ip_hl << 2)
+				continue;
+			ret -= ip.ip_hl << 2;
+
+			memset(&icp, 0, sizeof(icp));
+			memcpy(&icp, &packet[ip.ip_hl << 2],
+				MIN((size_t)ret, sizeof(icp)));
+
+			if (icp.icmp_type != ICMP_TSTAMPREPLY
+			    || icp.icmp_id != oicp.icmp_id
+			    || icp.icmp_seq < seqno
+			    || icp.icmp_seq >= oicp.icmp_seq)
 				continue;
 
-
-			sendtime = ntohl(icp->icmp_otime);
+			sendtime = ntohl(icp.icmp_otime);
 			recvtime = ((tcur.tv_sec % SECDAY) * 1000 +
 				    tcur.tv_usec / 1000);
 
-			total = recvtime-sendtime;
+			total = recvtime - sendtime;
 			if (total < 0)	/* do not hassle midnight */
 				continue;
 
 			rcvcount++;
-			histime1 = ntohl(icp->icmp_rtime);
-			histime2 = ntohl(icp->icmp_ttime);
+			histime1 = ntohl(icp.icmp_rtime);
+			histime2 = ntohl(icp.icmp_ttime);
 			/*
 			 * a host using a time format different from
 			 * msec. since midnight UT (as per RFC792) should
@@ -279,7 +279,7 @@ quit:
 			   	measure_delta, trials,
 				inet_ntoa(addr->sin_addr), hname);
 		}
-	} else if (print) {
+	} else if (printerr) {
 		if (errno != 0)
 			fprintf(stderr, "measure %s: %s\n", hname,
 				strerror(errno));
@@ -310,17 +310,36 @@ quit:
 void
 mstotvround(struct timeval *res, long x)
 {
-#ifndef sgi
 	if (x < 0)
 		x = -((-x + 3)/5);
 	else
 		x = (x+3)/5;
 	x *= 5;
-#endif /* sgi */
+
 	res->tv_sec = x/1000;
 	res->tv_usec = (x-res->tv_sec*1000)*1000;
 	if (res->tv_usec < 0) {
 		res->tv_usec += 1000000;
 		res->tv_sec--;
 	}
+}
+
+void
+update_time(struct timeval *tv, const struct tsp *msg)
+{
+#ifdef SUPPORT_UTMP
+	logwtmp("|", "date", "");
+#endif
+#ifdef SUPPORT_UTMPX
+	logwtmpx("|", "date", "", 0, OLD_TIME);
+#endif
+	tv->tv_sec = msg->tsp_time.tv_sec;
+	tv->tv_usec = msg->tsp_time.tv_usec;
+	(void)settimeofday(tv, 0);
+#ifdef SUPPORT_UTMP
+	logwtmp("}", "date", "");
+#endif
+#ifdef SUPPORT_UTMPX
+	logwtmpx("}", "date", "", 0, NEW_TIME);
+#endif
 }

@@ -1,7 +1,7 @@
-/*	$NetBSD: main.c,v 1.4 1998/02/04 11:08:57 christos Exp $	*/
+/*	$NetBSD: main.c,v 1.9 2004/09/01 01:46:56 chs Exp $	*/
 
 /*
- * Copyright (c) 1988 Mark Nudleman
+ * Copyright (c) 1988 Mark Nudelman
  * Copyright (c) 1988, 1993
  *	Regents of the University of California.  All rights reserved.
  *
@@ -13,11 +13,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -36,9 +32,9 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT(
-"@(#) Copyright (c) 1988 Mark Nudleman.\n\
-@(#) Copyright (c) 1988, 1993
+__COPYRIGHT(\
+"@(#) Copyright (c) 1988 Mark Nudelman.\n\
+@(#) Copyright (c) 1988, 1993\n\
 	Regents of the University of California.  All rights reserved.\n");
 #endif /* not lint */
 
@@ -46,7 +42,7 @@ __COPYRIGHT(
 #if 0
 static char sccsid[] = "@(#)main.c	8.1 (Berkeley) 6/7/93";
 #else
-__RCSID("$NetBSD: main.c,v 1.4 1998/02/04 11:08:57 christos Exp $");
+__RCSID("$NetBSD: main.c,v 1.9 2004/09/01 01:46:56 chs Exp $");
 #endif
 #endif /* not lint */
 
@@ -71,7 +67,7 @@ int	is_tty;
 char	*current_file, *previous_file, *current_name, *next_name;
 off_t	prev_pos;
 int	any_display;
-int	scroll;
+int	scroll_lines;
 int	ac;
 char	**av;
 int	curr_ac;
@@ -125,7 +121,8 @@ edit(filename)
 		return(0);
 	}
 	else if ((f = open(filename, O_RDONLY, 0)) < 0) {
-		(void)sprintf(message, "%s: %s", filename, strerror(errno));
+		(void)snprintf(message, sizeof(message), "%s: %s", filename,
+		    strerror(errno));
 		error(message);
 		free(filename);
 		return(0);
@@ -335,13 +332,13 @@ save(s)
 {
 	char *p;
 
-	p = malloc((u_int)strlen(s)+1);
+	p = strdup(s);
 	if (p == NULL)
 	{
 		error("cannot allocate memory");
 		quit();
 	}
-	return(strcpy(p, s));
+	return(p);
 }
 
 /*

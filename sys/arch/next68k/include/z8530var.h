@@ -1,4 +1,4 @@
-/*	$NetBSD: z8530var.h,v 1.2 1999/07/03 08:22:56 dbj Exp $	*/
+/*	$NetBSD: z8530var.h,v 1.8 2008/03/29 19:15:35 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -21,11 +21,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -45,38 +41,30 @@
  */
 
 #define splzs() splserial()
+#define	IPL_ZS	IPL_SERIAL
 
 #include <dev/ic/z8530sc.h>
 
 struct zsc_softc {
-	struct	device zsc_dev;		/* required first: base device */
+	device_t zsc_dev;		/* required first: base device */
 	struct	zs_chanstate *zsc_cs[2];	/* channel A and B soft state */
 	/* Machine-dependent part follows... */
 	struct	evcnt zsc_intrcnt;		/* count interrupts */
 	struct zs_chanstate  zsc_cs_store[2];
+	void	*zsc_softintr_cookie;
 };
 
 /*
  * Functions to read and write individual registers in a channel.
- * The ZS chip requires a 1.6 uSec. recovery time between accesses.
- * On the SparcStation the recovery time is handled in hardware.
- * On the older Sun4 machine it isn't, and software must do it.
- *
- * However, it *is* a problem on some Sun4m's (i.e. the SS20) (XXX: why?).
- * Thus we leave in the delay (done in the functions below).
- * XXX: (ABB) Think about this more.
- *
- * The functions below could be macros instead if we are concerned
- * about the function call overhead where ZS_DELAY does nothing.
  */
 
-u_char zs_read_reg __P((struct zs_chanstate *cs, u_char reg));
-u_char zs_read_csr __P((struct zs_chanstate *cs));
-u_char zs_read_data __P((struct zs_chanstate *cs));
+uint8_t zs_read_reg(struct zs_chanstate *, uint8_t);
+uint8_t zs_read_csr(struct zs_chanstate *);
+uint8_t zs_read_data(struct zs_chanstate *);
 
-void  zs_write_reg __P((struct zs_chanstate *cs, u_char reg, u_char val));
-void  zs_write_csr __P((struct zs_chanstate *cs, u_char val));
-void  zs_write_data __P((struct zs_chanstate *cs, u_char val));
+void  zs_write_reg(struct zs_chanstate *, uint8_t, uint8_t);
+void  zs_write_csr(struct zs_chanstate *, uint8_t);
+void  zs_write_data(struct zs_chanstate *, uint8_t);
 
 /* The sparc has splzs() in psl.h */
 

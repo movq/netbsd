@@ -1,4 +1,4 @@
-/*	$NetBSD: auth.h,v 1.8 1999/09/12 19:37:48 aidan Exp $	*/
+/*	$NetBSD: auth.h,v 1.11 2005/02/06 05:53:07 perry Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -67,12 +63,12 @@
 typedef struct XauthP {
 	int	type;
 	int	way;
-	int	(*init) __P((struct XauthP *, int));
-	int	(*send) __P((struct XauthP *));
-	void	(*is) __P((struct XauthP *, unsigned char *, int));
-	void	(*reply) __P((struct XauthP *, unsigned char *, int));
-	int	(*status) __P((struct XauthP *, char *, int));
-	void	(*printsub) __P((unsigned char *, int, unsigned char *, int));
+	int	(*init)(struct XauthP *, int);
+	int	(*send)(struct XauthP *);
+	void	(*is)(struct XauthP *, unsigned char *, int);
+	void	(*reply)(struct XauthP *, unsigned char *, int);
+	int	(*status)(struct XauthP *, char *, size_t, int);
+	void	(*printsub)(unsigned char *, int, unsigned char *, int);
 } Authenticator;
 
 #include "auth-proto.h"

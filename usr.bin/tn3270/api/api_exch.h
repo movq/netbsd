@@ -1,4 +1,4 @@
-/*	$NetBSD: api_exch.h,v 1.5 1998/07/26 22:38:15 mycroft Exp $	*/
+/*	$NetBSD: api_exch.h,v 1.7 2003/08/07 11:16:24 agc Exp $	*/
 
 /*-
  * Copyright (c) 1988 The Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -162,10 +158,10 @@ struct storage_descriptor {
     short	length;		/* In network byte order */
 };
 
-int api_exch_nextcommand __P((void));
-int api_exch_incommand __P((int));
-int api_exch_outcommand __P((int));
-int api_exch_outtype __P((int, int , const char *));
-int api_exch_intype __P((int, int , char *));
-int api_exch_flush __P((void));
-int api_exch_init __P((int, char *));
+int api_exch_nextcommand(void);
+int api_exch_incommand(int);
+int api_exch_outcommand(int);
+int api_exch_outtype(int, int , const char *);
+int api_exch_intype(int, int , char *);
+int api_exch_flush(void);
+int api_exch_init(int, char *);

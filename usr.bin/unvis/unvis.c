@@ -1,4 +1,4 @@
-/*	$NetBSD: unvis.c,v 1.8 1998/10/13 17:02:53 wsanchez Exp $	*/
+/*	$NetBSD: unvis.c,v 1.11 2008/07/21 14:19:27 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1989, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)unvis.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: unvis.c,v 1.8 1998/10/13 17:02:53 wsanchez Exp $");
+__RCSID("$NetBSD: unvis.c,v 1.11 2008/07/21 14:19:27 lukem Exp $");
 #endif /* not lint */
 
 #include <err.h>
@@ -51,6 +47,8 @@ __RCSID("$NetBSD: unvis.c,v 1.8 1998/10/13 17:02:53 wsanchez Exp $");
 #include <stdlib.h>
 #include <unistd.h>
 #include <vis.h>
+
+int eflags;
 
 int	main __P((int, char **));
 void process __P((FILE *fp, const char *filename));
@@ -63,11 +61,14 @@ main(argc, argv)
 	FILE *fp;
 	int ch;
 
-	while ((ch = getopt(argc, argv, "")) != -1)
+	while ((ch = getopt(argc, argv, "h")) != -1)
 		switch((char)ch) {
+		case 'h':
+			eflags |= VIS_HTTPSTYLE;
+			break;
 		case '?':
 		default:
-			(void) fprintf(stderr, "usage: unvis [file...]\n");
+			(void) fprintf(stderr, "usage: unvis [-h] [file...]\n");
 			exit(1);
 		}
 	argc -= optind;
@@ -98,7 +99,7 @@ process(fp, filename)
 	while ((c = getc(fp)) != EOF) {
 		offset++;
 	again:
-		switch(ret = unvis(&outc, (char)c, &state, 0)) {
+		switch(ret = unvis(&outc, (char)c, &state, eflags)) {
 		case UNVIS_VALID:
 			putchar(outc);
 			break;
@@ -117,6 +118,6 @@ process(fp, filename)
 			/* NOTREACHED */
 		}
 	}
-	if (unvis(&outc, (char)0, &state, UNVIS_END) == UNVIS_VALID)
+	if (unvis(&outc, (char)0, &state, eflags | UNVIS_END) == UNVIS_VALID)
 		putchar(outc);
 }

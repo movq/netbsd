@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_compat_09.c,v 1.4 1999/10/11 01:36:22 eeh Exp $	*/
+/*	$NetBSD: netbsd32_compat_09.c,v 1.18 2008/05/29 14:51:26 mrg Exp $	*/
 
 /*
  * Copyright (c) 1998 Matthew R. Green
@@ -12,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -28,67 +26,61 @@
  * SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_09.c,v 1.18 2008/05/29 14:51:26 mrg Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
 
 #include <sys/time.h>
-#include <vm/vm.h>
+#include <uvm/uvm_extern.h>
 #include <sys/sysctl.h>
 
 #include <compat/netbsd32/netbsd32.h>
 #include <compat/netbsd32/netbsd32_syscallargs.h>
 
 int
-compat_09_netbsd32_ogetdomainname(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+compat_09_netbsd32_ogetdomainname(struct lwp *l, const struct compat_09_netbsd32_ogetdomainname_args *uap, register_t *retval)
 {
-	struct compat_09_netbsd32_ogetdomainname_args /* {
+	/* {
 		syscallarg(netbsd32_charp) domainname;
 		syscallarg(int) len;
-	} */ *uap = v;
-	int name;
+	} */
+	int name[2];
 	size_t sz;
 
-	name = KERN_DOMAINNAME;
+	name[0] = CTL_KERN;
+	name[1] = KERN_DOMAINNAME;
 	sz = SCARG(uap, len);
-	return (kern_sysctl(&name, 1, (char *)(u_long)SCARG(uap, domainname), &sz, 0, 0, p));
+	return (old_sysctl(&name[0], 2,
+	    (char *)SCARG_P32(uap, domainname), &sz, 0, 0, l));
 }
 
 int
-compat_09_netbsd32_osetdomainname(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+compat_09_netbsd32_osetdomainname(struct lwp *l, const struct compat_09_netbsd32_osetdomainname_args *uap, register_t *retval)
 {
-	struct compat_09_netbsd32_osetdomainname_args /* {
+	/* {
 		syscallarg(netbsd32_charp) domainname;
 		syscallarg(int) len;
-	} */ *uap = v;
-	int name;
-	int error;
+	} */
+	int name[2];
 
-	if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
-		return (error);
-	name = KERN_DOMAINNAME;
-	return (kern_sysctl(&name, 1, 0, 0, (char *)(u_long)SCARG(uap, domainname),
-			    SCARG(uap, len), p));
+	name[0] = CTL_KERN;
+	name[1] = KERN_DOMAINNAME;
+	return (old_sysctl(&name[0], 2, 0, 0,
+	    (char *)SCARG_P32(uap, domainname), SCARG(uap, len), l));
 }
 
 int
-compat_09_netbsd32_ouname(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+compat_09_netbsd32_uname(struct lwp *l, const struct compat_09_netbsd32_uname_args *uap, register_t *retval)
 {
-	struct compat_09_netbsd32_uname_args /* {
+	/* {
 		syscallarg(netbsd32_outsnamep_t) name;
-	} */ *uap = v;
+	} */
 	struct compat_09_sys_uname_args ua;
 
 	NETBSD32TOP_UAP(name, struct outsname);
-	return (compat_09_sys_uname(p, &ua, retval));
+	return (compat_09_sys_uname(l, &ua, retval));
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_subr.c,v 1.7 1999/03/24 05:51:14 mrg Exp $	*/
+/*	$NetBSD: bus_subr.c,v 1.17 2008/04/28 20:23:38 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,13 +34,12 @@
  * The common stuff is in autoconf.c
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: bus_subr.c,v 1.17 2008/04/28 20:23:38 martin Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
-
-#include <vm/vm.h>
-#include <vm/vm_kern.h>
-#include <vm/vm_map.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -64,11 +56,10 @@
 label_t *nofault;
 
 /* These are defined in pmap.c */
-extern vm_offset_t tmp_vpages[];
+extern vaddr_t tmp_vpages[];
 extern int tmp_vpages_inuse;
 
 #define OBIO_MASK 0xFFffff
-#define PMAP_OBMEM 0
 
 static const struct {
 	int  type;
@@ -94,10 +85,9 @@ static const struct {
  * need to do peek/write/read tricks.
  */
 void *
-bus_tmapin(bustype, pa)
-	int bustype, pa;
+bus_tmapin(int bustype, int pa)
 {
-	vm_offset_t pgva;
+	vaddr_t pgva;
 	int off, pte;
 
 	if ((bustype < 0) || (bustype >= BUS__NTYPES))
@@ -123,10 +113,10 @@ bus_tmapin(bustype, pa)
 	return ((void *)(pgva + off));
 }
 
-void bus_tmapout(vp)
-	void *vp;
+void 
+bus_tmapout(void *vp)
 {
-	vm_offset_t pgva;
+	vaddr_t pgva;
 
 	pgva = m68k_trunc_page(vp);
 	if (pgva != tmp_vpages[1])
@@ -140,10 +130,9 @@ void bus_tmapout(vp)
  * Make a permanent mapping for a device.
  */
 void *
-bus_mapin(bustype, pa, sz)
-	int bustype, pa, sz;
+bus_mapin(int bustype, int pa, int sz)
 {
-	vm_offset_t va;
+	vaddr_t va;
 	int off;
 
 	if ((bustype < 0) || (bustype >= BUS__NTYPES))
@@ -156,8 +145,7 @@ bus_mapin(bustype, pa, sz)
 
 	/* Borrow PROM mappings if we can. */
 	if (bustype == BUS_OBIO) {
-		va = (vm_offset_t) obio_find_mapping(pa, sz);
-		if (va != 0)
+		if (find_prom_map(pa, PMAP_OBIO, sz, &va) == 0)
 			goto done;
 	}
 
@@ -167,7 +155,7 @@ bus_mapin(bustype, pa, sz)
 	pa |= PMAP_NC;	/* non-cached */
 
 	/* Get some kernel virtual address space. */
-	va = uvm_km_valloc_wait(kernel_map, sz);
+	va = uvm_km_alloc(kernel_map, sz, 0, UVM_KMF_VAONLY | UVM_KMF_WAITVA);
 	if (va == 0)
 		panic("bus_mapin");
 
@@ -178,15 +166,13 @@ done:
 	return ((void*)(va + off));
 }
 
-void
-bus_mapout(ptr, sz)
-	void *ptr;
-	int sz;
+void 
+bus_mapout(void *ptr, int sz)
 {
-	vm_offset_t va;
+	vaddr_t va;
 	int off;
 
-	va = (vm_offset_t)ptr;
+	va = (vaddr_t)ptr;
 
 	/* If it was a PROM mapping, do NOT free it! */
 	if ((va >= SUN3_MONSTART) && (va < SUN3_MONEND))
@@ -197,5 +183,7 @@ bus_mapout(ptr, sz)
 	sz += off;
 	sz = m68k_round_page(sz);
 
-	uvm_km_free_wakeup(kernel_map, va, sz);
+	pmap_remove(pmap_kernel(), va, va + sz);
+	pmap_update(pmap_kernel());
+	uvm_km_free(kernel_map, va, sz, UVM_KMF_VAONLY);
 }

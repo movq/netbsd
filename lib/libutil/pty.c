@@ -1,4 +1,4 @@
-/*	$NetBSD: pty.c,v 1.14 1999/09/20 04:48:08 lukem Exp $	*/
+/*	$NetBSD: pty.c,v 1.29 2005/09/14 02:12:34 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)pty.c	8.3 (Berkeley) 5/16/94";
 #else
-__RCSID("$NetBSD: pty.c,v 1.14 1999/09/20 04:48:08 lukem Exp $");
+__RCSID("$NetBSD: pty.c,v 1.29 2005/09/14 02:12:34 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -56,103 +52,117 @@ __RCSID("$NetBSD: pty.c,v 1.14 1999/09/20 04:48:08 lukem Exp $");
 #include <unistd.h>
 #include <util.h>
 
-#ifdef i386
-/* PCVT conflicts with ttyv*. */
-#define TTY_LETTERS "pqrstuwxyzPQRST"
-#else
-#define TTY_LETTERS "pqrstuvwxyzPQRST"
-#endif
+/*
+ * XXX: `v' removed until no ports are using console devices which use ttyv0
+ */
+#define TTY_LETTERS	"pqrstuwxyzPQRST"
+#define TTY_OLD_SUFFIX	"0123456789abcdef"
+#define TTY_NEW_SUFFIX	"ghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 int
-openpty(amaster, aslave, name, termp, winp)
-	int *amaster, *aslave;
-	char *name;
-	struct termios *termp;
-	struct winsize *winp;
+openpty(int *amaster, int *aslave, char *name, struct termios *term,
+	struct winsize *winp)
 {
 	static char line[] = "/dev/XtyXX";
-	const char *cp1, *cp2;
+	const char *cp1, *cp2, *cp, *linep;
 	int master, slave;
 	gid_t ttygid;
-	struct group *gr;
+	mode_t mode;
+	struct group grs, *grp;
+	char grbuf[1024];
 
 	_DIAGASSERT(amaster != NULL);
 	_DIAGASSERT(aslave != NULL);
 	/* name may be NULL */
-	/* termp may be NULL */
+	/* term may be NULL */
 	/* winp may be NULL */
 
-	if ((gr = getgrnam("tty")) != NULL)
-		ttygid = gr->gr_gid;
-	else
-		ttygid = (gid_t) -1;
+	if ((master = open("/dev/ptm", O_RDWR)) != -1) {
+		struct ptmget pt;
+		if (ioctl(master, TIOCPTMGET, &pt) != -1) {
+			(void)close(master);
+			master = pt.cfd;
+			slave = pt.sfd;
+			linep = pt.sn;
+			goto gotit;
+		}
+		(void)close(master);
+	}
+
+	(void)getgrnam_r("tty", &grs, grbuf, sizeof(grbuf), &grp);
+	if (grp != NULL) {
+		ttygid = grp->gr_gid;
+		mode = S_IRUSR|S_IWUSR|S_IWGRP;
+	} else {
+		ttygid = getgid();
+		mode = S_IRUSR|S_IWUSR;
+	}
 
 	for (cp1 = TTY_LETTERS; *cp1; cp1++) {
 		line[8] = *cp1;
-		for (cp2 = "0123456789abcdef"; *cp2; cp2++) {
+		for (cp = cp2 = TTY_OLD_SUFFIX TTY_NEW_SUFFIX; *cp2; cp2++) {
 			line[5] = 'p';
 			line[9] = *cp2;
 			if ((master = open(line, O_RDWR, 0)) == -1) {
-				if (errno == ENOENT)
-					return (-1);	/* out of ptys */
-			} else {
-				line[5] = 't';
-				(void) chown(line, getuid(), ttygid);
-				(void) chmod(line, S_IRUSR|S_IWUSR|S_IWGRP);
-				(void) revoke(line);
-				if ((slave = open(line, O_RDWR, 0)) != -1) {
-					*amaster = master;
-					*aslave = slave;
-					if (name)
-						strcpy(name, line);
-					if (termp)
-						(void) tcsetattr(slave,
-							TCSAFLUSH, termp);
-					if (winp)
-						(void) ioctl(slave, TIOCSWINSZ,
-						    winp);
-					return (0);
-				}
-				(void) close(master);
+				if (errno != ENOENT)
+					continue;	/* busy */
+				if (cp2 - cp + 1 < sizeof(TTY_OLD_SUFFIX))
+					return -1; /* out of ptys */
+				else	
+					break;	/* out of ptys in this group */
 			}
+			line[5] = 't';
+			linep = line;
+			if (chown(line, getuid(), ttygid) == 0 &&
+			    chmod(line, mode) == 0 &&
+			    revoke(line) == 0 &&
+			    (slave = open(line, O_RDWR, 0)) != -1) {
+gotit:
+				*amaster = master;
+				*aslave = slave;
+				if (name)
+					(void)strcpy(name, linep);
+				if (term)
+					(void)tcsetattr(slave, TCSAFLUSH, term);
+				if (winp)
+					(void)ioctl(slave, TIOCSWINSZ, winp);
+				return 0;
+			}
+			(void)close(master);
 		}
 	}
 	errno = ENOENT;	/* out of ptys */
-	return (-1);
+	return -1;
 }
 
 pid_t
-forkpty(amaster, name, termp, winp)
-	int *amaster;
-	char *name;
-	struct termios *termp;
-	struct winsize *winp;
+forkpty(int *amaster, char *name, struct termios *term, struct winsize *winp)
 {
 	int master, slave;
 	pid_t pid;
 
 	_DIAGASSERT(amaster != NULL);
 	/* name may be NULL */
-	/* termp may be NULL */
+	/* term may be NULL */
 	/* winp may be NULL */
 
-	if (openpty(&master, &slave, name, termp, winp) == -1)
-		return (-1);
+	if (openpty(&master, &slave, name, term, winp) == -1)
+		return -1;
 	switch (pid = fork()) {
 	case -1:
-		return (-1);
+		return -1;
 	case 0:
 		/*
 		 * child
 		 */
-		(void) close(master);
+		(void)close(master);
 		login_tty(slave);
-		return (0);
+		return 0;
 	}
 	/*
 	 * parent
 	 */
 	*amaster = master;
-	(void) close(slave);
-	return (pid);
+	(void)close(slave);
+	return pid;
 }

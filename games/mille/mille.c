@@ -1,4 +1,4 @@
-/*	$NetBSD: mille.c,v 1.9 1999/09/12 09:02:21 jsm Exp $	*/
+/*	$NetBSD: mille.c,v 1.16 2008/08/08 16:10:47 drochner Exp $	*/
 
 /*
  * Copyright (c) 1982, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1982, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1982, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)mille.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: mille.c,v 1.9 1999/09/12 09:02:21 jsm Exp $");
+__RCSID("$NetBSD: mille.c,v 1.16 2008/08/08 16:10:47 drochner Exp $");
 #endif
 #endif /* not lint */
 
@@ -62,7 +58,7 @@ main(ac, av)
 	bool	restore;
 
 	/* Revoke setgid privileges */
-	setregid(getgid(), getgid());
+	setgid(getgid());
 
 	if (strcmp(av[0], "a.out") == 0) {
 		outf = fopen("q", "w");
@@ -78,11 +74,12 @@ main(ac, av)
 		break;
 	  default:
 		printf("usage: milles [ restore_file ]\n");
-		exit(-1);
+		exit(1);
 		/* NOTREACHED */
 	}
 	Play = PLAYER;
-	initscr();
+	if (!initscr())
+		errx(0, "couldn't initialize screen");
 	delwin(stdscr);
 	stdscr = Board = newwin(BOARD_Y, BOARD_X, 0, 0);
 	Score = newwin(SCORE_Y, SCORE_X, 0, 40);
@@ -100,7 +97,7 @@ main(ac, av)
 # else
 	srandom(0);
 # endif
-	crmode();
+	cbreak();
 	noecho();
 	signal(SIGINT, rub);
 	for (;;) {
@@ -143,7 +140,7 @@ main(ac, av)
  */
 void
 rub(dummy)
-	int dummy __attribute__((__unused__));
+	int dummy __unused;
 {
 	(void)signal(SIGINT, SIG_IGN);
 	if (getyn(REALLYPROMPT))

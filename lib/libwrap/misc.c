@@ -1,4 +1,4 @@
-/*	$NetBSD: misc.c,v 1.7 1999/08/31 13:58:58 itojun Exp $	*/
+/*	$NetBSD: misc.c,v 1.9 2002/12/02 22:08:44 jdolecek Exp $	*/
 
  /*
   * Misc routines that are used by tcpd and by tcpdchk.
@@ -11,7 +11,7 @@
 #if 0
 static char sccsic[] = "@(#) misc.c 1.2 96/02/11 17:01:29";
 #else
-__RCSID("$NetBSD: misc.c,v 1.7 1999/08/31 13:58:58 itojun Exp $");
+__RCSID("$NetBSD: misc.c,v 1.9 2002/12/02 22:08:44 jdolecek Exp $");
 #endif
 #endif
 
@@ -24,10 +24,6 @@ __RCSID("$NetBSD: misc.c,v 1.7 1999/08/31 13:58:58 itojun Exp $");
 
 #include "tcpd.h"
 
-#ifndef	INADDR_NONE
-#define	INADDR_NONE	(-1)		/* XXX should be 0xffffffff */
-#endif
-
 /* xgets - fgets() with backslash-newline stripping */
 
 char   *xgets(ptr, len, fp)
@@ -38,7 +34,7 @@ FILE   *fp;
     int     got;
     char   *start = ptr;
 
-    while (fgets(ptr, len, fp)) {
+    while (len > 1 && fgets(ptr, len, fp)) {
 	got = strlen(ptr);
 	if (got >= 1 && ptr[got - 1] == '\n') {
 	    tcpd_context.line++;
@@ -61,13 +57,6 @@ char   *split_at(string, delimiter)
 char   *string;
 int     delimiter;
 {
-#if 0
-    char   *cp;
-
-    if ((cp = strchr(string, delimiter)) != 0)
-	*cp++ = 0;
-    return (cp);
-#else
     char *cp;
     int bracket;
 
@@ -89,7 +78,6 @@ int     delimiter;
 	}
     }
     return NULL;
-#endif
 }
 
 /* dot_quad_addr - convert dotted quad to internal form */

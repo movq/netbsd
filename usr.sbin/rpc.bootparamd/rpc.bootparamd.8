@@ -1,4 +1,4 @@
-.\" $NetBSD: rpc.bootparamd.8,v 1.11 1999/09/12 18:47:12 kleink Exp $
+.\" $NetBSD: rpc.bootparamd.8,v 1.16 2003/08/20 13:07:41 tsutsui Exp $
 .\" @(#)bootparamd.8
 .Dd January 8, 1994
 .Dt BOOTPARAMD 8
@@ -9,8 +9,8 @@
 .Nd boot parameter server
 .Sh SYNOPSIS
 .Nm
-.Op Fl d
-.Op Fl s
+.Op Fl ds
+.Op Fl i Ar interface
 .Op Fl r Ar router
 .Op Fl f Ar file
 .Sh DESCRIPTION
@@ -37,6 +37,16 @@ will be searched immediately.
 .It Fl d
 Display the debugging information. The daemon does not fork in this
 case.
+.It Fl i Ar interface
+Specify the interface to become the default router.
+.Nm
+picks the first IPv4 address it finds on the system by default.
+With
+.Fl i ,
+you can control which interface to be used to obtain the default router address.
+.Fl r
+overrides
+.Fl i .
 .It Fl s
 Log the debugging information with
 .Xr syslog 3 .
@@ -47,7 +57,6 @@ This defaults to the machine running the server.
 Specify the file to use as boot parameter file instead of
 .Dq Pa /etc/bootparams .
 .El
-.Pp
 .Sh FILES
 .Bl -tag -width /etc/bootparams -compact
 .It Pa /etc/bootparams
@@ -55,9 +64,11 @@ default configuration file
 .El
 .Sh SEE ALSO
 .Xr bootparams 5
+.Sh AUTHORS
+Originally written by
+.An Klas Heggemann
+.Aq klas@nada.kth.se .
 .Sh BUGS
 You may find the syslog messages too verbose.
 .Pp
 It's not clear if the non-canonical hack mentioned above is a good idea.
-.Sh AUTHOR
-Originally written by Klas Heggemann <klas@nada.kth.se>

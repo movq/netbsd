@@ -1,6 +1,6 @@
-.\"	$NetBSD: atalk.4,v 1.8 1999/12/15 22:07:30 abs Exp $
+.\"	$NetBSD: atalk.4,v 1.18 2005/12/26 19:48:12 perry Exp $
 .\"
-.\" This file is derived from the atalk.4 man page in the Netatlk 1.4b2
+.\" This file is derived from the atalk.4 man page in the Netatalk 1.4b2
 .\" distribution. That distribution is covered by the following copyright:
 .\"
 .\" Copyright (c) 1990,1996 Regents of The University of Michigan.
@@ -34,8 +34,8 @@
 .Nm atalk
 .Nd AppleTalk Protocol Family
 .Sh SYNOPSIS
-.Fd #include <sys/types.h>
-.Fd #include <netatalk/at.h>
+.In sys/types.h
+.In netatalk/at.h
 .Sh DESCRIPTION
 The
 .Tn AppleTalk
@@ -54,28 +54,27 @@ or
 ).
 Currently,
 .Nx Ns 's
-AppleTalk implementataion supports Ethernet, FDDI, and Token Ring.
+AppleTalk implementation supports Ethernet, FDDI, and Token Ring.
 .Pp
 AppleTalk packets are encapsulated on the Ethernet using the EtherTalk
 Link Access Protocol (ELAP).
 Local network address resolution is
 handled using the AppleTalk Address Resolution Protocol (AARP).
 Neither of these protocols is exposed to user-mode applications.
-.Pp
 .Sh ADDRESSING
 AppleTalk addresses are three byte quantities, stored in network
 byte order.
 The include file
 .Aq Pa netatalk/at.h
 defines the AppleTalk address format.
-
+.Pp
 Sockets in the AppleTalk protocol family use the following address
 structure:
 .Bd -literal -offset indent
 struct sockaddr_at {
-	u_int8_t	sat_len;
-	u_int8_t	sat_family;
-	u_int8_t	sat_port;
+	uint8_t	sat_len;
+	sa_family_t	sat_family;
+	uint8_t	sat_port;
 	struct at_addr	sat_addr;
 	union {
 		struct netrange r_netrange;
@@ -90,7 +89,8 @@ The node for
 .Xr bind 2
 must always be
 .Dv ATADDR_ANYNODE :
-``this node.'' The net
+.Dq this node .
+The net
 .\"may
 must
 be
@@ -98,8 +98,9 @@ be
 .\"or
 .\".Dv ATADDR_LATENET .
 .Dv ATADDR_ANYNET
-corresponds to the machine's ``primary'' address (the first
-configured).
+corresponds to the machine's
+.Dq primary
+address (the first configured).
 .\".Dv ATADDR_LATENET
 .\"causes the address in outgoing packets to be determined when a packet
 .\"is sent, i.e. determined late.
@@ -113,7 +114,7 @@ the primary address
 are returned with
 .Xr getsockname 2 .
 .Sh PROTOCOLS
-The AppleTalk protocol family is comprised of the
+The AppleTalk protocol family comprises the
 .Tn DDP
 datagram delivery protocol,
 AppleTalk Data Stream Protocol
@@ -166,15 +167,14 @@ services are provided by a user library.
 and
 .Tn AFP
 services are provided by user programs and daemons.
-.Pp
 .Sh SEE ALSO
 .\" .BR ddp (4P),
 .\" .BR atp (3N),
 .\" .BR asp (3N),
 .Xr bind 2 ,
 .Xr getsockname 2 ,
-.Xr options 4 ,
-.Xr atalkd 8 .
+.Xr options 4
+.\" .Xr atalkd 8
 .Rs
 .%B Inside AppleTalk, second edition
 .%A Gursharan S. Sidhu

@@ -1,4 +1,4 @@
-/*	$NetBSD: adb.c,v 1.6 1999/08/16 06:28:09 tsubai Exp $	*/
+/*	$NetBSD: adb.c,v 1.24 2007/11/07 19:47:00 garbled Exp $	*/
 
 /*-
  * Copyright (C) 1994	Bradley A. Grantham
@@ -30,6 +30,9 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: adb.c,v 1.24 2007/11/07 19:47:00 garbled Exp $");
+
 #include <sys/param.h>
 #include <sys/device.h>
 #include <sys/fcntl.h>
@@ -39,13 +42,20 @@
 #include <sys/signalvar.h>
 #include <sys/systm.h>
 
+#include <machine/bus.h>
 #include <machine/autoconf.h>
+#include <machine/pio.h>
 
 #include <macppc/dev/adbvar.h>
 #include <macppc/dev/akbdvar.h>
+#include <macppc/dev/pm_direct.h>
 #include <macppc/dev/viareg.h>
 
+#include <dev/clock_subr.h>
+#include <dev/ofw/openfirm.h>
+
 #include "aed.h"
+#include "apm.h"
 
 /*
  * Function declarations.
@@ -53,6 +63,7 @@
 static int	adbmatch __P((struct device *, struct cfdata *, void *));
 static void	adbattach __P((struct device *, struct device *, void *));
 static int	adbprint __P((void *, const char *));
+static void	adb_todr_init(void);
 
 /*
  * Global variables.
@@ -66,11 +77,8 @@ int	adb_debug = 0;		/* Output debugging messages */
 /*
  * Driver definition.
  */
-struct cfattach adb_ca = {
-	sizeof(struct adb_softc), adbmatch, adbattach
-};
-
-extern int adbHardware;
+CFATTACH_DECL(adb, sizeof(struct adb_softc),
+    adbmatch, adbattach, NULL, NULL);
 
 static int
 adbmatch(parent, cf, aux)
@@ -102,13 +110,13 @@ adbattach(parent, self, aux)
 {
 	struct adb_softc *sc = (struct adb_softc *)self;
 	struct confargs *ca = aux;
-
+	int irq = ca->ca_intr[0];
+	int node;
 	ADBDataBlock adbdata;
 	struct adb_attach_args aa_args;
 	int totaladbs;
-	int adbindex, adbaddr;
+	int adbindex, adbaddr, adb_node;
 
-	extern adb_intr();
 	extern volatile u_char *Via1Base;
 
 	ca->ca_reg[0] += ca->ca_baseaddr;
@@ -119,12 +127,47 @@ adbattach(parent, self, aux)
 	if (strcmp(ca->ca_name, "via-cuda") == 0)
 		adbHardware = ADB_HW_CUDA;
 	else if (strcmp(ca->ca_name, "via-pmu") == 0)
-		adbHardware = ADB_HW_PB;
+		adbHardware = ADB_HW_PMU;
+
+	node = of_getnode_byname(OF_parent(ca->ca_node), "extint-gpio1");
+	if (node)
+		OF_getprop(node, "interrupts", &irq, 4);
+
+	printf(" irq %d: ", irq);
 
 	adb_polling = 1;
-	ADBReInit();
+	adb_node = of_getnode_byname(ca->ca_node, "adb");
+	if (adb_node)
+		ADBReInit();
 
-	intr_establish(ca->ca_intr[0], IST_LEVEL, IPL_HIGH, adb_intr, sc);
+	switch (adbHardware) {
+	case ADB_HW_CUDA:
+		intr_establish(irq, IST_LEVEL, IPL_TTY, adb_intr_cuda, sc);
+		break;
+	case ADB_HW_PMU:
+		intr_establish(irq, IST_LEVEL, IPL_TTY, pm_intr, sc);
+		pm_init();
+		break;
+	}
+
+	adb_todr_init();
+
+#if NAPM > 0
+	/* Magic for signalling the apm driver to match. */
+	aa_args.origaddr = ADBADDR_APM;
+	aa_args.adbaddr = ADBADDR_APM;
+	aa_args.handler_id = ADBADDR_APM;
+
+	(void)config_found(self, &aa_args, NULL);
+#endif
+
+	/* 
+	 * see if we're supposed to have an ADB bus
+	 * since some PowerBooks don't have one and their PMUs barf on ADB
+	 * commands we bail here if there's no adb node
+	 */
+	if (!adb_node)
+		return;
 
 #ifdef ADB_DEBUG
 	if (adb_debug)
@@ -132,8 +175,7 @@ adbattach(parent, self, aux)
 #endif
 	totaladbs = CountADBs();
 
-	printf(" irq %d", ca->ca_intr[0]);
-	printf(": %d targets\n", totaladbs);
+	printf("%d targets\n", totaladbs);
 
 #if NAED > 0
 	/* ADB event device for compatibility */
@@ -158,12 +200,13 @@ adbattach(parent, self, aux)
 	if (adbHardware == ADB_HW_CUDA)
 		adb_cuda_autopoll();
 	adb_polling = 0;
+
 }
 
 int
 adbprint(args, name)
-        void *args;
-        const char *name;
+	void *args;
+	const char *name;
 {
 	struct adb_attach_args *aa_args = (struct adb_attach_args *)args;
 	int rv = UNCONF;
@@ -172,23 +215,25 @@ adbprint(args, name)
 		rv = UNSUPP; /* most ADB device types are unsupported */
 
 		/* print out what kind of ADB device we have found */
-		printf("%s addr %d: ", name, aa_args->origaddr);
+		aprint_normal("%s addr %d: ", name, aa_args->adbaddr);
 		switch(aa_args->origaddr) {
 #ifdef DIAGNOSTIC
 		case 0:
-			printf("ADB event device");
+			aprint_normal("ADB event device");
 			rv = UNCONF;
 			break;
 		case ADBADDR_SECURE:
-			printf("security dongle (%d)", aa_args->handler_id);
+			aprint_normal("security dongle (%d)",
+			    aa_args->handler_id);
 			break;
 #endif
 		case ADBADDR_MAP:
-			printf("mapped device (%d)", aa_args->handler_id);
+			aprint_normal("mapped device (%d)",
+			    aa_args->handler_id);
 			rv = UNCONF;
 			break;
 		case ADBADDR_REL:
-			printf("relative positioning device (%d)",
+			aprint_normal("relative positioning device (%d)",
 			    aa_args->handler_id);
 			rv = UNCONF;
 			break;
@@ -196,47 +241,71 @@ adbprint(args, name)
 		case ADBADDR_ABS:
 			switch (aa_args->handler_id) {
 			case ADB_ARTPAD:
-				printf("WACOM ArtPad II");
+				aprint_normal("WACOM ArtPad II");
 				break;
 			default:
-				printf("absolute positioning device (%d)",
+				aprint_normal("absolute positioning device (%d)",
 				    aa_args->handler_id);
 				break;
 			}
 			break;
 		case ADBADDR_DATATX:
-			printf("data transfer device (modem?) (%d)",
+			aprint_normal("data transfer device (modem?) (%d)",
 			    aa_args->handler_id);
 			break;
 		case ADBADDR_MISC:
 			switch (aa_args->handler_id) {
 			case ADB_POWERKEY:
-				printf("Sophisticated Circuits PowerKey");
+				aprint_normal("Sophisticated Circuits PowerKey");
 				break;
 			default:
-				printf("misc. device (remote control?) (%d)",
+				aprint_normal("misc. device (remote control?) (%d)",
 				    aa_args->handler_id);
 				break;
 			}
 			break;
 		default:
-			printf("unknown type device, (handler %d)",
+			aprint_normal("unknown type device, (handler %d)",
 			    aa_args->handler_id);
 			break;
 #endif /* DIAGNOSTIC */
 		}
 	} else		/* a device matched and was configured */
-                printf(" addr %d: ", aa_args->origaddr);
+                aprint_normal(" addr %d: ", aa_args->adbaddr);
 
-	return (rv);
+	return rv;
+}
+
+#define DIFF19041970 2082844800
+
+static int
+adb_todr_get(todr_chip_handle_t tch, volatile struct timeval *tvp)
+{
+	unsigned long sec;
+
+	if (adb_read_date_time(&sec) != 0)
+		return EIO;
+	tvp->tv_sec = sec - DIFF19041970;
+	tvp->tv_usec = 0;
+	return 0;
+}
+
+static int
+adb_todr_set(todr_chip_handle_t tch, volatile struct timeval *tvp)
+{
+	unsigned long sec;
+
+	sec = tvp->tv_sec + DIFF19041970;
+	return adb_set_date_time(sec) ? EIO : 0;
 }
 
 void
-extdms_complete(buffer, compdata, cmd)
-	caddr_t buffer, compdata;
-	int cmd;
+adb_todr_init(void)
 {
-	long *p = (long *)compdata;
+	static struct todr_chip_handle tch = {
+		.todr_gettime = adb_todr_get,
+		.todr_settime = adb_todr_set
+	};
 
-	*p= -1;
+	todr_attach(&tch);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: internals.c,v 1.5 2000/03/13 22:59:22 soren Exp $	*/
+/*	$NetBSD: internals.c,v 1.13 2006/11/24 19:46:58 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998-1999 Brett Lymn (blymn@baea.com.au, brett_lymn@yahoo.com.au)
@@ -10,7 +10,7 @@
  * 1. Redistributions of source code must retain the above copyright
  *    notice, this list of conditions and the following disclaimer.
  * 2. The name of the author may not be used to endorse or promote products
- *    derived from this software withough specific prior written permission
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -26,6 +26,9 @@
  *
  */
 
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: internals.c,v 1.13 2006/11/24 19:46:58 christos Exp $");
+
 #include <menu.h>
 #include <ctype.h>
 #include <stdlib.h>
@@ -34,20 +37,20 @@
 
 /* internal function prototypes */
 static void
-_menui_calc_neighbours(MENU *, int, int, int, int, ITEM **, ITEM **,
-			ITEM **, ITEM **);
-static void _menui_redraw_menu __P((MENU *, int, int));
+_menui_calc_neighbours(MENU *menu, int item_no, int cycle, int item_rows,
+		       int item_cols, ITEM **next, ITEM **prev,
+			ITEM **major_next, ITEM **major_prev);
+static void _menui_redraw_menu(MENU *menu, int old_top_row, int old_cur_item);
 
   /*
    * Link all the menu items together to speed up navigation.  We need
    * to calculate the widest item entry, then work out how many columns
-   * of items the window will accomodate and then how many rows there will
+   * of items the window will accommodate and then how many rows there will
    * be.  Once the layout is determined the neighbours of each item is
    * calculated and the item structures updated.
    */
 int
-_menui_stitch_items(menu)
-	MENU *menu;
+_menui_stitch_items(MENU *menu)
 {
 	int i, cycle, row_major;
 
@@ -114,17 +117,9 @@ _menui_stitch_items(menu)
    * order the caller can generate the neighbours for either menu layout style.
    */
 static void
-_menui_calc_neighbours(menu, item_no, cycle, item_rows, item_cols, next, prev,
-			major_next, major_prev)
-	MENU *menu;
-	int item_no;
-	int cycle;
-	int item_rows;
-	int item_cols;
-	ITEM **next;
-	ITEM **prev;
-	ITEM **major_next;
-	ITEM **major_prev;
+_menui_calc_neighbours(MENU *menu, int item_no, int cycle, int item_rows,
+		       int item_cols, ITEM **next, ITEM **prev,
+		       ITEM **major_next, ITEM **major_prev)
 {
 	int neighbour;
 
@@ -237,10 +232,7 @@ _menui_calc_neighbours(menu, item_no, cycle, item_rows, item_cols, next, prev,
  * accordingly.  Call the term and init functions if required.
  */
 int
-_menui_goto_item(menu, item, new_top_row)
-	MENU *menu;
-	ITEM *item;
-	int new_top_row;
+_menui_goto_item(MENU *menu, ITEM *item, int new_top_row)
 {
 	int old_top_row = menu->top_row, old_cur_item = menu->cur_item;
 	
@@ -286,10 +278,7 @@ _menui_goto_item(menu, item, new_top_row)
  * otherwise return E_NO_MATCH
  */
 int
-_menui_match_items(menu, direction, item_matched)
-	MENU *menu;
-	int direction;
-	int *item_matched;
+_menui_match_items(MENU *menu, int direction, int *item_matched)
 {
 	int i, caseless;
 
@@ -345,11 +334,7 @@ _menui_match_items(menu, direction, item_matched)
  * index of the item that matched the pattern.
  */
 int
-_menui_match_pattern(menu, c, direction, item_matched)
-	MENU *menu;
-	char c;
-	int direction;
-	int *item_matched;
+_menui_match_pattern(MENU *menu, int c, int direction, int *item_matched)
 {
 	if (menu == NULL)
 		return E_BAD_ARGUMENT;
@@ -396,22 +381,20 @@ _menui_match_pattern(menu, c, direction, item_matched)
  * Draw an item in the subwindow complete with appropriate highlighting.
  */
 void
-_menui_draw_item(menu, item)
-	MENU *menu;
-	int item;
+_menui_draw_item(MENU *menu, int item)
 {
 	int j, pad_len, mark_len;
 	
 	mark_len = max(menu->mark.length, menu->unmark.length);
 	
-	wmove(menu->menu_subwin,
+	wmove(menu->scrwin,
 	      menu->items[item]->row - menu->top_row,
 	      menu->items[item]->col * (menu->col_width + 1));
-			
-	if ((menu->cur_item == item) || (menu->items[item]->selected == 1))
-		wattron(menu->menu_subwin, menu->fore);
+
+	if (menu->cur_item == item)
+		wattrset(menu->scrwin, menu->fore);
 	if ((menu->items[item]->opts & O_SELECTABLE) != O_SELECTABLE)
-		wattron(menu->menu_subwin, menu->grey);
+		wattron(menu->scrwin, menu->grey);
 
 	  /* deal with the menu mark, if  one is set.
 	   * We mark the selected items and write blanks for
@@ -421,28 +404,28 @@ _menui_draw_item(menu, item)
 	if (menu->items[item]->selected == 1) {
 		if (menu->mark.string != NULL) {
 			for (j = 0; j < menu->mark.length; j++) {
-				waddch(menu->menu_subwin,
+				waddch(menu->scrwin,
 				       menu->mark.string[j]);
 			}
 		}
 		  /* blank any length difference between mark & unmark */
 		for (j = menu->mark.length; j < mark_len; j++)
-			waddch(menu->menu_subwin, ' ');
+			waddch(menu->scrwin, ' ');
 	} else {
 		if (menu->unmark.string != NULL) {
 			for (j = 0; j < menu->unmark.length; j++) {
-				waddch(menu->menu_subwin,
+				waddch(menu->scrwin,
 				       menu->unmark.string[j]);
 			}
 		}
 		  /* blank any length difference between mark & unmark */
 		for (j = menu->unmark.length; j < mark_len; j++)
-			waddch(menu->menu_subwin, ' ');
+			waddch(menu->scrwin, ' ');
 	}
 	
 	  /* add the menu name */
 	for (j=0; j < menu->items[item]->name.length; j++)
-		waddch(menu->menu_subwin,
+		waddch(menu->scrwin,
 		       menu->items[item]->name.string[j]);
 	
 	pad_len = menu->col_width - menu->items[item]->name.length
@@ -450,19 +433,33 @@ _menui_draw_item(menu, item)
 	if ((menu->opts & O_SHOWDESC) == O_SHOWDESC) {
 		pad_len -= menu->items[item]->description.length - 1;
 		for (j = 0; j < pad_len; j++)
-			waddch(menu->menu_subwin, menu->pad);
+			waddch(menu->scrwin, menu->pad);
 		for (j = 0; j < menu->items[item]->description.length; j++) {
-			waddch(menu->menu_subwin,
+			waddch(menu->scrwin,
 			       menu->items[item]->description.string[j]);
 		}
 	} else {
 		for (j = 0; j < pad_len; j++)
-			waddch(menu->menu_subwin, ' ');
+			waddch(menu->scrwin, ' ');
 	}
 	menu->items[item]->visible = 1;
+	
 	  /* kill any special attributes... */
-	wattrset(menu->menu_subwin, menu->back);
+	wattrset(menu->scrwin, menu->back);
 
+	  /*
+	   * Fill in the spacing between items, annoying but it looks
+	   * odd if the menu items are inverse because the spacings do not
+	   * have the same attributes as the items.
+	   */
+	if ((menu->items[item]->col > 0) &&
+	    (menu->items[item]->col < (menu->item_cols - 1))) {
+		wmove(menu->scrwin,
+		      menu->items[item]->row - menu->top_row,
+		      menu->items[item]->col * (menu->col_width + 1) - 1);
+		waddch(menu->scrwin, ' ');
+	}
+	
 	  /* and position the cursor nicely */
 	pos_menu_cursor(menu);
 }
@@ -471,8 +468,7 @@ _menui_draw_item(menu, item)
  * Draw the menu in the subwindow provided.
  */
 int
-_menui_draw_menu(menu)
-	MENU *menu;
+_menui_draw_menu(MENU *menu)
 {
 	int rowmajor, i, j, max_items, last_item, row = -1, col = -1;
 	
@@ -484,13 +480,10 @@ _menui_draw_menu(menu)
 		menu->items[i]->visible = 0;
 	}
 
-	wmove(menu->menu_subwin, 0, 0);
+	wmove(menu->scrwin, 0, 0);
 
-	menu->col_width = getmaxx(menu->menu_subwin) / menu->cols;
+	menu->col_width = getmaxx(menu->scrwin) / menu->cols;
 
-	  /*if ((menu->opts & O_SHOWDESC) == O_SHOWDESC)
-	    menu->col_width++;*/
-		
 	max_items = menu->rows * menu->cols;
 	last_item = ((max_items + i) > menu->item_count) ? menu->item_count :
 		(max_items + i);
@@ -498,7 +491,7 @@ _menui_draw_menu(menu)
 	for (; i < last_item; i++) {
 		if (i > menu->item_count) {
 			  /* no more items to draw, write background blanks */
-			wattron(menu->menu_subwin, menu->back);
+			wattrset(menu->scrwin, menu->back);
 			if (row < 0) {
 				row = menu->items[menu->item_count - 1]->row;
 				col = menu->items[menu->item_count - 1]->col;
@@ -517,10 +510,10 @@ _menui_draw_menu(menu)
 					col++;
 				}
 			}
-			wmove(menu->menu_subwin, row,
+			wmove(menu->scrwin, row,
 			      col * (menu->col_width + 1));
 			for (j = 0; j < menu->col_width; j++)
-				waddch(menu->menu_subwin, ' ');
+				waddch(menu->scrwin, ' ');
 		} else {
 			_menui_draw_item(menu, i);
 			
@@ -542,8 +535,7 @@ _menui_draw_menu(menu)
  *
  */
 void
-_menui_max_item_size(menu)
-	MENU *menu;
+_menui_max_item_size(MENU *menu)
 {
 	int i, with_desc, width;
 
@@ -565,10 +557,7 @@ _menui_max_item_size(menu)
  * unhighlight the old item and highlight the new one.
  */
 static void
-_menui_redraw_menu(menu, old_top_row, old_cur_item)
-	MENU *menu;
-	int old_top_row;
-	int old_cur_item;
+_menui_redraw_menu(MENU *menu, int old_top_row, int old_cur_item)
 {
 
 	if (menu->top_row != old_top_row) {
@@ -578,7 +567,7 @@ _menui_redraw_menu(menu, old_top_row, old_cur_item)
 		   * XXXX we could scroll the window and just fill in the
 		   * XXXX changed lines.
 		   */
-		wclear(menu->menu_subwin);
+		wclear(menu->scrwin);
 		_menui_draw_menu(menu);
 	} else {
 		if (menu->cur_item != old_cur_item) {

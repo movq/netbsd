@@ -1,4 +1,4 @@
-.\"	$NetBSD: fs.5,v 1.9 1999/03/17 20:19:45 garbled Exp $
+.\"	$NetBSD: fs.5,v 1.17 2005/12/26 19:48:12 perry Exp $
 .\"
 .\" Copyright (c) 1983, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -33,7 +29,7 @@
 .\"
 .\"     @(#)fs.5	8.2 (Berkeley) 4/19/94
 .\"
-.Dd April 19, 1994
+.Dd July 27, 2001
 .Dt FS 5
 .Os
 .Sh NAME
@@ -41,15 +37,15 @@
 .Nm inode
 .Nd format of file system volume
 .Sh SYNOPSIS
-.Fd #include <sys/types.h>
-.Fd #include <ufs/ffs/fs.h>
-.Fd #include <ufs/ufs/inode.h>
+.In sys/param.h
+.In ufs/ffs/fs.h
+.In ufs/ufs/inode.h
 .Sh DESCRIPTION
 The files
-.Aq Pa fs.h
+.Aq Pa ufs/ffs/fs.h
 and
-.Aq Pa inode.h
-declare several structures, defined variables and macros
+.Aq Pa ufs/ufs/inode.h
+declare several structures and define variables and macros
 which are used to create and manage the underlying format of
 file system objects on random access devices (disks).
 .Pp
@@ -75,87 +71,112 @@ from the file
 .Bd -literal
 #define	FS_MAGIC 0x011954
 struct fs {
-	struct	fs *fs_link;	/* linked list of file systems */
-	struct	fs *fs_rlink;	/*     used for incore super blocks */
-	daddr_t	fs_sblkno;	/* addr of super-block in filesys */
-	daddr_t	fs_cblkno;	/* offset of cyl-block in filesys */
-	daddr_t	fs_iblkno;	/* offset of inode-blocks in filesys */
-	daddr_t	fs_dblkno;	/* offset of first data after cg */
-	long	fs_cgoffset;	/* cylinder group offset in cylinder */
-	long	fs_cgmask;	/* used to calc mod fs_ntrak */
-	time_t 	fs_time;    	/* last time written */
-	long	fs_size;	/* number of blocks in fs */
-	long	fs_dsize;	/* number of data blocks in fs */
-	long	fs_ncg;	/* number of cylinder groups */
-	long	fs_bsize;	/* size of basic blocks in fs */
-	long	fs_fsize;	/* size of frag blocks in fs */
-	long	fs_frag;	/* number of frags in a block in fs */
+	int32_t	 fs_firstfield;	/* historic file system linked list, */
+	int32_t	 fs_unused_1;	/*     used for incore super blocks */
+	int32_t  fs_sblkno;	/* addr of super-block in filesys */
+	int32_t  fs_cblkno;	/* offset of cyl-block in filesys */
+	int32_t  fs_iblkno;	/* offset of inode-blocks in filesys */
+	int32_t  fs_dblkno;	/* offset of first data after cg */
+	int32_t	 fs_old_cgoffset; /* cylinder group offset in cylinder */
+	int32_t	 fs_old_cgmask;	  /* used to calc mod fs_ntrak */
+	int32_t	 fs_old_time;	/* last time written */
+	int32_t	 fs_old_size;	/* number of blocks in fs */
+	int32_t	 fs_old_dsize;	/* number of data blocks in fs */
+	int32_t	 fs_ncg;	/* number of cylinder groups */
+	int32_t	 fs_bsize;	/* size of basic blocks in fs */
+	int32_t	 fs_fsize;	/* size of frag blocks in fs */
+	int32_t	 fs_frag;	/* number of frags in a block in fs */
 /* these are configuration parameters */
-	long	fs_minfree;	/* minimum percentage of free blocks */
-	long	fs_rotdelay;	/* num of ms for optimal next block */
-	long	fs_rps;	/* disk revolutions per second */
+	int32_t	 fs_minfree;	/* minimum percentage of free blocks */
+	int32_t	 fs_old_rotdelay; /* num of ms for optimal next block */
+	int32_t	 fs_old_rps;	/* disk revolutions per second */
 /* these fields can be computed from the others */
-	long	fs_bmask;	/* ``blkoff'' calc of blk offsets */
-	long	fs_fmask;	/* ``fragoff'' calc of frag offsets */
-	long	fs_bshift;	/* ``lblkno'' calc of logical blkno */
-	long	fs_fshift;	/* ``numfrags'' calc number of frags */
+	int32_t	 fs_bmask;	/* ``blkoff'' calc of blk offsets */
+	int32_t	 fs_fmask;	/* ``fragoff'' calc of frag offsets */
+	int32_t	 fs_bshift;	/* ``lblkno'' calc of logical blkno */
+	int32_t	 fs_fshift;	/* ``numfrags'' calc number of frags */
 /* these are configuration parameters */
-	long	fs_maxcontig;	/* max number of contiguous blks */
-	long	fs_maxbpg;	/* max number of blks per cyl group */
+	int32_t	 fs_maxcontig;	/* max number of contiguous blks */
+	int32_t	 fs_maxbpg;	/* max number of blks per cyl group */
 /* these fields can be computed from the others */
-	long	fs_fragshift;	/* block to frag shift */
-	long	fs_fsbtodb;	/* fsbtodb and dbtofsb shift constant */
-	long	fs_sbsize;	/* actual size of super block */
-	long	fs_csmask;	/* csum block offset */
-	long	fs_csshift;	/* csum block number */
-	long	fs_nindir;	/* value of NINDIR */
-	long	fs_inopb;	/* value of INOPB */
-	long	fs_nspf;	/* value of NSPF */
+	int32_t	 fs_fragshift;	/* block to frag shift */
+	int32_t	 fs_fsbtodb;	/* fsbtodb and dbtofsb shift constant */
+	int32_t	 fs_sbsize;	/* actual size of super block */
+	int32_t	 fs_spare1[2];	/* old fs_csmask */
+				/* old fs_csshift */
+	int32_t	 fs_nindir;	/* value of NINDIR */
+	int32_t	 fs_inopb;	/* value of INOPB */
+	int32_t	 fs_old_nspf;	/* value of NSPF */
 /* yet another configuration parameter */
-	long	fs_optim;	/* optimization preference, see below */
+	int32_t	 fs_optim;	/* optimization preference, see below */
 /* these fields are derived from the hardware */
-	long	fs_npsect;	/* # sectors/track including spares */
-	long	fs_interleave;	/* hardware sector interleave */
-	long	fs_trackskew;	/* sector 0 skew, per track */
-	long	fs_headswitch;	/* head switch time, usec */
-	long	fs_trkseek;	/* track-to-track seek, usec */
+	int32_t	 fs_old_npsect;	/* # sectors/track including spares */
+	int32_t	 fs_old_interleave;	/* hardware sector interleave */
+	int32_t	 fs_old_trackskew;	/* sector 0 skew, per track */
+/* fs_id takes the space of unused fs_headswitch and fs_trkseek fields */
+	int32_t	 fs_id[2];	/* unique file system id */
 /* sizes determined by number of cylinder groups and their sizes */
-	daddr_t fs_csaddr;	/* blk addr of cyl grp summary area */
-	long	fs_cssize;	/* size of cyl grp summary area */
-	long	fs_cgsize;	/* cylinder group size */
+	int32_t  fs_old_csaddr;	/* blk addr of cyl grp summary area */
+	int32_t	 fs_cssize;	/* size of cyl grp summary area */
+	int32_t	 fs_cgsize;	/* cylinder group size */
 /* these fields are derived from the hardware */
-	long	fs_ntrak;	/* tracks per cylinder */
-	long	fs_nsect;	/* sectors per track */
-	long  	fs_spc;   	/* sectors per cylinder */
-/* this comes from the disk driver partitioning */
-	long	fs_ncyl;   	/* cylinders in file system */
-/* these fields can be computed from the others */
-	long	fs_cpg;	/* cylinders per group */
-	long	fs_ipg;	/* inodes per group */
-	long	fs_fpg;	/* blocks per group * fs_frag */
+	int32_t	 fs_spare2;	/* old fs_ntrak */
+	int32_t	 fs_old_nsect;	/* sectors per track */
+	int32_t	 fs_old_spc;	/* sectors per cylinder */
+	int32_t	 fs_old_ncyl;	/* cylinders in file system */
+	int32_t	 fs_old_cpg;	/* cylinders per group */
+	int32_t	 fs_ipg;	/* inodes per group */
+	int32_t	 fs_fpg;	/* blocks per group * fs_frag */
 /* this data must be re-computed after crashes */
-	struct	csum fs_cstotal;	/* cylinder summary information */
+	struct	csum fs_old_cstotal;	/* cylinder summary information */
 /* these fields are cleared at mount time */
-	char   	fs_fmod;    	/* super block modified flag */
-	char   	fs_clean;    	/* file system is clean flag */
-	char   	fs_ronly;   	/* mounted read-only flag */
-	char   	fs_flags;   	/* currently unused flag */
-	char	fs_fsmnt[MAXMNTLEN];	/* name mounted on */
+	int8_t	 fs_fmod;	/* super block modified flag */
+	int8_t	 fs_clean;	/* file system is clean flag */
+	int8_t	 fs_ronly;	/* mounted read-only flag */
+	uint8_t	 fs_old_flags;	/* see FS_ flags below */
+	u_char	 fs_fsmnt[MAXMNTLEN];	/* name mounted on */
+	u_char   fs_volname[MAXVOLLEN];	/* volume name */
+	uint64_t fs_swuid;	/* system-wide uid */
+	int32_t	 fs_pad;
 /* these fields retain the current block allocation info */
-	long	fs_cgrotor;	/* last cg searched */
-	struct	csum *fs_csp[MAXCSBUFS]; /* list of fs_cs info buffers */
-	long	fs_cpc;	/* cyl per cycle in postbl */
-	short	fs_opostbl[16][8];	/* old rotation block list head */
-	long	fs_sparecon[56];	/* reserved for future constants */
-	quad	fs_qbmask;	/* ~fs_bmask - for use with quad size */
-	quad	fs_qfmask;	/* ~fs_fmask - for use with quad size */
-	long	fs_postblformat; /* format of positional layout tables */
-	long	fs_nrpos;	/* number of rotational positions */
-	long	fs_postbloff;	/* (short) rotation block list head */
-	long	fs_rotbloff;	/* (u_char) blocks for each rotation */
-	long	fs_magic;	/* magic number */
-	u_char	fs_space[1];	/* list of blocks for each rotation */
-/* actually longer */
+	int32_t	 fs_cgrotor;	/* last cg searched (UNUSED) */
+	void 	*fs_ocsp[NOCSPTRS];/* padding; was list of fs_cs buffers */
+	uint8_t *fs_contigdirs;   /* # of contiguously allocated dirs */
+	struct csum *fs_csp;	/* cg summary info buffer for fs_cs */
+	int32_t	*fs_maxcluster;	/* max cluster in each cyl group */
+	u_char	*fs_active;	/* used by snapshots to track fs */
+	int32_t	 fs_old_cpc;	/* cyl per cycle in postbl */
+/* this area is otherwise allocated unless fs_old_flags & FS_FLAGS_UPDATED */
+	int32_t	 fs_maxbsize;	/* maximum blocking factor permitted */
+	int64_t	 fs_sparecon64[17]; /* old rotation block list head */
+	int64_t	 fs_sblockloc;	/* byte offset of standard superblock */
+	struct	csum_total fs_cstotal; /* cylinder summary information */
+	int64_t  fs_time;	/* last time written */
+	int64_t	 fs_size;	/* number of blocks in fs */
+	int64_t	 fs_dsize;	/* number of data blocks in fs */
+	int64_t  fs_csaddr;	/* blk addr of cyl grp summary area */
+	int64_t	 fs_pendingblocks; /* blocks in process of being freed */
+	int32_t	 fs_pendinginodes; /* inodes in process of being freed */
+	int32_t	 fs_snapinum[FSMAXSNAP]; /* list of snapshot inode numbers */
+/* back to stuff that has been around a while */
+	int32_t	 fs_avgfilesize; /* expected average file size */
+	int32_t	 fs_avgfpdir;	 /* expected # of files per directory */
+	int32_t	 fs_save_cgsize; /* save real cg size to use fs_bsize */
+	int32_t	 fs_sparecon32[26]; /* reserved for future constants */
+	uint32_t fs_flags;	    /* see FS_ flags below */
+/* back to stuff that has been around a while (again) */
+	int32_t	 fs_contigsumsize; /* size of cluster summary array */
+	int32_t	 fs_maxsymlinklen; /* max length of an internal symlink */
+	int32_t	 fs_old_inodefmt;  /* format of on-disk inodes */
+	uint64_t fs_maxfilesize;  /* maximum representable file size */
+	int64_t	 fs_qbmask;	   /* ~fs_bmask for use with 64-bit size */
+	int64_t	 fs_qfmask;	   /* ~fs_fmask for use with 64-bit size */
+	int32_t	 fs_state;	   /* validate fs_clean field (UNUSED) */
+	int32_t	 fs_old_postblformat; /* format of positional layout tables */
+	int32_t	 fs_old_nrpos;	/* number of rotational positions */
+	int32_t  fs_spare5[2];	/* old fs_postbloff */
+				/* old fs_rotbloff */
+	int32_t	 fs_magic;	/* magic number */
 };
 .Ed
 .Pp
@@ -286,7 +307,7 @@ defines the amount of space allocated in
 the super-block for this name.
 The limit on the amount of summary information per file system
 is defined by
-.Dv MAXCSBUFS.
+.Dv MAXCSBUFS .
 For a 4096 byte block size, it is currently parameterized for a
 maximum of two million cylinders.
 .Pp

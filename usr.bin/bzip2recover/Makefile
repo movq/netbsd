@@ -1,9 +1,17 @@
-#	$NetBSD: Makefile,v 1.3 1999/02/12 18:55:28 cjs Exp $
+#	$NetBSD: Makefile,v 1.8 2007/05/28 12:06:25 tls Exp $
+
+USE_FORT?= yes	# data-driven bugs?
+NOMAN=	   # defined
+
+.include <bsd.own.mk>		# for MKDYNAMICROOT definition
 
 PROG=       bzip2recover
-WARNS=	    0
-CWARNFLAGS=-Wall -Wstrict-prototypes -Wpointer-arith
+
+.if (${MKDYNAMICROOT} == "no")
 LDSTATIC?= -static
-MKMAN=no
+.endif
+
+DIST=	   ${NETBSDSRCDIR}/dist/bzip2
+.PATH:	   ${DIST}
 
 .include <bsd.prog.mk>

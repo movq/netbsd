@@ -1,4 +1,4 @@
-/*	$NetBSD: wt.c,v 1.49 2000/03/23 07:01:36 thorpej Exp $	*/
+/*	$NetBSD: wt.c,v 1.80 2008/06/08 12:43:52 tsutsui Exp $	*/
 
 /*
  * Streamer tape driver.
@@ -24,17 +24,17 @@
  * All rights reserved.
  *
  * Authors: Robert Baron
- * 
+ *
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
+ *
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -50,6 +50,9 @@
  *  Copyright 1988, 1989 by Intel Corporation
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: wt.c,v 1.80 2008/06/08 12:43:52 tsutsui Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/callout.h>
@@ -61,12 +64,11 @@
 #include <sys/mtio.h>
 #include <sys/device.h>
 #include <sys/proc.h>
+#include <sys/lwp.h>
 #include <sys/conf.h>
 
-#include <vm/vm_param.h>
-
-#include <machine/intr.h>
-#include <machine/bus.h>
+#include <sys/intr.h>
+#include <sys/bus.h>
 #include <machine/pio.h>
 
 #include <dev/isa/isavar.h>
@@ -95,8 +97,8 @@ static struct wtregs {
 	CMDPORT,	/* command, write only */
 	STATPORT,	/* status, read only */
 	CTLPORT,	/* control, write only */
-	SDMAPORT,	/* start dma */
-	RDMAPORT;	/* reset dma */
+	SDMAPORT,	/* start DMA */
+	RDMAPORT;	/* reset DMA */
 	/* status port bits */
 	u_char BUSY,	/* not ready bit define */
 	NOEXCEP,	/* no exception bit define */
@@ -125,19 +127,19 @@ struct wt_softc {
 	bus_space_handle_t	sc_ioh;
 	isa_chipset_tag_t	sc_ic;
 
-	struct callout		sc_timer_ch;
+	callout_t		sc_timer_ch;
 
 	enum wttype type;	/* type of controller */
-	int chan;		/* dma channel number, 1..3 */
+	int chan;		/* DMA channel number, 1..3 */
 	int flags;		/* state of tape drive */
 	unsigned dens;		/* tape density */
 	int bsize;		/* tape block size */
 	void *buf;		/* internal i/o buffer */
 
-	void *dmavaddr;		/* virtual address of dma i/o buffer */
+	void *dmavaddr;		/* virtual address of DMA i/o buffer */
 	size_t dmatotal;	/* size of i/o buffer */
 	int dmaflags;		/* i/o direction */
-	size_t dmacount;	/* resulting length of dma i/o */
+	size_t dmacount;	/* resulting length of DMA i/o */
 
 	u_short error;		/* code for error encountered */
 	u_short ercnt;		/* number of error blocks */
@@ -146,31 +148,44 @@ struct wt_softc {
 	struct wtregs regs;
 };
 
-/* XXX: These don't belong here really */
-cdev_decl(wt);
-bdev_decl(wt);
+static dev_type_open(wtopen);
+static dev_type_close(wtclose);
+static dev_type_read(wtread);
+static dev_type_write(wtwrite);
+static dev_type_ioctl(wtioctl);
+static dev_type_strategy(wtstrategy);
+static dev_type_dump(wtdump);
+static dev_type_size(wtsize);
 
-int wtwait __P((struct wt_softc *sc, int catch, char *msg));
-int wtcmd __P((struct wt_softc *sc, int cmd));
-int wtstart __P((struct wt_softc *sc, int flag, void *vaddr, size_t len));
-void wtdma __P((struct wt_softc *sc));
-void wttimer __P((void *arg));
-void wtclock __P((struct wt_softc *sc));
-int wtreset __P((bus_space_tag_t, bus_space_handle_t, struct wtregs *));
-int wtsense __P((struct wt_softc *sc, int verbose, int ignore));
-int wtstatus __P((struct wt_softc *sc));
-void wtrewind __P((struct wt_softc *sc));
-int wtreadfm __P((struct wt_softc *sc));
-int wtwritefm __P((struct wt_softc *sc));
-u_char wtsoft __P((struct wt_softc *sc, int mask, int bits));
-
-int wtprobe __P((struct device *, struct cfdata *, void *));
-void wtattach __P((struct device *, struct device *, void *));
-int wtintr __P((void *sc));
-
-struct cfattach wt_ca = {
-	sizeof(struct wt_softc), wtprobe, wtattach
+const struct bdevsw wt_bdevsw = {
+	wtopen, wtclose, wtstrategy, wtioctl, wtdump, wtsize, D_TAPE
 };
+
+const struct cdevsw wt_cdevsw = {
+	wtopen, wtclose, wtread, wtwrite, wtioctl,
+	nostop, notty, nopoll, nommap, nokqfilter, D_TAPE
+};
+
+static int	wtwait(struct wt_softc *sc, int catch, const char *msg);
+static int	wtcmd(struct wt_softc *sc, int cmd);
+static int	wtstart(struct wt_softc *sc, int flag, void *vaddr, size_t len);
+static void	wtdma(struct wt_softc *sc);
+static void	wttimer(void *arg);
+static void	wtclock(struct wt_softc *sc);
+static int	wtreset(bus_space_tag_t, bus_space_handle_t, struct wtregs *);
+static int	wtsense(struct wt_softc *sc, int verbose, int ignore);
+static int	wtstatus(struct wt_softc *sc);
+static void	wtrewind(struct wt_softc *sc);
+static int	wtreadfm(struct wt_softc *sc);
+static int	wtwritefm(struct wt_softc *sc);
+static u_char	wtsoft(struct wt_softc *sc, int mask, int bits);
+static int	wtintr(void *sc);
+
+int	wtprobe(struct device *, struct cfdata *, void *);
+void	wtattach(struct device *, struct device *, void *);
+
+CFATTACH_DECL(wt, sizeof(struct wt_softc),
+    wtprobe, wtattach, NULL, NULL);
 
 extern struct cfdriver wt_cd;
 
@@ -178,45 +193,63 @@ extern struct cfdriver wt_cd;
  * Probe for the presence of the device.
  */
 int
-wtprobe(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+wtprobe(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_iot;
 	bus_space_handle_t ioh;
-	int rv = 0;
+	int rv = 0, iosize;
 
-
-	/* Disallow wildcarded i/o address. */
-	if (ia->ia_iobase == ISACF_PORT_DEFAULT)
+	if (ia->ia_nio < 1)
+		return (0);
+	if (ia->ia_nirq < 1)
+		return (0);
+	if (ia->ia_ndrq < 1)
 		return (0);
 
-	if (ia->ia_drq < 1 || ia->ia_drq > 3) {
-		printf("wtprobe: Bad drq=%d, should be 1..3\n", ia->ia_drq);
+	/* Disallow wildcarded i/o address. */
+	if (ia->ia_io[0].ir_addr == ISA_UNKNOWN_PORT)
+		return (0);
+	if (ia->ia_irq[0].ir_irq == ISA_UNKNOWN_IRQ)
+		return (0);
+
+	if (ia->ia_drq[0].ir_drq < 1 || ia->ia_drq[0].ir_drq > 3) {
+		printf("wtprobe: Bad drq=%d, should be 1..3\n",
+		    ia->ia_drq[0].ir_drq);
 		return (0);
 	}
 
+	iosize = AV_NPORT;
+
 	/* Map i/o space */
-	if (bus_space_map(iot, ia->ia_iobase, AV_NPORT, 0, &ioh))
+	if (bus_space_map(iot, ia->ia_io[0].ir_addr, iosize, 0, &ioh))
 		return 0;
 
 	/* Try Wangtek. */
 	if (wtreset(iot, ioh, &wtregs)) {
-		ia->ia_iosize = WT_NPORT; /* XXX misleading */
+		iosize = WT_NPORT; /* XXX misleading */
 		rv = 1;
 		goto done;
 	}
 
 	/* Try Archive. */
 	if (wtreset(iot, ioh, &avregs)) {
-		ia->ia_iosize = AV_NPORT;
+		iosize = AV_NPORT;
 		rv = 1;
 		goto done;
 	}
 
 done:
+	if (rv) {
+		ia->ia_nio = 1;
+		ia->ia_io[0].ir_size = iosize;
+
+		ia->ia_nirq = 1;
+		ia->ia_ndrq = 1;
+
+		ia->ia_niomem = 0;
+	}
 	bus_space_unmap(iot, ioh, AV_NPORT);
 	return rv;
 }
@@ -225,9 +258,7 @@ done:
  * Device is found, configure it.
  */
 void
-wtattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+wtattach(struct device *parent, struct device *self, void *aux)
 {
 	struct wt_softc *sc = (void *)self;
 	struct isa_attach_args *ia = aux;
@@ -236,7 +267,7 @@ wtattach(parent, self, aux)
 	bus_size_t maxsize;
 
 	/* Map i/o space */
-	if (bus_space_map(iot, ia->ia_iobase, AV_NPORT, 0, &ioh)) {
+	if (bus_space_map(iot, ia->ia_io[0].ir_addr, AV_NPORT, 0, &ioh)) {
 		printf(": can't map i/o space\n");
 		return;
 	}
@@ -245,12 +276,12 @@ wtattach(parent, self, aux)
 	sc->sc_ioh = ioh;
 	sc->sc_ic = ia->ia_ic;
 
-	callout_init(&sc->sc_timer_ch);
+	callout_init(&sc->sc_timer_ch, 0);
 
 	/* Try Wangtek. */
 	if (wtreset(iot, ioh, &wtregs)) {
 		sc->type = WANGTEK;
-		bcopy(&wtregs, &sc->regs, sizeof(sc->regs));
+		memcpy(&sc->regs, &wtregs, sizeof(sc->regs));
 		printf(": type <Wangtek>\n");
 		goto ok;
 	}
@@ -258,7 +289,7 @@ wtattach(parent, self, aux)
 	/* Try Archive. */
 	if (wtreset(iot, ioh, &avregs)) {
 		sc->type = ARCHIVE;
-		bcopy(&avregs, &sc->regs, sizeof(sc->regs));
+		memcpy(&sc->regs, &avregs, sizeof(sc->regs));
 		printf(": type <Archive>\n");
 		/* Reset DMA. */
 		bus_space_write_1(iot, ioh, sc->regs.RDMAPORT, 0);
@@ -266,47 +297,48 @@ wtattach(parent, self, aux)
 	}
 
 	/* what happened? */
-	printf("%s: lost controller\n", self->dv_xname);
+	aprint_error_dev(self, "lost controller\n");
 	return;
 
 ok:
 	sc->flags = TPSTART;		/* tape is rewound */
 	sc->dens = -1;			/* unknown density */
 
-	sc->chan = ia->ia_drq;
+	sc->chan = ia->ia_drq[0].ir_drq;
 
 	if ((maxsize = isa_dmamaxsize(sc->sc_ic, sc->chan)) < MAXPHYS) {
-		printf("%s: max DMA size %lu is less than required %d\n",
-		    sc->sc_dev.dv_xname, (u_long)maxsize, MAXPHYS);
+		aprint_error_dev(&sc->sc_dev, "max DMA size %lu is less than required %d\n",
+		    (u_long)maxsize, MAXPHYS);
+		return;
+	}
+
+	if (isa_drq_alloc(sc->sc_ic, sc->chan) != 0) {
+		aprint_error_dev(&sc->sc_dev, "can't reserve drq %d\n",
+		    sc->chan);
 		return;
 	}
 
 	if (isa_dmamap_create(sc->sc_ic, sc->chan, MAXPHYS,
 	    BUS_DMA_NOWAIT|BUS_DMA_ALLOCNOW)) {
-		printf("%s: can't set up ISA DMA map\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "can't set up ISA DMA map\n");
 		return;
 	}
 
-	sc->sc_ih = isa_intr_establish(ia->ia_ic, ia->ia_irq, IST_EDGE,
-	    IPL_BIO, wtintr, sc);
+	sc->sc_ih = isa_intr_establish(ia->ia_ic, ia->ia_irq[0].ir_irq,
+	    IST_EDGE, IPL_BIO, wtintr, sc);
 }
 
-int
-wtdump(dev, blkno, va, size)
-	dev_t dev;
-	daddr_t blkno;
-	caddr_t va;
-	size_t size;
+static int
+wtdump(dev_t dev, daddr_t blkno, void *va,
+    size_t size)
 {
 
 	/* Not implemented. */
 	return ENXIO;
 }
 
-int
-wtsize(dev)
-	dev_t dev;
+static int
+wtsize(dev_t dev)
 {
 
 	/* Not implemented. */
@@ -316,22 +348,16 @@ wtsize(dev)
 /*
  * Open routine, called on every device open.
  */
-int
-wtopen(dev, flag, mode, p)
-	dev_t dev;
-	int flag;
-	int mode;
-	struct proc *p;
+static int
+wtopen(dev_t dev, int flag, int mode, struct lwp *l)
 {
 	int unit = minor(dev) & T_UNIT;
 	struct wt_softc *sc;
 	int error;
 
-	if (unit >= wt_cd.cd_ndevs)
-		return ENXIO;
-	sc = wt_cd.cd_devs[unit];
-	if (!sc)
-		return ENXIO;
+	sc = device_lookup_private(&wt_cd, unit);
+	if (sc == NULL)
+		return (ENXIO);
 
 	/* Check that device is not in use */
 	if (sc->flags & TPINUSE)
@@ -382,8 +408,7 @@ wtopen(dev, flag, mode, p)
 
 				/* Check the status of the controller. */
 				if (sc->error & TP_ILL) {
-					printf("%s: invalid tape density\n",
-					    sc->sc_dev.dv_xname);
+					aprint_error_dev(&sc->sc_dev, "invalid tape density\n");
 					return ENODEV;
 				}
 			}
@@ -407,15 +432,13 @@ wtopen(dev, flag, mode, p)
 /*
  * Close routine, called on last device close.
  */
-int
-wtclose(dev, flags, mode, p)
-	dev_t dev;
-	int flags;
-	int mode;
-	struct proc *p;
+static int
+wtclose(dev_t dev, int flags, int mode,
+    struct lwp *l)
 {
-	int unit = minor(dev) & T_UNIT;
-	struct wt_softc *sc = wt_cd.cd_devs[unit];
+	struct wt_softc *sc;
+
+	sc = device_lookup_private(&wt_cd, minor(dev) & T_UNIT);
 
 	/* If rewind is pending, do nothing */
 	if (sc->flags & TPREW)
@@ -461,17 +484,14 @@ done:
  * ioctl(int fd, MTIOCTOP, struct mtop *buf)	-- do BSD-like op
  * ioctl(int fd, WTQICMD, int qicop)		-- do QIC op
  */
-int
-wtioctl(dev, cmd, addr, flag, p)
-	dev_t dev;
-	u_long cmd;
-	caddr_t addr;
-	int flag;
-	struct proc *p;
+static int
+wtioctl(dev_t dev, unsigned long cmd, void *addr, int flag,
+    struct lwp *l)
 {
-	int unit = minor(dev) & T_UNIT;
-	struct wt_softc *sc = wt_cd.cd_devs[unit];
+	struct wt_softc *sc;
 	int error, count, op;
+
+	sc = device_lookup_private(&wt_cd, minor(dev) & T_UNIT);
 
 	switch (cmd) {
 	default:
@@ -565,13 +585,13 @@ wtioctl(dev, cmd, addr, flag, p)
 /*
  * Strategy routine.
  */
-void
-wtstrategy(bp)
-	struct buf *bp;
+static void
+wtstrategy(struct buf *bp)
 {
-	int unit = minor(bp->b_dev) & T_UNIT;
-	struct wt_softc *sc = wt_cd.cd_devs[unit];
+	struct wt_softc *sc;
 	int s;
+
+	sc = device_lookup_private(&wt_cd, minor(bp->b_dev) & T_UNIT);
 
 	bp->b_resid = bp->b_bcount;
 
@@ -632,7 +652,6 @@ wtstrategy(bp)
 
 	if (sc->flags & TPEXCEP) {
 errxit:
-		bp->b_flags |= B_ERROR;
 		bp->b_error = EIO;
 	}
 xit:
@@ -640,21 +659,15 @@ xit:
 	return;
 }
 
-int
-wtread(dev, uio, flags)
-	dev_t dev;
-	struct uio *uio;
-	int flags;
+static int
+wtread(dev_t dev, struct uio *uio, int flags)
 {
 
 	return (physio(wtstrategy, NULL, dev, B_READ, minphys, uio));
 }
 
-int
-wtwrite(dev, uio, flags)
-	dev_t dev;
-	struct uio *uio;
-	int flags;
+static int
+wtwrite(dev_t dev, struct uio *uio, int flags)
 {
 
 	return (physio(wtstrategy, NULL, dev, B_WRITE, minphys, uio));
@@ -663,9 +676,8 @@ wtwrite(dev, uio, flags)
 /*
  * Interrupt routine.
  */
-int
-wtintr(arg)
-	void *arg;
+static int
+wtintr(void *arg)
 {
 	struct wt_softc *sc = arg;
 	u_char x;
@@ -688,7 +700,7 @@ wtintr(arg)
 			   "rewind busy?\n" : "rewind finished\n"));
 		sc->flags &= ~TPREW;		/* rewind finished */
 		wtsense(sc, 1, TP_WRP);
-		wakeup((caddr_t)sc);
+		wakeup((void *)sc);
 		return 1;
 	}
 
@@ -702,7 +714,7 @@ wtintr(arg)
 		if ((x & sc->regs.NOEXCEP) == 0)	/* operation failed */
 			wtsense(sc, 1, (sc->flags & TPRMARK) ? TP_WRP : 0);
 		sc->flags &= ~(TPRMARK | TPWMARK); /* operation finished */
-		wakeup((caddr_t)sc);
+		wakeup((void *)sc);
 		return 1;
 	}
 
@@ -717,14 +729,14 @@ wtintr(arg)
 	sc->dmacount += sc->bsize;		/* increment counter */
 
 	/*
-	 * Clean up dma.
+	 * Clean up DMA.
 	 */
 	if ((sc->dmaflags & DMAMODE_READ) &&
 	    (sc->dmatotal - sc->dmacount) < sc->bsize) {
 		/* If reading short block, copy the internal buffer
 		 * to the user memory. */
 		isa_dmadone(sc->sc_ic, sc->chan);
-		bcopy(sc->buf, sc->dmavaddr, sc->dmatotal - sc->dmacount);
+		memcpy(sc->dmavaddr, sc->buf, sc->dmatotal - sc->dmacount);
 	} else
 		isa_dmadone(sc->sc_ic, sc->chan);
 
@@ -738,7 +750,7 @@ wtintr(arg)
 			sc->flags |= TPVOL;	/* end of file */
 		else
 			sc->flags |= TPEXCEP;	/* i/o error */
-		wakeup((caddr_t)sc);
+		wakeup((void *)sc);
 		return 1;
 	}
 
@@ -752,15 +764,14 @@ wtintr(arg)
 	if (sc->dmacount > sc->dmatotal)	/* short last block */
 		sc->dmacount = sc->dmatotal;
 	/* Wake up user level. */
-	wakeup((caddr_t)sc);
+	wakeup((void *)sc);
 	WTDBPRINT(("i/o finished, %d\n", sc->dmacount));
 	return 1;
 }
 
 /* start the rewind operation */
-void
-wtrewind(sc)
-	struct wt_softc *sc;
+static void
+wtrewind(struct wt_softc *sc)
 {
 	int rwmode = sc->flags & (TPRO | TPWO);
 
@@ -782,9 +793,8 @@ wtrewind(sc)
 /*
  * Start the `read marker' operation.
  */
-int
-wtreadfm(sc)
-	struct wt_softc *sc;
+static int
+wtreadfm(struct wt_softc *sc)
 {
 
 	sc->flags &= ~(TPRO | TPWO | TPVOL);
@@ -801,12 +811,11 @@ wtreadfm(sc)
 /*
  * Write marker to the tape.
  */
-int
-wtwritefm(sc)
-	struct wt_softc *sc;
+static int
+wtwritefm(struct wt_softc *sc)
 {
 
-	tsleep((caddr_t)wtwritefm, WTPRI, "wtwfm", hz);
+	tsleep((void *)wtwritefm, WTPRI, "wtwfm", hz);
 	sc->flags &= ~(TPRO | TPWO);
 	if (!wtcmd(sc, QIC_WRITEFM)) {
 		wtsense(sc, 1, 0);
@@ -820,10 +829,8 @@ wtwritefm(sc)
 /*
  * While controller status & mask == bits continue waiting.
  */
-u_char
-wtsoft(sc, mask, bits)
-	struct wt_softc *sc;
-	int mask, bits;
+static u_char
+wtsoft(struct wt_softc *sc, int mask, int bits)
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -848,17 +855,15 @@ wtsoft(sc, mask, bits)
 		x = bus_space_read_1(iot, ioh, sc->regs.STATPORT);
 		if ((x & mask) != bits)
 			return x;
-		tsleep((caddr_t)wtsoft, WTPRI, "wtsoft", 1);
+		tsleep((void *)wtsoft, WTPRI, "wtsoft", 1);
 	}
 }
 
 /*
  * Execute QIC command.
  */
-int
-wtcmd(sc, cmd)
-	struct wt_softc *sc;
-	int cmd;
+static int
+wtcmd(struct wt_softc *sc, int cmd)
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -873,7 +878,7 @@ wtcmd(sc, cmd)
 		splx(s);
 		return 0;
 	}
-	
+
 	/* output the command */
 	bus_space_write_1(iot, ioh, sc->regs.CMDPORT, cmd);
 
@@ -895,25 +900,21 @@ wtcmd(sc, cmd)
 }
 
 /* wait for the end of i/o, seeking marker or rewind operation */
-int
-wtwait(sc, catch, msg)
-	struct wt_softc *sc;
-	int catch;
-	char *msg;
+static int
+wtwait(struct wt_softc *sc, int catch, const char *msg)
 {
 	int error;
 
 	WTDBPRINT(("wtwait() `%s'\n", msg));
 	while (sc->flags & (TPACTIVE | TPREW | TPRMARK | TPWMARK))
-		if ((error = tsleep((caddr_t)sc, WTPRI | catch, msg, 0)) != 0)
+		if ((error = tsleep((void *)sc, WTPRI | catch, msg, 0)) != 0)
 			return error;
 	return 0;
 }
 
-/* initialize dma for the i/o operation */
-void
-wtdma(sc)
-	struct wt_softc *sc;
+/* initialize DMA for the i/o operation */
+static void
+wtdma(struct wt_softc *sc)
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -937,12 +938,8 @@ wtdma(sc)
 }
 
 /* start i/o operation */
-int
-wtstart(sc, flag, vaddr, len)
-	struct wt_softc *sc;
-	int flag;
-	void *vaddr;
-	size_t len;
+static int
+wtstart(struct wt_softc *sc, int flag, void *vaddr, size_t len)
 {
 	u_char x;
 
@@ -965,16 +962,15 @@ wtstart(sc, flag, vaddr, len)
 /*
  * Start timer.
  */
-void
-wtclock(sc)
-	struct wt_softc *sc;
+static void
+wtclock(struct wt_softc *sc)
 {
 
 	if (sc->flags & TPTIMER)
 		return;
 	sc->flags |= TPTIMER;
 	/*
-	 * Some controllers seem to lose dma interrupts too often.  To make the
+	 * Some controllers seem to lose DMA interrupts too often.  To make the
 	 * tape stream we need 1 tick timeout.
 	 */
 	callout_reset(&sc->sc_timer_ch, (sc->flags & TPACTIVE) ? 1 : hz,
@@ -986,9 +982,8 @@ wtclock(sc)
  * This is necessary in case interrupts get eaten due to
  * multiple devices on a single IRQ line.
  */
-void
-wttimer(arg)
-	void *arg;
+static void
+wttimer(void *arg)
 {
 	register struct wt_softc *sc = (struct wt_softc *)arg;
 	int s;
@@ -1016,11 +1011,8 @@ wttimer(arg)
 /*
  * Perform QIC-02 and QIC-36 compatible reset sequence.
  */
-int
-wtreset(iot, ioh, regs)
-	bus_space_tag_t iot;
-	bus_space_handle_t ioh;
-	struct wtregs *regs;
+static int
+wtreset(bus_space_tag_t iot, bus_space_handle_t ioh, struct wtregs *regs)
 {
 	u_char x;
 	int i;
@@ -1051,12 +1043,10 @@ wtreset(iot, ioh, regs)
  * Get controller status information.  Return 0 if user i/o request should
  * receive an i/o error code.
  */
-int
-wtsense(sc, verbose, ignore)
-	struct wt_softc *sc;
-	int verbose, ignore;
+static int
+wtsense(struct wt_softc *sc, int verbose, int ignore)
 {
-	char *msg = 0;
+	const char *msg = 0;
 	int error;
 
 	WTDBPRINT(("wtsense() ignore=0x%x\n", ignore));
@@ -1096,16 +1086,15 @@ wtsense(sc, verbose, ignore)
 	else if (error & TP_ILL)
 		msg = "Illegal command";
 	if (msg)
-		printf("%s: %s\n", sc->sc_dev.dv_xname, msg);
+		printf("%s: %s\n", device_xname(&sc->sc_dev), msg);
 	return 0;
 }
 
 /*
  * Get controller status information.
  */
-int
-wtstatus(sc)
-	struct wt_softc *sc;
+static int
+wtstatus(struct wt_softc *sc)
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -1132,7 +1121,7 @@ wtstatus(sc)
 
 	p = (char *)&sc->error;
 	while (p < (char *)&sc->error + 6) {
-		u_char x = wtsoft(sc, sc->regs.BUSY | sc->regs.NOEXCEP, 
+		u_char x = wtsoft(sc, sc->regs.BUSY | sc->regs.NOEXCEP,
 		    sc->regs.BUSY | sc->regs.NOEXCEP);
 
 		if ((x & sc->regs.NOEXCEP) == 0) {	/* error */

@@ -1,4 +1,4 @@
-.\"	$NetBSD: lpt.4,v 1.1 1999/11/28 17:39:46 scw Exp $
+.\" $NetBSD: lpt.4,v 1.6 2003/07/26 20:17:35 salo Exp $
 .\"
 .\" Copyright (c) 1993 Christopher G. Demetriou
 .\" All rights reserved.
@@ -13,9 +13,11 @@
 .\"    documentation and/or other materials provided with the distribution.
 .\" 3. All advertising materials mentioning features or use of this software
 .\"    must display the following acknowledgement:
-.\"      This product includes software developed by Christopher G. Demetriou.
+.\"          This product includes software developed for the
+.\"          NetBSD Project.  See http://www.NetBSD.org/ for
+.\"          information about NetBSD.
 .\" 4. The name of the author may not be used to endorse or promote products
-.\"    derived from this software without specific prior written permission
+.\"    derived from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
 .\" IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -28,13 +30,14 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
+.\" <<Id: LICENSE,v 1.2 2000/06/14 15:57:33 cgd Exp>>
+.\"
 .Dd November 28, 1999
 .Dt LPT 4 mvme68k
 .Os
 .Sh NAME
 .Nm lpt
-.Nd
-Parallel port driver
+.Nd parallel port driver
 .Sh SYNOPSIS
 .Cd "lpt0 at pcc? ipl 1
 .Cd "lpt0 at pcctwo? ipl 1
@@ -43,7 +46,7 @@ This driver provides access to parallel ports.  The bits in the minor
 number select various features of the driver.
 .Pp
 .Bl -column "Minor Bit" "Functionxxxxxxxxxxxxxxxxxxxxxxxxxxxx" -offset indent
-.It Sy Pa "Minor Bit"	Function
+.It Sy "Minor Bit"	Function
 .It 128	Use the interruptless driver. (polling)
 .It  64	Do not initialize the device on the port.
 .It  32	Automatic LF on CR.

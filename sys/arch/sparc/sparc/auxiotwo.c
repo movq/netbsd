@@ -1,4 +1,4 @@
-/*	$NetBSD: auxiotwo.c,v 1.2 2000/03/14 21:18:27 jdc Exp $	*/
+/*	$NetBSD: auxiotwo.c,v 1.9 2008/04/28 20:23:36 martin Exp $	*/
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,6 +34,9 @@
  * at Lawrence Berkeley Laboratory.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: auxiotwo.c,v 1.9 2008/04/28 20:23:36 martin Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
@@ -55,23 +51,17 @@
 static int serial_refcount;
 static int serial_power;
 
-static int auxiotwomatch __P((struct device *, struct cfdata *, void *));
+static int auxiotwomatch(struct device *, struct cfdata *, void *);
+static void auxiotwoattach(struct device *, struct device *, void *);
 
-static void auxiotwoattach
-		__P((struct device *, struct device *, void *));
-
-struct cfattach auxiotwo_obio_ca = {
-	sizeof(struct device), auxiotwomatch, auxiotwoattach
-};
+CFATTACH_DECL(auxiotwo_obio, sizeof(struct device),
+     auxiotwomatch, auxiotwoattach, NULL, NULL);
 
 /*
  * The OPENPROM calls this "auxio2".
  */
 static int
-auxiotwomatch(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+auxiotwomatch(struct device *parent, struct cfdata *cf, void *aux)
 {
 	union obio_attach_args *uoba = aux;
 
@@ -82,9 +72,7 @@ auxiotwomatch(parent, cf, aux)
 }
 
 static void
-auxiotwoattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+auxiotwoattach(struct device *parent, struct device *self, void *aux)
 {
 	union obio_attach_args *uoba = aux;
 	struct sbus_attach_args *sa = &uoba->uoba_sbus;
@@ -93,8 +81,7 @@ auxiotwoattach(parent, self, aux)
 	if (sbus_bus_map(sa->sa_bustag,
 			 sa->sa_slot, sa->sa_offset,
 			 sizeof(long),
-			 BUS_SPACE_MAP_LINEAR,
-			 0, &bh) != 0) {
+			 BUS_SPACE_MAP_LINEAR, &bh) != 0) {
 		printf("auxiotwoattach: can't map register\n");
 		return;
 	}
@@ -107,8 +94,7 @@ auxiotwoattach(parent, self, aux)
 }
 
 unsigned int
-auxiotwobisc(bis, bic)
-	int bis, bic;
+auxiotwobisc(int bis, int bic)
 {
 	register int s;
 
@@ -130,8 +116,7 @@ auxiotwobisc(bis, bic)
  * Serial port state - called from zs_enable()/zs_disable()
  */
 void
-auxiotwoserialendis (state)
-	int state;
+auxiotwoserialendis(int state)
 {
 	switch (state) {
 
@@ -154,8 +139,7 @@ auxiotwoserialendis (state)
  * Set power management - called by tctrl
  */
 void
-auxiotwoserialsetapm (state)
-	int state;
+auxiotwoserialsetapm(int state)
 {
 	switch (state) {
 
@@ -190,7 +174,8 @@ auxiotwoserialsetapm (state)
  * Get power management - called by tctrl
  */
 int
-auxiotwoserialgetapm ()
+auxiotwoserialgetapm (void)
 {
+
 	return (serial_power);
 }

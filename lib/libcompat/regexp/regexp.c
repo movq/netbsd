@@ -34,9 +34,9 @@
  */
 
 #include <sys/cdefs.h>
-#ifndef lint
-__RCSID("$NetBSD: regexp.c,v 1.12 1999/09/16 09:57:06 lukem Exp $");
-#endif /* not lint */
+#if defined(LIBC_SCCS) && !defined(lint)
+__RCSID("$NetBSD: regexp.c,v 1.18 2007/02/16 16:34:19 freza Exp $");
+#endif /* LIBC_SCCS and not lint */
 
 #include <ctype.h>
 #include <regexp.h>
@@ -206,8 +206,8 @@ STATIC int strcspn __P((char *, char *));
  * of the structure of the compiled regexp.
  */
 regexp *
-__compat_regcomp(exp)
-const char *exp;
+__compat_regcomp(expn)
+const char *expn;
 {
 	regexp *r;
 	char *scan;
@@ -215,15 +215,15 @@ const char *exp;
 	int len;
 	int flags;
 
-	if (exp == NULL)
+	if (expn == NULL)
 		FAIL("NULL argument");
 
 	/* First pass: determine size, legality. */
 #ifdef notdef
-	if (exp[0] == '.' && exp[1] == '*') exp += 2;  /* aid grep */
+	if (expn[0] == '.' && expn[1] == '*') expn += 2;  /* aid grep */
 #endif
 	/* LINTED const castaway */
-	regparse = (char *)exp;
+	regparse = (char *)expn;
 	regnpar = 1;
 	regsize = 0L;
 	regcode = &regdummy;
@@ -242,7 +242,7 @@ const char *exp;
 
 	/* Second pass: emit code. */
 	/* LINTED const castaway */
-	regparse = (char *)exp;
+	regparse = (char *)expn;
 	regnpar = 1;
 	regcode = r->program;
 	regc(MAGIC);
@@ -276,7 +276,7 @@ const char *exp;
 			longest = NULL;
 			len = 0;
 			for (; scan != NULL; scan = regnext(scan))
-				if (OP(scan) == EXACTLY && strlen(OPERAND(scan)) >= len) {
+				if (OP(scan) == EXACTLY && (int) strlen(OPERAND(scan)) >= len) {
 					longest = OPERAND(scan);
 					len = strlen(OPERAND(scan));
 				}
@@ -924,16 +924,17 @@ char *prog;
 			break;
 		case WORDA:
 			/* Must be looking at a letter, digit, or _ */
-			if ((!isalnum(*reginput)) && *reginput != '_')
+			if ((!isalnum(UCHARAT(reginput))) && *reginput != '_')
 				return(0);
 			/* Prev must be BOL or nonword */
 			if (reginput > regbol &&
-			    (isalnum(reginput[-1]) || reginput[-1] == '_'))
+			    (isalnum(UCHARAT(reginput - 1))
+			     || reginput[-1] == '_'))
 				return(0);
 			break;
 		case WORDZ:
 			/* Must be looking at non letter, digit, or _ */
-			if (isalnum(*reginput) || *reginput == '_')
+			if (isalnum(UCHARAT(reginput)) || *reginput == '_')
 				return(0);
 			/* We don't care what the previous char was */
 			break;
@@ -1169,18 +1170,17 @@ regexp *r;
 	char *s;
 	char op = EXACTLY;	/* Arbitrary non-END op. */
 	char *next;
-	extern char *strchr();
 
 
 	s = r->program + 1;
 	while (op != END) {	/* While that wasn't END last time... */
 		op = OP(s);
-		printf("%2d%s", s-r->program, regprop(s));	/* Where, what. */
+		printf("%2td%s", s-r->program, regprop(s));	/* Where, what. */
 		next = regnext(s);
 		if (next == NULL)		/* Next ptr. */
 			printf("(0)");
 		else
-			printf("(%d)", (s-r->program)+(next-s));
+			printf("(%td)", (s-r->program)+(next-s));
 		s += 3;
 		if (op == ANYOF || op == ANYBUT || op == EXACTLY) {
 			/* Literal string, where present. */
@@ -1285,6 +1285,7 @@ char *op;
 		p = "WORDZ";
 		break;
 	default:
+		p = NULL;
 		regerror("corrupted opcode");
 		break;
 	}

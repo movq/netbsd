@@ -1,4 +1,4 @@
-/*	$NetBSD: zopen.c,v 1.6 1997/09/15 10:58:39 lukem Exp $	*/
+/*	$NetBSD: zopen.c,v 1.12 2008/02/21 02:50:11 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1985, 1986, 1992, 1993
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)zopen.c	8.1 (Berkeley) 6/27/93";
 #else
-static char rcsid[] = "$NetBSD: zopen.c,v 1.6 1997/09/15 10:58:39 lukem Exp $";
+static char rcsid[] = "$NetBSD: zopen.c,v 1.12 2008/02/21 02:50:11 joerg Exp $";
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -70,7 +66,6 @@ static char rcsid[] = "$NetBSD: zopen.c,v 1.6 1997/09/15 10:58:39 lukem Exp $";
 #include <sys/param.h>
 #include <sys/stat.h>
 
-#include <ctype.h>
 #include <errno.h>
 #include <signal.h>
 #include <stdio.h>
@@ -203,14 +198,13 @@ struct s_zstate {
 #define	FIRST	257		/* First free entry. */
 #define	CLEAR	256		/* Table clear output code. */
 
-static int	cl_block __P((struct s_zstate *));
-static void	cl_hash __P((struct s_zstate *, count_int));
-static code_int	getcode __P((struct s_zstate *));
-static int	output __P((struct s_zstate *, code_int));
-static int	zclose __P((void *));
-FILE	       *zopen __P((const char *, const char *, int));
-static int	zread __P((void *, char *, int));
-static int	zwrite __P((void *, const char *, int));
+static int	cl_block(struct s_zstate *);
+static code_int	getcode(struct s_zstate *);
+static int	output(struct s_zstate *, code_int);
+static int	zclose(void *);
+FILE	       *zopen(const char *, const char *, int);
+static int	zread(void *, char *, int);
+static int	zwrite(void *, const char *, int);
 
 /*-
  * Algorithm from "A Technique for High Performance Data Compression",
@@ -239,10 +233,7 @@ static int	zwrite __P((void *, const char *, int));
  * questions about this implementation to ames!jaw.
  */
 static int
-zwrite(cookie, wbp, num)
-	void *cookie;
-	const char *wbp;
-	int num;
+zwrite(void *cookie, const char *wbp, int num)
 {
 	code_int i;
 	int c, disp;
@@ -288,9 +279,9 @@ zwrite(cookie, wbp, num)
 	hshift = 8 - hshift;	/* Set hash code range bound. */
 
 	hsize_reg = hsize;
-	cl_hash(zs, (count_int)hsize_reg);	/* Clear hash table. */
+	memset(htab, 0xff, hsize_reg * sizeof(count_int));
 
-middle:	for (i = 0; count--;) {
+middle:	while (count--) {
 		c = *bp++;
 		in_count++;
 		fcode = (long)(((long)c << maxbits) + ent);
@@ -330,8 +321,7 @@ nomatch:	if (output(zs, (code_int) ent) == -1)
 }
 
 static int
-zclose(cookie)
-	void *cookie;
+zclose(void *cookie)
 {
 	struct s_zstate *zs;
 	int rval;
@@ -376,9 +366,7 @@ static char_type rmask[9] =
 	{0x00, 0x01, 0x03, 0x07, 0x0f, 0x1f, 0x3f, 0x7f, 0xff};
 
 static int
-output(zs, ocode)
-	struct s_zstate *zs;
-	code_int ocode;
+output(struct s_zstate *zs, code_int ocode)
 {
 	int bits, r_off;
 	char_type *bp;
@@ -465,10 +453,7 @@ output(zs, ocode)
  * compress() routine.  See the definitions above.
  */
 static int
-zread(cookie, rbp, num)
-	void *cookie;
-	char *rbp;
-	int num;
+zread(void *cookie, char *rbp, int num)
 {
 	u_int count;
 	struct s_zstate *zs;
@@ -576,8 +561,7 @@ eof:	return (num - count);
  * 	code or -1 is returned.
  */
 static code_int
-getcode(zs)
-	struct s_zstate *zs;
+getcode(struct s_zstate *zs)
 {
 	code_int gcode;
 	int r_off, bits;
@@ -635,8 +619,7 @@ getcode(zs)
 }
 
 static int
-cl_block(zs)			/* Table clear for block compress. */
-	struct s_zstate *zs;
+cl_block(struct s_zstate *zs)		/* Table clear for block compress. */
 {
 	long rat;
 
@@ -654,7 +637,7 @@ cl_block(zs)			/* Table clear for block compress. */
 		ratio = rat;
 	else {
 		ratio = 0;
-		cl_hash(zs, (count_int) hsize);
+		memset(htab, 0xff, hsize * sizeof(count_int));
 		free_ent = FIRST;
 		clear_flg = 1;
 		if (output(zs, (code_int) CLEAR) == -1)
@@ -663,44 +646,8 @@ cl_block(zs)			/* Table clear for block compress. */
 	return (0);
 }
 
-static void
-cl_hash(zs, cl_hsize)			/* Reset code table. */
-	struct s_zstate *zs;
-	count_int cl_hsize;
-{
-	count_int *htab_p;
-	long i, m1;
-
-	m1 = -1;
-	htab_p = htab + cl_hsize;
-	i = cl_hsize - 16;
-	do {			/* Might use Sys V memset(3) here. */
-		*(htab_p - 16) = m1;
-		*(htab_p - 15) = m1;
-		*(htab_p - 14) = m1;
-		*(htab_p - 13) = m1;
-		*(htab_p - 12) = m1;
-		*(htab_p - 11) = m1;
-		*(htab_p - 10) = m1;
-		*(htab_p - 9) = m1;
-		*(htab_p - 8) = m1;
-		*(htab_p - 7) = m1;
-		*(htab_p - 6) = m1;
-		*(htab_p - 5) = m1;
-		*(htab_p - 4) = m1;
-		*(htab_p - 3) = m1;
-		*(htab_p - 2) = m1;
-		*(htab_p - 1) = m1;
-		htab_p -= 16;
-	} while ((i -= 16) >= 0);
-	for (i += 16; i > 0; i--)
-		*--htab_p = m1;
-}
-
 FILE *
-zopen(fname, mode, bits)
-	const char *fname, *mode;
-	int bits;
+zopen(const char *fname, const char *mode, int bits)
 {
 	struct s_zstate *zs;
 

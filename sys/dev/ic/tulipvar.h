@@ -1,4 +1,4 @@
-/*	$NetBSD: tulipvar.h,v 1.32 2000/03/23 07:01:33 thorpej Exp $	*/
+/*	$NetBSD: tulipvar.h,v 1.61 2008/04/28 20:23:51 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,8 +33,14 @@
 #ifndef _DEV_IC_TULIPVAR_H_
 #define	_DEV_IC_TULIPVAR_H_
 
+#include "rnd.h"
+
 #include <sys/queue.h>
 #include <sys/callout.h>
+
+#if NRND > 0
+#include <sys/rnd.h>
+#endif
 
 /*
  * Misc. definitions for the Digital Semiconductor ``Tulip'' (21x4x)
@@ -137,13 +136,18 @@ typedef enum {
 	TULIP_CHIP_MX98713A  = 12,	/* Macronix 98713A PMAC */
 	TULIP_CHIP_MX98715   = 13,	/* Macronix 98715 PMAC */
 	TULIP_CHIP_MX98715A  = 14,	/* Macronix 98715A PMAC */
-	TULIP_CHIP_MX98725   = 15,	/* Macronix 98725 PMAC */
-	TULIP_CHIP_WB89C840F = 16,	/* Winbond 89C840F */
-	TULIP_CHIP_DM9102    = 17,	/* Davicom DM9102 */
-	TULIP_CHIP_AL981     = 18,	/* ADMtek AL981 */
-	TULIP_CHIP_AX88140   = 19,	/* ASIX AX88140 */
-	TULIP_CHIP_AX88141   = 20,	/* ASIX AX88141 */
-	TULIP_CHIP_X3201_3   = 21,	/* Xircom X3201-3 */
+	TULIP_CHIP_MX98715AEC_X = 15,	/* Macronix 98715AEC-C, -E PMAC */
+	TULIP_CHIP_MX98725   = 16,	/* Macronix 98725 PMAC */
+	TULIP_CHIP_WB89C840F = 17,	/* Winbond 89C840F */
+	TULIP_CHIP_DM9102    = 18,	/* Davicom DM9102 */
+	TULIP_CHIP_DM9102A   = 19,	/* Davicom DM9102A */
+	TULIP_CHIP_AL981     = 20,	/* ADMtek AL981 */
+	TULIP_CHIP_AN983     = 21,	/* ADMtek AN983 */
+	TULIP_CHIP_AN985     = 22,	/* ADMtek AN985 */
+	TULIP_CHIP_AX88140   = 23,	/* ASIX AX88140 */
+	TULIP_CHIP_AX88141   = 24,	/* ASIX AX88141 */
+	TULIP_CHIP_X3201_3   = 25,	/* Xircom X3201-3 */
+	TULIP_CHIP_RS7112    = 26	/* Conexant RS7112 LANfinity */
 } tulip_chip_t;
 
 #define	TULIP_CHIP_NAMES						\
@@ -163,13 +167,18 @@ typedef enum {
 	"Macronix MX98713A",						\
 	"Macronix MX98715",						\
 	"Macronix MX98715A",						\
+	"Macronix MX98715AEC-x",					\
 	"Macronix MX98725",						\
 	"Winbond 89C840F",						\
 	"Davicom DM9102",						\
+	"Davicom DM9102A",						\
 	"ADMtek AL981",							\
+	"ADMtek AN983",							\
+	"ADMtek AN985",							\
 	"ASIX AX88140",							\
 	"ASIX AX88141",							\
 	"Xircom X3201-3",						\
+	"Conexant RS7112",						\
 }
 
 struct tulip_softc;
@@ -178,18 +187,73 @@ struct tulip_softc;
  * Media init, change, status function pointers.
  */
 struct tulip_mediasw {
-	void	(*tmsw_init) __P((struct tulip_softc *));
-	void	(*tmsw_get) __P((struct tulip_softc *, struct ifmediareq *));
-	int	(*tmsw_set) __P((struct tulip_softc *));
+	void	(*tmsw_init)(struct tulip_softc *);
+	void	(*tmsw_get)(struct tulip_softc *, struct ifmediareq *);
+	int	(*tmsw_set)(struct tulip_softc *);
 };
 
 /*
- * Table which describes the transmit threshold mode.
+ * Table which describes the transmit threshold mode.  We generally
+ * start at index 0.  Whenever we get a transmit underrun, we increment
+ * our index, falling back if we encounter the NULL terminator.
  */
 struct tulip_txthresh_tab {
 	u_int32_t txth_opmode;		/* OPMODE bits */
 	const char *txth_name;		/* name of mode */
 };
+
+#define	TLP_TXTHRESH_TAB_10 {						\
+	{ OPMODE_TR_72,		"72 bytes" },				\
+	{ OPMODE_TR_96,		"96 bytes" },				\
+	{ OPMODE_TR_128,	"128 bytes" },				\
+	{ OPMODE_TR_160,	"160 bytes" },				\
+	{ 0,			NULL },					\
+}
+
+#define	TLP_TXTHRESH_TAB_10_100 {					\
+	{ OPMODE_TR_72,		"72/128 bytes" },			\
+	{ OPMODE_TR_96,		"96/256 bytes" },			\
+	{ OPMODE_TR_128,	"128/512 bytes" },			\
+	{ OPMODE_TR_160,	"160/1024 bytes" },			\
+	{ OPMODE_SF,		"store and forward mode" },		\
+	{ 0,			NULL },					\
+}
+
+#define	TXTH_72			0
+#define	TXTH_96			1
+#define	TXTH_128		2
+#define	TXTH_160		3
+#define	TXTH_SF			4
+
+#define	TLP_TXTHRESH_TAB_DM9102 {					\
+	{ OPMODE_TR_72,		"72/128 bytes" },			\
+	{ OPMODE_TR_96,		"96/256 bytes" },			\
+	{ OPMODE_TR_128,	"128/512 bytes" },			\
+	{ OPMODE_SF,		"store and forward mode" },		\
+	{ 0,			NULL },					\
+}
+
+#define	TXTH_DM9102_72		0
+#define	TXTH_DM9102_96		1
+#define	TXTH_DM9102_128		2
+#define	TXTH_DM9102_SF		3
+
+/*
+ * The Winbond 89C840F does transmit threshold control totally
+ * differently.  It simply has a 7-bit field which indicates
+ * the threshold:
+ *
+ *	txth = ((OPMODE & OPMODE_WINB_TTH) >> OPMODE_WINB_TTH_SHIFT) * 16;
+ *
+ * However, we just do Store-and-Forward mode on these chips, since
+ * the DMA engines seem to be flaky.
+ */
+#define	TLP_TXTHRESH_TAB_WINB {						\
+	{ 0,			"store and forward mode" },		\
+	{ 0,			NULL },					\
+}
+
+#define	TXTH_WINB_SF		0
 
 /*
  * Settings for Tulip SIA media.
@@ -207,9 +271,8 @@ struct tulip_21x4x_media {
 	int		tm_type;	/* type of media; see tulipreg.h */
 	const char	*tm_name;	/* name of media */
 
-	void		(*tm_get) __P((struct tulip_softc *,
-			    struct ifmediareq *));
-	int		(*tm_set) __P((struct tulip_softc *));
+	void		(*tm_get)(struct tulip_softc *, struct ifmediareq *);
+	int		(*tm_set)(struct tulip_softc *);
 
 	int		tm_phyno;	/* PHY # on MII */
 
@@ -241,6 +304,7 @@ struct tulip_srom_to_ifmedia {
 	const char	*tsti_name;	/* media name */
 
 	u_int32_t	tsti_opmode;	/* OPMODE bits for this media */
+	u_int32_t	tsti_sia_cap;	/* "MII" capabilities for this media */
 
 	/*
 	 * Settings for 21040, 21041, and 21142/21143 SIA, in the event
@@ -257,10 +321,11 @@ struct tulip_srom_to_ifmedia {
 struct tulip_stats {
 	u_long		ts_tx_uf;	/* transmit underflow errors */
 	u_long		ts_tx_to;	/* transmit jabber timeouts */
-	u_long		ts_tx_ec;	/* excessve collision count */
+	u_long		ts_tx_ec;	/* excessive collision count */
 	u_long		ts_tx_lc;	/* late collision count */
 };
 
+#ifndef _STANDALONE
 /*
  * Software state per device.
  */
@@ -270,8 +335,6 @@ struct tulip_softc {
 	bus_space_handle_t sc_sh;	/* bus space handle */
 	bus_dma_tag_t sc_dmat;		/* bus DMA tag */
 	struct ethercom sc_ethercom;	/* ethernet common data */
-	void *sc_sdhook;		/* shutdown hook */
-	void *sc_powerhook;		/* power management hook */
 
 	struct tulip_stats sc_stats;	/* debugging stats */
 
@@ -298,8 +361,9 @@ struct tulip_softc {
 	tulip_chip_t	sc_chip;	/* chip type */
 	int		sc_rev;		/* chip revision */
 	int		sc_flags;	/* misc flags. */
-	char		sc_name[16];	/* board name */
+	char		sc_name[32];	/* board name */
 	u_int32_t	sc_cacheline;	/* cache line size */
+	u_int32_t	sc_maxburst;	/* maximum burst length */
 	int		sc_devno;	/* PCI device # */
 
 	struct mii_data sc_mii;		/* MII/media information */
@@ -310,27 +374,28 @@ struct tulip_softc {
 	u_int8_t	sc_gp_dir;	/* GPIO pin direction bits (21140) */
 	int		sc_media_seen;	/* ISV media block types seen */
 	int		sc_tlp_minst;	/* Tulip internal media instance */
+	u_int32_t	sc_sia_cap;	/* SIA media capabilities (21143) */
 
 	/* Reset function. */
-	void		(*sc_reset) __P((struct tulip_softc *));
+	void		(*sc_reset)(struct tulip_softc *);
 
 	/* Pre-init function. */
-	void		(*sc_preinit) __P((struct tulip_softc *));
+	void		(*sc_preinit)(struct tulip_softc *);
 
 	/* Filter setup function. */
-	void		(*sc_filter_setup) __P((struct tulip_softc *));
+	void		(*sc_filter_setup)(struct tulip_softc *);
 
 	/* Media status update function. */
-	void		(*sc_statchg) __P((struct device *));
+	void		(*sc_statchg)(struct device *);
 
 	/* Media tick function. */
-	void		(*sc_tick) __P((void *));
+	void		(*sc_tick)(void *);
 	struct callout sc_tick_callout;
 
 	/* Power management hooks. */
-	int		(*sc_enable) __P((struct tulip_softc *));
-	void		(*sc_disable) __P((struct tulip_softc *));
-	void		(*sc_power) __P((struct tulip_softc *, int));
+	int		(*sc_enable)(struct tulip_softc *);
+	void		(*sc_disable)(struct tulip_softc *);
+	void		(*sc_power)(struct tulip_softc *, int);
 
 	/*
 	 * The Winbond 89C840F places registers 4 bytes apart, instead
@@ -373,11 +438,20 @@ struct tulip_softc {
 	u_int32_t sc_tdctl_ch;		/* conditional desc chaining */
 	u_int32_t sc_tdctl_er;		/* conditional desc end-of-ring */
 
+	u_int32_t sc_setup_fsls;	/* FS|LS on setup descriptor */
+
 	struct tulip_txsq sc_txfreeq;	/* free Tx descsofts */
 	struct tulip_txsq sc_txdirtyq;	/* dirty Tx descsofts */
 
+	short	sc_if_flags;
+
 	int	sc_rxptr;		/* next ready RX descriptor/descsoft */
+
+#if NRND > 0
+	rndsource_element_t sc_rnd_source; /* random source */
+#endif
 };
+#endif
 
 /* sc_flags */
 #define	TULIPF_WANT_SETUP	0x00000001	/* want filter setup */
@@ -387,20 +461,22 @@ struct tulip_softc {
 #define	TULIPF_MRL		0x00000010	/* memory read line okay */
 #define	TULIPF_MRM		0x00000020	/* memory read multi okay */
 #define	TULIPF_MWI		0x00000040	/* memory write inval okay */
+#define	TULIPF_AUTOPOLL		0x00000080	/* chip supports auto-poll */
 #define	TULIPF_LINK_UP		0x00000100	/* link is up (non-MII) */
 #define	TULIPF_LINK_VALID	0x00000200	/* link state valid */
 #define	TULIPF_DOINGAUTO	0x00000400	/* doing autoneg (non-MII) */
 #define	TULIPF_ATTACHED		0x00000800	/* attach has succeeded */
 #define	TULIPF_ENABLED		0x00001000	/* chip is enabled */
+#define	TULIPF_BLE		0x00002000	/* data is big endian */
+#define	TULIPF_DBO		0x00004000	/* descriptor is big endian */
+#define	TULIPF_VPC		0x00008000	/* Virtual PC Ethernet */
 
 #define	TULIP_IS_ENABLED(sc)	((sc)->sc_flags & TULIPF_ENABLED)
 
 /*
- * This macro returns the current media entry for *non-MII* media.
+ * This macro returns the current media entry.
  */
-#define	TULIP_CURRENT_MEDIA(sc)						\
-	(IFM_SUBTYPE((sc)->sc_mii.mii_media.ifm_cur->ifm_media) != IFM_AUTO ? \
-	 (sc)->sc_mii.mii_media.ifm_cur : (sc)->sc_nway_active)
+#define	TULIP_CURRENT_MEDIA(sc) ((sc)->sc_mii.mii_media.ifm_cur)
 
 /*
  * This macro determines if a change to media-related OPMODE bits requires
@@ -463,8 +539,8 @@ do {									\
 	__rxd->td_bufaddr2 =						\
 	    htole32(TULIP_CDRXADDR((sc), TULIP_NEXTRX((x))));		\
 	__rxd->td_ctl =							\
-	    htole32(((__m->m_ext.ext_size - 1) << TDCTL_SIZE1_SHIFT) |	\
-	    (sc)->sc_tdctl_ch |						\
+	    htole32((((__m->m_ext.ext_size - 1) & ~0x3U)		\
+	    << TDCTL_SIZE1_SHIFT) | (sc)->sc_tdctl_ch |			\
 	    ((x) == (TULIP_NRXDESC - 1) ? sc->sc_tdctl_er : 0));	\
 	__rxd->td_status = htole32(TDSTAT_OWN|TDSTAT_Rx_FS|TDSTAT_Rx_LS); \
 	TULIP_CDRXSYNC((sc), (x), BUS_DMASYNC_PREREAD|BUS_DMASYNC_PREWRITE); \
@@ -491,15 +567,11 @@ do {									\
 #define	TULIP_ISSET(sc, reg, mask)					\
 	(TULIP_READ((sc), (reg)) & (mask))
 
-#if BYTE_ORDER == BIG_ENDIAN
-#define	TULIP_SP_FIELD_C(x)	((x) << 16)
-#else
-#define	TULIP_SP_FIELD_C(x)	(x)
-#endif
-#define	TULIP_SP_FIELD(x, f)	TULIP_SP_FIELD_C(((u_int16_t *)(x))[(f)])
+#define	TULIP_SP_FIELD_C(a, b)	((b) << 8 | (a))
+#define	TULIP_SP_FIELD(x, f)	TULIP_SP_FIELD_C((x)[f * 2], (x)[f * 2 + 1])
 
 #ifdef _KERNEL
-extern const char *tlp_chip_names[];
+extern const char * const tlp_chip_names[];
 
 extern const struct tulip_mediasw tlp_21040_mediasw;
 extern const struct tulip_mediasw tlp_21040_tp_mediasw;
@@ -510,19 +582,29 @@ extern const struct tulip_mediasw tlp_sio_mii_mediasw;
 extern const struct tulip_mediasw tlp_pnic_mediasw;
 extern const struct tulip_mediasw tlp_pmac_mediasw;
 extern const struct tulip_mediasw tlp_al981_mediasw;
+extern const struct tulip_mediasw tlp_an985_mediasw;
+extern const struct tulip_mediasw tlp_dm9102_mediasw;
+extern const struct tulip_mediasw tlp_asix_mediasw;
+extern const struct tulip_mediasw tlp_rs7112_mediasw;
 
-void	tlp_attach __P((struct tulip_softc *, const u_int8_t *));
-int	tlp_activate __P((struct device *, enum devact));
-int	tlp_detach __P((struct tulip_softc *));
-int	tlp_intr __P((void *));
-int	tlp_read_srom __P((struct tulip_softc *));
-int	tlp_srom_crcok __P((const u_int8_t *));
-int	tlp_isv_srom __P((const u_int8_t *));
-int	tlp_isv_srom_enaddr __P((struct tulip_softc *, u_int8_t *));
-int	tlp_parse_old_srom __P((struct tulip_softc *, u_int8_t *));
+void	tlp_attach(struct tulip_softc *, const u_int8_t *);
+int	tlp_activate(struct device *, enum devact);
+int	tlp_detach(struct tulip_softc *);
+int	tlp_intr(void *);
+int	tlp_read_srom(struct tulip_softc *);
+int	tlp_srom_crcok(const u_int8_t *);
+int	tlp_isv_srom(const u_int8_t *);
+int	tlp_isv_srom_enaddr(struct tulip_softc *, u_int8_t *);
+int	tlp_parse_old_srom(struct tulip_softc *, u_int8_t *);
+void	tlp_reset(struct tulip_softc *);
+void	tlp_idle(struct tulip_softc *, u_int32_t);
 
-int	tlp_mediachange __P((struct ifnet *));
-void	tlp_mediastatus __P((struct ifnet *, struct ifmediareq *));
+int	tlp_mediachange(struct ifnet *);
+void	tlp_mediastatus(struct ifnet *, struct ifmediareq *);
+
+void	tlp_21140_gpio_get(struct tulip_softc *sc, struct ifmediareq *ifmr);
+int	tlp_21140_gpio_set(struct tulip_softc *sc);
+
 #endif /* _KERNEL */
 
 #endif /* _DEV_IC_TULIPVAR_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: exect.S,v 1.1 2000/01/05 14:07:40 msaitoh Exp $	*/
+/*	$NetBSD: exect.S,v 1.5 2006/01/06 01:53:30 uwe Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -40,35 +36,9 @@
 
 #include <machine/asm.h>
 #if defined(SYSLIBC_SCCS) && !defined(lint)
-	RCSID("$NetBSD: exect.S,v 1.1 2000/01/05 14:07:40 msaitoh Exp $")
+	RCSID("$NetBSD: exect.S,v 1.5 2006/01/06 01:53:30 uwe Exp $")
 #endif /* SYSLIBC_SCCS and not lint */
 
 #include "SYS.h"
-#include <machine/psl.h>
 
-ENTRY(exect)
-	mov.l	LSYS_execve, r0
-	trapa	#0x80
-
-	mov.l	Lcerror, r1
-	jmp	@r0
-
-	.align 2
-LSYS_execve:	.long	SYS_execve
-Lcerror:	.long	cerror
-
-#if 0	
-ENTRY(exect)
-	movl	$(SYS_execve),%eax
-	pushf
-	popl	%edx
-	orl	$(PSL_T),%edx
-	pushl	%edx
-	popf
-	int	$0x80
-#ifdef PIC
-	jmp	PIC_PLT(cerror)		/* exect(file, argv, env); */
-#else
-	jmp	cerror
-#endif
-#endif
+PSEUDO(exect,execve)

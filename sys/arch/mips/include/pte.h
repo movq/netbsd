@@ -1,4 +1,4 @@
-/*	$NetBSD: pte.h,v 1.8 1999/05/28 07:23:38 nisimura Exp $	*/
+/*	$NetBSD: pte.h,v 1.19 2008/04/28 20:23:28 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -56,10 +49,6 @@
 #include <mips/mips1_pte.h>
 #include <mips/mips3_pte.h>
 
-#if !defined(MIPS1) && !defined(MIPS3)
-#error Must include at least one MIPS architecture.
-#endif
-
 #define	PG_ASID	0x000000ff	/* Address space ID */
 
 #ifndef _LOCORE
@@ -70,8 +59,6 @@ typedef union pt_entry {
 	struct mips1_pte pt_mips1_pte;	/* for getting to bits by name */
 	struct mips3_pte pt_mips3_pte;
 } pt_entry_t;
-
-#define	PT_ENTRY_NULL	((pt_entry_t *) 0)
 
 /*
  * Macros/inline functions to hide PTE format differences.
@@ -84,7 +71,7 @@ int pmap_is_page_ro(pmap_t, vaddr_t, int);
 
 
 /* MIPS1-only */
-#if defined(MIPS1) && !defined(MIPS3)
+#if defined(MIPS1) && !defined(MIPS3_PLUS)
 #define	mips_pg_v(entry)	((entry) & MIPS1_PG_V)
 #define	mips_pg_wired(entry)	((entry) & MIPS1_PG_WIRED)
 
@@ -93,20 +80,22 @@ int pmap_is_page_ro(pmap_t, vaddr_t, int);
 #define	mips_pg_ro_bit()	(MIPS1_PG_RO)
 #define	mips_pg_ropage_bit()	(MIPS1_PG_RO)	/* XXX not MIPS1_PG_ROPAGE? */
 #define	mips_pg_rwpage_bit()	(MIPS1_PG_RWPAGE)
+#define	mips_pg_rwncpage_bit()	(MIPS1_PG_RWNCPAGE)
 #define	mips_pg_cwpage_bit()	(MIPS1_PG_CWPAGE)
+#define	mips_pg_cwncpage_bit()	(MIPS1_PG_CWNCPAGE)
 #define	mips_pg_global_bit()	(MIPS1_PG_G)
 #define	mips_pg_wired_bit()	(MIPS1_PG_WIRED)
 
 #define	PTE_TO_PADDR(pte)	MIPS1_PTE_TO_PADDR((pte))
 #define	PAGE_IS_RDONLY(pte, va)	MIPS1_PAGE_IS_RDONLY((pte), (va))
 
-#define	pfn_to_vad(x)		mips1_pfn_to_vad((vaddr_t)(x))
-#define	vad_to_pfn(x)		mips1_vad_to_pfn((x))
+#define	mips_tlbpfn_to_paddr(x)		mips1_tlbpfn_to_paddr((vaddr_t)(x))
+#define	mips_paddr_to_tlbpfn(x)		mips1_paddr_to_tlbpfn((x))
 #endif /* mips1 */
 
 
-/* MIPS3-only */
-#if !defined(MIPS1) && defined(MIPS3)
+/* MIPS3 (or greater) only */
+#if !defined(MIPS1) && defined(MIPS3_PLUS)
 #define	mips_pg_v(entry)	((entry) & MIPS3_PG_V)
 #define	mips_pg_wired(entry)	((entry) & MIPS3_PG_WIRED)
 
@@ -115,19 +104,21 @@ int pmap_is_page_ro(pmap_t, vaddr_t, int);
 #define	mips_pg_ro_bit()	(MIPS3_PG_RO)
 #define	mips_pg_ropage_bit()	(MIPS3_PG_ROPAGE)
 #define	mips_pg_rwpage_bit()	(MIPS3_PG_RWPAGE)
+#define	mips_pg_rwncpage_bit()	(MIPS3_PG_RWNCPAGE)
 #define	mips_pg_cwpage_bit()	(MIPS3_PG_CWPAGE)
+#define	mips_pg_cwncpage_bit()	(MIPS3_PG_CWNCPAGE)
 #define	mips_pg_global_bit()	(MIPS3_PG_G)
 #define	mips_pg_wired_bit()	(MIPS3_PG_WIRED)
 
 #define	PTE_TO_PADDR(pte)	MIPS3_PTE_TO_PADDR((pte))
 #define	PAGE_IS_RDONLY(pte, va)	MIPS3_PAGE_IS_RDONLY((pte), (va))
 
-#define	pfn_to_vad(x)		mips3_pfn_to_vad((vaddr_t)(x))
-#define	vad_to_pfn(x)		mips3_vad_to_pfn((x))
+#define	mips_tlbpfn_to_paddr(x)		mips3_tlbpfn_to_paddr((vaddr_t)(x))
+#define	mips_paddr_to_tlbpfn(x)		mips3_paddr_to_tlbpfn((x))
 #endif /* mips3 */
 
-/* MIPS1 and MIPS3 */
-#if defined(MIPS1) && defined(MIPS3)
+/* MIPS1 and MIPS3 (or greater) */
+#if defined(MIPS1) && defined(MIPS3_PLUS)
 
 static __inline int
     mips_pg_v(unsigned int entry),
@@ -140,18 +131,18 @@ static __inline unsigned int
     mips_pg_ropage_bit(void),
     mips_pg_cwpage_bit(void),
     mips_pg_rwpage_bit(void),
-    mips_pg_global_bit(void),
-    PTE_TO_PADDR(unsigned int entry);
+    mips_pg_global_bit(void);
+static __inline paddr_t PTE_TO_PADDR(unsigned int pte);
 
-static __inline vaddr_t pfn_to_vad(unsigned int x);
-static __inline int vad_to_pfn(vaddr_t x);
+static __inline paddr_t mips_tlbpfn_to_paddr(unsigned int pfn);
+static __inline unsigned int mips_paddr_to_tlbpfn(paddr_t pa);
 
 
 static __inline int
 mips_pg_v(entry)
 	unsigned int entry;
 {
-	if (CPUISMIPS3)
+	if (MIPS_HAS_R4K_MMU)
 		return (entry & MIPS3_PG_V);
 	return (entry & MIPS1_PG_V);
 }
@@ -160,81 +151,81 @@ static __inline int
 mips_pg_wired(entry)
 	unsigned int entry;
 {
-	if (CPUISMIPS3)
+	if (MIPS_HAS_R4K_MMU)
 		return (entry & MIPS3_PG_WIRED);
 	return (entry & MIPS1_PG_WIRED);
 }
 
 static __inline unsigned int
-mips_pg_m_bit()
+mips_pg_m_bit(void)
 {
-	if (CPUISMIPS3)
+	if (MIPS_HAS_R4K_MMU)
 		return (MIPS3_PG_D);
 	return (MIPS1_PG_D);
 }
 
 static __inline unsigned int
-mips_pg_ro_bit()
+mips_pg_ro_bit(void)
 {
-	if (CPUISMIPS3)
+	if (MIPS_HAS_R4K_MMU)
 		return (MIPS3_PG_RO);
 	return (MIPS1_PG_RO);
 }
 
 static __inline unsigned int
-mips_pg_rw_bit()
+mips_pg_rw_bit(void)
 {
-	if (CPUISMIPS3)
+	if (MIPS_HAS_R4K_MMU)
 		return (MIPS3_PG_D);
 	return (MIPS1_PG_RW);
 }
 
 static __inline unsigned int
-mips_pg_ropage_bit()
+mips_pg_ropage_bit(void)
 {
-	if (CPUISMIPS3)
+	if (MIPS_HAS_R4K_MMU)
 		return (MIPS3_PG_ROPAGE);
 	return (MIPS1_PG_RO);
 }
 
 static __inline unsigned int
-mips_pg_rwpage_bit()
+mips_pg_rwpage_bit(void)
 {
-	if (CPUISMIPS3)
+	if (MIPS_HAS_R4K_MMU)
 		return (MIPS3_PG_RWPAGE);
 	return (MIPS1_PG_RWPAGE);
 }
 
 static __inline unsigned int
-mips_pg_cwpage_bit()
+mips_pg_cwpage_bit(void)
 {
-	if (CPUISMIPS3)
+	if (MIPS_HAS_R4K_MMU)
 		return (MIPS3_PG_CWPAGE);
 	return (MIPS1_PG_CWPAGE);
 }
 
 
 static __inline unsigned int
-mips_pg_global_bit()
+mips_pg_global_bit(void)
 {
-	if (CPUISMIPS3)
+	if (MIPS_HAS_R4K_MMU)
 		return (MIPS3_PG_G);
 	return (MIPS1_PG_G);
 }
 
 static __inline unsigned int
-mips_pg_wired_bit()
+mips_pg_wired_bit(void)
 {
-	if (CPUISMIPS3)
+	if (MIPS_HAS_R4K_MMU)
 		return (MIPS3_PG_WIRED);
 	return (MIPS1_PG_WIRED);
 }
 
-static __inline unsigned int
+static __inline paddr_t
 PTE_TO_PADDR(pte)
 	unsigned int pte;
 {
-	if (CPUISMIPS3)
+	if (MIPS_HAS_R4K_MMU)
 		return (MIPS3_PTE_TO_PADDR(pte));
 	return (MIPS1_PTE_TO_PADDR(pte));
 }
@@ -244,27 +235,27 @@ PAGE_IS_RDONLY(pte, va)
 	unsigned int pte;
 	vaddr_t va;
 {
-	if (CPUISMIPS3)
+	if (MIPS_HAS_R4K_MMU)
 		return (MIPS3_PAGE_IS_RDONLY(pte, va));
 	return (MIPS1_PAGE_IS_RDONLY(pte, va));
 }
 
-static __inline vaddr_t
-pfn_to_vad(x)
-	unsigned int x;
+static __inline paddr_t
+mips_tlbpfn_to_paddr(pfn)
+	unsigned int pfn;
 {
-	if (CPUISMIPS3)
-		return (mips3_pfn_to_vad(x));
-	return (mips1_pfn_to_vad(x));
+	if (MIPS_HAS_R4K_MMU)
+		return (mips3_tlbpfn_to_paddr(pfn));
+	return (mips1_tlbpfn_to_paddr(pfn));
 }
 
-static __inline int
-vad_to_pfn(x)
-	vaddr_t x;
+static __inline unsigned int
+mips_paddr_to_tlbpfn(pa)
+	paddr_t pa;
 {
-	if (CPUISMIPS3)
-		return (mips3_vad_to_pfn(x));
-	return (mips1_vad_to_pfn(x));
+	if (MIPS_HAS_R4K_MMU)
+		return (mips3_paddr_to_tlbpfn(pa));
+	return (mips1_paddr_to_tlbpfn(pa));
 }
 #endif
 
@@ -282,11 +273,4 @@ vad_to_pfn(x)
 extern	pt_entry_t *Sysmap;		/* kernel pte table */
 extern	u_int Sysmapsize;		/* number of pte's in Sysmap */
 #endif	/* defined(_KERNEL) && !defined(_LOCORE) */
-
-/*
- * User virtual to pte page entry.  Same on mips1 and mips3.
- */
-#define	uvtopte(adr)	(((adr) >> PGSHIFT) & (NPTEPG - 1))
-
-
 #endif /* __MIPS_PTE_H__ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: md.c,v 1.19 1998/12/17 14:29:50 pk Exp $	*/
+/*	$NetBSD: md.c,v 1.21 2008/04/28 20:23:03 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -100,13 +93,13 @@ static int reloc_target_bitsize[] = {
 
 static void iflush __P((jmpslot_t *));
 
-static __inline void
+static inline void
 iflush(sp)
 	jmpslot_t		*sp;
 {
-	__asm __volatile("iflush %0+0" : : "r" (sp));
-	__asm __volatile("iflush %0+4" : : "r" (sp));
-	__asm __volatile("iflush %0+8" : : "r" (sp));
+	__asm volatile("iflush %0+0" : : "r" (sp));
+	__asm volatile("iflush %0+4" : : "r" (sp));
+	__asm volatile("iflush %0+8" : : "r" (sp));
 }
 
 /*

@@ -1,4 +1,4 @@
-/*	$NetBSD: pcibios.h,v 1.1 1999/11/17 01:16:37 thorpej Exp $	*/
+/*	$NetBSD: pcibios.h,v 1.12 2007/12/25 18:33:33 perry Exp $	*/
 
 /*
  * Copyright (c) 1999, by UCHIYAMA Yasushi
@@ -49,39 +49,60 @@
  * Slot entry (per PCI 2.1)
  */
 struct pcibios_linkmap {
-	u_int8_t	link;
-	u_int16_t	bitmap;
-} __attribute__((__packed__));
+	uint8_t		link;
+	uint16_t	bitmap;
+} __packed;
 
 struct pcibios_intr_routing {
-	u_int8_t	bus;
-	u_int8_t	device;
+	uint8_t		bus;
+	uint8_t		device;
 	struct pcibios_linkmap linkmap[4];	/* INT[A:D]# */
-	u_int8_t	slot;
-	u_int8_t	reserved;
-} __attribute__((__packed__));
+	uint8_t		slot;
+	uint8_t		reserved;
+} __packed;
 
 /*
  * $PIR header.  Reference:
  *
- *	http://www.microsoft.com/HWDEV/busbios/PCIIRQ.htm
+ *	http://www.microsoft.com/whdc/hwdev/archive/BUSBIOS/pciirq.mspx
  */
 struct pcibios_pir_header {
-	u_int32_t	signature;		/* $PIR */
-	u_int16_t	version;
-	u_int16_t	tablesize;
-	u_int8_t	router_bus;
-	u_int8_t	router_devfunc;
-	u_int16_t	exclusive_irq;
-	u_int32_t	compat_router;		/* PCI vendor/product */
-	u_int32_t	miniport;
-	u_int8_t	reserved[11];
-	u_int8_t	checksum;
-} __attribute__((__packed__));
+	uint32_t	signature;		/* $PIR */
+	uint16_t	version;
+	uint16_t	tablesize;
+	uint8_t		router_bus;
+	uint8_t		router_devfunc;
+	uint16_t	exclusive_irq;
+	uint32_t	compat_router;		/* PCI vendor/product */
+	uint32_t	miniport;
+	uint8_t		reserved[11];
+	uint8_t		checksum;
+} __packed;
 
-void	pcibios_init __P((void));
+#define	PIR_DEVFUNC_DEVICE(devfunc)	(((devfunc) >> 3) & 0x1f)
+#define	PIR_DEVFUNC_FUNCTION(devfunc)	((devfunc) & 7)
+
+void	pcibios_init(void);
 
 extern struct pcibios_pir_header pcibios_pir_header;
 extern struct pcibios_intr_routing *pcibios_pir_table;
 extern int pcibios_pir_table_nentries;
 extern int pcibios_max_bus;
+
+#ifdef PCIBIOSVERBOSE
+extern int pcibiosverbose;
+
+#define	PCIBIOS_PRINTV(arg) \
+	do { \
+		if (pcibiosverbose) \
+			aprint_normal arg; \
+	} while (0)
+#define	PCIBIOS_PRINTVN(n, arg) \
+	do { \
+		 if (pcibiosverbose > (n)) \
+			aprint_normal arg; \
+	} while (0)
+#else
+#define	PCIBIOS_PRINTV(arg)
+#define	PCIBIOS_PRINTVN(n, arg)
+#endif

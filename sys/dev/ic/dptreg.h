@@ -1,7 +1,7 @@
-/*	$NetBSD: dptreg.h,v 1.8 2000/03/25 13:38:35 ad Exp $	*/
+/*	$NetBSD: dptreg.h,v 1.19 2008/09/08 23:36:54 gmcgarry Exp $	*/
 
 /*
- * Copyright (c) 1999 Andy Doran <ad@NetBSD.org>
+ * Copyright (c) 1999, 2000, 2001 Andrew Doran <ad@NetBSD.org>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -35,32 +35,6 @@
 #define DPT_MAX_LUNS		8
 #define DPT_MAX_CHANNELS	3
 
-/* Software parameters */
-#define	DPT_MAX_XFER		((DPT_SG_SIZE - 1) << PGSHIFT)
-#define DPT_MAX_CCBS		256
-#define DPT_SG_SIZE        	64
-#define DPT_ABORT_TIMEOUT	2000	/* milliseconds */
-#define DPT_MORE_TIMEOUT	1000	/* microseconds */
-#define DPT_SCRATCH_SIZE	256	/* bytes */
-
-#ifdef _KERNEL
-
-#define dpt_inb(x, o)	\
-    bus_space_read_1((x)->sc_iot, (x)->sc_ioh, (o))
-#define dpt_inw(x, o)	\
-    bus_space_read_2((x)->sc_iot, (x)->sc_ioh, (o))
-#define dpt_inl(x, o)	\
-    bus_space_read_4((x)->sc_iot, (x)->sc_ioh, (o))
-
-#define dpt_outb(x, o, d) \
-    bus_space_write_1((x)->sc_iot, (x)->sc_ioh, (o), (d))
-#define dpt_outw(x, o, d) \
-    bus_space_write_2((x)->sc_iot, (x)->sc_ioh, (o), (d))
-#define dpt_outl(x, o, d) \
-    bus_space_write_4((x)->sc_iot, (x)->sc_ioh, (o), (d))
-
-#endif	/* _KERNEL */
- 
 /*
  * HBA registers
  */
@@ -124,12 +98,27 @@ struct eata_cp {
 	u_int8_t	cp_cdb_more0[3];	/* SCSI CDB */
 	u_int8_t	cp_cdb_len;		/* SCSI CDB */
 	u_int8_t	cp_cdb_more1[7];	/* SCSI CDB */
+
 	u_int32_t	cp_datalen;		/* Bytes of data/SG list */
 	u_int32_t	cp_ccbid;		/* ID of software CCB */
 	u_int32_t	cp_dataaddr;		/* Addr of data/SG list */
 	u_int32_t	cp_stataddr;		/* Addr of status packet */
 	u_int32_t	cp_senseaddr;		/* Addr of req. sense */
-};
+} __packed;
+
+struct eata_ucp {
+	u_int8_t	ucp_cp[sizeof(struct eata_cp) - 5*4];	/* XXX */
+	u_long		ucp_datalen;
+	u_long		ucp_ccbid;
+	void *		ucp_dataaddr;
+	void *		ucp_stataddr;
+	void *		ucp_senseaddr;
+	u_long		ucp_timeout;
+	u_int8_t	ucp_hstatus;
+	u_int8_t	ucp_tstatus;
+	u_int8_t	ucp_retries;
+	u_int8_t	ucp_padding;
+} __packed;
 
 #define CP_C0_SCSI_RESET	0x01	/* Cause a bus reset */
 #define CP_C0_HBA_INIT		0x02	/* Reinitialize HBA */
@@ -161,23 +150,23 @@ struct eata_cp {
 #define CP_C4_IDENTIFY		0x80	/* Always true */
 
 /*
- * EATA status packet as returned by controller upon command completion. It 
- * contains status, message info and a handle on the initiating CCB. 
+ * EATA status packet as returned by controller upon command completion.  It
+ * contains status, message info and a handle on the initiating CCB.
  */
 struct eata_sp {
 	u_int8_t	sp_hba_status;		/* Host adapter status */
 	u_int8_t	sp_scsi_status;		/* SCSI bus status */
 	u_int8_t	sp_reserved[2];		/* Reserved */
-	u_int32_t	sp_inv_residue;		/* Bytes not transfered */
+	u_int32_t	sp_inv_residue;		/* Bytes not transferred */
 	u_int32_t	sp_ccbid;		/* ID of software CCB */
 	u_int8_t	sp_id_message;
 	u_int8_t	sp_que_message;
 	u_int8_t	sp_tag_message;
 	u_int8_t	sp_messages[9];
-};
+} __packed;
 
-/* 
- * HBA status as returned by status packet. Bit 7 signals end of command. 
+/*
+ * HBA status as returned by status packet.  Bit 7 signals end of command.
  */
 #define SP_HBA_NO_ERROR		0x00    /* No error on command */
 #define SP_HBA_ERROR_SEL_TO	0x01    /* Device selection timeout */
@@ -209,10 +198,10 @@ struct eata_sp {
 struct eata_sg {
 	u_int32_t	sg_addr;
 	u_int32_t	sg_len;
-};
+} __packed;
 
 /*
- * EATA configuration data as returned by HBA. XXX this is bogus - it
+ * EATA configuration data as returned by HBA.  XXX This is bogus - it
  * doesn't sync up with the structure FreeBSD uses. [ad]
  */
 struct eata_cfg {
@@ -237,7 +226,7 @@ struct eata_cfg {
 	u_int8_t	ec_maxlun;		/* Maximum LUN supported */
 	u_int8_t	ec_feat4;		/* 5th feature byte */
 	u_int8_t	ec_raidnum;		/* RAID host adapter humber */
-};
+} __packed;
 
 #define EC_F0_OVERLAP_CMDS	0x01	/* Overlapped cmds supported */
 #define EC_F0_TARGET_MODE	0x02	/* Target mode supported */
@@ -288,13 +277,13 @@ struct eata_inquiry_data {
 	u_int8_t 	ei_response_format;
 	u_int8_t 	ei_additional_length;
 	u_int8_t 	ei_unused[2];
-	u_int8_t	ei_flags;	
+	u_int8_t	ei_flags;
 	char		ei_vendor[8];		/* Vendor, e.g: DPT, NEC */
 	char		ei_model[7];		/* Model number */
 	char		ei_suffix[9];		/* Model number suffix */
 	char		ei_fw[3];		/* Firmware */
 	char		ei_fwrev[1];		/* Firmware revision */
 	u_int8_t	ei_extra[8];
-};
+} __packed;
 
 #endif	/* !defined _IC_DPTREG_H_ */

@@ -1,3 +1,5 @@
-#	$NetBSD: Makefile,v 1.1 1999/01/13 08:42:57 ross Exp $
+#	$NetBSD: Makefile,v 1.4 2002/07/21 08:14:50 lukem Exp $
 
-.include <bsd.prog.mk>
+MERGED_SRCS+=	${COMMON}/sysinst ${.CURDIR}/../hp300/upgrade
+
+.include <bsd.man.mk>

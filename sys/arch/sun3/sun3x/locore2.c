@@ -1,4 +1,4 @@
-/*	$NetBSD: locore2.c,v 1.21 1998/07/04 22:18:44 jonathan Exp $	*/
+/*	$NetBSD: locore2.c,v 1.34 2008/04/28 20:23:38 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,6 +29,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: locore2.c,v 1.34 2008/04/28 20:23:38 martin Exp $");
+
 #include "opt_ddb.h"
 
 #include <sys/param.h>
@@ -43,9 +39,10 @@
 #include <sys/proc.h>
 #include <sys/reboot.h>
 #include <sys/user.h>
-#include <sys/exec_aout.h>
+#define ELFSIZE 32
+#include <sys/exec_elf.h>
 
-#include <vm/vm.h>
+#include <uvm/uvm_extern.h>
 
 #include <machine/cpu.h>
 #include <machine/db_machdep.h>
@@ -58,23 +55,23 @@
 
 #include <sun3/sun3/interreg.h>
 #include <sun3/sun3/machdep.h>
-#include <sun3/sun3/vector.h>
+#include <sun68k/sun68k/vector.h>
 
 /* This is defined in locore.s */
 extern char kernel_text[];
 
 /* These are defined by the linker */
 extern char etext[], edata[], end[];
-char *esym;	/* DDB */
+int nsym;
+char *ssym, *esym;
 
 /*
  * XXX: m68k common code needs these...
  * ... but this port does not need to deal with anything except
  * an mc68030, so these two variables are always ignored.
- * XXX: Need to do something about <m68k/include/cpu.h>
  */
-int cputype =  1;	/* CPU_68030 */
-int mmutype = -1;	/* MMU_68030 */
+int cputype = CPU_68030;
+int mmutype = MMU_68030;
 
 /*
  * Now our own stuff.
@@ -84,89 +81,70 @@ struct user *proc0paddr;	/* proc[0] pcb address (u-area VA) */
 extern struct pcb *curpcb;
 
 /* First C code called by locore.s */
-void _bootstrap __P((struct exec));
+void _bootstrap(void);
 
-static void _vm_init __P((struct exec *kehp));
+static void _vm_init(void);
 
-#if defined(DDB) && !defined(SYMTAB_SPACE)
-static void _save_symtab __P((struct exec *kehp));
+#if defined(DDB)
+static void _save_symtab(void);
 
 /*
  * Preserve DDB symbols and strings by setting esym.
  */
-static void
-_save_symtab(kehp)
-	struct exec *kehp;	/* kernel exec header */
+static void 
+_save_symtab(void)
 {
-	int x, *symsz, *strsz;
-	char *endp, *errdesc;
-
-	/* Initialize */
-	endp = end;
-	symsz = (int*)end;
+	int i;
+	Elf_Ehdr *ehdr;
+	Elf_Shdr *shp;
+	vaddr_t minsym, maxsym;
 
 	/*
-	 * Sanity-check the exec header.
+	 * Check the ELF headers.
 	 */
-	errdesc = "bad magic";
-	if ((kehp->a_midmag & 0xFFF0) != 0x0100)
-		goto err;
 
-	/* Boundary between text and data varries a little. */
-	errdesc = "bad header";
-	x = kehp->a_text + kehp->a_data;
-	if (x != (edata - kernel_text))
-		goto err;
-	if (kehp->a_bss != (end - edata))
-		goto err;
-	if (kehp->a_entry != (int)kernel_text)
-		goto err;
-	if (kehp->a_trsize || kehp->a_drsize)
-		goto err;
-	/* The exec header looks OK... */
+	ehdr = (void *)end;
+	if (memcmp(ehdr->e_ident, ELFMAG, SELFMAG) != 0 ||
+	    ehdr->e_ident[EI_CLASS] != ELFCLASS32) {
+		mon_printf("_save_symtab: bad ELF magic\n");
+		return;
+	}
 
-	/* Check the symtab length word. */
-	errdesc = "bad symbols/strings";
-	if (kehp->a_syms != *symsz)
-		goto err;
-	endp += sizeof(int);	/* past length word */
-	endp += *symsz;			/* past nlist array */
-
-	/* Sanity-check the string table length. */
-	strsz = (int*)endp;
-	if ((*strsz < 4) || (*strsz > 0x80000))
-		goto err;
-	/* OK, we have a valid symbol table. */
-	endp += *strsz;			/* past strings */
-
-	/* Success!  Advance esym past the symbol data. */
-	esym = endp;
-	return;
-
- err:
 	/*
-	 * Make sure the later call to ddb_init()
-	 * will pass zero as the symbol table size.
+	 * Find the end of the symbols and strings.
 	 */
-	*symsz = 0;
-	mon_printf("_save_symtab: %s\n", errdesc);
+
+	maxsym = 0;
+	minsym = ~maxsym;
+	shp = (Elf_Shdr *)(end + ehdr->e_shoff);
+	for (i = 0; i < ehdr->e_shnum; i++) {
+		if (shp[i].sh_type != SHT_SYMTAB &&
+		    shp[i].sh_type != SHT_STRTAB) {
+			continue;
+		}
+		minsym = min(minsym, (vaddr_t)end + shp[i].sh_offset);
+		maxsym = max(maxsym, (vaddr_t)end + shp[i].sh_offset +
+			     shp[i].sh_size);
+	}
+	nsym = 1;
+	ssym = (char *)ehdr;
+	esym = (char *)maxsym;
 }
-#endif	/* DDB && !SYMTAB_SPACE */
+#endif	/* DDB */
 
 /*
  * This function is called from _bootstrap() to initialize
  * pre-vm-sytem virtual memory.  All this really does is to
  * set virtual_avail to the first page following preloaded
  * data (i.e. the kernel and its symbol table) and special
- * things that may be needed very early (proc0 upages).
+ * things that may be needed very early (lwp0 upages).
  * Once that is done, pmap_bootstrap() is called to do the
  * usual preparations for our use of the MMU.
  */
-static void
-_vm_init(kehp)
-	struct exec *kehp;	/* kernel exec header */
+static void 
+_vm_init(void)
 {
-	vm_offset_t nextva;
+	vaddr_t nextva;
 
 	/*
 	 * First preserve our symbol table, which might have been
@@ -174,9 +152,9 @@ _vm_init(kehp)
 	 * if DDB is not part of this kernel, ignore the symbols.
 	 */
 	esym = end + 4;
-#if defined(DDB) && !defined(SYMTAB_SPACE)
+#if defined(DDB)
 	/* This will advance esym past the symbols. */
-	_save_symtab(kehp);
+	_save_symtab();
 #endif
 
 	/*
@@ -186,20 +164,20 @@ _vm_init(kehp)
 	nextva = m68k_round_page(esym);
 
 	/*
-	 * Setup the u-area pages (stack, etc.) for proc0.
+	 * Setup the u-area pages (stack, etc.) for lwp0.
 	 * This is done very early (here) to make sure the
 	 * fault handler works in case we hit an early bug.
-	 * (The fault handler may reference proc0 stuff.)
+	 * (The fault handler may reference lwp0 stuff.)
 	 */
 	proc0paddr = (struct user *) nextva;
 	nextva += USPACE;
-	bzero((caddr_t)proc0paddr, USPACE);
-	proc0.p_addr = proc0paddr;
+	memset((void *)proc0paddr, 0, USPACE);
+	lwp0.l_addr = proc0paddr;
 
 	/*
-	 * Now that proc0 exists, make it the "current" one.
+	 * Now that lwp0 exists, make it the "current" one.
 	 */
-	curproc = &proc0;
+	curlwp = &lwp0;
 	curpcb = &proc0paddr->u_pcb;
 
 	/* This does most of the real work. */
@@ -213,19 +191,18 @@ _vm_init(kehp)
  * hp300 port (and other m68k) but which we prefer to do in C code.
  * Also do setup specific to the Sun PROM monitor and IDPROM here.
  */
-void
-_bootstrap(keh)
-	struct exec keh;	/* kernel exec header */
+void 
+_bootstrap(void)
 {
 
 	/* First, Clear BSS. */
-	bzero(edata, end - edata);
+	memset(edata, 0, end - edata);
 
 	/* Set v_handler, get boothowto. */
 	sunmon_init();
 
 	/* Handle kernel mapping, pmap_bootstrap(), etc. */
-	_vm_init(&keh);
+	_vm_init();
 
 	/*
 	 * Find and save OBIO mappings needed early,

@@ -1,4 +1,4 @@
-/*	$NetBSD: miscbltin.c,v 1.27 1998/09/26 19:28:12 christos Exp $	*/
+/*	$NetBSD: miscbltin.c,v 1.36.26.1 2009/04/01 00:25:21 snj Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)miscbltin.c	8.4 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: miscbltin.c,v 1.27 1998/09/26 19:28:12 christos Exp $");
+__RCSID("$NetBSD: miscbltin.c,v 1.36.26.1 2009/04/01 00:25:21 snj Exp $");
 #endif
 #endif /* not lint */
 
@@ -57,6 +53,7 @@ __RCSID("$NetBSD: miscbltin.c,v 1.27 1998/09/26 19:28:12 christos Exp $");
 #include <unistd.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <errno.h>
 
 #include "shell.h"
 #include "options.h"
@@ -69,51 +66,62 @@ __RCSID("$NetBSD: miscbltin.c,v 1.27 1998/09/26 19:28:12 christos Exp $");
 
 #undef rflag
 
-extern char **argptr;		/* argument list for builtin command */
 
 
 /*
- * The read builtin.  The -e option causes backslashes to escape the
- * following character.
+ * The read builtin.
+ * Backslahes escape the next char unless -r is specified.
  *
  * This uses unbuffered input, which may be avoidable in some cases.
+ *
+ * Note that if IFS=' :' then read x y should work so that:
+ * 'a b'	x='a', y='b'
+ * ' a b '	x='a', y='b'
+ * ':b'		x='',  y='b'
+ * ':'		x='',  y=''
+ * '::'		x='',  y=''
+ * ': :'	x='',  y=''
+ * ':::'	x='',  y='::'
+ * ':b c:'	x='',  y='b c:'
  */
 
 int
-readcmd(argc, argv)
-	int argc;
-	char **argv;
+readcmd(int argc, char **argv)
 {
 	char **ap;
-	int backslash;
 	char c;
 	int rflag;
 	char *prompt;
-	char *ifs;
+	const char *ifs;
 	char *p;
 	int startword;
 	int status;
 	int i;
+	int is_ifs;
+	int saveall = 0;
 
 	rflag = 0;
 	prompt = NULL;
 	while ((i = nextopt("p:r")) != '\0') {
 		if (i == 'p')
-			prompt = optarg;
+			prompt = optionarg;
 		else
 			rflag = 1;
 	}
+
 	if (prompt && isatty(0)) {
 		out2str(prompt);
 		flushall();
 	}
+
 	if (*(ap = argptr) == NULL)
 		error("arg count");
+
 	if ((ifs = bltinlookup("IFS", 1)) == NULL)
-		ifs = nullstr;
+		ifs = " \t\n";
+
 	status = 0;
-	startword = 1;
-	backslash = 0;
+	startword = 2;
 	STARTSTACKSTR(p);
 	for (;;) {
 		if (read(0, &c, 1) != 1) {
@@ -122,43 +130,79 @@ readcmd(argc, argv)
 		}
 		if (c == '\0')
 			continue;
-		if (backslash) {
-			backslash = 0;
-			if (c != '\n')
-				STPUTC(c, p);
-			continue;
-		}
-		if (!rflag && c == '\\') {
-			backslash++;
-			continue;
-		}
-		if (c == '\n')
-			break;
-		if (startword && *ifs == ' ' && strchr(ifs, c)) {
-			continue;
-		}
-		startword = 0;
-		if (backslash && c == '\\') {
+		if (c == '\\' && !rflag) {
 			if (read(0, &c, 1) != 1) {
 				status = 1;
 				break;
 			}
-			STPUTC(c, p);
-		} else if (ap[1] != NULL && strchr(ifs, c) != NULL) {
-			STACKSTRNUL(p);
-			setvar(*ap, stackblock(), 0);
-			ap++;
-			startword = 1;
-			STARTSTACKSTR(p);
-		} else {
-			STPUTC(c, p);
+			if (c != '\n')
+				STPUTC(c, p);
+			continue;
 		}
+		if (c == '\n')
+			break;
+		if (strchr(ifs, c))
+			is_ifs = strchr(" \t\n", c) ? 1 : 2;
+		else
+			is_ifs = 0;
+
+		if (startword != 0) {
+			if (is_ifs == 1) {
+				/* Ignore leading IFS whitespace */
+				if (saveall)
+					STPUTC(c, p);
+				continue;
+			}
+			if (is_ifs == 2 && startword == 1) {
+				/* Only one non-whitespace IFS per word */
+				startword = 2;
+				if (saveall)
+					STPUTC(c, p);
+				continue;
+			}
+		}
+
+		if (is_ifs == 0) {
+			/* append this character to the current variable */
+			startword = 0;
+			if (saveall)
+				/* Not just a spare terminator */
+				saveall++;
+			STPUTC(c, p);
+			continue;
+		}
+
+		/* end of variable... */
+		startword = is_ifs;
+
+		if (ap[1] == NULL) {
+			/* Last variable needs all IFS chars */
+			saveall++;
+			STPUTC(c, p);
+			continue;
+		}
+
+		STACKSTRNUL(p);
+		setvar(*ap, stackblock(), 0);
+		ap++;
+		STARTSTACKSTR(p);
 	}
 	STACKSTRNUL(p);
-	/* Remove trailing blanks */
-	while (stackblock() <= --p && strchr(ifs, *p) != NULL)
-		*p = '\0';
+
+	/* Remove trailing IFS chars */
+	for (; stackblock() <= --p; *p = 0) {
+		if (!strchr(ifs, *p))
+			break;
+		if (strchr(" \t\n", *p))
+			/* Always remove whitespace */
+			continue;
+		if (saveall > 1)
+			/* Don't remove non-whitespace unless it was naked */
+			break;
+	}
 	setvar(*ap, stackblock(), 0);
+
+	/* Set any remaining args to "" */
 	while (*++ap != NULL)
 		setvar(*ap, nullstr, 0);
 	return status;
@@ -167,9 +211,7 @@ readcmd(argc, argv)
 
 
 int
-umaskcmd(argc, argv)
-	int argc;
-	char **argv;
+umaskcmd(int argc, char **argv)
 {
 	char *ap;
 	int mask;
@@ -239,7 +281,8 @@ umaskcmd(argc, argv)
 			}
 			INTON;
 			if (!set)
-				error("Illegal mode: %s", ap);
+				error("Cannot set mode `%s' (%s)", ap,
+				    strerror(errno));
 
 			umask(~mask & 0777);
 		}
@@ -298,13 +341,14 @@ static const struct limits limits[] = {
 #ifdef RLIMIT_SWAP
 	{ "swap(kbytes)",		RLIMIT_SWAP,	1024, 'w' },
 #endif
+#ifdef RLIMIT_SBSIZE
+	{ "sbsize(bytes)",		RLIMIT_SBSIZE,	   1, 'b' },
+#endif
 	{ (char *) 0,			0,		   0,  '\0' }
 };
 
 int
-ulimitcmd(argc, argv)
-	int argc;
-	char **argv;
+ulimitcmd(int argc, char **argv)
 {
 	int	c;
 	rlim_t val = 0;
@@ -316,7 +360,7 @@ ulimitcmd(argc, argv)
 	struct rlimit	limit;
 
 	what = 'f';
-	while ((optc = nextopt("HSatfdsmcnpl")) != '\0')
+	while ((optc = nextopt("HSabtfdsmcnplv")) != '\0')
 		switch (optc) {
 		case 'H':
 			how = HARD;
@@ -334,14 +378,14 @@ ulimitcmd(argc, argv)
 	for (l = limits; l->name && l->option != what; l++)
 		;
 	if (!l->name)
-		error("ulimit: internal error (%c)\n", what);
+		error("internal error (%c)", what);
 
 	set = *argptr ? 1 : 0;
 	if (set) {
 		char *p = *argptr;
 
 		if (all || argptr[1])
-			error("ulimit: too many arguments\n");
+			error("too many arguments");
 		if (strcmp(p, "unlimited") == 0)
 			val = RLIM_INFINITY;
 		else {
@@ -354,7 +398,7 @@ ulimitcmd(argc, argv)
 					break;
 			}
 			if (c)
-				error("ulimit: bad number\n");
+				error("bad number");
 			val *= l->factor;
 		}
 	}
@@ -373,7 +417,7 @@ ulimitcmd(argc, argv)
 			{
 				val /= l->factor;
 #ifdef BSD4_4
-				out1fmt("%qd\n", (long long) val);
+				out1fmt("%lld\n", (long long) val);
 #else
 				out1fmt("%ld\n", (long) val);
 #endif
@@ -384,12 +428,12 @@ ulimitcmd(argc, argv)
 
 	getrlimit(l->cmd, &limit);
 	if (set) {
-		if (how & SOFT)
-			limit.rlim_cur = val;
 		if (how & HARD)
 			limit.rlim_max = val;
+		if (how & SOFT)
+			limit.rlim_cur = val;
 		if (setrlimit(l->cmd, &limit) < 0)
-			error("ulimit: bad limit\n");
+			error("error setting limit (%s)", strerror(errno));
 	} else {
 		if (how & SOFT)
 			val = limit.rlim_cur;
@@ -402,7 +446,7 @@ ulimitcmd(argc, argv)
 		{
 			val /= l->factor;
 #ifdef BSD4_4
-			out1fmt("%qd\n", (long long) val);
+			out1fmt("%lld\n", (long long) val);
 #else
 			out1fmt("%ld\n", (long) val);
 #endif

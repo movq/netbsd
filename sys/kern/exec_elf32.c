@@ -1,7 +1,7 @@
-/*	$NetBSD: exec_elf32.c,v 1.47 2000/02/06 16:49:51 eeh Exp $	*/
+/*	$NetBSD: exec_elf32.c,v 1.136 2008/09/15 18:12:56 rmind Exp $	*/
 
 /*-
- * Copyright (c) 1994 The NetBSD Foundation, Inc.
+ * Copyright (c) 1994, 2000, 2005 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -63,146 +56,136 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(1, "$NetBSD: exec_elf32.c,v 1.136 2008/09/15 18:12:56 rmind Exp $");
+
 /* If not included by exec_elf64.c, ELFSIZE won't be defined. */
 #ifndef ELFSIZE
 #define	ELFSIZE		32
 #endif
 
-#include "opt_compat_linux.h"
-#include "opt_compat_ibcs2.h"
-#include "opt_compat_svr4.h"
-#include "opt_compat_freebsd.h"
-#include "opt_compat_netbsd32.h"
+#ifdef _KERNEL_OPT
+#include "opt_pax.h"
+#endif /* _KERNEL_OPT */
 
 #include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/kernel.h>
 #include <sys/proc.h>
 #include <sys/malloc.h>
+#include <sys/kmem.h>
 #include <sys/namei.h>
 #include <sys/vnode.h>
 #include <sys/exec.h>
 #include <sys/exec_elf.h>
-#include <sys/fcntl.h>
 #include <sys/syscall.h>
 #include <sys/signalvar.h>
 #include <sys/mount.h>
 #include <sys/stat.h>
+#include <sys/kauth.h>
+#include <sys/bitops.h>
 
-#include <sys/mman.h>
-#include <vm/vm.h>
-#include <vm/vm_param.h>
-#include <vm/vm_map.h>
-
-#include <machine/cpu.h>
+#include <sys/cpu.h>
 #include <machine/reg.h>
 
-#ifdef COMPAT_NETBSD32
-#include <compat/netbsd32/netbsd32_exec.h>
-#endif
+#include <compat/common/compat_util.h>
 
-#ifdef COMPAT_LINUX
-#include <compat/linux/common/linux_exec.h>
-#endif
+#include <sys/pax.h>
 
-#ifdef COMPAT_SVR4
-#include <compat/svr4/svr4_exec.h>
-#endif
+extern const struct emul emul_netbsd;
 
-#ifdef COMPAT_IBCS2
-#include <compat/ibcs2/ibcs2_exec.h>
-#endif
+#define elf_check_header	ELFNAME(check_header)
+#define elf_copyargs		ELFNAME(copyargs)
+#define elf_load_file		ELFNAME(load_file)
+#define elf_load_psection	ELFNAME(load_psection)
+#define exec_elf_makecmds	ELFNAME2(exec,makecmds)
+#define netbsd_elf_signature	ELFNAME2(netbsd,signature)
+#define netbsd_elf_probe	ELFNAME2(netbsd,probe)
 
-#ifdef COMPAT_FREEBSD
-#include <compat/freebsd/freebsd_exec.h>
-#endif
+int	elf_load_file(struct lwp *, struct exec_package *, char *,
+	    struct exec_vmcmd_set *, u_long *, struct elf_args *, Elf_Addr *);
+void	elf_load_psection(struct exec_vmcmd_set *, struct vnode *,
+	    const Elf_Phdr *, Elf_Addr *, u_long *, int *, int);
 
-int	ELFNAME(check_header) __P((Elf_Ehdr *, int));
-int	ELFNAME(load_file) __P((struct proc *, struct exec_package *, char *,
-	    struct exec_vmcmd_set *, u_long *, struct elf_args *, Elf_Addr *));
-void	ELFNAME(load_psection) __P((struct exec_vmcmd_set *, struct vnode *,
-	    Elf_Phdr *, Elf_Addr *, u_long *, int *));
-
-int ELFNAME2(netbsd,signature) __P((struct proc *, struct exec_package *,
-    Elf_Ehdr *));
-static int ELFNAME2(netbsd,probe) __P((struct proc *, struct exec_package *,
-    Elf_Ehdr *, char *, Elf_Addr *));
-
-extern char sigcode[], esigcode[];
-#ifdef SYSCALL_DEBUG
-extern char *syscallnames[];
-#endif
-
-struct emul ELFNAMEEND(emul_netbsd) = {
-	"netbsd",
-	NULL,
-	sendsig,
-	SYS_syscall,
-	SYS_MAXSYSCALL,
-	sysent,
-#ifdef SYSCALL_DEBUG
-	syscallnames,
-#else
-	NULL,
-#endif
-	howmany(ELF_AUX_ENTRIES * sizeof(AuxInfo), sizeof (Elf_Addr)),
-	ELFNAME(copyargs),
-	setregs,
-	sigcode,
-	esigcode,
-};
-
-int (*ELFNAME(probe_funcs)[]) __P((struct proc *, struct exec_package *,
-    Elf_Ehdr *, char *, Elf_Addr *)) = {
-#if defined(COMPAT_NETBSD32) && (ELFSIZE == 32)
-	    /* This one should go first so it matches instead of netbsd */
-	ELFNAME2(netbsd32,probe),
-#endif
-	ELFNAME2(netbsd,probe),
-#if defined(COMPAT_FREEBSD) && (ELFSIZE == 32)
-	ELFNAME2(freebsd,probe),		/* XXX not 64-bit safe */
-#endif
-#if defined(COMPAT_LINUX)
-	ELFNAME2(linux,probe),
-#endif
-#if defined(COMPAT_SVR4) && (ELFSIZE == 32)
-	ELFNAME2(svr4,probe),			/* XXX not 64-bit safe */
-#endif
-#if defined(COMPAT_IBCS2) && (ELFSIZE == 32)
-	ELFNAME2(ibcs2,probe),			/* XXX not 64-bit safe */
-#endif
-};
+int	netbsd_elf_signature(struct lwp *, struct exec_package *, Elf_Ehdr *);
+int	netbsd_elf_probe(struct lwp *, struct exec_package *, void *, char *,
+	    vaddr_t *);
 
 /* round up and down to page boundaries. */
 #define	ELF_ROUND(a, b)		(((a) + (b) - 1) & ~((b) - 1))
 #define	ELF_TRUNC(a, b)		((a) & ~((b) - 1))
 
+#define MAXPHNUM	50
+
+#ifdef PAX_ASLR
+/*
+ * We don't move this code in kern_pax.c because it is compiled twice.
+ */
+static void
+pax_aslr_elf(struct lwp *l, struct exec_package *epp, Elf_Ehdr *eh,
+    Elf_Phdr *ph)
+{
+	size_t pax_align = 0, pax_offset, i;
+	uint32_t r;
+
+	if (!pax_aslr_active(l))
+		return;
+
+	/*
+	 * find align XXX: not all sections might have the same
+	 * alignment
+	 */
+	for (i = 0; i < eh->e_phnum; i++)
+		if (ph[i].p_type == PT_LOAD) {
+			pax_align = ph[i].p_align;
+			break;
+		}
+
+	r = arc4random();
+
+	if (pax_align == 0)
+		pax_align = PGSHIFT;
+#ifdef DEBUG_ASLR
+	uprintf("r=0x%x a=0x%x p=0x%x Delta=0x%lx\n", r,
+	    ilog2(pax_align), PGSHIFT, PAX_ASLR_DELTA(r,
+		ilog2(pax_align), PAX_ASLR_DELTA_EXEC_LEN));
+#endif
+	pax_offset = ELF_TRUNC(PAX_ASLR_DELTA(r,
+	    ilog2(pax_align), PAX_ASLR_DELTA_EXEC_LEN), pax_align);
+
+	for (i = 0; i < eh->e_phnum; i++)
+		ph[i].p_vaddr += pax_offset;
+	eh->e_entry += pax_offset;
+#ifdef DEBUG_ASLR
+	uprintf("pax offset=0x%zx entry=0x%llx\n",
+	    pax_offset, (unsigned long long)eh->e_entry);
+#endif
+}
+#endif /* PAX_ASLR */
+
 /*
  * Copy arguments onto the stack in the normal way, but add some
  * extra information in case of dynamic binding.
  */
-void *
-ELFNAME(copyargs)(pack, arginfo, stack, argp)
-	struct exec_package *pack;
-	struct ps_strings *arginfo;
-	void *stack;
-	void *argp;
+int
+elf_copyargs(struct lwp *l, struct exec_package *pack,
+    struct ps_strings *arginfo, char **stackp, void *argp)
 {
-	size_t len;
-	AuxInfo ai[ELF_AUX_ENTRIES], *a;
+	size_t len, vlen;
+	AuxInfo ai[ELF_AUX_ENTRIES], *a, *execname;
 	struct elf_args *ap;
+	int error;
 
-	stack = copyargs(pack, arginfo, stack, argp);
-	if (!stack)
-		return NULL;
+	if ((error = copyargs(l, pack, arginfo, stackp, argp)) != 0)
+		return error;
 
 	a = ai;
+	execname = NULL;
 
 	/*
 	 * Push extra arguments on the stack needed by dynamically
 	 * linked binaries
 	 */
 	if ((ap = (struct elf_args *)pack->ep_emul_arg)) {
+		struct vattr *vap = pack->ep_vap;
 
 		a->a_type = AT_PHDR;
 		a->a_v = ap->arg_phaddr;
@@ -217,7 +200,7 @@ ELFNAME(copyargs)(pack, arginfo, stack, argp)
 		a++;
 
 		a->a_type = AT_PAGESZ;
-		a->a_v = NBPG;
+		a->a_v = PAGE_SIZE;
 		a++;
 
 		a->a_type = AT_BASE;
@@ -232,7 +215,35 @@ ELFNAME(copyargs)(pack, arginfo, stack, argp)
 		a->a_v = ap->arg_entry;
 		a++;
 
-		free((char *)ap, M_TEMP);
+		a->a_type = AT_EUID;
+		if (vap->va_mode & S_ISUID)
+			a->a_v = vap->va_uid;
+		else
+			a->a_v = kauth_cred_geteuid(l->l_cred);
+		a++;
+
+		a->a_type = AT_RUID;
+		a->a_v = kauth_cred_getuid(l->l_cred);
+		a++;
+
+		a->a_type = AT_EGID;
+		if (vap->va_mode & S_ISGID)
+			a->a_v = vap->va_gid;
+		else
+			a->a_v = kauth_cred_getegid(l->l_cred);
+		a++;
+
+		a->a_type = AT_RGID;
+		a->a_v = kauth_cred_getgid(l->l_cred);
+		a++;
+
+		if (pack->ep_path) {
+			execname = a;
+			a->a_type = AT_SUN_EXECNAME;
+			a++;
+		}
+
+		free(ap, M_TEMP);
 		pack->ep_emul_arg = NULL;
 	}
 
@@ -240,12 +251,23 @@ ELFNAME(copyargs)(pack, arginfo, stack, argp)
 	a->a_v = 0;
 	a++;
 
-	len = (a - ai) * sizeof(AuxInfo);
-	if (copyout(ai, stack, len))
-		return NULL;
-	stack = (caddr_t)stack + len;
+	vlen = (a - ai) * sizeof(AuxInfo);
 
-	return stack;
+	if (execname) {
+		char *path = pack->ep_path;
+		execname->a_v = (uintptr_t)(*stackp + vlen);
+		len = strlen(path) + 1;
+		if ((error = copyout(path, (*stackp + vlen), len)) != 0)
+			return error;
+		len = ALIGN(len);
+	} else
+		len = 0;
+
+	if ((error = copyout(ai, *stackp, vlen)) != 0)
+		return error;
+	*stackp += vlen + len;
+
+	return 0;
 }
 
 /*
@@ -254,13 +276,12 @@ ELFNAME(copyargs)(pack, arginfo, stack, argp)
  * Check header for validity; return 0 of ok ENOEXEC if error
  */
 int
-ELFNAME(check_header)(eh, type)
-	Elf_Ehdr *eh;
-	int type;
+elf_check_header(Elf_Ehdr *eh, int type)
 {
 
 	if (memcmp(eh->e_ident, ELFMAG, SELFMAG) != 0 ||
 	    eh->e_ident[EI_CLASS] != ELFCLASS)
+		return ENOEXEC;
 
 	switch (eh->e_machine) {
 
@@ -270,7 +291,13 @@ ELFNAME(check_header)(eh, type)
 		return ENOEXEC;
 	}
 
+	if (ELF_EHDR_FLAGS_OK(eh) == 0)
+		return ENOEXEC;
+
 	if (eh->e_type != type)
+		return ENOEXEC;
+
+	if (eh->e_shnum > 32768 || eh->e_phnum > 128)
 		return ENOEXEC;
 
 	return 0;
@@ -282,97 +309,82 @@ ELFNAME(check_header)(eh, type)
  * Load a psection at the appropriate address
  */
 void
-ELFNAME(load_psection)(vcset, vp, ph, addr, size, prot)
-	struct exec_vmcmd_set *vcset;
-	struct vnode *vp;
-	Elf_Phdr *ph;
-	Elf_Addr *addr;
-	u_long *size;
-	int *prot;
+elf_load_psection(struct exec_vmcmd_set *vcset, struct vnode *vp,
+    const Elf_Phdr *ph, Elf_Addr *addr, u_long *size, int *prot, int flags)
 {
-	u_long uaddr, msize, psize, rm, rf;
+	u_long msize, psize, rm, rf;
 	long diff, offset;
 
 	/*
 	 * If the user specified an address, then we load there.
 	 */
-	if (*addr != ELFDEFNNAME(NO_ADDR)) {
-		if (ph->p_align > 1) {
-			*addr = ELF_ROUND(*addr, ph->p_align);
-			uaddr = ELF_TRUNC(ph->p_vaddr, ph->p_align);
-		} else
-			uaddr = ph->p_vaddr;
-		diff = ph->p_vaddr - uaddr;
-	} else {
-		*addr = uaddr = ph->p_vaddr;
-		if (ph->p_align > 1)
-			*addr = ELF_TRUNC(uaddr, ph->p_align);
-		diff = uaddr - *addr;
-	}
+	if (*addr == ELFDEFNNAME(NO_ADDR))
+		*addr = ph->p_vaddr;
+
+	if (ph->p_align > 1) {
+		/*
+		 * Make sure we are virtually aligned as we are supposed to be.
+		 */
+		diff = ph->p_vaddr - ELF_TRUNC(ph->p_vaddr, ph->p_align);
+		KASSERT(*addr - diff == ELF_TRUNC(*addr, ph->p_align));
+		/*
+		 * But make sure to not map any pages before the start of the
+		 * psection by limiting the difference to within a page.
+		 */
+		diff &= PAGE_MASK;
+	} else
+		diff = 0;
 
 	*prot |= (ph->p_flags & PF_R) ? VM_PROT_READ : 0;
 	*prot |= (ph->p_flags & PF_W) ? VM_PROT_WRITE : 0;
 	*prot |= (ph->p_flags & PF_X) ? VM_PROT_EXECUTE : 0;
 
+	/*
+	 * Adjust everything so it all starts on a page boundary.
+	 */
+	*addr -= diff;
 	offset = ph->p_offset - diff;
 	*size = ph->p_filesz + diff;
 	msize = ph->p_memsz + diff;
-	psize = round_page(*size);
 
-	if ((ph->p_flags & PF_W) != 0) {
-		/*
-		 * Because the pagedvn pager can't handle zero fill of the last
-		 * data page if it's not page aligned we map the last page
-		 * readvn.
-		 */
-		psize = trunc_page(*size);
-		NEW_VMCMD(vcset, vmcmd_map_pagedvn, psize, *addr, vp,
-		    offset, *prot);
-		if(psize != *size)
-			NEW_VMCMD(vcset, vmcmd_map_readvn, *size - psize,
-			    *addr + psize, vp, offset + psize, *prot);
-	} else
-		NEW_VMCMD(vcset, vmcmd_map_pagedvn, psize, *addr, vp,
-		    offset, *prot);
+	if (ph->p_align >= PAGE_SIZE) {
+		if ((ph->p_flags & PF_W) != 0) {
+			/*
+			 * Because the pagedvn pager can't handle zero fill
+			 * of the last data page if it's not page aligned we
+			 * map the last page readvn.
+			 */
+			psize = trunc_page(*size);
+		} else {
+			psize = round_page(*size);
+		}
+	} else {
+		psize = *size;
+	}
+
+	if (psize > 0) {
+		NEW_VMCMD2(vcset, ph->p_align < PAGE_SIZE ?
+		    vmcmd_map_readvn : vmcmd_map_pagedvn, psize, *addr, vp,
+		    offset, *prot, flags);
+		flags &= VMCMD_RELATIVE;
+	}
+	if (psize < *size) {
+		NEW_VMCMD2(vcset, vmcmd_map_readvn, *size - psize,
+		    *addr + psize, vp, offset + psize, *prot, flags);
+	}
 
 	/*
-	 * Check if we need to extend the size of the segment
+	 * Check if we need to extend the size of the segment (does
+	 * bss extend page the next page boundary)?
 	 */
 	rm = round_page(*addr + msize);
 	rf = round_page(*addr + *size);
 
 	if (rm != rf) {
-		NEW_VMCMD(vcset, vmcmd_map_zero, rm - rf, rf, NULLVP,
-		    0, *prot);
+		NEW_VMCMD2(vcset, vmcmd_map_zero, rm - rf, rf, NULLVP,
+		    0, *prot, flags & VMCMD_RELATIVE);
 		*size = msize;
 	}
-}
-
-/*
- * elf_read_from():
- *
- *	Read from vnode into buffer at offset.
- */
-int
-ELFNAME(read_from)(p, vp, off, buf, size)
-	struct vnode *vp;
-	u_long off;
-	struct proc *p;
-	caddr_t buf;
-	int size;
-{
-	int error;
-	size_t resid;
-
-	if ((error = vn_rdwr(UIO_READ, vp, buf, size, off, UIO_SYSSPACE,
-	    0, p->p_ucred, &resid, p)) != 0)
-		return error;
-	/*
-	 * See if we got all of it
-	 */
-	if (resid != 0)
-		return ENOEXEC;
-	return 0;
 }
 
 /*
@@ -383,35 +395,39 @@ ELFNAME(read_from)(p, vp, off, buf, size)
  * so it might be used externally.
  */
 int
-ELFNAME(load_file)(p, epp, path, vcset, entry, ap, last)
-	struct proc *p;
-	struct exec_package *epp;
-	char *path;
-	struct exec_vmcmd_set *vcset;
-	u_long *entry;
-	struct elf_args	*ap;
-	Elf_Addr *last;
+elf_load_file(struct lwp *l, struct exec_package *epp, char *path,
+    struct exec_vmcmd_set *vcset, u_long *entryoff, struct elf_args *ap,
+    Elf_Addr *last)
 {
 	int error, i;
-	struct nameidata nd;
 	struct vnode *vp;
 	struct vattr attr;
 	Elf_Ehdr eh;
 	Elf_Phdr *ph = NULL;
+	const Elf_Phdr *ph0;
+	const Elf_Phdr *base_ph;
+	const Elf_Phdr *last_ph;
 	u_long phsize;
-	char *bp = NULL;
 	Elf_Addr addr = *last;
+	struct proc *p;
 
-	bp = path;
+	p = l->l_proc;
+
 	/*
 	 * 1. open file
 	 * 2. read filehdr
 	 * 3. map text, data, and bss out of it using VM_*
 	 */
-	NDINIT(&nd, LOOKUP, FOLLOW | LOCKLEAF, UIO_SYSSPACE, path, p);
-	if ((error = namei(&nd)) != 0)
-		return error;
-	vp = nd.ni_vp;
+	vp = epp->ep_interp;
+	if (vp == NULL) {
+		error = emul_find_interp(l, epp, path);
+		if (error != 0)
+			return error;
+		vp = epp->ep_interp;
+	}
+	/* We'll tidy this ourselves - otherwise we have locking issues */
+	epp->ep_interp = NULL;
+	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 
 	/*
 	 * Similarly, if it's not marked as executable, or it's not a regular
@@ -421,11 +437,11 @@ ELFNAME(load_file)(p, epp, path, vcset, entry, ap, last)
 		error = EACCES;
 		goto badunlock;
 	}
-	if ((error = VOP_ACCESS(vp, VEXEC, p->p_ucred, p)) != 0)
+	if ((error = VOP_ACCESS(vp, VEXEC, l->l_cred)) != 0)
 		goto badunlock;
 
 	/* get attributes */
-	if ((error = VOP_GETATTR(vp, &attr, p->p_ucred, p)) != 0)
+	if ((error = VOP_GETATTR(vp, &attr, l->l_cred)) != 0)
 		goto badunlock;
 
 	/*
@@ -443,48 +459,144 @@ ELFNAME(load_file)(p, epp, path, vcset, entry, ap, last)
 #ifdef notyet /* XXX cgd 960926 */
 	XXX cgd 960926: (maybe) VOP_OPEN it (and VOP_CLOSE in copyargs?)
 #endif
+
+	error = vn_marktext(vp);
+	if (error)
+		goto badunlock;
+
 	VOP_UNLOCK(vp, 0);
 
-	if ((error = ELFNAME(read_from)(p, vp, 0, (caddr_t) &eh,
-	    sizeof(eh))) != 0)
+	if ((error = exec_read_from(l, vp, 0, &eh, sizeof(eh))) != 0)
 		goto bad;
 
-	if ((error = ELFNAME(check_header)(&eh, ET_DYN)) != 0)
+	if ((error = elf_check_header(&eh, ET_DYN)) != 0)
 		goto bad;
+
+	if (eh.e_phnum > MAXPHNUM || eh.e_phnum == 0) {
+		error = ENOEXEC;
+		goto bad;
+	}
 
 	phsize = eh.e_phnum * sizeof(Elf_Phdr);
-	ph = (Elf_Phdr *)malloc(phsize, M_TEMP, M_WAITOK);
+	ph = kmem_alloc(phsize, KM_SLEEP);
 
-	if ((error = ELFNAME(read_from)(p, vp, eh.e_phoff,
-	    (caddr_t) ph, phsize)) != 0)
+	if ((error = exec_read_from(l, vp, eh.e_phoff, ph, phsize)) != 0)
 		goto bad;
+
+#ifdef ELF_INTERP_NON_RELOCATABLE
+	/*
+	 * Evil hack:  Only MIPS should be non-relocatable, and the
+	 * psections should have a high address (typically 0x5ffe0000).
+	 * If it's now relocatable, it should be linked at 0 and the
+	 * psections should have zeros in the upper part of the address.
+	 * Otherwise, force the load at the linked address.
+	 */
+	if (*last == ELF_LINK_ADDR && (ph->p_vaddr & 0xffff0000) == 0)
+		*last = ELFDEFNNAME(NO_ADDR);
+#endif
+
+	/*
+	 * If no position to load the interpreter was set by a probe
+	 * function, pick the same address that a non-fixed mmap(0, ..)
+	 * would (i.e. something safely out of the way).
+	 */
+	if (*last == ELFDEFNNAME(NO_ADDR)) {
+		u_long limit = 0;
+		/*
+		 * Find the start and ending addresses of the psections to
+		 * be loaded.  This will give us the size.
+		 */
+		for (i = 0, ph0 = ph, base_ph = NULL; i < eh.e_phnum;
+		     i++, ph0++) {
+			if (ph0->p_type == PT_LOAD) {
+				u_long psize = ph0->p_vaddr + ph0->p_memsz;
+				if (base_ph == NULL)
+					base_ph = ph0;
+				if (psize > limit)
+					limit = psize;
+			}
+		}
+
+		if (base_ph == NULL) {
+			error = ENOEXEC;
+			goto bad;
+		}
+
+		/*
+		 * Now compute the size and load address.
+		 */
+		addr = (*epp->ep_esch->es_emul->e_vm_default_addr)(p,
+		    epp->ep_daddr,
+		    round_page(limit) - trunc_page(base_ph->p_vaddr));
+	} else
+		addr = *last; /* may be ELF_LINK_ADDR */
 
 	/*
 	 * Load all the necessary sections
 	 */
-	for (i = 0; i < eh.e_phnum; i++) {
-		u_long size = 0;
-		int prot = 0;
+	for (i = 0, ph0 = ph, base_ph = NULL, last_ph = NULL;
+	     i < eh.e_phnum; i++, ph0++) {
+		switch (ph0->p_type) {
+		case PT_LOAD: {
+			u_long size;
+			int prot = 0;
+			int flags;
 
-		switch (ph[i].p_type) {
-		case PT_LOAD:
-			ELFNAME(load_psection)(vcset, vp, &ph[i], &addr,
-			    &size, &prot);
-			/* If entry is within this section it must be text */
-			if (eh.e_entry >= ph[i].p_vaddr &&
-			    eh.e_entry < (ph[i].p_vaddr + size)) {
-				/* XXX */
-				*entry = addr + eh.e_entry;
-#ifdef mips
-				*entry -= ph[i].p_vaddr;
-#endif
-				ap->arg_interp = addr;
+			if (base_ph == NULL) {
+				/*
+				 * First encountered psection is always the
+				 * base psection.  Make sure it's aligned
+				 * properly (align down for topdown and align
+				 * upwards for not topdown).
+				 */
+				base_ph = ph0;
+				flags = VMCMD_BASE;
+				if (addr == ELF_LINK_ADDR)
+					addr = ph0->p_vaddr;
+				if (p->p_vmspace->vm_map.flags & VM_MAP_TOPDOWN)
+					addr = ELF_TRUNC(addr, ph0->p_align);
+				else
+					addr = ELF_ROUND(addr, ph0->p_align);
+			} else {
+				u_long limit = round_page(last_ph->p_vaddr
+				    + last_ph->p_memsz);
+				u_long base = trunc_page(ph0->p_vaddr);
+
+				/*
+				 * If there is a gap in between the psections,
+				 * map it as inaccessible so nothing else
+				 * mmap'ed will be placed there.
+				 */
+				if (limit != base) {
+					NEW_VMCMD2(vcset, vmcmd_map_zero,
+					    base - limit,
+					    limit - base_ph->p_vaddr, NULLVP,
+					    0, VM_PROT_NONE, VMCMD_RELATIVE);
+				}
+
+				addr = ph0->p_vaddr - base_ph->p_vaddr;
+				flags = VMCMD_RELATIVE;
+			}
+			last_ph = ph0;
+			elf_load_psection(vcset, vp, &ph[i], &addr,
+			    &size, &prot, flags);
+			/*
+			 * If entry is within this psection then this
+			 * must contain the .text section.  *entryoff is
+			 * relative to the base psection.
+			 */
+			if (eh.e_entry >= ph0->p_vaddr &&
+			    eh.e_entry < (ph0->p_vaddr + size)) {
+				*entryoff = eh.e_entry - base_ph->p_vaddr;
 			}
 			addr += size;
 			break;
+		}
 
 		case PT_DYNAMIC:
 		case PT_PHDR:
+			break;
+
 		case PT_NOTE:
 			break;
 
@@ -493,7 +605,10 @@ ELFNAME(load_file)(p, epp, path, vcset, entry, ap, last)
 		}
 	}
 
-	free((char *)ph, M_TEMP);
+	kmem_free(ph, phsize);
+	/*
+	 * This value is ignored if TOPDOWN.
+	 */
 	*last = addr;
 	vrele(vp);
 	return 0;
@@ -503,7 +618,7 @@ badunlock:
 
 bad:
 	if (ph != NULL)
-		free((char *)ph, M_TEMP);
+		kmem_free(ph, phsize);
 #ifdef notyet /* XXX cgd 960926 */
 	(maybe) VOP_CLOSE it
 #endif
@@ -521,103 +636,93 @@ bad:
  * text, data, bss, and stack segments.
  */
 int
-ELFNAME2(exec,makecmds)(p, epp)
-	struct proc *p;
-	struct exec_package *epp;
+exec_elf_makecmds(struct lwp *l, struct exec_package *epp)
 {
 	Elf_Ehdr *eh = epp->ep_hdr;
 	Elf_Phdr *ph, *pp;
 	Elf_Addr phdr = 0, pos = 0;
-	int error, i, n, nload;
-	char interp[MAXPATHLEN];
+	int error, i, nload;
+	char *interp = NULL;
 	u_long phsize;
+	struct proc *p;
+	bool is_dyn;
 
 	if (epp->ep_hdrvalid < sizeof(Elf_Ehdr))
 		return ENOEXEC;
 
+	is_dyn = elf_check_header(eh, ET_DYN) == 0;
 	/*
 	 * XXX allow for executing shared objects. It seems silly
 	 * but other ELF-based systems allow it as well.
 	 */
-	if (ELFNAME(check_header)(eh, ET_EXEC) != 0 &&
-	    ELFNAME(check_header)(eh, ET_DYN) != 0)
+	if (elf_check_header(eh, ET_EXEC) != 0 && !is_dyn)
 		return ENOEXEC;
 
-	/*
-	 * check if vnode is in open for writing, because we want to
-	 * demand-page out of it.  if it is, don't do it, for various
-	 * reasons
-	 */
-	if (epp->ep_vp->v_writecount != 0) {
-#ifdef DIAGNOSTIC
-		if (epp->ep_vp->v_flag & VTEXT)
-			panic("exec: a VTEXT vnode has writecount != 0\n");
-#endif
-		return ETXTBSY;
-	}
+	if (eh->e_phnum > MAXPHNUM || eh->e_phnum == 0)
+		return ENOEXEC;
+
+	error = vn_marktext(epp->ep_vp);
+	if (error)
+		return error;
+
 	/*
 	 * Allocate space to hold all the program headers, and read them
 	 * from the file
 	 */
+	p = l->l_proc;
 	phsize = eh->e_phnum * sizeof(Elf_Phdr);
-	ph = (Elf_Phdr *)malloc(phsize, M_TEMP, M_WAITOK);
+	ph = kmem_alloc(phsize, KM_SLEEP);
 
-	if ((error = ELFNAME(read_from)(p, epp->ep_vp, eh->e_phoff,
-	    (caddr_t) ph, phsize)) != 0)
+	if ((error = exec_read_from(l, epp->ep_vp, eh->e_phoff, ph, phsize)) !=
+	    0)
 		goto bad;
 
 	epp->ep_taddr = epp->ep_tsize = ELFDEFNNAME(NO_ADDR);
 	epp->ep_daddr = epp->ep_dsize = ELFDEFNNAME(NO_ADDR);
 
-	interp[0] = '\0';
-
 	for (i = 0; i < eh->e_phnum; i++) {
 		pp = &ph[i];
 		if (pp->p_type == PT_INTERP) {
-			if (pp->p_filesz >= sizeof(interp))
+			if (pp->p_filesz >= MAXPATHLEN) {
+				error = ENOEXEC;
 				goto bad;
-			if ((error = ELFNAME(read_from)(p, epp->ep_vp,
-			    pp->p_offset, (caddr_t) interp,
-			    pp->p_filesz)) != 0)
+			}
+			interp = PNBUF_GET();
+			interp[0] = '\0';
+			if ((error = exec_read_from(l, epp->ep_vp,
+			    pp->p_offset, interp, pp->p_filesz)) != 0)
 				goto bad;
 			break;
 		}
 	}
 
 	/*
-	 * Setup things for native emulation.
-	 */
-	epp->ep_emul = &ELFNAMEEND(emul_netbsd);
-	pos = ELFDEFNNAME(NO_ADDR);
-
-	/*
 	 * On the same architecture, we may be emulating different systems.
-	 * See which one will accept this executable. This currently only
-	 * applies to SVR4, and IBCS2 on the i386 and Linux on the i386
-	 * and the Alpha.
+	 * See which one will accept this executable.
 	 *
 	 * Probe functions would normally see if the interpreter (if any)
 	 * exists. Emulation packages may possibly replace the interpreter in
-	 * interp[] with a changed path (/emul/xxx/<path>), and also
-	 * set the ep_emul field in the exec package structure.
+	 * interp[] with a changed path (/emul/xxx/<path>).
 	 */
-	n = sizeof(ELFNAME(probe_funcs)) / sizeof(ELFNAME(probe_funcs)[0]);
-	if (n != 0) {
-		error = ENOEXEC;
-		for (i = 0; i < n && error; i++)
-			error = ELFNAME(probe_funcs)[i](p, epp, eh,
-			    interp, &pos);
-#ifdef notyet
-		/*
-		 * We should really use a signature in our native binaries
-		 * and have our own probe function for matching binaries,
-		 * before trying the emulations. For now, if the emulation
-		 * probes failed we default to native.
-		 */
+	pos = ELFDEFNNAME(NO_ADDR);
+	if (epp->ep_esch->u.elf_probe_func) {
+		vaddr_t startp = (vaddr_t)pos;
+
+		error = (*epp->ep_esch->u.elf_probe_func)(l, epp, eh, interp,
+							  &startp);
 		if (error)
 			goto bad;
-#endif
+		pos = (Elf_Addr)startp;
 	}
+
+#if defined(PAX_MPROTECT) || defined(PAX_SEGVGUARD) || defined(PAX_ASLR)
+	p->p_pax = epp->ep_pax_flags;
+#endif /* PAX_MPROTECT || PAX_SEGVGUARD || PAX_ASLR */
+
+#ifdef PAX_ASLR
+	if (is_dyn)
+		pax_aslr_elf(l, epp, eh, ph);
+#endif /* PAX_ASLR */
 
 	/*
 	 * Load all the necessary sections
@@ -635,10 +740,12 @@ ELFNAME2(exec,makecmds)(p, epp)
 			 * XXX
 			 * Can handle only 2 sections: text and data
 			 */
-			if (nload++ == 2)
+			if (nload++ == 2) {
+				error = ENOEXEC;
 				goto bad;
-			ELFNAME(load_psection)(&epp->ep_vmcmds, epp->ep_vp,
-			    &ph[i], &addr, &size, &prot);
+			}
+			elf_load_psection(&epp->ep_vmcmds, epp->ep_vp,
+			    &ph[i], &addr, &size, &prot, VMCMD_FIXED);
 
 			/*
 			 * Decide whether it's text or data by looking
@@ -659,17 +766,13 @@ ELFNAME2(exec,makecmds)(p, epp)
 			break;
 
 		case PT_SHLIB:
-#ifndef COMPAT_IBCS2			/* SCO has these sections */
-			error = ENOEXEC;
-			goto bad;
-#endif
-
+			/* SCO has these sections. */
 		case PT_INTERP:
-			/* Already did this one */
+			/* Already did this one. */
 		case PT_DYNAMIC:
+			break;
 		case PT_NOTE:
 			break;
-
 		case PT_PHDR:
 			/* Note address of program headers (in text segment) */
 			phdr = pp->p_vaddr;
@@ -683,32 +786,24 @@ ELFNAME2(exec,makecmds)(p, epp)
 		}
 	}
 
-	/* this breaks on, e.g., OpenBSD-compatible mips shared binaries. */
-#ifndef ELF_INTERP_NON_RELOCATABLE
-	/*
-	 * If no position to load the interpreter was set by a probe
-	 * function, pick the same address that a non-fixed mmap(0, ..)
-	 * would (i.e. something safely out of the way).
-	 */
-	if (pos == ELFDEFNNAME(NO_ADDR))
-		pos = round_page(epp->ep_daddr + MAXDSIZ);
-#endif	/* !ELF_INTERP_NON_RELOCATABLE */
-
 	/*
 	 * Check if we found a dynamically linked binary and arrange to load
-	 * it's interpreter
+	 * its interpreter
 	 */
-	if (interp[0]) {
+	if (interp) {
 		struct elf_args *ap;
+		int j = epp->ep_vmcmds.evs_used;
+		u_long interp_offset;
 
-		ap = (struct elf_args *)malloc(sizeof(struct elf_args),
+		MALLOC(ap, struct elf_args *, sizeof(struct elf_args),
 		    M_TEMP, M_WAITOK);
-		if ((error = ELFNAME(load_file)(p, epp, interp,
-		    &epp->ep_vmcmds, &epp->ep_entry, ap, &pos)) != 0) {
-			free((char *)ap, M_TEMP);
+		if ((error = elf_load_file(l, epp, interp,
+		    &epp->ep_vmcmds, &interp_offset, ap, &pos)) != 0) {
+			FREE(ap, M_TEMP);
 			goto bad;
 		}
-		pos += phsize;
+		ap->arg_interp = epp->ep_vmcmds.evs_cmds[j].ev_addr;
+		epp->ep_entry = ap->arg_interp + interp_offset;
 		ap->arg_phaddr = phdr;
 
 		ap->arg_phentsize = eh->e_phentsize;
@@ -716,96 +811,110 @@ ELFNAME2(exec,makecmds)(p, epp)
 		ap->arg_entry = eh->e_entry;
 
 		epp->ep_emul_arg = ap;
+
+		PNBUF_PUT(interp);
 	} else
 		epp->ep_entry = eh->e_entry;
 
 #ifdef ELF_MAP_PAGE_ZERO
 	/* Dell SVR4 maps page zero, yeuch! */
-	NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_readvn, NBPG, 0, epp->ep_vp, 0,
-	    VM_PROT_READ);
+	NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_readvn, PAGE_SIZE, 0,
+	    epp->ep_vp, 0, VM_PROT_READ);
 #endif
-	free((char *)ph, M_TEMP);
-	epp->ep_vp->v_flag |= VTEXT;
-	return exec_elf_setup_stack(p, epp);
+	kmem_free(ph, phsize);
+	return (*epp->ep_esch->es_setup_stack)(l, epp);
 
 bad:
-	free((char *)ph, M_TEMP);
+	if (interp)
+		PNBUF_PUT(interp);
+	kmem_free(ph, phsize);
 	kill_vmcmds(&epp->ep_vmcmds);
-	return ENOEXEC;
-}
-
-int
-ELFNAME2(netbsd,signature)(p, epp, eh)
-	struct proc *p;
-	struct exec_package *epp;
-	Elf_Ehdr *eh;
-{
-	Elf_Phdr *hph, *ph;
-	Elf_Nhdr *np = NULL;
-	size_t phsize;
-	int error;
-
-	phsize = eh->e_phnum * sizeof(Elf_Phdr);
-	hph = (Elf_Phdr *)malloc(phsize, M_TEMP, M_WAITOK);
-	if ((error = ELFNAME(read_from)(p, epp->ep_vp, eh->e_phoff,
-	    (caddr_t)hph, phsize)) != 0)
-		goto out1;
-
-	for (ph = hph;  ph < &hph[eh->e_phnum]; ph++) {
-		if (ph->p_type != PT_NOTE ||
-		    ph->p_filesz < sizeof(Elf_Nhdr) + ELF_NOTE_NETBSD_NAMESZ)
-			continue;
-
-		np = (Elf_Nhdr *)malloc(ph->p_filesz, M_TEMP, M_WAITOK);
-		if ((error = ELFNAME(read_from)(p, epp->ep_vp, ph->p_offset,
-		    (caddr_t)np, ph->p_filesz)) != 0)
-			goto out2;
-
-		if (np->n_type != ELF_NOTE_TYPE_OSVERSION) {
-			free(np, M_TEMP);
-			np = NULL;
-			continue;
-		}
-
-		/* Check the name and description sizes. */
-		if (np->n_namesz != ELF_NOTE_NETBSD_NAMESZ ||
-		    np->n_descsz != ELF_NOTE_NETBSD_DESCSZ)
-			goto out3;
-
-		/* Is the name "NetBSD\0\0"? */
-		if (memcmp((np + 1), ELF_NOTE_NETBSD_NAME,
-		    ELF_NOTE_NETBSD_NAMESZ))
-			goto out3;
-
-		/* XXX: We could check for the specific emulation here */
-		/* All checks succeeded. */
-		error = 0;
-		goto out2;
-	}
-
-out3:
-	error = ENOEXEC;
-out2:
-	if (np)
-		free(np, M_TEMP);
-out1:
-	free(hph, M_TEMP);
 	return error;
 }
 
-static int
-ELFNAME2(netbsd,probe)(p, epp, eh, itp, pos)
-	struct proc *p;
-	struct exec_package *epp;
-	Elf_Ehdr *eh;
-	char *itp;
-	Elf_Addr *pos;
+int
+netbsd_elf_signature(struct lwp *l, struct exec_package *epp,
+    Elf_Ehdr *eh)
+{
+	size_t i;
+	Elf_Phdr *ph;
+	size_t phsize;
+	int error;
+	int isnetbsd = 0;
+	char *ndata;
+
+	epp->ep_pax_flags = 0;
+	if (eh->e_phnum > MAXPHNUM || eh->e_phnum == 0)
+		return ENOEXEC;
+
+	phsize = eh->e_phnum * sizeof(Elf_Phdr);
+	ph = kmem_alloc(phsize, KM_SLEEP);
+	error = exec_read_from(l, epp->ep_vp, eh->e_phoff, ph, phsize);
+	if (error)
+		goto out;
+
+	for (i = 0; i < eh->e_phnum; i++) {
+		Elf_Phdr *ephp = &ph[i];
+		Elf_Nhdr *np;
+
+		if (ephp->p_type != PT_NOTE ||
+		    ephp->p_filesz > 1024 ||
+		    ephp->p_filesz < sizeof(Elf_Nhdr) + ELF_NOTE_NETBSD_NAMESZ)
+			continue;
+
+		np = kmem_alloc(ephp->p_filesz, KM_SLEEP);
+		error = exec_read_from(l, epp->ep_vp, ephp->p_offset, np,
+		    ephp->p_filesz);
+		if (error)
+			goto next;
+
+		ndata = (char *)(np + 1);
+		switch (np->n_type) {
+		case ELF_NOTE_TYPE_NETBSD_TAG:
+			if (np->n_namesz != ELF_NOTE_NETBSD_NAMESZ ||
+			    np->n_descsz != ELF_NOTE_NETBSD_DESCSZ ||
+			    memcmp(ndata, ELF_NOTE_NETBSD_NAME,
+			    ELF_NOTE_NETBSD_NAMESZ))
+				goto next;
+			isnetbsd = 1;
+			break;
+
+		case ELF_NOTE_TYPE_PAX_TAG:
+			if (np->n_namesz != ELF_NOTE_PAX_NAMESZ ||
+			    np->n_descsz != ELF_NOTE_PAX_DESCSZ ||
+			    memcmp(ndata, ELF_NOTE_PAX_NAME,
+			    ELF_NOTE_PAX_NAMESZ))
+				goto next;
+			(void)memcpy(&epp->ep_pax_flags,
+			    ndata + ELF_NOTE_PAX_NAMESZ,
+			    sizeof(epp->ep_pax_flags));
+			break;
+
+		default:
+			break;
+		}
+
+next:
+		kmem_free(np, ephp->p_filesz);
+		continue;
+	}
+
+	error = isnetbsd ? 0 : ENOEXEC;
+out:
+	kmem_free(ph, phsize);
+	return error;
+}
+
+int
+netbsd_elf_probe(struct lwp *l, struct exec_package *epp, void *eh, char *itp,
+    vaddr_t *pos)
 {
 	int error;
 
-	if ((error = ELFNAME2(netbsd,signature)(p, epp, eh)) != 0)
+	if ((error = netbsd_elf_signature(l, epp, eh)) != 0)
 		return error;
-	epp->ep_emul = &ELFNAMEEND(emul_netbsd);
-	*pos = ELFDEFNNAME(NO_ADDR);
+#ifdef ELF_INTERP_NON_RELOCATABLE
+	*pos = ELF_LINK_ADDR;
+#endif
 	return 0;
 }

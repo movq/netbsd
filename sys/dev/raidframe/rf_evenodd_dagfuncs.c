@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_evenodd_dagfuncs.c,v 1.6 2000/03/30 12:45:40 augustss Exp $	*/
+/*	$NetBSD: rf_evenodd_dagfuncs.c,v 1.18 2007/03/04 06:02:38 christos Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -30,7 +30,16 @@
  * Code for RAID-EVENODD  architecture.
  */
 
-#include "rf_types.h"
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: rf_evenodd_dagfuncs.c,v 1.18 2007/03/04 06:02:38 christos Exp $");
+
+#include "rf_archs.h"
+#include "opt_raid_diagnostic.h"
+
+#if RF_INCLUDE_EVENODD > 0
+
+#include <dev/raidframe/raidframevar.h>
+
 #include "rf_raid.h"
 #include "rf_dag.h"
 #include "rf_dagffrd.h"
@@ -41,7 +50,6 @@
 #include "rf_dagfuncs.h"
 #include "rf_etimer.h"
 #include "rf_general.h"
-#include "rf_configure.h"
 #include "rf_parityscan.h"
 #include "rf_evenodd.h"
 #include "rf_evenodd_dagfuncs.h"
@@ -55,7 +63,7 @@ RF_RedFuncs_t rf_eoERecoveryFuncs = {rf_RecoveryEFunc, "Recovery E Func", rf_Rec
 /**********************************************************************************************
  *   the following encoding node functions is used in  EO_000_CreateLargeWriteDAG
  **********************************************************************************************/
-int 
+int
 rf_RegularPEFunc(node)
 	RF_DagNode_t *node;
 {
@@ -85,7 +93,7 @@ rf_RegularPEFunc(node)
    old data and new data, then encode temp buf into old 'E' buf to form new 'E', but this approach
    take the same speed as the previous, and need more memory.
 */
-int 
+int
 rf_RegularONEFunc(node)
 	RF_DagNode_t *node;
 {
@@ -100,8 +108,12 @@ rf_RegularONEFunc(node)
 	char   *srcbuf, *destbuf;
 	RF_AccTraceEntry_t *tracerec = node->dagHdr->tracerec;
 	RF_Etimer_t timer;
-	RF_PhysDiskAddr_t *pda, *EPDA = (RF_PhysDiskAddr_t *) node->params[EpdaIndex].p;
-	int     ESUOffset = rf_StripeUnitOffset(layoutPtr, EPDA->startSector);	/* generally zero  */
+	RF_PhysDiskAddr_t *pda;
+#ifdef RAID_DIAGNOSTIC
+	RF_PhysDiskAddr_t *EPDA =
+	    (RF_PhysDiskAddr_t *) node->params[EpdaIndex].p;
+	int     ESUOffset = rf_StripeUnitOffset(layoutPtr, EPDA->startSector);
+#endif /* RAID_DIAGNOSTIC */
 
 	RF_ASSERT(EPDA->type == RF_PDA_TYPE_Q);
 	RF_ASSERT(ESUOffset == 0);
@@ -112,7 +124,7 @@ rf_RegularONEFunc(node)
 	 * new data is stored in Rod buffer */
 	for (k = 0; k < EpdaIndex; k += 2) {
 		length = rf_RaidAddressToByte(raidPtr, ((RF_PhysDiskAddr_t *) node->params[k].p)->numSector);
-		retcode = rf_bxor(node->params[k + EpdaIndex + 3].p, node->params[k + 1].p, length, node->dagHdr->bp);
+		retcode = rf_bxor(node->params[k + EpdaIndex + 3].p, node->params[k + 1].p, length);
 	}
 	/* Start to encoding the buffer storing the difference of old data and
 	 * new data into 'E' buffer  */
@@ -130,7 +142,7 @@ rf_RegularONEFunc(node)
 	 * function in XorNode */
 	for (k = 0; k < EpdaIndex; k += 2) {
 		length = rf_RaidAddressToByte(raidPtr, ((RF_PhysDiskAddr_t *) node->params[k].p)->numSector);
-		retcode = rf_bxor(node->params[k + EpdaIndex + 3].p, node->params[k + 1].p, length, node->dagHdr->bp);
+		retcode = rf_bxor(node->params[k + EpdaIndex + 3].p, node->params[k + 1].p, length);
 	}
 	RF_ETIMER_STOP(timer);
 	RF_ETIMER_EVAL(timer);
@@ -141,7 +153,7 @@ rf_RegularONEFunc(node)
 #endif
 }
 
-int 
+int
 rf_SimpleONEFunc(node)
 	RF_DagNode_t *node;
 {
@@ -161,7 +173,7 @@ rf_SimpleONEFunc(node)
 		length = rf_RaidAddressToByte(raidPtr, ((RF_PhysDiskAddr_t *) node->params[4].p)->numSector);	/* this is a pda of
 														 * writeDataNodes */
 		/* bxor to buffer of readDataNodes */
-		retcode = rf_bxor(node->params[5].p, node->params[1].p, length, node->dagHdr->bp);
+		retcode = rf_bxor(node->params[5].p, node->params[1].p, length);
 		/* find out the corresponding colume in encoding matrix for
 		 * write colume to be encoded into redundant disk 'E' */
 		scol = rf_EUCol(layoutPtr, pda->raidAddress);
@@ -169,7 +181,7 @@ rf_SimpleONEFunc(node)
 		destbuf = node->params[3].p;
 		/* Start encoding process */
 		rf_e_encToBuf(raidPtr, scol, srcbuf, RF_EO_MATRIX_DIM - 2, destbuf, pda->numSector);
-		rf_bxor(node->params[5].p, node->params[1].p, length, node->dagHdr->bp);
+		rf_bxor(node->params[5].p, node->params[1].p, length);
 		RF_ETIMER_STOP(timer);
 		RF_ETIMER_EVAL(timer);
 		tracerec->q_us += RF_ETIMER_VAL_US(timer);
@@ -182,7 +194,7 @@ rf_SimpleONEFunc(node)
 
 
 /****** called by rf_RegularPEFunc(node) and rf_RegularEFunc(node) in f.f. large write  ********/
-void 
+void
 rf_RegularESubroutine(node, ebuf)
 	RF_DagNode_t *node;
 	char   *ebuf;
@@ -215,7 +227,7 @@ rf_RegularESubroutine(node, ebuf)
 /*******************************************************************************************
  *			 Used in  EO_001_CreateLargeWriteDAG
  ******************************************************************************************/
-int 
+int
 rf_RegularEFunc(node)
 	RF_DagNode_t *node;
 {
@@ -238,7 +250,7 @@ rf_RegularEFunc(node)
  *  other than the above two into smaller accesses. We may have to change
  *  DegrESubroutin in the future.
  *******************************************************************************************/
-void 
+void
 rf_DegrESubroutine(node, ebuf)
 	RF_DagNode_t *node;
 	char   *ebuf;
@@ -276,7 +288,7 @@ rf_DegrESubroutine(node, ebuf)
  * failed in the stripe but not accessed at this time, then we should, instead, use
  * the rf_EOWriteDoubleRecoveryFunc().
  **************************************************************************************/
-int 
+int
 rf_Degraded_100_EOFunc(node)
 	RF_DagNode_t *node;
 {
@@ -292,7 +304,7 @@ rf_Degraded_100_EOFunc(node)
  * However, in evenodd this function can also be used as decoding function to recover
  * data from dead disk in the case of parity failure and a single data failure.
  **************************************************************************************/
-void 
+void
 rf_e_EncOneSect(
     RF_RowCol_t srcLogicCol,
     char *srcSecbuf,
@@ -367,7 +379,7 @@ rf_e_EncOneSect(
 	}
 }
 
-void 
+void
 rf_e_encToBuf(
     RF_Raid_t * raidPtr,
     RF_RowCol_t srcLogicCol,
@@ -389,7 +401,7 @@ rf_e_encToBuf(
  * to recover the data in dead disk. This function is used in the recovery node of
  * for EO_110_CreateReadDAG
  **************************************************************************************/
-int 
+int
 rf_RecoveryEFunc(node)
 	RF_DagNode_t *node;
 {
@@ -406,7 +418,8 @@ rf_RecoveryEFunc(node)
 	RF_AccTraceEntry_t *tracerec = node->dagHdr->tracerec;
 	RF_Etimer_t timer;
 
-	bzero((char *) node->results[0], rf_RaidAddressToByte(raidPtr, failedPDA->numSector));
+	memset((char *) node->results[0], 0,
+	    rf_RaidAddressToByte(raidPtr, failedPDA->numSector));
 	if (node->dagHdr->status == rf_enable) {
 		RF_ETIMER_START(timer);
 		for (i = 0; i < node->numParams - 2; i += 2)
@@ -432,7 +445,7 @@ rf_RecoveryEFunc(node)
  * This function is used in the case where one data and the parity have filed.
  * (in EO_110_CreateWriteDAG )
  **************************************************************************************/
-int 
+int
 rf_EO_DegradedWriteEFunc(RF_DagNode_t * node)
 {
 	rf_DegrESubroutine(node, node->results[0]);
@@ -448,7 +461,7 @@ rf_EO_DegradedWriteEFunc(RF_DagNode_t * node)
  *  		THE FUNCTION IS FOR DOUBLE DEGRADED READ AND WRITE CASES
  **************************************************************************************/
 
-void 
+void
 rf_doubleEOdecode(
     RF_Raid_t * raidPtr,
     char **rrdbuf,
@@ -491,8 +504,8 @@ rf_doubleEOdecode(
 #endif
 	RF_ASSERT(*((long *) dest[0]) == 0);
 	RF_ASSERT(*((long *) dest[1]) == 0);
-	bzero((char *) P, bytesPerEU);
-	bzero((char *) temp, bytesPerEU);
+	memset((char *) P, 0, bytesPerEU);
+	memset((char *) temp, 0, bytesPerEU);
 	RF_ASSERT(*P == 0);
 	/* calculate the 'P' parameter, which, not parity, is the Xor of all
 	 * elements in the last two column, ie. 'E' and 'parity' colume, see
@@ -641,7 +654,7 @@ rf_doubleEOdecode(
 * 	EO_200_CreateReadDAG
 *
 ***************************************************************************************/
-int 
+int
 rf_EvenOddDoubleRecoveryFunc(node)
 	RF_DagNode_t *node;
 {
@@ -660,7 +673,8 @@ rf_EvenOddDoubleRecoveryFunc(node)
 	        npda;
 	RF_RowCol_t fcol[2], fsuoff[2], fsuend[2], numDataCol = layoutPtr->numDataCol;
 	char  **buf, *ebuf, *pbuf, *dest[2];
-	long   *suoff = NULL, *suend = NULL, *prmToCol = NULL, psuoff, esuoff;
+	long   *suoff = NULL, *suend = NULL, *prmToCol = NULL,
+	    psuoff = 0, esuoff = 0;
 	RF_SectorNum_t startSector, endSector;
 	RF_Etimer_t timer;
 	RF_AccTraceEntry_t *tracerec = node->dagHdr->tracerec;
@@ -706,9 +720,11 @@ rf_EvenOddDoubleRecoveryFunc(node)
 	if (nresults == 1) {
 		/* find the startSector to begin decoding */
 		pda = node->results[0];
-		bzero(pda->bufPtr, bytesPerSector * pda->numSector);
+		memset(pda->bufPtr, 0, bytesPerSector * pda->numSector);
 		fsuoff[0] = rf_StripeUnitOffset(layoutPtr, pda->startSector);
 		fsuend[0] = fsuoff[0] + pda->numSector;
+		fsuoff[1] = 0;
+		fsuend[1] = 0;
 		startSector = fsuoff[0];
 		endSector = fsuend[0];
 
@@ -719,9 +735,9 @@ rf_EvenOddDoubleRecoveryFunc(node)
 		sosAddr = rf_RaidAddressOfPrevStripeBoundary(layoutPtr, asmap->raidAddress);
 		for (i = 0; i < numDataCol; i++) {
 			npda.raidAddress = sosAddr + (i * secPerSU);
-			(raidPtr->Layout.map->MapSector) (raidPtr, npda.raidAddress, &(npda.row), &(npda.col), &(npda.startSector), 0);
+			(raidPtr->Layout.map->MapSector) (raidPtr, npda.raidAddress, &(npda.col), &(npda.startSector), 0);
 			/* skip over dead disks */
-			if (RF_DEAD_DISK(raidPtr->Disks[npda.row][npda.col].status))
+			if (RF_DEAD_DISK(raidPtr->Disks[npda.col].status))
 				if (i != fcol[0])
 					break;
 		}
@@ -730,9 +746,9 @@ rf_EvenOddDoubleRecoveryFunc(node)
 	} else {
 		RF_ASSERT(nresults == 2);
 		pda0 = node->results[0];
-		bzero(pda0->bufPtr, bytesPerSector * pda0->numSector);
+		memset(pda0->bufPtr, 0, bytesPerSector * pda0->numSector);
 		pda1 = node->results[1];
-		bzero(pda1->bufPtr, bytesPerSector * pda1->numSector);
+		memset(pda1->bufPtr, 0, bytesPerSector * pda1->numSector);
 		/* determine the failed colume numbers of the two failed
 		 * disks. */
 		fcol[0] = rf_EUCol(layoutPtr, pda0->raidAddress);
@@ -770,7 +786,7 @@ rf_EvenOddDoubleRecoveryFunc(node)
 				continue;
 		for (prm = 0; prm < ndataParam; prm++)
 			if (suoff[prm] <= sector && sector < suend[prm])
-				buf[(prmToCol[prm])] = ((RF_PhysDiskAddr_t *) node->params[prm].p)->bufPtr +
+				buf[(prmToCol[prm])] = (char *)((RF_PhysDiskAddr_t *) node->params[prm].p)->bufPtr +
 				    rf_RaidAddressToByte(raidPtr, sector - suoff[prm]);
 		/* find out if sector is in the shadow of any accessed failed
 		 * SU. If yes, assign dest[0], dest[1] to point at suitable
@@ -779,30 +795,30 @@ rf_EvenOddDoubleRecoveryFunc(node)
 		 * destination of decoding. */
 		RF_ASSERT(nresults == 1 || nresults == 2);
 		if (nresults == 1) {
-			dest[0] = ((RF_PhysDiskAddr_t *) node->results[0])->bufPtr + rf_RaidAddressToByte(raidPtr, sector - fsuoff[0]);
+			dest[0] = (char *)((RF_PhysDiskAddr_t *) node->results[0])->bufPtr + rf_RaidAddressToByte(raidPtr, sector - fsuoff[0]);
 			/* Always malloc temp buffer to dest[1]  */
 			RF_Malloc(dest[1], bytesPerSector, (char *));
-			bzero(dest[1], bytesPerSector);
+			memset(dest[1], 0, bytesPerSector);
 			mallc_two = 1;
 		} else {
 			if (fsuoff[0] <= sector && sector < fsuend[0])
-				dest[0] = ((RF_PhysDiskAddr_t *) node->results[0])->bufPtr + rf_RaidAddressToByte(raidPtr, sector - fsuoff[0]);
+				dest[0] = (char *)((RF_PhysDiskAddr_t *) node->results[0])->bufPtr + rf_RaidAddressToByte(raidPtr, sector - fsuoff[0]);
 			else {
 				RF_Malloc(dest[0], bytesPerSector, (char *));
-				bzero(dest[0], bytesPerSector);
+				memset(dest[0], 0, bytesPerSector);
 				mallc_one = 1;
 			}
 			if (fsuoff[1] <= sector && sector < fsuend[1])
-				dest[1] = ((RF_PhysDiskAddr_t *) node->results[1])->bufPtr + rf_RaidAddressToByte(raidPtr, sector - fsuoff[1]);
+				dest[1] = (char *)((RF_PhysDiskAddr_t *) node->results[1])->bufPtr + rf_RaidAddressToByte(raidPtr, sector - fsuoff[1]);
 			else {
 				RF_Malloc(dest[1], bytesPerSector, (char *));
-				bzero(dest[1], bytesPerSector);
+				memset(dest[1], 0, bytesPerSector);
 				mallc_two = 1;
 			}
 			RF_ASSERT(mallc_one == 0 || mallc_two == 0);
 		}
-		pbuf = ppda->bufPtr + rf_RaidAddressToByte(raidPtr, sector - psuoff);
-		ebuf = epda->bufPtr + rf_RaidAddressToByte(raidPtr, sector - esuoff);
+		pbuf = (char *)ppda->bufPtr + rf_RaidAddressToByte(raidPtr, sector - psuoff);
+		ebuf = (char *)epda->bufPtr + rf_RaidAddressToByte(raidPtr, sector - esuoff);
 		/*
 	         * After finish finding all needed sectors, call doubleEOdecode function for decoding
 	         * one sector to destination.
@@ -839,7 +855,7 @@ rf_EvenOddDoubleRecoveryFunc(node)
  * many accesses of single stripe unit.
  */
 
-int 
+int
 rf_EOWriteDoubleRecoveryFunc(node)
 	RF_DagNode_t *node;
 {
@@ -899,9 +915,9 @@ rf_EOWriteDoubleRecoveryFunc(node)
 	sosAddr = rf_RaidAddressOfPrevStripeBoundary(layoutPtr, asmap->raidAddress);
 	for (i = 0; i < numDataCol; i++) {
 		npda.raidAddress = sosAddr + (i * secPerSU);
-		(raidPtr->Layout.map->MapSector) (raidPtr, npda.raidAddress, &(npda.row), &(npda.col), &(npda.startSector), 0);
+		(raidPtr->Layout.map->MapSector) (raidPtr, npda.raidAddress, &(npda.col), &(npda.startSector), 0);
 		/* skip over dead disks */
-		if (RF_DEAD_DISK(raidPtr->Disks[npda.row][npda.col].status))
+		if (RF_DEAD_DISK(raidPtr->Disks[npda.col].status))
 			if (i != fcol[0])
 				break;
 	}
@@ -913,8 +929,8 @@ rf_EOWriteDoubleRecoveryFunc(node)
 	RF_Malloc(olddata[1], numbytes, (char *));
 	dest[0] = olddata[0];
 	dest[1] = olddata[1];
-	bzero(olddata[0], numbytes);
-	bzero(olddata[1], numbytes);
+	memset(olddata[0], 0, numbytes);
+	memset(olddata[1], 0, numbytes);
 	/* Begin the recovery decoding, initially buf[j],  ebuf, pbuf, dest[j]
 	 * have already pointed at the beginning of each source buffers and
 	 * destination buffers */
@@ -943,7 +959,7 @@ rf_EOWriteDoubleRecoveryFunc(node)
 	 * into the old recovered data, then do the same things as small
 	 * write. */
 
-	rf_bxor(((RF_PhysDiskAddr_t *) node->params[numDataCol].p)->bufPtr, olddata[0], numbytes, node->dagHdr->bp);
+	rf_bxor(((RF_PhysDiskAddr_t *) node->params[numDataCol].p)->bufPtr, olddata[0], numbytes);
 	/* do new 'E' calculation  */
 	/* find out the corresponding colume in encoding matrix for write
 	 * colume to be encoded into redundant disk 'E' */
@@ -953,7 +969,7 @@ rf_EOWriteDoubleRecoveryFunc(node)
 	rf_e_encToBuf(raidPtr, scol, olddata[0], RF_EO_MATRIX_DIM - 2, epda->bufPtr, fpda->numSector);
 
 	/* do new 'P' calculation  */
-	rf_bxor(olddata[0], ppda->bufPtr, numbytes, node->dagHdr->bp);
+	rf_bxor(olddata[0], ppda->bufPtr, numbytes);
 	/* Free the allocated buffer  */
 	RF_Free(olddata[0], numbytes);
 	RF_Free(olddata[1], numbytes);
@@ -967,3 +983,4 @@ rf_EOWriteDoubleRecoveryFunc(node)
 	rf_GenericWakeupFunc(node, 0);
 	return (0);
 }
+#endif				/* RF_INCLUDE_EVENODD > 0 */

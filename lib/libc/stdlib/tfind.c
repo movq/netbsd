@@ -1,4 +1,4 @@
-/*	$NetBSD: tfind.c,v 1.3 1999/09/20 04:39:43 lukem Exp $	*/
+/*	$NetBSD: tfind.c,v 1.5 2005/03/23 08:16:53 kleink Exp $	*/
 
 /*
  * Tree search generalized from Knuth (6.2.2) Algorithm T just like
@@ -13,7 +13,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: tfind.c,v 1.3 1999/09/20 04:39:43 lukem Exp $");
+__RCSID("$NetBSD: tfind.c,v 1.5 2005/03/23 08:16:53 kleink Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <assert.h>
@@ -25,10 +25,10 @@ __RCSID("$NetBSD: tfind.c,v 1.3 1999/09/20 04:39:43 lukem Exp $");
 void *
 tfind(vkey, vrootp, compar)
 	const void *vkey;		/* key to be found */
-	void **vrootp;			/* address of the tree root */
+	void * const *vrootp;		/* address of the tree root */
 	int (*compar) __P((const void *, const void *));
 {
-	node_t **rootp = (node_t **)vrootp;
+	node_t * const *rootp = (node_t * const*)vrootp;
 
 	_DIAGASSERT(vkey != NULL);
 	_DIAGASSERT(compar != NULL);

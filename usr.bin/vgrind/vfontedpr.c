@@ -1,4 +1,4 @@
-/*	$NetBSD: vfontedpr.c,v 1.7 1998/12/19 23:41:53 christos Exp $	*/
+/*	$NetBSD: vfontedpr.c,v 1.13 2008/07/21 14:19:27 lukem Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)vfontedpr.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: vfontedpr.c,v 1.7 1998/12/19 23:41:53 christos Exp $");
+__RCSID("$NetBSD: vfontedpr.c,v 1.13 2008/07/21 14:19:27 lukem Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -99,7 +95,7 @@ static boolean  pass = FALSE;	/*
 
 static int	blklevel;	/* current nesting level */
 static int	comtype;	/* type of comment */
-static char    *defsfile[2] = { _PATH_VGRINDEFS, 0 };
+static const char *defsfile[2] = { _PATH_VGRINDEFS, 0 };
 				/* name of language definitions file */
 static int	margin;
 static int	plstack[PSMAX];	/* the procedure nesting level stack */
@@ -126,18 +122,20 @@ char	*l_prcbeg;		/* regular expr for procedure begin */
 char    *l_strbeg;		/* delimiter for string constant */
 char    *l_strend;		/* delimiter for string constant */
 boolean	 l_toplex;		/* procedures only defined at top lex level */
-char	*language = "c";	/* the language indicator */
+const char *language = "c";	/* the language indicator */
 
 int	main __P((int, char **));
 
 #define	ps(x)	printf("%s", x)
+static char minus[] = "-";
+static char minusn[] = "-n";
 
 int
 main(argc, argv)
     int argc;
     char *argv[];
 {
-    char *fname = "";
+    const char *fname = "";
     struct stat stbuf;
     char buf[BUFSIZ];
     char *defs;
@@ -167,7 +165,7 @@ main(argc, argv)
 	    if (!strcmp(argv[0], "-f")) {
 		filter++;
 		argv[0] = argv[argc-1];
-		argv[argc-1] = "-";
+		argv[argc-1] = minus;
 		continue;
 	    }
 
@@ -180,7 +178,7 @@ main(argc, argv)
 	    /* build an index */
 	    if (!strcmp(argv[0], "-x")) {
 		idx++;
-		argv[0] = "-n";
+		argv[0] = minusn;
 	    }
 
 	    /* indicate no keywords */
@@ -234,10 +232,10 @@ main(argc, argv)
 	i = cgetent(&defs, defsfile, language);
 	if (i == -1) {
 	    fprintf (stderr, "no entry for language %s\n", language);
-	    exit (0);
+	    exit(0);
 	} else  if (i == -2) { fprintf(stderr,
 	    "cannot find vgrindefs file %s\n", defsfile[0]);
-	    exit (0);
+	    exit(0);
 	} else if (i == -3) { fprintf(stderr,
 	    "potential reference loop detected in vgrindefs file %s\n",
             defsfile[0]);
@@ -376,8 +374,7 @@ putScp(os)
         ps("\n");
 	if (psptr < PSMAX) {
 	    ++psptr;
-	    strncpy (pstack[psptr], pname, PNAMELEN);
-	    pstack[psptr][PNAMELEN] = '\0';
+	    strlcpy(pstack[psptr], pname, sizeof(pstack[psptr]));
 	    plstack[psptr] = blklevel;
 	}
     }
@@ -386,12 +383,12 @@ skip:
 	/* check for string, comment, blockstart, etc */
 	if (!incomm && !instr && !inchr) {
 
-	    blkeptr = expmatch (s, l_blkend, dummy);
-	    blksptr = expmatch (s, l_blkbeg, dummy);
-	    comptr = expmatch (s, l_combeg, dummy);
-	    acmptr = expmatch (s, l_acmbeg, dummy);
-	    strptr = expmatch (s, l_strbeg, dummy);
-	    chrptr = expmatch (s, l_chrbeg, dummy);
+	    blkeptr = expmatch(s, l_blkend, dummy);
+	    blksptr = expmatch(s, l_blkbeg, dummy);
+	    comptr = expmatch(s, l_combeg, dummy);
+	    acmptr = expmatch(s, l_acmbeg, dummy);
+	    strptr = expmatch(s, l_strbeg, dummy);
+	    chrptr = expmatch(s, l_chrbeg, dummy);
 
 	    /* start of a comment? */
 	    if (comptr != NIL)
@@ -400,13 +397,13 @@ skip:
 		  && (comptr < chrptr || chrptr == NIL)
 		  && (comptr < blksptr || blksptr == NIL)
 		  && (comptr < blkeptr || blkeptr == NIL)) {
-		    putKcp (s, comptr-1, FALSE);
+		    putKcp(s, comptr-1, FALSE);
 		    s = comptr;
 		    incomm = TRUE;
 		    comtype = STANDARD;
 		    if (s != os)
-			ps ("\\c");
-		    ps ("\\c\n'+C\n");
+			ps("\\c");
+		    ps("\\c\n'+C\n");
 		    continue;
 		}
 
@@ -416,13 +413,13 @@ skip:
 		  && (acmptr < chrptr || chrptr == NIL)
 		  && (acmptr < blksptr || blksptr == NIL)
 		  && (acmptr < blkeptr || blkeptr == NIL)) {
-		    putKcp (s, acmptr-1, FALSE);
+		    putKcp(s, acmptr-1, FALSE);
 		    s = acmptr;
 		    incomm = TRUE;
 		    comtype = ALTERNATE;
 		    if (s != os)
-			ps ("\\c");
-		    ps ("\\c\n'+C\n");
+			ps("\\c");
+		    ps("\\c\n'+C\n");
 		    continue;
 		}
 
@@ -431,7 +428,7 @@ skip:
 		if ((strptr < chrptr || chrptr == NIL)
 		  && (strptr < blksptr || blksptr == NIL)
 		  && (strptr < blkeptr || blkeptr == NIL)) {
-		    putKcp (s, strptr-1, FALSE);
+		    putKcp(s, strptr-1, FALSE);
 		    s = strptr;
 		    instr = TRUE;
 		    continue;
@@ -441,7 +438,7 @@ skip:
 	    if (chrptr != NIL)
 		if ((chrptr < blksptr || blksptr == NIL)
 		  && (chrptr < blkeptr || blkeptr == NIL)) {
-		    putKcp (s, chrptr-1, FALSE);
+		    putKcp(s, chrptr-1, FALSE);
 		    s = chrptr;
 		    inchr = TRUE;
 		    continue;
@@ -450,15 +447,15 @@ skip:
 	    /* end of a lexical block */
 	    if (blkeptr != NIL) {
 		if (blkeptr < blksptr || blksptr == NIL) {
-		    putKcp (s, blkeptr - 1, FALSE);
+		    putKcp(s, blkeptr - 1, FALSE);
 		    s = blkeptr;
 		    blklevel--;
 		    if (psptr >= 0 && plstack[psptr] >= blklevel) {
 
 			/* end of current procedure */
 			if (s != os)
-			    ps ("\\c");
-			ps ("\\c\n'-F\n");
+			    ps("\\c");
+			ps("\\c\n'-F\n");
 			blklevel = plstack[psptr];
 
 			/* see if we should print the last proc name */
@@ -473,7 +470,7 @@ skip:
 
 	    /* start of a lexical block */
 	    if (blksptr != NIL) {
-		putKcp (s, blksptr - 1, FALSE);
+		putKcp(s, blksptr - 1, FALSE);
 		s = blksptr;
 		blklevel++;
 		continue;
@@ -481,61 +478,61 @@ skip:
 
 	/* check for end of comment */
 	} else if (incomm) {
-	    comptr = expmatch (s, l_comend, dummy);
-	    acmptr = expmatch (s, l_acmend, dummy);
+	    comptr = expmatch(s, l_comend, dummy);
+	    acmptr = expmatch(s, l_acmend, dummy);
 	    if (((comtype == STANDARD) && (comptr != NIL)) ||
 	        ((comtype == ALTERNATE) && (acmptr != NIL))) {
 		if (comtype == STANDARD) {
-		    putKcp (s, comptr-1, TRUE);
+		    putKcp(s, comptr-1, TRUE);
 		    s = comptr;
 		} else {
-		    putKcp (s, acmptr-1, TRUE);
+		    putKcp(s, acmptr-1, TRUE);
 		    s = acmptr;
 		}
 		incomm = FALSE;
 		ps("\\c\n'-C\n");
 		continue;
 	    } else {
-		putKcp (s, s + strlen(s) -1, TRUE);
+		putKcp(s, s + strlen(s) -1, TRUE);
 		s = s + strlen(s);
 		continue;
 	    }
 
 	/* check for end of string */
 	} else if (instr) {
-	    if ((strptr = expmatch (s, l_strend, dummy)) != NIL) {
-		putKcp (s, strptr-1, TRUE);
+	    if ((strptr = expmatch(s, l_strend, dummy)) != NIL) {
+		putKcp(s, strptr-1, TRUE);
 		s = strptr;
 		instr = FALSE;
 		continue;
 	    } else {
-		putKcp (s, s+strlen(s)-1, TRUE);
+		putKcp(s, s+strlen(s)-1, TRUE);
 		s = s + strlen(s);
 		continue;
 	    }
 
 	/* check for end of character string */
 	} else if (inchr) {
-	    if ((chrptr = expmatch (s, l_chrend, dummy)) != NIL) {
-		putKcp (s, chrptr-1, TRUE);
+	    if ((chrptr = expmatch(s, l_chrend, dummy)) != NIL) {
+		putKcp(s, chrptr-1, TRUE);
 		s = chrptr;
 		inchr = FALSE;
 		continue;
 	    } else {
-		putKcp (s, s+strlen(s)-1, TRUE);
+		putKcp(s, s+strlen(s)-1, TRUE);
 		s = s + strlen(s);
 		continue;
 	    }
 	}
 
 	/* print out the line */
-	putKcp (s, s + strlen(s) -1, FALSE);
+	putKcp(s, s + strlen(s) -1, FALSE);
 	s = s + strlen(s);
     } while (*s);
 }
 
 static void
-putKcp (start, end, force)
+putKcp(start, end, force)
     char	*start;		/* start of string to write */
     char	*end;		/* end of string to write */
     boolean	force;		/* true if we should force nokeyw */
@@ -579,7 +576,7 @@ putKcp (start, end, force)
 		}
 	    }
 
-	putcp (*start++);
+	putcp(*start++);
     }
 }
 
@@ -684,7 +681,7 @@ isproc(s)
 {
     pname[0] = '\0';
     if (!l_toplex || blklevel == 0)
-	if (expmatch (s, l_prcbeg, pname) != NIL) {
+	if (expmatch(s, l_prcbeg, pname) != NIL) {
 	    return (TRUE);
 	}
     return (FALSE);
@@ -702,12 +699,10 @@ iskw(s)
 	int i = 1;
 	char *cp = s;
 
-/*###705 [cc] warning: subscript has type `char'%%%*/
-	while (++cp, isidchr(*cp))
+	while (++cp, isidchr((unsigned char)*cp))
 		i++;
 	while ((cp = *ss++) != NULL)
-/*###708 [cc] warning: subscript has type `char'%%%*/
-		if (!STRNCMP(s,cp,i) && !isidchr(cp[i]))
+		if (!STRNCMP(s,cp,i) && !isidchr((unsigned char)cp[i]))
 			return (i);
 	return (0);
 }

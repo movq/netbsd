@@ -1,7 +1,6 @@
-/*	$NetBSD: wesc.c,v 1.25 1999/01/10 13:30:48 tron Exp $	*/
+/*	$NetBSD: wesc.c,v 1.38 2008/06/13 08:13:37 cegger Exp $ */
 
 /*
- * Copyright (c) 1994 Michael L. Hitch
  * Copyright (c) 1982, 1990 The Regents of the University of California.
  * All rights reserved.
  *
@@ -13,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -36,10 +31,42 @@
  *	@(#)dma.c
  */
 
+/*
+ * Copyright (c) 1994 Michael L. Hitch
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ *	@(#)dma.c
+ */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: wesc.c,v 1.38 2008/06/13 08:13:37 cegger Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
+
+#include <uvm/uvm_extern.h>
+
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsiconf.h>
@@ -51,36 +78,25 @@
 #include <amiga/dev/siopvar.h>
 #include <amiga/dev/zbusvar.h>
 
-void wescattach __P((struct device *, struct device *, void *));
-int wescmatch __P((struct device *, struct cfdata *, void *));
-int wesc_dmaintr __P((void *));
+void wescattach(struct device *, struct device *, void *);
+int wescmatch(struct device *, struct cfdata *, void *);
+int wesc_dmaintr(void *);
 #ifdef DEBUG
-void wesc_dump __P((void));
+void wesc_dump(void);
 #endif
-
-struct scsipi_device wesc_scsidev = {
-	NULL,		/* use default error handler */
-	NULL,		/* do not have a start functio */
-	NULL,		/* have no async handler */
-	NULL,		/* Use default done routine */
-};
 
 
 #ifdef DEBUG
 #endif
 
-struct cfattach wesc_ca = {
-	sizeof(struct siop_softc), wescmatch, wescattach
-};
+CFATTACH_DECL(wesc, sizeof(struct siop_softc),
+    wescmatch, wescattach, NULL, NULL);
 
 /*
  * if we are an MacroSystemsUS Warp Engine
  */
 int
-wescmatch(pdp, cfp, auxp)
-	struct device *pdp;
-	struct cfdata *cfp;
-	void *auxp;
+wescmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 {
 	struct zbus_args *zap;
 
@@ -91,40 +107,49 @@ wescmatch(pdp, cfp, auxp)
 }
 
 void
-wescattach(pdp, dp, auxp)
-	struct device *pdp, *dp;
-	void *auxp;
+wescattach(struct device *pdp, struct device *dp, void *auxp)
 {
-	struct siop_softc *sc;
+	struct siop_softc *sc = (struct siop_softc *)dp;
 	struct zbus_args *zap;
 	siop_regmap_p rp;
+	struct scsipi_adapter *adapt = &sc->sc_adapter;
+	struct scsipi_channel *chan = &sc->sc_channel;
+
 
 	printf("\n");
 
 	zap = auxp;
 
-	sc = (struct siop_softc *)dp;
-	sc->sc_siopp = rp = (siop_regmap_p)((caddr_t)zap->va + 0x40000);
+	sc->sc_siopp = rp = (siop_regmap_p)((char *)zap->va + 0x40000);
 
 	/*
 	 * CTEST7 = SC0, TT1
 	 */
-	sc->sc_clock_freq = 50;		/* Clock = 50Mhz */
+	sc->sc_clock_freq = 50;		/* Clock = 50 MHz */
 	sc->sc_ctest7 = SIOP_CTEST7_SC0 | SIOP_CTEST7_TT1;
 	sc->sc_dcntl = 0x00;
 
-	sc->sc_adapter.scsipi_cmd = siop_scsicmd;
-	sc->sc_adapter.scsipi_minphys = siop_minphys;
+	/*
+	 * Fill in the scsipi_adapter.
+	 */
+	memset(adapt, 0, sizeof(*adapt));
+	adapt->adapt_dev = &sc->sc_dev;
+	adapt->adapt_nchannels = 1;
+	adapt->adapt_openings = 7;
+	adapt->adapt_max_periph = 1;
+	adapt->adapt_request = siop_scsipi_request;
+	adapt->adapt_minphys = siop_minphys;
 
-	sc->sc_link.scsipi_scsi.channel = SCSI_CHANNEL_ONLY_ONE;
-	sc->sc_link.adapter_softc = sc;
-	sc->sc_link.scsipi_scsi.adapter_target = 7;
-	sc->sc_link.adapter = &sc->sc_adapter;
-	sc->sc_link.device = &wesc_scsidev;
-	sc->sc_link.openings = 2;
-	sc->sc_link.scsipi_scsi.max_target = 7;
-	sc->sc_link.scsipi_scsi.max_lun = 7;
-	sc->sc_link.type = BUS_SCSI;
+	/*
+	 * Fill in the scsipi_channel.
+	 */
+	memset(chan, 0, sizeof(*chan));
+	chan->chan_adapter = adapt;
+	chan->chan_bustype = &scsi_bustype;
+	chan->chan_channel = 0;
+	chan->chan_ntargets = 8;
+	chan->chan_nluns = 8;
+	chan->chan_id = 7;
 
 	siopinitialize(sc);
 
@@ -136,12 +161,11 @@ wescattach(pdp, dp, auxp)
 	/*
 	 * attach all scsi units on us
 	 */
-	config_found(dp, &sc->sc_link, scsiprint);
+	config_found(dp, chan, scsiprint);
 }
 
 int
-wesc_dmaintr(arg)
-	void *arg;
+wesc_dmaintr(void *arg)
 {
 	struct siop_softc *sc = arg;
 	siop_regmap_p rp;
@@ -166,13 +190,16 @@ wesc_dmaintr(arg)
 
 #ifdef DEBUG
 void
-wesc_dump()
+wesc_dump(void)
 {
 	extern struct cfdriver wesc_cd;
+	struct siop_softc *sc;
 	int i;
 
-	for (i = 0; i < wesc_cd.cd_ndevs; ++i)
-		if (wesc_cd.cd_devs[i])
-			siop_dump(wesc_cd.cd_devs[i]);
+	for (i = 0; i < wesc_cd.cd_ndevs; ++i) {
+		sc = device_lookup_private(&wesc_cd, i);
+		if (sc != NULL)
+			siop_dump(sc);
+	}
 }
 #endif

@@ -1,14 +1,19 @@
-Near term:
-	check cfs_vnodeops.c: re vrele/VOP_LOCK -> vget
-		cfs_create, remove, link mkdir, rmdir, symlink
+$NetBSD: TODO,v 1.4 2007/04/08 13:50:51 gdt Exp $
 
-	cfs_vfsops.c: use vfsp vs 0
-		cp = makecfsnode(&ctlfid, vfsp, VCHR);
+1. getcwd
 
-Medium term:
-	Add missing VFS methods.
-	Do performance profile.
-	Tune hash algorithm used in cfs_namecache.
+getcwd does not work.
 
-Eventually:
-	Use standard queue macros.
+2. VOP_GETPAGES/PUTPAGES
+
+Check behavior vs. specifications.
+Resolve uvm_fault layering issue (see PR 28372).
+
+3. check vnops correctness
+
+Check all vnops against their specifications.
+
+4. LK_RETRY removal
+
+Remove the use of LK_RETRY in most or all vn_lock calls.
+(Defer this until other filesystems do not call LK_RETRY.)

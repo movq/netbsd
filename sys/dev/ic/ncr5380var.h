@@ -1,4 +1,4 @@
-/*	$NetBSD: ncr5380var.h,v 1.18 2000/03/25 15:27:57 tsutsui Exp $	*/
+/*	$NetBSD: ncr5380var.h,v 1.32 2008/04/04 16:00:58 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1995 David Jones, Gordon W. Ross
@@ -34,18 +34,26 @@
 
 /*
  * This file defines the interface between the machine-dependent
- * module and the machine-indepenedent ncr5380sbc.c module.
+ * module and the machine-independent ncr5380sbc.c module.
  */
 
 /*
- * Only the i386 uses real bus space:
- *	arm32: oak and csa drivers; easy to convert
+ * Currently acorn26, amd64, alpha, i386, mips, news68k, sparc, sun2, and vax
+ * use real bus space:
+ *	acorn32: csa driver; easy to convert
  *	mac68k: sbc driver; easy to convert
  *	pc532: ncr driver; need bus.h first
- *	sparc: si and sw drivers; easy to convert
  *	sun3: si driver; need bus.h first
  */
-#if defined(__i386__) || defined(__vax__) || defined(__mips__)
+#if defined(acorn26) || \
+    defined(__alpha__) || \
+    defined(__amd64__) || \
+    defined(__i386__) || \
+    defined(__mips__) || \
+    defined(news68k) || \
+    defined(__sparc__) || \
+    defined(sun2) || \
+    defined(__vax__)
 # define NCR5380_USE_BUS_SPACE
 #endif
 
@@ -53,7 +61,7 @@
  * Handy read/write macros
  */
 #ifdef NCR5380_USE_BUS_SPACE
-# include <machine/bus.h>
+# include <sys/bus.h>
 /* bus_space() variety */
 # define NCR5380_READ(sc, reg)		bus_space_read_1(sc->sc_regt, \
 					    sc->sc_regh, sc->reg)
@@ -91,7 +99,7 @@ struct sci_req {
 	struct		scsipi_xfer *sr_xs;	/* Pointer to xfer struct, NULL=unused */
 	int		sr_target, sr_lun;	/* For fast access */
 	void		*sr_dma_hand;		/* Current DMA hnadle */
-	u_char		*sr_dataptr;		/* Saved data pointer */
+	uint8_t		*sr_dataptr;		/* Saved data pointer */
 	int		sr_datalen;
 	int		sr_flags;		/* Internal error code */
 #define	SR_IMMED			1	/* Immediate command */
@@ -104,9 +112,9 @@ struct sci_req {
 
 
 struct ncr5380_softc {
-	struct device		sc_dev;
-	struct scsipi_link	sc_link;
+	device_t		sc_dev;
 	struct scsipi_adapter	sc_adapter;
+	struct scsipi_channel	sc_channel;
 
 #ifdef NCR5380_USE_BUS_SPACE
 	/* Pointers to bus_space */
@@ -124,32 +132,32 @@ struct ncr5380_softc {
 	bus_size_t	sci_r7;
 #else
 	/* Pointers to 5380 registers.  See ncr5380reg.h */
-	volatile u_char *sci_r0;
-	volatile u_char *sci_r1;
-	volatile u_char *sci_r2;
-	volatile u_char *sci_r3;
-	volatile u_char *sci_r4;
-	volatile u_char *sci_r5;
-	volatile u_char *sci_r6;
-	volatile u_char *sci_r7;
+	volatile uint8_t *sci_r0;
+	volatile uint8_t *sci_r1;
+	volatile uint8_t *sci_r2;
+	volatile uint8_t *sci_r3;
+	volatile uint8_t *sci_r4;
+	volatile uint8_t *sci_r5;
+	volatile uint8_t *sci_r6;
+	volatile uint8_t *sci_r7;
 #endif
 
 	/* Functions set from MD code */
-	int		(*sc_pio_out) __P((struct ncr5380_softc *,
-					   int, int, u_char *));
-	int		(*sc_pio_in) __P((struct ncr5380_softc *,
-					  int, int, u_char *));
-	void		(*sc_dma_alloc) __P((struct ncr5380_softc *));
-	void		(*sc_dma_free) __P((struct ncr5380_softc *));
+	int		(*sc_pio_out)(struct ncr5380_softc *,
+					   int, int, uint8_t *);
+	int		(*sc_pio_in)(struct ncr5380_softc *,
+					  int, int, uint8_t *);
+	void		(*sc_dma_alloc)(struct ncr5380_softc *);
+	void		(*sc_dma_free)(struct ncr5380_softc *);
 
-	void		(*sc_dma_setup) __P((struct ncr5380_softc *));
-	void		(*sc_dma_start) __P((struct ncr5380_softc *));
-	void		(*sc_dma_poll) __P((struct ncr5380_softc *));
-	void		(*sc_dma_eop) __P((struct ncr5380_softc *));
-	void		(*sc_dma_stop) __P((struct ncr5380_softc *));
+	void		(*sc_dma_setup)(struct ncr5380_softc *);
+	void		(*sc_dma_start)(struct ncr5380_softc *);
+	void		(*sc_dma_poll)(struct ncr5380_softc *);
+	void		(*sc_dma_eop)(struct ncr5380_softc *);
+	void		(*sc_dma_stop)(struct ncr5380_softc *);
 
-	void		(*sc_intr_on) __P((struct ncr5380_softc *));
-	void		(*sc_intr_off) __P((struct ncr5380_softc *));
+	void		(*sc_intr_on)(struct ncr5380_softc *);
+	void		(*sc_intr_off)(struct ncr5380_softc *);
 
 	int		sc_flags;	/* Misc. flags and capabilities */
 #define	NCR5380_FORCE_POLLING	1	/* Do not use interrupts. */
@@ -175,7 +183,7 @@ struct ncr5380_softc {
 	struct		sci_req *sc_current;
 
 	/* Active data pointer for current SCSI command. */
-	u_char		*sc_dataptr;
+	uint8_t		*sc_dataptr;
 	int		sc_datalen;
 
 	/* Begin MI private data */
@@ -205,10 +213,10 @@ struct ncr5380_softc {
 #define SEND_SDTR		0x40
 #define	SEND_WDTR		0x80
 #define NCR_MAX_MSG_LEN 8
-	u_char  sc_omess[NCR_MAX_MSG_LEN];
-	u_char	*sc_omp;		/* Outgoing message pointer */
-	u_char	sc_imess[NCR_MAX_MSG_LEN];
-	u_char	*sc_imp;		/* Incoming message pointer */
+	uint8_t  sc_omess[NCR_MAX_MSG_LEN];
+	uint8_t	*sc_omp;		/* Outgoing message pointer */
+	uint8_t	sc_imess[NCR_MAX_MSG_LEN];
+	uint8_t	*sc_imp;		/* Incoming message pointer */
 	int	sc_rev;			/* Chip revision */
 #define NCR_VARIANT_NCR5380	0
 #define NCR_VARIANT_DP8490	1
@@ -218,17 +226,18 @@ struct ncr5380_softc {
 
 };
 
-void	ncr5380_attach __P((struct ncr5380_softc *));
-int	ncr5380_detach __P((struct ncr5380_softc *, int));
-int 	ncr5380_intr __P((void *));
-int 	ncr5380_scsi_cmd __P((struct scsipi_xfer *));
-int 	ncr5380_pio_in __P((struct ncr5380_softc *, int, int, u_char *));
-int 	ncr5380_pio_out __P((struct ncr5380_softc *, int, int, u_char *));
-void	ncr5380_init __P((struct ncr5380_softc *));
+void	ncr5380_attach(struct ncr5380_softc *);
+int	ncr5380_detach(struct ncr5380_softc *, int);
+int 	ncr5380_intr(void *);
+void	ncr5380_scsipi_request(struct scsipi_channel *,
+	    scsipi_adapter_req_t, void *);
+int 	ncr5380_pio_in(struct ncr5380_softc *, int, int, uint8_t *);
+int 	ncr5380_pio_out(struct ncr5380_softc *, int, int, uint8_t *);
+void	ncr5380_init(struct ncr5380_softc *);
 
 #ifdef	NCR5380_DEBUG
 struct ncr5380_softc *ncr5380_debug_sc;
-void ncr5380_trace __P((char *msg, long val));
+void ncr5380_trace(const char *msg, long val);
 #define	NCR_TRACE(msg, val) ncr5380_trace(msg, val)
 #else	/* NCR5380_DEBUG */
 #define	NCR_TRACE(msg, val)	/* nada */

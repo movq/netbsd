@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_shm.h,v 1.4 1998/10/04 00:02:41 fvdl Exp $	*/
+/*	$NetBSD: linux_shm.h,v 1.12 2008/04/28 20:23:44 martin Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -58,6 +51,49 @@ struct linux_shmid_ds {
 	void			*l_private3;
 };
 
+struct linux_shmid64_ds {
+	struct linux_ipc64_perm	l_shm_perm;
+	size_t			l_shm_segsz;
+	linux_time_t		l_shm_atime;
+#ifndef _LP64
+	u_long			l____unused1;
+#endif
+	linux_time_t		l_shm_dtime;
+#ifndef _LP64
+	u_long			l____unused2;
+#endif
+	linux_time_t		l_shm_ctime;
+#ifndef _LP64
+	u_long			l____unused3;
+#endif
+	int			l_shm_cpid;
+	int			l_shm_lpid;
+	u_long			l_shm_nattch;
+	u_long			l___unused4;
+	u_long			l___unused5;
+};
+
+struct linux_shminfo64 {
+	u_long			l_shmmax;
+	u_long			l_shmmin;
+	u_long			l_shmmni;
+	u_long			l_shmseg;
+	u_long			l_shmall;
+	u_long			l___unused1;
+	u_long			l___unused2;
+	u_long			l___unused3;
+	u_long			l___unused4;
+};
+
+struct linux_shm_info {
+	int			l_used_ids;
+	u_long			l_shm_tot;
+	u_long			l_shm_rss;
+	u_long			l_shm_swp;
+	u_long			l_swap_attempts;
+	u_long			l_swap_successes;
+};
+
 #define LINUX_SHM_RDONLY	0x1000
 #define LINUX_SHM_RND		0x2000
 #define LINUX_SHM_REMAP		0x4000
@@ -82,15 +118,26 @@ struct linux_sys_shmctl_args {
 	syscallarg(struct linux_shmid_ds *) buf;
 };
 
+struct linux_sys_shmget_args {
+	syscallarg(key_t) key;
+	syscallarg(size_t) size;
+	syscallarg(int) shmflg;
+};
+
 #ifdef SYSVSHM
 #ifdef _KERNEL
 __BEGIN_DECLS
-int linux_sys_shmat __P((struct proc *, void *, register_t *));
-int linux_sys_shmctl __P((struct proc *, void *, register_t *));
-void linux_to_bsd_shmid_ds __P((struct linux_shmid_ds *,
-    struct shmid_ds *));
-void bsd_to_linux_shmid_ds __P((struct shmid_ds *,
-    struct linux_shmid_ds *));
+int linux_sys_shmget(struct lwp *, const struct linux_sys_shmget_args *, register_t *);
+int linux_sys_shmat(struct lwp *, const struct linux_sys_shmat_args *, register_t *);
+int linux_sys_shmctl(struct lwp *, const struct linux_sys_shmctl_args *, register_t *);
+void linux_to_bsd_shmid_ds(struct linux_shmid_ds *,
+    struct shmid_ds *);
+void linux_to_bsd_shmid64_ds(struct linux_shmid64_ds *,
+    struct shmid_ds *);
+void bsd_to_linux_shmid_ds(struct shmid_ds *,
+    struct linux_shmid_ds *);
+void bsd_to_linux_shmid64_ds(struct shmid_ds *,
+    struct linux_shmid64_ds *);
 __END_DECLS
 #endif	/* !_KERNEL */
 #endif	/* !SYSVSHM */

@@ -1,4 +1,4 @@
-/* $NetBSD: pci_eb164.c,v 1.24 1999/02/12 06:25:13 thorpej Exp $ */
+/* $NetBSD: pci_eb164.c,v 1.36 2008/04/28 20:23:11 martin Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -66,7 +59,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: pci_eb164.c,v 1.24 1999/02/12 06:25:13 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_eb164.c,v 1.36 2008/04/28 20:23:11 martin Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -77,7 +70,7 @@ __KERNEL_RCSID(0, "$NetBSD: pci_eb164.c,v 1.24 1999/02/12 06:25:13 thorpej Exp $
 #include <sys/device.h>
 #include <sys/syslog.h>
 
-#include <vm/vm.h>
+#include <uvm/uvm_extern.h>
 
 #include <machine/autoconf.h>
 #include <machine/rpb.h>
@@ -92,18 +85,14 @@ __KERNEL_RCSID(0, "$NetBSD: pci_eb164.c,v 1.24 1999/02/12 06:25:13 thorpej Exp $
 
 #include <alpha/pci/pci_eb164.h>
 
-#ifndef EVCNT_COUNTERS
-#include <machine/intrcnt.h>
-#endif
-
 #include "sio.h"
 #if NSIO
 #include <alpha/pci/siovar.h>
 #endif
 
-int	dec_eb164_intr_map __P((void *, pcitag_t, int, int,
-	    pci_intr_handle_t *));
+int	dec_eb164_intr_map __P((struct pci_attach_args *, pci_intr_handle_t *));
 const char *dec_eb164_intr_string __P((void *, pci_intr_handle_t));
+const struct evcnt *dec_eb164_intr_evcnt __P((void *, pci_intr_handle_t));
 void	*dec_eb164_intr_establish __P((void *, pci_intr_handle_t,
 	    int, int (*func)(void *), void *));
 void	dec_eb164_intr_disestablish __P((void *, void *));
@@ -116,14 +105,11 @@ void	*dec_eb164_pciide_compat_intr_establish __P((void *, struct device *,
 #define	PCI_STRAY_MAX	5
 
 struct alpha_shared_intr *eb164_pci_intr;
-#ifdef EVCNT_COUNTERS
-struct evcnt eb164_intr_evcnt;
-#endif
 
 bus_space_tag_t eb164_intrgate_iot;
 bus_space_handle_t eb164_intrgate_ioh;
 
-void	eb164_iointr __P((void *framep, unsigned long vec));
+void	eb164_iointr __P((void *arg, unsigned long vec));
 extern void	eb164_intr_enable __P((int irq));	/* pci_eb164_intr.S */
 extern void	eb164_intr_disable __P((int irq));	/* pci_eb164_intr.S */
 
@@ -133,11 +119,13 @@ pci_eb164_pickintr(ccp)
 {
 	bus_space_tag_t iot = &ccp->cc_iot;
 	pci_chipset_tag_t pc = &ccp->cc_pc;
+	char *cp;
 	int i;
 
         pc->pc_intr_v = ccp;
         pc->pc_intr_map = dec_eb164_intr_map;
         pc->pc_intr_string = dec_eb164_intr_string;
+	pc->pc_intr_evcnt = dec_eb164_intr_evcnt;
         pc->pc_intr_establish = dec_eb164_intr_establish;
         pc->pc_intr_disestablish = dec_eb164_intr_disestablish;
 
@@ -151,7 +139,7 @@ pci_eb164_pickintr(ccp)
 	for (i = 0; i < EB164_MAX_IRQ; i++)
 		eb164_intr_disable(i);	
 
-	eb164_pci_intr = alpha_shared_intr_alloc(EB164_MAX_IRQ);
+	eb164_pci_intr = alpha_shared_intr_alloc(EB164_MAX_IRQ, 8);
 	for (i = 0; i < EB164_MAX_IRQ; i++) {
 		/*
 		 * Systems with a Pyxis seem to have problems with
@@ -160,25 +148,28 @@ pci_eb164_pickintr(ccp)
 		 */
 		alpha_shared_intr_set_maxstrays(eb164_pci_intr, i,
 			(ccp->cc_flags & CCF_ISPYXIS) ? 0 : PCI_STRAY_MAX);
+
+		cp = alpha_shared_intr_string(eb164_pci_intr, i);
+		sprintf(cp, "irq %d", i);
+		evcnt_attach_dynamic(alpha_shared_intr_evcnt(
+		    eb164_pci_intr, i), EVCNT_TYPE_INTR, NULL,
+		    "eb164", cp);
 	}
 
 #if NSIO
 	sio_intr_setup(pc, iot);
 	eb164_intr_enable(EB164_SIO_IRQ);
 #endif
-
-	set_iointr(eb164_iointr);
 }
 
 int     
-dec_eb164_intr_map(ccv, bustag, buspin, line, ihp)
-        void *ccv;
-        pcitag_t bustag; 
-        int buspin, line;
+dec_eb164_intr_map(pa, ihp)
+	struct pci_attach_args *pa;
         pci_intr_handle_t *ihp;
 {
-	struct cia_config *ccp = ccv;
-	pci_chipset_tag_t pc = &ccp->cc_pc;
+        pcitag_t bustag = pa->pa_intrtag; 
+        int buspin = pa->pa_intrpin, line = pa->pa_intrline;
+	pci_chipset_tag_t pc = pa->pa_pc;
 	int bus, device, function;
 	u_int64_t variation;
 
@@ -191,7 +182,7 @@ dec_eb164_intr_map(ccv, bustag, buspin, line, ihp)
 		return 1;
 	}
 
-	alpha_pci_decompose_tag(pc, bustag, &bus, &device, &function);
+	pci_decompose_tag(pc, bustag, &bus, &device, &function);
 
 	variation = hwrpb->rpb_variation & SV_ST_MASK;
 
@@ -238,7 +229,7 @@ dec_eb164_intr_map(ccv, bustag, buspin, line, ihp)
 	}
 
 	if (line > EB164_MAX_IRQ)
-		panic("dec_eb164_intr_map: eb164 irq too large (%d)\n",
+		panic("dec_eb164_intr_map: eb164 irq too large (%d)",
 		    line);
 
 	*ihp = line;
@@ -256,9 +247,23 @@ dec_eb164_intr_string(ccv, ih)
         static char irqstr[15];          /* 11 + 2 + NULL + sanity */
 
         if (ih > EB164_MAX_IRQ)
-                panic("dec_eb164_intr_string: bogus eb164 IRQ 0x%lx\n", ih);
+                panic("dec_eb164_intr_string: bogus eb164 IRQ 0x%lx", ih);
         sprintf(irqstr, "eb164 irq %ld", ih);
         return (irqstr);
+}
+
+const struct evcnt *
+dec_eb164_intr_evcnt(ccv, ih)
+	void *ccv;
+	pci_intr_handle_t ih;
+{
+#if 0
+	struct cia_config *ccp = ccv;
+#endif
+
+	if (ih > EB164_MAX_IRQ)
+		panic("dec_eb164_intr_string: bogus eb164 IRQ 0x%lx", ih);
+	return (alpha_shared_intr_evcnt(eb164_pci_intr, ih));
 }
 
 void *
@@ -274,13 +279,17 @@ dec_eb164_intr_establish(ccv, ih, level, func, arg)
 	void *cookie;
 
 	if (ih > EB164_MAX_IRQ)
-		panic("dec_eb164_intr_establish: bogus eb164 IRQ 0x%lx\n", ih);
+		panic("dec_eb164_intr_establish: bogus eb164 IRQ 0x%lx", ih);
 
 	cookie = alpha_shared_intr_establish(eb164_pci_intr, ih, IST_LEVEL,
 	    level, func, arg, "eb164 irq");
 
-	if (cookie != NULL && alpha_shared_intr_isactive(eb164_pci_intr, ih))
+	if (cookie != NULL &&
+	    alpha_shared_intr_firstactive(eb164_pci_intr, ih)) {
+		scb_set(0x900 + SCB_IDXTOVEC(ih), eb164_iointr, NULL,
+		   level);
 		eb164_intr_enable(ih);
+	}
 	return (cookie);
 }
 
@@ -303,6 +312,7 @@ dec_eb164_intr_disestablish(ccv, cookie)
 		eb164_intr_disable(irq);
 		alpha_shared_intr_set_dfltsharetype(eb164_pci_intr, irq,
 		    IST_NONE);
+		scb_free(0x900 + SCB_IDXTOVEC(irq));
 	}
  
 	splx(s);
@@ -321,7 +331,7 @@ dec_eb164_pciide_compat_intr_establish(v, dev, pa, chan, func, arg)
 	void *cookie = NULL;
 	int bus, irq;
 
-	alpha_pci_decompose_tag(pc, pa->pa_tag, &bus, NULL, NULL);
+	pci_decompose_tag(pc, pa->pa_tag, &bus, NULL, NULL);
 
 	/*
 	 * If this isn't PCI bus #0, all bets are off.
@@ -333,45 +343,30 @@ dec_eb164_pciide_compat_intr_establish(v, dev, pa, chan, func, arg)
 #if NSIO
 	cookie = sio_intr_establish(NULL /*XXX*/, irq, IST_EDGE, IPL_BIO,
 	    func, arg);
+	if (cookie == NULL)
+		return (NULL);
+	printf("%s: %s channel interrupting at %s\n", dev->dv_xname,
+	    PCIIDE_CHANNEL_NAME(chan), sio_intr_string(NULL /*XXX*/, irq));
 #endif
 	return (cookie);
 }
 
 void
-eb164_iointr(framep, vec)
-	void *framep;
+eb164_iointr(arg, vec)
+	void *arg;
 	unsigned long vec;
 {
 	int irq; 
 
-	if (vec >= 0x900) {
-		if (vec >= 0x900 + (EB164_MAX_IRQ << 4))
-			panic("eb164_iointr: vec 0x%lx out of range\n", vec);
-		irq = (vec - 0x900) >> 4;
+	irq = SCB_VECTOIDX(vec - 0x900);
 
-#ifdef EVCNT_COUNTERS
-		eb164_intr_evcnt.ev_count++;
-#else
-		if (EB164_MAX_IRQ != INTRCNT_EB164_IRQ_LEN)
-			panic("eb164 interrupt counter sizes inconsistent");
-		intrcnt[INTRCNT_EB164_IRQ + irq]++;
-#endif
-
-		if (!alpha_shared_intr_dispatch(eb164_pci_intr, irq)) {
-			alpha_shared_intr_stray(eb164_pci_intr, irq,
-			    "eb164 irq");
-			if (ALPHA_SHARED_INTR_DISABLE(eb164_pci_intr, irq))
-				eb164_intr_disable(irq);
-		}
-		return;
-	}
-#if NSIO
-	if (vec >= 0x800) {
-		sio_iointr(framep, vec);
-		return;
-	}
-#endif
-	panic("eb164_iointr: weird vec 0x%lx\n", vec);
+	if (!alpha_shared_intr_dispatch(eb164_pci_intr, irq)) {
+		alpha_shared_intr_stray(eb164_pci_intr, irq,
+		    "eb164 irq");
+		if (ALPHA_SHARED_INTR_DISABLE(eb164_pci_intr, irq))
+			eb164_intr_disable(irq);
+	} else
+		alpha_shared_intr_reset_strays(eb164_pci_intr, irq);
 }
 
 #if 0		/* THIS DOES NOT WORK!  see pci_eb164_intr.S. */

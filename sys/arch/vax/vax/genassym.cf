@@ -1,4 +1,4 @@
-#	$NetBSD: genassym.cf,v 1.11 2000/03/19 14:56:53 ragge Exp $
+#	$NetBSD: genassym.cf,v 1.43 2008/06/04 11:30:26 ad Exp $
 #
 # Copyright (c) 1997 Ludd, University of Lule}, Sweden.
 # All rights reserved.
@@ -30,41 +30,80 @@
 # THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 
+quote #define __MUTEX_PRIVATE
+quote #define __RWLOCK_PRIVATE
 
 include	<sys/param.h>
 include	<sys/proc.h>
 include	<sys/errno.h>
 include	<sys/syscall.h>
+include	<sys/sched.h>
+include	<sys/device.h>
 
-include	<net/netisr.h>
+include <uvm/uvm.h>
 
+include	<machine/cpu.h>
 include	<machine/mtpr.h>
 include	<machine/pcb.h>
 include	<machine/sid.h>
+include <machine/signal.h>
+include	<machine/frame.h>
 include	<machine/trap.h>
-include	<machine/cpu.h>
+include	<machine/uvax.h>
 
-define	P_PRIORITY	offsetof(struct proc, p_priority)
-define	P_ADDR		offsetof(struct proc, p_addr)
+define	L_PRIORITY	offsetof(struct lwp, l_priority)
+define	L_ADDR		offsetof(struct lwp, l_addr)
+define	L_CPU		offsetof(struct lwp, l_cpu)
+define	L_STAT		offsetof(struct lwp, l_stat)
+define	L_PROC		offsetof(struct lwp, l_proc)
+define	L_CTXSWTCH	offsetof(struct lwp, l_ctxswtch)
+
 define	P_VMSPACE	offsetof(struct proc, p_vmspace)
+define	P_MD_SYSCALL	offsetof(struct proc, p_md.md_syscall)
 
 define	P0BR		offsetof(struct pcb, P0BR)
 define	P0LR		offsetof(struct pcb, P0LR)
 define	P1BR		offsetof(struct pcb, P1BR)
 define	P1LR		offsetof(struct pcb, P1LR)
 define	IFTRAP		offsetof(struct pcb, iftrap)
+define	ESP		offsetof(struct pcb, ESP)
+define	SSP		offsetof(struct pcb, SSP)
+define	KSP		offsetof(struct pcb, KSP)
+define	PCB_R0		offsetof(struct pcb, R[0])
+define	PCB_R1		offsetof(struct pcb, R[1])
+define	PCB_R6		offsetof(struct pcb, R[6])
+define	PCB_R7		offsetof(struct pcb, R[7])
+define	PCB_AP		offsetof(struct pcb, AP)
+define	PCB_FP		offsetof(struct pcb, FP)
+define	PCB_PC		offsetof(struct pcb, PC)
+define	PCB_PSL		offsetof(struct pcb, PSL)
+define	PCB_PADDR	offsetof(struct pcb, pcb_paddr)
+
+define	SOFTINT_CLOCK	SOFTINT_CLOCK
+define	SOFTINT_BIO	SOFTINT_BIO
+define	SOFTINT_NET	SOFTINT_NET
+define	SOFTINT_SERIAL	SOFTINT_SERIAL
 
 define	MCHK		offsetof(struct cpu_dep, cpu_mchk)
 define	MEMERR		offsetof(struct cpu_dep, cpu_memerr)
+define	BADADDR		offsetof(struct cpu_dep, cpu_badaddr)
 
 define	KERNBASE	KERNBASE
 
-# Multiprocessor struct members
-define	CI_CURPROC	offsetof(struct cpu_info, ci_curproc)
-define	CI_WANT_RESCHED	offsetof(struct cpu_info, ci_want_resched)
+define	UVME_INTRS	offsetof(struct uvmexp, intrs)
+define	UVME_SOFTS	offsetof(struct uvmexp, softs)
+
+ifdef MULTIPROCESSOR
+define	CI_CURLWP	offsetof(struct cpu_info, ci_curlwp)
+endif
+define	CI_MTX_COUNT	offsetof(struct cpu_info, ci_mtx_count)
+define	CI_MTX_OLDSPL	offsetof(struct cpu_info, ci_mtx_oldspl)
+define	CI_SOFTLWPS	offsetof(struct cpu_info, ci_softlwps)
 
 # mtpr register numbers
 define	PR_KSP		PR_KSP
+define	PR_ESP		PR_ESP
+define	PR_SSP		PR_SSP
 define	PR_USP		PR_USP
 define	PR_ICCS		PR_ICCS
 define	PR_PCBB		PR_PCBB
@@ -96,24 +135,47 @@ define	T_SYSCALL	T_SYSCALL
 define	T_ASTFLT	T_ASTFLT
 define	T_KDBTRAP	T_KDBTRAP
 
-# software net interrupts
-define	NETISR_IP	NETISR_IP
-define	NETISR_ARP	NETISR_ARP
-define	NETISR_NS	NETISR_NS
-define	NETISR_ATALK	NETISR_ATALK
-define	NETISR_ISO	NETISR_ISO
-define	NETISR_CCITT	NETISR_CCITT
-define	NETISR_PPP	NETISR_PPP
-define	NETISR_IPV6	NETISR_IPV6
-
 define	USPACE		USPACE
+define	TRAPFRAMELEN	sizeof(struct trapframe)
+define	CALLSFRAMELEN	sizeof(struct callsframe)
+define	CA_ARGNO	offsetof(struct callsframe, ca_argno)
 
 define	ENAMETOOLONG	ENAMETOOLONG
+define	EFAULT		EFAULT
 
-define	SYS___sigreturn14	SYS___sigreturn14
+define	EV_COUNT	offsetof(struct evcnt, ev_count)
+
+define	SYS_compat_16___sigreturn14	SYS_compat_16___sigreturn14
 define	SYS_exit	SYS_exit
 
 define	VAX_TYP_UV2	VAX_TYP_UV2
 define	VAX_TYP_8SS	VAX_TYP_8SS
 define	VAX_BTYP_46	VAX_BTYP_46
 define	VAX_BTYP_48	VAX_BTYP_48
+define	VAX_BTYP_49	VAX_BTYP_49
+
+define	IPL_HIGH	IPL_HIGH
+define	IPL_CLOCK	IPL_CLOCK
+define	IPL_SCHED	IPL_SCHED
+define	IPL_VM		IPL_VM
+define	IPL_NONE	IPL_NONE
+
+define	VC_DIAGTIMM	offsetof(struct vs_cpu, vc_diagtimm)
+
+define	PSL_IS		PSL_IS
+
+define	MTX_OWNER	offsetof(struct kmutex, mtx_owner)
+define	MTX_LOCK	offsetof(struct kmutex, mtx_lock)
+define	MTX_IPL		offsetof(struct kmutex, mtx_ipl)
+ifdef	MUTEX_COUNT_BIAS
+define	MTX_COUNT_BIAS	MUTEX_COUNT_BIAS
+endif
+
+define	RW_OWNER	offsetof(struct krwlock, rw_owner)
+define	RW_HAS_WAITERS	RW_HAS_WAITERS
+define	RW_WRITE_LOCKED	RW_WRITE_LOCKED
+define	RW_WRITE_WANTED	RW_WRITE_WANTED
+define	RW_READ_INCR	RW_READ_INCR
+define	RW_THREAD	RW_THREAD
+define	RW_READER	RW_READER
+define	RW_WRITER	RW_WRITER

@@ -1,4 +1,33 @@
-/*	$NetBSD: sync_vnops.c,v 1.2 1999/11/15 18:49:10 fvdl Exp $	*/
+/*	$NetBSD: sync_vnops.c,v 1.25.10.1 2009/02/24 04:13:35 snj Exp $	*/
+
+/*-
+ * Copyright (c) 2009 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * This code is derived from software contributed to The NetBSD Foundation
+ * by Andrew Doran.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
 
 /*
  * Copyright 1997 Marshall Kirk McKusick. All Rights Reserved.
@@ -31,6 +60,9 @@
  * SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: sync_vnops.c,v 1.25.10.1 2009/02/24 04:13:35 snj Exp $");
+
 #include <sys/param.h>
 #include <sys/proc.h>
 #include <sys/systm.h>
@@ -41,8 +73,8 @@
 #include <miscfs/genfs/genfs.h>
 #include <miscfs/syncfs/syncfs.h>
 
-int (**sync_vnodeop_p) __P((void *));
-struct vnodeopv_entry_desc sync_vnodeop_entries[] = {
+int (**sync_vnodeop_p)(void *);
+const struct vnodeopv_entry_desc sync_vnodeop_entries[] = {
 	{ &vop_default_desc, vn_default_error },
 	{ &vop_close_desc, sync_close },		/* close */
 	{ &vop_fsync_desc, sync_fsync },		/* fsync */
@@ -52,11 +84,24 @@ struct vnodeopv_entry_desc sync_vnodeop_entries[] = {
 	{ &vop_unlock_desc, sync_unlock },		/* unlock */
 	{ &vop_print_desc, sync_print },		/* print */
 	{ &vop_islocked_desc, sync_islocked },		/* islocked */
-	{ (struct vnodeop_desc*)NULL, (int(*) __P((void *)))NULL }
+	{ &vop_putpages_desc, sync_putpages },		/* islocked */
+	{ NULL, NULL }
 };
 
-struct vnodeopv_desc sync_vnodeop_opv_desc =
+const struct vnodeopv_desc sync_vnodeop_opv_desc =
 	{ &sync_vnodeop_p, sync_vnodeop_entries };
+
+/*
+ * Return delay factor appropriate for the given file system.   For
+ * WAPBL we use the sync vnode to burst out metadata updates: sync
+ * those file systems more frequently.
+ */
+static inline int
+sync_delay(struct mount *mp)
+{
+
+	return mp->mnt_wapbl != NULL ? metadelay : syncdelay;
+}
 
 /*
  * Create a new filesystem syncer vnode for the specified mount point.
@@ -66,22 +111,23 @@ vfs_allocate_syncvnode(mp)
 	struct mount *mp;
 {
 	struct vnode *vp;
-	static long start, incr, next;
-	int error;
+	static int start, incr, next;
+	int error, vdelay;
 
 	/* Allocate a new vnode */
-	if ((error = getnewvnode(VT_VFS, mp, sync_vnodeop_p, &vp)) != 0) {
-		mp->mnt_syncer = NULL;
+	if ((error = getnewvnode(VT_VFS, mp, sync_vnodeop_p, &vp)) != 0)
 		return (error);
-	}
+
 	vp->v_writecount = 1;
 	vp->v_type = VNON;
+
 	/*
 	 * Place the vnode onto the syncer worklist. We attempt to
 	 * scatter them about on the list so that they will go off
 	 * at evenly distributed times even if all the filesystems
 	 * are mounted at once.
 	 */
+
 	next += incr;
 	if (next == 0 || next > syncer_maxdelay) {
 		start /= 2;
@@ -92,9 +138,30 @@ vfs_allocate_syncvnode(mp)
 		}
 		next = start;
 	}
-	vn_syncer_add_to_worklist(vp, syncdelay > 0 ? next % syncdelay : 0);
+	mutex_enter(&vp->v_interlock);
+	vdelay = sync_delay(mp);
+	vn_syncer_add_to_worklist(vp, vdelay > 0 ? next % vdelay : 0);
+	mutex_exit(&vp->v_interlock);
 	mp->mnt_syncer = vp;
 	return (0);
+}
+
+/*
+ * Destroy the filesystem syncer vnode for the specified mount point.
+ */
+void
+vfs_deallocate_syncvnode(mp)
+	struct mount *mp;
+{
+	struct vnode *vp;
+
+	vp = mp->mnt_syncer;
+	mp->mnt_syncer = NULL;
+	mutex_enter(&vp->v_interlock);
+	vn_syncer_remove_from_worklist(vp);
+	vp->v_writecount = 0;
+	mutex_exit(&vp->v_interlock);
+	vgone(vp);
 }
 
 /*
@@ -106,13 +173,13 @@ sync_fsync(v)
 {
 	struct vop_fsync_args /* {
 		struct vnode *a_vp;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 		int a_flags;
-		struct proc *a_p;
+		off_t offlo;
+		off_t offhi;
 	} */ *ap = v;
 	struct vnode *syncvp = ap->a_vp;
 	struct mount *mp = syncvp->v_mount;
-	int asyncflag;
 
 	/*
 	 * We only need to do something if this is a lazy evaluation.
@@ -123,22 +190,18 @@ sync_fsync(v)
 	/*
 	 * Move ourselves to the back of the sync list.
 	 */
-	vn_syncer_add_to_worklist(syncvp, syncdelay);
+	mutex_enter(&syncvp->v_interlock);
+	vn_syncer_add_to_worklist(syncvp, sync_delay(mp));
+	mutex_exit(&syncvp->v_interlock);
 
 	/*
 	 * Walk the list of vnodes pushing all that are dirty and
 	 * not already on the sync list.
 	 */
-	simple_lock(&mountlist_slock);
-	if (vfs_busy(mp, LK_NOWAIT, &mountlist_slock) == 0) {
-		asyncflag = mp->mnt_flag & MNT_ASYNC;
-		mp->mnt_flag &= ~MNT_ASYNC;
-		VFS_SYNC(mp, MNT_LAZY, ap->a_cred, ap->a_p);
-		if (asyncflag)
-			mp->mnt_flag |= MNT_ASYNC;
-		vfs_unbusy(mp);
-	} else
-		simple_unlock(&mountlist_slock);
+	if (vfs_busy(mp, NULL) == 0) {
+		VFS_SYNC(mp, MNT_LAZY, ap->a_cred);
+		vfs_unbusy(mp, false, NULL);
+	}
 	return (0);
 }
 
@@ -156,27 +219,14 @@ sync_inactive(v)
 	struct vnode *vp = ap->a_vp;
 
 	VOP_UNLOCK(vp, 0);
-	if (vp->v_usecount == 0)
-		vgone(vp);
 	return (0);
 }
 
 int
-sync_reclaim(v)
-	void *v;
+sync_reclaim(void *v)
 {
-	struct vop_reclaim_args /* {
-		struct vnode *a_vp;
-	} */ *ap = v;
-	struct vnode *vp = ap->a_vp;
-	int s;
 
-	s = splbio();
-	vp->v_mount->mnt_syncer = NULL;
-	LIST_REMOVE(vp, v_synclist);
-	splx(s);
-
-	return 0;
+	return (0);
 }
 
 /*
@@ -186,14 +236,7 @@ int
 sync_print(v)
 	void *v;
 {
-	struct vop_print_args /* {
-		struct vnode *a_vp;
-	} */ *ap = v;
-	struct vnode *vp = ap->a_vp;
 
-	printf("syncer vnode");
-	if (vp->v_vnlock != NULL)
-		lockmgr_printinfo(vp->v_vnlock);
-	printf("\n");
+	printf("syncer vnode\n");
 	return (0);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_arcsubr.c,v 1.30 2000/03/30 09:45:34 augustss Exp $	*/
+/*	$NetBSD: if_arcsubr.c,v 1.59 2008/02/20 17:05:52 matt Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Ignatios Souvatzis
@@ -13,11 +13,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -37,7 +33,13 @@
  *       @(#)if_ethersubr.c	8.1 (Berkeley) 6/10/93
  *
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_arcsubr.c,v 1.59 2008/02/20 17:05:52 matt Exp $");
+
 #include "opt_inet.h"
+
+#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -50,7 +52,7 @@
 #include <sys/errno.h>
 #include <sys/syslog.h>
 
-#include <machine/cpu.h>
+#include <sys/cpu.h>
 
 #include <net/if.h>
 #include <net/netisr.h>
@@ -60,6 +62,10 @@
 #include <net/if_arc.h>
 #include <net/if_arp.h>
 #include <net/if_ether.h>
+
+#if NBPFILTER > 0
+#include <net/bpf.h>
+#endif
 
 #ifdef INET
 #include <netinet/in.h>
@@ -73,7 +79,6 @@
 #endif
 #include <netinet6/in6_var.h>
 #include <netinet6/nd6.h>
-#include <netinet6/in6_ifattach.h>
 #endif
 
 #define ARCNET_ALLOW_BROKEN_ARP
@@ -82,10 +87,10 @@
 #define ARC_IPMTU	1500
 #endif
 
-static struct mbuf *arc_defrag __P((struct ifnet *, struct mbuf *));
+static struct mbuf *arc_defrag(struct ifnet *, struct mbuf *);
 
 /*
- * RC1201 requires us to have this configurable. We have it only per 
+ * RC1201 requires us to have this configurable. We have it only per
  * machine at the moment... there is no generic "set mtu" ioctl, AFAICS.
  * Anyway, it is possible to binpatch this or set it per kernel config
  * option.
@@ -94,14 +99,13 @@ static struct mbuf *arc_defrag __P((struct ifnet *, struct mbuf *));
 ERROR: The arc_ipmtu is ARC_IPMTU, but must not exceed 60480.
 #endif
 int arc_ipmtu = ARC_IPMTU;
-u_int8_t  arcbroadcastaddr = 0;
+uint8_t  arcbroadcastaddr = 0;
 
 #define senderr(e) { error = (e); goto bad;}
-#define SIN(s) ((struct sockaddr_in *)s)
 
-static	int arc_output __P((struct ifnet *, struct mbuf *,
-	    struct sockaddr *, struct rtentry *));
-static	void arc_input __P((struct ifnet *, struct mbuf *));
+static	int arc_output(struct ifnet *, struct mbuf *,
+	    const struct sockaddr *, struct rtentry *);
+static	void arc_input(struct ifnet *, struct mbuf *);
 
 /*
  * ARCnet output routine.
@@ -109,37 +113,35 @@ static	void arc_input __P((struct ifnet *, struct mbuf *));
  * Assumes that ifp is actually pointer to arccom structure.
  */
 static int
-arc_output(ifp, m0, dst, rt0)
-	struct ifnet *ifp;
-	struct mbuf *m0;
-	struct sockaddr *dst;
-	struct rtentry *rt0;
+arc_output(struct ifnet *ifp, struct mbuf *m0, const struct sockaddr *dst,
+    struct rtentry *rt0)
 {
 	struct mbuf		*m, *m1, *mcopy;
 	struct rtentry		*rt;
 	struct arccom		*ac;
+	const struct arc_header	*cah;
 	struct arc_header	*ah;
 	struct arphdr		*arph;
-	int			s, error, newencoding;
-	u_int8_t		atype, adst, myself;
+	int			error, newencoding;
+	uint8_t			atype, adst, myself;
 	int			tfrags, sflag, fsflag, rsflag;
+	ALTQ_DECL(struct altq_pktattr pktattr;)
 
-	if ((ifp->if_flags & (IFF_UP|IFF_RUNNING)) != (IFF_UP|IFF_RUNNING)) 
-		return(ENETDOWN); /* m, m1 aren't initialized yet */
+	if ((ifp->if_flags & (IFF_UP|IFF_RUNNING)) != (IFF_UP|IFF_RUNNING))
+		return (ENETDOWN); /* m, m1 aren't initialized yet */
 
 	error = newencoding = 0;
 	ac = (struct arccom *)ifp;
 	m = m0;
 	mcopy = m1 = NULL;
 
-	myself = *LLADDR(ifp->if_sadl);
+	myself = *CLLADDR(ifp->if_sadl);
 
-	ifp->if_lastchange = time;
 	if ((rt = rt0)) {
 		if ((rt->rt_flags & RTF_UP) == 0) {
 			if ((rt0 = rt = rtalloc1(dst, 1)))
 				rt->rt_refcnt--;
-			else 
+			else
 				senderr(EHOSTUNREACH);
 		}
 		if (rt->rt_flags & RTF_GATEWAY) {
@@ -154,9 +156,15 @@ arc_output(ifp, m0, dst, rt0)
 		}
 		if (rt->rt_flags & RTF_REJECT)
 			if (rt->rt_rmx.rmx_expire == 0 ||
-			    time.tv_sec < rt->rt_rmx.rmx_expire)
+			    time_second < rt->rt_rmx.rmx_expire)
 				senderr(rt == rt0 ? EHOSTDOWN : EHOSTUNREACH);
 	}
+
+	/*
+	 * if the queueing discipline needs packet classification,
+	 * do it before prepending link headers.
+	 */
+	IFQ_CLASSIFY(&ifp->if_snd, m, dst->sa_family, &pktattr);
 
 	switch (dst->sa_family) {
 #ifdef INET
@@ -165,15 +173,15 @@ arc_output(ifp, m0, dst, rt0)
 		/*
 		 * For now, use the simple IP addr -> ARCnet addr mapping
 		 */
-		if (m->m_flags & (M_BCAST|M_MCAST)) 
+		if (m->m_flags & (M_BCAST|M_MCAST))
 			adst = arcbroadcastaddr; /* ARCnet broadcast address */
 		else if (ifp->if_flags & IFF_NOARP)
-			adst = ntohl(SIN(dst)->sin_addr.s_addr) & 0xFF;
+			adst = ntohl(satocsin(dst)->sin_addr.s_addr) & 0xFF;
 		else if (!arpresolve(ifp, rt, m, dst, &adst))
 			return 0;	/* not resolved yet */
 
 		/* If broadcasting on a simplex interface, loopback a copy */
-		if ((m->m_flags & (M_BCAST|M_MCAST)) && 
+		if ((m->m_flags & (M_BCAST|M_MCAST)) &&
 		    (ifp->if_flags & IFF_SIMPLEX))
 			mcopy = m_copy(m, 0, (int)M_COPYALL);
 		if (ifp->if_flags & IFF_LINK0) {
@@ -194,8 +202,7 @@ arc_output(ifp, m0, dst, rt0)
 
 		arph->ar_hrd = htons(ARPHRD_ARCNET);
 
-		switch(ntohs(arph->ar_op)) {
-
+		switch (ntohs(arph->ar_op)) {
 		case ARPOP_REVREQUEST:
 		case ARPOP_REVREPLY:
 			if (!(ifp->if_flags & IFF_LINK0)) {
@@ -233,22 +240,17 @@ arc_output(ifp, m0, dst, rt0)
 #endif
 #ifdef INET6
 	case AF_INET6:
-#ifdef OLDIP6OUTPUT
-		if (!nd6_resolve(ifp, rt, m, dst, (u_char *)&adst))
-			return(0);	/* if not yet resolves */
-#else
-		if (!nd6_storelladdr(ifp, rt, m, dst, (u_char *)&adst))
-			return(0); /* it must be impossible, but... */
-#endif /* OLDIP6OUTPUT */
+		if (!nd6_storelladdr(ifp, rt, m, dst, &adst, sizeof(adst)))
+			return (0); /* it must be impossible, but... */
 		atype = htons(ARCTYPE_INET6);
 		newencoding = 1;
 		break;
 #endif
 
 	case AF_UNSPEC:
-		ah = (struct arc_header *)dst->sa_data;
- 		adst = ah->arc_dhost;
-		atype = ah->arc_type;
+		cah = (const struct arc_header *)dst->sa_data;
+ 		adst = cah->arc_dhost;
+		atype = cah->arc_type;
 		break;
 
 	default:
@@ -263,7 +265,7 @@ arc_output(ifp, m0, dst, rt0)
 	/*
 	 * Add local net header.  If no space in first mbuf,
 	 * allocate another.
-	 * 
+	 *
 	 * For ARCnet, this is just symbolic. The header changes
 	 * form and position on its way into the hardware and out of
 	 * the wire.  At this point, it contains source, destination and
@@ -293,22 +295,10 @@ arc_output(ifp, m0, dst, rt0)
 			ah->arc_flag = rsflag;
 			ah->arc_seqid = ac->ac_seqid;
 
-			s = splimp();
-			/*
-			 * Queue message on interface, and start output if 
-			 * interface not yet active.
-			 */
-			if (IF_QFULL(&ifp->if_snd)) {
-				IF_DROP(&ifp->if_snd);
-				splx(s);
-				senderr(ENOBUFS);
-			}
-			ifp->if_obytes += m->m_pkthdr.len;
-			IF_ENQUEUE(&ifp->if_snd, m);
-			if ((ifp->if_flags & IFF_OACTIVE) == 0)
-				(*ifp->if_start)(ifp);
-			splx(s);
-	
+			if ((error = ifq_enqueue(ifp, m ALTQ_COMMA
+			    ALTQ_DECL(&pktattr))) != 0)
+				return (error);
+
 			m = m1;
 			sflag += 2;
 			rsflag = sflag;
@@ -353,23 +343,8 @@ arc_output(ifp, m0, dst, rt0)
 		ah->arc_dhost = adst;
 		ah->arc_shost = myself;
 	}
-	s = splimp();
-	/*
-	 * Queue message on interface, and start output if interface
-	 * not yet active.
-	 */
-	if (IF_QFULL(&ifp->if_snd)) {
-		IF_DROP(&ifp->if_snd);
-		splx(s);
-		senderr(ENOBUFS);
-	}
-	ifp->if_obytes += m->m_pkthdr.len;
-	IF_ENQUEUE(&ifp->if_snd, m);
-	if ((ifp->if_flags & IFF_OACTIVE) == 0)
-		(*ifp->if_start)(ifp);
-	splx(s);
 
-	return (error);
+	return ifq_enqueue(ifp, m ALTQ_COMMA ALTQ_DECL(&pktattr));
 
 bad:
 	if (m1)
@@ -380,23 +355,21 @@ bad:
 }
 
 /*
- * Defragmenter. Returns mbuf if last packet found, else 
+ * Defragmenter. Returns mbuf if last packet found, else
  * NULL. frees imcoming mbuf as necessary.
  */
 
-__inline struct mbuf *
-arc_defrag(ifp, m)
-	struct ifnet *ifp;
-	struct mbuf *m;
+static struct mbuf *
+arc_defrag(struct ifnet *ifp, struct mbuf *m)
 {
 	struct arc_header *ah, *ah1;
 	struct arccom *ac;
 	struct ac_frag *af;
 	struct mbuf *m1;
-	char *s;
+	const char *s;
 	int newflen;
-	u_char src,dst,typ;
-	
+	u_char src, dst, typ;
+
 	ac = (struct arccom *)ifp;
 
 	if (m->m_len < ARC_HDRNEWLEN) {
@@ -435,7 +408,7 @@ arc_defrag(ifp, m)
 	s = "debug code error";
 
 	if (ah->arc_flag & 1) {
-		/* 
+		/*
 		 * first fragment. We always initialize, which is
 		 * about the right thing to do, as we only want to
 		 * accept one fragmented packet per src at a time.
@@ -489,23 +462,23 @@ arc_defrag(ifp, m)
 		if (ah->arc_flag == af->af_lastseen + 2) {
 			/* ok, this is next fragment */
 			af->af_lastseen = ah->arc_flag;
-			m_adj(m,ARC_HDRNEWLEN);
+			m_adj(m, ARC_HDRNEWLEN);
 
-			/* 
+			/*
 			 * m_cat might free the first mbuf (with pkthdr)
 			 * in 2nd chain; therefore:
 			 */
 
-			newflen = m->m_pkthdr.len;	
+			newflen = m->m_pkthdr.len;
 
-			m_cat(m1,m);
+			m_cat(m1, m);
 
 			m1->m_pkthdr.len += newflen;
 
 			/* is it the last one? */
 			if (af->af_lastseen > af->af_maxflag) {
 				af->af_packet = NULL;
-				return(m1);
+				return (m1);
 			} else
 				return NULL;
 		}
@@ -518,7 +491,7 @@ outofseq:
 		af->af_packet = NULL;
 	}
 
-	if (m) 
+	if (m)
 		m_freem(m);
 
 	log(LOG_INFO,"%s: got out of seq. packet: %s\n",
@@ -535,10 +508,9 @@ outofseq:
  * Easiest is to assume that everybody else uses that, too.
  */
 int
-arc_isphds(type)
-	u_int8_t type;
+arc_isphds(uint8_t type)
 {
-	return (type != ARCTYPE_IP_OLD && 
+	return (type != ARCTYPE_IP_OLD &&
 		type != ARCTYPE_ARP_OLD &&
 		type != ARCTYPE_DIAGNOSE);
 }
@@ -549,15 +521,12 @@ arc_isphds(type)
  * the ARCnet header.
  */
 static void
-arc_input(ifp, m)
-	struct ifnet *ifp;
-	struct mbuf *m;
+arc_input(struct ifnet *ifp, struct mbuf *m)
 {
 	struct arc_header *ah;
 	struct ifqueue *inq;
-	u_int8_t atype;
+	uint8_t atype;
 	int s;
-	struct arphdr *arph;
 
 	if ((ifp->if_flags & IFF_UP) == 0) {
 		m_freem(m);
@@ -566,12 +535,11 @@ arc_input(ifp, m)
 
 	/* possibly defragment: */
 	m = arc_defrag(ifp, m);
-	if (m == NULL) 
+	if (m == NULL)
 		return;
 
 	ah = mtod(m, struct arc_header *);
 
-	ifp->if_lastchange = time;
 	ifp->if_ibytes += m->m_pkthdr.len;
 
 	if (arcbroadcastaddr == ah->arc_dhost) {
@@ -607,7 +575,6 @@ arc_input(ifp, m)
 		m_adj(m, ARC_HDRLEN);
 		schednetisr(NETISR_ARP);
 		inq = &arpintrq;
-		arph = mtod(m, struct arphdr *);
 #ifdef ARCNET_ALLOW_BROKEN_ARP
 		mtod(m, struct arphdr *)->ar_pro = htons(ETHERTYPE_IP);
 #endif
@@ -625,7 +592,7 @@ arc_input(ifp, m)
 		return;
 	}
 
-	s = splimp();
+	s = splnet();
 	if (IF_QFULL(inq)) {
 		IF_DROP(inq);
 		m_freem(m);
@@ -637,51 +604,30 @@ arc_input(ifp, m)
 /*
  * Convert Arcnet address to printable (loggable) representation.
  */
-static char digits[] = "0123456789abcdef";
 char *
-arc_sprintf(ap)
-	u_int8_t *ap;
+arc_sprintf(uint8_t *ap)
 {
 	static char arcbuf[3];
 	char *cp = arcbuf;
 
-	*cp++ = digits[*ap >> 4];
-	*cp++ = digits[*ap++ & 0xf];
+	*cp++ = hexdigits[*ap >> 4];
+	*cp++ = hexdigits[*ap++ & 0xf];
 	*cp   = 0;
 	return (arcbuf);
-}
-
-/*
- * Register (new) link level address.
- */
-void
-arc_storelladdr(ifp, lla)
-	struct ifnet *ifp;
-	u_int8_t lla;
-{
-	struct sockaddr_dl *sdl;
-	if ((sdl = ifp->if_sadl) &&
-	   sdl->sdl_family == AF_LINK) {
-		sdl->sdl_type = IFT_ARCNET;
-		sdl->sdl_alen = ifp->if_addrlen;
-		*(LLADDR(sdl)) = lla;
-	}
-	ifp->if_mtu = ARC_PHDS_MAXMTU;
 }
 
 /*
  * Perform common duties while attaching to interface list
  */
 void
-arc_ifattach(ifp, lla)
-	struct ifnet *ifp;
-	u_int8_t lla;
+arc_ifattach(struct ifnet *ifp, uint8_t lla)
 {
 	struct arccom *ac;
 
 	ifp->if_type = IFT_ARCNET;
 	ifp->if_addrlen = 1;
 	ifp->if_hdrlen = ARC_HDRLEN;
+	ifp->if_dlt = DLT_ARCNET;
 	if (ifp->if_flags & IFF_BROADCAST)
 		ifp->if_flags |= IFF_MULTICAST|IFF_ALLMULTI;
 	if (ifp->if_flags & IFF_LINK0 && arc_ipmtu > ARC_PHDS_MAXMTU)
@@ -692,17 +638,18 @@ arc_ifattach(ifp, lla)
 	ifp->if_output = arc_output;
 	ifp->if_input = arc_input;
 	ac = (struct arccom *)ifp;
-	ac->ac_seqid = (time.tv_sec) & 0xFFFF; /* try to make seqid unique */
+	ac->ac_seqid = (time_second) & 0xFFFF; /* try to make seqid unique */
 	if (lla == 0) {
 		/* XXX this message isn't entirely clear, to me -- cgd */
 		log(LOG_ERR,"%s: link address 0 reserved for broadcasts.  Please change it and ifconfig %s down up\n",
-		   ifp->if_xname, ifp->if_xname); 
+		   ifp->if_xname, ifp->if_xname);
 	}
 	if_attach(ifp);
-	arc_storelladdr(ifp, lla);
+	if_set_sadl(ifp, &lla, sizeof(lla));
 
 	ifp->if_broadcastaddr = &arcbroadcastaddr;
-#ifdef INET6
-	in6_ifattach_getifid(ifp);
-#endif          
+
+#if NBPFILTER > 0
+	bpfattach(ifp, DLT_ARCNET, ARC_HDRLEN);
+#endif
 }

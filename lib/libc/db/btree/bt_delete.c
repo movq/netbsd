@@ -1,4 +1,4 @@
-/*	$NetBSD: bt_delete.c,v 1.11 1999/03/16 18:17:56 christos Exp $	*/
+/*	$NetBSD: bt_delete.c,v 1.16 2008/09/11 12:58:00 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -36,18 +32,17 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-#if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)bt_delete.c	8.13 (Berkeley) 7/28/94";
-#else
-__RCSID("$NetBSD: bt_delete.c,v 1.11 1999/03/16 18:17:56 christos Exp $");
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
 #endif
-#endif /* LIBC_SCCS and not lint */
+
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: bt_delete.c,v 1.16 2008/09/11 12:58:00 joerg Exp $");
 
 #include "namespace.h"
 #include <sys/types.h>
 
+#include <assert.h>
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
@@ -55,11 +50,11 @@ __RCSID("$NetBSD: bt_delete.c,v 1.11 1999/03/16 18:17:56 christos Exp $");
 #include <db.h>
 #include "btree.h"
 
-static int __bt_bdelete __P((BTREE *, const DBT *));
-static int __bt_curdel __P((BTREE *, const DBT *, PAGE *, u_int));
-static int __bt_pdelete __P((BTREE *, PAGE *));
-static int __bt_relink __P((BTREE *, PAGE *));
-static int __bt_stkacq __P((BTREE *, PAGE **, CURSOR *));
+static int __bt_bdelete(BTREE *, const DBT *);
+static int __bt_curdel(BTREE *, const DBT *, PAGE *, u_int);
+static int __bt_pdelete(BTREE *, PAGE *);
+static int __bt_relink(BTREE *, PAGE *);
+static int __bt_stkacq(BTREE *, PAGE **, CURSOR *);
 
 /*
  * __bt_delete
@@ -68,10 +63,7 @@ static int __bt_stkacq __P((BTREE *, PAGE **, CURSOR *));
  * Return RET_SPECIAL if the key is not found.
  */
 int
-__bt_delete(dbp, key, flags)
-	const DB *dbp;
-	const DBT *key;
-	u_int flags;
+__bt_delete(const DB *dbp, const DBT *key, u_int flags)
 {
 	BTREE *t;
 	CURSOR *c;
@@ -150,10 +142,7 @@ __bt_delete(dbp, key, flags)
  *	0 on success, 1 on failure
  */
 static int
-__bt_stkacq(t, hp, c)
-	BTREE *t;
-	PAGE **hp;
-	CURSOR *c;
+__bt_stkacq(BTREE *t, PAGE **hp, CURSOR *c)
 {
 	BINTERNAL *bi;
 	EPG *e;
@@ -297,9 +286,7 @@ ret:	mpool_put(t->bt_mp, h, 0);
  *	RET_ERROR, RET_SUCCESS and RET_SPECIAL if the key not found.
  */
 static int
-__bt_bdelete(t, key)
-	BTREE *t;
-	const DBT *key;
+__bt_bdelete(BTREE *t, const DBT *key)
 {
 	EPG *e;
 	PAGE *h;
@@ -384,15 +371,13 @@ loop:	if ((e = __bt_search(t, key, &exact)) == NULL)
  *	mpool_put's the page
  */
 static int
-__bt_pdelete(t, h)
-	BTREE *t;
-	PAGE *h;
+__bt_pdelete(BTREE *t, PAGE *h)
 {
 	BINTERNAL *bi;
 	PAGE *pg;
 	EPGNO *parent;
 	indx_t cnt, idx, *ip, offset;
-	u_int32_t nksize;
+	uint32_t nksize;
 	char *from;
 
 	/*
@@ -481,15 +466,11 @@ __bt_pdelete(t, h)
  *	RET_SUCCESS, RET_ERROR.
  */
 int
-__bt_dleaf(t, key, h, idx)
-	BTREE *t;
-	const DBT *key;
-	PAGE *h;
-	u_int idx;
+__bt_dleaf(BTREE *t, const DBT *key, PAGE *h, u_int idx)
 {
 	BLEAF *bl;
 	indx_t cnt, *ip, offset;
-	u_int32_t nbytes;
+	uint32_t nbytes;
 	void *to;
 	char *from;
 
@@ -546,11 +527,7 @@ __bt_dleaf(t, key, h, idx)
  *	RET_SUCCESS, RET_ERROR.
  */
 static int
-__bt_curdel(t, key, h, idx)
-	BTREE *t;
-	const DBT *key;
-	PAGE *h;
-	u_int idx;
+__bt_curdel(BTREE *t, const DBT *key, PAGE *h, u_int idx)
 {
 	CURSOR *c;
 	EPG e;
@@ -645,9 +622,7 @@ dup2:				c->pg.pgno = e.page->pgno;
  *	h:	page to be deleted
  */
 static int
-__bt_relink(t, h)
-	BTREE *t;
-	PAGE *h;
+__bt_relink(BTREE *t, PAGE *h)
 {
 	PAGE *pg;
 

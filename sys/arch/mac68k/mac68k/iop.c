@@ -1,13 +1,38 @@
-/*	$NetBSD: iop.c,v 1.2 1999/06/28 04:33:22 briggs Exp $	*/
+/*	$NetBSD: iop.c,v 1.11 2007/03/12 18:18:25 ad Exp $	*/
 
 /*
- * Freely contributed to the NetBSD Foundation.
- * XXX - Do paperwork and put a proper copyright here.
+ * Copyright (c) 2000 Allen Briggs.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 /*
  *	This code handles VIA, RBV, and OSS functionality.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: iop.c,v 1.11 2007/03/12 18:18:25 ad Exp $");
 
 #include "opt_mac68k.h"
 
@@ -26,51 +51,54 @@
 
 static IOP	mac68k_iops[2];
 
-static void	iopism_hand __P((void *arg));
-static void	load_msg_to_iop __P((IOPHW *ioph, struct iop_msg *msg));
-static void	iop_message_sent __P((IOP *iop, int chan));
-static void	receive_iop_message __P((IOP *iop, int chan));
-static void	default_listener __P((IOP *iop, struct iop_msg *msg));
+static void	iopism_hand(void *);
+static void	load_msg_to_iop(IOPHW *, struct iop_msg *);
+static void	iop_message_sent(IOP *, int);
+static void	receive_iop_message(IOP *, int);
+static void	default_listener(IOP *, struct iop_msg *);
 
-static __inline__ int iop_read1 __P((IOPHW *ioph, u_long addr));
-static __inline__ void iop_write1 __P((IOPHW *ioph, u_long addr, u_char data));
-static __inline__ void _iop_upload __P((IOPHW *, u_char *, u_long, u_long));
-static __inline__ void _iop_download __P((IOPHW *, u_char *, u_long, u_long));
+static inline int iop_alive(IOPHW *);
+static inline int iop_read1(IOPHW *, u_long);
+static inline void iop_write1(IOPHW *, u_long, u_char);
+static inline void _iop_upload(IOPHW *, u_char *, u_long, u_long);
+static inline void _iop_download(IOPHW *, u_char *, u_long, u_long);
 
-static __inline__ int
-iop_read1(ioph, iopbase)
-	IOPHW	*ioph;
-	u_long	iopbase;
+static inline int
+iop_read1(IOPHW *ioph, u_long iopbase)
 {
 	IOP_LOADADDR(ioph, iopbase);
 	return ioph->data;
 }
 
-static __inline__ void
-iop_write1(ioph, iopbase, data)
-	IOPHW	*ioph;
-	u_long	iopbase;
-	u_char	data;
+static inline void
+iop_write1(IOPHW *ioph, u_long iopbase, u_char data)
 {
 	IOP_LOADADDR(ioph, iopbase);
 	ioph->data = data;
 }
 
+static inline int
+iop_alive(IOPHW *ioph)
+{
+	int alive;
+
+	alive = iop_read1(ioph, IOP_ADDR_ALIVE);
+	iop_write1(ioph, IOP_ADDR_ALIVE, 0);
+	return alive;
+}
+
 static void
-default_listener(iop, msg)
-	IOP *iop;
-	struct iop_msg *msg;
+default_listener(IOP *iop, struct iop_msg *msg)
 {
 	printf("unsolicited message on channel %d.\n", msg->channel);
 }
 
 void
-iop_init(fullinit)
-	int	fullinit;
+iop_init(int fullinit)
 {
-	IOPHW	*ioph;
-	IOP	*iop;
-	int	i, ii;
+	IOPHW *ioph;
+	IOP *iop;
+	int i, ii;
 
 	switch (current_mac_model->machineid) {
 	default:
@@ -90,14 +118,14 @@ iop_init(fullinit)
 		break;
 	}       
 
-	ioph = mac68k_iops[SCC_IOP].iop;
-	ioph->control_status = 0x82;		/* Reset */
-	ioph->control_status = IOP_BYPASS;	/* Set to bypass */
-
-	ioph = mac68k_iops[ISM_IOP].iop;
-	ioph->control_status = 0x82;		/* Reset */
-
 	if (!fullinit) {
+		ioph = mac68k_iops[SCC_IOP].iop;
+		ioph->control_status = 0;		/* Reset */
+		ioph->control_status = IOP_BYPASS;	/* Set to bypass */
+
+		ioph = mac68k_iops[ISM_IOP].iop;
+		ioph->control_status = 0;		/* Reset */
+
 		return;
 	}
 
@@ -110,10 +138,10 @@ iop_init(fullinit)
 			iop->listeners[i] = default_listener;
 			iop->listener_data[i] = NULL;
 		}
-		IOP_LOADADDR(ioph, 0x200);
+/*		IOP_LOADADDR(ioph, 0x200);
 		for (i = 0x200; i > 0; i--) {
 			ioph->data = 0;
-		}
+		}*/
 	}
 
 	switch (current_mac_model->machineid) {
@@ -126,9 +154,9 @@ iop_init(fullinit)
 		intr_establish(iopscc_hand, iop, 4);
 #endif
 		iop = &mac68k_iops[ISM_IOP];
-		via1_register_irq(2, iopism_hand, iop);
-		via_reg(VIA1, vIER) = 0x84;
-		via_reg(VIA1, vIFR) = 0x04;
+		via2_register_irq(0, iopism_hand, iop);
+		via_reg(VIA2, vIER) = 0x81;
+		via_reg(VIA2, vIFR) = 0x01;
 		break;
 	case MACH_MACIIFX:
 		/* oss_register_irq(2, iopism_hand, &ioph); */
@@ -139,14 +167,15 @@ iop_init(fullinit)
 	ioph = iop->iop;
 	printf("SCC IOP base: 0x%x\n", (unsigned) ioph);
 	pool_init(&iop->pool, sizeof(struct iop_msg), 0, 0, 0, "mac68k_iop1",
-		  0, NULL, NULL, M_DEVBUF);
-	ioph->control_status = 0x80 | IOP_BYPASS;
+	    NULL, IPL_NONE);
+	ioph->control_status = IOP_BYPASS;
 
 	iop = &mac68k_iops[ISM_IOP];
 	ioph = iop->iop;
-	printf("ISM IOP base: 0x%x\n", (unsigned) ioph);
+	printf("ISM IOP base: 0x%x, alive %x\n", (unsigned) ioph, 
+	(unsigned) iop_alive(ioph));
 	pool_init(&iop->pool, sizeof(struct iop_msg), 0, 0, 0, "mac68k_iop2",
-		  0, NULL, NULL, M_DEVBUF);
+	    NULL, IPL_NONE);
 	iop_write1(ioph, IOP_ADDR_ALIVE, 0);
 
 /*
@@ -160,7 +189,7 @@ iop_init(fullinit)
  */
 	printf("OLD cs0: 0x%x\n", (unsigned) ioph->control_status);
 
-	ioph->control_status = 0x80 | IOP_CS_RUN | IOP_CS_AUTOINC;
+	ioph->control_status = IOP_CS_RUN | IOP_CS_AUTOINC;
 {unsigned cs, c2;
 	cs = (unsigned) ioph->control_status;
 	printf("OLD cs1: 0x%x\n", cs);
@@ -170,11 +199,8 @@ iop_init(fullinit)
 }
 }
 
-static __inline__ void
-_iop_upload(ioph, mem, nb, iopbase)
-	IOPHW	*ioph;
-	u_char	*mem;
-	u_long	nb, iopbase;
+static inline void
+_iop_upload(IOPHW *ioph, u_char *mem, u_long nb, u_long iopbase)
 {
 	IOP_LOADADDR(ioph, iopbase);
 	while (nb--) {
@@ -183,12 +209,9 @@ _iop_upload(ioph, mem, nb, iopbase)
 }
 
 void
-iop_upload(iopn, mem, nb, iopbase)
-	int	iopn;
-	u_char	*mem;
-	u_long	nb, iopbase;
+iop_upload(int iopn, u_char *mem, u_long nb, u_long iopbase)
 {
-	IOPHW	*ioph;
+	IOPHW *ioph;
 
 	if (iopn & ~1) return;
 	ioph = mac68k_iops[iopn].iop;
@@ -197,11 +220,8 @@ iop_upload(iopn, mem, nb, iopbase)
 	_iop_upload(ioph, mem, nb, iopbase);
 }
 
-static __inline__ void
-_iop_download(ioph, mem, nb, iopbase)
-	IOPHW	*ioph;
-	u_char	*mem;
-	u_long	nb, iopbase;
+static inline void
+_iop_download(IOPHW *ioph, u_char *mem, u_long nb, u_long iopbase)
 {
 	IOP_LOADADDR(ioph, iopbase);
 	while (nb--) {
@@ -210,10 +230,7 @@ _iop_download(ioph, mem, nb, iopbase)
 }
 
 void
-iop_download(iopn, mem, nb, iopbase)
-	int	iopn;
-	u_char	*mem;
-	u_long	nb, iopbase;
+iop_download(int iopn, u_char *mem, u_long nb, u_long iopbase)
 {
 	IOPHW	*ioph;
 
@@ -225,14 +242,13 @@ iop_download(iopn, mem, nb, iopbase)
 }
 
 static void
-iopism_hand(arg)
-	void	*arg;
+iopism_hand(void *arg)
 {
-	IOP	*iop;
-	IOPHW	*ioph;
-	u_char	cs;
-	u_char	m, s;
-	int	i;
+	IOP *iop;
+	IOPHW *ioph;
+	u_char cs;
+	u_char m, s;
+	int i;
 
 	iop = (IOP *) arg;
 	ioph = iop->iop;
@@ -277,11 +293,9 @@ printf("iopism_hand.\n");
 }
 
 static void
-load_msg_to_iop(ioph, msg)
-	IOPHW		*ioph;
-	struct iop_msg	*msg;
+load_msg_to_iop(IOPHW *ioph, struct iop_msg *msg)
 {
-	int		offset;
+	int offset;
 
 	msg->status = IOP_MSGSTAT_SENDING;
 	offset = IOP_ADDR_SEND_MSG + msg->channel * IOP_MSGLEN;
@@ -293,18 +307,16 @@ load_msg_to_iop(ioph, msg)
 }
 
 static void
-iop_message_sent(iop, chan)
-	IOP	*iop;
-	int	chan;
+iop_message_sent(IOP *iop, int chan)
 {
-	IOPHW		*ioph;
-	struct iop_msg	*msg;
+	IOPHW *ioph;
+	struct iop_msg *msg;
 
 	ioph = iop->iop;
 
 	msg = SIMPLEQ_FIRST(&iop->sendq[chan]);
 	msg->status = IOP_MSGSTAT_SENT;
-	SIMPLEQ_REMOVE_HEAD(&iop->sendq[chan], msg, iopm);
+	SIMPLEQ_REMOVE_HEAD(&iop->sendq[chan], iopm);
 
 	msg->handler(iop, msg);
 
@@ -318,17 +330,17 @@ iop_message_sent(iop, chan)
 }
 
 static void
-receive_iop_message(iop, chan)
-	IOP	*iop;
-	int	chan;
+receive_iop_message(IOP *iop, int chan)
 {
-	IOPHW		*ioph;
-	struct iop_msg	*msg;
-	int		offset;
+	IOPHW *ioph;
+	struct iop_msg *msg;
+	int offset;
+
+	ioph = iop->iop;
 
 	msg = SIMPLEQ_FIRST(&iop->recvq[chan]);
 	if (msg) {
-		SIMPLEQ_REMOVE_HEAD(&iop->recvq[chan], msg, iopm);
+		SIMPLEQ_REMOVE_HEAD(&iop->recvq[chan], iopm);
 	} else {
 		msg = &iop->unsolicited_msg;
 		msg->channel = chan;
@@ -354,15 +366,12 @@ receive_iop_message(iop, chan)
 }
 
 int
-iop_send_msg(iopn, chan, mesg, msglen, handler, user_data)
-	int		iopn, chan, msglen;
-	u_char		*mesg;
-	iop_msg_handler	handler;
-	void		*user_data;
+iop_send_msg(int iopn, int chan, u_char *mesg, int msglen,
+    iop_msg_handler handler, void *user_data)
 {
-	struct iop_msg	*msg;
-	IOP		*iop;
-	int		s;
+	struct iop_msg *msg;
+	IOP *iop;
+	int s;
 
 	if (iopn & ~1) return -1;
 	iop = &mac68k_iops[iopn];
@@ -399,14 +408,11 @@ delay(1000);
 }
 
 int
-iop_queue_receipt(iopn, chan, handler, user_data)
-	int		iopn, chan;
-	iop_msg_handler	handler;
-	void		*user_data;
+iop_queue_receipt(int iopn, int chan, iop_msg_handler handler, void *user_data)
 {
-	struct iop_msg	*msg;
-	IOP		*iop;
-	int		s;
+	struct iop_msg *msg;
+	IOP *iop;
+	int s;
 
 	if (iopn & ~1) return -1;
 	iop = &mac68k_iops[iopn];
@@ -431,13 +437,11 @@ iop_queue_receipt(iopn, chan, handler, user_data)
 }
 
 int
-iop_register_listener(iopn, chan, handler, user_data)
-	int		iopn, chan;
-	iop_msg_handler	handler;
-	void		*user_data;
+iop_register_listener(int iopn, int chan, iop_msg_handler handler,
+    void *user_data)
 {
-	IOP		*iop;
-	int		s;
+	IOP *iop;
+	int s;
 
 	if (iopn & ~1) return -1;
 	iop = &mac68k_iops[iopn];

@@ -1,4 +1,4 @@
-/*	$NetBSD: player.h,v 1.8 1999/12/28 18:05:25 jsm Exp $	*/
+/*	$NetBSD: player.h,v 1.11 2003/08/07 09:37:44 agc Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -34,9 +30,6 @@
  *
  *	@(#)player.h	8.2 (Berkeley) 5/3/95
  */
-
-#include <curses.h>
-#include "extern.h"
 
 /* sizes and coordinates for the screen */
 
@@ -92,21 +85,9 @@
 #define SLOT_B		VIEW_B
 #define SLOT_R		(SLOT_L+SLOT_X-1)
 
-#ifdef SIGTSTP
-#define SCREENTEST()	(initscr() != NULL && signal(SIGTSTP, SIG_DFL) != SIG_ERR && STAT_R < COLS && SCROLL_Y > 0)
-#else
-#define SCREENTEST()	(initscr() != NULL && STAT_R < COLS && SCROLL_Y > 0)
-#endif
-
-extern WINDOW *view_w;
-extern WINDOW *slot_w;
-extern WINDOW *scroll_w;
-extern WINDOW *stat_w;
-extern WINDOW *turn_w;
-
-extern char done_curses;
-extern char loaded, fired, changed, repaired;
-extern char dont_adjust;
+extern int done_curses;
+extern int loaded, fired, changed, repaired;
+extern int dont_adjust;
 extern int viewrow, viewcol;
 extern char movebuf[sizeof SHIP(0)->file->movebuf];
 extern char version[];

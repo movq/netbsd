@@ -1,8 +1,8 @@
-#	$NetBSD: Makefile,v 1.6 1999/12/24 17:02:14 minoura Exp $
+#	$NetBSD: Makefile,v 1.11 2007/10/28 13:59:53 isaki Exp $
 
-SUBDIR= ramdisk bootfloppy ramdisk.sysinst bootfloppy.sysinst
-
-.PHONY: release
+SUBDIR=		ramdisk .WAIT instkernel .WAIT bootfloppy.sysinst
+# `floppy-root' cannot be used now, due to size issue.
+#SUBDIR+=	bootfloppy.generic
 
 TARGETS+=	release
 

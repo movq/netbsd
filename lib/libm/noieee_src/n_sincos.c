@@ -1,4 +1,4 @@
-/*	$NetBSD: n_sincos.c,v 1.3 1999/07/02 15:37:37 simonb Exp $	*/
+/*	$NetBSD: n_sincos.c,v 1.6 2003/08/07 16:44:52 agc Exp $	*/
 /*
  * Copyright (c) 1987, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,18 +34,19 @@ static char sccsid[] = "@(#)sincos.c	8.1 (Berkeley) 6/4/93";
 #endif
 #endif /* not lint */
 
+#define _LIBM_DECLARE
 #include "mathimpl.h"
 #include "trig.h"
+
 double
-sin(x)
-double x;
+sin(double x)
 {
 	double a,c,z;
 
         if(!finite(x))		/* sin(NaN) and sin(INF) must be NaN */
 		return x-x;
 	x=drem(x,PI2);		/* reduce x into [-PI,PI] */
-	a=copysign(x,one);
+	a=copysign(x,__one);
 	if (a >= PIo4) {
 		if(a >= PI3o4)		/* ... in [3PI/4,PI] */
 			x = copysign((a = PI-a),x);
@@ -57,46 +54,57 @@ double x;
 			a = PIo2-a;		/* rtn. sign(x)*C(PI/2-|x|) */
 			z = a*a;
 			c = cos__C(z);
-			z *= half;
-			a = (z >= thresh ? half-((z-half)-c) : one-(z-c));
+			z *= __half;
+			a = (z >= thresh ? __half-((z-__half)-c) : __one-(z-c));
 			return copysign(a,x);
 		}
 	}
 
-	if (a < small) {		/* rtn. S(x) */
-		z = big+a;
+	if (a < __small) {		/* rtn. S(x) */
+		z = __big+a;
 		return x;
 	}
 	return x+x*sin__S(x*x);
 }
 
+float
+sinf(float x)
+{
+	return sin(x);
+}
+
 double
-cos(x)
-double x;
+cos(double x)
 {
 	double a,c,z,s = 1.0;
 
 	if(!finite(x))		/* cos(NaN) and cos(INF) must be NaN */
 		return x-x;
 	x=drem(x,PI2);		/* reduce x into [-PI,PI] */
-	a=copysign(x,one);
+	a=copysign(x,__one);
 	if (a >= PIo4) {
 		if (a >= PI3o4) {	/* ... in [3PI/4,PI] */
 			a = PI-a;
-			s = negone;
+			s = __negone;
 		}
 		else {			/* ... in [PI/4,3PI/4] */
 			a = PIo2-a;
 			return a+a*sin__S(a*a);	/* rtn. S(PI/2-|x|) */
 		}
 	}
-	if (a < small) {
-		z = big+a;
+	if (a < __small) {
+		z = __big+a;
 		return s;		/* rtn. s*C(a) */
 	}
 	z = a*a;
 	c = cos__C(z);
-	z *= half;
-	a = (z >= thresh ? half-((z-half)-c) : one-(z-c));
+	z *= __half;
+	a = (z >= thresh ? __half-((z-__half)-c) : __one-(z-c));
 	return copysign(a,s);
+}
+
+float
+cosf(float x)
+{
+	return cos(x);
 }

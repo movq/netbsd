@@ -1,10 +1,13 @@
-/*	$NetBSD: io.c,v 1.5 1999/09/08 21:45:29 jsm Exp $	*/
+/*	$NetBSD: io.c,v 1.11 2007/12/15 19:44:42 perry Exp $	*/
 
 /*
  * io.c - input/output routines for Phantasia
  */
 
 #include "include.h"
+#undef bool
+#include <sys/cdefs.h>
+#include <curses.h>
 
 void
 getstring(cp, mx)
@@ -154,18 +157,15 @@ interrupt()
 int
 getanswer(choices, def)
 	const char   *choices;
-	bool    def;
+	phbool  def;
 {
 	int     ch;		/* input */
-	int     loop;		/* counter */
-	int     oldx, oldy;	/* original coordinates on screen */
+	volatile int	loop;	/* counter */
+	volatile int	oldx, oldy;	/* original coordinates on screen */
 
 	getyx(stdscr, oldy, oldx);
 	alarm(0);		/* make sure alarm is off */
 
-#if __GNUC__
-	(void)&loop;		/* XXX quiet gcc */
-#endif
 	for (loop = 3; loop; --loop)
 		/* try for 3 times */
 	{
@@ -241,7 +241,7 @@ getanswer(choices, def)
 
 void
 catchalarm(dummy)
-	int dummy __attribute__((__unused__));
+	int dummy __unused;
 {
 	longjmp(Timeoenv, 1);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: elf.c,v 1.4 2000/01/16 03:07:32 takemura Exp $	*/
+/*	$NetBSD: elf.c,v 1.9 2007/03/05 21:05:01 dogcow Exp $	*/
 
 /*-
  * Copyright (c) 1999 Shin Takemura.
@@ -49,18 +49,18 @@
 #endif
 
 static int
-scanfile(int fd, caddr_t *start, caddr_t *end, caddr_t *entry, int load);
+scanfile(int fd, void **start, void **end, void **entry, int load);
 
 static long total_bytes = 0;
 
 int
-getinfo(int fd, caddr_t *start, caddr_t *end)
+getinfo(int fd, void **start, void **end)
 {
 	return (scanfile(fd, start, end, NULL, 0));
 }
 
 int
-loadfile(int fd, caddr_t *entry)
+loadfile(int fd, void **entry)
 {
 	return (scanfile(fd, NULL, NULL, entry, 1));
 }
@@ -70,14 +70,14 @@ enum {
 };
 
 int
-vmem_sub(int opr, void* xxx, caddr_t addr, int nbytes, int *byte_count)
+vmem_sub(int opr, void* xxx, void *addr, int nbytes, int *byte_count)
 {
 	int n;
-	caddr_t end_addr, vaddr;
+	void *end_addr, *vaddr;
 	int count = 0;
 	int progress = 0;
 	int fd = (int)xxx;
-	caddr_t src_addr = (caddr_t)xxx;
+	void *src_addr = (void *)xxx;
 
 	debug_printf(TEXT("loadfile_sub(%x-%x, %S)\n"),
 		     addr, addr + nbytes,
@@ -126,7 +126,7 @@ vmem_sub(int opr, void* xxx, caddr_t addr, int nbytes, int *byte_count)
       
 
 static int
-scanfile(int fd, caddr_t *start, caddr_t *end, caddr_t *entry, int load)
+scanfile(int fd, void **start, void **end, void **entry, int load)
 {
 	Elf_Ehdr elfx, *elf = &elfx;
 	int i, first;
@@ -134,7 +134,7 @@ scanfile(int fd, caddr_t *start, caddr_t *end, caddr_t *entry, int load)
 	int progress;
 	Elf_Shdr *shtbl = NULL;
 	Elf_Phdr *phtbl = NULL;
-	caddr_t min_addr, max_addr;
+	void *min_addr, *max_addr;
 	int sh_symidx, sh_stridx;
 	int dbg_hdr_size = sizeof(Elf_Ehdr) + sizeof(Elf_Shdr) * 2;
 
@@ -191,11 +191,11 @@ scanfile(int fd, caddr_t *start, caddr_t *end, caddr_t *entry, int load)
 			continue;
 		}
 
-		if (first || max_addr < (caddr_t)(phtbl[i].p_vaddr + phtbl[i].p_memsz)) {
-			max_addr = (caddr_t)(phtbl[i].p_vaddr + phtbl[i].p_memsz);
+		if (first || max_addr < (void *)(phtbl[i].p_vaddr + phtbl[i].p_memsz)) {
+			max_addr = (void *)(phtbl[i].p_vaddr + phtbl[i].p_memsz);
 		}
-		if (first || (caddr_t)phtbl[i].p_vaddr < min_addr) {
-			min_addr = (caddr_t)phtbl[i].p_vaddr;
+		if (first || (void *)phtbl[i].p_vaddr < min_addr) {
+			min_addr = (void *)phtbl[i].p_vaddr;
 		}
 
 		if (load) {
@@ -206,13 +206,13 @@ scanfile(int fd, caddr_t *start, caddr_t *end, caddr_t *entry, int load)
 			}
 
 			if (vmem_sub(VMEM_LOAD, (void*)fd,
-				     (caddr_t)phtbl[i].p_vaddr,
+				     (void *)phtbl[i].p_vaddr,
 				     phtbl[i].p_filesz,
 				     &byte_count) != 0) {
 				goto error_cleanup;
 			}
 			if (vmem_sub(VMEM_CLEAR, NULL,
-				     (caddr_t)phtbl[i].p_vaddr + phtbl[i].p_filesz,
+				     (void *)phtbl[i].p_vaddr + phtbl[i].p_filesz,
 				     phtbl[i].p_memsz - phtbl[i].p_filesz,
 				     &byte_count) != 0) {
 				goto error_cleanup;
@@ -238,7 +238,7 @@ scanfile(int fd, caddr_t *start, caddr_t *end, caddr_t *entry, int load)
 	if (pref.load_debug_info) {
 		/*
 		 *  scan section header table
-		 *  to search for debuging infomation
+		 *  to search for debugging information
 		 */
 		sh_symidx = -1;
 		sh_stridx = -1;
@@ -252,7 +252,7 @@ scanfile(int fd, caddr_t *start, caddr_t *end, caddr_t *entry, int load)
 			}
 		}
 		if (sh_symidx == -1 || sh_stridx == -1) {
-			debug_printf(TEXT("debuging infomation not found\n"));
+			debug_printf(TEXT("debugging information not found\n"));
 		} else
 		if (load) {
 			Elf_Ehdr dbg_eh;
@@ -332,13 +332,13 @@ scanfile(int fd, caddr_t *start, caddr_t *end, caddr_t *entry, int load)
 			}
 		} else {
 			/*
-			 *  make space for debuging infomation
+			 *  make space for debugging information
 			 */
 			int dbg_info_size = ROUNDUP(dbg_hdr_size +
 						    shtbl[sh_symidx].sh_size +
 						    shtbl[sh_stridx].sh_size,
 						    DEBUG_INFO_ALIGN);
-			debug_printf(TEXT("%x bytes debug infomation\n"),
+			debug_printf(TEXT("%x bytes debug information\n"),
 				     dbg_info_size);
 			max_addr += dbg_info_size;
 			total_bytes += dbg_info_size;
@@ -346,16 +346,16 @@ scanfile(int fd, caddr_t *start, caddr_t *end, caddr_t *entry, int load)
 	}
 #endif /* LOAD_DEBUG_INFO */
 
-	if (phtbl) free(phtbl, sizeof(*phtbl) * elf->e_phnum);
-	if (shtbl) free(shtbl, sizeof(*shtbl) * elf->e_shnum);
+	if (phtbl) dealloc(phtbl, sizeof(*phtbl) * elf->e_phnum);
+	if (shtbl) dealloc(shtbl, sizeof(*shtbl) * elf->e_shnum);
 
 	if (start) *start = min_addr;
 	if (end) *end = max_addr;
-	if (entry) *entry = (caddr_t)elf->e_entry;
+	if (entry) *entry = (void *)elf->e_entry;
 	return (0);
 
  error_cleanup:
-	if (phtbl) free(phtbl, sizeof(*phtbl) * elf->e_phnum);
-	if (shtbl) free(shtbl, sizeof(*shtbl) * elf->e_shnum);
+	if (phtbl) dealloc(phtbl, sizeof(*phtbl) * elf->e_phnum);
+	if (shtbl) dealloc(shtbl, sizeof(*shtbl) * elf->e_shnum);
 	return (-1);
 }

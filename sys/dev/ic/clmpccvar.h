@@ -1,4 +1,4 @@
-/*	$NetBSD: clmpccvar.h,v 1.4 2000/03/19 10:38:43 scw Exp $ */
+/*	$NetBSD: clmpccvar.h,v 1.12 2008/04/28 20:23:49 martin Exp $ */
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -61,7 +54,7 @@ struct clmpcc_chan {
 	struct tty	*ch_tty;	/* This channel's tty structure */
 	struct clmpcc_softc *ch_sc;	/* Pointer to chip's softc structure */
 	u_char		ch_car;		/* Channel number (CD2400_REG_CAR) */
-	u_char		ch_openflags;	/* Persistant TIOC flags */
+	u_char		ch_openflags;	/* Persistent TIOC flags */
 	volatile u_short ch_flags;	/* Various channel-specific flags */
 #define	CLMPCC_FLG_IS_CONSOLE	0x0001	/* Channel is system console */
 #define CLMPCC_FLG_START_BREAK 	0x0002
@@ -106,33 +99,32 @@ struct clmpcc_softc {
 	bus_space_handle_t sc_ioh;	/* Handle for chip's regs */
 	void		*sc_data;	/* MD-specific data */
 	int		sc_clk;		/* Clock-rate, in Hz */
+	struct evcnt	*sc_evcnt;	/* Parent Event Counter (or NULL) */
 	u_char		sc_vector_base;	/* Vector base reg, or 0 for auto */
-	u_char		sc_rpilr;	/* Receive Priority Interupt Level */
-	u_char		sc_tpilr;	/* Transmit Priority Interupt Level */
-	u_char		sc_mpilr;	/* Modem Priority Interupt Level */
+	u_char		sc_rpilr;	/* Receive Priority Interrupt Level */
+	u_char		sc_tpilr;	/* Transmit Priority Interrupt Level */
+	u_char		sc_mpilr;	/* Modem Priority Interrupt Level */
 	int		sc_swaprtsdtr;	/* Non-zero if RTS and DTR swapped */
 	u_int		sc_byteswap;	/* One of the following ... */
 #define CLMPCC_BYTESWAP_LOW	0x00	/* *byteswap pin is low */
 #define CLMPCC_BYTESWAP_HIGH	0x03	/* *byteswap pin is high */
 
-	/* Called to request a soft interrupt callback to clmpcc_softintr */
-	void		(*sc_softhook) __P((struct clmpcc_softc *));
+	void		*sc_softintr_cookie;
 
 	/* Called when an interrupt has to be acknowledged in polled mode. */
-	void		(*sc_iackhook) __P((struct clmpcc_softc *, int));
+	void		(*sc_iackhook)(struct clmpcc_softc *, int);
 
 	/*
 	 * No user-serviceable parts below
 	 */
-	volatile int	sc_soft_running;
 	struct clmpcc_chan sc_chans[CLMPCC_NUM_CHANS];
 };
 
-extern void	clmpcc_attach	__P((struct clmpcc_softc *));
-extern int	clmpcc_cnattach	__P((struct clmpcc_softc *, int, int));
-extern int	clmpcc_rxintr	__P((void *));
-extern int	clmpcc_txintr	__P((void *));
-extern int	clmpcc_mdintr	__P((void *));
-extern void 	clmpcc_softintr	__P((void *));
+extern void	clmpcc_attach(struct clmpcc_softc *);
+extern int	clmpcc_cnattach(struct clmpcc_softc *, int, int);
+extern int	clmpcc_rxintr(void *);
+extern int	clmpcc_txintr(void *);
+extern int	clmpcc_mdintr(void *);
+extern void 	clmpcc_softintr(void *);
 
 #endif	/* __clmpccvar_h */

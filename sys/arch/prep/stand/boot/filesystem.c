@@ -1,4 +1,4 @@
-/*	$NetBSD: filesystem.c,v 1.1 2000/02/29 15:21:49 nonaka Exp $	*/
+/*	$NetBSD: filesystem.c,v 1.3 2008/04/28 20:23:33 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,18 +30,9 @@
  */
 
 #include <lib/libsa/stand.h>
-#include <lib/libsa/ufs.h>
-#include <lib/libsa/cd9660.h>
-#if 0
-#include <nfs.h>
-#endif
 
 struct fs_ops file_system[] = {
-{ ufs_open, ufs_close, ufs_read, ufs_write, ufs_seek, ufs_stat },
-{ cd9660_open, cd9660_close, cd9660_read, cd9660_write, cd9660_seek, cd9660_stat },
-#if 0
-{ nfs_open, nfs_close, nfs_read, nfs_write, nfs_seek, nfs_stat },
-#endif
+{ null_open, null_close, null_read, null_write, null_seek, null_stat },
 };
 
 int nfsys = sizeof (file_system)/sizeof (struct fs_ops);

@@ -1,4 +1,4 @@
-.\"	$NetBSD: termcap.5,v 1.16 2000/02/19 17:57:03 mycroft Exp $
+.\"	$NetBSD: termcap.5,v 1.34 2003/08/07 10:31:32 agc Exp $
 .\"
 .\" Copyright (c) 1985, 1991, 1993, 1994
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -33,7 +29,7 @@
 .\"
 .\"     from: @(#)termcap.5	8.3 (Berkeley) 4/16/94
 .\"
-.Dd April 16, 1994
+.Dd January 27, 2003
 .Dt TERMCAP 5
 .Os
 .Sh NAME
@@ -43,25 +39,21 @@
 .Nm termcap
 .Sh DESCRIPTION
 The
-.Nm Termcap
-file
-is a data base describing terminals,
-used,
-for example,
-by
+.Nm
+file is a database describing terminals, used, for example, by
 .Xr \&vi 1
 and
 .Xr curses 3 .
 Terminals are described in
-.Nm termcap
+.Nm
 by giving a set of capabilities that they have and by describing
 how operations are performed.
 Padding requirements and initialization sequences
 are included in
-.Nm termcap .
+.Nm .
 .Pp
 Entries in
-.Nm termcap
+.Nm
 consist of a number of `:'-separated fields.
 The first entry for each terminal gives the names that are known for the
 terminal, separated by `|' characters.
@@ -124,10 +116,70 @@ New software should not rely on them at all.
 .Bl -column indent indent indent
 .Sy Name	Type	Notes	Description
 functions
+.It "!1	str		Sent by shifted save key."
+.It "!2	str		Sent by shifted suspend key."
+.It "!3	str		Sent by shifted undo key."
+.It "#1	str		Sent by shifted help key."
+.It "#2	str		Sent by shifted home key."
+.It "#3	str		Sent by shifted input key."
+.It "#4	str		Sent by shifted left-arrow key."
+.It "%0	str		Sent by redo key."
+.It "%1	str		Sent by help key."
+.It "%2	str		Sent by mark key."
+.It "%3	str		Sent by message key."
+.It "%4	str		Sent by move key."
+.It "%5	str		Sent by next-object key."
+.It "%6	str		Sent by open key."
+.It "%7	str		Sent by options key."
+.It "%8	str		Sent by previous-object key."
+.It "%9	str		Sent by print or copy key."
+.It "%a	str		Sent by shifted message key."
+.It "%b	str		Sent by shifted move key."
+.It "%c	str		Sent by shifted next key."
+.It "%d	str		Sent by shifted options key."
+.It "%e	str		Sent by shifted prev key."
+.It "%f	str		Sent by shifted print key."
+.It "%g	str		Sent by shifted redo key."
+.It "%h	str		Sent by shifted replace key."
+.It "%i	str		Sent by shifted right-arrow key."
+.It "%j	str		Sent by shifted resume key."
+.It "\*[Am]0	str		Sent by shifted cancel key."
+.It "\*[Am]1	str		Sent by ref(erence) key."
+.It "\*[Am]2	str		Sent by refresh key."
+.It "\*[Am]3	str		Sent by replace key."
+.It "\*[Am]4	str		Sent by restart key."
+.It "\*[Am]5	str		Sent by resume key."
+.It "\*[Am]6	str		Sent by save key."
+.It "\*[Am]7	str		Sent by suspend key."
+.It "\*[Am]8	str		Sent by undo key."
+.It "\*[Am]9	str		Sent by shifted begin key."
+.It "*0	str		Sent by shifted find key."
+.It "*1	str		Sent by shifted command key."
+.It "*2	str		Sent by shifted copy key."
+.It "*3	str		Sent by shifted create key."
+.It "*4	str		Sent by shifted delete-character key."
+.It "*5	str		Sent by shifted delete-line key."
+.It "*6	str		Sent by shifted select key."
+.It "*7	str		Sent by shifted end key."
+.It "*8	str		Sent by shifted clear-to-end-of-line key."
+.It "*9	str		Sent by shifted exit key."
+.It "@0	str		Sent by find key."
+.It "@1	str		Sent by begin key."
+.It "@2	str		Sent by cancel key."
+.It "@3	str		Sent by close key."
+.It "@4	str		Sent by command key."
+.It "@5	str		Sent by copy key."
+.It "@6	str		Sent by create key."
+.It "@7	str		Sent by end key."
+.It "@8	str		Sent by enter key."
+.It "@9	str		Sent by exit key."
+.It "AB	str		Set background color to #1 using ANSI escape."
+.It "ac	str		Alternative (graphic) character set pairs."
 .It "ae	str	(P)	End alternative character set."
 .It AL	str	(NP*)	Add"
 .Em n
 new blank lines
+.It "AF	str		Set foreground color to #1 using ANSI escape."
 .It "al	str	(P*)	Add new blank line."
 .It "am	bool		Terminal has automatic margins."
 .It "as	str	(P)	Start alternative character set."
@@ -140,12 +192,14 @@ new blank lines
 .It "bw	bool	" Ta Sy \&le
 (backspace) wraps from column 0 to last column.
 .It "CC	str		Terminal settable command character in prototype."
+.It "cc	bool		Terminal can re-define existing color."
 .It "cd	str	(P*)	Clear to end of display."
 .It "ce	str	(P)	Clear to end of line."
 .It "ch	str	(NP)	Set cursor column (horizontal position)."
 .It "cl	str	(P*)	Clear screen and home cursor."
 .It "CM	str	(NP)	Memory-relative cursor addressing."
 .It "cm	str	(NP)	Screen-relative cursor motion."
+.It "Co	num		Maximum number of colors on the screen."
 .It "co	num		Number of columns in a line (See"
 .Sx BUGS
 section below).
@@ -173,16 +227,17 @@ delay needed (default 0).
 lines.
 .It "dl	str	(P*)	Delete line."
 .It "dm	str		Enter delete mode."
-.It "dN	num	(o)	Milliseconds of
+.It "dN	num	(o)	Milliseconds of"
 .Sy \&nl
 delay needed (default 0).
-.It "DO	str	(NP*)	Move cursor down:
+.It "DO	str	(NP*)	Move cursor down:"
 .Ar n
 lines.
 .It "do	str		Down one line."
 .It "ds	str		Disable status line."
 .It "dT	num	(o)	Milliseconds of horizontal tab delay needed (default 0)."
 .It "dV	num	(o)	Milliseconds of vertical tab delay needed (default 0)."
+.It "eA	str		Enable alternate character set."
 .It "ec	str	(NP)	Erase"
 .Ar n
 characters.
@@ -191,29 +246,35 @@ characters.
 .It "eo	bool		Can erase overstrikes with a blank."
 .It "EP	bool	(o)	Even parity."
 .It "es	bool		Escape can be used on the status line."
+.It "F1-F9	str		Sent by function keys 11-19."
+.It "FA-FZ	str		Sent by function keys 20-45."
+.It "Fa-Fr	str		Sent by function keys 46-63."
 .It "ff	str	(P*)	Hardcopy terminal page eject."
 .It "fs	str		Return from status line."
 .It "gn	bool		Generic line type, for example dialup, switch)."
 .It "hc	bool		Hardcopy terminal."
 .It "HD	bool	(o)	Half-duplex."
 .It "hd	str		Half-line down (forward 1/2 linefeed)."
+.It "hl	bool		Terminal uses only HLS color notation (Tektronix)."
 .It "ho	str	(P)	Home cursor."
 .It "hs	bool		Has extra"
 .Dq status line .
 .It "hu	str		Half-line up (reverse 1/2 linefeed)."
 .It "hz	bool		Cannot print ``~'' (Hazeltine)."
 .It "i1-i3	str		Terminal initialization strings"
-.Pf ( Xr terminfo
+.Pf ( Xr terminfo 5
 only)
 .It "IC	str	(NP*)	Insert"
 .Ar n
 blank characters.
+.It "Ic	str		Set color #1 to RGB #2, #3, #4."
 .It "ic	str	(P*)	Insert character."
 .It "if	str		Name of file containing initialization string."
 .It "im	str		Enter insert mode."
 .It "in	bool		Insert mode distinguishes nulls."
+.It "Ip	str		Set color-pair #1 to fg #2, bg #3."
 .It "iP	str		Pathname of program for initialization"
-.Pf ( Xr terminfo
+.Pf ( Xr terminfo 5
 only).
 .It "ip	str	(P*)	Insert pad after character inserted."
 .It "is	str		Terminal initialization string"
@@ -228,8 +289,10 @@ positions.
 .It "K4	str		Sent by keypad lower left."
 .It "K5	str		Sent by keypad lower right."
 .It "k0-k9	str		Sent by function keys 0-9."
+.It "k;	str		Sent by function key 10."
 .It "kA	str		Sent by insert-line key."
 .It "ka	str		Sent by clear-all-tabs key."
+.It "kB	str		Sent by back-tab key."
 .It "kb	str		Sent by backspace key."
 .It "kC	str		Sent by clear-screen or erase key."
 .It "kD	str		Sent by delete-character key."
@@ -245,6 +308,7 @@ mode.
 .It "kL	str		Sent by delete-line key."
 .It "kl	str		Sent by left-arrow key."
 .It "kM	str		Sent by insert key while in insert mode."
+.It "Km	str		Mouse event has occurred."
 .It "km	bool		Has a"
 .Dq meta
 key (shift, sets parity bit).
@@ -274,10 +338,10 @@ positions.
 .Sx BUGS
 section below)
 .It "ll	str		Last line, first column
-.It "lm	num		Lines of memory if >" Sy \&li
+.It "lm	num		Lines of memory if \*[Gt]" Sy \&li
 (0 means varies).
 .It "ma	str	(o)	Arrow key map (used by"
-.Xr \&vi
+.Xr \&vi 1
 version 2 only).
 .It "mb	str		Turn on blinking attribute."
 .It "md	str		Turn on bold (extra bright) attribute."
@@ -295,6 +359,7 @@ version 2 only).
 .It "mr	str		Turn on reverse-video attribute."
 .It "ms	bool		Safe to move in standout modes."
 .It "mu	str	(o)	Memory unlock (turn off memory lock)."
+.It "NC	num		Video attributes that can't be used with colors"
 .It "nc	bool	(o)	No correctly-working"
 .Sy \&cr
 (Datamedia 2500, Hazeltine 2000).
@@ -305,23 +370,26 @@ version 2 only).
 .It "nw	str	(P)	Newline (behaves like"
 .Sy \&cr
 followed by
-.Sy \&do ).
+.Sy \&do ) .
 .It "OP	bool	(o)	Odd parity."
+.It "oc	str		Set all colors to the original ones."
+.It "op	str		Set default color-pair to the original one."
 .It "os	bool		Terminal overstrikes."
+.It "pa	num		Maximum number of color-pairs on the screen."
 .It "pb	num		Lowest baud where delays are required."
-.It "pc	str		Pad character (default" Tn NUL ).
+.It "pc	str		Pad character (default" Tn NUL ) .
 .It "pf	str		Turn off the printer."
 .It "pk	str		Program function key"
 .Em n
 to type string
 .Em s
-.Pf ( Xr terminfo
+.Pf ( Xr terminfo 5
 only).
 .It "pl	str		Program function key"
 .Em n
 to execute string
 .Em s
-.Pf ( Xr terminfo
+.Pf ( Xr terminfo 5
 only).
 .It "pO	str	(N)	Turn on the printer for"
 .Em n
@@ -329,15 +397,15 @@ bytes.
 .It "po	str		Turn on the printer."
 .It "ps	str		Print contents of the screen."
 .It "pt	bool	(o)	Has hardware tabs (may need to be set with"
-.Sy \&is ).
+.Sy \&is ) .
 .It "px	str		Program function key"
 .Em n
 to transmit string
 .Em s
-.Pf ( Xr terminfo
+.Pf ( Xr terminfo 5
 only).
 .It "r1-r3	str		Reset terminal completely to sane modes"
-.Pf ( Xr terminfo
+.Pf ( Xr terminfo 5
 only).
 .It "rc	str	(P)	Restore cursor to position of last"
 .Sy \&sc .
@@ -352,8 +420,10 @@ times.
 .Pf ( Nm termcap
 only).
 .It "sa	str	(NP)	Define the video attributes."
+.It "Sb	str		Set background color to #1."
 .It "sc	str	(P)	Save cursor position."
 .It "se	str		End standout mode."
+.It "Sf	str		Set foreground color to #1."
 .It "SF	str	(NP*)	Scroll forward"
 .Em n
 lines.
@@ -372,9 +442,9 @@ lines.
 .It "ta	str	(P)	Tab to next 8-position hardware tab stop."
 .It "tc	str		Entry of similar terminal \- must be last."
 .It "te	str		String to end programs that use"
-.Nm termcap .
+.Nm .
 .It "ti	str		String to begin programs that use"
-.Nm termcap .
+.Nm .
 .It "ts	str	(N)	Go to status line, column"
 .Em n .
 .It "UC	bool	(o)	Upper-case only."
@@ -391,6 +461,7 @@ or
 lines.
 .It "up	str		Upline (cursor up)."
 .It "us	str		Start underscore mode."
+.It "ut	bool		Screen erased with background color."
 .It "vb	str		Visible bell (must not move cursor)."
 .It "ve	str		Make cursor appear normal (undo"
 .Sy \&vs Ns / Sy \&vi ) .
@@ -414,19 +485,22 @@ handshaking.
 .Sy \&so
 char (Teleray 1061).
 .It "xx	bool	(o)	Tektronix 4025 insert-line."
+.It "ZZ	str		Pointer to the extended termcap entry.  See"
+.Xr tgetent 3
+for details.
 .El
 .Ss A Sample Entry
 The following entry, which describes the Concept\-100, is among the more
 complex entries in the
-.Nm termcap
+.Nm
 file as of this writing.
 .Pp
 .Bd -literal
 ca\||\|concept100\||\|c100\||\|concept\||\|c104\||\|concept100-4p\||\|HDS Concept\-100:\e
 	:al=3*\eE^R:am:bl=^G:cd=16*\eE^C:ce=16\eE^U:cl=2*^L:cm=\eEa%+ %+ :\e
 	:co#80:.cr=9^M:db:dc=16\eE^A:dl=3*\eE^B:do=^J:ei=\eE\e200:eo:im=\eE^P:in:\e
-	:ip=16*:is=\eEU\eEf\eE7\eE5\eE8\eEl\eENH\eEK\eE\e200\eEo&\e200\eEo\e47\eE:k1=\eE5:\e
-	:k2=\eE6:k3=\eE7:kb=^h:kd=\eE<:ke=\eEx:kh=\eE?:kl=\eE>:kr=\eE=:ks=\eEX:\e
+	:ip=16*:is=\eEU\eEf\eE7\eE5\eE8\eEl\eENH\eEK\eE\e200\eEo\*[Am]\e200\eEo\e47\eE:k1=\eE5:\e
+	:k2=\eE6:k3=\eE7:kb=^h:kd=\eE\*[Lt]:ke=\eEx:kh=\eE?:kl=\eE\*[Gt]:kr=\eE=:ks=\eEX:\e
 	:ku=\eE;:le=^H:li#24:mb=\eEC:me=\eEN\e200:mh=\eEE:mi:mk=\eEH:mp=\eEI:\e
 	:mr=\eED:nd=\eE=:pb#9600:rp=0.2*\eEr%.%+ :se=\eEd\eEe:sf=^J:so=\eEE\eED:\e
 	:.ta=8\et:te=\eEv    \e200\e200\e200\e200\e200\e200\eEp\er\en:\e
@@ -444,7 +518,7 @@ Comments may be included on lines beginning with
 .Dq # .
 .Ss Types of Capabilities
 Capabilities in
-.Nm termcap
+.Nm
 are of three types: Boolean capabilities,
 which indicate particular features that the terminal has;
 numeric capabilities,
@@ -476,7 +550,7 @@ ending at the next following `:'.
 A delay in milliseconds may appear after
 the `=' in such a capability,
 which causes padding characters to be supplied by
-.Xr tputs
+.Xr tputs 3
 after the remainder of the string is sent to provide this delay.
 The delay can be either a number,
 such as `20', or a number followed by
@@ -532,7 +606,7 @@ character in a string capability it
 must be encoded as
 .Sy \&\e200 .
 (The routines that deal with
-.Nm termcap
+.Nm
 use C strings and strip the high bits of the output very late, so that
 a
 .Sy \&\e200
@@ -550,17 +624,17 @@ in the example above.
 .Ss Preparing Descriptions
 The most effective way to prepare a terminal description is by imitating
 the description of a similar terminal in
-.Nm termcap
+.Nm
 and to build up a description gradually, using partial descriptions
 with
-.Xr \&vi
+.Xr \&vi 1
 to check that they are correct.
 Be aware that a very unusual terminal may expose deficiencies in
 the ability of the
-.Nm termcap
+.Nm
 file to describe it
 or bugs in
-.Xr \&vi .
+.Xr \&vi 1 .
 To easily test a new terminal description you are working on
 you can put it in your home directory in a file called
 .Pa .termcap
@@ -576,14 +650,14 @@ See
 The
 .Ev TERMCAP
 environment variable is usually set to the
-.Nm termcap
+.Nm
 entry itself
 to avoid reading files when starting up a program.
 .Pp
 To get the padding for insert-line right
 (if the terminal manufacturer did not document it),
 a severe test is to use
-.Xr \&vi
+.Xr \&vi 1
 to edit
 .Pa /etc/passwd
 at 9600 baud, delete roughly 16 lines from the middle of the screen,
@@ -631,7 +705,7 @@ give this as
 (Normally this will be carriage-return,
 .Sy \&^M . )
 If there is a code to produce an audible signal (bell, beep,
-etc. ) ,
+etc.),
 give this as
 .Sy \&bl .
 .Pp
@@ -659,7 +733,7 @@ because the space would erase the character moved over.
 .Pp
 A very important point here is that the local cursor motions encoded
 in
-.Nm termcap
+.Nm
 have undefined behavior at the left and top edges of a
 .Tn CRT
 display.
@@ -712,9 +786,8 @@ This is useful for drawing a box around the edge of the screen,
 for example.
 If the terminal has switch-selectable automatic margins,
 the
-.Nm termcap
-description usually assumes that this feature is on,
-.Em i.e . ,
+.Nm
+description usually assumes that this feature is on, i.e.,
 .Sy \&am .
 If the terminal has a command
 that moves to the first column of the next line,
@@ -771,36 +844,36 @@ encodings have the following meanings:
 .Bl -column xxxxx
 .It "%%	output `%'"
 .It "%d	output value as in"
-.Xr printf
+.Xr printf 3
 %d
 .It "%2	output value as in"
-.Xr printf
+.Xr printf 3
 %2d
 .It "%3	output value as in"
-.Xr printf
+.Xr printf 3
 %3d
 .It "%.	output value as in"
-.Xr printf
+.Xr printf 3
 %c
 .It "%+" Ns Em x Ta No add
 .Em x
 to value, then do %.
-.It "%>" Ns Em \&xy Ta No if
-value >
+.It "%\*[Gt]" Ns Em \&xy Ta No if
+value \*[Gt]
 .Em x
 then add
 .Em y ,
 no output
-.It "%r	reverse order of two parameters, no output"
-.It "%i	increment by one, no output"
-.It "%n	exclusive-or all parameters with 0140 (Datamedia 2500)"
-.It "%B" Ta Tn BCD No "(16*(value/10)) + (value%10), no output"
-.It "%D	Reverse coding (value \- 2*(value%16)), no output (Delta Data)."
+.It "\&%r	reverse order of two parameters, no output"
+.It "\&%i	increment by one, no output"
+.It "\&%n	exclusive-or all parameters with 0140 (Datamedia 2500)"
+.It "\&%B" Ta Tn BCD No "(16*(value/10)) + (value%10), no output"
+.It "\&%D	Reverse coding (value \- 2*(value%16)), no output (Delta Data)."
 .El
 .Pp
 Consider the Hewlett-Packard 2645, which, to get to row 3 and column 12, needs
 to be sent
-.Dq \eE&a12c03Y
+.Dq \eE\*[Am]a12c03Y
 padded for 6 milliseconds.
 Note that the order
 of the row and column coordinates is reversed here
@@ -809,7 +882,7 @@ are sent as two-digit integers.
 Thus its
 .Sy \&cm
 capability is
-.Dq Li cm=6\eE&%r%2c%2Y .
+.Dq Li cm=6\eE\*[Am]%r%2c%2Y .
 .Pp
 The Datamedia 2500 needs the current row and column sent
 encoded in binary using
@@ -828,14 +901,14 @@ and
 .Sy \&\er ,
 as the system may change or discard them.
 (Programs using
-.Nm termcap
+.Nm
 must set terminal modes so that tabs are not expanded, so
 .Sy \&\et
 is safe to send.
 This turns out to be essential for the Ann Arbor 4080.)
 .Pp
 A final example is the Lear Siegler
-.Tn ADM Ns \-3a,
+.Tn ADM Ns \-3a ,
 which offsets row and column
 by a blank character, thus
 .Dq Li cm=\eE=%+ %+\ \& .
@@ -849,9 +922,7 @@ can be given as single parameter capabilities
 Sometimes these are shorter than the more general two-parameter sequence
 (as with the Hewlett-Packard 2645) and can be used in preference to
 .Sy \&cm .
-If there are parameterized local motions
-.Pf ( Em e.g . ,
-move
+If there are parameterized local motions (e.g., move
 .Ar n
 positions to the right)
 these can be given as
@@ -948,10 +1019,10 @@ which all commands affect, it should be given as the parameterized string
 The four parameters are the starting and ending lines in memory
 and the starting and ending columns in memory, in that order.
 (This
-.Xr terminfo
+.Xr terminfo 5
 capability is described for completeness.
 It is unlikely that any
-.Nm termcap Ns \- using
+.Nm Ns \-using
 program will support it.)
 .Pp
 If the terminal can retain display memory above the screen, then the
@@ -969,7 +1040,7 @@ may bring down non-blank lines.
 .Ss Insert/Delete Character
 There are two basic kinds of intelligent terminals with respect to
 insert/delete character that can be described using
-.Nm termcap .
+.Nm .
 The most common insert/delete character operations affect only the characters
 on the current line and shift characters off the end of the line rigidly.
 Other terminals, such as the Concept\-100 and the Perkin Elmer Owl, make
@@ -1009,7 +1080,7 @@ and special treatment of untyped spaces),
 we have seen no terminals whose insert
 mode cannot be described with the single attribute.
 .Pp
-.Nm Termcap
+.Nm
 can describe both terminals that have an insert mode and terminals
 that send a simple sequence to open a blank position on the current line.
 Give as
@@ -1056,9 +1127,7 @@ will repeat the effects of
 times.
 .Pp
 It is occasionally necessary to move around while in insert mode
-to delete characters on the same line
-.Pf ( Em e.g . ,
-if there is a tab after
+to delete characters on the same line (e.g., if there is a tab after
 the insertion position).
 If your terminal allows motion while in
 insert mode, you can give the capability
@@ -1165,10 +1234,10 @@ Not all modes need be supported by
 .Sy \&sa ,
 only those for which corresponding attribute commands exist.
 (It is unlikely that a
-.Nm termcap Ns \-using
+.Nm Ns \-using
 program will support this capability, which is defined for compatibility
 with
-.Xr terminfo . )
+.Xr terminfo 5 ) .
 .Pp
 Terminals with the
 .Dq magic cookie
@@ -1180,7 +1249,7 @@ rather than maintaining extra attribute bits for each character cell,
 instead deposit special
 .Dq cookies ,
 or
-.Dq garbage characters ,,
+.Dq garbage characters ,
 when they receive mode-setting sequences,
 which affect the display algorithm.
 .Pp
@@ -1367,7 +1436,7 @@ the display for cursor addressing to work properly.
 This is also used for the Tektronix 4025, where
 .Sy \&ti
 sets the command character to be the one used by
-.Nm termcap .
+.Nm .
 .Pp
 Other capabilities
 include
@@ -1378,10 +1447,10 @@ and
 the name of a file containing long initialization strings.
 These strings are expected to set the terminal into modes
 consistent with the rest of the
-.Nm termcap
+.Nm
 description.
 They are normally sent to the terminal by the
-.Xr tset
+.Xr tset 1
 program each time the user logs in.
 They will be printed in the following order:
 .Sy \&is ;
@@ -1391,7 +1460,7 @@ and
 .Sy \&st ;
 and finally
 .Sy \&if .
-.Pf ( Xr Terminfo
+.Pf ( Xr terminfo 5
 uses
 .Sy \&i\&1-i2
 instead of
@@ -1407,9 +1476,9 @@ can be analogously given as
 and
 .Sy \&if .
 These strings are output by the
-.Xr reset
+.Xr reset 1
 program, which is used when the terminal gets into a wedged state.
-.Pf ( Xr Terminfo
+.Pf ( Xr terminfo 5
 uses
 .Sy "\&r1-r3"
 instead of
@@ -1451,11 +1520,11 @@ positions when the terminal is powered up, then the numeric parameter
 .Sy \&it
 is given, showing the number of positions between tab stops.
 This is normally used by the
-.Xr tset
+.Xr tset 1
 command to determine whether to set the driver mode for hardware tab
 expansion, and whether to set the tab stops.
 If the terminal has tab stops that can be saved in nonvolatile memory, the
-.Nm termcap
+.Nm
 description can assume that they are properly set.
 .Pp
 If there are commands to set and clear tab stops, they can be given as
@@ -1471,7 +1540,7 @@ or
 .Ss Delays
 Certain capabilities control padding in the terminal driver.
 These are primarily needed by hardcopy terminals and are used by the
-.Xr tset
+.Xr tset 1
 program to set terminal driver modes appropriately.
 Delays embedded in the capabilities
 .Sy \&cr ,
@@ -1488,7 +1557,7 @@ below the value of
 .Sy \&pb .
 For
 .Bx 4.2
-.Xr tset ,
+.Xr tset 1 ,
 the delays are given as numeric capabilities
 .Sy \&dC ,
 .Sy \&dN ,
@@ -1526,7 +1595,7 @@ from the status line can be given as
 .Sy \&ts
 and
 .Sy \&fs .
-.Pf ( Xr \&fs
+.Pf ( Sy \&fs
 must leave the cursor position in the same place that it was before
 .Sy \&ts .
 If necessary, the
@@ -1550,8 +1619,7 @@ A string that turns off the status line (or otherwise erases its contents)
 should be given as
 .Sy \&ds .
 The status line is normally assumed to be the same width as the
-rest of the screen,
-.Em i.e . ,
+rest of the screen, i.e.,
 .Sy \&co .
 If the status line is a different width (possibly because the terminal
 does not allow an entire line to be loaded), then its width in columns
@@ -1579,9 +1647,9 @@ this can be indicated with the parameterized string
 The first parameter is the character to be repeated and the second is
 the number of times to repeat it.
 (This is a
-.Xr terminfo
+.Xr terminfo 5
 feature that is unlikely to be supported by a program that uses
-.Nm termcap . )
+.Nm . )
 .Pp
 If the terminal has a settable command character, such as the
 Tektronix 4025, this can be indicated with
@@ -1611,7 +1679,7 @@ terminal, such as
 .Em dialup ,
 .Em patch ,
 and
-.Xr network ,
+.Em network ,
 should include the
 .Sy \&gn
 (generic) capability so that programs can complain that they do not know
@@ -1696,10 +1764,16 @@ and
 .Sy \&px
 causes the string to be transmitted to the computer.
 Unfortunately, due to lack of a definition for string parameters in
-.Nm termcap ,
+.Nm ,
 only
-.Xr terminfo
+.Xr terminfo 5
 supports these capabilities.
+The
+.Sy \&ZZ
+capability is automatically generated in the tgetent call and must
+never be defined in
+.Nm
+entries.
 .Ss Glitches and Braindamage
 Hazeltine terminals, which do not allow `~' characters to be displayed,
 should indicate
@@ -1760,9 +1834,7 @@ The string capability
 can be given
 with the name of the similar terminal.
 This capability must be
-.Em last ,
-and the combined length of the entries
-must not exceed 1024.
+.Em last .
 The capabilities given before
 .Sy \&tc
 override those in the terminal type invoked by
@@ -1794,12 +1866,12 @@ user preferences.
 .It Pa /usr/share/misc/termcap
 File containing terminal descriptions.
 .It Pa /usr/share/misc/termcap.db
-Hash database file containing terminal descriptions (see 
+Hash database file containing terminal descriptions (see
 .Xr cap_mkdb 1 ) .
 .El
 .Sh SEE ALSO
-.Xr \&ex 1 ,
 .Xr cap_mkdb 1 ,
+.Xr \&ex 1 ,
 .Xr more 1 ,
 .Xr tset 1 ,
 .Xr \&ul 1 ,
@@ -1809,13 +1881,18 @@ Hash database file containing terminal descriptions (see
 .Xr termcap 3
 .\" following commented since .Nx currently has no term(7)
 .\".Xr term 7
-.Sh CAVEATS AND BUGS
+.Sh HISTORY
 The
+.Nm
+file format appeared in
+.Bx 3 .
+.Sh BUGS
 .Em Note :
-.Nm termcap
+The
+.Nm
 functions
 were replaced by
-.Xr terminfo
+.Xr terminfo 5
 in
 .At V
 Release 2.0.
@@ -1828,17 +1905,4 @@ entry.
 Most programs now use the kernel information primarily; the information
 in this file is used only if the kernel does not have any information.
 .Pp
-.Xr \&Vi
-allows only 256 characters for string capabilities, and the routines
-in
-.Xr termcap 3
-do not check for overflow of this buffer.
-The total length of a single entry (excluding only escaped newlines)
-may not exceed 1024.
-.Pp
 Not all programs support all entries.
-.Sh HISTORY
-The
-.Nm
-file format appeared in
-.Bx 3 .

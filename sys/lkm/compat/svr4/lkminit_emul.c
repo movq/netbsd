@@ -1,4 +1,4 @@
-/* $NetBSD: lkminit_emul.c,v 1.2 1997/05/19 22:11:22 jtc Exp $ */
+/* $NetBSD: lkminit_emul.c,v 1.12 2008/04/28 20:24:06 martin Exp $ */
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,36 +29,73 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: lkminit_emul.c,v 1.12 2008/04/28 20:24:06 martin Exp $");
+
 #include <sys/param.h>
 #include <sys/ioctl.h>
 #include <sys/systm.h>
 #include <sys/conf.h>
-#include <sys/mount.h>
-#include <sys/exec.h>
+#include <sys/proc.h>
 #include <sys/lkm.h>
-#include <sys/file.h>
-#include <sys/errno.h>
 
-#include <compat/svr4/svr4_exec.h>
+extern const struct emul emul_svr4;
 
+int compat_svr4_lkmentry(struct lkm_table *, int, int);
 
-struct execsw svr4_lkm_execsw = { ELF_HDR_SIZE, exec_elf_makecmds };
-
+static int svr4_init(struct lkm_table *lkmtp, int cmd);
+static int svr4_done(struct lkm_table *lkmtp, int cmd);
 
 /*
- * declare the filesystem
+ * declare the emulation
  */
-MOD_EXEC("svr4", -1, &svr4_lkm_execsw);
+MOD_COMPAT("compat_svr4", -1, &emul_svr4);
 
 /*
  * entry point
  */
 int
 compat_svr4_lkmentry(lkmtp, cmd, ver)
-	struct lkm_table *lkmtp;	
+	struct lkm_table *lkmtp;
 	int cmd;
 	int ver;
 {
 
-	DISPATCH(lkmtp, cmd, ver, lkm_nofunc, lkm_nofunc, lkm_nofunc);
+	DISPATCH(lkmtp, cmd, ver, svr4_init, svr4_done, lkm_nofunc);
+}
+
+static int
+svr4_init(lkmtp, cmd)
+	struct lkm_table *lkmtp;
+	int cmd;
+{
+#ifdef i386
+	/*
+	 * XXX Yeah, this is ugly.
+	 * Ideally, there would be some compat init/done routine, called
+	 * by both this code and i386/machdep.c. However, that seems like
+	 * overkill given that only svr4 compat needs an initialization.
+	 */
+#define	IDTVEC(name)	__CONCAT(X, name)
+	extern void IDTVEC(svr4_fasttrap)(void);
+
+	setgate(&idt[0xd2], &IDTVEC(svr4_fasttrap), 0, SDT_SYS386TGT,
+		SEL_UPL, GSEL(GCODE_SEL, SEL_KPL));
+#endif
+
+	return (0);
+}
+
+static int
+svr4_done(struct lkm_table *lkmtp, int cmd)
+{
+#ifdef i386
+	/* XXX is this right? Wouldn't this cause null pointer dereference
+	 * if some userland code would use the gate after the LKM is unloaded?
+	 */
+	setgate(&idt[0xd2], NULL, 0, SDT_SYS386TGT,
+		SEL_UPL, GSEL(GCODE_SEL, SEL_KPL));
+#endif
+
+	return (0);
 }

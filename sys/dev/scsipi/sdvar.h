@@ -1,7 +1,7 @@
-/*	$NetBSD: sdvar.h,v 1.11 2000/01/22 16:35:25 drochner Exp $	*/
+/*	$NetBSD: sdvar.h,v 1.31 2008/07/16 18:54:09 drochner Exp $	*/
 
 /*-
- * Copyright (c) 1998 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 2004 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -53,40 +46,50 @@
  * Ported to run under 386BSD by Julian Elischer (julian@dialix.oz.au) Sept 1992
  */
 
+#ifndef _DEV_SCSIPI_SDVAR_H_
+#define _DEV_SCSIPI_SDVAR_H_
+
+#include "opt_scsi.h"
 #include "rnd.h"
 #if NRND > 0
 #include <sys/rnd.h>
 #endif
 
+#ifndef	SDRETRIES
 #define	SDRETRIES	4
+#endif
 
-struct sd_ops;
+#ifndef	SD_IO_TIMEOUT
+#define	SD_IO_TIMEOUT	(60 * 1000)
+#endif
 
 struct sd_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	struct disk sc_dk;
 
 	int flags;
-#define	SDF_LOCKED	0x01
-#define	SDF_WANTED	0x02
 #define	SDF_WLABEL	0x04		/* label is writable */
 #define	SDF_LABELLING	0x08		/* writing label */
 #define	SDF_ANCIENT	0x10		/* disk is ancient; for minphys */
 #define	SDF_DIRTY	0x20		/* disk is dirty; needs cache flush */
 #define	SDF_FLUSHING	0x40		/* flushing, for sddone() */
-	struct scsipi_link *sc_link;	/* contains our targ, lun, etc. */
+
+	struct scsipi_periph *sc_periph;/* contains our targ, lun, etc. */
+
 	struct disk_parms {
 		u_long	heads;		/* number of heads */
 		u_long	cyls;		/* number of cylinders */
 		u_long	sectors;	/* number of sectors/track */
 		u_long	blksize;	/* number of bytes/sector */
-		u_long	disksize;	/* total number sectors */
 		u_long	rot_rate;	/* rotational rate, in RPM */
+		u_int64_t disksize;	/* total number sectors */
+		u_int64_t disksize512;	/* total number sectors */
 	} params;
-	struct buf_queue buf_queue;
+
+	struct bufq_state *buf_queue;
+	callout_t sc_callout;
 	u_int8_t type;
 	char name[16]; /* product name, for default disklabel */
-	const struct sd_ops *sc_ops;	/* our bus-dependent ops vector */
 
 	void *sc_sdhook;		/* our shutdown hook */
 
@@ -95,16 +98,8 @@ struct sd_softc {
 #endif
 };
 
-struct sd_ops {
-	int	(*sdo_get_parms) __P((struct sd_softc *, struct disk_parms *,
-		    int));
-	int	(*sdo_flush) __P((struct sd_softc *, int));
-};
-#define	SDGP_RESULT_OK		0	/* paramters obtained */
+#define	SDGP_RESULT_OK		0	/* parameters obtained */
 #define	SDGP_RESULT_OFFLINE	1	/* no media, or otherwise losing */
 #define	SDGP_RESULT_UNFORMATTED	2	/* unformatted media (max params) */
 
-void sdattach __P((struct device *, struct sd_softc *, struct scsipi_link *,
-    const struct sd_ops *));
-int sdactivate __P((struct device *, enum devact));
-int sddetach __P((struct device *, int));
+#endif /* _DEV_SCSIPI_SDVAR_H_ */

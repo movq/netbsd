@@ -1,4 +1,4 @@
-/*	$NetBSD: pathnames.h,v 1.4 1995/04/23 10:33:21 cgd Exp $	*/
+/*	$NetBSD: pathnames.h,v 1.6 2003/08/07 10:04:30 agc Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,4 +37,5 @@
 
 #include <paths.h>
 
-#define	_PATH_TMPPORTAL	 "/tmp/portalXXXXXX"	/* Scratch socket name */
+#define	_PATH_TMPPORTAL	 "/tmp/portalXXXXXX"	/* Scratch socket dirname */
+#define _PATH_PORTAL_FILE "sock"		/* Socket filename */

@@ -1,4 +1,4 @@
-.\"	$NetBSD: du.1,v 1.8 1998/02/15 17:08:17 kleink Exp $
+.\"	$NetBSD: du.1,v 1.21 2006/09/24 07:19:16 wiz Exp $
 .\"
 .\" Copyright (c) 1990, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -33,7 +29,7 @@
 .\"
 .\"	@(#)du.1	8.2 (Berkeley) 4/1/94
 .\"
-.Dd October 4, 1996
+.Dd September 24, 2006
 .Dt DU 1
 .Os
 .Sh NAME
@@ -42,8 +38,8 @@
 .Sh SYNOPSIS
 .Nm
 .Op Fl H | Fl L | Fl P
-.Op Fl a | Fl s
-.Op Fl ckrx
+.Op Fl a | Fl d Ar depth | Fl s
+.Op Fl cghkmnrx
 .Op Ar file ...
 .Sh DESCRIPTION
 The
@@ -65,19 +61,46 @@ All symbolic links are followed.
 No symbolic links are followed.
 .It Fl a
 Display an entry for each file in the file hierarchy.
+.It Fl c
+Display the grand total after all the arguments have been processed.
+.It Fl d
+Display an entry files and directories
+.Ar depth
+directories deep.
+.It Fl g
+If the
+.Fl g
+flag is specified, the number displayed is the number of gigabyte
+(1024*1024*1024 bytes) blocks.
+.It Fl h
+If the
+.Fl h
+flag is specified, the numbers will be displayed in "human-readable"
+format.
+Use unit suffixes: B (Byte), K (Kilobyte), M (Megabyte), G (Gigabyte),
+T (Terabyte) and P (Petabyte).
 .It Fl k
 By default,
 .Nm
 displays the number of blocks as returned by the
-.Xr stat  2
+.Xr stat 2
 system call, i.e. 512-byte blocks.
 If the
 .Fl k
-flag is specified, the number displayed is the number of 1024-byte
-blocks.
+flag is specified, the number displayed is the number of kilobyte
+(1024 bytes) blocks.
 Partial numbers of blocks are rounded up.
-.It Fl c
-Display the grand total after all the arguments have been processed.
+.It Fl m
+If the
+.Fl m
+flag is specified, the number displayed is the number of megabyte
+(1024*1024 bytes) blocks.
+.It Fl n
+Ignore files and directories with user
+.Qq nodump
+flag
+.Pq Dv UF_NODUMP
+set.
 .It Fl r
 Generate warning messages about directories that cannot be read.
 This is the default behaviour.
@@ -91,9 +114,9 @@ Filesystem mount points are not traversed.
 counts the storage used by symbolic links and not the files they
 reference unless the
 .Fl H
-or 
-.Fl L 
-option is specified.  
+or
+.Fl L
+option is specified.
 If either the
 .Fl H
 or
@@ -112,19 +135,25 @@ Files having multiple hard links are counted (and displayed) a single
 time per
 .Nm
 execution.
-.Sh ENVIRONMENT VARIABLES
+.Sh ENVIRONMENT
 .Bl -tag -width BLOCKSIZE
 .It Ev BLOCKSIZE
 If the environment variable
 .Ev BLOCKSIZE
-is set, and the 
-.Fl k
-option is not specified, the block counts will be displayed in units of that
+is set, and the
+.Fl g ,
+.Fl h ,
+.Fl k ,
+and
+.Fl m
+options are not specified, the block counts will be displayed in units of that
 size block.
 .El
 .Sh SEE ALSO
 .Xr df 1 ,
+.Xr chflags 2 ,
 .Xr fts 3 ,
+.Xr getbsize 3 ,
 .Xr symlink 7 ,
 .Xr quot 8
 .Sh HISTORY

@@ -1,12 +1,69 @@
-/*	$NetBSD: hack.pri.c,v 1.5 1997/10/19 16:58:50 christos Exp $	*/
+/*	$NetBSD: hack.pri.c,v 1.9.14.1 2009/06/29 23:22:24 snj Exp $	*/
 
 /*
- * Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1985.
+ * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
+ * Amsterdam
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met:
+ *
+ * - Redistributions of source code must retain the above copyright notice,
+ * this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above copyright
+ * notice, this list of conditions and the following disclaimer in the
+ * documentation and/or other materials provided with the distribution.
+ *
+ * - Neither the name of the Stichting Centrum voor Wiskunde en
+ * Informatica, nor the names of its contributors may be used to endorse or
+ * promote products derived from this software without specific prior
+ * written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
+ * IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+ * PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER
+ * OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+ * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
+ * Copyright (c) 1982 Jay Fenlason <hack@gnu.org>
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+ * AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL
+ * THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.pri.c,v 1.5 1997/10/19 16:58:50 christos Exp $");
+__RCSID("$NetBSD: hack.pri.c,v 1.9.14.1 2009/06/29 23:22:24 snj Exp $");
 #endif				/* not lint */
 
 #include "hack.h"
@@ -40,21 +97,11 @@ swallowed()
 boolean         panicking;
 
 void
-#ifdef __STDC__
 panic(const char *fmt, ...)
-#else
-panic(va_alist)
-	va_dcl
-#endif
 {
 	va_list ap;
-#ifndef __STDC__
-	const char *fmt;
-	va_start(ap);
-	fmt = va_arg(ap, const char *);
-#else
+
 	va_start(ap, fmt);
-#endif
 	if (panicking++)
 		exit(1);	/* avoid loops - this should never happen */
 	home();
@@ -344,7 +391,7 @@ pru()
 
 /* print a position that is visible for @ */
 void
-prl(x, y)
+prl(int x, int y)
 {
 	struct rm      *room;
 	struct monst   *mtmp;
@@ -673,7 +720,7 @@ void
 cornbot(lth)
 	int             lth;
 {
-	if (lth < sizeof(oldbot)) {
+	if ((unsigned)lth < sizeof(oldbot)) {
 		oldbot[lth] = 0;
 		flags.botl = 1;
 	}
@@ -684,33 +731,47 @@ bot()
 {
 	char           *ob = oldbot, *nb = newbot;
 	int             i;
+	size_t pos;
+
 	if (flags.botlx)
 		*ob = 0;
 	flags.botl = flags.botlx = 0;
 #ifdef GOLD_ON_BOTL
-	(void) sprintf(newbot,
+	(void) snprintf(newbot, sizeof(newbot),
 		       "Level %-2d  Gold %-5lu  Hp %3d(%d)  Ac %-2d  Str ",
 		       dlevel, u.ugold, u.uhp, u.uhpmax, u.uac);
 #else
-	(void) sprintf(newbot,
+	(void) snprintf(newbot, sizeof(newbot),
 		       "Level %-2d   Hp %3d(%d)   Ac %-2d   Str ",
 		       dlevel, u.uhp, u.uhpmax, u.uac);
 #endif	/* GOLD_ON_BOTL */
 	if (u.ustr > 18) {
 		if (u.ustr > 117)
-			(void) strcat(newbot, "18/**");
-		else
-			(void) sprintf(eos(newbot), "18/%02d", u.ustr - 18);
-	} else
-		(void) sprintf(eos(newbot), "%-2d   ", u.ustr);
+			(void) strlcat(newbot, "18/**", sizeof(newbot));
+		else {
+			pos = strlen(newbot);
+			(void) snprintf(newbot+pos, sizeof(newbot)-pos,
+					"18/%02d", u.ustr - 18);
+		}
+	} else {
+		pos = strlen(newbot);
+		(void) snprintf(newbot+pos, sizeof(newbot)-pos,
+				"%-2d   ", u.ustr);
+	}
+	pos = strlen(newbot);
 #ifdef EXP_ON_BOTL
-	(void) sprintf(eos(newbot), "  Exp %2d/%-5lu ", u.ulevel, u.uexp);
+	(void) snprintf(newbot+pos, sizeof(newbot)-pos,
+			"  Exp %2d/%-5lu ", u.ulevel, u.uexp);
 #else
-	(void) sprintf(eos(newbot), "   Exp %2u  ", u.ulevel);
+	(void) snprintf(newbot+pos, sizeof(newbot)-pos,
+			"   Exp %2u  ", u.ulevel);
 #endif	/* EXP_ON_BOTL */
-	(void) strcat(newbot, hu_stat[u.uhs]);
-	if (flags.time)
-		(void) sprintf(eos(newbot), "  %ld", moves);
+	(void) strlcat(newbot, hu_stat[u.uhs], sizeof(newbot));
+	if (flags.time) {
+		pos = strlen(newbot);
+		(void) snprintf(newbot+pos, sizeof(newbot)-pos,
+				"  %ld", moves);
+	}
 	if (strlen(newbot) >= COLNO) {
 		char           *bp0, *bp1;
 		bp0 = bp1 = newbot;

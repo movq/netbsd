@@ -1,4 +1,4 @@
-/*	$NetBSD: nlist.h,v 1.10 1998/12/17 23:15:21 pk Exp $	*/
+/*	$NetBSD: nlist.h,v 1.13 2005/02/26 21:16:35 dsl Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -17,11 +17,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -56,7 +52,7 @@ struct nlist {
 		long n_strx;		/* file string table offset (on disk) */
 	} n_un;
 #else
-	__aconst char *n_name;		/* symbol name (in memory) */
+	const char *n_name;		/* symbol name (in memory) */
 #endif
 
 #define	N_UNDF	0x00		/* undefined */
@@ -89,8 +85,8 @@ struct nlist {
 #define	N_STAB		0x0e0	/* mask for debugger symbols -- stab(5) */
 
 __BEGIN_DECLS
-int nlist __P((const char *, struct nlist *));
-int __fdnlist __P((int, struct nlist *));		/* XXX for libkvm */
+int nlist(const char *, struct nlist *);
+int __fdnlist(int, struct nlist *);		/* XXX for libkvm */
 __END_DECLS
 
 #endif /* !_NLIST_H_ */

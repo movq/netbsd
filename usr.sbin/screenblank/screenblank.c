@@ -1,7 +1,7 @@
-/*	$NetBSD: screenblank.c,v 1.10 1999/06/06 03:35:36 thorpej Exp $	*/
+/*	$NetBSD: screenblank.c,v 1.28 2008/07/21 13:36:59 lukem Exp $	*/
 
 /*-
- * Copyright (c) 1996, 1998 The NetBSD Foundation, Inc.
+ * Copyright (c) 1996-2002 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,15 +30,14 @@
  */
 
 /*
- * Screensaver daemon for the Sun 3 and SPARC.
+ * Screensaver daemon for the Sun 3 and SPARC, and platforms using WSCONS.
  */
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT(
-"@(#) Copyright (c) 1996, 1998 \
-	The NetBSD Foundation, Inc.  All rights reserved.");
-__RCSID("$NetBSD: screenblank.c,v 1.10 1999/06/06 03:35:36 thorpej Exp $");
+__COPYRIGHT("@(#) Copyright (c) 1996-2002\
+ The NetBSD Foundation, Inc.  All rights reserved.");
+__RCSID("$NetBSD: screenblank.c,v 1.28 2008/07/21 13:36:59 lukem Exp $");
 #endif
 
 #include <sys/types.h>
@@ -64,13 +56,14 @@ __RCSID("$NetBSD: screenblank.c,v 1.10 1999/06/06 03:35:36 thorpej Exp $");
 #include <stdio.h>
 #include <string.h>
 #include <signal.h>
+#include <syslog.h>
 #include <unistd.h>
 #include <util.h>
 
 #include <dev/wscons/wsconsio.h>
 
 #ifdef HAVE_FBIO
-#include <machine/fbio.h>
+#include <dev/sun/fbio.h>
 #endif
 
 #include "pathnames.h"
@@ -88,25 +81,23 @@ struct	dev_stat {
 };
 LIST_HEAD(ds_list, dev_stat) ds_list;
 
-extern	char *__progname;
-
-int	main __P((int, char *[]));
-static	void add_dev __P((const char *, int));
-static	void change_state __P((int));
-static	void cvt_arg __P((char *, struct timeval *));
-static	void sighandler __P((int));
-static	void usage __P((void));
+int	main(int, char *[]);
+static	void add_dev(const char *, int);
+static	void change_state(int);
+static	void cvt_arg(char *, struct timespec *);
+static	void sighandler(int);
+static	int is_graphics_fb(struct dev_stat *);
+static	void usage(void);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	struct dev_stat *dsp;
-	struct timeval timo_on, timo_off, *tvp;
+	struct timespec timo_on, timo_off, *tvp, tv;
 	struct sigaction sa;
 	struct stat st;
 	int ch, change, fflag = 0, kflag = 0, mflag = 0, state;
+	int bflag = 0, uflag = 0;
 	const char *kbd, *mouse, *display;
 
 	LIST_INIT(&ds_list);
@@ -115,12 +106,17 @@ main(argc, argv)
 	 * Set the default timeouts: 10 minutes on, .25 seconds off.
 	 */
 	timo_on.tv_sec = 600;
-	timo_on.tv_usec = 0;
+	timo_on.tv_nsec = 0;
 	timo_off.tv_sec = 0;
-	timo_off.tv_usec = 250000;
+	timo_off.tv_nsec = 250000000;
 
-	while ((ch = getopt(argc, argv, "d:e:f:km")) != -1) {
+	while ((ch = getopt(argc, argv, "bd:e:f:i:kmu")) != -1) {
 		switch (ch) {
+		case 'b':
+			bflag = 1;
+			uflag = 0;
+			break;
+
 		case 'd':
 			cvt_arg(optarg, &timo_on);
 			break;
@@ -134,6 +130,10 @@ main(argc, argv)
 			add_dev(optarg, 1);
 			break;
 
+		case 'i':
+			add_dev(optarg, 0);
+			break;
+
 		case 'k':
 			if (mflag || kflag)
 				usage();
@@ -144,6 +144,11 @@ main(argc, argv)
 			if (kflag || mflag)
 				usage();
 			mflag = 1;
+			break;
+
+		case 'u':
+			uflag = 1;
+			bflag = 0;
 			break;
 
 		default:
@@ -188,16 +193,28 @@ main(argc, argv)
 #endif
 
 	/*
-	 * Add the keyboard, mouse, and default framebuffer devices
-	 * as necessary.  We _always_ check the console device.
+	 * Add the default framebuffer device if necessary.
+	 * We _always_ check the console device.
 	 */
 	add_dev(_PATH_CONSOLE, 0);
+	if (!fflag)
+		add_dev(display, 1);
+
+	/*
+	 * If this is an one-off blank/unblank request, handle it now.
+	 * We don't need to open keyboard/mouse device for that.
+	 */
+	if (bflag || uflag) {
+		change_state(bflag ? videooff : videoon);
+		exit(0);
+	}
+
+
+	/* Add the keyboard and mouse devices as necessary. */
 	if (!kflag)
 		add_dev(kbd, 0);
 	if (!mflag)
 		add_dev(mouse, 0);
-	if (!fflag)
-		add_dev(display, 1);
 
 	/* Ensure that the framebuffer is on. */
 	state = videoon;
@@ -216,6 +233,7 @@ main(argc, argv)
 	    sigaction(SIGHUP, &sa, NULL))
 		err(1, "sigaction");
 
+	openlog("screenblank", LOG_PID, LOG_DAEMON);
 	/* Detach. */
 	if (daemon(0, 0))
 		err(1, "daemon");
@@ -224,13 +242,15 @@ main(argc, argv)
 	/* Start the state machine. */
 	for (;;) {
 		change = 0;
-		for (dsp = ds_list.lh_first; dsp != NULL;
-		    dsp = dsp->ds_link.le_next) {
-			/* Don't check framebuffers. */
-			if (dsp->ds_isfb)
+		LIST_FOREACH(dsp, &ds_list, ds_link) {
+			/* Don't check framebuffers in graphics mode. */
+			if (is_graphics_fb(dsp))
 				continue;
-			if (stat(dsp->ds_path, &st) < 0)
-				err(1, "stat: %s", dsp->ds_path);
+			if (stat(dsp->ds_path, &st) == -1) {
+				syslog(LOG_CRIT,
+				    "Can't stat `%s' (%m)", dsp->ds_path);
+				exit(1);
+			}
 			if (st.st_atime > dsp->ds_atime) {
 				change = 1;
 				dsp->ds_atime = st.st_atime;
@@ -255,23 +275,24 @@ main(argc, argv)
 			}
 		}
 
-		if (select(0, NULL, NULL, NULL, tvp) < 0)
-			err(1, "select");
+		tv = *tvp;
+		if (nanosleep(&tv, NULL) == -1)
+			err(1, "nanosleep");
 	}
 	/* NOTREACHED */
 }
 
 static void
-add_dev(path, isfb)
-	const char *path;
-	int isfb;
+add_dev(const char *path, int isfb)
 {
 	struct dev_stat *dsp;
-	int fd;
+	struct stat sb;
 
-	/* Make sure we can open the device. */
-	if ((fd = open(path, O_RDWR, 0666)) == -1)
-		err(1, "can't open %s", path);
+	/* Make sure we can stat the device. */
+	if (stat(path, &sb) == -1) {
+		warn("Can't stat `%s'", path);
+		return;
+	}
 
 #ifdef HAVE_FBIO
 	/*
@@ -280,20 +301,23 @@ add_dev(path, isfb)
 	 * Sun-style fbio ioctls.  If so, switch to fbio mode.
 	 */
 	if (isfb && setvideo != FBIOSVIDEO) {
-		int onoff;
+		int onoff, fd;
 
+		if ((fd = open(path, O_RDWR, 0666)) == -1) {
+			warn("Can't open `%s'", path);
+			return;
+		}
 		if ((ioctl(fd, FBIOGVIDEO, &onoff)) == 0)
 			setvideo = FBIOSVIDEO;
+		(void)close(fd);
 	}
 #endif
-
-	(void) close(fd);
 
 	/* Create the entry... */
 	dsp = malloc(sizeof(struct dev_stat));
 	if (dsp == NULL)
-		errx(1, "can't allocate memory for %s", path);
-	memset(dsp, 0, sizeof(struct dev_stat));
+		err(1, "Can't allocate memory for `%s'", path);
+	(void)memset(dsp, 0, sizeof(struct dev_stat));
 	dsp->ds_path = path;
 	dsp->ds_isfb = isfb;
 
@@ -303,8 +327,7 @@ add_dev(path, isfb)
 
 /* ARGSUSED */
 static void
-sighandler(sig)
-	int sig;
+sighandler(int sig)
 {
 
 	/* Kill the pid file and re-enable the framebuffer before exit. */
@@ -312,53 +335,94 @@ sighandler(sig)
 	exit(0);
 }
 
-static void
-change_state(state)
+/*
+ * Return 1 if we are a framebuffer in graphics mode or a framebuffer
+ * where we cannot tell the mode. Return 0 if we are not a framebuffer
+ * device, or a wscons framebuffer in text mode.
+ */
+static int
+is_graphics_fb(struct dev_stat *dsp)
+{
+	int fd;
 	int state;
+
+	if (dsp->ds_isfb == 0)
+		return 0;
+
+	/* We can't tell if we are not a wscons device */
+	if (setvideo != WSDISPLAYIO_SVIDEO)
+		return 1;
+
+	if ((fd = open(dsp->ds_path, O_RDWR, 0)) == -1) {
+		syslog(LOG_WARNING, "Cannot open `%s' (%m)", dsp->ds_path);
+		return 1;
+	}
+
+	if (ioctl(fd, WSDISPLAYIO_GMODE, &state) == -1) {
+		syslog(LOG_WARNING, "Cannot get mode on `%s' (%m)",
+		    dsp->ds_path);
+		/* We can't tell, so we say we are mapped */
+		state = WSDISPLAYIO_MODE_MAPPED;
+	}
+
+	(void)close(fd);
+
+	return state != WSDISPLAYIO_MODE_EMUL;
+}
+
+static void
+change_state(int state)
 {
 	struct dev_stat *dsp;
 	int fd;
+	int fail = 1;
 
-	for (dsp = ds_list.lh_first; dsp != NULL; dsp = dsp->ds_link.le_next) {
+	LIST_FOREACH(dsp, &ds_list, ds_link) {
 		/* Don't change the state of non-framebuffers! */
 		if (dsp->ds_isfb == 0)
 			continue;
-		if ((fd = open(dsp->ds_path, O_RDWR, 0)) < 0) {
-			warn("open: %s", dsp->ds_path);
+		if ((fd = open(dsp->ds_path, O_RDWR, 0)) == -1) {
+			syslog(LOG_WARNING, "Can't open `%s' (%m)",
+			    dsp->ds_path);
 			continue;
 		}
-		if (ioctl(fd, setvideo, &state) < 0)
-			warn("ioctl: %s", dsp->ds_path);
+		if (ioctl(fd, setvideo, &state) == -1)
+			syslog(LOG_WARNING, "Can't set video on `%s' (%m)",
+			    dsp->ds_path);
+		else
+			fail = 0;
 		(void)close(fd);
+	}
+	if (fail) {
+		syslog(LOG_CRIT, "No frame buffer devices, exiting\n");
+		exit(1);
 	}
 }
 
 static void
-cvt_arg(arg, tvp)
-	char *arg;
-	struct timeval *tvp;
+cvt_arg(char *arg, struct timespec *tvp)
 {
 	char *cp;
-	int seconds, microseconds, factor;
+	int seconds, nanoseconds, factor;
 	int period = 0;
-	factor = 1000000;
-	microseconds = 0;
+	factor = 1000000000;
+	nanoseconds = 0;
 	seconds = 0;
 
 	for (cp = arg; *cp != '\0'; ++cp) {
 		if (*cp == '.') {
 			if (period)
-				errx(1, "invalid argument: %s", arg);
+				errx(1, "Invalid argument: %s", arg);
 			period = 1;
 			continue;
 		}
 
-		if (!isdigit(*cp))
-			errx(1, "invalid argument: %s", arg);
+		if (!isdigit((unsigned char)*cp))
+			errx(1, "Invalid argument: %s", arg);
 
 		if (period) {
 			if (factor > 1) {
-				microseconds = microseconds * 10 + (*cp - '0');
+				nanoseconds = nanoseconds * 10 + (*cp - '0');
 				factor /= 10;
 			}
 		} else
@@ -367,16 +431,20 @@ cvt_arg(arg, tvp)
 
 	tvp->tv_sec = seconds;
 	if (factor > 1)
-		microseconds *= factor;
-		
-	tvp->tv_usec = microseconds;
+		nanoseconds *= factor;
+
+	tvp->tv_nsec = nanoseconds;
 }
 
 static void
-usage()
+usage(void)
 {
 
-	fprintf(stderr, "usage: %s [-k | -m] [-d timeout] [-e timeout] %s\n",
-	    __progname, "[-f framebuffer]");
+	(void)fprintf(stderr,
+	    "usage: %s [-k | -m] [-d inactivity-timeout] [-e wakeup-delay]\n"
+	    "\t\t[-f framebuffer] [-i input-device]\n"
+	    "       %s {-b | -u}\n",
+	    getprogname(),
+	    getprogname());
 	exit(1);
 }

@@ -1,6 +1,8 @@
-#	$NetBSD: Makefile,v 1.30 1999/03/06 16:21:58 itohy Exp $
+#	$NetBSD: Makefile,v 1.38 2008/08/29 00:02:24 gmcgarry Exp $
 
-CPPFLAGS+=-I${.CURDIR}/../../../lib -I${.CURDIR}/../../telnet
+.include <bsd.own.mk>
+
+CPPFLAGS+=-I${NETBSDSRCDIR}/lib -I${NETBSDSRCDIR}/usr.bin/telnet
 LDADD+=	-lcurses -lcrypt
 DPADD+=	${LIBCURSES} ${LIBCRYPT}
 
@@ -12,58 +14,72 @@ SRCS=	api.c api_bsd.c api_exch.c apilib.c asc_ebc.c astosc.c commands.c \
 	termout.c tn3270.c utilities.c
 DPSRCS=	asc_disp.out astosc.out disp_asc.out kbd.out
 
-MKASTOSC!=cd $(.CURDIR)/../tools/mkastosc; \
-	printf "xxx: .MAKE\n\t@echo \$${.OBJDIR}/mkastosc\n" | ${MAKE} -s -f-
+MKASTOSCDIR !=cd $(.CURDIR)/../tools/mkastosc && ${PRINTOBJDIR}
+MKASTOSC= ${MKASTOSCDIR}/mkastosc
+
 ${MKASTOSC}:
-	cd ${.CURDIR}/../tools/mkastosc; ${MAKE}
+	@cd ${.CURDIR}/../tools/mkastosc && ${MAKE}
 
-MKASTODS!=cd $(.CURDIR)/../tools/mkastods; \
-	printf "xxx: .MAKE\n\t@echo \$${.OBJDIR}/mkastods\n" | ${MAKE} -s -f-
+MKASTODSDIR!=cd $(.CURDIR)/../tools/mkastods && ${PRINTOBJDIR}
+MKASTODS= ${MKASTODSDIR}/mkastods
+
 ${MKASTODS}:
-	cd ${.CURDIR}/../tools/mkastods; ${MAKE}
+	@cd ${.CURDIR}/../tools/mkastods && ${MAKE}
 
-MKDSTOAS!=cd $(.CURDIR)/../tools/mkdstoas; \
-	printf "xxx: .MAKE\n\t@echo \$${.OBJDIR}/mkdstoas\n" | ${MAKE} -s -f-
+MKDSTOASDIR!=cd $(.CURDIR)/../tools/mkdstoas && ${PRINTOBJDIR}
+MKDSTOAS= ${MKDSTOASDIR}/mkdstoas
+
 ${MKDSTOAS}:
-	cd ${.CURDIR}/../tools/mkdstoas; ${MAKE}
+	@cd ${.CURDIR}/../tools/mkdstoas && ${MAKE}
 
-MKHITS!=cd $(.CURDIR)/../tools/mkhits; \
-	printf "xxx: .MAKE\n\t@echo \$${.OBJDIR}/mkhits\n" | ${MAKE} -s -f-
+MKHITSDIR!=cd $(.CURDIR)/../tools/mkhits && ${PRINTOBJDIR}
+MKHITS= ${MKHITSDIR}/mkhits
+
 ${MKHITS}:
-	cd ${.CURDIR}/../tools/mkhits; ${MAKE}
+	@cd ${.CURDIR}/../tools/mkhits && ${MAKE}
 
 astosc.out: ${.CURDIR}/../ctlr/hostctlr.h ${.CURDIR}/../ctlr/function.h \
 	    ${.CURDIR}/../ctlr/${KBD} ${MKASTOSC}
+	${_MKTARGET_CREATE}
 	${MKASTOSC} \
 	    ${.CURDIR}/../ctlr/hostctlr.h ${.CURDIR}/../ctlr/function.h \
 	    < ${.CURDIR}/../ctlr/${KBD} > astosc.tmp
 	mv -f astosc.tmp ${.TARGET}
-CLEANFILES+=	astosc.tmp
+CLEANFILES+=	astosc.tmp astosc.out
 
 asc_disp.out: ${MKASTODS}
+	${_MKTARGET_CREATE}
 	${MKASTODS} > asc_disp.tmp
 	mv -f asc_disp.tmp ${.TARGET}
-CLEANFILES+=	asc_disp.tmp
+CLEANFILES+=	asc_disp.tmp asc_disp.out
 
 disp_asc.out: ${MKDSTOAS}
+	${_MKTARGET_CREATE}
 	${MKDSTOAS} > disp_asc.tmp
 	mv -f disp_asc.tmp ${.TARGET}
-CLEANFILES+=	disp_asc.tmp
+CLEANFILES+=	disp_asc.tmp disp_asc.out
 
 kbd.out: ${.CURDIR}/../ctlr/hostctlr.h ${.CURDIR}/../ctlr/${KBD} ${MKHITS}
+	${_MKTARGET_CREATE}
 	${CC} ${CPPFLAGS} -E ${.CURDIR}/../ctlr/function.c > TMPfunc.out
 	${MKHITS} \
 	    ${.CURDIR}/../ctlr/hostctlr.h TMPfunc.out \
 	    < ${.CURDIR}/../ctlr/${KBD} > kbd.tmp
 	rm -f TMPFunc.out
 	mv -f kbd.tmp ${.TARGET}
-CLEANFILES+=	TMPfunc.out kbd.tmp
+CLEANFILES+=	TMPfunc.out kbd.tmp kbd.out
 
 .include <bsd.prog.mk>
 
+.if (defined(HAVE_GCC) && ${HAVE_GCC} == 4) || defined(HAVE_PCC)
+.for f in api commands system telnet terminal termout tn3270 utilities
+COPTS.${f}.c+=  -Wno-pointer-sign
+.endfor
+.endif
+
 .PATH: ${.CURDIR}/../api ${.CURDIR}/../ascii ${.CURDIR}/../ctlr
 .PATH: ${.CURDIR}/../general ${.CURDIR}/../sys_curses ${.CURDIR}/../../telnet
-.PATH: ${.CURDIR}/../../../lib/libtelnet
+.PATH: ${NETBSDSRCDIR}/lib/libtelnet
 
 astosc.o:	astosc.out
 disp_asc.o:	asc_disp.out disp_asc.out

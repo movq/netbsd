@@ -1,4 +1,4 @@
-/*	$NetBSD: at_control.c,v 1.4 2000/03/23 07:03:27 thorpej Exp $	 */
+/*	$NetBSD: at_control.c,v 1.26 2008/04/30 00:25:17 ad Exp $	 */
 
 /*
  * Copyright (c) 1990,1994 Regents of The University of Michigan.
@@ -26,16 +26,19 @@
  *	netatalk@umich.edu
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: at_control.c,v 1.26 2008/04/30 00:25:17 ad Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
-#include <sys/types.h>
 #include <sys/errno.h>
 #include <sys/ioctl.h>
 #include <sys/mbuf.h>
 #include <sys/kernel.h>
 #include <sys/socket.h>
 #include <sys/socketvar.h>
+#include <sys/kauth.h>
 #include <net/if.h>
 #include <net/route.h>
 #include <net/if_ether.h>
@@ -48,19 +51,19 @@
 #include <netatalk/phase2.h>
 #include <netatalk/at_extern.h>
 
-static int aa_dorangeroute __P((struct ifaddr * ifa,
-    u_int first, u_int last, int cmd));
-static int aa_addsingleroute __P((struct ifaddr * ifa,
-    struct at_addr * addr, struct at_addr * mask));
-static int aa_delsingleroute __P((struct ifaddr * ifa,
-    struct at_addr * addr, struct at_addr * mask));
-static int aa_dosingleroute __P((struct ifaddr * ifa, struct at_addr * addr,
-    struct at_addr * mask, int cmd, int flags));
-static int at_scrub __P((struct ifnet * ifp, struct at_ifaddr * aa));
-static int at_ifinit __P((struct ifnet * ifp, struct at_ifaddr * aa,
-    struct sockaddr_at * sat));
+static int aa_dorangeroute(struct ifaddr * ifa,
+    u_int first, u_int last, int cmd);
+static int aa_addsingleroute(struct ifaddr * ifa,
+    struct at_addr * addr, struct at_addr * mask);
+static int aa_delsingleroute(struct ifaddr * ifa,
+    struct at_addr * addr, struct at_addr * mask);
+static int aa_dosingleroute(struct ifaddr * ifa, struct at_addr * addr,
+    struct at_addr * mask, int cmd, int flags);
+static int at_scrub(struct ifnet * ifp, struct at_ifaddr * aa);
+static int at_ifinit(struct ifnet *, struct at_ifaddr *,
+    const struct sockaddr_at *);
 #if 0
-static void aa_clean __P((void));
+static void aa_clean(void);
 #endif
 
 #define sateqaddr(a,b)	((a)->sat_len == (b)->sat_len && \
@@ -69,15 +72,16 @@ static void aa_clean __P((void));
 			 (a)->sat_addr.s_node == (b)->sat_addr.s_node )
 
 int
-at_control(cmd, data, ifp, p)
+at_control(cmd, data, ifp, l)
 	u_long          cmd;
-	caddr_t         data;
+	void *        data;
 	struct ifnet   *ifp;
-	struct proc    *p;
+	struct lwp     *l;
 {
 	struct ifreq   *ifr = (struct ifreq *) data;
-	struct sockaddr_at *sat;
+	const struct sockaddr_at *csat;
 	struct netrange *nr;
+	const struct netrange *cnr;
 	struct at_aliasreq *ifra = (struct at_aliasreq *) data;
 	struct at_ifaddr *aa0;
 	struct at_ifaddr *aa = 0;
@@ -125,12 +129,15 @@ at_control(cmd, data, ifp, p)
 		 * If we are not superuser, then we don't get to do these
 		 * ops.
 		 */
-		if (suser(p->p_ucred, &p->p_acflag))
+		if (l && kauth_authorize_network(l->l_cred,
+		    KAUTH_NETWORK_INTERFACE,
+		    KAUTH_REQ_NETWORK_INTERFACE_SETPRIV, ifp, (void *)cmd,
+		    NULL) != 0)
 			return (EPERM);
 
-		sat = satosat(&ifr->ifr_addr);
-		nr = (struct netrange *) sat->sat_zero;
-		if (nr->nr_phase == 1) {
+		csat = satocsat(ifreq_getaddr(cmd, ifr));
+		cnr = (const struct netrange *)csat->sat_zero;
+		if (cnr->nr_phase == 1) {
 			/*
 		         * Look for a phase 1 address on this interface.
 		         * This may leave aa pointing to the first address on
@@ -164,14 +171,13 @@ at_control(cmd, data, ifp, p)
 		 */
 		if (aa == (struct at_ifaddr *) 0) {
 			aa = (struct at_ifaddr *)
-			    malloc(sizeof(struct at_ifaddr), M_IFADDR, 
-			    M_WAITOK);
+			    malloc(sizeof(struct at_ifaddr), M_IFADDR,
+			    M_WAITOK|M_ZERO);
 
 			if (aa == NULL)
 				return (ENOBUFS);
 
-			bzero(aa, sizeof *aa);
-			callout_init(&aa->aa_probe_ch);
+			callout_init(&aa->aa_probe_ch, 0);
 
 			if ((aa0 = at_ifaddr.tqh_first) != NULL) {
 				/*
@@ -197,9 +203,7 @@ at_control(cmd, data, ifp, p)
 		         * Find the end of the interface's addresses
 		         * and link our new one on the end
 		         */
-			TAILQ_INSERT_TAIL(&ifp->if_addrlist,
-			    (struct ifaddr *) aa, ifa_list);
-			IFAREF(&aa->aa_ifa);
+			ifa_insert(ifp, &aa->aa_ifa);
 
 			/*
 		         * As the at_ifaddr contains the actual sockaddrs,
@@ -216,7 +220,7 @@ at_control(cmd, data, ifp, p)
 			/*
 		         * Set/clear the phase 2 bit.
 		         */
-			if (nr->nr_phase == 1)
+			if (cnr->nr_phase == 1)
 				aa->aa_flags &= ~AFA_PHASE2;
 			else
 				aa->aa_flags |= AFA_PHASE2;
@@ -235,9 +239,9 @@ at_control(cmd, data, ifp, p)
 		break;
 
 	case SIOCGIFADDR:
-		sat = satosat(&ifr->ifr_addr);
-		nr = (struct netrange *) sat->sat_zero;
-		if (nr->nr_phase == 1) {
+		csat = satocsat(ifreq_getaddr(cmd, ifr));
+		cnr = (const struct netrange *)csat->sat_zero;
+		if (cnr->nr_phase == 1) {
 			/*
 		         * If the request is specifying phase 1, then
 		         * only look at a phase one address
@@ -247,13 +251,22 @@ at_control(cmd, data, ifp, p)
 				    (aa->aa_flags & AFA_PHASE2) == 0)
 					break;
 			}
-		} else {
+		} else if (cnr->nr_phase == 2) {
 			/*
-		         * default to phase 2
+		         * If the request is specifying phase 2, then
+		         * only look at a phase two address
 		         */
 			for (; aa; aa = aa->aa_list.tqe_next) {
 				if (aa->aa_ifp == ifp &&
 				    (aa->aa_flags & AFA_PHASE2))
+					break;
+			}
+		} else {
+			/*
+		         * default to everything
+		         */
+			for (; aa; aa = aa->aa_list.tqe_next) {
+				if (aa->aa_ifp == ifp)
 					break;
 			}
 		}
@@ -268,37 +281,40 @@ at_control(cmd, data, ifp, p)
          * the "aa" pointer is valid when needed.
          */
 	switch (cmd) {
-	case SIOCGIFADDR:
+	case SIOCGIFADDR: {
+		union {
+			struct sockaddr sa;
+			struct sockaddr_at sat;
+		} u;
 
 		/*
 		 * copy the contents of the sockaddr blindly.
 		 */
-		sat = (struct sockaddr_at *) & ifr->ifr_addr;
-		*sat = aa->aa_addr;
-
+		sockaddr_copy(&u.sa, sizeof(u),
+		    (const struct sockaddr *)&aa->aa_addr);
 		/*
 		 * and do some cleanups
 		 */
-		((struct netrange *) &sat->sat_zero)->nr_phase =
-		    (aa->aa_flags & AFA_PHASE2) ? 2 : 1;
-		((struct netrange *) &sat->sat_zero)->nr_firstnet =
-		    aa->aa_firstnet;
-		((struct netrange *) &sat->sat_zero)->nr_lastnet =
-		    aa->aa_lastnet;
+		nr = (struct netrange *)&u.sat.sat_zero;
+		nr->nr_phase = (aa->aa_flags & AFA_PHASE2) ? 2 : 1;
+		nr->nr_firstnet = aa->aa_firstnet;
+		nr->nr_lastnet = aa->aa_lastnet;
+		ifreq_setaddr(cmd, ifr, &u.sa);
 		break;
+	}
 
 	case SIOCSIFADDR:
-		return (at_ifinit(ifp, aa, 
-		    (struct sockaddr_at *) &ifr->ifr_addr));
+		return at_ifinit(ifp, aa,
+		    (const struct sockaddr_at *)ifreq_getaddr(cmd, ifr));
 
 	case SIOCAIFADDR:
 		if (sateqaddr(&ifra->ifra_addr, &aa->aa_addr))
 			return 0;
-		return (at_ifinit(ifp, aa,
-		    (struct sockaddr_at *) &ifr->ifr_addr));
+		return at_ifinit(ifp, aa,
+		    (const struct sockaddr_at *)ifreq_getaddr(cmd, ifr));
 
 	case SIOCDIFADDR:
-		at_purgeaddr((struct ifaddr *) aa, ifp);
+		at_purgeaddr(&aa->aa_ifa);
 		break;
 
 	default:
@@ -310,10 +326,9 @@ at_control(cmd, data, ifp, p)
 }
 
 void
-at_purgeaddr(ifa, ifp)
-	struct ifaddr *ifa;
-	struct ifnet *ifp;
+at_purgeaddr(struct ifaddr *ifa)
 {
+	struct ifnet *ifp = ifa->ifa_ifp;
 	struct at_ifaddr *aa = (void *) ifa;
 
 	/*
@@ -325,24 +340,15 @@ at_purgeaddr(ifa, ifp)
 	/*
 	 * remove the ifaddr from the interface
 	 */
-	TAILQ_REMOVE(&ifp->if_addrlist, (struct ifaddr *) aa, ifa_list);
-	IFAFREE(&aa->aa_ifa);
+	ifa_remove(ifp, &aa->aa_ifa);
 	TAILQ_REMOVE(&at_ifaddr, aa, aa_list);
 	IFAFREE(&aa->aa_ifa);
 }
 
 void
-at_purgeif(ifp)
-	struct ifnet *ifp;
+at_purgeif(struct ifnet *ifp)
 {
-	struct ifaddr *ifa, *nifa;
-
-	for (ifa = TAILQ_FIRST(&ifp->if_addrlist); ifa != NULL; ifa = nifa) {
-		nifa = TAILQ_NEXT(ifa, ifa_list);
-		if (ifa->ifa_addr->sa_family != AF_APPLETALK)
-			continue;
-		at_purgeaddr(ifa, ifp);
-	}
+	if_purgeaddrs(ifp, AF_APPLETALK, at_purgeaddr);
 }
 
 /*
@@ -382,11 +388,11 @@ static int
 at_ifinit(ifp, aa, sat)
 	struct ifnet   *ifp;
 	struct at_ifaddr *aa;
-	struct sockaddr_at *sat;
+	const struct sockaddr_at *sat;
 {
 	struct netrange nr, onr;
 	struct sockaddr_at oldaddr;
-	int             s = splimp(), error = 0, i, j;
+	int             s = splnet(), error = 0, i, j;
 	int             netinc, nodeinc, nnets;
 	u_short         net;
 
@@ -458,7 +464,7 @@ at_ifinit(ifp, aa, sat)
 				 */
 				if (nnets != 1) {
 					net = ntohs(nr.nr_firstnet) +
-					    time.tv_sec % (nnets - 1);
+					    time_second % (nnets - 1);
 				} else {
 					net = ntohs(nr.nr_firstnet);
 				}
@@ -497,7 +503,7 @@ at_ifinit(ifp, aa, sat)
 		 * not specified, be random about it... XXX use /dev/random?
 		 */
 		if (sat->sat_addr.s_node == ATADDR_ANYNODE) {
-			AA_SAT(aa)->sat_addr.s_node = time.tv_sec;
+			AA_SAT(aa)->sat_addr.s_node = time_second;
 		} else {
 			AA_SAT(aa)->sat_addr.s_node = sat->sat_addr.s_node;
 		}
@@ -516,7 +522,7 @@ at_ifinit(ifp, aa, sat)
 		         * Once again, starting at the (possibly random)
 		         * initial node address.
 		         */
-			for (j = 0, nodeinc = time.tv_sec | 1; j < 256;
+			for (j = 0, nodeinc = time_second | 1; j < 256;
 			     j++, AA_SAT(aa)->sat_addr.s_node += nodeinc) {
 				if (AA_SAT(aa)->sat_addr.s_node > 253 ||
 				    AA_SAT(aa)->sat_addr.s_node < 1) {
@@ -560,7 +566,7 @@ at_ifinit(ifp, aa, sat)
 				break;
 
 			/* reset node for next network */
-			AA_SAT(aa)->sat_addr.s_node = time.tv_sec;
+			AA_SAT(aa)->sat_addr.s_node = time_second;
 		}
 
 		/*
@@ -581,7 +587,7 @@ at_ifinit(ifp, aa, sat)
 	 * interface about it, just in case it needs to adjust something.
 	 */
 	if (ifp->if_ioctl &&
-	    (error = (*ifp->if_ioctl) (ifp, SIOCSIFADDR, (caddr_t) aa))) {
+	    (error = (*ifp->if_ioctl) (ifp, SIOCSIFADDR, (void *) aa))) {
 		/*
 		 * of course this could mean that it objects violently
 		 * so if it does, we back out again..
@@ -666,8 +672,7 @@ at_ifinit(ifp, aa, sat)
  * check whether a given address is a broadcast address for us..
  */
 int
-at_broadcast(sat)
-	struct sockaddr_at *sat;
+at_broadcast(const struct sockaddr_at *sat)
 {
 	struct at_ifaddr *aa;
 
@@ -848,24 +853,17 @@ aa_clean()
 	struct ifaddr  *ifa;
 	struct ifnet   *ifp;
 
-	while (aa = at_ifaddr) {
+	while ((aa = TAILQ_FIRST(&at_ifaddr)) != NULL) {
+		TAILQ_REMOVE(&at_ifaddr, aa, aa_list);
 		ifp = aa->aa_ifp;
 		at_scrub(ifp, aa);
-		at_ifaddr = aa->aa_next;
-		if ((ifa = ifp->if_addrlist) == (struct ifaddr *) aa) {
-			ifp->if_addrlist = ifa->ifa_next;
-		} else {
-			while (ifa->ifa_next &&
-			       (ifa->ifa_next != (struct ifaddr *) aa)) {
-				ifa = ifa->ifa_next;
-			}
-			if (ifa->ifa_next) {
-				ifa->ifa_next = 
-				    ((struct ifaddr *) aa)->ifa_next;
-			} else {
-				panic("at_entry");
-			}
+		IFADDR_FOREACH(ifa, ifp) {
+			if (ifa == &aa->aa_ifa)
+				break;
 		}
+		if (ifa == NULL)
+			panic("aa not present");
+		ifa_remove(ifp, ifa);
 	}
 }
 #endif

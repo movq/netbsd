@@ -1,4 +1,4 @@
-/*	$NetBSD: vme.c,v 1.3 1998/01/12 18:04:22 thorpej Exp $	*/
+/*	$NetBSD: vme.c,v 1.13 2008/04/28 20:23:15 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -32,6 +25,9 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: vme.c,v 1.13 2008/04/28 20:23:15 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -48,11 +44,11 @@ int vmematch __P((struct device *, struct cfdata *, void *));
 void vmeattach __P((struct device *, struct device *, void *));
 int vmeprint __P((void *, const char *));
 
-struct cfattach vme_ca = {
-	sizeof(struct vme_softc), vmematch, vmeattach
-};
+CFATTACH_DECL(vme, sizeof(struct vme_softc),
+    vmematch, vmeattach, NULL, NULL);
 
-int	vmesearch __P((struct device *, struct cfdata *, void *));
+int	vmesearch __P((struct device *, struct cfdata *,
+		       const int *, void *));
 
 int
 vmematch(parent, cf, aux)
@@ -62,7 +58,7 @@ vmematch(parent, cf, aux)
 {
 	struct vmebus_attach_args *vba = aux;
 
-	if (strcmp(vba->vba_busname, cf->cf_driver->cd_name))
+	if (strcmp(vba->vba_busname, cf->cf_name))
 		return (0);
 
         return (1);
@@ -82,7 +78,7 @@ vmeattach(parent, self, aux)
 	sc->sc_memt = vba->vba_memt;
 	sc->sc_vc   = vba->vba_vc;
 
-	config_search(vmesearch, self, NULL);
+	config_search_ia(vmesearch, self, "vme", NULL);
 }
 
 int
@@ -93,22 +89,23 @@ vmeprint(aux, vme)
 	struct vme_attach_args *va = aux;
 
 	if (va->va_iosize)
-		printf(" port 0x%x", va->va_iobase);
+		aprint_normal(" port 0x%x", va->va_iobase);
 	if (va->va_iosize > 1)
-		printf("-0x%x", va->va_iobase + va->va_iosize - 1);
+		aprint_normal("-0x%x", va->va_iobase + va->va_iosize - 1);
 	if (va->va_msize)
-		printf(" iomem 0x%x", va->va_maddr);
+		aprint_normal(" iomem 0x%x", va->va_maddr);
 	if (va->va_msize > 1)
-		printf("-0x%x", va->va_maddr + va->va_msize - 1);
+		aprint_normal("-0x%x", va->va_maddr + va->va_msize - 1);
 	if (va->va_irq != IRQUNK)
-		printf(" irq %d", va->va_irq);
+		aprint_normal(" irq %d", va->va_irq);
 	return (UNCONF);
 }
 
 int
-vmesearch(parent, cf, aux)
+vmesearch(parent, cf, ldesc, aux)
 	struct device *parent;
 	struct cfdata *cf;
+	const int *ldesc;
 	void *aux;
 {
 	struct vme_softc *sc = (struct vme_softc *)parent;
@@ -123,7 +120,7 @@ vmesearch(parent, cf, aux)
 	va.va_msize  = cf->cf_msize;
 	va.va_irq    = cf->cf_irq;
 
-	if ((*cf->cf_attach->ca_match)(parent, cf, &va) > 0)
+	if (config_match(parent, cf, &va) > 0)
 		config_attach(parent, cf, &va, vmeprint);
 	return (0);
 }

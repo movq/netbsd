@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_machdep.c,v 1.17 2000/03/14 14:11:06 soren Exp $	*/
+/*	$NetBSD: sys_machdep.c,v 1.33 2007/12/20 23:02:41 dsl Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,6 +34,9 @@
  *	@(#)sys_machdep.c	8.1 (Berkeley) 6/10/93
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: sys_machdep.c,v 1.33 2007/12/20 23:02:41 dsl Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/ioctl.h>
@@ -47,85 +46,24 @@
 #include <sys/uio.h>
 #include <sys/kernel.h>
 #include <sys/buf.h>
-#include <sys/trace.h>
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
 
+#include <mips/cache.h>
 #include <mips/sysarch.h>
 #include <mips/cachectl.h>
 #include <mips/locore.h>
-#include <vm/vm.h>
 
-#ifdef TRACE
-int	nvualarm;
+#include <uvm/uvm_extern.h>
 
 int
-vtrace(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+sys_sysarch(struct lwp *l, const struct sys_sysarch_args *uap, register_t *retval)
 {
-	struct vtrace_args /* {
-		syscallarg(int) request;
-		syscallarg(int) value;
-	} */ *uap = v;
-	int vdoualarm();
-
-	switch (SCARG(uap, request)) {
-
-	case VTR_DISABLE:		/* disable a trace point */
-	case VTR_ENABLE:		/* enable a trace point */
-		if (SCARG(uap, value) < 0 || SCARG(uap, value) >= TR_NFLAGS)
-			return (EINVAL);
-		*retval = traceflags[SCARG(uap, value)];
-		traceflags[SCARG(uap, value)] = SCARG(uap, request);
-		break;
-
-	case VTR_VALUE:		/* return a trace point setting */
-		if (SCARG(uap, value) < 0 || SCARG(uap, value) >= TR_NFLAGS)
-			return (EINVAL);
-		*retval = traceflags[SCARG(uap, value)];
-		break;
-
-	case VTR_UALARM:	/* set a real-time ualarm, less than 1 min */
-		if (SCARG(uap, value) <= 0 || SCARG(uap, value) > 60 * hz ||
-		    nvualarm > 5)
-			return (EINVAL);
-		nvualarm++;
-		timeout(vdoualarm, (caddr_t)p->p_pid, SCARG(uap, value));
-		break;
-
-	case VTR_STAMP:
-		trace(TR_STAMP, SCARG(uap, value), p->p_pid);
-		break;
-	}
-	return (0);
-}
-
-void
-vdoualarm(arg)
-	int arg;
-{
-	struct proc *p;
-
-	p = pfind(arg);
-	if (p)
-		psignal(p, 16);
-	nvualarm--;
-}
-#endif /* TRACE */
-
-int
-sys_sysarch(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
-{
-	struct sys_sysarch_args /* {
+	/* {
 		syscallarg(int) op;
 		syscallarg(void *) parms;
-	} */ *uap = v;
-
+	} */
+	struct proc *p = l->l_proc;
 	int error = 0;
 
 	switch(SCARG(uap, op)) {
@@ -133,7 +71,8 @@ sys_sysarch(p, v, retval)
 		struct mips_cacheflush_args cfua;
 
 		error = copyin(SCARG(uap, parms), &cfua, sizeof(cfua));
-		if (error != 0) return (error);
+		if (error != 0)
+			return (error);
 		error =  mips_user_cacheflush(p, cfua.va, cfua.nbytes,
 		     cfua.whichcache);
 		break;
@@ -142,7 +81,8 @@ sys_sysarch(p, v, retval)
 		struct mips_cachectl_args ccua;
 
 		error = copyin(SCARG(uap, parms), &ccua, sizeof(ccua));
-		if (error != 0) return (error);
+		if (error != 0)
+			return (error);
 		error = mips_user_cachectl(p, ccua.va, ccua.nbytes, ccua.ctl);
 		break;
 	}
@@ -155,17 +95,14 @@ sys_sysarch(p, v, retval)
 
 
 /*
- * Hande a user-space  request to flush a given virutal address
- * rangefrom the i-cache, d-cache, or both.
+ * Handle a request to flush a given user virtual address
+ * range from the i-cache, d-cache, or both.
  */
 int
-mips_user_cacheflush(p, va, nbytes, whichcache)
-	struct proc *p;
-	vaddr_t va;
-	int nbytes, whichcache;
+mips_user_cacheflush(struct proc *p, vaddr_t va, size_t nbytes, int whichcache)
 {
 
-	/* validate the cache we're going to  flush. */
+	/* validate the cache we're going to flush. */
 	switch (whichcache) {
 	    case ICACHE:
 	    case DCACHE:
@@ -177,20 +114,26 @@ mips_user_cacheflush(p, va, nbytes, whichcache)
 
 #ifndef notyet
 	/* For now, just flush all of both caches. */
-	MachFlushCache();
+	mips_icache_sync_all();
+	mips_dcache_wbinv_all();
 	return (0);
 
 #else
-	void * uncached_physaddr;
-	u_int len;
+	void *uncached_physaddr;
+	size_t len;
 
 	/*
 	 * Invalidate each page in the virtual-address range,
-	 * by manually mapping to a  physical address and
+	 * by manually mapping to a physical address and
 	 * invalidating the PA.
 	 */
 	for (base = (void*) addr; nbytes > 0; base += len, nbytes -= len) {
-		/* XXX vm_fault?  */
+		/*
+		 * XXX: still to be done:
+		 *   Check that base is user-space.
+		 *   Check that we have a mapping, calculate physaddr.
+		 *   Flush relevent cache(s).
+		 */
 		if (whichcache & ICACHE) {
 			MachFlushCache(uncached_physaddr, len);
 		}
@@ -202,17 +145,14 @@ mips_user_cacheflush(p, va, nbytes, whichcache)
 }
 
 /*
- * Hande a user-space to make a given range of virtual addresses
+ * Handle a request to make a given user virtual address range
  * non-cacheable.
  */
 int
-mips_user_cachectl(p, va, nbytes, cachectl)
-	struct proc *p;
-	vaddr_t va;
-	int nbytes, cachectl;
+mips_user_cachectl(struct proc *p, vaddr_t va, size_t nbytes, int cachectlval)
 {
-	/* validate the cache we're going to  flush. */
-	switch (cachectl) {
+	/* validate the cache we're going to flush. */
+	switch (cachectlval) {
 	case CACHEABLE:
 	case UNCACHEABLE:
 		break;
@@ -226,8 +166,8 @@ mips_user_cachectl(p, va, nbytes, cachectl)
 	/*
 	 * Use the merged mips3 pmap cache-control functions to change
 	 * the cache attributes of each page in the virtual-address range,
-	 * by manually mapping to a  physical address and changing the
-	 * pmap attributes of the  PA of each page in the range.
+	 * by manually mapping to a physical address and changing the
+	 * pmap attributes of the PA of each page in the range.
 	 * Force misses on non-present pages to be sure the cacheable bits
 	 * get set.
 	 */

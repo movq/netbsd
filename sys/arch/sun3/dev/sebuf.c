@@ -1,4 +1,4 @@
-/*	$NetBSD: sebuf.c,v 1.5 1999/04/09 04:26:27 gwr Exp $	*/
+/*	$NetBSD: sebuf.c,v 1.17 2008/06/28 12:13:38 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -51,6 +44,9 @@
  * the two children.  This driver has no device nodes.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: sebuf.c,v 1.17 2008/06/28 12:13:38 tsutsui Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/conf.h>
@@ -61,7 +57,7 @@
 #include <sys/proc.h>
 #include <sys/tty.h>
 
-#include <vm/vm.h>
+#include <uvm/uvm_extern.h>
 
 #include <machine/autoconf.h>
 #include <machine/cpu.h>
@@ -69,10 +65,8 @@
 #include "sereg.h"
 #include "sevar.h"
 
-#define	offsetof(type, member) ((size_t)(&((type *)0)->member))
-
 struct sebuf_softc {
-	struct	device sc_dev;		/* base device (required) */
+	device_t sc_dev;		/* base device (required) */
 	struct sebuf_regs *sc_regs;
 };
 
@@ -80,19 +74,15 @@ struct sebuf_softc {
  * Autoconfig attachment
  */
 
-static int  sebuf_match __P((struct device *, struct cfdata *, void *));
-static void sebuf_attach __P((struct device *, struct device *, void *));
-static int  sebuf_print __P((void *, const char *));
+static int  sebuf_match(device_t, cfdata_t, void *);
+static void sebuf_attach(device_t, device_t, void *);
+static int  sebuf_print(void *, const char *);
 
-struct cfattach sebuf_ca = {
-	sizeof(struct sebuf_softc), sebuf_match, sebuf_attach
-};
+CFATTACH_DECL_NEW(sebuf, sizeof(struct sebuf_softc),
+    sebuf_match, sebuf_attach, NULL, NULL);
 
-static int
-sebuf_match(parent, cf, args)
-	struct device *parent;
-	struct cfdata *cf;
-	void *args;
+static int 
+sebuf_match(device_t parent, cfdata_t cf, void *args)
 {
 	struct confargs *ca = args;
 	struct se_regs *sreg;
@@ -100,26 +90,26 @@ sebuf_match(parent, cf, args)
 	int pa, x;
 
 	if (ca->ca_paddr == -1)
-		return (0);
+		return 0;
 
 	/* Is it there at all? */
 	pa = ca->ca_paddr;
 	x = bus_peek(ca->ca_bustype, pa, 2);
 	if (x == -1)
-		return (0);
+		return 0;
 
 	/* Look at the CSR for the SCSI part. */
 	pa = ca->ca_paddr + offsetof(struct sebuf_regs, se_scsi_regs);
 	sreg = bus_tmapin(ca->ca_bustype, pa);
 	/* Write some bits that are wired to zero. */
 	sreg->se_csr = 0xFFF3;
-	x = peek_word((caddr_t)(&sreg->se_csr));
+	x = peek_word((void *)(&sreg->se_csr));
 	bus_tmapout(sreg);
 	if ((x == -1) || (x & 0xFCF0)) {
 #ifdef	DEBUG
-		printf("sebuf_match: SCSI csr=0x%x\n", x);
+		aprint_debug("%s: SCSI csr=0x%x\n", __func__, x);
 #endif
-		return (0);
+		return 0;
 	}
 
 	/* Look at the CSR for the Ethernet part. */
@@ -127,43 +117,41 @@ sebuf_match(parent, cf, args)
 	ereg = bus_tmapin(ca->ca_bustype, pa);
 	/* Write some bits that are wired to zero. */
 	ereg->ie_csr = 0x0FFF;
-	x = peek_word((caddr_t)(&ereg->ie_csr));
+	x = peek_word((void *)(&ereg->ie_csr));
 	bus_tmapout(ereg);
 	if ((x == -1) || (x & 0xFFF)) {
 #ifdef	DEBUG
-		printf("sebuf_match: Ether csr=0x%x\n", x);
+		printf("%s: Ether csr=0x%x\n", __func__, x);
 #endif
-		return (0);
+		return 0;
 	}
 
 	/* Default interrupt priority always splbio==2 */
 	if (ca->ca_intpri == -1)
 		ca->ca_intpri = 2;
 
-	return (1);
+	return 1;
 }
 
-static void
-sebuf_attach(parent, self, args)
-	struct device *parent, *self;
-	void *args;
+static void 
+sebuf_attach(device_t parent, device_t self, void *args)
 {
-	struct sebuf_softc *sc = (struct sebuf_softc *)self;
+	struct sebuf_softc *sc = device_private(self);
 	struct confargs *ca = args;
 	struct sebuf_attach_args aa;
 	struct sebuf_regs *regs;
 
-	printf("\n");
+	sc->sc_dev = self;
+	aprint_normal("\n");
 
 	if (ca->ca_intpri != 2)
 		panic("sebuf: bad level");
 
 	/* Map in the whole board. */
-	regs = (struct sebuf_regs *)
-		bus_mapin(ca->ca_bustype, ca->ca_paddr,
-			  sizeof(struct sebuf_regs));
+	regs = (struct sebuf_regs *)bus_mapin(ca->ca_bustype, ca->ca_paddr,
+	    sizeof(struct sebuf_regs));
 	if (regs == NULL)
-		panic("sebuf_attach");
+		panic("%s", __func__);
 	sc->sc_regs = regs;
 
 	/* Attach the SCSI child. */
@@ -173,7 +161,7 @@ sebuf_attach(parent, self, args)
 	aa.buf  = &regs->se_scsi_buf[0];
 	aa.blen = SE_NCRBUFSIZE;
 	aa.regs = &regs->se_scsi_regs;
-	(void) config_found(self, (void *) &aa, sebuf_print);
+	(void)config_found(self, (void *)&aa, sebuf_print);
 
 	/* Attach the Ethernet child. */
 	aa.ca.ca_intpri++;
@@ -182,17 +170,15 @@ sebuf_attach(parent, self, args)
 	aa.buf  = &regs->se_eth_buf[0];
 	aa.blen = SE_IEBUFSIZE;
 	aa.regs = &regs->se_eth_regs;
-	(void) config_found(self, (void *) &aa, sebuf_print);
+	(void)config_found(self, (void *)&aa, sebuf_print);
 }
 
-static int
-sebuf_print(aux, name)
-	void *aux;
-	const char *name;
+static int 
+sebuf_print(void *aux, const char *name)
 {
 
 	if (name != NULL)
-		printf("%s: ", name);
+		aprint_normal("%s: ", name);
 
 	return UNCONF;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: rpc_main.c,v 1.15 1998/12/19 21:19:12 christos Exp $	*/
+/*	$NetBSD: rpc_main.c,v 1.32 2008/03/08 19:49:08 christos Exp $	*/
 
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
@@ -30,12 +30,16 @@
  * Mountain View, California  94043
  */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
 #include <sys/cdefs.h>
-#ifndef lint
+#if defined(__RCSID) && !defined(lint)
 #if 0
 static char sccsid[] = "@(#)rpc_main.c 1.30 89/03/30 (C) 1987 SMI";
 #else
-__RCSID("$NetBSD: rpc_main.c,v 1.15 1998/12/19 21:19:12 christos Exp $");
+__RCSID("$NetBSD: rpc_main.c,v 1.32 2008/03/08 19:49:08 christos Exp $");
 #endif
 #endif
 
@@ -45,32 +49,22 @@ __RCSID("$NetBSD: rpc_main.c,v 1.15 1998/12/19 21:19:12 christos Exp $");
 
 #define RPCGEN_VERSION	"199506"/* This program's version (year & month) */
 
+#include <sys/types.h>
+#include <sys/param.h>
+#include <sys/file.h>
+#include <sys/stat.h>
+#include <ctype.h>
+#include <err.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <ctype.h>
-#include <err.h>
-#include <sys/types.h>
-#ifdef __TURBOC__
-#define	MAXPATHLEN	80
-#include <process.h>
-#include <dir.h>
-#else
 #include <unistd.h>
-#include <sys/param.h>
-#include <sys/file.h>
-#endif
-#include <sys/stat.h>
 #include "rpc_scan.h"
 #include "rpc_parse.h"
 #include "rpc_util.h"
 
 #define EXTEND	1		/* alias for TRUE */
 #define DONT_EXTEND	0	/* alias for FALSE */
-
-#define SVR4_CPP "/usr/ccs/lib/cpp"
-#define SUNOS_CPP "/lib/cpp"
-static int cppDefined = 0;	/* explicit path for C preprocessor */
 
 struct commandline {
 	int     cflag;		/* xdr C routines */
@@ -90,7 +84,7 @@ struct commandline {
 static char *cmdname;
 
 static char *svcclosetime = "120";
-static char *CPP = "/usr/bin/cpp";
+static char *CPP;
 static char CPPFLAGS[] = "-C";
 static char pathbuf[MAXPATHLEN + 1];
 static char *allv[] = {
@@ -129,8 +123,9 @@ int     exitnow;		/* If started by port monitors, exit after the
 int     timerflag;		/* TRUE if !indefinite && !exitnow */
 int     newstyle;		/* newstyle of passing arguments (by value) */
 int     Cflag = 0;		/* ANSI C syntax */
+int	Mflag = 0;		/* multithread safe */
 static int allfiles;		/* generate all files */
-int     tirpcflag = 0;		/* generating code for tirpc, by default */
+int     tirpcflag = 1;		/* generating code for tirpc, by default */
 
 #ifdef __MSDOS__
 static char *dos_cppfile = NULL;
@@ -142,7 +137,6 @@ static char *extendfile __P((char *, char *));
 static void open_output __P((char *, char *));
 static void add_warning __P((void));
 static void clear_args __P((void));
-static void find_cpp __P((void));
 static void open_input __P((char *, char *));
 static int check_nettype __P((char *, char *[]));
 static void c_output __P((char *, char *, int, char *));
@@ -162,13 +156,16 @@ static int parseargs __P((int, char *[], struct commandline *));
 static void usage __P((void));
 static void options_usage __P((void));
 
-
 int
 main(argc, argv)
 	int     argc;
 	char   *argv[];
 {
 	struct commandline cmd;
+
+	setprogname(argv[0]);
+	if (!(CPP = getenv("RPCGEN_CPP")))
+		CPP = "/usr/bin/cpp";
 
 	(void) memset((char *) &cmd, 0, sizeof(struct commandline));
 	clear_args();
@@ -317,25 +314,7 @@ clear_args()
 		arglist[i] = NULL;
 	argcount = FIXEDARGS;
 }
-/* make sure that a CPP exists */
-static void 
-find_cpp()
-{
-	struct stat buf;
 
-	if (stat(CPP, &buf) < 0) {	/* SVR4 or explicit cpp does not exist */
-		if (cppDefined) {
-			fprintf(stderr, "cannot find C preprocessor: %s\n", CPP);
-			crash();
-		} else {	/* try the other one */
-			CPP = SUNOS_CPP;
-			if (stat(CPP, &buf) < 0) {	/* can't find any cpp */
-				fprintf(stderr, "cannot find any C preprocessor (cpp)\n");
-				crash();
-			}
-		}
-	}
-}
 /*
  * Open input file with given define for C-preprocessor
  */
@@ -355,8 +334,8 @@ open_input(infile, define)
 		char    cppfile[MAXPATH];
 		char   *cpp;
 
-		if ((cpp = searchpath("cpp.exe")) == NULL
-		    && (cpp = getenv("RPCGENCPP")) == NULL)
+		if ((cpp = getenv("RPCGEN_CPP")) == NULL &&
+		    (cpp = searchpath("cpp.exe")) == NULL)
 			cpp = DOSCPP;
 
 		putarg(0, cpp);
@@ -390,7 +369,6 @@ open_input(infile, define)
 	(void) pipe(pd);
 	switch (fork()) {
 	case 0:
-		find_cpp();
 		putarg(0, CPP);
 		putarg(1, CPPFLAGS);
 		addarg(define);
@@ -399,12 +377,10 @@ open_input(infile, define)
 		(void) close(1);
 		(void) dup2(pd[1], 1);
 		(void) close(pd[0]);
-		execv(arglist[0], arglist);
-		perror("execv");
-		exit(1);
+		execvp(arglist[0], arglist);
+		err(1, "$RPCGEN_CPP: %s", CPP);
 	case -1:
-		perror("fork");
-		exit(1);
+		err(1, "fork");
 	}
 	(void) close(pd[1]);
 	fin = fdopen(pd[0], "r");
@@ -505,7 +481,7 @@ c_initialize()
 
 }
 
-char    rpcgen_table_dcl[] = "struct rpcgen_table {\n\
+const char    rpcgen_table_dcl[] = "struct rpcgen_table {\n\
 	char	*(*proc)();\n\
 	xdrproc_t	xdr_arg;\n\
 	unsigned	len_arg;\n\
@@ -518,7 +494,7 @@ static char *
 generate_guard(pathname)
 	char   *pathname;
 {
-	char   *filename, *guard, *tmp;
+	char   *filename, *guard, *tmp, *tmp2;
 
 	filename = strrchr(pathname, '/');	/* find last component */
 	filename = ((filename == 0) ? pathname : filename + 1);
@@ -526,12 +502,13 @@ generate_guard(pathname)
 	/* convert to upper case */
 	tmp = guard;
 	while (*tmp) {
-		if (islower((unsigned char)*tmp))
-			*tmp = toupper(*tmp);
+		*tmp = toupper((unsigned char)*tmp);
 		tmp++;
 	}
 
-	guard = extendfile(guard, "_H_RPCGEN");
+	tmp2 = extendfile(guard, "_H_RPCGEN");
+	free(guard);
+	guard = tmp2;
 	return (guard);
 }
 /*
@@ -555,7 +532,10 @@ h_output(infile, define, extend, outfile)
 	outfilename = extend ? extendfile(infile, outfile) : outfile;
 	open_output(infile, outfilename);
 	add_warning();
-	guard = generate_guard(outfilename ? outfilename : infile);
+	if (outfilename || infile)
+		guard = generate_guard(outfilename ? outfilename : infile);
+	else
+		guard = "STDIN_";
 
 	f_print(fout, "#ifndef _%s\n#define _%s\n\n", guard,
 	    guard);
@@ -581,6 +561,8 @@ h_output(infile, define, extend, outfile)
 			f_print(fout, rpcgen_table_dcl);
 		}
 	f_print(fout, "\n#endif /* !_%s */\n", guard);
+
+	free(guard);
 }
 /*
  * Compile into an RPC service
@@ -643,8 +625,6 @@ s_output(argc, argv, infile, define, extend, outfile, nomain, netflag)
 		f_print(fout, "#include <sys/types.h>\n");
 
 	f_print(fout, "#include <memory.h>\n");
-	if (tirpcflag)
-		f_print(fout, "#include <stropts.h>\n");
 
 	if (inetdflag || !tirpcflag) {
 		f_print(fout, "#include <sys/socket.h>\n");
@@ -804,6 +784,8 @@ clnt_output(infile, define, extend, outfile)
 
 	open_output(infile, outfilename);
 	add_sample_msg();
+	if (Cflag)
+		f_print(fout, "#include <stdio.h>\n");
 	if (infile && (include = extendfile(infile, ".h"))) {
 		f_print(fout, "#include \"%s\"\n", include);
 		free(include);
@@ -928,7 +910,7 @@ parseargs(argc, argv, cmd)
 	int     i;
 	int     j;
 	int     c;
-	char    flag[(1 << 8 * sizeof(char))];
+	char    flag[1 << CHAR_BIT];
 	int     nflags;
 
 	cmdname = argv[0];
@@ -1005,6 +987,9 @@ parseargs(argc, argv, cmd)
 				case 'I':
 					inetdflag = 1;
 					break;
+				case 'M':
+					Mflag = 1;
+					break;
 				case 'N':
 					newstyle = 1;
 					break;
@@ -1060,13 +1045,16 @@ parseargs(argc, argv, cmd)
 					if (++i == argc) {
 						return (0);
 					}
-					(void) strcpy(pathbuf, argv[i]);
-					(void) strcat(pathbuf, "/cpp");
+					(void) strlcpy(pathbuf, argv[i],
+					    sizeof(pathbuf));
+					(void) strlcat(pathbuf, "/cpp",
+					    sizeof(pathbuf));
 					CPP = pathbuf;
-					cppDefined = 1;
 					goto nextarg;
 
-
+				case 'v':
+					printf("version 1.0\n");
+					exit(0);
 
 				default:
 					return (0);
@@ -1128,9 +1116,9 @@ static void
 usage()
 {
 	f_print(stderr, "usage:  %s infile\n", cmdname);
-	f_print(stderr, "\t%s [-a][-b][-C][-Dname[=value]] -i size  [-I [-K seconds]] [-A][-L][-M toolkit][-N][-T] infile\n",
+	f_print(stderr, "\t%s [-a][-b][-C][-Dname[=value]] -i size [-I [-K seconds]] [-A] [-M] [-N] [-T] infile\n",
 	    cmdname);
-	f_print(stderr, "\t%s [-c | -h | -l | -m | -t | -Sc | -Ss] [-o outfile] [infile]\n",
+	f_print(stderr, "\t%s [-L] [-M] [-c | -h | -l | -m | -t | -Sc | -Ss] [-o outfile] [infile]\n",
 	    cmdname);
 	f_print(stderr, "\t%s [-s nettype]* [-o outfile] [infile]\n", cmdname);
 	f_print(stderr, "\t%s [-n netid]* [-o outfile] [infile]\n", cmdname);
@@ -1155,6 +1143,7 @@ options_usage()
 	f_print(stderr, "-l\t\tgenerate client side stubs\n");
 	f_print(stderr, "-L\t\tserver errors will be printed to syslog\n");
 	f_print(stderr, "-m\t\tgenerate server side stubs\n");
+	f_print(stderr, "-M\t\tgenerate thread-safe stubs\n");
 	f_print(stderr, "-n netid\tgenerate server code that supports named netid\n");
 	f_print(stderr, "-N\t\tsupports multiple arguments and call-by-value\n");
 	f_print(stderr, "-o outfile\tname of the output file\n");

@@ -1,4 +1,4 @@
-/*	$NetBSD: yptest.c,v 1.3 1997/10/13 07:44:01 lukem Exp $	 */
+/*	$NetBSD: yptest.c,v 1.8 2004/10/22 18:41:09 peter Exp $	 */
 
 /*
  * Copyright (c) 1994 Mats O Jansson <moj@stacken.kth.se>
@@ -33,12 +33,13 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: yptest.c,v 1.3 1997/10/13 07:44:01 lukem Exp $");
+__RCSID("$NetBSD: yptest.c,v 1.8 2004/10/22 18:41:09 peter Exp $");
 #endif
 
 #include <sys/types.h>
 #include <err.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -47,39 +48,45 @@ __RCSID("$NetBSD: yptest.c,v 1.3 1997/10/13 07:44:01 lukem Exp $");
 #include <rpcsvc/yp_prot.h>
 #include <rpcsvc/ypclnt.h>
 
-int	main __P((int, char *[]));
-static	int yptest_foreach __P((int, char *, int, char *, int, char *));
-
-extern	char *__progname;		/* from crt0.o */
+int	main(int, char *[]);
+static	int yptest_foreach(int, char *, int, char *, int, char *);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char **argv)
 {
 	char *Domain, *Value, *Key2;
-	char *Map = "passwd.byname";
-	char *Key = "root";
+	const char *Map = "passwd.byname";
+	const char *Key = "root";
 	int KeyLen, ValLen, Status, Order;
 	struct ypall_callback Callback;
 	struct ypmaplist *ypml, *y;
 
 	if (argc != 1) {
-		fprintf(stderr, "usage: %s\n", __progname);
+		fprintf(stderr, "usage: %s\n", getprogname());
 		exit(1);
 	}
 
-	if (yp_get_default_domain(&Domain))
-		errx(1, "can't get YP domain name");
+	Status = yp_get_default_domain(&Domain);
+	if (Status != 0) {
+		printf("Can't get YP domain name: %s\n", yperr_string(Status));
+		exit(1);
+	}
 
 	printf("Test 1: yp_match\n");
 	KeyLen = strlen(Key);
 	Status = yp_match(Domain, Map, Key, KeyLen, &Value, &ValLen);
-	printf("%*.*s\n", ValLen, ValLen, Value);
+	if (Status == 0)
+		printf("%*.*s\n", ValLen, ValLen, Value);
+	else
+		printf("yp error: %s\n", yperr_string(Status));
 
 	printf("\nTest 2: yp_first\n");
 	Status = yp_first(Domain, Map, &Key2, &KeyLen, &Value, &ValLen);
-	printf("%*.*s %*.*s\n", KeyLen, KeyLen, Key2, ValLen, ValLen, Value);
+	if (Status == 0)
+		printf("%*.*s %*.*s\n", KeyLen, KeyLen, Key2, ValLen, ValLen,
+		    Value);
+	else
+		printf("yp error: %s\n", yperr_string(Status));
 
 	printf("\nTest 3: yp_next\n");
 	while (Status == 0) {
@@ -88,15 +95,23 @@ main(argc, argv)
 		if (Status == 0)
 			printf("%*.*s %*.*s\n", KeyLen, KeyLen, Key2,
 			    ValLen, ValLen, Value);
+		else
+			printf("yp error: %s\n", yperr_string(Status));
 	}
 
 	printf("\nTest 4: yp_master\n");
 	Status = yp_master(Domain, Map, &Key2);
-	printf("%s\n", Key2);
+	if (Status == 0)
+		printf("%s\n", Key2);
+	else
+		printf("yp error: %s\n", yperr_string(Status));
 
 	printf("\nTest 5: yp_order\n");
 	Status = yp_order(Domain, Map, &Order);
-	printf("%d\n", Order);
+	if (Status == 0)
+		printf("%d\n", Order);
+	else
+		printf("yp error: %s\n", yperr_string(Status));
 
 	printf("\nTest 6: yp_maplist\n");
 	ypml = NULL;
@@ -107,22 +122,24 @@ main(argc, argv)
 			printf("%s\n", ypml->ypml_name);
 			y = ypml->ypml_next;
 		}
+		break;
+	default:
+		printf("yp error: %s\n", yperr_string(Status));
+		break;
 	}
 
 	printf("\nTest 7: yp_all\n");
 	Callback.foreach = yptest_foreach;
 	Status = yp_all(Domain, Map, &Callback);
+	if (Status != 0)
+		printf("yp error: %s\n", yperr_string(Status));
+
 	exit(0);
 }
 
 static int
-yptest_foreach(status, key, keylen, val, vallen, data)
-	int status;
-	char *key;
-	int keylen;
-	char *val;
-	int vallen;
-	char *data;
+yptest_foreach(int status, char *key, int keylen, char *val, int vallen,
+	       char *data)
 {
 
 	if (status == YP_NOMORE)

@@ -1,4 +1,4 @@
-/*     $NetBSD: login.c,v 1.56 2000/03/07 14:11:22 enami Exp $       */
+/*	$NetBSD: login.c,v 1.96 2008/07/21 14:19:23 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1987, 1988, 1991, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,16 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT(
-"@(#) Copyright (c) 1980, 1987, 1988, 1991, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1987, 1988, 1991, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)login.c	8.4 (Berkeley) 4/2/94";
 #endif
-__RCSID("$NetBSD: login.c,v 1.56 2000/03/07 14:11:22 enami Exp $");
+__RCSID("$NetBSD: login.c,v 1.96 2008/07/21 14:19:23 lukem Exp $");
 #endif /* not lint */
 
 /*
@@ -59,6 +54,7 @@ __RCSID("$NetBSD: login.c,v 1.56 2000/03/07 14:11:22 enami Exp $");
 #include <sys/resource.h>
 #include <sys/file.h>
 #include <sys/wait.h>
+#include <sys/socket.h>
 
 #include <err.h>
 #include <errno.h>
@@ -74,7 +70,13 @@ __RCSID("$NetBSD: login.c,v 1.56 2000/03/07 14:11:22 enami Exp $");
 #include <ttyent.h>
 #include <tzfile.h>
 #include <unistd.h>
+#include <sysexits.h>
+#ifdef SUPPORT_UTMP
 #include <utmp.h>
+#endif
+#ifdef SUPPORT_UTMPX
+#include <utmpx.h>
+#endif
 #include <util.h>
 #ifdef SKEY
 #include <skey.h>
@@ -86,29 +88,45 @@ __RCSID("$NetBSD: login.c,v 1.56 2000/03/07 14:11:22 enami Exp $");
 #ifdef LOGIN_CAP
 #include <login_cap.h>
 #endif
+#include <vis.h>
 
 #include "pathnames.h"
 
-void	 badlogin __P((char *));
-void	 checknologin __P((char *));
-void	 dolastlog __P((int));
-void	 getloginname __P((void));
-int	 main __P((int, char *[]));
-void	 motd __P((char *));
-int	 rootterm __P((char *));
-void	 sigint __P((int));
-void	 sleepexit __P((int));
-const	 char *stypeof __P((const char *));
-void	 timedout __P((int));
-#if defined(KERBEROS) || defined(KERBEROS5)
-int	 klogin __P((struct passwd *, char *, char *, char *));
-void	 kdestroy __P((void));
-void	 dofork __P((void));
-#endif
 #ifdef KERBEROS5
-int	k5_read_creds __P((char*));
-int	k5_write_creds __P((void));
+int login_krb5_get_tickets = 1;
+int login_krb5_forwardable_tgt = 0;
+int login_krb5_retain_ccache = 0;
 #endif
+
+void	 badlogin(char *);
+void	 checknologin(char *);
+#ifdef SUPPORT_UTMP
+static void	 doutmp(void);
+static void	 dolastlog(int);
+#endif
+#ifdef SUPPORT_UTMPX
+static void	 doutmpx(void);
+static void	 dolastlogx(int);
+#endif
+static void	 update_db(int);
+void	 getloginname(void);
+void	 motd(char *);
+int	 rootterm(char *);
+void	 sigint(int);
+void	 sleepexit(int);
+const	 char *stypeof(const char *);
+void	 timedout(int);
+#ifdef KERBEROS5
+int	 k5login(struct passwd *, char *, char *, char *);
+void	 k5destroy(void);
+int	 k5_read_creds(char*);
+int	 k5_write_creds(void);
+#endif
+#if defined(KERBEROS5)
+void	 dofork(void);
+#endif
+void	 decode_ss(const char *);
+void	 usage(void);
 
 #define	TTYGRPNAME	"tty"		/* name of group to own ttys */
 
@@ -121,44 +139,40 @@ int	k5_write_creds __P((void));
  */
 u_int	timeout = 300;
 
-#if defined(KERBEROS) || defined(KERBEROS5)
+#if defined(KERBEROS5)
 int	notickets = 1;
 char	*instance;
-char	*krbtkfile_env;
-#endif
-#ifdef KERBEROS5
+int	has_ccache = 0;
 extern krb5_context kcontext;
 extern int	have_forward;
-extern int	use_krb5;
+extern char	*krb5tkfile_env;
+extern int	krb5_configured;
+#endif
+
+#if defined(KERBEROS5)
+#define	KERBEROS_CONFIGURED	krb5_configured
 #endif
 
 struct	passwd *pwd;
-int	failures;
-char	term[64], *envinit[1], *hostname, *username, *tty;
+int	failures, have_ss;
+char	term[64], *envinit[1], *hostname, *username, *tty, *nested;
+struct timeval now;
+struct sockaddr_storage ss;
 
-static const char copyrightstr[] = "\
-Copyright (c) 1996, 1997, 1998, 1999, 2000\n\
-\tThe NetBSD Foundation, Inc.  All rights reserved.\n\
-Copyright (c) 1980, 1983, 1986, 1988, 1990, 1991, 1993, 1994\n\
-\tThe Regents of the University of California.  All rights reserved.\n\n";
+extern const char copyrightstr[];
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	extern char **environ;
 	struct group *gr;
 	struct stat st;
-	struct timeval tp;
-	struct utmp utmp;
 	int ask, ch, cnt, fflag, hflag, pflag, sflag, quietlog, rootlogin, rval;
 	int Fflag;
 	uid_t uid, saved_uid;
 	gid_t saved_gid, saved_gids[NGROUPS_MAX];
 	int nsaved_gids;
 	char *domain, *p, *ttyn, *pwprompt;
-	const char *salt;
 	char tbuf[MAXPATHLEN + 2], tname[sizeof(_PATH_TTY) + 10];
 	char localhost[MAXHOSTNAMELEN + 1];
 	int need_chpass, require_chpass;
@@ -168,6 +182,9 @@ main(argc, argv)
 #ifdef KERBEROS5
 	krb5_error_code kerror;
 #endif
+#if defined(KERBEROS5)
+	int got_tickets = 0;
+#endif
 #ifdef LOGIN_CAP
 	char *shell = NULL;
 	login_cap_t *lc = NULL;
@@ -176,6 +193,7 @@ main(argc, argv)
 	tbuf[0] = '\0';
 	rval = 0;
 	pwprompt = NULL;
+	nested = NULL;
 	need_chpass = require_chpass = 0;
 
 	(void)signal(SIGALRM, timedout);
@@ -184,13 +202,15 @@ main(argc, argv)
 	(void)signal(SIGINT, SIG_IGN);
 	(void)setpriority(PRIO_PROCESS, 0, 0);
 
-	openlog("login", LOG_ODELAY, LOG_AUTH);
+	openlog("login", 0, LOG_AUTH);
 
 	/*
 	 * -p is used by getty to tell login not to destroy the environment
 	 * -f is used to skip a second login authentication
-	 * -h is used by other servers to pass the name of the remote
-	 *    host to login so that it may be placed in utmp and wtmp
+	 * -h is used by other servers to pass the name of the remote host to
+	 *    login so that it may be placed in utmp/utmpx and wtmp/wtmpx
+	 * -a in addition to -h, a server may supply -a to pass the actual
+	 *    server address.
 	 * -s is used to force use of S/Key or equivalent.
 	 */
 	domain = NULL;
@@ -201,13 +221,22 @@ main(argc, argv)
 	localhost[sizeof(localhost) - 1] = '\0';
 
 	Fflag = fflag = hflag = pflag = sflag = 0;
+	have_ss = 0;
 #ifdef KERBEROS5
 	have_forward = 0;
-	use_krb5 = 1;
 #endif
 	uid = getuid();
-	while ((ch = getopt(argc, argv, "Ffh:ps")) != -1)
+	while ((ch = getopt(argc, argv, "a:Ffh:ps")) != -1)
 		switch (ch) {
+		case 'a':
+			if (uid)
+				errx(EXIT_FAILURE, "-a option: %s", strerror(EPERM));
+			decode_ss(optarg);
+#ifdef notdef
+			(void)sockaddr_snprintf(optarg,
+			    sizeof(struct sockaddr_storage), "%a", (void *)&ss);
+#endif
+			break;
 		case 'F':
 			Fflag = 1;
 			/* FALLTHROUGH */
@@ -216,11 +245,13 @@ main(argc, argv)
 			break;
 		case 'h':
 			if (uid)
-				errx(1, "-h option: %s", strerror(EPERM));
+				errx(EXIT_FAILURE, "-h option: %s", strerror(EPERM));
 			hflag = 1;
+#ifdef notdef
 			if (domain && (p = strchr(optarg, '.')) != NULL &&
 			    strcasecmp(p, domain) == 0)
-				*p = 0;
+				*p = '\0';
+#endif
 			hostname = optarg;
 			break;
 		case 'p':
@@ -231,10 +262,11 @@ main(argc, argv)
 			break;
 		default:
 		case '?':
-			(void)fprintf(stderr,
-			    "usage: login [-fps] [-h hostname] [username]\n");
-			exit(1);
+			usage();
+			break;
 		}
+
+	setproctitle(NULL);
 	argc -= optind;
 	argv += optind;
 
@@ -244,18 +276,32 @@ main(argc, argv)
 	} else
 		ask = 1;
 
+#ifdef F_CLOSEM
+	(void)fcntl(3, F_CLOSEM, 0);
+#else
 	for (cnt = getdtablesize(); cnt > 2; cnt--)
 		(void)close(cnt);
+#endif
 
 	ttyn = ttyname(STDIN_FILENO);
 	if (ttyn == NULL || *ttyn == '\0') {
 		(void)snprintf(tname, sizeof(tname), "%s??", _PATH_TTY);
 		ttyn = tname;
 	}
-	if ((tty = strrchr(ttyn, '/')) != NULL)
+	if ((tty = strstr(ttyn, "/pts/")) != NULL)
+		++tty;
+	else if ((tty = strrchr(ttyn, '/')) != NULL)
 		++tty;
 	else
 		tty = ttyn;
+
+	if (issetugid()) {
+		nested = strdup(user_from_uid(getuid(), 0));
+		if (nested == NULL) {
+			syslog(LOG_ERR, "strdup: %m");
+			sleepexit(EXIT_FAILURE);
+		}
+	}
 
 #ifdef LOGIN_CAP
 	/* Get "login-retries" and "login-backoff" from default class */
@@ -272,27 +318,34 @@ main(argc, argv)
 #ifdef KERBEROS5
 	kerror = krb5_init_context(&kcontext);
 	if (kerror) {
-		syslog(LOG_NOTICE, "%s when initializing Kerberos context",
-		    error_message(kerror));
-		use_krb5 = 0;
+		/*
+		 * If Kerberos is not configured, that is, we are
+		 * not using Kerberos, do not log the error message.
+		 * However, if Kerberos is configured,  and the
+		 * context init fails for some other reason, we need
+		 * to issue a no tickets warning to the user when the
+		 * login succeeds.
+		 */
+		if (kerror != ENXIO) {	/* XXX NetBSD-local Heimdal hack */
+			syslog(LOG_NOTICE,
+			    "%s when initializing Kerberos context",
+			    error_message(kerror));
+			krb5_configured = 1;
+		}
+		login_krb5_get_tickets = 0;
 	}
-#endif KERBEROS5
+#endif /* KERBEROS5 */
 
 	for (cnt = 0;; ask = 1) {
-#if defined(KERBEROS) || defined(KERBEROS5)
-	        kdestroy();
+#if defined(KERBEROS5)
+		if (login_krb5_get_tickets)
+			k5destroy();
 #endif
 		if (ask) {
 			fflag = 0;
 			getloginname();
 		}
 		rootlogin = 0;
-#ifdef KERBEROS
-		if ((instance = strchr(username, '.')) != NULL)
-			*instance++ = '\0';
-		else
-			instance = "";
-#endif
 #ifdef KERBEROS5
 		if ((instance = strchr(username, '/')) != NULL)
 			*instance++ = '\0';
@@ -312,13 +365,9 @@ main(argc, argv)
 				badlogin(tbuf);
 			failures = 0;
 		}
-		(void)strncpy(tbuf, username, sizeof(tbuf) - 1);
-		tbuf[sizeof(tbuf) - 1] = '\0';
+		(void)strlcpy(tbuf, username, sizeof(tbuf));
 
-		if ((pwd = getpwnam(username)) != NULL)
-			salt = pwd->pw_passwd;
-		else
-			salt = "xx";
+		pwd = getpwnam(username);
 
 #ifdef LOGIN_CAP
 		/*
@@ -341,7 +390,7 @@ main(argc, argv)
 			if (fflag && (uid == 0 || uid == pwd->pw_uid)) {
 				/* already authenticated */
 #ifdef KERBEROS5
-				if (Fflag)
+				if (login_krb5_get_tickets && Fflag)
 					k5_read_creds(username);
 #endif
 				break;
@@ -359,10 +408,10 @@ main(argc, argv)
 #ifdef SKEY
 		if (skey_haskey(username) == 0) {
 			static char skprompt[80];
-			char *skinfo = skey_keyinfo(username);
+			const char *skinfo = skey_keyinfo(username);
 				
-			(void)snprintf(skprompt, sizeof(skprompt)-1,
-			    "Password [%s]:",
+			(void)snprintf(skprompt, sizeof(skprompt),
+			    "Password [ %s ]:",
 			    skinfo ? skinfo : "error getting challenge");
 			pwprompt = skprompt;
 		} else
@@ -375,17 +424,16 @@ main(argc, argv)
 			rval = 1;
 			goto skip;
 		}
-#ifdef KERBEROS
-		if (klogin(pwd, instance, localhost, p) == 0) {
+#ifdef KERBEROS5
+		if (login_krb5_get_tickets &&
+		    k5login(pwd, instance, localhost, p) == 0) {
 			rval = 0;
-			goto skip;
+			got_tickets = 1;
 		}
 #endif
-#ifdef KERBEROS5
-		if (klogin(pwd, instance, localhost, p) == 0) {
-			rval = 0;
+#if defined(KERBEROS5)
+		if (got_tickets)
 			goto skip;
-		}
 #endif
 #ifdef SKEY
 		if (skey_haskey(username) == 0 &&
@@ -413,9 +461,8 @@ main(argc, argv)
 		 * but with insecure terminal, refuse the login attempt.
 		 */
 		if (pwd && !rval && rootlogin && !rootterm(tty)) {
-			(void)fprintf(stderr,
-			    "%s login refused on this terminal.\n",
-			    pwd->pw_name);
+			(void)printf("Login incorrect or refused on this "
+			    "terminal.\n");
 			if (hostname)
 				syslog(LOG_NOTICE,
 				    "LOGIN %s REFUSED FROM %s ON TTY %s",
@@ -430,16 +477,21 @@ main(argc, argv)
 		if (pwd && !rval)
 			break;
 
-		(void)printf("Login incorrect\n");
+		(void)printf("Login incorrect or refused on this "
+		    "terminal.\n");
 		failures++;
 		cnt++;
-		/* we allow 10 tries, but after 3 we start backing off */
+		/*
+		 * We allow login_retries tries, but after login_backoff
+		 * we start backing off.  These default to 10 and 3
+		 * respectively.
+		 */
 		if (cnt > login_backoff) {
 			if (cnt >= login_retries) {
 				badlogin(username);
-				sleepexit(1);
+				sleepexit(EXIT_FAILURE);
 			}
-			sleep((u_int)((cnt - 3) * 5));
+			sleep((u_int)((cnt - login_backoff) * 5));
 		}
 	}
 
@@ -450,17 +502,17 @@ main(argc, argv)
 
 	/* if user not super-user, check for disabled logins */
 #ifdef LOGIN_CAP
-        if (!login_getcapbool(lc, "ignorenologin", rootlogin))
+	if (!login_getcapbool(lc, "ignorenologin", rootlogin))
 		checknologin(login_getcapstr(lc, "nologin", NULL, NULL));
 #else
-        if (!rootlogin)
-                checknologin(NULL);
+	if (!rootlogin)
+		checknologin(NULL);
 #endif
 
 #ifdef LOGIN_CAP
-        quietlog = login_getcapbool(lc, "hushlogin", 0);
+	quietlog = login_getcapbool(lc, "hushlogin", 0);
 #else
-        quietlog = 0;
+	quietlog = 0;
 #endif
 	/* Temporarily give up special privileges so we can change */
 	/* into NFS-mounted homes that are exported for non-root */
@@ -475,15 +527,15 @@ main(argc, argv)
 	
 	if (chdir(pwd->pw_dir) < 0) {
 #ifdef LOGIN_CAP
-                if (login_getcapbool(lc, "requirehome", 0)) {
+		if (login_getcapbool(lc, "requirehome", 0)) {
 			(void)printf("Home directory %s required\n",
 			    pwd->pw_dir);
-                        sleepexit(1);
+			sleepexit(EXIT_FAILURE);
 		}
 #endif	
 		(void)printf("No home directory %s!\n", pwd->pw_dir);
-		if (chdir("/"))
-			exit(0);
+		if (chdir("/") == -1)
+			exit(EXIT_FAILURE);
 		pwd->pw_dir = "/";
 		(void)printf("Logging in with home = \"/\".\n");
 	}
@@ -497,18 +549,17 @@ main(argc, argv)
 	(void)setegid(saved_gid);
 
 #ifdef LOGIN_CAP
-        pw_warntime = login_getcaptime(lc, "password-warn",
-            _PASSWORD_WARNDAYS * SECSPERDAY,
-            _PASSWORD_WARNDAYS * SECSPERDAY);
+	pw_warntime = login_getcaptime(lc, "password-warn",
+		_PASSWORD_WARNDAYS * SECSPERDAY,
+		_PASSWORD_WARNDAYS * SECSPERDAY);
 #endif
 
-	if (pwd->pw_change || pwd->pw_expire)
-		(void)gettimeofday(&tp, (struct timezone *)NULL);
+	(void)gettimeofday(&now, (struct timezone *)NULL);
 	if (pwd->pw_expire) {
-		if (tp.tv_sec >= pwd->pw_expire) {
+		if (now.tv_sec >= pwd->pw_expire) {
 			(void)printf("Sorry -- your account has expired.\n");
-			sleepexit(1);
-		} else if (pwd->pw_expire - tp.tv_sec < pw_warntime && 
+			sleepexit(EXIT_FAILURE);
+		} else if (pwd->pw_expire - now.tv_sec < pw_warntime && 
 		    !quietlog)
 			(void)printf("Warning: your account expires on %s",
 			    ctime(&pwd->pw_expire));
@@ -516,25 +567,17 @@ main(argc, argv)
 	if (pwd->pw_change) {
 		if (pwd->pw_change == _PASSWORD_CHGNOW)
 			need_chpass = 1;
-		else if (tp.tv_sec >= pwd->pw_change) {
+		else if (now.tv_sec >= pwd->pw_change) {
 			(void)printf("Sorry -- your password has expired.\n");
-			sleepexit(1);
-		} else if (pwd->pw_change - tp.tv_sec < pw_warntime && 
+			sleepexit(EXIT_FAILURE);
+		} else if (pwd->pw_change - now.tv_sec < pw_warntime && 
 		    !quietlog)
 			(void)printf("Warning: your password expires on %s",
 			    ctime(&pwd->pw_change));
 
 	}
 	/* Nothing else left to fail -- really log in. */
-	memset((void *)&utmp, 0, sizeof(utmp));
-	(void)time(&utmp.ut_time);
-	(void)strncpy(utmp.ut_name, username, sizeof(utmp.ut_name));
-	if (hostname)
-		(void)strncpy(utmp.ut_host, hostname, sizeof(utmp.ut_host));
-	(void)strncpy(utmp.ut_line, tty, sizeof(utmp.ut_line));
-	login(&utmp);
-
-	dolastlog(quietlog);
+	update_db(quietlog);
 
 	(void)chown(ttyn, pwd->pw_uid,
 	    (gr = getgrnam(TTYGRPNAME)) ? gr->gr_gid : pwd->pw_gid);
@@ -542,9 +585,9 @@ main(argc, argv)
 	if (ttyaction(ttyn, "login", pwd->pw_name))
 		(void)printf("Warning: ttyaction failed.\n");
 
-#if defined(KERBEROS) || defined(KERBEROS5)
+#if defined(KERBEROS5)
 	/* Fork so that we can call kdestroy */
-	if (krbtkfile_env)
+	if (! login_krb5_retain_ccache && has_ccache)
 		dofork();
 #endif
 
@@ -553,17 +596,22 @@ main(argc, argv)
 		environ = envinit;
 
 #ifdef LOGIN_CAP
-	if (setusercontext(lc, pwd, pwd->pw_uid, 
-	    LOGIN_SETALL & ~LOGIN_SETPATH) != 0) {
+	if (nested == NULL && setusercontext(lc, pwd, pwd->pw_uid,
+	    LOGIN_SETLOGIN) != 0) {
 		syslog(LOG_ERR, "setusercontext failed");
-		exit(1);
+		exit(EXIT_FAILURE);
+	}
+	if (setusercontext(lc, pwd, pwd->pw_uid,
+	    (LOGIN_SETALL & ~(LOGIN_SETPATH|LOGIN_SETLOGIN))) != 0) {
+		syslog(LOG_ERR, "setusercontext failed");
+		exit(EXIT_FAILURE);
 	}
 #else
 	(void)setgid(pwd->pw_gid);
 
 	initgroups(username, pwd->pw_gid);
 	
-	if (setlogin(pwd->pw_name) < 0)
+	if (nested == NULL && setlogin(pwd->pw_name) < 0)
 		syslog(LOG_ERR, "setlogin() failure: %m");
 
 	/* Discard permissions last so can't get killed and drop core. */
@@ -578,8 +626,8 @@ main(argc, argv)
 #ifdef LOGIN_CAP
 	if ((shell = login_getcapstr(lc, "shell", NULL, NULL)) != NULL) {
 		if ((shell = strdup(shell)) == NULL) {
-                	syslog(LOG_NOTICE, "Cannot alloc mem");
-                	sleepexit(1);
+			syslog(LOG_ERR, "Cannot alloc mem");
+			sleepexit(EXIT_FAILURE);
 		}
 		pwd->pw_shell = shell;
 	}
@@ -594,7 +642,7 @@ main(argc, argv)
 			tt = login_getcapstr(lc, "term", NULL, NULL);
 #endif
 		/* unknown term -> "su" */
-		(void)strncpy(term, tt != NULL ? tt : "su", sizeof(term));
+		(void)strlcpy(term, tt != NULL ? tt : "su", sizeof(term));
 	}
 	(void)setenv("TERM", term, 0);
 	(void)setenv("LOGNAME", pwd->pw_name, 1);
@@ -606,13 +654,9 @@ main(argc, argv)
 	(void)setenv("PATH", _PATH_DEFPATH, 0);
 #endif
 
-#ifdef KERBEROS
-	if (krbtkfile_env)
-		(void)setenv("KRBTKFILE", krbtkfile_env, 1);
-#endif
 #ifdef KERBEROS5
-	if (krbtkfile_env)
-		(void)setenv("KRB5CCNAME", krbtkfile_env, 1);
+	if (krb5tkfile_env)
+		(void)setenv("KRB5CCNAME", krb5tkfile_env, 1);
 #endif
 
 	if (tty[sizeof("tty")-1] == 'd')
@@ -628,8 +672,8 @@ main(argc, argv)
 			    username, tty);
 	}
 
-#if defined(KERBEROS) || defined(KERBEROS5)
-	if (!quietlog && notickets == 1)
+#if defined(KERBEROS5)
+	if (KERBEROS_CONFIGURED && !quietlog && notickets == 1)
 		(void)printf("Warning: no Kerberos tickets issued.\n");
 #endif
 
@@ -641,14 +685,14 @@ main(argc, argv)
 			motd(fname);
 		else
 #endif
-			(void)printf(copyrightstr);
+			(void)printf("%s", copyrightstr);
 
 #ifdef LOGIN_CAP
-                fname = login_getcapstr(lc, "welcome", NULL, NULL);
-                if (fname == NULL || access(fname, F_OK) != 0)
+		fname = login_getcapstr(lc, "welcome", NULL, NULL);
+		if (fname == NULL || access(fname, F_OK) != 0)
 #endif
-                        fname = _PATH_MOTDFILE;
-                motd(fname);
+			fname = _PATH_MOTDFILE;
+		motd(fname);
 
 		(void)snprintf(tbuf,
 		    sizeof(tbuf), "%s/%s", _PATH_MAILDIR, pwd->pw_name);
@@ -667,8 +711,8 @@ main(argc, argv)
 	(void)signal(SIGTSTP, SIG_IGN);
 
 	tbuf[0] = '-';
-	(void)strncpy(tbuf + 1, (p = strrchr(pwd->pw_shell, '/')) ?
-	    p + 1 : pwd->pw_shell, sizeof(tbuf) - 2);
+	(void)strlcpy(tbuf + 1, (p = strrchr(pwd->pw_shell, '/')) ?
+	    p + 1 : pwd->pw_shell, sizeof(tbuf) - 1);
 
 	/* Wait to change password until we're unprivileged */
 	if (need_chpass) {
@@ -683,66 +727,76 @@ main(argc, argv)
 			switch (fork()) {
 			case -1:
 				warn("fork");
-				sleepexit(1);
+				sleepexit(EXIT_FAILURE);
 			case 0:
-				execl(_PATH_BINPASSWD, "passwd", 0);
-				_exit(1);
+				execl(_PATH_BINPASSWD, "passwd", NULL);
+				_exit(EXIT_FAILURE);
 			default:
 				if (wait(&status) == -1 ||
 				    WEXITSTATUS(status))
-					sleepexit(1);
+					sleepexit(EXIT_FAILURE);
 			}
 		}
 	}
 
 #ifdef KERBEROS5
-	k5_write_creds();
+	if (login_krb5_get_tickets)
+		k5_write_creds();
 #endif
-	execlp(pwd->pw_shell, tbuf, 0);
-	err(1, "%s", pwd->pw_shell);
+	execlp(pwd->pw_shell, tbuf, NULL);
+	err(EXIT_FAILURE, "%s", pwd->pw_shell);
 }
 
-#if defined(KERBEROS) || defined(KERBEROS5)
+#if defined(KERBEROS5)
 #define	NBUFSIZ		(MAXLOGNAME + 1 + 5)	/* .root suffix */
 #else
 #define	NBUFSIZ		(MAXLOGNAME + 1)
 #endif
 
-#if defined(KERBEROS) || defined(KERBEROS5)
+#if defined(KERBEROS5)
 /*
  * This routine handles cleanup stuff, and the like.
  * It exists only in the child process.
  */
-#include <sys/wait.h>
 void
-dofork()
+dofork(void)
 {
-	int child;
+	pid_t child, wchild;
 
-	if (!(child = fork()))
+	switch (child = fork()) {
+	case 0:
 		return; /* Child process */
+	case -1:
+		err(EXIT_FAILURE, "Can't fork");
+		/*NOTREACHED*/
+	default:
+		break;
+	}
 
 	/*
 	 * Setup stuff?  This would be things we could do in parallel
 	 * with login
 	 */
-	(void)chdir("/");	/* Let's not keep the fs busy... */
+	if (chdir("/") == -1)	/* Let's not keep the fs busy... */
+		err(EXIT_FAILURE, "Can't chdir to `/'");
 
 	/* If we're the parent, watch the child until it dies */
-	while (wait(0) != child)
-		;
+	while ((wchild = wait(NULL)) != child)
+		if (wchild == -1)
+			err(EXIT_FAILURE, "Can't wait");
 
 	/* Cleanup stuff */
 	/* Run kdestroy to destroy tickets */
-	kdestroy();
+	if (login_krb5_get_tickets)
+		k5destroy();
 
 	/* Leave */
-	exit(0);
+	exit(EXIT_SUCCESS);
 }
 #endif
 
 void
-getloginname()
+getloginname(void)
 {
 	int ch;
 	char *p;
@@ -753,7 +807,7 @@ getloginname()
 		for (p = nbuf; (ch = getchar()) != '\n'; ) {
 			if (ch == EOF) {
 				badlogin(username);
-				exit(0);
+				exit(EXIT_FAILURE);
 			}
 			if (p < nbuf + (NBUFSIZ - 1))
 				*p++ = ch;
@@ -772,8 +826,7 @@ getloginname()
 }
 
 int
-rootterm(ttyn)
-	char *ttyn;
+rootterm(char *ttyn)
 {
 	struct ttyent *t;
 
@@ -783,8 +836,7 @@ rootterm(ttyn)
 jmp_buf motdinterrupt;
 
 void
-motd(fname)
-	char *fname;
+motd(char *fname)
 {
 	int fd, nchars;
 	sig_t oldint;
@@ -802,8 +854,7 @@ motd(fname)
 
 /* ARGSUSED */
 void
-sigint(signo)
-	int signo;
+sigint(int signo)
 {
 
 	longjmp(motdinterrupt, 1);
@@ -811,17 +862,15 @@ sigint(signo)
 
 /* ARGSUSED */
 void
-timedout(signo)
-	int signo;
+timedout(int signo)
 {
 
 	(void)fprintf(stderr, "Login timed out after %d seconds\n", timeout);
-	exit(0);
+	exit(EXIT_FAILURE);
 }
 
 void
-checknologin(fname)
-	char *fname;
+checknologin(char *fname)
 {
 	int fd, nchars;
 	char tbuf[8192];
@@ -829,13 +878,118 @@ checknologin(fname)
 	if ((fd = open(fname ? fname : _PATH_NOLOGIN, O_RDONLY, 0)) >= 0) {
 		while ((nchars = read(fd, tbuf, sizeof(tbuf))) > 0)
 			(void)write(fileno(stdout), tbuf, nchars);
-		sleepexit(0);
+		sleepexit(EXIT_SUCCESS);
 	}
 }
 
-void
-dolastlog(quiet)
-	int quiet;
+static void
+update_db(int quietlog)
+{
+	if (nested != NULL) {
+		if (hostname != NULL)
+			syslog(LOG_NOTICE, "%s to %s on tty %s from %s",
+			    nested, pwd->pw_name, tty, hostname);
+		else
+			syslog(LOG_NOTICE, "%s to %s on tty %s", nested,
+			    pwd->pw_name, tty);
+
+		return;
+	}
+	if (hostname != NULL && have_ss == 0) {
+		socklen_t len = sizeof(ss);
+		have_ss = getpeername(STDIN_FILENO, (struct sockaddr *)&ss,
+		    &len) != -1;
+	}
+	(void)gettimeofday(&now, NULL);
+#ifdef SUPPORT_UTMPX
+	doutmpx();
+	dolastlogx(quietlog);
+	quietlog = 1;
+#endif	
+#ifdef SUPPORT_UTMP
+	doutmp();
+	dolastlog(quietlog);
+#endif
+}
+
+#ifdef SUPPORT_UTMPX
+static void
+doutmpx(void)
+{
+	struct utmpx utmpx;
+	char *t;
+
+	memset((void *)&utmpx, 0, sizeof(utmpx));
+	utmpx.ut_tv = now;
+	(void)strncpy(utmpx.ut_name, username, sizeof(utmpx.ut_name));
+	if (hostname) {
+		(void)strncpy(utmpx.ut_host, hostname, sizeof(utmpx.ut_host));
+		utmpx.ut_ss = ss;
+	}
+	(void)strncpy(utmpx.ut_line, tty, sizeof(utmpx.ut_line));
+	utmpx.ut_type = USER_PROCESS;
+	utmpx.ut_pid = getpid();
+	t = tty + strlen(tty);
+	if (t - tty >= sizeof(utmpx.ut_id)) {
+	    (void)strncpy(utmpx.ut_id, t - sizeof(utmpx.ut_id),
+		sizeof(utmpx.ut_id));
+	} else {
+	    (void)strncpy(utmpx.ut_id, tty, sizeof(utmpx.ut_id));
+	}
+	if (pututxline(&utmpx) == NULL)
+		syslog(LOG_NOTICE, "Cannot update utmpx: %m");
+	endutxent();
+	if (updwtmpx(_PATH_WTMPX, &utmpx) != 0)
+		syslog(LOG_NOTICE, "Cannot update wtmpx: %m");
+}
+
+static void
+dolastlogx(int quiet)
+{
+	struct lastlogx ll;
+	if (!quiet && getlastlogx(_PATH_LASTLOGX, pwd->pw_uid, &ll) != NULL) {
+		time_t t = (time_t)ll.ll_tv.tv_sec;
+		(void)printf("Last login: %.24s ", ctime(&t));
+		if (*ll.ll_host != '\0')
+			(void)printf("from %.*s ",
+			    (int)sizeof(ll.ll_host),
+			    ll.ll_host);
+		(void)printf("on %.*s\n",
+		    (int)sizeof(ll.ll_line),
+		    ll.ll_line);
+	}
+	ll.ll_tv = now;
+	(void)strncpy(ll.ll_line, tty, sizeof(ll.ll_line));
+	if (hostname)
+		(void)strncpy(ll.ll_host, hostname, sizeof(ll.ll_host));
+	else
+		(void)memset(ll.ll_host, '\0', sizeof(ll.ll_host));
+	if (have_ss)
+		ll.ll_ss = ss;
+	else
+		(void)memset(&ll.ll_ss, 0, sizeof(ll.ll_ss));
+	if (updlastlogx(_PATH_LASTLOGX, pwd->pw_uid, &ll) != 0)
+		syslog(LOG_NOTICE, "Cannot update lastlogx: %m");
+}
+#endif
+
+#ifdef SUPPORT_UTMP
+static void
+doutmp(void)
+{
+	struct utmp utmp;
+
+	(void)memset((void *)&utmp, 0, sizeof(utmp));
+	utmp.ut_time = now.tv_sec;
+	(void)strncpy(utmp.ut_name, username, sizeof(utmp.ut_name));
+	if (hostname)
+		(void)strncpy(utmp.ut_host, hostname, sizeof(utmp.ut_host));
+	(void)strncpy(utmp.ut_line, tty, sizeof(utmp.ut_line));
+	login(&utmp);
+}
+
+static void
+dolastlog(int quiet)
 {
 	struct lastlog ll;
 	int fd;
@@ -845,22 +999,20 @@ dolastlog(quiet)
 		if (!quiet) {
 			if (read(fd, (char *)&ll, sizeof(ll)) == sizeof(ll) &&
 			    ll.ll_time != 0) {
-				(void)printf("Last login: %.*s ",
-				    24, (char *)ctime(&ll.ll_time));
+				(void)printf("Last login: %.24s ",
+				    ctime(&ll.ll_time));
 				if (*ll.ll_host != '\0')
-					(void)printf("from %.*s\n",
+					(void)printf("from %.*s ",
 					    (int)sizeof(ll.ll_host),
 					    ll.ll_host);
-				else
-					(void)printf("on %.*s\n",
-					    (int)sizeof(ll.ll_line),
-					    ll.ll_line);
+				(void)printf("on %.*s\n",
+				    (int)sizeof(ll.ll_line), ll.ll_line);
 			}
 			(void)lseek(fd, (off_t)(pwd->pw_uid * sizeof(ll)),
 			    SEEK_SET);
 		}
 		memset((void *)&ll, 0, sizeof(ll));
-		(void)time(&ll.ll_time);
+		ll.ll_time = now.tv_sec;
 		(void)strncpy(ll.ll_line, tty, sizeof(ll.ll_line));
 		if (hostname)
 			(void)strncpy(ll.ll_host, hostname, sizeof(ll.ll_host));
@@ -868,10 +1020,10 @@ dolastlog(quiet)
 		(void)close(fd);
 	}
 }
+#endif
 
 void
-badlogin(name)
-	char *name;
+badlogin(char *name)
 {
 
 	if (failures == 0)
@@ -892,8 +1044,7 @@ badlogin(name)
 }
 
 const char *
-stypeof(ttyid)
-	const char *ttyid;
+stypeof(const char *ttyid)
 {
 	struct ttyent *t;
 
@@ -901,10 +1052,37 @@ stypeof(ttyid)
 }
 
 void
-sleepexit(eval)
-	int eval;
+sleepexit(int eval)
 {
 
 	(void)sleep(5);
 	exit(eval);
+}
+
+void
+decode_ss(const char *arg)
+{
+	struct sockaddr_storage *ssp;
+	size_t len = strlen(arg);
+	
+	if (len > sizeof(*ssp) * 4 + 1 || len < sizeof(*ssp))
+		errx(EXIT_FAILURE, "Bad argument");
+
+	if ((ssp = malloc(len)) == NULL)
+		err(EXIT_FAILURE, NULL);
+
+	if (strunvis((char *)ssp, arg) != sizeof(*ssp))
+		errx(EXIT_FAILURE, "Decoding error");
+
+	(void)memcpy(&ss, ssp, sizeof(ss));
+	have_ss = 1;
+}
+
+void
+usage(void)
+{
+	(void)fprintf(stderr,
+	    "Usage: %s [-Ffps] [-a address] [-h hostname] [username]\n",
+	    getprogname());
+	exit(EXIT_FAILURE);
 }

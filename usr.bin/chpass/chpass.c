@@ -1,4 +1,4 @@
-/*	$NetBSD: chpass.c,v 1.18 1999/02/08 22:21:44 mjl Exp $	*/
+/*	$NetBSD: chpass.c,v 1.33 2008/07/21 14:19:21 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1988, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1988, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1988, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)chpass.c	8.4 (Berkeley) 4/2/94";
 #else 
-__RCSID("$NetBSD: chpass.c,v 1.18 1999/02/08 22:21:44 mjl Exp $");
+__RCSID("$NetBSD: chpass.c,v 1.33 2008/07/21 14:19:21 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -62,36 +58,35 @@ __RCSID("$NetBSD: chpass.c,v 1.18 1999/02/08 22:21:44 mjl Exp $");
 #include <string.h>
 #include <unistd.h>
 #include <util.h>
+#include <libgen.h>
 
 #include "chpass.h"
 #include "pathnames.h"
 
-extern	char *__progname;		/* from crt0.o */
-
-char *tempname;
+static char tempname[] = "/tmp/pw.XXXXXX";
 uid_t uid;
 int use_yp;
-int yflag;
 
-void	(*Pw_error) __P((const char *, int, int));
+void	(*Pw_error)(const char *, int, int);
 
 #ifdef	YP
-extern	int _yp_check __P((char **));	/* buried deep inside libc */
+extern	int _yp_check(char **);	/* buried deep inside libc */
 #endif
 
-void	baduser __P((void));
-int	main __P((int, char **));
-void	usage __P((void));
+void	baduser(void);
+void	cleanup(void);
+void	usage(void);
 
 int
-main(argc, argv)
-	int argc;
-	char **argv;
+main(int argc, char **argv)
 {
 	enum { NEWSH, LOADENTRY, EDITENTRY } op;
 	struct passwd *pw, lpw, old_pw;
-	int ch, pfd, tfd, dfd;
-	char *arg, *username = NULL, tempname[] = "/etc/pw.XXXXXX";
+	int ch, dfd, pfd, tfd;
+#ifdef YP
+	int yflag = 0;
+#endif
+	char *arg, *username = NULL;
 
 #ifdef __GNUC__
 	pw = NULL;		/* XXX gcc -Wuninitialized */
@@ -103,7 +98,7 @@ main(argc, argv)
 
 	op = EDITENTRY;
 	while ((ch = getopt(argc, argv, "a:s:ly")) != -1)
-		switch(ch) {
+		switch (ch) {
 		case 'a':
 			op = LOADENTRY;
 			arg = optarg;
@@ -166,8 +161,9 @@ main(argc, argv)
 			if (pw != NULL)
 				use_yp = 0;
 			else {
-				errx(1, "master YP server not running yppasswd daemon.\n\t%s\n",
-				    "Can't change password.");
+				warnx("master YP server not running yppasswd"
+				    " daemon.");
+				errx(1, "Can't change password.");
 			}
 		}
 	}
@@ -182,35 +178,30 @@ main(argc, argv)
 
 #ifdef	YP
 	if (op == LOADENTRY && use_yp)
-		errx(1, "cannot load entry using YP.\n\tUse the -l flag to load local.");
+		errx(1, "cannot load entry using YP.\n"
+		    "\tUse the -l flag to load local.");
 #endif
 
 	if (op == EDITENTRY || op == NEWSH) {
 		if (username != NULL) {
-#ifdef YP
-			if (use_yp)
-				pw = ypgetpwnam(username);
-			else
-#endif /* YP */
-				pw = getpwnam(username);
+			pw = getpwnam(username);
 			if (pw == NULL)
 				errx(1, "unknown user: %s", username);
 			if (uid && uid != pw->pw_uid)
 				baduser();
 		} else {
-#ifdef YP
-			if (use_yp)
-				pw = ypgetpwuid(uid);
-			else
-#endif /* YP */
-				pw = getpwuid(uid);
+			pw = getpwuid(uid);
 			if (pw == NULL)
-				errx(1, "unknown user: uid %u\n", uid);
+				errx(1, "unknown user: uid %u", uid);
 		}
 
 		/* Make a copy for later verification */
 		old_pw = *pw;
 		old_pw.pw_gecos = strdup(old_pw.pw_gecos);
+		if (!old_pw.pw_gecos) {
+			err(1, "strdup");
+			/*NOTREACHED*/
+		}
 	}
 
 	if (op == NEWSH) {
@@ -231,12 +222,23 @@ main(argc, argv)
 
 	/* Edit the user passwd information if requested. */
 	if (op == EDITENTRY) {
+		struct stat sb;
+
 		dfd = mkstemp(tempname);
 		if (dfd < 0 || fcntl(dfd, F_SETFD, 1) < 0)
 			(*Pw_error)(tempname, 1, 1);
+		if (atexit(cleanup)) {
+			cleanup();
+			errx(1, "couldn't register cleanup");
+		}
+		if (stat(dirname(tempname), &sb) == -1)
+			err(1, "couldn't stat `%s'", dirname(tempname));
+		if (!(sb.st_mode & S_ISTXT))
+			errx(1, "temporary directory `%s' is not sticky",
+			    dirname(tempname));
+
 		display(tempname, dfd, pw);
 		edit(tempname, pw);
-		(void)unlink(tempname);
 	}
 
 #ifdef	YP
@@ -258,12 +260,12 @@ main(argc, argv)
 	tfd = pw_lock(0);
 	if (tfd < 0) {
 		if (errno != EEXIST)
-			err(1, _PATH_MASTERPASSWD_LOCK);
+			err(1, "%s", _PATH_MASTERPASSWD_LOCK);
 		warnx("The passwd file is busy, waiting...");
 		tfd = pw_lock(10);
 		if (tfd < 0) {
 			if (errno != EEXIST)
-				err(1, _PATH_MASTERPASSWD_LOCK);
+				err(1, "%s", _PATH_MASTERPASSWD_LOCK);
 			errx(1, "The passwd file is still busy, "
 			     "try again later.");
 		}
@@ -278,28 +280,37 @@ main(argc, argv)
 	/* Copy the passwd file to the lock file, updating pw. */
 	pw_copy(pfd, tfd, pw, (op == LOADENTRY) ? NULL : &old_pw);
 
+	close(pfd);
+	close(tfd);
+
 	/* Now finish the passwd file update. */
-	if (pw_mkdb() < 0)
+	if (pw_mkdb(username, 0) < 0)
 		pw_error(NULL, 0, 1);
 
 	exit(0);
 }
 
 void
-baduser()
+baduser(void)
 {
 
 	errx(1, "%s", strerror(EACCES));
 }
 
 void
-usage()
+usage(void)
 {
 
-#ifdef	YP
-	(void)fprintf(stderr, "usage: chpass [-a list] [-s shell] [-l]%s [user]\n", use_yp?" [-y]":"");
-#else
-	(void)fprintf(stderr, "usage: chpass [-a list] [-s shell] [user]\n");
-#endif
+	(void)fprintf(stderr,
+	    "usage: %s [-a list] [-s shell] [-l] [user]\n"
+	    "       %s [-a list] [-s shell] [-y] [user]\n",
+	    getprogname(), getprogname());
 	exit(1);
+}
+
+void
+cleanup(void)
+{
+
+	(void)unlink(tempname);
 }

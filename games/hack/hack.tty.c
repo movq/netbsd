@@ -1,4 +1,4 @@
-/*	$NetBSD: hack.tty.c,v 1.6 1997/10/19 16:59:17 christos Exp $	*/
+/*	$NetBSD: hack.tty.c,v 1.12 2003/08/07 09:37:19 agc Exp $	*/
 
 /*-
  * Copyright (c) 1988, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,11 +34,71 @@
 #if 0
 static char     sccsid[] = "@(#)hack.tty.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: hack.tty.c,v 1.6 1997/10/19 16:59:17 christos Exp $");
+__RCSID("$NetBSD: hack.tty.c,v 1.12 2003/08/07 09:37:19 agc Exp $");
 #endif
 #endif				/* not lint */
 
-/* Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1985. */
+/*
+ * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
+ * Amsterdam
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met:
+ *
+ * - Redistributions of source code must retain the above copyright notice,
+ * this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above copyright
+ * notice, this list of conditions and the following disclaimer in the
+ * documentation and/or other materials provided with the distribution.
+ *
+ * - Neither the name of the Stichting Centrum voor Wiskunde en
+ * Informatica, nor the names of its contributors may be used to endorse or
+ * promote products derived from this software without specific prior
+ * written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
+ * IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+ * PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER
+ * OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+ * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
+ * Copyright (c) 1982 Jay Fenlason <hack@gnu.org>
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+ * AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL
+ * THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
 /* hack.tty.c - version 1.0.3 */
 /*
  * With thanks to the people who sent code for SYSV - hpscdi!jon,
@@ -50,6 +106,7 @@ __RCSID("$NetBSD: hack.tty.c,v 1.6 1997/10/19 16:59:17 christos Exp $");
  */
 
 #include <termios.h>
+#include <termcap.h>
 #include "hack.h"
 #include "extern.h"
 
@@ -73,7 +130,6 @@ struct termios  inittyb, curttyb;
 void
 gettty()
 {
-	extern speed_t ospeed;
 	if (tcgetattr(0, &inittyb) < 0)
 		perror("Hack (gettty)");
 	curttyb = inittyb;
@@ -93,12 +149,12 @@ gettty()
 /* reset terminal to original state */
 void
 settty(s)
-	char           *s;
+	const char           *s;
 {
 	clear_screen();
 	end_screen();
 	if (s)
-		printf(s);
+		printf("%s", s);
 	(void) fflush(stdout);
 	if (tcsetattr(0, TCSADRAIN, &inittyb) < 0)
 		perror("Hack (settty)");
@@ -143,22 +199,11 @@ setftty()
 /* fatal error */
 /* VARARGS1 */
 void
-#ifdef __STDC__
 error(const char *fmt, ...)
-#else
-error(va_alist)
-	va_dcl
-#endif
 {
 	va_list ap;
-#ifndef __STDC__
-	const char *fmt;
 
-	va_start(ap);
-	fmt = va_arg(ap, const char *);
-#else
 	va_start(ap, fmt);
-#endif
 	if (settty_needed)
 		settty((char *) 0);
 	vprintf(fmt, ap);
@@ -230,7 +275,7 @@ getret()
 
 void
 cgetret(s)
-	char           *s;
+	const char           *s;
 {
 	putsym('\n');
 	if (flags.standout)
@@ -247,7 +292,7 @@ char            morc;		/* tell the outside world what char he used */
 
 void
 xwaitforspace(s)
-	char           *s;	/* chars allowed besides space or return */
+	const char *s;	/* chars allowed besides space or return */
 {
 	int             c;
 

@@ -1,4 +1,4 @@
-/*      $NetBSD: n_atan2.c,v 1.4 1999/07/02 15:37:36 simonb Exp $        */
+/*      $NetBSD: n_atan2.c,v 1.6 2003/08/07 16:44:50 agc Exp $        */
 /*
  * Copyright (c) 1985, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -110,6 +106,7 @@ static char sccsid[] = "@(#)atan2.c	8.1 (Berkeley) 6/4/93";
  * shown.
  */
 
+#define _LIBM_STATIC
 #include "mathimpl.h"
 
 vc(athfhi, 4.6364760900080611433E-1  ,6338,3fed,da7b,2b0d,  -1, .ED63382B0DDA7B)
@@ -173,8 +170,8 @@ ic(a11,    1.6438029044759730479E-2  ,  -6,  1.0D52174A1BB54)
 #define	a12	vccast(a12)
 #endif
 
-double atan2(y,x)
-double  y,x;
+double
+atan2(double y, double x)
 {
 	static const double zero=0, one=1, small=1.0E-9, big=1.0E18;
 	double t,z,signy,signx,hi,lo;

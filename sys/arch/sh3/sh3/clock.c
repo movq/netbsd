@@ -1,12 +1,11 @@
-/*	$NetBSD: clock.c,v 1.9 2000/03/20 20:44:32 msaitoh Exp $	*/
+/*	$NetBSD: clock.c,v 1.39 2008/04/28 20:23:35 martin Exp $	*/
 
 /*-
- * Copyright (c) 1993, 1994 Charles Hannum.
- * Copyright (c) 1990 The Regents of the University of California.
+ * Copyright (c) 2002 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
- * This code is derived from software contributed to Berkeley by
- * William Jolitz and Don Ahn.
+ * This code is derived from software contributed to The NetBSD Foundation
+ * by UCHIYAMA Yasushi.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -16,477 +15,321 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- *	@(#)clock.c	7.2 (Berkeley) 5/12/91
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
-/*
- * Mach Operating System
- * Copyright (c) 1991,1990,1989 Carnegie Mellon University
- * All Rights Reserved.
- *
- * Permission to use, copy, modify and distribute this software and its
- * documentation is hereby granted, provided that both the copyright
- * notice and this permission notice appear in all copies of the
- * software, derivative works or modified versions, and any portions
- * thereof, and that both notices appear in supporting documentation.
- *
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND FOR
- * ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- *
- * Carnegie Mellon requests users of this software to return to
- *
- *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
- *  School of Computer Science
- *  Carnegie Mellon University
- *  Pittsburgh PA 15213-3890
- *
- * any improvements or extensions that they make and grant Carnegie Mellon
- * the rights to redistribute these changes.
- */
-/*
-  Copyright 1988, 1989 by Intel Corporation, Santa Clara, California.
 
-		All Rights Reserved
-
-Permission to use, copy, modify, and distribute this software and
-its documentation for any purpose and without fee is hereby
-granted, provided that the above copyright notice appears in all
-copies and that both the copyright notice and this permission notice
-appear in supporting documentation, and that the name of Intel
-not be used in advertising or publicity pertaining to distribution
-of the software without specific, written prior permission.
-
-INTEL DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE
-INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS,
-IN NO EVENT SHALL INTEL BE LIABLE FOR ANY SPECIAL, INDIRECT, OR
-CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
-LOSS OF USE, DATA OR PROFITS, WHETHER IN ACTION OF CONTRACT,
-NEGLIGENCE, OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION
-WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-*/
-
-/*
- * Primitive clock interrupt routines.
- */
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.39 2008/04/28 20:23:35 martin Exp $");
 
 #include "opt_pclock.h"
+#include "opt_hz.h"
 #include "wdog.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/time.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
+#include <sys/timetc.h>
 
 #include <dev/clock_subr.h>
 
+#include <sh3/clock.h>
+#include <sh3/exception.h>
 #include <sh3/rtcreg.h>
 #include <sh3/tmureg.h>
 #include <sh3/wdogvar.h>
-#include <machine/cpu.h>
-#include <machine/intr.h>
-#include <machine/cpufunc.h>
-#include <machine/shbvar.h>
-
-void	spinwait __P((int));
-void	findcpuspeed __P((void));
-int	clockintr __P((void *));
-int	gettick __P((void));
-void	sysbeepstop __P((void *));
-void	sysbeep __P((int, int));
-void	rtcinit __P((void));
-
-int timer0speed;
-
-/*
- * microtime() makes use of the following globals.  Note that isa_timer_tick
- * may be redundant to the `tick' variable, but is kept here for stability.
- * isa_timer_count is the countdown count for the timer.  timer_msb_table[]
- * and timer_lsb_table[] are used to compute the microsecond increment
- * for time.tv_usec in the follow fashion:
- *
- * time.tv_usec += isa_timer_msb_table[cnt_msb] - isa_timer_lsb_table[cnt_lsb];
- */
-
-void
-startrtclock()
-{
-
-	findcpuspeed();		/* use the clock (while it's free)
-					to find the cpu speed */
-}
-
-#if 0
-#define USE_RTCCLK
-#endif
-/*
- * Fill in *tvp with current time with microsecond resolution.
- */
-void
-microtime(tvp)
-	struct timeval *tvp;
-{
-	int s = splclock();
-	static struct timeval lasttime;
-#if 0
-	u_long ticks = 0;
-#endif
-
-	*tvp = time;
-
-#if 0
-#ifdef USE_RTCCLK
-	/* ticks = (16384 - SHREG_TCNT1)*1000000/16384; */
-	ticks = 1000000 - SHREG_TCNT1*1000/16;
-#else
-	ticks = (PCLOCK/16 - SHREG_TCNT1)/(PCLOCK/16/1000000);
-#endif
-
-	tvp->tv_usec += ticks;
-	while (tvp->tv_usec >= 1000000) {
-		tvp->tv_usec -= 1000000;
-		tvp->tv_sec++;
-	}
-#endif
-	if (tvp->tv_sec == lasttime.tv_sec &&
-	    tvp->tv_usec <= lasttime.tv_usec &&
-	    (tvp->tv_usec = lasttime.tv_usec + 1) >= 1000000) {
-		tvp->tv_sec++;
-		tvp->tv_usec -= 1000000;
-	}
-	lasttime = *tvp;
-	splx(s);
-}
-
 #include <sh3/wdtreg.h>
-unsigned int maxwdog;
+
+#include <machine/intr.h>
+
+#ifndef HZ
+#define	HZ		64
+#endif
+#define	SH_RTC_CLOCK	16384	/* Hz */
+
+/*
+ * NetBSD/sh3 clock module
+ *  + default 64Hz
+ *  + use TMU channel 0 as clock interrupt source.
+ *  + use TMU channel 1 as emulated software interrupt soruce.
+ *  + use TMU channel 2 as freerunning counter for timecounter.
+ *  + If RTC module is active, TMU channel 0 input source is RTC output.
+ *    (16.384kHz)
+ */
+struct {
+	/* Hard clock */
+	uint32_t hz_cnt;	/* clock interrupt interval count */
+	uint32_t cpucycle_1us;	/* calibrated loop variable (1 us) */
+	uint32_t tmuclk;	/* source clock of TMU0 (Hz) */
+
+	uint32_t pclock;	/* PCLOCK */
+	uint32_t cpuclock;	/* CPU clock */
+	int flags;
+
+	struct timecounter tc;
+} sh_clock = {
+#ifdef PCLOCK
+	.pclock = PCLOCK,
+#endif
+};
+
+uint32_t maxwdog;
+
+struct evcnt sh_hardclock_evcnt =
+    EVCNT_INITIALIZER(EVCNT_TYPE_INTR, NULL, "tmu0", "hardclock");
+
+/* TMU */
+/* interrupt handler is timing critical. prepared for each. */
+int sh3_clock_intr(void *);
+int sh4_clock_intr(void *);
+u_int sh_timecounter_get(struct timecounter *);
+
+/*
+ * Estimate CPU and Peripheral clock.
+ */
+#define	TMU_START(x)							\
+do {									\
+	_reg_bclr_1(SH_(TSTR), TSTR_STR##x);				\
+	_reg_write_4(SH_(TCNT ## x), 0xffffffff);			\
+	_reg_bset_1(SH_(TSTR), TSTR_STR##x);				\
+} while (/*CONSTCOND*/0)
+
+#define	TMU_ELAPSED(x)							\
+	(0xffffffff - _reg_read_4(SH_(TCNT ## x)))
+
+void
+sh_clock_init(int flags)
+{
+	uint32_t s, t0, cnt_1s;
+
+	sh_clock.flags = flags;
+
+	/* Initialize TMU */
+	_reg_write_2(SH_(TCR0), 0);
+	_reg_write_2(SH_(TCR1), 0);
+	_reg_write_2(SH_(TCR2), 0);
+
+	/* Reset RTC alarm and interrupt */
+	_reg_write_1(SH_(RCR1), 0);
+
+	/* Stop all counter */
+	_reg_write_1(SH_(TSTR), 0);
+
+	/*
+	 * Estimate CPU clock.
+	 */
+	if (sh_clock.flags & SH_CLOCK_NORTC) {
+		/* Set TMU channel 0 source to PCLOCK / 16 */
+		_reg_write_2(SH_(TCR0), TCR_TPSC_P16);
+		sh_clock.tmuclk = sh_clock.pclock / 16;
+	} else {
+		/* Set TMU channel 0 source to RTC counter clock (16.384kHz) */
+		_reg_write_2(SH_(TCR0),
+		    CPU_IS_SH3 ? SH3_TCR_TPSC_RTC : SH4_TCR_TPSC_RTC);
+		sh_clock.tmuclk = SH_RTC_CLOCK;
+
+		/* Make sure RTC oscillator is enabled */
+		_reg_bset_1(SH_(RCR2), SH_RCR2_ENABLE);
+	}
+
+	s = _cpu_exception_suspend();
+	_cpu_spin(1);	/* load function on cache. */
+	TMU_START(0);
+	_cpu_spin(10000000);
+	t0 = TMU_ELAPSED(0);
+	_cpu_exception_resume(s);
+
+	sh_clock.cpucycle_1us = (sh_clock.tmuclk * 10) / t0;
+
+	cnt_1s = ((uint64_t)sh_clock.tmuclk * 10000000 * 10 + t0/2) / t0;
+	if (CPU_IS_SH4)
+		sh_clock.cpuclock = cnt_1s / 2; /* two-issue */
+	else
+		sh_clock.cpuclock = cnt_1s;
+
+	/*
+	 * Estimate PCLOCK
+	 */
+	if (sh_clock.pclock == 0) {
+		uint32_t t1;
+
+		/* set TMU channel 1 source to PCLOCK / 4 */
+		_reg_write_2(SH_(TCR1), TCR_TPSC_P4);
+		s = _cpu_exception_suspend();
+		_cpu_spin(1);	/* load function on cache. */
+		TMU_START(0);
+		TMU_START(1);
+		_cpu_spin(cnt_1s); /* 1 sec. */
+		t0 = TMU_ELAPSED(0);
+		t1 = TMU_ELAPSED(1);
+		_cpu_exception_resume(s);
+
+		sh_clock.pclock
+		    = ((uint64_t)t1 * 4 * SH_RTC_CLOCK + t0/2) / t0;
+	}
+
+	/* Stop all counter */
+	_reg_write_1(SH_(TSTR), 0);
+
+#undef TMU_START
+#undef TMU_ELAPSED
+}
 
 int
-clockintr(arg)
-	void *arg;
+sh_clock_get_cpuclock()
 {
-#if 1
-	struct clockframe *frame = arg;		/* not strictly necessary */
-#endif
-#if (NWDOG > 0)
-	unsigned int i;
 
-	i = (unsigned int)SHREG_WTCNT_R;
+	return (sh_clock.cpuclock);
+}
+
+int
+sh_clock_get_pclock()
+{
+
+	return (sh_clock.pclock);
+}
+
+void
+setstatclockrate(int newhz)
+{
+	/* XXX not yet */
+}
+
+u_int
+sh_timecounter_get(struct timecounter *tc)
+{
+
+	return 0xffffffff - _reg_read_4(SH_(TCNT2));
+}
+
+/*
+ *  Wait at least `n' usec.
+ */
+void
+delay(int n)
+{
+
+	_cpu_spin(sh_clock.cpucycle_1us * n);
+}
+
+/*
+ * Start the clock interrupt.
+ */
+void
+cpu_initclocks()
+{
+
+	if (sh_clock.pclock == 0)
+		panic("No PCLOCK information.");
+
+	/* Set global variables. */
+	hz = HZ;
+	tick = 1000000 / hz;
+
+	/*
+	 * Use TMU channel 0 as hard clock
+	 */
+	_reg_bclr_1(SH_(TSTR), TSTR_STR0);
+
+	if (sh_clock.flags & SH_CLOCK_NORTC) {
+		/* use PCLOCK/16 as TMU0 source */
+		_reg_write_2(SH_(TCR0), TCR_UNIE | TCR_TPSC_P16);
+	} else {
+		/* use RTC clock as TMU0 source */
+		_reg_write_2(SH_(TCR0), TCR_UNIE |
+		    (CPU_IS_SH3 ? SH3_TCR_TPSC_RTC : SH4_TCR_TPSC_RTC));
+	}
+	sh_clock.hz_cnt = sh_clock.tmuclk / hz - 1;
+
+	_reg_write_4(SH_(TCOR0), sh_clock.hz_cnt);
+	_reg_write_4(SH_(TCNT0), sh_clock.hz_cnt);
+
+	evcnt_attach_static(&sh_hardclock_evcnt);
+	intc_intr_establish(SH_INTEVT_TMU0_TUNI0, IST_LEVEL, IPL_CLOCK,
+	    CPU_IS_SH3 ? sh3_clock_intr : sh4_clock_intr, 0);
+	/* start hardclock */
+	_reg_bset_1(SH_(TSTR), TSTR_STR0);
+
+	/*
+	 * TMU channel 1 is one shot timer for softintr(9).
+	 */
+	_reg_write_2(SH_(TCR1), TCR_UNIE | TCR_TPSC_P4);
+	_reg_write_4(SH_(TCOR1), 0xffffffff);
+
+	/*
+	 * TMU channel 2 is freerunning counter for timecounter(9).
+	 */
+	_reg_write_2(SH_(TCR2), TCR_TPSC_P4);
+	_reg_write_4(SH_(TCOR2), 0xffffffff);
+
+	/*
+	 * Start and initialize timecounter.
+	 */
+	_reg_bset_1(SH_(TSTR), TSTR_STR2);
+
+	sh_clock.tc.tc_get_timecount = sh_timecounter_get;
+	sh_clock.tc.tc_frequency = sh_clock.pclock / 4;
+	sh_clock.tc.tc_name = "tmu_pclock_4";
+	sh_clock.tc.tc_quality = 0;
+	sh_clock.tc.tc_counter_mask = 0xffffffff;
+	tc_init(&sh_clock.tc);
+}
+
+
+#ifdef SH3
+int
+sh3_clock_intr(void *arg) /* trap frame */
+{
+#if (NWDOG > 0)
+	uint32_t i;
+
+	i = (uint32_t)SHREG_WTCNT_R;
 	if (i > maxwdog)
 		maxwdog = i;
 	wdog_wr_cnt(0);			/* reset to zero */
 #endif
 
-	/* clear timer counter under flow interrupt flag */
-#ifdef USE_RTCCLK
-        SHREG_TCR1 = TCR_UNIE | TCR_TPSC_RTC;
-#else
-        SHREG_TCR1 = TCR_UNIE | TCR_TPSC_P16;
-#endif
+	sh_hardclock_evcnt.ev_count++;
 
-	hardclock(frame);
-	return -1;
+	/* clear underflow status */
+	_reg_bclr_2(SH3_TCR0, TCR_UNF);
+
+	hardclock(arg);
+
+	return (1);
 }
-
+#endif /* SH3 */
+#ifdef SH4
 int
-gettick()
+sh4_clock_intr(void *arg) /* trap frame */
 {
-	int counter;
-	/* Don't want someone screwing with the counter while we're here. */
-	disable_intr();
+#if (NWDOG > 0)
+	uint32_t i;
 
-	counter = SHREG_TCNT0;
-
-	enable_intr();
-	return counter;
-}
-
-/*
- * Wait "n" microseconds.
- * Relies on timer 1 counting down from (TIMER_FREQ / hz) at TIMER_FREQ Hz.
- * Note: timer had better have been programmed before this is first used!
- * (Note that we use `rate generator' mode, which counts at 1:1; `square
- * wave' mode counts at 2:1).
- */
-void
-delay(n)
-	int n;
-{
-	unsigned int limit, tick, otick;
-
-	/*
-	 * Read the counter first, so that the rest of the setup overhead is
-	 * counted.
-	 */
-
-	n *= timer0speed;
-
-	otick = gettick();
-	limit = 0xffffffff;
-
-	while (n > 0) {
-		tick = gettick();
-		if (tick > otick)
-			n -= limit - (tick - otick);
-		else
-			n -= otick - tick;
-		otick = tick;
-	}
-}
-
-void
-sysbeepstop(arg)
-	void *arg;
-{
-#ifdef	TODO
-#endif
-}
-
-void
-sysbeep(pitch, period)
-	int pitch, period;
-{
-#ifdef	TODO
-#endif
-}
-
-unsigned int delaycount;	/* calibrated loop variable (1 millisecond) */
-
-#define FIRST_GUESS   0x2000
-
-void
-findcpuspeed()
-{
-	int i;
-	unsigned int remainder;
-
-	/* using clock = Internal RTC */
-	SHREG_TOCR = TOCR_TCOE;
-
-	/* disable Under Flow int,up rising edge, 1/4 Cys */
-	SHREG_TCR0 = 0;
-
-	timer0speed = PCLOCK / 1000000 / 4 + 1;
-
-	/* set counter */
-	SHREG_TCNT0 = 0xffffffff;
-
-	/* start counter 0 */
-	SHREG_TSTR |= TSTR_STR0;
-
-	/* Timer counter is decremented at every 0.5 uSec */
-	for (i = FIRST_GUESS; i; i--)
-		;
-
-	/* Read the value left in the counter */
-	remainder = gettick();
-
-	/* 1 timer tick neary eqyal 0.5 uSec */
-	delaycount = (FIRST_GUESS * 2000) / (0xffffffff - remainder);
-}
-
-void
-cpu_initclocks()
-{
-
-#ifdef USE_RTCCLK
-        /* enable under flow interrupt, up rising edge, RTCCLK */
-	/* RTCCLK == 16kHz */
-	SHREG_TCR1 = TCR_UNIE | TCR_TPSC_RTC;
-	SHREG_TCOR1 = 16384 / hz - 1; /* about 1/HZ Sec */
-	SHREG_TCNT1 = 16384 / hz - 1; /* about 1/HZ Sec */
-#else
-        /* enable under flow interrupt, up rising edge, 1/16 Pcyc */
-	SHREG_TCR1 = TCR_UNIE | TCR_TPSC_P16;
-	SHREG_TCOR1 = PCLOCK / 16 / hz - 1; /* about 1/HZ Sec */
-	SHREG_TCNT1 = PCLOCK / 16 / hz - 1; /* about 1/HZ Sec */
+	i = (uint32_t)SHREG_WTCNT_R;
+	if (i > maxwdog)
+		maxwdog = i;
+	wdog_wr_cnt(0);			/* reset to zero */
 #endif
 
-	/* start timer counter 1 */
-	SHREG_TSTR |= TSTR_STR1;
+	sh_hardclock_evcnt.ev_count++;
 
-	(void)shb_intr_establish(TMU1_IRQ, IST_EDGE, IPL_CLOCK, clockintr, 0);
+	/* clear underflow status */
+	_reg_bclr_2(SH4_TCR0, TCR_UNF);
+
+	hardclock(arg);
+
+	return (1);
 }
-
-void
-rtcinit()
-{
-	static int first_rtcopen_ever = 1;
-
-	if (!first_rtcopen_ever)
-		return;
-	first_rtcopen_ever = 0;
-
-}
-
-static int timeset;
-
-/*
- * Initialize the time of day register, based on the time base which is, e.g.
- * from a filesystem.
- */
-void
-inittodr(base)
-	time_t base;
-{
-	struct clock_ymdhms dt;
-	int doreset = 0;
-
-	/*
-	 * We mostly ignore the suggested time and go for the RTC clock time
-	 * stored in the CMOS RAM.  If the time can't be obtained from the
-	 * CMOS, or if the time obtained from the CMOS is 5 or more years
-	 * less than the suggested time, we used the suggested time.  (In
-	 * the latter case, it's likely that the CMOS battery has died.)
-	 */
-
-	if (base < 15*SECYR) {	/* if before 1985, something's odd... */
-		printf("WARNING: preposterous time in file system\n");
-		/* read the system clock anyway */
-		base = 17*SECYR + 186*SECDAY + SECDAY/2;
-	}
-
-#ifdef SH4
-#define	FROMBCD2(x)	((((x) & 0xf000) >> 12) * 1000 + \
-			 (((x) & 0x0f00) >> 8) * 100 + \
-			 (((x) & 0x00f0) >> 4) * 10 + ((x) & 0xf))
-	dt.dt_year = FROMBCD2(SHREG_RYRCNT);
-#else
-	dt.dt_year = 1900 + FROMBCD(SHREG_RYRCNT);
-#endif
-	dt.dt_mon = FROMBCD(SHREG_RMONCNT);
-	dt.dt_day = FROMBCD(SHREG_RDAYCNT);
-	dt.dt_wday = FROMBCD(SHREG_RWKCNT);
-	dt.dt_hour = FROMBCD(SHREG_RHRCNT);
-	dt.dt_min = FROMBCD(SHREG_RMINCNT);
-	dt.dt_sec = FROMBCD(SHREG_RSECCNT);
-
-#ifdef DEBUG
-	printf("readclock: %d/%d/%d/%d/%d/%d(%d)\n", dt.dt_year - 1900,
-	       dt.dt_mon, dt.dt_day, dt.dt_hour, dt.dt_min, dt.dt_sec,
-	       dt.dt_wday);
-#endif
-
-#ifndef SH4
-	if (dt.dt_year < 1970)
-		dt.dt_year += 100;
-#endif
-
-	if (dt.dt_mon < 1 || dt.dt_mon > 12)
-		doreset = 1;
-	if (dt.dt_day < 1 || dt.dt_day > 31)
-		doreset = 1;
-	if (dt.dt_hour > 23)
-		doreset = 1;
-	if (dt.dt_min > 59)
-		doreset = 1;
-	if (dt.dt_sec > 59)
-		doreset = 1;
-
-	if (doreset == 1) {
-		printf("WARNING: clock time is invalid.\n");
-		printf("WARNING: reset to epoch time!\n");
-		time.tv_sec = 0;
-	} else
-		time.tv_sec = clock_ymdhms_to_secs(&dt) + rtc_offset * 60;
-
-#ifndef INITTODR_ALWAYS_USE_RTC
-	if (base < time.tv_sec - 5*SECYR)
-		printf("WARNING: file system time much less than clock time\n");
-	else if (base > time.tv_sec + 5*SECYR) {
-		printf("WARNING: clock time much less than file system time\n");
-		printf("WARNING: using file system time\n");
-		goto fstime;
-	}
-#endif
-
-	timeset = 1;
-	time.tv_usec = 0;
-
-	return;
-
-#ifndef INITTODR_ALWAYS_USE_RTC
-fstime:
-	timeset = 1;
-	time.tv_sec = base;
-	time.tv_usec = 0;
-	printf("WARNING: CHECK AND RESET THE DATE!\n");
-#endif
-}
-
-/*
- * Reset the clock.
- */
-void
-resettodr()
-{
-	struct clock_ymdhms dt;
-	int s;
-
-	/*
-	 * We might have been called by boot() due to a crash early
-	 * on.  Don't reset the clock chip in this case.
-	 */
-
-	if (!timeset)
-		return;
-
-	s = splclock();
-
-	clock_secs_to_ymdhms(time.tv_sec - rtc_offset * 60, &dt);
-
-	/* stop RTC */
-	SHREG_RCR2 = SHREG_RCR2_RESET|SHREG_RCR2_ENABLE;
-
-	SHREG_RSECCNT = TOBCD(dt.dt_sec);
-	SHREG_RMINCNT = TOBCD(dt.dt_min);
-	SHREG_RHRCNT = TOBCD(dt.dt_hour);
-	SHREG_RWKCNT = TOBCD(dt.dt_wday);
-	SHREG_RDAYCNT = TOBCD(dt.dt_day);
-	SHREG_RMONCNT = TOBCD(dt.dt_mon);
-#ifdef SH4
-#define TOBCD2(x)	((((x) % 10000) / 1000 * 4096) + \
-			 (((x) % 1000) / 100 * 256) + \
-			 ((((x) % 100) / 10) * 16) + ((x) % 10))
-	SHREG_RYRCNT = TOBCD2(dt.dt_year);
-#else
-	SHREG_RYRCNT = TOBCD(dt.dt_year % 100);
-#endif
-
-	/* start RTC */
-	SHREG_RCR2 = SHREG_RCR2_RESET|SHREG_RCR2_ENABLE|SHREG_RCR2_START;
-
-	splx(s);
-
-#ifdef DEBUG
-        printf("setclock: %d/%d/%d/%d/%d/%d(%d)\n", dt.dt_year % 100,
-	       dt.dt_mon, dt.dt_day, dt.dt_hour, dt.dt_min, dt.dt_sec,
-	       dt.dt_wday);
-#endif
-}
-
-void
-setstatclockrate(arg)
-	int arg;
-{
-}
+#endif /* SH4 */

@@ -1,4 +1,4 @@
-/*	$NetBSD: rec_open.c,v 1.11 1998/05/07 19:24:21 kleink Exp $	*/
+/*	$NetBSD: rec_open.c,v 1.17 2008/09/11 12:58:00 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -36,20 +32,19 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-#if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)rec_open.c	8.10 (Berkeley) 9/1/94";
-#else
-__RCSID("$NetBSD: rec_open.c,v 1.11 1998/05/07 19:24:21 kleink Exp $");
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
 #endif
-#endif /* LIBC_SCCS and not lint */
+
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: rec_open.c,v 1.17 2008/09/11 12:58:00 joerg Exp $");
 
 #include "namespace.h"
 #include <sys/types.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 
+#include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -61,12 +56,8 @@ __RCSID("$NetBSD: rec_open.c,v 1.11 1998/05/07 19:24:21 kleink Exp $");
 #include "recno.h"
 
 DB *
-__rec_open(fname, flags, mode, openinfo, dflags)
-	const char *fname;
-	int flags;
-	mode_t mode;
-	const RECNOINFO *openinfo;
-	int dflags;
+__rec_open(const char *fname, int flags, mode_t mode, const RECNOINFO *openinfo,
+    int dflags)
 {
 	BTREE *t;
 	BTREEINFO btopeninfo;
@@ -76,12 +67,16 @@ __rec_open(fname, flags, mode, openinfo, dflags)
 	int rfd = -1;	/* pacify gcc */
 	int sverrno;
 
+	dbp = NULL;
 	/* Open the user's file -- if this fails, we're done. */
-	if (fname != NULL && (rfd = open(fname, flags, mode)) < 0)
-		return (NULL);
+	if (fname != NULL) {
+		if ((rfd = open(fname, flags, mode)) == -1)
+			return (NULL);
+		if (fcntl(rfd, F_SETFD, FD_CLOEXEC) == -1)
+			goto err;
+	}
 
 	/* Create a btree in memory (backed by disk). */
-	dbp = NULL;
 	if (openinfo) {
 		if (openinfo->flags & ~(R_FIXEDLEN | R_NOKEY | R_SNAPSHOT))
 			goto einval;
@@ -230,8 +225,7 @@ err:	sverrno = errno;
 }
 
 int
-__rec_fd(dbp)
-	const DB *dbp;
+__rec_fd(const DB *dbp)
 {
 	BTREE *t;
 

@@ -1,12 +1,12 @@
 /*
- * Written by J.T. Conklin <jtc@netbsd.org>.
+ * Written by J.T. Conklin <jtc@NetBSD.org>.
  * Public domain.
  */
 
 #include <machine/asm.h>
 
 #if defined(LIBC_SCCS)
-	RCSID("$NetBSD: bcmp.S,v 1.7 1995/04/28 22:57:54 jtc Exp $")
+	RCSID("$NetBSD: bcmp.S,v 1.9 2007/11/12 18:41:59 ad Exp $")
 #endif
 
 ENTRY(bcmp)
@@ -15,7 +15,6 @@ ENTRY(bcmp)
 	movl	12(%esp),%edi
 	movl	16(%esp),%esi
 	xorl	%eax,%eax		/* clear return value */
-	cld				/* set compare direction forward */
 
 	movl	20(%esp),%ecx		/* compare by words */
 	shrl	$2,%ecx

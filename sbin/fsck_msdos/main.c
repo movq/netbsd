@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.11 1997/10/17 11:20:03 ws Exp $	*/
+/*	$NetBSD: main.c,v 1.21 2008/06/13 20:46:09 martin Exp $	*/
 
 /*
  * Copyright (C) 1995 Wolfgang Solfrank
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Martin Husemann
- *	and Wolfgang Solfrank.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHORS ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -35,47 +28,49 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: main.c,v 1.11 1997/10/17 11:20:03 ws Exp $");
+__RCSID("$NetBSD: main.c,v 1.21 2008/06/13 20:46:09 martin Exp $");
 #endif /* not lint */
 
 #include <stdlib.h>
 #include <string.h>
-#include <ctype.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <errno.h>
-#if __STDC__
 #include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
+#include <signal.h>
 
 #include "fsutil.h"
 #include "ext.h"
+#include "exitvalues.h"
 
 int alwaysno;		/* assume "no" for all questions */
 int alwaysyes;		/* assume "yes" for all questions */
 int preen;		/* set when preening */
 int rdonly;		/* device is opened read only (supersedes above) */
 
-static void usage __P((void));
-int main __P((int, char **));
+static void usage(void) __dead;
 
 static void
-usage()
+usage(void)
 {
-	errexit("Usage: fsck_msdos [-fnpy] filesystem ... \n");
+    	(void)fprintf(stderr, "Usage: %s [-fnpy] filesystem ... \n",
+	    getprogname());
+	exit(FSCK_EXIT_USAGE);
+}
+
+static void
+catch(int n)
+{
+	exit(FSCK_EXIT_SIGNALLED);
 }
 
 int
-main(argc, argv)
-	int argc;
-	char **argv;
+main(int argc, char **argv)
 {
-	int ret = 0, erg;
+	int ret = FSCK_EXIT_OK, erg;
 	int ch;
 
-	while ((ch = getopt(argc, argv, "pynf")) != -1) {
+	while ((ch = getopt(argc, argv, "pPqynf")) != -1) {
 		switch (ch) {
 		case 'f':
 			/*
@@ -97,6 +92,12 @@ main(argc, argv)
 			alwaysyes = alwaysno = 0;
 			break;
 
+		case 'P':		/* Progress meter not implemented. */
+			break;
+
+		case 'q':		/* Quiet not implemented. */
+			break;
+
 		default:
 			usage();
 			break;
@@ -107,6 +108,11 @@ main(argc, argv)
 
 	if (!argc)
 		usage();
+
+	if (signal(SIGINT, SIG_IGN) != SIG_IGN)
+		(void) signal(SIGINT, catch);
+	if (preen)
+		(void) signal(SIGQUIT, catch);
 
 	while (--argc >= 0) {
 		setcdevname(*argv, preen);
@@ -121,14 +127,7 @@ main(argc, argv)
 
 /*VARARGS*/
 int
-#if __STDC__
 ask(int def, const char *fmt, ...)
-#else
-ask(def, fmt, va_alist)
-	int def;
-	char *fmt;
-	va_dcl
-#endif
 {
 	va_list ap;
 
@@ -143,12 +142,9 @@ ask(def, fmt, va_alist)
 		return def;
 	}
 
-#if __STDC__
 	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
 	vsnprintf(prompt, sizeof(prompt), fmt, ap);
+	va_end(ap);
 	if (alwaysyes || rdonly) {
 		printf("%s? %s\n", prompt, rdonly ? "no" : "yes");
 		return !rdonly;

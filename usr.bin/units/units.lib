@@ -1,4 +1,4 @@
-/	$NetBSD: units.lib,v 1.5 1999/03/15 16:02:55 hubertf Exp $
+/	$NetBSD: units.lib,v 1.14 2007/02/15 22:37:27 dogcow Exp $
 
 / primitive units
 
@@ -199,6 +199,31 @@ brfloz			1|20 brpint
 brpeck			554.84 in3 fuzz
 brbushel		4 brpeck
 
+/ Bottles
+
+bottle			750 milliliter
+/bottle			fifth
+
+miniature		100 milliliter
+split			1|4 bottle
+half			1|2 bottle
+magnum			2 bottle
+jeroboam		4 bottle
+rehoboam		6 bottle
+methuselah		8 bottle
+salmanazar		12 bottle
+balthazar		16 bottle
+nebuchadnezzar		20 bottle
+sovereign		34 bottle
+
+/ Bottles - alternate names and spellings
+
+pony			split
+fillette		half
+tappit-hen		3 imperial
+rheoboam		rehoboam
+shalmaneser		salmanazar
+
 / Energy Work
 
 newton			kg-m/sec2
@@ -232,9 +257,7 @@ lux			cd sr/m2
 $			dollar
 argentinapeso		$
 australiadollar		.66 $
-austriaschilling	.83 $
 bahraindinar		2.6522 $
-belgiumfranc		.028 $
 brazilcruzeiro		.000019 $
 britainpound		1.49 $
 canadadollar		.77 $
@@ -245,18 +268,12 @@ colombiapeso		.001495 $
 denmarkkrone		.15 $
 ecuadorsucre		.000539 $
 europeeuro		0.9142 $
-finlandmarkka		.17 $
-francefranc		.17 $
-germanymark		.58 $
 greatbritainpound	britainpound
-greecedrachma		.0043 $
 hongkongdollar		.13  $
 hungaryforint		.011 $
 indiarupee		.03211 $
 indonesiarupiah		.0004782 $
-irelandpunt		1.43 $
 israelshekel		.3642 $
-italylira		.00064 $
 japanyen		.0093 $
 jordandinar		1.4682 $
 kuwaitdinar		3.3173 $
@@ -264,20 +281,17 @@ lebanonpound		.000578 $
 malaysiaringgit		.338 $
 maltalira		2.6042 $
 mexicopeso		.3205128 $
-netherlandguilder	.52 $
 newzealanddollar	.539 $
 norwaykrone		.139 $
 pakistanrupee		.037 $
 perunewsol		.5065 $
 philippinespeso		.03738 $
 polandzloty		.000059 $
-portugalescudo		.00617 $
 saudiarabiariyal	.26702 $
 singaporedollar		.6157 $
 slovakkoruna		.034 $
 southamericarand	.21 $
 southkoreawon		.001 $
-spainpeseta		.007 $
 swedenkrona		.13 $
 switzerlandfranc	.66 $
 taiwandollar		.038285 $
@@ -286,6 +300,21 @@ turkeylira		.0000929 $
 unitedarabdirham	.2723 $
 uruguaynewpeso		.246852 $
 venezuelabolivar	.011 $
+
+/ The following currencies are locked to the Euro:
+/ <URL:http://www.ecb.int/change/conversion.htm>
+belgiumfranc		1|40.3399 euro
+germanymark		1|1.95583 euro
+spainpeseta		1|166.386 euro
+francefranc		1|6.55957 euro
+irelandpunt		1|.787564 euro
+italylira		1|1936.27 euro
+luxembourgfranc		1|40.3399 euro
+netherlandsguilder	1|2.20371 euro
+austriaschilling	1|13.7603 euro
+portugalescudo		1|200.482 euro
+finlandmarkka		1|5.94573 euro
+greecedrachma		1|340.750 euro
 
 mark			germanymark
 euro			europeeuro
@@ -373,7 +402,7 @@ cup			1|2 pt
 curie			3.7e+10 /sec
 dalton			amu
 decade			10 yr
-dipotre			/m
+diopter			/m
 displacementton		35 ft3
 doppelzentner		100 kg
 dozen			12
@@ -415,7 +444,7 @@ hectare			1e+4 m2
 hefnercandle		.92 cd
 hertz			/sec
 Hz			hertz
-hogshead		2 barrel
+hogshead		63 gallon
 hd			hogshead
 homestead		1|4 mi2
 horsepower		550 ft-lb-g/sec
@@ -423,7 +452,6 @@ hp			horsepower
 hyl			gm force sec2/m
 hz			/sec
 imaginarycubicfoot	1.4 ft3
-jeroboam		4|5 gal
 karat			1|24
 kcal			kilocal
 kcalorie		kilocal
@@ -443,7 +471,6 @@ longhundredweight	112 lb
 longquarter		28 lb
 lusec			1e-6 mm-hg m3/s
 mach			331.46 m/sec
-magnum			2 qt
 marineleague		3 nmile
 maxwell			1e-8 weber
 metriccarat		200 mg
@@ -451,7 +478,7 @@ mgd			megagal/day
 mh			millihenry
 mhz			1e+6 /sec
 mil			1e-3 in
-millenium		1000 year
+millennium		1000 year
 minersinch		1.5 ft3/min
 minim			1|60 fldr
 mo			month
@@ -491,20 +518,23 @@ quarter			9 in
 quartersection		1|4 mi2
 quintal			100 kg
 quire			25
+rackunit		1.75 in
 rad			100 erg/gm
 ream			500
 registerton		100 ft3
-rehoboam		156 floz
 rhe			10 m2/nt-sec
 rontgen			2.58e-4 curie/kg
 rood			1.21e+3 yd
 rope			20 ft
+RU			rackunit
 rutherford		1e+6 /sec
 rydberg			1.36054e+1 ev
 sabin			1 ft2
 sack			3 bu
+score			20
 seam			8 bu
 section			mi2
+shed			1e-24 barn
 shippington		40 ft3
 shorthundredweight	100 lb
 shortquarter		25 lb
@@ -513,6 +543,7 @@ sigma			microsec
 skein			120 yd
 skot			1e-3 apostilb
 slug			lb-g-sec2/ft
+smoot			67 in
 span			9 in
 spat			4 pi sr
 spindle			14400 yd
@@ -538,6 +569,7 @@ tonne			1e+6 gm
 torr			mm hg
 township		36 mi2
 tun			8 barrel
+U			rackunit
 water			gram g / cc
 wey			40 bu
 weymass			252 lb

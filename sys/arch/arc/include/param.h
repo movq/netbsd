@@ -1,10 +1,43 @@
-/*	$NetBSD: param.h,v 1.13 2000/02/11 19:25:14 thorpej Exp $	*/
+/*	$NetBSD: param.h,v 1.24 2005/12/11 12:16:39 christos Exp $	*/
 /*      $OpenBSD: param.h,v 1.9 1997/04/30 09:54:15 niklas Exp $ */
 
 /*
- * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Systems Programming Group of the University of Utah Computer
+ * Science Department and Ralph Campbell.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ *	from: Utah Hdr: machparam.h 1.11 89/08/14
+ *	from: @(#)param.h	8.1 (Berkeley) 6/10/93
+ */
+/*
+ * Copyright (c) 1988 University of Utah.
  *
  * This code is derived from software contributed to Berkeley by
  * the Systems Programming Group of the University of Utah Computer
@@ -69,8 +102,7 @@
 #define	DEV_BSIZE	512
 #define	DEV_BSHIFT	9		/* log2(DEV_BSIZE) */
 #define BLKDEV_IOSIZE	2048
-/* XXX Maxphys temporary changed to 32K while SCSI driver is fixed. */
-#define	MAXPHYS		(32 * 1024)	/* max raw I/O transfer size */
+#define	MAXPHYS		(64 * 1024)	/* max raw I/O transfer size */
 
 #define	SSIZE		1		/* initial stack size/NBPG */
 #define	SINCR		1		/* increment of stack/NBPG */
@@ -87,20 +119,24 @@
 
 /*
  * Constants related to network buffer management.
- * MCLBYTES must be no larger than CLBYTES (the software page size), and,
+ * MCLBYTES must be no larger than NBPG (the software page size), and,
  * on machines that exchange pages of input or output buffers with mbuf
  * clusters (MAPPED_MBUFS), MCLBYTES must also be an integral multiple
  * of the hardware page size.
  */
-#define	MSIZE		128		/* size of an mbuf */
-#define	MCLSHIFT	11
-#define	MCLBYTES	(1 << MCLSHIFT)	/* enough for whole Ethernet packet */
-#define	MCLOFSET	(MCLBYTES - 1)
-#ifndef NMBCLUSTERS
+#define	MSIZE		256		/* size of an mbuf */
 
-#if defined(_KERNEL) && !defined(_LKM)
+#ifndef MCLSHIFT
+#define	MCLSHIFT	11		/* convert bytes to m_buf clusters */
+					/* 2K cluster can hold Ether frame */
+#endif	/* MCLSHIFT */
+
+#define	MCLBYTES	(1 << MCLSHIFT)	/* size of a m_buf cluster */
+
+#ifndef NMBCLUSTERS
+#if defined(_KERNEL_OPT)
 #include "opt_gateway.h"
-#endif /* _KERNEL && ! _LKM */
+#endif
 
 #ifdef GATEWAY
 #define	NMBCLUSTERS	2048		/* map size, max cluster allocation */
@@ -117,17 +153,9 @@
 #ifndef _LOCORE
 
 extern int cpuspeed;
-extern void delay __P((int n));
+void delay(unsigned int n);
 
-#if 0 /* XXX: should use mips_mcclock.c */
-#define	DELAY(n)	{ register int N = cpuspeed * (n); while (--N > 0); }
-#else
-/*
- *   Delay is based on an assumtion that each time in the loop
- *   takes 3 clocks. Three is for branch and subtract in the delay slot.
- */
-#define	DELAY(n)	{ register int N = cpuspeed * (n); while ((N -= 3) > 0); }
-#endif
+#define	DELAY(n)	delay(n)
 
 #include <machine/intr.h>
 

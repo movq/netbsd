@@ -1,4 +1,4 @@
-/* $NetBSD: a12dc.c,v 1.2 2000/03/06 21:36:05 thorpej Exp $ */
+/* $NetBSD: a12dc.c,v 1.19 2007/11/19 18:51:36 ad Exp $ */
 
 /* [Notice revision 2.2]
  * Copyright (c) 1997, 1998 Avalon Computer Systems, Inc.
@@ -59,11 +59,12 @@
  */
 
 #include "opt_avalon_a12.h"		/* Config options headers */
+#include "opt_kgdb.h"
 
 #ifndef BSIDE
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: a12dc.c,v 1.2 2000/03/06 21:36:05 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: a12dc.c,v 1.19 2007/11/19 18:51:36 ad Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -75,10 +76,12 @@ __KERNEL_RCSID(0, "$NetBSD: a12dc.c,v 1.2 2000/03/06 21:36:05 thorpej Exp $");
 #include <sys/user.h>
 #include <sys/uio.h>
 #include <sys/device.h>
+#include <sys/conf.h>
+#include <sys/kauth.h>
 
 #include <dev/cons.h>
 
-#include <machine/conf.h>
+#include <machine/cpuconf.h>
 #include <machine/autoconf.h>
 #include <machine/rpb.h>
 
@@ -99,11 +102,24 @@ struct a12dc_softc {
 	struct  device sc_dev;
 } a12dc_softc;
 
-struct cfattach a12dc_ca = {
-	sizeof(struct a12dc_softc), a12dcmatch, a12dcattach,
-};
+CFATTACH_DECL(a12dc, sizeof(struct a12dc_softc),
+    a12dcmatch, a12dcattach, NULL, NULL);
 
 extern	struct cfdriver a12dc_cd;
+
+dev_type_open(a12dcopen);
+dev_type_close(a12dcclose);
+dev_type_read(a12dcread);
+dev_type_write(a12dcwrite);
+dev_type_ioctl(a12dcioctl);
+dev_type_stop(a12dcstop);
+dev_type_tty(a12dctty);
+dev_type_poll(a12dcpoll);
+
+const struct cdevsw a12dc_cdevsw = {
+	a12dcopen, a12dcclose, a12dcread, a12dcwrite, a12dcioctl,
+	a12dcstop, a12dctty, a12dcpoll, nommap, ttykqfilter, D_TTY
+};
 
 int	a12dcfound;		/* There Can Be Only One. */
 
@@ -134,7 +150,6 @@ a12dcmatch(parent, match, aux)
 	struct pcibus_attach_args *pba = aux;
 
 	return	cputype == ST_AVALON_A12
-	    &&	strcmp(pba->pba_busname, a12dc_cd.cd_name) == 0
 	    &&	!a12dcfound;
 }
 
@@ -149,7 +164,7 @@ a12dcattach(parent, self, aux)
 	/* note that we've attached the chipset; can't have 2 A12Cs. */
 	a12dcfound = 1;
 
-	printf(": driver %s\n", "$Revision: 1.2 $");
+	printf(": driver %s\n", "$Revision: 1.19 $");
 
 	tp = a12dc_tty[0] = ttymalloc();
 	tp->t_oproc = a12dcstart;
@@ -247,10 +262,10 @@ static int did_init;
 }
 
 int
-a12dcopen(dev, flag, mode, p)
+a12dcopen(dev, flag, mode, l)
 	dev_t dev;
 	int flag, mode;
-	struct proc *p;
+	struct lwp *l;
 {
 	int unit = minor(dev);
 	struct tty *tp;
@@ -270,10 +285,8 @@ a12dcopen(dev, flag, mode, p)
 	} else
 		tp = a12dc_tty[unit];
 
-	if ((tp->t_state & TS_ISOPEN) &&
-	    (tp->t_state & TS_XCLUDE) &&
-	    p->p_ucred->cr_uid != 0)
-		return EBUSY;
+	if (kauth_authorize_device_tty(l->l_cred, KAUTH_DEVICE_TTY_OPEN, tp))
+		return (EBUSY);
 
 	s = spltty();
 
@@ -292,14 +305,11 @@ a12dcopen(dev, flag, mode, p)
 		/* XXX XXX XXX
 		a12_intr_register_icw(a12dcintr);
 		*/
-	} else if (tp->t_state&TS_XCLUDE && p->p_ucred->cr_uid != 0) {
-		splx(s);
-		return EBUSY;
 	}
 
 	splx(s);
 
-	return (*linesw[tp->t_line].l_open)(dev, tp);
+	return (*tp->t_linesw->l_open)(dev, tp);
 }
  
 int
@@ -311,7 +321,7 @@ a12dcclose(dev, flag, mode, p)
 	int unit = minor(dev);
 	struct tty *tp = a12dc_tty[unit];
 
-	(*linesw[tp->t_line].l_close)(tp, flag);
+	(*tp->t_linesw->l_close)(tp, flag);
 	ttyclose(tp);
 	return 0;
 }
@@ -324,7 +334,7 @@ a12dcread(dev, uio, flag)
 {
 	struct tty *tp = a12dc_tty[minor(dev)];
 
-	return ((*linesw[tp->t_line].l_read)(tp, uio, flag));
+	return ((*tp->t_linesw->l_read)(tp, uio, flag));
 }
  
 int
@@ -335,14 +345,25 @@ a12dcwrite(dev, uio, flag)
 {
 	struct tty *tp = a12dc_tty[minor(dev)];
  
-	return ((*linesw[tp->t_line].l_write)(tp, uio, flag));
+	return ((*tp->t_linesw->l_write)(tp, uio, flag));
+}
+
+int
+a12dcpoll(dev, events, p)
+	dev_t dev;
+	int events;
+	struct proc *p;
+{
+	struct tty *tp = a12dc_tty[minor(dev)];
+ 
+	return ((*tp->t_linesw->l_poll)(tp, events, p));
 }
  
 int
 a12dcioctl(dev, cmd, data, flag, p)
 	dev_t dev;
 	u_long cmd;
-	caddr_t data;
+	void *data;
 	int flag;
 	struct proc *p;
 {
@@ -350,14 +371,10 @@ a12dcioctl(dev, cmd, data, flag, p)
 	struct tty *tp = a12dc_tty[unit];
 	int error;
 
-	error = (*linesw[tp->t_line].l_ioctl)(tp, cmd, data, flag, p);
-	if (error >= 0)
+	error = (*tp->t_linesw->l_ioctl)(tp, cmd, data, flag, p);
+	if (error != EPASSTHROUGH)
 		return error;
-	error = ttioctl(tp, cmd, data, flag, p);
-	if (error >= 0)
-		return error;
-
-	return ENOTTY;
+	return ttioctl(tp, cmd, data, flag, p);
 }
 
 int
@@ -377,13 +394,7 @@ a12dcstart(tp)
 	s = spltty();
 	if (tp->t_state & (TS_TTSTOP | TS_BUSY))
 		goto out;
-	if (tp->t_outq.c_cc <= tp->t_lowat) {
-		if (tp->t_state & TS_ASLEEP) {
-			tp->t_state &= ~TS_ASLEEP;
-			wakeup((caddr_t)&tp->t_outq);
-		}
-		selwakeup(&tp->t_wsel);
-	}
+	ttypull(tp);
 	tp->t_state |= TS_BUSY;
 	while (tp->t_outq.c_cc != 0)
 		a12dccnputc(tp->t_dev, getc(&tp->t_outq));
@@ -420,7 +431,7 @@ a12dcintr(v)
 
 	while (a12dccnlookc(tp->t_dev, &c)) {
 		if (tp->t_state & TS_ISOPEN)
-			(*linesw[tp->t_line].l_rint)(c, tp);
+			(*tp->t_linesw->l_rint)(c, tp);
 	}
 #endif
 }
@@ -439,15 +450,12 @@ a12dctty(dev)
 int
 a12dccnattach()
 {
-	int i;
 	static struct consdev a12dccons = {
 		NULL, NULL, a12dccngetc, a12dccnputc, a12dccnpollc, NULL,
 		    NODEV, CN_NORMAL
 	};
 
-	for(i = 0; i < nchrdev; ++i)
-		if (cdevsw[i].d_open == a12dcopen)
-			a12dccons.cn_dev = makedev(i, 0);
+	a12dccons.cn_dev = makedev(cdevsw_lookup_major(&a12dc_cdevsw), 0);
 
 	cn_tab = &a12dccons;
 	return 0;
@@ -508,7 +516,7 @@ check_cdr()
                 break;
             case CHANNEL_KDATA:
 		if(!kmsg)
-			printf("Ignoring new kernel\n");;
+			printf("Ignoring new kernel\n");
 		kmsg = 1;
 		break;
             case CHANNEL_KMARK:

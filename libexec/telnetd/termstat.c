@@ -1,4 +1,4 @@
-/*	$NetBSD: termstat.c,v 1.6 1997/10/08 08:45:14 mrg Exp $	*/
+/*	$NetBSD: termstat.c,v 1.14 2005/02/06 05:58:21 perry Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,26 +34,25 @@
 #if 0
 static char sccsid[] = "@(#)termstat.c	8.2 (Berkeley) 5/30/95";
 #else
-__RCSID("$NetBSD: termstat.c,v 1.6 1997/10/08 08:45:14 mrg Exp $");
+__RCSID("$NetBSD: termstat.c,v 1.14 2005/02/06 05:58:21 perry Exp $");
 #endif
 #endif /* not lint */
 
 #include "telnetd.h"
 
+#ifdef ENCRYPTION
+#include <libtelnet/encrypt.h>
+#endif
+
 /*
  * local variables
  */
 int def_tspeed = -1, def_rspeed = -1;
-#ifdef	TIOCSWINSZ
 int def_row = 0, def_col = 0;
-#endif
 #ifdef	LINEMODE
 static int _terminit = 0;
 #endif	/* LINEMODE */
 
-#if	defined(CRAY2) && defined(UNICOS5)
-int	newmap = 1;	/* nonzero if \n maps to ^M^J */
-#endif
 
 #ifdef	LINEMODE
 /*
@@ -136,18 +131,11 @@ int	newmap = 1;	/* nonzero if \n maps to ^M^J */
  *	   then linemode is off, if server won't SGA, then linemode
  *	   is on.
  */
-	void
-localstat()
+void
+localstat(void)
 {
 	int need_will_echo = 0;
 
-#if	defined(CRAY2) && defined(UNICOS5)
-	/*
-	 * Keep track of that ol' CR/NL mapping while we're in the
-	 * neighborhood.
-	 */
-	newmap = tty_isnewmap();
-#endif	/* defined(CRAY2) && defined(UNICOS5) */
 
 	/*
 	 * Check for state of BINARY options.
@@ -187,6 +175,25 @@ localstat()
 		tty_setlinemode(uselinemode);
 	}
 
+#ifdef	ENCRYPTION
+	/*
+	 * If the terminal is not echoing, but editing is enabled,
+	 * something like password input is going to happen, so
+	 * if we the other side is not currently sending encrypted
+	 * data, ask the other side to start encrypting.
+	 */
+	if (his_state_is_will(TELOPT_ENCRYPT)) {
+		static int enc_passwd = 0;
+		if (uselinemode && !tty_isecho() && tty_isediting()
+		    && (enc_passwd == 0) && !decrypt_input) {
+			encrypt_send_request_start();
+			enc_passwd = 1;
+		} else if (enc_passwd) {
+			encrypt_send_request_end();
+			enc_passwd = 0;
+		}
+	}
+#endif	/* ENCRYPTION */
 
 	/*
 	 * Do echo mode handling as soon as we know what the
@@ -272,10 +279,9 @@ localstat()
 # endif	/* KLUDGELINEMODE */
 			send_do(TELOPT_LINEMODE, 1);
 			/* send along edit modes */
-			(void) sprintf(nfrontp, "%c%c%c%c%c%c%c", IAC, SB,
+			(void) output_data("%c%c%c%c%c%c%c", IAC, SB,
 				TELOPT_LINEMODE, LM_MODE, useeditmode,
 				IAC, SE);
-			nfrontp += 7;
 			editmode = useeditmode;
 # ifdef	KLUDGELINEMODE
 		}
@@ -301,10 +307,9 @@ localstat()
 			/*
 			 * Send along appropriate edit mode mask.
 			 */
-			(void) sprintf(nfrontp, "%c%c%c%c%c%c%c", IAC, SB,
+			(void) output_data("%c%c%c%c%c%c%c", IAC, SB,
 				TELOPT_LINEMODE, LM_MODE, useeditmode,
 				IAC, SE);
-			nfrontp += 7;
 			editmode = useeditmode;
 		}
 
@@ -342,26 +347,24 @@ done:
  *
  * Check for changes to flow control
  */
-	void
-flowstat()
+void
+flowstat(void)
 {
 	if (his_state_is_will(TELOPT_LFLOW)) {
 		if (tty_flowmode() != flowmode) {
 			flowmode = tty_flowmode();
-			(void) sprintf(nfrontp, "%c%c%c%c%c%c",
+			(void) output_data("%c%c%c%c%c%c",
 					IAC, SB, TELOPT_LFLOW,
 					flowmode ? LFLOW_ON : LFLOW_OFF,
 					IAC, SE);
-			nfrontp += 6;
 		}
 		if (tty_restartany() != restartany) {
 			restartany = tty_restartany();
-			(void) sprintf(nfrontp, "%c%c%c%c%c%c",
+			(void) output_data("%c%c%c%c%c%c",
 					IAC, SB, TELOPT_LFLOW,
 					restartany ? LFLOW_RESTART_ANY
 						   : LFLOW_RESTART_XON,
 					IAC, SE);
-			nfrontp += 6;
 		}
 	}
 }
@@ -374,9 +377,8 @@ flowstat()
  * at a time, and if using kludge linemode, then only linemode may be
  * affected.
  */
-	void
-clientstat(code, parm1, parm2)
-	register int code, parm1, parm2;
+void
+clientstat(int code, int parm1, int parm2)
 {
 
 	/*
@@ -427,16 +429,15 @@ clientstat(code, parm1, parm2)
 				useeditmode = 0;
 				if (tty_isediting())
 					useeditmode |= MODE_EDIT;
-				if (tty_istrapsig)
+				if (tty_istrapsig())
 					useeditmode |= MODE_TRAPSIG;
 				if (tty_issofttab())
 					useeditmode |= MODE_SOFT_TAB;
 				if (tty_islitecho())
 					useeditmode |= MODE_LIT_ECHO;
-				(void) sprintf(nfrontp, "%c%c%c%c%c%c%c", IAC,
+				(void) output_data("%c%c%c%c%c%c%c", IAC,
 					SB, TELOPT_LINEMODE, LM_MODE,
 							useeditmode, IAC, SE);
-				nfrontp += 7;
 				editmode = useeditmode;
 			}
 
@@ -452,7 +453,7 @@ clientstat(code, parm1, parm2)
 
 	case LM_MODE:
 	    {
-		register int ack, changed;
+		int ack, changed;
 
 		/*
 		 * Client has sent along a mode mask.  If it agrees with
@@ -492,11 +493,10 @@ clientstat(code, parm1, parm2)
 			set_termbuf();
 
  			if (!ack) {
- 				(void) sprintf(nfrontp, "%c%c%c%c%c%c%c", IAC,
+ 				(void) output_data("%c%c%c%c%c%c%c", IAC,
 					SB, TELOPT_LINEMODE, LM_MODE,
  					useeditmode|MODE_ACK,
  					IAC, SE);
- 				nfrontp += 7;
  			}
 
 			editmode = useeditmode;
@@ -508,7 +508,6 @@ clientstat(code, parm1, parm2)
 #endif	/* LINEMODE */
 
 	case TELOPT_NAWS:
-#ifdef	TIOCSWINSZ
 	    {
 		struct winsize ws;
 
@@ -531,7 +530,6 @@ clientstat(code, parm1, parm2)
 		ws.ws_row = parm2;
 		(void) ioctl(pty, TIOCSWINSZ, (char *)&ws);
 	    }
-#endif	/* TIOCSWINSZ */
 
 		break;
 
@@ -549,7 +547,7 @@ clientstat(code, parm1, parm2)
 		/*
 		 * Change terminal speed as requested by client.
 		 * We set the receive speed first, so that if we can't
-		 * store seperate receive and transmit speeds, the transmit
+		 * store separate receive and transmit speeds, the transmit
 		 * speed will take precedence.
 		 */
 		tty_rspeed(parm2);
@@ -565,33 +563,11 @@ clientstat(code, parm1, parm2)
 		break;
 	}  /* end of switch */
 
-#if	defined(CRAY2) && defined(UNICOS5)
-	/*
-	 * Just in case of the likely event that we changed the pty state.
-	 */
-	rcv_ioctl();
-#endif	/* defined(CRAY2) && defined(UNICOS5) */
 
 	netflush();
 
 }  /* end of clientstat */
 
-#if	defined(CRAY2) && defined(UNICOS5)
-	void
-termstat()
-{
-	needtermstat = 1;
-}
-
-	void
-_termstat()
-{
-	needtermstat = 0;
-	init_termbuf();
-	localstat();
-	rcv_ioctl();
-}
-#endif	/* defined(CRAY2) && defined(UNICOS5) */
 
 #ifdef	LINEMODE
 /*
@@ -602,8 +578,8 @@ _termstat()
  * function is called when the pty state has been processed for the first time.
  * It calls other functions that do things that were deferred in each module.
  */
-	void
-defer_terminit()
+void
+defer_terminit(void)
 {
 
 	/*
@@ -614,7 +590,6 @@ defer_terminit()
 		def_tspeed = def_rspeed = 0;
 	}
 
-#ifdef	TIOCSWINSZ
 	if (def_col || def_row) {
 		struct winsize ws;
 
@@ -623,7 +598,6 @@ defer_terminit()
 		ws.ws_row = def_row;
 		(void) ioctl(pty, TIOCSWINSZ, (char *)&ws);
 	}
-#endif
 
 	/*
 	 * The only other module that currently defers anything.
@@ -637,8 +611,8 @@ defer_terminit()
  *
  * Returns true if the pty state has been processed yet.
  */
-	int
-terminit()
+int
+terminit(void)
 {
 	return(_terminit);
 

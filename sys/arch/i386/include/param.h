@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.40 2000/02/11 19:25:15 thorpej Exp $	*/
+/*	$NetBSD: param.h,v 1.67.30.3 2009/02/16 03:06:21 snj Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,16 +34,15 @@
  *	@(#)param.h	5.8 (Berkeley) 6/28/91
  */
 
+#ifndef _I386_PARAM_H_
+#define _I386_PARAM_H_
+
 /*
  * Machine dependent constants for Intel 386.
  */
 
 #ifdef _KERNEL
-#ifdef _LOCORE
-#include <machine/psl.h>
-#else
 #include <machine/cpu.h>
-#endif
 #endif
 
 #define	_MACHINE	i386
@@ -68,7 +63,8 @@
  *
  */
 #define ALIGNBYTES		(sizeof(int) - 1)
-#define ALIGN(p)		(((u_int)(p) + ALIGNBYTES) &~ ALIGNBYTES)
+#define ALIGN(p)		(((u_int)(u_long)(p) + ALIGNBYTES) &~ \
+    ALIGNBYTES)
 #define ALIGNED_POINTER(p,t)	1
 
 #define	PGSHIFT		12		/* LOG2(NBPG) */
@@ -76,9 +72,20 @@
 #define	PGOFSET		(NBPG-1)	/* byte offset into page */
 #define	NPTEPG		(NBPG/(sizeof (pt_entry_t)))
 
-#define	KERNBASE	0xc0000000	/* start of kernel virtual space */
-#define	KERNTEXTOFF	0xc0100000	/* start of kernel text */
-#define	BTOPKERNBASE	((u_long)KERNBASE >> PGSHIFT)
+#if defined(_KERNEL_OPT)
+#include "opt_kernbase.h"
+#endif /* defined(_KERNEL_OPT) */
+
+#ifdef KERNBASE_LOCORE
+#error "You should only re-define KERNBASE"
+#endif
+
+#ifndef	KERNBASE
+#define	KERNBASE	0xc0000000UL	/* start of kernel virtual space */
+#endif
+
+#define	KERNTEXTOFF	(KERNBASE + 0x100000) /* start of kernel text */
+#define	BTOPKERNBASE	(KERNBASE >> PGSHIFT)
 
 #define	DEV_BSHIFT	9		/* log2(DEV_BSIZE) */
 #define	DEV_BSIZE	(1 << DEV_BSHIFT)
@@ -89,11 +96,19 @@
 
 #define	SSIZE		1		/* initial stack size/NBPG */
 #define	SINCR		1		/* increment of stack/NBPG */
-#define	UPAGES		2		/* pages of u-area */
+
+#ifndef UPAGES
+# ifdef DIAGNOSTIC
+#  define	UPAGES		3	/* 2 + 1 page for redzone */
+# else
+#  define	UPAGES		2	/* normal pages of u-area */
+# endif /* DIAGNOSTIC */
+#endif /* !defined(UPAGES) */
 #define	USPACE		(UPAGES * NBPG)	/* total size of u-area */
+#define	INTRSTACKSIZE	8192
 
 #ifndef MSGBUFSIZE
-#define MSGBUFSIZE	2*NBPG		/* default message buffer size */
+#define MSGBUFSIZE	8*NBPG		/* default message buffer size */
 #endif
 
 /*
@@ -103,26 +118,32 @@
  * clusters (MAPPED_MBUFS), MCLBYTES must also be an integral multiple
  * of the hardware page size.
  */
-#define	MSIZE		128		/* size of an mbuf */
+#define	MSIZE		256		/* size of an mbuf */
 
 #ifndef MCLSHIFT
-# define	MCLSHIFT	11	/* convert bytes to m_buf clusters */
+#define	MCLSHIFT	11		/* convert bytes to m_buf clusters */
+					/* 2K cluster can hold Ether frame */
 #endif	/* MCLSHIFT */
 
 #define	MCLBYTES	(1 << MCLSHIFT)	/* size of a m_buf cluster */
-#define	MCLOFSET	(MCLBYTES - 1)	/* offset within a m_buf cluster */
 
 #ifndef NMBCLUSTERS
-
-#if defined(_KERNEL) && !defined(_LKM)
+#if defined(_KERNEL_OPT)
 #include "opt_gateway.h"
-#endif /* _KERNEL && ! _LKM */
+#endif
 
 #ifdef GATEWAY
-#define	NMBCLUSTERS	512		/* map size, max cluster allocation */
+#define	NMBCLUSTERS	2048		/* map size, max cluster allocation */
 #else
-#define	NMBCLUSTERS	256		/* map size, max cluster allocation */
+#define	NMBCLUSTERS	1024		/* map size, max cluster allocation */
 #endif
+#endif
+
+#ifndef NFS_RSIZE
+#define NFS_RSIZE	32768
+#endif
+#ifndef NFS_WSIZE
+#define NFS_WSIZE	32768
 #endif
 
 /*
@@ -132,34 +153,17 @@
 #define	NKMEMPAGES_MIN_DEFAULT	((8 * 1024 * 1024) >> PAGE_SHIFT)
 #define	NKMEMPAGES_MAX_DEFAULT	((128 * 1024 * 1024) >> PAGE_SHIFT)
 
-/* pages ("clicks") to disk blocks */
-#define	ctod(x)		((x) << (PGSHIFT - DEV_BSHIFT))
-#define	dtoc(x)		((x) >> (PGSHIFT - DEV_BSHIFT))
-
-/* bytes to pages */
-#define	ctob(x)		((x) << PGSHIFT)
-#define	btoc(x)		(((x) + PGOFSET) >> PGSHIFT)
-
-/* bytes to disk blocks */
-#define	dbtob(x)	((x) << DEV_BSHIFT)
-#define	btodb(x)	((x) >> DEV_BSHIFT)
-
-/*
- * Map a ``block device block'' to a file system block.
- * This should be device dependent, and should use the bsize
- * field from the disk label.
- * For now though just use DEV_BSIZE.
- */
-#define	bdbtofsb(bn)	((bn) / (BLKDEV_IOSIZE / DEV_BSIZE))
-
 /*
  * Mach derived conversion macros
  */
-#define	i386_round_pdr(x)	((((unsigned)(x)) + PDOFSET) & ~PDOFSET)
-#define	i386_trunc_pdr(x)	((unsigned)(x) & ~PDOFSET)
-#define	i386_btod(x)		((unsigned)(x) >> PDSHIFT)
-#define	i386_dtob(x)		((unsigned)(x) << PDSHIFT)
-#define	i386_round_page(x)	((((unsigned)(x)) + PGOFSET) & ~PGOFSET)
-#define	i386_trunc_page(x)	((unsigned)(x) & ~PGOFSET)
-#define	i386_btop(x)		((unsigned)(x) >> PGSHIFT)
-#define	i386_ptob(x)		((unsigned)(x) << PGSHIFT)
+#define	x86_round_pdr(x) \
+	((((unsigned long)(x)) + (NBPD_L2 - 1)) & ~(NBPD_L2 - 1))
+#define	x86_trunc_pdr(x)	((unsigned long)(x) & ~(NBPD_L2 - 1))
+#define	x86_btod(x)		((unsigned long)(x) >> L2_SHIFT)
+#define	x86_dtob(x)		((unsigned long)(x) << L2_SHIFT)
+#define	x86_round_page(x)	((((unsigned long)(x)) + PGOFSET) & ~PGOFSET)
+#define	x86_trunc_page(x)	((unsigned long)(x) & ~PGOFSET)
+#define	x86_btop(x)		((unsigned long)(x) >> PGSHIFT)
+#define	x86_ptob(x)		((unsigned long)(x) << PGSHIFT)
+
+#endif /* _I386_PARAM_H_ */

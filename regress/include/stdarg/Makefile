@@ -1,12 +1,12 @@
-#	$NetBSD: Makefile,v 1.5 1999/02/13 02:54:31 lukem Exp $
+#	$NetBSD: Makefile,v 1.7 2002/09/18 05:41:36 lukem Exp $
 
-PROG=	stdargtest
-SRCS=	argtest.c
-MKMAN=	no
+NOMAN=		# defined
 
-CPPFLAGS+= -DSTDARG
+PROG=		stdargtest
+SRCS=		argtest.c
+CPPFLAGS+=	-DSTDARG
 
-.PATH:	${.CURDIR}/../stdarg
+.PATH:		${.CURDIR}/../stdarg
 
 regress: ${PROG}
 	./${PROG}

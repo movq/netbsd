@@ -1,4 +1,4 @@
-/*	$NetBSD: dnkbd.c,v 1.4 1997/10/09 08:57:11 jtc Exp $	*/
+/*	$NetBSD: dnkbd.c,v 1.12 2008/04/28 20:23:19 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -45,9 +38,10 @@
 #include <sys/param.h>
 
 #include <hp300/dev/frodoreg.h>		/* for apci offsets */
-#include <hp300/dev/dcareg.h>		/* for the register bit defintions */
-#include <hp300/dev/apcireg.h>		/* for the apci registers */
+#include <hp300/dev/intioreg.h>		/* for frodo offsets */
 
+#include <hp300/stand/common/dcareg.h>	/* for the register bit definitions */
+#include <hp300/stand/common/apcireg.h>	/* for the apci registers */
 #include <hp300/stand/common/samachdep.h>
 #include <hp300/stand/common/kbdvar.h>
 
@@ -98,7 +92,7 @@ u_char dnkbd_keymap[] = {
 int	dnkbd_ignore;		/* for ignoring mouse packets */
 
 int
-dnkbd_getc()
+dnkbd_getc(void)
 {
 	struct apciregs *apci =
 	    (struct apciregs *)IIOV(FRODO_BASE + FRODO_APCI_OFFSET(0));
@@ -115,13 +109,13 @@ dnkbd_getc()
 		/* Ignoring mouse? */
 		if (dnkbd_ignore) {
 			dnkbd_ignore--;
-			return (0);
+			return 0;
 		}
 
 		/* Is this the start of a mouse packet? */
 		if (c == 0xdf) {
 			dnkbd_ignore = 3;	/* 3 bytes of junk */
-			return (0);
+			return 0;
 		}
 
 		/* It's a keyboard event. */
@@ -141,12 +135,12 @@ dnkbd_getc()
 		}
 	}
 
-	return (c);
+	return c;
 }
 #endif /* SMALL */
 
 void
-dnkbd_nmi()
+dnkbd_nmi(void)
 {
 
 	/*
@@ -155,7 +149,7 @@ dnkbd_nmi()
 }
 
 int
-dnkbd_init()
+dnkbd_init(void)
 {
 
 	/*
@@ -167,19 +161,19 @@ dnkbd_init()
 	case HP_433:
 		break;
 	default:
-		return (0);
+		return 0;
 	}
 
 	/*
 	 * Look for a Frodo utility chip.  If we find one, assume there
 	 * is a Domain keyboard attached.
 	 */
-	if (badaddr((caddr_t)IIOV(FRODO_BASE + FRODO_APCI_OFFSET(0))))
-		return (0);
+	if (badaddr((void *)IIOV(FRODO_BASE + FRODO_APCI_OFFSET(0))))
+		return 0;
 
 	/*
 	 * XXX Any other initialization?  This appears to work ok.
 	 */
-	return (1);
+	return 1;
 }
 #endif /* ITECONSOLE && DOMAIN_KEYBOARD */

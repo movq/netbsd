@@ -1,4 +1,4 @@
-/*	$NetBSD: umap.h,v 1.9 1999/07/08 01:19:06 wrstuden Exp $	*/
+/*	$NetBSD: umap.h,v 1.16 2008/06/28 01:34:06 rumble Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -60,12 +56,12 @@ struct umap_args {
 #ifdef _KERNEL
 
 struct umap_mount {
-	struct layer_mount lm;		
+	struct layer_mount lm;
 	int             info_nentries;  /* number of uid mappings */
 	int		info_gnentries;	/* number of gid mappings */
-	u_long		info_mapdata[MAPFILEENTRIES][2]; /* mapping data for 
+	u_long		info_mapdata[MAPFILEENTRIES][2]; /* mapping data for
 	    user mapping in ficus */
-	u_long		info_gmapdata[GMAPFILEENTRIES][2]; /*mapping data for 
+	u_long		info_gmapdata[GMAPFILEENTRIES][2]; /*mapping data for
 	    group mapping in ficus */
 };
 #define	umapm_vfs		lm.layerm_vfs
@@ -88,8 +84,8 @@ struct umap_node {
 	struct	layer_node	ln;
 };
 
-u_long umap_reverse_findid __P((u_long id, u_long map[][2], int nentries));
-void umap_mapids __P((struct mount *v_mount, struct ucred *credp));
+u_long umap_reverse_findid(u_long id, u_long map[][2], int nentries);
+void umap_mapids(struct mount *v_mount, kauth_cred_t credp);
 
 #define	umap_hash	ln.layer_hash
 #define	umap_lowervp	ln.layer_lowervp
@@ -105,10 +101,10 @@ void umap_mapids __P((struct mount *v_mount, struct ucred *credp));
 #define	UMAPVPTOLOWERVP(vp) (VTOUMAP(vp)->umap_lowervp)
 #endif
 
-extern int (**umap_vnodeop_p) __P((void *));
+extern int (**umap_vnodeop_p)(void *);
 extern struct vfsops umapfs_vfsops;
 
-int     umap_bypass     __P((void *));
+int     umap_bypass(void *);
 
 #define NUMAPNODECACHE	16
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: com_multi.c,v 1.11 1998/09/16 21:30:58 is Exp $	*/
+/*	$NetBSD: com_multi.c,v 1.27 2008/04/28 20:23:52 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -48,11 +41,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -74,6 +63,10 @@
 /*
  * COM driver, uses National Semiconductor NS16450/NS16550AF UART
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: com_multi.c,v 1.27 2008/04/28 20:23:52 martin Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/ioctl.h>
@@ -86,11 +79,10 @@
 #include <sys/uio.h>
 #include <sys/kernel.h>
 #include <sys/syslog.h>
-#include <sys/types.h>
 #include <sys/device.h>
 
-#include <machine/intr.h>
-#include <machine/bus.h>
+#include <sys/intr.h>
+#include <sys/bus.h>
 
 #include <dev/ic/comreg.h>
 #include <dev/ic/comvar.h>
@@ -98,23 +90,21 @@
 #include <dev/isa/isavar.h>
 #include <dev/isa/com_multi.h>
 
-int com_multi_probe __P((struct device *, struct cfdata *, void *));
-void com_multi_attach __P((struct device *, struct device *, void *));
+#include "locators.h"
 
-struct cfattach com_multi_ca = {
-	sizeof(struct com_softc), com_multi_probe, com_multi_attach
-};
+int com_multi_probe(device_t, cfdata_t , void *);
+void com_multi_attach(device_t, device_t, void *);
+
+CFATTACH_DECL_NEW(com_multi, sizeof(struct com_softc),
+    com_multi_probe, com_multi_attach, NULL, NULL);
 
 int
-com_multi_probe(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+com_multi_probe(device_t parent, cfdata_t match, void *aux)
 {
 	int iobase;
 	struct cfdata *cf = match;
 	struct commulti_attach_args *ca = aux;
- 
+
 	if (cf->cf_loc[COMMULTICF_SLAVE] != COMMULTICF_SLAVE_DEFAULT &&
 	    cf->cf_loc[COMMULTICF_SLAVE] != ca->ca_slave)
 		return (0);
@@ -129,19 +119,17 @@ com_multi_probe(parent, match, aux)
 }
 
 void
-com_multi_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+com_multi_attach(device_t parent, device_t self, void *aux)
 {
-	struct com_softc *sc = (void *)self;
+	struct com_softc *sc = device_private(self);
 	struct commulti_attach_args *ca = aux;
+
+	sc->sc_dev = self;
 
 	/*
 	 * We're living on a commulti.
 	 */
-	sc->sc_iot = ca->ca_iot;
-	sc->sc_ioh = ca->ca_ioh;
-	sc->sc_iobase = ca->ca_iobase;
+	COM_INIT_REGS(sc->sc_regs, ca->ca_iot, ca->ca_ioh, ca->ca_iobase);
 	sc->sc_frequency = 115200 * 16;
 
 	if (ca->ca_noien)

@@ -1,7 +1,7 @@
-/*	$NetBSD: atapiconf.h,v 1.8 1999/10/20 15:22:27 enami Exp $	*/
+/*	$NetBSD: atapiconf.h,v 1.22 2008/03/24 14:44:26 cube Exp $	*/
 
 /*
- * Copyright (c) 1996 Manuel Bouyer.  All rights reserved.
+ * Copyright (c) 1996, 2001 Manuel Bouyer.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -29,26 +29,35 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifndef _DEV_SCSIPI_ATAPICONF_H
+#define _DEV_SCSIPI_ATAPICONF_H
+
+#include <sys/device.h>
 #include <dev/scsipi/scsipiconf.h>
 
-/* drive states stored in ata_drive_datas */
-#define PIOMODE		0
-#define PIOMODE_WAIT	1
-#define DMAMODE		2
-#define DMAMODE_WAIT	3
-#define READY		4
+struct atapibus_softc {
+	device_t sc_dev;
+	struct scsipi_channel *sc_channel;	/* our scsipi_channel */
+};
 
-struct atapi_mode_header;
-struct ataparams;
+extern const struct scsipi_periphsw atapi_probe_periphsw;
 
-int	wdc_atapi_get_params __P((struct scsipi_link *, u_int8_t, int,
-	    struct ataparams *)); 
-void	atapi_print_addr __P((struct scsipi_link *));
-int	atapi_interpret_sense __P((struct scsipi_xfer *));
-int	atapi_scsipi_cmd __P((struct scsipi_link *, struct scsipi_generic *,
-	    int, u_char *, int, int, int, struct buf *, int));
-int	atapi_mode_select __P((struct scsipi_link *,
-	    struct atapi_mode_header *, int, int, int, int));
-int	atapi_mode_sense __P((struct scsipi_link *, int,
-	    struct atapi_mode_header *, int, int, int, int));
-void	atapi_kill_pending __P((struct scsipi_link *));
+
+/*
+ * We need some more data than in scsipi_adapter.
+ * So define a new atapi_adapter, we'll cast channel->chan_adapter to
+ * atapi_adapter when we need the extra data (only in ATAPI code)
+ */
+struct atapi_adapter {
+	struct scsipi_adapter _generic;
+	void (*atapi_probe_device)(struct atapibus_softc *, int);
+};
+
+void 	*atapi_probe_device(struct atapibus_softc *, int,
+	    struct scsipi_periph *, struct scsipibus_attach_args *);
+int	atapiprint(void *, const char *);
+void	atapi_print_addr(struct scsipi_periph *);
+int	atapi_interpret_sense(struct scsipi_xfer *);
+void	atapi_scsipi_cmd(struct scsipi_xfer *);
+
+#endif /* _DEV_SCSIPI_ATAPICONF_H */

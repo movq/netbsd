@@ -1,4 +1,4 @@
-/*	$NetBSD: rxp.c,v 1.7 1999/09/08 21:17:56 jsm Exp $	*/
+/*	$NetBSD: rxp.c,v 1.12 2004/01/27 20:30:30 jsm Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -42,7 +38,7 @@
 #if 0
 static char sccsid[] = "@(#)rxp.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: rxp.c,v 1.7 1999/09/08 21:17:56 jsm Exp $");
+__RCSID("$NetBSD: rxp.c,v 1.12 2004/01/27 20:30:30 jsm Exp $");
 #endif
 #endif /* not lint */
 
@@ -68,6 +64,7 @@ __RCSID("$NetBSD: rxp.c,v 1.7 1999/09/08 21:17:56 jsm Exp $");
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <ctype.h>
 #include "quiz.h"
 					/* regexp tokens,	arg */
@@ -85,9 +82,9 @@ typedef short Rxp_t;			/* type for regexp tokens */
 static Rxp_t rxpbuf[RXP_LINE_SZ];	/* compiled regular expression buffer */
 char rxperr[128];			/* parser error message */
 
-static int	 rxp__compile __P((const char *, int));
-static char	*rxp__expand __P((int));
-static int	 rxp__match __P((const char *, int, Rxp_t *, Rxp_t *, const char *));
+static int	 rxp__compile(const char *, int);
+static char	*rxp__expand(int);
+static int	 rxp__match(const char *, int, Rxp_t *, Rxp_t *, const char *);
 
 int
 rxp_compile(s)
@@ -213,7 +210,6 @@ rxp__match(s, first, j_succ, j_fail, sp_fail)
 	static const char *sp;
 	int ch;
 	Rxp_t *grp_end = NULL;
-	int err;
 
 	if (first) {
 		rp = rxpbuf;
@@ -227,7 +223,7 @@ rxp__match(s, first, j_succ, j_fail, sp_fail)
 			if (ch != *sp++) {
 				rp = j_fail;
 				sp = sp_fail;
-				return (TRUE);
+				return (FALSE);
 			}
 			rp++;
 			break;
@@ -247,16 +243,17 @@ rxp__match(s, first, j_succ, j_fail, sp_fail)
 			break;
 		case ALT_S:
 			rp++;
-			if ((err = rxp__match(sp,
-			    FALSE, grp_end, rxpbuf + *rp++, sp)) != TRUE)
-				return (err);
+			rxp__match(sp, FALSE, grp_end, rxpbuf + *rp++, sp);
 			break;
 		case ALT_E:
 			rp = j_succ;
 			return (TRUE);
 		case GRP_E:
-		default:
+			rp = j_fail;
+			sp = sp_fail;
 			return (FALSE);
+		default:
+			abort();
 		}
 	return (*rp != END ? FALSE : TRUE);
 }

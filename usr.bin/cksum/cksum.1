@@ -1,4 +1,4 @@
-.\"	$NetBSD: cksum.1,v 1.13 1999/03/22 18:16:35 garbled Exp $
+.\"	$NetBSD: cksum.1,v 1.40 2006/09/02 23:27:45 wiz Exp $
 .\"
 .\" Copyright (c) 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -14,11 +14,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -36,29 +32,81 @@
 .\"
 .\"	@(#)cksum.1	8.2 (Berkeley) 4/28/95
 .\"
-.Dd April 28, 1995
+.Dd August 25, 2006
 .Dt CKSUM 1
 .Os
 .Sh NAME
 .Nm cksum ,
+.Nm md2 ,
+.Nm md4 ,
 .Nm md5 ,
+.Nm sha1 ,
+.Nm rmd160 ,
 .Nm sum
 .Nd display file checksums and block counts
 .Sh SYNOPSIS
 .Nm
-.Oo Fl m \&|
-.Oo Fl o Ar \&1 No \&| Ar \&2
+.Op Fl nw
+.Oo
+.Fl a Ar algorithm |
+.Fl c Oo Ar file Oc |
+.Op Fl o Ar 1 | Ar 2
 .Oc
-.Oc
-.Op Ar file ...
+.Op Ar
 .Nm sum
-.Op Ar file ...
+.Op Fl w
+.Op Fl c Op Ar file
+.Op Ar
+.Nm md2
+.Op Fl nw
+.Oo
+.Fl c Oo Ar file Oc |
+.Fl p |
+.Fl t |
+.Fl x |
+.Fl s Ar string
+.Oc
+.Op Ar
+.Nm md4
+.Op Fl nw
+.Oo
+.Fl c Oo Ar file Oc |
+.Fl p |
+.Fl t |
+.Fl x |
+.Fl s Ar string
+.Oc
+.Op Ar
 .Nm md5
-.Op Fl p
-.Op Fl t
-.Op Fl x
-.Op Fl s Ar string
-.Op Ar file ...
+.Op Fl nw
+.Oo
+.Fl c Oo Ar file Oc |
+.Fl p |
+.Fl t |
+.Fl x |
+.Fl s Ar string
+.Oc
+.Op Ar
+.Nm sha1
+.Op Fl nw
+.Oo
+.Fl c Oo Ar file Oc |
+.Fl p |
+.Fl t |
+.Fl x |
+.Fl s Ar string
+.Oc
+.Op Ar
+.Nm rmd160
+.Op Fl nw
+.Oo
+.Fl c Oo Ar file Oc |
+.Fl p |
+.Fl t |
+.Fl x |
+.Fl s Ar string
+.Oc
+.Op Ar
 .Sh DESCRIPTION
 The
 .Nm
@@ -85,9 +133,11 @@ as output a 128-bit
 .Dq fingerprint
 or
 .Dq message digest
-of the input.  It is conjectured that it is computationally infeasible
+of the input.
+It is conjectured that it is computationally infeasible
 to product two messages having the same message digest, or to produce
-any message having a given prespecified target message digest.  The
+any message having a given prespecified target message digest.
+The
 MD5 algorithm is intended for digital signature applications, where
 a large file must be
 .Dq compressed
@@ -95,21 +145,61 @@ in a secure manner before being encrypted with a private (secret)
 key under a public-key encryption system such as
 .Pa RSA .
 .Pp
+The
+.Nm md2
+and
+.Nm md4
+utilities behave in exactly the same manner as
+.Nm md5
+but use different algorithms.
+.Pp
+The
+.Nm sha1
+and
+.Nm rmd160
+utilities also produce message digests, however the output from these
+two programs is 160 bits in length, as opposed to 128.
+.Pp
 The options are as follows:
 .Bl -tag -width indent
-.It Fl m
-Use the MD5 algorithm rather than the default one.
+.It Fl a Ar algorithm
+When invoked as
+.Nm cksum ,
+use the specified
+.Ar algorithm .
+Valid algorithms are MD2, MD4, MD5, SHA1, RMD160, SHA256, SHA384, SHA512,
+CRC, old1, and old2.
+Old1 and old2 are equal to
+.Fl o Ar 1
+and
+.Fl o Ar 2 ,
+respectively.
+The default is CRC.
+.It Fl c Op Ar file
+Verify (check) files against a list of checksums.
+The list is read from
+.Ar file ,
+or from stdin if no filename is given.
+E.g. first run
+.Dl Ic md5 *.tgz \*[Gt] MD5
+.Dl Ic sha1 *.tgz \*[Gt] SHA1
+to generate a list of MD5 checksums in
+.Pa MD5 ,
+then use the following command to verify them:
+.Dl Ic cat MD5 SHA1 | cksum -c
+If an error is found during checksum verification, an error
+message is printed, and the program returns an error code of 1.
 .It Fl o
 Use historic algorithms instead of the (superior) default one.
 .Pp
 Algorithm 1 is the algorithm used by historic
 .Bx
-systems as the 
+systems as the
 .Xr sum 1
 algorithm and by historic
 .At V
 systems as the
-.Xr sum
+.Xr sum 1
 algorithm when using the
 .Fl r
 option.
@@ -120,7 +210,7 @@ Algorithm 2 is the algorithm used by historic
 .At V
 systems as the
 default
-.Xr sum
+.Xr sum 1
 algorithm.
 This is a 32-bit checksum, and is defined as follows:
 .Bd -unfilled -offset indent
@@ -135,19 +225,34 @@ replaced with the size of the file in blocks.
 For historic reasons, the block size is 1024 for algorithm 1 and 512
 for algorithm 2.
 Partial blocks are rounded up.
+.It Fl w
+Print warnings about malformed checksum files when verifying
+checksums with
+.Fl c .
 .El
 .Pp
-The following options apply only when using the MD5 algorithm:
+The following options apply only when using the one of the message
+digest algorithms:
 .Bl -tag -width indent
-.It Fl s Ar string
-Print the MD5 checksum of the given string
-.Ar string .
+.It Fl n
+Print the hash and the filename in the normal sum output form, with
+the hash at the left and the filename following on the right.
 .It Fl p
-Echo input from standard input to standard output, and append an MD5 checksum.
+Echo input from standard input to standard output, and append the
+selected message digest.
+.It Fl s Ar string
+Print the hash of the given string
+.Ar string .
 .It Fl t
-Run a built-in MD5 time trial.
+Run a built-in message digest time trial.
 .It Fl x
-Run a built-in MD5 test script.
+Run a built-in message digest test script.
+The tests that are run
+are supposed to encompass all the various tests in the suites that
+accompany the algorithms' descriptions with the exception of the
+last test for the SHA-1 algorithm and the RIPEMD-160 algorithm.
+The
+last test for these is one million copies of the lower letter a.
 .El
 .Pp
 The default
@@ -156,7 +261,7 @@ used is based on the polynomial used for
 .Tn CRC
 error checking
 in the networking standard
-.St -iso8802-3
+.St -iso8802-3 .
 The
 .Tn CRC
 checksum encoding is defined by the generating polynomial:
@@ -187,7 +292,7 @@ first.
 The smallest number of octets capable of representing this integer are used.
 .Pp
 M(x) is multiplied by x^32 (i.e., shifted left 32 bits) and divided by
-G(x) using mod 2 division, producing a remainder R(x) of degree <= 31.
+G(x) using mod 2 division, producing a remainder R(x) of degree \*[Le] 31.
 .Pp
 The coefficients of R(x) are considered to be a 32-bit sequence.
 .Pp
@@ -198,8 +303,11 @@ The
 .Nm
 and
 .Nm sum
-utilities exit 0 on success, and >0 if an error occurs.
+utilities exit 0 on success, and \*[Gt]0 if an error occurs.
 .Sh SEE ALSO
+.Xr openssl 1 ,
+.Xr mtree 8
+.Pp
 The default calculation is identical to that given in pseudo-code
 in the following
 .Tn ACM
@@ -210,16 +318,52 @@ article.
 .%J "Communications of the \\*(tNACM\\*(sP"
 .%D "August 1988"
 .Re
+.Rs
+.%A R. Rivest
+.%T The MD2 Message-Digest Algorithm
+.%O RFC 1319
+.Re
+.Rs
+.%A R. Rivest
+.%T The MD4 Message-Digest Algorithm
+.%O RFC 1186 and RFC 1320
+.Re
+.Rs
+.%A R. Rivest
+.%T The MD5 Message-Digest Algorithm
+.%O RFC 1321
+.Re
+.Rs
+.%A U.S. DOC/NIST
+.%T Secure Hash Standard
+.%O FIPS PUB 180-1
+.Re
 .Sh STANDARDS
 The
 .Nm
-utility is expected to conform to 
+utility is expected to conform to
 .St -p1003.2-92 .
 .Sh HISTORY
 The
 .Nm
 utility appeared in
 .Bx 4.4 .
+The functionality for
+.Nm md2 ,
+.Nm md4 ,
+.Nm sha1 ,
+and
+.Nm rmd160
+was added in
+.Nx 1.6 .
+Support for
+.Nm sha2
+was added in
+.Nx 3.0 .
+The functionality to verify checksum stored in a file
+.Pq Fl c
+first appeared in
+.Nx 4.0 .
 .\" .Pp
 .\" The
 .\" .Nm sum

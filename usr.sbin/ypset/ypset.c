@@ -1,4 +1,4 @@
-/*	$NetBSD: ypset.c,v 1.11 1997/07/18 08:16:58 thorpej Exp $	*/
+/*	$NetBSD: ypset.c,v 1.16 2004/09/07 13:20:41 jrf Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993 Theo de Raadt <deraadt@fsa.ca>
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Theo de Raadt.
- * 4. The name of the author may not be used to endorse or promote
- *    products derived from this software without specific prior written
- *    permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS
  * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -34,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: ypset.c,v 1.11 1997/07/18 08:16:58 thorpej Exp $");
+__RCSID("$NetBSD: ypset.c,v 1.16 2004/09/07 13:20:41 jrf Exp $");
 #endif
 
 #include <sys/param.h>
@@ -53,8 +47,6 @@ __RCSID("$NetBSD: ypset.c,v 1.11 1997/07/18 08:16:58 thorpej Exp $");
 #include <rpcsvc/ypclnt.h>
 #include <arpa/inet.h>
 
-extern char *__progname;
-
 int	main __P((int, char *[]));
 static void usage __P((void));
 static void gethostaddr __P((const char *, struct in_addr *));
@@ -66,8 +58,6 @@ main(argc, argv)
 	char *argv[];
 {
 	struct sockaddr_in sin;
-	extern char *optarg;
-	extern int optind;
 	char *domainname;
 	int c;
 
@@ -140,8 +130,7 @@ bind_tohost(sin, dom, server)
 
 	gethostaddr(server, &ypsd.ypsetdom_addr);
 
-	(void) strncpy(ypsd.ypsetdom_domain, dom, sizeof ypsd.ypsetdom_domain);
-	ypsd.ypsetdom_domain[sizeof(ypsd.ypsetdom_domain) - 1] = '\0';
+	(void) strlcpy(ypsd.ypsetdom_domain, dom, sizeof ypsd.ypsetdom_domain);
 	ypsd.ypsetdom_port = port;
 	ypsd.ypsetdom_vers = YPVERS;
 	
@@ -159,7 +148,7 @@ bind_tohost(sin, dom, server)
 	r = clnt_call(client, YPBINDPROC_SETDOM,
 	    xdr_ypbind_setdom, &ypsd, xdr_void, NULL, tv);
 	if (r) {
-		warnx("Cannot ypset for domain %s on host %s: %s.\n",
+		warnx("Cannot ypset for domain %s on host %s: %s.",
 		    dom, server, clnt_sperrno(r));
 		clnt_destroy(client);
 		return YPERR_YPBIND;
@@ -172,6 +161,6 @@ static void
 usage()
 {
 	(void) fprintf(stderr, "usage: %s [-h host ] [-d domain] server\n",
-	    __progname);
+	    getprogname());
 	exit(1);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_fta.c,v 1.15 1998/07/05 00:51:25 jonathan Exp $	*/
+/*	$NetBSD: if_fta.c,v 1.25 2008/04/05 16:44:41 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1996 Matt Thomas <matt@3am-software.com>
@@ -10,7 +10,7 @@
  * 1. Redistributions of source code must retain the above copyright
  *    notice, this list of conditions and the following disclaimer.
  * 2. The name of the author may not be used to endorse or promote products
- *    derived from this software withough specific prior written permission
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -35,6 +35,9 @@
  *   This module supports the DEC DEFTA TurboChannel FDDI Controller
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_fta.c,v 1.25 2008/04/05 16:44:41 cegger Exp $");
+
 #include "opt_inet.h"
 
 #include <sys/param.h>
@@ -55,10 +58,6 @@
 #include <netinet/in.h>
 #include <netinet/if_inarp.h>
 #endif
-
-#include <vm/vm.h>
-#include <vm/vm_kern.h>
-#include <vm/vm_param.h>
 
 #include <dev/tc/tcvar.h>
 #include <dev/ic/pdqvar.h>
@@ -82,9 +81,9 @@ static void
 pdq_tc_attach(
     struct device * const parent,
     struct device * const self,
-    void * const aux)
+    void *const aux)
 {
-    pdq_softc_t * const sc = (pdq_softc_t *) self;
+    pdq_softc_t * const sc = device_private(self);
     struct tc_attach_args * const ta = (struct tc_attach_args *) aux;
 
     /*
@@ -93,13 +92,14 @@ pdq_tc_attach(
      */
     sc->sc_dmatag = ta->ta_dmat;
     sc->sc_csrtag = ta->ta_memt;
-    bcopy(sc->sc_dev.dv_xname, sc->sc_if.if_xname, IFNAMSIZ);
+    memcpy(sc->sc_if.if_xname, device_xname(&sc->sc_dev), IFNAMSIZ);
     sc->sc_if.if_flags = 0;
     sc->sc_if.if_softc = sc;
 
     if (bus_space_map(sc->sc_csrtag, ta->ta_addr + PDQ_TC_CSR_OFFSET,
 		      PDQ_TC_CSR_SPACE, 0, &sc->sc_membase)) {
-	printf("\n%s: can't map card memory!\n", sc->sc_dev.dv_xname);
+	aprint_normal("\n");
+	aprint_error_dev(&sc->sc_dev, "can't map card memory!\n");
 	return;
     }
 
@@ -107,7 +107,7 @@ pdq_tc_attach(
 				sc->sc_if.if_xname, 0,
 				(void *) sc, PDQ_DEFTA);
     if (sc->sc_pdq == NULL) {
-	printf("%s: initialization failed\n", sc->sc_dev.dv_xname);
+	aprint_error_dev(&sc->sc_dev, "initialization failed\n");
 	return;
     }
 
@@ -118,7 +118,8 @@ pdq_tc_attach(
 
     sc->sc_ats = shutdownhook_establish((void (*)(void *)) pdq_hwreset, sc->sc_pdq);
     if (sc->sc_ats == NULL)
-	printf("%s: warning: couldn't establish shutdown hook\n", self->dv_xname);
+	aprint_error_dev(self, "warning: couldn't establish shutdown hook\n");
 }
 
-struct cfattach fta_ca = { sizeof(pdq_softc_t), pdq_tc_match, pdq_tc_attach };
+CFATTACH_DECL(fta, sizeof(pdq_softc_t),
+    pdq_tc_match, pdq_tc_attach, NULL, NULL);

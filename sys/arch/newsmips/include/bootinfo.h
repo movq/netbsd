@@ -1,4 +1,4 @@
-/*	$NetBSD: bootinfo.h,v 1.1 1999/12/18 08:01:25 tsubai Exp $	*/
+/*	$NetBSD: bootinfo.h,v 1.4 2005/12/11 12:18:24 christos Exp $	*/
 
 /*
  * Copyright (c) 1997
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed for the NetBSD Project
- *	by Matthias Drochner.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -79,10 +73,10 @@ struct btinfo_systype {
 };
 
 #ifdef _KERNEL
-void *lookup_bootinfo __P((int));
+void *lookup_bootinfo(int);
 #endif
 
 #ifdef _STANDALONE
-void bi_init __P((paddr_t));
-void bi_add __P((void *, int, int));
+void bi_init(paddr_t);
+void bi_add(void *, int, int);
 #endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: power.c,v 1.1.1.1 1998/06/20 04:58:51 eeh Exp $ */
+/*	$NetBSD: power.c,v 1.8 2006/05/12 23:35:24 uwe Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -39,6 +39,9 @@
  * SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: power.c,v 1.8 2006/05/12 23:35:24 uwe Exp $");
+
 #include <sys/param.h>
 #include <sys/device.h>
 #include <sys/kernel.h>
@@ -48,12 +51,11 @@
 
 #include <sparc64/dev/power.h>
 
-static int powermatch __P((struct device *, struct cfdata *, void *));
-static void powerattach __P((struct device *, struct device *, void *));
+static int powermatch(struct device *, struct cfdata *, void *);
+static void powerattach(struct device *, struct device *, void *);
 
-struct cfattach power_ca = {
-	sizeof(struct device), powermatch, powerattach
-};
+CFATTACH_DECL(power, sizeof(struct device),
+    powermatch, powerattach, NULL, NULL);
 
 extern struct cfdriver power_cd;
 
@@ -62,7 +64,7 @@ extern struct cfdriver power_cd;
  * machines. This allows the machine to remove power automatically when
  * shutdown or halted or whatever.
  *
- * XXX: this capability is not utilized in the current kernel.
+ * XXX: this capability is not used in the current kernel.
  */
 
 static int

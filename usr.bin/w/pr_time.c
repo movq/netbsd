@@ -1,4 +1,4 @@
-/*	$NetBSD: pr_time.c,v 1.9 1998/04/02 11:34:23 kleink Exp $	*/
+/*	$NetBSD: pr_time.c,v 1.16 2005/01/08 05:04:34 kim Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)pr_time.c	8.2 (Berkeley) 4/4/94";
 #else
-__RCSID("$NetBSD: pr_time.c,v 1.9 1998/04/02 11:34:23 kleink Exp $");
+__RCSID("$NetBSD: pr_time.c,v 1.16 2005/01/08 05:04:34 kim Exp $");
 #endif
 #endif /* not lint */
 
@@ -54,14 +50,13 @@ __RCSID("$NetBSD: pr_time.c,v 1.9 1998/04/02 11:34:23 kleink Exp $");
 
 /*
  * pr_attime --
- *	Print the time since the user logged in. 
+ *	Print the time since the user logged in.
  *
  *	Note: SCCS forces the bizarre string manipulation, things like
  *	%I% get replaced in the source code.
  */
 void
-pr_attime(started, now)
-	time_t *started, *now;
+pr_attime(time_t *started, time_t *now)
 {
 	static char buf[256];
 	int tnow_yday;
@@ -79,11 +74,11 @@ pr_attime(started, now)
 
 	/* If not today, use day-hour-am/pm. */
 	else if (tp->tm_yday != tnow_yday)
-		fmt = __CONCAT("%a%", "I%p");
+		fmt = "%a%" "I%p";
 
 	/* Default is hh:mm{am,pm}. */
 	else
-		fmt = __CONCAT("%l:%", "M%p");
+		fmt = "%l:%" "M%p";
 
 	(void)strftime(buf, sizeof(buf), fmt, tp);
 	buf[sizeof(buf) - 1] = '\0';
@@ -95,14 +90,22 @@ pr_attime(started, now)
  *	Display the idle time.
  */
 void
-pr_idle(idle)
-	time_t idle;
+pr_idle(time_t idle)
 {
-	int days = idle / SECSPERDAY;
+	int days;
+
+	if (idle == (time_t)-1) {
+		(void)printf("     ? ");
+		return;
+	}
+
+	days = idle / SECSPERDAY;
 
 	/* If idle more than 36 hours, print as a number of days. */
-	if (idle >= 36 * SECSPERHOUR)
-		printf(days == 1 ? "  %dday " : " %ddays ", days);
+	if (idle >= 48 * SECSPERHOUR)
+		printf(" %ddays ", days);
+	else if (idle >= 36 * SECSPERHOUR)
+		printf("  1day ");
 
 	/* If idle more than an hour, print as HH:MM. */
 	else if (idle >= SECSPERHOUR)

@@ -1,4 +1,4 @@
-/*	$NetBSD: findcpu.c,v 1.6 1999/12/11 17:55:13 ragge Exp $	*/
+/*	$NetBSD: findcpu.c,v 1.18 2008/03/11 05:34:03 matt Exp $	*/
 /*
  * Copyright (c) 1994, 1998 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -29,9 +29,13 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: findcpu.c,v 1.18 2008/03/11 05:34:03 matt Exp $");
 
 #include <sys/param.h>
+#ifdef _KERNEL
 #include <sys/device.h>
+#endif
 
 #include <machine/sid.h>
 #include <machine/nexus.h>
@@ -56,13 +60,16 @@ int vax_confdata;	/* machine dependend, configuration/setup data */
  * Try to figure out which type of system this is.
  */
 void
-findcpu()
+findcpu(void)
 {
 	vax_cpudata = mfpr(PR_SID);
 	vax_cputype = vax_cpudata >> 24;
 	vax_boardtype = vax_cputype << 24;
 
 	switch (vax_cputype) {
+	case VAX_TYP_730:
+		vax_bustype = VAX_UNIBUS;
+		break;
 	case VAX_TYP_780:
 		vax_bustype = VAX_SBIBUS;
 		break;
@@ -71,6 +78,10 @@ findcpu()
 		break;
 	case VAX_TYP_790:
 		vax_bustype = VAX_ABUS;
+		break;
+
+	case VAX_TYP_UV1:
+		vax_bustype = VAX_IBUS;
 		break;
 
 	case VAX_TYP_UV2:
@@ -90,7 +101,10 @@ findcpu()
 		case VAX_BTYP_48:
 		case VAX_BTYP_IS1:
 			vax_confdata = *(int *)(0x20020000);
+			vax_bustype = VAX_VSBUS;
+			break;
 		case VAX_BTYP_49:
+			vax_confdata = *(int *)(0x25800000);
 			vax_bustype = VAX_VSBUS;
 			break;
 
@@ -104,9 +118,11 @@ findcpu()
 		case VAX_BTYP_670:
 		case VAX_BTYP_660:
 		case VAX_BTYP_60:
-		case VAX_BTYP_69D:
+		case VAX_BTYP_680:
+		case VAX_BTYP_681:
 		case VAX_BTYP_630:
 		case VAX_BTYP_650:
+		case VAX_BTYP_53:
 			vax_bustype = VAX_IBUS;
 			break;
 
@@ -119,13 +135,17 @@ findcpu()
 		break;
 
 	case VAX_TYP_8NN:
+		vax_boardtype = VAX_BTYP_8800; /* subversion later */
+		vax_bustype = VAX_NMIBUS;
+		break;
+
 	case VAX_TYP_8PS:
-		vax_boardtype = VAX_BTYP_8800;
-		vax_bustype = VAX_NBIBUS;
+		vax_boardtype = VAX_BTYP_8PS;
+		vax_bustype = VAX_NMIBUS;
 		break;
 
 	default:
 		/* CPU not supported, just give up */
-		asm("halt");
+		__asm("halt");
 	}
 }

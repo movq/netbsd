@@ -1,4 +1,4 @@
-/*	$NetBSD: kdbparam.h,v 1.5 1997/06/22 07:42:50 jonathan Exp $	*/
+/*	$NetBSD: kdbparam.h,v 1.8 2005/12/11 12:18:09 christos Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -64,11 +60,11 @@
 #define	kdbaddrwrap(addr,newaddr)	(((addr)^(newaddr)) >> 31)
 
 /* declare machine dependent routines defined in kadb.c */
-void	kdbprinttrap __P((unsigned, unsigned));
-void	kdbsetsstep __P((void));
-void	kdbclrsstep __P((void));
-void	kdbreadc __P((char *));
-void	kdbwrite __P((char *, int));
-void	kdbprintins __P((int, long));
-void	kdbstacktrace __P((int));
-char	*kdbmalloc __P((int));
+void	kdbprinttrap(unsigned, unsigned);
+void	kdbsetsstep(void);
+void	kdbclrsstep(void);
+void	kdbreadc(char *);
+void	kdbwrite(char *, int);
+void	kdbprintins(int, long);
+void	kdbstacktrace(int);
+char	*kdbmalloc(int);

@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.h,v 1.4 1995/04/28 21:30:16 mycroft Exp $	*/
+/*	$NetBSD: machdep.h,v 1.6 2008/01/28 01:58:01 dholland Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -40,15 +36,15 @@
 /* for POSIX systems */
 #define	blockalarm() \
 	do {								\
-		sigset_t sigset;					\
-		sigemptyset(&sigset);					\
-		sigaddset(&sigset, SIGALRM);				\
-		sigprocmask(SIG_BLOCK, &sigset, (sigset_t *)0);		\
+		sigset_t set;						\
+		sigemptyset(&set);					\
+		sigaddset(&set, SIGALRM);				\
+		sigprocmask(SIG_BLOCK, &set, (sigset_t *)0);		\
 	} while (0)
 #define	unblockalarm() \
 	do {								\
-		sigset_t sigset;					\
-		sigemptyset(&sigset);					\
-		sigaddset(&sigset, SIGALRM);				\
-		sigprocmask(SIG_UNBLOCK, &sigset, (sigset_t *)0);	\
+		sigset_t set;						\
+		sigemptyset(&set);					\
+		sigaddset(&set, SIGALRM);				\
+		sigprocmask(SIG_UNBLOCK, &set, (sigset_t *)0);		\
 	} while (0)

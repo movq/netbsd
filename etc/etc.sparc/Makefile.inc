@@ -1,44 +1,56 @@
-#	$NetBSD: Makefile.inc,v 1.15 1999/11/14 16:23:36 pk Exp $
+#	$NetBSD: Makefile.inc,v 1.41 2008/03/18 04:20:37 lukem Exp $
 #
 #	etc.sparc/Makefile.inc -- sparc-specific etc Makefile targets
 #
 
-TOP= $(.CURDIR)/..
+# If you change the list of distributed kernels, don't forget
+# to update the release documentation in distrib/notes/common/contents
 
-# Set this for any kernels beyond GENERIC you want to include
-# in the distribution.
-EXTRA_KERNELS+= GENERIC_SCSI3
-BUILD_KERNELS+= INSTALL
+KERNEL_SETS=		GENERIC GENERIC_SCSI3 GENERIC_SUN4U GENERIC.MP	\
+			MRCOFFEE_OFW MRCOFFEE KRUPS
 
-# Add sparc installation directories
-MD_INSTALLATION_DIRS= \
-	installation/miniroot installation/netboot installation/bootfs
-INSTALLATION_DIRS+=$(MD_INSTALLATION_DIRS) 
+BUILD_KERNELS=		INSTALL
 
-snap_pre_md:
-.ifndef UPDATE
-	cd $(TOP)/distrib && ${MAKE} clean 
-.endif
+MD_INSTALLATION_DIRS=	installation/miniroot	\
+			installation/netboot	\
+			installation/bootfs	\
+			installation/tape	\
+			installation/floppy
+INSTALLATION_DIRS+=	${MD_INSTALLATION_DIRS}
+
+
+INSTALLATION_SYMLINKS=	\
+		tape/tapefile1.gz	../bootfs/netbsd.ram.aout.gz	\
+		tape/tapefile2		../bootfs/instfs.tgz		\
+		floppy/disk1.gz		../bootfs/boot.fs.gz		\
+		floppy/disk2		../bootfs/instfs.tgz		\
+		netboot/rootfs.tgz	../bootfs/instfs.tgz
 
 #
 # Install miniroot images and auxiliary scripts to the release tree
 #
 snap_md_post:
-	# make boot/miniroot images
-	(cd $(TOP)/distrib; ${MAKE})
+	# install boot images in netboot directory
+	${HOST_INSTALL_FILE} -m ${NONBINMODE} ${DESTDIR}/usr/mdec/boot.net \
+	    ${RELEASEDIR}/${RELEASEMACHINEDIR}/installation/netboot
+	${HOST_INSTALL_FILE} -m ${NONBINMODE} ${DESTDIR}/usr/mdec/bootjs.net \
+	    ${RELEASEDIR}/${RELEASEMACHINEDIR}/installation/netboot
 
-	# transfer images to release hierarchy
-.for dir in notes miniroot sparc/bootfs sparc/ramdisk
-	(cd $(TOP)/distrib/$(dir); ${MAKE} release)
-.endfor
-
-	# install boot image and installation scripts in netboot directory
-	cp -p $(DESTDIR)/usr/mdec/boot.net $(RELEASEDIR)/installation/netboot
-.for f in install.sh upgrade.sh install.sub ../sparc/install.md
-	cp -p $(TOP)/distrib/miniroot/$f $(RELEASEDIR)/installation/netboot
+	# install links to boot and installation utilities for various media
+.for linkdst linksrc in ${INSTALLATION_SYMLINKS} 
+	rm -f ${RELEASEDIR}/${RELEASEMACHINEDIR}/installation/${linkdst}
+	ln -s ${linksrc} ${RELEASEDIR}/${RELEASEMACHINEDIR}/installation/${linkdst}
 .endfor
 
 	# compute checksums
 .for dir in ${MD_INSTALLATION_DIRS}
-	sh $(TOP)/distrib/sets/makesums -t ${RELEASEDIR}/${dir} '*'
+	${MAKESUMS} -t ${RELEASEDIR}/${RELEASEMACHINEDIR}/${dir} '*'
 .endfor
+
+CDBOOTIMAGEDIR!= cd ${NETBSDSRCDIR}/distrib/sparc/bootfs && ${PRINTOBJDIR}
+CDBOOTIMAGE=	${CDBOOTIMAGEDIR}/boot.fs
+
+iso-image-md-post:
+	SUNLABEL=${TOOL_SUNLABEL:Q} \
+	    ${HOST_SH} ${NETBSDSRCDIR}/distrib/common/sunbootcd.sh \
+	    ${CDROM.image} ${CDBOOTIMAGE} ${CDBOOTIMAGE} ${CDBOOTIMAGE}

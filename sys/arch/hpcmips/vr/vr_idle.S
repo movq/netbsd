@@ -1,4 +1,4 @@
-/*	$NetBSD: vr_idle.S,v 1.2 2000/03/28 00:24:06 nisimura Exp $	*/
+/*	$NetBSD: vr_idle.S,v 1.15 2008/02/18 15:19:57 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -46,10 +42,7 @@
  */
 
 #include <mips/asm.h>
-#include <mips/cpuregs.h>
 #include <hpcmips/vr/vr_asm.h>
-
-#include "assym.h"
 
 	.set	noreorder
 
@@ -60,24 +53,11 @@
  * profiling.
  */
 LEAF(vr_idle)
-	li	t0, (MIPS_INT_MASK | MIPS_SR_INT_IE)
-	mtc0	t0, MIPS_COP_0_STATUS		# enable all interrupts
-	nop
-	sw	zero, _C_LABEL(curproc)		# set curproc NULL for stats
-1:
-	lw	t0, _C_LABEL(whichqs)		# look for non-empty queue
-	nop
-	bne	t0, zero, 1f
-	nop
 	.word	VR_OPCODE_STANDBY
 	nop
 	nop
 	nop
 	nop
-	beq	t0, zero, 1b
-	nop
-1:
-	la	ra, cpu_switch_queuescan	# rathole to cpu_switch()
 	j	ra
-	mtc0	zero, MIPS_COP_0_STATUS		# disable all interrupts
+	nop
 END(vr_idle)

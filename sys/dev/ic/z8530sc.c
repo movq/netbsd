@@ -1,9 +1,47 @@
-/*	$NetBSD: z8530sc.c,v 1.12 2000/03/30 12:45:32 augustss Exp $	*/
+/*	$NetBSD: z8530sc.c,v 1.28 2008/03/29 19:15:36 tsutsui Exp $	*/
+
+/*
+ * Copyright (c) 1992, 1993
+ *	The Regents of the University of California.  All rights reserved.
+ *
+ * This software was developed by the Computer Systems Engineering group
+ * at Lawrence Berkeley Laboratory under DARPA contract BG 91-66 and
+ * contributed to Berkeley.
+ *
+ * All advertising materials mentioning features or use of this software
+ * must display the following acknowledgement:
+ *	This product includes software developed by the University of
+ *	California, Lawrence Berkeley Laboratory.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ *	@(#)zs.c	8.1 (Berkeley) 7/19/93
+ */
 
 /*
  * Copyright (c) 1994 Gordon W. Ross
- * Copyright (c) 1992, 1993
- *	The Regents of the University of California.  All rights reserved.
  *
  * This software was developed by the Computer Systems Engineering group
  * at Lawrence Berkeley Laboratory under DARPA contract BG 91-66 and
@@ -52,6 +90,9 @@
  * driver common to tty and keyboard/mouse sub-drivers.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: z8530sc.c,v 1.28 2008/03/29 19:15:36 tsutsui Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
@@ -68,9 +109,7 @@
 #include <machine/z8530var.h>
 
 void
-zs_break(cs, set)
-	struct zs_chanstate *cs;
-	int set;
+zs_break(struct zs_chanstate *cs, int set)
 {
 
 	if (set) {
@@ -88,10 +127,9 @@ zs_break(cs, set)
  * drain on-chip fifo
  */
 void
-zs_iflush(cs)
-	struct zs_chanstate *cs;
+zs_iflush(struct zs_chanstate *cs)
 {
-	u_char c, rr0, rr1;
+	uint8_t c, rr0, rr1;
 	int i;
 
 	/*
@@ -117,7 +155,7 @@ zs_iflush(cs)
 		}
 	}
 }
-	
+
 
 /*
  * Write the given register set to the given zs channel in the proper order.
@@ -126,16 +164,11 @@ zs_iflush(cs)
  * Call this with interrupts disabled.
  */
 void
-zs_loadchannelregs(cs)
-	struct zs_chanstate *cs;
+zs_loadchannelregs(struct zs_chanstate *cs)
 {
-	u_char *reg;
+	uint8_t *reg, v;
 
-	/* Copy "pending" regs to "current" */
-	bcopy((caddr_t)cs->cs_preg, (caddr_t)cs->cs_creg, 16);
-	reg = cs->cs_creg;	/* current regs */
-
-	zs_write_csr(cs, ZSM_RESET_ERR);	/* XXX: reset error condition */
+	zs_write_csr(cs, ZSM_RESET_ERR); /* XXX: reset error condition */
 
 #if 1
 	/*
@@ -144,6 +177,19 @@ zs_loadchannelregs(cs)
 	 */
 	zs_iflush(cs);	/* XXX */
 #endif
+
+	if (cs->cs_ctl_chan != NULL)
+		v = ((cs->cs_ctl_chan->cs_creg[5] & (ZSWR5_RTS | ZSWR5_DTR)) !=
+		    (cs->cs_ctl_chan->cs_preg[5] & (ZSWR5_RTS | ZSWR5_DTR)));
+	else
+		v = 0;
+
+	if (memcmp((void *)cs->cs_preg, (void *)cs->cs_creg, 16) == 0 && !v)
+		return;	/* only change if values are different */
+
+	/* Copy "pending" regs to "current" */
+	memcpy((void *)cs->cs_creg, (void *)cs->cs_preg, 16);
+	reg = cs->cs_creg;	/* current regs */
 
 	/* disable interrupts */
 	zs_write_reg(cs, 1, reg[1] & ~ZSWR1_IMASK);
@@ -210,10 +256,23 @@ zs_loadchannelregs(cs)
 	zs_write_reg(cs, 3, reg[3]);
 	zs_write_reg(cs, 5, reg[5]);
 
+	/* Write the status bits on the alternate channel also. */
+	if (cs->cs_ctl_chan != NULL) {
+		v = cs->cs_ctl_chan->cs_preg[5];
+		cs->cs_ctl_chan->cs_creg[5] = v;
+		zs_write_reg(cs->cs_ctl_chan, 5, v);
+	}
+
 	/* interrupt enables: RX, TX, STATUS */
 	zs_write_reg(cs, 1, reg[1]);
 }
 
+void
+zs_lock_init(struct zs_chanstate *cs)
+{
+
+	mutex_init(&cs->cs_lock, MUTEX_NODEBUG, IPL_ZS);
+}
 
 /*
  * ZS hardware interrupt.  Scan all ZS channels.  NB: we know here that
@@ -227,15 +286,18 @@ zs_loadchannelregs(cs)
  * the order.
  */
 int
-zsc_intr_hard(arg)
-	void *arg;
+zsc_intr_hard(void *arg)
 {
 	struct zsc_softc *zsc = arg;
 	struct zs_chanstate *cs;
-	u_char rr3;
+	uint8_t rr3;
 
 	/* First look at channel A. */
 	cs = zsc->zsc_cs[0];
+
+	/* Lock both channels */
+	mutex_spin_enter(&cs->cs_lock);
+	mutex_spin_enter(&zsc->zsc_cs[1]->cs_lock);
 	/* Note: only channel A has an RR3 */
 	rr3 = zs_read_reg(cs, 3);
 
@@ -257,6 +319,9 @@ zsc_intr_hard(arg)
 			(*cs->cs_ops->zsop_txint)(cs);
 	}
 
+	/* Done with channel A */
+	mutex_spin_exit(&cs->cs_lock);
+
 	/* Now look at channel B. */
 	cs = zsc->zsc_cs[1];
 	if (rr3 & (ZSRR3_IP_B_RX | ZSRR3_IP_B_TX | ZSRR3_IP_B_STAT)) {
@@ -269,6 +334,8 @@ zsc_intr_hard(arg)
 			(*cs->cs_ops->zsop_txint)(cs);
 	}
 
+	mutex_spin_exit(&cs->cs_lock);
+
 	/* Note: caller will check cs_x->cs_softreq and DTRT. */
 	return (rr3);
 }
@@ -278,8 +345,7 @@ zsc_intr_hard(arg)
  * ZS software interrupt.  Scan all channels for deferred interrupts.
  */
 int
-zsc_intr_soft(arg)
-	void *arg;
+zsc_intr_soft(void *arg)
 {
 	struct zsc_softc *zsc = arg;
 	struct zs_chanstate *cs;
@@ -307,40 +373,39 @@ zsc_intr_soft(arg)
  * Provide a null zs "ops" vector.
  */
 
-static void zsnull_rxint   __P((struct zs_chanstate *));
-static void zsnull_stint   __P((struct zs_chanstate *, int));
-static void zsnull_txint   __P((struct zs_chanstate *));
-static void zsnull_softint __P((struct zs_chanstate *));
+static void zsnull_rxint  (struct zs_chanstate *);
+static void zsnull_stint  (struct zs_chanstate *, int);
+static void zsnull_txint  (struct zs_chanstate *);
+static void zsnull_softint(struct zs_chanstate *);
 
 static void
-zsnull_rxint(cs)
-	struct zs_chanstate *cs;
+zsnull_rxint(struct zs_chanstate *cs)
 {
+
 	/* Ask for softint() call. */
 	cs->cs_softreq = 1;
 }
 
 static void
-zsnull_stint(cs, force)
-	struct zs_chanstate *cs;
-	int force;
+zsnull_stint(struct zs_chanstate *cs, int force)
 {
+
 	/* Ask for softint() call. */
 	cs->cs_softreq = 1;
 }
 
 static void
-zsnull_txint(cs)
-	struct zs_chanstate *cs;
+zsnull_txint(struct zs_chanstate *cs)
 {
+
 	/* Ask for softint() call. */
 	cs->cs_softreq = 1;
 }
 
 static void
-zsnull_softint(cs)
-	struct zs_chanstate *cs;
+zsnull_softint(struct zs_chanstate *cs)
 {
+
 	zs_write_reg(cs,  1, 0);
 	zs_write_reg(cs, 15, 0);
 }

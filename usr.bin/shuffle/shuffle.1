@@ -1,4 +1,4 @@
-.\"	$NetBSD: shuffle.1,v 1.2 1998/09/24 12:28:39 christos Exp $
+.\"	$NetBSD: shuffle.1,v 1.6.18.1 2009/03/15 20:07:56 snj Exp $
 .\"
 .\" Copyright (c) 1998
 .\" 	Perry E. Metzger.  All rights reserved.
@@ -30,7 +30,7 @@
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
 .\"
-.Dd September 22, 1998
+.Dd February 18, 2009
 .Dt SHUFFLE 1
 .Os
 .Sh NAME
@@ -38,6 +38,7 @@
 .Nd print a random permutation of the command line arguments
 .Sh SYNOPSIS
 .Nm
+.Op Fl 0
 .Op Fl f Ar filename ...
 .Op Fl n Ar number
 .Op Fl p Ar number
@@ -48,7 +49,8 @@ The
 .Nm
 program prints a random permutation (or
 .Dq shuffle )
-of its input lines. This can be useful in shell scripts for selecting a
+of its command line arguments.
+This can be useful in shell scripts for selecting a
 random order in which to do a set of tasks, view a set of files, etc.
 .Pp
 If the
@@ -57,7 +59,6 @@ option is given, the data is taken from that files' contents or if the
 filename is
 .Ar -
 .Dq stdin .
-.Pp
 .Pp
 If the
 .Fl n
@@ -69,6 +70,13 @@ If the
 .Fl p
 option is given, its argument is treated as a number, and the program
 prints that number of randomly selected lines or arguments in a random order.
+.Pp
+The
+.Fl 0
+option changes the field separator character from \en to \e0, so that
+the output is suitable to be sent to
+.Xr xargs 1
+(to handle filenames with whitespace in them).
 .Sh EXAMPLES
 .Bd -literal -offset indent
 $ shuffle a b c d
@@ -83,7 +91,8 @@ $ shuffle -n 4 -p 2
 3
 .Ed
 .Sh SEE ALSO
-.Xr jot 1
+.Xr jot 1 ,
+.Xr random 6
 .Sh HISTORY
 The
 .Nm
@@ -91,6 +100,3 @@ program first appeared in
 .Nx 1.4 .
 .Sh AUTHORS
 Written by Perry E. Metzger (perry@piermont.com).
-.Sh BUGS
-The random number generator isn't that great, and thus the
-permutations often aren't that great.

@@ -1,4 +1,4 @@
-/*	$NetBSD: kgdb_stub.c,v 1.4 1996/10/13 03:35:22 christos Exp $	*/
+/*	$NetBSD: kgdb_stub.c,v 1.16 2007/10/17 19:58:04 garbled Exp $	*/
 
 /*
  * Copyright (c) 1990, 1993
@@ -21,11 +21,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -45,11 +41,17 @@
  */
 
 /*
- * "Stub" to allow remote cpu to debug over a serial line using gdb.
+ * "Stub" to allow remote CPU to debug over a serial line using gdb.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: kgdb_stub.c,v 1.16 2007/10/17 19:58:04 garbled Exp $");
+
+#include "opt_kgdb.h"
+
 #ifdef KGDB
 #ifndef lint
-static char rcsid[] = "$NetBSD: kgdb_stub.c,v 1.4 1996/10/13 03:35:22 christos Exp $";
+static char rcsid[] = "$NetBSD: kgdb_stub.c,v 1.16 2007/10/17 19:58:04 garbled Exp $";
 #endif
 
 #include <sys/param.h>
@@ -70,15 +72,15 @@ static char rcsid[] = "$NetBSD: kgdb_stub.c,v 1.4 1996/10/13 03:35:22 christos E
 extern int kernacc();
 extern void chgkprot();
 
-#ifndef KGDBDEV
-#define KGDBDEV NODEV
+#ifndef KGDB_DEV
+#define KGDB_DEV NODEV
 #endif
-#ifndef KGDBRATE
-#define KGDBRATE 9600
+#ifndef KGDB_DEVRATE
+#define KGDB_DEVRATE 9600
 #endif
 
-dev_t kgdb_dev = KGDBDEV;	/* remote debugging device (NODEV if none) */
-int kgdb_rate = KGDBRATE;	/* remote debugging baud rate */
+dev_t kgdb_dev = KGDB_DEV;	/* remote debugging device (NODEV if none) */
+int kgdb_rate = KGDB_DEVRATE;	/* remote debugging baud rate */
 int kgdb_active = 0;            /* remote debugging active if != 0 */
 int kgdb_debug_init = 0;	/* != 0 waits for remote at system init */
 int kgdb_debug_panic = 1;	/* != 0 waits for remote on panic */
@@ -106,13 +108,10 @@ static int (*kgdb_putc)();
  * Send a message.  The host gets one chance to read it.
  */
 static void
-kgdb_send(type, bp, len)
-	register u_char type;
-	register u_char *bp;
-	register int len;
+kgdb_send(u_char type, u_char *bp, int len)
 {
-	register u_char csum;
-	register u_char *ep = bp + len;
+	u_char csum;
+	u_char *ep = bp + len;
 
 	PUTC(FRAME_START);
 	PUTESC(type);
@@ -129,13 +128,11 @@ kgdb_send(type, bp, len)
 }
 
 static int
-kgdb_recv(bp, lenp)
-	u_char *bp;
-	int *lenp;
+kgdb_recv(u_char *bp, int *lenp)
 {
-	register u_char c, csum;
-	register int escape, len;
-	register int type;
+	u_char c, csum;
+	int escape, len;
+	int type;
 
 restart:
 	csum = len = escape = 0;
@@ -198,9 +195,8 @@ restart:
  * Translate a trap number into a unix compatible signal value.
  * (gdb only understands unix signal numbers).
  */
-static int 
-computeSignal(type)
-	int type;
+static int
+computeSignal(int type)
 {
 	int sigval;
 
@@ -248,17 +244,17 @@ computeSignal(type)
 }
 
 /*
- * Trap into kgdb to wait for debugger to connect, 
+ * Trap into kgdb to wait for debugger to connect,
  * noting on the console why nothing else is going on.
  */
-kgdb_connect(verbose)
-	int verbose;
+void
+kgdb_connect(int verbose)
 {
 
 	if (verbose)
 		printf("kgdb waiting...");
 	/* trap into kgdb */
-	asm("trap #15;");
+	__asm("trap #15;");
 	if (verbose)
 		printf("connected.\n");
 }
@@ -266,7 +262,8 @@ kgdb_connect(verbose)
 /*
  * Decide what to do on panic.
  */
-kgdb_panic()
+void
+kgdb_panic(void)
 {
 
 	if (kgdb_active == 0 && kgdb_debug_panic && kgdb_dev != NODEV)
@@ -284,11 +281,9 @@ kgdb_panic()
 #define GDB_PC 17
 
 static inline void
-kgdb_copy(src, dst, nbytes)
-	register u_char *src, *dst;
-	register u_int nbytes;
+kgdb_copy(u_char *src, u_char *dst, u_int nbytes)
 {
-	register u_char *ep = src + nbytes;
+	u_char *ep = src + nbytes;
 
 	while (src < ep)
 		*dst++ = *src++;
@@ -301,18 +296,14 @@ kgdb_copy(src, dst, nbytes)
  * SR).  We must skip this when copying into and out of gdb.
  */
 static inline void
-regs_to_gdb(fp, regs)
-	struct frame *fp;
-	u_long *regs;
+regs_to_gdb(struct frame *fp, u_long *regs)
 {
 	kgdb_copy((u_char *)fp->f_regs, (u_char *)regs, 16*4);
 	kgdb_copy((u_char *)&fp->f_stackadj, (u_char *)&regs[GDB_SR], 2*4);
 }
 
 static inline void
-gdb_to_regs(fp, regs)
-	struct frame *fp;
-	u_long *regs;
+gdb_to_regs(struct frame *fp, u_long *regs)
 {
 	kgdb_copy((u_char *)regs, (u_char *)fp->f_regs, 16*4);
 	kgdb_copy((u_char *)&regs[GDB_SR], (u_char *)&fp->f_stackadj, 2*4);
@@ -323,19 +314,17 @@ static u_char inbuffer[SL_RPCSIZE+1];
 static u_char outbuffer[SL_RPCSIZE];
 
 /*
- * This function does all command procesing for interfacing to 
+ * This function does all command procesing for interfacing to
  * a remote gdb.
  */
-int 
-kgdb_trap(type, frame)
-	int type;
-	struct frame *frame;
+int
+kgdb_trap(int type, struct frame *frame)
 {
-	register u_long len;
+	u_long len;
 	u_char *addr;
-	register u_char *cp;
-	register u_char out, in;
-	register int outlen;
+	u_char *cp;
+	u_char out, in;
+	int outlen;
 	int inlen;
 	u_long gdb_regs[NUM_REGS];
 
@@ -360,7 +349,7 @@ kgdb_trap(type, frame)
 		/*
 		 * If the packet that woke us up isn't an exec packet,
 		 * ignore it since there is no active debugger.  Also,
-		 * we check that it's not an ack to be sure that the 
+		 * we check that it's not an ack to be sure that the
 		 * remote side doesn't send back a response after the
 		 * local gdb has exited.  Otherwise, the local host
 		 * could trap into gdb if it's running a gdb kernel too.
@@ -386,7 +375,7 @@ kgdb_trap(type, frame)
 			;
 		/*
 		 * Do the printf *before* we ack the message.  This way
-		 * we won't drop any inbound characters while we're 
+		 * we won't drop any inbound characters while we're
 		 * doing the polling printf.
 		 */
 		printf("kgdb started from device %x\n", kgdb_dev);
@@ -395,14 +384,14 @@ kgdb_trap(type, frame)
 	}
 	/*
 	 * Stick frame regs into our reg cache then tell remote host
-	 * that an exception has occured.
+	 * that an exception has occurred.
 	 */
 	regs_to_gdb(frame, gdb_regs);
 	if (type != T_TRAP15) {
 		/*
 		 * Only send an asynchronous SIGNAL message when we hit
 		 * a breakpoint.  Otherwise, we will drop the incoming
-		 * packet while we output this one (and on entry the other 
+		 * packet while we output this one (and on entry the other
 		 * side isn't interested in the SIGNAL type -- if it is,
 		 * it will have used a signal packet.)
 		 */
@@ -459,7 +448,7 @@ kgdb_trap(type, frame)
 		case KGDB_REG_W | KGDB_DELTA:
 			cp = inbuffer;
 			for (len = 0; len < inlen; len += 5) {
-				register int j = cp[len];
+				int j = cp[len];
 
 				kgdb_copy(&cp[len + 1],
 					  (u_char *)&gdb_regs[j], 4);
@@ -529,9 +518,8 @@ kgdb_trap(type, frame)
  * XXX do kernacc call if safe, otherwise attempt
  * to simulate by simple bounds-checking.
  */
-kgdb_acc(addr, len, rw)
-	caddr_t addr;
-	int len, rw;
+int
+kgdb_acc(void *addr, int len, int rw)
 {
 	extern char proc0paddr[], kstack[];	/* XXX */
 	extern char *kernel_map;		/* XXX! */

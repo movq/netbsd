@@ -1,4 +1,4 @@
-/*	$NetBSD: aed.c,v 1.10 2000/03/23 06:39:56 thorpej Exp $	*/
+/*	$NetBSD: aed.c,v 1.28 2008/06/11 23:54:45 cegger Exp $	*/
 
 /*
  * Copyright (C) 1994	Bradley A. Grantham
@@ -30,6 +30,9 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: aed.c,v 1.28 2008/06/11 23:54:45 cegger Exp $");
+
 #include "opt_adb.h"
 
 #include <sys/param.h>
@@ -40,6 +43,7 @@
 #include <sys/proc.h>
 #include <sys/signalvar.h>
 #include <sys/systm.h>
+#include <sys/conf.h>
 
 #include <machine/autoconf.h>
 #include <machine/cpu.h>
@@ -53,35 +57,43 @@
 /*
  * Function declarations.
  */
-static int	aedmatch __P((struct device *, struct cfdata *, void *));
-static void	aedattach __P((struct device *, struct device *, void *));
-static void	aed_emulate_mouse __P((adb_event_t *event));
-static void	aed_kbdrpt __P((void *kstate));
-static void	aed_dokeyupdown __P((adb_event_t *event));
-static void	aed_handoff __P((adb_event_t *event));
-static void	aed_enqevent __P((adb_event_t *event));
+static int	aedmatch(struct device *, struct cfdata *, void *);
+static void	aedattach(struct device *, struct device *, void *);
+static void	aed_emulate_mouse(adb_event_t *);
+static void	aed_kbdrpt(void *);
+static void	aed_dokeyupdown(adb_event_t *);
+static void	aed_handoff(adb_event_t *);
+static void	aed_enqevent(adb_event_t *);
 
 /*
  * Local variables.
  */
-static struct aed_softc *aed_sc = NULL;
+static struct aed_softc *aed_sc;
 static int aed_options = 0 | AED_MSEMUL;
 
 /* Driver definition */
-struct cfattach aed_ca = {
-	sizeof(struct aed_softc), aedmatch, aedattach
-};
+CFATTACH_DECL(aed, sizeof(struct aed_softc),
+    aedmatch, aedattach, NULL, NULL);
 
 extern struct cfdriver aed_cd;
 
+dev_type_open(aedopen);
+dev_type_close(aedclose);
+dev_type_read(aedread);
+dev_type_ioctl(aedioctl);
+dev_type_poll(aedpoll);
+dev_type_kqfilter(aedkqfilter);
+
+const struct cdevsw aed_cdevsw = {
+	aedopen, aedclose, aedread, nullwrite, aedioctl,
+	nostop, notty, aedpoll, nommap, aedkqfilter,
+};
+
 static int
-aedmatch(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+aedmatch(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct adb_attach_args *aa_args = (struct adb_attach_args *)aux;
-	static int aed_matched = 0;
+	static int aed_matched;
 
 	/* Allow only one instance. */
         if ((aa_args->origaddr == 0) && (!aed_matched)) {
@@ -92,14 +104,13 @@ aedmatch(parent, cf, aux)
 }
 
 static void
-aedattach(parent, self, aux)
-	struct device *parent, *self;
-	void   *aux;
+aedattach(struct device *parent, struct device *self, void *aux)
 {
 	struct adb_attach_args *aa_args = (struct adb_attach_args *)aux;
 	struct aed_softc *sc = (struct aed_softc *)self;
 
-	callout_init(&sc->sc_repeat_ch);
+	callout_init(&sc->sc_repeat_ch, 0);
+	selinit(&sc->sc_selinfo);
 
 	sc->origaddr = aa_args->origaddr;
 	sc->adbaddr = aa_args->adbaddr;
@@ -113,7 +124,7 @@ aedattach(parent, self, aux)
 	sc->sc_repeating = -1;          /* not repeating */
 
 	/* Pull in the options flags. */ 
-	sc->sc_options = (sc->sc_dev.dv_cfdata->cf_flags | aed_options);
+	sc->sc_options = (device_cfdata(&sc->sc_dev)->cf_flags | aed_options);
 
 	sc->sc_ioproc = NULL;
 	
@@ -135,8 +146,7 @@ aedattach(parent, self, aux)
  * the handoff function.
  */
 int
-aed_input(event)
-        adb_event_t *event;
+aed_input(adb_event_t *event)
 {
         adb_event_t new_event = *event;
 	int rv = aed_sc->sc_open;
@@ -154,7 +164,7 @@ aed_input(event)
 		break;
 	default:                /* God only knows. */
 #ifdef DIAGNOSTIC
-		panic("aed: received event from unsupported device!\n");
+		panic("aed: received event from unsupported device!");
 #endif
 		rv = 0;
 		break;
@@ -170,10 +180,9 @@ aed_input(event)
  * the corresponding mouse button event.
  */
 static void 
-aed_emulate_mouse(event)
-	adb_event_t *event;
+aed_emulate_mouse(adb_event_t *event)
 {
-	static int emulmodkey_down = 0;
+	static int emulmodkey_down;
 	adb_event_t new_event;
 
 	if (event->u.k.key == ADBK_KEYDOWN(ADBK_OPTION)) {
@@ -307,21 +316,20 @@ aed_emulate_mouse(event)
  * ticks in the future.
  */
 static void 
-aed_kbdrpt(kstate)
-	void *kstate;
+aed_kbdrpt(void *kstate)
 {
-	struct aed_softc *aed_sc = (struct aed_softc *)kstate;
+	struct aed_softc *sc = (struct aed_softc *)kstate;
 
-	aed_sc->sc_rptevent.bytes[0] |= 0x80;
-	microtime(&aed_sc->sc_rptevent.timestamp);
-	aed_handoff(&aed_sc->sc_rptevent);	/* do key up */
+	sc->sc_rptevent.bytes[0] |= 0x80;
+	microtime(&sc->sc_rptevent.timestamp);
+	aed_handoff(&sc->sc_rptevent);	/* do key up */
 
-	aed_sc->sc_rptevent.bytes[0] &= 0x7f;
-	microtime(&aed_sc->sc_rptevent.timestamp);
-	aed_handoff(&aed_sc->sc_rptevent);	/* do key down */
+	sc->sc_rptevent.bytes[0] &= 0x7f;
+	microtime(&sc->sc_rptevent.timestamp);
+	aed_handoff(&sc->sc_rptevent);	/* do key down */
 
-	if (aed_sc->sc_repeating == aed_sc->sc_rptevent.u.k.key) {
-		callout_reset(&aed_sc->sc_repeat_ch, aed_sc->sc_rptinterval,
+	if (sc->sc_repeating == sc->sc_rptevent.u.k.key) {
+		callout_reset(&sc->sc_repeat_ch, sc->sc_rptinterval,
 		    aed_kbdrpt, kstate);
 	}
 }
@@ -333,10 +341,9 @@ aed_kbdrpt(kstate)
  * appropriate subsystem.
  */
 static void 
-aed_dokeyupdown(event)
-	adb_event_t *event;
+aed_dokeyupdown(adb_event_t *event)
 {
-	int     kbd_key;
+	int kbd_key;
 
 	kbd_key = ADBK_KEYVAL(event->u.k.key);
 	if (ADBK_PRESS(event->u.k.key) && keyboard[kbd_key][0] != 0) {
@@ -363,8 +370,7 @@ aed_dokeyupdown(event)
  * and we are not polling, otherwise, pass it up to the console driver.
  */
 static void
-aed_handoff(event)
-	adb_event_t *event;
+aed_handoff(adb_event_t *event)
 {
 	if (aed_sc->sc_open && !adb_polling)
 		aed_enqevent(event);
@@ -374,12 +380,11 @@ aed_handoff(event)
  * Place the event in the event queue and wakeup any waiting processes.
  */
 static void 
-aed_enqevent(event)
-    adb_event_t *event;
+aed_enqevent(adb_event_t *event)
 {
-	int     s;
+	int s;
 
-	s = spladb();
+	s = splvm();
 
 #ifdef DIAGNOSTIC
 	if (aed_sc->sc_evq_tail < 0 || aed_sc->sc_evq_tail >= AED_MAX_EVENTS)
@@ -397,7 +402,7 @@ aed_enqevent(event)
 	    AED_MAX_EVENTS] = *event;
 	aed_sc->sc_evq_len++;
 
-	selwakeup(&aed_sc->sc_selinfo);
+	selnotify(&aed_sc->sc_selinfo, 0, 0);
 	if (aed_sc->sc_ioproc)
 		psignal(aed_sc->sc_ioproc, SIGIO);
 
@@ -405,43 +410,36 @@ aed_enqevent(event)
 }
 
 int 
-aedopen(dev, flag, mode, p)
-    dev_t dev;
-    int flag, mode;
-    struct proc *p;
+aedopen(dev_t dev, int flag, int mode, struct lwp *l)
 {
-	int unit;
-	int error = 0;
+	struct aed_softc *sc;
 	int s;
 
-	unit = minor(dev);
-
-	if (unit != 0)
+	sc = device_lookup_private(&aed_cd, minor(dev));
+	if (sc == NULL)
 		return (ENXIO);
 
-	s = spladb();
-	if (aed_sc->sc_open) {
+	s = splvm();
+	if (sc->sc_open) {
 		splx(s);
 		return (EBUSY);
 	}
 	aed_sc->sc_evq_tail = 0;
 	aed_sc->sc_evq_len = 0;
 	aed_sc->sc_open = 1;
-	aed_sc->sc_ioproc = p;
+	aed_sc->sc_ioproc = l->l_proc;
 	splx(s);
 
-	return (error);
+	return 0;
 }
 
 
 int 
-aedclose(dev, flag, mode, p)
-    dev_t dev;
-    int flag, mode;
-    struct proc *p;
+aedclose(dev_t dev, int flag, int mode, struct lwp *l)
 {
-	int s = spladb();
+	int s;
 
+	s = splvm();
 	aed_sc->sc_open = 0;
 	aed_sc->sc_ioproc = NULL;
 	splx(s);
@@ -451,10 +449,7 @@ aedclose(dev, flag, mode, p)
 
 
 int 
-aedread(dev, uio, flag)
-    dev_t dev;
-    struct uio *uio;
-    int flag;
+aedread(dev_t dev, struct uio *uio, int flag)
 {
 	int s, error;
 	int willfit;
@@ -465,7 +460,7 @@ aedread(dev, uio, flag)
 	if (uio->uio_resid < sizeof(adb_event_t))
 		return (EMSGSIZE);	/* close enough. */
 
-	s = spladb();
+	s = splvm();
 	if (aed_sc->sc_evq_len == 0) {
 		splx(s);
 		return (0);
@@ -476,7 +471,7 @@ aedread(dev, uio, flag)
 	firstmove = (aed_sc->sc_evq_tail + total > AED_MAX_EVENTS)
 	    ? (AED_MAX_EVENTS - aed_sc->sc_evq_tail) : total;
 
-	error = uiomove((caddr_t) & aed_sc->sc_evq[aed_sc->sc_evq_tail],
+	error = uiomove((void *) & aed_sc->sc_evq[aed_sc->sc_evq_tail],
 	    firstmove * sizeof(adb_event_t), uio);
 	if (error) {
 		splx(s);
@@ -485,7 +480,7 @@ aedread(dev, uio, flag)
 	moremove = total - firstmove;
 
 	if (moremove > 0) {
-		error = uiomove((caddr_t) & aed_sc->sc_evq[0],
+		error = uiomove((void *) & aed_sc->sc_evq[0],
 		    moremove * sizeof(adb_event_t), uio);
 		if (error) {
 			splx(s);
@@ -498,24 +493,8 @@ aedread(dev, uio, flag)
 	return (0);
 }
 
-
 int 
-aedwrite(dev, uio, flag)
-    dev_t dev;
-    struct uio *uio;
-    int flag;
-{
-	return 0;
-}
-
-
-int 
-aedioctl(dev, cmd, data, flag, p)
-    dev_t dev;
-    int cmd;
-    caddr_t data;
-    int flag;
-    struct proc *p;
+aedioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
 	switch (cmd) {
 	case ADBIOC_DEVSINFO: {
@@ -579,10 +558,7 @@ aedioctl(dev, cmd, data, flag, p)
 
 
 int 
-aedpoll(dev, events, p)
-	dev_t dev;
-	int events;
-	struct proc *p;
+aedpoll(dev_t dev, int events, struct lwp *l)
 {
 	int s, revents;
 
@@ -591,12 +567,66 @@ aedpoll(dev, events, p)
 	if ((events & (POLLIN | POLLRDNORM)) == 0)
 		return (revents);
 
-	s = spladb();
+	s = splvm();
 	if (aed_sc->sc_evq_len > 0)
 		revents |= events & (POLLIN | POLLRDNORM);
 	else
-		selrecord(p, &aed_sc->sc_selinfo);
+		selrecord(l, &aed_sc->sc_selinfo);
 	splx(s);
 
 	return (revents);
+}
+
+static void
+filt_aedrdetach(struct knote *kn)
+{
+	int s;
+
+	s = splvm();
+	SLIST_REMOVE(&aed_sc->sc_selinfo.sel_klist, kn, knote, kn_selnext);
+	splx(s);
+}
+
+static int
+filt_aedread(struct knote *kn, long hint)
+{
+
+	kn->kn_data = aed_sc->sc_evq_len * sizeof(adb_event_t);
+	return (kn->kn_data > 0);
+}
+
+static const struct filterops aedread_filtops =
+	{ 1, NULL, filt_aedrdetach, filt_aedread };
+
+static const struct filterops aed_seltrue_filtops =
+	{ 1, NULL, filt_aedrdetach, filt_seltrue };
+
+int
+aedkqfilter(dev_t dev, struct knote *kn)
+{
+	struct klist *klist;
+	int s;
+
+	switch (kn->kn_filter) {
+	case EVFILT_READ:
+		klist = &aed_sc->sc_selinfo.sel_klist;
+		kn->kn_fop = &aedread_filtops;
+		break;
+
+	case EVFILT_WRITE:
+		klist = &aed_sc->sc_selinfo.sel_klist;
+		kn->kn_fop = &aed_seltrue_filtops;
+		break;
+
+	default:
+		return (1);
+	}
+
+	kn->kn_hook = NULL;
+
+	s = splvm();
+	SLIST_INSERT_HEAD(klist, kn, kn_selnext);
+	splx(s);
+
+	return (0);
 }

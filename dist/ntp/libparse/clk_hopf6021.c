@@ -1,9 +1,9 @@
-/*	$NetBSD: clk_hopf6021.c,v 1.1.1.1 2000/03/29 12:38:51 simonb Exp $	*/
+/*	$NetBSD: clk_hopf6021.c,v 1.4 2006/06/11 19:34:10 kardel Exp $	*/
 
 /*
- * /src/NTP/ntp-4/libparse/clk_hopf6021.c,v 4.7 1999/11/28 09:13:49 kardel RELEASE_19991128_A
+ * /src/NTP/ntp4-dev/libparse/clk_hopf6021.c,v 4.10 2004/11/14 15:29:41 kardel RELEASE_20050508_A
  *
- * clk_hopf6021.c,v 4.7 1999/11/28 09:13:49 kardel RELEASE_19991128_A
+ * clk_hopf6021.c,v 4.10 2004/11/14 15:29:41 kardel RELEASE_20050508_A
  *
  * Radiocode Clocks HOPF Funkuhr 6021 mit serieller Schnittstelle
  * base code version from 24th Nov 1995 - history at end
@@ -23,9 +23,6 @@
 #endif
 
 #if defined(REFCLOCK) && defined(CLOCK_PARSE) && defined(CLOCK_HOPF6021)
-
-#include <sys/types.h>
-#include <sys/time.h>
 
 #include "ntp_fp.h"
 #include "ntp_unixtime.h"
@@ -231,7 +228,7 @@ inp_hopf6021(
 {
 	unsigned int rtc;
 	
-	parseprintf(DD_PARSE, ("inp_hopf6021(0x%x, 0x%x, ...)\n", (int)parseio, (int)ch));
+	parseprintf(DD_PARSE, ("inp_hopf6021(0x%lx, 0x%x, ...)\n", (long)parseio, ch));
 	
 	switch (ch)
 	{
@@ -256,6 +253,9 @@ int clk_hopf6021_bs;
  * History:
  *
  * clk_hopf6021.c,v
+ * Revision 4.10  2004/11/14 15:29:41  kardel
+ * support PPSAPI, upgrade Copyright to Berkeley style
+ *
  * Revision 4.7  1999/11/28 09:13:49  kardel
  * RECON_4_0_98F
  *

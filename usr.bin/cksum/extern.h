@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.6 1997/01/30 01:10:35 thorpej Exp $	*/
+/*	$NetBSD: extern.h,v 1.19 2006/09/04 20:01:10 dsl Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,19 +31,58 @@
  *	@(#)extern.h	8.1 (Berkeley) 6/6/93
  */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
 #include <sys/cdefs.h>
+#include "crc_extern.h"
 
 __BEGIN_DECLS
-int	crc __P((int, u_int32_t *, u_int32_t *));
-void	pcrc __P((char *, u_int32_t, u_int32_t));
-void	psum1 __P((char *, u_int32_t, u_int32_t));
-void	psum2 __P((char *, u_int32_t, u_int32_t));
-int	csum1 __P((int, u_int32_t *, u_int32_t *));
-int	csum2 __P((int, u_int32_t *, u_int32_t *));
-int	md5 __P((int, u_int32_t *, u_int32_t *));
+void	pcrc(char *, u_int32_t, off_t);
+void	psum1(char *, u_int32_t, off_t);
+void	psum2(char *, u_int32_t, off_t);
+int	csum1(int, u_int32_t *, off_t *);
+int	csum2(int, u_int32_t *, off_t *);
+int	md5(int, u_int32_t *, u_int32_t *);
 
-void	MDString __P((const char *));
-void	MDTimeTrial __P((void));
-void	MDTestSuite __P((void));
-void	MDFilter __P((int));
+void	MD2String(const char *);
+void	MD2TimeTrial(void);
+void	MD2TestSuite(void);
+void	MD2Filter(int);
+
+void	MD4String(const char *);
+void	MD4TimeTrial(void);
+void	MD4TestSuite(void);
+void	MD4Filter(int);
+
+void	MD5String(const char *);
+void	MD5TimeTrial(void);
+void	MD5TestSuite(void);
+void	MD5Filter(int);
+
+void	SHA1String(const char *);
+void	SHA1TimeTrial(void);
+void	SHA1TestSuite(void);
+void	SHA1Filter(int);
+
+void	RMD160String(const char *);
+void	RMD160TimeTrial(void);
+void	RMD160TestSuite(void);
+void	RMD160Filter(int);
+
+void	SHA256_String(const char *);
+void	SHA256_TimeTrial(void);
+void	SHA256_TestSuite(void);
+void	SHA256_Filter(int);
+
+void	SHA384_String(const char *);
+void	SHA384_TimeTrial(void);
+void	SHA384_TestSuite(void);
+void	SHA384_Filter(int);
+
+void	SHA512_String(const char *);
+void	SHA512_TimeTrial(void);
+void	SHA512_TestSuite(void);
+void	SHA512_Filter(int);
 __END_DECLS

@@ -1,11 +1,11 @@
-/*	$NetBSD: rtld_start.S,v 1.3 1999/10/18 03:26:53 itohy Exp $	*/
+/*	$NetBSD: rtld_start.S,v 1.9 2008/04/28 20:23:03 martin Exp $	*/
 
 /*-
- * Copyright (c) 1999 The NetBSD Foundation, Inc.
+ * Copyright (c) 1999, 2002, 2003 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Klaus Klein.
+ * by Klaus Klein and by Charles M. Hannum.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,9 +37,22 @@
 	.type	.rtld_start,@function
 .rtld_start:
 	subql	#8,%sp			| storage for obj and cleanup
-	pea	(%sp)			| push sp
-	jbsr	_rtld@PLTPC		| entry = _rtld(sp)
-	addql	#4,%sp			| pop argument
+
+	lea	(%pc,_GLOBAL_OFFSET_TABLE_@GOTPC),%a0
+	lea	(%pc,_DYNAMIC),%a1
+	movel	%a1,%a5
+	subl	(%a0),%a5
+
+	movel	%a5,-(%sp)		| relocbase
+	movel	%a1,-(%sp)		| &_DYNAMIC
+	jbsr	_rtld_relocate_nonplt_self@PLTPC
+	addql	#8,%sp			| pop arguments
+
+	movel	%a5,-(%sp)		| relocbase
+	pea	4(%sp)			| sp
+	jbsr	_rtld@PLTPC		| entry = _rtld(sp, relocbase)
+	addql	#8,%sp			| pop arguments
+
 	moveal	(%sp)+,%a1		| cleanup
 	moveal	(%sp)+,%a0		| obj
 	moveal	%d0,%a3

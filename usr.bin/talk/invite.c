@@ -1,4 +1,4 @@
-/*	$NetBSD: invite.c,v 1.4 1997/10/20 00:23:23 lukem Exp $	*/
+/*	$NetBSD: invite.c,v 1.7 2005/09/24 16:40:01 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)invite.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: invite.c,v 1.4 1997/10/20 00:23:23 lukem Exp $");
+__RCSID("$NetBSD: invite.c,v 1.7 2005/09/24 16:40:01 christos Exp $");
 #endif /* not lint */
 
 #include "talk.h"
@@ -78,7 +74,7 @@ invite_remote()
 		p_error("Error on attempt to listen for caller");
 #ifdef MSG_EOR
 	/* copy new style sockaddr to old, swap family (short in old) */
-	msg.addr = *(struct osockaddr *)&my_addr;  /* XXX new to old  style*/
+	msg.addr = *(struct talkd_sockaddr *)(void *)&my_addr;
 	msg.addr.sa_family = htons(my_addr.sin_family);
 #else
 	msg.addr = *(struct sockaddr *)&my_addr;
@@ -88,7 +84,7 @@ invite_remote()
 	announce_invite();
 	/*
 	 * Shut off the automatic messages for a while,
-	 * so we can use the interupt timer to resend the invitation
+	 * so we can use the interrupt timer to resend the invitation
 	 */
 	end_msgs();
 	setitimer(ITIMER_REAL, &itimer, (struct itimerval *)0);
@@ -118,7 +114,7 @@ invite_remote()
 }
 
 /*
- * Routine called on interupt to re-invite the callee
+ * Routine called on interrupt to re-invite the callee
  */
 void
 re_invite(dummy)

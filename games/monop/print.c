@@ -1,4 +1,4 @@
-/*	$NetBSD: print.c,v 1.6 1999/09/08 21:17:52 jsm Exp $	*/
+/*	$NetBSD: print.c,v 1.12 2008/02/24 03:56:49 christos Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,21 +34,21 @@
 #if 0
 static char sccsid[] = "@(#)print.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: print.c,v 1.6 1999/09/08 21:17:52 jsm Exp $");
+__RCSID("$NetBSD: print.c,v 1.12 2008/02/24 03:56:49 christos Exp $");
 #endif
 #endif /* not lint */
 
-#include "monop.ext"
+#include "monop.h"
 
 static const char *header = "Name      Own      Price Mg # Rent";
 
-static void printmorg __P((const SQUARE *));
+static void printmorg(const SQUARE *);
 
 /*
  *	This routine prints out the current board
  */
 void
-printboard() 
+printboard()
 {
 	int i;
 
@@ -68,7 +64,7 @@ printboard()
  *	This routine lists where each player is.
  */
 void
-where() 
+where()
 {
 	int i;
 
@@ -86,9 +82,7 @@ where()
  *	This routine prints out an individual square
  */
 void
-printsq(sqn, eoln)
-	int sqn;
-	bool eoln;
+printsq(int sqn, bool eoln)
 {
 	int rnt;
 	PROP *pp;
@@ -127,8 +121,7 @@ printsq(sqn, eoln)
 					printf("0 %4d", pp->rent[0] * 2);
 			else
 				printf("H %4d", pp->rent[5]);
-		}
-		else
+		} else
 			printf("  %4d", pp->rent[0]);
 		break;
 	  case UTIL:

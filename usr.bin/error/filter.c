@@ -1,4 +1,4 @@
-/*	$NetBSD: filter.c,v 1.6 2000/01/14 06:53:48 mjl Exp $	*/
+/*	$NetBSD: filter.c,v 1.10 2003/08/07 11:13:37 agc Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)filter.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: filter.c,v 1.6 2000/01/14 06:53:48 mjl Exp $");
+__RCSID("$NetBSD: filter.c,v 1.10 2003/08/07 11:13:37 agc Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -58,17 +54,15 @@ char	*lint_libs[] = {
 	IG_FILE4,
 	0
 };
-extern	char*	processname;
-int	lexsort __P((const void *, const void *));
-int	search_ignore __P((char *));
+int	lexsort(const void *, const void *);
+int	search_ignore(char *);
 
 /*
  *	Read the file ERRORNAME of the names of functions in lint
  *	to ignore complaints about.
  */
 void
-getignored(auxname)
-	char	*auxname;
+getignored(char *auxname)
 {
 	int	i;
 	FILE	*fyle;
@@ -123,7 +117,7 @@ getignored(auxname)
 	}
 	for (i=0; i < nignored &&
 	          (fgets (inbuffer, sizeof(inbuffer)-1, fyle) != NULL); i++){
-		names_ignored[i] = strsave(inbuffer);
+		names_ignored[i] = strdup(inbuffer);
 		(void)substitute(names_ignored[i], '\n', '\0');
 	}
 	qsort(names_ignored, nignored, sizeof *names_ignored, lexsort);
@@ -136,8 +130,7 @@ getignored(auxname)
 }
 
 int
-lexsort(c1, c2)
-	const void *c1, *c2;
+lexsort(const void *c1, const void *c2)
 {
 	char	**cpp1, **cpp2;
 
@@ -147,8 +140,7 @@ lexsort(c1, c2)
 }
 
 int
-search_ignore(key)
-	char	*key;
+search_ignore(char *key)
 {
 	int	ub, lb;
 	int	halfway;
@@ -176,8 +168,7 @@ search_ignore(key)
  *	Return the new categorization of the error class.
  */
 Errorclass
-discardit(errorp)
-	Eptr		errorp;
+discardit(Eptr errorp)
 {
 	int		language;
 	int		i;

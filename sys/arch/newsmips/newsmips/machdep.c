@@ -1,9 +1,42 @@
-/*	$NetBSD: machdep.c,v 1.39 2000/03/25 10:14:14 nisimura Exp $	*/
+/*	$NetBSD: machdep.c,v 1.98 2008/07/02 17:28:56 ad Exp $	*/
 
 /*
- * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Systems Programming Group of the University of Utah Computer
+ * Science Department, The Mach Operating System project at
+ * Carnegie-Mellon University and Ralph Campbell.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ *	@(#)machdep.c	8.3 (Berkeley) 1/12/94
+ */
+/*
+ * Copyright (c) 1988 University of Utah.
  *
  * This code is derived from software contributed to Berkeley by
  * the Systems Programming Group of the University of Utah Computer
@@ -43,7 +76,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.39 2000/03/25 10:14:14 nisimura Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.98 2008/07/02 17:28:56 ad Exp $");
 
 /* from: Utah Hdr: machdep.c 1.63 91/04/24 */
 
@@ -55,7 +88,6 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.39 2000/03/25 10:14:14 nisimura Exp $"
 #include <sys/systm.h>
 #include <sys/signalvar.h>
 #include <sys/kernel.h>
-#include <sys/map.h>
 #include <sys/proc.h>
 #include <sys/buf.h>
 #include <sys/reboot.h>
@@ -68,19 +100,17 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.39 2000/03/25 10:14:14 nisimura Exp $"
 #include <sys/device.h>
 #include <sys/user.h>
 #include <sys/exec.h>
-#include <vm/vm.h>
-#include <sys/sysctl.h>
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
 #include <sys/kcore.h>
-
-#include <vm/vm_kern.h>
+#include <sys/ksyms.h>
 
 #include <uvm/uvm_extern.h>
 
 #include <ufs/mfs/mfs_extern.h>		/* mfs_initminiroot() */
 
 #include <machine/cpu.h>
+#include <machine/intr.h>
 #include <machine/reg.h>
 #include <machine/psl.h>
 #include <machine/pte.h>
@@ -88,7 +118,12 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.39 2000/03/25 10:14:14 nisimura Exp $"
 #include <machine/bootinfo.h>
 #include <machine/apbus.h>
 #include <machine/apcall.h>
-#include <mips/locore.h>		/* wbflush() */
+
+#include <mips/cache.h>
+#include <mips/locore.h>
+
+#define	_NEWSMIPS_BUS_DMA_PRIVATE
+#include <machine/bus.h>
 
 #ifdef DDB
 #include <machine/db_machdep.h>
@@ -99,21 +134,18 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.39 2000/03/25 10:14:14 nisimura Exp $"
 
 #include <machine/adrsmap.h>
 #include <machine/machConst.h>
-#include <machine/intr.h>
-#include <newsmips/newsmips/clockreg.h>
 #include <newsmips/newsmips/machid.h>
 #include <dev/cons.h>
 
-/* the following is used externally (sysctl_hw) */
-char machine[] = MACHINE;	/* from <machine/param.h> */
-char machine_arch[] = MACHINE_ARCH;
-char cpu_model[30];
+#include "ksyms.h"
+
+/* Our exported CPU info; we can have only one. */
+struct cpu_info cpu_info_store;
 
 /* maps for VM objects */
 
-vm_map_t exec_map = NULL;
-vm_map_t mb_map = NULL;
-vm_map_t phys_map = NULL;
+struct vm_map *mb_map = NULL;
+struct vm_map *phys_map = NULL;
 
 char *bootinfo = NULL;		/* pointer to bootinfo structure */
 int physmem;			/* max supported memory, changes to actual */
@@ -124,37 +156,24 @@ phys_ram_seg_t mem_clusters[VM_PHYSSEG_MAX];
 int mem_cluster_cnt;
 
 struct idrom idrom;
-void (*enable_intr) __P((void));
-void (*disable_intr) __P((void));
-
-/* System type dependent initializations. */
-extern void news3400_init __P((void));
-extern void news5000_init __P((void));
-
-/*
- * Interrupt-blocking functions defined in locore. These names aren't used
- * directly except here and in interrupt handlers.
- */
-
-/* Block out nested interrupt-enable bits. */
-extern int	cpu_spl0 __P((void)), cpu_spl1 __P((void));
-extern int	cpu_spl2 __P((void)), cpu_spl3 __P((void));
-extern int	splhigh __P((void));
-
-void to_monitor __P((int)) __attribute__((__noreturn__));
+void (*hardware_intr)(uint32_t, uint32_t, uint32_t, uint32_t);
+void (*enable_intr)(void);
+void (*disable_intr)(void);
+void (*enable_timer)(void);
 
 /*
  *  Local functions.
  */
 
 /* initialize bss, etc. from kernel start, before main() is called. */
-void mach_init __P((int, int, int, int));
-void prom_halt __P((int)) __attribute__((__noreturn__));
-static void newsmips_softintr __P((int));
+void mach_init(int, int, int, int);
+
+void prom_halt(int) __attribute__((__noreturn__));
+void to_monitor(int) __attribute__((__noreturn__));
 
 #ifdef DEBUG
 /* stacktrace code violates prototypes to get callee's registers */
-extern void stacktrace __P((void)); /*XXX*/
+extern void stacktrace(void); /*XXX*/
 #endif
 
 /*
@@ -164,6 +183,27 @@ extern void stacktrace __P((void)); /*XXX*/
  * disables mips1 FPU interrupts.
  */
 int safepri = MIPS3_PSL_LOWIPL;		/* XXX */
+
+/*
+ * This is a mask of bits to clear in the SR when we go to a
+ * given interrupt priority level.
+ */
+const uint32_t ipl_sr_bits[_IPL_N] = {
+	[IPL_NONE] = 0,
+	[IPL_SOFTCLOCK] =
+	    MIPS_SOFT_INT_MASK_0,
+	[IPL_SOFTNET] =
+	    MIPS_SOFT_INT_MASK_0 | MIPS_SOFT_INT_MASK_1,
+	[IPL_VM] =
+	    MIPS_SOFT_INT_MASK_0 | MIPS_SOFT_INT_MASK_1 |
+	    MIPS_INT_MASK_0 |
+	    MIPS_INT_MASK_1,
+	[IPL_SCHED] =
+	    MIPS_SOFT_INT_MASK_0 | MIPS_SOFT_INT_MASK_1 |
+	    MIPS_INT_MASK_0 |
+	    MIPS_INT_MASK_1 |
+	    MIPS_INT_MASK_2,
+};
 
 extern struct user *proc0paddr;
 extern u_long bootdev;
@@ -175,29 +215,21 @@ extern char edata[], end[];
  * Return the first page address following the system.
  */
 void
-mach_init(x_boothowto, x_bootdev, x_bootname, x_maxmem)
-	int x_boothowto;
-	int x_bootdev;
-	int x_bootname;
-	int x_maxmem;
+mach_init(int x_boothowto, int x_bootdev, int x_bootname, int x_maxmem)
 {
-	register int i;
 	u_long first, last;
-	caddr_t kernend, v;
-	vsize_t size;
+	char *kernend, *v;
 	struct btinfo_magic *bi_magic;
 	struct btinfo_bootarg *bi_arg;
 	struct btinfo_systype *bi_systype;
-#ifdef DDB
+#if NKSYMS || defined(DDB) || defined(LKM)
 	struct btinfo_symtab *bi_sym;
 	int nsym = 0;
 	char *ssym, *esym;
+
+	ssym = esym = NULL;	/* XXX: gcc */
 #endif
-
-	/* clear the BSS segment */
-	bzero(edata, end - edata);
-
-	systype = NEWS3400;			/* XXX compatibility */
+	bi_arg = NULL;
 
 	bootinfo = (void *)BOOTINFO_ADDR;	/* XXX */
 	bi_magic = lookup_bootinfo(BTINFO_MAGIC);
@@ -208,7 +240,7 @@ mach_init(x_boothowto, x_bootdev, x_bootname, x_maxmem)
 			x_bootdev = bi_arg->bootdev;
 			x_maxmem = bi_arg->maxmem;
 		}
-#ifdef DDB
+#if NKSYMS || defined(DDB) || defined(LKM)
 		bi_sym = lookup_bootinfo(BTINFO_SYMTAB);
 		if (bi_sym) {
 			nsym = bi_sym->nsym;
@@ -220,14 +252,46 @@ mach_init(x_boothowto, x_bootdev, x_bootname, x_maxmem)
 		bi_systype = lookup_bootinfo(BTINFO_SYSTYPE);
 		if (bi_systype)
 			systype = bi_systype->type;
+	} else {
+		/*
+		 * Running kernel is loaded by non-native loader;
+		 * clear the BSS segment here.
+		 */
+		memset(edata, 0, end - edata);
 	}
+
+	if (systype == 0) 
+		systype = NEWS3400;	/* XXX compatibility for old boot */
 
 #ifdef news5000
 	if (systype == NEWS5000) {
+		int i;
+		char *bootspec = (char *)x_bootdev;
+
+		if (bi_arg == NULL)
+			panic("news5000 requires BTINFO_BOOTARG to boot");
+
 		_sip = (void *)bi_arg->sip;
 		x_maxmem = _sip->apbsi_memsize;
 		x_maxmem -= 0x00100000;	/* reserve 1MB for ROM monitor */
-
+		if (strncmp(bootspec, "scsi", 4) == 0) {
+			x_bootdev = (5 << 28) | 0;	 /* magic, sd */
+			bootspec += 4;
+			if (*bootspec != '(' /*)*/)
+				goto bootspec_end;
+			i = strtoul(bootspec + 1, &bootspec, 10);
+			x_bootdev |= (i << 24);		/* bus */
+			if (*bootspec != ',')
+				goto bootspec_end;
+			i = strtoul(bootspec + 1, &bootspec, 10);
+			x_bootdev |= (i / 10) << 20;	/* controller */
+			x_bootdev |= (i % 10) << 16;	/* unit */
+			if (*bootspec != ',')
+				goto bootspec_end;
+			i = strtoul(bootspec + 1, &bootspec, 10);
+			x_bootdev |= (i << 8);		/* partition */
+		}
+ bootspec_end:
 		consinit();
 	}
 #endif
@@ -239,10 +303,10 @@ mach_init(x_boothowto, x_bootdev, x_bootname, x_maxmem)
 	*(int *)(MIPS_PHYS_TO_KSEG1(MACH_BOOTDEV_ADDR)) = x_bootdev;
 	*(int *)(MIPS_PHYS_TO_KSEG1(MACH_BOOTSW_ADDR)) = x_boothowto;
 
-	kernend = (caddr_t)mips_round_page(end);
-#ifdef DDB
+	kernend = (char *)mips_round_page(end);
+#if NKSYMS || defined(DDB) || defined(LKM)
 	if (nsym)
-		kernend = (caddr_t)mips_round_page(esym);
+		kernend = (char *)mips_round_page(esym);
 #endif
 
 	/*
@@ -268,23 +332,18 @@ mach_init(x_boothowto, x_bootdev, x_bootname, x_maxmem)
 	 * Clear out the I and D caches.
 	 */
 	mips_vector_init();
-#if 0
-	if (systype == NEWS5000) {
-		mips_L2CacheSize = 1024 * 1024;		/* XXX to be safe */
-		mips3_FlushCache();
-	}
-#endif
 
-#ifdef DDB
 	/*
-	 * Initialize machine-dependent DDB commands, in case of early panic.
+	 * We know the CPU type now.  Initialize our DMA tags (might
+	 * need this early).
 	 */
-	db_machine_init();
+	newsmips_bus_dma_init();
+
+#if NKSYMS || defined(DDB) || defined(LKM)
 	if (nsym)
-		ddb_init(esym - ssym, ssym, esym);
+		ksyms_init(esym - ssym, ssym, esym);
 #endif
 
-	boothowto &= ~RB_ASKNAME;	/* for lack of cn_getc */
 #ifdef KADB
 	boothowto |= RB_KDB;
 #endif
@@ -294,22 +353,9 @@ mach_init(x_boothowto, x_bootdev, x_bootname, x_maxmem)
 	 * Check to see if a mini-root was loaded into memory. It resides
 	 * at the start of the next page just after the end of BSS.
 	 */
-	if (boothowto & RB_MINIROOT) {
-		boothowto |= RB_DFLTROOT;
+	if (boothowto & RB_MINIROOT)
 		kernend += round_page(mfs_initminiroot(kernend));
-	}
 #endif
-
-	/*
-	 * Alloc u pages for proc0 stealing KSEG0 memory.
-	 */
-	proc0.p_addr = proc0paddr = (struct user *)kernend;
-	proc0.p_md.md_regs = (struct frame *)(kernend + USPACE) - 1;
-	memset(proc0.p_addr, 0, USPACE);
-	curpcb = &proc0.p_addr->u_pcb;
-	curpcb->pcb_context[11] = MIPS_INT_MASK | MIPS_SR_INT_IE; /* SR */
-
-	kernend += USPACE;
 
 	/*
 	 * Load the rest of the available pages into the VM system.
@@ -325,15 +371,18 @@ mach_init(x_boothowto, x_bootdev, x_bootname, x_maxmem)
 	mips_init_msgbuf();
 
 	/*
-	 * Allocate space for system data structures.  These data structures
-	 * are allocated here instead of cpu_startup() because physical
-	 * memory is directly addressable.  We don't have to map these into
-	 * virtual address space.
+	 * Initialize the virtual memory system.
 	 */
-	size = (vsize_t)allocsys(NULL, NULL);
-	v = (caddr_t)pmap_steal_memory(size, NULL, NULL); 
-	if ((allocsys(v, NULL) - v) != size)
-		panic("mach_init: table size inconsistency");
+	pmap_bootstrap();
+
+	/*
+	 * Allocate space for lwp0's USPACE.
+	 */
+	v = (char *)uvm_pageboot_alloc(USPACE);
+	lwp0.l_addr = proc0paddr = (struct user *)v;
+	lwp0.l_md.md_regs = (struct frame *)(v + USPACE) - 1;
+	proc0paddr->u_pcb.pcb_context[11] =
+	    MIPS_INT_MASK | MIPS_SR_INT_IE; /* SR */
 
 	/*
 	 * Determine what model of computer we are running on.
@@ -342,71 +391,62 @@ mach_init(x_boothowto, x_bootdev, x_bootname, x_maxmem)
 #ifdef news3400
 	case NEWS3400:
 		news3400_init();
+		strcpy(cpu_model, idrom.id_machine);
+		if (strcmp(cpu_model, "news3400") == 0 ||
+		    strcmp(cpu_model, "news3200") == 0 ||
+		    strcmp(cpu_model, "news3700") == 0) {
+			/*
+			 * Set up interrupt handling and I/O addresses.
+			 */
+			hardware_intr = news3400_intr;
+			cpuspeed = 10;
+		} else {
+			printf("kernel not configured for machine %s\n",
+			    cpu_model);
+		}
 		break;
 #endif
 
 #ifdef news5000
 	case NEWS5000:
 		news5000_init();
+		strcpy(cpu_model, idrom.id_machine);
+		if (strcmp(cpu_model, "news5000") == 0 ||
+		    strcmp(cpu_model, "news5900") == 0) {
+			/*
+			 * Set up interrupt handling and I/O addresses.
+			 */
+			hardware_intr = news5000_intr;
+			cpuspeed = 50;	/* ??? XXX */
+		} else {
+			printf("kernel not configured for machine %s\n",
+			    cpu_model);
+		}
 		break;
 #endif
-	}
-
-	i = idrom.id_modelid;
-
-	switch (i) {
 
 	default:
-		printf("kernel not configured for systype 0x%x\n", i);
-		/* cpu_reboot(RB_HALT | RB_NOSYNC, NULL); */
-
-#ifdef news5000
-	case 2: /* NWS-5000U/W */
-	case 5: /* NWS-5000R */
-	case 7: /* NWS-5000X */
-	case 9: /* NWS-5900X */
-	case 11:/* NWS-5000G */
-		/*
-		 * Set up interrupt handling and I/O addresses.
-		 */
-		mips_hardware_intr = news5000_intr;
-		mips_software_intr = newsmips_softintr;
-		strcpy(cpu_model, "news5000");
-		cpuspeed = 50;	/* ??? XXX */
+		printf("kernel not configured for systype %d\n", systype);
 		break;
-#endif
-
-#ifdef news3400
-	case 3: /* NWS-3410 */
-	case 6: /* NWS-3470 */
-		/*
-		 * Set up interrupt handling and I/O addresses.
-		 */
-		mips_hardware_intr = news3400_intr;
-		mips_software_intr = newsmips_softintr;
-		strcpy(cpu_model, "news3400");
-		cpuspeed = 10;
-		break;
-#endif
 	}
+}
 
-	/*
-	 * Initialize the virtual memory system.
-	 */
-	pmap_bootstrap();
+void
+mips_machdep_cache_config(void)
+{
+	/* All r4k news boxen have a 1MB L2 cache. */
+	if (CPUISMIPS3)
+		mips_sdcache_size = 1024 * 1024;
 }
 
 /*
  * cpu_startup: allocate memory for variable-sized tables,
- * initialize cpu, and do autoconfiguration.
+ * initialize CPU, and do autoconfiguration.
  */
 void
-cpu_startup()
+cpu_startup(void)
 {
-	register unsigned i;
-	int base, residual;
 	vaddr_t minaddr, maxaddr;
-	vsize_t size;
 	char pbuf[9];
 #ifdef DEBUG
 	extern int pmapdebug;
@@ -418,60 +458,18 @@ cpu_startup()
 	/*
 	 * Good {morning,afternoon,evening,night}.
 	 */
-	printf(version);
+	printf("%s%s", copyright, version);
+	printf("SONY NET WORK STATION, Model %s, ", idrom.id_model);
+	printf("Machine ID #%d\n", idrom.id_serial);
 	format_bytes(pbuf, sizeof(pbuf), ctob(physmem));
 	printf("total memory = %s\n", pbuf);
 
-	/*
-	 * Allocate virtual address space for file I/O buffers.
-	 * Note they are different than the array of headers, 'buf',
-	 * and usually occupy more virtual memory than physical.
-	 */
-	size = MAXBSIZE * nbuf;
-	if (uvm_map(kernel_map, (vaddr_t *)&buffers, round_page(size),
-		    NULL, UVM_UNKNOWN_OFFSET,
-		    UVM_MAPFLAG(UVM_PROT_NONE, UVM_PROT_NONE, UVM_INH_NONE,
-				UVM_ADV_NORMAL, 0)) != KERN_SUCCESS)
-		panic("startup: cannot allocate VM for buffers");
-	minaddr = (vaddr_t)buffers;
-	base = bufpages / nbuf;
-	residual = bufpages % nbuf;
-	for (i = 0; i < nbuf; i++) {
-		vsize_t curbufsize;
-		vaddr_t curbuf;
-		struct vm_page *pg;
-
-		/*
-		 * Each buffer has MAXBSIZE bytes of VM space allocated.  Of
-		 * that MAXBSIZE space, we allocate and map (base+1) pages
-		 * for the first "residual" buffers, and then we allocate
-		 * "base" pages for the rest.
-		 */
-		curbuf = (vaddr_t) buffers + (i * MAXBSIZE);
-		curbufsize = NBPG * ((i < residual) ? (base+1) : base);
-
-		while (curbufsize) {
-			pg = uvm_pagealloc(NULL, 0, NULL, 0);
-			if (pg == NULL)
-				panic("cpu_startup: not enough memory for "
-				    "buffer cache");
-			pmap_kenter_pa(curbuf, VM_PAGE_TO_PHYS(pg),
-				       VM_PROT_READ|VM_PROT_WRITE);
-			curbuf += PAGE_SIZE;
-			curbufsize -= PAGE_SIZE;
-		}
-	}
-	/*
-	 * Allocate a submap for exec arguments.  This map effectively
-	 * limits the number of processes exec'ing at any time.
-	 */
-	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				   16 * NCARGS, VM_MAP_PAGEABLE, FALSE, NULL);
+	minaddr = 0;
 	/*
 	 * Allocate a submap for physio
 	 */
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				   VM_PHYS_SIZE, 0, FALSE, NULL);
+	    VM_PHYS_SIZE, 0, false, NULL);
 
 	/*
 	 * No need to allocate an mbuf cluster submap.  Mbuf clusters
@@ -484,39 +482,6 @@ cpu_startup()
 #endif
 	format_bytes(pbuf, sizeof(pbuf), ptoa(uvmexp.free));
 	printf("avail memory = %s\n", pbuf);
-	format_bytes(pbuf, sizeof(pbuf), bufpages * NBPG);
-	printf("using %d buffers containing %s of memory\n", nbuf, pbuf);
-
-	/*
-	 * Set up buffers, so they can be used to read disk labels.
-	 */
-	bufinit();
-}
-
-
-/*
- * machine dependent system variables.
- */
-int
-cpu_sysctl(name, namelen, oldp, oldlenp, newp, newlen, p)
-	int *name;
-	u_int namelen;
-	void *oldp;
-	size_t *oldlenp;
-	void *newp;
-	size_t newlen;
-	struct proc *p;
-{
-	/* all sysctl names at this level are terminal */
-	if (namelen != 1)
-		return (ENOTDIR);		/* overloaded */
-
-	switch (name[0]) {
-
-	default:
-		return (EOPNOTSUPP);
-	}
-	/* NOTREACHED */
 }
 
 /*
@@ -524,33 +489,31 @@ cpu_sysctl(name, namelen, oldp, oldlenp, newp, newlen, p)
  * Look up information in bootinfo of boot loader.
  */
 void *
-lookup_bootinfo(type)
-	int type;
+lookup_bootinfo(int type)
 {
 	struct btinfo_common *bt;
 	char *help = bootinfo;
 
 	/* Check for a bootinfo record first. */
 	if (help == NULL)
-		return (NULL);
+		return NULL;
 
 	do {
 		bt = (struct btinfo_common *)help;
 		if (bt->type == type)
-			return ((void *)help);
+			return (void *)help;
 		help += bt->next;
 	} while (bt->next != 0 &&
 		(size_t)help < (size_t)bootinfo + BOOTINFO_SIZE);
 
-	return (NULL);
+	return NULL;
 }
 
 /*
  * call PROM to halt or reboot.
  */
 void
-prom_halt(howto)
-	int howto;
+prom_halt(int howto)
 
 {
 #ifdef news5000
@@ -567,13 +530,11 @@ prom_halt(howto)
 int	waittime = -1;
 
 void
-cpu_reboot(howto, bootstr)
-	volatile int howto;
-	char *bootstr;
+cpu_reboot(volatile int howto, char *bootstr)
 {
 
 	/* take a snap shot before clobbering any registers */
-	if (curproc)
+	if (curlwp)
 		savectx((struct user *)curpcb);
 
 #ifdef DEBUG
@@ -633,71 +594,32 @@ haltsys:
 	/*NOTREACHED*/
 }
 
-/*
- * Return the best possible estimate of the time in the timeval
- * to which tvp points.  Unfortunately, we can't read the hardware registers.
- * We guarantee that the time will be greater than the value obtained by a
- * previous call.
- */
 void
-microtime(tvp)
-	register struct timeval *tvp;
+delay(int n)
 {
-	int s = splclock();
-	static struct timeval lasttime;
 
-	*tvp = time;
-#if 0
-	tvp->tv_usec += clkread();
-	if (tvp->tv_usec >= 1000000) {
-		tvp->tv_usec -= 1000000;
-		tvp->tv_sec++;
-	}
-#endif
-
-	if (tvp->tv_sec == lasttime.tv_sec &&
-	    tvp->tv_usec <= lasttime.tv_usec &&
-	    (tvp->tv_usec = lasttime.tv_usec + 1) >= 1000000) {
-		tvp->tv_sec++;
-		tvp->tv_usec -= 1000000;
-	}
-	lasttime = *tvp;
-	splx(s);
-}
-
-void
-delay(n)
-	int n;
-{
 	DELAY(n);
 }
 
-#ifdef EXEC_ECOFF
-#include <sys/exec_ecoff.h>
-
-int
-cpu_exec_ecoff_hook(p, epp)
-	struct proc *p;
-	struct exec_package *epp;
-{
-	extern struct emul emul_netbsd;
-
-	epp->ep_emul = &emul_netbsd;
-
-	return 0;
-}
-#endif
-
-#include "zsc.h"
-
-int zssoft __P((void));
-
 void
-newsmips_softintr(sisr)
-	int sisr;
+cpu_intr(uint32_t status, uint32_t cause, uint32_t pc, uint32_t ipending)
 {
-#if NZSC > 0
-	if (sisr & SOFTISR_ZS)
-		zssoft();
+	struct cpu_info *ci;
+
+	ci = curcpu();
+	uvmexp.intrs++;
+
+	/* device interrupts */
+	ci->ci_idepth++;
+	(*hardware_intr)(status, cause, pc, ipending);
+	ci->ci_idepth--;
+
+#ifdef __HAVE_FAST_SOFTINTS
+	/* software interrupts */
+	ipending &= (MIPS_SOFT_INT_MASK_1|MIPS_SOFT_INT_MASK_0);
+	if (ipending == 0)
+		return;
+	_clrsoftintr(ipending);
+	softintr_dispatch(ipending);
 #endif
 }

@@ -1,4 +1,4 @@
-.\"	$NetBSD: 0.t,v 1.2 1998/01/09 06:54:39 perry Exp $
+.\"	$NetBSD: 0.t,v 1.4 2005/12/26 20:04:46 perry Exp $
 .\"
 .\" Copyright (c) 1983, 1993, 1994
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -159,15 +155,15 @@ ssize_t	int	/* signed size_t */
 time_t	long	/* seconds since the Epoch */
 u_char	unsigned char
 u_int	unsigned int
-u_int16_t	unsigned short	/* unsigned 16-bit integer */
-u_int32_t	unsigned int	/* unsigned 32-bit integer */
-u_int64_t	unsigned long long	/* unsigned 64-bit integer */
-u_int8_t	unsigned char	/* unsigned 8-bit integer */
 u_long	unsigned long
 u_quad_t	unsigned long long
 u_short	unsigned short
 uid_t	unsigned long	/* user ID */
 uint	unsigned int	/* System V compatibility */
+uint16_t	unsigned short	/* unsigned 16-bit integer */
+uint32_t	unsigned int	/* unsigned 32-bit integer */
+uint64_t	unsigned long long	/* unsigned 64-bit integer */
+uint8_t		unsigned char	/* unsigned 8-bit integer */
 ushort	unsigned short	/* System V compatibility */
 .TE
 .ft R

@@ -1,4 +1,34 @@
-/*	$NetBSD: snmp.c,v 1.4 1999/01/23 22:44:43 hwr Exp $	*/
+/*	$NetBSD: snmp.c,v 1.11 2003/05/16 18:10:38 itojun Exp $	*/
+
+/*
+ * Copyright (c) 1992, 2001 Xerox Corporation.  All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without modification,
+ * are permitted provided that the following conditions are met:
+ *
+ * Redistributions of source code must retain the above copyright notice,
+ * this list of conditions and the following disclaimer.
+ *
+ * Redistributions in binary form must reproduce the above copyright notice,
+ * this list of conditions and the following disclaimer in the documentation
+ * and/or other materials provided with the distribution.
+ *
+ * Neither name of the Xerox, PARC, nor the names of its contributors may be used
+ * to endorse or promote products derived from this software
+ * without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS ``AS IS''
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+ * THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE XEROX CORPORATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+ * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 
 #include "defs.h"
 #include <netinet/in_var.h>
@@ -9,7 +39,7 @@
 #define MROUTED
 #include "snmpd/snmp_vars.h"
 
-    u_short dest_port = 0;
+    in_port_t dest_port = 0;
     int sdlen = 0;
 
 struct addrCache {
@@ -27,7 +57,7 @@ static struct addrCache addrCache[10];
  */
 int /* returns: 0 on success, true on error */
 snmp_init(dest_port)
-    u_short dest_port;
+    in_port_t dest_port;
 {
    u_long myaddr;
    int ret;
@@ -90,6 +120,7 @@ snmp_init(dest_port)
        perror("socket");
        return 1;
    }
+   memset(&me, 0, sizeof(me));
    me.sin_family = AF_INET;
    me.sin_addr.s_addr = INADDR_ANY;
    /* already in network byte order (I think) */
@@ -157,9 +188,9 @@ get_address(name, length, addr, n)
  */
 u_char *
 o_scalar(vp, name, length, exact, var_len, write_method)
-    register struct variable *vp;   /* IN - pointer to variable entry that points here */
-    register oid	*name;	    /* IN/OUT - input name requested, output name found */
-    register int	*length;    /* IN/OUT - length of input and output oid's */
+    struct variable *vp;   /* IN - pointer to variable entry that points here */
+    oid	*name;	    /* IN/OUT - input name requested, output name found */
+    int	*length;    /* IN/OUT - length of input and output oid's */
     int			exact;	    /* IN - TRUE if an exact match was requested. */
     int			*var_len;   /* OUT - length of variable or 0 if function returned. */
     int			(**write_method)(); /* OUT - pointer to function to set variable, otherwise 0 */
@@ -185,7 +216,8 @@ o_scalar(vp, name, length, exact, var_len, write_method)
     case dvmrpVersion: {
        static char buff[15];
 
-       sprintf(buff, "mrouted%d.%d", PROTOCOL_VERSION, MROUTED_VERSION);
+       snprintf(buff, sizeof(buff), "mrouted%d.%d", PROTOCOL_VERSION,
+	       MROUTED_VERSION);
        *var_len = strlen(buff);
        return (u_char *)buff;
     }
@@ -252,9 +284,9 @@ next_boundary(vifi, addr, mask)
  */
 u_char *
 o_dvmrpBoundaryTable(vp, name, length, exact, var_len, write_method)
-    register struct variable *vp;   /* IN - pointer to variable entry that points here */
-    register oid	*name;	    /* IN/OUT - input name requested, output name found */
-    register int	*length;    /* IN/OUT - length of input and output oid's */
+    struct variable *vp;   /* IN - pointer to variable entry that points here */
+    oid	*name;	    /* IN/OUT - input name requested, output name found */
+    int	*length;    /* IN/OUT - length of input and output oid's */
     int			exact;	    /* IN - TRUE if an exact match was requested. */
     int			*var_len;   /* OUT - length of variable or 0 if function returned. */
     int			(**write_method)(); /* OUT - pointer to function to set variable, otherwise 0 */
@@ -382,9 +414,9 @@ find_neighbor(vifi, addr)
 
 u_char *
 o_dvmrpNeighborTable(vp, name, length, exact, var_len, write_method)
-    register struct variable *vp;   /* IN - pointer to variable entry that points here */
-    register oid	*name;	    /* IN/OUT - input name requested, output name found */
-    register int	*length;    /* IN/OUT - length of input and output oid's */
+    struct variable *vp;   /* IN - pointer to variable entry that points here */
+    oid	*name;	    /* IN/OUT - input name requested, output name found */
+    int	*length;    /* IN/OUT - length of input and output oid's */
     int			exact;	    /* IN - TRUE if an exact match was requested. */
     int			*var_len;   /* OUT - length of variable or 0 if function returned. */
     int			(**write_method)(); /* OUT - pointer to function to set variable, otherwise 0 */
@@ -467,7 +499,7 @@ o_dvmrpNeighborTable(vp, name, length, exact, var_len, write_method)
    case dvmrpNeighborVersion: {
        static char buff[15];
 
-       sprintf(buff, "%d.%d", neighbor->al_pv, neighbor->al_mv);
+       snprintf(buff, sizeof(buff), "%d.%d", neighbor->al_pv, neighbor->al_mv);
        *var_len = strlen(buff);
        return (u_char *)buff;
    }
@@ -556,9 +588,9 @@ next_cache(addr, vifi)
  */
 u_char *
 o_igmpCacheTable(vp, name, length, exact, var_len, write_method)
-    register struct variable *vp;   /* IN - pointer to variable entry that points here */
-    register oid	*name;	    /* IN/OUT - input name requested, output name found */
-    register int	*length;    /* IN/OUT - length of input and output oid's */
+    struct variable *vp;   /* IN - pointer to variable entry that points here */
+    oid	*name;	    /* IN/OUT - input name requested, output name found */
+    int	*length;    /* IN/OUT - length of input and output oid's */
     int			exact;	    /* IN - TRUE if an exact match was requested. */
     int			*var_len;   /* OUT - length of variable or 0 if function returned. */
     int			(**write_method)(); /* OUT - pointer to function to set variable, otherwise 0 */
@@ -676,15 +708,15 @@ o_igmpCacheTable(vp, name, length, exact, var_len, write_method)
  */
 u_char *
 o_igmpInterfaceTable(vp, name, length, exact, var_len, write_method)
-    register struct variable *vp;   /* IN - pointer to variable entry that points here */
-    register oid	*name;	    /* IN/OUT - input name requested, output name found */
-    register int	*length;    /* IN/OUT - length of input and output oid's */
+    struct variable *vp;   /* IN - pointer to variable entry that points here */
+    oid	*name;	    /* IN/OUT - input name requested, output name found */
+    int	*length;    /* IN/OUT - length of input and output oid's */
     int			exact;	    /* IN - TRUE if an exact match was requested. */
     int			*var_len;   /* OUT - length of variable or 0 if function returned. */
     int			(**write_method)(); /* OUT - pointer to function to set variable, otherwise 0 */
 {
     oid			newname[MAX_NAME_LEN];
-    register int	ifnum;
+    int	ifnum;
     int result;
 static struct sioc_vif_req v_req;
 
@@ -748,15 +780,15 @@ refresh_vif(v_req, ifnum)
  */
 u_char *
 o_ipMRouteInterfaceTable(vp, name, length, exact, var_len, write_method)
-    register struct variable *vp;   /* IN - pointer to variable entry that points here */
-    register oid	*name;	    /* IN/OUT - input name requested, output name found */
-    register int	*length;    /* IN/OUT - length of input and output oid's */
+    struct variable *vp;   /* IN - pointer to variable entry that points here */
+    oid	*name;	    /* IN/OUT - input name requested, output name found */
+    int	*length;    /* IN/OUT - length of input and output oid's */
     int			exact;	    /* IN - TRUE if an exact match was requested. */
     int			*var_len;   /* OUT - length of variable or 0 if function returned. */
     int			(**write_method)(); /* OUT - pointer to function to set variable, otherwise 0 */
 {
     oid			newname[MAX_NAME_LEN];
-    register int	ifnum;
+    int	ifnum;
     int result;
 static struct sioc_vif_req v_req;
 
@@ -856,9 +888,9 @@ static struct sioc_vif_req v_req;
  */
 u_char *
 o_dvmrpRouteTable(vp, name, length, exact, var_len, write_method)
-    register struct variable *vp;   /* IN - pointer to variable entry that points here */
-    register oid	*name;	    /* IN/OUT - input name requested, output name found */
-    register int	*length;    /* IN/OUT - length of input and output oid's */
+    struct variable *vp;   /* IN - pointer to variable entry that points here */
+    oid	*name;	    /* IN/OUT - input name requested, output name found */
+    int	*length;    /* IN/OUT - length of input and output oid's */
     int			exact;	    /* IN - TRUE if an exact match was requested. */
     int			*var_len;   /* OUT - length of variable or 0 if function returned. */
     int			(**write_method)(); /* OUT - pointer to function to set variable, otherwise 0 */
@@ -949,9 +981,9 @@ o_dvmrpRouteTable(vp, name, length, exact, var_len, write_method)
  */
 u_char *
 o_dvmrpRouteNextHopTable(vp, name, length, exact, var_len, write_method)
-    register struct variable *vp;   /* IN - pointer to variable entry that points here */
-    register oid	*name;	    /* IN/OUT - input name requested, output name found */
-    register int	*length;    /* IN/OUT - length of input and output oid's */
+    struct variable *vp;   /* IN - pointer to variable entry that points here */
+    oid	*name;	    /* IN/OUT - input name requested, output name found */
+    int	*length;    /* IN/OUT - length of input and output oid's */
     int			exact;	    /* IN - TRUE if an exact match was requested. */
     int			*var_len;   /* OUT - length of variable or 0 if function returned. */
     int			(**write_method)(); /* OUT - pointer to function to set variable, otherwise 0 */
@@ -1033,9 +1065,9 @@ o_dvmrpRouteNextHopTable(vp, name, length, exact, var_len, write_method)
  */
 u_char *
 o_ipMRouteTable(vp, name, length, exact, var_len, write_method)
-    register struct variable *vp;   /* IN - pointer to variable entry that points here */
-    register oid	*name;	    /* IN/OUT - input name requested, output name found */
-    register int	*length;    /* IN/OUT - length of input and output oid's */
+    struct variable *vp;   /* IN - pointer to variable entry that points here */
+    oid	*name;	    /* IN/OUT - input name requested, output name found */
+    int	*length;    /* IN/OUT - length of input and output oid's */
     int			exact;	    /* IN - TRUE if an exact match was requested. */
     int			*var_len;   /* OUT - length of variable or 0 if function returned. */
     int			(**write_method)(); /* OUT - pointer to function to set variable, otherwise 0 */
@@ -1152,9 +1184,9 @@ static struct sioc_sg_req sg_req;
  */
 u_char *
 o_ipMRouteNextHopTable(vp, name, length, exact, var_len, write_method)
-    register struct variable *vp;   /* IN - pointer to variable entry that points here */
-    register oid	*name;	    /* IN/OUT - input name requested, output name found */
-    register int	*length;    /* IN/OUT - length of input and output oid's */
+    struct variable *vp;   /* IN - pointer to variable entry that points here */
+    oid	*name;	    /* IN/OUT - input name requested, output name found */
+    int	*length;    /* IN/OUT - length of input and output oid's */
     int			exact;	    /* IN - TRUE if an exact match was requested. */
     int			*var_len;   /* OUT - length of variable or 0 if function returned. */
     int			(**write_method)(); /* OUT - pointer to function to set variable, otherwise 0 */

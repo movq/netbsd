@@ -1,4 +1,4 @@
-/*	$NetBSD: seekdir.c,v 1.9 2000/01/22 22:19:12 mycroft Exp $	*/
+/*	$NetBSD: seekdir.c,v 1.14 2006/05/17 20:36:50 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,14 +34,18 @@
 #if 0
 static char sccsid[] = "@(#)seekdir.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: seekdir.c,v 1.9 2000/01/22 22:19:12 mycroft Exp $");
+__RCSID("$NetBSD: seekdir.c,v 1.14 2006/05/17 20:36:50 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
+#include "reentrant.h"
+#include "extern.h"
 #include <sys/param.h>
 
 #include <dirent.h>
+
+#include "dirent_private.h"
 
 #ifdef __weak_alias
 __weak_alias(seekdir,_seekdir)
@@ -53,14 +53,18 @@ __weak_alias(seekdir,_seekdir)
 
 /*
  * Seek to an entry in a directory.
- * __seekdir is in telldir.c so that it can share opaque data structures.
+ * _seekdir_unlocked is in telldir.c so that it can share opaque data structures.
  */
 void
-seekdir(dirp, loc)
-	DIR *dirp;
-	long loc;
+seekdir(DIR *dirp, long loc)
 {
 
-
-	__seekdir(dirp, loc);
+#ifdef _REENTRANT
+	if (__isthreaded) {
+		mutex_lock((mutex_t *)dirp->dd_lock);
+		_seekdir_unlocked(dirp, loc);
+		mutex_unlock((mutex_t *)dirp->dd_lock);
+	} else
+#endif
+		_seekdir_unlocked(dirp, loc);
 }

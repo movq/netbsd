@@ -1,7 +1,7 @@
-/*	$NetBSD: tulipreg.h,v 1.17 2000/03/26 10:53:40 soren Exp $	*/
+/*	$NetBSD: tulipreg.h,v 1.34 2008/04/28 20:23:51 martin Exp $	*/
 
 /*-
- * Copyright (c) 1999 The NetBSD Foundation, Inc.
+ * Copyright (c) 1999, 2000 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -55,6 +48,9 @@
  *	  have only GPR media and the NWay block.  The 98715,
  *	  98715A, and 98725 support power management.
  *
+ *        The 98715AEC adds 802.3x flow Frame based Flow Control to the
+ *	  98715A.
+ *
  *	- Lite-On 82C115 (PNIC II):
  *
  *	  A clone of the Macronix MX98725, with the following differences:
@@ -63,7 +59,7 @@
  *		- 128-bit multicast hash table rather than the
  *		  standard 512-bit hash table
  *		- 802.3x flow control
- *		
+ *
  *	- Lite-On 82C168, 82C169 (PNIC):
  *
  *	  Pretty close, with only a few minor differences:
@@ -73,7 +69,7 @@
  *		- No SIO facility (due to the above two differences).
  *		- GPIO interface is different than the 21140's.
  *		- Boards that lack PHYs use the internal NWay block
- *		  and transciever.
+ *		  and transceiver.
  *
  *	- Winbond 89C840F
  *
@@ -103,9 +99,52 @@
  *		  but luckily, there are all AL981-specific registers,
  *		  so this is easy to deal with.
  *
+ *	- ADMtek AN983 and AN985
+ *
+ *	  Similar to the ADMtek AL981, but with a few differences.
+ *
+ *	- Xircom X3201-3
+ *
+ *	  CardBus 21143 clone, with a few differences:
+ *
+ *		- No MicroWire SROM; Ethernet address must come
+ *		  from CIS.
+ *		- Transmit buffers must also be 32-bit aligned.
+ *		- The BUSMODE_SWR bit is not self-clearing.
+ *		- Must include FS|LS in setup packet descriptor.
+ *		- SIA is not 21143-like, and all media attachments
+ *		  are MII-on-SIO.
+ *
+ *	- Davicom DM9102 and DM9102A
+ *
+ *	  Pretty similar to the 21140A, with a few differences:
+ *
+ *		- Wake-On-LAN support
+ *		- DM9102 has built-in 10/100 PHY on MII interface.
+ *		- DM9102A has built-in 10/100 PHY on MII interface,
+ *		  as well as a HomePNA 1 PHY on an alternate MII
+ *		  interface (selected by clearing OPMODE_PS).
+ *		- The chip has a bug in the transmit DMA logic,
+ *		  requiring that the packet be comprised of only
+ *		  one DMA segment.
+ *		- The bus interface is buggy, and the BUSMODE register
+ *		  must be initialized to 0.
+ *		- There seems to be an interrupt logic bug, requiring
+ *		  that interrupts be disabled on the chip during the
+ *		  interrupt handler.
+ *	
+ *	- ASIX AX88140
+ *	
+ *	  21433 clone with a few differences:
+ *
+ *	  	- Specific broadcast bit in the OPMODE register.
+ *	  	- Transmit buffer must be 32-bit aligned.
+ *	  	- The BUSMODE_SWR bit is not self-clearing.
+ *	  	- External 10BaseT PHY or 10/100 MII.
+ *
  * Some of the clone chips have different registers, and some have
  * different bits in the same registers.  These will be denoted by
- * PMAC, PNICII, PNIC, WINB, and ADM in the register/bit names.
+ * PMAC, PNICII, PNIC, DM, WINB, ADM and AX in the register/bit names.
  */
 
 /*
@@ -115,10 +154,10 @@
  * be a multiple of 4.
  */
 struct tulip_desc {
-	__volatile u_int32_t td_status;	  /* Status */
-	__volatile u_int32_t td_ctl;	  /* Control and Byte Counts */
-	__volatile u_int32_t td_bufaddr1; /* Buffer Address 1 */
-	__volatile u_int32_t td_bufaddr2; /* Buffer Address 2 */
+	volatile u_int32_t td_status;	  /* Status */
+	volatile u_int32_t td_ctl;	  /* Control and Byte Counts */
+	volatile u_int32_t td_bufaddr1; /* Buffer Address 1 */
+	volatile u_int32_t td_bufaddr2; /* Buffer Address 2 */
 };
 
 /*
@@ -331,7 +370,8 @@ struct tulip_desc {
 #define	TULIP_ROM_MB_21143_SYM		4	/* 21143 SYM block */
 #define	TULIP_ROM_MB_21143_RESET	5	/* 21143 reset block */
 
-#define	TULIP_ROM_GETW(data, off) ((data)[(off)] | ((data)[(off) + 1]) << 8)
+#define	TULIP_ROM_GETW(data, off) ((uint32_t)(data)[(off)] |		\
+				   (uint32_t)((data)[(off) + 1]) << 8)
 
 /*
  * Tulip control registers.
@@ -397,6 +437,9 @@ struct tulip_desc {
 		/*
 		 * Transmit auto-polling not supported on:
 		 *	Winbond 89C040F
+		 *	Xircom X3201-3
+		 *	Davicom DM9102 (buggy BUSMODE register)
+		 *	ASIX AX88140
 		 */
 #define	BUSMODE_TAP_NONE	0x00000000	/*     no auto-polling */
 #define	BUSMODE_TAP_200us	0x00020000	/*   200 uS */
@@ -472,6 +515,20 @@ struct tulip_desc {
 #define	STATUS_RS_QUEUE		0x000e0000	/* Running - queue current
 						   frame from FIFO into
 						   buffer */
+#define	STATUS_DM_RS_STOPPED	0x00000000	/* Stopped */
+#define	STATUS_DM_RS_FETCH	0x00020000	/* Running - fetch receive
+						   descriptor */
+#define	STATUS_DM_RS_WAIT	0x00040000	/* Running - wait for packet */
+#define	STATUS_DM_RS_QUEUE	0x00060000	/* Running - queue current
+						   frame from FIFO into
+						   buffer */
+#define	STATUS_DM_RS_CLOSE_OWN	0x00080000	/* Running - close receive
+						   descriptor, clear own */
+#define	STATUS_DM_RS_CLOSE_ST	0x000a0000	/* Running - close receive
+						   descriptor, write status */
+#define	STATUS_DM_RS_SUSPENDED	0x000c0000	/* Suspended */
+#define	STATUS_DM_RS_FLUSH	0x000e0000	/* Running - flush current
+						   frame from FIFO */
 #define	STATUS_TS		0x00700000	/* transmit process state */
 #define	STATUS_TS_STOPPED	0x00000000	/* Stopped */
 #define	STATUS_TS_FETCH		0x00100000	/* Running - fetch transmit
@@ -486,6 +543,20 @@ struct tulip_desc {
 #define	STATUS_TS_SUSPENDED	0x00600000	/* Suspended */
 #define	STATUS_TS_CLOSE		0x00700000	/* Running - close transmit
 						   descriptor */
+#define	STATUS_DM_TS_STOPPED	0x00000000	/* Stopped */
+#define	STATUS_DM_TS_FETCH	0x00100000	/* Running - fetch transmit
+						   descriptor */
+#define	STATUS_DM_TS_SETUP	0x00200000	/* Running - Setup packet */
+#define	STATUS_DM_TS_READING	0x00300000	/* Running - read buffer from
+						   memory and queue into
+						   FIFO */
+#define	STATUS_DM_TS_CLOSE_OWN	0x00400000	/* Running - close transmit
+						   descriptor, clear own */
+#define	STATUS_DM_TS_WAIT	0x00500000	/* Running - wait for end
+						   of transmission */
+#define	STATUS_DM_TS_CLOSE_ST	0x00600000	/* Running - close transmit
+						   descriptor, write status */
+#define	STATUS_DM_TS_SUSPENDED	0x00700000	/* Suspended */
 #define	STATUS_EB		0x03800000	/* error bits */
 #define	STATUS_EB_PARITY	0x00000000	/* parity errror */
 #define	STATUS_EB_MABT		0x00800000	/* master abort */
@@ -495,6 +566,10 @@ struct tulip_desc {
 #define	STATUS_LC		0x08000000	/* 100baseTX link change
 						   (21142/PMAC) */
 #define	STATUS_PMAC_WKUPI	0x10000000	/* wake up event */
+#define	STATUS_X3201_PMEIS	0x10000000	/* power management event
+						   interrupt summary */
+#define	STATUS_X3201_SFIS	0x80000000	/* second function (Modem)
+						   interrupt status */
 
 
 /* CSR6 - Operation Mode */
@@ -513,6 +588,7 @@ struct tulip_desc {
 #define	OPMODE_PM		0x00000080	/* pass all multicast */
 #define	OPMODE_WINB_AEP		0x00000080	/* accept error packet */
 #define	OPMODE_FKD		0x00000100	/* flaky oscillator disable */
+#define OPMODE_AX_RB		0x00000100	/* recieve broadcast packets */
 #define	OPMODE_FD		0x00000200	/* full-duplex mode */
 #define	OPMODE_OM		0x00000c00	/* operating mode */
 #define	OPMODE_OM_NORMAL	0x00000000	/*     normal mode */
@@ -568,7 +644,7 @@ struct tulip_desc {
 #define	OPMODE_WINB_REIO	0x80000000	/* receive early intr on */
 
 /* Shorthand for media-related OPMODE bits */
-#define	OPMODE_MEDIA_BITS	(OPMODE_FD|OPMODE_PS|OPMODE_PCS|OPMODE_SCR)
+#define	OPMODE_MEDIA_BITS	(OPMODE_FD|OPMODE_PS|OPMODE_TTM|OPMODE_PCS|OPMODE_SCR)
 
 /* CSR7 - Interrupt Enable */
 #define	CSR_INTEN		TULIP_CSR7
@@ -651,7 +727,7 @@ struct tulip_desc {
 
 /* CSR12 - SIA Status Register. */
 #define	CSR_SIASTAT		TULIP_CSR12
-#define	SIASTAT_PAUI		0x00000001	/* pin AUI/TP indication	
+#define	SIASTAT_PAUI		0x00000001	/* pin AUI/TP indication
 						   (21040) */
 #define	SIASTAT_MRA		0x00000001	/* MII receive activity
 						   (21142) */
@@ -682,6 +758,7 @@ struct tulip_desc {
 						   (21041) */
 #define	SIASTAT_ANS_DIS		0x00000000	/*     disabled */
 #define	SIASTAT_ANS_TXDIS	0x00001000	/*     transmit disabled */
+#define	SIASTAT_ANS_START	0x00001000	/*     (MX98715AEC) */
 #define	SIASTAT_ANS_ABD		0x00002000	/*     ability detect */
 #define	SIASTAT_ANS_ACKD	0x00003000	/*     acknowledge detect */
 #define	SIASTAT_ANS_ACKC	0x00004000	/*     complete acknowledge */
@@ -748,7 +825,7 @@ struct tulip_desc {
 						   enable */
 #define	SIATXRX_LTE		0x00001000	/* link test enable */
 #define	SIATXRX_APE		0x00002000	/* auto-polarity enable */
-#define	SIATXRX_SPP		0x00004000	/* set plarity plus */
+#define	SIATXRX_SPP		0x00004000	/* set polarity plus */
 #define	SIATXRX_TAS		0x00008000	/* 10base-T/AUI autosensing
 						   enable (21041/21142) */
 #define	SIATXRX_THX		0x00010000	/* 100baseTX-HDX (21142) */
@@ -816,6 +893,20 @@ struct tulip_desc {
 #define	GPP_PNIC_PIN_100M_LPKB	1
 #define	GPP_PNIC_PIN_BNC_XMER	2
 #define	GPP_PNIC_PIN_LNK100X	3
+
+/*
+ * Definitions used for the SMC 9332DST (21140) board.
+ */
+#define GPP_SMC9332DST_PINS	0x3f	/* General Purpose Pin directions */
+#define GPP_SMC9332DST_OK10	0x80	/* 10 Mb/sec Signal Detect gep<7> */
+#define GPP_SMC9332DST_OK100	0x40	/* 100 Mb/sec Signal Detect gep<6> */
+#define GPP_SMC9332DST_INIT	0x09	/* No loopback --- point-to-point */
+
+/*
+ * Definitions used for the Cogent EM1x0 (21140) board.
+ */
+#define GPP_COGENT_EM1x0_PINS	0x3f	/* General Purpose Pin directions */
+#define GPP_COGENT_EM1x0_INIT	0x09	/* No loopback --- point-to-point */
 
 
 /*
@@ -966,7 +1057,7 @@ struct tulip_desc {
 #define	CSR_PNIC_NWAY		0xb8
 #define	PNIC_NWAY_RS		0x00000001	/* reset NWay block */
 #define	PNIC_NWAY_PD		0x00000002	/* power down NWay block */
-#define	PNIC_NWAY_BX		0x00000004	/* bypass transciever */
+#define	PNIC_NWAY_BX		0x00000004	/* bypass transceiver */
 #define	PNIC_NWAY_LC		0x00000008	/* AUI low current mode */
 #define	PNIC_NWAY_UV		0x00000010	/* low squelch voltage */
 #define	PNIC_NWAY_DX		0x00000020	/* disable TP pol. correction */
@@ -995,7 +1086,7 @@ struct tulip_desc {
 
 
 /*
- * Macronix 98713, 98713A, 98715, 98715A, 98725 and
+ * Macronix 98713, 98713A, 98715, 98715A, 98715AEC, 98725 and
  * Lite-On 82C115 registers.
  */
 
@@ -1055,7 +1146,12 @@ struct tulip_desc {
 	 * this does not appear to be necessary.  This is probably
 	 * one of the things that frobbing the Test Operation Register
 	 * does.
+	 *
+	 * MX98715AEC uses this register for Auto Compensation.
+	 * CSR20<14> and CSR20<9> are called DS130 and DS120
 	 */
+#define	PMAC_NWAYSTAT_DS120	0x00000200	/* Auto-compensation circ */
+#define	PMAC_NWAYSTAT_DS130	0x00004000	/* Auto-compensation circ */
 #define	PMAC_NWAYSTAT_EQTEST	0x00001000	/* EQ test */
 #define	PMAC_NWAYSTAT_PCITEST	0x00010000	/* PCI test */
 #define	PMAC_NWAYSTAT_10TXH	0x08000000	/* 10t accepted */
@@ -1264,7 +1360,7 @@ struct tulip_desc {
 #define	CSR_ADM_CR		0x88
 #define	ADM_CR_ATUR		0x00000001	/* auto. tx underrun recover */
 #define	ADM_CR_SINT		0x00000002	/* software interrupt */
-#define	ADM_CR_DRT		0x0000000c	/* drain recieve threshold */
+#define	ADM_CR_DRT		0x0000000c	/* drain receive threshold */
 #define	ADM_CR_DRT_8LW		0x00000000	/*   8 longwords */
 #define	ADM_CR_DRT_16LW		0x00000004	/*   16 longwords */
 #define	ADM_CR_DRT_SF		0x00000008	/*   store-and-forward */
@@ -1390,5 +1486,77 @@ struct tulip_desc {
 						   1 == 1.4 VPP */
 #define	ADM_100CTR_ANC		0x1000		/* autoneg completed */
 #define	ADM_100CTR_DISRER	0x2000		/* disable Rx error counter */
+
+/* Operation Mode Register (AN983) */
+#define	CSR_ADM983_OPMODE	0xfc
+#define	ADM983_OPMODE_SPEED	0x80000000	/* 1 == 100, 0 == 10 */
+#define	ADM983_OPMODE_FD	0x40000000	/* 1 == fd, 0 == hd */
+#define	ADM983_OPMODE_LINK	0x20000000	/* 1 == link, 0 == no link */
+#define	ADM983_OPMODE_EERLOD	0x04000000	/* reload from EEPROM */
+#define	ADM983_OPMODE_SingleChip 0x00000007	/* single-chip mode */
+#define	ADM983_OPMODE_MacOnly	 0x00000004	/* MAC-only mode */
+
+/*
+ * Xircom X3201-3 registers
+ */
+
+/* Power Management Register */
+#define	CSR_X3201_PMR		TULIP_CSR16
+#define	X3201_PMR_EDINT		0x0000000f	/* energy detect interval */
+#define	X3201_PMR_EDEN		0x00000100	/* energy detect enable */
+#define	X3201_PMR_MPEN		0x00000200	/* magic packet enable */
+#define	X3201_PMR_WOLEN		0x00000400	/* Wake On Lan enable */
+#define	X3201_PMR_PMGP0EN	0x00001000	/* GP0 change enable */
+#define	X3201_PMR_PMLCEN	0x00002000	/* link change enable */
+#define	X3201_PMR_WOLTMEN	0x00008000	/* WOL template mem enable */
+#define	X3201_PMR_EP		0x00010000	/* energy present */
+#define	X3201_PMR_LP		0x00200000	/* link present */
+#define	X3201_PMR_EDES		0x01000000	/* ED event status */
+#define	X3201_PMR_MPES		0x02000000	/* MP event status */
+#define	X3201_PMR_WOLES		0x04000000	/* WOL event status */
+#define	X3201_PMR_WOLPS		0x08000000	/* WOL process status */
+#define	X3201_PMR_GP0ES		0x10000000	/* GP0 event status */
+#define	X3201_PMR_LCES		0x20000000	/* LC event status */
+
+/*
+ * Davicom DM9102 registers.
+ */
+
+/* PHY Status Register */
+#define	CSR_DM_PHYSTAT		TULIP_CSR12
+#define	DM_PHYSTAT_10		0x00000001	/* 10Mb/s */
+#define	DM_PHYSTAT_100		0x00000002	/* 100Mb/s */
+#define	DM_PHYSTAT_FDX		0x00000004	/* full-duplex */
+#define	DM_PHYSTAT_LINK		0x00000008	/* link up */
+#define	DM_PHYSTAT_RXLOCK	0x00000010	/* RX-lock */
+#define	DM_PHYSTAT_SIGNAL	0x00000020	/* signal detection */
+#define	DM_PHYSTAT_UTPSIG	0x00000040	/* UTP SIG */
+#define	DM_PHYSTAT_GPED		0x00000080	/* general PHY reset control */
+#define	DM_PHYSTAT_GEPC		0x00000100	/* GPED bits control */
+
+
+/* Sample Frame Access Register */
+#define	CSR_DM_SFAR		TULIP_CSR13
+
+
+/* Sample Frame Data Register */
+#define	CSR_DM_SFDR		TULIP_CSR14
+	/* See 21143 SIAGEN register */
+
+/*
+ * ASIX AX88140A and AX88141 registers.
+ */
+
+/* CSR13 - Filtering Index */
+#define CSR_AX_FILTIDX		TULIP_CSR13
+
+/* CSR14 - Filtering data */
+#define CSR_AX_FILTDATA		TULIP_CSR14
+
+/* Filtering Index values */
+#define AX_FILTIDX_PAR0		0x00000000
+#define AX_FILTIDX_PAR1		0x00000001
+#define AX_FILTIDX_MAR0		0x00000002
+#define AX_FILTIDX_MAR1		0x00000003
 
 #endif /* _DEV_IC_TULIPREG_H_ */

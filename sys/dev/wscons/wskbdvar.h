@@ -1,4 +1,4 @@
-/* $NetBSD: wskbdvar.h,v 1.10 2000/03/06 21:37:16 thorpej Exp $ */
+/* $NetBSD: wskbdvar.h,v 1.16 2008/05/01 20:18:19 cegger Exp $ */
 
 /*
  * Copyright (c) 1996, 1997 Christopher G. Demetriou.  All rights reserved.
@@ -41,10 +41,9 @@
  * with these functions, which is passed to them when they are invoked.
  */
 struct wskbd_accessops {
-	int	(*enable) __P((void *, int));
-	void    (*set_leds) __P((void *, int));
-	int     (*ioctl) __P((void *v, u_long cmd, caddr_t data, int flag,
-			      struct proc *p));
+	int	(*enable)(void *, int);
+	void    (*set_leds)(void *, int);
+	int     (*ioctl)(void *, u_long, void *, int, struct lwp *);
 };
 
 /*
@@ -54,9 +53,9 @@ struct wskbd_accessops {
  * with these functions, which is passed to them when they are invoked.
  */
 struct wskbd_consops {
-	void    (*getc) __P((void *, u_int *, int *));
-	void    (*pollc) __P((void *, int));
-	void	(*bell) __P((void *, u_int, u_int, u_int));
+	void    (*getc)(void *, u_int *, int *);
+	void    (*pollc)(void *, int);
+	void	(*bell)(void *, u_int, u_int, u_int);
 };
 
 /*
@@ -81,21 +80,30 @@ struct wskbddev_attach_args {
 /*
  * Autoconfiguration helper functions.
  */
-void	wskbd_cnattach __P((const struct wskbd_consops *, void *,
-			    const struct wskbd_mapdata *));
-void	wskbd_cndetach __P((void));
-int	wskbddevprint __P((void *, const char *));
+void	wskbd_cnattach(const struct wskbd_consops *, void *,
+			    const struct wskbd_mapdata *);
+void	wskbd_cndetach(void);
+int	wskbddevprint(void *, const char *);
 
 /*
  * Callbacks from the keyboard driver to the wskbd interface driver.
  */
-void	wskbd_input __P((struct device *kbddev, u_int type, int value));
+void	wskbd_input(device_t, u_int, int);
 /* for WSDISPLAY_COMPAT_RAWKBD */
-void	wskbd_rawinput __P((struct device *, u_char *, int));
+void	wskbd_rawinput(device_t, u_char *, int);
+
+/*
+ * Callbacks for (ACPI) hotkey drivers which generate
+ * keycodes.
+ */
+struct wskbd_softc;
+typedef int (wskbd_hotkey_plugin)(struct wskbd_softc *, void *, u_int, int);
+
+device_t wskbd_hotkey_register(device_t, void *, wskbd_hotkey_plugin *);
 
 /*
  * Console interface.
  */
-int	wskbd_cngetc __P((dev_t dev));
-void	wskbd_cnpollc __P((dev_t dev, int poll));
-void	wskbd_cnbell __P((dev_t, u_int, u_int, u_int));
+int	wskbd_cngetc(dev_t);
+void	wskbd_cnpollc(dev_t, int);
+void	wskbd_cnbell(dev_t, u_int, u_int, u_int);

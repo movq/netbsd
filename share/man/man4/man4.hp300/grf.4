@@ -1,4 +1,4 @@
-.\"	$NetBSD: grf.4,v 1.4 1997/10/19 12:56:55 mrg Exp $
+.\"	$NetBSD: grf.4,v 1.9 2003/08/07 10:31:06 agc Exp $
 .\"
 .\" Copyright (c) 1990, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -15,11 +15,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -37,7 +33,7 @@
 .\"
 .\"     from: @(#)grf.4	8.1 (Berkeley) 6/9/93
 .\"
-.Dd June 9, 1993
+.Dd September 10, 2001
 .Dt GRF 4 hp300
 .Os
 .Sh NAME
@@ -45,6 +41,12 @@
 .Nd
 .Tn HP
 graphics frame buffer device interface
+.Sh SYNOPSIS
+.Cd "grf* at dvbox?"
+.Cd "grf* at gbox?"
+.Cd "grf* at hyper?"
+.Cd "grf* at rbox?"
+.Cd "grf* at topcat?"
 .Sh DESCRIPTION
 This is a generic description of the frame buffer device interface.
 The devices to which this applies are the 98544, 98545 and 98547
@@ -76,7 +78,7 @@ machine and transferring the binaries to the
 .Bx
 machine, or by compilation
 with the use of the
-.Xr hpux 1
+.Ic hpux
 command.
 Applications using Starbase libraries have been run successfully
 on
@@ -108,7 +110,7 @@ Get Graphics Info
 .Pp
 Get info about device, setting the entries in the
 .Em grfinfo
-structure, as defined in <hpdev/grfioctl.h>:
+structure, as defined in \*[Lt]hpdev/grfioctl.h\*[Gt]:
 .Bd -literal
 struct	grfinfo {
 	int	gd_id;		/* HPUX identifier */
@@ -152,30 +154,6 @@ Unmap control registers and framebuffer space.
 .El
 .Pp
 For further information about the use of ioctl see the man page.
-.Sh EXAMPLE
-This short code fragment is an example of opening some graphics device and
-mapping in the control and frame buffer space:
-.Bd -literal
-#define GRF_DEV <some_graphics_device>  /* /dev/grfN */
-{
-	struct fbstruct *regs;  /*  fbstruct = gboxfb, rboxfb, etc. */
-	u_char *Addr, frame_buffer;
-	struct grfinfo gi;
-	int disp_fd;
-
-	disp_fd = open(GRF_DEV,1);
-	if (ioctl (disp_fd, GRFIOCGINFO, &gi) < 0) return -1;
-	(void) ioctl (disp_fd, GRFIOCON, 0);
-
-	Addr = (u_char *) 0;
-	if (ioctl (disp_fd, GRFIOCMAP, &Addr) < 0) {
-		(void) ioctl (disp_fd, GRFIOCOFF, 0);
-		return -1;
-	}
-	regs = (fbstruct *) Addr;               /* Control Registers   */
-	frame_buffer = (u_char *) Addr + gi.gd_regsize; /* Frame buffer mem */
-}
-.Ed
 .Sh FILES
 .Bl -tag -width /dev/*crt*? -compact
 .It Pa /dev/grf?
@@ -186,6 +164,30 @@ interface special files
 .Em starbase
 interface special files
 .El
+.Sh EXAMPLES
+This short code fragment is an example of opening some graphics device and
+mapping in the control and frame buffer space:
+.Bd -literal
+#define GRF_DEV \*[Lt]some_graphics_device\*[Gt]  /* /dev/grfN */
+{
+	struct fbstruct *regs;  /*  fbstruct = gboxfb, rboxfb, etc. */
+	u_char *Addr, frame_buffer;
+	struct grfinfo gi;
+	int disp_fd;
+
+	disp_fd = open(GRF_DEV,1);
+	if (ioctl (disp_fd, GRFIOCGINFO, \*[Am]gi) \*[Lt] 0) return -1;
+	(void) ioctl (disp_fd, GRFIOCON, 0);
+
+	Addr = (u_char *) 0;
+	if (ioctl (disp_fd, GRFIOCMAP, \*[Am]Addr) \*[Lt] 0) {
+		(void) ioctl (disp_fd, GRFIOCOFF, 0);
+		return -1;
+	}
+	regs = (fbstruct *) Addr;               /* Control Registers   */
+	frame_buffer = (u_char *) Addr + gi.gd_regsize; /* Frame buffer mem */
+}
+.Ed
 .Sh DIAGNOSTICS
 None under
 .Bx .
@@ -204,8 +206,9 @@ Invalid ioctl specification.
 .El
 .Sh SEE ALSO
 .Xr ioctl 2 ,
-.Xr dv 4 ,
-.Xr gb 4 ,
-.Xr rb 4 ,
-.Xr tc 4 ,
-.Xr hil 4
+.Xr dvbox 4 ,
+.Xr gbox 4 ,
+.Xr hil 4 ,
+.Xr hyper 4 ,
+.Xr rbox 4 ,
+.Xr topcat 4

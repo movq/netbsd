@@ -1,4 +1,4 @@
-/*	$NetBSD: whatis.c,v 1.12 1998/07/06 14:23:32 kleink Exp $	*/
+/*	$NetBSD: whatis.c,v 1.23 2008/07/21 14:19:28 lukem Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -36,15 +32,15 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1987, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1987, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)whatis.c	8.5 (Berkeley) 1/2/94";
 #else
-__RCSID("$NetBSD: whatis.c,v 1.12 1998/07/06 14:23:32 kleink Exp $");
+__RCSID("$NetBSD: whatis.c,v 1.23 2008/07/21 14:19:28 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -59,23 +55,21 @@ __RCSID("$NetBSD: whatis.c,v 1.12 1998/07/06 14:23:32 kleink Exp $");
 #include <string.h>
 #include <unistd.h>
 
-#include "config.h"
-#include "pathnames.h"
+#include "manconf.h"		/* from ../man/ */
+#include "pathnames.h"		/* from ../man/ */
 
 #define	MAXLINELEN	8192			/* max line handled */
 
 static int *found, foundman;
 
-int main __P((int, char **));
-void dashtrunc __P((char *, char *));
-int match __P((char *, char *));
-void usage __P((void));
-void whatis __P((char **, char *, int));
+int	main(int, char **);
+void	dashtrunc(char *, char *);
+int	match(char *, char *);
+void	usage(void);
+void	whatis(char **, char *, int);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char **argv)
 {
 	ENTRY *ep;
 	TAG *tp;
@@ -121,15 +115,17 @@ main(argc, argv)
 		whatis(argv, p_path, 1);
 	else {
 		config(conffile);
-		ep = (tp = getlist("_whatdb")) == NULL ?
-		   NULL : tp->list.tqh_first;
-		for (; ep != NULL; ep = ep->q.tqe_next) {
+		tp = gettag("_whatdb", 0);
+		if (!tp)
+			errx(EXIT_FAILURE, 
+			    "no database dirs (_whatdb) in config file");
+		TAILQ_FOREACH(ep, &tp->entrylist, q) {
 			if ((rv = glob(ep->s, GLOB_BRACE | GLOB_NOSORT, NULL,
 			    &pg)) != 0) {
 				if (rv == GLOB_NOMATCH)
 					continue;
 				else
-					err(1, "glob");
+					err(EXIT_FAILURE, "glob");
 			}
 			if (pg.gl_pathc)
 				for (p = pg.gl_pathv; *p; p++)
@@ -152,9 +148,7 @@ main(argc, argv)
 }
 
 void
-whatis(argv, path, buildpath)
-	char **argv, *path;
-	int buildpath;
+whatis(char **argv, char *path, int buildpath)
 {
 	char *end, *name, **p;
 	char buf[MAXLINELEN + 1], wbuf[MAXLINELEN + 1];
@@ -197,8 +191,7 @@ whatis(argv, path, buildpath)
  *	match a full word
  */
 int
-match(bp, str)
-	char *bp, *str;
+match(char *bp, char *str)
 {
 	int len;
 	char *start;
@@ -206,13 +199,26 @@ match(bp, str)
 	if (!*str || !*bp)
 		return(0);
 	for (len = strlen(str);;) {
-		for (; *bp && !isdigit(*bp) && !isalpha(*bp); ++bp);
+		/* 
+		 * /bin/[ is a special case.
+		 */
+		for (; *bp && *bp != '[' && !isalnum((unsigned char)*bp); ++bp);
 		if (!*bp)
 			break;
-		for (start = bp++;
-		    *bp && (*bp == '_' || isdigit(*bp) || isalpha(*bp)); ++bp);
-		if (bp - start == len && !strncasecmp(start, str, len))
+
+		/* check for word match first */
+		for (start = bp++; *bp && (*bp == '_' ||
+			isalnum((unsigned char) *bp)); ++bp);
+		if (bp - start == len && strncasecmp(start, str, len) == 0) {
 			return(1);
+		} else if (*bp && *bp != ',') {
+			/* check for full string match */
+			for (bp = start; *bp && *bp != ',' && *bp != '(' &&
+				!isspace((unsigned char) *bp); ++bp);
+			if (bp - start == len &&
+				strncasecmp(start, str, len) == 0)
+				return(1);
+		}
 	}
 	return(0);
 }
@@ -222,8 +228,7 @@ match(bp, str)
  *	truncate a string at " - "
  */
 void
-dashtrunc(from, to)
-	char *from, *to;
+dashtrunc(char *from, char *to)
 {
 	int ch;
 
@@ -238,7 +243,7 @@ dashtrunc(from, to)
  *	print usage message and die
  */
 void
-usage()
+usage(void)
 {
 	(void)fprintf(stderr,
 	    "usage: whatis [-C file] [-M path] [-m path] command ...\n");

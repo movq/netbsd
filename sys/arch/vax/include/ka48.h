@@ -33,6 +33,8 @@
  * KA48 (VS4000 VLC) specific definitions. *** INCOMPLETE ! MK-990306 ***
  */
 
+#ifndef _VAX_KA48_H_
+#define _VAX_KA48_H_
 
 /* IPR bits definitions */
 #define	PCSTS_FLUSH		 4
@@ -42,7 +44,7 @@
 
 /* memory addresses of interest */
 #define	KA48_INVFLT	0x20200000
-#define	KA48_INVFLTSZ	32768
+#define	KA48_INVFLTSZ	16384
 #define	KA48_CCR	0x23000000
 #define	KA48_TAGST	0x2d000000
 #define	KA48_TAGSZ	32768
@@ -52,3 +54,12 @@
 
 #define	KA48_BWF0	0x20080014
 #define	BWF0_FEN	0x01000000
+
+/* From OpenVMS $IO440DEF & $KA440DEF */
+#define	KA48_PARCTL	0x20080014
+#define	KA48_PARCTL_CPEN	0x00000001	/* CPU Parity Eanble? */
+#define	KA48_PARCTL_NPEN	0x00000100	/* ?? Parity Enable */
+#define	KA48_PARCTL_INVENA	0x01000000	/* Invalid ? Enable */
+#define	KA48_PARCTL_AGS		0x02000000	/* ??? */
+
+#endif /* _VAX_KA48_H_ */

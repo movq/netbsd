@@ -1,4 +1,4 @@
-.\"	$NetBSD: ipcs.1,v 1.8 1999/11/19 22:29:25 kristerw Exp $
+.\"	$NetBSD: ipcs.1,v 1.16 2004/09/15 19:45:17 hubertf Exp $
 .\"
 .\" Copyright (c) 1994 SigmaSoft, Th. Lockert
 .\" All rights reserved.
@@ -11,11 +11,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"      This product includes software developed by SigmaSoft, Th. Lockert.
-.\" 4. The name of the author may not be used to endorse or promote products
-.\"    derived from this software without specific prior written permission
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
 .\" IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -28,14 +23,14 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd June 18, 1994
-.Dt "IPCS" 1
+.Dd March 21, 2004
+.Dt IPCS 1
 .Os
 .Sh NAME
 .Nm ipcs
 .Nd report System V interprocess communication facilities status
 .Sh SYNOPSIS
-.Nm ""
+.Nm
 .Op Fl abcmopqstMQST
 .Bk -words
 .Op Fl C Ar system
@@ -65,7 +60,8 @@ and
 options.)
 .It Fl b
 Show the maximum allowed sizes for active semaphores, message queues,
-and shared memory segments.  The
+and shared memory segments.
+The
 .Dq maximum allowed size
 is the maximum number of bytes in a message on a message queue,
 the size of a shared memory segment,
@@ -77,13 +73,15 @@ and shared memory segments.
 Display information about active shared memory segments.
 .It Fl o
 Show outstanding usage for active message queues,
-and shared memory segments.  The
+and shared memory segments.
+The
 .Dq outstanding usage
 is the number of messages in a message queue, or the number
 of processes attached to a shared memory segment.
 .It Fl p
 Show the process ID information for active semaphores, message queues,
-and shared memory segments.  The
+and shared memory segments.
+The
 .Dq process ID information
 is the last process to send a message to or receive a message from
 a message queue,
@@ -95,7 +93,8 @@ Display information about active message queues.
 Display information about active semaphores.
 .It Fl t
 Show access times for active semaphores, message queues,
-and shared memory segments.  The access times is the time
+and shared memory segments.
+The access times is the time
 of the last control operation on an IPC object,
 the last send or receive of a message,
 the last attach or detach of a shared memory segment,
@@ -117,6 +116,13 @@ Display system information about messages queues.
 Display system information about semaphores.
 .It Fl T
 Display system information about shared memory, message queues
+and semaphores.
+(This is shorthand for specifying the
+.Fl M ,
+.Fl Q ,
+and
+.Fl S
+options.)
 .El
 .Pp
 If none of the
@@ -125,8 +131,9 @@ If none of the
 .Fl Q ,
 .Fl q ,
 .Fl S ,
+.Fl s ,
 or
-.Fl s
+.Fl T
 options are specified, information about all active IPC facilities is
 listed.
 .Sh RESTRICTIONS
@@ -135,10 +142,6 @@ System data structures may change while
 is running; the output of
 .Nm
 is not guaranteed to be consistent.
-.Sh BUGS
-This manual page is woefully incomplete, because it does not
-at all attempt to explain the information printed by
-.Nm "" .
 .Sh FILES
 .Bl -tag -width /etc/passwd -compact
 .It Pa /dev/kmem
@@ -147,8 +150,14 @@ default kernel memory
 default system name list
 .El
 .Sh SEE ALSO
-.Xr ipcrm 1
-.Sh AUTHOR
-.Bl -tag
-Thorsten Lockert <tholo@sigmasoft.com>
-.El
+.Xr ipcrm 1 ,
+.Xr shmat 2 ,
+.Xr shmctl 2 ,
+.Xr shmdt 2 ,
+.Xr shmget 2
+.Sh AUTHORS
+.An Thorsten Lockert Aq tholo@sigmasoft.com
+.Sh BUGS
+This manual page is woefully incomplete, because it does not
+at all attempt to explain the information printed by
+.Nm .

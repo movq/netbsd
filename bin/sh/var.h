@@ -1,4 +1,4 @@
-/*	$NetBSD: var.h,v 1.16 1999/07/09 03:05:50 christos Exp $	*/
+/*	$NetBSD: var.h,v 1.24 2008/10/16 14:36:40 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -45,18 +41,20 @@
 /* flags */
 #define VEXPORT		0x01	/* variable is exported */
 #define VREADONLY	0x02	/* variable cannot be modified */
-#define VSTRFIXED	0x04	/* variable struct is staticly allocated */
-#define VTEXTFIXED	0x08	/* text is staticly allocated */
+#define VSTRFIXED	0x04	/* variable struct is statically allocated */
+#define VTEXTFIXED	0x08	/* text is statically allocated */
 #define VSTACK		0x10	/* text is allocated on the stack */
 #define VUNSET		0x20	/* the variable is not set */
 #define VNOFUNC		0x40	/* don't call the callback function */
+#define VNOSET		0x80	/* do not set variable - just readonly test */
 
 
 struct var {
 	struct var *next;		/* next entry in hash list */
 	int flags;			/* flags are defined above */
 	char *text;			/* name=value */
-	void (*func) __P((const char *));
+	int name_len;			/* length of name */
+	void (*func)(const char *);
 					/* function to be called when  */
 					/* the variable gets set/unset */
 };
@@ -70,7 +68,7 @@ struct localvar {
 };
 
 
-struct localvar *localvars;
+extern struct localvar *localvars;
 
 #if ATTY
 extern struct var vatty;
@@ -81,6 +79,7 @@ extern struct var vmpath;
 extern struct var vpath;
 extern struct var vps1;
 extern struct var vps2;
+extern struct var vps4;
 #ifndef SMALL
 extern struct var vterm;
 extern struct var vtermcap;
@@ -100,6 +99,7 @@ extern struct var vhistsize;
 #define pathval()	(vpath.text + 5)
 #define ps1val()	(vps1.text + 4)
 #define ps2val()	(vps2.text + 4)
+#define ps4val()	(vps4.text + 4)
 #define optindval()	(voptind.text + 7)
 #ifndef SMALL
 #define histsizeval()	(vhistsize.text + 9)
@@ -111,21 +111,23 @@ extern struct var vhistsize;
 #endif
 #define mpathset()	((vmpath.flags & VUNSET) == 0)
 
-void initvar __P((void));
-void setvar __P((const char *, const char *, int));
-void setvareq __P((char *, int));
+void initvar(void);
+void setvar(const char *, const char *, int);
+void setvareq(char *, int);
 struct strlist;
-void listsetvar __P((struct strlist *));
-char *lookupvar __P((const char *));
-char *bltinlookup __P((const char *, int));
-char **environment __P((void));
-void shprocvar __P((void));
-int showvarscmd __P((int, char **));
-int exportcmd __P((int, char **));
-int localcmd __P((int, char **));
-void mklocal __P((char *));
-void poplocalvars __P((void));
-int setvarcmd __P((int, char **));
-int unsetcmd __P((int, char **));
-int unsetvar __P((const char *));
-int setvarsafe __P((const char *, const char *, int));
+void listsetvar(struct strlist *, int);
+char *lookupvar(const char *);
+char *bltinlookup(const char *, int);
+char **environment(void);
+void shprocvar(void);
+int showvars(const char *, int, int);
+int exportcmd(int, char **);
+int localcmd(int, char **);
+void mklocal(const char *, int);
+void listmklocal(struct strlist *, int);
+void poplocalvars(void);
+int setvarcmd(int, char **);
+int unsetcmd(int, char **);
+int unsetvar(const char *, int);
+int setvarsafe(const char *, const char *, int);
+void print_quoted(const char *);

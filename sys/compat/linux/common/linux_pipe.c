@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_pipe.c,v 1.49 1998/10/04 00:02:40 fvdl Exp $	*/
+/*	$NetBSD: linux_pipe.c,v 1.63 2008/06/18 12:24:18 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,6 +29,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: linux_pipe.c,v 1.63 2008/06/18 12:24:18 tsutsui Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
@@ -44,18 +40,18 @@
 #include <sys/mman.h>
 #include <sys/mount.h>
 
+#include <sys/sched.h>
 #include <sys/syscallargs.h>
-
-#include <vm/vm.h>
-#include <vm/vm_param.h>
 
 #include <compat/linux/common/linux_types.h>
 #include <compat/linux/common/linux_mmap.h>
 #include <compat/linux/common/linux_signal.h>
+#include <compat/linux/common/linux_ipc.h>
+#include <compat/linux/common/linux_sem.h>
 
 #include <compat/linux/linux_syscallargs.h>
 
-/* Used on: arm, i386, m68k, ppc */
+/* Used on: arm, i386, m68k, ppc, amd64 */
 /* Not used on: alpha, mips, sparc, sparc64 */
 /* Alpha, mips, sparc and sparc64 pass one of the fds in a register */
 
@@ -64,22 +60,31 @@
  * Linux directly passes the pointer.
  */
 int
-linux_sys_pipe(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+linux_sys_pipe(struct lwp *l, const struct linux_sys_pipe_args *uap, register_t *retval)
 {
-	struct linux_sys_pipe_args /* {
+	/* {
 		syscallarg(int *) pfds;
-	} */ *uap = v;
+	} */
 	int error;
+#ifdef __amd64__
+	int pfds[2];
+#endif
 
-	if ((error = sys_pipe(p, 0, retval)))
+	if ((error = sys_pipe(l, 0, retval)))
 		return error;
 
+#ifndef __amd64__
 	/* Assumes register_t is an int */
 	if ((error = copyout(retval, SCARG(uap, pfds), 2 * sizeof (int))))
 		return error;
+#else
+	/* On amd64, sizeof(register_t) != sizeof(int) */
+	pfds[0] = (int)retval[0];
+	pfds[1] = (int)retval[1];
+
+	if ((error = copyout(pfds, SCARG(uap, pfds), sizeof(pfds))))
+		return error;
+#endif
 
 	retval[0] = 0;
 	return 0;

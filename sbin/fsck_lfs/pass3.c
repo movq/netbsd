@@ -1,4 +1,4 @@
-/*	$NetBSD: pass3.c,v 1.2 1999/07/03 19:55:03 kleink Exp $	*/
+/* $NetBSD: pass3.c,v 1.9 2006/09/01 19:52:48 perseant Exp $	 */
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -42,20 +38,22 @@
 #include "extern.h"
 
 void
-pass3()
+pass3(void)
 {
-	register struct inoinfo **inpp, *inp;
+	struct inoinfo **inpp, *inp;
 	ino_t orphan;
 	int loopcnt;
 
 	for (inpp = &inpsort[inplast - 1]; inpp >= inpsort; inpp--) {
 		inp = *inpp;
-		if (inp->i_number == ROOTINO ||
+		if (inp->i_number == ROOTINO || inp->i_number == LFS_IFILE_INUM ||
 		    !(inp->i_parent == 0 || statemap[inp->i_number] == DSTATE))
 			continue;
 		if (statemap[inp->i_number] == DCLEAR)
 			continue;
-		for (loopcnt = 0; ; loopcnt++) {
+		if (statemap[inp->i_number] == FCLEAR)
+			continue;
+		for (loopcnt = 0;; loopcnt++) {
 			orphan = inp->i_number;
 			if (inp->i_parent == 0 ||
 			    statemap[inp->i_parent] != DSTATE ||
@@ -63,7 +61,7 @@ pass3()
 				break;
 			inp = getinoinfo(inp->i_parent);
 		}
-		(void)linkup(orphan, inp->i_dotdot);
+		(void) linkup(orphan, inp->i_dotdot);
 		inp->i_parent = inp->i_dotdot = lfdir;
 		lncntp[lfdir]--;
 		statemap[orphan] = DFOUND;

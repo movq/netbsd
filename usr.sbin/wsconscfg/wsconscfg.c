@@ -1,4 +1,4 @@
-/* $NetBSD: wsconscfg.c,v 1.5 1999/11/10 16:34:58 drochner Exp $ */
+/* $NetBSD: wsconscfg.c,v 1.17 2008/05/26 12:15:42 drochner Exp $ */
 
 /*
  * Copyright (c) 1999
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed for the NetBSD Project
- *	by Matthias Drochner.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -32,7 +26,9 @@
  *
  */
 
+#include <sys/cdefs.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -41,49 +37,63 @@
 #include <errno.h>
 
 #include <dev/wscons/wsconsio.h>
+#include <dev/wscons/wsdisplay_usl_io.h>
 
 #define DEFDEV "/dev/ttyEcfg"
 
-static void usage __P((void));
-int main __P((int, char**));
+static void usage(void) __dead;
+int main(int, char **);
 
 static void
-usage()
+usage(void)
 {
-	extern char *__progname;
-
+	const char *p = getprogname();
 	(void)fprintf(stderr,
-		      "Usage: %s [-f wsdev] [-d [-F]] [-k] [-m] [-t type]"
-		      "[-e emul] {vt | [kbd] | [mux]}\n", __progname);
+	     "Usage: %s [-e emul] [-f ctldev] [-t type] index\n"
+	     "\t%s -d [-F] [-f ctldev] index\n"
+	     "\t%s -g [-f ctldev]\n"
+	     "\t%s -k | -m [-d] [-f ctldev] [index]\n"
+	     "\t%s -s [-f ctldev] index\n", p, p, p, p, p);
 	exit(1);
 }
 
 int
-main(argc, argv)
-	int argc;
-	char **argv;
+main(int argc, char **argv)
 {
-	char *wsdev;
-	int c, delete, kbd, idx, wsfd, res, mux;
+	const char *wsdev;
+	int c, delete, kbd, idx, wsfd, swtch, get, mux;
 	struct wsdisplay_addscreendata asd;
 	struct wsdisplay_delscreendata dsd;
 	struct wsmux_device wmd;
 
+	setprogname(argv[0]);
 	wsdev = DEFDEV;
 	delete = 0;
 	kbd = 0;
 	mux = 0;
+	swtch = 0;
+	idx = -1;
+	get = 0;
 	asd.screentype = 0;
 	asd.emul = 0;
 	dsd.flags = 0;
 
-	while ((c = getopt(argc, argv, "f:dkmt:e:F")) != -1) {
+	while ((c = getopt(argc, argv, "de:Ff:gkmst:")) != -1) {
 		switch (c) {
+		case 'd':
+			delete++;
+			break;
+		case 'e':
+			asd.emul = optarg;
+			break;
+		case 'F':
+			dsd.flags |= WSDISPLAY_DELSCR_FORCE;
+			break;
 		case 'f':
 			wsdev = optarg;
 			break;
-		case 'd':
-			delete++;
+		case 'g':
+			get++;
 			break;
 		case 'k':
 			kbd++;
@@ -92,14 +102,11 @@ main(argc, argv)
 			mux++;
 			kbd++;
 			break;
+		case 's':
+			swtch++;
+			break;
 		case 't':
 			asd.screentype = optarg;
-			break;
-		case 'e':
-			asd.emul = optarg;
-			break;
-		case 'F':
-			dsd.flags |= WSDISPLAY_DELSCR_FORCE;
 			break;
 		case '?':
 		default:
@@ -110,47 +117,48 @@ main(argc, argv)
 	argc -= optind;
 	argv += optind;
 
-	if (kbd ? (argc > 1) : (argc != 1))
-		usage();
+	if (!get || argc != 0) {
+		if ((kbd || swtch) ? (argc > 1) : (argc != 1))
+			usage();
 
-	idx = -1;
-	if (argc > 0 && sscanf(argv[0], "%d", &idx) != 1)
-		errx(1, "invalid index");
+		if (argc > 0 && sscanf(argv[0], "%d", &idx) != 1)
+			errx(1, "invalid index");
+	}
+	if ((wsfd = open(wsdev, get ? O_RDONLY : O_RDWR)) == -1)
+		err(EXIT_FAILURE, "Cannot open `%s'", wsdev);
 
-	wsfd = open(wsdev, O_RDWR, 0);
-	if (wsfd < 0)
-		err(2, wsdev);
 
-	if (kbd) {
-		if (mux)
-			wmd.type = WSMUX_MUX;
-		else
-			wmd.type = WSMUX_KBD;
+	if (swtch) {
+		if (ioctl(wsfd, VT_ACTIVATE, idx) == -1)
+		    err(EXIT_FAILURE, "Cannot switch to %d", idx);
+	} else if (get) {
+		if (ioctl(wsfd, VT_GETACTIVE, &idx) == -1)
+		    err(EXIT_FAILURE, "Cannot get current screen");
+		(void)printf("%d\n", idx);
+	} else if (kbd) {
+		wmd.type = mux ? WSMUX_MUX : WSMUX_KBD;
 		wmd.idx = idx;
 		if (delete) {
-			res = ioctl(wsfd, WSMUX_REMOVE_DEVICE, &wmd);
-			if (res < 0)
-				err(3, "WSMUX_REMOVE_DEVICE");
+			if (ioctl(wsfd, WSMUX_REMOVE_DEVICE, &wmd) == -1)
+				err(EXIT_FAILURE, "WSMUX_REMOVE_DEVICE");
 		} else {
-			res = ioctl(wsfd, WSMUX_ADD_DEVICE, &wmd);
-			if (res < 0)
-				err(3, "WSMUX_ADD_DEVICE");
+			if (ioctl(wsfd, WSMUX_ADD_DEVICE, &wmd) == -1)
+				err(EXIT_FAILURE, "WSMUX_ADD_DEVICE");
 		}
 	} else if (delete) {
 		dsd.idx = idx;
-		res = ioctl(wsfd, WSDISPLAYIO_DELSCREEN, &dsd);
-		if (res < 0)
-			err(3, "WSDISPLAYIO_DELSCREEN");
+		if (ioctl(wsfd, WSDISPLAYIO_DELSCREEN, &dsd) == -1)
+			err(EXIT_FAILURE, "WSDISPLAYIO_DELSCREEN");
 	} else {
 		asd.idx = idx;
-		res = ioctl(wsfd, WSDISPLAYIO_ADDSCREEN, &asd);
-		if (res < 0) {
+		if (ioctl(wsfd, WSDISPLAYIO_ADDSCREEN, &asd) == -1) {
 			if (errno == EBUSY)
-				errx(3, "screen %d is already configured", idx);
+				errx(EXIT_FAILURE,
+				    "screen %d is already configured", idx);
 			else
-				err(3, "WSDISPLAYIO_ADDSCREEN");
+				err(EXIT_FAILURE, "WSDISPLAYIO_ADDSCREEN");
 		}
 	}
 
-	return (0);
+	return 0;
 }

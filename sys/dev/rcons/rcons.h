@@ -1,4 +1,4 @@
-/*	$NetBSD: rcons.h,v 1.11 2000/03/23 07:01:42 thorpej Exp $ */
+/*	$NetBSD: rcons.h,v 1.16 2005/12/11 12:23:44 christos Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -21,11 +21,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -57,7 +53,7 @@ struct rconsole {
 	/* This section must be filled in by the framebugger device */
 	u_int	rc_maxrow;		/* emulator height of screen */
 	u_int	rc_maxcol;		/* emulator width of screen */
-	void	(*rc_bell)__P((int));	/* ring the bell */
+	void	(*rc_bell)(int);	/* ring the bell */
 	struct	wsdisplay_emulops *rc_ops;/* output ops */
 	void	*rc_cookie;		/* cookie thereof */
 	u_int	rc_width;		/* width in pixels */
@@ -80,7 +76,8 @@ struct rconsole {
 	int	rc_p1;			/* escape sequence parameter 1 */
 	int	rc_fgcolor;		/* current fg color */
 	int	rc_bgcolor;		/* current bg color */
-	long	rc_attr;		/* wscons text attribute */
+	long	rc_attr;		/* current wscons text attribute */
+	long	rc_defattr;		/* default text attribute */
 	long	rc_kern_attr;		/* kernel output attribute */
 	u_int	rc_wsflg;		/* wscons attribute flags */
 	u_int	rc_supwsflg;		/* supported attribute flags */
@@ -99,28 +96,28 @@ struct rconsole {
 #define FB_P1		0x800		/* working on param 1 */
 
 /* rcons_kern.c */
-void rcons_cnputc __P((int));
-void rcons_bell __P((struct rconsole *));
-void rcons_init __P((struct rconsole *, int));
-void rcons_ttyinit __P((struct tty *));
+void rcons_cnputc(int);
+void rcons_bell(struct rconsole *);
+void rcons_init(struct rconsole *, int);
+void rcons_ttyinit(struct tty *);
 
 /* rcons_subr.c */
-void rcons_init_ops __P((struct rconsole *rc));
-void rcons_puts __P((struct rconsole *, unsigned char *, int));
-void rcons_pctrl __P((struct rconsole *, int));
-void rcons_esc __P((struct rconsole *, int));
-void rcons_doesc __P((struct rconsole *, int));
-void rcons_sgresc __P((struct rconsole *, int));
-void rcons_text __P((struct rconsole *, unsigned char *, int));
-void rcons_cursor __P((struct rconsole *));
-void rcons_invert __P((struct rconsole *, int));
-void rcons_clear2eop __P((struct rconsole *));
-void rcons_clear2eol __P((struct rconsole *));
-void rcons_scroll __P((struct rconsole *, int));
-void rcons_delchar __P((struct rconsole *, int));
-void rcons_delline __P((struct rconsole *, int));
-void rcons_insertchar __P((struct rconsole *, int));
-void rcons_insertline __P((struct rconsole *, int));
-void rcons_setcolor __P((struct rconsole *, int, int));
+void rcons_init_ops(struct rconsole *rc);
+void rcons_puts(struct rconsole *, const unsigned char *, int);
+void rcons_pctrl(struct rconsole *, int);
+void rcons_esc(struct rconsole *, int);
+void rcons_doesc(struct rconsole *, int);
+void rcons_sgresc(struct rconsole *, int);
+void rcons_text(struct rconsole *, const unsigned char *, int);
+void rcons_cursor(struct rconsole *);
+void rcons_invert(struct rconsole *, int);
+void rcons_clear2eop(struct rconsole *);
+void rcons_clear2eol(struct rconsole *);
+void rcons_scroll(struct rconsole *, int);
+void rcons_delchar(struct rconsole *, int);
+void rcons_delline(struct rconsole *, int);
+void rcons_insertchar(struct rconsole *, int);
+void rcons_insertline(struct rconsole *, int);
+void rcons_setcolor(struct rconsole *, int, int);
 
 #endif /* !defined _RCONS_H_ */

@@ -1,7 +1,10 @@
+##	$NetBSD: Makefile,v 1.6 2004/06/30 03:26:27 jmc Exp $
 ##  Notes:
 ##    This set of tests creates a dummy directory tree in /tmp and
 ##    populates it with several files.  The test requires around 1100
-##    inodes and 6.8MB.
+##    inodes and 6.8MB. The test system needs to run a kernel with
+##    FFS Endian Independent support (options FFS_EI) to be able to
+##    perform this test.
 ##
 ##    This test verifies that newfs can create filesystems in both bytes
 ##    orders. For each byte order it is checked that:
@@ -11,6 +14,8 @@
 ##        properly restore the filesystem.
 ##
 ##    This is derived from work done by Brian Grayson, submitted in PR 6706.
+
+.include <bsd.sys.mk>		# for HOST_SH
 
 TMPL=/tmp/ffstemplate
 TMPMP=/tmp/ffsregresstest_mount
@@ -64,10 +69,10 @@ cmp:
 dump:
 	@echo "***  Testing dump nodump flag support."
 	@#  First of all, estimate the size of a dump of just the tmpfs.
-	sh ${SRCDIR}/estimatecompare 2572 -S -h9 -0 ${CVND}${MPART}
+	${HOST_SH} ${SRCDIR}/estimatecompare 2572 -S -h9 -0 ${CVND}${MPART}
 
 	@#  Now estimate the size, after honoring the nodump flag.
-	sh ${SRCDIR}/estimatecompare 347  -S -h0 -0 ${CVND}${MPART}
+	${HOST_SH} ${SRCDIR}/estimatecompare 347  -S -h0 -0 ${CVND}${MPART}
 	@echo "***  Testing dump/restore support"
 	mkdir ${TMPREST}
 	dump -0 -h9 -B10000 -f - ${CVND}${MPART} | \
@@ -102,7 +107,7 @@ tmpfs:
 	    "${TMPIM}, ${EN} byte order."
 	dd if=/dev/zero of=${TMPIM} count=5860
 	vnconfig -v ${BVND}${RPART} ${TMPIM}
-	disklabel -rw ${VND} floppy288
+	disklabel -f ${SRCDIR}/disktab -rw ${VND} floppy288
 	newfs -B ${EN} -i 500 -b 8192 -f 1024 ${CVND}${MPART}
 	mkdir ${TMPMP}
 	mount -o async ${BVND}${MPART} ${TMPMP}

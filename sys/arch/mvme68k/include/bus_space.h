@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_space.h,v 1.5 2000/03/18 22:33:05 scw Exp $ */
+/*	$NetBSD: bus_space.h,v 1.13 2008/04/28 20:23:29 martin Exp $ */
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -73,6 +66,7 @@
 
 #ifndef _MVME68K_BUS_SPACE_H_
 #define	_MVME68K_BUS_SPACE_H_
+
 /*
  * Addresses (in bus space).
  */
@@ -82,23 +76,46 @@ typedef u_long bus_size_t;
 /*
  * Access methods for bus resources and address space.
  */
-typedef int	bus_space_tag_t;
+struct mvme68k_bus_space_tag;
+typedef struct mvme68k_bus_space_tag	*bus_space_tag_t;
 typedef u_long	bus_space_handle_t;
 
-/*
- * Value for the mvme68k bus space tag, not to be used directly by MI code.
- */
-#define MVME68K_INTIO_BUS_SPACE	0
-#define MVME68K_VME_BUS_SPACE	1
+struct mvme68k_bus_space_tag {
+	void		*bs_cookie;
+	int		(*bs_map)(void *, bus_addr_t, bus_size_t,
+				  int, bus_space_handle_t *);
+	void		(*bs_unmap)(void *, bus_space_handle_t, bus_size_t);
+	int		(*bs_peek_1)(void *, bus_space_handle_t,
+				     bus_size_t, uint8_t *);
+	int		(*bs_peek_2)(void *, bus_space_handle_t,
+				     bus_size_t, uint16_t *);
+	int		(*bs_peek_4)(void *, bus_space_handle_t,
+				     bus_size_t, uint32_t *);
+#if 0
+	int		(*bs_peek_8)(void *, bus_space_handle_t,
+				     bus_size_t, uint64_t *);
+#endif
+	int		(*bs_poke_1)(void *, bus_space_handle_t,
+				     bus_size_t, uint8_t);
+	int		(*bs_poke_2)(void *, bus_space_handle_t,
+				     bus_size_t, uint16_t);
+	int		(*bs_poke_4)(void *, bus_space_handle_t,
+				     bus_size_t, uint32_t);
+#if 0
+	int		(*bs_poke_8)(void *, bus_space_handle_t,
+				     bus_size_t, uint64_t);
+#endif
+};
 
 /*
- *	int bus_space_map __P((bus_space_tag_t t, bus_addr_t addr,
- *	    bus_size_t size, int flags, bus_space_handle_t *bshp));
+ *	int bus_space_map(bus_space_tag_t t, bus_addr_t addr,
+ *	                  bus_size_t size, int flags,
+ *                        bus_space_handle_t *bshp);
  *
  * Map a region of bus space.
  */
-int	bus_space_map __P((bus_space_tag_t, bus_addr_t, bus_size_t,
-	    int, bus_space_handle_t *));
+#define	bus_space_map(tag, offset, size, flags, handlep)		\
+    (*((tag)->bs_map))((tag)->bs_cookie, (offset), (size), (flags), (handlep))
 
 /*
  * Possible values for the 'flags' parameter of bus_space_map()
@@ -108,15 +125,22 @@ int	bus_space_map __P((bus_space_tag_t, bus_addr_t, bus_size_t,
 #define	BUS_SPACE_MAP_PREFETCHABLE	0x04
 
 /*
- *	void bus_space_unmap __P((bus_space_tag_t t,
- *	    bus_space_handle_t bsh, bus_size_t size));
+ *	void bus_space_unmap(bus_space_tag_t t,
+ *                           bus_space_handle_t bsh, bus_size_t size);
  *
  * Unmap a region of bus space.
  */
-void	bus_space_unmap __P((bus_space_tag_t, bus_space_handle_t, bus_size_t));
+#define bus_space_unmap(tag, handle, size)				\
+    (*((tag)->bs_unmap))((tag)->bs_cookie, (handle), (size))
 
+/*
+ *	int bus_space_subregion(bus_space_tag_t t, bus_space_handle_t h
+ *	    bus_addr_t offset, bus_size_t size, bus_space_handle_t *newh);
+ *
+ * Allocate a sub-region of an existing map
+ */
 #define	bus_space_subregion(t, h, o, s, hp)				\
-     (*(hp)=(h)+(o))
+     ((*(hp)=(h)+(o)), 0)
 
 /*
  * Allocation and deallocation operations.
@@ -127,30 +151,69 @@ void	bus_space_unmap __P((bus_space_tag_t, bus_space_handle_t, bus_size_t));
 #define	bus_space_free(t, h, s)
 
 /*
- *	u_intN_t bus_space_read_N __P((bus_space_tag_t tag,
- *	    bus_space_handle_t bsh, bus_size_t offset));
+ *	int bus_space_peek_N(bus_space_tag_t tag,
+ *	    bus_space_handle_t bsh, bus_size_t offset, uintN_t *valuep);
+ *
+ * Cautiously read 1, 2, 4 or 8 byte quantity from bus space described
+ * by tag/handle/offset.
+ * If no hardware responds to the read access, the function returns a
+ * non-zero value. Otherwise the value read is placed in `valuep'.
+ */
+#define	bus_space_peek_1(t, h, o, vp)					\
+    (*((t)->bs_peek_1))((t)->bs_cookie, (h), (o), (vp))
+
+#define	bus_space_peek_2(t, h, o, vp)					\
+    (*((t)->bs_peek_2))((t)->bs_cookie, (h), (o), (vp))
+
+#define	bus_space_peek_4(t, h, o, vp)					\
+    (*((t)->bs_peek_4))((t)->bs_cookie, (h), (o), (vp))
+
+#if 0	/* Cause a link error for bus_space_peek_8 */
+#define	bus_space_peek_8(t, h, o, vp)					\
+    (*((t)->bs_peek_8))((t)->bs_cookie, (h), (o), (vp))
+#endif
+
+/*
+ *	int bus_space_poke_N(bus_space_tag_t tag,
+ *	    bus_space_handle_t bsh, bus_size_t offset, uintN_t value);
+ *
+ * Cautiously write 1, 2, 4 or 8 byte quantity to bus space described
+ * by tag/handle/offset.
+ * If no hardware responds to the write access, the function returns a
+ * non-zero value.
+ */
+#define	bus_space_poke_1(t, h, o, v)					\
+    (*((t)->bs_poke_1))((t)->bs_cookie, (h), (o), (v))
+
+#define	bus_space_poke_2(t, h, o, v)					\
+    (*((t)->bs_poke_2))((t)->bs_cookie, (h), (o), (v))
+
+#define	bus_space_poke_4(t, h, o, v)					\
+    (*((t)->bs_poke_4))((t)->bs_cookie, (h), (o), (v))
+
+#if 0	/* Cause a link error for bus_space_poke_8 */
+#define	bus_space_poke_8(t, h, o, v)					\
+    (*((t)->bs_poke_8))((t)->bs_cookie, (h), (o), (v))
+#endif
+
+/*
+ *	uintN_t bus_space_read_N(bus_space_tag_t tag,
+ *	    bus_space_handle_t bsh, bus_size_t offset);
  *
  * Read a 1, 2, 4, or 8 byte quantity from bus space
  * described by tag/handle/offset.
  */
-
-#define	bus_space_read_1(t, h, o)					\
-    ((void) t, (*(volatile u_int8_t *)((h) + (o))))
-
-#define	bus_space_read_2(t, h, o)					\
-    ((void) t, (*(volatile u_int16_t *)((h) + (o))))
-
-#define	bus_space_read_4(t, h, o)					\
-    ((void) t, (*(volatile u_int32_t *)((h) + (o))))
-
-#if 0	/* Cause a link error for bus_space_read_8 */
-#define	bus_space_read_8(t, h, o)	!!! bus_space_read_8 unimplemented !!!
-#endif
+#define	bus_space_read_1(t,h,o)	\
+	    (*((volatile uint8_t *)(intptr_t)((h) + (o))))
+#define	bus_space_read_2(t,h,o)	\
+	    (*((volatile uint16_t *)(intptr_t)((h) + (o))))
+#define	bus_space_read_4(t,h,o)	\
+	    (*((volatile uint32_t *)(intptr_t)((h) + (o))))
 
 /*
- *	void bus_space_read_multi_N __P((bus_space_tag_t tag,
+ *	void bus_space_read_multi_N(bus_space_tag_t tag,
  *	    bus_space_handle_t bsh, bus_size_t offset,
- *	    u_intN_t *addr, size_t count));
+ *	    uintN_t *addr, size_t count);
  *
  * Read `count' 1, 2, 4, or 8 byte quantities from bus space
  * described by tag/handle/offset and copy into buffer provided.
@@ -158,12 +221,12 @@ void	bus_space_unmap __P((bus_space_tag_t, bus_space_handle_t, bus_size_t));
 
 #define	bus_space_read_multi_1(t, h, o, a, c) do {			\
 	(void) t;							\
-	__asm __volatile ("						\
-		movl	%0,a0					;	\
-		movl	%1,a1					;	\
-		movl	%2,d0					;	\
-	1:	movb	a0@,a1@+				;	\
-		subql	#1,d0					;	\
+	__asm volatile ("						\
+		movl	%0,%%a0					;	\
+		movl	%1,%%a1					;	\
+		movl	%2,%%d0					;	\
+	1:	movb	%%a0@,%%a1@+				;	\
+		subql	#1,%%d0					;	\
 		jne	1b"					:	\
 								:	\
 		    "r" ((h) + (o)), "g" (a), "g" (c)		:	\
@@ -172,12 +235,12 @@ void	bus_space_unmap __P((bus_space_tag_t, bus_space_handle_t, bus_size_t));
 
 #define	bus_space_read_multi_2(t, h, o, a, c) do {			\
 	(void) t;							\
-	__asm __volatile ("						\
-		movl	%0,a0					;	\
-		movl	%1,a1					;	\
-		movl	%2,d0					;	\
-	1:	movw	a0@,a1@+				;	\
-		subql	#1,d0					;	\
+	__asm volatile ("						\
+		movl	%0,%%a0					;	\
+		movl	%1,%%a1					;	\
+		movl	%2,%%d0					;	\
+	1:	movw	%%a0@,%%a1@+				;	\
+		subql	#1,%%d0					;	\
 		jne	1b"					:	\
 								:	\
 		    "r" ((h) + (o)), "g" (a), "g" (c)		:	\
@@ -186,12 +249,12 @@ void	bus_space_unmap __P((bus_space_tag_t, bus_space_handle_t, bus_size_t));
 
 #define	bus_space_read_multi_4(t, h, o, a, c) do {			\
 	(void) t;							\
-	__asm __volatile ("						\
-		movl	%0,a0					;	\
-		movl	%1,a1					;	\
-		movl	%2,d0					;	\
-	1:	movl	a0@,a1@+				;	\
-		subql	#1,d0					;	\
+	__asm volatile ("						\
+		movl	%0,%%a0					;	\
+		movl	%1,%%a1					;	\
+		movl	%2,%%d0					;	\
+	1:	movl	%%a0@,%%a1@+				;	\
+		subql	#1,%%d0					;	\
 		jne	1b"					:	\
 								:	\
 		    "r" ((h) + (o)), "g" (a), "g" (c)		:	\
@@ -203,9 +266,9 @@ void	bus_space_unmap __P((bus_space_tag_t, bus_space_handle_t, bus_size_t));
 #endif
 
 /*
- *	void bus_space_read_region_N __P((bus_space_tag_t tag,
+ *	void bus_space_read_region_N(bus_space_tag_t tag,
  *	    bus_space_handle_t bsh, bus_size_t offset,
- *	    u_intN_t *addr, size_t count));
+ *	    uintN_t *addr, size_t count);
  *
  * Read `count' 1, 2, 4, or 8 byte quantities from bus space
  * described by tag/handle and starting at `offset' and copy into
@@ -214,12 +277,12 @@ void	bus_space_unmap __P((bus_space_tag_t, bus_space_handle_t, bus_size_t));
 
 #define	bus_space_read_region_1(t, h, o, a, c) do {			\
 	(void) t;							\
-	__asm __volatile ("						\
-		movl	%0,a0					;	\
-		movl	%1,a1					;	\
-		movl	%2,d0					;	\
-	1:	movb	a0@+,a1@+				;	\
-		subql	#1,d0					;	\
+	__asm volatile ("						\
+		movl	%0,%%a0					;	\
+		movl	%1,%%a1					;	\
+		movl	%2,%%d0					;	\
+	1:	movb	%%a0@+,%%a1@+				;	\
+		subql	#1,%%d0					;	\
 		jne	1b"					:	\
 								:	\
 		    "r" ((h) + (o)), "g" (a), "g" (c)		:	\
@@ -228,12 +291,12 @@ void	bus_space_unmap __P((bus_space_tag_t, bus_space_handle_t, bus_size_t));
 
 #define	bus_space_read_region_2(t, h, o, a, c) do {			\
 	(void) t;							\
-	__asm __volatile ("						\
-		movl	%0,a0					;	\
-		movl	%1,a1					;	\
-		movl	%2,d0					;	\
-	1:	movw	a0@+,a1@+				;	\
-		subql	#1,d0					;	\
+	__asm volatile ("						\
+		movl	%0,%%a0					;	\
+		movl	%1,%%a1					;	\
+		movl	%2,%%d0					;	\
+	1:	movw	%%a0@+,%%a1@+				;	\
+		subql	#1,%%d0					;	\
 		jne	1b"					:	\
 								:	\
 		    "r" ((h) + (o)), "g" (a), "g" (c)		:	\
@@ -242,12 +305,12 @@ void	bus_space_unmap __P((bus_space_tag_t, bus_space_handle_t, bus_size_t));
 
 #define	bus_space_read_region_4(t, h, o, a, c) do {			\
 	(void) t;							\
-	__asm __volatile ("						\
-		movl	%0,a0					;	\
-		movl	%1,a1					;	\
-		movl	%2,d0					;	\
-	1:	movl	a0@+,a1@+				;	\
-		subql	#1,d0					;	\
+	__asm volatile ("						\
+		movl	%0,%%a0					;	\
+		movl	%1,%%a1					;	\
+		movl	%2,%%d0					;	\
+	1:	movl	%%a0@+,%%a1@+				;	\
+		subql	#1,%%d0					;	\
 		jne	1b"					:	\
 								:	\
 		    "r" ((h) + (o)), "g" (a), "g" (c)		:	\
@@ -259,31 +322,30 @@ void	bus_space_unmap __P((bus_space_tag_t, bus_space_handle_t, bus_size_t));
 #endif
 
 /*
- *	void bus_space_write_N __P((bus_space_tag_t tag,
+ *	void bus_space_write_N(bus_space_tag_t tag,
  *	    bus_space_handle_t bsh, bus_size_t offset,
- *	    u_intN_t value));
+ *	    uintN_t value);
  *
  * Write the 1, 2, 4, or 8 byte value `value' to bus space
  * described by tag/handle/offset.
  */
-
-#define	bus_space_write_1(t, h, o, v)					\
-    ((void) t, ((void)(*(volatile u_int8_t *)((h) + (o)) = (v))))
-
-#define	bus_space_write_2(t, h, o, v)					\
-    ((void) t, ((void)(*(volatile u_int16_t *)((h) + (o)) = (v))))
-
-#define	bus_space_write_4(t, h, o, v)					\
-    ((void) t, ((void)(*(volatile u_int32_t *)((h) + (o)) = (v))))
-
-#if 0	/* Cause a link error for bus_space_write_8 */
-#define	bus_space_write_8	!!! bus_space_write_8 not implemented !!!
-#endif
+#define	bus_space_write_1(t,h,o,v)					\
+	do {								\
+		*((volatile uint8_t *)(intptr_t)((h) + (o))) = (v);	\
+	} while (/*CONSTCOND*/0)
+#define	bus_space_write_2(t,h,o,v)					\
+	do {								\
+		*((volatile uint16_t *)(intptr_t)((h) + (o))) = (v);	\
+	} while (/*CONSTCOND*/0)
+#define	bus_space_write_4(t,h,o,v)					\
+	do {								\
+		*((volatile uint32_t *)(intptr_t)((h) + (o))) = (v);	\
+	} while (/*CONSTCOND*/0)
 
 /*
- *	void bus_space_write_multi_N __P((bus_space_tag_t tag,
+ *	void bus_space_write_multi_N(bus_space_tag_t tag,
  *	    bus_space_handle_t bsh, bus_size_t offset,
- *	    const u_intN_t *addr, size_t count));
+ *	    const uintN_t *addr, size_t count);
  *
  * Write `count' 1, 2, 4, or 8 byte quantities from the buffer
  * provided to bus space described by tag/handle/offset.
@@ -291,12 +353,12 @@ void	bus_space_unmap __P((bus_space_tag_t, bus_space_handle_t, bus_size_t));
 
 #define	bus_space_write_multi_1(t, h, o, a, c) do {			\
 	(void) t;							\
-	__asm __volatile ("						\
-		movl	%0,a0					;	\
-		movl	%1,a1					;	\
-		movl	%2,d0					;	\
-	1:	movb	a1@+,a0@				;	\
-		subql	#1,d0					;	\
+	__asm volatile ("						\
+		movl	%0,%%a0					;	\
+		movl	%1,%%a1					;	\
+		movl	%2,%%d0					;	\
+	1:	movb	%%a1@+,%%a0@				;	\
+		subql	#1,%%d0					;	\
 		jne	1b"					:	\
 								:	\
 		    "r" ((h) + (o)), "g" (a), "g" (c)		:	\
@@ -305,12 +367,12 @@ void	bus_space_unmap __P((bus_space_tag_t, bus_space_handle_t, bus_size_t));
 
 #define	bus_space_write_multi_2(t, h, o, a, c) do {			\
 	(void) t;							\
-	__asm __volatile ("						\
-		movl	%0,a0					;	\
-		movl	%1,a1					;	\
-		movl	%2,d0					;	\
-	1:	movw	a1@+,a0@				;	\
-		subql	#1,d0					;	\
+	__asm volatile ("						\
+		movl	%0,%%a0					;	\
+		movl	%1,%%a1					;	\
+		movl	%2,%%d0					;	\
+	1:	movw	%%a1@+,%%a0@				;	\
+		subql	#1,%%d0					;	\
 		jne	1b"					:	\
 								:	\
 		    "r" ((h) + (o)), "g" (a), "g" (c)		:	\
@@ -319,12 +381,12 @@ void	bus_space_unmap __P((bus_space_tag_t, bus_space_handle_t, bus_size_t));
 
 #define	bus_space_write_multi_4(t, h, o, a, c) do {			\
 	(void) t;							\
-	__asm __volatile ("						\
-		movl	%0,a0					;	\
-		movl	%1,a1					;	\
-		movl	%2,d0					;	\
-	1:	movl	a1@+,a0@				;	\
-		subql	#1,d0					;	\
+	__asm volatile ("						\
+		movl	%0,%%a0					;	\
+		movl	%1,%%a1					;	\
+		movl	%2,%%d0					;	\
+	1:	movl	a1@+,%%a0@				;	\
+		subql	#1,%%d0					;	\
 		jne	1b"					:	\
 								:	\
 		    "r" ((h) + (o)), "g" (a), "g" (c)		:	\
@@ -337,9 +399,9 @@ void	bus_space_unmap __P((bus_space_tag_t, bus_space_handle_t, bus_size_t));
 #endif
 
 /*
- *	void bus_space_write_region_N __P((bus_space_tag_t tag,
+ *	void bus_space_write_region_N(bus_space_tag_t tag,
  *	    bus_space_handle_t bsh, bus_size_t offset,
- *	    const u_intN_t *addr, size_t count));
+ *	    const uintN_t *addr, size_t count);
  *
  * Write `count' 1, 2, 4, or 8 byte quantities from the buffer provided
  * to bus space described by tag/handle starting at `offset'.
@@ -347,12 +409,12 @@ void	bus_space_unmap __P((bus_space_tag_t, bus_space_handle_t, bus_size_t));
 
 #define	bus_space_write_region_1(t, h, o, a, c) do {			\
 	(void) t;							\
-	__asm __volatile ("						\
-		movl	%0,a0					;	\
-		movl	%1,a1					;	\
-		movl	%2,d0					;	\
-	1:	movb	a1@+,a0@+				;	\
-		subql	#1,d0					;	\
+	__asm volatile ("						\
+		movl	%0,%%a0					;	\
+		movl	%1,%%a1					;	\
+		movl	%2,%%d0					;	\
+	1:	movb	%%a1@+,%%a0@+				;	\
+		subql	#1,%%d0					;	\
 		jne	1b"					:	\
 								:	\
 		    "r" ((h) + (o)), "g" (a), "g" (c)		:	\
@@ -361,12 +423,12 @@ void	bus_space_unmap __P((bus_space_tag_t, bus_space_handle_t, bus_size_t));
 
 #define	bus_space_write_region_2(t, h, o, a, c) do {			\
 	(void) t;							\
-	__asm __volatile ("						\
-		movl	%0,a0					;	\
-		movl	%1,a1					;	\
-		movl	%2,d0					;	\
-	1:	movw	a1@+,a0@+				;	\
-		subql	#1,d0					;	\
+	__asm volatile ("						\
+		movl	%0,%%a0					;	\
+		movl	%1,%%a1					;	\
+		movl	%2,%%d0					;	\
+	1:	movw	%%a1@+,%%a0@+				;	\
+		subql	#1,%%d0					;	\
 		jne	1b"					:	\
 								:	\
 		    "r" ((h) + (o)), "g" (a), "g" (c)		:	\
@@ -375,12 +437,12 @@ void	bus_space_unmap __P((bus_space_tag_t, bus_space_handle_t, bus_size_t));
 
 #define	bus_space_write_region_4(t, h, o, a, c) do {			\
 	(void) t;							\
-	__asm __volatile ("						\
-		movl	%0,a0					;	\
-		movl	%1,a1					;	\
-		movl	%2,d0					;	\
-	1:	movl	a1@+,a0@+				;	\
-		subql	#1,d0					;	\
+	__asm volatile ("						\
+		movl	%0,%%a0					;	\
+		movl	%1,%%a1					;	\
+		movl	%2,%%d0					;	\
+	1:	movl	%%a1@+,%%a0@+				;	\
+		subql	#1,%%d0					;	\
 		jne	1b"					:	\
 								:	\
 		    "r" ((h) + (o)), "g" (a), "g" (c)		:	\
@@ -393,9 +455,9 @@ void	bus_space_unmap __P((bus_space_tag_t, bus_space_handle_t, bus_size_t));
 #endif
 
 /*
- *	void bus_space_set_multi_N __P((bus_space_tag_t tag,
- *	    bus_space_handle_t bsh, bus_size_t offset, u_intN_t val,
- *	    size_t count));
+ *	void bus_space_set_multi_N(bus_space_tag_t tag,
+ *	    bus_space_handle_t bsh, bus_size_t offset, uintN_t val,
+ *	    size_t count);
  *
  * Write the 1, 2, 4, or 8 byte value `val' to bus space described
  * by tag/handle/offset `count' times.
@@ -403,12 +465,12 @@ void	bus_space_unmap __P((bus_space_tag_t, bus_space_handle_t, bus_size_t));
 
 #define	bus_space_set_multi_1(t, h, o, val, c) do {			\
 	(void) t;							\
-	__asm __volatile ("						\
-		movl	%0,a0					;	\
-		movl	%1,d1					;	\
-		movl	%2,d0					;	\
-	1:	movb	d1,a0@					;	\
-		subql	#1,d0					;	\
+	__asm volatile ("						\
+		movl	%0,%%a0					;	\
+		movl	%1,%%d1					;	\
+		movl	%2,%%d0					;	\
+	1:	movb	%%d1,%%a0@				;	\
+		subql	#1,%%d0					;	\
 		jne	1b"					:	\
 								:	\
 		    "r" ((h) + (o)), "g" (val), "g" (c)		:	\
@@ -417,12 +479,12 @@ void	bus_space_unmap __P((bus_space_tag_t, bus_space_handle_t, bus_size_t));
 
 #define	bus_space_set_multi_2(t, h, o, val, c) do {			\
 	(void) t;							\
-	__asm __volatile ("						\
-		movl	%0,a0					;	\
-		movl	%1,d1					;	\
-		movl	%2,d0					;	\
-	1:	movw	d1,a0@					;	\
-		subql	#1,d0					;	\
+	__asm volatile ("						\
+		movl	%0,%%a0					;	\
+		movl	%1,%%d1					;	\
+		movl	%2,%%d0					;	\
+	1:	movw	%%d1,%%a0@				;	\
+		subql	#1,%%d0					;	\
 		jne	1b"					:	\
 								:	\
 		    "r" ((h) + (o)), "g" (val), "g" (c)		:	\
@@ -431,12 +493,12 @@ void	bus_space_unmap __P((bus_space_tag_t, bus_space_handle_t, bus_size_t));
 
 #define	bus_space_set_multi_4(t, h, o, val, c) do {			\
 	(void) t;							\
-	__asm __volatile ("						\
-		movl	%0,a0					;	\
-		movl	%1,d1					;	\
-		movl	%2,d0					;	\
-	1:	movl	d1,a0@					;	\
-		subql	#1,d0					;	\
+	__asm volatile ("						\
+		movl	%0,%%a0					;	\
+		movl	%1,%%d1					;	\
+		movl	%2,%%d0					;	\
+	1:	movl	%%d1,%%a0@				;	\
+		subql	#1,%%d0					;	\
 		jne	1b"					:	\
 								:	\
 		    "r" ((h) + (o)), "g" (val), "g" (c)		:	\
@@ -449,9 +511,9 @@ void	bus_space_unmap __P((bus_space_tag_t, bus_space_handle_t, bus_size_t));
 #endif
 
 /*
- *	void bus_space_set_region_N __P((bus_space_tag_t tag,
- *	    bus_space_handle_t bsh, bus_size_t offset, u_intN_t val,
- *	    size_t count));
+ *	void bus_space_set_region_N(bus_space_tag_t tag,
+ *	    bus_space_handle_t bsh, bus_size_t offset, uintN_t val,
+ *	    size_t count);
  *
  * Write `count' 1, 2, 4, or 8 byte value `val' to bus space described
  * by tag/handle starting at `offset'.
@@ -459,12 +521,12 @@ void	bus_space_unmap __P((bus_space_tag_t, bus_space_handle_t, bus_size_t));
 
 #define	bus_space_set_region_1(t, h, o, val, c) do {			\
 	(void) t;							\
-	__asm __volatile ("						\
-		movl	%0,a0					;	\
-		movl	%1,d1					;	\
-		movl	%2,d0					;	\
-	1:	movb	d1,a0@+					;	\
-		subql	#1,d0					;	\
+	__asm volatile ("						\
+		movl	%0,%%a0					;	\
+		movl	%1,%%d1					;	\
+		movl	%2,%%d0					;	\
+	1:	movb	%%d1,%%a0@+				;	\
+		subql	#1,%%d0					;	\
 		jne	1b"					:	\
 								:	\
 		    "r" ((h) + (o)), "g" (val), "g" (c)		:	\
@@ -473,12 +535,12 @@ void	bus_space_unmap __P((bus_space_tag_t, bus_space_handle_t, bus_size_t));
 
 #define	bus_space_set_region_2(t, h, o, val, c) do {			\
 	(void) t;							\
-	__asm __volatile ("						\
-		movl	%0,a0					;	\
-		movl	%1,d1					;	\
-		movl	%2,d0					;	\
-	1:	movw	d1,a0@+					;	\
-		subql	#1,d0					;	\
+	__asm volatile ("						\
+		movl	%0,%%a0					;	\
+		movl	%1,%%d1					;	\
+		movl	%2,%%d0					;	\
+	1:	movw	%%d1,%%a0@+				;	\
+		subql	#1,%%d0					;	\
 		jne	1b"					:	\
 								:	\
 		    "r" ((h) + (o)), "g" (val), "g" (c)		:	\
@@ -487,12 +549,12 @@ void	bus_space_unmap __P((bus_space_tag_t, bus_space_handle_t, bus_size_t));
 
 #define	bus_space_set_region_4(t, h, o, val, c) do {			\
 	(void) t;							\
-	__asm __volatile ("						\
-		movl	%0,a0					;	\
-		movl	%1,d1					;	\
-		movl	%2,d0					;	\
-	1:	movl	d1,a0@+					;	\
-		subql	#1,d0					;	\
+	__asm volatile ("						\
+		movl	%0,%%a0					;	\
+		movl	%1,%%d1					;	\
+		movl	%2,%%d0					;	\
+	1:	movl	d1,%%a0@+				;	\
+		subql	#1,%%d0					;	\
 		jne	1b"					:	\
 								:	\
 		    "r" ((h) + (o)), "g" (val), "g" (c)		:	\
@@ -505,10 +567,10 @@ void	bus_space_unmap __P((bus_space_tag_t, bus_space_handle_t, bus_size_t));
 #endif
 
 /*
- *	void bus_space_copy_N __P((bus_space_tag_t tag,
+ *	void bus_space_copy_N(bus_space_tag_t tag,
  *	    bus_space_handle_t bsh1, bus_size_t off1,
  *	    bus_space_handle_t bsh2, bus_size_t off2,
- *	    size_t count));
+ *	    size_t count);
  *
  * Copy `count' 1, 2, 4, or 8 byte values from bus space starting
  * at tag/bsh1/off1 to bus space starting at tag/bsh2/off2.
@@ -516,10 +578,10 @@ void	bus_space_unmap __P((bus_space_tag_t, bus_space_handle_t, bus_size_t));
 
 #define	__MVME68K_copy_region_N(BYTES)					\
 static __inline void __CONCAT(bus_space_copy_region_,BYTES)		\
-	__P((bus_space_tag_t,						\
+	(bus_space_tag_t,						\
 	    bus_space_handle_t bsh1, bus_size_t off1,			\
 	    bus_space_handle_t bsh2, bus_size_t off2,			\
-	    bus_size_t count));						\
+	    bus_size_t count);						\
 									\
 static __inline void							\
 __CONCAT(bus_space_copy_region_,BYTES)(t, h1, o1, h2, o2, c)		\
@@ -554,9 +616,9 @@ __MVME68K_copy_region_N(4)
 /*
  * Bus read/write barrier methods.
  *
- *	void bus_space_barrier __P((bus_space_tag_t tag,
+ *	void bus_space_barrier(bus_space_tag_t tag,
  *	    bus_space_handle_t bsh, bus_size_t offset,
- *	    bus_size_t len, int flags));
+ *	    bus_size_t len, int flags);
  *
  * Note: the 680x0 does not currently require barriers, but we must
  * provide the flags to MI code.
@@ -567,5 +629,21 @@ __MVME68K_copy_region_N(4)
 #define	BUS_SPACE_BARRIER_WRITE	0x02		/* force write barrier */
 
 #define BUS_SPACE_ALIGNED_POINTER(p, t) ALIGNED_POINTER(p, t)
+
+
+#ifdef _MVME68K_BUS_SPACE_PRIVATE
+extern int _bus_space_map(void *, bus_addr_t, bus_size_t,
+    int, bus_space_handle_t *);
+extern void _bus_space_unmap(void *, bus_space_handle_t, bus_size_t);
+extern int _bus_space_peek_1(void *, bus_space_handle_t,
+    bus_size_t, uint8_t *);
+extern int _bus_space_peek_2(void *, bus_space_handle_t,
+    bus_size_t, uint16_t *);
+extern int _bus_space_peek_4(void *, bus_space_handle_t,
+    bus_size_t, uint32_t *);
+extern int _bus_space_poke_1(void *, bus_space_handle_t, bus_size_t, uint8_t);
+extern int _bus_space_poke_2(void *, bus_space_handle_t, bus_size_t, uint16_t);
+extern int _bus_space_poke_4(void *, bus_space_handle_t, bus_size_t, uint32_t);
+#endif /* _MVME68K_BUS_SPACE_PRIVATE */
 
 #endif /* _MVME68K_BUS_SPACE_H_ */

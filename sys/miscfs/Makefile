@@ -1,9 +1,8 @@
-#	$NetBSD: Makefile,v 1.2 2000/01/20 19:06:14 wrstuden Exp $
+#	$NetBSD: Makefile,v 1.8 2005/12/11 12:24:50 christos Exp $
 
 SUBDIR=	fdesc fifofs genfs kernfs nullfs overlay portal
-SUBDIR+= procfs specfs umapfs union
+SUBDIR+= procfs specfs syncfs umapfs
 
-KDIR=	/sys/miscfs
 INCSDIR= /usr/include/miscfs
 
 .include <bsd.kinc.mk>

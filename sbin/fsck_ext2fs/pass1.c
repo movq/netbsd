@@ -1,7 +1,6 @@
-/*	$NetBSD: pass1.c,v 1.9 2000/01/31 11:40:12 bouyer Exp $	*/
+/*	$NetBSD: pass1.c,v 1.17 2008/03/16 23:17:55 lukem Exp $	*/
 
 /*
- * Copyright (c) 1997 Manuel Bouyer.
  * Copyright (c) 1980, 1986, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -13,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -34,12 +29,41 @@
  * SUCH DAMAGE.
  */
 
+/*
+ * Copyright (c) 1997 Manuel Bouyer.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)pass1.c	8.1 (Berkeley) 6/5/93";
 #else
-__RCSID("$NetBSD: pass1.c,v 1.9 2000/01/31 11:40:12 bouyer Exp $");
+__RCSID("$NetBSD: pass1.c,v 1.17 2008/03/16 23:17:55 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -59,13 +83,14 @@ __RCSID("$NetBSD: pass1.c,v 1.9 2000/01/31 11:40:12 bouyer Exp $");
 #include "fsck.h"
 #include "extern.h"
 #include "fsutil.h"
+#include "exitvalues.h"
 
 static daddr_t badblk;
 static daddr_t dupblk;
-static void checkinode __P((ino_t, struct inodesc *));
+static void checkinode(ino_t, struct inodesc *);
 
 void
-pass1()
+pass1(void)
 {
 	ino_t inumber;
 	int c, i;
@@ -131,9 +156,7 @@ pass1()
 }
 
 static void
-checkinode(inumber, idesc)
-	ino_t inumber;
-	struct inodesc *idesc;
+checkinode(ino_t inumber, struct inodesc *idesc)
 {
 	struct ext2fs_dinode *dp;
 	struct zlncnt *zlnp;
@@ -141,16 +164,20 @@ checkinode(inumber, idesc)
 	mode_t mode;
 
 	dp = getnextinode(inumber);
-	if (inumber < EXT2_FIRSTINO && inumber != EXT2_ROOTINO) 
+	if (inumber < EXT2_FIRSTINO &&
+	    inumber != EXT2_ROOTINO &&
+	    !(inumber == EXT2_RESIZEINO &&
+	      (sblock.e2fs.e2fs_features_compat & EXT2F_COMPAT_RESIZE) != 0))
 		return;
 
 	mode = fs2h16(dp->e2di_mode) & IFMT;
 	if (mode == 0 || (dp->e2di_dtime != 0 && dp->e2di_nlink == 0)) {
 		if (mode == 0 && (
-			memcmp(dp->e2di_blocks, zino.e2di_blocks,
-			(NDADDR + NIADDR) * sizeof(u_int32_t)) ||
-		    dp->e2di_mode || dp->e2di_size)) {
-			pfatal("PARTIALLY ALLOCATED INODE I=%u", inumber);
+		    memcmp(dp->e2di_blocks, zino.e2di_blocks,
+		    (NDADDR + NIADDR) * sizeof(u_int32_t)) ||
+		    dp->e2di_mode || inosize(dp))) {
+			pfatal("PARTIALLY ALLOCATED INODE I=%llu",
+			    (unsigned long long)inumber);
 			if (reply("CLEAR") == 1) {
 				dp = ginode(inumber);
 				clearinode(dp);
@@ -159,7 +186,8 @@ checkinode(inumber, idesc)
 		}
 #ifdef notyet /* it seems that dtime == 0 is valid for a unallocated inode */
 		if (dp->e2di_dtime == 0) {
-			pwarn("DELETED INODE I=%u HAS A NULL DTIME", inumber);
+			pwarn("DELETED INODE I=%llu HAS A NULL DTIME",
+			    (unsigned long long)inumber);
 			if (preen) {
 				printf(" (CORRECTED)\n");
 			}
@@ -179,7 +207,8 @@ checkinode(inumber, idesc)
 	if (dp->e2di_dtime != 0) {
 		time_t t = fs2h32(dp->e2di_dtime);
 		char *p = ctime(&t);
-		pwarn("INODE I=%u HAS DTIME=%12.12s %4.4s", inumber, &p[4], &p[20]);
+		pwarn("INODE I=%llu HAS DTIME=%12.12s %4.4s",
+		    (unsigned long long)inumber, &p[4], &p[20]);
 		if (preen) {
 			printf(" (CORRECTED)\n");
 		}
@@ -189,24 +218,22 @@ checkinode(inumber, idesc)
 			inodirty();
 		}
 	}
-	if (/* dp->di_size < 0 || */
-	    fs2h32(dp->e2di_size) + sblock.e2fs_bsize - 1 <
-		fs2h32(dp->e2di_size)) {
+	if (inosize(dp) + sblock.e2fs_bsize - 1 < inosize(dp)) {
 		if (debug)
-			printf("bad size %lu:", (u_long)fs2h32(dp->e2di_size));
+			printf("bad size %llu:", (unsigned long long)inosize(dp));
 		goto unknown;
 	}
 	if (!preen && mode == IFMT && reply("HOLD BAD BLOCK") == 1) {
 		dp = ginode(inumber);
-		dp->e2di_size = h2fs32(sblock.e2fs_bsize);
 		dp->e2di_mode = h2fs16(IFREG|0600);
+		inossize(dp, sblock.e2fs_bsize);
 		inodirty();
 	}
-	ndb = howmany(fs2h32(dp->e2di_size), sblock.e2fs_bsize);
+	ndb = howmany(inosize(dp), sblock.e2fs_bsize);
 	if (ndb < 0) {
 		if (debug)
-			printf("bad size %lu ndb %d:",
-			    (u_long)fs2h32(dp->e2di_size), ndb);
+			printf("bad size %llu ndb %d:",
+			    (unsigned long long)inosize(dp), ndb);
 		goto unknown;
 	}
 	if (mode == IFBLK || mode == IFCHR)
@@ -216,9 +243,9 @@ checkinode(inumber, idesc)
 		 * Fake ndb value so direct/indirect block checks below
 		 * will detect any garbage after symlink string.
 		 */
-		if (fs2h32(dp->e2di_size) < EXT2_MAXSYMLINKLEN ||
+		if (inosize(dp) < EXT2_MAXSYMLINKLEN ||
 		    (EXT2_MAXSYMLINKLEN == 0 && dp->e2di_blocks == 0)) {
-			ndb = howmany(fs2h32(dp->e2di_size), sizeof(u_int32_t));
+			ndb = howmany(inosize(dp), sizeof(u_int32_t));
 			if (ndb > NDADDR) {
 				j = ndb - NDADDR;
 				for (ndb = 1; j > 1; j--)
@@ -249,14 +276,17 @@ checkinode(inumber, idesc)
 	}
 	if (ftypeok(dp) == 0)
 		goto unknown;
-	n_files++;
+	if (inumber >= EXT2_FIRSTINO || inumber == EXT2_ROOTINO) {
+		/* Don't count reserved inodes except root */
+		n_files++;
+	}
 	lncntp[inumber] = fs2h16(dp->e2di_nlink);
 	if (dp->e2di_nlink == 0) {
 		zlnp = (struct zlncnt *)malloc(sizeof *zlnp);
 		if (zlnp == NULL) {
 			pfatal("LINK COUNT TABLE OVERFLOW");
 			if (reply("CONTINUE") == 0)
-				errexit("%s\n", "");
+				exit(FSCK_EXIT_CHECK_FAILED);
 		} else {
 			zlnp->zlncnt = inumber;
 			zlnp->next = zlnhead;
@@ -264,7 +294,7 @@ checkinode(inumber, idesc)
 		}
 	}
 	if (mode == IFDIR) {
-		if (dp->e2di_size == 0)
+		if (inosize(dp) == 0)
 			statemap[inumber] = DCLEAR;
 		else
 			statemap[inumber] = DSTATE;
@@ -278,8 +308,9 @@ checkinode(inumber, idesc)
 	(void)ckinode(dp, idesc);
 	idesc->id_entryno *= btodb(sblock.e2fs_bsize);
 	if (fs2h32(dp->e2di_nblock) != idesc->id_entryno) {
-		pwarn("INCORRECT BLOCK COUNT I=%u (%d should be %d)",
-		    inumber, fs2h32(dp->e2di_nblock), idesc->id_entryno);
+		pwarn("INCORRECT BLOCK COUNT I=%llu (%d should be %d)",
+		    (unsigned long long)inumber, fs2h32(dp->e2di_nblock),
+		    idesc->id_entryno);
 		if (preen)
 			printf(" (CORRECTED)\n");
 		else if (reply("CORRECT") == 0)
@@ -290,7 +321,7 @@ checkinode(inumber, idesc)
 	}
 	return;
 unknown:
-	pfatal("UNKNOWN FILE TYPE I=%u", inumber);
+	pfatal("UNKNOWN FILE TYPE I=%llu", (unsigned long long)inumber);
 	statemap[inumber] = FCLEAR;
 	if (reply("CLEAR") == 1) {
 		statemap[inumber] = USTATE;
@@ -301,8 +332,7 @@ unknown:
 }
 
 int
-pass1check(idesc)
-	struct inodesc *idesc;
+pass1check(struct inodesc *idesc)
 {
 	int res = KEEPON;
 	int anyout, nfrags;
@@ -313,12 +343,12 @@ pass1check(idesc)
 	if ((anyout = chkrange(blkno, idesc->id_numfrags)) != 0) {
 		blkerror(idesc->id_number, "BAD", blkno);
 		if (badblk++ >= MAXBAD) {
-			pwarn("EXCESSIVE BAD BLKS I=%u",
-				idesc->id_number);
+			pwarn("EXCESSIVE BAD BLKS I=%llu",
+			    (unsigned long long)idesc->id_number);
 			if (preen)
 				printf(" (SKIPPING)\n");
 			else if (reply("CONTINUE") == 0)
-				errexit("%s\n", "");
+				exit(FSCK_EXIT_CHECK_FAILED);
 			return (STOP);
 		}
 	}
@@ -331,19 +361,19 @@ pass1check(idesc)
 		} else {
 			blkerror(idesc->id_number, "DUP", blkno);
 			if (dupblk++ >= MAXDUP) {
-				pwarn("EXCESSIVE DUP BLKS I=%u",
-					idesc->id_number);
+				pwarn("EXCESSIVE DUP BLKS I=%llu",
+				    (unsigned long long)idesc->id_number);
 				if (preen)
 					printf(" (SKIPPING)\n");
 				else if (reply("CONTINUE") == 0)
-					errexit("%s\n", "");
+					exit(FSCK_EXIT_CHECK_FAILED);
 				return (STOP);
 			}
 			new = (struct dups *)malloc(sizeof(struct dups));
 			if (new == NULL) {
 				pfatal("DUP TABLE OVERFLOW.");
 				if (reply("CONTINUE") == 0)
-					errexit("%s\n", "");
+					exit(FSCK_EXIT_CHECK_FAILED);
 				return (STOP);
 			}
 			new->dup = blkno;

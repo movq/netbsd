@@ -1,4 +1,4 @@
-/*	$NetBSD: promlib.c,v 1.2 1999/05/03 16:13:16 christos Exp $ */
+/*	$NetBSD: promlib.c,v 1.10 2008/04/28 20:23:36 martin Exp $ */
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -58,16 +51,15 @@
 #include <machine/oldmon.h>
 #include <machine/bsd_openprom.h>
 #include <machine/promlib.h>
-#include <machine/openfirm.h>
 
 #include <lib/libsa/stand.h>
 
 #define obpvec ((struct promvec *)romp)
 
-static void	obp_v2_putchar __P((int));
-static int	obp_v2_seek __P((int, u_quad_t));
-static char	*obp_v0_getbootpath __P((void));
-static char	*obp_v2_getbootpath __P((void));
+static void	obp_v2_putchar(int);
+static int	obp_v2_seek(int, u_quad_t);
+static const char	*obp_v0_getbootpath(void);
+static const char	*obp_v2_getbootpath(void);
 
 /*
  * PROM entry points.
@@ -78,7 +70,7 @@ struct promops promops;
  * Determine whether a node has the given property.
  */
 void
-prom_halt()
+prom_halt(void)
 {
 
 	_prom_halt();
@@ -86,8 +78,7 @@ prom_halt()
 
 
 void
-obp_v2_putchar(c)
-	int c;
+obp_v2_putchar(int c)
 {
 	char c0;
 
@@ -96,14 +87,12 @@ obp_v2_putchar(c)
 }
 
 int
-obp_v2_seek(handle, offset)
-	int handle;
-	u_quad_t offset;
+obp_v2_seek(int handle, u_quad_t offset)
 {
-	u_int32_t hi, lo;
+	uint32_t hi, lo;
 
-	lo = offset & ((u_int32_t)-1);
-	hi = (offset >> 32) & ((u_int32_t)-1);
+	lo = offset & ((uint32_t)-1);
+	hi = (offset >> 32) & ((uint32_t)-1);
 	(*obpvec->pv_v2devops.v2_seek)(handle, hi, lo);
 	return (0);
 }
@@ -115,26 +104,26 @@ obp_v2_seek(handle, offset)
  * is NULL but `*promvec->pv_v2bootargs.v2_bootargs' points to
  * "netbsd -s" or whatever.
  */
-char *
-obp_v0_getbootpath()
+const char *
+obp_v0_getbootpath(void)
 {
 	struct v0bootargs *ba = promops.po_bootcookie;
 	return (ba->ba_argv[0]);
 }
 
-char *
-obp_v2_getbootpath()
+const char *
+obp_v2_getbootpath(void)
 {
 	struct v2bootargs *ba = promops.po_bootcookie;
 	return (*ba->v2_bootpath);
 }
 
 
-static void prom_init_oldmon __P((void));
-static void prom_init_obp __P((void));
+static void prom_init_oldmon(void);
+static void prom_init_obp(void);
 
-static __inline__ void
-prom_init_oldmon()
+static inline void
+prom_init_oldmon(void)
 {
 	struct om_vector *oldpvec = (struct om_vector *)PROM_BASE;
 
@@ -148,8 +137,8 @@ prom_init_oldmon()
 	promops.po_bootpath = obp_v0_getbootpath;
 }
 
-static __inline__ void
-prom_init_obp()
+static inline void
+prom_init_obp(void)
 {
 	/*
 	 * OBP v0, v2 & v3
@@ -203,12 +192,12 @@ prom_init_obp()
  * Initialize our PROM operations vector.
  */
 void
-prom_init()
+prom_init(void)
 {
 
 	if (CPU_ISSUN4) {
 		prom_init_oldmon();
-		romp = (caddr_t)PROM_LOADADDR;	/* Used in main() */
+		romp = (void *)PROM_LOADADDR;	/* Used in main() */
 	} else if (obpvec->pv_magic == OBP_MAGIC) {
 		prom_init_obp();
 	} else {

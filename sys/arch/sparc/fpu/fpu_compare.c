@@ -1,4 +1,4 @@
-/*	$NetBSD: fpu_compare.c,v 1.2 1994/11/20 20:52:37 deraadt Exp $ */
+/*	$NetBSD: fpu_compare.c,v 1.6 2005/12/11 12:19:05 christos Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -21,11 +21,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -50,6 +46,9 @@
  * These rely on the fact that our internal wide format is achieved by
  * adding zero bits to the end of narrower mantissas.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: fpu_compare.c,v 1.6 2005/12/11 12:19:05 christos Exp $");
 
 #include <sys/types.h>
 
@@ -77,7 +76,7 @@ void
 fpu_compare(struct fpemu *fe, int cmpe)
 {
 	register struct fpn *a, *b;
-	register int cc, r3, r2, r1, r0;
+	register int cc;
 	FPU_DECL_CARRY
 
 	a = &fe->fe_f1;
@@ -147,18 +146,14 @@ fpu_compare(struct fpemu *fe, int cmpe)
 	}
 	/*
 	 * Only numbers remain.  To compare two numbers in magnitude, we
-	 * simply subtract their mantissas.
+	 * simply subtract them.
 	 */
-	FPU_SUBS(r3, a->fp_mant[0], b->fp_mant[0]);
-	FPU_SUBCS(r2, a->fp_mant[1], b->fp_mant[1]);
-	FPU_SUBCS(r1, a->fp_mant[2], b->fp_mant[2]);
-	FPU_SUBC(r0, a->fp_mant[3], b->fp_mant[3]);
-	if (r0 < 0)				/* underflow: |a| < |b| */
-		cc = diff(FSR_CC_LT);
-	else if ((r0 | r1 | r2 | r3) != 0)	/* |a| > |b| */
-		cc = diff(FSR_CC_GT);
+	a = fpu_sub(fe);
+	if (a->fp_class == FPC_ZERO)
+		cc = FSR_CC_EQ;
 	else
-		cc = FSR_CC_EQ;		/* |a| == |b| */
+		cc = diff(FSR_CC_GT);
+
 done:
 	fe->fe_fsr = (fe->fe_fsr & ~FSR_FCC) | (cc << FSR_FCC_SHIFT);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: find.c,v 1.14 2000/03/16 18:44:29 enami Exp $	*/
+/*	$NetBSD: find.c,v 1.25 2007/09/25 04:10:12 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993, 1994
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "from: @(#)find.c	8.5 (Berkeley) 8/5/94";
 #else
-__RCSID("$NetBSD: find.c,v 1.14 2000/03/16 18:44:29 enami Exp $");
+__RCSID("$NetBSD: find.c,v 1.25 2007/09/25 04:10:12 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -51,13 +47,17 @@ __RCSID("$NetBSD: find.c,v 1.14 2000/03/16 18:44:29 enami Exp $");
 #include <err.h>
 #include <errno.h>
 #include <fts.h>
+#include <signal.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 
 #include "find.h"
 
-static int ftscompare __P((const FTSENT **, const FTSENT **));
+static int ftscompare(const FTSENT **, const FTSENT **);
+
+static void sig_lock(sigset_t *);
+static void sig_unlock(const sigset_t *);
 
 /*
  * find_formplan --
@@ -65,8 +65,7 @@ static int ftscompare __P((const FTSENT **, const FTSENT **));
  *	command arguments.
  */
 PLAN *
-find_formplan(argv)
-	char **argv;
+find_formplan(char **argv)
 {
 	PLAN *plan, *tail, *new;
 
@@ -98,9 +97,9 @@ find_formplan(argv)
 	}
 
 	/*
-	 * if the user didn't specify one of -print, -ok or -exec, then -print
-	 * is assumed so we bracket the current expression with parens, if
-	 * necessary, and add a -print node on the end.
+	 * if the user didn't specify one of -print, -ok, -fprint, -exec, or
+	 * -exit, then -print is assumed so we bracket the current expression
+	 * with parens, if necessary, and add a -print node on the end.
 	 */
 	if (!isoutput) {
 		if (plan == NULL) {
@@ -149,14 +148,31 @@ find_formplan(argv)
 }
 
 static int
-ftscompare(e1, e2)
-	const FTSENT **e1, **e2;
+ftscompare(const FTSENT **e1, const FTSENT **e2)
 {
 
 	return (strcoll((*e1)->fts_name, (*e2)->fts_name));
 }
 
+static void
+sig_lock(sigset_t *s)
+{
+	sigset_t new;
+
+	sigemptyset(&new);
+	sigaddset(&new, SIGINFO); /* block SIGINFO */
+	sigprocmask(SIG_BLOCK, &new, s);
+}
+
+static void
+sig_unlock(const sigset_t *s)
+{
+
+	sigprocmask(SIG_SETMASK, s, NULL);
+}
+
 FTS *tree;			/* pointer to top of FTS hierarchy */
+FTSENT *g_entry;		/* shared with SIGINFO handler */
 
 /*
  * find_execute --
@@ -164,19 +180,21 @@ FTS *tree;			/* pointer to top of FTS hierarchy */
  *	over all FTSENT's returned for the given search paths.
  */
 int
-find_execute(plan, paths)
-	PLAN *plan;		/* search plan */
-	char **paths;		/* array of pathnames to traverse */
+find_execute(PLAN *plan, char **paths)
 {
-	register FTSENT *entry;
 	PLAN *p;
-	int rval;
+	int r, rval, cval;
+	sigset_t s;
+
+	cval = 1;
 
 	if (!(tree = fts_open(paths, ftsoptions, issort ? ftscompare : NULL)))
 		err(1, "ftsopen");
 
-	for (rval = 0; (entry = fts_read(tree)) != NULL; ) {
-		switch (entry->fts_info) {
+	sig_lock(&s);
+	for (rval = 0; cval && (g_entry = fts_read(tree)) != NULL; sig_lock(&s)) {
+		sig_unlock(&s);
+		switch (g_entry->fts_info) {
 		case FTS_D:
 			if (isdepth)
 				continue;
@@ -190,18 +208,14 @@ find_execute(plan, paths)
 		case FTS_NS:
 			(void)fflush(stdout);
 			warnx("%s: %s",
-			    entry->fts_path, strerror(entry->fts_errno));
+			    g_entry->fts_path, strerror(g_entry->fts_errno));
 			rval = 1;
 			continue;
-#ifdef FTS_W
-		case FTS_W:
-			continue;
-#endif /* FTS_W */
 		}
 #define	BADCH	" \t\n\\'\""
-		if (isxargs && strpbrk(entry->fts_path, BADCH)) {
+		if (isxargs && strpbrk(g_entry->fts_path, BADCH)) {
 			(void)fflush(stdout);
-			warnx("%s: illegal path", entry->fts_path);
+			warnx("%s: illegal path", g_entry->fts_path);
 			rval = 1;
 			continue;
 		}
@@ -211,11 +225,60 @@ find_execute(plan, paths)
 		 * false or all have been executed.  This is where we do all
 		 * the work specified by the user on the command line.
 		 */
-		for (p = plan; p && (p->eval)(p, entry); p = p->next)
-			;
+		for (p = plan; p && (p->eval)(p, g_entry); p = p->next)
+			if (p->type == N_EXIT) {
+				rval = p->exit_val;
+				cval = 0;
+			}
 	}
+
+	sig_unlock(&s);
 	if (errno)
 		err(1, "fts_read");
 	(void)fts_close(tree);
+
+	/*
+	 * Cleanup any plans with leftover state.
+	 * Keep the last non-zero return value.
+	 */
+	if ((r = find_traverse(plan, plan_cleanup, NULL)) != 0)
+		rval = r;
+
 	return (rval);
+}
+
+/*
+ * find_traverse --
+ *	traverse the plan tree and execute func() on all plans.  This
+ *	does not evaluate each plan's eval() function; it is intended
+ *	for operations that must run on all plans, such as state
+ *	cleanup.
+ *
+ *	If any func() returns non-zero, then so will find_traverse().
+ */
+int
+find_traverse(plan, func, arg)
+	PLAN *plan;
+	int (*func)(PLAN *, void *);
+	void *arg;
+{
+	PLAN *p;
+	int r, rval;
+
+	rval = 0;
+	for (p = plan; p; p = p->next) {
+		if ((r = func(p, arg)) != 0)
+			rval = r;
+		if (p->type == N_EXPR || p->type == N_OR) {
+			if (p->p_data[0])
+				if ((r = find_traverse(p->p_data[0],
+					    func, arg)) != 0)
+					rval = r;
+			if (p->p_data[1])
+				if ((r = find_traverse(p->p_data[1],
+					    func, arg)) != 0)
+					rval = r;
+		}
+	}
+	return rval;
 }

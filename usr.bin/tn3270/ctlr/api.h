@@ -1,4 +1,4 @@
-/*	$NetBSD: api.h,v 1.4 1998/03/04 13:16:06 christos Exp $	*/
+/*	$NetBSD: api.h,v 1.7 2003/08/07 11:16:30 agc Exp $	*/
 
 /*-
  * Copyright (c) 1988 The Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -326,7 +322,7 @@ typedef struct {
 #define	FP_OFF(y)	((unsigned int)(((unsigned long)(y))&0xFFFF))
 
 /*
- * Undo the preceeding.
+ * Undo the preceding.
  */
 
 #define	SEG_OFF_BACK(x,y)	(((x)<<16)|(y))
@@ -405,9 +401,9 @@ struct SREGS {
 #endif	/* defined(MSDOS) (else section) */
 
 /* Interface */
-int api_close_api __P((void));
-int api_open_api __P((char *));
-int api_exch_api __P((union REGS *, struct SREGS *, char *, int));
+int api_close_api(void);
+int api_open_api(char *);
+int api_exch_api(union REGS *, struct SREGS *, char *, int);
 
 /* api.c */
-void handle_api __P((union REGS *, struct SREGS *));
+void handle_api(union REGS *, struct SREGS *);

@@ -1,4 +1,4 @@
-/*	$NetBSD: map3270.h,v 1.4 1998/03/04 13:16:06 christos Exp $	*/
+/*	$NetBSD: map3270.h,v 1.6 2003/08/07 11:16:28 agc Exp $	*/
 
 /*-
  * Copyright (c) 1988 The Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -40,8 +36,8 @@
  */
 
 /* map3270.c */
-char *uncontrol __P((int));
-int ustrcmp __P((char *, char *));
-int Position __P((char *, char *));
-char *strsave __P((char *));
-state *InitControl __P((char *, int, int (*)(char *)));
+char *uncontrol(int);
+int ustrcmp(char *, char *);
+int Position(char *, char *);
+char *strsave(char *);
+state *InitControl(char *, int, int (*)(char *));

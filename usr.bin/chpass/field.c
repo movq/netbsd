@@ -1,4 +1,4 @@
-/*	$NetBSD: field.c,v 1.7 1998/08/10 23:21:05 kim Exp $	*/
+/*	$NetBSD: field.c,v 1.11 2005/02/17 17:09:48 xtraeme Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)field.c	8.4 (Berkeley) 4/2/94";
 #else 
-__RCSID("$NetBSD: field.c,v 1.7 1998/08/10 23:21:05 kim Exp $");
+__RCSID("$NetBSD: field.c,v 1.11 2005/02/17 17:09:48 xtraeme Exp $");
 #endif
 #endif /* not lint */
 
@@ -59,10 +55,7 @@ __RCSID("$NetBSD: field.c,v 1.7 1998/08/10 23:21:05 kim Exp $");
 
 /* ARGSUSED */
 int
-p_login(p, pw, ep)
-	const char *p;
-	struct passwd *pw;
-	ENTRY *ep;
+p_login(const char *p, struct passwd *pw, ENTRY *ep)
 {
 
 	if (!*p) {
@@ -80,7 +73,7 @@ p_login(p, pw, ep)
 	if (strchr(p, '.'))
 		warnx("\'.\' is dangerous in a login name");
 	for (; *p; ++p)
-		if (isupper(*p)) {
+		if (isupper((unsigned char)*p)) {
 			warnx("upper-case letters are dangerous in a login name");
 			break;
 		}
@@ -89,10 +82,7 @@ p_login(p, pw, ep)
 
 /* ARGSUSED */
 int
-p_passwd(p, pw, ep)
-	const char *p;
-	struct passwd *pw;
-	ENTRY *ep;
+p_passwd(const char *p, struct passwd *pw, ENTRY *ep)
 {
 
 	if (!*p)
@@ -107,48 +97,46 @@ p_passwd(p, pw, ep)
 
 /* ARGSUSED */
 int
-p_uid(p, pw, ep)
-	const char *p;
-	struct passwd *pw;
-	ENTRY *ep;
+p_uid(const char *p, struct passwd *pw, ENTRY *ep)
 {
-	uid_t id;
+	unsigned long id;
 	char *np;
 
 	if (!*p) {
 		warnx("empty uid field");
 		return (1);
 	}
-	if (!isdigit(*p)) {
+	if (!isdigit((unsigned char)*p)) {
 		warnx("illegal uid");
 		return (1);
 	}
 	errno = 0;
 	id = strtoul(p, &np, 10);
-	if (*np || (id == ULONG_MAX && errno == ERANGE)) {
+	/*
+	 * We don't need to check the return value of strtoul()
+	 * since ULONG_MAX is greater than UID_MAX.
+	 */
+	if (*np || id > UID_MAX) {
 		warnx("illegal uid");
 		return (1);
 	}
-	pw->pw_uid = id;
+	pw->pw_uid = (uid_t)id;
 	return (0);
 }
 
 /* ARGSUSED */
 int
-p_gid(p, pw, ep)
-	const char *p;
-	struct passwd *pw;
-	ENTRY *ep;
+p_gid(const char *p, struct passwd *pw, ENTRY *ep)
 {
 	struct group *gr;
-	gid_t id;
+	unsigned long id;
 	char *np;
 
 	if (!*p) {
 		warnx("empty gid field");
 		return (1);
 	}
-	if (!isdigit(*p)) {
+	if (!isdigit((unsigned char)*p)) {
 		if (!(gr = getgrnam(p))) {
 			warnx("unknown group %s", p);
 			return (1);
@@ -158,20 +146,21 @@ p_gid(p, pw, ep)
 	}
 	errno = 0;
 	id = strtoul(p, &np, 10);
-	if (*np || (id == ULONG_MAX && errno == ERANGE)) {
+	/*
+	 * We don't need to check the return value of strtoul() 
+	 * since ULONG_MAX is greater than GID_MAX.
+	 */
+	if (*np || id > GID_MAX) {
 		warnx("illegal gid");
 		return (1);
 	}
-	pw->pw_gid = id;
+	pw->pw_gid = (gid_t)id;
 	return (0);
 }
 
 /* ARGSUSED */
 int
-p_class(p, pw, ep)
-	const char *p;
-	struct passwd *pw;
-	ENTRY *ep;
+p_class(const char *p, struct passwd *pw, ENTRY *ep)
 {
 
 	if (!*p)
@@ -186,10 +175,7 @@ p_class(p, pw, ep)
 
 /* ARGSUSED */
 int
-p_change(p, pw, ep)
-	const char *p;
-	struct passwd *pw;
-	ENTRY *ep;
+p_change(const char *p, struct passwd *pw, ENTRY *ep)
 {
 
 	if (!atot(p, &pw->pw_change))
@@ -200,10 +186,7 @@ p_change(p, pw, ep)
 
 /* ARGSUSED */
 int
-p_expire(p, pw, ep)
-	const char *p;
-	struct passwd *pw;
-	ENTRY *ep;
+p_expire(const char *p, struct passwd *pw, ENTRY *ep)
 {
 
 	if (!atot(p, &pw->pw_expire))
@@ -214,10 +197,7 @@ p_expire(p, pw, ep)
 
 /* ARGSUSED */
 int
-p_gecos(p, pw, ep)
-	const char *p;
-	struct passwd *pw;
-	ENTRY *ep;
+p_gecos(const char *p, struct passwd *pw, ENTRY *ep)
 {
 
 	if (!(ep->save = strdup(p))) {
@@ -229,10 +209,7 @@ p_gecos(p, pw, ep)
 
 /* ARGSUSED */
 int
-p_hdir(p, pw, ep)
-	const char *p;
-	struct passwd *pw;
-	ENTRY *ep;
+p_hdir(const char *p, struct passwd *pw, ENTRY *ep)
 {
 
 	if (!*p) {
@@ -248,10 +225,7 @@ p_hdir(p, pw, ep)
 
 /* ARGSUSED */
 int
-p_shell(p, pw, ep)
-	const char *p;
-	struct passwd *pw;
-	ENTRY *ep;
+p_shell(const char *p, struct passwd *pw, ENTRY *ep)
 {
 	const char *t;
 

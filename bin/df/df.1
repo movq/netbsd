@@ -1,4 +1,4 @@
-.\"	$NetBSD: df.1,v 1.17 1999/03/22 18:30:44 garbled Exp $
+.\"	$NetBSD: df.1,v 1.43 2008/03/04 20:11:00 christos Exp $
 .\"
 .\" Copyright (c) 1989, 1990, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -33,7 +29,7 @@
 .\"
 .\"	@(#)df.1	8.2 (Berkeley) 1/13/92
 .\"
-.Dd January 13, 1994
+.Dd March 4, 2008
 .Dt DF 1
 .Os
 .Sh NAME
@@ -41,7 +37,8 @@
 .Nd display free disk space
 .Sh SYNOPSIS
 .Nm
-.Op Fl ikln
+.Op Fl agklmn
+.Op Fl G | Fl i | Fl P
 .Op Fl t Ar type
 .Op Ar file | Ar file_system ...
 .Sh DESCRIPTION
@@ -51,7 +48,7 @@ displays statistics about the amount of free disk space on the specified
 or on the file system of which
 .Ar file
 is a part.
-Values are displayed in 512-byte per block block counts.
+By default, all sizes are reported in 512-byte block counts.
 If neither a file or a
 .Ar file_system
 operand is specified,
@@ -70,17 +67,56 @@ on the filesystem is less than
 .Pp
 The following options are available:
 .Bl -tag -width Ds
+.It Fl a
+Show all mount points,
+including those that were mounted with the
+.Dv MNT_IGNORE
+flag.
+.It Fl G
+Display all the fields of the structure(s) returned by
+.Xr statvfs 2 .
+This option cannot be used with the
+.Fl i
+or
+.Fl P
+options, and it is modelled after the Solaris
+.Fl g
+option.
+This option will override the
+.Fl g ,
+.Fl h ,
+.Fl k ,
+and
+.Fl m
+options, as well as any setting of
+.Ev BLOCKSIZE .
+.It Fl g
+The
+.Fl g
+option causes the numbers to be reported in gigabytes (1024*1024*1024
+bytes).
+.It Fl h
+"Human-readable" output.
+Use unit suffixes: Byte, Kilobyte, Megabyte,
+Gigabyte, Terabyte, Petabyte, Exabyte in order to reduce the number of
+digits to four or less.
 .It Fl i
 Include statistics on the number of free inodes.
 .It Fl k
 By default, all sizes are reported in 512-byte block counts.
 The
 .Fl k
-option causes the numbers to be reported in kilobyte counts.
+option causes the numbers to be reported in kilobytes (1024 bytes).
 .It Fl l
-Display statistics only about mounted file systems with the MNT_LOCAL
-flag set.  If a non-local file system is given as an argument, a
+Display statistics only about mounted file systems with the
+.Dv MNT_LOCAL
+flag set.
+If a non-local file system is given as an argument, a
 warning is issued and no information is given on that file system.
+.It Fl m
+The
+.Fl m
+option causes the numbers to be reported in megabytes (1024*1024 bytes).
 .It Fl n
 Print out the previously obtained statistics from the file systems.
 This option should be used if it is possible that one or more
@@ -90,38 +126,78 @@ When this option is specified,
 .Nm
 will not request new statistics from the file systems, but will respond
 with the possibly stale statistics that were previously obtained.
+.It Fl P
+Produce output in the following portable format:
+.Pp
+If both the
+.Fl P
+and
+.Fl k
+option are specified, the output will be preceded by the following header
+line, formatted to match the data following it:
+.Bd -literal
+"Filesystem 1024-blocks Used Available Capacity Mounted on\\n"
+.Ed
+.Pp
+If the
+.Fl P
+option is specified without the
+.Fl k
+options, the output will be preceded by the following header line,
+formatted to match the data following it:
+.Bd -literal
+"Filesystem \*[Lt]blksize\*[Gt]-blocks Used Available Capacity Mounted on\\n"
+.Ed
+.Pp
+The header line is followed by data formatted as follows:
+.Bd -literal
+"%s %d %d %d %d%% %s\\n", \*[Lt]file system name\*[Gt], \*[Lt]total space\*[Gt],
+    \*[Lt]space used\*[Gt], \*[Lt]space free\*[Gt], \*[Lt]percentage used\*[Gt],
+    \*[Lt]file system root\*[Gt]
+.Ed
+.Pp
+Note that the
+.Fl i
+option may not be specified with
+.Fl P .
 .It Fl t Ar type
 Is used to indicate the actions should only be taken on
 filesystems of the specified type.
-More than one type may be specified in a comma separated list.
+More than one type may be specified in a comma-separated list.
 The list of filesystem types can be prefixed with
 .Dq no
 to specify the filesystem types for which action should
 .Em not
-be taken.  If a file system is given on the command line that is not of
+be taken.
+If a file system is given on the command line that is not of
 the specified type, a warning is issued and no information is given on
 that file system.
 .El
-.Sh ENVIRONMENT VARIABLES
+.Sh ENVIRONMENT
 .Bl -tag -width BLOCKSIZE
 .It Ev BLOCKSIZE
 If the environment variable
 .Ev BLOCKSIZE
 is set, and the
+.Fl g ,
+.Fl h ,
 .Fl k
-option is not specified, the block counts will be displayed in units of that
+and
+.Fl m
+options are not specified, the block counts will be displayed in units of that
 size block.
 .El
 .Sh SEE ALSO
 .Xr quota 1 ,
-.Xr statfs 2 ,
-.Xr fstatfs 2 ,
-.Xr getfsstat 2 ,
+.Xr fstatvfs 2 ,
+.Xr getvfsstat 2 ,
+.Xr statvfs 2 ,
+.Xr getbsize 3 ,
 .Xr getmntinfo 3 ,
+.Xr fs 5 ,
 .Xr fstab 5 ,
 .Xr mount 8 ,
 .Xr quot 8 ,
-.Xr fs 5 ,
 .Xr tunefs 8
 .Sh HISTORY
 A

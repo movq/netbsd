@@ -1,4 +1,4 @@
-/*	$NetBSD: perror.c,v 1.21 1999/08/22 12:52:28 kleink Exp $	*/
+/*	$NetBSD: perror.c,v 1.24 2006/01/26 11:13:42 kleink Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,24 +34,24 @@
 #if 0
 static char sccsid[] = "@(#)perror.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: perror.c,v 1.21 1999/08/22 12:52:28 kleink Exp $");
+__RCSID("$NetBSD: perror.c,v 1.24 2006/01/26 11:13:42 kleink Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
+#include "namespace.h"
 #include <errno.h>
 #include <limits.h>
 #include <stdio.h>
+#include <string.h>
 #include "extern.h"
 
 /*
  * Since perror() is not allowed to change the contents of strerror()'s
- * static buffer, both functions supply their own buffers to the
- * internal function __strerror().
+ * static buffer, both functions supply their own buffers to strerror_r().
  */
 
 void
-perror(s)
-	const char *s;
+perror(const char *s)
 {
 	const char *separator;
 	char buf[NL_TEXTMAX];
@@ -67,6 +63,6 @@ perror(s)
 	else
 		separator = ": ";
 
-	(void)fprintf(stderr, "%s%s%s\n", s, separator,
-	    __strerror(errno, buf, sizeof(buf)));
+	(void)strerror_r(errno, buf, sizeof(buf));
+	(void)fprintf(stderr, "%s%s%s\n", s, separator, buf);
 }

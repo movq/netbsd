@@ -1,4 +1,4 @@
-/*	$NetBSD: mkfifo.c,v 1.8 1997/10/19 05:11:54 lukem Exp $	*/
+/*	$NetBSD: mkfifo.c,v 1.12 2008/07/21 14:19:24 lukem Exp $	*/
 
 /*
  * Copyright (c) 1990, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1990, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1990, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)mkfifo.c	8.2 (Berkeley) 1/5/94";
 #endif
-__RCSID("$NetBSD: mkfifo.c,v 1.8 1997/10/19 05:11:54 lukem Exp $");
+__RCSID("$NetBSD: mkfifo.c,v 1.12 2008/07/21 14:19:24 lukem Exp $");
 #endif /* not lint */
 
 #include <stdio.h>
@@ -65,7 +61,7 @@ main(argc, argv)
 	char *argv[];
 {
 	int ch, exitval;
-	void * set;
+	void *set;
 	mode_t mode;
 
 	setlocale (LC_ALL, "");
@@ -79,13 +75,14 @@ main(argc, argv)
 		switch(ch) {
 		case 'm':
 			if (!(set = setmode(optarg))) {
-				errx(1, "invalid file mode.");
+				err(1, "Cannot set file mode `%s'", optarg);
 				/* NOTREACHED */
 			}
 			/* In symbolic mode strings, the + and - operators are
 			   interpreted relative to an assumed initial mode of
 			   a=rw. */
-			mode = getmode (set, 0666);
+			mode = getmode(set, 0666);
+			free(set);
 			break;
 		case '?':
 		default:

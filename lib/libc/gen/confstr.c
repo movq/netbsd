@@ -1,4 +1,4 @@
-/*	$NetBSD: confstr.c,v 1.10 2000/01/22 22:19:09 mycroft Exp $	*/
+/*	$NetBSD: confstr.c,v 1.12 2006/12/03 00:39:19 christos Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)confstr.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: confstr.c,v 1.10 2000/01/22 22:19:09 mycroft Exp $");
+__RCSID("$NetBSD: confstr.c,v 1.12 2006/12/03 00:39:19 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -66,33 +62,37 @@ confstr(name, buf, len)
 	int mib[2], sverrno;
 	char *p;
 
+	/*
+	 * POSIX 1003.2 requires errors to return 0 --
+	 * that is *really* useful.
+	 */
 	switch (name) {
 	case _CS_PATH:
 		mib[0] = CTL_USER;
 		mib[1] = USER_CS_PATH;
 		if (sysctl(mib, 2, NULL, &tlen, NULL, 0) == -1)
-			return (size_t)-1;
+			return 0;
 		if (len != 0 && buf != NULL) {
 			if ((p = malloc(tlen)) == NULL)
-				return (size_t)-1;
+				return 0;
 			if (sysctl(mib, 2, p, &tlen, NULL, 0) == -1) {
 				sverrno = errno;
 				free(p);
 				errno = sverrno;
-				return (size_t)-1;
+				return 0;
 			}
 			/*
 			 * POSIX 1003.2 requires partial return of
-			 * the string -- that should be *real* useful.
+			 * the string -- that is even more useful.
 			 */
 			(void)strncpy(buf, p, len - 1);
 			buf[len - 1] = '\0';
 			free(p);
 		}
-		return (tlen + 1);
+		return tlen + 1;
 	default:
 		errno = EINVAL;
-		return (0);
+		return 0;
 	}
 	/* NOTREACHED */
 }

@@ -1,13 +1,13 @@
-/*	$NetBSD: SYS.h,v 1.7 1999/01/14 22:48:21 kleink Exp $	*/
+/*	$NetBSD: SYS.h,v 1.11 2002/07/30 06:07:56 matt Exp $	*/
 
 #include <machine/asm.h>
 #include <sys/syscall.h>
 
 #ifdef __STDC__
-#define	_DOSYSCALL(x)		li	0,(SYS_ ## x)		;\
+#define	_DOSYSCALL(x)		li	%r0,(SYS_ ## x)		;\
 				sc
 #else
-#define	_DOSYSCALL(x)		li	0,(SYS_/**/x)		;\
+#define	_DOSYSCALL(x)		li	%r0,(SYS_/**/x)		;\
 				sc
 #endif /* __STDC__ */
 
@@ -36,3 +36,6 @@
 #define RSYSCALL_NOERROR(x)	PSEUDO_NOERROR(x,x)
 
 #define RSYSCALL(x)		PSEUDO(x,x)
+
+#define	WSYSCALL(weak,strong)	WEAK_ALIAS(weak,strong)		;\
+				PSEUDO(strong,weak)

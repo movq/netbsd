@@ -1,4 +1,4 @@
-/*	$NetBSD: getfile.c,v 1.6 1996/10/14 04:49:21 cgd Exp $	*/
+/*	$NetBSD: getfile.c,v 1.9 2007/11/24 13:20:55 isaki Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -36,12 +32,10 @@
  */
 #include "stand.h"
 
-#define CTRL(x) (x&037)
+#define CTRL(x) ((x) & 037)
 
 int
-getfile(prompt, mode)
-	char *prompt;
-	int mode;
+getfile(char *prompt, int mode)
 {
 	int fd;
 	char buf[100];
@@ -50,8 +44,8 @@ getfile(prompt, mode)
 		printf("%s: ", prompt);
 		gets(buf);
 		if (buf[0] == CTRL('d') && buf[1] == 0)
-			return (-1);
+			return -1;
 	} while ((fd = open(buf, mode)) < 0);
 
-	return (fd);
+	return fd;
 }

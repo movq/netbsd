@@ -1,4 +1,4 @@
-/* $NetBSD: ics2101.c,v 1.8 2000/03/30 12:45:33 augustss Exp $ */
+/* $NetBSD: ics2101.c,v 1.15 2008/04/28 20:23:52 martin Exp $ */
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD 
- *	  Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its 
- *    contributors may be used to endorse or promote products derived 
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,6 +29,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ics2101.c,v 1.15 2008/04/28 20:23:52 martin Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/errno.h>
@@ -45,7 +41,7 @@
 #include <sys/proc.h>
 #include <sys/buf.h>
 
-#include <machine/cpu.h>
+#include <sys/cpu.h>
 
 #include <sys/audioio.h>
 #include <dev/audio_if.h>
@@ -66,8 +62,8 @@
 
 #define cvt_value(val) ((val) >> 1)
 
-static void ics2101_mix_doit __P((struct ics2101_softc *, u_int, u_int, u_int,
-    u_int));
+static void ics2101_mix_doit(struct ics2101_softc *, u_int, u_int, u_int,
+    u_int);
 /*
  * Program one channel of the ICS mixer
  */
@@ -86,7 +82,7 @@ ics2101_mix_doit(sc, chan, side, value, flags)
 	unsigned char normal;
 	int s;
 
-	if (chan < ICSMIX_CHAN_0 || chan > ICSMIX_CHAN_5)
+	if (/* chan < ICSMIX_CHAN_0 || */ chan > ICSMIX_CHAN_5)
 		return;
 	if (side != ICSMIX_LEFT && side != ICSMIX_RIGHT)
 		return;

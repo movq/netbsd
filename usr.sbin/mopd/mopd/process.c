@@ -1,4 +1,4 @@
-/*	$NetBSD: process.c,v 1.6 2000/01/10 19:33:18 abs Exp $	*/
+/*	$NetBSD: process.c,v 1.14 2006/05/12 01:54:32 mrg Exp $	*/
 
 /*
  * Copyright (c) 1993-95 Mats O Jansson.  All rights reserved.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: process.c,v 1.6 2000/01/10 19:33:18 abs Exp $");
+__RCSID("$NetBSD: process.c,v 1.14 2006/05/12 01:54:32 mrg Exp $");
 #endif
 
 #include "os.h"
@@ -49,10 +49,9 @@ __RCSID("$NetBSD: process.c,v 1.6 2000/01/10 19:33:18 abs Exp $");
 
 extern u_char	buf[];
 extern int	DebugFlag;
+extern char 	*MopdDir;
 
 struct dllist dllist[MAXDL];		/* dump/load list		*/
-extern char	dl_mcst[];		/* Dump/Load Multicast		*/
-extern char	rc_mcst[];		/* Remote Console Multicast	*/
 
 void	mopNextLoad __P((u_char *, u_char *, u_char, int));
 void	mopProcessDL __P((FILE *, struct if_info *, u_char *, int *,
@@ -214,6 +213,8 @@ mopSendASV(dst, src, ii, trans)
 	}
 }
 
+#define MAX_ETH_PAYLOAD 1492
+
 void
 mopStartLoad(dst, src, dl_rpr, trans)
 	u_char	*dst,*src;
@@ -226,14 +227,15 @@ mopStartLoad(dst, src, dl_rpr, trans)
 	int	 index;
 	u_char	 mopcode = MOP_K_CODE_MLD;
 	u_short	 newlen,ptype = MOP_K_PROTO_DL;
+	struct dllist *dle;
 
 	slot = -1;
 	
 	/* Look if we have a non terminated load, if so, use it's slot */
 
-	for (i = 0; i < MAXDL; i++) {
-		if (dllist[i].status != DL_STATUS_FREE) {
-			if (mopCmpEAddr(dllist[i].eaddr,dst) == 0) {
+	for (i = 0, dle = dllist; i < MAXDL; i++, dle++) {
+		if (dle->status != DL_STATUS_FREE) {
+			if (mopCmpEAddr(dle->eaddr, dst) == 0) {
 				slot = i;
 			}
 		}
@@ -242,11 +244,11 @@ mopStartLoad(dst, src, dl_rpr, trans)
 	/* If no slot yet, then find first free */
 
 	if (slot == -1) {
-		for (i = 0; i < MAXDL; i++) {
-			if (dllist[i].status == DL_STATUS_FREE) {
+		for (i = 0, dle = dllist; i < MAXDL; i++, dle++) {
+			if (dle->status == DL_STATUS_FREE) {
 				if (slot == -1) {
 					slot = i;
-					memmove((char *)dllist[i].eaddr,
+					memmove((char *)dle->eaddr,
 					    (char *)dst, 6);
 				}
 			}
@@ -261,41 +263,38 @@ mopStartLoad(dst, src, dl_rpr, trans)
 	/* Ok, save info from RPR */
 
 	dllist[slot] = *dl_rpr;
-	dllist[slot].status = DL_STATUS_READ_IMGHDR;
+	dle = &dllist[slot];
+	dle->status = DL_STATUS_READ_IMGHDR;
 	
 	/* Get Load and Transfer Address. */
 
-	GetFileInfo(dllist[slot].ldfd,
-		    &dllist[slot].loadaddr,
-		    &dllist[slot].xferaddr,
-		    &dllist[slot].aout,
-		    &dllist[slot].a_text, &dllist[slot].a_text_fill,
-		    &dllist[slot].a_data, &dllist[slot].a_data_fill,
-		    &dllist[slot].a_bss,  &dllist[slot].a_bss_fill);
+	GetFileInfo(dle);
 
-	dllist[slot].nloadaddr = dllist[slot].loadaddr;
-	dllist[slot].lseek     = lseek(dllist[slot].ldfd,0L,SEEK_CUR);
-	dllist[slot].a_lseek   = 0;
+	dle->nloadaddr = dle->loadaddr;
+	dle->lseek     = lseek(dle->ldfd, 0L, SEEK_CUR);
+	dle->a_lseek   = 0;
 
-	dllist[slot].count     = 0;
-	if (dllist[slot].dl_bsz >= 1492)
-		dllist[slot].dl_bsz = 1492;
-	if (dllist[slot].dl_bsz == 1030)	/* VS/uVAX 2000 needs this */
-		dllist[slot].dl_bsz = 1000;
+	dle->count     = 0;
+	if (dle->dl_bsz >= MAX_ETH_PAYLOAD || dle->dl_bsz == 0)
+		dle->dl_bsz = MAX_ETH_PAYLOAD;
+	if (dle->dl_bsz == 1030)	/* VS/uVAX 2000 needs this */
+		dle->dl_bsz = 1000;
+	if (dle->dl_bsz == 0)		/* Needed by "big" VAXen */
+		dle->dl_bsz = MAX_ETH_PAYLOAD;
 	if (trans == TRANS_8023)
-		dllist[slot].dl_bsz = dllist[slot].dl_bsz - 8;
+		dle->dl_bsz = dle->dl_bsz - 8;
 
 	index = 0;
 	mopPutHeader(pkt, &index, dst, src, ptype, trans);
 	p = &pkt[index];
-	mopPutChar (pkt,&index,mopcode);
+	mopPutChar (pkt, &index, mopcode);
 
-	mopPutChar (pkt,&index,dllist[slot].count);
-	mopPutLong (pkt,&index,dllist[slot].loadaddr);
+	mopPutChar (pkt, &index, dle->count);
+	mopPutLong (pkt, &index, dle->loadaddr);
 
-	len = mopFileRead(&dllist[slot],&pkt[index]);
+	len = mopFileRead(dle, &pkt[index]);
 
-	dllist[slot].nloadaddr = dllist[slot].loadaddr + len;
+	dle->nloadaddr = dle->loadaddr + len;
 	index = index + len;
 
 	mopPutLength(pkt, trans, index);
@@ -314,18 +313,18 @@ mopStartLoad(dst, src, dl_rpr, trans)
 		mopDumpDL(stdout, pkt, trans);
 	}
 
-	if (pfWrite(dllist[slot].ii->fd, pkt, index, trans) != index) {
+	if (pfWrite(dle->ii->fd, pkt, index, trans) != index) {
 		if (DebugFlag) {
 			(void)fprintf(stderr, "error pfWrite()\n");
 		}
 	}
 
-	dllist[slot].status = DL_STATUS_SENT_MLD;
+	dle->status = DL_STATUS_SENT_MLD;
 }
 
 void
 mopNextLoad(dst, src, new_count, trans)
-	u_char	*dst,*src,new_count;
+	u_char	*dst, *src, new_count;
 	int	 trans;
 {
 	int	 len;
@@ -335,12 +334,13 @@ mopNextLoad(dst, src, new_count, trans)
 	char	 line[100];
 	u_short  newlen = 0,ptype = MOP_K_PROTO_DL;
 	u_char	 mopcode;
+	struct dllist *dle;
 
 	slot = -1;
 	
-	for (i = 0; i < MAXDL; i++) {
-		if (dllist[i].status != DL_STATUS_FREE) {
-			if (mopCmpEAddr(dst,dllist[i].eaddr) == 0)
+	for (i = 0, dle = dllist; i < MAXDL; i++, dle++) {
+		if (dle->status != DL_STATUS_FREE) {
+			if (mopCmpEAddr(dst, dle->eaddr) == 0)
 				slot = i;
 		}
 	}
@@ -350,43 +350,45 @@ mopNextLoad(dst, src, new_count, trans)
 	if (slot == -1)
 		return;
 
-	if ((new_count == ((dllist[slot].count+1) % 256))) {
-		dllist[slot].loadaddr = dllist[slot].nloadaddr;
-		dllist[slot].count    = new_count;
-	} else {
+	dle = &dllist[slot];
+
+	if ((new_count == ((dle->count+1) % 256))) {
+		dle->loadaddr = dllist[slot].nloadaddr;
+		dle->count    = new_count;
+	} else if (new_count != (dle->count % 256)) {
 		return;
 	}
 
-	if (dllist[slot].status == DL_STATUS_SENT_PLT) {
-		close(dllist[slot].ldfd);
-		dllist[slot].ldfd = 0;
-		dllist[slot].status = DL_STATUS_FREE;
-		sprintf(line,
+	if (dle->status == DL_STATUS_SENT_PLT) {
+		close(dle->ldfd);
+		dle->ldfd = -1;
+		dle->status = DL_STATUS_FREE;
+		snprintf(line, sizeof(line),
 			"%x:%x:%x:%x:%x:%x Load completed",
 			dst[0],dst[1],dst[2],dst[3],dst[4],dst[5]);
-		syslog(LOG_INFO, line);
+		syslog(LOG_INFO, "%s", line);
 		return;
 	}
 
-	dllist[slot].lseek     = lseek(dllist[slot].ldfd,0L,SEEK_CUR);
+	dle->lseek     = lseek(dle->ldfd, 0L, SEEK_CUR);
 	
-	if (dllist[slot].dl_bsz >= 1492)
-		dllist[slot].dl_bsz = 1492;
+	if (dle->dl_bsz >= MAX_ETH_PAYLOAD)
+		dle->dl_bsz = MAX_ETH_PAYLOAD;
 	
 	index = 0;
 	mopPutHeader(pkt, &index, dst, src, ptype, trans);
 	p = &pkt[index];
 	mopcode = MOP_K_CODE_MLD;
 	pindex = index;
-	mopPutChar (pkt,&index,mopcode);
-	mopPutChar (pkt,&index,dllist[slot].count);
-	mopPutLong (pkt,&index,dllist[slot].loadaddr);
+	mopPutChar (pkt,&index, mopcode);
+	mopPutChar (pkt,&index, dle->count);
+	mopPutLong (pkt,&index, dle->loadaddr);
 
-	len = mopFileRead(&dllist[slot],&pkt[index]);
+	len = mopFileRead(dle, &pkt[index]);
 	
 	if (len > 0 ) {
 			
-		dllist[slot].nloadaddr = dllist[slot].loadaddr + len;
+		dle->nloadaddr = dle->loadaddr + len;
 		index = index + len;
 
 		mopPutLength(pkt, trans, index);
@@ -396,25 +398,25 @@ mopNextLoad(dst, src, new_count, trans)
 		if (len == 0) {
 			index = pindex;
 			mopcode = MOP_K_CODE_PLT;
-			mopPutChar (pkt,&index,mopcode);
-			mopPutChar (pkt,&index,dllist[slot].count);
-			mopPutChar (pkt,&index,MOP_K_PLTP_HSN);
- 			mopPutChar (pkt,&index,3);
-			mopPutMulti(pkt,&index,"ipc",3);
-			mopPutChar (pkt,&index,MOP_K_PLTP_HSA);
-			mopPutChar (pkt,&index,6);
-			mopPutMulti(pkt,&index,src,6);
-			mopPutChar (pkt,&index,MOP_K_PLTP_HST);
-			mopPutTime (pkt,&index, 0);
-			mopPutChar (pkt,&index,0);
-			mopPutLong (pkt,&index,dllist[slot].xferaddr);
+			mopPutChar (pkt, &index, mopcode);
+			mopPutChar (pkt, &index, dle->count);
+			mopPutChar (pkt, &index, MOP_K_PLTP_HSN);
+ 			mopPutChar (pkt, &index, 3);
+			mopPutMulti(pkt, &index, "ipc", 3);
+			mopPutChar (pkt, &index, MOP_K_PLTP_HSA);
+			mopPutChar (pkt, &index, 6);
+			mopPutMulti(pkt, &index, src, 6);
+			mopPutChar (pkt, &index, MOP_K_PLTP_HST);
+			mopPutTime (pkt, &index, 0);
+			mopPutChar (pkt, &index, 0);
+			mopPutLong (pkt, &index, dle->xferaddr);
 
 			mopPutLength(pkt, trans, index);
 			newlen = mopGetLength(pkt, trans);
 		
-			dllist[slot].status = DL_STATUS_SENT_PLT;
+			dle->status = DL_STATUS_SENT_PLT;
 		} else {
-			dllist[slot].status = DL_STATUS_FREE;
+			dle->status = DL_STATUS_FREE;
 			return;
 		}
 	}
@@ -432,7 +434,7 @@ mopNextLoad(dst, src, new_count, trans)
 		mopDumpDL(stdout, pkt, trans);
 	}
 
-	if (pfWrite(dllist[slot].ii->fd, pkt, index, trans) != index) {
+	if (pfWrite(dle->ii->fd, pkt, index, trans) != index) {
 		if (DebugFlag) {
 			(void)fprintf(stderr, "error pfWrite()\n");
 		}
@@ -451,7 +453,7 @@ mopProcessDL(fd, ii, pkt, index, dst, src, trans, len)
 {
 	u_char  tmpc;
 	u_short moplen;
-	u_char  pfile[17], mopcode;
+	u_char  pfile[129], mopcode;
 	char    filename[FILENAME_MAX];
 	char    line[100];
 	int     i,nfd,iindex;
@@ -500,6 +502,8 @@ mopProcessDL(fd, ii, pkt, index, dst, src, trans, len)
 		rpr_pgty = mopGetChar(pkt,index);	/* Program Type */
 		
 		tmpc = mopGetChar(pkt,index);		/* Software ID Len */
+		if (tmpc > sizeof(pfile) - 1)
+			return;
 		for (i = 0; i < tmpc; i++) {
 			pfile[i] = mopGetChar(pkt,index);
 			pfile[i+1] = '\0';
@@ -513,8 +517,9 @@ mopProcessDL(fd, ii, pkt, index, dst, src, trans, len)
 			/* to ask. My solution is to use the ethernet addr */
 			/* as filename. Implementing a database would be   */
 			/* overkill.					   */
-			sprintf(pfile,"%02x%02x%02x%02x%02x%02x%c",
-				src[0],src[1],src[2],src[3],src[4],src[5],0);
+			snprintf(pfile, sizeof(pfile),
+			    "%02x%02x%02x%02x%02x%02x%c",
+			    src[0],src[1],src[2],src[3],src[4],src[5],0);
 		}
 		
 		tmpc = mopGetChar(pkt,index);		/* Processor */
@@ -526,31 +531,32 @@ mopProcessDL(fd, ii, pkt, index, dst, src, trans, len)
 		memmove((char *)(dl_rpr->eaddr), (char *)src, 6);
 		mopProcessInfo(pkt,index,moplen,dl_rpr,trans);
 
-		sprintf(filename,"%s/%s.SYS", MOP_FILE_PATH, pfile);
+		snprintf(filename, sizeof(filename), "%s/%s.SYS",
+		    MopdDir, pfile);
 		if ((mopCmpEAddr(dst,dl_mcst) == 0)) {
 			if ((nfd = open(filename, O_RDONLY, 0)) != -1) {
 				close(nfd);
 				mopSendASV(src, ii->eaddr, ii, trans);
-				sprintf(line,
+				snprintf(line, sizeof(line),
 					"%x:%x:%x:%x:%x:%x (%d) Do you have %s? (Yes)",
 					src[0],src[1],src[2],
 					src[3],src[4],src[5],trans,pfile);
 			} else {
-				sprintf(line,
+				snprintf(line, sizeof(line),
 					"%x:%x:%x:%x:%x:%x (%d) Do you have %s? (No)",
 					src[0],src[1],src[2],
 					src[3],src[4],src[5],trans,pfile);
 			}
-			syslog(LOG_INFO, line);
+			syslog(LOG_INFO, "%s", line);
 		} else {
 			if ((mopCmpEAddr(dst,ii->eaddr) == 0)) {
 				dl_rpr->ldfd = open(filename, O_RDONLY, 0);
 				mopStartLoad(src, ii->eaddr, dl_rpr, trans);
-				sprintf(line,
+				snprintf(line, sizeof(line),
 					"%x:%x:%x:%x:%x:%x Send me %s",
 					src[0],src[1],src[2],
 					src[3],src[4],src[5],pfile);
-				syslog(LOG_INFO, line);
+				syslog(LOG_INFO, "%s", line);
 			}
 		}
 		

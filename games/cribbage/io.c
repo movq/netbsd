@@ -1,4 +1,4 @@
-/*	$NetBSD: io.c,v 1.14 1999/09/30 18:01:32 jsm Exp $	*/
+/*	$NetBSD: io.c,v 1.21 2007/12/15 19:44:39 perry Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,23 +34,18 @@
 #if 0
 static char sccsid[] = "@(#)io.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: io.c,v 1.14 1999/09/30 18:01:32 jsm Exp $");
+__RCSID("$NetBSD: io.c,v 1.21 2007/12/15 19:44:39 perry Exp $");
 #endif
 #endif /* not lint */
 
 #include <ctype.h>
 #include <curses.h>
 #include <signal.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 #include <termios.h>
 #include <unistd.h>
-
-#if __STDC__
-#include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
 
 #include "deck.h"
 #include "cribbage.h"
@@ -102,10 +93,7 @@ msgcard(c, brief)
  *	Print the value of a card in ascii
  */
 int
-msgcrd(c, brfrank, mid, brfsuit)
-	CARD c;
-	BOOLEAN brfrank, brfsuit;
-	const char *mid;
+msgcrd(CARD c, BOOLEAN brfrank, const char *mid, BOOLEAN brfsuit)
 {
 	if (c.rank == EMPTY || c.suit == EMPTY)
 		return (FALSE);
@@ -127,11 +115,7 @@ msgcrd(c, brfrank, mid, brfsuit)
  *	Print out a card.
  */
 void
-printcard(win, cardno, c, blank)
-	WINDOW *win;
-	int     cardno;
-	CARD    c;
-	BOOLEAN blank;
+printcard(WINDOW *win, int cardno, CARD c, BOOLEAN blank)
 {
 	prcard(win, cardno * 2, cardno, c, blank);
 }
@@ -141,11 +125,7 @@ printcard(win, cardno, c, blank)
  *	Print out a card on the window at the specified location
  */
 void
-prcard(win, y, x, c, blank)
-	WINDOW *win;
-	int y, x;
-	CARD c;
-	BOOLEAN blank;
+prcard(WINDOW *win, int y, int x, CARD c, BOOLEAN blank)
 {
 	if (c.rank == EMPTY)
 		return;
@@ -168,11 +148,7 @@ prcard(win, y, x, c, blank)
  *	Print a hand of n cards
  */
 void
-prhand(h, n, win, blank)
-	const CARD h[];
-	int n;
-	WINDOW *win;
-	BOOLEAN blank;
+prhand(const CARD h[], int n, WINDOW *win, BOOLEAN blank)
 {
 	int i;
 
@@ -188,10 +164,7 @@ prhand(h, n, win, blank)
  *	input, returns the index of the card found...
  */
 int
-infrom(hand, n, prompt)
-	const CARD hand[];
-	int n;
-	const char *prompt;
+infrom(const CARD hand[], int n, const char *prompt)
 {
 	int i, j;
 	CARD crd;
@@ -244,8 +217,7 @@ infrom(hand, n, prompt)
  *	and then parses it.
  */
 int
-incard(crd)
-	CARD *crd;
+incard(CARD *crd)
 {
 	int i;
 	int rnk, sut;
@@ -329,7 +301,7 @@ gotit:
  *	Reads and converts to upper case
  */
 int
-getuchar()
+getuchar(void)
 {
 	int c;
 
@@ -346,9 +318,7 @@ getuchar()
  *	"hi" inclusive.
  */
 int
-number(lo, hi, prompt)
-	int lo, hi;
-	const char *prompt;
+number(int lo, int hi, const char *prompt)
 {
 	char *p;
 	int sum;
@@ -362,10 +332,10 @@ number(lo, hi, prompt)
 		}
 		sum = 0;
 
-		if (!isdigit(*p))
+		if (!isdigit((unsigned char)*p))
 			sum = lo - 1;
 		else
-			while (isdigit(*p)) {
+			while (isdigit((unsigned char)*p)) {
 				sum = 10 * sum + (*p - '0');
 				++p;
 			}
@@ -392,21 +362,11 @@ int     Mpos = 0;
 static int Newpos = 0;
 
 void
-#if __STDC__
 msg(const char *fmt, ...)
-#else
-msg(fmt, va_alist)
-	char *fmt;
-	va_dcl
-#endif
 {
 	va_list ap;
 
-#if __STDC__
 	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
 	(void)vsprintf(&Msgbuf[Newpos], fmt, ap);
 	Newpos = strlen(Msgbuf);
 	va_end(ap);
@@ -418,21 +378,11 @@ msg(fmt, va_alist)
  *	Add things to the current message
  */
 void
-#if __STDC__
 addmsg(const char *fmt, ...)
-#else
-addmsg(fmt, va_alist)
-	char *fmt;
-	va_dcl
-#endif
 {
 	va_list ap;
 
-#if __STDC__
 	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
 	(void)vsprintf(&Msgbuf[Newpos], fmt, ap);
 	Newpos = strlen(Msgbuf);
 	va_end(ap);
@@ -445,7 +395,7 @@ addmsg(fmt, va_alist)
 int     Lineno = 0;
 
 void
-endmsg()
+endmsg(void)
 {
 	static int lastline = 0;
 	int len;
@@ -453,8 +403,8 @@ endmsg()
 
 	/* All messages should start with uppercase */
 	mvaddch(lastline + Y_MSG_START, SCORE_X, ' ');
-	if (islower(Msgbuf[0]) && Msgbuf[1] != ')')
-		Msgbuf[0] = toupper(Msgbuf[0]);
+	if (islower((unsigned char)Msgbuf[0]) && Msgbuf[1] != ')')
+		Msgbuf[0] = toupper((unsigned char)Msgbuf[0]);
 	mp = Msgbuf;
 	len = strlen(mp);
 	if (len / MSG_X + Lineno >= MSG_Y) {
@@ -494,7 +444,7 @@ endmsg()
  *	Wait for the user to type ' ' before doing anything else
  */
 void
-do_wait()
+do_wait(void)
 {
 	static const char prompt[] = {'-', '-', 'M', 'o', 'r', 'e', '-', '-', '\0'};
 
@@ -516,10 +466,9 @@ do_wait()
  *	Sit around until the guy types the right key
  */
 void
-wait_for(ch)
-	int ch;
+wait_for(int ch)
 {
-	char c;
+	int c;
 
 	if (ch == '\n')
 		while ((c = readchar()) != '\n')
@@ -534,14 +483,14 @@ wait_for(ch)
  *	Reads and returns a character, checking for gross input errors
  */
 int
-readchar()
+readchar(void)
 {
 	int cnt;
-	char c;
+	unsigned char c;
 
 over:
 	cnt = 0;
-	while (read(STDIN_FILENO, &c, sizeof(char)) <= 0)
+	while (read(STDIN_FILENO, &c, sizeof(unsigned char)) <= 0)
 		if (cnt++ > 100) {	/* if we are getting infinite EOFs */
 			bye();		/* quit the game */
 			exit(1);
@@ -562,7 +511,7 @@ over:
  *	compressed to one space; a space is inserted before a ','
  */
 char *
-getline()
+getline(void)
 {
 	char *sp;
 	int c, oy, ox;
@@ -574,9 +523,6 @@ getline()
 	refresh();
 	/* loop reading in the string, and put it in a temporary buffer */
 	for (sp = linebuf; (c = readchar()) != '\n'; clrtoeol(), refresh()) {
-		if (c == -1)
-			continue;
-		else
 			if (c == erasechar()) {	/* process erase character */
 				if (sp > linebuf) {
 					int i;
@@ -611,8 +557,7 @@ getline()
 }
 
 void
-rint(signo)
-	int signo __attribute__((__unused__));
+receive_intr(int signo __unused)
 {
 	bye();
 	exit(1);
@@ -623,7 +568,7 @@ rint(signo)
  *	Leave the program, cleaning things up as we go.
  */
 void
-bye()
+bye(void)
 {
 	signal(SIGINT, SIG_IGN);
 	mvcur(0, COLS - 1, LINES - 1, 0);

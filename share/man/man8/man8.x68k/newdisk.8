@@ -1,4 +1,4 @@
-.\"	$NetBSD: newdisk.8,v 1.1 1999/12/24 16:51:25 minoura Exp $
+.\"	$NetBSD: newdisk.8,v 1.7 2003/07/26 20:17:39 salo Exp $
 .\"
 .\" Copyright (c) 1998 MINOURA Makoto.
 .\" All rights reserved.
@@ -30,13 +30,13 @@
 .\"
 .Dd December 24, 1999
 .Os
-.Dt NEWDISK 8
+.Dt NEWDISK 8 x68k
 .Sh NAME
 .Nm newdisk
 .Nd "Prepare a new disk to be usable for X680x0"
 .Sh SYNOPSIS
 .Nm
-.Op Fl vnfc
+.Op Fl vnfcp
 .Op Fl m Ar mboot
 .Ar raw_device
 .Sh DESCRIPTION
@@ -61,7 +61,9 @@ option prevents this behaviour.
 .It Fl c
 Check only.
 .Nm
-looks at the disk wheter it is already marked.
+looks at the disk whether it is already marked.
+.It Fl p
+Do not create the partition table.
 .It Fl m Ar mboot
 Specifies the mboot program to be written.
 .El
@@ -73,11 +75,12 @@ The default primary boot program.
 .Sh SEE ALSO
 .Xr boot 8 ,
 .Xr installboot 8
-.Sh AUTHOR
-.Nm
-was written by MINOURA Makoto <minoura@netbsd.org>.
 .Sh HISTORY
 The
 .Nm
 utility first appeared in
 .Nx 1.5 .
+.Sh AUTHORS
+.Nm
+was written by
+.An MINOURA Makoto Aq minoura@NetBSD.org .

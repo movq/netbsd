@@ -1,4 +1,4 @@
-/*	$NetBSD: rec_utils.c,v 1.8 1997/07/13 18:52:15 christos Exp $	*/
+/*	$NetBSD: rec_utils.c,v 1.12 2008/09/10 17:52:36 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -33,17 +29,16 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-#if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)rec_utils.c	8.6 (Berkeley) 7/16/94";
-#else
-__RCSID("$NetBSD: rec_utils.c,v 1.8 1997/07/13 18:52:15 christos Exp $");
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
 #endif
-#endif /* LIBC_SCCS and not lint */
+
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: rec_utils.c,v 1.12 2008/09/10 17:52:36 joerg Exp $");
 
 #include <sys/param.h>
 
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -66,11 +61,7 @@ __RCSID("$NetBSD: rec_utils.c,v 1.8 1997/07/13 18:52:15 christos Exp $");
  *	RET_SUCCESS, RET_ERROR.
  */
 int
-__rec_ret(t, e, nrec, key, data)
-	BTREE *t;
-	EPG *e;
-	recno_t nrec;
-	DBT *key, *data;
+__rec_ret(BTREE *t, EPG *e, recno_t nrec, DBT *key, DBT *data)
 {
 	RLEAF *rl;
 	void *p;

@@ -1,4 +1,4 @@
-.\"	$NetBSD: 6.t,v 1.2 1998/01/09 06:55:44 perry Exp $
+.\"	$NetBSD: 6.t,v 1.5 2003/08/07 10:30:55 agc Exp $
 .\"
 .\" Copyright (c) 1983, 1986, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -499,7 +495,7 @@ UNIBUS interfaces
 All hardware related interfaces currently reside on the UNIBUS.
 Consequently a common set of utility routines for dealing
 with the UNIBUS has been developed.  Each UNIBUS interface
-utilizes a structure of the following form:
+uses a structure of the following form:
 .DS
 .ta \w'#define 'u +\w'ifw_xtofree 'u +\w'pte ifu_wmap[IF_MAXNUBAMR];    'u
 struct	ifubinfo {
@@ -530,7 +526,7 @@ struct	ifxmt {
 	struct	ifrw ifrw;
 	caddr_t	ifw_base;			/* virt addr of buffer */
 	struct	pte ifw_wmap[IF_MAXNUBAMR];	/* base pages for output */
-	struct	mbuf *ifw_xtofree;		/* pages being dma'd out */
+	struct	mbuf *ifw_xtofree;		/* pages being DMA'd out */
 	short	ifw_xswapd;			/* mask of clusters swapped */
 	short	ifw_nmr;			/* number of entries in wmap */
 };

@@ -1,4 +1,4 @@
-/*	$NetBSD: execv.c,v 1.5 2000/01/22 22:19:09 mycroft Exp $	*/
+/*	$NetBSD: execv.c,v 1.9 2005/11/29 13:30:49 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)exec.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: execv.c,v 1.5 2000/01/22 22:19:09 mycroft Exp $");
+__RCSID("$NetBSD: execv.c,v 1.9 2005/11/29 13:30:49 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -51,19 +47,11 @@ __weak_alias(execv,_execv)
 #endif
 
 extern char **environ;
-#ifdef _REENT
-extern rwlock_t __environ_lock;
-#endif
 
 int
 execv(name, argv)
 	const char *name;
 	char * const *argv;
 {
-	int r;
-
-	rwlock_rdlock(&__environ_lock);
-	r = execve(name, argv, environ);
-	rwlock_unlock(&__environ_lock);
-	return (r);
+	return execve(name, argv, environ);
 }

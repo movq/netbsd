@@ -1,12 +1,69 @@
-/*	$NetBSD: hack.main.c,v 1.5 2000/03/02 18:19:06 kleink Exp $	*/
+/*	$NetBSD: hack.main.c,v 1.10.14.2 2009/06/29 23:25:09 snj Exp $	*/
 
 /*
- * Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1985.
+ * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
+ * Amsterdam
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met:
+ *
+ * - Redistributions of source code must retain the above copyright notice,
+ * this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above copyright
+ * notice, this list of conditions and the following disclaimer in the
+ * documentation and/or other materials provided with the distribution.
+ *
+ * - Neither the name of the Stichting Centrum voor Wiskunde en
+ * Informatica, nor the names of its contributors may be used to endorse or
+ * promote products derived from this software without specific prior
+ * written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
+ * IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+ * PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER
+ * OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+ * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
+ * Copyright (c) 1982 Jay Fenlason <hack@gnu.org>
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+ * AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL
+ * THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.main.c,v 1.5 2000/03/02 18:19:06 kleink Exp $");
+__RCSID("$NetBSD: hack.main.c,v 1.10.14.2 2009/06/29 23:25:09 snj Exp $");
 #endif				/* not lint */
 
 #include <signal.h>
@@ -22,21 +79,21 @@ __RCSID("$NetBSD: hack.main.c,v 1.5 2000/03/02 18:19:06 kleink Exp $");
 #define	gamename	"hack"
 #endif
 
-int             (*afternmv)  __P((void));
-int             (*occupation)  __P((void));
-char           *occtxt;		/* defined when occupation != NULL */
+int             (*afternmv)(void);
+int             (*occupation)(void);
+const char           *occtxt;		/* defined when occupation != NULL */
 
 int             hackpid;	/* current pid */
 int             locknum;	/* max num of players */
 #ifdef DEF_PAGER
-char           *catmore;	/* default pager */
+const char     *catmore;	/* default pager */
 #endif
 char            SAVEF[PL_NSIZ + 11] = "save/";	/* save/99999player */
 char           *hname;		/* name of the game (argv[0] of call) */
 char            obuf[BUFSIZ];	/* BUFSIZ is defined in stdio.h */
 
-int main __P((int, char *[]));
-static void chdirx __P((char *, boolean));
+int main(int, char *[]);
+static void chdirx(const char *, boolean);
 
 int
 main(argc, argv)
@@ -47,6 +104,12 @@ main(argc, argv)
 #ifdef CHDIR
 	char           *dir;
 #endif
+
+	/* Check for dirty tricks with closed fds 0, 1, 2 */
+	fd = open("/dev/null", O_RDONLY);
+	if (fd < 3)
+		exit(1);
+	close(fd);
 
 	hname = argv[0];
 	hackpid = getpid();
@@ -229,7 +292,7 @@ main(argc, argv)
 			}
 		if ((sfoo = getenv("GENOCIDED")) != NULL) {
 			if (*sfoo == '!') {
-				struct permonst *pm = mons;
+				const struct permonst *pm = mons;
 				char           *gp = genocided;
 
 				while (pm < mons + CMNUM + 2) {
@@ -239,15 +302,16 @@ main(argc, argv)
 				}
 				*gp = 0;
 			} else
-				(void) strcpy(genocided, sfoo);
+				(void) strlcpy(genocided, sfoo,
+						sizeof(genocided));
 			(void) strcpy(fut_geno, genocided);
 		}
 	}
 #endif
 	setftty();
-	(void) sprintf(SAVEF, "save/%d%s", getuid(), plname);
+	(void) snprintf(SAVEF, sizeof(SAVEF), "save/%d%s", getuid(), plname);
 	regularize(SAVEF + 5);	/* avoid . or / in name */
-	if ((fd = open(SAVEF, 0)) >= 0 &&
+	if ((fd = open(SAVEF, O_RDONLY)) >= 0 &&
 	    (uptodate(fd) || unlink(SAVEF) == 666)) {
 		(void) signal(SIGINT, done1);
 		pline("Restoring old save file...");
@@ -418,12 +482,12 @@ glo(foo)
 	int foo;
 {
 	/* construct the string  xlock.n  */
-	char           *tf;
+	size_t pos;
 
-	tf = lock;
-	while (*tf && *tf != '.')
-		tf++;
-	(void) sprintf(tf, ".%d", foo);
+	pos = 0;
+	while (lock[pos] && lock[pos] != '.')
+		pos++;
+	(void) snprintf(lock + pos, sizeof(lock) - pos, ".%d", foo);
 }
 
 /*
@@ -450,7 +514,7 @@ askname()
 		if (c != '-')
 			if (c < 'A' || (c > 'Z' && c < 'a') || c > 'z')
 				c = '_';
-		if (ct < sizeof(plname) - 1)
+		if (ct < (int)sizeof(plname) - 1)
 			plname[ct++] = c;
 	}
 	plname[ct] = 0;
@@ -460,22 +524,11 @@ askname()
 
 /* VARARGS1 */
 void
-#ifdef __STDC__
 impossible(const char *s, ...)
-#else
-impossible(va_alist)
-	va_dcl
-#endif
 {
 	va_list ap;
-#ifndef __STDC__
-	const char           *s;
 
-	va_start(ap);
-	s = va_arg(ap, const char *);
-#else
 	va_start(ap, s);
-#endif
 	vpline(s, ap);
 	va_end(ap);
 	pline("Program in disorder - perhaps you'd better Quit.");
@@ -484,7 +537,7 @@ impossible(va_alist)
 #ifdef CHDIR
 static void
 chdirx(dir, wr)
-	char           *dir;
+	const char     *dir;
 	boolean         wr;
 {
 
@@ -516,7 +569,7 @@ chdirx(dir, wr)
 
 		if (dir == NULL)
 			dir = ".";
-		if ((fd = open(RECORD, 2)) < 0) {
+		if ((fd = open(RECORD, O_RDWR)) < 0) {
 			printf("Warning: cannot write %s/%s", dir, RECORD);
 			getret();
 		} else

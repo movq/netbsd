@@ -1,4 +1,4 @@
-/*	$NetBSD: number.c,v 1.7 1999/09/08 21:17:53 jsm Exp $	*/
+/*	$NetBSD: number.c,v 1.12 2008/07/20 01:03:21 lukem Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1988, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1988, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)number.c	8.3 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: number.c,v 1.7 1999/09/08 21:17:53 jsm Exp $");
+__RCSID("$NetBSD: number.c,v 1.12 2008/07/20 01:03:21 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -80,12 +76,12 @@ static const char	*const name1[] = {
 	"novemdecillion",		"vigintillion",
 };
 
-void	convert __P((char *));
-int	main __P((int, char *[]));
-int	number __P((const char *, int));
-void	pfract __P((int));
-int	unit __P((int, const char *));
-void	usage __P((void)) __attribute__((__noreturn__));
+void	convert(char *);
+int	main(int, char *[]);
+int	number(const char *, int);
+void	pfract(int);
+int	unit(int, const char *);
+void	usage(void) __dead;
 
 int lflag;
 
@@ -145,7 +141,7 @@ convert(line)
 			}
 			goto badnum;
 		}
-		if (isdigit(*p))
+		if (isdigit((unsigned char)*p))
 			continue;
 		switch (*p) {
 		case '.':

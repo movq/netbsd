@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_util.h,v 1.6 1999/04/24 02:56:06 cgd Exp $	*/
+/*	$NetBSD: compat_util.h,v 1.20 2008/04/28 20:23:41 martin Exp $	*/
 
 /*-
  * Copyright (c) 1994 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -69,6 +62,7 @@
 
 struct emul;
 struct proc;
+struct exec_package;
 
 struct emul_flags_xtab {
 	unsigned long omask;
@@ -76,21 +70,13 @@ struct emul_flags_xtab {
 	unsigned long nval;
 };
 
-caddr_t	stackgap_init __P((struct emul *));
-void	*stackgap_alloc __P((caddr_t *, size_t));
+void emul_find_root(struct lwp *, struct exec_package *);
 
-int emul_find __P((struct proc *, caddr_t *, const char *, const char *,
-		   const char **, int));
+int emul_find_interp(struct lwp *, struct exec_package *, const char *);
 
 unsigned long emul_flags_translate(const struct emul_flags_xtab *tab,
 				   unsigned long in, unsigned long *leftover);
 
-void compat_offseterr __P((struct vnode *, char *msg));
-
-#define CHECK_ALT_EXIST(p, sgp, root, path) \
-    emul_find(p, sgp, root, path, &(path), 0)
-
-#define CHECK_ALT_CREAT(p, sgp, root, path) \
-    emul_find(p, sgp, root, path, &(path), 1)
+void compat_offseterr(struct vnode *, const char *);
 
 #endif /* !_COMPAT_UTIL_H_ */

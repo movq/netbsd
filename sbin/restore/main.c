@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.19 1999/11/09 15:06:33 drochner Exp $	*/
+/*	$NetBSD: main.c,v 1.33 2008/07/20 01:20:23 lukem Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)main.c	8.6 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: main.c,v 1.19 1999/11/09 15:06:33 drochner Exp $");
+__RCSID("$NetBSD: main.c,v 1.33 2008/07/20 01:20:23 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -66,10 +62,8 @@ __RCSID("$NetBSD: main.c,v 1.19 1999/11/09 15:06:33 drochner Exp $");
 #include "restore.h"
 #include "extern.h"
 
-extern char *__progname;	/* from crt0.o */
-
 int	bflag = 0, cvtflag = 0, dflag = 0, vflag = 0, yflag = 0;
-int	hflag = 1, mflag = 1, Nflag = 0;
+int	hflag = 1, mflag = 1, Dflag = 0, Nflag = 0;
 char	command = '\0';
 int32_t	dumpnum = 1;
 int32_t	volno = 0;
@@ -79,23 +73,25 @@ char	*usedinomap;
 ino_t	maxino;
 time_t	dumptime;
 time_t	dumpdate;
-FILE 	*terminal;
-char	*tmpdir;
+size_t	pagesize;
+FILE	*terminal;
+const char	*tmpdir;
+int	dotflag = 0;
 
-int	main __P((int, char *[]));
-static	void obsolete __P((int *, char **[]));
-static	void usage __P((void));
+FILE *Mtreefile = NULL;
+
+static	void obsolete(int *, char **[]);
+static	void usage(void);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	int ch;
 	ino_t ino;
-	char *inputdev;
-	char *symtbl = "./restoresymtable";
+	const char *inputdev;
+	const char *symtbl = "./restoresymtable";
 	char *p, name[MAXPATHLEN];
+	static char dot[] = ".";
 
 	if (argc < 2)
 		usage();
@@ -105,8 +101,8 @@ main(argc, argv)
 	if ((tmpdir = getenv("TMPDIR")) == NULL)
 		tmpdir = _PATH_TMP;
 	obsolete(&argc, &argv);
-	while ((ch = getopt(argc, argv, "b:cdf:himNRrs:tuvxy")) != -1)
-		switch(ch) {
+	while ((ch = getopt(argc, argv, "b:cD:df:himM:NRrs:tuvxy")) != -1)
+		switch (ch) {
 		case 'b':
 			/* Change default tape blocksize. */
 			bflag = 1;
@@ -118,6 +114,12 @@ main(argc, argv)
 			break;
 		case 'c':
 			cvtflag = 1;
+			break;
+		case 'D':
+			ddesc = digest_lookup(optarg);
+			if (ddesc == NULL)
+				err(1, "unknown digest algorithm: %s", optarg);
+			Dflag = 1;
 			break;
 		case 'd':
 			dflag = 1;
@@ -145,6 +147,11 @@ main(argc, argv)
 		case 'N':
 			Nflag = 1;
 			break;
+		case 'M':
+			Mtreefile = fopen(optarg, "a");
+			if (Mtreefile == NULL)
+				err(1, "can't open %s", optarg);
+			break;
 		case 's':
 			/* Dumpnum (skip to) for multifile dump tapes. */
 			dumpnum = strtol(optarg, &p, 10);
@@ -171,11 +178,15 @@ main(argc, argv)
 	if (command == '\0')
 		errx(1, "none of i, R, r, t or x options specified");
 
+	if (Nflag || command == 't')
+		uflag = 0;
+
 	if (signal(SIGINT, onintr) == SIG_IGN)
 		(void) signal(SIGINT, SIG_IGN);
 	if (signal(SIGTERM, onintr) == SIG_IGN)
 		(void) signal(SIGTERM, SIG_IGN);
 	setlinebuf(stderr);
+	pagesize = sysconf(_SC_PAGESIZE);
 
 	atexit(cleanup);
 
@@ -183,7 +194,7 @@ main(argc, argv)
 
 	if (argc == 0) {
 		argc = 1;
-		*--argv = ".";
+		*--argv = dot;
 	}
 
 	switch (command) {
@@ -273,6 +284,8 @@ main(argc, argv)
 			ino = dirlookup(name);
 			if (ino == 0)
 				continue;
+			if (ino == ROOTINO)
+				dotflag = 1;
 			if (mflag)
 				pathcheck(name);
 			treescan(name, ino, addfile);
@@ -289,24 +302,25 @@ main(argc, argv)
 }
 
 static void
-usage()
+usage(void)
 {
+	const char *progname = getprogname();
 
 	(void)fprintf(stderr,
-	    "usage: %s -i [-cdhmvyN] [-b blocksize] [-f file] [-s fileno]\n",
-	    __progname);
+	    "usage: %s -i [-cdhmvyN] [-b bsize] [-D algorithm] "
+	    "[-f file] [-M mtreefile] [-s fileno]\n", progname);
 	(void)fprintf(stderr,
-	    "\t%s -R [-cdvyN] [-b blocksize] [-f file] [-s fileno]\n",
-	    __progname);
+	    "       %s -R [-cdvyN] [-b bsize] [-D algorithm] [-f file] "
+	    "[-M mtreefile] [-s fileno]\n", progname);
 	(void)fprintf(stderr,
-	    "\t%s -r [-cdvyN] [-b blocksize] [-f file] [-s fileno]\n",
-	    __progname);
+	    "       %s -r [-cdvyN] [-b bsize] [-D algorithm] [-f file] "
+	    "[-M mtreefile] [-s fileno]\n", progname);
 	(void)fprintf(stderr,
-	    "\t%s -t [-cdhvy] [-b blocksize] [-f file] [-s fileno] [file ...]\n",
-	    __progname);
+	    "       %s -t [-cdhvy] [-b bsize] [-D algorithm] [-f file]\n"
+	    "           [-s fileno] [file ...]\n", progname);
 	(void)fprintf(stderr,
-	    "\t%s -x [-cdhmvyN] [-b blocksize] [-f file] [-s fileno] [file ...]\n",
-	    __progname);
+	    "       %s -x [-cdhmvyN] [-b bsize] [-D algorithm] [-f file]\n"
+	    "           [-M mtreefile] [-s fileno] [file ...]\n", progname);
 	exit(1);
 }
 
@@ -316,9 +330,7 @@ usage()
  *	getopt(3) will like.
  */
 static void
-obsolete(argcp, argvp)
-	int *argcp;
-	char **argvp[];
+obsolete(int *argcp, char **argvp[])
 {
 	int argc, flags;
 	char *ap, **argv, *flagsp, **nargv, *p;
@@ -371,6 +383,8 @@ obsolete(argcp, argvp)
 	if (flags) {
 		*p = '\0';
 		*nargv++ = flagsp;
+	} else {
+		free(flagsp);
 	}
 
 	/* Copy remaining arguments. */

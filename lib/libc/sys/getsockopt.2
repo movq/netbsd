@@ -1,4 +1,4 @@
-.\"	$NetBSD: getsockopt.2,v 1.18 1999/12/02 21:42:37 kleink Exp $
+.\"	$NetBSD: getsockopt.2,v 1.30 2007/12/16 09:49:28 lukem Exp $
 .\"
 .\" Copyright (c) 1983, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -33,7 +29,7 @@
 .\"
 .\"     @(#)getsockopt.2	8.4 (Berkeley) 5/2/95
 .\"
-.Dd May 2, 1995
+.Dd December 16, 2007
 .Dt GETSOCKOPT 2
 .Os
 .Sh NAME
@@ -43,10 +39,9 @@
 .Sh LIBRARY
 .Lb libc
 .Sh SYNOPSIS
-.Fd #include <sys/types.h>
-.Fd #include <sys/socket.h>
+.In sys/socket.h
 .Ft int
-.Fn getsockopt "int s" "int level" "int optname" "void *optval" "socklen_t *optlen"
+.Fn getsockopt "int s" "int level" "int optname" "void * restrict optval" "socklen_t * restrict optlen"
 .Ft int
 .Fn setsockopt "int s" "int level" "int optname" "const void *optval" "socklen_t optlen"
 .Sh DESCRIPTION
@@ -55,7 +50,8 @@ and
 .Fn setsockopt
 manipulate the
 .Em options
-associated with a socket.  Options may exist at multiple
+associated with a socket.
+Options may exist at multiple
 protocol levels; they are always present at the uppermost
 .Dq socket
 level.
@@ -68,8 +64,8 @@ is specified as
 .Dv SOL_SOCKET .
 To manipulate options at any
 other level the protocol number of the appropriate protocol
-controlling the option is supplied.  For example,
-to indicate that an option is to be interpreted by the
+controlling the option is supplied.
+For example, to indicate that an option is to be interpreted by the
 .Tn TCP
 protocol,
 .Fa level
@@ -87,15 +83,16 @@ are used to access option values for
 For
 .Fn getsockopt
 they identify a buffer in which the value for the
-requested option(s) are to be returned.  For
+requested option(s) are to be returned.
+For
 .Fn getsockopt ,
 .Fa optlen
 is a value-result parameter, initially containing the
 size of the buffer pointed to by
 .Fa optval ,
 and modified on return to indicate the actual size of
-the value returned.  If no option value is
-to be supplied or returned,
+the value returned.
+If no option value is to be supplied or returned,
 .Fa optval
 may be NULL.
 .Pp
@@ -109,9 +106,22 @@ socket level options, described below.
 Options at other protocol levels vary in format and
 name; consult the appropriate entries in
 section
-4 of the manual.
+4 of the manual, including:
+.Xr clnp 4 ,
+.Xr faith 4 ,
+.Xr icmp6 4 ,
+.Xr ip 4 ,
+.Xr ip6 4 ,
+.Xr ipsec 4 ,
+.Xr multicast 4 ,
+.Xr pim 4 ,
+.Xr route 4 ,
+.Xr tcp 4 ,
+.Xr tp 4 ,
+and
+.Xr unix 4 .
 .Pp
-Most socket-level options utilize an
+Most socket-level options use an
 .Fa int
 parameter for
 .Fa optval .
@@ -175,16 +185,16 @@ This option permits multiple instances of a program to each
 receive UDP/IP multicast or broadcast datagrams destined for the bound port.
 .Dv SO_KEEPALIVE
 enables the
-periodic transmission of messages on a connected socket.  Should the
-connected party fail to respond to these messages, the connection is
-considered broken and processes using the socket are notified via a
+periodic transmission of messages on a connected socket.
+Should the connected party fail to respond to these messages, the connection
+is considered broken and processes using the socket are notified via a
 .Dv SIGPIPE
 signal when attempting to send data.
 .Dv SO_DONTROUTE
 indicates that outgoing messages should
-bypass the standard routing facilities.  Instead, messages are directed
-to the appropriate network interface according to the network portion
-of the destination address.
+bypass the standard routing facilities.
+Instead, messages are directed to the appropriate network interface
+according to the network portion of the destination address.
 .Pp
 .Dv SO_LINGER
 controls the action taken when unsent messages
@@ -192,8 +202,8 @@ are queued on socket and a
 .Xr close 2
 is performed.
 If the socket promises reliable delivery of data and
-.Dv SO_LINGER is set,
-the system will block the process on the
+.Dv SO_LINGER
+is set, the system will block the process on the
 .Xr close 2
 attempt until it is able to transmit the data or until it decides it
 is unable to deliver the information (a timeout period, measured in
@@ -279,7 +289,7 @@ used to limit waits for output operations to complete.
 If a send operation has blocked for this much time,
 it returns with a partial count
 or with the error
-.Er EWOULDBLOCK
+.Er EAGAIN
 if no data were sent.
 In the current implementation, this timer is restarted each time additional
 data are delivered to the protocol,
@@ -297,7 +307,7 @@ and thus the limit is in effect an inactivity timer.
 If a receive operation has been blocked for this much time without
 receiving additional data, it returns with a short count
 or with the error
-.Er EWOULDBLOCK
+.Er EAGAIN
 if no data were received.
 .Pp
 If the
@@ -333,7 +343,7 @@ the error status.
 It may be used to check for asynchronous errors on connected
 datagram sockets or for other asynchronous errors.
 .Sh RETURN VALUES
-A 0 is returned if the call succeeds, -1 if it fails.
+A 0 is returned if the call succeeds, \-1 if it fails.
 .Sh ERRORS
 The call succeeds unless:
 .Bl -tag -width Er
@@ -359,15 +369,27 @@ is not in a valid part of the process address space.
 .El
 .Sh SEE ALSO
 .Xr ioctl 2 ,
-.Xr socket 2 ,
-.Xr select 2 ,
 .Xr poll 2 ,
+.Xr select 2 ,
+.Xr socket 2 ,
 .Xr getprotoent 3 ,
+.Xr clnp 4 ,
+.Xr faith 4 ,
+.Xr icmp6 4 ,
+.Xr ip 4 ,
+.Xr ip6 4 ,
+.Xr ipsec 4 ,
+.Xr multicast 4 ,
+.Xr pim 4 ,
+.Xr route 4 ,
+.Xr tcp 4 ,
+.Xr tp 4 ,
+.Xr unix 4 ,
 .Xr protocols 5
-.Sh BUGS
-Several of the socket options should be handled at lower levels of the system.
 .Sh HISTORY
 The
 .Fn getsockopt
 system call appeared in
 .Bx 4.2 .
+.Sh BUGS
+Several of the socket options should be handled at lower levels of the system.

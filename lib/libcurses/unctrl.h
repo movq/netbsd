@@ -1,4 +1,4 @@
-/*	$NetBSD: unctrl.h,v 1.1 1997/05/23 23:12:32 jtc Exp $	*/
+/*	$NetBSD: unctrl.h,v 1.4 2007/05/28 15:01:58 blymn Exp $	*/
 
 /*
  * Copyright (c) 1982, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,10 +31,28 @@
  *	@(#)unctrl.h	8.1 (Berkeley) 5/31/93
  */
 
-/*
- * unctrl.h
- */
+#ifndef _UNCTRL_H_
+#define _UNCTRL_H_
 
-extern char	*_unctrl[];
+#include <sys/cdefs.h>
+#ifdef HAVE_WCHAR
+#include <wchar.h>
+#include <curses.h>
+#endif /* HAVE_WCHAR */
 
-# define	unctrl(ch)	(_unctrl[ch & 0177])
+__BEGIN_DECLS
+extern const char * const  __unctrl[];		/* Control strings. */
+extern const unsigned char __unctrllen[];	/* Control strings length. */
+#ifdef HAVE_WCHAR
+extern const wchar_t * const  __wunctrl[];	/* Wide char control strings. */
+#endif /* HAVE_WCHAR */
+__END_DECLS
+
+/* 8-bit ASCII characters. */
+#define	unctrl(c)		__unctrl[((unsigned char)c) & 0xff]
+#define	unctrllen(c)	__unctrllen[((unsigned char)c) & 0xff]
+
+#ifdef HAVE_WCHAR
+#define	wunctrl(wc)		__wunctrl[( int )(wc->vals[ 0 ]) & 0xff]
+#endif /* HAVE_WCHAR */
+#endif /* _UNCTRL_H_ */

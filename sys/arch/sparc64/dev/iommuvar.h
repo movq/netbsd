@@ -1,4 +1,4 @@
-/*	$NetBSD: iommuvar.h,v 1.2 1999/06/20 00:51:29 eeh Exp $	*/
+/*	$NetBSD: iommuvar.h,v 1.17 2008/10/18 03:31:10 nakayama Exp $	*/
 
 /*
  * Copyright (c) 1999 Matthew R. Green
@@ -12,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -32,6 +30,21 @@
 #define _SPARC64_DEV_IOMMUVAR_H_
 
 /*
+ * Streaming buffer control
+ *
+ * It's easy to deal w/sysio since it has a single streaming buffer, and
+ * flushes are done on 8-byte boundaries.  But psycho is a pain since it
+ * has two streaming buffers and the streaming buffer flush dumps 64 bytes
+ * of data.
+ */
+struct strbuf_ctl {
+	struct iommu_state	*sb_is;		/* Pointer to our iommu */
+	bus_space_handle_t	sb_sb;		/* Handle for our regs */
+	paddr_t			sb_flushpa;	/* to flush streaming buffers */
+	volatile int64_t	*sb_flush;
+};
+
+/*
  * per-IOMMU state
  */
 struct iommu_state {
@@ -39,24 +52,36 @@ struct iommu_state {
 	int64_t			*is_tsb;	/* TSB virtual address */
 	int			is_tsbsize;	/* 0 = 8K, ... */
 	u_int			is_dvmabase;
+	u_int			is_dvmaend;
 	int64_t			is_cr;		/* IOMMU control regiter value */
 	struct extent		*is_dvmamap;	/* DVMA map for this instance */
 
-	paddr_t			is_flushpa;	/* used to flush the SBUS */
-	/* Needs to be volatile or egcs optimizes away loads */
-	volatile int64_t	is_flush;
+	struct strbuf_ctl	*is_sb[2];	/* Streaming buffers if any */
 
 	/* copies of our parents state, to allow us to be self contained */
 	bus_space_tag_t		is_bustag;	/* our bus tag */
-	struct iommureg		*is_iommu;	/* IOMMU registers */
-	struct iommu_strbuf	*is_sb;		/* streaming buffer */
+	bus_space_handle_t	is_iommu;	/* IOMMU registers */
 };
 
 /* interfaces for PCI/SBUS code */
-void	iommu_init __P((char *, struct iommu_state *, int));
-void	iommu_reset __P((struct iommu_state *));
-void    iommu_enter __P((struct iommu_state *, vaddr_t, int64_t, int));
-void    iommu_remove __P((struct iommu_state *, vaddr_t, size_t));
-int	iommu_flush __P((struct iommu_state *));
+void	iommu_init(char *, struct iommu_state *, int, uint32_t);
+void	iommu_reset(struct iommu_state *);
+void    iommu_enter(struct strbuf_ctl *, vaddr_t, int64_t, int);
+void    iommu_remove(struct iommu_state *, vaddr_t, size_t);
+paddr_t iommu_extract(struct iommu_state *, vaddr_t);
+
+int	iommu_dvmamap_load(bus_dma_tag_t, bus_dmamap_t, void *, bus_size_t,
+		struct proc *, int);
+void	iommu_dvmamap_unload(bus_dma_tag_t, bus_dmamap_t);
+int	iommu_dvmamap_load_raw(bus_dma_tag_t, bus_dmamap_t,
+		bus_dma_segment_t *, int, bus_size_t, int);
+void	iommu_dvmamap_sync(bus_dma_tag_t, bus_dmamap_t, bus_addr_t, bus_size_t,
+		int);
+int	iommu_dvmamem_alloc(bus_dma_tag_t, bus_size_t, bus_size_t, bus_size_t,
+		bus_dma_segment_t *, int, int *, int);
+void	iommu_dvmamem_free(bus_dma_tag_t, bus_dma_segment_t *, int);
+int	iommu_dvmamem_map(bus_dma_tag_t, bus_dma_segment_t *, int, size_t,
+		void **, int);
+void	iommu_dvmamem_unmap(bus_dma_tag_t, void *, size_t);
 
 #endif /* _SPARC64_DEV_IOMMUVAR_H_ */

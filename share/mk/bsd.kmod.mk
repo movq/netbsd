@@ -1,96 +1,136 @@
-#	$NetBSD: bsd.kmod.mk,v 1.36 2000/01/22 19:31:01 mycroft Exp $
+#	$NetBSD: bsd.kmod.mk,v 1.89 2008/10/19 22:05:21 apb Exp $
 
-.if !target(__initialized__)
-__initialized__:
-.if exists(${.CURDIR}/../Makefile.inc)
-.include "${.CURDIR}/../Makefile.inc"
-.endif
-.include <bsd.own.mk>
-.include <bsd.obj.mk>
-.include <bsd.depall.mk>
-.MAIN:		all
-.endif
+.include <bsd.init.mk>
+.include <bsd.klinks.mk>
 
-.PHONY:		cleankmod kmodinstall load unload
+##### Basic targets
+clean:		cleankmod
 realinstall:	kmodinstall
-clean cleandir distclean: cleankmod
 
-S?=		/sys
 KERN=		$S/kern
 
-CFLAGS+=	${COPTS} -D_KERNEL -D_LKM -I. -I${.CURDIR} -I$S -I$S/arch
+CFLAGS+=	-ffreestanding ${COPTS}
+CPPFLAGS+=	-nostdinc -I. -I${.CURDIR} -isystem $S -isystem $S/arch
+CPPFLAGS+=	-isystem ${S}/../common/include
+CPPFLAGS+=	-D_KERNEL -D_LKM
 
-DPSRCS+=	${SRCS:M*.l:.l=.c} ${SRCS:M*.y:.y=.c}
-CLEANFILES+=	${DPSRCS}
-.if defined(YHEADER)
-CLEANFILES+=	${SRCS:M*.y:.y=.h}
+# XXX until the kernel is fixed again...
+.if (defined(HAVE_GCC) && ${HAVE_GCC} == 4) || defined(HAVE_PCC)
+CFLAGS+=	-fno-strict-aliasing -Wno-pointer-sign
+.endif
+
+_YKMSRCS=	${SRCS:M*.[ly]:C/\..$/.c/} ${YHEADER:D${SRCS:M*.y:.y=.h}}
+DPSRCS+=	${_YKMSRCS}
+CLEANFILES+=	${_YKMSRCS}
+CLEANFILES+=	tmp.o
+
+.if \
+    ${MACHINE_CPU} == "arm" || \
+    ${MACHINE_CPU} == "hppa" || \
+    ${MACHINE_CPU} == "powerpc"
+CLEANFILES+=	${KMOD}_tramp.o ${KMOD}_tramp.S tmp.S ${KMOD}_tmp.o
 .endif
 
 OBJS+=		${SRCS:N*.h:N*.sh:R:S/$/.o/g}
+PROG?=		${KMOD}.o
+MAN?=		${KMOD}.4
 
-.if !defined(PROG)
-PROG=	${KMOD}.o
-.endif
+##### Build rules
+realall:	${PROG}
 
-${PROG}: ${DPSRCS} ${OBJS} ${DPADD}
-	${LD} -r ${LDFLAGS} -o tmp.o ${OBJS}
+${OBJS} ${LOBJS}: ${DPSRCS}
+
+.if \
+    ${MACHINE_CPU} == "arm" || \
+    ${MACHINE_CPU} == "hppa" || \
+    ${MACHINE_CPU} == "powerpc"
+${KMOD}_tmp.o: ${OBJS} ${DPADD}
+	${_MKTARGET_COMPILE}
+	${LD} -r -o tmp.o ${OBJS}
 	mv tmp.o ${.TARGET}
 
-.if	!defined(MAN)
-MAN=	${KMOD}.4
+${KMOD}_tramp.S: ${KMOD}_tmp.o $S/lkm/arch/${MACHINE_CPU}/lkmtramp.awk
+	${_MKTARGET_CREATE}
+	${OBJDUMP} --syms --reloc ${KMOD}_tmp.o | \
+		 ${TOOL_AWK} -f $S/lkm/arch/${MACHINE_CPU}/lkmtramp.awk \
+		 > tmp.S
+	mv tmp.S ${.TARGET}
+
+${PROG}: ${KMOD}_tmp.o ${KMOD}_tramp.o
+	${_MKTARGET_LINK}
+	${LD} -r \
+		`${OBJDUMP} --syms --reloc ${KMOD}_tmp.o | \
+			${TOOL_AWK} -f $S/lkm/arch/${MACHINE_CPU}/lkmwrap.awk` \
+		 -o tmp.o ${KMOD}_tmp.o ${KMOD}_tramp.o
+.if exists($S/lkm/arch/${MACHINE_CPU}/lkmhide.awk)
+	${OBJCOPY} \
+		`${NM} tmp.o | \
+			${TOOL_AWK} -f $S/lkm/arch/${MACHINE_CPU}/lkmhide.awk` \
+		tmp.o tmp1.o
+	mv tmp1.o tmp.o
+.endif
+	mv tmp.o ${.TARGET}
+.else
+${PROG}: ${OBJS} ${DPADD}
+	${_MKTARGET_LINK}
+	${LD} -r -o tmp.o ${OBJS}
+	mv tmp.o ${.TARGET}
 .endif
 
-realall: machine-links ${PROG}
+##### Install rules
+.if !target(kmodinstall)
+_PROG:=		${DESTDIR}${KMODDIR}/${PROG}		# installed path
 
-.PHONY:	machine-links
-beforedepend: machine-links
-machine-links:
-	-rm -f machine && \
-	    ln -s $S/arch/${MACHINE}/include machine
-	-rm -f ${MACHINE_ARCH} && \
-	    ln -s $S/arch/${MACHINE_ARCH}/include ${MACHINE_ARCH}
-CLEANFILES+=machine ${MACHINE_ARCH}
+.if ${MKUPDATE} == "no"
+${_PROG}! ${PROG}					# install rule
+.if !defined(BUILD) && !make(all) && !make(${PROG})
+${_PROG}!	.MADE					# no build at install
+.endif
+.else
+${_PROG}: ${PROG}					# install rule
+.if !defined(BUILD) && !make(all) && !make(${PROG})
+${_PROG}:	.MADE					# no build at install
+.endif
+.endif
+	${_MKTARGET_INSTALL}
+	${INSTALL_FILE} -o ${KMODOWN} -g ${KMODGRP} -m ${KMODMODE} \
+		${.ALLSRC} ${.TARGET}
 
-cleankmod:
+kmodinstall::	${_PROG}
+.PHONY:		kmodinstall
+.PRECIOUS:	${_PROG}				# keep if install fails
+
+.undef _PROG
+.endif # !target(kmodinstall)
+
+##### Clean rules
+cleankmod: .PHONY
 	rm -f a.out [Ee]rrs mklog core *.core \
 		${PROG} ${OBJS} ${LOBJS} ${CLEANFILES}
 
-#
-# define various install targets
-#
-.if !target(kmodinstall)
-kmodinstall:: ${DESTDIR}${KMODDIR}/${PROG}
-.if !defined(UPDATE)
-.PHONY: ${DESTDIR}${KMODDIR}/${PROG}
-.endif
-.if !defined(BUILD) && !make(all) && !make(${PROG})
-${DESTDIR}${KMODDIR}/${PROG}: .MADE
-.endif
-
-.PRECIOUS: ${DESTDIR}${KMODDIR}/${PROG}
-${DESTDIR}${KMODDIR}/${PROG}: ${PROG}
-	${INSTALL} ${RENAME} ${PRESERVE} ${COPY} ${INSTPRIV} -o ${KMODOWN} \
-	    -g ${KMODGRP} -m ${KMODMODE} ${.ALLSRC} ${.TARGET}
-.endif
-
+##### Custom rules
 lint: ${LOBJS}
 .if defined(LOBJS) && !empty(LOBJS)
-	${LINT} ${LINTFLAGS} ${LDFLAGS:M-L*} ${LOBJS} ${LDADD}
+	${LINT} ${LINTFLAGS} ${LDFLAGS:C/-L[  ]*/-L/Wg:M-L*} ${LOBJS} ${LDADD}
 .endif
 
 .if !target(load)
-load:	${PROG}
-	/sbin/modload ${KMOD_LOADFLAGS} -o ${KMOD} -e${KMOD}_lkmentry ${PROG}
+load: ${PROG}
+	/sbin/modload ${KMOD_LOADFLAGS} -o ${KMOD} ${PROG}
 .endif
+.PHONY: load
 
 .if !target(unload)
 unload:
 	/sbin/modunload -n ${KMOD}
 .endif
+.PHONY: unload
 
+##### Pull in related .mk logic
 .include <bsd.man.mk>
 .include <bsd.links.mk>
-.include <bsd.dep.mk>
 .include <bsd.sys.mk>
+.include <bsd.dep.mk>
 
-.-include "machine/Makefile.inc"
+.-include "$S/arch/${MACHINE_CPU}/include/Makefile.inc"
+.-include "$S/arch/${MACHINE}/include/Makefile.inc"

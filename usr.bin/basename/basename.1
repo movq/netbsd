@@ -1,4 +1,4 @@
-.\"	$NetBSD: basename.1,v 1.11 1997/11/15 20:16:16 msaitoh Exp $
+.\"	$NetBSD: basename.1,v 1.17 2003/09/06 20:56:40 kleink Exp $
 .\"
 .\" Copyright (c) 1990, 1993, 1994
 .\"	The Regents of the University of California.  All rights reserved.
@@ -14,11 +14,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -66,25 +62,27 @@ deletes the filename portion, beginning
 with the last slash
 .Ql \&/
 character to the end of
-.Ar string , 
+.Ar string ,
 and writes the result to the standard output.
-.Sh EXAMPLES 
+.Sh EXIT STATUS
+Both the
+.Nm
+and
+.Nm dirname
+utilities
+exit 0 on success, and \*[Gt]0 if an error occurs.
+.Sh EXAMPLES
 The following line sets the shell variable
 .Ev FOO
 to
 .Pa /usr/bin .
 .Pp
 .Dl FOO=`dirname /usr/bin/trail`
-.Sh DIAGNOSTICS
-Both the
-.Nm
-and
-.Nm dirname
-utilities
-exit 0 on success, and >0 if an error occurs.
 .Sh SEE ALSO
 .Xr csh 1 ,
-.Xr sh 1
+.Xr sh 1 ,
+.Xr basename 3 ,
+.Xr dirname 3
 .Sh STANDARDS
 The
 .Nm

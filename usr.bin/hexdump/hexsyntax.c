@@ -1,4 +1,4 @@
-/*	$NetBSD: hexsyntax.c,v 1.8 1998/04/08 23:48:57 jeremy Exp $	*/
+/*	$NetBSD: hexsyntax.c,v 1.13 2006/01/04 01:30:21 perry Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -33,12 +29,16 @@
  * SUCH DAMAGE.
  */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
 #include <sys/cdefs.h>
-#ifndef lint
+#if !defined(lint)
 #if 0
 static char sccsid[] = "@(#)hexsyntax.c	8.2 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: hexsyntax.c,v 1.8 1998/04/08 23:48:57 jeremy Exp $");
+__RCSID("$NetBSD: hexsyntax.c,v 1.13 2006/01/04 01:30:21 perry Exp $");
 #endif
 #endif /* not lint */
 
@@ -55,9 +55,7 @@ __RCSID("$NetBSD: hexsyntax.c,v 1.8 1998/04/08 23:48:57 jeremy Exp $");
 off_t skip;				/* bytes to skip */
 
 void
-newsyntax(argc, argvp)
-	int argc;
-	char ***argvp;
+newsyntax(int argc, char ***argvp)
 {
 	int ch;
 	char *p, **argv;
@@ -131,7 +129,7 @@ newsyntax(argc, argvp)
 }
 
 void
-usage()
+usage(void)
 {
 	(void)fprintf(stderr,
 "hexdump: [-bcCdovx] [-e fmt] [-f fmt_file] [-n length] [-s skip] [file ...]\n"

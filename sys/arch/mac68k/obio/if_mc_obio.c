@@ -1,7 +1,7 @@
-/*	$NetBSD: if_mc_obio.c,v 1.6 1998/07/08 04:18:54 scottr Exp $	*/
+/*	$NetBSD: if_mc_obio.c,v 1.17 2007/03/05 21:23:49 he Exp $	*/
 
 /*-
- * Copyright (c) 1997 David Huang <khym@bga.com>
+ * Copyright (c) 1997 David Huang <khym@azeotrope.org>
  * All rights reserved.
  *
  * Portions of this code are based on code by Denton Gentry <denny1@home.com>
@@ -35,6 +35,9 @@
  * Controller) for DMA to and from the MACE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_mc_obio.c,v 1.17 2007/03/05 21:23:49 he Exp $");
+
 #include "opt_ddb.h"
 
 #include <sys/param.h>
@@ -46,7 +49,7 @@
 #include <net/if.h>
 #include <net/if_ether.h>
 
-#include <vm/vm.h>
+#include <uvm/uvm_extern.h>
 
 #include <machine/bus.h>
 #include <machine/psc.h>
@@ -58,27 +61,21 @@
 #define MACE_REG_BASE	0x50F1C000
 #define MACE_PROM_BASE	0x50F08000
 
-hide int	mc_obio_match __P((struct device *, struct cfdata *, void *));
-hide void	mc_obio_attach __P((struct device *, struct device *, void *));
-hide void	mc_obio_init __P((struct mc_softc *sc));
-hide void	mc_obio_put __P((struct mc_softc *sc, u_int len));
-hide int	mc_dmaintr __P((void *arg));
-hide void	mc_reset_rxdma __P((struct mc_softc *sc));
-hide void	mc_reset_rxdma_set __P((struct mc_softc *, int set));
-hide void	mc_reset_txdma __P((struct mc_softc *sc));
-hide int	mc_obio_getaddr __P((struct mc_softc *, u_int8_t *));
+hide int	mc_obio_match(struct device *, struct cfdata *, void *);
+hide void	mc_obio_attach(struct device *, struct device *, void *);
+hide void	mc_obio_init(struct mc_softc *);
+hide void	mc_obio_put(struct mc_softc *, u_int);
+hide int	mc_dmaintr(void *);
+hide void	mc_reset_rxdma(struct mc_softc *);
+hide void	mc_reset_rxdma_set(struct mc_softc *, int);
+hide void	mc_reset_txdma(struct mc_softc *);
+hide int	mc_obio_getaddr(struct mc_softc *, u_int8_t *);
 
-extern int	kvtop __P((register caddr_t addr));
-
-struct cfattach mc_obio_ca = {
-	sizeof(struct mc_softc), mc_obio_match, mc_obio_attach
-};
+CFATTACH_DECL(mc_obio, sizeof(struct mc_softc),
+    mc_obio_match, mc_obio_attach, NULL, NULL);
 
 hide int
-mc_obio_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+mc_obio_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct obio_attach_args *oa = aux;
 	bus_space_handle_t bsh;
@@ -109,14 +106,12 @@ mc_obio_match(parent, cf, aux)
 }
 
 hide void
-mc_obio_attach(parent, self, aux)
-	struct device *parent, *self;
-	void	*aux;
+mc_obio_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct obio_attach_args *oa = (struct obio_attach_args *)aux;
 	struct mc_softc *sc = (void *)self;
 	u_int8_t myaddr[ETHER_ADDR_LEN];
-	int i, noncontig = 0;
+	int rsegs;
 
 	sc->sc_regt = oa->oa_tag;
 	sc->sc_biucc = XMTSP_64;
@@ -135,38 +130,59 @@ mc_obio_attach(parent, self, aux)
 		return;
 	}
 
-	/* allocate memory for transmit buffer and mark it non-cacheable */
-	sc->sc_txbuf = malloc(NBPG, M_DEVBUF, M_WAITOK);
-	sc->sc_txbuf_phys = kvtop(sc->sc_txbuf);
-	physaccess (sc->sc_txbuf, (caddr_t)sc->sc_txbuf_phys, NBPG,
-	    PG_V | PG_RW | PG_CI);
-
-	/*
-	 * allocate memory for receive buffer and mark it non-cacheable
-	 * XXX This should use the bus_dma interface, since the buffer
-	 * needs to be physically contiguous. However, it seems that
-	 * at least on my system, malloc() does allocate contiguous
-	 * memory. If it's not, suggest reducing the number of buffers
-	 * to 2, which will fit in one 4K page.
-	 */
-	sc->sc_rxbuf = malloc(MC_NPAGES * NBPG, M_DEVBUF, M_WAITOK);
-	sc->sc_rxbuf_phys = kvtop(sc->sc_rxbuf);
-	for (i = 0; i < MC_NPAGES; i++) {
-		int pa;
-
-		pa = kvtop(sc->sc_rxbuf + NBPG*i);
-		physaccess (sc->sc_rxbuf + NBPG*i, (caddr_t)pa, NBPG,
-		    PG_V | PG_RW | PG_CI);
-		if (pa != sc->sc_rxbuf_phys + NBPG*i)
-			noncontig = 1;
-	}
-
-	if (noncontig) {
-		printf("%s: receive DMA buffer not contiguous! "
-		    "Try compiling with \"options MC_RXDMABUFS=2\"\n",
-		    sc->sc_dev.dv_xname);
+	/* allocate memory for transmit and receive DMA buffers */
+	sc->sc_dmat = oa->oa_dmat;
+	if (bus_dmamem_alloc(sc->sc_dmat, 2 * 0x800, 0, 0, &sc->sc_dmasegs_tx,
+		1, &rsegs, BUS_DMA_NOWAIT) != 0) {
+		printf(": failed to allocate TX DMA buffers.\n");
 		return;
 	}
+
+	if (bus_dmamem_map(sc->sc_dmat, &sc->sc_dmasegs_tx, rsegs, 2 * 0x800,
+		(void*)&sc->sc_txbuf, BUS_DMA_NOWAIT | BUS_DMA_COHERENT) != 0) {
+		printf(": failed to map TX DMA buffers.\n");
+		return;
+	}
+
+	if (bus_dmamem_alloc(sc->sc_dmat, MC_RXDMABUFS * 0x800, 0, 0,
+		&sc->sc_dmasegs_rx, 1, &rsegs, BUS_DMA_NOWAIT) != 0) {
+		printf(": failed to allocate RX DMA buffers.\n");
+		return;
+	}
+
+	if (bus_dmamem_map(sc->sc_dmat, &sc->sc_dmasegs_rx, rsegs,
+		MC_RXDMABUFS * 0x800, (void*)&sc->sc_rxbuf,
+		BUS_DMA_NOWAIT | BUS_DMA_COHERENT) != 0) {
+		printf(": failed to map RX DMA buffers.\n");
+		return;
+	}
+
+	if (bus_dmamap_create(sc->sc_dmat, 2 * 0x800, 1, 2 * 0x800, 0,
+	    BUS_DMA_NOWAIT, &sc->sc_dmam_tx) != 0) {
+		printf(": failed to allocate TX DMA map.\n");
+		return;
+	}
+	
+	if (bus_dmamap_load(sc->sc_dmat, sc->sc_dmam_tx, sc->sc_txbuf,
+		2 * 0x800, NULL, BUS_DMA_NOWAIT) != 0) {
+		printf(": failed to map TX DMA mapping.\n");
+		return;
+	}
+
+	if (bus_dmamap_create(sc->sc_dmat, MC_RXDMABUFS * 0x800, 1,
+		MC_RXDMABUFS * 0x800, 0, BUS_DMA_NOWAIT, &sc->sc_dmam_rx) != 0) {
+		printf(": failed to allocate RX DMA map.\n");
+		return;
+	}
+	
+	if (bus_dmamap_load(sc->sc_dmat, sc->sc_dmam_rx, sc->sc_rxbuf,
+		MC_RXDMABUFS * 0x800, NULL, BUS_DMA_NOWAIT) != 0) {
+		printf(": failed to map RX DMA mapping.\n");
+		return;
+	}
+
+	sc->sc_txbuf_phys = sc->sc_dmasegs_tx.ds_addr;
+	sc->sc_rxbuf_phys = sc->sc_dmasegs_rx.ds_addr;
 
 	sc->sc_bus_init = mc_obio_init;
 	sc->sc_putpacket = mc_obio_put;
@@ -215,21 +231,24 @@ mc_obio_attach(parent, self, aux)
 
 /* Bus-specific initialization */
 hide void
-mc_obio_init(sc)
-	struct mc_softc *sc;
+mc_obio_init(struct mc_softc *sc)
 {
 	mc_reset_rxdma(sc);
 	mc_reset_txdma(sc);
 }
 
 hide void
-mc_obio_put(sc, len)
-	struct mc_softc *sc;
-	u_int len;
+mc_obio_put(struct mc_softc *sc, u_int len)
 {
-	psc_reg4(PSC_ENETWR_ADDR + sc->sc_txset) = sc->sc_txbuf_phys;
+	int offset = sc->sc_txset == 0 ? 0 : 0x800;
+
+	bus_dmamap_sync(sc->sc_dmat, sc->sc_dmam_tx, offset, 0x800,
+	    BUS_DMASYNC_PREWRITE);
+	psc_reg4(PSC_ENETWR_ADDR + sc->sc_txset) = sc->sc_txbuf_phys + offset;
 	psc_reg4(PSC_ENETWR_LEN + sc->sc_txset) = len;
 	psc_reg2(PSC_ENETWR_CMD + sc->sc_txset) = 0x9800;
+	bus_dmamap_sync(sc->sc_dmat, sc->sc_dmam_tx, offset, 0x800,
+	    BUS_DMASYNC_POSTWRITE);
 
 	sc->sc_txset ^= 0x10;
 }
@@ -238,8 +257,7 @@ mc_obio_put(sc, len)
  * Interrupt handler for the MACE DMA completion interrupts
  */
 int
-mc_dmaintr(arg)
-	void *arg;
+mc_dmaintr(void *arg)
 {
 	struct mc_softc *sc = arg;
 	u_int16_t status;
@@ -288,6 +306,11 @@ mc_dmaintr(arg)
 		/* Loop through, processing each of the packets */
 		for (; sc->sc_tail < head; sc->sc_tail++) {
 			offset = sc->sc_tail * 0x800;
+
+			bus_dmamap_sync(sc->sc_dmat, sc->sc_dmam_rx,
+					PAGE_SIZE + offset, 0x800,
+					BUS_DMASYNC_PREREAD);
+
 			sc->sc_rxframe.rx_rcvcnt = sc->sc_rxbuf[offset];
 			sc->sc_rxframe.rx_rcvsts = sc->sc_rxbuf[offset+2];
 			sc->sc_rxframe.rx_rntpc = sc->sc_rxbuf[offset+4];
@@ -295,6 +318,10 @@ mc_dmaintr(arg)
 			sc->sc_rxframe.rx_frame = sc->sc_rxbuf + offset + 16;
 
 			mc_rint(sc);
+
+			bus_dmamap_sync(sc->sc_dmat, sc->sc_dmam_rx,
+					PAGE_SIZE + offset, 0x800,
+					BUS_DMASYNC_POSTREAD);
 		}
 
 		/*
@@ -329,8 +356,7 @@ mc_dmaintr(arg)
 
 
 hide void
-mc_reset_rxdma(sc)
-	struct mc_softc *sc;
+mc_reset_rxdma(struct mc_softc *sc)
 {
 	u_int8_t maccc;
 
@@ -354,9 +380,7 @@ mc_reset_rxdma(sc)
 }
 
 hide void
-mc_reset_rxdma_set(sc, set)
-	struct mc_softc *sc;
-	int set;
+mc_reset_rxdma_set(struct mc_softc *sc, int set)
 {
 	/* disable DMA while modifying the registers, then reenable DMA */
 	psc_reg2(PSC_ENETRD_CMD + set) = 0x0100;
@@ -367,8 +391,7 @@ mc_reset_rxdma_set(sc, set)
 }
 
 hide void
-mc_reset_txdma(sc)
-	struct mc_softc *sc;
+mc_reset_txdma(struct mc_softc *sc)
 {
 	u_int8_t maccc;
 
@@ -381,9 +404,7 @@ mc_reset_txdma(sc)
 }
 
 hide int
-mc_obio_getaddr(sc, lladdr)
-	struct mc_softc *sc;
-	u_int8_t *lladdr;
+mc_obio_getaddr(struct mc_softc *sc, u_int8_t *lladdr)
 {
 	bus_space_handle_t bsh;
 	u_char csum;

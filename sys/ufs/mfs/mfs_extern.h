@@ -1,4 +1,4 @@
-/*	$NetBSD: mfs_extern.h,v 1.9 2000/03/16 18:20:07 jdolecek Exp $	*/
+/*	$NetBSD: mfs_extern.h,v 1.30 2008/06/28 01:34:05 rumble Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,38 +31,47 @@
  *	@(#)mfs_extern.h	8.4 (Berkeley) 3/30/95
  */
 
+#ifndef _UFS_MFS_MFS_EXTERN_H_
+#define _UFS_MFS_MFS_EXTERN_H_
+
+#include <sys/param.h>
+#include <sys/mount.h>
+#include <sys/mallocvar.h>
+
 struct buf;
 struct mount;
 struct nameidata;
 struct proc;
-struct statfs;
-struct ucred;
+struct statvfs;
 struct vnode;
 
 __BEGIN_DECLS
 #define	mfs_ioctl	genfs_enoioctl
 
 /* mfs_vfsops.c */
-int	mfs_mountroot	__P((void));
-int	mfs_initminiroot	__P((caddr_t));
-int	mfs_mount	__P((struct mount *, const char *, void *,
-			     struct nameidata *, struct proc *));
-int	mfs_start	__P((struct mount *, int, struct proc *));
-int	mfs_statfs	__P((struct mount *, struct statfs *, struct proc *));
-int	mfs_sysctl	__P((int *, u_int, void *, size_t *, void *, size_t,
-			     struct proc *));
+VFS_PROTOS(mfs);
 
-void	mfs_init	__P((void));
-void	mfs_done	__P((void));
+int	mfs_initminiroot(void *);
 
 /* mfs_vnops.c */
-int	mfs_open	__P((void *));
-int	mfs_strategy	__P((void *));
-void	mfs_doio	__P((struct buf *, caddr_t));
-int	mfs_bmap	__P((void *));
-int	mfs_close	__P((void *));
-int	mfs_inactive	__P((void *));
-int	mfs_reclaim	__P((void *));
-int	mfs_print	__P((void *));
+int	mfs_open(void *);
+int	mfs_strategy(void *);
+void	mfs_doio(struct buf *, void *);
+int	mfs_bmap(void *);
+int	mfs_close(void *);
+int	mfs_inactive(void *);
+int	mfs_reclaim(void *);
+int	mfs_print(void *);
+int	mfs_fsync(void *);
+
+#ifdef _KERNEL
+
+#include <sys/mutex.h>
+
+extern kmutex_t	mfs_lock;
+
+#endif
 
 __END_DECLS
+
+#endif /* !_UFS_MFS_MFS_EXTERN_H_ */

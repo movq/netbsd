@@ -1,7 +1,7 @@
 #! /usr/bin/awk -f
-#	$NetBSD: devlist2h.awk,v 1.3 1998/09/05 14:42:06 christos Exp $
+#	$NetBSD: devlist2h.awk,v 1.12 2008/05/02 18:11:06 martin Exp $
 #
-# Copyright (c) 1998 The NetBSD Foundation, Inc.
+# Copyright (c) 1998, 2004 The NetBSD Foundation, Inc.
 # All rights reserved.
 #
 # This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
 # 2. Redistributions in binary form must reproduce the above copyright
 #    notice, this list of conditions and the following disclaimer in the
 #    documentation and/or other materials provided with the distribution.
-# 3. All advertising materials mentioning features or use of this software
-#    must display the following acknowledgement:
-#        This product includes software developed by the NetBSD
-#        Foundation, Inc. and its contributors.
-# 4. Neither the name of The NetBSD Foundation nor the names of its
-#    contributors may be used to endorse or promote products derived
-#    from this software without specific prior written permission.
 #
 # THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 # ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -64,42 +57,44 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 # THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
-function collectline(f, line) {
-	oparen = 0
-	line = ""
-	while (f <= NF) {
-		if ($f == "#") {
-			line = line "("
-			oparen = 1
-			f++
+function collectline(_f, _line) {
+	_oparen = 0
+	_line = ""
+	while (_f <= NF) {
+		if ($_f == "#") {
+			_line = _line "("
+			_oparen = 1
+			_f++
 			continue
 		}
-		if (oparen) {
-			line = line $f
-			if (f < NF)
-				line = line " "
-			f++
+		if (_oparen) {
+			_line = _line $_f
+			if (_f < NF)
+				_line = _line " "
+			_f++
 			continue
 		}
-		line = line $f
-		if (f < NF)
-			line = line " "
-		f++
+		_line = _line $_f
+		if (_f < NF)
+			_line = _line " "
+		_f++
 	}
-	if (oparen)
-		line = line ")"
-	return line
+	if (_oparen)
+		_line = _line ")"
+	return _line
 }
 BEGIN {
-	nproducts = nvendors = 0
+	nproducts = nvendors = blanklines = 0
 	dfile="pcmciadevs_data.h"
 	hfile="pcmciadevs.h"
+	line=""
 }
 NR == 1 {
 	VERSION = $0
 	gsub("\\$", "", VERSION)
+	gsub(/ $/, "", VERSION)
 
-	printf("/*\t\$NetBSD\$\t*/\n\n") > dfile
+	printf("/*\t$NetBSD" "$\t*/\n\n") > dfile
 	printf("/*\n") > dfile
 	printf(" * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.\n") \
 	    > dfile
@@ -108,7 +103,7 @@ NR == 1 {
 	printf(" *\t%s\n", VERSION) > dfile
 	printf(" */\n") > dfile
 
-	printf("/*\t\$NetBSD\$\t*/\n\n") > hfile
+	printf("/*\t$NetBSD" "$\t*/\n\n") > hfile
 	printf("/*\n") > hfile
 	printf(" * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.\n") \
 	    > hfile
@@ -119,7 +114,7 @@ NR == 1 {
 
 	next
 }
-$1 == "vendor" {
+NF > 0 && $1 == "vendor" {
 	nvendors++
 
 	vendorindex[$2] = nvendors;		# record index for this name, for later.
@@ -131,7 +126,7 @@ $1 == "vendor" {
 	printf("/* %s */\n", vendors[nvendors, 3]) > hfile
 	next
 }
-$1 == "product" {
+NF > 0 && $1 == "product" {
 	nproducts++
 
 	products[nproducts, 1] = $2;		# vendor name
@@ -172,10 +167,6 @@ $1 == "product" {
 
 	products[nproducts, 5] = collectline(f, line)
 
-	printf("#define\tPCMCIA_STR_%s_%s\t\"%s\"\n",
-	    products[nproducts, 1], products[nproducts, 2],
-	    products[nproducts, 5]) > hfile
-
 	next
 }
 {
@@ -190,6 +181,22 @@ END {
 
 	printf("\n") > dfile
 
+	printf("struct pcmcia_knowndev {\n") > dfile
+	printf("\tint vendorid;\n") > dfile
+	printf("\tint productid;\n") > dfile
+	printf("\tstruct pcmcia_knowndev_cis {\n") > dfile
+	printf("\t\tchar *vendor;\n") > dfile
+	printf("\t\tchar *product;\n") > dfile
+	printf("\t\tchar *version;\n") > dfile
+	printf("\t\tchar *revision;\n") > dfile
+	printf("\t}cis;\n") > dfile
+	printf("\tint flags;\n") > dfile
+	printf("\tchar *vendorname;\n") > dfile
+	printf("\tchar *devicename;\n") > dfile
+	printf("\tint reserve;\n") > dfile
+	printf("};\n\n") > dfile
+	printf("#define	PCMCIA_CIS_INVALID\t\t{ NULL, NULL, NULL, NULL }\n") > dfile
+	printf("#define	PCMCIA_KNOWNDEV_NOPROD\t\t0\n\n") > dfile
 	printf("struct pcmcia_knowndev pcmcia_knowndevs[] = {\n") > dfile
 	for (i = 1; i <= nproducts; i++) {
 		printf("\t{\n") > dfile
@@ -200,26 +207,34 @@ END {
 			printf("\t    PCMCIA_VENDOR_%s, PCMCIA_PRODUCT_%s_%s,\n",
 			    products[i, 1], products[i, 1], products[i, 2]) > dfile
 		}
-		printf("\t    PCMCIA_CIS_%s_%s,\n", 
+		printf("\t    PCMCIA_CIS_%s_%s,\n",
 		    products[i, 1], products[i, 2]) > dfile
 		printf("\t    ") > dfile
 		printf("0") > dfile
 		printf(",\n") > dfile
 
-		vendi = vendorindex[products[i, 1]];
-		printf("\t    \"%s\",\n", vendors[vendi, 3]) > dfile
-		printf("\t    \"%s\"\t},\n", products[i, 5]) > dfile
-		printf("\t},\n") > dfile
+		if (products[i, 1] in vendorindex) {
+			vendi = vendorindex[products[i, 1]];
+			vendname = vendors[vendi, 3]
+		}
+		else
+			vendname = ""
+		printf("\t    \"%s\",\n", vendname) > dfile
+		printf("\t    \"%s\",\t}\n", products[i, 5]) > dfile
+		printf("\t,\n") > dfile
 	}
 	for (i = 1; i <= nvendors; i++) {
 		printf("\t{\n") > dfile
-		printf("\t    PCMCIA_VENDOR_%s, 0,\n", vendors[i, 1]) > dfile
+		printf("\t    PCMCIA_VENDOR_%s,\n", vendors[i, 1]) > dfile
 		printf("\t    PCMCIA_KNOWNDEV_NOPROD,\n") > dfile
 		printf("\t    PCMCIA_CIS_INVALID,\n") > dfile
+		printf("\t    0,\n") > dfile
 		printf("\t    \"%s\",\n", vendors[i, 3]) > dfile
 		printf("\t    NULL,\n") > dfile
 		printf("\t},\n") > dfile
 	}
 	printf("\t{ 0, 0, { NULL, NULL, NULL, NULL }, 0, NULL, NULL, }\n") > dfile
 	printf("};\n") > dfile
+	close(dfile)
+	close(hfile)
 }

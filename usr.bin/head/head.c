@@ -1,4 +1,4 @@
-/*	$NetBSD: head.c,v 1.12 1999/11/09 15:06:36 drochner Exp $	*/
+/*	$NetBSD: head.c,v 1.19 2008/07/21 14:19:23 lukem Exp $	*/
 
 /*
  * Copyright (c) 1980, 1987, 1992, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1987, 1992, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1987, 1992, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)head.c	8.2 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: head.c,v 1.12 1999/11/09 15:06:36 drochner Exp $");
+__RCSID("$NetBSD: head.c,v 1.19 2008/07/21 14:19:23 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -65,7 +61,7 @@ __RCSID("$NetBSD: head.c,v 1.12 1999/11/09 15:06:36 drochner Exp $");
  * Bill Joy UCB August 24, 1977
  */
 
-void head __P((FILE *, long));
+void head __P((FILE *, long, long));
 void obsolete __P((char *[]));
 void usage __P((void));
 int main __P((int, char *[]));
@@ -81,20 +77,45 @@ main(argc, argv)
 	FILE *fp;
 	int first;
 	long linecnt;
+	long bytecnt;
 	char *ep;
+	int qflag = 0;
+	int vflag = 0;
 
 	(void)setlocale(LC_ALL, "");
 	obsolete(argv);
 	linecnt = 10;
-	while ((ch = getopt(argc, argv, "n:")) != -1)
+	bytecnt = 0;
+	while ((ch = getopt(argc, argv, "c:n:qv")) != -1)
 		switch(ch) {
+		case 'c':
+			errno = 0;
+			bytecnt = strtol(optarg, &ep, 10);
+			if ((bytecnt == LONG_MIN || bytecnt == LONG_MAX) &&
+			    errno == ERANGE)
+				err(1, "illegal byte count -- %s", optarg);
+			else if (*ep || bytecnt <= 0)
+				errx(1, "illegal byte count -- %s", optarg);
+			break;
+
 		case 'n':
+			errno = 0;
 			linecnt = strtol(optarg, &ep, 10);
 			if ((linecnt == LONG_MIN || linecnt == LONG_MAX) &&
 			    errno == ERANGE)
 				err(1, "illegal line count -- %s", optarg);
 			else if (*ep || linecnt <= 0)
 				errx(1, "illegal line count -- %s", optarg);
+			break;
+
+		case 'q':
+			qflag = 1;
+			vflag = 0;
+			break;
+
+		case 'v':
+			qflag = 0;
+			vflag = 1;
 			break;
 
 		case '?':
@@ -111,31 +132,34 @@ main(argc, argv)
 				eval = 1;
 				continue;
 			}
-			if (argc > 1) {
+			if (vflag || (qflag == 0 && argc > 1)) {
 				(void)printf("%s==> %s <==\n",
 				    first ? "" : "\n", *argv);
 				first = 0;
 			}
-			head(fp, linecnt);
+			head(fp, linecnt, bytecnt);
 			(void)fclose(fp);
 		}
 	else
-		head(stdin, linecnt);
+		head(stdin, linecnt, bytecnt);
 	exit(eval);
 }
 
 void
-head(fp, cnt)
+head(fp, cnt, bytecnt)
 	FILE *fp;
 	long cnt;
+	long bytecnt;
 {
 	int ch;
 
+	if (bytecnt)
+		cnt = bytecnt;
 	while (cnt--)
 		while ((ch = getc(fp)) != EOF) {
 			if (putchar(ch) == EOF)
 				err(1, "stdout");
-			if (ch == '\n')
+			if (ch == '\n' || bytecnt)
 				break;
 		}
 }
@@ -163,7 +187,8 @@ obsolete(argv)
 void
 usage()
 {
-	extern char *__progname;
-	(void)fprintf(stderr, "Usage: %s [-n lines] [file ...]\n", __progname);
+
+	(void)fprintf(stderr, "usage: %s [-n lines] [file ...]\n",
+	    getprogname());
 	exit(1);
 }

@@ -1,4 +1,4 @@
-.\"	$NetBSD: ix.4,v 1.7 1999/12/15 23:44:55 abs Exp $
+.\"	$NetBSD: ix.4,v 1.15 2003/08/07 10:31:13 agc Exp $
 .\"
 .\" Copyright (c) 1986, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -42,6 +38,10 @@
 .Sh SYNOPSIS
 .Cd "np0 at uba0 csr 166000 vector npintr"
 .Sh DESCRIPTION
+NOTE: This driver has not been ported from
+.Bx 4.4
+yet.
+.Pp
 The
 .Nm ix
 interface provides access to a 10 Mb/s Ethernet network through
@@ -55,7 +55,7 @@ A program to load the image is provided in
 .Pa /usr/src/new/np100 .
 The sequence of commands would be:
 .Bd -literal -offset indent
-# ./npload np.image [/dev/np<board #> if other than np00]
+# ./npload np.image [/dev/np\*[Lt]board #\*[Gt] if other than np00]
 # sleep 10
 # ifconfig ix0 ...
 .Ed
@@ -80,9 +80,9 @@ The use of trailers is negotiated with
 This negotiation may be disabled, on a per-interface basis,
 by setting the
 .Dv IFF_NOTRAILERS
-flag with an 
-.Dv SIOCSIFFLAGS 
-.Xr ioctl .
+flag with an
+.Dv SIOCSIFFLAGS
+.Xr ioctl 2 .
 .Sh DIAGNOSTICS
 .Bl -diag
 .It "ix%d: Req failed, cmd %x, stat %x, ust error %x,%x."
@@ -96,7 +96,7 @@ and issuing the request to begin
 network operation.
 .Pp
 .It ix%d: can't initialize.
-The interface was unable to obtain unibus resources required for operation.
+The interface was unable to obtain UNIBUS resources required for operation.
 .Pp
 .It ix%d: failed to reinitialize DLA module.
 The interface got sick after attempting to reprogram its physical
@@ -115,7 +115,7 @@ This may happen if the board is reloaded while network processes are still
 running.
 .Pp
 .It ixrint: cqe error %x, %x, %x.
-This will result if an 
+This will result if an
 .Xr ifconfig 8
 request is made at an inopportune time, such as not allowing
 enough time after loading the firmware.
@@ -128,10 +128,10 @@ shut itself down, saying:
 The recourse is to reload the firmware and allow more time.
 .El
 .Sh SEE ALSO
-.Xr netintro 4 ,
-.Xr inet 4 ,
 .Xr arp 4 ,
-.Xr np 4 .
+.Xr inet 4 ,
+.Xr netintro 4 ,
+.Xr np 4
 .Sh HISTORY
 The
 .Nm

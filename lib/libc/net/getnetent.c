@@ -1,4 +1,4 @@
-/*	$NetBSD: getnetent.c,v 1.13 2000/01/22 22:19:14 mycroft Exp $	*/
+/*	$NetBSD: getnetent.c,v 1.18 2007/01/27 22:27:35 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -48,7 +44,7 @@
 static char sccsid[] = "@(#)getnetent.c	8.1 (Berkeley) 6/4/93";
 static char rcsid[] = "Id: getnetent.c,v 8.4 1997/06/01 20:34:37 vixie Exp ";
 #else
-__RCSID("$NetBSD: getnetent.c,v 1.13 2000/01/22 22:19:14 mycroft Exp $");
+__RCSID("$NetBSD: getnetent.c,v 1.18 2007/01/27 22:27:35 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -126,6 +122,12 @@ getnetent()
 
 	if (netf == NULL && (netf = fopen(_PATH_NETWORKS, "r" )) == NULL)
 		return (NULL);
+#if (defined(__sparc__) && defined(_LP64)) ||		\
+    defined(__alpha__) ||				\
+    (defined(__i386__) && defined(_LP64)) ||		\
+    (defined(__sh__) && defined(_LP64))
+	net.__n_pad0 = 0;
+#endif
 again:
 	p = fgets(line, sizeof line, netf);
 	if (p == NULL)
@@ -149,7 +151,7 @@ again:
 	net.n_net = inet_network(cp);
 	net.n_addrtype = AF_INET;
 	q = net.n_aliases = net_aliases;
-	if (p != NULL)  {
+	if (p != NULL) {
 		cp = p;
 		while (cp && *cp) {
 			if (*cp == ' ' || *cp == '\t') {

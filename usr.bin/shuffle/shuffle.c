@@ -1,4 +1,4 @@
-/*	$NetBSD: shuffle.c,v 1.7 1999/02/03 16:22:16 is Exp $	*/
+/*	$NetBSD: shuffle.c,v 1.19 2006/08/26 18:17:43 christos Exp $	*/
 
 /*
  * Copyright (c) 1998
@@ -33,74 +33,33 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: shuffle.c,v 1.7 1999/02/03 16:22:16 is Exp $");
+__RCSID("$NetBSD: shuffle.c,v 1.19 2006/08/26 18:17:43 christos Exp $");
 #endif /* not lint */
 
+#include <sys/time.h>
+
 #include <err.h>
+#include <errno.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <errno.h>
-#include <sys/time.h>
+#include <util.h>
 
-static void enomem __P((void));
-static void *emalloc __P((size_t));
-static void *erealloc __P((void *, size_t));
+static size_t *get_shuffle(size_t);
+static void usage(void);
+static void get_lines(const char *, char ***, size_t *);
+static size_t get_number(const char *, int);
 
-static size_t *get_shuffle __P((size_t));
-static void usage __P((void));
-static void get_lines __P((const char *, char ***, size_t *));
-static size_t get_number __P((const char *, int));
-
-int main __P((int, char *[]));
-
-/*
- * enomem --
- *	die when out of memory.
- */
-static void
-enomem()
-{
-	errx(2, "Cannot allocate memory.");
-}
-
-/*
- * emalloc --
- *	malloc, but die on error.
- */
-static void *
-emalloc(len)
-	size_t len;
-{
-	void *p;
-
-	if ((p = malloc(len)) == NULL)
-		enomem();
-	return p;
-}
-
-/*
- * erealloc --
- *	realloc, but die on error.
- */
-void *
-erealloc(ptr, size)
-	void *ptr;
-	size_t size;
-{
-	if ((ptr = realloc(ptr, size)) == NULL)
-		enomem();
-	return ptr;
-}
+int main(int, char *[]);
 
 /*
  * get_shuffle --
  *	Construct a random shuffle array of t elements
  */
 static size_t *
-get_shuffle(t)
-	size_t t;
+get_shuffle(size_t t)
 {
 	size_t *shuffle;
 	size_t i, j, k, temp;
@@ -112,11 +71,11 @@ get_shuffle(t)
 	
 	/*
 	 * This algorithm taken from Knuth, Seminumerical Algorithms,
-	 * page 139.
+	 * 2nd Ed., page 139.
 	 */
 
 	for (j = t - 1; j > 0; j--) {
-		k = random() % (j + 1);
+		k = arc4random() % (j + 1);
 		temp = shuffle[j];
 		shuffle[j] = shuffle[k];
 		shuffle[k] = temp;
@@ -130,12 +89,12 @@ get_shuffle(t)
  *	Print a usage message and exit
  */
 static void
-usage()
+usage(void)
 {
-	extern char *__progname;
+
 	(void) fprintf(stderr,
-    "Usage: %s [-f <filename>] [-n <number>] [-p <number>] [<arg> ...]\n",
-		__progname);
+    "usage: %s [-0] [-f <filename>] [-n <number>] [-p <number>] [<arg> ...]\n",
+		getprogname());
 	exit(1);
 }
 
@@ -145,14 +104,11 @@ usage()
  *	Return an array of lines read from input
  */
 static void
-get_lines(fname, linesp, nlinesp)
-	const char *fname;
-	char ***linesp;
-	size_t *nlinesp;
+get_lines(const char *fname, char ***linesp, size_t *nlinesp)
 {
 	FILE *fp;
 	char *line;
-	size_t size, nlines = 0, maxlines = 100;
+	size_t size, nlines = 0, maxlines = 128;
 	char **lines = emalloc(sizeof(char *) * maxlines);
 
 	if (strcmp(fname, "-") == 0)
@@ -168,7 +124,7 @@ get_lines(fname, linesp, nlinesp)
 		(void)memcpy(lines[nlines], line, size);
 		lines[nlines++][size] = '\0';
 		if (nlines >= maxlines) {
-			maxlines += 100;
+			maxlines *= 2;
 			lines = erealloc(lines, (sizeof(char *) * maxlines));
 		}
 	}
@@ -185,13 +141,13 @@ get_lines(fname, linesp, nlinesp)
  *	Return a number or exit on error
  */
 static size_t
-get_number(str, ch)
-	const char *str;
-	int ch;
+get_number(const char *str, int ch)
 {
 	char *estr;
-	long number = strtol(str, &estr, 0);
+	long number;
 
+	errno = 0;
+	number = strtol(str, &estr, 0);
 	if ((number == LONG_MIN || number == LONG_MAX) && errno == ERANGE)
 		err(1, "bad -%c argument `%s'", ch, str);
 	if (*estr)
@@ -202,19 +158,20 @@ get_number(str, ch)
 }
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	int i, nflag = 0, pflag = 0, ch;
 	char *fname = NULL;
 	size_t *shuffle = NULL;
-	struct timeval tv;
 	char **lines = NULL;
 	size_t nlines = 0, pick = 0;
+	char sep = '\n';
 	
-	while ((ch = getopt(argc, argv, "f:n:p:")) != -1) {
+	while ((ch = getopt(argc, argv, "0f:n:p:")) != -1) {
 		switch(ch) {
+		case '0':
+			sep = '\0';
+			break;
 		case 'f':
 			fname = optarg;
 			break;
@@ -244,8 +201,6 @@ main(argc, argv)
 		nlines = argc;
 	}
 
-	gettimeofday(&tv, NULL);
-	srandom(getpid() ^ ~getuid() ^ tv.tv_sec ^ tv.tv_usec);
 	if (nlines > 0)
 		shuffle = get_shuffle(nlines);
 
@@ -257,9 +212,10 @@ main(argc, argv)
 
 	for (i = 0; i < nlines; i++) {
 		if (nflag)
-			printf("%ld\n", (long)shuffle[i]);
+			printf("%ld", (long)shuffle[i]);
 		else
-			printf("%s\n", lines[shuffle[i]]);
+			printf("%s", lines[shuffle[i]]);
+		putc(sep, stdout);
 	}
 
 	return 0;

@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.h,v 1.33 2000/03/21 12:48:46 pk Exp $ */
+/*	$NetBSD: autoconf.h,v 1.46 2008/04/28 20:23:36 martin Exp $ */
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -57,11 +50,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -100,35 +89,34 @@
 
 /* Device register space description */
 struct rom_reg {
-	u_int32_t	rr_iospace;	/* register space (obio, etc) */
-	u_int32_t	rr_paddr;	/* register physical address */
-	u_int32_t	rr_len;		/* register length */
+	uint32_t	rr_iospace;	/* register space (obio, etc) */
+	uint32_t	rr_paddr;	/* register physical address */
+	uint32_t	rr_len;		/* register length */
 };
 
 /* Interrupt information */
 struct rom_intr {
-	u_int32_t	int_pri;	/* priority (IPL) */
-	u_int32_t	int_vec;	/* vector (always 0?) */
+	uint32_t	int_pri;	/* priority (IPL) */
+	uint32_t	int_vec;	/* vector (always 0?) */
 };
 
 /* Address translation accross busses */
 struct rom_range {		/* Only used on v3 PROMs */
-	u_int32_t	cspace;		/* Client space */
-	u_int32_t	coffset;	/* Client offset */
-	u_int32_t	pspace;		/* Parent space */
-	u_int32_t	poffset;	/* Parent offset */
-	u_int32_t	size;		/* Size in bytes of this range */
+	uint32_t	cspace;		/* Client space */
+	uint32_t	coffset;	/* Client offset */
+	uint32_t	pspace;		/* Parent space */
+	uint32_t	poffset;	/* Parent offset */
+	uint32_t	size;		/* Size in bytes of this range */
 };
 
 /* Attach arguments presented by mainbus_attach() */
 struct mainbus_attach_args {
 	bus_space_tag_t	ma_bustag;	/* parent bus tag */
 	bus_dma_tag_t	ma_dmatag;
-	char		*ma_name;	/* PROM node name */
+	const char	*ma_name;	/* PROM node name */
 	int		ma_node;	/* PROM handle */
-	bus_type_t	ma_iospace;	/* device I/O space */
 	bus_addr_t	ma_paddr;	/* register physical address */
-	int		ma_size;	/* register physical size */
+	bus_size_t	ma_size;	/* register physical size */
 	int		ma_pri;		/* priority (IPL) */
 	void		*ma_promvaddr;	/* PROM virtual address, if any */
 };
@@ -149,15 +137,11 @@ union obio_attach_args {
 	struct obio4_attach_args	uoba_oba4;	/* sun4 on-board view */
 };
 
-#define obio_bus_map(t, a, o, s, f, v, hp)		\
-	bus_space_map2(t, 0, (long)(a) + o, s, f, (vaddr_t)v, hp)
-
 /* obio specific bus flag */
 #define OBIO_BUS_MAP_USE_ROM	BUS_SPACE_MAP_BUS1
 
 /* obio bus helper that finds ROM mappings; exported for autoconf.c */
-int	obio_find_rom_map __P((bus_addr_t, bus_type_t, int,
-				bus_space_handle_t *));
+int	obio_find_rom_map(bus_addr_t, int, bus_space_handle_t *);
 
 
 /*
@@ -168,26 +152,13 @@ int	obio_find_rom_map __P((bus_addr_t, bus_type_t, int,
  */
 struct device;
 struct cfdata;
-int	matchbyname __P((struct device *, struct cfdata *cf, void *aux));
+int	matchbyname(struct device *, struct cfdata *cf, void *aux);
 
 /*
  * `clockfreq' produces a printable representation of a clock frequency
  * (this is just a frill).
  */
-char	*clockfreq __P((int freq));
-
-/*
- * Memory description arrays.  Shared between pmap.c and autoconf.c; no
- * one else should use this (except maybe mem.c, e.g., if we fix the VM to
- * handle discontiguous physical memory).
- */
-struct memarr {
-	paddr_t	addr;
-	psize_t	len;
-};
-int	makememarr(struct memarr *, int max, int which);
-#define	MEMARR_AVAILPHYS	0
-#define	MEMARR_TOTALPHYS	1
+char	*clockfreq(int freq);
 
 /* Openprom V2 style boot path */
 struct bootpath {
@@ -196,18 +167,12 @@ struct bootpath {
 	struct device *dev;	/* device that recognised this component */
 };
 
-#if 0
-struct bootpath	*bootpath_store __P((int, struct bootpath *));
-#endif
-int		sd_crazymap __P((int));
-
 /* Parse a disk string into a dev_t, return device struct pointer */
-struct	device *parsedisk __P((char *, int, int, dev_t *));
+struct	device *parsedisk(char *, int, int, dev_t *);
 
 /* Establish a mountroot_hook, for benefit of floppy drive, mostly. */
-void	mountroot_hook_establish __P((void (*) __P((struct device *)),
-				      struct device *));
+void	mountroot_hook_establish(void (*)(struct device *),
+				 struct device *);
 
-void	bootstrap __P((void));
-struct device *getdevunit __P((char *, int));
-int	romgetcursoraddr __P((int **, int **));
+void	bootstrap(void);
+int	romgetcursoraddr(int **, int **);

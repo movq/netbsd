@@ -1,4 +1,4 @@
-/*	$NetBSD: cmdtab.c,v 1.4 1997/11/22 07:28:42 lukem Exp $	*/
+/*	$NetBSD: cmdtab.c,v 1.8 2006/10/22 16:47:50 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)cmdtab.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: cmdtab.c,v 1.4 1997/11/22 07:28:42 lukem Exp $");
+__RCSID("$NetBSD: cmdtab.c,v 1.8 2006/10/22 16:47:50 christos Exp $");
 #endif /* not lint */
 
 #include "tip.h"
@@ -51,9 +47,8 @@ esctable_t etable[] = {
 	{ 'p',	NORM,	"put file to remote UNIX",	 cu_put },
 	{ '|',	NORM,	"pipe remote file",		 pipefile },
 	{ '$',	NORM,	"pipe local command to remote host", pipeout },
-#ifdef CONNECT
 	{ 'C',  NORM,	"connect program to remote host",consh },
-#endif
+	{ '+',	NORM,	"connect program to remote host",consh },
 	{ 'c',	NORM,	"change directory",		 chdirectory },
 	{ '.',	NORM,	"exit from tip",		 finish },
 	{CTRL('d'),NORM,"exit from tip",		 finish },
@@ -62,5 +57,5 @@ esctable_t etable[] = {
 	{ 's',	NORM,	"set variable",			 variable },
 	{ '?',	NORM,	"get this summary",		 help },
 	{ '#',	NORM,	"send break",			 genbrk },
-	{ 0, 0, 0 }
+	{ .e_char = '\0' }
 };

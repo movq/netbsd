@@ -1,4 +1,4 @@
-/*	$NetBSD: viewvar.h,v 1.4 1996/10/16 12:57:12 leo Exp $	*/
+/*	$NetBSD: viewvar.h,v 1.6 2005/12/11 12:16:54 christos Exp $	*/
 
 /*
  * Copyright (c) 1994 Christian E. Hopps
@@ -37,7 +37,7 @@
  * refered to by open/close/ioctl.  This device serves as
  * a interface to graphics. */
 
-#define	NOPROC	((struct proc *)-1)	/* XXX */
+#define	NOLWP	((struct lwp *)-1)	/* XXX */
 
 struct view_softc {
     struct  view_size size;
@@ -63,11 +63,5 @@ enum view_unit_flags {
 #ifdef _KERNEL
 view_t	*viewview __P((dev_t));
 int	viewprobe __P((void));
-
-dev_type_close(viewclose);
-dev_type_ioctl(viewioctl);
-dev_type_open(viewopen);
-dev_type_mmap(viewmmap);
-dev_type_poll(viewpoll);
 
 #endif /* _KERNEL */

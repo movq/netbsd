@@ -1,4 +1,4 @@
-/* $NetBSD: libstubs.h,v 1.3 1999/02/16 23:34:11 is Exp $ */
+/* $NetBSD: libstubs.h,v 1.6 2008/04/28 20:23:13 martin Exp $ */
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -63,6 +56,9 @@ void AbortIO(struct AmigaIO *);
 u_int8_t WaitIO(struct AmigaIO *);
 
 int OpenDevice(const char *, u_int32_t, struct AmigaIO *, u_int32_t);
+#ifdef _PRIMARY_BOOT
+void CloseDevice(struct AmigaIO *);
+#endif
 
 void *FindResident(const char *);
 void *OpenResource(const char *);
@@ -79,6 +75,10 @@ struct Screen *OpenScreenTagList(struct NewScreen *, const u_int32_t *);
 struct Screen *OpenScreenTag(struct NewScreen *, ...);
 struct Window *OpenWindowTagList(struct Window *, const u_int32_t *);
 struct Window *OpenWindowTag(struct Window *, ...);
+#ifdef _PRIMARY_BOOT
+void CloseScreen(struct Screen *);
+void CloseWindow(struct Window *);
+#endif
 
 #ifdef nomore
 u_int32_t mytime(void);
@@ -90,7 +90,7 @@ struct cfdev *FindConfigDev(struct cfdev *, int, int);
 void CacheClearU(void);
 #else
 #define LibCallNone(lib, what)  \
-	asm("movl a6,sp@-; movl %0,a6; " what "; movl sp@+,a6" :: \
+	__asm("movl a6,sp@-; movl %0,a6; " what "; movl sp@+,a6" :: \
 	    "r"(lib) : "d0", "d1", "a0", "a1")
 
 #define CacheClearU() LibCallNone(SysBase, "jsr a6@(-0x27c)")

@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.h,v 1.8 1995/05/11 21:29:21 christos Exp $	*/
+/*	$NetBSD: machdep.h,v 1.11 2003/08/07 09:05:33 agc Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -43,11 +39,9 @@
  * in some way.  The following macro will get this right on many machines.
  */
 
-#ifndef ALIGN
-union align {
-	int i;
-	char *cp;
-};
-
-#define ALIGN(nbytes)	(((nbytes) + sizeof(union align) - 1) & ~(sizeof(union align) - 1))
-#endif
+#define SHELL_SIZE (sizeof(union {int i; char *cp; double d; }) - 1)
+/*
+ * It appears that grabstackstr() will barf with such alignments
+ * because stalloc() will return a string allocated in a new stackblock.
+ */
+#define SHELL_ALIGN(nbytes) (((nbytes) + SHELL_SIZE) & ~SHELL_SIZE)

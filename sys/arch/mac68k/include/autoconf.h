@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.h,v 1.7 1998/12/22 08:47:06 scottr Exp $	*/
+/*	$NetBSD: autoconf.h,v 1.12 2007/03/04 06:00:08 christos Exp $	*/
 
 /*
  * Copyright (c) 1994 Gordon W. Ross
@@ -34,31 +34,35 @@
 
 #include <sys/device.h>
 
+#include <machine/bus.h>
+
 /*
  * Autoconfiguration information.
  * From sun3 port--adapted for mac68k platform by Allen Briggs.
  */
 
+struct mainbus_attach_args {
+	bus_space_tag_t	mba_bst;
+	bus_dma_tag_t	mba_dmat;
+};
+
 /* autoconf.c */
-void	setconf __P((void));
+void	setconf(void);
 
 /* machdep.c */
-void	mac68k_set_io_offsets __P((vaddr_t));
-void	dumpconf __P((void));
-int	badbaddr __P((register caddr_t addr));
-int	badwaddr __P((register caddr_t addr));
-int	badladdr __P((register caddr_t addr));
+void	mac68k_set_io_offsets(vaddr_t);
+void	dumpconf(void);
+int	badbaddr(void *);
+int	badwaddr(void *);
+int	badladdr(void *);
 
 /* clock.c */
-void	enablertclock __P((void));
-void	cpu_initclocks __P((void));
-void	setstatclockrate __P((int));
-void	disablertclock __P((void));
-u_long	clkread __P((void));
-void	inittodr __P((time_t));
-void	resettodr __P((void));
-void	mac68k_calibrate_delay __P((void));
-void	startrtclock __P((void));
+void	enablertclock(void);
+void	cpu_initclocks(void);
+void	setstatclockrate(int);
+void	disablertclock(void);
+void	mac68k_calibrate_delay(void);
+void	startrtclock(void);
 
 /* macrom.c */
-void	mrg_init __P((void));
+void	mrg_init(void);

@@ -1,4 +1,4 @@
-/*	$NetBSD: ypdb.h,v 1.2 1997/07/18 21:57:02 thorpej Exp $	*/
+/*	$NetBSD: ypdb.h,v 1.5 2008/02/29 03:00:47 lukem Exp $	*/
 
 /*
  * Copyright (c) 1990, 1993
@@ -19,11 +19,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -64,14 +60,15 @@ typedef struct {
 typedef DB DBM;
 
 __BEGIN_DECLS
-void	ypdb_close __P((DBM *));
-int	ypdb_delete __P((DBM *, datum));
-datum	ypdb_fetch __P((DBM *, datum));
-datum	ypdb_firstkey __P((DBM *));
-datum	ypdb_nextkey __P((DBM *));
-datum	ypdb_setkey __P((DBM *, datum));
-DBM     *ypdb_open __P((const char *, int, int));
-int	ypdb_store __P((DBM *, datum, datum, int));
+void	ypdb_close(DBM *);
+int	ypdb_delete(DBM *, datum);
+datum	ypdb_fetch(DBM *, datum);
+datum	ypdb_firstkey(DBM *);
+datum	ypdb_nextkey(DBM *);
+datum	ypdb_setkey(DBM *, datum);
+DBM     *ypdb_open(const char *);
+DBM     *ypdb_mktemp(char *);
+int	ypdb_store(DBM *, datum, datum, int);
 __END_DECLS
 
 #endif /* !_YPDB_H_ */

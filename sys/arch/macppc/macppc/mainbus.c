@@ -1,4 +1,4 @@
-/*	$NetBSD: mainbus.c,v 1.7 2000/02/03 19:27:45 tsubai Exp $	*/
+/*	$NetBSD: mainbus.c,v 1.17 2007/10/17 19:55:33 garbled Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -30,6 +30,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.17 2007/10/17 19:55:33 garbled Exp $");
+
 #include <sys/param.h>
 #include <sys/device.h>
 #include <sys/systm.h>
@@ -39,13 +42,13 @@
 
 #include <machine/autoconf.h>
 
+#include <powerpc/pic/picvar.h>
+
 int	mainbus_match __P((struct device *, struct cfdata *, void *));
 void	mainbus_attach __P((struct device *, struct device *, void *));
-int	mainbus_print __P((void *, const char *));
 
-struct cfattach mainbus_ca = {
-	sizeof(struct device), mainbus_match, mainbus_attach
-};
+CFATTACH_DECL(mainbus, sizeof(struct device),
+    mainbus_match, mainbus_attach, NULL, NULL);
 
 /*
  * Probe for the mainbus; always succeeds.
@@ -69,11 +72,20 @@ mainbus_attach(parent, self, aux)
 {
 	struct ofbus_attach_args oba;
 	struct confargs ca;
-	int node;
+	int node, i;
 	u_int32_t reg[4];
 	char name[32];
 
 	printf("\n");
+
+	for (i = 0; i < 2; i++) {
+		ca.ca_name = "cpu";
+		ca.ca_reg = reg;
+		reg[0] = i;
+		config_found(self, &ca, NULL);
+	}
+
+	pic_finish_setup();
 
 	node = OF_peer(0);
 	if (node) {
@@ -82,11 +94,8 @@ mainbus_attach(parent, self, aux)
 		config_found(self, &oba, NULL);
 	}
 
-	ca.ca_name = "cpu";
-	config_found(self, &ca, NULL);
-
 	for (node = OF_child(OF_finddevice("/")); node; node = OF_peer(node)) {
-		bzero(name, sizeof(name));
+		memset(name, 0, sizeof(name));
 		if (OF_getprop(node, "name", name, sizeof(name)) == -1)
 			continue;
 
@@ -96,17 +105,10 @@ mainbus_attach(parent, self, aux)
 		ca.ca_reg  = reg;
 		config_found(self, &ca, NULL);
 	}
-}
 
-int
-mainbus_print(aux, pnp)
-	void *aux;
-	const char *pnp;
-{
-	struct pcibus_attach_args *pa= aux;
+#ifdef MAMBO
+	ca.ca_name="com";
+	config_found(self, &ca, NULL);
+#endif
 
-	if (pnp)
-		printf("%s at %s", pa->pba_busname, pnp);
-	printf(" bus %d", pa->pba_bus);
-	return UNCONF;
 }

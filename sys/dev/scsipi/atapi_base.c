@@ -1,11 +1,12 @@
-/*	$NetBSD: atapi_base.c,v 1.14 1999/09/30 22:57:52 thorpej Exp $	*/
+/*	$NetBSD: atapi_base.c,v 1.28 2008/04/28 20:23:57 martin Exp $	*/
 
 /*-
- * Copyright (c) 1998 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 1999, 2004 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Charles M. Hannum.
+ * by Charles M. Hannum; by Jason R. Thorpe of the Numerical Aerospace
+ * Simulation Facility, NASA Ames Research Center.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -15,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,7 +30,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/types.h>
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: atapi_base.c,v 1.28 2008/04/28 20:23:57 martin Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
@@ -48,7 +44,6 @@
 #include <sys/proc.h>
 
 #include <dev/scsipi/scsipi_all.h>
-#include <dev/scsipi/atapi_all.h>
 #include <dev/scsipi/scsipiconf.h>
 #include <dev/scsipi/atapiconf.h>
 #include <dev/scsipi/scsipi_base.h>
@@ -60,24 +55,23 @@
  * THIS IS THE DEFAULT ERROR HANDLER
  */
 int
-atapi_interpret_sense(xs)
-	struct scsipi_xfer *xs;
+atapi_interpret_sense(struct scsipi_xfer *xs)
 {
+	struct scsipi_periph *periph = xs->xs_periph;
 	int key, error;
-	struct scsipi_link *sc_link = xs->sc_link;
-	char *msg = NULL;
+	const char *msg = NULL;
 
 	/*
 	 * If the device has it's own error handler, call it first.
 	 * If it returns a legit error value, return that, otherwise
 	 * it wants us to continue with normal error processing.
 	 */
-	if (sc_link->device->err_handler) {
-		SC_DEBUG(sc_link, SDEV_DB2,
+	if (periph->periph_switch->psw_error != NULL) {
+		SC_DEBUG(periph, SCSIPI_DB2,
 		    ("calling private err_handler()\n"));
-		error = (*sc_link->device->err_handler) (xs);
-		if (error != SCSIRET_CONTINUE)
-			return (error);		/* error >= 0  better ? */
+		error = (*periph->periph_switch->psw_error)(xs);
+		if (error != EJUSTRETURN)
+			return (error);
 	}
 	/*
 	 * otherwise use the default, call the generic sense handler if we have
@@ -96,8 +90,8 @@ atapi_interpret_sense(xs)
 			error = 0;
 			break;
 		case SKEY_NOT_READY:
-			if ((sc_link->flags & SDEV_REMOVABLE) != 0)
-				sc_link->flags &= ~SDEV_MEDIA_LOADED;
+			if ((periph->periph_flags & PERIPH_REMOVABLE) != 0)
+				periph->periph_flags &= ~PERIPH_MEDIA_LOADED;
 			if ((xs->xs_control & XS_CTL_IGNORE_NOT_READY) != 0)
 				return (0);
 			if ((xs->xs_control & XS_CTL_SILENT) != 0)
@@ -123,25 +117,29 @@ atapi_interpret_sense(xs)
 			error = EINVAL;
 			break;
 		case SKEY_UNIT_ATTENTION:
-			if ((sc_link->flags & SDEV_REMOVABLE) != 0)
-				sc_link->flags &= ~SDEV_MEDIA_LOADED;
+			if ((periph->periph_flags & PERIPH_REMOVABLE) != 0)
+				periph->periph_flags &= ~PERIPH_MEDIA_LOADED;
 			if ((xs->xs_control &
 			     XS_CTL_IGNORE_MEDIA_CHANGE) != 0 ||
 			    /* XXX Should reupload any transient state. */
-			    (sc_link->flags & SDEV_REMOVABLE) == 0)
+			    (periph->periph_flags & PERIPH_REMOVABLE) == 0)
 				return (ERESTART);
 			if ((xs->xs_control & XS_CTL_SILENT) != 0)
 				return (EIO);
 			msg = "unit attention";
 			error = EIO;
 			break;
-		case SKEY_WRITE_PROTECT:
+		case SKEY_DATA_PROTECT:
 			msg = "readonly device";
 			error = EROFS;
 			break;
 		case SKEY_ABORTED_COMMAND:
 			msg = "command aborted";
-			error = ERESTART;
+			if (xs->xs_retries != 0) {
+				xs->xs_retries--;
+				error = ERESTART;
+			} else
+				error = EIO;
 			break;
 		default:
 			error = EIO;
@@ -160,22 +158,25 @@ atapi_interpret_sense(xs)
 		}
 		if (xs->sense.atapi_sense & 0x04) { /* Aborted command */
 			msg = "ATA command aborted";
-			error = ERESTART;
+			if (xs->xs_retries != 0) {
+				xs->xs_retries--;
+				error = ERESTART;
+			} else
+				error = EIO;
 		}
 	}
 	if (msg) {
-		sc_link->sc_print_addr(sc_link);
+		scsipi_printaddr(periph);
 		printf("%s\n", msg);
 	} else {
 		if (error) {
-			sc_link->sc_print_addr(sc_link);
+			scsipi_printaddr(periph);
 			printf("unknown error code %d\n",
 			    xs->sense.atapi_sense);
 		}
 	}
 
 	return (error);
-
 }
 
 /*
@@ -187,15 +188,15 @@ atapi_interpret_sense(xs)
  * Print out the scsi_link structure's address info.
  */
 void
-atapi_print_addr(sc_link)
-	struct scsipi_link *sc_link;
+atapi_print_addr(struct scsipi_periph *periph)
 {
+	struct scsipi_channel *chan = periph->periph_channel;
+	struct scsipi_adapter *adapt = chan->chan_adapter;
 
-	printf("%s(%s:%d:%d): ",
-	    sc_link->device_softc ?
-	    ((struct device *)sc_link->device_softc)->dv_xname : "probe",
-	    ((struct device *)sc_link->adapter_softc)->dv_xname,
-	    sc_link->scsipi_atapi.channel, sc_link->scsipi_atapi.drive);
+	printf("%s(%s:%d:%d): ", periph->periph_dev != NULL ?
+	    device_xname(periph->periph_dev) : "probe",
+	    device_xname(adapt->adapt_dev),
+	    chan->chan_channel, periph->periph_target);
 }
 
 /*
@@ -204,97 +205,12 @@ atapi_print_addr(sc_link)
  * long the data is supposed to be. If we have  a buf
  * to associate with the transfer, we need that too.
  */
-int
-atapi_scsipi_cmd(sc_link, scsipi_cmd, cmdlen, data_addr, datalen,
-    retries, timeout, bp, flags)
-	struct scsipi_link *sc_link;
-	struct scsipi_generic *scsipi_cmd;
-	int cmdlen;
-	u_char *data_addr;
-	int datalen;
-	int retries;
-	int timeout;
-	struct buf *bp;
-	int flags;
+void
+atapi_scsipi_cmd(struct scsipi_xfer *xs)
 {
-	struct scsipi_xfer *xs;
-	int error, s;
+	struct scsipi_periph *periph = xs->xs_periph;
 
-	SC_DEBUG(sc_link, SDEV_DB2, ("atapi_cmd\n"));
+	SC_DEBUG(periph, SCSIPI_DB2, ("atapi_cmd\n"));
 
-#ifdef DIAGNOSTIC
-	if (bp != NULL && (flags & XS_CTL_ASYNC) == 0)
-		panic("atapi_scsipi_cmd: buffer without async");
-#endif
-
-	if ((xs = scsipi_make_xs(sc_link, scsipi_cmd, cmdlen, data_addr,
-	    datalen, retries, timeout, bp, flags)) == NULL) {
-		if (bp != NULL) {
-			s = splbio();
-			bp->b_flags |= B_ERROR;
-			bp->b_error = ENOMEM;
-			biodone(bp);
-			splx(s);
-		}
-		return (ENOMEM);
-	}
-
-	xs->cmdlen = (sc_link->scsipi_atapi.cap & ACAP_LEN) ? 16 : 12;
-
-	if ((error = scsipi_execute_xs(xs)) == EJUSTRETURN)
-		return (0);
-
-	/*
-	 * we have finished with the xfer stuct, free it and
-	 * check if anyone else needs to be started up.
-	 */
-	s = splbio();
-	scsipi_free_xs(xs, flags);
-	splx(s);
-	return (error);
-}
-
-int
-atapi_mode_select(l, data, len, flags, retries, timeout)
-	struct scsipi_link *l;
-	struct atapi_mode_header *data;
-	int len, flags, retries, timeout;
-{
-	struct atapi_mode_select scsipi_cmd;
-	int error;
-
-	bzero(&scsipi_cmd, sizeof(scsipi_cmd));
-	scsipi_cmd.opcode = ATAPI_MODE_SELECT;
-	scsipi_cmd.byte2 = AMS_PF;
-	_lto2b(len, scsipi_cmd.length);
-
-	/* length is reserved when doing mode select; zero it */
-	_lto2l(0, data->length);
-
-	error = scsipi_command(l, (struct scsipi_generic *)&scsipi_cmd,
-	    sizeof(scsipi_cmd), (void *)data, len, retries, timeout, NULL,
-	    flags | XS_CTL_DATA_OUT);
-	SC_DEBUG(l, SDEV_DB2, ("atapi_mode_select: error=%d\n", error));
-	return (error);
-}
-
-int
-atapi_mode_sense(l, page, data, len, flags, retries, timeout)
-	struct scsipi_link *l;
-	int page, len, flags, retries, timeout;
-	struct atapi_mode_header *data;
-{
-	struct atapi_mode_sense scsipi_cmd;
-	int error;
-
-	bzero(&scsipi_cmd, sizeof(scsipi_cmd));
-	scsipi_cmd.opcode = ATAPI_MODE_SENSE;
-	scsipi_cmd.page = page;
-	_lto2b(len, scsipi_cmd.length);
-
-	error = scsipi_command(l, (struct scsipi_generic *)&scsipi_cmd,
-	    sizeof(scsipi_cmd), (void *)data, len, retries, timeout, NULL,
-	    flags | XS_CTL_DATA_IN);
-	SC_DEBUG(l, SDEV_DB2, ("atapi_mode_sense: error=%d\n", error));
-	return (error);
+	xs->cmdlen = (periph->periph_cap & PERIPH_CAP_CMD16) ? 16 : 12;
 }

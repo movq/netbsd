@@ -33,11 +33,11 @@
 
 #ifndef RPC_HDR
 %#include <sys/cdefs.h>
-%#ifndef lint
+%#ifndef __lint__
 %/*static char sccsid[] = "from: @(#)rex.x 1.3 87/09/18 Copyr 1987 Sun Micro";*/
 %/*static char sccsid[] = "from: @(#)rex.x	2.1 88/08/01 4.0 RPCSRC";*/
-%__RCSID("$NetBSD: rex.x,v 1.4 1999/07/02 15:44:13 simonb Exp $");
-%#endif /* not lint */
+%__RCSID("$NetBSD: rex.x,v 1.6 2004/07/01 22:52:34 kleink Exp $");
+%#endif /* not __lint__ */
 #endif
 
 const STRINGSIZE = 1024;
@@ -154,7 +154,7 @@ struct tchars {
 	/* chars[2] == start output char */
 	/* chars[3] == stop output char */
 	/* chars[4] == end-of-file char */
-	/* chars[5] == input delimeter (like nl) */
+	/* chars[5] == input delimiter (like nl) */
 };
 
 struct ltchars {

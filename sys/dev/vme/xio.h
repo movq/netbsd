@@ -1,4 +1,4 @@
-/* $NetBSD: xio.h,v 1.2 1998/08/22 15:11:02 mrg Exp $ */
+/* $NetBSD: xio.h,v 1.4 2007/03/04 06:02:51 christos Exp $ */
 
 /*
  *
@@ -48,12 +48,12 @@
 struct xd_iocmd {
 	u_char cmd;	/* in: command number */
 	u_char subfn;	/* in: subfunction number */
-	u_char errno;	/* out: error number */
+	u_char errnum;	/* out: error number */
 	u_char tries;	/* out: number of tries */
 	u_short sectcnt;/* in,out: sector count (hw_spt on read drive param) */
 	u_short dlen;	/* in: length of data buffer (good sanity check) */
 	u_int block;	/* in: block number */
-	caddr_t dptr;	/* in: data buffer to do I/O from */
+	void *dptr;	/* in: data buffer to do I/O from */
 };
 
 #ifndef DIOSXDCMD

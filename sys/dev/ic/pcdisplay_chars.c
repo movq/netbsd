@@ -1,4 +1,4 @@
-/* $NetBSD: pcdisplay_chars.c,v 1.4 1999/02/20 18:26:13 drochner Exp $ */
+/* $NetBSD: pcdisplay_chars.c,v 1.13 2007/10/19 11:59:58 ad Exp $ */
 
 /*
  * Copyright (c) 1998
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed for the NetBSD Project
- *	by Matthias Drochner.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -32,13 +26,13 @@
  *
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: pcdisplay_chars.c,v 1.13 2007/10/19 11:59:58 ad Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
-#include <machine/bus.h>
-
-#include <dev/isa/isavar.h>
-#include <dev/isa/isareg.h>
+#include <sys/bus.h>
 
 #include <dev/ic/mc6845reg.h>
 #include <dev/ic/pcdisplayvar.h>
@@ -48,7 +42,7 @@
 #define CONTROL 1 /* XXX smiley */
 #define NOTPRINTABLE 4 /* diamond XXX watch out - not in ISO part! */
 
-static u_char isomappings[128] = {
+static const u_char isomappings[128] = {
 	CONTROL, CONTROL, CONTROL, CONTROL, CONTROL, CONTROL, CONTROL, CONTROL,
 	CONTROL, CONTROL, CONTROL, CONTROL, CONTROL, CONTROL, CONTROL, CONTROL,
 	CONTROL, CONTROL, CONTROL, CONTROL, CONTROL, CONTROL, CONTROL, CONTROL,
@@ -151,7 +145,7 @@ static u_char isomappings[128] = {
 	0x98, /* 0x00ff LATIN SMALL LETTER Y WITH DIAERESIS */
 };
 
-static struct {
+static const struct {
 	u_int16_t uni;
 	u_char ibm;
 } unimappings[] = {
@@ -265,7 +259,7 @@ static struct {
 	{0x266b, 0x0e}, /* BEAMED EIGHTH NOTES */
 };
 
-static struct {
+static const struct {
 	u_int16_t uni;
 	u_char ibm;
 	int quality;
@@ -334,12 +328,9 @@ static struct {
 };
 
 int
-pcdisplay_mapchar(id, uni, index)
-	void *id;
-	int uni;
-	unsigned int *index;
+pcdisplay_mapchar(void *id, int uni, unsigned int *index)
 {
-	int i;
+	u_int i;
 
 	if (uni < 128) {
 		*index = uni;

@@ -1,4 +1,4 @@
-/*	$NetBSD: chrtbl.c,v 1.4 1998/02/03 04:39:14 perry Exp $	*/
+/*	$NetBSD: chrtbl.c,v 1.10 2008/05/02 19:59:19 xtraeme Exp $	*/
 
 /*
  * Copyright (c) 1997 Christos Zoulas.  All rights reserved.
@@ -59,12 +59,11 @@ static int uplow __P((struct chartbl *, const char *, int, char *, size_t));
 static void printctype __P((FILE *, unsigned int));
 static int output_ascii __P((const char *, const struct chartbl *));
 static int output_binary __P((const struct chartbl *));
-static char *getline __P((FILE *, size_t *, size_t *));
 
 int main __P((int, char *[]));
 
 static const struct toklist {
-	char	 *name;
+	const char	 *name;
 	int	(*func) __P((struct chartbl *, const char *, int arg,
 	    char *, size_t lno));
 	int	  arg;
@@ -92,10 +91,9 @@ static const struct toklist {
 static void
 usage()
 {
-	extern char *__progname;
 
-	(void) fprintf(stderr, "Usage: %s [-o <filename>] <description>\n",
-	    __progname);
+	(void) fprintf(stderr, "usage: %s [-o <filename>] <description>\n",
+	    getprogname());
 	exit(1);
 }
 
@@ -162,6 +160,7 @@ setfilename(cs, token, arg, line, lnum)
 	default:
 		warn("%s: Bad filename argument %d at line %lu", token, arg,
 		    (u_long)lnum);
+		free(p);
 		return 1;
 	}
 }
@@ -432,45 +431,6 @@ output_binary(ct)
 }
 
 
-/* getline():
- *	Read a line from a file parsing continuations ending in \
- *	and eliminating trailing newlines.
- */
-static char *
-getline(fp, size, lineno)
-	FILE *fp;
-	size_t *size, *lineno;
-{
-	size_t s, len = 0;
-	char *buf = NULL;
-	char *ptr;
-	int cnt = 1;
-
-	while (cnt) {
-		if ((ptr = fgetln(fp, &s)) == NULL) {
-			*size = len;
-			return buf;
-		}
-		/* the newline may be missing at EOF */
-		if (ptr[s - 1] == '\n')	{ 
-			s--;			/* forget newline */
-			*lineno += 1;
-		}
-		if (s && (cnt = (ptr[s - 1] == '\\')))	/* check for \\ */
-			    s--;			/* forget \\ */
-
-		buf = realloc(buf, len + s + 1);
-		if (buf == NULL)
-			err(1, "Out of memory");
-		(void) memcpy(buf + len, ptr, s);
-		len += s;
-		buf[len] = '\0';
-	}
-	*size = len;
-	return buf;
-}
-
-
 int
 main(argc, argv)
 	int argc;
@@ -519,9 +479,8 @@ main(argc, argv)
 	(void) memset(ct.uptab, 0, sizeof(ct.uptab[0]) * (ct.maxchar * 1));
 	(void) memset(ct.lotab, 0, sizeof(ct.lotab[0]) * (ct.maxchar * 1));
 
-	for (lnum = 1; (line = getline(fp, &size, &lnum)) != NULL; free(line)) {
-		if (*line == '#')
-			continue;
+	for (lnum = 1; (line = fparseln(fp, &size, &lnum, NULL, 0)) != NULL;
+	    free(line)) {
 		for (token = line; *token && isspace((u_char) *token); token++)
 			continue;
 		if (*token == '\0')

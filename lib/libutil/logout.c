@@ -1,4 +1,4 @@
-/*	$NetBSD: logout.c,v 1.11 1999/09/20 04:48:07 lukem Exp $	*/
+/*	$NetBSD: logout.c,v 1.16 2005/08/27 17:07:17 elad Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)logout.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: logout.c,v 1.11 1999/09/20 04:48:07 lukem Exp $");
+__RCSID("$NetBSD: logout.c,v 1.16 2005/08/27 17:07:17 elad Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -54,28 +50,26 @@ __RCSID("$NetBSD: logout.c,v 1.11 1999/09/20 04:48:07 lukem Exp $");
 #include <util.h>
 #include <utmp.h>
 
-typedef struct utmp UTMP;
-
 int
-logout(line)
-	const char *line;
+logout(const char *line)
 {
 	int fd, rval;
-	UTMP ut;
+	struct utmp ut;
 
 	_DIAGASSERT(line != NULL);
 
 	if ((fd = open(_PATH_UTMP, O_RDWR, 0)) < 0)
 		return(0);
 	rval = 0;
-	while (read(fd, &ut, sizeof(UTMP)) == sizeof(UTMP)) {
-		if (!ut.ut_name[0] || strncmp(ut.ut_line, line, UT_LINESIZE))
+	while (read(fd, &ut, sizeof(ut)) == sizeof(ut)) {
+		if (!ut.ut_name[0] || strncmp(ut.ut_line, line,
+					      (size_t)UT_LINESIZE))
 			continue;
-		memset(ut.ut_name, 0, UT_NAMESIZE);
-		memset(ut.ut_host, 0, UT_HOSTSIZE);
+		memset(ut.ut_name, 0, (size_t)UT_NAMESIZE);
+		memset(ut.ut_host, 0, (size_t)UT_HOSTSIZE);
 		(void)time(&ut.ut_time);
-		(void)lseek(fd, -(off_t)sizeof(UTMP), SEEK_CUR);
-		(void)write(fd, &ut, sizeof(UTMP));
+		(void)lseek(fd, -(off_t)sizeof(ut), SEEK_CUR);
+		(void)write(fd, &ut, sizeof(ut));
 		rval = 1;
 	}
 	(void)close(fd);

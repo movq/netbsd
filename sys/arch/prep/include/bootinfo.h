@@ -1,4 +1,4 @@
-/*	$NetBSD: bootinfo.h,v 1.1 2000/02/29 15:21:26 nonaka Exp $	*/
+/*	$NetBSD: bootinfo.h,v 1.6 2006/05/09 02:52:39 garbled Exp $	*/
 
 /*
  * Copyright (c) 1997
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed for the NetBSD Project
- *	by Matthias Drochner.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -62,7 +56,7 @@ struct btinfo_clock {
 };
 
 #ifdef _KERNEL
-void *lookup_bootinfo __P((int));
+void *lookup_bootinfo(int);
 #endif
 
 #define BOOTINFO_MAXSIZE	0xd0

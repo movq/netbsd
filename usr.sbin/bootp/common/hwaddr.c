@@ -1,8 +1,8 @@
-/*	$NetBSD: hwaddr.c,v 1.4 1998/03/14 04:39:54 lukem Exp $	*/
+/*	$NetBSD: hwaddr.c,v 1.9 2007/05/27 16:31:42 tls Exp $	*/
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hwaddr.c,v 1.4 1998/03/14 04:39:54 lukem Exp $");
+__RCSID("$NetBSD: hwaddr.c,v 1.9 2007/05/27 16:31:42 tls Exp $");
 #endif
 
 /*
@@ -28,19 +28,12 @@ __RCSID("$NetBSD: hwaddr.c,v 1.4 1998/03/14 04:39:54 lukem Exp $");
 #include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <strings.h>
 #ifndef	NO_UNISTD
 #include <unistd.h>
 #endif
 #include <syslog.h>
 #include <arpa/inet.h>
-
-#ifndef USE_BFUNCS
-/* Yes, memcpy is OK here (no overlapped copies). */
-#include <memory.h>
-#define bcopy(a,b,c)    memcpy(b,a,c)
-#define bzero(p,l)      memset(p,0,l)
-#define bcmp(a,b,c)     memcmp(a,b,c)
-#endif
 
 #include "bptypes.h"
 #include "hwaddr.h"
@@ -72,13 +65,10 @@ int hwinfocnt = sizeof(hwinfolist) / sizeof(hwinfolist[0]);
 /*
  * Setup the arp cache so that IP address 'ia' will be temporarily
  * bound to hardware address 'ha' of length 'len'.
+ * s is the socket fd.
  */
 void
-setarp(s, ia, ha, len)
-	int s;						/* socket fd */
-	struct in_addr *ia;
-	u_char *ha;
-	int len;
+setarp(int s, struct in_addr *ia, u_char *ha, int len)
 {
 #ifdef	SIOCSARP
 	struct arpreq arpreq;		/* Arp request ioctl block */
@@ -141,10 +131,10 @@ setarp(s, ia, ha, len)
 	char *a;
 
 	a = inet_ntoa(*ia);
-	sprintf(buf, "arp -d %s; arp -s %s %s temp",
-		a, a, haddrtoa(ha, len));
+	snprintf(buf, sizeof(buf), "arp -d %s; arp -s %s %s temp",
+	    a, a, haddrtoa(ha, len));
 	if (debug > 2)
-		report(LOG_INFO, buf);
+		report(LOG_INFO, "%s", buf);
 	status = system(buf);
 	if (status)
 		report(LOG_ERR, "arp failed, exit code=0x%x", status);
@@ -157,9 +147,7 @@ setarp(s, ia, ha, len)
  * Convert a hardware address to an ASCII string.
  */
 char *
-haddrtoa(haddr, hlen)
-	u_char *haddr;
-	int hlen;
+haddrtoa(u_char *haddr, int hlen)
 {
 	static char haddrbuf[3 * MAXHADDRLEN + 1];
 	char *bufptr;
@@ -169,7 +157,8 @@ haddrtoa(haddr, hlen)
 
 	bufptr = haddrbuf;
 	while (hlen > 0) {
-		sprintf(bufptr, "%02X:", (unsigned) (*haddr++ & 0xFF));
+		snprintf(bufptr, sizeof(haddrbuf) - (bufptr - haddrbuf),
+		    "%02X:", (unsigned) (*haddr++ & 0xFF));
 		bufptr += 3;
 		hlen--;
 	}
@@ -236,9 +225,7 @@ static u_char conv802table[256] =
 };
 
 void
-haddr_conv802(addr_in, addr_out, len)
-	register u_char *addr_in, *addr_out;
-	int len;
+haddr_conv802(u_char *addr_in, u_char *addr_out, int len)
 {
 	u_char *lim;
 
@@ -253,8 +240,7 @@ haddr_conv802(addr_in, addr_out, len)
  * bit-reverse table above.
  */
 static int
-bitrev(n)
-	int n;
+bitrev(int n)
 {
 	int i, r;
 
@@ -267,7 +253,7 @@ bitrev(n)
 	return r;
 }
 
-main()
+main(void)
 {
 	int i;
 	for (i = 0; i <= 0xFF; i++) {

@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_timer.c,v 1.1.1.1 2000/03/29 12:38:53 simonb Exp $	*/
+/*	$NetBSD: ntp_timer.c,v 1.4 2007/01/06 19:45:23 kardel Exp $	*/
 
 /*
  * ntp_timer.c - event timer support routines
@@ -7,15 +7,19 @@
 # include <config.h>
 #endif
 
-#include <stdio.h>
-#include <sys/types.h>
-#include <sys/time.h>
-#include <signal.h>
-#include <sys/signal.h>
-
 #include "ntp_machine.h"
 #include "ntpd.h"
 #include "ntp_stdlib.h"
+
+#include <stdio.h>
+#include <signal.h>
+#ifdef HAVE_SYS_SIGNAL_H
+# include <sys/signal.h>
+#endif
+#ifdef HAVE_UNISTD_H
+# include <unistd.h>
+#endif
+
 #if defined(HAVE_IO_COMPLETION_PORT)
 # include "ntp_iocompletionport.h"
 # include "ntp_timer.h"
@@ -32,6 +36,8 @@
  * procedure to do cleanup and print a message.
  */
 
+volatile int interface_interval = 300;     /* update interface every 5 minutes as default */
+	  
 /*
  * Alarm flag.	The mainline code imports this.
  */
@@ -42,9 +48,13 @@ volatile int alarm_flag;
  */
 static	u_long adjust_timer;		/* second timer */
 static	u_long keys_timer;		/* minute timer */
-static	u_long hourly_timer;		/* hour timer */
+static	u_long stats_timer;		/* stats timer */
+static	u_long huffpuff_timer;		/* huff-n'-puff timer */
+static  u_long interface_timer;	        /* interface update timer */
+#ifdef OPENSSL
 static	u_long revoke_timer;		/* keys revoke timer */
-u_long	sys_revoke = KEY_REVOKE;	/* keys revoke timeout */
+u_char	sys_revoke = KEY_REVOKE;	/* keys revoke timeout (log2 s) */
+#endif /* OPENSSL */
 
 /*
  * Statistics counter for the interested.
@@ -74,6 +84,57 @@ static HANDLE WaitableTimerHandle = NULL;
 static	RETSIGTYPE alarming P((int));
 #endif /* SYS_WINNT */
 
+#if !defined(VMS)
+# if !defined SYS_WINNT || defined(SYS_CYGWIN32)
+#  ifndef HAVE_TIMER_SETTIME
+	struct itimerval itimer;
+#  else 
+	static timer_t ntpd_timerid;
+	struct itimerspec itimer;
+#  endif /* HAVE_TIMER_SETTIME */
+# endif /* SYS_WINNT */
+#endif /* VMS */
+
+/*
+ * reinit_timer - reinitialize interval timer.
+ */
+void 
+reinit_timer(void)
+{
+#if !defined(SYS_WINNT) && !defined(VMS)
+#  if defined(HAVE_TIMER_CREATE) && defined(HAVE_TIMER_SETTIME)
+	timer_gettime(ntpd_timerid, &itimer);
+	if (itimer.it_value.tv_sec < 0 || itimer.it_value.tv_sec > (1<<EVENT_TIMEOUT)) {
+		itimer.it_value.tv_sec = (1<<EVENT_TIMEOUT);
+	}
+	if (itimer.it_value.tv_nsec < 0 ) {
+		itimer.it_value.tv_nsec = 0;
+	}
+	if (itimer.it_value.tv_sec == 0 && itimer.it_value.tv_nsec == 0) {
+		itimer.it_value.tv_sec = (1<<EVENT_TIMEOUT);
+		itimer.it_value.tv_nsec = 0;
+	}
+	itimer.it_interval.tv_sec = (1<<EVENT_TIMEOUT);
+	itimer.it_interval.tv_nsec = 0;
+	timer_settime(ntpd_timerid, 0 /*!TIMER_ABSTIME*/, &itimer, NULL);
+#  else
+	getitimer(ITIMER_REAL, &itimer);
+	if (itimer.it_value.tv_sec < 0 || itimer.it_value.tv_sec > (1<<EVENT_TIMEOUT)) {
+		itimer.it_value.tv_sec = (1<<EVENT_TIMEOUT);
+	}
+	if (itimer.it_value.tv_usec < 0 ) {
+		itimer.it_value.tv_usec = 0;
+	}
+	if (itimer.it_value.tv_sec == 0 && itimer.it_value.tv_usec == 0) {
+		itimer.it_value.tv_sec = (1<<EVENT_TIMEOUT);
+		itimer.it_value.tv_usec = 0;
+	}
+	itimer.it_interval.tv_sec = (1<<EVENT_TIMEOUT);
+	itimer.it_interval.tv_usec = 0;
+	setitimer(ITIMER_REAL, &itimer, (struct itimerval *)0);
+#  endif
+# endif /* VMS */
+}
 
 /*
  * init_timer - initialize the timer data structures
@@ -81,20 +142,10 @@ static	RETSIGTYPE alarming P((int));
 void
 init_timer(void)
 {
-#if !defined(VMS)
-# if !defined SYS_WINNT || defined(SYS_CYGWIN32)
-#  ifndef HAVE_TIMER_SETTIME
-	struct itimerval itimer;
-#  else
-	static timer_t ntpd_timerid;	/* should be global if we ever want */
-					/* to kill timer without rebooting ... */
-	struct itimerspec itimer;
-#  endif /* HAVE_TIMER_SETTIME */
-# else /* SYS_WINNT */
-	HANDLE hToken;
+# if defined SYS_WINNT & !defined(SYS_CYGWIN32)
+	HANDLE hToken = INVALID_HANDLE_VALUE;
 	TOKEN_PRIVILEGES tkp;
 # endif /* SYS_WINNT */
-#endif /* !VMS */
 
 	/*
 	 * Initialize...
@@ -102,7 +153,9 @@ init_timer(void)
 	alarm_flag = 0;
 	alarm_overflow = 0;
 	adjust_timer = 1;
-	hourly_timer = HOUR;
+	stats_timer = 0;
+	huffpuff_timer = 0;
+	interface_timer = 0;
 	current_time = 0;
 	timer_overflows = 0;
 	timer_xmtcalls = 0;
@@ -208,7 +261,10 @@ void
 timer(void)
 {
 	register struct peer *peer, *next_peer;
-	int n;
+#ifdef OPENSSL
+	char	statstr[NTP_MAXSTRLEN]; /* statistics for filegen */
+#endif /* OPENSSL */
+	u_int n;
 
 	current_time += (1<<EVENT_TIMEOUT);
 
@@ -218,6 +274,16 @@ timer(void)
 	if (adjust_timer <= current_time) {
 		adjust_timer += 1;
 		adj_host_clock();
+		kod_proto();
+#ifdef REFCLOCK
+		for (n = 0; n < NTP_HASH_SIZE; n++) {
+			for (peer = peer_hash[n]; peer != 0; peer = next_peer) {
+				next_peer = peer->next;
+				if (peer->flags & FLAG_REFCLOCK)
+					refclock_timer(peer);
+			}
+		}
+#endif /* REFCLOCK */
 	}
 
 	/*
@@ -225,7 +291,7 @@ timer(void)
 	 * here, since the peer structure might go away as the result of
 	 * the call.
 	 */
-	for (n = 0; n < HASH_SIZE; n++) {
+	for (n = 0; n < NTP_HASH_SIZE; n++) {
 		for (peer = peer_hash[n]; peer != 0; peer = next_peer) {
 			next_peer = peer->next;
 			if (peer->action && peer->nextaction <= current_time)
@@ -252,19 +318,48 @@ timer(void)
 	}
 
 	/*
-	 * Garbage collect revoked keys
+	 * Huff-n'-puff filter
+	 */
+	if (huffpuff_timer <= current_time) {
+		huffpuff_timer += HUFFPUFF;
+		huffpuff();
+	}
+
+#ifdef OPENSSL
+	/*
+	 * Garbage collect old keys and generate new private value
 	 */
 	if (revoke_timer <= current_time) {
 		revoke_timer += RANDPOLL(sys_revoke);
-		key_expire_all();
+		expire_all();
+		sprintf(statstr, "refresh ts %u", ntohl(hostval.tstamp));
+		record_crypto_stats(NULL, statstr);
+#ifdef DEBUG
+		if (debug)
+			printf("timer: %s\n", statstr);
+#endif
 	}
+#endif /* OPENSSL */
 
 	/*
-	 * Finally, call the hourly routine.
+	 * interface update timer
 	 */
-	if (hourly_timer <= current_time) {
-		hourly_timer += HOUR;
-		hourly_stats();
+	if (interface_interval && interface_timer <= current_time) {
+		timer_interfacetimeout(current_time + interface_interval);
+#ifdef DEBUG
+	  if (debug)
+	    printf("timer: interface update\n");
+#endif
+	  interface_update(NULL, NULL);
+	}
+	
+	/*
+	 * Finally, periodically write stats.
+	 */
+	if (stats_timer <= current_time) {
+	     if (stats_timer != 0)
+		  write_stats();
+	     stats_timer += stats_write_period;
 	}
 }
 
@@ -295,6 +390,12 @@ alarming(
 #endif /* VMS */
 }
 #endif /* SYS_WINNT */
+
+void
+timer_interfacetimeout(u_long timeout)
+{
+	interface_timer = timeout;
+}
 
 
 /*

@@ -1,4 +1,4 @@
-/* $NetBSD: tc_dma_3000_500.c,v 1.9 1999/11/16 12:26:42 enami Exp $ */
+/* $NetBSD: tc_dma_3000_500.c,v 1.14 2008/04/28 20:23:12 martin Exp $ */
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,14 +32,15 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: tc_dma_3000_500.c,v 1.9 1999/11/16 12:26:42 enami Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tc_dma_3000_500.c,v 1.14 2008/04/28 20:23:12 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/kernel.h>
 #include <sys/malloc.h>
-#include <vm/vm.h>
+
+#include <uvm/uvm_extern.h>
 
 #define _ALPHA_BUS_DMA_PRIVATE
 #include <machine/bus.h>
@@ -62,6 +56,7 @@ struct alpha_bus_dma_tag tc_dmat_sgmap = {
 	NULL,				/* _next_window */
 	0,				/* _boundary */
 	NULL,				/* _sgmap */
+	0,				/* _pfthresh */
 	NULL,				/* _get_tag */
 	tc_bus_dmamap_create_sgmap,
 	tc_bus_dmamap_destroy_sgmap,
@@ -97,11 +92,11 @@ tc_dma_init_3000_500(nslots)
 	tc_dma_slot_info = malloc(sisize, M_DEVBUF, M_NOWAIT);
 	if (tc_dma_slot_info == NULL)
 		panic("tc_dma_init: can't allocate per-slot DMA info");
-	bzero(tc_dma_slot_info, sisize);
+	memset(tc_dma_slot_info, 0, sisize);
 
 	/* Default all slots to direct-mapped. */
 	for (i = 0; i < nslots; i++)
-		bcopy(&tc_dmat_direct, &tc_dma_slot_info[i].tdsi_dmat,
+		memcpy(&tc_dma_slot_info[i].tdsi_dmat, &tc_dmat_direct,
 		    sizeof(tc_dma_slot_info[i].tdsi_dmat));
 }
 
@@ -130,7 +125,6 @@ tc_bus_dmamap_create_sgmap(t, size, nsegments, maxsegsz, boundary,
 	int flags;
 	bus_dmamap_t *dmamp;
 {
-	struct tc_dma_slot_info *tdsi = t->_cookie;
 	bus_dmamap_t map;
 	int error;
 
@@ -141,12 +135,7 @@ tc_bus_dmamap_create_sgmap(t, size, nsegments, maxsegsz, boundary,
 
 	map = *dmamp;
 
-	if (flags & BUS_DMA_ALLOCNOW) {
-		error = alpha_sgmap_alloc(map, round_page(size),
-		    &tdsi->tdsi_sgmap, flags);
-		if (error)
-			tc_bus_dmamap_destroy_sgmap(t, map);
-	}
+	/* XXX BUS_DMA_ALLOCNOW */
 
 	return (error);
 }
@@ -159,10 +148,8 @@ tc_bus_dmamap_destroy_sgmap(t, map)
 	bus_dma_tag_t t;
 	bus_dmamap_t map;
 {
-	struct tc_dma_slot_info *tdsi = t->_cookie;
 
-	if (map->_dm_flags & DMAMAP_HAS_SGMAP)
-		alpha_sgmap_free(map, &tdsi->tdsi_sgmap);
+	KASSERT(map->dm_mapsize == 0);
 
 	_bus_dmamap_destroy(t, map);
 }

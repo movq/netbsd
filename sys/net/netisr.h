@@ -1,4 +1,4 @@
-/*	$NetBSD: netisr.h,v 1.19 2000/02/21 20:31:02 erh Exp $	*/
+/* $NetBSD: netisr.h,v 1.38 2008/10/14 17:15:20 pooka Exp $ */
 
 /*
  * Copyright (c) 1980, 1986, 1989, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -36,7 +32,7 @@
  */
 
 #ifndef _NET_NETISR_H_
-#define _NET_NETISR_H_
+#define _NET_NETISR_H_		/* checked by netisr_dispatch.h */
 
 /*
  * The networking code runs off software interrupts.
@@ -49,6 +45,56 @@
  * The routine to request a network software interrupt, setsoftnet(),
  * is defined in the machine-specific include files.
  */
+
+#if defined(_KERNEL)
+
+#if !defined(_LKM)
+#include "opt_inet.h"
+#include "opt_atalk.h"
+#include "opt_iso.h"
+#include "opt_natm.h"
+#include "arp.h"
+#endif /* !defined(_LKM) */
+
+#if !defined(_LOCORE)
+
+/* XXX struct sockaddr defn for for if.h, if_arp.h */
+#include <sys/socket.h>
+
+/*
+ * XXX IFNAMSIZE for if_ppp.h, natm.h; struct ifnet decl for in6.h, in.h;
+ * XXX struct mbuf decl for in6.h, in.h, route.h (via in_var.h).
+ */
+#include <net/if.h>
+
+#ifdef INET
+#include <netinet/in.h>
+#include <netinet/ip_var.h>
+#if NARP > 0
+#include <netinet/if_inarp.h>
+#endif
+#endif
+#ifdef INET6
+# ifndef INET
+#  include <netinet/in.h>
+# endif
+#include <netinet/ip6.h>
+#include <netinet6/ip6_var.h>
+#endif
+#ifdef ISO
+#include <netiso/iso.h>
+#include <netiso/clnp.h>
+#endif
+#ifdef NATM
+#include <netnatm/natm.h>
+#endif
+#ifdef NETATALK
+#include <netatalk/at_extern.h>
+#endif
+
+#endif /* !defined(_LOCORE) */
+#endif /* defined(_KERNEL) */
+
 
 /*
  * Each ``pup-level-1'' input queue has a bit in a ``netisr'' status
@@ -66,14 +112,11 @@
 #define	NETISR_ISDN	26		/* same as AF_E164 */
 #define	NETISR_NATM	27		/* same as AF_NATM */
 #define	NETISR_ARP	28		/* same as AF_ARP */
-#define	NETISR_PPP	31		/* for PPP processing */
+#define	NETISR_MAX	AF_MAX
 
-#define	schednetisr(anisr)	{ netisr |= 1<<(anisr); setsoftnet(); }
-
-#ifndef _LOCORE
-#ifdef _KERNEL
-int	netisr;				/* scheduling bits for network */
-#endif
+#if !defined(_LOCORE) && defined(_KERNEL)
+/* XXX Legacy netisr support. */
+void	schednetisr(int);
 #endif
 
-#endif /* _NET_NETISR_H_ */
+#endif /* !_NET_NETISR_H_ */

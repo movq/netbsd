@@ -1,4 +1,4 @@
-/*	$NetBSD: stp4020.c,v 1.10 2000/02/22 12:24:53 pk Exp $ */
+/*	$NetBSD: stp4020.c,v 1.55 2008/04/28 20:23:57 martin Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,27 +33,40 @@
  * STP4020: SBus/PCMCIA bridge supporting two Type-3 PCMCIA cards.
  */
 
-#include <sys/types.h>
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: stp4020.c,v 1.55 2008/04/28 20:23:57 martin Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/errno.h>
 #include <sys/malloc.h>
+#include <sys/extent.h>
 #include <sys/proc.h>
 #include <sys/kernel.h>
 #include <sys/kthread.h>
 #include <sys/device.h>
+#include <sys/intr.h>
 
 #include <dev/pcmcia/pcmciareg.h>
 #include <dev/pcmcia/pcmciavar.h>
 #include <dev/pcmcia/pcmciachip.h>
 
-#include <machine/bus.h>
-#include <machine/autoconf.h>
+#include <sys/bus.h>
 
 #include <dev/sbus/sbusvar.h>
 #include <dev/sbus/stp4020reg.h>
 
 #define STP4020_DEBUG 1	/* XXX-temp */
+
+/*
+ * We use the three available windows per socket in a simple, fixed
+ * arrangement. Each window maps (at full 1 MB size) one of the pcmcia
+ * spaces into sbus space.
+ */
+#define STP_WIN_ATTR	0	/* index of the attribute memory space window */
+#define	STP_WIN_MEM	1	/* index of the common memory space window */
+#define	STP_WIN_IO	2	/* index of the io space window */
+
 
 #if defined(STP4020_DEBUG)
 int stp4020_debug = 0;
@@ -89,16 +95,24 @@ struct stp4020_socket {
 	struct stp4020_softc	*sc;	/* Back link */
 	int		flags;
 #define STP4020_SOCKET_BUSY	0x0001
-#define STP4020_SOCKET_SHUTDOWN	0x0002
 	int		sock;		/* Socket number (0 or 1) */
-	bus_space_tag_t	tag;		/* socket control space */
-	bus_space_handle_t	regs;	/* 			*/
+	int		sbus_intno;	/* Do we use first (0) or second (1)
+					   interrupt? */
+#ifndef SUN4U
+	int		int_enable;	/* ICR0 value for interrupt enabled */
+	int		int_disable;	/* ICR0 value for interrupt disabled */
+#endif
+	bus_space_tag_t	tag;		/* socket control io	*/
+	bus_space_handle_t	regs;	/*  space		*/
+	bus_space_tag_t	pcmciat;	/* io space for pcmcia  */
 	struct device	*pcmcia;	/* Associated PCMCIA device */
 	int		(*intrhandler)	/* Card driver interrupt handler */
-			    __P((void *));
+			   (void *);
 	void		*intrarg;	/* Card interrupt handler argument */
-	int		ipl;		/* Interrupt level suggested by card */
-	int		winalloc;	/* Windows allocated (bitmask) */
+#ifndef SUN4U
+	void		*softint;	/* cookie for the softintr */
+#endif
+
 	struct {
 		bus_space_handle_t	winaddr;/* this window's address */
 	} windows[STP4020_NWIN];
@@ -108,67 +122,70 @@ struct stp4020_socket {
 struct stp4020_softc {
 	struct device	sc_dev;		/* Base device */
 	struct sbusdev	sc_sd;		/* SBus device */
-	bus_space_tag_t	sc_bustag;
-	bus_dma_tag_t	sc_dmatag;
 	pcmcia_chipset_tag_t	sc_pct;	/* Chipset methods */
 
-	struct proc	*event_thread;		/* event handling thread */
+	struct lwp	*event_thread;		/* event handling thread */
 	SIMPLEQ_HEAD(, stp4020_event)	events;	/* Pending events for thread */
 
 	struct stp4020_socket sc_socks[STP4020_NSOCK];
+#ifndef SUN4U
+	bool		sc_use_softint;
+#endif
 };
 
 
-static int	stp4020print	__P((void *, const char *));
-static int	stp4020match	__P((struct device *, struct cfdata *, void *));
-static void	stp4020attach	__P((struct device *, struct device *, void *));
-static int	stp4020_iointr	__P((void *));
-static int	stp4020_statintr __P((void *));
-
-struct cfattach nell_ca = {
-	sizeof(struct stp4020_softc), stp4020match, stp4020attach
-};
-
-#ifdef STP4020_DEBUG
-static void	stp4020_dump_regs __P((struct stp4020_socket *));
+static int	stp4020print(void *, const char *);
+static int	stp4020match(struct device *, struct cfdata *, void *);
+static void	stp4020attach(struct device *, struct device *, void *);
+static int	stp4020_intr(void *);
+static void	stp4020_map_window(struct stp4020_socket *h, int win, int speed);
+static void	stp4020_calc_speed(int bus_speed, int ns, int *length, int *cmd_delay);
+#ifndef SUN4U
+static void	stp4020_intr_dispatch(void *arg);
 #endif
 
-static int	stp4020_rd_sockctl __P((struct stp4020_socket *, int));
-static void	stp4020_wr_sockctl __P((struct stp4020_socket *, int, int));
-static int	stp4020_rd_winctl __P((struct stp4020_socket *, int, int));
-static void	stp4020_wr_winctl __P((struct stp4020_socket *, int, int, int));
+CFATTACH_DECL(nell, sizeof(struct stp4020_softc),
+    stp4020match, stp4020attach, NULL, NULL);
 
-void	stp4020_delay __P((unsigned int));
-void	stp4020_attach_socket __P((struct stp4020_socket *));
-void	stp4020_create_event_thread __P((void *));
-void	stp4020_event_thread __P((void *));
-void	stp4020_queue_event __P((struct stp4020_softc *, int, int));
+#ifdef STP4020_DEBUG
+static void	stp4020_dump_regs(struct stp4020_socket *);
+#endif
 
-int	stp4020_chip_mem_alloc __P((pcmcia_chipset_handle_t, bus_size_t,
-				    struct pcmcia_mem_handle *));
-void	stp4020_chip_mem_free __P((pcmcia_chipset_handle_t,
-				   struct pcmcia_mem_handle *));
-int	stp4020_chip_mem_map __P((pcmcia_chipset_handle_t, int, bus_addr_t,
+static int	stp4020_rd_sockctl(struct stp4020_socket *, int);
+static void	stp4020_wr_sockctl(struct stp4020_socket *, int, int);
+static int	stp4020_rd_winctl(struct stp4020_socket *, int, int);
+static void	stp4020_wr_winctl(struct stp4020_socket *, int, int, int);
+
+void	stp4020_delay(struct stp4020_softc *sc, unsigned int);
+void	stp4020_attach_socket(struct stp4020_socket *, int);
+void	stp4020_event_thread(void *);
+void	stp4020_queue_event(struct stp4020_softc *, int, int);
+
+int	stp4020_chip_mem_alloc(pcmcia_chipset_handle_t, bus_size_t,
+				    struct pcmcia_mem_handle *);
+void	stp4020_chip_mem_free(pcmcia_chipset_handle_t,
+				   struct pcmcia_mem_handle *);
+int	stp4020_chip_mem_map(pcmcia_chipset_handle_t, int, bus_addr_t,
 				  bus_size_t, struct pcmcia_mem_handle *,
-				  bus_addr_t *, int *));
-void	stp4020_chip_mem_unmap __P((pcmcia_chipset_handle_t, int));
+				  bus_size_t *, int *);
+void	stp4020_chip_mem_unmap(pcmcia_chipset_handle_t, int);
 
-int	stp4020_chip_io_alloc __P((pcmcia_chipset_handle_t,
+int	stp4020_chip_io_alloc(pcmcia_chipset_handle_t,
 				   bus_addr_t, bus_size_t, bus_size_t,
-				   struct pcmcia_io_handle *));
-void	stp4020_chip_io_free __P((pcmcia_chipset_handle_t,
-				  struct pcmcia_io_handle *));
-int	stp4020_chip_io_map __P((pcmcia_chipset_handle_t, int, bus_addr_t,
-				 bus_size_t, struct pcmcia_io_handle *, int *));
-void	stp4020_chip_io_unmap __P((pcmcia_chipset_handle_t, int));
+				   struct pcmcia_io_handle *);
+void	stp4020_chip_io_free(pcmcia_chipset_handle_t,
+				  struct pcmcia_io_handle *);
+int	stp4020_chip_io_map(pcmcia_chipset_handle_t, int, bus_addr_t,
+				 bus_size_t, struct pcmcia_io_handle *, int *);
+void	stp4020_chip_io_unmap(pcmcia_chipset_handle_t, int);
 
-void	stp4020_chip_socket_enable __P((pcmcia_chipset_handle_t));
-void	stp4020_chip_socket_disable __P((pcmcia_chipset_handle_t));
-void	*stp4020_chip_intr_establish __P((pcmcia_chipset_handle_t,
+void	stp4020_chip_socket_enable(pcmcia_chipset_handle_t);
+void	stp4020_chip_socket_disable(pcmcia_chipset_handle_t);
+void	stp4020_chip_socket_settype(pcmcia_chipset_handle_t, int);
+void	*stp4020_chip_intr_establish(pcmcia_chipset_handle_t,
 					  struct pcmcia_function *, int,
-					  int (*) __P((void *)), void *));
-void	stp4020_chip_intr_disestablish __P((pcmcia_chipset_handle_t, void *));
-
+					  int (*)(void *), void *);
+void	stp4020_chip_intr_disestablish(pcmcia_chipset_handle_t, void *);
 
 /* Our PCMCIA chipset methods */
 static struct pcmcia_chip_functions stp4020_functions = {
@@ -186,11 +203,13 @@ static struct pcmcia_chip_functions stp4020_functions = {
 	stp4020_chip_intr_disestablish,
 
 	stp4020_chip_socket_enable,
-	stp4020_chip_socket_disable
+	stp4020_chip_socket_disable,
+	stp4020_chip_socket_settype,
+	NULL
 };
 
 
-static __inline__ int
+static inline int
 stp4020_rd_sockctl(h, idx)
 	struct stp4020_socket *h;
 	int idx;
@@ -199,7 +218,7 @@ stp4020_rd_sockctl(h, idx)
 	return (bus_space_read_2(h->tag, h->regs, o));
 }
 
-static __inline__ void
+static inline void
 stp4020_wr_sockctl(h, idx, v)
 	struct stp4020_socket *h;
 	int idx;
@@ -209,7 +228,7 @@ stp4020_wr_sockctl(h, idx, v)
 	bus_space_write_2(h->tag, h->regs, o, v);
 }
 
-static __inline__ int
+static inline int
 stp4020_rd_winctl(h, win, idx)
 	struct stp4020_socket *h;
 	int win;
@@ -220,7 +239,7 @@ stp4020_rd_winctl(h, win, idx)
 	return (bus_space_read_2(h->tag, h->regs, o));
 }
 
-static __inline__ void
+static inline void
 stp4020_wr_winctl(h, win, idx, v)
 	struct stp4020_socket *h;
 	int win;
@@ -233,6 +252,87 @@ stp4020_wr_winctl(h, win, idx, v)
 	bus_space_write_2(h->tag, h->regs, o, v);
 }
 
+#ifndef SUN4U	/* XXX - move to SBUS machdep function? */
+
+static	u_int16_t stp4020_read_2(bus_space_tag_t,
+				 bus_space_handle_t,
+				 bus_size_t);
+static	u_int32_t stp4020_read_4(bus_space_tag_t,
+				 bus_space_handle_t,
+				 bus_size_t);
+static	u_int64_t stp4020_read_8(bus_space_tag_t,
+				 bus_space_handle_t,
+				 bus_size_t);
+static	void	stp4020_write_2(bus_space_tag_t,
+				bus_space_handle_t,
+				bus_size_t,
+				u_int16_t);
+static	void	stp4020_write_4(bus_space_tag_t,
+				bus_space_handle_t,
+				bus_size_t,
+				u_int32_t);
+static	void	stp4020_write_8(bus_space_tag_t,
+				bus_space_handle_t,
+				bus_size_t,
+				u_int64_t);
+
+static u_int16_t
+stp4020_read_2(space, handle, offset)
+	bus_space_tag_t space;
+	bus_space_handle_t handle;
+	bus_size_t offset;
+{
+	return (le16toh(*(volatile u_int16_t *)(handle + offset)));
+}
+
+static u_int32_t
+stp4020_read_4(space, handle, offset)
+	bus_space_tag_t space;
+	bus_space_handle_t handle;
+	bus_size_t offset;
+{
+	return (le32toh(*(volatile u_int32_t *)(handle + offset)));
+}
+
+static u_int64_t
+stp4020_read_8(space, handle, offset)
+	bus_space_tag_t space;
+	bus_space_handle_t handle;
+	bus_size_t offset;
+{
+	return (le64toh(*(volatile u_int64_t *)(handle + offset)));
+}
+
+static void
+stp4020_write_2(space, handle, offset, value)
+	bus_space_tag_t space;
+	bus_space_handle_t handle;
+	bus_size_t offset;
+	u_int16_t value;
+{
+	(*(volatile u_int16_t *)(handle + offset)) = htole16(value);
+}
+
+static void
+stp4020_write_4(space, handle, offset, value)
+	bus_space_tag_t space;
+	bus_space_handle_t handle;
+	bus_size_t offset;
+	u_int32_t value;
+{
+	(*(volatile u_int32_t *)(handle + offset)) = htole32(value);
+}
+
+static void
+stp4020_write_8(space, handle, offset, value)
+	bus_space_tag_t space;
+	bus_space_handle_t handle;
+	bus_size_t offset;
+	u_int64_t value;
+{
+	(*(volatile u_int64_t *)(handle + offset)) = htole64(value);
+}
+#endif	/* SUN4U */
 
 int
 stp4020print(aux, busname)
@@ -242,7 +342,7 @@ stp4020print(aux, busname)
 	struct pcmciabus_attach_args *paa = aux;
 	struct stp4020_socket *h = paa->pch;
 
-	printf(" socket %d", h->sock);
+	aprint_normal(" socket %d", h->sock);
 	return (UNCONF);
 }
 
@@ -267,29 +367,87 @@ stp4020attach(parent, self, aux)
 {
 	struct sbus_attach_args *sa = aux;
 	struct stp4020_softc *sc = (void *)self;
-	int node, rev;
-	int i;
+	bus_space_tag_t tag;
+	int rev, i, sbus_intno, hw_ipl;
 	bus_space_handle_t bh;
 
-	node = sa->sa_node;
-
 	/* Transfer bus tags */
-	sc->sc_bustag = sa->sa_bustag;
-	sc->sc_dmatag = sa->sa_dmatag;
+#ifdef SUN4U
+	tag = sa->sa_bustag;
+#else
+	tag = bus_space_tag_alloc(sa->sa_bustag, sc);
+	if (tag == NULL) {
+		aprint_error_dev(self, "attach: out of memory\n");
+		return;
+	}
+	tag->sparc_read_2 = stp4020_read_2;
+	tag->sparc_read_4 = stp4020_read_4;
+	tag->sparc_read_8 = stp4020_read_8;
+	tag->sparc_write_2 = stp4020_write_2;
+	tag->sparc_write_4 = stp4020_write_4;
+	tag->sparc_write_8 = stp4020_write_8;
+#endif	/* SUN4U */
+
+	/* check interrupt options, decide if we need a softint */
+#ifdef SUN4U
+	/*
+	 * On sparc64 the hardware interrupt priority does not restrict
+	 * the IPL we run our interrupt handler on, so we can always just
+	 * use the first interrupt and reqest the handler to run at
+	 * IPL_VM.
+	 */
+	sbus_intno = 0;
+	hw_ipl = IPL_VM;
+#else
+	/*
+	 * We need to check if one of the available interrupts has
+	 * a priority that allows us to establish a handler at IPL_VM.
+	 * If not (hard to imagine), use a soft interrupt.
+	 */
+	sbus_intno = -1;
+	for (i = 0; i < sa->sa_nintr; i++) {
+		struct sbus_softc *bus =
+			(struct sbus_softc *) sa->sa_bustag->cookie;
+		int ipl = bus->sc_intr2ipl[sa->sa_intr[i].oi_pri];
+		if (ipl <= IPL_VM) {
+			sbus_intno = i;
+			sc->sc_use_softint = false;
+			hw_ipl = IPL_VM;
+			break;
+		}
+	}
+	if (sbus_intno == -1) {
+		/*
+		 * We have not found a usable hardware interrupt - so
+		 * use a softint to bounce to the proper IPL.
+		 */
+		printf("no usable HW interrupt found, using softint\n");
+		sbus_intno = 0;
+		sc->sc_use_softint = true;
+		hw_ipl = IPL_NONE;
+	}
+#endif
 
 	/* Set up per-socket static initialization */
 	sc->sc_socks[0].sc = sc->sc_socks[1].sc = sc;
 	sc->sc_socks[0].tag = sc->sc_socks[1].tag = sa->sa_bustag;
+	/*
+	 * XXX we rely on "tag" accepting the same handle-domain
+	 * as sa->sa_bustag.
+	 */
+	sc->sc_socks[0].pcmciat = sc->sc_socks[1].pcmciat = tag;
+	sc->sc_socks[0].sbus_intno =
+		sc->sc_socks[1].sbus_intno = sbus_intno;
 
 	if (sa->sa_nreg < 8) {
 		printf("%s: only %d register sets\n",
-			self->dv_xname, sa->sa_nreg);
+			device_xname(self), sa->sa_nreg);
 		return;
 	}
 
 	if (sa->sa_nintr != 2) {
 		printf("%s: expect 2 interrupt Sbus levels; got %d\n",
-			self->dv_xname, sa->sa_nintr);
+			device_xname(self), sa->sa_nintr);
 		return;
 	}
 
@@ -310,13 +468,11 @@ stp4020attach(parent, self, aux)
 			continue;
 
 		if (sbus_bus_map(sa->sa_bustag,
-				 sa->sa_reg[i].sbr_slot,
-				 sa->sa_reg[i].sbr_offset,
-				 sa->sa_reg[i].sbr_size,
-				 BUS_SPACE_MAP_LINEAR, 0,
-				 &bh) != 0) {
-			printf("%s: attach: cannot map registers\n",
-				self->dv_xname);
+				 sa->sa_reg[i].oa_space,
+				 sa->sa_reg[i].oa_base,
+				 sa->sa_reg[i].oa_size,
+				 0, &bh) != 0) {
+			aprint_error_dev(self, "attach: cannot map registers\n");
 			return;
 		}
 
@@ -337,17 +493,11 @@ stp4020attach(parent, self, aux)
 
 	sbus_establish(&sc->sc_sd, &sc->sc_dev);
 
-	/*
-	 * We get to use two SBus interrupt levels.
-	 * The higher level we use for status change interrupts;
-	 * the lower level for PC card I/O.
-	 */
-	if (sa->sa_nintr != 0) {
-		bus_intr_establish(sa->sa_bustag, sa->sa_intr[1].sbi_pri,
-				   0, stp4020_statintr, sc);
-
-		bus_intr_establish(sa->sa_bustag, sa->sa_intr[0].sbi_pri,
-				   0, stp4020_iointr, sc);
+	/* We only use one interrupt level. */
+	if (sa->sa_nintr > sbus_intno) {
+		bus_intr_establish(sa->sa_bustag,
+		    sa->sa_intr[sbus_intno].oi_pri,
+		    hw_ipl, stp4020_intr, sc);
 	}
 
 	rev = stp4020_rd_sockctl(&sc->sc_socks[0], STP4020_ISR1_IDX) &
@@ -356,40 +506,57 @@ stp4020attach(parent, self, aux)
 
 	sc->sc_pct = (pcmcia_chipset_tag_t)&stp4020_functions;
 
-	/*
-	 * Arrange that a kernel thread be created to handle
-	 * insert/removal events.
-	 */
 	SIMPLEQ_INIT(&sc->events);
-	kthread_create(stp4020_create_event_thread, sc);
 
 	for (i = 0; i < STP4020_NSOCK; i++) {
 		struct stp4020_socket *h = &sc->sc_socks[i];
 		h->sock = i;
 		h->sc = sc;
 #ifdef STP4020_DEBUG
-		stp4020_dump_regs(h);
+		if (stp4020_debug)
+			stp4020_dump_regs(h);
 #endif
-		stp4020_attach_socket(h);
+		stp4020_attach_socket(h, sa->sa_frequency);
+	}
+
+	/*
+	 * Arrange that a kernel thread be created to handle
+	 * insert/removal events.
+	 */
+	if (kthread_create(PRI_NONE, 0, NULL, stp4020_event_thread, sc,
+	    &sc->event_thread, "%s", device_xname(self))) {
+		panic("%s: unable to create event thread", device_xname(self));
 	}
 }
 
 void
-stp4020_attach_socket(h)
+stp4020_attach_socket(h, speed)
 	struct stp4020_socket *h;
+	int speed;
 {
 	struct pcmciabus_attach_args paa;
 	int v;
 
-	/* Initialize the rest of the handle */
-	h->winalloc = 0;
+	/* no interrupt handlers yet */
+	h->intrhandler = NULL;
+	h->intrarg = NULL;
+#ifndef SUN4U
+	h->softint = NULL;
+	h->int_enable = 0;
+	h->int_disable = 0;
+#endif
+
+	/* Map all three windows */
+	stp4020_map_window(h, STP_WIN_ATTR, speed);
+	stp4020_map_window(h, STP_WIN_MEM, speed);
+	stp4020_map_window(h, STP_WIN_IO, speed);
 
 	/* Configure one pcmcia device per socket */
 	paa.paa_busname = "pcmcia";
 	paa.pct = (pcmcia_chipset_tag_t)h->sc->sc_pct;
 	paa.pch = (pcmcia_chipset_handle_t)h;
 	paa.iobase = 0;
-	paa.iosize = 0;
+	paa.iosize = STP4020_WINDOW_SIZE;
 
 	h->pcmcia = config_found(&h->sc->sc_dev, &paa, stp4020print);
 
@@ -401,37 +568,33 @@ stp4020_attach_socket(h)
 	 */
 
 	/*
-	 * Enable socket status change interrupts.
-	 * We use SB_INT[1] for status change interrupts.
+	 * Clear things up before we enable status change interrupts.
+	 * This seems to not be fully initialized by the PROM.
 	 */
-	v = stp4020_rd_sockctl(h, STP4020_ICR0_IDX);
-	v |= STP4020_ICR0_ALL_STATUS_IE | STP4020_ICR0_SCILVL_SB1;
+	stp4020_wr_sockctl(h, STP4020_ICR1_IDX, 0);
+	stp4020_wr_sockctl(h, STP4020_ICR0_IDX, 0);
+	stp4020_wr_sockctl(h, STP4020_ISR1_IDX, 0x3fff);
+	stp4020_wr_sockctl(h, STP4020_ISR0_IDX, 0x3fff);
+
+	/*
+	 * Enable socket status change interrupts.
+	 * We only use one common interrupt for status change
+	 * and IO, to avoid locking issues.
+	 */
+	v = STP4020_ICR0_ALL_STATUS_IE
+	    | (h->sbus_intno ? STP4020_ICR0_SCILVL_SB1
+			     : STP4020_ICR0_SCILVL_SB0);
 	stp4020_wr_sockctl(h, STP4020_ICR0_IDX, v);
 
-	/* Get live status bits from ISR0 */
+	/* Get live status bits from ISR0 and clear pending interrupts */
 	v = stp4020_rd_sockctl(h, STP4020_ISR0_IDX);
+	stp4020_wr_sockctl(h, STP4020_ISR0_IDX, v);
+
 	if ((v & (STP4020_ISR0_CD1ST|STP4020_ISR0_CD2ST)) == 0)
 		return;
 
 	pcmcia_card_attach(h->pcmcia);
 	h->flags |= STP4020_SOCKET_BUSY;
-}
-
-
-/*
- * Deferred thread creation callback.
- */
-void
-stp4020_create_event_thread(arg)
-	void *arg;
-{
-	struct stp4020_softc *sc = arg;
-	const char *name = sc->sc_dev.dv_xname;
-
-	if (kthread_create1(stp4020_event_thread, sc, &sc->event_thread,
-			   "%s", name)) {
-		panic("%s: unable to create event thread", name);
-	}
 }
 
 /*
@@ -452,10 +615,10 @@ stp4020_event_thread(arg)
 		s = splhigh();
 		if ((e = SIMPLEQ_FIRST(&sc->events)) == NULL) {
 			splx(s);
-			(void)tsleep(&sc->events, PWAIT, "pcicev", 0);
+			(void)tsleep(&sc->events, PWAIT, "nellevt", 0);
 			continue;
 		}
-		SIMPLEQ_REMOVE_HEAD(&sc->events, e, se_q);
+		SIMPLEQ_REMOVE_HEAD(&sc->events, se_q);
 		splx(s);
 
 		n = e->se_sock;
@@ -499,12 +662,42 @@ stp4020_queue_event(sc, sock, event)
 	wakeup(&sc->events);
 }
 
+#ifndef SUN4U
+/*
+ * Softinterrupt called to invoke the real driver interrupt handler.
+ */
+static void
+stp4020_intr_dispatch(arg)
+	void *arg;
+{
+	struct stp4020_socket *h = arg;
+	int s;
+
+	/* invoke driver handler */
+	h->intrhandler(h->intrarg);
+
+	/* enable SBUS interrupts for pcmcia interrupts again */
+	s = splhigh();
+	stp4020_wr_sockctl(h, STP4020_ICR0_IDX, h->int_enable);
+	splx(s);
+}
+#endif
+
 int
-stp4020_statintr(arg)
+stp4020_intr(arg)
 	void *arg;
 {
 	struct stp4020_softc *sc = arg;
-	int i, r = 0;
+#ifndef SUN4U
+	int s;
+#endif
+	int i, r = 0, cd_change = 0;
+
+
+#ifndef SUN4U
+	/* protect hardware access by splhigh against softint */
+	s = splhigh();
+#endif
 
 	/*
 	 * Check each socket for pending requests.
@@ -515,8 +708,10 @@ stp4020_statintr(arg)
 
 		h = &sc->sc_socks[i];
 
-		/* Read socket's ISR0 for the interrupt status bits */
 		v = stp4020_rd_sockctl(h, STP4020_ISR0_IDX);
+
+		/* Ack all interrupts at once. */
+		stp4020_wr_sockctl(h, STP4020_ISR0_IDX, v);
 
 #ifdef STP4020_DEBUG
 		if (stp4020_debug != 0) {
@@ -527,15 +722,13 @@ stp4020_statintr(arg)
 		}
 #endif
 
-		/* Ack all interrupts at once */
-		stp4020_wr_sockctl(h, STP4020_ISR0_IDX,
-				   STP4020_ISR0_ALL_STATUS_IRQ);
-
 		if ((v & STP4020_ISR0_CDCHG) != 0) {
 			/*
 			 * Card status change detect
 			 */
-			if ((v & (STP4020_ISR0_CD1ST|STP4020_ISR0_CD2ST)) != 0){
+			cd_change = 1;
+			r = 1;
+			if ((v & (STP4020_ISR0_CD1ST|STP4020_ISR0_CD2ST)) == (STP4020_ISR0_CD1ST|STP4020_ISR0_CD2ST)){
 				if ((h->flags & STP4020_SOCKET_BUSY) == 0) {
 					stp4020_queue_event(sc, i,
 						STP4020_EVENT_INSERTION);
@@ -551,63 +744,138 @@ stp4020_statintr(arg)
 			}
 		}
 
-		/* XXX - a bunch of unhandled conditions */
-		if ((v & STP4020_ISR0_BVD1CHG) != 0) {
-			printf("stp4020[%d]: Battery change 1\n", h->sock);
-		}
-
-		if ((v & STP4020_ISR0_BVD2CHG) != 0) {
-			printf("stp4020[%d]: Battery change 2\n", h->sock);
-		}
-
-		if ((v & STP4020_ISR0_RDYCHG) != 0) {
-			printf("stp4020[%d]: Ready/Busy change\n", h->sock);
-		}
-
-		if ((v & STP4020_ISR0_WPCHG) != 0) {
-			printf("stp4020[%d]: Write protect change\n", h->sock);
-		}
-
-		if ((v & STP4020_ISR0_PCTO) != 0) {
-			printf("stp4020[%d]: Card access timeout\n", h->sock);
-		}
-	}
-
-	return (r);
-}
-
-int
-stp4020_iointr(arg)
-	void *arg;
-{
-	struct stp4020_softc *sc = arg;
-	int i, r = 0;
-
-	/*
-	 * Check each socket for pending requests.
-	 */
-	for (i = 0 ; i < STP4020_NSOCK; i++) {
-		struct stp4020_socket *h;
-		int v;
-
-		h = &sc->sc_socks[i];
-		v = stp4020_rd_sockctl(h, STP4020_ISR0_IDX);
-
 		if ((v & STP4020_ISR0_IOINT) != 0) {
+			/* we can not deny this is ours, no matter what the
+			   card driver says. */
+			r = 1;
+
 			/* It's a card interrupt */
 			if ((h->flags & STP4020_SOCKET_BUSY) == 0) {
 				printf("stp4020[%d]: spurious interrupt?\n",
 					h->sock);
 				continue;
 			}
-			/* Call card handler, if any */
-			if (h->intrhandler != NULL)
-				r |= (*h->intrhandler)(h->intrarg);
+
+#ifndef SUN4U
+			/*
+			 * Schedule softint to invoke driver interrupt
+			 * handler
+			 */
+			if (h->softint != NULL)
+				sparc_softintr_schedule(h->softint);
+			/*
+			 * Disable this sbus interrupt, until the soft-int
+			 * handler had a chance to run
+			 */
+			stp4020_wr_sockctl(h, STP4020_ICR0_IDX, h->int_disable);
+#else
+			(*h->intrhandler)(h->intrarg);
+#endif
 		}
 
+		/* informational messages */
+		if ((v & STP4020_ISR0_BVD1CHG) != 0) {
+			/* ignore if this is caused by insert or removal */
+			if (!cd_change)
+				printf("stp4020[%d]: Battery change 1\n", h->sock);
+			r = 1;
+		}
+
+		if ((v & STP4020_ISR0_BVD2CHG) != 0) {
+			/* ignore if this is caused by insert or removal */
+			if (!cd_change)
+				printf("stp4020[%d]: Battery change 2\n", h->sock);
+			r = 1;
+		}
+
+		if ((v & STP4020_ISR0_SCINT) != 0) {
+			DPRINTF(("stp4020[%d]: status change\n", h->sock));
+			r = 1;
+		}
+
+		if ((v & STP4020_ISR0_RDYCHG) != 0) {
+			DPRINTF(("stp4020[%d]: Ready/Busy change\n", h->sock));
+			r = 1;
+		}
+
+		if ((v & STP4020_ISR0_WPCHG) != 0) {
+			DPRINTF(("stp4020[%d]: Write protect change\n", h->sock));
+			r = 1;
+		}
+
+		if ((v & STP4020_ISR0_PCTO) != 0) {
+			DPRINTF(("stp4020[%d]: Card access timeout\n", h->sock));
+			r = 1;
+		}
+
+		if ((v & ~STP4020_ISR0_LIVE) && r == 0)
+			printf("stp4020[%d]: unhandled interrupt: 0x%x\n", h->sock, v);
+
 	}
+#ifndef SUN4U
+	splx(s);
+#endif
 
 	return (r);
+}
+
+/*
+ * The function gets the sbus speed and a access time and calculates
+ * values for the CMDLNG and CMDDLAY registers.
+ */
+static void
+stp4020_calc_speed(int bus_speed, int ns, int *length, int *cmd_delay)
+{
+	int result;
+
+	if (ns < STP4020_MEM_SPEED_MIN)
+		ns = STP4020_MEM_SPEED_MIN;
+	else if (ns > STP4020_MEM_SPEED_MAX)
+		ns = STP4020_MEM_SPEED_MAX;
+	result = ns*(bus_speed/1000);
+	if (result % 1000000)
+		result = result/1000000 + 1;
+	else
+		result /= 1000000;
+	*length = result;
+
+	/* the sbus frequency range is limited, so we can keep this simple */
+	*cmd_delay = ns <= STP4020_MEM_SPEED_MIN? 1 : 2;
+}
+
+static void
+stp4020_map_window(struct stp4020_socket *h, int win, int speed)
+{
+	int v, length, cmd_delay;
+
+	/*
+	 * According to the PC Card standard 300ns access timing should be
+	 * used for attribute memory access. Our pcmcia framework does not
+	 * seem to propagate timing information, so we use that
+	 * everywhere.
+	 */
+	stp4020_calc_speed(speed, (win==STP_WIN_ATTR)? 300 : 100, &length, &cmd_delay);
+
+	/*
+	 * Fill in the Address Space Select and Base Address
+	 * fields of this windows control register 0.
+	 */
+	v = ((cmd_delay << STP4020_WCR0_CMDDLY_S)&STP4020_WCR0_CMDDLY_M)
+	    | ((length << STP4020_WCR0_CMDLNG_S)&STP4020_WCR0_CMDLNG_M);
+	switch (win) {
+	case STP_WIN_ATTR:
+		v |= STP4020_WCR0_ASPSEL_AM;
+		break;
+	case STP_WIN_MEM:
+		v |= STP4020_WCR0_ASPSEL_CM;
+		break;
+	case STP_WIN_IO:
+		v |= STP4020_WCR0_ASPSEL_IO;
+		break;
+	}
+	v |= (STP4020_ADDR2PAGE(0) & STP4020_WCR0_BASE_M);
+	stp4020_wr_winctl(h, win, STP4020_WCR0_IDX, v);
+	stp4020_wr_winctl(h, win, STP4020_WCR1_IDX, 1<<STP4020_WCR1_WAITREQ_S);
 }
 
 int
@@ -617,31 +885,13 @@ stp4020_chip_mem_alloc(pch, size, pcmhp)
 	struct pcmcia_mem_handle *pcmhp;
 {
 	struct stp4020_socket *h = (struct stp4020_socket *)pch;
-	int i, win;
 
-	/*
-	 * Allocate a window.
-	 */
-	if (size > STP4020_WINDOW_SIZE)
-		return (1);
-
-	for (win = -1, i = 0; i < STP4020_NWIN; i++) {
-		if ((h->winalloc & (1 << i)) == 0) {
-			win = i;
-			h->winalloc |= (1 << i);
-			break;
-		}
-	}
-
-	if (win == -1)
-		return (1);
-
-	pcmhp->memt = 0;
-	pcmhp->memh = h->windows[win].winaddr;
-	pcmhp->addr = 0;	/* What is it used for? */
+	/* we can not do much here, defere work to _mem_map */
+	pcmhp->memt = h->pcmciat;
 	pcmhp->size = size;
-	pcmhp->mhandle = win;	/* Use our window number as a handle */
-	pcmhp->realsize = STP4020_WINDOW_SIZE;
+	pcmhp->addr = 0;
+	pcmhp->mhandle = 0;
+	pcmhp->realsize = size;
 
 	return (0);
 }
@@ -651,8 +901,6 @@ stp4020_chip_mem_free(pch, pcmhp)
 	pcmcia_chipset_handle_t pch;
 	struct pcmcia_mem_handle *pcmhp;
 {
-
-	return;
 }
 
 int
@@ -662,46 +910,24 @@ stp4020_chip_mem_map(pch, kind, card_addr, size, pcmhp, offsetp, windowp)
 	bus_addr_t card_addr;
 	bus_size_t size;
 	struct pcmcia_mem_handle *pcmhp;
-	bus_addr_t *offsetp;
+	bus_size_t *offsetp;
 	int *windowp;
 {
 	struct stp4020_socket *h = (struct stp4020_socket *)pch;
-	bus_addr_t offset;
-	int win, v;
+	int win = (kind&PCMCIA_MEM_ATTR)? STP_WIN_ATTR : STP_WIN_MEM;
 
-	int mem8 = (kind & PCMCIA_WIDTH_MEM_MASK) == PCMCIA_WIDTH_MEM8;
-	kind &= ~PCMCIA_WIDTH_MEM_MASK;
-
-	if(mem8) {
-	    /* XXX Fix 8-bit memory accesses (can this be done at all?) */
-#ifdef DIAGNOSTIC
-	    printf("stp4020_chip_mem_map: can't handle 8-bit memory\n");
+	pcmhp->memt = h->pcmciat;
+	bus_space_subregion(h->pcmciat, h->windows[win].winaddr, card_addr, size, &pcmhp->memh);
+#ifdef SUN4U
+	if ((u_int8_t)pcmhp->memh._asi == ASI_PHYS_NON_CACHED)
+		pcmhp->memh._asi = ASI_PHYS_NON_CACHED_LITTLE;
+	else if ((u_int8_t)pcmhp->memh._asi == ASI_PRIMARY)
+		pcmhp->memh._asi = ASI_PRIMARY_LITTLE;
 #endif
-	    return (-1);
-	}
-
-	win = pcmhp->mhandle;
-	*windowp = win;
-
-	/*
-	 * Compute the address offset to the pcmcia address space
-	 * for the window.
-	 */
-	offset = card_addr & -STP4020_WINDOW_SIZE;
-	card_addr -= offset;
-	*offsetp = offset;
-
-	/*
-	 * Fill in the Address Space Select and Base Address
-	 * fields of this windows control register 0.
-	 */
-	v = stp4020_rd_winctl(h, win, STP4020_WCR0_IDX);
-	v &= (STP4020_WCR0_ASPSEL_M | STP4020_WCR0_BASE_M);
-	v |= (kind == PCMCIA_MEM_ATTR)
-		? STP4020_WCR0_ASPSEL_AM
-		: STP4020_WCR0_ASPSEL_CM;
-	v |= (STP4020_ADDR2PAGE(card_addr) & STP4020_WCR0_BASE_M);
-	stp4020_wr_winctl(h, win, STP4020_WCR0_IDX, v);
+	pcmhp->size = size;
+	pcmhp->realsize = STP4020_WINDOW_SIZE - card_addr;
+	*offsetp = 0;
+	*windowp = 0;
 
 	return (0);
 }
@@ -711,17 +937,6 @@ stp4020_chip_mem_unmap(pch, win)
 	pcmcia_chipset_handle_t pch;
 	int win;
 {
-	struct stp4020_socket *h = (struct stp4020_socket *)pch;
-
-#ifdef DIAGNOSTIC
-	if (win < 0 || win > 2)
-		panic("stp4020_chip_mem_unmap: window (%d) out of range", win);
-#endif
-	h->winalloc &= ~(1 << win);
-	/*
-	 * If possible, invalidate hardware mapping here; but
-	 * I don't think the stp4020 has provided for that.
-	 */
 }
 
 int
@@ -734,19 +949,9 @@ stp4020_chip_io_alloc(pch, start, size, align, pcihp)
 {
 	struct stp4020_socket *h = (struct stp4020_socket *)pch;
 
-	if (start) {
-		/* How on earth can `start' be interpreted??
-		   WHERE DOES THE CARD DRIVER GET IT FROM?
-		 */
-	}
-
-	pcihp->iot = h->tag;
-	pcihp->ioh = 0;
-	pcihp->addr = 0;
-	pcihp->size = size;
-	pcihp->flags = 0;
-
-	return (0);
+	pcihp->iot = h->pcmciat;
+	pcihp->ioh = h->windows[STP_WIN_IO].winaddr;
+	return 0;
 }
 
 void
@@ -754,8 +959,6 @@ stp4020_chip_io_free(pch, pcihp)
 	pcmcia_chipset_handle_t pch;
 	struct pcmcia_io_handle *pcihp;
 {
-
-	return;
 }
 
 int
@@ -768,38 +971,17 @@ stp4020_chip_io_map(pch, width, offset, size, pcihp, windowp)
 	int *windowp;
 {
 	struct stp4020_socket *h = (struct stp4020_socket *)pch;
-	int i, win, v;
 
-	/*
-	 * Allocate a window.
-	 */
-	if (size > STP4020_WINDOW_SIZE)
-		return (1);
-
-	for (win = -1, i = 0; i < STP4020_NWIN; i++) {
-		if ((h->winalloc & (1 << i)) == 0) {
-			win = i;
-			h->winalloc |= (1 << i);
-			break;
-		}
-	}
-
-	if (win == -1)
-		return (1);
-
-	*windowp = win;
-
-	/*
-	 * Fill in the Address Space Select and Base Address
-	 * fields of this windows control register 0.
-	 */
-	v = stp4020_rd_winctl(h, win, STP4020_WCR0_IDX);
-	v &= (STP4020_WCR0_ASPSEL_M | STP4020_WCR0_BASE_M);
-	v |= STP4020_WCR0_ASPSEL_IO;
-	v |= (STP4020_ADDR2PAGE(pcihp->addr+offset) & STP4020_WCR0_BASE_M);
-	stp4020_wr_winctl(h, win, STP4020_WCR0_IDX, v);
-
-	return (0);
+	pcihp->iot = h->pcmciat;
+	bus_space_subregion(h->pcmciat, h->windows[STP_WIN_IO].winaddr, offset, size, &pcihp->ioh);
+#ifdef SUN4U
+	if ((u_int8_t)pcihp->ioh._asi == ASI_PHYS_NON_CACHED)
+		pcihp->ioh._asi = ASI_PHYS_NON_CACHED_LITTLE;
+	else if ((u_int8_t)pcihp->ioh._asi == ASI_PRIMARY)
+		pcihp->ioh._asi = ASI_PRIMARY_LITTLE;
+#endif
+	*windowp = 0;
+	return 0;
 }
 
 void
@@ -807,14 +989,6 @@ stp4020_chip_io_unmap(pch, win)
 	pcmcia_chipset_handle_t pch;
 	int win;
 {
-	struct stp4020_socket *h = (struct stp4020_socket *)pch;
-
-#ifdef DIAGNOSTIC
-	if (win < 0 || win > 2)
-		panic("stp4020_chip_io_unmap: window (%d) out of range", win);
-#endif
-
-	h->winalloc &= ~(1 << win);
 }
 
 void
@@ -822,33 +996,30 @@ stp4020_chip_socket_enable(pch)
 	pcmcia_chipset_handle_t pch;
 {
 	struct stp4020_socket *h = (struct stp4020_socket *)pch;
-	int i, v, cardtype;
+	int i, v;
 
 	/* this bit is mostly stolen from pcic_attach_card */
 
 	/* Power down the socket to reset it, clear the card reset pin */
-	v = stp4020_rd_sockctl(h, STP4020_ICR1_IDX);
-	v &= ~STP4020_ICR1_MSTPWR;
-	stp4020_wr_sockctl(h, STP4020_ICR1_IDX, v);
+	stp4020_wr_sockctl(h, STP4020_ICR1_IDX, 0);
 
 	/*
 	 * wait 300ms until power fails (Tpf).  Then, wait 100ms since
 	 * we are changing Vcc (Toff).
 	 */
-	stp4020_delay((300 + 100) * 1000);
+	stp4020_delay(h->sc, 300 + 100);
 
 	/* Power up the socket */
-	v = stp4020_rd_sockctl(h, STP4020_ICR1_IDX);
-	v |= STP4020_ICR1_MSTPWR;
+	v = STP4020_ICR1_MSTPWR;
 	stp4020_wr_sockctl(h, STP4020_ICR1_IDX, v);
 
 	/*
 	 * wait 100ms until power raise (Tpr) and 20ms to become
 	 * stable (Tsu(Vcc)).
 	 */
-	stp4020_delay((100 + 20) * 1000);
+	stp4020_delay(h->sc, 100 + 20);
 
-	v |= STP4020_ICR1_PCIFOE;
+	v |= STP4020_ICR1_PCIFOE|STP4020_ICR1_VPP1_VCC;
 	stp4020_wr_sockctl(h, STP4020_ICR1_IDX, v);
 
 	/*
@@ -856,13 +1027,15 @@ stp4020_chip_socket_enable(pch)
 	 */
 	delay(10);
 
-	/* Clear reset flag */
+	/* Clear reset flag, set to memory mode */
 	v = stp4020_rd_sockctl(h, STP4020_ICR0_IDX);
+	v &= ~(STP4020_ICR0_IOIE | STP4020_ICR0_IOILVL | STP4020_ICR0_IFTYPE |
+	    STP4020_ICR0_SPKREN);
 	v &= ~STP4020_ICR0_RESET;
 	stp4020_wr_sockctl(h, STP4020_ICR0_IDX, v);
 
 	/* wait 20ms as per pc card standard (r2.01) section 4.3.6 */
-	stp4020_delay(20000);
+	stp4020_delay(h->sc, 20);
 
 	/* Wait for the chip to finish initializing (5 seconds max) */
 	for (i = 10000; i > 0; i--) {
@@ -879,37 +1052,42 @@ stp4020_chip_socket_enable(pch)
 			bits);
 		return;
 	}
+}
 
-	/* Set the card type */
-	cardtype = pcmcia_card_gettype(h->pcmcia);
-
-	v = stp4020_rd_sockctl(h, STP4020_ICR0_IDX);
-	v &= ~STP4020_ICR0_IFTYPE;
-	v |= (cardtype == PCMCIA_IFTYPE_IO)
-			? STP4020_ICR0_IFTYPE_IO
-			: STP4020_ICR0_IFTYPE_MEM;
-	stp4020_wr_sockctl(h, STP4020_ICR0_IDX, v);
-
-	DPRINTF(("%s: stp4020_chip_socket_enable %02x cardtype %s\n",
-		h->sc->sc_dev.dv_xname, h->sock,
-		((cardtype == PCMCIA_IFTYPE_IO) ? "io" : "mem")));
+void
+stp4020_chip_socket_settype(pch, type)
+	pcmcia_chipset_handle_t pch;
+	int type;
+{
+	struct stp4020_socket *h = (struct stp4020_socket *)pch;
+	int v;
 
 	/*
-	 * Enable socket I/O interrupts.
-	 * We use level SB_INT[0] for I/O interrupts.
+	 * Check the card type.
+	 * Enable socket I/O interrupts for IO cards.
 	 */
 	v = stp4020_rd_sockctl(h, STP4020_ICR0_IDX);
-	v &= ~STP4020_ICR0_IOILVL;
-	v |= STP4020_ICR0_IOIE | STP4020_ICR0_IOILVL_SB0;
-	stp4020_wr_sockctl(h, STP4020_ICR0_IDX, v);
-
-#if 0
-	/* Reinstall all the memory and io mappings */
-	for (win = 0; win < STP4020_NWIN; win++)
-		if (h->winalloc & (1 << win))
-			___chip_mem_map(h, win);
-
+	v &= ~(STP4020_ICR0_IOIE | STP4020_ICR0_IOILVL | STP4020_ICR0_IFTYPE |
+	    STP4020_ICR0_SPKREN);
+	if (type == PCMCIA_IFTYPE_IO) {
+		v |= STP4020_ICR0_IFTYPE_IO|STP4020_ICR0_IOIE
+		    |STP4020_ICR0_SPKREN;
+		v |= h->sbus_intno ? STP4020_ICR0_IOILVL_SB1
+				   : STP4020_ICR0_IOILVL_SB0;
+#ifndef SUN4U
+		h->int_enable = v;
+		h->int_disable = v & ~STP4020_ICR0_IOIE;
 #endif
+		DPRINTF(("%s: configuring card for IO useage\n", device_xname(&h->sc->sc_dev)));
+	} else {
+		v |= STP4020_ICR0_IFTYPE_MEM;
+#ifndef SUN4U
+		h->int_enable = h->int_disable = v;
+#endif
+		DPRINTF(("%s: configuring card for IO useage\n", device_xname(&h->sc->sc_dev)));
+		DPRINTF(("%s: configuring card for MEM ONLY useage\n", device_xname(&h->sc->sc_dev)));
+	}
+	stp4020_wr_sockctl(h, STP4020_ICR0_IDX, v);
 }
 
 void
@@ -919,24 +1097,21 @@ stp4020_chip_socket_disable(pch)
 	struct stp4020_socket *h = (struct stp4020_socket *)pch;
 	int v;
 
-	DPRINTF(("stp4020_chip_socket_disable\n"));
-
 	/*
 	 * Disable socket I/O interrupts.
 	 */
 	v = stp4020_rd_sockctl(h, STP4020_ICR0_IDX);
-	v &= ~(STP4020_ICR0_IOIE | STP4020_ICR0_IOILVL);
+	v &= ~(STP4020_ICR0_IOIE | STP4020_ICR0_IOILVL | STP4020_ICR0_IFTYPE |
+	    STP4020_ICR0_SPKREN);
 	stp4020_wr_sockctl(h, STP4020_ICR0_IDX, v);
 
 	/* Power down the socket */
-	v = stp4020_rd_sockctl(h, STP4020_ICR1_IDX);
-	v &= ~STP4020_ICR1_MSTPWR;
-	stp4020_wr_sockctl(h, STP4020_ICR1_IDX, v);
+	stp4020_wr_sockctl(h, STP4020_ICR1_IDX, 0);
 
 	/*
 	 * wait 300ms until power fails (Tpf).
 	 */
-	stp4020_delay(300 * 1000);
+	stp4020_delay(h->sc, 300);
 }
 
 void *
@@ -944,15 +1119,23 @@ stp4020_chip_intr_establish(pch, pf, ipl, handler, arg)
 	pcmcia_chipset_handle_t pch;
 	struct pcmcia_function *pf;
 	int ipl;
-	int (*handler) __P((void *));
+	int (*handler)(void *);
 	void *arg;
 {
 	struct stp4020_socket *h = (struct stp4020_socket *)pch;
 
+	/* only one interrupt handler per slot */
+	if (h->intrhandler != NULL) return NULL;
+
 	h->intrhandler = handler;
 	h->intrarg = arg;
-	h->ipl = ipl;
-	return (NULL);
+#ifndef SUN4U
+	if (h->sc->sc_use_softint) {
+		h->softint = sparc_softintr_establish(ipl, stp4020_intr_dispatch, h);
+		return h->softint;
+	}
+#endif
+	return h;
 }
 
 void
@@ -964,6 +1147,12 @@ stp4020_chip_intr_disestablish(pch, ih)
 
 	h->intrhandler = NULL;
 	h->intrarg = NULL;
+#ifndef SUN4U
+	if (h->softint) {
+		sparc_softintr_disestablish(h->softint);
+		h->softint = NULL;
+	}
+#endif
 }
 
 /*
@@ -971,14 +1160,11 @@ stp4020_chip_intr_disestablish(pch, ih)
  * XXX - assumes a context
  */
 void
-stp4020_delay(ms)
+stp4020_delay(sc, ms)
+	struct stp4020_softc *sc;
 	unsigned int ms;
 {
-	unsigned int ticks;
-extern	int cold;
-
-	/* Convert to ticks */
-	ticks = (ms * hz ) / 1000000;
+	unsigned int ticks = mstohz(ms);
 
 	if (cold || ticks == 0) {
 		delay(ms);
@@ -989,7 +1175,7 @@ extern	int cold;
 	if (ticks > 60*hz)
 		panic("stp4020: preposterous delay: %u", ticks);
 #endif
-	tsleep(&ticks, 0, "stp4020_delay", ticks);
+	tsleep(sc, 0, "nelldel", ticks);
 }
 
 #ifdef STP4020_DEBUG

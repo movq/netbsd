@@ -1,4 +1,4 @@
-/*	$NetBSD: if_lereg.h,v 1.1 1997/02/04 03:52:29 thorpej Exp $	*/
+/*	$NetBSD: if_lereg.h,v 1.5 2005/12/11 12:17:19 christos Exp $	*/
 
 /*
  * Copyright (c) 1982, 1990 The Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -54,7 +50,7 @@ struct lereg0 {
 	vu_char	ler0_id;	/* ID */
 	u_char	ler0_pad1;
 	vu_char	ler0_status;	/* interrupt enable/status */
-};
+} __attribute__((__packed__));
 
 /*
  * Control and status bits -- lereg0
@@ -69,7 +65,7 @@ struct lereg0 {
 struct lereg1 {
 	vu_short	ler1_rdp;	/* data port */
 	vu_short	ler1_rap;	/* register select port */
-};
+} __attribute__((__packed__));
 
 /*
  * Control and status bits -- lereg1
@@ -108,11 +104,11 @@ struct init_block {
 	u_short mode;		/* mode register */
 	u_char padr[6];		/* ethernet address */
 	u_long ladrf[2];	/* logical address filter (multicast) */
-        u_short rdra;           /* low order pointer to receive ring */
-        u_short rlen;           /* high order pointer and no. rings */
-        u_short tdra;           /* low order pointer to transmit ring */
-        u_short tlen;           /* high order pointer and no rings */
-};
+	u_short rdra;		/* low order pointer to receive ring */
+	u_short rlen;		/* high order pointer and no. rings */
+	u_short tdra;		/* low order pointer to transmit ring */
+	u_short tlen;		/* high order pointer and no rings */
+} __attribute__((__packed__));
 
 /*
  * Mode bits -- init_block
@@ -127,7 +123,7 @@ struct init_block {
 #define	LE_DRX		0x0001		/* disable receiver */
 #define	LE_NORMAL	0x0000
 
-/* 
+/*
  * Message descriptor
  */
 struct mds {
@@ -135,7 +131,7 @@ struct mds {
 	u_short flags;
 	u_short bcnt;
 	u_short mcnt;
-};
+} __attribute__((__packed__));
 
 /* Message descriptor flags */
 #define LE_OWN		0x8000		/* owner bit, 0=host, 1=LANCE */

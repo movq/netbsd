@@ -1,4 +1,4 @@
-/*	$NetBSD: bootptest.c,v 1.7 1999/09/26 10:27:40 kleink Exp $	*/
+/*	$NetBSD: bootptest.c,v 1.17 2008/05/02 19:22:10 xtraeme Exp $	*/
 
 /*
  * bootptest.c - Test out a bootp server.
@@ -36,10 +36,11 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: bootptest.c,v 1.7 1999/09/26 10:27:40 kleink Exp $");
+__RCSID("$NetBSD: bootptest.c,v 1.17 2008/05/02 19:22:10 xtraeme Exp $");
 #endif
 
-char *usage = "bootptest [-h] server-name [vendor-data-template-file]";
+const char *usage = "usage: %s [-f bootfile] [-h] [-m magic_number] server-name\n"
+	      "                 [vendor-data-template-file]\n";
 
 #include <sys/param.h>
 #include <sys/socket.h>
@@ -47,6 +48,7 @@ char *usage = "bootptest [-h] server-name [vendor-data-template-file]";
 #include <sys/file.h>
 #include <sys/time.h>
 #include <sys/stat.h>
+#include <sys/poll.h>
 
 #include <net/if.h>
 #include <netinet/in.h>
@@ -56,6 +58,7 @@ char *usage = "bootptest [-h] server-name [vendor-data-template-file]";
 #include <signal.h>
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 #include <errno.h>
 #include <ctype.h>
 #include <netdb.h>
@@ -116,17 +119,9 @@ unsigned char vm_rfc1048[4] = VM_RFC1048;
 short secs;						/* How long client has waited */
 
 
-#ifdef	__STDC__
-#define P(args) args
-#else
-#define P(args) ()
-#endif
-
-extern int getether P((char *, char *));
-int main P((int, char **));
-void send_request P((int));
-
-#undef P
+extern int getether(char *, char *);
+int main(int, char **);
+void send_request(int);
 
 /*
  * Initialization such as command-line processing is done, then
@@ -134,9 +129,7 @@ void send_request P((int));
  */
 
 int
-main(argc, argv)
-	int argc;
-	char **argv;
+main(int argc, char **argv)
 {
 	struct bootp *bp;
 	struct servent *sep;
@@ -145,11 +138,13 @@ main(argc, argv)
 	char *servername = NULL;
 	char *vendor_file = NULL;
 	char *bp_file = NULL;
+	socklen_t fromlen;
 	int s;				/* Socket file descriptor */
-	int n, fromlen, recvcnt;
+	int n, recvcnt;
 	int use_hwa = 0;
 	int32 vend_magic;
 	int32 xid;
+	struct pollfd set[1];
 
 	progname = strrchr(argv[0], '/');
 	if (progname)
@@ -204,7 +199,7 @@ main(argc, argv)
 
 		error:
 		default:
-			puts(usage);
+			(void)fprintf(stderr, usage, getprogname());
 			exit(1);
 
 		}
@@ -226,7 +221,7 @@ main(argc, argv)
 	}
 	if (!servername) {
 		printf("missing server name.\n");
-		puts(usage);
+		(void)fprintf(stderr, usage, getprogname());
 		exit(1);
 	}
 	/*
@@ -306,7 +301,7 @@ main(argc, argv)
 	xid = (int32) getpid();
 	bp->bp_xid = (u_int32) htonl(xid);
 	if (bp_file)
-		strncpy(bp->bp_file, bp_file, BP_FILE_LEN);
+		strlcpy(bp->bp_file, bp_file, sizeof(bp->bp_file));
 
 	/*
 	 * Fill in the hardware address (or client IP address)
@@ -319,7 +314,7 @@ main(argc, argv)
 			printf("No interface for %s\n", servername);
 			exit(1);
 		}
-		if (getether(ifr->ifr_name, eaddr)) {
+		if (getether(ifr->ifr_name, (char *)eaddr)) {
 			printf("Can not get ether addr for %s\n", ifr->ifr_name);
 			exit(1);
 		}
@@ -383,16 +378,12 @@ main(argc, argv)
 	recvcnt = 0;
 	bp->bp_secs = secs = 0;
 	send_request(s);
+	set[0].fd = s;
+	set[0].events = POLLIN;
 	while (1) {
-		struct timeval tv;
-		int readfds;
-
-		tv.tv_sec = WAITSECS;
-		tv.tv_usec = 0L;
-		readfds = (1 << s);
-		n = select(s + 1, (fd_set *) & readfds, NULL, NULL, &tv);
+		n = poll(set, 1, WAITSECS * 1000);
 		if (n < 0) {
-			perror("select");
+			perror("poll");
 			break;
 		}
 		if (n == 0) {
@@ -441,8 +432,7 @@ main(argc, argv)
 }
 
 void
-send_request(s)
-	int s;
+send_request(int s)
 {
 	/* Print the request packet. */
 	printf("Sending to %s", inet_ntoa(sin_server.sin_addr));
@@ -464,10 +454,9 @@ send_request(s)
  * Return true if truncated.
  */
 int
-printfn(s, ep)
-	register u_char *s, *ep;
+printfn(u_char *s, u_char *ep)
 {
-	register u_char c;
+	u_char c;
 
 	putchar('"');
 	while ((c = *s++) != 0) {
@@ -495,14 +484,13 @@ printfn(s, ep)
  * (like inet_ntoa, but ina is a pointer)
  */
 char *
-ipaddr_string(ina)
-	struct in_addr *ina;
+ipaddr_string(struct in_addr *ina)
 {
 	static char b[24];
 	u_char *p;
 
 	p = (u_char *) ina;
-	sprintf(b, "%d.%d.%d.%d", p[0], p[1], p[2], p[3]);
+	snprintf(b, sizeof(b), "%d.%d.%d.%d", p[0], p[1], p[2], p[3]);
 	return (b);
 }
 

@@ -1,11 +1,11 @@
-#	$NetBSD: Makefile.inc,v 1.3 1999/05/09 18:51:36 eeh Exp $
+#	$NetBSD: Makefile.inc,v 1.8 2005/12/11 12:24:45 christos Exp $
 
 SRCS+=  __main.c __assert.c \
 	imax.c imin.c lmax.c lmin.c max.c min.c ulmax.c ulmin.c \
-	bswap16.c bswap32.c bswap64.c \
-	bcmp.c bzero.S ffs.S \
+	bswap16.c bswap32.c bswap64.c ffs.S \
 	memchr.c memcmp.c memset.c \
-	strcat.c strcmp.c strcpy.c strlen.S strncasecmp.c strncmp.c strncpy.c \
+	strcat.c strcmp.c strcpy.c strtoul.c strlen.S strcasecmp.c \
+	strncasecmp.c strncmp.c strncpy.c \
 	scanc.c skpc.c \
 	htonl.S htons.S ntohl.S ntohs.S \
 	random.S
@@ -21,19 +21,19 @@ CLEANFILES+=rem.S sdiv.S udiv.S urem.S
 sdiv.S: $M/divrem.m4
 	echo 'building ${.TARGET} from ${.ALLSRC}'
 	(echo "define(NAME,\`.div')define(OP,\`div')define(S,\`true')"; \
-	 cat ${.ALLSRC}) | m4 > ${.TARGET}
+	 cat ${.ALLSRC}) | ${TOOL_M4} > ${.TARGET}
 
 udiv.S: $M/divrem.m4
 	@echo 'building ${.TARGET} from ${.ALLSRC}'
 	@(echo "define(NAME,\`.udiv')define(OP,\`div')define(S,\`false')"; \
-	 cat ${.ALLSRC}) | m4 > ${.TARGET}
+	 cat ${.ALLSRC}) | ${TOOL_M4} > ${.TARGET}
 
 rem.S:	$M/divrem.m4
 	echo 'building ${.TARGET} from ${.ALLSRC}'
 	(echo "define(NAME,\`.rem')define(OP,\`rem')define(S,\`true')"; \
-	 cat ${.ALLSRC}) | m4 > ${.TARGET}
+	 cat ${.ALLSRC}) | ${TOOL_M4} > ${.TARGET}
 
 urem.S: $M/divrem.m4
 	@echo 'building ${.TARGET} from ${.ALLSRC}'
 	@(echo "define(NAME,\`.urem')define(OP,\`rem')define(S,\`false')"; \
-	 cat ${.ALLSRC}) | m4 > ${.TARGET}
+	 cat ${.ALLSRC}) | ${TOOL_M4} > ${.TARGET}

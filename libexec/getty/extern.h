@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.4 1996/07/31 20:40:26 thorpej Exp $	*/
+/*	$NetBSD: extern.h,v 1.6 2003/08/07 09:46:41 agc Exp $	*/
 
 /*
  * Copyright (c) 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -37,20 +33,20 @@
 
 struct delayval;
 
-int	 adelay __P((int, struct delayval *));
-char	*autobaud __P((void));
-int	 delaybits __P((void));
-void	 edithost __P((char *));
-void	 gendefaults __P((void));
-int	 getent __P((char *, char *));
-int	 getflag __P((char *));
-long	 getnum __P((char *));
-char	*getstr __P((char *, char **));
-void	 gettable __P((char *, char *));
-void	 makeenv __P((char *[]));
-char	*portselector __P((void));
-void	 set_ttydefaults __P((int));
-void	 setchars __P((void));
-void	 setdefaults __P((void));
-void	 setflags __P((int));
-int	 speed __P((int));
+int	 adelay(int, struct delayval *);
+char	*autobaud(void);
+int	 delaybits(void);
+void	 edithost(char *);
+void	 gendefaults(void);
+int	 getent(char *, char *);
+int	 getflag(char *);
+long	 getnum(char *);
+char	*getstr(char *, char **);
+void	 gettable(char *, char *);
+void	 makeenv(char *[]);
+char	*portselector(void);
+void	 set_ttydefaults(int);
+void	 setchars(void);
+void	 setdefaults(void);
+void	 setflags(int);
+int	 speed(int);

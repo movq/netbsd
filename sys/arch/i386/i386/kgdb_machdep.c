@@ -1,4 +1,4 @@
-/*	$NetBSD: kgdb_machdep.c,v 1.6 1998/08/13 21:36:03 thorpej Exp $	*/
+/*	$NetBSD: kgdb_machdep.c,v 1.18 2008/06/24 16:28:44 ad Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -67,11 +60,10 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "opt_ddb.h"
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: kgdb_machdep.c,v 1.18 2008/06/24 16:28:44 ad Exp $");
 
-#if defined(DDB)
-#error "Can't build DDB and KGDB together."
-#endif
+#include "opt_ddb.h"
 
 /*
  * Machine-dependent functions for remote KGDB.  Originally written
@@ -83,7 +75,7 @@
 #include <sys/kgdb.h>
 #include <sys/systm.h>
 
-#include <vm/vm.h>
+#include <uvm/uvm_extern.h>
 
 #include <machine/pte.h>
 #include <machine/reg.h>
@@ -105,10 +97,16 @@ kgdb_acc(va, len)
 	last_va &= ~PGOFSET;
 
 	do {
-		pte = kvtopte(va);
+		if (va < VM_MIN_KERNEL_ADDRESS)
+			pte = vtopte(va);
+		else
+			pte = kvtopte(va);
 		if ((*pte & PG_V) == 0)
 			return (0);
-		va  += NBPG;
+		if (*pte & PG_PS)
+			va = (va & PG_LGFRAME) + NBPD_L2;
+		else
+			va += PAGE_SIZE;
 	} while (va < last_va);
 
 	return (1);
@@ -182,6 +180,8 @@ kgdb_getregs(regs, gdb_regs)
 	gdb_regs[10] = regs->tf_cs;
 	gdb_regs[12] = regs->tf_ds;
 	gdb_regs[13] = regs->tf_es;
+	gdb_regs[14] = regs->tf_fs;
+	gdb_regs[15] = regs->tf_gs;
 
 	if (KERNELMODE(regs->tf_cs, regs->tf_eflags)) {
 		/*
@@ -189,7 +189,7 @@ kgdb_getregs(regs, gdb_regs)
 		 */
 		gdb_regs[ 4] = (kgdb_reg_t)&regs->tf_esp; /* kernel stack
 							     pointer */
-		__asm __volatile("movw %%ss,%w0" : "=r" (gdb_regs[11]));
+		gdb_regs[11] = x86_getss();
 	}
 }
 

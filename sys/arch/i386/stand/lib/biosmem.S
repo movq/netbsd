@@ -1,4 +1,4 @@
-/*	$NetBSD: biosmem.S,v 1.5 1997/08/18 22:44:01 hannken Exp $	*/
+/*	$NetBSD: biosmem.S,v 1.8 2005/12/11 12:17:48 christos Exp $	*/
 
 /*
  * Copyright (c) 1996
@@ -31,11 +31,8 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
-	
 
 #include <machine/asm.h>
-
-#define	data32	.byte 0x66
 
 	.text
 
@@ -49,15 +46,15 @@ ENTRY(getbasemem)
 	push	%edi
 
 	call	_C_LABEL(prot_to_real)
+	.code16
 
 	int	$0x12
 	# zero-extend 16-bit result to 32 bits.
-	data32
 	movl	$0, %ebx
-	mov	%eax,%ebx		# !!! at run time, it is mov %ax,%bx
+	mov	%ax,%bx
 
-	data32
-	call	_C_LABEL(real_to_prot)
+	calll	_C_LABEL(real_to_prot)
+	.code32
 
 	movl	%ebx, %eax
 
@@ -77,17 +74,17 @@ ENTRY(getextmem1)
 	push	%edi
 
 	call	_C_LABEL(prot_to_real)
+	.code16
 
 	movb	$0x88,%ah
 	int	$0x15
 
 	# zero-extend 16-bit result to 32 bits.
-	data32
 	movl	$0, %ebx
-	mov	%eax,%ebx		# !!! at run time, it is mov %ax,%bx
+	mov	%ax,%bx
 
-	data32
-	call	_C_LABEL(real_to_prot)
+	calll	_C_LABEL(real_to_prot)
+	.code32
 
 	movl	%ebx, %eax
 

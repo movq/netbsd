@@ -1,4 +1,4 @@
-/* $NetBSD: vme.c,v 1.3 1999/06/30 15:06:05 drochner Exp $ */
+/* $NetBSD: vme.c,v 1.19 2007/10/19 12:01:23 ad Exp $ */
 
 /*
  * Copyright (c) 1999
@@ -28,37 +28,41 @@
  *
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: vme.c,v 1.19 2007/10/19 12:01:23 ad Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/malloc.h>
 #include <sys/extent.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/vme/vmereg.h>
 #include <dev/vme/vmevar.h>
 
-static void vme_extractlocators __P((int*, struct vme_attach_args*));
-static int vmeprint __P((struct vme_attach_args*, char*));
-static int vmesubmatch1 __P((struct device*, struct cfdata*, void*));
-static int vmesubmatch __P((struct device*, struct cfdata*, void*));
-int vmematch __P((struct device *, struct cfdata *, void *));
-void vmeattach __P((struct device*, struct device*,void*));
-static struct extent *vme_select_map __P((struct vmebus_softc*, vme_am_t));
+static void vme_extractlocators(int*, struct vme_attach_args*);
+static int vmeprint(struct vme_attach_args*, char*);
+static int vmesubmatch1(struct device*, struct cfdata*,
+			     const int *, void*);
+static int vmesubmatch(struct device*, struct cfdata*,
+			    const int *, void*);
+int vmematch(struct device *, struct cfdata *, void *);
+void vmeattach(struct device*, struct device*,void*);
+static struct extent *vme_select_map(struct vmebus_softc*, vme_am_t);
 
 #ifdef notyet
-int vmedetach __P((struct device*));
+int vmedetach(struct device*);
 #endif
 
 #define VME_SLAVE_DUMMYDRV "vme_slv"
 
 #define VME_NUMCFRANGES 3 /* cf. "files.vme" */
 
-struct cfattach vme_ca = {
-	sizeof(struct vmebus_softc), vmematch, vmeattach,
-};
+CFATTACH_DECL(vme, sizeof(struct vmebus_softc),
+    vmematch, vmeattach, NULL, NULL);
 
-struct cfattach vme_slv_ca = {
+const struct cfattach vme_slv_ca = {
 	0	/* never used */
 };
 
@@ -91,16 +95,16 @@ vmeprint(v, dummy)
 	int i;
 
 	for (i = 0; i < v->numcfranges; i++) {
-		printf(" addr %x", v->r[i].offset);
+		aprint_normal(" addr %x", v->r[i].offset);
 		if (v->r[i].size != -1)
-			printf("-%x", v->r[i].offset + v->r[i].size - 1);
+			aprint_normal("-%x", v->r[i].offset + v->r[i].size - 1);
 		if (v->r[i].am != -1)
-			printf(" am %02x", v->r[i].am);
+			aprint_normal(" am %02x", v->r[i].am);
 	}
 	if (v->ilevel != -1) {
-		printf(" irq %d", v->ilevel);
+		aprint_normal(" irq %d", v->ilevel);
 		if (v->ivector != -1)
-			printf(" vector %x", v->ivector);
+			aprint_normal(" vector %x", v->ivector);
 	}
 	return (UNCONF);
 }
@@ -123,35 +127,37 @@ vmeprint(v, dummy)
  * devices are attached.
  */
 static int
-vmesubmatch1(bus, dev, aux)
+vmesubmatch1(bus, dev, ldesc, aux)
 	struct device *bus;
 	struct cfdata *dev;
+	const int *ldesc;
 	void *aux;
 {
 	struct vmebus_softc *sc = (struct vmebus_softc*)bus;
 	struct vme_attach_args v;
 
-	if (strcmp(dev->cf_driver->cd_name, VME_SLAVE_DUMMYDRV))
+	if (strcmp(dev->cf_name, VME_SLAVE_DUMMYDRV))
 		return (0);
 
 	vme_extractlocators(dev->cf_loc, &v);
 
 	v.va_vct = sc->sc_vct; /* for space allocation */
 
-	(*sc->slaveconfig)(bus->dv_parent, &v);
+	(*sc->slaveconfig)(device_parent(bus), &v);
 	return (0);
 }
 
 static int
-vmesubmatch(bus, dev, aux)
+vmesubmatch(bus, dev, ldesc, aux)
 	struct device *bus;
 	struct cfdata *dev;
+	const int *ldesc;
 	void *aux;
 {
 	struct vmebus_softc *sc = (struct vmebus_softc*)bus;
 	struct vme_attach_args v;
 
-	if (!strcmp(dev->cf_driver->cd_name, VME_SLAVE_DUMMYDRV))
+	if (!strcmp(dev->cf_name, VME_SLAVE_DUMMYDRV))
 		return (0);
 
 	vme_extractlocators(dev->cf_loc, &v);
@@ -159,7 +165,7 @@ vmesubmatch(bus, dev, aux)
 	v.va_vct = sc->sc_vct;
 	v.va_bdt = sc->sc_bdt;
 
-	if (dev->cf_attach->ca_match(bus, dev, &v)) {
+	if (config_match(bus, dev, &v)) {
 		config_attach(bus, dev, &v, (cfprint_t)vmeprint);
 		return (1);
 	}
@@ -222,9 +228,9 @@ vmeattach(parent, self, aux)
 	if (sc->slaveconfig) {
 		/* first get info about the bus master's slave side,
 		 if present */
-		config_search((cfmatch_t)vmesubmatch1, self, 0);
+		config_search_ia(vmesubmatch1, self, "vme", 0);
 	}
-	config_search((cfmatch_t)vmesubmatch, self, 0);
+	config_search_ia(vmesubmatch, self, "vme", 0);
 
 #ifdef VMEDEBUG
 	if (sc->vme32ext)
@@ -245,7 +251,7 @@ vmedetach(dev)
 
 	if (sc->slaveconfig) {
 		/* allow bus master to free its bus ressources */
-		(*sc->slaveconfig)(dev->dv_parent, 0);
+		(*sc->slaveconfig)(device_parent(dev), 0);
 	}
 
 	/* extent maps should be empty now */
@@ -331,11 +337,15 @@ _vme_space_get(sc, len, ams, align, addr)
 	vme_addr_t *addr;
 {
 	struct extent *ex;
+	u_long help;
+	int res;
 
 	ex = vme_select_map(sc, ams);
 	if (!ex)
 		return (EINVAL);
 
-	return (extent_alloc(ex, len, align, EX_NOBOUNDARY, EX_NOWAIT,
-			     (u_long *)addr));
+	res = extent_alloc(ex, len, align, EX_NOBOUNDARY, EX_NOWAIT, &help);
+	if (!res)
+		*addr = help;
+	return (res);
 }

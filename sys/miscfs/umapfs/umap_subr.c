@@ -1,11 +1,11 @@
-/*	$NetBSD: umap_subr.c,v 1.16 2000/03/13 23:52:41 soren Exp $	*/
+/*	$NetBSD: umap_subr.c,v 1.25.44.1 2009/02/23 08:36:04 snj Exp $	*/
 
 /*
  * Copyright (c) 1999 National Aeronautics & Space Administration
  * All rights reserved.
  *
  * This software was written by William Studenmund of the
- * Numerical Aerospace Similation Facility, NASA Ames Research Center.
+ * Numerical Aerospace Simulation Facility, NASA Ames Research Center.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -47,11 +47,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -71,21 +67,25 @@
  *	@(#)umap_subr.c	8.9 (Berkeley) 5/14/95
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: umap_subr.c,v 1.25.44.1 2009/02/23 08:36:04 snj Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
 #include <sys/time.h>
-#include <sys/types.h>
 #include <sys/vnode.h>
 #include <sys/mount.h>
 #include <sys/namei.h>
 #include <sys/malloc.h>
+#include <sys/kauth.h>
+
 #include <miscfs/specfs/specdev.h>
 #include <miscfs/umapfs/umap.h>
 
-u_long umap_findid __P((u_long, u_long [][2], int));
-int umap_node_alloc __P((struct mount *, struct vnode *,
-				struct vnode **));
+u_long umap_findid(u_long, u_long [][2], int);
+int umap_node_alloc(struct mount *, struct vnode *,
+				struct vnode **);
 
 /*
  * umap_findid is called by various routines in umap_vnodeops.c to
@@ -140,14 +140,16 @@ umap_reverse_findid(id, map, nentries)
 void
 umap_mapids(v_mount, credp)
 	struct mount *v_mount;
-	struct ucred *credp;
+	kauth_cred_t credp;
 {
 	int i, unentries, gnentries;
 	uid_t uid;
 	gid_t gid;
 	u_long (*usermap)[2], (*groupmap)[2];
+	gid_t groups[NGROUPS];
+	uint16_t ngroups;
 
-	if (credp == NOCRED)
+	if (credp == NOCRED || credp == FSCRED)
 		return;
 
 	unentries =  MOUNTTOUMAPMOUNT(v_mount)->info_nentries;
@@ -157,36 +159,40 @@ umap_mapids(v_mount, credp)
 
 	/* Find uid entry in map */
 
-	uid = (uid_t) umap_findid(credp->cr_uid, usermap, unentries);
+	uid = (uid_t) umap_findid(kauth_cred_geteuid(credp), usermap, unentries);
 
 	if (uid != -1)
-		credp->cr_uid = uid;
+		kauth_cred_seteuid(credp, uid);
 	else
-		credp->cr_uid = (uid_t) NOBODY;
+		kauth_cred_seteuid(credp, (uid_t)NOBODY);
 
 #if 1
 	/* cr_gid is the same as cr_groups[0] in 4BSD, but not in NetBSD */
 
 	/* Find gid entry in map */
 
-	gid = (gid_t) umap_findid(credp->cr_gid, groupmap, gnentries);
+	gid = (gid_t) umap_findid(kauth_cred_getegid(credp), groupmap, gnentries);
 
 	if (gid != -1)
-		credp->cr_gid = gid;
+		kauth_cred_setegid(credp, gid);
 	else
-		credp->cr_gid = NULLGROUP;
+		kauth_cred_setegid(credp, NULLGROUP);
 #endif
 
-	/* Now we must map each of the set of groups in the cr_groups 
+	/* Now we must map each of the set of groups in the cr_groups
 		structure. */
 
-	for(i=0; i < credp->cr_ngroups; i++) {
-		gid = (gid_t) umap_findid(credp->cr_groups[i],
+	ngroups = kauth_cred_ngroups(credp);
+	for (i = 0; i < ngroups; i++) {
+		/* XXX elad: can't we just skip cases where gid == -1? */
+		groups[i] = kauth_cred_group(credp, i);
+		gid = (gid_t) umap_findid(groups[i],
 					  groupmap, gnentries);
-
 		if (gid != -1)
-			credp->cr_groups[i] = gid;
+			groups[i] = gid;
 		else
-			credp->cr_groups[i] = NULLGROUP;
+			groups[i] = NULLGROUP;
 	}
+
+	kauth_cred_setgroups(credp, groups, ngroups, -1, UIO_SYSSPACE);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: subs.c,v 1.13 1999/10/04 23:26:59 lukem Exp $	*/
+/*	$NetBSD: subs.c,v 1.16 2007/12/15 19:44:39 perry Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)subs.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: subs.c,v 1.13 1999/10/04 23:26:59 lukem Exp $");
+__RCSID("$NetBSD: subs.c,v 1.16 2007/12/15 19:44:39 perry Exp $");
 #endif
 #endif /* not lint */
 
@@ -65,8 +61,7 @@ const char   *const descr[] = {
 };
 
 void
-errexit(s)
-	const char *s;
+errexit(const char *s)
 {
 	write(2, "\n", 1);
 	perror(s);
@@ -74,8 +69,7 @@ errexit(s)
 }
 
 int
-addbuf(c)
-	int     c;
+addbuf(int c)
 {
 	buffnum++;
 	if (buffnum == BUFSIZ) {
@@ -88,7 +82,7 @@ addbuf(c)
 }
 
 void
-buflush()
+buflush(void)
 {
 	if (buffnum < 0)
 		return;
@@ -99,7 +93,7 @@ buflush()
 }
 
 int
-readc()
+readc(void)
 {
 	char    c;
 
@@ -126,8 +120,7 @@ readc()
 }
 
 void
-writec(c)
-	char    c;
+writec(int c)
 {
 	if (tflag)
 		fancyc(c);
@@ -136,8 +129,7 @@ writec(c)
 }
 
 void
-writel(l)
-	const char   *l;
+writel(const char *l)
 {
 #ifdef DEBUG
 	const char   *s;
@@ -161,7 +153,7 @@ writel(l)
 }
 
 void
-proll()
+proll(void)
 {
 	if (d0)
 		swap;
@@ -177,8 +169,7 @@ proll()
 }
 
 void
-wrint(n)
-	int     n;
+wrint(int n)
 {
 	int     i, j, t;
 
@@ -193,7 +184,7 @@ wrint(n)
 }
 
 void
-gwrite()
+gwrite(void)
 {
 	int     r, c;
 
@@ -236,7 +227,7 @@ gwrite()
 }
 
 int
-quit()
+quit(void)
 {
 
 	if (tflag) {
@@ -258,8 +249,7 @@ quit()
 }
 
 int
-yorn(special)
-	char    special;	/* special response */
+yorn(int special)
 {
 	char    c;
 	int     i;
@@ -289,8 +279,7 @@ yorn(special)
 }
 
 void
-wrhit(i)
-	int     i;
+wrhit(int i)
 {
 	writel("Blot hit on ");
 	wrint(i);
@@ -299,7 +288,7 @@ wrhit(i)
 }
 
 void
-nexturn()
+nexturn(void)
 {
 	int     c;
 
@@ -316,8 +305,7 @@ nexturn()
 }
 
 void
-getarg(arg)
-	char ***arg;
+getarg(char ***arg)
 {
 	char  **s;
 
@@ -403,7 +391,7 @@ getarg(arg)
 }
 
 void
-init()
+init(void)
 {
 	int     i;
 
@@ -422,7 +410,7 @@ init()
 }
 
 void
-wrscore()
+wrscore(void)
 {
 	writel("Score:  ");
 	writel(color[1]);
@@ -435,8 +423,7 @@ wrscore()
 }
 
 void
-fixtty(t)
-	struct termios *t;
+fixtty(struct termios *t)
 {
 	if (tflag)
 		newpos();
@@ -446,8 +433,7 @@ fixtty(t)
 }
 
 void
-getout(dummy)
-	int     dummy __attribute__((__unused__));
+getout(int dummy __unused)
 {
 	/* go to bottom of screen */
 	if (tflag) {
@@ -462,7 +448,7 @@ getout(dummy)
 }
 
 void
-roll()
+roll(void)
 {
 	char    c;
 	int     row;

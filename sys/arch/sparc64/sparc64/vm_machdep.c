@@ -1,6 +1,7 @@
-/*	$NetBSD: vm_machdep.c,v 1.26 2000/03/26 20:42:37 kleink Exp $ */
+/*	$NetBSD: vm_machdep.c,v 1.84.6.2 2009/06/05 18:29:46 snj Exp $ */
 
 /*
+ * Copyright (c) 1996-2002 Eduardo Horvath.  All rights reserved.
  * Copyright (c) 1996
  *	The President and Fellows of Harvard College. All rights reserved.
  * Copyright (c) 1992, 1993
@@ -48,63 +49,27 @@
  *	@(#)vm_machdep.c	8.2 (Berkeley) 9/23/93
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.84.6.2 2009/06/05 18:29:46 snj Exp $");
+
+#include "opt_multiprocessor.h"
+#include "opt_coredump.h"
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
 #include <sys/user.h>
 #include <sys/core.h>
-#include <sys/malloc.h>
 #include <sys/buf.h>
 #include <sys/exec.h>
 #include <sys/vnode.h>
-#include <sys/map.h>
 
-#include <vm/vm.h>
-#include <vm/vm_kern.h>
+#include <uvm/uvm_extern.h>
 
 #include <machine/cpu.h>
 #include <machine/frame.h>
 #include <machine/trap.h>
 #include <machine/bus.h>
-
-#include <sparc64/sparc64/cache.h>
-
-/* XXX These are in sbusvar.h, but including that would be problematical */
-struct sbus_softc *sbus0;
-void    sbus_enter __P((struct sbus_softc *, vaddr_t va, int64_t pa, int flags));
-void    sbus_remove __P((struct sbus_softc *, vaddr_t va, int len));
-
-/*
- * Move pages from one kernel virtual address to another.
- */
-void
-pagemove(from, to, size)
-	register caddr_t from, to;
-	size_t size;
-{
-	paddr_t pa;
-
-	if (size & PGOFSET || (long)from & PGOFSET || (long)to & PGOFSET)
-		panic("pagemove 1");
-#if 1
-	cache_flush((caddr_t)from, size);
-#endif
-	while (size > 0) {
-		if (pmap_extract(pmap_kernel(), (vaddr_t)from, &pa) == FALSE)
-			panic("pagemove 2");
-		pmap_remove(pmap_kernel(),
-		    (vaddr_t)from, (vaddr_t)from + PAGE_SIZE);
-		pmap_enter(pmap_kernel(),
-		    (vaddr_t)to, pa, VM_PROT_READ|VM_PROT_WRITE,
-		    VM_PROT_READ|VM_PROT_WRITE|PMAP_WIRED);
-		from += PAGE_SIZE;
-		to += PAGE_SIZE;
-		size -= PAGE_SIZE;
-	}
-#if 1
-	cache_flush((caddr_t)to, size);
-#endif
-}
 
 /*
  * Map a user I/O request into kernel virtual address space.
@@ -125,23 +90,12 @@ vmapbuf(bp, len)
 	if ((bp->b_flags & B_PHYS) == 0)
 		panic("vmapbuf");
 
-	/*
-	 * XXX:  It might be better to round/trunc to a
-	 * segment boundary to avoid VAC problems!
-	 */
 	bp->b_saveaddr = bp->b_data;
 	uva = trunc_page((vaddr_t)bp->b_data);
 	off = (vaddr_t)bp->b_data - uva;
 	len = round_page(off + len);
-	kva = uvm_km_valloc_wait(kernel_map, len);
-	bp->b_data = (caddr_t)(kva + off);
-
-	/*
-	 * We have to flush any write-back cache on the
-	 * user-space mappings so our new mappings will
-	 * have the correct contents.
-	 */
-	cache_flush((caddr_t)uva, len);
+	kva = uvm_km_alloc(kernel_map, len, 0, UVM_KMF_VAONLY | UVM_KMF_WAITVA);
+	bp->b_data = (void *)(kva + off);
 
 	upmap = vm_map_pmap(&bp->b_proc->p_vmspace->vm_map);
 	kpmap = vm_map_pmap(kernel_map);
@@ -149,14 +103,13 @@ vmapbuf(bp, len)
 		if (pmap_extract(upmap, uva, &pa) == FALSE)
 			panic("vmapbuf: null page frame");
 		/* Now map the page into kernel space. */
-		pmap_enter(pmap_kernel(), kva,
-			   pa /* | PMAP_NC */,
-			   VM_PROT_READ|VM_PROT_WRITE, PMAP_WIRED);
+		pmap_kenter_pa(kva, pa, VM_PROT_READ | VM_PROT_WRITE);
 
 		uva += PAGE_SIZE;
 		kva += PAGE_SIZE;
 		len -= PAGE_SIZE;
 	} while (len);
+	pmap_update(pmap_kernel());
 }
 
 /*
@@ -176,16 +129,17 @@ vunmapbuf(bp, len)
 	kva = trunc_page((vaddr_t)bp->b_data);
 	off = (vaddr_t)bp->b_data - kva;
 	len = round_page(off + len);
-
-	/* This will call pmap_remove() for us. */
-	uvm_km_free_wakeup(kernel_map, kva, len);
+	pmap_kremove(kva, len);
+	uvm_km_free(kernel_map, kva, len, UVM_KMF_VAONLY);
 	bp->b_data = bp->b_saveaddr;
 	bp->b_saveaddr = NULL;
+}
 
-#if 0	/* XXX: The flush above is sufficient, right? */
-	if (CACHEINFO.c_vactype != VAC_NONE)
-		cpuinfo.cache_flush(bp->b_data, len);
-#endif
+void
+cpu_proc_fork(struct proc *p1, struct proc *p2)
+{
+
+	p2->p_md.md_flags = p1->p_md.md_flags;
 }
 
 
@@ -205,62 +159,72 @@ vunmapbuf(bp, len)
 #endif
 
 #ifdef DEBUG
-char cpu_forkname[] = "cpu_fork()";
+char cpu_forkname[] = "cpu_lwp_fork()";
 #endif
 
+void setfunc_trampoline(void);
+inline void
+cpu_setfunc(struct lwp *l, void (*func)(void *), void *arg)
+{
+	struct pcb *npcb = &l->l_addr->u_pcb;
+	struct rwindow *rp;
+
+	rp = (struct rwindow *)((u_long)npcb + TOPFRAMEOFF);
+	rp->rw_local[0] = (long)func;		/* Function to call */
+	rp->rw_local[1] = (long)arg;		/* and its argument */
+
+	npcb->pcb_pc = (long)setfunc_trampoline - 8;
+	npcb->pcb_sp = (long)rp - STACK_OFFSET;
+}
+
 /*
- * Finish a fork operation, with process p2 nearly set up.
+ * Finish a fork operation, with lwp l2 nearly set up.
  * Copy and update the pcb and trap frame, making the child ready to run.
  * 
  * Rig the child's kernel stack so that it will start out in
- * proc_trampoline() and call child_return() with p2 as an
+ * lwp_trampoline() and call child_return() with l2 as an
  * argument. This causes the newly-created child process to go
  * directly to user level with an apparent return value of 0 from
  * fork(), while the parent process returns normally.
  *
- * p1 is the process being forked; if p1 == &proc0, we are creating
- * a kernel thread, and the return path will later be changed in cpu_set_kpc.
+ * l1 is the process being forked; if l1 == &lwp0, we are creating
+ * a kernel thread, and the return path and argument are specified with
+ * `func' and `arg'.
  *
  * If an alternate user-level stack is requested (with non-zero values
  * in both the stack and stacksize args), set up the user stack pointer
  * accordingly.
  */
+void lwp_trampoline(void);
 void
-cpu_fork(p1, p2, stack, stacksize)
-	register struct proc *p1, *p2;
+cpu_lwp_fork(l1, l2, stack, stacksize, func, arg)
+	register struct lwp *l1, *l2;
 	void *stack;
 	size_t stacksize;
+	void (*func)(void *);
+	void *arg;
 {
-	register struct pcb *opcb = &p1->p_addr->u_pcb;
-	register struct pcb *npcb = &p2->p_addr->u_pcb;
-	register struct trapframe *tf2;
-	register struct rwindow *rp;
+	struct pcb *opcb = &l1->l_addr->u_pcb;
+	struct pcb *npcb = &l2->l_addr->u_pcb;
+	struct trapframe *tf2;
+	struct rwindow *rp;
 
 	/*
-	 * Save all user registers to p1's stack or, in the case of
+	 * Save all user registers to l1's stack or, in the case of
 	 * user registers and invalid stack pointers, to opcb.
-	 * We then copy the whole pcb to p2; when switch() selects p2
-	 * to run, it will run at the `proc_trampoline' stub, rather
+	 * We then copy the whole pcb to l2; when switch() selects l2
+	 * to run, it will run at the `lwp_trampoline' stub, rather
 	 * than returning at the copying code below.
 	 *
-	 * If process p1 has an FPU state, we must copy it.  If it is
+	 * If process l1 has an FPU state, we must copy it.  If it is
 	 * the FPU user, we must save the FPU state first.
 	 */
 
 #ifdef NOTDEF_DEBUG
-	printf("cpu_fork()\n");
+	printf("cpu_lwp_fork()\n");
 #endif
-	if (p1 == curproc) {
+	if (l1 == curlwp) {
 		write_user_windows();
-#if 0
-		/* Make sure our D$ is not polluted w/bad data */
-		blast_vcache();
-		/* 
-		 * We should not need to copy this out cause we should be
-		 * able to directly reload our windows from the pcb.
-		 */
-		rwindow_save(p1);
-#endif
 
 		/*
 		 * We're in the kernel, so we don't really care about
@@ -270,30 +234,33 @@ cpu_fork(p1, p2, stack, stacksize)
 		opcb->pcb_cwp = getcwp();
 	}
 #ifdef DIAGNOSTIC
-	else if (p1 != &proc0)
-		panic("cpu_fork: curproc");
+	else if (l1 != &lwp0)	/* XXX is this valid? */
+		panic("cpu_lwp_fork: curlwp");
 #endif
 #ifdef DEBUG
 	/* prevent us from having NULL lastcall */
 	opcb->lastcall = cpu_forkname;
+#else
+	opcb->lastcall = NULL;
 #endif
-	bcopy((caddr_t)opcb, (caddr_t)npcb, sizeof(struct pcb));
-       	if (p1->p_md.md_fpstate) {
-		if (p1 == fpproc)
-			savefpstate(p1->p_md.md_fpstate);
-		p2->p_md.md_fpstate = malloc(sizeof(struct fpstate64),
-		    M_SUBPROC, M_WAITOK);
-		bcopy(p1->p_md.md_fpstate, p2->p_md.md_fpstate,
+	memcpy(npcb, opcb, sizeof(struct pcb));
+       	if (l1->l_md.md_fpstate) {
+       		fpusave_lwp(l1, true);
+		l2->l_md.md_fpstate = pool_cache_get(fpstate_cache, PR_WAITOK);
+		memcpy(l2->l_md.md_fpstate, l1->l_md.md_fpstate,
 		    sizeof(struct fpstate64));
 	} else
-		p2->p_md.md_fpstate = NULL;
+		l2->l_md.md_fpstate = NULL;
+
+	if (l1->l_proc->p_flag & PK_32)
+		l2->l_proc->p_flag |= PK_32;
 
 	/*
 	 * Setup (kernel) stack frame that will by-pass the child
 	 * out of the kernel. (The trap frame invariably resides at
 	 * the tippity-top of the u. area.)
 	 */
-	tf2 = p2->p_md.md_tf = (struct trapframe *)
+	tf2 = l2->l_md.md_tf = (struct trapframe *)
 			((long)npcb + USPACE - sizeof(*tf2));
 
 	/* Copy parent's trapframe */
@@ -303,167 +270,186 @@ cpu_fork(p1, p2, stack, stacksize)
 	 * If specified, give the child a different stack.
 	 */
 	if (stack != NULL)
-		tf2->tf_out[6] = (u_int64_t)(u_long)stack + stacksize;
+		tf2->tf_out[6] = (uint64_t)(u_long)stack + stacksize;
 
-	/* Duplicate efforts of syscall(), but slightly differently */
-	if (tf2->tf_global[1] & SYSCALL_G2RFLAG) {
-		/* jmp %g2 (or %g7, deprecated) on success */
-		tf2->tf_npc = tf2->tf_global[2];
-	} else {
-		/*
-		 * old system call convention: clear C on success
-		 * note: proc_trampoline() sets a fresh psr when
-		 * returning to user mode.
-		 */
-		/*tf2->tf_psr &= ~PSR_C;   -* success */
-	}
-
-	/* Set return values in child mode */
+	/*
+	 * Set return values in child mode and clear condition code,
+	 * in case we end up running a signal handler before returning
+	 * to userland.
+	 */
 	tf2->tf_out[0] = 0;
 	tf2->tf_out[1] = 1;
+	tf2->tf_tstate &= ~TSTATE_CCR;
 
 	/* Construct kernel frame to return to in cpu_switch() */
 	rp = (struct rwindow *)((u_long)npcb + TOPFRAMEOFF);
 	*rp = *(struct rwindow *)((u_long)opcb + TOPFRAMEOFF);
-	rp->rw_local[0] = (long)child_return;	/* Function to call */
-	rp->rw_local[1] = (long)p2;		/* and its argument */
 
-	npcb->pcb_pc = (long)proc_trampoline - 8;
+	rp->rw_local[0] = (long)func;	/* Function to call */
+	rp->rw_local[1] = (long)arg;	/* and its argument */
+	rp->rw_local[2] = (long)l2;	/* new lwp */
+
+	npcb->pcb_pc = (long)lwp_trampoline - 8;
 	npcb->pcb_sp = (long)rp - STACK_OFFSET;
-
-#ifdef NOTDEF_DEBUG
-	printf("cpu_fork: Copying over trapframe: otf=%p ntf=%p sp=%p opcb=%p npcb=%p\n", 
-	       (struct trapframe *)((int)opcb + USPACE - sizeof(*tf2)), tf2, rp, opcb, npcb);
-	printf("cpu_fork: tstate=%x:%x pc=%x:%x npc=%x:%x rsp=%x\n",
-	       (long)(tf2->tf_tstate>>32), (long)tf2->tf_tstate, 
-	       (long)(tf2->tf_pc>>32), (long)tf2->tf_pc,
-	       (long)(tf2->tf_npc>>32), (long)tf2->tf_npc, 
-	       (long)(tf2->tf_out[6]));
-	Debugger();
-#endif
 }
 
-/*
- * cpu_set_kpc:
- *
- * Arrange for in-kernel execution of a process to continue at the
- * named pc, as if the code at that address were called as a function
- * with the supplied argument.
- *
- * Note that it's assumed that when the named process returns,
- * we immediately return to user mode.
- *
- * (Note that cpu_fork(), above, uses an open-coded version of this.)
- */
-void
-cpu_set_kpc(p, pc, arg)
-	struct proc *p;
-	void (*pc) __P((void *));
-	void *arg;
+static inline void
+fpusave_cpu(bool save)
 {
-	struct pcb *pcb;
-	struct rwindow *rp;
+	struct lwp *l = fplwp;
 
-#if 0
-	/* Make sure our D$ is not polluted w/bad data */
-	blast_vcache();
-#endif
+	if (l == NULL)
+		return;
 
-	pcb = &p->p_addr->u_pcb;
+	if (save)
+		savefpstate(l->l_md.md_fpstate);
+	else
+		clearfpstate();
 
-	rp = (struct rwindow *)((u_long)pcb + TOPFRAMEOFF);
-	rp->rw_local[0] = (long)pc;		/* Function to call */
-	rp->rw_local[1] = (long)arg;		/* and its argument */
+	fplwp = NULL;
+}
 
-	/*
-	 * Frob PCB:
-	 *	- arrange to return to proc_trampoline() from cpu_switch()
-	 *	- point it at the stack frame constructed above
-	 *	- make it run in a clear set of register windows
-	 */
-	pcb->pcb_pc = (long)proc_trampoline - 8 ;
-	pcb->pcb_sp = (long)rp - STACK_OFFSET;
-#ifdef NOTDEF_DEBUG
-	/* Let's see if this is ever called */
-	{ int s=splhigh();
-	extern int pmapdebug;
-	pmapdebug = 0;
-	printf("cpu_set_kpc: p=%p pc=%p, sp=%p rsp=%p\n", p, pc, rp, (long)rp->rw_in[6]);
-	splx(s);
-	delay(2000000);
+void
+fpusave_lwp(struct lwp *l, bool save)
+{
+#ifdef MULTIPROCESSOR
+	volatile struct cpu_info *ci;
+
+	if (l == fplwp) {
+		int s = intr_disable();
+		fpusave_cpu(save);
+		intr_restore(s);
+		return;
 	}
-#endif
-}
 
-/*
- * cpu_exit is called as the last action during exit.
- *
- * We clean up a little and then call switchexit() with the old proc
- * as an argument.  switchexit() switches to the idle context, schedules
- * the old vmspace and stack to be freed, then selects a new process to
- * run.
- */
-void
-cpu_exit(p)
-	struct proc *p;
-{
-	register struct fpstate64 *fs;
+	for (ci = cpus; ci != NULL; ci = ci->ci_next) {
+		int spincount;
 
-	if ((fs = p->p_md.md_fpstate) != NULL) {
-		if (p == fpproc) {
-			savefpstate(fs);
-			fpproc = NULL;
+		if (ci == curcpu() || !CPUSET_HAS(cpus_active, ci->ci_index))
+			continue;
+		if (ci->ci_fplwp != l)
+			continue;
+		sparc64_send_ipi(ci->ci_cpuid, save ?
+				 sparc64_ipi_save_fpstate :
+				 sparc64_ipi_drop_fpstate, (uintptr_t)l, 0);
+
+		spincount = 0;
+		while (ci->ci_fplwp == l) {
+			membar_sync();
+			spincount++;
+			if (spincount > 10000000)
+				panic("fpusave_lwp ipi didn't");
 		}
-		free((void *)fs, M_SUBPROC);
+		break;
 	}
-	switchexit(p);
-	/* NOTREACHED */
+#else
+	if (l == fplwp)
+		fpusave_cpu(save);
+#endif
 }
 
+
+void
+cpu_lwp_free(struct lwp *l, int proc)
+{
+
+	if (l->l_md.md_fpstate != NULL)
+		fpusave_lwp(l, false);
+}
+
+void
+cpu_lwp_free2(struct lwp *l)
+{
+	struct fpstate64 *fs;
+
+	if ((fs = l->l_md.md_fpstate) != NULL)
+		pool_cache_put(fpstate_cache, fs);
+}
+
+#ifdef COREDUMP
 /*
  * cpu_coredump is called to write a core dump header.
  * (should this be defined elsewhere?  machdep.c?)
  */
 int
-cpu_coredump(p, vp, cred, chdr)
-	struct proc *p;
-	struct vnode *vp;
-	struct ucred *cred;
-	struct core *chdr;
+cpu_coredump(struct lwp *l, void *iocookie, struct core *chdr)
 {
 	int error;
 	struct md_coredump md_core;
 	struct coreseg cseg;
 
-	CORE_SETMAGIC(*chdr, COREMAGIC, MID_MACHINE, 0);
-	chdr->c_hdrsize = ALIGN(sizeof(*chdr));
-	chdr->c_seghdrsize = ALIGN(sizeof(cseg));
-	chdr->c_cpusize = sizeof(md_core);
+	if (iocookie == NULL) {
+		CORE_SETMAGIC(*chdr, COREMAGIC, MID_MACHINE, 0);
+		chdr->c_hdrsize = ALIGN(sizeof(*chdr));
+		chdr->c_seghdrsize = ALIGN(sizeof(cseg));
+		chdr->c_cpusize = sizeof(md_core);
+		chdr->c_nseg++;
+		return 0;
+	}
 
-	md_core.md_tf = *p->p_md.md_tf;
-	if (p->p_md.md_fpstate) {
-		if (p == fpproc)
-			savefpstate(p->p_md.md_fpstate);
-		md_core.md_fpstate = *p->p_md.md_fpstate;
+	/* Copy important fields over. */
+	md_core.md_tf.tf_tstate = l->l_md.md_tf->tf_tstate;
+	md_core.md_tf.tf_pc = l->l_md.md_tf->tf_pc;
+	md_core.md_tf.tf_npc = l->l_md.md_tf->tf_npc;
+	md_core.md_tf.tf_y = l->l_md.md_tf->tf_y;
+	md_core.md_tf.tf_tt = l->l_md.md_tf->tf_tt;
+	md_core.md_tf.tf_pil = l->l_md.md_tf->tf_pil;
+	md_core.md_tf.tf_oldpil = l->l_md.md_tf->tf_oldpil;
+
+	md_core.md_tf.tf_global[0] = l->l_md.md_tf->tf_global[0];
+	md_core.md_tf.tf_global[1] = l->l_md.md_tf->tf_global[1];
+	md_core.md_tf.tf_global[2] = l->l_md.md_tf->tf_global[2];
+	md_core.md_tf.tf_global[3] = l->l_md.md_tf->tf_global[3];
+	md_core.md_tf.tf_global[4] = l->l_md.md_tf->tf_global[4];
+	md_core.md_tf.tf_global[5] = l->l_md.md_tf->tf_global[5];
+	md_core.md_tf.tf_global[6] = l->l_md.md_tf->tf_global[6];
+	md_core.md_tf.tf_global[7] = l->l_md.md_tf->tf_global[7];
+
+	md_core.md_tf.tf_out[0] = l->l_md.md_tf->tf_out[0];
+	md_core.md_tf.tf_out[1] = l->l_md.md_tf->tf_out[1];
+	md_core.md_tf.tf_out[2] = l->l_md.md_tf->tf_out[2];
+	md_core.md_tf.tf_out[3] = l->l_md.md_tf->tf_out[3];
+	md_core.md_tf.tf_out[4] = l->l_md.md_tf->tf_out[4];
+	md_core.md_tf.tf_out[5] = l->l_md.md_tf->tf_out[5];
+	md_core.md_tf.tf_out[6] = l->l_md.md_tf->tf_out[6];
+	md_core.md_tf.tf_out[7] = l->l_md.md_tf->tf_out[7];
+
+#ifdef DEBUG
+	md_core.md_tf.tf_local[0] = l->l_md.md_tf->tf_local[0];
+	md_core.md_tf.tf_local[1] = l->l_md.md_tf->tf_local[1];
+	md_core.md_tf.tf_local[2] = l->l_md.md_tf->tf_local[2];
+	md_core.md_tf.tf_local[3] = l->l_md.md_tf->tf_local[3];
+	md_core.md_tf.tf_local[4] = l->l_md.md_tf->tf_local[4];
+	md_core.md_tf.tf_local[5] = l->l_md.md_tf->tf_local[5];
+	md_core.md_tf.tf_local[6] = l->l_md.md_tf->tf_local[6];
+	md_core.md_tf.tf_local[7] = l->l_md.md_tf->tf_local[7];
+
+	md_core.md_tf.tf_in[0] = l->l_md.md_tf->tf_in[0];
+	md_core.md_tf.tf_in[1] = l->l_md.md_tf->tf_in[1];
+	md_core.md_tf.tf_in[2] = l->l_md.md_tf->tf_in[2];
+	md_core.md_tf.tf_in[3] = l->l_md.md_tf->tf_in[3];
+	md_core.md_tf.tf_in[4] = l->l_md.md_tf->tf_in[4];
+	md_core.md_tf.tf_in[5] = l->l_md.md_tf->tf_in[5];
+	md_core.md_tf.tf_in[6] = l->l_md.md_tf->tf_in[6];
+	md_core.md_tf.tf_in[7] = l->l_md.md_tf->tf_in[7];
+#endif
+	if (l->l_md.md_fpstate) {
+		fpusave_lwp(l, true);
+		md_core.md_fpstate = *l->l_md.md_fpstate;
 	} else
-		bzero((caddr_t)&md_core.md_fpstate, 
+		memset(&md_core.md_fpstate, 0,
 		      sizeof(md_core.md_fpstate));
 
 	CORE_SETMAGIC(cseg, CORESEGMAGIC, MID_MACHINE, CORE_CPU);
 	cseg.c_addr = 0;
 	cseg.c_size = chdr->c_cpusize;
-	error = vn_rdwr(UIO_WRITE, vp, (caddr_t)&cseg, chdr->c_seghdrsize,
-	    (off_t)chdr->c_hdrsize, UIO_SYSSPACE,
-	    IO_NODELOCKED|IO_UNIT, cred, NULL, p);
+
+	error = coredump_write(iocookie, UIO_SYSSPACE, &cseg,
+	    chdr->c_seghdrsize);
 	if (error)
 		return error;
 
-	error = vn_rdwr(UIO_WRITE, vp, (caddr_t)&md_core, sizeof(md_core),
-	    (off_t)(chdr->c_hdrsize + chdr->c_seghdrsize), UIO_SYSSPACE,
-	    IO_NODELOCKED|IO_UNIT, cred, NULL, p);
-	if (!error)
-		chdr->c_nseg++;
-
-	return error;
+	return coredump_write(iocookie, UIO_SYSSPACE, &md_core,
+	    sizeof(md_core));
 }
-
+#endif

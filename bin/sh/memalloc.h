@@ -1,4 +1,4 @@
-/*	$NetBSD: memalloc.h,v 1.10 1995/05/11 21:29:31 christos Exp $	*/
+/*	$NetBSD: memalloc.h,v 1.15 2008/02/15 17:26:06 matt Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -42,6 +38,7 @@ struct stackmark {
 	struct stack_block *stackp;
 	char *stacknxt;
 	int stacknleft;
+	struct stackmark *marknext;
 };
 
 
@@ -50,18 +47,18 @@ extern int stacknleft;
 extern int sstrnleft;
 extern int herefd;
 
-pointer ckmalloc __P((int));
-pointer ckrealloc __P((pointer, int));
-char *savestr __P((char *));
-pointer stalloc __P((int));
-void stunalloc __P((pointer));
-void setstackmark __P((struct stackmark *));
-void popstackmark __P((struct stackmark *));
-void growstackblock __P((void));
-void grabstackblock __P((int));
-char *growstackstr __P((void));
-char *makestrspace __P((void));
-void ungrabstackstr __P((char *, char *));
+pointer ckmalloc(size_t);
+pointer ckrealloc(pointer, int);
+char *savestr(const char *);
+pointer stalloc(int);
+void stunalloc(pointer);
+void setstackmark(struct stackmark *);
+void popstackmark(struct stackmark *);
+void growstackblock(void);
+void grabstackblock(int);
+char *growstackstr(void);
+char *makestrspace(void);
+void ungrabstackstr(char *, char *);
 
 
 

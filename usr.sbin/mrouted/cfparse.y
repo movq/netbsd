@@ -1,32 +1,46 @@
 %{
-/*	$NetBSD: cfparse.y,v 1.5 1998/03/30 02:33:37 mrg Exp $	*/
+/*	$NetBSD: cfparse.y,v 1.15 2003/08/18 05:39:53 itojun Exp $	*/
 
 /*
  * Configuration file parser for mrouted.
  *
  * Written by Bill Fenner, NRL, 1994
+ * Copyright (c) 1994
+ * Naval Research Laboratory (NRL/CCS)
+ *                    and the
+ * Defense Advanced Research Projects Agency (DARPA)
+ *
+ * All Rights Reserved.
+ *
+ * Permission to use, copy, modify and distribute this software and its
+ * documentation is hereby granted, provided that both the copyright notice and
+ * this permission notice appear in all copies of the software, derivative
+ * works or modified versions, and any portions thereof, and that both notices
+ * appear in supporting documentation.
+ *
+ * NRL AND DARPA ALLOW FREE USE OF THIS SOFTWARE IN ITS "AS IS" CONDITION AND
+ * DISCLAIM ANY LIABILITY OF ANY KIND FOR ANY DAMAGES WHATSOEVER RESULTING FROM
+ * THE USE OF THIS SOFTWARE.
  */
 #include <stdio.h>
-#ifdef __STDC__
 #include <stdarg.h>
-#else
-#include <string.h>
-#include <varargs.h>
-#endif
 #include "defs.h"
 #include <netdb.h>
+#include <ifaddrs.h>
 
 /*
  * Local function declarations
  */
-static void		fatal __P((char *fmt, ...));
-static void		warn __P((char *fmt, ...));
-static void		yyerror __P((char *s));
-static char *		next_word __P((void));
-static int		yylex __P((void));
-static u_int32_t	valid_if __P((char *s));
-static struct ifreq *	ifconfaddr __P((struct ifconf *ifcp, u_int32_t a));
-int			yyparse __P((void));
+static void		fatal(char *fmt, ...)
+    __attribute__((__format__(__printf__, 1, 2)));
+static void		warn(char *fmt, ...)
+        __attribute__((__format__(__printf__, 1, 2)));
+static void		yyerror(char *s);
+static char *		next_word(void);
+static int		yylex(void);
+static u_int32_t	valid_if(char *s);
+static const char *	ifconfaddr(u_int32_t a);
+int			yyparse(void);
 
 static FILE *f __attribute__((__unused__));	/* XXX egcs */
 extern int udp_socket;
@@ -36,8 +50,6 @@ extern int cache_lifetime;
 extern int max_prune_lifetime;
 
 static int lineno;
-static struct ifreq ifbuf[32];
-static struct ifconf ifc;
 
 static struct uvif *v;
 
@@ -110,33 +122,32 @@ stmt	: error
 			
 			if (vifi == numvifs)
 			    fatal("%s is not a configured interface",
-				inet_fmt($2,s1));
+				inet_fmt($2));
 
 					}
 		ifmods
 	| TUNNEL interface addrname	{
-
-			struct ifreq *ifr;
+			const char *ifname;
 			struct ifreq ffr;
 			vifi_t vifi;
 
 			order++;
 
-			ifr = ifconfaddr(&ifc, $2);
-			if (ifr == 0)
+			ifname = ifconfaddr($2);
+			if (ifname == 0)
 			    fatal("Tunnel local address %s is not mine",
-				inet_fmt($2, s1));
+				inet_fmt($2));
 
-			strncpy(ffr.ifr_name, ifr->ifr_name, IFNAMSIZ);
+			strncpy(ffr.ifr_name, ifname, sizeof(ffr.ifr_name));
 			if (ioctl(udp_socket, SIOCGIFFLAGS, (char *)&ffr)<0)
 			    fatal("ioctl SIOCGIFFLAGS on %s",ffr.ifr_name);
 			if (ffr.ifr_flags & IFF_LOOPBACK)
 			    fatal("Tunnel local address %s is a loopback interface",
-				inet_fmt($2, s1));
+				inet_fmt($2));
 
-			if (ifconfaddr(&ifc, $3) != 0)
+			if (ifconfaddr($3) != 0)
 			    fatal("Tunnel remote address %s is one of mine",
-				inet_fmt($3, s1));
+				inet_fmt($3));
 
 			for (vifi = 0, v = uvifs;
 			     vifi < numvifs;
@@ -144,11 +155,11 @@ stmt	: error
 			    if (v->uv_flags & VIFF_TUNNEL) {
 				if ($3 == v->uv_rmt_addr)
 				    fatal("Duplicate tunnel to %s",
-					inet_fmt($3, s1));
+					inet_fmt($3));
 			    } else if (!(v->uv_flags & VIFF_DISABLED)) {
 				if (($3 & v->uv_subnetmask) == v->uv_subnet)
 				    fatal("Unnecessary tunnel to %s",
-					inet_fmt($3,s1));
+					inet_fmt($3));
 			    }
 
 			if (numvifs == MAXVIFS)
@@ -177,9 +188,10 @@ stmt	: error
 					}
 		tunnelmods
 					{
-			log(LOG_INFO, 0,
+			logit(LOG_INFO, 0,
 			    "installing tunnel from %s to %s as vif #%u - rate=%d",
-			    inet_fmt($2, s1), inet_fmt($3, s2),
+			    inet_fmt($2),
+			    inet_fmt($3),
 			    numvifs, v->uv_rate_limit);
 
 			++numvifs;
@@ -192,8 +204,7 @@ stmt	: error
 					fatal("Too many named boundaries (max %d)", MAXBOUNDS);
 				      }
 
-				      boundlist[numbounds].name = malloc(strlen($2) + 1);
-				      strcpy(boundlist[numbounds].name, $2);
+				      boundlist[numbounds].name = strdup($2);
 				      boundlist[numbounds++].bound = $3;
 				    }
 	| SYSNAM STRING    {
@@ -264,7 +275,7 @@ ifmod	: mod
 		    ph->pa_subnetbcast = ph->pa_subnet | ~ph->pa_subnetmask;
 		    if ($2.addr & ~ph->pa_subnetmask)
 			warn("Extra subnet %s/%d has host bits set",
-				inet_fmt($2.addr,s1), $2.mask);
+				inet_fmt($2.addr), $2.mask);
 		    ph->pa_next = v->uv_addrs;
 		    v->uv_addrs = ph;
 
@@ -314,7 +325,7 @@ mod	: THRESHOLD NUMBER	{ if ($2 < 1 || $2 > 255)
 		    v_acl->acl_addr = $2.addr & v_acl->acl_mask;
 		    if ($2.addr & ~v_acl->acl_mask)
 			warn("Boundary spec %s/%d has host bits set",
-				inet_fmt($2.addr,s1),$2.mask);
+				inet_fmt($2.addr),$2.mask);
 		    v_acl->acl_next = v->uv_acl;
 		    v->uv_acl = v_acl;
 
@@ -367,7 +378,7 @@ boundary	: ADDRMASK	{
 
 			if ((ntohl($1.addr) & 0xff000000) != 0xef000000) {
 			    fatal("Boundaries must be 239.x.x.x, not %s/%d",
-				inet_fmt($1.addr, s1), $1.mask);
+				inet_fmt($1.addr), $1.mask);
 			}
 			$$ = $1;
 
@@ -378,7 +389,6 @@ addrmask	: ADDRMASK	{ $$ = $1; }
 	| ADDR			{ $$.addr = $1; $$.mask = 0; }
 	;
 %%
-#ifdef __STDC__
 static void
 fatal(char *fmt, ...)
 {
@@ -386,25 +396,12 @@ fatal(char *fmt, ...)
 	char buf[200];
 
 	va_start(ap, fmt);
-#else
-/*VARARGS1*/
-static void
-fatal(fmt, va_alist)
-char *fmt;
-va_dcl
-{
-	va_list ap;
-	char buf[200];
-
-	va_start(ap);
-#endif
-	vsprintf(buf, fmt, ap);
+	vsnprintf(buf, sizeof(buf), fmt, ap);
 	va_end(ap);
 
-	log(LOG_ERR,0,"%s: %s near line %d", configfilename, buf, lineno);
+	logit(LOG_ERR,0,"%s: %s near line %d", configfilename, buf, lineno);
 }
 
-#ifdef __STDC__
 static void
 warn(char *fmt, ...)
 {
@@ -412,29 +409,17 @@ warn(char *fmt, ...)
 	char buf[200];
 
 	va_start(ap, fmt);
-#else
-/*VARARGS1*/
-static void
-warn(fmt, va_alist)
-char *fmt;
-va_dcl
-{
-	va_list ap;
-	char buf[200];
-
-	va_start(ap);
-#endif
-	vsprintf(buf, fmt, ap);
+	vsnprintf(buf, sizeof(buf), fmt, ap);
 	va_end(ap);
 
-	log(LOG_WARNING,0,"%s: %s near line %d", configfilename, buf, lineno);
+	logit(LOG_WARNING,0,"%s: %s near line %d", configfilename, buf, lineno);
 }
 
 static void
 yyerror(s)
 char *s;
 {
-	log(LOG_ERR, 0, "%s: %s near line %d", configfilename, s, lineno);
+	logit(LOG_ERR, 0, "%s: %s near line %d", configfilename, s, lineno);
 }
 
 static char *
@@ -487,6 +472,7 @@ yylex()
 	int n;
 	u_int32_t addr;
 	char *q;
+	char c;
 
 	if ((q = next_word()) == NULL) {
 		return 0;
@@ -528,26 +514,21 @@ yylex()
 		yylval.num = 0;
 		return BOOLEAN;
 	}
-	if (sscanf(q,"%[.0-9]/%d%c",s1,&n,s2) == 2) {
-		if ((addr = inet_parse(s1)) != 0xffffffff) {
-			yylval.addrmask.mask = n;
-			yylval.addrmask.addr = addr;
-			return ADDRMASK;
-		}
-		/* fall through to returning STRING */
+	if ((addr = inet_parse(q, &n)) != 0xffffffff) {
+		yylval.addrmask.mask = n;
+		yylval.addrmask.addr = addr;
+		return ADDRMASK;
 	}
-	if (sscanf(q,"%[.0-9]%c",s1,s2) == 1) {
-		if ((addr = inet_parse(s1)) != 0xffffffff &&
-		    inet_valid_host(addr)) { 
-			yylval.addr = addr;
-			return ADDR;
-		}
+	if ((addr = inet_parse(q,0)) != 0xffffffff &&
+	    inet_valid_host(addr)) { 
+		yylval.addr = addr;
+		return ADDR;
 	}
-	if (sscanf(q,"0x%8x%c",&n,s1) == 1) {
+	if (sscanf(q,"0x%8x%c",&n,&c) == 1) {
 		yylval.addr = n;
 		return ADDR;
 	}
-	if (sscanf(q,"%d%c",&n,s1) == 1) {
+	if (sscanf(q,"%d%c",&n,&c) == 1) {
 		yylval.num = n;
 		return NUMBER;
 	}
@@ -582,14 +563,9 @@ config_vifs_from_file()
 
 	if ((f = fopen(configfilename, "r")) == NULL) {
 	    if (errno != ENOENT)
-		log(LOG_ERR, errno, "can't open %s", configfilename);
+		logit(LOG_ERR, errno, "can't open %s", configfilename);
 	    return;
 	}
-
-	ifc.ifc_buf = (char *)ifbuf;
-	ifc.ifc_len = sizeof(ifbuf);
-	if (ioctl(udp_socket, SIOCGIFCONF, (char *)&ifc) < 0)
-	    log(LOG_ERR, errno, "ioctl SIOCGIFCONF");
 
 	yyparse();
 
@@ -600,8 +576,8 @@ static u_int32_t
 valid_if(s)
 char *s;
 {
-	register vifi_t vifi;
-	register struct uvif *v;
+	vifi_t vifi;
+	struct uvif *v;
 
 	for (vifi=0, v=uvifs; vifi<numvifs; vifi++, v++)
 	    if (!strcmp(v->uv_name, s))
@@ -610,28 +586,25 @@ char *s;
 	return 0;
 }
 
-static struct ifreq *
-ifconfaddr(ifcp, a)
-    struct ifconf *ifcp;
+static const char *
+ifconfaddr(a)
     u_int32_t a;
 {
-    int n;
-    struct ifreq *ifrp = (struct ifreq *)ifcp->ifc_buf;
-    struct ifreq *ifend = (struct ifreq *)((char *)ifrp + ifcp->ifc_len);
+    static char ifname[IFNAMSIZ];
+    struct ifaddrs *ifap, *ifa;
 
-    while (ifrp < ifend) {
-	    if (ifrp->ifr_addr.sa_family == AF_INET &&
-		((struct sockaddr_in *)&ifrp->ifr_addr)->sin_addr.s_addr == a)
-		    return (ifrp);
-#if (defined(BSD) && (BSD >= 199006))
-		n = ifrp->ifr_addr.sa_len + sizeof(ifrp->ifr_name);
-		if (n < sizeof(*ifrp))
-			++ifrp;
-		else
-			ifrp = (struct ifreq *)((char *)ifrp + n);
-#else
-		++ifrp;
-#endif
+    if (getifaddrs(&ifap) != 0)
+	return (NULL);
+
+    for (ifa = ifap; ifa; ifa = ifa->ifa_next) {
+	if (ifa->ifa_addr->sa_family == AF_INET &&
+	    ((struct sockaddr_in *)ifa->ifa_addr)->sin_addr.s_addr == a) {
+	    strlcpy(ifname, ifa->ifa_name, sizeof(ifname));
+	    freeifaddrs(ifap);
+	    return (ifname);
+	}
     }
-    return (0);
+
+    freeifaddrs(ifap);
+    return (NULL);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: fopen.c,v 1.9 2000/01/15 01:11:45 christos Exp $	*/
+/*	$NetBSD: fopen.c,v 1.13 2008/03/13 15:40:00 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)fopen.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: fopen.c,v 1.9 2000/01/15 01:11:45 christos Exp $");
+__RCSID("$NetBSD: fopen.c,v 1.13 2008/03/13 15:40:00 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -52,6 +48,8 @@ __RCSID("$NetBSD: fopen.c,v 1.9 2000/01/15 01:11:45 christos Exp $");
 #include <unistd.h>
 #include <stdio.h>
 #include <errno.h>
+#include <limits.h>
+#include "reentrant.h"
 #include "local.h"
 
 FILE *
@@ -73,15 +71,29 @@ fopen(file, mode)
 	if (oflags & O_NONBLOCK) {
 		struct stat st;
 		if (fstat(f, &st) == -1) {
-			close(f);
+			int sverrno = errno;
+			(void)close(f);
+			errno = sverrno;
 			goto release;
 		}
 		if (!S_ISREG(st.st_mode)) {
+			(void)close(f);
 			errno = EFTYPE;
-			close(f);
 			goto release;
 		}
 	}
+	/*
+	 * File descriptors are a full int, but _file is only a short.
+	 * If we get a valid file descriptor that is greater or equal to
+	 * USHRT_MAX, then the fd will get sign-extended into an
+	 * invalid file descriptor.  Handle this case by failing the
+	 * open. (We treat the short as unsigned, and special-case -1).
+	 */
+	if (f >= USHRT_MAX) {
+		errno = EMFILE;
+		goto release;
+	}
+
 	fp->_file = f;
 	fp->_flags = flags;
 	fp->_cookie = fp;

@@ -1,4 +1,4 @@
-/*	$NetBSD: grf_cvreg.h,v 1.6 1997/07/29 17:42:03 veego Exp $	*/
+/*	$NetBSD: grf_cvreg.h,v 1.12 2007/03/05 19:48:19 he Exp $	*/
 
 /*
  * Copyright (c) 1995 Michael Teske
@@ -60,35 +60,37 @@ struct grfcvtext_mode {
 #define MAXCOLS 200
 
 /* read VGA register */
-#define vgar(ba, reg) (*(((volatile caddr_t)ba)+reg))
+#define vgar(ba, reg) (*(((volatile char *)ba)+reg))
 
 /* write VGA register */
 #define vgaw(ba, reg, val) \
-	*(((volatile caddr_t)ba)+reg) = ((val) & 0xff)
+	*(((volatile char *)ba)+reg) = ((val) & 0xff)
 
 
 /* read 32 Bit VGA register */
-#define vgar32(ba, reg) (  *((unsigned long *) (((volatile caddr_t)ba)+reg)) )
+#define vgar32(ba, reg) \
+	(  *((volatile unsigned long *) (((volatile char *)ba)+reg)) )
 
 /* write 32 Bit VGA register */
 #define vgaw32(ba, reg, val) \
-	*((unsigned long *)  (((volatile caddr_t)ba)+reg)) = val
+	*((unsigned long *)  (((volatile char *)ba)+reg)) = val
 
 /* read 16 Bit VGA register */
-#define vgar16(ba, reg) (  *((unsigned short *) (((volatile caddr_t)ba)+reg)) )
+#define vgar16(ba, reg) \
+	(  *((volatile unsigned short *) (((volatile char *)ba)+reg)) )
 
 /* write 16 Bit VGA register */
 #define vgaw16(ba, reg, val) \
-	*((unsigned short *)  (((volatile caddr_t)ba)+reg)) = val
+	*((volatile unsigned short *)  (((volatile char *)ba)+reg)) = val
 
-int grfcv_cnprobe __P((void));
-void grfcv_iteinit __P((struct grf_softc *));
-static __inline void GfxBusyWait __P((volatile caddr_t));    
-static __inline void GfxFifoWait __P((volatile caddr_t));    
-static __inline unsigned char RAttr __P((volatile caddr_t, short)); 
-static __inline unsigned char RSeq __P((volatile caddr_t, short)); 
-static __inline unsigned char RCrt __P((volatile caddr_t, short)); 
-static __inline unsigned char RGfx __P((volatile caddr_t, short)); 
+int grfcv_cnprobe(void);
+void grfcv_iteinit(struct grf_softc *);
+static inline void GfxBusyWait(volatile void *);
+static inline void GfxFifoWait(volatile void *);
+static inline unsigned char RAttr(volatile void *, short);
+static inline unsigned char RSeq(volatile void *, short);
+static inline unsigned char RCrt(volatile void *, short);
+static inline unsigned char RGfx(volatile void *, short);
 
 
 /*
@@ -105,7 +107,7 @@ static __inline unsigned char RGfx __P((volatile caddr_t, short));
 
 /* General Registers: */
 #define GREG_MISC_OUTPUT_R	0x03CC
-#define GREG_MISC_OUTPUT_W	0x03C2	
+#define GREG_MISC_OUTPUT_W	0x03C2
 #define GREG_FEATURE_CONTROL_R	0x03CA
 #define GREG_FEATURE_CONTROL_W	0x03DA
 #define GREG_INPUT_STATUS0_R	0x03C2
@@ -362,22 +364,22 @@ static __inline unsigned char RGfx __P((volatile caddr_t, short));
 
 /* Gfx engine busy wait */
 
-static __inline void 
-GfxBusyWait (ba) 
-	volatile caddr_t ba;
+static inline void
+GfxBusyWait (ba)
+	volatile void *ba;
 {
 	int test;
 
 	do {
 		test = vgar16 (ba, ECR_GP_STAT);
-		asm volatile ("nop");
+		__asm volatile ("nop");
 	} while (test & (1 << 9));
 }
 
 
-static __inline void
-GfxFifoWait(ba) 
-	volatile caddr_t ba;
+static inline void
+GfxFifoWait(ba)
+	volatile void *ba;
 {
 	int test;
 
@@ -391,12 +393,12 @@ GfxFifoWait(ba)
  *
  * The methods have diverged a bit for each board, so
  * WPass(P) has been converted into a set of specific
- * __inline functions.
+ * inline functions.
  */
 
-static __inline unsigned char
+static inline unsigned char
 RAttr(ba, idx)
-	volatile caddr_t ba;
+	volatile void *ba;
 	short idx;
 {
 
@@ -405,27 +407,27 @@ RAttr(ba, idx)
 	return vgar(ba, ACT_ADDRESS_R);
 }
 
-static __inline unsigned char
+static inline unsigned char
 RSeq(ba, idx)
-	volatile caddr_t ba;
+	volatile void *ba;
 	short idx;
 {
 	vgaw(ba, SEQ_ADDRESS, idx);
 	return vgar(ba, SEQ_ADDRESS_R);
 }
 
-static __inline unsigned char
+static inline unsigned char
 RCrt(ba, idx)
-	volatile caddr_t ba;
+	volatile void *ba;
 	short idx;
 {
 	vgaw(ba, CRT_ADDRESS, idx);
 	return vgar(ba, CRT_ADDRESS_R);
 }
 
-static __inline unsigned char
+static inline unsigned char
 RGfx(ba, idx)
-	volatile caddr_t ba; 
+	volatile void *ba;
 	short idx;
 {
 	vgaw(ba, GCT_ADDRESS, idx);
@@ -433,4 +435,3 @@ RGfx(ba, idx)
 }
 
 #endif /* _GRF_RHREG_H */
-

@@ -9,11 +9,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -30,9 +26,9 @@
 .\" SUCH DAMAGE.
 .\"
 .\"     from: @(#)exp.3	6.12 (Berkeley) 7/31/91
-.\"	$NetBSD: exp.3,v 1.16 1999/08/15 22:23:54 kleink Exp $
+.\"	$NetBSD: exp.3,v 1.23 2005/07/21 12:58:22 wiz Exp $
 .\"
-.Dd July 31, 1991
+.Dd July 21, 2005
 .Dt EXP 3
 .Os
 .Sh NAME
@@ -42,6 +38,8 @@
 .Nm expm1f ,
 .Nm log ,
 .Nm logf ,
+.Nm log2 ,
+.Nm log2f ,
 .Nm log10 ,
 .Nm log10f ,
 .Nm log1p ,
@@ -52,7 +50,7 @@
 .Sh LIBRARY
 .Lb libm
 .Sh SYNOPSIS
-.Fd #include <math.h>
+.In math.h
 .Ft double
 .Fn exp "double x"
 .Ft float
@@ -65,6 +63,10 @@
 .Fn log "double x"
 .Ft float
 .Fn logf "float x"
+.Ft double
+.Fn log2 "double x"
+.Ft float
+.Fn log2f "float x"
 .Ft double
 .Fn log10 "double x"
 .Ft float
@@ -91,7 +93,7 @@ function computes the value exp(x)\-1 accurately even for tiny argument
 The
 .Fn log
 function computes the value of the natural logarithm of argument
-.Fa x.
+.Fa x .
 .Pp
 The
 .Fn log10
@@ -106,13 +108,63 @@ the value of log(1+x) accurately even for tiny argument
 .Fa x .
 .Pp
 The
+.Fn log2
+and the
+.Fn log2f
+functions compute the value of the logarithm of argument
+.Fa x
+to base 2.
+.Pp
+The
 .Fn pow
 computes the value
 of
 .Ar x
 to the exponent
 .Ar y .
-.Sh ERROR (due to Roundoff etc.)
+.Sh RETURN VALUES
+These functions will return the appropriate computation unless an error
+occurs or an argument is out of range.
+The functions
+.Fn exp ,
+.Fn expm1
+and
+.Fn pow
+detect if the computed value will overflow,
+set the global variable
+.Va errno
+to
+.Er ERANGE
+and cause a reserved operand fault on a
+.Tn VAX .
+The function
+.Fn pow x y
+checks to see if
+.Fa x
+\*[Lt] 0 and
+.Fa y
+is not an integer, in the event this is true,
+the global variable
+.Va errno
+is set to
+.Er EDOM
+and on the
+.Tn VAX
+generate a reserved operand fault.
+On a
+.Tn VAX ,
+.Va errno
+is set to
+.Er EDOM
+and the reserved operand is returned
+by log unless
+.Fa x
+\*[Gt] 0, by
+.Fn log1p
+unless
+.Fa x
+\*[Gt] \-1.
+.Sh ERRORS
 exp(x), log(x), expm1(x) and log1p(x) are accurate to within
 an
 .Em ulp ,
@@ -157,54 +209,6 @@ is exact until it is bigger than 2**56 on a
 2**53 for
 .Tn IEEE
 754.
-.Sh RETURN VALUES
-These functions will return the appropriate computation unless an error
-occurs or an argument is out of range.
-The functions
-.Fn exp ,
-.Fn expm1
-and
-.Fn pow
-detect if the computed value will overflow,
-set the global variable
-.Va errno
-to
-.Er ERANGE
-and cause a reserved operand fault on a
-.Tn VAX
-or
-.Tn Tahoe .
-The function
-.Fn pow x y
-checks to see if
-.Fa x
-< 0 and
-.Fa y
-is not an integer, in the event this is true,
-the global variable
-.Va errno
-is set to
-.Er EDOM
-and on the
-.Tn VAX
-and
-.Tn Tahoe
-generate a reserved operand fault.
-On a
-.Tn VAX
-and
-.Tn Tahoe ,
-.Va errno
-is set to
-.Er EDOM
-and the reserved operand is returned
-by log unless
-.Fa x
-> 0, by
-.Fn log1p
-unless
-.Fa x
-> \-1.
 .Sh NOTES
 The functions exp(x)\-1 and log(1+x) are called
 expm1 and logp1 in
@@ -238,14 +242,17 @@ and
 .Em NaN
 (the reserved
 operand on a
-.Tn VAX ) .  Previous implementations of pow may
+.Tn VAX ) .
+Previous implementations of pow may
 have defined x**0 to be undefined in some or all of these
-cases.  Here are reasons for returning x**0 = 1 always:
+cases.
+Here are reasons for returning x**0 = 1 always:
 .Bl -enum -width indent
 .It
 Any program that already tests whether x is zero (or
 infinite or \*(Na) before computing x**0 cannot care
-whether 0**0 = 1 or not. Any program that depends
+whether 0**0 = 1 or not.
+Any program that depends
 upon 0**0 to be invalid is dubious anyway since that
 expression's meaning and, if invalid, its consequences
 vary from one computer system to another.
@@ -269,7 +276,7 @@ If x(z) and y(z) are
 .Em any
 functions analytic (expandable
 in power series) in z around z = 0, and if there
-x(0) = y(0) = 0, then x(z)**y(z) \(-> 1 as z \(-> 0.
+x(0) = y(0) = 0, then x(z)**y(z) \(-\*[Gt] 1 as z \(-\*[Gt] 0.
 .Ed
 .It
 If 0**0 = 1, then

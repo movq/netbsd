@@ -1,4 +1,4 @@
-/*	$NetBSD: mtreg.h,v 1.1 1995/10/02 00:28:22 thorpej Exp $	*/
+/*	$NetBSD: mtreg.h,v 1.4 2005/12/11 12:17:14 christos Exp $	*/
 
 /* 
  * Copyright (c) 1992, The University of Utah and
@@ -155,7 +155,7 @@ struct	mt_stat {
 #define	SR1_EOF		0x80	/* positioned at File Mark */
 #define	SR1_BOT		0x40	/* positioned at Beginning of Tape */
 #define	SR1_EOT		0x20	/* positioned at End of Tape */
-#define	SR1_SOFTERR	0x10	/* Recoverable Error has Occured */
+#define	SR1_SOFTERR	0x10	/* Recoverable Error has Occurred */
 #define	SR1_REJECT	0x08	/* HPIB Cmd rejected - Regs 4 & 5 have info */
 #define	SR1_RO		0x04	/* No Write Ring */
 #define	SR1_ERR		0x02	/* Unrecoverable Data error - Reg 5 has info */
@@ -290,7 +290,7 @@ struct	mt_stat {
  *	185	Self test protocol error
  *	188	HPIB parity error
  *	189	Operator reset during protocol sequence
- *	190	Device clear recieved
+ *	190	Device clear received
  */
 
 /* SR6 is count of commands accepted since Immediate Response command failed */

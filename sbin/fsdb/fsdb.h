@@ -1,4 +1,4 @@
-/*	$NetBSD: fsdb.h,v 1.6 1998/03/18 17:03:15 bouyer Exp $	*/
+/*	$NetBSD: fsdb.h,v 1.10 2008/04/28 20:23:08 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,10 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-extern int bread __P((int fd, char *buf, daddr_t blk, long size));
-extern void bwrite __P((int fd, char *buf, daddr_t blk, long size));
-extern void rwerror __P((char *mesg, daddr_t blk));
-extern int reply __P((char *question));
+extern void rwerror(char *mesg, daddr_t blk);
 
 extern long dev_bsize;
 extern long secsize;
@@ -54,14 +44,14 @@ struct cmdtable {
 	const char *helptxt;
 	unsigned int minargc;
 	unsigned int maxargc;
-	int (*handler) __P((int argc, char *argv[]));
+	int (*handler)(int argc, char *argv[]);
 };
-extern struct dinode *curinode;
+extern union dinode *curinode;
 extern ino_t curinum;
 
-char **crack __P((char *, int *));
-int argcount __P((struct cmdtable *, int, char *[]));
-void printstat __P((const char *, ino_t, struct dinode *));
-int checkactive __P((void));
-int checkactivedir __P((void));
-int printactive __P((void));
+char **crack(char *, int *);
+int argcount(struct cmdtable *, int, char *[]);
+void printstat(const char *, ino_t, union dinode *);
+int checkactive(void);
+int checkactivedir(void);
+int printactive(void);

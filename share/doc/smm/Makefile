@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.17 1999/02/14 09:47:46 lukem Exp $
+#	$NetBSD: Makefile,v 1.20 2007/11/29 12:35:05 mjf Exp $
 #	from: @(#)Makefile	8.2 (Berkeley) 5/10/94
 
 .include <bsd.own.mk>
@@ -10,13 +10,13 @@
 # 02.config
 
 # Missing from 4.4BSD-Lite:
-# 14.uucpimpl 15.uucpnet 16.security 17.password
+# 14.uucpimpl 15.uucpnet 16.security
 
 BINDIR=	/usr/share/doc/smm
-.if ${MKSHARE} != "no"
+.if ${MKDOC} != "no"
 FILES=	00.contents Makefile Title
 .endif
-SUBDIR=	01.setup 04.quotas 05.fastfs 06.nfs 18.net
+SUBDIR=	01.setup 04.quotas 05.fastfs 06.nfs 17.password 18.net
 .if exists(03.fsck_ffs)
 SUBDIR+= 03.fsck_ffs
 .endif
@@ -34,10 +34,10 @@ SUBDIR+= 09.sendmail
 #	15.uucpnet 16.security 17.password 18.net 19.perl
 
 Title.ps: ${FILES}
-	groff -ms Title > ${.TARGET}
+	${TOOL_ROFF_PS} -ms Title > ${.TARGET}
 
 contents.ps: ${FILES}
-	groff -ms 00.contents > ${.TARGET}
+	${TOOL_ROFF_PS} -ms 00.contents > ${.TARGET}
 
 .include <bsd.prog.mk>
 .include <bsd.subdir.mk>

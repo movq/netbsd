@@ -1,4 +1,4 @@
-/*	$NetBSD: win.c,v 1.11 1998/10/14 00:58:49 wsanchez Exp $	*/
+/*	$NetBSD: win.c,v 1.13 2003/08/07 11:17:34 agc Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)win.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: win.c,v 1.11 1998/10/14 00:58:49 wsanchez Exp $");
+__RCSID("$NetBSD: win.c,v 1.13 2003/08/07 11:17:34 agc Exp $");
 #endif
 #endif /* not lint */
 
@@ -70,11 +66,7 @@ __RCSID("$NetBSD: win.c,v 1.11 1998/10/14 00:58:49 wsanchez Exp $");
  * Open a user window.
  */
 struct ww *
-openwin(id, row, col, nrow, ncol, nline, label, type, uflags, shf, sh)
-	int	id, row, col, nrow, ncol, nline;
-	char   *label;
-	int	type, uflags;
-	char   *shf, **sh;
+openwin(int id, int row, int col, int nrow, int ncol, int nline, char *label, int type, int uflags, char *shf, char **sh)
 {
 	struct ww *w;
 
@@ -115,7 +107,7 @@ openwin(id, row, col, nrow, ncol, nline, label, type, uflags, shf, sh)
 }
 
 int
-findid()
+findid(void)
 {
 	int i;
 
@@ -129,7 +121,7 @@ findid()
 }
 
 struct ww *
-findselwin()
+findselwin(void)
 {
 	struct ww *w, *s = 0;
 	int i;
@@ -146,8 +138,7 @@ findselwin()
  * Close a user window.  Close all if w == 0.
  */
 void
-closewin(w)
-	struct ww *w;
+closewin(struct ww *w)
 {
 	char didit = 0;
 	int i;
@@ -181,9 +172,7 @@ closewin(w)
  * Open an information (display) window.
  */
 struct ww *
-openiwin(nrow, label)
-	int nrow;
-	char *label;
+openiwin(int nrow, char *label)
 {
 	struct ww *w;
 
@@ -202,16 +191,14 @@ openiwin(nrow, label)
  * Close an information window.
  */
 void
-closeiwin(w)
-	struct ww *w;
+closeiwin(struct ww *w)
 {
 	closewin1(w);
 	reframe();
 }
 
 void
-closewin1(w)
-	struct ww *w;
+closewin1(struct ww *w)
 {
 	if (w == selwin)
 		selwin = 0;
@@ -233,9 +220,7 @@ closewin1(w)
  * Always reframe() if doreframe is true.
  */
 void
-front(w, doreframe)
-	struct ww *w;
-	char doreframe;
+front(struct ww *w, char doreframe)
 {
 	if (w->ww_back != (isfg(w) ? framewin : fgwin) && !wwvisible(w)) {
 		deletewin(w);
@@ -251,9 +236,7 @@ front(w, doreframe)
  * For normal windows, we put it behind the current window.
  */
 void
-addwin(w, fg)
-	struct ww *w;
-	char fg;
+addwin(struct ww *w, char fg)
 {
 	if (fg) {
 		wwadd(w, framewin);
@@ -268,8 +251,7 @@ addwin(w, fg)
  * Delete a window.
  */
 void
-deletewin(w)
-	struct ww *w;
+deletewin(struct ww *w)
 {
 	if (fgwin == w)
 		fgwin = w->ww_back;
@@ -277,7 +259,7 @@ deletewin(w)
 }
 
 void
-reframe()
+reframe(void)
 {
 	struct ww *w;
 
@@ -290,8 +272,7 @@ reframe()
 }
 
 void
-labelwin(w)
-	struct ww *w;
+labelwin(struct ww *w)
 {
 	int mode = w == selwin ? WWM_REV : 0;
 
@@ -317,8 +298,7 @@ labelwin(w)
 }
 
 void
-stopwin(w)
-	struct ww *w;
+stopwin(struct ww *w)
 {
 	if (w->ww_pty >= 0 && w->ww_type == WWT_PTY && wwstoptty(w->ww_pty) < 0)
 		error("Can't stop output: %s.", wwerror());
@@ -327,8 +307,7 @@ stopwin(w)
 }
 
 void
-startwin(w)
-	struct ww *w;
+startwin(struct ww *w)
 {
 	if (w->ww_pty >= 0 && w->ww_type == WWT_PTY &&
 	    wwstarttty(w->ww_pty) < 0)
@@ -338,9 +317,7 @@ startwin(w)
 }
 
 void
-sizewin(w, nrow, ncol)
-	struct ww *w;
-	int nrow, ncol;
+sizewin(struct ww *w, int nrow, int ncol)
 {
 	struct ww *back = w->ww_back;
 
@@ -354,16 +331,13 @@ sizewin(w, nrow, ncol)
 }
 
 void
-waitnl(w)
-	struct ww *w;
+waitnl(struct ww *w)
 {
 	(void) waitnl1(w, "[Type any key to continue]");
 }
 
 int
-more(w, always)
-	struct ww *w;
-	char always;
+more(struct ww *w, char always)
 {
 	int c;
 	int uc = ISSET(w->ww_wflags, WWW_UNCTRL);
@@ -378,9 +352,7 @@ more(w, always)
 }
 
 int
-waitnl1(w, prompt)
-	struct ww *w;
-	char *prompt;
+waitnl1(struct ww *w, char *prompt)
 {
 	int uc = ISSET(w->ww_wflags, WWW_UNCTRL);
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: stdarg.h,v 1.16 2000/02/03 16:16:10 kleink Exp $ */
+/*	$NetBSD: stdarg.h,v 1.23 2005/12/11 12:19:06 christos Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -21,11 +21,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -53,16 +49,58 @@
 typedef _BSD_VA_LIST_	va_list;
 
 #ifdef __lint__
-#define __builtin_saveregs()		(0)
-#define __builtin_classify_type(t)	(0)
-#define __builtin_next_arg(t)		((t) ? 0 : 0)
-#endif
 
-#define	__va_size(type) \
+# define va_start(ap, last)	((ap) = *(va_list *)0)
+# define va_arg(ap, type)	(*(type *)(void *)&(ap))
+# define va_end(ap)
+# define __va_copy(dest, src)	((dest) = (src))
+
+#elif __GNUC_PREREQ__(3,0)
+
+# define va_start(ap, last)	__builtin_va_start(ap, last)
+# define va_end(ap)		__builtin_va_end(ap)
+# define va_arg(ap, type)	__builtin_va_arg(ap, type)
+# define __va_copy(dst, src)	__builtin_va_copy(dst, src)
+
+#else
+
+# define va_start(ap, last) \
+	(void)(__builtin_next_arg(last), (ap) = (va_list)__builtin_saveregs())
+
+
+# define va_end(ap)	
+# define __va_copy(dest, src) \
+	((dest) = (src))
+
+# ifdef __arch64__
+/*
+ * For sparcv9 code.
+ */
+#  define __va_arg8(ap, type) \
+	(*(type *)(void *)((ap) += 8, (ap) - 8))
+#  define __va_arg16(ap, type) \
+	(*(type *)(void *)((ap) = (va_list)(((unsigned long)(ap) + 31) & -16),\
+			   (ap) - 16))
+#  define __va_int(ap, type) \
+	(*(type *)(void *)((ap) += 8, (ap) - sizeof(type)))
+
+#  define __REAL_TYPE_CLASS	8
+#  define __RECORD_TYPE_CLASS	12
+#  define va_arg(ap, type) \
+	(__builtin_classify_type(*(type *)0) == __REAL_TYPE_CLASS ?	\
+	 (__alignof__(type) == 16 ? __va_arg16(ap, type) :		\
+	  __va_arg8(ap, type)) :					\
+	 (__builtin_classify_type(*(type *)0) < __RECORD_TYPE_CLASS ?	\
+	  __va_int(ap, type) :						\
+	  (sizeof(type) <= 8 ? __va_arg8(ap, type) :			\
+	   (sizeof(type) <= 16 ? __va_arg16(ap, type) :			\
+	    *__va_arg8(ap, type *)))))
+# else /* __arch64__ */
+/* 
+ * For sparcv8 code.
+ */
+#  define __va_size(type) \
 	(((sizeof(type) + sizeof(long) - 1) / sizeof(long)) * sizeof(long))
-
-#define	va_start(ap, last) \
-	(__builtin_next_arg(last), (ap) = (va_list)__builtin_saveregs())
 
 /*
  * va_arg picks up the next argument of type `type'.  Appending an
@@ -80,13 +118,7 @@ typedef _BSD_VA_LIST_	va_list;
  * have a constructor.
  */
 
-#ifdef __lint__
-# define va_arg(ap, type)	(*(type *)(void *)(ap)) 
-#else /* !__lint__ */
-# if __GNUC__ < 2
-#  define __extension__
-# endif
-# define __va_8byte(ap, type) \
+#  define __va_8byte(ap, type) \
 	__extension__ ({						\
 		union { char __d[sizeof(type)]; int __i[2]; } __va_u;	\
 		__va_u.__i[0] = ((int *)(void *)(ap))[0];		\
@@ -94,26 +126,25 @@ typedef _BSD_VA_LIST_	va_list;
 		(ap) += 8; *(type *)(va_list)__va_u.__d;		\
 	})
 
-# define __va_arg(ap, type) \
+#  define __va_arg(ap, type) \
 	(*(type *)((ap) += __va_size(type),			\
 		   (ap) - (sizeof(type) < sizeof(long) &&	\
 			   sizeof(type) != __va_size(type) ?	\
 			   sizeof(type) : __va_size(type))))
 
-# define __RECORD_TYPE_CLASS	12
-# define va_arg(ap, type) \
+#  define __RECORD_TYPE_CLASS	12
+#  define va_arg(ap, type) \
 	(__builtin_classify_type(*(type *)0) >= __RECORD_TYPE_CLASS ?	\
 	 *__va_arg(ap, type *) : __va_size(type) == 8 ?			\
 	 __va_8byte(ap, type) : __va_arg(ap, type))
-#endif /* __lint__ */
 
-#if !defined(_ANSI_SOURCE) && \
-    (!defined(_POSIX_C_SOURCE) && !defined(_XOPEN_SOURCE) || \
-     defined(_ISOC99_SOURCE) || (__STDC_VERSION__ - 0) >= 199901L)
-# define va_copy(dest, src) \
-	((dest) = (src))
+# endif /* __arch64__ */
+#endif /* !__GNUC_PREREQ(3, 0) */
+
+#if !defined(_ANSI_SOURCE) &&						\
+    (defined(_ISOC99_SOURCE) || (__STDC_VERSION__ - 0) >= 199901L ||	\
+     defined(_NETBSD_SOURCE))
+# define va_copy(dst, src)	__va_copy(dst, src)
 #endif
-
-#define va_end(ap)	
 
 #endif /* !_SPARC_STDARG_H_ */

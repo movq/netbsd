@@ -66,7 +66,7 @@ $ EPIPE
 $ EDOM
 33 Numerical argument out of domain
 $ ERANGE
-34 Result too large
+34 Result too large or too small
 $ EAGAIN, EWOULDBLOCK
 35 Resource temporarily unavailable
 $ EINPROGRESS
@@ -82,7 +82,7 @@ $ EMSGSIZE
 $ EPROTOTYPE
 41 Protocol wrong type for socket
 $ ENOPROTOOPT
-42 Protocol not available
+42 Protocol option not available
 $ EPROTONOSUPPORT
 43 Protocol not supported
 $ ESOCKTNOSUPPORT
@@ -169,6 +169,28 @@ $ EOVERFLOW
 84 Value too large to be stored in data type
 $ EILSEQ
 85 Illegal byte sequence
+$ ENOTSUP
+86 Not supported
+$ ECANCELED
+87 Operation Canceled
+$ EBADMSG
+88 Bad or Corrupt message
+$ ENODATA
+89 No message available
+$ ENOSR
+90 No STREAM resources
+$ ENOSTR
+91 Not a STREAM
+$ ETIME
+92 STREAM ioctl timeout
+$ ENOATTR
+93 Attribute not found
+$ EMULTIHOP
+94 Multihop attempted
+$ ENOLINK
+95 Link has been severed
+$ EPROTO
+96 Protocol error
 $set 2
 $ SIGHUP
 1 Hangup

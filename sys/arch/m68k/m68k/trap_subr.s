@@ -1,9 +1,43 @@
-/*	$NetBSD: trap_subr.s,v 1.6 1999/11/10 00:01:32 thorpej Exp $	*/
+/*	$NetBSD: trap_subr.s,v 1.13 2007/10/17 19:55:12 garbled Exp $	*/
 
 /*
- * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1980, 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Systems Programming Group of the University of Utah Computer
+ * Science Department.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ * from: Utah $Hdr: locore.s 1.66 92/12/22$
+ *
+ *	@(#)locore.s	8.6 (Berkeley) 5/27/94
+ */
+/*
+ * Copyright (c) 1988 University of Utah.
  *
  * This code is derived from software contributed to Berkeley by
  * the Systems Programming Group of the University of Utah Computer
@@ -42,6 +76,8 @@
  *	@(#)locore.s	8.6 (Berkeley) 5/27/94
  */
 
+#include "opt_compat_sunos.h"
+
 /*
  * NOTICE: This is not a standalone file.  To use it, #include it in
  * your port's locore.s, like so:
@@ -59,8 +95,9 @@ ASENTRY_NOPROFILE(fault)
 	clrl	%sp@-			| no VA arg
 	clrl	%sp@-			| or code arg
 	movl	%d0,%sp@-		| push trap type
+	pea	%sp@(12)		| address of trap frame
 	jbsr	_C_LABEL(trap)		| handle trap
-	lea	%sp@(12),%sp		| pop value args
+	lea	%sp@(16),%sp		| pop value args
 	movl	%sp@(FR_SP),%a0		| restore
 	movl	%a0,%usp		|   user SP
 	moveml	%sp@+,#0x7FFF		| restore most user regs
@@ -71,10 +108,9 @@ ASENTRY_NOPROFILE(fault)
  * Similar to above, but will tidy up the stack, if necessary.
  */
 ASENTRY(faultstkadj)
+	pea	%sp@(12)		| address of trap frame
 	jbsr	_C_LABEL(trap)		| handle the error
-/* for 68060 Branch Prediction Error handler */
-_ASM_LABEL(faultstkadjnotrap):
-	lea	%sp@(12),%sp		| pop value args
+	lea	%sp@(16),%sp		| pop value args
 /* for new 68060 Branch Prediction Error handler */
 _ASM_LABEL(faultstkadjnotrap2):
 	movl	%sp@(FR_SP),%a0		| restore user SP
@@ -96,7 +132,7 @@ _ASM_LABEL(faultstkadjnotrap2):
 	movl	%sp@,%sp		| and our SP
 	jra	_ASM_LABEL(rei)		| all done
 
-#ifdef COMPAT_13
+#if defined(COMPAT_13) || defined(COMPAT_SUNOS)
 /*
  * Trap 1 - compat_13_sigreturn13
  */
@@ -116,11 +152,13 @@ ENTRY_NOPROFILE(trap1)
 ENTRY_NOPROFILE(trap2)
 	jra	_C_LABEL(trace)
 
+#if defined(COMPAT_16)
 /*
  * Trap 3 - sigreturn system call
  */
 ENTRY_NOPROFILE(trap3)
-	jra	_C_LABEL(m68k_sigreturn_stub)
+	jra	_C_LABEL(m68k_compat_16_sigreturn14_stub)
+#endif
 
 /*
  * The following exceptions only cause four and six word stack frames

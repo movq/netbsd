@@ -1,4 +1,4 @@
-/*	$NetBSD: psl.h,v 1.11 1999/08/05 18:28:01 thorpej Exp $ */
+/*	$NetBSD: psl.h,v 1.40 2008/03/02 15:07:02 nakayama Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -21,11 +21,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -47,9 +43,8 @@
 #ifndef PSR_IMPL
 
 /*
- * SPARC Process Status Register (in psl.h for hysterical raisins).
- * Of course, this register does not exist in v9, but we keep this stuff
- * in here in case we need it for compatibility w/v7 and v8.
+ * SPARC Process Status Register (in psl.h for hysterical raisins).  This
+ * doesn't exist on the V9.
  *
  * The picture in the Sun manuals looks like this:
  *	                                     1 1
@@ -60,41 +55,44 @@
  *	+-------+-------+-------+-----------+-+-+-------+-+-+-+---------+
  */
 
-#define	PSR_IMPL	0xf0000000	/* implementation */
-#define	PSR_VER		0x0f000000	/* version */
-#define	PSR_ICC		0x00f00000	/* integer condition codes */
-#define	PSR_N		0x00800000	/* negative */
-#define	PSR_Z		0x00400000	/* zero */
-#define	PSR_O		0x00200000	/* overflow */
-#define	PSR_C		0x00100000	/* carry */
-#define	PSR_EC		0x00002000	/* coprocessor enable */
-#define	PSR_EF		0x00001000	/* FP enable */
-#define	PSR_PIL		0x00000f00	/* interrupt level */
-#define	PSR_S		0x00000080	/* supervisor (kernel) mode */
-#define	PSR_PS		0x00000040	/* previous supervisor mode (traps) */
-#define	PSR_ET		0x00000020	/* trap enable */
-#define	PSR_CWP		0x0000001f	/* current window pointer */
+#define PSR_IMPL	0xf0000000	/* implementation */
+#define PSR_VER		0x0f000000	/* version */
+#define PSR_ICC		0x00f00000	/* integer condition codes */
+#define PSR_N		0x00800000	/* negative */
+#define PSR_Z		0x00400000	/* zero */
+#define PSR_O		0x00200000	/* overflow */
+#define PSR_C		0x00100000	/* carry */
+#define PSR_EC		0x00002000	/* coprocessor enable */
+#define PSR_EF		0x00001000	/* FP enable */
+#define PSR_PIL		0x00000f00	/* interrupt level */
+#define PSR_S		0x00000080	/* supervisor (kernel) mode */
+#define PSR_PS		0x00000040	/* previous supervisor mode (traps) */
+#define PSR_ET		0x00000020	/* trap enable */
+#define PSR_CWP		0x0000001f	/* current window pointer */
 
-#define	PSR_BITS "\20\16EC\15EF\10S\7PS\6ET"
+#define PSR_BITS "\20\16EC\15EF\10S\7PS\6ET"
 
 /* Interesting spl()s */
 #define PIL_SCSI	3
 #define PIL_FDSOFT	4
-#define	PIL_AUSOFT	4
+#define PIL_AUSOFT	4
 #define PIL_BIO		5
 #define PIL_VIDEO	5
-#define	PIL_TTY		6
-#define	PIL_LPT		6
-#define	PIL_NET		6
-#define PIL_IMP		7
-#define	PIL_CLOCK	10
+#define PIL_TTY		6
+#define PIL_LPT		6
+#define PIL_NET		6
+#define PIL_VM		7
+#define	PIL_AUD		8
+#define PIL_CLOCK	10
 #define PIL_FD		11
 #define PIL_SER		12
-#define PIL_AUD		13
+#define	PIL_STATCLOCK	14
+#define PIL_HIGH	15
+#define PIL_SCHED	PIL_CLOCK
+#define PIL_LOCK	PIL_HIGH
 
 /* 
  * SPARC V9 CCR register
- *
  */
 
 #define ICC_C	0x01L
@@ -134,23 +132,35 @@
 #define PSTATE_IE	0x002	/* interrupt enable */
 #define PSTATE_AG	0x001	/* enable alternate globals */
 
-#define	PSTATE_BITS "\20\14IG\13MG\12CLE\11TLE\10\7MM\6RED\5PEF\4AM\3PRIV\2IE\1AG"
+#define PSTATE_BITS "\20\14IG\13MG\12CLE\11TLE\10\7MM\6RED\5PEF\4AM\3PRIV\2IE\1AG"
+
+
+/*
+ * 32-bit code requires TSO or at best PSO since that's what's supported on
+ * SPARC V8 and earlier machines.
+ *
+ * 64-bit code sets the memory model in the ELF header.
+ *
+ * We're running kernel code in TSO for the moment so we don't need to worry
+ * about possible memory barrier bugs.
+ */
 
 #ifdef __arch64__
 #define PSTATE_PROM	(PSTATE_MM_TSO|PSTATE_PRIV)
 #define PSTATE_NUCLEUS	(PSTATE_MM_TSO|PSTATE_PRIV|PSTATE_AG)
 #define PSTATE_KERN	(PSTATE_MM_TSO|PSTATE_PRIV)
 #define PSTATE_INTR	(PSTATE_KERN|PSTATE_IE)
-#define PSTATE_USER32	(PSTATE_MM_TSO|PSTATE_AM|PSTATE_IE)	/* It's easier to debug */
-#define PSTATE_USER	(PSTATE_MM_RMO|PSTATE_AM|PSTATE_IE)
+#define PSTATE_USER32	(PSTATE_MM_TSO|PSTATE_AM|PSTATE_IE)
+#define PSTATE_USER	(PSTATE_MM_RMO|PSTATE_IE)
 #else
 #define PSTATE_PROM	(PSTATE_MM_TSO|PSTATE_PRIV)
 #define PSTATE_NUCLEUS	(PSTATE_MM_TSO|PSTATE_AM|PSTATE_PRIV|PSTATE_AG)
 #define PSTATE_KERN	(PSTATE_MM_TSO|PSTATE_AM|PSTATE_PRIV)
 #define PSTATE_INTR	(PSTATE_KERN|PSTATE_IE)
-#define PSTATE_USER32	(PSTATE_MM_TSO|PSTATE_AM|PSTATE_IE)	/* It's easier to debug */
-#define PSTATE_USER	(PSTATE_MM_RMO|PSTATE_AM|PSTATE_IE)
+#define PSTATE_USER32	(PSTATE_MM_TSO|PSTATE_AM|PSTATE_IE)
+#define PSTATE_USER	(PSTATE_MM_TSO|PSTATE_AM|PSTATE_IE)
 #endif
+
 
 /*
  * SPARC V9 TSTATE register
@@ -159,7 +169,6 @@
  *  +-----+-----+-----+--------+---+-----+
  *  | CCR | ASI |  -  | PSTATE | - | CWP |
  *  +-----+-----+-----+--------+---+-----+
- *
  */
 
 #define TSTATE_CWP		0x01f
@@ -170,8 +179,8 @@
 #define TSTATE_CCR		0xff00000000LL
 #define TSTATE_CCR_SHIFT	32
 
-#define PSRCC_TO_TSTATE(x)	(((int64_t)(x)&PSR_ICC)<<(TSTATE_CCR_SHIFT-19))
-#define TSTATECCR_TO_PSR(x)	(((x)&TSTATE_CCR)>>(TSTATE_CCR_SHIFT-19))
+#define PSRCC_TO_TSTATE(x)	(((int64_t)(x)&PSR_ICC)<<(TSTATE_CCR_SHIFT-20))
+#define TSTATECCR_TO_PSR(x)	(((x)&TSTATE_CCR)>>(TSTATE_CCR_SHIFT-20))
 
 /*
  * These are here to simplify life.
@@ -191,10 +200,10 @@
 #define TSTATE_IE	(PSTATE_IE<<TSTATE_PSTATE_SHIFT)
 #define TSTATE_AG	(PSTATE_AG<<TSTATE_PSTATE_SHIFT)
 
-#define	TSTATE_BITS "\20\14IG\13MG\12CLE\11TLE\10\7MM\6RED\5PEF\4AM\3PRIV\2IE\1AG"
+#define TSTATE_BITS "\20\14IG\13MG\12CLE\11TLE\10\7MM\6RED\5PEF\4AM\3PRIV\2IE\1AG"
 
-#define TSTATE_KERN	((TSTATE_KERN)<<TSTATE_PSTATE_SHIFT)
-#define TSTATE_USER	((TSTATE_USER)<<TSTATE_PSTATE_SHIFT)
+#define TSTATE_KERN	((PSTATE_KERN)<<TSTATE_PSTATE_SHIFT)
+#define TSTATE_USER	((PSTATE_USER)<<TSTATE_PSTATE_SHIFT)
 /*
  * SPARC V9 VER version register.
  *
@@ -239,53 +248,61 @@
 
 #if defined(_KERNEL) && !defined(_LOCORE)
 
-extern u_int64_t ver;	/* Copy of v9 version register.  We need to read this only once, in locore.s. */
-static __inline int getpstate __P((void));
-static __inline void setpstate __P((int));
-static __inline int getcwp __P((void));
-static __inline void setcwp __P((int));
-#ifndef SPLDEBUG
-static __inline void splx __P((int));
-#endif
-static __inline u_int64_t getver __P((void));
-
 /*
- * GCC pseudo-functions for manipulating privileged registers
+ * Inlines for manipulating privileged registers
  */
-static __inline int getpstate()
+static __inline int
+getpstate(void)
 {
 	int pstate;
 
-	__asm __volatile("rdpr %%pstate,%0" : "=r" (pstate));
+	__asm volatile("rdpr %%pstate,%0" : "=r" (pstate));
 	return (pstate);
 }
 
-static __inline void setpstate(newpstate)
-	int newpstate;
+static __inline void
+setpstate(int newpstate)
 {
-	__asm __volatile("wrpr %0,0,%%pstate" : : "r" (newpstate));
+	__asm volatile("wrpr %0,0,%%pstate" : : "r" (newpstate) : "memory");
 }
 
-static __inline int getcwp()
+static __inline int
+getcwp(void)
 {
 	int cwp;
 
-	__asm __volatile("rdpr %%cwp,%0" : "=r" (cwp));
+	__asm volatile("rdpr %%cwp,%0" : "=r" (cwp));
 	return (cwp);
 }
 
-static __inline void setcwp(newcwp)
-	int newcwp;
+static __inline void
+setcwp(int newcwp)
 {
-	__asm __volatile("wrpr %0,0,%%cwp" : : "r" (newcwp));
+	__asm volatile("wrpr %0,0,%%cwp" : : "r" (newcwp) : "memory");
 }
 
-static __inline u_int64_t getver()
+static __inline uint64_t
+getver(void)
 {
-	u_int64_t ver;
+	uint64_t ver;
 
-	__asm __volatile("rdpr %%ver,%0" : "=r" (ver));
+	__asm volatile("rdpr %%ver,%0" : "=r" (ver));
 	return (ver);
+}
+
+static __inline int
+intr_disable(void)
+{
+	int pstate = getpstate();
+
+	setpstate(pstate & ~PSTATE_IE);
+	return (pstate);
+}
+
+static __inline void
+intr_restore(int pstate)
+{
+	setpstate(pstate);
 }
 
 /*
@@ -293,65 +310,98 @@ static __inline u_int64_t getver()
  */
 
 #ifdef SPLDEBUG
-void prom_printf __P((const char *fmt, ...));
+void prom_printf(const char *fmt, ...);
 extern int printspl;
-#define SPLPRINT(x)	if(printspl) { int i=10000000; prom_printf x ; while(i--); }
+#define SPLPRINT(x) \
+{ \
+	if (printspl) { \
+		int i = 10000000; \
+		prom_printf x ; \
+		while (i--) \
+			; \
+	} \
+}
 #define	SPL(name, newpil) \
-static __inline int name##X __P((const char*, int)); \
 static __inline int name##X(const char* file, int line) \
 { \
 	int oldpil; \
-	__asm __volatile("rdpr %%pil,%0" : "=r" (oldpil)); \
+	__asm volatile("rdpr %%pil,%0" : "=r" (oldpil)); \
 	SPLPRINT(("{%s:%d %d=>%d}", file, line, oldpil, newpil)); \
-	__asm __volatile("wrpr %%g0,%0,%%pil" : : "n" (newpil)); \
+	__asm volatile("wrpr %%g0,%0,%%pil" : : "n" (newpil) : "memory"); \
 	return (oldpil); \
 }
 /* A non-priority-decreasing version of SPL */
 #define	SPLHOLD(name, newpil) \
-static __inline int name##X __P((const char*, int)); \
 static __inline int name##X(const char* file, int line) \
 { \
 	int oldpil; \
-	__asm __volatile("rdpr %%pil,%0" : "=r" (oldpil)); \
+	__asm volatile("rdpr %%pil,%0" : "=r" (oldpil)); \
 	if (newpil <= oldpil) \
 		return oldpil; \
 	SPLPRINT(("{%s:%d %d->!d}", file, line, oldpil, newpil)); \
-	__asm __volatile("wrpr %%g0,%0,%%pil" : : "n" (newpil)); \
+	__asm volatile("wrpr %%g0,%0,%%pil" : : "n" (newpil) : "memory"); \
 	return (oldpil); \
 }
 
 #else
 #define SPLPRINT(x)	
 #define	SPL(name, newpil) \
-static __inline int name __P((void)); \
-static __inline int name() \
+static __inline int name(void) \
 { \
 	int oldpil; \
-	__asm __volatile("rdpr %%pil,%0" : "=r" (oldpil)); \
-	__asm __volatile("wrpr %%g0,%0,%%pil" : : "n" (newpil)); \
+	__asm volatile("rdpr %%pil,%0" : "=r" (oldpil)); \
+	__asm volatile("wrpr %%g0,%0,%%pil" : : "n" (newpil) : "memory"); \
 	return (oldpil); \
 }
 /* A non-priority-decreasing version of SPL */
 #define	SPLHOLD(name, newpil) \
-static __inline int name __P((void)); \
-static __inline int name() \
+static __inline int name(void) \
 { \
 	int oldpil; \
-	__asm __volatile("rdpr %%pil,%0" : "=r" (oldpil)); \
+	__asm volatile("rdpr %%pil,%0" : "=r" (oldpil)); \
 	if (newpil <= oldpil) \
 		return oldpil; \
-	__asm __volatile("wrpr %%g0,%0,%%pil" : : "n" (newpil)); \
+	__asm volatile("wrpr %%g0,%0,%%pil" : : "n" (newpil) : "memory"); \
 	return (oldpil); \
 }
 #endif
 
-SPL(spl0, 0)
+typedef uint8_t ipl_t;
+typedef struct {
+	ipl_t _ipl;
+} ipl_cookie_t;
 
-SPL(spllowersoftclock, 1)
+static inline ipl_cookie_t
+makeiplcookie(ipl_t ipl)
+{
+
+	return (ipl_cookie_t){._ipl = ipl};
+}
+
+static __inline int __attribute__((__unused__))
+splraiseipl(ipl_cookie_t icookie)
+{
+	int newpil = icookie._ipl;
+	int oldpil;
+
+	/*
+	 * NetBSD/sparc64's IPL_* constants equate directly to the
+	 * corresponding PIL_* names; no need to map them here.
+	 */
+	__asm __volatile("rdpr %%pil,%0" : "=r" (oldpil));
+	if (newpil <= oldpil)
+		return (oldpil);
+	__asm __volatile("wrpr %0,0,%%pil" : : "r" (newpil) : "memory");
+	return (oldpil);
+}
+
+SPL(spl0, 0)
 
 SPLHOLD(splsoftint, 1)
 #define	splsoftclock	splsoftint
 #define	splsoftnet	splsoftint
+
+SPLHOLD(splsoftserial, 4)
 
 /* audio software interrupts are at software level 4 */
 SPLHOLD(splausoft, PIL_AUSOFT)
@@ -359,25 +409,10 @@ SPLHOLD(splausoft, PIL_AUSOFT)
 /* floppy software interrupts are at software level 4 too */
 SPLHOLD(splfdsoft, PIL_FDSOFT)
 
-/* Block devices */
-SPLHOLD(splbio, PIL_BIO)
-
-/* network hardware interrupts are at level 6 */
-SPLHOLD(splnet, PIL_NET)
-
-/* tty input runs at software level 6 */
-SPLHOLD(spltty, PIL_TTY)
-
-/* parallel port runs at software level 6 */
-SPLHOLD(spllpt, PIL_LPT)
-
 /*
  * Memory allocation (must be as high as highest network, tty, or disk device)
  */
-SPLHOLD(splimp, PIL_IMP)
-SPLHOLD(splpmap, PIL_IMP)
-
-SPLHOLD(splclock, PIL_CLOCK)
+SPLHOLD(splvm, PIL_VM)
 
 /* fd hardware interrupts are at level 11 */
 SPLHOLD(splfd, PIL_FD)
@@ -390,59 +425,47 @@ SPLHOLD(splserial, PIL_SER)
 SPLHOLD(splaudio, PIL_AUD)
 
 /* second sparc timer interrupts at level 14 */
-SPLHOLD(splstatclock, 14)
+SPLHOLD(splstatclock, PIL_STATCLOCK)
 
-SPLHOLD(splhigh, 15)
+SPLHOLD(splsched, PIL_SCHED)
+SPLHOLD(spllock, PIL_LOCK)
+
+SPLHOLD(splipi, PIL_HIGH)
+
+SPLHOLD(splhigh, PIL_HIGH)
 
 /* splx does not have a return value */
 #ifdef SPLDEBUG
-/* Keep gcc happy -- reduce warnings */
-#if 0
-static __inline void splx(newpil)
-	int newpil;
-{
-	int pil;
-
-	__asm __volatile("rdpr %%pil,%0" : "=r" (pil));
-	SPLPRINT(("{%d->%d}", pil, newpil)); \
-	__asm __volatile("wrpr %%g0,%0,%%pil" : : "rn" (newpil));
-}
-#endif
-
 #define	spl0()	spl0X(__FILE__, __LINE__)
-#define	spllowersoftclock() spllowersoftclockX(__FILE__, __LINE__)
 #define	splsoftint()	splsoftintX(__FILE__, __LINE__)
+#define	splsoftserial()	splsoftserialX(__FILE__, __LINE__)
 #define	splausoft()	splausoftX(__FILE__, __LINE__)
 #define	splfdsoft()	splfdsoftX(__FILE__, __LINE__)
-#define	splbio()	splbioX(__FILE__, __LINE__)
-#define	splnet()	splnetX(__FILE__, __LINE__)
-#define	spltty()	splttyX(__FILE__, __LINE__)
-#define	spllpt()	spllptX(__FILE__, __LINE__)
-#define	splimp()	splimpX(__FILE__, __LINE__)
-#define	splpmap()	splpmapX(__FILE__, __LINE__)
+#define	splvm()		splvmX(__FILE__, __LINE__)
 #define	splclock()	splclockX(__FILE__, __LINE__)
 #define	splfd()		splfdX(__FILE__, __LINE__)
 #define	splzs()		splzsX(__FILE__, __LINE__)
 #define	splserial()	splzerialX(__FILE__, __LINE__)
 #define	splaudio()	splaudioX(__FILE__, __LINE__)
 #define	splstatclock()	splstatclockX(__FILE__, __LINE__)
+#define	splsched()	splschedX(__FILE__, __LINE__)
+#define	spllock()	spllockX(__FILE__, __LINE__)
 #define	splhigh()	splhighX(__FILE__, __LINE__)
 #define splx(x)		splxX((x),__FILE__, __LINE__)
+#define splipi()	splhighX(__FILE__, __LINE__)
 
-static __inline void splxX __P((int, const char*, int));
-static __inline void splxX(newpil, file, line)
-	int newpil, line;
-	const char* file;
+static __inline void splxX(int newpil, const char *file, int line)
 #else
-static __inline void splx(newpil)
-	int newpil;
+static __inline void splx(int newpil)
 #endif
 {
+#ifdef SPLDEBUG
 	int pil;
 
-	__asm __volatile("rdpr %%pil,%0" : "=r" (pil));
-	SPLPRINT(("{%d->%d}", pil, newpil)); \
-	__asm __volatile("wrpr %%g0,%0,%%pil" : : "rn" (newpil));
+	__asm volatile("rdpr %%pil,%0" : "=r" (pil));
+	SPLPRINT(("{%d->%d}", pil, newpil));
+#endif
+	__asm volatile("wrpr %%g0,%0,%%pil" : : "rn" (newpil) : "memory");
 }
 #endif /* KERNEL && !_LOCORE */
 

@@ -1,4 +1,4 @@
-.\"	$NetBSD: msgrcv.2,v 1.10 1999/12/02 21:42:38 kleink Exp $	
+.\"	$NetBSD: msgrcv.2,v 1.17 2004/05/13 10:20:58 wiz Exp $
 .\"
 .\" Copyright (c) 1995 Frank van der Linden
 .\" All rights reserved.
@@ -38,11 +38,11 @@
 .Sh LIBRARY
 .Lb libc
 .Sh SYNOPSIS
-.Fd #include <sys/msg.h>
+.In sys/msg.h
 .Ft ssize_t
 .Fn msgrcv "int msqid" "void *msgp" "size_t msgsz" "long msgtyp" "int msgflg"
 .Sh DESCRIPTION
-The 
+The
 .Fn msgrcv
 function receives a message from the message queue specified in
 .Fa msqid ,
@@ -50,9 +50,10 @@ and places it into the user-defined structure pointed to by
 .Fa msgp .
 This structure must contain a first field of type
 .Sy long
-that will indicate the user-defined type of the message.  The remaining
-fields will contain the contents of the message.  The following is
-an example of what this user-defined structure might look like:
+that will indicate the user-defined type of the message.
+The remaining fields will contain the contents of the message.
+The following is an example of what this user-defined structure might
+look like:
 .Bd -literal
 struct mymsg {
     long mtype;    /* message type */
@@ -72,23 +73,26 @@ has one of the following meanings:
 .Bl -bullet
 .It
 .Fa msgtyp
-is greater than 0. The first message of type
+is greater than 0.
+The first message of type
 .Fa msgtyp
 will be received.
 .It
 .Fa msgtyp
-is equal to 0. The first message on the queue will be received.
+is equal to 0.
+The first message on the queue will be received.
 .It
 .Fa msgtyp
-is less than 0. The first message of the lowest message type that is
+is less than 0.
+The first message of the lowest message type that is
 less than or equal to the absolute value of
 .Fa msgtyp
 will be received.
 .El
 .Pp
 .Fa msgsz
-specifies the maximum length of the requested message. If the received
-message has a length greater than
+specifies the maximum length of the requested message.
+If the received message has a length greater than
 .Fa msgsz
 it will be silently truncated if the
 .Dv MSG_NOERROR
@@ -104,11 +108,12 @@ depends on whether the
 .Dv IPC_NOWAIT
 flag is set in
 .Fa msgflg
-or not. If
+or not.
+If
 .Dv IPC_NOWAIT
 is set, then
 .Fn msgrcv
-will immediately return a value of -1 and set
+will immediately return a value of \-1 and set
 .Va errno
 to
 .Er EAGAIN .
@@ -119,12 +124,13 @@ is not set, the calling process will block until:
 .It
 A message of the requested type becomes available on the message queue.
 .It
-The message queue is removed, in which case -1 will be returned and
+The message queue is removed, in which case \-1 will be returned and
 .Va errno
 set to
-.Er EINVAL .
+.Er EIDRM .
 .It
-A signal is received and caught. -1 is returned and
+A signal is received and caught.
+\-1 is returned and
 .Va errno
 is set to
 .Er EINTR .
@@ -151,7 +157,7 @@ returns the number of bytes received into the
 .Va mtext
 field of the structure pointed to by
 .Fa msgp .
-Otherwise, -1 is returned, and
+Otherwise, \-1 is returned, and
 .Va errno
 set to indicate the error.
 .Sh ERRORS
@@ -191,7 +197,7 @@ is set in
 .It Bq Er EIDRM
 The message queue identifier
 .Fa msqid
-is removed from the system. 
+is removed from the system.
 .It Bq Er ENOMSG
 The queue does not contain a message of the desired type and
 .Dv IPC_NOWAIT

@@ -1,4 +1,4 @@
-/*	$NetBSD: gmon.h,v 1.6 1996/11/25 20:08:44 jonathan Exp $	*/
+/*	$NetBSD: gmon.h,v 1.9 2006/10/04 14:22:58 christos Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1992, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -118,12 +114,6 @@ struct rawarc {
 	u_long	raw_selfpc;
 	long	raw_count;
 };
-
-/*
- * general rounding functions.
- */
-#define ROUNDDOWN(x,y)	(((x)/(y))*(y))
-#define ROUNDUP(x,y)	((((x)+(y)-1)/(y))*(y))
 
 /*
  * The profiling data structures are housed in this structure.

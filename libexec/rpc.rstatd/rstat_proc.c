@@ -1,4 +1,4 @@
-/*	$NetBSD: rstat_proc.c,v 1.29 1999/03/25 08:07:47 bgrayson Exp $	*/
+/*	$NetBSD: rstat_proc.c,v 1.43 2006/04/14 13:19:03 blymn Exp $	*/
 
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
@@ -35,7 +35,7 @@
 static char sccsid[] = "from: @(#)rpc.rstatd.c 1.1 86/09/25 Copyr 1984 Sun Micro";
 static char sccsid[] = "from: @(#)rstat_proc.c	2.2 88/08/01 4.0 RPCSRC";
 #else
-__RCSID("$NetBSD: rstat_proc.c,v 1.29 1999/03/25 08:07:47 bgrayson Exp $");
+__RCSID("$NetBSD: rstat_proc.c,v 1.43 2006/04/14 13:19:03 blymn Exp $");
 #endif
 #endif
 
@@ -46,6 +46,7 @@ __RCSID("$NetBSD: rstat_proc.c,v 1.29 1999/03/25 08:07:47 bgrayson Exp $");
  */
 
 #include <sys/param.h>
+#include <sys/sched.h>
 #include <sys/socket.h>
 
 #include <errno.h>
@@ -60,10 +61,8 @@ __RCSID("$NetBSD: rstat_proc.c,v 1.29 1999/03/25 08:07:47 bgrayson Exp $");
 #include <syslog.h>
 #ifdef BSD
 #include <sys/sysctl.h>
-#include <vm/vm.h>
 #include <uvm/uvm_extern.h>
-#include <sys/dkstat.h>
-#include "dkstats.h"
+#include "drvstats.h"
 #else
 #include <sys/dk.h>
 #endif
@@ -101,8 +100,6 @@ struct nlist nl[] = {
 	{ NULL },
 };
 
-extern int dk_ndrive;		/* From dkstats.c */
-extern struct _disk cur, last;
 int hz;
 char *memf = NULL, *nlistf = NULL;
 
@@ -120,15 +117,12 @@ union {
 	struct statstime s3;
 } stats_all;
 
-extern void dkreadstats __P((void));
-extern int dkinit __P((int, gid_t));
-
-void updatestat __P((int));
-void setup __P((void));
-void setup_kd_once __P((void));
-void stat_init __P((void));
-int havedisk __P((void));
-void rstat_service __P((struct svc_req *, SVCXPRT *));
+void updatestat(int);
+void setup(void);
+void setup_kd_once(void);
+void stat_init(void);
+int havedisk(void);
+void rstat_service(struct svc_req *, SVCXPRT *);
 
 static int stat_is_init = 0;
 
@@ -147,9 +141,7 @@ stat_init()
 }
 
 statstime *
-rstatproc_stats_3_svc(arg, rqstp)
-	void *arg;
-	struct svc_req *rqstp;
+rstatproc_stats_3_svc(void *arg, struct svc_req *rqstp)
 {
 	if (!stat_is_init)
 	        stat_init();
@@ -158,9 +150,7 @@ rstatproc_stats_3_svc(arg, rqstp)
 }
 
 statsswtch *
-rstatproc_stats_2_svc(arg, rqstp)
-	void *arg;
-	struct svc_req *rqstp;
+rstatproc_stats_2_svc(void *arg, struct svc_req *rqstp)
 {
 	if (!stat_is_init)
 	        stat_init();
@@ -170,9 +160,7 @@ rstatproc_stats_2_svc(arg, rqstp)
 }
 
 stats *
-rstatproc_stats_1_svc(arg, rqstp)
-	void *arg;
-	struct svc_req *rqstp;
+rstatproc_stats_1_svc(void *arg, struct svc_req *rqstp)
 {
 	if (!stat_is_init)
 	        stat_init();
@@ -182,9 +170,7 @@ rstatproc_stats_1_svc(arg, rqstp)
 }
 
 u_int *
-rstatproc_havedisk_3_svc(arg, rqstp)
-	void *arg;
-	struct svc_req *rqstp;
+rstatproc_havedisk_3_svc(void *arg, struct svc_req *rqstp)
 {
 	static u_int have;
 
@@ -196,30 +182,25 @@ rstatproc_havedisk_3_svc(arg, rqstp)
 }
 
 u_int *
-rstatproc_havedisk_2_svc(arg, rqstp)
-	void *arg;
-	struct svc_req *rqstp;
+rstatproc_havedisk_2_svc(void *arg, struct svc_req *rqstp)
 {
 	return (rstatproc_havedisk_3_svc(arg, rqstp));
 }
 
 u_int *
-rstatproc_havedisk_1_svc(arg, rqstp)
-	void *arg;
-	struct svc_req *rqstp;
+rstatproc_havedisk_1_svc(void *arg, struct svc_req *rqstp)
 {
 	return (rstatproc_havedisk_3_svc(arg, rqstp));
 }
 
 void
-updatestat(dummy)
-	int dummy;
+updatestat(int dummy)
 {
 	long off;
 	int i;
 	size_t len;
 	int mib[2];
-	struct uvmexp uvmexp;
+	struct uvmexp_sysctl uvmexp;
 	struct ifnet ifnet;
 	double avrun[3];
 	struct timeval tm, btm;
@@ -241,13 +222,13 @@ updatestat(dummy)
 	sincelastreq++;
 
 	/* 
-	 * dkreadstats reads in the "disk_count" as well as the "disklist"
+	 * drvreadstats reads in the "disk_count" as well as the "disklist"
 	 * statistics.  It also retrieves "hz" and the "cp_time" array.
 	 */
-	dkreadstats();
+	drvreadstats();
 	memset(stats_all.s3.dk_xfer, 0, sizeof(stats_all.s3.dk_xfer));
-	for (i = 0; i < dk_ndrive && i < DK_NDRIVE; i++)
-		stats_all.s3.dk_xfer[i] = cur.dk_xfer[i];
+	for (i = 0; i < ndrive && i < DK_NDRIVE; i++)
+		stats_all.s3.dk_xfer[i] = cur.rxfer[i] + cur.wxfer[i];
 
 #ifdef BSD
 	for (i = 0; i < CPUSTATES; i++)
@@ -279,15 +260,16 @@ updatestat(dummy)
 
 
 #ifdef DEBUG
-	syslog(LOG_DEBUG, "%d %d %d %d\n", stats_all.s3.cp_time[0],
-	    stats_all.s3.cp_time[1], stats_all.s3.cp_time[2], stats_all.s3.cp_time[3]);
+	syslog(LOG_DEBUG, "%d %d %d %d %d\n", stats_all.s3.cp_time[0],
+	    stats_all.s3.cp_time[1], stats_all.s3.cp_time[2],
+	    stats_all.s3.cp_time[3], stats_all.s3.cp_time[4]);
 #endif
 
 	mib[0] = CTL_VM;
-	mib[1] = VM_UVMEXP;
+	mib[1] = VM_UVMEXP2;
 	len = sizeof(uvmexp);
 	if (sysctl(mib, 2, &uvmexp, &len, NULL, 0) < 0) {
-		syslog(LOG_ERR, "can't sysctl vm.uvmexp");
+		syslog(LOG_ERR, "can't sysctl vm.uvmexp2");
 		exit(1);
 	}
 	stats_all.s3.v_pgpgin = uvmexp.fltanget;
@@ -318,8 +300,8 @@ updatestat(dummy)
 		stats_all.s3.if_collisions += ifnet.if_data.ifi_collisions;
 		off = (long)ifnet.if_list.tqe_next;
 	}
-	gettimeofday((struct timeval *)&stats_all.s3.curtime,
-		(struct timezone *) 0);
+	stats_all.s3.curtime.tv_sec = tm.tv_sec;
+	stats_all.s3.curtime.tv_usec = tm.tv_usec;
 	alarm(1);
 }
 
@@ -372,7 +354,7 @@ setup()
 		numintfs++;
 		off = (long)ifnet.if_list.tqe_next;
 	}
-	dkinit(0, getgid());
+	drvinit(0);
 }
 
 /*
@@ -381,20 +363,18 @@ setup()
 int
 havedisk()
 {
-	return dk_ndrive != 0;
+	return ndrive != 0;
 }
 
 void
-rstat_service(rqstp, transp)
-	struct svc_req *rqstp;
-	SVCXPRT *transp;
+rstat_service(struct svc_req *rqstp, SVCXPRT *transp)
 {
 	union {
 		int fill;
 	} argument;
 	char *result;
 	xdrproc_t xdr_argument, xdr_result;
-	char *(*local) __P((void *, struct svc_req *));
+	char *(*local)(void *, struct svc_req *);
 
 	switch (rqstp->rq_proc) {
 	case NULLPROC:
@@ -406,15 +386,15 @@ rstat_service(rqstp, transp)
 		xdr_result = (xdrproc_t)xdr_statstime;
                 switch (rqstp->rq_vers) {
                 case RSTATVERS_ORIG:
-                        local = (char *(*) __P((void *, struct svc_req *)))
+                        local = (char *(*)(void *, struct svc_req *))
 				rstatproc_stats_1_svc;
                         break;
                 case RSTATVERS_SWTCH:
-                        local = (char *(*) __P((void *, struct svc_req *)))
+                        local = (char *(*)(void *, struct svc_req *))
 				rstatproc_stats_2_svc;
                         break;
                 case RSTATVERS_TIME:
-                        local = (char *(*) __P((void *, struct svc_req *)))
+                        local = (char *(*)(void *, struct svc_req *))
 				rstatproc_stats_3_svc;
                         break;
                 default:
@@ -428,15 +408,15 @@ rstat_service(rqstp, transp)
 		xdr_result = (xdrproc_t)xdr_u_int;
                 switch (rqstp->rq_vers) {
                 case RSTATVERS_ORIG:
-                        local = (char *(*) __P((void *, struct svc_req *)))
+                        local = (char *(*)(void *, struct svc_req *))
 				rstatproc_havedisk_1_svc;
                         break;
                 case RSTATVERS_SWTCH:
-                        local = (char *(*) __P((void *, struct svc_req *)))
+                        local = (char *(*)(void *, struct svc_req *))
 				rstatproc_havedisk_2_svc;
                         break;
                 case RSTATVERS_TIME:
-                        local = (char *(*) __P((void *, struct svc_req *)))
+                        local = (char *(*)(void *, struct svc_req *))
 				rstatproc_havedisk_3_svc;
                         break;
                 default:

@@ -1,9 +1,9 @@
-/* $NetBSD: sh_opcode.h,v 1.1 1999/09/13 10:31:22 itojun Exp $ */
+/* $NetBSD: sh_opcode.h,v 1.3 2002/04/28 17:10:36 uch Exp $ */
 
 typedef union {
 	unsigned word;
 
-#if BYTE_ORDER == BIG_ENDIAN
+#if _BYTE_ORDER == BIG_ENDIAN
 	struct {
 		unsigned op: 16;
 	} oType;
@@ -73,7 +73,7 @@ typedef union {
 		unsigned i: 8;
 	} niType;
 #endif
-#if BYTE_ORDER == LITTLE_ENDIAN
+#if _BYTE_ORDER == LITTLE_ENDIAN
 struct {
 		unsigned op: 16;
 	} oType;
@@ -145,18 +145,18 @@ struct {
 #endif
 } InstFmt;
 
-#define OP_BF	0x8b
-#define OP_BFS	0x8f
-#define OP_BT	0x89
-#define OP_BTS	0x8d
-#define OP_BRA	0xa
-#define OP_BSR	0xb
-#define OP1_BRAF	0x0
-#define OP2_BRAF	0x23
-#define OP1_BSRF	0x0
-#define OP2_BSRF	0x03
-#define OP1_JMP	0x4
-#define OP2_JMP	0x2b
-#define OP1_JSR	0x4
-#define OP2_JSR	0x0b
-#define OP_RTS	0xffff
+#define	OP_BF	0x8b
+#define	OP_BFS	0x8f
+#define	OP_BT	0x89
+#define	OP_BTS	0x8d
+#define	OP_BRA	0xa
+#define	OP_BSR	0xb
+#define	OP1_BRAF	0x0
+#define	OP2_BRAF	0x23
+#define	OP1_BSRF	0x0
+#define	OP2_BSRF	0x03
+#define	OP1_JMP	0x4
+#define	OP2_JMP	0x2b
+#define	OP1_JSR	0x4
+#define	OP2_JSR	0x0b
+#define	OP_RTS	0xffff

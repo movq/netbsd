@@ -1,9 +1,10 @@
-/*	$NetBSD: ip6protosw.h,v 1.6 2000/02/17 10:59:39 darrenr Exp $	*/
+/*	$NetBSD: ip6protosw.h,v 1.21 2008/08/06 15:01:23 plunky Exp $	*/
+/*	$KAME: ip6protosw.h,v 1.22 2001/02/08 18:02:08 itojun Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -15,7 +16,7 @@
  * 3. Neither the name of the project nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE PROJECT AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -44,11 +45,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -74,7 +71,6 @@
  * Protocol switch table for IPv6.
  * All other definitions should refer to sys/protosw.h
  */
-#include <net/pfil.h>
 
 struct mbuf;
 struct sockaddr;
@@ -82,15 +78,37 @@ struct socket;
 struct domain;
 struct proc;
 struct ip6_hdr;
+struct icmp6_hdr;
+struct in6_addr;
 
 /*
  * argument type for the last arg of pr_ctlinput().
  * should be consulted only with AF_INET6 family.
+ *
+ * IPv6 ICMP IPv6 [exthdrs] finalhdr paylaod
+ * ^    ^    ^              ^
+ * |    |    ip6c_ip6       ip6c_off
+ * |    ip6c_icmp6
+ * ip6c_m
+ *
+ * ip6c_finaldst usually points to ip6c_ip6->ip6_dst.  if the original
+ * (internal) packet carries a routing header, it may point the final
+ * dstination address in the routing header.
+ *
+ * ip6c_src: ip6c_ip6->ip6_src + scope info + flowlabel in ip6c_ip6
+ *	(beware of flowlabel, if you try to compare it against others)
+ * ip6c_dst: ip6c_finaldst + scope info
  */
 struct ip6ctlparam {
 	struct mbuf *ip6c_m;		/* start of mbuf chain */
+	struct icmp6_hdr *ip6c_icmp6;	/* icmp6 header of target packet */
 	struct ip6_hdr *ip6c_ip6;	/* ip6 header of target packet */
 	int ip6c_off;			/* offset of the target proto header */
+	struct sockaddr_in6 *ip6c_src;	/* srcaddr w/ additional info */
+	struct sockaddr_in6 *ip6c_dst;	/* (final) dstaddr w/ additional info */
+	struct in6_addr *ip6c_finaldst;	/* final destination address */
+	void *ip6c_cmdarg;		/* control command dependent data */
+	u_int8_t ip6c_nxt;		/* final next header field */
 };
 
 struct ip6protosw {
@@ -101,34 +119,32 @@ struct ip6protosw {
 
 /* protocol-protocol hooks */
 	int	(*pr_input)		/* input to protocol (from below) */
-			__P((struct mbuf **, int *, int));
+			(struct mbuf **, int *, int);
 	int	(*pr_output)		/* output to protocol (from above) */
-			__P((struct mbuf *, ...));
-	void	(*pr_ctlinput)		/* control input (from below) */
-			__P((int, struct sockaddr *, void *));
+			(struct mbuf *, struct socket *, struct sockaddr_in6 *,
+			 struct mbuf *);
+	void	*(*pr_ctlinput)		/* control input (from below) */
+			(int, const struct sockaddr *, void *);
 	int	(*pr_ctloutput)		/* control output (from above) */
-			__P((int, struct socket *, int, int, struct mbuf **));
+			(int, struct socket *, struct sockopt *);
 
 /* user-protocol hook */
 	int	(*pr_usrreq)		/* user request: see list below */
-			__P((struct socket *, int, struct mbuf *,
-			     struct mbuf *, struct mbuf *, struct proc *));
+			(struct socket *, int, struct mbuf *,
+			     struct mbuf *, struct mbuf *, struct lwp *);
 
 /* utility hooks */
 	void	(*pr_init)		/* initialization hook */
-			__P((void));
+			(void);
 
 	void	(*pr_fasttimo)		/* fast timeout (200ms) */
-			__P((void));
+			(void);
 	void	(*pr_slowtimo)		/* slow timeout (500ms) */
-			__P((void));
+			(void);
 	void	(*pr_drain)		/* flush any excess space possible */
-			__P((void));
-	int	(*pr_sysctl)		/* sysctl for protocol */
-			__P((int *, u_int, void *, size_t *, void *, size_t));
-	struct	pfil_head	pr_pfh;
+			(void);
 };
 
-extern	struct	ip6protosw	inet6sw[];
+extern const struct ip6protosw inet6sw[];
 
 #endif /* !_NETINET6_IP6PROTOSW_H_ */

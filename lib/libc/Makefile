@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.87 2000/01/26 02:46:37 itojun Exp $
+#	$NetBSD: Makefile,v 1.136 2008/10/26 07:43:07 mrg Exp $
 #	@(#)Makefile	8.2 (Berkeley) 2/3/94
 #
 # All library objects contain sccsid strings by default; they may be
@@ -17,102 +17,103 @@
 # The Hesiod functions are always in libc. To choose that getpwent() and friends
 # actually call the Hesiod functions, put -DHESIOD on the CPPFLAGS line below.
 
+.include "Makefile.inc"
+
 LIB=		c
-CPPFLAGS+=	-D_LIBC -DNLS -DYP -DHESIOD -DLIBC_SCCS -DSYSLIBC_SCCS \
-		-D_REENTRANT -I${.CURDIR}/include
-CPPFLAGS+=	-DINET6
+CPPFLAGS+=	-I${.CURDIR}/include -I${.CURDIR}
 
-ARCHSUBDIR=	${MACHINE_ARCH:C/mipse[bl]/mips/}
-ARCHDIR=	${.CURDIR}/arch/${ARCHSUBDIR}
-AINC=		-I${ARCHDIR}
-.if defined(DESTDIR)
-AINC+=		-nostdinc -idirafter ${DESTDIR}/usr/include
-.endif
-CLEANFILES+=	${.CURDIR}/tags ${.OBJDIR}/tags
-
-# Don't try to lint the C library against itself when creating llib-lc.ln
-LLIBS=
+LIBCDIR=	${.CURDIR}
 
 .if exists (${ARCHDIR}/Makefile.inc)
 .PATH:	${ARCHDIR}
 .include "${ARCHDIR}/Makefile.inc"
 .endif
 
+.if exists (${ARCHDIR}/genassym.cf)
+DPSRCS+=	assym.h
+CLEANFILES+=	assym.h assym.h.tmp
+
+assym.h: ${ARCHDIR}/genassym.cf
+	${_MKTARGET_CREATE}
+	${TOOL_GENASSYM} -- ${CC} ${CFLAGS} \
+		${CPPFLAGS} ${CPPFLAGS.assym.h} ${PROF} \
+		< ${ARCHDIR}/genassym.cf > assym.h.tmp && \
+	mv -f assym.h.tmp assym.h
+.endif
+
+# The following controls how to build compatibility code for old NetBSD
+# binaries. If BUILDCOLD is yes, then we build a separate library; otherwise
+# we include the code in libc.
+BUILDCOLD?= no
+.if "${BUILDCOLD}" == "yes"
+SUBDIR=compat
+.include <bsd.subdir.mk>
+.else
+COMPATDIR=${.CURDIR}/compat
+.include "${.CURDIR}/compat/Makefile.inc"
+.endif
+
+.include "${.CURDIR}/../../common/lib/libc/Makefile.inc"
+.include "${.CURDIR}/atomic/Makefile.inc"
 .include "${.CURDIR}/db/Makefile.inc"
+.include "${.CURDIR}/citrus/Makefile.inc"
 .include "${.CURDIR}/compat-43/Makefile.inc"
+.include "${.CURDIR}/dlfcn/Makefile.inc"
+.include "${.CURDIR}/gdtoa/Makefile.inc"
 .include "${.CURDIR}/gen/Makefile.inc"
 .include "${.CURDIR}/gmon/Makefile.inc"
 .include "${.CURDIR}/hash/Makefile.inc"
+.include "${.CURDIR}/iconv/Makefile.inc"
+.include "${.CURDIR}/inet/Makefile.inc"
+.include "${.CURDIR}/isc/Makefile.inc"
 .include "${.CURDIR}/locale/Makefile.inc"
 .include "${.CURDIR}/md/Makefile.inc"
+.include "${.CURDIR}/misc/Makefile.inc"
 .include "${.CURDIR}/net/Makefile.inc"
+.include "${.CURDIR}/nameser/Makefile.inc"
 .include "${.CURDIR}/nls/Makefile.inc"
 .if (${MACHINE_ARCH} != "alpha") && (${MACHINE_ARCH} != "sparc64")
 .include "${.CURDIR}/quad/Makefile.inc"
 .endif
 .include "${.CURDIR}/regex/Makefile.inc"
+.include "${.CURDIR}/resolv/Makefile.inc"
 .include "${.CURDIR}/rpc/Makefile.inc"
+.include "${.CURDIR}/ssp/Makefile.inc"
 .include "${.CURDIR}/stdio/Makefile.inc"
 .include "${.CURDIR}/stdlib/Makefile.inc"
 .include "${.CURDIR}/string/Makefile.inc"
 .include "${.CURDIR}/termios/Makefile.inc"
+.include "${.CURDIR}/thread-stub/Makefile.inc"
 .include "${.CURDIR}/time/Makefile.inc"
 .include "${.CURDIR}/sys/Makefile.inc"
+.include "${.CURDIR}/uuid/Makefile.inc"
+.if (${MKYP} != "no")
 .include "${.CURDIR}/yp/Makefile.inc"
-
-NLS=	C.msg Pig.msg cs.msg de.msg es.msg fi.msg fr.msg nl.msg no.msg sv.msg
-
-LIBKERN=	${.CURDIR}/../../sys/lib/libkern
-
-KSRCS=	bcopy.c bcmp.c bswap16.c bswap32.c bswap64.c bzero.c ffs.c \
-	strcat.c strchr.c strcmp.c strcpy.c strlen.c \
-	strncmp.c strncpy.c strrchr.c \
-	htonl.c htons.c ntohl.c ntohs.c md5c.c \
-	memchr.c memcmp.c memcpy.c memmove.c memset.c \
-	index.c rindex.c
-.if (${MACHINE_ARCH} != "alpha") && (${MACHINE_ARCH} != "sparc64")
-KSRCS+=	adddi3.c anddi3.c ashldi3.c ashrdi3.c cmpdi2.c divdi3.c iordi3.c \
-	lshldi3.c lshrdi3.c moddi3.c muldi3.c negdi2.c notdi2.c qdivrem.c \
-	subdi3.c  ucmpdi2.c udivdi3.c umoddi3.c xordi3.c
-KINCLUDES+=	quad/quad.h
 .endif
 
-copy-to-libkern:	copy-to-libkern-machind copy-to-libkern-machdep
+NLS=	C.msg Pig.msg ca.msg cs.msg de.msg es.msg fi.msg fr.msg nl.msg \
+	no.msg pl.msg sk.msg sv.msg
 
-copy-to-libkern-machind: ${KSRCS}
-	cp -p ${.ALLSRC} ${LIBKERN}
-.if defined(KINCLUDES) && !empty(KINCLUDES)
-	(cd ${.CURDIR} ; cp -p ${KINCLUDES} ${LIBKERN})
-.endif
-
-copy-to-libkern-machdep: ${KMSRCS}
-.if defined(KMSRCS) && !empty(KMSRCS)
-	cp -p ${.ALLSRC} ${LIBKERN}/arch/${ARCHSUBDIR}
-.endif
-.if defined(KMINCLUDES) && !empty(KMINCLUDES)
-	(cd ${.CURDIR} ; cp -p ${KMINCLUDES} ${LIBKERN}/arch/${ARCHSUBDIR})
-.endif
-
-rm-from-libkern:
-	for i in ${KSRCS}; do rm -f ${LIBKERN}/$$i; done
-.if defined(KMSRCS) && !empty(KMSRCS)
-	for i in ${KMSRCS}; do rm -f ${LIBKERN}/arch/${ARCHSUBDIR}/$$i; done
-.endif
-
-realall: ${.OBJDIR}/tags
-${.OBJDIR}/tags: ${SRCS}
-	ctags ${.ALLSRC:M*.c}
-	egrep "^ENTRY(.*)|^FUNC(.*)|^SYSCALL(.*)" /dev/null ${.ALLSRC:M*.S} | \
+realall: tags
+tags: ${SRCS}
+	${_MKTARGET_CREATE}
+	-${TOOL_CTAGS} -w ${.ALLSRC:M*.c}
+	-egrep "^ENTRY(.*)|^FUNC(.*)|^SYSCALL(.*)" /dev/null ${.ALLSRC:M*.S} | \
 	    sed "s;\([^:]*\):\([^(]*\)(\([^, )]*\)\(.*\);\3 \1 /^\2(\3\4$$/;" \
 	    >> ${.TARGET}; sort -o ${.TARGET} ${.TARGET}
 
-tags: ${.CURDIR}/tags
-${.CURDIR}/tags: 
-	@rm -f ${.TARGET}
-	ln -s /var/db/libc.tags ${.TARGET}
-
-FILES=		${.OBJDIR}/tags
+FILES=		tags
 FILESNAME=	libc.tags
 FILESDIR=	/var/db
 
+
+# workaround for I18N stuffs: build singlebyte setlocale() for libc.a,
+# multibyte for libc.so.  the quirk should be removed when we support
+# dlopen() from within statically linked binaries.
+CSHLIBFLAGS+=	-D_I18N_DYNAMIC
+
 .include <bsd.lib.mk>
+
+# force the dynamic linker to initialize libc first
+SHLIB_SHFLAGS+=	-Wl,-z,initfirst
+

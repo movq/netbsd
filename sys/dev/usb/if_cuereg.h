@@ -1,4 +1,4 @@
-/*	$NetBSD: if_cuereg.h,v 1.10 2000/03/29 18:24:52 augustss Exp $	*/
+/*	$NetBSD: if_cuereg.h,v 1.14 2001/01/21 22:09:24 augustss Exp $	*/
 /*
  * Copyright (c) 1997, 1998, 1999, 2000
  *	Bill Paul <wpaul@ee.columbia.edu>.  All rights reserved.
@@ -41,11 +41,11 @@
 /*
  * Vendor specific control commands.
  */
-#define CUE_CMD_RESET				0xF4
+#define CUE_CMD_READSRAM			0xF1
 #define CUE_CMD_GET_MACADDR			0xF2
+#define CUE_CMD_RESET				0xF4
 #define CUE_CMD_WRITEREG			0xFA
 #define CUE_CMD_READREG				0xFB
-#define CUE_CMD_READSRAM			0xF1
 #define CUE_CMD_WRITESRAM			0xFC
 
 /*
@@ -186,7 +186,6 @@ struct cue_softc {
 	u_int16_t		cue_product;
 	int			cue_ed[CUE_ENDPT_MAX];
 	usbd_pipe_handle	cue_ep[CUE_ENDPT_MAX];
-	int			cue_unit;
 	u_int8_t		cue_mctab[CUE_MCAST_TABLE_LEN];
 	int			cue_if_flags;
 	u_int16_t		cue_rxfilt;
@@ -196,4 +195,7 @@ struct cue_softc {
 	char			cue_attached;
 	u_int			cue_rx_errs;
 	struct timeval		cue_rx_notice;
+
+	struct usb_task		cue_tick_task;
+	struct usb_task		cue_stop_task;
 };

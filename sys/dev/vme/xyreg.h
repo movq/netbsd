@@ -1,4 +1,4 @@
-/*	$NetBSD: xyreg.h,v 1.2 1998/08/22 11:47:46 pk Exp $	*/
+/*	$NetBSD: xyreg.h,v 1.6 2006/08/27 19:18:08 christos Exp $	*/
 
 /*
  *
@@ -129,7 +129,7 @@ struct xy_iopb {
 #define XYCMD_MBL 0xe		 /* maint. buffer load */
 #define XYCMD_MBD 0xf		 /* main. buffer dump */
 					/* section 2.4.4: byte 3 */
-	volatile u_char errno;		/* error or completion code */
+	volatile u_char errnum;		/* error or completion code */
 					/* section 2.4.3: byte 2 */
 	volatile u_char errs:1;		/* error summary bit */
 	volatile u_char resv2:2;	/* reserved */
@@ -145,8 +145,8 @@ struct xy_iopb {
 					/* section 2.4.5: byte 4 */
 	volatile u_char bw:1;		/* byte(1)/word(0) xfer size */
 	volatile u_char intlv:4;	 /* interleave factor (0=1:1, 1=2:1, etc.) */
-	volatile u_char thro:3;		/* dma throttle (0=2,1=4,2=8, etc...) */
-#define XY_THRO 4			/* 4 == 32 dma cycles */
+	volatile u_char thro:3;		/* DMA throttle (0=2,1=4,2=8, etc...) */
+#define XY_THRO 4			/* 4 == 32 DMA cycles */
 					/* section 2.4.8: byte 7 */
 	volatile u_char sect;		 /* sector # */
 					/* section 2.4.7: byte 6 */
@@ -169,7 +169,7 @@ struct xy_iopb {
 					/* section 2.4.14: byte 11 */
 	volatile u_char subfn;		/* sub-function */
 					/* section 2.4.13: byte 10 */
-	volatile u_char hoff;		/* head offset for fixed/removeable drives */
+	volatile u_char hoff;		/* head offset for fixed/removable drives */
 					/* section 2.4.15: byte 12,13 */
 	volatile u_short nxtiopb;	/* next iopb address (same relocation) */
 					/* section 2.4.16: byte 14,15 */

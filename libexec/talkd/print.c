@@ -1,4 +1,4 @@
-/*	$NetBSD: print.c,v 1.6 1998/07/04 19:31:05 mrg Exp $	*/
+/*	$NetBSD: print.c,v 1.8 2006/03/17 02:12:15 elad Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)print.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: print.c,v 1.6 1998/07/04 19:31:05 mrg Exp $");
+__RCSID("$NetBSD: print.c,v 1.8 2006/03/17 02:12:15 elad Exp $");
 #endif
 #endif /* not lint */
 
@@ -79,7 +75,7 @@ print_request(cp, mp)
 {
 	char tbuf[80], *tp;
 	
-	if (mp->type > NTYPES) {
+	if (mp->type >= NTYPES) {
 		(void)snprintf(tbuf, sizeof tbuf, "type %d", mp->type);
 		tp = tbuf;
 	} else
@@ -96,12 +92,12 @@ print_response(cp, rp)
 {
 	char tbuf[80], *tp, abuf[80], *ap;
 	
-	if (rp->type > NTYPES) {
+	if (rp->type >= NTYPES) {
 		(void)snprintf(tbuf, sizeof tbuf, "type %d", rp->type);
 		tp = tbuf;
 	} else
 		tp = types[rp->type];
-	if (rp->answer > NANSWERS) {
+	if (rp->answer >= NANSWERS) {
 		(void)snprintf(abuf, sizeof abuf, "answer %d", rp->answer);
 		ap = abuf;
 	} else

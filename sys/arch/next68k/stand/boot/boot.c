@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.2 1998/07/07 00:16:35 dbj Exp $	*/
+/*	$NetBSD: boot.c,v 1.10 2005/12/11 12:18:29 christos Exp $	*/
 /*
  * Copyright (c) 1994 Rolf Grossmann
  * All rights reserved.
@@ -33,61 +33,133 @@
 #include <sys/reboot.h>
 
 #include <lib/libsa/stand.h>
+#include <lib/libsa/loadfile.h>
 #include <lib/libkern/libkern.h>
 
 #include <machine/cpu.h>        /* for NEXT_RAMBASE */
 
-#define LOADADDR        (char *)NEXT_RAMBASE
+#include <next68k/next68k/nextrom.h>
+
+#define KERN_LOADADDR NEXT_RAMBASE
 
 extern int errno;
+
+extern char *mg;
+#define	MON(type, off) (*(type *)((u_int) (mg) + off))
+
+int devparse(const char *, int *, char *, char *, char *, char **);
+
+/* the PROM overwrites MG_boot_arg :-( */
+/* #define PROCESS_ARGS */
 
 /*
  * Boot device is derived from PROM provided information.
  */
 
-char *version="$Revision: 1.2 $";
-extern int subversion;
+extern char bootprog_rev[];
+extern char bootprog_name[];
+extern int build;
 #define KNAMEN 100
 char kernel[KNAMEN];
-char *entry_point;		/* return value filled in by machdep_start */
+int entry_point;		/* return value filled in by machdep_start */
+int turbo;
 
 extern void rtc_init(void);
 
 extern int try_bootp;
 
-char *
+volatile int qq;
+
+int
 main(char *boot_arg)
 {
-    printf(">> NetBSD BOOT [%s #%d]\n", version, subversion);
-    rtc_init();
-
-    try_bootp = 1;
-
-#if 0
-    printf("Press return to continue.\n");
-    getchar();
+	int fd;
+	u_long marks[MARK_MAX];
+	int dev;
+	char count, lun, part;
+	char machine;
+	char *file;
+#ifdef PROCESS_ARGS
+	char *kernel_args = MON(char *, MG_boot_dev);
 #endif
 
-    strcpy(kernel, boot_arg);
-    entry_point = NULL;
-    
-    while (1) {
-	errno = 0;
-	exec(kernel, LOADADDR, 0);
-	if (errno == ENOEXEC && entry_point != NULL) {
-          printf("Kernel loaded at 0x%lx\n",(unsigned long)entry_point);
+	machine = MON(char, MG_machine_type);
+	if (machine == NeXT_TURBO_MONO || machine == NeXT_TURBO_COLOR)
+		turbo = 1;
+	else
+		turbo = 0;
+
+	memset(marks, 0, sizeof(marks));
+	printf(">> %s BOOT [%s #%d]\n", bootprog_name, bootprog_rev, build);
+	printf(">> type %d, %sturbo\n", machine, turbo ? "" : "non-");
+	rtc_init();
+
+	try_bootp = 1;
+
 #if 0
-          printf("Press return to continue.\n");
-          getchar();
+	{
+		int i;
+		int *p = (int *)mg;
+		for (i = 0; i <= 896; ) {
+			printf ("%d: %x %x %x %x %x %x %x %x\n", i, p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
+			p = &p[8];
+			i += 8*4;
+		}
+	}
+	printf("Press return to continue.\n");
+	getchar();
 #endif
-          return entry_point;
-        }
-	
-	printf("load of %s: %s\n", kernel, strerror(errno));
-	printf("boot: ");
-	gets(kernel);
-	/* XXX we have to write this back into boot_arg or even mg->boot* */
-	if (kernel[0] == '\0')
-		return NULL;
-    }
+
+	strcpy(kernel, boot_arg);
+	entry_point = 0;
+
+	for (;;) {
+		marks[MARK_START] = (u_long)KERN_LOADADDR;
+		fd = loadfile(kernel, marks, LOAD_KERNEL);
+		if (fd != -1) {
+			break;
+		}
+
+		printf("load of %s: %s\n", kernel, strerror(errno));
+		printf("boot: ");
+		gets(kernel);
+		if (kernel[0] == '\0')
+			return 0;
+
+#ifdef PROCESS_ARGS
+		kernel_args = strchr(kernel, ')');
+		if (kernel_args == NULL)
+			kernel_args = kernel;
+		kernel_args = strchr(kernel_args, ' ');
+		if (kernel_args)
+			*kernel_args++ = '\0';
+#endif
+	}
+
+	dev = 0;
+	count = lun = part = 0;
+	if (devparse(kernel, &dev, &count, &lun, &part, &file) == 0) {
+		char *p = (char *)marks[MARK_END];
+		strcpy (p, devsw[dev].dv_name);
+		MON(char *, MG_boot_dev) = p;
+		p += strlen (p) + 1;
+		sprintf (p, "(%d,%d,%d)", count, lun, part);
+		MON(char *, MG_boot_info) = p;
+		p += strlen (p) + 1;
+		sprintf (p, "%s", file);
+		MON(char *, MG_boot_file) = p;
+#ifdef PROCESS_ARGS
+		p += strlen (p) + 1;
+		if (kernel_args)
+			strcpy (p, kernel_args);
+		else
+			*p = 0;
+		MON(char *, MG_boot_arg) = p;
+#endif
+	}
+
+	*((u_long *)KERN_LOADADDR) = marks[MARK_END] - KERN_LOADADDR;
+	printf("entry 0x%lx esym 0x%lx\n",
+	       marks[MARK_ENTRY], marks[MARK_END] - KERN_LOADADDR);
+	return marks[MARK_ENTRY];
 }

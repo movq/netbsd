@@ -1,4 +1,4 @@
-/*	$NetBSD: promlib.h,v 1.2 1999/05/03 16:14:02 christos Exp $ */
+/*	$NetBSD: promlib.h,v 1.23 2008/04/28 20:23:36 martin Exp $ */
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,7 +37,13 @@
 #ifndef _SPARC_PROMLIB_H_
 #define _SPARC_PROMLIB_H_
 
+#ifdef _KERNEL_OPT
+#include "opt_multiprocessor.h"
+#endif
+
+#include <machine/idprom.h>
 #include <machine/bsd_openprom.h>
+#include <machine/openfirm.h>
 
 /*
  * A set of methods to access the firmware.
@@ -64,83 +63,108 @@ struct promops {
 	void	*po_bootcookie;
 
 	/* Access to boot arguments */
-	char	*(*po_bootpath) __P((void));
-	char	*(*po_bootfile) __P((void));
-	char	*(*po_bootargs) __P((void));
+	const char *(*po_bootpath)(void);
+	const char *(*po_bootfile)(void);
+	const char *(*po_bootargs)(void);
 
 	/* I/O functions */
-	int	(*po_getchar) __P((void));
-	int	(*po_peekchar) __P((void));
-	void	(*po_putchar) __P((int));
-	void	(*po_putstr) __P((char *, int));
-	int	(*po_open) __P((char *));
-	void	(*po_close) __P((int));
-	int	(*po_read) __P((int, void *, int));
-	int	(*po_write) __P((int, void *, int));
-	int	(*po_seek) __P((int, u_quad_t));
+	int	(*po_getchar)(void);
+	int	(*po_peekchar)(void);
+	void	(*po_putchar)(int);
+	void	(*po_putstr)(const char *, int);
+	int	(*po_open)(const char *);
+	void	(*po_close)(int);
+	int	(*po_read)(int, void *, int);
+	int	(*po_write)(int, const void *, int);
+	int	(*po_seek)(int, u_quad_t);
 
-	int	(*po_instance_to_package) __P((int));
+	int	(*po_instance_to_package)(int);
 
 	/* Misc functions (common in OBP 0,2,3) */
-	void	(*po_halt) __P((void))		__attribute__((__noreturn__));
-	void	(*po_reboot) __P((char *))	__attribute__((__noreturn__));
-	void	(*po_abort) __P((void));
-	void	(*po_interpret) __P((char *));
-	void	(*po_setcallback) __P((void (*)__P((void))));
-	int	(*po_ticks) __P((void));
+	void	(*po_halt)(void)	__attribute__((__noreturn__));
+	void	(*po_reboot)(const char *)	__attribute__((__noreturn__));
+	void	(*po_abort)(void);
+	void	(*po_interpret)(const char *);
+	void	(*po_setcallback)(void (*)(void));
+	int	(*po_ticks)(void);
 	void	*po_tickdata;
 
 	/* sun4/sun4c only */
-	void	(*po_setcontext) __P((int ctxt, caddr_t va, int pmeg));
+	void	(*po_setcontext)(int ctxt, void *va, int pmeg);
 
 	/* MP functions (OBP v3 only) */
-	int	(*po_cpustart) __P((int, struct openprom_addr *, int, caddr_t));
-	int	(*po_cpustop) __P((int));
-	int	(*po_cpuidle) __P((int));
-	int	(*po_cpuresume) __P((int));
+	int	(*po_cpustart)(int, struct openprom_addr *, int, void *);
+	int	(*po_cpustop)(int);
+	int	(*po_cpuidle)(int);
+	int	(*po_cpuresume)(int);
 
 	/* Device node traversal (OBP v0, v2, v3; but not sun4) */
-	int	(*po_firstchild) __P((int));
-	int	(*po_nextsibling) __P((int));
+	int	(*po_firstchild)(int);
+	int	(*po_nextsibling)(int);
 
 	/* Device node properties */
-	int	(*po_getproplen) __P((int node, char *name));
-	int	(*po_getprop) __P((int node, char *name, void *, int));
-	int	(*po_setprop) __P((int node, char *name, void *, int));
-	char	*(*po_nextprop) __P((int node, char *name));
+	int	(*po_getproplen)(int, const char *);
+	int	(*po_getprop)(int, const char *, void *, int);
+	int	(*po_setprop)(int, const char *, const void *, int);
+	char	*(*po_nextprop)(int, const char *);
 
-	int	(*po_finddevice) __P((char *name));
+	int	(*po_finddevice)(const char *);
 
 };
 
 extern struct promops	promops;
 
-void	prom_init	__P((void));	/* To setup promops */
+/*
+ * Memory description array.
+ * Same as version 2 rom meminfo property.
+ */
+struct memarr {
+	long	zero;
+	u_long	addr;
+	u_long	len;
+};
+int	prom_makememarr(struct memarr *, int, int);
+#define	MEMARR_AVAILPHYS	0
+#define	MEMARR_TOTALPHYS	1
+
+struct idprom	*prom_getidprom(void);
+void		prom_getether(int, u_char *);
+const char	*prom_pa_location(u_int, u_int);
+
+void	prom_init(void);	/* To setup promops */
 
 /* Utility routines */
-int	prom_prop	__P((int, char *, int, int *, void **));
-int	getprop		__P((int, char *, int, int *, void **));
-int	getpropint	__P((int node, char *name, int deflt));
-char	*getpropstring	__P((int node, char *name));
-char	*getpropstringA	__P((int node, char *name, char *, size_t));
-void	prom_printf	__P((const char *, ...));
+int	prom_getprop(int, const char *, size_t, int *, void *);
+int	prom_getpropint(int, const char *, int);
+char	*prom_getpropstring(int, const char *);
+char	*prom_getpropstringA(int, const char *, char *, size_t);
+void	prom_printf(const char *, ...);
 
-int	prom_findroot	__P((void));
-int	prom_findnode	__P((int, const char *));
-int	prom_search	__P((int, const char *));
-int	prom_opennode	__P((char *));
-int	prom_node_has_property __P((int, const char *));
+int	prom_findroot(void);
+int	prom_findnode(int, const char *);
+int	prom_search(int, const char *);
+int	prom_opennode(const char *);
+int	prom_node_has_property(int, const char *);
+int	prom_getoptionsnode(void);
+int	prom_getoption(const char *, char *, int);
 
 #define	findroot()		prom_findroot()
 #define	findnode(node,name)	prom_findnode(node,name)
-#define	search_prom(node,name)	prom_search(node,name)
 #define	opennode(name)		prom_opennode(name)
 #define	node_has_property(node,prop)	prom_node_has_property(node,prop)
 
-void	prom_halt __P((void))	__attribute__((__noreturn__));
-void	prom_boot __P((char *))	__attribute__((__noreturn__));
+void	prom_halt(void)		__attribute__((__noreturn__));
+void	prom_boot(char *)	__attribute__((__noreturn__));
 
-#define callrom			prom_abort
+#if defined(MULTIPROCESSOR)
+#define callrom() do {		\
+	mp_pause_cpus();	\
+	prom_abort();		\
+	mp_resume_cpus();	\
+} while (0)
+#else
+#define callrom()		prom_abort()
+#endif
 
 #define prom_version()		(promops.po_version)
 #define prom_revision()		(promops.po_revision)
@@ -183,7 +207,7 @@ void	prom_boot __P((char *))	__attribute__((__noreturn__));
 
 #define firstchild(node)	prom_firstchild(node)
 #define nextsibling(node)	prom_nextsibling(node)
-#define getproplen(node,name)	prom_proplen(node, name)
+#define prom_getproplen(node,name)	prom_proplen(node, name)
 
 
 /* MP stuff - not currently used */

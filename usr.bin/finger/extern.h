@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.6 1998/07/26 21:35:28 mycroft Exp $	*/
+/*	$NetBSD: extern.h,v 1.10 2006/01/04 01:17:54 perry Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -42,19 +38,20 @@ extern DB *db;				/* Database. */
 extern int lflag;
 extern int oflag;
 extern int gflag;
+extern int eightflag;
 extern int pplan;
 
-void	 enter_lastlog __P((PERSON *));
-PERSON	*enter_person __P((struct passwd *));
-void	 enter_where __P((struct utmp *, PERSON *));
-void	 expandusername __P((const char *, const char *, char *, int));
-PERSON	*find_person __P((char *));
-int	 hash __P((char *));
-void	 lflag_print __P((void));
-int	 match __P((struct passwd *, char *));
-void	 netfinger __P((char *));
-PERSON	*palloc __P((void));
-char	*prphone __P((char *));
-int	 psort __P((const void *, const void *));
-void	 sflag_print __P((void));
-PERSON **sort __P((void));
+void	 enter_lastlog(PERSON *);
+PERSON	*enter_person(struct passwd *);
+void	 enter_where(struct utmpentry *, PERSON *);
+void	 expandusername(const char *, const char *, char *, int);
+PERSON	*find_person(char *);
+int	 hash(char *);
+void	 lflag_print(void);
+int	 match(struct passwd *, char *);
+void	 netfinger(char *);
+PERSON	*palloc(void);
+char	*prphone(char *);
+int	 psort(const void *, const void *);
+void	 sflag_print(void);
+PERSON **sort(void);

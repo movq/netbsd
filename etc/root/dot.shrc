@@ -1,8 +1,12 @@
-hup(){ kill -HUP `cat /var/run/$1.pid`; }
-ll(){ ls -l ${1+"$@"}; }
+#	$NetBSD: dot.shrc,v 1.8 2007/11/24 11:14:41 pavel Exp $
+
+if [ -f /etc/shrc ]; then
+	. /etc/shrc
+fi
+
+hup(){ (read pid; kill -HUP $pid) </var/run/$1.pid; }
 
 case "$-" in *i*)
-	PS1="`hostname -s`$PS1"
-	set -o emacs
+	# interactive mode settings go here
 	;;
 esac

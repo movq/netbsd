@@ -1,8 +1,11 @@
-/*	$NetBSD: sample_fm.c,v 1.2 1996/08/30 17:46:07 thorpej Exp $	*/
+/*	$NetBSD: sample_fm.c,v 1.5 2005/12/11 12:19:45 christos Exp $	*/
+
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: sample_fm.c,v 1.5 2005/12/11 12:19:45 christos Exp $");
 
 #include <stdio.h>
 #include <stdlib.h>
-#include "../../dev/opmreg.h"
+#include <machine/opmreg.h>
 
 /* Sample Voice Parameter : piano */
 

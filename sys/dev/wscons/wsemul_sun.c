@@ -1,4 +1,4 @@
-/* $NetBSD: wsemul_sun.c,v 1.11 2000/01/05 11:19:36 drochner Exp $ */
+/* $NetBSD: wsemul_sun.c,v 1.26 2006/11/16 01:33:31 christos Exp $ */
 
 /*
  * Copyright (c) 1996, 1997 Christopher G. Demetriou.  All rights reserved.
@@ -33,7 +33,7 @@
 /* XXX DESCRIPTION/SOURCE OF INFORMATION */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wsemul_sun.c,v 1.11 2000/01/05 11:19:36 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wsemul_sun.c,v 1.26 2006/11/16 01:33:31 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -47,17 +47,15 @@ __KERNEL_RCSID(0, "$NetBSD: wsemul_sun.c,v 1.11 2000/01/05 11:19:36 drochner Exp
 #include <dev/wscons/wsksymdef.h>
 #include <dev/wscons/ascii.h>
 
-#include "opt_wskernattr.h"
-
-void	*wsemul_sun_cnattach __P((const struct wsscreen_descr *, void *,
-				  int, int, long));
-void	*wsemul_sun_attach __P((int console, const struct wsscreen_descr *,
-				void *, int, int, void *, long));
-void	wsemul_sun_output __P((void *cookie, const u_char *data, u_int count,
-			       int));
-int	wsemul_sun_translate __P((void *cookie, keysym_t, char **));
-void	wsemul_sun_detach __P((void *cookie, u_int *crowp, u_int *ccolp));
-void	wsemul_sun_resetop __P((void *, enum wsemul_resetops));
+void	*wsemul_sun_cnattach(const struct wsscreen_descr *, void *,
+				  int, int, long);
+void	*wsemul_sun_attach(int console, const struct wsscreen_descr *,
+				void *, int, int, void *, long);
+void	wsemul_sun_output(void *cookie, const u_char *data, u_int count,
+			       int);
+int	wsemul_sun_translate(void *cookie, keysym_t, const char **);
+void	wsemul_sun_detach(void *cookie, u_int *crowp, u_int *ccolp);
+void	wsemul_sun_resetop(void *, enum wsemul_resetops);
 
 const struct wsemul_ops wsemul_sun_ops = {
 	"sun",
@@ -66,7 +64,9 @@ const struct wsemul_ops wsemul_sun_ops = {
 	wsemul_sun_output,
 	wsemul_sun_translate,
 	wsemul_sun_detach,
-	wsemul_sun_resetop
+	wsemul_sun_resetop,
+	NULL,	/* getmsgattrs */
+	NULL,	/* setmsgattrs */
 };
 
 #define	SUN_EMUL_STATE_NORMAL	0	/* normal processing */
@@ -97,13 +97,11 @@ struct wsemul_sun_emuldata {
 #endif
 };
 
-static u_int	wsemul_sun_output_normal __P((struct wsemul_sun_emuldata *,
-		    u_char, int));
-static u_int	wsemul_sun_output_haveesc __P((struct wsemul_sun_emuldata *,
-		    u_char));
-static u_int	wsemul_sun_output_control __P((struct wsemul_sun_emuldata *,
-		    u_char));
-static void	wsemul_sun_control __P((struct wsemul_sun_emuldata *, u_char));
+static u_int	wsemul_sun_output_normal(struct wsemul_sun_emuldata *,
+		    u_char, int);
+static u_int	wsemul_sun_output_haveesc(struct wsemul_sun_emuldata *, u_char);
+static u_int	wsemul_sun_output_control(struct wsemul_sun_emuldata *, u_char);
+static void	wsemul_sun_control(struct wsemul_sun_emuldata *, u_char);
 
 struct wsemul_sun_emuldata wsemul_sun_console_emuldata;
 
@@ -114,11 +112,8 @@ struct wsemul_sun_emuldata wsemul_sun_console_emuldata;
 #define	ROWS_LEFT		(edp->nrows - edp->crow - 1)
 
 void *
-wsemul_sun_cnattach(type, cookie, ccol, crow, defattr)
-	const struct wsscreen_descr *type;
-	void *cookie;
-	int ccol, crow;
-	long defattr;
+wsemul_sun_cnattach(const struct wsscreen_descr *type, void *cookie,
+	int ccol, int crow, long defattr)
 {
 	struct wsemul_sun_emuldata *edp;
 	int res;
@@ -148,12 +143,12 @@ wsemul_sun_cnattach(type, cookie, ccol, crow, defattr)
 #define WS_KERNEL_MONOATTR 0
 #endif
 	if (type->capabilities & WSSCREEN_WSCOLORS)
-		res = (*edp->emulops->alloc_attr)(cookie,
+		res = (*edp->emulops->allocattr)(cookie,
 					    WS_KERNEL_FG, WS_KERNEL_BG,
 					    WS_KERNEL_COLATTR | WSATTR_WSCOLORS,
 					    &edp->kernattr);
 	else
-		res = (*edp->emulops->alloc_attr)(cookie, 0, 0,
+		res = (*edp->emulops->allocattr)(cookie, 0, 0,
 					    WS_KERNEL_MONOATTR,
 					    &edp->kernattr);
 	if (res)
@@ -173,13 +168,8 @@ wsemul_sun_cnattach(type, cookie, ccol, crow, defattr)
 }
 
 void *
-wsemul_sun_attach(console, type, cookie, ccol, crow, cbcookie, defattr)
-	int console;
-	const struct wsscreen_descr *type;
-	void *cookie;
-	int ccol, crow;
-	void *cbcookie;
-	long defattr;
+wsemul_sun_attach(int console, const struct wsscreen_descr *type,
+	void *cookie, int ccol, int crow, void *cbcookie, long defattr)
 {
 	struct wsemul_sun_emuldata *edp;
 
@@ -209,16 +199,15 @@ wsemul_sun_attach(console, type, cookie, ccol, crow, cbcookie, defattr)
 
 	edp->cbcookie = cbcookie;
 
-	/* XXX This assumes that the default attribute is wob. */
-	if ((!(edp->scrcapabilities & WSSCREEN_WSCOLORS) ||
-		(*edp->emulops->alloc_attr)(edp->emulcookie,
-					    WSCOL_BLACK, WSCOL_WHITE,
-					    WSATTR_WSCOLORS,
-					    &edp->bowattr)) &&
-	    (!(edp->scrcapabilities & WSSCREEN_REVERSE) ||
-		(*edp->emulops->alloc_attr)(edp->emulcookie, 0, 0,
-					    WSATTR_REVERSE,
-					    &edp->bowattr)))
+	if ((!(edp->scrcapabilities & WSSCREEN_REVERSE) ||
+		(*edp->emulops->allocattr)(edp->emulcookie, 0, 0,
+					   WSATTR_REVERSE,
+					   &edp->bowattr)) &&
+	    (!(edp->scrcapabilities & WSSCREEN_WSCOLORS) ||
+		(*edp->emulops->allocattr)(edp->emulcookie,
+					   WSCOL_BLACK, WSCOL_WHITE,
+					   WSATTR_WSCOLORS,
+					   &edp->bowattr)))
 		edp->bowattr = edp->defattr;
 
 	edp->curattr = edp->defattr;
@@ -228,10 +217,7 @@ wsemul_sun_attach(console, type, cookie, ccol, crow, cbcookie, defattr)
 }
 
 static inline u_int
-wsemul_sun_output_normal(edp, c, kernel)
-	struct wsemul_sun_emuldata *edp;
-	u_char c;
-	int kernel;
+wsemul_sun_output_normal(struct wsemul_sun_emuldata *edp, u_char c, int kernel)
 {
 	u_int newstate = SUN_EMUL_STATE_NORMAL;
 	u_int n;
@@ -272,10 +258,11 @@ wsemul_sun_output_normal(edp, c, kernel)
 		break;
 
 	case ASCII_ESC:		/* "Escape (ESC)" */
-#ifdef DIAGNOSTIC
-		if (kernel)
-			panic("ESC in kernel output");
-#endif
+		if (kernel) {
+			printf("wsemul_sun_output_normal: ESC in kernel output ignored\n");
+			break;	/* ignore the ESC */
+		}
+
 		if (edp->state == SUN_EMUL_STATE_NORMAL) {
 			newstate = SUN_EMUL_STATE_HAVEESC;
 			break;
@@ -329,9 +316,7 @@ wsemul_sun_output_normal(edp, c, kernel)
 }
 
 static inline u_int
-wsemul_sun_output_haveesc(edp, c)
-	struct wsemul_sun_emuldata *edp;
-	u_char c;
+wsemul_sun_output_haveesc(struct wsemul_sun_emuldata *edp, u_char c)
 {
 	u_int newstate;
 
@@ -352,9 +337,7 @@ wsemul_sun_output_haveesc(edp, c)
 }
 
 static inline void
-wsemul_sun_control(edp, c)
-	struct wsemul_sun_emuldata *edp;
-	u_char c;
+wsemul_sun_control(struct wsemul_sun_emuldata *edp, u_char c)
 {
 	u_int n, src, dst;
 
@@ -476,9 +459,7 @@ setattr:
 }
 
 static inline u_int
-wsemul_sun_output_control(edp, c)
-	struct wsemul_sun_emuldata *edp;
-	u_char c;
+wsemul_sun_output_control(struct wsemul_sun_emuldata *edp, u_char c)
 {
 	u_int newstate = SUN_EMUL_STATE_CONTROL;
 	u_int i;
@@ -504,11 +485,7 @@ wsemul_sun_output_control(edp, c)
 }
 
 void
-wsemul_sun_output(cookie, data, count, kernel)
-	void *cookie;
-	const u_char *data;
-	u_int count;
-	int kernel;
+wsemul_sun_output(void *cookie, const u_char *data, u_int count, int kernel)
 {
 	struct wsemul_sun_emuldata *edp = cookie;
 	u_int newstate;
@@ -538,7 +515,7 @@ wsemul_sun_output(cookie, data, count, kernel)
 			break;
 		default:
 #ifdef DIAGNOSTIC
-			panic("wsemul_sun: invalid state %d\n", edp->state);
+			panic("wsemul_sun: invalid state %d", edp->state);
 #endif
                         /* try to recover, if things get screwed up... */
 			newstate = wsemul_sun_output_normal(edp, *data, 0);
@@ -550,7 +527,7 @@ wsemul_sun_output(cookie, data, count, kernel)
 	(*edp->emulops->cursor)(edp->emulcookie, 1, edp->crow, edp->ccol);
 }
 
-static char *sun_fkeys[] = {
+static const char *sun_fkeys[] = {
 	"\033[224z",	/* F1 */
 	"\033[225z",
 	"\033[226z",
@@ -564,10 +541,7 @@ static char *sun_fkeys[] = {
 };
 
 int
-wsemul_sun_translate(cookie, in, out)
-	void *cookie;
-	keysym_t in;
-	char **out;
+wsemul_sun_translate(void *cookie, keysym_t in, const char **out)
 {
 	static char c;
 
@@ -591,36 +565,36 @@ wsemul_sun_translate(cookie, in, out)
 	}
 
 	switch (in) {
-	    case KS_Home:
-	    case KS_KP_Home:
-	    case KS_KP_Begin:
+	case KS_Home:
+	case KS_KP_Home:
+	case KS_KP_Begin:
 		*out = "\033[214z";
 		return (6);
-	    case KS_Prior:
-	    case KS_KP_Prior:
+	case KS_Prior:
+	case KS_KP_Prior:
 		*out = "\033[216z";
 		return (6);
-	    case KS_Next:
-	    case KS_KP_Next:
+	case KS_Next:
+	case KS_KP_Next:
 		*out = "\033[222z";
 		return (6);
-	    case KS_Up:
-	    case KS_KP_Up:
+	case KS_Up:
+	case KS_KP_Up:
 		*out = "\033[A";
 		return (3);
-	    case KS_Down:
-	    case KS_KP_Down:
+	case KS_Down:
+	case KS_KP_Down:
 		*out = "\033[B";
 		return (3);
-	    case KS_Left:
-	    case KS_KP_Left:
+	case KS_Left:
+	case KS_KP_Left:
 		*out = "\033[D";
 		return (3);
-	    case KS_Right:
-	    case KS_KP_Right:
+	case KS_Right:
+	case KS_KP_Right:
 		*out = "\033[C";
 		return (3);
-	    case KS_KP_Delete:
+	case KS_KP_Delete:
 		*out = "\177";
 		return (1);
 	}
@@ -628,9 +602,7 @@ wsemul_sun_translate(cookie, in, out)
 }
 
 void
-wsemul_sun_detach(cookie, crowp, ccolp)
-	void *cookie;
-	u_int *crowp, *ccolp;
+wsemul_sun_detach(void *cookie, u_int *crowp, u_int *ccolp)
 {
 	struct wsemul_sun_emuldata *edp = cookie;
 
@@ -641,9 +613,7 @@ wsemul_sun_detach(cookie, crowp, ccolp)
 }
 
 void
-wsemul_sun_resetop(cookie, op)
-	void *cookie;
-	enum wsemul_resetops op;
+wsemul_sun_resetop(void *cookie, enum wsemul_resetops op)
 {
 	struct wsemul_sun_emuldata *edp = cookie;
 

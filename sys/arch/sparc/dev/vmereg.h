@@ -1,4 +1,4 @@
-/*	$NetBSD: vmereg.h,v 1.5 1998/09/19 16:44:59 pk Exp $ */
+/*	$NetBSD: vmereg.h,v 1.7 2008/04/28 20:23:36 martin Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,9 +30,9 @@
  */
 
 struct vmebusreg {
-	volatile u_int32_t	vmebus_cr;	/* VMEbus control register */
-	volatile u_int32_t	vmebus_afar;	/* VMEbus async fault address */
-	volatile u_int32_t	vmebus_afsr;	/* VMEbus async fault status */
+	volatile uint32_t	vmebus_cr;	/* VMEbus control register */
+	volatile uint32_t	vmebus_afar;	/* VMEbus async fault address */
+	volatile uint32_t	vmebus_afsr;	/* VMEbus async fault status */
 };
 
 /* VME bus Register offsets */
@@ -75,7 +68,7 @@ struct vmebusreg {
 			 "b\27ME\0b\30S\0b\31ERR\0b\32WB\0\33TO\0f\34\3SZ\0"
 
 struct vmebusvec {
-	volatile u_int8_t	vmebusvec[16];
+	volatile uint8_t	vmebusvec[16];
 };
 
 /*
@@ -114,4 +107,3 @@ struct vmebusvec {
 #define VME_IOC_TAGOFFSET	0x0f000000
 #define VME_IOC_DATAOFFSET	0x0f008000
 #define VME_IOC_FLUSHOFFSET	0x0f020000
-

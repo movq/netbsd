@@ -1,4 +1,4 @@
-/*	$NetBSD: rpc.yppasswdd.c,v 1.3 1999/06/06 02:44:52 thorpej Exp $	*/
+/*	$NetBSD: rpc.yppasswdd.c,v 1.11 2002/11/08 00:16:39 fvdl Exp $	*/
 
 /*
  * Copyright (c) 1994 Mats O Jansson <moj@stacken.kth.se>
@@ -31,9 +31,16 @@
  * SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+#ifndef lint
+__RCSID("$NetBSD: rpc.yppasswdd.c,v 1.11 2002/11/08 00:16:39 fvdl Exp $");
+#endif /* not lint */
+
 #include <sys/types.h>
 #include <sys/wait.h>
+
 #include <err.h>
+#include <errno.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -46,75 +53,93 @@
 #include <rpc/pmap_clnt.h>
 #include <rpcsvc/yppasswd.h>
 
-extern	char *__progname;		/* from crt0.s */
+#include "extern.h"
 
-int	noshell, nogecos, nopw, domake;
+int	noshell, nogecos, nopw;
 char	make_arg[_POSIX2_LINE_MAX] = "make";
 
-extern	void make_passwd __P((yppasswd *, struct svc_req *, SVCXPRT *));
-
-int	main __P((int, char *[]));
-void	yppasswddprog_1 __P((struct svc_req *, SVCXPRT *));
-void	usage __P((void));
+int	main(int, char *[]);
+void	yppasswddprog_1(struct svc_req *, SVCXPRT *);
+void	usage(void);
 
 int
-main(argc, argv)
-	int     argc;
-	char   *argv[];
+main(int argc, char *argv[])
 {
 	SVCXPRT *transp;
 	int i;
+	char *arg;
+	int maxrec = RPC_MAXDATASIZE;
 
 	for (i = 1; i < argc; i++) {
-		if (argv[i][0] == '-') {
-			if (strcmp("-noshell", argv[i]) == 0)
-				noshell = 1;
-			else if (strcmp("-nogecos", argv[i]) == 0)
-				nogecos = 1;
-			else if (strcmp("-nopw", argv[i]) == 0)
-				nopw = 1;
-			else if (strcmp("-m", argv[i]) == 0) {
-				domake = 1;
-				for (; i < argc; i++) {
-					strcat(make_arg, " ");
-					strcat(make_arg, argv[i]);
-				}
-			} else
+		arg = argv[i];
+		if (*arg++ != '-')
+			usage();
+		if (strcmp("d", arg) == 0)
+			if (++i == argc)
 				usage();
+			else {
+				if (pw_setprefix(argv[i]) < 0)
+					err(EXIT_FAILURE,NULL);
+			}
+		else if (strcmp("noshell", arg) == 0)
+			noshell = 1;
+		else if (strcmp("nogecos", arg) == 0)
+			nogecos = 1;
+		else if (strcmp("nopw", arg) == 0)
+			nopw = 1;
+		else if (strcmp("m", arg) == 0) {
+			int len;
+
+			len = strlen(make_arg);
+			if (++i == argc)
+				usage();
+			for (; i < argc; i++) {
+				int arglen;
+
+				arglen = strlen(argv[i]);
+				if ((len + arglen) > (sizeof(make_arg) - 2))
+					errx(EXIT_FAILURE, strerror(E2BIG));
+				make_arg[len++] = ' ';
+				(void)strcpy(&make_arg[len], argv[i]);
+				len += arglen;
+			}
 		} else
 			usage();
 	}
 
 	if (daemon(0, 0))
-		err(1, "can't detach");
+		err(EXIT_FAILURE, "can't detach");
 	pidfile(NULL);
 
-	(void) pmap_unset(YPPASSWDPROG, YPPASSWDVERS);
+	rpc_control(RPC_SVC_CONNMAXREC_SET, &maxrec);
+
+	(void)pmap_unset(YPPASSWDPROG, YPPASSWDVERS);
 
 	transp = svcudp_create(RPC_ANYSOCK);
 	if (transp == NULL)
-		errx(1, "cannot create UDP service");
+		errx(EXIT_FAILURE, "cannot create UDP service");
 
 	if (!svc_register(transp, YPPASSWDPROG, YPPASSWDVERS, yppasswddprog_1,
 	    IPPROTO_UDP))
-		errx(1, "unable to register YPPASSWDPROG/YPPASSWDVERS/UDP");
+		errx(EXIT_FAILURE,
+		    "unable to register YPPASSWDPROG/YPPASSWDVERS/UDP");
 
-	transp = svctcp_create(RPC_ANYSOCK, 0, 0);
+	transp = svctcp_create(RPC_ANYSOCK, RPC_MAXDATASIZE, RPC_MAXDATASIZE);
 	if (transp == NULL)
-		errx(1, "cannot create TCP service");
+		errx(EXIT_FAILURE, "cannot create TCP service");
 
 	if (!svc_register(transp, YPPASSWDPROG, YPPASSWDVERS, yppasswddprog_1,
 	    IPPROTO_TCP))
-		errx(1, "unable to register YPPASSWDPROG/YPPASSWDVERS/TCP");
+		errx(EXIT_FAILURE,
+		    "unable to register YPPASSWDPROG/YPPASSWDVERS/TCP");
 
 	svc_run();
-	errx(1, "svc_run returned");
+	errx(EXIT_FAILURE, "svc_run returned");
+	/* NOTREACHED */
 }
 
 void
-yppasswddprog_1(rqstp, transp)
-	struct svc_req *rqstp;
-	SVCXPRT *transp;
+yppasswddprog_1(struct svc_req *rqstp, SVCXPRT *transp)
 {
 	union {
 		yppasswd yppasswdproc_update_1_arg;
@@ -122,7 +147,7 @@ yppasswddprog_1(rqstp, transp)
 
 	switch (rqstp->rq_proc) {
 	case NULLPROC:
-		(void) svc_sendreply(transp, xdr_void, (char *) NULL);
+		(void)svc_sendreply(transp, xdr_void, (char *) NULL);
 		return;
 
 	case YPPASSWDPROC_UPDATE:
@@ -133,14 +158,14 @@ yppasswddprog_1(rqstp, transp)
 		 * conditions locally and timeouts on the
 		 * client.
 		 */
-		(void) memset(&argument, 0, sizeof(argument));
+		(void)memset(&argument, 0, sizeof(argument));
 		if (!svc_getargs(transp, xdr_yppasswd, (caddr_t) & argument)) {
 			svcerr_decode(transp);
 			return;
 		}
 		make_passwd((yppasswd *)&argument, rqstp, transp);
 		if (!svc_freeargs(transp, xdr_yppasswd, (caddr_t) &argument))
-			errx(1, "unable to free arguments");
+			errx(EXIT_FAILURE, "unable to free arguments");
 		return;
 	}
 
@@ -148,10 +173,10 @@ yppasswddprog_1(rqstp, transp)
 }
 
 void
-usage()
+usage(void)
 {
 
-	fprintf(stderr, "usage: %s [-noshell] [-nogecos] [-nopw] "
-	    "[-m arg1 arg2 ...]\n", __progname);
-	exit(1);
+	fprintf(stderr, "usage: %s [-d directory] [-noshell] [-nogecos] "
+	    "[-nopw] [-m arg1 [arg2 ...]]\n", getprogname());
+	exit(EXIT_FAILURE);
 }

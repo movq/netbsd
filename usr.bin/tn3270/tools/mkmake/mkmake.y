@@ -1,5 +1,5 @@
 %{
-/*	$NetBSD: mkmake.y,v 1.7 1998/05/07 05:26:35 enami Exp $	*/
+/*	$NetBSD: mkmake.y,v 1.13 2006/03/20 01:34:49 gdamore Exp $	*/
 /*-
  * Copyright (c) 1988 The Regents of the University of California.
  * All rights reserved.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -33,14 +29,16 @@
  * SUCH DAMAGE.
  */
 
+#ifndef HOST_TOOL
 #include <sys/cdefs.h>
-#ifndef lint
+#if defined(__RCSID) && !defined(lint)
 #if 0
 static char sccsid[] = "@(#)mkmake.y	4.2 (Berkeley) 4/26/91";
 #else
-__RCSID("$NetBSD: mkmake.y,v 1.7 1998/05/07 05:26:35 enami Exp $");
+__RCSID("$NetBSD: mkmake.y,v 1.13 2006/03/20 01:34:49 gdamore Exp $");
 #endif
 #endif /* not lint */
+#endif
 
 typedef struct string {
     int
@@ -65,7 +63,7 @@ typedef struct string {
  * (and, we restrict any given one to live on one and only one such list)
  *
  * Also, they may live on the list of values for someone else's variable,
- * or as someone's dependancy.
+ * or as someone's dependency.
  */
 
 typedef struct same {
@@ -310,41 +308,41 @@ white_space : WHITE_SPACE
 #include <ctype.h>
 
 /* mkmake.y */
-void yyerror __P((char *));
-void assign __P((same_t *, same_t *));
-int yylex __P((void));
-extern int yyparse __P((void));
-int main __P((int, char *[]));
+void yyerror(char *);
+void assign(same_t *, same_t *);
+int yylex(void);
+extern int yyparse(void);
+int main(int, char *[]);
 
-static int visitcheck __P((same_t *));
-static int string_hashof __P((char *, int));
-static int string_same __P((string_t *, string_t *));
-static string_t *string_lookup __P((char *));
-static same_t *same_search __P((same_t *, same_t *));
-static same_t *same_cat __P((same_t *, same_t *));
-static same_t *same_item __P((string_t *));
-static same_t *same_copy __P((same_t *));
-static same_t *same_merge __P((same_t *, same_t *));
-static void same_free __P((same_t *));
-static same_t *same_unlink __P((same_t *));
-static void same_replace __P((same_t *, same_t *));
-static same_t *same_char __P((int));
-static void add_target __P((same_t *, same_t *));
-static same_t *add_targets_actions __P((same_t *, same_t *));
-static same_t *add_depends __P((same_t *, same_t *));
-static same_t *value_of __P((same_t *));
-static same_t *expand_variables __P((same_t *, int));
-static same_t *ws_merge __P((same_t *));
-static same_t *variable __P((same_t *));
-static same_t *shell_variable __P((same_t *));
-static same_t *for_statement __P((same_t *, same_t *, same_t *));
-static same_t *do_command __P((same_t *, same_t *));
-static int Getchar __P((void));
-static int token_type __P((char *));
+static int visitcheck(same_t *);
+static int string_hashof(char *, int);
+static int string_same(string_t *, string_t *);
+static string_t *string_lookup(char *);
+static same_t *same_search(same_t *, same_t *);
+static same_t *same_cat(same_t *, same_t *);
+static same_t *same_item(string_t *);
+static same_t *same_copy(same_t *);
+static same_t *same_merge(same_t *, same_t *);
+static void same_free(same_t *);
+static same_t *same_unlink(same_t *);
+static void same_replace(same_t *, same_t *);
+static same_t *same_char(int);
+static void add_target(same_t *, same_t *);
+static same_t *add_targets_actions(same_t *, same_t *);
+static same_t *add_depends(same_t *, same_t *);
+static same_t *value_of(same_t *);
+static same_t *expand_variables(same_t *, int);
+static same_t *ws_merge(same_t *);
+static same_t *variable(same_t *);
+static same_t *shell_variable(same_t *);
+static same_t *for_statement(same_t *, same_t *, same_t *);
+static same_t *do_command(same_t *, same_t *);
+static int Getchar(void);
+static int token_type(char *);
 #if 0
-static void dump_same __P((same_t *));
+static void dump_same(same_t *);
 #endif
-static void do_dump __P((void));
+static void do_dump(void);
 static int last_char, last_saved = 0;
 static int column = 0, lineno = 1;
 
@@ -1085,7 +1083,7 @@ same_t *same;
     same_t *same2;
 
     for (visit(same, same2); !visited(same2); visit_next(same2)) {
-	printf(same2->string->string);
+	printf("%s", same2->string->string);
     }
     visit_end();
 }
@@ -1109,7 +1107,7 @@ do_dump()
 	printf("%s =\t", same->string->string);
 	for (visit(same->value_list, same2); !visited(same2);
 						visit_next(same2)) {
-	    printf(same2->string->string);
+	    printf("%s", same2->string->string);
 	}
 	visit_end();
 	printf("\n");
@@ -1121,13 +1119,13 @@ do_dump()
 	printf("\n%s:\t", same->string->string);
 	for (visit(same->depend_list, same2); !visited(same2);
 						visit_next(same2)) {
-	    printf(same2->string->string);
+	    printf("%s", same2->string->string);
 	}
 	visit_end();
 	printf("\n\t");
 	for (visit(same->action_list, same2); !visited(same2);
 					    visit_next(same2)) {
-	    printf(same2->string->string);
+	    printf("%s", same2->string->string);
 	    if (same2->string->string[0] == '\n') {
 		printf("\t");
 	    }

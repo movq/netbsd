@@ -1,4 +1,4 @@
-/*	$NetBSD: pciide_pdc202xx_reg.h,v 1.2 1999/11/28 20:05:18 bouyer Exp $ */
+/*	$NetBSD: pciide_pdc202xx_reg.h,v 1.14 2007/12/25 18:33:42 perry Exp $ */
 
 /*
  * Copyright (c) 1999 Manuel Bouyer.
@@ -13,23 +13,20 @@
  *    documentation and/or other materials provided with the distribution.
  * 3. All advertising materials mentioning features or use of this software
  *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
+ *	This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
 
@@ -68,11 +65,11 @@
 #define PDC2xx_TIM_IORDYp	0x00400000
 #define PDC2xx_TIM_DMARQp	0x00800000
 
-/* The following are extentions of the DMA registers */
+/* The following are extensions of the DMA registers */
 
 /* Ultra-DMA mode 3/4 control (PDC20262 only, 1 byte) */
 #define PDC262_U66	0x11
-#define PDC262_U66_EN(chan) (0x1 << ((chan) *2))
+#define PDC262_U66_EN(chan) (0x2 << ((chan) *2))
 /* primary mode (1 byte) */
 #define PDC2xx_PM	0x1a
 /* secondary mode (1 byte) */
@@ -88,12 +85,13 @@
 #define PDC2xx_SCR_SET_POLL(r,x) (((r) & 0xff0fffff) | (((x) & 0xf) << 20))
 #define PDC2xx_SCR_DMA		0x01000000
 #define PDC2xx_SCR_IORDY	0x02000000
-#define PDC2xx_SCR_G2FD		0x04000000		
+#define PDC2xx_SCR_G2FD		0x04000000
 #define PDC2xx_SCR_FLOAT	0x08000000
 #define PDC2xx_SCR_RSET		0x10000000
 #define PDC2xx_SCR_TST		0x20000000
-/* Values for "General Purpose Register" (PDC20262 only) */
+/* Values for "General Purpose Register" (PDC2026{2|5} only) */
 #define PDC262_SCR_GEN_LAT	0x20
+#define PDC265_SCR_GEN_LAT	0x03
 
 /* ATAPI port ((PDC20262 only) (4 bytes) */
 #define PDC262_ATAPI(chan) (0x20 + (4 * (chan)))
@@ -101,15 +99,23 @@
 #define PDC262_ATAPI_DMA_READ	0x00001000
 #define PDC262_ATAPI_DMA_WRITE	0x00002000
 #define PDC262_ATAPI_UDMA	0x00004000
+#define PDC262_ATAPI_LBA48_READ  0x05000000
+#define PDC262_ATAPI_LBA48_WRITE 0x06000000
 
 /*
  * The timings provided here cmoes from the PDC20262 docs. I hope they are
- * rigth for the PDC20246 too ...
+ * right for the PDC20246 too ...
  */
 
-static int8_t pdc2xx_pa[] = {0x9, 0x5, 0x3, 0x2, 0x1};
-static int8_t pdc2xx_pb[] = {0x13, 0xc, 0x8, 0x6, 0x4};
-static int8_t pdc2xx_dma_mb[] = {0x7, 0x3, 0x3};
-static int8_t pdc2xx_dma_mc[] = {0xf, 0x4, 0x3};
-static int8_t pdc2xx_udma_mb[] = {0x3, 0x2, 0x1, 0x2, 0x1};
-static int8_t pdc2xx_udma_mc[] = {0x3, 0x2, 0x1, 0x2, 0x1};
+static const int8_t pdc2xx_pa[] __unused =
+    {0x9, 0x5, 0x3, 0x2, 0x1};
+static const int8_t pdc2xx_pb[] __unused =
+    {0x13, 0xc, 0x8, 0x6, 0x4};
+static const int8_t pdc2xx_dma_mb[] __unused =
+    {0x3, 0x3, 0x3};
+static const int8_t pdc2xx_dma_mc[] __unused =
+    {0x5, 0x4, 0x3};
+static const int8_t pdc2xx_udma_mb[] __unused =
+    {0x3, 0x2, 0x1, 0x2, 0x1, 0x1};
+static const int8_t pdc2xx_udma_mc[] __unused =
+    {0x3, 0x2, 0x1, 0x2, 0x1, 0x1};

@@ -1,4 +1,4 @@
-/*	$NetBSD: fpu_emulate.c,v 1.21 1999/05/30 20:17:48 briggs Exp $	*/
+/*	$NetBSD: fpu_emulate.c,v 1.27.54.1 2009/01/26 00:24:55 snj Exp $	*/
 
 /*
  * Copyright (c) 1995 Gordon W. Ross
@@ -36,6 +36,10 @@
  * XXX - Just a start at it for now...
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: fpu_emulate.c,v 1.27.54.1 2009/01/26 00:24:55 snj Exp $");
+
+#include <sys/param.h>
 #include <sys/types.h>
 #include <sys/signal.h>
 #include <sys/systm.h>
@@ -46,6 +50,14 @@
 #endif
 
 #include "fpu_emulate.h"
+
+#define	fpe_abort(tfp, ksi, signo, code) 		\
+    do {						\
+	    (ksi)->ksi_signo = (signo);			\
+	    (ksi)->ksi_code = (code);			\
+	    (ksi)->ksi_addr = (void *)(frame)->f_pc;	\
+	    return -1;					\
+    } while (/*CONSTCOND*/0)
 
 static int fpu_emul_fmovmcr __P((struct fpemu *fe, struct instruction *insn));
 static int fpu_emul_fmovm __P((struct fpemu *fe, struct instruction *insn));
@@ -70,15 +82,13 @@ static struct fpn *fpu_cmp __P((struct fpemu *fe));
  * (Typically: zero, SIGFPE, SIGILL, SIGSEGV)
  */
 int
-fpu_emulate(frame, fpf)
+fpu_emulate(frame, fpf, ksi)
      struct frame *frame;
      struct fpframe *fpf;
+     ksiginfo_t *ksi;
 {
     static struct instruction insn;
     static struct fpemu fe;
-#if 0
-    u_int savedpc = 0;	/* XXX work around gcc -O lossage */
-#endif
     int word, optype, sig;
 
 
@@ -107,11 +117,13 @@ fpu_emulate(frame, fpf)
 	 * we expect to be in f_pc.
 	 *
 	 * XXX - This is a hack; it assumes we at least know the
-	 * sizes of all instructions we run across.  This may not
-	 * be true, so we save the PC in order to restore it later.
+	 * sizes of all instructions we run across.
+	 * XXX TODO: This may not be true, so we might want to save the PC
+	 * in order to restore it later.
 	 */
+	/* insn.is_nextpc = frame->f_pc; */
 	insn.is_pc = frame->f_fmt4.f_fslw;
-	insn.is_nextpc = frame->f_pc;
+	frame->f_pc = insn.is_pc;
     }
 
     word = fusword((void *) (insn.is_pc));
@@ -119,21 +131,21 @@ fpu_emulate(frame, fpf)
 #ifdef DEBUG
 	printf("fpu_emulate: fault reading opcode\n");
 #endif
-	return SIGSEGV;
+	fpe_abort(frame, ksi, SIGSEGV, SEGV_ACCERR);
     }
 
     if ((word & 0xf000) != 0xf000) {
 #ifdef DEBUG
 	printf("fpu_emulate: not coproc. insn.: opcode=0x%x\n", word);
 #endif
-	return SIGILL;
+	fpe_abort(frame, ksi, SIGILL, ILL_ILLOPC);
     }
 
     if ((word & 0x0E00) != 0x0200) {
 #ifdef DEBUG
 	printf("fpu_emulate: bad coproc. id: opcode=0x%x\n", word);
 #endif
-	return SIGILL;
+	fpe_abort(frame, ksi, SIGILL, ILL_ILLOPC);
     }
 
     insn.is_opcode = word;
@@ -144,7 +156,7 @@ fpu_emulate(frame, fpf)
 #ifdef DEBUG
 	printf("fpu_emulate: fault reading word1\n");
 #endif
-	return SIGSEGV;
+	fpe_abort(frame, ksi, SIGSEGV, SEGV_ACCERR);
     }
     insn.is_word1 = word;
     /* all FPU instructions are at least 4-byte long */
@@ -233,22 +245,28 @@ fpu_emulate(frame, fpf)
       */
     if ((sig == 0) || (sig == SIGFPE))
 	frame->f_pc += insn.is_advance;
-#if defined(DDB) && defined(DEBUG)
+#if defined(DDB) && defined(DEBUG_FPE)
     else {
 	printf("fpu_emulate: sig=%d, opcode=%x, word1=%x\n",
 	       sig, insn.is_opcode, insn.is_word1);
 	kdb_trap(-1, (db_regs_t *)&frame);
     }
 #endif
-    if (frame->f_format == 4)
+#if 0 /* XXX something is wrong */
+    if (frame->f_format == 4) {
 	/* XXX Restore PC -- 68{EC,LC}040 only */
-	frame->f_pc = insn.is_nextpc;
+	if (insn.is_nextpc)
+		frame->f_pc = insn.is_nextpc;
+    }
+#endif
 
 #if DEBUG_FPE
     printf("EXITING fpu_emulate: w/FPSR=%08x, FPCR=%08x\n",
 	   fe.fe_fpsr, fe.fe_fpcr);
 #endif
 
+    if (sig)
+	fpe_abort(frame, ksi, sig, 0);
     return (sig);
 }
 
@@ -735,8 +753,8 @@ fpu_emul_arith(fe, insn)
      * pointer to the result.
      
      */
-    res = 0;
-    switch (word1 & 0x3f) {
+    res = NULL;
+    switch (word1 & 0x7f) {
     case 0x00:			/* fmove */
 	res = &fe->fe_f2;
 	break;
@@ -892,7 +910,7 @@ fpu_emul_arith(fe, insn)
 	discard_result = 1;
 	break;
 
-    default:
+    default:			/* possibly 040/060 instructions */
 #ifdef DEBUG
 	printf("fpu_emul_arith: bad opcode=0x%x, word1=0x%x\n",
 	       insn->is_opcode, insn->is_word1);
@@ -900,14 +918,22 @@ fpu_emul_arith(fe, insn)
 	sig = SIGILL;
     } /* switch (word1 & 0x3f) */
 
+    /* for sanity */
+    if (res == NULL)
+	sig = SIGILL;
+
     if (!discard_result && sig == 0) {
 	fpu_implode(fe, res, FTYPE_EXT, &fpregs[regnum * 3]);
+
+	/* update fpsr according to the result of operation */
+	fpu_upd_fpsr(fe, res);
 #if DEBUG_FPE
 	printf("fpu_emul_arith: %08x,%08x,%08x stored in FP%d\n",
 	       fpregs[regnum*3], fpregs[regnum*3+1],
 	       fpregs[regnum*3+2], regnum);
     } else if (sig == 0) {
-	static char *class_name[] = { "SNAN", "QNAN", "ZERO", "NUM", "INF" };
+	static const char *class_name[] =
+	    { "SNAN", "QNAN", "ZERO", "NUM", "INF" };
 	printf("fpu_emul_arith: result(%s,%c,%d,%08x,%08x,%08x) discarded\n",
 	       class_name[res->fp_class + 2],
 	       res->fp_sign ? '-' : '+', res->fp_exp,
@@ -917,9 +943,6 @@ fpu_emul_arith(fe, insn)
 	printf("fpu_emul_arith: received signal %d\n", sig);
 #endif
     }
-
-    /* update fpsr according to the result of operation */
-    fpu_upd_fpsr(fe, res);
 
 #if DEBUG_FPE
     printf("fpu_emul_arith: FPSR = %08x, FPCR = %08x\n",
@@ -1090,6 +1113,7 @@ fpu_emul_type1(fe, insn)
 		    displ |= 0xffff0000;
 		}
 		insn->is_advance += displ;
+		/* XXX insn->is_nextpc = insn->is_pc + insn->is_advance; */
 	    } else {
 		insn->is_advance = 6;
 	    }
@@ -1190,7 +1214,7 @@ fpu_emul_brcc(fe, insn)
     if (sig == -1) {
 	/* branch does take place; 2 is the offset to the 1st disp word */
 	insn->is_advance = displ + 2;
-	insn->is_nextpc = insn->is_pc + insn->is_advance;
+	/* XXX insn->is_nextpc = insn->is_pc + insn->is_advance; */
     } else if (sig) {
 	return SIGILL;		/* got a signal */
     }

@@ -1,11 +1,7 @@
-/*	$NetBSD: math.h,v 1.3 2000/02/05 14:04:41 kleink Exp $	*/
+/*	$NetBSD: math.h,v 1.4.136.1 2009/05/11 20:09:20 bouyer Exp $	*/
 
-/*
- * ISO C99
- */
-#if !defined(_ANSI_SOURCE) && \
-    (!defined(_POSIX_C_SOURCE) && !defined(_XOPEN_SOURCE) || \
-     defined(_ISOC99_SOURCE) || (__STDC_VERSION__ - 0) >= 199901L)
-extern __const char	__nanf[];
-#define	NAN		(*(__const float *)(__const void *)__nanf)
+#define	__HAVE_NANF
+
+#ifdef _LP64
+#define	__HAVE_LONG_DOUBLE
 #endif

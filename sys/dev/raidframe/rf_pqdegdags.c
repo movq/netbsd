@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_pqdegdags.c,v 1.5 1999/08/15 02:36:40 oster Exp $	*/
+/*	$NetBSD: rf_pqdegdags.c,v 1.11 2005/12/11 12:23:37 christos Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -32,11 +32,15 @@
 */
 
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: rf_pqdegdags.c,v 1.11 2005/12/11 12:23:37 christos Exp $");
+
 #include "rf_archs.h"
 
 #if (RF_INCLUDE_DECL_PQ > 0) || (RF_INCLUDE_RAID6 > 0)
 
-#include "rf_types.h"
+#include <dev/raidframe/raidframevar.h>
+
 #include "rf_raid.h"
 #include "rf_dag.h"
 #include "rf_dagdegrd.h"
@@ -49,7 +53,7 @@
 #include "rf_pqdegdags.h"
 #include "rf_pq.h"
 
-static void 
+static void
 applyPDA(RF_Raid_t * raidPtr, RF_PhysDiskAddr_t * pda, RF_PhysDiskAddr_t * ppda,
     RF_PhysDiskAddr_t * qpda, void *bp);
 
@@ -106,7 +110,7 @@ rf_InitNode(node, rf_wait, RF_FALSE, rf_DiskReadFunc, rf_DiskReadUndoFunc, rf_Ge
   (_node_).params[0].p = _p_ ; \
   (_node_).params[1].p = (_p_)->bufPtr; \
   (_node_).params[2].v = parityStripeID; \
-  (_node_).params[3].v = RF_CREATE_PARAM3(RF_IO_NORMAL_PRIORITY, 0, 0, which_ru)
+  (_node_).params[3].v = RF_CREATE_PARAM3(RF_IO_NORMAL_PRIORITY, which_ru)
 
 #define DISK_NODE_PDA(node)  ((node)->params[0].p)
 
@@ -116,7 +120,7 @@ RF_CREATE_DAG_FUNC_DECL(rf_PQ_DoubleDegRead)
 	    "Rq", "PQ Recovery", rf_PQDoubleRecoveryFunc);
 }
 
-static void 
+static void
 applyPDA(raidPtr, pda, ppda, qpda, bp)
 	RF_Raid_t *raidPtr;
 	RF_PhysDiskAddr_t *pda;
@@ -183,7 +187,7 @@ applyPDA(raidPtr, pda, ppda, qpda, bp)
 */
 
 
-int 
+int
 rf_PQDoubleRecoveryFunc(node)
 	RF_DagNode_t *node;
 {
@@ -272,29 +276,29 @@ rf_PQDoubleRecoveryFunc(node)
 	return (0);
 }
 
-int 
+int
 rf_PQWriteDoubleRecoveryFunc(node)
 	RF_DagNode_t *node;
 {
 	/* The situation:
-	 * 
+	 *
 	 * We are doing a write that hits only one failed data unit. The other
 	 * failed data unit is not being overwritten, so we need to generate
 	 * it.
-	 * 
+	 *
 	 * For the moment, we assume all the nonfailed data being written is in
 	 * the shadow of the failed data unit. (i.e,, either a single data
 	 * unit write or the entire failed stripe unit is being overwritten. )
-	 * 
+	 *
 	 * Recovery strategy: apply the recovery data to the parity and q. Use P
 	 * & Q to recover the second failed data unit in P. Zero fill Q, then
 	 * apply the recovered data to p. Then apply the data being written to
 	 * the failed drive. Then walk through the surviving drives, applying
 	 * new data when it exists, othewise the recovery data. Quite a mess.
-	 * 
-	 * 
+	 *
+	 *
 	 * The params
-	 * 
+	 *
 	 * read pda0, read pda1, ... read pda (numDataCol-3), write pda0, ... ,
 	 * write pda (numStripeUnitAccess - numDataFailed), failed pda,
 	 * raidPtr, asmap */
@@ -345,7 +349,7 @@ rf_PQWriteDoubleRecoveryFunc(node)
 		rf_PQ_recover((unsigned long *) ppda->bufPtr, (unsigned long *) qpda->bufPtr, (unsigned long *) qpda->bufPtr, (unsigned long *) ppda->bufPtr, rf_RaidAddressToByte(raidPtr, pda->numSector), i, coeff);
 
 	/* OK. The valid data is in P. Zero fill Q, then inc it into it. */
-	bzero(qpda->bufPtr, rf_RaidAddressToByte(raidPtr, qpda->numSector));
+	memset(qpda->bufPtr, 0, rf_RaidAddressToByte(raidPtr, qpda->numSector));
 	rf_IncQ((unsigned long *) qpda->bufPtr, (unsigned long *) ppda->bufPtr, rf_RaidAddressToByte(raidPtr, qpda->numSector), i);
 
 	/* now apply all the write data to the buffer */

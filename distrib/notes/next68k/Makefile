@@ -1,3 +1,5 @@
-#	$NetBSD: Makefile,v 1.1 1999/04/01 17:10:35 dbj Exp $
+#	$NetBSD: Makefile,v 1.3 2002/07/21 08:14:50 lukem Exp $
 
-.include <bsd.prog.mk>
+MERGED_SRCS+=	${COMMON}/netboot
+
+.include <bsd.man.mk>

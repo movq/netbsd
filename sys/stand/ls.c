@@ -1,4 +1,4 @@
-/*	$NetBSD: ls.c,v 1.8 1998/09/13 15:19:13 christos Exp $	*/
+/*	$NetBSD: ls.c,v 1.13 2005/12/11 12:25:20 christos Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -43,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1993\n\
 #if 0
 static char sccsid[] = "@(#)ls.c	8.1 (Berkeley) 6/11/93";
 #else
-__RCSID("$NetBSD: ls.c,v 1.8 1998/09/13 15:19:13 christos Exp $");
+__RCSID("$NetBSD: ls.c,v 1.13 2005/12/11 12:25:20 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -74,11 +70,11 @@ main()
 		}
 
 		if (!S_ISDIR(st.st_mode)) {
-			printf("ls: not a direntory\n");
+			printf("ls: not a directory\n");
 			continue;
 		}
 		if (st.st_size == 0) {
-			printf("ls: zero length direntory\n");
+			printf("ls: zero length directory\n");
 			continue;
 		}
 		ls(fd);

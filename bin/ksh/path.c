@@ -1,11 +1,17 @@
-/*	$NetBSD: path.c,v 1.4 1999/10/20 15:10:00 hubertf Exp $	*/
+/*	$NetBSD: path.c,v 1.7 2005/06/26 19:09:00 christos Exp $	*/
+#include <sys/cdefs.h>
+
+#ifndef lint
+__RCSID("$NetBSD: path.c,v 1.7 2005/06/26 19:09:00 christos Exp $");
+#endif
+
 
 #include "sh.h"
 #include "ksh_stat.h"
 
 /*
  *	Contains a routine to search a : separated list of
- *	paths (a la CDPATH) and make appropiate file names.
+ *	paths (a la CDPATH) and make appropriate file names.
  *	Also contains a routine to simplify .'s and ..'s out of
  *	a path name.
  *
@@ -13,7 +19,7 @@
  */
 
 #ifdef S_ISLNK
-static char	*do_phys_path ARGS((XString *xsp, char *xp, const char *path));
+static char	*do_phys_path ARGS((XString *, char *, const char *));
 #endif /* S_ISLNK */
 
 /*
@@ -29,7 +35,7 @@ static char	*do_phys_path ARGS((XString *xsp, char *xp, const char *path));
  *	- cdpathp is set to the start of the next element in cdpathp (or NULL
  *	  if there are no more elements.
  *	The return value indicates whether a non-null element from cdpathp
- *	was appened to result.
+ *	was appended to result.
  */
 int
 make_path(cwd, file, cdpathp, xsp, phys_pathp)
@@ -110,22 +116,22 @@ make_path(cwd, file, cdpathp, xsp, phys_pathp)
  * ie, simplify_path("/a/b/c/./../d/..") returns "/a/b"
  */
 void
-simplify_path(path)
-	char	*path;
+simplify_path(pathx)
+	char	*pathx;
 {
 	char	*cur;
 	char	*t;
 	int	isrooted;
-	char	*very_start = path;
+	char	*very_start = pathx;
 	char	*start;
 
-	if (!*path)
+	if (!*pathx)
 		return;
 
-	if ((isrooted = ISROOTEDPATH(path)))
+	if ((isrooted = ISROOTEDPATH(pathx)))
 		very_start++;
 #if defined (OS2) || defined (__CYGWIN__)
-	if (path[0] && path[1] == ':')	/* skip a: */
+	if (pathx[0] && pathx[1] == ':')	/* skip a: */
 		very_start += 2;
 #endif /* OS2 || __CYGWIN__ */
 
@@ -146,7 +152,7 @@ simplify_path(path)
 
 #ifdef __CYGWIN__
        /* preserve leading double-slash on pathnames (for UNC paths) */
-       if (path[0] && ISDIRSEP(path[0]) && path[1] && ISDIRSEP(path[1]))
+       if (pathx[0] && ISDIRSEP(pathx[0]) && pathx[1] && ISDIRSEP(pathx[1]))
                very_start++;
 #endif /* __CYGWIN__ */
 
@@ -156,7 +162,7 @@ simplify_path(path)
 			t++;
 
 		if (*t == '\0') {
-			if (cur == path)
+			if (cur == pathx)
 				/* convert empty path to dot */
 				*cur++ = '.';
 			*cur = '\0';
@@ -193,11 +199,11 @@ simplify_path(path)
 
 
 void
-set_current_wd(path)
-	char *path;
+set_current_wd(pathx)
+	char *pathx;
 {
 	int len;
-	char *p = path;
+	char *p = pathx;
 
 	if (!p && !(p = ksh_get_wd((char *) 0, 0)))
 		p = null;
@@ -207,21 +213,21 @@ set_current_wd(path)
 	if (len > current_wd_size)
 		current_wd = aresize(current_wd, current_wd_size = len, APERM);
 	memcpy(current_wd, p, len);
-	if (p != path && p != null)
+	if (p != pathx && p != null)
 		afree(p, ATEMP);
 }
 
 #ifdef S_ISLNK
 char *
-get_phys_path(path)
-	const char *path;
+get_phys_path(pathx)
+	const char *pathx;
 {
 	XString xs;
 	char *xp;
 
-	Xinit(xs, xp, strlen(path) + 1, ATEMP);
+	Xinit(xs, xp, strlen(pathx) + 1, ATEMP);
 
-	xp = do_phys_path(&xs, xp, path);
+	xp = do_phys_path(&xs, xp, pathx);
 
 	if (!xp)
 		return (char *) 0;
@@ -234,10 +240,10 @@ get_phys_path(path)
 }
 
 static char *
-do_phys_path(xsp, xp, path)
+do_phys_path(xsp, xp, pathx)
 	XString *xsp;
 	char *xp;
-	const char *path;
+	const char *pathx;
 {
 	const char *p, *q;
 	int len, llen;
@@ -245,7 +251,7 @@ do_phys_path(xsp, xp, path)
 	char lbuf[PATH];
 
 	Xcheck(*xsp, xp);
-	for (p = path; p; p = q) {
+	for (p = pathx; p; p = q) {
 		while (ISDIRSEP(*p))
 			p++;
 		if (!*p)

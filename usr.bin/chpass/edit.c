@@ -1,4 +1,4 @@
-/*	$NetBSD: edit.c,v 1.12 1998/07/26 21:25:16 mycroft Exp $	*/
+/*	$NetBSD: edit.c,v 1.19 2005/06/02 01:42:11 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)edit.c	8.3 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: edit.c,v 1.12 1998/07/26 21:25:16 mycroft Exp $");
+__RCSID("$NetBSD: edit.c,v 1.19 2005/06/02 01:42:11 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -54,14 +50,13 @@ __RCSID("$NetBSD: edit.c,v 1.12 1998/07/26 21:25:16 mycroft Exp $");
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <util.h>
 
 #include "chpass.h"
 
 void
-edit(tempname, pw)
-	char *tempname;
-	struct passwd *pw;
+edit(char *tempname, struct passwd *pw)
 {
 	struct stat begin, end;
 
@@ -73,7 +68,6 @@ edit(tempname, pw)
 			(*Pw_error)(tempname, 1, 1);
 		if (begin.st_mtime == end.st_mtime) {
 			warnx("no changes made");
-			unlink(tempname);
 			(*Pw_error)(NULL, 0, 0);
 		}
 		if (verify(tempname, pw))
@@ -93,10 +87,7 @@ edit(tempname, pw)
  *	set conditional flag if the user gets to edit the shell.
  */
 void
-display(tempname, fd, pw)
-	char *tempname;
-	int fd;
-	struct passwd *pw;
+display(char *tempname, int fd, struct passwd *pw)
 {
 	FILE *fp;
 	char *bp, *p;
@@ -133,6 +124,10 @@ display(tempname, fd, pw)
 	else
 		list[E_SHELL].restricted = 1;
 	bp = strdup(pw->pw_gecos);
+	if (!bp) {
+		err(1, "strdup");
+		/*NOTREACHED*/
+	}
 	p = strsep(&bp, ",");
 	(void)fprintf(fp, "Full Name: %s\n", p ? p : "");
 	p = strsep(&bp, ",");
@@ -147,22 +142,21 @@ display(tempname, fd, pw)
 }
 
 int
-verify(tempname, pw)
-	char *tempname;
-	struct passwd *pw;
+verify(char *tempname, struct passwd *pw)
 {
 	ENTRY *ep;
 	char *p;
 	struct stat sb;
-	FILE *fp;
-	int len;
+	FILE *fp = NULL;
+	int len, fd;
 	static char buf[LINE_MAX];
 
-	if (!(fp = fopen(tempname, "r")))
+	if ((fd = open(tempname, O_RDONLY|O_NOFOLLOW)) == -1 ||
+	    (fp = fdopen(fd, "r")) == NULL)
 		(*Pw_error)(tempname, 1, 1);
-	if (fstat(fileno(fp), &sb))
+	if (fstat(fd, &sb))
 		(*Pw_error)(tempname, 1, 1);
-	if (sb.st_size == 0) {
+	if (sb.st_size == 0 || sb.st_nlink != 1) {
 		warnx("corrupted temporary file");
 		goto bad;
 	}
@@ -190,7 +184,7 @@ verify(tempname, pw)
 					warnx("line corrupted");
 					goto bad;
 				}
-				while (isspace(*++p));
+				while (isspace((unsigned char)*++p));
 				if (ep->except && strpbrk(p, ep->except)) {
 					warnx(
 				   "illegal character in the \"%s\" field",

@@ -1,4 +1,4 @@
-/*	$NetBSD: cp.c,v 1.28 1999/09/05 16:14:43 kleink Exp $	*/
+/* $NetBSD: cp.c,v 1.51 2008/07/20 00:52:39 lukem Exp $ */
 
 /*
  * Copyright (c) 1988, 1993, 1994
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -39,15 +35,15 @@
 #include <sys/cdefs.h>
 #ifndef lint
 __COPYRIGHT(
-"@(#) Copyright (c) 1988, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+"@(#) Copyright (c) 1988, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)cp.c	8.5 (Berkeley) 4/29/95";
 #else
-__RCSID("$NetBSD: cp.c,v 1.28 1999/09/05 16:14:43 kleink Exp $");
+__RCSID("$NetBSD: cp.c,v 1.51 2008/07/20 00:52:39 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -73,6 +69,7 @@ __RCSID("$NetBSD: cp.c,v 1.28 1999/09/05 16:14:43 kleink Exp $");
 #include <errno.h>
 #include <fts.h>
 #include <locale.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -84,32 +81,32 @@ __RCSID("$NetBSD: cp.c,v 1.28 1999/09/05 16:14:43 kleink Exp $");
                 *--(p).p_end = '\0';					\
 }
 
-PATH_T to = { to.p_path, "" };
+static char empty[] = "";
+PATH_T to = { .p_end = to.p_path, .target_end = empty  };
 
 uid_t myuid;
-int Rflag, iflag, pflag, rflag, fflag;
+int Hflag, Lflag, Rflag, Pflag, fflag, iflag, pflag, rflag, vflag, Nflag;
 mode_t myumask;
 
 enum op { FILE_TO_FILE, FILE_TO_DIR, DIR_TO_DNE };
 
-int main __P((int, char *[]));
-int copy __P((char *[], enum op, int));
-int mastercmp __P((const FTSENT **, const FTSENT **));
+int 	main(int, char *[]);
+int 	copy(char *[], enum op, int);
+int 	mastercmp(const FTSENT **, const FTSENT **);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	struct stat to_stat, tmp_stat;
 	enum op type;
-	int Hflag, Lflag, Pflag, ch, fts_options, r;
-	char *target;
+	int ch, fts_options, r, have_trailing_slash;
+	char *target, **src;
 
+	setprogname(argv[0]);
 	(void)setlocale(LC_ALL, "");
 
 	Hflag = Lflag = Pflag = Rflag = 0;
-	while ((ch = getopt(argc, argv, "HLPRfipr")) != -1) 
+	while ((ch = getopt(argc, argv, "HLNPRfiprv")) != -1) 
 		switch (ch) {
 		case 'H':
 			Hflag = 1;
@@ -118,6 +115,9 @@ main(argc, argv)
 		case 'L':
 			Lflag = 1;
 			Hflag = Pflag = 0;
+			break;
+		case 'N':
+			Nflag = 1;
 			break;
 		case 'P':
 			Pflag = 1;
@@ -140,10 +140,13 @@ main(argc, argv)
 		case 'r':
 			rflag = 1;
 			break;
+		case 'v':
+			vflag = 1;
+			break;
 		case '?':
 		default:
 			usage();
-			break;
+			/* NOTREACHED */
 		}
 	argc -= optind;
 	argv += optind;
@@ -153,15 +156,20 @@ main(argc, argv)
 
 	fts_options = FTS_NOCHDIR | FTS_PHYSICAL;
 	if (rflag) {
-		if (Rflag)
-			errx(1,
+		if (Rflag) {
+			errx(EXIT_FAILURE,
 		    "the -R and -r options may not be specified together.");
-		if (Hflag || Lflag || Pflag)
-			errx(1,
+			/* NOTREACHED */
+		}
+		if (Hflag || Lflag || Pflag) {
+			errx(EXIT_FAILURE,
 	"the -H, -L, and -P options may not be specified with the -r option.");
+			/* NOTREACHED */
+		}
 		fts_options &= ~FTS_PHYSICAL;
 		fts_options |= FTS_LOGICAL;
 	}
+
 	if (Rflag) {
 		if (Hflag)
 			fts_options |= FTS_COMFOLLOW;
@@ -169,7 +177,7 @@ main(argc, argv)
 			fts_options &= ~FTS_PHYSICAL;
 			fts_options |= FTS_LOGICAL;
 		}
-	} else {
+	} else if (!Pflag) {
 		fts_options &= ~FTS_PHYSICAL;
 		fts_options |= FTS_LOGICAL | FTS_COMFOLLOW;
 	}
@@ -182,15 +190,12 @@ main(argc, argv)
 
 	/* Save the target base in "to". */
 	target = argv[--argc];
-	if (strlen(target) > MAXPATHLEN)
-		errx(1, "%s: name too long", target);
-	(void)strcpy(to.p_path, target);
+	if (strlcpy(to.p_path, target, sizeof(to.p_path)) >= sizeof(to.p_path))
+		errx(EXIT_FAILURE, "%s: name too long", target);
 	to.p_end = to.p_path + strlen(to.p_path);
-        if (to.p_path == to.p_end) {
-		*to.p_end++ = '.';
-		*to.p_end = 0;
-	}
-        STRIP_TRAILING_SLASH(to);
+	have_trailing_slash = (to.p_end[-1] == '/');
+	if (have_trailing_slash)
+		STRIP_TRAILING_SLASH(to);
 	to.target_end = to.p_end;
 
 	/* Set end of argument list for fts(3). */
@@ -210,17 +215,20 @@ main(argc, argv)
 	 *
 	 * In (2), the real target is not directory, but "directory/source".
 	 */
-	r = stat(to.p_path, &to_stat);
-	if (r == -1 && errno != ENOENT)
-		err(1, "%s", to.p_path);
+	if (Pflag)
+		r = lstat(to.p_path, &to_stat);
+	else
+		r = stat(to.p_path, &to_stat);
+	if (r == -1 && errno != ENOENT) {
+		err(EXIT_FAILURE, "%s", to.p_path);
+		/* NOTREACHED */
+	}
 	if (r == -1 || !S_ISDIR(to_stat.st_mode)) {
 		/*
 		 * Case (1).  Target is not a directory.
 		 */ 
-		if (argc > 1) {
+		if (argc > 1)
 			usage();
-			exit(1);
-		}
 		/*
 		 * Need to detect the case:
 		 *	cp -R dir foo
@@ -233,8 +241,10 @@ main(argc, argv)
 				r = stat(*argv, &tmp_stat);
 			else
 				r = lstat(*argv, &tmp_stat);
-			if (r == -1)
-				err(1, "%s", *argv);
+			if (r == -1) {
+				err(EXIT_FAILURE, "%s", *argv);
+				/* NOTREACHED */
+			}
 			
 			if (S_ISDIR(tmp_stat.st_mode) && (Rflag || rflag))
 				type = DIR_TO_DNE;
@@ -242,6 +252,14 @@ main(argc, argv)
 				type = FILE_TO_FILE;
 		} else
 			type = FILE_TO_FILE;
+
+		if (have_trailing_slash && type == FILE_TO_FILE) {
+			if (r == -1)
+				errx(1, "directory %s does not exist",
+				     to.p_path);
+			else
+				errx(1, "%s is not a directory", to.p_path);
+		}
 	} else {
 		/*
 		 * Case (2).  Target is a directory.
@@ -249,38 +267,50 @@ main(argc, argv)
 		type = FILE_TO_DIR;
 	}
 
-	exit (copy(argv, type, fts_options));
+	/*
+	 * make "cp -rp src/ dst" behave like "cp -rp src dst" not
+	 * like "cp -rp src/. dst"
+	 */
+	for (src = argv; *src; src++) {
+		size_t len = strlen(*src);
+		while (len-- > 1 && (*src)[len] == '/')
+			(*src)[len] = '\0';
+	}
+
+	exit(copy(argv, type, fts_options));
 	/* NOTREACHED */
 }
 
 int
-copy(argv, type, fts_options)
-	char *argv[];
-	enum op type;
-	int fts_options;
+copy(char *argv[], enum op type, int fts_options)
 {
 	struct stat to_stat;
 	FTS *ftsp;
 	FTSENT *curr;
-	int base, dne, nlen, rval;
-	char *p, *tmp;
+	int base, dne, sval;
+	int this_failed, any_failed;
+	size_t nlen;
+	char *p, *target_mid;
 
+	dne = 0;
 	base = 0;	/* XXX gcc -Wuninitialized (see comment below) */
 
 	if ((ftsp = fts_open(argv, fts_options, mastercmp)) == NULL)
-		err(1, argv[0]);
-	for (rval = 0; (curr = fts_read(ftsp)) != NULL;) {
+		err(EXIT_FAILURE, "%s", argv[0]);
+		/* NOTREACHED */
+	for (any_failed = 0; (curr = fts_read(ftsp)) != NULL;) {
+		this_failed = 0;
 		switch (curr->fts_info) {
 		case FTS_NS:
 		case FTS_DNR:
 		case FTS_ERR:
-			warnx("%s: %s",
-			    curr->fts_path, strerror(curr->fts_errno));
-			rval = 1;
+			warnx("%s: %s", curr->fts_path,
+					strerror(curr->fts_errno));
+			this_failed = any_failed = 1;
 			continue;
 		case FTS_DC:			/* Warn, continue. */
 			warnx("%s: directory causes a cycle", curr->fts_path);
-			rval = 1;
+			this_failed = any_failed = 1;
 			continue;
 		}
 
@@ -291,9 +321,9 @@ copy(argv, type, fts_options)
 		if (type != FILE_TO_FILE) {
 			if ((curr->fts_namelen +
 			    to.target_end - to.p_path + 1) > MAXPATHLEN) {
-				warnx("%s/%s: name too long (not copied)", 
-				    to.p_path, curr->fts_name);
-				rval = 1;
+				warnx("%s/%s: name too long (not copied)",
+						to.p_path, curr->fts_name);
+				this_failed = any_failed = 1;
 				continue;
 			}
 
@@ -331,27 +361,33 @@ copy(argv, type, fts_options)
 
 			p = &curr->fts_path[base];
 			nlen = curr->fts_pathlen - base;
+			target_mid = to.target_end;
+			if (*p != '/' && target_mid[-1] != '/')
+				*target_mid++ = '/';
+			*target_mid = 0;
 
-			tmp = to.target_end;
-			if (*p != '/' && *(tmp - 1) != '/')
-				*tmp++ = '/';
-			*tmp = 0;
-
-			(void)strncat(tmp, p, nlen);
-			to.p_end = tmp + nlen;
+			if (target_mid - to.p_path + nlen >= PATH_MAX) {
+				warnx("%s%s: name too long (not copied)",
+				    to.p_path, p);
+				this_failed = any_failed = 1;
+				continue;
+			}
+			(void)strncat(target_mid, p, nlen);
+			to.p_end = target_mid + nlen;
 			*to.p_end = 0;
 			STRIP_TRAILING_SLASH(to);
 		}
 
+		sval = Pflag ? lstat(to.p_path, &to_stat) : stat(to.p_path, &to_stat);
 		/* Not an error but need to remember it happened */
-		if (stat(to.p_path, &to_stat) == -1)
+		if (sval == -1)
 			dne = 1;
 		else {
 			if (to_stat.st_dev == curr->fts_statp->st_dev &&
 			    to_stat.st_ino == curr->fts_statp->st_ino) {
 				warnx("%s and %s are identical (not copied).",
 				    to.p_path, curr->fts_path);
-				rval = 1;
+				this_failed = any_failed = 1;
 				if (S_ISDIR(curr->fts_statp->st_mode))
 					(void)fts_set(ftsp, curr, FTS_SKIP);
 				continue;
@@ -360,10 +396,11 @@ copy(argv, type, fts_options)
 			    S_ISDIR(to_stat.st_mode)) {
 		warnx("cannot overwrite directory %s with non-directory %s",
 				    to.p_path, curr->fts_path);
-				rval = 1;
+				this_failed = any_failed = 1;
 				continue;
 			}
-			dne = 0;
+			if (!S_ISDIR(curr->fts_statp->st_mode))
+				dne = 0;
 		}
 
 		switch (curr->fts_statp->st_mode & S_IFMT) {
@@ -372,10 +409,10 @@ copy(argv, type, fts_options)
 			if((fts_options & FTS_LOGICAL) ||
 			   ((fts_options & FTS_COMFOLLOW) && curr->fts_level == 0)) {
 				if (copy_file(curr, dne))
-					rval = 1;
+					this_failed = any_failed = 1;
 			} else {	
 				if (copy_link(curr, !dne))
-					rval = 1;
+					this_failed = any_failed = 1;
 			}
 			break;
 		case S_IFDIR:
@@ -384,7 +421,7 @@ copy(argv, type, fts_options)
 					warnx("%s is a directory (not copied).",
 					    curr->fts_path);
 				(void)fts_set(ftsp, curr, FTS_SKIP);
-				rval = 1;
+				this_failed = any_failed = 1;
 				break;
 			}
 
@@ -406,10 +443,14 @@ copy(argv, type, fts_options)
 				if (dne) {
 					if (mkdir(to.p_path, 
 					    curr->fts_statp->st_mode | S_IRWXU) < 0)
-						err(1, "%s", to.p_path);
+						err(EXIT_FAILURE, "%s",
+						    to.p_path);
+						/* NOTREACHED */
 				} else if (!S_ISDIR(to_stat.st_mode)) {
 					errno = ENOTDIR;
-					err(1, "%s", to.p_path);
+					err(EXIT_FAILURE, "%s",
+						to.p_path);
+					/* NOTREACHED */
 				}
 			}
 			else if (curr->fts_info == FTS_DP) /* Second pass */
@@ -421,45 +462,58 @@ copy(argv, type, fts_options)
                         	 * forever.
 				 */
 				if (pflag && setfile(curr->fts_statp, 0))
-					rval = 1;
+					this_failed = any_failed = 1;
 				else if (dne)
 					(void)chmod(to.p_path, 
 					    curr->fts_statp->st_mode);
+
+				/*
+				 * Since this is the second pass, we already
+				 * noted (and acted on) the existence of the
+				 * directory.
+				 */
+				dne = 0;
 			}
 			else
-                        {
-                        	warnx("directory %s encountered when not expected.", curr->fts_path);
-                        	rval = 1;
-                                break;
-                        }
+			{
+				warnx("directory %s encountered when not expected.",
+				    curr->fts_path);
+				this_failed = any_failed = 1;
+				break;
+			}
 
 			break;
 		case S_IFBLK:
 		case S_IFCHR:
 			if (Rflag) {
 				if (copy_special(curr->fts_statp, !dne))
-					rval = 1;
+					this_failed = any_failed = 1;
 			} else
 				if (copy_file(curr, dne))
-					rval = 1;
+					this_failed = any_failed = 1;
 			break;
 		case S_IFIFO:
 			if (Rflag) {
 				if (copy_fifo(curr->fts_statp, !dne))
-					rval = 1;
+					this_failed = any_failed = 1;
 			} else 
 				if (copy_file(curr, dne))
-					rval = 1;
+					this_failed = any_failed = 1;
 			break;
 		default:
 			if (copy_file(curr, dne))
-				rval = 1;
+				this_failed = any_failed = 1;
 			break;
 		}
+		if (vflag && !this_failed)
+			(void)printf("%s -> %s\n", curr->fts_path, to.p_path);
 	}
-	if (errno)
-		err(1, "fts_read");
-	return (rval);
+	if (errno) {
+		err(EXIT_FAILURE, "fts_read");
+		/* NOTREACHED */
+	}
+	(void)fts_close(ftsp);
+	return (any_failed);
 }
 
 /*
@@ -471,8 +525,7 @@ copy(argv, type, fts_options)
  *	files first reduces seeking.
  */
 int
-mastercmp(a, b)
-	const FTSENT **a, **b;
+mastercmp(const FTSENT **a, const FTSENT **b)
 {
 	int a_info, b_info;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: login_tty.c,v 1.9 1999/09/20 04:48:07 lukem Exp $	*/
+/*	$NetBSD: login_tty.c,v 1.12 2008/02/09 05:07:26 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)login_tty.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: login_tty.c,v 1.9 1999/09/20 04:48:07 lukem Exp $");
+__RCSID("$NetBSD: login_tty.c,v 1.12 2008/02/09 05:07:26 dholland Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -51,8 +47,7 @@ __RCSID("$NetBSD: login_tty.c,v 1.9 1999/09/20 04:48:07 lukem Exp $");
 #include <util.h>
 
 int
-login_tty(fd)
-	int fd;
+login_tty(int fd)
 {
 
 	_DIAGASSERT(fd != -1);
@@ -60,10 +55,10 @@ login_tty(fd)
 	(void) setsid();
 	if (ioctl(fd, TIOCSCTTY, (char *)NULL) == -1)
 		return (-1);
-	(void) dup2(fd, 0);
-	(void) dup2(fd, 1);
-	(void) dup2(fd, 2);
-	if (fd > STDERR_FILENO)
+	(void) dup2(fd, STDIN_FILENO);
+	(void) dup2(fd, STDOUT_FILENO);
+	(void) dup2(fd, STDERR_FILENO);
+	if (fd != STDIN_FILENO && fd != STDOUT_FILENO && fd != STDERR_FILENO)
 		(void) close(fd);
 	return (0);
 }

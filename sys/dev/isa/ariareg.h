@@ -1,4 +1,4 @@
-/*	$NetBSD: ariareg.h,v 1.2 1998/07/21 07:48:36 mycroft Exp $	*/
+/*	$NetBSD: ariareg.h,v 1.5 2005/12/11 12:22:02 christos Exp $	*/
 
 /*
  * Copyright (c) 1995, 1996 Roland C. Dowdeswell.  All rights reserved.
@@ -70,11 +70,11 @@
 #define ARIAR_NPOLL		30000
 #define ARIAR_OPEN_PLAY		0x0002
 #define ARIAR_OPEN_RECORD	0x0001
-#define ARIAR_PLAY_CHAN         1
+#define ARIAR_PLAY_CHAN		1
 #define ARIAR_RECORD_CHAN       0
 #define ARIAR_BUSY		0x8000
 #define ARIAR_ARIA_SYNTH	0x0080
-#define ARIAR_SR22K             0x0040
+#define ARIAR_SR22K		0x0040
 #define ARIAR_DSPINTWR		0x0008
 #define ARIAR_PCINTWR		0x0002
 
@@ -91,7 +91,7 @@
 #define	ARIADSPC_CDVOLUME	0x0007
 #define	ARIADSPC_MICVOLUME	0x0008
 #define	ARIADSPC_MIXERCONFIG	0x0009
-#define ARIADSPC_FORCEINTR	0x000a	/* Force an Interupt */
+#define ARIADSPC_FORCEINTR	0x000a	/* Force an Interrupt */
 #define ARIADSPC_TRANSCOMPLETE	0x0010	/* Transfer Complete */
 #define ARIADSPC_START_PLAY	0x0011
 #define ARIADSPC_STOP_PLAY	0x0012
@@ -135,4 +135,4 @@
 #define ARIAMIX_OUTPUT_CLASS	17
 #define ARIAMIX_INPUT_CLASS	18
 #define ARIAMIX_RECORD_CLASS	19
-#define ARIAMIX_EQ_CLASS        20
+#define ARIAMIX_EQ_CLASS	20

@@ -1,4 +1,4 @@
-/*	$NetBSD: intreg.h,v 1.9 1998/10/26 08:12:15 pk Exp $ */
+/*	$NetBSD: intreg.h,v 1.13 2005/11/16 22:10:58 uwe Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -21,11 +21,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -72,8 +68,8 @@
 #define	IE_ALLIE	0x01	/* enable interrupts */
 
 #ifndef _LOCORE
-void	ienab_bis __P((int bis));	/* set given bits */
-void	ienab_bic __P((int bic));	/* clear given bits */
+void	ienab_bis(int);		/* set given bits */
+void	ienab_bic(int);		/* clear given bits */
 #endif
 
 #ifdef notyet
@@ -97,9 +93,9 @@ void	ienab_bic __P((int bic));	/* clear given bits */
  */
 #ifndef _LOCORE
 struct icr_pi {
-	u_int32_t	pi_pend;	/* Pending interrupts (read-only) */
-	u_int32_t	pi_clr;		/* Clear interrupts (write-only) */
-	u_int32_t	pi_set;		/* Raise interrupts (write-only) */
+	uint32_t	pi_pend;	/* Pending interrupts (read-only) */
+	uint32_t	pi_clr;		/* Clear interrupts (write-only) */
+	uint32_t	pi_set;		/* Raise interrupts (write-only) */
 };
 #endif
 #define ICR_PI_PEND_OFFSET	0
@@ -150,3 +146,14 @@ struct icr_pi {
 				"f\0\7VME\0f\7\7SBUS\0b\16K\0b\17S\0b\20E\0"  \
 				"b\21A\0b\22SC\0b\23T\0b\24VI\0b\25MI\0"      \
 				"b\26F\0b\33V\0b\34M\0b\35I\0b\36ME\0b\37MA\0"
+
+/*
+ * Set & clear bits in the system interrupt register
+ */
+#define	icr_si_bis(bis) do {			\
+	*((uint32_t *)ICR_SI_SET) = (bis);	\
+} while (0)
+
+#define	icr_si_bic(bic) do {			\
+	*((uint32_t *)ICR_SI_CLR) = (bic);	\
+} while (0)

@@ -1,4 +1,4 @@
-/*	$NetBSD: expand.c,v 1.8 1999/02/10 16:15:31 kleink Exp $	*/
+/*	$NetBSD: expand.c,v 1.12 2008/07/21 14:19:22 lukem Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,39 +31,40 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)expand.c	8.1 (Berkeley) 6/9/93";
 #endif
-__RCSID("$NetBSD: expand.c,v 1.8 1999/02/10 16:15:31 kleink Exp $");
+__RCSID("$NetBSD: expand.c,v 1.12 2008/07/21 14:19:22 lukem Exp $");
 #endif /* not lint */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
 #include <unistd.h>
+#include <err.h>
 
 /*
  * expand - expand tabs to equivalent spaces
  */
-int	nstops;
-int	tabstops[100];
+size_t	nstops;
+size_t	tabstops[100];
 
-static	void	getstops __P((char *));
-	int	main __P((int, char **));
-static	void	usage __P((void));
+static	void	getstops(const char *);
+	int	main(int, char **);
+static	void	usage(void) __dead;
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
-	int c, column;
-	int n;
+	int c;
+	size_t n, column;
+
+	setprogname(argv[0]);
 
 	/* handle obsolete syntax */
 	while (argc > 1 &&
@@ -92,10 +89,8 @@ main(argc, argv)
 
 	do {
 		if (argc > 0) {
-			if (freopen(argv[0], "r", stdin) == NULL) {
-				perror(argv[0]);
-				exit(EXIT_FAILURE);
-			}
+			if (freopen(argv[0], "r", stdin) == NULL)
+				err(EXIT_FAILURE, "Cannot open `%s'", argv[0]);
 			argc--, argv++;
 		}
 		column = 0;
@@ -113,7 +108,8 @@ main(argc, argv)
 					do {
 						putchar(' ');
 						column++;
-					} while (((column - 1) % tabstops[0]) != (tabstops[0] - 1));
+					} while (((column - 1) % tabstops[0])
+					    != (tabstops[0] - 1));
 					continue;
 				}
 				for (n = 0; n < nstops; n++)
@@ -148,41 +144,40 @@ main(argc, argv)
 			}
 		}
 	} while (argc > 0);
-	exit(EXIT_SUCCESS);
-	/* NOTREACHED */
+	return EXIT_SUCCESS;
 }
 
 static void
-getstops(cp)
-	char *cp;
+getstops(const char *spec)
 {
 	int i;
+	const char *cp = spec;
 
 	nstops = 0;
 	for (;;) {
 		i = 0;
 		while (*cp >= '0' && *cp <= '9')
 			i = i * 10 + *cp++ - '0';
-		if (i <= 0 || i > 256) {
-bad:
-			fprintf(stderr, "Bad tab stop spec\n");
-			exit(EXIT_FAILURE);
-		}
+		if (i <= 0 || i > 256)
+			errx(EXIT_FAILURE, "Too large tab stop spec `%d'", i);
 		if (nstops > 0 && i <= tabstops[nstops-1])
-			goto bad;
+			errx(EXIT_FAILURE, "Out of order tabstop spec `%d'", i);
+		if (nstops == sizeof(tabstops) / sizeof(tabstops[0]) - 1)
+			errx(EXIT_FAILURE, "Too many tabstops");
 		tabstops[nstops++] = i;
-		if (*cp == 0)
+		if (*cp == '\0')
 			break;
 		if (*cp != ',' && *cp != ' ')
-			goto bad;
+			errx(EXIT_FAILURE, "Illegal tab stop spec `%s'", spec);
 		cp++;
 	}
 }
 
 static void
-usage()
+usage(void)
 {
 
-	(void)fprintf(stderr, "usage: expand [-t tablist] [file ...]\n");
+	(void)fprintf(stderr, "Usage: %s [-t tablist] [file ...]\n",
+	    getprogname());
 	exit(EXIT_FAILURE);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_machdep.c,v 1.4 2000/03/31 14:51:55 soren Exp $	*/
+/*	$NetBSD: pci_machdep.c,v 1.27 2008/05/30 19:26:35 ad Exp $	*/
 
 /*
  * Copyright (c) 2000 Soren S. Jorvang.  All rights reserved.
@@ -25,15 +25,16 @@
  * SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.27 2008/05/30 19:26:35 ad Exp $");
+
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/time.h>
 #include <sys/systm.h>
 #include <sys/errno.h>
 #include <sys/device.h>
-
-#include <vm/vm.h>
-#include <vm/vm_kern.h>
+#include <sys/extent.h>
 
 #define _COBALT_BUS_DMA_PRIVATE
 #include <machine/bus.h>
@@ -42,13 +43,17 @@
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcidevs.h>
+#include <dev/pci/pciconf.h>
+#include <dev/pci/pciide_apollo_reg.h>
+
+#include <cobalt/dev/gtreg.h>
 
 /*
  * PCI doesn't have any special needs; just use
  * the generic versions of these functions.
  */
 struct cobalt_bus_dma_tag pci_bus_dma_tag = {
-	_bus_dmamap_create, 
+	_bus_dmamap_create,
 	_bus_dmamap_destroy,
 	_bus_dmamap_load,
 	_bus_dmamap_load_mbuf,
@@ -64,9 +69,8 @@ struct cobalt_bus_dma_tag pci_bus_dma_tag = {
 };
 
 void
-pci_attach_hook(parent, self, pba)
-	struct device *parent, *self;
-	struct pcibus_attach_args *pba;
+pci_attach_hook(struct device *parent, struct device *self,
+    struct pcibus_attach_args *pba)
 {
 	/* XXX */
 
@@ -74,27 +78,23 @@ pci_attach_hook(parent, self, pba)
 }
 
 int
-pci_bus_maxdevs(pc, busno)
-	pci_chipset_tag_t pc;
-	int busno;
+pci_bus_maxdevs(pci_chipset_tag_t pc, int busno)
 {
-	return 31;		/* Probing device 31 hangs the system. */
+
+	return 32;
 }
 
 pcitag_t
-pci_make_tag(pc, bus, device, function)
-	pci_chipset_tag_t pc;
-	int bus, device, function;
+pci_make_tag(pci_chipset_tag_t pc, int bus, int device, int function)
 {
+
 	return (bus << 16) | (device << 11) | (function << 8);
 }
 
 void
-pci_decompose_tag(pc, tag, bp, dp, fp)
-	pci_chipset_tag_t pc;
-	pcitag_t tag;
-	int *bp, *dp, *fp;
+pci_decompose_tag(pci_chipset_tag_t pc, pcitag_t tag, int *bp, int *dp, int *fp)
 {
+
 	if (bp != NULL)
 		*bp = (tag >> 16) & 0xff;
 	if (dp != NULL)
@@ -103,99 +103,189 @@ pci_decompose_tag(pc, tag, bp, dp, fp)
 		*fp = (tag >> 8) & 0x07;
 }
 
-#define PCI_CFG_ADDR	((volatile u_int32_t *)MIPS_PHYS_TO_KSEG1(0x14000cf8))
-#define PCI_CFG_DATA	((volatile u_int32_t *)MIPS_PHYS_TO_KSEG1(0x14000cfc))
-
 pcireg_t
-pci_conf_read(pc, tag, reg)
-	pci_chipset_tag_t pc;
-	pcitag_t tag;
-	int reg;
+pci_conf_read(pci_chipset_tag_t pc, pcitag_t tag, int reg)
 {
 	pcireg_t data;
+	int bus, dev, func;
 
-	*PCI_CFG_ADDR = 0x80000000 | tag | reg;
-	data = *PCI_CFG_DATA;
-	*PCI_CFG_ADDR = 0;
+	pci_decompose_tag(pc, tag, &bus, &dev, &func);
+
+	/*
+	 * 2700 hardware wedges on accesses to device 6.
+	 */
+	if (bus == 0 && dev == 6)
+		return 0;
+	/*
+	 * 2800 hardware wedges on accesses to device 31.
+	 */
+	if (bus == 0 && dev == 31)
+		return 0;
+
+	bus_space_write_4(pc->pc_bst, pc->pc_bsh, GT_PCICFG_ADDR,
+	    PCICFG_ENABLE | tag | reg);
+	data = bus_space_read_4(pc->pc_bst, pc->pc_bsh, GT_PCICFG_DATA);
+	bus_space_write_4(pc->pc_bst, pc->pc_bsh, GT_PCICFG_ADDR, 0);
 
 	return data;
 }
 
 void
-pci_conf_write(pc, tag, reg, data)
-	pci_chipset_tag_t pc;
-	pcitag_t tag;
-	int reg;
-	pcireg_t data;
+pci_conf_write(pci_chipset_tag_t pc, pcitag_t tag, int reg, pcireg_t data)
 {
-	*PCI_CFG_ADDR = 0x80000000 | tag | reg;
-	*PCI_CFG_DATA = data;
-	*PCI_CFG_ADDR = 0;
 
-	return;
+	bus_space_write_4(pc->pc_bst, pc->pc_bsh, GT_PCICFG_ADDR,
+	    PCICFG_ENABLE | tag | reg);
+	bus_space_write_4(pc->pc_bst, pc->pc_bsh, GT_PCICFG_DATA, data);
+	bus_space_write_4(pc->pc_bst, pc->pc_bsh, GT_PCICFG_ADDR, 0);
 }
 
 int
-pci_intr_map(pc, intrtag, pin, line, ihp)
-	pci_chipset_tag_t pc;
-	pcitag_t intrtag;
-	int pin, line;
-	pci_intr_handle_t *ihp;
+pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
-	/* XXX checks XXX */
+	pci_chipset_tag_t pc = pa->pa_pc;
+	pcitag_t intrtag = pa->pa_intrtag;
+	int pin = pa->pa_intrpin;
+	int line = pa->pa_intrline;
+	int bus, dev, func;
+
+	pci_decompose_tag(pc, intrtag, &bus, &dev, &func);
+
+	/*
+	 * The interrupt lines of the internal Tulips are connected
+	 * directly to the CPU.
+	 */
+	if (cobalt_id == COBALT_ID_QUBE2700) {
+		if (bus == 0 && dev == 7 && pin == PCI_INTERRUPT_PIN_A) {
+			/* tulip is connected to CPU INT2 on Qube2700 */
+			*ihp = NICU_INT + 2;
+			return 0;
+		}
+	} else {
+		if (bus == 0 && dev == 7 && pin == PCI_INTERRUPT_PIN_A) {
+			/* the primary tulip is connected to CPU INT1 */
+			*ihp = NICU_INT + 1;
+			return 0;
+		}
+		if (bus == 0 && dev == 12 && pin == PCI_INTERRUPT_PIN_A) {
+			/* the secondary tulip is connected to CPU INT2 */
+			*ihp = NICU_INT + 2;
+			return 0;
+		}
+	}
+
+	/* sanity check */
+	if (line == 0 || line >= NICU_INT)
+		return -1;
 
 	*ihp = line;
-
 	return 0;
 }
 
 const char *
-pci_intr_string(pc, ih)
-	pci_chipset_tag_t pc;
-	pci_intr_handle_t ih;
+pci_intr_string(pci_chipset_tag_t pc, pci_intr_handle_t ih)
 {
 	static char irqstr[8];
 
-	/*
-	 * XXX
-	 */
-
-	if (ih == 4)
-		sprintf(irqstr, "level 1");
-	else if (ih == 13)
-		sprintf(irqstr, "level 2");
+	if (ih >= NICU_INT)
+		sprintf(irqstr, "level %d", ih - NICU_INT);
 	else
 		sprintf(irqstr, "irq %d", ih);
 
 	return irqstr;
 }
 
-void *
-pci_intr_establish(pc, ih, level, func, arg)
-	pci_chipset_tag_t pc;
-	pci_intr_handle_t ih;
-	int level, (*func)(void *);
-	void *arg;
+const struct evcnt *
+pci_intr_evcnt(pci_chipset_tag_t pc, pci_intr_handle_t ih)
 {
-	/*
-	 * The two Tulips are wired directly to CPU interrupts.
-	 * XXX
-	 */
 
-	if (ih == 4)
-		return cpu_intr_establish(1, level, func, arg);
-	else if (ih == 13)
-		return cpu_intr_establish(2, level, func, arg);
+	/* XXX for now, no evcnt parent reported */
+	return NULL;
+}
+
+int
+pci_intr_setattr(pci_chipset_tag_t pc, pci_intr_handle_t *ih,
+		 int attr, uint64_t data)
+{
+
+	switch (attr) {
+	case PCI_INTR_MPSAFE:
+		return 0;
+	default:
+		return ENODEV;
+	}
+}
+
+void *
+pci_intr_establish(pci_chipset_tag_t pc, pci_intr_handle_t ih, int level,
+    int (*func)(void *), void *arg)
+{
+
+	if (ih >= NICU_INT)
+		return cpu_intr_establish(ih - NICU_INT, level, func, arg);
 	else
 		return icu_intr_establish(ih, IST_LEVEL, level, func, arg);
 }
 
 void
-pci_intr_disestablish(pc, cookie)
-	pci_chipset_tag_t pc;
-	void *cookie;
+pci_intr_disestablish(pci_chipset_tag_t pc, void *cookie)
 {
-	panic("pci_intr_disestablish: not implemented");
 
-	return;
+	/* Try both, only the valid one will disestablish. */
+	cpu_intr_disestablish(cookie);
+	icu_intr_disestablish(cookie);
+}
+
+void
+pci_conf_interrupt(pci_chipset_tag_t pc, int bus, int dev, int pin, int swiz,
+    int *iline)
+{
+
+	/*
+	 * Use irq 9 on all devices on the Qube's PCI slot.
+	 * XXX doesn't handle devices over PCI-PCI bridges
+	 */
+	if (bus == 0 && dev == 10 && pin != PCI_INTERRUPT_PIN_NONE)
+		*iline = 9;
+}
+
+int
+pci_conf_hook(pci_chipset_tag_t pc, int bus, int dev, int func, pcireg_t id)
+{
+
+	/* ignore bogus IDs */
+	if (PCI_VENDOR(id) == 0)
+		return 0;
+
+	/* 2700 hardware wedges on accesses to device 6. */
+	if (bus == 0 && dev == 6)
+		return 0;
+
+	/* 2800 hardware wedges on accesses to device 31. */
+	if (bus == 0 && dev == 31)
+		return 0;
+
+	/* Don't configure the bridge and PCI probe. */ 
+	if (PCI_VENDOR(id) == PCI_VENDOR_MARVELL &&
+	    PCI_PRODUCT(id) == PCI_PRODUCT_MARVELL_GT64011)
+	        return 0;
+
+	/* Don't configure on-board VIA VT82C586 (pcib, uhci) */
+	if (bus == 0 && dev == 9 && (func == 0 || func == 2))
+		return 0;
+
+	/* Enable viaide secondary port. Some firmware doesn't enable it. */
+	if (bus == 0 && dev == 9 && func == 1) {
+		pcitag_t tag;
+		pcireg_t csr;
+
+#define	APO_VIAIDECONF	(APO_VIA_REGBASE + 0x00)
+
+		tag = pci_make_tag(pc, bus, dev, func);
+		csr = pci_conf_read(pc, tag, APO_VIAIDECONF);
+		pci_conf_write(pc, tag, APO_VIAIDECONF,
+		    csr | APO_IDECONF_EN(1));
+	}
+	return PCI_CONF_DEFAULT & ~(PCI_COMMAND_SERR_ENABLE |
+	    PCI_COMMAND_PARITY_ENABLE);
 }

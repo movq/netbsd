@@ -1,4 +1,4 @@
-/*	$NetBSD: netstat.h,v 1.18 2000/02/26 09:55:24 itojun Exp $	*/
+/*	$NetBSD: netstat.h,v 1.36 2008/02/27 16:36:54 ad Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -39,6 +35,7 @@
 
 int	Aflag;		/* show addresses of protocol control block */
 int	aflag;		/* show all sockets (including servers) */
+int	Bflag;		/* show Berkeley Packet Filter information */
 int	bflag;		/* show i/f byte stats */
 int	dflag;		/* show i/f dropped packets */
 #ifndef SMALL
@@ -48,26 +45,29 @@ int	iflag;		/* show interfaces */
 int	Lflag;		/* don't show LLINFO entries */
 int	lflag;		/* show routing table with use and ref */
 int	mflag;		/* show memory stats */
-int	nflag;		/* show addresses numerically */
+int	numeric_addr;	/* show addresses numerically */
+int	numeric_port;	/* show ports numerically */
+int	nflag;		/* same as above, for show.c compat */
 int	Pflag;		/* dump a PCB */
 int	pflag;		/* show given protocol */
+int	qflag;		/* show softintrq */
 int	rflag;		/* show routing tables (or routing stats) */
 int	sflag;		/* show protocol statistics */
 int	tflag;		/* show i/f watchdog timers */
-int	vflag;		/* verbose route information */
+int	vflag;		/* verbose route information or don't truncate names */
 
 int	interval;	/* repeat interval for i/f stats */
 
 char	*interface;	/* desired i/f for stats, or NULL for all i/fs */
 
 int	af;		/* address family */
-
-extern	char *__progname; /* program name, from crt0.o */
+int	use_sysctl;	/* use sysctl instead of kmem */
 
 
 int	kread __P((u_long addr, char *buf, int size));
 char	*plural __P((int));
 char	*plurales __P((int));
+int	get_hardticks __P((void));
 
 void	protopr __P((u_long, char *));
 void	tcp_stats __P((u_long, char *));
@@ -76,12 +76,21 @@ void	udp_stats __P((u_long, char *));
 void	ip_stats __P((u_long, char *));
 void	icmp_stats __P((u_long, char *));
 void	igmp_stats __P((u_long, char *));
+void	pim_stats __P((u_long, char *));
+void	arp_stats __P((u_long, char *));
+void	carp_stats __P((u_long, char *));
 #ifdef IPSEC
+/* run-time selector for which  implementation (KAME, FAST_IPSEC) to show */
+void	ipsec_switch __P((u_long, char *));
+/* KAME ipsec version */
 void	ipsec_stats __P((u_long, char *));
+/* FAST_IPSEC version */
+void	fast_ipsec_stats __P((u_long, char *));
 #endif
 
 #ifdef INET6
 struct sockaddr_in6;
+struct in6_addr;
 void	ip6protopr __P((u_long, char *));
 void	tcp6_stats __P((u_long, char *));
 void	tcp6_dump __P((u_long));
@@ -91,6 +100,7 @@ void	ip6_ifstats __P((char *));
 void	icmp6_stats __P((u_long, char *));
 void	icmp6_ifstats __P((char *));
 void	pim6_stats __P((u_long, char *));
+void	rip6_stats __P((u_long, char *));
 void	mroute6pr __P((u_long, u_long, u_long));
 void	mrt6_stats __P((u_long, u_long));
 char	*routename6 __P((struct sockaddr_in6 *));
@@ -105,14 +115,27 @@ void	mbpr(u_long, u_long, u_long, u_long, u_long);
 void	hostpr __P((u_long, u_long));
 void	impstats __P((u_long, u_long));
 
-void	pr_rthdr __P((int));
+void	pr_rthdr __P((int, int));
 void	pr_family __P((int));
 void	rt_stats __P((u_long));
 char	*ns_phost __P((struct sockaddr *));
 void	upHex __P((char *));
 
-char	*routename __P((u_int32_t));
-char	*netname __P((u_int32_t, u_int32_t));
+void	p_rttables(int);
+void	p_flags(int, char *);
+void	p_addr(struct sockaddr *, struct sockaddr *, int);
+void	p_gwaddr(struct sockaddr *, int);
+void	p_sockaddr(struct sockaddr *, struct sockaddr *, int, int);
+char	*routename(struct sockaddr *);
+char	*routename4(in_addr_t);
+char	*netname(struct sockaddr *, struct sockaddr *);
+char	*netname4(in_addr_t, in_addr_t);
+
+/* char	*routename __P((u_int32_t)); */
+/* char	*netname __P((u_int32_t, u_int32_t)); */
+#ifdef INET6
+char	*netname6 __P((struct sockaddr_in6 *, struct sockaddr_in6 *));
+#endif 
 char	*atalk_print __P((const struct sockaddr *, int));
 char	*atalk_print2 __P((const struct sockaddr *, const struct sockaddr *,
     int));
@@ -138,7 +161,12 @@ void	iso_protopr __P((u_long, char *));
 void	iso_protopr1 __P((u_long, int));
 void	tp_protopr __P((u_long, char *));
 void	tp_inproto __P((u_long));
-void	tp_stats __P((u_long, caddr_t));
+void	tp_stats __P((u_long, char *));
 
 void	mroutepr __P((u_long, u_long, u_long, u_long));
 void	mrt_stats __P((u_long, u_long));
+
+void	bpf_stats(void);
+void	bpf_dump(char *);
+
+#define PLEN    (LONG_BIT / 4 + 2)

@@ -1,4 +1,4 @@
-/*	$NetBSD: ansi.h,v 1.3 1998/07/31 15:30:40 ross Exp $ */
+/*	$NetBSD: ansi.h,v 1.14 2007/10/17 19:57:29 garbled Exp $ */
 
 /*-
  * Copyright (c) 1990, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,6 +34,9 @@
 #ifndef	_ANSI_H_
 #define	_ANSI_H_
 
+#include <sys/cdefs.h>
+#include <machine/int_types.h>
+
 /*
  * Types which are fundamental to the implementation and may appear in
  * more than one standard header are defined here.  Standard headers
@@ -52,30 +51,28 @@
 #define	_BSD_SIZE_T_		unsigned long	/* sizeof() */
 #define	_BSD_SSIZE_T_		long		/* byte count or error */
 #define	_BSD_TIME_T_		int		/* time() */
+#if __GNUC_PREREQ__(3, 0)
+#define	_BSD_VA_LIST_		__builtin_va_list /* va_list */
+#else
 #define	_BSD_VA_LIST_		char *		/* va_list */
+#endif
 #define	_BSD_CLOCKID_T_		int		/* clockid_t */
 #define	_BSD_TIMER_T_		int		/* timer_t */
 #define	_BSD_SUSECONDS_T_	int		/* suseconds_t */
 #define	_BSD_USECONDS_T_	unsigned int	/* useconds_t */
-#define	_BSD_INTPTR_T_		long		/* intptr_t */
-#define	_BSD_UINTPTR_T_		unsigned long	/* uintptr_t */
-
-/*
- * Runes (wchar_t) is declared to be an ``int'' instead of the more natural
- * ``unsigned long'' or ``long''.  Two things are happening here.  It is not
- * unsigned so that EOF (-1) can be naturally assigned to it and used.  Also,
- * it looks like 10646 will be a 31 bit standard.  This means that if your
- * ints cannot hold 32 bits, you will be in trouble.  The reason an int was
- * chosen over a long is that the is*() and to*() routines take ints (says
- * ANSI C), but they use _RUNE_T_ instead of int.  By changing it here, you
- * lose a bit of ANSI conformance, but your programs will still work.
- *
- * Note that _WCHAR_T_ and _RUNE_T_ must be of the same type.  When wchar_t
- * and rune_t are typedef'd, _WCHAR_T_ will be undef'd, but _RUNE_T remains
- * defined for ctype.h.
- */
 #define	_BSD_WCHAR_T_		int		/* wchar_t */
 #define	_BSD_WINT_T_		int		/* wint_t */
-#define	_BSD_RUNE_T_		int		/* rune_t */
+#define _BSD_WCTRANS_T_		void *		/* wctrans_t */
+#define _BSD_WCTYPE_T_		void *		/* wctype_t */
+
+/*
+ * mbstate_t is an opaque object to keep conversion state, during multibyte
+ * stream conversions.  The content must not be referenced by user programs.
+ */
+typedef union {
+	__int64_t __mbstateL;	/* for alignment */
+	char __mbstate8[128];
+} __mbstate_t;
+#define	_BSD_MBSTATE_T_		__mbstate_t	/* mbstate_t */
 
 #endif	/* _ANSI_H_ */

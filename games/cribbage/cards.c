@@ -1,4 +1,4 @@
-/*	$NetBSD: cards.c,v 1.6 1999/09/30 18:01:32 jsm Exp $	*/
+/*	$NetBSD: cards.c,v 1.8 2005/07/02 08:32:32 jmc Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)cards.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: cards.c,v 1.6 1999/09/30 18:01:32 jsm Exp $");
+__RCSID("$NetBSD: cards.c,v 1.8 2005/07/02 08:32:32 jmc Exp $");
 #endif
 #endif /* not lint */
 
@@ -55,8 +51,7 @@ __RCSID("$NetBSD: cards.c,v 1.6 1999/09/30 18:01:32 jsm Exp $");
  * Initialize a deck of cards to contain one of each type.
  */
 void
-makedeck(d)
-	CARD    d[];
+makedeck(CARD d[])
 {
 	int i, j, k;
 
@@ -76,8 +71,7 @@ makedeck(d)
  * see Knuth, vol. 2, page 125.
  */
 void
-shuffle(d)
-	CARD d[];
+shuffle(CARD d[])
 {
 	int j, k;
 	CARD c;
@@ -94,8 +88,7 @@ shuffle(d)
  * return true if the two cards are equal...
  */
 int
-eq(a, b)
-	CARD a, b;
+eq(CARD a, CARD b)
 {
 	return ((a.rank == b.rank) && (a.suit == b.suit));
 }
@@ -104,10 +97,7 @@ eq(a, b)
  * is_one returns TRUE if a is in the set of cards b
  */
 int
-is_one(a, b, n)
-	CARD a;
-	const CARD b[];
-	int n;
+is_one(CARD a, const CARD b[], int n)
 {
 	int i;
 
@@ -121,9 +111,7 @@ is_one(a, b, n)
  * remove the card a from the deck d of n cards
  */
 void
-cremove(a, d, n)
-	CARD a, d[];
-	int n;
+cremove(CARD a, CARD d[], int n)
 {
 	int i, j;
 
@@ -139,9 +127,7 @@ cremove(a, d, n)
  *	Sort a hand of n cards
  */
 void
-sorthand(h, n)
-	CARD h[];
-	int n;
+sorthand(CARD h[], int n)
 {
 	CARD *cp, *endp;
 	CARD c;

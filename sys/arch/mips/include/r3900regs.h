@@ -1,30 +1,34 @@
-/*	$NetBSD: r3900regs.h,v 1.1 1999/11/29 11:13:11 uch Exp $ */
+/*	$NetBSD: r3900regs.h,v 1.7 2008/04/28 20:23:28 martin Exp $ */
 
-/*
- * Copyright (c) 1999, by UCHIYAMA Yasushi
+/*-
+ * Copyright (c) 1999, 2000 The NetBSD Foundation, Inc.
  * All rights reserved.
+ *
+ * This code is derived from software contributed to The NetBSD Foundation
+ * by UCHIYAMA Yasushi.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
  * 1. Redistributions of source code must retain the above copyright
  *    notice, this list of conditions and the following disclaimer.
- * 2. The name of the developer may NOT be used to endorse or promote products
- *    derived from this software without specific prior written permission.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
  *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
+
 /*
  *	[address space]
  *	kseg2		0xc0000000 - 0xfeffffff
@@ -45,11 +49,13 @@
  *	R3900 don't have PE, CM, PZ, SwC and IsC.
  */
 #define R3900_SR_NMI		0x00100000 /* r3k PE position */
+#if 0
 #undef MIPS1_PARITY_ERR
 #undef MIPS1_CACHE_MISS
 #undef MIPS1_PARITY_ZERO
 #undef MIPS1_SWAP_CACHES
 #undef MIPS1_ISOL_CACHES
+#endif
 
 /*
  *	[context register]
@@ -76,19 +82,6 @@
  */
 
 /*
- *	Index register
- *	3912 ... index field[8:12] (32 entry)
- */
-#define R3900_TLB_NUM_TLB_ENTRIES	32
-#define R3920_TLB_NUM_TLB_ENTRIES	64
-#undef MIPS1_TLB_NUM_TLB_ENTRIES
-#ifdef TX391X
-#define MIPS1_TLB_NUM_TLB_ENTRIES	R3900_TLB_NUM_TLB_ENTRIES
-#elif defined TX392X
-#define MIPS1_TLB_NUM_TLB_ENTRIES	R3920_TLB_NUM_TLB_ENTRIES
-#endif
-
-/*
  *	Config register (R3900 specific)
  */
 #define R3900_CONFIG_ICS_SHIFT		19
@@ -106,7 +99,6 @@
 #define R3900_CONFIG_DCS_8KB		0x00030000
 #define R3900_CONFIG_DCS_16KB		0x00040000
 
-
 #define R3900_CONFIG_DCS_MASK		0x00070000
 #define R3900_CONFIG_CWFON		0x00004000
 #define R3900_CONFIG_WBON		0x00002000
@@ -123,20 +115,37 @@
 #define R3900_CONFIG_DRSIZE_MASK	0x00000003
 
 /*
- *	R3900 CACHE instruction (not MIPS3 cache op)
+ *	CACHE
  */
-#define R3900_MIN_CACHE_SIZE		1024
-#define R3900_MAX_DCACHE_SIZE		(8 * 1024)
-#ifndef OP_CACHE
-#define OP_CACHE	057
-#endif
-#define R3900_CACHE(op, offset, base) \
-	.word (OP_CACHE << 26 | ((base) << 21) | ((op) << 16) | \
-	((offset) & 0xffff))
-#define R3900_CACHE_I_INDEXINVALIDATE	0
-#define R3900_CACHE_D_HITINVALIDATE	0x11
-
-#define	CPUREG_A0	4	
-#define CPUREG_T0	8
-
-
+/* Cache size (limit) */
+/* R3900/R3920 */
+#define R3900_C_SIZE_MIN		1024
+#define R3900_C_SIZE_MAX		8192
+/* Cache line size */
+/* R3900 */
+#define R3900_C_LSIZE_I			16
+#define R3900_C_LSIZE_D			4
+/* R3920 */
+#define R3920_C_LSIZE_I			16
+#define R3920_C_LSIZE_D			16
+/* Cache operation */
+/* R3900 */
+#define R3900_C_IINV_I			0x00
+#define R3900_C_IWBINV_D		0x01
+#define R3900_C_ILRUC_I			0x04
+#define R3900_C_ILRUC_D			0x05
+#define R3900_C_ILCKC_D			0x09 /* R3900 only */
+#define R3900_C_HINV_D			0x11
+/* R3920 */
+#define R3920_C_IINV_I			0x00
+#define R3920_C_IWBINV_D		0x01
+#define R3920_C_ILRUC_I			0x04
+#define R3920_C_ILRUC_D			0x05
+#define R3920_C_ILDTAG_I		0x0c /* R3920 only */
+#define R3920_C_ILDTAG_D		0x0d /* R3920 only */
+#define R3920_C_HINV_I			0x10 /* R3920 only */
+#define R3920_C_HINV_D			0x11
+#define R3920_C_HWBINV_D		0x14 /* R3920 only */
+#define R3920_C_HWB_D			0x18 /* R3920 only */
+#define R3920_C_ISTTAG_I		0x1c /* R3920 only */
+#define R3920_C_ISTTAG_D		0x1d /* R3920 only */

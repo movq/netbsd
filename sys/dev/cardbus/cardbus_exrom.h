@@ -1,26 +1,23 @@
-/* $NetBSD: cardbus_exrom.h,v 1.2 1999/12/15 12:28:54 kleink Exp $ */
+/* $NetBSD: cardbus_exrom.h,v 1.6 2008/04/29 06:53:02 martin Exp $ */
 
 /*
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
- * This code is derived from software contributed to 
+ * This code is derived from software contributed to
  * The NetBSD Foundation by Johan Danielsson.
  *
- * Redistribution and use in source and binary forms, with or without 
- * modification, are permitted provided that the following conditions 
- * are met: 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
  *
- * 1. Redistributions of source code must retain the above copyright 
- *    notice, this list of conditions and the following disclaimer. 
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
  *
- * 2. Redistributions in binary form must reproduce the above copyright 
- *    notice, this list of conditions and the following disclaimer in the 
- *    documentation and/or other materials provided with the distribution. 
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
  *
- * 3. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -56,17 +53,17 @@
 
 
 struct cardbus_rom_image {
-    unsigned int	rom_image; /* image number */
-    size_t		image_size;
-    bus_space_tag_t	romt;
-    bus_space_handle_t	romh;    /* subregion */
-    SIMPLEQ_ENTRY(cardbus_rom_image) next;
+	unsigned int		rom_image;	/* image number */
+	size_t			image_size;
+	bus_space_tag_t		romt;
+	bus_space_handle_t	romh;		/* subregion */
+	SIMPLEQ_ENTRY(cardbus_rom_image) next;
 };
 
 SIMPLEQ_HEAD(cardbus_rom_image_head, cardbus_rom_image);
 
 int
-cardbus_read_exrom __P((bus_space_tag_t, bus_space_handle_t, 
-			struct cardbus_rom_image_head*));
+cardbus_read_exrom(bus_space_tag_t, bus_space_handle_t,
+    struct cardbus_rom_image_head *);
 
 #endif /* !_DEV_CARDBUS_CARDBUS_EXROM_H_ */

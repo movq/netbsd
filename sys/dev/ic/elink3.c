@@ -1,7 +1,7 @@
-/*	$NetBSD: elink3.c,v 1.79 2000/03/30 12:45:30 augustss Exp $	*/
+/*	$NetBSD: elink3.c,v 1.127 2008/08/27 05:33:47 christos Exp $	*/
 
 /*-
- * Copyright (c) 1998 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -68,8 +61,10 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: elink3.c,v 1.127 2008/08/27 05:33:47 christos Exp $");
+
 #include "opt_inet.h"
-#include "opt_ns.h"
 #include "bpfilter.h"
 #include "rnd.h"
 
@@ -93,27 +88,14 @@
 #include <net/if_ether.h>
 #include <net/if_media.h>
 
-#ifdef INET
-#include <netinet/in.h>
-#include <netinet/in_systm.h>
-#include <netinet/in_var.h>
-#include <netinet/ip.h>
-#include <netinet/if_inarp.h>
-#endif
-
-#ifdef NS
-#include <netns/ns.h>
-#include <netns/ns_if.h>
-#endif
-
 #if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
 #endif
 
-#include <machine/cpu.h>
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/cpu.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/mii/mii.h>
 #include <dev/mii/miivar.h>
@@ -160,7 +142,7 @@ struct ep_media {
  * Any Boomerang (3c90x) chips with MII really do have an internal
  * MII and real PHYs attached; no `native' media.
  */
-struct ep_media ep_vortex_media[] = {
+const struct ep_media ep_vortex_media[] = {
 	{ ELINK_PCI_10BASE_T,	"10baseT",	IFM_ETHER|IFM_10_T,
 	  ELINKMEDIA_10BASE_T },
 	{ ELINK_PCI_10BASE_T,	"10baseT-FDX",	IFM_ETHER|IFM_10_T|IFM_FDX,
@@ -187,7 +169,7 @@ struct ep_media ep_vortex_media[] = {
  * Media table for the older 3Com Etherlink III chipset, used
  * in the 3c509, 3c579, and 3c589.
  */
-struct ep_media ep_509_media[] = {
+const struct ep_media ep_509_media[] = {
 	{ ELINK_W0_CC_UTP,	"10baseT",	IFM_ETHER|IFM_10_T,
 	  ELINKMEDIA_10BASE_T },
 	{ ELINK_W0_CC_AUI,	"10base5",	IFM_ETHER|IFM_10_5,
@@ -198,50 +180,50 @@ struct ep_media ep_509_media[] = {
 	  0 },
 };
 
-void	ep_internalconfig __P((struct ep_softc *sc));
-void	ep_vortex_probemedia __P((struct ep_softc *sc));
-void	ep_509_probemedia __P((struct ep_softc *sc));
+void	ep_internalconfig(struct ep_softc *sc);
+void	ep_vortex_probemedia(struct ep_softc *sc);
+void	ep_509_probemedia(struct ep_softc *sc);
 
-static void eptxstat __P((struct ep_softc *));
-static int epstatus __P((struct ep_softc *));
-void	epinit __P((struct ep_softc *));
-int	epioctl __P((struct ifnet *, u_long, caddr_t));
-void	epstart __P((struct ifnet *));
-void	epwatchdog __P((struct ifnet *));
-void	epreset __P((struct ep_softc *));
-static void epshutdown __P((void *));
-void	epread __P((struct ep_softc *));
-struct mbuf *epget __P((struct ep_softc *, int));
-void	epmbuffill __P((void *));
-void	epmbufempty __P((struct ep_softc *));
-void	epsetfilter __P((struct ep_softc *));
-void	ep_roadrunner_mii_enable __P((struct ep_softc *));
-void	epsetmedia __P((struct ep_softc *));
+static void eptxstat(struct ep_softc *);
+static int epstatus(struct ep_softc *);
+int	epinit(struct ifnet *);
+void	epstop(struct ifnet *, int);
+int	epioctl(struct ifnet *, u_long, void *);
+void	epstart(struct ifnet *);
+void	epwatchdog(struct ifnet *);
+void	epreset(struct ep_softc *);
+static void epshutdown(void *);
+void	epread(struct ep_softc *);
+struct mbuf *epget(struct ep_softc *, int);
+void	epmbuffill(void *);
+void	epmbufempty(struct ep_softc *);
+void	epsetfilter(struct ep_softc *);
+void	ep_roadrunner_mii_enable(struct ep_softc *);
+void	epsetmedia(struct ep_softc *);
 
 /* ifmedia callbacks */
-int	ep_media_change __P((struct ifnet *ifp));
-void	ep_media_status __P((struct ifnet *ifp, struct ifmediareq *req));
+int	ep_media_change(struct ifnet *ifp);
+void	ep_media_status(struct ifnet *ifp, struct ifmediareq *req);
 
 /* MII callbacks */
-int	ep_mii_readreg __P((struct device *, int, int));
-void	ep_mii_writereg __P((struct device *, int, int, int));
-void	ep_statchg __P((struct device *));
+int	ep_mii_readreg(device_t, int, int);
+void	ep_mii_writereg(device_t, int, int, int);
+void	ep_statchg(device_t);
 
-void	ep_tick __P((void *));
+void	ep_tick(void *);
 
-static int epbusyeeprom __P((struct ep_softc *));
-u_int16_t ep_read_eeprom __P((struct ep_softc *, u_int16_t));
-static inline void ep_reset_cmd __P((struct ep_softc *sc, 
-					u_int cmd, u_int arg));
-static inline void ep_finish_reset __P((bus_space_tag_t, bus_space_handle_t));
-static inline void ep_discard_rxtop __P((bus_space_tag_t, bus_space_handle_t));
-static __inline int ep_w1_reg __P((struct ep_softc *, int));
+static int epbusyeeprom(struct ep_softc *);
+u_int16_t ep_read_eeprom(struct ep_softc *, u_int16_t);
+static inline void ep_reset_cmd(struct ep_softc *sc, u_int cmd, u_int arg);
+static inline void ep_finish_reset(bus_space_tag_t, bus_space_handle_t);
+static inline void ep_discard_rxtop(bus_space_tag_t, bus_space_handle_t);
+static inline int ep_w1_reg(struct ep_softc *, int);
 
 /*
  * MII bit-bang glue.
  */
-u_int32_t ep_mii_bitbang_read __P((struct device *));
-void ep_mii_bitbang_write __P((struct device *, u_int32_t));
+u_int32_t ep_mii_bitbang_read(device_t);
+void ep_mii_bitbang_write(device_t, u_int32_t);
 
 const struct mii_bitbang_ops ep_mii_bitbang_ops = {
 	ep_mii_bitbang_read,
@@ -259,10 +241,8 @@ const struct mii_bitbang_ops ep_mii_bitbang_ops = {
  * Some chips (3c515 [Corkscrew] and 3c574 [RoadRunner]) have
  * Window 1 registers offset!
  */
-static __inline int
-ep_w1_reg(sc, reg)
-	struct ep_softc *sc;
-	int reg;
+static inline int
+ep_w1_reg(struct ep_softc *sc, int reg)
 {
 
 	switch (sc->ep_chipset) {
@@ -288,15 +268,13 @@ ep_w1_reg(sc, reg)
  * but older hardware doesn't implement it and we must delay.
  */
 static inline void
-ep_finish_reset(iot, ioh)
-	bus_space_tag_t iot;
-	bus_space_handle_t ioh;
+ep_finish_reset(bus_space_tag_t iot, bus_space_handle_t ioh)
 {
 	int i;
 
 	for (i = 0; i < 10000; i++) {
 		if ((bus_space_read_2(iot, ioh, ELINK_STATUS) &
-		    S_COMMAND_IN_PROGRESS) == 0)
+		    COMMAND_IN_PROGRESS) == 0)
 			break;
 		DELAY(10);
 	}
@@ -307,9 +285,7 @@ ep_finish_reset(iot, ioh)
  * Used for global reset, TX_RESET, RX_RESET.
  */
 static inline void
-ep_reset_cmd(sc, cmd, arg)
-	struct ep_softc *sc;
-	u_int cmd, arg;
+ep_reset_cmd(struct ep_softc *sc, u_int cmd, u_int arg)
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -320,9 +296,7 @@ ep_reset_cmd(sc, cmd, arg)
 
 
 static inline void
-ep_discard_rxtop(iot, ioh)
-	bus_space_tag_t iot;
-	bus_space_handle_t ioh;
+ep_discard_rxtop(bus_space_tag_t iot, bus_space_handle_t ioh)
 {
 	int i;
 
@@ -336,7 +310,7 @@ ep_discard_rxtop(iot, ioh)
 	 */
 	for (i = 0; i < 8000; i++) {
 		if ((bus_space_read_2(iot, ioh, ELINK_STATUS) &
-		    S_COMMAND_IN_PROGRESS) == 0)
+		    COMMAND_IN_PROGRESS) == 0)
 		    return;
 	}
 
@@ -348,19 +322,16 @@ ep_discard_rxtop(iot, ioh)
  * Back-end attach and configure.
  */
 int
-epconfig(sc, chipset, enaddr)
-	struct ep_softc *sc;
-	u_short chipset;
-	u_int8_t *enaddr;
+epconfig(struct ep_softc *sc, u_short chipset, u_int8_t *enaddr)
 {
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
 	u_int16_t i;
-	u_int8_t myla[6];
+	u_int8_t myla[ETHER_ADDR_LEN];
 
-	callout_init(&sc->sc_mii_callout);
-	callout_init(&sc->sc_mbuf_callout);
+	callout_init(&sc->sc_mii_callout, 0);
+	callout_init(&sc->sc_mbuf_callout, 0);
 
 	sc->ep_chipset = chipset;
 
@@ -375,7 +346,7 @@ epconfig(sc, chipset, enaddr)
 		/*
 		 * Read the station address from the eeprom.
 		 */
-		for (i = 0; i < 3; i++) {
+		for (i = 0; i < ETHER_ADDR_LEN / 2; i++) {
 			u_int16_t x = ep_read_eeprom(sc, i);
 			myla[(i << 1)] = x >> 8;
 			myla[(i << 1) + 1] = x;
@@ -389,14 +360,14 @@ epconfig(sc, chipset, enaddr)
 	 * 11-bit parameter, and  11 bits isn't enough to hold a full-size
 	 * packet length.
 	 * Commands to these cards implicitly upshift a packet size
-	 * or threshold by 2 bits. 
+	 * or threshold by 2 bits.
 	 * To detect  cards with large-packet support, we probe by setting
 	 * the transmit threshold register, then change windows and
 	 * read back the threshold register directly, and see if the
 	 * threshold value was shifted or not.
 	 */
 	bus_space_write_2(iot, ioh, ELINK_COMMAND,
-	    SET_TX_AVAIL_THRESH | ELINK_LARGEWIN_PROBE); 
+	    SET_TX_AVAIL_THRESH | ELINK_LARGEWIN_PROBE);
 	GO_WINDOW(5);
 	i = bus_space_read_2(iot, ioh, ELINK_W5_TX_AVAIL_THRESH);
 	GO_WINDOW(1);
@@ -411,33 +382,37 @@ epconfig(sc, chipset, enaddr)
 		break;
 
 	default:
-		printf("%s: wrote 0x%x to TX_AVAIL_THRESH, read back 0x%x. "
+		aprint_error_dev(sc->sc_dev,
+		    "wrote 0x%x to TX_AVAIL_THRESH, read back 0x%x. "
 		    "Interface disabled\n",
-		    sc->sc_dev.dv_xname, ELINK_LARGEWIN_PROBE, (int) i);
+		    ELINK_LARGEWIN_PROBE, (int) i);
 		return (1);
 	}
 
 	/*
-	 * Ensure Tx-available interrupts are enabled for 
+	 * Ensure Tx-available interrupts are enabled for
 	 * start the interface.
 	 * XXX should be in epinit()?
 	 */
 	bus_space_write_2(iot, ioh, ELINK_COMMAND,
 	    SET_TX_AVAIL_THRESH | (1600 >> sc->ep_pktlenshift));
 
-	bcopy(sc->sc_dev.dv_xname, ifp->if_xname, IFNAMSIZ);
+	strlcpy(ifp->if_xname, device_xname(sc->sc_dev), IFNAMSIZ);
 	ifp->if_softc = sc;
 	ifp->if_start = epstart;
 	ifp->if_ioctl = epioctl;
 	ifp->if_watchdog = epwatchdog;
+	ifp->if_init = epinit;
+	ifp->if_stop = epstop;
 	ifp->if_flags =
 	    IFF_BROADCAST | IFF_SIMPLEX | IFF_NOTRAILERS | IFF_MULTICAST;
+	IFQ_SET_READY(&ifp->if_snd);
 
 	if_attach(ifp);
 	ether_ifattach(ifp, enaddr);
 
 	/*
-	 * Finish configuration: 
+	 * Finish configuration:
 	 * determine chipset if the front-end couldn't do so,
 	 * show board details, set media.
 	 */
@@ -454,8 +429,7 @@ epconfig(sc, chipset, enaddr)
 	 * Display some additional information, if pertinent.
 	 */
 	if (sc->ep_flags & ELINK_FLAGS_USEFIFOBUFFER)
-		printf("%s: RoadRunner FIFO buffer enabled\n",
-		    sc->sc_dev.dv_xname);
+		aprint_normal_dev(sc->sc_dev, "RoadRunner FIFO buffer enabled\n");
 
 	/*
 	 * Initialize our media structures and MII info.  We'll
@@ -465,8 +439,14 @@ epconfig(sc, chipset, enaddr)
 	sc->sc_mii.mii_readreg = ep_mii_readreg;
 	sc->sc_mii.mii_writereg = ep_mii_writereg;
 	sc->sc_mii.mii_statchg = ep_statchg;
-	ifmedia_init(&sc->sc_mii.mii_media, 0, ep_media_change,
+	ifmedia_init(&sc->sc_mii.mii_media, IFM_IMASK, ep_media_change,
 	    ep_media_status);
+
+	/*
+	 * All CORKSCREW chips have MII.
+	 */
+	if (sc->ep_chipset == ELINK_CHIPSET_CORKSCREW)
+		sc->ep_flags |= ELINK_FLAGS_MII;
 
 	/*
 	 * Now, determine which media we have.
@@ -479,6 +459,7 @@ epconfig(sc, chipset, enaddr)
 		}
 		/* FALLTHROUGH */
 
+	case ELINK_CHIPSET_CORKSCREW:
 	case ELINK_CHIPSET_BOOMERANG:
 		/*
 		 * If the device has MII, probe it.  We won't be using
@@ -486,7 +467,7 @@ epconfig(sc, chipset, enaddr)
 		 * we don't, just treat the Boomerang like the Vortex.
 		 */
 		if (sc->ep_flags & ELINK_FLAGS_MII) {
-			mii_attach(&sc->sc_dev, &sc->sc_mii, 0xffffffff,
+			mii_attach(sc->sc_dev, &sc->sc_mii, 0xffffffff,
 			    MII_PHY_ANY, MII_OFFSET_ANY, 0);
 			if (LIST_FIRST(&sc->sc_mii.mii_phys) == NULL) {
 				ifmedia_add(&sc->sc_mii.mii_media,
@@ -512,12 +493,8 @@ epconfig(sc, chipset, enaddr)
 
 	GO_WINDOW(1);		/* Window 1 is operating window */
 
-#if NBPFILTER > 0
-	bpfattach(&ifp->if_bpf, ifp, DLT_EN10MB, sizeof(struct ether_header));
-#endif
-
 #if NRND > 0
-	rnd_attach_source(&sc->rnd_source, sc->sc_dev.dv_xname,
+	rnd_attach_source(&sc->rnd_source, device_xname(sc->sc_dev),
 	    RND_TYPE_NET, 0);
 #endif
 
@@ -528,6 +505,9 @@ epconfig(sc, chipset, enaddr)
 
 	ep_reset_cmd(sc, ELINK_COMMAND, RX_RESET);
 	ep_reset_cmd(sc, ELINK_COMMAND, TX_RESET);
+
+	/* The attach is successful. */
+	sc->sc_flags |= ELINK_FLAGS_ATTACHED;
 	return (0);
 }
 
@@ -537,8 +517,7 @@ epconfig(sc, chipset, enaddr)
  * internal-configuration register.
  */
 void
-ep_internalconfig(sc)
-	struct ep_softc *sc;
+ep_internalconfig(struct ep_softc *sc)
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -546,12 +525,12 @@ ep_internalconfig(sc)
 	u_int config0;
 	u_int config1;
 
-	int  ram_size, ram_width, ram_speed, rom_size, ram_split;
+	int  ram_size, ram_width, ram_split;
 	/*
 	 * NVRAM buffer Rx:Tx config names for busmastering cards
 	 * (Demon, Vortex, and later).
 	 */
-	const char *onboard_ram_config[] = {
+	const char *const onboard_ram_config[] = {
 		"5:3", "3:1", "1:1", "3:5" };
 
 	GO_WINDOW(3);
@@ -562,14 +541,11 @@ ep_internalconfig(sc)
 
 	ram_size  = (config0 & CONFIG_RAMSIZE) >> CONFIG_RAMSIZE_SHIFT;
 	ram_width = (config0 & CONFIG_RAMWIDTH) >> CONFIG_RAMWIDTH_SHIFT;
-	ram_speed = (config0 & CONFIG_RAMSPEED) >> CONFIG_RAMSPEED_SHIFT;
-	rom_size  = (config0 & CONFIG_ROMSIZE) >> CONFIG_ROMSIZE_SHIFT;
 
 	ram_split  = (config1 & CONFIG_RAMSPLIT) >> CONFIG_RAMSPLIT_SHIFT;
 
-	printf("%s: address %s, %dKB %s-wide FIFO, %s Rx:Tx split\n",
-	       sc->sc_dev.dv_xname,
-	       ether_sprintf(LLADDR(sc->sc_ethercom.ec_if.if_sadl)),
+	aprint_normal_dev(sc->sc_dev, "address %s, %dKB %s-wide FIFO, %s Rx:Tx split\n",
+	       ether_sprintf(CLLADDR(sc->sc_ethercom.ec_if.if_sadl)),
 	       8 << ram_size,
 	       (ram_width) ? "word" : "byte",
 	       onboard_ram_config[ram_split]);
@@ -582,28 +558,27 @@ ep_internalconfig(sc)
  * Use the config_cntrl register  in window 0 instead.
  * Used on original, 10Mbit ISA (3c509), 3c509B, and pre-Demon EISA cards
  * that implement  CONFIG_CTRL.  We don't have a good way to set the
- * default active mediuim; punt to ifconfig  instead.
+ * default active medium; punt to ifconfig  instead.
  */
 void
-ep_509_probemedia(sc)
-	struct ep_softc *sc;
+ep_509_probemedia(struct ep_softc *sc)
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
 	struct ifmedia *ifm = &sc->sc_mii.mii_media;
 	u_int16_t ep_w0_config, port;
-	struct ep_media *epm;
+	const struct ep_media *epm;
 	const char *sep = "", *defmedianame = NULL;
 	int defmedia = 0;
 
 	GO_WINDOW(0);
 	ep_w0_config = bus_space_read_2(iot, ioh, ELINK_W0_CONFIG_CTRL);
 
-	printf("%s: ", sc->sc_dev.dv_xname);
+	aprint_normal_dev(sc->sc_dev, "");
 
 	/* Sanity check that there are any media! */
 	if ((ep_w0_config & ELINK_W0_CC_MEDIAMASK) == 0) {
-		printf("no media present!\n");
+		aprint_error("no media present!\n");
 		ifmedia_add(ifm, IFM_ETHER|IFM_NONE, 0, NULL);
 		ifmedia_set(ifm, IFM_ETHER|IFM_NONE);
 		return;
@@ -614,7 +589,7 @@ ep_509_probemedia(sc)
 	 */
 	port = ep_read_eeprom(sc, EEPROM_ADDR_CFG) >> 14;
 
-#define	PRINT(s)	printf("%s%s", sep, s); sep = ", "
+#define	PRINT(str)	aprint_normal("%s%s", sep, str); sep = ", "
 
 	for (epm = ep_509_media; epm->epm_name != NULL; epm++) {
 		if (ep_w0_config & epm->epm_mpbit) {
@@ -639,7 +614,7 @@ ep_509_probemedia(sc)
 		panic("ep_509_probemedia: impossible");
 #endif
 
-	printf(" (default %s)\n", defmedianame);
+	aprint_normal(" (default %s)\n", defmedianame);
 	ifmedia_set(ifm, defmedia);
 }
 
@@ -650,13 +625,12 @@ ep_509_probemedia(sc)
  * Use media and card-version info in window 3 instead.
  */
 void
-ep_vortex_probemedia(sc)
-	struct ep_softc *sc;
+ep_vortex_probemedia(struct ep_softc *sc)
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
 	struct ifmedia *ifm = &sc->sc_mii.mii_media;
-	struct ep_media *epm;
+	const struct ep_media *epm;
 	u_int config1;
 	int reset_options;
 	int default_media;	/* 3-bit encoding of default (EEPROM) media */
@@ -666,22 +640,22 @@ ep_vortex_probemedia(sc)
 	GO_WINDOW(3);
 	config1 = (u_int)bus_space_read_2(iot, ioh,
 	    ELINK_W3_INTERNAL_CONFIG + 2);
-	reset_options = (int)bus_space_read_1(iot, ioh, ELINK_W3_RESET_OPTIONS);
+	reset_options = (int)bus_space_read_2(iot, ioh, ELINK_W3_RESET_OPTIONS);
 	GO_WINDOW(0);
 
 	default_media = (config1 & CONFIG_MEDIAMASK) >> CONFIG_MEDIAMASK_SHIFT;
 
-	printf("%s: ", sc->sc_dev.dv_xname);
+	aprint_normal_dev(sc->sc_dev, "");
 
 	/* Sanity check that there are any media! */
 	if ((reset_options & ELINK_PCI_MEDIAMASK) == 0) {
-		printf("no media present!\n");
+		aprint_error("no media present!\n");
 		ifmedia_add(ifm, IFM_ETHER|IFM_NONE, 0, NULL);
 		ifmedia_set(ifm, IFM_ETHER|IFM_NONE);
 		return;
 	}
 
-#define	PRINT(s)	printf("%s%s", sep, s); sep = ", "
+#define	PRINT(str)	aprint_normal("%s%s", sep, str); sep = ", "
 
 	for (epm = ep_vortex_media; epm->epm_name != NULL; epm++) {
 		if (reset_options & epm->epm_mpbit) {
@@ -714,7 +688,7 @@ ep_vortex_probemedia(sc)
 		panic("ep_vortex_probemedia: impossible");
 #endif
 
-	printf(" (default %s)\n", defmedianame);
+	aprint_normal(" (default %s)\n", defmedianame);
 	ifmedia_set(ifm, defmedia);
 }
 
@@ -722,8 +696,7 @@ ep_vortex_probemedia(sc)
  * One second timer, used to tick the MII.
  */
 void
-ep_tick(arg)
-	void *arg;
+ep_tick(void *arg)
 {
 	struct ep_softc *sc = arg;
 	int s;
@@ -733,7 +706,7 @@ ep_tick(arg)
 		panic("ep_tick");
 #endif
 
-	if ((sc->sc_dev.dv_flags & DVF_ACTIVE) == 0)
+	if (!device_is_active(sc->sc_dev))
 		return;
 
 	s = splnet();
@@ -749,24 +722,28 @@ ep_tick(arg)
  * The order in here seems important. Otherwise we may not receive
  * interrupts. ?!
  */
-void
-epinit(sc)
-	struct ep_softc *sc;
+int
+epinit(struct ifnet *ifp)
 {
-	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
+	struct ep_softc *sc = ifp->if_softc;
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
-	int i;
+	int i, error;
+	const u_int8_t *addr;
 
-	/* Make sure any pending reset has completed before touching board. */
+	if (!sc->enabled && (error = epenable(sc)) != 0)
+		return (error);
+
+	/* Make sure any pending reset has completed before touching board */
 	ep_finish_reset(iot, ioh);
 
 	/*
-	 * Cance any pending I/O.
+	 * Cancel any pending I/O.
 	 */
-	epstop(sc);
+	epstop(ifp, 0);
 
-	if (sc->bustype != ELINK_BUS_PCI) {
+	if (sc->bustype != ELINK_BUS_PCI && sc->bustype != ELINK_BUS_EISA
+	    && sc->bustype != ELINK_BUS_MCA) {
 		GO_WINDOW(0);
 		bus_space_write_2(iot, ioh, ELINK_W0_CONFIG_CTRL, 0);
 		bus_space_write_2(iot, ioh, ELINK_W0_CONFIG_CTRL,
@@ -778,25 +755,28 @@ epinit(sc)
 	}
 
 	GO_WINDOW(2);
-	for (i = 0; i < 6; i++)	/* Reload the ether_addr. */
-		bus_space_write_1(iot, ioh, ELINK_W2_ADDR_0 + i,
-		    LLADDR(ifp->if_sadl)[i]);
+	/* Reload the ether_addr. */
+	addr = CLLADDR(ifp->if_sadl);
+	for (i = 0; i < 6; i += 2)
+		bus_space_write_2(iot, ioh, ELINK_W2_ADDR_0 + i,
+		    (addr[i] << 0) | (addr[i + 1] << 8));
 
 	/*
 	 * Reset the station-address receive filter.
 	 * A bug workaround for busmastering (Vortex, Demon) cards.
 	 */
-	for (i = 0; i < 6; i++)
-		bus_space_write_1(iot, ioh, ELINK_W2_RECVMASK_0 + i, 0);
+	for (i = 0; i < 6; i += 2)
+		bus_space_write_2(iot, ioh, ELINK_W2_RECVMASK_0 + i, 0);
 
 	ep_reset_cmd(sc, ELINK_COMMAND, RX_RESET);
 	ep_reset_cmd(sc, ELINK_COMMAND, TX_RESET);
 
 	GO_WINDOW(1);		/* Window 1 is operating window */
 	for (i = 0; i < 31; i++)
-		bus_space_read_1(iot, ioh, ep_w1_reg(sc, ELINK_W1_TX_STATUS));
+		(void)bus_space_read_2(iot, ioh,
+				       ep_w1_reg(sc, ELINK_W1_TX_STATUS));
 
-	/* Set threshhold for for Tx-space avaiable interrupt. */
+	/* Set threshold for Tx-space available interrupt. */
 	bus_space_write_2(iot, ioh, ELINK_COMMAND,
 	    SET_TX_AVAIL_THRESH | (1600 >> sc->ep_pktlenshift));
 
@@ -829,14 +809,12 @@ epinit(sc)
 
 	/* Enable interrupts. */
 	bus_space_write_2(iot, ioh, ELINK_COMMAND,
-	    SET_RD_0_MASK | S_CARD_FAILURE | S_RX_COMPLETE | S_TX_COMPLETE |
-	    S_TX_AVAIL);
+	    SET_RD_0_MASK | WATCHED_INTERRUPTS);
 	bus_space_write_2(iot, ioh, ELINK_COMMAND,
-	    SET_INTR_MASK | S_CARD_FAILURE | S_RX_COMPLETE | S_TX_COMPLETE |
-	    S_TX_AVAIL);
+	    SET_INTR_MASK | WATCHED_INTERRUPTS);
 
 	/*
-	 * Attempt to get rid of any stray interrupts that occured during
+	 * Attempt to get rid of any stray interrupts that occurred during
 	 * configuration.  On the i386 this isn't possible because one may
 	 * already be queued.  However, a single stray interrupt is
 	 * unimportant.
@@ -862,17 +840,18 @@ epinit(sc)
 
 	/* Attempt to start output, if any. */
 	epstart(ifp);
+
+	return (0);
 }
 
 
 /*
- * Set multicast receive filter. 
+ * Set multicast receive filter.
  * elink3 hardware has no selective multicast filter in hardware.
  * Enable reception of all multicasts and filter in software.
  */
 void
-epsetfilter(sc)
-	struct ep_softc *sc;
+epsetfilter(struct ep_softc *sc)
 {
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 
@@ -884,8 +863,7 @@ epsetfilter(sc)
 }
 
 int
-ep_media_change(ifp)
-	struct ifnet *ifp;
+ep_media_change(struct ifnet *ifp)
 {
 	struct ep_softc *sc = ifp->if_softc;
 
@@ -899,8 +877,7 @@ ep_media_change(ifp)
  * Reset and enable the MII on the RoadRunner.
  */
 void
-ep_roadrunner_mii_enable(sc)
-	struct ep_softc *sc;
+ep_roadrunner_mii_enable(struct ep_softc *sc)
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -923,8 +900,7 @@ ep_roadrunner_mii_enable(sc)
  * Set the card to use the specified media.
  */
 void
-epsetmedia(sc)
-	struct ep_softc *sc;
+epsetmedia(struct ep_softc *sc)
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -1009,7 +985,7 @@ epsetmedia(sc)
 		break;
 
 	case IFM_NONE:
-		printf("%s: interface disabled\n", sc->sc_dev.dv_xname);
+		printf("%s: interface disabled\n", device_xname(sc->sc_dev));
 		return;
 
 	default:
@@ -1069,9 +1045,7 @@ epsetmedia(sc)
  * (if_media callback, may be called before interface is brought up).
  */
 void
-ep_media_status(ifp, req)
-	struct ifnet *ifp;
-	struct ifmediareq *req;
+ep_media_status(struct ifnet *ifp, struct ifmediareq *req)
 {
 	struct ep_softc *sc = ifp->if_softc;
 	bus_space_tag_t iot = sc->sc_iot;
@@ -1121,15 +1095,14 @@ ep_media_status(ifp, req)
  * Always called as splnet().
  */
 void
-epstart(ifp)
-	struct ifnet *ifp;
+epstart(struct ifnet *ifp)
 {
 	struct ep_softc *sc = ifp->if_softc;
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
 	struct mbuf *m, *m0;
 	int sh, len, pad;
-	bus_addr_t txreg;
+	bus_size_t txreg;
 
 	/* Don't transmit if interface is busy or not running */
 	if ((ifp->if_flags & (IFF_RUNNING | IFF_OACTIVE)) != IFF_RUNNING)
@@ -1137,7 +1110,7 @@ epstart(ifp)
 
 startagain:
 	/* Sneak a peek at the next packet */
-	m0 = ifp->if_snd.ifq_head;
+	IFQ_POLL(&ifp->if_snd, m0);
 	if (m0 == 0)
 		return;
 
@@ -1156,7 +1129,7 @@ startagain:
 	if (len + pad > ETHER_MAX_LEN) {
 		/* packet is obviously too large: toss it */
 		++ifp->if_oerrors;
-		IF_DEQUEUE(&ifp->if_snd, m0);
+		IFQ_DEQUEUE(&ifp->if_snd, m0);
 		m_freem(m0);
 		goto readcheck;
 	}
@@ -1174,7 +1147,7 @@ startagain:
 		    SET_TX_AVAIL_THRESH | ELINK_THRESH_DISABLE);
 	}
 
-	IF_DEQUEUE(&ifp->if_snd, m0);
+	IFQ_DEQUEUE(&ifp->if_snd, m0);
 	if (m0 == 0)		/* not really needed */
 		return;
 
@@ -1187,10 +1160,15 @@ startagain:
 #endif
 
 	/*
-	 * Do the output at splhigh() so that an interrupt from another device
-	 * won't cause a FIFO underrun.
+	 * Do the output at a high interrupt priority level so that an
+	 * interrupt from another device won't cause a FIFO underrun.
+	 * We choose splsched() since that blocks essentially everything
+	 * except for interrupts from serial devices (which typically
+	 * lose data if their interrupt isn't serviced fast enough).
+	 *
+	 * XXX THIS CAN CAUSE CLOCK DRIFT!
 	 */
-	sh = splhigh();
+	sh = splsched();
 
 	txreg = ep_w1_reg(sc, ELINK_W1_TX_PIO_WR_1);
 
@@ -1269,10 +1247,10 @@ readcheck:
 		/* We received a complete packet. */
 		u_int16_t status = bus_space_read_2(iot, ioh, ELINK_STATUS);
 
-		if ((status & S_INTR_LATCH) == 0) {
+		if ((status & INTR_LATCH) == 0) {
 			/*
 			 * No interrupt, read the packet and continue
-			 * Is  this supposed to happen? Is my motherboard 
+			 * Is  this supposed to happen? Is my motherboard
 			 * completely busted?
 			 */
 			epread(sc);
@@ -1285,7 +1263,7 @@ readcheck:
 		if (epstatus(sc)) {
 			if (ifp->if_flags & IFF_DEBUG)
 				printf("%s: adapter reset\n",
-				    sc->sc_dev.dv_xname);
+				    device_xname(sc->sc_dev));
 			epreset(sc);
 		}
 	}
@@ -1302,8 +1280,7 @@ readcheck:
  *	on the cable (once in a blue moon).
  */
 static int
-epstatus(sc)
-	struct ep_softc *sc;
+epstatus(struct ep_softc *sc)
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -1318,26 +1295,26 @@ epstatus(sc)
 
 	if (fifost & FIFOS_RX_UNDERRUN) {
 		if (sc->sc_ethercom.ec_if.if_flags & IFF_DEBUG)
-			printf("%s: RX underrun\n", sc->sc_dev.dv_xname);
+			printf("%s: RX underrun\n", device_xname(sc->sc_dev));
 		epreset(sc);
 		return 0;
 	}
 
 	if (fifost & FIFOS_RX_STATUS_OVERRUN) {
 		if (sc->sc_ethercom.ec_if.if_flags & IFF_DEBUG)
-			printf("%s: RX Status overrun\n", sc->sc_dev.dv_xname);
+			printf("%s: RX Status overrun\n", device_xname(sc->sc_dev));
 		return 1;
 	}
 
 	if (fifost & FIFOS_RX_OVERRUN) {
 		if (sc->sc_ethercom.ec_if.if_flags & IFF_DEBUG)
-			printf("%s: RX overrun\n", sc->sc_dev.dv_xname);
+			printf("%s: RX overrun\n", device_xname(sc->sc_dev));
 		return 1;
 	}
 
 	if (fifost & FIFOS_TX_OVERRUN) {
 		if (sc->sc_ethercom.ec_if.if_flags & IFF_DEBUG)
-			printf("%s: TX overrun\n", sc->sc_dev.dv_xname);
+			printf("%s: TX overrun\n", device_xname(sc->sc_dev));
 		epreset(sc);
 		return 0;
 	}
@@ -1347,8 +1324,7 @@ epstatus(sc)
 
 
 static void
-eptxstat(sc)
-	struct ep_softc *sc;
+eptxstat(struct ep_softc *sc)
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -1358,22 +1334,22 @@ eptxstat(sc)
 	 * We need to read+write TX_STATUS until we get a 0 status
 	 * in order to turn off the interrupt flag.
 	 */
-	while ((i = bus_space_read_1(iot, ioh,
+	while ((i = bus_space_read_2(iot, ioh,
 	     ep_w1_reg(sc, ELINK_W1_TX_STATUS))) & TXS_COMPLETE) {
-		bus_space_write_1(iot, ioh, ep_w1_reg(sc, ELINK_W1_TX_STATUS),
+		bus_space_write_2(iot, ioh, ep_w1_reg(sc, ELINK_W1_TX_STATUS),
 		    0x0);
 
 		if (i & TXS_JABBER) {
 			++sc->sc_ethercom.ec_if.if_oerrors;
 			if (sc->sc_ethercom.ec_if.if_flags & IFF_DEBUG)
 				printf("%s: jabber (%x)\n",
-				       sc->sc_dev.dv_xname, i);
+				       device_xname(sc->sc_dev), i);
 			epreset(sc);
 		} else if (i & TXS_UNDERRUN) {
 			++sc->sc_ethercom.ec_if.if_oerrors;
 			if (sc->sc_ethercom.ec_if.if_flags & IFF_DEBUG)
 				printf("%s: fifo underrun (%x) @%d\n",
-				       sc->sc_dev.dv_xname, i,
+				       device_xname(sc->sc_dev), i,
 				       sc->tx_start_thresh);
 			if (sc->tx_succ_ok < 100)
 				    sc->tx_start_thresh = min(ETHER_MAX_LEN,
@@ -1390,8 +1366,7 @@ eptxstat(sc)
 }
 
 int
-epintr(arg)
-	void *arg;
+epintr(void *arg)
 {
 	struct ep_softc *sc = arg;
 	bus_space_tag_t iot = sc->sc_iot;
@@ -1399,23 +1374,19 @@ epintr(arg)
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	u_int16_t status;
 	int ret = 0;
-	int addrandom = 0;
 
-	if (sc->enabled == 0 ||
-	    (sc->sc_dev.dv_flags & DVF_ACTIVE) == 0)
+	if (sc->enabled == 0 || !device_is_active(sc->sc_dev))
 		return (0);
 
-	for (;;) {
-		bus_space_write_2(iot, ioh, ELINK_COMMAND, C_INTR_LATCH);
 
+	for (;;) {
 		status = bus_space_read_2(iot, ioh, ELINK_STATUS);
 
-		if ((status & (S_TX_COMPLETE | S_TX_AVAIL |
-			       S_RX_COMPLETE | S_CARD_FAILURE)) == 0) {
-			if ((status & S_INTR_LATCH) == 0) {
+		if ((status & WATCHED_INTERRUPTS) == 0) {
+			if ((status & INTR_LATCH) == 0) {
 #if 0
 				printf("%s: intr latch cleared\n",
-				       sc->sc_dev.dv_xname);
+				       device_xname(&sc->sc_dev));
 #endif
 				break;
 			}
@@ -1430,69 +1401,57 @@ epintr(arg)
 		 * interrupts occasionally.
 		 */
 		bus_space_write_2(iot, ioh, ELINK_COMMAND, ACK_INTR |
-				  (status & (C_INTR_LATCH |
-					     C_CARD_FAILURE |
-					     C_TX_COMPLETE |
-					     C_TX_AVAIL |
-					     C_RX_COMPLETE |
-					     C_RX_EARLY |
-					     C_INT_RQD |
-					     C_UPD_STATS)));
+		    (status & (INTR_LATCH | ALL_INTERRUPTS)));
 
 #if 0
 		status = bus_space_read_2(iot, ioh, ELINK_STATUS);
 
-		printf("%s: intr%s%s%s%s\n", sc->sc_dev.dv_xname,
-		       (status & S_RX_COMPLETE)?" RX_COMPLETE":"",
-		       (status & S_TX_COMPLETE)?" TX_COMPLETE":"",
-		       (status & S_TX_AVAIL)?" TX_AVAIL":"",
-		       (status & S_CARD_FAILURE)?" CARD_FAILURE":"");
+		printf("%s: intr%s%s%s%s\n", device_xname(&sc->sc_dev),
+		       (status & RX_COMPLETE)?" RX_COMPLETE":"",
+		       (status & TX_COMPLETE)?" TX_COMPLETE":"",
+		       (status & TX_AVAIL)?" TX_AVAIL":"",
+		       (status & CARD_FAILURE)?" CARD_FAILURE":"");
 #endif
 
-		if (status & S_RX_COMPLETE) {
+		if (status & RX_COMPLETE) {
 			epread(sc);
-			addrandom = 1;
 		}
-		if (status & S_TX_AVAIL) {
+		if (status & TX_AVAIL) {
 			sc->sc_ethercom.ec_if.if_flags &= ~IFF_OACTIVE;
 			epstart(&sc->sc_ethercom.ec_if);
-			addrandom = 1;
 		}
-		if (status & S_CARD_FAILURE) {
+		if (status & CARD_FAILURE) {
 			printf("%s: adapter failure (%x)\n",
-			    sc->sc_dev.dv_xname, status);
+			    device_xname(sc->sc_dev), status);
 #if 1
-			epinit(sc);
+			epinit(ifp);
 #else
 			epreset(sc);
 #endif
 			return (1);
 		}
-		if (status & S_TX_COMPLETE) {
+		if (status & TX_COMPLETE) {
 			eptxstat(sc);
 			epstart(ifp);
-			addrandom = 1;
 		}
 
 #if NRND > 0
 		if (status)
 			rnd_add_uint32(&sc->rnd_source, status);
 #endif
-	}	
+	}
 
 	/* no more interrupts */
 	return (ret);
 }
 
 void
-epread(sc)
-	struct ep_softc *sc;
+epread(struct ep_softc *sc)
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	struct mbuf *m;
-	struct ether_header *eh;
 	int len;
 
 	len = bus_space_read_2(iot, ioh, ep_w1_reg(sc, ELINK_W1_RX_STATUS));
@@ -1500,7 +1459,7 @@ epread(sc)
 again:
 	if (ifp->if_flags & IFF_DEBUG) {
 		int err = len & ERR_MASK;
-		char *s = NULL;
+		const char *s = NULL;
 
 		if (len & ERR_INCOMPLETE)
 			s = "incomplete packet";
@@ -1518,7 +1477,7 @@ again:
 			s = "dribble bits";
 
 		if (s)
-			printf("%s: %s\n", sc->sc_dev.dv_xname, s);
+			printf("%s: %s\n", device_xname(sc->sc_dev), s);
 	}
 
 	if (len & ERR_INCOMPLETE)
@@ -1540,31 +1499,15 @@ again:
 
 	++ifp->if_ipackets;
 
-	/* We assume the header fit entirely in one mbuf. */
-	eh = mtod(m, struct ether_header *);
-
 #if NBPFILTER > 0
 	/*
 	 * Check if there's a BPF listener on this interface.
 	 * If so, hand off the raw packet to BPF.
 	 */
-	if (ifp->if_bpf) {
+	if (ifp->if_bpf)
 		bpf_mtap(ifp->if_bpf, m);
-
-		/*
-		 * Note that the interface cannot be in promiscuous mode if
-		 * there are no BPF listeners.  And if we are in promiscuous
-		 * mode, we have to check if this packet is really ours.
-		 */
-		if ((ifp->if_flags & IFF_PROMISC) &&
-		    (eh->ether_dhost[0] & 1) == 0 && /* !mcast and !bcast */
-		    bcmp(eh->ether_dhost, LLADDR(sc->sc_ethercom.ec_if.if_sadl),
-		        sizeof(eh->ether_dhost)) != 0) {
-			m_freem(m);
-			return;
-		}
-	}
 #endif
+
 	(*ifp->if_input)(ifp, m);
 
 	/*
@@ -1590,7 +1533,7 @@ again:
 		if (len & ERR_INCOMPLETE) {
 			if (ifp->if_flags & IFF_DEBUG)
 				printf("%s: adapter reset\n",
-				    sc->sc_dev.dv_xname);
+				    device_xname(sc->sc_dev));
 			epreset(sc);
 			return;
 		}
@@ -1605,17 +1548,17 @@ abort:
 }
 
 struct mbuf *
-epget(sc, totlen)
-	struct ep_softc *sc;
-	int totlen;
+epget(struct ep_softc *sc, int totlen)
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
-	struct mbuf *top, **mp, *m, *rv = NULL;
-	bus_addr_t rxreg;
+	struct mbuf *m;
+	bus_size_t rxreg;
 	int len, remaining;
-	int sh;
+	int s;
+	void *newdata;
+	u_long offset;
 
 	m = sc->mb[sc->next_mb];
 	sc->mb[sc->next_mb] = 0;
@@ -1627,26 +1570,56 @@ epget(sc, totlen)
 		/* If the queue is no longer full, refill. */
 		if (sc->last_mb == sc->next_mb)
 			callout_reset(&sc->sc_mbuf_callout, 1, epmbuffill, sc);
+
 		/* Convert one of our saved mbuf's. */
 		sc->next_mb = (sc->next_mb + 1) % MAX_MBS;
 		m->m_data = m->m_pktdat;
 		m->m_flags = M_PKTHDR;
-		bzero(&m->m_pkthdr, sizeof(m->m_pkthdr));
+		memset(&m->m_pkthdr, 0, sizeof(m->m_pkthdr));
 	}
 	m->m_pkthdr.rcvif = ifp;
 	m->m_pkthdr.len = totlen;
 	len = MHLEN;
-	top = 0;
-	mp = &top;
 
 	/*
-	 * We read the packet at splhigh() so that an interrupt from another
-	 * device doesn't cause the card's buffer to overflow while we're
-	 * reading it.  We may still lose packets at other times.
+	 * Allocate big enough space to hold whole packet, to avoid
+	 * allocating new mbufs on splsched().
 	 */
-	sh = splhigh();
+	if (totlen + ALIGNBYTES > len) {
+		if (totlen + ALIGNBYTES > MCLBYTES) {
+			len = ALIGN(totlen + ALIGNBYTES);
+			MEXTMALLOC(m, len, M_DONTWAIT);
+		} else {
+			len = MCLBYTES;
+			MCLGET(m, M_DONTWAIT);
+		}
+		if ((m->m_flags & M_EXT) == 0) {
+			m_free(m);
+			return 0;
+		}
+	}
+
+	/* align the struct ip header */
+	newdata = (char *)ALIGN(m->m_data + sizeof(struct ether_header))
+	    - sizeof(struct ether_header);
+	m->m_data = newdata;
+	m->m_len = totlen;
 
 	rxreg = ep_w1_reg(sc, ELINK_W1_RX_PIO_RD_1);
+	remaining = totlen;
+	offset = mtod(m, u_long);
+
+	/*
+	 * We read the packet at a high interrupt priority level so that
+	 * an interrupt from another device won't cause the card's packet
+	 * buffer to overflow.  We choose splsched() since that blocks
+	 * essentially everything except for interrupts from serial
+	 * devices (which typically lose data if their interrupt isn't
+	 * serviced fast enough).
+	 *
+	 * XXX THIS CAN CAUSE CLOCK DRIFT!
+	 */
+	s = splsched();
 
 	if (sc->ep_flags & ELINK_FLAGS_USEFIFOBUFFER) {
 		/*
@@ -1659,109 +1632,62 @@ epget(sc, totlen)
 		bus_space_write_2(iot, ioh, ELINK_W1_RUNNER_RDCTL, totlen >> 1);
 	}
 
-	while (totlen > 0) {
-		if (top) {
-			m = sc->mb[sc->next_mb];
-			sc->mb[sc->next_mb] = 0;
-			if (m == 0) {
-				MGET(m, M_DONTWAIT, MT_DATA);
-				if (m == 0) {
-					m_freem(top);
-					goto out;
-				}
-			} else {
-				sc->next_mb = (sc->next_mb + 1) % MAX_MBS;
-			}
-			len = MLEN;
+	if (ELINK_IS_BUS_32(sc->bustype)) {
+		/*
+		 * Read bytes up to the point where we are aligned.
+		 * (We can align to 4 bytes, rather than ALIGNBYTES,
+		 * here because we're later reading 4-byte chunks.)
+		 */
+		if ((remaining > 3) && (offset & 3))  {
+			int count = (4 - (offset & 3));
+			bus_space_read_multi_1(iot, ioh,
+			    rxreg, (u_int8_t *) offset, count);
+			offset += count;
+			remaining -= count;
 		}
-		if (totlen >= MINCLSIZE) {
-			MCLGET(m, M_DONTWAIT);
-			if ((m->m_flags & M_EXT) == 0) {
-				m_free(m);
-				m_freem(top);
-				goto out;
-			}
-			len = MCLBYTES;
-		}
-		if (top == 0)  {
-			/* align the struct ip header */
-			caddr_t newdata = (caddr_t)
-			    ALIGN(m->m_data + sizeof(struct ether_header))
-			    - sizeof(struct ether_header);
-			len -= newdata - m->m_data;
-			m->m_data = newdata;
-		}
-		remaining = len = min(totlen, len);
-		if (ELINK_IS_BUS_32(sc->bustype)) {
-			u_long offset = mtod(m, u_long);
-			/*
-			 * Read bytes up to the point where we are aligned.
-			 * (We can align to 4 bytes, rather than ALIGNBYTES,
-			 * here because we're later reading 4-byte chunks.)
-			 */
-			if ((remaining > 3) && (offset & 3))  {
-				int count = (4 - (offset & 3));
-				bus_space_read_multi_1(iot, ioh,
-				    rxreg, (u_int8_t *) offset, count);
-				offset += count;
-				remaining -= count;
-			}
-			if (remaining > 3) {
-				bus_space_read_multi_stream_4(iot, ioh,
-				    rxreg, (u_int32_t *) offset,
+		if (remaining > 3) {
+			bus_space_read_multi_stream_4(iot, ioh,
+			    rxreg, (u_int32_t *) offset,
 				    remaining >> 2);
-				offset += remaining & ~3;
-				remaining &= 3;
-			}
-			if (remaining)  {
-				bus_space_read_multi_1(iot, ioh,
-				    rxreg, (u_int8_t *) offset, remaining);
-			}
-		} else {
-			u_long offset = mtod(m, u_long);
-			if ((remaining > 1) && (offset & 1))  {
-				bus_space_read_multi_1(iot, ioh,
-				    rxreg, (u_int8_t *) offset, 1);
-				remaining -= 1;
-				offset += 1;
-			}
-			if (remaining > 1) {
-				bus_space_read_multi_stream_2(iot, ioh,
-				    rxreg, (u_int16_t *) offset,
-				    remaining >> 1);
-				offset += remaining & ~1;
-			}
-			if (remaining & 1)  {
-				bus_space_read_multi_1(iot, ioh,
-				    rxreg, (u_int8_t *) offset, remaining & 1);
-			}
+			offset += remaining & ~3;
+			remaining &= 3;
 		}
-		m->m_len = len;
-		totlen -= len;
-		*mp = m;
-		mp = &m->m_next;
+		if (remaining)  {
+			bus_space_read_multi_1(iot, ioh,
+			    rxreg, (u_int8_t *) offset, remaining);
+		}
+	} else {
+		if ((remaining > 1) && (offset & 1))  {
+			bus_space_read_multi_1(iot, ioh,
+			    rxreg, (u_int8_t *) offset, 1);
+			remaining -= 1;
+			offset += 1;
+		}
+		if (remaining > 1) {
+			bus_space_read_multi_stream_2(iot, ioh,
+			    rxreg, (u_int16_t *) offset,
+			    remaining >> 1);
+			offset += remaining & ~1;
+		}
+		if (remaining & 1)  {
+				bus_space_read_multi_1(iot, ioh,
+			    rxreg, (u_int8_t *) offset, remaining & 1);
+		}
 	}
-
-	rv = top;
 
 	ep_discard_rxtop(iot, ioh);
 
- out:
 	if (sc->ep_flags & ELINK_FLAGS_USEFIFOBUFFER)
 		bus_space_write_2(iot, ioh, ELINK_W1_RUNNER_RDCTL, 0);
-	splx(sh);
+	splx(s);
 
-	return rv;
+	return (m);
 }
 
 int
-epioctl(ifp, cmd, data)
-	struct ifnet *ifp;
-	u_long cmd;
-	caddr_t data;
+epioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
 	struct ep_softc *sc = ifp->if_softc;
-	struct ifaddr *ifa = (struct ifaddr *)data;
 	struct ifreq *ifr = (struct ifreq *)data;
 	int s, error = 0;
 
@@ -1769,72 +1695,9 @@ epioctl(ifp, cmd, data)
 
 	switch (cmd) {
 
-	case SIOCSIFADDR:
-		if ((error = epenable(sc)) != 0)
-			break;
-		/* epinit is called just below */
-		ifp->if_flags |= IFF_UP;
-		switch (ifa->ifa_addr->sa_family) {
-#ifdef INET
-		case AF_INET:
-			epinit(sc);
-			arp_ifinit(&sc->sc_ethercom.ec_if, ifa);
-			break;
-#endif
-#ifdef NS
-		case AF_NS:
-		    {
-			struct ns_addr *ina = &IA_SNS(ifa)->sns_addr;
-
-			if (ns_nullhost(*ina))
-				ina->x_host = *(union ns_host *)
-				    LLADDR(ifp->if_sadl);
-			else
-				bcopy(ina->x_host.c_host,
-				    LLADDR(ifp->if_sadl),
-				    ifp->if_addrlen);
-			/* Set new address. */
-			epinit(sc);
-			break;
-		    }
-#endif
-		default:
-			epinit(sc);
-			break;
-		}
-		break;
-
 	case SIOCSIFMEDIA:
 	case SIOCGIFMEDIA:
 		error = ifmedia_ioctl(ifp, ifr, &sc->sc_mii.mii_media, cmd);
-		break;
-
-	case SIOCSIFFLAGS:
-		if ((ifp->if_flags & IFF_UP) == 0 &&
-		    (ifp->if_flags & IFF_RUNNING) != 0) {
-			/*
-			 * If interface is marked down and it is running, then
-			 * stop it.
-			 */
-			epstop(sc);
-			ifp->if_flags &= ~IFF_RUNNING;
-			epdisable(sc);
-		} else if ((ifp->if_flags & IFF_UP) != 0 &&
-			   (ifp->if_flags & IFF_RUNNING) == 0) {
-			/*
-			 * If interface is marked up and it is stopped, then
-			 * start it.
-			 */
-			if ((error = epenable(sc)) != 0)
-				break;
-			epinit(sc);
-		} else if ((ifp->if_flags & IFF_UP) != 0) {
-			/*
-			 * deal with flags changes:
-			 * IFF_MULTICAST, IFF_PROMISC.
-			 */
-			epsetfilter(sc);
-		}
 		break;
 
 	case SIOCADDMULTI:
@@ -1844,22 +1707,18 @@ epioctl(ifp, cmd, data)
 			break;
 		}
 
-		error = (cmd == SIOCADDMULTI) ?
-		    ether_addmulti(ifr, &sc->sc_ethercom) :
-		    ether_delmulti(ifr, &sc->sc_ethercom);
+	default:
+		error = ether_ioctl(ifp, cmd, data);
 
 		if (error == ENETRESET) {
 			/*
 			 * Multicast list has changed; set the hardware filter
 			 * accordingly.
 			 */
-			epreset(sc);
+			if (ifp->if_flags & IFF_RUNNING)
+				epreset(sc);
 			error = 0;
 		}
-		break;
-
-	default:
-		error = EINVAL;
 		break;
 	}
 
@@ -1868,32 +1727,30 @@ epioctl(ifp, cmd, data)
 }
 
 void
-epreset(sc)
-	struct ep_softc *sc;
+epreset(struct ep_softc *sc)
 {
 	int s;
 
 	s = splnet();
-	epinit(sc);
+	epinit(&sc->sc_ethercom.ec_if);
 	splx(s);
 }
 
 void
-epwatchdog(ifp)
-	struct ifnet *ifp;
+epwatchdog(struct ifnet *ifp)
 {
 	struct ep_softc *sc = ifp->if_softc;
 
-	log(LOG_ERR, "%s: device timeout\n", sc->sc_dev.dv_xname);
+	log(LOG_ERR, "%s: device timeout\n", device_xname(sc->sc_dev));
 	++sc->sc_ethercom.ec_if.if_oerrors;
 
 	epreset(sc);
 }
 
 void
-epstop(sc)
-	struct ep_softc *sc;
+epstop(struct ifnet *ifp, int disable)
 {
+	struct ep_softc *sc = ifp->if_softc;
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
 
@@ -1924,12 +1781,17 @@ epstop(sc)
 	ep_reset_cmd(sc, ELINK_COMMAND, RX_RESET);
 	ep_reset_cmd(sc, ELINK_COMMAND, TX_RESET);
 
-	bus_space_write_2(iot, ioh, ELINK_COMMAND, C_INTR_LATCH);
+	bus_space_write_2(iot, ioh, ELINK_COMMAND, ACK_INTR | INTR_LATCH);
 	bus_space_write_2(iot, ioh, ELINK_COMMAND, SET_RD_0_MASK);
 	bus_space_write_2(iot, ioh, ELINK_COMMAND, SET_INTR_MASK);
 	bus_space_write_2(iot, ioh, ELINK_COMMAND, SET_RX_FILTER);
 
 	epmbufempty(sc);
+
+	if (disable)
+		epdisable(sc);
+
+	ifp->if_flags &= ~IFF_RUNNING;
 }
 
 
@@ -1937,15 +1799,15 @@ epstop(sc)
  * Before reboots, reset card completely.
  */
 static void
-epshutdown(arg)
-	void *arg;
+epshutdown(void *arg)
 {
 	struct ep_softc *sc = arg;
-	int s = splnet(); 
+	int s = splnet();
 
 	if (sc->enabled) {
-		epstop(sc);
+		epstop(&sc->sc_ethercom.ec_if, 0);
 		ep_reset_cmd(sc, ELINK_COMMAND, GLOBAL_RESET);
+		epdisable(sc);
 		sc->enabled = 0;
 	}
 	splx(s);
@@ -1962,21 +1824,18 @@ epshutdown(arg)
  * each card compares the data on the bus; if there is a difference
  * then that card goes into ID_WAIT state again). In the meantime;
  * one bit of data is returned in the AX register which is conveniently
- * returned to us by bus_space_read_1().  Hence; we read 16 times getting one
+ * returned to us by bus_space_read_2().  Hence; we read 16 times getting one
  * bit of data with each read.
  *
  * NOTE: the caller must provide an i/o handle for ELINK_ID_PORT!
  */
 u_int16_t
-epreadeeprom(iot, ioh, offset)
-	bus_space_tag_t iot;
-	bus_space_handle_t ioh;
-	int offset;
+epreadeeprom(bus_space_tag_t iot, bus_space_handle_t ioh, int offset)
 {
 	u_int16_t data = 0;
 	int i;
 
-	bus_space_write_1(iot, ioh, 0, 0x80 + offset);
+	bus_space_write_2(iot, ioh, 0, 0x80 + offset);
 	delay(1000);
 	for (i = 0; i < 16; i++)
 		data = (data << 1) | (bus_space_read_2(iot, ioh, 0) & 1);
@@ -1984,45 +1843,62 @@ epreadeeprom(iot, ioh, offset)
 }
 
 static int
-epbusyeeprom(sc)
-	struct ep_softc *sc;
+epbusyeeprom(struct ep_softc *sc)
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
+	bus_size_t eecmd;
 	int i = 100, j;
+	uint16_t busybit;
 
 	if (sc->bustype == ELINK_BUS_PCMCIA) {
 		delay(1000);
 		return 0;
 	}
 
+	if (sc->ep_chipset == ELINK_CHIPSET_CORKSCREW) {
+		eecmd = CORK_ASIC_EEPROM_COMMAND;
+		busybit = CORK_EEPROM_BUSY;
+	} else {
+		eecmd = ELINK_W0_EEPROM_COMMAND;
+		busybit = EEPROM_BUSY;
+	}
+
 	j = 0;		/* bad GCC flow analysis */
 	while (i--) {
-		j = bus_space_read_2(iot, ioh, ELINK_W0_EEPROM_COMMAND);
-		if (j & EEPROM_BUSY)
+		j = bus_space_read_2(iot, ioh, eecmd);
+		if (j & busybit)
 			delay(100);
 		else
 			break;
 	}
-	if (!i) {
-		printf("\n%s: eeprom failed to come ready\n",
-		    sc->sc_dev.dv_xname);
+	if (i == 0) {
+		aprint_normal("\n");
+		aprint_error_dev(sc->sc_dev, "eeprom failed to come ready\n");
 		return (1);
 	}
-	if (j & EEPROM_TST_MODE) {
+	if (sc->ep_chipset != ELINK_CHIPSET_CORKSCREW &&
+	    (j & EEPROM_TST_MODE) != 0) {
 		/* XXX PnP mode? */
-		printf("\n%s: erase pencil mark!\n", sc->sc_dev.dv_xname);
+		printf("\n%s: erase pencil mark!\n", device_xname(sc->sc_dev));
 		return (1);
 	}
 	return (0);
 }
 
 u_int16_t
-ep_read_eeprom(sc, offset)
-	struct ep_softc *sc;
-	u_int16_t offset;
+ep_read_eeprom(struct ep_softc *sc, u_int16_t offset)
 {
+	bus_size_t eecmd, eedata;
 	u_int16_t readcmd;
+
+	if (sc->ep_chipset == ELINK_CHIPSET_CORKSCREW) {
+		eecmd = CORK_ASIC_EEPROM_COMMAND;
+		eedata = CORK_ASIC_EEPROM_DATA;
+	} else {
+		eecmd = ELINK_W0_EEPROM_COMMAND;
+		eedata = ELINK_W0_EEPROM_DATA;
+	}
 
 	/*
 	 * RoadRunner has a larger EEPROM, so a different read command
@@ -2035,16 +1911,17 @@ ep_read_eeprom(sc, offset)
 
 	if (epbusyeeprom(sc))
 		return (0);		/* XXX why is eeprom busy? */
-	bus_space_write_2(sc->sc_iot, sc->sc_ioh, ELINK_W0_EEPROM_COMMAND,
-	    readcmd | offset);
+
+	bus_space_write_2(sc->sc_iot, sc->sc_ioh, eecmd, readcmd | offset);
+
 	if (epbusyeeprom(sc))
 		return (0);		/* XXX why is eeprom busy? */
-	return (bus_space_read_2(sc->sc_iot, sc->sc_ioh, ELINK_W0_EEPROM_DATA));
+
+	return (bus_space_read_2(sc->sc_iot, sc->sc_ioh, eedata));
 }
 
 void
-epmbuffill(v)
-	void *v;
+epmbuffill(void *v)
 {
 	struct ep_softc *sc = v;
 	struct mbuf *m;
@@ -2069,13 +1946,12 @@ epmbuffill(v)
 }
 
 void
-epmbufempty(sc)
-	struct ep_softc *sc;
+epmbufempty(struct ep_softc *sc)
 {
 	int s, i;
 
 	s = splnet();
-	for (i = 0; i<MAX_MBS; i++) {
+	for (i = 0; i < MAX_MBS; i++) {
 		if (sc->mb[i]) {
 			m_freem(sc->mb[i]);
 			sc->mb[i] = NULL;
@@ -2087,14 +1963,12 @@ epmbufempty(sc)
 }
 
 int
-epenable(sc)
-	struct ep_softc *sc;
+epenable(struct ep_softc *sc)
 {
 
 	if (sc->enabled == 0 && sc->enable != NULL) {
 		if ((*sc->enable)(sc) != 0) {
-			printf("%s: device enable failed\n",
-			    sc->sc_dev.dv_xname);
+			aprint_error_dev(sc->sc_dev, "device enable failed\n");
 			return (EIO);
 		}
 	}
@@ -2104,8 +1978,7 @@ epenable(sc)
 }
 
 void
-epdisable(sc)
-	struct ep_softc *sc;
+epdisable(struct ep_softc *sc)
 {
 
 	if (sc->enabled != 0 && sc->disable != NULL) {
@@ -2120,11 +1993,9 @@ epdisable(sc)
  *	Handle device activation/deactivation requests.
  */
 int
-ep_activate(self, act)
-	struct device *self;
-	enum devact act;
+ep_activate(device_t self, enum devact act)
 {
-	struct ep_softc *sc = (struct ep_softc *)self;
+	struct ep_softc *sc = device_private(self);
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	int error = 0, s;
 
@@ -2151,12 +2022,14 @@ ep_activate(self, act)
  *	Detach a elink3 interface.
  */
 int
-ep_detach(self, flags)
-	struct device *self;
-	int flags;
+ep_detach(device_t self, int flags)
 {
-	struct ep_softc *sc = (struct ep_softc *)self;
+	struct ep_softc *sc = device_private(self);
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
+
+	/* Succeed now if there's no work to do. */
+	if ((sc->sc_flags & ELINK_FLAGS_ATTACHED) == 0)
+		return (0);
 
 	epdisable(sc);
 
@@ -2174,9 +2047,6 @@ ep_detach(self, flags)
 #if NRND > 0
 	rnd_detach_source(&sc->rnd_source);
 #endif
-#if NBPFILTER > 0
-	bpfdetach(ifp);
-#endif
 	ether_ifdetach(ifp);
 	if_detach(ifp);
 
@@ -2186,10 +2056,9 @@ ep_detach(self, flags)
 }
 
 u_int32_t
-ep_mii_bitbang_read(self)
-	struct device *self;
+ep_mii_bitbang_read(device_t self)
 {
-	struct ep_softc *sc = (void *) self;
+	struct ep_softc *sc = device_private(self);
 
 	/* We're already in Window 4. */
 	return (bus_space_read_2(sc->sc_iot, sc->sc_ioh,
@@ -2197,11 +2066,9 @@ ep_mii_bitbang_read(self)
 }
 
 void
-ep_mii_bitbang_write(self, val)
-	struct device *self;
-	u_int32_t val;
+ep_mii_bitbang_write(device_t self, u_int32_t val)
 {
-	struct ep_softc *sc = (void *) self;
+	struct ep_softc *sc = device_private(self);
 
 	/* We're already in Window 4. */
 	bus_space_write_2(sc->sc_iot, sc->sc_ioh,
@@ -2209,11 +2076,9 @@ ep_mii_bitbang_write(self, val)
 }
 
 int
-ep_mii_readreg(self, phy, reg)
-	struct device *self;
-	int phy, reg;
+ep_mii_readreg(device_t self, int phy, int reg)
 {
-	struct ep_softc *sc = (void *) self;
+	struct ep_softc *sc = device_private(self);
 	int val;
 
 	GO_WINDOW(4);
@@ -2226,11 +2091,9 @@ ep_mii_readreg(self, phy, reg)
 }
 
 void
-ep_mii_writereg(self, phy, reg, val)
-	struct device *self;
-	int phy, reg, val;
+ep_mii_writereg(device_t self, int phy, int reg, int val)
 {
-	struct ep_softc *sc = (void *) self;
+	struct ep_softc *sc = device_private(self);
 
 	GO_WINDOW(4);
 
@@ -2240,10 +2103,9 @@ ep_mii_writereg(self, phy, reg, val)
 }
 
 void
-ep_statchg(self)
-	struct device *self;
+ep_statchg(device_t self)
 {
-	struct ep_softc *sc = (struct ep_softc *)self;
+	struct ep_softc *sc = device_private(self);
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
 	int mctl;
@@ -2256,4 +2118,30 @@ ep_statchg(self)
 		mctl &= ~MAC_CONTROL_FDX;
 	bus_space_write_2(iot, ioh, ELINK_W3_MAC_CONTROL, mctl);
 	GO_WINDOW(1);	/* back to operating window */
+}
+
+void
+ep_power(int why, void *arg)
+{
+	struct ep_softc *sc = arg;
+	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
+	int s;
+
+	s = splnet();
+	switch (why) {
+	case PWR_SUSPEND:
+	case PWR_STANDBY:
+		epstop(ifp, 1);
+		break;
+	case PWR_RESUME:
+		if (ifp->if_flags & IFF_UP) {
+			(void)epinit(ifp);
+		}
+		break;
+	case PWR_SOFTSUSPEND:
+	case PWR_SOFTSTANDBY:
+	case PWR_SOFTRESUME:
+		break;
+	}
+	splx(s);
 }

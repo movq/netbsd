@@ -1,4 +1,4 @@
-/*	$NetBSD: sprintf.c,v 1.9 2000/01/21 19:51:37 mycroft Exp $	*/
+/*	$NetBSD: sprintf.c,v 1.15 2007/06/03 17:39:26 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,48 +37,41 @@
 #if 0
 static char sccsid[] = "@(#)sprintf.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: sprintf.c,v 1.9 2000/01/21 19:51:37 mycroft Exp $");
+__RCSID("$NetBSD: sprintf.c,v 1.15 2007/06/03 17:39:26 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
 #include <assert.h>
 #include <errno.h>
-#include <stdio.h>
-#if __STDC__
-#include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
 #include <limits.h>
+#include <stdarg.h>
+#include <stdio.h>
+
+#include "reentrant.h"
 #include "local.h"
 
-int
-#if __STDC__
-sprintf(char *str, char const *fmt, ...)
-#else
-sprintf(str, fmt, va_alist)
-	char *str;
-	char *fmt;
-	va_dcl
+#ifdef _FORTIFY_SOURCE
+#undef sprintf
 #endif
+
+int
+sprintf(char *str, char const *fmt, ...)
 {
 	int ret;
 	va_list ap;
 	FILE f;
+	struct __sfileext fext;
 
 	_DIAGASSERT(str != NULL);
 	_DIAGASSERT(fmt != NULL);
 
+	_FILEEXT_SETUP(&f, &fext);
 	f._file = -1;
 	f._flags = __SWR | __SSTR;
 	f._bf._base = f._p = (unsigned char *)str;
 	f._bf._size = f._w = INT_MAX;
-#if __STDC__
 	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
-	ret = vfprintf(&f, fmt, ap);
+	ret = __vfprintf_unlocked(&f, fmt, ap);
 	va_end(ap);
 	*f._p = 0;
 	return (ret);

@@ -1,4 +1,4 @@
-/*	$NetBSD: essvar.h,v 1.17 2000/03/23 07:01:34 thorpej Exp $	*/
+/*	$NetBSD: essvar.h,v 1.24 2005/12/11 12:22:02 christos Exp $	*/
 /*
  * Copyright 1997
  * Digital Equipment Corporation. All rights reserved.
@@ -33,7 +33,7 @@
  */
 
 /*
-** @(#) $RCSfile: essvar.h,v $ $Revision: 1.17 $ (SHARK) $Date: 2000/03/23 07:01:34 $
+** @(#) $RCSfile: essvar.h,v $ $Revision: 1.24 $ (SHARK) $Date: 2005/12/11 12:22:02 $
 **
 **++
 **
@@ -54,7 +54,7 @@
 **	Blair Fidler	Software Engineering Australia
 **			Gold Coast, Australia.
 **
-**  CREATION DATE:  
+**  CREATION DATE:
 **
 **	May 12, 1997.
 **
@@ -106,7 +106,7 @@ struct ess_audio_channel
 	int	ist;
 	void	*ih;			/* interrupt vectoring */
 	u_long	nintr;			/* number of interrupts taken */
-	void	(*intr)__P((void*));	/* ISR for DMA complete */
+	void	(*intr)(void*);		/* ISR for DMA complete */
 	void	*arg;			/* arg for intr() */
 
 	/* Status information */
@@ -135,34 +135,41 @@ struct ess_softc
 
 	u_short	sc_open;		/* reference count of open calls */
 
-	int ndevs; 
+	int ndevs;
 	u_char	gain[ESS_MAX_NDEVS][2];	/* kept in input levels */
 #define ESS_LEFT 0
 #define ESS_RIGHT 1
-	
+
 	u_int	out_port;		/* output port */
 	u_int	in_mask;		/* input ports */
 	u_int	in_port;		/* XXX needed for MI interface */
 
 	u_int	spkr_state;		/* non-null is on */
-	
+
 	struct ess_audio_channel sc_audio1; /* audio channel for record */
 	struct ess_audio_channel sc_audio2; /* audio channel for playback */
 
 	u_int	sc_model;
 #define ESS_UNSUPPORTED 0
-#define ESS_1888	1
-#define ESS_1887	2
-#define ESS_888		3
-#define ESS_1788	4
+#define	ESS_688		1
+#define	ESS_1688	2
+#define ESS_1788	3
+#define ESS_1868	4
 #define ESS_1869	5
-#define ESS_1879	6
-#define ESS_1868	7
-#define ESS_1878	8
+#define ESS_1878	6
+#define ESS_1879	7
+#define ESS_888		8
+#define ESS_1887	9
+#define ESS_1888	10
 
 	u_int	sc_version;		/* Legacy ES688/ES1688 ID */
+
+	/* game port on es1888 */
+	bus_space_tag_t sc_joy_iot;
+	bus_space_handle_t sc_joy_ioh;
 };
 
-int	essmatch __P((struct ess_softc *));
-void	essattach __P((struct ess_softc *));
+int	essmatch(struct ess_softc *);
+void	essattach(struct ess_softc *, int);
+int	ess_config_addr(struct ess_softc *);
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: lcmd.h,v 1.4 1997/11/21 08:36:02 lukem Exp $	*/
+/*	$NetBSD: lcmd.h,v 1.6 2003/08/07 11:17:25 agc Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -43,7 +39,7 @@
 struct lcmd_tab {
 	char *lc_name;
 	int lc_minlen;
-	void (*lc_func) __P((struct value *, struct value *));
+	void (*lc_func)(struct value *, struct value *);
 	struct lcmd_arg *lc_arg;
 };
 
@@ -60,28 +56,28 @@ struct lcmd_arg {
 #define ARG_STR		0x02		/* must be a string */
 #define ARG_LIST	0x10		/* this arg can be a list */
 
-struct lcmd_tab	*lcmd_lookup __P((char *));
-void	l_alias __P((struct value *, struct value *));
-void	l_close __P((struct value *, struct value *));
-void	l_cursormodes __P((struct value *, struct value *));
-void	l_debug __P((struct value *, struct value *));
-void	l_def_nline __P((struct value *, struct value *));
-void	l_def_shell __P((struct value *, struct value *));
-void	l_def_smooth __P((struct value *, struct value *));
-void	l_echo __P((struct value *, struct value *));
-void	l_escape __P((struct value *, struct value *));
-void	l_foreground __P((struct value *, struct value *));
-void	l_iostat __P((struct value *, struct value *));
-void	l_label __P((struct value *, struct value *));
-void	l_list __P((struct value *, struct value *));
-void	l_select __P((struct value *, struct value *));
-void	l_smooth __P((struct value *, struct value *));
-void	l_source __P((struct value *, struct value *));
-void	l_terse __P((struct value *, struct value *));
-void	l_time __P((struct value *, struct value *));
-void	l_unalias __P((struct value *, struct value *));
-void	l_unset __P((struct value *, struct value *));
-void	l_variable __P((struct value *, struct value *));
-void	l_window __P((struct value *, struct value *));
-void	l_write __P((struct value *, struct value *));
-struct ww *vtowin __P((struct value *, struct ww *));
+struct lcmd_tab	*lcmd_lookup(char *);
+void	l_alias(struct value *, struct value *);
+void	l_close(struct value *, struct value *);
+void	l_cursormodes(struct value *, struct value *);
+void	l_debug(struct value *, struct value *);
+void	l_def_nline(struct value *, struct value *);
+void	l_def_shell(struct value *, struct value *);
+void	l_def_smooth(struct value *, struct value *);
+void	l_echo(struct value *, struct value *);
+void	l_escape(struct value *, struct value *);
+void	l_foreground(struct value *, struct value *);
+void	l_iostat(struct value *, struct value *);
+void	l_label(struct value *, struct value *);
+void	l_list(struct value *, struct value *);
+void	l_select(struct value *, struct value *);
+void	l_smooth(struct value *, struct value *);
+void	l_source(struct value *, struct value *);
+void	l_terse(struct value *, struct value *);
+void	l_time(struct value *, struct value *);
+void	l_unalias(struct value *, struct value *);
+void	l_unset(struct value *, struct value *);
+void	l_variable(struct value *, struct value *);
+void	l_window(struct value *, struct value *);
+void	l_write(struct value *, struct value *);
+struct ww *vtowin(struct value *, struct ww *);

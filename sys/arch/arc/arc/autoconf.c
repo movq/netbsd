@@ -1,11 +1,46 @@
-/*	$NetBSD: autoconf.c,v 1.13 2000/01/23 21:01:50 soda Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.32 2007/12/03 15:33:12 ad Exp $	*/
 /*	$OpenBSD: autoconf.c,v 1.9 1997/05/18 13:45:20 pefo Exp $	*/
+
+/*
+ * Copyright (c) 1992, 1993
+ *	The Regents of the University of California.  All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Systems Programming Group of the University of Utah Computer
+ * Science Department and Ralph Campbell.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ * from: Utah Hdr: autoconf.c 1.31 91/01/21
+ *
+ *	from: @(#)autoconf.c	8.1 (Berkeley) 6/10/93
+ */
 
 /*
  * Copyright (c) 1996 Per Fogelstrom
  * Copyright (c) 1988 University of Utah.
- * Copyright (c) 1992, 1993
- *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * the Systems Programming Group of the University of Utah Computer
@@ -52,6 +87,9 @@
  * and the drivers are initialized.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.32 2007/12/03 15:33:12 ad Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/buf.h>
@@ -63,31 +101,57 @@
 #include <machine/cpu.h>
 #include <machine/autoconf.h>
 
-void findroot __P((struct device **devpp, int *partp));
-int getpno __P((char **cp));
+#include <dev/scsipi/scsi_all.h>
+#include <dev/scsipi/scsipi_all.h>
+#include <dev/scsipi/scsiconf.h>
+
+#include <arc/arc/timervar.h>
+
+struct bootdev_data {
+	const char *dev_type;
+	int	bus;
+	int	unit;
+	int	partition;
+};
+
+static int getpno(const char **, int *);
 
 /*
  * The following several variables are related to
  * the configuration process, and are used in initializing
  * the machine.
  */
-int	cpuspeed = 150;	/* approx # instr per usec. */
-
-void	findroot __P((struct device **, int *));
+struct bootdev_data *bootdev_data;
 
 /*
  *  Configure all devices found that we know about.
  *  This is done at boot time.
  */
 void
-cpu_configure()
+cpu_configure(void)
 {
+
+#ifdef ENABLE_INT5_STATCLOCK
+	evcnt_attach_static(&statclock_ev);
+#endif
+
 	(void)splhigh();	/* To be really sure.. */
-	if (config_rootfound("mainbus", "mainbus") == NULL)
+	if (config_rootfound("mainbus", NULL) == NULL)
 		panic("no mainbus found");
 
 	/* Configuration is finished, turn on interrupts. */
-	_splnone();	/* enable all source forcing SOFT_INTs cleared */
+#ifdef ENABLE_INT5_STATCLOCK
+	/*
+	 * Enable interrupt sources.
+	 * We can't enable CPU INT5 which is used by statclock(9) here
+	 * until cpu_initclocks(9) is called because there is no way
+	 * to disable it other than setting status register by spl(9).
+	 */
+	_spllower(MIPS_INT_MASK_5);
+#else
+	/* enable all source forcing SOFT_INTs cleared */
+	_splnone();
+#endif
 }
 
 #if defined(NFS_BOOT_BOOTP) || defined(NFS_BOOT_DHCP)
@@ -95,72 +159,18 @@ int nfs_boot_rfc951 = 1;
 #endif
 
 void
-cpu_rootconf()
+cpu_rootconf(void)
 {
-	struct device *booted_device;
-	int booted_partition;
-
-	findroot(&booted_device, &booted_partition);
 
 	printf("boot device: %s\n",
 	    booted_device ? booted_device->dv_xname : "<unknown>");
 
-	setroot(booted_device, booted_partition);
-}
-
-u_long	bootdev;		/* should be dev_t, but not until 32 bits */
-
-/*
- * Attempt to find the device from which we were booted.
- * If we can do so, and not instructed not to do so,
- * change rootdev to correspond to the load device.
- */
-void
-findroot(devpp, partp)
-	struct device **devpp;
-	int *partp;
-{
-	int i, majdev, unit, part;
-	struct device *dv;
-	char buf[32];
-
-	/*
-	 * Default to "not found."
-	 */
-	*devpp = NULL;
-	*partp = 0;
-
-#if 0
-	printf("howto %x bootdev %x ", boothowto, bootdev);
-#endif
-
-	if ((bootdev & B_MAGICMASK) != (u_long)B_DEVMAGIC)
-		return;
-
-	majdev = B_TYPE(bootdev);
-	for (i = 0; dev_name2blk[i].d_name != NULL; i++)
-		if (majdev == dev_name2blk[i].d_maj)
-			break;
-	if (dev_name2blk[i].d_name == NULL)
-		return;
-
-	part = B_PARTITION(bootdev);
-	unit = B_UNIT(bootdev);
-
-	sprintf(buf, "%s%d", dev_name2blk[i].d_name, unit);
-	for (dv = alldevs.tqh_first; dv != NULL;
-	    dv = dv->dv_list.tqe_next) {
-		if (strcmp(buf, dv->dv_xname) == 0) {
-			*devpp = dv;
-			*partp = part;
-			return;
-		}
-	}
+	setroot(booted_device, booted_device ? bootdev_data->partition : 0);
 }
 
 struct devmap {
-	char *attachment;
-	char *dev;
+	const char *attachment;
+	const char *dev;
 };
 
 /*
@@ -169,10 +179,9 @@ struct devmap {
  * (beware for empty scsi id's...)
  */
 void
-makebootdev(cp)
-	char *cp;
+makebootdev(const char *cp)
 {
-	int ctrl, unit, part, i;
+	int ok, junk;
 	static struct devmap devmap[] = {
 		{ "multi", "fd" },
 		{ "eisa", "wd" },
@@ -180,11 +189,11 @@ makebootdev(cp)
 		{ NULL, NULL }
 	};
 	struct devmap *dp = &devmap[0];
+	static struct bootdev_data bd;
 
-	bootdev = B_DEVMAGIC;
-
+	/* "scsi()" */
 	while (dp->attachment) {
-		if (strncmp (cp, dp->attachment, strlen(dp->attachment)) == 0)
+		if (strncmp(cp, dp->attachment, strlen(dp->attachment)) == 0)
 			break;
 		dp++;
 	}
@@ -192,42 +201,119 @@ makebootdev(cp)
 		printf("Warning: boot device unrecognized: %s\n", cp);
 		return;
 	}
-	ctrl = getpno(&cp);
-	if (*cp++ == ')')
-		unit = getpno(&cp);
+	bd.dev_type = dp->dev;
+	ok = getpno(&cp, &bd.bus);
+
+	/* "multi(2)scsi(0)disk(0)rdisk(0)partition(1)" case */
+	if (ok && strcmp(dp->attachment, "multi") == 0 &&
+	    memcmp(cp, "scsi", 4) == 0) {
+		bd.dev_type = "sd";
+		ok = getpno(&cp, &bd.bus);
+	}
+
+	/* "disk(N)" */
+	if (ok)
+		ok = getpno(&cp, &bd.unit);
 	else
-		unit = 0;
+		bd.unit = 0;
+
+	/* "rdisk()" */
 	if (*cp++ == ')')
-		getpno(&cp);
+		ok = getpno(&cp, &junk);
+
+	/* "partition(1)" */
 #if 0 /* ignore partition number */
-	if (*cp++ == ')')
-		part = getpno(&cp) - 1;
+	if (ok && getpno(&cp, &bd.partition))
+		--bd.partition;
 	else
 #endif
-		part = 0;
+		bd.partition = 0;
 
-	for (i = 0; dev_name2blk[i].d_name != NULL; i++)
-		if (strcmp(dp->dev, dev_name2blk[i].d_name) == 0)
-			bootdev = MAKEBOOTDEV(dev_name2blk[i].d_maj, 0,
-			    ctrl, unit, part);
+	bootdev_data = &bd;
 }
 
-int
-getpno(cp)
-	char **cp;
+static int
+getpno(const char **cp, int *np)
 {
 	int val = 0;
-	char *cx = *cp;
+	const char *s = *cp;
+	int got = 0;
 
-	while(*cx && *cx != '(')
-		cx++;
-	if(*cx == '(') {
-		cx++;
-		while(*cx && *cx != ')') {
-			val = val * 10 + *cx - '0';
-			cx++;
+	*np = 0;
+
+	while (*s && *s != '(')
+		s++;
+	if (*s == '(') {
+		for (s++; *s; s++) {
+			if (*s == ')') {
+				s++;
+				got = 1;
+				*np = val;
+				break;
+			}
+			val = val * 10 + *s - '0';
 		}
 	}
-	*cp = cx;
-	return val;
+	*cp = s;
+	return (got);
+}
+
+/*
+ * Attempt to find the device from which we were booted.
+ */
+void
+device_register(struct device *dev, void *aux)
+{
+	struct bootdev_data *b = bootdev_data;
+	struct device *parent = device_parent(dev);
+
+	static int found = 0, initted = 0, scsiboot = 0;
+	static struct device *scsibusdev = NULL;
+
+	if (b == NULL)
+		return;	/* There is no hope. */
+	if (found)
+		return;
+
+	if (!initted) {
+		if (strcmp(b->dev_type, "sd") == 0)
+			scsiboot = 1;
+		initted = 1;
+	}
+
+	if (scsiboot && device_is_a(dev, "scsibus")) {
+		/* XXX device_unit() abuse */
+		if (device_unit(dev) == b->bus) {
+			scsibusdev = dev;
+#if 0
+			printf("\nscsibus = %s\n", dev->dv_xname);
+#endif
+		}
+		return;
+	}
+
+	if (!device_is_a(dev, b->dev_type))
+		return;
+
+	if (device_is_a(dev, "sd")) {
+		struct scsipibus_attach_args *sa = aux;
+
+		if (scsiboot && scsibusdev && parent == scsibusdev &&
+		    sa->sa_periph->periph_target == b->unit) {
+			booted_device = dev;
+#if 0
+			printf("\nbooted_device = %s\n", dev->dv_xname);
+#endif
+			found = 1;
+		}
+		return;
+	}
+	/* XXX device_unit() abuse */
+	if (device_unit(dev) == b->unit) {
+		booted_device = dev;
+#if 0
+		printf("\nbooted_device = %s\n", dev->dv_xname);
+#endif
+		found = 1;
+	}
 }

@@ -1,5 +1,9 @@
-#	$NetBSD: Makefile.inc,v 1.1 1997/10/17 14:19:00 lukem Exp $
+#	$NetBSD: Makefile.inc,v 1.3 2007/05/28 12:06:42 tls Exp $
 
 .if exists(${.CURDIR}/../../Makefile.inc)
 .include "${.CURDIR}/../../Makefile.inc"
 .endif
+
+USE_FORT?=yes	# network client/server
+
+WARNS=4

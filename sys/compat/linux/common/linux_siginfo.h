@@ -1,4 +1,4 @@
-/* 	$NetBSD: linux_siginfo.h,v 1.2 1998/12/15 19:31:39 itohy Exp $	*/
+/* 	$NetBSD: linux_siginfo.h,v 1.13 2008/10/21 20:24:15 njoly Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,14 +33,24 @@
 #define _LINUX_SIGINFO_H
 
 #if defined(__i386__)
-/*XXX XAX write me#include <compat/linux/i386/linux_siginfo.h>*/
-#include <compat/linux/arch/alpha/linux_siginfo.h>
+#include <compat/linux/arch/i386/linux_siginfo.h>
 #elif defined(__m68k__)
 #include <compat/linux/arch/m68k/linux_siginfo.h>
 #elif defined(__alpha__)
 #include <compat/linux/arch/alpha/linux_siginfo.h>
-#else
-#error Undefined linux_siginfo.h machine type.
+#elif defined(__powerpc__)
+#include <compat/linux/arch/powerpc/linux_siginfo.h>
+#elif defined(__mips__)
+#include <compat/linux/arch/mips/linux_siginfo.h>
+#elif defined(__arm__)
+#include <compat/linux/arch/arm/linux_siginfo.h>
+#elif defined(__amd64__)
+#include <compat/linux/arch/amd64/linux_siginfo.h>
 #endif
+
+/* From linux/include/asm-generic/siginfo.h */
+#define LINUX_CLD_EXITED	1
+#define LINUX_CLD_KILLED	2
+#define LINUX_CLD_DUMPED	3
 
 #endif /* !_LINUX_SIGINFO_H */

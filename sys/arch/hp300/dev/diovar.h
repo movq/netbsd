@@ -1,4 +1,4 @@
-/*	$NetBSD: diovar.h,v 1.7 1998/01/11 21:53:05 thorpej Exp $	*/
+/*	$NetBSD: diovar.h,v 1.13 2008/04/28 20:23:19 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -48,9 +41,11 @@
 struct dio_attach_args {
 	bus_space_tag_t da_bst;		/* bus space tag */
 	int	da_scode;		/* select code */
+	int	da_addr;		/* device address */
 	int	da_size;		/* size of address space */
-	u_int8_t da_id;			/* primary device id */
-	u_int8_t da_secid;		/* secondary device id */
+	int	da_ipl;			/* interrupt priority level */
+	uint8_t da_id;			/* primary device id */
+	uint8_t da_secid;		/* secondary device id */
 };
 
 /*
@@ -58,8 +53,8 @@ struct dio_attach_args {
  * the size of a DIO device (not all use one select code).
  */
 struct dio_devdata {
-	u_int8_t dd_id;			/* primary device id */
-	u_int8_t dd_secid;		/* secondary device id */
+	uint8_t dd_id;			/* primary device id */
+	uint8_t dd_secid;		/* secondary device id */
 	int	dd_nscode;		/* number of select codes */
 };
 
@@ -68,16 +63,14 @@ struct dio_devdata {
  * a textual description of a device.
  */
 struct dio_devdesc {
-	u_int8_t dd_id;			/* primary device id */
-	u_int8_t dd_secid;		/* secondary device id */
+	uint8_t dd_id;			/* primary device id */
+	uint8_t dd_secid;		/* secondary device id */
 	const char *dd_desc;		/* description */
 };
 
-#include "locators.h"
-#define	diocf_scode		cf_loc[DIOCF_SCODE]
-
 #ifdef _KERNEL
-void	*dio_scodetopa __P((int));
-void	*dio_intr_establish __P((int (*)(void *), void *, int, int));
-void	dio_intr_disestablish __P((void *));
+void	*dio_scodetopa(int);
+void	*dio_intr_establish(int (*)(void *), void *, int, int);
+void	dio_intr_disestablish(void *);
+void	dio_set_bus_space_oddbyte(bus_space_tag_t);
 #endif /* _KERNEL */

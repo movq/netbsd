@@ -1,4 +1,4 @@
-/*	$NetBSD: gsp_act.c,v 1.2 1997/10/17 06:58:47 lukem Exp $	*/
+/*	$NetBSD: gsp_act.c,v 1.5 2006/08/26 18:15:37 christos Exp $	*/
 /*
  * GSP assembler - semantic actions
  *
@@ -17,7 +17,7 @@
  *    must display the following acknowledgement:
  *      This product includes software developed by Paul Mackerras.
  * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software withough specific prior written permission
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -33,10 +33,12 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: gsp_act.c,v 1.2 1997/10/17 06:58:47 lukem Exp $");
+__RCSID("$NetBSD: gsp_act.c,v 1.5 2006/08/26 18:15:37 christos Exp $");
 #endif
 
 #include <stdlib.h>
+#include <string.h>
+#include <util.h>
 #include "gsp_ass.h"
 
 void

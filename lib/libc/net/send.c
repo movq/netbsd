@@ -1,4 +1,4 @@
-/*	$NetBSD: send.c,v 1.7 1997/07/13 19:58:06 christos Exp $	*/
+/*	$NetBSD: send.c,v 1.9 2003/08/07 16:43:15 agc Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,14 +34,19 @@
 #if 0
 static char sccsid[] = "@(#)send.c	8.2 (Berkeley) 2/21/94";
 #else
-__RCSID("$NetBSD: send.c,v 1.7 1997/07/13 19:58:06 christos Exp $");
+__RCSID("$NetBSD: send.c,v 1.9 2003/08/07 16:43:15 agc Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
+#include "namespace.h"
 #include <sys/types.h>
 #include <sys/socket.h>
 
 #include <stddef.h>
+
+#ifdef __weak_alias
+__weak_alias(send, _send)
+#endif
 
 ssize_t
 send(s, msg, len, flags)

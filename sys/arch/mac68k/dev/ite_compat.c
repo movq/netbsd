@@ -1,4 +1,4 @@
-/*	$NetBSD: ite_compat.c,v 1.2 2000/02/14 07:01:46 scottr Exp $	*/
+/*	$NetBSD: ite_compat.c,v 1.10 2007/03/04 06:00:07 christos Exp $	*/
 
 /*
  * Copyright (C) 2000 Scott Reynolds
@@ -35,6 +35,9 @@
  * modification.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ite_compat.c,v 1.10 2007/03/04 06:00:07 christos Exp $");
+
 #include "ite.h"
 #include "wsdisplay.h"
 
@@ -43,15 +46,32 @@
 #include <sys/conf.h>
 #include <sys/device.h>
 #include <sys/ioctl.h>
+#include <sys/ttycom.h>
 
 #include <dev/cons.h>
 
 #include <machine/cpu.h>
 #include <machine/iteioctl.h>
 
-cdev_decl(ite);
-cdev_decl(wsdisplay);
-void		iteattach __P((int));
+dev_type_open(iteopen);
+dev_type_close(iteclose);
+dev_type_read(iteread);
+dev_type_write(itewrite);
+dev_type_ioctl(iteioctl);
+dev_type_tty(itetty);
+dev_type_poll(itepoll);
+dev_type_kqfilter(itekqfilter);
+
+const struct cdevsw ite_cdevsw = {
+	iteopen, iteclose, iteread, itewrite, iteioctl,
+	nostop, itetty, itepoll, nommap, itekqfilter, D_TTY
+};
+
+#if NWSDISPLAY > 0
+extern const struct cdevsw wsdisplay_cdevsw;
+#endif
+
+void		iteattach(int);
 
 static int	ite_initted = 0;
 static int	ite_bell_freq = 1880;
@@ -61,21 +81,17 @@ static int	ite_bell_volume = 100;
 
 /*ARGSUSED*/
 void
-iteattach(n)
-	int n;
+iteattach(int n)
 {
 #if NWSDISPLAY > 0
 	int maj;
 
-	for (maj = 0; maj < nchrdev; maj++)
-		if (cdevsw[maj].d_open == wsdisplayopen)
-			break;
-	KASSERT(maj < nchrdev);
+	maj = cdevsw_lookup_major(&wsdisplay_cdevsw);
+	KASSERT(maj != -1);
 
 	if (maj != major(cn_tab->cn_dev))
 		return;
 
-	cn_tab->cn_dev = cn_tab->cn_dev;
 	ite_initted = 1;
 #endif
 }
@@ -86,72 +102,44 @@ iteattach(n)
 
 /*ARGSUSED*/
 int
-iteopen(dev, mode, devtype, p)
-	dev_t dev;
-	int mode;
-	int devtype;
-	struct proc *p;
+iteopen(dev_t dev, int mode, int devtype, struct lwp *l)
 {
-	return ite_initted ?
-	    wsdisplayopen(cn_tab->cn_dev, mode, devtype, p) : (ENXIO);
+	return ite_initted ? (0) : (ENXIO);
 }
 
 /*ARGSUSED*/
 int
-iteclose(dev, flag, mode, p)
-	dev_t dev;
-	int flag;
-	int mode;
-	struct proc *p;
+iteclose(dev_t dev, int flag, int mode, struct lwp *l)
 {
-	return ite_initted ?
-	    wsdisplayclose(cn_tab->cn_dev, flag, mode, p) : (ENXIO);
+	return ite_initted ? (0) : (ENXIO);
 }
 
 /*ARGSUSED*/
 int
-iteread(dev, uio, flag)
-	dev_t dev;
-	struct uio *uio;
-	int flag;
+iteread(dev_t dev, struct uio *uio, int flag)
 {
 	return ite_initted ?
-	    wsdisplayread(cn_tab->cn_dev, uio, flag) : (ENXIO);
+	    (*wsdisplay_cdevsw.d_read)(cn_tab->cn_dev, uio, flag) : (ENXIO);
 }
 
 /*ARGSUSED*/
 int
-itewrite(dev, uio, flag)
-	dev_t dev;
-	struct uio *uio;
-	int flag;
+itewrite(dev_t dev, struct uio *uio, int flag)
 {
 	return ite_initted ?
-	    wsdisplaywrite(cn_tab->cn_dev, uio, flag) : (ENXIO);
+	    (*wsdisplay_cdevsw.d_write)(cn_tab->cn_dev, uio, flag) : (ENXIO);
 }
 
 /*ARGSUSED*/
 struct tty *
-itetty(dev)
-	dev_t dev;
+itetty(dev_t dev)
 {
-	return ite_initted ? wsdisplaytty(cn_tab->cn_dev) : (NULL);
-}
-
-/*ARGSUSED*/
-void 
-itestop(struct tty *tp, int flag)
-{
+	return ite_initted ? (*wsdisplay_cdevsw.d_tty)(cn_tab->cn_dev) : (NULL);
 }
 
 /*ARGSUSED*/
 int
-iteioctl(dev, cmd, addr, flag, p)
-	dev_t dev;
-	u_long cmd;
-	caddr_t addr;
-	int flag;
-	struct proc *p;
+iteioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
 {
 	if (!ite_initted)
 		return (ENXIO);
@@ -187,8 +175,24 @@ iteioctl(dev, cmd, addr, flag, p)
 			return (0);
 		}
 	default:
-		return wsdisplayioctl(cn_tab->cn_dev, cmd, addr, flag, p);
+		return ((*wsdisplay_cdevsw.d_ioctl)(cn_tab->cn_dev, cmd,
+						    addr, flag, l));
 	}
 
 	return (ENOTTY);
+}
+
+/*ARGSUSED*/
+int
+itepoll(dev_t dev, int events, struct lwp *l)
+{
+	return ite_initted ?
+	    (*wsdisplay_cdevsw.d_poll)(cn_tab->cn_dev, events, l) : (ENXIO);
+}
+
+int
+itekqfilter(dev_t dev, struct knote *kn)
+{
+	return ite_initted ?
+	    (*wsdisplay_cdevsw.d_kqfilter)(cn_tab->cn_dev, kn) : (ENXIO);
 }

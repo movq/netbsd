@@ -1,8 +1,9 @@
-/*	$NetBSD: nlist_elf32.c,v 1.19 1999/11/04 02:00:17 erh Exp $	*/
+/* $NetBSD: nlist_elf32.c,v 1.28 2005/06/12 05:21:27 lukem Exp $ */
 
 /*
- * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
- *
+ * Copyright (c) 1996 Christopher G. Demetriou
+ * All rights reserved.
+ * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -13,11 +14,12 @@
  *    documentation and/or other materials provided with the distribution.
  * 3. All advertising materials mentioning features or use of this software
  *    must display the following acknowledgement:
- *      This product includes software developed by Christopher G. Demetriou
- *	for the NetBSD Project.
+ *          This product includes software developed for the
+ *          NetBSD Project.  See http://www.NetBSD.org/ for
+ *          information about NetBSD.
  * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
- *
+ *    derived from this software without specific prior written permission.
+ * 
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
  * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
@@ -28,7 +30,14 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * 
+ * <<Id: LICENSE,v 1.2 2000/06/14 15:57:33 cgd Exp>>
  */
+
+#include <sys/cdefs.h>
+#if defined(LIBC_SCCS) && !defined(lint)
+__RCSID("$NetBSD: nlist_elf32.c,v 1.28 2005/06/12 05:21:27 lukem Exp $");
+#endif /* LIBC_SCCS and not lint */
 
 /* If not included by nlist_elf64.c, ELFSIZE won't be defined. */
 #ifndef ELFSIZE
@@ -40,6 +49,8 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/file.h>
+#include <sys/ioctl.h>
+#include <sys/ksyms.h>
 
 #include <assert.h>
 #include <errno.h>
@@ -70,7 +81,7 @@ ELFNAMEEND(__fdnlist)(fd, list)
 	struct nlist *p;
 	char *mappedfile, *strtab;
 	size_t mappedsize;
-	Elf_Ehdr *ehdrp;
+	Elf_Ehdr *ehdrp, ehdr;
 	Elf_Shdr *shdrp, *symshdrp, *symstrshdrp;
 	Elf_Sym *symp;
 	Elf_Off shdr_off;
@@ -103,6 +114,79 @@ ELFNAMEEND(__fdnlist)(fd, list)
 		errno = EFBIG;
 		BAD;
 	}
+
+	/*
+	 * Read the elf header of the file.
+	 */
+	if ((ssize_t)(i = pread(fd, &ehdr, sizeof(Elf_Ehdr), (off_t)0)) == -1)
+		BAD;
+
+	/*
+	 * Check that the elf header is correct.
+	 */
+	if (i != sizeof(Elf_Ehdr))
+		BAD;
+	if (memcmp(ehdr.e_ident, ELFMAG, SELFMAG) != 0 ||
+	    ehdr.e_ident[EI_CLASS] != ELFCLASS)
+		BAD;
+
+	switch (ehdr.e_machine) {
+	ELFDEFNNAME(MACHDEP_ID_CASES)
+
+	default:
+		BAD;
+	}
+
+	if (S_ISCHR(st.st_mode)) {
+		const char *nlistname;
+		struct ksyms_gsymbol kg;
+		Elf_Sym sym;
+
+		/*
+		 * Character device; assume /dev/ksyms.
+		 */
+		nent = 0;
+		for (p = list; !ISLAST(p); ++p) {
+
+			p->n_other = 0;
+			p->n_desc = 0;
+			nlistname = p->n_un.n_name;
+			if (*nlistname == '_')
+				nlistname++;
+
+			kg.kg_name = nlistname;
+			kg.kg_sym = &sym;
+			if (ioctl(fd, KIOCGSYMBOL, &kg) == 0) {
+				p->n_value = sym.st_value;
+				switch (ELF_ST_TYPE(sym.st_info)) {
+				case STT_NOTYPE:
+					p->n_type = N_UNDF;
+					break;
+				case STT_OBJECT:
+					p->n_type = N_DATA;
+					break;
+				case STT_FUNC:
+					p->n_type = N_TEXT;
+					break;
+				case STT_FILE:
+					p->n_type = N_FN;
+					break;
+				default:
+					p->n_type = 0;
+					/* catch other enumerations for gcc */
+					break;
+				}
+				if (ELF_ST_BIND(sym.st_info) != STB_LOCAL)
+					p->n_type |= N_EXT;
+			} else {
+				nent++;
+				p->n_value = 0;
+				p->n_type = 0;
+			}
+		}
+		return nent;
+	}
+
 	mappedsize = (size_t)st.st_size;
 	mappedfile = mmap(NULL, mappedsize, PROT_READ, MAP_PRIVATE|MAP_FILE,
 	    fd, (off_t)0);
@@ -117,17 +201,6 @@ ELFNAMEEND(__fdnlist)(fd, list)
 	if (check(0, sizeof *ehdrp))
 		BADUNMAP;
 	ehdrp = (Elf_Ehdr *)(void *)&mappedfile[0];
-
-	if (memcmp(ehdrp->e_ident, ELFMAG, SELFMAG) != 0 ||
-	    ehdrp->e_ident[EI_CLASS] != ELFCLASS)
-		BADUNMAP;
-
-	switch (ehdrp->e_machine) {
-	ELFDEFNNAME(MACHDEP_ID_CASES)
-
-	default:
-		BADUNMAP;
-	}
 
 	/*
 	 * Find the symbol list and string table.
@@ -196,7 +269,7 @@ ELFNAMEEND(__fdnlist)(fd, list)
 				 * Translate (roughly) from ELF to nlist
 				 */
 				p->n_value = symp[i].st_value;
-				switch (ELFDEFNNAME(ST_TYPE)(symp[i].st_info)) {
+				switch (ELF_ST_TYPE(symp[i].st_info)) {
 				case STT_NOTYPE:
 					p->n_type = N_UNDF;
 					break;
@@ -213,8 +286,7 @@ ELFNAMEEND(__fdnlist)(fd, list)
 					/* catch other enumerations for gcc */
 					break;
 				}
-				if (ELFDEFNNAME(ST_BIND)(symp[i].st_info) !=
-				    STB_LOCAL)
+				if (ELF_ST_BIND(symp[i].st_info) != STB_LOCAL)
 					p->n_type |= N_EXT;
 				p->n_desc = 0;			/* XXX */
 				p->n_other = 0;			/* XXX */

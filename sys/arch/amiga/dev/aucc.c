@@ -1,4 +1,4 @@
-/*	$NetBSD: aucc.c,v 1.25 2000/03/16 16:37:20 kleink Exp $	*/
+/*	$NetBSD: aucc.c,v 1.40 2006/03/08 23:46:22 lukem Exp $ */
 
 /*
  * Copyright (c) 1999 Bernardo Innocenti
@@ -35,22 +35,25 @@
 
 /* TODO:
  *
- * - ulaw -> 14bit conversion
+ * - mu-law -> 14bit conversion
  * - channel allocation is wrong for 14bit mono
  * - convert the... err... conversion routines to 68k asm for best performance
- * 	XXX: NO. aucc audio is limited by chipmem speed, anyway. You dont 
+ * 	XXX: NO. aucc audio is limited by chipmem speed, anyway. You dont
  *	want to make life difficult for amigappc work.
  *		-is
  *
- * - rely on auconv.c routines for ulaw/alaw conversions
+ * - rely on auconv.c routines for mu-law/A-law conversions
  * - perhaps use a calibration table for better 14bit output
- * - set 31KHz AGA video mode to allow 44.1KHz even if grfcc is missing
+ * - set 31 kHz AGA video mode to allow 44.1 kHz even if grfcc is missing
  *	in the kernel
  * - 14bit output requires maximum volume
  */
 
 #include "aucc.h"
 #if NAUCC > 0
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: aucc.c,v 1.40 2006/03/08 23:46:22 lukem Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -67,6 +70,8 @@
 #include <amiga/amiga/device.h>
 #include <amiga/dev/auccvar.h>
 
+#include "opt_lev6_defer.h"
+
 
 #ifdef LEV6_DEFER
 #define AUCC_MAXINT 3
@@ -79,7 +84,7 @@
 #define AUCC_ALLDMAF (DMAF_AUD0|DMAF_AUD1|DMAF_AUD2|DMAF_AUD3)
 
 #ifdef AUDIO_DEBUG
-/*extern printf __P((const char *,...));*/
+/*extern printf(const char *,...);*/
 int     auccdebug = 1;
 #define DPRINTF(x)      if (auccdebug) printf x
 #else
@@ -93,7 +98,7 @@ int     auccdebug = 1;
 #define splaudio() spl4();
 
 /* clock frequency.. */
-extern int eclockfreq; 
+extern int eclockfreq;
 
 
 /* hw audio ch */
@@ -114,28 +119,25 @@ struct aucc_softc {
 	int	sc_14bit;		/* 14bit output enabled */
 
 	int	sc_intrcnt;		/* interrupt count */
-	int	sc_channelmask;  	/* which channels are used ? */
-	void (*sc_decodefunc) __P((u_char **, u_char *, int));
+	int	sc_channelmask;		/* which channels are used ? */
+	void (*sc_decodefunc)(u_char **, u_char *, int);
 				/* pointer to format conversion routine */
 };
 
 /* interrupt interfaces */
-void aucc_inthdl __P((int)); 
+void aucc_inthdl(int);
 
 /* forward declarations */
-static int init_aucc __P((struct aucc_softc *));
-static u_int freqtoper  __P((u_int));
-static u_int pertofreq  __P((u_int));
+static int init_aucc(struct aucc_softc *);
+static u_int freqtoper(u_int);
+static u_int pertofreq(u_int);
 
 /* autoconfiguration driver */
-void	auccattach __P((struct device *, struct device *, void *));
-int	auccmatch __P((struct device *, struct cfdata *, void *));
+void	auccattach(struct device *, struct device *, void *);
+int	auccmatch(struct device *, struct cfdata *, void *);
 
-struct cfattach aucc_ca = {
-	sizeof(struct aucc_softc),
-	auccmatch,
-	auccattach
-};
+CFATTACH_DECL(aucc, sizeof(struct aucc_softc),
+    auccmatch, auccattach, NULL, NULL);
 
 struct audio_device aucc_device = {
 	"Amiga-audio",
@@ -144,10 +146,10 @@ struct audio_device aucc_device = {
 };
 
 
-struct aucc_softc *aucc=NULL;
+struct aucc_softc *aucc = NULL;
 
 
-unsigned char ulaw_to_lin[] = {
+unsigned char mulaw_to_lin[] = {
 	0x82, 0x86, 0x8a, 0x8e, 0x92, 0x96, 0x9a, 0x9e,
 	0xa2, 0xa6, 0xaa, 0xae, 0xb2, 0xb6, 0xba, 0xbe,
 	0xc1, 0xc3, 0xc5, 0xc7, 0xc9, 0xcb, 0xcd, 0xcf,
@@ -185,56 +187,54 @@ unsigned char ulaw_to_lin[] = {
 /*
  * Define our interface to the higher level audio driver.
  */
-int	aucc_open __P((void *, int));
-void	aucc_close __P((void *));
-int	aucc_set_out_sr __P((void *, u_long));
-int	aucc_query_encoding __P((void *, struct audio_encoding *));
-int	aucc_round_blocksize __P((void *, int));
-int	aucc_commit_settings __P((void *));
-int	aucc_start_output __P((void *, void *, int, void (*)(void *),
-				  void *));
-int	aucc_start_input __P((void *, void *, int, void (*)(void *),
-				 void *));
-int	aucc_halt_output __P((void *));
-int	aucc_halt_input __P((void *));
-int	aucc_getdev __P((void *, struct audio_device *));
-int	aucc_set_port __P((void *, mixer_ctrl_t *));
-int	aucc_get_port __P((void *, mixer_ctrl_t *));
-int	aucc_query_devinfo __P((void *, mixer_devinfo_t *));
-void	aucc_encode __P((int, int, int, int, u_char *, u_short **));
-int	aucc_set_params __P((void *, int, int,
-	    struct audio_params *, struct audio_params *));
-int	aucc_get_props __P((void *));
+int	aucc_open(void *, int);
+void	aucc_close(void *);
+int	aucc_set_out_sr(void *, u_int);
+int	aucc_query_encoding(void *, struct audio_encoding *);
+int	aucc_round_blocksize(void *, int, int, const audio_params_t *);
+int	aucc_commit_settings(void *);
+int	aucc_start_output(void *, void *, int, void (*)(void *), void *);
+int	aucc_start_input(void *, void *, int, void (*)(void *), void *);
+int	aucc_halt_output(void *);
+int	aucc_halt_input(void *);
+int	aucc_getdev(void *, struct audio_device *);
+int	aucc_set_port(void *, mixer_ctrl_t *);
+int	aucc_get_port(void *, mixer_ctrl_t *);
+int	aucc_query_devinfo(void *, mixer_devinfo_t *);
+void	aucc_encode(int, int, int, int, u_char *, u_short **);
+int	aucc_set_params(void *, int, int, audio_params_t *, audio_params_t *,
+			stream_filter_list_t *, stream_filter_list_t *);
+int	aucc_get_props(void *);
 
 
-static void aucc_decode_slinear8_1ch __P((u_char **, u_char *, int));
-static void aucc_decode_slinear8_2ch __P((u_char **, u_char *, int));
-static void aucc_decode_slinear8_3ch __P((u_char **, u_char *, int));
-static void aucc_decode_slinear8_4ch __P((u_char **, u_char *, int));
+static void aucc_decode_slinear8_1ch(u_char **, u_char *, int);
+static void aucc_decode_slinear8_2ch(u_char **, u_char *, int);
+static void aucc_decode_slinear8_3ch(u_char **, u_char *, int);
+static void aucc_decode_slinear8_4ch(u_char **, u_char *, int);
 
-static void aucc_decode_ulinear8_1ch __P((u_char **, u_char *, int));
-static void aucc_decode_ulinear8_2ch __P((u_char **, u_char *, int));
-static void aucc_decode_ulinear8_3ch __P((u_char **, u_char *, int));
-static void aucc_decode_ulinear8_4ch __P((u_char **, u_char *, int));
+static void aucc_decode_ulinear8_1ch(u_char **, u_char *, int);
+static void aucc_decode_ulinear8_2ch(u_char **, u_char *, int);
+static void aucc_decode_ulinear8_3ch(u_char **, u_char *, int);
+static void aucc_decode_ulinear8_4ch(u_char **, u_char *, int);
 
-static void aucc_decode_ulaw_1ch __P((u_char **, u_char *, int));
-static void aucc_decode_ulaw_2ch __P((u_char **, u_char *, int));
-static void aucc_decode_ulaw_3ch __P((u_char **, u_char *, int));
-static void aucc_decode_ulaw_4ch __P((u_char **, u_char *, int));
+static void aucc_decode_mulaw_1ch(u_char **, u_char *, int);
+static void aucc_decode_mulaw_2ch(u_char **, u_char *, int);
+static void aucc_decode_mulaw_3ch(u_char **, u_char *, int);
+static void aucc_decode_mulaw_4ch(u_char **, u_char *, int);
 
-static void aucc_decode_slinear16_1ch __P((u_char **, u_char *, int));
-static void aucc_decode_slinear16_2ch __P((u_char **, u_char *, int));
-static void aucc_decode_slinear16_3ch __P((u_char **, u_char *, int));
-static void aucc_decode_slinear16_4ch __P((u_char **, u_char *, int));
+static void aucc_decode_slinear16_1ch(u_char **, u_char *, int);
+static void aucc_decode_slinear16_2ch(u_char **, u_char *, int);
+static void aucc_decode_slinear16_3ch(u_char **, u_char *, int);
+static void aucc_decode_slinear16_4ch(u_char **, u_char *, int);
 
-static void aucc_decode_slinear16sw_1ch __P((u_char **, u_char *, int));
-static void aucc_decode_slinear16sw_2ch __P((u_char **, u_char *, int));
-static void aucc_decode_slinear16sw_3ch __P((u_char **, u_char *, int));
-static void aucc_decode_slinear16sw_4ch __P((u_char **, u_char *, int));
+static void aucc_decode_slinear16sw_1ch(u_char **, u_char *, int);
+static void aucc_decode_slinear16sw_2ch(u_char **, u_char *, int);
+static void aucc_decode_slinear16sw_3ch(u_char **, u_char *, int);
+static void aucc_decode_slinear16sw_4ch(u_char **, u_char *, int);
 
 
 
-struct audio_hw_if sa_hw_if = {
+const struct audio_hw_if sa_hw_if = {
 	aucc_open,
 	aucc_close,
 	NULL,
@@ -259,15 +259,15 @@ struct audio_hw_if sa_hw_if = {
 	NULL,
 	NULL,
 	aucc_get_props,
+	NULL,
+	NULL,
+	NULL,
 };
 
 /* autoconfig routines */
 
 int
-auccmatch(pdp, cfp, aux)
-	struct device *pdp;
-	struct cfdata *cfp;
-	void *aux;
+auccmatch(struct device *pdp, struct cfdata *cfp, void *aux)
 {
 	static int aucc_matched = 0;
 
@@ -286,16 +286,15 @@ auccmatch(pdp, cfp, aux)
  * Audio chip found.
  */
 void
-auccattach(parent, self, args)
-	struct device *parent, *self;
-	void *args;
+auccattach(struct device *parent, struct device *self, void *args)
 {
-	register struct aucc_softc *sc = (struct aucc_softc *)self;
-	register int i;
+	struct aucc_softc *sc;
+	int i;
 
+	sc = (struct aucc_softc *)self;
 	printf("\n");
 
-	if((i=init_aucc(sc))) {
+	if ((i=init_aucc(sc))) {
 		printf("audio: no chipmem\n");
 		return;
 	}
@@ -305,42 +304,42 @@ auccattach(parent, self, args)
 
 
 static int
-init_aucc(sc)
-	struct aucc_softc *sc;
+init_aucc(struct aucc_softc *sc)
 {
-	register int i, err=0;
+	int i, err;
 
+	err = 0;
 	/* init values per channel */
- 	for (i=0;i<4;i++) {
-		sc->sc_channel[i].nd_freq=8000;
-		sc->sc_channel[i].nd_per=freqtoper(8000);
-		sc->sc_channel[i].nd_busy=0;
-		sc->sc_channel[i].nd_dma=alloc_chipmem(AUDIO_BUF_SIZE*2);
-		if (sc->sc_channel[i].nd_dma==NULL)
-			err=1;
-	 	sc->sc_channel[i].nd_dmalength=0;
-		sc->sc_channel[i].nd_volume=64; 
-		sc->sc_channel[i].nd_intr=NULL;
-		sc->sc_channel[i].nd_intrdata=NULL;
-		sc->sc_channel[i].nd_doublebuf=0;
-		DPRINTF(("dma buffer for channel %d is %p\n", i,
+	for (i = 0; i < 4; i++) {
+		sc->sc_channel[i].nd_freq = 8000;
+		sc->sc_channel[i].nd_per = freqtoper(8000);
+		sc->sc_channel[i].nd_busy = 0;
+		sc->sc_channel[i].nd_dma = alloc_chipmem(AUDIO_BUF_SIZE*2);
+		if (sc->sc_channel[i].nd_dma == NULL)
+			err = 1;
+		sc->sc_channel[i].nd_dmalength = 0;
+		sc->sc_channel[i].nd_volume = 64;
+		sc->sc_channel[i].nd_intr = NULL;
+		sc->sc_channel[i].nd_intrdata = NULL;
+		sc->sc_channel[i].nd_doublebuf = 0;
+		DPRINTF(("DMA buffer for channel %d is %p\n", i,
 		    sc->sc_channel[i].nd_dma));
 	}
 
 	if (err) {
-		for(i=0;i<4;i++)
+		for (i = 0; i < 4; i++)
 			if (sc->sc_channel[i].nd_dma)
 				free_chipmem(sc->sc_channel[i].nd_dma);
 	}
 
-	sc->sc_channels=1;
-	sc->sc_channelmask=0xf;
-	sc->sc_precision=8;
+	sc->sc_channels = 1;
+	sc->sc_channelmask = 0xf;
+	sc->sc_precision = 8;
 	sc->sc_14bit = 0;
-	sc->sc_encoding=AUDIO_ENCODING_ULAW;
-	sc->sc_decodefunc = aucc_decode_ulaw_1ch;
+	sc->sc_encoding = AUDIO_ENCODING_ULAW;
+	sc->sc_decodefunc = aucc_decode_mulaw_1ch;
 
-	/* clear interrupts and dma: */
+	/* clear interrupts and DMA: */
 	custom.intena = AUCC_ALLINTF;
 	custom.dmacon = AUCC_ALLDMAF;
 
@@ -348,37 +347,36 @@ init_aucc(sc)
 }
 
 int
-aucc_open(addr, flags)
-	void *addr;
-	int flags;
+aucc_open(void *addr, int flags)
 {
-	struct aucc_softc *sc = addr;
+	struct aucc_softc *sc;
 	int i;
 
+	sc = addr;
 	DPRINTF(("sa_open: unit %p\n",sc));
 
 	if (sc->sc_open)
-		return (EBUSY);
+		return EBUSY;
 	sc->sc_open = 1;
-	for (i=0;i<AUCC_MAXINT;i++) {
-		sc->sc_channel[i].nd_intr=NULL;
-		sc->sc_channel[i].nd_intrdata=NULL;
+	for (i = 0; i < AUCC_MAXINT; i++) {
+		sc->sc_channel[i].nd_intr = NULL;
+		sc->sc_channel[i].nd_intrdata = NULL;
 	}
-	aucc=sc;
-	sc->sc_channelmask=0xf;
+	aucc = sc;
+	sc->sc_channelmask = 0xf;
 
-	DPRINTF(("saopen: ok -> sc=0x%p\n",sc));
+	DPRINTF(("saopen: ok -> sc=%p\n",sc));
 
-	return (0);
+	return 0;
 }
 
 void
-aucc_close(addr)
-	void *addr;
+aucc_close(void *addr)
 {
-	register struct aucc_softc *sc = addr;
+	struct aucc_softc *sc;
 
-	DPRINTF(("sa_close: sc=0x%p\n", sc));
+	sc = addr;
+	DPRINTF(("sa_close: sc=%p\n", sc));
 	/*
 	 * halt i/o, clear open flag, and done.
 	 */
@@ -389,96 +387,94 @@ aucc_close(addr)
 }
 
 int
-aucc_set_out_sr(addr, sr)
-	void *addr;
-	u_long sr;
+aucc_set_out_sr(void *addr, u_int sr)
 {
-	struct aucc_softc *sc=addr;
+	struct aucc_softc *sc;
 	u_long per;
-	register int i;
+	int i;
 
-	per=freqtoper(sr);
-	if (per>0xffff)
+	sc = addr;
+	per = freqtoper(sr);
+	if (per > 0xffff)
 		return EINVAL;
-	sr=pertofreq(per);
+	sr = pertofreq(per);
 
-	for (i=0;i<4;i++) {
-		sc->sc_channel[i].nd_freq=sr;
-		sc->sc_channel[i].nd_per=per;
+	for (i = 0; i < 4; i++) {
+		sc->sc_channel[i].nd_freq = sr;
+		sc->sc_channel[i].nd_per = per;
 	}
 
-	return(0);	
+	return 0;
 }
 
 int
-aucc_query_encoding(addr, fp)
-	void *addr;
-	struct audio_encoding *fp;
+aucc_query_encoding(void *addr, struct audio_encoding *fp)
 {
+
 	switch (fp->index) {
-		case 0:
-			strcpy(fp->name, AudioEslinear);
-			fp->encoding = AUDIO_ENCODING_SLINEAR;
-			fp->precision = 8;
-			fp->flags = 0;
-			break;
-		case 1:
-			strcpy(fp->name, AudioEmulaw);
-			fp->encoding = AUDIO_ENCODING_ULAW;
-			fp->precision = 8;
-			fp->flags = AUDIO_ENCODINGFLAG_EMULATED;
-			break;
-		
-		case 2:
-			strcpy(fp->name, AudioEulinear);
-			fp->encoding = AUDIO_ENCODING_ULINEAR;
-			fp->precision = 8;
-			fp->flags = AUDIO_ENCODINGFLAG_EMULATED;
-			break;
+	case 0:
+		strcpy(fp->name, AudioEslinear);
+		fp->encoding = AUDIO_ENCODING_SLINEAR;
+		fp->precision = 8;
+		fp->flags = 0;
+		break;
+	case 1:
+		strcpy(fp->name, AudioEmulaw);
+		fp->encoding = AUDIO_ENCODING_ULAW;
+		fp->precision = 8;
+		fp->flags = AUDIO_ENCODINGFLAG_EMULATED;
+		break;
 
-		case 3:
-			strcpy(fp->name, AudioEslinear);
-			fp->encoding = AUDIO_ENCODING_SLINEAR;
-			fp->precision = 16;
-			fp->flags = AUDIO_ENCODINGFLAG_EMULATED;
-			break;
+	case 2:
+		strcpy(fp->name, AudioEulinear);
+		fp->encoding = AUDIO_ENCODING_ULINEAR;
+		fp->precision = 8;
+		fp->flags = AUDIO_ENCODINGFLAG_EMULATED;
+		break;
 
-		case 4:
-			strcpy(fp->name, AudioEslinear_be);
-			fp->encoding = AUDIO_ENCODING_SLINEAR_BE;
-			fp->precision = 16;
-			fp->flags = AUDIO_ENCODINGFLAG_EMULATED;
-			break;
+	case 3:
+		strcpy(fp->name, AudioEslinear);
+		fp->encoding = AUDIO_ENCODING_SLINEAR;
+		fp->precision = 16;
+		fp->flags = AUDIO_ENCODINGFLAG_EMULATED;
+		break;
 
-		case 5:
-			strcpy(fp->name, AudioEslinear_le);
-			fp->encoding = AUDIO_ENCODING_SLINEAR_LE;
-			fp->precision = 16;
-			fp->flags = AUDIO_ENCODINGFLAG_EMULATED;
-			break;
+	case 4:
+		strcpy(fp->name, AudioEslinear_be);
+		fp->encoding = AUDIO_ENCODING_SLINEAR_BE;
+		fp->precision = 16;
+		fp->flags = AUDIO_ENCODINGFLAG_EMULATED;
+		break;
 
-		default:
-			return(EINVAL);
-			/*NOTREACHED*/
+	case 5:
+		strcpy(fp->name, AudioEslinear_le);
+		fp->encoding = AUDIO_ENCODING_SLINEAR_LE;
+		fp->precision = 16;
+		fp->flags = AUDIO_ENCODINGFLAG_EMULATED;
+		break;
+
+	default:
+		return EINVAL;
+		/*NOTREACHED*/
 	}
-	return(0);
+	return 0;
 }
 
 int
-aucc_set_params(addr, setmode, usemode, p, r)
-	void *addr;
-	int setmode, usemode;
-	struct  audio_params *p, *r;
+aucc_set_params(void *addr, int setmode, int usemode,
+		audio_params_t *p, audio_params_t *r,
+		stream_filter_list_t *pfil, stream_filter_list_t *rfil)
 {
-	struct aucc_softc *sc = addr;
+	struct aucc_softc *sc;
 
+	sc = addr;
 	/* if (setmode & AUMODE_RECORD)
 		return 0 ENXIO*/;
 
 #ifdef AUCCDEBUG
 	printf("aucc_set_params(setmode 0x%x, usemode 0x%x, "
-		"enc %d, bits %d, chn %d, sr %ld)\n", setmode, usemode,
-		p->encoding, p->precision, p->channels, p->sample_rate);
+	       "enc %u, bits %u, chn %u, sr %u)\n", setmode, usemode,
+	       p->encoding, p->precision, p->channels, p->sample_rate);
 #endif
 
 	switch (p->precision) {
@@ -487,16 +483,16 @@ aucc_set_params(addr, setmode, usemode, p, r)
 		case AUDIO_ENCODING_ULAW:
 			switch (p->channels) {
 			case 1:
-				sc->sc_decodefunc = aucc_decode_ulaw_1ch;
+				sc->sc_decodefunc = aucc_decode_mulaw_1ch;
 				break;
 			case 2:
-				sc->sc_decodefunc = aucc_decode_ulaw_2ch;
+				sc->sc_decodefunc = aucc_decode_mulaw_2ch;
 				break;
 			case 3:
-				sc->sc_decodefunc = aucc_decode_ulaw_3ch;
+				sc->sc_decodefunc = aucc_decode_mulaw_3ch;
 				break;
 			case 4:
-				sc->sc_decodefunc = aucc_decode_ulaw_4ch;
+				sc->sc_decodefunc = aucc_decode_mulaw_4ch;
 				break;
 			default:
 				return EINVAL;
@@ -615,43 +611,38 @@ aucc_set_params(addr, setmode, usemode, p, r)
 }
 
 int
-aucc_round_blocksize(addr, blk)
-	void *addr;
-	int blk;
+aucc_round_blocksize(void *addr, int blk,
+		     int mode, const audio_params_t *param)
 {
+
 	/* round up to even size */
 	return blk > AUDIO_BUF_SIZE ? AUDIO_BUF_SIZE : blk;
 }
 
 int
-aucc_commit_settings(addr)
-	void *addr;
+aucc_commit_settings(void *addr)
 {
-	register struct aucc_softc *sc = addr;
-	register int i;
+	struct aucc_softc *sc;
+	int i;
 
 	DPRINTF(("sa_commit.\n"));
 
-	for (i=0;i<4;i++) {
-		custom.aud[i].vol=sc->sc_channel[i].nd_volume;
-		custom.aud[i].per=sc->sc_channel[i].nd_per;
+	sc = addr;
+	for (i = 0; i < 4; i++) {
+		custom.aud[i].vol = sc->sc_channel[i].nd_volume;
+		custom.aud[i].per = sc->sc_channel[i].nd_per;
 	}
 
 	DPRINTF(("commit done\n"));
 
-	return(0);
+	return 0;
 }
 
 static int masks[4] = {1,3,7,15}; /* masks for n first channels */
 static int masks2[4] = {1,2,4,8};
 
 int
-aucc_start_output(addr, p, cc, intr, arg)
-	void *addr;
-	void *p;
-	int cc;
-	void (*intr) __P((void *));
-	void *arg;
+aucc_start_output(void *addr, void *p, int cc, void (*intr)(void *), void *arg)
 {
 	struct aucc_softc *sc;
 	int mask;
@@ -672,7 +663,7 @@ aucc_start_output(addr, p, cc, intr, arg)
 	if (mask == 0) /* active and used channels are disjoint */
 		return EINVAL;
 
-	for (i=0;i<4;i++) {
+	for (i = 0; i < 4; i++) {
 		/* channels available ? */
 		if ((masks2[i] & mask) && (sc->sc_channel[i].nd_busy))
 			return EBUSY; /* channel is busy */
@@ -684,31 +675,30 @@ aucc_start_output(addr, p, cc, intr, arg)
 	for (i = j = 0; i < AUCC_MAXINT; i++) {
 		if (masks2[i] & mask) {
 			DPRINTF(("first channel is %d\n",i));
-			j=i;
-			sc->sc_channel[i].nd_intr=intr;
-			sc->sc_channel[i].nd_intrdata=arg;
+			j = i;
+			sc->sc_channel[i].nd_intr = intr;
+			sc->sc_channel[i].nd_intrdata = arg;
 			break;
 		}
 	}
 
 	DPRINTF(("dmap is %p %p %p %p, mask=0x%x\n", dmap[0], dmap[1],
-		dmap[2], dmap[3], mask));
+		 dmap[2], dmap[3], mask));
 
-	/* disable ints, dma for channels, until all parameters set */
+	/* disable ints, DMA for channels, until all parameters set */
 	/* XXX dont disable DMA! custom.dmacon=mask;*/
 	custom.intreq = mask << INTB_AUD0;
 	custom.intena = mask << INTB_AUD0;
 
-	/* copy data to dma buffer */
-		
+	/* copy data to DMA buffer */
+
 	if (sc->sc_channels == 1) {
 		dmap[0] =
 		dmap[1] =
 		dmap[2] =
 		dmap[3] = (u_char *)sc->sc_channel[j].nd_dma;
-	}
-	else {
-		for (k=0; k<4; k++) {
+	} else {
+		for (k = 0; k < 4; k++) {
 			if (masks2[k+j] & mask)
 				dmap[k] = (u_char *)sc->sc_channel[k+j].nd_dma;
 		}
@@ -722,7 +712,8 @@ aucc_start_output(addr, p, cc, intr, arg)
 		dmap[3] += AUDIO_BUF_SIZE;
 	}
 
-	/* compute output length in bytes per channel.
+	/*
+	 * compute output length in bytes per channel.
 	 * divide by two only for 16bit->8bit conversion.
 	 */
 	len = cc / sc->sc_channels;
@@ -732,8 +723,8 @@ aucc_start_output(addr, p, cc, intr, arg)
 	/* call audio decoding routine */
 	sc->sc_decodefunc (dmap, (u_char *)p, len);
 
-	/* dma buffers: we use same buffer 4 all channels
-	 * write dma location and length
+	/* DMA buffers: we use same buffer 4 all channels
+	 * write DMA location and length
 	 */
 	for (i = k = 0; i < 4; i++) {
 		if (masks2[i] & mask) {
@@ -756,101 +747,92 @@ aucc_start_output(addr, p, cc, intr, arg)
 		}
 	}
 
-	channel[j].handler=aucc_inthdl;
+	channel[j].handler = aucc_inthdl;
 
 	/* enable ints */
 	custom.intena = INTF_SETCLR | INTF_INTEN | (masks2[j] << INTB_AUD0);
 
 	DPRINTF(("enabled ints: 0x%x\n", (masks2[j] << INTB_AUD0)));
 
-	/* enable dma */
+	/* enable DMA */
 	custom.dmacon = DMAF_SETCLR | DMAF_MASTER | mask;
 
-	DPRINTF(("enabled dma, mask=0x%x\n",mask));
+	DPRINTF(("enabled DMA, mask=0x%x\n",mask));
 
-	return(0);
+	return 0;
 }
 
 /* ARGSUSED */
 int
-aucc_start_input(addr, p, cc, intr, arg)
-	void *addr;
-	void *p;
-	int cc;
-	void (*intr) __P((void *));
-	void *arg;
+aucc_start_input(void *addr, void *p, int cc, void (*intr)(void *), void *arg)
 {
 
 	return ENXIO; /* no input */
 }
 
 int
-aucc_halt_output(addr)
-	void *addr;
+aucc_halt_output(void *addr)
 {
-	register struct aucc_softc *sc = addr;
-	register int i;
+	struct aucc_softc *sc;
+	int i;
 
 	/* XXX only halt, if input is also halted ?? */
-	/* stop dma, etc */
+	sc = addr;
+	/* stop DMA, etc */
 	custom.intena = AUCC_ALLINTF;
 	custom.dmacon = AUCC_ALLDMAF;
 	/* mark every busy unit idle */
-	for (i=0;i<4;i++) {
-		sc->sc_channel[i].nd_busy=sc->sc_channel[i].nd_mask=0;
-		channel[i].isaudio=0;
-		channel[i].play_count=0;
+	for (i = 0; i < 4; i++) {
+		sc->sc_channel[i].nd_busy = sc->sc_channel[i].nd_mask = 0;
+		channel[i].isaudio = 0;
+		channel[i].play_count = 0;
 	}
 
-	return(0);
+	return 0;
 }
 
 int
-aucc_halt_input(addr)
-	void *addr;
+aucc_halt_input(void *addr)
 {
-	/* no input */
 
+	/* no input */
 	return ENXIO;
 }
 
 int
-aucc_getdev(addr, retp)
-        void *addr;
-        struct audio_device *retp;
+aucc_getdev(void *addr, struct audio_device *retp)
 {
-        *retp = aucc_device;
-        return 0;
+
+	*retp = aucc_device;
+	return 0;
 }
 
 int
-aucc_set_port(addr, cp)
-	void *addr;
-	mixer_ctrl_t *cp;
+aucc_set_port(void *addr, mixer_ctrl_t *cp)
 {
-	register struct aucc_softc *sc = addr;
-	register int i,j;
+	struct aucc_softc *sc;
+	int i,j;
 
 	DPRINTF(("aucc_set_port: port=%d", cp->dev));
-
+	sc = addr;
 	switch (cp->type) {
 	case AUDIO_MIXER_SET:
-		if (cp->dev!=AUCC_CHANNELS)
+		if (cp->dev != AUCC_CHANNELS)
 			return EINVAL;
-		i=cp->un.mask;
-		if ((i<1) || (i>15))
+		i = cp->un.mask;
+		if ((i < 1) || (i > 15))
 			return EINVAL;
 
-		sc->sc_channelmask=i;
+		sc->sc_channelmask = i;
 		break;
 
 	case AUDIO_MIXER_VALUE:
-		i=cp->un.value.num_channels;
-		if ((i<1) || (i>4))
+		i = cp->un.value.num_channels;
+		if ((i < 1) || (i > 4))
 			return EINVAL;
 
 #ifdef __XXXwhatsthat
-		if (cp->dev!=AUCC_VOLUME)
+		if (cp->dev != AUCC_VOLUME)
 			return EINVAL;
 #endif
 
@@ -858,24 +840,24 @@ aucc_set_port(addr, cp)
 
 		/* evil workaround for xanim bug, IMO */
 		if ((sc->sc_channels == 1) && (i == 2)) {
-			sc->sc_channel[0].nd_volume = 
-			    sc->sc_channel[3].nd_volume = 
-			    cp->un.value.level[0]>>2;
-			sc->sc_channel[1].nd_volume = 
-			    sc->sc_channel[2].nd_volume = 
-			    cp->un.value.level[1]>>2;
-		} else if (i>1) {
-			for (j=0;j<i;j++)
-	 			sc->sc_channel[j].nd_volume =
-				    cp->un.value.level[j]>>2;
+			sc->sc_channel[0].nd_volume =
+			    sc->sc_channel[3].nd_volume =
+			    cp->un.value.level[0] >> 2;
+			sc->sc_channel[1].nd_volume =
+			    sc->sc_channel[2].nd_volume =
+			    cp->un.value.level[1] >> 2;
+		} else if (i > 1) {
+			for (j = 0; j < i; j++)
+				sc->sc_channel[j].nd_volume =
+				    cp->un.value.level[j] >> 2;
 		} else if (sc->sc_channels > 1)
-			for (j=0; j<sc->sc_channels; j++)
-	 			sc->sc_channel[j].nd_volume =
-				    cp->un.value.level[0]>>2;
+			for (j = 0; j < sc->sc_channels; j++)
+				sc->sc_channel[j].nd_volume =
+				    cp->un.value.level[0] >> 2;
 		else
-			for (j=0; j<4; j++)
-	 			sc->sc_channel[j].nd_volume =
-				    cp->un.value.level[0]>>2;
+			for (j = 0; j < 4; j++)
+				sc->sc_channel[j].nd_volume =
+				    cp->un.value.level[0] >> 2;
 		break;
 
 	default:
@@ -887,31 +869,29 @@ aucc_set_port(addr, cp)
 
 
 int
-aucc_get_port(addr, cp)
-	void *addr;
-	mixer_ctrl_t *cp;
+aucc_get_port(void *addr, mixer_ctrl_t *cp)
 {
-	register struct aucc_softc *sc = addr;
-	register int i,j;
+	struct aucc_softc *sc;
+	int i,j;
 
 	DPRINTF(("aucc_get_port: port=%d", cp->dev));
-
+	sc = addr;
 	switch (cp->type) {
 	case AUDIO_MIXER_SET:
-		if (cp->dev!=AUCC_CHANNELS)
+		if (cp->dev != AUCC_CHANNELS)
 			return EINVAL;
-		cp->un.mask=sc->sc_channelmask;
+		cp->un.mask = sc->sc_channelmask;
 		break;
 
 	case AUDIO_MIXER_VALUE:
 		i = cp->un.value.num_channels;
-		if ((i<1)||(i>4))
+		if ((i < 1) || (i > 4))
 			return EINVAL;
 
-		for (j=0;j<i;j++)
+		for (j = 0; j < i; j++)
 			cp->un.value.level[j] =
-			    (sc->sc_channel[j].nd_volume<<2) +
-			    (sc->sc_channel[j].nd_volume>>4);
+			    (sc->sc_channel[j].nd_volume << 2) +
+			    (sc->sc_channel[j].nd_volume >> 4);
 		break;
 
 	default:
@@ -922,26 +902,23 @@ aucc_get_port(addr, cp)
 
 
 int
-aucc_get_props(addr)
-	void *addr;
+aucc_get_props(void *addr)
 {
 	return 0;
 }
 
 int
-aucc_query_devinfo(addr, dip)
-	void *addr;
-	register mixer_devinfo_t *dip;
+aucc_query_devinfo(void *addr, register mixer_devinfo_t *dip)
 {
-	register int i;
+	int i;
 
 	switch(dip->index) {
 	case AUCC_CHANNELS:
 		dip->type = AUDIO_MIXER_SET;
 		dip->mixer_class = AUCC_OUTPUT_CLASS;
 		dip->prev = dip->next = AUDIO_MIXER_LAST;
-                strcpy(dip->label.name, AudioNspeaker);
-		for (i=0;i<16;i++) {
+		strcpy(dip->label.name, AudioNspeaker);
+		for (i = 0; i < 16; i++) {
 			sprintf(dip->un.s.member[i].label.name,
 			    "channelmask%d", i);
 			dip->un.s.member[i].mask = i;
@@ -971,37 +948,39 @@ aucc_query_devinfo(addr, dip)
 
 	DPRINTF(("AUDIO_MIXER_DEVINFO: name=%s\n", dip->label.name));
 
-	return(0);
+	return 0;
 }
-
 
 /* audio int handler */
 void
 aucc_inthdl(int ch)
 {
-	register int i;
-	register int mask=aucc->sc_channel[ch].nd_mask;
+	int i;
+	int mask;
 
-	/* for all channels in this maskgroup:
-	   disable dma, int 
-	   mark idle */
-	DPRINTF(("inthandler called, channel %d, mask 0x%x\n",ch,mask));
+	mask = aucc->sc_channel[ch].nd_mask;
+	/*
+	 * for all channels in this maskgroup:
+	 * disable DMA, int
+	 * mark idle
+	 */
+	DPRINTF(("inthandler called, channel %d, mask 0x%x\n", ch, mask));
 
-	custom.intreq=mask<<INTB_AUD0; /* clear request */
+	custom.intreq = mask << INTB_AUD0; /* clear request */
 	/*
 	 * XXX: maybe we can leave ints and/or DMA on,
 	 * if another sample has to be played?
 	 */
-	custom.intena=mask<<INTB_AUD0;
+	custom.intena = mask << INTB_AUD0;
 	/*
-	 * XXX custom.dmacon=mask; NO!!! 
-	 */ 
-	for (i=0; i<4; i++) {
-		if (masks2[i]&&mask) {
+	 * XXX custom.dmacon=mask; NO!!!
+	 */
+	for (i = 0; i < 4; i++) {
+		if (masks2[i] && mask) {
 			DPRINTF(("marking channel %d idle\n",i));
-			aucc->sc_channel[i].nd_busy=0;
-			aucc->sc_channel[i].nd_mask=0;
-			channel[i].isaudio=channel[i].play_count=0;
+			aucc->sc_channel[i].nd_busy = 0;
+			aucc->sc_channel[i].nd_mask = 0;
+			channel[i].isaudio = channel[i].play_count = 0;
 		}
 	}
 
@@ -1010,53 +989,62 @@ aucc_inthdl(int ch)
 		DPRINTF(("calling %p\n",aucc->sc_channel[ch].nd_intr));
 		(*(aucc->sc_channel[ch].nd_intr))
 		    (aucc->sc_channel[ch].nd_intrdata);
-	}
-	else
+	} else
 		DPRINTF(("zero int handler\n"));
 	DPRINTF(("ints done\n"));
 }
 
-
-
-
 /* transform frequency to period, adjust bounds */
 static u_int
-freqtoper(u_int freq) {
-	u_int per=eclockfreq*5/freq;
-	
-	if (per<124)
-		per=124; /* must have at least 124 ticks between samples */
+freqtoper(u_int freq)
+{
+	u_int per;
+
+	per = eclockfreq * 5 / freq;
+	if (per < 124)
+		per = 124;   /* must have at least 124 ticks between samples */
 
 	return per;
 }
 
 /* transform period to frequency */
 static u_int
-pertofreq(u_int per) {
-	u_int freq=eclockfreq*5/per;
+pertofreq(u_int per)
+{
 
-	return freq;
+	return eclockfreq * 5 / per;
 }
 
-static void aucc_decode_slinear8_1ch (u_char **dmap, u_char *p, int i) {
-	memcpy (dmap[0], p, i);
+static void
+aucc_decode_slinear8_1ch(u_char **dmap, u_char *p, int i)
+{
+	memcpy(dmap[0], p, i);
 }
 
-static void aucc_decode_slinear8_2ch (u_char **dmap, u_char *p, int i) {
-	u_char *ch0 = dmap[0];
-	u_char *ch1 = dmap[1];
+static void
+aucc_decode_slinear8_2ch(u_char **dmap, u_char *p, int i)
+{
+	u_char *ch0;
+	u_char *ch1;
 
+	ch0 = dmap[0];
+	ch1 = dmap[1];
 	while (i--) {
 		*ch0++ = *p++;
 		*ch1++ = *p++;
 	}
 }
 
-static void aucc_decode_slinear8_3ch (u_char **dmap, u_char *p, int i) {
-	u_char *ch0 = dmap[0];
-	u_char *ch1 = dmap[1];
-	u_char *ch2 = dmap[2];
+static void
+aucc_decode_slinear8_3ch(u_char **dmap, u_char *p, int i)
+{
+	u_char *ch0;
+	u_char *ch1;
+	u_char *ch2;
 
+	ch0 = dmap[0];
+	ch1 = dmap[1];
+	ch2 = dmap[2];
 	while (i--) {
 		*ch0++ = *p++;
 		*ch1++ = *p++;
@@ -1064,12 +1052,18 @@ static void aucc_decode_slinear8_3ch (u_char **dmap, u_char *p, int i) {
 	}
 }
 
-static void aucc_decode_slinear8_4ch (u_char **dmap, u_char *p, int i) {
-	u_char *ch0 = dmap[0];
-	u_char *ch1 = dmap[1];
-	u_char *ch2 = dmap[2];
-	u_char *ch3 = dmap[3];
+static void
+aucc_decode_slinear8_4ch(u_char **dmap, u_char *p, int i)
+{
+	u_char *ch0;
+	u_char *ch1;
+	u_char *ch2;
+	u_char *ch3;
 
+	ch0 = dmap[0];
+	ch1 = dmap[1];
+	ch2 = dmap[2];
+	ch3 = dmap[3];
 	while (i--) {
 		*ch0++ = *p++;
 		*ch1++ = *p++;
@@ -1079,26 +1073,23 @@ static void aucc_decode_slinear8_4ch (u_char **dmap, u_char *p, int i) {
 }
 
 static void
-aucc_decode_ulinear8_1ch (dmap, p, i)
-	u_char **dmap;
-	u_char *p;
-	int i;
+aucc_decode_ulinear8_1ch(u_char **dmap, u_char *p, int i)
 {
-	u_char *ch0 = dmap[0];
+	u_char *ch0;
 
+	ch0 = dmap[0];
 	while (i--)
 		*ch0++ = *p++ - 128;
 }
 
 static void
-aucc_decode_ulinear8_2ch(dmap, p, i)
-	u_char **dmap;
-	u_char *p;
-	int i;
+aucc_decode_ulinear8_2ch(u_char **dmap, u_char *p, int i)
 {
-	u_char *ch0 = dmap[0];
-	u_char *ch1 = dmap[1];
+	u_char *ch0;
+	u_char *ch1;
 
+	ch0 = dmap[0];
+	ch1 = dmap[1];
 	while (i--) {
 		*ch0++ = *p++ - 128;
 		*ch1++ = *p++ - 128;
@@ -1106,15 +1097,15 @@ aucc_decode_ulinear8_2ch(dmap, p, i)
 }
 
 static void
-aucc_decode_ulinear8_3ch(dmap, p, i)
-	u_char **dmap;
-	u_char *p;
-	int i;
+aucc_decode_ulinear8_3ch(u_char **dmap, u_char *p, int i)
 {
-	u_char *ch0 = dmap[0];
-	u_char *ch1 = dmap[1];
-	u_char *ch2 = dmap[2];
+	u_char *ch0;
+	u_char *ch1;
+	u_char *ch2;
 
+	ch0 = dmap[0];
+	ch1 = dmap[1];
+	ch2 = dmap[2];
 	while (i--) {
 		*ch0++ = *p++ - 128;
 		*ch1++ = *p++ - 128;
@@ -1123,16 +1114,17 @@ aucc_decode_ulinear8_3ch(dmap, p, i)
 }
 
 static void
-aucc_decode_ulinear8_4ch(dmap, p, i)
-	u_char **dmap;
-	u_char *p;
-	int i;
+aucc_decode_ulinear8_4ch(u_char **dmap, u_char *p, int i)
 {
-	u_char *ch0 = dmap[0];
-	u_char *ch1 = dmap[1];
-	u_char *ch2 = dmap[2];
-	u_char *ch3 = dmap[3];
+	u_char *ch0;
+	u_char *ch1;
+	u_char *ch2;
+	u_char *ch3;
 
+	ch0 = dmap[0];
+	ch1 = dmap[1];
+	ch2 = dmap[2];
+	ch3 = dmap[3];
 	while (i--) {
 		*ch0++ = *p++ - 128;
 		*ch1++ = *p++ - 128;
@@ -1143,79 +1135,76 @@ aucc_decode_ulinear8_4ch(dmap, p, i)
 
 
 static void
-aucc_decode_ulaw_1ch (dmap, p, i)
-	u_char **dmap;
-	u_char *p;
-	int i;
+aucc_decode_mulaw_1ch(u_char **dmap, u_char *p, int i)
 {
-	u_char *ch0 = dmap[0];
+	u_char *ch0;
 
+	ch0 = dmap[0];
 	while (i--)
-		*ch0++ = ulaw_to_lin[*p++];
+		*ch0++ = mulaw_to_lin[*p++];
 }
 
 static void
-aucc_decode_ulaw_2ch(dmap, p, i)
-	u_char **dmap;
-	u_char *p;
-	int i;
+aucc_decode_mulaw_2ch(u_char **dmap, u_char *p, int i)
 {
-	u_char *ch0 = dmap[0];
-	u_char *ch1 = dmap[1];
+	u_char *ch0;
+	u_char *ch1;
 
+	ch0 = dmap[0];
+	ch1 = dmap[1];
 	while (i--) {
-		*ch0++ = ulaw_to_lin[*p++];
-		*ch1++ = ulaw_to_lin[*p++];
+		*ch0++ = mulaw_to_lin[*p++];
+		*ch1++ = mulaw_to_lin[*p++];
 	}
 }
 
 static void
-aucc_decode_ulaw_3ch(dmap, p, i)
-	u_char **dmap;
-	u_char *p;
-	int i;
+aucc_decode_mulaw_3ch(u_char **dmap, u_char *p, int i)
 {
-	u_char *ch0 = dmap[0];
-	u_char *ch1 = dmap[1];
-	u_char *ch2 = dmap[2];
+	u_char *ch0;
+	u_char *ch1;
+	u_char *ch2;
 
+	ch0 = dmap[0];
+	ch1 = dmap[1];
+	ch2 = dmap[2];
 	while (i--) {
-		*ch0++ = ulaw_to_lin[*p++];
-		*ch1++ = ulaw_to_lin[*p++];
-		*ch2++ = ulaw_to_lin[*p++];
+		*ch0++ = mulaw_to_lin[*p++];
+		*ch1++ = mulaw_to_lin[*p++];
+		*ch2++ = mulaw_to_lin[*p++];
 	}
 }
 
 static void
-aucc_decode_ulaw_4ch(dmap, p, i)
-	u_char **dmap;
-	u_char *p;
-	int i;
+aucc_decode_mulaw_4ch(u_char **dmap, u_char *p, int i)
 {
-	u_char *ch0 = dmap[0];
-	u_char *ch1 = dmap[1];
-	u_char *ch2 = dmap[2];
-	u_char *ch3 = dmap[3];
+	u_char *ch0;
+	u_char *ch1;
+	u_char *ch2;
+	u_char *ch3;
 
+	ch0 = dmap[0];
+	ch1 = dmap[1];
+	ch2 = dmap[2];
+	ch3 = dmap[3];
 	while (i--) {
-		*ch0++ = ulaw_to_lin[*p++];
-		*ch1++ = ulaw_to_lin[*p++];
-		*ch2++ = ulaw_to_lin[*p++];
-		*ch3++ = ulaw_to_lin[*p++];
+		*ch0++ = mulaw_to_lin[*p++];
+		*ch1++ = mulaw_to_lin[*p++];
+		*ch2++ = mulaw_to_lin[*p++];
+		*ch3++ = mulaw_to_lin[*p++];
 	}
 }
 
 
 /* 14bit output */
 static void
-aucc_decode_slinear16_1ch(dmap, p, i)
-	u_char **dmap;
-	u_char *p;
-	int i;
+aucc_decode_slinear16_1ch(u_char **dmap, u_char *p, int i)
 {
-	u_char *ch0 = dmap[0];
-	u_char *ch3 = dmap[1]; /* XXX should be 3 */
+	u_char *ch0;
+	u_char *ch3;
 
+	ch0 = dmap[0];
+	ch3 = dmap[1];		/* XXX should be 3 */
 	while (i--) {
 		*ch0++ = *p++;
 		*ch3++ = *p++ >> 2;
@@ -1224,16 +1213,17 @@ aucc_decode_slinear16_1ch(dmap, p, i)
 
 /* 14bit stereo output */
 static void
-aucc_decode_slinear16_2ch(dmap, p, i)
-	u_char **dmap;
-	u_char *p;
-	int i;
+aucc_decode_slinear16_2ch(u_char **dmap, u_char *p, int i)
 {
-	u_char *ch0 = dmap[0];
-	u_char *ch1 = dmap[1];
-	u_char *ch2 = dmap[2];
-	u_char *ch3 = dmap[3];
+	u_char *ch0;
+	u_char *ch1;
+	u_char *ch2;
+	u_char *ch3;
 
+	ch0 = dmap[0];
+	ch1 = dmap[1];
+	ch2 = dmap[2];
+	ch3 = dmap[3];
 	while (i--) {
 		*ch0++ = *p++;
 		*ch3++ = *p++ >> 2;
@@ -1243,15 +1233,15 @@ aucc_decode_slinear16_2ch(dmap, p, i)
 }
 
 static void
-aucc_decode_slinear16_3ch(dmap, p, i)
-	u_char **dmap;
-	u_char *p;
-	int i;
+aucc_decode_slinear16_3ch(u_char **dmap, u_char *p, int i)
 {
-	u_char *ch0 = dmap[0];
-	u_char *ch1 = dmap[1];
-	u_char *ch2 = dmap[2];
+	u_char *ch0;
+	u_char *ch1;
+	u_char *ch2;
 
+	ch0 = dmap[0];
+	ch1 = dmap[1];
+	ch2 = dmap[2];
 	while (i--) {
 		*ch0++ = *p++; p++;
 		*ch1++ = *p++; p++;
@@ -1260,16 +1250,17 @@ aucc_decode_slinear16_3ch(dmap, p, i)
 }
 
 static void
-aucc_decode_slinear16_4ch (dmap, p, i)
-	u_char **dmap;
-	u_char *p;
-	int i;
+aucc_decode_slinear16_4ch(u_char **dmap, u_char *p, int i)
 {
-	u_char *ch0 = dmap[0];
-	u_char *ch1 = dmap[1];
-	u_char *ch2 = dmap[2];
-	u_char *ch3 = dmap[3];
+	u_char *ch0;
+	u_char *ch1;
+	u_char *ch2;
+	u_char *ch3;
 
+	ch0 = dmap[0];
+	ch1 = dmap[1];
+	ch2 = dmap[2];
+	ch3 = dmap[3];
 	while (i--) {
 		*ch0++ = *p++; p++;
 		*ch1++ = *p++; p++;
@@ -1280,14 +1271,13 @@ aucc_decode_slinear16_4ch (dmap, p, i)
 
 /* 14bit output, swap bytes */
 static void
-aucc_decode_slinear16sw_1ch(dmap, p, i)
-	u_char **dmap;
-	u_char *p;
-	int i;
+aucc_decode_slinear16sw_1ch(u_char **dmap, u_char *p, int i)
 {
-	u_char *ch0 = dmap[0];
-	u_char *ch3 = dmap[3];
+	u_char *ch0;
+	u_char *ch3;
 
+	ch0 = dmap[0];
+	ch3 = dmap[1];		/* XXX should be 3 */
 	while (i--) {
 		*ch3++ = *p++ >> 2;
 		*ch0++ = *p++;
@@ -1295,16 +1285,17 @@ aucc_decode_slinear16sw_1ch(dmap, p, i)
 }
 
 static void
-aucc_decode_slinear16sw_2ch(dmap, p, i)
-	u_char **dmap;
-	u_char *p;
-	int i;
+aucc_decode_slinear16sw_2ch(u_char **dmap, u_char *p, int i)
 {
-	u_char *ch0 = dmap[0];
-	u_char *ch1 = dmap[1];
-	u_char *ch2 = dmap[2];
-	u_char *ch3 = dmap[3];
+	u_char *ch0;
+	u_char *ch1;
+	u_char *ch2;
+	u_char *ch3;
 
+	ch0 = dmap[0];
+	ch1 = dmap[1];
+	ch2 = dmap[2];
+	ch3 = dmap[3];
 	while (i--) {
 		*ch3++ = *p++ >> 2;
 		*ch0++ = *p++;
@@ -1314,15 +1305,15 @@ aucc_decode_slinear16sw_2ch(dmap, p, i)
 }
 
 static void
-aucc_decode_slinear16sw_3ch(dmap, p, i)
-	u_char **dmap;
-	u_char *p;
-	int i;
+aucc_decode_slinear16sw_3ch(u_char **dmap, u_char *p, int i)
 {
-	u_char *ch0 = dmap[0];
-	u_char *ch1 = dmap[1];
-	u_char *ch2 = dmap[2];
+	u_char *ch0;
+	u_char *ch1;
+	u_char *ch2;
 
+	ch0 = dmap[0];
+	ch1 = dmap[1];
+	ch2 = dmap[2];
 	while (i--) {
 		p++; *ch0++ = *p++;
 		p++; *ch1++ = *p++;
@@ -1331,16 +1322,17 @@ aucc_decode_slinear16sw_3ch(dmap, p, i)
 }
 
 static void
-aucc_decode_slinear16sw_4ch(dmap, p, i)
-	u_char **dmap;
-	u_char *p;
-	int i;
+aucc_decode_slinear16sw_4ch(u_char **dmap, u_char *p, int i)
 {
-	u_char *ch0 = dmap[0];
-	u_char *ch1 = dmap[1];
-	u_char *ch2 = dmap[2];
-	u_char *ch3 = dmap[3];
+	u_char *ch0;
+	u_char *ch1;
+	u_char *ch2;
+	u_char *ch3;
 
+	ch0 = dmap[0];
+	ch1 = dmap[1];
+	ch2 = dmap[2];
+	ch3 = dmap[3];
 	while (i--) {
 		p++; *ch0++ = *p++;
 		p++; *ch1++ = *p++;

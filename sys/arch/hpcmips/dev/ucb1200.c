@@ -1,36 +1,40 @@
-/*	$NetBSD: ucb1200.c,v 1.4 2000/03/12 15:36:11 uch Exp $ */
+/*	$NetBSD: ucb1200.c,v 1.17 2008/04/28 20:23:21 martin Exp $ */
 
-/*
- * Copyright (c) 2000, by UCHIYAMA Yasushi
+/*-
+ * Copyright (c) 2000 The NetBSD Foundation, Inc.
  * All rights reserved.
+ *
+ * This code is derived from software contributed to The NetBSD Foundation
+ * by UCHIYAMA Yasushi.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
  * 1. Redistributions of source code must retain the above copyright
  *    notice, this list of conditions and the following disclaimer.
- * 2. The name of the developer may NOT be used to endorse or promote products
- *    derived from this software without specific prior written permission.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
  *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
 
 /*
  * Device driver for PHILIPS UCB1200 Advanced modem/audio analog front-end
  */
-#define UCB1200DEBUG
-#include "opt_tx39_debug.h"
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ucb1200.c,v 1.17 2008/04/28 20:23:21 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -46,17 +50,14 @@
 #include <hpcmips/dev/ucb1200var.h>
 #include <hpcmips/dev/ucb1200reg.h>
 
-#ifdef UCB1200DEBUG
-int	ucb1200debug = 0;
-#define	DPRINTF(arg) if (ucb1200debug) printf arg;
-#define	DPRINTFN(n, arg) if (ucb1200debug > (n)) printf arg;
-#else
-#define	DPRINTF(arg)
-#define DPRINTFN(n, arg)
+#ifdef	UCB1200_DEBUG
+#define DPRINTF_ENABLE
+#define DPRINTF_DEBUG	ucb1200_debug
 #endif
+#include <machine/debug.h>
 
 struct ucbchild_state {
-	int (*cs_busy) __P((void*));
+	int (*cs_busy)(void *);
 	void *cs_arg;
 };
 
@@ -72,19 +73,19 @@ struct ucb1200_softc {
 	struct ucbchild_state sc_child[UCB1200_MODULE_MAX];
 };
 
-int	ucb1200_match	__P((struct device*, struct cfdata*, void*));
-void	ucb1200_attach	__P((struct device*, struct device*, void*));
-int	ucb1200_print	__P((void*, const char*));
-int	ucb1200_search	__P((struct device*, struct cfdata*, void*));
-int	ucb1200_check_id __P((u_int16_t, int));
+int	ucb1200_match(struct device *, struct cfdata *, void *);
+void	ucb1200_attach(struct device *, struct device *, void *);
+int	ucb1200_print(void *, const char *);
+int	ucb1200_search(struct device *, struct cfdata *,
+		       const int *, void *);
+int	ucb1200_check_id(u_int16_t, int);
 
-#ifdef UCB1200DEBUG
-void	ucb1200_dump	__P((struct ucb1200_softc*));
+#ifdef UCB1200_DEBUG
+void	ucb1200_dump(struct ucb1200_softc *);
 #endif
 
-struct cfattach ucb_ca = {
-	sizeof(struct ucb1200_softc), ucb1200_match, ucb1200_attach
-};
+CFATTACH_DECL(ucb, sizeof(struct ucb1200_softc),
+    ucb1200_match, ucb1200_attach, NULL, NULL);
 
 const struct ucb_id {
 	u_int16_t	id;
@@ -98,26 +99,20 @@ const struct ucb_id {
 };
 
 int
-ucb1200_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+ucb1200_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct txsib_attach_args *sa = aux;
 	u_int16_t reg;
 	
 	if (sa->sa_slot != 0) /* UCB1200 must be subframe 0 */
-		return 0;
+		return (0);
 	reg = txsibsf0_reg_read(sa->sa_tc, UCB1200_ID_REG);
 	
 	return (ucb1200_check_id(reg, 0));
 }
 
 void
-ucb1200_attach(parent, self, aux)
-	struct device *parent;
-	struct device *self;
-	void *aux;
+ucb1200_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct txsib_attach_args *sa = aux;
 	struct ucb1200_softc *sc = (void*)self;
@@ -132,22 +127,20 @@ ucb1200_attach(parent, self, aux)
 	tx39sib_enable1(sc->sc_parent);
 	tx39sib_enable2(sc->sc_parent);
 
-#ifdef UCB1200DEBUG	
-	if (ucb1200debug)
+#ifdef UCB1200_DEBUG	
+	if (ucb1200_debug)
 		ucb1200_dump(sc);
 #endif
 	reg = txsibsf0_reg_read(sa->sa_tc, UCB1200_ID_REG);
 	(void)ucb1200_check_id(reg, 1);
 	printf("\n");
 
-	config_search(ucb1200_search, self, ucb1200_print);
+	config_search_ia(ucb1200_search, self, "ucbif", ucb1200_print);
 }
 
 int
-ucb1200_search(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+ucb1200_search(struct device *parent, struct cfdata *cf,
+	       const int *ldesc, void *aux)
 {
 	struct ucb1200_softc *sc = (void*)parent;
 	struct ucb1200_attach_args ucba;
@@ -158,24 +151,21 @@ ucb1200_search(parent, cf, aux)
 	ucba.ucba_sib	   = sc->sc_parent;
 	ucba.ucba_ucb	   = parent;
 	
-	if ((*cf->cf_attach->ca_match)(parent, cf, &ucba))
+	if (config_match(parent, cf, &ucba))
 		config_attach(parent, cf, &ucba, ucb1200_print);
 
-	return 0;
+	return (0);
 }
 
 int
-ucb1200_print(aux, pnp)
-	void *aux;
-	const char *pnp;
+ucb1200_print(void *aux, const char *pnp)
 {
-	return pnp ? QUIET : UNCONF;
+
+	return (pnp ? QUIET : UNCONF);
 }
 
 int
-ucb1200_check_id(idreg, print)
-	u_int16_t idreg;
-	int print;
+ucb1200_check_id(u_int16_t idreg, int print)
 {
 	int i;
 
@@ -189,15 +179,12 @@ ucb1200_check_id(idreg, print)
 		}
 	}
 	
-	return 0;
+	return (0);
 }
 
 void
-ucb1200_state_install(dev, sfun, sarg, sid)
-	struct device *dev;
-	int (*sfun) __P((void*));
-	void *sarg;
-	int sid;
+ucb1200_state_install(struct device *dev, int (*sfun)(void *), void *sarg,
+    int sid)
 {
 	struct ucb1200_softc *sc = (void*)dev;
 	
@@ -217,17 +204,16 @@ ucb1200_state_idle(dev)
 	for (i = 0; i < UCB1200_MODULE_MAX; i++, cs++)
 		if (cs->cs_busy)
 			if ((*cs->cs_busy)(cs->cs_arg))
-				return 0;
+				return (0);
 		
-	return 1; /* idle state */
+	return (1); /* idle state */
 }
 
-#ifdef UCB1200DEBUG
+#ifdef UCB1200_DEBUG
 void
-ucb1200_dump(sc)
-	struct ucb1200_softc *sc;
+ucb1200_dump(struct ucb1200_softc *sc)
 {
-        const char *regname[] = {
+	static const char *const regname[] = {
                 "IO_DATA        ",
                 "IO_DIR         ",
                 "POSINTEN       ",
@@ -244,16 +230,18 @@ ucb1200_dump(sc)
                 "MODE           ",
                 "RESERVED       ",
                 "NULL           "
-        };
-	tx_chipset_tag_t tc = sc->sc_tc;
+	};
+	tx_chipset_tag_t tc;
 	u_int16_t reg;
 	int i;
+
+	tc = sc->sc_tc;
 
 	printf("\n\t[UCB1200 register]\n");
 	for (i = 0; i < 16; i++) {
 		reg = txsibsf0_reg_read(tc, i);
 		printf("%s(%02d) 0x%04x ", regname[i], i, reg);
-		bitdisp(reg);
+		dbg_bit_print(reg);
 	}
 }
-#endif /* UCB1200DEBUG */
+#endif /* UCB1200_DEBUG */

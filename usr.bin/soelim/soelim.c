@@ -1,4 +1,4 @@
-/*	$NetBSD: soelim.c,v 1.7 1999/11/09 15:06:36 drochner Exp $	*/
+/*	$NetBSD: soelim.c,v 1.14 2008/07/21 14:19:26 lukem Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)soelim.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: soelim.c,v 1.7 1999/11/09 15:06:36 drochner Exp $");
+__RCSID("$NetBSD: soelim.c,v 1.14 2008/07/21 14:19:26 lukem Exp $");
 #endif /* not lint */
 
 /*
@@ -76,32 +72,32 @@ struct path {
 	size_t n, c;
 };
 
-static int	 process __P((struct path *, char *));
-static void	 initpath __P((struct path *));
-static void	 addpath __P((struct path *,  const char *));
-static FILE	*openpath __P((struct path *, const char *, const char *));
+static int	 process(struct path *, const char *);
+static void	 initpath(struct path *);
+static void	 addpath(struct path *,  const char *);
+static FILE	*openpath(struct path *, const char *, const char *);
 
-int	main __P((int, char **));
+int	main(int, char **);
 
 
 static void
-initpath(p)
-	struct path *p;
+initpath(struct path *p)
 {
 	p->list = NULL;
 	p->n = p->c = 0;
 }
 
 static void
-addpath(p, dir)
-	struct path *p;
-	const char *dir;
+addpath(struct path *p, const char *dir)
 {
+	char **n;
+
 	if (p->list == NULL || p->n <= p->c - 2) {
-		p->n += 10;
-		p->list = realloc(p->list, p->n * sizeof(p->list[0]));
-		if (p->list == NULL)
+		n = realloc(p->list, (p->n + 10) * sizeof(p->list[0]));
+		if (n == NULL)
 			err(1, NULL);
+		p->list = n;
+		p->n += 10;
 	}
 
 	if ((p->list[p->c++] = strdup(dir)) == NULL)
@@ -111,10 +107,7 @@ addpath(p, dir)
 }
 
 static FILE *
-openpath(p, name, parm)
-	struct path *p;
-	const char *name;
-	const char *parm;
+openpath(struct path *p, const char *name, const char *parm)
 {
 	char filename[MAXPATHLEN];
 	const char *f;
@@ -139,11 +132,8 @@ openpath(p, name, parm)
 }
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
-	extern char *__progname;
 	struct path p;
 	int c;
 
@@ -157,7 +147,8 @@ main(argc, argv)
 			break;
 		default:
 			(void)fprintf(stderr,
-			    "Usage: %s [-I<dir>] [files...]\n", __progname);
+			    "usage: %s [-I<dir>] [files...]\n",
+			    getprogname());
 			exit(1);
 		}
 
@@ -177,9 +168,7 @@ main(argc, argv)
 }
 
 int
-process(p, file)
-	struct path *p;
-	char *file;
+process(struct path *p, const char *file)
 {
 	char *cp;
 	int c;

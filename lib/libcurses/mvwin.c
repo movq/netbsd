@@ -1,4 +1,4 @@
-/*	$NetBSD: mvwin.c,v 1.9 1999/04/13 14:08:18 mrg Exp $	*/
+/*	$NetBSD: mvwin.c,v 1.15 2003/08/07 16:44:22 agc Exp $	*/
 
 /*
  * Copyright (c) 1981, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,25 +34,48 @@
 #if 0
 static char sccsid[] = "@(#)mvwin.c	8.2 (Berkeley) 5/4/94";
 #else
-__RCSID("$NetBSD: mvwin.c,v 1.9 1999/04/13 14:08:18 mrg Exp $");
+__RCSID("$NetBSD: mvwin.c,v 1.15 2003/08/07 16:44:22 agc Exp $");
 #endif
 #endif				/* not lint */
 
 #include "curses.h"
+#include "curses_private.h"
+
+/*
+ * mvderwin --
+ *      Move a derived window.
+ *
+ */
+int
+mvderwin(WINDOW *win, int dy, int dx)
+{
+	WINDOW *parent;
+	int x, y;
+
+	if (win == NULL)
+		return ERR;
+
+	parent = win->orig;
+
+	if (parent == NULL)
+		return ERR;
+
+	x = parent->begx + dx;
+	y = parent->begy + dy;
+	return mvwin(win, y, x);
+}
 
 /*
  * mvwin --
  *	Relocate the starting position of a window.
  */
 int
-mvwin(win, by, bx)
-	WINDOW *win;
-	int     by, bx;
+mvwin(WINDOW *win, int by, int bx)
 {
 	WINDOW *orig;
 	int     dy, dx;
 
-	if (by + win->maxy > LINES || bx + win->maxx > COLS)
+	if (by < 0 || by + win->maxy > LINES || bx < 0 || bx + win->maxx > COLS)
 		return (ERR);
 	dy = by - win->begy;
 	dx = bx - win->begx;

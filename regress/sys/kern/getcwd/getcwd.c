@@ -1,4 +1,4 @@
-/* $NetBSD: getcwd.c,v 1.5 1999/07/11 09:54:41 sommerfeld Exp $ */
+/*	$NetBSD: getcwd.c,v 1.9 2008/04/28 20:23:06 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -57,26 +50,26 @@
 
 #include "getcwd.h"
 
-int	main __P((int, char *[]));
+int	main(int, char *[]);
 
-static void check1 __P((char *dir, char *buf, char *calltext,
-    int actual, int expected, int experr));
+static void check1(char *dir, char *buf, char *calltext,
+    int actual, int expected, int experr);
 
-static void time_old_getcwd __P((void));
-static void time_kern_getcwd __P((void));
-static void time_func __P((char *name,
-    void (*func)(void)));
+static void time_old_getcwd(void);
+static void time_kern_getcwd(void);
+static void time_func(char *name,
+    void (*func)(void));
 
-static void test_speed __P((void));
-static void test___getcwd  __P((void));
-static void test___getcwd_perms  __P((void));
-static void test___getcwd_chroot __P((void));
+static void test_speed(void);
+static void test___getcwd (void);
+static void test___getcwd_perms (void);
+static void test___getcwd_chroot(void);
 
-static void stress_test_getcwd __P((void));
-static void usage __P((char *progname));
+static void stress_test_getcwd(void);
+static void usage(char *progname);
 
 /* libc-private interface */
-int __getcwd __P((char *, size_t));
+int __getcwd(char *, size_t);
 
 /*
  * test cases:
@@ -200,7 +193,7 @@ time_kern_getcwd()
 static void
 time_func(name, func)
 	char *name;
-	void (*func) __P((void));
+	void (*func)(void);
 {
 	struct timeval before, after;
 	double delta_t;
@@ -454,7 +447,7 @@ stress_test_getcwd()
 
 		cp = old_getcwd (ubuf, MAXPATHLEN);
 		if (strcmp(buf, ubuf) != 0) {
-			warnx("In %s, old_getcwd says %s\n",
+			warnx("In %s, old_getcwd says %s",
 			    buf, ubuf);
 		}
 

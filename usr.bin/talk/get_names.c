@@ -1,4 +1,4 @@
-/*	$NetBSD: get_names.c,v 1.7 1998/07/26 22:26:29 mycroft Exp $	*/
+/*	$NetBSD: get_names.c,v 1.13 2007/01/08 17:10:59 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,13 +34,16 @@
 #if 0
 static char sccsid[] = "@(#)get_names.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: get_names.c,v 1.7 1998/07/26 22:26:29 mycroft Exp $");
+__RCSID("$NetBSD: get_names.c,v 1.13 2007/01/08 17:10:59 christos Exp $");
 #endif /* not lint */
 
 #include "talk.h"
+#include <err.h>
 #include <sys/param.h>
 #include <pwd.h>
+#include <stdlib.h>
 #include <unistd.h>
+#include <util.h>
 
 extern	CTL_MSG msg;
 
@@ -64,24 +63,29 @@ get_names(argc, argv)
 	char *names;
 
 	if (argc < 2 ) {
-		printf("Usage: talk user [ttyname]\n");
-		exit(-1);
+		printf("usage: talk user [ttyname]\n");
+		exit(1);
 	}
 	if (!isatty(0)) {
 		printf("Standard input must be a tty, not a pipe or a file\n");
-		exit(-1);
+		exit(1);
 	}
 	if ((my_name = getlogin()) == NULL) {
 		struct passwd *pw;
 
 		if ((pw = getpwuid(getuid())) == NULL) {
 			printf("You don't exist. Go away.\n");
-			exit(-1);
+			exit(1);
 		}
 		my_name = pw->pw_name;
 	}
-	gethostname(hostname, sizeof (hostname));
-	hostname[sizeof(hostname) - 1] = '\0';
+	if ((cp = getenv("TALKHOST")) != NULL)
+		(void)estrlcpy(hostname, cp, sizeof(hostname));
+	else {
+		if (gethostname(hostname, sizeof(hostname)) == -1)
+			err(EXIT_FAILURE, "gethostname");
+		hostname[sizeof(hostname) - 1] = '\0';
+	}
 	my_machine_name = hostname;
 	/* check for, and strip out, the machine name of the target */
 	names = strdup(argv[1]);
@@ -121,4 +125,5 @@ get_names(argc, argv)
 	msg.r_name[NAME_SIZE - 1] = '\0';
 	strncpy(msg.r_tty, his_tty, TTY_SIZE);
 	msg.r_tty[TTY_SIZE - 1] = '\0';
+	free(names);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: semtest.c,v 1.2 2000/01/31 15:10:34 christos Exp $	*/
+/*	$NetBSD: semtest.c,v 1.6 2008/04/28 20:23:07 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -55,13 +48,13 @@
 #include <time.h>
 #include <unistd.h>
 
-int	main __P((int, char *[]));
-void	print_semid_ds __P((struct semid_ds *, mode_t));
-void	sigsys_handler __P((int));
-void	sigchld_handler __P((int));
-void	cleanup __P((void));
-void	waiter __P((void));
-void	usage __P((void));
+int	main(int, char *[]);
+void	print_semid_ds(struct semid_ds *, mode_t);
+void	sigsys_handler(int);
+void	sigchld_handler(int);
+void	cleanup(void);
+void	waiter(void);
+void	usage(void);
 
 int	sender_semid = -1;
 pid_t	child_pid;
@@ -232,7 +225,7 @@ sigchld_handler(signo)
 		errx(1, "receiver exited abnormally");
 
 	if (WEXITSTATUS(cstatus) != 0)
-		errx(1, "receiver exited with status %d\n",
+		errx(1, "receiver exited with status %d",
 		    WEXITSTATUS(cstatus));
 
 	/*
@@ -304,9 +297,8 @@ print_semid_ds(sp, mode)
 void
 usage()
 {
-	extern const char *__progname;
 
-	fprintf(stderr, "usage: %s keypath\n", __progname);
+	fprintf(stderr, "usage: %s keypath\n", getprogname());
 	exit(1);
 }
 

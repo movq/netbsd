@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.h,v 1.3 1998/09/01 17:33:04 tsubai Exp $	*/
+/*	$NetBSD: autoconf.h,v 1.15 2007/11/26 19:58:30 garbled Exp $	*/
 
 /*-
  * Copyright (C) 1998	Internet Research Institute, Inc.
@@ -31,18 +31,56 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifndef _MACHINE_AUTOCONF_H_
+#define _MACHINE_AUTOCONF_H_
+
+#include <machine/bus.h>	/* for bus_space_tag_t */
+
 struct confargs {
-	char *ca_name;
+	const char *ca_name;
 	u_int ca_node;
 	int ca_nreg;
 	u_int *ca_reg;
 	int ca_nintr;
 	int *ca_intr;
 
-	u_int ca_baseaddr;
-	/* bus_space_tag_t ca_tag; */
+	bus_addr_t ca_baseaddr;
+	bus_space_tag_t ca_tag;
 };
 
-extern void *mapiodev __P((paddr_t, psize_t));
-extern int kvtop __P((caddr_t));
-extern void *intr_establish __P((int, int, int, int (*)(void *), void *));
+/* there are in locore.S */
+void ofbcopy(const void *, void *, size_t);
+int badaddr(volatile void *, int);
+
+/* these are in clock.c */
+void calc_delayconst(void);
+void decr_intr(struct clockframe *);
+
+/* these are in cpu.c */
+void identifycpu(char *);
+
+/* these are in machdep.c */
+void initppc(u_int, u_int, char *);
+void model_init(void);
+void *mapiodev(paddr_t, psize_t);
+paddr_t kvtop(void *);
+void dumpsys(void);
+void copy_disp_props(struct device *, int, prop_dictionary_t);
+
+/* these are in extintr.c */
+void init_interrupt(void);
+
+/* these are in dev/akbd.c */
+int kbd_intr(void *);
+int akbd_cnattach(void);
+int adbkbd_cnattach(void);
+
+/* these are in dev/ofb.c */
+int ofb_is_console(void);
+int rascons_cnattach(void);
+
+extern int console_node;
+extern int console_instance;
+extern char model_name[64];
+
+#endif /* _MACHINE_AUTOCONF_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: openprom.c,v 1.10 1999/02/14 12:48:03 pk Exp $ */
+/*	$NetBSD: openprom.c,v 1.26 2007/03/04 06:00:46 christos Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -21,11 +21,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -44,6 +40,11 @@
  *	@(#)openprom.c	8.1 (Berkeley) 6/11/93
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: openprom.c,v 1.26 2007/03/04 06:00:46 christos Exp $");
+
+#include "opt_sparc_arch.h"
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/errno.h>
@@ -52,38 +53,33 @@
 #include <sys/malloc.h>
 #include <sys/conf.h>
 #include <sys/device.h>
+#include <sys/event.h>
 
 #include <machine/bsd_openprom.h>
 #include <machine/promlib.h>
 #include <machine/openpromio.h>
-#include <machine/conf.h>
+
+dev_type_open(openpromopen);
+dev_type_ioctl(openpromioctl);
+
+const struct cdevsw openprom_cdevsw = {
+	openpromopen, nullclose, noread, nowrite, openpromioctl,
+	nostop, notty, nopoll, nommap, nokqfilter, D_OTHER
+};
 
 static	int lastnode;			/* speed hack */
-extern	int optionsnode;		/* node ID of ROM's options */
 
-static int openpromcheckid __P((int, int));
-static int openpromgetstr __P((int, char *, char **));
+static int openpromcheckid(int, int);
+static int openpromgetstr(int, char *, char **);
 
 int
-openpromopen(dev, flags, mode, p)
-	dev_t dev;
-	int flags, mode;
-	struct proc *p;
+openpromopen(dev_t dev, int flags, int mode, struct lwp *l)
 {
+
 #if defined(SUN4)
 	if (cputyp==CPU_SUN4)
 		return (ENODEV);
 #endif
-
-	return (0);
-}
-
-int
-openpromclose(dev, flags, mode, p)
-	dev_t dev;
-	int flags, mode;
-	struct proc *p;
-{
 
 	return (0);
 }
@@ -93,8 +89,7 @@ openpromclose(dev, flags, mode, p)
  * listed from node ID sid forward.
  */
 static int
-openpromcheckid(sid, tid)
-	int sid, tid;
+openpromcheckid(int sid, int tid)
 {
 
 	for (; sid != 0; sid = nextsibling(sid))
@@ -105,9 +100,7 @@ openpromcheckid(sid, tid)
 }
 
 static int
-openpromgetstr(len, user, cpp)
-	int len;
-	char *user, **cpp;
+openpromgetstr(int len, char *user, char **cpp)
 {
 	int error;
 	char *cp;
@@ -123,16 +116,13 @@ openpromgetstr(len, user, cpp)
 }
 
 int
-openpromioctl(dev, cmd, data, flags, p)
-	dev_t dev;
-	u_long cmd;
-	caddr_t data;
-	int flags;
-	struct proc *p;
+openpromioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
 {
 	struct opiocdesc *op;
-	int node, len, ok, error, s;
+	int node, optionsnode, len, ok, error, s;
 	char *name, *value, *nextprop;
+
+	optionsnode = prom_getoptionsnode();
 
 	/* All too easy... */
 	if (cmd == OPIOCGETOPTNODE) {
@@ -178,7 +168,7 @@ openpromioctl(dev, cmd, data, flags, p)
 			break;
 		value = malloc(len, M_TEMP, M_WAITOK);
 		s = splhigh();
-		error = getprop(node, name, 1, &len, (void **)&value);
+		error = prom_getprop(node, name, 1, &len, &value);
 		splx(s);
 		if (error != 0)
 			break;
@@ -240,6 +230,20 @@ openpromioctl(dev, cmd, data, flags, p)
 		node = firstchild(node);
 		splx(s);
 		*(int *)data = lastnode = node;
+		break;
+
+	case OPIOCFINDDEVICE:
+		if ((flags & FREAD) == 0)
+			return (EBADF);
+		error = openpromgetstr(op->op_namelen, op->op_name, &name);
+		if (error)
+			break;
+		node = prom_finddevice(name);
+		if (node == 0 || node == -1) {
+			error = ENOENT;
+			break;
+		}
+		op->op_nodeid = lastnode = node;
 		break;
 
 	default:

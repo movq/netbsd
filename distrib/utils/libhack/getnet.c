@@ -1,4 +1,4 @@
-/*	$NetBSD: getnet.c,v 1.1 1997/12/12 03:05:59 gwr Exp $	*/
+/*	$NetBSD: getnet.c,v 1.4 2004/05/09 01:49:56 sommerfeld Exp $	*/
 
 /* Copyright (c) 1993 Carlos Leandro and Rui Salgueiro
  *	Dep. Matematica Universidade de Coimbra, Portugal, Europe
@@ -19,11 +19,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -45,6 +41,13 @@
  * and then gutted, leaving only stubs.
  */
 
+#include <sys/cdefs.h>
+
+#ifdef __weak_alias
+#define getnetbyaddr		_getnetbyaddr
+#define getnetbyname		_getnetbyname
+#endif
+
 #include <sys/param.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -58,10 +61,15 @@
 #include <errno.h>
 #include <string.h>
 
+#ifdef __weak_alias
+__weak_alias(getnetbyaddr,_getnetbyaddr)
+__weak_alias(getnetbyname,_getnetbyname)
+#endif
+
 struct netent *
 getnetbyaddr(net, net_type)
-	register u_long net;
-	register int net_type;
+	uint32_t net;
+	int net_type;
 {
 	return (NULL);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: rmt.c,v 1.10 2000/02/08 18:00:05 mjacob Exp $	*/
+/*	$NetBSD: rmt.c,v 1.15 2008/07/21 13:36:59 lukem Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)rmt.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: rmt.c,v 1.10 2000/02/08 18:00:05 mjacob Exp $");
+__RCSID("$NetBSD: rmt.c,v 1.15 2008/07/21 13:36:59 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -82,7 +78,7 @@ FILE	*debug;
 char	*checkbuf __P((char *, int));
 void	 error __P((int));
 int	 main __P((int, char **));
-void	 getstring __P((char *));
+void	 getstring __P((char *, size_t));
 
 int
 main(argc, argv)
@@ -110,8 +106,8 @@ top:
 	case 'O':
 		if (tape >= 0)
 			(void) close(tape);
-		getstring(device);
-		getstring(mode);
+		getstring(device, sizeof(device));
+		getstring(mode, sizeof(mode));
 		DEBUG2("rmtd: O %s %s\n", device, mode);
 		tape = open(device, atoi(mode),
 		    S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH);
@@ -121,23 +117,23 @@ top:
 
 	case 'C':
 		DEBUG("rmtd: C\n");
-		getstring(device);		/* discard */
+		getstring(device, sizeof(device));	/* discard */
 		if (close(tape) < 0)
 			goto ioerror;
 		tape = -1;
 		goto respond;
 
 	case 'L':
-		getstring(count);
-		getstring(pos);
+		getstring(count, sizeof(count));
+		getstring(pos, sizeof(pos));
 		DEBUG2("rmtd: L %s %s\n", count, pos);
-		rval = lseek(tape, (off_t)strtoq(count, NULL, 10), atoi(pos));
+		rval = lseek(tape, (off_t)strtoll(count, NULL, 10), atoi(pos));
 		if (rval < 0)
 			goto ioerror;
 		goto respond;
 
 	case 'W':
-		getstring(count);
+		getstring(count, sizeof(count));
 		n = atoi(count);
 		DEBUG1("rmtd: W %s\n", count);
 		record = checkbuf(record, n);
@@ -154,21 +150,21 @@ top:
 		goto respond;
 
 	case 'R':
-		getstring(count);
+		getstring(count, sizeof(count));
 		DEBUG1("rmtd: R %s\n", count);
 		n = atoi(count);
 		record = checkbuf(record, n);
 		rval = read(tape, record, n);
 		if (rval < 0)
 			goto ioerror;
-		(void)sprintf(resp, "A%d\n", rval);
+		(void)snprintf(resp, sizeof(resp), "A%d\n", rval);
 		(void)write(STDOUT_FILENO, resp, strlen(resp));
 		(void)write(STDOUT_FILENO, record, rval);
 		goto top;
 
 	case 'I':
-		getstring(op);
-		getstring(count);
+		getstring(op, sizeof(op));
+		getstring(count, sizeof(count));
 		DEBUG2("rmtd: I %s %s\n", op, count);
 		{
 			struct mtop mtop;
@@ -192,7 +188,7 @@ top:
 			/* limit size to 'original' mtget size */
 			if (rval > 24)
 				rval = 24;
-			(void)sprintf(resp, "A%d\n", rval);
+			(void)snprintf(resp, sizeof(resp), "A%d\n", rval);
 			(void)write(STDOUT_FILENO, resp, strlen(resp));
 			(void)write(STDOUT_FILENO, (char *)&mtget, rval);
 			goto top;
@@ -204,7 +200,7 @@ top:
 	}
 respond:
 	DEBUG1("rmtd: A %d\n", rval);
-	(void)sprintf(resp, "A%d\n", rval);
+	(void)snprintf(resp, sizeof(resp), "A%d\n", rval);
 	(void)write(STDOUT_FILENO, resp, strlen(resp));
 	goto top;
 ioerror:
@@ -213,19 +209,18 @@ ioerror:
 }
 
 void
-getstring(bp)
+getstring(bp, size)
 	char *bp;
+	size_t size;
 {
-	int i;
 	char *cp = bp;
+	char *ep = bp + size - 1;
 
-	for (i = 0; i < SSIZE - 1; i++) {
-		if (read(STDIN_FILENO, cp+i, 1) != 1)
+	do {
+		if (read(STDIN_FILENO, cp, 1) != 1)
 			exit(0);
-		if (cp[i] == '\n')
-			break;
-	}
-	cp[i] = '\0';
+	} while (*cp != '\n' && ++cp < ep);
+	*cp = '\0';
 }
 
 char *
@@ -256,6 +251,6 @@ error(num)
 {
 
 	DEBUG2("rmtd: E %d (%s)\n", num, strerror(num));
-	(void)sprintf(resp, "E%d\n%s\n", num, strerror(num));
+	(void)snprintf(resp, sizeof(resp), "E%d\n%s\n", num, strerror(num));
 	(void)write(STDOUT_FILENO, resp, strlen(resp));
 }

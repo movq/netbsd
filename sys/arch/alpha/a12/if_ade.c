@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ade.c,v 1.4 1999/12/04 21:19:52 ragge Exp $	*/
+/*	$NetBSD: if_ade.c,v 1.33 2008/03/24 12:24:37 yamt Exp $	*/
 
 /*
  * NOTE: this version of if_de was modified for bounce buffers prior
@@ -51,7 +51,7 @@
  * 1. Redistributions of source code must retain the above copyright
  *    notice, this list of conditions and the following disclaimer.
  * 2. The name of the author may not be used to endorse or promote products
- *    derived from this software withough specific prior written permission
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -79,6 +79,9 @@
  */
 #define	TULIP_HDR_DATA
 #define	LCLDMA 1
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_ade.c,v 1.33 2008/03/24 12:24:37 yamt Exp $");
 
 #include "opt_inet.h"
 #include "opt_ns.h"
@@ -129,9 +132,7 @@
 #include <netns/ns_if.h>
 #endif
 
-#include <vm/vm.h>
-#include <vm/vm_param.h>
-#include <vm/vm_kern.h>
+#include <uvm/uvm_extern.h>
 
 #if defined(__FreeBSD__)
 #include <vm/pmap.h>
@@ -226,7 +227,7 @@ static void tulip_ifmedia_status(struct ifnet * const ifp, struct ifmediareq *re
 /* static void tulip_21140_map_media(tulip_softc_t *sc); */
 #ifdef LCLDMA
 static void reset_lcl_dma(tulip_softc_t * const sc);
-static void a12_m_copydata(struct mbuf *m, int off, int len, caddr_t cp);
+static void a12_m_copydata(struct mbuf *m, int off, int len, void *cp);
 static void dumpring(void **);
 /* 
  * Note for LCLDMA mods. These are for systems such as the Avalon
@@ -236,8 +237,13 @@ static void dumpring(void **);
  * course, they won't be needing de(4) drivers.
  */
 static void
-donothing(caddr_t m, u_int p, void *q)
+donothing(struct mbuf *m, void *buf, size_t size, void *arg)
 {
+
+	if (__predict_true(m != NULL)) {
+		pool_cache_put(mb_cache, m);
+	}
+
 }
 static void a12r2pb(void *vsrc, void *vdst, int len) {
 	long	bounce[9];
@@ -269,7 +275,7 @@ static void a12r2pb(void *vsrc, void *vdst, int len) {
 		 */
 		if(offset)
 			bounce[0] = dst[0];
-		bcopy(src,(int8_t *)bounce+offset,t);
+		memcpy((int8_t *)bounce+offset,src,t);
 		for(i=llw; i>=0; --i) {	/* reverse so d_status is last */
 			alpha_mb();
 			dst[i] = bounce[i];
@@ -294,7 +300,7 @@ static void a12r2pb(void *vsrc, void *vdst, int len) {
 	alpha_wmb();
 }
 
-#define BEGIN(p) do { tulip_desc_t t; bcopy((p),&t,sizeof(t))
+#define BEGIN(p) do { tulip_desc_t t; memcpy(&t,(p),sizeof(t))
 #define	END(p)			   a12r2pb(&t,(p),sizeof(t)); } while(0)
 
 static void setstatus(tulip_desc_t *t, u_int32_t val) {
@@ -376,8 +382,8 @@ tulip_txprobe(
     /*
      * Construct a LLC TEST message which will point to ourselves.
      */
-    bcopy(sc->tulip_enaddr, mtod(m, struct ether_header *)->ether_dhost, 6);
-    bcopy(sc->tulip_enaddr, mtod(m, struct ether_header *)->ether_shost, 6);
+    memcpy(mtod(m, struct ether_header *)->ether_dhost, sc->tulip_enaddr, 6);
+    memcpy(mtod(m, struct ether_header *)->ether_shost, sc->tulip_enaddr, 6);
     mtod(m, struct ether_header *)->ether_type = htons(3);
     mtod(m, unsigned char *)[14] = 0;
     mtod(m, unsigned char *)[15] = 0;
@@ -634,7 +640,7 @@ tulip_media_link_monitor(
 
     if (mi == NULL) {
 #if defined(DIAGNOSTIC) || defined(TULIP_DEBUG)
-	panic("tulip_media_link_monitor: %s: botch at line %d\n",
+	panic("tulip_media_link_monitor: %s: botch at line %d",
 	      tulip_mediums[sc->tulip_media],__LINE__);
 #endif
 	return TULIP_LINK_UNKNOWN;
@@ -915,7 +921,7 @@ tulip_media_poll(
 	    }
 	    default: {
 #if defined(DIAGNOSTIC) || defined(TULIP_DEBUG)
-		panic("tulip_media_poll: botch at line %d\n", __LINE__);
+		panic("tulip_media_poll: botch at line %d", __LINE__);
 #endif
 		break;
 	    }
@@ -1567,7 +1573,7 @@ tulip_mii_autonegotiate(
 	}
 	default: {
 #if defined(DIAGNOSTIC)
-	    panic("tulip_media_poll: botch at line %d\n", __LINE__);
+	    panic("tulip_media_poll: botch at line %d", __LINE__);
 #endif
 	    break;
 	}
@@ -1671,7 +1677,7 @@ tulip_null_media_poll(
 #endif
 }
 
-__inline__ static void
+inline static void
 tulip_21140_mediainit(
     tulip_softc_t * const sc,
     tulip_media_info_t * const mip,
@@ -1896,7 +1902,7 @@ static const tulip_boardsw_t tulip_2114x_isv_boardsw = {
 /* 
  * At least in some versions of the driver, all 2114x are mapped to
  * tulip_21140_eb_boardsw, so this isn't necessarily going to be
- * utilized. But for possible later use, provide this as a clone of
+ * used. But for possible later use, provide this as a clone of
  * the dec evalboard configuration. The Avalon card should look the
  * same to the software as the eval card, with the exception of the
  * srom format in the early production units.
@@ -2134,9 +2140,9 @@ tulip_identify_dec_nic(
 #define D0	4
     if (sc->tulip_chipid <= TULIP_DE425)
 	return;
-    if (bcmp(sc->tulip_rombuf + 29, "DE500", 5) == 0
-	|| bcmp(sc->tulip_rombuf + 29, "DE450", 5) == 0) {
-	bcopy(sc->tulip_rombuf + 29, &sc->tulip_boardid[D0], 8);
+    if (memcmp(sc->tulip_rombuf + 29, "DE500", 5) == 0
+	|| memcmp(sc->tulip_rombuf + 29, "DE450", 5) == 0) {
+	memcpy(&sc->tulip_boardid[D0], sc->tulip_rombuf + 29, 8);
 	sc->tulip_boardid[D0+8] = ' ';
     }
 #undef D0
@@ -2336,7 +2342,7 @@ tulip_identify_asante_nic(
 	mi->mi_gpr_length = 0;
 	mi->mi_gpr_offset = 0;
 	mi->mi_reset_length = 0;
-	mi->mi_reset_offset = 0;;
+	mi->mi_reset_offset = 0;
 
 	mi->mi_phyaddr = tulip_mii_get_phyaddr(sc, 0);
 	if (mi->mi_phyaddr == TULIP_MII_NOPHY)
@@ -2384,7 +2390,7 @@ tulip_srom_decode(
     /*
      * Save the hardware address.
      */
-    bcopy((caddr_t) shp->sh_ieee802_address, (caddr_t) sc->tulip_enaddr, 6);
+    memcpy((void *) sc->tulip_enaddr, (void *) shp->sh_ieee802_address, 6);
     /*
      * If this is a multiple port card, add the adapter index to the last
      * byte of the hardware address.  (if it isn't multiport, adding 0
@@ -2794,18 +2800,18 @@ tulip_read_macaddr(
     }
 
 
-    if (bcmp(&sc->tulip_rombuf[0], &sc->tulip_rombuf[16], 8) != 0) {
+    if (memcmp(&sc->tulip_rombuf[0], &sc->tulip_rombuf[16], 8) != 0) {
 	/*
 	 * Detect early Avalon 100-TX PMC cards with magic number followed
 	 * by hw addr. These should all have been upgraded by now. It's an
 	 * electronic eeprom write-in-place, so there's no excuse not to...
 	 */
-	if (bcmp("AC5E", sc->tulip_rombuf, 4) == 0) {
+	if (memcmp("AC5E", sc->tulip_rombuf, 4) == 0) {
 		panic("PMC2TTX: old format Avalon srom, reprogram hw addr");
 #if 0
 		printf("ade%d: Warning: reinit srom! Old Avalon format!",
 			cf->cf_unit);
-		bcopy(sc->tulip_rombuf + 4, sc->tulip_enaddr, 6);
+		memcpy(sc->tulip_enaddr, sc->tulip_rombuf + 4, 6);
 		sc->tulip_flags |= TULIP_ROMOK;
 		goto check_oui;
 #endif
@@ -2830,7 +2836,7 @@ tulip_read_macaddr(
 	if (sc->tulip_rombuf[0] == 0 && sc->tulip_rombuf[1] == 0
 		&& sc->tulip_rombuf[2] == 0)
 	    return -4;
-	bcopy(sc->tulip_rombuf, sc->tulip_enaddr, 6);
+	memcpy(sc->tulip_enaddr, sc->tulip_rombuf, 6);
 	sc->tulip_flags |= TULIP_ROMOK;
 	goto check_oui;
     } else {
@@ -2864,12 +2870,12 @@ tulip_read_macaddr(
 		sc->tulip_boardsw = root_sc->tulip_boardsw;
 		strcpy(sc->tulip_boardid, root_sc->tulip_boardid);
 		if (sc->tulip_boardsw->bd_type == TULIP_21140_ISV) {
-		    bcopy(root_sc->tulip_rombuf, sc->tulip_rombuf,
+		    memcpy(sc->tulip_rombuf, root_sc->tulip_rombuf,
 			  sizeof(sc->tulip_rombuf));
 		    if (!tulip_srom_decode(sc))
 			return -5;
 		} else {
-		    bcopy(root_sc->tulip_enaddr, sc->tulip_enaddr, 6);
+		    memcpy(sc->tulip_enaddr, root_sc->tulip_enaddr, 6);
 		    sc->tulip_enaddr[5] += sc->tulip_unit - root_sc->tulip_unit;
 		}
 		/*
@@ -2893,17 +2899,17 @@ tulip_read_macaddr(
      * This is the standard DEC address ROM test.
      */
 
-    if (bcmp(&sc->tulip_rombuf[24], testpat, 8) != 0)
+    if (memcmp(&sc->tulip_rombuf[24], testpat, 8) != 0)
 	return -3;
 
     tmpbuf[0] = sc->tulip_rombuf[15]; tmpbuf[1] = sc->tulip_rombuf[14];
     tmpbuf[2] = sc->tulip_rombuf[13]; tmpbuf[3] = sc->tulip_rombuf[12];
     tmpbuf[4] = sc->tulip_rombuf[11]; tmpbuf[5] = sc->tulip_rombuf[10];
     tmpbuf[6] = sc->tulip_rombuf[9];  tmpbuf[7] = sc->tulip_rombuf[8];
-    if (bcmp(&sc->tulip_rombuf[0], tmpbuf, 8) != 0)
+    if (memcmp(&sc->tulip_rombuf[0], tmpbuf, 8) != 0)
 	return -2;
 
-    bcopy(sc->tulip_rombuf, sc->tulip_enaddr, 6);
+    memcpy(sc->tulip_enaddr, sc->tulip_rombuf, 6);
 
     cksum = *(u_int16_t *) &sc->tulip_enaddr[0];
     cksum *= 2;
@@ -2925,8 +2931,8 @@ tulip_read_macaddr(
      * Check for various boards based on OUI.  Did I say braindead?
      */
     for (idx = 0; tulip_vendors[idx].vendor_identify_nic != NULL; idx++) {
-	if (bcmp((caddr_t) sc->tulip_enaddr,
-		 (caddr_t) tulip_vendors[idx].vendor_oui, 3) == 0) {
+	if (memcmp((void *) sc->tulip_enaddr,
+		 (void *) tulip_vendors[idx].vendor_oui, 3) == 0) {
 	    (*tulip_vendors[idx].vendor_identify_nic)(sc);
 	    break;
 	}
@@ -3048,10 +3054,10 @@ tulip_addr_filter(
 	     * go into hash perfect mode (512 bit multicast
 	     * hash and one perfect hardware).
 	     */
-	    bzero(sc->tulip_setupdata, sizeof(sc->tulip_setupdata));
+	    memset(sc->tulip_setupdata, 0, sizeof(sc->tulip_setupdata));
 	    ETHER_FIRST_MULTI(step, TULIP_ETHERCOM(sc), enm);
 	    while (enm != NULL) {
-		if (bcmp(enm->enm_addrlo, enm->enm_addrhi, 6) == 0) {
+		if (memcmp(enm->enm_addrlo, enm->enm_addrhi, 6) == 0) {
 		    hash = tulip_mchash(enm->enm_addrlo);
 		    sp[hash >> 4] |= 1 << (hash & 0xF);
 		} else {
@@ -3083,7 +3089,7 @@ tulip_addr_filter(
 	     */
 	    ETHER_FIRST_MULTI(step, TULIP_ETHERCOM(sc), enm);
 	    for (; enm != NULL; idx++) {
-		if (bcmp(enm->enm_addrlo, enm->enm_addrhi, 6) == 0) {
+		if (memcmp(enm->enm_addrlo, enm->enm_addrhi, 6) == 0) {
 		    *sp++ = ((u_int16_t *) enm->enm_addrlo)[0]; 
 		    *sp++ = ((u_int16_t *) enm->enm_addrlo)[1]; 
 		    *sp++ = ((u_int16_t *) enm->enm_addrlo)[2];
@@ -3378,7 +3384,7 @@ tulip_rx_intr(
 #if NBPFILTER > 0
 	    if (sc->tulip_bpf != NULL) {
 		if (me == ms)
-		    TULIP_BPF_TAP(sc, mtod(ms, caddr_t), total_len);
+		    TULIP_BPF_TAP(sc, mtod(ms, void *), total_len);
 		else
 		    TULIP_BPF_MTAP(sc, ms);
 	    }
@@ -3446,11 +3452,13 @@ tulip_rx_intr(
 #if defined(TULIP_COPY_RXDATA)
 		if (!accept || total_len >= MHLEN - 2) {
 #endif
+#if defined(LCLDMA)
 		    MCLGET(m0, M_DONTWAIT);
 		    if ((m0->m_flags & M_EXT) == 0) {
 			m_freem(m0);
 			m0 = NULL;
 		    }
+#endif /* defined(LCLDMA) */
 #if defined(TULIP_COPY_RXDATA)
 		}
 #endif
@@ -3480,7 +3488,7 @@ tulip_rx_intr(
 #error BIG_PACKET is incompatible with TULIP_COPY_RXDATA
 #endif
 		m0->m_data += 2;	/* align data after header */
-		m_copydata(ms, 0, total_len, mtod(m0, caddr_t));
+		m_copydata(ms, 0, total_len, mtod(m0, void *));
 		m0->m_len = m0->m_pkthdr.len = total_len;
 		m0->m_pkthdr.rcvif = ifp;
 #if defined(__NetBSD__)
@@ -3518,25 +3526,23 @@ tulip_rx_intr(
 	 * mbuf cluster that we really can't use. Otherwise, we
 	 * recycle them efficiently.
 	 */
-	if (ms->m_flags & M_CLUSTER) {	/* not one of ours */
-		struct mbuf *ms2 = ms;
+	if ((ms->m_flags & M_EXT) == 0) {	/* not one of ours */
 		int ring_entry_number = ri->ri_nextout - ri->ri_first;
-		MEXTREMOVE(ms2);	/* uses "ms" internally! */
-		MEXTADD(ms2, sc->tulip_rx_kva[ring_entry_number], 
+		MEXTADD(ms, sc->tulip_rx_kva[ring_entry_number], 
 			TULIP_RX_BUFLEN, MT_DATA, donothing, 0);
 	}
 #ifdef TULIP_DEBUG
 	if (ms->m_next != NULL)
 		panic("tulip lcldma rx unexpected chain");
 	if (ri->ri_nextout->d_addr1
-	!= a12map(TULIP_KVATOPHYS(sc, mtod(ms, caddr_t))))
+	!= a12map(TULIP_KVATOPHYS(sc, mtod(ms, void *))))
 		panic("tulip LCLDMA rx d_addr1");
 #endif
 #endif
 	do {
 	    BEGIN(ri->ri_nextout);
 		t.d_length1 = TULIP_RX_BUFLEN;
-		t.d_addr1   = a12map(TULIP_KVATOPHYS(sc, mtod(ms, caddr_t)));
+		t.d_addr1   = a12map(TULIP_KVATOPHYS(sc, mtod(ms, void *)));
 	    END(ri->ri_nextout);
 	    setstatus(ri->ri_nextout,TULIP_DSTS_OWNER);
 	    if (++ri->ri_nextout == ri->ri_last)
@@ -3923,7 +3929,7 @@ static int
 tulip_ifioctl(
     struct ifnet * const ifp,
     ioctl_cmd_t cmd,
-    caddr_t data)
+    void *data)
 {
     tulip_softc_t * const sc = TULIP_IFP_TO_SOFTC(ifp);
     struct ifaddr *ifa = (struct ifaddr *)data;
@@ -3960,9 +3966,9 @@ tulip_ifioctl(
 			ina->x_host = *(union ns_host *)(sc->tulip_enaddr);
 		    } else {
 			ifp->if_flags &= ~IFF_RUNNING;
-			bcopy((caddr_t)ina->x_host.c_host,
-			      (caddr_t)sc->tulip_enaddr,
-			      sizeof(sc->tulip_enaddr));
+			memcpy((void *)sc->tulip_enaddr,
+			    (void *)ina->x_host.c_host,
+			    sizeof(sc->tulip_enaddr));
 		    }
 		    tulip_init(sc);
 		    break;
@@ -3977,9 +3983,8 @@ tulip_ifioctl(
 	    break;
 	}
 	case SIOCGIFADDR: {
-	    bcopy((caddr_t) sc->tulip_enaddr,
-		  (caddr_t) ((struct sockaddr *)&ifr->ifr_data)->sa_data,
-		  6);
+	    memcpy((void *) ((struct sockaddr *)&ifr->ifr_data)->sa_data,
+		(void *) sc->tulip_enaddr, 6);
 	    break;
 	}
 
@@ -4001,14 +4006,11 @@ tulip_ifioctl(
 	    /*
 	     * Update multicast listeners
 	     */
-	    if (cmd == SIOCADDMULTI)
-		error = ether_addmulti(ifr, TULIP_ETHERCOM(sc));
-	    else
-		error = ether_delmulti(ifr, TULIP_ETHERCOM(sc));
-
-	    if (error == ENETRESET) {
-		tulip_addr_filter(sc);		/* reset multicast filtering */
-		tulip_init(sc);
+	    if ((error = ether_ioctl(ifp, cmd, data)) == ENETRESET) {
+		if (ifp->if_flags & IFF_RUNNING) {
+		    tulip_addr_filter(sc);	/* reset multicast filtering */
+		    tulip_init(sc);
+		}
 		error = 0;
 	    }
 	    break;
@@ -4031,11 +4033,13 @@ tulip_ifioctl(
 		error = EINVAL;
 		break;
 	    }
-	    ifp->if_mtu = ifr->ifr_mtu;
+	    if ((error = ifioctl_common(ifp, cmd, data)) == ENETRESET) {
 #ifdef BIG_PACKET
-	    tulip_reset(sc);
-	    tulip_init(sc);
+		tulip_reset(sc);
+		tulip_init(sc);
 #endif
+	    	error = 0;
+	    }
 	    break;
 #endif /* SIOCSIFMTU */
 
@@ -4104,7 +4108,7 @@ tulip_ifstart(
 		ifp->if_flags |= IFF_OACTIVE;
 		return;
 	    }
-	    bcopy(sc->tulip_setupdata, sc->tulip_setupbuf,
+	    memcpy(sc->tulip_setupbuf, sc->tulip_setupdata,
 		   sizeof(sc->tulip_setupdata));
 	    sc->tulip_flags &= ~TULIP_WANTSETUP;
 	    sc->tulip_flags |= TULIP_DOINGSETUP;
@@ -4187,8 +4191,8 @@ tulip_ifstart(
 	/* Create a chain of descriptors tracking the chain of mbufs */
 	do {
 	    int len = m0->m_len;
-	    caddr_t addr = mtod(m0, caddr_t);
-	    unsigned clsize = NBPG - (((u_long) addr) & PGOFSET);
+	    void *addr = mtod(m0, void *);
+	    unsigned clsize = PAGE_SIZE - (((u_long) addr) & PGOFSET);
 
 	    next_m0 = m0->m_next;
 	    while (len > 0) {
@@ -4256,7 +4260,7 @@ tulip_ifstart(
 		if (partial)
 		    continue;
 #endif
-		clsize = NBPG;
+		clsize = PAGE_SIZE;
 	    }
 	} while ((m0 = next_m0) != NULL);
 
@@ -4276,7 +4280,7 @@ tulip_ifstart(
 			continue;
 		    }
 		}
-		m_copydata(m, 0, m->m_pkthdr.len, mtod(m0, caddr_t));
+		m_copydata(m, 0, m->m_pkthdr.len, mtod(m0, void *));
 		m0->m_pkthdr.len = m0->m_len = m->m_pkthdr.len;
 		IF_PREPEND(ifq, m0);
 	    }
@@ -4500,10 +4504,6 @@ tulip_attach(
     TULIP_ETHER_IFATTACH(sc);
 #endif
 #endif /* __bsdi__ */
-
-#if NBPFILTER > 0
-    TULIP_BPF_ATTACH(sc);
-#endif
 }
 
 static void
@@ -4544,13 +4544,13 @@ void lcl_dma_restart(void) {
 
 #include <alpha/pci/a12creg.h>
 
-static caddr_t	LCLDMAstart = (void *)ALPHA_PHYS_TO_K0SEG(A12_PCIBuffer);
+static void *	LCLDMAstart = (void *)ALPHA_PHYS_TO_K0SEG(A12_PCIBuffer);
 static int	lclpcisize  = 128*1024;
 
 void *
 lcl_dma_ram_next(int size)
 {
-	static	caddr_t first;
+	static	void *first;
 	void	*t;
 
 	if (first==0L /* || size==-1 */) {
@@ -4616,11 +4616,11 @@ tulip_initring(
     ri->ri_max = ndescs;
     (void)lcl_dma_ram_next(16);	/* superstitiously avoid the origin */
     ri->ri_first = (tulip_desc_t *)lcl_dma_ram_next(dsize);
-    bzero(ri->ri_first, dsize);
+    memset(ri->ri_first, 0, dsize);
     for(i=0; i<ndescs; ++i) {
 	    kvalist[i] = lcl_dma_ram_next(TULIP_XX_BUFLEN);
 	    BEGIN(ri->ri_first+i);
-		bzero(&t, sizeof(t));
+		memset(&t, 0, sizeof(t));
 		t.d_addr1 = a12map(TULIP_KVATOPHYS(sc,kvalist[i]));
 	    END(ri->ri_first+i);
     }
@@ -4712,7 +4712,7 @@ tulip_initring(		/* the usual case */
     ri->ri_max = ndescs;
     ri->ri_first = descs;
     ri->ri_last = ri->ri_first + ri->ri_max;
-    bzero((caddr_t) ri->ri_first, sizeof(ri->ri_first[0]) * ri->ri_max);
+    memset((void *) ri->ri_first, 0, sizeof(ri->ri_first[0]) * ri->ri_max);
     ri->ri_last[-1].d_flag = TULIP_DFLAG_ENDRING;
 }
 #endif
@@ -4739,7 +4739,7 @@ static const int tulip_eisa_irqs[4] = { IRQ5, IRQ9, IRQ10, IRQ11 };
 #if defined(__FreeBSD__)
 
 #define	TULIP_PCI_ATTACH_ARGS	pcici_t config_id, int unit
-#define	TULIP_SHUTDOWN_ARGS	int howto, void * arg
+#define	TULIP_SHUTDOWN_ARGS	int howto, void *arg
 
 #if defined(TULIP_DEVCONF)
 static void tulip_shutdown(TULIP_SHUTDOWN_ARGS);
@@ -4806,7 +4806,7 @@ DATA_SET (pcidevice_set, adedevice);
 #endif /* __FreeBSD__ */
 
 #if defined(__bsdi__)
-#define	TULIP_PCI_ATTACH_ARGS	struct device * const parent, struct device * const self, void * const aux
+#define	TULIP_PCI_ATTACH_ARGS	struct device * const parent, struct device * const self, void *const aux
 #define	TULIP_SHUTDOWN_ARGS	void *arg
 
 static int
@@ -4863,7 +4863,7 @@ tulip_probe(
 	/* Disable memory space access */
 	pci_outl(pa, PCI_COMMAND, pci_inl(pa, PCI_COMMAND) & ~2);
 #else
-	ia->ia_maddr = (caddr_t) (pci_inl(pa, PCI_CBMA) & ~7);
+	ia->ia_maddr = (void *) (pci_inl(pa, PCI_CBMA) & ~7);
 	pci_outl(pa, PCI_CBMA, 0xFFFFFFFF);
 	ia->ia_msize = ((~pci_inl(pa, PCI_CBMA)) | 7) + 1;
 	pci_outl(pa, PCI_CBMA, (int) ia->ia_maddr);
@@ -4951,7 +4951,7 @@ struct cfdriver decd = {
 #endif /* __bsdi__ */
 
 #if defined(__NetBSD__)
-#define	TULIP_PCI_ATTACH_ARGS	struct device * const parent, struct device * const self, void * const aux
+#define	TULIP_PCI_ATTACH_ARGS	struct device * const parent, struct device * const self, void *const aux
 #define	TULIP_SHUTDOWN_ARGS	void *arg
 static int
 tulip_pci_probe(
@@ -4974,9 +4974,8 @@ tulip_pci_probe(
 
 static void tulip_pci_attach(TULIP_PCI_ATTACH_ARGS);
 
-struct cfattach ade_ca = {
-    sizeof(tulip_softc_t), tulip_pci_probe, tulip_pci_attach
-};
+CFATTACH_DECL(ade, sizeof(tulip_softc_t),
+    tulip_pci_probe, tulip_pci_attach, NULL, NULL);
 
 #endif /* __NetBSD__ */
 
@@ -5015,7 +5014,7 @@ tulip_pci_attach(
 #if defined(__NetBSD__)
     tulip_softc_t * const sc = (tulip_softc_t *) self;
     struct pci_attach_args * const pa = (struct pci_attach_args *) aux;
-    const int unit = sc->tulip_dev.dv_unit;
+    const int unit = device_unit(&sc->tulip_dev);
 #ifdef THIS_IS_THE_ORIGINAL_HRH_DRIVER_USING_THE_NOW_DEFUNCT_PCI_MEM_FIND
     bus_addr_t regbase;
     bus_size_t regsize;
@@ -5029,7 +5028,7 @@ tulip_pci_attach(
 #define	PCI_CONF_READ(r)	pci_conf_read(pa->pa_pc, pa->pa_tag, (r))
 #define	PCI_GETBUSDEVINFO(sc)	do { \
 	int busno, devno, funcno; \
-	alpha_pci_decompose_tag(pa->pa_pc, pa->pa_tag, &busno, &devno, &funcno); \
+	pci_decompose_tag(pa->pa_pc, pa->pa_tag, &busno, &devno, &funcno); \
 	(sc)->tulip_pci_busno = busno; \
 	(sc)->tulip_pci_devno = devno; \
     } while (0)
@@ -5155,7 +5154,7 @@ tulip_pci_attach(
 
 
 #if defined(__NetBSD__)
-    bcopy(self->dv_xname, sc->tulip_if.if_xname, IFNAMSIZ);
+    strcpy(sc->tulip_if.if_xname, self->dv_xname);
     sc->tulip_if.if_softc = sc;
     sc->tulip_pc = pa->pa_pc;
 #else
@@ -5173,7 +5172,7 @@ tulip_pci_attach(
     retval = pci_map_mem(config_id, PCI_CBMA, (vaddr_t *) &csr_base, &pa_csrs);
 #endif
     if (!retval) {
-	free((caddr_t) sc, M_DEVBUF);
+	free((void *) sc, M_DEVBUF);
 	return;
     }
     tulips[unit] = sc;
@@ -5286,8 +5285,7 @@ tulip_pci_attach(
 	    pci_intr_handle_t intrhandle;
 	    const char *intrstr;
 
-	    if (pci_intr_map(pa->pa_pc, pa->pa_intrtag, pa->pa_intrpin,
-			     pa->pa_intrline, &intrhandle)) {
+	    if (pci_intr_map(pa, &intrhandle)) {
 		printf(": couldn't map interrupt\n");
 		return;
 	    }
@@ -5349,12 +5347,12 @@ a12_m_copydata(m, off, len, cp)
 	register struct mbuf *m;
 	register int off;
 	register int len;
-	caddr_t cp;
+	void *cp;
 {
 static	long packet[200];	/* may seem unwise, but typ a12 ram is 512 MB */
 
 	if(len > sizeof(packet))
 		panic("a12_m_copydata");
-	m_copydata(m, off, len, (caddr_t)packet);
+	m_copydata(m, off, len, (void *)packet);
 	a12r2pb(packet,cp,len);
 }

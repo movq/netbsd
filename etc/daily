@@ -1,6 +1,6 @@
 #!/bin/sh -
 #
-#	$NetBSD: daily,v 1.32 2000/01/20 04:13:54 itojun Exp $
+#	$NetBSD: daily,v 1.71 2008/08/30 10:53:22 bouyer Exp $
 #	@(#)daily	8.2 (Berkeley) 1/25/94
 #
 
@@ -13,6 +13,7 @@ fi
 
 host=`hostname`
 date=`date`
+rcvar_manpage='daily.conf(5)'
 
 echo "To: ${MAILTO:-root}"
 echo "Subject: $host daily output for $date"
@@ -47,7 +48,8 @@ echo "Uptime: " `uptime`
 #if [ -d /var/tmp -a ! -h /var/tmp ]; then
 #	cd /var/tmp && {
 #	find . ! -name . -atime +7 -exec rm -f -- {} \;
-#	find . ! -name . -type d -mtime +1 -exec rmdir -- {} \; \
+#	find . ! \( -name . -o -name vi.recover \) -type d \
+#		-mtime +1 -exec rmdir -- {} \; \
 #	    >/dev/null 2>&1; }
 #fi
 
@@ -64,15 +66,12 @@ echo "Uptime: " `uptime`
 #	find . ! -name . -mtime +7 -exec rm -f -- {} \; ; }
 #fi
 
-TMPDIR=/tmp/_daily.$$
+DAILYDIR=$(mktemp -d -t _daily) || exit 1
 
-if ! mkdir $TMPDIR; then
-	echo can not create $TMPDIR.
-	exit 1
-fi
+trap "/bin/rm -rf $DAILYDIR ; exit 0" EXIT INT QUIT
 
-if ! cd $TMPDIR; then
-	echo can not cd to $TMPDIR.
+if ! cd "$DAILYDIR"; then
+	echo "Can not cd to $DAILYDIR".
 	exit 1
 fi
 
@@ -80,10 +79,13 @@ TMP=daily.$$
 TMP2=daily2.$$
 
 if checkyesno find_core; then
-	find / \( ! -fstype local -o -fstype rdonly -o -fstype fdesc \
-		-o -fstype kernfs -o -fstype procfs \) -a -prune -o \
-		-name 'lost+found' -a -prune -o \
-		\( -name '*.core' -o -name 'core' \) -a -print > $TMP
+	# Turn "foo !bar bax" into "-fstype foo -o ! -fstype bar -o -fstype bax"
+	ignfstypes=`echo $find_core_ignore_fstypes | \
+		sed -e's/\(!*\)\([^[:space:]]\{1,\}\)/-o \1 -fstype \2/g' \
+		    -e's/^-o //'`
+	find / \( $ignfstypes \) -prune -o \
+		-name 'lost+found' -prune -o \
+		\( -name '*.core' -o -name 'core' \) -type f -print > $TMP
 #		\( -name '[#,]*' -o -name '.#*' -o -name a.out \
 #		   -o -name '*.CKP' -o -name '.emacs_[0-9]*' \) \
 #			-a -atime +3 -exec rm -f -- {} \; -a -print > $TMP
@@ -116,15 +118,24 @@ fi
 if checkyesno purge_accounting && [ -f /var/account/acct ]; then
 	echo ""
 	echo "Purging accounting records:"
-	mv /var/account/acct.2 /var/account/acct.3
-	mv /var/account/acct.1 /var/account/acct.2
-	mv /var/account/acct.0 /var/account/acct.1
+	if [ -f /var/account/acct.0.gz ]; then
+		mv /var/account/acct.2.gz /var/account/acct.3.gz 2>/dev/null
+		mv /var/account/acct.1.gz /var/account/acct.2.gz 2>/dev/null
+		mv /var/account/acct.0.gz /var/account/acct.1.gz 2>/dev/null
+	else
+		mv /var/account/acct.2 /var/account/acct.3 2>/dev/null
+		mv /var/account/acct.1 /var/account/acct.2 2>/dev/null
+		mv /var/account/acct.0 /var/account/acct.1 2>/dev/null
+	fi
 	cp /var/account/acct /var/account/acct.0
 	sa -sq
+	if [ -f /var/account/acct.1.gz ]; then
+		gzip /var/account/acct.0
+	fi
 fi
 
 if checkyesno run_calendar; then
-	calendar -a > $TMP
+	calendar -a > $TMP 2>&1
 	if [ -s $TMP ]; then
 		echo ""
 		echo "Running calendar:"
@@ -133,23 +144,22 @@ if checkyesno run_calendar; then
 	rm -f $TMP
 fi
 
-if checkyesno check_uucp && \
-    [ -d /var/spool/uucp -a -f /usr/libexec/uucp/clean.daily ]; then
-	echo ""
-	echo "Cleaning up UUCP:"
-	su daemon -c /usr/libexec/uucp/clean.daily
-fi
-
 if checkyesno check_disks; then
-	df -k > $TMP 
-	dump W > $TMP2
+	if checkyesno show_remote_fs; then
+		df -hi -t nokernfs,procfs,null,fdesc > $TMP
+	else
+		df -hil -t nokernfs,procfs,null,fdesc > $TMP
+	fi
+	if [ -s /etc/dumpdates ] ; then
+		dump -W > $TMP2
+	fi
 	if [ -s $TMP -o -s $TMP2 ]; then
 		echo ""
 		echo "Checking subsystem status:"
 		echo ""
 		echo "disks:"
 		if [ -s $TMP ]; then
-			cat $TMP
+			cat $TMP | sed 's/Mounted on/Mount/'
 			echo ""
 		fi
 		if [ -s $TMP2 ]; then
@@ -158,26 +168,28 @@ if checkyesno check_disks; then
 		fi
 		echo ""
 	fi
+	rm -f $TMP $TMP2
+	touch $TMP2
+	for dev in `iostat -x | awk '/^raid/ { print $1 }'`; do
+		raidctl -s $dev | awk '/^.*: failed$/ {print $0}' > $TMP
+		if [ -s $TMP ]; then
+			echo "$dev:" >> $TMP2
+			cat $TMP >> $TMP2
+		fi
+		rm -f $TMP
+	done
+	if [ -s $TMP2 ]; then
+		echo "failed RAIDframe component(s):"
+			cat $TMP2
+	fi
+	rm -f $TMP2
 fi
-
-rm -f $TMP $TMP2
 
 if checkyesno check_mailq; then
 	mailq > $TMP
-	if ! grep -q "^Mail queue is empty$" $TMP; then
+	if ! grep -q "queue is empty$" $TMP; then
 		echo ""
 		echo "mail:"
-		cat $TMP
-	fi
-fi
-
-rm -f $TMP
-
-if checkyesno check_uucp && [ -d /var/spool/uucp ]; then
-	uustat -a > $TMP
-	if [ -s $TMP ]; then
-		echo ""
-		echo "uucp:"
 		cat $TMP
 	fi
 fi
@@ -187,11 +199,25 @@ rm -f $TMP
 if checkyesno check_network; then
 	echo ""
 	echo "network:"
-	# excluding IPv6
-	netstat -in | awk 'NR == 1 {print;} NR > 1 {if ($3 !~ /:/) print; }'
-	echo ""
-	echo "IPv6 network:"
-	netstat -inv | awk 'NR == 1 {print;} NR > 1 {if ($3 ~ /:/) print; }'
+	if checkyesno full_netstat; then
+		netstat -inv
+	else
+		netstat -inv | awk 'BEGIN {
+			ifs[""] = 0;
+		}
+		/^[^\*]* / {
+			if (NR == 1) {
+				printf("%-8s %12s %6s %12s %6s %6s\n",
+				  $1, $(NF-4), $(NF-3), $(NF-2), $(NF-1), $NF);
+				next;
+			}
+			if (!($1 in ifs)) {
+				printf("%-8s %12s %6s %12s %6s %6s\n",
+				  $1, $(NF-4), $(NF-3), $(NF-2), $(NF-1), $NF);
+				ifs[$1] = 1;
+			}
+		}'
+	fi
 	echo ""
 	t=/var/rwho/*
 	if [ "$t" != '/var/rwho/*' ]; then
@@ -202,7 +228,7 @@ fi
 if checkyesno run_fsck; then
 	echo ""
 	echo "Checking filesystems:"
-	fsck -n | grep -v '^\*\* Phase'
+	fsck -n -f ${run_fsck_flags} | grep -v '^\*\* Phase'
 fi
 
 echo ""
@@ -217,18 +243,35 @@ if checkyesno run_rdist && [ -f /etc/Distfile ]; then
 fi
 
 if checkyesno run_security; then
-	SECOUT=$TMPDIR/sec
-	sh /etc/security 2>&1 > $SECOUT
-	if [ ! -s $SECOUT ]; then
-		echo "Nothing to report on $date" > $SECOUT
+	SECOUT="$DAILYDIR/sec"
+	sh /etc/security > "$SECOUT" 2>&1
+	if [ ! -s "$SECOUT" ]; then
+		if checkyesno send_empty_security; then
+			echo "Nothing to report on $date" > "$SECOUT"
+		else
+			echo ""
+			echo "Suppressing empty security report."
+		fi
 	fi
-	mail -s "$host daily insecurity output for $date" $MAILTO < $SECOUT
+	if [ -s "$SECOUT" ]; then
+		mail -s "$host daily insecurity output for $date" \
+		    "$MAILTO" < "$SECOUT"
+	fi
+fi
+
+if checkyesno run_skeyaudit; then
+	if [ -s /etc/skeykeys ]; then
+		echo ""
+		echo "Checking remaining s/key OTPs:"
+		skeyaudit
+	fi
 fi
 
 if [ -f /etc/daily.local ]; then
-	echo ""
-	echo "Running /etc/daily.local:"
-	. /etc/daily.local
+	( . /etc/daily.local ) > $TMP 2>&1
+	if [ -s $TMP ] ; then
+		printf "\nRunning /etc/daily.local:\n"
+		cat $TMP
+	fi
+	rm -f $TMP
 fi
-
-rm -rf $TMPDIR

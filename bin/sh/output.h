@@ -1,4 +1,4 @@
-/*	$NetBSD: output.h,v 1.14 1998/01/31 12:37:55 christos Exp $	*/
+/*	$NetBSD: output.h,v 1.19 2008/10/12 01:40:37 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -40,11 +36,7 @@
 
 #ifndef OUTPUT_INCL
 
-#ifdef __STDC__
 #include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
 
 struct output {
 	char *nextc;
@@ -55,35 +47,38 @@ struct output {
 	short flags;
 };
 
+/* flags for ->flags */
+#define OUTPUT_ERR 01		/* error occurred on output */
+
 extern struct output output;
 extern struct output errout;
 extern struct output memout;
 extern struct output *out1;
 extern struct output *out2;
 
-void open_mem __P((char *, int, struct output *));
-void out1str __P((const char *));
-void out2str __P((const char *));
-void outstr __P((const char *, struct output *));
-void emptyoutbuf __P((struct output *));
-void flushall __P((void));
-void flushout __P((struct output *));
-void freestdout __P((void));
-void outfmt __P((struct output *, const char *, ...))
+void open_mem(char *, int, struct output *);
+void out1str(const char *);
+void out2str(const char *);
+void outstr(const char *, struct output *);
+void emptyoutbuf(struct output *);
+void flushall(void);
+void flushout(struct output *);
+void freestdout(void);
+void outfmt(struct output *, const char *, ...)
     __attribute__((__format__(__printf__,2,3)));
-void out1fmt __P((const char *, ...))
+void out1fmt(const char *, ...)
     __attribute__((__format__(__printf__,1,2)));
-void dprintf __P((const char *, ...))
+void dprintf(const char *, ...)
     __attribute__((__format__(__printf__,1,2)));
-void fmtstr __P((char *, size_t, const char *, ...))
+void fmtstr(char *, size_t, const char *, ...)
     __attribute__((__format__(__printf__,3,4)));
-void doformat __P((struct output *, const char *, va_list));
-int xwrite __P((int, char *, int));
-int xioctl __P((int, unsigned long, char *));
+void doformat(struct output *, const char *, va_list);
+int xwrite(int, char *, int);
+int xioctl(int, unsigned long, char *);
 
 #define outc(c, file)	(--(file)->nleft < 0? (emptyoutbuf(file), *(file)->nextc++ = (c)) : (*(file)->nextc++ = (c)))
-#define out1c(c)	outc(c, out1);
-#define out2c(c)	outc(c, out2);
+#define out1c(c)	outc(c, out1)
+#define out2c(c)	outc(c, out2)
 
 #define OUTPUT_INCL
 #endif

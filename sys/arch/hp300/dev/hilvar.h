@@ -1,9 +1,43 @@
-/*	$NetBSD: hilvar.h,v 1.15 1998/06/25 23:57:35 thorpej Exp $	*/
+/*	$NetBSD: hilvar.h,v 1.25 2008/03/29 06:47:07 tsutsui Exp $	*/
 
 /*
- * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Systems Programming Group of the University of Utah Computer
+ * Science Department.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ * from: Utah $Hdr: hilvar.h 1.3 92/01/21$
+ *
+ *	@(#)hilvar.h	8.1 (Berkeley) 6/10/93
+ */
+/*
+ * Copyright (c) 1988 University of Utah.
  *
  * This code is derived from software contributed to Berkeley by
  * the Systems Programming Group of the University of Utah Computer
@@ -41,11 +75,6 @@
  *
  *	@(#)hilvar.h	8.1 (Berkeley) 6/10/93
  */
-
-#ifndef TRUE
-#define TRUE	1
-#define FALSE	0
-#endif
 
 #define NHILD		8		/* 7 actual + loop pseudo (dev 0) */
 #define NHILQ		8		/* must be <= sizeof(int) */
@@ -96,21 +125,25 @@ struct hilloopdev {
 #define HIL_DERROR	0x80	/* loop has reconfigured, reality altered */
 
 struct hil_softc {
-	struct	hil_dev	*hl_addr;	/* base of hardware registers */
-	u_char 	hl_cmddone;		/* */
-	u_char 	hl_cmdending;		/* */
-	u_char	hl_actdev;		/* current input device */
-	u_char	hl_cmddev;		/* device to perform command on */
-	u_char	hl_pollbuf[HILBUFSIZE];	/* interrupt time input buffer */
-	u_char	hl_cmdbuf[HILBUFSIZE];	/* */
-	u_char 	*hl_pollbp;		/* pointer into hl_pollbuf */
-	u_char	*hl_cmdbp;		/* pointer into hl_cmdbuf */
-	struct	hiliqueue hl_queue[NHILQ];	/* input queues */
-	struct  hilloopdev hl_device[NHILD];	/* device data */
-	u_char  hl_maxdev;		/* number of devices on loop */
-	u_char	hl_kbddev;		/* keyboard device on loop */
-	u_char	hl_kbdlang;		/* keyboard language */
-	u_char	hl_kbdflags;		/* keyboard state */
+	device_t sc_dev;
+	struct	hil_dev	*sc_addr;	/* base of hardware registers */
+	uint8_t	sc_cmddone;		/* */
+	uint8_t	sc_cmdending;		/* */
+	uint8_t	sc_actdev;		/* current input device */
+	uint8_t	sc_cmddev;		/* device to perform command on */
+	uint8_t	sc_pollbuf[HILBUFSIZE];	/* interrupt time input buffer */
+	uint8_t	sc_cmdbuf[HILBUFSIZE];	/* */
+	uint8_t	*sc_pollbp;		/* pointer into hl_pollbuf */
+	uint8_t	*sc_cmdbp;		/* pointer into hl_cmdbuf */
+	struct	hiliqueue sc_queue[NHILQ];	/* input queues */
+	struct  hilloopdev sc_device[NHILD];	/* device data */
+	uint8_t	sc_maxdev;		/* number of devices on loop */
+	uint8_t	sc_kbddev;		/* keyboard device on loop */
+	uint8_t	sc_kbdlang;		/* keyboard language */
+	uint8_t	sc_kbdflags;		/* keyboard state */
+#if NRND > 0
+	rndsource_element_t rnd_source;
+#endif
 };
 
 /* hl_kbdflags */
@@ -119,30 +152,22 @@ struct hil_softc {
 #define KBD_AR2		0x04		/* keyboard auto-repeat rate 2 */
 
 #ifdef _KERNEL
-void	kbdbell __P((int));
-void	kbdenable __P((int));
-void	kbddisable __P((int));
-int	kbdgetc __P((int *));
-void	kbdcninit __P((void));
+void	hilkbdbell(void *);
+void	hilkbdenable(void *);
+void	hilkbddisable(void *);
+int	hilkbdcngetc(int *);
+int	hilkbdcnattach(bus_space_tag_t, bus_addr_t);
 
-int	kbdnmi __P((void));
+int	kbdnmi(void);
 
-void	hilsoftinit __P((int, struct hil_dev *));
-void	hilinit __P((int, struct hil_dev *));
+void	hilsoftinit(int, struct hil_dev *);
+void	hilinit(int, struct hil_dev *);
 
-void	send_hil_cmd __P((struct hil_dev *, u_char,
-				u_char *, u_char, u_char *));
-void	send_hildev_cmd __P((struct hil_softc *, char, char));
+void	send_hil_cmd(struct hil_dev *, u_char,
+				u_char *, u_char, u_char *);
+void	send_hildev_cmd(struct hil_softc *, char, char);
 
-void	polloff __P((struct hil_dev *));
-void	pollon __P((struct hil_dev *));
+void	polloff(struct hil_dev *);
+void	pollon(struct hil_dev *);
 
-#ifndef _LKM
-#include "opt_compat_hpux.h"
-#endif
-
-#ifdef COMPAT_HPUX
-int	hpuxhilioctl __P((dev_t, int, caddr_t, int));
-int	hildevno __P((dev_t));
-#endif /* COMPAT_HPUX */
 #endif /* _KERNEL */

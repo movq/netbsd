@@ -1,19 +1,24 @@
-#	$NetBSD: Makefile,v 1.14 1999/10/26 03:42:58 itojun Exp $
+#	$NetBSD: Makefile,v 1.20 2007/05/28 12:06:22 tls Exp $
 
-LIB=	z
-MKMAN=	no
+USE_FORT?= yes	# data-driven bugs?
 
-SRCS=	adler32.c compress.c crc32.c deflate.c gzio.c infblock.c \
-	infcodes.c inffast.c inflate.c inftrees.c infutil.c trees.c uncompr.c \
-	zutil.c
-SRCS+=	gzio_compat.c
+.include <bsd.own.mk>
 
-CPPFLAGS+= -I${.CURDIR}
+USE_SHLIBDIR=	yes
 
-CLEANFILES+= minigzip
+ZLIBDIR=${NETBSDSRCDIR}/common/dist/zlib
+.PATH: ${ZLIBDIR}
+LIB=		z
 
-INCS=	zconf.h zlib.h
-INCSDIR=/usr/include
+SRCS=	adler32.c compress.c crc32.c deflate.c gzio.c infback.c inffast.c \
+	inflate.c inftrees.c trees.c uncompr.c zutil.c 
+MAN=	zlib.3
+
+CPPFLAGS+=	-I${ZLIBDIR}
+CLEANFILES+=	minigzip
+
+INCS=		zconf.h zlib.h
+INCSDIR=	/usr/include
 
 .include <bsd.lib.mk>
 
@@ -22,5 +27,5 @@ test: minigzip
 
 # Note: CFLAGS ommitted by intention!
 # This is to verify that zlib.h works standalone.
-minigzip : minigzip.c libz.a
-	$(CC) -o minigzip ${.CURDIR}/minigzip.c libz.a
+minigzip: minigzip.c libz.a
+	${CC} -o minigzip ${.CURDIR}/minigzip.c libz.a

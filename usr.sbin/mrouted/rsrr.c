@@ -1,29 +1,33 @@
-/*	$NetBSD: rsrr.c,v 1.4 1998/07/18 05:04:40 lukem Exp $	*/
+/*	$NetBSD: rsrr.c,v 1.10 2008/08/26 17:38:21 seanb Exp $	*/
 
 /*
- * Copyright (c) 1993 by the University of Southern California
+ * Copyright (c) 1993, 1998-2001.
+ * The University of Southern California/Information Sciences Institute.
  * All rights reserved.
  *
- * Permission to use, copy, modify, and distribute this software and its
- * documentation in source and binary forms for non-commercial purposes
- * and without fee is hereby granted, provided that the above copyright
- * notice appear in all copies and that both the copyright notice and
- * this permission notice appear in supporting documentation. and that
- * any documentation, advertising materials, and other materials related
- * to such distribution and use acknowledge that the software was
- * developed by the University of Southern California, Information
- * Sciences Institute.  The name of the University may not be used to
- * endorse or promote products derived from this software without
- * specific prior written permission.
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the project nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
  *
- * THE UNIVERSITY OF SOUTHERN CALIFORNIA makes no representations about
- * the suitability of this software for any purpose.  THIS SOFTWARE IS
- * PROVIDED "AS IS" AND WITHOUT ANY EXPRESS OR IMPLIED WARRANTIES,
- * INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
- *
- * Other copyrights might apply to parts of this software and are so
- * noted when applicable.
+ * THIS SOFTWARE IS PROVIDED BY THE PROJECT AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE PROJECT OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
  */
 
 /* RSRR code written by Daniel Zappala, USC Information Sciences Institute,
@@ -45,7 +49,7 @@
  * checks for scoped multicast addresses
  */
 #define GET_SCOPE(gt) { \
-	register int _i; \
+	int _i; \
 	if (((gt)->gt_mcastgrp & 0xff000000) == 0xef000000) \
 	    for (_i = 0; _i < numvifs; _i++) \
 		if (scoped_addr(_i, (gt)->gt_mcastgrp)) \
@@ -64,19 +68,18 @@ char rsrr_recv_buf[RSRR_MAX_LEN];	/* RSRR receive buffer */
 char rsrr_send_buf[RSRR_MAX_LEN];	/* RSRR send buffer */
 
 struct sockaddr_un client_addr;
-int client_length = sizeof(client_addr);
+socklen_t client_length = sizeof(client_addr);
 
 
 /*
  * Procedure definitions needed internally.
  */
-static void	rsrr_accept __P((int recvlen));
-static void	rsrr_accept_iq __P((void));
-static int	rsrr_accept_rq __P((struct rsrr_rq *route_query, int flags,
-					struct gtable *gt_notify));
-static int	rsrr_send __P((int sendlen));
-static void	rsrr_cache __P((struct gtable *gt,
-					struct rsrr_rq *route_query));
+static void	rsrr_accept(int recvlen);
+static void	rsrr_accept_iq(void);
+static int	rsrr_accept_rq(struct rsrr_rq *route_query, int flags,
+			       struct gtable *gt_notify);
+static int	rsrr_send(int sendlen);
+static void	rsrr_cache(struct gtable *gt, struct rsrr_rq *route_query);
 
 /* Initialize RSRR socket */
 void
@@ -86,12 +89,12 @@ rsrr_init()
     struct sockaddr_un serv_addr;
 
     if ((rsrr_socket = socket(AF_LOCAL, SOCK_DGRAM, 0)) < 0)
-	log(LOG_ERR, errno, "Can't create RSRR socket");
+	logit(LOG_ERR, errno, "Can't create RSRR socket");
 
     unlink(RSRR_SERV_PATH);
     bzero((char *) &serv_addr, sizeof(serv_addr));
     serv_addr.sun_family = AF_LOCAL;
-    strcpy(serv_addr.sun_path, RSRR_SERV_PATH);
+    strlcpy(serv_addr.sun_path, RSRR_SERV_PATH, sizeof(serv_addr.sun_path));
 #if (defined(BSD) && (BSD >= 199103))
     servlen = offsetof(struct sockaddr_un, sun_path) +
 		strlen(serv_addr.sun_path);
@@ -101,10 +104,10 @@ rsrr_init()
 #endif
  
     if (bind(rsrr_socket, (struct sockaddr *) &serv_addr, servlen) < 0)
-	log(LOG_ERR, errno, "Can't bind RSRR socket");
+	logit(LOG_ERR, errno, "Can't bind RSRR socket");
 
     if (register_input_handler(rsrr_socket,rsrr_read) < 0)
-	log(LOG_WARNING, 0, "Couldn't register RSRR as an input handler");
+	logit(LOG_WARNING, 0, "Couldn't register RSRR as an input handler");
 }
 
 /* Read a message from the RSRR socket */
@@ -113,15 +116,15 @@ rsrr_read(f, rfd)
 	int f;
 	fd_set *rfd;
 {
-    register int rsrr_recvlen;
-    register int omask;
+    int rsrr_recvlen;
+    int omask;
     
     bzero((char *) &client_addr, sizeof(client_addr));
     rsrr_recvlen = recvfrom(rsrr_socket, rsrr_recv_buf, sizeof(rsrr_recv_buf),
 			    0, (struct sockaddr *)&client_addr, &client_length);
     if (rsrr_recvlen < 0) {	
 	if (errno != EINTR)
-	    log(LOG_ERR, errno, "RSRR recvfrom");
+	    logit(LOG_ERR, errno, "RSRR recvfrom");
 	return;
     }
     /* Use of omask taken from main() */
@@ -141,7 +144,7 @@ rsrr_accept(recvlen)
     struct rsrr_rq *route_query;
     
     if (recvlen < RSRR_HEADER_LEN) {
-	log(LOG_WARNING, 0,
+	logit(LOG_WARNING, 0,
 	    "Received RSRR packet of %d bytes, which is less than min size",
 	    recvlen);
 	return;
@@ -150,7 +153,7 @@ rsrr_accept(recvlen)
     rsrr = (struct rsrr_header *) rsrr_recv_buf;
     
     if (rsrr->version > RSRR_MAX_VERSION) {
-	log(LOG_WARNING, 0,
+	logit(LOG_WARNING, 0,
 	    "Received RSRR packet version %d, which I don't understand",
 	    rsrr->version);
 	return;
@@ -161,29 +164,29 @@ rsrr_accept(recvlen)
 	switch (rsrr->type) {
 	  case RSRR_INITIAL_QUERY:
 	    /* Send Initial Reply to client */
-	    log(LOG_INFO, 0, "Received Initial Query\n");
+	    logit(LOG_INFO, 0, "Received Initial Query\n");
 	    rsrr_accept_iq();
 	    break;
 	  case RSRR_ROUTE_QUERY:
 	    /* Check size */
 	    if (recvlen < RSRR_RQ_LEN) {
-		log(LOG_WARNING, 0,
+		logit(LOG_WARNING, 0,
 		    "Received Route Query of %d bytes, which is too small",
 		    recvlen);
 		break;
 	    }
 	    /* Get the query */
 	    route_query = (struct rsrr_rq *) (rsrr_recv_buf + RSRR_HEADER_LEN);
-	    log(LOG_INFO, 0,
+	    logit(LOG_INFO, 0,
 		"Received Route Query for src %s grp %s notification %d",
-		inet_fmt(route_query->source_addr.s_addr, s1),
-		inet_fmt(route_query->dest_addr.s_addr,s2),
+		inet_fmt(route_query->source_addr.s_addr),
+		inet_fmt(route_query->dest_addr.s_addr),
 		BIT_TST(rsrr->flags,RSRR_NOTIFICATION_BIT));
 	    /* Send Route Reply to client */
 	    rsrr_accept_rq(route_query,rsrr->flags,NULL);
 	    break;
 	  default:
-	    log(LOG_WARNING, 0,
+	    logit(LOG_WARNING, 0,
 		"Received RSRR packet type %d, which I don't handle",
 		rsrr->type);
 	    break;
@@ -191,7 +194,7 @@ rsrr_accept(recvlen)
 	break;
 	
       default:
-	log(LOG_WARNING, 0,
+	logit(LOG_WARNING, 0,
 	    "Received RSRR packet version %d, which I don't understand",
 	    rsrr->version);
 	break;
@@ -211,8 +214,8 @@ rsrr_accept_iq()
      * but we should check anyway.
      */
     if (numvifs > RSRR_MAX_VIFS) {
-	log(LOG_WARNING, 0,
-	    "Can't send RSRR Route Reply because %d is too many vifs %d",
+	logit(LOG_WARNING, 0,
+	    "Can't send RSRR Route Reply because %d is too many vifs",
 	    numvifs);
 	return;
     }
@@ -240,7 +243,7 @@ rsrr_accept_iq()
     sendlen = RSRR_HEADER_LEN + numvifs*RSRR_VIF_LEN;
     
     /* Send it. */
-    log(LOG_INFO, 0, "Send RSRR Initial Reply");
+    logit(LOG_INFO, 0, "Send RSRR Initial Reply");
     rsrr_send(sendlen);
 }
 
@@ -356,15 +359,15 @@ rsrr_accept_rq(route_query,flags,gt_notify)
     }
     
     if (gt_notify)
-	log(LOG_INFO, 0, "Route Change: Send RSRR Route Reply");
+	logit(LOG_INFO, 0, "Route Change: Send RSRR Route Reply");
 
     else
-	log(LOG_INFO, 0, "Send RSRR Route Reply");
+	logit(LOG_INFO, 0, "Send RSRR Route Reply");
 
-    log(LOG_INFO, 0, "for src %s dst %s in vif %d out vif %d\n",
-	inet_fmt(route_reply->source_addr.s_addr,s1),
-	inet_fmt(route_reply->dest_addr.s_addr,s2),
-	route_reply->in_vif,route_reply->out_vif_bm);
+    logit(LOG_INFO, 0, "for src %s dst %s in vif %d out vif %lu\n",
+	inet_fmt(route_reply->source_addr.s_addr),
+	inet_fmt(route_reply->dest_addr.s_addr),
+	route_reply->in_vif, route_reply->out_vif_bm);
     
     /* Send it. */
     return rsrr_send(sendlen);
@@ -383,9 +386,9 @@ rsrr_send(sendlen)
     
     /* Check for errors. */
     if (error < 0) {
-	log(LOG_WARNING, errno, "Failed send on RSRR socket");
+	logit(LOG_WARNING, errno, "Failed send on RSRR socket");
     } else if (error != sendlen) {
-	log(LOG_WARNING, 0,
+	logit(LOG_WARNING, 0,
 	    "Sent only %d out of %d bytes on RSRR socket\n", error, sendlen);
     }
     return error;
@@ -421,7 +424,7 @@ rsrr_cache(gt,route_query)
 	    } else {
 		/* Update */
 		rc->route_query.query_id = route_query->query_id;
-		log(LOG_DEBUG, 0,
+		logit(LOG_DEBUG, 0,
 			"Update cached query id %ld from client %s\n",
 			rc->route_query.query_id, rc->client_addr.sun_path);
 	    }
@@ -435,15 +438,16 @@ rsrr_cache(gt,route_query)
      */
     rc = (struct rsrr_cache *) malloc(sizeof(struct rsrr_cache));
     if (rc == NULL)
-	log(LOG_ERR, 0, "ran out of memory");
+	logit(LOG_ERR, 0, "ran out of memory");
     rc->route_query.source_addr.s_addr = route_query->source_addr.s_addr;
     rc->route_query.dest_addr.s_addr = route_query->dest_addr.s_addr;
     rc->route_query.query_id = route_query->query_id;
-    strcpy(rc->client_addr.sun_path, client_addr.sun_path);
+    strlcpy(rc->client_addr.sun_path, client_addr.sun_path,
+        sizeof(rc->client_addr.sun_path));
     rc->client_length = client_length;
     rc->next = gt->gt_rsrr_cache;
     gt->gt_rsrr_cache = rc;
-    log(LOG_DEBUG, 0, "Cached query id %ld from client %s\n",
+    logit(LOG_DEBUG, 0, "Cached query id %ld from client %s\n",
 	   rc->route_query.query_id,rc->client_addr.sun_path);
 }
 
@@ -464,7 +468,7 @@ rsrr_cache_send(gt,notify)
     rcnp = &gt->gt_rsrr_cache;
     while ((rc = *rcnp) != NULL) {
 	if (rsrr_accept_rq(&rc->route_query,flags,gt) < 0) {
-	    log(LOG_DEBUG, 0, "Deleting cached query id %ld from client %s\n",
+	    logit(LOG_DEBUG, 0, "Deleting cached query id %ld from client %s\n",
 		   rc->route_query.query_id,rc->client_addr.sun_path);
 	    /* Delete cache entry. */
 	    *rcnp = rc->next;
@@ -482,7 +486,8 @@ rsrr_cache_clean(gt)
 {
     struct rsrr_cache *rc,*rc_next;
 
-    printf("cleaning cache for group %s\n",inet_fmt(gt->gt_mcastgrp, s1));
+    printf("cleaning cache for group %s\n",
+	    inet_fmt(gt->gt_mcastgrp));
     rc = gt->gt_rsrr_cache;
     while (rc) {
 	rc_next = rc->next;

@@ -1,4 +1,4 @@
-/*	$NetBSD: lseek.c,v 1.7 2000/01/22 22:19:20 mycroft Exp $	*/
+/*	$NetBSD: lseek.c,v 1.10 2007/11/23 12:39:15 uebayasi Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)lseek.c	8.1 (Berkeley) 6/17/93";
 #else
-__RCSID("$NetBSD: lseek.c,v 1.7 2000/01/22 22:19:20 mycroft Exp $");
+__RCSID("$NetBSD: lseek.c,v 1.10 2007/11/23 12:39:15 uebayasi Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -51,6 +47,8 @@ __RCSID("$NetBSD: lseek.c,v 1.7 2000/01/22 22:19:20 mycroft Exp $");
 __weak_alias(lseek,_lseek)
 #endif
 
+off_t __lseek(int, int, off_t, int);
+
 /*
  * This function provides 64-bit offset padding that
  * is not supplied by GCC 1.X but is supplied by GCC 2.X.
@@ -62,5 +60,5 @@ lseek(fd, offset, whence)
 	int	whence;
 {
 
-	return(__syscall((quad_t)SYS_lseek, fd, 0, offset, whence));
+	return __lseek(fd, 0, offset, whence);
 }

@@ -1,3 +1,6 @@
+/*	$NetBSD: look.c,v 1.10 2004/06/20 22:20:15 jmc Exp $	*/
+/*	$OpenBSD: look.c,v 1.8 2001/09/17 08:11:13 espie Exp $	*/
+
 /*
  * Copyright (c) 1989, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -13,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -34,12 +33,16 @@
  * SUCH DAMAGE.
  */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
 #include <sys/cdefs.h>
-#ifndef lint
+#if defined(__RCSID) && !defined(lint)
 #if 0
 static char sccsid[] = "@(#)look.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: look.c,v 1.6 1997/10/19 04:39:57 lukem Exp $");
+__RCSID("$NetBSD: look.c,v 1.10 2004/06/20 22:20:15 jmc Exp $");
 #endif
 #endif /* not lint */
 
@@ -52,6 +55,7 @@ __RCSID("$NetBSD: look.c,v 1.6 1997/10/19 04:39:57 lukem Exp $");
 #include <sys/types.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stddef.h>
 #include <string.h>
 #include "mdef.h"
 #include "stdd.h"
@@ -59,15 +63,14 @@ __RCSID("$NetBSD: look.c,v 1.6 1997/10/19 04:39:57 lukem Exp $");
 
 static void freent __P((ndptr));
 
-
-int
+unsigned
 hash(name)
-	char *name;
+	const char *name;
 {
-	unsigned long h = 0;
+	unsigned int h = 0;
 	while (*name)
 		h = (h << 5) + h + *name++;
-	return (h % HASHSIZE);
+	return (h);
 }
 
 /*
@@ -75,12 +78,14 @@ hash(name)
  */
 ndptr 
 lookup(name)
-	char *name;
+	const char *name;
 {
 	ndptr p;
+	unsigned int h;
 
-	for (p = hashtab[hash(name)]; p != nil; p = p->nxtptr)
-		if (STREQ(name, p->name))
+	h = hash(name);
+	for (p = hashtab[h % HASHSIZE]; p != nil; p = p->nxtptr)
+		if (h == p->hv && STREQ(name, p->name))
 			break;
 	return (p);
 }
@@ -91,16 +96,17 @@ lookup(name)
  */
 ndptr 
 addent(name)
-	char *name;
+	const char *name;
 {
-	int h;
+	unsigned int h;
 	ndptr p;
 
 	h = hash(name);
 	p = (ndptr) xalloc(sizeof(struct ndblock));
-	p->nxtptr = hashtab[h];
-	hashtab[h] = p;
+	p->nxtptr = hashtab[h % HASHSIZE];
+	hashtab[h % HASHSIZE] = p;
 	p->name = xstrdup(name);
+	p->hv = h;
 	return p;
 }
 
@@ -108,11 +114,9 @@ static void
 freent(p)
 	ndptr p;
 {
-	if (!(p->type & STATIC)) {
-		free((char *) p->name);
-		if (p->defn != null)
-			free((char *) p->defn);
-	}
+	free((char *) p->name);
+	if (p->defn != null)
+		free((char *) p->defn);
 	free((char *) p);
 }
 
@@ -121,21 +125,21 @@ freent(p)
  */
 void
 remhash(name, all)
-	char *name;
+	const char *name;
 	int all;
 {
-	int h;
+	unsigned int h;
 	ndptr xp, tp, mp;
 
 	h = hash(name);
-	mp = hashtab[h];
+	mp = hashtab[h % HASHSIZE];
 	tp = nil;
 	while (mp != nil) {
-		if (STREQ(mp->name, name)) {
+		if (mp->hv == h && STREQ(mp->name, name)) {
 			mp = mp->nxtptr;
 			if (tp == nil) {
-				freent(hashtab[h]);
-				hashtab[h] = mp;
+				freent(hashtab[h % HASHSIZE]);
+				hashtab[h % HASHSIZE] = mp;
 			}
 			else {
 				xp = tp->nxtptr;

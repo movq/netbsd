@@ -1,4 +1,4 @@
-/*	$NetBSD: control.c,v 1.17 1998/02/05 04:57:29 gwr Exp $	*/
+/*	$NetBSD: control.c,v 1.23 2008/04/28 20:23:38 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,79 +29,46 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: control.c,v 1.23 2008/04/28 20:23:38 martin Exp $");
+
 #include <sys/param.h>
 
 #include <machine/pte.h>
 #include <sun3/sun3/control.h>
 
-int
-get_context()
+int 
+get_context(void)
 {
 	return (get_control_byte(CONTEXT_REG) & CONTEXT_MASK);
 }
 
-void
-set_context(c)
-	int c;
+void 
+set_context(int c)
 {
 	set_control_byte(CONTEXT_REG, (c & CONTEXT_MASK));
 }
 
-u_int
-get_pte(va)
-	vm_offset_t va;
+u_int 
+get_pte(vaddr_t va)
 {
 	return (get_control_word(CONTROL_ADDR_BUILD(PGMAP_BASE, va)));
 }
 
-void
-set_pte(va, pte)
-	vm_offset_t va;
-	u_int pte;
+void 
+set_pte(vaddr_t va, u_int pte)
 {
 	set_control_word(CONTROL_ADDR_BUILD(PGMAP_BASE, va), pte);
 }
 
-int
-get_segmap(va)
-	vm_offset_t va;
+int 
+get_segmap(vaddr_t va)
 {
 	return (get_control_byte(CONTROL_ADDR_BUILD(SEGMAP_BASE, va)));
 }
 
-void set_segmap(va, sme)
-	vm_offset_t va;
-	int sme;
+void 
+set_segmap(vaddr_t va, int sme)
 {
 	set_control_byte(CONTROL_ADDR_BUILD(SEGMAP_BASE, va), sme);
-}
-
-/*
- * Set a segmap entry in all contexts.
- * (i.e. somewhere in kernel space.)
- * XXX - Should optimize:  "(get|set)_control_(word|byte)"
- * calls so this does save/restore of sfc/dfc only once!
- */
-void
-set_segmap_allctx(va, sme)
-	vm_offset_t va;
-	int sme;	/* segmap entry */
-{
-	vm_offset_t ctrladdr;
-	register int ctx, oldctx;
-
-	/* Inline get_context() */
-	oldctx = get_control_byte(CONTEXT_REG);
-	oldctx &= CONTEXT_MASK;
-
-	ctrladdr = CONTROL_ADDR_BUILD(SEGMAP_BASE, va);
-	for (ctx = 0; ctx < CONTEXT_NUM; ctx++) {
-		/* Inlined set_context() */
-		set_control_byte(CONTEXT_REG, ctx);
-		/* Inlined set_segmap() */
-		set_control_byte(ctrladdr, sme);
-	}
-
-	/* Inlined set_context(ctx); */
-	set_control_byte(CONTEXT_REG, oldctx);
 }

@@ -1,10 +1,6 @@
-.\" $NetBSD: legal,v 1.6 1999/01/13 07:30:05 ross Exp $	
-.
-.
-.
+.\"	$NetBSD: legal,v 1.13 2002/06/15 14:41:10 itojun Exp $
 .
 .ig
-
 
 WARNING: Don't insert markup into this file without making AT LEAST one of
 the following checks:
@@ -13,38 +9,21 @@ the following checks:
   2. The command is an -mdoc macro that doesn't change the point size.
   3. You restore the lowered point size after marked-up input changes it.
 
-
 ..
 .
 .
-.
-.
-This product includes software developed by Charles Hannum.
-
-This product includes software developed by Charles Hannum, by
-the University of Vermont and State Agricultural College and
-Garrett A. Wollman, by William F. Jolitz, and by the
-University of California, Berkeley, Lawrence Berkeley
-Laboratory, and its contributors.
-
-This product includes software developed by the University of
-Vermont and State Agricultural College and Garrett A. Wollman.
-
-This product includes software developed by Dean Huxley.
-
-This product includes software developed by Herb Peyerl.
-
-In the following statement, "This software" refers to the Mitsumi
-CD-ROM driver:
-
+.It
+In the following statement, "This software" refers to the Mitsumi CD-ROM driver:
+.(item -offset indent -compact
 This software was developed by Holger Veit and Brian Moore for
-use with "386BSD" and similar operating systems.  "Similar
-operating systems" includes mainly non-profit oriented systems
-for research and education, including but not restricted to
-"NetBSD", "FreeBSD", "Mach" (by CMU).
-
-In the following statement, "This software" refers to the parallel
-port driver:
-
-This software is a component of "386BSD" developed by 
-William F. Jolitz, TeleMuse.
+use with "386BSD" and similar operating systems.
+"Similar operating systems" includes mainly non-profit oriented systems for
+research and education, including but not restricted to "NetBSD" , "FreeBSD" ,
+"Mach" (by CMU).
+.item)
+.It
+In the following statement, "This software" refers to the parallel port driver:
+.(item -offset indent -compact
+This software is a component of "386BSD" developed by
+William F.  Jolitz, TeleMuse.
+.item)

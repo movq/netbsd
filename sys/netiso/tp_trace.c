@@ -1,4 +1,4 @@
-/*	$NetBSD: tp_trace.c,v 1.7 2000/03/30 13:10:16 augustss Exp $	*/
+/*	$NetBSD: tp_trace.c,v 1.13 2007/03/04 06:03:33 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -68,6 +64,9 @@ SOFTWARE.
  * the tracing when the kernel got too big to boot.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: tp_trace.c,v 1.13 2007/03/04 06:03:33 christos Exp $");
+
 #define TP_TRACEFILE
 
 #include <sys/param.h>
@@ -79,7 +78,6 @@ SOFTWARE.
 #include <netiso/tp_param.h>
 #include <netiso/tp_timer.h>
 #include <netiso/tp_stat.h>
-#include <netiso/tp_param.h>
 #include <netiso/tp_ip.h>
 #include <netiso/tp_pcb.h>
 #include <netiso/tp_tpdu.h>
@@ -100,13 +98,8 @@ u_char          tp_traceflags[128];
 /* VARARGS */
 
 void
-tpTrace(tpcb, event, arg, src, len, arg4, arg5)
-	struct tp_pcb  *tpcb;
-	u_int           event, arg;
-	u_int           src;
-	u_int           len;
-	u_int           arg4;
-	u_int           arg5;
+tpTrace(struct tp_pcb  *tpcb, u_int event, u_int arg, u_int src, u_int len,
+	u_int arg4, u_int arg5)
 {
 	struct tp_Trace *tp;
 
@@ -118,12 +111,12 @@ tpTrace(tpcb, event, arg, src, len, arg4, arg5)
 	tp->tpt_arg = arg;
 	if (tpcb)
 		tp->tpt_arg2 = tpcb->tp_lref;
-	bcopy((caddr_t) & time, (caddr_t) & tp->tpt_time, sizeof(struct timeval));
+	bcopy((void *) & time, (void *) & tp->tpt_time, sizeof(struct timeval));
 
 	switch (event) {
 
 	case TPPTertpdu:
-		bcopy((caddr_t) src, (caddr_t) & tp->tpt_ertpdu,
+		bcopy((void *) src, (void *) & tp->tpt_ertpdu,
 		      (unsigned) MIN((int) len, sizeof(struct tp_Trace)));
 		break;
 
@@ -131,8 +124,8 @@ tpTrace(tpcb, event, arg, src, len, arg4, arg5)
 	case TPPTmisc:
 
 		/* arg is a string */
-		bcopy((caddr_t) arg, (caddr_t) tp->tpt_str,
-		 (unsigned) MIN(1 + strlen((caddr_t) arg), TPTRACE_STRLEN));
+		bcopy((void *) arg, (void *) tp->tpt_str,
+		 (unsigned) MIN(1 + strlen((void *) arg), TPTRACE_STRLEN));
 		tp->tpt_m2 = src;
 		tp->tpt_m3 = len;
 		tp->tpt_m4 = arg4;
@@ -154,16 +147,16 @@ tpTrace(tpcb, event, arg, src, len, arg4, arg5)
 		tp->tpt_m1 = arg5;
 		break;
 	case TPPTparam:
-		bcopy((caddr_t) src, (caddr_t) & tp->tpt_param, sizeof(struct tp_param));
+		bcopy((void *) src, (void *) & tp->tpt_param, sizeof(struct tp_param));
 		break;
 	case TPPTref:
-		bcopy((caddr_t) src, (caddr_t) & tp->tpt_ref, sizeof(struct tp_ref));
+		bcopy((void *) src, (void *) & tp->tpt_ref, sizeof(struct tp_ref));
 		break;
 
 	case TPPTtpduin:
 	case TPPTtpduout:
 		tp->tpt_arg2 = arg4;
-		bcopy((caddr_t) src, (caddr_t) & tp->tpt_tpdu,
+		bcopy((void *) src, (void *) & tp->tpt_tpdu,
 		      (unsigned) MIN((int) len, sizeof(struct tp_Trace)));
 		break;
 	}

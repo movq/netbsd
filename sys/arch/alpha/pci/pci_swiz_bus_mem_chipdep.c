@@ -1,4 +1,4 @@
-/* $NetBSD: pci_swiz_bus_mem_chipdep.c,v 1.34 2000/02/26 18:53:13 thorpej Exp $ */
+/* $NetBSD: pci_swiz_bus_mem_chipdep.c,v 1.41 2008/04/28 20:23:11 martin Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -91,6 +84,9 @@
  *			for the sparse memory space extent.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(1, "$NetBSD: pci_swiz_bus_mem_chipdep.c,v 1.41 2008/04/28 20:23:11 martin Exp $");
+
 #include <sys/extent.h>
 
 #define	__C(A,B)	__CONCAT(A,B)
@@ -115,6 +111,12 @@ int		__C(CHIP,_mem_alloc) __P((void *, bus_addr_t, bus_addr_t,
                     bus_space_handle_t *));
 void		__C(CHIP,_mem_free) __P((void *, bus_space_handle_t,
 		    bus_size_t));
+
+/* get kernel virtual address */
+void *		__C(CHIP,_mem_vaddr) __P((void *, bus_space_handle_t));
+
+/* mmap for user */
+paddr_t		__C(CHIP,_mem_mmap) __P((void *, bus_addr_t, off_t, int, int));
 
 /* barrier */
 inline void	__C(CHIP,_mem_barrier) __P((void *, bus_space_handle_t,
@@ -263,6 +265,12 @@ __C(CHIP,_bus_mem_init)(t, v)
 	t->abs_alloc =		__C(CHIP,_mem_alloc);
 	t->abs_free = 		__C(CHIP,_mem_free);
 
+	/* get kernel virtual address */
+	t->abs_vaddr =		__C(CHIP,_mem_vaddr);
+
+	/* mmap for user */
+	t->abs_mmap =		__C(CHIP,_mem_mmap);
+
 	/* barrier */
 	t->abs_barrier =	__C(CHIP,_mem_barrier);
 	
@@ -324,7 +332,7 @@ __C(CHIP,_bus_mem_init)(t, v)
 	/* XXX WE WANT EXTENT_NOCOALESCE, BUT WE CAN'T USE IT. XXX */
 	dex = extent_create(__S(__C(CHIP,_bus_dmem)), 0x0UL,
 	    0xffffffffffffffffUL, M_DEVBUF,
-	    (caddr_t)CHIP_D_MEM_EX_STORE(v), CHIP_D_MEM_EX_STORE_SIZE(v),
+	    (void *)CHIP_D_MEM_EX_STORE(v), CHIP_D_MEM_EX_STORE_SIZE(v),
 	    EX_NOWAIT);
 	extent_alloc_region(dex, 0, 0xffffffffffffffffUL, EX_NOWAIT);
 
@@ -347,7 +355,7 @@ __C(CHIP,_bus_mem_init)(t, v)
 	/* XXX WE WANT EXTENT_NOCOALESCE, BUT WE CAN'T USE IT. XXX */
 	sex = extent_create(__S(__C(CHIP,_bus_smem)), 0x0UL,
 	    0xffffffffffffffffUL, M_DEVBUF,
-	    (caddr_t)CHIP_S_MEM_EX_STORE(v), CHIP_S_MEM_EX_STORE_SIZE(v),
+	    (void *)CHIP_S_MEM_EX_STORE(v), CHIP_S_MEM_EX_STORE_SIZE(v),
 	    EX_NOWAIT);
 	extent_alloc_region(sex, 0, 0xffffffffffffffffUL, EX_NOWAIT);
 
@@ -564,8 +572,8 @@ __C(CHIP,_mem_get_window)(v, window, abst)
 		abst->abst_bus_end = CHIP_D_MEM_W1_BUS_END(v);
 		abst->abst_sys_start = CHIP_D_MEM_W1_SYS_START(v);
 		abst->abst_sys_end = CHIP_D_MEM_W1_SYS_END(v);
-		abst->abst_addr_shift = CHIP_ADDR_SHIFT;
-		abst->abst_size_shift = CHIP_SIZE_SHIFT;
+		abst->abst_addr_shift = 0;
+		abst->abst_size_shift = 0;
 		abst->abst_flags = ABST_DENSE;
 		break;
 #endif
@@ -895,6 +903,56 @@ __C(CHIP,_mem_free)(v, bsh, size)
 
 	/* XXX XXX XXX XXX XXX XXX */
 	panic("%s not implemented", __S(__C(CHIP,_mem_free)));
+}
+
+void *
+__C(CHIP,_mem_vaddr)(v, bsh)
+	void *v;
+	bus_space_handle_t bsh;
+{
+#ifdef CHIP_D_MEM_W1_SYS_START
+	/*
+	 * XXX should check that the range was mapped
+	 * with BUS_SPACE_MAP_LINEAR for sanity
+	 */
+	if ((bsh >> 63) != 0)
+		return ((void *)bsh);
+#endif
+	return (0);
+}
+
+paddr_t
+__C(CHIP,_mem_mmap)(v, addr, off, prot, flags)
+	void *v;
+	bus_addr_t addr;
+	off_t off;
+	int prot;
+	int flags;
+{
+	bus_space_handle_t dh = 0, sh = 0;	/* XXX -Wuninitialized */
+	int linear = flags & BUS_SPACE_MAP_LINEAR;
+	int haved = 0, haves = 0;
+
+#ifdef CHIP_D_MEM_W1_SYS_START
+	if (__C(CHIP,_xlate_addr_to_dense_handle)(v, addr + off, &dh)) {
+		haved = 1;
+		dh = ALPHA_K0SEG_TO_PHYS(dh);
+	}
+#endif
+	if (__C(CHIP,_xlate_addr_to_sparse_handle)(v, addr + off, &sh)) {
+		haves = 1;
+		sh = ALPHA_K0SEG_TO_PHYS(sh);
+	}
+
+	if (linear) {
+		if (haved == 0)
+			return (-1);
+		return (alpha_btop(dh));
+	}
+
+	if (haves == 0)
+		return (-1);
+	return (alpha_btop(sh));
 }
 
 inline void

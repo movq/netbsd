@@ -1,4 +1,4 @@
-/*	$NetBSD: md.h,v 1.4 2000/03/28 00:29:57 thorpej Exp $	*/
+/*	$NetBSD: md.h,v 1.19 2006/02/26 10:25:54 dsl Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -44,59 +44,28 @@
 /*
  * Symbolic names for disk partitions.
  */
-#define PART_ROOT	A
-#define PART_SWAP	B
-#define PART_RAW	C
-#define PART_USR	D	/* Can be after PART_FIRST_FREE */
-#define PART_FIRST_FREE	E
+#define PART_ROOT	PART_A
+#define PART_SWAP	PART_B
+#define PART_RAW	PART_C
+#define PART_USR	PART_D	/* Can be after PART_FIRST_FREE */
+#define PART_FIRST_FREE	PART_E
 
 #define DEFSWAPRAM	16	/* Assume at least this RAM for swap calc */
 #define DEFROOTSIZE	32	/* Default root size */
-#define STDNEEDMB	80	/* Min space for non X install */
+#define DEFVARSIZE	32	/* Default /var size, if created */
+#define DEFUSRSIZE	70	/* Default /usr size, if /home */
 #define XNEEDMB		35	/* Extra megs for full X installation */
 
 /*
  * Default filesets to fetch and install during installation
  * or upgrade.
  */
-EXTERN distinfo dist_list[]
-#ifdef MAIN
-= {
-    {"kern",	1, NULL, "Kernel       : "},
-    {"base",	1, NULL, "Base         : "},
-    {"etc",	1, NULL, "System (/etc): "},
-    {"comp",	1, NULL, "Compiler     : "},
-    {"games",	1, NULL, "Games        : "},
-    {"man",	1, NULL, "Manuals      : "},
-    {"misc",	1, NULL, "Miscellaneous: "},
-    {"text",	1, NULL, "Text tools   : "},
-    {"secr",	0, NULL, "Security     : "},
-
-    {"xbase",	1, NULL, "X11 clients  : "},
-    {"xfont",	1, NULL, "X11 fonts    : "},
-    {"xserver",	1, NULL, "X11 servers  : "},
-    {"xcontrib",1, NULL, "X11 contrib  : "},
-    {"xcomp",	1, NULL, "X programming: "},
-    {NULL, 0, NULL, NULL }
-}
-#endif
-;
+#define SET_KERNEL_1_NAME	"kern-GENERIC"
 
 /*
  * Disk names accepted as valid targets for a from-scratch installation.
  */
-EXTERN	char *disk_names[]
-#ifdef MAIN
-= {"sd", "ra", "rd", "hp", NULL}
-#endif
-;
-
-/*
- * Legal start character for a disk for checking input.
- * this must return 1 for a character that matches the first
- * characters of each member of disk_names.
- */
-#define ISDISKSTART(dn)	(dn == 's' || dn == 'r' || dn == 'h')
+#define DISK_NAMES "sd", "ra", "rd", "hp"
 
 /*
  * Machine-specific command to write a new label to a disk.
@@ -104,8 +73,3 @@ EXTERN	char *disk_names[]
  * the hand-edited disklabel will NOT be written by MI code.
  */
 #define	DISKLABEL_CMD	"disklabel -w -r"
-
-/*
- * Default file system type for floppies.
- */
-EXTERN char *fdtype INIT("ffs");

@@ -1,4 +1,6 @@
-/*	$NetBSD: akbdvar.h,v 1.4 1999/02/17 14:56:56 tsubai Exp $	*/
+/*	$NetBSD: akbdvar.h,v 1.12 2007/03/05 10:47:06 tsutsui Exp $	*/
+
+/*	$OpenBSD: akbdvar.h,v 1.3 2002/03/27 21:48:12 drahn Exp $	*/
 
 /*
  * Copyright (C) 1998	Colin Wood
@@ -33,6 +35,8 @@
 #ifndef _MACPPC_KBDVAR_H_
 #define _MACPPC_KBDVAR_H_
 
+#include "opt_wsdisplay_compat.h"
+
 #include <machine/adbsys.h>
 
 /*
@@ -48,6 +52,14 @@ struct akbd_softc {
 
 	u_int8_t	sc_leds;	/* current LED state */
 	struct device	*sc_wskbddev;
+
+	int sc_polling;
+	int sc_npolledkeys;
+	unsigned char sc_polledkeys[32];
+
+#ifdef WSDISPLAY_COMPAT_RAWKBD
+	int sc_rawkbd;
+#endif
 };
 
 /* LED register bits, inverse of actual register value */
@@ -55,6 +67,7 @@ struct akbd_softc {
 #define LED_CAPSLOCK	0x2
 #define LED_SCROLL_LOCK	0x4
 
-void kbd_adbcomplete __P((caddr_t buffer, caddr_t data_area, int adb_command));
+void kbd_adbcomplete __P((uint8_t *buffer, uint8_t *data_area, int adb_command));
+void kbd_passup __P((struct akbd_softc *sc, int));
 
 #endif /* _MACPPC_KBDVAR_H_ */

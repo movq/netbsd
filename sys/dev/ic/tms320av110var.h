@@ -1,4 +1,4 @@
-/*	$NetBSD: tms320av110var.h,v 1.3 1999/02/16 23:34:13 is Exp $	*/
+/*	$NetBSD: tms320av110var.h,v 1.10 2008/04/28 20:23:51 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -47,7 +40,7 @@
 #ifndef _TMS320AV110_VAR_H_
 #define _TMS320AV110_VAR_H_
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 /* softc */
 
@@ -58,28 +51,28 @@ struct tav_softc {
 	bus_space_handle_t sc_ioh;
 
 	/* above audio callback function */
-	void 		(*sc_intr) __P((void *));
-	void 		*sc_intrarg;
+	void		(*sc_intr)(void *);
+	void		*sc_intrarg;
 	int		sc_bsize;
 
-	/* below audio interupt acknowledge function. Ignored if NULL */
-	void 		(*sc_intack) __P((struct tav_softc *));
+	/* below audio interrupt acknowledge function. Ignored if NULL */
+	void		(*sc_intack)(struct tav_softc *);
 
 	/* initialization from below */
 
-	u_int8_t	sc_pcm_div;	/* passed in */
-	u_int8_t	sc_pcm_ord; 	/* passed in */
-	u_int8_t	sc_pcm_18; 	/* passed in */
-	u_int8_t	sc_dif; 	/* passed in */
+	uint8_t		sc_pcm_div;	/* passed in */
+	uint8_t		sc_pcm_ord;	/* passed in */
+	uint8_t		sc_pcm_18;	/* passed in */
+	uint8_t		sc_dif;	/* passed in */
 };
 
 /* prototypes */
 
-void tms320av110_attach_mi __P((struct tav_softc *));
-int tms320av110_intr __P((void *));
+void tms320av110_attach_mi(struct tav_softc *);
+int tms320av110_intr(void *);
 
-static void tav_write_short __P((bus_space_tag_t, bus_space_handle_t,
-	bus_size_t, u_int16_t));
+static void tav_write_short(bus_space_tag_t, bus_space_handle_t,
+    bus_size_t, uint16_t);
 
 /* access functions/macros: */
 /* XXX shouldn't these be in the reg.h file? */
@@ -87,17 +80,17 @@ static void tav_write_short __P((bus_space_tag_t, bus_space_handle_t,
 #define tav_read_byte(ioh, iot, off) bus_space_read_1(ioh, iot, off)
 
 #define tav_read_short(ioh, iot, off)	(		\
-	bus_space_read_1((ioh), (iot), (off)) 	|	\
+	bus_space_read_1((ioh), (iot), (off))	|	\
 	bus_space_read_1((ioh), (iot), (off)+1) << 8)
 
 #define tav_read_long(ioh, iot, off)	(		\
-	bus_space_read_1((ioh), (iot), (off)) 	|	\
+	bus_space_read_1((ioh), (iot), (off))	|	\
 	bus_space_read_1((ioh), (iot), (off)+1) << 8 |	\
 	bus_space_read_1((ioh), (iot), (off)+2) << 16 |	\
 	bus_space_read_1((ioh), (iot), (off)+3))
 
 #define tav_read_time(ioh, iot, off)	(		\
-	bus_space_read_1((ioh), (iot), (off)) 	|	\
+	bus_space_read_1((ioh), (iot), (off))	|	\
 	bus_space_read_1((ioh), (iot), (off)+1) << 8 |	\
 	bus_space_read_1((ioh), (iot), (off)+2) << 16 |	\
 	bus_space_read_1((ioh), (iot), (off)+3) << 24 |	\
@@ -105,15 +98,13 @@ static void tav_write_short __P((bus_space_tag_t, bus_space_handle_t,
 
 #define tav_write_byte(ioh, iot, off, v) bus_space_write_1(ioh, iot, off, v)
 
-static __inline void 
-tav_write_short(iot, ioh, off, val)
-	bus_space_tag_t iot;
-	bus_space_handle_t ioh;
-	bus_size_t off;
-	u_int16_t val;
+static __inline void
+tav_write_short(bus_space_tag_t iot, bus_space_handle_t ioh,
+    bus_size_t off, uint16_t val)
 {
+
 	bus_space_write_1(iot, ioh, off+1, (val)>>8);
-	bus_space_write_1(iot, ioh, off,  (u_int8_t)val);
+	bus_space_write_1(iot, ioh, off,  (uint8_t)val);
 }
 
 #endif /* _TMS320AV110_VAR_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: frodovar.h,v 1.4 1997/10/04 09:59:53 thorpej Exp $	*/
+/*	$NetBSD: frodovar.h,v 1.9 2008/04/28 20:23:19 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -71,14 +64,25 @@
  */
 struct frodo_attach_args {
 	const char *fa_name;	/* device name */
+	bus_space_tag_t fa_bst;	/* bus space tag */
+	int	fa_base;	/* Frodo base address */
 	int	fa_offset;	/* offset from Frodo base */
 	int	fa_line;	/* Frodo interrupt line */
+};
+
+/*
+ * Structure used to describe a device for autoconfiguration purposes.
+ */
+struct frodo_device {
+	const char *fd_name;	/* device name */
+	int	fd_offset;	/* offset from Frodo base */
+	int	fd_line;	/* Frodo interrupt line */
 };
 
 #include "locators.h"
 #define	frodocf_offset		cf_loc[FRODOCF_OFFSET]
 #define	FRODO_UNKNOWN_OFFSET	FRODOCF_OFFSET_DEFAULT
 
-void	frodo_intr_establish __P((struct device *, int (*func)(void *),
-	    void *, int, int));
-void	frodo_intr_disestablish __P((struct device *, int));
+void	frodo_intr_establish(device_t, int (*func)(void *), void *, int, int);
+void	frodo_intr_disestablish(device_t, int);
+void	frodo_init_bus_space(bus_space_tag_t);

@@ -1,4 +1,4 @@
-.\"	$NetBSD: profil.2,v 1.5 1999/12/02 21:42:38 kleink Exp $
+.\"	$NetBSD: profil.2,v 1.13 2003/08/07 16:44:04 agc Exp $
 .\"
 .\" Copyright (c) 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -14,11 +14,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -45,6 +41,7 @@
 .Sh LIBRARY
 .Lb libc
 .Sh SYNOPSIS
+.In unistd.h
 .Ft int
 .Fn profil "char *samples" "size_t size" "u_long offset" "u_int scale"
 .Sh DESCRIPTION
@@ -107,7 +104,8 @@ returns 0.
 .It Pa /usr/lib/gcrt0.o
 profiling C run-time startup file
 .It Pa gmon.out
-conventional name for profiling output file
+conventional name for profiling output file.
+This may be different if the PROFDIR environment variable is set.
 .El
 .Sh ERRORS
 The following error may be reported:
@@ -118,7 +116,8 @@ The buffer
 contains an invalid address.
 .El
 .Sh SEE ALSO
-.Xr gprof 1
+.Xr gprof 1 ,
+.Xr moncontrol 3
 .\" .Sh HISTORY
 .\" wish I knew...  probably v7.
 .Sh BUGS

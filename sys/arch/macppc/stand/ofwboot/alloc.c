@@ -1,4 +1,4 @@
-/*	$NetBSD: alloc.c,v 1.1 1998/05/15 10:15:59 tsubai Exp $	*/
+/*	$NetBSD: alloc.c,v 1.10 2008/04/28 20:23:27 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -126,16 +119,17 @@ LIST_HEAD(, ml) allocatedlist = LIST_HEAD_INITIALIZER(allocatedlist);
 #define	OVERHEAD	ALIGN(sizeof (struct ml))	/* shorthand */
 
 void *
-alloc(size)
-	unsigned size;
+alloc(size_t size)
 {
 	struct ml *f, *bestf;
+#ifndef ALLOC_FIRST_FIT
 	unsigned bestsize = 0xffffffff;	/* greater than any real size */
+#endif
 	char *help;
 	int failed;
 
 #ifdef ALLOC_TRACE
-	printf("alloc(%u)", size);
+	printf("alloc(%zu)", size);
 #endif
 
 	/*
@@ -146,17 +140,18 @@ alloc(size)
 
 #ifdef ALLOC_FIRST_FIT
 	/* scan freelist */
-	for (f = freelist.lh_first; f != NULL && f->size < size;
+	for (f = freelist.lh_first; f != NULL && (size_t)f->size < size;
 	    f = f->list.le_next)
 		/* noop */ ;
 	bestf = f;
-	failed = (bestf == (struct fl *)0);
+	failed = (bestf == NULL);
 #else
 	/* scan freelist */
+	bestf = NULL;		/* XXXGCC: -Wuninitialized */
 	f = freelist.lh_first;
 	while (f != NULL) {
-		if (f->size >= size) {
-			if (f->size == size)	/* exact match */
+		if ((size_t)f->size >= size) {
+			if ((size_t)f->size == size)	/* exact match */
 				goto found;
 
 			if (f->size < bestsize) {
@@ -178,15 +173,15 @@ alloc(size)
 		 * to page size, and record the chunk size.
 		 */
 		size = roundup(size, NBPG);
-		help = OF_claim(0, size, NBPG);
+		help = OF_claim(NULL, (unsigned)size, NBPG);
 		if (help == (char *)-1)
 			panic("alloc: out of memory");
 
 		f = (struct ml *)help;
-		f->size = size;
+		f->size = (unsigned)size;
 #ifdef ALLOC_TRACE
 		printf("=%lx (new chunk size %u)\n",
-		    (u_long)(help + OVERHEAD), f->f_size);
+		    (u_long)(help + OVERHEAD), f->size);
 #endif
 		goto out;
 	}
@@ -194,7 +189,9 @@ alloc(size)
 	/* we take the best fit */
 	f = bestf;
 
+#ifndef ALLOC_FIRST_FIT
  found:
+#endif
 	/* remove from freelist */
 	LIST_REMOVE(f, list);
 	help = (char *)f;
@@ -208,18 +205,16 @@ alloc(size)
 }
 
 void
-free(ptr, size)
-	void *ptr;
-	unsigned size;	/* only for consistenct check */
+dealloc(void *ptr, size_t size)
 {
 	register struct ml *a = (struct ml *)((char*)ptr - OVERHEAD);
 
 #ifdef ALLOC_TRACE
-	printf("free(%lx, %u) (origsize %u)\n", (u_long)ptr, size, a->size);
+	printf("dealloc(%lx, %zu) (origsize %u)\n", (u_long)ptr, size, a->size);
 #endif
 #ifdef DEBUG
-	if (size > a->size)
-		printf("free %u bytes @%lx, should be <=%u\n",
+	if (size > (size_t)a->size)
+		printf("dealloc %zu bytes @%lx, should be <=%u\n",
 		    size, (u_long)ptr, a->size);
 #endif
 
@@ -229,9 +224,9 @@ free(ptr, size)
 }
 
 void
-freeall()
+freeall(void)
 {
-#ifdef __notyet__		/* Firmware bug ?! */
+#ifdef __notyet__
 	struct ml *m;
 
 	/* Release chunks on freelist... */

@@ -1,30 +1,15 @@
-#	$NetBSD: Makefile.inc,v 1.5 1999/04/27 12:32:08 simonb Exp $
+#	$NetBSD: Makefile.inc,v 1.16 2007/07/24 10:49:27 pavel Exp $
 #
 #	etc.pmax/Makefile.inc -- pmax-specific etc Makefile targets
 #
 
-# Set this for any kernels beyond GENERIC you want to include
-# in the distribution.
-#EXTRA_KERNELS+=
+# If you change the list of distributed kernels, don't forget
+# to update the release documentation in distrib/notes/common/contents
 
-# Set this for any kernels beyond GENERIC and ${EXTRA_KERNELS} you
-# need to build to make installation tools/media.
-BUILD_KERNELS+=INSTALL RAMDISK
+KERNEL_SETS=		GENERIC
 
-# Add any extra release directories to be made
-INSTALLATION_DIRS+=installation/diskimage installation/netboot
+BUILD_KERNELS=		INSTALL RAMDISK
 
-# location and name of the stripped down NFS install kernel
-NFSCONF=		INSTALL
-NFSKERNNAME=		nfsnetbsd
-# We don't know about ${KERNOBJDIR} yet ...
-NFSKERNDIR=		${.CURDIR:C/[^\/]+$//}sys/arch/${MACHINE}/compile/${NFSCONF}
-NFSKERN=		${NFSKERNDIR}/${NFSKERNNAME}
-
-snap_md_post: ${DISKIMAGE} ${DISKIMAGE_TAR} ${INSTALLKERN}
-	${INSTALL} ${RENAME} ${PRESERVE} ${COPY} -o root -g wheel \
-		-m ${BINMODE} ${NFSKERN}.ecoff \
-		${RELEASEDIR}/binary/kernel/${NFSKERNNAME}
-	gzip -9 ${RELEASEDIR}/binary/kernel/${NFSKERNNAME}
-	(cd ${.CURDIR}/../distrib/pmax && \
-	    ${MAKE} depend && ${MAKE} ${_J} && ${MAKE} install)
+INSTALLATION_DIRS+=	installation/diskimage	\
+			installation/netboot \
+			installation/miniroot

@@ -1,6 +1,7 @@
-/*	$NetBSD: cpu.h,v 1.7 2000/02/24 23:32:26 msaitoh Exp $	*/
+/*	$NetBSD: cpu.h,v 1.53 2008/03/22 03:23:27 uwe Exp $	*/
 
 /*-
+ * Copyright (c) 2002 The NetBSD Foundation, Inc. All rights reserved.
  * Copyright (c) 1990 The Regents of the University of California.
  * All rights reserved.
  *
@@ -15,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -39,182 +36,230 @@
  */
 
 /*
- * SH3 Version
+ * SH3/SH4 support.
  *
  *  T.Horiuchi    Brains Corp.   5/22/98
  */
 
 #ifndef _SH3_CPU_H_
-#define _SH3_CPU_H_
+#define	_SH3_CPU_H_
 
-/*
- * Definitions unique to sh3 cpu support.
- */
-#include <machine/psl.h>
-#include <machine/frame.h>
-#include <machine/segments.h>
+#if defined(_KERNEL_OPT)
+#include "opt_lockdebug.h"
+#endif
+
+#include <sh3/psl.h>
+#include <sh3/frame.h>
+
+#ifdef _KERNEL
+#include <sys/cpu_data.h>
+struct cpu_info {
+	struct cpu_data ci_data;	/* MI per-cpu data */
+	cpuid_t	ci_cpuid;
+	int	ci_mtx_count;
+	int	ci_mtx_oldspl;
+	int	ci_want_resched;
+	int	ci_idepth;
+};
+
+extern struct cpu_info cpu_info_store;
+#define	curcpu()			(&cpu_info_store)
 
 /*
  * definitions of cpu-dependent requirements
  * referenced in generic code
  */
-#define	cpu_swapin(p)			/* nothing */
-#define	cpu_wait(p)			/* nothing */
 #define	cpu_number()			0
+/*
+ * Can't swapout u-area, (__SWAP_BROKEN)
+ * since we use P1 converted address for trapframe.
+ */
+#define	cpu_swapin(p)			/* nothing */
+#define	cpu_swapout(p)			panic("cpu_swapout: can't get here");
+#define	cpu_proc_fork(p1, p2)		/* nothing */
 
 /*
- * Arguments to hardclock, softclock and statclock
- * encapsulate the previous machine state in an opaque
- * clockframe; for now, use generic intrframe.
- *
- * XXX intrframe has a lot of gunk we don't need.
+ * Arguments to hardclock and gatherstats encapsulate the previous
+ * machine state in an opaque clockframe.
  */
-#define clockframe intrframe
+struct clockframe {
+	int	spc;	/* program counter at time of interrupt */
+	int	ssr;	/* status register at time of interrupt */
+	int	ssp;	/* stack pointer at time of interrupt */
+};
 
-#if 1
-#define	CLKF_USERMODE(frame)	(!KERNELMODE((frame)->if_r15))
-#else
-#define	CLKF_USERMODE(frame)	USERMODE((frame)->if_spc, (frame)->if_ssr)
-#endif
-#if 0
-#define	CLKF_BASEPRI(frame)	((frame)->if_pri == 0)
-#else
-/* XXX we should fix this */
-#define	CLKF_BASEPRI(frame)	(0)
-#endif
-#define	CLKF_PC(frame)		((frame)->if_spc)
-#define	CLKF_INTR(frame)	(0)	/* XXX should have an interrupt stack */
+
+#define	CLKF_USERMODE(cf)	(!KERNELMODE((cf)->ssr))
+#define	CLKF_PC(cf)		((cf)->spc)
+#define	CLKF_INTR(cf)		(curcpu()->ci_idepth > 0)
+
+/*
+ * This is used during profiling to integrate system time.  It can safely
+ * assume that the process is resident.
+ */
+#define	PROC_PC(p)							\
+	(((struct trapframe *)(p)->p_md.md_regs)->tf_spc)
 
 /*
  * Preempt the current process if in interrupt from user mode,
  * or after the current trap/syscall if in system mode.
  */
-int	want_resched;		/* resched() was called */
-#define	need_resched()		(want_resched = 1, setsoftast())
+#define	cpu_need_resched(ci, flags)					\
+do {									\
+	ci->ci_want_resched = 1;					\
+	if (curlwp != ci->ci_data.cpu_idlelwp)				\
+		aston(curlwp);						\
+} while (/*CONSTCOND*/0)
 
 /*
  * Give a profiling tick to the current process when the user profiling
- * buffer pages are invalid.  On the i386, request an ast to send us
- * through trap(), marking the proc as needing a profiling tick.
+ * buffer pages are invalid.  On the MIPS, request an ast to send us
+ * through trap, marking the proc as needing a profiling tick.
  */
-#define	need_proftick(p)	((p)->p_flag |= P_OWEUPC, setsoftast())
+#define	cpu_need_proftick(l)						\
+do {									\
+	(l)->l_pflag |= LP_OWEUPC;					\
+	aston(l);							\
+} while (/*CONSTCOND*/0)
 
 /*
  * Notify the current process (p) that it has a signal pending,
  * process as soon as possible.
  */
-#define	signotify(p)		setsoftast()
+#define	cpu_signotify(l)	aston(l)
+
+#define	aston(l)		((l)->l_md.md_astpending = 1)
 
 /*
  * We need a machine-independent name for this.
  */
 #define	DELAY(x)		delay(x)
-void	delay __P((int));
+#endif /* _KERNEL */
 
 /*
- * Logical address space of SH3 CPU.
+ * Logical address space of SH3/SH4 CPU.
  */
-#define SH3_P0SEG_BASE	0x00000000
-#define SH3_P0SEG_END	0x7fffffff
-#define SH3_P1SEG_BASE	0x80000000	/* pa == va */
-#define SH3_P1SEG_END	0x9fffffff
-#define SH3_P2SEG_BASE	0xa0000000	/* pa == va, non-cacheable */
-#define SH3_P2SEG_END	0xbfffffff
-#define SH3_P3SEG_BASE	0xc0000000
-#define SH3_P3SEG_END	0xdfffffff
-#define SH3_P4SEG_BASE	0xe0000000
-#define SH3_P4SEG_END	0xffffffff
+#define	SH3_PHYS_MASK	0x1fffffff
 
-#define SH3_PHYS_MASK	0x1fffffff
-#define SH3_P1234SEG_SIZE	0x20000000
+#define	SH3_P0SEG_BASE	0x00000000	/* TLB mapped, also U0SEG */
+#define	SH3_P0SEG_END	0x7fffffff
+#define	SH3_P1SEG_BASE	0x80000000	/* pa == va */
+#define	SH3_P1SEG_END	0x9fffffff
+#define	SH3_P2SEG_BASE	0xa0000000	/* pa == va, non-cacheable */
+#define	SH3_P2SEG_END	0xbfffffff
+#define	SH3_P3SEG_BASE	0xc0000000	/* TLB mapped, kernel mode */
+#define	SH3_P3SEG_END	0xdfffffff
+#define	SH3_P4SEG_BASE	0xe0000000	/* peripheral space */
+#define	SH3_P4SEG_END	0xffffffff
 
-#define SH3_P1SEG_TO_PHYS(x)	((unsigned)(x) & SH3_PHYS_MASK)
-#define SH3_P2SEG_TO_PHYS(x)	((unsigned)(x) & SH3_PHYS_MASK)
-#define SH3_PHYS_TO_P1SEG(x)	((unsigned)(x) | SH3_P1SEG_BASE)
-#define SH3_PHYS_TO_P2SEG(x)	((unsigned)(x) | SH3_P2SEG_BASE)
-#define SH3_P1SEG_TO_P2SEG(x)	((unsigned)(x) | SH3_P1234SEG_SIZE)
+#define	SH3_P1SEG_TO_PHYS(x)	((uint32_t)(x) & SH3_PHYS_MASK)
+#define	SH3_P2SEG_TO_PHYS(x)	((uint32_t)(x) & SH3_PHYS_MASK)
+#define	SH3_PHYS_TO_P1SEG(x)	((uint32_t)(x) | SH3_P1SEG_BASE)
+#define	SH3_PHYS_TO_P2SEG(x)	((uint32_t)(x) | SH3_P2SEG_BASE)
+#define	SH3_P1SEG_TO_P2SEG(x)	((uint32_t)(x) | 0x20000000)
+#define	SH3_P2SEG_TO_P1SEG(x)	((uint32_t)(x) & ~0x20000000)
+
+#ifndef __lint__
+
+/*
+ * Switch from P1 (cached) to P2 (uncached).  This used to be written
+ * using gcc's assigned goto extension, but gcc4 aggressive optimizations
+ * tend to optimize that away under certain circumstances.
+ */
+#define RUN_P2						\
+	do {						\
+		register uint32_t r0 asm("r0");		\
+		uint32_t pc;				\
+		__asm volatile(				\
+			"	mov.l	1f, %1	;"	\
+			"	mova	2f, %0	;"	\
+			"	or	%0, %1	;"	\
+			"	jmp	@%1	;"	\
+			"	 nop		;"	\
+			"	.align 2	;"	\
+			"1:	.long	0x20000000;"	\
+			"2:;"				\
+			: "=r"(r0), "=r"(pc));		\
+	} while (0)
+
+/*
+ * Switch from P2 (uncached) back to P1 (cached).  We need to be
+ * running on P2 to access cache control, memory-mapped cache and TLB
+ * arrays, etc. and after touching them at least 8 instructinos are
+ * necessary before jumping to P1, so provide that padding here.
+ */
+#define RUN_P1						\
+	do {						\
+		register uint32_t r0 asm("r0");		\
+		uint32_t pc;				\
+		__asm volatile(				\
+		/*1*/	"	mov.l	1f, %1	;"	\
+		/*2*/	"	mova	2f, %0	;"	\
+		/*3*/	"	nop		;"	\
+		/*4*/	"	and	%0, %1	;"	\
+		/*5*/	"	nop		;"	\
+		/*6*/	"	nop		;"	\
+		/*7*/	"	nop		;"	\
+		/*8*/	"	nop		;"	\
+			"	jmp	@%1	;"	\
+			"	 nop		;"	\
+			"	.align 2	;"	\
+			"1:	.long	~0x20000000;"	\
+			"2:;"				\
+			: "=r"(r0), "=r"(pc));		\
+	} while (0)
+
+/*
+ * If RUN_P1 is the last thing we do in a function we can omit it, b/c
+ * we are going to return to a P1 caller anyway, but we still need to
+ * ensure there's at least 8 instructions before jump to P1.
+ */
+#define PAD_P1_SWITCH	__asm volatile ("nop;nop;nop;nop;nop;nop;nop;nop;")
+
+#else  /* __lint__ */
+#define	RUN_P2		do {} while (/* CONSTCOND */ 0)
+#define	RUN_P1		do {} while (/* CONSTCOND */ 0)
+#define	PAD_P1_SWITCH	do {} while (/* CONSTCOND */ 0)
+#endif
+
+#if defined(SH4)
+/* SH4 Processor Version Register */
+#define	SH4_PVR_ADDR	0xff000030	/* P4  address */
+#define	SH4_PVR		(*(volatile uint32_t *) SH4_PVR_ADDR)
+#define	SH4_PRR_ADDR	0xff000044	/* P4  address */
+#define	SH4_PRR		(*(volatile uint32_t *) SH4_PRR_ADDR)
+
+#define	SH4_PVR_MASK	0xffffff00
+#define	SH4_PVR_SH7750	0x04020500	/* SH7750  */
+#define	SH4_PVR_SH7750S	0x04020600	/* SH7750S */
+#define	SH4_PVR_SH775xR	0x04050000	/* SH775xR */
+#define	SH4_PVR_SH7751	0x04110000	/* SH7751  */
+
+#define	SH4_PRR_MASK	0xfffffff0
+#define SH4_PRR_7750R	0x00000100	/* SH7750R */
+#define SH4_PRR_7751R	0x00000110	/* SH7751R */
+#endif
 
 /*
  * pull in #defines for kinds of processors
  */
 #include <machine/cputypes.h>
 
-
-#ifdef _KERNEL
-extern int cpu;
-extern int cpu_class;
-extern struct cpu_nocpuid_nameclass sh3_nocpuid_cpus[];
-extern struct cpu_cpuid_nameclass sh3_cpuid_cpus[];
-
-/* autoconf.c */
-void	configure __P((void));
-
-/* sh3_machdep.c */
-void sh3_startup __P((void));
-
-/* machdep.c */
-void	delay __P((int));
-void	dumpconf __P((void));
-void	cpu_reset __P((void));
-
-/* locore.s */
-struct region_descriptor;
-void	lgdt __P((struct region_descriptor *));
-void	fillw __P((short, void *, size_t));
-void
-bcopyb  __P((caddr_t from, caddr_t to, size_t len));
-void
-bcopyw __P((caddr_t from, caddr_t to, size_t len));
-void
-setPageDirReg __P((int pgdir));
-
-
-struct pcb;
-void	savectx __P((struct pcb *));
-void	switch_exit __P((struct proc *));
-void	proc_trampoline __P((void));
-
-/* clock.c */
-void	startrtclock __P((void));
-
-/* npx.c */
-void	npxdrop __P((void));
-void	npxsave __P((void));
-
-/* vm_machdep.c */
-int kvtop __P((caddr_t));
-
-#ifdef MATH_EMULATE
-/* math_emulate.c */
-int	math_emulate __P((struct trapframe *));
-#endif
-
-
-/* trap.c */
-void	child_return __P((struct proc *, int, int, int, struct trapframe));
-
-#endif /* _KERNEL */
-
 /*
  * CTL_MACHDEP definitions.
  */
 #define	CPU_CONSDEV		1	/* dev_t: console terminal device */
-#define	CPU_NKPDE		2	/* int: number of kernel PDEs */
-#define	CPU_BOOTED_KERNEL	3	/* string: booted kernel name */
-#define	CPU_SETPRIVPROC		4	/* set current proc to piviledged proc
-					   */
-#define	CPU_DEBUGMODE		5	/* set debug mode */
-#define	CPU_LOADANDRESET	6	/* load kernel image and reset */
-#define	CPU_MAXID		7	/* number of valid machdep ids */
+#define	CPU_LOADANDRESET	2	/* load kernel image and reset */
+#define	CPU_MAXID		3	/* number of valid machdep ids */
 
-#define	CTL_MACHDEP_NAMES { \
-	{ 0, 0 }, \
-	{ "console_device", CTLTYPE_STRUCT }, \
-	{ "nkpde", CTLTYPE_INT }, \
-	{ "booted_kernel", CTLTYPE_STRING }, \
-	{ "set_priv_proc", CTLTYPE_INT }, \
-	{ "debug_mode", CTLTYPE_INT }, \
-	{ "load_and_reset", CTLTYPE_INT }, \
-}
-
+#ifdef _KERNEL
+void sh_cpu_init(int, int);
+void sh_startup(void);
+void cpu_reset(void) __attribute__((__noreturn__)); /* soft reset */
+void _cpu_spin(uint32_t);	/* for delay loop. */
+void delay(int);
+struct pcb;
+void savectx(struct pcb *);
+void dumpsys(void);
+#endif /* _KERNEL */
 #endif /* !_SH3_CPU_H_ */

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.4 1997/07/20 22:36:31 christos Exp $
+#	$NetBSD: Makefile,v 1.6 2003/07/18 02:18:57 lukem Exp $
 
 PROG=	chio
 

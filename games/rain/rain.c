@@ -1,4 +1,4 @@
-/*	$NetBSD: rain.c,v 1.13 1999/08/08 02:06:01 simonb Exp $	*/
+/*	$NetBSD: rain.c,v 1.21 2008/08/08 16:10:47 drochner Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)rain.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: rain.c,v 1.13 1999/08/08 02:06:01 simonb Exp $");
+__RCSID("$NetBSD: rain.c,v 1.21 2008/08/08 16:10:47 drochner Exp $");
 #endif
 #endif /* not lint */
 
@@ -59,94 +55,99 @@ __RCSID("$NetBSD: rain.c,v 1.13 1999/08/08 02:06:01 simonb Exp $");
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <errno.h>
+#include <limits.h>
 
-volatile sig_atomic_t sig_caught = 0;
+static volatile sig_atomic_t sig_caught = 0;
 
-int	main __P((int, char **));
-void	onsig __P((int));
+int main(int, char **);
+static void onsig(int);
 
 
 int
-main(argc, argv)
-	int argc;
-	char **argv;
+main(int argc, char **argv)
 {
 	int x, y, j;
 	long cols, lines;
 	unsigned int delay = 0;
+	unsigned long val = 0;
 	int ch;
+	char *ep;
 	int xpos[5], ypos[5];
 
-	while ((ch = getopt(argc, argv, "d:h")) != -1)
+	while ((ch = getopt(argc, argv, "d:")) != -1)
 		switch (ch) {
 		case 'd':
-			if ((delay = (unsigned int)strtoul(optarg, (char **)NULL, 10)) < 1
-			    || delay > 1000)
-				errx(1, "invalid delay (1-1000)");
-			delay *= 1000;  /* ms -> us */
+			val = strtoul(optarg, &ep, 0);
+			if (ep == optarg || *ep)
+				errx(1, "Invalid delay `%s'", optarg);
+			if (errno == ERANGE && val == ULONG_MAX)
+				err(1, "Invalid delay `%s'", optarg);
+			if (val >= 1000)
+				errx(1, "Invalid delay `%s' (1-999)", optarg);
+			delay = (unsigned int)val * 1000;  /* ms -> us */
 			break;
-		case 'h':
 		default:
-			(void)fprintf(stderr, "usage: rain [-d delay]\n");
-			exit(1);
+			(void)fprintf(stderr, "Usage: %s [-d delay]\n",
+			    getprogname());
+			return 1;
 		}
 
-	initscr();
+	if (!initscr())
+		errx(0, "couldn't initialize screen");
 	cols = COLS - 4;
 	lines = LINES - 4;
 
 	(void)signal(SIGHUP, onsig);
 	(void)signal(SIGINT, onsig);
-	(void)signal(SIGQUIT, onsig);
-	(void)signal(SIGSTOP, onsig);
-	(void)signal(SIGTSTP, onsig);
 	(void)signal(SIGTERM, onsig);
 
+	(void)curs_set(0);
 	for (j = 4; j >= 0; --j) {
 		xpos[j] = random() % cols + 2;
 		ypos[j] = random() % lines + 2;
 	}
 	for (j = 0;;) {
 		if (sig_caught) {
-			endwin();
+			(void)endwin();
 			exit(0);
 		}
 		x = random() % cols + 2;
 		y = random() % lines + 2;
-		mvaddch(y, x, '.');
-		mvaddch(ypos[j], xpos[j], 'o');
+		(void)mvaddch(y, x, '.');
+		(void)mvaddch(ypos[j], xpos[j], 'o');
 		if (!j--)
 			j = 4;
-		mvaddch(ypos[j], xpos[j], 'O');
+		(void)mvaddch(ypos[j], xpos[j], 'O');
 		if (!j--)
 			j = 4;
-		mvaddch(ypos[j] - 1, xpos[j], '-');
-		mvaddstr(ypos[j], xpos[j] - 1, "|.|");
-		mvaddch(ypos[j] + 1, xpos[j], '-');
+		(void)mvaddch(ypos[j] - 1, xpos[j], '-');
+		(void)mvaddstr(ypos[j], xpos[j] - 1, "|.|");
+		(void)mvaddch(ypos[j] + 1, xpos[j], '-');
 		if (!j--)
 			j = 4;
-		mvaddch(ypos[j] - 2, xpos[j], '-');
-		mvaddstr(ypos[j] - 1, xpos[j] - 1, "/ \\");
-		mvaddstr(ypos[j], xpos[j] - 2, "| O |");
-		mvaddstr(ypos[j] + 1, xpos[j] - 1, "\\ /");
-		mvaddch(ypos[j] + 2, xpos[j], '-');
+		(void)mvaddch(ypos[j] - 2, xpos[j], '-');
+		(void)mvaddstr(ypos[j] - 1, xpos[j] - 1, "/ \\");
+		(void)mvaddstr(ypos[j], xpos[j] - 2, "| O |");
+		(void)mvaddstr(ypos[j] + 1, xpos[j] - 1, "\\ /");
+		(void)mvaddch(ypos[j] + 2, xpos[j], '-');
 		if (!j--)
 			j = 4;
-		mvaddch(ypos[j] - 2, xpos[j], ' ');
-		mvaddstr(ypos[j] - 1, xpos[j] - 1, "   ");
-		mvaddstr(ypos[j], xpos[j] - 2, "     ");
-		mvaddstr(ypos[j] + 1, xpos[j] - 1, "   ");
-		mvaddch(ypos[j] + 2, xpos[j], ' ');
+		(void)mvaddch(ypos[j] - 2, xpos[j], ' ');
+		(void)mvaddstr(ypos[j] - 1, xpos[j] - 1, "   ");
+		(void)mvaddstr(ypos[j], xpos[j] - 2, "     ");
+		(void)mvaddstr(ypos[j] + 1, xpos[j] - 1, "   ");
+		(void)mvaddch(ypos[j] + 2, xpos[j], ' ');
 		xpos[j] = x;
 		ypos[j] = y;
-		refresh();
-		if (delay) usleep(delay);
+		(void)refresh();
+		if (delay) (void)usleep(delay);
 	}
 }
 
-void
-onsig(dummy)
-	int dummy __attribute__((__unused__));
+/* ARGSUSED */
+static void
+onsig(int dummy __unused)
 {
 	sig_caught = 1;
 }

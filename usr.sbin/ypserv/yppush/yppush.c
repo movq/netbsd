@@ -1,4 +1,4 @@
-/*	$NetBSD: yppush.c,v 1.11 1999/07/25 09:36:02 lukem Exp $	*/
+/*	$NetBSD: yppush.c,v 1.21 2008/02/29 03:00:47 lukem Exp $	*/
 
 /*
  *
@@ -45,10 +45,11 @@
 #include <ctype.h>
 #include <err.h>
 #include <errno.h>
-#include <fcntl.h>
 #include <signal.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <syslog.h>
 #include <unistd.h>
 
 #include <rpc/rpc.h>
@@ -85,18 +86,17 @@ struct yppush_info {
  * global vars
  */
 
-extern char *__progname;	/* from crt0.o */
 int     verbo = 0;		/* verbose */
 
 /*
  * prototypes
  */
 
-int	main __P((int, char *[]));
-int	pushit __P((int, char *, int, char *, int, char *));
-void	push __P((char *, int, struct yppush_info *));
-void	_svc_run __P((void));
-void	usage __P((void));
+int	main(int, char *[]);
+int	pushit(int, char *, int, char *, int, char *);
+void	push(char *, int, struct yppush_info *);
+void	_svc_run(void);
+void	usage(void);
 
 
 /*
@@ -104,9 +104,7 @@ void	usage __P((void));
  */
 
 int
-main(argc, argv)
-	int     argc;
-	char   *argv[];
+main(int argc, char *argv[])
 
 {
 	char   *targhost = NULL;
@@ -144,6 +142,7 @@ main(argc, argv)
 	argv += optind;
 	if (argc != 1)
 		usage();
+	openlog("yppush", LOG_PID, LOG_DAEMON);
 	ypi.map = argv[0];
 	if (strlen(ypi.map) > YPMAXMAP)
 		errx(1, "%s: map name too long (limit %d)", ypi.map, YPMAXMAP);
@@ -175,7 +174,7 @@ main(argc, argv)
          * now open the database so we can extract "order number"
          * (i.e. timestamp) of the map.
          */
-	ypdb = ypdb_open(ypi.map, 0, O_RDONLY);
+	ypdb = ypdb_open(ypi.map);
 	if (ypdb == NULL)
 		err(1, "ypdb_open %s/%s/%s", YP_DB_PATH, ypi.ourdomain,
 		    ypi.map);
@@ -189,7 +188,7 @@ main(argc, argv)
 	ypi.order = 0;
 	cp = datum.dptr;
 	while (cp < datum.dptr + datum.dsize) {
-		if (!isdigit(*cp))
+		if (!isdigit((unsigned char)*cp))
 			errx(1,
 		    "invalid order number: check database with 'makedbm -u'");
 		ypi.order = (ypi.order * 10) + *cp - '0';
@@ -283,10 +282,10 @@ main(argc, argv)
  * usage: print usage and exit
  */
 void
-usage()
+usage(void)
 {
 	fprintf(stderr, "usage: %s [-d domain] [-h host] [-v] map\n",
-	    __progname);
+	    getprogname());
 	exit(1);
 }
 
@@ -295,14 +294,10 @@ usage()
  * the key/value pairs are from the ypservers map.
  */
 int
-pushit(instatus, inkey, inkeylen, inval, invallen, indata)
-	int     instatus, inkeylen, invallen;
-	char   *inkey, *inval, *indata;
+pushit(int instatus, char *inkey, int inkeylen, char *inval,
+       int invallen, char *indata)
 {
 	struct yppush_info *ypi = (struct yppush_info *) indata;
-
-	if (instatus != YP_TRUE)		/* failure? */
-		return (instatus);
 
 	push(inkey, inkeylen, ypi);		/* do it! */
 	return (0);
@@ -312,10 +307,7 @@ pushit(instatus, inkey, inkeylen, inval, invallen, indata)
  * push: push a specific map on a specific host
  */
 void
-push(host, hostlen, ypi)
-	char   *host;
-	int     hostlen;
-	struct yppush_info *ypi;
+push(char *host, int hostlen, struct yppush_info *ypi)
 {
 	char    target[YPMAXPEER];
 	CLIENT *ypserv;
@@ -389,7 +381,7 @@ push(host, hostlen, ypi)
          * instead, the owner of the map is determined by the master value
          * currently cached on the slave server.
          */
-	close(transp->xp_sock);	/* close child's socket, we don't need it */
+	close(transp->xp_fd);	/* close child's socket, we don't need it */
 	/* don't wait for anything here, we will wait for child's exit */
 	tv.tv_sec = 0;
 	tv.tv_usec = 0;
@@ -435,7 +427,7 @@ error:
  * to await the reply from ypxfr.
  */
 void
-_svc_run()
+_svc_run(void)
 {
 	fd_set  readfds;
 	struct timeval tv;

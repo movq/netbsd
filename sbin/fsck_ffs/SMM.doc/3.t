@@ -1,4 +1,4 @@
-.\"	$NetBSD: 3.t,v 1.4 1996/10/11 20:15:49 thorpej Exp $
+.\"	$NetBSD: 3.t,v 1.6 2003/08/07 10:04:22 agc Exp $
 .\"
 .\" Copyright (c) 1982, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -353,7 +349,7 @@ When found,
 .I fsck
 will prompt the user to adjust the length of the offending directory
 which is done by shortening the size of the directory to the end of the
-last allocated block preceeding the hole.
+last allocated block preceding the hole.
 Unfortunately, this means that another Phase 1 run has to be done. 
 .I Fsck
 will remind the user to rerun fsck after repairing a

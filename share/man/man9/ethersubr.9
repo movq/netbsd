@@ -1,4 +1,4 @@
-.\"	$NetBSD: ethersubr.9,v 1.10 1999/03/16 00:40:47 garbled Exp $
+.\"	$NetBSD: ethersubr.9,v 1.18 2008/04/30 13:10:58 martin Exp $
 .\"
 .\" Copyright (c) 1997 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -50,31 +43,31 @@
 .Nm fddi_delmulti
 .Nd Ethernet and FDDI driver support functions and macros
 .Sh SYNOPSIS
-.Fd #include <net/if_ether.h>
+.In net/if_ether.h
 .Ft void
-.Fn ether_ifattach "struct ifnet *ifp" "u_int8_t *lla"
+.Fn ether_ifattach "struct ifnet *ifp" "uint8_t *lla"
 .Ft int
-.Fn ether_addmulti "struct ifrequest *ifr" "struct ethercom *ec"
+.Fn ether_addmulti "const struct sockaddr *sa" "struct ethercom *ec"
 .Ft int
-.Fn ether_delmulti "struct ifrequest *ifr" "struct ethercom *ec"
+.Fn ether_delmulti "const struct sockaddr *sa" "struct ethercom *ec"
 .Ft void
-.Fn ETHER_FIRST_MULTI "struct ether_multistep step" "struct ethercom *ec" "struct ether_multi *enm" 
+.Fn ETHER_FIRST_MULTI "struct ether_multistep step" "struct ethercom *ec" "struct ether_multi *enm"
 .Ft void
-.Fn ETHER_NEXT_MULTI  "struct ether_multistep step" "struct ether_multi *enm" 
+.Fn ETHER_NEXT_MULTI  "struct ether_multistep step" "struct ether_multi *enm"
 .Ft int
-.Fn ETHER_IS_MULTICAST "u_int8_t *addr"
-.Fd #include <net/if_fddi.h>
+.Fn ETHER_IS_MULTICAST "uint8_t *addr"
+.In net/if_fddi.h
 .Ft void
-.Fn fddi_ifattach "struct ifnet *ifp" "u_int8_t *lla"
+.Fn fddi_ifattach "struct ifnet *ifp" "uint8_t *lla"
 .Ft int
-.Fn fddi_addmulti "struct ifrequest *ifr" "struct ethercom *ec"
+.Fn fddi_addmulti "const struct sockaddr *sa" "struct ethercom *ec"
 .Ft int
-.Fn fddi_delmulti "struct ifrequest *ifr" "struct ethercom *ec"
+.Fn fddi_delmulti "const struct sockaddr *sa" "struct ethercom *ec"
 .Sh DESCRIPTION
 The
-.Nm 
+.Nm
 functions provide the interface between the
-.Nm 
+.Nm
 module and the network drivers which need Ethernet support.
 Such drivers must request the
 .Ar ether
@@ -92,8 +85,8 @@ Note that you also need the
 stuff to support IPv4 on your hardware.
 .Bl -tag -width compact
 .It Fn ether_ifattach
-Perform the device-independent, but Ethernet-specific initialization of 
-the interface pointed to by 
+Perform the device-independent, but Ethernet-specific initialization of
+the interface pointed to by
 .Fa ifp .
 .Pp
 Among other duties, this function creates a record for the link level
@@ -112,7 +105,7 @@ Add
 or delete
 .Pq Fn ether_delmulti
 the address described by the
-.Fa ifr
+.Fa sa
 pointer to the Ethernet multicast list belonging to
 .Fa ec .
 .Pp
@@ -157,20 +150,21 @@ can't be found in the list of multicast addresses.
 corresponding functions for FDDI devices.
 .It Fn ETHER_NEXT_MULTI
 is a macro to step through all of the ether_multi records, one at a time.
-The current position is remembered in 
-.Fa step , 
-which the caller must provide. 
+The current position is remembered in
+.Fa step ,
+which the caller must provide.
 .It Fn ETHER_FIRST_MULTI
-must be called to initialize 
+must be called to initialize
 .Fa step
-and get the first record.  Both macros return a
-.Dv NULL 
+and get the first record.
+Both macros return a
+.Dv NULL
 .Fa enm
 when there are no remaining records.
 .It Fn ETHER_IS_MULTICAST
-returns 1, if 
+returns 1, if
 .Fa addr
-points to an Ethernet/FDDI multicast (or broadcast) address. 
+points to an Ethernet/FDDI multicast (or broadcast) address.
 Implemented as a macro.
 .El
 .Sh SEE ALSO

@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_machdep.c,v 1.11 1999/03/23 05:54:11 gwr Exp $	*/
+/*	$NetBSD: sys_machdep.c,v 1.21 2007/12/20 23:02:43 dsl Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,6 +31,9 @@
  *	@(#)sys_machdep.c	8.2 (Berkeley) 1/13/94
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: sys_machdep.c,v 1.21 2007/12/20 23:02:43 dsl Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/ioctl.h>
@@ -44,73 +43,13 @@
 #include <sys/uio.h>
 #include <sys/kernel.h>
 #include <sys/buf.h>
-#include <sys/trace.h>
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
 
-#include <vm/vm.h>
+#include <uvm/uvm_extern.h>
 
 #include <machine/cpu.h>
-#include <sun3/sun3/machdep.h>
-
-#ifdef TRACE
-int	nvualarm;
-
-sys_vtrace(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
-{
-	register struct sys_vtrace_args /* {
-		syscallarg(int) request;
-		syscallarg(int) value;
-	} */ *uap = v;
-	int vdoualarm();
-
-	switch (SCARG(uap, request)) {
-
-	case VTR_DISABLE:		/* disable a trace point */
-	case VTR_ENABLE:		/* enable a trace point */
-		if (SCARG(uap, value) < 0 || SCARG(uap, value) >= TR_NFLAGS)
-			return (EINVAL);
-		*retval = traceflags[SCARG(uap, value)];
-		traceflags[SCARG(uap, value)] = SCARG(uap, request);
-		break;
-
-	case VTR_VALUE:		/* return a trace point setting */
-		if (SCARG(uap, value) < 0 || SCARG(uap, value) >= TR_NFLAGS)
-			return (EINVAL);
-		*retval = traceflags[SCARG(uap, value)];
-		break;
-
-	case VTR_UALARM:	/* set a real-time ualarm, less than 1 min */
-		if (SCARG(uap, value) <= 0 || SCARG(uap, value) > 60 * hz ||
-		    nvualarm > 5)
-			return (EINVAL);
-		nvualarm++;
-		timeout(vdoualarm, (void *)p->p_pid, SCARG(uap, value));
-		break;
-
-	case VTR_STAMP:
-		trace(TR_STAMP, SCARG(uap, value), p->p_pid);
-		break;
-	}
-	return (0);
-}
-
-vdoualarm(arg)
-	void *arg;
-{
-	register int pid = (int)arg;
-	register struct proc *p;
-
-	p = pfind(pid);
-	if (p)
-		psignal(p, 16);
-	nvualarm--;
-}
-#endif
-
+#include <m68k/cacheops.h>
 
 /* XXX should be in an include file somewhere */
 #define CC_PURGE	1
@@ -120,12 +59,8 @@ vdoualarm(arg)
 /* XXX end should be */
 
 /*ARGSUSED1*/
-int
-cachectl1(req, addr, len, p)
-	unsigned long req;
-	vaddr_t	addr;
-	size_t len;
-	struct proc *p;
+int 
+cachectl1(unsigned long req, vaddr_t addr, size_t len, struct proc *p)
 {
 	int error = 0;
 
@@ -151,16 +86,13 @@ cachectl1(req, addr, len, p)
 	return(error);
 }
 
-int
-sys_sysarch(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+int 
+sys_sysarch(struct lwp *l, const struct sys_sysarch_args *uap, register_t *retval)
 {
-	struct sys_sysarch_args /* {
+	/* {
 		syscallarg(int) op;
 		syscallarg(void *) parms;
-	} */ *uap = v;
+	} */
 
 	(void)uap->op;	/* kill warning */
 	return (ENOSYS);

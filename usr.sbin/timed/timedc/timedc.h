@@ -1,4 +1,4 @@
-/*	$NetBSD: timedc.h,v 1.6 2000/01/21 17:08:39 mycroft Exp $	*/
+/*	$NetBSD: timedc.h,v 1.12 2007/01/27 17:57:45 cbiere Exp $	*/
 
 /*-
  * Copyright (c) 1985, 1993 The Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -37,10 +33,9 @@
 
 #include <sys/param.h>
 #include <sys/time.h>
-#ifdef sgi
-#include <sys/uio.h>
-#endif
 #include <sys/socket.h>
+#include <sys/poll.h>
+
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
@@ -56,11 +51,10 @@
 #define NONSTDTIME	3
 #define HOSTDOWN 	0x7fffffff
 
-struct	cmd {
-	char	*c_name;		/* command name */
-	char	*c_help;		/* help message */
-	void	(*c_handler) __P((int, char **)); /* routine to do the work */
-	int	c_priv;			/* privileged command */
+struct cmd {
+	const char *c_name;		/* command name */
+	const char *c_help;		/* help message */
+	void	(*c_handler)(int, char **); /* routine to do the work */
 };
 
 #include "timedc-extern.h"

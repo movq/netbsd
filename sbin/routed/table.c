@@ -1,4 +1,4 @@
-/*	$NetBSD: table.c,v 1.13 2000/03/02 21:01:34 christos Exp $	*/
+/*	$NetBSD: table.c,v 1.22 2004/07/06 23:36:24 mycroft Exp $	*/
 
 /*
  * Copyright (c) 1983, 1988, 1993
@@ -33,23 +33,24 @@
  * SUCH DAMAGE.
  */
 
-#if !defined(lint) && !defined(sgi) && !defined(__NetBSD__)
-static char sccsid[] __attribute__((unused)) = "@(#)tables.c	8.1 (Berkeley) 6/5/93";
-#elif defined(__NetBSD__)
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: table.c,v 1.13 2000/03/02 21:01:34 christos Exp $");
-#endif
-
 #include "defs.h"
+
+#ifdef __NetBSD__
+__RCSID("$NetBSD: table.c,v 1.22 2004/07/06 23:36:24 mycroft Exp $");
+#elif defined(__FreeBSD__)
+__RCSID("$FreeBSD$");
+#else
+__RCSID("Revision: 2.27 ");
+#ident "Revision: 2.27 "
+#endif
 
 static struct rt_spare *rts_better(struct rt_entry *);
 static struct rt_spare rts_empty = {0,0,0,HOPCNT_INFINITY,0,0,0};
-
-static void	set_need_flash(void);
+static void  set_need_flash(void);
 #ifdef _HAVE_SIN_LEN
-static void	masktrim(struct sockaddr_in *ap);
+static void masktrim(struct sockaddr_in *ap);
 #else
-static void	masktrim(struct sockaddr_in_new *ap);
+static void masktrim(struct sockaddr_in_new *ap);
 #endif
 
 
@@ -61,7 +62,7 @@ int	need_flash = 1;			/* flash update needed
 
 struct timeval age_timer;		/* next check of old routes */
 struct timeval need_kern = {		/* need to update kernel table */
-	EPOCH+MIN_WAITTIME-1
+	EPOCH+MIN_WAITTIME-1, 0
 };
 
 int	stopint;
@@ -254,8 +255,6 @@ ag_flush(naddr lim_dst_h,		/* flush routes to here */
 				 * then mark the suppressor redundant.
 				 */
 				if (ag_cors->ag_pref <= ag->ag_pref) {
-				    if (ag_cors->ag_seqno > ag->ag_seqno)
-					ag_cors->ag_seqno = ag->ag_seqno;
 				    if (AG_IS_REDUN(ag->ag_state)
 					&& ag_cors->ag_mask==ag->ag_mask<<1) {
 					if (ag_cors->ag_dst_h == dst_h)
@@ -290,7 +289,7 @@ ag_check(naddr	dst,
 	 naddr	nhop,
 	 char	metric,
 	 char	pref,
-	 u_int	seqno,
+	 u_int	new_seqno,
 	 u_short tag,
 	 u_short state,
 	 void (*out)(struct ag_info *))	/* output using this */
@@ -317,7 +316,7 @@ ag_check(naddr	dst,
 		nc_ag.ag_pref = pref;
 		nc_ag.ag_tag = tag;
 		nc_ag.ag_state = state;
-		nc_ag.ag_seqno = seqno;
+		nc_ag.ag_seqno = new_seqno;
 		out(&nc_ag);
 		return;
 	}
@@ -347,8 +346,6 @@ ag_check(naddr	dst,
 		    && (ag_cors->ag_gate == ag->ag_gate
 			|| (ag->ag_state & AGS_FINE_GATE)
 			|| (ag_cors->ag_state & AGS_CORS_GATE))) {
-			if (ag_cors->ag_seqno > ag->ag_seqno)
-				ag_cors->ag_seqno = ag->ag_seqno;
 			/*  If the suppressed target was redundant,
 			 * then mark the suppressor redundant.
 			 */
@@ -407,16 +404,12 @@ ag_check(naddr	dst,
 				ag->ag_tag = tag;
 				ag->ag_metric = metric;
 				ag->ag_pref = pref;
+				if (ag->ag_seqno < new_seqno)
+					ag->ag_seqno = new_seqno;
 				x = ag->ag_state;
 				ag->ag_state = state;
 				state = x;
 			}
-
-			/* The sequence number controls flash updating,
-			 * and should be the smaller of the two.
-			 */
-			if (ag->ag_seqno > seqno)
-				ag->ag_seqno = seqno;
 
 			/* Some bits are set if they are set on either route,
 			 * except when the route is for an interface.
@@ -457,8 +450,8 @@ ag_check(naddr	dst,
 			 *
 			 * Combine and promote (aggregate) the pair of routes.
 			 */
-			if (seqno > ag->ag_seqno)
-				seqno = ag->ag_seqno;
+			if (new_seqno < ag->ag_seqno)
+				new_seqno = ag->ag_seqno;
 			if (!AG_IS_REDUN(state))
 				state &= ~AGS_REDUN1;
 			if (AG_IS_REDUN(ag->ag_state))
@@ -519,10 +512,10 @@ ag_check(naddr	dst,
 			pref = x;
 
 			/* take the newest sequence number */
-			if (seqno >= ag->ag_seqno)
-				seqno = ag->ag_seqno;
+			if (new_seqno <= ag->ag_seqno)
+				new_seqno = ag->ag_seqno;
 			else
-				ag->ag_seqno = seqno;
+				ag->ag_seqno = new_seqno;
 
 		} else {
 			if (!(state & AGS_AGGREGATE))
@@ -538,10 +531,10 @@ ag_check(naddr	dst,
 			if (!AG_IS_REDUN(state))
 				state &= ~AGS_REDUN1;
 			state &= ~AGS_REDUN0;
-			if (seqno > ag->ag_seqno)
-				seqno = ag->ag_seqno;
+			if (new_seqno < ag->ag_seqno)
+				new_seqno = ag->ag_seqno;
 			else
-				ag->ag_seqno = seqno;
+				ag->ag_seqno = new_seqno;
 		}
 
 		mask <<= 1;
@@ -602,7 +595,7 @@ ag_check(naddr	dst,
 	nag->ag_pref = pref;
 	nag->ag_tag = tag;
 	nag->ag_state = state;
-	nag->ag_seqno = seqno;
+	nag->ag_seqno = new_seqno;
 
 	nag->ag_fine = ag;
 	if (ag != 0)
@@ -638,18 +631,22 @@ rtm_type_name(u_char type)
 #ifdef RTM_OIFINFO
 		"RTM_OIFINFO",
 #endif
-		"RTM_IFINFO"
+		"RTM_IFINFO",
+		"RTM_NEWMADDR",
+		"RTM_DELMADDR"
 	};
-	static char name0[10];
+#define NEW_RTM_PAT "RTM type %#x"
+	static char name0[sizeof(NEW_RTM_PAT)+2];
 
 
 	if (type > sizeof(rtm_types)/sizeof(rtm_types[0])
 	    || type == 0) {
-		sprintf(name0, "RTM type %#x", type);
+		snprintf(name0, sizeof(name0), NEW_RTM_PAT, type);
 		return name0;
 	} else {
 		return rtm_types[type-1];
 	}
+#undef NEW_RTM_PAT
 }
 
 
@@ -1012,10 +1009,10 @@ rtm_lose(struct rt_msghdr *rtm,
  * then fill in the sockaddr_in provided and point it there.
  */
 static int
-get_info_gate(struct sockaddr **sap,
-	      struct sockaddr_in *sin)
+get_info_gate(const struct sockaddr **sap,
+	      struct sockaddr_in *rsin)
 {
-	struct sockaddr_dl *sdl = (struct sockaddr_dl *)*sap;
+	const struct sockaddr_dl *sdl = (const struct sockaddr_dl *)*sap;
 	struct interface *ifp;
 
 	if (sdl == 0)
@@ -1029,12 +1026,12 @@ get_info_gate(struct sockaddr **sap,
 	if (ifp == 0)
 		return 0;
 
-	sin->sin_addr.s_addr = ifp->int_addr;
+	rsin->sin_addr.s_addr = ifp->int_addr;
 #ifdef _HAVE_SA_LEN
-	sin->sin_len = sizeof(*sin);
+	rsin->sin_len = sizeof(*rsin);
 #endif
-	sin->sin_family = AF_INET;
-	*sap = (struct sockaddr*)sin;
+	rsin->sin_family = AF_INET;
+	*sap = (const struct sockaddr*)rsin;
 
 	return 1;
 }
@@ -1114,6 +1111,13 @@ flush_kern(void)
 		 */
 		if (rtm->rtm_flags & RTF_LLINFO)
 			continue;
+
+#if defined(RTF_CLONED) && defined(__bsdi__)
+		/* ignore cloned routes
+		 */
+		if (rtm->rtm_flags & RTF_CLONED)
+			continue;
+#endif
 
 		/* ignore multicast addresses
 		 */
@@ -1223,15 +1227,17 @@ read_rt(void)
 			continue;
 		}
 #ifdef RTM_OIFINFO
-		if (m.r.rtm.rtm_type == RTM_OIFINFO) {
-			continue; /* ignore compat message */
-		}
+		if (m.r.rtm.rtm_type == RTM_OIFINFO)
+			continue;	/* ignore compat message */
 #endif
 
-		strcpy(str, rtm_type_name(m.r.rtm.rtm_type));
+		strlcpy(str, rtm_type_name(m.r.rtm.rtm_type), sizeof(str));
 		strp = &str[strlen(str)];
-		if (m.r.rtm.rtm_type <= RTM_CHANGE)
-			strp += sprintf(strp," from pid %d",m.r.rtm.rtm_pid);
+		if (m.r.rtm.rtm_type <= RTM_CHANGE) {
+			snprintf(strp, str + sizeof(str) - strp,
+			    " from pid %d",m.r.rtm.rtm_pid);
+			strp += strlen(strp);
+		}
 
 		rt_xaddrs(&info, m.r.addrs, &m.r.addrs[RTAX_MAX],
 			  m.r.rtm.rtm_addrs);
@@ -1253,29 +1259,41 @@ read_rt(void)
 			? HOST_MASK
 			: std_mask(S_ADDR(INFO_DST(&info))));
 
-		strp += sprintf(strp, ": %s",
-				addrname(S_ADDR(INFO_DST(&info)), mask, 0));
+		snprintf(strp, str + sizeof(str) - strp, ": %s",
+		    addrname(S_ADDR(INFO_DST(&info)), mask, 0));
+		strp += strlen(strp);
 
 		if (IN_MULTICAST(ntohl(S_ADDR(INFO_DST(&info))))) {
 			trace_act("ignore multicast %s", str);
 			continue;
 		}
-		
+
 		if (m.r.rtm.rtm_flags & RTF_LLINFO) {
 			trace_act("ignore ARP %s", str);
 			continue;
 		}
 
+#if defined(RTF_CLONED) && defined(__bsdi__)
+		if (m.r.rtm.rtm_flags & RTF_CLONED) {
+			trace_act("ignore cloned %s", str);
+			continue;
+		}
+#endif
+
 		if (get_info_gate(&INFO_GATE(&info), &gate_sin)) {
 			gate = S_ADDR(INFO_GATE(&info));
-			strp += sprintf(strp, " --> %s", naddr_ntoa(gate));
+			snprintf(strp, str + sizeof(str) - strp,
+			    " --> %s", naddr_ntoa(gate));
+			strp += strlen(strp);
 		} else {
 			gate = 0;
 		}
 
 		if (INFO_AUTHOR(&info) != 0)
-			strp += sprintf(strp, " by authority of %s",
-					saddr_ntoa(INFO_AUTHOR(&info)));
+			snprintf(strp, str + sizeof(str) - strp,
+			    " by authority of %s",
+			    saddr_ntoa(INFO_AUTHOR(&info)));
+			strp += strlen(strp);
 
 		switch (m.r.rtm.rtm_type) {
 		case RTM_ADD:
@@ -1621,7 +1639,7 @@ rtinit(void)
 	/* Initialize the radix trees */
 	max_keylen = sizeof(struct sockaddr_in);
 	rn_init();
-	rn_inithead((void**)&rhead, 32);
+	rn_inithead((void*)&rhead, 32);
 
 	/* mark all of the slots in the table free */
 	ag_avail = ag_slots;
@@ -1633,8 +1651,8 @@ rtinit(void)
 
 
 #ifdef _HAVE_SIN_LEN
-static struct sockaddr_in dst_sock = {sizeof(dst_sock), AF_INET};
-static struct sockaddr_in mask_sock = {sizeof(mask_sock), AF_INET};
+static struct sockaddr_in dst_sock = {sizeof(dst_sock), AF_INET, 0, {0}, {0}};
+static struct sockaddr_in mask_sock = {sizeof(mask_sock), AF_INET, 0, {0}, {0}};
 #else
 static struct sockaddr_in_new dst_sock = {_SIN_ADDR_SIZE, AF_INET};
 static struct sockaddr_in_new mask_sock = {_SIN_ADDR_SIZE, AF_INET};
@@ -1722,8 +1740,6 @@ rtadd(naddr	dst,
 	rt->rt_poison_metric = HOPCNT_INFINITY;
 	rt->rt_seqno = update_seqno;
 
-	if (++total_routes == MAX_ROUTES)
-		msglog("have maximum (%d) routes", total_routes);
 	if (TRACEACTIONS)
 		trace_add_del("Add", rt);
 
@@ -1735,6 +1751,9 @@ rtadd(naddr	dst,
 		msglog("rnh_addaddr() failed for %s mask=%#lx",
 		       naddr_ntoa(dst), (u_long)mask);
 		free(rt);
+	} else {
+		if (++total_routes == MAX_ROUTES)
+			msglog("have maximum (%d) routes", total_routes);
 	}
 }
 
@@ -1809,8 +1828,7 @@ rtswitch(struct rt_entry *rt,
 	 struct rt_spare *rts)
 {
 	struct rt_spare swap;
-	char label[10];
-
+	char label[20];
 
 	/* Do not change permanent routes */
 	if (0 != (rt->rt_state & (RS_MHOME | RS_STATIC | RS_RDISC
@@ -1827,7 +1845,8 @@ rtswitch(struct rt_entry *rt,
 		return;
 
 	swap = rt->rt_spares[0];
-	(void)sprintf(label, "Use #%d", (int)(rts - rt->rt_spares));
+	(void)snprintf(label, sizeof(label), "Use #%d",
+	    (int)(rts - rt->rt_spares));
 	rtchange(rt, rt->rt_state & ~(RS_NET_SYN | RS_RDISC), rts, label);
 	if (swap.rts_metric == HOPCNT_INFINITY) {
 		*rts = rts_empty;

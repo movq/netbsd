@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.14 1999/07/16 01:38:20 hubertf Exp $	*/
+/*	$NetBSD: main.c,v 1.20 2008/07/20 01:03:20 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -17,11 +17,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -40,15 +36,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1991, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1991, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)main.c	8.1 (Berkeley) 6/2/93";
 #else
-__RCSID("$NetBSD: main.c,v 1.14 1999/07/16 01:38:20 hubertf Exp $");
+__RCSID("$NetBSD: main.c,v 1.20 2008/07/20 01:03:20 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -58,23 +54,20 @@ __RCSID("$NetBSD: main.c,v 1.14 1999/07/16 01:38:20 hubertf Exp $");
 #include <err.h>
 #include <signal.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include "hdr.h"
 #include "extern.h"
 
-int main __P((int, char **));
-
 int
-main(argc, argv)
-	int     argc;
-	char  **argv;
+main(int argc, char **argv)
 {
 	int     i;
 	int     rval, ll;
 	struct text *kk;
 
 	/* revoke setgid privileges from dm */
-	setregid(getgid(), getgid());
+	setgid(getgid());
 
 	init();		/* Initialize everything */
 	signal(SIGINT, trapdel);
@@ -414,7 +407,8 @@ l4080:
 			if (place[eggs] == plac[eggs]
 			    || (toting(eggs) && loc == plac[eggs]))
 				goto l2011;
-			if (place[eggs] == 0 && place[troll] == 0 && prop[troll] == 0)
+			if (place[eggs] == 0 && place[troll] == 0 && 
+			    prop[troll] == 0)
 				prop[troll] = 1;
 			k = 2;
 			if (here(eggs))
@@ -598,14 +592,14 @@ l4090:
 		case 14:	/* 9140 - eat */
 			if (obj == food)
 				goto l8142;
-			if (obj == bird || obj == snake || obj == clam || obj == oyster
-			    || obj == dwarf || obj == dragon || obj == troll
-			    || obj == bear)
+			if (obj == bird || obj == snake || obj == clam
+			    || obj == oyster || obj == dwarf || obj == dragon 
+			    || obj == troll || obj == bear)
 				spk = 71;
 			goto l2011;
 		l9150: case 15:/* 9150 - drink */
 			if (obj == 0 && liqloc(loc) != water && (liq() != water
-				|| !here(bottle)))
+			    || !here(bottle)))
 				goto l8000;
 			if (obj != 0 && obj != water)
 				spk = 110;
@@ -640,7 +634,8 @@ l4090:
 			    || k == liqloc(loc))
 				spk = 94;
 			for (i = 1; i <= 5; i++)
-				if (dloc[i] == loc && dflag >= 2 && obj == dwarf)
+				if (dloc[i] == loc && dflag >= 2 
+				    && obj == dwarf)
 					spk = 94;
 			if (closed)
 				spk = 138;

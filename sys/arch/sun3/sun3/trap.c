@@ -1,11 +1,45 @@
-/*	$NetBSD: trap.c,v 1.87 1999/12/05 11:56:36 ragge Exp $	*/
+/*	$NetBSD: trap.c,v 1.135.4.1 2009/02/02 00:48:56 snj Exp $	*/
+
+/*
+ * Copyright (c) 1982, 1986, 1990, 1993
+ *	The Regents of the University of California.  All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Systems Programming Group of the University of Utah Computer
+ * Science Department.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ *	from: Utah Hdr: trap.c 1.37 92/12/20
+ *	from: @(#)trap.c	8.5 (Berkeley) 1/4/94
+ */
 
 /*
  * Copyright (c) 1994 Gordon W. Ross
  * Copyright (c) 1993 Adam Glass
  * Copyright (c) 1988 University of Utah.
- * Copyright (c) 1982, 1986, 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * the Systems Programming Group of the University of Utah Computer
@@ -43,12 +77,15 @@
  *	from: @(#)trap.c	8.5 (Berkeley) 1/4/94
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.135.4.1 2009/02/02 00:48:56 snj Exp $");
+
 #include "opt_ddb.h"
 #include "opt_execfmt.h"
-#include "opt_ktrace.h"
-#include "opt_compat_netbsd.h"
+#include "opt_fpu_emulate.h"
+#include "opt_kgdb.h"
+#include "opt_compat_aout_m68k.h"
 #include "opt_compat_sunos.h"
-#include "opt_compat_linux.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -57,46 +94,41 @@
 #include <sys/kernel.h>
 #include <sys/signalvar.h>
 #include <sys/resourcevar.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/syscall.h>
 #include <sys/syslog.h>
 #include <sys/user.h>
-#ifdef KTRACE
-#include <sys/ktrace.h>
-#endif
+#include <sys/userret.h>
+#include <sys/kauth.h>
 #ifdef	KGDB
 #include <sys/kgdb.h>
 #endif
 
-#include <vm/vm.h>
-#include <vm/pmap.h>
-
 #include <uvm/uvm_extern.h>
 
 #include <machine/cpu.h>
-#include <machine/db_machdep.h>
 #include <machine/endian.h>
 #include <machine/psl.h>
 #include <machine/trap.h>
 #include <machine/reg.h>
+#include <m68k/cacheops.h>
 
 #include <sun3/sun3/fc.h>
 #include <sun3/sun3/machdep.h>
 
-/* XXX - Later, get this from <m68k/m68k.h> */
-void	regdump __P((struct trapframe *, int));
+#ifdef DDB
+#include <machine/db_machdep.h>
+#include <ddb/db_extern.h>
+#endif
 
 #ifdef COMPAT_SUNOS
 #include <compat/sunos/sunos_syscall.h>
 extern struct emul emul_sunos;
 #endif
 
-#ifdef COMPAT_LINUX
-#ifdef EXEC_AOUT
-extern struct emul emul_linux_aout;
-#endif
-#ifdef EXEC_ELF32
-extern struct emul emul_linux_elf32;
-#endif
+#ifdef COMPAT_AOUT_M68K
+extern struct emul emul_netbsd_aoutm68k;
 #endif
 
 /*
@@ -105,25 +137,23 @@ extern struct emul emul_linux_elf32;
  */
 #ifdef	_SUN3X_
 # define _pmap_fault(map, va, ftype) \
-	uvm_fault(map, va, 0, ftype)
+	uvm_fault(map, va, ftype)
 #endif	/* SUN3X */
 
 /* Special labels in m68k/copy.s */
 extern char fubail[], subail[];
 
 /* These are called from locore.s */
-void syscall __P((register_t code, struct trapframe));
-void trap __P((int type, u_int code, u_int v, struct trapframe));
-void trap_kdebug __P((int type, struct trapframe tf));
-int _nodb_trap __P((int type, struct trapframe *));
-void straytrap __P((struct trapframe));
+void trap(struct trapframe *, int type, u_int code, u_int v);
+void trap_kdebug(int type, struct trapframe tf);
+int _nodb_trap(int type, struct trapframe *);
+void straytrap(struct trapframe);
 
-static void userret __P((struct proc *, struct trapframe *, u_quad_t));
+static void userret(struct lwp *, struct trapframe *, u_quad_t);
 
 int astpending;
-int want_resched;
 
-char	*trap_type[] = {
+const char *trap_type[] = {
 	"Bus error",
 	"Address error",
 	"Illegal instruction",
@@ -164,7 +194,8 @@ short	exframesize[] = {
 };
 
 #define KDFAULT(c)	(((c) & (SSW_DF|SSW_FCMASK)) == (SSW_DF|FC_SUPERD))
-#define WRFAULT(c)	(((c) & (SSW_DF|SSW_RW)) == SSW_DF)
+#define WRFAULT(c)	(((c) & SSW_DF) != 0 && \
+			  ((((c) & SSW_RW) == 0) || (((c) & SSW_RM) != 0)))
 
 /* #define	DEBUG XXX */
 
@@ -182,48 +213,35 @@ int mmupid = -1;
  * trap and syscall both need the following work done before
  * returning to user mode.
  */
-static void
-userret(p, tf, oticks)
-	register struct proc *p;
-	register struct trapframe *tf;
-	u_quad_t oticks;
+static void 
+userret(struct lwp *l, struct trapframe *tf, u_quad_t oticks)
 {
-	int sig, s;
+	struct proc *p = l->l_proc;
 
-	/* take pending signals */
-	while ((sig = CURSIG(p)) != 0)
-		postsig(sig);
-
-	p->p_priority = p->p_usrpri;
-
-	if (want_resched) {
-		/*
-		 * Since we are curproc, clock will normally just change
-		 * our priority without moving us from one queue to another
-		 * (since the running process is not on a queue.)
-		 * If that happened after we put ourselves on the run queue
-		 * but before we mi_switch()'ed, we might not be on the queue
-		 * indicated by our priority.
-		 */
-		s = splstatclock();
-		setrunqueue(p);
-		p->p_stats->p_ru.ru_nivcsw++;
-		mi_switch();
-		splx(s);
-		while ((sig = CURSIG(p)) != 0)
-			postsig(sig);
-	}
+	/* Invoke MI userret code */
+	mi_userret(l);
 
 	/*
 	 * If profiling, charge system time to the trapped pc.
 	 */
-	if (p->p_flag & P_PROFIL) {
+	if (p->p_stflag & PST_PROFIL) {
 		extern int psratio;
-		addupc_task(p, tf->tf_pc,
+		addupc_task(l, tf->tf_pc,
 		            (int)(p->p_sticks - oticks) * psratio);
 	}
+}
 
-	curpriority = p->p_priority;
+/*
+ * Used by the common m68k syscall() and child_return() functions.
+ * XXX: Temporary until all m68k ports share common trap()/userret() code.
+ */
+void machine_userret(struct lwp *, struct frame *, u_quad_t);
+
+void 
+machine_userret(struct lwp *l, struct frame *f, u_quad_t t)
+{
+
+	userret(l, &f->F_t, t);
 }
 
 /*
@@ -232,34 +250,34 @@ userret(p, tf, oticks)
  * System calls are broken out for efficiency.
  */
 /*ARGSUSED*/
-void
-trap(type, code, v, tf)
-	int type;
-	u_int code, v;
-	struct trapframe tf;
+void 
+trap(struct trapframe *tf, int type, u_int code, u_int v)
 {
-	register struct proc *p;
-	register int sig, tmp;
-	u_int ucode;
+	struct lwp *l;
+	struct proc *p;
+	ksiginfo_t ksi;
+	int tmp;
 	u_quad_t sticks;
+	void *onfault;
 
 	uvmexp.traps++;
-	p = curproc;
-	ucode = 0;
-	sig = 0;
+	l = curlwp;
 
-	/* I have verified that this DOES happen! -gwr */
-	if (p == NULL)
-		p = &proc0;
+	KSI_INIT_TRAP(&ksi);
+	ksi.ksi_trap = type & ~T_USER;
+
+	p = l->l_proc;
+
 #ifdef	DIAGNOSTIC
-	if (p->p_addr == NULL)
+	if (l->l_addr == NULL)
 		panic("trap: no pcb");
 #endif
 
-	if (USERMODE(tf.tf_sr)) {
+	if (USERMODE(tf->tf_sr)) {
 		type |= T_USER;
 		sticks = p->p_sticks;
-		p->p_md.md_regs = tf.tf_regs;
+		l->l_md.md_regs = tf->tf_regs;
+		LWP_CACHE_CREDS(l, p);
 	} else {
 		sticks = 0;
 		/* XXX: Detect trap recursion? */
@@ -277,11 +295,11 @@ trap(type, code, v, tf)
 		tmp = splhigh();
 #ifdef KGDB
 		/* If connected, step or cont returns 1 */
-		if (kgdb_trap(type, &tf))
+		if (kgdb_trap(type, tf))
 			goto kgdb_cont;
 #endif
 #ifdef	DDB
-		(void) kdb_trap(type, (db_regs_t *) &tf);
+		(void) kdb_trap(type, (db_regs_t *) tf);
 #endif
 #ifdef KGDB
 	kgdb_cont:
@@ -295,14 +313,14 @@ trap(type, code, v, tf)
 			 */
 			panic("trap during panic!");
 		}
-		regdump(&tf, 128);
+		regdump(tf, 128);
 		type &= ~T_USER;
 		if ((u_int)type < trap_types)
 			panic(trap_type[type]);
 		panic("trap type 0x%x", type);
 
 	case T_BUSERR:		/* kernel bus error */
-		if (p->p_addr->u_pcb.pcb_onfault == NULL)
+		if (l->l_addr->u_pcb.pcb_onfault == NULL)
 			goto dopanic;
 		/*FALLTHROUGH*/
 
@@ -313,15 +331,17 @@ trap(type, code, v, tf)
 		 * indicated location and set flag informing buserror code
 		 * that it may need to clean up stack frame.
 		 */
-		tf.tf_stackadj = exframesize[tf.tf_format];
-		tf.tf_format = tf.tf_vector = 0;
-		tf.tf_pc = (int) p->p_addr->u_pcb.pcb_onfault;
+		tf->tf_stackadj = exframesize[tf->tf_format];
+		tf->tf_format = tf->tf_vector = 0;
+		tf->tf_pc = (int) l->l_addr->u_pcb.pcb_onfault;
 		goto done;
 
 	case T_BUSERR|T_USER:	/* bus error */
 	case T_ADDRERR|T_USER:	/* address error */
-		ucode = v;
-		sig = SIGBUS;
+		ksi.ksi_addr = (void *)v;
+		ksi.ksi_signo = SIGBUS;
+		ksi.ksi_code = (type == (T_BUSERR|T_USER)) ?
+			BUS_OBJERR : BUS_ADRERR;
 		break;
 
 	case T_COPERR:		/* kernel coprocessor violation */
@@ -334,32 +354,33 @@ trap(type, code, v, tf)
 		printf("pid %d: kernel %s exception\n", p->p_pid,
 		       type==T_COPERR ? "coprocessor" : "format");
 		type |= T_USER;
-		p->p_sigacts->ps_sigact[SIGILL].sa_handler = SIG_DFL;
-		sigdelset(&p->p_sigignore, SIGILL);
-		sigdelset(&p->p_sigcatch, SIGILL);
-		sigdelset(&p->p_sigmask, SIGILL);
-		sig = SIGILL;
-		ucode = tf.tf_format;
+
+		mutex_enter(p->p_lock);
+		SIGACTION(p, SIGILL).sa_handler = SIG_DFL;
+		sigdelset(&p->p_sigctx.ps_sigignore, SIGILL);
+		sigdelset(&p->p_sigctx.ps_sigcatch, SIGILL);
+		sigdelset(&l->l_sigmask, SIGILL);
+		mutex_exit(p->p_lock);
+
+		ksi.ksi_signo = SIGILL;
+		ksi.ksi_addr = (void *)(int)tf->tf_format;
+		ksi.ksi_code = (type == T_COPERR) ?
+			ILL_COPROC : ILL_ILLOPC;
 		break;
 
 	case T_COPERR|T_USER:	/* user coprocessor violation */
-		/* What is a proper response here? */
-		ucode = 0;
-		sig = SIGFPE;
+	/* What is a proper response here? */
+		ksi.ksi_signo = SIGFPE;
+		ksi.ksi_code = FPE_FLTINV;
 		break;
 
 	case T_FPERR|T_USER:	/* 68881 exceptions */
 		/*
 		 * We pass along the 68881 status register which locore stashed
-		 * in code for us.  Note that there is a possibility that the
-		 * bit pattern of this register will conflict with one of the
-		 * FPE_* codes defined in signal.h.  Fortunately for us, the
-		 * only such codes we use are all in the range 1-7 and the low
-		 * 3 bits of the status register are defined as 0 so there is
-		 * no clash.
+		 * in code for us.
 		 */
-		ucode = code;
-		sig = SIGFPE;
+		ksi.ksi_signo = SIGFPE;
+		ksi.ksi_code = fpsr2siginfocode(code);
 		break;
 
 	case T_FPEMULI:		/* FPU faults in supervisor mode */
@@ -368,28 +389,32 @@ trap(type, code, v, tf)
 			longjmp(nofault);
 		goto dopanic;
 
-	case T_FPEMULI|T_USER:	/* unimplemented FP instuction */
+	case T_FPEMULI|T_USER:	/* unimplemented FP instruction */
 	case T_FPEMULD|T_USER:	/* unimplemented FP data type */
 #ifdef	FPU_EMULATE
-		sig = fpu_emulate(&tf, &p->p_addr->u_pcb.pcb_fpregs);
-		/* XXX - Deal with tracing? (tf.tf_sr & PSL_T) */
+		if (fpu_emulate(tf, &l->l_addr->u_pcb.pcb_fpregs, &ksi) == 0)
+			; /* XXX - Deal with tracing? (tf->tf_sr & PSL_T) */
 #else
 		uprintf("pid %d killed: no floating point support\n", p->p_pid);
-		sig = SIGILL;
+		ksi.ksi_signo = SIGILL;
+		ksi.ksi_code = ILL_ILLOPC;
 #endif
 		break;
 
 	case T_ILLINST|T_USER:	/* illegal instruction fault */
 	case T_PRIVINST|T_USER:	/* privileged instruction fault */
-		ucode = tf.tf_format;
-		sig = SIGILL;
+		ksi.ksi_addr = (void *)(int)tf->tf_format;
+		ksi.ksi_signo = SIGILL;
+		ksi.ksi_code = (type == (T_PRIVINST|T_USER)) ?
+			ILL_PRVOPC : ILL_ILLOPC;
 		break;
 
 	case T_ZERODIV|T_USER:	/* Divide by zero */
+		ksi.ksi_code = FPE_FLTDIV;
 	case T_CHKINST|T_USER:	/* CHK instruction trap */
 	case T_TRAPVINST|T_USER:	/* TRAPV instruction trap */
-		ucode = tf.tf_format;
-		sig = SIGFPE;
+		ksi.ksi_addr = (void *)(int)tf->tf_format;
+		ksi.ksi_signo = SIGFPE;
 		break;
 
 	/*
@@ -409,7 +434,7 @@ trap(type, code, v, tf)
 	 * XXX: because locore.s now gives them special treatment.
 	 */
 	case T_TRAP15:		/* kernel breakpoint */
-		tf.tf_sr &= ~PSL_T;
+		tf->tf_sr &= ~PSL_T;
 		goto done;
 
 	case T_TRACE|T_USER:	/* user trace trap */
@@ -429,8 +454,8 @@ trap(type, code, v, tf)
 		/* FALLTHROUGH */
 	case T_TRACE:		/* tracing a trap instruction */
 	case T_TRAP15|T_USER:	/* SUN user trace trap */
-		tf.tf_sr &= ~PSL_T;
-		sig = SIGTRAP;
+		tf->tf_sr &= ~PSL_T;
+		ksi.ksi_signo = SIGTRAP;
 		break;
 
 	case T_ASTFLT:		/* system async trap, cannot happen */
@@ -439,10 +464,12 @@ trap(type, code, v, tf)
 	case T_ASTFLT|T_USER:	/* user async trap */
 		astpending = 0;
 		/* T_SSIR is not used on a Sun3. */
-		if (p->p_flag & P_OWEUPC) {
-			p->p_flag &= ~P_OWEUPC;
-			ADDUPROF(p);
+		if (l->l_pflag & LP_OWEUPC) {
+			l->l_pflag &= ~LP_OWEUPC;
+			ADDUPROF(l);
 		}
+		if (curcpu()->ci_want_resched)
+			preempt();
 		goto douret;
 
 	case T_MMUFLT:		/* kernel mode page fault */
@@ -459,8 +486,8 @@ trap(type, code, v, tf)
 		 * If we were doing profiling ticks or other user mode
 		 * stuff from interrupt code, Just Say No.
 		 */
-		if (p->p_addr->u_pcb.pcb_onfault == (caddr_t)fubail ||
-		    p->p_addr->u_pcb.pcb_onfault == (caddr_t)subail)
+		if (l->l_addr->u_pcb.pcb_onfault == (void *)fubail ||
+		    l->l_addr->u_pcb.pcb_onfault == (void *)subail)
 		{
 #ifdef	DEBUG
 			if (mmudebug & MDB_CPFAULT) {
@@ -473,17 +500,17 @@ trap(type, code, v, tf)
 		/*FALLTHROUGH*/
 
 	case T_MMUFLT|T_USER: { 	/* page fault */
-		register vm_offset_t va;
-		register struct vmspace *vm = p->p_vmspace;
-		register vm_map_t map;
+		vaddr_t va;
+		struct vmspace *vm = p->p_vmspace;
+		struct vm_map *map;
 		int rv;
 		vm_prot_t ftype;
-		extern vm_map_t kernel_map;
+		extern struct vm_map *kernel_map;
 
 #ifdef DEBUG
 		if ((mmudebug & MDB_WBFOLLOW) || MDB_ISPID(p->p_pid))
 		printf("trap: T_MMUFLT pid=%d, code=0x%x, v=0x%x, pc=0x%x, sr=0x%x\n",
-		       p->p_pid, code, v, tf.tf_pc, tf.tf_sr);
+		       p->p_pid, code, v, tf->tf_pc, tf->tf_sr);
 #endif
 
 		/*
@@ -497,15 +524,18 @@ trap(type, code, v, tf)
 		map = &vm->vm_map;
 		if ((type & T_USER) == 0) {
 			/* supervisor mode fault */
-			if ((p->p_addr->u_pcb.pcb_onfault == NULL) || KDFAULT(code))
+			if ((l->l_addr->u_pcb.pcb_onfault == NULL) || KDFAULT(code))
 				map = kernel_map;
+		} else if (l->l_flag & LW_SA) {
+			l->l_savp->savp_faultaddr = (vaddr_t)v;
+			l->l_pflag |= LP_SA_PAGEFAULT;
 		}
 
 		if (WRFAULT(code))
-			ftype = VM_PROT_READ | VM_PROT_WRITE;
+			ftype = VM_PROT_WRITE;
 		else
 			ftype = VM_PROT_READ;
-		va = m68k_trunc_page((vm_offset_t)v);
+		va = m68k_trunc_page((vaddr_t)v);
 
 		/*
 		 * Need to resolve the fault.
@@ -517,11 +547,15 @@ trap(type, code, v, tf)
 		 * This function may also, for example, disallow any
 		 * faults in the kernel text segment, etc.
 		 */
+
+		onfault = l->l_addr->u_pcb.pcb_onfault;
+		l->l_addr->u_pcb.pcb_onfault = NULL;
 		rv = _pmap_fault(map, va, ftype);
+		l->l_addr->u_pcb.pcb_onfault = onfault;
 
 #ifdef	DEBUG
 		if (rv && MDB_ISPID(p->p_pid)) {
-			printf("vm_fault(%p, 0x%lx, 0x%x, 0) -> 0x%x\n",
+			printf("vm_fault(%p, 0x%lx, 0x%x) -> 0x%x\n",
 			       map, va, ftype, rv);
 			if (mmudebug & MDB_WBFAILED)
 				Debugger();
@@ -535,22 +569,22 @@ trap(type, code, v, tf)
 		 * the current limit and we need to reflect that as an access
 		 * error.
 		 */
-		if ((map != kernel_map) && ((caddr_t)va >= vm->vm_maxsaddr)) {
-			if (rv == KERN_SUCCESS) {
-				unsigned nss;
+		if (rv == 0) {
+			if (map != kernel_map && (void *)va >= vm->vm_maxsaddr)
+				uvm_grow(p, va);
 
-				nss = btoc((u_int)(USRSTACK-va));
-				if (nss > vm->vm_ssize)
-					vm->vm_ssize = nss;
-			} else if (rv == KERN_PROTECTION_FAILURE)
-				rv = KERN_INVALID_ADDRESS;
-		}
-		if (rv == KERN_SUCCESS)
+			if ((type & T_USER) != 0)
+				l->l_pflag &= ~LP_SA_PAGEFAULT;
 			goto finish;
-
+		}
+		if (rv == EACCES) {
+			ksi.ksi_code = SEGV_ACCERR;
+			rv = EFAULT;
+		} else
+			ksi.ksi_code = SEGV_MAPERR;
 		if ((type & T_USER) == 0) {
 			/* supervisor mode fault */
-			if (p->p_addr->u_pcb.pcb_onfault) {
+			if (l->l_addr->u_pcb.pcb_onfault) {
 #ifdef	DEBUG
 				if (mmudebug & MDB_CPFAULT) {
 					printf("trap: copyfault pcb_onfault\n");
@@ -559,19 +593,20 @@ trap(type, code, v, tf)
 #endif
 				goto copyfault;
 			}
-			printf("vm_fault(%p, 0x%lx, 0x%x, 0) -> 0x%x\n",
+			printf("vm_fault(%p, 0x%lx, 0x%x) -> 0x%x\n",
 			       map, va, ftype, rv);
 			goto dopanic;
 		}
-		ucode = v;
-		if (rv == KERN_RESOURCE_SHORTAGE) {
+		l->l_pflag &= ~LP_SA_PAGEFAULT;
+		ksi.ksi_addr = (void *)v;
+		if (rv == ENOMEM) {
 			printf("UVM: pid %d (%s), uid %d killed: out of swap\n",
 			       p->p_pid, p->p_comm,
-			       p->p_cred && p->p_ucred ?
-			       p->p_ucred->cr_uid : -1);
-			sig = SIGKILL;
+			       l->l_cred ?
+			       kauth_cred_geteuid(l->l_cred) : -1);
+			ksi.ksi_signo = SIGKILL;
 		} else {
-			sig = SIGSEGV;
+			ksi.ksi_signo = SIGSEGV;
 		}
 		break;
 		} /* T_MMUFLT */
@@ -582,237 +617,13 @@ finish:
 	if ((type & T_USER) == 0)
 		goto done;
 	/* Post a signal if necessary. */
-	if (sig != 0)
-		trapsignal(p, sig, ucode);
+	if (ksi.ksi_signo)
+		trapsignal(l, &ksi);
 douret:
-	userret(p, &tf, sticks);
+	userret(l, tf, sticks);
 
 done:;
 	/* XXX: Detect trap recursion? */
-}
-
-/*
- * Process a system call.
- */
-void
-syscall(code, tf)
-	register_t code;
-	struct trapframe tf;
-{
-	register caddr_t params;
-	register struct sysent *callp;
-	register struct proc *p;
-	int error, opc, nsys;
-	size_t argsize;
-	register_t args[8], rval[2];
-	u_quad_t sticks;
-
-	uvmexp.syscalls++;
-	if (!USERMODE(tf.tf_sr))
-		panic("syscall");
-	p = curproc;
-	sticks = p->p_sticks;
-	p->p_md.md_regs = tf.tf_regs;
-	opc = tf.tf_pc;
-
-	nsys = p->p_emul->e_nsysent;
-	callp = p->p_emul->e_sysent;
-
-#ifdef COMPAT_SUNOS
-	if (p->p_emul == &emul_sunos) {
-		/*
-		 * SunOS passes the syscall-number on the stack, whereas
-		 * BSD passes it in D0. So, we have to get the real "code"
-		 * from the stack, and clean up the stack, as SunOS glue
-		 * code assumes the kernel pops the syscall argument the
-		 * glue pushed on the stack. Sigh...
-		 */
-		code = fuword((caddr_t)tf.tf_regs[SP]);
-
-		/*
-		 * XXX
-		 * Don't do this for sunos_sigreturn, as there's no stored pc
-		 * on the stack to skip, the argument follows the syscall
-		 * number without a gap.
-		 */
-		if (code != SUNOS_SYS_sigreturn) {
-			tf.tf_regs[SP] += sizeof (int);
-			/*
-			 * remember that we adjusted the SP,
-			 * might have to undo this if the system call
-			 * returns ERESTART.
-			 * XXX - Use a local variable for this? -gwr
-			 */
-			p->p_md.md_flags |= MDP_STACKADJ;
-		} else {
-			/* XXX - This may be redundant (see below). */
-			p->p_md.md_flags &= ~MDP_STACKADJ;
-		}
-	}
-#endif
-
-	params = (caddr_t)tf.tf_regs[SP] + sizeof(int);
-
-	switch (code) {
-	case SYS_syscall:
-		/*
-		 * Code is first argument, followed by actual args.
-		 */
-		code = fuword(params);
-		params += sizeof(int);
-		/*
-		 * XXX sigreturn requires special stack manipulation
-		 * that is only done if entered via the sigreturn
-		 * trap.  Cannot allow it here so make sure we fail.
-		 */
-		switch (code) {
-#ifdef COMPAT_13
-		case SYS_compat_13_sigreturn13:
-#endif
-		case SYS___sigreturn14:
-			code = nsys;
-			break;
-		}
-		break;
-	case SYS___syscall:
-		/*
-		 * Like syscall, but code is a quad, so as to maintain
-		 * quad alignment for the rest of the arguments.
-		 */
-		if (callp != sysent)
-			break;
-		code = fuword(params + _QUAD_LOWWORD * sizeof(int));
-		params += sizeof(quad_t);
-		break;
-	default:
-		break;
-	}
-	if (code < 0 || code >= nsys)
-		callp += p->p_emul->e_nosys;		/* illegal */
-	else
-		callp += code;
-	argsize = callp->sy_argsize;
-#ifdef COMPAT_LINUX
-	if (0
-# ifdef EXEC_AOUT
-	    || p->p_emul == &emul_linux_aout
-# endif
-# ifdef EXEC_ELF32
-	    || p->p_emul == &emul_linux_elf32
-# endif
-	     ) {
-		/*
-		 * Linux passes the args in d1-d5
-		 */
-		switch (argsize) {
-		case 20:
-			args[4] = frame.f_regs[D5];
-		case 16:
-			args[3] = frame.f_regs[D4];
-		case 12:
-			args[2] = frame.f_regs[D3];
-		case 8:
-			args[1] = frame.f_regs[D2];
-		case 4:
-			args[0] = frame.f_regs[D1];
-		case 0:
-			error = 0;
-			break;
-		default:
-#ifdef DEBUG
-			panic("linux syscall %d weird argsize %d",
-				code, argsize);
-#else
-			error = EINVAL;
-#endif
-			break;
-		}
-	} else
-#endif
-	if (argsize)
-		error = copyin(params, (caddr_t)args, argsize);
-	else
-		error = 0;
-#ifdef SYSCALL_DEBUG
-	scdebug_call(p, code, args);
-#endif
-#ifdef KTRACE
-	if (KTRPOINT(p, KTR_SYSCALL))
-		ktrsyscall(p->p_tracep, code, argsize, args);
-#endif
-	if (error)
-		goto bad;
-	rval[0] = 0;
-	rval[1] = tf.tf_regs[D1];
-	error = (*callp->sy_call)(p, args, rval);
-	switch (error) {
-	case 0:
-		tf.tf_regs[D0] = rval[0];
-		tf.tf_regs[D1] = rval[1];
-		tf.tf_sr &= ~PSL_C;	/* carry bit */
-		break;
-	case ERESTART:
-		/*
-		 * We always enter through a `trap' instruction, which is 2
-		 * bytes, so adjust the pc by that amount.
-		 */
-		tf.tf_pc = opc - 2;
-		break;
-	case EJUSTRETURN:
-		/* nothing to do */
-		break;
-	default:
-	bad:
-		if (p->p_emul->e_errno)
-			error = p->p_emul->e_errno[error];
-		tf.tf_regs[D0] = error;
-		tf.tf_sr |= PSL_C;	/* carry bit */
-		break;
-	}
-
-#ifdef SYSCALL_DEBUG
-	scdebug_ret(p, code, error, rval);
-#endif
-#ifdef COMPAT_SUNOS
-	/* need new p-value for this */
-	if (p->p_md.md_flags & MDP_STACKADJ) {
-		p->p_md.md_flags &= ~MDP_STACKADJ;
-		if (error == ERESTART)
-			tf.tf_regs[SP] -= sizeof (int);
-	}
-#endif
-	userret(p, &tf, sticks);
-#ifdef KTRACE
-	if (KTRPOINT(p, KTR_SYSRET))
-		ktrsysret(p->p_tracep, code, error, rval[0]);
-#endif
-}
-
-/*
- * Set up return-value registers as fork() libc stub expects,
- * and do normal return-to-user-mode stuff.
- */
-void
-child_return(arg)
-	void *arg;
-{
-	struct proc *p = arg;
-	struct trapframe *tf;
-
-	tf = (struct trapframe *)p->p_md.md_regs;
-	tf->tf_regs[D0] = 0;
-	tf->tf_sr &= ~PSL_C;
-	tf->tf_format = FMT0;
-
-	/*
-	 * Old ticks (3rd arg) is zero so we will charge the child
-	 * for any clock ticks that might happen before this point.
-	 */
-	userret(p, tf, 0);
-#ifdef KTRACE
-	if (KTRPOINT(p, KTR_SYSRET))
-		ktrsysret(p->p_tracep, SYS_fork, 0, 0);
-#endif
 }
 
 /*
@@ -820,10 +631,8 @@ child_return(arg)
  * when there is no debugger installed (or not attached).
  * Drop into the PROM temporarily...
  */
-int
-_nodb_trap(type, tf)
-	int type;
-	struct trapframe *tf;
+int 
+_nodb_trap(int type, struct trapframe *tf)
 {
 
 	printf("\r\nKernel ");
@@ -848,10 +657,8 @@ _nodb_trap(type, tf)
  * If we have both DDB and KGDB, let KGDB see it first,
  * because KGDB will just return 0 if not connected.
  */
-void
-trap_kdebug(type, tf)
-	int type;
-	struct trapframe tf;
+void 
+trap_kdebug(int type, struct trapframe tf)
 {
 
 #ifdef	KGDB
@@ -873,9 +680,8 @@ trap_kdebug(type, tf)
  * Called by locore.s for an unexpected interrupt.
  * XXX - Almost identical to trap_kdebug...
  */
-void
-straytrap(tf)
-	struct trapframe tf;
+void 
+straytrap(struct trapframe tf)
 {
 	int type = -1;
 

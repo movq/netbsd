@@ -1,4 +1,4 @@
-/*	$NetBSD: help.c,v 1.6 1999/09/08 21:45:32 jsm Exp $	*/
+/*	$NetBSD: help.c,v 1.8.10.1 2009/04/01 21:41:49 snj Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,13 +34,14 @@
 #if 0
 static char sccsid[] = "@(#)help.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: help.c,v 1.6 1999/09/08 21:45:32 jsm Exp $");
+__RCSID("$NetBSD: help.c,v 1.8.10.1 2009/04/01 21:41:49 snj Exp $");
 #endif
 #endif /* not lint */
 
 #include <stdio.h>
 #include <math.h>
 #include <unistd.h>
+#include <limits.h>
 #include "trek.h"
 
 /*
@@ -73,7 +70,7 @@ const char	*const Cntvect[3] =
 /*ARGSUSED*/
 void
 help(v)
-	int v __attribute__((__unused__));
+	int v __unused;
 {
 	int		i;
 	double		dist, x;
@@ -100,7 +97,7 @@ help(v)
 	Game.helps += 1;
 
 	/* find the closest base */
-	dist = 1e50;
+	dist = TOOLARGE;
 	if (Quad[Ship.quadx][Ship.quady].bases <= 0)
 	{
 		/* there isn't one in this quadrant */

@@ -1,9 +1,43 @@
-/*	$NetBSD: cpu.h,v 1.11 1999/08/10 21:08:08 thorpej Exp $	*/
+/*	$NetBSD: cpu.h,v 1.40 2007/10/17 19:56:04 garbled Exp $	*/
 
 /*
- * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1982, 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Systems Programming Group of the University of Utah Computer
+ * Science Department.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ * from: Utah $Hdr: cpu.h 1.16 91/03/25$
+ *
+ *	@(#)cpu.h	8.4 (Berkeley) 1/5/94
+ */
+/*
+ * Copyright (c) 1988 University of Utah.
  *
  * This code is derived from software contributed to Berkeley by
  * the Systems Programming Group of the University of Utah Computer
@@ -43,8 +77,14 @@
  */
 
 
-#ifndef _CPU_MACHINE_
-#define _CPU_MACHINE_
+#ifndef _MACHINE_CPU_H_
+#define _MACHINE_CPU_H_
+
+#if defined(_KERNEL)
+
+#if defined(_KERNEL_OPT)
+#include "opt_lockdebug.h"
+#endif
 
 /*
  * Exported definitions unique to next68k/68k cpu support.
@@ -62,14 +102,29 @@
  */
 #include <machine/intr.h>
 
+#include <sys/cpu_data.h>
+struct cpu_info {
+	struct cpu_data ci_data;	/* MI per-cpu data */
+	cpuid_t	ci_cpuid;
+	int	ci_mtx_count;
+	int	ci_mtx_oldspl;
+	int	ci_want_resched;
+};
+
+extern struct cpu_info cpu_info_store;
+
+#define	curcpu()			(&cpu_info_store)
+
 /*
  * definitions of cpu-dependent requirements
  * referenced in generic code
  */
 #define	cpu_swapin(p)			/* nothing */
-#define	cpu_wait(p)			/* nothing */
 #define cpu_swapout(p)			/* nothing */
 #define	cpu_number()			0
+
+void	cpu_proc_fork(struct proc *, struct proc *);
+
 
 /*
  * Arguments to hardclock and gatherstats encapsulate the previous
@@ -79,110 +134,62 @@
 struct clockframe {
 	u_short	sr;		/* sr at time of interrupt */
 	u_long	pc;		/* pc at time of interrupt */
-	u_short	vo;		/* vector offset (4-word frame) */
-};
+	u_short	fmt:4,
+		vec:12;		/* vector offset (4-word frame) */
+} __attribute__((packed));
 
 #define	CLKF_USERMODE(framep)	(((framep)->sr & PSL_S) == 0)
-#define	CLKF_BASEPRI(framep)	(((framep)->sr & PSL_IPL) == 0)
 #define	CLKF_PC(framep)		((framep)->pc)
-#if 0
-/* We would like to do it this way... */
-#define	CLKF_INTR(framep)	(((framep)->sr & PSL_M) == 0)
-#else
-/* but until we start using PSL_M, we have to do this instead */
-#define	CLKF_INTR(framep)	(0)	/* XXX */
-#endif
+
+/*
+ * The clock interrupt handler can determine if it's a nested
+ * interrupt by checking for interrupt_depth > 1.
+ * (Remember, the clock interrupt handler itself will cause the
+ * depth counter to be incremented).
+ */
+extern volatile unsigned int interrupt_depth;
+#define	CLKF_INTR(framep)	(interrupt_depth > 1)
 
 /*
  * Preempt the current process if in interrupt from user mode,
  * or after the current trap/syscall if in system mode.
  */
-extern int want_resched; /* resched() was called */
-#define	need_resched()	{ want_resched = 1; aston(); }
+#define	cpu_need_resched(ci, flags)	\
+	do { ci->ci_want_resched = 1; aston(); } while (/* CONSTCOND */0)
 
 /*
  * Give a profiling tick to the current process when the user profiling
  * buffer pages are invalid.  On the sun3, request an ast to send us
  * through trap, marking the proc as needing a profiling tick.
  */
-#define	need_proftick(p)	((p)->p_flag |= P_OWEUPC, aston())
+#define	cpu_need_proftick(l)	((l)->l_pflag |= LP_OWEUPC, aston())
 
 /*
  * Notify the current process (p) that it has a signal pending,
  * process as soon as possible.
  */
-#define	signotify(p)	aston()
+#define	cpu_signotify(l)	aston()
 
 #define aston() (astpending++)
 
-int	astpending;	/* need to trap before returning to user mode */
-int	want_resched;	/* resched() was called */
+extern	int	astpending;	/* need to trap before returning to user mode */
 
-#ifdef _KERNEL
-extern	volatile char *intiobase;
-extern  volatile char *intiolimit;
-extern	volatile char *monobase;
-extern  volatile char *monolimit;
-extern	volatile char *colorbase;
-extern  volatile char *colorlimit;
-extern	void (*vectab[]) __P((void));
+extern	void (*vectab[])(void);
 
-struct frame;
 struct fpframe;
-struct pcb;
 
 /* locore.s functions */
-void	m68881_save __P((struct fpframe *));
-void	m68881_restore __P((struct fpframe *));
-#if 0                           /* it's already in m68k/m68k.h */
-u_long	getdfc __P((void));
-u_long	getsfc __P((void));
-#endif
+void	m68881_save(struct fpframe *);
+void	m68881_restore(struct fpframe *);
 
-#if 0 /* {@@@ Use cacheops.h? */
+int	suline(void *, void *);
+void	loadustp(int);
 
-void	DCIA __P((void));
-void	DCIS __P((void));
-void	DCIU __P((void));
-void	ICIA __P((void));
-void	ICPA __P((void));
-void	PCIA __P((void));
-void	TBIA __P((void));
-void	TBIS __P((vm_offset_t));
-void	TBIAS __P((void));
-void	TBIAU __P((void));
-#if defined(M68040)
-void	DCFA __P((void));
-void	DCFP __P((vm_offset_t));
-void	DCFL __P((vm_offset_t));
-void	DCPL __P((vm_offset_t));
-void	DCPP __P((vm_offset_t));
-void	ICPL __P((vm_offset_t));
-void	ICPP __P((vm_offset_t));
-#endif
-#endif /* }@@@ use m68k/cacheops.c */
-
-int	suline __P((caddr_t, caddr_t));
-void	savectx __P((struct pcb *));
-void	switch_exit __P((struct proc *));
-void	proc_trampoline __P((void));
-void	loadustp __P((int));
-
-void	doboot __P((void)) __attribute__((__noreturn__));
-
-/* sys_machdep.c functions */
-int	cachectl1 __P((unsigned long, vaddr_t, size_t, struct proc *));
-
-/* vm_machdep.c functions */
-void	physaccess __P((caddr_t, caddr_t, int, int));
-void	physunaccess __P((caddr_t, int));
-int	kvtop __P((caddr_t));
+void	doboot(void) __attribute__((__noreturn__));
+int	nmihand(void *);
 
 /* clock.c functions */
-void	next68k_calibrate_delay __P((void));
-
-/* trap.c function */
-void	child_return __P((void *));
+void	next68k_calibrate_delay(void);
 
 #endif /* _KERNEL */
 
@@ -194,7 +201,7 @@ void	child_return __P((void *));
 #define	NEXT_SLOT_ID		0x0
 #ifdef	M68030
 #define	NEXT_SLOT_ID_BMAP	0x0
-#endif	M68030
+#endif	/* M68030 */
 #endif
 #ifdef	M68040
 #ifdef DISABLE_NEXT_BMAP_CHIP		/* @@@ For turbo testing */
@@ -202,8 +209,8 @@ void	child_return __P((void *));
 #else
 #define	NEXT_SLOT_ID_BMAP	0x00100000
 #endif
-#define NEXT_SLOT_ID            0x0
-#endif	M68040
+#define NEXT_SLOT_ID		0x0
+#endif	/* M68040 */
 
 /****************************************************************/
 
@@ -265,8 +272,10 @@ void	child_return __P((void *));
 #define NEXT_P_MEMTIMING	(NEXT_SLOT_ID_BMAP+0x02006010)
 #define NEXT_P_INTRSTAT		(NEXT_SLOT_ID+0x02007000)
 #define NEXT_P_INTRSTAT_CON	0x02007000
+/* #define NEXT_P_INTRSTAT_0	(NEXT_SLOT_ID+0x02008000) */
 #define NEXT_P_INTRMASK		(NEXT_SLOT_ID+0x02007800)
 #define NEXT_P_INTRMASK_CON	0x02007800
+/* #define NEXT_P_INTRMASK_0	(NEXT_SLOT_ID+0x0200a000) */
 #define NEXT_P_SCR1		(NEXT_SLOT_ID+0x0200c000)
 #define NEXT_P_SCR1_CON	0x0200c000
 #define NEXT_P_SID		0x0200c800		/* NOT slot-relative */
@@ -282,7 +291,10 @@ void	child_return __P((void *));
 #define NEXT_P_MEMSIZE		0x04000000
 #define NEXT_P_VIDEOMEM		(NEXT_SLOT_ID+0x0b000000)
 #define NEXT_P_VIDEOSIZE	0x0003a800
+#if 0
 #define NEXT_P_C16_VIDEOMEM	(NEXT_SLOT_ID+0x06000000)	/* COLOR_FB */
+#endif
+#define NEXT_P_C16_VIDEOMEM	(0x2c000000)
 #define NEXT_P_C16_VIDEOSIZE	0x001D4000		/* COLOR_FB */
 #define NEXT_P_WF4VIDEO		(NEXT_SLOT_ID+0x0c000000)	/* w A+B-AB function */
 #define NEXT_P_WF3VIDEO		(NEXT_SLOT_ID+0x0d000000)	/* w (1-A)B function */
@@ -319,11 +331,11 @@ void	child_return __P((void *));
 #define	NEXT_I_ENETX_DMA	NEXT_I(6,1,28)
 #define	NEXT_I_ENETR_DMA	NEXT_I(6,2,27)
 #define	NEXT_I_SCSI_DMA		NEXT_I(6,3,26)
-#define	NEXT_I_DISK_DMA	        NEXT_I(6,4,25)
+#define	NEXT_I_DISK_DMA		NEXT_I(6,4,25)
 #define	NEXT_I_PRINTER_DMA	NEXT_I(6,5,24)
 #define	NEXT_I_SOUND_OUT_DMA	NEXT_I(6,6,23)
 #define	NEXT_I_SOUND_IN_DMA	NEXT_I(6,7,22)
-#define	NEXT_I_SCC_DMA	        NEXT_I(6,8,21)
+#define	NEXT_I_SCC_DMA		NEXT_I(6,8,21)
 #define	NEXT_I_DSP_DMA		NEXT_I(6,9,20)
 #define	NEXT_I_M2R_DMA		NEXT_I(6,10,19)
 #define	NEXT_I_R2M_DMA		NEXT_I(6,11,18)
@@ -371,11 +383,11 @@ void	child_return __P((void *));
 
 #define	INTIOBASE	(0x02000000)
 #define	INTIOTOP	(0x02120000)
-#define MONOBASE        (0x0b000000)
-#define MONOTOP         (0x0b03a800)
-#define COLORBASE	(0x06000000)
-#define COLORTOP	(0x061D4000)
-                                     
+#define MONOBASE	(0x0b000000)
+#define MONOTOP		(0x0b03a800)
+#define COLORBASE	(0x2c000000)
+#define COLORTOP	(0x2c1D4000)
+
 #define NEXT_INTR_BITS \
 "\20\40NMI\37PFAIL\36TIMER\35ENETX_DMA\34ENETR_DMA\33SCSI_DMA\32DISK_DMA\31PRINTER_DMA\30SOUND_OUT_DMA\27SOUND_IN_DMA\26SCC_DMA\25DSP_DMA\24M2R_DMA\23R2M_DMA\22SCC\21REMOTE\20BUS\17DSP_4\16DISK|C16_VIDEO\15SCSI\14PRINTER\13ENETX\12ENETR\11SOUND_OVRUN\10PHONE\07DSP_3\06VIDEO\05MONITOR\04KYBD_MOUSE\03POWER\02SOFTINT1\01SOFTINT0"
 
@@ -388,27 +400,14 @@ void	child_return __P((void *));
  * ``intiolimit'' (defined in locore.s).  Since it is always mapped,
  * conversion between physical and kernel virtual addresses is easy.
  */
-#define	ISIIOVA(va) \
-	((char *)(va) >= intiobase && (char *)(va) < intiolimit)
-#define	IIOV(pa)	((int)(pa)-INTIOBASE+(int)intiobase)
-#define	IIOP(va)	((int)(va)-(int)intiobase+INTIOBASE)
-#define	IIOPOFF(pa)	((int)(pa)-INTIOBASE)
+#define	IIOV(pa)	((int)(pa)-INTIOBASE+intiobase)
+#define	IIOP(va)	((int)(va)-intiobase+INTIOBASE)
 #define	IIOMAPSIZE	btoc(INTIOTOP-INTIOBASE)	/* 2mb */
 
 /* mono fb space */
-#define	ISMONOVA(va) \
-	((char *)(va) >= monobase && (char *)(va) < monolimit)
-#define	MONOV(pa)	((int)(pa)-MONOBASE+(int)monobase)
-#define	MONOP(va)	((int)(va)-(int)monobase+MONOBASE)
-#define	MONOPOFF(pa)	((int)(pa)-MONOBASE)
 #define	MONOMAPSIZE	btoc(MONOTOP-MONOBASE)	/* who cares */
 
 /* color fb space */
-#define	ISCOLORVA(va) \
-	((char *)(va) >= colorbase && (char *)(va) < colorlimit)
-#define	COLORV(pa)	((int)(pa)-COLORBASE+(int)colorbase)
-#define	COLORP(va)	((int)(va)-(int)colorbase+COLORBASE)
-#define	COLORPOFF(pa)	((int)(pa)-COLORBASE)
 #define	COLORMAPSIZE	btoc(COLORTOP-COLORBASE)	/* who cares */
 
-#endif	/* _CPU_MACHINE_ */
+#endif	/* _MACHINE_CPU_H_ */

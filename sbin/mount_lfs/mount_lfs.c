@@ -1,4 +1,4 @@
-/*	$NetBSD: mount_lfs.c,v 1.9 1999/12/08 22:39:25 perseant Exp $	*/
+/*	$NetBSD: mount_lfs.c,v 1.33 2008/08/05 20:57:45 pooka Exp $	*/
 
 /*-
  * Copyright (c) 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)mount_lfs.c	8.4 (Berkeley) 4/26/95";
 #else
-__RCSID("$NetBSD: mount_lfs.c,v 1.9 1999/12/08 22:39:25 perseant Exp $");
+__RCSID("$NetBSD: mount_lfs.c,v 1.33 2008/08/05 20:57:45 pooka Exp $");
 #endif
 #endif /* not lint */
 
@@ -58,44 +54,80 @@ __RCSID("$NetBSD: mount_lfs.c,v 1.9 1999/12/08 22:39:25 perseant Exp $");
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <paths.h>
 
-#include "mntopts.h"
+#include <signal.h>
+
+#include <mntopts.h>
 #include "pathnames.h"
+#include "mountprog.h"
+#include "mount_lfs.h"
 
-const struct mntopt mopts[] = {
+static const struct mntopt mopts[] = {
 	MOPT_STDOPTS,
 	MOPT_UPDATE,
-	{ NULL }
+	MOPT_GETARGS,
+	MOPT_NOATIME,
+	MOPT_NULL,
 };
 
-int	main __P((int, char *[]));
-void	invoke_cleaner __P((char *));
-void	usage __P((void));
+static void	usage(void);
 
-int short_rds, cleaner_debug;
+#ifdef WANT_CLEANER
+static void	invoke_cleaner(char *);
+static void	kill_daemon(char *);
+static void	kill_cleaner(char *);
+#endif /* WANT_CLEANER */
 
+static int short_rds, cleaner_debug, cleaner_bytes, fs_idle, noclean;
+static const char *nsegs;
+
+#ifndef MOUNT_NOMAIN
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char **argv)
 {
-	struct ufs_args args;
-	int ch, mntflags, noclean;
-	char *fs_name, *options;
-	const char *errcause;
 
+	setprogname(argv[0]);
+	return mount_lfs(argc, argv);
+}
+#endif
+
+void
+mount_lfs_parseargs(int argc, char *argv[],
+	struct ufs_args *args, int *mntflags,
+	char *canon_dev, char *canon_dir)
+{
+	int ch;
+	char *options;
+	mntoptparse_t mp;
+
+	memset(args, 0, sizeof(*args));
 	options = NULL;
-	mntflags = noclean = 0;
-	while ((ch = getopt(argc, argv, "dno:s")) != -1)
+	nsegs = "4";
+	*mntflags = noclean = 0;
+	cleaner_bytes = 1;
+	while ((ch = getopt(argc, argv, "bdiN:no:s")) != -1)
 		switch (ch) {
+		case 'b':
+			cleaner_bytes = !cleaner_bytes;
+			break;
 		case 'd':
 			cleaner_debug = 1;
+			break;
+		case 'i':
+			fs_idle = 1;
 			break;
 		case 'n':
 			noclean = 1;
 			break;
+		case 'N':
+			nsegs = optarg;
+			break;
 		case 'o':
-			getmntopts(optarg, mopts, &mntflags, 0);
+			mp = getmntopts(optarg, mopts, mntflags, 0);
+			if (mp == NULL)
+				err(1, "getmntopts");
+			freemntopts(mp);
 			break;
 		case 's':
 			short_rds = 1;
@@ -110,18 +142,42 @@ main(argc, argv)
 	if (argc != 2)
 		usage();
 
-	args.fspec = argv[0];	/* the name of the device file */
-	fs_name = argv[1];	/* the mount point */
+	pathadj(argv[0], canon_dev);
+	args->fspec = canon_dev;
 
-#define DEFAULT_ROOTUID	-2
-	args.export.ex_root = DEFAULT_ROOTUID;
-	if (mntflags & MNT_RDONLY) {
-		args.export.ex_flags = MNT_EXRDONLY;
-		noclean = 1;
-	} else
-		args.export.ex_flags = 0;
+	pathadj(argv[1], canon_dir);
+}
 
-	if (mount(MOUNT_LFS, fs_name, mntflags, &args)) {
+int
+mount_lfs(int argc, char *argv[])
+{
+	struct ufs_args args;
+	int mntflags;
+	int mntsize, oldflags, i;
+	char fs_name[MAXPATHLEN], canon_dev[MAXPATHLEN];
+	struct statvfs *mntbuf;
+	const char *errcause;
+
+	mount_lfs_parseargs(argc, argv, &args, &mntflags, canon_dev, fs_name);
+
+	/*
+	 * Record the previous status of this filesystem (if any) before
+	 * performing the mount, so we can know whether to start or
+	 * kill the cleaner process below.
+	 */
+	oldflags = MNT_RDONLY; /* If not mounted, pretend r/o */
+	if (mntflags & MNT_UPDATE) {
+		if ((mntsize = getmntinfo(&mntbuf, MNT_NOWAIT)) == 0)
+			err(1, "getmntinfo");
+		for (i = 0; i < mntsize; i++) {
+			if (strcmp(mntbuf[i].f_mntfromname, args.fspec) == 0) {
+				oldflags = mntbuf[i].f_flag;
+				break;
+			}
+		}
+	}
+
+	if (mount(MOUNT_LFS, fs_name, mntflags, &args, sizeof args) == -1) {
 		switch (errno) {
 		case EMFILE:
 			errcause = "mount table full";
@@ -140,36 +196,101 @@ main(argc, argv)
 		errx(1, "%s on %s: %s", args.fspec, fs_name, errcause);
 	}
 
+#ifdef WANT_CLEANER
+	/* Not mounting fresh or upgrading to r/w; don't start the cleaner */
+	if (!(oldflags & MNT_RDONLY) || (mntflags & MNT_RDONLY)
+	    || (mntflags & MNT_GETARGS))
+		noclean = 1;
 	if (!noclean)
 		invoke_cleaner(fs_name);
 		/* NOTREACHED */
 
+	/* Downgrade to r/o; kill the cleaner */
+	if ((mntflags & MNT_RDONLY) && !(oldflags & MNT_RDONLY))
+		kill_cleaner(fs_name);
+#endif /* WANT_CLEANER */
+
 	exit(0);
 }
 
-void
-invoke_cleaner(name)
-	char *name;
+#ifdef WANT_CLEANER
+static void
+kill_daemon(char *pidname)
 {
-	char *args[6], **ap = args;
+	FILE *fp;
+	char s[80];
+	pid_t pid;
+
+	fp = fopen(pidname, "r");
+	if (fp) {
+		fgets(s, 80, fp);
+		pid = atoi(s);
+		if (pid)
+			kill(pid, SIGINT);
+		fclose(fp);
+	}
+}
+
+static void
+kill_cleaner(char *name)
+{
+	char *pidname;
+	char *cp;
+	int off;
+
+	/* Parent first */
+	asprintf(&pidname, "%slfs_cleanerd:m:%s.pid", _PATH_VARRUN, name);
+	if (!pidname)
+		err(1, "malloc");
+	off = strlen(_PATH_VARRUN);
+	while((cp = strchr(pidname + off, '/')) != NULL)
+		*cp = '|';
+	kill_daemon(pidname);
+	free(pidname);
+
+	/* Then child */
+	asprintf(&pidname, "%slfs_cleanerd:s:%s.pid", _PATH_VARRUN, name);
+	if (!pidname)
+		err(1, "malloc");
+	off = strlen(_PATH_VARRUN);
+	while((cp = strchr(pidname + off, '/')) != NULL)
+		*cp = '|';
+	kill_daemon(pidname);
+	free(pidname);
+}
+
+static void
+invoke_cleaner(char *name)
+{
+	const char *args[7], **ap = args;
 
 	/* Build the argument list. */
 	*ap++ = _PATH_LFS_CLEANERD;
+	if (cleaner_bytes)
+		*ap++ = "-b";
+	if (nsegs) {
+		*ap++ = "-n";
+		*ap++ = nsegs;
+	}
 	if (short_rds)
 		*ap++ = "-s";
 	if (cleaner_debug)
 		*ap++ = "-d";
+	if (fs_idle)
+		*ap++ = "-f";
 	*ap++ = name;
 	*ap = NULL;
 
-	execv(args[0], args);
+	execv(args[0], __UNCONST(args));
 	err(1, "exec %s", _PATH_LFS_CLEANERD);
 }
+#endif /* WANT_CLEANER */
 
-void
-usage()
+static void
+usage(void)
 {
 	(void)fprintf(stderr,
-		"usage: mount_lfs [-dns] [-o options] special node\n");
+		"usage: %s [-bdins] [-N nsegs] [-o options] special node\n",
+		getprogname());
 	exit(1);
 }

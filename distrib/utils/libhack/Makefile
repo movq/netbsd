@@ -1,39 +1,35 @@
-# $NetBSD: Makefile,v 1.9 1999/09/26 04:49:37 dan Exp $
+# $NetBSD: Makefile,v 1.21.14.1 2009/01/15 03:24:06 snj Exp $
 #
 # Stubs to kill off some things from libc:
 # This save space on a boot system.
 # (See Makefile.inc also.)
 
-LIB=	hack
-SRCS=	getcap.c getgrent.c gethost.c getnet.c getnetgr.c getpwent.c \
-	localeconv.c perror.c setlocale.c \
-	strerror.c strsignal.c utmp.c yplib.c
-.ifndef NOLIBHACKOPENDIR
-SRCS+=        opendir.c
-.endif
+.PATH.c: ${.CURDIR}/../../../lib/libc/gen ${.CURDIR}/../../../lib/libc/locale
 
+CPPFLAGS+=	-DSMALL
+CPPFLAGS.runetable.c+=	-I${HACKSRC}/../../../lib/libc/citrus \
+			-DALL_80_TO_FF_SW1
 
-HACKOBJS= getcap.o getgrent.o gethost.o getnet.o getnetgr.o getpwent.o \
-	localeconv.o perror.o setlocale.o \
-	strerror.o strsignal.o utmp.o yplib.o
-.ifndef NOLIBHACKOPENDIR
-HACKOBJS+= opendir.o
-.endif
+LIB=		hack
+SRCS=		getcap.c getgrent.c getnet.c getnetgr.c getpwent.c \
+		localeconv.c multibyte.c perror.c runetable.c setlocale.c \
+		strerror.c strsignal.c syslog.c utmp.c yplib.c
 
-WARNS=	1
-MKPIC=	no
-MKLINT= no
-MKPROFILE=no
+WARNS=		1
+NOLINKLIB=	# defined
+NOLINT= 	# defined
+NOPIC=		# defined
+NOPROFILE=	# defined
 
-all: libhack.a libhack.o
+realall: libhack.o
 
-libhack.o : $(HACKOBJS)
-	$(LD) -r -o $@ $(HACKOBJS)
+libhack.o: libhack.a
+	${LD} -r -o $@ --whole-archive libhack.a
 
-CLEANFILES+=  libhack.o
+CLEANFILES+=	libhack.o
 
 tpwent: getpwent.c
-	$(CC) -g -o $@.o -DTEST_MAIN -c getpwent.c
-	$(CC) -o $@ $@.o
+	${CC} -g -o $@.o -DTEST_MAIN -c getpwent.c
+	${CC} -o $@ $@.o
 
 .include <bsd.lib.mk>

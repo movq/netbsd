@@ -1,4 +1,4 @@
-/*	$NetBSD: rmjob.c,v 1.15 1999/12/07 14:54:45 mrg Exp $	*/
+/*	$NetBSD: rmjob.c,v 1.23 2006/01/20 17:30:00 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)rmjob.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: rmjob.c,v 1.15 1999/12/07 14:54:45 mrg Exp $");
+__RCSID("$NetBSD: rmjob.c,v 1.23 2006/01/20 17:30:00 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -76,34 +72,17 @@ static char	current[40];		/* active control file name */
 
 extern uid_t	uid, euid;		/* real and effective user id's */
 
-static	void	do_unlink __P((char *));
-static	void	alarmer __P((int));
+static	void	do_unlink(const char *);
+static	void	alarmer(int);
 
 void
-rmjob()
+rmjob(void)
 {
 	int i, nitems;
 	int assasinated = 0;
 	struct dirent **files;
-	char *cp;
 
-	if ((i = cgetent(&bp, printcapdb, printer)) == -2)
-		fatal("can't open printer description file");
-	else if (i == -1)
-		fatal("unknown printer");
-	else if (i == -3)
-		fatal("potential reference loop detected in printcap file");
-	if (cgetstr(bp, "lp", &LP) < 0)
-		LP = _PATH_DEFDEVLP;
-	if (cgetstr(bp, "rp", &RP) < 0)
-		RP = DEFLP;
-	if (cgetstr(bp, "sd", &SD) < 0)
-		SD = _PATH_DEFSPOOL;
-	if (cgetstr(bp,"lo", &LO) < 0)
-		LO = DEFLOCK;
-	cgetstr(bp, "rm", &RM);
-	if ((cp = checkremote()) != NULL)
-		printf("Warning: %s\n", cp);
+	getprintcap(printer);
 
 	/*
 	 * If the format was `lprm -' and the user isn't the super-user,
@@ -165,8 +144,7 @@ rmjob()
  * Return boolean indicating existence of a lock file.
  */
 int
-lockchk(s)
-	char *s;
+lockchk(const char *s)
 {
 	FILE *fp;
 	int i, n;
@@ -204,8 +182,7 @@ lockchk(s)
  * Process a control file.
  */
 void
-process(file)
-	char *file;
+process(const char *file)
 {
 	FILE *cfp;
 
@@ -228,8 +205,7 @@ process(file)
 }
 
 static void
-do_unlink(file)
-	char *file;
+do_unlink(const char *file)
 {
 	int	ret;
 
@@ -245,11 +221,11 @@ do_unlink(file)
  * Do the dirty work in checking
  */
 int
-chk(file)
-	char *file;
+chk(const char *file)
 {
 	int *r, n;
-	char **u, *cp;
+	char **u;
+	const char *cp;
 	FILE *cfp;
 
 	/*
@@ -281,7 +257,7 @@ chk(file)
 	/*
 	 * Check the request list
 	 */
-	for (n = 0, cp = file+3; isdigit(*cp); )
+	for (n = 0, cp = file+3; isdigit((unsigned char)*cp); )
 		n = n * 10 + (*cp++ - '0');
 	for (r = requ; r < &requ[requests]; r++)
 		if (*r == n && isowner(line+1, file))
@@ -302,8 +278,7 @@ chk(file)
  * Normal users can only remove the file from where it was sent.
  */
 int
-isowner(owner, file)
-	char *owner, *file;
+isowner(const char *owner, const char *file)
 {
 	if (!strcmp(person, root) && (from == host || !strcmp(from, file+6)))
 		return(1);
@@ -320,7 +295,7 @@ isowner(owner, file)
  * then try removing files on the remote machine.
  */
 void
-rmremote()
+rmremote(void)
 {
 	char *cp, *s;
 	int i, rem;
@@ -364,7 +339,7 @@ rmremote()
 	cp[0] = '\n';
 	cp[1] = '\0';
 
-	rem = getport(RM, 0);
+	rem = getport(RM);
 	if (rem < 0) {
 		if (from != host)
 			printf("%s: ", host);
@@ -393,8 +368,7 @@ rmremote()
 }
 
 static void
-alarmer(s)
-	int s;
+alarmer(int s)
 {
 	/* nothing */
 }
@@ -403,8 +377,7 @@ alarmer(s)
  * Return 1 if the filename begins with 'cf'
  */
 int
-iscf(d)
-	struct dirent *d;
+iscf(const struct dirent *d)
 {
 	return(d->d_name[0] == 'c' && d->d_name[1] == 'f');
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: getmntinfo.c,v 1.11 2000/01/22 22:19:10 mycroft Exp $	*/
+/*	$NetBSD: getmntinfo.c,v 1.16 2005/09/13 01:44:09 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)getmntinfo.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: getmntinfo.c,v 1.11 2000/01/22 22:19:10 mycroft Exp $");
+__RCSID("$NetBSD: getmntinfo.c,v 1.16 2005/09/13 01:44:09 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -51,37 +47,33 @@ __RCSID("$NetBSD: getmntinfo.c,v 1.11 2000/01/22 22:19:10 mycroft Exp $");
 #include <errno.h>
 #include <stdlib.h>
 
-#ifdef __weak_alias
-__weak_alias(getmntinfo,_getmntinfo)
-#endif
-
 /*
  * Return information about mounted filesystems.
  */
 int
 getmntinfo(mntbufp, flags)
-	struct statfs **mntbufp;
+	struct statvfs **mntbufp;
 	int flags;
 {
-	static struct statfs *mntbuf;
+	static struct statvfs *mntbuf;
 	static int mntsize;
 	static size_t bufsize;
 
 	_DIAGASSERT(mntbufp != NULL);
 
 	if (mntsize <= 0 &&
-	    (mntsize = getfsstat(NULL, 0L, MNT_NOWAIT)) < 0)
+	    (mntsize = getvfsstat(NULL, (size_t)0, MNT_NOWAIT)) == -1)
 		return (0);
 	if (bufsize > 0 &&
-	    (mntsize = getfsstat(mntbuf, (long)bufsize, flags)) < 0)
+	    (mntsize = getvfsstat(mntbuf, bufsize, flags)) == -1)
 		return (0);
-	while (bufsize <= mntsize * sizeof(struct statfs)) {
+	while (bufsize <= mntsize * sizeof(struct statvfs)) {
 		if (mntbuf)
 			free(mntbuf);
-		bufsize = (mntsize + 1) * sizeof(struct statfs);
-		if ((mntbuf = (struct statfs *)malloc(bufsize)) == 0)
+		bufsize = (mntsize + 1) * sizeof(struct statvfs);
+		if ((mntbuf = malloc(bufsize)) == NULL)
 			return (0);
-		if ((mntsize = getfsstat(mntbuf, (long)bufsize, flags)) < 0)
+		if ((mntsize = getvfsstat(mntbuf, bufsize, flags)) == -1)
 			return (0);
 	}
 	*mntbufp = mntbuf;

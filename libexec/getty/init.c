@@ -1,4 +1,4 @@
-/*	$NetBSD: init.c,v 1.10 2000/01/04 13:43:37 ad Exp $	*/
+/*	$NetBSD: init.c,v 1.17 2007/12/03 09:54:24 isaki Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "from: @(#)init.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: init.c,v 1.10 2000/01/04 13:43:37 ad Exp $");
+__RCSID("$NetBSD: init.c,v 1.17 2007/12/03 09:54:24 isaki Exp $");
 #endif
 #endif /* not lint */
 
@@ -56,34 +52,38 @@ __RCSID("$NetBSD: init.c,v 1.10 2000/01/04 13:43:37 ad Exp $");
 extern	struct termios tmode;
 extern	char hostname[];
 
+#define M(a) ((char *)&tmode.c_cc[a])
+
 struct	gettystrs gettystrs[] = {
-	{ "nx" },			/* next table */
-	{ "cl" },			/* screen clear characters */
-	{ "im" },			/* initial message */
-	{ "lm", "login: " },		/* login message */
-	{ "er", &tmode.c_cc[VERASE] },	/* erase character */
-	{ "kl", &tmode.c_cc[VKILL] },	/* kill character */
-	{ "et", &tmode.c_cc[VEOF] },	/* eof chatacter (eot) */
-	{ "pc", "" },			/* pad character */
-	{ "tt" },			/* terminal type */
-	{ "ev" },			/* enviroment */
-	{ "lo", _PATH_LOGIN },		/* login program */
-	{ "hn", hostname },		/* host name */
-	{ "he" },			/* host name edit */
-	{ "in", &tmode.c_cc[VINTR] },	/* interrupt char */
-	{ "qu", &tmode.c_cc[VQUIT] },	/* quit char */
-	{ "xn", &tmode.c_cc[VSTART] },	/* XON (start) char */
-	{ "xf", &tmode.c_cc[VSTOP] },	/* XOFF (stop) char */
-	{ "bk", &tmode.c_cc[VEOL] },	/* brk char (alt \n) */
-	{ "su", &tmode.c_cc[VSUSP] },	/* suspend char */
-	{ "ds", &tmode.c_cc[VDSUSP] },	/* delayed suspend */
-	{ "rp", &tmode.c_cc[VREPRINT] },/* reprint char */
-	{ "fl", &tmode.c_cc[VDISCARD] },/* flush output */
-	{ "we", &tmode.c_cc[VWERASE] },	/* word erase */
-	{ "ln", &tmode.c_cc[VLNEXT] },	/* literal next */
-	{ "pp" },			/* ppp login program */
-	{ "if" },                       /* sysv-like 'issue' filename */
-	{ "al" },                       /* user to auto-login */
+	{ "nx" },		/* next table */
+	{ "cl" },		/* screen clear characters */
+	{ "im" },		/* initial message */
+	{ "lm", "login: " },	/* login message */
+	{ "er", M(VERASE) },	/* erase character */
+	{ "kl", M(VKILL) },	/* kill character */
+	{ "et", M(VEOF) },	/* eof chatacter (eot) */
+	{ "pc", "" },		/* pad character */
+	{ "tt" },		/* terminal type */
+	{ "ev" },		/* environment */
+	{ "lo", _PATH_LOGIN },	/* login program */
+	{ "hn", hostname },	/* host name */
+	{ "he" },		/* host name edit */
+	{ "in", M(VINTR) },	/* interrupt char */
+	{ "qu", M(VQUIT) },	/* quit char */
+	{ "xn", M(VSTART) },	/* XON (start) char */
+	{ "xf", M(VSTOP) },	/* XOFF (stop) char */
+	{ "bk", M(VEOL) },	/* brk char (alt \n) */
+	{ "su", M(VSUSP) },	/* suspend char */
+	{ "ds", M(VDSUSP) },	/* delayed suspend */
+	{ "rp", M(VREPRINT) },	/* reprint char */
+	{ "fl", M(VDISCARD) },	/* flush output */
+	{ "we", M(VWERASE) },	/* word erase */
+	{ "ln", M(VLNEXT) },	/* literal next */
+	{ "st", M(VSTATUS) },	/* status */
+	{ "b2", M(VEOL2) },	/* alt brk char */
+	{ "pp" },		/* ppp login program */
+	{ "if" },		/* sysv-like 'issue' filename */
+	{ "al" },		/* user to auto-login */
 	{ 0 }
 };
 
@@ -140,5 +140,7 @@ struct	gettyflags gettyflags[] = {
 	{ "dx", 0 },			/* set decctlq */
 	{ "np", 0 },			/* no parity at all (8bit chars) */
 	{ "mb", 0 },			/* do MDMBUF flow control */
+	{ "cs", 0 },			/* clear screen based on term type */
+	{ "nn", 0 },			/* don't prompt for login name */
 	{ 0 }
 };

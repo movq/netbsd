@@ -1,4 +1,4 @@
-/*	$NetBSD: vme_pccvar.h,v 1.2 2000/03/18 22:33:04 scw Exp $	*/
+/*	$NetBSD: vme_pccvar.h,v 1.8 2008/04/28 20:23:29 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,50 +32,16 @@
 #ifndef _MVME68K_VME_PCCVAR_H
 #define _MVME68K_VME_PCCVAR_H
 
+#define VME1_SLAVE_OFFBOARD_RAM	0
+#define VME1_SLAVE_A32		1
+#define VME1_SLAVE_A24		2
+#define VME1_SLAVE_A16		3
+#define VME1_NSLAVES		4
 
 struct vme_pcc_softc {
-	struct device		sc_dev;
-	bus_space_tag_t		sc_bust;
+	struct mvmebus_softc	sc_mvmebus;
 	bus_space_handle_t	sc_bush;
-	bus_dma_tag_t		sc_dmat;
-	bus_space_tag_t		sc_vmet;
-	struct vme_chipset_tag	sc_vct;
-	u_long			sc_irqref[8];
+	struct mvmebus_range	sc_slave[VME1_NSLAVES];
 };
-
-
-struct vme_pcc_mapresc_t {
-	bus_space_handle_t	pm_handle;
-	bus_addr_t		pm_addr;
-	bus_size_t		pm_size;
-	vme_am_t		pm_am;
-	vme_datasize_t		pm_datasize;
-};
-
-
-int _vme_pcc_map __P((void *, vme_addr_t, vme_size_t, vme_am_t, vme_datasize_t,
-    vme_swap_t, bus_space_tag_t *, bus_space_handle_t *, vme_mapresc_t *));
-
-void _vme_pcc_unmap __P((void *, vme_mapresc_t));
-
-int _vme_pcc_probe __P((void *, vme_addr_t, vme_size_t, vme_am_t,vme_datasize_t,
-    int (*)(void *, bus_space_tag_t, bus_space_handle_t), void *));
-
-int _vme_pcc_intmap __P((void *, int, int, vme_intr_handle_t *));
-
-void *_vme_pcc_intr_establish __P((void *, vme_intr_handle_t, int,
-    int (*)(void *), void *));
-
-void _vme_pcc_intr_disestablish __P((void *, vme_intr_handle_t));
-
-int _vme_pcc_dmamap_create __P((void *, vme_size_t, vme_am_t, vme_datasize_t,
-    vme_swap_t, int, vme_size_t, vme_addr_t, int, bus_dmamap_t *));
-
-void _vme_pcc_dmamap_destroy __P((void *, bus_dmamap_t));
-
-int _vme_pcc_dmamem_alloc __P((void *, vme_size_t, vme_am_t, vme_datasize_t,
-    vme_swap_t, bus_dma_segment_t *, int, int *, int));
-
-void _vme_pcc_dmamem_free __P((void *, bus_dma_segment_t *, int));
 
 #endif /* __MVME68K_VME_PCCVAR_H */

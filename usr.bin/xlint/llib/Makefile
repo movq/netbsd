@@ -1,17 +1,24 @@
-#	$NetBSD: Makefile,v 1.6 2000/01/23 20:59:11 mycroft Exp $
+#	$NetBSD: Makefile,v 1.10 2003/10/21 10:01:22 lukem Exp $
+
+.include <bsd.own.mk>
 
 LIBS=	llib-lposix.ln llib-lstdc.ln
+
+.if ${MKLINT} != "no"
 FILES=	${LIBS}
 FILESDIR= ${LINTLIBDIR}
 
 realall:	${LIBS}
+.endif
 
 CLEANFILES+= ${LIBS}
 
 llib-lposix.ln: llib-lposix
-	lint -Cposix ${.ALLSRC}
+	${_MKTARGET_CREATE}
+	${LINT} ${LINTFLAGS} -Cposix ${.ALLSRC}
 
 llib-lstdc.ln: llib-lstdc
-	lint -Cstdc ${.ALLSRC}
+	${_MKTARGET_CREATE}
+	${LINT} ${LINTFLAGS} -Cstdc ${.ALLSRC}
 
 .include <bsd.prog.mk>

@@ -1,4 +1,4 @@
-/*	$NetBSD: asc.c,v 1.34 2000/03/23 06:39:56 thorpej Exp $	*/
+/*	$NetBSD: asc.c,v 1.53 2008/06/15 10:29:18 tsutsui Exp $	*/
 
 /*
  * Copyright (C) 1997 Scott Reynolds
@@ -63,17 +63,18 @@
  * ASC driver code and console bell support
  */
 
-#include <sys/types.h>
 #include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: asc.c,v 1.53 2008/06/15 10:29:18 tsutsui Exp $");
+
+#include <sys/types.h>
 #include <sys/errno.h>
 #include <sys/time.h>
 #include <sys/systm.h>
 #include <sys/param.h>
 #include <sys/device.h>
-#include <sys/poll.h>
+#include <sys/conf.h>
 
-#include <vm/vm.h>
-#include <vm/pmap.h>
+#include <uvm/uvm_extern.h>
 
 #include <machine/autoconf.h>
 #include <machine/cpu.h>
@@ -97,27 +98,35 @@ int	asc_debug = 0;		/* non-zero enables debugging output */
 
 static u_int8_t		asc_wave_tab[0x800];
 
-static int	asc_ring_bell __P((void *, int, int, int));
-static void	asc_stop_bell __P((void *));
+static int	asc_ring_bell(void *, int, int, int);
+static void	asc_stop_bell(void *);
 #if __notyet__
-static void	asc_intr_enable __P((void));
-static void	asc_intr __P((void *));
+static void	asc_intr_enable(void);
+static void	asc_intr(void *);
 #endif
 
-static int	ascmatch __P((struct device *, struct cfdata *, void *));
-static void	ascattach __P((struct device *, struct device *, void *));
+static int	ascmatch(struct device *, struct cfdata *, void *);
+static void	ascattach(struct device *, struct device *, void *);
 
-struct cfattach asc_ca = {
-	sizeof(struct asc_softc), ascmatch, ascattach
-};
+CFATTACH_DECL(asc, sizeof(struct asc_softc),
+    ascmatch, ascattach, NULL, NULL);
 
 extern struct cfdriver asc_cd;
 
+dev_type_open(ascopen);
+dev_type_close(ascclose);
+dev_type_read(ascread);
+dev_type_write(ascwrite);
+dev_type_ioctl(ascioctl);
+dev_type_mmap(ascmmap);
+
+const struct cdevsw asc_cdevsw = {
+	ascopen, ascclose, ascread, ascwrite, ascioctl,
+	nostop, notty, nopoll, ascmmap, nokqfilter,
+};
+
 static int
-ascmatch(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+ascmatch(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct obio_attach_args *oa = (struct obio_attach_args *)aux;
 	bus_addr_t addr;
@@ -126,6 +135,8 @@ ascmatch(parent, cf, aux)
 
 	if (oa->oa_addr != (-1))
 		addr = (bus_addr_t)oa->oa_addr;
+	else if (current_mac_model->machineid == MACH_MACTV)
+		return 0;
 	else if (current_mac_model->machineid == MACH_MACIIFX)
 		addr = (bus_addr_t)MAC68K_IIFX_ASC_BASE;
 	else
@@ -145,9 +156,7 @@ ascmatch(parent, cf, aux)
 }
 
 static void
-ascattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+ascattach(struct device *parent, struct device *self, void *aux)
 {
 	struct asc_softc *sc = (struct asc_softc *)self;
 	struct obio_attach_args *oa = (struct obio_attach_args *)aux;
@@ -168,7 +177,7 @@ ascattach(parent, self, aux)
 	}
 	sc->sc_open = 0;
 	sc->sc_ringing = 0;
-	callout_init(&sc->sc_bell_ch);
+	callout_init(&sc->sc_bell_ch, 0);
 
 	for (i = 0; i < 256; i++) {	/* up part of wave, four voices? */
 		asc_wave_tab[i] = i / 4;
@@ -200,18 +209,12 @@ ascattach(parent, self, aux)
 }
 
 int
-ascopen(dev, flag, mode, p)
-	dev_t dev;
-	int flag;
-	int mode;
-	struct proc *p;
+ascopen(dev_t dev, int flag, int mode, struct lwp *l)
 {
 	struct asc_softc *sc;
-	int unit;
 
-	unit = ASCUNIT(dev);
-	sc = asc_cd.cd_devs[unit];
-	if (unit >= asc_cd.cd_ndevs)
+	sc = device_lookup_private(&asc_cd, ASCUNIT(dev));
+	if (sc == NULL)
 		return (ENXIO);
 	if (sc->sc_open)
 		return (EBUSY);
@@ -221,51 +224,36 @@ ascopen(dev, flag, mode, p)
 }
 
 int
-ascclose(dev, flag, mode, p)
-	dev_t dev;
-	int flag;
-	int mode;
-	struct proc *p;
+ascclose(dev_t dev, int flag, int mode, struct lwp *l)
 {
 	struct asc_softc *sc;
 
-	sc = asc_cd.cd_devs[ASCUNIT(dev)];
+	sc = device_lookup_private(&asc_cd, ASCUNIT(dev));
 	sc->sc_open = 0;
 
 	return (0);
 }
 
 int
-ascread(dev, uio, ioflag)
-	dev_t dev;
-	struct uio *uio;
-	int ioflag;
+ascread(dev_t dev, struct uio *uio, int ioflag)
 {
 	return (ENXIO);
 }
 
 int
-ascwrite(dev, uio, ioflag)
-	dev_t dev;
-	struct uio *uio;
-	int ioflag;
+ascwrite(dev_t dev, struct uio *uio, int ioflag)
 {
 	return (ENXIO);
 }
 
 int
-ascioctl(dev, cmd, data, flag, p)
-	dev_t dev;
-	int cmd;
-	caddr_t data;
-	int flag;
-	struct proc *p;
+ascioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
 	struct asc_softc *sc;
 	int error;
 	int unit = ASCUNIT(dev);
 
-	sc = asc_cd.cd_devs[unit];
+	sc = device_lookup_private(&asc_cd, unit);
 	error = 0;
 
 	switch (cmd) {
@@ -276,28 +264,16 @@ ascioctl(dev, cmd, data, flag, p)
 	return (error);
 }
 
-int
-ascpoll(dev, events, p)
-	dev_t dev;
-	int events;
-	struct proc *p;
+paddr_t
+ascmmap(dev_t dev, off_t off, int prot)
 {
-	return (events & (POLLOUT | POLLWRNORM));
-}
-
-int
-ascmmap(dev, off, prot)
-	dev_t dev;
-	int off;
-	int prot;
-{
-	int unit = ASCUNIT(dev);
 	struct asc_softc *sc;
 	paddr_t pa;
 
-	sc = asc_cd.cd_devs[unit];
+	sc = device_lookup_private(&asc_cd, ASCUNIT(dev));
 	if ((u_int)off < MAC68K_ASC_LEN) {
-		(void) pmap_extract(pmap_kernel(), (vaddr_t)sc->sc_handle, &pa);
+		(void) pmap_extract(pmap_kernel(), (vaddr_t)sc->sc_handle.base,
+		    &pa);
 		return m68k_btop(pa + off);
 	}
 
@@ -305,9 +281,7 @@ ascmmap(dev, off, prot)
 }
 
 static int 
-asc_ring_bell(arg, freq, length, volume)
-	void *arg;
-	int freq, length, volume;
+asc_ring_bell(void *arg, int freq, int length, int volume)
 {
 	struct asc_softc *sc = (struct asc_softc *)arg;
 	unsigned long cfreq;
@@ -356,8 +330,7 @@ asc_ring_bell(arg, freq, length, volume)
 }
 
 static void 
-asc_stop_bell(arg)
-	void *arg;
+asc_stop_bell(void *arg)
 {
 	struct asc_softc *sc = (struct asc_softc *)arg;
 
@@ -373,7 +346,7 @@ asc_stop_bell(arg)
 
 #if __notyet__
 static void
-asc_intr_enable()
+asc_intr_enable(void)
 {
 	int s;
 
@@ -388,8 +361,7 @@ asc_intr_enable()
 
 /*ARGSUSED*/
 static void
-asc_intr(arg)
-        void *arg;
+asc_intr(void *arg)
 {
 #ifdef ASC_DEBUG
 	struct asc_softc *sc = (struct asc_softc *)arg;

@@ -1,4 +1,4 @@
-/*	$NetBSD: adbvar.h,v 1.18 2000/03/19 07:44:58 scottr Exp $	*/
+/*	$NetBSD: adbvar.h,v 1.25 2008/04/03 05:03:23 scottr Exp $	*/
 
 /*
  * Copyright (C) 1994	Bradley A. Grantham
@@ -48,11 +48,9 @@ typedef struct adb_trace_xlate_s {
 
 extern adb_trace_xlate_t adb_trace_xlations[];
 
-#define ADB_MAXTRACE	(NBPG / sizeof(int) - 1)
-extern int	adb_traceq[ADB_MAXTRACE];
-extern int	adb_traceq_tail;
-extern int	adb_traceq_len;
 extern int	adb_polling;
+
+extern void	*adb_softintr_cookie;
 
 #ifdef DEBUG
 #ifndef ADB_DEBUG
@@ -65,18 +63,16 @@ extern int	adb_debug;
 #endif
 
 /* adb.c */
-void	adb_enqevent __P((adb_event_t *event));
-int	adbopen __P((dev_t dev, int flag, int mode, struct proc *p));
-int	adbclose __P((dev_t dev, int flag, int mode, struct proc *p));
-int	adbread __P((dev_t dev, struct uio *uio, int flag));
-int	adbwrite __P((dev_t dev, struct uio *uio, int flag));
-int	adbioctl __P((dev_t , int , caddr_t , int , struct proc *));
-int	adbpoll __P((dev_t dev, int events, struct proc *p));
+void	adb_enqevent(adb_event_t *);
+
+int	adb_op_sync(Ptr, Ptr, Ptr, short);
+void	adb_spin(volatile int *);
+void	adb_op_comprout(void);
 
 /* adbsysasm.s */
-void	adb_kbd_asmcomplete __P((void));
-void	adb_ms_asmcomplete __P((void));
-void	extdms_complete __P((void));
+void	adb_kbd_asmcomplete(void);
+void	adb_ms_asmcomplete(void);
+void	extdms_complete(void);
 
 /* types of adb hardware that we (will eventually) support */
 #define ADB_HW_UNKNOWN		0x0	/* don't know */
@@ -94,13 +90,14 @@ void	extdms_complete __P((void));
 
 #ifndef MRG_ADB
 /* adb_direct.c */
-int	adb_poweroff __P((void));
-int	CountADBs __P((void));
-void	ADBReInit __P((void));
-int	GetIndADB __P((ADBDataBlock * info, int index));
-int	GetADBInfo __P((ADBDataBlock * info, int adbAddr));
-int	SetADBInfo __P((ADBSetInfoBlock * info, int adbAddr));
-int	ADBOp __P((Ptr buffer, Ptr compRout, Ptr data, short commandNum));
-int	adb_read_date_time __P((unsigned long *t));
-int	adb_set_date_time __P((unsigned long t));
+int	adb_poweroff(void);
+int	CountADBs(void);
+void	ADBReInit(void);
+int	GetIndADB(ADBDataBlock *, int);
+int	GetADBInfo(ADBDataBlock *, int);
+int	SetADBInfo(ADBSetInfoBlock *, int);
+int	ADBOp(Ptr, Ptr, Ptr, short);
+int	adb_read_date_time(unsigned long *);
+int	adb_set_date_time(unsigned long);
 #endif /* !MRG_ADB */
+void	adb_soft_intr(void);

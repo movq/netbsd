@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_utils.c,v 1.5 2000/01/07 03:41:03 oster Exp $	*/
+/*	$NetBSD: rf_utils.c,v 1.16 2006/11/16 01:33:23 christos Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -32,38 +32,32 @@
  *
  ****************************************/
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: rf_utils.c,v 1.16 2006/11/16 01:33:23 christos Exp $");
 
-#include "rf_threadstuff.h"
-
-#include <sys/time.h>
-
+#include "rf_archs.h"
 #include "rf_utils.h"
 #include "rf_debugMem.h"
 #include "rf_alloclist.h"
-#include "rf_general.h"
 
 /* creates & zeros 2-d array with b rows and k columns (MCH) */
 RF_RowCol_t **
-rf_make_2d_array(b, k, allocList)
-	int     b;
-	int     k;
-	RF_AllocListElem_t *allocList;
+rf_make_2d_array(int b, int k, RF_AllocListElem_t *allocList)
 {
 	RF_RowCol_t **retval, i;
 
 	RF_MallocAndAdd(retval, b * sizeof(RF_RowCol_t *), (RF_RowCol_t **), allocList);
 	for (i = 0; i < b; i++) {
 		RF_MallocAndAdd(retval[i], k * sizeof(RF_RowCol_t), (RF_RowCol_t *), allocList);
-		(void) bzero((char *) retval[i], k * sizeof(RF_RowCol_t));
+		(void) memset((char *) retval[i], 0, k * sizeof(RF_RowCol_t));
 	}
 	return (retval);
 }
 
-void 
-rf_free_2d_array(a, b, k)
-	RF_RowCol_t **a;
-	int     b;
-	int     k;
+#if (RF_INCLUDE_PARITY_DECLUSTERING > 0) || (RF_INCLUDE_PARITY_DECLUSTERING_PQ > 0)
+
+void
+rf_free_2d_array(RF_RowCol_t **a, int b, int k)
 {
 	RF_RowCol_t i;
 
@@ -75,31 +69,26 @@ rf_free_2d_array(a, b, k)
 
 /* creates & zeros a 1-d array with c columns */
 RF_RowCol_t *
-rf_make_1d_array(c, allocList)
-	int     c;
-	RF_AllocListElem_t *allocList;
+rf_make_1d_array(int c, RF_AllocListElem_t *allocList)
 {
 	RF_RowCol_t *retval;
 
 	RF_MallocAndAdd(retval, c * sizeof(RF_RowCol_t), (RF_RowCol_t *), allocList);
-	(void) bzero((char *) retval, c * sizeof(RF_RowCol_t));
+	(void) memset((char *) retval, 0, c * sizeof(RF_RowCol_t));
 	return (retval);
 }
 
-void 
-rf_free_1d_array(a, n)
-	RF_RowCol_t *a;
-	int     n;
+void
+rf_free_1d_array(RF_RowCol_t *a, int n)
 {
 	RF_Free(a, n * sizeof(RF_RowCol_t));
 }
+
 /* Euclid's algorithm:  finds and returns the greatest common divisor
  * between a and b.     (MCH)
  */
-int 
-rf_gcd(m, n)
-	int     m;
-	int     n;
+int
+rf_gcd(int m, int n)
 {
 	int     t;
 
@@ -110,6 +99,7 @@ rf_gcd(m, n)
 	}
 	return (n);
 }
+#endif
 /* these convert between text and integer.  Apparently the regular C macros
  * for doing this are not available in the kernel
  */
@@ -120,9 +110,8 @@ rf_gcd(m, n)
 #define HC2INT(x)    ( ((x) >= 'a' && (x) <= 'f') ? (x) - 'a' + 10 :                    \
 		       ( ((x) >= 'A' && (x) <= 'F') ? (x) - 'A' + 10 : (x - '0') ) )
 
-int 
-rf_atoi(p)
-	char   *p;
+int
+rf_atoi(char *p)
 {
 	int     val = 0, negate = 0;
 
@@ -135,9 +124,8 @@ rf_atoi(p)
 	return ((negate) ? -val : val);
 }
 
-int 
-rf_htoi(p)
-	char   *p;
+int
+rf_htoi(char *p)
 {
 	int     val = 0;
 	for (; ISHEXCHAR(*p); p++)

@@ -1,8 +1,8 @@
-/*	$NetBSD: if_rayreg.h,v 1.2 2000/02/27 20:40:43 augustss Exp $	*/
-/* 
+/*	$NetBSD: if_rayreg.h,v 1.10 2007/12/25 18:33:42 perry Exp $	*/
+/*
  * Copyright (c) 2000 Christian E. Hopps
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -31,28 +31,29 @@
 #define	RAY_MAXSSIDLEN	32
 
 /*
- * CCR registers 
+ * CCR registers
  */
-#define RAY_COR		(0xf00 + 0)	/* config option register */
-#define	RAY_CCSR	(0xf00 + 1)	/* card config and status register */
-#define	RAY_PIN		(0xf00 + 2)	/* not in hw */
-#define	RAY_SOCKETCOPY	(0xf00 + 3)	/* not used by hw */
-#define	RAY_HCSIR	(0xf00 + 5)	/* HCS intr register */
-#define	RAY_ECFIR	(0xf00 + 6)	/* ECF intr register */
-#define	RAY_AR0		(0xf00 + 8)	/* authorization register 0 (unused) */
-#define	RAY_AR1		(0xf00 + 9)	/* authorization register 1 (unused) */
+#define RAY_COR		0	/* config option register */
+#define	RAY_CCSR	1	/* card config and status register */
+#define	RAY_PIN		2	/* not in hw */
+#define	RAY_SOCKETCOPY	3	/* not used by hw */
+#define	RAY_HCSIR	5	/* HCS intr register */
+#define	RAY_ECFIR	6	/* ECF intr register */
+#define	RAY_AR0		8	/* authorization register 0 (unused) */
+#define	RAY_AR1		9	/* authorization register 1 (unused) */
+#define	RAY_PMR		10	/* program mode register (unused) */
+#define	RAY_TMR		11	/* pc test mode register (unused) */
+#define	RAY_FCWR	16	/* frequency control word register */
+
 /*
- * XXX these registers cannot be accessed with pcmcia.c's 14 byte mapping
+ * XXX these registers cannot be accessed with pcmcia.c's 0x14 byte mapping
  * of the CCR for us
  */
 #if 0
-#define	RAY_PMR		0xf0a	/* program mode register (unused) */
-#define	RAY_TMR		0xf0b	/* pc test mode register (unused) */
-#define	RAY_FCWR	0xf10	/* frequency control word register */
-#define RAY_TMC1	0xf14	/* test mode control 1 (unused) */
-#define RAY_TMC2	0xf15	/* test mode control 1 (unused) */
-#define RAY_TMC3	0xf16	/* test mode control 1 (unused) */
-#define RAY_TMC4	0xf17	/* test mode control 1 (unused) */
+#define RAY_TMC1	0x014	/* test mode control 1 (unused) */
+#define RAY_TMC2	0x015	/* test mode control 1 (unused) */
+#define RAY_TMC3	0x016	/* test mode control 1 (unused) */
+#define RAY_TMC4	0x017	/* test mode control 1 (unused) */
 #endif
 
 /*
@@ -171,7 +172,7 @@ struct ray_csc {
 	u_int16_t	csc_mrx_overflow;	/* ECF incs on rx overflow */
 	u_int16_t	csc_mrx_cksum;	/* " on cksum error */
 	u_int16_t	csc_rx_hcksum;	/* " on header cksum error */
-	u_int8_t	csc_rx_noise;		/* average RSL measuremant */
+	u_int8_t	csc_rx_noise;		/* average RSL measurement */
 };
 
 /* status area */
@@ -222,7 +223,7 @@ struct ray_startup_params_head {
 /*48*/	u_int8_t	sp_country_code;
 /*49*/	u_int8_t	sp_hop_seq;
 /*4a*/	u_int8_t	sp_hop_seq_len;	/* no longer supported */
-} __attribute__((__packed__));
+} __packed;
 
 /* build 5 tail to the startup params */
 struct ray_startup_params_tail_5 {
@@ -240,7 +241,7 @@ struct ray_startup_params_tail_5 {
 	u_int8_t	sp_privacy_must_start;
 	u_int8_t	sp_privacy_can_join;
 	u_int8_t	sp_basic_rate_set[8];
-} __attribute__((__packed__));
+} __packed;
 
 /* build 4 (webgear) tail to the startup params */
 struct ray_startup_params_tail_4 {
@@ -255,7 +256,7 @@ struct ray_startup_params_tail_4 {
 	u_int8_t	sp_test_min_chan;
 	u_int8_t	sp_test_max_chan;
 	/* more bytes in build 5 */
-} __attribute__((__packed__));
+} __packed;
 
 /*
  * Parameter IDs for the update/report param commands and values if
@@ -384,11 +385,11 @@ struct ray_startup_params_tail_4 {
 #define	RAY_CMD_MAX		0x0e
 
 /*
- * unsolicted commands from the ECF
+ * unsolicited commands from the ECF
  */
 #define	RAY_ECMD_RX_DONE		0x80	/* process rx packet */
 #define	RAY_ECMD_REJOIN_DONE		0x81	/* rejoined the network */
-#define	RAY_ECMD_ROAM_START		0x82	/* romaining started */
+#define	RAY_ECMD_ROAM_START		0x82	/* roaming started */
 #define	RAY_ECMD_JAPAN_CALL_SIGNAL	0x83	/* japan test thing */
 
 
@@ -498,7 +499,7 @@ struct ray_cmd_tx {
 	u_int8_t	c_antenna;
 };
 
-/* RAY_CMD_TX_REQ (for bulid 4) */
+/* RAY_CMD_TX_REQ (for build 4) */
 struct ray_cmd_tx_4 {
 	u_int8_t	c_status;		/* ccs generic header */
 	u_int8_t	c_cmd;			/* " */
@@ -558,14 +559,6 @@ struct ray_param_req {
 
 #ifdef _KERNEL
 #define	RAY_FAILCAUSE_WAITING	257
-#endif
-
-#ifndef SIOCGIFGENERIC
-#define SIOCGIFGENERIC  _IOWR('i', 57, struct ifreq)    /* generic IF get op */
-#endif
-
-#ifndef SIOCSIFGENERIC
-#define SIOCSIFGENERIC  _IOWR('i', 58, struct ifreq)    /* generic IF get op */
 #endif
 
 /* get a param the data is a ray_param_request structure */

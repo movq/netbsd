@@ -1,11 +1,11 @@
-/*	$NetBSD: layer_vnops.c,v 1.3 2000/03/30 12:22:14 augustss Exp $	*/
+/*	$NetBSD: layer_vnops.c,v 1.35 2008/01/30 09:50:23 ad Exp $	*/
 
 /*
  * Copyright (c) 1999 National Aeronautics & Space Administration
  * All rights reserved.
  *
  * This software was written by William Studenmund of the
- * Numerical Aerospace Similation Facility, NASA Ames Research Center.
+ * Numerical Aerospace Simulation Facility, NASA Ames Research Center.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -47,11 +47,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -71,7 +67,7 @@
  *
  * Ancestors:
  *	@(#)lofs_vnops.c	1.2 (Berkeley) 6/18/92
- *	$Id: layer_vnops.c,v 1.3 2000/03/30 12:22:14 augustss Exp $
+ *	Id: lofs_vnops.c,v 1.11 1992/05/30 10:05:43 jsp Exp jsp
  *	...and...
  *	@(#)null_vnodeops.c 1.20 92/07/07 UCLA Ficus project
  */
@@ -82,7 +78,7 @@
  * (See mount_null(8) for more information.)
  *
  * The layer.h, layer_extern.h, layer_vfs.c, and layer_vnops.c files provide
- * the core implimentation of the null file system and most other stacked
+ * the core implementation of the null file system and most other stacked
  * fs's. The description below refers to the null file system, but the
  * services provided by the layer* files are useful for all layered fs's.
  *
@@ -125,13 +121,13 @@
  * The null layer is the minimum file system layer,
  * simply bypassing all possible operations to the lower layer
  * for processing there.  The majority of its activity centers
- * on the bypass routine, though which nearly all vnode operations
+ * on the bypass routine, through which nearly all vnode operations
  * pass.
  *
  * The bypass routine accepts arbitrary vnode operations for
  * handling by the lower layer.  It begins by examing vnode
  * operation arguments and replacing any layered nodes by their
- * lower-layer equivlants.  It then invokes the operation
+ * lower-layer equivalents.  It then invokes the operation
  * on the lower layer.  Finally, it replaces the layered nodes
  * in the arguments and, if a vnode is return by the operation,
  * stacks a layered node on top of the returned vnode.
@@ -183,8 +179,8 @@
  * are created as a result of vnode operations on
  * this or other null vnode stacks.
  *
- * New vnode stacks come into existance as a result of
- * an operation which returns a vnode.  
+ * New vnode stacks come into existence as a result of
+ * an operation which returns a vnode.
  * The bypass routine stacks a null-node above the new
  * vnode before returning it to the caller.
  *
@@ -194,7 +190,7 @@
  * the root null-node (which was created when the null layer was mounted).
  * Now consider opening "sys".  A vop_lookup would be
  * done on the root null-node.  This operation would bypass through
- * to the lower layer which would return a vnode representing 
+ * to the lower layer which would return a vnode representing
  * the UFS "sys".  layer_bypass then builds a null-node
  * aliasing the UFS "sys" and returns this to the caller.
  * Later operations on the null-node "sys" will repeat this
@@ -208,13 +204,13 @@
  * then begin modifing the copy.  Sed can be used to easily rename
  * all variables.
  *
- * The umap layer is an example of a layer descended from the 
+ * The umap layer is an example of a layer descended from the
  * null layer.
  *
  *
  * INVOKING OPERATIONS ON LOWER LAYERS
  *
- * There are two techniques to invoke operations on a lower layer 
+ * There are two techniques to invoke operations on a lower layer
  * when the operation cannot be completely bypassed.  Each method
  * is appropriate in different situations.  In both cases,
  * it is the responsibility of the aliasing layer to make
@@ -223,28 +219,32 @@
  *
  * The first approach is to call the aliasing layer's bypass routine.
  * This method is most suitable when you wish to invoke the operation
- * currently being hanldled on the lower layer.  It has the advantage
+ * currently being handled on the lower layer.  It has the advantage
  * that the bypass routine already must do argument mapping.
  * An example of this is null_getattrs in the null layer.
  *
- * A second approach is to directly invoked vnode operations on
+ * A second approach is to directly invoke vnode operations on
  * the lower layer with the VOP_OPERATIONNAME interface.
  * The advantage of this method is that it is easy to invoke
  * arbitrary operations on the lower layer.  The disadvantage
- * is that vnodes arguments must be manualy mapped.
+ * is that vnodes' arguments must be manually mapped.
  *
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: layer_vnops.c,v 1.35 2008/01/30 09:50:23 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
 #include <sys/time.h>
-#include <sys/types.h>
 #include <sys/vnode.h>
 #include <sys/mount.h>
 #include <sys/namei.h>
-#include <sys/malloc.h>
+#include <sys/kmem.h>
 #include <sys/buf.h>
+#include <sys/kauth.h>
+
 #include <miscfs/genfs/layer.h>
 #include <miscfs/genfs/layer_extern.h>
 #include <miscfs/genfs/genfs.h>
@@ -281,7 +281,7 @@
  *   to determine what implementation of the op should be invoked
  * - all mapped vnodes are of our vnode-type (NEEDSWORK:
  *   problems on rmdir'ing mount points and renaming?)
- */ 
+ */
 int
 layer_bypass(v)
 	void *v;
@@ -290,12 +290,13 @@ layer_bypass(v)
 		struct vnodeop_desc *a_desc;
 		<other random data follows, presumably>
 	} */ *ap = v;
-	int (**our_vnodeop_p) __P((void *)); 
+	int (**our_vnodeop_p)(void *);
 	struct vnode **this_vp_p;
 	int error, error1;
 	struct vnode *old_vps[VDESC_MAX_VPS], *vp0;
 	struct vnode **vps_p[VDESC_MAX_VPS];
 	struct vnode ***vppp;
+	struct mount *mp;
 	struct vnodeop_desc *descp = ap->a_desc;
 	int reles, i, flags;
 
@@ -305,16 +306,18 @@ layer_bypass(v)
 	 */
 	if (descp->vdesc_vp_offsets == NULL ||
 	    descp->vdesc_vp_offsets[0] == VDESC_NO_OFFSET)
-		panic ("layer_bypass: no vp's in map.\n");
+		panic("%s: no vp's in map.\n", __func__);
 #endif
 
-	vps_p[0] = VOPARG_OFFSETTO(struct vnode**,descp->vdesc_vp_offsets[0],ap);
+	vps_p[0] =
+	    VOPARG_OFFSETTO(struct vnode**, descp->vdesc_vp_offsets[0], ap);
 	vp0 = *vps_p[0];
-	flags = MOUNTTOLAYERMOUNT(vp0->v_mount)->layerm_flags;
+	mp = vp0->v_mount;
+	flags = MOUNTTOLAYERMOUNT(mp)->layerm_flags;
 	our_vnodeop_p = vp0->v_op;
 
 	if (flags & LAYERFS_MBYPASSDEBUG)
-		printf ("layer_bypass: %s\n", descp->vdesc_name);
+		printf("%s: %s\n", __func__, descp->vdesc_name);
 
 	/*
 	 * Map the vnodes going in.
@@ -325,8 +328,9 @@ layer_bypass(v)
 	for (i = 0; i < VDESC_MAX_VPS; reles >>= 1, i++) {
 		if (descp->vdesc_vp_offsets[i] == VDESC_NO_OFFSET)
 			break;   /* bail out at end of list */
-		vps_p[i] = this_vp_p = 
-			VOPARG_OFFSETTO(struct vnode**,descp->vdesc_vp_offsets[i],ap);
+		vps_p[i] = this_vp_p =
+		    VOPARG_OFFSETTO(struct vnode**, descp->vdesc_vp_offsets[i],
+		    ap);
 		/*
 		 * We're not guaranteed that any but the first vnode
 		 * are of our type.  Check for and don't map any
@@ -346,7 +350,7 @@ layer_bypass(v)
 			if (reles & VDESC_VP0_WILLRELE)
 				VREF(*this_vp_p);
 		}
-			
+
 	}
 
 	/*
@@ -390,17 +394,20 @@ layer_bypass(v)
 		if (descp->vdesc_flags & VDESC_VPP_WILLRELE)
 			goto out;
 		vppp = VOPARG_OFFSETTO(struct vnode***,
-				 descp->vdesc_vpp_offset,ap);
+				 descp->vdesc_vpp_offset, ap);
 		/*
 		 * Only vop_lookup, vop_create, vop_makedir, vop_bmap,
-		 * vop_mknod, and vop_symlink return vpp's. The latter
-		 * two are VPP_WILLRELE, so we won't get here, and vop_bmap
+		 * vop_mknod, and vop_symlink return vpp's. vop_bmap
 		 * doesn't call bypass as the lower vpp is fine (we're just
-		 * going to do i/o on it). vop_loookup doesn't call bypass
+		 * going to do i/o on it). vop_lookup doesn't call bypass
 		 * as a lookup on "." would generate a locking error.
 		 * So all the calls which get us here have a locked vpp. :-)
 		 */
-		error = layer_node_create(old_vps[0]->v_mount, **vppp, *vppp);
+		error = layer_node_create(mp, **vppp, *vppp);
+		if (error) {
+			vput(**vppp);
+			**vppp = NULL;
+		}
 	}
 
  out:
@@ -424,8 +431,8 @@ layer_lookup(v)
 	} */ *ap = v;
 	struct componentname *cnp = ap->a_cnp;
 	int flags = cnp->cn_flags;
-	struct vnode *dvp, *vp, *ldvp;
-	int error, r;
+	struct vnode *dvp, *lvp, *ldvp;
+	int error;
 
 	dvp = ap->a_dvp;
 
@@ -436,36 +443,33 @@ layer_lookup(v)
 	ldvp = LAYERVPTOLOWERVP(dvp);
 	ap->a_dvp = ldvp;
 	error = VCALL(ldvp, ap->a_desc->vdesc_offset, ap);
-	vp = *ap->a_vpp;
+	lvp = *ap->a_vpp;
+	*ap->a_vpp = NULL;
 
 	if (error == EJUSTRETURN && (flags & ISLASTCN) &&
 	    (dvp->v_mount->mnt_flag & MNT_RDONLY) &&
 	    (cnp->cn_nameiop == CREATE || cnp->cn_nameiop == RENAME))
 		error = EROFS;
+
 	/*
-	 * We must do the same locking and unlocking at this layer as 
-	 * is done in the layers below us. It used to be we would try
-	 * to guess based on what was set with the flags and error codes.
-	 *
-	 * But that doesn't work. So now we have the underlying VOP_LOOKUP
-	 * tell us if it released the parent vnode, and we adjust the
-	 * upper node accordingly. We can't just look at the lock states
-	 * of the lower nodes as someone else might have come along and
-	 * locked the parent node after our call to VOP_LOOKUP locked it.
+	 * We must do the same locking and unlocking at this layer as
+	 * is done in the layers below us.
 	 */
-	if ((cnp->cn_flags & PDIRUNLOCK)) {
-		LAYERFS_UPPERUNLOCK(dvp, 0, r);
-	}
-	if (ldvp == vp) {
+	if (ldvp == lvp) {
+
 		/*
 		 * Did lookup on "." or ".." in the root node of a mount point.
 		 * So we return dvp after a VREF.
 		 */
-		*ap->a_vpp = dvp;
 		VREF(dvp);
-		vrele(vp);
-	} else if (vp != NULL) {
-		error = layer_node_create(dvp->v_mount, vp, ap->a_vpp);
+		*ap->a_vpp = dvp;
+		vrele(lvp);
+	} else if (lvp != NULL) {
+		/* dvp, ldvp and vp are all locked */
+		error = layer_node_create(dvp->v_mount, lvp, ap->a_vpp);
+		if (error) {
+			vput(lvp);
+		}
 	}
 	return (error);
 }
@@ -481,8 +485,8 @@ layer_setattr(v)
 		struct vnodeop_desc *a_desc;
 		struct vnode *a_vp;
 		struct vattr *a_vap;
-		struct ucred *a_cred;
-		struct proc *a_p;
+		kauth_cred_t a_cred;
+		struct lwp *a_l;
 	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
 	struct vattr *vap = ap->a_vap;
@@ -525,8 +529,8 @@ layer_getattr(v)
 	struct vop_getattr_args /* {
 		struct vnode *a_vp;
 		struct vattr *a_vap;
-		struct ucred *a_cred;
-		struct proc *a_p;
+		kauth_cred_t a_cred;
+		struct lwp *a_l;
 	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
 	int error;
@@ -534,7 +538,7 @@ layer_getattr(v)
 	if ((error = LAYERFS_DO_BYPASS(vp, ap)) != 0)
 		return (error);
 	/* Requires that arguments be restored. */
-	ap->a_vap->va_fsid = vp->v_mount->mnt_stat.f_fsid.val[0];
+	ap->a_vap->va_fsid = vp->v_mount->mnt_stat.f_fsidx.__fsid_val[0];
 	return (0);
 }
 
@@ -545,8 +549,8 @@ layer_access(v)
 	struct vop_access_args /* {
 		struct vnode *a_vp;
 		int  a_mode;
-		struct ucred *a_cred;
-		struct proc *a_p;
+		kauth_cred_t a_cred;
+		struct lwp *a_l;
 	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
 	mode_t mode = ap->a_mode;
@@ -606,6 +610,11 @@ layer_lock(v)
 	struct vnode *vp = ap->a_vp, *lowervp;
 	int	flags = ap->a_flags, error;
 
+	if (flags & LK_INTERLOCK) {
+		mutex_exit(&vp->v_interlock);
+		flags &= ~LK_INTERLOCK;
+	}
+
 	if (vp->v_vnlock != NULL) {
 		/*
 		 * The lower level has exported a struct lock to us. Use
@@ -615,12 +624,7 @@ layer_lock(v)
 		 * going away doesn't mean the struct lock below us is.
 		 * LK_EXCLUSIVE is fine.
 		 */
-		if ((flags & LK_TYPE_MASK) == LK_DRAIN) {
-			return(lockmgr(vp->v_vnlock,
-				(flags & ~LK_TYPE_MASK) | LK_EXCLUSIVE,
-				&vp->v_interlock));
-		} else
-			return(lockmgr(vp->v_vnlock, flags, &vp->v_interlock));
+		return (vlockmgr(vp->v_vnlock, flags));
 	} else {
 		/*
 		 * Ahh well. It would be nice if the fs we're over would
@@ -630,22 +634,13 @@ layer_lock(v)
 		 * on "..", we have to lock the lower node, then lock our
 		 * node. Most of the time it won't matter that we lock our
 		 * node (as any locking would need the lower one locked
-		 * first). But we can LK_DRAIN the upper lock as a step
-		 * towards decomissioning it.
+		 * first).
 		 */
 		lowervp = LAYERVPTOLOWERVP(vp);
-		if (flags & LK_INTERLOCK) {
-			simple_unlock(&vp->v_interlock);
-			flags &= ~LK_INTERLOCK;
-		}
-		if ((flags & LK_TYPE_MASK) == LK_DRAIN) {
-			error = VOP_LOCK(lowervp,
-				(flags & ~LK_TYPE_MASK) | LK_EXCLUSIVE);
-		} else
-			error = VOP_LOCK(lowervp, flags);
+		error = VOP_LOCK(lowervp, flags);
 		if (error)
 			return (error);
-		if ((error = lockmgr(&vp->v_lock, flags, &vp->v_interlock))) {
+		if ((error = vlockmgr(&vp->v_lock, flags))) {
 			VOP_UNLOCK(lowervp, 0);
 		}
 		return (error);
@@ -666,24 +661,19 @@ layer_unlock(v)
 	struct vnode *vp = ap->a_vp;
 	int	flags = ap->a_flags;
 
+	if (flags & LK_INTERLOCK) {
+		mutex_exit(&vp->v_interlock);
+		flags &= ~LK_INTERLOCK;
+	}
+
 	if (vp->v_vnlock != NULL) {
-		return (lockmgr(vp->v_vnlock, ap->a_flags | LK_RELEASE,
-			&vp->v_interlock));
+		return (vlockmgr(vp->v_vnlock, ap->a_flags | LK_RELEASE));
 	} else {
-		if (flags & LK_INTERLOCK) {
-			simple_unlock(&vp->v_interlock);
-			flags &= ~LK_INTERLOCK;
-		}
 		VOP_UNLOCK(LAYERVPTOLOWERVP(vp), flags);
-		return (lockmgr(&vp->v_lock, ap->a_flags | LK_RELEASE,
-			&vp->v_interlock));
+		return (vlockmgr(&vp->v_lock, flags | LK_RELEASE));
 	}
 }
 
-/*
- * As long as genfs_nolock is in use, don't call VOP_ISLOCKED(lowervp)
- * if vp->v_vnlock == NULL as genfs_noislocked will always report 0.
- */
 int
 layer_islocked(v)
 	void *v;
@@ -692,11 +682,16 @@ layer_islocked(v)
 		struct vnode *a_vp;
 	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
+	int lkstatus;
 
 	if (vp->v_vnlock != NULL)
-		return (lockstatus(vp->v_vnlock));
-	else
-		return (lockstatus(&vp->v_lock));
+		return vlockstatus(vp->v_vnlock);
+
+	lkstatus = VOP_ISLOCKED(LAYERVPTOLOWERVP(vp));
+	if (lkstatus)
+		return lkstatus;
+
+	return vlockstatus(&vp->v_lock);
 }
 
 /*
@@ -714,9 +709,11 @@ layer_fsync(v)
 {
 	struct vop_fsync_args /* {
 		struct vnode *a_vp;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 		int  a_flags;
-		struct proc *a_p;
+		off_t offlo;
+		off_t offhi;
+		struct lwp *a_l;
 	} */ *ap = v;
 
 	if (ap->a_flags & FSYNC_RECLAIM) {
@@ -733,8 +730,16 @@ layer_inactive(v)
 {
 	struct vop_inactive_args /* {
 		struct vnode *a_vp;
-		struct proc *a_p;
+		bool *a_recycle;
 	} */ *ap = v;
+	struct vnode *vp = ap->a_vp;
+
+	/*
+	 * ..., but don't cache the device node. Also, if we did a
+	 * remove, don't cache the node.
+	 */
+	*ap->a_recycle = (vp->v_type == VBLK || vp->v_type == VCHR
+	    || (VTOLAYER(vp)->layer_flags & LAYERFS_REMOVED));
 
 	/*
 	 * Do nothing (and _don't_ bypass).
@@ -748,8 +753,86 @@ layer_inactive(v)
 	 * like they do in the name lookup cache code.
 	 * That's too much work for now.
 	 */
-	VOP_UNLOCK(ap->a_vp, 0);
+	VOP_UNLOCK(vp, 0);
+
 	return (0);
+}
+
+int
+layer_remove(v)
+	void *v;
+{
+	struct vop_remove_args /* {
+		struct vonde		*a_dvp;
+		struct vnode		*a_vp;
+		struct componentname	*a_cnp;
+	} */ *ap = v;
+
+	int		error;
+	struct vnode	*vp = ap->a_vp;
+
+	vref(vp);
+	if ((error = LAYERFS_DO_BYPASS(vp, ap)) == 0)
+		VTOLAYER(vp)->layer_flags |= LAYERFS_REMOVED;
+
+	vrele(vp);
+
+	return (error);
+}
+
+int
+layer_rename(v)
+	void *v;
+{
+	struct vop_rename_args  /* {
+		struct vnode		*a_fdvp;
+		struct vnode		*a_fvp;
+		struct componentname	*a_fcnp;
+		struct vnode		*a_tdvp;
+		struct vnode		*a_tvp;
+		struct componentname	*a_tcnp;
+	} */ *ap = v;
+
+	int error;
+	struct vnode *fdvp = ap->a_fdvp;
+	struct vnode *tvp;
+
+	tvp = ap->a_tvp;
+	if (tvp) {
+		if (tvp->v_mount != fdvp->v_mount)
+			tvp = NULL;
+		else
+			vref(tvp);
+	}
+	error = LAYERFS_DO_BYPASS(fdvp, ap);
+	if (tvp) {
+		if (error == 0)
+			VTOLAYER(tvp)->layer_flags |= LAYERFS_REMOVED;
+		vrele(tvp);
+	}
+
+	return (error);
+}
+
+int
+layer_rmdir(v)
+	void *v;
+{
+	struct vop_rmdir_args /* {
+		struct vnode		*a_dvp;
+		struct vnode		*a_vp;
+		struct componentname	*a_cnp;
+	} */ *ap = v;
+	int		error;
+	struct vnode	*vp = ap->a_vp;
+
+	vref(vp);
+	if ((error = LAYERFS_DO_BYPASS(vp, ap)) == 0)
+		VTOLAYER(vp)->layer_flags |= LAYERFS_REMOVED;
+
+	vrele(vp);
+
+	return (error);
 }
 
 int
@@ -758,7 +841,7 @@ layer_reclaim(v)
 {
 	struct vop_reclaim_args /* {
 		struct vnode *a_vp;
-		struct proc *a_p;
+		struct lwp *a_l;
 	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
 	struct layer_mount *lmp = MOUNTTOLAYERMOUNT(vp->v_mount);
@@ -768,9 +851,7 @@ layer_reclaim(v)
 	/*
 	 * Note: in vop_reclaim, the node's struct lock has been
 	 * decomissioned, so we have to be careful about calling
-	 * VOP's on ourself. Even if we turned a LK_DRAIN into an
-	 * LK_EXCLUSIVE in layer_lock, we still must be careful as VXLOCK is
-	 * set.
+	 * VOP's on ourself.  We must be careful as VXLOCK is set.
 	 */
 	/* After this assignment, this node will not be re-used. */
 	if ((vp == lmp->layerm_rootvp)) {
@@ -783,12 +864,13 @@ layer_reclaim(v)
 		lmp->layerm_rootvp = NULL;
 	}
 	xp->layer_lowervp = NULL;
-	simple_lock(&lmp->layerm_hashlock);
+	mutex_enter(&lmp->layerm_hashlock);
 	LIST_REMOVE(xp, layer_hash);
-	simple_unlock(&lmp->layerm_hashlock);
-	FREE(vp->v_data, M_TEMP);
+	mutex_exit(&lmp->layerm_hashlock);
+	kmem_free(vp->v_data, lmp->layerm_size);
 	vp->v_data = NULL;
-	vrele (lowervp);
+	vrele(lowervp);
+
 	return (0);
 }
 
@@ -828,33 +910,7 @@ layer_print(v)
 }
 
 /*
- * XXX - vop_strategy must be hand coded because it has no
- * vnode in its arguments.
- * This goes away with a merged VM/buffer cache.
- */
-int
-layer_strategy(v)
-	void *v;
-{
-	struct vop_strategy_args /* {
-		struct buf *a_bp;
-	} */ *ap = v;
-	struct buf *bp = ap->a_bp;
-	int error;
-	struct vnode *savedvp;
-
-	savedvp = bp->b_vp;
-	bp->b_vp = LAYERVPTOLOWERVP(bp->b_vp);
-
-	error = VOP_STRATEGY(bp);
-
-	bp->b_vp = savedvp;
-
-	return (error);
-}
-
-/*
- * XXX - like vop_strategy, vop_bwrite must be hand coded because it has no
+ * XXX - vop_bwrite must be hand coded because it has no
  * vnode in its arguments.
  * This goes away with a merged VM/buffer cache.
  */
@@ -877,4 +933,62 @@ layer_bwrite(v)
 	bp->b_vp = savedvp;
 
 	return (error);
+}
+
+int
+layer_getpages(v)
+	void *v;
+{
+	struct vop_getpages_args /* {
+		struct vnode *a_vp;
+		voff_t a_offset;
+		struct vm_page **a_m;
+		int *a_count;
+		int a_centeridx;
+		vm_prot_t a_access_type;
+		int a_advice;
+		int a_flags;
+	} */ *ap = v;
+	struct vnode *vp = ap->a_vp;
+	int error;
+
+	/*
+	 * just pass the request on to the underlying layer.
+	 */
+
+	if (ap->a_flags & PGO_LOCKED) {
+		return EBUSY;
+	}
+	ap->a_vp = LAYERVPTOLOWERVP(vp);
+	mutex_exit(&vp->v_interlock);
+	mutex_enter(&ap->a_vp->v_interlock);
+	error = VCALL(ap->a_vp, VOFFSET(vop_getpages), ap);
+	return error;
+}
+
+int
+layer_putpages(v)
+	void *v;
+{
+	struct vop_putpages_args /* {
+		struct vnode *a_vp;
+		voff_t a_offlo;
+		voff_t a_offhi;
+		int a_flags;
+	} */ *ap = v;
+	struct vnode *vp = ap->a_vp;
+	int error;
+
+	/*
+	 * just pass the request on to the underlying layer.
+	 */
+
+	ap->a_vp = LAYERVPTOLOWERVP(vp);
+	mutex_exit(&vp->v_interlock);
+	if (ap->a_flags & PGO_RECLAIM) {
+		return 0;
+	}
+	mutex_enter(&ap->a_vp->v_interlock);
+	error = VCALL(ap->a_vp, VOFFSET(vop_putpages), ap);
+	return error;
 }

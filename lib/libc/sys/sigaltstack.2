@@ -1,4 +1,4 @@
-.\"	$NetBSD: sigaltstack.2,v 1.13 1999/12/11 19:35:48 msaitoh Exp $
+.\"	$NetBSD: sigaltstack.2,v 1.21.26.1 2009/04/25 23:10:13 snj Exp $
 .\"
 .\" Copyright (c) 1983, 1991, 1992, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -33,7 +29,7 @@
 .\"
 .\"     @(#)sigaltstack.2	8.2 (Berkeley) 5/1/95
 .\"
-.Dd May 1, 1995
+.Dd April 16, 2009
 .Dt SIGALTSTACK 2
 .Os
 .Sh NAME
@@ -42,7 +38,7 @@
 .Sh LIBRARY
 .Lb libc
 .Sh SYNOPSIS
-.Fd #include <signal.h>
+.In signal.h
 .Pp
 .Bd -literal
 typedef struct sigaltstack {
@@ -52,7 +48,7 @@ typedef struct sigaltstack {
 } stack_t;
 .Ed
 .Ft int
-.Fn sigaltstack "const stack_t *ss" "stack_t *oss"
+.Fn sigaltstack "const stack_t * restrict ss" "stack_t * restrict oss"
 .Sh DESCRIPTION
 .Fn sigaltstack
 allows users to define an alternative stack on which signals
@@ -72,7 +68,7 @@ call), the system checks to see
 if the process is currently executing on that stack.
 If the process is not currently executing on the signal stack,
 the system arranges a switch to the signal stack for the
-duration of the signal handler's execution. 
+duration of the signal handler's execution.
 .Pp
 If
 .Dv SS_DISABLE
@@ -84,7 +80,7 @@ and
 are ignored and the signal stack will be disabled.
 Trying to disable an active stack will cause
 .Nm
-to return -1 with
+to return \-1 with
 .Va errno
 set to
 .Er EINVAL .
@@ -114,7 +110,7 @@ if ((sigstk.ss_sp = malloc(SIGSTKSZ)) == NULL)
 	/* error return */
 sigstk.ss_size = SIGSTKSZ;
 sigstk.ss_flags = 0;
-if (sigaltstack(&sigstk,0) < 0)
+if (sigaltstack(\*[Am]sigstk,0) \*[Lt] 0)
 	perror("sigaltstack");
 .Ed
 .Pp
@@ -137,7 +133,7 @@ If the stack overflows and this space is not protected
 unpredictable results may occur.
 .Sh RETURN VALUES
 Upon successful completion, a value of 0 is returned.
-Otherwise, a value of -1 is returned and 
+Otherwise, a value of \-1 is returned and
 .Va errno
 is set to indicate the error.
 .Sh ERRORS
@@ -155,7 +151,7 @@ address space.
 .It Bq Er EINVAL
 An attempt was made to disable an active stack.
 .It Bq Er ENOMEM
-Size of alternative stack area is less than or equal to
+Size of alternative stack area is less than
 .Dv MINSIGSTKSZ .
 .El
 .Sh SEE ALSO
@@ -174,3 +170,9 @@ the
 .Fn sigstack
 system call, appeared in
 .Bx 4.2 .
+.Sh CAVEATS
+Due to limitations in the current pthread implementation,
+.Nm
+should not be used in programs which link against the
+.Xr pthread 3
+library (whether threads are used or not).

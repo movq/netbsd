@@ -1,4 +1,4 @@
-.\"	$NetBSD: ipsend.1,v 1.2 1999/12/11 23:47:56 veego Exp $
+.\"	$NetBSD: ipsend.1,v 1.5 2002/12/21 13:15:11 wiz Exp $
 .\"
 .TH IPSEND 1
 .SH NAME
@@ -53,7 +53,7 @@ enable debugging mode.
 .TP
 .BR \-f \0<offset>
 The \fI-f\fP allows the IP offset field in the IP header to be set to an
-arbitrary value, which can be specified in decimal or hexidecimal.
+arbitrary value, which can be specified in decimal or hexadecimal.
 .TP
 .BR \-g \0<gateway>
 Specify the hostname of the gateway through which to route packets.  This
@@ -98,11 +98,11 @@ Set the protocol to TCP.
 .B \-U
 Set the protocol to UDP.
 .TP
-.BR \-d
+.BR \-v
 enable verbose mode.
 .DT
 .SH SEE ALSO
-ipresend(1), iptest(1), bpf(4), protocols(4), ipsend(5)
+ipresend(1), iptest(1), bpf(4), protocols(5), ipsend(5)
 .SH DIAGNOSTICS
 .PP
 Needs to be run as root.

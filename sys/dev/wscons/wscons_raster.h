@@ -1,4 +1,4 @@
-/* $NetBSD: wscons_raster.h,v 1.5 1999/02/12 11:25:23 drochner Exp $ */
+/* $NetBSD: wscons_raster.h,v 1.10 2006/10/09 11:03:43 peter Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -21,11 +21,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -80,17 +76,17 @@ struct rcons {
 #define	RC_CURSOR	0x004		/* cursor currently displayed */
 
 /* Initialization functions. */
-void	rcons_init __P((struct rcons *rc, int mrow, int mcol));
+void	rcons_init(struct rcons *, int, int);
 
 /* Console emulation interface functions.  See ansicons.h for more info. */
-void	rcons_cursor __P((void *, int, int, int));
-void	rcons_invert __P((void *, int));
-int	rcons_mapchar __P((void *, int, unsigned int *));
-void	rcons_putchar __P((void *, int, int, u_int, long));
-void	rcons_copycols __P((void *, int, int, int, int));
-void	rcons_erasecols __P((void *, int, int, int, long));
-void	rcons_copyrows __P((void *, int, int, int));
-void	rcons_eraserows __P((void *, int, int, long));
-int	rcons_alloc_attr __P((void *, int, int, int, long *));
+void	rcons_cursor(void *, int, int, int);
+void	rcons_invert(void *, int);
+int	rcons_mapchar(void *, int, unsigned int *);
+void	rcons_putchar(void *, int, int, u_int, long);
+void	rcons_copycols(void *, int, int, int, int);
+void	rcons_erasecols(void *, int, int, int, long);
+void	rcons_copyrows(void *, int, int, int);
+void	rcons_eraserows(void *, int, int, long);
+int	rcons_allocattr(void *, int, int, int, long *);
 
 #endif /* _DEV_PSEUDO_RCONS_H_ */

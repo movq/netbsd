@@ -1,4 +1,4 @@
-/*	$NetBSD: itevar.h,v 1.7 2000/03/27 14:08:39 leo Exp $	*/
+/*	$NetBSD: itevar.h,v 1.12 2007/03/04 05:59:40 christos Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman (Atari modifications)
@@ -94,7 +94,7 @@ struct ite_softc {
 	int			cury;
 	int			save_cury;
 	int			(*itexx_ioctl) __P((struct ite_softc *, u_long,
-						caddr_t, int, struct proc *));
+						void *, int, struct lwp *));
 };
 
 enum ite_flags {
@@ -104,6 +104,7 @@ enum ite_flags {
 	ITE_ISOPEN = 0x8,		/* ite has been opened		*/
 	ITE_INGRF  = 0x10,		/* ite is in graphics mode	*/
 	ITE_ACTIVE = 0x20,		/* ite is an active terminal	*/
+	ITE_ATTACHED = 0x40,		/* ite is attached		*/
 };
 
 enum ite_replrules {
@@ -193,19 +194,8 @@ void	ite_cnfinish __P((struct ite_softc *));
 /* standard ite device entry points. */
 void	iteinit __P((dev_t));
 
-/*
- * Standard character device functions.
- */
-dev_type_open(iteopen);
-dev_type_close(iteclose);
-dev_type_read(iteread);
-dev_type_write(itewrite);
-dev_type_ioctl(iteioctl);
-dev_type_tty(itetty);
-dev_type_stop(itestop);
-
 /* ite functions */
-int	ite_on __P((dev_t, int));
+void	ite_on __P((dev_t, int));
 void	ite_off __P((dev_t, int));
 void	ite_reinit __P((dev_t));
 int	ite_param __P((struct tty *, struct termios *));

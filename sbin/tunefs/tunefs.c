@@ -1,4 +1,4 @@
-/*	$NetBSD: tunefs.c,v 1.19 1999/11/15 19:22:22 fvdl Exp $	*/
+/*	$NetBSD: tunefs.c,v 1.37 2008/07/31 15:55:41 simonb Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)tunefs.c	8.3 (Berkeley) 5/3/95";
 #else
-__RCSID("$NetBSD: tunefs.c,v 1.19 1999/11/15 19:22:22 fvdl Exp $");
+__RCSID("$NetBSD: tunefs.c,v 1.37 2008/07/31 15:55:41 simonb Exp $");
 #endif
 #endif /* not lint */
 
@@ -51,23 +47,23 @@ __RCSID("$NetBSD: tunefs.c,v 1.19 1999/11/15 19:22:22 fvdl Exp $");
  * tunefs: change layout parameters to an existing file system.
  */
 #include <sys/param.h>
-#include <sys/stat.h>
 
-#include <ufs/ufs/dinode.h>
 #include <ufs/ffs/fs.h>
 #include <ufs/ffs/ffs_extern.h>
+#include <ufs/ufs/ufs_wapbl.h>
 
 #include <machine/bswap.h>
 
-#include <errno.h>
 #include <err.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <fstab.h>
-#include <stdio.h>
 #include <paths.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <util.h>
 
 /* the optimization warning string template */
 #define	OPTWARN	"should optimize for %s with minfree %s %d%%"
@@ -79,291 +75,460 @@ union {
 #define	sblock sbun.sb
 char buf[MAXBSIZE];
 
-int fi;
-long dev_bsize = 1;
-int needswap = 0;
+int	fi;
+long	dev_bsize = 512;
+int	needswap = 0;
+int	is_ufs2 = 0;
+off_t	sblockloc;
 
-void bwrite __P((daddr_t, char *, int));
-int bread __P((daddr_t, char *, int));
-void getsb __P((struct fs *, const char *));
-int main __P((int, char *[]));
-void usage __P((void));
+static off_t sblock_try[] = SBLOCKSEARCH;
+
+static	void	bwrite(daddr_t, char *, int, const char *);
+static	void	bread(daddr_t, char *, int, const char *);
+static	void	change_log_info(long long);
+static	void	getsb(struct fs *, const char *);
+static	int	openpartition(const char *, int, char *, size_t);
+static	void	show_log_info(void);
+static	void	usage(void);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
-	char *cp, *name, *action;
-	const char *special;
-	struct stat st;
-	int i;
-	int Aflag = 0, Nflag = 0;
-	struct fstab *fs;
-	char *chg[2], device[MAXPATHLEN];
+#define	OPTSTRINGBASE	"AFNe:g:h:l:m:o:"
+#ifdef TUNEFS_SOFTDEP
+	int		softdep;
+#define	OPTSTRING	OPTSTRINGBASE ## "n:"
+#else
+#define	OPTSTRING	OPTSTRINGBASE
+#endif
+	int		i, ch, Aflag, Fflag, Nflag, openflags;
+	const char	*special, *chg[2];
+	char		device[MAXPATHLEN];
+	int		maxbpg, minfree, optim;
+	int		avgfilesize, avgfpdir;
+	long long	logfilesize;
 
-	argc--, argv++; 
-	if (argc < 2)
-		usage();
-	special = argv[argc - 1];
-	fs = getfsfile(special);
-	if (fs)
-		special = fs->fs_spec;
-again:
-	if (stat(special, &st) < 0) {
-		if (*special != '/') {
-			if (*special == 'r')
-				special++;
-			(void)snprintf(device, sizeof(device), "%s/%s",
-			    _PATH_DEV, special);
-			special = device;
-			goto again;
-		}
-		err(1, "%s", special);
-	}
-	if (!S_ISBLK(st.st_mode) && !S_ISCHR(st.st_mode))
-		errx(10, "%s: not a block or character device", special);
-	getsb(&sblock, special);
+	Aflag = Fflag = Nflag = 0;
+	maxbpg = minfree = optim = -1;
+	avgfilesize = avgfpdir = -1;
+	logfilesize = -1;
+#ifdef TUNEFS_SOFTDEP
+	softdep = -1;
+#endif
 	chg[FS_OPTSPACE] = "space";
 	chg[FS_OPTTIME] = "time";
-	for (; argc > 0 && argv[0][0] == '-'; argc--, argv++) {
-		for (cp = &argv[0][1]; *cp; cp++)
-			switch (*cp) {
 
-			case 'A':
-				Aflag++;
-				continue;
+	while ((ch = getopt(argc, argv, OPTSTRING)) != -1) {
+		switch (ch) {
 
-			case 'N':
-				Nflag++;
-				continue;
+		case 'A':
+			Aflag++;
+			break;
 
-			case 'a':
-				name = "maximum contiguous block count";
-				if (argc < 1)
-					errx(10, "-a: missing %s", name);
-				argc--, argv++;
-				i = atoi(*argv);
-				if (i < 1)
-					errx(10, "%s must be >= 1 (was %s)",
-					    name, *argv);
-				warnx("%s changes from %d to %d",
-				    name, sblock.fs_maxcontig, i);
-				sblock.fs_maxcontig = i;
-				continue;
+		case 'F':
+			Fflag++;
+			break;
 
-			case 'd':
-				name =
-				   "rotational delay between contiguous blocks";
-				if (argc < 1)
-					errx(10, "-d: missing %s", name);
-				argc--, argv++;
-				i = atoi(*argv);
-				warnx("%s changes from %dms to %dms",
-				    name, sblock.fs_rotdelay, i);
-				sblock.fs_rotdelay = i;
-				continue;
+		case 'N':
+			Nflag++;
+			break;
 
-			case 'e':
-				name =
-				  "maximum blocks per file in a cylinder group";
-				if (argc < 1)
-					errx(10, "-e: missing %s", name);
-				argc--, argv++;
-				i = atoi(*argv);
-				if (i < 1)
-					errx(10, "%s must be >= 1 (was %s)",
-					    name, *argv);
-				warnx("%s changes from %d to %d",
-				    name, sblock.fs_maxbpg, i);
-				sblock.fs_maxbpg = i;
-				continue;
+		case 'e':
+			maxbpg = strsuftoll(
+			    "maximum blocks per file in a cylinder group",
+			    optarg, 1, INT_MAX);
+			break;
 
-			case 'm':
-				name = "minimum percentage of free space";
-				if (argc < 1)
-					errx(10, "-m: missing %s", name);
-				argc--, argv++;
-				i = atoi(*argv);
-				if (i < 0 || i > 99)
-					errx(10, "bad %s (%s)", name, *argv);
-				warnx("%s changes from %d%% to %d%%",
-				    name, sblock.fs_minfree, i);
-				sblock.fs_minfree = i;
-				if (i >= MINFREE &&
-				    sblock.fs_optim == FS_OPTSPACE)
-					warnx(OPTWARN, "time", ">=", MINFREE);
-				if (i < MINFREE &&
-				    sblock.fs_optim == FS_OPTTIME)
-					warnx(OPTWARN, "space", "<", MINFREE);
-				continue;
-			case 'n':
-				name = "soft dependencies";
-				if (argc < 1)
-					errx(10, "-n: missing %s", name);
-				argc--, argv++;
-				if (strcmp(*argv, "enable") == 0) {
-					sblock.fs_flags |= FS_DOSOFTDEP;
-					action = "set";
-				} else if (strcmp(*argv, "disable") == 0) {
-					sblock.fs_flags &= ~FS_DOSOFTDEP;
-					action = "cleared";
-				} else {
-					errx(10, "bad %s (options are %s)",
-					    name, "`enable' or `disable'");
-				}
-				warnx("%s %s", name, action);
-				continue;
+		case 'g':
+			avgfilesize = strsuftoll("average file size", optarg,
+			    1, INT_MAX);
+			break;
 
-			case 'o':
-				name = "optimization preference";
-				if (argc < 1)
-					errx(10, "-o: missing %s", name);
-				argc--, argv++;
-				if (strcmp(*argv, chg[FS_OPTSPACE]) == 0)
-					i = FS_OPTSPACE;
-				else if (strcmp(*argv, chg[FS_OPTTIME]) == 0)
-					i = FS_OPTTIME;
-				else
-					errx(10, "bad %s (options are `space' or `time')",
-					    name);
-				if (sblock.fs_optim == i) {
-					warnx("%s remains unchanged as %s",
-					    name, chg[i]);
-					continue;
-				}
-				warnx("%s changes from %s to %s",
-				    name, chg[sblock.fs_optim], chg[i]);
-				sblock.fs_optim = i;
-				if (sblock.fs_minfree >= MINFREE &&
-				    i == FS_OPTSPACE)
-					warnx(OPTWARN, "time", ">=", MINFREE);
-				if (sblock.fs_minfree < MINFREE &&
-				    i == FS_OPTTIME)
-					warnx(OPTWARN, "space", "<", MINFREE);
-				continue;
+		case 'h':
+			avgfpdir = strsuftoll(
+			    "expected number of files per directory",
+			    optarg, 1, INT_MAX);
+			break;
 
-			case 't':
-				name = "track skew in sectors";
-				if (argc < 1)
-					errx(10, "-t: missing %s", name);
-				argc--, argv++;
-				i = atoi(*argv);
-				if (i < 0)
-					errx(10, "%s: %s must be >= 0",
-						*argv, name);
-				warnx("%s changes from %d to %d",
-					name, sblock.fs_trackskew, i);
-				sblock.fs_trackskew = i;
-				continue;
+		case 'l':
+			logfilesize = strsuftoll("journal log file size",
+			    optarg, 0, INT_MAX);
+			break;
 
-			default:
-				usage();
+		case 'm':
+			minfree = strsuftoll("minimum percentage of free space",
+			    optarg, 0, 99);
+			break;
+
+#ifdef TUNEFS_SOFTDEP
+		case 'n':
+			if (strcmp(optarg, "enable") == 0)
+				softdep = 1;
+			else if (strcmp(optarg, "disable") == 0)
+				softdep = 0;
+			else {
+				errx(10, "bad soft dependencies "
+					"(options are `enable' or `disable')");
 			}
+			break;
+#endif
+
+		case 'o':
+			if (strcmp(optarg, chg[FS_OPTSPACE]) == 0)
+				optim = FS_OPTSPACE;
+			else if (strcmp(optarg, chg[FS_OPTTIME]) == 0)
+				optim = FS_OPTTIME;
+			else
+				errx(10,
+				    "bad %s (options are `space' or `time')",
+				    "optimization preference");
+			break;
+
+		default:
+			usage();
+		}
 	}
+	argc -= optind;
+	argv += optind; 
 	if (argc != 1)
 		usage();
+
+	special = argv[0];
+	openflags = Nflag ? O_RDONLY : O_RDWR;
+	if (Fflag)
+		fi = open(special, openflags);
+	else {
+		fi = openpartition(special, openflags, device, sizeof(device));
+		special = device;
+	}
+	if (fi == -1)
+		err(1, "%s", special);
+	getsb(&sblock, special);
+
+#define CHANGEVAL(old, new, type, suffix) do				\
+	if ((new) != -1) {						\
+		if ((new) == (old))					\
+			warnx("%s remains unchanged at %d%s",		\
+			    (type), (old), (suffix));			\
+		else {							\
+			warnx("%s changes from %d%s to %d%s",		\
+			    (type), (old), (suffix), (new), (suffix));	\
+			(old) = (new);					\
+		}							\
+	} while (/* CONSTCOND */0)
+
+	warnx("tuning %s", special);
+	CHANGEVAL(sblock.fs_maxbpg, maxbpg,
+	    "maximum blocks per file in a cylinder group", "");
+	CHANGEVAL(sblock.fs_minfree, minfree,
+	    "minimum percentage of free space", "%");
+	if (minfree != -1) {
+		if (minfree >= MINFREE &&
+		    sblock.fs_optim == FS_OPTSPACE)
+			warnx(OPTWARN, "time", ">=", MINFREE);
+		if (minfree < MINFREE &&
+		    sblock.fs_optim == FS_OPTTIME)
+			warnx(OPTWARN, "space", "<", MINFREE);
+	}
+#ifdef TUNEFS_SOFTDEP
+	if (softdep == 1) {
+		sblock.fs_flags |= FS_DOSOFTDEP;
+		warnx("soft dependencies set");
+	} else if (softdep == 0) {
+		sblock.fs_flags &= ~FS_DOSOFTDEP;
+		warnx("soft dependencies cleared");
+	}
+#endif
+	if (optim != -1) {
+		if (sblock.fs_optim == optim) {
+			warnx("%s remains unchanged as %s",
+			    "optimization preference",
+			    chg[optim]);
+		} else {
+			warnx("%s changes from %s to %s",
+			    "optimization preference",
+			    chg[sblock.fs_optim], chg[optim]);
+			sblock.fs_optim = optim;
+			if (sblock.fs_minfree >= MINFREE &&
+			    optim == FS_OPTSPACE)
+				warnx(OPTWARN, "time", ">=", MINFREE);
+			if (sblock.fs_minfree < MINFREE &&
+			    optim == FS_OPTTIME)
+				warnx(OPTWARN, "space", "<", MINFREE);
+		}
+	}
+	CHANGEVAL(sblock.fs_avgfilesize, avgfilesize,
+	    "average file size", "");
+	CHANGEVAL(sblock.fs_avgfpdir, avgfpdir,
+	    "expected number of files per directory", "");
+
+	if (logfilesize >= 0)
+		change_log_info(logfilesize);
+
 	if (Nflag) {
-		fprintf(stdout, "tunefs: current settings\n");
-		fprintf(stdout, "\tmaximum contiguous block count %d\n",
+		printf("tunefs: current settings of %s\n", special);
+		printf("\tmaximum contiguous block count %d\n",
 		    sblock.fs_maxcontig);
-		fprintf(stdout,
-		    "\trotational delay between contiguous blocks %dms\n",
-		    sblock.fs_rotdelay);
-		fprintf(stdout,
-		    "\tmaximum blocks per file in a cylinder group %d\n",
+		printf("\tmaximum blocks per file in a cylinder group %d\n",
 		    sblock.fs_maxbpg);
-		fprintf(stdout, "\tminimum percentage of free space %d%%\n",
+		printf("\tminimum percentage of free space %d%%\n",
 		    sblock.fs_minfree);
-		fprintf(stdout, "\tsoft dependencies: %s\n",
+#ifdef TUNEFS_SOFTDEP
+		printf("\tsoft dependencies: %s\n",
 		    (sblock.fs_flags & FS_DOSOFTDEP) ? "on" : "off");
-		fprintf(stdout, "\toptimization preference: %s\n",
-		    chg[sblock.fs_optim]);
-		fprintf(stdout, "\ttrack skew %d sectors\n",
-			sblock.fs_trackskew);
-		fprintf(stdout, "tunefs: no changes made\n");
+#endif
+		printf("\toptimization preference: %s\n", chg[sblock.fs_optim]);
+		printf("\taverage file size: %d\n", sblock.fs_avgfilesize);
+		printf("\texpected number of files per directory: %d\n",
+		    sblock.fs_avgfpdir);
+		show_log_info();
+		printf("tunefs: no changes made\n");
 		exit(0);
 	}
-	fi = open(special, 1);
-	if (fi < 0)
-		err(3, "cannot open %s for writing", special);
-	memcpy(buf, (char *)&sblock, SBSIZE);
+
+	memcpy(buf, (char *)&sblock, SBLOCKSIZE);
 	if (needswap)
-		ffs_sb_swap((struct fs*)buf, (struct fs*)buf, 1);
-	bwrite((daddr_t)SBOFF / dev_bsize, buf, SBSIZE);
+		ffs_sb_swap((struct fs*)buf, (struct fs*)buf);
+	bwrite(sblockloc, buf, SBLOCKSIZE, special);
 	if (Aflag)
 		for (i = 0; i < sblock.fs_ncg; i++)
 			bwrite(fsbtodb(&sblock, cgsblock(&sblock, i)),
-			    buf, SBSIZE);
+			    buf, SBLOCKSIZE, special);
 	close(fi);
 	exit(0);
 }
 
-void
-usage()
+static void
+show_log_info(void)
+{
+	const char *loc;
+	uint64_t size, blksize, logsize;
+	int print;
+
+	switch (sblock.fs_journal_location) {
+	case UFS_WAPBL_JOURNALLOC_NONE:
+		print = blksize = 0;
+		/* nothing */
+		break;
+	case UFS_WAPBL_JOURNALLOC_END_PARTITION:
+		loc = "end of partition";
+		size = sblock.fs_journallocs[UFS_WAPBL_EPART_COUNT];
+		blksize = sblock.fs_journallocs[UFS_WAPBL_EPART_BLKSZ];
+		print = 1;
+		break;
+	case UFS_WAPBL_JOURNALLOC_IN_FILESYSTEM:
+		loc = "in filesystem";
+		size = sblock.fs_journallocs[UFS_WAPBL_INFS_COUNT];
+		blksize = sblock.fs_journallocs[UFS_WAPBL_INFS_BLKSZ];
+		print = 1;
+		break;
+	default:
+		loc = "unknown";
+		size = blksize = 0;
+		print = 1;
+		break;
+	}
+
+	if (print) {
+		logsize = size * blksize;
+
+		printf("\tjournal log file location: %s\n", loc);
+		printf("\tjournal log file size: ");
+		if (logsize == 0)
+			printf("0\n");
+		else {
+			char sizebuf[8];
+			humanize_number(sizebuf, 6, size * blksize, "B",
+			    HN_AUTOSCALE, HN_B | HN_NOSPACE | HN_DECIMAL);
+			printf("%s (%" PRId64 " bytes)", sizebuf, logsize);
+		}
+		printf("\n");
+		printf("\tjournal log flags:");
+		if (sblock.fs_journal_flags & UFS_WAPBL_FLAGS_CREATE_LOG)
+			printf(" clear-log");
+		if (sblock.fs_journal_flags & UFS_WAPBL_FLAGS_CLEAR_LOG)
+			printf(" clear-log");
+		printf("\n");
+	}
+}
+
+static void
+change_log_info(long long logfilesize)
+{
+	/*
+	 * NOTES:
+	 *  - only operate on in-filesystem log sizes
+	 *  - can't change size of existing log
+	 *  - if current is same, no action
+	 *  - if current is zero and new is non-zero, set flag to create log
+	 *    on next mount
+	 *  - if current is non-zero and new is zero, set flag to clear log
+	 *    on next mount
+	 */
+	int in_fs_log;
+	uint64_t old_size;
+
+	old_size = 0;
+	switch (sblock.fs_journal_location) {
+	case UFS_WAPBL_JOURNALLOC_END_PARTITION:
+		in_fs_log = 0;
+		old_size = sblock.fs_journallocs[UFS_WAPBL_EPART_COUNT] *
+		    sblock.fs_journallocs[UFS_WAPBL_EPART_BLKSZ];
+		break;
+
+	case UFS_WAPBL_JOURNALLOC_IN_FILESYSTEM:
+		in_fs_log = 1;
+		old_size = sblock.fs_journallocs[UFS_WAPBL_INFS_COUNT] *
+		    sblock.fs_journallocs[UFS_WAPBL_INFS_BLKSZ];
+		break;
+
+	case UFS_WAPBL_JOURNALLOC_NONE:
+	default:
+		in_fs_log = 0;
+		old_size = 0;
+		break;
+	}
+
+	if (!in_fs_log)
+		errx(1, "Can't change size of non-in-filesystem log");
+
+	if (old_size == logfilesize && logfilesize > 0) {
+		/* no action */
+		warnx("log file size remains unchanged at %lld", logfilesize);
+		return;
+	}
+
+	if (logfilesize == 0) {
+		/*
+		 * Don't clear out the locators - the kernel might need
+		 * these to find the log!  Just set the "clear the log"
+		 * flag and let the kernel do the rest.
+		 */
+		sblock.fs_journal_flags |= UFS_WAPBL_FLAGS_CLEAR_LOG;
+		sblock.fs_journal_flags &= ~UFS_WAPBL_FLAGS_CREATE_LOG;
+		warnx("log file size cleared from %" PRIu64 "", old_size);
+		return;
+	}
+
+	if (old_size == 0) {
+		/* create new log of desired size next mount */
+		sblock.fs_journal_location = UFS_WAPBL_JOURNALLOC_IN_FILESYSTEM;
+		sblock.fs_journallocs[UFS_WAPBL_INFS_ADDR] = 0;
+		sblock.fs_journallocs[UFS_WAPBL_INFS_COUNT] = logfilesize;
+		sblock.fs_journallocs[UFS_WAPBL_INFS_BLKSZ] = 0;
+		sblock.fs_journallocs[UFS_WAPBL_INFS_INO] = 0;
+		sblock.fs_journal_flags |= UFS_WAPBL_FLAGS_CREATE_LOG;
+		sblock.fs_journal_flags &= ~UFS_WAPBL_FLAGS_CLEAR_LOG;
+		warnx("log file size set to %lld", logfilesize);
+	} else {
+		errx(1,
+		    "Can't change existing log size from %" PRIu64 " to %lld",
+		     old_size, logfilesize);
+	} 
+}
+
+static void
+usage(void)
 {
 
-	fprintf(stderr, "Usage: tunefs [-AN] tuneup-options special-device\n");
+	fprintf(stderr, "usage: tunefs [-AFN] tuneup-options special-device\n");
 	fprintf(stderr, "where tuneup-options are:\n");
-	fprintf(stderr, "\t-d rotational delay between contiguous blocks\n");
-	fprintf(stderr, "\t-a maximum contiguous blocks\n");
 	fprintf(stderr, "\t-e maximum blocks per file in a cylinder group\n");
+	fprintf(stderr, "\t-g average file size\n");
+	fprintf(stderr, "\t-h expected number of files per directory\n");
+	fprintf(stderr, "\t-l journal log file size (`0' to clear journal)\n");
 	fprintf(stderr, "\t-m minimum percentage of free space\n");
-	fprintf(stderr, "\t-o optimization preference (`space' or `time')\n");
+#ifdef TUNEFS_SOFTDEP
 	fprintf(stderr, "\t-n soft dependencies (`enable' or `disable')\n");
-	fprintf(stderr, "\t-t track skew in sectors\n");
+#endif
+	fprintf(stderr, "\t-o optimization preference (`space' or `time')\n");
 	exit(2);
 }
 
-void
-getsb(fs, file)
-	struct fs *fs;
-	const char *file;
-{
-
-	fi = open(file, 0);
-	if (fi < 0)
-		err(3, "cannot open %s for reading", file);
-	if (bread((daddr_t)SBOFF, (char *)fs, SBSIZE))
-		err(4, "%s: bad super block", file);
-	if (fs->fs_magic != FS_MAGIC) {
-		if (fs->fs_magic == bswap32(FS_MAGIC)) {
-			needswap = 1;
-			ffs_sb_swap(fs, fs, 0);
-		} else
-			err(5, "%s: bad magic number", file);
-	}
-	dev_bsize = fs->fs_fsize / fsbtodb(fs, 1);
-	close(fi);
-}
-
-void
-bwrite(blk, buf, size)
-	daddr_t blk;
-	char *buf;
-	int size;
-{
-
-	if (lseek(fi, (off_t)blk * dev_bsize, SEEK_SET) < 0)
-		err(6, "FS SEEK");
-	if (write(fi, buf, size) != size)
-		err(7, "FS WRITE");
-}
-
-int
-bread(bno, buf, cnt)
-	daddr_t bno;
-	char *buf;
-	int cnt;
+static void
+getsb(struct fs *fs, const char *file)
 {
 	int i;
 
-	if (lseek(fi, (off_t)bno * dev_bsize, SEEK_SET) < 0)
-		return(1);
-	if ((i = read(fi, buf, cnt)) != cnt) {
-		for(i=0; i<sblock.fs_bsize; i++)
-			buf[i] = 0;
-		return (1);
+	for (i = 0; ; i++) {
+		if (sblock_try[i] == -1)
+			errx(5, "cannot find filesystem superblock");
+		bread(sblock_try[i] / dev_bsize, (char *)fs, SBLOCKSIZE, file);
+		switch(fs->fs_magic) {
+		case FS_UFS2_MAGIC:
+			is_ufs2 = 1;
+			/*FALLTHROUGH*/
+		case FS_UFS1_MAGIC:
+			break;
+		case FS_UFS2_MAGIC_SWAPPED:
+			is_ufs2 = 1;
+			/*FALLTHROUGH*/
+		case FS_UFS1_MAGIC_SWAPPED:
+			warnx("%s: swapping byte order", file);
+			needswap = 1;
+			ffs_sb_swap(fs, fs);
+			break;
+		default:
+			continue;
+		}
+		if (!is_ufs2 && sblock_try[i] == SBLOCK_UFS2)
+			continue;
+		if ((is_ufs2 || fs->fs_old_flags & FS_FLAGS_UPDATED)
+		    && fs->fs_sblockloc != sblock_try[i])
+			continue;
+		break;
 	}
-	return (0);
+
+	dev_bsize = fs->fs_fsize / fsbtodb(fs, 1);
+	sblockloc = sblock_try[i] / dev_bsize;
+}
+
+static void
+bwrite(daddr_t blk, char *buffer, int size, const char *file)
+{
+	off_t	offset;
+
+	offset = (off_t)blk * dev_bsize;
+	if (lseek(fi, offset, SEEK_SET) == -1)
+		err(6, "%s: seeking to %lld", file, (long long)offset);
+	if (write(fi, buffer, size) != size)
+		err(7, "%s: writing %d bytes", file, size);
+}
+
+static void
+bread(daddr_t blk, char *buffer, int cnt, const char *file)
+{
+	off_t	offset;
+	int	i;
+
+	offset = (off_t)blk * dev_bsize;
+	if (lseek(fi, offset, SEEK_SET) == -1)
+		err(4, "%s: seeking to %lld", file, (long long)offset);
+	if ((i = read(fi, buffer, cnt)) != cnt)
+		errx(5, "%s: short read", file);
+}
+
+static int
+openpartition(const char *name, int flags, char *device, size_t devicelen)
+{
+	char		rawspec[MAXPATHLEN], *p;
+	struct fstab	*fs;
+	int		fd, oerrno;
+
+	fs = getfsfile(name);
+	if (fs) {
+		if ((p = strrchr(fs->fs_spec, '/')) != NULL) {
+			snprintf(rawspec, sizeof(rawspec), "%.*s/r%s",
+			    (int)(p - fs->fs_spec), fs->fs_spec, p + 1);
+			name = rawspec;
+		} else
+			name = fs->fs_spec;
+	}
+	fd = opendisk(name, flags, device, devicelen, 0);
+	if (fd == -1 && errno == ENOENT) {
+		oerrno = errno;
+		strlcpy(device, name, devicelen);
+		errno = oerrno;
+	}
+	return (fd);
 }

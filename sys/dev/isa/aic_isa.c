@@ -1,4 +1,4 @@
-/*	$NetBSD: aic_isa.c,v 1.7 1998/06/09 07:24:56 thorpej Exp $	*/
+/*	$NetBSD: aic_isa.c,v 1.21 2008/04/08 20:08:49 cegger Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995, 1996 Charles M. Hannum.  All rights reserved.
@@ -50,7 +50,9 @@
  * Charles Hannum (mycroft@duality.gnu.ai.mit.edu).  Thanks a million!
  */
 
-#include <sys/types.h>
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: aic_isa.c,v 1.21 2008/04/08 20:08:49 cegger Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
@@ -62,8 +64,8 @@
 #include <sys/user.h>
 #include <sys/queue.h>
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
@@ -74,7 +76,7 @@
 #include <dev/ic/aic6360reg.h>
 #include <dev/ic/aic6360var.h>
 
-int	aic_isa_probe __P((struct device *, struct cfdata *, void *));
+int	aic_isa_probe(struct device *, struct cfdata *, void *);
 
 struct aic_isa_softc {
 	struct	aic_softc sc_aic;	/* real "aic" softc */
@@ -83,9 +85,8 @@ struct aic_isa_softc {
 	void	*sc_ih;			/* interrupt handler */
 };
 
-struct cfattach aic_isa_ca = {
-	sizeof(struct aic_isa_softc), aic_isa_probe, aic_isa_attach
-};
+CFATTACH_DECL(aic_isa, sizeof(struct aic_isa_softc),
+    aic_isa_probe, aic_isa_attach, NULL, NULL);
 
 
 /*
@@ -97,39 +98,51 @@ struct cfattach aic_isa_ca = {
  * returns non-zero value if a controller is found.
  */
 int
-aic_isa_probe(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+aic_isa_probe(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_iot;
 	bus_space_handle_t ioh;
 	int rv;
 
+	if (ia->ia_nio < 1)
+		return (0);
+	if (ia->ia_nirq < 1)
+		return (0);
+
+	if (ISA_DIRECT_CONFIG(ia))
+		return (0);
+
 	/* Disallow wildcarded i/o address. */
-	if (ia->ia_iobase == ISACF_PORT_DEFAULT)
+	if (ia->ia_io[0].ir_addr == ISA_UNKNOWN_PORT)
 		return (0);
 
-	if (bus_space_map(iot, ia->ia_iobase, AIC_ISA_IOSIZE, 0, &ioh))
+	/* Disallow wildcarded IRQ. */
+	if (ia->ia_irq[0].ir_irq == ISA_UNKNOWN_IRQ)
 		return (0);
 
-	AIC_TRACE(("aic_isa_probe: port 0x%x\n", ia->ia_iobase));
+	if (bus_space_map(iot, ia->ia_io[0].ir_addr, AIC_ISA_IOSIZE, 0, &ioh))
+		return (0);
+
 	rv = aic_find(iot, ioh);
 
 	bus_space_unmap(iot, ioh, AIC_ISA_IOSIZE);
 
 	if (rv) {
-		ia->ia_msize = 0;
-		ia->ia_iosize = AIC_ISA_IOSIZE;
+		ia->ia_nio = 1;
+		ia->ia_io[0].ir_size = AIC_ISA_IOSIZE;
+
+		ia->ia_nirq = 1;
+
+		ia->ia_niomem = 0;
+		ia->ia_ndrq = 0;
 	}
 	return rv;
 }
 
 void
-aic_isa_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+aic_isa_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	struct aic_isa_softc *isc = (void *)self;
@@ -140,24 +153,22 @@ aic_isa_attach(parent, self, aux)
 
 	printf("\n");
 
-	if (bus_space_map(iot, ia->ia_iobase, AIC_ISA_IOSIZE, 0, &ioh)) {
-		printf("%s: can't map i/o space\n", sc->sc_dev.dv_xname);
+	if (bus_space_map(iot, ia->ia_io[0].ir_addr, AIC_ISA_IOSIZE, 0, &ioh)) {
+		aprint_error_dev(&sc->sc_dev, "can't map i/o space\n");
 		return;
 	}
 
 	sc->sc_iot = iot;
 	sc->sc_ioh = ioh;
-	AIC_TRACE(("aic_isa_attach: port 0x%x\n", ia->ia_iobase));
 	if (!aic_find(iot, ioh)) {
-		printf("%s: aic_find failed", sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "aic_find failed");
 		return;
 	}
 
-	isc->sc_ih = isa_intr_establish(ic, ia->ia_irq, IST_EDGE, IPL_BIO,
-	    aicintr, sc);
+	isc->sc_ih = isa_intr_establish(ic, ia->ia_irq[0].ir_irq, IST_EDGE,
+	    IPL_BIO, aicintr, sc);
 	if (isc->sc_ih == NULL) {
-		printf("%s: couldn't establish interrupt\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "couldn't establish interrupt\n");
 		return;
 	}
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: md.c,v 1.10 1999/08/16 08:29:07 abs Exp $	*/
+/*	$NetBSD: md.c,v 1.33 2008/10/07 09:58:16 abs Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -55,31 +55,30 @@
 #include "md.h"
 #include "msg_defs.h"
 #include "menu_defs.h"
-#include "bsddisklabel.c"
 
 int
 md_get_info(void)
 {
 	struct disklabel disklabel;
 	int fd;
-	char devname[100];
+	char dev_name[100];
 
-	snprintf(devname, 100, "/dev/r%sc", diskdev);
+	snprintf(dev_name, 100, "/dev/r%sc", diskdev);
 
-	fd = open(devname, O_RDONLY, 0);
+	fd = open(dev_name, O_RDONLY, 0);
 	if (fd < 0) {
 		if (logging)
-			(void)fprintf(log, "Can't open %s\n", devname);
+			(void)fprintf(logfp, "Can't open %s\n", dev_name);
 		endwin();
-		fprintf(stderr, "Can't open %s\n", devname);
+		fprintf(stderr, "Can't open %s\n", dev_name);
 		exit(1);
 	}
 	if (ioctl(fd, DIOCGDINFO, &disklabel) == -1) {
 		if (logging)
-			(void)fprintf(log, "Can't read disklabel on %s.\n",
-				devname);
+			(void)fprintf(logfp, "Can't read disklabel on %s.\n",
+				dev_name);
 		endwin();
-		fprintf(stderr, "Can't read disklabel on %s.\n", devname);
+		fprintf(stderr, "Can't read disklabel on %s.\n", dev_name);
 		close(fd);
 		exit(1);
 	}
@@ -100,9 +99,6 @@ md_get_info(void)
 	dlsize = dlcyl*dlhead*dlsec;
 	if (disklabel.d_secperunit > dlsize)
 		dlsize = disklabel.d_secperunit;
-
-	/* Compute minimum NetBSD partition sizes (in sectors). */
-	minfsdmb = STDNEEDMB * (MEG / sectorsize);
 
 	return 1;
 }
@@ -139,7 +135,8 @@ md_post_newfs(void)
 {
 
 	printf(msg_string(MSG_dobootblks), diskdev);
-	run_prog(0, 0, NULL, "/sbin/disklabel -B %s", diskdev);
+	run_program(0, "/usr/sbin/installboot /dev/r%s%c /usr/mdec/%.2sboot",
+	    diskdev, 'a' + getrawpartition(), diskdev);
 	return 0;
 }
 
@@ -174,10 +171,12 @@ md_check_partitions(void)
 int
 md_update(void)
 {
+	move_aout_libs();
 	endwin();
 	md_copy_filesystem();
 	md_post_newfs();
-	puts(CL);		/* XXX */
+	wrefresh(curscr);
+	wmove(stdscr, 0, 0);
 	wclear(stdscr);
 	wrefresh(stdscr);
 	return 1;
@@ -186,24 +185,29 @@ md_update(void)
 void
 md_cleanup_install(void)
 {
-	char realfrom[STRSIZE];
-	char realto[STRSIZE];
-	char sedcmd[STRSIZE];
 
-	strncpy(realfrom, target_expand("/etc/rc.conf"), STRSIZE);
-	strncpy(realto, target_expand("/etc/rc.conf.install"), STRSIZE);
+	enable_rc_conf();
+}
 
-	sprintf(sedcmd, "sed 's/rc_configured=NO/rc_configured=YES/' < %s > %s",
-	    realfrom, realto);
-	if (logging)
-		(void)fprintf(log, "%s\n", sedcmd);
-	if (scripting)
-		(void)fprintf(script, "%s\n", sedcmd);
-	do_system(sedcmd);
+int
+md_pre_update()
+{
+	return 1;
+}
 
-	run_prog(1, 0, NULL, "mv -f %s %s", realto, realfrom);
+void
+md_init()
+{
+}
 
-	run_prog(0, 0, NULL, "rm -f %s", target_expand("/sysinst"));
-	run_prog(0, 0, NULL, "rm -f %s", target_expand("/.termcap"));
-	run_prog(0, 0, NULL, "rm -f %s", target_expand("/.profile"));
+void
+md_init_set_status(int minimal)
+{
+	(void)minimal;
+}
+
+int
+md_post_extract(void)
+{
+	return 0;
 }

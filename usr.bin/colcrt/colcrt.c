@@ -1,4 +1,4 @@
-/*	$NetBSD: colcrt.c,v 1.4 1997/10/18 12:59:10 lukem Exp $	*/
+/*	$NetBSD: colcrt.c,v 1.8 2008/07/21 14:19:21 lukem Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,19 +31,20 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)colcrt.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: colcrt.c,v 1.4 1997/10/18 12:59:10 lukem Exp $");
+__RCSID("$NetBSD: colcrt.c,v 1.8 2008/07/21 14:19:21 lukem Exp $");
 #endif
 #endif /* not lint */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -76,15 +73,12 @@ char	printall;
 char	*progname;
 FILE	*f;
 
-int	main __P((int, char **));
-void	move __P((int, int));
-void	pflush __P((int));
-int	plus __P((char, char));
+void	move(int, int);
+void	pflush(int);
+int	plus(char, char);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	int c;
 	char *cp, *dp;
@@ -196,8 +190,7 @@ main(argc, argv)
 }
 
 int
-plus(c, d)
-	char c, d;
+plus(char c, char d)
 {
 
 	return ((c == '|' && d == '-') || d == '_');
@@ -206,8 +199,7 @@ plus(c, d)
 int first;
 
 void
-pflush(ol)
-	int ol;
+pflush(int ol)
 {
 	int i;
 	char *cp;
@@ -241,8 +233,7 @@ pflush(ol)
 }
 
 void
-move(l, m)
-	int l, m;
+move(int l, int m)
 {
 	char *cp, *dp;
 

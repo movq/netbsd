@@ -1,10 +1,10 @@
-/*	$NetBSD: adv_pci.c,v 1.7 1999/06/12 12:09:58 dante Exp $	*/
+/*	$NetBSD: adv_pci.c,v 1.23 2008/04/28 20:23:54 martin Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc. All rights reserved.
- * 
+ *
  * Author: Baldassare Dante Profeta <dante@mclink.it>
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -13,13 +13,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -62,7 +55,9 @@
  *     2. This board has been sold by Iomega as a Jaz Jet PCI adapter.
  */
 
-#include <sys/types.h>
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: adv_pci.c,v 1.23 2008/04/28 20:23:54 martin Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/malloc.h>
@@ -70,8 +65,8 @@
 #include <sys/queue.h>
 #include <sys/device.h>
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
@@ -89,26 +84,14 @@
 #define PCI_BASEADR_IO        0x10
 
 /******************************************************************************/
-
-int	adv_pci_match __P((struct device *, struct cfdata *, void *));
-void	adv_pci_attach __P((struct device *, struct device *, void *));
-
-struct cfattach adv_pci_ca =
-{
-	sizeof(ASC_SOFTC), adv_pci_match, adv_pci_attach
-};
-
-/******************************************************************************/
 /*
  * Check the slots looking for a board we recognise
  * If we find one, note it's address (slot) and call
  * the actual probe routine to check it out.
  */
-int 
-adv_pci_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+static int
+adv_pci_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -123,11 +106,8 @@ adv_pci_match(parent, match, aux)
 	return 0;
 }
 
-
-void 
-adv_pci_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+static void
+adv_pci_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 	ASC_SOFTC      *sc = (void *) self;
@@ -138,32 +118,35 @@ adv_pci_attach(parent, self, aux)
 	u_int32_t       command;
 	const char     *intrstr;
 
+	aprint_naive(": SCSI controller\n");
 
 	sc->sc_flags = 0x0;
 	if (PCI_VENDOR(pa->pa_id) == PCI_VENDOR_ADVSYS)
 		switch (PCI_PRODUCT(pa->pa_id)) {
 		case PCI_PRODUCT_ADVSYS_1200A:
-			printf(": AdvanSys ASC1200A SCSI adapter\n");
+			aprint_normal(": AdvanSys ASC1200A SCSI adapter\n");
 			break;
 
 		case PCI_PRODUCT_ADVSYS_1200B:
-			printf(": AdvanSys ASC1200B SCSI adapter\n");
+			aprint_normal(": AdvanSys ASC1200B SCSI adapter\n");
 			break;
 
 		case PCI_PRODUCT_ADVSYS_ULTRA:
 			switch (PCI_REVISION(pa->pa_class)) {
 			case ASC_PCI_REVISION_3050:
-				printf(": AdvanSys ABP-9xxUA SCSI adapter\n");
+				aprint_normal(
+				    ": AdvanSys ABP-9xxUA SCSI adapter\n");
 				break;
 
 			case ASC_PCI_REVISION_3150:
-				printf(": AdvanSys ABP-9xxU SCSI adapter\n");
+				aprint_normal(
+				    ": AdvanSys ABP-9xxU SCSI adapter\n");
 				break;
 			}
 			break;
 
 		default:
-			printf(": unknown model!\n");
+			aprint_error(": unknown model!\n");
 			return;
 		}
 
@@ -208,8 +191,7 @@ adv_pci_attach(parent, self, aux)
 	 */
 	if (pci_mapreg_map(pa, PCI_BASEADR_IO, PCI_MAPREG_TYPE_IO, 0,
 			&iot, &ioh, NULL, NULL)) {
-		printf("%s: unable to map device registers\n",
-		       sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "unable to map device registers\n");
 		return;
 	}
 
@@ -232,9 +214,8 @@ adv_pci_attach(parent, self, aux)
 	/*
 	 * Map Interrupt line
 	 */
-	if (pci_intr_map(pc, pa->pa_intrtag, pa->pa_intrpin,
-			 pa->pa_intrline, &ih)) {
-		printf("%s: couldn't map interrupt\n", sc->sc_dev.dv_xname);
+	if (pci_intr_map(pa, &ih)) {
+		aprint_error_dev(&sc->sc_dev, "couldn't map interrupt\n");
 		return;
 	}
 	intrstr = pci_intr_string(pc, ih);
@@ -244,17 +225,19 @@ adv_pci_attach(parent, self, aux)
 	 */
 	sc->sc_ih = pci_intr_establish(pc, ih, IPL_BIO, adv_intr, sc);
 	if (sc->sc_ih == NULL) {
-		printf("%s: couldn't establish interrupt", sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "couldn't establish interrupt");
 		if (intrstr != NULL)
-			printf(" at %s", intrstr);
-		printf("\n");
+			aprint_normal(" at %s", intrstr);
+		aprint_normal("\n");
 		return;
 	}
-	printf("%s: interrupting at %s\n", sc->sc_dev.dv_xname, intrstr);
+	aprint_normal_dev(&sc->sc_dev, "interrupting at %s\n", intrstr);
 
 	/*
 	 * Attach all the sub-devices we can find
 	 */
 	adv_attach(sc);
 }
-/******************************************************************************/
+
+CFATTACH_DECL(adv_pci, sizeof(ASC_SOFTC),
+    adv_pci_match, adv_pci_attach, NULL, NULL);

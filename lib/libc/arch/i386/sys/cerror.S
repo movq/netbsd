@@ -1,4 +1,4 @@
-/*	$NetBSD: cerror.S,v 1.12 2000/02/19 21:04:58 mycroft Exp $	*/
+/*	$NetBSD: cerror.S,v 1.14 2003/08/07 16:42:08 agc Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -40,41 +36,23 @@
 
 #include <machine/asm.h>
 #if defined(SYSLIBC_SCCS) && !defined(lint)
-	RCSID("$NetBSD: cerror.S,v 1.12 2000/02/19 21:04:58 mycroft Exp $")
+	RCSID("$NetBSD: cerror.S,v 1.14 2003/08/07 16:42:08 agc Exp $")
 #endif /* SYSLIBC_SCCS and not lint */
 
 #include "SYS.h"
 
-#ifdef _REENTRANT
 	.globl	_C_LABEL(__errno)
-#else
-	.globl	_C_LABEL(errno)
-#endif
+
 _ENTRY(CERROR)
+	pushl	%eax
 #ifdef PIC
 	PIC_PROLOGUE
-#endif
-
-#ifdef _REENTRANT
-	pushl	%eax
-# ifdef PIC
 	call	PIC_PLT(_C_LABEL(__errno))
-# else
-	call	_C_LABEL(__errno)
-# endif /* PIC */
-	popl	(%eax)
-#else
-# ifdef PIC
-	movl	PIC_GOT(_C_LABEL(errno)),%ecx
-	movl	%eax,(%ecx)
-# else
-	movl	%eax,_C_LABEL(errno)
-# endif /* PIC */
-#endif /* _REENTRANT */
-
-#ifdef PIC
 	PIC_EPILOGUE
-#endif
+#else
+	call	_C_LABEL(__errno)
+#endif /* PIC */
+	popl	(%eax)
 	movl	$-1,%eax
 	movl	$-1,%edx
 	ret

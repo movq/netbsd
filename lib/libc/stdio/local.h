@@ -1,4 +1,4 @@
-/*	$NetBSD: local.h,v 1.9 1998/07/27 16:05:07 mycroft Exp $	*/
+/*	$NetBSD: local.h,v 1.20 2005/05/14 23:51:02 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -37,6 +33,9 @@
  *
  *	@(#)local.h	8.3 (Berkeley) 7/3/94
  */
+
+#include "wcio.h"
+#include "fileext.h"
 
 /*
  * Information local to this implementation of stdio,
@@ -59,10 +58,29 @@ extern int	_fwalk __P((int (*)(FILE *)));
 extern char	*_mktemp __P((char *));
 extern int	__swsetup __P((FILE *));
 extern int	__sflags __P((const char *, int *));
+extern int	__svfscanf __P((FILE * __restrict, const char * __restrict,
+		    _BSD_VA_LIST_))
+		    __attribute__((__format__(__scanf__, 2, 0)));
+extern int	__svfscanf_unlocked __P((FILE * __restrict, const char * __restrict,
+		    _BSD_VA_LIST_))
+		    __attribute__((__format__(__scanf__, 2, 0)));
+extern int	__vfprintf_unlocked __P((FILE * __restrict, const char * __restrict,
+		    _BSD_VA_LIST_));
+
 
 extern int	__sdidinit;
 
 extern int	__gettemp __P((char *, int *, int));
+
+extern wint_t	__fgetwc_unlock __P((FILE *));
+extern wint_t	__fputwc_unlock __P((wchar_t, FILE *));
+
+extern char	*__fgetstr __P((FILE * __restrict, size_t * __restrict, int));
+extern int	 __slbexpand __P((FILE *, size_t));
+extern int 	 __vfwprintf_unlocked __P((FILE *, const wchar_t *,
+    _BSD_VA_LIST_));
+extern int	 __vfwscanf_unlocked __P((FILE * __restrict,
+    const wchar_t * __restrict, _BSD_VA_LIST_));
 
 /*
  * Return true iff the given FILE cannot be written now.
@@ -75,11 +93,11 @@ extern int	__gettemp __P((char *, int *, int));
  * Test whether the given stdio file has an active ungetc buffer;
  * release such a buffer, without restoring ordinary unread data.
  */
-#define	HASUB(fp) ((fp)->_ub._base != NULL)
+#define	HASUB(fp) (_UB(fp)._base != NULL)
 #define	FREEUB(fp) { \
-	if ((fp)->_ub._base != (fp)->_ubuf) \
-		free((char *)(fp)->_ub._base); \
-	(fp)->_ub._base = NULL; \
+	if (_UB(fp)._base != (fp)->_ubuf) \
+		free((char *)_UB(fp)._base); \
+	_UB(fp)._base = NULL; \
 }
 
 /*
@@ -90,3 +108,6 @@ extern int	__gettemp __P((char *, int *, int));
 	free((char *)(fp)->_lb._base); \
 	(fp)->_lb._base = NULL; \
 }
+
+extern void __flockfile_internal __P((FILE *, int));
+extern void __funlockfile_internal __P((FILE *, int));

@@ -1,39 +1,22 @@
-#	$NetBSD: Makefile.inc,v 1.8 1999/02/06 21:19:24 thorpej Exp $
+#	$NetBSD: Makefile.inc,v 1.15 2008/06/24 13:02:25 matt Exp $
 
 BINDIR=			/usr/mdec
 
-# RELOC=FFF00000 allows for boot prog up to FF000 (1044480) bytes long
-RELOC=	FFF00000
+release:
 
-CPPFLAGS+=		-DDCACONSOLE -DAPCICONSOLE -DITECONSOLE -DDCMCONSOLE
-CPPFLAGS+=		-DHIL_KEYBOARD -DUK_KEYBOARD
-CPPFLAGS+=		-DDOMAIN_KEYBOARD
-CPPFLAGS+=		-D_STANDALONE -DCOMPAT_NOLABEL -Dhp300
-CPPFLAGS+=		-DCOMPAT_UFS -DNO_LSEEK
+S?=		${.CURDIR}/../../../..
 
-# Limit the alloc() heap to below the msgbuf and ROM scratch pages.
-CPPFLAGS+=		-DHEAP_LIMIT="0xffffdfff"
+.PHONY: machine-links
+beforedepend: machine-links
+# ${MACHINE} then ${MACHINE_ARCH}
+machine-links:
+	-rm -f machine && \
+		ln -s $S/arch/hp300/include machine
+	-rm -f hp300 && \
+		ln -s $S/arch/hp300/include hp300
+	-rm -f m68k && \
+		ln -s $S/arch/m68k/include m68k
+CLEANFILES+=machine hp300 m68k
 
-COMMONSOURCE=		srt0.S autoconf.c clock.c conf.c cons.c devopen.c \
-			machdep.c prf.c rawfs.c netio.c
-DRIVERSOURCE=		apci.c ct.c dca.c dcm.c dnkbd.c fhpib.c hil.c \
-			hpib.c if_le.c ite.c ite_dv.c ite_gb.c ite_rb.c \
-			ite_subr.c ite_tc.c ite_hy.c kbd.c kbdconf.c \
-			nhpib.c rd.c scsi.c sd.c
+realall: machine-links .WAIT ${PROG}
 
-### Figure out what to use for mkboot
-MKBOOTDIR=		${.CURDIR}/../mkboot
-
-.if exists(${MKBOOTDIR}/obj.${MACHINE})
-MKBOOTOBJDIR=		${MKBOOTDIR}/obj.${MACHINE}
-.elif exists (${MKBOOTDIR}/obj)
-MKBOOTOBJDIR=		${MKBOOTDIR}/obj
-.else
-MKBOOTOBJDIR=		${MKBOOTDIR}
-.endif
-
-MKBOOT_PROG=		${MKBOOTOBJDIR}/mkboot
-
-# Make sure ${MKBOOT_PROG} is always available
-${MKBOOT_PROG}:
-	@cd ${MKBOOTDIR} && make depend && make

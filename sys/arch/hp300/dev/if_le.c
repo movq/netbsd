@@ -1,4 +1,4 @@
-/*	$NetBSD: if_le.c,v 1.47 1998/08/15 10:51:16 mycroft Exp $	*/
+/*	$NetBSD: if_le.c,v 1.61 2008/04/28 20:23:19 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -51,11 +44,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -74,39 +63,27 @@
  *	@(#)if_le.c	8.2 (Berkeley) 11/16/93
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_le.c,v 1.61 2008/04/28 20:23:19 martin Exp $");
+
 #include "opt_inet.h"
 #include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/mbuf.h>
-#include <sys/syslog.h>
-#include <sys/socket.h>
 #include <sys/device.h>
 
 #include <net/if.h>
 #include <net/if_ether.h>
 #include <net/if_media.h>
 
-#ifdef INET
-#include <netinet/in.h>
-#include <netinet/if_inarp.h>
-#endif
-
-#include <machine/autoconf.h>
-#include <machine/cpu.h>
-#include <machine/intr.h>
-
 #include <dev/ic/lancereg.h>
 #include <dev/ic/lancevar.h>
-#include <dev/ic/am7990reg.h>
 #include <dev/ic/am7990var.h>
 
-#include <hp300/dev/dioreg.h>
 #include <hp300/dev/diovar.h>
 #include <hp300/dev/diodevs.h>
 #include <hp300/dev/if_lereg.h>
-#include <hp300/dev/if_levar.h>
 
 #include "opt_useleds.h"
 
@@ -114,41 +91,37 @@
 #include <hp300/hp300/leds.h>
 #endif
 
-int	lematch __P((struct device *, struct cfdata *, void *));
-void	leattach __P((struct device *, struct device *, void *));
+struct  le_softc {
+	struct  am7990_softc sc_am7990; /* glue to MI code */
 
-struct cfattach le_ca = {
-	sizeof(struct le_softc), lematch, leattach
+	bus_space_tag_t sc_bst;
+
+	bus_space_handle_t sc_bsh0;	/* DIO registers */
+	bus_space_handle_t sc_bsh1;	/* LANCE registers */
+	bus_space_handle_t sc_bsh2;	/* buffer area */
 };
 
-int	leintr __P((void *));
+static int	lematch(device_t, cfdata_t, void *);
+static void	leattach(device_t, device_t, void *);
 
-#if defined(_KERNEL) && !defined(_LKM)
+CFATTACH_DECL_NEW(le, sizeof(struct le_softc),
+    lematch, leattach, NULL, NULL);
+
+static int	leintr(void *);
+
+#if defined(_KERNEL_OPT)
 #include "opt_ddb.h"
 #endif
 
-#ifdef DDB
-#define	integrate
-#define hide
-#else
-#define	integrate	static __inline
-#define hide		static
-#endif
-
-hide void le_copytobuf __P((struct lance_softc *, void *, int, int));
-hide void le_copyfrombuf __P((struct lance_softc *, void *, int, int));
-hide void le_zerobuf __P((struct lance_softc *, int, int));
+static void	le_copytobuf(struct lance_softc *, void *, int, int);
+static void	le_copyfrombuf(struct lance_softc *, void *, int, int);
+static void	le_zerobuf(struct lance_softc *, int, int);
 
 /* offsets for:	   ID,   REGS,    MEM,  NVRAM */
-int	lestd[] = { 0, 0x4000, 0x8000, 0xC008 };
+static const int lestd[] = { 0, 0x4000, 0x8000, 0xC008 };
 
-hide void lewrcsr __P((struct lance_softc *, u_int16_t, u_int16_t));
-hide u_int16_t lerdcsr __P((struct lance_softc *, u_int16_t));  
-
-hide void
-lewrcsr(sc, port, val)
-	struct lance_softc *sc;
-	u_int16_t port, val;
+static void
+lewrcsr(struct lance_softc *sc, uint16_t port, uint16_t val)
 {
 	struct le_softc *lesc = (struct le_softc *)sc;
 	bus_space_tag_t bst = lesc->sc_bst;
@@ -163,16 +136,14 @@ lewrcsr(sc, port, val)
 	} while ((bus_space_read_1(bst, bsh0, LER0_STATUS) & LE_ACK) == 0);
 }
 
-hide u_int16_t
-lerdcsr(sc, port)
-	struct lance_softc *sc;
-	u_int16_t port;
+static uint16_t
+lerdcsr(struct lance_softc *sc, uint16_t port)
 {
 	struct le_softc *lesc = (struct le_softc *)sc;
 	bus_space_tag_t bst = lesc->sc_bst;
 	bus_space_handle_t bsh0 = lesc->sc_bsh0;
 	bus_space_handle_t bsh1 = lesc->sc_bsh1;
-	u_int16_t val;
+	uint16_t val;
 
 	do {
 		bus_space_write_2(bst, bsh1, LER1_RAP, port);
@@ -181,20 +152,17 @@ lerdcsr(sc, port)
 		val = bus_space_read_2(bst, bsh1, LER1_RDP);
 	} while ((bus_space_read_1(bst, bsh0, LER0_STATUS) & LE_ACK) == 0);
 
-	return (val);
+	return val;
 }
 
-int
-lematch(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+static int
+lematch(device_t parent, cfdata_t cf, void *aux)
 {
 	struct dio_attach_args *da = aux;
 
 	if (da->da_id == DIO_DEVICE_ID_LAN)
-		return (1);
-	return (0);
+		return 1;
+	return 0;
 }
 
 /*
@@ -202,35 +170,32 @@ lematch(parent, match, aux)
  * record.  System will initialize the interface when it is ready
  * to accept packets.
  */
-void
-leattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+static void
+leattach(device_t parent, device_t self, void *aux)
 {
-	struct dio_attach_args *da = aux;
-	struct le_softc *lesc = (struct le_softc *)self;
+	struct le_softc *lesc = device_private(self);
 	struct lance_softc *sc = &lesc->sc_am7990.lsc;
+	struct dio_attach_args *da = aux;
 	bus_space_tag_t bst = da->da_bst;
 	bus_space_handle_t bsh0, bsh1, bsh2;
 	bus_size_t offset;
-	int i, ipl;
+	int i;
+
+	sc->sc_dev = self;
 
 	if (bus_space_map(bst, (bus_addr_t)dio_scodetopa(da->da_scode),
 	    da->da_size, 0, &bsh0)) {
-		printf("\n%s: can't map LANCE registers\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error(": can't map LANCE registers\n");
 		return;
 	}
 
 	if (bus_space_subregion(bst, bsh0, lestd[1], LER1_SIZE, &bsh1)) {
-		printf("\n%s: can't subregion LANCE space\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error(": can't subregion LANCE space\n");
 		return;
 	}
 
 	if (bus_space_subregion(bst, bsh0, lestd[2], LE_BUFSIZE, &bsh2)) {
-		printf("\n%s: can't subregion buffer space\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error(": can't subregion buffer space\n");
 		return;
 	}
 
@@ -241,9 +206,6 @@ leattach(parent, self, aux)
 
 	bus_space_write_1(bst, bsh0, LER0_ID, 0xff);
 	DELAY(100);
-
-	ipl = DIO_IPL((caddr_t)bsh0);			/* XXX */
-	printf(" ipl %d", ipl);
 
 	sc->sc_conf3 = LE_C3_BSWP;
 	sc->sc_addr = 0;
@@ -275,22 +237,21 @@ leattach(parent, self, aux)
 	am7990_config(&lesc->sc_am7990);
 
 	/* Establish the interrupt handler. */
-	(void) dio_intr_establish(leintr, sc, ipl, IPL_NET);
+	(void) dio_intr_establish(leintr, sc, da->da_ipl, IPL_NET);
 	bus_space_write_1(bst, bsh0, LER0_STATUS, LE_IE);
 }
 
-int
-leintr(arg)
-	void *arg;
+static int
+leintr(void *arg)
 {
 	struct lance_softc *sc = arg;
 #ifdef USELEDS
-	u_int16_t isr;
+	uint16_t isr;
 
 	isr = lerdcsr(sc, LE_CSR0);
 
 	if ((isr & LE_C0_INTR) == 0)
-		return (0);
+		return 0;
 
 	if (isr & LE_C0_RINT)
 		ledcontrol(0, 0, LED_LANRCV);
@@ -299,35 +260,27 @@ leintr(arg)
 		ledcontrol(0, 0, LED_LANXMT);
 #endif /* USELEDS */
 
-	return (am7990_intr(sc));
+	return am7990_intr(sc);
 }
 
-hide void
-le_copytobuf(sc, from, boff, len)
-	struct lance_softc *sc;
-	void *from;
-	int boff, len;
+static void
+le_copytobuf(struct lance_softc *sc, void *from, int boff, int len)
 {
 	struct le_softc *lesc = (struct le_softc *)sc;
 
 	bus_space_write_region_1(lesc->sc_bst, lesc->sc_bsh2, boff, from, len);
 }
 
-hide void
-le_copyfrombuf(sc, to, boff, len)
-	struct lance_softc *sc;
-	void *to;
-	int boff, len;
+static void
+le_copyfrombuf(struct lance_softc *sc, void *to, int boff, int len)
 {
 	struct le_softc *lesc = (struct le_softc *)sc;
 
 	bus_space_read_region_1(lesc->sc_bst, lesc->sc_bsh2, boff, to, len);
 }
 
-hide void
-le_zerobuf(sc, boff, len)
-	struct lance_softc *sc;
-	int boff, len;
+static void
+le_zerobuf(struct lance_softc *sc, int boff, int len)
 {
 	struct le_softc *lesc = (struct le_softc *)sc;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: __vfork14.S,v 1.1 2000/01/05 14:07:40 msaitoh Exp $	*/
+/*	$NetBSD: __vfork14.S,v 1.6 2006/01/06 07:07:34 uwe Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -40,7 +36,7 @@
 
 #include <machine/asm.h>
 #if defined(SYSLIBC_SCCS) && !defined(lint)
-	RCSID("$NetBSD: __vfork14.S,v 1.1 2000/01/05 14:07:40 msaitoh Exp $")
+	RCSID("$NetBSD: __vfork14.S,v 1.6 2006/01/06 07:07:34 uwe Exp $")
 #endif /* SYSLIBC_SCCS and not lint */
 
 #include "SYS.h"
@@ -53,23 +49,19 @@
  *
  */
 ENTRY(__vfork14)
-	sts	pr, r2		/* my rta into r2 */
-	mov.l	LSYS___vfork14, r0
+	mov.l	.L_SYS___vfork14, r0
 	trapa	#0x80
 	bf	err
-	add	#0xff, r1
-	and	r1, r0
-	jmp	@r2
-	nop
+
+	add	#0xff, r1	/* from 1 to 0 in child, 0 to -1 in parent */
+	rts
+	 and	r1, r0		/* 0 in child, child pid in parent */
+
 err:
-	mov.l	L_errno, r1
-	mov.l	r0, @r1
-	mov	#0xff, r0
-	jmp	@r2
-	nop
-	
-	.align 2
-LSYS___vfork14:
+	JUMP_CERROR
+
+	.align	2
+.L_SYS___vfork14:
 	.long	SYS___vfork14
-L_errno:
-	.long	_errno
+
+	SET_ENTRY_SIZE(__vfork14)

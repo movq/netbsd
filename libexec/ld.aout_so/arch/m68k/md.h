@@ -1,4 +1,4 @@
-/*	$NetBSD: md.h,v 1.8 1999/01/05 10:02:21 itohy Exp $	*/
+/*	$NetBSD: md.h,v 1.11 2002/12/10 17:14:38 thorpej Exp $	*/
 
 /*
  *	- m68k dependent definitions
@@ -9,13 +9,27 @@
  */
 void _cachectl __P((void *, size_t));
 
-#if defined(CROSS_LINKER) && defined(XHOST) && XHOST==i386
+#if defined(CROSS_LINKER) && defined(XHOST) &&			\
+	(XHOST==i386 || XHOST==mipsel || XHOST==sh3el)
 #define NEED_SWAP
 #endif
 
 #define	MAX_ALIGNMENT		(sizeof (long))
 
-#define PAGSIZ			__LDPGSZ
+#ifdef CROSS_LINKER
+/* XXX We should check for m68k ports that have pages of less than 8K (sun2) */
+#ifndef MID_M68K
+#define MID_M68K	135
+#endif
+
+#undef MID_MACHINE
+#define MID_MACHINE	MID_M68K
+
+#undef AOUT_LDPGSZ
+#define AOUT_LDPGSZ		8192
+#endif /* CROSS_LINKER */
+
+#define PAGSIZ			AOUT_LDPGSZ
 
 #define N_SET_FLAG(ex,f)	N_SETMAGIC(ex,N_GETMAGIC(ex), MID_MACHINE, \
 						N_GETFLAG(ex)|(f))
@@ -35,7 +49,6 @@ void _cachectl __P((void *, size_t));
 
 #define RELOC_STATICS_THROUGH_GOT_P(r)		(1)
 #define JMPSLOT_NEEDS_RELOC			(0)
-#define	RELOC_SYMBOLICS_THROUGH_JMPSLOT		(1)
 #define	JMPSLOT_NONEXTERN_IS_INTERMODULE	(0)
 
 #define md_got_reloc(r)			(0)

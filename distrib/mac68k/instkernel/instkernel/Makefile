@@ -1,29 +1,17 @@
-#	$NetBSD: Makefile,v 1.2 1999/12/17 20:48:08 fredb Exp $
-
-RAMDISK!=cd ${.CURDIR}/../ramdisk; \
-	printf "xxx: .MAKE\n\t@echo \$${.OBJDIR}/ramdisk.fs\n" | \
-	${MAKE} -s -f-
-
-INSTALL_KERNEL?=INSTALL
-KERNEL=${BSDSRCDIR}/sys/arch/mac68k/compile/${INSTALL_KERNEL}/netbsd
-
-all:
-	cp ${KERNEL} netbsd-${INSTALL_KERNEL}
-	mdsetimage -T 0x0 -v netbsd-${INSTALL_KERNEL} ${RAMDISK}
-# XXX Doesn't boot with this. Why?
-#	strip netbsd-${INSTALL_KERNEL}
-# XXX Reported not to boot on some machines.
-#	gzip -9 -f netbsd-${INSTALL_KERNEL}
-	gzip -f netbsd-${INSTALL_KERNEL}
-
-clean cleandir distclean:
-	rm -f netbsd*
-
-release: all
-	${INSTALL} -d -o root -g wheel -m 755 \
-		${RELEASEDIR}/installation/instkernel/	
-	${INSTALL} -c -o root -g wheel -m 644 netbsd-${INSTALL_KERNEL}.gz \
-		${RELEASEDIR}/installation/instkernel/	
+#	$NetBSD: Makefile,v 1.18 2003/10/25 04:39:48 lukem Exp $
 
 .include <bsd.own.mk>
-.include <bsd.obj.mk>
+.include "${NETBSDSRCDIR}/distrib/common/Makefile.distrib"
+
+RAMDISKDIR!=	cd ${.CURDIR}/../ramdisk && ${PRINTOBJDIR}
+RAMDISK=	${RAMDISKDIR}/ramdisk.fs
+
+MDSETTARGETS=		INSTALL		${RAMDISK}	netbsd-INSTALL	\
+			INSTALLSBC	${RAMDISK}	netbsd-INSTALLSBC
+MDSET_RELEASEDIR=	installation/instkernel
+
+MDSET_NOSTRIP=		# defined
+
+.include "${DISTRIBDIR}/common/Makefile.mdset"
+
+.include <bsd.prog.mk>

@@ -1,4 +1,4 @@
-/*	$NetBSD: io.c,v 1.5 1997/10/20 00:23:24 lukem Exp $	*/
+/*	$NetBSD: io.c,v 1.12 2006/10/07 17:27:57 elad Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)io.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: io.c,v 1.5 1997/10/20 00:23:24 lukem Exp $");
+__RCSID("$NetBSD: io.c,v 1.12 2006/10/07 17:27:57 elad Exp $");
 #endif /* not lint */
 
 /*
@@ -54,8 +50,9 @@ __RCSID("$NetBSD: io.c,v 1.5 1997/10/20 00:23:24 lukem Exp $");
 #include <errno.h>
 #include <string.h>
 #include <unistd.h>
+#include <poll.h>
 
-#define A_LONG_TIME 10000000
+#define A_LONG_TIME 1000000
 
 /*
  * The routine to do the actual talking
@@ -63,10 +60,9 @@ __RCSID("$NetBSD: io.c,v 1.5 1997/10/20 00:23:24 lukem Exp $");
 void
 talk()
 {
-	fd_set read_template, read_set;
+	struct pollfd set[2];
 	int nb;
 	char buf[BUFSIZ];
-	struct timeval wait;
 
 	message("Connection established\007\007\007");
 	current_line = 0;
@@ -75,24 +71,20 @@ talk()
 	 * Wait on both the other process (sockt_mask) and 
 	 * standard input ( STDIN_MASK )
 	 */
-	FD_ZERO(&read_template);
-	FD_SET(sockt, &read_template);
-	FD_SET(fileno(stdin), &read_template);
+	set[0].fd = sockt;
+	set[0].events = POLLIN;
+	set[1].fd = fileno(stdin);
+	set[1].events = POLLIN;
 	for (;;) {
-		read_set = read_template;
-		wait.tv_sec = A_LONG_TIME;
-		wait.tv_usec = 0;
-		nb = select(32, &read_set, 0, 0, &wait);
+		nb = poll(set, 2, A_LONG_TIME * 1000);
 		if (nb <= 0) {
-			if (errno == EINTR) {
-				read_set = read_template;
+			if (errno == EINTR)
 				continue;
-			}
 			/* panic, we don't know what happened */
-			p_error("Unexpected error from select");
+			p_error("Unexpected error from poll");
 			quit();
 		}
-		if (FD_ISSET(sockt, &read_set)) { 
+		if (set[0].revents & POLLIN) { 
 			/* There is data on sockt */
 			nb = read(sockt, buf, sizeof buf);
 			if (nb <= 0) {
@@ -101,16 +93,17 @@ talk()
 			}
 			display(&his_win, buf, nb);
 		}
-		if (FD_ISSET(fileno(stdin), &read_set)) {
+		if (set[1].revents & POLLIN) {
 			/*
 			 * We can't make the tty non_blocking, because
 			 * curses's output routines would screw up
 			 */
-			ioctl(0, FIONREAD, (struct sgttyb *) &nb);
+			ioctl(0, FIONREAD, (void *) &nb);
 			nb = read(0, buf, nb);
 			display(&my_win, buf, nb);
 			/* might lose data here because sockt is non-blocking */
-			write(sockt, buf, nb);
+			if (nb > 0)
+				write(sockt, buf, nb);
 		}
 	}
 }

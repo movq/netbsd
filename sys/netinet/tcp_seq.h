@@ -1,4 +1,4 @@
-/*	$NetBSD: tcp_seq.h,v 1.12 1998/10/04 21:33:53 matt Exp $	*/
+/*	$NetBSD: tcp_seq.h,v 1.16 2005/12/10 23:36:23 elad Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993, 1995
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -47,6 +43,8 @@
 #define	SEQ_LEQ(a,b)	((int)((a)-(b)) <= 0)
 #define	SEQ_GT(a,b)	((int)((a)-(b)) > 0)
 #define	SEQ_GEQ(a,b)	((int)((a)-(b)) >= 0)
+#define SEQ_MIN(a, b)	((SEQ_LT(a, b)) ? (a) : (b))
+#define SEQ_MAX(a, b)	((SEQ_GT(a, b)) ? (a) : (b))
 
 #define	SEQ_SUB(a,b)	((long)((a)-(b)))
 
@@ -60,7 +58,7 @@
 
 #define	tcp_sendseqinit(tp) \
 	(tp)->snd_una = (tp)->snd_nxt = (tp)->snd_max = (tp)->snd_up = \
-	    (tp)->snd_recover = (tp)->iss
+	    (tp)->snd_recover = (tp)->snd_high = (tp)->iss
 
 #define TCP_ISS_RANDOM_MASK 0x00ffffff /* bits of randomness in a TCP ISS */
 #define TCP_ISSINCR         0x01000000 /* increment per time and per conn */
@@ -69,4 +67,4 @@
 extern tcp_seq	 tcp_iss_seq;		/* tcp initial seq # */
 #endif
 
-#endif /* _NETINET_TCP_SEQ_H_ */
+#endif /* !_NETINET_TCP_SEQ_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_machdep.h,v 1.4 1999/01/21 23:06:25 christos Exp $	 */
+/*	$NetBSD: svr4_machdep.h,v 1.12 2008/04/28 20:23:37 martin Exp $	 */
 
 /*-
  * Copyright (c) 1994 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -46,6 +39,9 @@
  */
 
 #define SVR4_SPARC_PSR		0
+#ifdef _LP64
+#define SVR4_SPARC_CCR		0
+#endif
 #define SVR4_SPARC_PC		1
 #define SVR4_SPARC_nPC		2
 #define SVR4_SPARC_Y		3
@@ -64,14 +60,20 @@
 #define SVR4_SPARC_O5		16
 #define SVR4_SPARC_O6		17
 #define SVR4_SPARC_O7		18
+#define SVR4_SPARC_ASI		19
+#define SVR4_SPARC_FPRS		20
+#ifdef _LP64
+#define SVR4_SPARC_MAXREG	21
+#else
 #define SVR4_SPARC_MAXREG	19
+#endif
 
 #define SVR4_SPARC_SP		SVR4_SPARC_O6
 #define SVR4_SPARC_PS		SVR4_SPARC_PSR
 
 #define SVR4_SPARC_MAXWIN	31
 
-typedef int svr4_greg_t;
+typedef long svr4_greg_t;
 
 typedef struct {
 	svr4_greg_t	rwin_lo[8];
@@ -88,11 +90,22 @@ typedef svr4_greg_t svr4_gregset_t[SVR4_SPARC_MAXREG];
 
 typedef struct {
 	union {
-		u_int	 fp_ri[32];
-		double	 fp_rd[16];
+		u_int		fp_ri[32];
+#ifdef _LP64
+		double		fp_rd[32];
+		long double	fp_rq[16];
+#else
+		double		fp_rd[16];
+#endif
 	} fpu_regs;
+#ifdef _LP64
+	unsigned long	 fp_fsr;
+	unsigned	 fp_fprs;
+	void		*fp_q;
+#else
 	void		*fp_q;
 	unsigned	 fp_fsr;
+#endif
 	u_char		 fp_nqel;
 	u_char		 fp_nqsize;
 	u_char		 fp_busy;
@@ -105,21 +118,27 @@ typedef struct {
 
 #define SVR4_XRS_ID	(('x' << 24) | ('r' << 16) | ('s' << 8))
 
+typedef long svr4_asrset_t[16]; /* %asr16 - %asr31 */
+
 typedef struct svr4_mcontext {
 	svr4_gregset_t	 greg;
 	svr4_gwindow_t  *gwin;
 	svr4_fregset_t	 freg;
 	svr4_xrs_t	 xrs;
+#ifdef _LP64
+	svr4_asrset_t	 asrs;
+	long		 pad[4];
+#else
 	long		 pad[19];
+#endif
 } svr4_mcontext_t;
 
 #define SVR4_UC_MACHINE_PAD	23
 
 struct svr4_ucontext;
 
-void svr4_getcontext __P((struct proc *, struct svr4_ucontext *, sigset_t *));
-int svr4_setcontext __P((struct proc *p, struct svr4_ucontext *));
-void svr4_sendsig __P((sig_t, int, sigset_t *, u_long));
-int svr4_trap __P((int, struct proc *));
+#define svr4_syscall_intern	syscall_intern
+
+int svr4_trap(int, struct lwp *);
 
 #endif /* !_SPARC_SVR4_MACHDEP_H_ */

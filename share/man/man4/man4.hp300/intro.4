@@ -1,4 +1,4 @@
-.\"	$NetBSD: intro.4,v 1.5 1999/12/15 23:44:52 abs Exp $
+.\"	$NetBSD: intro.4,v 1.16 2005/06/20 13:25:24 peter Exp $
 .\"
 .\" Copyright (c) 1990, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -33,12 +29,12 @@
 .\"
 .\"     from: @(#)intro.4	8.1 (Berkeley) 6/5/93
 .\"
-.Dd June 5, 1993
+.Dd November 15, 2003
 .Dt INTRO 4 hp300
 .Os
 .Sh NAME
 .Nm intro
-.Nd introduction to special files and hardware support
+.Nd introduction to hp300 special files and hardware support
 .Sh DESCRIPTION
 This section describes the special files, related driver functions,
 and networking support
@@ -48,13 +44,13 @@ In this part of the manual, the
 section of
 each configurable device gives a sample specification
 for use in constructing a system description for the
-.Xr config 8
+.Xr config 1
 program.
 The
 .Tn DIAGNOSTICS
 section lists messages which may appear on the console
 and/or in the system error log
-.Pa /usr/adm/messages
+.Pa /var/log/messages
 due to errors in device operation;
 see
 .Xr syslogd 8
@@ -93,15 +89,6 @@ the system will have to be rebooted.
 .Pp
 The autoconfiguration system is described in
 .Xr autoconf 4 .
-A list of the supported devices is given below.
-.Sh SEE ALSO
-.Xr intro 4 ,
-.Xr intro 4 ,
-.Xr autoconf 4 ,
-.Xr config 8 .
-.Rs
-.%T "Building 4.3 BSD UNIX Systems with Config (SMM:2)"
-.Re
 .Sh LIST OF DEVICES
 The devices listed below are supported in this incarnation of
 the system.  Pseudo-devices are not listed.
@@ -112,26 +99,35 @@ for example, new
 .Tn CS/80
 drives.
 .Bl -column grf/ite -offset indent
+com	serial interfaces (98644, 98626, and built-in apci and dca)
 ct	7946/9144 CS/80 cartridge tape
-dca	98644 built-in serial interface
-dcl	HP 98628A communications link
 dcm	HP 98642A communications multiplexer
-dma	98620B DMA controller
-dv	HP98730 ``DaVinci'' device interface
-gb	 HP98700 ``Gatorbox'' device interface
+dio	DIO/DIO-II bus
+dnkbd	Domain keyboard
+dvbox	HP98730 ``DaVinci'' device interface
+fhpib	``fast'' HP-IB interface
+frodo	Frodo ASIC (a.k.a. Apollo Utility Chip)
+gbox	HP98700 ``Gatorbox'' device interface
 grf/ite	Topcat/Gatorbox/Renaissance frame buffer
 hil	HIL interface
-hpib	Built-in and 98625 HP-IB interface
+nhpib	Built-in and 98625 HP-IB interface
+hyper	Hyperion device interface
+intio	HP300 internal I/O space driver
 ite	HP Internal Terminal Emulator
 le	98643 Lance-based Ethernet interface
-mem	main memory
 ppi	HP-IB printer/plotter interface
-rb	HP98720 ``Renaissance'' device interface
+rbox	HP98720 ``Renaissance'' device interface
 rd	CS/80 disk interface
 rmp	HP Remote Maintenance Protocol family
-st	CCS SCSI tape drive
-tc	HP98544-98550 ``Topcat'' and ``Catseye'' device interface
+spc	HP98265A SCSI interface
+topcat	HP98544-98550 ``Topcat'' and ``Catseye'' device interface
 .El
+.Sh SEE ALSO
+.Xr config 1 ,
+.Xr autoconf 4
+.Rs
+.%T "Building 4.3 BSD UNIX Systems with Config (SMM:2)"
+.Re
 .Sh HISTORY
 The
 .Tn HP300

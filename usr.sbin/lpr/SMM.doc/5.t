@@ -1,4 +1,4 @@
-.\" $NetBSD: 5.t,v 1.2 1995/11/15 22:54:33 pk Exp $
+.\" $NetBSD: 5.t,v 1.4 2008/05/07 17:44:44 christos Exp $
 .\" Copyright (c) 1983, 1993
 .\"	The Regents of the University of California.  All rights reserved.
 .\"
@@ -10,11 +10,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -73,7 +69,7 @@ The
 .B if
 filter is passed the following parameters.
 .DS
-\fIfilter\fP [\|\fB\-c\fP\|] \fB\-w\fPwidth \fB\-l\fPlength \fB\-i\fPindent \fB\-n\fP login \fB\-h\fP host accounting_file
+\fIfilter\fP [\|\fB\-c\fP\|] \fB\-w\fPwidth \fB\-l\fPlength \fB\-i\fPindent \fB\-n\fP login \fB\-j\fP jobname \fB\-h\fP host accounting_file
 .DE
 The
 .B \-c
@@ -97,10 +93,13 @@ and
 parameters specify the login name and host name of the job owner.
 The last argument is the name of the accounting file from
 .IR printcap .
+The
+.B \-j
+parameter is optional and specifies the name of the print job if available.
 .PP
 All other filters are called with the following arguments:
 .DS
-\fIfilter\fP \fB\-x\fPwidth \fB\-y\fPlength \fB\-n\fP login \fB\-h\fP host accounting_file
+\fIfilter\fP \fB\-x\fPwidth \fB\-y\fPlength \fB\-n\fP login \fB\-j\fP jobname \fB\-h\fP host accounting_file
 .DE
 The
 .B \-x

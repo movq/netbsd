@@ -1,7 +1,11 @@
-/*	$NetBSD: intr.h,v 1.6 1999/12/31 08:15:48 tsubai Exp $	*/
+/*	$NetBSD: intr.h,v 1.23 2008/04/28 20:23:30 martin Exp $	*/
 
-/*
- * Copyright (c) 1998 Jonathan Stone.  All rights reserved.
+/*-
+ * Copyright (c) 2000, 2001 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * This code is derived from software contributed to The NetBSD Foundation
+ * by Jason R. Thorpe.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -11,113 +15,119 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Jonathan Stone for
- *      the NetBSD Project.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
- * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
- * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
 
 #ifndef _MACHINE_INTR_H_
 #define _MACHINE_INTR_H_
 
 #define IPL_NONE	0	/* disable only this interrupt */
-#define IPL_BIO		1	/* disable block I/O interrupts */
-#define IPL_NET		2	/* disable network interrupts */
-#define IPL_TTY		3	/* disable terminal interrupts */
-#define IPL_CLOCK	4	/* disable clock interrupts */
-#define IPL_STATCLOCK	5	/* disable profiling interrupts */
-#define IPL_SERIAL	6	/* disable serial hardware interrupts */
-#define IPL_HIGH	7	/* disable all interrupts */
+#define IPL_SOFTCLOCK	1	/* clock software interrupts (SI 0) */
+#define IPL_SOFTBIO	1	/* bio software interrupts (SI 0) */
+#define IPL_SOFTNET	2	/* network software interrupts (SI 1) */
+#define IPL_SOFTSERIAL	2	/* serial software interrupts (SI 1) */
+#define	IPL_VM		3
+#define IPL_SCHED	4	/* disable clock interrupts */
+#define IPL_HIGH	4	/* disable all interrupts */
+
+#define _IPL_N		5
+
+#define _IPL_SI0_FIRST	IPL_SOFTCLOCK
+#define _IPL_SI0_LAST	IPL_SOFTBIO
+
+#define _IPL_SI1_FIRST	IPL_SOFTNET
+#define _IPL_SI1_LAST	IPL_SOFTSERIAL
 
 #ifdef _KERNEL
 #ifndef _LOCORE
-#include <mips/cpuregs.h>
 
-extern int _splraise __P((int));
-extern int _spllower __P((int));
-extern int _splset __P((int));
-extern int _splget __P((void));
-extern void _splnone __P((void));
-extern void _setsoftintr __P((int));
-extern void _clrsoftintr __P((int));
+#include <sys/device.h>
+#include <mips/locore.h>
 
-#define setsoftclock()	_setsoftintr(MIPS_SOFT_INT_MASK_0)
-#define setsoftnet()	_setsoftintr(MIPS_SOFT_INT_MASK_1)
-#define clearsoftclock() _clrsoftintr(MIPS_SOFT_INT_MASK_0)
-#define clearsoftnet()	_clrsoftintr(MIPS_SOFT_INT_MASK_1)
-
-/*
- * nesting interrupt masks.
- */
-#define MIPS_INT_MASK_SPL_SOFT0	MIPS_SOFT_INT_MASK_0
-#define MIPS_INT_MASK_SPL_SOFT1	(MIPS_SOFT_INT_MASK_1|MIPS_INT_MASK_SPL_SOFT0)
-#define MIPS_INT_MASK_SPL0	(MIPS_INT_MASK_0|MIPS_INT_MASK_SPL_SOFT1)
-#define MIPS_INT_MASK_SPL1	(MIPS_INT_MASK_1|MIPS_INT_MASK_SPL0)
-#define MIPS_INT_MASK_SPL2	(MIPS_INT_MASK_2|MIPS_INT_MASK_SPL1)
-#define MIPS_INT_MASK_SPL3	(MIPS_INT_MASK_3|MIPS_INT_MASK_SPL2)
-#define MIPS_INT_MASK_SPL4	(MIPS_INT_MASK_4|MIPS_INT_MASK_SPL3)
-#define MIPS_INT_MASK_SPL5	(MIPS_INT_MASK_5|MIPS_INT_MASK_SPL4)
+extern const uint32_t ipl_sr_bits[_IPL_N];
 
 #define spl0()		(void)_spllower(0)
 #define splx(s)		(void)_splset(s)
-#define splbio()	_splraise(MIPS_INT_MASK_SPL0)
-#define splnet()	_splraise(MIPS_INT_MASK_SPL1)
-#define spltty()	_splraise(MIPS_INT_MASK_SPL1)
-#define splimp()	_splraise(MIPS_INT_MASK_SPL1)
-#define splclock()	_splraise(MIPS_INT_MASK_SPL2)
-#define splstatclock()	_splraise(MIPS_INT_MASK_SPL2)
-#define splhigh()	_splraise(MIPS_INT_MASK_SPL2)
 
-#define splsoftclock()	_splraise(MIPS_INT_MASK_SPL_SOFT0)
-#define splsoftnet()	_splraise(MIPS_INT_MASK_SPL_SOFT1)
-#define spllowersoftclock() _spllower(MIPS_INT_MASK_SPL_SOFT0)
+#define splsoft()	_splraise(ipl_sr_bits[IPL_SOFT])
+
+typedef int ipl_t;
+typedef struct {
+	ipl_t _sr;
+} ipl_cookie_t;
+
+static inline ipl_cookie_t
+makeiplcookie(ipl_t ipl)
+{
+
+	return (ipl_cookie_t){._sr = ipl_sr_bits[ipl]};
+}
+
+static inline int
+splraiseipl(ipl_cookie_t icookie)
+{
+
+	return _splraise(icookie._sr);
+}
+
+#include <sys/spl.h>
+
+struct newsmips_intrhand {
+	LIST_ENTRY(newsmips_intrhand) ih_q;
+	struct evcnt intr_count;
+	int (*ih_func)(void *);
+	void *ih_arg;
+	u_int ih_level;
+	u_int ih_mask;
+	u_int ih_priority;
+};
+
+struct newsmips_intr {
+	LIST_HEAD(,newsmips_intrhand) intr_q;
+};
 
 /*
  * Index into intrcnt[], which is defined in locore
  */
-#define SOFTCLOCK_INTR	0
-#define SOFTNET_INTR	1
-#define SERIAL0_INTR	2
-#define SERIAL1_INTR	3
-#define SERIAL2_INTR	4
-#define LANCE_INTR	5
-#define SCSI_INTR	6
-#define ERROR_INTR	7
-#define HARDCLOCK_INTR	8
-#define FPU_INTR	9
-#define SLOT1_INTR	10
-#define SLOT2_INTR	11
-#define SLOT3_INTR	12
-#define FLOPPY_INTR	13
-#define STRAY_INTR	14
+#define SERIAL0_INTR	0
+#define SERIAL1_INTR	1
+#define SERIAL2_INTR	2
+#define LANCE_INTR	3
+#define SCSI_INTR	4
+#define ERROR_INTR	5
+#define HARDCLOCK_INTR	6
+#define FPU_INTR	7
+#define SLOT1_INTR	8
+#define SLOT2_INTR	9
+#define SLOT3_INTR	10
+#define FLOPPY_INTR	11
+#define STRAY_INTR	12
 
 extern u_int intrcnt[];
 
 /* handle i/o device interrupts */
-extern int (*mips_hardware_intr) __P((u_int, u_int, u_int, u_int));
-extern int news3400_intr __P((u_int, u_int, u_int, u_int));
-extern int news5000_intr __P((u_int, u_int, u_int, u_int));
+#ifdef news3400
+void news3400_intr(uint32_t, uint32_t, uint32_t, uint32_t);
+#endif
+#ifdef news5000
+void news5000_intr(uint32_t, uint32_t, uint32_t, uint32_t);
+#endif
+extern void (*hardware_intr)(uint32_t, uint32_t, uint32_t, uint32_t);
 
-/* handle software interrupts */
-extern void (*mips_software_intr) __P((int));
-
-#define SOFTISR_ZS	0x01
-
-extern void (*enable_intr) __P((void));
-extern void (*disable_intr) __P((void));
+extern void (*enable_intr)(void);
+extern void (*disable_intr)(void);
+extern void (*enable_timer)(void);
 
 #endif /* !_LOCORE */
 #endif /* _KERNEL */

@@ -1,4 +1,4 @@
-/*	$NetBSD: ttyaction.c,v 1.13 1999/09/20 04:48:10 lukem Exp $	*/
+/*	$NetBSD: ttyaction.c,v 1.19 2008/04/28 20:23:03 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,6 +33,11 @@
  * For each matching "tty" and "action" run the "command."
  * See fnmatch() for matching the tty name.
  */
+
+#include <sys/cdefs.h>
+#if defined(LIBC_SCCS) && !defined(lint)
+__RCSID("$NetBSD: ttyaction.c,v 1.19 2008/04/28 20:23:03 martin Exp $");
+#endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -61,25 +59,23 @@
 #define _PATH_TTYACTION "/etc/ttyaction"
 #endif
 
-static char *actfile = _PATH_TTYACTION;
-static char *pathenv = __CONCAT("PATH=",_PATH_STDPATH);
+static const char *actfile = _PATH_TTYACTION;
+static const char *pathenv = "PATH=" _PATH_STDPATH;
 
 int
-ttyaction(tty, act, user)
-	const char *tty;
-	const char *act;
-	const char *user;
+ttyaction(const char *tty, const char *act, const char *user)
 {
 	FILE *fp;
 	char *p1, *p2;
-	char *argv[4];
-	char *envp[8];
+	const char *argv[4];
+	const char *envp[8];
 	char *lastp;
 	char line[1024];
 	char env_tty[64];
 	char env_act[64];
 	char env_user[256];
-	int error, linenum, pid, status;
+	int error, linenum, status;
+	pid_t pid;
 
 	_DIAGASSERT(tty != NULL);
 	_DIAGASSERT(act != NULL);
@@ -90,7 +86,7 @@ ttyaction(tty, act, user)
 		return 0;
 
 	/* Skip the "/dev/" part of the first arg. */
-	if (!strncmp(tty, "/dev/", 5))
+	if (!strncmp(tty, "/dev/", (size_t)5))
 		tty += 5;
 
 	/* Args will be: "sh -c ..." */
@@ -113,7 +109,7 @@ ttyaction(tty, act, user)
 
 	linenum = 0;
 	status = 0;
-	while (fgets(line, sizeof(line), fp)) {
+	while (fgets(line, (int)sizeof(line), fp)) {
 		linenum++;
 
 		/* Allow comment lines. */
@@ -138,7 +134,9 @@ ttyaction(tty, act, user)
 		}
 		if (pid == 0) {
 			/* This is the child. */
-			error = execve(argv[0], argv, envp);
+			error = execve(argv[0], 
+			    (char *const *)__UNCONST(argv),
+			    (char *const *)__UNCONST(envp));
 			/* If we get here, it is an error. */
 			warnx("%s: line %d: exec failed: %s",
 				  actfile, linenum, strerror(errno));

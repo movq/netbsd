@@ -1,4 +1,4 @@
-/*	$NetBSD: ite_cc.c,v 1.15 2000/02/11 21:42:52 leo Exp $	*/
+/*	$NetBSD: ite_cc.c,v 1.27 2007/03/04 05:59:40 christos Exp $	*/
 
 /*
  * Copyright (c) 1996 Leo Weppelman
@@ -30,6 +30,9 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ite_cc.c,v 1.27 2007/03/04 05:59:40 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -89,8 +92,8 @@ extern font_info	font_info_8x16;
 
 static void view_init __P((struct ite_softc *));
 static void view_deinit __P((struct ite_softc *));
-static int  itecc_ioctl __P((struct ite_softc *, u_long, caddr_t, int,
-							struct proc *));
+static int  itecc_ioctl __P((struct ite_softc *, u_long, void *, int,
+							struct lwp *));
 static int  ite_newsize __P((struct ite_softc *, struct itewinsize *));
 static void cursor32 __P((struct ite_softc *, int));
 static void putc8 __P((struct ite_softc *, int, int, int, int));
@@ -106,9 +109,8 @@ void grfccattach __P((struct device *, struct device *, void *));
 int  grfccmatch __P((struct device *, struct cfdata *, void *));
 int  grfccprint __P((void *, const char *));
 
-struct cfattach grfcc_ca = {
-	sizeof(struct grf_softc), grfccmatch, grfccattach
-};
+CFATTACH_DECL(grfcc, sizeof(struct grf_softc),
+    grfccmatch, grfccattach, NULL, NULL);
 
 /*
  * only used in console init.
@@ -131,8 +133,10 @@ struct device	*pdp;
 struct cfdata	*cfp;
 void		*auxp;
 {
+	static int	did_consinit = 0;
 	static int	must_probe = 1;
 	grf_auxp_t	*grf_auxp = auxp;
+	extern const struct cdevsw view_cdevsw;
 
 	if (must_probe) {
 		/*
@@ -156,22 +160,23 @@ void		*auxp;
 
 	if (atari_realconfig == 0) {
 		/*
-		 * Early console init. Only match unit 0.
+		 * Early console init. Only match first unit.
 		 */
-		if (cfp->cf_unit != 0)
+		if (did_consinit)
 			return(0);
-		if (viewopen(0, 0, 0, NULL))
+		if ((*view_cdevsw.d_open)(cfp->cf_unit, 0, 0, NULL))
 			return(0);
 		cfdata_grf = cfp;
+		did_consinit = 1;
 		return (1);
 	}
 
 	/*
 	 * Normal config. When we are called directly from the grfbus,
-	 * we only match unit 0. The attach function will call us for
+	 * we only match the first unit. The attach function will call us for
 	 * the other configured units.
 	 */
-	if (grf_auxp->from_bus_match && (cfp->cf_unit != 0))
+	if (grf_auxp->from_bus_match && (did_consinit > 1))
 		return (0);
 
 	if (!grf_auxp->from_bus_match && (grf_auxp->unit != cfp->cf_unit))
@@ -180,10 +185,11 @@ void		*auxp;
 	/*
 	 * Final constraint: each grf needs a view....
 	 */
-	if((cfdata_grf == NULL) || (cfp->cf_unit != 0)) {
-	    if(viewopen(cfp->cf_unit, 0, 0, NULL))
+	if((cfdata_grf == NULL) || (did_consinit > 1)) {
+	    if((*view_cdevsw.d_open)(cfp->cf_unit, 0, 0, NULL))
 		return(0);
 	}
+	did_consinit = 2;
 	return(1);
 }
 
@@ -197,25 +203,25 @@ struct device	*pdp, *dp;
 void		*auxp;
 {
 	static struct grf_softc		congrf;
+	static int			first_attach = 1;
 	       grf_auxp_t		*grf_bus_auxp = auxp;
 	       grf_auxp_t		grf_auxp;
 	       struct grf_softc		*gp;
 	       int			maj;
+	extern const struct cdevsw grf_cdevsw;
 
 	/*
 	 * find our major device number 
 	 */
-	for(maj = 0; maj < nchrdev; maj++)
-		if (cdevsw[maj].d_open == grfopen)
-			break;
+	maj = cdevsw_lookup_major(&grf_cdevsw);
 
 	/*
 	 * Handle exeption case: early console init
 	 */
 	if(dp == NULL) {
-		congrf.g_unit    = 0;
+		congrf.g_unit    = cfdata_grf->cf_unit;
+		congrf.g_grfdev  = makedev(maj, congrf.g_unit);
 		congrf.g_itedev  = (dev_t)-1;
-		congrf.g_grfdev  = makedev(maj, 0);
 		congrf.g_flags   = GF_ALIVE;
 		congrf.g_mode    = grf_mode;
 		congrf.g_conpri  = grfcc_cnprobe();
@@ -229,10 +235,10 @@ void		*auxp;
 	}
 
 	gp = (struct grf_softc *)dp;
-	gp->g_unit = gp->g_device.dv_unit;
+	gp->g_unit = device_unit(&gp->g_device);
 	grfsp[gp->g_unit] = gp;
 
-	if((cfdata_grf != NULL) && (gp->g_unit == 0)) {
+	if((cfdata_grf != NULL) && (gp->g_unit == congrf.g_unit)) {
 		/*
 		 * We inited earlier just copy the info, take care
 		 * not to copy the device struct though.
@@ -263,9 +269,10 @@ void		*auxp;
 	config_found(dp, gp, grfccprint);
 
 	/*
-	 * If attaching unit 0, go ahead and 'find' the rest of us
+	 * If attaching the first unit, go ahead and 'find' the rest of us
 	 */
-	if (gp->g_unit == 0) {
+	if (first_attach) {
+		first_attach = 0;
 		grf_auxp.from_bus_match = 0;
 		for (grf_auxp.unit=1; grf_auxp.unit < NGRFCC; grf_auxp.unit++) {
 		    config_found(pdp, (void*)&grf_auxp, grf_bus_auxp->busprint);
@@ -279,7 +286,7 @@ void		*auxp;
 const char	*pnp;
 {
 	if(pnp)
-		printf("ite at %s", pnp);
+		aprint_normal("ite at %s", pnp);
 	return(UNCONF);
 }
 
@@ -373,6 +380,7 @@ struct itewinsize	*winsz;
 	u_long			i, j;
 	int			error = 0;
 	view_t			*view;
+	extern const struct cdevsw view_cdevsw;
 
 	vs.x      = winsz->x;
 	vs.y      = winsz->y;
@@ -380,8 +388,8 @@ struct itewinsize	*winsz;
 	vs.height = winsz->height;
 	vs.depth  = winsz->depth;
 
-	error = viewioctl(ip->grf->g_viewdev, VIOCSSIZE, (caddr_t)&vs, 0,
-								NOPROC);
+	error = (*view_cdevsw.d_ioctl)(ip->grf->g_viewdev, VIOCSSIZE,
+				       (void *)&vs, 0, NOLWP);
 	view  = viewview(ip->grf->g_viewdev);
 
 	/*
@@ -449,17 +457,19 @@ struct itewinsize	*winsz;
 }
 
 int
-itecc_ioctl(ip, cmd, addr, flag, p)
+itecc_ioctl(ip, cmd, addr, flag, l)
 struct ite_softc	*ip;
 u_long			cmd;
-caddr_t			addr;
+void *			addr;
 int			flag;
-struct proc		*p;
+struct lwp		*l;
 {
 	struct winsize		ws;
 	struct itewinsize	*is;
 	int			error = 0;
 	view_t			*view = viewview(ip->grf->g_viewdev);
+	extern const struct cdevsw ite_cdevsw;
+	extern const struct cdevsw view_cdevsw;
 
 	switch (cmd) {
 	case ITEIOCSWINSZ:
@@ -478,20 +488,22 @@ struct proc		*p;
 			 * XXX tell tty about the change 
 			 * XXX this is messy, but works 
 			 */
-			iteioctl(ip->grf->g_itedev,TIOCSWINSZ,(caddr_t)&ws,0,p);
+			(*ite_cdevsw.d_ioctl)(ip->grf->g_itedev, TIOCSWINSZ,
+					      (void *)&ws, 0, l);
 		}
 		break;
 	case VIOCSCMAP:
 	case VIOCGCMAP:
 		/*
-		 * XXX watchout for that NOPROC. its not really the kernel
+		 * XXX watchout for that NOLWP. its not really the kernel
 		 * XXX talking these two commands don't use the proc pointer
 		 * XXX though.
 		 */
-		error = viewioctl(ip->grf->g_viewdev, cmd, addr, flag, NOPROC);
+		error = (*view_cdevsw.d_ioctl)(ip->grf->g_viewdev, cmd, addr,
+					       flag, NOLWP);
 		break;
 	default:
-		error = -1;
+		error = EPASSTHROUGH;
 		break;
 	}
 	return (error);
@@ -526,7 +538,7 @@ cursor32(struct ite_softc *ip, int flag)
 		cend = ip->font.height-1; 
 		pl   = cci->column_offset[ip->cursorx]
 				+ cci->row_ptr[ip->cursory];
-		__asm__ __volatile__
+		__asm volatile
 			("1: notb  %0@ ; addaw %4,%0\n\t"
 			 "dbra  %1,1b"
 			 : "=a" (pl), "=d" (cend)
@@ -551,7 +563,7 @@ cursor32(struct ite_softc *ip, int flag)
 	pl          = cci->column_offset[ip->cursorx]
 			+ cci->row_ptr[ip->cursory];
 
-	__asm__ __volatile__
+	__asm volatile
 		("1: notb  %0@ ; addaw %4,%0\n\t"
 		 "dbra  %1,1b"
 		 : "=a" (pl), "=d" (cend)
@@ -679,9 +691,9 @@ int				dir, sx, count;
 			int	t;
 			sofs2 -= ip->font.width;
 			dofs2 -= ip->font.width;
-			asm("bfextu %1@{%2:%3},%0" : "=d" (t)
+			__asm("bfextu %1@{%2:%3},%0" : "=d" (t)
 				: "a" (pl), "d" (sofs2), "d" (ip->font.width));
-			asm("bfins %3,%0@{%1:%2}" :
+			__asm("bfins %3,%0@{%1:%2}" :
 				: "a" (pl), "d" (dofs2), "d" (ip->font.width),
 				  "d" (t));
 		    }
@@ -699,9 +711,9 @@ int				dir, sx, count;
 		    for(i = (ip->cols - sx)-1; i >= 0; i--) {
 			int	t;
 
-			asm("bfextu %1@{%2:%3},%0" : "=d" (t)
+			__asm("bfextu %1@{%2:%3},%0" : "=d" (t)
 				: "a" (pl), "d" (sofs2), "d" (ip->font.width));
-			asm("bfins %3,%0@{%1:%2}"
+			__asm("bfins %3,%0@{%1:%2}"
 				: : "a" (pl), "d" (dofs2),"d" (ip->font.width),
 				    "d" (t));
 			sofs2 += ip->font.width;

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.3 1995/03/18 15:01:20 cgd Exp $
+#	$NetBSD: Makefile,v 1.5 2005/06/27 01:00:07 christos Exp $
 
 PROG=	ttyflags
 MAN=	ttyflags.8

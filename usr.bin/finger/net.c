@@ -1,4 +1,4 @@
-/*	$NetBSD: net.c,v 1.13 1999/07/02 06:01:23 itojun Exp $	*/
+/*	$NetBSD: net.c,v 1.22 2006/01/04 01:17:54 perry Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)net.c	8.4 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: net.c,v 1.13 1999/07/02 06:01:23 itojun Exp $");
+__RCSID("$NetBSD: net.c,v 1.22 2006/01/04 01:17:54 perry Exp $");
 #endif
 #endif /* not lint */
 
@@ -53,22 +49,22 @@ __RCSID("$NetBSD: net.c,v 1.13 1999/07/02 06:01:23 itojun Exp $");
 #include <arpa/inet.h>
 
 #include <netdb.h>
+#include <time.h>
 #include <db.h>
 #include <unistd.h>
 #include <pwd.h>
-#include <utmp.h>
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
-#include <unistd.h>
 #include <err.h>
+
+#include "utmpentry.h"
 
 #include "finger.h"
 #include "extern.h"
 
 void
-netfinger(name)
-	char *name;
+netfinger(char *name)
 {
 	FILE *fp;
 	int c, lastc;
@@ -111,7 +107,7 @@ netfinger(name)
 	}
 	if (s < 0) {
 		if (emsg != NULL)
-			warn(emsg);
+			warn("%s", emsg);
 		return;
 	}
 
@@ -129,25 +125,25 @@ netfinger(name)
 	 * Read from the remote system; once we're connected, we assume some
 	 * data.  If none arrives, we hang until the user interrupts.
 	 *
-	 * If we see a <CR> or a <CR> with the high bit set, treat it as
-	 * a newline; if followed by a newline character, only output one
-	 * newline.
+	 * If we see a <CR> followed by a newline character, only output
+	 * one newline.
 	 *
-	 * Otherwise, all high bits are stripped; if it isn't printable and
-	 * it isn't a space, we can simply set the 7th bit.  Every ASCII
-	 * character with bit 7 set is printable.
+	 * If a character isn't printable and it isn't a space, we strip the
+	 * 8th bit and set the 7th bit.  Every ASCII character with bit 7 set
+	 * is printable.
 	 */
 	if ((fp = fdopen(s, "r")) != NULL)
 		while ((c = getc(fp)) != EOF) {
-			c &= 0x7f;
 			if (c == '\r') {
 				if (lastc == '\r')	/* ^M^M - skip dupes */
 					continue;
 				c = '\n';
 				lastc = '\r';
 			} else {
-				if (!isprint(c) && !isspace(c))
+				if (!(eightflag || isprint(c) || isspace(c))) {
+					c &= 0x7f;
 					c |= 0x40;
+				}
 				if (lastc != '\r' || c != '\n')
 					lastc = c;
 				else {

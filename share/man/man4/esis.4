@@ -1,4 +1,4 @@
-.\"	$NetBSD: esis.4,v 1.6 1999/12/15 22:07:31 abs Exp $
+.\"	$NetBSD: esis.4,v 1.13 2003/08/07 10:31:01 agc Exp $
 .\"
 .\" Copyright (c) 1990, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -40,11 +36,11 @@
 .Nm esis
 .Nd End System to Intermediate System Routing Protocol
 .Sh SYNOPSIS
-.Fd #include <sys/types.h>
-.Fd #include <netiso/esis.h>
+.In sys/types.h
+.In netiso/esis.h
 .Sh DESCRIPTION
 The
-.Nm ES-IS
+.Tn ES-IS
 routing protocol is used to dynamically map between
 .Tn ISO NSAP
 addresses and
@@ -90,7 +86,7 @@ Intermediate System) may be changed by issuing an
 .Dv SIOCSSTYPE
 .Xr ioctl 2 ,
 which is defined in
-.Pa Aq sys/netiso/iso_snpac.h .
+.Aq Pa sys/netiso/iso_snpac.h .
 .Pp
 The protocol behaves differently depending on whether the System is
 configured as an End System or an Intermediate System.
@@ -166,9 +162,8 @@ arrived upon, a redirect
 .Tn PDU
 is generated.
 .Sh MANUAL ROUTING TABLE MODIFICATION
-.Pp
 To facilitate communications with systems which do not use
-.Nm ES-IS ,
+.Tn ES-IS ,
 one may add a route whose destination is a struct sockaddr_iso containing the
 .Tn NSAP
 in question, and the gateway being a link-level struct sockaddr,
@@ -195,10 +190,10 @@ struct sockaddr specifying the
 of the
 .Tn IS .
 .Sh SEE ALSO
-.Xr un 4 ,
 .Xr iso 4 ,
-.Xr route 8 ,
-.Xr ifconfig 8
+.\" .Xr un 4 ,
+.Xr ifconfig 8 ,
+.Xr route 8
 .Rs
 .%T "End system to Intermediate system routing exchange protocol for use in conjunction with the Protocol for providing the connectionless-mode network service"
 .%R ISO
@@ -221,7 +216,7 @@ This multicast address is not compatible with the
 .Tn IEEE 802.5
 .Pq Tn Token Ring
 multicast addresses format.
-Therefore, broadcast addresses are used on the 
+Therefore, broadcast addresses are used on the
 .Tn IEEE 802.5
 subnetwork.
 .Pp

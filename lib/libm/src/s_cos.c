@@ -12,7 +12,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBM_SCCS) && !defined(lint)
-__RCSID("$NetBSD: s_cos.c,v 1.9 1999/07/02 15:37:42 simonb Exp $");
+__RCSID("$NetBSD: s_cos.c,v 1.11 2007/08/20 16:01:39 drochner Exp $");
 #endif
 
 /* cos(x)
@@ -46,15 +46,18 @@ __RCSID("$NetBSD: s_cos.c,v 1.9 1999/07/02 15:37:42 simonb Exp $");
  *	TRIG(x) returns trig(x) nearly rounded
  */
 
+#include "namespace.h"
 #include "math.h"
 #include "math_private.h"
 
-#ifdef __STDC__
-	double cos(double x)
-#else
-	double cos(x)
-	double x;
+#if 0 /* notyet */
+#ifdef __weak_alias
+__weak_alias(cos, _cos)
 #endif
+#endif
+
+double
+cos(double x)
 {
 	double y[2],z=0.0;
 	int32_t n, ix;

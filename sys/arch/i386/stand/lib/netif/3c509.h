@@ -1,4 +1,4 @@
-/*	$NetBSD: 3c509.h,v 1.3 2000/03/13 23:52:29 soren Exp $	*/
+/*	$NetBSD: 3c509.h,v 1.6 2006/11/24 22:52:16 wiz Exp $	*/
 
 /*
  * Copyright (c) 1993 Herb Peyerl
@@ -66,7 +66,7 @@
 #define BASE 	(eth_base)
 
 /*
- * Commands to read/write EEPROM trough EEPROM command register (Window 0,
+ * Commands to read/write EEPROM through EEPROM command register (Window 0,
  * Offset 0xa)
  */
 #define EEPROM_CMD_RD    0x0080	/* Read:  Address required (5 bits) */
@@ -86,7 +86,7 @@
 /**************************************************************************
  *									  *
  * These define the EEPROM data structure.  They are used in the probe
- * function to verify the existance of the adapter after having sent
+ * function to verify the existence of the adapter after having sent
  * the ID_Sequence.
  *
  * There are others but only the ones we use are defined here.

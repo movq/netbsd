@@ -1,8 +1,38 @@
-/*	$NetBSD: util.c,v 1.15 1999/11/09 15:06:35 drochner Exp $	*/
+/*	$NetBSD: util.c,v 1.27 2007/05/05 16:55:17 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
  *	The Regents of the University of California.  All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * Tony Nardo of the Johns Hopkins University/Applied Physics Lab.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ */
+
+/*
  * Portions Copyright (c) 1983, 1995, 1996 Eric P. Allman
  *
  * This code is derived from software contributed to Berkeley by
@@ -42,7 +72,7 @@
 #if 0
 static char sccsid[] = "@(#)util.c	8.3 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: util.c,v 1.15 1999/11/09 15:06:35 drochner Exp $");
+__RCSID("$NetBSD: util.c,v 1.27 2007/05/05 16:55:17 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -62,17 +92,17 @@ __RCSID("$NetBSD: util.c,v 1.15 1999/11/09 15:06:35 drochner Exp $");
 #include <unistd.h>
 #include <utmp.h>
 
+#include "utmpentry.h"
+
 #include "finger.h"
 #include "extern.h"
 
-static void	 find_idle_and_ttywrite __P((WHERE *));
-static void	 userinfo __P((PERSON *, struct passwd *));
-static WHERE	*walloc __P((PERSON *));
+static void	 find_idle_and_ttywrite(WHERE *);
+static void	 userinfo(PERSON *, struct passwd *);
+static WHERE	*walloc(PERSON *);
 
 int
-match(pw, user)
-	struct passwd *pw;
-	char *user;
+match(struct passwd *pw, char *user)
 {
 	char *p;
 	char *bp, name[1024];
@@ -80,7 +110,7 @@ match(pw, user)
 	if (!strcasecmp(pw->pw_name, user))
 		return(1);
 
-	(void)strncpy(bp = tbuf, pw->pw_gecos, sizeof(tbuf));
+	(void)strlcpy(bp = tbuf, pw->pw_gecos, sizeof(tbuf));
 
 	/* Ampersands get replaced by the login name. */
 	if (!(p = strsep(&bp, ",")))
@@ -96,11 +126,7 @@ match(pw, user)
 
 /* inspired by usr.sbin/sendmail/util.c::buildfname */
 void
-expandusername(gecos, login, buf, buflen)
-	const char *gecos;
-	const char *login;
-	char *buf;
-	int buflen;
+expandusername(const char *gecos, const char *login, char *buf, int buflen)
 {
 	const char *p;
 	char *bp;
@@ -121,7 +147,7 @@ expandusername(gecos, login, buf, buflen)
 		if (*p == '&') {
 			/* interpolate full name */
 			snprintf(bp, buflen - (bp - buf), "%s", login);
-			*bp = toupper(*bp);
+			*bp = toupper((unsigned char)*bp);
 			bp += strlen(bp);
 		}
 		else
@@ -131,8 +157,7 @@ expandusername(gecos, login, buf, buflen)
 }
 
 void
-enter_lastlog(pn)
-	PERSON *pn;
+enter_lastlog(PERSON *pn)
 {
 	WHERE *w;
 	static int opened, fd;
@@ -172,34 +197,32 @@ enter_lastlog(pn)
 	if (doit) {
 		w = walloc(pn);
 		w->info = LASTLOG;
+		if ((w->tty = malloc(UT_LINESIZE + 1)) == NULL)
+			err(1, NULL);
 		memcpy(w->tty, ll.ll_line, UT_LINESIZE);
-		w->tty[UT_LINESIZE] = 0;
+		w->tty[UT_LINESIZE] = '\0';
+		if ((w->host = malloc(UT_HOSTSIZE + 1)) == NULL)
+			err(1, NULL);
 		memcpy(w->host, ll.ll_host, UT_HOSTSIZE);
-		w->host[UT_HOSTSIZE] = 0;
+		w->host[UT_HOSTSIZE] = '\0';
 		w->loginat = ll.ll_time;
 	}
 }
 
 void
-enter_where(ut, pn)
-	struct utmp *ut;
-	PERSON *pn;
+enter_where(struct utmpentry *ep, PERSON *pn)
 {
-	WHERE *w;
+	WHERE *w = walloc(pn);
 
-	w = walloc(pn);
 	w->info = LOGGEDIN;
-	memcpy(w->tty, ut->ut_line, UT_LINESIZE);
-	w->tty[UT_LINESIZE] = 0;
-	memcpy(w->host, ut->ut_host, UT_HOSTSIZE);
-	w->host[UT_HOSTSIZE] = 0;
-	w->loginat = (time_t)ut->ut_time;
+	w->tty = ep->line;
+	w->host = ep->host;
+	w->loginat = (time_t)ep->tv.tv_sec;
 	find_idle_and_ttywrite(w);
 }
 
 PERSON *
-enter_person(pw)
-	struct passwd *pw;
+enter_person(struct passwd *pw)
 {
 	DBT data, key;
 	PERSON *pn;
@@ -234,23 +257,16 @@ enter_person(pw)
 }
 
 PERSON *
-find_person(name)
-	char *name;
+find_person(char *name)
 {
-	int cnt;
 	DBT data, key;
 	PERSON *p;
-	char buf[UT_NAMESIZE + 1];
 
 	if (!db)
 		return(NULL);
 
-	/* Name may be only UT_NAMESIZE long and not NUL terminated. */
-	for (cnt = 0; cnt < UT_NAMESIZE && *name; ++name, ++cnt)
-		buf[cnt] = *name;
-	buf[cnt] = '\0';
-	key.data = buf;
-	key.size = cnt;
+	key.data = name;
+	key.size = strlen(name);
 
 	if ((*db->get)(db, &key, &data, 0))
 		return (NULL);
@@ -259,7 +275,7 @@ find_person(name)
 }
 
 PERSON *
-palloc()
+palloc(void)
 {
 	PERSON *p;
 
@@ -269,8 +285,7 @@ palloc()
 }
 
 static WHERE *
-walloc(pn)
-	PERSON *pn;
+walloc(PERSON *pn)
 {
 	WHERE *w;
 
@@ -287,8 +302,7 @@ walloc(pn)
 }
 
 char *
-prphone(num)
-	char *num;
+prphone(char *num)
 {
 	char *p;
 	int len;
@@ -337,15 +351,13 @@ prphone(num)
 }
 
 static void
-find_idle_and_ttywrite(w)
-	WHERE *w;
+find_idle_and_ttywrite(WHERE *w)
 {
-	extern time_t now;
 	struct stat sb;
 
 	(void)snprintf(tbuf, sizeof(tbuf), "%s/%s", _PATH_DEV, w->tty);
 	if (stat(tbuf, &sb) < 0) {
-		warn(tbuf);
+		warn("%s", tbuf);
 		return;
 	}
 	w->idletime = now < sb.st_atime ? 0 : now - sb.st_atime;
@@ -355,9 +367,7 @@ find_idle_and_ttywrite(w)
 }
 
 static void
-userinfo(pn, pw)
-	PERSON *pn;
-	struct passwd *pw;
+userinfo(PERSON *pn, struct passwd *pw)
 {
 	char *p;
 	char *bp, name[1024];
@@ -370,8 +380,7 @@ userinfo(pn, pw)
 	pn->dir = strdup(pw->pw_dir);
 	pn->shell = strdup(pw->pw_shell);
 
-	(void)strncpy(bp = tbuf, pw->pw_gecos, sizeof(tbuf));
-	tbuf[sizeof(tbuf) - 1] = '\0';
+	(void)strlcpy(bp = tbuf, pw->pw_gecos, sizeof(tbuf));
 
 	/* ampersands get replaced by the login name */
 	if (!(p = strsep(&bp, ",")))
@@ -384,7 +393,7 @@ userinfo(pn, pw)
 	    strdup(p) : NULL;
 	pn->homephone = ((p = strsep(&bp, ",")) && *p) ?
 	    strdup(p) : NULL;
-	(void)snprintf(tbuf, sizeof(tbuf), "%s/%s", _PATH_MAILSPOOL,
+	(void)snprintf(tbuf, sizeof(tbuf), "%s/%s", _PATH_MAILDIR,
 	    pw->pw_name);
 	pn->mailrecv = -1;		/* -1 == not_valid */
 	if (stat(tbuf, &sb) < 0) {

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 1999/09/29 04:57:49 perseant Exp $
+#	$NetBSD: Makefile,v 1.9 2008/04/27 03:06:46 tsutsui Exp $
 #	@(#)Makefile	8.1 (Berkeley) 6/5/93
 
 #	lfs_inode.c		LFS filestore-specific routines
@@ -6,18 +6,24 @@
 #	DEBUG			use local directory to find ddate and dumpdates
 #	TDEBUG			trace out the process forking
 
+.include <bsd.own.mk>
+
 PROG=	dump_lfs
 LINKS=	${BINDIR}/dump_lfs ${BINDIR}/rdump_lfs
-CPPFLAGS+=-DRDUMP -I${.CURDIR} -I${.CURDIR}/../dump
+CPPFLAGS+=-DRDUMP -I${.CURDIR} -I${NETBSDSRCDIR}/sbin/dump
+CPPFLAGS+=-DDUMP_LFS
 # CPPFLAGS+= -DDEBUG -DTDEBUG -DFDEBUG -DWRITEDEBUG -DSTATS -DDIAGNOSTICS
-SRCS=	itime.c main.c optr.c dumprmt.c rcache.c tape.c traverse.c unctime.c \
-	ffs_bswap.c lfs_inode.c
-BINGRP=	tty
-BINMODE=2555
+SRCS=	itime.c main.c optr.c dumprmt.c rcache.c snapshot.c tape.c \
+	traverse.c unctime.c ffs_bswap.c lfs_inode.c
 MAN=	dump_lfs.8
 MLINKS+=dump_lfs.8 rdump_lfs.8
 CFLAGS+=-g
 
-.PATH:  ${.CURDIR}/../dump ${.CURDIR}/../../sys/ufs/lfs ${.CURDIR}/../../sys/ufs/ffs
+.if ${MACHINE_ARCH} == "m68000"
+COPTS.lfs_inode.c+=	-fno-tree-ter
+.endif
+
+.PATH:  ${NETBSDSRCDIR}/sbin/dump ${NETBSDSRCDIR}/sys/ufs/lfs \
+	${NETBSDSRCDIR}/sys/ufs/ffs
 
 .include <bsd.prog.mk>

@@ -1,4 +1,4 @@
-/*      $NetBSD: n_log.c,v 1.4 1999/07/02 15:37:37 simonb Exp $ */
+/*      $NetBSD: n_log.c,v 1.7 2008/03/20 16:41:26 mhitch Exp $ */
 /*
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,10 +34,17 @@ static char sccsid[] = "@(#)log.c	8.2 (Berkeley) 11/30/93";
 #endif
 #endif /* not lint */
 
+#include "../src/namespace.h"
+
 #include <math.h>
 #include <errno.h>
 
 #include "mathimpl.h"
+
+#ifdef __weak_alias
+__weak_alias(log, _log);
+__weak_alias(logf, _logf);
+#endif
 
 /* Table-driven natural logarithm.
  *
@@ -99,12 +102,12 @@ static char sccsid[] = "@(#)log.c	8.2 (Berkeley) 11/30/93";
  * Values for log(F) were generated using error < 10^-57 absolute
  * with the bc -l package.
 */
-static double	A1 = 	  .08333333333333178827;
-static double	A2 = 	  .01250000000377174923;
-static double	A3 =	 .002232139987919447809;
-static double	A4 =	.0004348877777076145742;
+static const double	A1 = 	  .08333333333333178827;
+static const double	A2 = 	  .01250000000377174923;
+static const double	A3 =	 .002232139987919447809;
+static const double	A4 =	.0004348877777076145742;
 
-static double logF_head[N+1] = {
+static const double logF_head[N+1] = {
 	0.,
 	.007782140442060381246,
 	.015504186535963526694,
@@ -236,7 +239,7 @@ static double logF_head[N+1] = {
 	.693147180560117703862
 };
 
-static double logF_tail[N+1] = {
+static const double logF_tail[N+1] = {
 	0.,
 	-.00000000000000543229938420049,
 	 .00000000000000172745674997061,
@@ -369,11 +372,7 @@ static double logF_tail[N+1] = {
 };
 
 double
-#ifdef _ANSI_SOURCE
 log(double x)
-#else
-log(x) double x;
-#endif
 {
 	int m, j;
 	double F, f, g, q, u, u2, v, zero = 0.0, one = 1.0;
@@ -445,11 +444,7 @@ log(x) double x;
  * log(x) = a+b to 63 bits, with a is rounded to 26 bits.
  */
 struct Double
-#ifdef _ANSI_SOURCE
 __log__D(double x)
-#else
-__log__D(x) double x;
-#endif
 {
 	int m, j;
 	double F, f, g, q, u, v, u2;
@@ -487,4 +482,10 @@ __log__D(x) double x;
 	TRUNC(r.a);
 	r.b = (u1 - r.a) + u2;
 	return (r);
+}
+
+float
+logf(float x)
+{
+	return(log((double)x));
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: cat.c,v 1.22 2000/01/15 01:13:15 christos Exp $	*/
+/* $NetBSD: cat.c,v 1.47 2008/07/20 00:52:39 lukem Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -36,55 +32,55 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-#ifndef lint
-__COPYRIGHT(
-"@(#) Copyright (c) 1989, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
-#endif /* not lint */
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
 
-#ifndef lint
+#include <sys/cdefs.h>
+#if !defined(lint)
+__COPYRIGHT(
+"@(#) Copyright (c) 1989, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #if 0
 static char sccsid[] = "@(#)cat.c	8.2 (Berkeley) 4/27/95";
 #else
-__RCSID("$NetBSD: cat.c,v 1.22 2000/01/15 01:13:15 christos Exp $");
+__RCSID("$NetBSD: cat.c,v 1.47 2008/07/20 00:52:39 lukem Exp $");
 #endif
 #endif /* not lint */
 
 #include <sys/param.h>
 #include <sys/stat.h>
 
-#include <locale.h>
 #include <ctype.h>
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <locale.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
-int bflag, eflag, fflag, nflag, sflag, tflag, vflag;
+int bflag, eflag, fflag, lflag, nflag, sflag, tflag, vflag;
 int rval;
 const char *filename;
 
-int main __P((int, char *[]));
-void cook_args __P((char *argv[]));
-void cook_buf __P((FILE *));
-void raw_args __P((char *argv[]));
-void raw_cat __P((int));
+int main(int, char *[]);
+void cook_args(char *argv[]);
+void cook_buf(FILE *);
+void raw_args(char *argv[]);
+void raw_cat(int);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
-	extern int optind;
 	int ch;
+	struct flock stdout_lock;
 
+	setprogname(argv[0]);
 	(void)setlocale(LC_ALL, "");
 
-	while ((ch = getopt(argc, argv, "befnstuv")) != -1)
+	while ((ch = getopt(argc, argv, "beflnstuv")) != -1)
 		switch (ch) {
 		case 'b':
 			bflag = nflag = 1;	/* -b implies -n */
@@ -92,20 +88,23 @@ main(argc, argv)
 		case 'e':
 			eflag = vflag = 1;	/* -e implies -v */
 			break;
+		case 'f':
+			fflag = 1;
+			break;
+		case 'l':
+			lflag = 1;
+			break;
 		case 'n':
 			nflag = 1;
 			break;
 		case 's':
 			sflag = 1;
 			break;
-		case 'f':
-			fflag = 1;
-			break;
 		case 't':
 			tflag = vflag = 1;	/* -t implies -v */
 			break;
 		case 'u':
-			setbuf(stdout, (char *)NULL);
+			setbuf(stdout, NULL);
 			break;
 		case 'v':
 			vflag = 1;
@@ -113,25 +112,32 @@ main(argc, argv)
 		default:
 		case '?':
 			(void)fprintf(stderr,
-			    "usage: cat [-benstuv] [-] [file ...]\n");
-			exit(1);
+			    "usage: cat [-beflnstuv] [-] [file ...]\n");
+			exit(EXIT_FAILURE);
 			/* NOTREACHED */
 		}
 	argv += optind;
+
+	if (lflag) {
+		stdout_lock.l_len = 0;
+		stdout_lock.l_start = 0;
+		stdout_lock.l_type = F_WRLCK;
+		stdout_lock.l_whence = SEEK_SET;
+		if (fcntl(STDOUT_FILENO, F_SETLKW, &stdout_lock) == -1)
+			err(EXIT_FAILURE, "stdout");
+	}
 
 	if (bflag || eflag || nflag || sflag || tflag || vflag)
 		cook_args(argv);
 	else
 		raw_args(argv);
 	if (fclose(stdout))
-		err(1, "stdout");
-	exit(rval);
-	/* NOTREACHED */
+		err(EXIT_FAILURE, "stdout");
+	return (rval);
 }
 
 void
-cook_args(argv)
-	char **argv;
+cook_args(char **argv)
 {
 	FILE *fp;
 
@@ -141,9 +147,10 @@ cook_args(argv)
 		if (*argv) {
 			if (!strcmp(*argv, "-"))
 				fp = stdin;
-			else if ((fp = fopen(*argv, "rf")) == NULL) {
+			else if ((fp = fopen(*argv,
+			    fflag ? "rf" : "r")) == NULL) {
 				warn("%s", *argv);
-				rval = 1;
+				rval = EXIT_FAILURE;
 				++argv;
 				continue;
 			}
@@ -152,12 +159,13 @@ cook_args(argv)
 		cook_buf(fp);
 		if (fp != stdin)
 			(void)fclose(fp);
+		else
+			clearerr(fp);
 	} while (*argv);
 }
 
 void
-cook_buf(fp)
-	FILE *fp;
+cook_buf(FILE *fp)
 {
 	int ch, gobble, line, prev;
 
@@ -166,7 +174,10 @@ cook_buf(fp)
 		if (prev == '\n') {
 			if (ch == '\n') {
 				if (sflag) {
-					if (!gobble && putchar(ch) == EOF)
+					if (!gobble && nflag && !bflag)
+						(void)fprintf(stdout,
+							"%6d\t\n", ++line);
+					else if (!gobble && putchar(ch) == EOF)
 						break;
 					gobble = 1;
 					continue;
@@ -220,16 +231,15 @@ cook_buf(fp)
 	}
 	if (ferror(fp)) {
 		warn("%s", filename);
-		rval = 1;
+		rval = EXIT_FAILURE;
 		clearerr(fp);
 	}
 	if (ferror(stdout))
-		err(1, "stdout");
+		err(EXIT_FAILURE, "stdout");
 }
 
 void
-raw_args(argv)
-	char **argv;
+raw_args(char **argv)
 {
 	int fd;
 
@@ -251,14 +261,15 @@ raw_args(argv)
 				}
 				if (!S_ISREG(st.st_mode)) {
 					close(fd);
-					errno = EFTYPE;
-					goto skip;
+					warnx("%s: not a regular file", *argv);
+					goto skipnomsg;
 				}
 			}
 			else if ((fd = open(*argv, O_RDONLY, 0)) < 0) {
 skip:
 				warn("%s", *argv);
-				rval = 1;
+skipnomsg:
+				rval = EXIT_FAILURE;
 				++argv;
 				continue;
 			}
@@ -271,34 +282,35 @@ skip:
 }
 
 void
-raw_cat(rfd)
-	int rfd;
+raw_cat(int rfd)
 {
-	int wfd;
 	static char *buf;
 	static char fb_buf[BUFSIZ];
-	struct stat sbuf;
 	static size_t bsize;
+
 	ssize_t nr, nw, off;
+	int wfd;
 
 	wfd = fileno(stdout);
 	if (buf == NULL) {
-		if (fstat(wfd, &sbuf) == 0) {
-			bsize = MIN(sbuf.st_blksize, SSIZE_MAX);
-			bsize = MAX(bsize, BUFSIZ);
+		struct stat sbuf;
+
+		if (fstat(wfd, &sbuf) == 0 &&
+		    sbuf.st_blksize > sizeof(fb_buf)) {
+			bsize = sbuf.st_blksize;
 			buf = malloc(bsize);
 		}
 		if (buf == NULL) {
+			bsize = sizeof(fb_buf);
 			buf = fb_buf;
-			bsize = BUFSIZ;
 		}
 	}
 	while ((nr = read(rfd, buf, bsize)) > 0)
 		for (off = 0; nr; nr -= nw, off += nw)
 			if ((nw = write(wfd, buf + off, (size_t)nr)) < 0)
-				err(1, "stdout");
+				err(EXIT_FAILURE, "stdout");
 	if (nr < 0) {
 		warn("%s", filename);
-		rval = 1;
+		rval = EXIT_FAILURE;
 	}
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: ofnet.c,v 1.18 2000/03/23 07:01:37 thorpej Exp $	*/
+/*	$NetBSD: ofnet.c,v 1.41 2008/04/08 20:11:58 cegger Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -30,6 +30,10 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ofnet.c,v 1.41 2008/04/08 20:11:58 cegger Exp $");
+
 #include "ofnet.h"
 #include "opt_inet.h"
 #include "bpfilter.h"
@@ -38,6 +42,7 @@
 #include <sys/systm.h>
 #include <sys/callout.h>
 #include <sys/device.h>
+#include <sys/disk.h>
 #include <sys/ioctl.h>
 #include <sys/mbuf.h>
 #include <sys/socket.h>
@@ -62,14 +67,13 @@
 #include <ipkdb/ipkdb.h>
 #include <machine/ipkdb.h>
 
-struct cfattach ipkdb_ofn_ca = {
-	0, ipkdb_probe, ipkdb_attach
-};
+CFATTACH_DECL(ipkdb_ofn, 0,
+    ipkdb_probe, ipkdb_attach, NULL, NULL);
 
 static struct ipkdb_if *kifp;
 static struct ofnet_softc *ipkdb_of;
 
-static int ipkdbprobe __P((struct cfdata *, void *));
+static int ipkdbprobe (struct cfdata *, void *);
 #endif
 
 struct ofnet_softc {
@@ -80,32 +84,28 @@ struct ofnet_softc {
 	struct callout sc_callout;
 };
 
-static int ofnet_match __P((struct device *, struct cfdata *, void *));
-static void ofnet_attach __P((struct device *, struct device *, void *));
+static int ofnet_match (struct device *, struct cfdata *, void *);
+static void ofnet_attach (struct device *, struct device *, void *);
 
-struct cfattach ofnet_ca = {
-	sizeof(struct ofnet_softc), ofnet_match, ofnet_attach
-};
+CFATTACH_DECL(ofnet, sizeof(struct ofnet_softc),
+    ofnet_match, ofnet_attach, NULL, NULL);
 
-static void ofnet_read __P((struct ofnet_softc *));
-static void ofnet_timer __P((void *));
-static void ofnet_init __P((struct ofnet_softc *));
-static void ofnet_stop __P((struct ofnet_softc *));
+static void ofnet_read (struct ofnet_softc *);
+static void ofnet_timer (void *);
+static void ofnet_init (struct ofnet_softc *);
+static void ofnet_stop (struct ofnet_softc *);
 
-static void ofnet_start __P((struct ifnet *));
-static int ofnet_ioctl __P((struct ifnet *, u_long, caddr_t));
-static void ofnet_watchdog __P((struct ifnet *));
+static void ofnet_start (struct ifnet *);
+static int ofnet_ioctl (struct ifnet *, u_long, void *);
+static void ofnet_watchdog (struct ifnet *);
 
 static int
-ofnet_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+ofnet_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct ofbus_attach_args *oba = aux;
 	char type[32];
 	int l;
-	
+
 #if NIPKDB_OFN > 0
 	if (!parent)
 		return ipkdbprobe(match, aux);
@@ -124,21 +124,19 @@ ofnet_match(parent, match, aux)
 }
 
 static void
-ofnet_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+ofnet_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct ofnet_softc *of = (void *)self;
+	struct ofnet_softc *of = device_private(self);
 	struct ifnet *ifp = &of->sc_ethercom.ec_if;
 	struct ofbus_attach_args *oba = aux;
 	char path[256];
 	int l;
 	u_int8_t myaddr[ETHER_ADDR_LEN];
-	
+
 	of->sc_phandle = oba->oba_phandle;
 #if NIPKDB_OFN > 0
 	if (kifp &&
-	    kifp->unit - 1 == of->sc_dev.dv_unit &&
+	    kifp->unit - 1 == device_unit(&of->sc_dev) &&
 	    OF_instance_to_package(kifp->port) == oba->oba_phandle)  {
 		ipkdb_of = of;
 		of->sc_ihandle = kifp->port;
@@ -154,52 +152,55 @@ ofnet_attach(parent, self, aux)
 		panic("ofnet_attach: no mac-address");
 	printf(": address %s\n", ether_sprintf(myaddr));
 
-	callout_init(&of->sc_callout);
+	callout_init(&of->sc_callout, 0);
 
-	bcopy(of->sc_dev.dv_xname, ifp->if_xname, IFNAMSIZ);
+	strlcpy(ifp->if_xname, device_xname(&of->sc_dev), IFNAMSIZ);
 	ifp->if_softc = of;
 	ifp->if_start = ofnet_start;
 	ifp->if_ioctl = ofnet_ioctl;
 	ifp->if_watchdog = ofnet_watchdog;
 	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_NOTRAILERS;
+	IFQ_SET_READY(&ifp->if_snd);
 
 	if_attach(ifp);
 	ether_ifattach(ifp, myaddr);
-
-#if NBPFILTER > 0
-	bpfattach(&ifp->if_bpf, ifp, DLT_EN10MB, sizeof(struct ether_header));
-#endif
-
-	dk_establish(0, self);					/* XXX */
 }
 
-static char buf[ETHERMTU + sizeof(struct ether_header)];
+static char buf[ETHER_MAX_LEN];
 
 static void
-ofnet_read(of)
-	struct ofnet_softc *of;
+ofnet_read(struct ofnet_softc *of)
 {
 	struct ifnet *ifp = &of->sc_ethercom.ec_if;
 	struct mbuf *m, **mp, *head;
-	int l, len;
+	int s, l, len;
 	char *bufp;
 
+	s = splnet();
 #if NIPKDB_OFN > 0
 	ipkdbrint(kifp, ifp);
-#endif	
-	while (1) {
-		if ((len = OF_read(of->sc_ihandle, buf, sizeof buf)) < 0) {
-			if (len == -2 || len == 0)
-				return;
-			ifp->if_ierrors++;
-			continue;
-		}
+#endif
+	for (;;) {
+		len = OF_read(of->sc_ihandle, buf, sizeof buf);
+		if (len == -2 || len == 0)
+			break;
 		if (len < sizeof(struct ether_header)) {
 			ifp->if_ierrors++;
 			continue;
 		}
 		bufp = buf;
-		
+
+		/*
+		 * We don't know if the interface included the FCS
+		 * or not.  For now, assume that it did if we got
+		 * a packet length that looks like it could include
+		 * the FCS.
+		 *
+		 * XXX Yuck.
+		 */
+		if (len > ETHER_MAX_LEN - ETHER_CRC_LEN)
+			len = ETHER_MAX_LEN - ETHER_CRC_LEN;
+
 		/* Allocate a header mbuf */
 		MGETHDR(m, M_DONTWAIT, MT_DATA);
 		if (m == 0) {
@@ -208,10 +209,11 @@ ofnet_read(of)
 		}
 		m->m_pkthdr.rcvif = ifp;
 		m->m_pkthdr.len = len;
+
 		l = MHLEN;
 		head = 0;
 		mp = &head;
-		
+
 		while (len > 0) {
 			if (head) {
 				MGET(m, M_DONTWAIT, MT_DATA);
@@ -243,7 +245,7 @@ ofnet_read(of)
 			 * XXX then so does other code in this driver.
 			 */
 			if (head == NULL) {
-				caddr_t newdata = (caddr_t)ALIGN(m->m_data +
+				char *newdata = (char *)ALIGN(m->m_data +
 				      sizeof(struct ether_header)) -
 				    sizeof(struct ether_header);
 				l -= newdata - m->m_data;
@@ -267,6 +269,7 @@ ofnet_read(of)
 		ifp->if_ipackets++;
 		(*ifp->if_input)(ifp, head);
 	}
+	splx(s);
 }
 
 static void
@@ -280,8 +283,7 @@ ofnet_timer(arg)
 }
 
 static void
-ofnet_init(of)
-	struct ofnet_softc *of;
+ofnet_init(struct ofnet_softc *of)
 {
 	struct ifnet *ifp = &of->sc_ethercom.ec_if;
 
@@ -296,34 +298,32 @@ ofnet_init(of)
 }
 
 static void
-ofnet_stop(of)
-	struct ofnet_softc *of;
+ofnet_stop(struct ofnet_softc *of)
 {
 	callout_stop(&of->sc_callout);
 	of->sc_ethercom.ec_if.if_flags &= ~IFF_RUNNING;
 }
 
 static void
-ofnet_start(ifp)
-	struct ifnet *ifp;
+ofnet_start(struct ifnet *ifp)
 {
 	struct ofnet_softc *of = ifp->if_softc;
 	struct mbuf *m, *m0;
 	char *bufp;
 	int len;
-	
+
 	if (!(ifp->if_flags & IFF_RUNNING))
 		return;
 
 	for (;;) {
 		/* First try reading any packets */
 		ofnet_read(of);
-		
+
 		/* Now get the first packet on the queue */
-		IF_DEQUEUE(&ifp->if_snd, m0);
+		IFQ_DEQUEUE(&ifp->if_snd, m0);
 		if (!m0)
 			return;
-		
+
 		if (!(m0->m_flags & M_PKTHDR))
 			panic("ofnet_start: no header mbuf");
 		len = m0->m_pkthdr.len;
@@ -340,12 +340,25 @@ ofnet_start(ifp)
 			continue;
 		}
 
-		for (bufp = buf; m = m0;) {
+		for (bufp = buf; (m = m0) != NULL;) {
 			bcopy(mtod(m, char *), bufp, m->m_len);
 			bufp += m->m_len;
 			MFREE(m, m0);
 		}
-		if (OF_write(of->sc_ihandle, buf, bufp - buf) != bufp - buf)
+
+		/*
+		 * We don't know if the interface will auto-pad for
+		 * us, so make sure it's at least as large as a
+		 * minimum size Ethernet packet.
+		 */
+
+		if (len < (ETHER_MIN_LEN - ETHER_CRC_LEN)) {
+			memset(bufp, 0, ETHER_MIN_LEN - ETHER_CRC_LEN - len);
+			bufp += ETHER_MIN_LEN - ETHER_CRC_LEN - len;
+		} else
+			len = bufp - buf;
+
+		if (OF_write(of->sc_ihandle, buf, len) != len)
 			ifp->if_oerrors++;
 		else
 			ifp->if_opackets++;
@@ -353,20 +366,17 @@ ofnet_start(ifp)
 }
 
 static int
-ofnet_ioctl(ifp, cmd, data)
-	struct ifnet *ifp;
-	u_long cmd;
-	caddr_t data;
+ofnet_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
 	struct ofnet_softc *of = ifp->if_softc;
 	struct ifaddr *ifa = (struct ifaddr *)data;
-	struct ifreq *ifr = (struct ifreq *)data;
+	/* struct ifreq *ifr = (struct ifreq *)data; */
 	int error = 0;
-	
+
 	switch (cmd) {
 	case SIOCSIFADDR:
 		ifp->if_flags |= IFF_UP;
-		
+
 		switch (ifa->ifa_addr->sa_family) {
 #ifdef	INET
 		case AF_INET:
@@ -399,12 +409,11 @@ ofnet_ioctl(ifp, cmd, data)
 }
 
 static void
-ofnet_watchdog(ifp)
-	struct ifnet *ifp;
+ofnet_watchdog(struct ifnet *ifp)
 {
 	struct ofnet_softc *of = ifp->if_softc;
-	
-	log(LOG_ERR, "%s: device timeout\n", of->sc_dev.dv_xname);
+
+	log(LOG_ERR, "%s: device timeout\n", device_xname(&of->sc_dev));
 	ifp->if_oerrors++;
 	ofnet_stop(of);
 	ofnet_init(of);
@@ -412,29 +421,24 @@ ofnet_watchdog(ifp)
 
 #if NIPKDB_OFN > 0
 static void
-ipkdbofstart(kip)
-	struct ipkdb_if *kip;
+ipkdbofstart(struct ipkdb_if *kip)
 {
 	int unit = kip->unit - 1;
-	
+
 	if (ipkdb_of)
 		ipkdbattach(kip, &ipkdb_of->sc_ethercom);
 }
 
 static void
-ipkdbofleave(kip)
-	struct ipkdb_if *kip;
+ipkdbofleave(struct ipkdb_if *kip)
 {
 }
 
 static int
-ipkdbofrcv(kip, buf, poll)
-	struct ipkdb_if *kip;
-	u_char *buf;
-	int poll;
+ipkdbofrcv(struct ipkdb_if *kip, u_char *buf, int poll)
 {
 	int l;
-	
+
 	do {
 		l = OF_read(kip->port, buf, ETHERMTU);
 		if (l < 0)
@@ -444,24 +448,19 @@ ipkdbofrcv(kip, buf, poll)
 }
 
 static void
-ipkdbofsend(kip, buf, l)
-	struct ipkdb_if *kip;
-	u_char *buf;
-	int l;
+ipkdbofsend(struct ipkdb_if *kip, u_char *buf, int l)
 {
 	OF_write(kip->port, buf, l);
 }
 
 static int
-ipkdbprobe(match, aux)
-	struct cfdata *match;
-	void *aux;
+ipkdbprobe(struct cfdata *match, void *aux)
 {
 	struct ipkdb_if *kip = aux;
 	static char name[256];
 	int len;
 	int phandle;
-	
+
 	kip->unit = match->cf_unit + 1;
 
 	if (!(kip->port = OF_open("net")))
@@ -475,7 +474,7 @@ ipkdbprobe(match, aux)
 	if (OF_getprop(phandle, "mac-address", kip->myenetaddr,
 	    sizeof kip->myenetaddr) < 0)
 		return -1;
-	
+
 	kip->flags |= IPKDB_MYHW;
 	kip->name = name;
 	kip->start = ipkdbofstart;
@@ -484,7 +483,7 @@ ipkdbprobe(match, aux)
 	kip->send = ipkdbofsend;
 
 	kifp = kip;
-	
+
 	return 0;
 }
 #endif

@@ -1,4 +1,4 @@
-/*      $NetBSD: advlib.h,v 1.11 1999/08/07 07:20:16 thorpej Exp $        */
+/*      $NetBSD: advlib.h,v 1.17 2005/12/11 12:21:25 christos Exp $        */
 
 /*
  * Definitions for low level routines and data structures
@@ -42,10 +42,10 @@
  */
 /*
  * advansys.c - Linux Host Driver for AdvanSys SCSI Adapters
- *     
+ *
  * Copyright (c) 1995-1996 Advanced System Products, Inc.
  * All Rights Reserved.
- *   
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that redistributions of source
  * code retain the above copyright notice and this comment without
@@ -452,7 +452,7 @@ typedef struct asc_scisq_1
 	u_int32_t	data_addr; /* physical address of first segment to transef */
 	u_int32_t	data_cnt;  /* byte count of first segment to transfer */
 	u_int32_t	sense_addr; /* physical address of the sense buffer */
-	u_int8_t	sense_len; /* lenght of sense buffer */
+	u_int8_t	sense_len; /* length of sense buffer */
 	u_int8_t	extra_bytes;
 } ASC_SCSIQ_1;
 
@@ -839,6 +839,8 @@ typedef struct asc_softc
 {
 	struct device		sc_dev;
 
+	struct device		*sc_child;
+
 	bus_space_tag_t		sc_iot;
 	bus_space_handle_t	sc_ioh;
 	bus_dma_tag_t		sc_dmat;
@@ -847,12 +849,14 @@ typedef struct asc_softc
 
 	struct adv_control	*sc_control;	/* control structures */
 
+	bus_dma_segment_t	sc_control_seg;
+	int			sc_control_nsegs;
+
 	struct adv_ccb		*sc_ccbhash[CCB_HASH_SIZE];
 	TAILQ_HEAD(, adv_ccb)	sc_free_ccb, sc_waiting_ccb;
-	struct scsipi_link	sc_link;	/* prototype for devs */
-	struct scsipi_adapter	sc_adapter;
 
-	TAILQ_HEAD(, scsipi_xfer) sc_queue;
+	struct scsipi_adapter	sc_adapter;
+	struct scsipi_channel	sc_channel;
 
 	bus_addr_t		overrun_buf;
 
@@ -1325,20 +1329,20 @@ typedef struct asceep_config
 /******************************************************************************/
 
 
-void AscInitASC_SOFTC __P((ASC_SOFTC *));
-int16_t AscInitFromEEP __P((ASC_SOFTC *));
-u_int16_t AscInitFromASC_SOFTC __P((ASC_SOFTC *));
-int AscInitDriver __P((ASC_SOFTC *));
-void AscReInitLram __P((ASC_SOFTC *));
-int AscFindSignature __P((bus_space_tag_t, bus_space_handle_t));
-u_int8_t AscGetChipIRQ __P((bus_space_tag_t, bus_space_handle_t, u_int16_t));
-u_int16_t AscGetIsaDmaChannel __P((bus_space_tag_t, bus_space_handle_t));
-int AscISR __P((ASC_SOFTC *));
-int AscExeScsiQueue __P((ASC_SOFTC *, ASC_SCSI_Q *));
-void AscInquiryHandling __P((ASC_SOFTC *, u_int8_t, ASC_SCSI_INQUIRY *));
-int AscAbortCCB __P((ASC_SOFTC *, struct adv_ccb *));
-int AscResetBus __P((ASC_SOFTC *));
-int AscResetDevice __P((ASC_SOFTC *, u_char));
+void AscInitASC_SOFTC(ASC_SOFTC *);
+int16_t AscInitFromEEP(ASC_SOFTC *);
+u_int16_t AscInitFromASC_SOFTC(ASC_SOFTC *);
+int AscInitDriver(ASC_SOFTC *);
+void AscReInitLram(ASC_SOFTC *);
+int AscFindSignature(bus_space_tag_t, bus_space_handle_t);
+u_int8_t AscGetChipIRQ(bus_space_tag_t, bus_space_handle_t, u_int16_t);
+u_int16_t AscGetIsaDmaChannel(bus_space_tag_t, bus_space_handle_t);
+int AscISR(ASC_SOFTC *);
+int AscExeScsiQueue(ASC_SOFTC *, ASC_SCSI_Q *);
+void AscInquiryHandling(ASC_SOFTC *, u_int8_t, ASC_SCSI_INQUIRY *);
+int AscAbortCCB(ASC_SOFTC *, struct adv_ccb *);
+int AscResetBus(ASC_SOFTC *);
+int AscResetDevice(ASC_SOFTC *, u_char);
 
 
 /******************************************************************************/

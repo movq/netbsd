@@ -1,7 +1,7 @@
-/*	$NetBSD: if_fxp_pci.c,v 1.5 2000/03/16 23:41:40 thorpej Exp $	*/
+/*	$NetBSD: if_fxp_pci.c,v 1.60 2008/07/09 17:07:28 joerg Exp $	*/
 
 /*-
- * Copyright (c) 1997, 1998, 1999, 2000 The NetBSD Foundation, Inc.
+ * Copyright (c) 1997, 1998, 1999, 2000, 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,9 +35,9 @@
  * driver.  Works with Intel Etherexpress Pro 10+, 100B, 100+ cards.
  */
 
-#include "opt_inet.h"
-#include "opt_ns.h"
-#include "bpfilter.h"
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_fxp_pci.c,v 1.60 2008/07/09 17:07:28 joerg Exp $");
+
 #include "rnd.h"
 
 #include <sys/param.h>
@@ -68,22 +61,8 @@
 #include <net/if_media.h>
 #include <net/if_ether.h>
 
-#if NBPFILTER > 0
-#include <net/bpf.h>
-#endif
-
-#ifdef INET
-#include <netinet/in.h>
-#include <netinet/if_inarp.h>
-#endif
-
-#ifdef NS
-#include <netns/ns.h>
-#include <netns/ns_if.h>
-#endif
-
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/mii/miivar.h>
 
@@ -94,32 +73,94 @@
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcidevs.h>
 
-int	fxp_pci_match __P((struct device *, struct cfdata *, void *));
-void	fxp_pci_attach __P((struct device *, struct device *, void *));
+struct fxp_pci_softc {
+	struct fxp_softc psc_fxp;
 
-struct cfattach fxp_pci_ca = {
-	sizeof(struct fxp_softc), fxp_pci_match, fxp_pci_attach
+	pci_chipset_tag_t psc_pc;	/* pci chipset tag */
+	pcireg_t psc_regs[0x20>>2];	/* saved PCI config regs (sparse) */
+	pcitag_t psc_tag;		/* pci register tag */
+
+	int psc_pwrmgmt_csr_reg;	/* ACPI power management register */
+	pcireg_t psc_pwrmgmt_csr;	/* ...and the contents at D0 */
+	struct pci_conf_state psc_pciconf; /* standard PCI configuration regs */
 };
 
-const struct fxp_pci_product {
+static int	fxp_pci_match(device_t, cfdata_t, void *);
+static void	fxp_pci_attach(device_t, device_t, void *);
+
+static int	fxp_pci_enable(struct fxp_softc *);
+static void	fxp_pci_disable(struct fxp_softc *);
+
+static void fxp_pci_confreg_restore(struct fxp_pci_softc *psc);
+static bool fxp_pci_resume(device_t dv PMF_FN_PROTO);
+
+CFATTACH_DECL_NEW(fxp_pci, sizeof(struct fxp_pci_softc),
+    fxp_pci_match, fxp_pci_attach, NULL, NULL);
+
+static const struct fxp_pci_product {
 	u_int32_t	fpp_prodid;	/* PCI product ID */
 	const char	*fpp_name;	/* device name */
 } fxp_pci_products[] = {
 	{ PCI_PRODUCT_INTEL_82557,
 	  "Intel i82557 Ethernet" },
+	{ PCI_PRODUCT_INTEL_82559ER,
+	  "Intel i82559ER Ethernet" },
 	{ PCI_PRODUCT_INTEL_IN_BUSINESS,
 	  "Intel InBusiness Ethernet" },
-
+	{ PCI_PRODUCT_INTEL_82801BA_LAN,
+	  "Intel i82562 Ethernet" },
+	{ PCI_PRODUCT_INTEL_82801E_LAN_1,
+	  "Intel i82559 Ethernet" },
+	{ PCI_PRODUCT_INTEL_82801E_LAN_2,
+	  "Intel i82559 Ethernet" },
+	{ PCI_PRODUCT_INTEL_PRO_100_VE_0,
+	  "Intel PRO/100 VE Network Controller" },
+	{ PCI_PRODUCT_INTEL_PRO_100_VE_1,
+	  "Intel PRO/100 VE Network Controller" },
+	{ PCI_PRODUCT_INTEL_PRO_100_VE_2,
+	  "Intel PRO/100 VE Network Controller with 82562ET/EZ PHY" },
+	{ PCI_PRODUCT_INTEL_PRO_100_VE_3,
+	  "Intel PRO/100 VE Network Controller with 82562ET/EZ (CNR) PHY" },
+	{ PCI_PRODUCT_INTEL_PRO_100_VE_4,
+	  "Intel PRO/100 VE (MOB) Network Controller" },
+	{ PCI_PRODUCT_INTEL_PRO_100_VE_5,
+	  "Intel PRO/100 VE (LOM) Network Controller" },
+	{ PCI_PRODUCT_INTEL_PRO_100_VE_6,
+	  "Intel PRO/100 VE Network Controller" },
+	{ PCI_PRODUCT_INTEL_PRO_100_VE_7,
+	  "Intel PRO/100 VE Network Controller" },
+	{ PCI_PRODUCT_INTEL_PRO_100_VE_8,
+	  "Intel PRO/100 VE Network Controller" },
+	{ PCI_PRODUCT_INTEL_PRO_100_VM_0,
+	  "Intel PRO/100 VM Network Controller" },
+	{ PCI_PRODUCT_INTEL_PRO_100_VM_1,
+	  "Intel PRO/100 VM Network Controller" },
+	{ PCI_PRODUCT_INTEL_PRO_100_VM_2,
+	  "Intel PRO/100 VM Network Controller" },
+	{ PCI_PRODUCT_INTEL_PRO_100_VM_3,
+	  "Intel PRO/100 VM Network Controller with 82562EM/EX PHY" },
+	{ PCI_PRODUCT_INTEL_PRO_100_VM_4,
+	  "Intel PRO/100 VM Network Controller with 82562EM/EX (CNR) PHY" },
+	{ PCI_PRODUCT_INTEL_PRO_100_VM_5,
+	  "Intel PRO/100 VM (MOB) Network Controller" },
+	{ PCI_PRODUCT_INTEL_PRO_100_VM_6,
+	  "Intel PRO/100 VM Network Controller with 82562ET/EZ PHY" },
+	{ PCI_PRODUCT_INTEL_PRO_100_M,
+	  "Intel PRO/100 M Network Controller" },
+	{ PCI_PRODUCT_INTEL_82801EB_LAN,
+	  "Intel 82801EB/ER (ICH5) Network Controller" },
+	{ PCI_PRODUCT_INTEL_82801FB_LAN,
+	  "Intel 82562EZ (ICH6)" },
+	{ PCI_PRODUCT_INTEL_82801G_LAN,
+	  "Intel 82801GB/GR (ICH7) Network Controller" },
+	{ PCI_PRODUCT_INTEL_82801GB_LAN,
+	  "Intel 82801GB 10/100 Network Controller" },
 	{ 0,
 	  NULL },
 };
 
-const struct fxp_pci_product *fxp_pci_lookup
-    __P((const struct pci_attach_args *));
-
-const struct fxp_pci_product *
-fxp_pci_lookup(pa)
-	const struct pci_attach_args *pa;
+static const struct fxp_pci_product *
+fxp_pci_lookup(const struct pci_attach_args *pa)
 {
 	const struct fxp_pci_product *fpp;
 
@@ -133,11 +174,8 @@ fxp_pci_lookup(pa)
 	return (NULL);
 }
 
-int
-fxp_pci_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+static int
+fxp_pci_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -147,12 +185,69 @@ fxp_pci_match(parent, match, aux)
 	return (0);
 }
 
-void
-fxp_pci_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+/*
+ * On resume : (XXX it is necessary with new pmf framework ?) 
+ * Restore PCI configuration registers that may have been clobbered.
+ * This is necessary due to bugs on the Sony VAIO Z505-series on-board
+ * ethernet, after an APM suspend/resume, as well as after an ACPI
+ * D3->D0 transition.  We call this function from a power hook after
+ * APM resume events, as well as after the ACPI D3->D0 transition.
+ */
+static void
+fxp_pci_confreg_restore(struct fxp_pci_softc *psc)
 {
-	struct fxp_softc *sc = (struct fxp_softc *)self;
+	pcireg_t reg;
+
+#if 0
+	/*
+	 * Check to see if the command register is blank -- if so, then
+	 * we'll assume that all the clobberable-registers have been
+	 * clobbered.
+	 */
+
+	/*
+	 * In general, the above metric is accurate. Unfortunately,
+	 * it is inaccurate across a hibernation. Ideally APM/ACPI
+	 * code should take note of hibernation events and execute
+	 * a hibernation wakeup hook, but at present a hibernation wake
+	 * is indistinguishable from a suspend wake.
+	 */
+
+	if (((reg = pci_conf_read(psc->psc_pc, psc->psc_tag,
+	    PCI_COMMAND_STATUS_REG)) & 0xffff) != 0)
+		return;
+#else
+	reg = pci_conf_read(psc->psc_pc, psc->psc_tag, PCI_COMMAND_STATUS_REG);
+#endif
+
+	pci_conf_write(psc->psc_pc, psc->psc_tag,
+	    PCI_COMMAND_STATUS_REG,
+	    (reg & 0xffff0000) |
+	    (psc->psc_regs[PCI_COMMAND_STATUS_REG>>2] & 0xffff));
+	pci_conf_write(psc->psc_pc, psc->psc_tag, PCI_BHLC_REG,
+	    psc->psc_regs[PCI_BHLC_REG>>2]);
+	pci_conf_write(psc->psc_pc, psc->psc_tag, PCI_MAPREG_START+0x0,
+	    psc->psc_regs[(PCI_MAPREG_START+0x0)>>2]);
+	pci_conf_write(psc->psc_pc, psc->psc_tag, PCI_MAPREG_START+0x4,
+	    psc->psc_regs[(PCI_MAPREG_START+0x4)>>2]);
+	pci_conf_write(psc->psc_pc, psc->psc_tag, PCI_MAPREG_START+0x8,
+	    psc->psc_regs[(PCI_MAPREG_START+0x8)>>2]);
+}
+
+static bool
+fxp_pci_resume(device_t dv PMF_FN_ARGS)
+{
+	struct fxp_pci_softc *psc = device_private(dv);
+	fxp_pci_confreg_restore(psc);
+
+	return true;
+}
+
+static void
+fxp_pci_attach(device_t parent, device_t self, void *aux)
+{
+	struct fxp_pci_softc *psc = device_private(self);
+	struct fxp_softc *sc = &psc->psc_fxp;
 	struct pci_attach_args *pa = aux;
 	pci_chipset_tag_t pc = pa->pa_pc;
 	pci_intr_handle_t ih;
@@ -164,10 +259,11 @@ fxp_pci_attach(parent, self, aux)
 	bus_addr_t addr;
 	bus_size_t size;
 	int flags;
+	int error;
 
-	sc->sc_enabled = 1;
-	sc->sc_enable = NULL;
-	sc->sc_disable = NULL;
+	sc->sc_dev = self;
+
+	aprint_naive(": Ethernet controller\n");
 
 	/*
 	 * Map control/status registers.
@@ -216,7 +312,7 @@ fxp_pci_attach(parent, self, aux)
 		sc->sc_st = iot;
 		sc->sc_sh = ioh;
 	} else {
-		printf(": unable to map device registers\n");
+		aprint_error(": unable to map device registers\n");
 		return;
 	}
 
@@ -228,36 +324,213 @@ fxp_pci_attach(parent, self, aux)
 		panic("fxp_pci_attach: impossible");
 	}
 
-	/*
-	 * XXX Perhaps report '557, '558, '559 based on revision?
-	 */
-	printf(": %s, rev %d\n", fpp->fpp_name, PCI_REVISION(pa->pa_class));
+	sc->sc_rev = PCI_REVISION(pa->pa_class);
+
+	switch (fpp->fpp_prodid) {
+	case PCI_PRODUCT_INTEL_82557:
+	case PCI_PRODUCT_INTEL_82559ER:
+	case PCI_PRODUCT_INTEL_IN_BUSINESS:
+	    {
+		const char *chipname = NULL;
+
+		if (sc->sc_rev >= FXP_REV_82558_A4) {
+			chipname = "i82558 Ethernet";
+			/*
+			 * Enable the MWI command for memory writes.
+			 */
+			if (pa->pa_flags & PCI_FLAGS_MWI_OKAY)
+				sc->sc_flags |= FXPF_MWI;
+		}
+		if (sc->sc_rev >= FXP_REV_82559_A0)
+			chipname = "i82559 Ethernet";
+		if (sc->sc_rev >= FXP_REV_82559S_A)
+			chipname = "i82559S Ethernet";
+		if (sc->sc_rev >= FXP_REV_82550)
+			chipname = "i82550 Ethernet";
+
+		/*
+		 * Mark all i82559 and i82550 revisions as having
+		 * the "resume bug".  See i82557.c for details.
+		 */
+		if (sc->sc_rev >= FXP_REV_82559_A0)
+			sc->sc_flags |= FXPF_HAS_RESUME_BUG;
+
+		aprint_normal(": %s, rev %d\n", chipname != NULL ? chipname :
+		    fpp->fpp_name, sc->sc_rev);
+		break;
+	    }
+
+	case PCI_PRODUCT_INTEL_82801BA_LAN:
+		aprint_normal(": %s, rev %d\n", fpp->fpp_name, sc->sc_rev);
+
+		/*
+		 * The 82801BA Ethernet has a bug which requires us to send a
+		 * NOP before a CU_RESUME if we're in 10baseT mode.
+		 */
+		if (fpp->fpp_prodid == PCI_PRODUCT_INTEL_82801BA_LAN)
+			sc->sc_flags |= FXPF_HAS_RESUME_BUG;
+		break;
+
+	case PCI_PRODUCT_INTEL_PRO_100_VE_0:
+	case PCI_PRODUCT_INTEL_PRO_100_VE_1:
+	case PCI_PRODUCT_INTEL_PRO_100_VM_0:
+	case PCI_PRODUCT_INTEL_PRO_100_VM_1:
+	case PCI_PRODUCT_INTEL_82562EH_HPNA_0:
+	case PCI_PRODUCT_INTEL_82562EH_HPNA_1:
+	case PCI_PRODUCT_INTEL_82562EH_HPNA_2:
+	case PCI_PRODUCT_INTEL_PRO_100_VM_2:
+		aprint_normal(": %s, rev %d\n", fpp->fpp_name, sc->sc_rev);
+
+		/*
+		 * ICH3 chips apparently have problems with the enhanced
+		 * features, so just treat them as an i82557.  It also
+		 * has the resume bug that the ICH2 has.
+		 */
+		sc->sc_rev = 1;
+		sc->sc_flags |= FXPF_HAS_RESUME_BUG;
+		break;
+	case PCI_PRODUCT_INTEL_82801E_LAN_1:
+	case PCI_PRODUCT_INTEL_82801E_LAN_2:
+		aprint_normal(": %s, rev %d\n", fpp->fpp_name, sc->sc_rev);
+
+		/*
+		 *  XXX We have to read the C-ICH's developer's manual
+		 *  in detail
+		 */
+		break;
+	case PCI_PRODUCT_INTEL_PRO_100_VE_2:
+	case PCI_PRODUCT_INTEL_PRO_100_VE_3:
+	case PCI_PRODUCT_INTEL_PRO_100_VE_4:
+	case PCI_PRODUCT_INTEL_PRO_100_VE_5:
+	case PCI_PRODUCT_INTEL_PRO_100_VM_3:
+	case PCI_PRODUCT_INTEL_PRO_100_VM_4:
+	case PCI_PRODUCT_INTEL_PRO_100_VM_5:
+	case PCI_PRODUCT_INTEL_PRO_100_VM_6:
+	case PCI_PRODUCT_INTEL_82801EB_LAN:
+	case PCI_PRODUCT_INTEL_82801FB_LAN:
+	case PCI_PRODUCT_INTEL_82801G_LAN:
+	default:
+		aprint_normal(": %s, rev %d\n", fpp->fpp_name, sc->sc_rev);
+
+		/*
+		 * No particular quirks.
+		 */
+		break;
+	}
 
 	/* Make sure bus-mastering is enabled. */
 	pci_conf_write(pc, pa->pa_tag, PCI_COMMAND_STATUS_REG,
 	    pci_conf_read(pc, pa->pa_tag, PCI_COMMAND_STATUS_REG) |
 	    PCI_COMMAND_MASTER_ENABLE);
 
+  	/*
+	 * Under some circumstances (such as APM suspend/resume
+	 * cycles, and across ACPI power state changes), the
+	 * i82257-family can lose the contents of critical PCI
+	 * configuration registers, causing the card to be
+	 * non-responsive and useless.  This occurs on the Sony VAIO
+	 * Z505-series, among others.  Preserve them here so they can
+	 * be later restored (by fxp_pci_confreg_restore()).
+	 */
+	psc->psc_pc = pc;
+	psc->psc_tag = pa->pa_tag;
+	psc->psc_regs[PCI_COMMAND_STATUS_REG>>2] =
+	    pci_conf_read(pc, pa->pa_tag, PCI_COMMAND_STATUS_REG);
+	psc->psc_regs[PCI_BHLC_REG>>2] =
+	    pci_conf_read(pc, pa->pa_tag, PCI_BHLC_REG);
+	psc->psc_regs[(PCI_MAPREG_START+0x0)>>2] =
+	    pci_conf_read(pc, pa->pa_tag, PCI_MAPREG_START+0x0);
+	psc->psc_regs[(PCI_MAPREG_START+0x4)>>2] =
+	    pci_conf_read(pc, pa->pa_tag, PCI_MAPREG_START+0x4);
+	psc->psc_regs[(PCI_MAPREG_START+0x8)>>2] =
+	    pci_conf_read(pc, pa->pa_tag, PCI_MAPREG_START+0x8);
+
+	/* power up chip */
+	switch ((error = pci_activate(pa->pa_pc, pa->pa_tag, self,
+	    pci_activate_null))) {
+	case EOPNOTSUPP:
+		break;
+	case 0: 
+		sc->sc_enable = fxp_pci_enable;
+		sc->sc_disable = fxp_pci_disable;
+		break;
+	default:
+		aprint_error_dev(self, "cannot activate %d\n", error);
+		return;
+	}
+
+	/* Restore PCI configuration registers. */
+	fxp_pci_confreg_restore(psc);
+
+	sc->sc_enabled = 1;
+
 	/*
 	 * Map and establish our interrupt.
 	 */
-	if (pci_intr_map(pc, pa->pa_intrtag, pa->pa_intrpin,
-	    pa->pa_intrline, &ih)) {
-		printf("%s: couldn't map interrupt\n", sc->sc_dev.dv_xname);
+	if (pci_intr_map(pa, &ih)) {
+		aprint_error_dev(self, "couldn't map interrupt\n");
 		return;
 	}
 	intrstr = pci_intr_string(pc, ih);
 	sc->sc_ih = pci_intr_establish(pc, ih, IPL_NET, fxp_intr, sc);
 	if (sc->sc_ih == NULL) {
-		printf("%s: couldn't establish interrupt",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "couldn't establish interrupt");
 		if (intrstr != NULL)
-			printf(" at %s", intrstr);
-		printf("\n");
+			aprint_normal(" at %s", intrstr);
+		aprint_normal("\n");
 		return;
 	}
-	printf("%s: interrupting at %s\n", sc->sc_dev.dv_xname, intrstr);
+	aprint_normal_dev(self, "interrupting at %s\n", intrstr);
 
 	/* Finish off the attach. */
 	fxp_attach(sc);
+	if (sc->sc_disable != NULL)
+		fxp_disable(sc);
+
+	/* Add a suspend hook to restore PCI config state */
+	if (!pmf_device_register(self, NULL, fxp_pci_resume))
+		aprint_error_dev(self, "couldn't establish power handler\n");
+	else
+		pmf_class_network_register(self, &sc->sc_ethercom.ec_if);
+}
+
+static int
+fxp_pci_enable(struct fxp_softc *sc)
+{
+	struct fxp_pci_softc *psc = (void *) sc;
+
+#if 0
+	printf("%s: going to power state D0\n", device_xname(self));
+#endif
+
+	/* Bring the device into D0 power state. */
+	pci_conf_write(psc->psc_pc, psc->psc_tag,
+	    psc->psc_pwrmgmt_csr_reg, psc->psc_pwrmgmt_csr);
+
+	/* Now restore the configuration registers. */
+	fxp_pci_confreg_restore(psc);
+
+	return (0);
+}
+
+static void
+fxp_pci_disable(struct fxp_softc *sc)
+{
+	struct fxp_pci_softc *psc = (void *) sc;
+
+	/*
+	 * for some 82558_A4 and 82558_B0, entering D3 state makes
+	 * media detection disordered.
+	 */
+	if (sc->sc_rev <= FXP_REV_82558_B0)
+		return;
+
+#if 0
+	printf("%s: going to power state D3\n", device_xname(self));
+#endif
+
+	/* Put the device into D3 state. */
+	pci_conf_write(psc->psc_pc, psc->psc_tag,
+	    psc->psc_pwrmgmt_csr_reg, (psc->psc_pwrmgmt_csr &
+	    ~PCI_PMCSR_STATE_MASK) | PCI_PMCSR_STATE_D3);
 }

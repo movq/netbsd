@@ -1,4 +1,4 @@
-/*      $NetBSD: n_lgamma.c,v 1.3 1998/10/20 02:26:12 matt Exp $ */
+/*      $NetBSD: n_lgamma.c,v 1.6 2006/11/24 21:15:54 wiz Exp $ */
 /*-
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@ static char sccsid[] = "@(#)lgamma.c	8.2 (Berkeley) 11/30/93";
 /*
  * Coded by Peter McIlroy, Nov 1992;
  *
- * The financial support of UUNET Communications Services is greatfully
+ * The financial support of UUNET Communications Services is gratefully
  * acknowledged.
  */
 
@@ -72,12 +68,12 @@ static char sccsid[] = "@(#)lgamma.c	8.2 (Berkeley) 11/30/93";
  *	non-positive integer	returns +Inf.
  *	NaN			returns NaN
 */
-static int endian;
 #if defined(__vax__) || defined(tahoe)
 #define _IEEE		0
 /* double and float have same size exponent field */
 #define TRUNC(x)	x = (double) (float) (x)
 #else
+static int endian;
 #define _IEEE		1
 #define TRUNC(x)	*(((int *) &x) + endian) &= 0xf8000000
 #define infnan(x)	0.0
@@ -86,7 +82,7 @@ static int endian;
 static double small_lgam(double);
 static double large_lgam(double);
 static double neg_lgam(double);
-static double one = 1.0;
+static const double one = 1.0;
 int signgam;
 
 #define UNDERFL (1e-1020 * 1e-1020)
@@ -147,7 +143,9 @@ lgamma(double x)
 	double r;
 
 	signgam = 1;
+#if _IEEE
 	endian = ((*(int *) &one)) ? 1 : 0;
+#endif
 
 	if (!finite(x)) {
 		if (_IEEE)
@@ -272,7 +270,7 @@ static double
 neg_lgam(double x)
 {
 	int xi;
-	double y, z, one = 1.0, zero = 0.0;
+	double y, z, zero = 0.0;
 
 	/* avoid destructive cancellation as much as possible */
 	if (x > -170) {

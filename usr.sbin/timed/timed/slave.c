@@ -1,4 +1,4 @@
-/*	$NetBSD: slave.c,v 1.8 1997/10/17 14:19:40 lukem Exp $	*/
+/*	$NetBSD: slave.c,v 1.18 2007/01/26 16:12:41 christos Exp $	*/
 
 /*-
  * Copyright (c) 1985, 1993 The Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,13 +34,9 @@
 #if 0
 static char sccsid[] = "@(#)slave.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: slave.c,v 1.8 1997/10/17 14:19:40 lukem Exp $");
+__RCSID("$NetBSD: slave.c,v 1.18 2007/01/26 16:12:41 christos Exp $");
 #endif
 #endif /* not lint */
-
-#ifdef sgi
-#ident "$Revision: 1.8 $"
-#endif
 
 #include "globals.h"
 #include <setjmp.h>
@@ -64,17 +56,11 @@ static void schgdate(struct tsp *, char *);
 static void setmaster(struct tsp *);
 static void answerdelay(void);
 
-#ifdef sgi
-extern void logwtmp(struct timeval *, struct timeval *);
-#else
-extern void logwtmp(char *, char *, char *);
-#endif /* sgi */
-
 int
-slave()
+slave(void)
 {
 	int tries;
-	long electiontime, refusetime, looktime, looptime, adjtime;
+	long electiontime, refusetime, looktime, looptime, adjusttime;
 	u_short seq;
 	long fastelection;
 #define FASTTOUT 3
@@ -91,11 +77,11 @@ slave()
 	struct netinfo *ntp;
 	struct hosttbl *htp;
 
-
+	memset(&cadr, 0, sizeof(cadr));	/* XXX gcc */
 	old_slavenet = 0;
 	seq = 0;
 	refusetime = 0;
-	adjtime = 0;
+	adjusttime = 0;
 
 	(void)gettimeofday(&ntime, 0);
 	electiontime = ntime.tv_sec + delay2;
@@ -158,13 +144,9 @@ loop:
 			to.tsp_vers = TSPVERSION;
 			to.tsp_seq = sequence++;
 			to.tsp_hopcnt = MAX_HOPCNT;
-			(void)strcpy(to.tsp_name, hostname);
+			set_tsp_name(&to, hostname);
 			bytenetorder(&to);
-			if (sendto(sock, (char *)&to, sizeof(struct tsp), 0,
-				   (struct sockaddr*)&ntp->dest_addr,
-				   sizeof(ntp->dest_addr)) < 0) {
-				trace_sendto_err(ntp->dest_addr.sin_addr);
-			}
+			(void)sendtsp(sock, &to, &ntp->dest_addr);
 		    }
 		}
 		(void)gettimeofday(&ntime, 0);
@@ -240,18 +222,18 @@ loop:
 			 * is found.
 			 */
 			(void)gettimeofday(&otime, 0);
-			if (adjtime < otime.tv_sec)
+			if (adjusttime < otime.tv_sec)
 				looptime -= (looptime-otime.tv_sec)/2 + 1;
 
 			setmaster(msg);
 			if (seq != msg->tsp_seq) {
 				seq = msg->tsp_seq;
-				synch(tvtomsround(msg->tsp_time));
+				synch((long)tvtomsround(msg->tsp_time));
 			}
 			(void)gettimeofday(&ntime, 0);
 			electiontime = ntime.tv_sec + delay2;
 			fastelection = ntime.tv_sec + FASTTOUT;
-			adjtime = ntime.tv_sec + SAMPLEINTVL*2;
+			adjusttime = ntime.tv_sec + SAMPLEINTVL*2;
 			break;
 
 		case TSP_SETTIME:
@@ -264,18 +246,14 @@ loop:
 			/* adjust time for residence on the queue */
 			(void)gettimeofday(&otime, 0);
 			adj_msg_time(msg,&otime);
-#ifdef sgi
-			(void)cftime(newdate, "%D %T", &msg->tsp_time.tv_sec);
-			(void)cftime(olddate, "%D %T", &otime.tv_sec);
-#else
+
 			/*
 			 * the following line is necessary due to syslog
 			 * calling ctime() which clobbers the static buffer
 			 */
-			(void)strcpy(olddate, date());
+			(void)strlcpy(olddate, date(), sizeof(olddate));
 			tmpt = msg->tsp_time.tv_sec;
-			(void)strcpy(newdate, ctime(&tmpt));
-#endif /* sgi */
+			(void)strlcpy(newdate, ctime(&tmpt), sizeof(newdate));
 
 			if (!good_host_name(msg->tsp_name)) {
 				syslog(LOG_NOTICE,
@@ -293,19 +271,7 @@ loop:
 				 */
 				synch(tvtomsround(ntime));
 			} else {
-#ifdef sgi
-				if (0 > settimeofday(&msg->tsp_time, 0)) {
-					syslog(LOG_ERR,"settimeofdate(): %m");
-					break;
-				}
-				logwtmp(&otime, &msg->tsp_time);
-#else
-				logwtmp("|", "date", "");
-				tmptv.tv_sec = msg->tsp_time.tv_sec;
-				tmptv.tv_usec = msg->tsp_time.tv_usec;
-				(void)settimeofday(&tmptv, 0);
-				logwtmp("}", "date", "");
-#endif /* sgi */
+				update_time(&tmptv, msg);
 				syslog(LOG_NOTICE,
 				       "date changed by %s from %s",
 					msg->tsp_name, olddate);
@@ -364,24 +330,16 @@ loop:
 			break;
 
 		case TSP_SETDATE:
-#ifdef sgi
-			(void)cftime(newdate, "%D %T", &msg->tsp_time.tv_sec);
-#else
 			tmpt = msg->tsp_time.tv_sec;
-			(void)strcpy(newdate, ctime(&tmpt));
-#endif /* sgi */
+			(void)strlcpy(newdate, ctime(&tmpt), sizeof(newdate));
 			schgdate(msg, newdate);
 			break;
 
 		case TSP_SETDATEREQ:
 			if (fromnet->status != MASTER)
 				break;
-#ifdef sgi
-			(void)cftime(newdate, "%D %T", &msg->tsp_time.tv_sec);
-#else
 			tmpt = msg->tsp_time.tv_sec;
-			(void)strcpy(newdate, ctime(&tmpt));
-#endif /* sgi */
+			(void)strlcpy(newdate, ctime(&tmpt), sizeof(newdate));
 			htp = findhost(msg->tsp_name);
 			if (0 == htp) {
 				syslog(LOG_WARNING,
@@ -434,8 +392,8 @@ loop:
 					refusetime = ntime.tv_sec + 30;
 				}
 				taddr = from;
-				(void)strcpy(tname, msg->tsp_name);
-				(void)strcpy(to.tsp_name, hostname);
+				get_tsp_name(msg, tname, sizeof(tname));
+				set_tsp_name(&to, hostname);
 				answerdelay();
 				if (!acksend(&to, &taddr, tname,
 					     TSP_ACK, 0, 0))
@@ -446,7 +404,7 @@ loop:
 			} else {	/* fromnet->status == MASTER */
 				htp = addmach(msg->tsp_name, &from,fromnet);
 				to.tsp_type = TSP_QUIT;
-				(void)strcpy(to.tsp_name, hostname);
+				set_tsp_name(&to, hostname);
 				if (!acksend(&to, &htp->addr, htp->name,
 					     TSP_ACK, 0, htp->noanswer)) {
 					syslog(LOG_ERR,
@@ -465,7 +423,7 @@ loop:
 			 * more than one master: the first slave to
 			 * come up will notify here the situation.
 			 */
-			(void)strcpy(to.tsp_name, hostname);
+			set_tsp_name(&to, hostname);
 
 			/* The other master often gets into the same state,
 			 * with boring results.
@@ -499,7 +457,7 @@ loop:
 			to.tsp_type = TSP_MSITEREQ;
 			to.tsp_vers = TSPVERSION;
 			to.tsp_seq = 0;
-			(void)strcpy(to.tsp_name, hostname);
+			set_tsp_name(&to, hostname);
 			answer = acksend(&to, &slavenet->dest_addr,
 					 ANYADDR, TSP_ACK,
 					 slavenet, 0);
@@ -507,13 +465,9 @@ loop:
 			    && good_host_name(answer->tsp_name)) {
 				setmaster(answer);
 				to.tsp_type = TSP_ACK;
-				(void)strcpy(to.tsp_name, answer->tsp_name);
+				set_tsp_name(&to, answer->tsp_name);
 				bytenetorder(&to);
-				if (sendto(sock, (char *)&to,
-					   sizeof(struct tsp), 0,
-					   (struct sockaddr*)&taddr, sizeof(taddr)) < 0) {
-					trace_sendto_err(taddr.sin_addr);
-				}
+				(void)sendtsp(sock, &to, &taddr);
 			}
 			break;
 
@@ -556,9 +510,9 @@ loop:
 				    if (answer == NULL)
 					break;
 				    taddr = from;
-				    (void)strcpy(tname, answer->tsp_name);
+				    get_tsp_name(answer, tname, sizeof(tname));
 				    to.tsp_type = TSP_QUIT;
-				    (void)strcpy(to.tsp_name, hostname);
+				    set_tsp_name(&to, hostname);
 				    if (!acksend(&to, &taddr, tname,
 						 TSP_ACK, 0, 1)) {
 					syslog(LOG_ERR,
@@ -575,12 +529,9 @@ loop:
 				    break;
 				bytenetorder(msg);
 				for (ntp = nettab; ntp != 0; ntp = ntp->next) {
-				    if (ntp->status == MASTER
-					&& 0 > sendto(sock, (char *)msg,
-						      sizeof(struct tsp), 0,
-					      (struct sockaddr*)&ntp->dest_addr,
-						      sizeof(ntp->dest_addr)))
-				    trace_sendto_err(ntp->dest_addr.sin_addr);
+				    if (ntp->status == MASTER)
+					    (void)sendtsp(sock, msg,
+						&ntp->dest_addr);
 				}
 			    }
 			} else {	/* fromnet->status == MASTER */
@@ -611,7 +562,7 @@ loop:
 				htp = addmach(answer->tsp_name,
 					      &from,ntp);
 				to.tsp_type = TSP_QUIT;
-				(void)strcpy(to.tsp_name, hostname);
+				set_tsp_name(&to, hostname);
 				if (!acksend(&to,&htp->addr,htp->name,
 					     TSP_ACK, 0, htp->noanswer)) {
 					syslog(LOG_ERR,
@@ -646,7 +597,7 @@ setmaster(struct tsp *msg)
 	    && (slavenet != old_slavenet
 		|| strcmp(msg->tsp_name, master_name)
 		|| old_status != status)) {
-		(void)strcpy(master_name, msg->tsp_name);
+		get_tsp_name(msg, master_name, sizeof(master_name));
 		old_slavenet = slavenet;
 		old_status = status;
 
@@ -692,7 +643,7 @@ schgdate(struct tsp *msg, char *newdate)
 
 	to.tsp_type = TSP_SETDATEREQ;
 	to.tsp_time = msg->tsp_time;
-	(void)strcpy(to.tsp_name, hostname);
+	set_tsp_name(&to, hostname);
 	if (!acksend(&to, &slavenet->dest_addr,
 		     ANYADDR, TSP_DATEACK,
 		     slavenet, 0))
@@ -709,16 +660,11 @@ schgdate(struct tsp *msg, char *newdate)
 static void
 answerdelay(void)
 {
-#ifdef sgi
-	sginap(delay1);
-#else
-	struct timeval timeout;
+	struct timespec timeout;
 
 	timeout.tv_sec = 0;
-	timeout.tv_usec = delay1;
+	timeout.tv_nsec = delay1 * 1000;
 
-	(void)select(0, (fd_set *)NULL, (fd_set *)NULL, (fd_set *)NULL,
-	    &timeout);
+	nanosleep(&timeout, NULL);
 	return;
-#endif /* sgi */
 }

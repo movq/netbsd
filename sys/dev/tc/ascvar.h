@@ -1,4 +1,4 @@
-/*	$NetBSD: ascvar.h,v 1.6 2000/02/08 04:35:03 nisimura Exp $	*/
+/*	$NetBSD: ascvar.h,v 1.11 2007/03/04 06:02:46 christos Exp $	*/
 
 
 /*
@@ -28,7 +28,7 @@ typedef struct scsi_state {
 #define DISCONN		0x001	/* true if currently disconnected from bus */
 #define DMA_IN_PROGRESS	0x002	/* true if data DMA started */
 #define DMA_IN		0x004	/* true if reading from SCSI device */
-#define DMA_RESUME	0x08	/* true if DMA was interrupted by disc. */
+#define DMA_RESUME	0x008	/* true if DMA was interrupted by disc. */
 #define DMA_OUT		0x010	/* true if writing to SCSI device */
 #define DID_SYNC	0x020	/* true if synchronous offset was negotiated */
 #define TRY_SYNC	0x040	/* true if try neg. synchronous offset */
@@ -58,16 +58,16 @@ struct asc_softc {
 	struct script	*script;	/* next expected interrupt & action */
 	ScsiCmd		*cmd[ASC_NCMD];	/* active command indexed by SCSI ID */
 	State		st[ASC_NCMD];	/* state info for each active command */
-	/* Start dma routine */
-	int  (*dma_start) __P((struct asc_softc *asc,
+	/* Start DMA routine */
+	int  (*dma_start)(struct asc_softc *asc,
 				struct scsi_state *state,
-				caddr_t cp, int flag, int len, int off));
-	/* End dma routine */
-	void	(*dma_end) __P((struct asc_softc *asc,
-				struct scsi_state *state, int flag));
+				void *cp, int flag, int len, int off);
+	/* End DMA routine */
+	void	(*dma_end)(struct asc_softc *asc,
+				struct scsi_state *state, int flag);
 
 	u_char		*dma_next;
-	int		dma_xfer;	/* Dma len still to go */
+	int		dma_xfer;	/* DMA len still to go */
 	int		min_period;	/* Min transfer period clk/byte */
 	int		max_period;	/* Max transfer period clk/byte */
 	int		ccf;		/* CCF, whatever that really is? */
@@ -85,11 +85,11 @@ typedef struct asc_softc *asc_softc_t;
 #define ASC_SPEED_25_MHZ	250
 #define ASC_SPEED_12_5_MHZ	125
 
-void	ascattach __P((struct asc_softc *asc, int bus_speed));
-int	asc_intr __P ((void *asc));
+void	ascattach(struct asc_softc *asc, int bus_speed);
+int	asc_intr(void *asc);
 
 /*
- * Dma operations.
+ * DMA operations.
  */
 #define	ASCDMA_READ	1
 #define	ASCDMA_WRITE	2

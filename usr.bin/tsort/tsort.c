@@ -1,4 +1,4 @@
-/*	$NetBSD: tsort.c,v 1.13 1998/08/25 20:59:42 ross Exp $	*/
+/*	$NetBSD: tsort.c,v 1.22 2008/07/21 14:19:27 lukem Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993, 1994
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -36,21 +32,21 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-#ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
-#endif /* not lint */
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
 
-#ifndef lint
+#include <sys/cdefs.h>
+#if !defined(lint)
+__COPYRIGHT("@(#) Copyright (c) 1989, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #if 0
 static char sccsid[] = "@(#)tsort.c	8.3 (Berkeley) 5/4/95";
 #endif
-__RCSID("$NetBSD: tsort.c,v 1.13 1998/08/25 20:59:42 ross Exp $");
+__RCSID("$NetBSD: tsort.c,v 1.22 2008/07/21 14:19:27 lukem Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
-
 #include <ctype.h>
 #include <db.h>
 #include <err.h>
@@ -70,7 +66,7 @@ __RCSID("$NetBSD: tsort.c,v 1.13 1998/08/25 20:59:42 ross Exp $");
  *     tsort [-l] [inputfile]
  *  If no input file is specified, standard input is read.
  *
- *  Should be compatable with AT&T tsort HOWEVER the output is not identical
+ *  Should be compatible with AT&T tsort HOWEVER the output is not identical
  *  (i.e. for most graphs there is more than one sorted order, and this tsort
  *  usually generates a different one then the AT&T tsort).  Also, cycle
  *  reporting seems to be more accurate in this version (the AT&T tsort
@@ -125,6 +121,8 @@ main(argc, argv)
 	FILE *fp;
 	int bsize, ch, nused;
 	BUF bufs[2];
+
+	setprogname(argv[0]);
 
 	fp = NULL;
 	while ((ch = getopt(argc, argv, "dlq")) != -1)
@@ -189,7 +187,7 @@ main(argc, argv)
 
 	/* do the sort */
 	tsort();
-	exit(0);
+	return(0);
 }
 
 /* double the size of oldbuf and return a pointer to the new buffer. */
@@ -198,8 +196,11 @@ grow_buf(bp, size)
 	void *bp;
 	int size;
 {
-	if ((bp = realloc(bp, (u_int)size)) == NULL)
+	void *n;
+
+	if ((n = realloc(bp, (u_int)size)) == NULL)
 		err(1, "realloc");
+	bp = n;
 	return (bp);
 }
 
@@ -259,7 +260,7 @@ get_node(name)
 
 	switch ((*db->get)(db, &key, &data, 0)) {
 	case 0:
-		memmove(&n, data.data, sizeof(n));
+		(void)memmove(&n, data.data, sizeof(n));
 		return (n);
 	case 1:
 		break;
@@ -276,7 +277,7 @@ get_node(name)
 	n->n_arcs = NULL;
 	n->n_refcnt = 0;
 	n->n_flags = 0;
-	memmove(n->n_name, name, key.size);
+	(void)memmove(n->n_name, name, key.size);
 
 	/* Add to linked list. */
 	if ((n->n_next = graph) != NULL)
@@ -408,8 +409,7 @@ find_cycle(from, to, longest_len, depth)
 		if (*np == to) {
 			if (depth + 1 > longest_len) {
 				longest_len = depth + 1;
-				(void)memcpy((char *)longest_cycle,
-				    (char *)cycle_buf,
+				(void)memcpy(longest_cycle, cycle_buf,
 				    longest_len * sizeof(NODE *));
 			}
 		} else {

@@ -1,14 +1,40 @@
-.\" $NetBSD: tun.4,v 1.5 1999/03/16 01:19:18 garbled Exp $
-.\" Based on PR#2411
+.\" $NetBSD: tun.4,v 1.22.4.1 2009/01/16 22:48:21 bouyer Exp $
 .\"
-.Dd March 10, 1996
+.\" Copyright (c) 1996-2006 The NetBSD Foundation, Inc.
+.\" All rights reserved.
+.\"
+.\" This code is derived from software contributed to The NetBSD Foundation
+.\" by der Mouse.
+.\"
+.\" Redistribution and use in source and binary forms, with or without
+.\" modification, are permitted provided that the following conditions
+.\" are met:
+.\" 1. Redistributions of source code must retain the above copyright
+.\"    notice, this list of conditions and the following disclaimer.
+.\" 2. Redistributions in binary form must reproduce the above copyright
+.\"    notice, this list of conditions and the following disclaimer in the
+.\"    documentation and/or other materials provided with the distribution.
+.\"
+.\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+.\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+.\" TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+.\" PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+.\" BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+.\" CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+.\" SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+.\" INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+.\" CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+.\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+.\" POSSIBILITY OF SUCH DAMAGE.
+.\"
+.Dd April 8, 2006
 .Dt TUN 4
 .Os
 .Sh NAME
 .Nm tun
 .Nd tunnel software network interface
 .Sh SYNOPSIS
-.Cd pseudo-device tun Op Ar count
+.Cd pseudo-device tun
 .Sh DESCRIPTION
 The
 .Nm tun
@@ -31,35 +57,50 @@ it is simulating
 a network interface in the case of
 .Nm tun ,
 or a terminal for
-.Nm pty Pc ,
+.Nm pty
+.Pc ,
 and a character-special device
 .Dq control
 interface.
 .Pp
-The network interfaces are named
+To use a
+.Nm tun
+device, the administrator must first create the interface.
+This can be done by using the
+.Xr ifconfig 8
+.Cm create
+command, or via the
+.Dv SIOCIFCREATE
+ioctl.
+An
+.Fn open
+call on
+.Pa /dev/tun Ns Sy N ,
+will also create a network interface with the same unit number of
+that device if it doesn't exist yet.
+.Pp
+The network interfaces should be named
 .Sy tun Ns Ar 0 ,
 .Sy tun Ns Ar 1 ,
-etc, as many in all as the
-.Ar count
-figure given on the
-.Sy pseudo-device
-line.  Each one supports the usual network-interface
-.Xr ioctl 2 Ns s,
+etc.
+Each interface supports the usual network-interface
+.Xr ioctl 2 Ns s ,
 such as
 .Dv SIOCSIFADDR
 and
 .Dv SIOCSIFNETMASK ,
 and thus can be used with
 .Xr ifconfig 8
-like any other interface.  At boot time, they are
+like any other interface.
+At boot time, they are
 .Dv POINTOPOINT
 interfaces, but this can be changed; see the description of the control
-device, below.  When the system chooses to transmit a packet on the
+device, below.
+When the system chooses to transmit a packet on the
 network interface, the packet can be read from the control device
 .Po
-it appears as
-.Dq input
-there
+it appears there as
+.Dq output
 .Pc ;
 writing a packet to the control device generates an input
 packet on the network interface, as if the
@@ -72,22 +113,23 @@ is exclusive-open
 .Po
 it cannot be opened if it is already open
 .Pc
-and is restricted to the super-user. A
+and is restricted to the super-user
+.Pq regardless of file system permissions .
+A
 .Fn read
 call will return an error
 .Pq Er EHOSTDOWN
 if the interface is not
 .Dq ready
-.Po
-which means that the control device is open and the interface's
-address has been set
-.Pc .
+(which means that the interface
+address has not been set).
 Once the interface is ready,
 .Fn read
 will return a packet if one is available; if not, it will either block
 until one is or return
-.Er EWOULDBLOCK ,
-depending on whether non-blocking I/O has been enabled.  If the packet
+.Er EAGAIN ,
+depending on whether non-blocking I/O has been enabled.
+If the packet
 is longer than is allowed for in the buffer passed to
 .Fn read ,
 the extra data will be silently dropped.
@@ -97,14 +139,16 @@ to the network interface output routine
 .Pq Sq Li tunoutput .
 The destination address is in
 .Sq Li struct sockaddr
-format. The actual length of the prepended address is in the member
+format.
+The actual length of the prepended address is in the member
 .Sq Li sa_len .
 The packet data follows immediately.
 A
 .Xr write 2
 call passes a packet in to be
 .Dq received
-on the pseudo-interface.  Each
+on the pseudo-interface.
+Each
 .Fn write
 call supplies exactly one packet; the packet length is taken from the
 amount of data provided to
@@ -127,14 +171,14 @@ field.
 The following
 .Xr ioctl 2
 calls are supported
-.Pq defined in Aq Pa net/if_tun.h Ns :
+.Pq defined in Aq Pa net/if_tun.h :
 .Bl -tag -width TUNSIFMODE
 .It Dv TUNSDEBUG
 The argument should be a pointer to an
 .Va int ;
-this sets the internal debugging variable to that value.  What, if
-anything, this variable controls is not documented here; see the source
-code.
+this sets the internal debugging variable to that value.
+What, if anything, this variable controls is not documented here;
+see the source code.
 .It Dv TUNGDEBUG
 The argument should be a pointer to an
 .Va int ;
@@ -145,24 +189,42 @@ The argument should be a pointer to an
 its value must be either
 .Dv IFF_POINTOPOINT
 or
-.Dv IFF_BROADCAST 
+.Dv IFF_BROADCAST
 (optionally
 .Dv IFF_MULTICAST
-may be or'ed into the value).  The type of the corresponding
+may be or'ed into the value).
+The type of the corresponding
 .Em tun Ns Sy n
-interface is set to the supplied type.  If the value is anything else,
-an
+interface is set to the supplied type.
+If the value is anything else, an
 .Er EINVAL
-error occurs.  The interface must be down at the time; if it is up, an
+error occurs.
+The interface must be down at the time; if it is up, an
 .Er EBUSY
 error occurs.
 .It Dv TUNSLMODE
 The argument should be a pointer to an
 .Va int ;
-a non-zero value turns on
+a non-zero value turns off
+.Dq multi-af
+mode and turns on
 .Dq link-layer
 mode, causing packets read from the tunnel device to be prepended with
 network destination address.
+.It Dv TUNGIFHEAD
+The argument should be a pointer to an
+.Va int ;
+the ioctl sets the value to one if the device is in
+.Dq multi-af
+mode, and zero otherwise.
+.It Dv TUNSIFHEAD
+The argument should be a pointer to an
+.Va int ;
+a non-zero value turns off
+.Dq link-layer
+mode, and enables
+.Dq multi-af
+mode, where every packet is preceded with a four byte address family.
 .It Dv FIONBIO
 Turn non-blocking I/O for reads off or on, according as the argument
 .Va int Ns 's
@@ -211,7 +273,14 @@ If the interface is up when the data device is not open
 output packets are always thrown away rather than letting
 them pile up.
 .Sh SEE ALSO
-.Xr intro 4 ,
-.Xr inet 4
-.Sh BUGS
-Currently is IP-only.
+.Xr inet 4 ,
+.Xr intro 4
+.Sh HISTORY
+.An -split
+IPv6 support comes mostly from
+.Fx
+and was added in
+.Nx 4.0
+by
+.An Rui Paulo
+.Aq rpaulo@NetBSD.org .

@@ -1,4 +1,4 @@
-/*	$NetBSD: zbusvar.h,v 1.2 1999/09/25 21:47:12 is Exp $	*/
+/*	$NetBSD: zbusvar.h,v 1.7 2007/03/04 05:59:30 christos Exp $	*/
 
 /*
  * Copyright (c) 1994 Christian E. Hopps
@@ -41,21 +41,28 @@ struct zbus_args {
 	int prodid;
 	int serno;
 };
-vaddr_t	ZTWOROMADDR;
-vaddr_t	ZTWOMEMADDR;
-u_int		NZTWOMEMPG;
-vaddr_t	ZBUSADDR;	/* kva of Zorro bus I/O pages */
-u_int		ZBUSAVAIL;	/* bytes of Zorro bus I/O space left */
+
+extern vaddr_t		ZTWOROMADDR;
+extern vaddr_t		ZTWOMEMADDR;
+extern u_int		NZTWOMEMPG;
+extern vaddr_t		ZBUSADDR;	/* kva of Zorro bus I/O pages */
+extern u_int		ZBUSAVAIL;	/* bytes of Zorro bus I/O space left */
+
 #define ZTWOROMBASE	(0x00D80000)
 #define ZTWOROMTOP	(0x00F80000)
 #define NZTWOROMPG	btoc(ZTWOROMTOP-ZTWOROMBASE)
 
-/* 
+/*
  * maps a ztwo and/or A3000 builtin address into the mapped kva address
  */
+#if defined(__m68k__)
 #define ztwomap(pa) \
     ((volatile void *)((u_int)ZTWOROMADDR - ZTWOROMBASE + (u_int)(pa)))
-#define ztwopa(va) ((caddr_t)(ZTWOROMBASE + (u_int)(va) - (u_int)ZTWOROMADDR))
+#define ztwopa(va) ((void *)(ZTWOROMBASE + (u_int)(va) - (u_int)ZTWOROMADDR))
+#else
+#define ztwomap(pa) (volatile void *)(pa)
+#define ztwopa(va) (void *)(va)
+#endif
 
 /*
  * tests whether the address lies in our zorro2 rom space
@@ -67,7 +74,7 @@ u_int		ZBUSAVAIL;	/* bytes of Zorro bus I/O space left */
 #define isztwopa(pa) ((u_int)(pa) >= ZTWOROMBASE && (u_int)(pa) <= ZTWOROMTOP)
 #define isztwomem(kva) \
     (ZTWOMEMADDR && (u_int)(kva) >= ZTWOMEMADDR && \
-    (u_int)(kva) < (ZTWOMEMADDR + NZTWOMEMPG * NBPG))
+    (u_int)(kva) < (ZTWOMEMADDR + NZTWOMEMPG * PAGE_SIZE))
 
 #define ZTHREEBASE	(0x40000000)
 #define ZTHREETOP	((u_long)0x80000000)

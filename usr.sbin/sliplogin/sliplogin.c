@@ -1,4 +1,4 @@
-/*	$NetBSD: sliplogin.c,v 1.16 1998/07/04 21:04:02 mrg Exp $	*/
+/*	$NetBSD: sliplogin.c,v 1.22 2008/07/21 13:36:59 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1990, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1990, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)sliplogin.c	8.2 (Berkeley) 2/1/94";
 #else
-__RCSID("$NetBSD: sliplogin.c,v 1.16 1998/07/04 21:04:02 mrg Exp $");
+__RCSID("$NetBSD: sliplogin.c,v 1.22 2008/07/21 13:36:59 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -128,7 +124,7 @@ findid(name)
 	char user[16];
 	int n;
 
-	(void)strncpy(loginname, name, sizeof(loginname) - 1);
+	(void)strlcpy(loginname, name, sizeof(loginname));
 	if ((fp = fopen(_PATH_ACCESS, "r")) == NULL) {
 		syslog(LOG_ERR, "%s: %m\n", _PATH_ACCESS);
 		err(1, "%s", _PATH_ACCESS);
@@ -139,7 +135,7 @@ findid(name)
 		n = sscanf(loginargs, "%15s%*[ \t]%15s%*[ \t]%15s%*[ \t]%15s%*[ \t]%15s%*[ \t]%15s%*[ \t]%15s%*[ \t]%15s%*[ \t]%15s\n",
                         user, laddr, raddr, mask, slopt[0], slopt[1], 
 			slopt[2], slopt[3], slopt[4]);
-		if (user[0] == '#' || isspace(user[0]))
+		if (user[0] == '#' || isspace((unsigned char)user[0]))
 			continue;
 		if (strcmp(user, name) != 0)
 			continue;
@@ -153,7 +149,7 @@ findid(name)
 		(void)snprintf(loginfile, sizeof loginfile, "%s.%s",
 		    _PATH_LOGIN, name);
 		if (access(loginfile, R_OK|X_OK) != 0) {
-			(void)strncpy(loginfile, _PATH_LOGIN, sizeof(loginfile) - 1);
+			(void)strlcpy(loginfile, _PATH_LOGIN, sizeof(loginfile));
 			if (access(loginfile, R_OK|X_OK)) {
 				fputs("access denied - no login file\n",
 				      stderr);
@@ -196,7 +192,7 @@ hup_handler(s)
 	(void)snprintf(logoutfile, sizeof logoutfile, "%s.%s", _PATH_LOGOUT,
 	    loginname);
 	if (access(logoutfile, R_OK|X_OK) != 0)
-		(void)strncpy(logoutfile, _PATH_LOGOUT, sizeof(logoutfile) - 1);
+		(void)strlcpy(logoutfile, _PATH_LOGOUT, sizeof(logoutfile));
 	if (access(logoutfile, R_OK|X_OK) == 0) {
 		char logincmd[2*MAXPATHLEN+32];
 
@@ -229,6 +225,8 @@ main(argc, argv)
 		errx(1, "login %s too long", argv[0]);
 	if ((name = strrchr(argv[0], '/')) == NULL)
 		name = argv[0];
+	else
+		name++;
 	s = getdtablesize();
 	for (fd = 3 ; fd < s ; fd++)
 		(void)close(fd);
@@ -364,7 +362,7 @@ main(argc, argv)
 	 * to see whether changes are allowed (or just "route get").
 	 */
 	(void)setuid(0);
-	if ((s = system(logincmd)) != NULL) {
+	if ((s = system(logincmd)) != 0) {
 		syslog(LOG_ERR, "%s login failed: exit status %d from %s",
 		       loginname, s, loginfile);
 		(void)ioctl(STDIN_FILENO, TIOCSETD, (caddr_t)&odisc);

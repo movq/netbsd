@@ -1,4 +1,4 @@
-/*	$NetBSD: n_jn.c,v 1.4 1999/07/02 15:37:37 simonb Exp $	*/
+/*	$NetBSD: n_jn.c,v 1.6 2003/08/07 16:44:51 agc Exp $	*/
 /*-
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -105,14 +101,14 @@ static char sccsid[] = "@(#)jn.c	8.2 (Berkeley) 11/30/93";
 #define infnan(x) (0.0)
 #endif
 
-static double
+static const double
 invsqrtpi= 5.641895835477562869480794515607725858441e-0001,
 two  = 2.0,
 zero = 0.0,
 one  = 1.0;
 
-double jn(n,x)
-	int n; double x;
+double
+jn(int n, double x)
 {
 	int i, sgn;
 	double a, b, temp;
@@ -257,8 +253,9 @@ double jn(n,x)
 	}
 	return ((sgn == 1) ? -b : b);
 }
-double yn(n,x)
-	int n; double x;
+
+double
+yn(int n, double x)
 {
 	int i, sign;
 	double a, b, temp;

@@ -1,4 +1,4 @@
-/*	$NetBSD: worms.c,v 1.11 1999/07/30 02:23:27 hubertf Exp $	*/
+/*	$NetBSD: worms.c,v 1.19 2008/08/08 16:10:47 drochner Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)worms.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: worms.c,v 1.11 1999/07/30 02:23:27 hubertf Exp $");
+__RCSID("$NetBSD: worms.c,v 1.19 2008/08/08 16:10:47 drochner Exp $");
 #endif
 #endif /* not lint */
 
@@ -183,9 +179,9 @@ static struct	worm {
 
 volatile sig_atomic_t sig_caught = 0;
 
-int	 main __P((int, char **));
-void	 nomem __P((void)) __attribute__((__noreturn__));
-void	 onsig __P((int));
+int	 main(int, char **);
+void	 nomem(void) __dead;
+void	 onsig(int);
 
 int
 main(argc, argv)
@@ -241,7 +237,9 @@ main(argc, argv)
 	if (!(worm = malloc((size_t)number *
 	    sizeof(struct worm))) || !(mp = malloc((size_t)1024)))
 		nomem();
-	initscr();
+	if (!initscr())
+		errx(0, "couldn't initialize screen");
+	curs_set(0);
 	CO = COLS;
 	LI = LINES;
 	last = CO - 1;
@@ -273,7 +271,6 @@ main(argc, argv)
 	(void)signal(SIGHUP, onsig);
 	(void)signal(SIGINT, onsig);
 	(void)signal(SIGQUIT, onsig);
-	(void)signal(SIGSTOP, onsig);
 	(void)signal(SIGTSTP, onsig);
 	(void)signal(SIGTERM, onsig);
 
@@ -295,7 +292,12 @@ main(argc, argv)
 			endwin();
 			exit(0);
 		}
-		if (delay) usleep(delay);
+		if (delay) {
+			if (delay % 1000000 != 0)
+				usleep(delay % 1000000);
+			if (delay >= 1000000)
+				sleep(delay / 1000000);
+		}
 		for (n = 0, w = &worm[0]; n < number; n++, w++) {
 			if ((x = w->xpos[h = w->head]) < 0) {
 				mvaddch(y = w->ypos[h] = bottom,
@@ -339,7 +341,7 @@ main(argc, argv)
 
 void
 onsig(signo)
-	int signo __attribute__((__unused__));
+	int signo __unused;
 {
 	sig_caught = 1;
 }

@@ -1,6 +1,4 @@
-/*	$NetBSD: i82365_isasubr.c,v 1.20 2000/02/28 05:30:19 enami Exp $	*/
-
-#define	PCICISADEBUG
+/*	$NetBSD: i82365_isasubr.c,v 1.40 2008/04/08 20:08:49 cegger Exp $	*/
 
 /*
  * Copyright (c) 2000 Christian E. Hopps.  All rights reserved.
@@ -33,18 +31,19 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: i82365_isasubr.c,v 1.40 2008/04/08 20:08:49 cegger Exp $");
 
-#include <sys/types.h>
+#define	PCICISADEBUG
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/extent.h>
 #include <sys/malloc.h>
 
-#include <vm/vm.h>
-
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/isa/isareg.h>
 #include <dev/isa/isavar.h>
@@ -89,9 +88,6 @@ int	pcic_isa_alloc_iosize = PCIC_ISA_ALLOC_IOSIZE;
  * IRQs for PCMCIA slots.  Useful if order of probing would screw up other
  * devices, or if PCIC hardware/cards have trouble with certain interrupt
  * lines.
- *
- * We disable IRQ 10 by default, since some common laptops (namely, the
- * NEC Versa series) reserve IRQ 10 for the docking station SCSI interface.
  */
 
 #ifndef PCIC_ISA_INTR_ALLOC_MASK
@@ -101,7 +97,7 @@ int	pcic_isa_alloc_iosize = PCIC_ISA_ALLOC_IOSIZE;
 int	pcic_isa_intr_alloc_mask = PCIC_ISA_INTR_ALLOC_MASK;
 
 #ifndef	PCIC_IRQ_PROBE
-#ifdef __hpcmips__
+#ifdef hpcmips
 /*
  * The irq probing doesn't work with current vrisab implementation.
  * The irq is just an key to find matching GPIO port to use and is fixed.
@@ -130,8 +126,8 @@ int	pcicsubr_debug = 0;
  * just use socket 0
  */
 
-void pcic_isa_probe_interrupts __P((struct pcic_softc *, struct pcic_handle *));
-static int pcic_isa_count_intr __P((void *));
+void pcic_isa_probe_interrupts(struct pcic_softc *, struct pcic_handle *);
+static int pcic_isa_count_intr(void *);
 
 static int
 pcic_isa_count_intr(arg)
@@ -157,7 +153,7 @@ pcic_isa_count_intr(arg)
 
 	/*
 	 * make sure we don't get stuck in a loop due to
-	 * unhandled level interupts
+	 * unhandled level interrupts
 	 */
 	if (++sc->intr_false > 40) {
 		isa_intr_disestablish(isc->sc_ic, sc->ih);
@@ -193,7 +189,7 @@ pcic_isa_probe_interrupts(sc, h)
 	ic = isc->sc_ic;
 
 	printf("%s: controller %d detecting irqs with mask 0x%04x:",
-	    sc->dev.dv_xname, h->chip, sc->intr_mask[h->chip]);
+	    device_xname(&sc->dev), h->chip, sc->intr_mask[h->chip]);
 	DPRINTF(("\n"));
 
 	/* clear any current interrupt */
@@ -268,7 +264,7 @@ pcic_isa_probe_interrupts(sc, h)
 	}
 	sc->intr_mask[h->chip] = mask;
 
-	printf("%s\n", sc->intr_mask ? "" : " none");
+	printf("%s\n", sc->intr_mask[h->chip] ? "" : " none");
 }
 
 /*
@@ -304,8 +300,7 @@ pcic_isa_config_interrupts(self)
 
 		/* the cirrus chips lack support for the soft interrupt */
 		if (pcic_irq_probe != 0 &&
-		    h->vendor != PCIC_VENDOR_CIRRUS_PD6710 &&
-		    h->vendor != PCIC_VENDOR_CIRRUS_PD672X)
+		    h->vendor != PCIC_VENDOR_CIRRUS_PD67XX)
 			pcic_isa_probe_interrupts(sc, h);
 
 		chipmask &= sc->intr_mask[h->chip];
@@ -332,39 +327,37 @@ pcic_isa_config_interrupts(self)
 	 * use two different interrupts, but interrupts are relatively
 	 * scarce, shareable, and for PCIC controllers, very infrequent.
 	 */
-	if ((self->dv_cfdata->cf_flags & 1) == 0) {
-		if (sc->irq != IRQUNK) {
+	if ((device_cfdata(self)->cf_flags & 1) == 0) {
+		if (sc->irq != ISA_UNKNOWN_IRQ) {
 			if ((chipmask & (1 << sc->irq)) == 0)
 				printf("%s: warning: configured irq %d not "
 				    "detected as available\n",
-				    sc->dev.dv_xname, sc->irq);
+				    device_xname(&sc->dev), sc->irq);
 		} else if (chipmask == 0 ||
 		    isa_intr_alloc(ic, chipmask, IST_EDGE, &sc->irq)) {
-			printf("%s: no available irq; ", sc->dev.dv_xname);
-			sc->irq = IRQUNK;
+			aprint_error_dev(&sc->dev, "no available irq; ");
+			sc->irq = ISA_UNKNOWN_IRQ;
 		} else if ((chipmask & ~(1 << sc->irq)) == 0 && chipuniq == 0) {
-			printf("%s: can't share irq with cards; ",
-			    sc->dev.dv_xname);
-			sc->irq = IRQUNK;
+			aprint_error_dev(&sc->dev, "can't share irq with cards; ");
+			sc->irq = ISA_UNKNOWN_IRQ;
 		}
 	} else {
-		printf("%s: ", sc->dev.dv_xname);
-		sc->irq = IRQUNK;
+		printf("%s: ", device_xname(&sc->dev));
+		sc->irq = ISA_UNKNOWN_IRQ;
 	}
 
-	if (sc->irq != IRQUNK) {
+	if (sc->irq != ISA_UNKNOWN_IRQ) {
 		sc->ih = isa_intr_establish(ic, sc->irq, IST_EDGE, IPL_TTY,
 		    pcic_intr, sc);
 		if (sc->ih == NULL) {
-			printf("%s: can't establish interrupt",
-			    sc->dev.dv_xname);
-			sc->irq = IRQUNK;
+			aprint_error_dev(&sc->dev, "can't establish interrupt");
+			sc->irq = ISA_UNKNOWN_IRQ;
 		}
 	}
-	if (sc->irq == IRQUNK)
+	if (sc->irq == ISA_UNKNOWN_IRQ)
 		printf("polling for socket events\n");
 	else
-		printf("%s: using irq %d for socket events\n", sc->dev.dv_xname,
+		printf("%s: using irq %d for socket events\n", device_xname(&sc->dev),
 		    sc->irq);
 
 	pcic_attach_sockets_finish(sc);
@@ -402,7 +395,7 @@ void pcic_isa_bus_width_probe (sc, iot, ioh, base, length)
 
 	/* Map i/o space. */
 	if (bus_space_map(iot, base + 0x400, length, 0, &ioh_high)) {
-		printf("%s: can't map high i/o space\n", sc->dev.dv_xname);
+		aprint_error_dev(&sc->dev, "can't map high i/o space\n");
 		return;
 	}
 
@@ -429,16 +422,11 @@ void pcic_isa_bus_width_probe (sc, iot, ioh, base, length)
 	bus_space_free(iot, ioh_high, length);
 
 	/*
-	 * XXX mycroft recommends I/O space range 0x400-0xfff .  I should put
-	 * this in a header somewhere
-	 */
-
-	/*
 	 * XXX some hardware doesn't seem to grok addresses in 0x400 range--
 	 * apparently missing a bit or more of address lines. (e.g.
 	 * CIRRUS_PD672X with Linksys EthernetCard ne2000 clone in TI
 	 * TravelMate 5000--not clear which is at fault)
-	 * 
+	 *
 	 * Add a kludge to detect 10 bit wide buses and deal with them,
 	 * and also a config file option to override the probe.
 	 */
@@ -447,26 +435,12 @@ void pcic_isa_bus_width_probe (sc, iot, ioh, base, length)
 		sc->iobase = 0x300;
 		sc->iosize = 0x0ff;
 	} else {
-#if 0
-		/*
-		 * This is what we'd like to use, but...
-		 */
 		sc->iobase = 0x400;
 		sc->iosize = 0xbff;
-#else
-		/*
-		 * ...the above bus width probe doesn't always work.
-		 * So, experimentation has shown the following range
-		 * to not lose on systems that 0x300-0x3ff loses on
-		 * (e.g. the NEC Versa 6030X).
-		 */
-		sc->iobase = 0x330;
-		sc->iosize = 0x0cf;
-#endif
 	}
 
 	DPRINTF(("%s: bus_space_alloc range 0x%04lx-0x%04lx (probed)\n",
-	    sc->dev.dv_xname, (long) sc->iobase,
+	    device_xname(&sc->dev), (long) sc->iobase,
 
 	    (long) sc->iobase + sc->iosize));
 
@@ -475,7 +449,7 @@ void pcic_isa_bus_width_probe (sc, iot, ioh, base, length)
 		sc->iosize = pcic_isa_alloc_iosize;
 
 		DPRINTF(("%s: bus_space_alloc range 0x%04lx-0x%04lx "
-		    "(config override)\n", sc->dev.dv_xname, (long) sc->iobase,
+		    "(config override)\n", device_xname(&sc->dev), (long) sc->iobase,
 		    (long) sc->iobase + sc->iosize));
 	}
 }
@@ -485,7 +459,7 @@ pcic_isa_chip_intr_establish(pch, pf, ipl, fct, arg)
 	pcmcia_chipset_handle_t pch;
 	struct pcmcia_function *pf;
 	int ipl;
-	int (*fct) __P((void *));
+	int (*fct)(void *);
 	void *arg;
 {
 	struct pcic_handle *h = (struct pcic_handle *) pch;
@@ -496,12 +470,22 @@ pcic_isa_chip_intr_establish(pch, pf, ipl, fct, arg)
 	void *ih;
 	int reg;
 
+	/*
+	 * PLEASE NOTE:
+	 * The IRQLEVEL bit has no bearing on what happens on the host side of
+	 * the PCMCIA controller.  ISA interrupts are defined to be edge-
+	 * triggered, and as this attachment is for ISA devices, the interrupt
+	 * *must* be configured for edge-trigger.  If you think you should
+	 * change this to use IST_LEVEL, you are *wrong*.  You should figure
+	 * out what your real problem is and leave this code alone rather than
+	 * breaking everyone else's systems.  - mycroft
+	 */
 	if (pf->cfe->flags & PCMCIA_CFE_IRQLEVEL)
-		ist = IST_EDGE;
+		ist = IST_EDGE;		/* SEE COMMENT ABOVE */
 	else if (pf->cfe->flags & PCMCIA_CFE_IRQPULSE)
-		ist = IST_PULSE;
+		ist = IST_PULSE;	/* SEE COMMENT ABOVE */
 	else
-		ist = IST_EDGE;
+		ist = IST_EDGE;		/* SEE COMMENT ABOVE */
 
 	if (isa_intr_alloc(ic, sc->intr_mask[h->chip], ist, &irq))
 		return (NULL);
@@ -509,19 +493,19 @@ pcic_isa_chip_intr_establish(pch, pf, ipl, fct, arg)
 	h->ih_irq = irq;
 	if (h->flags & PCIC_FLAG_ENABLED) {
 		reg = pcic_read(h, PCIC_INTR);
-		reg &= ~(PCIC_INTR_IRQ_MASK | PCIC_INTR_ENABLE);
+		reg &= ~PCIC_INTR_IRQ_MASK;
 		pcic_write(h, PCIC_INTR, reg | irq);
 	}
 
 	if ((ih = isa_intr_establish(ic, irq, ist, ipl, fct, arg)) == NULL)
 		return (NULL);
 
-	printf("%s: card irq %d\n", h->pcmcia->dv_xname, irq);
+	printf("%s: card irq %d\n", device_xname(h->pcmcia), irq);
 
 	return (ih);
 }
 
-void 
+void
 pcic_isa_chip_intr_disestablish(pch, ih)
 	pcmcia_chipset_handle_t pch;
 	void *ih;
@@ -536,7 +520,7 @@ pcic_isa_chip_intr_disestablish(pch, ih)
 	h->ih_irq = 0;
 	if (h->flags & PCIC_FLAG_ENABLED) {
 		reg = pcic_read(h, PCIC_INTR);
-		reg &= ~(PCIC_INTR_IRQ_MASK | PCIC_INTR_ENABLE);
+		reg &= ~PCIC_INTR_IRQ_MASK;
 		pcic_write(h, PCIC_INTR, reg);
 	}
 }

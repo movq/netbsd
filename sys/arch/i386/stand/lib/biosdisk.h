@@ -1,4 +1,4 @@
-/*	$NetBSD: biosdisk.h,v 1.2 1997/03/22 01:41:35 thorpej Exp $	*/
+/*	$NetBSD: biosdisk.h,v 1.6 2005/12/11 12:17:48 christos Exp $	*/
 
 /*
  * Copyright (c) 1996
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed for the NetBSD Project
- *	by Matthias Drochner.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -31,7 +25,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-int biosdiskstrategy __P((void*, int, daddr_t, size_t, void*, size_t*));
-int biosdiskopen __P((struct open_file*, ...));
-int biosdiskclose __P((struct open_file*));
-int biosdiskioctl __P((struct open_file*, u_long, void*));
+int biosdisk_strategy(void *, int, daddr_t, size_t, void *, size_t *);
+int biosdisk_open(struct open_file *, ...);
+int biosdisk_close(struct open_file *);
+int biosdisk_ioctl(struct open_file *, u_long, void *);
+int biosdisk_findpartition(int, u_int);
+

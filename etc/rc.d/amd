@@ -1,19 +1,27 @@
 #!/bin/sh
 #
-# $NetBSD: amd,v 1.1.1.1 2000/03/10 11:53:25 lukem Exp $
+# $NetBSD: amd,v 1.15 2008/02/25 22:12:42 tron Exp $
 #
 
 # PROVIDE: amd
-# REQUIRE: nfsiod portmap mountall ypbind
+# REQUIRE: rpcbind mountall ypbind
+# BEFORE:  DAEMON
 
-. /etc/rc.subr
-. /etc/rc.conf
+$_rc_subr_loaded . /etc/rc.subr
 
 name="amd"
+rcvar=$name
 command="/usr/sbin/${name}"
-command_args='-p -a '$amd_dir' `sed s/#.*$// <'$amd_master'` >/var/run/amd.pid'
-required_files="$amd_master"
+reload_cmd="/usr/sbin/amq -f"
+extra_commands="reload"
+
+load_rc_config $name
+
+command_args='-p -a '$amd_dir' -F /etc/amd.conf >/var/run/amd.pid'
+required_files="/etc/amd.conf"
 required_dirs="$amd_dir"
-required_vars="portmap"
+required_vars="rpcbind"
+
+load_rc_config_var rpcbind rpcbind
 
 run_rc_command "$1"

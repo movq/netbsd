@@ -1,4 +1,4 @@
-/*	$NetBSD: auth.c,v 1.10 2000/02/01 22:29:27 thorpej Exp $	*/
+/*	$NetBSD: auth.c,v 1.19 2006/03/20 04:03:22 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)auth.c	8.3 (Berkeley) 5/30/95"
 #else
-__RCSID("$NetBSD: auth.c,v 1.10 2000/02/01 22:29:27 thorpej Exp $");
+__RCSID("$NetBSD: auth.c,v 1.19 2006/03/20 04:03:22 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -63,15 +59,14 @@ __RCSID("$NetBSD: auth.c,v 1.10 2000/02/01 22:29:27 thorpej Exp $");
  */
 
 
-#if	defined(AUTHENTICATION)
+#ifdef AUTHENTICATION
 #include <stdio.h>
 #include <sys/types.h>
 #include <signal.h>
 #define	AUTH_NAMES
 #include <arpa/telnet.h>
-#ifdef	__STDC__
 #include <stdlib.h>
-#endif
+#include <unistd.h>
 #ifdef	NO_STRING_H
 #include <strings.h>
 #else
@@ -84,15 +79,6 @@ __RCSID("$NetBSD: auth.c,v 1.10 2000/02/01 22:29:27 thorpej Exp $");
 #include "auth-proto.h"
 
 #define	typemask(x)		(1<<((x)-1))
-
-#ifdef	KRB4_ENCPWD
-extern krb4encpwd_init();
-extern krb4encpwd_send();
-extern krb4encpwd_is();
-extern krb4encpwd_reply();
-extern krb4encpwd_status();
-extern krb4encpwd_printsub();
-#endif
 
 #ifdef	RSA_ENCPWD
 extern rsaencpwd_init();
@@ -112,6 +98,8 @@ static	int	validuser = 0;
 static	unsigned char	_auth_send_data[256];
 static	unsigned char	*auth_send_data;
 static	int	auth_send_cnt = 0;
+
+static void auth_intr(int);
 
 /*
  * Authentication types supported.  Plese note that these are stored
@@ -135,6 +123,15 @@ Authenticator authenticators[] = {
 				spx_printsub },
 #endif
 #ifdef	KRB5
+# ifdef	ENCRYPTION
+	{ AUTHTYPE_KERBEROS_V5, AUTH_WHO_CLIENT|AUTH_HOW_MUTUAL,
+				kerberos5_init,
+				kerberos5_send,
+				kerberos5_is,
+				kerberos5_reply,
+				kerberos5_status,
+				kerberos5_printsub },
+# endif	/* ENCRYPTION */
 	{ AUTHTYPE_KERBEROS_V5, AUTH_WHO_CLIENT|AUTH_HOW_ONE_WAY,
 				kerberos5_init,
 				kerberos5_send,
@@ -142,24 +139,6 @@ Authenticator authenticators[] = {
 				kerberos5_reply,
 				kerberos5_status,
 				kerberos5_printsub },
-#endif
-#ifdef	KRB4
-	{ AUTHTYPE_KERBEROS_V4, AUTH_WHO_CLIENT|AUTH_HOW_ONE_WAY,
-				kerberos4_init,
-				kerberos4_send,
-				kerberos4_is,
-				kerberos4_reply,
-				kerberos4_status,
-				kerberos4_printsub },
-#endif
-#ifdef	KRB4_ENCPWD
-	{ AUTHTYPE_KRB4_ENCPWD, AUTH_WHO_CLIENT|AUTH_HOW_MUTUAL,
-				krb4encpwd_init,
-				krb4encpwd_send,
-				krb4encpwd_is,
-				krb4encpwd_reply,
-				krb4encpwd_status,
-				krb4encpwd_printsub },
 #endif
 #ifdef	RSA_ENCPWD
 	{ AUTHTYPE_RSA_ENCPWD, AUTH_WHO_CLIENT|AUTH_HOW_ONE_WAY,
@@ -170,7 +149,17 @@ Authenticator authenticators[] = {
 				rsaencpwd_status,
 				rsaencpwd_printsub },
 #endif
-	{ 0, },
+#ifdef SRA
+	{ AUTHTYPE_SRA, AUTH_WHO_CLIENT|AUTH_HOW_ONE_WAY,
+				sra_init,
+				sra_send,
+				sra_is,
+				sra_reply,
+				sra_status,
+				sra_printsub },
+
+#endif
+	{ 0, 0, 0, 0, 0, 0, 0, 0 },
 };
 
 static Authenticator NoAuth = { 0 };
@@ -224,7 +213,7 @@ auth_disable_name(name)
 {
 	int x;
 	for (x = 0; x < AUTHTYPE_CNT; ++x) {
-		if (!strcasecmp(name, AUTHTYPE_NAME(x))) {
+		if (AUTHTYPE_NAME(x) && !strcasecmp(name, AUTHTYPE_NAME(x))) {
 			i_wont_support |= typemask(x);
 			break;
 		}
@@ -238,13 +227,13 @@ getauthmask(type, maskp)
 {
 	register int x;
 
-	if (!strcasecmp(type, AUTHTYPE_NAME(0))) {
+	if (AUTHTYPE_NAME(0) && !strcasecmp(type, AUTHTYPE_NAME(0))) {
 		*maskp = -1;
 		return(1);
 	}
 
 	for (x = 1; x < AUTHTYPE_CNT; ++x) {
-		if (!strcasecmp(type, AUTHTYPE_NAME(x))) {
+		if (AUTHTYPE_NAME(x) && !strcasecmp(type, AUTHTYPE_NAME(x))) {
 			*maskp = typemask(x);
 			return(1);
 		}
@@ -312,7 +301,8 @@ auth_togdebug(on)
 }
 
 	int
-auth_status()
+auth_status(s)
+	char *s;
 {
 	Authenticator *ap;
 	int i, mask;
@@ -489,7 +479,7 @@ auth_is(data, cnt)
 		return;
 	}
 
-	if (ap = findauthenticator(data[0], data[1])) {
+	if ((ap = findauthenticator(data[0], data[1])) != NULL) {
 		if (ap->is)
 			(*ap->is)(ap, data+2, cnt-2);
 	} else if (auth_debug_mode)
@@ -507,7 +497,7 @@ auth_reply(data, cnt)
 	if (cnt < 2)
 		return;
 
-	if (ap = findauthenticator(data[0], data[1])) {
+	if ((ap = findauthenticator(data[0], data[1])) != NULL) {
 		if (ap->reply)
 			(*ap->reply)(ap, data+2, cnt-2);
 	} else if (auth_debug_mode)
@@ -520,7 +510,6 @@ auth_name(data, cnt)
 	unsigned char *data;
 	int cnt;
 {
-	Authenticator *ap;
 	unsigned char savename[256];
 
 	if (cnt < 1) {
@@ -583,8 +572,9 @@ auth_intr(sig)
 }
 
 	int
-auth_wait(name)
+auth_wait(name, l)
 	char *name;
+	size_t l;
 {
 	if (auth_debug_mode)
 		printf(">>>%s: in auth_wait.\r\n", Name);
@@ -611,7 +601,7 @@ auth_wait(name)
 
 	if (authenticated->status)
 		validuser = (*authenticated->status)(authenticated,
-						     name, validuser);
+						     name, l, validuser);
 	return(validuser);
 }
 
@@ -649,7 +639,7 @@ auth_gen_printsub(data, cnt, buf, buflen)
 	buf[buflen-2] = '*';
 	buflen -= 2;
 	for (; cnt > 0; cnt--, data++) {
-		sprintf((char *)tbuf, " %d", *data);
+		snprintf((char *)tbuf, sizeof(tbuf), " %d", *data);
 		for (cp = tbuf; *cp && buflen > 0; --buflen)
 			*buf++ = *cp++;
 		if (buflen <= 0)

@@ -1,4 +1,4 @@
-/*	$NetBSD: done.c,v 1.6 1998/09/13 15:21:36 hubertf Exp $	*/
+/*	$NetBSD: done.c,v 1.9 2005/07/01 00:03:36 jmc Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -17,11 +17,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -43,18 +39,19 @@
 #if 0
 static char sccsid[] = "@(#)done.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: done.c,v 1.6 1998/09/13 15:21:36 hubertf Exp $");
+__RCSID("$NetBSD: done.c,v 1.9 2005/07/01 00:03:36 jmc Exp $");
 #endif
 #endif /* not lint */
 
 /*      Re-coding of advent in C: termination routines */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include "hdr.h"
 #include "extern.h"
 
 int
-score()
+score(void)
 {				/* sort of like 20000 */
 	int     scor, i;
 	mxscor = scor = 0;
@@ -105,9 +102,10 @@ score()
 	return (scor);
 }
 
+/* entry=1 means goto 13000 */	/* game is over */
+/* entry=2 means goto 20000 */	/* 3=19000 */
 void
-done(entry)		/* entry=1 means goto 13000 */	/* game is over */
-	int     entry;	/* entry=2 means goto 20000 */	/* 3=19000 */
+done(int entry)
 {
 	int     i, sc;
 	if (entry == 1)
@@ -138,10 +136,9 @@ done(entry)		/* entry=1 means goto 13000 */	/* game is over */
 	exit(0);
 }
 
-
+/* label 90 */
 void
-die(entry)			/* label 90 */
-	int     entry;
+die(int entry)
 {
 	int     i;
 	if (entry != 99) {

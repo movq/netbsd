@@ -1,4 +1,4 @@
-/*	$NetBSD: mystring.h,v 1.9 1995/05/11 21:29:42 christos Exp $	*/
+/*	$NetBSD: mystring.h,v 1.11 2003/08/07 09:05:35 agc Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -40,10 +36,10 @@
 
 #include <string.h>
 
-void scopyn __P((const char *, char *, int));
-int prefix __P((const char *, const char *));
-int number __P((const char *));
-int is_number __P((const char *));
+void scopyn(const char *, char *, int);
+int prefix(const char *, const char *);
+int number(const char *);
+int is_number(const char *);
 
 #define equal(s1, s2)	(strcmp(s1, s2) == 0)
 #define scopy(s1, s2)	((void)strcpy(s2, s1))

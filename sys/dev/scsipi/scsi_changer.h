@@ -1,4 +1,4 @@
-/*	$NetBSD: scsi_changer.h,v 1.14 1999/09/09 23:24:12 thorpej Exp $	*/
+/*	$NetBSD: scsi_changer.h,v 1.20 2005/12/11 12:23:50 christos Exp $	*/
 
 /*
  * Copyright (c) 1996, 1999 Jason R. Thorpe <thorpej@and.com>
@@ -48,7 +48,7 @@
  *
  * TRW Financial Systems, in accordance with their agreement with Carnegie
  * Mellon University, makes this software available to CMU to distribute
- * or use in any manner that they see fit as long as this message is kept with 
+ * or use in any manner that they see fit as long as this message is kept with
  * the software. For this reason TFS also grants any other persons or
  * organisations permission to use or modify this software.
  *
@@ -302,15 +302,9 @@ struct scsi_send_volume_tag {
 #define ELEMENT_TYPE_DT		0x04
 
 /*
- * XXX The following definitions should be common to all SCSI device types.
- */
-#define PGCODE_MASK	0x3f	/* valid page number bits in pg_code */
-#define PGCODE_PS	0x80	/* indicates page is savable */
-
-/*
  * Device capabilities page.
  *
- * This page defines characteristics of the elemenet types in the
+ * This page defines characteristics of the element types in the
  * medium changer device.
  *
  * Note in the definitions below, the following abbreviations are
@@ -318,7 +312,7 @@ struct scsi_send_volume_tag {
  *		MT	Medium transport element (picker)
  *		ST	Storage transport element (slot)
  *		IE	Import/export element (portal)
- *		DT	Data tranfer element (tape/disk drive)
+ *		DT	Data transfer element (tape/disk drive)
  */
 struct page_device_capabilities {
 	u_int8_t	pg_code;	/* page code (0x1f) */
@@ -369,7 +363,7 @@ struct page_device_capabilities {
 };
 
 /*
- * Medium changer elemement address assignment page.
+ * Medium changer element address assignment page.
  *
  * Some of these fields can be a little confusing, so an explanation
  * is in order.
@@ -421,7 +415,7 @@ struct page_element_address_assignment {
 	/* First data transfer element address */
 	u_int8_t	fdtea[2];
 
-	/* Number of data trafer elements */
+	/* Number of data transfer elements */
 	u_int8_t	ndte[2];
 
 	u_int8_t	reserved[2];

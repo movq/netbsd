@@ -1,4 +1,4 @@
-/*	$NetBSD: fingerd.c,v 1.13 1999/12/16 06:00:25 itojun Exp $	*/
+/*	$NetBSD: fingerd.c,v 1.24 2008/07/20 01:09:07 lukem Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -33,17 +29,17 @@
  * SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
 #ifndef lint
-static char const copyright[] =
-"@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n";
+__COPYRIGHT("@(#) Copyright (c) 1983, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "from: @(#)fingerd.c	8.1 (Berkeley) 6/4/93";
 #else
-static char const rcsid[] = "$NetBSD: fingerd.c,v 1.13 1999/12/16 06:00:25 itojun Exp $";
+__RCSID("$NetBSD: fingerd.c,v 1.24 2008/07/20 01:09:07 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -56,24 +52,24 @@ static char const rcsid[] = "$NetBSD: fingerd.c,v 1.13 1999/12/16 06:00:25 itoju
 #include <unistd.h>
 #include <syslog.h>
 #include <netdb.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "pathnames.h"
 
-void err __P((const char *, ...));
-int main __P((int, char *[]));
+void err(const char *, ...);
+int main(int, char *[]);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
-	register FILE *fp;
-	register int ch, ac = 2;
-	register char *lp = NULL /* XXX gcc */;
+	FILE *fp;
+	int ch, ac = 2;
+	char *lp = NULL /* XXX gcc */;
 	struct sockaddr_storage ss;
-	int p[2], logging, no_forward, user_required, short_list, sval;
+	int p[2], logging, no_forward, user_required, short_list;
+	socklen_t sval;
 #define	ENTRIES	50
 	char **ap, *av[ENTRIES + 1], **comp, line[1024], *prog, *s;
 	char hostbuf[MAXHOSTNAMELEN];
@@ -82,7 +78,7 @@ main(argc, argv)
 	logging = no_forward = user_required = short_list = 0;
 	openlog("fingerd", LOG_PID, LOG_DAEMON);
 	opterr = 0;
-	while ((ch = getopt(argc, argv, "gsluShmpP:")) != -1)
+	while ((ch = getopt(argc, argv, "gsluShmpP:8")) != -1)
 		switch (ch) {
 		case 'l':
 			logging = 1;
@@ -112,9 +108,12 @@ main(argc, argv)
 		case 'g':
 			av[ac++] = "-g";
 			break;
+		case '8':
+			av[ac++] = "-8";
+			break;
 		case '?':
 		default:
-			err("illegal option -- %c", ch);
+			err("illegal option -- %c", optopt);
 		}
 
 
@@ -150,7 +149,7 @@ main(argc, argv)
 			break;
 		lp = NULL;
 		if (no_forward && strchr(*ap, '@')) {
-			(void) puts("fowarding service denied\r\n");
+			(void) puts("forwarding service denied\r\n");
 			exit(1);
 		}
 
@@ -213,27 +212,12 @@ main(argc, argv)
 	exit(0);
 }
 
-#if __STDC__
-#include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
-
 void
-#if __STDC__
 err(const char *fmt, ...)
-#else
-err(fmt, va_alist)
-	char *fmt;
-        va_dcl
-#endif
 {
 	va_list ap;
-#if __STDC__
+
 	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
 	(void) vsyslog(LOG_ERR, fmt, ap);
 	va_end(ap);
 	exit(1);

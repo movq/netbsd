@@ -1,4 +1,4 @@
-/*	$NetBSD: md.c,v 1.1 2000/02/20 20:34:57 is Exp $ */
+/*	$NetBSD: md.c,v 1.21 2008/10/07 09:58:14 abs Exp $ */
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -48,13 +48,6 @@
 #include "msg_defs.h"
 #include "menu_defs.h"
 
-
-int c1024_resp;
-struct disklist *disklist = NULL;
-
-//int defbootselpart, defbootseldisk;
-
-
 /* prototypes */
 
 
@@ -81,9 +74,8 @@ md_post_newfs(void)
 {
 	/* boot blocks ... */
 	msg_display(MSG_dobootblks, diskdev);
-	return run_prog(0, 1, NULL,
-	    "/usr/mdec/installboot -v /usr/mdec/xxboot /dev/r%sa",
-	    diskdev);
+	return run_program(RUN_DISPLAY,
+	    "/usr/mdec/installboot -v /usr/mdec/xxboot /dev/r%sa", diskdev);
 }
 
 int
@@ -107,7 +99,8 @@ md_update(void)
 	endwin();
 	md_copy_filesystem();
 	md_post_newfs();
-	puts(CL);		/* XXX */
+	wrefresh(curscr);
+	wmove(stdscr, 0, 0);
 	wclear(stdscr);
 	wrefresh(stdscr);
 	return 1;
@@ -117,23 +110,29 @@ md_update(void)
 void
 md_cleanup_install(void)
 {
-	char realfrom[STRSIZE];
-	char realto[STRSIZE];
-	char sedcmd[STRSIZE];
 
-	strncpy(realfrom, target_expand("/etc/rc.conf"), STRSIZE);
-	strncpy(realto, target_expand("/etc/rc.conf.install"), STRSIZE);
+	enable_rc_conf();
+}
 
-	sprintf(sedcmd, "sed 's/rc_configured=NO/rc_configured=YES/' < %s > %s",
-	    realfrom, realto);
-	if (logging)
-		(void)fprintf(log, "%s\n", sedcmd);
-	if (scripting)
-		(void)fprintf(script, "%s\n", sedcmd);
-	do_system(sedcmd);
+int
+md_pre_update()
+{
+	return 1;
+}
 
-	run_prog(1, 0, NULL, "mv -f %s %s", realto, realfrom);
-	run_prog(0, 0, NULL, "rm -f %s", target_expand("/sysinst"));
-	run_prog(0, 0, NULL, "rm -f %s", target_expand("/.termcap"));
-	run_prog(0, 0, NULL, "rm -f %s", target_expand("/.profile"));
+void
+md_init()
+{
+}
+
+void
+md_init_set_status(int minimal)
+{
+	(void)minimal;
+}
+
+int
+md_post_extract(void)
+{
+	return 0;
 }

@@ -1,4 +1,4 @@
-/* $NetBSD: dwlpx.c,v 1.19 1999/11/04 19:15:22 thorpej Exp $ */
+/* $NetBSD: dwlpx.c,v 1.32 2007/03/04 05:59:11 christos Exp $ */
 
 /*
  * Copyright (c) 1997 by Matthew Jacob
@@ -32,14 +32,14 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: dwlpx.c,v 1.19 1999/11/04 19:15:22 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dwlpx.c,v 1.32 2007/03/04 05:59:11 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
 
-#include <vm/vm.h>
+#include <uvm/uvm_extern.h>
 
 #include <machine/autoconf.h>
 
@@ -53,36 +53,25 @@ __KERNEL_RCSID(0, "$NetBSD: dwlpx.c,v 1.19 1999/11/04 19:15:22 thorpej Exp $");
 #include <alpha/pci/dwlpxvar.h>
 #include <alpha/pci/pci_kn8ae.h>
 
-#define	KV(_addr)	((caddr_t)ALPHA_PHYS_TO_K0SEG((_addr)))
+#define	KV(_addr)	((void *)ALPHA_PHYS_TO_K0SEG((_addr)))
 #define	DWLPX_SYSBASE(sc)	\
 	    ((((unsigned long)((sc)->dwlpx_node - 4))	<< 36) |	\
 	     (((unsigned long) (sc)->dwlpx_hosenum)	<< 34) |	\
+	     (1LL					<< 39))
+#define	DWLPX_SYSBASE1(node, hosenum)	\
+	    ((((unsigned long)(node - 4))	<< 36) |	\
+	     (((unsigned long) hosenum)	        << 34) |	\
 	     (1LL					<< 39))
 
 
 static int	dwlpxmatch __P((struct device *, struct cfdata *, void *));
 static void	dwlpxattach __P((struct device *, struct device *, void *));
-struct cfattach dwlpx_ca = {
-	sizeof(struct dwlpx_softc), dwlpxmatch, dwlpxattach
-};
+CFATTACH_DECL(dwlpx, sizeof(struct dwlpx_softc),
+    dwlpxmatch, dwlpxattach, NULL, NULL);
 
 extern struct cfdriver dwlpx_cd;
 
-static int	dwlpxprint __P((void *, const char *));
-static struct dwlpx_softc *dwlps[DWLPX_NIONODE][DWLPX_NHOSE];
-
-static int
-dwlpxprint(aux, pnp)
-	void *aux;
-	const char *pnp;
-{
-	register struct pcibus_attach_args *pba = aux;
-	/* only PCIs can attach to DWLPX's; easy. */
-	if (pnp)
-		printf("%s at %s", pba->pba_busname, pnp);
-	printf(" bus %d", pba->pba_bus);
-	return (UNCONF);
-}
+void	dwlpx_errintr(void *, u_long vec);
 
 static int
 dwlpxmatch(parent, cf, aux)
@@ -91,9 +80,29 @@ dwlpxmatch(parent, cf, aux)
 	void *aux;
 {
 	struct kft_dev_attach_args *ka = aux;
+	unsigned long ls;
+	u_int32_t ctl;
 
 	if (strcmp(ka->ka_name, dwlpx_cd.cd_name) != 0)
 		return (0);
+
+	ls = DWLPX_SYSBASE1(ka->ka_node, ka->ka_hosenum);
+	
+	/*
+	 * Probe the first HPC to make sure this really is a dwlpx and
+	 * nothing else.
+	 */ 
+	if (badaddr(KV(PCIA_CTL(1) + ls), sizeof (ctl)) != 0) {
+		/*
+		 * If we are here something went wrong. One reason
+		 * could be that this is a dwlma and not a dwlpx.
+		 *
+		 * We can not clear potential illegal CSR errors here
+		 * since it is unknown hardware. 
+		 */
+		return (0);
+	}
+
 	return (1);
 }
 
@@ -113,7 +122,7 @@ dwlpxattach(parent, self, aux)
 	sc->dwlpx_node = ka->ka_node;
 	sc->dwlpx_dtype = ka->ka_dtype;
 	sc->dwlpx_hosenum = ka->ka_hosenum;
-	dwlps[sc->dwlpx_node - 4][sc->dwlpx_hosenum] = sc;
+
 	dwlpx_init(sc);
 	dwlpx_dma_init(ccp);
 
@@ -158,9 +167,6 @@ dwlpxattach(parent, self, aux)
 		 * Set up interrupts
 		 */
 		pci_kn8ae_pickintr(&sc->dwlpx_cc, 1);
-#ifdef	EVCNT_COUNTERS
-		evcnt_attach(self, "intr", kn8ae_intr_evcnt);
-#endif
 		once++;
 	} else {
 		pci_kn8ae_pickintr(&sc->dwlpx_cc, 0);
@@ -169,26 +175,27 @@ dwlpxattach(parent, self, aux)
 	/*
 	 * Attach PCI bus
 	 */
-	pba.pba_busname = "pci";
 	pba.pba_iot = &sc->dwlpx_cc.cc_iot;
 	pba.pba_memt = &sc->dwlpx_cc.cc_memt;
 	pba.pba_dmat =	/* start with direct, may change... */
 	    alphabus_dma_get_tag(&sc->dwlpx_cc.cc_dmat_direct, ALPHA_BUS_PCI);
+	pba.pba_dmat64 = NULL;
 	pba.pba_pc = &sc->dwlpx_cc.cc_pc;
 	pba.pba_bus = 0;
+	pba.pba_bridgetag = NULL;
 	pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED |
 	    PCI_FLAGS_MRL_OKAY | PCI_FLAGS_MRM_OKAY | PCI_FLAGS_MWI_OKAY;
-	config_found(self, &pba, dwlpxprint);
+	config_found_ia(self, "pcibus", &pba, pcibusprint);
 }
 
 void
 dwlpx_init(sc)
 	struct dwlpx_softc *sc;
 {
-	int i;
 	u_int32_t ctl;
 	struct dwlpx_config *ccp = &sc->dwlpx_cc;
-	unsigned long ls = DWLPX_SYSBASE(sc);
+	unsigned long vec, ls = DWLPX_SYSBASE(sc);
+	int i;
 
 	if (ccp->cc_initted == 0) {
 		/*
@@ -250,31 +257,17 @@ dwlpx_init(sc)
 	 * Do this even for all HPCs- even for the nonexistent
 	 * one on hose zero of a KFTIA.
 	 */
+	vec = scb_alloc(dwlpx_errintr, sc);
+	if (vec == SCB_ALLOC_FAILED)
+		panic("%s: unable to allocate error vector",
+		    sc->dwlpx_dev.dv_xname);
+	printf("%s: error interrupt at vector 0x%lx\n",
+	    sc->dwlpx_dev.dv_xname, vec);
 	for (i = 0; i < NHPC; i++) {
 		REGVAL(PCIA_IMASK(i) + ccp->cc_sysbase) = DWLPX_IMASK_DFLT;
-		REGVAL(PCIA_ERRVEC(i) + ccp->cc_sysbase) =
-		    DWLPX_ERRVEC((sc->dwlpx_node - 4), sc->dwlpx_hosenum);
+		REGVAL(PCIA_ERRVEC(i) + ccp->cc_sysbase) = vec;
 	}
-	for (i = 0; i < DWLPX_MAXDEV; i++) {
-		u_int16_t vec;
-		int ss, hpc;
 
-		vec = DWLPX_MVEC((sc->dwlpx_node - 4), sc->dwlpx_hosenum, i);
-		ss = i;
-		if (i < 4) {
-			hpc = 0;
-		} else if (i < 8) {
-			ss -= 4;
-			hpc = 1;
-		} else {
-			ss -= 8;
-			hpc = 2;
-		}
-		REGVAL(PCIA_DEVVEC(hpc, ss, 1) + ccp->cc_sysbase) = vec;
-		REGVAL(PCIA_DEVVEC(hpc, ss, 2) + ccp->cc_sysbase) = vec;
-		REGVAL(PCIA_DEVVEC(hpc, ss, 3) + ccp->cc_sysbase) = vec;
-		REGVAL(PCIA_DEVVEC(hpc, ss, 4) + ccp->cc_sysbase) = vec;
-	}
 	/*
 	 * Establish HAE values, as well as make sure of sanity elsewhere.
 	 */
@@ -317,32 +310,24 @@ dwlpx_init(sc)
 }
 
 void
-dwlpx_iointr(framep, vec)
-	void *framep;
+dwlpx_errintr(arg, vec)
+	void *arg;
 	unsigned long vec;
 {
-	struct dwlpx_softc *sc;
-	struct dwlpx_config *ccp;
-	int ionode, hosenum, i;
+	struct dwlpx_softc *sc = arg;
+	struct dwlpx_config *ccp = &sc->dwlpx_cc;
+	int i;
 	struct {
 		u_int32_t err;
 		u_int32_t addr;
 	} hpcs[NHPC];
 
-	ionode = (vec >> 8) & 0xf;
-	hosenum = (vec >> 4) & 0x7;
-	if (ionode >= DWLPX_NIONODE || hosenum >= DWLPX_NHOSE) {
-		panic("dwlpx_iointr: mangled vector 0x%lx", vec);
-		/* NOTREACHED */
-	}
-	sc = dwlps[ionode][hosenum];
-	ccp = &sc->dwlpx_cc;
 	for (i = 0; i < sc->dwlpx_nhpc; i++) {
 		hpcs[i].err = REGVAL(PCIA_ERR(i) + ccp->cc_sysbase);
 		hpcs[i].addr = REGVAL(PCIA_FADR(i) + ccp->cc_sysbase);
 	}
 	printf("%s: node %d hose %d error interrupt\n",
-		sc->dwlpx_dev.dv_xname, ionode + 4, hosenum);
+	    sc->dwlpx_dev.dv_xname, sc->dwlpx_node, sc->dwlpx_hosenum);
 	
 	for (i = 0; i < sc->dwlpx_nhpc; i++) {
 		if ((hpcs[i].err & PCIA_ERR_ERROR) == 0)

@@ -1,4 +1,4 @@
-/*	$NetBSD: fork.S,v 1.1 1995/02/10 17:50:34 cgd Exp $	*/
+/* $NetBSD: fork.S,v 1.5 2003/02/13 02:50:48 nathanw Exp $ */
 
 /*
  * Copyright (c) 1994, 1995 Carnegie-Mellon University.
@@ -29,7 +29,8 @@
 
 #include "SYS.h"
 
-SYSCALL(fork)
+LEAF(__fork, 0)
+	CALLSYS_ERROR(fork)
 	cmovne	a4, zero, v0		/* a4 (rv[1]) != 0, child */
 	RET
-END(fork)
+END(__fork)

@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.10 2000/01/23 21:04:22 aymeric Exp $	*/
+/*	$NetBSD: intr.h,v 1.20 2008/04/28 20:23:12 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,28 +35,75 @@
  * include files.
  */
 
-#ifndef _MACHINE_INTR_H_
-#define _MACHINE_INTR_H_
+#ifndef _AMIGA_INTR_H_
+#define _AMIGA_INTR_H_
 
 #include <amiga/amiga/isr.h>
 #include <amiga/include/mtpr.h>
+#include <m68k/psl.h>
 
-#define __GENERIC_SOFT_INTERRUPTS
-#define IPL_SOFTSERIAL 1
-#define IPL_SOFTNET 1
+#define	IPL_NONE	0
+#define	IPL_SOFTCLOCK	1
+#define	IPL_SOFTBIO	1
+#define	IPL_SOFTNET	1
+#define	IPL_SOFTSERIAL	1
+#define	IPL_VM		2
+#define	IPL_SCHED	3
+#define	IPL_HIGH	4
+#define	_NIPL		5
 
-/* not used yet, should reflect psl.h */
-#define IPL_BIO		3
-#define IPL_NET		3
-#define IPL_SERIAL	4
-#define IPL_TTY		4
+extern int ipl2spl_table[_NIPL];
 
+typedef int ipl_t;
+typedef struct {
+	uint16_t _ipl;
+} ipl_cookie_t;
 
-#ifdef splaudio
-#undef splaudio
-#define splaudio spl6
+static inline ipl_cookie_t
+makeiplcookie(ipl_t ipl)
+{
+
+	return (ipl_cookie_t){._ipl = ipl};
+}
+
+static inline int
+splraiseipl(ipl_cookie_t icookie)
+{
+
+	return _splraise(ipl2spl_table[icookie._ipl]);
+}
+
+#ifdef _KERNEL_OPT
+#include "opt_lev6_defer.h"
 #endif
 
-#define spllpt()	spl6()
+#define	spl0()			_spl0()	/* we have real software interrupts */
+#define splsoftclock()		splraise1()
+#define splsoftnet()		splraise1()
+#define splsoftserial()		splraise1()
+#define splsoftbio()		splraise1()
+#define	splvm()			splraise4()
 
+#ifndef _LKM
+
+#ifndef LEV6_DEFER
+#define splsched()	splraise6()
+#define splhigh()	spl7()
+#else
+#define splsched()	splraise4()
+#define splhigh()	splraise4()
 #endif
+
+#else	/* _LKM */
+
+extern int _spllkm6(void);
+extern int _spllkm7(void);
+
+#define splsched()	_spllkm6()
+#define splhigh()	_spllkm7()
+
+#endif /* _LKM */
+
+#define splx(s)		_spl(s)
+
+#endif	/* !_AMIGA_INTR_H_ */

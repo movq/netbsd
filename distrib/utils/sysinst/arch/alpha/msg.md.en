@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.md.en,v 1.5 1999/07/06 06:10:05 cgd Exp $	*/
+/*	$NetBSD: msg.md.en,v 1.10 2008/02/02 04:51:36 itohy Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -40,38 +40,17 @@
 /* alpha machine dependent messages, english */
 
 
-message fullpart
-{We are now going to install NetBSD on the disk %s.  You may
-choose to install NetBSD on the entire disk or part of the disk.
-Which would you like to do?
+message md_hello
+{If you booted from a floppy, you may now remove the disk.
+
 }
 
 message dobootblks
 {Installing boot blocks on %s....
 }
 
-message askfsroot
-{I will be asking for partition sizes and on some, mount points.
+message set_kernel_1
+{Kernel (GENERIC)}
 
-First the root partition.  You have %d %s left on your disk.
-Root partition size? }
-
-message askfsswap
-{
-Next the swap partition.  You have %d %s left on your disk.
-Swap partition size? }
-
-message askfsusr
-{
-Next the /usr partition.  You have %d %s left on your disk.
-/usr partition size? }
-
-message otherparts
-{You still have some space remaining unallocated on your disk.  Please
-give sizes and mount points for the following partitions.
-
-}
-
-message askfspart
-{The next partition is /dev/%s%c.  You have %d %s left on your disk.
-Partition size? }
+message set_kernel_2
+{Kernel (GENERIC.MP)}

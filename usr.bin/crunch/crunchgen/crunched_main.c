@@ -1,4 +1,4 @@
-/*	$NetBSD: crunched_main.c,v 1.2 1997/08/02 21:30:10 perry Exp $	*/
+/*	$NetBSD: crunched_main.c,v 1.4 2006/05/10 21:34:20 mrg Exp $	*/
 /*
  * Copyright (c) 1994 University of Maryland
  * All Rights Reserved.
@@ -34,11 +34,12 @@
  */
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: crunched_main.c,v 1.2 1997/08/02 21:30:10 perry Exp $");
+__RCSID("$NetBSD: crunched_main.c,v 1.4 2006/05/10 21:34:20 mrg Exp $");
 #endif
 
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 struct stub {
     char *name;
@@ -47,7 +48,7 @@ struct stub {
 
 extern struct stub entry_points[];
 
-int main(int argc, char **argv)
+int main(int argc, char **argv, char **envp)
 {
     char *slash, *basename;
     struct stub *ep;
@@ -62,7 +63,7 @@ int main(int argc, char **argv)
 	if(!strcmp(basename, ep->name)) break;
 
     if(ep->name)
-	return ep->f(argc, argv);
+	return ep->f(argc, argv, envp);
     else {
 	fprintf(stderr, "%s: %s not compiled in\n", EXECNAME, basename);
 	crunched_usage();
@@ -70,7 +71,7 @@ int main(int argc, char **argv)
 }
 
 
-int crunched_main(int argc, char **argv)
+int crunched_main(int argc, char **argv, char **envp)
 {
     struct stub *ep;
     int columns, len;
@@ -78,7 +79,7 @@ int crunched_main(int argc, char **argv)
     if(argc <= 1) 
 	crunched_usage();
 
-    return main(--argc, ++argv);
+    return main(--argc, ++argv, envp);
 }
 
 

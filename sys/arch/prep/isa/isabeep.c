@@ -1,4 +1,4 @@
-/*	$NetBSD: isabeep.c,v 1.1 2000/02/29 15:21:43 nonaka Exp $	*/
+/*	$NetBSD: isabeep.c,v 1.9 2007/10/17 19:56:50 garbled Exp $	*/
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
@@ -27,6 +27,9 @@
  * rights to redistribute these changes.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: isabeep.c,v 1.9 2007/10/17 19:56:50 garbled Exp $");
+
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
 #include <sys/types.h>
@@ -35,7 +38,7 @@
 #include <sys/systm.h>
 #include <sys/errno.h>
 #include <sys/device.h>
-#include <vm/vm.h>
+#include <uvm/uvm_extern.h>
 
 #include <dev/isa/isavar.h>
 
@@ -43,31 +46,25 @@
 #if NPCPPI > 0
 #include <dev/isa/pcppivar.h>
 
-int isabeepmatch __P((struct device *, struct cfdata *, void *));
-void isabeepattach __P((struct device *, struct device *, void *));
+int isabeepmatch(struct device *, struct cfdata *, void *);
+void isabeepattach(struct device *, struct device *, void *);
 
-struct cfattach isabeep_ca = {
-	sizeof(struct device), isabeepmatch, isabeepattach
-};
+CFATTACH_DECL(isabeep, sizeof(struct device),
+    isabeepmatch, isabeepattach, NULL, NULL);
 
 static int ppi_attached;
 static pcppi_tag_t ppicookie;
 
 int
-isabeepmatch(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+isabeepmatch(struct device *parent, struct cfdata *match, void *aux)
 {
 	return (!ppi_attached);
 }
 
 void
-isabeepattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+isabeepattach(struct device *parent, struct device *self, void *aux)
 {
-	printf("\n");
+	aprint_normal("\n");
 
 	ppicookie = ((struct pcppi_attach_args *)aux)->pa_cookie;
 	ppi_attached = 1;
@@ -75,8 +72,7 @@ isabeepattach(parent, self, aux)
 #endif
 
 void
-isabeep(pitch, period)
-	int pitch, period;
+isabeep(int pitch, int period)
 {
 #if NPCPPI > 0
 	if (ppi_attached)

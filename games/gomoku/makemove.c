@@ -1,4 +1,4 @@
-/*	$NetBSD: makemove.c,v 1.6 2000/03/13 23:57:23 soren Exp $	*/
+/*	$NetBSD: makemove.c,v 1.8 2006/05/11 00:17:07 mrg Exp $	*/
 
 /*
  * Copyright (c) 1994
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)makemove.c	8.2 (Berkeley) 5/3/95";
 #else
-__RCSID("$NetBSD: makemove.c,v 1.6 2000/03/13 23:57:23 soren Exp $");
+__RCSID("$NetBSD: makemove.c,v 1.8 2006/05/11 00:17:07 mrg Exp $");
 #endif
 #endif /* not lint */
 
@@ -228,7 +224,7 @@ update_overlap(osp)
 	int i, f, r, r1, d, d1, n;
 	int a, b, bmask, bmask1;
 	struct spotstr *esp;
-	char *str;
+	u_char *str;
 
 	esp = NULL;
 	for (r = 4; --r >= 0; ) {			/* for each direction */

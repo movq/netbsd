@@ -1,7 +1,7 @@
-/*	$NetBSD: vfs_init.c,v 1.15 1999/11/15 18:49:09 fvdl Exp $	*/
+/*	$NetBSD: vfs_init.c,v 1.41 2008/09/27 13:01:07 reinoud Exp $	*/
 
 /*-
- * Copyright (c) 1998 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 2000, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -54,11 +47,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -77,6 +66,9 @@
  *	@(#)vfs_init.c	8.5 (Berkeley) 5/11/95
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: vfs_init.c,v 1.41 2008/09/27 13:01:07 reinoud Exp $");
+
 #include <sys/param.h>
 #include <sys/mount.h>
 #include <sys/time.h>
@@ -88,6 +80,8 @@
 #include <sys/errno.h>
 #include <sys/malloc.h>
 #include <sys/systm.h>
+#include <sys/module.h>
+#include <sys/dirhash.h>
 
 /*
  * Sigh, such primitive tools are these...
@@ -101,19 +95,19 @@
 /*
  * The global list of vnode operations.
  */
-extern struct vnodeop_desc *vfs_op_descs[];
+extern const struct vnodeop_desc * const vfs_op_descs[];
 
 /*
  * These vnodeopv_descs are listed here because they are not
  * associated with any particular file system, and thus cannot
  * be initialized by vfs_attach().
  */
-extern struct vnodeopv_desc dead_vnodeop_opv_desc;
-extern struct vnodeopv_desc fifo_vnodeop_opv_desc;
-extern struct vnodeopv_desc spec_vnodeop_opv_desc;
-extern struct vnodeopv_desc sync_vnodeop_opv_desc;
+extern const struct vnodeopv_desc dead_vnodeop_opv_desc;
+extern const struct vnodeopv_desc fifo_vnodeop_opv_desc;
+extern const struct vnodeopv_desc spec_vnodeop_opv_desc;
+extern const struct vnodeopv_desc sync_vnodeop_opv_desc;
 
-struct vnodeopv_desc *vfs_special_vnodeopv_descs[] = {
+const struct vnodeopv_desc * const vfs_special_vnodeopv_descs[] = {
 	&dead_vnodeop_opv_desc,
 	&fifo_vnodeop_opv_desc,
 	&spec_vnodeop_opv_desc,
@@ -121,19 +115,16 @@ struct vnodeopv_desc *vfs_special_vnodeopv_descs[] = {
 	NULL,
 };
 
+struct vfs_list_head vfs_list =			/* vfs list */
+    LIST_HEAD_INITIALIZER(vfs_list);
+
 /*
  * This code doesn't work if the defn is **vnodop_defns with cc.
  * The problem is because of the compiler sometimes putting in an
  * extra level of indirection for arrays.  It's an interesting
  * "feature" of C.
  */
-int vfs_opv_numops;
-
-typedef int (*PFI) __P((void *));
-
-void vfs_opv_init_explicit __P((struct vnodeopv_desc *));
-void vfs_opv_init_default __P((struct vnodeopv_desc *));
-void vfs_op_init __P((void));
+typedef int (*PFI)(void *);
 
 /*
  * A miscellaneous routine.
@@ -141,8 +132,7 @@ void vfs_op_init __P((void));
  */
 /*ARGSUSED*/
 int
-vn_default_error(v)
-	void *v;
+vn_default_error(void *v)
 {
 
 	return (EOPNOTSUPP);
@@ -169,12 +159,11 @@ vn_default_error(v)
  * Init the vector, if it needs it.
  * Also handle backwards compatibility.
  */
-void
-vfs_opv_init_explicit(vfs_opv_desc)
-	struct vnodeopv_desc *vfs_opv_desc;
+static void
+vfs_opv_init_explicit(const struct vnodeopv_desc *vfs_opv_desc)
 {
-	int (**opv_desc_vector) __P((void *));
-	struct vnodeopv_entry_desc *opve_descp;
+	int (**opv_desc_vector)(void *);
+	const struct vnodeopv_entry_desc *opve_descp;
 
 	opv_desc_vector = *(vfs_opv_desc->opv_desc_vector_p);
 
@@ -184,7 +173,7 @@ vfs_opv_init_explicit(vfs_opv_desc)
 		/*
 		 * Sanity check:  is this operation listed
 		 * in the list of operations?  We check this
-		 * by seeing if its offest is zero.  Since
+		 * by seeing if its offset is zero.  Since
 		 * the default routine should always be listed
 		 * first, it should be the only one with a zero
 		 * offset.  Any other operation with a zero
@@ -213,12 +202,11 @@ vfs_opv_init_explicit(vfs_opv_desc)
 	}
 }
 
-void
-vfs_opv_init_default(vfs_opv_desc)
-	struct vnodeopv_desc *vfs_opv_desc;
+static void
+vfs_opv_init_default(const struct vnodeopv_desc *vfs_opv_desc)
 {
 	int j;
-	int (**opv_desc_vector) __P((void *));
+	int (**opv_desc_vector)(void *);
 
 	opv_desc_vector = *(vfs_opv_desc->opv_desc_vector_p);
 
@@ -228,17 +216,16 @@ vfs_opv_init_default(vfs_opv_desc)
 	if (opv_desc_vector[VOFFSET(vop_default)] == NULL)
 		panic("vfs_opv_init: operation vector without default routine.");
 
-	for (j = 0; j < vfs_opv_numops; j++)
+	for (j = 0; j < VNODE_OPS_COUNT; j++)
 		if (opv_desc_vector[j] == NULL)
-			opv_desc_vector[j] = 
+			opv_desc_vector[j] =
 			    opv_desc_vector[VOFFSET(vop_default)];
 }
 
 void
-vfs_opv_init(vopvdpp)
-	struct vnodeopv_desc **vopvdpp;
+vfs_opv_init(const struct vnodeopv_desc * const *vopvdpp)
 {
-	int (**opv_desc_vector) __P((void *));
+	int (**opv_desc_vector)(void *);
 	int i;
 
 	/*
@@ -247,8 +234,8 @@ vfs_opv_init(vopvdpp)
 	for (i = 0; vopvdpp[i] != NULL; i++) {
 		/* XXX - shouldn't be M_VNODE */
 		opv_desc_vector =
-		    malloc(vfs_opv_numops * sizeof(PFI), M_VNODE, M_WAITOK);
-		memset(opv_desc_vector, 0, vfs_opv_numops * sizeof(PFI));
+		    malloc(VNODE_OPS_COUNT * sizeof(PFI), M_VNODE, M_WAITOK);
+		memset(opv_desc_vector, 0, VNODE_OPS_COUNT * sizeof(PFI));
 		*(vopvdpp[i]->opv_desc_vector_p) = opv_desc_vector;
 		DODEBUG(printf("vector at %p allocated\n",
 		    opv_desc_vector_p));
@@ -269,8 +256,7 @@ vfs_opv_init(vopvdpp)
 }
 
 void
-vfs_opv_free(vopvdpp)
-	struct vnodeopv_desc **vopvdpp;
+vfs_opv_free(const struct vnodeopv_desc * const *vopvdpp)
 {
 	int i;
 
@@ -284,36 +270,44 @@ vfs_opv_free(vopvdpp)
 	}
 }
 
-void
-vfs_op_init()
+#ifdef DEBUG
+static void
+vfs_op_check(void)
 {
 	int i;
 
 	DODEBUG(printf("Vnode_interface_init.\n"));
-	/*
-	 * Figure out how many ops there are by counting the table,
-	 * and assign each its offset.
-	 */
-	for (vfs_opv_numops = 0, i = 0; vfs_op_descs[i]; i++) {
-		vfs_op_descs[i]->vdesc_offset = vfs_opv_numops;
-		vfs_opv_numops++;
-	}
-	DODEBUG(printf ("vfs_opv_numops=%d\n", vfs_opv_numops));
-}
 
-/*
- * Routines having to do with the management of the vnode table.
- */
-struct vattr va_null;
+	/*
+	 * Check offset of each op.
+	 */
+	for (i = 0; vfs_op_descs[i]; i++) {
+		if (vfs_op_descs[i]->vdesc_offset != i)
+			panic("vfs_op_check: vfs_op_desc[] offset mismatch");
+	}
+
+	if (i != VNODE_OPS_COUNT) {
+		panic("vfs_op_check: vnode ops count mismatch (%d != %d)",
+			i, VNODE_OPS_COUNT);
+	}
+
+	DODEBUG(printf ("vfs_opv_numops=%d\n", VNODE_OPS_COUNT));
+}
+#endif /* DEBUG */
 
 /*
  * Initialize the vnode structures and initialize each file system type.
  */
 void
-vfsinit()
+vfsinit(void)
 {
-	extern struct vfsops *vfs_list_initial[];
-	int i;
+
+	/*
+	 * Initialize the namei pathname buffer pool and cache.
+	 */
+	pnbuf_cache = pool_cache_init(MAXPATHLEN, 0, 0, 0, "pnbufpl",
+	    NULL, IPL_NONE, NULL, NULL, NULL);
+	KASSERT(pnbuf_cache != NULL);
 
 	/*
 	 * Initialize the vnode table
@@ -325,10 +319,12 @@ vfsinit()
 	 */
 	nchinit();
 
+#ifdef DEBUG
 	/*
-	 * Initialize the list of vnode operations.
+	 * Check the list of vnode operations.
 	 */
-	vfs_op_init();
+	vfs_op_check();
+#endif
 
 	/*
 	 * Initialize the special vnode operations.
@@ -336,15 +332,141 @@ vfsinit()
 	vfs_opv_init(vfs_special_vnodeopv_descs);
 
 	/*
+	 * Initialise generic dirhash.
+	 */
+	dirhash_init();
+
+	/*
+	 * Initialise VFS hooks.
+	 */
+	vfs_hooks_init();
+
+	/*
 	 * Establish each file system which was statically
 	 * included in the kernel.
 	 */
-	vattr_null(&va_null);
-	for (i = 0; vfs_list_initial[i] != NULL; i++) {
-		if (vfs_attach(vfs_list_initial[i])) {
-			printf("multiple `%s' file systems",
-			    vfs_list_initial[i]->vfs_name);
-			panic("vfsinit");
+	module_init_class(MODULE_CLASS_VFS);
+}
+
+/*
+ * Drop a reference to a file system type.
+ */
+void
+vfs_delref(struct vfsops *vfs)
+{
+
+	mutex_enter(&vfs_list_lock);
+	vfs->vfs_refcount--;
+	mutex_exit(&vfs_list_lock);
+}
+
+/*
+ * Establish a file system and initialize it.
+ */
+int
+vfs_attach(struct vfsops *vfs)
+{
+	struct vfsops *v;
+	int error = 0;
+
+	mutex_enter(&vfs_list_lock);
+
+	/*
+	 * Make sure this file system doesn't already exist.
+	 */
+	LIST_FOREACH(v, &vfs_list, vfs_list) {
+		if (strcmp(vfs->vfs_name, v->vfs_name) == 0) {
+			error = EEXIST;
+			goto out;
 		}
 	}
+
+	/*
+	 * Initialize the vnode operations for this file system.
+	 */
+	vfs_opv_init(vfs->vfs_opv_descs);
+
+	/*
+	 * Now initialize the file system itself.
+	 */
+	(*vfs->vfs_init)();
+
+	/*
+	 * ...and link it into the kernel's list.
+	 */
+	LIST_INSERT_HEAD(&vfs_list, vfs, vfs_list);
+
+	/*
+	 * Sanity: make sure the reference count is 0.
+	 */
+	vfs->vfs_refcount = 0;
+ out:
+	mutex_exit(&vfs_list_lock);
+	return (error);
+}
+
+/*
+ * Remove a file system from the kernel.
+ */
+int
+vfs_detach(struct vfsops *vfs)
+{
+	struct vfsops *v;
+	int error = 0;
+
+	mutex_enter(&vfs_list_lock);
+
+	/*
+	 * Make sure no one is using the filesystem.
+	 */
+	if (vfs->vfs_refcount != 0) {
+		error = EBUSY;
+		goto out;
+	}
+
+	/*
+	 * ...and remove it from the kernel's list.
+	 */
+	LIST_FOREACH(v, &vfs_list, vfs_list) {
+		if (v == vfs) {
+			LIST_REMOVE(v, vfs_list);
+			break;
+		}
+	}
+
+	if (v == NULL) {
+		error = ESRCH;
+		goto out;
+	}
+
+	/*
+	 * Now run the file system-specific cleanups.
+	 */
+	(*vfs->vfs_done)();
+
+	/*
+	 * Free the vnode operations vector.
+	 */
+	vfs_opv_free(vfs->vfs_opv_descs);
+ out:
+ 	mutex_exit(&vfs_list_lock);
+	return (error);
+}
+
+void
+vfs_reinit(void)
+{
+	struct vfsops *vfs;
+
+	mutex_enter(&vfs_list_lock);
+	LIST_FOREACH(vfs, &vfs_list, vfs_list) {
+		if (vfs->vfs_reinit) {
+			vfs->vfs_refcount++;
+			mutex_exit(&vfs_list_lock);
+			(*vfs->vfs_reinit)();
+			mutex_enter(&vfs_list_lock);
+			vfs->vfs_refcount--;
+		}
+	}
+	mutex_exit(&vfs_list_lock);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: strfile.h,v 1.5 1999/12/30 01:26:44 simonb Exp $	*/
+/*	$NetBSD: strfile.h,v 1.7 2008/10/19 07:56:42 apb Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,21 +34,21 @@
  *	@(#)strfile.h	8.1 (Berkeley) 5/31/93
  */
 
-#include <sys/types.h>
+#include <stdint.h>
 
 #define	STR_ENDSTRING(line,tbl) \
 	((line)[0] == (tbl).str_delim && (line)[1] == '\n')
 
 typedef struct {				/* information table */
 #define	VERSION		1
-	u_int32_t	str_version;		/* version number */
-	u_int32_t	str_numstr;		/* # of strings in the file */
-	u_int32_t	str_longlen;		/* length of longest string */
-	u_int32_t	str_shortlen;		/* length of shortest string */
+	uint32_t	str_version;		/* version number */
+	uint32_t	str_numstr;		/* # of strings in the file */
+	uint32_t	str_longlen;		/* length of longest string */
+	uint32_t	str_shortlen;		/* length of shortest string */
 #define	STR_RANDOM	0x1			/* randomized pointers */
 #define	STR_ORDERED	0x2			/* ordered pointers */
 #define	STR_ROTATED	0x4			/* rot-13'd text */
-	u_int32_t	str_flags;		/* bit field for flags */
+	uint32_t	str_flags;		/* bit field for flags */
 	unsigned char	stuff[4];		/* long aligned space */
 #define	str_delim	stuff[0]		/* delimiting character */
 } STRFILE;

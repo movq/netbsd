@@ -1,4 +1,4 @@
-/*	$NetBSD: flsc.c,v 1.25 1999/09/30 22:59:52 thorpej Exp $	*/
+/*	$NetBSD: flsc.c,v 1.41 2008/04/13 04:55:52 tsutsui Exp $ */
 
 /*
  * Copyright (c) 1997 Michael L. Hitch
@@ -43,6 +43,9 @@
 
 #include "opt_ddb.h"
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: flsc.c,v 1.41 2008/04/13 04:55:52 tsutsui Exp $");
+
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -54,6 +57,8 @@
 #include <sys/proc.h>
 #include <sys/user.h>
 #include <sys/queue.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
@@ -70,35 +75,27 @@
 #include <amiga/dev/flscvar.h>
 #include <amiga/dev/zbusvar.h>
 
-void	flscattach	__P((struct device *, struct device *, void *));
-int	flscmatch	__P((struct device *, struct cfdata *, void *));
+int	flscmatch(device_t, cfdata_t, void *);
+void	flscattach(device_t, device_t, void *);
 
 /* Linkup to the rest of the kernel */
-struct cfattach flsc_ca = {
-	sizeof(struct flsc_softc), flscmatch, flscattach
-};
-
-struct scsipi_device flsc_dev = {
-	NULL,			/* Use default error handler */
-	NULL,			/* have a queue, served by this */
-	NULL,			/* have no async handler */
-	NULL,			/* Use default 'done' routine */
-};
+CFATTACH_DECL_NEW(flsc, sizeof(struct flsc_softc),
+    flscmatch, flscattach, NULL, NULL);
 
 /*
  * Functions and the switch for the MI code.
  */
-u_char	flsc_read_reg __P((struct ncr53c9x_softc *, int));
-void	flsc_write_reg __P((struct ncr53c9x_softc *, int, u_char));
-int	flsc_dma_isintr __P((struct ncr53c9x_softc *));
-void	flsc_dma_reset __P((struct ncr53c9x_softc *));
-int	flsc_dma_intr __P((struct ncr53c9x_softc *));
-int	flsc_dma_setup __P((struct ncr53c9x_softc *, caddr_t *,
-	    size_t *, int, size_t *));
-void	flsc_dma_go __P((struct ncr53c9x_softc *));
-void	flsc_dma_stop __P((struct ncr53c9x_softc *));
-int	flsc_dma_isactive __P((struct ncr53c9x_softc *));
-void	flsc_clear_latched_intr __P((struct ncr53c9x_softc *));
+uint8_t	flsc_read_reg(struct ncr53c9x_softc *, int);
+void	flsc_write_reg(struct ncr53c9x_softc *, int, uint8_t);
+int	flsc_dma_isintr(struct ncr53c9x_softc *);
+void	flsc_dma_reset(struct ncr53c9x_softc *);
+int	flsc_dma_intr(struct ncr53c9x_softc *);
+int	flsc_dma_setup(struct ncr53c9x_softc *, uint8_t **,
+	    size_t *, int, size_t *);
+void	flsc_dma_go(struct ncr53c9x_softc *);
+void	flsc_dma_stop(struct ncr53c9x_softc *);
+int	flsc_dma_isactive(struct ncr53c9x_softc *);
+void	flsc_clear_latched_intr(struct ncr53c9x_softc *);
 
 struct ncr53c9x_glue flsc_glue = {
 	flsc_read_reg,
@@ -125,51 +122,47 @@ extern int shift_nosync;
  * if we are an Advanced Systems & Software FastlaneZ3
  */
 int
-flscmatch(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+flscmatch(device_t parent, cfdata_t cf, void *aux)
 {
 	struct zbus_args *zap;
 
 	if (!is_a4000() && !is_a3000())
-		return(0);
+		return 0;
 
 	zap = aux;
 	if (zap->manid == 0x2140 && zap->prodid == 11
 	    && iszthreepa(zap->pa))
-		return(1);
+		return 1;
 
-	return(0);
+	return 0;
 }
 
 /*
  * Attach this instance, and then all the sub-devices
  */
 void
-flscattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+flscattach(device_t parent, device_t self, void *aux)
 {
-	struct flsc_softc *fsc = (void *)self;
+	struct flsc_softc *fsc = device_private(self);
 	struct ncr53c9x_softc *sc = &fsc->sc_ncr53c9x;
 	struct zbus_args  *zap;
 
 	/*
 	 * Set up the glue for MI code early; we use some of it here.
 	 */
+	sc->sc_dev = self;
 	sc->sc_glue = &flsc_glue;
 
 	/*
 	 * Save the regs
 	 */
 	zap = aux;
-	fsc->sc_dmabase = (volatile u_char *)zap->va;
-	fsc->sc_reg = &((volatile u_char *)zap->va)[0x1000001];
+	fsc->sc_dmabase = (volatile uint8_t *)zap->va;
+	fsc->sc_reg = &((volatile uint8_t *)zap->va)[0x1000001];
 
-	sc->sc_freq = 40;		/* Clocked at 40Mhz */
+	sc->sc_freq = 40;		/* Clocked at 40 MHz */
 
-	printf(": address %p", fsc->sc_reg);
+	aprint_normal(": address %p", fsc->sc_reg);
 
 	sc->sc_id = 7;
 
@@ -203,9 +196,10 @@ flscattach(parent, self, aux)
 	fsc->sc_portbits = 0xa0 | FLSC_PB_EDI | FLSC_PB_ESI;
 	fsc->sc_hardbits = fsc->sc_reg[0x40];
 
-	fsc->sc_alignbuf = (char *)((u_long)fsc->sc_unalignbuf & -4);
+	fsc->sc_alignbuf = (uint8_t *)((u_long)fsc->sc_unalignbuf & -4);
 
-	sc->sc_dev.dv_cfdata->cf_flags |= (scsi_nosync >> shift_nosync) & 0xffff;
+	device_cfdata(self)->cf_flags |=
+	    (scsi_nosync >> shift_nosync) & 0xffff;
 	shift_nosync += 16;
 	ncr53c9x_debug |= (scsi_nosync >> shift_nosync) & 0xffff;
 	shift_nosync += 16;
@@ -213,7 +207,7 @@ flscattach(parent, self, aux)
 	/*
 	 * Configure interrupts.
 	 */
-	fsc->sc_isr.isr_intr = (int (*)(void *))ncr53c9x_intr;
+	fsc->sc_isr.isr_intr = ncr53c9x_intr;
 	fsc->sc_isr.isr_arg  = sc;
 	fsc->sc_isr.isr_ipl  = 2;
 	add_isr(&fsc->sc_isr);
@@ -223,19 +217,17 @@ flscattach(parent, self, aux)
 	/*
 	 * Now try to attach all the sub-devices
 	 */
-	sc->sc_adapter.scsipi_cmd = ncr53c9x_scsi_cmd;
-	sc->sc_adapter.scsipi_minphys = minphys; 
-	ncr53c9x_attach(sc, &flsc_dev);
+	sc->sc_adapter.adapt_request = ncr53c9x_scsipi_request;
+	sc->sc_adapter.adapt_minphys = minphys;
+	ncr53c9x_attach(sc);
 }
 
 /*
  * Glue functions.
  */
 
-u_char
-flsc_read_reg(sc, reg)
-	struct ncr53c9x_softc *sc;
-	int reg;
+uint8_t
+flsc_read_reg(struct ncr53c9x_softc *sc, int reg)
 {
 	struct flsc_softc *fsc = (struct flsc_softc *)sc;
 
@@ -243,17 +235,14 @@ flsc_read_reg(sc, reg)
 }
 
 void
-flsc_write_reg(sc, reg, val)
-	struct ncr53c9x_softc *sc;
-	int reg;
-	u_char val;
+flsc_write_reg(struct ncr53c9x_softc *sc, int reg, uint8_t val)
 {
 	struct flsc_softc *fsc = (struct flsc_softc *)sc;
 	struct ncr53c9x_tinfo *ti;
-	u_char v = val;
+	uint8_t v = val;
 
 	if (fsc->sc_piomode && reg == NCR_CMD &&
-	    v == (NCRCMD_TRANS|NCRCMD_DMA)) {
+	    v == (NCRCMD_TRANS | NCRCMD_DMA)) {
 		v = NCRCMD_TRANS;
 	}
 	/*
@@ -265,7 +254,7 @@ flsc_write_reg(sc, reg, val)
 	 */
 	if (reg == NCR_SELID) {
 		ti = &sc->sc_tinfo[
-		    sc->sc_nexus->xs->sc_link->scsipi_scsi.target];
+		    sc->sc_nexus->xs->xs_periph->periph_target];
 		if (sc->sc_nexus->xs->xs_control & XS_CTL_POLL) {
 			if (ti->flags & T_SYNCMODE) {
 				ti->flags ^= T_SYNCMODE | T_NEGOTIATE;
@@ -288,21 +277,20 @@ flsc_write_reg(sc, reg, val)
 	    sc->sc_flags & NCR_SYNCHNEGO &&
 	     sc->sc_nexus->xs->xs_control & XS_CTL_POLL) {
 		ti = &sc->sc_tinfo[
-		    sc->sc_nexus->xs->sc_link->scsipi_scsi.target];
+		    sc->sc_nexus->xs->xs_periph->periph_target];
 		ti->offset = 0;
 	}
 	fsc->sc_reg[reg * 4] = v;
 }
 
 int
-flsc_dma_isintr(sc)
-	struct ncr53c9x_softc *sc;
+flsc_dma_isintr(struct ncr53c9x_softc *sc)
 {
 	struct flsc_softc *fsc = (struct flsc_softc *)sc;
-	unsigned hardbits;
+	unsigned int hardbits;
 
 	hardbits = fsc->sc_reg[0x40];
-	if (hardbits & FLSC_HB_IACT)
+	if ((hardbits & FLSC_HB_IACT) != 0)
 		return (fsc->sc_csr = 0);
 
 	if (sc->sc_state == NCR_CONNECTED || sc->sc_state == NCR_SELECTING)
@@ -310,13 +298,13 @@ flsc_dma_isintr(sc)
 	else
 		fsc->sc_portbits &= ~FLSC_PB_LED;
 
-	if ((hardbits & FLSC_HB_CREQ) && !(hardbits & FLSC_HB_MINT) &&
-	    fsc->sc_reg[NCR_STAT * 4] & NCRSTAT_INT) {
+	if ((hardbits & FLSC_HB_CREQ) != 0 && (hardbits & FLSC_HB_MINT) == 0 &&
+	    (fsc->sc_reg[NCR_STAT * 4] & NCRSTAT_INT) != 0) {
 		return 1;
 	}
 	/* Do I still need this? */
-	if (fsc->sc_piomode && fsc->sc_reg[NCR_STAT * 4] & NCRSTAT_INT &&
-	    !(hardbits & FLSC_HB_MINT))
+	if (fsc->sc_piomode && (fsc->sc_reg[NCR_STAT * 4] & NCRSTAT_INT) != 0 &&
+	    (hardbits & FLSC_HB_MINT) == 0)
 		return 1;
 
 	fsc->sc_reg[0x40] = fsc->sc_portbits & ~FLSC_PB_INT_BITS;
@@ -325,8 +313,7 @@ flsc_dma_isintr(sc)
 }
 
 void
-flsc_clear_latched_intr(sc)
-	struct ncr53c9x_softc *sc;
+flsc_clear_latched_intr(struct ncr53c9x_softc *sc)
 {
 	struct flsc_softc *fsc = (struct flsc_softc *)sc;
 
@@ -335,47 +322,47 @@ flsc_clear_latched_intr(sc)
 }
 
 void
-flsc_dma_reset(sc)
-	struct ncr53c9x_softc *sc;
+flsc_dma_reset(struct ncr53c9x_softc *sc)
 {
 	struct flsc_softc *fsc = (struct flsc_softc *)sc;
-struct ncr53c9x_tinfo *ti;
+	struct ncr53c9x_tinfo *ti;
 
-if (sc->sc_nexus)
-  ti = &sc->sc_tinfo[sc->sc_nexus->xs->sc_link->scsipi_scsi.target];
-else
-  ti = &sc->sc_tinfo[1];	/* XXX */
-if (fsc->sc_active) {
-  printf("dmaaddr %p dmasize %d stat %x flags %x off %d per %d ff %x",
-     *fsc->sc_dmaaddr, fsc->sc_dmasize, fsc->sc_reg[NCR_STAT * 4],
-     ti->flags, ti->offset, ti->period, fsc->sc_reg[NCR_FFLAG * 4]);
-  printf(" intr %x\n", fsc->sc_reg[NCR_INTR * 4]);
+	if (sc->sc_nexus)
+		ti = &sc->sc_tinfo[sc->sc_nexus->xs->xs_periph->periph_target];
+	else
+		ti = &sc->sc_tinfo[1];	/* XXX */
+	if (fsc->sc_active) {
+		printf("dmaaddr %p dmasize %d stat %x flags %x off %d ",
+		    *fsc->sc_dmaaddr, fsc->sc_dmasize, 
+		    fsc->sc_reg[NCR_STAT * 4], ti->flags, ti->offset);
+		printf("per %d ff %x intr %x\n", 
+		    ti->period, fsc->sc_reg[NCR_FFLAG * 4], 
+		    fsc->sc_reg[NCR_INTR * 4]);
 #ifdef DDB
-  Debugger();
+		Debugger();
 #endif
-}
+	}
 	fsc->sc_portbits &= ~FLSC_PB_DMA_BITS;
 	fsc->sc_reg[0x40] = fsc->sc_portbits;
 	fsc->sc_reg[0x80] = 0;
-	*((u_long *)fsc->sc_dmabase) = 0;
+	*((volatile uint32_t *)fsc->sc_dmabase) = 0;
 	fsc->sc_active = 0;
 	fsc->sc_piomode = 0;
 }
 
 int
-flsc_dma_intr(sc)
-	struct ncr53c9x_softc *sc;
+flsc_dma_intr(struct ncr53c9x_softc *sc)
 {
 	register struct flsc_softc *fsc = (struct flsc_softc *)sc;
-	register u_char	*p;
-	volatile u_char *cmdreg, *intrreg, *statreg, *fiforeg;
-	register u_int	flscphase, flscstat, flscintr;
-	register int	cnt;
+	uint8_t *p;
+	volatile uint8_t *cmdreg, *intrreg, *statreg, *fiforeg;
+	u_int flscphase, flscstat, flscintr;
+	int cnt;
 
 	NCR_DMA(("flsc_dma_intr: pio %d cnt %d int %x stat %x fifo %d ",
 	    fsc->sc_piomode, fsc->sc_dmasize, sc->sc_espintr, sc->sc_espstat,
 	    fsc->sc_reg[NCR_FFLAG * 4] & NCRFIFO_FF));
-	if (!(fsc->sc_reg[0x40] & FLSC_HB_CREQ))
+	if ((fsc->sc_reg[0x40] & FLSC_HB_CREQ) == 0)
 		printf("flsc_dma_intr: csr %x stat %x intr %x\n", fsc->sc_csr,
 		    sc->sc_espstat, sc->sc_espintr);
 	if (fsc->sc_active == 0) {
@@ -388,7 +375,7 @@ flsc_dma_intr(sc)
 		fsc->sc_portbits &= ~FLSC_PB_DMA_BITS;
 		fsc->sc_reg[0x40] = fsc->sc_portbits;
 		fsc->sc_reg[0x80] = 0;
-		*((u_long *)fsc->sc_dmabase) = 0;
+		*((volatile uint32_t *)fsc->sc_dmabase) = 0;
 		cnt = fsc->sc_reg[NCR_TCL * 4];
 		cnt += fsc->sc_reg[NCR_TCM * 4] << 8;
 		cnt += fsc->sc_reg[NCR_TCH * 4] << 16;
@@ -426,8 +413,8 @@ flsc_dma_intr(sc)
 
 	p = *fsc->sc_dmaaddr;
 	flscphase = sc->sc_phase;
-	flscstat = (u_int) sc->sc_espstat;
-	flscintr = (u_int) sc->sc_espintr;
+	flscstat = (u_int)sc->sc_espstat;
+	flscintr = (u_int)sc->sc_espintr;
 	cmdreg = fsc->sc_reg + NCR_CMD * 4;
 	fiforeg = fsc->sc_reg + NCR_FIFO * 4;
 	statreg = fsc->sc_reg + NCR_STAT * 4;
@@ -462,14 +449,15 @@ NCR_DMA(("flsc_dma_intr: PIO out- phase %d cnt %d active %d\n", flscphase, cnt,
 		}
 
 		if (fsc->sc_active && cnt) {
-			while (!(*statreg & 0x80));
+			while ((*statreg & 0x80) == 0)
+				;
 			flscstat = *statreg;
 			flscintr = *intrreg;
 			flscphase = (flscintr & NCRINTR_DIS)
 				    ? /* Disconnected */ BUSFREE_PHASE
 				    : flscstat & PHASE_MASK;
 		}
-	} while (cnt && fsc->sc_active && (flscintr & NCRINTR_BS));
+	} while (cnt && fsc->sc_active && (flscintr & NCRINTR_BS) != 0);
 #if 1
 if (fsc->sc_dmasize < 8 && cnt)
   printf("flsc_dma_intr: short transfer: dmasize %d cnt %d\n",
@@ -478,8 +466,8 @@ if (fsc->sc_dmasize < 8 && cnt)
 	NCR_DMA(("flsc_dma_intr: PIO transfer [%d], %d->%d phase %d stat %x intr %x\n",
 	    *fsc->sc_pdmalen, fsc->sc_dmasize, cnt, flscphase, flscstat, flscintr));
 	sc->sc_phase = flscphase;
-	sc->sc_espstat = (u_char) flscstat;
-	sc->sc_espintr = (u_char) flscintr;
+	sc->sc_espstat = (uint8_t)flscstat;
+	sc->sc_espintr = (uint8_t)flscintr;
 	*fsc->sc_dmaaddr = p;
 	*fsc->sc_pdmalen -= fsc->sc_dmasize - cnt;
 	fsc->sc_dmasize = cnt;
@@ -492,16 +480,12 @@ if (fsc->sc_dmasize < 8 && cnt)
 }
 
 int
-flsc_dma_setup(sc, addr, len, datain, dmasize)
-	struct ncr53c9x_softc *sc;
-	caddr_t *addr;
-	size_t *len;
-	int datain;
-	size_t *dmasize;
+flsc_dma_setup(struct ncr53c9x_softc *sc, uint8_t **addr, size_t *len,
+               int datain, size_t *dmasize)
 {
 	struct flsc_softc *fsc = (struct flsc_softc *)sc;
 	paddr_t pa;
-	u_char *ptr;
+	uint8_t *ptr;
 	size_t xfer;
 
 	fsc->sc_dmaaddr = addr;
@@ -532,7 +516,7 @@ flsc_dma_setup(sc, addr, len, datain, dmasize)
 	 * DMA can be nasty for high-speed serial input, so limit the
 	 * size of this DMA operation if the serial port is running at
 	 * a high speed (higher than 19200 for now - should be adjusted
-	 * based on cpu type and speed?).
+	 * based on CPU type and speed?).
 	 * XXX - add serial speed check XXX
 	 */
 	if (ser_open_speed > 19200 && flsc_max_dma != 0 &&
@@ -540,13 +524,13 @@ flsc_dma_setup(sc, addr, len, datain, dmasize)
 		fsc->sc_dmasize = flsc_max_dma;
 	ptr = *addr;			/* Kernel virtual address */
 	pa = kvtop(ptr);		/* Physical address of DMA */
-	xfer = min(fsc->sc_dmasize, NBPG - (pa & (NBPG - 1)));
+	xfer = min(fsc->sc_dmasize, PAGE_SIZE - (pa & (PAGE_SIZE - 1)));
 	fsc->sc_xfr_align = 0;
 	fsc->sc_piomode = 0;
 	fsc->sc_portbits &= ~FLSC_PB_DMA_BITS;
 	fsc->sc_reg[0x40] = fsc->sc_portbits;
 	fsc->sc_reg[0x80] = 0;
-	*((u_long *)fsc->sc_dmabase) = 0;
+	*((volatile uint32_t *)fsc->sc_dmabase) = 0;
 
 	/*
 	 * If output and length < 16, copy to fifo
@@ -579,8 +563,8 @@ flsc_dma_setup(sc, addr, len, datain, dmasize)
 	 * If unaligned address, read unaligned bytes into alignment buffer
 	 */
 	else if ((int)ptr & 3 || xfer & 3) {
-		pa = kvtop((caddr_t)fsc->sc_alignbuf);
-		xfer = fsc->sc_dmasize = min(xfer, sizeof (fsc->sc_unalignbuf));
+		pa = kvtop((void *)fsc->sc_alignbuf);
+		xfer = fsc->sc_dmasize = min(xfer, sizeof(fsc->sc_unalignbuf));
 		NCR_DMA(("flsc_dma_setup: align read by %d bytes\n", xfer));
 		fsc->sc_xfr_align = 1;
 	}
@@ -591,7 +575,7 @@ flsc_dma_setup(sc, addr, len, datain, dmasize)
 	else if (fsc->sc_dmasize < 4) {
 		NCR_DMA(("flsc_dma_setup: read remaining %d bytes\n",
 		    fsc->sc_dmasize));
-		pa = kvtop((caddr_t)fsc->sc_alignbuf);
+		pa = kvtop((void *)fsc->sc_alignbuf);
 		fsc->sc_xfr_align = 1;
 	}
 	/*
@@ -605,10 +589,10 @@ flsc_dma_setup(sc, addr, len, datain, dmasize)
 	while (xfer < fsc->sc_dmasize) {
 		if ((pa + xfer) != kvtop(*addr + xfer))
 			break;
-		if ((fsc->sc_dmasize - xfer) < NBPG)
+		if ((fsc->sc_dmasize - xfer) < PAGE_SIZE)
 			xfer = fsc->sc_dmasize;
 		else
-			xfer += NBPG;
+			xfer += PAGE_SIZE;
 	}
 
 	fsc->sc_dmasize = xfer;
@@ -618,7 +602,7 @@ flsc_dma_setup(sc, addr, len, datain, dmasize)
 	if (mmutype == MMU_68040) {
 		if (fsc->sc_xfr_align) {
 			int n;
-			for (n = 0; n < sizeof (fsc->sc_unalignbuf); ++n)
+			for (n = 0; n < sizeof(fsc->sc_unalignbuf); ++n)
 				fsc->sc_alignbuf[n] = n | 0x80;
 			dma_cachectl(fsc->sc_alignbuf,
 			    sizeof(fsc->sc_unalignbuf));
@@ -628,7 +612,7 @@ flsc_dma_setup(sc, addr, len, datain, dmasize)
 	}
 #endif
 	fsc->sc_reg[0x80] = 0;
-	*((u_long *)(fsc->sc_dmabase + (pa & 0x00fffffc))) = pa;
+	*((volatile uint32_t *)(fsc->sc_dmabase + (pa & 0x00fffffc))) = pa;
 	fsc->sc_portbits &= ~FLSC_PB_DMA_BITS;
 	fsc->sc_portbits |= FLSC_PB_ENABLE_DMA |
 	    (fsc->sc_datain ? FLSC_PB_DMA_READ : FLSC_PB_DMA_WRITE);
@@ -640,8 +624,7 @@ flsc_dma_setup(sc, addr, len, datain, dmasize)
 }
 
 void
-flsc_dma_go(sc)
-	struct ncr53c9x_softc *sc;
+flsc_dma_go(struct ncr53c9x_softc *sc)
 {
 	struct flsc_softc *fsc = (struct flsc_softc *)sc;
 
@@ -659,8 +642,7 @@ flsc_dma_go(sc)
 }
 
 void
-flsc_dma_stop(sc)
-	struct ncr53c9x_softc *sc;
+flsc_dma_stop(struct ncr53c9x_softc *sc)
 {
 	struct flsc_softc *fsc = (struct flsc_softc *)sc;
 
@@ -668,13 +650,12 @@ flsc_dma_stop(sc)
 	fsc->sc_reg[0x40] = fsc->sc_portbits;
 
 	fsc->sc_reg[0x80] = 0;
-	*((u_long *)fsc->sc_dmabase) = 0;
+	*((volatile uint32_t *)fsc->sc_dmabase) = 0;
 	fsc->sc_piomode = 0;
 }
 
 int
-flsc_dma_isactive(sc)
-	struct ncr53c9x_softc *sc;
+flsc_dma_isactive(struct ncr53c9x_softc *sc)
 {
 	struct flsc_softc *fsc = (struct flsc_softc *)sc;
 

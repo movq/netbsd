@@ -1,4 +1,4 @@
-/*	$NetBSD: toucholap.c,v 1.9 1999/04/13 14:08:19 mrg Exp $	*/
+/*	$NetBSD: toucholap.c,v 1.15 2007/01/21 13:25:36 jdc Exp $	*/
 
 /*
  * Copyright (c) 1981, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,36 +34,36 @@
 #if 0
 static char sccsid[] = "@(#)toucholap.c	8.2 (Berkeley) 5/4/94";
 #else
-__RCSID("$NetBSD: toucholap.c,v 1.9 1999/04/13 14:08:19 mrg Exp $");
+__RCSID("$NetBSD: toucholap.c,v 1.15 2007/01/21 13:25:36 jdc Exp $");
 #endif
 #endif				/* not lint */
 
 #include "curses.h"
+#include "curses_private.h"
 
 /*
  * touchoverlap --
  *	Touch, on win2, the part that overlaps with win1.
  */
 int
-touchoverlap(win1, win2)
-	WINDOW *win1, *win2;
+touchoverlap(WINDOW *win1, WINDOW *win2)
 {
 	int     y, endy, endx, starty, startx;
 
 #ifdef DEBUG
-	__CTRACE("touchoverlap: (%0.2o, %0.2o);\n", win1, win2);
+	__CTRACE(__CTRACE_WINDOW, "touchoverlap: (%p, %p);\n", win1, win2);
 #endif
 	starty = max(win1->begy, win2->begy);
 	startx = max(win1->begx, win2->begx);
 	endy = min(win1->maxy + win1->begy, win2->maxy + win2->begx);
 	endx = min(win1->maxx + win1->begx, win2->maxx + win2->begx);
 #ifdef DEBUG
-	__CTRACE("touchoverlap: from (%d,%d) to (%d,%d)\n",
+	__CTRACE(__CTRACE_WINDOW, "touchoverlap: from (%d,%d) to (%d,%d)\n",
 	    starty, startx, endy, endx);
-	__CTRACE("touchoverlap: win1 (%d,%d) to (%d,%d)\n",
+	__CTRACE(__CTRACE_WINDOW, "touchoverlap: win1 (%d,%d) to (%d,%d)\n",
 	    win1->begy, win1->begx, win1->begy + win1->maxy,
 	    win1->begx + win1->maxx);
-	__CTRACE("touchoverlap: win2 (%d,%d) to (%d,%d)\n",
+	__CTRACE(__CTRACE_WINDOW, "touchoverlap: win2 (%d,%d) to (%d,%d)\n",
 	    win2->begy, win2->begx, win2->begy + win2->maxy,
 	    win2->begx + win2->maxx);
 #endif
@@ -78,6 +74,6 @@ touchoverlap(win1, win2)
 	endy -= win2->begy;
 	endx -= win2->begx;
 	for (--endx, y = starty; y < endy; y++)
-		__touchline(win2, y, startx, endx, 0);
+		__touchline(win2, y, startx, endx);
 	return (OK);
 }

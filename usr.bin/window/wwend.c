@@ -1,4 +1,4 @@
-/*	$NetBSD: wwend.c,v 1.4 1997/11/21 08:37:16 lukem Exp $	*/
+/*	$NetBSD: wwend.c,v 1.8 2006/12/18 20:04:55 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,18 +37,18 @@
 #if 0
 static char sccsid[] = "@(#)wwend.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: wwend.c,v 1.4 1997/11/21 08:37:16 lukem Exp $");
+__RCSID("$NetBSD: wwend.c,v 1.8 2006/12/18 20:04:55 christos Exp $");
 #endif
 #endif /* not lint */
 
+#include <stdlib.h>
 #include <unistd.h>
 #include "ww.h"
 #include "tt.h"
 #include "xx.h"
 
 void
-wwend(exit)
-	int exit;
+wwend(int quit __unused)
 {
 	if (tt.tt_checkpoint) {
 		(void) alarm(0);
@@ -61,14 +57,13 @@ wwend(exit)
 	xxend();
 	(void) wwsettty(0, &wwoldtty);
 #ifdef TERMINFO
-	if (exit)
+	if (quit)
 		wwterminfoend();
 #endif
 }
 
 void
-wwquit(dummy)
-	int dummy;
+wwquit(int dummy __unused)
 {
 	wwend(1);
 	exit(1);

@@ -1,4 +1,4 @@
-/*	$NetBSD: arcbios.c,v 1.5 2000/03/06 21:36:06 thorpej Exp $	*/
+/*	$NetBSD: arcbios.c,v 1.16 2005/12/24 23:23:59 perry Exp $	*/
 /*	$OpenBSD: arcbios.c,v 1.3 1998/06/06 06:33:33 mickey Exp $	*/
 
 /*-
@@ -30,63 +30,48 @@
  * SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: arcbios.c,v 1.16 2005/12/24 23:23:59 perry Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
 #include <sys/user.h>
 #include <sys/kcore.h>
-#include <vm/vm.h>
+#include <uvm/uvm_extern.h>
 #include <dev/cons.h>
 #include <machine/cpu.h>
 #include <arc/arc/arcbios.h>
-#include <arc/arc/arctype.h>
 
-int Bios_Read __P((int, char *, int, int *));
-int Bios_Write __P((int, char *, int, int *));
-int Bios_Open __P((char *, int, u_int *));
-int Bios_Close __P((u_int));
-arc_mem_t *Bios_GetMemoryDescriptor __P((arc_mem_t *));
-arc_sid_t *Bios_GetSystemId __P((void));
-arc_config_t *Bios_GetChild __P((arc_config_t *));
-arc_dsp_stat_t *Bios_GetDisplayStatus __P((int));
+int Bios_Read(int, char *, int, int *);
+int Bios_Write(int, char *, int, int *);
+int Bios_Open(char *, int, u_int *);
+int Bios_Close(u_int);
+arc_mem_t *Bios_GetMemoryDescriptor(arc_mem_t *);
+arc_sid_t *Bios_GetSystemId(void);
+arc_config_t *Bios_GetChild(arc_config_t *);
+arc_config_t *Bios_GetPeer(arc_config_t *);
+arc_dsp_stat_t *Bios_GetDisplayStatus(int);
 
-char vendor[sizeof(((arc_sid_t *)0)->vendor) + 1];
-char prodid[sizeof(((arc_sid_t *)0)->prodid) + 1];
+static void bios_config_id_copy(arc_config_t *, char *, size_t);
+static void bios_config_component(arc_config_t *);
+static void bios_config_subtree(arc_config_t *);
 
-arc_dsp_stat_t	displayinfo;		/* Save area for display status info. */
-static struct systypes {
-	char *sys_vend;		/* Vendor ID if name is ambigous */
-	char *sys_name;		/* May be left NULL if name is sufficient */
-	int  sys_type;
-} sys_types[] = {
-#ifdef arc
-    { NULL,		"PICA-61",			ACER_PICA_61 },
-    { NULL,		"NEC-R94",			ACER_PICA_61 },
-    { NULL,		"NEC-RD94",			NEC_RD94 },
-    { NULL,		"DESKTECH-TYNE",		DESKSTATION_TYNE }, 
-    { NULL,		"DESKTECH-ARCStation I",	DESKSTATION_RPC44 },
-    { NULL,		"Microsoft-Jazz",		MAGNUM },
-    { NULL,		"RM200PCI",			SNI_RM200 },
-#endif
-#ifdef sgi
-    { NULL,		"SGI-IP17",			SGI_CRIMSON },
-    { NULL,		"SGI-IP19",			SGI_ONYX },
-    { NULL,		"SGI-IP20",			SGI_INDIGO },
-    { NULL,		"SGI-IP21",			SGI_POWER },
-    { NULL,		"SGI-IP22",			SGI_INDY },
-    { NULL,		"SGI-IP25",			SGI_POWER10 },
-    { NULL,		"SGI-IP26",			SGI_POWERI },
-    { NULL,		"SGI-IP32",			SGI_O2 },
-#endif
-};
+char arc_vendor_id[sizeof(((arc_sid_t *)0)->vendor) + 1];
+unsigned char arc_product_id[sizeof(((arc_sid_t *)0)->prodid)];
 
-#define KNOWNSYSTEMS (sizeof(sys_types) / sizeof(struct systypes))
+char arc_id[64 + 1];
+
+char arc_displayc_id[64 + 1];		/* DisplayController id */
+arc_dsp_stat_t	arc_displayinfo;	/* Save area for display status info. */
+
+int arc_cpu_l2cache_size = 0;
 
 /*
  *	ARC Bios trampoline code.
  */
 #define ARC_Call(Name,Offset)	\
-__asm__("\n"			\
+__asm("\n"			\
 "	.text\n"		\
 "	.ent	" #Name "\n"	\
 "	.align	3\n"		\
@@ -144,30 +129,28 @@ ARC_Call(Bios_GetDisplayStatus,		0x90);
  *	BIOS based console, for early stage.
  */
 
-int  biosgetc __P((dev_t));
-void biosputc __P((dev_t, int));
+int  biosgetc(dev_t);
+void biosputc(dev_t, int);
 
 /* this is to fake out the console routines, while booting. */
 struct consdev bioscons = {
-	NULL, NULL, biosgetc, biosputc, nullcnpollc, NULL, NODEV, CN_DEAD
+	NULL, NULL, biosgetc, biosputc, nullcnpollc, NULL, NULL,
+	    NULL, NODEV, CN_DEAD
 };
 
 int
-biosgetc(dev)
-	dev_t dev;
+biosgetc(dev_t dev)
 {
 	int cnt;
 	char buf;
 
 	if (Bios_Read(0, &buf, 1, &cnt) != arc_ESUCCESS)
-		return (-1);
-	return (buf & 255);
+		return -1;
+	return buf & 255;
 }
 
 void
-biosputc(dev, ch)
-	dev_t dev;
-	int ch;
+biosputc(dev_t dev, int ch)
 {
 	int cnt;
 	char buf;
@@ -177,7 +160,7 @@ biosputc(dev, ch)
 }
 
 void
-bios_init_console()
+bios_init_console(void)
 {
 	static int initialized = 0;
 
@@ -196,12 +179,10 @@ bios_init_console()
  * Concatenate obvious adjecent segments.
  */
 int
-bios_configure_memory(mem_reserved, mem_clusters, mem_cluster_cnt_return)
-	int *mem_reserved;
-	phys_ram_seg_t *mem_clusters;
-	int *mem_cluster_cnt_return;
+bios_configure_memory(int *mem_reserved, phys_ram_seg_t *mem_clusters,
+    int *mem_cluster_cnt_return)
 {
-	int physmem = 0;		/* Total physical memory size */
+	int bios_physmem = 0;		/* Total physical memory size */
 	int mem_cluster_cnt = 0;
 
 	arc_mem_t *descr = NULL;
@@ -214,7 +195,8 @@ bios_configure_memory(mem_reserved, mem_clusters, mem_cluster_cnt_return)
 
 #ifdef BIOS_MEMORY_DEBUG
 		printf("memory type:%d, 0x%8lx..%8lx, size:%8ld bytes\n",
-		    descr->Type, seg_start, seg_end, seg_end - seg_start);
+		    descr->Type, (u_long)seg_start, (u_long)seg_end,
+		    (u_long)(seg_end - seg_start));
 #endif
 
 		switch (descr->Type) {
@@ -233,7 +215,7 @@ bios_configure_memory(mem_reserved, mem_clusters, mem_cluster_cnt_return)
 		case FreeContigous:
 			reserved = 0;
 account_it:
-			physmem += descr->PageCount * 4096;
+			bios_physmem += descr->PageCount * 4096;
 
 			for (i = 0; i < mem_cluster_cnt; ) {
 				if (mem_reserved[i] == reserved &&
@@ -268,89 +250,95 @@ account_it:
 		}
 	}
 
-#ifdef MEMORY_DEBUG
+#ifdef BIOS_MEMORY_DEBUG
 	for (i = 0; i < mem_cluster_cnt; i++)
 		printf("mem_clusters[%d] = %d:{ 0x%8lx, 0x%8lx }\n", i,
 		    mem_reserved[i],
 		    (long)mem_clusters[i].start,
 		    (long)mem_clusters[i].size);
-	printf("physmem = %d\n", physmem);
+	printf("physmem = %d\n", bios_physmem);
 #endif
 
 	*mem_cluster_cnt_return = mem_cluster_cnt;
-	return (physmem);
+	return bios_physmem;
 }
 
 /*
- * Find out system type.
+ * ARC Firmware present?
  */
 int
-bios_ident()
+bios_ident(void)
 {
-	arc_config_t	*cf;
-	arc_sid_t	*sid;
-	int		i;
 
-	if ((ArcBiosBase->magic != ARC_PARAM_BLK_MAGIC) &&
-	    (ArcBiosBase->magic != ARC_PARAM_BLK_MAGIC_BUG)) {
-		return (-1);	/* This is not an ARC system */
-	}
-
-#ifdef BIOS_IDENT_DEBUG
-	bios_init_console();
-#endif
-	sid = Bios_GetSystemId();
-	if (sid) {
-		bcopy(sid->vendor, vendor, sizeof(sid->vendor));
-		vendor[sizeof(vendor) - 1] = 0;
-		bcopy(sid->prodid, prodid, sizeof(sid->prodid));
-		prodid[sizeof(prodid) - 1] = 0;
-#ifdef BIOS_IDENT_DEBUG
-		printf("BIOS Vendor  ID [%8.8s]\n", sid->vendor);
-		printf("BIOS Product ID [%02x", sid->prodid[0]);
-		for (i = 1; i < sizeof(sid->prodid); i++)
-			printf(":%02x", sid->prodid[i]);
-		printf("]\n");
-#endif
-	} else {
-		strcpy(vendor, "N/A");
-		strcpy(prodid, "N/A");
-	}
-	cf = Bios_GetChild(NULL);
-	if (cf) {
-#ifdef BIOS_IDENT_DEBUG
-		printf("BIOS System ID [%s]\n", cf->id);
-#endif
-		for (i = 0; i < KNOWNSYSTEMS; i++) {
-			if (strcmp(sys_types[i].sys_name, cf->id) != 0)
-				continue;
-			if (sys_types[i].sys_vend &&
-			    strncmp(sys_types[i].sys_vend, sid->vendor,
-			    sizeof(sid->vendor)) != 0)
-				continue;
-			return (sys_types[i].sys_type);	/* Found it. */
-		}
-	}
-
-	bios_init_console();
-	printf("UNIDENTIFIED ARC SYSTEM [%s] VENDOR [%8.8s] PRODID [%02x",
-	       cf ? cf->id : "N/A", vendor, prodid[0]);
-	for (i = 1; i < sizeof(sid->prodid); i++)
-		printf(":%02x", prodid[i]);
-	printf("]\n");
-	printf("Please contact NetBSD (mailto: port-arc@netbsd.org).\n");
-	for (;;)
-		;
+	return (ArcBiosBase->magic == ARC_PARAM_BLK_MAGIC) ||
+	    (ArcBiosBase->magic == ARC_PARAM_BLK_MAGIC_BUG);
 }
 
 /*
  * save various information of BIOS for future use.
  */
-void
-bios_save_info()
+
+static void
+bios_config_id_copy(arc_config_t *cf, char *string, size_t size)
 {
+
+	size--;
+	if (size > cf->id_len)
+		size = cf->id_len;
+	memcpy(string, cf->id, size);
+	string[size] = '\0';
+}
+
+static void
+bios_config_component(arc_config_t *cf)
+{
+
+	switch (cf->class) {
+	case arc_SystemClass:
+		if (cf->type == arc_System)
+			bios_config_id_copy(cf, arc_id, sizeof(arc_id));
+		break;
+	case arc_CacheClass:
+		if (cf->type == arc_SecondaryDcache)
+			arc_cpu_l2cache_size = 4096 << (cf->key & 0xffff);
+		break;
+	case arc_ControllerClass:
+		if (cf->type == arc_DisplayController &&
+		    arc_displayc_id[0] == '\0' /* first found one. XXX */)
+			bios_config_id_copy(cf, arc_displayc_id,
+			    sizeof(arc_displayc_id));
+		break;
+	default:
+		break;
+	}
+}
+
+static
+void bios_config_subtree(arc_config_t *cf)
+{
+
+	for (cf = Bios_GetChild(cf); cf != NULL; cf = Bios_GetPeer(cf)) {
+		bios_config_component(cf);
+		bios_config_subtree(cf);
+	}
+}
+
+void
+bios_save_info(void)
+{
+	arc_sid_t *sid;
+
+	sid = Bios_GetSystemId();
+	if (sid) {
+		memcpy(arc_vendor_id, sid->vendor, sizeof(arc_vendor_id) - 1);
+		arc_vendor_id[sizeof(arc_vendor_id) - 1] = 0;
+		memcpy(arc_product_id, sid->prodid, sizeof(arc_product_id));
+	}
+
+	bios_config_subtree(NULL);
+
 #ifdef arc
-	displayinfo = *Bios_GetDisplayStatus(1);
+	arc_displayinfo = *Bios_GetDisplayStatus(1);
 #endif
 }
 
@@ -360,15 +348,12 @@ bios_save_info()
  * display configuration.
  */
 void
-bios_display_info(xpos, ypos, xsize, ysize)
-	int *xpos;
-	int *ypos;
-	int *xsize;
-	int *ysize;
+bios_display_info(int *xpos, int *ypos, int *xsize, int *ysize)
 {
-	*xpos = displayinfo.CursorXPosition;
-	*ypos = displayinfo.CursorYPosition;
-	*xsize = displayinfo.CursorMaxXPosition;
-	*ysize = displayinfo.CursorMaxYPosition;
+
+	*xpos = arc_displayinfo.CursorXPosition;
+	*ypos = arc_displayinfo.CursorYPosition;
+	*xsize = arc_displayinfo.CursorMaxXPosition;
+	*ysize = arc_displayinfo.CursorMaxYPosition;
 }
 #endif

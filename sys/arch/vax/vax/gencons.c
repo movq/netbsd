@@ -1,4 +1,4 @@
-/*	$NetBSD: gencons.c,v 1.22 2000/01/24 02:40:33 matt Exp $	*/
+/*	$NetBSD: gencons.c,v 1.49 2008/03/11 05:34:03 matt Exp $	*/
 
 /*
  * Copyright (c) 1994 Gordon W. Ross
@@ -35,7 +35,12 @@
 
  /* All bugs are subject to removal without further notice */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: gencons.c,v 1.49 2008/03/11 05:34:03 matt Exp $");
+
 #include "opt_ddb.h"
+#include "opt_cputype.h"
+#include "opt_multiprocessor.h"
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -46,6 +51,8 @@
 #include <sys/conf.h>
 #include <sys/device.h>
 #include <sys/reboot.h>
+#include <sys/kernel.h>
+#include <sys/kauth.h>
 
 #include <dev/cons.h>
 
@@ -55,9 +62,12 @@
 #include <machine/scb.h>
 #include <machine/../vax/gencons.h>
 
-static	struct tty *gencn_tty[4];
+static	struct gc_softc {
+	short alive;
+	short unit;
+	struct tty *gencn_tty;
+} gc_softc[4];
 
-static	int consopened = 0;
 static	int maxttys = 1;
 
 static	int pr_txcs[4] = {PR_TXCS, PR_TXCS1, PR_TXCS2, PR_TXCS3};
@@ -66,248 +76,267 @@ static	int pr_txdb[4] = {PR_TXDB, PR_TXDB1, PR_TXDB2, PR_TXDB3};
 static	int pr_rxdb[4] = {PR_RXDB, PR_RXDB1, PR_RXDB2, PR_RXDB3};
 
 cons_decl(gen);
-#ifdef DYNAMIC_DEVSW
-bcdev_decl(gencn);
-#else
-cdev_decl(gencn);
-#endif
 
-static	int gencnparam __P((struct tty *, struct termios *));
-static	void gencnstart __P((struct tty *));
-void	gencnrint __P((void *));
-void	gencntint __P((void *));
+static	int gencnparam(struct tty *, struct termios *);
+static	void gencnstart(struct tty *);
+
+dev_type_open(gencnopen);
+dev_type_close(gencnclose);
+dev_type_read(gencnread);
+dev_type_write(gencnwrite);
+dev_type_ioctl(gencnioctl);
+dev_type_tty(gencntty);
+dev_type_poll(gencnpoll);
+
+const struct cdevsw gen_cdevsw = {
+	gencnopen, gencnclose, gencnread, gencnwrite, gencnioctl,
+	nostop, gencntty, gencnpoll, nommap, ttykqfilter, D_TTY
+};
 
 int
-gencnopen(dev, flag, mode, p)
-	dev_t	dev;
-	int	flag, mode;
-	struct proc *p;
+gencnopen(dev_t dev, int flag, int mode, struct lwp *l)
 {
-        int unit;
-        struct tty *tp;
+	int unit;
+	struct tty *tp;
 
-        unit = minor(dev);
-        if (unit >= maxttys)
+	unit = minor(dev);
+	if (unit >= maxttys)
 		return ENXIO;
 
-	if (gencn_tty[unit] == NULL)
-		gencn_tty[unit] = ttymalloc();
+	if (gc_softc[unit].gencn_tty == NULL)
+		gc_softc[unit].gencn_tty = ttymalloc();
 
-	tp = gencn_tty[unit];
+	gc_softc[unit].alive = 1;
+	gc_softc[unit].unit = unit;
+	tp = gc_softc[unit].gencn_tty;
 
-        tp->t_oproc = gencnstart;
-        tp->t_param = gencnparam;
-        tp->t_dev = dev;
-        if ((tp->t_state & TS_ISOPEN) == 0) {
-                ttychars(tp);
-                tp->t_iflag = TTYDEF_IFLAG;
-                tp->t_oflag = TTYDEF_OFLAG;
-                tp->t_cflag = TTYDEF_CFLAG;
-                tp->t_lflag = TTYDEF_LFLAG;
-                tp->t_ispeed = tp->t_ospeed = TTYDEF_SPEED;
-                gencnparam(tp, &tp->t_termios);
-                ttsetwater(tp);
-        } else if (tp->t_state & TS_XCLUDE && p->p_ucred->cr_uid != 0)
-                return EBUSY;
-        tp->t_state |= TS_CARR_ON;
-	if (unit == 0)
-		consopened = 1;
-	mtpr(GC_RIE, pr_rxcs[unit]); /* Turn on interrupts */
-	mtpr(GC_TIE, pr_txcs[unit]);
+	tp->t_oproc = gencnstart;
+	tp->t_param = gencnparam;
+	tp->t_dev = dev;
 
-        return ((*linesw[tp->t_line].l_open)(dev, tp));
+	if (kauth_authorize_device_tty(l->l_cred, KAUTH_DEVICE_TTY_OPEN, tp))
+		return (EBUSY);
+
+	if ((tp->t_state & TS_ISOPEN) == 0) {
+		ttychars(tp);
+		tp->t_iflag = TTYDEF_IFLAG;
+		tp->t_oflag = TTYDEF_OFLAG;
+		tp->t_cflag = TTYDEF_CFLAG;
+		tp->t_lflag = TTYDEF_LFLAG;
+		tp->t_ispeed = tp->t_ospeed = TTYDEF_SPEED;
+		gencnparam(tp, &tp->t_termios);
+		ttsetwater(tp);
+	}
+	tp->t_state |= TS_CARR_ON;
+
+	return ((*tp->t_linesw->l_open)(dev, tp));
 }
 
 int
-gencnclose(dev, flag, mode, p)
-        dev_t dev;
-        int flag, mode;
-        struct proc *p;
+gencnclose(dev_t dev, int flag, int mode, struct lwp *l)
 {
-        struct tty *tp = gencn_tty[minor(dev)];
+	struct tty *tp = gc_softc[minor(dev)].gencn_tty;
 
-	if (minor(dev) == 0)
-		consopened = 0;
-        (*linesw[tp->t_line].l_close)(tp, flag);
-        ttyclose(tp);
-        return (0);
+	(*tp->t_linesw->l_close)(tp, flag);
+	ttyclose(tp);
+	gc_softc[minor(dev)].alive = 0;
+	return (0);
 }
 
 struct tty *
-gencntty(dev)
-	dev_t dev;
+gencntty(dev_t dev)
 {
-	return gencn_tty[minor(dev)];
+	return gc_softc[minor(dev)].gencn_tty;
 }
 
 int
-gencnread(dev, uio, flag)
-        dev_t dev;
-        struct uio *uio;
-        int flag;
+gencnread(dev_t dev, struct uio *uio, int flag)
 {
-        struct tty *tp = gencn_tty[minor(dev)];
+	struct tty *tp = gc_softc[minor(dev)].gencn_tty;
 
-        return ((*linesw[tp->t_line].l_read)(tp, uio, flag));
+	return ((*tp->t_linesw->l_read)(tp, uio, flag));
 }
 
 int
-gencnwrite(dev, uio, flag)
-        dev_t dev;
-        struct uio *uio;
-        int flag;
+gencnwrite(dev_t dev, struct uio *uio, int flag)
 {
-        struct tty *tp = gencn_tty[minor(dev)];
+	struct tty *tp = gc_softc[minor(dev)].gencn_tty;
 
-        return ((*linesw[tp->t_line].l_write)(tp, uio, flag));
+	return ((*tp->t_linesw->l_write)(tp, uio, flag));
 }
 
 int
-gencnioctl(dev, cmd, data, flag, p)
-        dev_t dev;
-        u_long cmd;
-        caddr_t data;
-        int flag;
-        struct proc *p;
+gencnpoll(dev_t dev, int events, struct lwp *l)
 {
-        struct tty *tp = gencn_tty[minor(dev)];
-        int error;
-
-        error = (*linesw[tp->t_line].l_ioctl)(tp, cmd, data, flag, p);
-        if (error >= 0)
-                return error;
-        error = ttioctl(tp, cmd, data, flag, p);
-        if (error >= 0)
-		return error;
+	struct tty *tp = gc_softc[minor(dev)].gencn_tty;
  
-	return ENOTTY;
+	return ((*tp->t_linesw->l_poll)(tp, events, l));
+}
+
+int
+gencnioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
+{
+	struct tty *tp = gc_softc[minor(dev)].gencn_tty;
+	int error;
+
+	error = (*tp->t_linesw->l_ioctl)(tp, cmd, data, flag, l);
+	if (error != EPASSTHROUGH)
+		return error;
+	return ttioctl(tp, cmd, data, flag, l);
 }
 
 void
-gencnstart(tp)
-        struct tty *tp;
+gencnstart(struct tty *tp)
 {
-        struct clist *cl;
-        int s, ch;
+	struct clist *cl;
+	int s, ch;
 
-        s = spltty();
-        if (tp->t_state & (TS_BUSY|TS_TTSTOP|TS_TIMEOUT))
-                goto out;
-        cl = &tp->t_outq;
+#if defined(MULTIPROCESSOR)
+	if ((curcpu()->ci_flags & CI_MASTERCPU) == 0)
+		return cpu_send_ipi(IPI_DEST_MASTER, IPI_START_CNTX);
+#endif
 
-	if(cl->c_cc){
-        	tp->t_state |= TS_BUSY;
+	s = spltty();
+	if (tp->t_state & (TS_BUSY|TS_TTSTOP|TS_TIMEOUT))
+		goto out;
+	cl = &tp->t_outq;
+
+	if (ttypull(tp)) {
+		tp->t_state |= TS_BUSY;
 		ch = getc(cl);
 		mtpr(ch, pr_txdb[minor(tp->t_dev)]);
-	} else {
-		if (tp->t_state & TS_ASLEEP) {
-			tp->t_state &= ~TS_ASLEEP;
-			wakeup((caddr_t)cl);
-		}
-		selwakeup(&tp->t_wsel);
 	}
-
-out:	splx(s);
+ out:
+	splx(s);
 }
 
-void
-gencnrint(arg)
-	void *arg;
+static void
+gencnrint(void *arg)
 {
-	struct tty *tp = *(struct tty **) arg;
-	int unit = (struct tty **) arg - gencn_tty;
+	struct gc_softc *sc = arg;
+	struct tty *tp = sc->gencn_tty;
 	int i;
 
-	i = mfpr(pr_rxdb[unit]) & 0377; /* Mask status flags etc... */
+	if (sc->alive == 0)
+		return;
+	i = mfpr(pr_rxdb[sc->unit]) & 0377; /* Mask status flags etc... */
+	KERNEL_LOCK(1, NULL);
 
 #ifdef DDB
 	if (tp->t_dev == cn_tab->cn_dev) {
 		int j = kdbrint(i);
 
-		if (j == 1)	/* Escape received, just return */
+		if (j == 1) {	/* Escape received, just return */
+			KERNEL_UNLOCK_ONE(NULL);
 			return;
+		}
 
 		if (j == 2)	/* Second char wasn't 'D' */
-			(*linesw[tp->t_line].l_rint)(27, tp);
+			(*tp->t_linesw->l_rint)(27, tp);
 	}
 #endif
 
-	(*linesw[tp->t_line].l_rint)(i, tp);
-	return;
+	(*tp->t_linesw->l_rint)(i, tp);
+	KERNEL_UNLOCK_ONE(NULL);
 }
 
-void
-gencnstop(tp, flag)
-        struct tty *tp;
-        int flag;
+static void
+gencntint(void *arg)
 {
-}
+	struct gc_softc *sc = arg;
+	struct tty *tp = sc->gencn_tty;
 
-void
-gencntint(arg)
-	void *arg;
-{
-	struct tty *tp = *(struct tty **) arg;
-
+	if (sc->alive == 0)
+		return;
+	KERNEL_LOCK(1, NULL);
 	tp->t_state &= ~TS_BUSY;
 
 	gencnstart(tp);
+	KERNEL_UNLOCK_ONE(NULL);
 }
 
 int
-gencnparam(tp, t)
-	struct tty *tp;
-	struct termios *t;
+gencnparam(struct tty *tp, struct termios *t)
 {
-        /* XXX - These are ignored... */
-        tp->t_ispeed = t->c_ispeed;
-        tp->t_ospeed = t->c_ospeed;
-        tp->t_cflag = t->c_cflag;
+	/* XXX - These are ignored... */
+	tp->t_ispeed = t->c_ispeed;
+	tp->t_ospeed = t->c_ospeed;
+	tp->t_cflag = t->c_cflag;
 	return 0;
 }
 
 void
-gencnprobe(cndev)
-	struct	consdev *cndev;
+gencnprobe(struct consdev *cndev)
 {
-	if ((vax_cputype < VAX_TYP_UV1) || /* All older has MTPR console */
+	if ((vax_cputype < VAX_TYP_UV2) || /* All older has MTPR console */
+	    (vax_boardtype == VAX_BTYP_9RR) ||
 	    (vax_boardtype == VAX_BTYP_630) ||
+	    (vax_boardtype == VAX_BTYP_660) ||
 	    (vax_boardtype == VAX_BTYP_670) ||
+	    (vax_boardtype == VAX_BTYP_680) ||
+	    (vax_boardtype == VAX_BTYP_681) ||
 	    (vax_boardtype == VAX_BTYP_650)) {
-		cndev->cn_dev = makedev(25, 0);
+		cndev->cn_dev = makedev(cdevsw_lookup_major(&gen_cdevsw), 0);
 		cndev->cn_pri = CN_NORMAL;
 	} else
 		cndev->cn_pri = CN_DEAD;
 }
 
 void
-gencninit(cndev)
-	struct	consdev *cndev;
+gencninit(struct consdev *cndev)
 {
 
 	/* Allocate interrupt vectors */
-	scb_vecalloc(SCB_G0R, gencnrint, &gencn_tty[0], SCB_ISTACK);
-	scb_vecalloc(SCB_G0T, gencntint, &gencn_tty[0], SCB_ISTACK);
+	scb_vecalloc(SCB_G0R, gencnrint, &gc_softc[0], SCB_ISTACK, NULL);
+	scb_vecalloc(SCB_G0T, gencntint, &gc_softc[0], SCB_ISTACK, NULL);
+	mtpr(GC_RIE, pr_rxcs[0]); /* Turn on interrupts */
+	mtpr(GC_TIE, pr_txcs[0]);
 
 	if (vax_cputype == VAX_TYP_8SS) {
 		maxttys = 4;
-		scb_vecalloc(SCB_G1R, gencnrint, &gencn_tty[1], SCB_ISTACK);
-		scb_vecalloc(SCB_G1T, gencntint, &gencn_tty[1], SCB_ISTACK);
+		scb_vecalloc(SCB_G1R, gencnrint, &gc_softc[1], SCB_ISTACK, NULL);
+		scb_vecalloc(SCB_G1T, gencntint, &gc_softc[1], SCB_ISTACK, NULL);
 
-		scb_vecalloc(SCB_G2R, gencnrint, &gencn_tty[2], SCB_ISTACK);
-		scb_vecalloc(SCB_G2T, gencntint, &gencn_tty[2], SCB_ISTACK);
+		scb_vecalloc(SCB_G2R, gencnrint, &gc_softc[2], SCB_ISTACK, NULL);
+		scb_vecalloc(SCB_G2T, gencntint, &gc_softc[2], SCB_ISTACK, NULL);
 
-		scb_vecalloc(SCB_G3R, gencnrint, &gencn_tty[3], SCB_ISTACK);
-		scb_vecalloc(SCB_G3T, gencntint, &gencn_tty[3], SCB_ISTACK);
+		scb_vecalloc(SCB_G3R, gencnrint, &gc_softc[3], SCB_ISTACK, NULL);
+		scb_vecalloc(SCB_G3T, gencntint, &gc_softc[3], SCB_ISTACK, NULL);
 	}
+#if 0
+	mtpr(0, PR_RXCS);
+	mtpr(0, PR_TXCS); 
 	mtpr(0, PR_TBIA); /* ??? */
+#endif
 }
 
 void
-gencnputc(dev,ch)
-	dev_t	dev;
-	int	ch;
+gencnputc(dev_t dev, int ch)
 {
+#if VAX8800 || VAXANY
+	/*
+	 * On KA88 we may get C-S/C-Q from the console.
+	 * XXX - this will cause a loop at spltty() in kernel and will
+	 * interfere with other console communication. Fortunately
+	 * kernel printf's are uncommon.
+	 */
+	if (vax_cputype == VAX_TYP_8NN) {
+		int s = spltty();
+
+		while (mfpr(PR_RXCS) & GC_DON) {
+			if ((mfpr(PR_RXDB) & 0x7f) == 19) {
+				while (1) {
+					while ((mfpr(PR_RXCS) & GC_DON) == 0)
+						;
+					if ((mfpr(PR_RXDB) & 0x7f) == 17)
+						break;
+				}
+			}
+		}
+		splx(s);
+	}
+#endif
+
 	while ((mfpr(PR_TXCS) & GC_RDY) == 0) /* Wait until xmit ready */
 		;
 	mtpr(ch, PR_TXDB);	/* xmit character */
@@ -317,8 +346,7 @@ gencnputc(dev,ch)
 }
 
 int
-gencngetc(dev)
-	dev_t	dev;
+gencngetc(dev_t dev)
 {
 	int i;
 
@@ -331,15 +359,21 @@ gencngetc(dev)
 }
 
 void 
-gencnpollc(dev, pollflag)
-        dev_t dev;
-        int pollflag;
+gencnpollc(dev_t dev, int pollflag)
 {
-        if (pollflag)  {
-                mtpr(0, PR_RXCS);
-	        mtpr(0, PR_TXCS); 
-	} else if (consopened) {
-	        mtpr(GC_RIE, PR_RXCS);
-	        mtpr(GC_TIE, PR_TXCS);
+	if (pollflag)  {
+		mtpr(0, PR_RXCS);
+		mtpr(0, PR_TXCS); 
+	} else {
+		mtpr(GC_RIE, PR_RXCS);
+		mtpr(GC_TIE, PR_TXCS);
 	}
 }
+
+#if defined(MULTIPROCESSOR)
+void
+gencnstarttx(void)
+{
+	gencnstart(gc_softc[0].gencn_tty);
+}
+#endif

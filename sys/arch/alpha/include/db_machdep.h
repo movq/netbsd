@@ -1,4 +1,4 @@
-/* $NetBSD: db_machdep.h,v 1.9 1999/04/20 21:30:15 thorpej Exp $ */
+/* $NetBSD: db_machdep.h,v 1.17 2007/02/21 22:59:37 thorpej Exp $ */
 
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
@@ -35,21 +35,22 @@
  */
 
 #include <sys/param.h>
-#include <vm/vm.h>
+#include <uvm/uvm_extern.h>
 #include <machine/frame.h>
 
 typedef	vaddr_t		db_addr_t;	/* address - unsigned */
 typedef	long		db_expr_t;	/* expression - signed */
 
 typedef struct trapframe db_regs_t;
-db_regs_t		ddb_regs;	/* register state */
-#define	DDB_REGS	(&ddb_regs)
+extern db_regs_t	*ddb_regp;	/* pointer to current register state */
+#define	DDB_REGS	(ddb_regp)
 
-#define	PC_REGS(regs)	((db_addr_t)(regs)->tf_regs[FRAME_PC])
+#define	PC_REGS(regs)	((regs)->tf_regs[FRAME_PC])
 
+#define	BKPT_ADDR(addr)	(addr)		/* breakpoint address */
 #define	BKPT_INST	0x00000080	/* breakpoint instruction */
 #define	BKPT_SIZE	(4)		/* size of breakpoint inst */
-#define	BKPT_SET(inst)	(BKPT_INST)
+#define	BKPT_SET(inst, addr)	(BKPT_INST)
 
 #define	FIXUP_PC_AFTER_BREAK(regs) \
 	((regs)->tf_regs[FRAME_PC] -= BKPT_SIZE)
@@ -63,14 +64,14 @@ db_regs_t		ddb_regs;	/* register state */
  * Functions needed for software single-stepping.
  */
 
-boolean_t	db_inst_trap_return __P((int inst));
-boolean_t	db_inst_return __P((int inst));
-boolean_t	db_inst_call __P((int inst));
-boolean_t	db_inst_branch __P((int inst));
-boolean_t	db_inst_load __P((int inst));
-boolean_t	db_inst_store __P((int inst));
-boolean_t	db_inst_unconditional_flow_transfer __P((int inst));
-db_addr_t	db_branch_taken __P((int inst, db_addr_t pc, db_regs_t *regs));
+bool		db_inst_trap_return(int inst);
+bool		db_inst_return(int inst);
+bool		db_inst_call(int inst);
+bool		db_inst_branch(int inst);
+bool		db_inst_load(int inst);
+bool		db_inst_store(int inst);
+bool		db_inst_unconditional_flow_transfer(int inst);
+db_addr_t	db_branch_taken(int inst, db_addr_t pc, db_regs_t *regs);
 
 #define	inst_trap_return(ins)	db_inst_trap_return(ins)
 #define	inst_return(ins)	db_inst_return(ins)
@@ -86,12 +87,15 @@ db_addr_t	db_branch_taken __P((int inst, db_addr_t pc, db_regs_t *regs));
 /* No delay slots on Alpha. */
 #define	next_instr_address(v, b) ((db_addr_t) ((b) ? (v) : ((v) + 4)))
 
-u_long	db_register_value __P((db_regs_t *, int));
-int	ddb_trap __P((unsigned long, unsigned long, unsigned long,
-	    unsigned long, struct trapframe *));
+u_long	db_register_value(db_regs_t *, int);
+int	ddb_trap(unsigned long, unsigned long, unsigned long,
+	    unsigned long, struct trapframe *);
 
-int	alpha_debug __P((unsigned long, unsigned long, unsigned long,
-	    unsigned long, struct trapframe *));
+int	alpha_debug(unsigned long, unsigned long, unsigned long,
+	    unsigned long, struct trapframe *);
+
+struct alpha_bus_space;
+void	alpha_kgdb_init(const char **, struct alpha_bus_space *);
 
 /*
  * We define some of our own commands.

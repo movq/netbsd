@@ -1,4 +1,4 @@
-/*	$NetBSD: atrun.c,v 1.7 1999/08/16 03:08:33 simonb Exp $	*/
+/*	$NetBSD: atrun.c,v 1.19 2008/04/05 20:17:37 christos Exp $	*/
 
 /*
  *  atrun.c - run jobs queued by at; run with root privileges.
@@ -26,28 +26,26 @@
  */
 
 /* System Headers */
-
+#include <sys/cdefs.h>
 #include <sys/types.h>
-#include <sys/stat.h>
 #include <sys/wait.h>
-#include <sys/param.h>
+
 #include <ctype.h>
-#include <dirent.h>
 #include <errno.h>
+#include <dirent.h>
 #include <fcntl.h>
-#include <pwd.h>
-#include <grp.h>
-#include <signal.h>
-#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 #include <time.h>
 #include <unistd.h>
 #include <syslog.h>
-#include <utmp.h>
-
+#include <pwd.h>
+#include <grp.h>
+#include <err.h>
 #include <paths.h>
+#include <stdarg.h>
 
 /* Local headers */
 
@@ -56,93 +54,91 @@
 #include "pathnames.h"
 #include "atrun.h"
 
-/* File scope defines */
-
-#if (MAXLOGNAME-1) > UT_NAMESIZE
-#define LOGNAMESIZE UT_NAMESIZE
-#else
-#define LOGNAMESIZE (MAXLOGNAME-1)
-#endif
-
 /* File scope variables */
 
-static char *namep;
 #if 0
 static char rcsid[] = "$OpenBSD: atrun.c,v 1.7 1997/09/08 22:12:10 millert Exp $";
 #else
-__RCSID("$NetBSD: atrun.c,v 1.7 1999/08/16 03:08:33 simonb Exp $");
+__RCSID("$NetBSD: atrun.c,v 1.19 2008/04/05 20:17:37 christos Exp $");
 #endif
 
 static int debug = 0;
 
 /* Local functions */
-static void perr __P((const char *));
-static void perr2 __P((char *, char *));
-static int write_string __P((int, const char *));
-static void run_file __P((const char *, uid_t, gid_t));
-static void become_user __P((struct passwd *, uid_t));
+static void perr(const char *, ...) __dead;
+static void perrx(const char *, ...) __dead;
+static int write_string(int, const char *);
+static void run_file(const char *, uid_t, gid_t);
+static void become_user(struct passwd *, uid_t);
 
-int main __P((int, char *[]));
+static const char nobody[] = "nobody";
 
 static void
-perr(a)
-	const char *a;
+perr(const char *fmt, ...)
 {
+	char buf[2048];
+	va_list ap;
+
+	va_start(ap, fmt);
+	(void)vsnprintf(buf, sizeof(buf), fmt, ap);
+	va_end(ap);
+
 	if (debug)
-		perror(a);
+		warn("%s", buf);
 	else
-		syslog(LOG_ERR, "%s: %m", a);
+		syslog(LOG_ERR, "%s: %m", buf);
 
 	exit(EXIT_FAILURE);
 }
 
 static void
-perr2(a, b)
-	char *a, *b;
+perrx(const char *fmt, ...)
 {
-	if (debug) {
-		(void)fputs(a, stderr);
-		perror(b);
-	} else
-		syslog(LOG_ERR, "%s%s: %m", a, b);
+	va_list ap;
+
+	va_start(ap, fmt);
+
+	if (debug)
+		vwarnx(fmt, ap);
+	else
+		vsyslog(LOG_ERR, fmt, ap);
+
+	va_end(ap);
 
 	exit(EXIT_FAILURE);
 }
 
 static int
-write_string(fd, a)
-	int fd;
-	const char *a;
+write_string(int fd, const char *a)
 {
-	return(write(fd, a, strlen(a)));
+	return write(fd, a, strlen(a));
 }
 
 static void
-become_user(pentry, uid)
-	struct passwd *pentry;
-	uid_t uid;
+become_user(struct passwd *pentry, uid_t uid)
 {
-	if (initgroups(pentry->pw_name, pentry->pw_gid) < 0)
-		perr("Cannot init group list");
+	if (initgroups(pentry->pw_name, pentry->pw_gid) == -1)
+		perr("Cannot init group list for `%s'", pentry->pw_name);
 
-	if (setegid(pentry->pw_gid) < 0 || setgid(pentry->pw_gid) < 0)
-		perr("Cannot change primary group");
+	if (setegid(pentry->pw_gid) == -1 || setgid(pentry->pw_gid) == -1)
+		perr("Cannot change primary group to %lu",
+		    (unsigned long)pentry->pw_gid);
 
-	if (setlogin(pentry->pw_name) < 0)
-		perr("Cannot set login name");
+	if (setsid() == -1)
+		perr("Cannot create a session");
 
-	if (setuid(uid) < 0 || seteuid(uid) < 0)
-		perr("Cannot set user id");
+	if (setlogin(pentry->pw_name) == -1)
+		perr("Cannot set login name to `%s'", pentry->pw_name);
 
-	if (chdir(pentry->pw_dir) < 0)
-		chdir("/");
+	if (setuid(uid) == -1 || seteuid(uid) == -1)
+		perr("Cannot set user id to %lu", (unsigned long)uid);
+
+	if (chdir(pentry->pw_dir) == -1)
+		(void)chdir("/");
 }
 
 static void
-run_file(filename, uid, gid)
-	const char *filename;
-	uid_t uid;
-	gid_t gid;
+run_file(const char *filename, uid_t uid, gid_t gid)
 {
 	/*
 	 * Run a file by by spawning off a process which redirects I/O,
@@ -152,7 +148,7 @@ run_file(filename, uid, gid)
 	pid_t pid;
 	int fd_out, fd_in;
 	int queue;
-	char mailbuf[LOGNAMESIZE + 1], fmt[49];
+	char mailbuf[LOGIN_NAME_MAX], fmt[49];
 	char *mailname = NULL;
 	FILE *stream;
 	int send_mail = 0;
@@ -162,13 +158,14 @@ run_file(filename, uid, gid)
 	int fflags;
 	uid_t nuid;
 	gid_t ngid;
+	int serrno;
 
-	PRIV_START
+	PRIV_START;
 
-	if (chmod(filename, S_IRUSR) != 0)
-		perr("Cannot change file permissions");
+	if (chmod(filename, S_IRUSR) == -1)
+		perr("Cannot change file permissions to `%s'", filename);
 
-	PRIV_END
+	PRIV_END;
 
 	pid = fork();
 	if (pid == -1)
@@ -183,89 +180,83 @@ run_file(filename, uid, gid)
 	 */
 
 	pentry = getpwuid(uid);
-	if (pentry == NULL) {
-		syslog(LOG_ERR,"Userid %u not found - aborting job %s",
-		    uid, filename);
-		exit(EXIT_FAILURE);
-	}
-	PRIV_START
+	if (pentry == NULL)
+		perrx("Userid %lu not found - aborting job `%s'",
+		    (unsigned long)uid, filename);
+
+	PRIV_START;
 
 	stream = fopen(filename, "r");
+	serrno = errno;
 
-	PRIV_END
+	PRIV_END;
 
-	if (pentry->pw_expire && time(NULL) >= pentry->pw_expire) {
-		syslog(LOG_ERR, "Userid %u has expired - aborting job %s",
-		    uid, filename);
-		exit(EXIT_FAILURE);
+	if (stream == NULL) {
+		errno = serrno;
+		perr("Cannot open input file");
 	}
 
-	if (stream == NULL)
-		perr("Cannot open input file");
+	if (pentry->pw_expire && time(NULL) >= pentry->pw_expire)
+		perrx("Userid %lu has expired - aborting job `%s'",
+		    (unsigned long)uid, filename);
 
-	if ((fd_in = dup(fileno(stream))) < 0)
+	if ((fd_in = dup(fileno(stream))) == -1)
 		perr("Error duplicating input file descriptor");
 
 	if (fstat(fd_in, &buf) == -1)
 		perr("Error in fstat of input file descriptor");
 
-	PRIV_START
+	PRIV_START;
 
 	if (lstat(filename, &lbuf) == -1)
-		perr("Error in lstat of input file");
+		perr("Error in lstat of `%s'", filename);
 
-	PRIV_END
+	PRIV_END;
 
-	if (S_ISLNK(lbuf.st_mode)) {
-		syslog(LOG_ERR, "Symbolic link encountered in job %s - aborting",
+	if (S_ISLNK(lbuf.st_mode))
+		perrx("Symbolic link encountered in job `%s' - aborting",
 		    filename);
-		exit(EXIT_FAILURE);
-	}
+
 	if ((lbuf.st_dev != buf.st_dev) || (lbuf.st_ino != buf.st_ino) ||
 	    (lbuf.st_uid != buf.st_uid) || (lbuf.st_gid != buf.st_gid) ||
-	    (lbuf.st_size!=buf.st_size)) {
-		syslog(LOG_ERR, "Somebody changed files from under us for job %s - aborting", filename);
-		exit(EXIT_FAILURE);
-	}
-	if (buf.st_nlink > 1) {
-		syslog(LOG_ERR, "Somebody is trying to run a linked script for job %s",
+	    (lbuf.st_size!=buf.st_size))
+		perrx("Somebody changed files from under us for job `%s' "
+		    "- aborting", filename);
+
+	if (buf.st_nlink > 1)
+		perrx("Somebody is trying to run a linked script for job `%s'",
 		    filename);
-		exit(EXIT_FAILURE);
-	}
+
 	if ((fflags = fcntl(fd_in, F_GETFD)) < 0)
 		perr("Error in fcntl");
 
 	(void)fcntl(fd_in, F_SETFD, fflags & ~FD_CLOEXEC);
 
 	(void)snprintf(fmt, sizeof(fmt),
-	    "#!/bin/sh\n# atrun uid=%%ld gid=%%ld\n# mail %%%ds %%d",
-	    LOGNAMESIZE);
-	if (fscanf(stream, fmt, &nuid, &ngid, mailbuf, &send_mail) != 4) {
-		syslog(LOG_ERR, "File %s is in wrong format - aborting",
-		    filename);
-		exit(EXIT_FAILURE);
-	}
-	if (mailbuf[0] == '-') {
-		syslog(LOG_ERR, "illegal mail name %s in %s", mailbuf, filename);
-		exit(EXIT_FAILURE);
-	}
+	    "#!/bin/sh\n# atrun uid=%%u gid=%%u\n# mail %%%ds %%d",
+	    LOGIN_NAME_MAX);
+
+	if (fscanf(stream, fmt, &nuid, &ngid, mailbuf, &send_mail) != 4)
+		perrx("File `%s' is in wrong format - aborting", filename);
+
+	if (mailbuf[0] == '-')
+		perrx("Illegal mail name `%s' in `%s'", mailbuf, filename);
+
 	mailname = mailbuf;
-	if (nuid != uid) {
-		syslog(LOG_ERR, "Job %s - userid %u does not match file uid %u",
-		    filename, nuid, uid);
-		exit(EXIT_FAILURE);
-	}
-	if (ngid != gid) {
-		syslog(LOG_ERR, "Job %s - groupid %u does not match file gid %u",
-		    filename, ngid, gid);
-		exit(EXIT_FAILURE);
-	}
+	if (nuid != uid)
+		perrx("Job `%s' - userid %lu does not match file uid %lu",
+		    filename, (unsigned long)nuid, (unsigned long)uid);
+
+	if (ngid != gid)
+		perrx("Job `%s' - groupid %lu does not match file gid %lu",
+		    filename, (unsigned long)ngid, (unsigned long)gid);
+
 	(void)fclose(stream);
 
-	PRIV_START
+	PRIV_START;
 
-	if (chdir(_PATH_ATSPOOL) < 0)
-		perr2("Cannot chdir to ", _PATH_ATSPOOL);
+	if (chdir(_PATH_ATSPOOL) == -1)
+		perr("Cannot chdir to `%s'", _PATH_ATSPOOL);
 
 	/*
 	 * Create a file to hold the output of the job we are  about to
@@ -273,10 +264,10 @@ run_file(filename, uid, gid)
 	 */
 
 	if ((fd_out = open(filename,
-		    O_WRONLY | O_CREAT | O_EXCL, S_IWUSR | S_IRUSR)) < 0)
-		perr("Cannot create output file");
+		    O_WRONLY | O_CREAT | O_EXCL, S_IWUSR | S_IRUSR)) == -1)
+		perr("Cannot create output file `%s'", filename);
 
-	PRIV_END
+	PRIV_END;
 
 	write_string(fd_out, "To: ");
 	write_string(fd_out, mailname);
@@ -303,7 +294,7 @@ run_file(filename, uid, gid)
 		 * the input file, and standard output and error sent to
 		 * our output file.
 		 */
-		if (lseek(fd_in, (off_t) 0, SEEK_SET) < 0)
+		if (lseek(fd_in, (off_t) 0, SEEK_SET) == (off_t)-1)
 			perr("Error in lseek");
 
 		if (dup(fd_in) != STDIN_FILENO)
@@ -318,10 +309,10 @@ run_file(filename, uid, gid)
 		(void)close(fd_in);
 		(void)close(fd_out);
 
-		PRIV_START
+		PRIV_START;
 
-		if (chdir(_PATH_ATJOBS) < 0)
-			perr2("Cannot chdir to ", _PATH_ATJOBS);
+		if (chdir(_PATH_ATJOBS) == -1)
+			perr("Cannot chdir to `%s'", _PATH_ATJOBS);
 
 		queue = *filename;
 
@@ -330,43 +321,41 @@ run_file(filename, uid, gid)
 
 		become_user(pentry, uid);
 
-		if (execle("/bin/sh", "sh", (char *)NULL, nenvp) != 0)
-			perr("Exec failed for /bin/sh");
-
-		PRIV_END
+		(void)execle("/bin/sh", "sh", (char *)NULL, nenvp);
+		perr("Exec failed for /bin/sh");
 	}
 	/* We're the parent.  Let's wait. */
 	(void)close(fd_in);
 	(void)close(fd_out);
-	waitpid(pid, (int *)NULL, 0);
+	(void)waitpid(pid, (int *)NULL, 0);
 
 	/*
 	 * Send mail.  Unlink the output file first, so it is deleted
 	 * after the run.
 	 */
-	PRIV_START
+	PRIV_START;
 
 	if (stat(filename, &buf) == -1)
-		perr("Error in stat of output file");
+		perr("Error in stat of output file `%s'", filename);
 	if (open(filename, O_RDONLY) != STDIN_FILENO)
-		perr("Open of jobfile failed");
+		perr("Open of jobfile `%s' failed", filename);
 
 	(void)unlink(filename);
 
-	PRIV_END
+	PRIV_END;
 
 	if ((buf.st_size != size) || send_mail) {
 		/* Fork off a child for sending mail */
 
-		PRIV_START
+		PRIV_START;
 
 		become_user(pentry, uid);
 
 		execl(_PATH_SENDMAIL, "sendmail", "-F", "Atrun Service",
 		    "-odi", "-oem", "-t", (char *) NULL);
-		perr("Exec failed for mail command");
+		perr("Exec failed for mail command `%s'", _PATH_SENDMAIL);
 
-		PRIV_END
+		PRIV_END;
 	}
 	exit(EXIT_SUCCESS);
 }
@@ -374,9 +363,7 @@ run_file(filename, uid, gid)
 /* Global functions */
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	/*
 	 * Browse through  _PATH_ATJOBS, checking all the jobfiles wether
@@ -404,14 +391,22 @@ main(argc, argv)
 	int c;
 	int run_batch;
 	double la, load_avg = ATRUN_MAXLOAD;
+	struct group *grp;
+	struct passwd *pwd;
+
+	openlog("atrun", LOG_PID, LOG_CRON);
+
+	if ((grp = getgrnam(nobody)) == NULL)
+		perrx("Cannot get gid for `%s'", nobody);
+
+	if ((pwd = getpwnam(nobody)) == NULL)
+		perrx("Cannot get uid for `%s'", nobody);
 
 	/*
 	 * We don't need root privileges all the time; running under uid
 	 * and gid nobody is fine except for privileged operations.
 	 */
-	RELINQUISH_PRIVS_ROOT(NOBODY_UID, NOBODY_GID)
-
-	openlog("atrun", LOG_PID, LOG_CRON);
+	RELINQUISH_PRIVS_ROOT(pwd->pw_uid, grp->gr_gid);
 
 	opterr = 0;
 	errno = 0;
@@ -419,8 +414,8 @@ main(argc, argv)
 		switch (c) {
 		case 'l':
 			if (sscanf(optarg, "%lf", &load_avg) != 1)
-				perr("garbled option -l");
-			if (load_avg <= 0.)
+				perrx("Bad argument to option -l: ", optarg);
+			if (load_avg <= 0)
 				load_avg = ATRUN_MAXLOAD;
 			break;
 
@@ -429,22 +424,19 @@ main(argc, argv)
 			break;
 
 		case '?':
-			perr("unknown option");
-			break;
+			perrx("Usage: %s [-l <loadav>] [-d]", getprogname());
+			/*NOTREACHED*/
 
 		default:
-			perr("idiotic option - aborted");
-			break;
+			perrx("Invalid option: %c", c);
+			/*NOTREACHED*/
 		}
 	}
 
-	namep = argv[0];
+	PRIV_START;
 
-	PRIV_START
-
-	if (chdir(_PATH_ATJOBS) != 0)
-		perr2("Cannot change to ", _PATH_ATJOBS);
-
+	if (chdir(_PATH_ATJOBS) == -1)
+		perr("Cannot change directory to `%s'", _PATH_ATJOBS);
 
 	/*
 	 * Main loop. Open spool directory for reading and look over all
@@ -459,9 +451,9 @@ main(argc, argv)
 	 * invocation of atrun.
 	 */
 	if ((spool = opendir(".")) == NULL)
-		perr2("Cannot read ", _PATH_ATJOBS);
+		perr("Cannot open `%s'", _PATH_ATJOBS);
 
-	PRIV_END
+	PRIV_END;
 
 	now = time(NULL);
 	run_batch = 0;
@@ -469,45 +461,48 @@ main(argc, argv)
 	batch_gid = (gid_t) -1;
 
 	while ((dirent = readdir(spool)) != NULL) {
-		PRIV_START
+		PRIV_START;
 
-		if (stat(dirent->d_name, &buf) != 0)
-			perr2("Cannot stat in ", _PATH_ATJOBS);
+		if (stat(dirent->d_name, &buf) == -1)
+			perr("Cannot stat `%s' in `%s'", dirent->d_name,
+			    _PATH_ATJOBS);
 
-		PRIV_END
+		PRIV_END;
 
 		/* We don't want directories */
 		if (!S_ISREG(buf.st_mode))
 			continue;
 
-		if (sscanf(dirent->d_name, "%c%5x%8lx", &queue, &jobno, &ctm) != 3)
+		if (sscanf(dirent->d_name, "%c%5x%8lx", &queue, &jobno,
+		    &ctm) != 3)
 			continue;
 
 		run_time = (time_t) ctm * 60;
 
 		if ((S_IXUSR & buf.st_mode) && (run_time <= now)) {
-			if (isupper(queue) &&
+			if (isupper((unsigned char)queue) &&
 			    (strcmp(batch_name, dirent->d_name) > 0)) {
 				run_batch = 1;
-				(void)strncpy(batch_name, dirent->d_name,
+				(void)strlcpy(batch_name, dirent->d_name,
 				    sizeof(batch_name));
 				batch_uid = buf.st_uid;
 				batch_gid = buf.st_gid;
 			}
 
 			/* The file is executable and old enough */
-			if (islower(queue))
-				run_file(dirent->d_name, buf.st_uid, buf.st_gid);
+			if (islower((unsigned char)queue))
+				run_file(dirent->d_name, buf.st_uid,
+				    buf.st_gid);
 		}
 
 		/* Delete older files */
 		if ((run_time < now) && !(S_IXUSR & buf.st_mode) &&
 		    (S_IRUSR & buf.st_mode)) {
-			PRIV_START
+			PRIV_START;
 
 			(void)unlink(dirent->d_name);
 
-			PRIV_END
+			PRIV_END;
 		}
 	}
 
@@ -516,5 +511,5 @@ main(argc, argv)
 		run_file(batch_name, batch_uid, batch_gid);
 
 	closelog();
-	exit(EXIT_SUCCESS);
+	return EXIT_SUCCESS;
 }

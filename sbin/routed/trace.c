@@ -1,4 +1,4 @@
-/*	$NetBSD: trace.c,v 1.24 2000/03/02 21:02:01 christos Exp $	*/
+/*	$NetBSD: trace.c,v 1.31 2006/03/22 02:23:11 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1988, 1993
@@ -33,19 +33,21 @@
  * SUCH DAMAGE.
  */
 
-#if !defined(lint) && !defined(sgi) && !defined(__NetBSD__)
-static char sccsid[] __attribute__((unused)) = "@(#)trace.c	8.1 (Berkeley) 6/5/93";
-#elif defined(__NetBSD__)
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: trace.c,v 1.24 2000/03/02 21:02:01 christos Exp $");
-#endif
-
 #define	RIPCMDS
 #include "defs.h"
 #include "pathnames.h"
 #include <sys/stat.h>
 #include <sys/signal.h>
 #include <fcntl.h>
+
+#ifdef __NetBSD__
+__RCSID("$NetBSD: trace.c,v 1.31 2006/03/22 02:23:11 christos Exp $");
+#elif defined(__FreeBSD__)
+__RCSID("$FreeBSD$");
+#else
+__RCSID("Revision: 2.27 ");
+#ident "Revision: 2.27 "
+#endif
 
 
 #ifdef sgi
@@ -74,7 +76,7 @@ qstring(u_char *s, int len)
 	static char buf[8*20+1];
 	char *p;
 	u_char *s2, c;
-
+	int n;
 
 	for (p = buf; len != 0 && p < &buf[sizeof(buf)-1]; len--) {
 		c = *s++;
@@ -109,7 +111,10 @@ qstring(u_char *s, int len)
 			*p++ = 'b';
 			break;
 		default:
-			p += sprintf(p,"%o",c);
+			n = snprintf(p, sizeof(buf) - (p - buf), "%o", c);
+			if (n <= 0)
+				goto exit;
+			p += n;
 			break;
 		}
 	}
@@ -133,7 +138,8 @@ naddr_ntoa(naddr a)
 	struct in_addr addr;
 
 	addr.s_addr = a;
-	s = strcpy(bufs[bufno].str, inet_ntoa(addr));
+	strlcpy(bufs[bufno].str, inet_ntoa(addr), sizeof(bufs[bufno].str));
+	s = bufs[bufno].str;
 	bufno = (bufno+1) % NUM_BUFS;
 	return s;
 #undef NUM_BUFS
@@ -141,7 +147,7 @@ naddr_ntoa(naddr a)
 
 
 const char *
-saddr_ntoa(struct sockaddr *sa)
+saddr_ntoa(const struct sockaddr *sa)
 {
 	return (sa == 0) ? "?" : naddr_ntoa(S_ADDR(sa));
 }
@@ -188,6 +194,7 @@ tmsg(const char *p, ...)
 		lastlog();
 		va_start(args, p);
 		vfprintf(ftrace, p, args);
+		va_end(args);
 		(void)fputc('\n',ftrace);
 		fflush(ftrace);
 	}
@@ -208,6 +215,8 @@ trace_close(int zap_stdio)
 			fclose(ftrace);
 		ftrace = 0;
 		fd = open(_PATH_DEVNULL, O_RDWR);
+		if (fd == -1)
+			return;
 		if (isatty(STDIN_FILENO))
 			(void)dup2(fd, STDIN_FILENO);
 		if (isatty(STDOUT_FILENO))
@@ -241,6 +250,7 @@ trace_off(const char *p, ...)
 		lastlog();
 		va_start(args, p);
 		vfprintf(ftrace, p, args);
+		va_end(args);
 		(void)fputc('\n',ftrace);
 	}
 	trace_close(file_trace);
@@ -368,7 +378,7 @@ set_tracefile(const char *filename,
 		trace_close(file_trace = 1);
 
 		if (fn != savetracename)
-			strncpy(savetracename, fn, sizeof(savetracename)-1);
+			strlcpy(savetracename, fn, sizeof(savetracename));
 		ftrace = n_ftrace;
 
 		fflush(stdout);
@@ -441,9 +451,12 @@ addrname(naddr	addr,			/* in network byte order */
 	} bufs[NUM_BUFS];
 	char *s, *sp;
 	naddr dmask;
+	size_t l;
 	int i;
 
-	s = strcpy(bufs[bufno].str, naddr_ntoa(addr));
+	strlcpy(bufs[bufno].str, naddr_ntoa(addr), sizeof(bufs[bufno].str));
+	s = bufs[bufno].str;
+	l = sizeof(bufs[bufno].str);
 	bufno = (bufno+1) % NUM_BUFS;
 
 	if (force == 1 || (force == 0 && mask != std_mask(addr))) {
@@ -453,10 +466,11 @@ addrname(naddr	addr,			/* in network byte order */
 		if (mask + dmask == 0) {
 			for (i = 0; i != 32 && ((1<<i) & mask) == 0; i++)
 				continue;
-			(void)sprintf(sp, "/%d", 32-i);
+			(void)snprintf(sp, s + l - sp, "/%d", 32-i);
 
 		} else {
-			(void)sprintf(sp, " (mask %#x)", (u_int)mask);
+			(void)snprintf(sp, s + l - sp, " (mask %#x)",
+			    (u_int)mask);
 		}
 	}
 
@@ -586,8 +600,11 @@ rtname(naddr dst,
 			+3*4+3+1];	/* "xxx.xxx.xxx.xxx" */
 	int i;
 
-	i = sprintf(buf, "%-16s-->", addrname(dst, mask, 0));
-	(void)sprintf(&buf[i], "%-*s", 15+20-MAX(20,i), naddr_ntoa(gate));
+	i = snprintf(buf, sizeof(buf), "%-16s-->", addrname(dst, mask, 0));
+	if (i >= sizeof(buf) || i < 0)
+		return buf;
+	(void)snprintf(&buf[i], sizeof(buf) - i, "%-*s", 15+20-MAX(20, i),
+	    naddr_ntoa(gate));
 	return buf;
 }
 
@@ -643,9 +660,15 @@ trace_if(const char *act,
 			       ifp->int_mask, 1));
 	if (ifp->int_metric != 0)
 		(void)fprintf(ftrace, "metric=%d ", ifp->int_metric);
+	if (ifp->int_adj_inmetric != 0)
+		(void)fprintf(ftrace, "adj_inmetric=%u ",
+			      ifp->int_adj_inmetric);
+	if (ifp->int_adj_outmetric != 0)
+		(void)fprintf(ftrace, "adj_outmetric=%u ",
+			      ifp->int_adj_outmetric);
 	if (!IS_RIP_OUT_OFF(ifp->int_state)
 	    && ifp->int_d_metric != 0)
-		(void)fprintf(ftrace, "fake_default=%d ", ifp->int_d_metric);
+		(void)fprintf(ftrace, "fake_default=%u ", ifp->int_d_metric);
 	trace_bits(if_bits, ifp->int_if_flags, 0);
 	trace_bits(is_bits, ifp->int_state, 0);
 	(void)fputc('\n',ftrace);
@@ -723,6 +746,7 @@ trace_misc(const char *p, ...)
 	lastlog();
 	va_start(args, p);
 	vfprintf(ftrace, p, args);
+	va_end(args);
 	(void)fputc('\n',ftrace);
 }
 
@@ -740,6 +764,7 @@ trace_act(const char *p, ...)
 	lastlog();
 	va_start(args, p);
 	vfprintf(ftrace, p, args);
+	va_end(args);
 	(void)fputc('\n',ftrace);
 }
 
@@ -757,6 +782,7 @@ trace_pkt(const char *p, ...)
 	lastlog();
 	va_start(args, p);
 	vfprintf(ftrace, p, args);
+	va_end(args);
 	(void)fputc('\n',ftrace);
 }
 

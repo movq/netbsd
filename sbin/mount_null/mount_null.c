@@ -1,4 +1,4 @@
-/*	$NetBSD: mount_null.c,v 1.7 1999/07/08 03:04:39 wrstuden Exp $	*/
+/*	$NetBSD: mount_null.c,v 1.18 2008/07/20 01:20:22 lukem Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993, 1994
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,15 +34,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1992, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1992, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)mount_null.c	8.6 (Berkeley) 4/26/95";
 #else
-__RCSID("$NetBSD: mount_null.c,v 1.7 1999/07/08 03:04:39 wrstuden Exp $");
+__RCSID("$NetBSD: mount_null.c,v 1.18 2008/07/20 01:20:22 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -60,31 +56,42 @@ __RCSID("$NetBSD: mount_null.c,v 1.7 1999/07/08 03:04:39 wrstuden Exp $");
 #include <stdlib.h>
 #include <string.h>
 
-#include "mntopts.h"
+#include <mntopts.h>
 
-const struct mntopt mopts[] = {
+static const struct mntopt mopts[] = {
 	MOPT_STDOPTS,
-	{ NULL }
+	MOPT_GETARGS,
+	MOPT_NULL,
 };
 
-int	main __P((int, char *[]));
-int	subdir __P((const char *, const char *));
-void	usage __P((void));
+int	mount_null(int argc, char **argv);
+static int	subdir(const char *, const char *);
+static void	usage(void);
+
+#ifndef MOUNT_NOMAIN
+int
+main(int argc, char **argv)
+{
+	return mount_null(argc, argv);
+}
+#endif
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+mount_null(int argc, char *argv[])
 {
 	struct null_args args;
 	int ch, mntflags;
-	char target[MAXPATHLEN];
+	char target[MAXPATHLEN], canon_dir[MAXPATHLEN];
+	mntoptparse_t mp;
 
 	mntflags = 0;
 	while ((ch = getopt(argc, argv, "o:")) != -1)
 		switch(ch) {
 		case 'o':
-			getmntopts(optarg, mopts, &mntflags, 0);
+			mp = getmntopts(optarg, mopts, &mntflags, 0);
+			if (mp == NULL)
+				err(1, "getmntopts");
+			freemntopts(mp);
 			break;
 		case '?':
 		default:
@@ -96,24 +103,33 @@ main(argc, argv)
 	if (argc != 2)
 		usage();
 
-	if (realpath(argv[0], target) == 0)
-		err(1, "%s", target);
+	if (realpath(argv[0], target) == NULL)        /* Check device path */
+		err(1, "realpath %s", argv[0]);
+	if (strncmp(argv[0], target, MAXPATHLEN)) {
+		warnx("\"%s\" is a relative path.", argv[0]);
+		warnx("using \"%s\" instead.", target);
+	}
 
-	if (subdir(target, argv[1]) || subdir(argv[1], target))
-		errx(1, "%s (%s) and %s are not distinct paths",
-		    argv[0], target, argv[1]);
+	if (realpath(argv[1], canon_dir) == NULL)    /* Check mounton path */
+		err(1, "realpath %s", argv[1]);
+	if (strncmp(argv[1], canon_dir, MAXPATHLEN)) {
+		warnx("\"%s\" is a relative path.", argv[1]);
+		warnx("using \"%s\" instead.", canon_dir);
+	}
+
+	if (subdir(target, canon_dir) || subdir(canon_dir, target))
+		errx(1, "%s (%s) and %s (%s) are not distinct paths",
+		    argv[0], target, argv[1], canon_dir);
 
 	args.la.target = target;
 
-	if (mount(MOUNT_NULL, argv[1], mntflags, &args))
-		err(1, "%s on %s", target, argv[1]);
+	if (mount(MOUNT_NULL, canon_dir, mntflags, &args, sizeof args) == -1)
+		err(1, "%s on %s", target, canon_dir);
 	exit(0);
 }
 
-int
-subdir(p, dir)
-	const char *p;
-	const char *dir;
+static int
+subdir(const char *p, const char *dir)
 {
 	int l;
 
@@ -127,8 +143,8 @@ subdir(p, dir)
 	return (0);
 }
 
-void
-usage()
+static void
+usage(void)
 {
 	(void)fprintf(stderr,
 		"usage: mount_null [-o options] target_fs mount_point\n");

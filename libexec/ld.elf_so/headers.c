@@ -1,8 +1,9 @@
-/*	$NetBSD: headers.c,v 1.6 1999/11/07 00:21:12 mycroft Exp $	 */
+/*	$NetBSD: headers.c,v 1.26.10.1 2009/01/16 22:21:30 bouyer Exp $	 */
 
 /*
  * Copyright 1996 John D. Polstra.
  * Copyright 1996 Matt Thomas <matt@3am-software.com>
+ * Copyright 2002 Charles M. Hannum <root@ihack.net>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -37,6 +38,11 @@
  * John Polstra <jdp@polstra.com>.
  */
 
+#include <sys/cdefs.h>
+#ifndef lint
+__RCSID("$NetBSD: headers.c,v 1.26.10.1 2009/01/16 22:21:30 bouyer Exp $");
+#endif /* not lint */
+
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -57,15 +63,15 @@
  * information in its Obj_Entry structure.
  */
 void
-_rtld_digest_dynamic(obj)
-	Obj_Entry *obj;
+_rtld_digest_dynamic(const char *execname, Obj_Entry *obj)
 {
 	Elf_Dyn        *dynp;
 	Needed_Entry  **needed_tail = &obj->needed;
 	const Elf_Dyn  *dyn_rpath = NULL;
-	Elf_Sword	plttype = DT_REL;
-	Elf_Word        relsz = 0, relasz = 0;
-	Elf_Word	pltrelsz = 0, pltrelasz = 0;
+	Elf_Sword	plttype = DT_NULL;
+	Elf_Addr        relsz = 0, relasz = 0;
+	Elf_Addr	pltrel = 0, pltrelsz = 0;
+	Elf_Addr	init = 0, fini = 0;
 
 	for (dynp = obj->dynamic; dynp->d_tag != DT_NULL; ++dynp) {
 		switch (dynp->d_tag) {
@@ -84,25 +90,15 @@ _rtld_digest_dynamic(obj)
 			break;
 
 		case DT_JMPREL:
-			if (plttype == DT_REL) {
-				obj->pltrel = (const Elf_Rel *)
-				    (obj->relocbase + dynp->d_un.d_ptr);
-			} else {
-				obj->pltrela = (const Elf_RelA *)
-				    (obj->relocbase + dynp->d_un.d_ptr);
-			}
+			pltrel = dynp->d_un.d_ptr;
 			break;
 
 		case DT_PLTRELSZ:
-			if (plttype == DT_REL) {
-				pltrelsz = dynp->d_un.d_val;
-			} else {
-				pltrelasz = dynp->d_un.d_val;
-			}
+			pltrelsz = dynp->d_un.d_val;
 			break;
 
 		case DT_RELA:
-			obj->rela = (const Elf_RelA *)
+			obj->rela = (const Elf_Rela *)
 			    (obj->relocbase + dynp->d_un.d_ptr);
 			break;
 
@@ -111,19 +107,12 @@ _rtld_digest_dynamic(obj)
 			break;
 
 		case DT_RELAENT:
-			assert(dynp->d_un.d_val == sizeof(Elf_RelA));
+			assert(dynp->d_un.d_val == sizeof(Elf_Rela));
 			break;
 
 		case DT_PLTREL:
 			plttype = dynp->d_un.d_val;
-			assert(plttype == DT_REL ||
-			    plttype == DT_RELA);
-			if (plttype == DT_RELA) {
-				obj->pltrela = (const Elf_RelA *) obj->pltrel;
-				obj->pltrel = NULL;
-				pltrelasz = pltrelsz;
-				pltrelsz = 0;
-			}
+			assert(plttype == DT_REL || plttype == DT_RELA);
 			break;
 
 		case DT_SYMTAB:
@@ -157,7 +146,6 @@ _rtld_digest_dynamic(obj)
 			break;
 
 		case DT_NEEDED:
-			assert(!obj->rtld);
 			{
 				Needed_Entry *nep = NEW(Needed_Entry);
 
@@ -197,22 +185,27 @@ _rtld_digest_dynamic(obj)
 			break;
 
 		case DT_INIT:
-			obj->init = (void (*) __P((void)))
-			    (obj->relocbase + dynp->d_un.d_ptr);
+			init = dynp->d_un.d_ptr;
 			break;
 
 		case DT_FINI:
-			obj->fini = (void (*) __P((void)))
-			    (obj->relocbase + dynp->d_un.d_ptr);
+			fini = dynp->d_un.d_ptr;
 			break;
 
+		/*
+		 * Don't process DT_DEBUG on MIPS as the dynamic section
+		 * is mapped read-only. DT_MIPS_RLD_MAP is used instead.
+		 * XXX: n32/n64 may use DT_DEBUG, not sure yet.
+		 */
+#ifndef __mips__
 		case DT_DEBUG:
 #ifdef RTLD_LOADER
 			dynp->d_un.d_ptr = (Elf_Addr)&_rtld_debug;
 #endif
 			break;
+#endif
 
-#if defined(__mips__)
+#ifdef __mips__
 		case DT_MIPS_LOCAL_GOTNO:
 			obj->local_gotno = dynp->d_un.d_val;
 			break;
@@ -232,17 +225,56 @@ _rtld_digest_dynamic(obj)
 #endif
 			break;
 #endif
+		case DT_FLAGS_1:
+			obj->initfirst =
+			    ((dynp->d_un.d_val & DF_1_INITFIRST) != 0);
+			break;
 		}
 	}
 
 	obj->rellim = (const Elf_Rel *)((caddr_t)obj->rel + relsz);
-	obj->relalim = (const Elf_RelA *)((caddr_t)obj->rela + relasz);
-	obj->pltrellim = (const Elf_Rel *)((caddr_t)obj->pltrel + pltrelsz);
-	obj->pltrelalim = (const Elf_RelA *)((caddr_t)obj->pltrela + pltrelasz);
+	obj->relalim = (const Elf_Rela *)((caddr_t)obj->rela + relasz);
+	if (plttype == DT_REL) {
+		obj->pltrel = (const Elf_Rel *)(obj->relocbase + pltrel);
+		obj->pltrellim = (const Elf_Rel *)(obj->relocbase + pltrel + pltrelsz);
+		obj->pltrelalim = 0;
+		/* On PPC and SPARC, at least, REL(A)SZ may include JMPREL.
+		   Trim rel(a)lim to save time later. */
+		if (obj->rellim && obj->pltrel &&
+		    obj->rellim > obj->pltrel &&
+		    obj->rellim <= obj->pltrellim)
+			obj->rellim = obj->pltrel;
+	} else if (plttype == DT_RELA) {
+		obj->pltrela = (const Elf_Rela *)(obj->relocbase + pltrel);
+		obj->pltrellim = 0;
+		obj->pltrelalim = (const Elf_Rela *)(obj->relocbase + pltrel + pltrelsz);
+		/* On PPC and SPARC, at least, REL(A)SZ may include JMPREL.
+		   Trim rel(a)lim to save time later. */
+		if (obj->relalim && obj->pltrela &&
+		    obj->relalim > obj->pltrela &&
+		    obj->relalim <= obj->pltrelalim)
+			obj->relalim = obj->pltrela;
+	}
+
+#if defined(RTLD_LOADER) && defined(__HAVE_FUNCTION_DESCRIPTORS)
+	if (init != 0)
+		obj->init = (void (*)(void))
+		    _rtld_function_descriptor_alloc(obj, NULL, init);
+	if (fini != 0)
+		obj->fini = (void (*)(void))
+		    _rtld_function_descriptor_alloc(obj, NULL, fini);
+#else
+	if (init != 0)
+		obj->init = (void (*)(void))
+		    (obj->relocbase + init);
+	if (fini != 0)
+		obj->fini = (void (*)(void))
+		    (obj->relocbase + fini);
+#endif
 
 	if (dyn_rpath != NULL) {
-		_rtld_add_paths(&obj->rpaths, obj->strtab +
-		    dyn_rpath->d_un.d_val, true);
+		_rtld_add_paths(execname, &obj->rpaths, obj->strtab +
+		    dyn_rpath->d_un.d_val);
 	}
 }
 
@@ -253,47 +285,46 @@ _rtld_digest_dynamic(obj)
  * returns an Obj_Entry structure.
  */
 Obj_Entry *
-_rtld_digest_phdr(phdr, phnum, entry)
-	const Elf_Phdr *phdr;
-	int phnum;
-	caddr_t entry;
+_rtld_digest_phdr(const Elf_Phdr *phdr, int phnum, caddr_t entry)
 {
 	Obj_Entry      *obj;
 	const Elf_Phdr *phlimit = phdr + phnum;
 	const Elf_Phdr *ph;
 	int             nsegs = 0;
+	ptrdiff_t	relocoffs = 0;
+	Elf_Addr	vaddr;
 
 	obj = _rtld_obj_new();
 	for (ph = phdr; ph < phlimit; ++ph) {
+		vaddr = ph->p_vaddr + relocoffs;
+		dbg(("headers: relocoffs = %lx\n", (long)relocoffs));
 		switch (ph->p_type) {
 
 		case PT_PHDR:
-			assert((const Elf_Phdr *) ph->p_vaddr == phdr);
-			obj->phdr = (const Elf_Phdr *) ph->p_vaddr;
-			obj->phsize = ph->p_memsz;
+			relocoffs = (uintptr_t)phdr - (uintptr_t)ph->p_vaddr;
 			break;
 
 		case PT_INTERP:
-			obj->interp = (const char *) ph->p_vaddr;
+			obj->interp = (const char *)(uintptr_t)vaddr;
 			break;
 
 		case PT_LOAD:
 			assert(nsegs < 2);
 			if (nsegs == 0) {	/* First load segment */
-				obj->vaddrbase = round_down(ph->p_vaddr);
-				obj->mapbase = (caddr_t) obj->vaddrbase;
-				obj->relocbase = obj->mapbase - obj->vaddrbase;
-				obj->textsize = round_up(ph->p_vaddr +
-				    ph->p_memsz) - obj->vaddrbase;
+				obj->vaddrbase = round_down(vaddr);
+				obj->mapbase = (caddr_t)(uintptr_t)obj->vaddrbase;
+				obj->relocbase = (void *)relocoffs;
+				obj->textsize = round_up(vaddr + ph->p_memsz) -
+				    obj->vaddrbase;
 			} else {		/* Last load segment */
-				obj->mapsize = round_up(ph->p_vaddr +
-				    ph->p_memsz) - obj->vaddrbase;
+				obj->mapsize = round_up(vaddr + ph->p_memsz) -
+				    obj->vaddrbase;
 			}
 			++nsegs;
 			break;
 
 		case PT_DYNAMIC:
-			obj->dynamic = (Elf_Dyn *) ph->p_vaddr;
+			obj->dynamic = (Elf_Dyn *)(uintptr_t)vaddr;
 			break;
 		}
 	}

@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_nwayxor.c,v 1.4 2000/03/30 12:45:41 augustss Exp $	*/
+/*	$NetBSD: rf_nwayxor.c,v 1.11 2006/11/16 01:33:23 christos Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -35,15 +35,17 @@
  *
  ************************************************************/
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: rf_nwayxor.c,v 1.11 2006/11/16 01:33:23 christos Exp $");
+
 #include "rf_nwayxor.h"
 #include "rf_shutdown.h"
 
 static int callcount[10];
 static void rf_ShutdownNWayXor(void *);
 
-static void 
-rf_ShutdownNWayXor(ignored)
-	void   *ignored;
+static void
+rf_ShutdownNWayXor(void *ignored)
 {
 	int     i;
 
@@ -55,23 +57,19 @@ rf_ShutdownNWayXor(ignored)
 	printf("\n");
 }
 
-int 
-rf_ConfigureNWayXor(listp)
-	RF_ShutdownList_t **listp;
+int
+rf_ConfigureNWayXor(RF_ShutdownList_t **listp)
 {
-	int     i, rc;
+	int     i;
 
 	for (i = 0; i < 10; i++)
 		callcount[i] = 0;
-	rc = rf_ShutdownCreate(listp, rf_ShutdownNWayXor, NULL);
-	return (rc);
+	rf_ShutdownCreate(listp, rf_ShutdownNWayXor, NULL);
+	return (0);
 }
 
-void 
-rf_nWayXor1(src_rbs, dest_rb, len)
-	RF_ReconBuffer_t **src_rbs;
-	RF_ReconBuffer_t *dest_rb;
-	int     len;
+void
+rf_nWayXor1(RF_ReconBuffer_t **src_rbs,	RF_ReconBuffer_t *dest_rb, int len)
 {
 	unsigned long *src = (unsigned long *) src_rbs[0]->buffer;
 	unsigned long *dest = (unsigned long *) dest_rb->buffer;
@@ -101,11 +99,8 @@ rf_nWayXor1(src_rbs, dest_rb, len)
 	}
 }
 
-void 
-rf_nWayXor2(src_rbs, dest_rb, len)
-	RF_ReconBuffer_t **src_rbs;
-	RF_ReconBuffer_t *dest_rb;
-	int     len;
+void
+rf_nWayXor2(RF_ReconBuffer_t **src_rbs, RF_ReconBuffer_t *dest_rb, int len)
 {
 	unsigned long *dst = (unsigned long *) dest_rb->buffer;
 	unsigned long *a = dst;
@@ -194,11 +189,8 @@ rf_nWayXor2(src_rbs, dest_rb, len)
   _dst += 4;
 
 
-void 
-rf_nWayXor3(src_rbs, dest_rb, len)
-	RF_ReconBuffer_t **src_rbs;
-	RF_ReconBuffer_t *dest_rb;
-	int     len;
+void
+rf_nWayXor3(RF_ReconBuffer_t **src_rbs, RF_ReconBuffer_t *dest_rb, int len)
 {
 	unsigned long *dst = (unsigned long *) dest_rb->buffer;
 	unsigned long *b = (unsigned long *) src_rbs[0]->buffer;
@@ -224,11 +216,8 @@ rf_nWayXor3(src_rbs, dest_rb, len)
 	}
 }
 
-void 
-rf_nWayXor4(src_rbs, dest_rb, len)
-	RF_ReconBuffer_t **src_rbs;
-	RF_ReconBuffer_t *dest_rb;
-	int     len;
+void
+rf_nWayXor4(RF_ReconBuffer_t **src_rbs, RF_ReconBuffer_t *dest_rb, int len)
 {
 	unsigned long *dst = (unsigned long *) dest_rb->buffer;
 	unsigned long *b = (unsigned long *) src_rbs[0]->buffer;
@@ -256,11 +245,8 @@ rf_nWayXor4(src_rbs, dest_rb, len)
 	}
 }
 
-void 
-rf_nWayXor5(src_rbs, dest_rb, len)
-	RF_ReconBuffer_t **src_rbs;
-	RF_ReconBuffer_t *dest_rb;
-	int     len;
+void
+rf_nWayXor5(RF_ReconBuffer_t **src_rbs, RF_ReconBuffer_t *dest_rb, int len)
 {
 	unsigned long *dst = (unsigned long *) dest_rb->buffer;
 	unsigned long *b = (unsigned long *) src_rbs[0]->buffer;
@@ -290,11 +276,8 @@ rf_nWayXor5(src_rbs, dest_rb, len)
 	}
 }
 
-void 
-rf_nWayXor6(src_rbs, dest_rb, len)
-	RF_ReconBuffer_t **src_rbs;
-	RF_ReconBuffer_t *dest_rb;
-	int     len;
+void
+rf_nWayXor6(RF_ReconBuffer_t **src_rbs, RF_ReconBuffer_t *dest_rb, int len)
 {
 	unsigned long *dst = (unsigned long *) dest_rb->buffer;
 	unsigned long *b = (unsigned long *) src_rbs[0]->buffer;
@@ -326,11 +309,8 @@ rf_nWayXor6(src_rbs, dest_rb, len)
 	}
 }
 
-void 
-rf_nWayXor7(src_rbs, dest_rb, len)
-	RF_ReconBuffer_t **src_rbs;
-	RF_ReconBuffer_t *dest_rb;
-	int     len;
+void
+rf_nWayXor7(RF_ReconBuffer_t **src_rbs, RF_ReconBuffer_t *dest_rb, int len)
 {
 	unsigned long *dst = (unsigned long *) dest_rb->buffer;
 	unsigned long *b = (unsigned long *) src_rbs[0]->buffer;
@@ -364,11 +344,8 @@ rf_nWayXor7(src_rbs, dest_rb, len)
 	}
 }
 
-void 
-rf_nWayXor8(src_rbs, dest_rb, len)
-	RF_ReconBuffer_t **src_rbs;
-	RF_ReconBuffer_t *dest_rb;
-	int     len;
+void
+rf_nWayXor8(RF_ReconBuffer_t **src_rbs, RF_ReconBuffer_t *dest_rb, int len)
 {
 	unsigned long *dst = (unsigned long *) dest_rb->buffer;
 	unsigned long *b = (unsigned long *) src_rbs[0]->buffer;
@@ -405,11 +382,8 @@ rf_nWayXor8(src_rbs, dest_rb, len)
 }
 
 
-void 
-rf_nWayXor9(src_rbs, dest_rb, len)
-	RF_ReconBuffer_t **src_rbs;
-	RF_ReconBuffer_t *dest_rb;
-	int     len;
+void
+rf_nWayXor9(RF_ReconBuffer_t **src_rbs, RF_ReconBuffer_t *dest_rb, int len)
 {
 	unsigned long *dst = (unsigned long *) dest_rb->buffer;
 	unsigned long *b = (unsigned long *) src_rbs[0]->buffer;

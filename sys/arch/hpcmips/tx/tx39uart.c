@@ -1,32 +1,38 @@
-/*	$NetBSD: tx39uart.c,v 1.3 2000/01/16 21:47:01 uch Exp $ */
+/*	$NetBSD: tx39uart.c,v 1.14 2008/04/28 20:23:22 martin Exp $ */
 
-/*
- * Copyright (c) 1999, 2000, by UCHIYAMA Yasushi
+/*-
+ * Copyright (c) 1999, 2000 The NetBSD Foundation, Inc.
  * All rights reserved.
+ *
+ * This code is derived from software contributed to The NetBSD Foundation
+ * by UCHIYAMA Yasushi.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
  * 1. Redistributions of source code must retain the above copyright
  *    notice, this list of conditions and the following disclaimer.
- * 2. The name of the developer may NOT be used to endorse or promote products
- *    derived from this software without specific prior written permission.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
  *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
-#include "opt_tx39_debug.h"
-#include "opt_tx39uartdebug.h"
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: tx39uart.c,v 1.14 2008/04/28 20:23:22 martin Exp $");
+
+#include "opt_tx39uart_debug.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -38,14 +44,13 @@
 #include <hpcmips/tx/tx39var.h>
 #include <hpcmips/tx/tx39uartvar.h>
 
-#include <hpcmips/tx/txiomanvar.h>
-
 #include "locators.h"
 
-int	tx39uart_match __P((struct device*, struct cfdata*, void*));
-void	tx39uart_attach __P((struct device*, struct device*, void*));
-int	tx39uart_print __P((void*, const char*));
-int	tx39uart_search __P((struct device*, struct cfdata*, void*));
+int	tx39uart_match(struct device *, struct cfdata *, void *);
+void	tx39uart_attach(struct device *, struct device *, void *);
+int	tx39uart_print(void *, const char *);
+int	tx39uart_search(struct device *, struct cfdata *,
+			const int *, void *);
 
 struct tx39uart_softc {
 	struct	device sc_dev;
@@ -53,44 +58,33 @@ struct tx39uart_softc {
 	int sc_enabled;
 };
 
-struct cfattach tx39uart_ca = {
-	sizeof(struct tx39uart_softc), tx39uart_match, tx39uart_attach
-};
+CFATTACH_DECL(tx39uart, sizeof(struct tx39uart_softc),
+    tx39uart_match, tx39uart_attach, NULL, NULL);
 
 int
-tx39uart_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+tx39uart_match(struct device *parent, struct cfdata *cf, void *aux)
 {
-	return 1;
+	return ATTACH_LAST;
 }
 
 void
-tx39uart_attach(parent, self, aux)
-	struct device *parent;
-	struct device *self;
-	void *aux;
+tx39uart_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct txsim_attach_args *ta = aux;
-	struct tx39uart_softc *sc = (void*)self;
+	struct tx39uart_softc *sc = (void *)self;
 	tx_chipset_tag_t tc;
 
 	printf("\n");
 	sc->sc_tc = tc = ta->ta_tc;
 
-	txioman_uart_init(tc);
-
-	config_search(tx39uart_search, self, tx39uart_print);
+	config_search_ia(tx39uart_search, self, "txcomif", tx39uart_print);
 }
 
 int
-tx39uart_search(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+tx39uart_search(struct device *parent, struct cfdata *cf,
+		const int *ldesc, void *aux)
 {
-	struct tx39uart_softc *sc = (void*)parent;
+	struct tx39uart_softc *sc = (void *)parent;
 	struct tx39uart_attach_args ua;
 	
 	ua.ua_tc	= sc->sc_tc;
@@ -102,7 +96,7 @@ tx39uart_search(parent, cf, aux)
 	}
 	
 	if (!(sc->sc_enabled & (1 << ua.ua_slot)) && /* not attached slot */
-	    (*cf->cf_attach->ca_match)(parent, cf, &ua)) {
+	    config_match(parent, cf, &ua)) {
 		config_attach(parent, cf, &ua, tx39uart_print);
 		sc->sc_enabled |= (1 << ua.ua_slot);
 	}
@@ -111,13 +105,11 @@ tx39uart_search(parent, cf, aux)
 }
 
 int
-tx39uart_print(aux, pnp)
-	void *aux;
-	const char *pnp;
+tx39uart_print(void *aux, const char *pnp)
 {
 	struct tx39uart_attach_args *ua = aux;
 	
-	printf(" slot %d", ua->ua_slot);
+	aprint_normal(" slot %d", ua->ua_slot);
 
 	return QUIET;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: types.h,v 1.20 2000/03/19 14:43:13 pk Exp $ */
+/*	$NetBSD: types.h,v 1.50 2008/01/20 18:09:09 joerg Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -21,11 +21,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -51,57 +47,69 @@
 #undef sun
 #endif
 
+#if defined(_KERNEL_OPT)
+#include "opt_sparc_arch.h"
+#endif
+
 #include <sys/cdefs.h>
+#include <sys/featuretest.h>
+#include <machine/int_types.h>
+
+/* The following are unsigned to prevent annoying sign extended pointers. */
+typedef unsigned long int	register_t;
+typedef unsigned int		register32_t;
+#ifdef __arch64__
+typedef unsigned long int	register64_t;
+#else
+/* LONGLONG */
+typedef unsigned long long int	register64_t;
+#endif
 
 #if defined(_KERNEL)
 typedef struct label_t {
-	int val[2];
+#ifdef SUN4U
+	register64_t val[2];
+#else
+	register_t val[3];
+#endif
 } label_t;
 #endif
 
-/*
- * Basic integral types.  Omit the typedef if
- * not possible for a machine/compiler combination.
- */
-#define	__BIT_TYPES_DEFINED__
-typedef	__signed char		   int8_t;
-typedef	unsigned char		 u_int8_t;
-typedef	short			  int16_t;
-typedef	unsigned short		u_int16_t;
-typedef	int			  int32_t;
-typedef	unsigned int		u_int32_t;
-
-#ifdef __arch64__
-/* 64-bit compiler */
-typedef	long			  int64_t;
-typedef unsigned long		u_int64_t;
-#else
-/* 32-bit compiler */
-/* LONGLONG */
-typedef	long long		  int64_t;
-/* LONGLONG */
-typedef	unsigned long long	u_int64_t;
-#endif
-
-/* The following are unsigned to prevent annoying sign extended pointers. */
-typedef unsigned long		register_t;
-typedef u_int32_t		register32_t;
-typedef u_int64_t		register64_t;
-
-/*
- * This should be defined(_KERNEL) ... but things break.
- */
-#if !defined(_POSIX_C_SOURCE) && !defined(_XOPEN_SOURCE)
-typedef unsigned long		vaddr_t;
+#if defined(_NETBSD_SOURCE)
+typedef unsigned long int	vaddr_t;
 typedef vaddr_t			vsize_t;
 #ifdef SUN4U
-typedef u_int64_t		paddr_t;
+#ifdef __arch64__
+typedef unsigned long int	paddr_t;
 #else
-typedef unsigned long		paddr_t;
-#endif
+/* LONGLONG */
+typedef unsigned long long int	paddr_t;
+#endif /* __arch64__ */
+#else
+typedef unsigned long int	paddr_t;
+#endif /* SUN4U */
 typedef paddr_t			psize_t;
 #endif
 
-#define __HAVE_DEVICE_REGISTER
+typedef	volatile unsigned char		__cpu_simple_lock_t;
+
+/* __cpu_simple_lock_t used to be a full word. */
+#define	__CPU_SIMPLE_LOCK_PAD
+
+#define	__SIMPLELOCK_LOCKED	0xff
+#define	__SIMPLELOCK_UNLOCKED	0
+
+#define	__HAVE_DEVICE_REGISTER
+#define	__HAVE_SYSCALL_INTERN
+#define	__GENERIC_SOFT_INTERRUPTS_ALL_LEVELS
+
+#ifdef SUN4U
+#define	__HAVE_ATOMIC64_OPS
+#define __HAVE_CPU_COUNTER	/* sparc v9 CPUs have %tick */
+#if defined(_KERNEL)
+#define __HAVE_RAS
+#endif
+#endif
+
 
 #endif	/* _MACHTYPES_H_ */

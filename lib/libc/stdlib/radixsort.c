@@ -1,4 +1,4 @@
-/*	$NetBSD: radixsort.c,v 1.14 2000/01/22 22:19:20 mycroft Exp $	*/
+/*	$NetBSD: radixsort.c,v 1.16 2005/12/24 21:11:16 perry Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)radixsort.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: radixsort.c,v 1.14 2000/01/22 22:19:20 mycroft Exp $");
+__RCSID("$NetBSD: radixsort.c,v 1.16 2005/12/24 21:11:16 perry Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -75,7 +71,7 @@ typedef struct {
 	int sn, si;
 } stack;
 
-static __inline void simplesort
+static inline void simplesort
 	    __P((const u_char **, int, int, const u_char *, u_int));
 static void r_sort_a __P((const u_char **, int, int, const u_char *, u_int));
 static void r_sort_b __P((const u_char **,
@@ -326,7 +322,7 @@ r_sort_b(a, ta, n, i, tr, endch)
 	}
 }
 		
-static __inline void
+static inline void
 simplesort(a, n, b, tr, endch)	/* insertion sort */
 	const u_char **a;
 	int n, b;

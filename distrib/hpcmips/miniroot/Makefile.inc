@@ -1,4 +1,13 @@
-#	$NetBSD: Makefile.inc,v 1.4 2000/03/11 09:12:34 shin Exp $
+#	$NetBSD: Makefile.inc,v 1.14 2003/04/10 15:01:52 he Exp $
 
-VND=vnd0d
-IMAGESIZE=8192
+DBG=		-Os
+
+IMAGESIZE=	4352k
+MAKEFS_FLAGS=	-o density=2k
+IMAGEENDIAN=	le
+MAKEDEVTARGETS=	all
+LISTS+=		${DISTRIBDIR}/common/list.sysinst
+MTREECONF+=	${.CURDIR}/mtree.usr.install
+IMAGEDEPENDS+=	${ARCHDIR}/dot.profile ${ARCHDIR}/termcap.vt100 \
+		${DESTDIR}/.profile ${DESTDIR}/etc/disktab
+SMALLPROG_INET6=1

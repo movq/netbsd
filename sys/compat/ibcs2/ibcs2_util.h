@@ -1,4 +1,4 @@
-/*	$NetBSD: ibcs2_util.h,v 1.5 1998/09/05 14:50:26 christos Exp $	*/
+/*	$NetBSD: ibcs2_util.h,v 1.9 2008/04/28 20:23:41 martin Exp $	*/
 
 /*-
  * Copyright (c) 1994 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -70,18 +63,15 @@
 
 #include <compat/common/compat_util.h>
 
+#ifdef _KERNEL
+
 #ifdef DEBUG_IBCS2
-#define DPRINTF(a)      printf a;
-#else
-#define DPRINTF(a)
-#endif
+extern int ibcs2_debug;
+#define DPRINTF(a)      do { if (ibcs2_debug) printf a; } while (0)
+#else /* !DEBUG_IBCS2 */
+#define DPRINTF(a)	do { } while (0)
+#endif /* DEBUG_IBCS2 */
 
-extern const char ibcs2_emul_path[];
-
-#define IBCS2_CHECK_ALT_EXIST(p, sgp, path) \
-	CHECK_ALT_EXIST(p, sgp, ibcs2_emul_path, path)
-
-#define IBCS2_CHECK_ALT_CREAT(p, sgp, path) \
-	CHECK_ALT_CREAT(p, sgp, ibcs2_emul_path, path)
+#endif /* _KERNEL */
 
 #endif /* !_IBCS2_UTIL_H_ */

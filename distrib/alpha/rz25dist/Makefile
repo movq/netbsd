@@ -1,9 +1,11 @@
-# $NetBSD: Makefile,v 1.23 1999/04/07 06:47:50 cgd Exp $
+# $NetBSD: Makefile,v 1.28 2003/07/10 10:34:02 lukem Exp $
+
+.include "../../../Makefile.inc"
 
 # Make a distribution for the alpha, on a spare disk.
 # This creates a large, gzipped disk image in ${.OBJDIR}
 
-TARGETS=	bin.tar.gz etc.tar.gz x11.tar.gz diskimage.gz
+LOCALTARGETS=	bin.tar.gz etc.tar.gz x11.tar.gz diskimage.gz
 
 .if !defined(DESTDIR) || !defined(DESTDISK)
 all:
@@ -11,10 +13,12 @@ all:
 	@false
 .else
 
+KERNEL?= ${KERNOBJDIR}/GENERIC/netbsd
+
 SECPERCYL=	343
 CYLS=		1189
 
-all: ${TARGETS}
+all: ${LOCALTARGETS}
 
 mount-fs:
 	disklabel -W ${DESTDISK}
@@ -29,19 +33,19 @@ mount-fs:
 	mount /dev/${DESTDISK}d ${DESTDIR}/usr
 
 build-fs:
-	cd ${.CURDIR}/../../../etc && make distribution
+	cd ${.CURDIR}/../../../etc && ${MAKE} distribution
 	if [ -d ${.CURDIR}/../../../toolchain ]; then \
 		cd ${.CURDIR}/../../../toolchain && \
-		    make prefix=${DESTDIR}/usr/local install; \
+		    ${MAKE} prefix=${DESTDIR}/usr/local install; \
 	else \
 		true; \
 	fi
 	if [ -d ${.CURDIR}/../../../xc ]; then \
-		cd ${.CURDIR}/../../../xc && make install install.man; \
+		cd ${.CURDIR}/../../../xc && ${MAKE} install install.man; \
 	else \
 		true; \
 	fi
-	cp ${.CURDIR}/../../../sys/arch/alpha/compile/GENERIC/netbsd ${DESTDIR}
+	cp ${KERNEL} ${DESTDIR}
 	ln -s gcc ${DESTDIR}/usr/local/bin/cc
 	(cd ${DESTDIR}/usr/libexec && ln -s \
 	    ../local/lib/gcc-lib/alpha-unknown-netbsd*/*/cpp .)
@@ -56,8 +60,7 @@ build-fs:
 	ln -s ../local/bin/strip ${DESTDIR}/usr/bin
 	cp -p ${DESTDIR}/usr/mdec/boot ${DESTDIR}/
 	sync; sleep 1; sync; sleep 1
-	${DESTDIR}/usr/mdec/installboot -v /dev/r${DESTDISK}c \
-	    ${DESTDIR}/usr/mdec/bootxx_ffs
+	${TOOL_INSTALLBOOT} -v /dev/r${DESTDISK}c ${DESTDIR}/usr/mdec/bootxx_ffs
 
 unmount-fs:
 	umount ${DESTDIR}/usr ${DESTDIR}
@@ -94,8 +97,9 @@ x11.tar.gz: mount-fs build-fs
 
 # clean dependencies in case somebody decides to shortcut the build.
 clean cleandir distclean:
-	/bin/rm -f ${TARGETS}
+	/bin/rm -f ${LOCALTARGETS}
 	/bin/rm -f mount-fs build-fs unmount-fs
 
+.include <bsd.kernobj.mk>
 .include <bsd.own.mk>
 .include <bsd.obj.mk>

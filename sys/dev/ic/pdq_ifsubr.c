@@ -1,4 +1,4 @@
-/*	$NetBSD: pdq_ifsubr.c,v 1.26 2000/03/07 00:33:13 mycroft Exp $	*/
+/*	$NetBSD: pdq_ifsubr.c,v 1.52 2008/04/08 12:07:27 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1996 Matt Thomas <matt@3am-software.com>
@@ -10,7 +10,7 @@
  * 1. Redistributions of source code must retain the above copyright
  *    notice, this list of conditions and the following disclaimer.
  * 2. The name of the author may not be used to endorse or promote products
- *    derived from this software withough specific prior written permission
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -34,9 +34,11 @@
  *	(ie. it provides an ifnet interface to the rest of the system)
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: pdq_ifsubr.c,v 1.52 2008/04/08 12:07:27 cegger Exp $");
+
 #ifdef __NetBSD__
 #include "opt_inet.h"
-#include "opt_ns.h"
 #endif
 
 #include <sys/param.h>
@@ -87,14 +89,10 @@
 #include <i386/isa/isavar.h>
 #endif
 
-#ifdef NS
-#include <netns/ns.h>
-#include <netns/ns_if.h>
-#endif
 
+#ifndef __NetBSD__
 #include <vm/vm.h>
-#include <vm/vm_kern.h>
-#include <vm/vm_param.h>
+#endif
 
 #if defined(__FreeBSD__)
 /*
@@ -162,7 +160,7 @@ pdq_ifwatchdog(
     ifp->if_timer = 0;
     for (;;) {
 	struct mbuf *m;
-	IF_DEQUEUE(&ifp->if_snd, m);
+	IFQ_DEQUEUE(&ifp->if_snd, m);
 	if (m == NULL)
 	    return;
 	PDQ_OS_DATABUF_FREE(PDQ_OS_IFP_TO_SOFTC(ifp)->sc_pdq, m);
@@ -174,7 +172,6 @@ pdq_ifstart(
     struct ifnet *ifp)
 {
     pdq_softc_t * const sc = PDQ_OS_IFP_TO_SOFTC(ifp);
-    struct ifqueue *ifq = &ifp->if_snd;
     struct mbuf *m;
     int tx = 0;
 
@@ -188,8 +185,9 @@ pdq_ifstart(
 	sc->sc_if.if_flags |= IFF_OACTIVE;
 	return;
     }
+    sc->sc_flags |= PDQIF_DOWNCALL;
     for (;; tx = 1) {
-	IF_DEQUEUE(ifq, m);
+	IFQ_POLL(&ifp->if_snd, m);
 	if (m == NULL)
 	    break;
 #if defined(PDQ_BUS_DMA) && !defined(PDQ_BUS_DMA_NOTX)
@@ -202,7 +200,8 @@ pdq_ifstart(
 	    }
 	    if (!bus_dmamap_create(sc->sc_dmatag, m->m_pkthdr.len, 255,
 				   m->m_pkthdr.len, 0, BUS_DMA_NOWAIT, &map)) {
-		if (!bus_dmamap_load_mbuf(sc->sc_dmatag, map, m, BUS_DMA_NOWAIT)) {
+		if (!bus_dmamap_load_mbuf(sc->sc_dmatag, map, m,
+					  BUS_DMA_WRITE|BUS_DMA_NOWAIT)) {
 		    bus_dmamap_sync(sc->sc_dmatag, map, 0, m->m_pkthdr.len,
 				    BUS_DMASYNC_PREWRITE);
 		    M_SETCTX(m, map);
@@ -222,13 +221,13 @@ pdq_ifstart(
 
 	if (pdq_queue_transmit_data(sc->sc_pdq, m) == PDQ_FALSE)
 	    break;
+	IFQ_DEQUEUE(&ifp->if_snd, m);
     }
-    if (m != NULL) {
+    if (m != NULL)
 	ifp->if_flags |= IFF_OACTIVE;
-	IF_PREPEND(ifq, m);
-    }
     if (tx)
 	PDQ_DO_TYPE2_PRODUCER(sc->sc_pdq);
+    sc->sc_flags &= ~PDQIF_DOWNCALL;
 }
 
 void
@@ -281,9 +280,10 @@ pdq_os_restart_transmitter(
 {
     pdq_softc_t *sc = pdq->pdq_os_ctx;
     sc->sc_if.if_flags &= ~IFF_OACTIVE;
-    if (sc->sc_if.if_snd.ifq_head != NULL) {
+    if (IFQ_IS_EMPTY(&sc->sc_if.if_snd) == 0) {
 	sc->sc_if.if_timer = PDQ_OS_TX_TIMEOUT;
-	pdq_ifstart(&sc->sc_if);
+	if ((sc->sc_flags & PDQIF_DOWNCALL) == 0)
+	    pdq_ifstart(&sc->sc_if);
     } else {
 	sc->sc_if.if_timer = 0;
     }
@@ -315,7 +315,7 @@ pdq_os_addr_fill(
 
     /*
      * ADDR_FILTER_SET is always issued before FILTER_SET so
-     * we can play with PDQ_ALLMULTI and not worry about 
+     * we can play with PDQ_ALLMULTI and not worry about
      * queueing a FILTER_SET ourselves.
      */
 
@@ -326,7 +326,7 @@ pdq_os_addr_fill(
 
     ETHER_FIRST_MULTI(step, PDQ_FDDICOM(sc), enm);
     while (enm != NULL && num_addrs > 0) {
-	if (bcmp(enm->enm_addrlo, enm->enm_addrhi, 6) == 0) {
+	if (memcmp(enm->enm_addrlo, enm->enm_addrhi, 6) == 0) {
 	    ((u_short *) addr->lanaddr_bytes)[0] = ((u_short *) enm->enm_addrlo)[0];
 	    ((u_short *) addr->lanaddr_bytes)[1] = ((u_short *) enm->enm_addrlo)[1];
 	    ((u_short *) addr->lanaddr_bytes)[2] = ((u_short *) enm->enm_addrlo)[2];
@@ -417,7 +417,7 @@ int
 pdq_ifioctl(
     struct ifnet *ifp,
     ioctl_cmd_t cmd,
-    caddr_t data)
+    void *data)
 {
     pdq_softc_t *sc = PDQ_OS_IFP_TO_SOFTC(ifp);
     int s, error = 0;
@@ -438,26 +438,6 @@ pdq_ifioctl(
 		}
 #endif /* INET */
 
-#if defined(NS)
-		/* This magic copied from if_is.c; I don't use XNS,
-		 * so I have no way of telling if this actually
-		 * works or not.
-		 */
-		case AF_NS: {
-		    struct ns_addr *ina = &(IA_SNS(ifa)->sns_addr);
-		    if (ns_nullhost(*ina)) {
-			ina->x_host = *(union ns_host *)PDQ_LANADDR(sc);
-		    } else {
-			ifp->if_flags &= ~IFF_RUNNING;
-			bcopy((caddr_t)ina->x_host.c_host,
-			      (caddr_t)PDQ_LANADDR(sc),
-			      PDQ_LANADDR_SIZE(sc));
-		    }
-
-		    pdq_ifinit(sc);
-		    break;
-		}
-#endif /* NS */
 
 		default: {
 		    pdq_ifinit(sc);
@@ -468,9 +448,8 @@ pdq_ifioctl(
 	}
 	case SIOCGIFADDR: {
 	    struct ifreq *ifr = (struct ifreq *)data;
-	    bcopy((caddr_t) PDQ_LANADDR(sc),
-		  (caddr_t) ((struct sockaddr *)&ifr->ifr_data)->sa_data,
-		  6);
+	    error = ifreq_setaddr(cmd, ifr,
+	        (const struct sockaddr *)sc->sc_if.if_sadl);
 	    break;
 	}
 
@@ -484,12 +463,7 @@ pdq_ifioctl(
 	    /*
 	     * Update multicast listeners
 	     */
-	    if (cmd == SIOCADDMULTI)
-		error = ether_addmulti((struct ifreq *)data, PDQ_FDDICOM(sc));
-	    else
-		error = ether_delmulti((struct ifreq *)data, PDQ_FDDICOM(sc));
-
-	    if (error == ENETRESET) {
+	    if ((error = ether_ioctl(ifp, cmd, data)) == ENETRESET) {
 		if (sc->sc_if.if_flags & IFF_RUNNING)
 		    pdq_run(sc->sc_pdq);
 		error = 0;
@@ -510,7 +484,8 @@ pdq_ifioctl(
 		error = EINVAL;
 		break;
 	    }
-	    ifp->if_mtu = ifr->ifr_mtu;
+	    if ((error = ifioctl_common(ifp, cmd, data)) == ENETRESET)
+		error = 0;
 	    break;
 	}
 #endif /* SIOCSIFMTU */
@@ -558,6 +533,7 @@ pdq_ifattach(
     ifp->if_output = fddi_output;
 #endif
     ifp->if_start = pdq_ifstart;
+    IFQ_SET_READY(&ifp->if_snd);
 
 #if defined(IFM_FDDI)
     {
@@ -568,19 +544,16 @@ pdq_ifattach(
 	ifmedia_set(&sc->sc_ifmedia, media);
     }
 #endif
-  
+
     if_attach(ifp);
 #if defined(__NetBSD__)
-    fddi_ifattach(ifp, (caddr_t)&sc->sc_pdq->pdq_hwaddr);
+    fddi_ifattach(ifp, (void *)&sc->sc_pdq->pdq_hwaddr);
 #else
     fddi_ifattach(ifp);
 #endif
-#if NBPFILTER > 0
-    PDQ_BPFATTACH(sc, DLT_FDDI, sizeof(struct fddi_header));
-#endif
 }
 
-#if defined(PDQ_BUS_DMA) 
+#if defined(PDQ_BUS_DMA)
 int
 pdq_os_memalloc_contig(
     pdq_t *pdq)
@@ -594,11 +567,15 @@ pdq_os_memalloc_contig(
     not_ok = bus_dmamem_alloc(sc->sc_dmatag,
 			 sizeof(*pdq->pdq_dbp), sizeof(*pdq->pdq_dbp),
 			 sizeof(*pdq->pdq_dbp), db_segs, 1, &db_nsegs,
-			 BUS_DMA_NOWAIT);
+#if defined(__sparc__) || defined(__sparc64__)
+			BUS_DMA_NOWAIT | BUS_DMA_COHERENT);
+#else
+			BUS_DMA_NOWAIT);
+#endif
     if (!not_ok) {
 	steps = 1;
 	not_ok = bus_dmamem_map(sc->sc_dmatag, db_segs, db_nsegs,
-				sizeof(*pdq->pdq_dbp), (caddr_t *) &pdq->pdq_dbp,
+				sizeof(*pdq->pdq_dbp), (void **) &pdq->pdq_dbp,
 				BUS_DMA_NOWAIT);
     }
     if (!not_ok) {
@@ -623,7 +600,7 @@ pdq_os_memalloc_contig(
 	steps = 5;
 	not_ok = bus_dmamem_map(sc->sc_dmatag, ui_segs, ui_nsegs,
 			    PDQ_OS_PAGESIZE,
-			    (caddr_t *) &pdq->pdq_unsolicited_info.ui_events,
+			    (void **) &pdq->pdq_unsolicited_info.ui_events,
 			    BUS_DMA_NOWAIT);
     }
     if (!not_ok) {
@@ -641,12 +618,18 @@ pdq_os_memalloc_contig(
     if (!not_ok) {
 	steps = 8;
 	pdq->pdq_unsolicited_info.ui_pa_bufstart = sc->sc_uimap->dm_segs[0].ds_addr;
-	cb_segs[0].ds_addr = db_segs[0].ds_addr +
-		 offsetof(pdq_descriptor_block_t, pdqdb_consumer);
+	cb_segs[0] = db_segs[0];
+	cb_segs[0].ds_addr += offsetof(pdq_descriptor_block_t, pdqdb_consumer);
 	cb_segs[0].ds_len = sizeof(pdq_consumer_block_t);
+#if defined(__sparc__) || defined(__sparc64__)
+	pdq->pdq_cbp = (pdq_consumer_block_t*)((unsigned long int)pdq->pdq_dbp +
+	    (unsigned long int)offsetof(pdq_descriptor_block_t,pdqdb_consumer));
+#else
 	not_ok = bus_dmamem_map(sc->sc_dmatag, cb_segs, 1,
-				sizeof(*pdq->pdq_cbp), (caddr_t *) &pdq->pdq_cbp,
+				sizeof(*pdq->pdq_cbp),
+				(void **)&pdq->pdq_cbp,
 				BUS_DMA_NOWAIT|BUS_DMA_COHERENT);
+#endif
     }
     if (!not_ok) {
 	steps = 9;
@@ -656,7 +639,7 @@ pdq_os_memalloc_contig(
     if (!not_ok) {
 	steps = 10;
 	not_ok = bus_dmamap_load(sc->sc_dmatag, sc->sc_cbmap,
-				 (caddr_t) pdq->pdq_cbp, sizeof(*pdq->pdq_cbp),
+				 pdq->pdq_cbp, sizeof(*pdq->pdq_cbp),
 				 NULL, BUS_DMA_NOWAIT);
     }
     if (!not_ok) {
@@ -675,7 +658,7 @@ pdq_os_memalloc_contig(
 	}
 	case 9: {
 	    bus_dmamem_unmap(sc->sc_dmatag,
-			     (caddr_t) pdq->pdq_cbp, sizeof(*pdq->pdq_cbp));
+			     (void *)pdq->pdq_cbp, sizeof(*pdq->pdq_cbp));
 	    /* FALL THROUGH */
 	}
 	case 8: {
@@ -688,7 +671,7 @@ pdq_os_memalloc_contig(
 	}
 	case 6: {
 	    bus_dmamem_unmap(sc->sc_dmatag,
-			     (caddr_t) pdq->pdq_unsolicited_info.ui_events,
+			     (void *) pdq->pdq_unsolicited_info.ui_events,
 			     PDQ_OS_PAGESIZE);
 	    /* FALL THROUGH */
 	}
@@ -706,7 +689,7 @@ pdq_os_memalloc_contig(
 	}
 	case 2: {
 	    bus_dmamem_unmap(sc->sc_dmatag,
-			     (caddr_t) pdq->pdq_dbp,
+			     (void *) pdq->pdq_dbp,
 			     sizeof(*pdq->pdq_dbp));
 	    /* FALL THROUGH */
 	}
@@ -781,25 +764,27 @@ pdq_os_databuf_alloc(
 
     MGETHDR(m, M_DONTWAIT, MT_DATA);
     if (m == NULL) {
-	printf("%s: can't alloc small buf\n", sc->sc_dev.dv_xname);
+	aprint_error_dev(&sc->sc_dev, "can't alloc small buf\n");
 	return NULL;
     }
     MCLGET(m, M_DONTWAIT);
     if ((m->m_flags & M_EXT) == 0) {
-	printf("%s: can't alloc cluster\n", sc->sc_dev.dv_xname);
+	aprint_error_dev(&sc->sc_dev, "can't alloc cluster\n");
         m_free(m);
 	return NULL;
     }
+    MCLAIM(m, &PDQ_FDDICOM(sc)->ec_rx_mowner);
     m->m_pkthdr.len = m->m_len = PDQ_OS_DATABUF_SIZE;
 
     if (bus_dmamap_create(sc->sc_dmatag, PDQ_OS_DATABUF_SIZE,
 			   1, PDQ_OS_DATABUF_SIZE, 0, BUS_DMA_NOWAIT, &map)) {
-	printf("%s: can't create dmamap\n", sc->sc_dev.dv_xname);
+	aprint_error_dev(&sc->sc_dev, "can't create dmamap\n");
 	m_free(m);
 	return NULL;
     }
-    if (bus_dmamap_load_mbuf(sc->sc_dmatag, map, m, BUS_DMA_NOWAIT)) {
-	printf("%s: can't load dmamap\n", sc->sc_dev.dv_xname);
+    if (bus_dmamap_load_mbuf(sc->sc_dmatag, map, m,
+    			     BUS_DMA_READ|BUS_DMA_NOWAIT)) {
+	aprint_error_dev(&sc->sc_dev, "can't load dmamap\n");
 	bus_dmamap_destroy(sc->sc_dmatag, map);
 	m_free(m);
 	return NULL;

@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.17 1999/11/06 23:05:40 scottr Exp $	*/
+/*	$NetBSD: intr.h,v 1.31 2008/07/17 16:13:33 tsutsui Exp $	*/
 
 /*
  * Copyright (C) 1997 Scott Reynolds
@@ -36,28 +36,23 @@
 
 /* spl0 requires checking for software interrupts */
 
+#define	IPL_NONE	0
+#define	IPL_SOFTCLOCK	1
+#define	IPL_SOFTBIO	2
+#define	IPL_SOFTNET	3
+#define	IPL_SOFTSERIAL	4
+#define	IPL_VM		5
+#define	IPL_SCHED	6
+#define	IPL_HIGH	7
+#define	NIPL		8
+
 /*
  * This array contains the appropriate PSL_S|PSL_IPL? values
  * to raise interrupt priority to the requested level.
  */
-extern unsigned short mac68k_ipls[];
-
-#define	MAC68K_IPL_SOFT		0
-#define	MAC68K_IPL_BIO		1
-#define	MAC68K_IPL_NET		2
-#define	MAC68K_IPL_TTY		3
-#define	MAC68K_IPL_IMP		4
-#define	MAC68K_IPL_AUDIO	5
-#define	MAC68K_IPL_SERIAL	6
-#define	MAC68K_IPL_ADB		7
-#define	MAC68K_IPL_CLOCK	8
-#define	MAC68K_IPL_STATCLOCK	9
-#define	MAC68K_IPL_SCHED	10
-#define	MAC68K_IPL_HIGH		11
-#define	MAC68K_NIPLS		12
+extern uint16_t ipl2psl_table[NIPL];
 
 /* These spl calls are _not_ to be used by machine-independent code. */
-#define	spladb()	_splraise(mac68k_ipls[MAC68K_IPL_ADB])
 #define	splzs()		splserial()
 
 /*
@@ -65,53 +60,40 @@ extern unsigned short mac68k_ipls[];
  * 1) ensuring mutual exclusion (why use processor level?)
  * 2) allowing faster devices to take priority
  */
-#define	spllowersoftclock() spl1()
-#define	splsoftclock()	_splraise(mac68k_ipls[MAC68K_IPL_SOFT])
-#define	splsoftnet()	_splraise(mac68k_ipls[MAC68K_IPL_SOFT])
-#define	spltty()	_splraise(mac68k_ipls[MAC68K_IPL_TTY])
-#define	splbio()	_splraise(mac68k_ipls[MAC68K_IPL_BIO])
-#define	splnet()	_splraise(mac68k_ipls[MAC68K_IPL_NET])
-#define	splimp()	_splraise(mac68k_ipls[MAC68K_IPL_IMP])
-#define	splaudio()	_splraise(mac68k_ipls[MAC68K_IPL_AUDIO])
-#define	splclock()	_splraise(mac68k_ipls[MAC68K_IPL_CLOCK])
-#define	splstatclock()	_splraise(mac68k_ipls[MAC68K_IPL_STATCLOCK])
-#define	splsched()	_splraise(mac68k_ipls[MAC68K_IPL_SCHED])
-#define	splserial()	_splraise(mac68k_ipls[MAC68K_IPL_SERIAL])
-#define	splhigh()	spl7()
 
 /* watch out for side effects */
 #define splx(s)         ((s) & PSL_IPL ? _spl(s) : spl0())
 
-/*
- * simulated software interrupt register
- */
-extern volatile u_int8_t ssir;
 
-#define	SIR_NET		0x01
-#define	SIR_CLOCK	0x02
-#define	SIR_SERIAL	0x04
-#define SIR_DTMGR	0x08
-#define SIR_ADB		0x10
+typedef int ipl_t;
+typedef struct {
+	uint16_t _ipl;
+} ipl_cookie_t;
 
-#define	siron(mask)	\
-	__asm __volatile ( "orb %1,%0" : "=m" (ssir) : "i" (mask))
-#define	siroff(mask)	\
-	__asm __volatile ( "andb %1,%0" : "=m" (ssir) : "ir" (~(mask)));
+static inline ipl_cookie_t
+makeiplcookie(ipl_t ipl)
+{
 
-#define	setsoftnet()	siron(SIR_NET)
-#define	setsoftclock()	siron(SIR_CLOCK)
-#define	setsoftserial()	siron(SIR_SERIAL)
-#define	setsoftdtmgr()	siron(SIR_DTMGR)
-#define	setsoftadb()	siron(SIR_ADB)
+	return (ipl_cookie_t){._ipl = ipl};
+}
+
+static inline int
+splraiseipl(ipl_cookie_t icookie)
+{
+
+	return _splraise(ipl2psl_table[icookie._ipl]);
+}
+
+#include <sys/spl.h>
 
 /* intr.c */
-void	intr_init __P((void));
-void	intr_establish __P((int (*)(void *), void *, int));
-void	intr_disestablish __P((int));
-void	intr_dispatch __P((int));
+void	intr_init(void);
+void	intr_establish(int (*)(void *), void *, int);
+void	intr_disestablish(int);
+void	intr_dispatch(int);
 
 /* locore.s */
-int	spl0 __P((void));
+int	spl0(void);
 #endif /* _KERNEL */
 
 #endif /* _MAC68K_INTR_H_ */

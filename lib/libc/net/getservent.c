@@ -1,8 +1,11 @@
-/*	$NetBSD: getservent.c,v 1.7 2000/01/22 22:19:15 mycroft Exp $	*/
+/*	$NetBSD: getservent.c,v 1.12 2008/04/28 20:23:00 martin Exp $	*/
 
-/*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+/*-
+ * Copyright (c) 2004 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * This code is derived from software contributed to The NetBSD Foundation
+ * by Christos Zoulas.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -12,43 +15,31 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)getservent.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: getservent.c,v 1.7 2000/01/22 22:19:15 mycroft Exp $");
-#endif
+__RCSID("$NetBSD: getservent.c,v 1.12 2008/04/28 20:23:00 martin Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
-#include <sys/types.h>
-#include <sys/socket.h>
+#include "reentrant.h"
+
 #include <netdb.h>
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
+
+#include "servent.h"
 
 #ifdef __weak_alias
 __weak_alias(endservent,_endservent)
@@ -56,80 +47,34 @@ __weak_alias(getservent,_getservent)
 __weak_alias(setservent,_setservent)
 #endif
 
-#define	MAXALIASES	35
-
-static FILE *servf = NULL;
-static char line[BUFSIZ+1];
-static struct servent serv;
-static char *serv_aliases[MAXALIASES];
-int _serv_stayopen;
+#ifdef _REENTRANT
+mutex_t _servent_mutex = MUTEX_INITIALIZER;
+#endif
+struct servent_data _servent_data;
 
 void
-setservent(f)
-	int f;
+setservent(int f)
 {
-	if (servf == NULL)
-		servf = fopen(_PATH_SERVICES, "r" );
-	else
-		rewind(servf);
-	_serv_stayopen |= f;
+	mutex_lock(&_servent_mutex);
+	setservent_r(f, &_servent_data);
+	mutex_unlock(&_servent_mutex);
 }
 
 void
-endservent()
+endservent(void)
 {
-	if (servf) {
-		fclose(servf);
-		servf = NULL;
-	}
-	_serv_stayopen = 0;
+	mutex_lock(&_servent_mutex);
+	endservent_r(&_servent_data);
+	mutex_unlock(&_servent_mutex);
 }
 
 struct servent *
-getservent()
+getservent(void)
 {
-	char *p;
-	register char *cp, **q;
+	struct servent *s;
 
-	if (servf == NULL && (servf = fopen(_PATH_SERVICES, "r" )) == NULL)
-		return (NULL);
-again:
-	if ((p = fgets(line, BUFSIZ, servf)) == NULL)
-		return (NULL);
-	if (*p == '#')
-		goto again;
-	cp = strpbrk(p, "#\n");
-	if (cp == NULL)
-		goto again;
-	*cp = '\0';
-	serv.s_name = p;
-	p = strpbrk(p, " \t");
-	if (p == NULL)
-		goto again;
-	*p++ = '\0';
-	while (*p == ' ' || *p == '\t')
-		p++;
-	cp = strpbrk(p, ",/");
-	if (cp == NULL)
-		goto again;
-	*cp++ = '\0';
-	serv.s_port = htons((u_short)atoi(p));
-	serv.s_proto = cp;
-	q = serv.s_aliases = serv_aliases;
-	cp = strpbrk(cp, " \t");
-	if (cp != NULL)
-		*cp++ = '\0';
-	while (cp && *cp) {
-		if (*cp == ' ' || *cp == '\t') {
-			cp++;
-			continue;
-		}
-		if (q < &serv_aliases[MAXALIASES - 1])
-			*q++ = cp;
-		cp = strpbrk(cp, " \t");
-		if (cp != NULL)
-			*cp++ = '\0';
-	}
-	*q = NULL;
-	return (&serv);
+	mutex_lock(&_servent_mutex);
+	s = getservent_r(&_servent_data.serv, &_servent_data);
+	mutex_unlock(&_servent_mutex);
+	return (s);
 }

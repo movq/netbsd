@@ -1,4 +1,4 @@
-/*	$NetBSD: misc.c,v 1.9 1999/07/29 19:03:31 hubertf Exp $	*/
+/*	$NetBSD: misc.c,v 1.21 2007/10/05 07:23:09 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993, 1994
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -42,59 +38,77 @@
 #if 0
 static char sccsid[] = "@(#)misc.c	8.3 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: misc.c,v 1.9 1999/07/29 19:03:31 hubertf Exp $");
+__RCSID("$NetBSD: misc.c,v 1.21 2007/10/05 07:23:09 lukem Exp $");
 #endif
 #endif /* not lint */
 
+#include <sys/param.h>
 #include <sys/types.h>
+#include <sys/time.h>
 
 #include <err.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 #include <unistd.h>
+#include <util.h>
+#include <inttypes.h>
 
 #include "dd.h"
 #include "extern.h"
 
+#define	tv2mS(tv) ((tv).tv_sec * 1000LL + ((tv).tv_usec + 500) / 1000)
+
 void
-summary()
+summary(void)
 {
-	time_t secs;
 	char buf[100];
+	int64_t mS;
+	struct timeval tv;
 
 	if (progress)
 		(void)write(STDERR_FILENO, "\n", 1);
 
-	(void)time(&secs);
-	if ((secs -= st.start) == 0)
-		secs = 1;
+	(void)gettimeofday(&tv, NULL);
+	mS = tv2mS(tv) - tv2mS(st.start);
+	if (mS == 0)
+		mS = 1;
 	/* Use snprintf(3) so that we don't reenter stdio(3). */
 	(void)snprintf(buf, sizeof(buf),
-	    "%lu+%lu records in\n%lu+%lu records out\n",
-	    st.in_full, st.in_part, st.out_full, st.out_part);
+	    "%llu+%llu records in\n%llu+%llu records out\n",
+	    (unsigned long long)st.in_full,  (unsigned long long)st.in_part,
+	    (unsigned long long)st.out_full, (unsigned long long)st.out_part);
 	(void)write(STDERR_FILENO, buf, strlen(buf));
 	if (st.swab) {
-		(void)snprintf(buf, sizeof(buf), "%lu odd length swab %s\n",
-		     st.swab, (st.swab == 1) ? "block" : "blocks");
+		(void)snprintf(buf, sizeof(buf), "%llu odd length swab %s\n",
+		    (unsigned long long)st.swab,
+		    (st.swab == 1) ? "block" : "blocks");
 		(void)write(STDERR_FILENO, buf, strlen(buf));
 	}
 	if (st.trunc) {
-		(void)snprintf(buf, sizeof(buf), "%lu truncated %s\n",
-		     st.trunc, (st.trunc == 1) ? "block" : "blocks");
+		(void)snprintf(buf, sizeof(buf), "%llu truncated %s\n",
+		    (unsigned long long)st.trunc,
+		    (st.trunc == 1) ? "block" : "blocks");
+		(void)write(STDERR_FILENO, buf, strlen(buf));
+	}
+	if (st.sparse) {
+		(void)snprintf(buf, sizeof(buf), "%llu sparse output %s\n",
+		    (unsigned long long)st.sparse,
+		    (st.sparse == 1) ? "block" : "blocks");
 		(void)write(STDERR_FILENO, buf, strlen(buf));
 	}
 	(void)snprintf(buf, sizeof(buf),
-	    "%qu bytes transferred in %lu secs (%qu bytes/sec)\n",
-	    (long long) st.bytes, (long) secs, (long long) (st.bytes / secs));
+	    "%llu bytes transferred in %lu.%03d secs (%llu bytes/sec)\n",
+	    (unsigned long long) st.bytes,
+	    (long) (mS / 1000),
+	    (int) (mS % 1000),
+	    (unsigned long long) (st.bytes * 1000LL / mS));
 	(void)write(STDERR_FILENO, buf, strlen(buf));
 }
 
 /* ARGSUSED */
 void
-summaryx(notused)
-	int notused;
+summaryx(int notused)
 {
 
 	summary();
@@ -102,10 +116,10 @@ summaryx(notused)
 
 /* ARGSUSED */
 void
-terminate(notused)
-	int notused;
+terminate(int signo)
 {
 
-	exit(0);
-	/* NOTREACHED */
+	summary();
+	(void)raise_default_signal(signo);
+	_exit(127);
 }

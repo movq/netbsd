@@ -1,4 +1,4 @@
-.\"	$NetBSD: rnd.4,v 1.5 1999/03/16 01:19:17 garbled Exp $
+.\"	$NetBSD: rnd.4,v 1.12 2005/12/26 19:48:12 perry Exp $
 .\"
 .\" Copyright (c) 1997 Michael Graff
 .\" All rights reserved.
@@ -68,7 +68,7 @@ User code can obtain random values from the kernel in two ways.
 Reading from
 .Pa /dev/random
 will only return values while sufficient entropy exists in the
-internal pool.  When sufficent entropy does not exist, EAGAIN is
+internal pool.  When sufficient entropy does not exist, EAGAIN is
 returned for non-blocking reads, or the read will block for blocking
 reads.
 .Pp
@@ -89,12 +89,12 @@ timing information and other state for that source.
 .Bd -literal -offset indent
 typedef struct {
         char            name[16];
-        u_int32_t       last_time;
-        u_int32_t       last_delta;
-        u_int32_t       last_delta2;
-        u_int32_t       total;
-        u_int32_t       type;
-	u_int32_t	flags;
+        uint32_t       last_time;
+        uint32_t       last_delta;
+        uint32_t       last_delta2;
+        uint32_t       total;
+        uint32_t       type;
+	uint32_t	flags;
 } rndsource_t;
 .Ed
 .Pp
@@ -128,6 +128,8 @@ collected from this source type, but entropy is not estimated.
 The device is a tape device.
 .It Dv RND_TYPE_TTY
 The device is a terminal, mouse, or other user input device.
+.It Dv RND_TYPE_RNG
+The device is a random number generator.
 .El
 .Pp
 .Va flags
@@ -148,14 +150,14 @@ file, along with the data types and constants.
 .Pp
 .Bl -tag -width RNDADDTOENTCNT
 .It Dv RNDGETENTCNT
-.Pq Li "u_int32_t"
+.Pq Li "uint32_t"
 Return the current entropy count (in bits).
 .It Dv RNDGETSRCNUM
 .Pq Li "rndstat_t"
 .Bd -literal -offset indent
 typedef struct {
-        u_int32_t       start;
-        u_int32_t       count;
+        uint32_t       start;
+        uint32_t       count;
         rndsource_t     source[RND_MAXSTATCOUNT];
 } rndstat_t;
 .Ed
@@ -184,9 +186,9 @@ Return the device state for a named device.
 .Bd -literal -offset indent
 typedef struct {
         char            name[16];
-        u_int32_t       type;
-        u_int32_t       flags;
-        u_int32_t       mask;
+        uint32_t       type;
+        uint32_t       flags;
+        uint32_t       mask;
 } rndctl_t;
 .Ed
 .Pp
@@ -197,7 +199,7 @@ is 0xff, only the device name stored in
 is used.  If it is any other value, all devices of type
 .Va type
 are altered.  This allows all network interfaces to be disabled for
-entropy collection with one call, for example. 
+entropy collection with one call, for example.
 The
 .Va flags
 and
@@ -211,8 +213,8 @@ are to be set or cleared.
 .Pq Li "rnddata_t"
 .Bd -literal -offset indent
 typedef struct {
-        u_int32_t       len;
-        u_int32_t       entropy;
+        uint32_t       len;
+        uint32_t       entropy;
         u_char          data[RND_POOLWORDS * 4];
 } rnddata_t;
 .Ed
@@ -224,13 +226,13 @@ Returns ``good'' values only
 .It Pa /dev/urandom
 Always returns data, degenerates to a pseudo-random generator
 .El
+.Sh SEE ALSO
+.Xr rndctl 8 ,
+.Xr rnd 9
 .Sh HISTORY
 The random device was first made available in
 .Nx 1.3 .
-.Sh AUTHOR
-This implementation was written by Michael Graff <explorer@flame.org>
+.Sh AUTHORS
+This implementation was written by Michael Graff \*[Lt]explorer@flame.org\*[Gt]
 using ideas and algorithms gathered from many sources, including
 the driver written by Ted Ts'o.
-.Sh SEE ALSO
-.Xr rndctl 8 ,
-.Xr rnd 9 .

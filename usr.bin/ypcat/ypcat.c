@@ -1,4 +1,4 @@
-/*	$NetBSD: ypcat.c,v 1.8 1997/11/01 06:40:35 lukem Exp $	*/
+/*	$NetBSD: ypcat.c,v 1.11 2003/12/10 12:06:26 agc Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993 Theo de Raadt <deraadt@fsa.ca>
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Theo de Raadt.
- * 4. The name of the author may not be used to endorse or promote
- *    products derived from this software without specific prior written
- *    permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS
  * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -34,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: ypcat.c,v 1.8 1997/11/01 06:40:35 lukem Exp $");
+__RCSID("$NetBSD: ypcat.c,v 1.11 2003/12/10 12:06:26 agc Exp $");
 #endif
 
 #include <sys/param.h>
@@ -43,6 +37,8 @@ __RCSID("$NetBSD: ypcat.c,v 1.8 1997/11/01 06:40:35 lukem Exp $");
 #include <ctype.h>
 #include <err.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
 #include <rpc/rpc.h>
@@ -68,8 +64,6 @@ int	printit __P((int, char *, int, char *, int, char *));
 void	usage __P((void));
 
 int key;
-
-extern	char *__progname;
 
 int
 main(argc, argv)
@@ -169,7 +163,7 @@ usage()
 {
 
 	fprintf(stderr, "usage: %s [-k] [-d domainname] [-t] mapname\n",
-	    __progname);
-	fprintf(stderr, "       %s -x\n", __progname);
+	    getprogname());
+	fprintf(stderr, "       %s -x\n", getprogname());
 	exit(1);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: llabs.S,v 1.1 2000/03/06 18:32:24 kleink Exp $	*/
+/*	$NetBSD: llabs.S,v 1.5 2008/08/04 21:29:28 matt Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -40,10 +36,20 @@
 
 #include <machine/asm.h>
 #if defined(LIBC_SCCS)
-	RCSID("$NetBSD: llabs.S,v 1.1 2000/03/06 18:32:24 kleink Exp $")
+	RCSID("$NetBSD: llabs.S,v 1.5 2008/08/04 21:29:28 matt Exp $")
 #endif
 
+#ifdef WEAK_ALIAS
+WEAK_ALIAS(llabs, _llabs)
+WEAK_ALIAS(imaxabs, _llabs)
+#endif
+
+#ifdef WEAK_ALIAS
+ENTRY(_llabs)
+#else
+STRONG_ALIAS(imaxabs, llabs)
 ENTRY(llabs)
+#endif
 	movl	8(%esp),%edx
 	movl	4(%esp),%eax
 	testl	%edx,%edx

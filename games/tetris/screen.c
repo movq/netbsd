@@ -1,4 +1,4 @@
-/*	$NetBSD: screen.c,v 1.13 1999/10/04 23:27:03 lukem Exp $	*/
+/*	$NetBSD: screen.c,v 1.22 2008/01/28 01:38:59 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -42,6 +38,7 @@
  * Tetris screen control.
  */
 
+#include <sys/cdefs.h>
 #include <sys/ioctl.h>
 
 #include <setjmp.h>
@@ -64,16 +61,15 @@ static cell curscreen[B_SIZE];	/* 1 => standout (or otherwise marked) */
 static int curscore;
 static int isset;		/* true => terminal is in game mode */
 static struct termios oldtt;
-static void (*tstp) __P((int));
+static void (*tstp)(int);
 
-static	void	scr_stop __P((int));
-static	void	stopset __P((int)) __attribute__((__noreturn__));
+static	void	scr_stop(int);
+static	void	stopset(int) __dead;
 
 
 /*
  * Capabilities from TERMCAP.
  */
-char	PC, *BC, *UP;		/* tgoto requires globals: ugh! */
 short	ospeed;
 
 static char
@@ -121,8 +117,7 @@ struct tcsinfo {	/* termcap string info; some abbrevs above */
 
 /* This is where we will actually stuff the information */
 
-static char combuf[1024], tbuf[1024];
-
+static struct tinfo *info;
 
 /*
  * Routine used by tputs().
@@ -141,7 +136,15 @@ put(c)
  * count=1.  (See screen.h for putpad().)
  */
 #define	putstr(s)	(void)fputs(s, stdout)
-#define	moveto(r, c)	putpad(tgoto(CMstr, c, r))
+
+void
+moveto(int r, int c)
+{
+	char buf[256];
+
+	if (t_goto(info, CMstr, c, r, buf, 255) == 0)
+		putpad(buf);
+}
 
 /*
  * Set up from termcap.
@@ -153,7 +156,7 @@ scr_init()
 #ifdef unneeded
 	static int ncflag;
 #endif
-	char *term, *fill;
+	char *term;
 	static struct tcninfo {	/* termcap numeric and flag info */
 		char tcname[3];
 		int *tcaddr;
@@ -171,28 +174,28 @@ scr_init()
 		{"sg", &sgnum},
 		{ {0}, NULL}
 	};
-	
+	static char backspace[] = "\b";
+
 	if ((term = getenv("TERM")) == NULL)
 		stop("you must set the TERM environment variable");
-	if (tgetent(tbuf, term) <= 0)
+	if (t_getent(&info, term) <= 0)
 		stop("cannot find your termcap");
-	fill = combuf;
 	{
-		register struct tcsinfo *p;
+		struct tcsinfo *p;
 
 		for (p = tcstrings; p->tcaddr; p++)
-			*p->tcaddr = tgetstr(p->tcname, &fill);
+			*p->tcaddr = t_agetstr(info, p->tcname);
 	}
 	{
-		register struct tcninfo *p;
+		struct tcninfo *p;
 
 		for (p = tcflags; p->tcaddr; p++)
-			*p->tcaddr = tgetflag(p->tcname);
+			*p->tcaddr = t_getflag(info, p->tcname);
 		for (p = tcnums; p->tcaddr; p++)
-			*p->tcaddr = tgetnum(p->tcname);
+			*p->tcaddr = t_getnum(info, p->tcname);
 	}
 	if (bsflag)
-		BC = "\b";
+		BC = backspace;
 	else if (BC == NULL && bcstr != NULL)
 		BC = bcstr;
 	if (CLstr == NULL)
@@ -217,13 +220,13 @@ static void
 stopset(sig)
 	int sig;
 {
-	sigset_t sigset;
+	sigset_t set;
 
 	(void) signal(sig, SIG_DFL);
 	(void) kill(getpid(), sig);
-	sigemptyset(&sigset);
-	sigaddset(&sigset, sig);
-	(void) sigprocmask(SIG_UNBLOCK, &sigset, (sigset_t *)0);
+	sigemptyset(&set);
+	sigaddset(&set, sig);
+	(void) sigprocmask(SIG_UNBLOCK, &set, (sigset_t *)0);
 	longjmp(scr_onstop, 1);
 }
 
@@ -231,13 +234,13 @@ static void
 scr_stop(sig)
 	int sig;
 {
-	sigset_t sigset;
+	sigset_t set;
 
 	scr_end();
 	(void) kill(getpid(), sig);
-	sigemptyset(&sigset);
-	sigaddset(&sigset, sig);
-	(void) sigprocmask(SIG_UNBLOCK, &sigset, (sigset_t *)0);
+	sigemptyset(&set);
+	sigaddset(&set, sig);
+	(void) sigprocmask(SIG_UNBLOCK, &set, (sigset_t *)0);
 	scr_set();
 	scr_msg(key_msg, 1);
 }
@@ -250,13 +253,13 @@ scr_set()
 {
 	struct winsize ws;
 	struct termios newtt;
-	sigset_t sigset, osigset;
-	void (*ttou) __P((int));
+	sigset_t nsigset, osigset;
+	void (*ttou)(int);
 
-	sigemptyset(&sigset);
-	sigaddset(&sigset, SIGTSTP);
-	sigaddset(&sigset, SIGTTOU);
-	(void) sigprocmask(SIG_BLOCK, &sigset, &osigset);
+	sigemptyset(&nsigset);
+	sigaddset(&nsigset, SIGTSTP);
+	sigaddset(&nsigset, SIGTTOU);
+	(void) sigprocmask(SIG_BLOCK, &nsigset, &osigset);
 	if ((tstp = signal(SIGTSTP, stopset)) == SIG_IGN)
 		(void) signal(SIGTSTP, SIG_IGN);
 	if ((ttou = signal(SIGTTOU, stopset)) == SIG_IGN)
@@ -291,7 +294,7 @@ scr_set()
 	if (tcsetattr(0, TCSADRAIN, &newtt) < 0)
 		stop("tcsetattr() fails");
 	ospeed = cfgetospeed(&newtt);
-	(void) sigprocmask(SIG_BLOCK, &sigset, &osigset);
+	(void) sigprocmask(SIG_BLOCK, &nsigset, &osigset);
 
 	/*
 	 * We made it.  We are now in screen mode, modulo TIstr
@@ -315,12 +318,12 @@ scr_set()
 void
 scr_end()
 {
-	sigset_t sigset, osigset;
+	sigset_t nsigset, osigset;
 
-	sigemptyset(&sigset);
-	sigaddset(&sigset, SIGTSTP);
-	sigaddset(&sigset, SIGTTOU);
-	(void) sigprocmask(SIG_BLOCK, &sigset, &osigset);
+	sigemptyset(&nsigset);
+	sigaddset(&nsigset, SIGTSTP);
+	sigaddset(&nsigset, SIGTTOU);
+	(void) sigprocmask(SIG_BLOCK, &nsigset, &osigset);
 	/* move cursor to last line */
 	if (LLstr)
 		putstr(LLstr);	/* termcap(5) says this is not padded */
@@ -372,15 +375,15 @@ typedef cell regcell;
 void
 scr_update()
 {
-	register cell *bp, *sp;
-	register regcell so, cur_so = 0;
-	register int i, ccol, j;
-	sigset_t sigset, osigset;
+	cell *bp, *sp;
+	regcell so, cur_so = 0;
+	int i, ccol, j;
+	sigset_t nsigset, osigset;
 	static const struct shape *lastshape;
 
-	sigemptyset(&sigset);
-	sigaddset(&sigset, SIGTSTP);
-	(void) sigprocmask(SIG_BLOCK, &sigset, &osigset);
+	sigemptyset(&nsigset);
+	sigaddset(&nsigset, SIGTSTP);
+	(void) sigprocmask(SIG_BLOCK, &nsigset, &osigset);
 
 	/* always leave cursor after last displayed point */
 	curscreen[D_LAST * B_COLS - 1] = -1;
@@ -396,7 +399,6 @@ scr_update()
 
 	/* draw preview of nextpattern */
 	if (showpreview && (nextshape != lastshape)) {
-		int i;
 		static int r=5, c=2;
 		int tr, tc, t; 
 
@@ -484,12 +486,12 @@ scr_update()
  */
 void
 scr_msg(s, set)
-	register char *s;
+	char *s;
 	int set;
 {
 	
 	if (set || CEstr == NULL) {
-		register int l = strlen(s);
+		int l = strlen(s);
 
 		moveto(Rows - 2, ((Cols - l) >> 1) - 1);
 		if (set)

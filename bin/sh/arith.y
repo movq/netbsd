@@ -1,5 +1,5 @@
 %{
-/*	$NetBSD: arith.y,v 1.13 1999/07/09 03:05:49 christos Exp $	*/
+/*	$NetBSD: arith.y,v 1.18 2007/03/25 06:29:26 apb Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -42,7 +38,7 @@
 #if 0
 static char sccsid[] = "@(#)arith.y	8.3 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: arith.y,v 1.13 1999/07/09 03:05:49 christos Exp $");
+__RCSID("$NetBSD: arith.y,v 1.18 2007/03/25 06:29:26 apb Exp $");
 #endif
 #endif /* not lint */
 
@@ -53,25 +49,90 @@ __RCSID("$NetBSD: arith.y,v 1.13 1999/07/09 03:05:49 christos Exp $");
 #include "output.h"
 #include "memalloc.h"
 
+typedef intmax_t YYSTYPE;
+#define YYSTYPE YYSTYPE
+
+intmax_t arith_result;
 const char *arith_buf, *arith_startbuf;
 
-void yyerror __P((const char *));
-int yyparse __P((void));
+void yyerror(const char *);
 #ifdef TESTARITH
-int main __P((int , char *[]));
-int error __P((char *));
+int main(int , char *[]);
+int error(char *);
 #endif
 
-int
+%}
+%token ARITH_NUM ARITH_LPAREN ARITH_RPAREN
+
+%left ARITH_OR
+%left ARITH_AND
+%left ARITH_BOR
+%left ARITH_BXOR
+%left ARITH_BAND
+%left ARITH_EQ ARITH_NE
+%left ARITH_LT ARITH_GT ARITH_GE ARITH_LE
+%left ARITH_LSHIFT ARITH_RSHIFT
+%left ARITH_ADD ARITH_SUB
+%left ARITH_MUL ARITH_DIV ARITH_REM
+%left ARITH_UNARYMINUS ARITH_UNARYPLUS ARITH_NOT ARITH_BNOT
+%%
+
+exp:	expr {
+			/*
+			 * yyparse() returns int, so we have to save
+			 * the desired result elsewhere.
+			 */
+			arith_result = $1;
+			return 0;
+		}
+	;
+
+
+expr:	ARITH_LPAREN expr ARITH_RPAREN { $$ = $2; }
+	| expr ARITH_OR expr	{ $$ = $1 ? $1 : $3 ? $3 : 0; }
+	| expr ARITH_AND expr	{ $$ = $1 ? ( $3 ? $3 : 0 ) : 0; }
+	| expr ARITH_BOR expr	{ $$ = $1 | $3; }
+	| expr ARITH_BXOR expr	{ $$ = $1 ^ $3; }
+	| expr ARITH_BAND expr	{ $$ = $1 & $3; }
+	| expr ARITH_EQ expr	{ $$ = $1 == $3; }
+	| expr ARITH_GT expr	{ $$ = $1 > $3; }
+	| expr ARITH_GE expr	{ $$ = $1 >= $3; }
+	| expr ARITH_LT expr	{ $$ = $1 < $3; }
+	| expr ARITH_LE expr	{ $$ = $1 <= $3; }
+	| expr ARITH_NE expr	{ $$ = $1 != $3; }
+	| expr ARITH_LSHIFT expr { $$ = $1 << $3; }
+	| expr ARITH_RSHIFT expr { $$ = $1 >> $3; }
+	| expr ARITH_ADD expr	{ $$ = $1 + $3; }
+	| expr ARITH_SUB expr	{ $$ = $1 - $3; }
+	| expr ARITH_MUL expr	{ $$ = $1 * $3; }
+	| expr ARITH_DIV expr	{
+			if ($3 == 0)
+				yyerror("division by zero");
+			$$ = $1 / $3;
+			}
+	| expr ARITH_REM expr   {
+			if ($3 == 0)
+				yyerror("division by zero");
+			$$ = $1 % $3;
+			}
+	| ARITH_NOT expr	{ $$ = !($2); }
+	| ARITH_BNOT expr	{ $$ = ~($2); }
+	| ARITH_SUB expr %prec ARITH_UNARYMINUS { $$ = -($2); }
+	| ARITH_ADD expr %prec ARITH_UNARYPLUS { $$ = $2; }
+	| ARITH_NUM
+	;
+%%
+intmax_t
 arith(s)
 	const char *s;
 {
-	long result;
+	intmax_t result;
 
 	arith_buf = arith_startbuf = s;
 
 	INTOFF;
-	result = yyparse();
+	(void) yyparse();
+	result = arith_result;
 	arith_lex_reset();	/* reprime lex */
 	INTON;
 
@@ -90,7 +151,7 @@ expcmd(argc, argv)
 	const char *p;
 	char *concat;
 	char **ap;
-	long i;
+	intmax_t i;
 
 	if (argc > 1) {
 		p = argv[1];
@@ -113,9 +174,10 @@ expcmd(argc, argv)
 	} else
 		p = "";
 
-	i = arith(p);
+	(void)arith(p);
+	i = arith_result;
 
-	out1fmt("%ld\n", i);
+	out1fmt("%"PRIdMAX"\n", i);
 	return (! i);
 }
 
@@ -125,7 +187,7 @@ expcmd(argc, argv)
 main(argc, argv)
 	char *argv[];
 {
-	printf("%d\n", exp(argv[1]));
+	printf("%"PRIdMAX"\n", exp(argv[1]));
 }
 error(s)
 	char *s;
@@ -134,62 +196,7 @@ error(s)
 	exit(1);
 }
 #endif
-%}
-%token ARITH_NUM ARITH_LPAREN ARITH_RPAREN
 
-%left ARITH_OR
-%left ARITH_AND
-%left ARITH_BOR
-%left ARITH_BXOR
-%left ARITH_BAND
-%left ARITH_EQ ARITH_NE
-%left ARITH_LT ARITH_GT ARITH_GE ARITH_LE
-%left ARITH_LSHIFT ARITH_RSHIFT
-%left ARITH_ADD ARITH_SUB
-%left ARITH_MUL ARITH_DIV ARITH_REM
-%left ARITH_UNARYMINUS ARITH_UNARYPLUS ARITH_NOT ARITH_BNOT
-%%
-
-exp:	expr = {
-			return ($1);
-		}
-	;
-
-
-expr:	ARITH_LPAREN expr ARITH_RPAREN = { $$ = $2; }
-	| expr ARITH_OR expr	= { $$ = $1 ? $1 : $3 ? $3 : 0; }
-	| expr ARITH_AND expr	= { $$ = $1 ? ( $3 ? $3 : 0 ) : 0; }
-	| expr ARITH_BOR expr	= { $$ = $1 | $3; }
-	| expr ARITH_BXOR expr	= { $$ = $1 ^ $3; }
-	| expr ARITH_BAND expr	= { $$ = $1 & $3; }
-	| expr ARITH_EQ expr	= { $$ = $1 == $3; }
-	| expr ARITH_GT expr	= { $$ = $1 > $3; }
-	| expr ARITH_GE expr	= { $$ = $1 >= $3; }
-	| expr ARITH_LT expr	= { $$ = $1 < $3; }
-	| expr ARITH_LE expr	= { $$ = $1 <= $3; }
-	| expr ARITH_NE expr	= { $$ = $1 != $3; }
-	| expr ARITH_LSHIFT expr = { $$ = $1 << $3; }
-	| expr ARITH_RSHIFT expr = { $$ = $1 >> $3; }
-	| expr ARITH_ADD expr	= { $$ = $1 + $3; }
-	| expr ARITH_SUB expr	= { $$ = $1 - $3; }
-	| expr ARITH_MUL expr	= { $$ = $1 * $3; }
-	| expr ARITH_DIV expr	= {
-			if ($3 == 0)
-				yyerror("division by zero");
-			$$ = $1 / $3;
-			}
-	| expr ARITH_REM expr   = {
-			if ($3 == 0)
-				yyerror("division by zero");
-			$$ = $1 % $3;
-			}
-	| ARITH_NOT expr	= { $$ = !($2); }
-	| ARITH_BNOT expr	= { $$ = ~($2); }
-	| ARITH_SUB expr %prec ARITH_UNARYMINUS = { $$ = -($2); }
-	| ARITH_ADD expr %prec ARITH_UNARYPLUS = { $$ = $2; }
-	| ARITH_NUM
-	;
-%%
 void
 yyerror(s)
 	const char *s;

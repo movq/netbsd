@@ -1,20 +1,22 @@
-# $NetBSD: Makefile,v 1.1 1999/05/11 19:14:50 drochner Exp $
+# $NetBSD: Makefile,v 1.6 2008/10/19 22:05:20 apb Exp $
 
-PROG= extest
-NOMAN=
+NOMAN=		# defined
 
-.PATH: $(.CURDIR)/../../../../sys/kern
-SRCS= extest.c subr_extent.c
+.include <bsd.own.mk>
 
-CPPFLAGS+= -D_EXTENT_TESTING -D__POOL_EXPOSE
+PROG=		extest
+SRCS=		extest.c subr_extent.c
+CPPFLAGS+=	-D_EXTENT_TESTING -D__POOL_EXPOSE
+CLEANFILES+=	extest.c extest.out
+WARNS?=		1
 
-regress: $(PROG)
-	$(.OBJDIR)/$(PROG) >extest.out
-	tail +4 $(.CURDIR)/extest.exp | diff - extest.out
+.PATH:		${NETBSDSRCDIR}/sys/kern
+
+regress: ${PROG}
+	./${PROG} >extest.out
+	tail +4 ${.CURDIR}/extest.exp | diff - extest.out
 
 extest.c: extest.awk tests
-	awk -f $(.CURDIR)/extest.awk <$(.CURDIR)/tests >extest.c
-
-CLEANFILES+= extest.c extest.out
+	${TOOL_AWK} -f ${.CURDIR}/extest.awk <${.CURDIR}/tests >extest.c
 
 .include <bsd.prog.mk>

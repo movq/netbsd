@@ -1,4 +1,4 @@
-.\"	$NetBSD: fnmatch.3,v 1.13 1998/02/05 18:46:17 perry Exp $
+.\"	$NetBSD: fnmatch.3,v 1.21 2003/08/07 16:42:48 agc Exp $
 .\"
 .\" Copyright (c) 1989, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -13,11 +13,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -35,7 +31,7 @@
 .\"
 .\"     @(#)fnmatch.3	8.3 (Berkeley) 4/28/95
 .\"
-.Dd April 28, 1995
+.Dd October 7, 2002
 .Dt FNMATCH 3
 .Os
 .Sh NAME
@@ -44,7 +40,7 @@
 .Sh LIBRARY
 .Lb libc
 .Sh SYNOPSIS
-.Fd #include <fnmatch.h>
+.In fnmatch.h
 .Ft int
 .Fn fnmatch "const char *pattern" "const char *string" "int flags"
 .Sh DESCRIPTION
@@ -71,7 +67,7 @@ is the bitwise inclusive
 of any of the following
 constants, which are defined in the include file
 .Pa fnmatch.h .
-.Bl -tag -width FNM_PATHNAME
+.Bl -tag -width FNM_LEADING_DIRXX
 .It Dv FNM_NOESCAPE
 Normally, every occurrence of a backslash
 .Pq Ql \e
@@ -91,13 +87,21 @@ If this flag is not set, then slashes are treated as regular characters.
 .It Dv FNM_PERIOD
 Leading periods in strings match periods in patterns.
 The definition of ``leading'' is related to the specification of
-.Dv FNM_PATHNAME.
+.Dv FNM_PATHNAME .
 A period is always ``leading'' if it is the first character in
 .Ar string .
 Additionally, if
 .Dv FNM_PATHNAME
 is set,
 a period is ``leading'' if it immediately follows a slash.
+.It Dv FNM_LEADING_DIR
+Ignore
+.Dq /*
+rest after successful
+.Fa pattern
+matching.
+.It Dv FNM_CASEFOLD
+The pattern is matched in a case-insensitive fashion.
 .El
 .Sh RETURN VALUES
 The
@@ -117,10 +121,15 @@ The
 .Fn fnmatch
 function conforms to
 .St -p1003.2-92 .
+The
+.Dv FNM_CASEFOLD
+flag is a
+.Nx
+extension.
 .Sh HISTORY
 The
 .Fn fnmatch
-function first appeared in 
+function first appeared in
 .Bx 4.4 .
 .Sh BUGS
 The pattern

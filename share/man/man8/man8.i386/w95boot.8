@@ -1,4 +1,4 @@
-.\"   $NetBSD: w95boot.8,v 1.2 1999/03/17 20:31:20 garbled Exp $
+.\"   $NetBSD: w95boot.8,v 1.9 2008/04/30 13:10:58 martin Exp $
 .\"
 .\" Copyright (c) 1997 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -13,13 +13,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -91,7 +84,7 @@ in that directory, containing the following lines:
 .Bd -literal -offset indent
 @ECHO OFF
 IF EXIST C:\\NetBSD\\BOOTED GOTO towin
-ECHO >C:\\NetBSD\\BOOTED
+ECHO \*[Gt]C:\\NetBSD\\BOOTED
 CHOICE /C+ /N /T+,5
 C:\\NetBSD\\DOSBOOT -u
 ECHO Error booting NetBSD
@@ -99,9 +92,9 @@ CHOICE /C+ /N /T+,60
 
 :towin
 DEL C:\\NetBSD\\BOOTED
-ECHO Y >C:\\NetBSD\\Y
+ECHO Y \*[Gt]C:\\NetBSD\\Y
 CHOICE /C+ /N /T+,5
-C:\\WINDOWS\\WIN.COM <Y
+C:\\WINDOWS\\WIN.COM \*[Lt]Y
 .Ed
 .Pp
 Now, double click the icon for the
@@ -121,7 +114,7 @@ Choose ``rename'' and change the name to
 Right click this newly-renamed icon again and select ``Properties''.
 Click to the ``Program'' tab. Edit the first text field to
 ``GoNetBSD''. Edit the ``Cmd line'' text field to read
-.Dq Pa C:\eNetBSD\eGoNetBSD.BAT Ns .
+.Dq Pa C:\eNetBSD\eGoNetBSD.BAT .
 Ensure the ``Batch file'' field is blank.
 Click on the ``Advanced'' button. Make sure ``MS-DOS Mode'' is checked.
 Uncheck the ``Warn before entering MS-DOS Mode'' checkbox if you intend
@@ -145,9 +138,9 @@ To set up GoNetBSD to run under System Agent, follow these steps. First,
 double click the System Agent icon on the taskbar tray. This will open
 the System Agent window. Select ``Schedule a New Program'' from the
 ``Program'' menu. In the ``Program'' text field, enter the complete path
-to the GoNetBSD batch file, for example 
-.Dq C:\eNetBSD\eGoNetBSD.BAT Ns .
-In the ``Description'' text field, enter a desriptive name for the
+to the GoNetBSD batch file, for example
+.Dq C:\eNetBSD\eGoNetBSD.BAT .
+In the ``Description'' text field, enter a descriptive name for the
 scheduled event, such as ``Reboot system under NetBSD''.
 .Pp
 Now click the ``When to Run program'' and select the time schedule for
@@ -167,7 +160,7 @@ Setting a very short deadline will prevent this.
 .Pp
 Now click ``OK'' in that window and the previous window to get back to
 the System Agent main window, and then close System Agent. Your system
-will now automaticlly switch to
+will now automatically switch to
 .Nx
 at the specified time or times.
 .Pp
@@ -185,10 +178,10 @@ or
 may be useful.
 .Sh SEE ALSO
 .Xr at 1 ,
-.Xr dosboot 8 ,
-.Xr cron 8 ,
 .Xr crontab 1 ,
 .Xr ftp 1 ,
+.Xr cron 8 ,
+.Xr dosboot 8 ,
 .Xr mount_msdos 8 ,
 .Xr reboot 8 ,
 .Xr shutdown 8

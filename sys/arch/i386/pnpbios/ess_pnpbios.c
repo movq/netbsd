@@ -1,4 +1,4 @@
-/*	$NetBSD: ess_pnpbios.c,v 1.3 2000/03/04 23:08:54 nathanw Exp $	*/
+/*	$NetBSD: ess_pnpbios.c,v 1.17 2008/04/28 20:23:25 martin Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -35,6 +28,9 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ess_pnpbios.c,v 1.17 2008/04/28 20:23:25 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -59,31 +55,35 @@
 #include <dev/isa/essreg.h>
 #include <dev/isa/essvar.h>
 
-int ess_pnpbios_match __P((struct device *, struct cfdata *, void *));
-void ess_pnpbios_attach __P((struct device *, struct device *, void *));
+int ess_pnpbios_match(struct device *, struct cfdata *, void *);
+void ess_pnpbios_attach(struct device *, struct device *, void *);
 
-struct cfattach ess_pnpbios_ca = {
-	sizeof(struct ess_softc), ess_pnpbios_match, ess_pnpbios_attach
-};
+CFATTACH_DECL(ess_pnpbios, sizeof(struct ess_softc),
+    ess_pnpbios_match, ess_pnpbios_attach, NULL, NULL);
 
 int
-ess_pnpbios_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+ess_pnpbios_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct pnpbiosdev_attach_args *aa = aux;
 
-	if (strcmp(aa->idstr, "ESS0104") && strcmp(aa->idstr, "ESS1869"))
+	if (strcmp(aa->idstr, "ESS0104") && /* 1788 */
+	    strcmp(aa->idstr, "ESS0114") && /* 1788 */
+	    strcmp(aa->idstr, "CPQAE27") && /* 1788 */
+	    strcmp(aa->idstr, "ESS1869") && /* 1869 */
+	    strcmp(aa->idstr, "CPQB0AB") && /* 1869 */
+	    strcmp(aa->idstr, "CPQB0AC") && /* 1869 */
+	    strcmp(aa->idstr, "CPQB0AD") && /* 1869 */
+	    strcmp(aa->idstr, "CPQB0F1") && /* 1869 */
+	    strcmp(aa->idstr, "ESS1879"))   /* 1879 */
 		return (0);
 
 	return (1);
 }
 
 void
-ess_pnpbios_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+ess_pnpbios_attach(struct device *parent, struct device *self,
+    void *aux)
 {
 	struct ess_softc *sc = (void *)self;
 	struct pnpbiosdev_attach_args *aa = aux;
@@ -101,12 +101,14 @@ ess_pnpbios_attach(parent, self, aux)
 	sc->sc_audio1.ist = IST_EDGE;
 	sc->sc_audio2.ist = IST_EDGE;
 
-	if (pnpbios_getirqnum(aa->pbt, aa->resc, 0, &sc->sc_audio1.irq)) {
+	if (pnpbios_getirqnum(aa->pbt, aa->resc, 0, &sc->sc_audio1.irq,
+	    NULL)) {
 		printf(": can't get IRQ\n");
 		return;
 	}
 
-	if (pnpbios_getirqnum(aa->pbt, aa->resc, 1, &sc->sc_audio2.irq))
+	if (pnpbios_getirqnum(aa->pbt, aa->resc, 1, &sc->sc_audio2.irq,
+	    NULL))
 		sc->sc_audio2.irq = -1;
 
 	if (pnpbios_getdmachan(aa->pbt, aa->resc, 0, &sc->sc_audio1.drq)) {
@@ -120,14 +122,13 @@ ess_pnpbios_attach(parent, self, aux)
 	printf("\n");
 	pnpbios_print_devres(self, aa);
 
-	printf("%s", self->dv_xname);
+	printf("%s", device_xname(self));
 
 	if (!essmatch(sc)) {
-		printf("%s: essmatch failed\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "essmatch failed\n");
 		pnpbios_io_unmap(aa->pbt, aa->resc, 0, sc->sc_iot, sc->sc_ioh);
 		return;
 	}
 
-	essattach(sc);
+	essattach(sc, 0);
 }
-

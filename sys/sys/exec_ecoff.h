@@ -1,4 +1,4 @@
-/*	$NetBSD: exec_ecoff.h,v 1.11 1999/04/27 05:36:43 cgd Exp $	*/
+/*	$NetBSD: exec_ecoff.h,v 1.18 2005/12/11 12:25:20 christos Exp $	*/
 
 /*
  * Copyright (c) 1994 Adam Glass
@@ -103,15 +103,15 @@ struct ecoff_exechdr {
          ECOFF_SEGMENT_ALIGNMENT(ep))))
 
 #ifdef _KERNEL
-int	exec_ecoff_makecmds __P((struct proc *, struct exec_package *));
-int	exec_ecoff_setup_stack __P((struct proc *, struct exec_package *));
-int	cpu_exec_ecoff_hook __P((struct proc *, struct exec_package *));
+int	exec_ecoff_makecmds(struct lwp *, struct exec_package *);
+int	cpu_exec_ecoff_probe(struct lwp *, struct exec_package *);
+void	cpu_exec_ecoff_setregs(struct lwp *, struct exec_package *, u_long);
 
-int	exec_ecoff_prep_omagic __P((struct proc *, struct exec_package *,
+int	exec_ecoff_prep_omagic __P((struct lwp *, struct exec_package *,
 	    struct ecoff_exechdr *, struct vnode *));
-int	exec_ecoff_prep_nmagic __P((struct proc *, struct exec_package *,
+int	exec_ecoff_prep_nmagic __P((struct lwp *, struct exec_package *,
 	    struct ecoff_exechdr *, struct vnode *));
-int	exec_ecoff_prep_zmagic __P((struct proc *, struct exec_package *,
+int	exec_ecoff_prep_zmagic __P((struct lwp *, struct exec_package *,
 	    struct ecoff_exechdr *, struct vnode *));
 
 #endif /* _KERNEL */

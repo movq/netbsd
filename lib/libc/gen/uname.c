@@ -1,4 +1,4 @@
-/*	$NetBSD: uname.c,v 1.8 2000/01/22 22:19:13 mycroft Exp $	*/
+/*	$NetBSD: uname.c,v 1.10 2007/01/15 22:26:35 cbiere Exp $	*/
 
 /*-
  * Copyright (c) 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)uname.c	8.1 (Berkeley) 1/4/94";
 #else
-__RCSID("$NetBSD: uname.c,v 1.8 2000/01/22 22:19:13 mycroft Exp $");
+__RCSID("$NetBSD: uname.c,v 1.10 2007/01/15 22:26:35 cbiere Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -58,11 +54,9 @@ int
 uname(name)
 	struct utsname *name;
 {
-	int mib[2], rval;
+	int mib[2];
 	size_t len;
 	char *p;
-
-	rval = 0;
 
 	_DIAGASSERT(name != NULL);
 
@@ -70,40 +64,43 @@ uname(name)
 	mib[1] = KERN_OSTYPE;
 	len = sizeof(name->sysname);
 	if (sysctl(mib, 2, &name->sysname, &len, NULL, 0) == -1)
-		rval = -1;
+		goto error;
 
 	mib[0] = CTL_KERN;
 	mib[1] = KERN_HOSTNAME;
 	len = sizeof(name->nodename);
 	if (sysctl(mib, 2, &name->nodename, &len, NULL, 0) == -1)
-		rval = -1;
+		goto error;
 
 	mib[0] = CTL_KERN;
 	mib[1] = KERN_OSRELEASE;
 	len = sizeof(name->release);
 	if (sysctl(mib, 2, &name->release, &len, NULL, 0) == -1)
-		rval = -1;
+		goto error;
 
-	/* The version may have newlines in it, turn them into spaces. */
 	mib[0] = CTL_KERN;
 	mib[1] = KERN_VERSION;
 	len = sizeof(name->version);
 	if (sysctl(mib, 2, &name->version, &len, NULL, 0) == -1)
-		rval = -1;
-	else
-		for (p = name->version; len--; ++p) {
-			if (*p == '\n' || *p == '\t') {
-				if (len > 1)
-					*p = ' ';
-				else
-					*p = '\0';
-			}
+		goto error;
+
+	/* The version may have newlines in it, turn them into spaces. */
+	for (p = name->version; len--; ++p) {
+		if (*p == '\n' || *p == '\t') {
+			if (len > 1)
+				*p = ' ';
+			else
+				*p = '\0';
 		}
+	}
 
 	mib[0] = CTL_HW;
 	mib[1] = HW_MACHINE;
 	len = sizeof(name->machine);
 	if (sysctl(mib, 2, &name->machine, &len, NULL, 0) == -1)
-		rval = -1;
-	return (rval);
+		goto error;
+	return (0);
+
+error:
+	return (-1);
 }

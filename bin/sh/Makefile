@@ -1,60 +1,86 @@
-#	$NetBSD: Makefile,v 1.49 1999/07/09 03:05:49 christos Exp $
+#	$NetBSD: Makefile,v 1.83 2008/10/25 22:23:55 apb Exp $
 #	@(#)Makefile	8.4 (Berkeley) 5/5/95
 
-WARNS=2
+.include <bsd.own.mk>
+
+WARNS=4
+
 YHEADER=1
 PROG=	sh
 SHSRCS=	alias.c cd.c echo.c error.c eval.c exec.c expand.c \
 	histedit.c input.c jobs.c mail.c main.c memalloc.c miscbltin.c \
-	mystring.c options.c parser.c redir.c show.c trap.c output.c var.c
-GENSRCS=arith.c arith.h arith_lex.c builtins.c builtins.h init.c nodes.c \
-	nodes.h syntax.c syntax.h token.h
+	mystring.c options.c parser.c redir.c show.c trap.c output.c var.c \
+	test.c kill.c syntax.c
+GENSRCS=arith.c arith_lex.c builtins.c init.c nodes.c
+GENHDRS=arith.h builtins.h nodes.h token.h
 SRCS=	${SHSRCS} ${GENSRCS}
+
+DPSRCS+=${GENHDRS}
 
 LDADD+=	-ll -ledit -ltermcap
 DPADD+=	${LIBL} ${LIBEDIT} ${LIBTERMCAP}
 
-LFLAGS= -8	# 8-bit lex scanner for arithmetic
+LFLAGS=	-8	# 8-bit lex scanner for arithmetic
 YFLAGS=	-d
 
-CPPFLAGS+=-DSHELL -I. -I${.CURDIR}
+# Environment for scripts executed during build.
+SCRIPT_ENV= \
+	AWK=${TOOL_AWK:Q} \
+	SED=${TOOL_SED:Q}
 
-.PATH:	${.CURDIR}/bltin ${.CURDIR}/../../usr.bin/printf
+# The .depend file can get references to these temporary files
+.OPTIONAL: lex.yy.c y.tab.c
 
-CLEANFILES+= mkinit mknodes mksyntax
-CLEANFILES+= ${GENSRCS} y.tab.h
-
-token.h: mktokens
-	sh ${.ALLSRC}
-
-builtins.c builtins.h: mkbuiltins shell.h builtins.def
-	sh ${.ALLSRC} ${.OBJDIR}
-
-init.c: mkinit ${SHSRCS}
-	./${.ALLSRC}
-
-nodes.c nodes.h: mknodes nodetypes nodes.c.pat
-	./${.ALLSRC}
-
-syntax.c syntax.h: mksyntax
-	./${.ALLSRC}
-
-mkinit: mkinit.c
-	${HOST_LINK.c} -o mkinit ${.IMPSRC}
-
-mknodes: mknodes.c
-	${HOST_LINK.c} -o mknodes ${.IMPSRC}
-
-.if	(${MACHINE_ARCH} == "powerpc") || \
-	(${MACHINE_ARCH} == "arm32")
-TARGET_CHARFLAG= -DTARGET_CHAR="u_int8_t"
-.else
-TARGET_CHARFLAG= -DTARGET_CHAR="int8_t"
+.ifdef CRUNCHEDPROG
+LFLAGS+=-L
+YFLAGS+=-l
 .endif
 
-mksyntax: mksyntax.c
-	${HOST_LINK.c} ${TARGET_CHARFLAG} -o mksyntax ${.IMPSRC}
+CPPFLAGS+=-DSHELL -I. -I${.CURDIR}
+#XXX: For testing only.
+#CPPFLAGS+=-DDEBUG=1
+#CFLAGS+=-funsigned-char
+#TARGET_CHARFLAG?= -DTARGET_CHAR="unsigned char" -funsigned-char
+
+.ifdef SMALLPROG
+CPPFLAGS+=-DSMALL
+.else
+SRCS+=printf.c
+.endif
+
+.PATH:	${.CURDIR}/bltin ${NETBSDSRCDIR}/bin/test \
+	${NETBSDSRCDIR}/usr.bin/printf \
+	${NETBSDSRCDIR}/bin/kill
+
+CLEANFILES+= ${GENSRCS} ${GENHDRS} y.tab.h
+CLEANFILES+= trace
+
+token.h: mktokens
+	${_MKTARGET_CREATE}
+	${SCRIPT_ENV} ${HOST_SH} ${.ALLSRC}
+
+builtins.h: builtins.c
+	${_MKTARGET_CREATE}
+
+builtins.c: mkbuiltins shell.h builtins.def
+	${_MKTARGET_CREATE}
+	${SCRIPT_ENV} ${HOST_SH} ${.ALLSRC} ${.OBJDIR}
+	[ -f builtins.h ]
+
+init.c: mkinit.sh ${SHSRCS}
+	${_MKTARGET_CREATE}
+	${SCRIPT_ENV} ${HOST_SH} ${.ALLSRC}
+
+nodes.h: nodes.c
+
+nodes.c: mknodes.sh nodetypes nodes.c.pat
+	${_MKTARGET_CREATE}
+	${SCRIPT_ENV} ${HOST_SH} ${.ALLSRC} ${.OBJDIR}
+	[ -f nodes.h ]
+
+.if ${USETOOLS} == "yes"
+COMPATOBJDIR!=	cd ${NETBSDSRCDIR}/tools/compat && ${PRINTOBJDIR}
+NBCOMPATLIB=	-L${COMPATOBJDIR} -lnbcompat
+.endif
 
 .include <bsd.prog.mk>
-
-${OBJS}: builtins.h nodes.h syntax.h token.h

@@ -1,4 +1,4 @@
-/*	$NetBSD: globalcmds.c,v 1.7 2000/01/08 23:34:17 itojun Exp $ */
+/*	$NetBSD: globalcmds.c,v 1.13 2006/02/05 08:51:03 dsl Exp $ */
 
 /*-
  * Copyright (c) 1999
@@ -32,23 +32,26 @@
  * SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+#ifndef lint
+__RCSID("$NetBSD: globalcmds.c,v 1.13 2006/02/05 08:51:03 dsl Exp $");
+#endif /* not lint */
+
 #include <curses.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+
 #include "systat.h"
 #include "extern.h"
 
-
-static char *shortname __P((const char *, const char *));
+static char *shortname(const char *, const char *);
 
 static char *
-shortname(key, s)
-	const char *key;
-	const char *s;
+shortname(const char *key, const char *s)
 {
 	char *p, *q;
-	size_t l;
+	size_t len;
 
 	if (key == NULL) {
 		if ((p = strdup(s)) == NULL)
@@ -59,41 +62,45 @@ shortname(key, s)
 			q[2] = '\0';
 		}
 		return p;
-	} else if (strncmp(key, s, l = strlen(key)) == 0 && s[l] == '.') {
-		p = strdup(s + l + 1);
+	}
+
+	len = strlen(key);
+	if (strncmp(key, s, len) == 0 && s[len] == '.') {
+		p = strdup(s + len + 1);
+		if (!p)
+			return NULL;
 		return p;
-	} else
-		return NULL;
+	}
+	return NULL;
 }
 
 void
-global_help(args)
-	char *args;
+global_help(char *args)
 {
 	int col, len;
 	struct mode *p;
-	char *cur, *prev;
+	char *name, *prev;
 
 	move(CMDLINE, col = 0);
-	cur = prev = NULL;
+	name = prev = NULL;
 	for (p = modes; p->c_name; p++) {
-		if ((cur = shortname(args, p->c_name)) == NULL)
+		if ((name = shortname(args, p->c_name)) == NULL)
 			continue;
-		if (cur && prev && strcmp(cur, prev) == 0) {
-			free(cur);
-			cur = NULL;
+		if (name && prev && strcmp(name, prev) == 0) {
+			free(name);
+			name = NULL;
 			continue;
 		}
-		len = strlen(cur);
+		len = strlen(name);
 		if (col + len > COLS)
 			break;
-		addstr(cur); col += len;
+		addstr(name); col += len;
 		if (col + 1 < COLS)
 			addch(' ');
 		if (prev)
 			free(prev);
-		prev = cur;
-		cur = NULL;
+		prev = name;
+		name = NULL;
 	}
 	if (col == 0 && args) {
 		standout();
@@ -104,15 +111,14 @@ global_help(args)
 		standend();
 	}
 	clrtoeol();
-	if (cur)
-		free(cur);
+	if (name)
+		free(name);
 	if (prev)
 		free(prev);
 }
 
 void
-global_interval(args)
-	char *args;
+global_interval(char *args)
 {
 	int interval;
 
@@ -127,7 +133,6 @@ global_interval(args)
 		return;
 	}
 
-	alarm(0);
 	naptime = interval;
 	display(0);
 	status();
@@ -135,8 +140,7 @@ global_interval(args)
 
 
 void
-global_load(args)
-	char *args;
+global_load(char *args)
 {
 	(void)getloadavg(avenrun, sizeof(avenrun)/sizeof(avenrun[0]));
 	mvprintw(CMDLINE, 0, "%4.1f %4.1f %4.1f",
@@ -145,17 +149,15 @@ global_load(args)
 }
 
 void
-global_quit(args)
-	char *args;
+global_quit(char *args)
 {
 	die(0);
 }
 
 void
-global_stop(args)
-	char *args;
+global_stop(char *args)
 {
-	alarm(0);
+	timeout(-1);
 	mvaddstr(CMDLINE, 0, "Refresh disabled.");
 	clrtoeol();
 }

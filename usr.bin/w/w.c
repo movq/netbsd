@@ -1,4 +1,4 @@
-/*	$NetBSD: w.c,v 1.34 1999/11/29 11:15:13 pk Exp $	*/
+/*	$NetBSD: w.c,v 1.73 2008/07/21 14:19:27 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1991, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1991, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1991, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)w.c	8.6 (Berkeley) 6/30/94";
 #else
-__RCSID("$NetBSD: w.c,v 1.34 1999/11/29 11:15:13 pk Exp $");
+__RCSID("$NetBSD: w.c,v 1.73 2008/07/21 14:19:27 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -54,6 +50,7 @@ __RCSID("$NetBSD: w.c,v 1.34 1999/11/29 11:15:13 pk Exp $");
  *
  */
 #include <sys/param.h>
+#include <sys/types.h>
 #include <sys/time.h>
 #include <sys/stat.h>
 #include <sys/sysctl.h>
@@ -80,71 +77,89 @@ __RCSID("$NetBSD: w.c,v 1.34 1999/11/29 11:15:13 pk Exp $");
 #include <time.h>
 #include <tzfile.h>
 #include <unistd.h>
+#ifdef SUPPORT_UTMP
 #include <utmp.h>
+#endif
+#ifdef SUPPORT_UTMPX
+#include <utmpx.h>
+#endif
 #include <vis.h>
 
 #include "extern.h"
 
 struct timeval	boottime;
-struct utmp	utmp;
 struct winsize	ws;
 kvm_t	       *kd;
 time_t		now;		/* the current time of day */
 time_t		uptime;		/* time of last reboot & elapsed time since */
 int		ttywidth;	/* width of tty */
-int		argwidth;	/* width of tty */
+int		argwidth;	/* width of tty left to print process args */
 int		header = 1;	/* true if -h flag: don't print heading */
 int		nflag;		/* true if -n flag: don't convert addrs */
+int		wflag;		/* true if -w flag: wide printout */
 int		sortidle;	/* sort bu idle time */
 char	       *sel_user;	/* login of particular user selected */
 char		domain[MAXHOSTNAMELEN + 1];
+int maxname = 8, maxline = 3, maxhost = 16;
 
 /*
  * One of these per active utmp entry.
  */
 struct	entry {
 	struct	entry *next;
-	struct	utmp utmp;
-	dev_t	tdev;		/* dev_t of terminal */
-	time_t	idle;		/* idle time of terminal in seconds */
-	struct	kinfo_proc *kp;	/* `most interesting' proc */
+	char name[UTX_USERSIZE + 1];
+	char line[UTX_LINESIZE + 1];
+	char host[UTX_HOSTSIZE + 1];
+	char type[2];
+	struct timeval tv;
+	dev_t	tdev;			/* dev_t of terminal */
+	time_t	idle;			/* idle time of terminal in seconds */
+	struct	kinfo_proc2 *tp;	/* `most interesting' tty proc */
+	struct	kinfo_proc2 *pp;	/* pid proc */
+	pid_t	pid;			/* pid or ~0 if not known */
 } *ep, *ehead = NULL, **nextp = &ehead;
 
-static void	 pr_args __P((struct kinfo_proc *));
-static void	 pr_header __P((time_t *, int));
-static struct stat
-		*ttystat __P((char *));
-static void	 usage __P((int));
-int	main __P((int, char **));
+static void	pr_args(struct kinfo_proc2 *);
+static void	pr_header(time_t *, int);
+#if defined(SUPPORT_UTMP) || defined(SUPPORT_UTMPX)
+static int	ttystat(const char *, struct stat *);
+static void	process(struct entry *);
+#endif
+static void	usage(int);
+
+int	main(int, char **);
 
 int
-main(argc, argv)
-	int argc;
-	char **argv;
+main(int argc, char **argv)
 {
-	extern char *__progname;
-	struct kinfo_proc *kp;
+	struct kinfo_proc2 *kp;
 	struct hostent *hp;
-	struct stat *stp;
-	FILE *ut;
 	struct in_addr l;
-	int ch, i, nentries, nusers, wcmd;
-	gid_t egid = getegid();
-	char *memf, *nlistf, *p, *x;
+	int ch, i, nentries, nusers, wcmd, curtain, use_sysctl;
+	char *memf, *nlistf, *p, *x, *usrnp;
+	time_t then;
+	size_t len;
+#ifdef SUPPORT_UTMP
+	struct utmp *ut;
+#endif
+#ifdef SUPPORT_UTMPX
+	struct utmpx *utx;
+#endif
+	const char *progname;
 	char buf[MAXHOSTNAMELEN], errbuf[_POSIX2_LINE_MAX];
 
-	(void)setegid(getgid());
+	setprogname(argv[0]);
 
 	/* Are we w(1) or uptime(1)? */
-	p = __progname;
-	if (*p == '-')
-		p++;
-	if (*p == 'u') {
+	progname = getprogname();
+	if (*progname == '-')
+		progname++;
+	if (*progname == 'u') {
 		wcmd = 0;
 		p = "";
 	} else {
 		wcmd = 1;
-		p = "hiflM:N:nsuw";
+		p = "hiM:N:nw";
 	}
 
 	memf = nlistf = NULL;
@@ -166,9 +181,9 @@ main(argc, argv)
 		case 'n':
 			nflag = 1;
 			break;
-		case 'f': case 'l': case 's': case 'u': case 'w':
-			warnx("[-flsuw] no longer supported");
-			/* FALLTHROUGH */
+		case 'w':
+			wflag = 1;
+			break;
 		case '?':
 		default:
 			usage(wcmd);
@@ -176,65 +191,104 @@ main(argc, argv)
 	argc -= optind;
 	argv += optind;
 
-	/*
-	 * Discard setgid privileges.  If not the running kernel, we toss
-	 * them away totally so that bad guys can't print interesting stuff
-	 * from kernel memory, otherwise switch back to kmem for the
-	 * duration of the kvm_openfiles() call.
-	 */
-	if (nlistf != NULL || memf != NULL)
-		(void)setgid(getgid());
-	else
-		(void)setegid(egid);
+	use_sysctl = (memf == NULL && nlistf == NULL);
 
-	if ((kd = kvm_openfiles(nlistf, memf, NULL, O_RDONLY, errbuf)) == NULL)
+	if ((kd = kvm_openfiles(nlistf, memf, NULL,
+	    memf == NULL ? KVM_NO_FILES : O_RDONLY, errbuf)) == NULL)
 		errx(1, "%s", errbuf);
 
-	/* get rid of it now anyway */
-	if (nlistf == NULL && memf == NULL)
-		(void)setgid(getgid());
-
 	(void)time(&now);
-	if ((ut = fopen(_PATH_UTMP, "r")) == NULL)
-		err(1, "%s", _PATH_UTMP);
+
+	if (use_sysctl) {
+		len = sizeof(curtain);
+		if (sysctlbyname("security.curtain", &curtain, &len, 
+		    NULL, 0) == -1)
+			curtain = 0;
+	}
+
+#ifdef SUPPORT_UTMPX
+	setutxent();
+#endif
+#ifdef SUPPORT_UTMP
+	setutent();
+#endif
 
 	if (*argv)
 		sel_user = *argv;
 
-	for (nusers = 0; fread(&utmp, sizeof(utmp), 1, ut);) {
-		if (utmp.ut_name[0] == '\0')
+	nusers = 0;
+#ifdef SUPPORT_UTMPX
+	while ((utx = getutxent()) != NULL) {
+		if (utx->ut_type != USER_PROCESS)
 			continue;
 		++nusers;
-		if (wcmd == 0 || (sel_user &&
-		    strncmp(utmp.ut_name, sel_user, UT_NAMESIZE) != 0))
+		if (sel_user &&
+		    strncmp(utx->ut_name, sel_user, sizeof(utx->ut_name)) != 0)
 			continue;
 		if ((ep = calloc(1, sizeof(struct entry))) == NULL)
 			err(1, NULL);
+		(void)memcpy(ep->name, utx->ut_name, sizeof(utx->ut_name));
+		(void)memcpy(ep->line, utx->ut_line, sizeof(utx->ut_line));
+		ep->name[sizeof(utx->ut_name)] = '\0';
+		ep->line[sizeof(utx->ut_line)] = '\0';
+		if (!nflag || getnameinfo((struct sockaddr *)&utx->ut_ss,
+		    utx->ut_ss.ss_len, ep->host, sizeof(ep->host), NULL, 0,
+		    NI_NUMERICHOST) != 0) {
+			(void)memcpy(ep->host, utx->ut_host,
+			    sizeof(utx->ut_host));
+			ep->host[sizeof(utx->ut_host)] = '\0';
+		}
+		ep->type[0] = 'x';
+		ep->tv = utx->ut_tv;
+		ep->pid = utx->ut_pid;
 		*nextp = ep;
 		nextp = &(ep->next);
-		memmove(&(ep->utmp), &utmp, sizeof(struct utmp));
-		if (!(stp = ttystat(ep->utmp.ut_line)))
-			continue;
-		ep->tdev = stp->st_rdev;
-#ifdef CPU_CONSDEV
-		/*
-		 * If this is the console device, attempt to ascertain
-		 * the true console device dev_t.
-		 */
-		if (ep->tdev == 0) {
-			int mib[2];
-			size_t size;
-
-			mib[0] = CTL_MACHDEP;
-			mib[1] = CPU_CONSDEV;
-			size = sizeof(dev_t);
-			(void) sysctl(mib, 2, &ep->tdev, &size, NULL, 0);
-		}
-#endif
-		if ((ep->idle = now - stp->st_atime) < 0)
-			ep->idle = 0;
+		if (wcmd != 0)
+			process(ep);
 	}
-	(void)fclose(ut);
+#endif
+
+#ifdef SUPPORT_UTMP
+	while ((ut = getutent()) != NULL) {
+		if (ut->ut_name[0] == '\0')
+			continue;
+
+		if (sel_user &&
+		    strncmp(ut->ut_name, sel_user, sizeof(ut->ut_name)) != 0)
+			continue;
+
+		/* Don't process entries that we have utmpx for */
+		for (ep = ehead; ep != NULL; ep = ep->next) {
+			if (strncmp(ep->line, ut->ut_line,
+			    sizeof(ut->ut_line)) == 0)
+				break;
+		}
+		if (ep != NULL)
+			continue;
+
+		++nusers;
+		if ((ep = calloc(1, sizeof(struct entry))) == NULL)
+			err(1, NULL);
+		(void)memcpy(ep->name, ut->ut_name, sizeof(ut->ut_name));
+		(void)memcpy(ep->line, ut->ut_line, sizeof(ut->ut_line));
+		(void)memcpy(ep->host, ut->ut_host, sizeof(ut->ut_host));
+		ep->name[sizeof(ut->ut_name)] = '\0';
+		ep->line[sizeof(ut->ut_line)] = '\0';
+		ep->host[sizeof(ut->ut_host)] = '\0';
+		ep->tv.tv_sec = ut->ut_time;
+		*nextp = ep;
+		nextp = &(ep->next);
+		if (wcmd != 0)
+			process(ep);
+	}
+#endif
+
+#ifdef SUPPORT_UTMPX
+	endutxent();
+#endif
+#ifdef SUPPORT_UTMP
+	endutent();
+#endif
 
 	if (header || wcmd == 0) {
 		pr_header(&now, nusers);
@@ -242,43 +296,58 @@ main(argc, argv)
 			exit (0);
 	}
 
-#define HEADER	"USER    TTY FROM              LOGIN@  IDLE WHAT\n"
-#define WUSED	(sizeof (HEADER) - sizeof ("WHAT\n"))
-	(void)printf(HEADER);
-
-	if ((kp = kvm_getprocs(kd, KERN_PROC_ALL, 0, &nentries)) == NULL)
+	if ((kp = kvm_getproc2(kd, KERN_PROC_ALL, 0,
+	    sizeof(struct kinfo_proc2), &nentries)) == NULL)
 		errx(1, "%s", kvm_geterr(kd));
-	for (i = 0; i < nentries; i++, kp++) {
-		struct proc *p = &kp->kp_proc;
-		struct eproc *e;
 
-		if (p->p_stat == SIDL || p->p_stat == SZOMB)
+	/* Include trailing space because TTY header starts one column early. */
+	for (i = 0; i < nentries; i++, kp++) {
+
+		if (kp->p_stat == SIDL || kp->p_stat == SZOMB)
 			continue;
-		e = &kp->kp_eproc;
+
 		for (ep = ehead; ep != NULL; ep = ep->next) {
-			if (ep->tdev == e->e_tdev && e->e_pgid == e->e_tpgid) {
+			if (ep->tdev != 0 && ep->tdev == kp->p_tdev &&
+			    kp->p__pgid == kp->p_tpgid) {
 				/*
-				 * Proc is in foreground of this terminal
+				 * Proc is in foreground of this
+				 * terminal
 				 */
-				if (proc_compare(&ep->kp->kp_proc, p))
-					ep->kp = kp;
+				if (proc_compare(ep->tp, kp))
+					ep->tp = kp;
+				break;
+			} 
+			if (ep->pid != 0 && ep->pid == kp->p_pid) {
+				ep->pp = kp;
 				break;
 			}
 		}
 	}
+
 	if ((ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 &&
-	     ioctl(STDERR_FILENO, TIOCGWINSZ, &ws) == -1 &&
-	     ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) == -1) || ws.ws_col == 0)
-	       ttywidth = 79;
-        else
-	       ttywidth = ws.ws_col - 1;
-	argwidth = ttywidth - WUSED;
+	    ioctl(STDERR_FILENO, TIOCGWINSZ, &ws) == -1 &&
+	    ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) == -1) || ws.ws_col == 0)
+		ttywidth = 79;
+	else
+		ttywidth = ws.ws_col - 1;
+
+	if (!wflag && maxhost > (ttywidth / 3))
+		maxhost = ttywidth / 3;
+
+	argwidth = printf("%-*s TTY     %-*s %*s  IDLE WHAT\n",
+	    maxname, "USER", maxhost, "FROM",
+	    7 /* "dddhhXm" */, "LOGIN@");
+	argwidth -= sizeof("WHAT\n") - 1 /* NUL */;
+	argwidth = ttywidth - argwidth;
 	if (argwidth < 4)
 		argwidth = 8;
+	if (wflag)
+		argwidth = -1;
+
 	/* sort by idle time */
 	if (sortidle && ehead != NULL) {
 		struct entry *from = ehead, *save;
-		
+
 		ehead = NULL;
 		while (from != NULL) {
 			for (nextp = &ehead;
@@ -291,7 +360,24 @@ main(argc, argv)
 			*nextp = save;
 		}
 	}
-			
+#if defined(SUPPORT_UTMP) && defined(SUPPORT_UTMPX)
+	else if (ehead != NULL) {
+		struct entry *from = ehead, *save;
+
+		ehead = NULL;
+		while (from != NULL) {
+			for (nextp = &ehead;
+			    (*nextp) && strcmp(from->line, (*nextp)->line) > 0;
+			    nextp = &(*nextp)->next)
+				continue;
+			save = from;
+			from = from->next;
+			save->next = *nextp;
+			*nextp = save;
+		}
+	}
+#endif
+
 	if (!nflag) {
 		int	rv;
 
@@ -304,11 +390,15 @@ main(argc, argv)
 	}
 
 	for (ep = ehead; ep != NULL; ep = ep->next) {
-		p = *ep->utmp.ut_host ? ep->utmp.ut_host : "-";
-		for (x = p; x < p + UT_HOSTSIZE; x++)
+		char host_buf[MAXHOSTNAMELEN + 1];
+
+		strlcpy(host_buf, ep->host, sizeof(host_buf));
+		p = *host_buf ? host_buf : "-";
+
+		for (x = p; x < p + MAXHOSTNAMELEN; x++)
 			if (*x == '\0' || *x == ':')
 				break;
-		if (x == p + UT_HOSTSIZE || *x != ':')
+		if (x == p + MAXHOSTNAMELEN || *x != ':')
 			x = NULL;
 		else
 			*x++ = '\0';
@@ -319,33 +409,45 @@ main(argc, argv)
 				p = hp->h_name;
 				p += strlen(hp->h_name);
 				p -= strlen(domain);
-				if (p > hp->h_name && strcmp(p, domain) == 0)
+				if (p > hp->h_name &&
+				    strcasecmp(p, domain) == 0)
 					*p = '\0';
 			}
 			p = hp->h_name;
 		}
 		if (x) {
-			(void)snprintf(buf, sizeof(buf), "%s:%.*s", p,
-			    (int)(ep->utmp.ut_host + UT_HOSTSIZE - x), x);
+			(void)snprintf(buf, sizeof(buf), "%s:%s", p, x);
 			p = buf;
 		}
-		(void)printf("%-*.*s %-2.2s %-*.*s ",
-		    UT_NAMESIZE, UT_NAMESIZE, ep->utmp.ut_name,
-		    (strncmp(ep->utmp.ut_line, "tty", 3) &&
-		    strncmp(ep->utmp.ut_line, "dty", 3)) ?
-		    ep->utmp.ut_line : ep->utmp.ut_line + 3,
-		    UT_HOSTSIZE, UT_HOSTSIZE, *p ? p : "-");
-		pr_attime(&ep->utmp.ut_time, &now);
+
+		if (ep->tp != NULL)
+			kp = ep->tp;
+		else if (ep->pp != NULL)
+			kp = ep->pp;
+		else if (ep->pid != 0) {
+			if (curtain)
+				kp = NULL;
+			else {
+				warnx("Stale utmp%s entry: %s %s %s",
+				    ep->type, ep->name, ep->line, ep->host);
+				continue;
+			}
+		}
+		usrnp = (kp == NULL) ? ep->name : kp->p_login;
+		(void)printf("%-*s %-7.7s %-*.*s ",
+		    maxname, usrnp, ep->line,
+		    maxhost, maxhost, *p ? p : "-");
+		then = (time_t)ep->tv.tv_sec;
+		pr_attime(&then, &now);
 		pr_idle(ep->idle);
-		pr_args(ep->kp);
-		printf("\n");
+		pr_args(kp);
+		(void)printf("\n");
 	}
 	exit(0);
 }
 
 static void
-pr_args(kp)
-	struct kinfo_proc *kp;
+pr_args(struct kinfo_proc2 *kp)
 {
 	char **argv;
 	int left;
@@ -353,9 +455,17 @@ pr_args(kp)
 	if (kp == 0)
 		goto nothing;
 	left = argwidth;
-	argv = kvm_getargv(kd, kp, argwidth);
-	if (argv == 0)
-		goto nothing;
+	argv = kvm_getargv2(kd, kp, (argwidth < 0) ? 0 : argwidth);
+	if (argv == 0) {
+		if (kp->p_comm == 0) {
+			goto nothing;
+		} else {
+			fmt_putc('(', &left);
+			fmt_puts((char *)kp->p_comm, &left);
+			fmt_putc(')', &left);
+			return;
+		}
+	}
 	while (*argv) {
 		fmt_puts(*argv, &left);
 		argv++;
@@ -367,9 +477,7 @@ nothing:
 }
 
 static void
-pr_header(nowp, nusers)
-	time_t *nowp;
-	int nusers;
+pr_header(time_t *nowp, int nusers)
 {
 	double avenrun[3];
 	time_t uptime;
@@ -384,8 +492,7 @@ pr_header(nowp, nusers)
 	 * SCCS forces the string manipulation below, as it replaces
 	 * %, M, and % in a character string with the file name.
 	 */
-	(void)strftime(buf, sizeof(buf),
-	    __CONCAT("%l:%","M%p"), localtime(nowp));
+	(void)strftime(buf, sizeof(buf), "%l:%" "M%p", localtime(nowp));
 	buf[sizeof(buf) - 1] = '\0';
 	(void)printf("%s ", buf);
 
@@ -442,27 +549,85 @@ pr_header(nowp, nusers)
 	}
 }
 
-static struct stat *
-ttystat(line)
-	char *line;
+#if defined(SUPPORT_UTMP) || defined(SUPPORT_UTMPX)
+static int
+ttystat(const char *line, struct stat *st)
 {
-	static struct stat sb;
 	char ttybuf[MAXPATHLEN];
 
-	(void)snprintf(ttybuf, sizeof(ttybuf), "%s/%s", _PATH_DEV, line);
-	if (stat(ttybuf, &sb))
-		return (NULL);
-	return (&sb);
+	(void)snprintf(ttybuf, sizeof(ttybuf), "%s%s", _PATH_DEV, line);
+	return stat(ttybuf, st);
 }
 
 static void
-usage(wcmd)
-	int wcmd;
+process(struct entry *ep)
 {
+	struct stat st;
+	time_t touched;
+	int max;
+
+	if ((max = strlen(ep->name)) > maxname)
+		maxname = max;
+	if ((max = strlen(ep->line)) > maxline)
+		maxline = max;
+	if ((max = strlen(ep->host)) > maxhost)
+		maxhost = max;
+
+	ep->tdev = 0;
+	ep->idle = (time_t)-1;
+
+#ifdef SUPPORT_UTMP
+	/*
+	 * Hack to recognize and correctly parse
+	 * ut entry made by ftpd. The "tty" used
+	 * by ftpd is not a real tty, just identifier in
+	 * form ftpPID. Pid parsed from the "tty name"
+	 * is used later to match corresponding process.
+	 * NB: This is only used for utmp entries. For utmpx,
+	 * we already have the pid.
+	 */
+	if (ep->pid == 0 && strncmp(ep->line, "ftp", 3) == 0) {
+		ep->pid = strtol(ep->line + 3, NULL, 10);
+		return;
+	}
+#endif
+	if (ttystat(ep->line, &st) == -1)
+		return;
+
+	ep->tdev = st.st_rdev;
+	/*
+	 * If this is the console device, attempt to ascertain
+	 * the true console device dev_t.
+	 */
+	if (ep->tdev == 0) {
+		int mib[2];
+		size_t size;
+
+		mib[0] = CTL_KERN;
+		mib[1] = KERN_CONSDEV;
+		size = sizeof(dev_t);
+		(void) sysctl(mib, 2, &ep->tdev, &size, NULL, 0);
+	}
+
+	touched = st.st_atime;
+	if (touched < ep->tv.tv_sec) {
+		/* tty untouched since before login */
+		touched = ep->tv.tv_sec;
+	}
+	if ((ep->idle = now - touched) < 0)
+		ep->idle = 0;
+}
+#endif
+
+static void
+usage(int wcmd)
+{
+
 	if (wcmd)
 		(void)fprintf(stderr,
-		    "usage: w: [-hin] [-M core] [-N system] [user]\n");
+		    "Usage: %s [-hinw] [-M core] [-N system] [user]\n",
+		    getprogname());
 	else
-		(void)fprintf(stderr, "uptime\n");
+		(void)fprintf(stderr, "Usage: %s\n", getprogname());
 	exit(1);
 }

@@ -1,16 +1,18 @@
 #!/bin/sh
 #
-# $NetBSD: ipmon,v 1.1.1.1 2000/03/10 11:53:25 lukem Exp $
+# $NetBSD: ipmon,v 1.12 2004/08/13 18:08:03 mycroft Exp $
 #
 
 # PROVIDE: ipmon
 # REQUIRE: syslogd
+# BEFORE:  SERVERS
 
-. /etc/rc.subr
-. /etc/rc.conf
+$_rc_subr_loaded . /etc/rc.subr
 
 name="ipmon"
+rcvar=$name
 command="/usr/sbin/${name}"
-command_args="&"
+pidfile="/var/run/${name}.pid"
 
+load_rc_config $name
 run_rc_command "$1"

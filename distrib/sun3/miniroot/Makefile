@@ -1,76 +1,60 @@
-#	$NetBSD: Makefile,v 1.15 1999/05/21 04:06:20 gwr Exp $
+#	$NetBSD: Makefile,v 1.38 2008/10/25 22:27:34 apb Exp $
 
-TOP=		${.CURDIR}/..
+.include <bsd.own.mk>
+.include "${NETBSDSRCDIR}/distrib/common/Makefile.distrib"
 
-# This include just sets REV=XX
-.include "${TOP}/Makefile.inc"
+.include <bsd.kernobj.mk>
 
-IMAGE=	miniroot
+IMAGE=		miniroot.fs
+IMAGESIZE=	6m
+MAKEFS_FLAGS=	-o density=8k
 
-TREE=	${TOP}/common/${IMAGE}.tree
+KERNEL3=	${KERNOBJDIR}/INSTALL/netbsd
+KERNEL3X=	${KERNOBJDIR}/INSTALL3X/netbsd
 
-LISTS=	${TOP}/common/${IMAGE}.list \
-	${TOP}/common/mini_sbin.list \
-	${TOP}/common/mini_bin.list \
-	${TOP}/common/mini_usr.list
+WARNS=		1
+DBG=		-Os
 
-KERNEL3  = ${KERNOBJDIR}/INSTALL/netbsd
-KERNEL3X = ${KERNOBJDIR}/INSTALL3X/netbsd
+CRUNCHBIN=	instbin
+CRUNCHGEN_FLAGS= -d "${DBG}"
 
-MOUNT_POINT?=	/mnt
-BDEV?=		/dev/sd1b
-CDEV?=		/dev/rsd1b
+LISTS=		${.CURDIR}/list
+MTREECONF=	${.CURDIR}/mtree.conf
+IMAGEENDIAN=	be
+PARSELISTENV=	KERNEL3=${KERNEL3} KERNEL3X=${KERNEL3X}
+MAKEDEVTARGETS=	std md0 cd0 st0 st1 sd0 sd1 sd2 xd0 xy0 fd0
+IMAGEDEPENDS=	${CRUNCHBIN} \
+		${KERNEL3} ${KERNEL3X} \
+		fstab install.md profile termcap \
+		${DESTDIR}/dev/MAKEDEV ${DESTDIR}/dev/MAKEDEV.local \
+		${DESTDIR}/etc/disktab ${DESTDIR}/etc/group \
+		${DESTDIR}/etc/master.passwd ${DESTDIR}/etc/netconfig \
+		${DESTDIR}/etc/passwd ${DESTDIR}/etc/protocols \
+		${DESTDIR}/etc/pwd.db ${DESTDIR}/etc/services \
+		${DESTDIR}/etc/spwd.db \
+		${DESTDIR}/usr/mdec/bootxx \
+		${DESTDIR}/usr/mdec/netboot ${DESTDIR}/usr/mdec/tapeboot \
+		${DESTDIR}/usr/mdec/ufsboot \
+		${DISTRIBDIR}/miniroot/install.sh \
+		${DISTRIBDIR}/miniroot/upgrade.sh \
+		install.sub
 
-# These are all the parameters for the miniroot: (8MB)
-DISKTYPE=	miniroot
-NBLKS=		20480
-# bigendian, old format, minfree, opt, b/i  trks, sects, cpg
-NEWFSARGS= -B be -O -m 0 -o space -i 8192 -t 8 -u 32 -c 16
+IMAGEPOSTBUILD=		${TOOL_INSTALLBOOT} -v -m ${MACHINE} ${IMAGE} \
+		    	    ${DESTDIR}/usr/mdec/bootxx /ufsboot
+IMAGE_RELEASEDIR=	installation/miniroot
 
-CLEANFILES= ${IMAGE}.gz install.sub
+# Use stubs to eliminate some large stuff from libc
+HACKSRC=	${DISTRIBDIR}/utils/libhack
+.include	"${HACKSRC}/Makefile.inc"
+${CRUNCHBIN}:	libhack.o
 
-all: ${IMAGE}.gz
+install.sub: ${DISTRIBDIR}/miniroot/install.sub
+	${TOOL_SED} -e "/^VERSION=/s/=.*/=${DISTRIBREV}/" < $? > $@
 
-${IMAGE}.gz: ${TREE} ${LISTS} install.sub
-	-newfs ${NEWFSARGS} -s ${NBLKS} ${CDEV} ${DISKTYPE}
-	mount ${BDEV} ${MOUNT_POINT}
-	mtree -def ${TREE} -p ${MOUNT_POINT}/ -u
-	cp ${KERNEL3}  ${MOUNT_POINT}/netbsd.sun3
-	cp ${KERNEL3X} ${MOUNT_POINT}/netbsd.sun3x
-	TOPDIR=${TOP} CURDIR=${.CURDIR} \
-	  OBJDIR=${.OBJDIR} TARGDIR=${MOUNT_POINT} \
-	  sh ${TOP}/common/RunList.sh ${LISTS}
-	sync ; sleep 1 ; sync
-	cd ${MOUNT_POINT} ;\
-	  usr/mdec/installboot -v ufsboot usr/mdec/bootxx ${CDEV}
-	sync
-	@echo ""
-	@df -i ${MOUNT_POINT}
-	@echo ""
-	-umount ${MOUNT_POINT}
-	dd if=${CDEV} bs=16b count=`expr ${NBLKS} / 16` |\
-	  gzip > ${IMAGE}.tmp
-	-mv -f ${IMAGE}.tmp ${IMAGE}.gz
+CLEANFILES+= install.sub
 
-# Do not delete this if I change my mind and kill make...
-.PRECIOUS: ${IMAGE}.gz
+.include "${DISTRIBDIR}/common/Makefile.crunch"
+.include "${DISTRIBDIR}/common/Makefile.makedev"
+.include "${DISTRIBDIR}/common/Makefile.image"
 
-install.sub : ${TOP}/../miniroot/install.sub
-	sed -e "/^VERSION=/s/=.*/=${REV}/" < $? > $@
-
-clean cleandir distclean:
-	-rm -f a.out core *.core *.o
-	-rm -f ${CLEANFILES}
-
-# Standard rules needed by the above...
-.include <bsd.obj.mk>
-
-.if !defined(RELEASEDIR)
-release:
-	@echo setenv RELEASEDIR before doing that!
-	@false
-.else	# RELEASEDIR
-release: ${IMAGE}.gz
-	cp -p ${IMAGE}.gz \
-	 ${RELEASEDIR}/installation/miniroot/${IMAGE}.gz
-.endif	# RELEASEDIR
+.include <bsd.prog.mk>

@@ -1,4 +1,4 @@
-/*	$NetBSD: aout_machdep.h,v 1.2 1998/12/03 05:15:06 sakamoto Exp $	*/
+/*	$NetBSD: aout_machdep.h,v 1.5 2002/12/10 17:14:17 thorpej Exp $	*/
 
 /*-
  * Copyright (C) 1995 Wolfgang Solfrank.
@@ -30,8 +30,8 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef	_MACH_EXEC_H_
-#define	_MACH_EXEC_H_
+#ifndef	_POWERPC_AOUT_MACHDEP_H_
+#define	_POWERPC_AOUT_MACHDEP_H_
 
 #include <machine/reloc.h>
 
@@ -44,11 +44,11 @@ struct relocation_info_ppc {
 	unsigned int r_symbolnum : 24,	/* ordinal number of add symbol */
 			r_extern :  1,	/* 1 if need to add symbol to value */
 				 :  1;	/* unused bits */
-	enum reloc_type r_type	 :  6;	/* relocation type */
+	u_int32_t r_type	 :  6;	/* relocation type */
 	long r_addend;			/* relocation addend */
 };
 #define relocation_info	relocation_info_ppc
 
-#define	__LDPGSZ	4096
+#define	AOUT_LDPGSZ	4096
 
-#endif	/* _MACH_EXEC_H_ */
+#endif	/* _POWERPC_AOUT_MACHDEP_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: execle.c,v 1.6 2000/01/22 22:19:09 mycroft Exp $	*/
+/*	$NetBSD: execle.c,v 1.11 2008/01/09 11:26:03 simonb Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,64 +34,50 @@
 #if 0
 static char sccsid[] = "@(#)exec.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: execle.c,v 1.6 2000/01/22 22:19:09 mycroft Exp $");
+__RCSID("$NetBSD: execle.c,v 1.11 2008/01/09 11:26:03 simonb Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
+#include <stdarg.h>
 #include <stdlib.h>
 #include <unistd.h>
-
-#if __STDC__
-#include <stdarg.h>
-#define VA_START(ap, last)	va_start(ap, last)
-#else
-#include <varargs.h>
-#define VA_START(ap, last)	va_start(ap)
-#endif
 
 #ifdef __weak_alias
 __weak_alias(execle,_execle)
 #endif
 
 int
-#if __STDC__
 execle(const char *name, const char *arg, ...)
-#else
-execle(name, arg, va_alist)
-	const char *name;
-	const char *arg;
-	va_dcl
-#endif
 {
-#if defined(__i386__) || defined(__m68k__) || defined(__ns32k__)
+#if defined(__i386__) || defined(__m68k__)
 	va_list ap;
 	char **envp;
 
-	VA_START(ap, arg);
+	va_start(ap, arg);
 	while ((va_arg(ap, char *)) != NULL)
-		;
+		continue;
 	envp = va_arg(ap, char **);
 	va_end(ap);
 
-	return execve(name, (char **) &arg, envp);
+	return execve(name, __UNCONST(&arg), envp);
 #else
 	va_list ap;
 	char **argv, **envp;
 	int i;
 
-	VA_START(ap, arg);
+	va_start(ap, arg);
 	for (i = 2; va_arg(ap, char *) != NULL; i++)
-		;
+		continue;
 	va_end(ap);
 
-	argv = alloca (i * sizeof (char *));
+	argv = alloca(i * sizeof (char *));
 	
-	VA_START(ap, arg);
-	argv[0] = (char *) arg;
-	for (i = 1; (argv[i] = (char *) va_arg(ap, char *)) != NULL; i++) 
-		;
-	envp = (char **) va_arg(ap, char **);
+	va_start(ap, arg);
+	argv[0] = __UNCONST(arg);
+	for (i = 1; (argv[i] = va_arg(ap, char *)) != NULL; i++) 
+		continue;
+	envp = va_arg(ap, char **);
 	va_end(ap);
 
 	return execve(name, argv, envp);

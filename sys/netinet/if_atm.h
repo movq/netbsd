@@ -1,4 +1,4 @@
-/*      $NetBSD: if_atm.h,v 1.4 1998/09/13 15:45:40 christos Exp $       */
+/*      $NetBSD: if_atm.h,v 1.11 2008/10/24 17:07:33 dyoung Exp $       */
 
 /*
  *
@@ -39,8 +39,8 @@
  * if_atm.h
  */
 
-void atm_rtrequest __P((int, struct rtentry *, struct sockaddr *));
-int atmresolve __P((struct rtentry *, struct mbuf *, struct sockaddr *, 
-		struct atm_pseudohdr *));
+void atm_rtrequest(int, struct rtentry *, const struct rt_addrinfo *);
+int atmresolve(struct rtentry *, struct mbuf *, const struct sockaddr *,
+		struct atm_pseudohdr *);
 
-#endif /* _NETINET_IF_ATM_H_ */
+#endif /* !_NETINET_IF_ATM_H_ */

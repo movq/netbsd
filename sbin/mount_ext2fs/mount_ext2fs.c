@@ -1,4 +1,4 @@
-/*	$NetBSD: mount_ext2fs.c,v 1.6 1998/12/02 16:15:10 kenh Exp $	*/
+/*	$NetBSD: mount_ext2fs.c,v 1.21 2008/08/05 20:57:45 pooka Exp $	*/
 
 /*-
  * Copyright (c) 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)mount_ufs.c	8.4 (Berkeley) 4/26/95";
 #else
-__RCSID("$NetBSD: mount_ext2fs.c,v 1.6 1998/12/02 16:15:10 kenh Exp $");
+__RCSID("$NetBSD: mount_ext2fs.c,v 1.21 2008/08/05 20:57:45 pooka Exp $");
 #endif
 #endif /* not lint */
 
@@ -59,10 +55,12 @@ __RCSID("$NetBSD: mount_ext2fs.c,v 1.6 1998/12/02 16:15:10 kenh Exp $");
 #include <string.h>
 #include <unistd.h>
 
-#include "mntopts.h"
+#include <mntopts.h>
 
-void	ext2fs_usage __P((void));
-int	main __P((int, char *[]));
+#include "mountprog.h"
+#include "mount_ext2fs.h"
+
+static void	ext2fs_usage(void);
 
 static const struct mntopt mopts[] = {
 	MOPT_STDOPTS,
@@ -71,27 +69,39 @@ static const struct mntopt mopts[] = {
 	MOPT_UPDATE,
 	MOPT_RELOAD,
 	MOPT_FORCE,
+	MOPT_GETARGS,
 	MOPT_NODEVMTIME,
-	{ NULL }
+	MOPT_NULL,
 };
 
+#ifndef MOUNT_NOMAIN
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
-	extern int optreset;
-	struct ufs_args args;		/* XXX ffs_args */
-	int ch, mntflags;
-	char *fs_name;
-	const char *errcause;
 
-	mntflags = 0;
+	setprogname(argv[0]);
+	return mount_ext2fs(argc, argv);
+}
+#endif
+
+void
+mount_ext2fs_parseargs(int argc, char *argv[],
+	struct ufs_args *args, int *mntflags,
+	char *canon_dev, char *canon_dir)
+{
+	int ch;
+	mntoptparse_t mp;
+
+	memset(args, 0, sizeof(*args));
+	*mntflags = 0;
 	optind = optreset = 1;		/* Reset for parse of new argv. */
 	while ((ch = getopt(argc, argv, "o:")) != -1)
 		switch (ch) {
 		case 'o':
-			getmntopts(optarg, mopts, &mntflags, 0);
+			mp = getmntopts(optarg, mopts, mntflags, 0);
+			if (mp == NULL)
+				err(1, "getmntopts");
+			freemntopts(mp);
 			break;
 		case '?':
 		default:
@@ -103,17 +113,24 @@ main(argc, argv)
 	if (argc != 2)
 		ext2fs_usage();
 
-        args.fspec = argv[0];		/* The name of the device file. */
-	fs_name = argv[1];		/* The mount point. */
+	pathadj(argv[0], canon_dev);
+	args->fspec = canon_dev;
 
-#define DEFAULT_ROOTUID	-2
-	args.export.ex_root = DEFAULT_ROOTUID;
-	if (mntflags & MNT_RDONLY)
-		args.export.ex_flags = MNT_EXRDONLY;
-	else
-		args.export.ex_flags = 0;
+	pathadj(argv[1], canon_dir);
+}
 
-	if (mount(MOUNT_EXT2FS, fs_name, mntflags, &args) < 0) {
+int
+mount_ext2fs(int argc, char *argv[])
+{
+	struct ufs_args args;		/* XXX ffs_args */
+	char fs_name[MAXPATHLEN], canon_dev[MAXPATHLEN];
+	const char *errcause;
+	int mntflags;
+
+	mount_ext2fs_parseargs(argc, argv, &args, &mntflags,
+	    canon_dev, fs_name);
+
+	if (mount(MOUNT_EXT2FS, fs_name, mntflags, &args, sizeof args) == -1) {
 		switch (errno) {
 		case EMFILE:
 			errcause = "mount table full";
@@ -134,10 +151,10 @@ main(argc, argv)
 	exit(0);
 }
 
-void
-ext2fs_usage()
+static void
+ext2fs_usage(void)
 {
 	(void)fprintf(stderr,
-		"usage: mount_ext2fs [-o options] special node\n");
+		"usage: %s [-o options] special node\n", getprogname());
 	exit(1);
 }

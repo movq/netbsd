@@ -1,4 +1,4 @@
-/*	$NetBSD: ttzapple.c,v 1.5 1998/12/20 15:01:30 christos Exp $	*/
+/*	$NetBSD: ttzapple.c,v 1.8 2006/12/18 20:04:55 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)ttzapple.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: ttzapple.c,v 1.5 1998/12/20 15:01:30 christos Exp $");
+__RCSID("$NetBSD: ttzapple.c,v 1.8 2006/12/18 20:04:55 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -75,33 +71,32 @@ int zz_lastc;
 	/* for checkpointing */
 int zz_sum;
 
-void	zz_checkpoint __P((void));
-void	zz_checksum __P((char *, int));
-void	zz_clear __P((void));
-void	zz_clreol __P((void));
-void	zz_clreos __P((void));
-void	zz_compress __P((int));
-void	zz_delchar __P((int));
-void	zz_delline __P((int));
-void	zz_end __P((void));
-void	zz_insline __P((int));
-void	zz_insspace __P((int));
-void	zz_move __P((int, int));
-void	zz_put_token __P((int, char *, int));
-void	zz_putc __P((char));
-void	zz_reset __P((void));
-int	zz_rint __P((char *, int));
-void	zz_scroll_down __P((int));
-void	zz_scroll_up __P((int));
-void	zz_setmodes __P((int));
-void	zz_setscroll __P((int, int));
-void	zz_set_token __P((int, char *, int));
-void	zz_start __P((void));
-void	zz_write __P((char *, int));
+void	zz_checkpoint(void);
+void	zz_checksum(char *, int);
+void	zz_clear(void);
+void	zz_clreol(void);
+void	zz_clreos(void);
+void	zz_compress(int);
+void	zz_delchar(int);
+void	zz_delline(int);
+void	zz_end(void);
+void	zz_insline(int);
+void	zz_insspace(int);
+void	zz_move(int, int);
+void	zz_put_token(int, char *, int);
+void	zz_putc(char);
+void	zz_reset(void);
+int	zz_rint(char *, int);
+void	zz_scroll_down(int);
+void	zz_scroll_up(int);
+void	zz_setmodes(int);
+void	zz_setscroll(int, int);
+void	zz_set_token(int, char *, int);
+void	zz_start(void);
+void	zz_write(char *, int);
 
 void
-zz_setmodes(new)
-	int new;
+zz_setmodes(int new)
 {
 	if (new & WWM_REV) {
 		if ((tt.tt_modes & WWM_REV) == 0)
@@ -113,8 +108,7 @@ zz_setmodes(new)
 }
 
 void
-zz_insline(n)
-	int n;
+zz_insline(int n)
 {
 	if (n == 1)
 		ttesc('a');
@@ -125,8 +119,7 @@ zz_insline(n)
 }
 
 void
-zz_delline(n)
-	int n;
+zz_delline(int n)
 {
 	if (n == 1)
 		ttesc('d');
@@ -137,8 +130,7 @@ zz_delline(n)
 }
 
 void
-zz_putc(c)
-	char c;
+zz_putc(char c)
 {
 	if (tt.tt_nmodes != tt.tt_modes)
 		zz_setmodes(tt.tt_nmodes);
@@ -148,9 +140,7 @@ zz_putc(c)
 }
 
 void
-zz_write(p, n)
-	char *p;
-	int n;
+zz_write(char *p, int n)
 {
 	if (tt.tt_nmodes != tt.tt_modes)
 		zz_setmodes(tt.tt_nmodes);
@@ -161,8 +151,7 @@ zz_write(p, n)
 }
 
 void
-zz_move(row, col)
-	int row, col;
+zz_move(int row, int col)
 {
 	int x;
 
@@ -258,7 +247,7 @@ out:
 }
 
 void
-zz_start()
+zz_start(void)
 {
 	ttesc('T');
 	ttputc(TOKEN_MAX + ' ');
@@ -275,7 +264,7 @@ zz_start()
 }
 
 void
-zz_reset()
+zz_reset(void)
 {
 	zz_setscroll(0, NROW - 1);
 	tt.tt_modes = WWM_REV;
@@ -284,7 +273,7 @@ zz_reset()
 }
 
 void
-zz_end()
+zz_end(void)
 {
 	ttesc('T');
 	ttputc(' ');
@@ -294,27 +283,26 @@ zz_end()
 }
 
 void
-zz_clreol()
+zz_clreol(void)
 {
 	ttesc('2');
 }
 
 void
-zz_clreos()
+zz_clreos(void)
 {
 	ttesc('3');
 }
 
 void
-zz_clear()
+zz_clear(void)
 {
 	ttesc('4');
 	tt.tt_col = tt.tt_row = 0;
 }
 
 void
-zz_insspace(n)
-	int n;
+zz_insspace(int n)
 {
 	if (n == 1)
 		ttesc('i');
@@ -325,8 +313,7 @@ zz_insspace(n)
 }
 
 void
-zz_delchar(n)
-	int n;
+zz_delchar(int n)
 {
 	if (n == 1)
 		ttesc('c');
@@ -337,8 +324,7 @@ zz_delchar(n)
 }
 
 void
-zz_scroll_down(n)
-	int n;
+zz_scroll_down(int n)
 {
 	if (n == 1) {
 		if (tt.tt_row == NROW - 1)
@@ -352,8 +338,7 @@ zz_scroll_down(n)
 }
 
 void
-zz_scroll_up(n)
-	int n;
+zz_scroll_up(int n)
 {
 	if (n == 1)
 		ttesc('r');
@@ -364,8 +349,7 @@ zz_scroll_up(n)
 }
 
 void
-zz_setscroll(top, bot)
-	int top, bot;
+zz_setscroll(int top, int bot)
 {
 	ttesc('?');
 	ttputc(top + ' ');
@@ -377,10 +361,7 @@ zz_setscroll(top, bot)
 int zz_debug = 0;
 
 void
-zz_set_token(t, s, n)
-	int t;
-	char *s;
-	int n;
+zz_set_token(int t, char *s, int n)
 {
 	if (tt.tt_nmodes != tt.tt_modes)
 		zz_setmodes(tt.tt_nmodes);
@@ -399,10 +380,7 @@ zz_set_token(t, s, n)
 }
 
 void
-zz_put_token(t, s, n)
-	int t;
-	char *s;
-	int n;
+zz_put_token(int t, char *s __unused, int n __unused)
 {
 	if (tt.tt_nmodes != tt.tt_modes)
 		zz_setmodes(tt.tt_nmodes);
@@ -417,9 +395,7 @@ zz_put_token(t, s, n)
 }
 
 int
-zz_rint(p, n)
-	char *p;
-	int n;
+zz_rint(char *p, int n)
 {
 	int i;
 	char *q;
@@ -475,9 +451,7 @@ zz_rint(p, n)
 }
 
 void
-zz_checksum(p, n)
-	char *p;
-	int n;
+zz_checksum(char *p, int n)
 {
 	while (--n >= 0) {
 		int c = *p++ & 0x7f;
@@ -487,8 +461,7 @@ zz_checksum(p, n)
 }
 
 void
-zz_compress(flag)
-	int flag;
+zz_compress(int flag)
 {
 	if (flag)
 		tt.tt_checksum = 0;
@@ -497,7 +470,7 @@ zz_compress(flag)
 }
 
 void
-zz_checkpoint()
+zz_checkpoint(void)
 {
 	static char x[] = { ctrl('['), 'V', 0, 0 };
 
@@ -510,7 +483,7 @@ zz_checkpoint()
 }
 
 int
-tt_zapple()
+tt_zapple(void)
 {
 	tt.tt_insspace = zz_insspace;
 	tt.tt_delchar = zz_delchar;

@@ -1,4 +1,4 @@
-/*	$NetBSD: i82586reg.h,v 1.7 1998/02/28 01:07:45 pk Exp $	*/
+/*	$NetBSD: i82586reg.h,v 1.13 2008/04/28 20:23:50 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -83,6 +76,15 @@
  * We use integer offsets exclusively to access the i82586 data structures.
  */
 
+/*
+ * The i82596 has a hardware port that can be used to command the
+ * chip to perform special functions.  For all but IE_PORT_RESET,
+ * a 16-byte aligned memory address is ORed into the port command.
+ */
+#define IE_PORT_RESET		0x00	/* software reset */
+#define IE_PORT_SELF_TEST	0x01	/* self-test */
+#define IE_PORT_ALT_SCP		0x02	/* set alternate SCP address */
+#define IE_PORT_DUMP		0x03	/* dump state */
 
 /*
  * This is the master configuration block.
@@ -100,6 +102,25 @@ struct __ie_sys_conf_ptr {
 #define IE_SCP_ISCP(base)	((base) + 8)
 
 /*
+ * SYSBUS byte flags.  Most are specific to the i82596, and so
+ * far we always run an i82596 in i82586-compatible mode.
+ */
+#define IE_SYSBUS_16BIT		(0x0 << 0)
+#define IE_SYSBUS_8BIT		(0x1 << 0)
+#define IE_SYSBUS_596_82586	(0x0 << 1)
+#define IE_SYSBUS_596_32SEG	(0x1 << 1)
+#define IE_SYSBUS_596_LINEAR	(0x2 << 1)
+#define IE_SYSBUS_596_TRGINT	(0x0 << 3)
+#define IE_SYSBUS_596_TRGEXT	(0x1 << 3)
+#define IE_SYSBUS_596_NOLOCK	(0x0 << 4)
+#define IE_SYSBUS_596_LOCK	(0x1 << 4)
+#define IE_SYSBUS_596_INTHIGH	(0x0 << 4)
+#define IE_SYSBUS_596_INTLOW	(0x1 << 5)
+#define IE_SYSBUS_596_RSVD_SET	(0x1 << 6)
+#define IE_SYSBUS_596_LE	(0x0 << 7)
+#define IE_SYSBUS_596_BE	(0x1 << 7)
+
+/*
  * Note that this is wired in hardware; the SCP is always located here, no
  * matter what.
  */
@@ -114,7 +135,7 @@ struct __ie_int_sys_conf_ptr {
 	u_int8_t	ie_busy;	// zeroed after init
 	u_int8_t	mbz;
 	u_int16_t	ie_scb_offset;	// 16-bit physaddr of next struct
-	caddr_t		ie_base;	// 24-bit physaddr for all 16-bit vars
+	void *		ie_base;	// 24-bit physaddr for all 16-bit vars
 };
  */
 #define IE_ISCP_SZ		8
@@ -235,7 +256,7 @@ struct __ie_recv_frame_desc {
 struct __ie_recv_buf_desc {
 	u_int16_t	ie_rbd_status;	// status for this buffer
 	u_int16_t	ie_rbd_next;	// 16-pointer to next RBD
-	caddr_t		ie_rbd_buffer;	// 24-pointer to buffer for this RBD
+	void *		ie_rbd_buffer;	// 24-pointer to buffer for this RBD
 	u_int16_t	ie_rbd_length;	// length of the buffer
 	u_int16_t	mbz;		// must be zero
 };
@@ -260,7 +281,7 @@ struct __ie_recv_buf_desc {
  * All commands share this in common.
  *-
 struct __ie_cmd_common {
-	u_int16_t ie_cmd_status;	// status of this command 
+	u_int16_t ie_cmd_status;	// status of this command
 	u_int16_t ie_cmd_cmd;		// command word
 	u_int16_t ie_cmd_link;		// link to next command
 };
@@ -340,7 +361,7 @@ struct __ie_xmit_cmd {
 struct __ie_xmit_buf {
 	u_int16_t ie_xmit_flags;	// see below
 	u_int16_t ie_xmit_next;		// 16-pointer to next desc
-	caddr_t ie_xmit_buf;		// 24-pointer to the actual buffer
+	void *ie_xmit_buf;		// 24-pointer to the actual buffer
 };
  */
 #define IE_XBD_SZ			8
@@ -384,8 +405,8 @@ struct __ie_tdr_cmd {
 
 #define IE_TDR_SUCCESS	0x8000	/* TDR succeeded without error */
 #define IE_TDR_XCVR	0x4000	/* detected a transceiver problem */
-#define IE_TDR_OPEN	0x2000	/* detected an open */
-#define IE_TDR_SHORT	0x1000	/* TDR detected a short */
+#define IE_TDR_OPEN	0x2000	/* detected an incorrect termination ("open") */
+#define IE_TDR_SHORT	0x1000	/* TDR detected a short circuit */
 #define IE_TDR_TIME	0x07ff	/* mask for reflection time */
 
 /*

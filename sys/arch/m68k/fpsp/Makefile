@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.7 1997/09/18 22:55:56 jeremy Exp $
+#	$NetBSD: Makefile,v 1.17 2008/10/25 22:27:37 apb Exp $
 
 #	MOTOROLA MICROPROCESSOR & MEMORY TECHNOLOGY GROUP
 #	M68000 Hi-Performance Microprocessor Division
@@ -36,16 +36,26 @@
 #	Makefile for 68040 Floating Point Software Package
 #
 
+.include <bsd.prog.mk>
+
 TARGET = fpsp
 
-AS		= ${CC} -x assembler-with-cpp -traditional-cpp -c -m68040 -I${.CURDIR}
+CPPFLAGS=	${FPSPCPPFLAGS} ${FPSPMISCCPPFLAGS}
+.SUFFIXES:	.o .s .sa .defs .h
+
+.PATH.h: ${FPSPDIR}
+.PATH.s: ${FPSPDIR}
+.PATH.sa: ${FPSPDIR}
+
+AS?		= as
 LD?		= ld
+AFLAGS		= -x assembler-with-cpp -m68040
 
 #
 # For the Library Version:
 #
 AR?		= ar
-LIB_FILTER 	= sed 's/fpsp.defs/l_fpsp.defs/'
+LIB_FILTER 	= ${TOOL_SED} 's/fpsp.defs/l_fpsp.defs/'
 LIB_TARGET	= lib$(TARGET).a
 #
 # SYS selects the template set to use
@@ -65,14 +75,12 @@ LIB_TARGET	= lib$(TARGET).a
 SYS		= GCC
 PREFIX		= L_
 
-.SUFFIXES:	.o .s .sa .defs .h
-
 .sa.s:
-	sh ${.CURDIR}/asm2gas ${.IMPSRC} >${.TARGET}
+	SED=${TOOL_SED:Q} ${HOST_SH} ${FPSPDIR}/asm2gas ${.IMPSRC} >${.TARGET}
 .h.defs:
-	sh ${.CURDIR}/asm2gas ${.IMPSRC} >${.TARGET}
+	SED=${TOOL_SED:Q} ${HOST_SH} ${FPSPDIR}/asm2gas ${.IMPSRC} >${.TARGET}
 .s.o:
-	$(AS) -o ${.TARGET} ${.IMPSRC}
+	${CC} ${AFLAGS} ${CPPFLAGS} -c -o ${.TARGET} ${.IMPSRC}
 
 H_FILES = \
 	fpsp.defs \
@@ -243,7 +251,8 @@ $(LIB_O_FILES): l_fpsp.defs
 # the entry routines for each function.
 #
 l_entry.sa: L_ENTRY.AWK L_LIST MONADIC.$(SYS) DYADIC.$(SYS) l_fpsp.h
-	awk -f L_ENTRY.AWK SYS=$(SYS) PREFIX=$(PREFIX) - <L_LIST|sh>l_entry.sa
+	${TOOL_AWK} -f L_ENTRY.AWK SYS=$(SYS) PREFIX=$(PREFIX) - \
+	    <L_LIST | ${HOST_SH} >l_entry.sa
 
 #
 # Do_func.sa and round.sa need special editing to remove references that
@@ -335,4 +344,3 @@ clean:
 	rm -f $(LIB_TARGET)
 
 clobber:	clean
-

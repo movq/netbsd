@@ -1,4 +1,4 @@
-/*	$NetBSD: pdqreg.h,v 1.13 1999/12/23 18:14:59 matt Exp $	*/
+/*	$NetBSD: pdqreg.h,v 1.19 2008/06/24 10:12:06 gmcgarry Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1996 Matt Thomas <matt@3am-software.com>
@@ -10,7 +10,7 @@
  * 1. Redistributions of source code must retain the above copyright
  *    notice, this list of conditions and the following disclaimer.
  * 2. The name of the author may not be used to endorse or promote products
- *    derived from this software withough specific prior written permission
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -80,17 +80,6 @@ struct _pdq_lanaddr_t {
 typedef struct {
     pdq_uint8_t fwrev_bytes[4];
 } pdq_fwrev_t;
-
-enum _pdq_state_t {
-    PDQS_RESET=0,
-    PDQS_UPGRADE=1,
-    PDQS_DMA_UNAVAILABLE=2,
-    PDQS_DMA_AVAILABLE=3,
-    PDQS_LINK_AVAILABLE=4,
-    PDQS_LINK_UNAVAILABLE=5,
-    PDQS_HALTED=6,
-    PDQS_RING_MEMBER=7
-};
 
 struct _pdq_csrs_t {
     pdq_bus_memoffset_t csr_port_reset;			/* 0x00 [RW] */
@@ -283,58 +272,27 @@ typedef struct {
     pdq_uint32_t pdqcb__filler5[7];
 } pdq_consumer_block_t;
 
-#if defined(BYTE_ORDER) && BYTE_ORDER == BIG_ENDIAN
-#define	PDQ_BITFIELD2(a, b)		         b, a
-#define	PDQ_BITFIELD3(a, b, c)		      c, b, a
-#define	PDQ_BITFIELD4(a, b, c, d)	   d, c, b, a
-#define	PDQ_BITFIELD5(a, b, c, d, e)	e, d, c, b, a
-#define	PDQ_BITFIELD12(a, b, c, d, e, f, g, h, i, j, k, l)	\
-					l, k, j, i, h, g, f, e, d, c, b, a
-#else
-#define	PDQ_BITFIELD2(a, b)		a, b
-#define	PDQ_BITFIELD3(a, b, c)		a, b, c
-#define	PDQ_BITFIELD4(a, b, c, d)	a, b, c, d
-#define	PDQ_BITFIELD5(a, b, c, d, e)	a, b, c, d, e
-#define	PDQ_BITFIELD12(a, b, c, d, e, f, g, h, i, j, k, l)	\
-					a, b, c, d, e, f, g, h, i, j, k, l
-#endif
-
 typedef struct {
-    pdq_uint32_t PDQ_BITFIELD5(rxd_pa_hi : 16,
-			       rxd_seg_cnt : 4,
-			       rxd_seg_len_hi : 9,
-			       rxd_seg_len_lo : 2,
-			       rxd_sop : 1);
+    pdq_uint32_t rxd_pa_hi;
+#define PDQ_RXDESC_PA_HI(x)	(((x) & 0xffff) <<  0)	/* : 16 */
+#define PDQ_RXDESC_SEG_CNT(x)	(((x) & 0x000f) << 16)	/* :  4 */
+#define PDQ_RXDESC_SEG_LEN(x)	((((x) & 0xc) << 27) | (((x) & 0x1ff0) << 16))
+#define PDQ_RXDESC_SOP		0x80000000		/* :  1 */
     pdq_uint32_t rxd_pa_lo;
 } pdq_rxdesc_t;
 
-typedef union {
-    pdq_uint32_t rxs_status;
-    struct {
-	pdq_uint32_t PDQ_BITFIELD12(st_len : 13,
-				    st_rcc_ss : 2,
-				    st_rcc_dd : 2,
-				    st_rcc_reason : 3,
-				    st_rcc_badcrc : 1,
-				    st_rcc_badpdu : 1,
-				    st_fsb__reserved : 2,
-				    st_fsb_c : 1,
-				    st_fsb_a : 1,
-				    st_fsb_e : 1,
-				    st_fsc : 3,
-				    st__reserved : 2);
-    } rxs_st;
-} pdq_rxstatus_t;
-#define rxs_len			rxs_st.st_len
-#define rxs_rcc_ss		rxs_st.st_rcc_ss
-#define rxs_rcc_dd		rxs_st.st_rcc_dd
-#define rxs_rcc_reason		rxs_st.st_rcc_reason
-#define rxs_rcc_badcrc		rxs_st.st_rcc_badcrc
-#define rxs_rcc_badpdu		rxs_st.st_rcc_badpdu
-#define rxs_fsb_c		rxs_st.st_fsb_c
-#define rxs_fsb_a		rxs_st.st_fsb_a
-#define rxs_fsb_e		rxs_st.st_fsb_e
-#define rxs_fsc			rxs_st.st_fsc
+#define	PDQ_RXS_LEN(x)		(((x) >>  0) & 0x1fff)	/* : 13 */
+#define	PDQ_RXS_RCC_SS(x)	(((x) >> 13) & 0x0003)	/* :  2 */
+#define	PDQ_RXS_RCC_DD(x)	(((x) >> 15) & 0x0003)	/* :  2 */
+#define	PDQ_RXS_RCC_REASON(x)	(((x) >> 17) & 0x0007)	/* :  3 */
+#define	PDQ_RXS_RCC_BADCRC(x)	(((x) >> 20) & 0x0001)	/* :  1 */
+#define	PDQ_RXS_RCC_BADPDU(x)	(((x) >> 21) & 0x0001)	/* :  1 */
+#define	PDQ_RXS_FSB__RSVD(x)	(((x) >> 22) & 0x0003)	/* :  2 */
+#define	PDQ_RXS_FSB_C(x)	(((x) >> 24) & 0x0001)	/* :  1 */
+#define	PDQ_RXS_FSB_A(x)	(((x) >> 25) & 0x0001)	/* :  1 */
+#define	PDQ_RXS_FSB_E(x)	(((x) >> 26) & 0x0001)	/* :  1 */
+#define	PDQ_RXS_FSC(x)		(((x) >> 27) & 0x0007)	/* :  3 */
+#define	PDQ_RXS__RSVD(x)	(((x) >> 30) & 0x0003)	/* :  2 */
 
 #define	PDQ_RXS_RCC_DD_NO_MATCH		0x00
 #define	PDQ_RXS_RCC_DD_PROMISC_MATCH	0x01
@@ -342,11 +300,12 @@ typedef union {
 #define	PDQ_RXS_RCC_DD_MLA_MATCH	0x03
 
 typedef struct {
-    pdq_uint32_t PDQ_BITFIELD5(txd_pa_hi : 16,
-			       txd_seg_len : 13,
-			       txd_mbz : 1,
-			       txd_eop : 1,
-			       txd_sop : 1);
+    pdq_uint32_t txd_pa_hi;
+#define	PDQ_TXDESC_PA_HI(x)		(((x) & 0xffff) <<  0)
+#define	PDQ_TXDESC_SEG_LEN(x)		(((x) & 0x1fff) << 16)
+#define	PDQ_TXDESC_MBZ			0x20000000
+#define	PDQ_TXDESC_EOP			0x40000000
+#define	PDQ_TXDESC_SOP			0x80000000
     pdq_uint32_t txd_pa_lo;
 } pdq_txdesc_t;
 
@@ -443,7 +402,7 @@ typedef struct {
     pdq_uint32_t ui_completion;
 } pdq_unsolicited_info_t;
 
-#define	PDQ_RX_FC_OFFSET	(sizeof(pdq_rxstatus_t) + 3)
+#define	PDQ_RX_FC_OFFSET	(sizeof(pdq_uint32_t) + 3)
 #define	PDQ_RX_SEGCNT		((PDQ_FDDI_MAX + PDQ_OS_DATABUF_SIZE - 1) / PDQ_OS_DATABUF_SIZE)
 #define	PDQ_DO_TYPE2_PRODUCER(pdq) \
     PDQ_CSR_WRITE(&(pdq)->pdq_csrs, csr_type_2_producer, \
@@ -494,7 +453,7 @@ struct _pdq_t {
     pdq_lanaddr_t pdq_hwaddr;
     pdq_fwrev_t pdq_fwrev;
     pdq_descriptor_block_t *pdq_dbp;
-    volatile pdq_consumer_block_t *pdq_cbp;
+    pdq_consumer_block_t *pdq_cbp;
     pdq_uint32_t pdq_intrmask;
     pdq_uint32_t pdq_flags;
 #define	PDQ_PROMISC	0x0001
@@ -612,11 +571,6 @@ typedef enum {
     PDQSNMP_EOL=0,
     PDQSNMP_FULL_DUPLEX_ENABLE=0x2F11
 } pdq_snmp_item_code_t;
-
-enum _pdq_boolean_t {
-    PDQ_FALSE=0,
-    PDQ_TRUE=1
-};
 
 typedef enum {
     PDQ_FILTER_BLOCK=0,
@@ -1099,7 +1053,7 @@ typedef enum {
     PDQ_LINK_EVENT_ARGUMENT_REASON=0,		/* pdq_rireason_t */
     PDQ_LINK_EVENT_ARGUMENT_DATA_LINK_HEADER=1,	/* pdq_dlhdr_t */
     PDQ_LINK_EVENT_ARGUMENT_SOURCE=2,		/* pdq_lanaddr_t */
-    PDQ_LINK_EVENT_ARGUMENT_UPSTREAM_NEIGHBOR=3,/* pdq_lanaddr_t */	
+    PDQ_LINK_EVENT_ARGUMENT_UPSTREAM_NEIGHBOR=3,/* pdq_lanaddr_t */
     PDQ_LINK_EVENT_ARGUMENT_EOL=0xFF
 } pdq_link_event_argument_t;
 

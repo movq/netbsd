@@ -1,4 +1,4 @@
-/*	$NetBSD: profile.h,v 1.14 2000/01/22 22:46:56 mycroft Exp $	*/
+/*	$NetBSD: profile.h,v 1.33 2007/12/20 23:46:13 ad Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,6 +31,15 @@
  *	@(#)profile.h	8.1 (Berkeley) 6/11/93
  */
 
+#ifdef _KERNEL_OPT
+#include "opt_multiprocessor.h"
+#endif
+
+#ifdef _KERNEL
+#include <machine/cpufunc.h>
+#include <machine/lock.h>
+#endif
+
 #define	_MCOUNT_DECL static __inline void _mcount
 
 #ifdef __ELF__
@@ -47,30 +52,86 @@
 
 #define	MCOUNT \
 MCOUNT_COMPAT								\
-extern void mcount __P((void)) __asm__(MCOUNT_ENTRY);			\
+extern void mcount(void) __asm(MCOUNT_ENTRY)				\
+	__attribute__((__no_instrument_function__));			\
 void									\
-mcount()								\
+mcount(void)								\
 {									\
 	int selfpc, frompcindex;					\
+	int eax, ecx, edx;						\
+									\
+	__asm volatile("movl %%eax,%0" : "=g" (eax));			\
+	__asm volatile("movl %%ecx,%0" : "=g" (ecx));			\
+	__asm volatile("movl %%edx,%0" : "=g" (edx));			\
 	/*								\
 	 * find the return address for mcount,				\
 	 * and the return address for mcount's caller.			\
 	 *								\
 	 * selfpc = pc pushed by mcount call				\
 	 */								\
-	__asm__("movl 4(%%ebp),%0" : "=r" (selfpc));			\
+	__asm volatile("movl 4(%%ebp),%0" : "=r" (selfpc));		\
 	/*								\
 	 * frompcindex = pc pushed by call into self.			\
 	 */								\
-	__asm__("movl (%%ebp),%0;movl 4(%0),%0" : "=r" (frompcindex));	\
+	__asm volatile("movl (%%ebp),%0;movl 4(%0),%0"			\
+	    : "=r" (frompcindex));					\
 	_mcount((u_long)frompcindex, (u_long)selfpc);			\
+									\
+	__asm volatile("movl %0,%%edx" : : "g" (edx));			\
+	__asm volatile("movl %0,%%ecx" : : "g" (ecx));			\
+	__asm volatile("movl %0,%%eax" : : "g" (eax));			\
 }
 
 #ifdef _KERNEL
-/*
- * Note that we assume splhigh() and splx() cannot call mcount()
- * recursively.
- */
-#define	MCOUNT_ENTER	s = splhigh()
-#define	MCOUNT_EXIT	splx(s)
+#ifdef MULTIPROCESSOR
+__cpu_simple_lock_t __mcount_lock;
+
+static inline void
+MCOUNT_ENTER_MP(void)
+{
+	__cpu_simple_lock(&__mcount_lock);
+	__insn_barrier();
+}
+
+static inline void
+MCOUNT_EXIT_MP(void)
+{
+	__insn_barrier();
+	__mcount_lock = __SIMPLELOCK_UNLOCKED;
+}
+#else
+#define MCOUNT_ENTER_MP()
+#define MCOUNT_EXIT_MP()
+#endif
+
+static inline void
+mcount_disable_intr(void)
+{
+	__asm volatile("cli");
+}
+
+static inline u_long
+mcount_read_psl(void)
+{
+	u_long	ef;
+
+	__asm volatile("pushfl; popl %0" : "=r" (ef));
+	return (ef);
+}
+
+static inline void
+mcount_write_psl(u_long ef)
+{
+	__asm volatile("pushl %0; popfl" : : "r" (ef));
+}
+
+#define	MCOUNT_ENTER							\
+	s = (int)mcount_read_psl();					\
+	mcount_disable_intr();						\
+	MCOUNT_ENTER_MP();
+
+#define	MCOUNT_EXIT							\
+	MCOUNT_EXIT_MP();						\
+	mcount_write_psl(s);
+
 #endif /* _KERNEL */

@@ -1,4 +1,4 @@
-/*	$NetBSD: conf.c,v 1.16 1999/11/27 06:45:52 simonb Exp $	*/
+/*	$NetBSD: conf.c,v 1.24 2005/12/11 12:18:39 christos Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -50,6 +46,15 @@
 #include <machine/dec_prom.h>
 #include "../common/rz.h"
 
+#ifdef NET_DEBUG
+/* only used for network debugging for now */
+#ifdef DEBUG_VAL
+int debug = DEBUG_VAL;
+#else
+int debug = 0;
+#endif
+#endif /* NET_DEBUG */
+
 #ifndef LIBSA_SINGLE_DEVICE
 
 #ifdef LIBSA_NO_DEV_CLOSE
@@ -63,9 +68,10 @@
 #endif
 
 struct devsw devsw[] = {
-	{ "rz", rzstrategy, rzopen, rzclose, rzioctl },			/* 0 */
+	{ "rz", rzstrategy, rzopen, rzclose, rzioctl },
 #ifdef BOOTNET
-	{ "tftp", net_strategy, net_open, net_close, net_ioctl },	/* 1 */
+	{ "tftp", net_strategy, net_open, net_close, net_ioctl },
+	{ "mop", net_strategy, net_open, net_close, net_ioctl },
 #endif
 };
 
@@ -76,28 +82,29 @@ int	ndevs = (sizeof(devsw)/sizeof(devsw[0]));
 #ifndef LIBSA_SINGLE_FILESYSTEM
 #ifdef LIBSA_NO_FS_CLOSE
 #define ufs_close	0
-#define lfs_close	0
+#define lfsv1_close	0
+#define lfsv2_close	0
 #define cd9660_close	0
 #define ustarfs_close	0
 #define nfs_close	0
 #endif
 #ifdef LIBSA_NO_FS_WRITE
 #define ufs_write	0
-#define lfs_write	0
+#define lfsv1_write	0
+#define lfsv2_write	0
 #define cd9660_write	0
 #define ustarfs_write	0
 #define nfs_write	0
 #endif
 
 struct fs_ops file_system[] = {
-	{ ufs_open, ufs_close, ufs_read, ufs_write, ufs_seek, ufs_stat },
-	{ lfs_open, lfs_close, lfs_read, lfs_write, lfs_seek, lfs_stat },
-	{ cd9660_open, cd9660_close, cd9660_read, cd9660_write, cd9660_seek,
-	    cd9660_stat },
-	{ ustarfs_open, ustarfs_close, ustarfs_read, ustarfs_write,
-	    ustarfs_seek, ustarfs_stat },
+	FS_OPS(ufs),
+	FS_OPS(lfsv1),
+	FS_OPS(lfsv2),
+	FS_OPS(cd9660),
+	FS_OPS(ustarfs),
 #ifdef BOOTNET
-	{ nfs_open, nfs_close, nfs_read, nfs_write, nfs_seek, nfs_stat },
+	FS_OPS(nfs),
 #endif
 };
 

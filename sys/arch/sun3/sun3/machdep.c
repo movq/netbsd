@@ -1,11 +1,45 @@
-/*	$NetBSD: machdep.c,v 1.136 2000/01/19 20:05:49 thorpej Exp $	*/
+/*	$NetBSD: machdep.c,v 1.185.6.1 2009/02/02 03:30:34 snj Exp $	*/
+
+/*
+ * Copyright (c) 1982, 1986, 1990, 1993
+ *	The Regents of the University of California.  All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Systems Programming Group of the University of Utah Computer
+ * Science Department.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ *	from: Utah Hdr: machdep.c 1.74 92/12/20
+ *	from: @(#)machdep.c	8.10 (Berkeley) 4/20/94
+ */
 
 /*
  * Copyright (c) 1994, 1995 Gordon W. Ross
  * Copyright (c) 1993 Adam Glass
  * Copyright (c) 1988 University of Utah.
- * Copyright (c) 1982, 1986, 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * the Systems Programming Group of the University of Utah Computer
@@ -43,18 +77,20 @@
  *	from: @(#)machdep.c	8.10 (Berkeley) 4/20/94
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.185.6.1 2009/02/02 03:30:34 snj Exp $");
+
 #include "opt_ddb.h"
+#include "opt_kgdb.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
-#include <sys/map.h>
 #include <sys/proc.h>
 #include <sys/buf.h>
 #include <sys/reboot.h>
 #include <sys/conf.h>
 #include <sys/file.h>
-#include <sys/clist.h>
 #include <sys/device.h>
 #include <sys/malloc.h>
 #include <sys/mbuf.h>
@@ -68,14 +104,10 @@
 #include <sys/kcore.h>
 #include <sys/vnode.h>
 #include <sys/syscallargs.h>
+#include <sys/ksyms.h>
 #ifdef	KGDB
 #include <sys/kgdb.h>
 #endif
-
-#include <vm/vm.h>
-#include <vm/vm_map.h>
-#include <vm/vm_kern.h>
-#include <vm/vm_page.h>
 
 #include <uvm/uvm.h> /* XXX: not _extern ... need vm_map_create */
 
@@ -99,21 +131,25 @@
 
 #include <sun3/sun3/machdep.h>
 
+#include "ksyms.h"
+
 /* Defined in locore.s */
 extern char kernel_text[];
 /* Defined by the linker */
 extern char etext[];
 
-vm_map_t exec_map = NULL;  
-vm_map_t mb_map = NULL;
-vm_map_t phys_map = NULL;
+/* Our exported CPU info; we can have only one. */  
+struct cpu_info cpu_info_store;
+
+struct vm_map *mb_map = NULL;
+struct vm_map *phys_map = NULL;
 
 int	physmem;
 int	fputype;
-caddr_t	msgbufaddr;
+void *	msgbufaddr;
 
 /* Virtual page frame for /dev/mem (see mem.c) */
-vm_offset_t vmmap;
+vaddr_t vmmap;
 
 /*
  * safepri is a safe priority for sleep to set for a spin-wait
@@ -122,10 +158,10 @@ vm_offset_t vmmap;
 int	safepri = PSL_LOWIPL;
 
 /* Our private scratch page for dumping the MMU. */
-static vm_offset_t dumppage;
+static vaddr_t dumppage;
 
-static void identifycpu __P((void));
-static void initcpu __P((void));
+static void identifycpu(void);
+static void initcpu(void);
 
 /*
  * Console initialization: called early on from main,
@@ -133,8 +169,8 @@ static void initcpu __P((void));
  * to use the console for output immediately (via PROM)
  * but can not use it for input until after this point.
  */
-void
-consinit()
+void 
+consinit(void)
 {
 
 	/*
@@ -143,13 +179,12 @@ consinit()
 	 */
 	cninit();
 
-#ifdef DDB
-	db_machine_init();
+#if NKSYMS || defined(DDB) || defined(LKM)
 	{
-		extern int end[];
-		extern char *esym;
+		extern int nsym;
+		extern char *ssym, *esym;
 
-		ddb_init(end[0], end + 1, (int*)esym);
+		ksyms_init(nsym, ssym, esym);
 	}
 #endif /* DDB */
 
@@ -171,20 +206,17 @@ consinit()
 
 /*
  * cpu_startup: allocate memory for variable-sized tables,
- * initialize cpu, and do autoconfiguration.
+ * initialize CPU, and do autoconfiguration.
  *
  * This is called early in init_main.c:main(), after the
  * kernel memory allocator is ready for use, but before
  * the creation of processes 1,2, and mountroot, etc.
  */
-void
-cpu_startup()
+void 
+cpu_startup(void)
 {
-	caddr_t v;
-	int sz, i;
-	vm_size_t size;
-	int base, residual;
-	vm_offset_t minaddr, maxaddr;
+	char *v;
+	vaddr_t minaddr, maxaddr;
 	char pbuf[9];
 
 	/*
@@ -194,14 +226,14 @@ cpu_startup()
 	 * Its mapping was prepared in pmap_bootstrap().
 	 * Also, offset some to avoid PROM scribbles.
 	 */
-	v = (caddr_t) KERNBASE;
-	msgbufaddr = (caddr_t)(v + MSGBUFOFF);
+	v = (char *)KERNBASE;
+	msgbufaddr = v + MSGBUFOFF;
 	initmsgbuf(msgbufaddr, MSGBUFSIZE);
 
 	/*
 	 * Good {morning,afternoon,evening,night}.
 	 */
-	printf(version);
+	printf("%s%s", copyright, version);
 	identifycpu();
 	initfpu();	/* also prints FPU type */
 
@@ -211,103 +243,36 @@ cpu_startup()
 	/*
 	 * Get scratch page for dumpsys().
 	 */
-	if ((dumppage = uvm_km_alloc(kernel_map, NBPG)) == 0)
+	dumppage = uvm_km_alloc(kernel_map, PAGE_SIZE, 0, UVM_KMF_WIRED);
+	if (dumppage == 0)
 		panic("startup: alloc dumppage");
 
-	/*
-	 * Find out how much space we need, allocate it,
-	 * and then give everything true virtual addresses.
-	 */
-	sz = (int)allocsys(NULL, NULL);
-	if ((v = (caddr_t)uvm_km_alloc(kernel_map, round_page(sz))) == 0)
-		panic("startup: no room for tables");
-	if (allocsys(v, NULL) - v != sz)
-		panic("startup: table size inconsistency");
+
+	minaddr = 0;
 
 	/*
-	 * Now allocate buffers proper.  They are different than the above
-	 * in that they usually occupy more virtual memory than physical.
+	 * Allocate a submap for physio
 	 */
-	size = MAXBSIZE * nbuf;
-	if (uvm_map(kernel_map, (vm_offset_t *) &buffers, round_page(size),
-		    NULL, UVM_UNKNOWN_OFFSET,
-		    UVM_MAPFLAG(UVM_PROT_NONE, UVM_PROT_NONE, UVM_INH_NONE,
-				UVM_ADV_NORMAL, 0)) != KERN_SUCCESS)
-		panic("startup: cannot allocate VM for buffers");
-	minaddr = (vm_offset_t)buffers;
-	if ((bufpages / nbuf) >= btoc(MAXBSIZE)) {
-		/* don't want to alloc more physical mem than needed */
-		bufpages = btoc(MAXBSIZE) * nbuf;
-	}
-	base = bufpages / nbuf;
-	residual = bufpages % nbuf;
-	for (i = 0; i < nbuf; i++) {
-		vm_size_t curbufsize;
-		vm_offset_t curbuf;
-		struct vm_page *pg;
-
-		/*
-		 * Each buffer has MAXBSIZE bytes of VM space allocated.  Of
-		 * that MAXBSIZE space, we allocate and map (base+1) pages
-		 * for the first "residual" buffers, and then we allocate
-		 * "base" pages for the rest.
-		 */
-		curbuf = (vm_offset_t) buffers + (i * MAXBSIZE);
-		curbufsize = NBPG * ((i < residual) ? (base+1) : base);
-
-		while (curbufsize) {
-			pg = uvm_pagealloc(NULL, 0, NULL, 0);
-			if (pg == NULL) 
-				panic("cpu_startup: not enough memory for "
-				    "buffer cache");
-			pmap_kenter_pa(curbuf, VM_PAGE_TO_PHYS(pg),
-				       VM_PROT_READ|VM_PROT_WRITE);
-			curbuf += PAGE_SIZE;
-			curbufsize -= PAGE_SIZE;
-		}
-	}
-
-	/*
-	 * Allocate a submap for exec arguments.  This map effectively
-	 * limits the number of processes exec'ing at any time.
-	 */
-	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				   16*NCARGS, VM_MAP_PAGEABLE, FALSE, NULL);
-
-	/*
-	 * We don't use a submap for physio, and use a separate map
-	 * for DVMA allocations.  Our vmapbuf just maps pages into
-	 * the kernel map (any kernel mapping is OK) and then the
-	 * device drivers clone the kernel mappings into DVMA space.
-	 */
+	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
+				   VM_PHYS_SIZE, 0, false, NULL);
 
 	/*
 	 * Finally, allocate mbuf cluster submap.
 	 */
 	mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
 				 nmbclusters * mclbytes, VM_MAP_INTRSAFE,
-				 FALSE, NULL);
+				 false, NULL);
 
 	format_bytes(pbuf, sizeof(pbuf), ptoa(uvmexp.free));
 	printf("avail memory = %s\n", pbuf);
-	format_bytes(pbuf, sizeof(pbuf), bufpages * NBPG);
-	printf("using %d buffers containing %s of memory\n", nbuf, pbuf);
-
-	/*
-	 * Tell the VM system that writing to kernel text isn't allowed.
-	 * If we don't, we might end up COW'ing the text segment!
-	 */
-	if (uvm_map_protect(kernel_map, (vm_offset_t) kernel_text,
-	    m68k_trunc_page((vm_offset_t) etext),
-	    UVM_PROT_READ|UVM_PROT_EXEC, TRUE) != KERN_SUCCESS)
-		panic("can't protect kernel text");
 
 	/*
 	 * Allocate a virtual page (for use by /dev/mem)
 	 * This page is handed to pmap_enter() therefore
 	 * it has to be in the normal kernel VA range.
 	 */
-	vmmap = uvm_km_valloc_wait(kernel_map, NBPG);
+	vmmap = uvm_km_alloc(kernel_map, PAGE_SIZE, 0,
+	    UVM_KMF_VAONLY | UVM_KMF_WAITVA);
 
 	/*
 	 * Create the DVMA maps.
@@ -318,23 +283,15 @@ cpu_startup()
 	 * Set up CPU-specific registers, cache, etc.
 	 */
 	initcpu();
-
-	/*
-	 * Set up buffers, so they can be used to read disk labels.
-	 */
-	bufinit();
 }
 
 /*
  * Set registers on exec.
  */
-void
-setregs(p, pack, stack)
-	struct proc *p;
-	struct exec_package *pack;
-	u_long stack;
+void 
+setregs(struct lwp *l, struct exec_package *pack, u_long stack)
 {
-	struct trapframe *tf = (struct trapframe *)p->p_md.md_regs;
+	struct trapframe *tf = (struct trapframe *)l->l_md.md_regs;
 
 	tf->tf_sr = PSL_USERSET;
 	tf->tf_pc = pack->ep_entry & ~1;
@@ -348,7 +305,7 @@ setregs(p, pack, stack)
 	tf->tf_regs[D7] = 0;
 	tf->tf_regs[A0] = 0;
 	tf->tf_regs[A1] = 0;
-	tf->tf_regs[A2] = (int)PS_STRINGS;
+	tf->tf_regs[A2] = (int)l->l_proc->p_psstr;
 	tf->tf_regs[A3] = 0;
 	tf->tf_regs[A4] = 0;
 	tf->tf_regs[A5] = 0;
@@ -356,11 +313,11 @@ setregs(p, pack, stack)
 	tf->tf_regs[SP] = stack;
 
 	/* restore a null state frame */
-	p->p_addr->u_pcb.pcb_fpregs.fpf_null = 0;
+	l->l_addr->u_pcb.pcb_fpregs.fpf_null = 0;
 	if (fputype)
-		m68881_restore(&p->p_addr->u_pcb.pcb_fpregs);
+		m68881_restore(&l->l_addr->u_pcb.pcb_fpregs);
 
-	p->p_md.md_flags = 0;
+	l->l_md.md_flags = 0;
 }
 
 /*
@@ -377,8 +334,8 @@ char	cpu_model[120];
  * the video memory on the Sun3/50.  Therefore, this
  * function just prints out what we already know.
  */
-void
-identifycpu()
+void 
+identifycpu(void)
 {
 	extern char *cpu_string;	/* XXX */
 
@@ -392,47 +349,54 @@ identifycpu()
 /*
  * machine dependent system variables.
  */
-int
-cpu_sysctl(name, namelen, oldp, oldlenp, newp, newlen, p)
-	int *name;
-	u_int namelen;
-	void *oldp;
-	size_t *oldlenp;
-	void *newp;
-	size_t newlen;
-	struct proc *p;
+#if 0   /* XXX - Not yet... */
+static int
+sysctl_machdep_root_device(SYSCTLFN_ARGS)
 {
-	int error;
-	dev_t consdev;
+	struct sysctlnode node = *rnode;
 
-	/* all sysctl names at this level are terminal */
-	if (namelen != 1)
-		return (ENOTDIR);		/* overloaded */
+	node.sysctl_data = some permutation on root_device;
+	node.sysctl_size = strlen(root_device) + 1;
+	return (sysctl_lookup(SYSCTLFN_CALL(&node)));
+}
 
-	switch (name[0]) {
-	case CPU_CONSDEV:
-		if (cn_tab != NULL)
-			consdev = cn_tab->cn_dev;
-		else
-			consdev = NODEV;
-		error = sysctl_rdstruct(oldp, oldlenp, newp,
-		    &consdev, sizeof consdev);
-		break;
+static int
+sysctl_machdep_booted_kernel(SYSCTLFN_ARGS)
+{
+	struct sysctlnode node = *rnode;
 
-#if 0	/* XXX - Not yet... */
-	case CPU_ROOT_DEVICE:
-		error = sysctl_rdstring(oldp, oldlenp, newp, root_device);
-		break;
-
-	case CPU_BOOTED_KERNEL:
-		error = sysctl_rdstring(oldp, oldlenp, newp, booted_kernel);
-		break;
+	node.sysctl_data = some permutation on booted_kernel;
+	node.sysctl_size = strlen(booted_kernel) + 1;
+	return (sysctl_lookup(SYSCTLFN_CALL(&node)));
+}
 #endif
 
-	default:
-		error = EOPNOTSUPP;
-	}
-	return (error);
+SYSCTL_SETUP(sysctl_machdep_setup, "sysctl machdep subtree setup")
+{
+
+	sysctl_createv(clog, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT,
+		       CTLTYPE_NODE, "machdep", NULL,
+		       NULL, 0, NULL, 0,
+		       CTL_MACHDEP, CTL_EOL);
+
+	sysctl_createv(clog, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT,
+		       CTLTYPE_STRUCT, "console_device", NULL,
+		       sysctl_consdev, 0, NULL, sizeof(dev_t),
+		       CTL_MACHDEP, CPU_CONSDEV, CTL_EOL);
+#if 0	/* XXX - Not yet... */
+	sysctl_createv(clog, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT,
+		       CTLTYPE_STRING, "root_device", NULL,
+		       sysctl_machdep_root_device, 0, NULL, 0,
+		       CTL_MACHDEP, CPU_ROOT_DEVICE, CTL_EOL);
+	sysctl_createv(clog, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT,
+		       CTLTYPE_STRING, "booted_kernel", NULL,
+		       sysctl_machdep_booted_kernel, 0, NULL, 0,
+		       CTL_MACHDEP, CPU_BOOTED_KERNEL, CTL_EOL);
+#endif
 }
 
 /* See: sig_machdep.c */
@@ -445,7 +409,7 @@ cpu_sysctl(name, namelen, oldp, oldlenp, newp, newlen, p)
  */
 int waittime = -1;	/* XXX - Who else looks at this? -gwr */
 static void
-reboot_sync __P((void))
+reboot_sync(void)
 {
 
 	/* Check waittime here to localize its use to this function. */
@@ -458,10 +422,8 @@ reboot_sync __P((void))
 /*
  * Common part of the BSD and SunOS reboot system calls.
  */
-__dead void
-cpu_reboot(howto, user_boot_string)
-	int howto;
-	char *user_boot_string;
+__dead void 
+cpu_reboot(int howto, char *user_boot_string)
 {
 	char *bs, *p;
 	char default_boot_string[8];
@@ -498,7 +460,7 @@ cpu_reboot(howto, user_boot_string)
 
 	if (howto & RB_HALT) {
 	haltsys:
-		printf("Kernel halted.\n");
+		printf("halted.\n");
 		sunmon_halt();
 	}
 
@@ -528,7 +490,7 @@ cpu_reboot(howto, user_boot_string)
 			*p = '\0';
 		}
 	}
-	printf("Kernel rebooting...\n");
+	printf("rebooting...\n");
 	sunmon_reboot(bs);
 	for (;;) ;
 	/*NOTREACHED*/
@@ -537,7 +499,7 @@ cpu_reboot(howto, user_boot_string)
 /*
  * These variables are needed by /sbin/savecore
  */
-u_long	dumpmag = 0x8fca0101;	/* magic number */
+uint32_t dumpmag = 0x8fca0101;	/* magic number */
 int 	dumpsize = 0;		/* pages */
 long	dumplo = 0; 		/* blocks */
 
@@ -545,26 +507,28 @@ long	dumplo = 0; 		/* blocks */
 
 /*
  * This is called by main to set dumplo, dumpsize.
- * Dumps always skip the first NBPG of disk space
+ * Dumps always skip the first PAGE_SIZE of disk space
  * in case there might be a disk label stored there.
  * If there is extra space, put dump at the end to
  * reduce the chance that swapping trashes it.
  */
-void
-cpu_dumpconf()
+void 
+cpu_dumpconf(void)
 {
+	const struct bdevsw *bdev;
 	int devblks;	/* size of dump device in blocks */
 	int dumpblks;	/* size of dump image in blocks */
-	int maj;
-	int (*getsize)__P((dev_t));
+	int (*getsize)(dev_t);
 
 	if (dumpdev == NODEV)
 		return;
 
-	maj = major(dumpdev);
-	if (maj < 0 || maj >= nblkdev)
-		panic("dumpconf: bad dumpdev=0x%x", dumpdev);
-	getsize = bdevsw[maj].d_psize;
+	bdev = bdevsw_lookup(dumpdev);
+	if (bdev == NULL) {
+		dumpdev = NODEV;
+		return;
+	}
+	getsize = bdev->d_psize;
 	if (getsize == NULL)
 		return;
 	devblks = (*getsize)(dumpdev);
@@ -592,33 +556,35 @@ cpu_dumpconf()
 
 /* Note: gdb looks for "dumppcb" in a kernel crash dump. */
 struct pcb dumppcb;
-extern vm_offset_t avail_start;
+extern paddr_t avail_start;
 
 /*
  * Write a crash dump.  The format while in swap is:
  *   kcore_seg_t cpu_hdr;
  *   cpu_kcore_hdr_t cpu_data;
- *   padding (NBPG-sizeof(kcore_seg_t))
- *   pagemap (2*NBPG)
+ *   padding (PAGE_SIZE-sizeof(kcore_seg_t))
+ *   pagemap (2*PAGE_SIZE)
  *   physical memory...
  */
-void
-dumpsys()
+void 
+dumpsys(void)
 {
-	struct bdevsw *dsw;
+	const struct bdevsw *dsw;
 	kcore_seg_t	*kseg_p;
 	cpu_kcore_hdr_t *chdr_p;
 	struct sun3_kcore_hdr *sh;
 	char *vaddr;
-	vm_offset_t paddr;
+	paddr_t paddr;
 	int psize, todo, chunk;
 	daddr_t blkno;
 	int error = 0;
 
-	msgbufenabled = 0;
 	if (dumpdev == NODEV)
 		return;
 	if (dumppage == 0)
+		return;
+	dsw = bdevsw_lookup(dumpdev);
+	if (dsw == NULL || dsw->d_psize == NULL)
 		return;
 
 	/*
@@ -634,7 +600,6 @@ dumpsys()
 	}
 	savectx(&dumppcb);
 
-	dsw = &bdevsw[major(dumpdev)];
 	psize = (*(dsw->d_psize))(dumpdev);
 	if (psize == -1) {
 		printf("dump area unavailable\n");
@@ -650,7 +615,7 @@ dumpsys()
 	blkno = dumplo;
 	todo = dumpsize;	/* pages */
 	vaddr = (char*)dumppage;
-	bzero(vaddr, NBPG);
+	memset(vaddr, 0, PAGE_SIZE);
 
 	/* Set pointers to all three parts. */
 	kseg_p = (kcore_seg_t *)vaddr;
@@ -663,31 +628,31 @@ dumpsys()
 
 	/* Fill in cpu_kcore_hdr_t part. */
 	strncpy(chdr_p->name, kernel_arch, sizeof(chdr_p->name));
-	chdr_p->page_size = NBPG;
+	chdr_p->page_size = PAGE_SIZE;
 	chdr_p->kernbase = KERNBASE;
 
 	/* Fill in the sun3_kcore_hdr part (MMU state). */
 	pmap_kcore_hdr(sh);
 
 	/* Write out the dump header. */
-	error = (*dsw->d_dump)(dumpdev, blkno, vaddr, NBPG);
+	error = (*dsw->d_dump)(dumpdev, blkno, vaddr, PAGE_SIZE);
 	if (error)
 		goto fail;
-	blkno += btodb(NBPG);
+	blkno += btodb(PAGE_SIZE);
 
 	/* translation RAM (page zero) */
 	pmap_get_pagemap((int*)vaddr, 0);
-	error = (*dsw->d_dump)(dumpdev, blkno, vaddr, NBPG);
+	error = (*dsw->d_dump)(dumpdev, blkno, vaddr, PAGE_SIZE);
 	if (error)
 		goto fail;
-	blkno += btodb(NBPG);
+	blkno += btodb(PAGE_SIZE);
 
 	/* translation RAM (page one) */
-	pmap_get_pagemap((int*)vaddr, NBPG);
-	error = (*dsw->d_dump)(dumpdev, blkno, vaddr, NBPG);
+	pmap_get_pagemap((int*)vaddr, PAGE_SIZE);
+	error = (*dsw->d_dump)(dumpdev, blkno, vaddr, PAGE_SIZE);
 	if (error)
 		goto fail;
-	blkno += btodb(NBPG);
+	blkno += btodb(PAGE_SIZE);
 
 	/*
 	 * Now dump physical memory.  Have to do it in two chunks.
@@ -707,13 +672,13 @@ dumpsys()
 		chunk = todo;
 	do {
 		if ((todo & 0xf) == 0)
-			printf("\r%4d", todo);
+			printf_nolog("\r%4d", todo);
 		vaddr = (char*)(paddr + KERNBASE);
-		error = (*dsw->d_dump)(dumpdev, blkno, vaddr, NBPG);
+		error = (*dsw->d_dump)(dumpdev, blkno, vaddr, PAGE_SIZE);
 		if (error)
 			goto fail;
-		paddr += NBPG;
-		blkno += btodb(NBPG);
+		paddr += PAGE_SIZE;
+		blkno += btodb(PAGE_SIZE);
 		--todo;
 	} while (--chunk > 0);
 
@@ -721,15 +686,16 @@ dumpsys()
 	vaddr = (char*)vmmap;	/* Borrow /dev/mem VA */
 	do {
 		if ((todo & 0xf) == 0)
-			printf("\r%4d", todo);
-		pmap_enter(pmap_kernel(), vmmap, paddr | PMAP_NC,
-		    VM_PROT_READ, VM_PROT_READ);
-		error = (*dsw->d_dump)(dumpdev, blkno, vaddr, NBPG);
-		pmap_remove(pmap_kernel(), vmmap, vmmap + NBPG);
+			printf_nolog("\r%4d", todo);
+		pmap_kenter_pa(vmmap, paddr | PMAP_NC, VM_PROT_READ);
+		pmap_update(pmap_kernel());
+		error = (*dsw->d_dump)(dumpdev, blkno, vaddr, PAGE_SIZE);
+		pmap_kremove(vmmap, PAGE_SIZE);
+		pmap_update(pmap_kernel());
 		if (error)
 			goto fail;
-		paddr += NBPG;
-		blkno += btodb(NBPG);
+		paddr += PAGE_SIZE;
+		blkno += btodb(PAGE_SIZE);
 	} while (--todo > 0);
 
 	printf("\rdump succeeded\n");
@@ -738,8 +704,8 @@ fail:
 	printf(" dump error=%d\n", error);
 }
 
-static void
-initcpu()
+static void 
+initcpu(void)
 {
 	/* XXX: Enable RAM parity/ECC checking? */
 	/* XXX: parityenable(); */
@@ -759,15 +725,13 @@ initcpu()
 
 /*
  * cpu_exec_aout_makecmds():
- *	cpu-dependent a.out format hook for execve().
+ *	CPU-dependent a.out format hook for execve().
  *
  * Determine if the given exec package refers to something which we
  * understand and, if so, set up the vmcmds for it.
  */
-int
-cpu_exec_aout_makecmds(p, epp)
-	struct proc *p;
-	struct exec_package *epp;
+int 
+cpu_exec_aout_makecmds(struct lwp *l, struct exec_package *epp)
 {
 	return ENOEXEC;
 }

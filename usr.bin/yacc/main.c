@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.10 1997/10/31 07:46:08 mycroft Exp $	*/
+/*	$NetBSD: main.c,v 1.20 2008/07/21 14:19:28 lukem Exp $	*/
 
 /*
  * Copyright (c) 1989 The Regents of the University of California.
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -36,17 +32,21 @@
  * SUCH DAMAGE.
  */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
 #include <sys/cdefs.h>
-#ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989 The Regents of the University of California.\n"
-"All rights reserved.\n");
+#if defined(__COPYRIGHT) && !defined(lint)
+__COPYRIGHT("@(#) Copyright (c) 1989\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
-#ifndef lint
+#if defined(__RCSID) && !defined(lint)
 #if 0
 static char sccsid[] = "@(#)main.c	5.5 (Berkeley) 5/24/93";
 #else
-__RCSID("$NetBSD: main.c,v 1.10 1997/10/31 07:46:08 mycroft Exp $");
+__RCSID("$NetBSD: main.c,v 1.20 2008/07/21 14:19:28 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -62,14 +62,11 @@ char tflag;
 char vflag;
 
 char *symbol_prefix;
-char *file_prefix = "y";
 char *myname = "yacc";
-char *temp_form = "yacc.XXXXXXX";
+
 
 int lineno;
 int outline;
-
-int explicit_file_name;
 
 char *action_file_name;
 char *code_file_name;
@@ -113,20 +110,21 @@ char  *rassoc;
 short **derives;
 char *nullable;
 
-int main __P((int, char *[]));
+static char *file_prefix = "y";
+static char *temp_form = "yacc.XXXXXXX";
+static int explicit_file_name;
 
-void onintr __P((int));
-__dead void done __P((int));
-void set_signals __P((void));
-void usage __P((void));
-void getargs __P((int, char *[]));
-char * allocate __P((unsigned));
-void create_file_names __P((void));
-void open_files __P((void));
 
+static __dead void onintr(int);
+static void set_signals(void);
+static __dead void usage(void);
+static void getargs(int, char *[]);
+static void create_file_names(void);
+static void open_files(void);
+
+/* coverity[+kill] */
 __dead void
-done(k)
-int k;
+done(int k)
 {
     if (action_file) { fclose(action_file); unlink(action_file_name); }
     if (text_file) { fclose(text_file); unlink(text_file_name); }
@@ -135,15 +133,14 @@ int k;
 }
 
 
-void
-onintr(signo)
-	int signo;
+static void
+onintr(int signo)
 {
     done(1);
 }
 
 
-void
+static void
 set_signals()
 {
 #ifdef SIGINT
@@ -161,8 +158,8 @@ set_signals()
 }
 
 
-void
-usage()
+static void
+usage(void)
 {
     fprintf(stderr, "usage: %s [-dlrtv] [-b file_prefix] [-o outputfile] "
 	"[-p symbol_prefix] filename\n", myname);
@@ -170,10 +167,8 @@ usage()
 }
 
 
-void
-getargs(argc, argv)
-int argc;
-char *argv[];
+static void
+getargs(int argc, char *argv[])
 {
     int i;
     char *s;
@@ -287,8 +282,7 @@ no_more_options:;
 
 
 char *
-allocate(n)
-unsigned n;
+allocate(unsigned n)
 {
     char *p;
 
@@ -302,8 +296,8 @@ unsigned n;
 }
 
 
-void
-create_file_names()
+static void
+create_file_names(void)
 {
     int i, len;
     char *tmpdir;
@@ -323,9 +317,9 @@ create_file_names()
     union_file_name = MALLOC(i);
     if (union_file_name == 0) no_space();
 
-    strcpy(action_file_name, tmpdir);
-    strcpy(text_file_name, tmpdir);
-    strcpy(union_file_name, tmpdir);
+    strlcpy(action_file_name, tmpdir, i);
+    strlcpy(text_file_name, tmpdir, i);
+    strlcpy(union_file_name, tmpdir, i);
 
     if (len && tmpdir[len - 1] != '/')
     {
@@ -335,9 +329,9 @@ create_file_names()
 	++len;
     }
 
-    strcpy(action_file_name + len, temp_form);
-    strcpy(text_file_name + len, temp_form);
-    strcpy(union_file_name + len, temp_form);
+    strlcpy(action_file_name + len, temp_form, i - len);
+    strlcpy(text_file_name + len, temp_form, i - len);
+    strlcpy(union_file_name + len, temp_form, i - len);
 
     action_file_name[len + 5] = 'a';
     text_file_name[len + 5] = 't';
@@ -347,20 +341,16 @@ create_file_names()
 
     if (!output_file_name)
     {
-	output_file_name = MALLOC(len + 7);
+	asprintf(&output_file_name, "%s%s", file_prefix, OUTPUT_SUFFIX);
 	if (output_file_name == 0)
 	    no_space();
-	strcpy(output_file_name, file_prefix);
-	strcpy(output_file_name + len, OUTPUT_SUFFIX);
     }
 
     if (rflag)
     {
-	code_file_name = MALLOC(len + 8);
+	asprintf(&code_file_name, "%s%s", file_prefix, CODE_SUFFIX);
 	if (code_file_name == 0)
 	    no_space();
-	strcpy(code_file_name, file_prefix);
-	strcpy(code_file_name + len, CODE_SUFFIX);
     }
     else
 	code_file_name = output_file_name;
@@ -370,10 +360,9 @@ create_file_names()
 	if (explicit_file_name)
 	{
 	    char *suffix;
-	    defines_file_name = MALLOC(strlen(output_file_name) + 1);
+	    defines_file_name = strdup(output_file_name);
 	    if (defines_file_name == 0)
 		no_space();
-	    strcpy(defines_file_name, output_file_name);
 	    /* does the output_file_name have a known suffix */
             suffix = strrchr(output_file_name, '.');
             if (suffix != 0 &&
@@ -398,27 +387,23 @@ create_file_names()
 	}
 	else
 	{
-	    defines_file_name = MALLOC(len + 7);
+	    asprintf(&defines_file_name, "%s%s", file_prefix, DEFINES_SUFFIX);
 	    if (defines_file_name == 0)
 		no_space();
-	    strcpy(defines_file_name, file_prefix);
-	    strcpy(defines_file_name + len, DEFINES_SUFFIX);
 	}
     }
 
     if (vflag)
     {
-	verbose_file_name = MALLOC(len + 8);
+	asprintf(&verbose_file_name, "%s%s", file_prefix, VERBOSE_SUFFIX);
 	if (verbose_file_name == 0)
 	    no_space();
-	strcpy(verbose_file_name, file_prefix);
-	strcpy(verbose_file_name + len, VERBOSE_SUFFIX);
     }
 }
 
 
-void
-open_files()
+static void
+open_files(void)
 {
     int fd;
 
@@ -472,9 +457,7 @@ open_files()
 
 
 int
-main(argc, argv)
-int argc;
-char *argv[];
+main(int argc, char *argv[])
 {
     set_signals();
     getargs(argc, argv);
@@ -487,5 +470,5 @@ char *argv[];
     output();
     done(0);
     /*NOTREACHED*/
-    exit(0);
+    return 0;
 }

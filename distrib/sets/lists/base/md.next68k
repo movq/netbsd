@@ -1,2 +1,2 @@
-# $NetBSD: md.next68k,v 1.6 1999/04/19 03:11:32 simonb Exp $
-./usr/mdec/boot
+# $NetBSD: md.next68k,v 1.8 2004/01/11 10:24:58 lukem Exp $
+./usr/mdec/boot					base-sysutil-bin

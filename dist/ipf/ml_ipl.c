@@ -1,14 +1,9 @@
-/*	$NetBSD: ml_ipl.c,v 1.1.1.1 1999/12/11 22:23:59 veego Exp $	*/
+/*	$NetBSD: ml_ipl.c,v 1.6 2008/05/20 07:08:06 darrenr Exp $	*/
 
 /*
- * Copyright (C) 1993-1998 by Darren Reed.
+ * Copyright (C) 1993-2001 by Darren Reed.
  *
- * Redistribution and use in source and binary forms are permitted
- * provided that this notice is preserved and due credit is given
- * to the original author and the contributors.  The author accepts no
- * responsibility and is not changed in any way.
- *
- * I hate legaleese, don't you ?
+ * See the IPFILTER.LICENCE file for details on licencing.
  */
 /*
  * 29/12/94 Added code from Marc Huber <huber@fzi.de> to allow it to allocate
@@ -36,10 +31,10 @@
 #define	IPL_NAME	"/dev/ipl"
 #endif
 
-extern	int	iplattach(), iplopen(), iplclose(), iplioctl(), iplread();
+extern	int	ipfattach(), iplopen(), iplclose(), iplioctl(), iplread();
 extern	int	nulldev(), iplidentify(), errno;
 
-struct	cdevsw	ipldevsw = 
+struct	cdevsw	ipldevsw =
 {
 	iplopen, iplclose, iplread, nulldev,
 	iplioctl, nulldev, nulldev, nulldev,
@@ -47,11 +42,11 @@ struct	cdevsw	ipldevsw =
 };
 
 
-struct	dev_ops	ipl_ops = 
+struct	dev_ops	ipl_ops =
 {
 	1,
 	iplidentify,
-	iplattach,
+	ipfattach,
 	iplopen,
 	iplclose,
 	iplread,
@@ -67,7 +62,7 @@ struct	dev_ops	ipl_ops =
 int	ipl_major = 0;
 
 #ifdef sun4m
-struct	vdldrv	vd = 
+struct	vdldrv	vd =
 {
 	VDMAGIC_PSEUDO,
 	"ipl",
@@ -129,7 +124,7 @@ struct	vdstat	*vds;
 		return ipl_attach(vdi);
 	case VDUNLOAD:
 		return unload(vdp, vdi);
-		
+
 	case VDSTAT:
 		return 0;
 
@@ -145,7 +140,7 @@ static unload(vdp, vdi)
 	int	i;
 
 	(void) vn_remove(IPL_NAME, UIO_SYSSPACE, FILE);
-	return ipldetach();
+	return ipfdetach();
 }
 
 
@@ -165,5 +160,5 @@ struct	vdioctl_load	*vdi;
 	error = vn_create(IPL_NAME, UIO_SYSSPACE, &vattr, EXCL, 0, &vp);
 	if (error == 0)
 		VN_RELE(vp);
-	return iplattach(0);
+	return ipfattach(0);
 }

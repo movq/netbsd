@@ -1,4 +1,4 @@
-/*	$NetBSD: chmod.c,v 1.22 2000/01/20 02:50:54 mycroft Exp $	*/
+/* $NetBSD: chmod.c,v 1.34 2008/07/20 00:52:39 lukem Exp $ */
 
 /*
  * Copyright (c) 1989, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -36,48 +32,46 @@
 #include <sys/cdefs.h>
 #ifndef lint
 __COPYRIGHT(
-"@(#) Copyright (c) 1989, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+"@(#) Copyright (c) 1989, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)chmod.c	8.8 (Berkeley) 4/1/94";
 #else
-__RCSID("$NetBSD: chmod.c,v 1.22 2000/01/20 02:50:54 mycroft Exp $");
+__RCSID("$NetBSD: chmod.c,v 1.34 2008/07/20 00:52:39 lukem Exp $");
 #endif
 #endif /* not lint */
 
-#include <sys/types.h>
+#include <sys/param.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 
 #include <err.h>
 #include <errno.h>
 #include <fts.h>
+#include <limits.h>
 #include <locale.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <limits.h>
 
-int main __P((int, char *[]));
-void usage __P((void));
+int	main(int, char *[]);
+void	usage(void);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	FTS *ftsp;
 	FTSENT *p;
 	mode_t *set;
 	int Hflag, Lflag, Rflag, ch, fflag, fts_options, hflag, rval;
 	char *mode;
-	int (*change_mode) __P((const char *, mode_t));
+	int (*change_mode)(const char *, mode_t);
 
-	set = NULL;	/* XXX gcc -Wuninitialized */
-
+	setprogname(argv[0]);
 	(void)setlocale(LC_ALL, "");
 
 	Hflag = Lflag = Rflag = fflag = hflag = 0;
@@ -102,12 +96,12 @@ main(argc, argv)
 			break;
 		case 'h':
 			/*
-			 * In System V (and probably POSIX.2) the -h option
-			 * causes chmod to change the mode of the symbolic
-			 * link.  4.4BSD's symbolic links didn't have modes,
-			 * so it was an undocumented noop.  In NetBSD 1.3,
-			 * lchmod(2) is introduced and this option does real
-			 * work.
+			 * In System V the -h option causes chmod to
+			 * change the mode of the symbolic link.
+			 * 4.4BSD's symbolic links didn't have modes,
+			 * so it was an undocumented noop.  In NetBSD
+			 * 1.3, lchmod(2) is introduced and this
+			 * option does real work.
 			 */
 			hflag = 1;
 			break;
@@ -136,27 +130,34 @@ done:	argv += optind;
 
 	fts_options = FTS_PHYSICAL;
 	if (Rflag) {
-		if (hflag)
-			errx(1,
+		if (hflag) {
+			errx(EXIT_FAILURE,
 		"the -R and -h options may not be specified together.");
+			/* NOTREACHED */
+		}
 		if (Hflag)
 			fts_options |= FTS_COMFOLLOW;
 		if (Lflag) {
 			fts_options &= ~FTS_PHYSICAL;
 			fts_options |= FTS_LOGICAL;
 		}
-	}
+	} else if (!hflag)
+		fts_options |= FTS_COMFOLLOW;
 	if (hflag)
 		change_mode = lchmod;
 	else
 		change_mode = chmod;
 
 	mode = *argv;
-	if ((set = setmode(mode)) == NULL)
-		errx(1, "invalid file mode: %s", mode);
+	if ((set = setmode(mode)) == NULL) {
+		err(EXIT_FAILURE, "Cannot set file mode `%s'", mode);
+		/* NOTREACHED */
+	}
 
-	if ((ftsp = fts_open(++argv, fts_options, 0)) == NULL)
-		err(1, argv[0]);
+	if ((ftsp = fts_open(++argv, fts_options, 0)) == NULL) {
+		err(EXIT_FAILURE, "fts_open");
+		/* NOTREACHED */
+	}
 	for (rval = 0; (p = fts_read(ftsp)) != NULL;) {
 		switch (p->fts_info) {
 		case FTS_D:
@@ -194,17 +195,20 @@ done:	argv += optind;
 			rval = 1;
 		}
 	}
-	if (errno)
-		err(1, "fts_read");
+	if (errno) {
+		err(EXIT_FAILURE, "fts_read");
+		/* NOTREACHED */
+	}
 	exit(rval);
 	/* NOTREACHED */
 }
 
 void
-usage()
+usage(void)
 {
 	(void)fprintf(stderr,
-	    "usage: chmod [-R [-H | -L | -P]] [-h] mode file ...\n");
+	    "usage: %s [-R [-H | -L | -P]] [-h] mode file ...\n",
+	    getprogname());
 	exit(1);
 	/* NOTREACHED */
 }

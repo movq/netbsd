@@ -1,4 +1,4 @@
-.\"	$NetBSD: route.4,v 1.7 1998/04/28 06:00:55 fair Exp $
+.\"	$NetBSD: route.4,v 1.15 2003/08/07 10:31:03 agc Exp $
 .\"
 .\" Copyright (c) 1990, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -37,12 +33,12 @@
 .Dt ROUTE 4
 .Os
 .Sh NAME
-.Nm route 
+.Nm route
 .Nd kernel packet forwarding database
 .Sh SYNOPSIS
-.Fd #include <sys/socket.h>
-.Fd #include <net/if.h>
-.Fd #include <net/route.h>
+.In sys/socket.h
+.In net/if.h
+.In net/route.h
 .Ft int
 .Fn socket PF_ROUTE SOCK_RAW "int family"
 .Sh DESCRIPTION
@@ -61,7 +57,7 @@ used in earlier releases.
 Routing table changes may only be carried out by the super user.
 .Pp
 The operating system may spontaneously emit routing messages in response
-to external events, such as receipt of a re-direct, or failure to
+to external events, such as receipt of a redirect, or failure to
 locate a suitable route for a request.
 The message types are described in greater detail below.
 .Pp
@@ -85,7 +81,7 @@ is requested to address the packet to the gateway listed in the routing entry
 (i.e. the packet is forwarded).
 .Pp
 When routing a packet,
-the kernel will attempt to find 
+the kernel will attempt to find
 the most specific route matching the destination.
 (If there are two different mask and value-under-the-mask pairs
 that match, the more specific is the one with more bits in the mask.
@@ -93,7 +89,7 @@ A route to a host is regarded as being supplied with a mask of
 as many ones as there are bits in the destination).
 If no entry is found, the destination is declared to be unreachable,
 and a routing\-miss message is generated if there are any
-listers on the routing control socket described below.
+listeners on the routing control socket described below.
 .Pp
 A wildcard routing entry is specified with a zero
 destination address value, and a mask of all zeroes.
@@ -167,14 +163,14 @@ at the
 .Dv SOL_SOCKET
 level is to be turned off.
 A process may ignore all messages from the routing socket
-by doing a 
+by doing a
 .Xr shutdown 2
 system call for further input.
 .Pp
 If a route is in use when it is deleted,
 the routing entry will be marked down and removed from the routing table,
 but the resources associated with it will not
-be reclaimed until all references to it are released. 
+be reclaimed until all references to it are released.
 User processes can obtain information about the routing
 entry to a specific destination by using a
 .Dv RTM_GET
@@ -196,7 +192,9 @@ The messages are:
 #define	RTM_RESOLVE	0xb    /* request to resolve dst to LL addr */
 #define	RTM_NEWADDR	0xc    /* address being added to iface */
 #define	RTM_DELADDR	0xd    /* address being removed from iface */
-#define	RTM_IFINFO	0xe    /* iface going up/down etc. */
+#define	RTM_OIFINFO	0xe    /* Old (pre-1.5) RTM_IFINFO message */
+#define	RTM_IFINFO	0xf    /* iface/link going up/down etc. */
+#define	RTM_IFANNOUNCE	0x10   /* iface arrival/departure */
 .Ed
 .Pp
 A message header consists of one of the following:
@@ -206,7 +204,7 @@ struct rt_msghdr {
     u_char  rtm_version;       /* future binary compatibility */
     u_char  rtm_type;          /* message type */
     u_short rtm_index;         /* index for associated ifp */
-    int     rtm_flags;         /* flags, incl kern & message, e.g. DONE */
+    int     rtm_flags;         /* flags, incl kern \*[Am] message, e.g. DONE */
     int     rtm_addrs;         /* bitmask identifying sockaddrs in msg */
     pid_t   rtm_pid;           /* identify sender */
     int     rtm_seq;           /* for sender to identify action */
@@ -218,36 +216,51 @@ struct rt_msghdr {
 
 struct if_msghdr {
     u_short ifm_msglen;        /* to skip over non-understood messages */
-    u_char  ifm_version;       /* future binary compatability */
+    u_char  ifm_version;       /* future binary compatibility */
     u_char  ifm_type;          /* message type */
     int     ifm_addrs;         /* like rtm_addrs */
     int     ifm_flags;         /* value of if_flags */
     u_short ifm_index;         /* index for associated ifp */
     struct  if_data ifm_data;  /* statistics and other data about if */
-}; 
+};
 
 struct ifa_msghdr {
     u_short ifam_msglen;       /* to skip over non-understood messages */
-    u_char  ifam_version;      /* future binary compatability */
+    u_char  ifam_version;      /* future binary compatibility */
     u_char  ifam_type;         /* message type */
     int     ifam_addrs;        /* like rtm_addrs */
     int     ifam_flags;        /* value of ifa_flags */
     u_short ifam_index;        /* index for associated ifp */
     int     ifam_metric;       /* value of ifa_metric */
 };
+
+struct if_announcemsghdr {
+    u_short ifan_msglen;       /* to skip over non-understood messages */
+    u_char  ifan_version;      /* future binary compatibility */
+    u_char  ifan_type;         /* message type */
+    u_short ifan_index;        /* index for associated ifp */
+    char    ifan_name[IFNAMSIZ]; /* if name, e.g. "en0" */
+    u_short ifan_what;         /* what type of announcement */
+};
 .Ed
 .Pp
-The 
+The
 .Dv RTM_IFINFO
-message uses a 
+message uses a
 .Ar if_msghdr
-header, the 
+header, the
 .Dv RTM_NEWADDR
-and 
+and
 .Dv RTM_DELADDR
 messages use a
 .Ar ifa_msghdr
-header, and all other messages use the
+header,
+the
+.Dv RTM_IFANNOUNCE
+message uses a
+.Ar if_announcemsghdr
+header,
+and all other messages use the
 .Ar rt_msghdr
 header.
 .Pp
@@ -258,8 +271,8 @@ struct rt_metrics {
     u_long rmx_mtu;            /* MTU for this path */
     u_long rmx_hopcount;       /* max hops expected */
     u_long rmx_expire;         /* lifetime for route, e.g. redirect */
-    u_long rmx_recvpipe;       /* inbound delay-bandwith product */
-    u_long rmx_sendpipe;       /* outbound delay-bandwith product */
+    u_long rmx_recvpipe;       /* inbound delay-bandwidth product */
+    u_long rmx_sendpipe;       /* outbound delay-bandwidth product */
     u_long rmx_ssthresh;       /* outbound gateway buffer limit */
     u_long rmx_rtt;            /* estimated round trip time */
     u_long rmx_rttvar;         /* estimated rtt variance */
@@ -282,6 +295,7 @@ Flags include the values:
 #define	RTF_LLINFO    0x400    /* generated by ARP or ESIS */
 #define	RTF_STATIC    0x800    /* manually added */
 #define	RTF_BLACKHOLE 0x1000   /* just discard pkts (during updates) */
+#define	RTF_CLONED    0x2000   /* this is a cloned route */
 #define	RTF_PROTO2    0x4000   /* protocol specific routing flag */
 #define	RTF_PROTO1    0x8000   /* protocol specific routing flag */
 .Ed

@@ -1,4 +1,4 @@
-/*	$NetBSD: icom.c,v 1.1.1.1 2000/03/29 12:38:51 simonb Exp $	*/
+/*	$NetBSD: icom.c,v 1.3 2006/06/11 19:34:10 kardel Exp $	*/
 
 /*
  * Program to control ICOM radios
@@ -10,16 +10,11 @@
 #include "icom.h"
 #include <unistd.h>
 #include <stdio.h>
-
-#ifdef HAVE_TERMIOS_H
-# include <termios.h>
-#endif /* HAVE_TERMIOS_H */
-#ifdef HAVE_SYS_TERMIOS_H
-# include <sys/termios.h>
-#endif /* HAVE_SYS_TERMIOS_H */
-
 #include <fcntl.h>
 #include <errno.h>
+
+#include "ntp_tty.h"
+#include "l_stdlib.h"
 
 /*
  * Scraps
@@ -144,13 +139,14 @@ icom_init(
 	int speed,		/* line speed */
 	int trace		/* trace flags */	)
 {
-	struct termios ttyb;
+	TTY ttyb;
 	int fd;
 
 	flags = trace;
 	fd = open(device, O_RDWR, 0777);
 	if (fd < 0)
 		return (fd);
+
 	tcgetattr(fd, &ttyb);
 	ttyb.c_iflag = 0;	/* input modes */
 	ttyb.c_oflag = 0;	/* output modes */

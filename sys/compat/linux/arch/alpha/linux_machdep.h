@@ -1,7 +1,7 @@
-/*	$NetBSD: linux_machdep.h,v 1.2 2000/03/18 23:40:56 erh Exp $	*/
+/*	$NetBSD: linux_machdep.h,v 1.11 2008/04/28 20:23:42 martin Exp $	*/
 
 /*-
- * Copyright (c) 1998 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,6 +31,10 @@
 
 #ifndef _ALPHA_LINUX_MACHDEP_H
 #define _ALPHA_LINUX_MACHDEP_H
+
+#include <compat/linux/common/linux_types.h>
+#include <compat/linux/common/linux_signal.h>
+#include <compat/linux/common/linux_siginfo.h>
 
 /*
  * The Linux sigcontext, pretty much a standard alpha trapframe.
@@ -95,12 +92,11 @@ struct linux_rt_sigframe {
 
 #ifdef _KERNEL
 __BEGIN_DECLS
-void setup_linux_rt_sigframe __P((struct trapframe *, int, sigset_t *));
-void setup_linux_sigframe __P((struct trapframe *, int, sigset_t *));
-int linux_restore_sigcontext __P((struct proc *, struct linux_sigcontext,
-				  sigset_t *));
-void linux_sendsig __P((sig_t, int, sigset_t *, u_long));
-dev_t linux_fakedev __P((dev_t));
+void setup_linux_rt_sigframe(struct trapframe *, int, const sigset_t *);
+void setup_linux_sigframe(struct trapframe *, int, const sigset_t *);
+int linux_restore_sigcontext(struct lwp *, struct linux_sigcontext,
+				  sigset_t *);
+void linux_syscall_intern(struct proc *);
 __END_DECLS
 #endif /* !_KERNEL */
 

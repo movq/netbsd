@@ -1,4 +1,4 @@
-/*	$NetBSD: ppt.c,v 1.7 1999/12/16 13:38:28 jsm Exp $	*/
+/*	$NetBSD: ppt.c,v 1.17 2008/07/20 01:03:22 lukem Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,46 +31,102 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1988, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1988, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)ppt.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: ppt.c,v 1.7 1999/12/16 13:38:28 jsm Exp $");
+__RCSID("$NetBSD: ppt.c,v 1.17 2008/07/20 01:03:22 lukem Exp $");
 #endif
 #endif /* not lint */
 
+#include <err.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
-	int	main __P((int, char *[]));
-static void	putppt __P((int));
+#define	EDGE	"___________"
+
+       void	usage(void);
+	int	main(int, char *[]);
+static void	putppt(int);
+	int	getppt(const char *);
+
+void
+usage(void)
+{
+	extern char *__progname;
+	fprintf(stderr, "usage: %s [-d] [string ...]\n", __progname);
+	exit(1);
+}
 
 int
 main(argc, argv)
 	int argc;
 	char **argv;
 {
-	int c;
-	char *p;
+	char *p, buf[132];
+	int c, start, neednl, dflag;
 
 	/* Revoke setgid privileges */
-	setregid(getgid(), getgid());
+	setgid(getgid());
 
-	(void) puts("___________");
-	if (argc > 1)
-		while ((p = *++argv) != NULL) {
-			for (; *p; ++p)
-				putppt((int)*p);
-			if ((*(argv + 1)))
-				putppt((int)' ');
+	dflag = 0;
+	while ((c = getopt(argc, argv, "dh")) != -1)
+		switch(c) {
+		case 'd':
+			dflag = 1;
+			break;
+		case 'h':
+		case '?':
+		default:
+			usage();
 		}
-	else while ((c = getchar()) != EOF)
-		putppt(c);
-	(void) puts("___________");
+	argc -= optind;
+	argv += optind;
+
+	if (dflag) {
+		if (argc > 0)
+			usage();
+
+		start = 0;
+		neednl = 0;
+		while (fgets(buf, sizeof(buf), stdin) != NULL) {
+			c = getppt(buf);
+			if (c < 0) {
+				if (start) {
+					/* lost sync? */
+					if (neednl)
+						putchar('\n');
+					exit(0);
+				} else
+					continue;
+			}
+			start = 1;
+			putchar(c);
+			neednl = (c != '\n');
+		}
+		if (!feof(stdin))
+			err(1, "fgets");
+		if (neednl)
+			putchar('\n');
+	} else {
+		(void) puts(EDGE);
+		if (argc > 0)
+			while ((p = *argv++)) {
+				for (; *p; ++p)
+					putppt((int)*p);
+				if ((*(argv)))
+					putppt((int)' ');
+			}
+		else while ((c = getchar()) != EOF)
+			putppt(c);
+		(void) puts(EDGE);
+	}
 	exit(0);
 }
 
@@ -95,4 +147,34 @@ putppt(c)
 	}
 	(void) putchar('|');
 	(void) putchar('\n');
+}
+
+int
+getppt(const char *buf)
+{
+	const char *p = strchr(buf, '.');
+	int c;
+
+	if (p == NULL)
+		return (-1);
+
+	c = 0;
+	if (p[ 3] != ' ')
+		c |= 0001;
+	if (p[ 2] != ' ')
+		c |= 0002;
+	if (p[ 1] != ' ')
+		c |= 0004;
+	if (p[-1] != ' ')
+		c |= 0010;
+	if (p[-2] != ' ')
+		c |= 0020;
+	if (p[-3] != ' ')
+		c |= 0040;
+	if (p[-4] != ' ')
+		c |= 0100;
+	if (p[-5] != ' ')
+		c |= 0200;
+
+	return (c);
 }

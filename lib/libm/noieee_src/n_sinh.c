@@ -1,4 +1,4 @@
-/*      $NetBSD: n_sinh.c,v 1.4 1999/07/02 15:37:37 simonb Exp $ */
+/*      $NetBSD: n_sinh.c,v 1.7 2008/03/20 16:41:26 mhitch Exp $ */
 /*
  * Copyright (c) 1985, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -78,7 +74,14 @@ static char sccsid[] = "@(#)sinh.c	8.1 (Berkeley) 6/4/93";
  * shown.
  */
 
+#define _LIBM_STATIC
+#include "../src/namespace.h"
 #include "mathimpl.h"
+
+#ifdef __weak_alias
+__weak_alias(sinh, _sinh);
+__weak_alias(sinhf, _sinhf);
+#endif
 
 vc(mln2hi, 8.8029691931113054792E1   ,0f33,43b0,2bdb,c7e2,   7, .B00F33C7E22BDB)
 vc(mln2lo,-4.9650192275318476525E-16 ,1b60,a70f,582a,279e, -50,-.8F1B60279E582A)
@@ -95,14 +98,14 @@ ic(lnovfl, 7.0978271289338397310E2,     9, 1.62E42FEFA39EF)
 #endif
 
 #if defined(__vax__)||defined(tahoe)
-static int max = 126                      ;
+static const int max = 126                      ;
 #else	/* defined(__vax__)||defined(tahoe) */
-static int max = 1023                     ;
+static const int max = 1023                     ;
 #endif	/* defined(__vax__)||defined(tahoe) */
 
 
-double sinh(x)
-double x;
+double
+sinh(double x)
 {
 	static const double  one=1.0, half=1.0/2.0 ;
 	double t, sign;
@@ -121,4 +124,10 @@ double x;
 
 	else  /* sinh(+-INF) = +-INF, sinh(+-big no.) overflow to +-INF */
 	    return( expm1(x)*sign );
+}
+
+float
+sinhf(float x)
+{
+	return(sinh((double)x));
 }

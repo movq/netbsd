@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.19 1999/07/20 09:35:21 mrg Exp $
+#	$NetBSD: Makefile,v 1.42 2008/08/29 00:02:24 gmcgarry Exp $
 #
 # Copyright (c) 1990 The Regents of the University of California.
 # All rights reserved.
@@ -34,37 +34,51 @@
 #	from: @(#)Makefile	8.1 (Berkeley) 6/6/93
 #
 
-SRCTOP=	../..
-.include <bsd.crypto.mk>
+.include <bsd.own.mk>
+
+USE_FORT?= yes	# network client
 
 PROG=	telnet
 
-CPPFLAGS+=-DTERMCAP -DKLUDGELINEMODE -DUSE_TERMIO -Dunix
-CPPFLAGS+=-DENV_HACK
+CPPFLAGS+=-DTERMCAP -DKLUDGELINEMODE -DUSE_TERMIO -DENV_HACK
 CPPFLAGS+=-I${.CURDIR}
 
-LDADD+= -ltermcap -ltelnet
-DPADD+=	${LIBTERMCAP} ${LIBTELNET}
+LDADD+= -ltermcap ${LIBTELNETDIR}/libtelnet.a
+DPADD+=	${LIBTERMCAP} ${LIBTELNETDIR}/libtelnet.a
 
 SRCS=	authenc.c commands.c main.c network.c ring.c sys_bsd.c telnet.c \
 	terminal.c tn3270.c utilities.c
 
-# These are the sources that have encryption stuff in them.
-CRYPT_SRC= authenc.c commands.c externs.h main.c network.c
-CRYPT_SRC+= ring.c ring.h telnet.c terminal.c utilities.c Makefile
-NOCRYPT_DIR=${.CURDIR}/Nocrypt
-
-.if defined(CRYPTOPATH)
-.sinclude "${CRYPTOPATH}/usr.bin/telnet/Makefile.frag"
-.endif
-
+CPPFLAGS+=-I${NETBSDSRCDIR}/lib
 CPPFLAGS+=-DIPSEC
 LDADD+=	-lipsec
 DPADD+=	${LIBIPSEC}
+
+.if (${USE_INET6} != "no")
 CPPFLAGS+=-DINET6
+.endif
 
-LIBTELNETINCS?=-I${.CURDIR}/../../lib
+LIBTELNETDIR!=	cd ${.CURDIR}/../../lib/libtelnet; ${PRINTOBJDIR}
 
-CPPFLAGS+=${LIBTELNETINCS}
+.if (${USE_KERBEROS} != "no")
+CPPFLAGS+=-I${DESTDIR}/usr/include/krb5
+CPPFLAGS+=-DKRB5 -DFORWARD -DAUTHENTICATION -DENCRYPTION
+LDADD+= -lkrb5 -lasn1 -lcrypto -lcrypt
+DPADD+=	${LIBKRB5} ${LIBASN1} ${LIBCRYPTO} ${LIBCRYPT}
+
+.if (${USE_PAM} != "no")
+LDADD+= -lpam ${PAM_STATIC_LDADD}
+DPADD+=	${LIBPAM} ${PAM_STATIC_DPADD}
+.endif
+
+LDADD+= -ldes -lcom_err -lroken
+DPADD+=	${LIBDES} ${LIBCOM_ERR} ${LIBROKEN}
+.endif
+
+.if (defined(HAVE_GCC) && ${HAVE_GCC} == 4) || defined(HAVE_PCC)
+.for f in commands telnet terminal utilities
+COPTS.${f}.c+=  -Wno-pointer-sign
+.endfor
+.endif
 
 .include <bsd.prog.mk>

@@ -1,4 +1,4 @@
-/*	$NetBSD: mac68k5380.c,v 1.36 2000/02/14 07:01:47 scottr Exp $	*/
+/*	$NetBSD: mac68k5380.c,v 1.44 2005/12/24 23:24:00 perry Exp $	*/
 
 /*
  * Copyright (c) 1995 Allen Briggs
@@ -33,13 +33,18 @@
  *
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: mac68k5380.c,v 1.44 2005/12/24 23:24:00 perry Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
-#include <sys/dkstat.h>
 #include <sys/syslog.h>
 #include <sys/buf.h>
+
+#include <uvm/uvm_extern.h>
+
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsi_message.h>
@@ -90,12 +95,12 @@
 #endif
 #ifdef DBG_PID
 	/* static	char	*last_hit = NULL, *olast_hit = NULL; */
-	static char *last_hit[DBG_PID];
+	static const char *last_hit[DBG_PID];
 #	define	PID(a)	\
 	{ int i; \
-	  for (i=0; i< DBG_PID-1; i++) \
-		last_hit[i] = last_hit[i+1]; \
-	  last_hit[DBG_PID-1] = a; }
+	  for (i = 0; i < DBG_PID - 1; i++) \
+		last_hit[i] = last_hit[i + 1]; \
+	  last_hit[DBG_PID - 1] = a; }
 #else
 #	define	PID(a)
 #endif
@@ -125,40 +130,37 @@ static volatile u_char	*ncr		= (volatile u_char *) 0x10000;
 static volatile u_char	*ncr_5380_with_drq	= (volatile u_char *)  0x6000;
 static volatile u_char	*ncr_5380_without_drq	= (volatile u_char *) 0x12000;
 
-#define SCSI_5380		((struct scsi_5380 *) ncr)
+#define SCSI_5380		((volatile struct scsi_5380 *) ncr)
 #define GET_5380_REG(rnum)	SCSI_5380->scsi_5380[((rnum)<<4)]
 #define SET_5380_REG(rnum,val)	(SCSI_5380->scsi_5380[((rnum)<<4)] = (val))
 
 static void	ncr5380_irq_intr(void *);
 static void	ncr5380_drq_intr(void *);
-static void	do_ncr5380_drq_intr __P((void *));
+static void	do_ncr5380_drq_intr(void *);
 
-static __inline__ void	scsi_clr_ipend __P((void));
-static		  void	scsi_mach_init __P((struct ncr_softc *sc));
-static		  int	machine_match __P((struct device *parent,
-			    struct cfdata *cf, void *aux,
-			    struct cfdriver *cd));
-static __inline__ int	pdma_ready __P((void));
-static		  int	transfer_pdma __P((u_char *phasep, u_char *data,
-					u_long *count));
+static inline void	scsi_clr_ipend(void);
+static		  void	scsi_mach_init(struct ncr_softc *);
+static		  int	machine_match(struct device *, struct cfdata *, void *,
+			    struct cfdriver *);
+static inline int	pdma_ready(void);
+static		  int	transfer_pdma(u_char *, u_char *, u_long *);
 
-static __inline__ void
-scsi_clr_ipend()
+static inline void
+scsi_clr_ipend(void)
 {
-	int	tmp;
+	int tmp;
 
 	tmp = GET_5380_REG(NCR5380_IRCV);
 	scsi_clear_irq();
 }
 
 static void
-scsi_mach_init(sc)
-	struct ncr_softc	*sc;
+scsi_mach_init(struct ncr_softc *sc)
 {
-	static int	initted = 0;
+	static int initted = 0;
 
 	if (initted++)
-		panic("scsi_mach_init called again.\n");
+		panic("scsi_mach_init called again.");
 
 	ncr		= (volatile u_char *)
 			  (SCSIBase + (u_long) ncr);
@@ -180,11 +182,8 @@ scsi_mach_init(sc)
 }
 
 static int
-machine_match(parent, cf, aux, cd)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
-	struct cfdriver *cd;
+machine_match(struct device *parent, struct cfdata *cf, void *aux,
+	      struct cfdriver *cd)
 {
 	if (!mac68k_machine.scsi80)
 		return 0;
@@ -204,7 +203,7 @@ int		pdma_5380_sends = 0;
 int		pdma_5380_bytes = 0;
 
 void
-pdma_stat()
+pdma_stat(void)
 {
 	printf("PDMA SCSI: %d xfers completed for %d bytes.\n",
 		pdma_5380_sends, pdma_5380_bytes);
@@ -267,8 +266,8 @@ pdma_cleanup(void)
 }
 #endif
 
-static __inline__ int
-pdma_ready()
+static inline int
+pdma_ready(void)
 {
 #if USE_PDMA
 	SC_REQ	*reqp = connected;
@@ -313,7 +312,7 @@ extern	u_char	ncr5380_no_parchk;
 			return 1;
 		} else {
 			scsi_show();
-			panic("Spurious interrupt during PDMA xfer.\n");
+			panic("Spurious interrupt during PDMA xfer.");
 		}
 	} else
 		PID("pdma_ready4");
@@ -322,8 +321,7 @@ extern	u_char	ncr5380_no_parchk;
 }
 
 static void
-ncr5380_irq_intr(p)
-	void	*p;
+ncr5380_irq_intr(void *p)
 {
 	PID("irq");
 
@@ -352,8 +350,7 @@ ncr5380_irq_intr(p)
  * This is usually caused by a disconnecting target.
  */
 static void
-do_ncr5380_drq_intr(p)
-	void	*p;
+do_ncr5380_drq_intr(void *p)
 {
 #if USE_PDMA
 extern	int			*nofault, m68k_fault_addr;
@@ -411,7 +408,7 @@ extern	int			*nofault, m68k_fault_addr;
 				    4 - (((int) pending_5380_data) & 0x3));
 		if (count && (count < 4)) {
 			data = (u_int8_t *) pending_5380_data;
-			drq = (u_int8_t *) ncr_5380_with_drq;
+			drq = (volatile u_int8_t *) ncr_5380_with_drq;
 			while (count) {
 #define R1	*data++ = *drq++
 				R1; count--;
@@ -442,7 +439,7 @@ extern	int			*nofault, m68k_fault_addr;
 		}
 #undef R4
 		data = (u_int8_t *) long_data;
-		drq = (u_int8_t *) long_drq;
+		drq = (volatile u_int8_t *) long_drq;
 		while (count) {
 #define R1	*data++ = *drq++
 			R1; count--;
@@ -461,7 +458,7 @@ extern	int			*nofault, m68k_fault_addr;
 				    4 - (((int) pending_5380_data) & 0x3));
 		if (count && (count < 4)) {
 			data = (u_int8_t *) pending_5380_data;
-			drq = (u_int8_t *) ncr_5380_with_drq;
+			drq = (volatile u_int8_t *) ncr_5380_with_drq;
 			while (count) {
 #define W1	*drq++ = *data++
 				W1; count--;
@@ -493,7 +490,7 @@ extern	int			*nofault, m68k_fault_addr;
 		}
 #undef W4
 		data = (u_int8_t *) long_data;
-		drq = (u_int8_t *) long_drq;
+		drq = (volatile u_int8_t *) long_drq;
 		while (count) {
 #define W1	*drq++ = *data++
 			W1; count--;
@@ -525,8 +522,7 @@ extern	int			*nofault, m68k_fault_addr;
 }
 
 static void
-ncr5380_drq_intr(p)
-	void	*p;
+ncr5380_drq_intr(void *p)
 {
 	while (GET_5380_REG(NCR5380_DMSTAT) & SC_DMA_REQ) {
 		do_ncr5380_drq_intr(p);
@@ -539,17 +535,14 @@ ncr5380_drq_intr(p)
 #define SCSI_TIMEOUT_VAL	10000000
 
 static int
-transfer_pdma(phasep, data, count)
-	u_char	*phasep;
-	u_char	*data;
-	u_long	*count;
+transfer_pdma(u_char *phasep, u_char *data, u_long *count)
 {
-	SC_REQ	*reqp = connected;
-	int	len = *count, s, scsi_timeout = SCSI_TIMEOUT_VAL;
+	SC_REQ *reqp = connected;
+	int len = *count, s, scsi_timeout = SCSI_TIMEOUT_VAL;
 
 	if (pdma_5380_dir) {
 		panic("ncrscsi: transfer_pdma called when operation already "
-			"pending.\n");
+			"pending.");
 	}
 	PID("transfer_pdma0")
 
@@ -610,7 +603,7 @@ transfer_pdma(phasep, data, count)
 	 */
 	switch (*phasep) {
 	default:
-		panic("Unexpected phase in transfer_pdma.\n");
+		panic("Unexpected phase in transfer_pdma.");
 	case PH_DATAOUT:
 		pdma_5380_dir = 1;
 		SET_5380_REG(NCR5380_ICOM, GET_5380_REG(NCR5380_ICOM)|SC_ADTB);

@@ -1,4 +1,4 @@
-/*	$NetBSD: amsvar.h,v 1.4 1999/06/17 06:59:05 tsubai Exp $	*/
+/*	$NetBSD: amsvar.h,v 1.8 2007/03/05 10:47:06 tsutsui Exp $	*/
 
 /*
  * Copyright (C) 1998	Colin Wood
@@ -52,6 +52,17 @@ struct ams_softc {
 
 	int		sc_mb;		/* current button state */
 	struct device	*sc_wsmousedev;
+	/* helpers for trackpads */
+	int		sc_down;
+	int		sc_tapping;	/* 1 - tapping causes button event */
+	/*
+	 * trackpad protocol variant. Known so far:
+	 * 2 buttons - PowerBook 3400, single events on button 3 and 4 indicate
+	 *             finger down and up
+	 * 4 buttons - iBook G4, button 6 indicates finger down, button 4 is
+	 *             always down
+	 */
+	int		sc_x, sc_y;
 };
 
 /* EMP device classes */
@@ -60,7 +71,7 @@ struct ams_softc {
 #define MSCLASS_TRACKBALL	2
 #define MSCLASS_TRACKPAD	3
 
-void ms_adbcomplete __P((caddr_t buffer, caddr_t data_area, int adb_command));
+void ms_adbcomplete __P((uint8_t *buffer, uint8_t *data_area, int adb_command));
 void ms_handoff __P((adb_event_t *event, struct ams_softc *));
 
 #endif /* _MACPPC_AMSVAR_H_ */

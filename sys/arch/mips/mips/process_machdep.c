@@ -1,8 +1,42 @@
-/*	$NetBSD: process_machdep.c,v 1.14 2000/03/28 03:11:28 simonb Exp $	*/
+/*	$NetBSD: process_machdep.c,v 1.29 2007/03/04 06:00:12 christos Exp $	*/
+
+/*
+ * Copyright (c) 1993 The Regents of the University of California.
+ * All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * Jan-Simon Pendry.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ * From:
+ *	Id: procfs_i386.c,v 4.1 1993/12/17 10:47:45 jsp Rel
+ */
 
 /*
  * Copyright (c) 1994 Adam Glass
- * Copyright (c) 1993 The Regents of the University of California.
  * Copyright (c) 1993 Jan-Simon Pendry
  * All rights reserved.
  *
@@ -42,7 +76,7 @@
  */
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
-__KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.14 2000/03/28 03:11:28 simonb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.29 2007/03/04 06:00:12 christos Exp $");
 
 /*
  * This file may seem a bit stylized, but that so that it's easier to port.
@@ -68,95 +102,68 @@ __KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.14 2000/03/28 03:11:28 simonb 
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/time.h>
-#include <sys/kernel.h>
 #include <sys/proc.h>
 #include <sys/user.h>
-#include <sys/vnode.h>
 #include <sys/ptrace.h>
+#include <mips/reg.h>
 #include <mips/regnum.h>			/* symbolic register indices */
-#include <machine/psl.h>
-#include <machine/reg.h>
-
-#if !defined(NOFPU) && !defined(SOFTFLOAT)
-void savefpregs __P((struct proc *));
-#endif
 
 int
-process_read_regs(p, regs)
-	struct proc *p;
-	struct reg *regs;
+process_read_regs(struct lwp *l, struct reg *regs)
 {
-	memcpy(regs, p->p_md.md_regs, sizeof(struct reg));
-	return (0);
-}
 
-int
-process_write_regs(p, regs)
-	struct proc *p;
-	struct reg *regs;
-{
-	memcpy(p->p_md.md_regs, regs, sizeof(struct reg));
-	/*
-	 * XXX: is it safe to let users set system coprocessor regs?
-	 * XXX: Clear to user set bits!!
-	 */
-	/*p->p_md.md_tf->tf_psr = psr | (regs->r_psr & PSR_ICC);*/
-	return (0);
-}
-
-int
-process_read_fpregs(p, regs)
-	struct proc *p;
-	struct fpreg *regs;
-{
-	if (p->p_md.md_flags & MDP_FPUSED) {
-#if !defined(NOFPU) && !defined(SOFTFLOAT)
-		if (p == fpcurproc)
-			savefpregs(p);
-#endif
-		memcpy(regs, &p->p_addr->u_pcb.pcb_fpregs,
-			sizeof(struct fpreg));
-	}
-	else
-		memset(regs, 0, sizeof(struct fpreg));
+	memcpy(regs, l->l_md.md_regs, sizeof(struct reg));
 	return 0;
 }
 
 int
-process_write_fpregs(p, regs)
-	struct proc *p;
-	struct fpreg *regs;
+process_write_regs(struct lwp *l, const struct reg *regs)
 {
-	if ((p->p_md.md_flags & MDP_FPUSED) == 0)	/* XXX */
-		return EINVAL;
+	struct frame *f;
+	mips_reg_t sr;
 
-#if !defined(NOFPU) && !defined(SOFTFLOAT)
-	if (p->p_md.md_flags & MDP_FPUSED) {
-		if (p == fpcurproc)
-			savefpregs(p);
-	}
-#endif
-
-	memcpy(&p->p_addr->u_pcb.pcb_fpregs, regs, sizeof(struct fpreg));
+	f = (struct frame *) l->l_md.md_regs;
+	sr = f->f_regs[_R_SR];
+	memcpy(l->l_md.md_regs, regs, sizeof(struct reg));
+	f->f_regs[_R_SR] = sr;
 	return 0;
 }
 
 int
-process_sstep(p, sstep)
-	struct proc *p;
+process_read_fpregs(struct lwp *l, struct fpreg *regs)
 {
+
+	if ((l->l_md.md_flags & MDP_FPUSED) && l == fpcurlwp)
+		savefpregs(l);
+	memcpy(regs, &l->l_addr->u_pcb.pcb_fpregs, sizeof(struct fpreg));
+	return 0;
+}
+
+int
+process_write_fpregs(struct lwp *l, const struct fpreg *regs)
+{
+
+	/* to load FPA contents next time when FP insn is executed */
+	if ((l->l_md.md_flags & MDP_FPUSED) && l == fpcurlwp)
+		fpcurlwp = NULL;
+	memcpy(&l->l_addr->u_pcb.pcb_fpregs, regs, sizeof(struct fpreg));
+	return 0;
+}
+
+int
+process_sstep(struct lwp *l, int sstep)
+{
+
 	/* XXX what are the correct semantics: sstep once, or forevermore? */
 	if (sstep)
-		mips_singlestep(p);
-	return (0);
+		mips_singlestep(l);
+	return 0;
 }
 
 int
-process_set_pc(p, addr)
-	struct proc *p;
-	caddr_t addr;
+process_set_pc(struct lwp *l, void *addr)
 {
-	((struct frame *)p->p_md.md_regs)->f_regs[PC] = (int)addr;
-	return (0);
+
+	((struct frame *)l->l_md.md_regs)->f_regs[_R_PC] = (intptr_t)addr;
+	return 0;
 }

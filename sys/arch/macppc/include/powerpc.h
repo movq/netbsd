@@ -1,4 +1,4 @@
-/*	$NetBSD: powerpc.h,v 1.2 1998/08/21 16:13:28 tsubai Exp $	*/
+/*	$NetBSD: powerpc.h,v 1.6 2006/08/05 21:26:48 sanjayl Exp $	*/
 
 /*
  * Copyright (C) 1996 Wolfgang Solfrank.
@@ -34,9 +34,12 @@
 #define	_MACHINE_POWERPC_H_
 
 struct mem_region {
+#if defined (PMAC_G5)
+	paddr_t start_hi;
+#endif
 	paddr_t start;
 	psize_t size;
-};
+}__attribute__((packed));
 
 void mem_regions __P((struct mem_region **, struct mem_region **));
 
@@ -51,8 +54,5 @@ void ppc_boot __P((char *bootspec)) __attribute__((__noreturn__));
 int dk_match __P((char *name));
 
 void ofrootfound __P((void));
-
-extern	struct device *booted_device;
-extern	int booted_partition;
 
 #endif	/* _MACHINE_POWERPC_H_ */

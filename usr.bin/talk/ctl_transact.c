@@ -1,4 +1,4 @@
-/*	$NetBSD: ctl_transact.c,v 1.4 1997/10/20 00:23:16 lukem Exp $	*/
+/*	$NetBSD: ctl_transact.c,v 1.9 2003/08/07 11:16:03 agc Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,20 +34,21 @@
 #if 0
 static char sccsid[] = "@(#)ctl_transact.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: ctl_transact.c,v 1.4 1997/10/20 00:23:16 lukem Exp $");
+__RCSID("$NetBSD: ctl_transact.c,v 1.9 2003/08/07 11:16:03 agc Exp $");
 #endif /* not lint */
 
 #include "talk.h"
 #include <sys/time.h>
 #include <errno.h>
 #include <unistd.h>
+#include <poll.h>
 #include "talk_ctl.h"
 
 #define CTL_WAIT 2	/* time to wait for a response, in seconds */
 
 /*
  * SOCKDGRAM is unreliable, so we must repeat messages if we have
- * not recieved an acknowledgement within a reasonable amount
+ * not received an acknowledgement within a reasonable amount
  * of time
  */
 void
@@ -61,24 +58,21 @@ ctl_transact(target, msg, type, rp)
 	int type;
 	CTL_RESPONSE *rp;
 {
-	fd_set read_mask, ctl_mask;
+	struct pollfd set[1];
 	int nready, cc;
-	struct timeval wait;
 
 	nready = 0;
 	msg.type = type;
 	daemon_addr.sin_addr = target;
 	daemon_addr.sin_port = daemon_port;
-	FD_ZERO(&ctl_mask);
-	FD_SET(ctl_sockt, &ctl_mask);
+	set[0].fd = ctl_sockt;
+	set[0].events = POLLIN;
 
 	/*
 	 * Keep sending the message until a response of
 	 * the proper type is obtained.
 	 */
 	do {
-		wait.tv_sec = CTL_WAIT;
-		wait.tv_usec = 0;
 		/* resend message until a response is obtained */
 		do {
 			cc = sendto(ctl_sockt, (char *)&msg, sizeof (msg), 0,
@@ -89,8 +83,7 @@ ctl_transact(target, msg, type, rp)
 					continue;
 				p_error("Error on write to talk daemon");
 			}
-			read_mask = ctl_mask;
-			nready = select(32, &read_mask, 0, 0, &wait);
+			nready = poll(set, 1, CTL_WAIT * 1000);
 			if (nready < 0) {
 				if (errno == EINTR)
 					continue;
@@ -109,10 +102,8 @@ ctl_transact(target, msg, type, rp)
 					continue;
 				p_error("Error on read from talk daemon");
 			}
-			read_mask = ctl_mask;
 			/* an immediate poll */
-			timerclear(&wait);
-			nready = select(32, &read_mask, 0, 0, &wait);
+			nready = poll(set, 1, 0);
 		} while (nready > 0 && (rp->vers != TALK_VERSION ||
 		    rp->type != type));
 	} while (rp->vers != TALK_VERSION || rp->type != type);

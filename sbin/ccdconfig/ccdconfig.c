@@ -1,4 +1,4 @@
-/*	$NetBSD: ccdconfig.c,v 1.29 2000/02/16 06:52:32 enami Exp $	*/
+/*	$NetBSD: ccdconfig.c,v 1.48 2008/07/20 01:20:21 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,18 +31,14 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT(
-"@(#) Copyright (c) 1996, 1997\
-	The NetBSD Foundation, Inc.  All rights reserved.");
-__RCSID("$NetBSD: ccdconfig.c,v 1.29 2000/02/16 06:52:32 enami Exp $");
+__COPYRIGHT("@(#) Copyright (c) 1996, 1997\
+ The NetBSD Foundation, Inc.  All rights reserved.");
+__RCSID("$NetBSD: ccdconfig.c,v 1.48 2008/07/20 01:20:21 lukem Exp $");
 #endif
-
-#define __POOL_EXPOSE			/* dev/ccdvar.h uses struct pool */
 
 #include <sys/param.h>
 #include <sys/ioctl.h>
 #include <sys/disklabel.h>
-#include <sys/device.h>
 #include <sys/disk.h>
 #include <sys/stat.h>
 #include <sys/sysctl.h>
@@ -70,31 +59,32 @@ __RCSID("$NetBSD: ccdconfig.c,v 1.29 2000/02/16 06:52:32 enami Exp $");
 
 #include "pathnames.h"
 
-extern	char *__progname;
-
 
 static	size_t lineno;
 static	gid_t egid;
 static	int verbose;
-static	char *ccdconf = _PATH_CCDCONF;
+static	const char *ccdconf = _PATH_CCDCONF;
 
 static	char *core;
 static	char *kernel;
 
 struct	flagval {
-	char	*fv_flag;
+	const char *fv_flag;
 	int	fv_val;
 } flagvaltab[] = {
 	{ "CCDF_UNIFORM",	CCDF_UNIFORM },
+	{ "CCDF_NOLABEL",	CCDF_NOLABEL },
 	{ NULL,			0 },
 };
 
 static	struct nlist nl[] = {
-	{ "_ccd_softc" },
+	{ .n_name = "_ccd_softc" },
 #define SYM_CCDSOFTC		0
-	{ "_numccd" },
+	{ .n_name = "_numccd" },
 #define SYM_NUMCCD		1
-	{ NULL },
+	{ .n_name = "_ccd_softc_elemsize" },
+#define SYM_CCDSOFTCELEMSIZE	2
+	{ .n_name = NULL },
 };
 
 #define CCD_CONFIG		0	/* configure a device */
@@ -103,22 +93,19 @@ static	struct nlist nl[] = {
 #define CCD_UNCONFIGALL		3	/* unconfigure all devices */
 #define CCD_DUMP		4	/* dump a ccd's configuration */
 
-int	main __P((int, char *[]));
-static	int checkdev __P((char *));
-static	int do_io __P((char *, u_long, struct ccd_ioctl *));
-static	int do_single __P((int, char **, int));
-static	int do_all __P((int));
-static	int dump_ccd __P((int, char **, int));
-static	int flags_to_val __P((char *));
-static	int pathtounit __P((char *, int *));
-static	void print_ccd_info __P((struct ccd_softc *, kvm_t *));
-static	char *resolve_ccdname __P((char *));
-static	void usage __P((void));
+static	int checkdev(char *);
+static	int do_io(char *, u_long, struct ccd_ioctl *);
+static	int do_single(int, char **, int);
+static	int do_all(int);
+static	int dump_ccd(int, char **, int);
+static	int flags_to_val(char *);
+static	int pathtounit(char *, int *);
+static	void print_ccd_info(struct ccd_softc *, kvm_t *);
+static	char *resolve_ccdname(char *);
+static	void usage(void);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	int ch, options = 0, action = CCD_CONFIG;
 
@@ -207,10 +194,7 @@ main(argc, argv)
 }
 
 static int
-do_single(argc, argv, action)
-	int argc;
-	char **argv;
-	int action;
+do_single(int argc, char **argv, int action)
 {
 	struct ccd_ioctl ccio;
 	char *ccd, *cp, *cp2, **disks;
@@ -235,6 +219,7 @@ do_single(argc, argv, action)
 			else
 				if (verbose)
 					printf("%s unconfigured\n", cp);
+			free(ccd);
 		}
 		return (i);
 	}
@@ -267,6 +252,7 @@ do_single(argc, argv, action)
 	ileave = (int)strtol(cp, &cp2, 10);
 	if ((errno == ERANGE) || (ileave < 0) || (*cp2 != '\0')) {
 		warnx("invalid interleave factor: %s", cp);
+		free(ccd);
 		return (1);
 	}
 
@@ -275,6 +261,7 @@ do_single(argc, argv, action)
 		cp = *argv++; --argc;
 		if ((flags = flags_to_val(cp)) < 0) {
 			warnx("invalid flags argument: %s", cp);
+			free(ccd);
 			return (1);
 		}
 	}
@@ -283,6 +270,7 @@ do_single(argc, argv, action)
 	disks = malloc(argc * sizeof(char *));
 	if (disks == NULL) {
 		warnx("no memory to configure ccd");
+		free(ccd);
 		return (1);
 	}
 	for (i = 0; argc != 0; ) {
@@ -291,6 +279,8 @@ do_single(argc, argv, action)
 			disks[i++] = cp;
 		else {
 			warnx("%s: %s", cp, strerror(j));
+			free(ccd);
+			free(disks);
 			return (1);
 		}
 	}
@@ -302,6 +292,7 @@ do_single(argc, argv, action)
 	ccio.ccio_flags = flags;
 
 	if (do_io(ccd, CCDIOCSET, &ccio)) {
+		free(ccd);
 		free(disks);
 		return (1);
 	}
@@ -325,16 +316,16 @@ do_single(argc, argv, action)
 			printf("concatenated\n");
 	}
 
+	free(ccd);
 	free(disks);
 	return (0);
 }
 
 static int
-do_all(action)
-	int action;
+do_all(int action)
 {
 	FILE *f;
-	char *line, *cp, *vp, **argv;
+	char *line, *cp, *vp, **argv, **nargv;
 	int argc, rval;
 	size_t len;
 
@@ -361,11 +352,13 @@ do_all(action)
 			if (vp == NULL)
 				continue;
 
-			if ((argv = realloc(argv,
-			    sizeof(char *) * ++argc)) == NULL) {
+			if ((nargv = realloc(argv,
+			    sizeof(char *) * (argc + 1))) == NULL) {
 				warnx("no memory to configure ccds");
 				return (1);
 			}
+			argv = nargv;
+			argc++;
 			argv[argc - 1] = vp;
 
 			/*
@@ -396,8 +389,7 @@ do_all(action)
 }
 
 static int
-checkdev(path)
-	char *path;
+checkdev(char *path)
 {
 	struct stat st;
 
@@ -411,12 +403,9 @@ checkdev(path)
 }
 
 static int
-pathtounit(path, unitp)
-	char *path;
-	int *unitp;
+pathtounit(char *path, int *unitp)
 {
 	struct stat st;
-	int maxpartitions;
 
 	if (stat(path, &st) != 0)
 		return (errno);
@@ -424,20 +413,16 @@ pathtounit(path, unitp)
 	if (!S_ISBLK(st.st_mode) && !S_ISCHR(st.st_mode))
 		return (EINVAL);
 
-	if ((maxpartitions = getmaxpartitions()) < 0)
-		return (errno);
-
-	*unitp = minor(st.st_rdev) / maxpartitions;
+	*unitp = DISKUNIT(st.st_rdev);
 
 	return (0);
 }
 
 static char *
-resolve_ccdname(name)
-	char *name;
+resolve_ccdname(char *name)
 {
 	char c, *path;
-	size_t len, newlen;
+	size_t len;
 	int rawpart;
 
 	if (name[0] == '/' || name[0] == '.') {
@@ -448,31 +433,23 @@ resolve_ccdname(name)
 	len = strlen(name);
 	c = name[len - 1];
 
-	newlen = len + 8;
-	if ((path = malloc(newlen)) == NULL)
-		return (NULL);
-	memset(path, 0, newlen);
-
-	if (isdigit(c)) {
-		if ((rawpart = getrawpartition()) < 0) {
-			free(path);
+	if (isdigit((unsigned char)c)) {
+		if ((rawpart = getrawpartition()) < 0)
 			return (NULL);
-		}
-		(void)snprintf(path, newlen, "/dev/%s%c", name, 'a' + rawpart);
+		if (asprintf(&path, "/dev/%s%c", name, 'a' + rawpart) < 0)
+			return (NULL);
 	} else
-		(void)snprintf(path, newlen, "/dev/%s", name);
+		if (asprintf(&path, "/dev/%s", name) < 0)
+			return (NULL);
 
 	return (path);
 }
 
 static int
-do_io(path, cmd, cciop)
-	char *path;
-	u_long cmd;
-	struct ccd_ioctl *cciop;
+do_io(char *path, u_long cmd, struct ccd_ioctl *cciop)
 {
 	int fd;
-	char *cp;
+	const char *cp;
 
 	if ((fd = open(path, O_RDWR, 0640)) < 0) {
 		warn("open: %s", path);
@@ -501,25 +478,24 @@ do_io(path, cmd, cciop)
 
 #define KVM_ABORT(kd, str) {						\
 	(void)kvm_close((kd));						\
-	warnx((str));							\
-	warnx(kvm_geterr((kd)));					\
+	warnx("%s", (str));						\
+	warnx("%s", kvm_geterr((kd)));					\
 	return (1);							\
 }
 
 static int
-dump_ccd(argc, argv, action)
-	int argc;
-	char **argv;
-	int action;
+dump_ccd(int argc, char **argv, int action)
 {
 	char errbuf[_POSIX2_LINE_MAX], *ccd, *cp;
 	struct ccd_softc *cs, *kcs;
+	void *vcs;
 	size_t readsize;
-	int i, error, numccd, numconfiged = 0;
+	int i, error, numccd, ccd_softc_elemsize, numconfiged = 0;
 	kvm_t *kd;
 
 	memset(errbuf, 0, sizeof(errbuf));
 
+	vcs = NULL;
 	(void)setegid(egid);
 	if ((kd = kvm_openfiles(kernel, core, NULL, O_RDONLY,
 	    errbuf)) == NULL) {
@@ -532,7 +508,7 @@ dump_ccd(argc, argv, action)
 		KVM_ABORT(kd, "ccd-related symbols not available");
 
 	/* Check to see how many ccds are currently configured. */
-	if (kvm_read(kd, nl[SYM_NUMCCD].n_value, (char *)&numccd,
+	if (kvm_read(kd, nl[SYM_NUMCCD].n_value, (void *)&numccd,
 	    sizeof(numccd)) != sizeof(numccd))
 		KVM_ABORT(kd, "can't determine number of configured ccds");
 
@@ -541,28 +517,49 @@ dump_ccd(argc, argv, action)
 		goto done;
 	}
 
-	/* Allocate space for the configuration data. */
-	readsize = numccd * sizeof(struct ccd_softc);
-	if ((cs = malloc(readsize)) == NULL) {
+	if (kvm_read(kd, nl[SYM_CCDSOFTCELEMSIZE].n_value,
+	    (void *)&ccd_softc_elemsize, sizeof(ccd_softc_elemsize))
+	    != sizeof(ccd_softc_elemsize))
+		KVM_ABORT(kd, "can't determine size of ccd_softc");
+
+	/* Allocate space for the kernel's configuration data. */
+	readsize = numccd * ccd_softc_elemsize;
+	if ((vcs = malloc(readsize)) == NULL) {
 		warnx("no memory for configuration data");
 		goto bad;
 	}
-	memset(cs, 0, readsize);
+	memset(vcs, 0, readsize);
 
 	/*
-	 * Read the ccd configuration data from the kernel and dump
-	 * it to stdout.
+	 * Read the ccd configuration data from the kernel.
+	 * The kernel's ccd_softc is larger than userland's
+	 * (the former contains extra structure members at
+	 * the end of the structure), so read the kernel
+	 * ccd_softcs into a temporary buffer and convert
+	 * into userland ccd_softcs.
 	 */
-	if (kvm_read(kd, nl[SYM_CCDSOFTC].n_value, (char *)&kcs,
+	if (kvm_read(kd, nl[SYM_CCDSOFTC].n_value, (void *)&kcs,
 	    sizeof(kcs)) != sizeof(kcs)) {
-		free(cs);
+		free(vcs);
 		KVM_ABORT(kd, "can't find pointer to configuration data");
 	}
-	if (kvm_read(kd, (u_long)kcs, (char *)cs, readsize) != readsize) {
-		free(cs);
+	if (kvm_read(kd, (u_long)kcs, vcs, readsize) != readsize) {
+		free(vcs);
 		KVM_ABORT(kd, "can't read configuration data");
 	}
 
+	if ((cs = calloc(numccd, sizeof(struct ccd_softc))) == NULL) {
+		warnx("no memory for configuration data");
+		free(vcs);
+		goto bad;
+	}
+	for (i = 0; i < numccd; i++) {
+		memcpy(&cs[i], (char *)vcs + i * ccd_softc_elemsize,
+		    sizeof(struct ccd_softc));
+	}
+	free(vcs);
+
+	/* Dump ccd configuration to stdout. */
 	if (argc == 0) {
 		for (i = 0; i < numccd; ++i)
 			if (cs[i].sc_flags & CCDF_INITED) {
@@ -581,16 +578,19 @@ dump_ccd(argc, argv, action)
 			}
 			if ((error = pathtounit(ccd, &i)) != 0) {
 				warn("%s", ccd);
+				free(ccd);
 				continue;
 			}
 			if (i >= numccd) {
 				warnx("ccd%d not configured", i);
+				free(ccd);
 				continue;
 			}
 			if (cs[i].sc_flags & CCDF_INITED)
 				print_ccd_info(&cs[i], kd);
 			else
 				printf("# ccd%d not configured\n", i);
+			free(ccd);
 		}
 	}
 
@@ -606,9 +606,7 @@ dump_ccd(argc, argv, action)
 }
 
 static void
-print_ccd_info(cs, kd)
-	struct ccd_softc *cs;
-	kvm_t *kd;
+print_ccd_info(struct ccd_softc *cs, kvm_t *kd)
 {
 	static int header_printed = 0;
 	struct ccdcinfo *cip;
@@ -635,24 +633,25 @@ print_ccd_info(cs, kd)
 	fflush(stdout);
 
 	/* Read in the component info. */
-	if (kvm_read(kd, (u_long)cs->sc_cinfo, (char *)cip,
+	if (kvm_read(kd, (u_long)cs->sc_cinfo, (void *)cip,
 	    readsize) != readsize) {
 		printf("\n");
 		warnx("can't read component info");
-		warnx(kvm_geterr(kd));
+		warnx("%s", kvm_geterr(kd));
 		goto done;
 	}
 
 	/* Read component pathname and display component info. */
 	for (i = 0; i < cs->sc_nccdisks; ++i) {
-		if (kvm_read(kd, (u_long)cip[i].ci_path, (char *)path,
+		if (kvm_read(kd, (u_long)cip[i].ci_path, (void *)path,
 		    cip[i].ci_pathlen) != cip[i].ci_pathlen) {
 			printf("\n");
 			warnx("can't read component pathname");
-			warnx(kvm_geterr(kd));
+			warnx("%s", kvm_geterr(kd));
 			goto done;
 		}
-		printf((i + 1 < cs->sc_nccdisks) ? "%s " : "%s\n", path);
+		fputs(path, stdout);
+		fputc((i + 1 < cs->sc_nccdisks) ? ' ' : '\n', stdout);
 		fflush(stdout);
 	}
 
@@ -661,8 +660,7 @@ print_ccd_info(cs, kd)
 }
 
 static int
-flags_to_val(flags)
-	char *flags;
+flags_to_val(char *flags)
 {
 	char *cp, *tok;
 	int i, tmp, val = ~CCDF_USERMASK;
@@ -720,15 +718,16 @@ flags_to_val(flags)
 }
 
 static void
-usage()
+usage(void)
 {
+	const char *progname = getprogname();
 
-	fprintf(stderr, "usage: %s [-cv] ccd ileave [flags] %s\n", __progname,
-	    "dev [...]");
-	fprintf(stderr, "       %s -C [-v] [-f config_file]\n", __progname);
-	fprintf(stderr, "       %s -u [-v] ccd [...]\n", __progname);
-	fprintf(stderr, "       %s -U [-v] [-f config_file]\n", __progname);
-	fprintf(stderr, "       %s -g [-M core] [-N system] %s\n", __progname,
-	    "[ccd [...]]");
+	fprintf(stderr, "usage: %s [-cv] ccd ileave [flags] dev [...]\n",
+	    progname);
+	fprintf(stderr, "       %s -C [-v] [-f config_file]\n", progname);
+	fprintf(stderr, "       %s -u [-v] ccd [...]\n", progname);
+	fprintf(stderr, "       %s -U [-v] [-f config_file]\n", progname);
+	fprintf(stderr, "       %s -g [-M core] [-N system] [ccd [...]]\n",
+	    progname);
 	exit(1);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: mail.local.c,v 1.16 1998/08/10 02:57:23 perry Exp $	*/
+/*	$NetBSD: mail.local.c,v 1.25 2008/07/20 01:09:07 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,12 +31,12 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1990, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1990, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #if 0
 static char sccsid[] = "@(#)mail.local.c	8.22 (Berkeley) 6/21/95";
 #else
-__RCSID("$NetBSD: mail.local.c,v 1.16 1998/08/10 02:57:23 perry Exp $");
+__RCSID("$NetBSD: mail.local.c,v 1.25 2008/07/20 01:09:07 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -54,20 +50,23 @@ __RCSID("$NetBSD: mail.local.c,v 1.16 1998/08/10 02:57:23 perry Exp $");
 #include <fcntl.h>
 #include <pwd.h>
 #include <netdb.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <syslog.h>
 #include <time.h>
 #include <unistd.h>
+#include <sysexits.h>
+
 
 #include "pathnames.h"
 
-#define	FATAL		1
-#define	NOTFATAL	0
-
 int	deliver __P((int, char *, int));
-void	err __P((int, const char *, ...));
+void	logerr __P((int, const char *, ...))
+     __attribute__((__format__(__printf__, 2, 3)));
+void	logwarn __P((const char *, ...))
+     __attribute__((__format__(__printf__, 1, 2)));
 void	notifybiff __P((char *));
 int	store __P((const char *));
 void	usage __P((void));
@@ -96,7 +95,7 @@ main(argc, argv)
 		case 'f':
 		case 'r':		/* backward compatible */
 			if (from)
-				err(FATAL, "multiple -f options");
+				logerr(EX_USAGE, "multiple -f options");
 			from = optarg;
 			break;
 		case 'l':
@@ -123,8 +122,13 @@ main(argc, argv)
 		from = (pw = getpwuid(uid)) ? pw->pw_name : "???";
 
 	fd = store(from);
-	for (eval = 0; *argv; ++argv)
-		eval |= deliver(fd, *argv, lockfile);
+	for (eval = EX_OK; *argv; ++argv) {
+		int rval;
+
+		rval = deliver(fd, *argv, lockfile);
+		if (eval == EX_OK && rval != EX_OK)
+			eval = rval;
+	}
 	exit (eval);
 }
 
@@ -138,8 +142,10 @@ store(from)
 	char *tn, line[2048];
 
 	tn = strdup(_PATH_LOCTMP);
+	if (!tn)
+		logerr(EX_OSERR, "not enough core");
 	if ((fd = mkstemp(tn)) == -1 || !(fp = fdopen(fd, "w+")))
-		err(FATAL, "unable to open temporary file");
+		logerr(EX_OSERR, "unable to open temporary file");
 	(void)unlink(tn);
 	free(tn);
 
@@ -168,7 +174,9 @@ store(from)
 
 	(void)fflush(fp);
 	if (ferror(fp))
-		err(FATAL, "temporary file write error");
+		logerr(EX_OSERR, "temporary file write error");
+	fd = dup(fd);
+	(void)fclose(fp);
 	return(fd);
 }
 
@@ -179,8 +187,9 @@ deliver(fd, name, lockfile)
 	int lockfile;
 {
 	struct stat sb;
-	struct passwd *pw;
-	int created, mbfd, nr, nw, off, rval=0, lfd=-1;
+	struct passwd pwres, *pw;
+	char pwbuf[1024];
+	int created, mbfd, nr, nw, off, rval=EX_OK, lfd=-1;
 	char biffmsg[100], buf[8*1024], path[MAXPATHLEN], lpath[MAXPATHLEN];
 	off_t curoff;
 
@@ -188,9 +197,13 @@ deliver(fd, name, lockfile)
 	 * Disallow delivery to unknown names -- special mailboxes can be
 	 * handled in the sendmail aliases file.
 	 */
-	if (!(pw = getpwnam(name))) {
-		err(NOTFATAL, "unknown name: %s", name);
-		return(1);
+	if ((getpwnam_r(name, &pwres, pwbuf, sizeof(pwbuf), &pw)) != 0) {
+		logwarn("unable to find user %s: %s", name, strerror(errno));
+		return(EX_TEMPFAIL);
+	}
+	if (pw == NULL) {
+		logwarn("unknown name: %s", name);
+		return(EX_NOUSER);
 	}
 
 	(void)snprintf(path, sizeof path, "%s/%s", _PATH_MAILDIR, name);
@@ -201,44 +214,45 @@ deliver(fd, name, lockfile)
 
 		if((lfd = open(lpath, O_CREAT|O_WRONLY|O_EXCL,
 		    S_IRUSR|S_IWUSR)) < 0) {
-			err(NOTFATAL, "%s: %s", lpath, strerror(errno));
-			return(1);
+			logwarn("%s: %s", lpath, strerror(errno));
+			return(EX_OSERR);
 		}
 	}
 
 	if (!(created = lstat(path, &sb)) &&
 	    (sb.st_nlink != 1 || S_ISLNK(sb.st_mode))) {
-		err(NOTFATAL, "%s: linked file", path);
-		return(1);
+		logwarn("%s: linked file", path);
+		return(EX_OSERR);
 	}
+	
 	if ((mbfd = open(path, O_APPEND|O_WRONLY|O_EXLOCK,
 	    S_IRUSR|S_IWUSR)) < 0) {
 		if ((mbfd = open(path, O_APPEND|O_CREAT|O_WRONLY|O_EXLOCK,
 		    S_IRUSR|S_IWUSR)) < 0) {
-			err(NOTFATAL, "%s: %s", path, strerror(errno));
-			return(1);
+			logwarn("%s: %s", path, strerror(errno));
+			return(EX_OSERR);
 		}
 	}
 
 	curoff = lseek(mbfd, 0, SEEK_END);
-	(void)snprintf(biffmsg, sizeof biffmsg, "%s@%qd\n", name,
+	(void)snprintf(biffmsg, sizeof biffmsg, "%s@%lld\n", name,
 	    (long long)curoff);
 	if (lseek(fd, 0, SEEK_SET) == (off_t)-1) {
-		err(FATAL, "temporary file: %s", strerror(errno));
-		rval = 1;
+		logwarn("temporary file: %s", strerror(errno));
+		rval = EX_OSERR;
 		goto bad;
 	}
 
 	while ((nr = read(fd, buf, sizeof(buf))) > 0)
 		for (off = 0; off < nr;  off += nw)
 			if ((nw = write(mbfd, buf + off, nr - off)) < 0) {
-				err(NOTFATAL, "%s: %s", path, strerror(errno));
+				logwarn("%s: %s", path, strerror(errno));
 				goto trunc;
 			}
 	if (nr < 0) {
-		err(FATAL, "temporary file: %s", strerror(errno));
+		logwarn("temporary file: %s", strerror(errno));
 trunc:		(void)ftruncate(mbfd, curoff);
-		rval = 1;
+		rval = EX_OSERR;
 	}
 
 	/*
@@ -260,9 +274,10 @@ bad:
 	(void)fsync(mbfd);		/* Don't wait for update. */
 	(void)close(mbfd);		/* Implicit unlock. */
 
-	if (!rval)
+	if (rval == EX_OK)
 		notifybiff(biffmsg);
-	return(rval);
+
+	return rval;
 }
 
 void
@@ -280,7 +295,7 @@ notifybiff(msg)
 		if (!(sp = getservbyname("biff", "udp")))
 			return;
 		if (!(hp = gethostbyname("localhost"))) {
-			err(NOTFATAL, "localhost: %s", strerror(errno));
+			logwarn("localhost: %s", strerror(errno));
 			return;
 		}
 		addr.sin_len = sizeof(struct sockaddr_in);
@@ -289,45 +304,42 @@ notifybiff(msg)
 		memcpy(&addr.sin_addr, hp->h_addr, hp->h_length);
 	}
 	if (f < 0 && (f = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
-		err(NOTFATAL, "socket: %s", strerror(errno));
+		logwarn("socket: %s", strerror(errno));
 		return;
 	}
 	len = strlen(msg) + 1;
 	if (sendto(f, msg, len, 0, (struct sockaddr *)&addr, sizeof(addr))
 	    != len)
-		err(NOTFATAL, "sendto biff: %s", strerror(errno));
+		logwarn("sendto biff: %s", strerror(errno));
 }
 
 void
 usage()
 {
-	err(FATAL, "usage: mail.local [-f from] user ...");
+	logerr(EX_USAGE, "usage: mail.local [-l] [-f from] user ...");
 }
 
-#if __STDC__
-#include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
-
 void
-#if __STDC__
-err(int isfatal, const char *fmt, ...)
-#else
-err(isfatal, fmt)
-	int isfatal;
-	char *fmt;
-	va_dcl
-#endif
+logerr(int status, const char *fmt, ...)
 {
 	va_list ap;
-#if __STDC__
+
 	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
 	vsyslog(LOG_ERR, fmt, ap);
 	va_end(ap);
-	if (isfatal)
-		exit(1);
+
+	exit(status);
+	/* NOTREACHED */
+	return;
+}
+
+void
+logwarn(const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	vsyslog(LOG_ERR, fmt, ap);
+	va_end(ap);
+	return;
 }

@@ -1,5 +1,6 @@
-#	$NetBSD: Makefile,v 1.4 1999/12/17 20:48:06 fredb Exp $
+#	$NetBSD: Makefile,v 1.8 2004/03/26 06:33:18 jmc Exp $
 
-SUBDIR=	instkernel # miniroot
+SUBDIR=		instkernel stand
+TARGETS+=	release
 
 .include <bsd.subdir.mk>

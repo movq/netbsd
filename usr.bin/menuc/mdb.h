@@ -1,4 +1,4 @@
-/*	$NetBSD: mdb.h,v 1.4 1999/06/20 02:07:18 cgd Exp $	*/
+/*	$NetBSD: mdb.h,v 1.8 2006/02/20 21:06:40 dsl Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -67,6 +67,7 @@ typedef struct action {
 
 typedef struct optn_info {
 	char *name;
+	int   name_is_code;
 	int   menu;
 	int   issub;
 	int   doexit;
@@ -82,14 +83,20 @@ struct menu_info {
 	int y, x;
 	int h, w;
 	int numopt;
+	int name_is_code;
 	optn_info *optns;
 	action postact;
 	action exitact;
 };
 
 /* defines for mopt */
-#define NOEXITOPT 1
-#define NOBOX 2
-#define SCROLL 4
-
+#define MC_NOEXITOPT 1
+#define MC_NOBOX 2
+#define MC_SCROLL 4
+#define MC_NOSHORTCUT 8
+#define MC_NOCLEAR 16
+#define MC_DFLTEXIT 32
+#define MC_ALWAYS_SCROLL 64
+#define MC_SUBMENU 128
+#define MC_VALID 0x10000
 #endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: time.h,v 1.29 2000/02/03 23:04:45 cgd Exp $	*/
+/*	$NetBSD: time.h,v 1.62 2008/07/15 16:18:09 christos Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -36,8 +32,9 @@
  */
 
 #ifndef _SYS_TIME_H_
-#define _SYS_TIME_H_
+#define	_SYS_TIME_H_
 
+#include <sys/featuretest.h>
 #include <sys/types.h>
 
 /*
@@ -45,8 +42,8 @@
  * and used in other calls.
  */
 struct timeval {
-	long	tv_sec;		/* seconds */
-	long	tv_usec;	/* and microseconds */
+	long    tv_sec;		/* seconds */
+	long    tv_usec;	/* and microseconds */
 };
 
 /*
@@ -57,14 +54,15 @@ struct timespec {
 	long	tv_nsec;	/* and nanoseconds */
 };
 
-#define	TIMEVAL_TO_TIMESPEC(tv, ts) {					\
+#if defined(_NETBSD_SOURCE)
+#define	TIMEVAL_TO_TIMESPEC(tv, ts) do {				\
 	(ts)->tv_sec = (tv)->tv_sec;					\
 	(ts)->tv_nsec = (tv)->tv_usec * 1000;				\
-}
-#define	TIMESPEC_TO_TIMEVAL(tv, ts) {					\
+} while (/*CONSTCOND*/0)
+#define	TIMESPEC_TO_TIMEVAL(tv, ts) do {				\
 	(tv)->tv_sec = (ts)->tv_sec;					\
 	(tv)->tv_usec = (ts)->tv_nsec / 1000;				\
-}
+} while (/*CONSTCOND*/0)
 
 /*
  * Note: timezone is obsolete. All timezone handling is now in
@@ -76,7 +74,7 @@ struct timezone {
 };
 
 /* Operations on timevals. */
-#define	timerclear(tvp)		(tvp)->tv_sec = (tvp)->tv_usec = 0
+#define	timerclear(tvp)		(tvp)->tv_sec = (tvp)->tv_usec = 0L
 #define	timerisset(tvp)		((tvp)->tv_sec || (tvp)->tv_usec)
 #define	timercmp(tvp, uvp, cmp)						\
 	(((tvp)->tv_sec == (uvp)->tv_sec) ?				\
@@ -90,7 +88,7 @@ struct timezone {
 			(vvp)->tv_sec++;				\
 			(vvp)->tv_usec -= 1000000;			\
 		}							\
-	} while (0)
+	} while (/* CONSTCOND */ 0)
 #define	timersub(tvp, uvp, vvp)						\
 	do {								\
 		(vvp)->tv_sec = (tvp)->tv_sec - (uvp)->tv_sec;		\
@@ -99,11 +97,108 @@ struct timezone {
 			(vvp)->tv_sec--;				\
 			(vvp)->tv_usec += 1000000;			\
 		}							\
-	} while (0)
+	} while (/* CONSTCOND */ 0)
+
+/*
+ * hide bintime for _STANDALONE because this header is used for hpcboot.exe,
+ * which is built with compilers which don't recognize LL suffix.
+ *	http://mail-index.NetBSD.org/tech-userlevel/2008/02/27/msg000181.html
+ */
+#if !defined(_STANDALONE)
+struct bintime {
+	time_t	sec;
+	uint64_t frac;
+};
+
+static __inline void
+bintime_addx(struct bintime *bt, uint64_t x)
+{
+	uint64_t u;
+
+	u = bt->frac;
+	bt->frac += x;
+	if (u > bt->frac)
+		bt->sec++;
+}
+
+static __inline void
+bintime_add(struct bintime *bt, const struct bintime *bt2)
+{
+	uint64_t u;
+
+	u = bt->frac;
+	bt->frac += bt2->frac;
+	if (u > bt->frac)
+		bt->sec++;
+	bt->sec += bt2->sec;
+}
+
+static __inline void
+bintime_sub(struct bintime *bt, const struct bintime *bt2)
+{
+	uint64_t u;
+
+	u = bt->frac;
+	bt->frac -= bt2->frac;
+	if (u < bt->frac)
+		bt->sec--;
+	bt->sec -= bt2->sec;
+}
+
+/*-
+ * Background information:
+ *
+ * When converting between timestamps on parallel timescales of differing
+ * resolutions it is historical and scientific practice to round down rather
+ * than doing 4/5 rounding.
+ *
+ *   The date changes at midnight, not at noon.
+ *
+ *   Even at 15:59:59.999999999 it's not four'o'clock.
+ *
+ *   time_second ticks after N.999999999 not after N.4999999999
+ */
+
+static __inline void
+bintime2timespec(const struct bintime *bt, struct timespec *ts)
+{
+
+	ts->tv_sec = bt->sec;
+	ts->tv_nsec =
+	    (long)(((uint64_t)1000000000 * (uint32_t)(bt->frac >> 32)) >> 32);
+}
+
+static __inline void
+timespec2bintime(const struct timespec *ts, struct bintime *bt)
+{
+
+	bt->sec = ts->tv_sec;
+	/* 18446744073 = int(2^64 / 1000000000) */
+	bt->frac = ts->tv_nsec * (uint64_t)18446744073LL; 
+}
+
+static __inline void
+bintime2timeval(const struct bintime *bt, struct timeval *tv)
+{
+
+	tv->tv_sec = bt->sec;
+	tv->tv_usec =
+	    (long)(((uint64_t)1000000 * (uint32_t)(bt->frac >> 32)) >> 32);
+}
+
+static __inline void
+timeval2bintime(const struct timeval *tv, struct bintime *bt)
+{
+
+	bt->sec = (/* XXX NetBSD not SUS compliant - MUST FIX */time_t)tv->tv_sec;
+	/* 18446744073709 = int(2^64 / 1000000) */
+	bt->frac = tv->tv_usec * (uint64_t)18446744073709LL;
+}
+#endif /* !defined(_STANDALONE) */
 
 /* Operations on timespecs. */
-#define	timespecclear(tsp)		(tsp)->tv_sec = (tsp)->tv_nsec = 0
-#define	timespecisset(tsp)		((tsp)->tv_sec || (tsp)->tv_nsec)
+#define	timespecclear(tsp)	(tsp)->tv_sec = (time_t)((tsp)->tv_nsec = 0L)
+#define	timespecisset(tsp)	((tsp)->tv_sec || (tsp)->tv_nsec)
 #define	timespeccmp(tsp, usp, cmp)					\
 	(((tsp)->tv_sec == (usp)->tv_sec) ?				\
 	    ((tsp)->tv_nsec cmp (usp)->tv_nsec) :			\
@@ -116,7 +211,7 @@ struct timezone {
 			(vsp)->tv_sec++;				\
 			(vsp)->tv_nsec -= 1000000000L;			\
 		}							\
-	} while (0)
+	} while (/* CONSTCOND */ 0)
 #define	timespecsub(tsp, usp, vsp)					\
 	do {								\
 		(vsp)->tv_sec = (tsp)->tv_sec - (usp)->tv_sec;		\
@@ -125,7 +220,9 @@ struct timezone {
 			(vsp)->tv_sec--;				\
 			(vsp)->tv_nsec += 1000000000L;			\
 		}							\
-	} while (0)
+	} while (/* CONSTCOND */ 0)
+#define timespec2ns(x) (((uint64_t)(x)->tv_sec) * 1000000000L + (x)->tv_nsec)
+#endif /* _NETBSD_SOURCE */
 
 /*
  * Names of the interval timers, and structure
@@ -141,51 +238,54 @@ struct	itimerval {
 };
 
 /*
- * Getkerninfo clock information structure
+ * Structure defined by POSIX.1b to be like a itimerval, but with
+ * timespecs. Used in the timer_*() system calls.
  */
-struct clockinfo {
-	int	hz;		/* clock frequency */
-	int	tick;		/* micro-seconds per hz tick */
-	int	tickadj;	/* clock skew rate for adjtime() */
-	int	stathz;		/* statistics clock frequency */
-	int	profhz;		/* profiling clock frequency */
+struct	itimerspec {
+	struct	timespec it_interval;
+	struct	timespec it_value;
 };
 
-#define CLOCK_REALTIME	0
-#define CLOCK_VIRTUAL	1
-#define CLOCK_PROF	2
+#define	CLOCK_REALTIME	0
+#define	CLOCK_VIRTUAL	1
+#define	CLOCK_PROF	2
+#define	CLOCK_MONOTONIC	3
 
-#define TIMER_RELTIME	0x0	/* relative timer */
-#define TIMER_ABSTIME	0x1	/* absolute timer */
+#define	TIMER_RELTIME	0x0	/* relative timer */
+#define	TIMER_ABSTIME	0x1	/* absolute timer */
 
 #ifdef _KERNEL
-int	itimerfix __P((struct timeval *tv));
-int	itimerdecr __P((struct itimerval *itp, int usec));
-void	microtime __P((struct timeval *tv));
-int	settime __P((struct timeval *));
-int	ratecheck __P((struct timeval *, const struct timeval *));
+#include <sys/timevar.h>
 #else /* !_KERNEL */
-
 #ifndef _STANDALONE
+#if (_POSIX_C_SOURCE - 0) >= 200112L || \
+    (defined(_XOPEN_SOURCE) && defined(_XOPEN_SOURCE_EXTENDED)) || \
+    (_XOPEN_SOURCE - 0) >= 500 || defined(_NETBSD_SOURCE)
+#include <sys/select.h>
+#endif
+
+#include <sys/cdefs.h>
 #include <time.h>
 
-#ifndef _POSIX_SOURCE
-#include <sys/cdefs.h>
-
 __BEGIN_DECLS
-int	adjtime __P((const struct timeval *, struct timeval *));
-int	futimes __P((int, const struct timeval *));
-int	getitimer __P((int, struct itimerval *));
-int	gettimeofday __P((struct timeval *, struct timezone *));
-int	lutimes __P((const char *, const struct timeval *));
-int	setitimer __P((int, const struct itimerval *, struct itimerval *));
-int	settimeofday __P((const struct timeval *, const struct timezone *));
-int	utimes __P((const char *, const struct timeval *));
+#if (_POSIX_C_SOURCE - 0) >= 200112L || \
+    defined(_XOPEN_SOURCE) || defined(_NETBSD_SOURCE)
+int	getitimer(int, struct itimerval *);
+int	gettimeofday(struct timeval * __restrict, void *__restrict);
+int	setitimer(int, const struct itimerval * __restrict,
+	    struct itimerval * __restrict);
+int	utimes(const char *, const struct timeval [2]);
+#endif /* _POSIX_C_SOURCE >= 200112L || _XOPEN_SOURCE || _NETBSD_SOURCE */
+
+#if defined(_NETBSD_SOURCE)
+int	adjtime(const struct timeval *, struct timeval *);
+int	futimes(int, const struct timeval [2]);
+int	lutimes(const char *, const struct timeval [2]);
+int	settimeofday(const struct timeval * __restrict,
+	    const void *__restrict);
+#endif /* _NETBSD_SOURCE */
 __END_DECLS
-#endif /* !POSIX */
 
 #endif	/* !_STANDALONE */
-
 #endif /* !_KERNEL */
-
 #endif /* !_SYS_TIME_H_ */

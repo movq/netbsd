@@ -1,5 +1,5 @@
-.\"	$NetBSD: getopt.1,v 1.9 1999/12/01 12:03:16 lukem Exp $
-.Dd June 21, 1993
+.\"	$NetBSD: getopt.1,v 1.16 2003/05/10 17:02:04 jmmv Exp $
+.Dd November 9, 2000
 .Dt GETOPT 1
 .Os
 .Sh NAME
@@ -15,7 +15,7 @@ is used to break up options in command lines for easy parsing by
 shell procedures, and to check for legal options.
 .Op Optstring
 is a string of recognized option letters (see
-.Xr getopt 3) ;
+.Xr getopt 3 ) ;
 if a letter is followed by a colon, the option
 is expected to have an argument which may or may not be
 separated from it by white space.
@@ -33,7 +33,7 @@ preceded by a
 .Dq \-
 and in its own shell argument;
 each option argument is also in its own shell argument.
-.Sh EXAMPLE
+.Sh EXAMPLES
 The following code fragment shows how one might process the arguments
 for a command that can take the options
 .Op a
@@ -45,24 +45,24 @@ which requires an argument.
 .Pp
 .Bd -literal -offset indent
 args=\`getopt abc: $*\`
-if [ $? != 0 ]; then
+if [ $? \-ne 0 ]; then
 	echo 'Usage: ...'
 	exit 2
 fi
 set \-\- $args
-for i; do
-	shift
-	case "$i"; in
+while [ $# \-gt 0 ]; do
+	case "$1" in
 		\-a|\-b)
-			flag=$i
+			flag=$1
 			;;
 		\-c)
-			carg=$1; shift
+			carg=$2; shift
 			;;
 		\-\-)
-			break
+			shift; break
 			;;
 	esac
+	shift
 done
 .Ed
 .Pp
@@ -76,26 +76,26 @@ cmd \-a \-carg \-\- file file
 .Ed
 .Pp
 .St -p1003.2
-mandates that the 
+mandates that the
 .Xr sh 1
-set command return the value of 0 for the exit status.  Therefore,
-the exit status of the
+set command return the value of 0 for the exit status.
+Therefore, the exit status of the
 .Nm
 command is lost when
 .Nm
 and the
 .Xr sh 1
-set command are used on the same line.  The example given
-is one way to detect errors found by 
-.Nm "" .
-.Sh SEE ALSO
-.Xr sh 1 ,
-.Xr getopt 3
+set command are used on the same line.
+The example given is one way to detect errors found by
+.Nm .
 .Sh DIAGNOSTICS
 .Nm
 prints an error message on the standard error output when it
 encounters an option letter not included in
 .Op optstring .
+.Sh SEE ALSO
+.Xr sh 1 ,
+.Xr getopt 3
 .Sh HISTORY
 Written by Henry Spencer, working from a Bell Labs manual page.
 Behavior believed identical to the Bell version.
@@ -112,7 +112,7 @@ from
 .Nm
 rather than from the shell procedure containing the invocation
 of
-.Nm "" ;
+.Nm ;
 this again is hard to fix.
 .Pp
 The precise best way to use the

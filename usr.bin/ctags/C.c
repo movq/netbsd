@@ -1,4 +1,4 @@
-/*	$NetBSD: C.c,v 1.7 1999/06/05 19:04:23 ross Exp $	*/
+/*	$NetBSD: C.c,v 1.15 2006/04/22 17:46:48 christos Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -33,12 +29,16 @@
  * SUCH DAMAGE.
  */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
 #include <sys/cdefs.h>
-#ifndef lint
+#if defined(__RCSID) && !defined(lint)
 #if 0
 static char sccsid[] = "@(#)C.c	8.4 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: C.c,v 1.7 1999/06/05 19:04:23 ross Exp $");
+__RCSID("$NetBSD: C.c,v 1.15 2006/04/22 17:46:48 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -48,17 +48,17 @@ __RCSID("$NetBSD: C.c,v 1.7 1999/06/05 19:04:23 ross Exp $");
 
 #include "ctags.h"
 
-static int	func_entry __P((void));
-static void	hash_entry __P((void));
-static void	skip_string __P((int));
-static int	str_entry __P((int));
+static int	func_entry(void);
+static void	hash_entry(void);
+static void	skip_string(int);
+static int	str_entry(int);
 
 /*
  * c_entries --
  *	read .c and .h files and call appropriate routines
  */
 void
-c_entries()
+c_entries(void)
 {
 	int	c;			/* current character */
 	int	level;			/* brace level */
@@ -126,7 +126,10 @@ c_entries()
 		 */
 		case '/':
 			if (GETC(==, '*')) {
-				skip_comment();
+				skip_comment(c);
+				continue;
+			} else if (c == '/') {
+				skip_comment(c);
 				continue;
 			}
 			(void)ungetc(c, inf);
@@ -147,10 +150,11 @@ c_entries()
 		 */
 		case '(':
 			do c = getc(inf);
-			while(iswhite(c));
+			while (c != EOF && iswhite(c));
 			if (c == '*')
 				break;
-			else	ungetc(c, inf);
+			if (c != EOF)
+				ungetc(c, inf);
 			if (!level && token) {
 				int	curline;
 
@@ -205,7 +209,9 @@ c_entries()
 		 * reserved words.
 		 */
 		default:
-	storec:		if (!intoken(c)) {
+	storec:		if (c == EOF)
+				break;
+			if (!intoken(c)) {
 				if (sp == tok)
 					break;
 				*sp = EOS;
@@ -236,7 +242,8 @@ c_entries()
 				sp = tok;
 			}
 			else if (sp != tok || begtoken(c)) {
-				*sp++ = c;
+				if (sp < tok + sizeof tok)
+					*sp++ = c;
 				token = YES;
 			}
 			continue;
@@ -252,7 +259,7 @@ c_entries()
  *	handle a function reference
  */
 static int
-func_entry()
+func_entry(void)
 {
 	int	c;			/* current character */
 	int	level = 0;		/* for matching '()' */
@@ -275,7 +282,9 @@ func_entry()
 		case '/':
 			/* skip comments */
 			if (GETC(==, '*'))
-				skip_comment();
+				skip_comment(c);
+			else if (c == '/')
+				skip_comment(c);
 			break;
 		case '(':
 			level++;
@@ -330,7 +339,9 @@ fnd:
 		if (intoken(c) || c == '{')
 			break;
 		if (c == '/' && GETC(==, '*'))
-			skip_comment();
+			skip_comment(c);
+		else if (c == '/')
+			skip_comment(c);
 		else {				/* don't ever "read" '/' */
 			(void)ungetc(c, inf);
 			return (NO);
@@ -346,7 +357,7 @@ fnd:
  *	handle a line starting with a '#'
  */
 static void
-hash_entry()
+hash_entry(void)
 {
 	int	c;			/* character read */
 	int	curline;		/* line started on */
@@ -363,8 +374,11 @@ hash_entry()
 			return;
 		if (iswhite(c))
 			break;
-		*sp++ = c;
+		if (sp < tok + sizeof tok)
+			*sp++ = c;
 	}
+	if(sp >= tok + sizeof tok)
+		--sp;
 	*sp = EOS;
 	if (memcmp(tok, "define", 6))	/* only interested in #define's */
 		goto skip;
@@ -375,7 +389,8 @@ hash_entry()
 			break;
 	}
 	for (sp = tok;;) {		/* get next token */
-		*sp++ = c;
+		if(sp < tok + sizeof tok)
+			*sp++ = c;
 		if (GETC(==, EOF))
 			return;
 		/*
@@ -385,6 +400,8 @@ hash_entry()
 		if (!intoken(c))
 			break;
 	}
+	if(sp >= tok + sizeof tok)
+		--sp;
 	*sp = EOS;
 	if (dflag || c == '(') {	/* only want macros */
 		getline();
@@ -403,8 +420,7 @@ skip:	if (c == '\n') {		/* get rid of rest of define */
  *	handle a struct, union or enum entry
  */
 static int
-str_entry(c)
-	int	c;			/* current character */
+str_entry(int c /* current character */)
 {
 	int	curline;		/* line started on */
 	char	*sp;			/* buffer pointer */
@@ -449,7 +465,7 @@ str_entry(c)
  *	skip over comment
  */
 void
-skip_comment()
+skip_comment(int commenttype)
 {
 	int	c;			/* character read */
 	int	star;			/* '*' flag */
@@ -461,10 +477,18 @@ skip_comment()
 			star = YES;
 			break;
 		case '/':
-			if (star)
+			if (commenttype == '*' && star)
 				return;
 			break;
 		case '\n':
+			if (commenttype == '/') {
+				/*
+				 * we don't really parse C, so sometimes it
+				 * is necessary to see the newline
+				 */
+				ungetc(c, inf);
+				return;
+			}
 			SETLINE;
 			/*FALLTHROUGH*/
 		default:
@@ -478,8 +502,7 @@ skip_comment()
  *	skip to the end of a string or character constant.
  */
 void
-skip_string(key)
-	int	key;
+skip_string(int key)
 {
 	int	c,
 		skip;
@@ -504,8 +527,7 @@ skip_string(key)
  *	skip to next char "key"
  */
 int
-skip_key(key)
-	int	key;
+skip_key(int key)
 {
 	int	c,
 		skip,
@@ -528,7 +550,10 @@ skip_key(key)
 		case '/':
 			/* skip comments */
 			if (GETC(==, '*')) {
-				skip_comment();
+				skip_comment(c);
+				break;
+			} else if (c == '/') {
+				skip_comment(c);
 				break;
 			}
 			(void)ungetc(c, inf);

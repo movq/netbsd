@@ -1,4 +1,4 @@
-/*	$NetBSD: warn.c,v 1.4 1999/08/17 03:43:59 mycroft Exp $	*/
+/*	$NetBSD: warn.c,v 1.14 2007/06/18 14:13:54 ginsbach Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -33,47 +29,35 @@
  * SUCH DAMAGE.
  */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
 #if 0
 static char sccsid[] = "@(#)err.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: warn.c,v 1.4 1999/08/17 03:43:59 mycroft Exp $");
+__RCSID("$NetBSD: warn.c,v 1.14 2007/06/18 14:13:54 ginsbach Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
-#ifndef __NO_NAMESPACE_H	/* XXX */
 #include "namespace.h"
-#endif
 #include <err.h>
-
-#ifdef __STDC__
 #include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
 
 #ifdef __weak_alias
 __weak_alias(warn, _warn)
 #endif
 
+#if !HAVE_ERR_H
 void
-#ifdef __STDC__
-_warn(const char *fmt, ...)
-#else
-_warn(va_alist)
-	va_dcl
-#endif
+warn(const char *fmt, ...)
 {
 	va_list ap;
-#if __STDC__
-	va_start(ap, fmt);
-#else
-	const char *fmt;
 
-	va_start(ap);
-	fmt = va_arg(ap, const char *);
-#endif
-	_vwarn(fmt, ap);
+	va_start(ap, fmt);
+	vwarn(fmt, ap);
 	va_end(ap);
 }
+#endif

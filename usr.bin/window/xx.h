@@ -1,4 +1,4 @@
-/*	$NetBSD: xx.h,v 1.5 1998/10/14 00:58:49 wsanchez Exp $	*/
+/*	$NetBSD: xx.h,v 1.7 2003/08/07 11:17:47 agc Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -61,21 +57,21 @@ EXTERN int xxbufsize;
 
 #define char_sep '\0'
 
-struct xx *xxalloc __P((void));
-void	xxclear __P((void));
-void	xxclreol __P((int, int));
-void	xxclreos __P((int, int));
-void	xxdelchar __P((int, int));
-void	xxend __P((void));
-void	xxflush __P((int));
-void	xxflush_scroll __P((struct xx *));
-void	xxfree __P((struct xx *));
-int	xxinit __P((void));
-void	xxinschar __P((int, int, int, int));
-void	xxinsspace __P((int, int));
-void	xxmove __P((int, int));
-void	xxreset __P((void));
-void	xxreset1 __P((void));
-void	xxscroll __P((int, int, int));
-void	xxstart __P((void));
-void	xxwrite __P((int, int, char *, int, int));
+struct xx *xxalloc(void);
+void	xxclear(void);
+void	xxclreol(int, int);
+void	xxclreos(int, int);
+void	xxdelchar(int, int);
+void	xxend(void);
+void	xxflush(int);
+void	xxflush_scroll(struct xx *);
+void	xxfree(struct xx *);
+int	xxinit(void);
+void	xxinschar(int, int, int, int);
+void	xxinsspace(int, int);
+void	xxmove(int, int);
+void	xxreset(void);
+void	xxreset1(void);
+void	xxscroll(int, int, int);
+void	xxstart(void);
+void	xxwrite(int, int, char *, int, int);

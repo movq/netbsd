@@ -1,4 +1,4 @@
-/*	$NetBSD: asm.h,v 1.22 1999/04/24 08:10:33 simonb Exp $	*/
+/*	$NetBSD: asm.h,v 1.40 2007/10/17 19:55:36 garbled Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -58,25 +54,32 @@
 #ifndef _MIPS_ASM_H
 #define _MIPS_ASM_H
 
+#include <machine/cdefs.h>	/* for API selection */
 #include <mips/regdef.h>
 
 /*
  * Define -pg profile entry code.
- * XXX assume .set noreorder for kernel, .set reorder for user code.
+ * Must always be noreorder, must never use a macro instruction
+ * Final addiu to t9 must always equal the size of this _KERN_MCOUNT
  */
-#define _KERN_MCOUNT		\
-	.set	noat;		\
-	move	$1,$31;		\
-	jal	_mcount;	\
-	subu	sp,sp,8;	\
-	.set at
+#define _KERN_MCOUNT						\
+	.set	push;						\
+	.set	noreorder;					\
+	.set	noat;						\
+	subu	sp,sp,16;					\
+	sw	t9,12(sp);					\
+	move	AT,ra;						\
+	lui	t9,%hi(_mcount); 				\
+	addiu	t9,t9,%lo(_mcount);				\
+	jalr	t9;						\
+	nop;							\
+	lw	t9,4(sp);					\
+	addiu	sp,sp,8;					\
+	addiu	t9,t9,40;					\
+	.set	pop;					
 
 #ifdef GPROF
-# if defined(_KERNEL) || defined(_LOCORE)
-#  define MCOUNT _KERN_MCOUNT
-# else
-#  define MCOUNT .set noreorder; _KERN_MCOUNT ;  .set reorder;
-# endif
+#define MCOUNT _KERN_MCOUNT
 #else
 #define	MCOUNT
 #endif
@@ -99,10 +102,21 @@
 #endif
 
 /*
- * WARN_REFERENCES: create a warning if the specified symbol is referenced
- * (ELF only, and thus, no leading underscores).
+ * WEAK_ALIAS: create a weak alias.
  */
-#ifdef __ELF__
+#define	WEAK_ALIAS(alias,sym)						\
+	.weak alias;							\
+	alias = sym
+/*
+ * STRONG_ALIAS: create a strong alias.
+ */
+#define STRONG_ALIAS(alias,sym)						\
+	.globl alias;							\
+	alias = sym
+
+/*
+ * WARN_REFERENCES: create a warning if the specified symbol is referenced.
+ */
 #ifdef __STDC__
 #define	WARN_REFERENCES(_sym,_msg)				\
 	.section .gnu.warning. ## _sym ; .ascii _msg ; .text
@@ -110,7 +124,6 @@
 #define	WARN_REFERENCES(_sym,_msg)				\
 	.section .gnu.warning./**/_sym ; .ascii _msg ; .text
 #endif /* __STDC__ */
-#endif /* __ELF__ */
 
 /*
  * LEAF
@@ -137,11 +150,29 @@ _C_LABEL(x): ;				\
 	.frame	sp, 0, ra
 
 /*
+ * STATIC_LEAF
+ *	Declare a local leaf function.
+ */
+#define STATIC_LEAF(x)			\
+	.ent	_C_LABEL(x), 0;		\
+_C_LABEL(x): ;				\
+	.frame sp, 0, ra;		\
+	MCOUNT
+
+/*
  * XLEAF
  *	declare alternate entry to leaf routine
  */
 #define XLEAF(x)			\
 	.globl	_C_LABEL(x);		\
+	AENT (_C_LABEL(x));		\
+_C_LABEL(x):
+
+/*
+ * STATIC_XLEAF
+ *	declare alternate entry to a static leaf routine
+ */
+#define STATIC_XLEAF(x)			\
 	AENT (_C_LABEL(x));		\
 _C_LABEL(x):
 
@@ -221,11 +252,13 @@ _C_LABEL(x):
 #define PANIC(msg)			\
 	la	a0, 9f;			\
 	jal	_C_LABEL(panic);	\
+	nop;				\
 	MSG(msg)
 
 #define	PRINTF(msg)			\
 	la	a0, 9f;			\
 	jal	_C_LABEL(printf);	\
+	nop;				\
 	MSG(msg)
 
 #define	MSG(msg)			\
@@ -281,5 +314,33 @@ _C_LABEL(x):
 #define	REG_EPILOGUE	.set pop
 #define SZREG	8
 #endif	/* _MIPS_BSD_API */
+
+/*
+ * The DYNAMIC_STATUS_MASK option adds an additional masking operation
+ * when updating the hardware interrupt mask in the status register.
+ *
+ * This is useful for platforms that need to at run-time mask
+ * interrupts based on motherboard configuration or to handle
+ * slowly clearing interrupts.
+ *
+ * XXX this is only currently implemented for mips3.
+ */
+#ifdef MIPS_DYNAMIC_STATUS_MASK
+#define DYNAMIC_STATUS_MASK(sr,scratch)	\
+	lw	scratch, mips_dynamic_status_mask; \
+	and	sr, sr, scratch
+
+#define DYNAMIC_STATUS_MASK_TOUSER(sr,scratch1)		\
+	ori	sr, (MIPS_INT_MASK | MIPS_SR_INT_IE);	\
+	DYNAMIC_STATUS_MASK(sr,scratch1)
+#else
+#define DYNAMIC_STATUS_MASK(sr,scratch)
+#define DYNAMIC_STATUS_MASK_TOUSER(sr,scratch1)
+#endif
+
+/* See lock_stubs.S. */
+#define	MIPS_LOCK_RAS_SIZE	128
+
+#define CPUVAR(off) _C_LABEL(cpu_info_store)+__CONCAT(CPU_INFO_,off)
 
 #endif /* _MIPS_ASM_H */

@@ -1,9 +1,43 @@
-/*	$NetBSD: clock.c,v 1.21 2000/01/06 12:03:31 leo Exp $	*/
+/*	$NetBSD: clock.c,v 1.41.6.1 2008/11/06 00:15:55 snj Exp $	*/
 
 /*
- * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1982, 1990 The Regents of the University of California.
  * All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Systems Programming Group of the University of Utah Computer
+ * Science Department.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ * from: Utah $Hdr: clock.c 1.18 91/01/21$
+ *
+ *	@(#)clock.c	7.6 (Berkeley) 5/7/91
+ */
+/*
+ * Copyright (c) 1988 University of Utah.
  *
  * This code is derived from software contributed to Berkeley by
  * the Systems Programming Group of the University of Utah Computer
@@ -42,12 +76,18 @@
  *	@(#)clock.c	7.6 (Berkeley) 5/7/91
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.41.6.1 2008/11/06 00:15:55 snj Exp $");
+
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/uio.h>
 #include <sys/conf.h>
+#include <sys/proc.h>
+#include <sys/event.h>
+#include <sys/timetc.h>
 
 #include <dev/clock_subr.h>
 
@@ -62,12 +102,28 @@
 #include <machine/profile.h>
 #endif
 
+static int	atari_rtc_get(todr_chip_handle_t, struct clock_ymdhms *);
+static int	atari_rtc_set(todr_chip_handle_t, struct clock_ymdhms *);
+
 /*
  * The MFP clock runs at 2457600Hz. We use a {system,stat,prof}clock divider
  * of 200. Therefore the timer runs at an effective rate of:
  * 2457600/200 = 12288Hz.
  */
 #define CLOCK_HZ	12288
+
+static u_int clk_getcounter(struct timecounter *);
+
+static struct timecounter clk_timecounter = {
+	clk_getcounter,	/* get_timecount */
+	0,		/* no poll_pps */
+	~0u,		/* counter_mask */
+	CLOCK_HZ,	/* frequency */
+	"clock",	/* name, overriden later */
+	100,		/* quality */
+	NULL,		/* prev */
+	NULL,		/* next */
+};
 
 /*
  * Machine-dependent clock routines.
@@ -88,7 +144,6 @@ struct clock_softc {
  */
 #define	RTC_OPEN	1
 
-/* {b,c}devsw[] function prototypes for rtc functions */
 dev_type_open(rtcopen);
 dev_type_close(rtcclose);
 dev_type_read(rtcread);
@@ -97,15 +152,18 @@ dev_type_write(rtcwrite);
 static void	clockattach __P((struct device *, struct device *, void *));
 static int	clockmatch __P((struct device *, struct cfdata *, void *));
 
-struct cfattach clock_ca = {
-	sizeof(struct clock_softc), clockmatch, clockattach
-};
+CFATTACH_DECL(clock, sizeof(struct clock_softc),
+    clockmatch, clockattach, NULL, NULL);
 
 extern struct cfdriver clock_cd;
 
+const struct cdevsw rtc_cdevsw = {
+	rtcopen, rtcclose, rtcread, rtcwrite, noioctl,
+	nostop, notty, nopoll, nommap, nokqfilter,
+};
+
 void statintr __P((struct clockframe));
 
-static u_long	gettod __P((void));
 static int	twodigits __P((char *, int));
 
 static int	divisor;	/* Systemclock divisor	*/
@@ -115,14 +173,14 @@ static int	divisor;	/* Systemclock divisor	*/
  * be a power of 2. Since this gives us an even number, not an odd number,
  * we discard one case and compensate. That is, a variance of 64 would
  * give us offsets in [0..63]. Instead, we take offsets in [1..63].
- * This is symetric around the point 32, or statvar/2, and thus averages
+ * This is symmetric around the point 32, or statvar/2, and thus averages
  * to that value (assuming uniform random numbers).
  */
 #ifdef STATCLOCK
 static int	statvar = 32;	/* {stat,prof}clock variance		*/
 static int	statmin;	/* statclock divisor - variance/2	*/
 static int	profmin;	/* profclock divisor - variance/2	*/
-static int	clk2min;	/* current, from above choises		*/
+static int	clk2min;	/* current, from above choices		*/
 #endif
 
 int
@@ -144,12 +202,6 @@ void		*auxp;
 	    MFP->mf_tbdr  = 0;	
 	    MFP->mf_tbcr  = T_Q004;	/* Start timer			*/
 
-	    /*
-	     * Initialize the time structure
-	     */
-	    time.tv_sec  = 0;
-	    time.tv_usec = 0;
-
 	    return 0;
 	}
 	if(!strcmp("clock", auxp))
@@ -165,6 +217,13 @@ struct device	*pdp, *dp;
 void		*auxp;
 {
 	struct clock_softc *sc = (void *)dp;
+	static struct todr_chip_handle	tch;
+
+	tch.todr_gettime_ymdhms = atari_rtc_get;
+	tch.todr_settime_ymdhms = atari_rtc_set;
+	tch.todr_setwen = NULL;
+
+	todr_attach(&tch);
 
 	sc->sc_flags = 0;
 
@@ -179,12 +238,15 @@ void		*auxp;
 	MFP->mf_iera &= ~IA_TIMA;	/* Disable timer interrupts	*/
 	MFP->mf_tadr  = divisor;	/* Set divisor			*/
 
+	clk_timecounter.tc_frequency = CLOCK_HZ;
+
 	if (hz != 48 && hz != 64 && hz != 96) { /* XXX */
 		printf (": illegal value %d for systemclock, reset to %d\n\t",
 								hz, 64);
 		hz = 64;
 	}
 	printf(": system hz %d timer-A divisor 200/%d\n", hz, divisor);
+	tc_init(&clk_timecounter);
 
 #ifdef STATCLOCK
 	if ((stathz == 0) || (stathz > hz) || (CLOCK_HZ % stathz))
@@ -254,22 +316,24 @@ statintr(frame)
 }
 #endif /* STATCLOCK */
 
-/*
- * Returns number of usec since last recorded clock "tick"
- * (i.e. clock interrupt).
- */
-long
-clkread()
+static u_int
+clk_getcounter(struct timecounter *tc)
 {
-	u_int	delta;
+	u_int delta;
+	u_char ipra, tadr;
+	int s, cur_hardclock;
 
-	delta = ((divisor - MFP->mf_tadr) * tick) / divisor;
-	/*
-	 * Account for pending clock interrupts
-	 */
-	if(MFP->mf_iera & IA_TIMA)
-		return(delta + tick);
-	return(delta);
+	s = splhigh();
+	ipra = MFP->mf_ipra;
+	tadr = MFP->mf_tadr;
+	delta = divisor - tadr;
+
+	if (ipra & IA_TIMA)
+		delta += divisor;
+	cur_hardclock = hardclock_ticks;
+	splx(s);
+
+	return (divisor - tadr) + divisor * cur_hardclock;
 }
 
 #define TIMB_FREQ	614400
@@ -281,10 +345,9 @@ clkread()
  * Note: timer had better have been programmed before this is first used!
  */
 void
-delay(n)
-int	n;
+delay(unsigned int n)
 {
-	int	tick, otick;
+	int	ticks, otick, remaining;
 
 	/*
 	 * Read the counter first, so that the rest of the setup overhead is
@@ -292,29 +355,26 @@ int	n;
 	 */
 	otick = MFP->mf_tbdr;
 
-	/*
-	 * Calculate ((n * TIMER_FREQ) / 1e6) using explicit assembler code so
-	 * we can take advantage of the intermediate 64-bit quantity to prevent
-	 * loss of significance.
-	 */
-	n -= 5;
-	if(n < 0)
-		return;
-	{
-	    u_int	temp;
-		
-	    __asm __volatile ("mulul %2,%1:%0" : "=d" (n), "=d" (temp)
-					       : "d" (TIMB_FREQ));
-	    __asm __volatile ("divul %1,%2:%0" : "=d" (n)
-					       : "d"(1000000),"d"(temp),"0"(n));
+	if (n <= UINT_MAX / TIMB_FREQ) {
+		/*
+		 * For unsigned arithmetic, division can be replaced with
+		 * multiplication with the inverse and a shift.
+		 */
+		remaining = n * TIMB_FREQ / 1000000;
+	} else {
+		/* This is a very long delay.
+		 * Being slow here doesn't matter.
+		 */
+		remaining = (unsigned long long) n * TIMB_FREQ / 1000000;
 	}
 
-	while(n > 0) {
-		tick = MFP->mf_tbdr;
-		if(tick > otick)
-			n -= TIMB_LIMIT - (tick - otick);
-		else n -= otick - tick;
-		otick = tick;
+	while(remaining > 0) {
+		ticks = MFP->mf_tbdr;
+		if(ticks > otick)
+			remaining -= TIMB_LIMIT - (ticks - otick);
+		else
+			remaining -= otick - ticks;
+		otick = ticks;
 	}
 }
 
@@ -324,7 +384,7 @@ int	n;
  * Assumes it is called with clock interrupts blocked.
  */
 profclock(pc, ps)
-	caddr_t pc;
+	void *pc;
 	int ps;
 {
 	/*
@@ -378,80 +438,82 @@ u_int	regno, value;
 	((struct rtc *)rtc)->rtc_data  = value;
 }
 
-/*
- * Initialize the time of day register, assuming the RTC runs in UTC.
- * Since we've got the 'rtc' device, this functionality should be removed
- * from the kernel. The only problem to be solved before that can happen
- * is the possibility of init(1) providing a way (rc.boot?) to set
- * the RTC before single-user mode is entered.
- */
-void
-inittodr(base)
-time_t base;
-{
-	/* Battery clock does not store usec's, so forget about it. */
-	time.tv_sec  = gettod();
-	time.tv_usec = 0;
-}
-
-/*
- * Function turned into a No-op. Use /dev/rtc to update the RTC.
- */
-void
-resettodr()
-{
-	return;
-}
-
-static u_long
-gettod()
+static int
+atari_rtc_get(todr_chip_handle_t todr, struct clock_ymdhms *dtp)
 {
 	int			sps;
 	mc_todregs		clkregs;
-	struct clock_ymdhms	dt;
+	u_int			regb;
 
 	sps = splhigh();
+	regb = mc146818_read(RTC, MC_REGB);
 	MC146818_GETTOD(RTC, &clkregs);
 	splx(sps);
 
+	regb &= MC_REGB_24HR|MC_REGB_BINARY;
+	if (regb != (MC_REGB_24HR|MC_REGB_BINARY)) {
+		printf("Error: Nonstandard RealTimeClock Configuration -"
+			" value ignored\n"
+			"       A write to /dev/rtc will correct this.\n");
+			return(0);
+	}
 	if(clkregs[MC_SEC] > 59)
-		return(0);
+		return -1;
 	if(clkregs[MC_MIN] > 59)
-		return(0);
+		return -1;
 	if(clkregs[MC_HOUR] > 23)
-		return(0);
+		return -1;
 	if(range_test(clkregs[MC_DOM], 1, 31))
-		return(0);
+		return -1;
 	if (range_test(clkregs[MC_MONTH], 1, 12))
-		return(0);
-	if(clkregs[MC_YEAR] > (2000 - GEMSTARTOFTIME))
-		return(0);
+		return -1;
+	if(clkregs[MC_YEAR] > 99)
+		return -1;
 
-	dt.dt_year = clkregs[MC_YEAR] + GEMSTARTOFTIME;
-	dt.dt_mon  = clkregs[MC_MONTH];
-	dt.dt_day  = clkregs[MC_DOM];
-	dt.dt_hour = clkregs[MC_HOUR];
-	dt.dt_min  = clkregs[MC_MIN];
-	dt.dt_sec  = clkregs[MC_SEC];
+	dtp->dt_year = clkregs[MC_YEAR] + GEMSTARTOFTIME;
+	dtp->dt_mon  = clkregs[MC_MONTH];
+	dtp->dt_day  = clkregs[MC_DOM];
+	dtp->dt_hour = clkregs[MC_HOUR];
+	dtp->dt_min  = clkregs[MC_MIN];
+	dtp->dt_sec  = clkregs[MC_SEC];
 
-	return(clock_ymdhms_to_secs(&dt));
+	return 0;
 }
+
+static int
+atari_rtc_set(todr_chip_handle_t todr, struct clock_ymdhms *dtp)
+{
+	int s;
+	mc_todregs clkregs;
+
+	clkregs[MC_YEAR] = dtp->dt_year - GEMSTARTOFTIME;
+	clkregs[MC_MONTH] = dtp->dt_mon;
+	clkregs[MC_DOM] = dtp->dt_day;
+	clkregs[MC_HOUR] = dtp->dt_hour;
+	clkregs[MC_MIN] = dtp->dt_min;
+	clkregs[MC_SEC] = dtp->dt_sec;
+
+	s = splclock();
+	MC146818_PUTTOD(RTC, &clkregs);
+	splx(s);
+
+	return 0;
+}
+
 /***********************************************************************
  *                   RTC-device support				       *
  ***********************************************************************/
 int
-rtcopen(dev, flag, mode, p)
+rtcopen(dev, flag, mode, l)
 	dev_t		dev;
 	int		flag, mode;
-	struct proc	*p;
+	struct lwp	*l;
 {
 	int			unit = minor(dev);
 	struct clock_softc	*sc;
 
-	if (unit >= clock_cd.cd_ndevs)
-		return ENXIO;
-	sc = clock_cd.cd_devs[unit];
-	if (!sc)
+	sc = device_lookup_private(&clock_cd, unit);
+	if (sc == NULL)
 		return ENXIO;
 	if (sc->sc_flags & RTC_OPEN)
 		return EBUSY;
@@ -461,14 +523,14 @@ rtcopen(dev, flag, mode, p)
 }
 
 int
-rtcclose(dev, flag, mode, p)
+rtcclose(dev, flag, mode, l)
 	dev_t		dev;
 	int		flag;
 	int		mode;
-	struct proc	*p;
+	struct lwp	*l;
 {
 	int			unit = minor(dev);
-	struct clock_softc	*sc = clock_cd.cd_devs[unit];
+	struct clock_softc	*sc = device_lookup_private(&clock_cd, unit);
 
 	sc->sc_flags = 0;
 	return 0;
@@ -485,7 +547,7 @@ rtcread(dev, uio, flags)
 	int			s, length;
 	char			buffer[16];
 
-	sc = clock_cd.cd_devs[minor(dev)];
+	sc = device_lookup_private(&clock_cd, minor(dev));
 
 	s = splhigh();
 	MC146818_GETTOD(RTC, &clkregs);
@@ -503,7 +565,7 @@ rtcread(dev, uio, flags)
 	if (length > uio->uio_resid)
 		length = uio->uio_resid;
 
-	return(uiomove((caddr_t)buffer, length, uio));
+	return(uiomove((void *)buffer, length, uio));
 }
 
 static int
@@ -538,13 +600,15 @@ rtcwrite(dev, uio, flags)
 	  && length != sizeof(buffer - 1)))
 		return(EINVAL);
 	
-	if ((error = uiomove((caddr_t)buffer, sizeof(buffer), uio)))
+	if ((error = uiomove((void *)buffer, sizeof(buffer), uio)))
 		return(error);
 
 	if (length == sizeof(buffer) && buffer[sizeof(buffer) - 1] != '\n')
 		return(EINVAL);
 
 	s = splclock();
+	mc146818_write(RTC, MC_REGB,
+		mc146818_read(RTC, MC_REGB) | MC_REGB_24HR | MC_REGB_BINARY);
 	MC146818_GETTOD(RTC, &clkregs);
 	splx(s);
 

@@ -1,4 +1,4 @@
-.\"   $NetBSD: fdc.4,v 1.4 1999/03/16 01:19:21 garbled Exp $
+.\"   $NetBSD: fdc.4,v 1.13 2008/04/30 13:10:56 martin Exp $
 .\"
 .\" Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,7 +35,9 @@
 .Nd NEC 765 floppy disk controller driver
 .Sh SYNOPSIS
 .Cd "fdc0 at isa? port 0x3f0 irq 6 drq 2"
-.Cd "fd* at fdc? drive ?"
+.Cd "fdc* at acpi?"
+.Cd "fdc* at pnpbios? index ?"
+.Cd "fd*  at fdc? drive ?"
 .Sh DESCRIPTION
 The
 .Nm
@@ -51,22 +46,22 @@ floppy disk drives, commonly found on IBM-PC compatible systems.
 .Pp
 The driver supports the following floppy diskette formats by using
 particular partitions:
-.Bl -tag -width -offset indent -compact
+.Bl -tag -width xxxx -offset indent -compact
 .It 1.44MB 3.5-inch (b)
 .It "1.2MB " 5.25-inch (c)
-.It "360KB " 3.5-inch (1.2MB drive) (d)
-.It "360KB " 3.5-inch (IBM-PC drive) (e)
+.It "360KB " 5.25-inch (1.2MB drive) (d)
+.It "360KB " 5.25-inch (IBM-PC drive) (e)
 .It "720KB " 3.5-inch (f)
 .It "720KB " 5.25-inch (g)
 .It "360KB " 3.5-inch (h)
 .El
-Partition 
+Partition
 .Ar a
 selects the default format for the attached floppy drive, as determined
 by the BIOS configuration for the diskette drive.
 .Sh FORMATTING
 The driver supports floppy disk formatting using the interfaces in
-.Pa Aq sys/fdio.h :
+.Aq Pa sys/fdio.h :
 .Bl -tag -width FDIOCFORMAT_TRACK -compact
 .It Dv FDIOCGETFORMAT Fa struct fdformat_parms
 Fetch current formatting parameters.  This gets the default parameters
@@ -105,7 +100,10 @@ and then call
 followed by a series of calls to
 .Dv FDIOCFORMAT_TRACK .
 .Sh SEE ALSO
-.Xr fdformat 1 .
+.Xr fdformat 1 ,
+.Xr acpi 4 ,
+.Xr isa 4 ,
+.Xr pnpbios 4
 .Sh HISTORY
 The
 .Nm

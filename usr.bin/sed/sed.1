@@ -1,4 +1,4 @@
-.\"	$NetBSD: sed.1,v 1.13 1998/12/24 02:07:36 ross Exp $
+.\"	$NetBSD: sed.1,v 1.27 2008/09/21 16:46:01 wiz Exp $
 .\"
 .\" Copyright (c) 1992, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -14,11 +14,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -36,7 +32,7 @@
 .\"
 .\"	@(#)sed.1	8.2 (Berkeley) 12/30/93
 .\"
-.Dd December 30, 1993
+.Dd September 21, 2008
 .Dt SED 1
 .Os
 .Sh NAME
@@ -44,11 +40,11 @@
 .Nd stream editor
 .Sh SYNOPSIS
 .Nm
-.Op Fl an
+.Op Fl aEnr
 .Ar command
 .Op Ar file ...
-.Nm ""
-.Op Fl an
+.Nm
+.Op Fl aEnr
 .Op Fl e Ar command
 .Op Fl f Ar command_file
 .Op Ar file ...
@@ -60,7 +56,7 @@ are specified, modifying the input as specified by a list of commands.
 The input is then written to the standard output.
 .Pp
 A single command may be specified as the first argument to
-.Nm "" .
+.Nm .
 Multiple commands may be specified by using the
 .Fl e
 or
@@ -83,6 +79,9 @@ option causes
 to delay opening each file until a command containing the related
 .Dq w
 function is applied to a line of input.
+.It Fl E
+Enables the use of extended regular expressions instead of the
+usual basic regular expression syntax.
 .It Fl e Ar command
 Append the editing commands specified by the
 .Ar command
@@ -99,6 +98,10 @@ all of the commands have been applied to it.
 The
 .Fl n
 option suppresses this behavior.
+.It Fl r
+Identical to
+.Fl E ,
+present for compatibility with GNU sed.
 .El
 .Pp
 The form of a
@@ -125,7 +128,7 @@ deletes the pattern space.
 Some of the functions use a
 .Em "hold space"
 to save all or part of the pattern space for subsequent retrieval.
-.Sh "Sed Addresses"
+.Sh SED ADDRESSES
 An address is not required, but if specified must be a number (that counts
 input lines
 cumulatively across input files), a dollar
@@ -152,15 +155,13 @@ starts looking again for the first address.
 .Pp
 Editing commands can be applied to non-selected pattern spaces by use
 of the exclamation character
-.Po
-.Dq !
-.Pc
+.Pq Dq \&!
 function.
-.Sh "Sed Regular Expressions"
+.Sh SED REGULAR EXPRESSIONS
 The
 .Nm
 regular expressions are basic regular expressions (BRE's, see
-.Xr regex 3
+.Xr re_format 7
 for more information).
 In addition,
 .Nm
@@ -206,7 +207,7 @@ will substitute
 .Dq XXX
 for the pattern
 .Dq abc .
-.Sh "Sed Functions"
+.Sh SED FUNCTIONS
 In the following list of commands, the maximum number of permissible
 addresses for each command is indicated by [0addr], [1addr], or [2addr],
 representing zero, one, or two addresses.
@@ -235,7 +236,7 @@ The
 .Dq t ,
 .Dq w ,
 .Dq y ,
-.Dq ! ,
+.Dq \&! ,
 and
 .Dq \&:
 functions all accept additional arguments.
@@ -260,7 +261,7 @@ can be preceded by white space and can be followed by white space.
 The function can be preceded by white space.
 The terminating
 .Dq }
-must be preceded by a newline or optional white space.
+must be preceded by a newline (and optionally white space).
 .sp
 .Bl -tag -width "XXXXXX" -compact
 .It [2addr] function-list
@@ -354,7 +355,7 @@ The end of each line is marked with a
 .It [2addr]n
 Write the pattern space to the standard output if the default output has
 not been suppressed, and replace the pattern space with the next line of
-input.
+input. (Does not begin a new cycle.)
 .sp
 .It [2addr]N
 Append the next line of input to the pattern space, using an embedded
@@ -392,11 +393,11 @@ a literal character if it is preceded by a backslash.
 .Pp
 An ampersand
 .Po
-.Dq &
+.Dq \*[Am]
 .Pc
 appearing in the replacement is replaced by the string matching the RE.
 The special meaning of
-.Dq &
+.Dq \*[Am]
 in this context can be suppressed by preceding it by a backslash.
 The string
 .Dq \e# ,
@@ -404,7 +405,7 @@ where
 .Dq #
 is a digit, is replaced by the text matched
 by the corresponding backreference expression (see
-.Xr re_format 7 ).
+.Xr re_format 7 ) .
 .Pp
 A line can be split by substituting a newline character into it.
 To specify a newline character in the replacement string, precede it with
@@ -497,7 +498,7 @@ option on the command line.
 .Pp
 The
 .Nm
-utility exits 0 on success and >0 if an error occurs.
+utility exits 0 on success and \*[Gt]0 if an error occurs.
 .Sh SEE ALSO
 .Xr awk 1 ,
 .Xr ed 1 ,

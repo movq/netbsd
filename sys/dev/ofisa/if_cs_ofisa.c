@@ -1,4 +1,4 @@
-/*	$NetBSD: if_cs_ofisa.c,v 1.3 1998/08/17 20:34:19 thorpej Exp $	*/
+/*	$NetBSD: if_cs_ofisa.c,v 1.18 2008/04/28 20:23:54 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,11 +30,19 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_cs_ofisa.c,v 1.18 2008/04/28 20:23:54 martin Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/socket.h>
 #include <sys/device.h>
 #include <sys/malloc.h>
+
+#include "rnd.h"
+#if NRND > 0
+#include <sys/rnd.h>
+#endif
 
 #include <net/if.h>
 #include <net/if_ether.h>
@@ -51,22 +52,22 @@
 #include <netinet/if_inarp.h>
 #endif
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/ofw/openfirm.h>
 #include <dev/isa/isavar.h>
 #include <dev/ofisa/ofisavar.h>
 
-#include <dev/isa/cs89x0reg.h>
-#include <dev/isa/cs89x0var.h>
+#include <dev/ic/cs89x0reg.h>
+#include <dev/ic/cs89x0var.h>
+#include <dev/isa/cs89x0isavar.h>
 
-int	cs_ofisa_match __P((struct device *, struct cfdata *, void *));
-void	cs_ofisa_attach __P((struct device *, struct device *, void *));
+int	cs_ofisa_match(struct device *, struct cfdata *, void *);
+void	cs_ofisa_attach(struct device *, struct device *, void *);
 
-struct cfattach cs_ofisa_ca = {
-	sizeof(struct cs_softc), cs_ofisa_match, cs_ofisa_attach
-};
+CFATTACH_DECL(cs_ofisa, sizeof(struct cs_softc_isa),
+    cs_ofisa_match, cs_ofisa_attach, NULL, NULL);
 
 int
 cs_ofisa_match(parent, cf, aux)
@@ -75,7 +76,7 @@ cs_ofisa_match(parent, cf, aux)
 	void *aux;
 {
 	struct ofisa_attach_args *aa = aux;
-	const char *compatible_strings[] = {
+	static const char *const compatible_strings[] = {
 		"CRUS,CS8900",
 		/* XXX CS8920, CS8920M? */
 		/* XXX PNP names? */
@@ -97,7 +98,8 @@ cs_ofisa_attach(parent, self, aux)
 	struct device *parent, *self;
 	void *aux;
 {
-	struct cs_softc *sc = (struct cs_softc *) self;
+	struct cs_softc *sc = device_private(self);
+	struct cs_softc_isa *isc = (void *)sc;
 	struct ofisa_attach_args *aa = aux;
 	struct ofisa_reg_desc reg[2];
 	struct ofisa_intr_desc intr;
@@ -108,7 +110,7 @@ cs_ofisa_attach(parent, self, aux)
 	const char *message = NULL;
 	u_int8_t enaddr[6];
 
-	sc->sc_ic = aa->ic;
+	isc->sc_ic = aa->ic;
 	sc->sc_iot = aa->iot;
 	sc->sc_memt = aa->memt;
 
@@ -121,7 +123,7 @@ cs_ofisa_attach(parent, self, aux)
 	 *	1 i/o register region
 	 *	0 or 1 memory region
 	 *	1 interrupt
-	 *	0 or 1 dma channel
+	 *	0 or 1 DMA channel
 	 */
 
 	io_addr = mem_addr = -1;
@@ -176,13 +178,13 @@ cs_ofisa_attach(parent, self, aux)
 		return;
 	}
 
-	sc->sc_drq = ISACF_DRQ_DEFAULT;
+	isc->sc_drq = -1;
 	n = ofisa_dma_get(aa->oba.oba_phandle, &dma, 1);
 #ifdef _CS_OFISA_MD_DMA_FIXUP
 	n = cs_ofisa_md_dma_fixup(parent, self, aux, &dma, 1, n);
 #endif
 	if (n == 1)
-		sc->sc_drq = dma.drq;
+		isc->sc_drq = dma.drq;
 
 	if (io_addr == (bus_addr_t) -1) {
 		printf(": no I/O space\n");
@@ -235,25 +237,27 @@ cs_ofisa_attach(parent, self, aux)
 		printf("\n");
 
 	if (message != NULL)
-		printf("%s: %s\n", sc->sc_dev.dv_xname, message);
+		printf("%s: %s\n", device_xname(&sc->sc_dev), message);
 
 	if (defmedia == -1) {
-		printf("%s: unable to get default media\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "unable to get default media\n");
 		defmedia = media[0];	/* XXX What to do? */
 	}
 
-	sc->sc_ih = isa_intr_establish(sc->sc_ic, sc->sc_irq, intr.share,
+	sc->sc_ih = isa_intr_establish(isc->sc_ic, sc->sc_irq, intr.share,
 	    IPL_NET, cs_intr, sc);
 	if (sc->sc_ih == NULL) {
-		printf("%s: unable to establish interrupt\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "unable to establish interrupt\n");
 		return;
 	}
 
 #ifdef _CS_OFISA_MD_CFGFLAGS_FIXUP
 	sc->sc_cfgflags |= cs_ofisa_md_cfgflags_fixup(parent, self, aux);
 #endif
+
+	sc->sc_dma_chipinit = cs_isa_dma_chipinit;
+	sc->sc_dma_attach = cs_isa_dma_attach;
+	sc->sc_dma_process_rx = cs_process_rx_dma;
 
 	cs_attach(sc, enaddr, media, nmedia, defmedia);
 

@@ -1,4 +1,4 @@
-/* 	$NetBSD: linux_errno.h,v 1.1 1998/09/30 21:36:23 erh Exp $	*/
+/* 	$NetBSD: linux_errno.h,v 1.7 2008/04/28 20:23:42 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,6 +32,12 @@
 #ifndef _ALPHA_LINUX_ERRNO_H
 #define _ALPHA_LINUX_ERRNO_H
 
+/*
+ * Linux/Alpha returns negative errors to userland
+ * The libc makes the errno positive.
+ */
+#define LINUX_SCERR_SIGN -
+
 /* Linux switches EDEADLK and EAGAIN. */
 #undef	LINUX_EDEADLK
 #define LINUX_EDEADLK		11
@@ -52,7 +51,7 @@
 #define LINUX_EDESTADDRREQ	39	/* Destination address required */
 #define LINUX_EMSGSIZE		40	/* Message too long */
 #define LINUX_EPROTOTYPE	41	/* Protocol wrong type for socket */
-#define LINUX_ENOPROTOOPT	42	/* Protocol not available */
+#define LINUX_ENOPROTOOPT	42	/* Protocol option not available */
 #define LINUX_EPROTONOSUPPORT	43	/* Protocol not supported */
 #define LINUX_ESOCKTNOSUPPORT	44	/* Socket type not supported */
 #define LINUX_EOPNOTSUPP	45	/* Operation not supported on transport endpoint */

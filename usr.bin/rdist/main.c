@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.10 1999/04/20 07:53:02 mrg Exp $	*/
+/*	$NetBSD: main.c,v 1.19 2008/07/21 14:19:25 lukem Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)main.c	8.1 (Berkeley) 6/9/93";
 #else
-__RCSID("$NetBSD: main.c,v 1.10 1999/04/20 07:53:02 mrg Exp $");
+__RCSID("$NetBSD: main.c,v 1.19 2008/07/21 14:19:25 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -84,14 +80,12 @@ gid_t	groupid;	/* user's group ID */
 struct	passwd *pw;	/* pointer to static area used by getpwent */
 struct	group *gr;	/* pointer to static area used by getgrent */
 
-int	main __P((int, char **));
-static void usage __P((void));
-static void docmdargs __P((int, char *[]));
+int	main(int, char **);
+static void usage(void);
+static void docmdargs(int, char *[]);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char **argv)
 {
 	char *arg;
 	int cmdargs = 0;
@@ -103,13 +97,13 @@ main(argc, argv)
 		fprintf(stderr, "%s: Who are you?\n", argv[0]);
 		exit(1);
 	}
-	strcpy(user, pw->pw_name);
-	strcpy(homedir, pw->pw_dir);
+	strlcpy(user, pw->pw_name, sizeof(user));
+	strlcpy(homedir, pw->pw_dir, sizeof(homedir));
 	groupid = pw->pw_gid;
 	gethostname(host, sizeof(host));
 	host[sizeof(host) - 1] = '\0';
-	strcpy(tempfile, _PATH_TMP);
-	strcat(tempfile, _RDIST_TMP);
+	strlcpy(tempfile, _PATH_TMP, sizeof(tempfile));
+	strlcat(tempfile, _RDIST_TMP, sizeof(tempfile));
 	if ((tempname = strrchr(tempfile, '/')) != 0)
 		tempname++;
 	else
@@ -212,6 +206,7 @@ main(argc, argv)
 
 	if (iamremote) {
 		server();
+		unlink(tempfile);
 		exit(nerrs != 0);
 	}
 
@@ -219,13 +214,14 @@ main(argc, argv)
 		docmdargs(argc, argv);
 	else {
 		if (fin == NULL) {
-			if(distfile == NULL) {
-				if((fin = fopen("distfile","r")) == NULL)
+			if (distfile == NULL) {
+				if ((fin = fopen("distfile","r")) == NULL)
 					fin = fopen("Distfile", "r");
 			} else
 				fin = fopen(distfile, "r");
-			if(fin == NULL) {
+			if (fin == NULL) {
 				perror(distfile ? distfile : "distfile");
+				unlink(tempfile);
 				exit(1);
 			}
 		}
@@ -234,14 +230,19 @@ main(argc, argv)
 			docmds(dhosts, argc, argv);
 	}
 
+	unlink(tempfile);
 	exit(nerrs != 0);
 }
 
 static void
-usage()
+usage(void)
 {
-	printf("Usage: rdist [-nqbhirvwyD] [-f distfile] [-d var=value] [-m host] [file ...]\n");
-	printf("or: rdist [-nqbhirvwyD] -c source [...] machine[:dest]\n");
+
+	(void)fprintf(stderr,
+	    "usage: %s [-bDhinqRvwy] [-d var=value] [-f distfile] [-m host] "
+	    "[name ...]\n"
+	    "or   : %s [-bDhinqRvwy] -c name ... [login@]host[:dest]\n",
+	    getprogname(), getprogname());
 	exit(1);
 }
 
@@ -249,9 +250,7 @@ usage()
  * rcp like interface for distributing files.
  */
 static void
-docmdargs(nargs, args)
-	int nargs;
-	char *args[];
+docmdargs(int nargs, char **args)
 {
 	struct namelist *nl, *prev;
 	char *cp;
@@ -282,7 +281,7 @@ docmdargs(nargs, args)
 	tnl.n_name = cp;
 	hosts = expand(&tnl, E_ALL);
 	if (nerrs)
-		exit(1);
+		return;
 
 	if (dest == NULL || *dest == '\0')
 		cmds = NULL;
@@ -300,14 +299,16 @@ docmdargs(nargs, args)
 	}
 	insert(NULL, files, hosts, cmds);
 	docmds(NULL, 0, NULL);
+	freenl(files);
+	freenl(hosts);
+	freesubcmd(cmds);
 }
 
 /*
  * Print a list of NAME blocks (mostly for debugging).
  */
 void
-prnames(nl)
-	struct namelist *nl;
+prnames(struct namelist *nl)
 {
 	printf("( ");
 	while (nl != NULL) {

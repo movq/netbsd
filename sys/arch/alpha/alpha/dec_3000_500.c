@@ -1,4 +1,4 @@
-/* $NetBSD: dec_3000_500.c,v 1.28 1999/11/19 10:49:46 mrg Exp $ */
+/* $NetBSD: dec_3000_500.c,v 1.42 2007/03/04 15:18:10 yamt Exp $ */
 
 /*
  * Copyright (c) 1994, 1995, 1996 Carnegie-Mellon University.
@@ -32,29 +32,25 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: dec_3000_500.c,v 1.28 1999/11/19 10:49:46 mrg Exp $");
-
-#include "opt_new_scc_driver.h"
+__KERNEL_RCSID(0, "$NetBSD: dec_3000_500.c,v 1.42 2007/03/04 15:18:10 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/termios.h>
+#include <sys/conf.h>
 #include <dev/cons.h>
 
 #include <machine/rpb.h>
 #include <machine/autoconf.h>
-#include <machine/conf.h>
+#include <machine/cpuconf.h>
 
 #include <dev/tc/tcvar.h>
-#include <alpha/tc/tcdsvar.h>
+#include <dev/tc/tcdsvar.h>
 #include <alpha/tc/tc_3000_500.h>
-#ifndef NEW_SCC_DRIVER
-#include <alpha/tc/sccvar.h>
-#endif
 
 #include <machine/z8530var.h>
-#include <dev/dec/zskbdvar.h>
+#include <dev/tc/zs_ioasicvar.h>
 
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
@@ -118,19 +114,7 @@ dec_3000_500_cons_init()
 {
 	struct ctb *ctb;
 
-	ctb = (struct ctb *)(((caddr_t)hwrpb) + hwrpb->rpb_ctb_off);
-
-#ifndef NEW_SCC_DRIVER
-	switch (ctb->ctb_term_type) {
-	case CTB_GRAPHICS:
-		alpha_donot_kludge_scc = 1;
-		return;
-	case CTB_PRINTERPORT:
-		return;
-	default:
-		goto badconsole;
-	}
-#else
+	ctb = (struct ctb *)(((char *)hwrpb) + hwrpb->rpb_ctb_off);
 
 	switch (ctb->ctb_term_type) {
 	case CTB_GRAPHICS:
@@ -165,23 +149,17 @@ dec_3000_500_cons_init()
 			 * XXX Should use ctb_line_off to get the
 			 * XXX line parameters--these are the defaults.
 			 */
-			if (zs_ioasic_cnattach(0x1e0000000, 0x00180000, 1,
-			    9600, (TTYDEF_CFLAG & ~(CSIZE | PARENB)) | CS8))
-				panic("can't init serial console");
+			zs_ioasic_cnattach(0x1e0000000, 0x00180000, 1);
 			break;
 		}
 
 	default:
-		goto badconsole;
+		printf("ctb->ctb_term_type = 0x%lx\n", ctb->ctb_term_type);
+		printf("ctb->ctb_turboslot = 0x%lx\n", ctb->ctb_turboslot);
+		panic("consinit: unknown console type %lu",
+		    ctb->ctb_term_type);
+		/* NOTREACHED */
 	}
-#endif
-	return;
-badconsole:
-	printf("ctb->ctb_term_type = 0x%lx\n", ctb->ctb_term_type);
-	printf("ctb->ctb_turboslot = 0x%lx\n", ctb->ctb_turboslot);
-
-	panic("consinit: unknown console type %lu\n",
-	    ctb->ctb_term_type);
 }
 
 static void
@@ -193,16 +171,15 @@ dec_3000_500_device_register(dev, aux)
 	static struct device *scsidev;
 	static struct device *tcdsdev;
 	struct bootdev_data *b = bootdev_data;
-	struct device *parent = dev->dv_parent;
-	struct cfdata *cf = dev->dv_cfdata;
-	struct cfdriver *cd = cf->cf_driver;
+	struct device *parent = device_parent(dev);
 
 	if (found)
 		return;
 
 	if (!initted) {
 		scsiboot = (strcmp(b->protocol, "SCSI") == 0);
-		netboot = (strcmp(b->protocol, "BOOTP") == 0);
+		netboot = (strcmp(b->protocol, "BOOTP") == 0) ||
+		    (strcmp(b->protocol, "MOP") == 0);
 #if 0
 		printf("scsiboot = %d, netboot = %d\n", scsiboot, netboot);
 #endif
@@ -215,7 +192,7 @@ dec_3000_500_device_register(dev, aux)
 	 * as the right channel.  then we find the actual scsi
 	 * device we came from.  note: no SCSI LUN support (yet).
 	 */
-	if (scsiboot && (strcmp(cd->cd_name, "tcds") == 0)) {
+	if (scsiboot && device_is_a(dev, "tcds")) {
 		struct tc_attach_args *tcargs = aux;
 
 		if (b->slot != tcargs->ta_slot)
@@ -227,7 +204,7 @@ dec_3000_500_device_register(dev, aux)
 #endif
 	}
 	if (scsiboot && tcdsdev &&
-	    (strcmp(cd->cd_name, "asc") == 0)) {
+	    device_is_a(dev, "asc")) {
 		struct tcdsdev_attach_args *ta = aux;
 
 		if (parent != (struct device *)tcdsdev)
@@ -243,27 +220,27 @@ dec_3000_500_device_register(dev, aux)
 	}
 
 	if (scsiboot && scsidev &&
-	    (strcmp(cd->cd_name, "sd") == 0 ||
-	     strcmp(cd->cd_name, "st") == 0 ||
-	     strcmp(cd->cd_name, "cd") == 0)) {
+	    (device_is_a(dev, "sd") ||
+	     device_is_a(dev, "st") ||
+	     device_is_a(dev, "cd"))) {
 		struct scsipibus_attach_args *sa = aux;
 
-		if (parent->dv_parent != scsidev)
+		if (device_parent(parent) != scsidev)
 			return;
 
-		if (b->unit / 100 != sa->sa_sc_link->scsipi_scsi.target)
+		if (b->unit / 100 != sa->sa_periph->periph_target)
 			return;
 
 		/* XXX LUN! */
 
 		switch (b->boot_dev_type) {
 		case 0:
-			if (strcmp(cd->cd_name, "sd") &&
-			    strcmp(cd->cd_name, "cd"))
+			if (!device_is_a(dev, "sd") &&
+			    !device_is_a(dev, "cd"))
 				return;
 			break;
 		case 1:
-			if (strcmp(cd->cd_name, "st"))
+			if (!device_is_a(dev, "st"))
 				return;
 			break;
 		default:
@@ -279,9 +256,8 @@ dec_3000_500_device_register(dev, aux)
 	}
 
 	if (netboot) {
-                if (b->slot == 7 && strcmp(cd->cd_name, "le") == 0 &&
-		    strcmp(parent->dv_cfdata->cf_driver->cd_name, "ioasic")
-		     == 0) {
+                if (b->slot == 7 && device_is_a(dev, "le") &&
+		    device_is_a(parent, "ioasic")) {
 			/*
 			 * no need to check ioasic_attach_args, since only
 			 * one le on ioasic.

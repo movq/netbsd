@@ -1,21 +1,16 @@
-#	$NetBSD: Makefile.inc,v 1.7 1999/02/09 19:21:53 tv Exp $
+#	$NetBSD: Makefile.inc,v 1.14 2004/12/12 12:43:05 mrg Exp $
 
 .if !defined(__MAKEFILE_INC_INCLUDED__)
 __MAKEFILE_INC_INCLUDED__=1
 
-CPPFLAGS+=	-I${.OBJDIR} -I${.CURDIR} -I${.CURDIR}/../common \
-		-I${BFDOBJ} -I${DIST}/bfd -I${DIST}/binutils -I${DIST}/include \
-		-DHAVE_CONFIG_H
-DPADD+=		${LIBCOMMONDIR}/libcommon.a ${BFDOBJ}/libbfd_pic.a
-LDADD+=		-L${LIBCOMMONDIR} -lcommon -L${BFDOBJ} -lbfd
+.include <bsd.own.mk>
 
-DIST=		${.CURDIR}/../../../dist
-.if !make(print-objdir)
-BFDOBJ!=	cd ${.CURDIR}/../../../lib/libbfd && ${MAKE} print-objdir
-LIBCOMMONDIR!=	cd ${.CURDIR}/../common && ${MAKE} print-objdir
-.endif
-
-.PATH: ${DIST}/binutils
+GNUHOSTDIST=	${DIST}
+GNUCPPFLAGS=	${G_DEFS} ${G_INCLUDES}
+CPPFLAGS+=	${GNUCPPFLAGS:M-D*:N-DLOCALEDIR*} ${GNUCPPFLAGS:M-I*:N-I.*} \
+		-I${TOP}/${BFDSUBDIR}/libbfd/arch/${MACHINE_ARCH} \
+		-I${DIST}/include -I${DIST}/bfd -I${DIST}/binutils \
+		-DLOCALEDIR=\"${LOCALEDIR}\"
 
 .if exists(${.CURDIR}/../../Makefile.inc)
 .include "${.CURDIR}/../../Makefile.inc"

@@ -1,30 +1,39 @@
-#	$NetBSD: Makefile.inc,v 1.11 2000/03/08 15:39:48 cjs Exp $
+#	$NetBSD: Makefile.inc,v 1.41 2008/10/25 22:27:34 apb Exp $
+#
 
-# Ross Harvey <ross@netbsd.org>
+# Ross Harvey <ross@NetBSD.org>
 
-.include <bsd.obj.mk>	# So we get /etc/mk.conf vars.
+.include <bsd.own.mk>	# So we get /etc/mk.conf vars.
+.include "${NETBSDSRCDIR}/distrib/common/Makefile.distrib"
+
+# Whether or not to regenerate tables of contents
+#
+MKTOCS?=yes
 
 M?=	${.CURDIR:T}
-V!=	/bin/sh ${.CURDIR}/../../../sys/conf/osrelease.sh
-V_S!=	/bin/sh ${.CURDIR}/../../../sys/conf/osrelease.sh -s
+COMMON=	${.CURDIR}/../common
 
-MAIN=	${.CURDIR}/../common/main ${EXTRA}
+MAIN=	${COMMON}/main ${COMMON}/macros ${EXTRA}
 TARG=	INSTALL
 TARGS=	${TARG}.ps ${TARG}.txt ${TARG}.html ${TARG}.more
-SRCS=	${MAIN} whatis contents hardware xfer prep install\
-	upgrade donations legal.common legal postinstall ../Makefile.inc\
-	${MERGED_SRCS}
-ICMD=	${INSTALL} ${RENAME} ${PRESERVE} ${COPY}	\
-	-o root -g wheel -m ${NONBINMODE} 
+TOCS=	${TARG}.PostScript.toc ${TARG}.ASCII.toc ${TARG}.HTML.toc \
+	${TARG}.more.toc
+SRCS=	${MAIN} whatis ${COMMON}/contents hardware xfer prep \
+	${.CURDIR}/install ${COMMON}/postinstall upgrade \
+	${COMMON}/legal.common legal ${COMMON}/netboot \
+	${COMMON}/sysinst \
+	${.CURDIR}/../Makefile.inc ${MERGED_SRCS}
 
-PRESET=	${GFLAGS} -dV=$V -dV_S=${V_S} -dMACHINE=$M -d.CURDIR=${.CURDIR} -r$M=1 
+whatis: .OPTIONAL
+
+PRESET=	${GFLAGS} -U -dM=${M} -dV=${DISTRIBVER} -d.CURDIR=${.CURDIR} -r${M}=1
 
 POST_PLAIN= -P-b -P-u -P-o
 
 ARGS_PS=	${PRESET} -dformat=PostScript
-ARGS_TXT=	${PRESET} -dformat=ASCII ${POST_PLAIN} -Tascii
+ARGS_TXT=	${PRESET} -dformat=ASCII ${POST_PLAIN} -Tascii -mtty-char
 ARGS_HTML=	${PRESET} -dformat=HTML ${POST_PLAIN} -Tlatin1 -ww
-ARGS_MORE=	${PRESET} -dformat=more -P-h -Tascii
+ARGS_MORE=	${PRESET} -dformat=more -P-h -Tascii -mtty-char
 
 #
 # For example...
@@ -33,43 +42,71 @@ ARGS_MORE=	${PRESET} -dformat=more -P-h -Tascii
 #	.Ss "Install notes for NetBSD/\*[MACHINE]"
 #
 
-CLEANFILES+=${TARGS}
+all: ${TARGS}
 
-.for i in ps txt html more
-all: ${TARG}.$i
-.endfor
-
-${TARG}.ps: ${SRCS}
-	groff ${ARGS_PS}   -mdoc      ${MAIN} > $@
-
-${TARG}.txt: ${SRCS}
-	groff ${ARGS_TXT}  -mdoc      ${MAIN} > $@
-
-${TARG}.html: ${SRCS}
-	groff ${ARGS_HTML} -mdoc2html ${MAIN} > $@
-
-${TARG}.more: ${SRCS}
-	groff ${ARGS_MORE} -mdoc      ${MAIN} > $@
-
-echosrcs! ${SRCS}
-	@echo ${.ALLSRC}
-
-echomore!
-	@echo ${.OBJDIR}/${TARG}.more
-
-.ifndef RELEASEDIR
-release:
-	@echo setenv RELEASEDIR first
-	@false
-.else
-release:
-.for i in ${TARGS}
-	${ICMD} ${i} ${RELEASEDIR}/.
-.endfor
+.if ${MKTOCS} != "no"
+TOC.ps=		${TOCS:M*.PostScript.*}
+TOC.txt=	${TOCS:M*.ASCII.*}
+TOC.html=	${TOCS:M*.HTML.*}
+TOC.more=	${TOCS:M*.more.*}
 .endif
 
-.PATH: ${.CURDIR}/../common
 
-# make the "afterdepend" rule happy
-.depend:
-	@touch $@
+${TARG}.ps: ${SRCS} ${TOC.ps} ${DISTRIBVERDEP}
+	${TOOL_GROFF} ${ARGS_PS}   -mdoc      ${MAIN} > $@
+
+${TARG}.pdf: ${TARG}.ps
+	ps2pdf ${TARG}.ps $@
+
+${TARG}.txt: ${SRCS} ${TOC.txt} ${DISTRIBVERDEP}
+	${TOOL_GROFF} ${ARGS_TXT}  -mdoc      ${MAIN} > $@
+
+${TARG}.html: ${SRCS} ${TOC.html} ${DISTRIBVERDEP}
+	${TOOL_GROFF} ${ARGS_HTML} -mdoc2html ${MAIN} > $@
+
+${TARG}.more: ${SRCS} ${TOC.more} ${DISTRIBVERDEP}
+	${TOOL_GROFF} ${ARGS_MORE} -mdoc      ${MAIN} > $@
+
+
+# Rules to build the table of contents (.toc) files.
+# They are generated twice to take into account the
+# space taken by the TOC itself.
+#
+
+TOCPROC=	   2>&1 >/dev/null |\
+           ${TOOL_SED} -n '/^\.Ti/{s/ \([A-Za-z]\)/ "\1/; s/ *$$/"/; p; }'
+
+${TARG}.PostScript.toc: ${SRCS}
+	${TOOL_GROFF} -dTOC=1 ${ARGS_PS} -mdoc ${MAIN} ${TOCPROC} > $@.tmp
+	mv -f $@.tmp $@
+	${TOOL_GROFF} -dTOC=1 ${ARGS_PS} -mdoc ${MAIN} ${TOCPROC} > $@.tmp
+	mv -f $@.tmp $@
+
+${TARG}.ASCII.toc: ${SRCS}
+	${TOOL_GROFF} -dTOC=1 ${ARGS_TXT} -mdoc ${MAIN} ${TOCPROC} > $@.tmp
+	mv -f $@.tmp $@
+	${TOOL_GROFF} -dTOC=1 ${ARGS_TXT} -mdoc ${MAIN} ${TOCPROC} > $@.tmp
+	mv -f $@.tmp $@
+
+${TARG}.HTML.toc: ${SRCS}
+	${TOOL_GROFF} -dTOC=1 ${ARGS_HTML} -mdoc ${MAIN} ${TOCPROC} > $@.tmp
+	mv -f $@.tmp $@
+	${TOOL_GROFF} -dTOC=1 ${ARGS_HTML} -mdoc ${MAIN} ${TOCPROC} > $@.tmp
+	mv -f $@.tmp $@
+
+${TARG}.more.toc: ${SRCS}
+	${TOOL_GROFF} -dTOC=1 ${ARGS_MORE} -mdoc ${MAIN} ${TOCPROC} > $@.tmp
+	mv -f $@.tmp $@
+	${TOOL_GROFF} -dTOC=1 ${ARGS_MORE} -mdoc ${MAIN} ${TOCPROC} > $@.tmp
+	mv -f $@.tmp $@
+
+
+release: check_RELEASEDIR .WAIT ${TARGS}
+	${INSTALL} -d -m 755 ${RELEASEDIR}/${RELEASEMACHINEDIR}
+	${RELEASE_INSTALL} ${TARGS} ${RELEASEDIR}/${RELEASEMACHINEDIR}
+
+cleannotes:
+	rm -f [Ee]rrs mklog core *.core ${TARGS} ${TOCS} \
+	    ${TOCS:S/.toc$/.toc.tmp/g}
+
+clean cleandir distclean: cleannotes

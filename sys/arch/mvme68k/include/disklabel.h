@@ -1,4 +1,4 @@
-/*	$NetBSD: disklabel.h,v 1.5 1999/11/09 10:03:20 scw Exp $	*/
+/*	$NetBSD: disklabel.h,v 1.9 2005/12/11 12:18:17 christos Exp $	*/
 
 /*
  * Copyright (c) 1995 Dale Rahn.
@@ -36,11 +36,9 @@
 /* number of boot pieces , ie xxboot bootxx */
 #define NUMBOOT		0
 
-#define	PARTITIONSHIFT	3 /* could also be 4 if you need 16 partitions */
-
 #define LABELSECTOR     0                       /* sector containing label */
 #define LABELOFFSET	0			/* offset of label in sector */
-#define MAXPARTITIONS	(1 << PARTITIONSHIFT)	/* number of partitions */
+#define MAXPARTITIONS	8			/* number of partitions */
 #define RAW_PART	2			/* raw partition: xx?c */
 
 /*
@@ -147,5 +145,5 @@ struct cpu_disklabel {
 	u_short	cfg_rsvc2;
 	u_long	magic2;
 	u_char	cfg_4[192];
-};
-#endif _MACHINE_DISKLABEL_H_
+} __attribute__((__packed__));
+#endif /* _MACHINE_DISKLABEL_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: psl.h,v 1.4 2000/02/13 10:25:07 tsubai Exp $	*/
+/*	$NetBSD: psl.h,v 1.14 2006/08/05 21:26:49 sanjayl Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -30,19 +30,21 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef	_MACHINE_PSL_H_
-#define	_MACHINE_PSL_H_
+#ifndef	_POWERPC_PSL_H_
+#define	_POWERPC_PSL_H_
 
 /*
  * Machine State Register (MSR)
  *
  * The PowerPC 601 does not implement the following bits:
  *
- *	POW, ILE, BE, RI, LE[*]
+ *	VEC, POW, ILE, BE, RI, LE[*]
  *
  * [*] Little-endian mode on the 601 is implemented in the HID0 register.
  */
+#define	PSL_VEC		0x02000000	/* AltiVec vector unit available */
 #define	PSL_POW		0x00040000	/* power management */
+#define	PSL_TGPR	0x00020000	/* temp. gpr remapping (mpc603e) */
 #define	PSL_ILE		0x00010000	/* interrupt endian mode (1 == le) */
 #define	PSL_EE		0x00008000	/* external interrupt enable */
 #define	PSL_PR		0x00004000	/* privilege mode (1 == user) */
@@ -55,10 +57,14 @@
 #define	PSL_IP		0x00000040	/* interrupt prefix */
 #define	PSL_IR		0x00000020	/* instruction address relocation */
 #define	PSL_DR		0x00000010	/* data address relocation */
+#define	PSL_PM		0x00000008	/* Performance monitor marked mode */
 #define	PSL_RI		0x00000002	/* recoverable interrupt */
 #define	PSL_LE		0x00000001	/* endian mode (1 == le) */
 
-#define	PSL_601_MASK	~(PSL_POW|PSL_ILE|PSL_BE|PSL_RI|PSL_LE)
+#define	PSL_601_MASK	~(PSL_VEC|PSL_POW|PSL_ILE|PSL_BE|PSL_RI|PSL_LE)
+
+/* The IBM 970 series does not implemnt LE mode */
+#define PSL_970_MASK	~(PSL_ILE|PSL_LE)
 
 /*
  * Floating-point exception modes:
@@ -75,8 +81,29 @@
 #define	PSL_MBO		0
 #define	PSL_MBZ		0
 
-#define	PSL_USERSET	(PSL_EE | PSL_PR | PSL_ME | PSL_IR | PSL_DR | PSL_RI)
+/*
+ * A user is not allowed to change any MSR bits except the following:
+ * We restrict the test to the low 16 bits of the MSR since those are the
+ * only ones preserved in the trap.  Note that this means PSL_VEC needs to
+ * be restored to SRR1 in userret.
+ */
+#if defined(_KERNEL) && !defined(_LOCORE)
+#ifdef _KERNEL_OPT
+#include "opt_ppcarch.h"
+#endif /* _KERNEL_OPT */
 
-#define	PSL_USERSTATIC	(PSL_USERSET | PSL_IP | 0x87c0008c)
+#if defined(PPC_OEA) || defined (PPC_OEA64_BRIDGE)
+extern int cpu_psluserset, cpu_pslusermod;
 
-#endif	/* _MACHINE_PSL_H_ */
+#define	PSL_USERSET		cpu_psluserset
+#define	PSL_USERMOD		cpu_pslusermod
+#else /* PPC_IBM4XX */
+#define	PSL_USERSET		(PSL_EE | PSL_PR | PSL_ME | PSL_IR | PSL_DR)
+#define	PSL_USERMOD		(0)
+#endif /* PPC_OEA */
+
+#define	PSL_USERSRR1		((PSL_USERSET|PSL_USERMOD) & 0xFFFF)
+#define	PSL_USEROK_P(psl)	(((psl) & ~PSL_USERMOD) == PSL_USERSET)
+#endif /* !_LOCORE */
+
+#endif	/* _POWERPC_PSL_H_ */

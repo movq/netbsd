@@ -1,17 +1,11 @@
-#	$NetBSD: Makefile,v 1.1 1999/07/09 15:29:44 minoura Exp $
+#	$NetBSD: Makefile,v 1.10 2005/02/19 17:00:40 dsl Exp $
 #
 # Makefile for x68k
 #
 
-# have to have all of them here for crunch ...
+# Note: we have no french or german messages, because x68k console does not
+# support ISO-8859-1 (right half) character set.
 
-SRCS=	menu_defs.c msg_defs.c main.c install.c upgrade.c \
-	txtwalk.c run.c factor.c net.c disks.c util.c geom.c \
-	label.c target.c md.c
-
-md.o:	menu_defs.h msg_defs.h
+LANGUAGES=	en pl
 
 .include "../../Makefile.inc"
-
-# Note: we have no french messages, because x68k console does not
-# support ISO-8859-1 (right half) character set.

@@ -1,22 +1,22 @@
-/*	$NetBSD: refclock_leitch.c,v 1.1.1.1 2000/03/29 12:38:53 simonb Exp $	*/
+/*	$NetBSD: refclock_leitch.c,v 1.4 2007/01/06 19:45:23 kardel Exp $	*/
 
 /*
  * refclock_leitch - clock driver for the Leitch CSD-5300 Master Clock
  */
+
 #ifdef HAVE_CONFIG_H
-#include <config.h>
+# include <config.h>
 #endif
 
 #if defined(REFCLOCK) && defined(CLOCK_LEITCH)
-
-#include <stdio.h>
-#include <ctype.h>
-#include <sys/time.h>
 
 #include "ntpd.h"
 #include "ntp_io.h"
 #include "ntp_refclock.h"
 #include "ntp_unixtime.h"
+
+#include <stdio.h>
+#include <ctype.h>
 
 #ifdef STREAM
 #include <stropts.h>
@@ -50,14 +50,20 @@
 #define LEITCH_DESCRIPTION "Leitch: CSD 5300 Master Clock System Driver"
 #define LEITCH232 "/dev/leitch%d"	/* name of radio device */
 #define SPEED232 B300		/* uart speed (300 baud) */ 
+#ifdef DEBUG
 #define leitch_send(A,M) \
 if (debug) fprintf(stderr,"write leitch %s\n",M); \
 if ((write(A->leitchio.fd,M,sizeof(M)) < 0)) {\
-						      if (debug) \
-									 fprintf(stderr, "leitch_send: unit %d send failed\n", A->unit); \
-																		 else \
-																			      msyslog(LOG_ERR, "leitch_send: unit %d send failed %m",A->unit);}
-		
+	if (debug) \
+	    fprintf(stderr, "leitch_send: unit %d send failed\n", A->unit); \
+	else \
+	    msyslog(LOG_ERR, "leitch_send: unit %d send failed %m",A->unit);}
+#else
+#define leitch_send(A,M) \
+if ((write(A->leitchio.fd,M,sizeof(M)) < 0)) {\
+	msyslog(LOG_ERR, "leitch_send: unit %d send failed %m",A->unit);}
+#endif
+
 #define STATE_IDLE 0
 #define STATE_DATE 1
 #define STATE_TIME1 2
@@ -168,7 +174,7 @@ leitch_poll(
 	if (debug)
 	    fprintf(stderr, "leitch_poll()\n");
 #endif
-	if (unit > MAXUNITS) {
+	if (unit >= MAXUNITS) {
 		/* XXXX syslog it */
 		return;
 	}
@@ -448,6 +454,7 @@ leitch_receive(
 			leitch->state = STATE_IDLE;
 			break;
 		}
+		leitch->reftime1.l_uf = 0;
 #ifdef DEBUG
 		if (debug)
 		    fprintf(stderr, "%lu\n", (u_long)leitch->reftime1.l_ui);

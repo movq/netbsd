@@ -1,17 +1,23 @@
-#	$NetBSD: Makefile,v 1.28 1999/03/19 22:06:37 thorpej Exp $
+#	$NetBSD: Makefile,v 1.45.38.1 2008/11/06 23:51:27 snj Exp $
 
-.include <bsd.own.mk>
+.include <bsd.own.mk>			# for OBJECT_FMT definition
+.include <bsd.shlib.mk>			# for SHLINKINSTALLDIR definition
+.if ${MKPIC} != "no"
 .if (${OBJECT_FMT} == "a.out")
 PROG=	ld.so
 SRCS=	mdprologue.S rtld.c malloc.c shlib.c md.c vfprintf.c
-CLIB=	${.CURDIR}/../../lib/libc
-CLIBOBJ!=cd ${CLIB}; \
-	 printf "xxx: .MAKE\n\t@echo \$${.OBJDIR}\n" | ${MAKE} -s -f-
+BINDIR=	${SHLINKINSTALLDIR}
+
+CLIB=	${NETBSDSRCDIR}/lib/libc
+CLIBOBJ!=cd ${CLIB} && ${PRINTOBJDIR}
 PICFLAG=-fpic -fno-function-cse
 CPPFLAGS+=$(PICFLAG) -DRTLD -DLIBC_SCCS \
 	  -I${CLIB}/include -I$(.CURDIR)/arch/$(MACHINE_ARCH) -I$(.CURDIR)
 .if defined(DEBUG)
 CPPFLAGS+=-DDEBUG
+.endif
+.if ${SHLIBINSTALLDIR} != ${LIBDIR}
+CPPFLAGS+=-DSTANDARD_SEARCH_DIRS=\"${SHLIBINSTALLDIR}\",\"${LIBDIR}\"
 .endif
 ASFLAGS+=-k
 LDFLAGS+=-Bshareable -Bsymbolic -assert nosymbolic -L${CLIBOBJ}
@@ -28,9 +34,32 @@ $(PROG):
 
 .S.o:
 	${CPP} ${.IMPSRC} | ${AS} ${ASFLAGS} -o ${.TARGET} -
+
+.if ${SHLINKINSTALLDIR} != "/usr/libexec"
+SYMLINKS+=	${SHLINKINSTALLDIR}/${PROG} /usr/libexec/${PROG}
 .endif
 
-MAN= rtld.1
-MLINKS=	rtld.1 ld.so.1
+.elif (${OBJECT_FMT} == "ELF" && \
+       (${MACHINE_ARCH} == "arm" || \
+        ${MACHINE_ARCH} == "i386" || \
+        ${MACHINE_ARCH} == "m68k" || \
+        ${MACHINE_ARCH} == "sparc" || \
+        ${MACHINE_ARCH} == "vax"))
 
+FILES=		ld.so
+FILESDIR=	/usr/libexec
+FILESMODE=	${BINMODE}
+UUDECODE_FILES=	ld.so.${MACHINE_ARCH}
+UUDECODE_FILES_RENAME_${UUDECODE_FILES}= ld.so
+
+all dependall: ${FILES}
+
+ld.so:	ld.so.${MACHINE_ARCH}
+
+.endif
+.endif
+
+MAN= ld.aout_so.1
+
+.include <bsd.files.mk>
 .include <bsd.prog.mk>

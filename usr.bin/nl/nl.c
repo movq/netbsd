@@ -1,4 +1,4 @@
-/*	$NetBSD: nl.c,v 1.5 1999/09/06 21:50:39 kleink Exp $	*/
+/*	$NetBSD: nl.c,v 1.9 2008/07/21 14:19:24 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,10 +31,9 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT(
-"@(#) Copyright (c) 1999\
+__COPYRIGHT("@(#) Copyright (c) 1999\
  The NetBSD Foundation, Inc.  All rights reserved.");
-__RCSID("$NetBSD: nl.c,v 1.5 1999/09/06 21:50:39 kleink Exp $");
+__RCSID("$NetBSD: nl.c,v 1.9 2008/07/21 14:19:24 lukem Exp $");
 #endif    
 
 #include <errno.h>
@@ -50,6 +42,7 @@ __RCSID("$NetBSD: nl.c,v 1.5 1999/09/06 21:50:39 kleink Exp $");
 #include <regex.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
 typedef enum {
@@ -309,7 +302,7 @@ filter()
 	line = startnum;
 	section = BODY;
 #ifdef __GNUC__
-	(void)&donumber;	/* avoid bogus `uninitialized' warning */
+	donumber = 0;	/* avoid bogus `uninitialized' warning */
 #endif
 
 	while (fgets(buffer, (int)buffersize, stdin) != NULL) {

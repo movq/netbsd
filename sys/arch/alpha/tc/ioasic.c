@@ -1,4 +1,4 @@
-/* $NetBSD: ioasic.c,v 1.29 2000/03/15 03:07:46 nisimura Exp $ */
+/* $NetBSD: ioasic.c,v 1.39 2008/06/13 05:36:50 cegger Exp $ */
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -68,20 +61,18 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: ioasic.c,v 1.29 2000/03/15 03:07:46 nisimura Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ioasic.c,v 1.39 2008/06/13 05:36:50 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/systm.h>
 #include <sys/device.h>
+#include <sys/malloc.h>
 
 #include <machine/autoconf.h>
 #include <machine/bus.h>
 #include <machine/pte.h>
 #include <machine/rpb.h>
-#ifndef EVCNT_COUNTERS
-#include <machine/intrcnt.h>
-#endif
 
 #include <dev/tc/tcvar.h>
 #include <dev/tc/ioasicreg.h>
@@ -91,9 +82,8 @@ __KERNEL_RCSID(0, "$NetBSD: ioasic.c,v 1.29 2000/03/15 03:07:46 nisimura Exp $")
 int	ioasicmatch __P((struct device *, struct cfdata *, void *));
 void	ioasicattach __P((struct device *, struct device *, void *));
 
-struct cfattach ioasic_ca = {
-	sizeof(struct ioasic_softc), ioasicmatch, ioasicattach,
-};
+CFATTACH_DECL(ioasic, sizeof(struct ioasic_softc),
+    ioasicmatch, ioasicattach, NULL, NULL);
 
 int	ioasic_intr __P((void *));
 int	ioasic_intrnull __P((void *));
@@ -110,8 +100,7 @@ int	ioasic_intrnull __P((void *));
 #define	IOASIC_NCOOKIES		4
 
 struct ioasic_dev ioasic_devs[] = {
-	/* XXX lance name */
-	{ "lance",    IOASIC_SLOT_3_START, C(IOASIC_DEV_LANCE),
+	{ "PMAD-BA ", IOASIC_SLOT_3_START, C(IOASIC_DEV_LANCE),
 	  IOASIC_INTR_LANCE, },
 	{ "z8530   ", IOASIC_SLOT_4_START, C(IOASIC_DEV_SCC0),
 	  IOASIC_INTR_SCC_0, },
@@ -120,13 +109,14 @@ struct ioasic_dev ioasic_devs[] = {
 	{ "TOY_RTC ", IOASIC_SLOT_8_START, C(IOASIC_DEV_BOGUS),
 	  0, },
 	{ "AMD79c30", IOASIC_SLOT_9_START, C(IOASIC_DEV_ISDN),
-	  IOASIC_INTR_ISDN,  },
+	  IOASIC_INTR_ISDN_TXLOAD | IOASIC_INTR_ISDN_RXLOAD,  },
 };
 int ioasic_ndevs = sizeof(ioasic_devs) / sizeof(ioasic_devs[0]);
 
 struct ioasicintr {
 	int	(*iai_func) __P((void *));
 	void	*iai_arg;
+	struct evcnt iai_evcnt;
 } ioasicintrs[IOASIC_NCOOKIES];
 
 tc_addr_t ioasic_base;		/* XXX XXX XXX */
@@ -167,6 +157,8 @@ ioasicattach(parent, self, aux)
 	u_long ssr;
 #endif
 	u_long i, imsk;
+	const struct evcnt *pevcnt;
+	char *cp;
 
 	ioasicfound = 1;
 
@@ -202,9 +194,17 @@ ioasicattach(parent, self, aux)
 	/*
 	 * Set up interrupt handlers.
 	 */
+	pevcnt = tc_intr_evcnt(parent, ta->ta_cookie);
 	for (i = 0; i < IOASIC_NCOOKIES; i++) {
 		ioasicintrs[i].iai_func = ioasic_intrnull;
 		ioasicintrs[i].iai_arg = (void *)i;
+
+		cp = malloc(12, M_DEVBUF, M_NOWAIT);
+		if (cp == NULL)
+			panic("ioasicattach");
+		sprintf(cp, "slot %lu", i);
+		evcnt_attach_dynamic(&ioasicintrs[i].iai_evcnt,
+		    EVCNT_TYPE_INTR, pevcnt, self->dv_xname, cp);
 	}
 	tc_intr_establish(parent, ta->ta_cookie, TC_IPL_NONE, ioasic_intr, sc);
 
@@ -215,13 +215,10 @@ ioasicattach(parent, self, aux)
 }
 
 void
-ioasic_intr_establish(ioa, cookie, level, func, arg)
-	struct device *ioa;
-	void *cookie, *arg;
-	tc_intrlevel_t level;
-	int (*func) __P((void *));
+ioasic_intr_establish(device_t ioa, void *cookie, tc_intrlevel_t level,
+		int (*func)(void *), void *arg)
 {
-	struct ioasic_softc *sc = (void *)ioasic_cd.cd_devs[0];
+	struct ioasic_softc *sc = device_lookup_private(&ioasic_cd,0);
 	u_long dev, i, imsk;
 
 	dev = (u_long)cookie;
@@ -248,11 +245,9 @@ ioasic_intr_establish(ioa, cookie, level, func, arg)
 }
 
 void
-ioasic_intr_disestablish(ioa, cookie)
-	struct device *ioa;
-	void *cookie;
+ioasic_intr_disestablish(device_t ioa, void *cookie)
 {
-	struct ioasic_softc *sc = (void *)ioasic_cd.cd_devs[0];
+	struct ioasic_softc *sc = device_lookup_private(&ioasic_cd,0);
 	u_long dev, i, imsk;
 
 	dev = (u_long)cookie;
@@ -283,7 +278,7 @@ ioasic_intrnull(val)
 	void *val;
 {
 
-	panic("ioasic_intrnull: uncaught IOASIC intr for cookie %ld\n",
+	panic("ioasic_intrnull: uncaught IOASIC intr for cookie %ld",
 	    (u_long)val);
 }
 
@@ -297,34 +292,37 @@ ioasic_intr(val)
 	register struct ioasic_softc *sc = val;
 	register int ifound;
 	int gifound;
-	u_int32_t sir;
+	u_int32_t sir, osir;
 
 	gifound = 0;
 	do {
 		ifound = 0;
 		tc_syncbus();
 
-		sir = bus_space_read_4(sc->sc_bst, sc->sc_bsh, IOASIC_INTR);
+		osir = sir =
+		    bus_space_read_4(sc->sc_bst, sc->sc_bsh, IOASIC_INTR);
 
-#ifdef EVCNT_COUNTERS
-	/* No interrupt counting via evcnt counters */ 
-	XXX BREAK HERE XXX
-#else /* !EVCNT_COUNTERS */
-#define	INCRINTRCNT(slot)	intrcnt[INTRCNT_IOASIC + slot]++
-#endif /* EVCNT_COUNTERS */ 
+#define	INCRINTRCNT(slot)	ioasicintrs[slot].iai_evcnt.ev_count++
 
 		/* XXX DUPLICATION OF INTERRUPT BIT INFORMATION... */
-#define	CHECKINTR(slot, bits)						\
-		if (sir & bits) {					\
+#define	CHECKINTR(slot, bits, clear)					\
+		if (sir & (bits)) {					\
 			ifound = 1;					\
 			INCRINTRCNT(slot);				\
 			(*ioasicintrs[slot].iai_func)			\
 			    (ioasicintrs[slot].iai_arg);		\
+			if (clear)					\
+				sir &= ~(bits);				\
 		}
-		CHECKINTR(IOASIC_DEV_SCC0, IOASIC_INTR_SCC_0);
-		CHECKINTR(IOASIC_DEV_SCC1, IOASIC_INTR_SCC_1);
-		CHECKINTR(IOASIC_DEV_LANCE, IOASIC_INTR_LANCE);
-		CHECKINTR(IOASIC_DEV_ISDN, IOASIC_INTR_ISDN);
+		CHECKINTR(IOASIC_DEV_SCC0, IOASIC_INTR_SCC_0, 0);
+		CHECKINTR(IOASIC_DEV_SCC1, IOASIC_INTR_SCC_1, 0);
+		CHECKINTR(IOASIC_DEV_LANCE, IOASIC_INTR_LANCE, 0);
+		CHECKINTR(IOASIC_DEV_ISDN, IOASIC_INTR_ISDN_TXLOAD |
+		    IOASIC_INTR_ISDN_RXLOAD | IOASIC_INTR_ISDN_OVRUN, 1);
+
+		if (sir != osir)
+			bus_space_write_4(sc->sc_bst, sc->sc_bsh,
+			    IOASIC_INTR, sir);
 
 		gifound |= ifound;
 	} while (ifound);

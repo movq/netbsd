@@ -1,4 +1,4 @@
-/*	$NetBSD: hwaddr.h,v 1.2 1998/01/09 08:09:11 perry Exp $	*/
+/*	$NetBSD: hwaddr.h,v 1.5 2008/05/02 19:22:10 xtraeme Exp $	*/
 
 /* hwaddr.h */
 #ifndef	HWADDR_H
@@ -9,27 +9,19 @@
 /*
  * This structure holds information about a specific network type.  The
  * length of the network hardware address is stored in "hlen".
- * The string pointed to by "name" is the cononical name of the network.
+ * The string pointed to by "name" is the canonical name of the network.
  */
 struct hwinfo {
     unsigned int hlen;
-    char *name;
+    const char *name;
 };
 
 extern struct hwinfo hwinfolist[];
 extern int hwinfocnt;
 
-#ifdef	__STDC__
-#define P(args) args
-#else
-#define P(args) ()
-#endif
-
-extern void setarp P((int, struct in_addr *, u_char *, int));
-extern char *haddrtoa P((u_char *, int));
-extern void haddr_conv802 P((u_char *, u_char *, int));
-
-#undef P
+extern void setarp(int, struct in_addr *, u_char *, int);
+extern char *haddrtoa(u_char *, int);
+extern void haddr_conv802(u_char *, u_char *, int);
 
 /*
  * Return the length in bytes of a hardware address of the given type.

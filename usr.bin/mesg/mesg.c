@@ -1,4 +1,4 @@
-/*	$NetBSD: mesg.c,v 1.5 1997/08/01 04:32:44 mikel Exp $	*/
+/*	$NetBSD: mesg.c,v 1.8 2008/07/21 14:19:24 lukem Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993
@@ -17,11 +17,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,15 +37,15 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1987, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1987, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)mesg.c	8.2 (Berkeley) 1/21/94";
 #endif
-__RCSID("$NetBSD: mesg.c,v 1.5 1997/08/01 04:32:44 mikel Exp $");
+__RCSID("$NetBSD: mesg.c,v 1.8 2008/07/21 14:19:24 lukem Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -62,16 +58,14 @@ __RCSID("$NetBSD: mesg.c,v 1.5 1997/08/01 04:32:44 mikel Exp $");
 #include <string.h>
 #include <unistd.h>
 
-int	main __P((int, char **));
-
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	struct stat sb;
 	char *tty;
 	int ch;
+
+	setprogname(*argv);
 
 	while ((ch = getopt(argc, argv, "")) != -1)
 		switch (ch) {
@@ -82,31 +76,33 @@ main(argc, argv)
 	argc -= optind;
 	argv += optind;
 
-	if ((tty = ttyname(STDERR_FILENO)) == NULL)
+	if ((tty = ttyname(STDIN_FILENO)) == NULL &&
+	    (tty = ttyname(STDOUT_FILENO)) == NULL &&
+	    (tty = ttyname(STDERR_FILENO)) == NULL)
 		err(2, "ttyname");
-	if (stat(tty, &sb) < 0)
+	if (stat(tty, &sb) == -1)
 		err(2, "%s", tty);
 
 	if (*argv == NULL) {
 		if (sb.st_mode & S_IWGRP) {
 			(void)fprintf(stderr, "is y\n");
-			exit(0);
+			return 0;
 		}
 		(void)fprintf(stderr, "is n\n");
-		exit(1);
+		return 1;
 	}
 
 	switch (*argv[0]) {
 	case 'y':
-		if (chmod(tty, sb.st_mode | S_IWGRP) < 0)
+		if (chmod(tty, sb.st_mode | S_IWGRP) == -1)
 			err(2, "%s", tty);
-		exit(0);
+		return 0;
 	case 'n':
-		if (chmod(tty, sb.st_mode & ~S_IWGRP) < 0)
+		if (chmod(tty, sb.st_mode & ~S_IWGRP) == -1)
 			err(2, "%s", tty);
-		exit(1);
+		return 1;
 	}
 
-usage:	(void)fprintf(stderr, "usage: mesg [y | n]\n");
-	exit(2);
+usage:	(void)fprintf(stderr, "Usage: %s [y | n]\n", getprogname());
+	return 2;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: cron.c,v 1.9 1999/03/17 20:57:05 fair Exp $	*/
+/*	$NetBSD: cron.c,v 1.13 2006/12/18 20:11:10 christos Exp $	*/
 
 /* Copyright 1988,1990,1993,1994 by Paul Vixie
  * All rights reserved
@@ -22,7 +22,7 @@
 #if 0
 static char rcsid[] = "Id: cron.c,v 2.11 1994/01/15 20:43:43 vixie Exp";
 #else
-__RCSID("$NetBSD: cron.c,v 1.9 1999/03/17 20:57:05 fair Exp $");
+__RCSID("$NetBSD: cron.c,v 1.13 2006/12/18 20:11:10 christos Exp $");
 #endif
 #endif
 
@@ -39,35 +39,31 @@ __RCSID("$NetBSD: cron.c,v 1.9 1999/03/17 20:57:05 fair Exp $");
 #endif
 
 
-static	void	usage __P((void)),
-		run_reboot_jobs __P((cron_db *)),
-		cron_tick __P((cron_db *)),
-		cron_sync __P((void)),
-		cron_sleep __P((void)),
+static	void	usage(void),
+		run_reboot_jobs(cron_db *),
+		cron_tick(cron_db *),
+		cron_sync(void),
+		cron_sleep(void),
 #ifdef USE_SIGCHLD
-		sigchld_handler __P((int)),
+		sigchld_handler(int),
 #endif
-		sighup_handler __P((int)),
-		parse_args __P((int c, char *v[]));
+		sighup_handler(int),
+		parse_args(int c, char *v[]);
 
-
-int main __P((int, char *[]));
 
 static void
-usage() {
-	fprintf(stderr, "usage:  %s [-x debugflag[,...]]\n", ProgramName);
+usage(void) {
+	fprintf(stderr, "usage:  %s [-x debugflag[,...]]\n", getprogname());
 	exit(ERROR_EXIT);
 }
 
 
 int
-main(argc, argv)
-	int	argc;
-	char	*argv[];
+main(int argc, char **argv)
 {
 	cron_db	database;
 
-	ProgramName = argv[0];
+	setprogname(argv[0]);
 
 #if defined(BSD)
 	setlinebuf(stdout);
@@ -133,8 +129,7 @@ main(argc, argv)
 
 
 static void
-run_reboot_jobs(db)
-	cron_db *db;
+run_reboot_jobs(cron_db *db)
 {
 	user		*u;
 	entry		*e;
@@ -151,21 +146,34 @@ run_reboot_jobs(db)
 
 
 static void
-cron_tick(db)
-	cron_db	*db;
+cron_tick(cron_db *db)
 {
- 	struct tm	*tm = localtime(&TargetTime);
+	char		*orig_tz, *job_tz;
+ 	struct tm	*tm;
 	int		minute, hour, dom, month, dow;
 	user		*u;
 	entry		*e;
 
 	/* make 0-based values out of these so we can use them as indicies
 	 */
-	minute = tm->tm_min -FIRST_MINUTE;
-	hour = tm->tm_hour -FIRST_HOUR;
-	dom = tm->tm_mday -FIRST_DOM;
-	month = tm->tm_mon +1 /* 0..11 -> 1..12 */ -FIRST_MONTH;
-	dow = tm->tm_wday -FIRST_DOW;
+#define maketime(tz1, tz2) do { \
+	char *t = tz1; \
+	if (t != NULL && *t != '\0') \
+		setenv("TZ", t, 1); \
+	else if ((tz2) != NULL) \
+		setenv("TZ", (tz2), 1); \
+	else \
+		unsetenv("TZ"); \
+	tm = localtime(&TargetTime); \
+	minute = tm->tm_min -FIRST_MINUTE; \
+	hour = tm->tm_hour -FIRST_HOUR; \
+	dom = tm->tm_mday -FIRST_DOM; \
+	month = tm->tm_mon +1 /* 0..11 -> 1..12 */ -FIRST_MONTH; \
+	dow = tm->tm_wday -FIRST_DOW; \
+	} while (0)
+
+	orig_tz = getenv("TZ");
+	maketime(NULL, orig_tz);
 
 	Debug(DSCH, ("[%d] tick(%d,%d,%d,%d,%d)\n",
 		getpid(), minute, hour, dom, month, dow))
@@ -181,6 +189,8 @@ cron_tick(db)
 			Debug(DSCH|DEXT, ("user [%s:%d:%d:...] cmd=\"%s\"\n",
 					  env_get("LOGNAME", e->envp),
 					  e->uid, e->gid, e->cmd))
+			job_tz = env_get("CRON_TZ", e->envp);
+			maketime(job_tz, orig_tz);
 			if (bit_test(e->minute, minute)
 			 && bit_test(e->hour, hour)
 			 && bit_test(e->month, month)
@@ -193,6 +203,10 @@ cron_tick(db)
 			}
 		}
 	}
+	if (orig_tz != NULL)
+		setenv("TZ", orig_tz, 1);
+	else
+		unsetenv("TZ");
 }
 
 
@@ -206,7 +220,7 @@ cron_tick(db)
  * that's something sysadmin's know to expect what with crashing computers..
  */
 static void
-cron_sync() {
+cron_sync(void) {
  	struct tm	*tm;
 
 	TargetTime = time((time_t*)0);
@@ -216,7 +230,7 @@ cron_sync() {
 
 
 static void
-cron_sleep() {
+cron_sleep(void) {
 	int	seconds_to_wait;
 
 	do {
@@ -245,8 +259,7 @@ cron_sleep() {
 
 #ifdef USE_SIGCHLD
 static void
-sigchld_handler(x)
-	int x;
+sigchld_handler(int x __unused)
 {
 	WAIT_T		waiter;
 	PID_T		pid;
@@ -277,17 +290,14 @@ sigchld_handler(x)
 
 
 static void
-sighup_handler(x)
-	int x;
+sighup_handler(int x __unused)
 {
 	log_close();
 }
 
 
 static void
-parse_args(argc, argv)
-	int	argc;
-	char	*argv[];
+parse_args(int argc, char **argv)
 {
 	int	argch;
 

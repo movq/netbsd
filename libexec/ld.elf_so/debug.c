@@ -1,4 +1,4 @@
-/*	$NetBSD: debug.c,v 1.2 1999/03/01 16:40:07 christos Exp $	*/
+/*	$NetBSD: debug.c,v 1.6 2004/10/22 05:39:56 skrll Exp $	*/
 
 /*
  * Copyright 1996 John D. Polstra.
@@ -36,11 +36,11 @@
  */
 
 #include <sys/cdefs.h>
-#ifdef __STDC__
+#ifndef lint
+__RCSID("$NetBSD: debug.c,v 1.6 2004/10/22 05:39:56 skrll Exp $");
+#endif /* not lint */
+
 #include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
 
 #include "debug.h"
 #include "rtldenv.h"
@@ -49,26 +49,14 @@
 int debug = 0;
 
 void
-#ifdef __STDC__
 debug_printf(const char *format, ...)
-#else
-debug_printf(va_alist)
-	va_dcl
-#endif
 {
-	if(debug) {
+
+	if (debug) {
 		va_list ap;
-#ifdef __STDC__
+
 		va_start(ap, format);
-#else
-		const char *format;
-
-		va_start(ap);
-		format = va_arg(ap, const char *);
-#endif
-
 		xvprintf(format, ap);
-
 		va_end(ap);
 		xprintf("\n");
 	}

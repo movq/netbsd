@@ -1,4 +1,4 @@
-.\"	$NetBSD: mdoc.7,v 1.15 1999/11/19 01:50:32 enami Exp $
+.\"	$NetBSD: mdoc.7,v 1.29 2003/12/31 14:02:08 bjh21 Exp $
 .\"
 .\" Copyright (c) 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -33,7 +29,7 @@
 .\"
 .\"	@(#)mdoc.7	8.2 (Berkeley) 12/30/93
 .\"
-.Dd November 24, 1997
+.Dd April 16, 2003
 .Os
 .Dt MDOC 7
 .Sh NAME
@@ -64,7 +60,7 @@ The second contains the manual and general text domain
 macros which differentiate the
 .Nm -\mdoc
 package from other
-.Xr troff
+.Xr troff 1
 formatting packages.
 .Sh PAGE STRUCTURE DOMAIN
 .Ss Title Macros
@@ -94,11 +90,15 @@ or
 and the
 .Ql \&.Nd
 macros.
+.It Ar LIBRARY
+Sections two and three function calls.
 .It Ar SYNOPSIS
 Usage.
 .It Ar DESCRIPTION
 General description, should include
 options and parameters.
+.It Ar EXIT STATUS
+Sections one and eight commands and utilities.
 .It Ar RETURN VALUES
 Sections two and three function calls.
 .It Ar ENVIRONMENT
@@ -125,7 +125,7 @@ Gotchas and caveats.
 Security issues to be aware of.
 .It Ar other
 Customized headers may be added at
-the authors discretion.
+the author's discretion.
 .El
 .It Li \&.Ss
 Subsection Headers.
@@ -194,7 +194,8 @@ is used.
 End-display (matches \&.Bd).
 .It Li \&.Bl
 Begin-list.
-Create lists or columns. Options:
+Create lists or columns.
+Options:
 .Bl -tag -width flag -compact
 .It Em List-types
 .Bl -column "xbullet " -compact
@@ -240,11 +241,14 @@ List item.
 The manual and general text domain macros are special in that
 most of them are parsed for callable macros
 for example:
-.Bl -tag -width ".Op Fl s Ar filex" -offset indent
-.It Li "\&.Op Fl s Ar file"
-Produces
+.Bd -unfilled -offset indent
+.Li "\&.Op Fl s Ar file"
+.Ed
+.Pp
+Produces:
+.Bd -unfilled -offset indent
 .Op Fl s Ar file
-.El
+.Ed
 .Pp
 In this example, the option enclosure macro
 .Ql \&.Op
@@ -274,22 +278,26 @@ one at a time.
 The string
 .Ql "),"
 is not recognized as punctuation and will be output with a leading white
-space and in what ever font the calling macro uses.
+space and in whatever font the calling macro uses.
 The
 argument list
 .Ql "] ) ,"
 is recognized as three sequential closing punctuation characters
 and a leading white space is not output between the characters
 and the previous argument (if any).
+.Pp
 The special meaning of a punctuation character may be escaped
 with the string
-.Ql \e& .
-For example the following string,
-.Bl -tag -width "&.Ar file1\ , file2\ , file3\ )\ ." -offset indent
-.It Li "\&.Ar file1\ , file2\ , file3\ )\ ."
-Produces
-.Ar file1 , file2 , file3 ) .
-.El
+.Ql \e\*[Am] .
+For example the following string:
+.Bd -unfilled -offset indent
+.Li "\&.Ar file1\ \e\*[Am], file2\ , file3\ )\ ."
+.Ed
+.Pp
+Produces:
+.Bd -unfilled -offset indent
+.Ar file1 \&, file2 , file3 ) .
+.Ed
 .ne 1i
 .Ss Manual Domain Macros
 .Bl -column "Name" "Parsed" "Callable" -compact
@@ -305,7 +313,10 @@ Produces
 .It Li \&Fd Ta \&No Ta \&No Ta "Function declaration."
 .It Li \&Fl Ta Yes Ta Yes Ta "Command line flag."
 .It Li \&Fn Ta Yes Ta Yes Ta "Function call (also .Fo and .Fc)."
+.It Li \&Ft Ta Yes Ta Yes Ta "Function type."
 .It Li \&Ic Ta Yes Ta Yes Ta "Interactive command."
+.It Li \&In Ta \&No Ta \&No Ta "Include header."
+.It Li \&Lb Ta Yes Ta Yes Ta "Library name."
 .It Li \&Li Ta Yes Ta Yes Ta "Literal text."
 .It Li \&Nd Ta \&No Ta \&No Ta "Name description."
 .It Li \&Nm Ta Yes Ta Yes Ta "Command name."
@@ -314,7 +325,7 @@ Produces
 .It Li \&Pa Ta Yes Ta Yes Ta "Pathname or file name."
 .It Li \&St Ta Yes Ta Yes Ta "Standards (-p1003.2, -p1003.1 or -ansiC)"
 .It Li \&Va Ta Yes Ta Yes Ta "Variable name."
-.It Li \&Vt Ta Yes Ta Yes Ta "Variable type (Fortran only)."
+.It Li \&Vt Ta Yes Ta Yes Ta "Variable type."
 .It Li \&Xr Ta Yes Ta Yes Ta "Manual Page Cross Reference."
 .El
 .Ss General Text Domain Macros
@@ -335,11 +346,12 @@ Produces
 .It Li \&Ao Ta Yes Ta Yes Ta "Angle open quote."
 .It Li \&Ap Ta Yes Ta Yes Ta "Insert apostrophe; switch to .No mode "
 .It Li \&Aq Ta Yes Ta Yes Ta "Angle quote."
-.It Li \&At Ta \&No Ta \&No Ta Tn "AT&T UNIX."
+.It Li \&At Ta \&No Ta \&No Ta Tn "AT\*[Am]T UNIX."
 .It Li \&Bc Ta Yes Ta Yes Ta "Bracket close quote."
 .It Li \&Bf Ta \&No Ta \&No Ta "Begin font mode."
 .It Li \&Bo Ta Yes Ta Yes Ta "Bracket open quote."
 .It Li \&Bq Ta Yes Ta Yes Ta "Bracket quote."
+.It Li \&Bsx Ta Yes Ta Yes Ta "BSD/OS."
 .It Li \&Bx Ta Yes Ta Yes Ta "BSD" .
 .It Li \&Db Ta \&No Ta \&No Ta "Debug (default is \\*qoff\\*q)."
 .It Li \&Dc Ta Yes Ta Yes Ta "Double close quote."
@@ -349,24 +361,25 @@ Produces
 .It Li \&Ef Ta \&No Ta \&No Ta "End font mode."
 .It Li \&Em Ta Yes Ta Yes Ta "Emphasis (traditional English)."
 .It Li \&Eo Ta Yes Ta Yes Ta "Enclose string open quote."
-.It Li \&Fx Ta \&No Ta \&No Ta "FreeBSD."
+.It Li \&Fx Ta Yes Ta Yes Ta "FreeBSD."
 .It Li \&No Ta Yes Ta Yes Ta "Normal text (no-op)."
 .It Li \&Ns Ta Yes Ta Yes Ta "No space."
-.It Li \&Nx Ta \&No Ta \&No Ta "NetBSD."
+.It Li \&Nx Ta Yes Ta Yes Ta "NetBSD."
+.It Li \&Ox Ta Yes Ta Yes Ta "OpenBSD."
 .It Li \&Pc Ta Yes Ta Yes Ta "Parenthesis close quote."
 .It Li \&Pf Ta Yes Ta \&No Ta "Prefix string."
 .It Li \&Po Ta Yes Ta Yes Ta "Parenthesis open quote."
 .It Li \&Pq Ta Yes Ta Yes Ta "Parentheses quote."
-.It Li \&Qc Ta Yes Ta Yes Ta "Strait Double close quote."
+.It Li \&Qc Ta Yes Ta Yes Ta "Straight Double close quote."
 .It Li \&Ql Ta Yes Ta Yes Ta "Quoted literal."
-.It Li \&Qo Ta Yes Ta Yes Ta "Strait Double open quote."
-.It Li \&Qq Ta Yes Ta Yes Ta "Strait Double quote."
+.It Li \&Qo Ta Yes Ta Yes Ta "Straight Double open quote."
+.It Li \&Qq Ta Yes Ta Yes Ta "Straight Double quote."
 .It Li \&Re Ta \&No Ta \&No Ta "Reference end."
 .It Li \&Rs Ta \&No Ta \&No Ta "Reference start."
 .It Li \&Sc Ta Yes Ta Yes Ta "Single close quote."
 .It Li \&So Ta Yes Ta Yes Ta "Single open quote."
-.It Li \&Sq Ta Yes Ta Yes Ta "Single quote."
 .It Li \&Sm Ta \&No Ta \&No Ta "Space mode (default is \\*qon\\*q)."
+.It Li \&Sq Ta Yes Ta Yes Ta "Single quote."
 .It Li \&Sx Ta Yes Ta Yes Ta "Section Cross Reference."
 .It Li \&Sy Ta Yes Ta Yes Ta "Symbolic (traditional English)."
 .It Li \&Tn Ta Yes Ta Yes Ta "Trade or type name (small Caps)."
@@ -396,12 +409,12 @@ and the function enclosure macros
 are irregular.
 The extended list macros are used when the number of macro arguments
 would exceed the
-.Xr troff
+.Xr troff 1
 limitation of nine arguments.
-.Sh CONFIGURATION
-For site specific configuration of the macro package,
-see the file
-.Pa /usr/src/share/tmac/README .
+.\" .Sh CONFIGURATION
+.\" For site specific configuration of the macro package,
+.\" see the file
+.\" .Pa /usr/src/share/tmac/README .
 .Sh FILES
 .Bl -tag -width "tmac.doc-ditroff" -compact
 .It Pa tmac.doc
@@ -410,11 +423,11 @@ Manual and general text domain macros.
 Common structural macros and definitions.
 .It Pa tmac.doc-nroff
 Site dependent
-.Xr nroff
+.Xr nroff 1
 style file.
 .It Pa tmac.doc-ditroff
 Site dependent
-.Xr troff
+.Xr troff 1
 style file.
 .It Pa tmac.doc-syms
 Special defines (such as the standards macro).

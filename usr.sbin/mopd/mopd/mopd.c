@@ -1,4 +1,4 @@
-/*	$NetBSD: mopd.c,v 1.6 1999/06/06 03:21:43 thorpej Exp $	*/
+/*	$NetBSD: mopd.c,v 1.10 2002/11/05 14:18:05 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1993-96 Mats O Jansson.  All rights reserved.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: mopd.c,v 1.6 1999/06/06 03:21:43 thorpej Exp $");
+__RCSID("$NetBSD: mopd.c,v 1.10 2002/11/05 14:18:05 thorpej Exp $");
 #endif
 
 /*
@@ -72,8 +72,7 @@ int	VersionFlag = 0;	/* print version              */
 int	Not3Flag = 0;		/* Not MOP V3 messages.       */
 int	Not4Flag = 0;		/* Not MOP V4 messages.       */
 int	promisc = 1;		/* Need promisc mode    */
-
-extern char *__progname;	/* from crt0.o */
+char	*MopdDir = MOP_FILE_PATH;  /* Path to mop directory  */
 
 int
 main(argc, argv)
@@ -81,11 +80,10 @@ main(argc, argv)
 	char  **argv;
 {
 	int	c, pid;
-	char   *interface;
 
 	extern char version[];
 
-	while ((c = getopt(argc, argv, "34adfv")) != -1)
+	while ((c = getopt(argc, argv, "34adfs:v")) != -1) {
 		switch (c) {
 			case '3':
 				Not3Flag++;
@@ -102,6 +100,9 @@ main(argc, argv)
 			case 'f':
 				ForegroundFlag++;
 				break;
+			case 's':
+				MopdDir = optarg;
+				break;
 			case 'v':
 				VersionFlag++;
 				break;
@@ -109,26 +110,25 @@ main(argc, argv)
 				Usage();
 				/* NOTREACHED */
 		}
-	
+	}
+	argc -= optind;
+	argv += optind;
+
 	if (VersionFlag) {
-		fprintf(stdout,"%s: version %s\n", __progname, version);
+		fprintf(stdout,"%s: version %s\n", getprogname(), version);
 		exit(0);
 	}
 
-	interface = argv[optind++];
-
-	if ((AllFlag && interface) ||
-	    (!AllFlag && interface == 0) ||
-	    (argc > optind) ||
-	    (Not3Flag && Not4Flag))  
+	if ((AllFlag && argc != 0) || (!AllFlag && argc == 0) ||
+	    (Not3Flag && Not4Flag))
 		Usage();
 
 	/* All error reporting is done through syslogs. */
-	openlog(__progname, LOG_PID | LOG_CONS, LOG_DAEMON);
+	openlog("mopd", LOG_PID, LOG_DAEMON);
 
 	if ((!ForegroundFlag) && DebugFlag)
 		fprintf(stdout,
-		    "%s: not running as daemon, -d given.\n", __progname);
+		    "%s: not running as daemon, -d given.\n", getprogname());
 
 	if ((!ForegroundFlag) && (!DebugFlag)) {
 		pid = fork();
@@ -146,12 +146,14 @@ main(argc, argv)
 		pidfile(NULL);
 	}
 
-	syslog(LOG_INFO, "%s %s started.", __progname, version);
+	syslog(LOG_INFO, "%s %s started.", getprogname(), version);
 
 	if (AllFlag)
  		deviceInitAll();
-	else
-		deviceInitOne(interface);
+	else {
+		while (argc--)
+			deviceInitOne(*argv++);
+	}
 
 	Loop();
 	/* NOTREACHED */
@@ -162,9 +164,10 @@ void
 Usage()
 {
 	(void) fprintf(stderr, "usage: %s -a [ -d -f -v ] [ -3 | -4 ]\n",
-	    __progname);
-	(void) fprintf(stderr, "       %s [ -d -f -v ] [ -3 | -4 ] interface\n",
-	    __progname);
+	    getprogname());
+	(void) fprintf(stderr, "       %s [ -d -f -v ] [ -3 | -4 ]\n",
+	    getprogname());
+	(void) fprintf(stderr, "           interface [...]\n");
 	exit(1);
 }
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: lcmd1.c,v 1.8 1998/10/14 00:58:47 wsanchez Exp $	*/
+/*	$NetBSD: lcmd1.c,v 1.11 2006/12/18 20:04:55 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)lcmd1.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: lcmd1.c,v 1.8 1998/10/14 00:58:47 wsanchez Exp $");
+__RCSID("$NetBSD: lcmd1.c,v 1.11 2006/12/18 20:04:55 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -52,7 +48,7 @@ __RCSID("$NetBSD: lcmd1.c,v 1.8 1998/10/14 00:58:47 wsanchez Exp $");
 #include "lcmd.h"
 #include "var.h"
 
-char	vtobool __P((struct value *, char, char));
+char	vtobool(struct value *, char, char);
 
 struct lcmd_arg arg_window[] = {
 	{ "row",	1,	ARG_NUM },
@@ -67,13 +63,11 @@ struct lcmd_arg arg_window[] = {
 	{ "keepopen",	1,	ARG_ANY },
 	{ "smooth",	1,	ARG_ANY },
 	{ "shell",	1,	ARG_STR|ARG_LIST },
-	{ 0 }
+	{ NULL,		0,	0 }
 };
 
 void
-l_window(v, a)
-	struct value *v;
-	struct value *a;
+l_window(struct value *v, struct value *a)
 {
 	struct ww *w;
 	int col, row, ncol, nrow, id, nline;
@@ -142,12 +136,11 @@ l_window(v, a)
 
 struct lcmd_arg arg_def_nline[] = {
 	{ "nlines",	1,	ARG_NUM },
-	{ 0 }
+	{ NULL,		0,	0 }
 };
 
 void
-l_def_nline(v, a)
-	struct value *v, *a;
+l_def_nline(struct value *v, struct value *a)
 {
 	v->v_num = default_nline;
 	v->v_type = V_NUM;
@@ -158,12 +151,11 @@ l_def_nline(v, a)
 struct lcmd_arg arg_smooth[] = {
 	{ "window",	1,	ARG_NUM },
 	{ "flag",	1,	ARG_ANY },
-	{ 0 }
+	{ NULL,		0,	0 }
 };
 
 void
-l_smooth(v, a)
-	struct value *v, *a;
+l_smooth(struct value *v, struct value *a)
 {
 	struct ww *w;
 
@@ -180,12 +172,11 @@ l_smooth(v, a)
 
 struct lcmd_arg arg_def_smooth[] = {
 	{ "flag",	1,	ARG_ANY },
-	{ 0 }
+	{ NULL,		0,	0 }
 };
 
 void
-l_def_smooth(v, a)
-	struct value *v, *a;
+l_def_smooth(struct value *v, struct value *a)
 {
 	v->v_type = V_NUM;
 	v->v_num = default_smooth;
@@ -194,12 +185,11 @@ l_def_smooth(v, a)
 
 struct lcmd_arg arg_select[] = {
 	{ "window",	1,	ARG_NUM },
-	{ 0 }
+	{ NULL,		0,	0 }
 };
 
 void
-l_select(v, a)
-	struct value *v, *a;
+l_select(struct value *v, struct value *a)
 {
 	struct ww *w;
 
@@ -214,12 +204,11 @@ l_select(v, a)
 
 struct lcmd_arg arg_debug[] = {
 	{ "flag",	1,	ARG_ANY },
-	{ 0 }
+	{ NULL,		0,	0 }
 };
 
 void
-l_debug(v, a)
-	struct value *v, *a;
+l_debug(struct value *v, struct value *a)
 {
 	v->v_type = V_NUM;
 	v->v_num = debug;
@@ -228,12 +217,11 @@ l_debug(v, a)
 
 struct lcmd_arg arg_escape[] = {
 	{ "escapec",	1,	ARG_STR },
-	{ 0 }
+	{ NULL,		0,	0 }
 };
 
 void
-l_escape(v, a)
-	struct value *v, *a;
+l_escape(struct value *v, struct value *a)
 {
 	char buf[2];
 
@@ -251,13 +239,11 @@ l_escape(v, a)
 struct lcmd_arg arg_label[] = {
 	{ "window",	1,	ARG_NUM },
 	{ "label",	1,	ARG_STR },
-	{ 0 }
+	{ NULL,		0,	0 }
 };
 
 void
-l_label(v, a)
-struct value *v;
-	struct value *a;
+l_label(struct value *v __unused, struct value *a)
 {
 	struct ww *w;
 
@@ -271,12 +257,11 @@ struct value *v;
 struct lcmd_arg arg_foreground[] = {
 	{ "window",	1,	ARG_NUM },
 	{ "flag",	1,	ARG_ANY },
-	{ 0 }
+	{ NULL,		0,	0 }
 };
 
 void
-l_foreground(v, a)
-	struct value *v, *a;
+l_foreground(struct value *v, struct value *a)
 {
 	struct ww *w;
 	char flag;
@@ -295,12 +280,11 @@ l_foreground(v, a)
 
 struct lcmd_arg arg_terse[] = {
 	{ "flag",	1,	ARG_ANY },
-	{ 0 }
+	{ NULL,		0,	0 }
 };
 
 void
-l_terse(v, a)
-	struct value *v, *a;
+l_terse(struct value *v, struct value *a)
 {
 	v->v_type = V_NUM;
 	v->v_num = terse;
@@ -309,12 +293,11 @@ l_terse(v, a)
 
 struct lcmd_arg arg_source[] = {
 	{ "filename",	1,	ARG_STR },
-	{ 0 }
+	{ NULL,		0,	0 }
 };
 
 void
-l_source(v, a)
-	struct value *v, *a;
+l_source(struct value *v, struct value *a)
 {
 	v->v_type = V_NUM;
 	if (a->v_type != V_ERR && dosource(a->v_str) < 0) {
@@ -327,13 +310,11 @@ l_source(v, a)
 struct lcmd_arg arg_write[] = {
 	{ "window",	1,	ARG_NUM },
 	{ "",		0,	ARG_ANY|ARG_LIST },
-	{ 0 }
+	{ NULL,		0,	0 }
 };
 
 void
-l_write(v, a)
-	struct value *v;
-	struct value *a;
+l_write(struct value *v __unused, struct value *a)
 {
 	char buf[20];
 	struct ww *w;
@@ -353,13 +334,11 @@ l_write(v, a)
 
 struct lcmd_arg arg_close[] = {
 	{ "window",	1,	ARG_ANY|ARG_LIST },
-	{ 0 }
+	{ NULL,		0,	0 }
 };
 
 void
-l_close(v, a)
-	struct value *v;
-	struct value *a;
+l_close(struct value *v __unused, struct value *a)
 {
 	struct ww *w;
 
@@ -373,12 +352,11 @@ l_close(v, a)
 
 struct lcmd_arg arg_cursormodes[] = {
 	{ "modes",	1,	ARG_NUM },
-	{ 0 }
+	{ NULL,		0,	0 }
 };
 
 void
-l_cursormodes(v, a)
-	struct value *v, *a;
+l_cursormodes(struct value *v, struct value *a)
 {
 
 	v->v_type = V_NUM;
@@ -389,12 +367,11 @@ l_cursormodes(v, a)
 
 struct lcmd_arg arg_unset[] = {
 	{ "variable",	1,	ARG_ANY },
-	{ 0 }
+	{ NULL,		0,	0 }
 };
 
 void
-l_unset(v, a)
-	struct value *v, *a;
+l_unset(struct value *v, struct value *a)
 {
 	v->v_type = V_NUM;
 	switch (a->v_type) {
@@ -414,9 +391,7 @@ l_unset(v, a)
 }
 
 struct ww *
-vtowin(v, w)
-	struct value *v;
-	struct ww *w;
+vtowin(struct value *v, struct ww *w)
 {
 	switch (v->v_type) {
 	case V_ERR:
@@ -437,9 +412,7 @@ vtowin(v, w)
 }
 
 char
-vtobool(v, def, err)
-	struct value *v;
-	char def, err;
+vtobool(struct value *v, char def, char err)
 {
 	switch (v->v_type) {
 	case V_NUM:

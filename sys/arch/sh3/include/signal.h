@@ -1,4 +1,4 @@
-/*	$NetBSD: signal.h,v 1.1 1999/09/13 10:31:23 itojun Exp $	*/
+/*	$NetBSD: signal.h,v 1.12 2005/12/11 12:18:58 christos Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1991 Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -36,16 +32,21 @@
  */
 
 #ifndef _SH3_SIGNAL_H_
-#define _SH3_SIGNAL_H_
+#define	_SH3_SIGNAL_H_
+
+#include <sys/featuretest.h>
 
 typedef int sig_atomic_t;
 
-#if !defined(_ANSI_SOURCE) && !defined(_POSIX_C_SOURCE) && \
-    !defined(_XOPEN_SOURCE)
-/*
- * Get the "code" values
- */
-#include <machine/trap.h>
+#ifdef _KERNEL
+#ifdef COMPAT_16
+#define SIGTRAMP_VALID(vers)	((unsigned)(vers) <= 2)
+#else
+#define SIGTRAMP_VALID(vers)	((vers) == 2)
+#endif
+#endif
+
+#if defined(_NETBSD_SOURCE)
 
 /*
  * Information pushed on stack when a signal is delivered.
@@ -79,7 +80,7 @@ struct sigcontext13 {
 	int	sc_onstack;		/* sigstack state to restore */
 	int	sc_mask;		/* signal mask to restore (old style) */
 
-	int	sc_trapno;		/* XXX should be above */
+	int	sc_expevt;		/* XXX should be above */
 	int	sc_err;
 };
 #endif
@@ -106,13 +107,12 @@ struct sigcontext {
 	int	sc_r15;
 
 	int	sc_onstack;	/* sigstack state to restore */
-	int	__sc_mask13;	/* signal mask to restore (old style) */
 
-	int	sc_trapno;	/* XXX should be above */
+	int	sc_expevt;	/* XXX should be above */
 	int	sc_err;
 
 	sigset_t sc_mask;	/* signal mask to restore (new style) */
 };
 
-#endif	/* !_ANSI_SOURCE && !_POSIX_C_SOURCE && !_XOPEN_SOURCE */
+#endif	/* _NETBSD_SOURCE */
 #endif	/* !_SH3_SIGNAL_H_ */

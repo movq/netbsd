@@ -1,12 +1,69 @@
-/*	$NetBSD: hack.apply.c,v 1.5 1997/10/19 16:57:32 christos Exp $	*/
+/*	$NetBSD: hack.apply.c,v 1.9 2007/12/15 19:44:41 perry Exp $	*/
 
 /*
- * Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1985.
+ * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
+ * Amsterdam
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met:
+ *
+ * - Redistributions of source code must retain the above copyright notice,
+ * this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above copyright
+ * notice, this list of conditions and the following disclaimer in the
+ * documentation and/or other materials provided with the distribution.
+ *
+ * - Neither the name of the Stichting Centrum voor Wiskunde en
+ * Informatica, nor the names of its contributors may be used to endorse or
+ * promote products derived from this software without specific prior
+ * written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
+ * IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+ * PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER
+ * OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+ * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
+ * Copyright (c) 1982 Jay Fenlason <hack@gnu.org>
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+ * AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL
+ * THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.apply.c,v 1.5 1997/10/19 16:57:32 christos Exp $");
+__RCSID("$NetBSD: hack.apply.c,v 1.9 2007/12/15 19:44:41 perry Exp $");
 #endif				/* not lint */
 
 #include	"hack.h"
@@ -14,16 +71,16 @@ __RCSID("$NetBSD: hack.apply.c,v 1.5 1997/10/19 16:57:32 christos Exp $");
 #include	"def.edog.h"
 #include	"def.mkroom.h"
 
-static void use_camera __P((struct obj *));
-static int in_ice_box __P((struct obj *));
-static int ck_ice_box __P((struct obj *));
-static int out_ice_box __P((struct obj *));
-static void use_ice_box __P((struct obj *));
-static struct monst *bchit __P((int, int , int , int));
-static void use_whistle __P((struct obj *));
-static void use_magic_whistle __P((struct obj *));
-static int dig __P((void));
-static int use_pick_axe __P((struct obj *));
+static void use_camera(struct obj *);
+static int in_ice_box(struct obj *);
+static int ck_ice_box(struct obj *);
+static int out_ice_box(struct obj *);
+static void use_ice_box(struct obj *);
+static struct monst *bchit(int, int , int , int);
+static void use_whistle(struct obj *);
+static void use_magic_whistle(struct obj *);
+static int dig(void);
+static int use_pick_axe(struct obj *);
 
 int
 doapply()
@@ -80,7 +137,7 @@ xit:
 /* ARGSUSED */
 static void
 use_camera(obj) /* */ 
-	struct obj     *obj;
+	struct obj     *obj __unused;
 {
 	struct monst *mtmp;
 	if (!getdir(1)) {	/* ask: in what direction? */
@@ -246,7 +303,7 @@ bchit(ddx, ddy, range, sym)
 /* ARGSUSED */
 static void
 use_whistle(obj)
-	struct obj     *obj;
+	struct obj     *obj __unused;
 {
 	struct monst *mtmp = fmon;
 	pline("You produce a high whistling sound.");
@@ -264,7 +321,7 @@ use_whistle(obj)
 /* ARGSUSED */
 static void
 use_magic_whistle(obj)
-	struct obj     *obj;
+	struct obj     *obj __unused;
 {
 	struct monst *mtmp = fmon;
 	pline("You produce a strange whistling sound.");
@@ -317,7 +374,7 @@ dig()
 			}
 		}
 	} else if (dig_effort > 100) {
-		char  *digtxt;
+		const char  *digtxt;
 		struct obj *obj;
 
 		lev = &levl[dpx][dpy];

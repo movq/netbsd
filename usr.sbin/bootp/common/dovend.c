@@ -1,8 +1,8 @@
-/*	$NetBSD: dovend.c,v 1.3 1998/03/14 04:39:54 lukem Exp $	*/
+/*	$NetBSD: dovend.c,v 1.6 2007/05/27 16:31:42 tls Exp $	*/
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: dovend.c,v 1.3 1998/03/14 04:39:54 lukem Exp $");
+__RCSID("$NetBSD: dovend.c,v 1.6 2007/05/27 16:31:42 tls Exp $");
 #endif
 
 /*
@@ -17,30 +17,16 @@ __RCSID("$NetBSD: dovend.c,v 1.3 1998/03/14 04:39:54 lukem Exp $");
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 #include <errno.h>
 #include <syslog.h>
-
-#ifndef USE_BFUNCS
-# include <memory.h>
-/* Yes, memcpy is OK here (no overlapped copies). */
-# define bcopy(a,b,c)    memcpy(b,a,c)
-# define bzero(p,l)      memset(p,0,l)
-# define bcmp(a,b,c)     memcmp(a,b,c)
-# define index           strchr
-#endif
 
 #include "bootp.h"
 #include "bootpd.h"
 #include "report.h"
 #include "dovend.h"
 
-#ifdef	__STDC__
-#define P(args) args
-#else
-#define P(args) ()
-#endif
-
-PRIVATE int insert_generic P((struct shared_bindata *, byte **, int *));
+PRIVATE int insert_generic(struct shared_bindata *, byte **, int *);
 
 /*
  * Insert the 2nd part of the options into an option buffer.
@@ -56,10 +42,7 @@ PRIVATE int insert_generic P((struct shared_bindata *, byte **, int *));
  */
 
 int
-dovend_rfc1497(hp, buf, len)
-	struct host *hp;
-	byte *buf;
-	int len;
+dovend_rfc1497(struct host *hp, byte *buf, int len)
 {
 	int bytesleft = len;
 	byte *vp = buf;
@@ -67,7 +50,7 @@ dovend_rfc1497(hp, buf, len)
 	char *tmpstr;
 #endif
 
-	static char noroom[] = "%s: No room for \"%s\" option";
+	static const char noroom[] = "%s: No room for \"%s\" option";
 #define	NEED(LEN, MSG) do                       \
 		if (bytesleft < (LEN)) {         	    \
 			report(LOG_NOTICE, noroom,          \
@@ -295,11 +278,7 @@ dovend_rfc1497(hp, buf, len)
  */
 
 int
-insert_ip(tag, iplist, dest, bytesleft)
-	byte tag;
-	struct in_addr_list *iplist;
-	byte **dest;
-	int *bytesleft;
+insert_ip(byte tag, struct in_addr_list *iplist, byte **dest, int *bytesleft)
 {
 	struct in_addr *addrptr;
 	unsigned addrcount = 1;
@@ -338,10 +317,7 @@ insert_ip(tag, iplist, dest, bytesleft)
  */
 
 static int
-insert_generic(gendata, buff, bytesleft)
-	struct shared_bindata *gendata;
-	byte **buff;
-	int *bytesleft;
+insert_generic(struct shared_bindata *gendata, byte **buff, int *bytesleft)
 {
 	byte *srcptr;
 	int length, numbytes;
@@ -393,9 +369,7 @@ insert_generic(gendata, buff, bytesleft)
  */
 
 void
-insert_u_long(value, dest)
-	u_int32 value;
-	byte **dest;
+insert_u_long(u_int32 value, byte **dest)
 {
 	byte *temp;
 	int n;

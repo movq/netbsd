@@ -1,4 +1,4 @@
-/*	$NetBSD: grfabs_ccreg.h,v 1.7 1997/09/19 03:27:13 mhitch Exp $	*/
+/*	$NetBSD: grfabs_ccreg.h,v 1.9 2006/03/08 23:46:22 lukem Exp $	*/
 
 /*
  * Copyright (c) 1994 Christian E. Hopps
@@ -188,7 +188,7 @@ enum quad_frame_numbers {
 #define QUAD1_ID 0x00f1
 #define QUAD2_ID 0x0f01
 #define QUAD3_ID 0x0ff1
-	
+
 #define HALF_2024_LINE (512>>3)
 #define DIGITAL_RED 0x0800
 #define DIGITAL_GREEN 0x0080
@@ -244,7 +244,7 @@ enum quad_frame_numbers {
 /* defines for bplcon3 register */
 #define BPLCON3_EXTBLNKEN	(1<<0)	/* external blank enable */
 #define BPLCON3_EXTBLKZD	(1<<1)	/* external blank ored into trnsprncy */
-#define BPLCON3_ZDCLKEN	(1<<2)	/* zd pin outputs a 14mhz clock*/
+#define BPLCON3_ZDCLKEN	(1<<2)	/* zd pin outputs a 14 MHz clock*/
 #define BPLCON3_BRDNTRAN	(1<<4)	/* border is opaque */
 #define BPLCON3_BRDNBLNK	(1<<5)	/* border is opaque */
 

@@ -1,4 +1,4 @@
-.\"	$NetBSD: cd.4,v 1.13 1999/12/11 23:10:15 augustss Exp $
+.\"	$NetBSD: cd.4,v 1.17 2002/08/20 15:47:46 wiz Exp $
 .\"
 .\" Copyright (c) 1996
 .\"     Julian Elischer <julian@freebsd.org>.  All rights reserved.
@@ -79,7 +79,6 @@ disk label
 structure, which will contain correct figures for the size of the
 .Tn CD-ROM
 should that information be required.
-.Pp
 .Sh KERNEL CONFIGURATION
 Any number of
 .Tn CD-ROM
@@ -97,7 +96,7 @@ in the header files
 and
 .Aq Pa sys/disklabel.h .
 .Pp
-.Bl -tag -width CDIOCREADSUBCHANNEL -compact
+.Bl -tag -width CDIOCREADSUBCHANNEL
 .It Dv DIOCGDINFO
 .It Dv DIOCSDINFO
 .Pq Li "struct disklabel"
@@ -110,7 +109,6 @@ inquiry commands, and should be the same as
 the information printed at boot.
 This structure is defined in
 .Xr disklabel 5 .
-
 .\".It Dv CDIOCCAPABILITY
 .\".Pq Li "struct ioc_capability"
 .\"Retrieve information from the drive on what features it supports.
@@ -174,7 +172,7 @@ This structure is defined in
 .\"	/* The tray has dynamic debugging */
 .\"};
 .\".Ed
-.It Dv CDIOCPLAYTRACKS	
+.It Dv CDIOCPLAYTRACKS
 .Pq Li "struct ioc_play_track"
 Start audio playback given a track address and length.
 The structure is defined as follows:
@@ -187,7 +185,6 @@ struct ioc_play_track
 	u_char	end_index;
 };
 .Ed
-
 .It Dv CDIOCPLAYBLOCKS
 .Pq Li "struct ioc_play_blocks"
 Start audio playback given a block address and length.
@@ -199,8 +196,7 @@ struct ioc_play_blocks
 	int	len;
 };
 .Ed
-
-.It Dv CDIOCPLAYMSF	
+.It Dv CDIOCPLAYMSF
 .Pq Li "struct ioc_play_msf"
 Start audio playback given a `minutes-seconds-frames' address and length.
 The structure is defined as follows:
@@ -215,7 +211,6 @@ struct ioc_play_msf
 	u_char	end_f;
 };
 .Ed
-
 .It Dv CDIOCREADSUBCHANNEL
 .Pq Li "struct ioc_read_subchannel"
 Read information from the subchannel at the location specified by this
@@ -235,7 +230,6 @@ struct ioc_read_subchannel {
 	struct  cd_sub_channel_info *data;
 };
 .Ed
-
 .It Dv CDIOREADTOCHEADER
 .Pq Li "struct ioc_toc_header"
 Return summary information about the table of contents for the mounted
@@ -248,7 +242,6 @@ struct ioc_toc_header {
 	u_char  ending_track;
 };
 .Ed
-
 .It Dv CDIOREADTOCENTRYS
 .Pq Li "struct ioc_read_toc_entry"
 Return information from the table of contents entries mentioned.
@@ -266,7 +259,6 @@ The requested data is written into an area of size
 .Li data_len
 and pointed to by
 .Li data .
-
 .It Dv CDIOCSETPATCH
 .Pq Li "struct ioc_patch"
 Attach various audio channels to various output channels.
@@ -277,7 +269,6 @@ struct ioc_patch {
 	/* one for each channel */
 };
 .Ed
-
 .It Dv CDIOCGETVOL
 .It Dv CDIOCSETVOL
 .Pq Li "struct ioc_vol"
@@ -290,51 +281,39 @@ struct	ioc_vol
 	/* one for each channel */
 };
 .Ed
-
-.It Dv CDIOCSETMONO	
+.It Dv CDIOCSETMONO
 Patch all output channels to all source channels.
-
 .It Dv CDIOCSETSTEREO
 Patch left source channel to the left output channel and the right
 source channel to the right output channel.
-
-.It Dv CDIOCSETMUTE	
+.It Dv CDIOCSETMUTE
 Mute output without changing the volume settings.
-
 .It Dv CDIOCSETLEFT
 .It Dv CDIOCSETRIGHT
 Attach both output channels to the left (right) source channel.
-
-.It Dv CDIOCSETDEBUG	
-.It Dv CDIOCCLRDEBUG	
+.It Dv CDIOCSETDEBUG
+.It Dv CDIOCCLRDEBUG
 Turn on (off) debugging for the appropriate device.
-
-.It Dv CDIOCPAUSE	
-.It Dv CDIOCRESUME	
+.It Dv CDIOCPAUSE
+.It Dv CDIOCRESUME
 Pause (resume) audio play, without resetting the location of the read-head.
-
-.It Dv CDIOCRESET	
+.It Dv CDIOCRESET
 Reset the drive.
-
-.It Dv CDIOCSTART	
-.It Dv CDIOCSTOP	
+.It Dv CDIOCSTART
+.It Dv CDIOCSTOP
 Tell the drive to spin-up (-down) the
 .Tn CD-ROM .
-
 .It Dv CDIOCALLOW
 .It Dv CDIOCPREVENT
 Tell the drive to allow (prevent) manual ejection of the
 .Tn CD-ROM
 disc.
 Not all drives support this feature.
-
-.It Dv CDIOCEJECT	
+.It Dv CDIOCEJECT
 Eject the
 .Tn CD-ROM .
-
 .It Dv CDIOCLOADUNLOAD
 Cause the ATAPI changer to load or unload discs.
-
 .It Dv CDIOCCLOSE
 Tell the drive to close its door and load the media.
 Not all drives support this feature.
@@ -414,6 +393,11 @@ None.
 .Xr wd 4 ,
 .Xr disklabel 5 ,
 .Xr disklabel 8
+.Sh HISTORY
+The
+.Nm
+driver appeared in
+.Tn 386BSD 0.1 .
 .Sh BUGS
 The names of the structures used for the third argument to
 .Fn ioctl
@@ -421,8 +405,3 @@ were poorly chosen, and a number of spelling errors have survived in
 the names of the
 .Fn ioctl
 commands.
-.Sh HISTORY
-The
-.Nm
-driver appeared in
-.Tn 386BSD 0.1 Ns .

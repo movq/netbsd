@@ -1,4 +1,4 @@
-/*	$NetBSD: reg.h,v 1.1 1999/09/13 10:31:21 itojun Exp $	*/
+/*	$NetBSD: reg.h,v 1.7 2008/10/26 19:53:03 uwe Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -39,7 +35,7 @@
  */
 
 #ifndef _SH3_REG_H_
-#define _SH3_REG_H_
+#define	_SH3_REG_H_
 
 /*
  * Location of the users' stored
@@ -76,13 +72,45 @@
 /*
  * Registers accessible to ptrace(2) syscall for debugger
  * The machine-dependent code for PT_{SET,GET}REGS needs to
- * use whichver order, defined above, is correct, so that it
+ * use whichever order, defined above, is correct, so that it
  * is all invisible to the user.
  */
 struct reg {
 	int r_spc;
 	int r_ssr;
 	int r_pr;
+	int r_mach;
+	int r_macl;
+	int r_r15;
+	int r_r14;
+	int r_r13;
+	int r_r12;
+	int r_r11;
+	int r_r10;
+	int r_r9;
+	int r_r8;
+	int r_r7;
+	int r_r6;
+	int r_r5;
+	int r_r4;
+	int r_r3;
+	int r_r2;
+	int r_r1;
+	int r_r0;
+	int r_gbr;
+};
+
+
+/*
+ * Old struct reg that is missing r_gbr.  Compat ptrace(2) requests
+ * are renamed to PT___GETREGS40 and PT___SETREGS40.
+ */
+struct __reg40 {
+	int r_spc;
+	int r_ssr;
+	int r_pr;
+	int r_mach;
+	int r_macl;
 	int r_r15;
 	int r_r14;
 	int r_r13;

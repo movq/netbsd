@@ -1,4 +1,4 @@
-/*	$NetBSD: wskbdutil.c,v 1.7 1999/12/21 11:59:13 drochner Exp $	*/
+/*	$NetBSD: wskbdutil.c,v 1.15 2008/04/28 20:24:01 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,9 +29,10 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/param.h>
-#include <sys/types.h>
 #include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: wskbdutil.c,v 1.15 2008/04/28 20:24:01 martin Exp $");
+
+#include <sys/param.h>
 #include <sys/errno.h>
 #include <sys/systm.h>
 #include <sys/malloc.h>
@@ -175,20 +169,37 @@ static struct compose_tab_s {
 	{ { KS_acute,			KS_u },			KS_uacute },
 	{ { KS_asciicircum,		KS_u },			KS_ucircumflex },
 	{ { KS_grave,			KS_u },			KS_ugrave },
-	{ { KS_acute,			KS_y },			KS_yacute }
+	{ { KS_acute,			KS_y },			KS_yacute },
+	{ { KS_dead_semi,		KS_gr_A },		KS_gr_At  },
+	{ { KS_dead_semi,		KS_gr_E },		KS_gr_Et  },
+	{ { KS_dead_semi,		KS_gr_H },		KS_gr_Ht  },
+	{ { KS_dead_semi,		KS_gr_I },		KS_gr_It  },
+	{ { KS_dead_semi,		KS_gr_O },		KS_gr_Ot  },
+	{ { KS_dead_semi,		KS_gr_Y },		KS_gr_Yt  },
+	{ { KS_dead_semi,		KS_gr_V },		KS_gr_Vt  },
+	{ { KS_dead_colon,		KS_gr_I },		KS_gr_Id  },
+	{ { KS_dead_colon,		KS_gr_Y },		KS_gr_Yd  },
+	{ { KS_dead_semi,		KS_gr_a },		KS_gr_at  },
+	{ { KS_dead_semi,		KS_gr_e },		KS_gr_et  },
+	{ { KS_dead_semi,		KS_gr_h },		KS_gr_ht  },
+	{ { KS_dead_semi,		KS_gr_i },		KS_gr_it  },
+	{ { KS_dead_semi,		KS_gr_o },		KS_gr_ot  },
+	{ { KS_dead_semi,		KS_gr_y },		KS_gr_yt  },
+	{ { KS_dead_semi,		KS_gr_v },		KS_gr_vt  },
+	{ { KS_dead_colon,		KS_gr_i },		KS_gr_id  },
+	{ { KS_dead_colon,		KS_gr_y },		KS_gr_yd  }
 };
 
 #define COMPOSE_SIZE	sizeof(compose_tab)/sizeof(compose_tab[0])
 
 static int compose_tab_inorder = 0;
 
-static inline int compose_tab_cmp __P((struct compose_tab_s *, struct compose_tab_s *));
-static keysym_t ksym_upcase __P((keysym_t));
-static void fillmapentry __P((const keysym_t *, int, struct wscons_keymap *));
+static inline int compose_tab_cmp(struct compose_tab_s *, struct compose_tab_s *);
+static keysym_t ksym_upcase(keysym_t);
+static void fillmapentry(const keysym_t *, int, struct wscons_keymap *);
 
 static inline int
-compose_tab_cmp(i, j)
-	struct compose_tab_s *i, *j;
+compose_tab_cmp(struct compose_tab_s *i, struct compose_tab_s *j)
 {
 	if (i->elem[0] == j->elem[0])
 		return(i->elem[1] - j->elem[1]);
@@ -197,8 +208,7 @@ compose_tab_cmp(i, j)
 }
 
 keysym_t
-wskbd_compose_value(compose_buf)
-	keysym_t *compose_buf;
+wskbd_compose_value(keysym_t *compose_buf)
 {
 	int i, j, r;
 	struct compose_tab_s v;
@@ -268,8 +278,7 @@ static const u_char latin1_to_upper[256] = {
 };
 
 static keysym_t
-ksym_upcase(ksym)
-	keysym_t ksym;
+ksym_upcase(keysym_t ksym)
 {
 	if (ksym >= KS_f1 && ksym <= KS_f20)
 		return(KS_F1 - KS_f1 + ksym);
@@ -282,10 +291,7 @@ ksym_upcase(ksym)
 }
 
 static void
-fillmapentry(kp, len, mapentry)
-	const keysym_t *kp;
-	int len;
-	struct wscons_keymap *mapentry;
+fillmapentry(const keysym_t *kp, int len, struct wscons_keymap *mapentry)
 {
 	switch (len) {
 	case 0:
@@ -327,10 +333,8 @@ fillmapentry(kp, len, mapentry)
 }
 
 void
-wskbd_get_mapentry(mapdata, kc, mapentry)
-	const struct wskbd_mapdata *mapdata;
-	int kc;
-	struct wscons_keymap *mapentry;
+wskbd_get_mapentry(const struct wskbd_mapdata *mapdata, int kc,
+	struct wscons_keymap *mapentry)
 {
 	kbd_t cur;
 	const keysym_t *kp;
@@ -379,10 +383,7 @@ wskbd_get_mapentry(mapdata, kc, mapentry)
 }
 
 void
-wskbd_init_keymap(newlen, map, maplen)
-	int newlen;
-	struct wscons_keymap **map;
-	int *maplen;
+wskbd_init_keymap(int newlen, struct wscons_keymap **map, int *maplen)
 {
 	int i;
 
@@ -404,10 +405,8 @@ wskbd_init_keymap(newlen, map, maplen)
 }
 
 int
-wskbd_load_keymap(mapdata, map, maplen)
-	const struct wskbd_mapdata *mapdata;
-	struct wscons_keymap **map;
-	int *maplen;
+wskbd_load_keymap(const struct wskbd_mapdata *mapdata,
+	struct wscons_keymap **map, int *maplen)
 {
 	int i, s, kc, stack_ptr;
 	const keysym_t *kp;

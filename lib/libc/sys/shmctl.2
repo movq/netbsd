@@ -1,4 +1,4 @@
-.\"	$NetBSD: shmctl.2,v 1.9 1999/12/02 21:42:39 kleink Exp $	
+.\"	$NetBSD: shmctl.2,v 1.19 2006/12/31 03:17:52 uebayasi Exp $
 .\"
 .\" Copyright (c) 1995 Frank van der Linden
 .\" All rights reserved.
@@ -29,7 +29,7 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd August 25, 1999
+.Dd November 25, 2006
 .Dt SHMCTL 2
 .Os
 .Sh NAME
@@ -38,7 +38,7 @@
 .Sh LIBRARY
 .Lb libc
 .Sh SYNOPSIS
-.Fd #include <sys/shm.h>
+.In sys/shm.h
 .Ft int
 .Fn shmctl "int shmid" "int cmd" "struct shmid_ds *buf"
 .Sh DESCRIPTION
@@ -57,7 +57,7 @@ structure associated with it which contains the following members:
     pid_t           shm_lpid;   /* pid of last shm op */
     pid_t           shm_cpid;   /* pid of creator */
     shmatt_t        shm_nattch; /* # of current attaches */
-    time_t          shm_atime;  /* last shmat() time*/
+    time_t          shm_atime;  /* last shmat() time */
     time_t          shm_dtime;  /* last shmdt() time */
     time_t          shm_ctime;  /* last change by shmctl() */
 .Ed
@@ -113,6 +113,15 @@ Only the super-user or a process with an effective uid equal to the
 or
 .Va shm_perm.uid
 values in the data structure associated with the queue can do this.
+.It Dv SHM_LOCK
+Lock the shared memory segment specified by
+.Fa shmid
+in memory.
+This operation can only be executed by the super-user.
+.It Dv SHM_UNLOCK
+Unlock the shared memory segment specified by
+.Fa shmid .
+This operation can only be executed by the super-user.
 .El
 .Pp
 The read and write permissions on a shared memory identifier
@@ -120,7 +129,7 @@ are determined by the
 .Va shm_perm.mode
 field in the same way as is
 done with files (see
-.Xr chmod 2 ),
+.Xr chmod 2 ) ,
 but the effective uid can match either the
 .Va shm_perm.cuid
 field or the
@@ -132,13 +141,32 @@ or
 .Va shm_perm.gid .
 .Sh RETURN VALUES
 Upon successful completion, a value of 0 is returned.
-Otherwise, -1 is returned and the global variable
+Otherwise, \-1 is returned and the global variable
 .Va errno
 is set to indicate the error.
 .Sh ERRORS
 .Fn shmctl
 will fail if:
 .Bl -tag -width Er
+.It Bq Er EACCES
+The command is
+.Dv IPC_STAT
+and the caller has no read permission for this shared memory segment.
+.It Bq Er EFAULT
+.Fa buf
+specifies an invalid address.
+.It Bq Er EINVAL
+.Fa shmid
+is not a valid shared memory segment identifier.
+.Pp
+.Va cmd
+is not a valid command.
+.It Bq Er ENOMEM
+The
+.Fa cmd
+is equal to
+.Dv SHM_LOCK
+and there is not enough physical memory.
 .It Bq Er EPERM
 .Fa cmd
 is equal to
@@ -157,21 +185,18 @@ An attempt was made to increase the value of
 through
 .Dv IPC_SET
 but the caller is not the super-user.
-.It Bq Er EACCES
-The command is
-.Dv IPC_STAT
-and the caller has no read permission for this shared memory segment.
-.It Bq Er EINVAL
-.Fa shmid
-is not a valid shared memory segment identifier.
 .Pp
-.Va cmd
-is not a valid command.
-.It Bq Er EFAULT
-.Fa buf
-specifies an invalid address.
+The
+.Fa cmd
+is equal to
+.Dv SHM_LOCK
+or
+.Dv SHM_UNLOCK
+and the caller is not the super-user.
 .El
 .Sh SEE ALSO
+.Xr ipcrm 1 ,
+.Xr ipcs 1 ,
 .Xr shmat 2 ,
 .Xr shmget 2
 .Sh STANDARDS

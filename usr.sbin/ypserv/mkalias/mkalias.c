@@ -1,4 +1,4 @@
-/*	$NetBSD: mkalias.c,v 1.8 1999/06/07 03:06:09 mrg Exp $ */
+/*	$NetBSD: mkalias.c,v 1.15 2008/02/29 03:00:47 lukem Exp $ */
 
 /*
  * Copyright (c) 1997 Mats O Jansson <moj@stacken.kth.se>
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: mkalias.c,v 1.8 1999/06/07 03:06:09 mrg Exp $");
+__RCSID("$NetBSD: mkalias.c,v 1.15 2008/02/29 03:00:47 lukem Exp $");
 #endif
 
 #include <sys/types.h>
@@ -43,7 +43,6 @@ __RCSID("$NetBSD: mkalias.c,v 1.8 1999/06/07 03:06:09 mrg Exp $");
 
 #include <ctype.h>
 #include <err.h>
-#include <fcntl.h>
 #include <netdb.h>
 #include <resolv.h>
 #include <stdio.h>
@@ -58,19 +57,14 @@ __RCSID("$NetBSD: mkalias.c,v 1.8 1999/06/07 03:06:09 mrg Exp $");
 #include "ypdb.h"
 #include "ypdef.h"
 
-void	capitalize __P((char *, int));
-int	check_host __P((char *, char *, int, int, int));
-int	main __P((int, char *[]));
-void	split_address __P((char *, int, char *, char *));
-void	usage __P((void));
-
-extern char *__progname;		/* from crt0.o */
+void	capitalize(char *, int);
+int	check_host(char *, char *, int, int, int);
+int	main(int, char *[]);
+void	split_address(char *, int, char *, char *);
+void	usage(void);
 
 void
-split_address(address, len, user, host)
-	char	*address;
-	int	 len;
-	char	*user, *host;
+split_address(char *address, int len, char *user, char *host)
 {
 	char *c, *s, *r;
 	int  i = 0;
@@ -107,11 +101,9 @@ split_address(address, len, user, host)
 }
 
 int
-check_host(address, host, dflag, uflag, Eflag)
-	char	*address, *host;
-	int	 dflag, uflag, Eflag;
+check_host(char *address, char *host, int dflag, int uflag, int Eflag)
 {
-	char answer[PACKETSZ];
+	u_char answer[PACKETSZ];
 	int  status;
 
 	if ((dflag && strchr(address, '@')) ||
@@ -133,9 +125,7 @@ check_host(address, host, dflag, uflag, Eflag)
 }
 
 void
-capitalize(name, len)
-	char	*name;
-	int	 len;
+capitalize(char *name, int len)
 {
 	char last = ' ';
 	char *c;
@@ -150,16 +140,14 @@ capitalize(name, len)
 	if (last == '.') {
 		for(c = name; i < len; i++) {
 			if (last == '.')
-				*c = toupper(*c);
+				*c = toupper((unsigned char)*c);
 			last = *c++;
 		}
 	}
 }
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	int	eflag = 0;
 	int	dflag = 0;
@@ -175,9 +163,8 @@ main(argc, argv)
 	datum	key, val;
 	char	*slash;
 	DBM	*new_db = NULL;
-	static	char mapname[] = "ypdbXXXXXXXXXX";
-	char	db_mapname[MAXPATHLEN], db_outfile[MAXPATHLEN],
-		db_tempname[MAXPATHLEN];
+	static	const char template[] = "ypdbXXXXXX";
+	char	db_mapname[MAXPATHLEN], db_outfile[MAXPATHLEN];
 	int	status;
 	char	user[4096], host[4096]; /* XXX: DB bsize = 4096 in ypdb.c */
 	char	datestr[11];
@@ -228,12 +215,13 @@ main(argc, argv)
 	if (optind < argc)
 		usage();
 	
-	db = ypdb_open(input, O_RDONLY, 0444);
+	db = ypdb_open(input);
 	if (db == NULL)
 		err(1, "Unable to open input database `%s'", input);
 
 	if (output != NULL) {
-		if (strlen(output) + strlen(YPDB_SUFFIX) > MAXPATHLEN)
+		if (strlen(output) + strlen(YPDB_SUFFIX) >
+		    (sizeof(db_outfile) + 1))
 			warnx("file name `%s' too long", output);
 		snprintf(db_outfile, sizeof(db_outfile),
 			 "%s%s", output, YPDB_SUFFIX);
@@ -246,17 +234,14 @@ main(argc, argv)
 	
 		/* note: output is now directory where map goes ! */
 	
-		if (strlen(output) + strlen(mapname)
-		    + strlen(YPDB_SUFFIX) > MAXPATHLEN)
+		if (strlen(output) + strlen(template) + strlen(YPDB_SUFFIX) >
+		    (sizeof(db_mapname) - 1))
 			errx(1, "Directory name `%s' too long", output);
 	
-		snprintf(db_tempname, sizeof(db_tempname), "%s%s", output,
-			mapname);
-		mktemp(db_tempname);	/* OK */
-		snprintf(db_mapname, sizeof(db_mapname), "%s%s", db_tempname,
-			YPDB_SUFFIX);
+		snprintf(db_mapname, sizeof(db_mapname), "%s%s",
+		    output, template);
 	
-		new_db = ypdb_open(db_tempname, O_RDWR|O_CREAT, 0444);
+		new_db = ypdb_mktemp(db_mapname);
 		if (new_db == NULL)
 			err(1, "Unable to open output database `%s'",
 			    db_outfile);
@@ -299,7 +284,7 @@ main(argc, argv)
 			status = ypdb_store(new_db, val, key, YPDB_INSERT);
 			if (status != 0) {
 				printf("%s: problem storing %*.*s %*.*s\n",
-				       __progname,
+				       getprogname(),
 				       val.dsize, val.dsize, val.dptr,
 				       key.dsize, key.dsize, key.dptr);
 			}
@@ -314,7 +299,7 @@ main(argc, argv)
 	}
 
 	if (new_db != NULL) {
-	  	sprintf(datestr, "%010d", (int)time(NULL));
+	  	snprintf(datestr, sizeof(datestr), "%010d", (int)time(NULL));
 		key.dptr = YP_LAST_KEY;
 		key.dsize = strlen(YP_LAST_KEY);
 		val.dptr = datestr;
@@ -352,10 +337,10 @@ main(argc, argv)
 }
 
 void
-usage()
+usage(void)
 {
 	fprintf(stderr,
 		"usage: %s [-e|-E [-d] [-u]] [-n] [-v] input [output]\n",
-		__progname);
+		getprogname());
 	exit(1);
 }

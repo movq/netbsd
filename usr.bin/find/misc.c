@@ -1,4 +1,4 @@
-/*	$NetBSD: misc.c,v 1.7 1998/02/02 14:02:25 mrg Exp $	*/
+/*	$NetBSD: misc.c,v 1.14 2006/10/11 19:51:10 apb Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "from: @(#)misc.c	8.2 (Berkeley) 4/1/94";
 #else
-__RCSID("$NetBSD: misc.c,v 1.7 1998/02/02 14:02:25 mrg Exp $");
+__RCSID("$NetBSD: misc.c,v 1.14 2006/10/11 19:51:10 apb Exp $");
 #endif
 #endif /* not lint */
 
@@ -54,28 +50,38 @@ __RCSID("$NetBSD: misc.c,v 1.7 1998/02/02 14:02:25 mrg Exp $");
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "find.h"
- 
+
 /*
  * brace_subst --
  *	Replace occurrences of {} in orig with path, and place it in a malloced
  *      area of memory set in store.
  */
 void
-brace_subst(orig, store, path, len)
-	char *orig, **store, *path;
-	int len;
+brace_subst(char *orig, char **store, char *path, int *len)
 {
-	int plen;
-	char ch, *p;
+	int nlen, plen, rest;
+	char ch, *p, *ostore;
 
 	plen = strlen(path);
 	for (p = *store; (ch = *orig) != '\0'; ++orig)
 		if (ch == '{' && orig[1] == '}') {
-			while ((p - *store) + plen > len)
-				if (!(*store = realloc(*store, len *= 2)))
+			/* Length of string after the {}. */
+			rest = strlen(&orig[2]);
+
+			nlen = *len;
+			while ((p - *store) + plen + rest + 1 > nlen)
+				nlen *= 2;
+
+			if (nlen > *len) {
+				ostore = *store;
+				if ((*store = realloc(ostore, nlen)) == NULL)
 					err(1, "realloc");
+				*len = nlen;
+				p += *store - ostore;	/* Relocate. */
+			}
 			memmove(p, path, plen);
 			p += plen;
 			++orig;
@@ -90,8 +96,7 @@ brace_subst(orig, store, path, len)
  *	input. If the input is 'y' then 1 is returned.
  */
 int
-queryuser(argv)
-	char **argv;
+queryuser(char **argv)
 {
 	int ch, first, nl;
 
@@ -118,18 +123,29 @@ queryuser(argv)
 	}
         return (first == 'y');
 }
- 
-/*
- * emalloc --
- *	malloc with error checking.
- */
-void *
-emalloc(len)
-	u_int len;
-{
-	void *p;
 
-	if ((p = malloc(len)) == NULL)
-		err(1, "malloc");
-	return (p);
+/*
+ * show_path --
+ *	called on SIGINFO
+ */
+/* ARGSUSED */
+void
+show_path(int sig)
+{
+	extern FTSENT *g_entry;
+	int errno_bak;
+
+	if (g_entry == NULL) {
+		/*
+		 * not initialized yet.
+		 * assumption: pointer assignment is atomic.
+		 */
+		return;
+	}
+
+	errno_bak = errno;
+	write(STDERR_FILENO, "find path: ", 11);
+	write(STDERR_FILENO, g_entry->fts_path, g_entry->fts_pathlen);
+	write(STDERR_FILENO, "\n", 1);
+	errno = errno_bak;
 }

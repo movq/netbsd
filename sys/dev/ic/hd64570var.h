@@ -1,4 +1,4 @@
-/*	$NetBSD: hd64570var.h,v 1.3 2000/01/04 06:36:29 chopps Exp $	*/
+/*	$NetBSD: hd64570var.h,v 1.8 2007/03/04 06:01:55 christos Exp $	*/
 
 /*
  * Copyright (c) 1999 Christian E. Hopps
@@ -103,7 +103,7 @@ struct sca_port {
 	 * start of each important bit of information for transmit and
 	 * receive buffers.
 	 *
-	 * note: for non-dma the phys and virtual version should be
+	 * note: for non-DMA the phys and virtual version should be
 	 * the same value and should be an _offset_ from the beginning
 	 * of mapped memory described by sc_memt/sc_memh.
 	 */
@@ -132,10 +132,6 @@ struct sca_port {
 	struct ifqueue fastq;		/* interactive packets */
 #endif
 
-#if NBPFILTER > 0
-	caddr_t	sp_bpf;			/* hook for BPF */
-#endif
-
 	struct sca_softc *sca;		/* pointer to parent */
 };
 
@@ -155,8 +151,8 @@ struct sca_softc {
 	 * If the function pointer is NULL, no callback is specified.
 	 */
 	void *sc_aux;
-	void (*sc_dtr_callback)(void *aux, int port, int state);
-	void (*sc_clock_callback)(void *aux, int port, int state);
+	void (*sc_dtr_callback)(void *, int, int);
+	void (*sc_clock_callback)(void *, int, int);
 
 	/* used to read and write the device registers */
 	u_int8_t	(*sc_read_1)(struct sca_softc *, u_int);
@@ -172,8 +168,8 @@ struct sca_softc {
 	int			sc_usedma;
 	union {
 		struct {
-			bus_space_tag_t	p_memt;		/* mem for non-dma */
-			bus_space_handle_t p_memh;	/* mem for non-dma */
+			bus_space_tag_t	p_memt;		/* mem for non-DMA */
+			bus_space_handle_t p_memh;	/* mem for non-DMA */
 			bus_space_handle_t p_sca_ioh[16]; /* io for sca regs */
 			bus_size_t 	p_pagesize;	/* memory page size */
 			bus_size_t 	p_pagemask;	/* memory page mask */
@@ -185,10 +181,10 @@ struct sca_softc {
 			void	(*p_page_off)(struct sca_softc *);
 		} u_paged;
 		struct {
-			bus_dma_tag_t	d_dmat;	/* bus dma tag */
-			bus_dmamap_t	d_dmam;	/* bus dma map */
-			bus_dma_segment_t d_seg;	/* bus dma segment */
-			caddr_t		d_dma_addr;	/* kva  of segment */
+			bus_dma_tag_t	d_dmat;	/* bus DMA tag */
+			bus_dmamap_t	d_dmam;	/* bus DMA map */
+			bus_dma_segment_t d_seg;	/* bus DMA segment */
+			void *		d_dma_addr;	/* kva  of segment */
 			bus_size_t	d_allocsize;	/* size of region */
 		} u_dma;
 	} sc_u;

@@ -1,4 +1,4 @@
-/* $NetBSD: wsemul_vt100_keys.c,v 1.3 1999/04/22 20:06:02 mycroft Exp $ */
+/* $NetBSD: wsemul_vt100_keys.c,v 1.9 2005/12/11 12:24:12 christos Exp $ */
 
 /*
  * Copyright (c) 1998
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed for the NetBSD Project
- *	by Matthias Drochner.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -32,15 +26,19 @@
  *
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: wsemul_vt100_keys.c,v 1.9 2005/12/11 12:24:12 christos Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 
+#include <dev/wscons/wsconsio.h>
 #include <dev/wscons/wsdisplayvar.h>
 #include <dev/wscons/wsksymvar.h>
 #include <dev/wscons/wsksymdef.h>
 #include <dev/wscons/wsemul_vt100var.h>
 
-static char *vt100_fkeys[] = {
+static const char *vt100_fkeys[] = {
 	"\033[11~",	/* F1 */
 	"\033[12~",
 	"\033[13~",		/* F1-F5 normally don't send codes */
@@ -63,14 +61,14 @@ static char *vt100_fkeys[] = {
 	"\033[34~",	/* F20 */
 };
 
-static char *vt100_pfkeys[] = {
+static const char *vt100_pfkeys[] = {
 	"\033OP",	/* PF1 */
 	"\033OQ",
 	"\033OR",
 	"\033OS",	/* PF4 */
 };
 
-static char *vt100_numpad[] = {
+static const char *vt100_numpad[] = {
 	"\033Op",	/* KP 0 */
 	"\033Oq",	/* KP 1 */
 	"\033Or",	/* KP 2 */
@@ -84,10 +82,7 @@ static char *vt100_numpad[] = {
 };
 
 int
-wsemul_vt100_translate(cookie, in, out)
-	void *cookie;
-	keysym_t in;
-	char **out;
+wsemul_vt100_translate(void *cookie, keysym_t in, const char **out)
 {
 	struct wsemul_vt100_emuldata *edp = cookie;
 	static char c;

@@ -1,4 +1,4 @@
-/*	$NetBSD: fpgetsticky.c,v 1.1 1999/07/07 01:55:08 danw Exp $	*/
+/*	$NetBSD: fpgetsticky.c,v 1.9 2008/04/28 20:22:56 martin Exp $	*/
 
 /*
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  * 
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,14 +29,29 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+#if defined(LIBC_SCCS) && !defined(lint)
+__RCSID("$NetBSD: fpgetsticky.c,v 1.9 2008/04/28 20:22:56 martin Exp $");
+#endif /* LIBC_SCCS and not lint */
+
+#include "namespace.h"
+
 #include <sys/types.h>
 #include <ieeefp.h>
+#include <powerpc/fpu.h>
+
+#ifdef __weak_alias
+__weak_alias(fpgetsticky,_fpgetsticky)
+#endif
+
+#define	STICKYBITS	(FPSCR_XX|FPSCR_ZX|FPSCR_UX|FPSCR_OX|FPSCR_VX)
+#define	STICKYSHFT	25
 
 fp_except
-fpgetsticky()
+fpgetsticky(void)
 {
-	u_int64_t fpscr;
+	uint64_t fpscr;
 
-	__asm__ __volatile("mffs %0" : "=f"(fpscr));
-	return ((fpscr >> 25) & 0x1f);
+	__asm volatile("mffs %0" : "=f"(fpscr));
+	return (((uint32_t)fpscr & STICKYBITS) >> STICKYSHFT);
 }

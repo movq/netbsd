@@ -1,9 +1,15 @@
-____ __   _  ____ __ __ ___  ___   ___
 ___ /  | / /__  _/ /_  /   |/ __\ / _ |
 __ /   |/ // _\/_  _/ / ' / \_ \ / /  /
 _ / /|   // __/ / /_ / , | __/ // / ,/
  /_/ |__/_\__/__\__//___/__\__//___'
 		-- Greywolf
+%
+#netbsd - where monks recite their internal dialogue while debugging.
+		-- Bernhard Riedel
+%
+- What's up?
+- All the NetBSD servers, of course..
+		-- Gavan Fantom
 %
 A _Real_ Operating System for _Real_ Hackers.
 		-- Greywolf
@@ -21,14 +27,6 @@ Anagrams for NetBSD core team:
   Resented Combat
   Boast Decrement
   Basement DEC rot
-		-- Julian Assange
-%
-Anagrams for NetBSD core team:
-  Strobe mased net
-  Strobe mased ten
-  Erect teen bonds
-  A boned cream test
-  Cremate no debts
 		-- Julian Assange
 %
 Anagrams for NetBSD-core:
@@ -51,6 +49,13 @@ http://www.imrryr.org/NetBSD/logo
 I didn't get where I am today without using NetBSD
 		-- Dave Tyson
 %
+I held off from Uni until NetBSD came out.
+I decided, ``if there's no NetBSD then I'll just flip burgers''
+		-- Roland Dowdeswell
+%
+If it isn't possible with NetBSD, it isn't worth doing.
+		-- Petter "Nosfisk" Lindquist
+%
 My other computer runs NetBSD
 		-- Allen Briggs
 %
@@ -63,10 +68,10 @@ NetBSD - A Mycroft in every port.
 NetBSD - a server in every port.
 		-- Julian Assange
 %
-NetBSD - big, isn't it?
-		-- Julian Assange
+NetBSD - because Unix isn't just #include <linux.h>, i386, ELF, ...!
+		-- Hubert Feyrer
 %
-NetBSD - Bits for Tits.
+NetBSD - big, isn't it?
 		-- Julian Assange
 %
 NetBSD - daemonic power
@@ -87,17 +92,17 @@ NetBSD - hackers tested, mom approved
 NetBSD - here today and in the middle of 2038 tomorrow.
 		-- Julian Assange
 %
+NetBSD - love all, serve all.
+		-- Silke Mueller
+%
 NetBSD - Mach 3 stealthOS, undetectable by media radar.
 		-- Julian Assange
 %
 NetBSD - more is more.
 		-- Julian Assange
 %
-NetBSD - more ports than a Norwegian crack whore.
-		-- Julian Assange
-%
-NetBSD - Multiple Architectures lead to Multiple Orgasms.
-		-- Julian Assange
+NetBSD - no propaganda in the default system, in more than 10 years!
+		-- Jaromir Dolecek
 %
 NetBSD:  No Windows or Gates, but lots of doors, portals and tunnels.
 		-- Greywolf
@@ -147,11 +152,11 @@ NetBSD - the power to suave.
 NetBSD - the power to swerve (penguins, worse than cane toads).
 		-- Julian Assange
 %
-NetBSD - the semen in the money shot.
-		-- Julian Assange
-%
 NetBSD:  The Source is out there.
 		-- Greywolf
+%
+NetBSD - The undiscriminated geek UNIX
+		-- Richard Rauch
 %
 NetBSD - we have nothing to declare but our benchmarks.
 		-- Julian Assange
@@ -159,22 +164,24 @@ NetBSD - we have nothing to declare but our benchmarks.
 NetBSD - we put the Net in NetBSD.
 		-- Julian Assange
 %
-NetBSD - We put the OS in OrgaSm.
-		-- Julian Assange
-%
 NetBSD - We're not in canvas anymore, toto
-		-- Julian Assange
-%
-NetBSD - we're on a mission from Hell.
 		-- Julian Assange
 %
 NetBSD - where do you want to go Tuesday?
 		-- Julian Assange
 %
+NetBSD - Will even run on i386
+		-- Brian Hechinger
+%
 NetBSD - your basement or mine?
 		-- Julian Assange
 %
 NetBSD: A drinking group with a serious computing problem.
+%
+NetBSD: A pmap for every occasion.
+		-- David Brownlee
+%
+NetBSD: Abandon all hype, oh ye who enter here.
 %
 NetBSD: Agnostics in the Platform Religious Wars.
 		-- Erik E. Fair
@@ -184,9 +191,6 @@ NetBSD: An Operating System For Everyone
 %
 NetBSD: Are you old enough to run it?
 		-- Tom Harvey
-%
-NetBSD: better for your uptime than Viagra.
-		-- Daniel Carosone
 %
 NetBSD: Beyond Windows
 		-- Johan Ihren
@@ -210,7 +214,9 @@ NetBSD: Designed to be {secure, reliable, portable, CORRECT}
 		-- Matthew Orgass
 %
 NetBSD: Download one, get ${NUMPORTS}-1 for free.
-		-- Antti Kantee
+%
+NetBSD: Empowering the VAX generation.
+		-- Andy Doran
 %
 NetBSD: Everyone else is doin' it. But we're doin' it right.
 		-- Herb Peyerl
@@ -282,18 +288,14 @@ NetBSD: lets get it right
 NetBSD: Linux without the hype.
 		-- Hubert Feyrer
 %
-NetBSD logo: Kiss-painted (w/tongue) Beastie stabbing a pitchfork
-       through a bloodied and obviously-in-horrible-pain Tux.
-		-- Mason Loring Bliss
-%
-NetBSD long theme: "Eat a queer fetus for Jesus, and run NetBSD!"
-		-- Mason Loring Bliss
-%
 NetBSD: making all computer hardware a commodity.
 		-- Erik E. Fair
 %
 NetBSD: Making your net work, and its free to boot!
 		-- Steve Woodford
+%
+NetBSD: Masterly with distinction.  Striking also.
+		-- Andy Doran
 %
 NetBSD: May the Source be with you
 		-- Greg Earle
@@ -304,9 +306,6 @@ NetBSD: Microsoft ask you where you want to go, NetBSD gets you there
 NetBSD, More Nines.
 		-- Andrew Gillham
 %
-NetBSD: More Ports That A Cheap Whore
-		-- Andrew Gillham
-%
 NetBSD: Multi-platform OS
 %
 NetBSD: My Computer Runs!
@@ -314,6 +313,9 @@ NetBSD: My Computer Runs!
 %
 NetBSD: My Computer Works!
 		-- Andrew Gillham
+%
+NetBSD: My other computer also runs NetBSD.
+		-- David Brownlee
 %
 NetBSD, Net Improvement.
 		-- Andrew Gillham
@@ -333,14 +335,13 @@ NetBSD: Network Your World.
 NetBSD: Networking Space
 		-- Andrew Gillham
 %
-NetBSD: No Sh;t!
-		-- Andrew Gillham
+NetBSD: No hype required.
+		-- David Brownlee
 %
 NetBSD, No Worries!
 		-- Andrew Gillham
 %
 NetBSD: Not all of the First Ones have gone away.
-		-- Antti Kantee
 %
 NetBSD. Not Guano.
 		-- Hubert Feyrer
@@ -349,10 +350,15 @@ NetBSD: Not your mother's OS (unless you are P. Seebach)
 		-- Tom Harvey
 %
 NetBSD: Oh my god! They support my hardware! You hackers!
-		-- Antti Kantee
 %
 NetBSD: Perpetual performance!
 		-- Lars-Johan Liman
+%
+NetBSD: Pink fluffy chunks or green bits - the choice is yours.
+		-- Andy Doran
+%
+NetBSD: Ports to * boards.
+		-- Steve Woodford
 %
 NetBSD: Power Your Net.
 		-- Andrew Gillham
@@ -367,6 +373,8 @@ NetBSD: Professionalpower!
 		-- Lars-Johan Liman
 %
 NetBSD: "Progress on your system is closer than it appears."
+%
+NetBSD: Raiders of the Lost Arch
 %
 NetBSD: Re: NetBSD Slogans
 		-- Mirian Crzig Lennox
@@ -401,9 +409,6 @@ NetBSD: Stable and strong!
 NetBSD: Stop, Drop, and Load
 		-- Andrew Gillham
 %
-NetBSD, stupid.
-		-- Julian Assange
-%
 NetBSD, Tap The Power
 		-- Andrew Gillham
 %
@@ -423,7 +428,6 @@ NetBSD: The Last Bastion of the true UNIX Religion.
 		-- Miles Nordin
 %
 NetBSD: The OS WORM - Write Once, Run Many
-		-- Antti Kantee
 %
 NetBSD: The Power of Code
 		-- Mason Loring Bliss
@@ -444,6 +448,8 @@ NetBSD: the server is up
 %
 NetBSD: The Worlds Most Portable Operating System
 %
+NetBSD/toaster: we wish the toaster to be happy too.
+%
 NetBSD: To serve the power.
 		-- Herb Peyerl
 %
@@ -459,9 +465,6 @@ NetBSD: Two guys with a vax
 NetBSD: u_long uptime;
 		-- Herb Peyerl
 %
-NetBSD: Unix With Balls.
-		-- Andrew Gillham
-%
 NetBSD: unshackling hardware designers and users from the bondage
         of WinTel.
 		-- Erik E. Fair
@@ -470,7 +473,6 @@ NetBSD: Use the ENTIRE computer!
 		-- Andrew Gillham
 %
 NetBSD: userland included
-		-- Antti Kantee
 %
 NetBSD: We Come In Peace.
 		-- Andrew Gillham
@@ -509,17 +511,17 @@ NetBSD: Where do you want to have the power to serve, tomorrow?
 NetBSD: Who do you Serve? And who do you Trust?
 		-- David Maxwell
 %
+NetBSD will put hair on a UNIX admin's chest
+		-- Jason R. Fink
+%
 NetBSD: Write Once, Run Everywhere. Java optional.
 		-- Todd Whitesel
 %
 NetBSD: You can't handle it.
 		-- Paul Newhouse
 %
-NetBSD/sparc: less Lovelaces in your LX?
-		-- Jim Wise
-%
-Never mind the bollocks, here's NetBSD.
-		-- Julian Assange
+NetBSD: You choose the hardware, we'll bring the OS.
+		-- David Brownlee
 %
 Of course it runs NetBSD.
 %
@@ -537,3 +539,13 @@ Where would you have rather been today, tomorrow? NetBSD.
 %
 With many thanks to the core team and UCB CSRG.
 		-- Greywolf
+%
+Young or old; cutting edge or yesterday's NeWS, NetBSD is the UNIX for you. 
+It can be a hulking monster in your basement, or fit in the palm
+of your hand.
+		-- Richard Rauch
+%
+NetBSD: Dead on Target
+		-- Gimpy
+%
+NetBSD JIHBED

@@ -1,4 +1,4 @@
-/*	$NetBSD: exec_script.c,v 1.23 2000/02/01 01:23:29 assar Exp $	*/
+/*	$NetBSD: exec_script.c,v 1.62 2008/03/21 21:55:00 ad Exp $	*/
 
 /*
  * Copyright (c) 1993, 1994, 1996 Christopher G. Demetriou
@@ -30,14 +30,19 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: exec_script.c,v 1.62 2008/03/21 21:55:00 ad Exp $");
+
 #if defined(SETUIDSCRIPTS) && !defined(FDSCRIPTS)
 #define FDSCRIPTS		/* Need this for safe set-id scripts. */
 #endif
 
+#include "veriexec.h"
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
-#include <sys/malloc.h>
+#include <sys/kmem.h>
 #include <sys/vnode.h>
 #include <sys/namei.h>
 #include <sys/file.h>
@@ -47,9 +52,9 @@
 #include <sys/filedesc.h>
 #include <sys/exec.h>
 #include <sys/resourcevar.h>
-#include <vm/vm.h>
 
 #include <sys/exec_script.h>
+#include <sys/exec_elf.h>
 
 /*
  * exec_script_makecmds(): Check if it's an executable shell script.
@@ -64,14 +69,14 @@
  * into the exec package.
  */
 int
-exec_script_makecmds(p, epp)
-	struct proc *p;
-	struct exec_package *epp;
+exec_script_makecmds(struct lwp *l, struct exec_package *epp)
 {
 	int error, hdrlinelen, shellnamelen, shellarglen;
 	char *hdrstr = epp->ep_hdr;
 	char *cp, *shellname, *shellarg, *oldpnbuf;
-	char **shellargp, **tmpsap;
+	size_t shellargp_len;
+	struct exec_fakearg *shellargp;
+	struct exec_fakearg *tmpsap;
 	struct vnode *scriptvp;
 #ifdef SETUIDSCRIPTS
 	/* Gcc needs those initialized for spurious uninitialized warning */
@@ -96,7 +101,7 @@ exec_script_makecmds(p, epp)
 	 * (The latter requirement means that we have to check
 	 * for both spaces and tabs later on.)
 	 */
-	hdrlinelen = min(epp->ep_hdrvalid, MAXINTERP);
+	hdrlinelen = min(epp->ep_hdrvalid, SCRIPT_HDR_SIZE);
 	for (cp = hdrstr + EXEC_SCRIPT_MAGICLEN; cp < hdrstr + hdrlinelen;
 	    cp++) {
 		if (*cp == '\n') {
@@ -105,6 +110,13 @@ exec_script_makecmds(p, epp)
 		}
 	}
 	if (cp >= hdrstr + hdrlinelen)
+		return ENOEXEC;
+
+	/*
+	 * If the script has an ELF header, don't exec it.
+	 */
+	if (epp->ep_hdrvalid >= sizeof(ELFMAG)-1 &&
+	    memcmp(hdrstr, ELFMAG, sizeof(ELFMAG)-1) == 0)
 		return ENOEXEC;
 
 	shellname = NULL;
@@ -146,8 +158,9 @@ exec_script_makecmds(p, epp)
 check_shell:
 #ifdef SETUIDSCRIPTS
 	/*
-	 * MNT_NOSUID and STRC are already taken care of by check_exec,
-	 * so we don't need to worry about them now or later.
+	 * MNT_NOSUID has already taken care of by check_exec,
+	 * so we don't need to worry about it now or later.  We
+	 * will need to check PSL_TRACED later, however.
 	 */
 	script_sbits = epp->ep_vap->va_mode & (S_ISUID | S_ISGID);
 	if (script_sbits != 0) {
@@ -164,7 +177,7 @@ check_shell:
 	 * method of implementing "safe" set-id and x-only scripts.
 	 */
 	vn_lock(epp->ep_vp, LK_EXCLUSIVE | LK_RETRY);
-	error = VOP_ACCESS(epp->ep_vp, VREAD, p->p_ucred, p);
+	error = VOP_ACCESS(epp->ep_vp, VREAD, l->l_cred);
 	VOP_UNLOCK(epp->ep_vp, 0);
 	if (error == EACCES
 #ifdef SETUIDSCRIPTS
@@ -178,19 +191,17 @@ check_shell:
 			panic("exec_script_makecmds: epp already has a fd");
 #endif
 
-		/* falloc() will use the descriptor for us */
-		if ((error = falloc(p, &fp, &epp->ep_fd)) != 0) {
+		if ((error = fd_allocfile(&fp, &epp->ep_fd)) != 0) {
 			scriptvp = NULL;
 			shellargp = NULL;
 			goto fail;
 		}
-
 		epp->ep_flags |= EXEC_HASFD;
 		fp->f_type = DTYPE_VNODE;
 		fp->f_ops = &vnops;
-		fp->f_data = (caddr_t) epp->ep_vp;
+		fp->f_data = (void *) epp->ep_vp;
 		fp->f_flag = FREAD;
-		FILE_UNUSE(fp, p);
+		fd_affix(curproc, fp, epp->ep_fd);
 	}
 #endif
 
@@ -200,30 +211,39 @@ check_shell:
 	epp->ep_flags |= EXEC_INDIR;
 
 	/* and set up the fake args list, for later */
-	MALLOC(shellargp, char **, 4 * sizeof(char *), M_EXEC, M_WAITOK);
+	shellargp_len = 4 * sizeof(*shellargp);
+	shellargp = kmem_alloc(shellargp_len, KM_SLEEP);
 	tmpsap = shellargp;
-	MALLOC(*tmpsap, char *, shellnamelen + 1, M_EXEC, M_WAITOK);
-	strcpy(*tmpsap++, shellname);
+	tmpsap->fa_len = shellnamelen + 1;
+	tmpsap->fa_arg = kmem_alloc(tmpsap->fa_len, KM_SLEEP);
+	strlcpy(tmpsap->fa_arg, shellname, tmpsap->fa_len);
+	tmpsap++;
 	if (shellarg != NULL) {
-		MALLOC(*tmpsap, char *, shellarglen + 1, M_EXEC, M_WAITOK);
-		strcpy(*tmpsap++, shellarg);
+		tmpsap->fa_len = shellarglen + 1;
+		tmpsap->fa_arg = kmem_alloc(tmpsap->fa_len, KM_SLEEP);
+		strlcpy(tmpsap->fa_arg, shellarg, tmpsap->fa_len);
+		tmpsap++;
 	}
-	MALLOC(*tmpsap, char *, MAXPATHLEN, M_EXEC, M_WAITOK);
+	tmpsap->fa_len = MAXPATHLEN;
+	tmpsap->fa_arg = kmem_alloc(tmpsap->fa_len, KM_SLEEP);
 #ifdef FDSCRIPTS
 	if ((epp->ep_flags & EXEC_HASFD) == 0) {
 #endif
 		/* normally can't fail, but check for it if diagnostic */
-		error = copyinstr(epp->ep_name, *tmpsap++, MAXPATHLEN,
+		error = copyinstr(epp->ep_name, tmpsap->fa_arg, MAXPATHLEN,
 		    (size_t *)0);
+		tmpsap++;
 #ifdef DIAGNOSTIC
 		if (error != 0)
-			panic("exec_script: copyinstr couldn't fail\n");
+			panic("exec_script: copyinstr couldn't fail");
 #endif
 #ifdef FDSCRIPTS
-	} else
-		sprintf(*tmpsap++, "/dev/fd/%d", epp->ep_fd);
+	} else {
+		snprintf(tmpsap->fa_arg, MAXPATHLEN, "/dev/fd/%d", epp->ep_fd);
+		tmpsap++;
+	}
 #endif
-	*tmpsap = NULL;
+	tmpsap->fa_arg = NULL;
 
 	/*
 	 * mark the header we have as invalid; check_exec will read
@@ -238,10 +258,10 @@ check_shell:
 	scriptvp = epp->ep_vp;
 	oldpnbuf = epp->ep_ndp->ni_cnd.cn_pnbuf;
 
-	if ((error = check_exec(p, epp)) == 0) {
-		/* note that we've clobbered the header */
-		epp->ep_flags |= EXEC_DESTR;
-
+	error = check_exec(l, epp);
+	/* note that we've clobbered the header */
+	epp->ep_flags |= EXEC_DESTR;
+	if (error == 0) {
 		/*
 		 * It succeeded.  Unlock the script and
 		 * close it if we aren't using it any more.
@@ -250,19 +270,22 @@ check_shell:
 		 */
 		if ((epp->ep_flags & EXEC_HASFD) == 0) {
 			vn_lock(scriptvp, LK_EXCLUSIVE | LK_RETRY);
-			VOP_CLOSE(scriptvp, FREAD, p->p_ucred, p);
+			VOP_CLOSE(scriptvp, FREAD, l->l_cred);
 			vput(scriptvp);
 		}
 
 		/* free the old pathname buffer */
-		FREE(oldpnbuf, M_NAMEI);
+		PNBUF_PUT(oldpnbuf);
 
 		epp->ep_flags |= (EXEC_HASARGL | EXEC_SKIPARG);
 		epp->ep_fa = shellargp;
+		epp->ep_fa_len = shellargp_len;
 #ifdef SETUIDSCRIPTS
 		/*
 		 * set thing up so that set-id scripts will be
-		 * handled appropriately
+		 * handled appropriately.  PSL_TRACED will be
+		 * checked later when the shell is actually
+		 * exec'd.
 		 */
 		epp->ep_vap->va_mode |= script_sbits;
 		if (script_sbits & S_ISUID)
@@ -278,28 +301,26 @@ check_shell:
 #ifdef FDSCRIPTS
 fail:
 #endif
-	/* note that we've clobbered the header */
-	epp->ep_flags |= EXEC_DESTR;
 
 	/* kill the opened file descriptor, else close the file */
         if (epp->ep_flags & EXEC_HASFD) {
                 epp->ep_flags &= ~EXEC_HASFD;
-                (void) fdrelease(p, epp->ep_fd);
+                fd_close(epp->ep_fd);
         } else if (scriptvp) {
 		vn_lock(scriptvp, LK_EXCLUSIVE | LK_RETRY);
-		VOP_CLOSE(scriptvp, FREAD, p->p_ucred, p);
+		VOP_CLOSE(scriptvp, FREAD, l->l_cred);
 		vput(scriptvp);
 	}
 
-        FREE(epp->ep_ndp->ni_cnd.cn_pnbuf, M_NAMEI);
+        PNBUF_PUT(epp->ep_ndp->ni_cnd.cn_pnbuf);
 
 	/* free the fake arg list, because we're not returning it */
 	if ((tmpsap = shellargp) != NULL) {
-		while (*tmpsap != NULL) {
-			FREE(*tmpsap, M_EXEC);
+		while (tmpsap->fa_arg != NULL) {
+			kmem_free(tmpsap->fa_arg, tmpsap->fa_len);
 			tmpsap++;
 		}
-		FREE(shellargp, M_EXEC);
+		kmem_free(shellargp, shellargp_len);
 	}
 
         /*

@@ -1,4 +1,4 @@
-/*	$NetBSD: map.c,v 1.9 1998/07/26 23:09:50 mycroft Exp $	*/
+/*	$NetBSD: map.c,v 1.11 2006/04/30 23:54:40 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)map.c	8.1 (Berkeley) 6/9/93";
 #endif
-__RCSID("$NetBSD: map.c,v 1.9 1998/07/26 23:09:50 mycroft Exp $");
+__RCSID("$NetBSD: map.c,v 1.11 2006/04/30 23:54:40 christos Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -182,6 +178,7 @@ badmopt:		errx(1, "illegal -m option format: %s", copy);
 		(void)printf("%sLT", p);
 	(void)printf("\nspeed: %d\n", mapp->speed);
 #endif
+	free(copy);
 }
 
 /*

@@ -1,4 +1,4 @@
-/*	$NetBSD: fstab.c,v 1.22 2000/01/22 22:19:10 mycroft Exp $	*/
+/*	$NetBSD: fstab.c,v 1.28 2006/08/12 23:49:54 christos Exp $	*/
 
 /*
  * Copyright (c) 1980, 1988, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)fstab.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: fstab.c,v 1.22 2000/01/22 22:19:10 mycroft Exp $");
+__RCSID("$NetBSD: fstab.c,v 1.28 2006/08/12 23:49:54 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -69,27 +65,26 @@ static struct fstab _fs_fstab;
 
 static int fstabscan __P((void));
 
-static __inline char *nextfld __P((char **, const char *));
+static char *nextfld(char **, const char *);
+static int fstabscan(void);
 
 
-static __inline char *
-nextfld(str, sep)
-	char **str;
-	const char *sep;
+static char *
+nextfld(char **str, const char *sep)
 {
 	char *ret;
 
 	_DIAGASSERT(str != NULL);
 	_DIAGASSERT(sep != NULL);
 
-	while ((ret = strsep(str, sep)) != NULL && *ret == '\0')
+	while ((ret = stresep(str, sep, '\\')) != NULL && *ret == '\0')
 		continue;
 	return ret;
 }
 
 
 static int
-fstabscan()
+fstabscan(void)
 {
 	char *cp, *lp, *sp;
 #define	MAXLINELENGTH	1024
@@ -97,10 +92,11 @@ fstabscan()
 	char subline[MAXLINELENGTH];
 	static const char sep[] = ":\n";
 	static const char ws[] = " \t\n";
-	static char *fstab_type[] = {
+	static const char *fstab_type[] = {
 	    FSTAB_RW, FSTAB_RQ, FSTAB_RO, FSTAB_SW, FSTAB_DP, FSTAB_XX, NULL 
 	};
 
+	(void)memset(&_fs_fstab, 0, sizeof(_fs_fstab));
 	for (;;) {
 		if (!(lp = fgets(line, sizeof(line), _fs_fp)))
 			return 0;
@@ -117,8 +113,9 @@ fstabscan()
 					continue;
 				_fs_fstab.fs_mntops = _fs_fstab.fs_type;
 				_fs_fstab.fs_vfstype =
+				    __UNCONST(
 				    strcmp(_fs_fstab.fs_type, FSTAB_SW) ?
-				    "ufs" : "swap";
+				    "ufs" : "swap");
 				if ((cp = nextfld(&lp, sep)) != NULL) {
 					_fs_fstab.fs_freq = atoi(cp);
 					if ((cp = nextfld(&lp, sep)) != NULL) {
@@ -145,21 +142,27 @@ fstabscan()
 			if ((cp = nextfld(&lp, ws)) != NULL)
 				_fs_fstab.fs_passno = atoi(cp);
 		}
-		sp = strncpy(subline, _fs_fstab.fs_mntops, sizeof(subline)-1);
+
+		/* subline truncated iff line truncated */
+		(void)strlcpy(subline, _fs_fstab.fs_mntops, sizeof(subline));
+		sp = subline;
+
 		while ((cp = nextfld(&sp, ",")) != NULL) {
-			char **tp;
+			const char **tp;
 
 			if (strlen(cp) != 2)
 				continue;
 
 			for (tp = fstab_type; *tp; tp++)
 				if (strcmp(cp, *tp) == 0) {
-					_fs_fstab.fs_type = *tp;
+					_fs_fstab.fs_type = __UNCONST(*tp);
 					break;
 				}
 			if (*tp)
 				break;
 		}
+		if (_fs_fstab.fs_type == NULL)
+			goto bad;
 		if (strcmp(_fs_fstab.fs_type, FSTAB_XX) == 0)
 			continue;
 		if (cp != NULL)
@@ -172,7 +175,7 @@ bad:
 }
 
 struct fstab *
-getfsent()
+getfsent(void)
 {
 	if ((!_fs_fp && !setfsent()) || !fstabscan())
 		return NULL;
@@ -180,8 +183,7 @@ getfsent()
 }
 
 struct fstab *
-getfsspec(name)
-	const char *name;
+getfsspec(const char *name)
 {
 
 	_DIAGASSERT(name != NULL);
@@ -194,8 +196,7 @@ getfsspec(name)
 }
 
 struct fstab *
-getfsfile(name)
-	const char *name;
+getfsfile(const char *name)
 {
 
 	_DIAGASSERT(name != NULL);
@@ -208,7 +209,7 @@ getfsfile(name)
 }
 
 int
-setfsent()
+setfsent(void)
 {
 	_fs_lineno = 0;
 	if (_fs_fp) {
@@ -223,7 +224,7 @@ setfsent()
 }
 
 void
-endfsent()
+endfsent(void)
 {
 	if (_fs_fp) {
 		(void)fclose(_fs_fp);

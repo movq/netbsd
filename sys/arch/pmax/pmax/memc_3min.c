@@ -1,9 +1,43 @@
-/*	$NetBSD: memc_3min.c,v 1.6 2000/01/08 01:02:39 simonb Exp $	*/
+/*	$NetBSD: memc_3min.c,v 1.10 2005/12/11 12:18:39 christos Exp $	*/
 
 /*
- * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Systems Programming Group of the University of Utah Computer
+ * Science Department and Ralph Campbell.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ * from: Utah Hdr: trap.c 1.32 91/04/06
+ *
+ *	@(#)trap.c	8.5 (Berkeley) 1/11/94
+ */
+/*
+ * Copyright (c) 1988 University of Utah.
  *
  * This code is derived from software contributed to Berkeley by
  * the Systems Programming Group of the University of Utah Computer
@@ -45,7 +79,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: memc_3min.c,v 1.6 2000/01/08 01:02:39 simonb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: memc_3min.c,v 1.10 2005/12/11 12:18:39 christos Exp $");
 
 /*
  * Motherboard memory error contoller used in both
@@ -60,31 +94,6 @@ __KERNEL_RCSID(0, "$NetBSD: memc_3min.c,v 1.6 2000/01/08 01:02:39 simonb Exp $")
 #include <pmax/pmax/kmin.h>
 #include <pmax/pmax/memc.h>
 
-
-/* forward declarations */
-static unsigned	kn02ba_recover_erradr __P((u_int phys, u_int mer));
-
-
-static unsigned
-kn02ba_recover_erradr(phys, mer)
-	unsigned phys, mer;
-{
-	/* phys holds bits 28:2, mer knows which byte */
-	switch (mer & KMIN_MER_LASTBYTE) {
-	case KMIN_LASTB31:
-		mer = 3; break;
-	case KMIN_LASTB23:
-		mer = 2; break;
-	case KMIN_LASTB15:
-		mer = 1; break;
-	case KMIN_LASTB07:
-		mer = 0; break;
-	}
-	return ((phys & KMIN_AER_ADDR_MASK) | mer);
-}
-
-
-
 /*
  * Handle error
  * All we can do with parity is panic.
@@ -93,19 +102,30 @@ kn02ba_recover_erradr(phys, mer)
 void
 kn02ba_errintr()
 {
-	int mer, adr, siz;
+	int mer, adr, siz, err;
 	static int errintr_cnt = 0;
 
-	siz = *(volatile int *)MIPS_PHYS_TO_KSEG1(KMIN_REG_MSR);
-	mer = *(volatile int *)MIPS_PHYS_TO_KSEG1(KMIN_REG_MER);
-	adr = *(volatile int *)MIPS_PHYS_TO_KSEG1(KMIN_REG_AER);
+	siz = *(u_int32_t *)MIPS_PHYS_TO_KSEG1(KMIN_REG_MSR);
+	mer = *(u_int32_t *)MIPS_PHYS_TO_KSEG1(KMIN_REG_MER);
+	adr = *(u_int32_t *)MIPS_PHYS_TO_KSEG1(KMIN_REG_AER);
 
 	/* clear interrupt bit */
-	*(unsigned int *)MIPS_PHYS_TO_KSEG1(KMIN_REG_TIMEOUT) = 0;
+	*(u_int32_t *)MIPS_PHYS_TO_KSEG1(KMIN_REG_TIMEOUT) = 0;
+
+	err = 0;	/* XXX gcc */
+	switch (mer & KMIN_MER_LASTBYTE) {
+	case KMIN_LASTB31:
+		err = 3; break;
+	case KMIN_LASTB23:
+		err = 2; break;
+	case KMIN_LASTB15:
+		err = 1; break;
+	case KMIN_LASTB07:
+		err = 0; break;
+	}
+	err |= (adr & KMIN_AER_ADDR_MASK);
 
 	errintr_cnt++;
-	printf("(%d)%s%x [%x %x %x]\n", errintr_cnt,
-	       "Bad memory chip at phys ",
-	       kn02ba_recover_erradr(adr, mer),
-	       mer, siz, adr);
+	printf("(%d)Bad memory chip at phys %x [%x %x %x]\n",
+		errintr_cnt, err, mer, siz, adr);
 }

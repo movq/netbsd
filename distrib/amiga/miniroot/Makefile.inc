@@ -1,11 +1,12 @@
-#	$NetBSD: Makefile.inc,v 1.2 1999/03/15 20:54:54 is Exp $
+#	$NetBSD: Makefile.inc,v 1.14 2006/01/24 20:28:21 is Exp $
 
-VND=		vnd0c
-IMAGESIZE?=	8192 # 512 byte blocks
-NEWFSOPTS?=	-c 64 -B be
-DISKTYPE?=	miniroot
+IMAGESIZE=	6m
+MAKEFS_FLAGS=   -o density=4k
+IMAGEENDIAN=	be
+MAKEDEVTARGETS=	floppy
+IMAGEDEPENDS+=	${ARCHDIR}/disktab.shadow ${ARCHDIR}/dot.profile \
+		${ARCHDIR}/install.md ${ARCHDIR}/termcap.vt \
+		${DESTDIR}/usr/mdec/boot.amiga \
+		${KERNOBJDIR}/INSTALL/netbsd
 
-#
-# install bootblock, so that we can boot from there
-#
-BOOTINSTALL=${DESTDIR}/usr/mdec/installboot ${DESTDIR}/usr/mdec/xxboot ${VND_RDEV}
+IMAGEPOSTBUILD=	dd if=${DESTDIR}/usr/mdec/bootxx_ffs of=${IMAGE} bs=8192 conv=notrunc

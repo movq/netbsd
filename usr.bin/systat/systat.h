@@ -1,4 +1,4 @@
-/*	$NetBSD: systat.h,v 1.6 1999/12/20 03:45:03 jwise Exp $	*/
+
 
 /*-
  * Copyright (c) 1980, 1989, 1992, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,21 +34,21 @@
 #include <curses.h>
 
 struct  mode {
-        char    *c_name;			/* command name */
-        void    (*c_refresh) __P((void));	/* display refresh */
-        void    (*c_fetch) __P((void));		/* sets up data structures */
-        void    (*c_label) __P((void));		/* label display */
-	int	(*c_init) __P((void));		/* initialize namelist, etc. */
-	WINDOW	*(*c_open) __P((void));		/* open display */
-	void	(*c_close) __P((WINDOW *));	/* close display */
+        const char    *c_name;			/* command name */
+        void    (*c_refresh)(void);		/* display refresh */
+        void    (*c_fetch)(void);		/* sets up data structures */
+        void    (*c_label)(void);		/* label display */
+	int	(*c_init)(void);		/* initialize namelist, etc. */
+	WINDOW	*(*c_open)(void);		/* open display */
+	void	(*c_close)(WINDOW *);		/* close display */
 	struct	command *c_commands;		/* commands for mode */
 	char	c_flags;			/* see below */
 };
 
 struct	command {
-	char	*c_name;
-	void	(*c_cmd) __P((char *args));
-	char	*helptext;
+	const char	*c_name;
+	void	(*c_cmd)(char *args);
+	const char	*helptext;
 };
 
 #define	CF_INIT		0x1		/* been initialized */
@@ -61,11 +57,8 @@ struct	command {
 #define	TCP	0x1
 #define	UDP	0x2
 
-#define KREAD(addr, buf, len)  kvm_ckread((addr), (buf), (len))
+#define KREAD(addr, buf, len)  kvm_ckread((addr), (buf), (len), # addr)
 #define NVAL(indx)  namelist[(indx)].n_value
 #define NPTR(indx)  (void *)NVAL((indx))
-#define NREAD(indx, buf, len) kvm_ckread(NPTR((indx)), (buf), (len))
+#define NREAD(indx, buf, len) kvm_ckread(NPTR((indx)), (buf), (len), # indx)
 #define LONG	(sizeof (long))
-
-void dkreadstats __P((void));	/* XXX: from ../vmstat/dkstats.c */
-void dkswap __P((void));	/* XXX: from ../vmstat/dkstats.c */

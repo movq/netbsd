@@ -1,4 +1,4 @@
-/* $NetBSD: wscons_rinit.c,v 1.2 1998/05/14 20:49:56 drochner Exp $ */
+/* $NetBSD: wscons_rinit.c,v 1.6 2005/12/11 12:24:12 christos Exp $ */
 
 /*
  * Copyright (c) 1991, 1993
@@ -21,11 +21,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -44,6 +40,9 @@
  *	@(#)rcons_font.c	8.1 (Berkeley) 6/11/93
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: wscons_rinit.c,v 1.6 2005/12/11 12:24:12 christos Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
@@ -53,12 +52,10 @@
 
 #include <dev/wscons/wscons_rfont.h>
 
-void	rcons_initfont __P((struct rcons *, struct raster_font *));
+void	rcons_initfont(struct rcons *, struct raster_font *);
 
 void
-rcons_initfont(rc, fp)
-	struct rcons *rc;
-	struct raster_font *fp;
+rcons_initfont(struct rcons *rc, struct raster_font *fp)
 {
 	static int initfontdone;
 
@@ -96,9 +93,7 @@ rcons_initfont(rc, fp)
 }
 
 void
-rcons_init(rc, mrow, mcol)
-	struct rcons *rc;
-	int mrow, mcol;
+rcons_init(struct rcons *rc, int mrow, int mcol)
 {
 	struct raster *rp = rc->rc_sp;
 	int i;

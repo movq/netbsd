@@ -1,4 +1,4 @@
-/*	$NetBSD: n_asincos.c,v 1.5 1999/07/02 15:37:36 simonb Exp $	*/
+/*	$NetBSD: n_asincos.c,v 1.7 2003/08/07 16:44:50 agc Exp $	*/
 /*
  * Copyright (c) 1985, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -93,8 +89,7 @@ static char sccsid[] = "@(#)asincos.c	8.1 (Berkeley) 6/4/93";
 #include "mathimpl.h"
 
 double
-asin(x)
-	double x;
+asin(double x)
 {
 	double s,t,one=1.0;
 #if !defined(__vax__)&&!defined(tahoe)
@@ -161,8 +156,7 @@ asin(x)
  */
 
 double
-acos(x)
-	double x;
+acos(double x)
 {
 	double t,one=1.0;
 #if !defined(__vax__)&&!defined(tahoe)

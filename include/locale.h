@@ -1,4 +1,4 @@
-/*	$NetBSD: locale.h,v 1.9 2000/01/10 16:58:37 kleink Exp $	*/
+/*	$NetBSD: locale.h,v 1.14.34.1 2009/01/15 03:24:06 snj Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -57,6 +53,12 @@ struct lconv {
 	char	n_sep_by_space;
 	char	p_sign_posn;
 	char	n_sign_posn;
+	char	int_p_cs_precedes;
+	char	int_n_cs_precedes;
+	char	int_p_sep_by_space;
+	char	int_n_sep_by_space;
+	char	int_p_sign_posn;
+	char	int_n_sign_posn;
 };
 
 #include <sys/null.h>
@@ -73,9 +75,23 @@ struct lconv {
 
 #include <sys/cdefs.h>
 
+#ifdef __SETLOCALE_SOURCE__
+
+typedef struct _locale_impl_t		*_locale_t;
+
+#define _LC_GLOBAL_LOCALE		((_locale_t)-1)
+
+#endif
+
 __BEGIN_DECLS
-struct lconv	*localeconv __P((void));
-char		*setlocale __P((int, const char *));
+struct lconv	*localeconv(void);
+#ifdef __SETLOCALE_SOURCE__
+char		*setlocale(int, const char *);
+char		*__setlocale_mb_len_max_32(int, const char *);
+char		*__setlocale(int, const char *);
+#else /* !__SETLOCALE_SOURCE__ */
+char		*setlocale(int, const char *) __RENAME(__setlocale_mb_len_max_32);
+#endif /* !__SETLOCALE_SOURCE__ */
 __END_DECLS
 
 #endif /* _LOCALE_H_ */

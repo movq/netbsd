@@ -1,4 +1,4 @@
-#	$NetBSD: genassym.cf,v 1.24 2000/01/21 13:24:06 pk Exp $
+#	$NetBSD: genassym.cf,v 1.56 2008/09/20 18:29:05 tsutsui Exp $
 
 #
 # Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
 # 2. Redistributions in binary form must reproduce the above copyright
 #    notice, this list of conditions and the following disclaimer in the
 #    documentation and/or other materials provided with the distribution.
-# 3. All advertising materials mentioning features or use of this software
-#    must display the following acknowledgement:
-#        This product includes software developed by the NetBSD
-#        Foundation, Inc. and its contributors.
-# 4. Neither the name of The NetBSD Foundation nor the names of its
-#    contributors may be used to endorse or promote products derived
-#    from this software without specific prior written permission.
 #
 # THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 # ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -55,11 +48,7 @@
 # 2. Redistributions in binary form must reproduce the above copyright
 #    notice, this list of conditions and the following disclaimer in the
 #    documentation and/or other materials provided with the distribution.
-# 3. All advertising materials mentioning features or use of this software
-#    must display the following acknowledgement:
-#	This product includes software developed by the University of
-#	California, Berkeley and its contributors.
-# 4. Neither the name of the University nor the names of its contributors
+# 3. Neither the name of the University nor the names of its contributors
 #    may be used to endorse or promote products derived from this software
 #    without specific prior written permission.
 #
@@ -78,10 +67,11 @@
 #	@(#)genassym.c	8.1 (Berkeley) 6/11/93
 #
 
+quote	#define	__MUTEX_PRIVATE
+
 include <sys/param.h>
 include <sys/buf.h>
 include <sys/proc.h>
-include <sys/map.h>
 include <sys/proc.h>
 include <sys/mbuf.h>
 include <sys/msgbuf.h>
@@ -89,17 +79,17 @@ include <sys/user.h>
 include <sys/device.h>
 include <sys/disklabel.h>
 include <sys/disk.h>
+include <sys/mutex.h>
 
-include <vm/vm.h>
-include <uvm/uvm_extern.h>
+include <uvm/uvm.h>
 
-include <machine/pmap.h>
 include <machine/cpu.h>
-
 include <machine/oldmon.h>
 include <machine/bsd_openprom.h>
 
 include <sparc/sparc/cpuvar.h>
+
+include <sparc/sparc/msiiepreg.h>
 
 ifdef notyet
 include <sparc/dev/zsreg.h>
@@ -107,38 +97,42 @@ include <sparc/dev/zsvar.h>
 endif
 
 include <machine/bus.h>
-include <dev/ic/am7930reg.h>
-include <dev/ic/am7930var.h>
+include <sparc/dev/audioamdvar.h>
 
 include <sparc/dev/fdreg.h>
 include <sparc/dev/fdvar.h>
 
 # general constants
 define	BSD		BSD
-define	SUN4_PGSHIFT	SUN4_PGSHIFT
-define	SUN4CM_PGSHIFT	SUN4CM_PGSHIFT
 define	USRSTACK	USRSTACK
 
 # proc fields and values
-define	P_ADDR		offsetof(struct proc, p_addr)
-define	P_STAT		offsetof(struct proc, p_stat)
-define	P_WCHAN		offsetof(struct proc, p_wchan)
+define	L_ADDR		offsetof(struct lwp, l_addr)
+define	L_PROC		offsetof(struct lwp, l_proc)
+define	L_STAT		offsetof(struct lwp, l_stat)
+define	L_WCHAN		offsetof(struct lwp, l_wchan)
+define	L_CPU		offsetof(struct lwp, l_cpu)
+define	L_PRIORITY	offsetof(struct lwp, l_priority)
 define	P_VMSPACE	offsetof(struct proc, p_vmspace)
-define	SRUN		SRUN
+define	P_MD_SYSCALL	offsetof(struct proc, p_md.md_syscall)
+define	LSRUN		LSRUN
+define	LSONPROC	LSONPROC
 
 # VM structure fields
 define	VM_PMAP		offsetof(struct vmspace, vm_map.pmap)
 define	PMAP_CTX	offsetof(struct pmap, pm_ctx)
 define	PMAP_CTXNUM	offsetof(struct pmap, pm_ctxnum)
+define	PMAP_CPUSET	offsetof(struct pmap, pm_cpuset)
 
 # interrupt/fault metering
-define	V_SWTCH		offsetof(struct uvmexp, swtch)
 define	V_INTR		offsetof(struct uvmexp, intrs)
+define	V_SOFT		offsetof(struct uvmexp, softs)
 define	V_FAULTS	offsetof(struct uvmexp, faults)
+define	EV_COUNT	offsetof(struct evcnt, ev_count)
 
 # CPU info structure
 define	CPUINFO_STRUCTSIZE	sizeof(struct cpu_info)
-define	CPUINFO_CPUNO		offsetof(struct cpu_info, cpu_no)
+define	CPUINFO_CPUNO		offsetof(struct cpu_info, ci_cpuid)
 define	CPUINFO_GETSYNCFLT	offsetof(struct cpu_info, get_syncflt)
 define	CPUINFO_GETASYNCFLT	offsetof(struct cpu_info, get_asyncflt)
 define	CPUINFO_PURE_VCACHE_FLS	offsetof(struct cpu_info, pure_vcache_flush)
@@ -148,9 +142,24 @@ define	CPUINFO_EINTSTACK	offsetof(struct cpu_info, eintstack)
 define	INT_STACK_SIZE		INT_STACK_SIZE
 define	CPUINFO_REDZONE		offsetof(struct cpu_info, redzone)
 define	REDSIZE			REDSIZE
-define	CPUINFO_IDLE_U		offsetof(struct cpu_info, idle_u)
 define	CPUINFO_CURPCB		offsetof(struct cpu_info, curpcb)
-define	CPUINFO_CURPROC		offsetof(struct cpu_info, _curproc)
+define	CPUINFO_CURLWP		offsetof(struct cpu_info, ci_curlwp)
+define	CPUINFO_SELF		offsetof(struct cpu_info, ci_self)
+define	CPUINFO_FLAGS		offsetof(struct cpu_info, flags)
+define	CPUINFO_WANT_AST	offsetof(struct cpu_info, ci_want_ast)
+define	CPUINFO_TT		offsetof(struct cpu_info, ci_tt)
+define	CPUINFO_CACHE_LINESZ	offsetof(struct cpu_info, cacheinfo.c_linesize)
+define	CPUINFO_CACHE_NLINES	offsetof(struct cpu_info, cacheinfo.c_nlines)
+define	CPUINFO_XMSG_FUNC	offsetof(struct cpu_info, msg.u.xpmsg_func.func)
+define	CPUINFO_XMSG_TRAP	offsetof(struct cpu_info, msg.u.xpmsg_func.trap)
+define	CPUINFO_XMSG_ARG0	offsetof(struct cpu_info, msg.u.xpmsg_func.arg0)
+define	CPUINFO_XMSG_ARG1	offsetof(struct cpu_info, msg.u.xpmsg_func.arg1)
+define	CPUINFO_XMSG_ARG2	offsetof(struct cpu_info, msg.u.xpmsg_func.arg2)
+define	CPUINFO_XMSG_CMPLT	offsetof(struct cpu_info, msg.complete)
+define	CPUINFO_IDLESPIN	offsetof(struct cpu_info, idlespin)
+define	CPUINFO_MTX_COUNT	offsetof(struct cpu_info, ci_mtx_count)
+define	CPUINFO_MTX_OLDSPL	offsetof(struct cpu_info, ci_mtx_oldspl)
+define	CPUINFO_IDEPTH		offsetof(struct cpu_info, ci_idepth)
 
 # PTE bits and related information
 define	PG_W		PG_W
@@ -158,15 +167,15 @@ define	PG_VSHIFT	PG_VSHIFT
 define	PG_PROTSHIFT	PG_PROTSHIFT
 define	PG_PROTUREAD	PG_PROTUREAD
 define	PG_PROTUWRITE	PG_PROTUWRITE
-if defined(SUN4M)
+
 define	SRMMU_TETYPE	SRMMU_TETYPE
 define	SRMMU_TEPTE	SRMMU_TEPTE
 define	SRMMU_PROT_MASK	SRMMU_PROT_MASK
 define	PPROT_R_RW	PPROT_R_RW
 define	PPROT_RX_RX	PPROT_RX_RX
 define	PPROT_RWX_RWX	PPROT_RWX_RWX
+define	PPROT_X_X	PPROT_X_X
 define	PPROT_WRITE	PPROT_WRITE
-endif
 
 # FPU state
 define	FS_REGS		offsetof(struct fpstate, fs_regs)
@@ -174,6 +183,15 @@ define	FS_FSR		offsetof(struct fpstate, fs_fsr)
 define	FS_QSIZE	offsetof(struct fpstate, fs_qsize)
 define	FS_QUEUE	offsetof(struct fpstate, fs_queue)
 define	FSR_QNE		FSR_QNE
+
+# microSPARC-IIep PCI controller registers
+define PCIC_PROC_IPR_REG	offsetof(struct msiiep_pcic_reg, pcic_proc_ipr)
+define PCIC_SOFT_INTR_CLEAR_REG	offsetof(struct msiiep_pcic_reg, pcic_soft_intr_clear)
+define PCIC_SOFT_INTR_SET_REG	offsetof(struct msiiep_pcic_reg, pcic_soft_intr_set)
+define PCIC_SCCR_REG		offsetof(struct msiiep_pcic_reg, pcic_sccr)
+define PCIC_SYS_ITMR_CLR_REG	offsetof(struct msiiep_pcic_reg, pcic_sys_itmr_clr)
+define PCIC_SYS_ITMR_SET_REG	offsetof(struct msiiep_pcic_reg, pcic_sys_itmr_set)
+define MSIIEP_SYS_ITMR_ALL	MSIIEP_SYS_ITMR_ALL
 
 # errno
 define	EFAULT		EFAULT
@@ -212,10 +230,6 @@ define	AU_PDATA	offsetof(struct auio, au_pdata)
 define	AU_PEND		offsetof(struct auio, au_pend)
 define	AU_EVCNT	offsetof(struct auio, au_intrcnt.ev_count)
 
-define	AMD_IR		offsetof(struct am7930, ir)
-define	AMD_BBRB	offsetof(struct am7930, bbrb)
-define	AMD_BBTB	offsetof(struct am7930, bbtb)
-
 define	PROM_BASE	PROM_BASE
 
 define	PV_MAGIC	offsetof(struct promvec, pv_magic)
@@ -242,3 +256,10 @@ define	FDC_NSTAT	offsetof(struct fdcio, fdcio_nstat)
 define	FDC_DATA	offsetof(struct fdcio, fdcio_data)
 define	FDC_TC		offsetof(struct fdcio, fdcio_tc)
 define	FDC_EVCNT	offsetof(struct fdcio, fdcio_intrcnt.ev_count)
+
+# locking
+define	MTX_LOCK	offsetof(struct kmutex, mtx_lock)
+define	MTX_IPL		offsetof(struct kmutex, u.s.mtxs_ipl)
+
+define	__SIMPLELOCK_LOCKED	__SIMPLELOCK_LOCKED
+define	__SIMPLELOCK_UNLOCKED	__SIMPLELOCK_UNLOCKED

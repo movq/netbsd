@@ -1,4 +1,4 @@
-/*	$NetBSD: comm.c,v 1.12 1999/02/11 00:53:24 hubertf Exp $	*/
+/*	$NetBSD: comm.c,v 1.16 2008/07/21 14:19:22 lukem Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993, 1994
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,15 +34,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1989, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)comm.c	8.4 (Berkeley) 5/4/95";
 #endif
-__RCSID("$NetBSD: comm.c,v 1.12 1999/02/11 00:53:24 hubertf Exp $");
+__RCSID("$NetBSD: comm.c,v 1.16 2008/07/21 14:19:22 lukem Exp $");
 #endif /* not lint */
 
 #include <err.h>
@@ -61,15 +57,12 @@ __RCSID("$NetBSD: comm.c,v 1.12 1999/02/11 00:53:24 hubertf Exp $");
 
 char *tabs[] = { "", "\t", "\t\t" };
 
-FILE   *file __P((const char *));
-int	main __P((int, char **));
-void	show __P((FILE *, char *, char *));
-void	usage __P((void));
+FILE   *file(const char *);
+void	show(FILE *, char *, char *);
+void	usage(void);
 
 int
-main(argc, argv)
-	int argc;
-	char **argv;
+main(int argc, char **argv)
 {
 	int comp, file1done, file2done, read1, read2;
 	int ch, flag1, flag2, flag3;
@@ -171,17 +164,14 @@ main(argc, argv)
 }
 
 void
-show(fp, offset, buf)
-	FILE *fp;
-	char *offset, *buf;
+show(FILE *fp, char *offset, char *buf)
 {
 	while (printf("%s%s", offset, buf) >= 0 && fgets(buf, MAXLINELEN, fp))
 		;
 }
 
 FILE *
-file(name)
-	const char *name;
+file(const char *name)
 {
 	FILE *fp;
 
@@ -193,9 +183,9 @@ file(name)
 }
 
 void
-usage()
+usage(void)
 {
 
-	(void)fprintf(stderr, "usage: comm [-123] file1 file2\n");
+	(void)fprintf(stderr, "usage: comm [-123f] file1 file2\n");
 	exit(1);
 }

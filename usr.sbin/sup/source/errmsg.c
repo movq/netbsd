@@ -1,9 +1,9 @@
-/*	$NetBSD: errmsg.c,v 1.5 1998/08/04 04:33:15 mikel Exp $	*/
+/*	$NetBSD: errmsg.c,v 1.8 2003/04/03 17:14:24 christos Exp $	*/
 
 /*
  * Copyright (c) 1991 Carnegie Mellon University
  * All Rights Reserved.
- * 
+ *
  * Permission to use, copy, modify and distribute this software and its
  * documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
@@ -37,40 +37,40 @@
 #include "supextern.h"
 
 #ifndef __NetBSD__
-static char *itoa __P((char *, unsigned));
+static char *itoa(char *, unsigned);
 
-static char *itoa(p,n)
-char *p;
-unsigned n;
+static char *
+itoa(char *p, unsigned n)
 {
-    if (n >= 10)
-	p =itoa(p,n/10);
-    *p++ = (n%10)+'0';
-    return(p);
+	if (n >= 10)
+		p = itoa(p, n / 10);
+	*p++ = (n % 10) + '0';
+	return (p);
 }
 #endif
 
-const char *errmsg(cod)
-int cod;
+const char *
+errmsg(int cod)
 {
-#ifndef __NetBSD__
-	extern int	errno;
-	extern int	sys_nerr;
-	extern char	*sys_errlist[];
+#ifndef errno
+	extern int errno;
+	extern int sys_nerr;
+	extern char *sys_errlist[];
 	static char unkmsg[] = "Unknown error ";
-	static char unk[sizeof(unkmsg)+11];		/* trust us */
+	static char unk[sizeof(unkmsg) + 11];	/* trust us */
 #endif
 
-	if (cod < 0) cod = errno;
+	if (cod < 0)
+		cod = errno;
 
-#ifndef __NetBSD__
-	if((cod >= 0) && (cod < sys_nerr))
-	    return(sys_errlist[cod]);
+#ifndef errno
+	if ((cod >= 0) && (cod < sys_nerr))
+		return (sys_errlist[cod]);
 
-	strcpy(unk,unkmsg);
-	*itoa(&unk[sizeof(unkmsg)-1],cod) = '\0';
+	strcpy(unk, unkmsg);
+	*itoa(&unk[sizeof(unkmsg) - 1], cod) = '\0';
 
-	return(unk);
+	return (unk);
 #else
 	return strerror(cod);
 #endif

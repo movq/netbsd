@@ -1,12 +1,71 @@
-/*	$NetBSD: hack.h,v 1.4 1997/10/19 16:58:02 christos Exp $	*/
+/*	$NetBSD: hack.h,v 1.10.42.1 2009/06/29 23:25:09 snj Exp $	*/
 
 /*
- * Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1985.
+ * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
+ * Amsterdam
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met:
+ *
+ * - Redistributions of source code must retain the above copyright notice,
+ * this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above copyright
+ * notice, this list of conditions and the following disclaimer in the
+ * documentation and/or other materials provided with the distribution.
+ *
+ * - Neither the name of the Stichting Centrum voor Wiskunde en
+ * Informatica, nor the names of its contributors may be used to endorse or
+ * promote products derived from this software without specific prior
+ * written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
+ * IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+ * PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER
+ * OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+ * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
+/*
+ * Copyright (c) 1982 Jay Fenlason <hack@gnu.org>
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+ * AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL
+ * THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
 #ifndef _HACK_H_
 #define _HACK_H_
 
 #include "config.h"
+#include <stdlib.h>
 #include <string.h>
 
 #ifndef BSD
@@ -51,7 +110,7 @@ struct prop {
 #define	RIGHT_SIDE	RIGHT_RING
 #define	BOTH_SIDES	(LEFT_SIDE | RIGHT_SIDE)
 	long p_flgs;
-	void (*p_tofn) __P((void));	/* called after timeout */
+	void (*p_tofn)(void);	/* called after timeout */
 };
 
 struct you {
@@ -60,7 +119,7 @@ struct you {
 #ifdef QUEST
 	schar di;		/* direction of FF */
 	xchar ux0, uy0;		/* initial position FF */
-#endif QUEST
+#endif /* QUEST */
 	xchar udisx, udisy;	/* last display pos */
 	char usym;		/* usually '@' */
 	schar uluck;
@@ -72,7 +131,7 @@ struct you {
 	unsigned ulevel:4;	/* 1 - 14 */
 #ifdef QUEST
 	unsigned uhorizon:7;
-#endif QUEST
+#endif /* QUEST */
 	unsigned utrap:3;	/* trap timeout */
 	unsigned utraptype:1;	/* defined if utrap nonzero */
 #define	TT_BEARTRAP	0
@@ -104,7 +163,7 @@ struct you {
 #define Stoned		u.uprops[STONED].p_flgs
 #define PROP(x) (x-RIN_ADORNMENT)       /* convert ring to index in uprops */
 	unsigned umconf:1;
-	char *usick_cause;
+	const char *usick_cause;
 	struct prop uprops[LAST_RING+10];
 
 	unsigned uswallow:1;		/* set if swallowed by a monster */
@@ -132,29 +191,29 @@ extern boolean in_mklev;
 extern boolean level_exists[];
 extern boolean restoring;
 extern char *CD;
-extern char *catmore;
+extern const char *catmore;
 extern char *hname;
-extern char *hu_stat[]; /* in eat.c */
-extern char *nomovemsg;
-extern char *occtxt;
-extern char *save_cm,*killer;
-extern char *traps[];
+extern const char *const hu_stat[]; /* in eat.c */
+extern const char *nomovemsg;
+extern const char *occtxt;
+extern char *save_cm;
+extern const char *killer;
+extern const char *const traps[];
 extern char SAVEF[];
 extern char fut_geno[60]; /* idem */
 extern char genocided[60]; /* defined in Decl.c */
-extern char lock[];
+extern char lock[PL_NSIZ + 4];
 extern char mlarge[];
 extern char morc;
 extern char nul[];
-extern char pl_character[];
 extern char plname[PL_NSIZ], pl_character[PL_CSIZ];
-extern char quitchars[];
+extern const char quitchars[];
 extern char sdir[]; /* defined in hack.c */
-extern char shtypes[]; /* = "=/)%?!["; 8 types: 7 specialized, 1 mixed */
-extern char vowels[];
+extern const char shtypes[]; /* = "=/)%?!["; 8 types: 7 specialized, 1 mixed */
+extern const char vowels[];
 extern coord bhitpos;	/* place where thrown weapon falls to the ground */
-extern int (*afternmv) __P((void));
-extern int (*occupation) __P((void));
+extern int (*afternmv)(void);
+extern int (*occupation)(void);
 extern int CO, LI; /* usually COLNO and ROWNO+2 */
 extern int bases[];
 extern int doorindex;
@@ -164,7 +223,6 @@ extern int nroom;
 extern long moves;
 extern long wailmsg;
 extern schar xdir[], ydir[]; /* idem */
-extern struct gold *fgold;
 extern struct monst *mydogs;
 extern struct monst youmonst;
 extern struct obj *billobjs;
@@ -173,12 +231,11 @@ extern struct obj *uleft, *uright, *fcobj;
 extern struct obj *uball;	/* defined if PUNISHED */
 extern struct obj *uchain;	/* defined iff PUNISHED */
 extern struct obj zeroobj;
-extern struct permonst li_dog, dog, la_dog;
-extern struct permonst mons[CMNUM + 2];
-extern struct permonst pm_eel;
-extern struct permonst pm_ghost;
-extern struct permonst pm_mail_daemon;
-extern struct permonst pm_wizard;
+extern const struct permonst li_dog, dog, la_dog;
+extern const struct permonst pm_eel;
+extern const struct permonst pm_ghost;
+extern const struct permonst pm_mail_daemon;
+extern const struct permonst pm_wizard;
 #ifndef NOWORM
 extern long wgrowtime[32];
 extern struct wseg *m_atseg;

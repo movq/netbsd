@@ -1,9 +1,7 @@
-/*	$NetBSD: main.h,v 1.4 1994/06/29 06:41:08 cgd Exp $	*/
+/*	$NetBSD: main.h,v 1.8 2007/02/22 06:16:03 thorpej Exp $	*/
 
-#define TRUE 1
-#define FALSE 0
 #define LINELEN 2350
-	/* approx limit on token size for C compiler 
+	/* approx limit on token size for C compiler
 	 * which matters for the purpose of debugging (astring.c...)
 	 */
 
@@ -28,4 +26,7 @@ extern char *synonyms[];
 extern int transno;
 extern int print_trans;
 extern char *stash();
-
+extern void Exit();
+extern void putincludes();
+extern void openfiles();
+extern void includecode();

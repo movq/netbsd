@@ -1,13 +1,38 @@
-/*	$NetBSD: get_names.c,v 1.3 1998/07/06 07:00:31 mrg Exp $	*/
+/*	$NetBSD: get_names.c,v 1.7 2003/06/11 12:00:22 wiz Exp $	*/
 /*
- * Copyright (c) 1983 Regents of the University of California.
- * All rights reserved.  The Berkeley software License Agreement
- * specifies the terms and conditions for redistribution.
+ * Copyright (c) 1983-2003, Regents of the University of California.
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without 
+ * modification, are permitted provided that the following conditions are 
+ * met:
+ * 
+ * + Redistributions of source code must retain the above copyright 
+ *   notice, this list of conditions and the following disclaimer.
+ * + Redistributions in binary form must reproduce the above copyright 
+ *   notice, this list of conditions and the following disclaimer in the 
+ *   documentation and/or other materials provided with the distribution.
+ * + Neither the name of the University of California, San Francisco nor 
+ *   the names of its contributors may be used to endorse or promote 
+ *   products derived from this software without specific prior written 
+ *   permission.
+ * 
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS 
+ * IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED 
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A 
+ * PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT 
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT 
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, 
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY 
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT 
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: get_names.c,v 1.3 1998/07/06 07:00:31 mrg Exp $");
+__RCSID("$NetBSD: get_names.c,v 1.7 2003/06/11 12:00:22 wiz Exp $");
 #endif /* not lint */
 
 #include "bsd.h"
@@ -17,12 +42,11 @@ __RCSID("$NetBSD: get_names.c,v 1.3 1998/07/06 07:00:31 mrg Exp $");
 # include	<sys/param.h>
 # include	<netdb.h>
 # include	<stdio.h>
+# include	<stdlib.h>
 # include	<string.h>
 # include	<unistd.h>
 # include	"hunt.h"
 # include	"talk_ctl.h"
-
-extern	CTL_MSG	msg;
 
 static	char	hostname[MAXHOSTNAMELEN + 1];
 char		*my_machine_name;
@@ -58,8 +82,13 @@ get_local_name(my_name)
 	/* look up the address of the local host */
 	hp = gethostbyname(my_machine_name);
 	if (hp == (struct hostent *) 0) {
-		printf("This machine doesn't exist. Boy, am I confused!\n");
-		exit(-1);
+# ifdef LOG
+		syslog(LOG_ERR,
+		    "This machine doesn't exist. Boy, am I confused!");
+# else
+		perror("This machine doesn't exist. Boy, am I confused!");
+# endif
+		exit(1);
 	}
 	memcpy(&my_machine_addr, hp->h_addr, hp->h_length);
 	/* find the daemon portal */
@@ -74,7 +103,7 @@ get_local_name(my_name)
 # else
 		perror("This machine doesn't support talk");
 # endif
-		exit(-1);
+		exit(1);
 	}
 	daemon_port = sp->s_port;
 }

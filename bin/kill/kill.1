@@ -1,4 +1,4 @@
-.\"	$NetBSD: kill.1,v 1.12 1999/10/06 17:19:09 jdolecek Exp $
+.\"	$NetBSD: kill.1,v 1.21 2007/12/28 14:32:50 wiz Exp $
 .\"
 .\" Copyright (c) 1980, 1990, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -14,11 +14,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -47,19 +43,19 @@
 .Op Fl s Ar signal_name
 .Ar pid
 \&...
-.Nm ""
+.Nm
 .Fl l
 .Op Ar exit_status
-.Nm ""
+.Nm
 .Fl signal_name
 .Ar pid
 \&...
-.Nm ""
+.Nm
 .Fl signal_number
 .Ar pid
 \&...
 .Sh DESCRIPTION
-The 
+The
 .Nm
 utility sends a signal to the process(es) specified
 by the pid operand(s).
@@ -74,9 +70,18 @@ A symbolic signal name specifying the signal to be sent instead of the
 default
 .Dv TERM .
 .It Fl l Op Ar exit_status
-If no operand is given, list the signal names; otherwise, write
-the signal name corresponding to
+Display the name of the signal corresponding to
 .Ar exit_status .
+.Ar exit_status
+may be the exit status of a command killed by a signal
+(see the
+special
+.Xr sh 1
+parameter
+.Sq ?\& )
+or a signal number.
+.Pp
+If no operand is given, display the names of all the signals.
 .It Fl signal_name
 A symbolic signal name specifying the signal to be sent instead of the
 default
@@ -92,6 +97,9 @@ The following pids have special meanings:
 .It -1
 If superuser, broadcast the signal to all processes; otherwise broadcast
 to all processes belonging to the user.
+.It 0
+Broadcast the signal to all processes in the current process group
+belonging to the user.
 .El
 .Pp
 Some of the more commonly used signals:
@@ -124,6 +132,8 @@ See
 for details.
 .Sh SEE ALSO
 .Xr csh 1 ,
+.Xr pgrep 1 ,
+.Xr pkill 1 ,
 .Xr ps 1 ,
 .Xr kill 2 ,
 .Xr sigaction 2 ,
@@ -139,9 +149,3 @@ A
 .Nm
 command appeared in
 .At v6 .
-.Sh BUGS
-A replacement for the command
-.Dq Li kill 0
-for
-.Xr csh  1
-users should be provided.

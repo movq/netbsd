@@ -1,4 +1,4 @@
-/*	$NetBSD: getent.c,v 1.7 1998/02/27 10:33:46 christos Exp $	*/
+/*	$NetBSD: getent.c,v 1.10 2005/02/06 05:53:07 perry Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)getent.c	8.2 (Berkeley) 12/15/93";
 #else
-__RCSID("$NetBSD: getent.c,v 1.7 1998/02/27 10:33:46 christos Exp $");
+__RCSID("$NetBSD: getent.c,v 1.10 2005/02/06 05:53:07 perry Exp $");
 #endif
 #endif /* not lint */
 
@@ -47,8 +43,8 @@ __RCSID("$NetBSD: getent.c,v 1.7 1998/02/27 10:33:46 christos Exp $");
 
 static char *area;
 
-int getent __P((char *, char *));
-char *getstr __P((char *, char **));
+int getent(char *, char *);
+char *getstr(char *, char **);
 
 /*ARGSUSED*/
 int
@@ -56,7 +52,7 @@ getent(cp, name)
 char *cp, *name;
 {
 #ifdef	HAS_CGETENT
-	char *dba[2];
+	const char *dba[2];
 
 	dba[0] = "/etc/gettytab";
 	dba[1] = 0;

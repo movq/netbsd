@@ -1,7 +1,7 @@
-/*	$NetBSD: bus.h,v 1.11 2000/01/25 22:13:23 drochner Exp $	*/
+/*	$NetBSD: bus.h,v 1.28 2008/04/28 20:23:31 martin Exp $	*/
 
 /*-
- * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
+ * Copyright (c) 1996, 1997, 1998, 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -117,6 +110,16 @@ int	bus_space_alloc __P((bus_space_tag_t t, bus_addr_t rstart,
 
 void	bus_space_free __P((bus_space_tag_t t, bus_space_handle_t bsh,
 	    bus_size_t size));
+
+/*
+ *	void *bus_space_vaddr __P((bus_space_tag_t, bus_space_handle_t));
+ *
+ * Get the kernel virtual address for the mapped bus space.
+ * Only allowed for regions mapped with BUS_SPACE_MAP_LINEAR.
+ *  (XXX not enforced)
+ */
+#define bus_space_vaddr(t, h) \
+	((void *)(h))
 
 /*
  *	u_intN_t bus_space_read_N __P((bus_space_tag_t tag,
@@ -465,8 +468,8 @@ __PMAX_copy_region(4)
  * On the MIPS, we just flush the write buffer.
  */
 #define	bus_space_barrier(t, h, o, l, f)	\
-	((void)((void)(t), (void)(h), (void)(o), (void)(l), (void)(f)),	\
-	 wbflush())
+	((void)((void)(t), (void)(h), (void)(o), (void)(l), (void)(f),	\
+	 wbflush()))
 #define	BUS_SPACE_BARRIER_READ	0x01		/* force read barrier */
 #define	BUS_SPACE_BARRIER_WRITE	0x02		/* force write barrier */
 
@@ -478,16 +481,20 @@ __PMAX_copy_region(4)
 /*
  * Flags used in various bus DMA methods.
  */
-#define	BUS_DMA_WAITOK		0x00	/* safe to sleep (pseudo-flag) */
-#define	BUS_DMA_NOWAIT		0x01	/* not safe to sleep */
-#define	BUS_DMA_ALLOCNOW	0x02	/* perform resource allocation now */
-#define	BUS_DMA_COHERENT	0x04	/* hint: map memory DMA coherent */
-#define	BUS_DMA_BUS1		0x10	/* placeholders for bus functions... */
-#define	BUS_DMA_BUS2		0x20
-#define	BUS_DMA_BUS3		0x40
-#define	BUS_DMA_BUS4		0x80
+#define	BUS_DMA_WAITOK		0x000	/* safe to sleep (pseudo-flag) */
+#define	BUS_DMA_NOWAIT		0x001	/* not safe to sleep */
+#define	BUS_DMA_ALLOCNOW	0x002	/* perform resource allocation now */
+#define	BUS_DMA_COHERENT	0x004	/* hint: map memory DMA coherent */
+#define	BUS_DMA_STREAMING	0x008	/* hint: sequential, unidirectional */
+#define	BUS_DMA_BUS1		0x010	/* placeholders for bus functions... */
+#define	BUS_DMA_BUS2		0x020
+#define	BUS_DMA_BUS3		0x040
+#define	BUS_DMA_BUS4		0x080
+#define	BUS_DMA_READ		0x100	/* mapping is device -> memory only */
+#define	BUS_DMA_WRITE		0x200	/* mapping is memory -> device only */
+#define	BUS_DMA_NOCACHE		0x400	/* hint: map non-cached memory */
 
-#define	PMAX_DMAMAP_COHERENT	0x100	/* no cache flush necessary on sync */
+#define	PMAX_DMAMAP_COHERENT	0x10000	/* no cache flush necessary on sync */
 
 /* Forwards needed by prototypes below. */
 struct mbuf;
@@ -503,6 +510,8 @@ struct uio;
 
 typedef struct pmax_bus_dma_tag		*bus_dma_tag_t;
 typedef struct pmax_bus_dmamap		*bus_dmamap_t;
+
+#define BUS_DMA_TAG_VALID(t)    ((t) != (bus_dma_tag_t)0)
 
 /*
  *	bus_dma_segment_t
@@ -551,10 +560,10 @@ struct pmax_bus_dma_tag {
 	void	(*_dmamem_free) __P((bus_dma_tag_t,
 		    bus_dma_segment_t *, int));
 	int	(*_dmamem_map) __P((bus_dma_tag_t, bus_dma_segment_t *,
-		    int, size_t, caddr_t *, int));
-	void	(*_dmamem_unmap) __P((bus_dma_tag_t, caddr_t, size_t));
-	int	(*_dmamem_mmap) __P((bus_dma_tag_t, bus_dma_segment_t *,
-		    int, int, int, int));
+		    int, size_t, void **, int));
+	void	(*_dmamem_unmap) __P((bus_dma_tag_t, void *, size_t));
+	paddr_t	(*_dmamem_mmap) __P((bus_dma_tag_t, bus_dma_segment_t *,
+		    int, off_t, int, int));
 };
 
 #define	bus_dmamap_create(t, s, n, m, b, f, p)			\
@@ -585,6 +594,9 @@ struct pmax_bus_dma_tag {
 #define	bus_dmamem_mmap(t, sg, n, o, p, f)			\
 	(*(t)->_dmamem_mmap)((t), (sg), (n), (o), (p), (f))
 
+#define bus_dmatag_subregion(t, mna, mxa, nt, f) EOPNOTSUPP
+#define bus_dmatag_destroy(t)
+
 /*
  *	bus_dmamap_t
  *
@@ -596,19 +608,23 @@ struct pmax_bus_dmamap {
 	 */
 	bus_size_t	_dm_size;	/* largest DMA transfer mappable */
 	int		_dm_segcnt;	/* number of segs this map can map */
-	bus_size_t	_dm_maxsegsz;	/* largest possible segment */
+	bus_size_t	_dm_maxmaxsegsz; /* fixed largest possible segment */
 	bus_size_t	_dm_boundary;	/* don't cross this */
 	int		_dm_flags;	/* misc. flags */
+	struct vmspace	*_dm_vmspace;	/* vmspace that owns the mapping */
 
 	/*
 	 * PUBLIC MEMBERS: these are used by machine-independent code.
 	 */
+	bus_size_t	dm_maxsegsz;	/* largest possible segment */
 	bus_size_t	dm_mapsize;	/* size of the mapping */
 	int		dm_nsegs;	/* # valid segments in mapping */
 	bus_dma_segment_t dm_segs[1];	/* segments; variable length */
 };
 
 #ifdef _PMAX_BUS_DMA_PRIVATE
+void	pmax_bus_dma_init(void);
+
 int	_bus_dmamap_create __P((bus_dma_tag_t, bus_size_t, int, bus_size_t,
 	    bus_size_t, int, bus_dmamap_t *));
 void	_bus_dmamap_destroy __P((bus_dma_tag_t, bus_dmamap_t));
@@ -621,7 +637,9 @@ int	_bus_dmamap_load_uio __P((bus_dma_tag_t, bus_dmamap_t,
 int	_bus_dmamap_load_raw __P((bus_dma_tag_t, bus_dmamap_t,
 	    bus_dma_segment_t *, int, bus_size_t, int));
 void	_bus_dmamap_unload __P((bus_dma_tag_t, bus_dmamap_t));
-void	_bus_dmamap_sync __P((bus_dma_tag_t, bus_dmamap_t, bus_addr_t,
+void	_bus_dmamap_sync_r3k __P((bus_dma_tag_t, bus_dmamap_t, bus_addr_t,
+	    bus_size_t, int));
+void	_bus_dmamap_sync_r4k __P((bus_dma_tag_t, bus_dmamap_t, bus_addr_t,
 	    bus_size_t, int));
 
 int	_bus_dmamem_alloc __P((bus_dma_tag_t tag, bus_size_t size,
@@ -630,11 +648,11 @@ int	_bus_dmamem_alloc __P((bus_dma_tag_t tag, bus_size_t size,
 void	_bus_dmamem_free __P((bus_dma_tag_t tag, bus_dma_segment_t *segs,
 	    int nsegs));
 int	_bus_dmamem_map __P((bus_dma_tag_t tag, bus_dma_segment_t *segs,
-	    int nsegs, size_t size, caddr_t *kvap, int flags));
-void	_bus_dmamem_unmap __P((bus_dma_tag_t tag, caddr_t kva,
+	    int nsegs, size_t size, void **kvap, int flags));
+void	_bus_dmamem_unmap __P((bus_dma_tag_t tag, void *kva,
 	    size_t size));
-int	_bus_dmamem_mmap __P((bus_dma_tag_t tag, bus_dma_segment_t *segs,
-	    int nsegs, int off, int prot, int flags));
+paddr_t	_bus_dmamem_mmap __P((bus_dma_tag_t tag, bus_dma_segment_t *segs,
+	    int nsegs, off_t off, int prot, int flags));
 
 int	_bus_dmamem_alloc_range __P((bus_dma_tag_t tag, bus_size_t size,
 	    bus_size_t alignment, bus_size_t boundary,

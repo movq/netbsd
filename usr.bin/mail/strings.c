@@ -1,4 +1,4 @@
-/*	$NetBSD: strings.c,v 1.6 1997/10/19 05:03:54 lukem Exp $	*/
+/*	$NetBSD: strings.c,v 1.16 2007/10/29 23:20:39 christos Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)strings.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: strings.c,v 1.6 1997/10/19 05:03:54 lukem Exp $");
+__RCSID("$NetBSD: strings.c,v 1.16 2007/10/29 23:20:39 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -53,6 +49,21 @@ __RCSID("$NetBSD: strings.c,v 1.6 1997/10/19 05:03:54 lukem Exp $");
 #include "rcv.h"
 #include "extern.h"
 
+#define	STRINGSIZE	((unsigned) 128)/* Dynamic allocation units */
+
+/*
+ * The pointers for the string allocation routines,
+ * there are NSPACE independent areas.
+ * The first holds STRINGSIZE bytes, the next
+ * twice as much, and so on.
+ */
+#define	NSPACE	25			/* Total number of string spaces */
+static struct strings {
+	char	*s_topFree;		/* Beginning of this area */
+	char	*s_nextFree;		/* Next alloctable place here */
+	unsigned s_nleft;		/* Number of bytes left here */
+} stringdope[NSPACE];
+
 /*
  * Allocate size more bytes of space and return the address of the
  * first byte to the caller.  An even number of bytes are always
@@ -61,40 +72,51 @@ __RCSID("$NetBSD: strings.c,v 1.6 1997/10/19 05:03:54 lukem Exp $");
  * the occasional user with enormous string size requests.
  */
 
-char *
-salloc(size)
-	int size;
+PUBLIC void *
+salloc(size_t size)
 {
 	char *t;
-	int s;
+	size_t s;
 	struct strings *sp;
-	int index;
+	int idx;
 
 	s = size;
-	s += (sizeof (char *) - 1);
-	s &= ~(sizeof (char *) - 1);
-	index = 0;
+	s += (sizeof(char *) - 1);
+	s &= ~(sizeof(char *) - 1);
+	idx = 0;
 	for (sp = &stringdope[0]; sp < &stringdope[NSPACE]; sp++) {
-		if (sp->s_topFree == NOSTR && (STRINGSIZE << index) >= s)
+		if (sp->s_topFree == NULL && (STRINGSIZE << idx) >= s)
 			break;
 		if (sp->s_nleft >= s)
 			break;
-		index++;
+		idx++;
 	}
 	if (sp >= &stringdope[NSPACE])
 		errx(1, "String too large");
-	if (sp->s_topFree == NOSTR) {
-		index = sp - &stringdope[0];
-		sp->s_topFree = malloc(STRINGSIZE << index);
-		if (sp->s_topFree == NOSTR)
-			errx(1, "No room for space %d", index);
+	if (sp->s_topFree == NULL) {
+		idx = sp - &stringdope[0];
+		sp->s_topFree = malloc(STRINGSIZE << idx);
+		if (sp->s_topFree == NULL)
+			errx(1, "No room for space %d", idx);
 		sp->s_nextFree = sp->s_topFree;
-		sp->s_nleft = STRINGSIZE << index;
+		sp->s_nleft = STRINGSIZE << idx;
 	}
 	sp->s_nleft -= s;
 	t = sp->s_nextFree;
 	sp->s_nextFree += s;
-	return(t);
+	return t;
+}
+
+/*
+ * Allocate zeroed space for 'number' elments of size 'size'.
+ */
+PUBLIC void *
+csalloc(size_t number, size_t size)
+{
+	void *p;
+	p = salloc(number * size);
+	(void)memset(p, 0, number * size);
+	return p;
 }
 
 /*
@@ -102,21 +124,21 @@ salloc(size)
  * Called to free all strings allocated
  * since last reset.
  */
-void
-sreset()
+PUBLIC void
+sreset(void)
 {
 	struct strings *sp;
-	int index;
+	int idx;
 
 	if (noreset)
 		return;
-	index = 0;
+	idx = 0;
 	for (sp = &stringdope[0]; sp < &stringdope[NSPACE]; sp++) {
-		if (sp->s_topFree == NOSTR)
+		if (sp->s_topFree == NULL)
 			continue;
 		sp->s_nextFree = sp->s_topFree;
-		sp->s_nleft = STRINGSIZE << index;
-		index++;
+		sp->s_nleft = STRINGSIZE << idx;
+		idx++;
 	}
 }
 
@@ -124,11 +146,11 @@ sreset()
  * Make the string area permanent.
  * Meant to be called in main, after initialization.
  */
-void
-spreserve()
+PUBLIC void
+spreserve(void)
 {
 	struct strings *sp;
 
 	for (sp = &stringdope[0]; sp < &stringdope[NSPACE]; sp++)
-		sp->s_topFree = NOSTR;
+		sp->s_topFree = NULL;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: hp300spu.h,v 1.5 1999/07/31 00:28:20 thorpej Exp $	*/
+/*	$NetBSD: hp300spu.h,v 1.13 2008/04/28 20:23:19 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -55,13 +48,16 @@
 #define	HP_375		7	/* 50MHz 68030+32K external cache */
 #define	HP_400		8	/* 50MHz 68030+32K external cache */
 #define	HP_380		9	/* 25MHz 68040 */
-#define	HP_425		10	/* 26MHz 68040 */
+#define	HP_425		10	/* 25MHz 68040 */
 #define	HP_433		11	/* 33MHz 68040 */
 #define	HP_385		12	/* 33MHz 68040 */
+#define	HP_362		13	/* 25MHz 68030 */
+#define	HP_382		14	/* 25MHz 68040 */
 
 /* values for mmuid - used to differentiate similar CPU/cache combos */
 #define	MMUID_345	1	/* 345 */
 #define	MMUID_375	3	/* 375 */
+#define	MMUID_382	11	/* 382 */
 #define	MMUID_385	2	/* 385 */
 #define	MMUID_425_T	5	/* 425t - 25MHz Trailways */
 #define	MMUID_425_S	7	/* 425s - 25MHz Strider */
@@ -88,7 +84,9 @@ extern	int mmuid;		/* MMU id */
 /*
  * Pull in user-defined SPU configuration options.
  */
+#if defined(_KERNEL_OPT)
 #include "opt_spuconf.h"
+#endif
 
 /*
  * CPU configuration.
@@ -97,12 +95,13 @@ extern	int mmuid;		/* MMU id */
 #define M68020
 #endif
 
-#if defined(HP340) || defined(HP345) || defined(HP360) || defined(HP370) || \
-    defined(HP375) || defined(HP400)
+#if defined(HP340) || defined(HP345) || defined(HP360) || defined(HP362) || \
+    defined(HP370) || defined(HP375) || defined(HP400)
 #define M68030
 #endif
 
-#if defined(HP380) || defined(HP385) || defined(HP425) || defined(HP433)
+#if defined(HP380) || defined(HP382) || defined(HP385) || defined(HP425) || \
+    defined(HP433)
 #define M68040
 #endif
 
@@ -122,10 +121,10 @@ extern	int mmuid;		/* MMU id */
  */
 #if defined(M68K_MMU_HP)
 #define	CACHE_HAVE_VAC
+#define M68K_VAC
 #endif
 
-#if defined(HP345) || defined(HP360) || defined(HP370) || \
-    defined(HP375) || defined(HP400)
+#if defined(HP345) || defined(HP370) || defined(HP375) || defined(HP400)
 #define	CACHE_HAVE_PAC
 #endif
 

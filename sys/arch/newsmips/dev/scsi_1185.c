@@ -1,4 +1,4 @@
-/*	$NetBSD: scsi_1185.c,v 1.5 1998/08/21 14:52:29 tsubai Exp $	*/
+/*	$NetBSD: scsi_1185.c,v 1.19 2008/04/09 15:40:30 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -47,7 +43,7 @@
  *
  *	CXD1185Q
  *	SCSI bus low level common routines
- *				for one cpu machine
+ *				for one CPU machine
  *
  * MODIFY HISTORY:
  *
@@ -56,9 +52,14 @@
  *				kanarazu wait wo ireru-beshi !
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: scsi_1185.c,v 1.19 2008/04/09 15:40:30 tsutsui Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
@@ -66,11 +67,14 @@
 
 #include <machine/cpu.h>
 #include <machine/intr.h>
-#include <machine/locore.h>
 #include <machine/machConst.h>
+
+#include <mips/cache.h>
 
 #include <newsmips/dev/screg_1185.h>
 #include <newsmips/dev/scsireg.h>
+
+#include "ioconf.h"
 
 #if defined(news3400)
 # include <newsmips/dev/dmac_0448.h>
@@ -79,7 +83,6 @@
 # endif
 #endif
 
-#define VOLATILE volatile
 #define ABORT_SYNCTR_MES_FROM_TARGET
 #define SCSI_1185AQ
 #define RESET_RECOVER
@@ -108,8 +111,8 @@
 
 #define	splscsi splsc
 
-#if defined(mips) && defined(CPU_SINGLE)
-#define nops(x)		{ int i; for (i = 0; i < (x); i++) ; }
+#if defined(__mips__) && defined(CPU_SINGLE)
+#define nops(x)		{ int __i; for (__i = 0; __i < (x); __i++) ; }
 #define	DMAC_WAIT0	;
 #else
 #define	DMAC_WAIT0	DMAC_WAIT
@@ -129,111 +132,106 @@ static int dmac_map_init = 0;
 
 #define	SEL_TIMEOUT_VALUE 0x7a
 
-extern struct cfdriver sc_cd;
+void sc_send(struct sc_scb *, int, int);
+int scintr(void);
+void scsi_hardreset(void);
+void scsi_chipreset(struct sc_softc *);
+void scsi_softreset(struct sc_softc *);
+int sc_busy(struct sc_softc *, int);
 
-void sc_send __P((struct sc_scb *, int, int));
-int scintr __P((void));
-void scsi_hardreset __P((void));
-void scsi_chipreset __P((struct sc_softc *));
-void scsi_softreset __P((struct sc_softc *));
-int sc_busy __P((struct sc_softc *, int));
+static int WAIT_STATR_BITCLR(int);
+static int WAIT_STATR_BITSET(int);
+static void SET_CMD(struct sc_softc *, int);
+static void SET_CNT(int);
+static int GET_CNT(void);
+static void GET_INTR(uint8_t *, uint8_t *);
+static void sc_start(struct sc_softc *);
+static void sc_resel(struct sc_softc *);
+static void sc_discon(struct sc_softc *);
+static void sc_pmatch(struct sc_softc *);
+static void flush_fifo(struct sc_softc *);
+static void sc_cout(struct sc_softc *, struct sc_chan_stat *);
+static void sc_min(struct sc_softc *, struct sc_chan_stat *);
+static void sc_mout(struct sc_softc *, struct sc_chan_stat *);
+static void sc_sin(struct sc_softc *, volatile struct sc_chan_stat *);
+static void sc_dio(struct sc_softc *, volatile struct sc_chan_stat *);
+static void sc_dio_pad(struct sc_softc *, volatile struct sc_chan_stat *);
+static void print_scsi_stat(struct sc_softc *);
+static void append_wb(struct sc_softc *, struct sc_chan_stat *);
+static struct sc_chan_stat *get_wb_chan(struct sc_softc *);
+static int release_wb(struct sc_softc *);
+static void adjust_transfer(struct sc_softc *, struct sc_chan_stat *);
+static void clean_k2dcache(struct sc_scb *);
 
-static int WAIT_STATR_BITCLR __P((int));
-static int WAIT_STATR_BITSET __P((int));
-static void SET_CMD __P((struct sc_softc *, int));
-static void SET_CNT __P((int));
-static int GET_CNT __P((void));
-static void GET_INTR __P((VOLATILE int *, VOLATILE int *));
-static void sc_start __P((struct sc_softc *));
-static void sc_resel __P((struct sc_softc *));
-static void sc_discon __P((struct sc_softc *));
-static void sc_pmatch __P((struct sc_softc *));
-static void flush_fifo __P((struct sc_softc *));
-static void sc_cout __P((struct sc_softc *, struct sc_chan_stat *));
-static void sc_min __P((struct sc_softc *, struct sc_chan_stat *));
-static void sc_mout __P((struct sc_softc *, struct sc_chan_stat *));
-static void sc_sin __P((struct sc_softc *, VOLATILE struct sc_chan_stat *));
-static void sc_dio __P((struct sc_softc *, VOLATILE struct sc_chan_stat *));
-static void sc_dio_pad __P((struct sc_softc *, VOLATILE struct sc_chan_stat *));
-static void print_scsi_stat __P((struct sc_softc *));
-static void append_wb __P((struct sc_softc *, struct sc_chan_stat *));
-static struct sc_chan_stat *get_wb_chan __P((struct sc_softc *));
-static int release_wb __P((struct sc_softc *));
-static void adjust_transfer __P((struct sc_softc *, struct sc_chan_stat *));
-static void clean_k2dcache __P((struct sc_scb *));
+extern void sc_done(struct sc_scb *);
+extern paddr_t kvtophys(vaddr_t);
 
-extern void sc_done __P((struct sc_scb *));
-extern paddr_t kvtophys __P((vaddr_t));
-
-#if defined(mips) && defined(CPU_SINGLE)
-#define dma_reset(x) {						\
-	int s = splscsi();					\
+#if defined(__mips__) && defined(CPU_SINGLE)
+#define dma_reset(x) do {					\
+	int __s = splscsi();					\
 	dmac_gsel = (x); dmac_cctl = DM_RST; dmac_cctl = 0;	\
-	splx(s);						\
-}
+	splx(__s);						\
+} while (/* CONSTCOND */ 0)
 #endif
 
 int
-WAIT_STATR_BITCLR(bitmask)
-	register int bitmask;
+WAIT_STATR_BITCLR(int bitmask)
 {
-	register int iloop;
-	register VOLATILE int dummy;
+	int iloop;
+	uint8_t dummy;
 
 	iloop = 0;
 	do {
 		dummy = sc_statr;
 		DMAC_WAIT0;
 		if (iloop++ > CHECK_LOOP_CNT)
-			return (-1);
+			return -1;
 	} while (dummy & bitmask);
-	return (0);
+	return 0;
 }
 
 int
-WAIT_STATR_BITSET(bitmask)
-	register int bitmask;
+WAIT_STATR_BITSET(int bitmask)
 {
-	register int iloop;
-	register VOLATILE int dummy;
+	int iloop;
+	uint8_t dummy;
 
 	iloop = 0;
 	do {
 		dummy = sc_statr;
 		DMAC_WAIT0;
 		if (iloop++ > CHECK_LOOP_CNT)
-			return (-1);
+			return -1;
 	} while ((dummy & bitmask) == 0);
-	return (0);
+	return 0;
 }
 
 void
-SET_CMD(sc, CMD)
-	struct sc_softc *sc;
-	register int CMD;
+SET_CMD(struct sc_softc *sc, int CMD)
 {
-	(void) WAIT_STATR_BITCLR(R0_CIP);
-	sc->lastcmd = (CMD);
-	sc_comr = (CMD);
+
+	(void)WAIT_STATR_BITCLR(R0_CIP);
+	sc->lastcmd = CMD;
+	sc_comr = CMD;
 	DMAC_WAIT0;
 }
 
 void
-SET_CNT(COUNT)
-	register int COUNT;
+SET_CNT(int COUNT)
 {
-	sc_tclow = (COUNT) & 0xff;
+
+	sc_tclow = COUNT & 0xff;
 	DMAC_WAIT0;
-	sc_tcmid = ((COUNT) >> 8) & 0xff;
+	sc_tcmid = (COUNT >> 8) & 0xff;
 	DMAC_WAIT0;
-	sc_tchi = ((COUNT) >> 16) & 0xff;
+	sc_tchi = (COUNT >> 16) & 0xff;
 	DMAC_WAIT0;
 }
 
 int
-GET_CNT()
+GET_CNT(void)
 {
-	register VOLATILE int COUNT;
+	int COUNT;
 
 	COUNT = sc_tclow;
 	DMAC_WAIT0;
@@ -241,15 +239,14 @@ GET_CNT()
 	DMAC_WAIT0;
 	COUNT += (sc_tchi << 16) & 0xff0000;
 	DMAC_WAIT0;
-	return (COUNT);
+	return COUNT;
 }
 
 void
-GET_INTR(DATA1, DATA2)
-	register VOLATILE int *DATA1;
-	register VOLATILE int *DATA2;
+GET_INTR(uint8_t *DATA1, uint8_t *DATA2)
 {
-	(void) WAIT_STATR_BITCLR(R0_CIP);
+
+	(void)WAIT_STATR_BITCLR(R0_CIP);
 	while (sc_statr & R0_MIRQ) {
 		DMAC_WAIT0;
 		*DATA1 |= sc_intrq1;
@@ -261,23 +258,21 @@ GET_INTR(DATA1, DATA2)
 
 
 void
-sc_send(scb, chan, ie)
-	struct sc_scb *scb;
-	int chan, ie;
+sc_send(struct sc_scb *scb, int chan, int ie)
 {
 	struct sc_softc *sc = scb->scb_softc;
 	struct sc_chan_stat *cs;
 	struct scsipi_xfer *xs;
 	int i;
-	u_char *p;
+	uint8_t *p;
 
 	cs = &sc->chan_stat[chan];
 	xs = scb->xs;
 
-	p = (u_char *)xs->cmd;
+	p = (uint8_t *)xs->cmd;
 	if (cs->scb != NULL) {
 		printf("SCSI%d: sc_send() NOT NULL cs->sc\n", chan);
-		printf("ie=0x%x scb=0x%p cs->sc=0x%p\n", ie, scb, cs->scb);
+		printf("ie=0x%x scb=%p cs->sc=%p\n", ie, scb, cs->scb);
 		printf("cdb=");
 		for (i = 0; i < 6; i++)
 			printf(" 0x%x", *p++);
@@ -341,12 +336,11 @@ sc_send(scb, chan, ie)
  *	SCSI start up routine
  */
 void
-sc_start(sc)
-	struct sc_softc *sc;
+sc_start(struct sc_softc *sc)
 {
 	struct sc_chan_stat *cs;
-	int chan, dummy;
-	int s;
+	int chan, s;
+	uint8_t dummy;
 
 	s = splscsi();
 	cs = get_wb_chan(sc);
@@ -413,16 +407,16 @@ sc_start_exit:
  *	SCSI interrupt service routine
  */
 int
-scintr()
+scintr(void)
 {
-	register int iloop;
-	register VOLATILE int chan;
-	register VOLATILE int dummy;
+	int iloop;
+	int chan;
+	uint8_t dummy;
 	struct sc_softc *sc;
 	struct sc_chan_stat *cs;
-	int s_int1, s_int2;
+	uint8_t s_int1, s_int2;
 
-	sc = sc_cd.cd_devs[0];					/* XXX */
+	sc = device_lookup_private(&sc_cd, 0);		/* XXX */
 
 scintr_loop:
 
@@ -467,7 +461,8 @@ scintr_loop:
 	}
 
 	cs = get_wb_chan(sc);
-	if (cs) chan = cs->chan_num;
+	if (cs)
+		chan = cs->chan_num;
 
 	if (cs && (sc->sel_stat[chan] == SEL_START) &&
 		(sc->lastcmd == SCMD_SEL_ATN)) {
@@ -499,7 +494,8 @@ scintr_loop:
 			 * SELECTION timeout
 			 */
 			sc->int_stat1 &= ~R2_STO;
-			if ((sc->int_stat2&(R3_PHC|R3_RMSG)) != (R3_PHC|R3_RMSG)) {
+			if ((sc->int_stat2&(R3_PHC|R3_RMSG)) !=
+			     (R3_PHC|R3_RMSG)) {
 				sc->ipc = chan;
 				sc->ip = &sc->chan_stat[chan];
 				sc->sel_stat[chan] = SEL_TIMEOUT;
@@ -566,8 +562,8 @@ scintr_loop:
 			adjust_transfer(sc, sc->ip);
 		}
 		if (sc->int_stat2 & R3_SPE) {
-			register int VOLATILE statr;
-			register int VOLATILE cmonr;
+			int volatile statr;
+			int volatile cmonr;
 
 			statr = sc_statr;
 			DMAC_WAIT0;
@@ -652,7 +648,7 @@ scintr_loop:
 	}
 
 scintr_exit:
-	return (1);
+	return 1;
 }
 
 /*
@@ -661,15 +657,15 @@ scintr_exit:
  *		And call scsi_softreset().
  */
 void
-scsi_hardreset()
+scsi_hardreset(void)
 {
-	register int s;
+	int s;
 #ifdef DMAC_MAP_INIT
-	register int i;
+	int i;
 #endif
 	struct sc_softc *sc;
 
-	sc = sc_cd.cd_devs[0];					/* XXX */
+	sc = device_lookup_private(&sc_cd, 0);	/* XXX */
 	s = splscsi();
 
 	scsi_chipreset(sc);
@@ -682,10 +678,10 @@ scsi_hardreset()
 	if (dmac_map_init == 0) {
 		dmac_map_init++;
 		for (i = 0; i < NDMACMAP; i++) {
-# if defined(mips) && defined(CPU_SINGLE)
+# if defined(__mips__) && defined(CPU_SINGLE)
 			dmac_gsel = CH_SCSI;
-			dmac_ctag = (u_char)i;
-			dmac_cmap = (u_short)0;
+			dmac_ctag = (uint8_t)i;
+			dmac_cmap = (uint16_t)0;
 # endif
 		}
 	}
@@ -696,7 +692,7 @@ scsi_hardreset()
 
 /*
  * I/O port (sc_ioptr) bit assign
- *	
+ *
  *	Rf_PRT3		-	<reserved>
  *	Rf_PRT2		-	<reserved>
  *	Rf_PRT1		out	Floppy Disk Density control
@@ -704,18 +700,17 @@ scsi_hardreset()
  */
 
 void
-scsi_chipreset(sc)
-	struct sc_softc *sc;
+scsi_chipreset(struct sc_softc *sc)
 {
-	register int s;
-	register VOLATILE int save_ioptr;
+	int s;
+	uint8_t save_ioptr;
 
 	s = splscsi();
 
-#if defined(mips) && defined(CPU_SINGLE)
+#if defined(__mips__) && defined(CPU_SINGLE)
 	dmac_gsel = CH_SCSI;
 	dmac_cwid = 4;				/* initialize DMAC SCSI chan */
-	*(unsigned VOLATILE char *)PINTEN |= DMA_INTEN;
+	*(volatile uint8_t *)PINTEN |= DMA_INTEN;
 	dma_reset(CH_SCSI);
 #endif
 	sc_envir = 0;				/* 1/4 clock */
@@ -725,7 +720,7 @@ scsi_chipreset(sc)
 	sc->lastcmd = SCMD_CHIP_RST;
 	sc_comr = SCMD_CHIP_RST;		/* reset chip */
 	DMAC_WAIT;
-	(void) WAIT_STATR_BITCLR(R0_CIP);
+	(void)WAIT_STATR_BITCLR(R0_CIP);
 	/*
 	 * SCMD_CHIP_RST command reset all register
 	 *				except sc_statr<7:6> & sc_cmonr.
@@ -763,12 +758,11 @@ scsi_chipreset(sc)
 }
 
 void
-scsi_softreset(sc)
-	struct sc_softc *sc;
+scsi_softreset(struct sc_softc *sc)
 {
-	register VOLATILE struct sc_chan_stat *cs;
+	struct sc_chan_stat *cs;
 	int i;
-	/* register int (*handler)(); */
+	/* int (*handler)(); */
 
 	sc->wbq_actf = NULL;
 	sc->wbq_actl = NULL;
@@ -794,7 +788,7 @@ scsi_softreset(sc)
 			if ((cs->scb->istatus & INST_EP) == 0)
 				cs->scb->istatus = (INST_EP|INST_HE);
 			cs->scb = NULL;
-#ifdef mips
+#ifdef __mips__
 			clean_k2dcache(scb);
 #endif
 			if (cs->intr_flg == SCSI_INTEN) {
@@ -815,13 +809,12 @@ scsi_softreset(sc)
  *		( RESELECTION phase )
  */
 void
-sc_resel(sc)
-	struct sc_softc *sc;
+sc_resel(struct sc_softc *sc)
 {
-	register struct sc_chan_stat *cs;
-	register VOLATILE int chan;
-	register VOLATILE int statr;
-	register int iloop;
+	struct sc_chan_stat *cs;
+	uint8_t chan;
+	uint8_t statr;
+	int iloop;
 
 	sc->min_flag = 0;
 	chan = (sc_idenr & R6_SID_MASK) >> SC_TG_SHIFT;
@@ -881,7 +874,7 @@ sc_resel(sc)
 		GET_INTR(&sc->int_stat1, &sc->int_stat2);
 	}
 	sc->int_stat2 &= ~R3_FNC;
-	
+
 	sc->sel_stat[chan] = SEL_SUCCESS;
 
 	sc->wrc--;
@@ -901,20 +894,19 @@ sc_resel(sc)
  *		( Target disconnect / job done )
  */
 void
-sc_discon(sc)
-	struct sc_softc *sc;
+sc_discon(struct sc_softc *sc)
 {
-	register VOLATILE struct sc_chan_stat *cs;
-	/* register int (*handler)(); */
-	register VOLATILE int dummy;
+	struct sc_chan_stat *cs;
+	/* int (*handler)(); */
+	uint8_t dummy;
 
 	/*
-	 * Signal reflection on BSY is occured.
+	 * Signal reflection on BSY has occurred.
 	 *	Not Bus Free Phase, ignore.
 	 *
 	 *	But, CXD1185Q reset INIT bit of sc_statr.
 	 *	So, can't issue Transfer Information command.
-	 *	
+	 *
 	 *	What shall we do ?  Bus reset ?
 	 */
 	if ((sc->int_stat2 & R3_DCNT) && ((sc_intok2 & Rb_DCNT) == 0))
@@ -941,7 +933,7 @@ sc_discon(sc)
 
 	if ((sc->sel_stat[cs->chan_num] != SEL_SUCCESS)
 			&& (sc->sel_stat[cs->chan_num] != SEL_TIMEOUT))
-		printf("sc_discon: eh!\n");
+		printf("%s: eh!\n", __func__);
 
 	/*
 	 * indicate abnormal terminate
@@ -961,7 +953,7 @@ sc_discon(sc)
 		if (sc->perr_flag[cs->chan_num] > 0)
 			cs->scb->istatus |= INST_EP|INST_PRE;
 		cs->scb = NULL;
-#ifdef mips
+#ifdef __mips__
 		clean_k2dcache(scb);
 #endif
 		if (cs->intr_flg == SCSI_INTEN) {
@@ -983,13 +975,12 @@ sc_discon_exit:
  *	SCSI phase match interrupt service routine
  */
 void
-sc_pmatch(sc)
-	struct sc_softc *sc;
+sc_pmatch(struct sc_softc *sc)
 {
 	struct sc_chan_stat *cs;
-	register VOLATILE int phase;
-	register VOLATILE int phase2;
-	register VOLATILE int cmonr;
+	uint8_t phase;
+	uint8_t phase2;
+	uint8_t cmonr;
 
 	sc->int_stat2 &= ~R3_FNC;			/* XXXXXXXX */
 
@@ -997,7 +988,7 @@ sc_pmatch(sc)
 	if (cs == NULL)
 		return;
 
-#if defined(mips) && defined(CPU_SINGLE)
+#if defined(__mips__) && defined(CPU_SINGLE)
 	dma_reset(CH_SCSI);
 #endif
 	phase = sc_cmonr & SC_PMASK;
@@ -1058,12 +1049,11 @@ sc_pmatch(sc)
 
 
 void
-flush_fifo(sc)
-	struct sc_softc *sc;
+flush_fifo(struct sc_softc *sc)
 {
-	register VOLATILE int dummy;
-	VOLATILE int tmp;
-	VOLATILE int tmp0;
+	uint8_t dummy;
+	uint8_t tmp;
+	uint8_t tmp0;
 
 	dummy = sc_ffstr;
 	DMAC_WAIT0;
@@ -1087,14 +1077,12 @@ flush_fifo(sc)
  *	SCSI command send routine
  */
 void
-sc_cout(sc, cs)
-	struct sc_softc *sc;
-	register struct sc_chan_stat *cs;
+sc_cout(struct sc_softc *sc, struct sc_chan_stat *cs)
 {
-	register int iloop;
-	register int cdb_bytes;
-	register VOLATILE int dummy;
-	register VOLATILE int statr;
+	int iloop;
+	int cdb_bytes;
+	uint8_t dummy;
+	uint8_t statr;
 	struct scsipi_xfer *xs;
 
 	if (cs->comflg == CF_SET) {
@@ -1176,13 +1164,11 @@ sc_cout(sc, cs)
  *	SCSI message accept routine
  */
 void
-sc_min(sc, cs)
-	struct sc_softc *sc;
-	register struct sc_chan_stat *cs;
+sc_min(struct sc_softc *sc, struct sc_chan_stat *cs)
 {
 	struct sc_scb *scb = cs->scb;
 	struct scsipi_xfer *xs = scb->xs;
-	register VOLATILE int dummy;
+	uint8_t dummy;
 
 	sc_intok2 = Rb_FNC|Rb_DCNT|Rb_SRST|Rb_PHC|Rb_SPE|Rb_RMSG;
 	DMAC_WAIT0;
@@ -1207,7 +1193,7 @@ sc_min(sc, cs)
 			dummy = sc_statr;
 			DMAC_WAIT0;
 		} while (dummy & R0_CIP);
-		GET_INTR(&sc->int_stat1, &sc->int_stat2);	/* clear interrupt */
+		GET_INTR(&sc->int_stat1, &sc->int_stat2); /* clear interrupt */
 	} while ((sc->int_stat2 & R3_FNC) == 0);
 	sc->int_stat2 &= ~R3_FNC;
 
@@ -1237,7 +1223,7 @@ sc_min(sc, cs)
 			/* Extended Message */
 			sc->min_cnt[cs->chan_num] = GET_MIN_COUNT;
 			sc->min_point[cs->chan_num] = scb->msgbuf;
-			bzero(scb->msgbuf, 8);
+			memset(scb->msgbuf, 0, 8);
 			*sc->min_point[cs->chan_num]++ = dummy;
 		} else {
 			switch ((dummy & MSG_IDENT)? MSG_IDENT : dummy) {
@@ -1304,7 +1290,7 @@ sc_min(sc, cs)
 #else
 			if (scb->msgbuf[2] == 0x01) {
 #endif
-				register int i;
+				int i;
 				/*
 				 * receive Synchronous transfer message reply
 				 *	calculate transfer period val
@@ -1333,17 +1319,15 @@ sc_min(sc, cs)
  *	SCSI message send routine
  */
 void
-sc_mout(sc, cs)
-	struct sc_softc *sc;
-	register struct sc_chan_stat *cs;
+sc_mout(struct sc_softc *sc, struct sc_chan_stat *cs)
 {
-	register struct sc_scb *scb = cs->scb;
-	register u_char *mp;
-	register int cnt;
-	register int iloop;
-	register VOLATILE int dummy;
-	VOLATILE int tmp;
-	VOLATILE int tmp0;
+	struct sc_scb *scb = cs->scb;
+	u_char *mp;
+	int cnt;
+	int iloop;
+	uint8_t dummy;
+	uint8_t tmp;
+	uint8_t tmp0;
 
 	flush_fifo(sc);
 
@@ -1396,7 +1380,7 @@ sc_mout(sc, cs)
 					return;
 			} while ((dummy & R4_MREQ) == 0);
 			SET_CMD(sc, SCMD_NGT_ATN);
-			(void) WAIT_STATR_BITCLR(R0_CIP);
+			(void)WAIT_STATR_BITCLR(R0_CIP);
 			GET_INTR(&tmp0, &tmp);		/* clear interrupt */
 
 			dummy = sc_cmonr;
@@ -1459,12 +1443,10 @@ sc_mout(sc, cs)
  *	SCSI status accept routine
  */
 void
-sc_sin(sc, cs)
-	struct sc_softc *sc;
-	register VOLATILE struct sc_chan_stat *cs;
+sc_sin(struct sc_softc *sc, volatile struct sc_chan_stat *cs)
 {
-	register VOLATILE int dummy;
-	register int iloop;
+	uint8_t dummy;
+	int iloop;
 
 	flush_fifo(sc);
 
@@ -1482,7 +1464,7 @@ sc_sin(sc, cs)
 
 	SET_CMD(sc, SCMD_TR_INFO);
 
-	(void) WAIT_STATR_BITCLR(R0_CIP);
+	(void)WAIT_STATR_BITCLR(R0_CIP);
 
 	sc->int_stat2 &= ~R3_FNC;
 	iloop = 0;
@@ -1501,16 +1483,14 @@ sc_sin(sc, cs)
  *	SCSI data in/out routine
  */
 void
-sc_dio(sc, cs)
-	struct sc_softc *sc;
-	register VOLATILE struct sc_chan_stat *cs;
+sc_dio(struct sc_softc *sc, volatile struct sc_chan_stat *cs)
 {
-	register VOLATILE struct sc_scb *scb;
-	register int i;
-	register int pages;
-	register u_int tag;
-	register u_int pfn;
-	VOLATILE int phase;
+	struct sc_scb *scb;
+	int i;
+	int pages;
+	uint8_t tag;
+	uint32_t pfn;
+	uint8_t phase;
 	struct scsipi_xfer *xs;
 
 	scb = cs->scb;
@@ -1551,17 +1531,17 @@ sc_dio(sc, cs)
 		}
 	}
 
-#if defined(mips) && defined(CPU_SINGLE)
+#if defined(__mips__) && defined(CPU_SINGLE)
 	SET_CMD(sc, SCMD_TR_INFO|R0_DMA|R0_TRBE);
 #endif
 
-#if defined(mips) && defined(CPU_SINGLE)
+#if defined(__mips__) && defined(CPU_SINGLE)
 	dmac_gsel = CH_SCSI;
-	dmac_ctrcl = (u_char)(cs->act_trcnt & 0xff);
-	dmac_ctrcm = (u_char)((cs->act_trcnt >> 8) & 0xff);
-	dmac_ctrch = (u_char)((cs->act_trcnt >> 16) & 0x0f);
-	dmac_cofsh = (u_char)((cs->act_offset >> 8) & 0xf);
-	dmac_cofsl = (u_char)(cs->act_offset & 0xff);
+	dmac_ctrcl = (uint8_t)(cs->act_trcnt & 0xff);
+	dmac_ctrcm = (uint8_t)((cs->act_trcnt >> 8) & 0xff);
+	dmac_ctrch = (uint8_t)((cs->act_trcnt >> 16) & 0x0f);
+	dmac_cofsh = (uint8_t)((cs->act_offset >> 8) & 0xf);
+	dmac_cofsl = (uint8_t)(cs->act_offset & 0xff);
 #endif
 	tag = 0;
 
@@ -1573,17 +1553,17 @@ sc_dio(sc, cs)
 		for (i = cs->act_tag; i < pages; i++) {
 			if ((pfn = scb->sc_map->mp_addr[i]) == 0)
 				panic("SCSI:sc_dma() zero entry");
-#if defined(mips) && defined(CPU_SINGLE)
+#if defined(__mips__) && defined(CPU_SINGLE)
 			dmac_gsel = CH_SCSI;
-			dmac_ctag = (u_char)tag++;
-			dmac_cmap = (u_short)pfn;
+			dmac_ctag = (uint8_t)tag++;
+			dmac_cmap = (uint16_t)pfn;
 #endif
 		}
 #ifdef MAP_OVER_ACCESS
-# if defined(mips) && defined(CPU_SINGLE)
+# if defined(__mips__) && defined(CPU_SINGLE)
 		dmac_gsel = CH_SCSI;
-		dmac_ctag = (u_char)tag++;
-		dmac_cmap = (u_short)pfn;
+		dmac_ctag = (uint8_t)tag++;
+		dmac_cmap = (uint16_t)pfn;
 # endif
 #endif
 	} else {
@@ -1593,22 +1573,22 @@ sc_dio(sc, cs)
 		pfn = kvtophys((vaddr_t)cs->act_point) >> PGSHIFT;
 		pages = (cs->act_trcnt >> PGSHIFT) + 2;
 		for (i = 0; i < pages; i++) {
-#if defined(mips) && defined(CPU_SINGLE)
+#if defined(__mips__) && defined(CPU_SINGLE)
 			dmac_gsel = CH_SCSI;
-			dmac_ctag = (u_char)tag++;
-			dmac_cmap = (u_short)pfn + i;
+			dmac_ctag = (uint8_t)tag++;
+			dmac_cmap = (uint8_t)pfn + i;
 #endif
 		}
 	}
 
-#if defined(mips) && defined(CPU_SINGLE)
+#if defined(__mips__) && defined(CPU_SINGLE)
 	dmac_gsel = CH_SCSI;
 	dmac_ctag = 0;
 #endif
 
 	if (phase == DAT_IN) {
 		sc->dma_stat = SC_DMAC_RD;
-#if defined(mips) && defined(CPU_SINGLE)
+#if defined(__mips__) && defined(CPU_SINGLE)
 		/*
 		 * auto pad flag is always on
 		 */
@@ -1621,7 +1601,7 @@ sc_dio(sc, cs)
 	}
 	else if (phase == DAT_OUT) {
 		sc->dma_stat = SC_DMAC_WR;
-#if defined(mips) && defined(CPU_SINGLE)
+#if defined(__mips__) && defined(CPU_SINGLE)
 		dmac_gsel = CH_SCSI;
 		dmac_cctl = DM_APAD;
 		DMAC_WAIT;
@@ -1634,11 +1614,9 @@ sc_dio(sc, cs)
 
 #define MAX_TR_CNT24	((1 << 24) -1)
 void
-sc_dio_pad(sc, cs)
-	struct sc_softc *sc;
-	register VOLATILE struct sc_chan_stat *cs;
+sc_dio_pad(struct sc_softc *sc, volatile struct sc_chan_stat *cs)
 {
-	register int dummy;
+	uint8_t dummy;
 
 	if (cs->act_trcnt >= 0)
 		return;
@@ -1655,9 +1633,9 @@ sc_dio_pad(sc, cs)
 }
 
 void
-print_scsi_stat(sc)
-	struct sc_softc *sc;
+print_scsi_stat(struct sc_softc *sc)
 {
+
 	printf("ipc=%d wrc=%d wbc=%d\n", sc->ipc, sc->wrc, sc->wbc);
 }
 
@@ -1665,11 +1643,10 @@ print_scsi_stat(sc)
  *	return 0 if it was done.  Or retun TRUE if it is busy.
  */
 int
-sc_busy(sc, chan)
-	struct sc_softc *sc;
-	register int chan;
+sc_busy(struct sc_softc *sc, int chan)
 {
-	return ((int)sc->chan_stat[chan].scb);
+
+	return (int)sc->chan_stat[chan].scb;
 }
 
 
@@ -1677,9 +1654,7 @@ sc_busy(sc, chan)
  *	append channel into Waiting Bus_free queue
  */
 void
-append_wb(sc, cs)
-	struct sc_softc *sc;
-	struct sc_chan_stat *cs;
+append_wb(struct sc_softc *sc, struct sc_chan_stat *cs)
 {
 	int s;
 
@@ -1698,8 +1673,7 @@ append_wb(sc, cs)
  *	get channel from Waiting Bus_free queue
  */
 struct sc_chan_stat *
-get_wb_chan(sc)
-	struct sc_softc *sc;
+get_wb_chan(struct sc_softc *sc)
 {
 	struct sc_chan_stat *cs;
 	int s;
@@ -1716,8 +1690,7 @@ get_wb_chan(sc)
  *	release channel from Waiting Bus_free queue
  */
 int
-release_wb(sc)
-	struct sc_softc *sc;
+release_wb(struct sc_softc *sc)
 {
 	struct sc_chan_stat *cs;
 	int error = 0;
@@ -1740,9 +1713,7 @@ release_wb(sc)
 }
 
 void
-adjust_transfer(sc, cs)
-	struct sc_softc *sc;
-	struct sc_chan_stat *cs;
+adjust_transfer(struct sc_softc *sc, struct sc_chan_stat *cs)
 {
 	struct sc_scb *scb = cs->scb;
 	u_int remain_cnt;
@@ -1752,7 +1723,7 @@ adjust_transfer(sc, cs)
 		sc->pad_start = 0;
 		remain_cnt = 0;
 	} else {
-# if defined(mips) && defined(CPU_SINGLE)
+# if defined(__mips__) && defined(CPU_SINGLE)
 		remain_cnt = GET_CNT();
 		remain_cnt -= sc->pad_cnt[cs->chan_num];
 		if (sc->dma_stat == SC_DMAC_WR) {
@@ -1774,23 +1745,24 @@ adjust_transfer(sc, cs)
 		cs->act_point += sent_byte;
 }
 
-#ifdef mips
+#ifdef __mips__
 static void
-clean_k2dcache(scb)
-	struct sc_scb *scb;
+clean_k2dcache(struct sc_scb *scb)
 {
 	struct sc_map *sc_map = scb->sc_map;
 	paddr_t pa;
 	int i, pages;
 
 	pa = kvtophys((vaddr_t)scb->msgbuf);
-	MachFlushDCache(MIPS_PHYS_TO_KSEG0(pa), sizeof(scb->msgbuf));
+	mips_dcache_wbinv_range_index(MIPS_PHYS_TO_KSEG0(pa),
+	    sizeof(scb->msgbuf));
 
 	if (MACH_IS_USPACE(scb->sc_cpoint))
 		panic("clean_k2dcache: user address is not supported");
 
 	if (MACH_IS_CACHED(scb->sc_cpoint)) {
-		MachFlushDCache((vaddr_t)scb->sc_cpoint, scb->sc_ctrnscnt);
+		mips_dcache_wbinv_range_index((vaddr_t)scb->sc_cpoint,
+		    scb->sc_ctrnscnt);
 		return;
 	}
 
@@ -1798,7 +1770,8 @@ clean_k2dcache(scb)
 		pages = sc_map->mp_pages;
 		for (i = 0; i < pages; i++) {
 			pa = sc_map->mp_addr[i] << PGSHIFT;
-			MachFlushDCache(MIPS_PHYS_TO_KSEG0(pa), NBPG);
+			mips_dcache_wbinv_range_index(MIPS_PHYS_TO_KSEG0(pa),
+			    PAGE_SIZE);
 		}
 	}
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: map_scan.l,v 1.1 1998/12/28 14:01:17 hannken Exp $ */
+/*	$NetBSD: map_scan.l,v 1.4 2008/04/28 20:23:09 martin Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,16 +33,19 @@
 
 #include <dev/wscons/wsksymdef.h>
 #include <dev/wscons/wsksymvar.h>
+
 #include <err.h>
+#include <stdlib.h>
+
 #include "wsconsctl.h"
 #include "map_parse.h"
 
 #define yywrap()	1
 
 void
-map_scan_setinput(str)
-	char *str;
+map_scan_setinput(char *str)
 {
+
 	yy_scan_string(str);
 }
 
@@ -78,7 +74,7 @@ keysym {
 
 		i = name2ksym(yytext);
 		if (i == -1)
-			errx(1, "%s: not a keysym", yytext);
+			errx(EXIT_FAILURE, "%s: not a keysym", yytext);
 		yylval.kval = i;
 		if (KS_GROUP(i) == KS_GROUP_Command ||
 		    i == KS_Cmd || i == KS_Cmd1 || i == KS_Cmd2)
@@ -94,9 +90,11 @@ keysym {
 
 . {
 		if (yytext[0] >= ' ' && yytext[0] <= '~')
-			errx(1, "%c: illegal character in input", yytext[0]);
+			errx(EXIT_FAILURE, "%c: illegal character in input",
+			    yytext[0]);
 		else
-			errx(1, "%03o: illegal character in input", yytext[0] & 255);
+			errx(EXIT_FAILURE, "%03o: illegal character in input",
+			    yytext[0] & 255);
 
 		/* To quiet the compiler */
 		if (0)

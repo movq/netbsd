@@ -1,4 +1,4 @@
-/*	$NetBSD: kbd_xlate.h,v 1.3 2000/03/19 12:50:43 pk Exp $	*/
+/*	$NetBSD: kbd_xlate.h,v 1.7 2005/12/11 12:23:56 christos Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -21,11 +21,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -66,10 +62,7 @@
  */
 struct kbd_state {
 	struct keyboard kbd_k;	/* table pointers */
-	int	kbd_modbits;		/* modifier keys */
-	int kbd_expect; 		/* expect ID or layout byte */
-#define	KBD_EXPECT_IDCODE	1
-#define	KBD_EXPECT_LAYOUT	2
+	int	kbd_modbits;	/* modifier keys */
 
 	u_char	kbd_id;		/* a place to store the ID */
 	u_char	kbd_layout;	/* which keyboard layout */
@@ -78,5 +71,5 @@ struct kbd_state {
 
 };
 
-extern void kbd_xlate_init __P((struct kbd_state *ks));
-extern int kbd_code_to_keysym __P((struct kbd_state *ks, int c));
+extern void kbd_xlate_init(struct kbd_state *ks);
+extern int kbd_code_to_keysym(struct kbd_state *ks, int c);

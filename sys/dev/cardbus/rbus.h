@@ -1,4 +1,4 @@
-/*	$NetBSD: rbus.h,v 1.3 1999/12/15 12:28:55 kleink Exp $	*/
+/*	$NetBSD: rbus.h,v 1.10 2007/10/19 11:59:40 ad Exp $	*/
 /*
  * Copyright (c) 1999
  *     HAYAKAWA Koichi.  All rights reserved.
@@ -35,37 +35,37 @@
 #define _DEV_CARDBUS_RBUS_H_
 
 /*
- * This file defines rbus (pseudo) class
+ * This file defines the rbus (pseudo) class
  *
  * What is rbus?
- * 
- *  Ths rbus is a recursive bus-space administrator.  This means a
+ *
+ *  The rbus is a recursive bus-space administrator.  This means a
  *  parent bus-space administrator, which usually belongs to a bus
- *  bridge, makes some child bus-space administorators and gives
- *  (restricted) bus-space for children.  There are a root bus-space
- *  administrator which maintains whole bus-space.
+ *  bridge, makes some child bus-space administrators and gives
+ *  (restricted) bus-space to the children.  There is a root bus-space
+ *  administrator which maintains the whole bus-space.
  *
  * Why recursive?
  *
  *  The recursive bus-space administration has two virtues.  The
  *  former is this modelling matches the actual memory and io space
- *  management of bridge devices well.  The latter is the rbus is
- *  distributed management system, so it matches well with
+ *  management of bridge devices well.  The latter is that the rbus is a
+ *  distributed management system, so it matches well with a
  *  multi-thread kernel.
  *
  * Abstraction
  *
- *  The rbus models bus-to-bus bridge into three way: dedicate, share
- *  and slave.  Dedicate means that the bridge has dedicate bus space.
- *  Share means that the bridge has bus space, but this bus space is
- *  shared with other bus bridges.  Slave means the bus bridge which
- *  does not have it own bus space and ask a parent bus bridge for bus
- *  space when a client requests bus space to the bridge.
+ *  The rbus models bus-to-bus bridges into three types: dedicated, shared,
+ *  and slave.  Dedicated means that the bridge has dedicated bus space.
+ *  Shared means that the bridge has bus space, but this bus space is
+ *  shared with other bus bridges.  Slave means a bus bridge which
+ *  does not have it own bus space and asks a parent bus bridge for bus
+ *  space when a client requests bus space from the bridge.
  */
 
 
 /* require sys/extent.h */
-/* require machine/bus.h */
+/* require sys/bus.h */
 
 #define rbus 1
 
@@ -90,14 +90,11 @@ struct rbustag {
   bus_addr_t rb_end;
   bus_addr_t rb_offset;
 #if notyet
-  int (*rb_space_alloc) __P((struct rbustag *,
-			     bus_addr_t start, bus_addr_t end,
-			     bus_addr_t addr, bus_size_t size,
-			     bus_addr_t mask, bus_addr_t align,
-			     int flags,
-			     bus_addr_t *addrp, bus_space_handle_t *bshp));
-  int (*rbus_space_free) __P((struct rbustag *, bus_space_handle_t,
-			      bus_size_t size, bus_addr_t *addrp));
+  int (*rb_space_alloc)(struct rbustag *, bus_addr_t, bus_addr_t,
+			     bus_addr_t, bus_size_t, bus_addr_t, bus_addr_t,
+			     int, bus_addr_t *, bus_space_handle_t *);
+  int (*rbus_space_free)(struct rbustag *, bus_space_handle_t,
+			      bus_size_t, bus_addr_t *);
 #endif
   int rb_flags;
 #define RBUS_SPACE_INVALID   0x00
@@ -119,20 +116,15 @@ typedef struct rbustag *rbus_tag_t;
  * easier.  These functions should be member functions of rbus
  * `class'.
  */
-int rbus_space_alloc __P((rbus_tag_t,
-			  bus_addr_t addr, bus_size_t size, bus_addr_t mask,
-			  bus_addr_t align, int flags,
-			  bus_addr_t *addrp, bus_space_handle_t *bshp));
+int rbus_space_alloc(rbus_tag_t, bus_addr_t, bus_size_t, bus_addr_t,
+    bus_addr_t, int, bus_addr_t *, bus_space_handle_t *);
 
-int rbus_space_alloc_subregion __P((rbus_tag_t,
-				    bus_addr_t start, bus_addr_t end,
-				    bus_addr_t addr, bus_size_t size,
-				    bus_addr_t mask, bus_addr_t align,
-				    int flags,
-				    bus_addr_t *addrp, bus_space_handle_t *bshp));
+int rbus_space_alloc_subregion(rbus_tag_t, bus_addr_t, bus_addr_t,
+    bus_addr_t, bus_size_t, bus_addr_t, bus_addr_t, int,
+    bus_addr_t *, bus_space_handle_t *);
 
-int rbus_space_free __P((rbus_tag_t, bus_space_handle_t, bus_size_t size,
-			 bus_addr_t *addrp));
+int rbus_space_free(rbus_tag_t, bus_space_handle_t, bus_size_t,
+    bus_addr_t *);
 
 
 /*
@@ -142,19 +134,18 @@ int rbus_space_free __P((rbus_tag_t, bus_space_handle_t, bus_size_t size,
  * rbus_new is a constructor which make an rbus instance from a parent
  * rbus.
  */
-rbus_tag_t rbus_new __P((rbus_tag_t parent, bus_addr_t start, bus_size_t size,
-			 bus_addr_t offset, int flags));
+rbus_tag_t rbus_new(rbus_tag_t, bus_addr_t, bus_size_t, bus_addr_t, int);
 
-rbus_tag_t rbus_new_root_delegate __P((bus_space_tag_t, bus_addr_t, bus_size_t,
-				       bus_addr_t offset));
-rbus_tag_t rbus_new_root_share __P((bus_space_tag_t, struct extent *,
-				    bus_addr_t, bus_size_t,bus_addr_t offset));
+rbus_tag_t rbus_new_root_delegate(bus_space_tag_t, bus_addr_t, bus_size_t,
+    bus_addr_t);
+rbus_tag_t rbus_new_root_share(bus_space_tag_t, struct extent *,
+    bus_addr_t, bus_size_t, bus_addr_t);
 
 /*
  * This function release bus-space used by the argument.  This
  * function is so-called-as a destructor.
  */
-int rbus_delete __P((rbus_tag_t));
+int rbus_delete(rbus_tag_t);
 
 
 /*

@@ -1,4 +1,33 @@
-/*	$NetBSD: sys_generic.c,v 1.47 2000/03/30 09:27:13 augustss Exp $	*/
+/*	$NetBSD: sys_generic.c,v 1.120.12.1 2009/06/17 20:48:57 bouyer Exp $	*/
+
+/*-
+ * Copyright (c) 2007, 2008, 2009 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * This code is derived from software contributed to The NetBSD Foundation
+ * by Andrew Doran.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -17,11 +46,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -40,7 +65,12 @@
  *	@(#)sys_generic.c	8.9 (Berkeley) 2/14/95
  */
 
-#include "opt_ktrace.h"
+/*
+ * System calls relating to files.
+ */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: sys_generic.c,v 1.120.12.1 2009/06/17 20:48:57 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -53,76 +83,65 @@
 #include <sys/uio.h>
 #include <sys/kernel.h>
 #include <sys/stat.h>
-#include <sys/malloc.h>
+#include <sys/kmem.h>
 #include <sys/poll.h>
-#ifdef KTRACE
-#include <sys/ktrace.h>
-#endif
-
+#include <sys/vnode.h>
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
+#include <sys/ktrace.h>
+#include <sys/atomic.h>
 
-int selscan __P((struct proc *, fd_mask *, fd_mask *, int, register_t *));
-int pollscan __P((struct proc *, struct pollfd *, int, register_t *));
+#include <uvm/uvm_extern.h>
 
 /*
  * Read system call.
  */
 /* ARGSUSED */
 int
-sys_read(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+sys_read(struct lwp *l, const struct sys_read_args *uap, register_t *retval)
 {
-	struct sys_read_args /* {
-		syscallarg(int) fd;
-		syscallarg(void *) buf;
-		syscallarg(size_t) nbyte;
-	} */ *uap = v;
-	int fd = SCARG(uap, fd);
-	struct file *fp;
-	struct filedesc *fdp = p->p_fd;
+	/* {
+		syscallarg(int)		fd;
+		syscallarg(void *)	buf;
+		syscallarg(size_t)	nbyte;
+	} */
+	file_t *fp;
+	int fd;
 
-	if ((u_int)fd >= fdp->fd_nfiles ||
-	    (fp = fdp->fd_ofiles[fd]) == NULL ||
-	    (fp->f_iflags & FIF_WANTCLOSE) != 0 ||
-	    (fp->f_flag & FREAD) == 0)
+	fd = SCARG(uap, fd);
+
+	if ((fp = fd_getfile(fd)) == NULL)
 		return (EBADF);
 
-	FILE_USE(fp);
+	if ((fp->f_flag & FREAD) == 0) {
+		fd_putfile(fd);
+		return (EBADF);
+	}
 
 	/* dofileread() will unuse the descriptor for us */
-	return (dofileread(p, fd, fp, SCARG(uap, buf), SCARG(uap, nbyte),
+	return (dofileread(fd, fp, SCARG(uap, buf), SCARG(uap, nbyte),
 	    &fp->f_offset, FOF_UPDATE_OFFSET, retval));
 }
 
 int
-dofileread(p, fd, fp, buf, nbyte, offset, flags, retval)
-	struct proc *p;
-	int fd;
-	struct file *fp;
-	void *buf;
-	size_t nbyte;
-	off_t *offset;
-	int flags;
-	register_t *retval;
+dofileread(int fd, struct file *fp, void *buf, size_t nbyte,
+	off_t *offset, int flags, register_t *retval)
 {
-	struct uio auio;
 	struct iovec aiov;
-	long cnt, error = 0;
-#ifdef KTRACE
-	struct iovec ktriov;
-#endif
+	struct uio auio;
+	size_t cnt;
+	int error;
+	lwp_t *l;
 
-	aiov.iov_base = (caddr_t)buf;
+	l = curlwp;
+
+	aiov.iov_base = (void *)buf;
 	aiov.iov_len = nbyte;
 	auio.uio_iov = &aiov;
 	auio.uio_iovcnt = 1;
 	auio.uio_resid = nbyte;
 	auio.uio_rw = UIO_READ;
-	auio.uio_segflg = UIO_USERSPACE;
-	auio.uio_procp = p;
+	auio.uio_vmspace = l->l_proc->p_vmspace;
 
 	/*
 	 * Reads return ssize_t because -1 is returned on error.  Therefore
@@ -134,13 +153,6 @@ dofileread(p, fd, fp, buf, nbyte, offset, flags, retval)
 		goto out;
 	}
 
-#ifdef KTRACE
-	/*
-	 * if tracing, save a copy of iovec
-	 */
-	if (KTRPOINT(p, KTR_GENIO))
-		ktriov = aiov;
-#endif
 	cnt = auio.uio_resid;
 	error = (*fp->f_ops->fo_read)(fp, offset, &auio, fp->f_cred, flags);
 	if (error)
@@ -148,13 +160,10 @@ dofileread(p, fd, fp, buf, nbyte, offset, flags, retval)
 		    error == EINTR || error == EWOULDBLOCK))
 			error = 0;
 	cnt -= auio.uio_resid;
-#ifdef KTRACE
-	if (KTRPOINT(p, KTR_GENIO) && error == 0)
-		ktrgenio(p->p_tracep, fd, UIO_READ, &ktriov, cnt, error);
-#endif
+	ktrgenio(fd, UIO_READ, buf, cnt, error);
 	*retval = cnt;
  out:
-	FILE_UNUSE(fp, p);
+	fd_putfile(fd);
 	return (error);
 }
 
@@ -162,81 +171,88 @@ dofileread(p, fd, fp, buf, nbyte, offset, flags, retval)
  * Scatter read system call.
  */
 int
-sys_readv(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+sys_readv(struct lwp *l, const struct sys_readv_args *uap, register_t *retval)
 {
-	struct sys_readv_args /* {
-		syscallarg(int) fd;
-		syscallarg(const struct iovec *) iovp;
-		syscallarg(int) iovcnt;
-	} */ *uap = v;
-	int fd = SCARG(uap, fd);
-	struct file *fp;
-	struct filedesc *fdp = p->p_fd;
+	/* {
+		syscallarg(int)				fd;
+		syscallarg(const struct iovec *)	iovp;
+		syscallarg(int)				iovcnt;
+	} */
 
-	if ((u_int)fd >= fdp->fd_nfiles ||
-	    (fp = fdp->fd_ofiles[fd]) == NULL ||
-	    (fp->f_iflags & FIF_WANTCLOSE) != 0 ||
-	    (fp->f_flag & FREAD) == 0)
-		return (EBADF);
-
-	FILE_USE(fp);
-
-	/* dofilereadv() will unuse the descriptor for us */
-	return (dofilereadv(p, fd, fp, SCARG(uap, iovp), SCARG(uap, iovcnt),
-	    &fp->f_offset, FOF_UPDATE_OFFSET, retval));
+	return do_filereadv(SCARG(uap, fd), SCARG(uap, iovp),
+	    SCARG(uap, iovcnt), NULL, FOF_UPDATE_OFFSET, retval);
 }
 
 int
-dofilereadv(p, fd, fp, iovp, iovcnt, offset, flags, retval)
-	struct proc *p;
-	int fd;
-	struct file *fp;
-	const struct iovec *iovp;
-	int iovcnt;
-	off_t *offset;
-	int flags;
-	register_t *retval;
+do_filereadv(int fd, const struct iovec *iovp, int iovcnt,
+    off_t *offset, int flags, register_t *retval)
 {
-	struct uio auio;
-	struct iovec *iov;
-	struct iovec *needfree;
-	struct iovec aiov[UIO_SMALLIOV];
-	long i, cnt, error = 0;
-	u_int iovlen;
-#ifdef KTRACE
-	struct iovec *ktriov = NULL;
-#endif
+	struct uio	auio;
+	struct iovec	*iov, *needfree = NULL, aiov[UIO_SMALLIOV];
+	int		i, error;
+	size_t		cnt;
+	u_int		iovlen;
+	struct file	*fp;
+	struct iovec	*ktriov = NULL;
 
-	/* note: can't use iovlen until iovcnt is validated */
-	iovlen = iovcnt * sizeof(struct iovec);
-	if ((u_int)iovcnt > UIO_SMALLIOV) {
-		if ((u_int)iovcnt > IOV_MAX) {
-			error = EINVAL;
+	if (iovcnt == 0)
+		return EINVAL;
+
+	if ((fp = fd_getfile(fd)) == NULL)
+		return EBADF;
+
+	if ((fp->f_flag & FREAD) == 0) {
+		fd_putfile(fd);
+		return EBADF;
+	}
+
+	if (offset == NULL)
+		offset = &fp->f_offset;
+	else {
+		struct vnode *vp = fp->f_data;
+		if (fp->f_type != DTYPE_VNODE || vp->v_type == VFIFO) {
+			error = ESPIPE;
 			goto out;
 		}
-		MALLOC(iov, struct iovec *, iovlen, M_IOV, M_WAITOK);
-		needfree = iov;
-	} else if ((u_int)iovcnt > 0) {
+		/*
+		 * Test that the device is seekable ?
+		 * XXX This works because no file systems actually
+		 * XXX take any action on the seek operation.
+		 */
+		error = VOP_SEEK(vp, fp->f_offset, *offset, fp->f_cred);
+		if (error != 0)
+			goto out;
+	}
+
+	iovlen = iovcnt * sizeof(struct iovec);
+	if (flags & FOF_IOV_SYSSPACE)
+		iov = __UNCONST(iovp);
+	else {
 		iov = aiov;
-		needfree = NULL;
-	} else {
-		error = EINVAL;
-		goto out;
+		if ((u_int)iovcnt > UIO_SMALLIOV) {
+			if ((u_int)iovcnt > IOV_MAX) {
+				error = EINVAL;
+				goto out;
+			}
+			iov = kmem_alloc(iovlen, KM_SLEEP);
+			if (iov == NULL) {
+				error = ENOMEM;
+				goto out;
+			}
+			needfree = iov;
+		}
+		error = copyin(iovp, iov, iovlen);
+		if (error)
+			goto done;
 	}
 
 	auio.uio_iov = iov;
 	auio.uio_iovcnt = iovcnt;
 	auio.uio_rw = UIO_READ;
-	auio.uio_segflg = UIO_USERSPACE;
-	auio.uio_procp = p;
-	error = copyin(iovp, iov, iovlen);
-	if (error)
-		goto done;
+	auio.uio_vmspace = curproc->p_vmspace;
+
 	auio.uio_resid = 0;
-	for (i = 0; i < iovcnt; i++) {
+	for (i = 0; i < iovcnt; i++, iov++) {
 		auio.uio_resid += iov->iov_len;
 		/*
 		 * Reads return ssize_t because -1 is returned on error.
@@ -247,17 +263,17 @@ dofilereadv(p, fd, fp, iovp, iovcnt, offset, flags, retval)
 			error = EINVAL;
 			goto done;
 		}
-		iov++;
 	}
-#ifdef KTRACE
+
 	/*
 	 * if tracing, save a copy of iovec
 	 */
-	if (KTRPOINT(p, KTR_GENIO))  {
-		MALLOC(ktriov, struct iovec *, iovlen, M_TEMP, M_WAITOK);
-		memcpy((caddr_t)ktriov, (caddr_t)auio.uio_iov, iovlen);
+	if (ktrpoint(KTR_GENIO))  {
+		ktriov = kmem_alloc(iovlen, KM_SLEEP);
+		if (ktriov != NULL)
+			memcpy(ktriov, auio.uio_iov, iovlen);
 	}
-#endif
+
 	cnt = auio.uio_resid;
 	error = (*fp->f_ops->fo_read)(fp, offset, &auio, fp->f_cred, flags);
 	if (error)
@@ -265,20 +281,18 @@ dofilereadv(p, fd, fp, iovp, iovcnt, offset, flags, retval)
 		    error == EINTR || error == EWOULDBLOCK))
 			error = 0;
 	cnt -= auio.uio_resid;
-#ifdef KTRACE
-	if (KTRPOINT(p, KTR_GENIO))
-		if (error == 0) {
-			ktrgenio(p->p_tracep, fd, UIO_READ, ktriov, cnt,
-			    error);
-		FREE(ktriov, M_TEMP);
-	}
-#endif
 	*retval = cnt;
+
+	if (ktriov != NULL) {
+		ktrgeniov(fd, UIO_READ, ktriov, cnt, error);
+		kmem_free(ktriov, iovlen);
+	}
+
  done:
 	if (needfree)
-		FREE(needfree, M_IOV);
+		kmem_free(needfree, iovlen);
  out:
-	FILE_UNUSE(fp, p);
+	fd_putfile(fd);
 	return (error);
 }
 
@@ -286,59 +300,47 @@ dofilereadv(p, fd, fp, iovp, iovcnt, offset, flags, retval)
  * Write system call
  */
 int
-sys_write(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+sys_write(struct lwp *l, const struct sys_write_args *uap, register_t *retval)
 {
-	struct sys_write_args /* {
-		syscallarg(int) fd;
-		syscallarg(const void *) buf;
-		syscallarg(size_t) nbyte;
-	} */ *uap = v;
-	int fd = SCARG(uap, fd);
-	struct file *fp;
-	struct filedesc *fdp = p->p_fd;
+	/* {
+		syscallarg(int)			fd;
+		syscallarg(const void *)	buf;
+		syscallarg(size_t)		nbyte;
+	} */
+	file_t *fp;
+	int fd;
 
-	if ((u_int)fd >= fdp->fd_nfiles ||
-	    (fp = fdp->fd_ofiles[fd]) == NULL ||
-	    (fp->f_iflags & FIF_WANTCLOSE) != 0 ||
-	    (fp->f_flag & FWRITE) == 0)
+	fd = SCARG(uap, fd);
+
+	if ((fp = fd_getfile(fd)) == NULL)
 		return (EBADF);
 
-	FILE_USE(fp);
+	if ((fp->f_flag & FWRITE) == 0) {
+		fd_putfile(fd);
+		return (EBADF);
+	}
 
 	/* dofilewrite() will unuse the descriptor for us */
-	return (dofilewrite(p, fd, fp, SCARG(uap, buf), SCARG(uap, nbyte),
+	return (dofilewrite(fd, fp, SCARG(uap, buf), SCARG(uap, nbyte),
 	    &fp->f_offset, FOF_UPDATE_OFFSET, retval));
 }
 
 int
-dofilewrite(p, fd, fp, buf, nbyte, offset, flags, retval)
-	struct proc *p;
-	int fd;
-	struct file *fp;
-	const void *buf;
-	size_t nbyte;
-	off_t *offset;
-	int flags;
-	register_t *retval;
+dofilewrite(int fd, struct file *fp, const void *buf,
+	size_t nbyte, off_t *offset, int flags, register_t *retval)
 {
-	struct uio auio;
 	struct iovec aiov;
-	long cnt, error = 0;
-#ifdef KTRACE
-	struct iovec ktriov;
-#endif
+	struct uio auio;
+	size_t cnt;
+	int error;
 
-	aiov.iov_base = (caddr_t)buf;		/* XXX kills const */
+	aiov.iov_base = __UNCONST(buf);		/* XXXUNCONST kills const */
 	aiov.iov_len = nbyte;
 	auio.uio_iov = &aiov;
 	auio.uio_iovcnt = 1;
 	auio.uio_resid = nbyte;
 	auio.uio_rw = UIO_WRITE;
-	auio.uio_segflg = UIO_USERSPACE;
-	auio.uio_procp = p;
+	auio.uio_vmspace = curproc->p_vmspace;
 
 	/*
 	 * Writes return ssize_t because -1 is returned on error.  Therefore
@@ -350,30 +352,23 @@ dofilewrite(p, fd, fp, buf, nbyte, offset, flags, retval)
 		goto out;
 	}
 
-#ifdef KTRACE
-	/*
-	 * if tracing, save a copy of iovec
-	 */
-	if (KTRPOINT(p, KTR_GENIO))
-		ktriov = aiov;
-#endif
 	cnt = auio.uio_resid;
 	error = (*fp->f_ops->fo_write)(fp, offset, &auio, fp->f_cred, flags);
 	if (error) {
 		if (auio.uio_resid != cnt && (error == ERESTART ||
 		    error == EINTR || error == EWOULDBLOCK))
 			error = 0;
-		if (error == EPIPE)
-			psignal(p, SIGPIPE);
+		if (error == EPIPE) {
+			mutex_enter(proc_lock);
+			psignal(curproc, SIGPIPE);
+			mutex_exit(proc_lock);
+		}
 	}
 	cnt -= auio.uio_resid;
-#ifdef KTRACE
-	if (KTRPOINT(p, KTR_GENIO) && error == 0)
-		ktrgenio(p->p_tracep, fd, UIO_WRITE, &ktriov, cnt, error);
-#endif
+	ktrgenio(fd, UIO_WRITE, buf, cnt, error);
 	*retval = cnt;
  out:
-	FILE_UNUSE(fp, p);
+	fd_putfile(fd);
 	return (error);
 }
 
@@ -381,79 +376,88 @@ dofilewrite(p, fd, fp, buf, nbyte, offset, flags, retval)
  * Gather write system call
  */
 int
-sys_writev(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+sys_writev(struct lwp *l, const struct sys_writev_args *uap, register_t *retval)
 {
-	struct sys_writev_args /* {
-		syscallarg(int) fd;
-		syscallarg(const struct iovec *) iovp;
-		syscallarg(int) iovcnt;
-	} */ *uap = v;
-	int fd = SCARG(uap, fd);
-	struct file *fp;
-	struct filedesc *fdp = p->p_fd;
+	/* {
+		syscallarg(int)				fd;
+		syscallarg(const struct iovec *)	iovp;
+		syscallarg(int)				iovcnt;
+	} */
 
-	if ((u_int)fd >= fdp->fd_nfiles ||
-	    (fp = fdp->fd_ofiles[fd]) == NULL ||
-	    (fp->f_iflags & FIF_WANTCLOSE) != 0 ||
-	    (fp->f_flag & FWRITE) == 0)
-		return (EBADF);
-
-	FILE_USE(fp);
-
-	/* dofilewritev() will unuse the descriptor for us */
-	return (dofilewritev(p, fd, fp, SCARG(uap, iovp), SCARG(uap, iovcnt),
-	    &fp->f_offset, FOF_UPDATE_OFFSET, retval));
+	return do_filewritev(SCARG(uap, fd), SCARG(uap, iovp),
+	    SCARG(uap, iovcnt), NULL, FOF_UPDATE_OFFSET, retval);
 }
 
 int
-dofilewritev(p, fd, fp, iovp, iovcnt, offset, flags, retval)
-	struct proc *p;
-	int fd;
-	struct file *fp;
-	const struct iovec *iovp;
-	int iovcnt;
-	off_t *offset;
-	int flags;
-	register_t *retval;
+do_filewritev(int fd, const struct iovec *iovp, int iovcnt,
+    off_t *offset, int flags, register_t *retval)
 {
-	struct uio auio;
-	struct iovec *iov;
-	struct iovec *needfree;
-	struct iovec aiov[UIO_SMALLIOV];
-	long i, cnt, error = 0;
-	u_int iovlen;
-#ifdef KTRACE
-	struct iovec *ktriov = NULL;
-#endif
+	struct uio	auio;
+	struct iovec	*iov, *needfree = NULL, aiov[UIO_SMALLIOV];
+	int		i, error;
+	size_t		cnt;
+	u_int		iovlen;
+	struct file	*fp;
+	struct iovec	*ktriov = NULL;
 
-	/* note: can't use iovlen until iovcnt is validated */
+	if (iovcnt == 0)
+		return EINVAL;
+
+	if ((fp = fd_getfile(fd)) == NULL)
+		return EBADF;
+
+	if ((fp->f_flag & FWRITE) == 0) {
+		fd_putfile(fd);
+		return EBADF;
+	}
+
+	if (offset == NULL)
+		offset = &fp->f_offset;
+	else {
+		struct vnode *vp = fp->f_data;
+		if (fp->f_type != DTYPE_VNODE || vp->v_type == VFIFO) {
+			error = ESPIPE;
+			goto out;
+		}
+		/*
+		 * Test that the device is seekable ?
+		 * XXX This works because no file systems actually
+		 * XXX take any action on the seek operation.
+		 */
+		error = VOP_SEEK(vp, fp->f_offset, *offset, fp->f_cred);
+		if (error != 0)
+			goto out;
+	}
+
 	iovlen = iovcnt * sizeof(struct iovec);
-	if ((u_int)iovcnt > UIO_SMALLIOV) {
-		if ((u_int)iovcnt > IOV_MAX)
-			return (EINVAL);
-		MALLOC(iov, struct iovec *, iovlen, M_IOV, M_WAITOK);
-		needfree = iov;
-	} else if ((u_int)iovcnt > 0) {
+	if (flags & FOF_IOV_SYSSPACE)
+		iov = __UNCONST(iovp);
+	else {
 		iov = aiov;
-		needfree = NULL;
-	} else {
-		error = EINVAL;
-		goto out;
+		if ((u_int)iovcnt > UIO_SMALLIOV) {
+			if ((u_int)iovcnt > IOV_MAX) {
+				error = EINVAL;
+				goto out;
+			}
+			iov = kmem_alloc(iovlen, KM_SLEEP);
+			if (iov == NULL) {
+				error = ENOMEM;
+				goto out;
+			}
+			needfree = iov;
+		}
+		error = copyin(iovp, iov, iovlen);
+		if (error)
+			goto done;
 	}
 
 	auio.uio_iov = iov;
 	auio.uio_iovcnt = iovcnt;
 	auio.uio_rw = UIO_WRITE;
-	auio.uio_segflg = UIO_USERSPACE;
-	auio.uio_procp = p;
-	error = copyin(iovp, iov, iovlen);
-	if (error)
-		goto done;
+	auio.uio_vmspace = curproc->p_vmspace;
+
 	auio.uio_resid = 0;
-	for (i = 0; i < iovcnt; i++) {
+	for (i = 0; i < iovcnt; i++, iov++) {
 		auio.uio_resid += iov->iov_len;
 		/*
 		 * Writes return ssize_t because -1 is returned on error.
@@ -464,41 +468,42 @@ dofilewritev(p, fd, fp, iovp, iovcnt, offset, flags, retval)
 			error = EINVAL;
 			goto done;
 		}
-		iov++;
 	}
-#ifdef KTRACE
+
 	/*
 	 * if tracing, save a copy of iovec
 	 */
-	if (KTRPOINT(p, KTR_GENIO))  {
-		MALLOC(ktriov, struct iovec *, iovlen, M_TEMP, M_WAITOK);
-		memcpy((caddr_t)ktriov, (caddr_t)auio.uio_iov, iovlen);
+	if (ktrpoint(KTR_GENIO))  {
+		ktriov = kmem_alloc(iovlen, KM_SLEEP);
+		if (ktriov != NULL)
+			memcpy(ktriov, auio.uio_iov, iovlen);
 	}
-#endif
+
 	cnt = auio.uio_resid;
 	error = (*fp->f_ops->fo_write)(fp, offset, &auio, fp->f_cred, flags);
 	if (error) {
 		if (auio.uio_resid != cnt && (error == ERESTART ||
 		    error == EINTR || error == EWOULDBLOCK))
 			error = 0;
-		if (error == EPIPE)
-			psignal(p, SIGPIPE);
+		if (error == EPIPE) {
+			mutex_enter(proc_lock);
+			psignal(curproc, SIGPIPE);
+			mutex_exit(proc_lock);
+		}
 	}
 	cnt -= auio.uio_resid;
-#ifdef KTRACE
-	if (KTRPOINT(p, KTR_GENIO))
-		if (error == 0) {
-			ktrgenio(p->p_tracep, fd, UIO_WRITE, ktriov, cnt,
-			    error);
-		FREE(ktriov, M_TEMP);
-	}
-#endif
 	*retval = cnt;
+
+	if (ktriov != NULL) {
+		ktrgeniov(fd, UIO_WRITE, ktriov, cnt, error);
+		kmem_free(ktriov, iovlen);
+	}
+
  done:
 	if (needfree)
-		FREE(needfree, M_IOV);
+		kmem_free(needfree, iovlen);
  out:
-	FILE_UNUSE(fp, p);
+	fd_putfile(fd);
 	return (error);
 }
 
@@ -507,46 +512,46 @@ dofilewritev(p, fd, fp, iovp, iovcnt, offset, flags, retval)
  */
 /* ARGSUSED */
 int
-sys_ioctl(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+sys_ioctl(struct lwp *l, const struct sys_ioctl_args *uap, register_t *retval)
 {
-	struct sys_ioctl_args /* {
-		syscallarg(int) fd;
-		syscallarg(u_long) com;
-		syscallarg(caddr_t) data;
-	} */ *uap = v;
-	struct file *fp;
-	struct filedesc *fdp;
-	u_long com;
-	int error = 0;
-	u_int size;
-	caddr_t data, memp;
-	int tmp;
-#define STK_PARAMS	128
-	u_long stkbuf[STK_PARAMS/sizeof(u_long)];
+	/* {
+		syscallarg(int)		fd;
+		syscallarg(u_long)	com;
+		syscallarg(void *)	data;
+	} */
+	struct file	*fp;
+	proc_t		*p;
+	struct filedesc	*fdp;
+	u_long		com;
+	int		error;
+	u_int		size;
+	void 		*data, *memp;
+#define	STK_PARAMS	128
+	u_long		stkbuf[STK_PARAMS/sizeof(u_long)];
+	fdfile_t	*ff;
 
+	error = 0;
+	p = l->l_proc;
 	fdp = p->p_fd;
-	if ((u_int)SCARG(uap, fd) >= fdp->fd_nfiles ||
-	    (fp = fdp->fd_ofiles[SCARG(uap, fd)]) == NULL ||
-	    (fp->f_iflags & FIF_WANTCLOSE) != 0)
-		return (EBADF);
 
-	FILE_USE(fp);
+	if ((fp = fd_getfile(SCARG(uap, fd))) == NULL)
+		return (EBADF);
 
 	if ((fp->f_flag & (FREAD | FWRITE)) == 0) {
 		error = EBADF;
+		com = 0;
 		goto out;
 	}
 
+	ff = fdp->fd_ofiles[SCARG(uap, fd)];
 	switch (com = SCARG(uap, com)) {
 	case FIONCLEX:
-		fdp->fd_ofileflags[SCARG(uap, fd)] &= ~UF_EXCLOSE;
+		ff->ff_exclose = false;
 		goto out;
 
 	case FIOCLEX:
-		fdp->fd_ofileflags[SCARG(uap, fd)] |= UF_EXCLOSE;
+		ff->ff_exclose = true;
+		fdp->fd_exclose = true;
 		goto out;
 	}
 
@@ -561,20 +566,22 @@ sys_ioctl(p, v, retval)
 	}
 	memp = NULL;
 	if (size > sizeof(stkbuf)) {
-		memp = (caddr_t)malloc((u_long)size, M_IOCTLOPS, M_WAITOK);
+		memp = kmem_alloc(size, KM_SLEEP);
 		data = memp;
 	} else
-		data = (caddr_t)stkbuf;
+		data = (void *)stkbuf;
 	if (com&IOC_IN) {
 		if (size) {
 			error = copyin(SCARG(uap, data), data, size);
 			if (error) {
 				if (memp)
-					free(memp, M_IOCTLOPS);
+					kmem_free(memp, size);
 				goto out;
 			}
+			ktrgenio(SCARG(uap, fd), UIO_WRITE, SCARG(uap, data),
+			    size, 0);
 		} else
-			*(caddr_t *)data = SCARG(uap, data);
+			*(void **)data = SCARG(uap, data);
 	} else if ((com&IOC_OUT) && size)
 		/*
 		 * Zero the buffer so the user always
@@ -582,414 +589,57 @@ sys_ioctl(p, v, retval)
 		 */
 		memset(data, 0, size);
 	else if (com&IOC_VOID)
-		*(caddr_t *)data = SCARG(uap, data);
+		*(void **)data = SCARG(uap, data);
 
 	switch (com) {
 
 	case FIONBIO:
-		if ((tmp = *(int *)data) != 0)
-			fp->f_flag |= FNONBLOCK;
+		/* XXX Code block is not atomic */
+		if (*(int *)data != 0)
+			atomic_or_uint(&fp->f_flag, FNONBLOCK);
 		else
-			fp->f_flag &= ~FNONBLOCK;
-		error = (*fp->f_ops->fo_ioctl)(fp, FIONBIO, (caddr_t)&tmp, p);
+			atomic_and_uint(&fp->f_flag, ~FNONBLOCK);
+		error = (*fp->f_ops->fo_ioctl)(fp, FIONBIO, data);
 		break;
 
 	case FIOASYNC:
-		if ((tmp = *(int *)data) != 0)
-			fp->f_flag |= FASYNC;
+		/* XXX Code block is not atomic */
+		if (*(int *)data != 0)
+			atomic_or_uint(&fp->f_flag, FASYNC);
 		else
-			fp->f_flag &= ~FASYNC;
-		error = (*fp->f_ops->fo_ioctl)(fp, FIOASYNC, (caddr_t)&tmp, p);
-		break;
-
-	case FIOSETOWN:
-		tmp = *(int *)data;
-		if (fp->f_type == DTYPE_SOCKET) {
-			((struct socket *)fp->f_data)->so_pgid = tmp;
-			error = 0;
-			break;
-		}
-		if (tmp <= 0) {
-			tmp = -tmp;
-		} else {
-			struct proc *p1 = pfind(tmp);
-			if (p1 == 0) {
-				error = ESRCH;
-				break;
-			}
-			tmp = p1->p_pgrp->pg_id;
-		}
-		error = (*fp->f_ops->fo_ioctl)
-			(fp, TIOCSPGRP, (caddr_t)&tmp, p);
-		break;
-
-	case FIOGETOWN:
-		if (fp->f_type == DTYPE_SOCKET) {
-			error = 0;
-			*(int *)data = ((struct socket *)fp->f_data)->so_pgid;
-			break;
-		}
-		error = (*fp->f_ops->fo_ioctl)(fp, TIOCGPGRP, data, p);
-		*(int *)data = -*(int *)data;
+			atomic_and_uint(&fp->f_flag, ~FASYNC);
+		error = (*fp->f_ops->fo_ioctl)(fp, FIOASYNC, data);
 		break;
 
 	default:
-		error = (*fp->f_ops->fo_ioctl)(fp, com, data, p);
+		error = (*fp->f_ops->fo_ioctl)(fp, com, data);
 		/*
 		 * Copy any data to user, size was
 		 * already set and checked above.
 		 */
-		if (error == 0 && (com&IOC_OUT) && size)
+		if (error == 0 && (com&IOC_OUT) && size) {
 			error = copyout(data, SCARG(uap, data), size);
+			ktrgenio(SCARG(uap, fd), UIO_READ, SCARG(uap, data),
+			    size, error);
+		}
 		break;
 	}
 	if (memp)
-		free(memp, M_IOCTLOPS);
+		kmem_free(memp, size);
  out:
-	FILE_UNUSE(fp, p);
-	return (error);
-}
-
-int	selwait, nselcoll;
-
-/*
- * Select system call.
- */
-int
-sys_select(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
-{
-	struct sys_select_args /* {
-		syscallarg(int) nd;
-		syscallarg(fd_set *) in;
-		syscallarg(fd_set *) ou;
-		syscallarg(fd_set *) ex;
-		syscallarg(struct timeval *) tv;
-	} */ *uap = v;
-	caddr_t bits;
-	char smallbits[howmany(FD_SETSIZE, NFDBITS) * sizeof(fd_mask) * 6];
-	struct timeval atv;
-	int s, ncoll, error = 0, timo;
-	size_t ni;
-
-	if (SCARG(uap, nd) < 0)
-		return (EINVAL);
-	if (SCARG(uap, nd) > p->p_fd->fd_nfiles) {
-		/* forgiving; slightly wrong */
-		SCARG(uap, nd) = p->p_fd->fd_nfiles;
-	}
-	ni = howmany(SCARG(uap, nd), NFDBITS) * sizeof(fd_mask);
-	if (ni * 6 > sizeof(smallbits))
-		bits = malloc(ni * 6, M_TEMP, M_WAITOK);
-	else
-		bits = smallbits;
-
-#define	getbits(name, x) \
-	if (SCARG(uap, name)) { \
-		error = copyin(SCARG(uap, name), bits + ni * x, ni); \
-		if (error) \
-			goto done; \
-	} else \
-		memset(bits + ni * x, 0, ni);
-	getbits(in, 0);
-	getbits(ou, 1);
-	getbits(ex, 2);
-#undef	getbits
-
-	if (SCARG(uap, tv)) {
-		error = copyin(SCARG(uap, tv), (caddr_t)&atv,
-			sizeof(atv));
-		if (error)
-			goto done;
-		if (itimerfix(&atv)) {
-			error = EINVAL;
-			goto done;
-		}
-		s = splclock();
-		timeradd(&atv, &time, &atv);
-		timo = hzto(&atv);
-		/*
-		 * Avoid inadvertently sleeping forever.
-		 */
-		if (timo == 0)
-			timo = 1;
-		splx(s);
-	} else
-		timo = 0;
-retry:
-	ncoll = nselcoll;
-	p->p_flag |= P_SELECT;
-	error = selscan(p, (fd_mask *)(bits + ni * 0),
-			   (fd_mask *)(bits + ni * 3), SCARG(uap, nd), retval);
-	if (error || *retval)
-		goto done;
-	s = splhigh();
-	if (timo && timercmp(&time, &atv, >=)) {
-		splx(s);
-		goto done;
-	}
-	if ((p->p_flag & P_SELECT) == 0 || nselcoll != ncoll) {
-		splx(s);
-		goto retry;
-	}
-	p->p_flag &= ~P_SELECT;
-	error = tsleep((caddr_t)&selwait, PSOCK | PCATCH, "select", timo);
-	splx(s);
-	if (error == 0)
-		goto retry;
-done:
-	p->p_flag &= ~P_SELECT;
-	/* select is not restarted after signals... */
-	if (error == ERESTART)
-		error = EINTR;
-	if (error == EWOULDBLOCK)
-		error = 0;
-	if (error == 0) {
-#define	putbits(name, x) \
-		if (SCARG(uap, name)) { \
-			error = copyout(bits + ni * x, SCARG(uap, name), ni); \
-			if (error) \
-				goto out; \
-		}
-		putbits(in, 3);
-		putbits(ou, 4);
-		putbits(ex, 5);
-#undef putbits
-	}
-out:
-	if (ni * 6 > sizeof(smallbits))
-		free(bits, M_TEMP);
-	return (error);
-}
-
-int
-selscan(p, ibitp, obitp, nfd, retval)
-	struct proc *p;
-	fd_mask *ibitp, *obitp;
-	int nfd;
-	register_t *retval;
-{
-	struct filedesc *fdp = p->p_fd;
-	int msk, i, j, fd;
-	fd_mask ibits, obits;
-	struct file *fp;
-	int n = 0;
-	static int flag[3] = { POLLRDNORM | POLLHUP | POLLERR,
-			       POLLWRNORM | POLLHUP | POLLERR,
-			       POLLRDBAND };
-
-	for (msk = 0; msk < 3; msk++) {
-		for (i = 0; i < nfd; i += NFDBITS) {
-			ibits = *ibitp++;
-			obits = 0;
-			while ((j = ffs(ibits)) && (fd = i + --j) < nfd) {
-				ibits &= ~(1 << j);
-				fp = fdp->fd_ofiles[fd];
-				if (fp == NULL ||
-				    (fp->f_iflags & FIF_WANTCLOSE) != 0)
-					return (EBADF);
-				FILE_USE(fp);
-				if ((*fp->f_ops->fo_poll)(fp, flag[msk], p)) {
-					obits |= (1 << j);
-					n++;
-				}
-				FILE_UNUSE(fp, p);
-			}
-			*obitp++ = obits;
-		}
-	}
-	*retval = n;
-	return (0);
-}
-
-/*
- * Poll system call.
- */
-int
-sys_poll(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
-{
-	struct sys_poll_args /* {
-		syscallarg(struct pollfd *) fds;
-		syscallarg(u_int) nfds;
-		syscallarg(int) timeout;
-	} */ *uap = v;
-	caddr_t bits;
-	char smallbits[32 * sizeof(struct pollfd)];
-	struct timeval atv;
-	int s, ncoll, error = 0, timo;
-	size_t ni;
-
-	if (SCARG(uap, nfds) > p->p_fd->fd_nfiles) {
-		/* forgiving; slightly wrong */
-		SCARG(uap, nfds) = p->p_fd->fd_nfiles;
-	}
-	ni = SCARG(uap, nfds) * sizeof(struct pollfd);
-	if (ni > sizeof(smallbits))
-		bits = malloc(ni, M_TEMP, M_WAITOK);
-	else
-		bits = smallbits;
-
-	error = copyin(SCARG(uap, fds), bits, ni);
-	if (error)
-		goto done;
-
-	if (SCARG(uap, timeout) != INFTIM) {
-		atv.tv_sec = SCARG(uap, timeout) / 1000;
-		atv.tv_usec = (SCARG(uap, timeout) % 1000) * 1000;
-		if (itimerfix(&atv)) {
-			error = EINVAL;
-			goto done;
-		}
-		s = splclock();
-		timeradd(&atv, &time, &atv);
-		timo = hzto(&atv);
-		/*
-		 * Avoid inadvertently sleeping forever.
-		 */
-		if (timo == 0)
-			timo = 1;
-		splx(s);
-	} else
-		timo = 0;
-retry:
-	ncoll = nselcoll;
-	p->p_flag |= P_SELECT;
-	error = pollscan(p, (struct pollfd *)bits, SCARG(uap, nfds), retval);
-	if (error || *retval)
-		goto done;
-	s = splhigh();
-	if (timo && timercmp(&time, &atv, >=)) {
-		splx(s);
-		goto done;
-	}
-	if ((p->p_flag & P_SELECT) == 0 || nselcoll != ncoll) {
-		splx(s);
-		goto retry;
-	}
-	p->p_flag &= ~P_SELECT;
-	error = tsleep((caddr_t)&selwait, PSOCK | PCATCH, "select", timo);
-	splx(s);
-	if (error == 0)
-		goto retry;
-done:
-	p->p_flag &= ~P_SELECT;
-	/* poll is not restarted after signals... */
-	if (error == ERESTART)
-		error = EINTR;
-	if (error == EWOULDBLOCK)
-		error = 0;
-	if (error == 0) {
-		error = copyout(bits, SCARG(uap, fds), ni);
-		if (error)
-			goto out;
-	}
-out:
-	if (ni > sizeof(smallbits))
-		free(bits, M_TEMP);
-	return (error);
-}
-
-int
-pollscan(p, fds, nfd, retval)
-	struct proc *p;
-	struct pollfd *fds;
-	int nfd;
-	register_t *retval;
-{
-	struct filedesc *fdp = p->p_fd;
-	int i;
-	struct file *fp;
-	int n = 0;
-
-	for (i = 0; i < nfd; i++, fds++) {
-		if ((u_int)fds->fd >= fdp->fd_nfiles) {
-			fds->revents = POLLNVAL;
-			n++;
-		} else {
-			fp = fdp->fd_ofiles[fds->fd];
-			if (fp == NULL ||
-			    (fp->f_iflags & FIF_WANTCLOSE) != 0) {
-				fds->revents = POLLNVAL;
-				n++;
-			} else {
-				FILE_USE(fp);
-				fds->revents = (*fp->f_ops->fo_poll)(fp,
-				    fds->events | POLLERR | POLLHUP, p);
-				if (fds->revents != 0)
-					n++;
-				FILE_UNUSE(fp, p);
-			}
-		}
-	}
-	*retval = n;
-	return (0);
-}
-
-/*ARGSUSED*/
-int
-seltrue(dev, events, p)
-	dev_t dev;
-	int events;
-	struct proc *p;
-{
-
-	return (events & (POLLIN | POLLOUT | POLLRDNORM | POLLWRNORM));
-}
-
-/*
- * Record a select request.
- */
-void
-selrecord(selector, sip)
-	struct proc *selector;
-	struct selinfo *sip;
-{
-	struct proc *p;
-	pid_t mypid;
-
-	mypid = selector->p_pid;
-	if (sip->si_pid == mypid)
-		return;
-	if (sip->si_pid && (p = pfind(sip->si_pid)) &&
-	    p->p_wchan == (caddr_t)&selwait)
-		sip->si_flags |= SI_COLL;
-	else
-		sip->si_pid = mypid;
-}
-
-/*
- * Do a wakeup when a selectable event occurs.
- */
-void
-selwakeup(sip)
-	struct selinfo *sip;
-{
-	struct proc *p;
-	int s;
-
-	if (sip->si_pid == 0)
-		return;
-	if (sip->si_flags & SI_COLL) {
-		nselcoll++;
-		sip->si_flags &= ~SI_COLL;
-		wakeup((caddr_t)&selwait);
-	}
-	p = pfind(sip->si_pid);
-	sip->si_pid = 0;
-	if (p != NULL) {
-		s = splhigh();
-		if (p->p_wchan == (caddr_t)&selwait) {
-			if (p->p_stat == SSLEEP)
-				setrunnable(p);
-			else
-				unsleep(p);
-		} else if (p->p_flag & P_SELECT)
-			p->p_flag &= ~P_SELECT;
-		splx(s);
+	fd_putfile(SCARG(uap, fd));
+	switch (error) {
+	case -1:
+		printf("sys_ioctl: _IO%s%s('%c', %lu, %lu) returned -1: "
+		    "pid=%d comm=%s\n",
+		    (com & IOC_IN) ? "W" : "", (com & IOC_OUT) ? "R" : "",
+		    (char)IOCGROUP(com), (com & 0xff), IOCPARM_LEN(com),
+		    p->p_pid, p->p_comm);
+		/* FALLTHROUGH */
+	case EPASSTHROUGH:
+		error = ENOTTY;
+		/* FALLTHROUGH */
+	default:
+		return (error);
 	}
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: setnetimage.c,v 1.2 1999/10/25 14:02:54 kleink Exp $	*/
+/*	$NetBSD: setnetimage.c,v 1.6 2008/04/28 20:23:31 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -78,8 +71,6 @@ struct seglist {
 #define NLADDR(x)	(mappedbfile + offsets[(x)])
 #define NLVAR(x)	(*(u_long *)(NLADDR(x)))
 
-extern const char *__progname;
-
 int main __P((int, char **));
 
 int
@@ -100,7 +91,7 @@ main(argc, argv)
 	struct seglist seglist[MAX_SEGMENTS];
 
 	if (argc != 3) {
-		fprintf(stderr, "usage: %s kernel bootfile\n", __progname);
+		fprintf(stderr, "usage: %s kernel bootfile\n", getprogname());
 		exit(1);
 	}
 
@@ -122,7 +113,7 @@ main(argc, argv)
 		errx(1, "%s too big to map", bootfile);
 
 	if ((mappedbfile = mmap(NULL, osb.st_size, PROT_READ | PROT_WRITE,
-	    MAP_FILE | MAP_SHARED, ofd, 0)) == (caddr_t)-1)
+	    MAP_FILE | MAP_SHARED, ofd, 0)) == (void *)-1)
 		err(1, "mmap %s", bootfile);
 	printf("mapped %s\n", bootfile);
 
@@ -131,7 +122,7 @@ main(argc, argv)
 
 	for (i = 0; i < X_NSYMS; i++) {
 		if (findoff_elf32(mappedbfile, osb.st_size, nl[i].n_value, &offsets[i]) != 0)
-			errx(1, "Couldn't find offset for %s in %s\n", nl[i].n_name, bootfile);
+			errx(1, "Couldn't find offset for %s in %s", nl[i].n_name, bootfile);
 #ifdef DEBUG
 		printf("%s is at offset %#x in %s\n", nl[i].n_name, offsets[i], bootfile);
 #endif
@@ -202,7 +193,7 @@ main(argc, argv)
 	    highaddr - lowaddr, Z_BEST_COMPRESSION);
 	if (i != Z_OK) {
 		printf("\n");
-		errx(1, "%s compression error %d\n", kernel, i);
+		errx(1, "%s compression error %d", kernel, i);
 	}
 	printf("done.\n"); fflush(stdout);
 
@@ -210,7 +201,7 @@ main(argc, argv)
 	printf("compressed size = %ld\n", destlen);
 	if (destlen > NLVAR(X_MAXKERNEL_SIZE))
 		errx(1, "kernel %s is too big, "
-		    "increase KERNELSIZE to at least %ld\n",
+		    "increase KERNELSIZE to at least %ld",
 		    kernel, destlen);
 
 	NLVAR(X_KERNEL_SIZE) = destlen;

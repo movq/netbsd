@@ -1,4 +1,4 @@
-/*	$NetBSD: ls.c,v 1.13 1998/11/06 23:21:38 christos Exp $	*/
+/*	$NetBSD: ls.c,v 1.19 2006/10/11 19:51:10 apb Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "from: @(#)ls.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: ls.c,v 1.13 1998/11/06 23:21:38 christos Exp $");
+__RCSID("$NetBSD: ls.c,v 1.19 2006/10/11 19:51:10 apb Exp $");
 #endif
 #endif /* not lint */
 
@@ -56,35 +52,33 @@ __RCSID("$NetBSD: ls.c,v 1.13 1998/11/06 23:21:38 christos Exp $");
 #include <time.h>
 #include <tzfile.h>
 #include <unistd.h>
-#include <utmp.h>
 
 #include "find.h"
 
 /* Derived from the print routines in the ls(1) source code. */
 
-static void printlink __P((char *));
-static void printtime __P((time_t));
+static void printlink(char *);
+static void printtime(time_t);
 
 void
-printlong(name, accpath, sb)
-	char *name;			/* filename to print */
-	char *accpath;			/* current valid path to filename */
-	struct stat *sb;		/* stat buffer */
+printlong(char *name,			/* filename to print */
+	char *accpath,			/* current valid path to filename */
+	struct stat *sb)		/* stat buffer */
 {
 	char modep[15];
 
-	(void)printf("%7lu %6qd ", (u_long)sb->st_ino,
+	(void)printf("%7lu %6lld ", (u_long)sb->st_ino,
 	    (long long)sb->st_blocks);
 	(void)strmode(sb->st_mode, modep);
 	(void)printf("%s %3lu %-*s %-*s ", modep, (unsigned long)sb->st_nlink,
-	    UT_NAMESIZE, user_from_uid(sb->st_uid, 0), UT_NAMESIZE,
+	    LOGIN_NAME_MAX, user_from_uid(sb->st_uid, 0), LOGIN_NAME_MAX,
 	    group_from_gid(sb->st_gid, 0));
 
 	if (S_ISCHR(sb->st_mode) || S_ISBLK(sb->st_mode))
 		(void)printf("%3d,%5d ", major(sb->st_rdev),
 		    minor(sb->st_rdev));
 	else
-		(void)printf("%9qd ", (long long)sb->st_size);
+		(void)printf("%9lld ", (long long)sb->st_size);
 	printtime(sb->st_mtime);
 	(void)printf("%s", name);
 	if (S_ISLNK(sb->st_mode))
@@ -93,8 +87,7 @@ printlong(name, accpath, sb)
 }
 
 static void
-printtime(ftime)
-	time_t ftime;
+printtime(time_t ftime)
 {
 	int i;
 	char *longstring;
@@ -116,13 +109,12 @@ printtime(ftime)
 }
 
 static void
-printlink(name)
-	char *name;
+printlink(char *name)
 {
 	int lnklen;
 	char path[MAXPATHLEN + 1];
 
-	if ((lnklen = readlink(name, path, MAXPATHLEN)) == -1) {
+	if ((lnklen = readlink(name, path, sizeof(path) - 1)) == -1) {
 		warn("%s", name);
 		return;
 	}

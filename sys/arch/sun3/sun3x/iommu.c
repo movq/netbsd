@@ -1,4 +1,4 @@
-/*	$NetBSD: iommu.c,v 1.8 1998/02/05 04:57:57 gwr Exp $	*/
+/*	$NetBSD: iommu.c,v 1.17 2008/06/28 12:13:38 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,6 +33,9 @@
  * Set-up functions for the Sun3x DVMA I/O Mapper.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: iommu.c,v 1.17 2008/06/28 12:13:38 tsutsui Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
@@ -55,53 +51,43 @@
 
 #define IOMMU_SIZE	(IOMMU_NENT * sizeof(iommu_pde_t))
 
-static int  iommu_match __P((struct device *, struct cfdata *, void *));
-static void iommu_attach __P((struct device *, struct device *, void *));
+static int  iommu_match(device_t, cfdata_t, void *);
+static void iommu_attach(device_t, device_t, void *);
 
-struct cfattach iommu_ca = {
-	sizeof(struct device), iommu_match, iommu_attach
-};
+CFATTACH_DECL_NEW(iommu, 0,
+    iommu_match, iommu_attach, NULL, NULL);
 
 static iommu_pde_t *iommu_va;
 
-static int
-iommu_match(parent, cf, args)
-	struct device *parent;
-	struct cfdata *cf;
-	void *args;
+static int 
+iommu_match(device_t parent, cfdata_t cf, void *args)
 {
+	/* This driver only supports one instance. */
+	if (iommu_va)
+		return 0;
 
-	/* This driver only supports one unit. */
-	if (cf->cf_unit != 0)
-		return (0);
-
-	return (1);
+	return 1;
 }
 
-static void
-iommu_attach(parent, self, args)
-	struct device *parent;
-	struct device *self;
-	void *args;
+static void 
+iommu_attach(device_t parent, device_t self, void *args)
 {
 	struct confargs *ca = args;
 
-	iommu_va = (iommu_pde_t *)
-		bus_mapin(ca->ca_bustype, ca->ca_paddr, IOMMU_SIZE);
+	iommu_va = (iommu_pde_t *)bus_mapin(ca->ca_bustype, ca->ca_paddr,
+	    IOMMU_SIZE);
 
-	printf("\n");
+	aprint_normal("\n");
 }
 
-void
-iommu_enter(sa, pa)
-	u_int32_t sa;	/* slave address */
-	u_int32_t pa;	/* phys. address */
+void 
+iommu_enter(uint32_t sa, uint32_t pa)
 {
 	int pn;
 
 #ifdef	DIAGNOSTIC
 	if (sa > (1<<24))
-		panic("iommu_enter: bad sa");
+		panic("%s: bad sa", __func__);
 #endif
 
 	/* Convert the slave address into a page index. */
@@ -114,16 +100,14 @@ iommu_enter(sa, pa)
 	iommu_va[pn].addr.raw = pa;
 }
 
-void
-iommu_remove(sa, len)
-	u_int32_t sa;	/* slave address */
-	u_int32_t len;
+void 
+iommu_remove(uint32_t sa, uint32_t len)
 {
 	int pn;
 
 #ifdef	DIAGNOSTIC
 	if (sa > (1<<24))
-		panic("iommu_enter: bad sa");
+		panic("%s: bad sa", __func__);
 #endif
 
 	pn = IOMMU_BTOP(sa);

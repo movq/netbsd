@@ -1,8 +1,8 @@
-/*	$NetBSD: trygetea.c,v 1.3 1998/03/14 04:39:55 lukem Exp $	*/
+/*	$NetBSD: trygetea.c,v 1.5 2007/03/10 00:16:51 hubertf Exp $	*/
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: trygetea.c,v 1.3 1998/03/14 04:39:55 lukem Exp $");
+__RCSID("$NetBSD: trygetea.c,v 1.5 2007/03/10 00:16:51 hubertf Exp $");
 #endif
 
 /*
@@ -22,26 +22,20 @@ __RCSID("$NetBSD: trygetea.c,v 1.3 1998/03/14 04:39:55 lukem Exp $");
 
 #include <netdb.h>
 #include <stdio.h>
-#include <ctype.h>
 #include <errno.h>
 
-int debug = 0;
-char *progname;
-
-main(argc, argv)
-	char **argv;
+int
+main(int argc, char **argv)
 {
 	u_char ea[16];				/* Ethernet address */
 	int i;
 
-	progname = argv[0];			/* for report */
-
 	if (argc < 2) {
-		printf("need interface name\n");
+		fprintf(stderr, "need interface name\n");
 		exit(1);
 	}
 	if ((i = getether(argv[1], ea)) < 0) {
-		printf("Could not get Ethernet address (rc=%d)\n", i);
+		fprintf(stderr, "Could not get Ethernet address (rc=%d)\n", i);
 		exit(1);
 	}
 	printf("Ether-addr");
@@ -49,5 +43,5 @@ main(argc, argv)
 		printf(":%x", ea[i] & 0xFF);
 	printf("\n");
 
-	exit(0);
+	return 0;
 }

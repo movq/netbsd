@@ -1,4 +1,4 @@
-/*	$NetBSD: cltp_var.h,v 1.8 1996/05/22 13:55:48 mycroft Exp $	*/
+/*	$NetBSD: cltp_var.h,v 1.16 2007/02/17 22:34:16 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,6 +31,9 @@
  *	@(#)cltp_var.h	8.1 (Berkeley) 6/10/93
  */
 
+#ifndef _NETISO_CLTP_VAR_H_
+#define _NETISO_CLTP_VAR_H_
+
 #define UD_TPDU_type	0x40	/* packet type */
 
 #define CLTPOVAL_SRC	0xc1	/* Source TSAP -- required */
@@ -51,15 +50,17 @@ struct cltpstat {
 };
 
 #ifdef _KERNEL
-struct isopcb   cltb;
-struct cltpstat cltpstat;
+extern struct isopcb   cltb;
+extern struct cltpstat cltpstat;
 
 /* cltp_usrreq.c */
-void cltp_init __P((void));
-void cltp_input __P((struct mbuf *, ...));
-void cltp_notify __P((struct isopcb *));
-void cltp_ctlinput __P((int, struct sockaddr *, void *));
-int cltp_output __P((struct mbuf *, ...));
-int cltp_usrreq __P((struct socket *, int, struct mbuf *, struct mbuf *,
-		     struct mbuf *, struct proc *));
+void cltp_init (void);
+void cltp_input (struct mbuf *, ...);
+void cltp_notify (struct isopcb *);
+void cltp_ctlinput(int, const struct sockaddr *, void *);
+int cltp_output (struct mbuf *, ...);
+int cltp_usrreq (struct socket *, int, struct mbuf *, struct mbuf *,
+		     struct mbuf *, struct lwp *);
 #endif
+
+#endif /* !_NETISO_CLTP_VAR_H_ */

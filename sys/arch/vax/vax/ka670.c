@@ -1,4 +1,4 @@
-/*	$NetBSD: ka670.c,v 1.4 2000/03/13 23:52:35 soren Exp $	*/
+/*	$NetBSD: ka670.c,v 1.14 2008/03/11 05:34:03 matt Exp $	*/
 /*
  * Copyright (c) 1999 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -32,14 +32,16 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ka670.c,v 1.14 2008/03/11 05:34:03 matt Exp $");
+
 #include <sys/param.h>
 #include <sys/types.h>
 #include <sys/device.h>
 #include <sys/kernel.h>
 #include <sys/systm.h>
 
-#include <vm/vm.h>
-#include <vm/vm_kern.h>
+#include <uvm/uvm_extern.h>
 
 #include <machine/pte.h>
 #include <machine/cpu.h>
@@ -52,26 +54,26 @@
 #include <machine/ka670.h>
 #include <machine/clock.h>
 
-static	void ka670_conf __P((void));
+static void ka670_memerr(void);
+static void ka670_conf(void);
+static void ka670_attach_cpu(device_t);
+static int ka670_mchk(void *);
+static int ka670_cache_init(void);	/* "int mapen" as argument? */
 
-static	int ka670_mchk __P((caddr_t));
-static	void ka670_memerr __P((void));
-static	int ka670_cache_init __P((void));	/* "int mapen" as argument? */
-static	void ka670_halt __P((void));
-static	void ka670_reboot __P((int));
+static const char * const ka670_devs[] = { "cpu", "sgec", "shac", "uba", NULL };
 
-struct	cpu_dep ka670_calls = {
-	0,
-	ka670_mchk,
-	ka670_memerr,
-	ka670_conf,
-	generic_clkread,
-	generic_clkwrite,
-	8,	/* 8 VUP */
-	2,	/* SCB pages */
-	ka670_halt,
-	ka670_reboot,
-	0,
+const struct cpu_dep ka670_calls = {
+	.cpu_mchk	= ka670_mchk,
+	.cpu_memerr	= ka670_memerr,
+	.cpu_conf	= ka670_conf,
+	.cpu_gettime	= generic_gettime,
+	.cpu_settime	= generic_settime,
+	.cpu_vups	= 8,	/* 8 VUP */
+	.cpu_scbsz	= 2,	/* SCB pages */
+	.cpu_halt	= generic_halt,
+	.cpu_reboot	= generic_reboot,
+	.cpu_devs	= ka670_devs,
+	.cpu_attach_cpu	= ka670_attach_cpu,
 };
 
 #define KA670_MC_RESTART	0x00008000	/* Restart possible*/
@@ -94,7 +96,7 @@ struct ka670_mcframe {		/* Format of RigelMAX machine check frame: */
 /*
  * This is not the mchk types on KA670.
  */
-static char *ka670_mctype[] = {
+static const char * const ka670_mctype[] = {
 	"no error (0)",			/* Code 0: No error */
 	"FPA: protocol error",		/* Code 1-5: FPA errors */
 	"FPA: illegal opcode",
@@ -122,10 +124,9 @@ static char *ka670_mctype[] = {
 static int ka670_error_count = 0;
 
 int
-ka670_mchk(addr)
-	caddr_t addr;
+ka670_mchk(void *addr)
 {
-	register struct ka670_mcframe *mcf = (void*)addr;
+	struct ka670_mcframe * const mcf = addr;
 
 	mtpr(0x00, PR_MCESR);	/* Acknowledge the machine check */
 	printf("machine check %d (0x%x)\n", mcf->mc670_code, mcf->mc670_code);
@@ -142,7 +143,7 @@ ka670_mchk(addr)
 	 */
 	if (mfpr(PR_PCSTS) & KA670_PCS_TRAP2) {
 		printf("TRAP2 (double error) in ka670_mchk.\n");
-		panic("unrecoverable state in ka670_mchk.\n");
+		panic("unrecoverable state in ka670_mchk.");
 		return (-1);
 	}
 	if ((mcf->mc670_code & KA670_MC_RESTART) || 
@@ -160,21 +161,31 @@ ka670_mchk(addr)
 }
 
 void
-ka670_memerr()
+ka670_memerr(void)
 {
+	char sbuf[256];
+
 	/*
 	 * Don\'t know what to do here. So just print some messages
 	 * and try to go on...
 	 */
+
 	printf("memory error!\n");
-	printf("primary cache status: %b\n", mfpr(PR_PCSTS), KA670_PCSTS_BITS);
-	printf("secondary cache status: %b\n", mfpr(PR_BCSTS), KA670_BCSTS_BITS);
+
+	bitmask_snprintf(mfpr(PR_PCSTS), KA670_PCSTS_BITS, sbuf, sizeof(sbuf));
+	printf("primary cache status: %s\n", sbuf);
+
+	bitmask_snprintf(mfpr(PR_BCSTS), KA670_BCSTS_BITS, sbuf, sizeof(sbuf));
+	printf("secondary cache status: %s\n", sbuf);
 }
 
 int
-ka670_cache_init()
+ka670_cache_init(void)
 {
 	int val;
+#ifdef DEBUG
+	char sbuf[256];
+#endif
 
 	mtpr(KA670_PCS_REFRESH, PR_PCSTS);	/* disable primary cache */
 	val = mfpr(PR_PCSTS);
@@ -187,34 +198,34 @@ ka670_cache_init()
 	mtpr(KA670_PCS_ENABLE | KA670_PCS_REFRESH, PR_PCSTS);	/* flush primary cache */
 
 #ifdef DEBUG
-	printf("primary cache status: %b\n", mfpr(PR_PCSTS), KA670_PCSTS_BITS);
-	printf("secondary cache status: %b\n", mfpr(PR_BCSTS), KA670_BCSTS_BITS);
+	bitmask_snprintf(mfpr(PR_PCSTS), KA670_PCSTS_BITS, sbuf, sizeof(sbuf));
+	printf("primary cache status: %s\n", sbuf);
+
+	bitmask_snprintf(mfpr(PR_BCSTS), KA670_BCSTS_BITS, sbuf, sizeof(sbuf));
+	printf("secondary cache status: %s\n", sbuf);
 #endif
 
 	return (0);
 }
+
 void
-ka670_conf()
+ka670_conf(void)
 {
-	printf("cpu0: KA670, ucode rev %d\n", vax_cpudata % 0377);
 
 	/*
 	 * ka670_conf() gets called with MMU enabled, now it's save to
 	 * init/reset the caches.
 	 */
 	ka670_cache_init();
+
+	cpmbx = (struct cpmbx *)vax_map_physmem(0x20140400, 1);
 }
 
-static void
-ka670_halt()
+void
+ka670_attach_cpu(device_t self)
 {
-	asm("halt");
+	aprint_normal(
+	    ": %s, Rigel (ucode rev %d), 2KB L1 cache, 128KB L2 cache\n",
+	    "KA670",
+	    vax_cpudata % 0377);
 }
-
-static void
-ka670_reboot(arg)
-	int arg;
-{
-	asm("halt");
-}
-

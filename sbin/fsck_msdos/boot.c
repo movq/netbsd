@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.6 1998/10/06 14:31:58 ws Exp $	*/
+/*	$NetBSD: boot.c,v 1.14 2008/06/13 20:46:09 martin Exp $	*/
 
 /*
  * Copyright (C) 1995, 1997 Wolfgang Solfrank
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Martin Husemann
- *	and Wolfgang Solfrank.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHORS ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -35,12 +28,11 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: boot.c,v 1.6 1998/10/06 14:31:58 ws Exp $");
+__RCSID("$NetBSD: boot.c,v 1.14 2008/06/13 20:46:09 martin Exp $");
 #endif /* not lint */
 
 #include <stdlib.h>
 #include <string.h>
-#include <ctype.h>
 #include <stdio.h>
 #include <unistd.h>
 
@@ -48,17 +40,16 @@ __RCSID("$NetBSD: boot.c,v 1.6 1998/10/06 14:31:58 ws Exp $");
 #include "fsutil.h"
 
 int
-readboot(dosfs, boot)
-	int dosfs;
-	struct bootblock *boot;
+readboot(int dosfs, struct bootblock *boot)
 {
 	u_char block[DOSBOOTBLOCKSIZE];
 	u_char fsinfo[2 * DOSBOOTBLOCKSIZE];
 	u_char backup[DOSBOOTBLOCKSIZE];
 	int ret = FSOK;
+	int i;
 	
 	if (read(dosfs, block, sizeof block) < sizeof block) {
-		perror("could not read boot block");
+		perr("could not read boot block");
 		return FSFATAL;
 	}
 
@@ -110,7 +101,7 @@ readboot(dosfs, boot)
 		    != boot->FSInfo * boot->BytesPerSec
 		    || read(dosfs, fsinfo, sizeof fsinfo)
 		    != sizeof fsinfo) {
-			perror("could not read fsinfo block");
+			perr("could not read fsinfo block");
 			return FSFATAL;
 		}
 		if (memcmp(fsinfo, "RRaA", 4)
@@ -137,7 +128,7 @@ readboot(dosfs, boot)
 				    != boot->FSInfo * boot->BytesPerSec
 				    || write(dosfs, fsinfo, sizeof fsinfo)
 				    != sizeof fsinfo) {
-					perror("Unable to write FSInfo");
+					perr("Unable to write FSInfo");
 					return FSFATAL;
 				}
 				ret = FSBOOTMOD;
@@ -156,13 +147,27 @@ readboot(dosfs, boot)
 		if (lseek(dosfs, boot->Backup * boot->BytesPerSec, SEEK_SET)
 		    != boot->Backup * boot->BytesPerSec
 		    || read(dosfs, backup, sizeof backup) != sizeof  backup) {
-			perror("could not read backup bootblock");
+			perr("could not read backup bootblock");
 			return FSFATAL;
 		}
-		if (memcmp(block, backup, DOSBOOTBLOCKSIZE)) {
-			/* Correct?					XXX */
-			pfatal("backup doesn't compare to primary bootblock");
-			return FSFATAL;
+		backup[65] = block[65];				/* XXX */
+		if (memcmp(block + 11, backup + 11, 79)) {
+			/*
+			 * XXX We require a reference that explains
+			 * that these bytes need to match, or should
+			 * drop the check.  gdt@ has observed
+			 * filesystems that work fine under Windows XP
+			 * and NetBSD that do not match, so the
+			 * requirement is suspect.  For now, just
+			 * print out useful information and continue.
+			 */
+			pfatal("backup (block %d) mismatch with primary bootblock:\n",
+			        boot->Backup);
+			for (i = 11; i < 11 + 90; i++) {
+				if (block[i] != backup[i])
+					pfatal("\ti=%d\tprimary 0x%02x\tbackup 0x%02x\n",
+					       i, block[i], backup[i]);
+			}
 		}
 		/* Check backup FSInfo?					XXX */
 	}
@@ -226,16 +231,14 @@ readboot(dosfs, boot)
 }
 
 int
-writefsinfo(dosfs, boot)
-	int dosfs;
-	struct bootblock *boot;
+writefsinfo(int dosfs, struct bootblock *boot)
 {
 	u_char fsinfo[2 * DOSBOOTBLOCKSIZE];
 
 	if (lseek(dosfs, boot->FSInfo * boot->BytesPerSec, SEEK_SET)
 	    != boot->FSInfo * boot->BytesPerSec
 	    || read(dosfs, fsinfo, sizeof fsinfo) != sizeof fsinfo) {
-		perror("could not read fsinfo block");
+		perr("could not read fsinfo block");
 		return FSFATAL;
 	}
 	fsinfo[0x1e8] = (u_char)boot->FSFree;
@@ -250,7 +253,7 @@ writefsinfo(dosfs, boot)
 	    != boot->FSInfo * boot->BytesPerSec
 	    || write(dosfs, fsinfo, sizeof fsinfo)
 	    != sizeof fsinfo) {
-		perror("Unable to write FSInfo");
+		perr("Unable to write FSInfo");
 		return FSFATAL;
 	}
 	/*
@@ -261,7 +264,7 @@ writefsinfo(dosfs, boot)
 	 * correctly, it has to be fixed pretty often.
 	 *
 	 * Therefor, we handle the FSINFO block only informally,
-	 * fixing it if neccessary, but otherwise ignoring the
+	 * fixing it if necessary, but otherwise ignoring the
 	 * fact that it was incorrect.
 	 */
 	return 0;

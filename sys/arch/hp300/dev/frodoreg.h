@@ -1,4 +1,4 @@
-/*	$NetBSD: frodoreg.h,v 1.1 1997/05/12 08:03:49 thorpej Exp $	*/
+/*	$NetBSD: frodoreg.h,v 1.4 2006/07/19 17:21:23 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1997 Michael Smith.  All rights reserved.
@@ -24,9 +24,6 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-
-/* Base address of the Frodo part */
-#define	FRODO_BASE		(INTIOBASE + 0x1c000)
 
 /*
  * Where we find the 8250-like APCI ports, and how far apart they are.

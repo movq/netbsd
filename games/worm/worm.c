@@ -1,4 +1,4 @@
-/*	$NetBSD: worm.c,v 1.18 2000/01/09 17:17:21 jsm Exp $	*/
+/*	$NetBSD: worm.c,v 1.28 2008/08/08 16:10:47 drochner Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)worm.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: worm.c,v 1.18 2000/01/09 17:17:21 jsm Exp $");
+__RCSID("$NetBSD: worm.c,v 1.28 2008/08/08 16:10:47 drochner Exp $");
 #endif
 #endif /* not lint */
 
@@ -80,20 +76,21 @@ int running = 0;
 int slow = 0;
 int score = 0;
 int start_len = LENGTH;
+int visible_len;
 int lastch;
 char outbuf[BUFSIZ];
 
-void	crash __P((void)) __attribute__((__noreturn__));
-void	display __P((const struct body *, char));
-int	main __P((int, char **));
-void	leave __P((int)) __attribute__((__noreturn__));
-void	life __P((void));
-void	newpos __P((struct body *));
-void	process __P((int));
-void	prize __P((void));
-int	rnd __P((int));
-void	setup __P((void));
-void	wake __P((int));
+void	crash(void) __dead;
+void	display(const struct body *, char);
+int	main(int, char **);
+void	leave(int) __dead;
+void	life(void);
+void	newpos(struct body *);
+void	process(int);
+void	prize(void);
+int	rnd(int);
+void	setup(void);
+void	wake(int);
 
 int
 main(argc, argv)
@@ -102,25 +99,35 @@ main(argc, argv)
 {
 
 	/* Revoke setgid privileges */
-	setregid(getgid(), getgid());
+	setgid(getgid());
 
-	if (argc == 2)
-		start_len = atoi(argv[1]);
-	if ((start_len <= 0) || (start_len > 500))
-		start_len = LENGTH;
 	setbuf(stdout, outbuf);
 	srand(getpid());
 	signal(SIGALRM, wake);
 	signal(SIGINT, leave);
 	signal(SIGQUIT, leave);
-	initscr();
-	crmode();
+	if (!initscr())
+		errx(0, "couldn't initialize screen");
+	cbreak();
 	noecho();
 #ifdef KEY_LEFT
 	keypad(stdscr, TRUE);
 #endif
 	slow = (baudrate() <= 1200);
 	clear();
+	if (COLS < 18 || LINES < 5) {
+		/*
+		 * Insufficient room for the line with " Worm" and the
+		 * score if fewer than 18 columns; insufficient room for
+		 * anything much if fewer than 5 lines.
+		 */
+		endwin();
+		errx(1, "screen too small");
+	}
+	if (argc == 2)
+		start_len = atoi(argv[1]);
+	if ((start_len <= 0) || (start_len > ((LINES-3) * (COLS-2)) / 3))
+		start_len = LENGTH;
 	stw = newwin(1, COLS-1, 0, 0);
 	tv = newwin(LINES-1, COLS-1, 1, 0);
 	box(tv, '*', '*');
@@ -152,14 +159,14 @@ void
 life()
 {
 	struct body *bp, *np;
-	int i;
+	int i, j = 1;
 
 	np = NULL;
 	head = newlink();
 	if (head == NULL)
 		err(1, NULL);
-	head->x = start_len+2;
-	head->y = 12;
+	head->x = start_len % (COLS-5) + 2;
+	head->y = LINES / 2;
 	head->next = NULL;
 	display(head, HEAD);
 	for (i = 0, bp = head; i < start_len; i++, bp = np) {
@@ -168,12 +175,19 @@ life()
 			err(1, NULL);
 		np->next = bp;
 		bp->prev = np;
-		np->x = bp->x - 1;
-		np->y = bp->y;
+		if (((bp->x <= 2) && (j == 1)) || ((bp->x >= COLS-4) && (j == -1))) {
+			j *= -1;
+			np->x = bp->x;
+			np->y = bp->y + 1;
+		} else {
+			np->x = bp->x - j;
+			np->y = bp->y;
+		}
 		display(np, BODY);
 	}
 	tail = np;
 	tail->prev = NULL;
+	visible_len = start_len + 1;
 }
 
 void
@@ -200,7 +214,7 @@ leave(dummy)
 
 void
 wake(dummy)
-	int dummy __attribute__((__unused__));
+	int dummy __unused;
 {
 	signal(SIGALRM, wake);
 	fflush(stdout);
@@ -218,8 +232,15 @@ void
 newpos(bp)
 	struct body * bp;
 {
+	if (visible_len == (LINES-3) * (COLS-3) - 1) {
+		endwin();
+
+		printf("\nYou won!\n");
+		printf("Your final score was %d\n\n", score);
+		exit(0);
+	}
 	do {
-		bp->y = rnd(LINES-3)+ 2;
+		bp->y = rnd(LINES-3)+ 1;
 		bp->x = rnd(COLS-3) + 1;
 		wmove(tv, bp->y, bp->x);
 	} while(winch(tv) != ' ');
@@ -295,6 +316,7 @@ process(ch)
 		nh = tail->next;
 		free(tail);
 		tail = nh;
+		visible_len--;
 	}
 	else growing--;
 	display(head, BODY);
@@ -305,7 +327,7 @@ process(ch)
 		prize();
 		score += growing;
 		running = 0;
-		wmove(stw, 0, 68);
+		wmove(stw, 0, COLS - 12);
 		wprintw(stw, "Score: %3d", score);
 		wrefresh(stw);
 	}
@@ -320,6 +342,7 @@ process(ch)
 	nh->x = x;
 	display(nh, HEAD);
 	head = nh;
+	visible_len++;
 	if (!(slow && running))
 	{
 		wmove(tv, head->y, head->x);

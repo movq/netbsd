@@ -1,4 +1,4 @@
-/*	$NetBSD: state.h,v 1.4 1998/03/04 13:16:06 christos Exp $	*/
+/*	$NetBSD: state.h,v 1.6 2003/08/07 11:16:28 agc Exp $	*/
 
 /*-
  * Copyright (c) 1988 The Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -52,8 +48,8 @@ struct State {
 };
 
 /* termin.c */
-void init_keyboard __P((void));
-void InitMapping __P((void));
-void TransInput __P((int, int));
-int TerminalIn __P((void));
-int DataFromTerminal __P((char *, int));
+void init_keyboard(void);
+void InitMapping(void);
+void TransInput(int, int);
+int TerminalIn(void);
+int DataFromTerminal(char *, int);

@@ -1,5 +1,5 @@
 %{
-/*	$NetBSD: nsparser.y,v 1.6 1999/11/28 05:46:15 lukem Exp $	*/
+/*	$NetBSD: nsparser.y,v 1.10 2008/04/28 20:23:00 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 1999 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,17 +32,17 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: nsparser.y,v 1.6 1999/11/28 05:46:15 lukem Exp $");
+__RCSID("$NetBSD: nsparser.y,v 1.10 2008/04/28 20:23:00 martin Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
 
 #include <assert.h>
-#include <err.h>
 #define _NS_PRIVATE
 #include <nsswitch.h>
 #include <stdio.h>
 #include <string.h>
+#include <syslog.h>
 
 
 static	void	_nsaddsrctomap __P((const char *));
@@ -57,8 +50,8 @@ static	void	_nsaddsrctomap __P((const char *));
 static	ns_dbt		curdbt;
 static	ns_src		cursrc;
 
-extern int	_nsyylineno;
 extern char *	_nsyytext;
+extern int _nsyylineno;
 %}
 
 %union {
@@ -94,9 +87,14 @@ Entry
 
 			lineno = _nsyylineno - (*_nsyytext == '\n' ? 1 : 0);
 			if (_nsdbtput(&curdbt) == -1)
-					/* XXX: syslog the following */
-				warn("%s line %d: error adding entry",
-				    _PATH_NS_CONF, lineno);
+				syslog(LOG_WARNING,
+				    "libc nsdispatch: %s line %d: %s",
+				    _PATH_NS_CONF, lineno,
+				    "error adding entry");
+		}
+	| error NL
+		{
+			yyerrok;
 		}
 	;
 
@@ -167,24 +165,27 @@ _nsaddsrctomap(elem)
 	if (curdbt.srclistsize > 0) {
 		if ((strcasecmp(elem, NSSRC_COMPAT) == 0) ||
 		    (strcasecmp(curdbt.srclist[0].name, NSSRC_COMPAT) == 0)) {
-				/* XXX: syslog the following */
-			warnx("%s line %d: 'compat' used with other sources",
-			    _PATH_NS_CONF, lineno);
+			syslog(LOG_WARNING,
+			    "libc nsdispatch: %s line %d: %s",
+			    _PATH_NS_CONF, lineno,
+			    "'compat' used with other sources");
 			return;
 		}
 	}
 	for (i = 0; i < curdbt.srclistsize; i++) {
 		if (strcasecmp(curdbt.srclist[i].name, elem) == 0) {
-				/* XXX: syslog the following */
-			warnx("%s line %d: duplicate source '%s'",
-			    _PATH_NS_CONF, lineno, elem);
+			syslog(LOG_WARNING,
+			    "libc nsdispatch: %s line %d: %s '%s'",
+			    _PATH_NS_CONF, lineno,
+			    "duplicate source", elem);
 			return;
 		}
 	}
 	cursrc.name = elem;
 	if (_nsdbtaddsrc(&curdbt, &cursrc) == -1) {
-			/* XXX: syslog the following */
-		warn("%s line %d: error adding '%s'",
-		    _PATH_NS_CONF, lineno, elem);
+		syslog(LOG_WARNING,
+		    "libc nsdispatch: %s line %d: %s '%s'",
+		    _PATH_NS_CONF, lineno,
+		    "error adding", elem);
 	}
 }

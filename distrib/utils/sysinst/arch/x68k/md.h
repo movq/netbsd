@@ -1,4 +1,4 @@
-/*	$NetBSD: md.h,v 1.3 2000/03/28 00:29:57 thorpej Exp $	*/
+/*	$NetBSD: md.h,v 1.19 2007/11/12 15:07:36 jmmv Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -52,22 +52,22 @@
 /*
  * Symbolic names for disk partitions.
  */
-#define PART_ROOT	A
-#define PART_SWAP	B
-#define PART_RAW	C
-#define PART_USR	D	/* Can be after PART_FIRST_FREE */
-#define PART_FIRST_FREE	E
+#define PART_ROOT	PART_A
+#define PART_SWAP	PART_B
+#define PART_RAW	PART_C
+#define PART_USR	PART_D	/* Can be after PART_FIRST_FREE */
+#define PART_FIRST_FREE	PART_E
 
 #define DEFSWAPRAM	32	/* Assume at least this RAM for swap calc */
 #define DEFROOTSIZE	20	/* Default root size */
-#define STDNEEDMB	80	/* Min space for non X install */
+#define DEFVARSIZE	32	/* Default /var size, if created */
+#define DEFUSRSIZE	70	/* Default /usr size, if /home */
 #define XNEEDMB		35	/* Extra megs for full X installation */
 
 /*
  *  Default filesets to fetch and install during installation
  *  or upgrade. The standard sets are:
- *      base, etc, comp, games, man, misc, text,
- *      xbase, xfont, xserver, xcontrib, xcomp.
+ *      base etc comp games man misc tests text xbase xcomp xetc xfont xserver
  *
  * x68k has the  MD set kern first, because generic kernels are  too
  * big to fit on install floppies. i386 does not yet include the x sets. 
@@ -75,49 +75,7 @@
  * Third entry is the last extension name in the split sets for loading
  * from floppy.
  */
-EXTERN distinfo dist_list[]
-#ifdef MAIN
-= {
-    {"kern",	1, "ac", "Kernel       : "},
-    {"base",	1, "bs", "Base         : "},
-    {"etc",	1, "aa", "System (/etc): "},
-    {"comp",	1, "bj", "Compiler     : "},
-    {"games",	1, "am", "Games        : "},
-    {"man",	1, "ar", "Manuals      : "},
-    {"misc",	1, "aj", "Miscellaneous: "},
-    {"text",	1, "af", "Text tools   : "},
-    {"secr",	0, NULL, "Security     : "},
-
-    /* XXX no X11 on floppies, what sets are they?*/
-    {"xbase",	1, "ak", "X11 clients  : "},
-    {"xfont",	1, "ay", "X11 fonts    : "},
-    {"xserver",	1, "ag", "X11 servers  : "},
-    {"xcontrib",1, "aa", "X11 contrib  : "},
-    {"xcomp",	1, "ag", "X programming: "},
-    {NULL, 0, NULL, NULL }
-}
-#endif
-;
-
-/*
- * Disk names accepted as valid targets for a from-scratch installation.
- *
- * On  x68k, we allow only "sd" scsi disks.
- */
-EXTERN	char *disk_names[]
-#ifdef MAIN
-= {"sd", NULL}
-#endif
-;
-
-/*
- * Legal start character for a disk for checking input. 
- * this must return 1 for a character that matches the first
- * characters of each member of disk_names.
- *
- * On x68k, that means matching 's' for sd.
- */
-#define ISDISKSTART(dn)	(dn == 's')
+#define SET_KERNEL_1_NAME	"kern-GENERIC"
 
 /*
  * Machine-specific command to write a new label to a disk.
@@ -131,10 +89,3 @@ EXTERN	char *disk_names[]
  * On x68k, do what the 1.2 install scripts did. 
  */
 #define DISKLABEL_CMD "disklabel -w"
-
-
-/*
- * Default fileystem type for floppy disks.
- * On x68k, that is  msdos.
- */
-EXTERN	char *fdtype INIT("msdos");

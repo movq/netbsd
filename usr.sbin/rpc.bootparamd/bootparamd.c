@@ -1,4 +1,4 @@
-/*	$NetBSD: bootparamd.c,v 1.21 1999/08/23 01:09:42 christos Exp $	*/
+/*	$NetBSD: bootparamd.c,v 1.44 2004/10/30 15:23:30 dsl Exp $	*/
 
 /*
  * This code is not copyright, and is placed in the public domain.
@@ -11,7 +11,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: bootparamd.c,v 1.21 1999/08/23 01:09:42 christos Exp $");
+__RCSID("$NetBSD: bootparamd.c,v 1.44 2004/10/30 15:23:30 dsl Exp $");
 #endif
 
 #include <sys/types.h>
@@ -19,9 +19,11 @@ __RCSID("$NetBSD: bootparamd.c,v 1.21 1999/08/23 01:09:42 christos Exp $");
 #include <sys/stat.h>
 #include <sys/socket.h>
 
+#include <assert.h>
 #include <ctype.h>
 #include <errno.h>
 #include <err.h>
+#include <fnmatch.h>
 #include <netdb.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -29,6 +31,9 @@ __RCSID("$NetBSD: bootparamd.c,v 1.21 1999/08/23 01:09:42 christos Exp $");
 #include <syslog.h>
 #include <unistd.h>
 #include <util.h>
+#include <ifaddrs.h>
+
+#include <net/if.h>
 
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -36,7 +41,9 @@ __RCSID("$NetBSD: bootparamd.c,v 1.21 1999/08/23 01:09:42 christos Exp $");
 #include <rpc/rpc.h>
 #include <rpc/pmap_clnt.h>
 #include <rpcsvc/bootparam_prot.h>
+#ifdef YP
 #include <rpcsvc/ypclnt.h>
+#endif
 
 #include "pathnames.h"
 
@@ -54,12 +61,13 @@ int     debug = 0;
 int     dolog = 0;
 struct in_addr route_addr;
 struct sockaddr_in my_addr;
-extern char *__progname;
 char   *bootpfile = _PATH_BOOTPARAMS;
+char   *iface = NULL;
 
 int	main __P((int, char *[]));
 int	lookup_bootparam __P((char *, char *, char *, char **, char **));
 void	usage __P((void));
+static int get_localaddr __P((const char *, struct sockaddr_in *));
 
 
 /*
@@ -75,13 +83,16 @@ main(argc, argv)
 	struct stat buf;
 	int    c;
 
-	while ((c = getopt(argc, argv, "dsr:f:")) != -1)
+	while ((c = getopt(argc, argv, "di:sr:f:")) != -1)
 		switch (c) {
 		case 'd':
 			debug = 1;
 			break;
+		case 'i':
+			iface = optarg;
+			break;
 		case 'r':
-			if (isdigit(*optarg)) {
+			if (isdigit((unsigned char)*optarg)) {
 				if (inet_aton(optarg, &route_addr) != 0)
 					break;
 			}
@@ -98,9 +109,9 @@ main(argc, argv)
 		case 's':
 			dolog = 1;
 #ifndef LOG_DAEMON
-			openlog(__progname, 0, 0);
+			openlog("rpc.bootparamd", 0, 0);
 #else
-			openlog(__progname, 0, LOG_DAEMON);
+			openlog("rpc.bootparamd", 0, LOG_DAEMON);
 			setlogmask(LOG_UPTO(LOG_NOTICE));
 #endif
 			break;
@@ -112,7 +123,8 @@ main(argc, argv)
 		err(1, "%s", bootpfile);
 
 	if (route_addr.s_addr == 0) {
-		get_myaddress(&my_addr);
+		if (get_localaddr(NULL, &my_addr) != 0)
+			errx(1, "router address not found");
 		route_addr.s_addr = my_addr.sin_addr.s_addr;
 	}
 	if (!debug) {
@@ -129,7 +141,12 @@ main(argc, argv)
 
 	if (!svc_register(transp, BOOTPARAMPROG, BOOTPARAMVERS, bootparamprog_1,
 	    IPPROTO_UDP))
-		errx(1, "unable to register BOOTPARAMPROG version %ld, udp",
+/*
+ * Do NOT change the "%u" in the format string below to "%lu". If your
+ * build fails update the "rpcgen" program and use "make cleandir" and
+ * "make includes" in "src/lib/librpcsvc" afterwards.
+ */
+		errx(1, "unable to register BOOTPARAMPROG version %u, udp",
 		    BOOTPARAMVERS);
 
 	svc_run();
@@ -164,11 +181,9 @@ bootparamproc_whoami_1_svc(whoami, rqstp)
 	    sizeof(haddr));
 	he = gethostbyaddr((char *) &haddr, sizeof(haddr), AF_INET);
 	if (he) {
-		strncpy(askname, he->h_name, sizeof(askname));
-		askname[sizeof(askname)-1] = 0;
+		(void)strlcpy(askname, he->h_name, sizeof(askname));
 	} else {
-		strncpy(askname, inet_ntoa(haddr), sizeof(askname));
-		askname[sizeof(askname)-1] = 0;
+		(void)strlcpy(askname, inet_ntoa(haddr), sizeof(askname));
 	}
 
 	if (debug)
@@ -232,17 +247,32 @@ bootparamproc_getfile_1_svc(getfile, rqstp)
 
 	he = NULL;
 	he = gethostbyname(getfile->client_name);
-	if (!he)
-		goto failed;
+	if (!he) {
+		if (debug)
+			warnx("getfile can't resolve client %s",
+			    getfile->client_name);
+		if (dolog)
+			syslog(LOG_NOTICE, "getfile can't resolve client %s",
+			    getfile->client_name);
+		return (NULL);
+	}
 
-	strncpy(askname, he->h_name, sizeof(askname));
-	askname[sizeof(askname)-1] = 0;
+	(void)strlcpy(askname, he->h_name, sizeof(askname));
 	err = lookup_bootparam(askname, NULL, getfile->file_id,
 	    &res.server_name, &res.server_path);
 	if (err == 0) {
 		he = gethostbyname(res.server_name);
-		if (!he)
-			goto failed;
+		if (!he) {
+			if (debug)
+				warnx("getfile can't resolve server %s for %s",
+			    res.server_name, getfile->client_name);
+		if (dolog)
+			syslog(LOG_NOTICE,
+			    "getfile can't resolve server %s for %s",
+			    res.server_name, getfile->client_name);
+		return (NULL);
+
+		}
 		memmove(&res.server_address.bp_address_u.ip_addr,
 		    he->h_addr, 4);
 		res.server_address.address_type = IP_ADDR_TYPE;
@@ -252,13 +282,13 @@ bootparamproc_getfile_1_svc(getfile, rqstp)
 		res.server_path[0] = '\0';
 		memset(&res.server_address.bp_address_u.ip_addr, 0, 4);
 	} else {
-failed:
 		if (debug)
-			warnx("getfile failed for %s",
+			warnx("getfile lookup failed for %s",
 			    getfile->client_name);
 		if (dolog)
 			syslog(LOG_NOTICE,
-			    "getfile failed for %s", getfile->client_name);
+			    "getfile lookup failed for %s",
+			    getfile->client_name);
 		return (NULL);
 	}
 
@@ -296,7 +326,7 @@ lookup_bootparam(client, client_canonical, id, server, path)
 	static int ypbuflen = 0;
 #endif
 	static char buf[BUFSIZ];
-	char   *bp, *word = NULL;
+	char   *canon = NULL, *bp, *word = NULL;
 	size_t  idlen = id == NULL ? 0 : strlen(id);
 	int     contin = 0;
 	int     found = 0;
@@ -338,28 +368,61 @@ lookup_bootparam(client, client_canonical, id, server, path)
 #endif
 			if (debug)
 				warnx("match %s with %s", word, client);
+
+#define	HASGLOB(str) \
+	(strchr(str, '*') != NULL || \
+	 strchr(str, '?') != NULL || \
+	 strchr(str, '[') != NULL || \
+	 strchr(str, ']') != NULL)
+
 			/* See if this line's client is the one we are
 			 * looking for */
-			if (strcasecmp(word, client) != 0) {
+			if (fnmatch(word, client, FNM_CASEFOLD) == 0) {
+				/*
+				 * Match.  The token may be globbed, we
+				 * can't just return that as the canonical
+				 * name.  Check to see if the token has any
+				 * globbing characters in it (*, ?, [, ]).
+				 * If so, just return the name we already
+				 * have.  Otherwise, return the token.
+				 */
+				if (HASGLOB(word))
+					canon = client;
+				else
+					canon = word;
+			} else {
+				struct hostent *hp;
 				/*
 				 * If it didn't match, try getting the
 				 * canonical host name of the client
-				 * on this line and comparing that to
-				 * the client we are looking for
+				 * on this line, if it's not a glob,
+				 * and comparing it to the client we
+				 * are looking up.
 				 */
-				struct hostent *hp = gethostbyname(word);
-				if (hp == NULL ) {
+				if (HASGLOB(word)) {
 					if (debug)
-						warnx(
-					    "Unknown bootparams host %s", word);
-					if (dolog)
-						syslog(LOG_NOTICE,
-					    "Unknown bootparams host %s", word);
+						warnx("Skipping non-match: %s",
+						    word);
 					continue;
 				}
-				if (strcasecmp(hp->h_name, client))
+				if ((hp = gethostbyname(word)) == NULL) {
+					if (debug)
+						warnx(
+					    "Unknown bootparams host %s",
+					    word);
+					if (dolog)
+						syslog(LOG_NOTICE,
+					    "Unknown bootparams host %s",
+					    word);
 					continue;
+				}
+				if (strcasecmp(hp->h_name, client) != 0)
+					continue;
+				canon = hp->h_name;
 			}
+
+#undef HASGLOB
+
 			contin *= -1;
 			break;
 		case 1:
@@ -367,8 +430,9 @@ lookup_bootparam(client, client_canonical, id, server, path)
 			break;
 		}
 
+		assert(canon != NULL);
 		if (client_canonical)
-			strncpy(client_canonical, word, MAX_MACHINE_NAME);
+			strncpy(client_canonical, canon, MAX_MACHINE_NAME);
 
 		/* We have found a line for CLIENT */
 		if (id == NULL) {
@@ -402,6 +466,51 @@ void
 usage()
 {
 	fprintf(stderr,
-	    "usage: %s [-d] [-s] [-r router] [-f bootparmsfile]\n", __progname);
+	    "usage: %s [-ds] [-i interface] [-r router] [-f bootparamsfile]\n",
+	    getprogname());
 	exit(1);
+}
+
+static int
+get_localaddr(ifname, sin)
+	const char *ifname;
+	struct sockaddr_in *sin;
+{
+	struct ifaddrs *ifap, *ifa;
+
+	if (getifaddrs(&ifap) != 0)
+		return -1;
+
+	for (ifa = ifap; ifa; ifa = ifa->ifa_next) {
+		if (ifname && strcmp(ifname, ifa->ifa_name) != 0)
+			continue;
+		if (ifa->ifa_addr->sa_family != AF_INET)
+			continue;
+		if (ifa->ifa_addr->sa_len != sizeof(*sin))
+			continue;
+
+		/* no loopback please */
+#ifdef IFF_LOOPBACK
+		if (ifa->ifa_flags & IFF_LOOPBACK)
+			continue;
+#else
+		if (strncmp(ifa->ifa_name, "lo", 2) == 0 &&
+		    (isdigit(ifa->ifa_name[2]) || ifa->ifa_name[2] == '\0'))
+			continue;
+#endif
+
+		if (!iface || strcmp(ifa->ifa_name, iface) == 0)
+			;
+		else
+			continue;
+
+		/* candidate found */
+		memcpy(sin, ifa->ifa_addr, ifa->ifa_addr->sa_len);
+		freeifaddrs(ifap);
+		return 0;
+	}
+
+	/* no candidate */
+	freeifaddrs(ifap);
+	return -1;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: setenv.c,v 1.18 2000/01/22 22:19:20 mycroft Exp $	*/
+/*	$NetBSD: setenv.c,v 1.29 2005/02/17 21:22:25 christos Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)setenv.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: setenv.c,v 1.18 2000/01/22 22:19:20 mycroft Exp $");
+__RCSID("$NetBSD: setenv.c,v 1.29 2005/02/17 21:22:25 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -53,12 +49,13 @@ __RCSID("$NetBSD: setenv.c,v 1.18 2000/01/22 22:19:20 mycroft Exp $");
 
 #ifdef __weak_alias
 __weak_alias(setenv,_setenv)
-__weak_alias(unsetenv,_unsetenv)
 #endif
 
-#ifdef _REENT
+#ifdef _REENTRANT
 extern rwlock_t __environ_lock;
 #endif
+
+extern char **environ;
 
 /*
  * setenv --
@@ -71,11 +68,11 @@ setenv(name, value, rewrite)
 	const char *value;
 	int rewrite;
 {
-	extern char **environ;
-	static int alloced;			/* if allocated space before */
-	char *c;
+	static char **saveenv;	/* copy of previously allocated space */
+	char *c, **newenv;
 	const char *cc;
-	int l_value, offset;
+	size_t l_value, size;
+	int offset;
 
 	_DIAGASSERT(name != NULL);
 	_DIAGASSERT(value != NULL);
@@ -86,72 +83,46 @@ setenv(name, value, rewrite)
 	rwlock_wrlock(&__environ_lock);
 	/* find if already exists */
 	if ((c = __findenv(name, &offset)) != NULL) {
-		if (!rewrite) {
-			rwlock_unlock(&__environ_lock);
-			return (0);
-		}
-		if (strlen(c) >= l_value) {	/* old larger; copy over */
-			while ((*c++ = *value++) != '\0');
-			rwlock_unlock(&__environ_lock);
-			return (0);
-		}
+		if (!rewrite)
+			goto good;
+		if (strlen(c) >= l_value)	/* old larger; copy over */
+			goto copy;
 	} else {					/* create new slot */
-		int cnt;
-		char **p;
+		size_t cnt;
 
-		for (p = environ, cnt = 0; *p; ++p, ++cnt);
-		if (alloced) {			/* just increase size */
-			environ = realloc(environ,
-			    (size_t)(sizeof(char *) * (cnt + 2)));
-			if (!environ) {
-				rwlock_unlock(&__environ_lock);
-				return (-1);
-			}
+		for (cnt = 0; environ[cnt]; ++cnt)
+			continue;
+		size = (size_t)(sizeof(char *) * (cnt + 2));
+		if (saveenv == environ) {		/* just increase size */
+			if ((newenv = realloc(saveenv, size)) == NULL)
+				goto bad;
+			saveenv = newenv;
+		} else {				/* get new space */
+			free(saveenv);
+			if ((saveenv = malloc(size)) == NULL)
+				goto bad;
+			(void)memcpy(saveenv, environ, cnt * sizeof(char *));
 		}
-		else {				/* get new space */
-			alloced = 1;		/* copy old entries into it */
-			p = malloc((size_t)(sizeof(char *) * (cnt + 2)));
-			if (!p) {
-				rwlock_unlock(&__environ_lock);
-				return (-1);
-			}
-			memcpy(p, environ, cnt * sizeof(char *));
-			environ = p;
-		}
+		environ = saveenv;
 		environ[cnt + 1] = NULL;
-		offset = cnt;
+		offset = (int)cnt;
 	}
-	for (cc = name; *cc && *cc != '='; ++cc)/* no `=' in name */
+	for (cc = name; *cc && *cc != '='; ++cc)	/* no `=' in name */
 		continue;
-	if (!(environ[offset] =			/* name + `=' + value */
-	    malloc((size_t)((int)(cc - name) + l_value + 2)))) {
-		rwlock_unlock(&__environ_lock);
-		return (-1);
-	}
-	for (c = environ[offset]; (*c = *name++) && *c != '='; ++c);
-	for (*c++ = '='; (*c++ = *value++) != '\0'; );
+	size = cc - name;
+	/* name + `=' + value */
+	if ((environ[offset] = malloc(size + l_value + 2)) == NULL)
+		goto bad;
+	c = environ[offset];
+	(void)memcpy(c, name, size);
+	c += size;
+	*c++ = '=';
+copy:
+	(void)memcpy(c, value, l_value + 1);
+good:
 	rwlock_unlock(&__environ_lock);
-	return (0);
-}
-
-/*
- * unsetenv(name) --
- *	Delete environmental variable "name".
- */
-void
-unsetenv(name)
-	const char *name;
-{
-	extern char **environ;
-	char **p;
-	int offset;
-
-	_DIAGASSERT(name != NULL);
-
-	rwlock_wrlock(&__environ_lock);
-	while (__findenv(name, &offset))	/* if set multiple times */
-		for (p = &environ[offset];; ++p)
-			if (!(*p = *(p + 1)))
-				break;
+	return 0;
+bad:
 	rwlock_unlock(&__environ_lock);
+	return -1;
 }

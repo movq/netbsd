@@ -1,4 +1,4 @@
-/*	$NetBSD: if_fpa.c,v 1.30 2000/03/30 12:45:34 augustss Exp $	*/
+/*	$NetBSD: if_fpa.c,v 1.50 2008/06/12 22:44:47 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1996 Matt Thomas <matt@3am-software.com>
@@ -10,7 +10,7 @@
  * 1. Redistributions of source code must retain the above copyright
  *    notice, this list of conditions and the following disclaimer.
  * 2. The name of the author may not be used to endorse or promote products
- *    derived from this software withough specific prior written permission
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -32,6 +32,9 @@
  *
  *   This module supports the DEC DEFPA PCI FDDI Controller
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_fpa.c,v 1.50 2008/06/12 22:44:47 cegger Exp $");
 
 #ifdef __NetBSD__
 #include "opt_inet.h"
@@ -62,21 +65,14 @@
 #include <net/bpfdesc.h>
 #endif
 
-#ifdef INET
-#include <netinet/in.h>
-#endif
-
 #if defined(__FreeBSD__)
 #include <netinet/if_fddi.h>
 #else
 #include <net/if_fddi.h>
 #endif
 
-#include <vm/vm.h>
-#include <vm/vm_kern.h>
-#include <vm/vm_param.h>
-
 #if defined(__FreeBSD__)
+#include <vm/vm.h>
 #include "fpa.h"
 #include <netinet/if_ether.h>
 #include <pci/pcivar.h>
@@ -129,12 +125,11 @@ static void pdq_pci_shutdown(int howto, void *sc);
 
 #elif defined(__bsdi__)
 extern struct cfdriver fpacd;
-#define	PDQ_PCI_UNIT_TO_SOFTC(unit)	((pdq_softc_t *)fpacd.cd_devs[unit])
+#define	PDQ_PCI_UNIT_TO_SOFTC(unit)	((pdq_softc_t *)device_lookup_private(&fpa_cd, unit))
 
 #elif defined(__NetBSD__)
-extern struct cfattach fpa_ca;
 extern struct cfdriver fpa_cd;
-#define	PDQ_PCI_UNIT_TO_SOFTC(unit)	((pdq_softc_t *)fpa_cd.cd_devs[unit])
+#define	PDQ_PCI_UNIT_TO_SOFTC(unit)	((pdq_softc_t *)device_lookup_private(&fpa_cd, unit))
 #define	pdq_pci_ifwatchdog		NULL
 #endif
 
@@ -209,11 +204,10 @@ pdq_pci_attach(
 	pci_conf_write(config_id, PCI_CFLT, data);
     }
 
-    sc = (pdq_softc_t *) malloc(sizeof(*sc), M_DEVBUF, M_NOWAIT);
+    sc = (pdq_softc_t *) malloc(sizeof(*sc), M_DEVBUF, M_NOWAIT|M_ZERO);
     if (sc == NULL)
 	return;
 
-    bzero(sc, sizeof(pdq_softc_t));	/* Zero out the softc*/
     if (!pci_map_mem(config_id, PCI_CBMA, &va_csrs, &pa_csrs)) {
 	free((void *) sc, M_DEVBUF);
 	return;
@@ -229,7 +223,7 @@ pdq_pci_attach(
 	free((void *) sc, M_DEVBUF);
 	return;
     }
-    bcopy((caddr_t) sc->sc_pdq->pdq_hwaddr.lanaddr_bytes, sc->sc_ac.ac_enaddr, 6);
+    bcopy((void *) sc->sc_pdq->pdq_hwaddr.lanaddr_bytes, sc->sc_ac.ac_enaddr, 6);
     pdqs_pci[unit] = sc;
     pdq_ifattach(sc, pdq_pci_ifwatchdog);
     pci_map_int(config_id, pdq_pci_ifintr, (void*) sc, &net_imask);
@@ -256,7 +250,7 @@ pdq_pci_shutdown(
     void *sc)
 {
     pdq_hwreset(((pdq_softc_t *)sc)->sc_pdq);
-}   
+}
 #endif
 
 static u_long pdq_pci_count;
@@ -325,7 +319,7 @@ pdq_pci_probe(
     ia->ia_drq = DRQNONE;
 
     /* Get the memory base address; assume the BIOS set it up correctly */
-    ia->ia_maddr = (caddr_t) (pci_inl(pa, PCI_CBMA) & ~7);
+    ia->ia_maddr = (void *) (pci_inl(pa, PCI_CBMA) & ~7);
     pci_outl(pa, PCI_CBMA, 0xFFFFFFFF);
     ia->ia_msize = ((~pci_inl(pa, PCI_CBMA)) | 7) + 1;
     pci_outl(pa, PCI_CBMA, (int) ia->ia_maddr);
@@ -371,7 +365,7 @@ pdq_pci_attach(
 	return;
     }
 
-    bcopy((caddr_t) sc->sc_pdq->pdq_hwaddr.lanaddr_bytes, sc->sc_ac.ac_enaddr, 6);
+    bcopy((void *) sc->sc_pdq->pdq_hwaddr.lanaddr_bytes, sc->sc_ac.ac_enaddr, 6);
 
     pdq_ifattach(sc, pdq_pci_ifwatchdog);
 
@@ -416,7 +410,7 @@ static void
 pdq_pci_attach(
     struct device * const parent,
     struct device * const self,
-    void * const aux)
+    void *const aux)
 {
     pdq_softc_t * const sc = (pdq_softc_t *)self;
     struct pci_attach_args * const pa = (struct pci_attach_args *) aux;
@@ -427,6 +421,8 @@ pdq_pci_attach(
     bus_space_handle_t ioh, memh;
     int ioh_valid, memh_valid;
 
+    aprint_naive(": FDDI controller\n");
+
     data = pci_conf_read(pa->pa_pc, pa->pa_tag, PCI_CFLT);
     if ((data & 0xFF00) < (DEFPA_LATENCY << 8)) {
 	data &= ~0xFF00;
@@ -434,7 +430,7 @@ pdq_pci_attach(
 	pci_conf_write(pa->pa_pc, pa->pa_tag, PCI_CFLT, data);
     }
 
-    bcopy(sc->sc_dev.dv_xname, sc->sc_if.if_xname, IFNAMSIZ);
+    strlcpy(sc->sc_if.if_xname, device_xname(&sc->sc_dev), IFNAMSIZ);
     sc->sc_if.if_flags = 0;
     sc->sc_if.if_softc = sc;
 
@@ -462,7 +458,7 @@ pdq_pci_attach(
     }
 #endif /* DEFPA_IOMAPPED */
     else {
-        printf(": unable to map device registers\n");
+        aprint_error(": unable to map device registers\n");
         return;
     }
 
@@ -478,36 +474,34 @@ pdq_pci_attach(
 				sc->sc_if.if_xname, 0,
 				(void *) sc, PDQ_DEFPA);
     if (sc->sc_pdq == NULL) {
-	printf("%s: initialization failed\n", sc->sc_dev.dv_xname);
+	aprint_error_dev(&sc->sc_dev, "initialization failed\n");
 	return;
     }
 
     pdq_ifattach(sc, pdq_pci_ifwatchdog);
 
-    if (pci_intr_map(pa->pa_pc, pa->pa_intrtag, pa->pa_intrpin,
-		     pa->pa_intrline, &intrhandle)) {
-	printf("%s: couldn't map interrupt\n", self->dv_xname);
+    if (pci_intr_map(pa, &intrhandle)) {
+	aprint_error_dev(self, "couldn't map interrupt\n");
 	return;
     }
     intrstr = pci_intr_string(pa->pa_pc, intrhandle);
     sc->sc_ih = pci_intr_establish(pa->pa_pc, intrhandle, IPL_NET, pdq_pci_ifintr, sc);
     if (sc->sc_ih == NULL) {
-	printf("%s: couldn't establish interrupt", self->dv_xname);
+	aprint_error_dev(self, "couldn't establish interrupt");
 	if (intrstr != NULL)
-	    printf(" at %s", intrstr);
-	printf("\n");
+	    aprint_normal(" at %s", intrstr);
+	aprint_normal("\n");
 	return;
     }
 
     sc->sc_ats = shutdownhook_establish((void (*)(void *)) pdq_hwreset, sc->sc_pdq);
     if (sc->sc_ats == NULL)
-	printf("%s: warning: couldn't establish shutdown hook\n", self->dv_xname);
+	aprint_error_dev(self, "warning: couldn't establish shutdown hook\n");
     if (intrstr != NULL)
-	printf("%s: interrupting at %s\n", self->dv_xname, intrstr);
+	aprint_normal_dev(self, "interrupting at %s\n", intrstr);
 }
 
-struct cfattach fpa_ca = {
-    sizeof(pdq_softc_t), pdq_pci_match, pdq_pci_attach
-};
+CFATTACH_DECL(fpa, sizeof(pdq_softc_t),
+    pdq_pci_match, pdq_pci_attach, NULL, NULL);
 
 #endif /* __NetBSD__ */

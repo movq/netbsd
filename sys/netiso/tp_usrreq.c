@@ -1,4 +1,4 @@
-/*	$NetBSD: tp_usrreq.c,v 1.15 2000/03/30 13:10:16 augustss Exp $	*/
+/*	$NetBSD: tp_usrreq.c,v 1.38 2008/10/22 18:17:46 plunky Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -68,6 +64,9 @@ SOFTWARE.
  * contained here and called by tp_usrreq().
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: tp_usrreq.c,v 1.38 2008/10/22 18:17:46 plunky Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/mbuf.h>
@@ -80,17 +79,18 @@ SOFTWARE.
 #include <sys/proc.h>
 
 #include <netiso/tp_param.h>
+#include <netiso/tp_var.h>
 #include <netiso/tp_timer.h>
-#include <netiso/tp_stat.h>
 #include <netiso/tp_seq.h>
+#include <netiso/tp_stat.h>
 #include <netiso/tp_ip.h>
 #include <netiso/tp_pcb.h>
-#include <netiso/tp_var.h>
 #include <netiso/argo_debug.h>
 #include <netiso/tp_trace.h>
 #include <netiso/tp_meas.h>
 #include <netiso/iso.h>
 #include <netiso/iso_errno.h>
+#include <netiso/iso_var.h>
 
 int             TNew;
 int             TPNagle1, TPNagle2;
@@ -104,24 +104,22 @@ struct tp_pcb  *tp_listeners, *tp_intercepts;
  *  print (str) followed by the control info in the mbufs of an mbuf chain (n)
  */
 void
-dump_mbuf(n, str)
-	struct mbuf    *n;
-	char           *str;
+dump_mbuf(struct mbuf *n, const char *str)
 {
 	struct mbuf    *nextrecord;
 
 	printf("dump %s\n", str);
 
-	if (n == MNULL) {
+	if (n == NULL) {
 		printf("EMPTY:\n");
 		return;
 	}
 	while (n) {
-		nextrecord = n->m_act;
+		nextrecord = n->m_nextpkt;
 		printf("RECORD:\n");
 		while (n) {
 			printf("%p : Len %x Data %p A %p Nx %p Tp %x\n",
-			       n, n->m_len, n->m_data, n->m_act, n->m_next, n->m_type);
+			       n, n->m_len, n->m_data, n->m_nextpkt, n->m_next, n->m_type);
 #ifdef notdef
 			{
 				char  *p = mtod(n, char *);
@@ -165,12 +163,8 @@ dump_mbuf(n, str)
  *  E* whatever is returned from the fsm.
  */
 int
-tp_rcvoob(tpcb, so, m, outflags, inflags)
-	struct tp_pcb  *tpcb;
-	struct socket *so;
-	struct mbuf *m;
-	int            *outflags;
-	int             inflags;
+tp_rcvoob(struct tp_pcb *tpcb, struct socket *so, struct mbuf *m,
+    int *outflags, int inflags)
 {
 	struct mbuf *n;
 	struct sockbuf *sb = &so->so_rcv;
@@ -185,7 +179,7 @@ tp_rcvoob(tpcb, so, m, outflags, inflags)
 #endif
 
 	/* if you use soreceive */
-	if (m == MNULL)
+	if (m == NULL)
 		return ENOBUFS;
 
 restart:
@@ -207,7 +201,7 @@ restart:
 	 */
 
 	sblock(sb, M_WAITOK);
-	for (nn = &sb->sb_mb; (n = *nn) != NULL; nn = &n->m_act)
+	for (nn = &sb->sb_mb; (n = *nn) != NULL; nn = &n->m_nextpkt)
 		if (n->m_type == MT_OOBDATA)
 			break;
 
@@ -218,7 +212,7 @@ restart:
 		}
 #endif
 		sbunlock(sb);
-		if (so->so_state & SS_NBIO) {
+		if (so->so_nbio) {
 			return EWOULDBLOCK;
 		}
 		sbwait(sb);
@@ -227,9 +221,9 @@ restart:
 	m->m_len = 0;
 
 	/* Assuming at most one xpd tpdu is in the buffer at once */
-	while (n != MNULL) {
+	while (n != NULL) {
 		m->m_len += n->m_len;
-		bcopy(mtod(n, caddr_t), mtod(m, caddr_t), (unsigned) n->m_len);
+		bcopy(mtod(n, void *), mtod(m, void *), (unsigned) n->m_len);
 		m->m_data += n->m_len;	/* so mtod() in bcopy() above gives
 					 * right addr */
 		n = n->m_next;
@@ -247,7 +241,7 @@ restart:
 
 	if ((inflags & MSG_PEEK) == 0) {
 		n = *nn;
-		*nn = n->m_act;
+		*nn = n->m_nextpkt;
 		for (; n; n = m_free(n))
 			sbfree(sb, n);
 	}
@@ -269,7 +263,7 @@ restart:
  *  tp_usrreq(), PRU_SENDOOB
  * FUNCTION and ARGUMENTS:
  * 	Send what's in the mbuf chain (m) as an XPD TPDU.
- * 	The mbuf may not contain more then 16 bytes of data.
+ * 	The mbuf may not contain more than 16 bytes of data.
  * 	XPD TSDUs aren't segmented, so they translate into
  * 	exactly one XPD TPDU, with EOT bit set.
  * RETURN VALUE:
@@ -279,11 +273,8 @@ restart:
  *  ENOBUFS if ran out of mbufs
  */
 int
-tp_sendoob(tpcb, so, xdata, outflags)
-	struct tp_pcb  *tpcb;
-	struct socket *so;
-	struct mbuf *xdata;
-	int            *outflags;	/* not used */
+tp_sendoob(struct tp_pcb *tpcb, struct socket *so, struct mbuf *xdata,
+    int *outflags)
 {
 	/*
 	 * Each mbuf chain represents a sequence # in the XPD seq space.
@@ -315,7 +306,7 @@ tp_sendoob(tpcb, so, xdata, outflags)
 	 */
 	if (sb->sb_mb) {	/* Anything already in eXpedited data
 				 * sockbuf? */
-		if (so->so_state & SS_NBIO) {
+		if (so->so_nbio) {
 			return EWOULDBLOCK;
 		}
 		while (sb->sb_mb) {
@@ -327,7 +318,7 @@ tp_sendoob(tpcb, so, xdata, outflags)
 	}
 	if (xdata == (struct mbuf *) 0) {
 		/* empty xpd packet */
-		MGETHDR(xdata, M_WAIT, MT_OOBDATA);
+		xdata = m_gethdr(M_WAIT, MT_OOBDATA);
 		xdata->m_len = 0;
 		xdata->m_pkthdr.len = 0;
 	}
@@ -386,14 +377,10 @@ tp_sendoob(tpcb, so, xdata, outflags)
  */
 /* ARGSUSED */
 int
-tp_usrreq(so, req, m, nam, control, p)
-	struct socket *so;
-	int req;
-	struct mbuf *m, *nam, *control;
-	struct proc *p;
+tp_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
+	struct mbuf *control, struct lwp *l)
 {
 	struct tp_pcb *tpcb;
-	int             s;
 	int             error = 0;
 	int             flags, *outflags = &flags;
 	u_long          eotsdu = 0;
@@ -416,7 +403,6 @@ tp_usrreq(so, req, m, nam, control, p)
 	if (req == PRU_CONTROL)
 		return (EOPNOTSUPP);
 
-	s = splsoftnet();
 	tpcb = sototpcb(so);
 	if (tpcb == 0 && req != PRU_ATTACH) {
 #ifdef TPPT
@@ -431,11 +417,12 @@ tp_usrreq(so, req, m, nam, control, p)
 	switch (req) {
 
 	case PRU_ATTACH:
+		sosetlock(so);
 		if (tpcb != 0) {
 			error = EISCONN;
 			break;
 		}
-		error = tp_attach(so, (long)nam);
+		error = tp_attach(so, (int)(long)nam);
 		if (error)
 			break;
 		tpcb = sototpcb(so);
@@ -453,13 +440,13 @@ tp_usrreq(so, req, m, nam, control, p)
 #endif
 				tp_detach(tpcb);
 			}
-			free((caddr_t) tpcb, M_PCB);
+			free((void *) tpcb, M_PCB);
 			tpcb = 0;
 		}
 		break;
 
 	case PRU_BIND:
-		error = tp_pcbbind(tpcb, nam, p);
+		error = tp_pcbbind(tpcb, nam, l);
 		break;
 
 	case PRU_LISTEN:
@@ -468,7 +455,7 @@ tp_usrreq(so, req, m, nam, control, p)
 			error = EINVAL;
 		else {
 			struct tp_pcb **tt;
-			remque(tpcb);
+			iso_remque(tpcb);
 			tpcb->tp_next = tpcb->tp_prev = tpcb;
 			for (tt = &tp_listeners; *tt; tt = &((*tt)->tp_nextlisten))
 				if ((*tt)->tp_lsuffixlen)
@@ -497,7 +484,7 @@ tp_usrreq(so, req, m, nam, control, p)
 #endif
 		if (tpcb->tp_lsuffixlen == 0) {
 			error = tp_pcbbind(tpcb, (struct mbuf *)0,
-			    (struct proc *)0);
+			    (struct lwp *)0);
 			if (error) {
 #ifdef ARGO_DEBUG
 				if (argo_debug[D_CONN]) {
@@ -540,12 +527,15 @@ tp_usrreq(so, req, m, nam, control, p)
 #ifdef TP_PERF_MEAS
 		if (DOPERF(tpcb)) {
 			u_int           lsufx, fsufx;
+			struct timeval	now;
+
 			lsufx = *(u_short *) (tpcb->tp_lsuffix);
 			fsufx = *(u_short *) (tpcb->tp_fsuffix);
 
+			getmicrotime(&now);
 			tpmeas(tpcb->tp_lref,
 			       TPtime_open | (tpcb->tp_xtd_format << 4),
-			       &time, lsufx, fsufx, tpcb->tp_fref);
+			       &now, lsufx, fsufx, tpcb->tp_fref);
 		}
 #endif
 		break;
@@ -570,9 +560,12 @@ tp_usrreq(so, req, m, nam, control, p)
 #ifdef TP_PERF_MEAS
 		if (DOPERF(tpcb)) {
 			u_int           lsufx, fsufx;
+			struct timeval	now;
+
 			lsufx = *(u_short *) (tpcb->tp_lsuffix);
 			fsufx = *(u_short *) (tpcb->tp_fsuffix);
 
+			getmicrotime(&now);
 			tpmeas(tpcb->tp_lref, TPtime_open,
 			       &time, lsufx, fsufx, tpcb->tp_fref);
 		}
@@ -731,7 +724,6 @@ tp_usrreq(so, req, m, nam, control, p)
 		/*
 		 * stat: don't bother with a blocksize.
 		 */
-		splx(s);
 		return (0);
 
 	case PRU_SOCKADDR:
@@ -763,14 +755,11 @@ tp_usrreq(so, req, m, nam, control, p)
 	}
 #endif
 release:
-	splx(s);
 	return error;
 }
 
 void
-tp_ltrace(so, uio)
-	struct socket  *so;
-	struct uio     *uio;
+tp_ltrace(struct socket *so, struct uio *uio)
 {
 #ifdef TPPT
 	if (tp_traceflags[D_DATA]) {
@@ -784,8 +773,7 @@ tp_ltrace(so, uio)
 }
 
 int
-tp_confirm(tpcb)
-	struct tp_pcb *tpcb;
+tp_confirm(struct tp_pcb *tpcb)
 {
 	struct tp_event E;
 	if (tpcb->tp_state == TP_CONFIRMING)
@@ -799,11 +787,9 @@ tp_confirm(tpcb)
  * Process control data sent with sendmsg()
  */
 int
-tp_snd_control(m, so, data)
-	struct mbuf    *m;
-	struct socket  *so;
-	struct mbuf **data;
+tp_snd_control(struct mbuf *m, struct socket *so, struct mbuf **data)
 {
+	struct sockopt sopt;
 	struct cmsghdr *ch;
 	int             error = 0;
 
@@ -811,8 +797,14 @@ tp_snd_control(m, so, data)
 		ch = mtod(m, struct cmsghdr *);
 		m->m_len -= sizeof(*ch);
 		m->m_data += sizeof(*ch);
-		error = tp_ctloutput(PRCO_SETOPT,
-				     so, ch->cmsg_level, ch->cmsg_type, &m);
+
+		sockopt_init(&sopt, ch->cmsg_level, ch->cmsg_type, 0);
+		error = sockopt_setmbuf(&sopt, m);
+		if (error == 0)
+			error = tp_ctloutput(PRCO_SETOPT, so, &sopt);
+		sockopt_destroy(&sopt);
+		m = NULL;
+
 		if (ch->cmsg_type == TPOPT_DISC_DATA) {
 			if (data && *data) {
 				m_freem(*data);
@@ -820,7 +812,7 @@ tp_snd_control(m, so, data)
 			}
 			error = tp_usrreq(so, PRU_DISCONNECT, (struct mbuf *)0,
 			    (struct mbuf *)0, (struct mbuf *)0,
-			    (struct proc *)0);
+			    (struct lwp *)0);
 		}
 	}
 	if (m)

@@ -1,4 +1,4 @@
-/*	$NetBSD: fgets.c,v 1.13 1999/11/14 18:19:57 explorer Exp $	*/
+/*	$NetBSD: fgets.c,v 1.21 2007/06/03 17:39:26 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,15 +37,18 @@
 #if 0
 static char sccsid[] = "@(#)fgets.c	8.2 (Berkeley) 12/22/93";
 #else
-__RCSID("$NetBSD: fgets.c,v 1.13 1999/11/14 18:19:57 explorer Exp $");
+__RCSID("$NetBSD: fgets.c,v 1.21 2007/06/03 17:39:26 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
-#include "local.h"
 #include "reentrant.h"
+#include "local.h"
+#ifdef _FORTIFY_SOURCE
+#undef fgets
+#endif
 
 /*
  * Read at most n-1 characters from the given file.
@@ -62,7 +61,7 @@ fgets(buf, n, fp)
 	int n;
 	FILE *fp;
 {
-	int len;
+	size_t len;
 	char *s;
 	unsigned char *p, *t;
 
@@ -72,13 +71,14 @@ fgets(buf, n, fp)
 		return (NULL);
 
 	FLOCKFILE(fp);
+	_SET_ORIENTATION(fp, -1);
 	s = buf;
 	n--;			/* leave space for NUL */
 	while (n != 0) {
 		/*
 		 * If the buffer is empty, refill it.
 		 */
-		if ((len = fp->_r) <= 0) {
+		if (fp->_r <= 0) {
 			if (__srefill(fp)) {
 				/* EOF/error: stop with partial or no line */
 				if (s == buf) {
@@ -87,8 +87,8 @@ fgets(buf, n, fp)
 				}
 				break;
 			}
-			len = fp->_r;
 		}
+		len = fp->_r;
 		p = fp->_p;
 
 		/*
@@ -99,19 +99,19 @@ fgets(buf, n, fp)
 		 */
 		if (len > n)
 			len = n;
-		t = memchr((void *)p, '\n', (size_t)len);
+		t = memchr((void *)p, '\n', len);
 		if (t != NULL) {
 			len = ++t - p;
 			fp->_r -= len;
 			fp->_p = t;
-			(void)memcpy((void *)s, (void *)p, (size_t)len);
+			(void)memcpy((void *)s, (void *)p, len);
 			s[len] = 0;
 			FUNLOCKFILE(fp);
 			return (buf);
 		}
 		fp->_r -= len;
 		fp->_p += len;
-		(void)memcpy((void *)s, (void *)p, (size_t)len);
+		(void)memcpy((void *)s, (void *)p, len);
 		s += len;
 		n -= len;
 	}

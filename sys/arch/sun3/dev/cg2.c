@@ -1,4 +1,4 @@
-/*	$NetBSD: cg2.c,v 1.11 1998/01/23 00:01:28 gwr Exp $	*/
+/*	$NetBSD: cg2.c,v 1.29 2008/06/28 12:13:38 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -21,11 +21,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -52,6 +48,9 @@
  * XXX should defer colormap updates to vertical retrace interrupts
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: cg2.c,v 1.29 2008/06/28 12:13:38 tsutsui Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/conf.h>
@@ -62,16 +61,15 @@
 #include <sys/proc.h>
 #include <sys/tty.h>
 
-#include <vm/vm.h>
+#include <uvm/uvm_extern.h>
 
-#include <machine/fbio.h>
+#include <dev/sun/fbio.h>
 #include <machine/autoconf.h>
 #include <machine/pmap.h>
 #include <machine/cg2reg.h>
 
+#include "ioconf.h"
 #include "fbvar.h"
-
-cdev_decl(cg2);
 
 #define	CMSIZE 256
 
@@ -88,7 +86,7 @@ cdev_decl(cg2);
 
 /* per-display variables */
 struct cg2_softc {
-	struct	device sc_dev;		/* base device */
+	device_t sc_dev;		/* base device */
 	struct	fbdevice sc_fb;		/* frame buffer device */
 	int 	sc_phys;		/* display RAM (phys addr) */
 	int 	sc_pmtype;		/* pmap type bits */
@@ -96,80 +94,81 @@ struct cg2_softc {
 };
 
 /* autoconfiguration driver */
-static void	cg2attach __P((struct device *, struct device *, void *));
-static int	cg2match __P((struct device *, struct cfdata *, void *));
+static int	cg2match(device_t, cfdata_t, void *);
+static void	cg2attach(device_t, device_t, void *);
 
-struct cfattach cgtwo_ca = {
-	sizeof(struct cg2_softc), cg2match, cg2attach
+CFATTACH_DECL_NEW(cgtwo, sizeof(struct cg2_softc),
+    cg2match, cg2attach, NULL, NULL);
+
+dev_type_open(cg2open);
+dev_type_ioctl(cg2ioctl);
+dev_type_mmap(cg2mmap);
+
+const struct cdevsw cgtwo_cdevsw = {
+	cg2open, nullclose, noread, nowrite, cg2ioctl,
+	nostop, notty, nopoll, cg2mmap, nokqfilter,
 };
 
-extern struct cfdriver cgtwo_cd;
-
-static int  cg2gattr __P((struct fbdevice *,  void *));
-static int  cg2gvideo __P((struct fbdevice *, void *));
-static int	cg2svideo __P((struct fbdevice *, void *));
-static int	cg2getcmap __P((struct fbdevice *, void *));
-static int	cg2putcmap __P((struct fbdevice *, void *));
+static int cg2gattr(struct fbdevice *,  void *);
+static int cg2gvideo(struct fbdevice *, void *);
+static int cg2svideo(struct fbdevice *, void *);
+static int cg2getcmap(struct fbdevice *, void *);
+static int cg2putcmap(struct fbdevice *, void *);
 
 static struct fbdriver cg2fbdriver = {
-	cg2open, cg2close, cg2mmap, cg2gattr,
+	cg2open, nullclose, cg2mmap, nokqfilter, cg2gattr,
 	cg2gvideo, cg2svideo,
 	cg2getcmap, cg2putcmap };
 
-static int cg2intr __P((void*));
+static int cg2intr(void *);
 
 /*
  * Match a cg2.
  */
-static int
-cg2match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+static int 
+cg2match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct confargs *ca = aux;
 	int probe_addr;
 
 	/* No default VME address. */
 	if (ca->ca_paddr == -1)
-		return (0);
+		return 0;
 
 	/* Make sure something is there... */
 	probe_addr = ca->ca_paddr + CTLREGS_OFF;
 	if (bus_peek(ca->ca_bustype, probe_addr, 1) == -1)
-		return (0);
+		return 0;
 
 	/* XXX: look at the ID reg? */
-	/* printf("cg2: id=0x%x\n", x); */
+	/* aprint_debug("cg2: id=0x%x\n", x); */
 
 	/* Default interrupt priority. */
 	if (ca->ca_intpri == -1)
 		ca->ca_intpri = 4;
 
-	return (1);
+	return 1;
 }
 
 /*
  * Attach a display.  We need to notice if it is the console, too.
  */
-static void
-cg2attach(parent, self, args)
-	struct device *parent, *self;
-	void *args;
+static void 
+cg2attach(device_t parent, device_t self, void *args)
 {
-	struct cg2_softc *sc = (struct cg2_softc *)self;
+	struct cg2_softc *sc = device_private(self);
 	struct fbdevice *fb = &sc->sc_fb;
 	struct confargs *ca = args;
 	struct fbtype *fbt;
 
+	sc->sc_dev = self;
 	sc->sc_phys = ca->ca_paddr;
 	sc->sc_pmtype = PMAP_NC | PMAP_VME16;
 
-	sc->sc_ctlreg = (struct cg2fb *) bus_mapin(ca->ca_bustype,
-			ca->ca_paddr + CTLREGS_OFF, CTLREGS_SIZE);
+	sc->sc_ctlreg = (struct cg2fb *)bus_mapin(ca->ca_bustype,
+	    ca->ca_paddr + CTLREGS_OFF, CTLREGS_SIZE);
 
-	isr_add_vectored(cg2intr, (void*)sc,
-					 ca->ca_intpri, ca->ca_intvec);
+	isr_add_vectored(cg2intr, sc, ca->ca_intpri, ca->ca_intvec);
 
 	/*
 	 * XXX - Initialize?  Determine type?
@@ -179,7 +178,7 @@ cg2attach(parent, self, args)
 
 	fb->fb_driver = &cg2fbdriver;
 	fb->fb_private = sc;
-	fb->fb_name = sc->sc_dev.dv_xname;
+	fb->fb_name = device_xname(self);
 
 	fbt = &fb->fb_fbtype;
 	fbt->fb_type = FBTYPE_SUN2COLOR;
@@ -190,68 +189,50 @@ cg2attach(parent, self, args)
 	fbt->fb_height = 900;
 	fbt->fb_size = CG2_MAPPED_SIZE;
 
-	printf(" (%dx%d)\n", fbt->fb_width, fbt->fb_height);
+	aprint_normal(" (%dx%d)\n", fbt->fb_width, fbt->fb_height);
 	fb_attach(fb, 2);
 }
 
-int
-cg2open(dev, flags, mode, p)
-	dev_t dev;
-	int flags, mode;
-	struct proc *p;
+int 
+cg2open(dev_t dev, int flags, int mode, struct lwp *l)
 {
+	struct cg2_softc *sc;
 	int unit = minor(dev);
 
-	if (unit >= cgtwo_cd.cd_ndevs || cgtwo_cd.cd_devs[unit] == NULL)
-		return (ENXIO);
-	return (0);
+	sc = device_lookup_private(&cgtwo_cd, unit);
+	if (sc == NULL)
+		return ENXIO;
+	return 0;
 }
 
-int
-cg2close(dev, flags, mode, p)
-	dev_t dev;
-	int flags, mode;
-	struct proc *p;
+int 
+cg2ioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
 {
+	struct cg2_softc *sc = device_lookup_private(&cgtwo_cd, minor(dev));
 
-	return (0);
-}
-
-int
-cg2ioctl(dev, cmd, data, flags, p)
-	dev_t dev;
-	u_long cmd;
-	caddr_t data;
-	int flags;
-	struct proc *p;
-{
-	struct cg2_softc *sc = cgtwo_cd.cd_devs[minor(dev)];
-
-	return (fbioctlfb(&sc->sc_fb, cmd, data));
+	return fbioctlfb(&sc->sc_fb, cmd, data);
 }
 
 /*
  * Return the address that would map the given device at the given
  * offset, allowing for the given protection, or return -1 for error.
  */
-int
-cg2mmap(dev, off, prot)
-	dev_t dev;
-	int off, prot;
+paddr_t 
+cg2mmap(dev_t dev, off_t off, int prot)
 {
-	struct cg2_softc *sc = cgtwo_cd.cd_devs[minor(dev)];
+	struct cg2_softc *sc = device_lookup_private(&cgtwo_cd, minor(dev));
 
 	if (off & PGOFSET)
-		panic("cg2mmap");
+		panic("%s: bad offset", __func__);
 
-	if ((unsigned)off >= CG2_MAPPED_SIZE)
-		return (-1);
+	if (off >= CG2_MAPPED_SIZE)
+		return -1;
 
 	/*
 	 * I turned on PMAP_NC here to disable the cache as I was
 	 * getting horribly broken behaviour with it on.
 	 */
-	return ((sc->sc_phys + off) | sc->sc_pmtype);
+	return (sc->sc_phys + off) | sc->sc_pmtype;
 }
 
 /*
@@ -259,9 +240,8 @@ cg2mmap(dev, off, prot)
  */
 
 /* FBIOGATTR: */
-static int  cg2gattr(fb, data)
-	struct fbdevice *fb;
-	void *data;
+static int 
+cg2gattr(struct fbdevice *fb, void *data)
 {
 	struct fbgattr *fba = data;
 
@@ -273,51 +253,48 @@ static int  cg2gattr(fb, data)
 	fba->sattr.dev_specific[0] = -1;
 	fba->emu_types[0] = fb->fb_fbtype.fb_type;
 	fba->emu_types[1] = -1;
-	return (0);
+	return 0;
 }
 
 /* FBIOGVIDEO: */
-static int  cg2gvideo(fb, data)
-	struct fbdevice *fb;
-	void *data;
+static int 
+cg2gvideo(struct fbdevice *fb, void *data)
 {
 	int *on = data;
 	struct cg2_softc *sc = fb->fb_private;
 
 	*on = sc->sc_ctlreg->status.reg.video_enab;
-	return (0);
+	return 0;
 }
 
 /* FBIOSVIDEO: */
-static int cg2svideo(fb, data)
-	struct fbdevice *fb;
-	void *data;
+static int 
+cg2svideo(struct fbdevice *fb, void *data)
 {
 	int *on = data;
 	struct cg2_softc *sc = fb->fb_private;
 
 	sc->sc_ctlreg->status.reg.video_enab = (*on) & 1;
 
-	return (0);
+	return 0;
 }
 
 /* FBIOGETCMAP: */
-static int cg2getcmap(fb, data)
-	struct fbdevice *fb;
-	void *data;
+static int 
+cg2getcmap(struct fbdevice *fb, void *data)
 {
 	struct fbcmap *cmap = data;
 	struct cg2_softc *sc = fb->fb_private;
-	u_char red[CMSIZE], green[CMSIZE], blue[CMSIZE];
+	uint8_t red[CMSIZE], green[CMSIZE], blue[CMSIZE];
 	int error, start, count, ecount;
-	register u_int i;
-	register u_short *p;
+	u_int i;
+	uint16_t *p;
 
 	start = cmap->index;
 	count = cmap->count;
 	ecount = start + count;
-	if (start >= CMSIZE || ecount > CMSIZE)
-		return (EINVAL);
+	if (start >= CMSIZE || count > CMSIZE - start)
+		return EINVAL;
 
 	/* XXX - Wait for retrace? */
 
@@ -334,40 +311,40 @@ static int cg2getcmap(fb, data)
 
 	/* Copy local arrays to user space. */
 	if ((error = copyout(red + start, cmap->red, count)) != 0)
-		return (error);
+		return error;
 	if ((error = copyout(green + start, cmap->green, count)) != 0)
-		return (error);
+		return error;
 	if ((error = copyout(blue + start, cmap->blue, count)) != 0)
-		return (error);
+		return error;
 
-	return (0);
+	return 0;
 }
 
 /* FBIOPUTCMAP: */
-static int cg2putcmap(fb, data)
-	struct fbdevice *fb;
-	void *data;
+static int 
+cg2putcmap(struct fbdevice *fb, void *data)
 {
 	struct fbcmap *cmap = data;
 	struct cg2_softc *sc = fb->fb_private;
-	u_char red[CMSIZE], green[CMSIZE], blue[CMSIZE];
-	int error, start, count, ecount;
-	register u_int i;
-	register u_short *p;
+	uint8_t red[CMSIZE], green[CMSIZE], blue[CMSIZE];
+	int error;
+	u_int start, count, ecount;
+	u_int i;
+	uint16_t *p;
 
 	start = cmap->index;
 	count = cmap->count;
 	ecount = start + count;
-	if (start >= CMSIZE || ecount > CMSIZE)
-		return (EINVAL);
+	if (start >= CMSIZE || count > CMSIZE - start)
+		return EINVAL;
 
 	/* Copy from user space to local arrays. */
 	if ((error = copyin(cmap->red, red + start, count)) != 0)
-		return (error);
+		return error;
 	if ((error = copyin(cmap->green, green + start, count)) != 0)
-		return (error);
+		return error;
 	if ((error = copyin(cmap->blue, blue + start, count)) != 0)
-		return (error);
+		return error;
 
 	/* XXX - Wait for retrace? */
 
@@ -382,13 +359,12 @@ static int cg2putcmap(fb, data)
 	for (i = start; i < ecount; i++)
 		*p++ = blue[i];
 
-	return (0);
+	return 0;
 
 }
 
-static int
-cg2intr(vsc)
-	void *vsc;
+static int 
+cg2intr(void *vsc)
 {
 	struct cg2_softc *sc = vsc;
 
@@ -396,5 +372,5 @@ cg2intr(vsc)
 	sc->sc_ctlreg->status.reg.inten = 0;
 
 	printf("cg2intr\n");
-	return (1);
+	return 1;
 }

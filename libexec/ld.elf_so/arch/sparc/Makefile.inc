@@ -1,6 +1,14 @@
-#	$NetBSD: Makefile.inc,v 1.2 1999/06/22 16:28:23 christos Exp $
+#	$NetBSD: Makefile.inc,v 1.11.2.1 2009/01/16 22:21:30 bouyer Exp $
 
-SRCS+=	rtld_start.S mdreloc.c
+SRCS+=		rtld_start.S mdreloc.c
 
-CPPFLAGS+= -fpic -DELFSIZE=32 -DRTLD_RELOCATE_SELF -DVARPSZ
-LDFLAGS+= -Bshareable -Bsymbolic -e _rtld_start
+# XXX Should not be in CPPFLAGS!
+CPPFLAGS+=	-fpic
+
+CPPFLAGS+=	-DELFSIZE=32
+
+LDFLAGS+=	-Wl,-e,_rtld_start
+
+.if defined(LD32DIR)
+.include "Makefile.ld32"
+.endif

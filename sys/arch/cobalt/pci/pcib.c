@@ -1,4 +1,4 @@
-/*	$NetBSD: pcib.c,v 1.2 2000/03/31 14:51:55 soren Exp $	*/
+/*	$NetBSD: pcib.c,v 1.19 2008/05/09 10:59:55 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 2000 Soren S. Jorvang.  All rights reserved.
@@ -25,6 +25,9 @@
  * SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: pcib.c,v 1.19 2008/05/09 10:59:55 tsutsui Exp $");
+
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -33,33 +36,20 @@
 
 #include <machine/cpu.h>
 #include <machine/bus.h>
-#include <machine/autoconf.h> 
-#include <machine/intr.h>
+#include <machine/autoconf.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcidevs.h>
 
-#include <dev/isa/isareg.h>
+static int	pcib_match(device_t, cfdata_t, void *);
+static void	pcib_attach(device_t, device_t, void *);
 
-static int	pcib_match(struct device *, struct cfdata *, void *);
-static void	pcib_attach(struct device *, struct device *, void *);
-static int	icu_intr(void *);
-
-struct cfattach pcib_ca = {
-	sizeof(struct device), pcib_match, pcib_attach
-};
-
-static struct {
-        int     (*func)(void *);
-        void    *arg;
-} icu[IO_ICUSIZE];
+CFATTACH_DECL_NEW(pcib, 0,
+    pcib_match, pcib_attach, NULL, NULL);
 
 static int
-pcib_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+pcib_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -71,68 +61,14 @@ pcib_match(parent, match, aux)
 }
 
 static void
-pcib_attach(parent, self, aux)
-	struct device *parent;
-	struct device *self;
-	void *aux;
+pcib_attach(device_t parent, device_t self, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 	char devinfo[256];
 
-	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo);
-	printf("\n%s: %s, rev %d\n", self->dv_xname, devinfo,
-					PCI_REVISION(pa->pa_class));
+	aprint_normal("\n");
+	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
+	aprint_normal_dev(self, "%s, rev %d\n", devinfo,
+	    PCI_REVISION(pa->pa_class));
 
-	/*
-	 * Initialize ICU. Since we block all these interrupts with
-	 * splbio(), we can just enable all of them all the time here.
-	 */
-	*(volatile u_int8_t *)MIPS_PHYS_TO_KSEG1(0x10000000 + IO_ICU1) = 0x10;
-	*(volatile u_int8_t *)MIPS_PHYS_TO_KSEG1(0x10000000 + IO_ICU1+1) = 0xff;
-	*(volatile u_int8_t *)MIPS_PHYS_TO_KSEG1(0x10000000 + IO_ICU2) = 0x10;
-	*(volatile u_int8_t *)MIPS_PHYS_TO_KSEG1(0x10000000 + IO_ICU2+1) = 0xff;
-	wbflush();
-
-	cpu_intr_establish(4, IPL_NONE, icu_intr, NULL);
-}
-
-void *   
-icu_intr_establish(irq, type, level, func, arg)
-        int irq;
-        int type;
-        int level;
-        int (*func)(void *);
-        void *arg;
-{
-	int i;
-
-	for (i = 0; i <= IO_ICUSIZE; i++) {
-		if (i == IO_ICUSIZE)
-			panic("too many IRQs");
-
-		if (icu[i].func != NULL)
-			continue;
-
-		icu[i].func = func;
-		icu[i].arg = arg;
-		break;
-	}
-
-	return (void *)-1;
-}
-
-int
-icu_intr(arg)
-	void *arg;
-{
-	int i;
-
-	for (i = 0; i < IO_ICUSIZE; i++) {
-		if (icu[i].func == NULL)
-			return 0;
-
-		(*icu[i].func)(icu[i].arg);
-	}
-
-	return 0;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: sethostid.c,v 1.4 1997/07/21 14:06:29 jtc Exp $	*/
+/*	$NetBSD: sethostid.c,v 1.7 2004/04/19 13:16:42 atatat Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)sethostid.c	8.1 (Berkeley) 6/2/93";
 #else
-__RCSID("$NetBSD: sethostid.c,v 1.4 1997/07/21 14:06:29 jtc Exp $");
+__RCSID("$NetBSD: sethostid.c,v 1.7 2004/04/19 13:16:42 atatat Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -47,20 +43,15 @@ __RCSID("$NetBSD: sethostid.c,v 1.4 1997/07/21 14:06:29 jtc Exp $");
 #include <sys/sysctl.h>
 #include <unistd.h>
 
-#if __STDC__
 int
 sethostid(long hostid)
-#else
-int
-sethostid(hostid)
-	long hostid;
-#endif
 {
-	int mib[2];
+	int mib[2], value;
 
 	mib[0] = CTL_KERN;
 	mib[1] = KERN_HOSTID;
-	if (sysctl(mib, 2, NULL, NULL, &hostid, sizeof hostid) == -1)
+	value = (int)hostid;
+	if (sysctl(mib, 2, NULL, NULL, &value, sizeof(value)) == -1)
 		return (-1);
 	return (0);
 }

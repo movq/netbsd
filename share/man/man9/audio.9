@@ -1,4 +1,4 @@
-.\"	$NetBSD: audio.9,v 1.15 2000/02/17 21:25:47 kleink Exp $
+.\"	$NetBSD: audio.9,v 1.42 2008/04/30 13:10:58 martin Exp $
 .\"
 .\" Copyright (c) 1999, 2000 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd February 11, 2000
+.Dd November 10, 2007
 .Dt AUDIO 9
 .Os
 .Sh NAME
@@ -43,66 +36,69 @@
 .Sh DESCRIPTION
 The audio device driver is divided into a high level,
 hardware independent layer, and a low level hardware
-dependent layer.  The interface between these is 
-the 
-.Va audio_hw_if 
+dependent layer.
+The interface between these is the
+.Va audio_hw_if
 structure.
 .Bd -literal
 struct audio_hw_if {
-	int	(*open)__P((void *, int));
-	void	(*close)__P((void *));
-	int	(*drain)__P((void *));
+	int	(*open)(void *, int);
+	void	(*close)(void *);
+	int	(*drain)(void *);
 
-	int	(*query_encoding)__P((void *, struct audio_encoding *));
-	int	(*set_params)__P((void *, int, int, 
-			struct audio_params *, struct audio_params *));
-	int	(*round_blocksize)__P((void *, int));
+	int	(*query_encoding)(void *, struct audio_encoding *);
+	int	(*set_params)(void *, int, int,
+		    audio_params_t *, audio_params_t *,
+		    stream_filter_list_t *, stream_filter_list_t *);
+	int	(*round_blocksize)(void *, int, int, const audio_params_t *);
 
-	int	(*commit_settings)__P((void *));
+	int	(*commit_settings)(void *);
 
-	int	(*init_output)__P((void *, void *, int));
-	int	(*init_input)__P((void *, void *, int));
-	int	(*start_output)__P((void *, void *, int,
-				    void (*)(void *), void *));
-	int	(*start_input)__P((void *, void *, int,
-				   void (*)(void *), void *));
-	int	(*halt_output)__P((void *));
-	int	(*halt_input)__P((void *));
+	int	(*init_output)(void *, void *, int);
+	int	(*init_input)(void *, void *, int);
+	int	(*start_output)(void *, void *, int, void (*)(void *),
+	            void *);
+	int	(*start_input)(void *, void *, int, void (*)(void *),
+		    void *);
+	int	(*halt_output)(void *);
+	int	(*halt_input)(void *);
 
-	int	(*speaker_ctl)__P((void *, int));
+	int	(*speaker_ctl)(void *, int);
 #define SPKR_ON  1
 #define SPKR_OFF 0
 
-	int	(*getdev)__P((void *, struct audio_device *));
-	int	(*setfd)__P((void *, int));
-	
-	int	(*set_port)__P((void *, mixer_ctrl_t *));
-	int	(*get_port)__P((void *, mixer_ctrl_t *));
+	int	(*getdev)(void *, struct audio_device *);
+	int	(*setfd)(void *, int);
 
-	int	(*query_devinfo)__P((void *, mixer_devinfo_t *));
-	
-	void	*(*allocm)__P((void *, int, size_t, int, int));
-	void	(*freem)__P((void *, void *, int));
-	size_t	(*round_buffersize)__P((void *, int, size_t));
-	int	(*mappage)__P((void *, void *, int, int));
+	int	(*set_port)(void *, mixer_ctrl_t *);
+	int	(*get_port)(void *, mixer_ctrl_t *);
 
-	int 	(*get_props)__P((void *));
+	int	(*query_devinfo)(void *, mixer_devinfo_t *);
 
-	int	(*trigger_output)__P((void *, void *, void *, int,
-			void (*)(void *), void *, struct audio_params *));
-	int	(*trigger_input)__P((void *, void *, void *, int,
-			void (*)(void *), void *, struct audio_params *));
+	void	*(*allocm)(void *, int, size_t, struct malloc_type *, int);
+	void	(*freem)(void *, void *, struct malloc_type *);
+	size_t	(*round_buffersize)(void *, int, size_t);
+	paddr_t	(*mappage)(void *, void *, off_t, int);
+
+	int 	(*get_props)(void *);
+
+	int	(*trigger_output)(void *, void *, void *, int,
+		    void (*)(void *), void *, const audio_params_t *);
+	int	(*trigger_input)(void *, void *, void *, int,
+		    void (*)(void *), void *, const audio_params_t *);
+	int	(*dev_ioctl)(void *, u_long, void *, int, struct lwp *);
+	int	(*powerstate)(void *, int);
+#define	AUDIOPOWER_ON	1
+#define	AUDIOPOWER_OFF	0
 };
 
-struct audio_params {
-	u_long	sample_rate;		/* sample rate */
-	u_int	encoding;		/* ulaw, linear, etc */
-	u_int	precision;		/* bits/sample */
-	u_int	channels;		/* mono(1), stereo(2) */
-	/* Software en/decode functions, set if SW coding required by HW */
-	void	(*sw_code)__P((void *, u_char *, int));
-	int	factor;			/* coding space change */
-};
+typedef struct audio_params {
+	u_int	sample_rate;	/* sample rate */
+	u_int	encoding;	/* e.g. mu-law, linear, etc */
+	u_int	precision;	/* bits/subframe */
+	u_int	validbits;	/* valid bits in a subframe */
+	u_int	channels;	/* mono(1), stereo(2) */
+} audio_params_t;
 .Ed
 .Pp
 The high level audio driver attaches to the low level driver
@@ -117,10 +113,11 @@ This call should be
 	struct device *dev;
 .Ed
 .Pp
-The 
+The
 .Va audio_hw_if
-struct is as shown above.  The
-.Va hdl 
+struct is as shown above.
+The
+.Va hdl
 argument is a handle to some low level data structure.
 It is sent as the first argument to all the functions
 in
@@ -130,13 +127,13 @@ when the high level driver calls them.
 is the device struct for the hardware device.
 .Pp
 The upper layer of the audio driver allocates one buffer for playing
-and one for recording.  It handles the buffering of data from the
-user processes in these.  The data is presented to the lower level
-in smaller chunks, called blocks.  If there, during playback, is
-no data available from the user process when the hardware request
-another block a block of silence will be used instead.  Furthermore,
-if the user process does not read data quickly enough during recording
-data will be thrown away.
+and one for recording.
+It handles the buffering of data from the user processes in these.
+The data is presented to the lower level in smaller chunks, called blocks.
+If, during playback, there is no data available from the user process when
+the hardware request another block a block of silence will be used instead.
+Furthermore, if the user process does not read data quickly enough during
+recording data will be thrown away.
 .Pp
 The fields of
 .Va audio_hw_if
@@ -144,32 +141,37 @@ are described in some more detail below.
 Some fields are optional and can be set to 0 if not needed.
 .Bl -tag -width indent
 .It Dv int open(void *hdl, int flags)
-is called when the audio device is opened.  It should initialize
-the hardware for I/O.  Every successful call to
+optional, is called when the audio device is opened.
+It should initialize the hardware for I/O.
+Every successful call to
 .Va open
 is matched by a call to
 .Va close .
 Return 0 on success, otherwise an error code.
 .It Dv void close(void *hdl)
-is called when the audio device is closed.
+optional, is called when the audio device is closed.
 .It Dv int drain(void *hdl)
 optional, is called before the device is closed or when
 .Dv AUDIO_DRAIN
-is called.  It should make sure that no samples remain
-in to be played that could be lost when 
+is called.
+It should make sure that no samples remain in to be played that could
+be lost when
 .Va close
 is called.
 Return 0 on success, otherwise an error code.
 .It Dv int query_encoding(void *hdl, struct audio_encoding *ae)
 is used when
 .Dv AUDIO_GETENC
-is called.  It should fill the 
+is called.
+It should fill the
 .Va audio_encoding
 structure and return 0 or, if there is no encoding with the
 given number, return EINVAL.
-.It Dv int set_params(void *hdl, int setmode, int usemode, 
-.Dv "struct audio_params *play, struct audio_params *rec)"
-.br
+.It Dv int set_params(void *hdl, int setmode, int usemode,
+.Dv "audio_params_t *play, audio_params_t *rec,"
+.Pp
+.Dv "stream_filter_list_t *pfil, stream_filter_list_t *rfil)"
+.Pp
 Called to set the audio encoding mode.
 .Va setmode
 is a combination of the
@@ -179,25 +181,94 @@ and
 flags to indicate which mode(s) are to be set.
 .Va usemode
 is also a combination of these flags, but indicates the current
-mode of the device (i.e. the value of
+mode of the device (i.e., the value of
 .Va mode
 in the
 .Va audio_info
 struct).
+.Pp
 The
 .Va play
 and
 .Va rec
 structures contain the encoding parameters that should be set.
-If the hardware requires software assistance with some encoding
-(e.g., it might be lacking mulaw support) it should fill the
-.Va sw_code
-and
-.Va factor
-fields of these structures.
 The values of the structures may also be modified if the hardware
-cannot be set to exactly the requested mode (e.g. if the requested
+cannot be set to exactly the requested mode (e.g., if the requested
 sampling rate is not supported, but one close enough is).
+.Pp
+If the hardware requires software assistance with some encoding
+(e.g., it might be lacking mu-law support) it should fill the
+.Va pfil
+for playing or
+.Va rfil
+for recording with conversion information.
+For example, if
+.Va play
+requests [8000Hz, mu-law, 8/8bit, 1ch] and the hardware does not
+support 8bit mu-law, but 16bit slinear_le, the driver should call
+.Dv pfil-\*[Gt]append()
+with
+.Va pfil ,
+.Va mulaw_to_slinear16 ,
+and audio_params_t representing [8000Hz, slinear_le, 16/16bit, 2ch].
+If the driver needs multiple conversions, a conversion nearest to the
+hardware should be set to the head of
+.Va pfil
+or
+.Va rfil .
+The definition of
+.Dv stream_filter_list_t
+follows:
+.Bd -literal
+typedef struct stream_filter_list {
+	void (*append)(struct stream_filter_list *,
+		       stream_filter_factory_t,
+		       const audio_params_t *);
+	void (*prepend)(struct stream_filter_list *,
+			stream_filter_factory_t,
+			const audio_params_t *);
+	void (*set)(struct stream_filter_list *, int,
+		    stream_filter_factory_t,
+		    const audio_params_t *);
+	int req_size;
+	struct stream_filter_req {
+		stream_filter_factory_t *factory;
+		audio_params_t param; /* from-param for recording,
+					 to-param for playing */
+	} filters[AUDIO_MAX_FILTERS];
+} stream_filter_list_t;
+.Ed
+.Pp
+For playing,
+.Va pfil
+constructs conversions as follows:
+.Bd -literal
+	(play) == write(2) input
+	  |	pfil-\*[Gt]filters[pfil-\*[Gt]req_size-1].factory
+	(pfil-\*[Gt]filters[pfil-\*[Gt]req_size-1].param)
+	  |	pfil-\*[Gt]filters[pfil-\*[Gt]req_size-2].factory
+	  :
+	  |	pfil-\*[Gt]filters[1].factory
+	(pfil-\*[Gt]filters[1].param)
+	  |	pfil-\*[Gt]filters[0].factory
+	(pfil-\*[Gt]filters[0].param)  == hardware input
+.Ed
+.Pp
+For recording,
+.Va rfil
+constructs conversions as follows:
+.Bd -literal
+	(rfil-\*[Gt]filters[0].param) == hardware output
+	  |	rfil-\*[Gt]filters[0].factory
+	(rfil-\*[Gt]filters[1].param)
+	  |	rfil-\*[Gt]filters[1].factory
+	  :
+	  |	rfil-\*[Gt]filters[rfil-\*[Gt]req_size-2].factory
+	(rfil-\*[Gt]filters[rfil-\*[Gt]req_size-1].param)
+	  |	rfil-\*[Gt]filters[rfil-\*[Gt]req_size-1].factory
+	(rec)  == read(2) output
+.Ed
+.Pp
 If the device does not have the
 .Dv AUDIO_PROP_INDEPENDENT
 property the same value is passed in both
@@ -211,47 +282,58 @@ is copied into
 after the call to
 .Va set_params .
 Return 0 on success, otherwise an error code.
-.It Dv int round_blocksize(void *hdl, int bs)
+.It Dv int round_blocksize(void *hdl, int bs, int mode,
+.Dv "const audio_params_t *param)"
+.Pp
 optional, is called with the block size,
 .Va bs ,
-that has been computed by the upper layer.  It should return
-a block size, possibly changed according to the needs of the
-hardware driver.
+that has been computed by the upper layer,
+.Va mode ,
+.Dv AUMODE_PLAY
+or
+.Dv AUMODE_RECORD ,
+and
+.Va param ,
+encoding parameters for the hardware.
+It should return a block size, possibly changed according to the needs
+of the hardware driver.
 .It Dv int commit_settings(void *hdl)
 optional, is called after all calls to
 .Va set_params ,
 and
 .Va set_port ,
-are done.  A hardware driver that needs to get the hardware in
-and out of command mode for each change can save all the changes
-during previous calls and do them all here.
+are done.
+A hardware driver that needs to get the hardware in and out of command
+mode for each change can save all the changes during previous calls and
+do them all here.
 Return 0 on success, otherwise an error code.
 .It Dv int init_output(void *hdl, void *buffer, int size)
 optional, is called before any output starts, but when the total
 .Va size
 of the output
-.Va buffer 
-has been determined.  It can be used to initialize looping DMA
-for hardware that needs that.
+.Va buffer
+has been determined.
+It can be used to initialize looping DMA for hardware that needs that.
 Return 0 on success, otherwise an error code.
 .It Dv int init_input(void *hdl, void *buffer, int size)
 optional, is called before any input starts, but when the total
 .Va size
 of the input
-.Va buffer 
-has been determined.  It can be used to initialize looping DMA
-for hardware that needs that.
+.Va buffer
+has been determined.
+It can be used to initialize looping DMA for hardware that needs that.
 Return 0 on success, otherwise an error code.
-.It Dv int start_output(void *hdl, void *block, int bsize,
+.It Dv int start_output(void *hdl, void *block, int blksize,
 .Dv "void (*intr)(void*), void *intrarg)"
-.br
+.Pp
 is called to start the transfer of
-.Va bsize
+.Va blksize
 bytes from
 .Va block
-to the audio hardware.  The call should return when the data
-transfer has been initiated (normally with DMA).  When the
-hardware is ready to accept more samples the function
+to the audio hardware.
+The call should return when the data transfer has been initiated
+(normally with DMA).
+When the hardware is ready to accept more samples the function
 .Va intr
 should be called with the argument
 .Va intrarg .
@@ -260,23 +342,24 @@ Calling
 will normally initiate another call to
 .Va start_output .
 Return 0 on success, otherwise an error code.
-.It Dv int start_input(void *hdl, void *block, int bsize,
+.It Dv int start_input(void *hdl, void *block, int blksize,
 .Dv "void (*intr)(void*), void *intrarg)"
-.br
+.Pp
 is called to start the transfer of
-.Va bsize
+.Va blksize
 bytes to
 .Va block
-from the audio hardware.  The call should return when the data
-transfer has been initiated (normally with DMA).  When the
-hardware is ready to deliver more samples the function
+from the audio hardware.
+The call should return when the data transfer has been initiated
+(normally with DMA).
+When the hardware is ready to deliver more samples the function
 .Va intr
 should be called with the argument
 .Va intrarg .
 Calling
 .Va intr
 will normally initiate another call to
-.Va start_input.
+.Va start_input .
 Return 0 on success, otherwise an error code.
 .It Dv int halt_output(void *hdl)
 is called to abort the output transfer (started by
@@ -290,11 +373,12 @@ in progress.
 Return 0 on success, otherwise an error code.
 .It Dv int speaker_ctl(void *hdl, int on)
 optional, is called when a half duplex device changes between
-playing and recording.  It can, e.g., be used to turn on
+playing and recording.
+It can, e.g., be used to turn on
 and off the speaker.
 Return 0 on success, otherwise an error code.
 .It Dv int getdev(void *hdl, struct audio_device *ret)
-Should fill the 
+Should fill the
 .Va audio_device
 struct with relevant information about the driver.
 Return 0 on success, otherwise an error code.
@@ -303,37 +387,41 @@ optional, is called when
 .Dv AUDIO_SETFD
 is used, but only if the device has AUDIO_PROP_FULLDUPLEX set.
 Return 0 on success, otherwise an error code.
-.It Dv int set_port(void *hdl, mixer_ctl_t *mc)
+.It Dv int set_port(void *hdl, mixer_ctrl_t *mc)
 is called in when
 .Dv AUDIO_MIXER_WRITE
-is used.  It should take data from the
-.Va mixer_ctl_t
+is used.
+It should take data from the
+.Va mixer_ctrl_t
 struct at set the corresponding mixer values.
 Return 0 on success, otherwise an error code.
-.It Dv int get_port(void *hdl, mixer_ctl_t *mc)
+.It Dv int get_port(void *hdl, mixer_ctrl_t *mc)
 is called in when
 .Dv AUDIO_MIXER_READ
-is used.  It should fill the
-.Va mixer_ctl_t
+is used.
+It should fill the
+.Va mixer_ctrl_t
 struct.
 Return 0 on success, otherwise an error code.
 .It Dv int query_devinfo(void *hdl, mixer_devinfo_t *di)
 is called in when
 .Dv AUDIO_MIXER_DEVINFO
-is used.  It should fill the
+is used.
+It should fill the
 .Va mixer_devinfo_t
 struct.
 Return 0 on success, otherwise an error code.
-.It Dv "void *allocm(void *hdl, int direction, size_t size, int type, int flags)"
-.br
-optional, is called to allocate the device buffers.  If not present
+.It Dv "void *allocm(void *hdl, int direction, size_t size, struct malloc_type *type, int flags)"
+.Pp
+optional, is called to allocate the device buffers.
+If not present
 .Xr malloc 9
 is used instead (with the same arguments but the first two).
 The reason for using a device dependent routine instead of
 .Xr malloc 9
 is that some buses need special allocation to do DMA.
 Returns the address of the buffer, or 0 on failure.
-.It Dv void freem(void *hdl, void *addr, int type)
+.It Dv void freem(void *hdl, void *addr, struct malloc_type *type)
 optional, is called to free memory allocated by
 .Va alloc .
 If not supplied
@@ -341,13 +429,13 @@ If not supplied
 is used.
 .It Dv size_t round_buffersize(void *hdl, int direction, size_t bufsize)
 optional, is called at startup to determine the audio
-buffer size.  The upper layer supplies the suggested
-size in
+buffer size.
+The upper layer supplies the suggested size in
 .Va bufsize ,
 which the hardware driver can then change if needed.
 E.g., DMA on the ISA bus cannot exceed 65536 bytes.
-.It Dv "int mappage(void *hdl, void *addr, int offs, int prot)"
-.br
+.It Dv "paddr_t mappage(void *hdl, void *addr, off_t offs, int prot)"
+.Pp
 optional, is called for
 .Xr mmap 2 .
 Should return the map value for the page at offset
@@ -359,13 +447,13 @@ mapped with protection
 Returns -1 on failure, or a machine dependent opaque value
 on success.
 .It Dv int get_props(void *hdl)
-Should return the device properties; i.e. a combination of
+Should return the device properties; i.e., a combination of
 AUDIO_PROP_xxx.
 .It Dv int trigger_output(void *hdl, void *start, void *end,
 .Dv "int blksize, void (*intr)(void*), void *intrarg,"
-.br
-.Dv "stuct audio_params *param)"
-.br
+.Pp
+.Dv "const audio_params_t *param)"
+.Pp
 optional, is called to start the transfer of data from the circular buffer
 delimited by
 .Va start
@@ -374,9 +462,9 @@ and
 to the audio hardware, parameterized as in
 .Va param .
 The call should return when the data transfer has been initiated
-(normally with DMA).  When the hardware is finished transferring
-each
-.Va bsize
+(normally with DMA).
+When the hardware is finished transferring each
+.Va blksize
 sized block, the function
 .Va intr
 should be called with the argument
@@ -387,9 +475,9 @@ Once started the transfer may be stopped using
 Return 0 on success, otherwise an error code.
 .It Dv int trigger_input(void *hdl, void *start, void *end,
 .Dv "int blksize, void (*intr)(void*), void *intrarg,"
-.br
-.Dv "stuct audio_params *param)"
-.br
+.Pp
+.Dv "const audio_params_t *param)"
+.Pp
 optional, is called to start the transfer of data from the audio hardware,
 parameterized as in
 .Va param ,
@@ -398,9 +486,9 @@ to the circular buffer delimited by
 and
 .Va end .
 The call should return when the data transfer has been initiated
-(normally with DMA).  When the hardware is finished transferring
-each
-.Va bsize
+(normally with DMA).
+When the hardware is finished transferring each
+.Va blksize
 sized block, the function
 .Va intr
 should be called with the argument
@@ -409,16 +497,37 @@ should be called with the argument
 Once started the transfer may be stopped using
 .Va halt_input .
 Return 0 on success, otherwise an error code.
+.It Dv int dev_ioctl(void *hdl, u_long cmd, void *addr,
+.Pp
+.Dv "int flag, struct lwp *l)"
+.Pp
+optional, is called when an
+.Xr ioctl 2
+is not recognized by the generic audio driver.
+Return 0 on success, otherwise an error code.
+.It Dv int powerstate(void *hdl, int state)
+.Pp
+optional, is called on the first open and last close of the audio
+device.
+.Va state
+may be one of
+.Dv AUDIOPOWER_ON
+or
+.Dv AUDIOPOWER_OFF .
+Returns 0 on success, otherwise an error code.
 .El
 .Pp
 The
 .Va query_devinfo
 method should define certain mixer controls for
 .Dv AUDIO_SETINFO
-to be able to change the port and gain.
+to be able to change the port and gain,
+and
+.Dv AUDIO_GETINFO
+to read them, as follows.
 .Pp
-If the audio hardware is capable of input from more
-than one source it should define
+If the record mixer is capable of input from more than one source,
+it should define
 .Dv AudioNsource
 in class
 .Dv AudioCrecord .
@@ -427,39 +536,70 @@ This mixer control should be of type
 or
 .Dv AUDIO_MIXER_SET
 and enumerate the possible input sources.
-For each of the named sources there should be
-a control in the
-.Dv AudioCinputs
+Each of the named sources for which the recording level can be set
+should have a control in the
+.Dv AudioCrecord
 class of type
-.Dv AUDIO_MIXER_VALUE
-if recording level of the source can be set.
-If the overall recording level can be changed (i.e. regardless
-of the input source) then this control should be named
-.Dv AudioNrecord
+.Dv AUDIO_MIXER_VALUE ,
+except the
+.Qq mixerout
+source is special,
+and will never have its own control.
+Its selection signifies,
+rather,
+that various sources in class
+.Dv AudioCrecord
+will be combined and presented to the single recording output
+in the same fashion that the sources of class
+.Dv AudioCinputs
+are combined and presented to the playback output(s).
+If the overall recording level can be changed,
+regardless of the input source,
+then this control should be named
+.Dv AudioNmaster
 and be of class
-.Dv AudioCinputs .
+.Dv AudioCrecord .
 .Pp
-If the audio hardware is capable of output to more than
-one destination it should define
-.Dv AudioNoutput
+Controls for various sources that affect only the playback output,
+as opposed to recording,
+should be in the
+.Dv AudioCinputs
+class,
+as of course should any controls that affect both playback and recording.
+.Pp
+If the play
+mixer is capable of output to more than one destination,
+it should define
+.Dv AudioNselect
 in class
-.Dv AudioCmonitor .
+.Dv AudioCoutputs .
 This mixer control should be of type
 .Dv AUDIO_MIXER_ENUM
 or
 .Dv AUDIO_MIXER_SET
 and enumerate the possible destinations.
-For each of the named destinations there should be
+For each of the named destinations for which the output level can be set,
+there should be
 a control in the
 .Dv AudioCoutputs
 class of type
-.Dv AUDIO_MIXER_VALUE
-if output level of the destination can be set.
-If the overall output level can be changed (i.e. regardless
-of the destination) then this control should be named
+.Dv AUDIO_MIXER_VALUE .
+If the overall output level can be changed,
+which is invariably the case,
+then this control should be named
 .Dv AudioNmaster
 and be of class
 .Dv AudioCoutputs .
+.Pp
+There's one additional source recognized specially by
+.Dv AUDIO_SETINFO
+and
+.Dv AUDIO_GETINFO ,
+to be presented as monitor_gain,
+and that is a control named
+.Dv AudioNmonitor ,
+of class
+.Dv AudioCmonitor .
 .Sh SEE ALSO
 .Xr audio 4
 .Sh HISTORY

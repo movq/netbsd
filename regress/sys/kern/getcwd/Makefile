@@ -1,12 +1,13 @@
-#	$NetBSD: Makefile,v 1.2 1999/03/26 13:14:12 sommerfe Exp $
+#	$NetBSD: Makefile,v 1.5 2006/10/14 21:23:01 bjh21 Exp $
 
-PROG=	getcwd
-SRCS=	getcwd.c old_getcwd.c
-MKMAN=	no
-LDFLAGS=-static
-WARNS=1
+NOMAN=		# defined
+LDSTATIC=	-static
 
-regress:
+PROG=		getcwd
+SRCS=		getcwd.c old_getcwd.c
+WARNS=		1
+
+regress: ${PROG}
 	@./getcwd -r
 	@./getcwd -p
 

@@ -1,4 +1,4 @@
-.\"	$NetBSD: flock.2,v 1.10 1999/12/02 21:42:36 kleink Exp $
+.\"	$NetBSD: flock.2,v 1.19 2004/05/13 10:20:58 wiz Exp $
 .\"
 .\" Copyright (c) 1983, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -42,7 +38,7 @@
 .Sh LIBRARY
 .Lb libc
 .Sh SYNOPSIS
-.Fd #include <fcntl.h>
+.In fcntl.h
 .Fd #define	LOCK_SH	1	/* shared lock */
 .Fd #define	LOCK_EX	2	/* exclusive lock */
 .Fd #define	LOCK_NB	4	/* don't block when locking */
@@ -82,7 +78,7 @@ locks and
 locks.
 At any time multiple shared locks may be applied to a file,
 but at no time are multiple exclusive, or both shared and exclusive,
-locks allowed simultaneously on a file.  
+locks allowed simultaneously on a file.
 .Pp
 A shared lock may be
 .Em upgraded
@@ -93,29 +89,31 @@ after other processes have gained and released the lock).
 .Pp
 Requesting a lock on an object that is already locked
 normally causes the caller to be blocked until the lock may be
-acquired.  If
+acquired.
+If
 .Dv LOCK_NB
 is included in
 .Fa operation ,
 then this will not happen; instead the call will fail and
 the error
-.Er EWOULDBLOCK
+.Er EAGAIN
 will be returned.
 .Sh NOTES
-Locks are on files, not file descriptors.  That is, file descriptors
-duplicated through
+Locks are on files, not file descriptors.
+That is, file descriptors duplicated through
 .Xr dup 2
 or
 .Xr fork 2
 do not result in multiple instances of a lock, but rather multiple
-references to a single lock.  If a process holding a lock on a file
+references to a single lock.
+If a process holding a lock on a file
 forks and the child explicitly unlocks the file, the parent will
 lose its lock.
 .Pp
 Processes blocked awaiting a lock may be awakened by signals.
 .Sh RETURN VALUES
 Zero is returned if the operation was successful;
-on an error a -1 is returned and an error code is left in
+on an error a \-1 is returned and an error code is left in
 the global location
 .Va errno .
 .Sh ERRORS
@@ -123,7 +121,7 @@ The
 .Fn flock
 call fails if:
 .Bl -tag -width Er
-.It Bq Er EWOULDBLOCK
+.It Bq Er EAGAIN
 The file is locked and the
 .Dv LOCK_NB
 option was specified.
@@ -140,16 +138,16 @@ The argument
 .Fa operation
 does not include one of
 .Dv LOCK_EX ,
-.Dv LOCK_SH 
+.Dv LOCK_SH
 or
 .Dv LOCK_UN .
 .El
 .Sh SEE ALSO
-.Xr open 2 ,
 .Xr close 2 ,
 .Xr dup 2 ,
 .Xr execve 2 ,
-.Xr fork 2
+.Xr fork 2 ,
+.Xr open 2
 .Sh HISTORY
 The
 .Fn flock

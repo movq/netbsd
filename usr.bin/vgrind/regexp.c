@@ -1,4 +1,4 @@
-/*	$NetBSD: regexp.c,v 1.5 1998/12/19 23:41:53 christos Exp $	*/
+/*	$NetBSD: regexp.c,v 1.11 2008/07/21 14:19:27 lukem Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -13,11 +13,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -36,17 +32,18 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)regexp.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: regexp.c,v 1.5 1998/12/19 23:41:53 christos Exp $");
+__RCSID("$NetBSD: regexp.c,v 1.11 2008/07/21 14:19:27 lukem Exp $");
 #endif /* not lint */
 
+#include <assert.h>
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
@@ -62,7 +59,7 @@ boolean	 x_escaped;	/* true if we are currently x_escaped */
 char	*x_start;	/* start of string */
 boolean	 l_onecase;	/* true if upper and lower equivalent */
 
-#define makelower(c) (isupper((unsigned char)(c)) ? tolower((c)) : (c))
+#define makelower(c) (isupper((unsigned char)(c)) ? tolower((unsigned char)(c)) : (c))
 
 /*  STRNCMP -	like strncmp except that we convert the
  *	 	first string to lower case before comparing
@@ -162,7 +159,7 @@ convexp(re)
 	return (NIL);
     if (*re == '\0')
 	return (NIL);
-    cre = malloc (4 * strlen(re) + 3);
+    cre = malloc(4 * strlen(re) + 3);
     ccre = cre;
     ure = re;
 
@@ -172,7 +169,7 @@ convexp(re)
     ccre = MNEXT(cre);
 
     /* start the conversion (its recursive) */
-    expconv ();
+    expconv();
     *ccre = 0;
     return (cre);
 }
@@ -264,7 +261,7 @@ expconv()
 	    *cs = OPER;
 	    OSYM(cs) = '(';
 	    ccre = ONEXT(cs);
-	    expconv ();
+	    expconv();
 	    OCNT(cs) = ccre - cs;		/* offset to next symbol */
 	    break;
 
@@ -292,6 +289,7 @@ expconv()
 		OCNT(ccre) = ccre - acs;	/* make a back pointer */
 	    else
 		OCNT(ccre) = 0;
+	    assert(cs != NULL);
 	    *cs |= ALT;
 	    cs = ccre;
 	    *cs = OPER;
@@ -349,7 +347,7 @@ expconv()
  */
 
 char *
-expmatch (s, re, mstring)
+expmatch(s, re, mstring)
     char *s;		/* string to check for a match in */
     char *re;		/* a converted irregular expression */
     char *mstring;	/* where to put whatever matches a \p */
@@ -410,7 +408,7 @@ expmatch (s, re, mstring)
 
 	    /* this is a grouping, recurse */
 	    case '(':
-		ptr = expmatch (s, ONEXT(cs), mstring);
+		ptr = expmatch(s, ONEXT(cs), mstring);
 		if (ptr != NIL) {
 
 		    /* the subexpression matched */
@@ -447,11 +445,11 @@ expmatch (s, re, mstring)
 		 */
 		s1 = s;
 		do {
-		    ptr = expmatch (s1, MNEXT(cs), mstring);
+		    ptr = expmatch(s1, MNEXT(cs), mstring);
 		    if (ptr != NIL && s1 != s) {
 
 			/* we have a match, remember the match */
-			strncpy (mstring, s, s1 - s);
+			strncpy(mstring, s, s1 - s);
 			mstring[s1 - s] = '\0';
 			return (ptr);
 		    } else if (ptr != NIL && (*cs & OPT)) {
@@ -481,7 +479,7 @@ expmatch (s, re, mstring)
 		 */
 		s1 = s;
 		do {
-		    ptr = expmatch (s1, MNEXT(cs), mstring);
+		    ptr = expmatch(s1, MNEXT(cs), mstring);
 		    if (ptr != NIL && s1 != s) {
 
 			/* we have a match */

@@ -1,4 +1,4 @@
-/*	$NetBSD: option.c,v 1.14 2000/03/16 18:44:30 enami Exp $	*/
+/*	$NetBSD: option.c,v 1.26 2007/02/06 15:33:22 perry Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "from: @(#)option.c	8.2 (Berkeley) 4/16/94";
 #else
-__RCSID("$NetBSD: option.c,v 1.14 2000/03/16 18:44:30 enami Exp $");
+__RCSID("$NetBSD: option.c,v 1.26 2007/02/06 15:33:22 perry Exp $");
 #endif
 #endif /* not lint */
 
@@ -56,8 +52,8 @@ __RCSID("$NetBSD: option.c,v 1.14 2000/03/16 18:44:30 enami Exp $");
 
 #include "find.h"
 
-int typecompare __P((const void *, const void *));
-static OPTION *option __P((char *));
+int typecompare(const void *, const void *);
+static OPTION *option(char *);
 
 /* NB: the following table must be sorted lexically. */
 static OPTION const options[] = {
@@ -65,21 +61,32 @@ static OPTION const options[] = {
 	{ "(",		N_OPENPAREN,	c_openparen,	0 },
 	{ ")",		N_CLOSEPAREN,	c_closeparen,	0 },
 	{ "-a",		N_AND,		c_null,		0 },
-	{ "-and",	N_AND,		c_null,		0 },
 	{ "-amin",	N_AMIN,		c_amin,		1 },
+	{ "-and",	N_AND,		c_null,		0 },
+	{ "-anewer",	N_ANEWER,	c_anewer,	1 },
 	{ "-atime",	N_ATIME,	c_atime,	1 },
 	{ "-cmin",	N_CMIN,		c_cmin,		1 },
+	{ "-cnewer",	N_CNEWER,	c_cnewer,	1 },
 	{ "-ctime",	N_CTIME,	c_ctime,	1 },
+	{ "-delete",	N_DELETE,	c_delete,	0 },
 	{ "-depth",	N_DEPTH,	c_depth,	0 },
+	{ "-empty",	N_EMPTY,	c_empty,	0 },
 	{ "-exec",	N_EXEC,		c_exec,		1 },
+	{ "-execdir",	N_EXECDIR,	c_execdir,	1 },
+	{ "-exit",	N_EXIT,		c_exit,		0 },
+	{ "-false",	N_FALSE,	c_false,	0 },
 	{ "-flags",	N_FLAGS,	c_flags,	1 },
 	{ "-follow",	N_FOLLOW,	c_follow,	0 },
+	{ "-fprint",	N_FPRINT,	c_fprint,	1 },
 	{ "-fstype",	N_FSTYPE,	c_fstype,	1 },
 	{ "-group",	N_GROUP,	c_group,	1 },
+	{ "-iname",	N_INAME,	c_iname,	1 },
 	{ "-inum",	N_INUM,		c_inum,		1 },
 	{ "-iregex",	N_IREGEX,	c_iregex,	1 },
 	{ "-links",	N_LINKS,	c_links,	1 },
 	{ "-ls",	N_LS,		c_ls,		0 },
+	{ "-maxdepth",	N_MAXDEPTH,	c_maxdepth,	1 },
+	{ "-mindepth",	N_MINDEPTH,	c_mindepth,	1 },
 	{ "-mmin",	N_MMIN,		c_mmin,		1 },
 	{ "-mtime",	N_MTIME,	c_mtime,	1 },
 	{ "-name",	N_NAME,		c_name,		1 },
@@ -96,6 +103,7 @@ static OPTION const options[] = {
 	{ "-printx",	N_PRINTX,	c_printx,	0 },
 	{ "-prune",	N_PRUNE,	c_prune,	0 },
 	{ "-regex",	N_REGEX,	c_regex,	1 },
+	{ "-rm",	N_DELETE,	c_delete,	0 },
 	{ "-size",	N_SIZE,		c_size,		1 },
 	{ "-type",	N_TYPE,		c_type,		1 },
 	{ "-user",	N_USER,		c_user,		1 },
@@ -111,8 +119,7 @@ static OPTION const options[] = {
  *	this switch stuff.
  */
 PLAN *
-find_create(argvp)
-	char ***argvp;
+find_create(char ***argvp)
 {
 	OPTION *p;
 	PLAN *new;
@@ -133,8 +140,7 @@ find_create(argvp)
 }
 
 static OPTION *
-option(name)
-	char *name;
+option(char *name)
 {
 	OPTION tmp;
 
@@ -144,9 +150,8 @@ option(name)
 }
 
 int
-typecompare(a, b)
-	const void *a, *b;
+typecompare(const void *a, const void *b)
 {
 
-	return (strcmp(((OPTION *)a)->name, ((OPTION *)b)->name));
+	return (strcmp(((const OPTION *)a)->name, ((const OPTION *)b)->name));
 }

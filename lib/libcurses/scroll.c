@@ -1,4 +1,4 @@
-/*	$NetBSD: scroll.c,v 1.10 1999/04/13 14:08:19 mrg Exp $	*/
+/*	$NetBSD: scroll.c,v 1.19 2007/01/21 13:25:36 jdc Exp $	*/
 
 /*
  * Copyright (c) 1981, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,41 +34,125 @@
 #if 0
 static char sccsid[] = "@(#)scroll.c	8.3 (Berkeley) 5/4/94";
 #else
-__RCSID("$NetBSD: scroll.c,v 1.10 1999/04/13 14:08:19 mrg Exp $");
+__RCSID("$NetBSD: scroll.c,v 1.19 2007/01/21 13:25:36 jdc Exp $");
 #endif
 #endif				/* not lint */
 
 #include "curses.h"
+#include "curses_private.h"
 
 /*
  * scroll --
  *	Scroll the window up a line.
  */
 int
-scroll(win)
-	WINDOW *win;
+scroll(WINDOW *win)
+{
+	return(wscrl(win, 1));
+}
+
+#ifndef _CURSES_USE_MACROS
+
+/*
+ * scrl --
+ *	Scroll stdscr n lines - up if n is positive, down if n is negative.
+ */
+int
+scrl(int lines)
+{
+	return wscrl(stdscr, lines);
+}
+
+/*
+ * setscrreg --
+ *	Set the top and bottom of the scrolling region for stdscr.
+ */
+int
+setscrreg(int top, int bottom)
+{
+	return wsetscrreg(stdscr, top, bottom);
+}
+
+#endif
+
+/*
+ * wscrl --
+ *	Scroll a window n lines - up if n is positive, down if n is negative.
+ */
+int
+wscrl(WINDOW *win, int lines)
 {
 	int     oy, ox;
 
 #ifdef DEBUG
-	__CTRACE("scroll: (%0.2o)\n", win);
+	__CTRACE(__CTRACE_WINDOW, "wscrl: (%p) lines=%d\n", win, lines);
 #endif
 
 	if (!(win->flags & __SCROLLOK))
 		return (ERR);
+	if (!lines)
+		return (OK);
 
 	getyx(win, oy, ox);
-	wmove(win, 0, 0);
-	wdeleteln(win);
+#ifdef DEBUG
+	__CTRACE(__CTRACE_WINDOW, "wscrl: y=%d\n", oy);
+#endif
+	if (oy < win->scr_t || oy > win->scr_b)
+		/* Outside scrolling region */
+		wmove(win, 0, 0);
+	else
+		/* Inside scrolling region */
+		wmove(win, win->scr_t, 0);
+	winsdelln(win, 0 - lines);
 	wmove(win, oy, ox);
 
 	if (win == curscr) {
-		putchar('\n');
-		if (!NONL)
+		__cputchar('\n');
+		if (!__NONL)
 			win->curx = 0;
 #ifdef DEBUG
-		__CTRACE("scroll: win == curscr\n");
+		__CTRACE(__CTRACE_WINDOW, "scroll: win == curscr\n");
 #endif
 	}
 	return (OK);
+}
+
+/*
+ * wsetscrreg --
+ *	Set the top and bottom of the scrolling region for win.
+ */
+int
+wsetscrreg(WINDOW *win, int top, int bottom)
+{
+	if (top < 0 || bottom >= win->maxy || bottom - top < 1)
+		return (ERR);
+	win->scr_t = top;
+	win->scr_b = bottom;
+	return (OK);
+}
+
+/*
+ * has_ic --
+ *	Does the terminal have insert- and delete-character?
+ */
+bool
+has_ic(void)
+{
+	if (__tc_ic !=NULL && __tc_dc != NULL)
+		return (TRUE);
+	else
+		return (FALSE);
+}
+
+/*
+ * has_ic --
+ *	Does the terminal have insert- and delete-line?
+ */
+bool
+has_il(void)
+{
+	if (__tc_al !=NULL && __tc_dl != NULL)
+		return (TRUE);
+	else
+		return (FALSE);
 }

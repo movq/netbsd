@@ -1,4 +1,4 @@
-/*	$NetBSD: poffd.c,v 1.3 2000/02/20 16:18:56 minoura Exp $	*/
+/*	$NetBSD: poffd.c,v 1.9 2008/05/27 18:01:34 nakayama Exp $	*/
 /*
  * Copyright (c) 1995 MINOURA Makoto.
  * All rights reserved.
@@ -30,6 +30,9 @@
  */
 
 /* poffd: looks at the power switch / alarm and does shutdown. */
+
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: poffd.c,v 1.9 2008/05/27 18:01:34 nakayama Exp $");
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -152,7 +155,7 @@ sethandler(void)
 	if (sw & POW_ALARMSW)
 #else
 	/*
-	 * According to Takeshi Nakayama <tn@catvmics.ne.jp>,
+	 * According to Takeshi Nakayama <nakayama@NetBSD.org>,
 	 * POW_ALARMSW seems to be always 1 on some models (at least XVI).
 	 */
 	if ((sw & (POW_EXTERNALSW|POW_FRONTSW)) == 0)
@@ -232,7 +235,9 @@ usr1handler(sig)
 	sigsetmask (sigsetmask (0) & (~sigmask (SIGUSR1)));
 	unlink (_PATH_POFFDPID);
 	execl(_PATH_BSHELL, "sh", "-c", shut, NULL);
-	logerror("Failed in exec: %s");
+	p = alloca(strlen(shutdownprog) + 20);
+	snprintf(p, strlen(shutdownprog) + 20, "Failed in exec %s: %%s", shut);
+	logerror(p);
 	exit(1);
 }
 
@@ -262,6 +267,6 @@ logerror(const char *str)
 {
 	char		buf[1024];
 
-	sprintf(buf, str, strerror(errno));
+	snprintf(buf, 1024, str, strerror(errno));
 	syslog(LOG_ERR, buf);
 }

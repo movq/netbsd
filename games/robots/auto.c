@@ -1,4 +1,4 @@
-/*	$NetBSD: auto.c,v 1.4 1999/09/08 21:17:56 jsm Exp $	*/
+/*	$NetBSD: auto.c,v 1.8 2008/04/28 20:22:54 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,17 +35,15 @@
  *	Algo : 
  *		IF scrapheaps don't exist THEN
  *			IF not in danger THEN 
- *				stay at current position;
- *		 	ELSE move away from the closest robot;
+ *				stay at current position
+ *		 	ELSE
+ *				move away from the closest robot
  *			FI
  *		ELSE 
- *			find closest heap;
- *			find closest robot;
- *			IF scrapheap is adjacenHEN
- *					move behind the scrapheap
- *				ELSE
- *					move away from the closest robot
- *				FI
+ *			find closest heap
+ *			find closest robot
+ *			IF scrapheap is adjacent THEN
+ *				move behind the scrapheap
  *			ELSE
  *				take the move that takes you away from the
  *				robots and closest to the heap
@@ -67,16 +58,16 @@
 
 #define CONSDEBUG(a)
 
-static int distance __P((int, int, int, int));
-static int xinc __P((int));
-static int yinc __P((int));
-static const char *find_moves __P((void));
-static COORD *closest_robot __P((int *));
-static COORD *closest_heap __P((int *));
-static char move_towards __P((int, int));
-static char move_away __P((COORD *));
-static char move_between __P((COORD *, COORD *));
-static int between __P((COORD *, COORD *));
+static int distance(int, int, int, int);
+static int xinc(int);
+static int yinc(int);
+static const char *find_moves(void);
+static COORD *closest_robot(int *);
+static COORD *closest_heap(int *);
+static char move_towards(int, int);
+static char move_away(COORD *);
+static char move_between(COORD *, COORD *);
+static int between(COORD *, COORD *);
 
 /* distance():
  * 	return "move" number distance of the two coordinates
@@ -236,7 +227,7 @@ move_towards(dx, dy)
 
 	(void)strcpy(ok_moves, find_moves());
 	best_move = ok_moves[0]; 
-	if (best_move != 'F') {
+	if (best_move != 't') {
 		mvx = xinc(best_move);
 		mvy = yinc(best_move);
 		move_judge = ABS(mvx - dx) + ABS(mvy - dy);

@@ -1,4 +1,4 @@
-/*	$NetBSD: rent.c,v 1.5 1999/08/21 10:40:04 simonb Exp $	*/
+/*	$NetBSD: rent.c,v 1.8 2008/02/24 01:57:34 dholland Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,11 +34,11 @@
 #if 0
 static char sccsid[] = "@(#)rent.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: rent.c,v 1.5 1999/08/21 10:40:04 simonb Exp $");
+__RCSID("$NetBSD: rent.c,v 1.8 2008/02/24 01:57:34 dholland Exp $");
 #endif
 #endif /* not lint */
 
-#include "monop.ext"
+#include "monop.h"
 
 /*
  *	This routine has the player pay rent
@@ -68,8 +64,9 @@ rent(sqp)
 			if (pp->houses == 0)
 				printf("rent is %d\n", rnt=pp->rent[0] * 2);
 			else if (pp->houses < 5)
-				printf("with %d houses, rent is %d\n",
-				    pp->houses, rnt=pp->rent[pp->houses]);
+				printf("with %d house%s, rent is %d\n",
+				    pp->houses, pp->houses == 1 ? "" : "s",
+				    rnt=pp->rent[pp->houses]);
 			else
 				printf("with a hotel, rent is %d\n",
 				    rnt=pp->rent[pp->houses]);

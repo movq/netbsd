@@ -1,4 +1,4 @@
-.\"	$NetBSD: beyond43.ms,v 1.2 1998/01/09 06:40:54 perry Exp $
+.\"	$NetBSD: beyond43.ms,v 1.5 2006/11/24 19:46:58 christos Exp $
 .\"
 .\" Copyright (c) 1989 The Regents of the University of California.
 .\" All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -116,7 +112,7 @@ BSD release.
 Kernel Memory Allocator
 .PP
 The 4.3BSD UNIX kernel used 10 different memory allocation mechanisms,
-each designed for the particular needs of the utilizing subsystem.
+each designed for the particular needs of the particular subsystem.
 These mechanisms have been replaced by a general purpose dynamic
 memory allocator that can be used by all of the kernel subsystems.
 The design of this allocator takes advantage of known memory usage
@@ -154,7 +150,7 @@ The new ``fat'' filesystem allows these limits to be set at filesystem
 creation time.
 Old kernels will treat the new filesystems as read-only,
 and new kernels
-will accomodate both formats.
+will accommodate both formats.
 The filesystem check facility, \fCfsck\fP, has also been modified to check
 either type.
 .br

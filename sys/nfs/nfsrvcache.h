@@ -1,4 +1,4 @@
-/*	$NetBSD: nfsrvcache.h,v 1.11 1997/05/12 23:36:07 fvdl Exp $	*/
+/*	$NetBSD: nfsrvcache.h,v 1.16 2007/12/04 17:42:32 yamt Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -49,6 +45,7 @@
 #define	NFSRVCACHESIZ	64
 
 struct nfsrvcache {
+	kcondvar_t rc_cv;
 	TAILQ_ENTRY(nfsrvcache) rc_lru;		/* LRU chain */
 	LIST_ENTRY(nfsrvcache) rc_hash;		/* Hash chain */
 	u_int32_t	rc_xid;				/* rpc id number */
@@ -58,8 +55,9 @@ struct nfsrvcache {
 	} rc_un;
 	union nethostaddr rc_haddr;		/* Host address */
 	u_int32_t rc_proc;			/* rpc proc number */
-	u_char    rc_state;		/* Current state of request */
-	u_char    rc_flag;		/* Flag bits */
+	int rc_state;		/* Current state of request */
+	int rc_gflags;		/* Flag bits */
+	int rc_flags;		/* Flag bits */
 };
 
 #define	rc_reply	rc_un.ru_repmb
@@ -78,12 +76,12 @@ struct nfsrvcache {
 #define	RC_DOIT		2
 #define	RC_CHECKIT	3
 
-/* Flag bits */
-#define	RC_LOCKED	0x01
-#define	RC_WANTED	0x02
+/* rc_gflags */
+#define	RC_G_LOCKED	0x01
+
+/* rc_flags */
 #define	RC_REPSTATUS	0x04
 #define	RC_REPMBUF	0x08
-#define	RC_NQNFS	0x10
 #define	RC_INETADDR	0x20
 #define	RC_NAM		0x40
 

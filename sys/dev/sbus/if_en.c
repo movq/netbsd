@@ -1,4 +1,4 @@
-/*	$NetBSD: if_en.c,v 1.9 1999/11/21 15:01:51 pk Exp $	*/
+/*	$NetBSD: if_en.c,v 1.23 2008/04/05 18:35:32 cegger Exp $	*/
 
 /*
  *
@@ -34,7 +34,7 @@
 
 /*
  *
- * i f _ e n _ s b u s . c  
+ * i f _ e n _ s b u s . c
  *
  * author: Chuck Cranor <chuck@ccrc.wustl.edu>
  * started: spring, 1996.
@@ -42,9 +42,11 @@
  * SBUS glue for the eni155s card.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_en.c,v 1.23 2008/04/05 18:35:32 cegger Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/types.h>
 #include <sys/device.h>
 #include <sys/mbuf.h>
 #include <sys/socket.h>
@@ -52,9 +54,9 @@
 
 #include <net/if.h>
 
-#include <machine/bus.h>
-#include <machine/autoconf.h>
-#include <machine/cpu.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
+#include <sys/cpu.h>
 
 #include <dev/sbus/sbusvar.h>
 
@@ -65,7 +67,6 @@
 /*
  * local structures
  */
-
 struct en_sbus_softc {
 	/* bus independent stuff */
 	struct en_softc	esc;		/* includes "device" structure */
@@ -74,26 +75,19 @@ struct en_sbus_softc {
 	struct sbusdev	sc_sd;		/* sbus device */
 };
 
-/*
- * local defines (SBUS specific stuff)
- */
-
-#define EN_IPL 5
 
 /*
  * prototypes
  */
-
-static	int en_sbus_match __P((struct device *, struct cfdata *, void *));
-static	void en_sbus_attach __P((struct device *, struct device *, void *));
+static	int en_sbus_match(struct device *, struct cfdata *, void *);
+static	void en_sbus_attach(struct device *, struct device *, void *);
 
 /*
- * SBUS autoconfig attachments
+ * SBus autoconfig attachments
  */
 
-struct cfattach en_sbus_ca = {
-	sizeof(struct en_sbus_softc), en_sbus_match, en_sbus_attach,
-};
+CFATTACH_DECL(en_sbus, sizeof(struct en_sbus_softc),
+    en_sbus_match, en_sbus_attach, NULL, NULL);
 
 /***********************************************************************/
 
@@ -137,18 +131,19 @@ en_sbus_attach(parent, self, aux)
 
 	printf("\n");
 
-	if (bus_space_map2(sa->sa_bustag, sa->sa_slot,
+	if (sbus_bus_map(sa->sa_bustag,
+			 sa->sa_slot,
 			 sa->sa_offset,
 			 4*1024*1024,
-			 0, 0, &sc->en_base) != 0) {
-		printf("%s: cannot map registers\n", self->dv_xname);
+			 0, &sc->en_base) != 0) {
+		aprint_error_dev(self, "cannot map registers\n");
 		return;
 	}
 
 	/* Establish interrupt handler */
 	if (sa->sa_nintr != 0)
 		(void)bus_intr_establish(sa->sa_bustag, sa->sa_pri,
-					 0, en_intr, sc);
+					 IPL_NET, en_intr, sc);
 
 	sc->ipl = sa->sa_pri;	/* appropriate? */
 

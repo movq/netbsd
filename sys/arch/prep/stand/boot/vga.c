@@ -1,4 +1,4 @@
-/*	$NetBSD: vga.c,v 1.1 2000/02/29 15:21:51 nonaka Exp $	*/
+/*	$NetBSD: vga.c,v 1.5 2006/04/10 18:40:06 garbled Exp $	*/
 
 /*-
  * Copyright (C) 1995-1997 Gary Thomas (gdt@linuxppc.org)
@@ -34,6 +34,7 @@
 
 #ifdef CONS_VGA
 #include <lib/libsa/stand.h>
+#include <lib/libkern/libkern.h>
 #include "boot.h"
 
 #define	COL		80
@@ -86,11 +87,11 @@ struct screen {
 u_short	pccolor;		/* color/attributes for tty output */
 u_short	pccolor_so;		/* color/attributes, standout mode */
 
-static void cursor __P((void));
-static void initscreen __P((void));
-void fillw __P((u_short, u_short *, int));
-void video_on __P((void));
-void video_off __P((void));
+static void cursor(void);
+static void initscreen(void);
+void fillw(u_short, u_short *, int);
+void video_on(void);
+void video_off(void);
 
 /*
  * cursor() sets an offset (0-1999) into the 80x25 text area   
@@ -130,10 +131,7 @@ initscreen()
 }
 
 void
-fillw(val, buf, num)
-	u_short val;
-	u_short *buf;
-	int num;
+fillw(u_short val, u_short *buf, int num)
 {
 	/* Need to byte swap value */
 	u_short tmp;
@@ -285,16 +283,17 @@ vga_putc(int c)
 		case 'L':	/* Insert line */
 			i = (d->cp - base) / COL;
 			/* avoid deficiency of bcopy implementation */
+			/* XXX: comment and hack relevant? */
 			pp = base + COL * (ROW-2);
 			for (j = ROW - 1 - i; j--; pp -= COL)
-				bcopy(pp, pp + COL, COL * CHR);
+				memmove(pp + COL, pp, COL * CHR);
 			fillw(d->color|(' '<<8), base + i * COL, COL);
 			break;
 
 		case 'M':	/* Delete line */
 			i = (d->cp - base) / COL;
 			pp = base + i * COL;
-			bcopy(pp + COL, pp, (ROW-1 - i)*COL*CHR);
+			memmove(pp, pp + COL, (ROW-1 - i)*COL*CHR);
 			fillw(d->color|(' '<<8), base + COL * (ROW - 1), COL);
 			break;
 
@@ -387,7 +386,7 @@ vga_putc(int c)
 		break;
 	}
 	if (d->cp >= base + (COL * ROW)) { /* scroll check */
-		bcopy(base + COL, base, COL * (ROW - 1) * CHR);
+		memmove(base, base + COL, COL * (ROW - 1) * CHR);
 		fillw(d->color|(' '<<8), base + COL * (ROW - 1), COL);
 		d->cp -= COL;
 	}	
@@ -395,8 +394,7 @@ vga_putc(int c)
 }
 
 void
-vga_puts(s)
-	char *s;
+vga_puts(char *s)
 {
 	char c;
 	while ((c = *s++)) {
@@ -405,7 +403,7 @@ vga_puts(s)
 }
 
 void
-video_on()
+video_on(void)
 {
 
 	/* Enable video */
@@ -414,7 +412,7 @@ video_on()
 }
 
 void
-video_off()
+video_off(void)
 {
 
 	/* Disable video */
@@ -423,8 +421,7 @@ video_off()
 }
 
 void
-vga_init(ISA_mem)
-	u_char *ISA_mem;
+vga_init(u_char *ISA_mem)
 {
 	struct screen *d = &screen;
 

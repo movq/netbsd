@@ -1,4 +1,4 @@
-/*	$NetBSD: rpc_tblout.c,v 1.7 1997/10/18 10:54:11 lukem Exp $	*/
+/*	$NetBSD: rpc_tblout.c,v 1.11 2004/06/20 22:20:16 jmc Exp $	*/
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
  * unrestricted use provided that this legend is included on all tape
@@ -29,12 +29,16 @@
  * Mountain View, California  94043
  */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
 #include <sys/cdefs.h>
-#ifndef lint
+#if defined(__RCSID) && !defined(lint)
 #if 0
 static char sccsid[] = "@(#)rpc_tblout.c 1.4 89/02/22 (C) 1988 SMI";
 #else
-__RCSID("$NetBSD: rpc_tblout.c,v 1.7 1997/10/18 10:54:11 lukem Exp $");
+__RCSID("$NetBSD: rpc_tblout.c,v 1.11 2004/06/20 22:20:16 jmc Exp $");
 #endif
 #endif
 
@@ -54,14 +58,15 @@ __RCSID("$NetBSD: rpc_tblout.c,v 1.7 1997/10/18 10:54:11 lukem Exp $");
 
 static char tabstr[TABCOUNT + 1] = "\t\t\t\t\t";
 
-static char tbl_hdr[] = "struct rpcgen_table %s_table[] = {\n";
-static char tbl_end[] = "};\n";
+static const char tbl_hdr[] = "struct rpcgen_table %s_table[] = {\n";
+static const char tbl_end[] = "};\n";
 
-static char null_entry[] = "\t(char *(*)())0,\n\
+static const char null_entry[] = "\t(char *(*)())0,\n\
  \t(xdrproc_t)xdr_void,\t\t0,\n\
  \t(xdrproc_t)xdr_void,\t\t0,\n";
 
-static char tbl_nproc[] = "int %s_nproc =\n\tsizeof(%s_table)/sizeof(%s_table[0]);\n\n";
+static const char tbl_nproc[] =
+    "u_int %s_nproc =\n\t(u_int)(sizeof(%s_table)/sizeof(%s_table[0]));\n\n";
 
 static void write_table __P((definition *));
 static void printit __P((char *, char *));
@@ -170,7 +175,7 @@ printit(prefix, type)
 	if (streq(type, "void")) {
 		f_print(fout, "0");
 	} else {
-		f_print(fout, "sizeof ( ");
+		f_print(fout, "(u_int)sizeof(");
 		/* XXX: should "follow" be 1 ??? */
 		ptype(prefix, type, 0);
 		f_print(fout, ")");

@@ -1,4 +1,4 @@
-/*	$NetBSD: time.h,v 1.24 2000/01/10 16:58:38 kleink Exp $	*/
+/*	$NetBSD: time.h,v 1.37 2008/09/21 16:59:46 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -17,11 +17,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -46,7 +42,6 @@
 #include <sys/cdefs.h>
 #include <sys/featuretest.h>
 #include <machine/ansi.h>
-#include <machine/limits.h>	/* Include file containing CLK_TCK. */
 
 #include <sys/null.h>
 
@@ -87,72 +82,87 @@ struct tm {
 	int	tm_wday;	/* days since Sunday [0-6] */
 	int	tm_yday;	/* days since January 1 [0-365] */
 	int	tm_isdst;	/* Daylight Savings Time flag */
-	long	tm_gmtoff;	/* offset from CUT in seconds */
+	long	tm_gmtoff;	/* offset from UTC in seconds */
 	__aconst char *tm_zone;	/* timezone abbreviation */
 };
 
 __BEGIN_DECLS
-char *asctime __P((const struct tm *));
-clock_t clock __P((void));
-char *ctime __P((const time_t *));
-double difftime __P((time_t, time_t));
-struct tm *gmtime __P((const time_t *));
-struct tm *localtime __P((const time_t *));
-time_t mktime __P((struct tm *));
-size_t strftime __P((char *, size_t, const char *, const struct tm *));
-time_t time __P((time_t *));
+char *asctime(const struct tm *);
+clock_t clock(void);
+char *ctime(const time_t *);
+double difftime(time_t, time_t);
+struct tm *gmtime(const time_t *);
+struct tm *localtime(const time_t *);
+time_t mktime(struct tm *);
+size_t strftime(char * __restrict, size_t, const char * __restrict,
+    const struct tm * __restrict)
+    __attribute__((__format__(__strftime__, 3, 0)));
+time_t time(time_t *);
 
-#if !defined(_ANSI_SOURCE)
-#define CLK_TCK		100
+#if defined(_POSIX_C_SOURCE) || defined(_XOPEN_SOURCE) || \
+    defined(_NETBSD_SOURCE)
+#ifndef __LIBC12_SOURCE__
+/*
+ * CLK_TCK uses libc's internal __sysconf() to retrieve the machine's
+ * HZ. The value of _SC_CLK_TCK is 39 -- we hard code it so we do not
+ * need to include unistd.h
+ */
+long __sysconf(int);
+#define CLK_TCK		(__sysconf(39))
+#endif
+#endif
+
 extern __aconst char *tzname[2];
-void tzset __P((void));
+void tzset(void);
 
 /*
  * X/Open Portability Guide >= Issue 4
  */
-#if (!defined(_POSIX_C_SOURCE) && !defined(_XOPEN_SOURCE)) || \
-    (_XOPEN_SOURCE - 0) >= 4
-char *strptime __P((const char *, const char *, struct tm *));
+#if defined(_XOPEN_SOURCE) || defined(_NETBSD_SOURCE)
+extern int daylight;
+#ifndef __LIBC12_SOURCE__
+extern long int timezone __RENAME(__timezone13);
+#endif
+char *strptime(const char * __restrict, const char * __restrict,
+    struct tm * __restrict);
 #endif
 
-#if (!defined(_POSIX_C_SOURCE) && !defined(_XOPEN_SOURCE)) || \
-    (_POSIX_C_SOURCE - 0) >= 199309L || (_XOPEN_SOURCE - 0) >= 500
+#if (_POSIX_C_SOURCE - 0) >= 199309L || (_XOPEN_SOURCE - 0) >= 500 || \
+    defined(_NETBSD_SOURCE)
 #include <sys/time.h>		/* XXX for struct timespec */
 struct sigevent;
 struct itimerspec;
-int clock_getres __P((clockid_t, struct timespec *));
-int clock_gettime __P((clockid_t, struct timespec *));
-int clock_settime __P((clockid_t, const struct timespec *));
-int nanosleep __P((const struct timespec *, struct timespec *));
-int timer_create __P((clockid_t, struct sigevent *, timer_t *));
-int timer_delete __P((timer_t));
-int timer_getoverrun __P((timer_t));
-int timer_gettime __P((timer_t, struct itimerspec *));
-int timer_settime __P((timer_t, int, const struct itimerspec *, 
-    struct itimerspec *));
-#endif /* (!_POSIX_C_SOURCE && !_XOPEN_SOURCE) || ... */
+int clock_getres(clockid_t, struct timespec *);
+int clock_gettime(clockid_t, struct timespec *);
+int clock_settime(clockid_t, const struct timespec *);
+int nanosleep(const struct timespec *, struct timespec *);
+int timer_create(clockid_t, struct sigevent * __restrict,
+    timer_t * __restrict);
+int timer_delete(timer_t);
+int timer_getoverrun(timer_t);
+int timer_gettime(timer_t, struct itimerspec *);
+int timer_settime(timer_t, int, const struct itimerspec * __restrict, 
+    struct itimerspec * __restrict);
+#endif /* _POSIX_C_SOURCE >= 199309 || _XOPEN_SOURCE >= 500 || ... */
 
-#if (!defined(_POSIX_C_SOURCE) && !defined(_XOPEN_SOURCE)) || \
-    (_POSIX_C_SOURCE - 0) >= 199506L || (_XOPEN_SOURCE - 0) >= 500 || \
-    defined(_REENTRANT)
-char *asctime_r __P((const struct tm *, char *));
-char *ctime_r __P((const time_t *, char *));
-struct tm *gmtime_r __P((const time_t *, struct tm *));
-struct tm *localtime_r __P((const time_t *, struct tm *));
+#if (_POSIX_C_SOURCE - 0) >= 199506L || (_XOPEN_SOURCE - 0) >= 500 || \
+    defined(_REENTRANT) || defined(_NETBSD_SOURCE)
+char *asctime_r(const struct tm * __restrict, char * __restrict);
+char *ctime_r(const time_t *, char *);
+struct tm *gmtime_r(const time_t * __restrict, struct tm * __restrict);
+struct tm *localtime_r(const time_t * __restrict, struct tm * __restrict);
 #endif
 
-#if !defined(_POSIX_C_SOURCE) && !defined(_XOPEN_SOURCE)
-time_t time2posix __P((time_t));
-time_t posix2time __P((time_t));
-time_t timegm __P((struct tm *const));
-time_t timeoff __P((struct tm *const, const long));
-time_t timelocal __P((struct tm *const));
-char *timezone __P((int, int));
-void tzsetwall __P((void));
-struct tm *offtime __P((const time_t *const, const long));
-#endif /* !_POSIX_C_SOURCE && !_XOPEN_SOURCE */
+#if defined(_NETBSD_SOURCE)
+time_t time2posix(time_t);
+time_t posix2time(time_t);
+time_t timegm(struct tm *);
+time_t timeoff(struct tm *, long);
+time_t timelocal(struct tm *);
+void tzsetwall(void);
+struct tm *offtime(const time_t *, long);
+#endif /* _NETBSD_SOURCE */
 
-#endif /* !_ANSI_SOURCE */
 __END_DECLS
 
 #endif /* !_TIME_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: fuswintr.c,v 1.1 1996/09/30 16:34:45 ws Exp $	*/
+/*	$NetBSD: fuswintr.c,v 1.5 2005/12/11 12:18:46 christos Exp $	*/
 
 /*-
  * Copyright (C) 1994 Wolfgang Solfrank.
@@ -31,14 +31,18 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: fuswintr.c,v 1.5 2005/12/11 12:18:46 christos Exp $");
+
+#include <sys/systm.h>
+
 /*
  * Emulate fuswintr
  *
  * Simply return fault for all cases
  */
 int
-fuswintr(addr)
-	char *addr;
+fuswintr(const void *addr)
 {
 	return -1;
 }

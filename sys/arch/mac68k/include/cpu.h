@@ -1,9 +1,39 @@
-/*	$NetBSD: cpu.h,v 1.63 1999/08/10 21:08:07 thorpej Exp $	*/
+/*	$NetBSD: cpu.h,v 1.92 2008/02/27 18:26:16 xtraeme Exp $	*/
 
 /*
- * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1982, 1990 The Regents of the University of California.
  * All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Systems Programming Group of the University of Utah Computer
+ * Science Department.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ */
+/*
+ * Copyright (c) 1988 University of Utah.
  *
  * This code is derived from software contributed to Berkeley by
  * the Systems Programming Group of the University of Utah Computer
@@ -64,9 +94,15 @@
 #ifndef _CPU_MACHINE_
 #define _CPU_MACHINE_
 
+#if defined(_KERNEL)
+
 /*
  * Exported definitions unique to mac68k/68k cpu support.
  */
+
+#if defined(_KERNEL_OPT)
+#include "opt_lockdebug.h"
+#endif
 
 /*
  * Get common m68k definitions.
@@ -79,14 +115,29 @@
  */
 #include <machine/intr.h>
 
+#include <sys/cpu_data.h>
+struct cpu_info {
+	struct cpu_data ci_data;	/* MI per-cpu data */
+	cpuid_t	ci_cpuid;
+	int	ci_mtx_oldspl;
+	int	ci_mtx_count;
+	int	ci_want_resched;
+};
+
+extern struct cpu_info cpu_info_store;
+
+#define	curcpu()			(&cpu_info_store)
+
 /*
  * definitions of cpu-dependent requirements
  * referenced in generic code
  */
 #define	cpu_swapin(p)			/* nothing */
-#define	cpu_wait(p)			/* nothing */
 #define	cpu_swapout(p)			/* nothing */
 #define	cpu_number()			0
+
+void	cpu_proc_fork(struct proc *, struct proc *);
+
 
 /*
  * Arguments to hardclock and gatherstats encapsulate the previous
@@ -97,10 +148,9 @@ struct clockframe {
 	u_short	sr;		/* sr at time of interrupt */
 	u_long	pc;		/* pc at time of interrupt */
 	u_short	vo;		/* vector offset (4-word frame) */
-};
+} __attribute__((packed));
 
 #define	CLKF_USERMODE(framep)	(((framep)->sr & PSL_S) == 0)
-#define	CLKF_BASEPRI(framep)	(((framep)->sr & PSL_IPL) == 0)
 #define	CLKF_PC(framep)		((framep)->pc)
 #define	CLKF_INTR(framep)	(0) /* XXX should use PSL_M (see hp300) */
 
@@ -108,32 +158,28 @@ struct clockframe {
  * Preempt the current process if in interrupt from user mode,
  * or after the current trap/syscall if in system mode.
  */
-extern int want_resched;	/* resched() was called */
-#define	need_resched()	{ want_resched++; aston(); }
+#define	cpu_need_resched(ci, v)	{ ci->ci_want_resched++; aston(); }
 
 /*
  * Give a profiling tick to the current process from the softclock
  * interrupt.  Request an ast to send us through trap(),
  * marking the proc as needing a profiling tick.
  */
-#define	need_proftick(p)	( (p)->p_flag |= P_OWEUPC, aston() )
+#define	cpu_need_proftick(l)	( (l)->l_pflag |= LP_OWEUPC, aston() )
 
 /*
  * Notify the current process (p) that it has a signal pending,
  * process as soon as possible.
  */
-#define	signotify(p)	aston()
+#define	cpu_signotify(l)	aston()
 
 extern int astpending;		/* need to trap before returning to user mode */
 #define aston() (astpending++)
 
+#endif /* _KERNEL */
+
 #define CPU_CONSDEV	1
 #define CPU_MAXID	2
-
-#define CTL_MACHDEP_NAMES { \
-	{ 0, 0 }, \
-	{ "console_device", CTLTYPE_STRUCT }, \
-}
 
 /* values for machineid --
  * 	These are equivalent to the MacOS Gestalt values. */
@@ -179,6 +225,7 @@ extern int astpending;		/* need to trap before returning to user mode */
 #define MACH_MACP550		80
 #define MACH_MACCCLASSICII	83
 #define MACH_MACPB165		84
+#define MACH_MACPB190CS		85
 #define MACH_MACTV		88
 #define MACH_MACLC475		89
 #define MACH_MACLC475_33	90
@@ -256,8 +303,8 @@ struct mac68k_machine_S {
 	/* What kind of model is this */
 struct cpu_model_info {
 	int	machineid;	/* MacOS Gestalt value. */
-	char	*model_major;	/* Make this distinction to save a few */
-	char	*model_minor;	/*      bytes--might be useful, too. */
+	const char	*model_major;	/* Make this distinction to save a few */
+	const char	*model_minor;	/*      bytes--might be useful, too. */
 	int	class;		/* Rough class of machine. */
 	  /* forwarded romvec_s is defined in mac68k/macrom.h */
 	struct romvec_s *rom_vectors; /* Pointer to our known rom vectors */
@@ -294,53 +341,21 @@ extern	unsigned long		load_addr;
 
 #ifdef _KERNEL
 
-struct frame;
 struct fpframe;
-struct pcb;
 
 /* machdep.c */
-void	mac68k_set_bell_callback __P((int (*)(void *, int, int, int), void *));
-int	mac68k_ring_bell __P((int, int, int));
-u_int	get_mapping __P((void));
+void	mac68k_set_bell_callback(int (*)(void *, int, int, int), void *);
+int	mac68k_ring_bell(int, int, int);
+u_int	get_mapping(void);
 
 /* locore.s functions */
-void	m68881_save __P((struct fpframe *));
-void	m68881_restore __P((struct fpframe *));
-void	DCIA __P((void));
-void	DCIS __P((void));
-void	DCIU __P((void));
-void	ICIA __P((void));
-void	ICPA __P((void));
-void	PCIA __P((void));
-void	TBIA __P((void));
-void	TBIS __P((vaddr_t));
-void	TBIAS __P((void));
-void	TBIAU __P((void));
-#if defined(M68040)
-void	DCFA __P((void));
-void	DCFP __P((paddr_t));
-void	DCFL __P((paddr_t));
-void	DCPL __P((paddr_t));
-void	DCPP __P((paddr_t));
-void	ICPL __P((paddr_t));
-void	ICPP __P((paddr_t));
-#endif
-int	suline __P((caddr_t, caddr_t));
-void	savectx __P((struct pcb *));
-void	switch_exit __P((struct proc *));
-void	proc_trampoline __P((void));
-void	loadustp __P((int));
+void	m68881_save(struct fpframe *);
+void	m68881_restore(struct fpframe *);
+int	suline(void *, void *);
+void	loadustp(int);
 
-/* sys_machdep.c */
-int	cachectl1 __P((unsigned long, vaddr_t, size_t, struct proc *));
-
-/* vm_machdep.c */
-void	physaccess __P((caddr_t, caddr_t, register int, register int));
-void	physunaccess __P((caddr_t, register int));
-int	kvtop __P((caddr_t));
-
-/* trap.c */
-void	child_return __P((void *));
+/* fpu.c */
+void	initfpu(void);
 
 #endif
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: ofisa.c,v 1.6 1998/06/30 00:09:36 thorpej Exp $	*/
+/*	$NetBSD: ofisa.c,v 1.18 2007/10/19 12:00:38 ad Exp $	*/
 
 /*
  * Copyright 1997, 1998
@@ -33,12 +33,15 @@
  *    even if advised of the possibility of such damage.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ofisa.c,v 1.18 2007/10/19 12:00:38 ad Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/malloc.h>
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/ofw/openfirm.h>
 #include <dev/isa/isavar.h>
@@ -48,16 +51,15 @@
 
 #define	OFW_MAX_STACK_BUF_SIZE	256
 
-static int	ofisamatch __P((struct device *, struct cfdata *, void *));
-static void	ofisaattach __P((struct device *, struct device *, void *));
+static int	ofisamatch(struct device *, struct cfdata *, void *);
+static void	ofisaattach(struct device *, struct device *, void *);
 
-struct cfattach ofisa_ca = {
-	sizeof(struct device), ofisamatch, ofisaattach
-};
+CFATTACH_DECL(ofisa, sizeof(struct device),
+    ofisamatch, ofisaattach, NULL, NULL);
 
 extern struct cfdriver ofisa_cd;
 
-static int	ofisaprint __P((void *, const char *));
+static int	ofisaprint(void *, const char *);
 
 static int
 ofisaprint(aux, pnp)
@@ -69,9 +71,9 @@ ofisaprint(aux, pnp)
 
 	(void)of_packagename(oba->oba_phandle, name, sizeof name);
 	if (pnp)
-		printf("%s at %s", name, pnp);
+		aprint_normal("%s at %s", name, pnp);
 	else
-		printf(" (%s)", name);
+		aprint_normal(" (%s)", name);
 	return UNCONF;
 }
 
@@ -82,7 +84,7 @@ ofisamatch(parent, cf, aux)
 	void *aux;
 {
 	struct ofbus_attach_args *oba = aux;
-	const char *compatible_strings[] = { "pnpPNP,a00", NULL };
+	static const char *const compatible_strings[] = { "pnpPNP,a00", NULL };
 	int rv = 0;
 
 	if (of_compatible(oba->oba_phandle, compatible_strings) != -1)
@@ -146,7 +148,7 @@ ofisa_reg_count(phandle)
 
 	len = OF_getproplen(phandle, "reg");
 
-	/* nonexistant or obviously malformed "reg" property */
+	/* nonexistent or obviously malformed "reg" property */
 	if (len < 0 || (len % 12) != 0)
 		return (-1);
 	return (len / 12);
@@ -224,7 +226,7 @@ ofisa_intr_count(phandle)
 
 	len = OF_getproplen(phandle, "interrupts");
 
-	/* nonexistant or obviously malformed "reg" property */
+	/* nonexistent or obviously malformed "reg" property */
 	if (len < 0 || (len % 8) != 0)
 		return (-1);
 	return (len / 8);
@@ -273,7 +275,7 @@ ofisa_intr_get(phandle, descp, ndescs)
 #ifdef DIAGNOSTIC
 		default:
 			/* Dunno what to do, so fail. */
-			printf("ofisa_intr_get: unknown intrerrupt type %d\n",
+			printf("ofisa_intr_get: unknown interrupt type %d\n",
 			    of_decode_int(&bp[4]));
 			rv = -1;
 			goto out;
@@ -314,7 +316,7 @@ ofisa_dma_count(phandle)
 
 	len = OF_getproplen(phandle, "dma");
 
-	/* nonexistant or obviously malformed "reg" property */
+	/* nonexistent or obviously malformed "reg" property */
 	if (len < 0 || (len % 20) != 0)
 		return (-1);
 	return (len / 20);
@@ -396,7 +398,8 @@ ofisa_dma_print(descp, ndescs)
 			modestr = "C";
 			break;
 		default:
-			sprintf(unkmode, "??? (%d)", descp[i].mode);
+			snprintf(unkmode, sizeof(unkmode), "??? (%d)",
+			    descp[i].mode);
 			modestr = unkmode;
 			break;
 		}

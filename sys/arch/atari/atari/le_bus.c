@@ -1,4 +1,4 @@
-/*	$NetBSD: le_bus.c,v 1.5 2000/01/19 13:12:55 leo Exp $	*/
+/*	$NetBSD: le_bus.c,v 1.13.10.1 2009/01/06 23:49:02 snj Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -35,11 +28,15 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: le_bus.c,v 1.13.10.1 2009/01/06 23:49:02 snj Exp $");
+
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/malloc.h>
-#include <machine/bswap.h>
+#include <sys/bswap.h>
 #include <machine/cpu.h>
 #include <machine/bus.h>
 
@@ -229,32 +226,32 @@ static void		leb_bus_space_set_region_8 __P((bus_space_tag_t,
 static u_int16_t swap16 __P((u_int16_t v));
 static u_int32_t swap32 __P((u_int32_t v));
 
-static __inline__ u_int16_t swap16(u_int16_t v)
+static inline u_int16_t swap16(u_int16_t v)
 {
 	__asm volatile ("rolw	#8, %0" : "=d"(v) : "0"(v));
 	return(v);
 }
 
-static __inline__ u_int32_t swap32(u_int32_t v)
+static inline u_int32_t swap32(u_int32_t v)
 {
-	__asm volatile ("	rolw	#8, %0
-				swap	%0
-				rolw	#8, %0" : "=d"(v) : "0"(v));
+	__asm volatile ("	rolw	#8, %0	\n"
+			"	swap	%0	\n"
+			"	rolw	#8, %0" : "=d"(v) : "0"(v));
 	return(v);
 }
 
 /*
  * Don't force a function call overhead on these primitives...
  */
-#define __read_1(h, o)		*((u_int8_t *)((h) + (o)))
-#define __read_2(h, o)		swap16(*((u_int16_t *)((h) + (o))))
-#define __read_4(h, o)		swap32(*((u_int32_t *)((h) + (o))))
-#define __read_8(h, o)		bswap64(*((u_int64_t *)((h) + (o))))
+#define __read_1(h, o)		*((volatile u_int8_t *)((h) + (o)))
+#define __read_2(h, o)		swap16(*((volatile u_int16_t *)((h) + (o))))
+#define __read_4(h, o)		swap32(*((volatile u_int32_t *)((h) + (o))))
+#define __read_8(h, o)		bswap64(*((volatile u_int64_t *)((h) + (o))))
 
-#define __write_1(h, o, v)	*((u_int8_t *)((h) + (o))) = (v)
-#define __write_2(h, o, v)	*((u_int16_t *)((h) + (o))) = swap16(v)
-#define __write_4(h, o, v)	*((u_int32_t *)((h) + (o))) = swap32(v)
-#define __write_8(h, o, v)	*((u_int64_t *)((h) + (o))) = bswap64(v)
+#define __write_1(h, o, v)	*((volatile u_int8_t *)((h) + (o))) = (v)
+#define __write_2(h, o, v)	*((volatile u_int16_t *)((h) + (o))) = swap16(v)
+#define __write_4(h, o, v)	*((volatile u_int32_t *)((h) + (o))) = swap32(v)
+#define __write_8(h, o, v)	*((volatile u_int64_t *)((h) + (o))) = bswap64(v)
 
 bus_space_tag_t
 leb_alloc_bus_space_tag(storage)
@@ -355,7 +352,7 @@ leb_bus_space_peek_1(t, h, o)
     bus_space_handle_t	h;
     bus_size_t		o;
 {
-    return(!badbaddr((caddr_t)(h + o), 1));
+    return(!badbaddr((void *)(h + o), 1));
 }
 
 static int 
@@ -364,7 +361,7 @@ leb_bus_space_peek_2(t, h, o)
     bus_space_handle_t	h;
     bus_size_t		o;
 {
-    return(!badbaddr((caddr_t)(h + o), 2));
+    return(!badbaddr((void *)(h + o), 2));
 }
 
 static int 
@@ -373,7 +370,7 @@ leb_bus_space_peek_4(t, h, o)
     bus_space_handle_t	h;
     bus_size_t		o;
 {
-    return(!badbaddr((caddr_t)(h + o), 4));
+    return(!badbaddr((void *)(h + o), 4));
 }
 
 static int 
@@ -382,7 +379,7 @@ leb_bus_space_peek_8(t, h, o)
     bus_space_handle_t	h;
     bus_size_t		o;
 {
-    return(!badbaddr((caddr_t)(h + o), 8));
+    return(!badbaddr((void *)(h + o), 8));
 }
 
 /*
@@ -489,7 +486,7 @@ leb_bus_space_read_stream_2(t, h, o)
 	bus_space_handle_t	h;
 	bus_size_t		o;
 {
-	return(*((u_int16_t *)(h + o)));
+	return(*((volatile u_int16_t *)(h + o)));
 }
 
 static u_int32_t
@@ -498,7 +495,7 @@ leb_bus_space_read_stream_4(t, h, o)
 	bus_space_handle_t	h;
 	bus_size_t		o;
 {
-	return(*((u_int32_t *)(h + o)));
+	return(*((volatile u_int32_t *)(h + o)));
 }
 
 static u_int64_t
@@ -507,7 +504,7 @@ leb_bus_space_read_stream_8(t, h, o)
 	bus_space_handle_t	h;
 	bus_size_t		o;
 {
-	return(*((u_int64_t *)(h + o)));
+	return(*((volatile u_int64_t *)(h + o)));
 }
 
 /*
@@ -524,7 +521,7 @@ leb_bus_space_write_stream_2(t, h, o, v)
 	bus_size_t		o;
 	u_int16_t		v;
 {
-	*((u_int16_t *)(h + o)) = v;
+	*((volatile u_int16_t *)(h + o)) = v;
 }
 
 static void
@@ -534,7 +531,7 @@ leb_bus_space_write_stream_4(t, h, o, v)
 	bus_size_t		o;
 	u_int32_t		v;
 {
-	*((u_int32_t *)(h + o)) = v;
+	*((volatile u_int32_t *)(h + o)) = v;
 }
 
 static void
@@ -544,7 +541,7 @@ leb_bus_space_write_stream_8(t, h, o, v)
 	bus_size_t		o;
 	u_int64_t		v;
 {
-	*((u_int64_t *)(h + o)) = v;
+	*((volatile u_int64_t *)(h + o)) = v;
 }
 
 /*
@@ -554,7 +551,7 @@ leb_bus_space_write_stream_8(t, h, o, v)
  *
  * Read 'count' 1, 2, 4, or 8 byte values from the bus_space described by
  * tag/handle at `offset' and store them in the address range starting at
- * 'address'. The values are converted to cpu endian order before being
+ * 'address'. The values are converted to CPU endian order before being
  * being stored.
  */
 static void
@@ -671,7 +668,7 @@ leb_bus_space_read_multi_stream_2(t, h, o, a, c)
 	u_int16_t		*a;
 {
 	for (; c; a++, c--)
-		*a = *((u_int16_t *)(h + o));
+		*a = *((volatile u_int16_t *)(h + o));
 }
 
 static void
@@ -682,7 +679,7 @@ leb_bus_space_read_multi_stream_4(t, h, o, a, c)
 	u_int32_t		*a;
 {
 	for (; c; a++, c--)
-		*a = *((u_int32_t *)(h + o));
+		*a = *((volatile u_int32_t *)(h + o));
 }
 
 static void
@@ -693,7 +690,7 @@ leb_bus_space_read_multi_stream_8(t, h, o, a, c)
 	u_int64_t		*a;
 {
 	for (; c; a++, c--)
-		*a = *((u_int64_t *)(h + o));
+		*a = *((volatile u_int64_t *)(h + o));
 }
 
 /*
@@ -713,7 +710,7 @@ leb_bus_space_write_multi_stream_2(t, h, o, a, c)
 	const u_int16_t		*a;
 {
 	for (; c; a++, c--)
-		*((u_int16_t *)(h + o)) = *a;
+		*((volatile u_int16_t *)(h + o)) = *a;
 }
 
 static void
@@ -724,7 +721,7 @@ leb_bus_space_write_multi_stream_4(t, h, o, a, c)
 	const u_int32_t		*a;
 {
 	for (; c; a++, c--)
-		*((u_int32_t *)(h + o)) = *a;
+		*((volatile u_int32_t *)(h + o)) = *a;
 }
 
 static void
@@ -735,7 +732,7 @@ leb_bus_space_write_multi_stream_8(t, h, o, a, c)
 	const u_int64_t		*a;
 {
 	for (; c; a++, c--)
-		*((u_int64_t *)(h + o)) = *a;
+		*((volatile u_int64_t *)(h + o)) = *a;
 }
 
 /*
@@ -861,7 +858,7 @@ leb_bus_space_read_region_stream_2(t, h, o, a, c)
 	u_int16_t		*a;
 {
 	for (; c; a++, o += 2, c--)
-		*a = *(u_int16_t *)(h + o);
+		*a = *(volatile u_int16_t *)(h + o);
 }
 
 static void
@@ -872,7 +869,7 @@ leb_bus_space_read_region_stream_4(t, h, o, a, c)
 	u_int32_t		*a;
 {
 	for (; c; a++, o += 4, c--)
-		*a = *(u_int32_t *)(h + o);
+		*a = *(volatile u_int32_t *)(h + o);
 }
 
 static void
@@ -883,7 +880,7 @@ leb_bus_space_read_region_stream_8(t, h, o, a, c)
 	u_int64_t		*a;
 {
 	for (; c; a++, o += 8, c--)
-		*a = *(u_int64_t *)(h + o);
+		*a = *(volatile u_int64_t *)(h + o);
 }
 
 /*
@@ -903,7 +900,7 @@ leb_bus_space_write_region_stream_2(t, h, o, a, c)
 	const u_int16_t		*a;
 {
 	for (; c; a++, o += 2, c--)
-		*((u_int16_t *)(h + o)) = *a;
+		*((volatile u_int16_t *)(h + o)) = *a;
 }
 
 static void
@@ -914,7 +911,7 @@ leb_bus_space_write_region_stream_4(t, h, o, a, c)
 	const u_int32_t		*a;
 {
 	for (; c; a++, o += 4, c--)
-		*((u_int32_t *)(h + o)) = *a;
+		*((volatile u_int32_t *)(h + o)) = *a;
 }
 
 static void
@@ -925,7 +922,7 @@ leb_bus_space_write_region_stream_8(t, h, o, a, c)
 	const u_int64_t		*a;
 {
 	for (; c; a++, o += 8, c--)
-		*((u_int64_t *)(h + o)) = *a;
+		*((volatile u_int64_t *)(h + o)) = *a;
 }
 
 /*
@@ -957,7 +954,7 @@ leb_bus_space_set_multi_2(t, h, o, v, c)
 {
 	v = swap16(v);
 	for (; c; c--)
-		*((u_int16_t *)(h + o)) = v;
+		*((volatile u_int16_t *)(h + o)) = v;
 }
 
 static void
@@ -969,7 +966,7 @@ leb_bus_space_set_multi_4(t, h, o, v, c)
 {
 	v = swap32(v);
 	for (; c; c--)
-		*((u_int32_t *)(h + o)) = v;
+		*((volatile u_int32_t *)(h + o)) = v;
 }
 
 static void
@@ -981,7 +978,7 @@ leb_bus_space_set_multi_8(t, h, o, v, c)
 {
 	v = bswap64(v);
 	for (; c; c--)
-		*((u_int64_t *)(h + o)) = v;
+		*((volatile u_int64_t *)(h + o)) = v;
 }
 
 /*
@@ -1012,7 +1009,7 @@ leb_bus_space_set_region_2(t, h, o, v, c)
 {
 	v = swap16(v);
 	for (; c; o += 2, c--)
-		*((u_int16_t *)(h + o)) = v;
+		*((volatile u_int16_t *)(h + o)) = v;
 }
 
 static void
@@ -1024,7 +1021,7 @@ leb_bus_space_set_region_4(t, h, o, v, c)
 {
 	v = swap32(v);
 	for (; c; o += 4, c--)
-		*((u_int32_t *)(h + o)) = v;
+		*((volatile u_int32_t *)(h + o)) = v;
 }
 
 static void
@@ -1036,5 +1033,5 @@ leb_bus_space_set_region_8(t, h, o, v, c)
 {
 	v = bswap64(v);
 	for (; c; o += 8, c--)
-		*((u_int64_t *)(h + o)) = v;
+		*((volatile u_int64_t *)(h + o)) = v;
 }

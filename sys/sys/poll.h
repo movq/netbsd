@@ -1,4 +1,4 @@
-/*	$NetBSD: poll.h,v 1.6 1998/09/13 14:46:24 christos Exp $	*/
+/*	$NetBSD: poll.h,v 1.12 2008/04/28 20:24:11 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,6 +31,8 @@
 
 #ifndef _SYS_POLL_H_
 #define	_SYS_POLL_H_
+
+#include <sys/featuretest.h>
 
 typedef unsigned int	nfds_t;
 
@@ -65,20 +60,37 @@ struct pollfd {
 #define	POLLHUP		0x0010
 #define	POLLNVAL	0x0020
 
-#if !defined(_XOPEN_SOURCE)
+#if defined(_NETBSD_SOURCE)
 /*
  * Infinite timeout value.
  */
 #define	INFTIM		-1
 #endif
 
-#ifndef _KERNEL
+#ifdef _KERNEL
+#include <sys/signal.h>		/* for sigset_t */
 
+struct lwp;
+struct timeval;
+
+int	pollcommon(struct lwp *, register_t *, struct pollfd *, u_int,
+	    struct timeval *, sigset_t *);
+#else
 #include <sys/cdefs.h>
 
 __BEGIN_DECLS
-int	poll __P((struct pollfd *, nfds_t, int));
+int	poll(struct pollfd *, nfds_t, int);
 __END_DECLS
+
+#ifdef _NETBSD_SOURCE
+#include <sys/sigtypes.h>	/* for sigset_t */
+struct timespec;
+
+__BEGIN_DECLS
+int	pollts(struct pollfd * __restrict, nfds_t,
+	    const struct timespec * __restrict, const sigset_t * __restrict);
+__END_DECLS
+#endif /* _NETBSD_SOURCE */
 
 #endif /* _KERNEL */
 

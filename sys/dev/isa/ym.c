@@ -1,7 +1,7 @@
-/*	$NetBSD: ym.c,v 1.14 2000/03/23 07:01:36 thorpej Exp $	*/
+/*	$NetBSD: ym.c,v 1.35 2008/04/28 20:23:52 martin Exp $	*/
 
 /*-
- * Copyright (c) 1999 The NetBSD Foundation, Inc.
+ * Copyright (c) 1999-2002 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -66,6 +59,9 @@
  *  Original code from OpenBSD.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ym.c,v 1.35 2008/04/28 20:23:52 martin Exp $");
+
 #include "mpu_ym.h"
 #include "opt_ym.h"
 
@@ -77,9 +73,9 @@
 #include <sys/kernel.h>
 #include <sys/proc.h>
 
-#include <machine/cpu.h>
-#include <machine/intr.h>
-#include <machine/bus.h>
+#include <sys/cpu.h>
+#include <sys/intr.h>
+#include <sys/bus.h>
 
 #include <sys/audioio.h>
 #include <dev/audio_if.h>
@@ -97,10 +93,6 @@
 #include <dev/isa/ymvar.h>
 #include <dev/isa/sbreg.h>
 
-#ifndef spllowersoftclock
- #error "We depend on the new semantics of splsoftclock(9)."
-#endif
-
 /* Power management mode. */
 #ifndef YM_POWER_MODE
 #define YM_POWER_MODE		YM_POWER_POWERSAVE
@@ -113,7 +105,7 @@
 
 /* Default mixer settings. */
 #ifndef YM_VOL_MASTER
-#define YM_VOL_MASTER		220
+#define YM_VOL_MASTER		208
 #endif
 
 #ifndef YM_VOL_DAC
@@ -122,6 +114,16 @@
 
 #ifndef YM_VOL_OPL3
 #define YM_VOL_OPL3		184
+#endif
+
+/*
+ * Default position of the equalizer.
+ */
+#ifndef YM_DEFAULT_TREBLE
+#define YM_DEFAULT_TREBLE	YM_EQ_FLAT_OFFSET
+#endif
+#ifndef YM_DEFAULT_BASS
+#define YM_DEFAULT_BASS		YM_EQ_FLAT_OFFSET
 #endif
 
 #ifdef __i386__		/* XXX */
@@ -136,33 +138,34 @@ int	ymdebug = 0;
 #else
 #define DPRINTF(x)
 #endif
-#define DVNAME(softc)	((softc)->sc_ad1848.sc_ad1848.sc_dev.dv_xname)
+#define DVNAME(softc)	(device_xname(&(softc)->sc_ad1848.sc_ad1848.sc_dev))
 
-int	ym_getdev __P((void *, struct audio_device *));
-int	ym_mixer_set_port __P((void *, mixer_ctrl_t *));
-int	ym_mixer_get_port __P((void *, mixer_ctrl_t *));
-int	ym_query_devinfo __P((void *, mixer_devinfo_t *));
-int	ym_intr __P((void *));
+int	ym_getdev(void *, struct audio_device *);
+int	ym_mixer_set_port(void *, mixer_ctrl_t *);
+int	ym_mixer_get_port(void *, mixer_ctrl_t *);
+int	ym_query_devinfo(void *, mixer_devinfo_t *);
+int	ym_intr(void *);
 #ifndef AUDIO_NO_POWER_CTL
-static void ym_save_codec_regs __P((struct ym_softc *));
-static void ym_restore_codec_regs __P((struct ym_softc *));
-void	ym_power_hook __P((int, void *));
-int	ym_codec_power_ctl __P((void *, int));
-static void ym_chip_powerdown __P((struct ym_softc *));
-static void ym_chip_powerup __P((struct ym_softc *, int));
-void ym_powerdown_blocks __P((void *));
-void ym_power_ctl __P((struct ym_softc *, int, int));
+static void ym_save_codec_regs(struct ym_softc *);
+static void ym_restore_codec_regs(struct ym_softc *);
+void	ym_power_hook(int, void *);
+int	ym_codec_power_ctl(void *, int);
+static void ym_chip_powerdown(struct ym_softc *);
+static void ym_chip_powerup(struct ym_softc *, int);
+void	ym_powerdown_blocks(void *);
+void	ym_power_ctl(struct ym_softc *, int, int);
 #endif
 
-static void ym_init __P((struct ym_softc *));
-static void ym_mute __P((struct ym_softc *, int, int));
-static void ym_set_master_gain __P((struct ym_softc *, struct ad1848_volume*));
-static void ym_set_mic_gain __P((struct ym_softc *, int));
-static void ym_set_3d __P((struct ym_softc *, mixer_ctrl_t *,
-	struct ad1848_volume *, int));
+static void ym_init(struct ym_softc *);
+static void ym_mute(struct ym_softc *, int, int);
+static void ym_set_master_gain(struct ym_softc *, struct ad1848_volume*);
+static void ym_hvol_to_master_gain(struct ym_softc *);
+static void ym_set_mic_gain(struct ym_softc *, int);
+static void ym_set_3d(struct ym_softc *, mixer_ctrl_t *,
+	struct ad1848_volume *, int);
 
 
-struct audio_hw_if ym_hw_if = {
+const struct audio_hw_if ym_hw_if = {
 	ad1848_isa_open,
 	ad1848_isa_close,
 	NULL,
@@ -189,30 +192,35 @@ struct audio_hw_if ym_hw_if = {
 	ad1848_isa_get_props,
 	ad1848_isa_trigger_output,
 	ad1848_isa_trigger_input,
+	NULL,
+	NULL,	/* powerstate */
 };
 
-static __inline int ym_read __P((struct ym_softc *, int));
-static __inline void ym_write __P((struct ym_softc *, int, int));
+static inline int ym_read(struct ym_softc *, int);
+static inline void ym_write(struct ym_softc *, int, int);
 
 void
-ym_attach(sc)
-	struct ym_softc *sc;
+ym_attach(struct ym_softc *sc)
 {
-	struct ad1848_softc *ac = &sc->sc_ad1848.sc_ad1848;
 	static struct ad1848_volume vol_master = {YM_VOL_MASTER, YM_VOL_MASTER};
 	static struct ad1848_volume vol_dac    = {YM_VOL_DAC,    YM_VOL_DAC};
 	static struct ad1848_volume vol_opl3   = {YM_VOL_OPL3,   YM_VOL_OPL3};
+	struct ad1848_softc *ac;
+	mixer_ctrl_t mctl;
 	struct audio_attach_args arg;
 
-	callout_init(&sc->sc_powerdown_ch);
+	ac = &sc->sc_ad1848.sc_ad1848;
+	callout_init(&sc->sc_powerdown_ch, 0);
 
 	/* Mute the output to reduce noise during initialization. */
 	ym_mute(sc, SA3_VOL_L, 1);
 	ym_mute(sc, SA3_VOL_R, 1);
 
+	sc->sc_version = ym_read(sc, SA3_MISC) & SA3_MISC_VER;
+	ac->chip_name = YM_IS_SA3(sc) ? "OPL3-SA3" : "OPL3-SA2";
+
 	sc->sc_ad1848.sc_ih = isa_intr_establish(sc->sc_ic, sc->ym_irq,
-						 IST_EDGE, IPL_AUDIO,
-						 ym_intr, sc);
+	    IST_EDGE, IPL_AUDIO, ym_intr, sc);
 
 #ifndef AUDIO_NO_POWER_CTL
 	sc->sc_ad1848.powerctl = ym_codec_power_ctl;
@@ -227,9 +235,6 @@ ym_attach(sc)
 	ym_set_mic_gain(sc, 0);
 	sc->master_mute = 0;
 
-	sc->mic_mute = 1;
-	ym_mute(sc, SA3_MIC_VOL, sc->mic_mute);
-
 	/* Override ad1848 settings. */
 	ad1848_set_channel_gain(ac, AD1848_DAC_CHANNEL, &vol_dac);
 	ad1848_set_channel_gain(ac, AD1848_AUX2_CHANNEL, &vol_opl3);
@@ -239,13 +244,13 @@ ym_attach(sc)
 	 * also change the initial value of sc->sc_external_sources
 	 * (currently 0 --- no external source is active).
 	 */
+	sc->mic_mute = 1;
+	ym_mute(sc, SA3_MIC_VOL, sc->mic_mute);
 	ad1848_mute_channel(ac, AD1848_AUX1_CHANNEL, MUTE_ALL);	/* CD */
 	ad1848_mute_channel(ac, AD1848_LINE_CHANNEL, MUTE_ALL);	/* line */
 	ac->mute[AD1848_AUX1_CHANNEL] = MUTE_ALL;
 	ac->mute[AD1848_LINE_CHANNEL] = MUTE_ALL;
 	/* speaker is muted by default */
-
-	sc->sc_version = ym_read(sc, SA3_MISC) & SA3_MISC_VER;
 
 	/* We use only one IRQ (IRQ-A). */
 	ym_write(sc, SA3_IRQ_CONF, SA3_IRQ_CONF_MPU_A | SA3_IRQ_CONF_WSS_A);
@@ -283,78 +288,93 @@ ym_attach(sc)
 	sc->sc_pow_timeout = YM_POWER_OFF_SEC;
 
 	sc->sc_on_blocks = sc->sc_turning_off =
-		YM_POWER_CODEC_P | YM_POWER_CODEC_R |
-		YM_POWER_OPL3 | YM_POWER_MPU401 | YM_POWER_3D |
-		YM_POWER_CODEC_DA | YM_POWER_CODEC_AD | YM_POWER_OPL3_DA;
+	    YM_POWER_CODEC_P | YM_POWER_CODEC_R |
+	    YM_POWER_OPL3 | YM_POWER_MPU401 | YM_POWER_3D |
+	    YM_POWER_CODEC_DA | YM_POWER_CODEC_AD | YM_POWER_OPL3_DA;
 #if NJOY > 0
 	sc->sc_on_blocks |= YM_POWER_JOYSTICK;	/* prevents chip powerdown */
 #endif
 	ym_powerdown_blocks(sc);
 
-	powerhook_establish(ym_power_hook, sc);
+	powerhook_establish(DVNAME(sc), ym_power_hook, sc);
+#endif
 
-	if (sc->sc_on_blocks /* & YM_POWER_ACTIVE */)
+	/* Set tone control to the default position. */
+	mctl.un.value.num_channels = 1;
+	mctl.un.value.level[AUDIO_MIXER_LEVEL_MONO] = YM_DEFAULT_TREBLE;
+	mctl.dev = YM_MASTER_TREBLE;
+	ym_mixer_set_port(sc, &mctl);
+	mctl.un.value.level[AUDIO_MIXER_LEVEL_MONO] = YM_DEFAULT_BASS;
+	mctl.dev = YM_MASTER_BASS;
+	ym_mixer_set_port(sc, &mctl);
+
+	/* Unmute the output now if the chip is on. */
+#ifndef AUDIO_NO_POWER_CTL
+	if (sc->sc_on_blocks & YM_POWER_ACTIVE)
 #endif
 	{
-		/* Unmute the output now if the chip is on. */
 		ym_mute(sc, SA3_VOL_L, sc->master_mute);
 		ym_mute(sc, SA3_VOL_R, sc->master_mute);
 	}
 }
 
-static __inline int
-ym_read(sc, reg)
-	struct ym_softc *sc;
-	int reg;
+static inline int
+ym_read(struct ym_softc *sc, int reg)
 {
+
 	bus_space_write_1(sc->sc_iot, sc->sc_controlioh,
-				SA3_CTL_INDEX, (reg & 0xff));
-	return (bus_space_read_1(sc->sc_iot, sc->sc_controlioh, SA3_CTL_DATA));
+	    SA3_CTL_INDEX, (reg & 0xff));
+	return bus_space_read_1(sc->sc_iot, sc->sc_controlioh, SA3_CTL_DATA);
 }
 
-static __inline void
-ym_write(sc, reg, data)
-	struct ym_softc *sc;
-	int reg;
-	int data;
+static inline void
+ym_write(struct ym_softc *sc, int reg, int data)
 {
+
 	bus_space_write_1(sc->sc_iot, sc->sc_controlioh,
-				SA3_CTL_INDEX, (reg & 0xff));
+	    SA3_CTL_INDEX, (reg & 0xff));
 	bus_space_write_1(sc->sc_iot, sc->sc_controlioh,
-				SA3_CTL_DATA, (data & 0xff));
+	    SA3_CTL_DATA, (data & 0xff));
 }
 
 static void
-ym_init(sc)
-	struct ym_softc *sc;
+ym_init(struct ym_softc *sc)
 {
-	u_int8_t dpd, apd;
+	uint8_t dpd, apd;
 
 	/* Mute SoundBlaster output if possible. */
 	if (sc->sc_sb_ioh) {
 		bus_space_write_1(sc->sc_iot, sc->sc_sb_ioh, SBP_MIXER_ADDR,
-				  SBP_MASTER_VOL);
+		    SBP_MASTER_VOL);
 		bus_space_write_1(sc->sc_iot, sc->sc_sb_ioh, SBP_MIXER_DATA,
-				  0x00);
+		    0x00);
 	}
 
+	if (!YM_IS_SA3(sc)) {
+		/* OPL3-SA2 */
+		ym_write(sc, SA3_PWR_MNG, SA2_PWR_MNG_CLKO |
+		    (sc->sc_opl_ioh == 0 ? SA2_PWR_MNG_FMPS : 0));
+		return;
+	}
+
+	/* OPL3-SA3 */
 	/* Figure out which part can be power down. */
 	dpd = SA3_DPWRDWN_SB		/* we never use SB */
 #if NMPU_YM > 0
-		| (sc->sc_mpu_ioh ? 0 : SA3_DPWRDWN_MPU)
+	    | (sc->sc_mpu_ioh ? 0 : SA3_DPWRDWN_MPU)
 #else
-		| SA3_DPWRDWN_MPU
+	    | SA3_DPWRDWN_MPU
 #endif
 #if NJOY == 0
-		| SA3_DPWRDWN_JOY
+	    | SA3_DPWRDWN_JOY
 #endif
-		| SA3_DPWRDWN_PNP	/* ISA Plug and Play is done */
-		/*
-		 * The master clock is for external wavetable synthesizer
-		 * OPL4-ML (YMF704) or OPL4-ML2 (YMF721),
-		 * and is currently unused.
-		 */
-		| SA3_DPWRDWN_MCLKO;
+	    | SA3_DPWRDWN_PNP	/* ISA Plug and Play is done */
+	    /*
+	     * The master clock is for external wavetable synthesizer
+	     * OPL4-ML (YMF704) or OPL4-ML2 (YMF721),
+	     * and is currently unused.
+	     */
+	    | SA3_DPWRDWN_MCLKO;
 
 	apd = SA3_APWRDWN_SBDAC;	/* we never use SB */
 
@@ -374,15 +394,16 @@ ym_init(sc)
 
 
 int
-ym_getdev(addr, retp)
-	void *addr;
-	struct audio_device *retp;
+ym_getdev(void *addr, struct audio_device *retp)
 {
-	struct ym_softc *sc = addr;
+	struct ym_softc *sc;
+	struct ad1848_softc *ac;
 
-	strcpy(retp->name, "OPL3-SA3");
-	sprintf(retp->version, "%d", sc->sc_version);
-	strcpy(retp->config, "ym");
+	sc = addr;
+	ac = &sc->sc_ad1848.sc_ad1848;
+	strlcpy(retp->name, ac->chip_name, sizeof(retp->name));
+	snprintf(retp->version, sizeof(retp->version), "%d", sc->sc_version);
+	strlcpy(retp->config, "ym", sizeof(retp->config));
 
 	return 0;
 }
@@ -409,13 +430,9 @@ static ad1848_devmap_t mappings[] = {
 
 
 static void
-ym_mute(sc, left_reg, mute)
-	struct ym_softc *sc;
-	int left_reg;
-	int mute;
-
+ym_mute(struct ym_softc *sc, int left_reg, int mute)
 {
-	u_int8_t reg;
+	uint8_t reg;
 
 	reg = ym_read(sc, left_reg);
 	if (mute)
@@ -426,11 +443,9 @@ ym_mute(sc, left_reg, mute)
 
 
 static void
-ym_set_master_gain(sc, vol)
-	struct ym_softc *sc;
-	struct ad1848_volume *vol;
+ym_set_master_gain(struct ym_softc *sc, struct ad1848_volume *vol)
 {
-	u_int  atten;
+	u_int atten;
 
 	sc->master_gain = *vol;
 
@@ -445,10 +460,45 @@ ym_set_master_gain(sc, vol)
 	ym_write(sc, SA3_VOL_R, (ym_read(sc, SA3_VOL_R) & ~SA3_VOL_MV) | atten);
 }
 
+/*
+ * Read current setting of master volume from hardware
+ * and update the software value if changed.
+ * [SA3] This function clears hardware volume interrupt.
+ */
 static void
-ym_set_mic_gain(sc, vol)
-	struct ym_softc *sc;
-	int vol;
+ym_hvol_to_master_gain(struct ym_softc *sc)
+{
+	u_int prevval, val;
+	int changed;
+
+	changed = 0;
+	val = SA3_VOL_MV & ~ym_read(sc, SA3_VOL_L);
+	prevval = (sc->master_gain.left * (SA3_VOL_MV + 1)) /
+	    (AUDIO_MAX_GAIN + 1);
+	if (val != prevval) {
+		sc->master_gain.left =
+		    val * ((AUDIO_MAX_GAIN + 1) / (SA3_VOL_MV + 1));
+		changed = 1;
+	}
+
+	val = SA3_VOL_MV & ~ym_read(sc, SA3_VOL_R);
+	prevval = (sc->master_gain.right * (SA3_VOL_MV + 1)) /
+	    (AUDIO_MAX_GAIN + 1);
+	if (val != prevval) {
+		sc->master_gain.right =
+		    val * ((AUDIO_MAX_GAIN + 1) / (SA3_VOL_MV + 1));
+		changed = 1;
+	}
+
+#if 0	/* XXX NOT YET */
+	/* Notify the change to async processes. */
+	if (changed && sc->sc_audiodev)
+		mixer_signal(sc->sc_audiodev);
+#endif
+}
+
+static void
+ym_set_mic_gain(struct ym_softc *sc, int vol)
 {
 	u_int atten;
 
@@ -462,20 +512,25 @@ ym_set_mic_gain(sc, vol)
 }
 
 static void
-ym_set_3d(sc, cp, val, reg)
-	struct ym_softc *sc;
-	mixer_ctrl_t *cp;
-	struct ad1848_volume *val;
-	int reg;
+ym_set_3d(struct ym_softc *sc, mixer_ctrl_t *cp,
+    struct ad1848_volume *val, int reg)
 {
-	u_int8_t e;
+	uint8_t l, r, e;
 
 	ad1848_to_vol(cp, val);
 
-	e = (val->left * (SA3_3D_BITS + 1) + (SA3_3D_BITS + 1) / 2) /
-		(AUDIO_MAX_GAIN + 1) << SA3_3D_LSHIFT |
-	    (val->right * (SA3_3D_BITS + 1) + (SA3_3D_BITS + 1) / 2) /
-		(AUDIO_MAX_GAIN + 1) << SA3_3D_RSHIFT;
+	l = val->left;
+	r = val->right;
+	if (reg != SA3_3D_WIDE) {
+		/* flat on center */
+		l = YM_EQ_EXPAND_VALUE(l);
+		r = YM_EQ_EXPAND_VALUE(r);
+	}
+
+	e = (l * (SA3_3D_BITS + 1) + (SA3_3D_BITS + 1) / 2) /
+	    (AUDIO_MAX_GAIN + 1) << SA3_3D_LSHIFT |
+	    (r * (SA3_3D_BITS + 1) + (SA3_3D_BITS + 1) / 2) /
+	    (AUDIO_MAX_GAIN + 1) << SA3_3D_RSHIFT;
 
 #ifndef AUDIO_NO_POWER_CTL
 	/* turn wide stereo on if necessary */
@@ -488,26 +543,31 @@ ym_set_3d(sc, cp, val, reg)
 #ifndef AUDIO_NO_POWER_CTL
 	/* turn wide stereo off if necessary */
 	if (YM_EQ_OFF(&sc->sc_treble) && YM_EQ_OFF(&sc->sc_bass) &&
-	    YM_EQ_OFF(&sc->sc_wide))
+	    YM_WIDE_OFF(&sc->sc_wide))
 		ym_power_ctl(sc, YM_POWER_3D, 0);
 #endif
 }
 
 int
-ym_mixer_set_port(addr, cp)
-	void *addr;
-	mixer_ctrl_t *cp;
+ym_mixer_set_port(void *addr, mixer_ctrl_t *cp)
 {
-	struct ad1848_softc *ac = addr;
-	struct ym_softc *sc = ac->parent;
+	struct ad1848_softc *ac;
+	struct ym_softc *sc;
 	struct ad1848_volume vol;
-	int error = 0;
-	u_int8_t extsources;
+	int error;
+	uint8_t extsources;
 
+	ac = addr;
+	sc = ac->parent;
+	error = 0;
 	DPRINTF(("%s: ym_mixer_set_port: dev 0x%x, type 0x%x, 0x%x (%d; %d, %d)\n",
 		DVNAME(sc), cp->dev, cp->type, cp->un.ord,
 		cp->un.value.num_channels, cp->un.value.level[0],
 		cp->un.value.level[1]));
+
+	/* SA2 doesn't have equalizer */
+	if (!YM_IS_SA3(sc) && YM_MIXER_SA3_ONLY(cp->dev))
+		return ENXIO;
 
 #ifndef AUDIO_NO_POWER_CTL
 	/* Power-up chip */
@@ -531,13 +591,13 @@ ym_mixer_set_port(addr, cp)
 			error = EINVAL;
 		else
 			ym_set_mic_gain(sc,
-				cp->un.value.level[AUDIO_MIXER_LEVEL_MONO]);
+			    cp->un.value.level[AUDIO_MIXER_LEVEL_MONO]);
 		goto out;
 
 	case YM_MASTER_EQMODE:
 		sc->sc_eqmode = cp->un.ord & SA3_SYS_CTL_YMODE;
 		ym_write(sc, SA3_SYS_CTL, (ym_read(sc, SA3_SYS_CTL) &
-					   ~SA3_SYS_CTL_YMODE) | sc->sc_eqmode);
+			     ~SA3_SYS_CTL_YMODE) | sc->sc_eqmode);
 		goto out;
 
 	case YM_MASTER_TREBLE:
@@ -565,7 +625,7 @@ ym_mixer_set_port(addr, cp)
 			error = EINVAL;
 		else
 			sc->sc_pow_timeout =
-				cp->un.value.level[AUDIO_MIXER_LEVEL_MONO];
+			    cp->un.value.level[AUDIO_MIXER_LEVEL_MONO];
 		goto out;
 
 	/*
@@ -574,6 +634,7 @@ ym_mixer_set_port(addr, cp)
 	case YM_CD_MUTE:
 	case YM_LINE_MUTE:
 	case YM_SPEAKER_MUTE:
+	case YM_MIC_MUTE:
 		extsources = YM_MIXER_TO_XS(cp->dev);
 		if (cp->un.ord) {
 			if ((sc->sc_external_sources &= ~extsources) == 0) {
@@ -600,7 +661,7 @@ ym_mixer_set_port(addr, cp)
 	case YM_MONITOR_MUTE:
 		if ((ac->open_mode & (FREAD | FWRITE)) == FREAD)
 			ym_power_ctl(sc, YM_POWER_CODEC_P | YM_POWER_CODEC_DA,
-					cp->un.ord == 0);
+			    cp->un.ord == 0);
 		break;	/* fall to ad1848_mixer_set_port() */
 #endif
 	}
@@ -629,20 +690,39 @@ out:
 	ym_power_ctl(sc, YM_POWER_CODEC_CTL, 0);
 #endif
 
-	return (error);
+	return error;
 }
 
 int
-ym_mixer_get_port(addr, cp)
-	void *addr;
-	mixer_ctrl_t *cp;
+ym_mixer_get_port(void *addr, mixer_ctrl_t *cp)
 {
-	struct ad1848_softc *ac = addr;
-	struct ym_softc *sc = ac->parent;
+	struct ad1848_softc *ac;
+	struct ym_softc *sc;
 	int error;
+
+	ac = addr;
+	sc = ac->parent;
+	/* SA2 doesn't have equalizer */
+	if (!YM_IS_SA3(sc) && YM_MIXER_SA3_ONLY(cp->dev))
+		return ENXIO;
 
 	switch (cp->dev) {
 	case YM_OUTPUT_LVL:
+		if (!YM_IS_SA3(sc)) {
+			/*
+			 * SA2 doesn't have hardware volume interrupt.
+			 * Read current value and update every time.
+			 */
+#ifndef AUDIO_NO_POWER_CTL
+			/* Power-up chip */
+			ym_power_ctl(sc, YM_POWER_CODEC_CTL, 1);
+#endif
+			ym_hvol_to_master_gain(sc);
+#ifndef AUDIO_NO_POWER_CTL
+			/* Power-down chip */
+			ym_power_ctl(sc, YM_POWER_CODEC_CTL, 0);
+#endif
+		}
 		ad1848_from_vol(cp, &sc->master_gain);
 		return 0;
 
@@ -688,7 +768,7 @@ ym_mixer_get_port(addr, cp)
 	error = ad1848_mixer_get_port(ac, mappings, NUMMAP, cp);
 
 	if (error != ENXIO)
-		return (error);
+		return error;
 
 	error = 0;
 
@@ -702,38 +782,44 @@ ym_mixer_get_port(addr, cp)
 		break;
 	}
 
-	return(error);
+	return error;
 }
 
-static char *mixer_classes[] = {
+static const char *mixer_classes[] = {
 	AudioCinputs, AudioCrecord, AudioCoutputs, AudioCmonitor,
-	AudioCequalization
 #ifndef AUDIO_NO_POWER_CTL
-	, AudioCpower
+	AudioCpower,
 #endif
+	AudioCequalization
 };
 
 int
-ym_query_devinfo(addr, dip)
-	void *addr;
-	mixer_devinfo_t *dip;
+ym_query_devinfo(void *addr, mixer_devinfo_t *dip)
 {
-	static char *mixer_port_names[] = {
+	static const char *mixer_port_names[] = {
 		AudioNdac, AudioNmidi, AudioNcd, AudioNline, AudioNspeaker,
 		AudioNmicrophone, AudioNmonitor
 	};
+	struct ad1848_softc *ac;
+	struct ym_softc *sc;
+
+	ac = addr;
+	sc = ac->parent;
+	/* SA2 doesn't have equalizer */
+	if (!YM_IS_SA3(sc) && YM_MIXER_SA3_ONLY(dip->index))
+		return ENXIO;
 
 	dip->next = dip->prev = AUDIO_MIXER_LAST;
 
 	switch(dip->index) {
-	case YM_INPUT_CLASS:			/* input class descriptor */
+	case YM_INPUT_CLASS:
 	case YM_OUTPUT_CLASS:
 	case YM_MONITOR_CLASS:
 	case YM_RECORD_CLASS:
-	case YM_EQ_CLASS:
 #ifndef AUDIO_NO_POWER_CTL
 	case YM_PWR_CLASS:
 #endif
+	case YM_EQ_CLASS:
 		dip->type = AUDIO_MIXER_CLASS;
 		dip->mixer_class = dip->index;
 		strcpy(dip->label.name,
@@ -763,6 +849,14 @@ ym_query_devinfo(addr, dip)
 			dip->un.v.num_channels = 1;
 		else
 			dip->un.v.num_channels = 2;
+
+		if (dip->index == YM_SPEAKER_LVL)
+			dip->un.v.delta = 1 << (8 - 4 /* valid bits */);
+		else if (dip->index == YM_DAC_LVL ||
+		    dip->index == YM_MONITOR_LVL)
+			dip->un.v.delta = 1 << (8 - 6 /* valid bits */);
+		else
+			dip->un.v.delta = 1 << (8 - 5 /* valid bits */);
 
 		strcpy(dip->un.v.units.name, AudioNvolume);
 		break;
@@ -796,6 +890,7 @@ ym_query_devinfo(addr, dip)
 		dip->next = YM_OUTPUT_MUTE;
 		strcpy(dip->label.name, AudioNmaster);
 		dip->un.v.num_channels = 2;
+		dip->un.v.delta = (AUDIO_MAX_GAIN + 1) / (SA3_VOL_MV + 1);
 		strcpy(dip->un.v.units.name, AudioNvolume);
 		break;
 
@@ -812,6 +907,7 @@ ym_query_devinfo(addr, dip)
 		dip->next = YM_RECORD_SOURCE;
 		strcpy(dip->label.name, AudioNrecord);
 		dip->un.v.num_channels = 2;
+		dip->un.v.delta = 1 << (8 - 4 /* valid bits */);
 		strcpy(dip->un.v.units.name, AudioNvolume);
 		break;
 
@@ -853,6 +949,8 @@ ym_query_devinfo(addr, dip)
 		dip->mixer_class = YM_EQ_CLASS;
 		strcpy(dip->label.name, AudioNtreble);
 		dip->un.v.num_channels = 2;
+		dip->un.v.delta = (AUDIO_MAX_GAIN + 1) / (SA3_3D_BITS + 1)
+		    >> YM_EQ_REDUCE_BIT;
 		strcpy(dip->un.v.units.name, AudioNtreble);
 		break;
 
@@ -861,6 +959,8 @@ ym_query_devinfo(addr, dip)
 		dip->mixer_class = YM_EQ_CLASS;
 		strcpy(dip->label.name, AudioNbass);
 		dip->un.v.num_channels = 2;
+		dip->un.v.delta = (AUDIO_MAX_GAIN + 1) / (SA3_3D_BITS + 1)
+		    >> YM_EQ_REDUCE_BIT;
 		strcpy(dip->un.v.units.name, AudioNbass);
 		break;
 
@@ -869,6 +969,7 @@ ym_query_devinfo(addr, dip)
 		dip->mixer_class = YM_EQ_CLASS;
 		strcpy(dip->label.name, AudioNsurround);
 		dip->un.v.num_channels = 2;
+		dip->un.v.delta = (AUDIO_MAX_GAIN + 1) / (SA3_3D_BITS + 1);
 		strcpy(dip->un.v.units.name, AudioNsurround);
 		break;
 
@@ -907,10 +1008,12 @@ ym_query_devinfo(addr, dip)
 }
 
 int
-ym_intr(arg)
-	void *arg;
+ym_intr(void *arg)
 {
 	struct ym_softc *sc = arg;
+#if NMPU_YM > 0
+	struct mpu_softc *sc_mpu = device_private(sc->sc_mpudev);
+#endif
 	u_int8_t ist;
 	int processed;
 
@@ -936,27 +1039,16 @@ ym_intr(arg)
 		 * MPU401 interrupt.
 		 */
 		if (ist & SA3_IRQ_STAT_MPU) {
-			mpu_intr(sc->sc_mpudev);
+			mpu_intr(sc_mpu);
 			processed = 1;
 		}
 #endif
 		/*
-		 * Hardware volume interrupt.
+		 * Hardware volume interrupt (SA3 only).
 		 * Recalculate master volume from the hardware setting.
 		 */
-		if (ist & SA3_IRQ_STAT_MV) {
-			sc->master_gain.left =
-				(SA3_VOL_MV & ~ym_read(sc, SA3_VOL_L)) *
-					(SA3_VOL_MV + 1) + (SA3_VOL_MV + 1) / 2;
-			sc->master_gain.right =
-				(SA3_VOL_MV & ~ym_read(sc, SA3_VOL_R)) *
-					(SA3_VOL_MV + 1) + (SA3_VOL_MV + 1) / 2;
-
-#if 0	/* XXX NOT YET */
-			/* Notify the change to async processes. */
-			if (sc->sc_audiodev)
-				mixer_signal(sc->sc_audiodev);
-#endif
+		if ((ist & SA3_IRQ_STAT_MV) && YM_IS_SA3(sc)) {
+			ym_hvol_to_master_gain(sc);
 			processed = 1;
 		}
 	} while (processed && (ist = ym_read(sc, SA3_IRQA_STAT)));
@@ -967,27 +1059,25 @@ ym_intr(arg)
 
 #ifndef AUDIO_NO_POWER_CTL
 static void
-ym_save_codec_regs(sc)
-	struct ym_softc *sc;
+ym_save_codec_regs(struct ym_softc *sc)
 {
-	struct ad1848_softc *ac = &sc->sc_ad1848.sc_ad1848;
+	struct ad1848_softc *ac;
 	int i;
 
 	DPRINTF(("%s: ym_save_codec_regs\n", DVNAME(sc)));
-
+	ac = &sc->sc_ad1848.sc_ad1848;
 	for (i = 0; i <= 0x1f; i++)
 		sc->sc_codec_scan[i] = ad_read(ac, i);
 }
 
 static void
-ym_restore_codec_regs(sc)
-	struct ym_softc *sc;
+ym_restore_codec_regs(struct ym_softc *sc)
 {
-	struct ad1848_softc *ac = &sc->sc_ad1848.sc_ad1848;
+	struct ad1848_softc *ac;
 	int i, t;
 
 	DPRINTF(("%s: ym_restore_codec_regs\n", DVNAME(sc)));
-
+	ac = &sc->sc_ad1848.sc_ad1848;
 	for (i = 0; i <= 0x1f; i++) {
 		/*
 		 * Wait til the chip becomes ready.
@@ -1013,19 +1103,20 @@ ym_restore_codec_regs(sc)
  * DMA state should also be restored.  FIXME.
  */
 void
-ym_power_hook(why, v)
-	int why;
-	void *v;
+ym_power_hook(int why, void *v)
 {
-	struct ym_softc *sc = v;
-	int i;
+	struct ym_softc *sc;
+	int i, xmax;
 	int s;
 
+	sc = v;
 	DPRINTF(("%s: ym_power_hook: why = %d\n", DVNAME(sc), why));
 
 	s = splaudio();
 
-	if (why != PWR_RESUME) {
+	switch (why) {
+	case PWR_SUSPEND:
+	case PWR_STANDBY:
 		/*
 		 * suspending...
 		 */
@@ -1049,7 +1140,9 @@ ym_power_hook(why, v)
 		sc->sc_sa3_scan[SA3_PWR_MNG] = ym_read(sc, SA3_PWR_MNG);
 		if (sc->sc_on_blocks)
 			ym_chip_powerdown(sc);
-	} else {
+		break;
+
+	case PWR_RESUME:
 		/*
 		 * resuming...
 		 */
@@ -1057,7 +1150,8 @@ ym_power_hook(why, v)
 		ym_init(sc);		/* power-on CODEC */
 
 		/* Restore control registers. */
-		for (i = SA3_PWR_MNG + 1; i <= YM_SAVE_REG_MAX; i++) {
+		xmax = YM_IS_SA3(sc)? YM_SAVE_REG_MAX_SA3 : YM_SAVE_REG_MAX_SA2;
+		for (i = SA3_PWR_MNG + 1; i <= xmax; i++) {
 			if (i == SA3_SB_SCAN || i == SA3_SB_SCAN_DATA ||
 			    i == SA3_DPWRDWN)
 				continue;
@@ -1069,20 +1163,26 @@ ym_power_hook(why, v)
 
 		/* Restore global/digital power-down state. */
 		ym_write(sc, SA3_PWR_MNG, sc->sc_sa3_scan[SA3_PWR_MNG]);
-		ym_write(sc, SA3_DPWRDWN, sc->sc_sa3_scan[SA3_DPWRDWN]);
+		if (YM_IS_SA3(sc))
+			ym_write(sc, SA3_DPWRDWN, sc->sc_sa3_scan[SA3_DPWRDWN]);
+		break;
+	case PWR_SOFTSUSPEND:
+	case PWR_SOFTSTANDBY:
+	case PWR_SOFTRESUME:
+		break;
 	}
 	splx(s);
 }
 
 int
-ym_codec_power_ctl(arg, flags)
-	void *arg;
-	int flags;
+ym_codec_power_ctl(void *arg, int flags)
 {
-	struct ym_softc *sc = arg;
-	struct ad1848_softc *ac = &sc->sc_ad1848.sc_ad1848;
+	struct ym_softc *sc;
+	struct ad1848_softc *ac;
 	int parts;
 
+	sc = arg;
+	ac = &sc->sc_ad1848.sc_ad1848;
 	DPRINTF(("%s: ym_codec_power_ctl: flags = 0x%x\n", DVNAME(sc), flags));
 
 	if (flags != 0) {
@@ -1110,15 +1210,16 @@ ym_codec_power_ctl(arg, flags)
  * This must be called at splaudio().
  */
 static void
-ym_chip_powerdown(sc)
-	struct ym_softc *sc;
+ym_chip_powerdown(struct ym_softc *sc)
 {
-	int i;
+	int i, xmax;
 
 	DPRINTF(("%s: ym_chip_powerdown\n", DVNAME(sc)));
 
+	xmax = YM_IS_SA3(sc) ? YM_SAVE_REG_MAX_SA3 : YM_SAVE_REG_MAX_SA2;
+
 	/* Save control registers. */
-	for (i = SA3_PWR_MNG + 1; i <= YM_SAVE_REG_MAX; i++) {
+	for (i = SA3_PWR_MNG + 1; i <= xmax; i++) {
 		if (i == SA3_SB_SCAN || i == SA3_SB_SCAN_DATA)
 			continue;
 		sc->sc_sa3_scan[i] = ym_read(sc, i);
@@ -1135,12 +1236,10 @@ ym_chip_powerdown(sc)
  * in power-down mode (or should be blocked by splaudio()).
  */
 static void
-ym_chip_powerup(sc, nosleep)
-	struct ym_softc *sc;
-	int nosleep;
+ym_chip_powerup(struct ym_softc *sc, int nosleep)
 {
 	int wchan;
-	u_int8_t pw;
+	uint8_t pw;
 
 	DPRINTF(("%s: ym_chip_powerup\n", DVNAME(sc)));
 
@@ -1174,15 +1273,16 @@ ym_chip_powerup(sc, nosleep)
 
 /* callout handler for power-down */
 void
-ym_powerdown_blocks(arg)
-	void *arg;
+ym_powerdown_blocks(void *arg)
 {
-	struct ym_softc *sc = arg;
-	u_int16_t parts;
-	u_int16_t on_blocks = sc->sc_on_blocks;
-	u_int8_t sv;
+	struct ym_softc *sc;
+	uint16_t parts;
+	uint16_t on_blocks;
+	uint8_t sv;
 	int s;
 
+	sc = arg;
+	on_blocks = sc->sc_on_blocks;
 	DPRINTF(("%s: ym_powerdown_blocks: turning_off 0x%x\n",
 		DVNAME(sc), sc->sc_turning_off));
 
@@ -1211,8 +1311,18 @@ ym_powerdown_blocks(arg)
 				YM_POWER_CODEC_DIGITAL) == 0)
 		ym_save_codec_regs(sc);
 
-	ym_write(sc, SA3_DPWRDWN, ym_read(sc, SA3_DPWRDWN) | (u_int8_t) parts);
-	ym_write(sc, SA3_APWRDWN, ym_read(sc, SA3_APWRDWN) | (parts >> 8));
+	if (YM_IS_SA3(sc)) {
+		/* OPL3-SA3 */
+		ym_write(sc, SA3_DPWRDWN,
+		    ym_read(sc, SA3_DPWRDWN) | (u_int8_t) parts);
+		ym_write(sc, SA3_APWRDWN,
+		    ym_read(sc, SA3_APWRDWN) | (parts >> 8));
+	} else {
+		/* OPL3-SA2 (only OPL3 can be off partially) */
+		if (parts & YM_POWER_OPL3)
+			ym_write(sc, SA3_PWR_MNG,
+			    ym_read(sc, SA3_PWR_MNG) | SA2_PWR_MNG_FMPS);
+	}
 
 	if (((sc->sc_on_blocks &= ~sc->sc_turning_off) & YM_POWER_ACTIVE) == 0)
 		ym_chip_powerdown(sc);
@@ -1229,9 +1339,7 @@ ym_powerdown_blocks(arg)
  * Power control entry point.
  */
 void
-ym_power_ctl(sc, parts, onoff)
-	struct ym_softc *sc;
-	int parts, onoff;
+ym_power_ctl(struct ym_softc *sc, int parts, int onoff)
 {
 	int s;
 	int need_restore_codec;
@@ -1290,10 +1398,19 @@ ym_power_ctl(sc, parts, onoff)
 
 		s = splaudio();
 
-		ym_write(sc, SA3_DPWRDWN,
-			 ym_read(sc, SA3_DPWRDWN) & (u_int8_t)~parts);
-		ym_write(sc, SA3_APWRDWN,
-			 ym_read(sc, SA3_APWRDWN) & ~(parts >> 8));
+		if (YM_IS_SA3(sc)) {
+			/* OPL3-SA3 */
+			ym_write(sc, SA3_DPWRDWN,
+			    ym_read(sc, SA3_DPWRDWN) & (u_int8_t)~parts);
+			ym_write(sc, SA3_APWRDWN,
+			    ym_read(sc, SA3_APWRDWN) & ~(parts >> 8));
+		} else {
+			/* OPL3-SA2 (only OPL3 can be off partially) */
+			if (parts & YM_POWER_OPL3)
+				ym_write(sc, SA3_PWR_MNG,
+				    ym_read(sc, SA3_PWR_MNG)
+					& ~SA2_PWR_MNG_FMPS);
+		}
 		if (need_restore_codec)
 			ym_restore_codec_regs(sc);
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.md.en,v 1.18 1999/07/06 06:10:06 cgd Exp $	*/
+/*	$NetBSD: msg.md.en,v 1.57 2008/04/30 15:29:11 ad Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -36,168 +36,48 @@
  *
  */
 
-/* MD Message catalog -- english, i386 version */
+/* MD Message catalog -- English, i386 version */
 
-message fullpart
-{We are now going to install NetBSD on the disk %s.  You may
-choose to install NetBSD on the entire disk, or on part of the disk.
-
-Partial-disk installation creates a partition, or `slice', for NetBSD
-in your disk's MBR partition table. Whole-disk installation is
-`dangerously dedicated': it takes over the entire MBR. This WILL
-overwrite all existing data and OSes on the disk. It also prohibits later
-installation of multiple OSes on that disk (unless you overwrite NetBSD and
-reinstall using only part of the disk).
-
-Which would you like to do?
-}
-
-message wdtype
-{What kind of disk is %s?}
-
-message sectforward
-{Does your disk do AUTOMATIC sector forwarding?}
-
-message dlgeom
-{It appears that your disk, %s, has already been labeled with a BSD
-disklabel and the disklabel reports geometry that is different from
-the real geometry.  The two geometries are:
-
-disklabel:	%d cylinders, %d heads, %d sectors 
-real geometry:	%d cylinders, %d heads, %d sectors 
-}
-
-/* the %s's will expand into three character strings */
-message part_header
-{   Start(%3s) Size(%3s)  End(%3s)   Kind
-   ---------- ---------- ---------- ----
-}
-
-message part_row_start_unused
-{%-1d:                                 }
-
-message part_row_start_used
-{%-1d: %-10d %-10d %-10d}
-
-message part_row_end
-{ %s\n}
-
-message setbiosgeom
-{You will be prompted for the geometry.  Please enter the values you
-want.  The number of cylinders should be <= 1024 and the number of sectors
-should be <= 63. If you have the BIOS set up to use > 1024 cylinders just
-truncate that number to 1024 here; NetBSD will know about the rest of the
-cylinders.
+message md_hello
+{If you booted from a floppy, you may now remove the disk.
 
 }
 
-message confirmbiosgeom
-{Please verify if the BIOS disk geometry below is correct. The value for
-the number of cylinders may have been truncated to 1024. This is ok as
-long as the other numbers are correct; only 1024 cylinders can be
-specified in the MBR, the rest will be found in a different way by NetBSD.
-
-If you reenter the values, make sure that the values are correct and
-match those used by other systems on this disk. Values that do not match
-may result in data corruption.
-
-}
-
-message badgeom
-{The current values for your disk geometry are:
-
-}
-
-message realgeom
-{real geom: %d cyl, %d heads, %d sec  (NB: for comparison only)\n}
-
-message biosgeom
-{BIOS geom: %d cyl, %d heads, %d sec\n}
-
-message reentergeom
-{The values just entered for the geometry are not usable.  Please,
-reenter the geometry.
-}
-
-message ovrwrite
-{Your disk currently has a non-NetBSD partition.  Do you really want to
-overwrite that partition with NetBSD?
-}
-
-message parttable
-{The partition table on your disk currently looks like the following:
-}
-
-message editpart
-{Partition %d looks like:\n\n}
-
-message editparttable
-{Edit your DOS partition table.  The highlighted partition is the currently
-active partition.  The partition table currently looks like:
-
-}
-
-message reeditpart
-{There are overlapping MBR partitions or there is not exactly one NetBSD
-partition. You should reedit the MBR partition table.
-
-Do you want to reedit it?
-}
-
-message nobsdpart
-{There is no NetBSD partition in the MBR partition table.}
-
-message multbsdpart
-{There are multiple NetBSD partitions in the MBR partition table.
-Partition %d will be the one used.}
-
-message dofdisk
-{Setting up the DOS partition table ...
-}
+message Keyboard_type {Keyboard type}
+message kb_default {}
 
 message dobad144
 {Installing the bad block table ...
 }
 
+message getboottype
+{Would you like to install the normal set of bootblocks or serial bootblocks?
+
+Normal bootblocks use the BIOS console device as the console
+(usually the monitor and keyboard). Serial bootblocks use the first
+serial port as the console.
+
+Selected bootblock: }
+
+message console_PC {BIOS console}
+message console_com {Serial port com%d at %d baud}
+message console_unchanged {Unchanged}
+
+message Bootblocks_selection
+{Bootblocks selection}
+message Use_normal_bootblocks	{Use BIOS console}
+message Use_serial_com0		{Use serial port com0}
+message Use_serial_com1		{Use serial port com1}
+message Use_serial_com2		{Use serial port com2}
+message Use_serial_com3		{Use serial port com3}
+message serial_baud_rate	{Set serial baud rate}
+message Use_existing_bootblocks	{Use existing bootblocks}
+
+message No_Bootcode		{No bootcode for root partition}
+
 message dobootblks
 {Installing boot blocks on %s....
 }
-
-message askfsroot1
-{I will be asking for partition information.
-
-First the root partition.  You have %d %s left on your disk.
-}
-
-message askfsroot2
-{Root partition size? }
-
-message askfsswap1
-{
-Next the swap partition.  You have %d %s left on your disk.
-}
-
-message askfsswap2
-{Swap partition size? }
-
-message otherparts
-{You still have some space remaining unallocated on your disk.  Please
-give sizes and mount points for the following partitions.
-
-}
-
-message askfspart1
-{The next partition is /dev/%s%c.  You have %d %s left on your disk.
-}
-
-message askfspart2
-{Partition size? }
-
-message cyl1024
-{The disklabel (set of partitions) you specified has a root partition that
-ends beyond the 1024 BIOS cylinder boundary. To be sure that the system
-can be booted at all times, the entire root partition must lie below that
-limit. You can either: }
 
 message onebiosmatch
 {This disk matches the following BIOS disk:
@@ -205,12 +85,19 @@ message onebiosmatch
 }
 
 message onebiosmatch_header
-{BIOS # cylinders  heads   sectors
------- ---------- ------- -------
+{BIOS # cylinders heads sectors total sectors  GB
+------ --------- ----- ------- ------------- ---
 }
 
 message onebiosmatch_row
-{%-6x %-10d %-7d %d\n}
+{%#6x %9d %5d %7d %13u %3u\n}
+
+message This_is_the_correct_geometry
+{This is the correct geometry}
+message Set_the_geometry_by_hand
+{Set the geometry by hand}
+message Use_one_of_these_disks
+{Use one of these disks}
 
 message biosmultmatch
 {This disk matches the following BIOS disks:
@@ -218,70 +105,62 @@ message biosmultmatch
 }
 
 message biosmultmatch_header
-{   BIOS # cylinders  heads   sectors
-   ------ ---------- ------- -------
+{   BIOS # cylinders heads sectors total sectors   GB
+   ------ --------- ----- ------- ------------- ----
 }
 
 message biosmultmatch_row
-{%-1d: %-6x %-10d %-7d %d\n}
+{%-1d: %#6x %9d %5d %7d %13u %3u\n}
+
+message biosgeom_advise
+{
+Note: since sysinst was able to uniquely match the disk you chose with a disk
+known to the BIOS, the values displayed above are very likely correct, and
+should not be changed (the values for cylinders, heads and sectors are
+probably 1023, 255 and 63 - this is correct). 
+You should only change the geometry if you know the BIOS reports incorrect
+values.
+}
 
 message pickdisk
 {Choose disk: }
 
-message wmbrfail
-{Rewrite of MBR failed. I can't continue.}
-
 message partabovechs
 {The NetBSD part of the disk lies outside of the range that the BIOS on
-your machine can address. Booting from it may not be possible. Are you
-sure you that you want to do this?
+your machine can address.
+Booting from it may not be possible. 
+Are you sure you that you want to do this?
+
+(Answering 'no' will take you back to the partition edit menu.)}
+
+message missing_bootmenu_text
+{You have more than one operating system on this disk, but have not
+specified a 'bootmenu' for either the active partition, or the
+NetBSD partition that you are going to install into. 
+
+Do you want to re-edit the partition to add a bootmenu entry?}
+
+message no_extended_bootmenu
+{You have requested that an extended partition be included in the bootmenu.
+However your system BIOS doesn't appear to support the read command used
+by that version of the bootmenu code. 
+Are you sure you that you want to do this?
 
 (Answering 'no' will take you back to the partition edit menu.)}
 
 message installbootsel
-{You appear to have more than one operating system installed on your
-disk. Do you want to install a bootselector so that you can select
-which system to start up when your computer is (re)started?}
+{Your configuration requires the NetBSD bootselect code to
+select which operating system to use. 
+
+It is not currently installed, do you want to install it now?}
 
 message installmbr
-{The start of the NetBSD part of the disk lies outside of the range
-that the BIOS can address. The initial bootcode in the Master Boot
-Record needs to be able to use the extended BIOS interface to boot
-off this partition. Do you want to install the NetBSD bootcode into
-the Master Boot Record so that this is ensured? Note that this will
-overwrite the existing code in the MBR, like some bootselectors.}
+{The bootcode in the Master Boot Record does not appear to be valid.
 
-message configbootsel
-{Configure the different bootselection menu items. You can change the
-simple menu entries for the matching partition entries that are displayed
-when the system boots. Also, you can specify the timeout and default
-action to be taken (if no selection is made in the bootmenu).\n}
+Do you want to install the NetBSD bootcode?}
 
-message bootseltimeout
-{Boot menu timeout: %d\n}
+message updatembr
+{Do you want to update the bootcode in the Master Boot Record to
+the latest version of the NetBSD bootcode?}
 
-message defbootselopt
-{Default boot menu action: }
-
-message defbootseloptactive
-{boot the first active partition.}
-
-message defbootseloptpart
-{boot off partition %d.\n}
-
-message defbootseloptdisk
-{boot off hard disk %d.\n}
-
-message bootselitemname
-{Enter name for menu item}
-
-message bootseltimeoutval
-{Timeout value in seconds (0-3600)}
-
-message bootsel_header
-{Number Type                             Menu entry
------- -------------------------------- ----------
-}
-
-message bootsel_row
-{%-6d %-32s %s\n}
+message set_kernel_1	{Kernel (GENERIC)}

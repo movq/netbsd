@@ -1,7 +1,7 @@
-/*	$NetBSD: yppasswdd_mkpw.c,v 1.4 1998/11/06 13:07:18 is Exp $	*/
+/*	$NetBSD: yppasswdd_mkpw.c,v 1.16 2008/02/24 21:10:02 dholland Exp $	*/
 
 /*
- * Copyright (c) 1996 Jason R. Thorpe <thorpej@NetBSD.ORG>
+ * Copyright (c) 1996 Jason R. Thorpe <thorpej@NetBSD.org>
  * All rights reserved.
  *
  * Copyright (c) 1994 Mats O Jansson <moj@stacken.kth.se>
@@ -34,42 +34,48 @@
  * SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+#ifndef lint
+__RCSID("$NetBSD: yppasswdd_mkpw.c,v 1.16 2008/02/24 21:10:02 dholland Exp $");
+#endif /* not lint */
+
 #include <sys/types.h>
+#include <sys/param.h>
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/resource.h>
 #include <sys/wait.h>
+
 #include <err.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <pwd.h>
 #include <signal.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <util.h>
+#include <limits.h>
 
 #include <rpc/rpc.h>
 #include <rpc/xdr.h>
 #include <rpcsvc/yppasswd.h>
 
-extern int noshell;
-extern int nogecos;
-extern int nopw;
-extern int make;
-extern char make_arg[];
-
-void	make_passwd __P((yppasswd *, struct svc_req *, SVCXPRT *));
+#include "extern.h"
 
 int	handling_request;		/* simple mutex */
 
 void
-make_passwd(argp, rqstp, transp)
-	yppasswd *argp;
-	struct svc_req *rqstp;
-	SVCXPRT *transp;
+make_passwd(yppasswd *argp, struct svc_req *rqstp, SVCXPRT *transp)
 {
-	struct passwd *pw;
+	struct passwd pw;
 	int pfd, tfd;
+	char mpwd[MAXPATHLEN];
+	char buf[8192]; /* from libutil */
+	char *p;
+	int lineno;
+	FILE *fpw;
 
 #define REPLY(val)	do { \
 		int res = (val); \
@@ -90,12 +96,38 @@ make_passwd(argp, rqstp, transp)
 	}
 	handling_request = 1;
 
-	pw = getpwnam(argp->newpw.pw_name);
-	if (!pw)
+	(void)strlcpy(mpwd, pw_getprefix(), sizeof(mpwd));
+	(void)strlcat(mpwd, _PATH_MASTERPASSWD, sizeof(mpwd));
+	fpw = fopen(mpwd, "r");
+	if (fpw == NULL) {
+		warnx("%s", mpwd);
 		RETURN(1);
-
-	if (*pw->pw_passwd &&
-	    strcmp(crypt(argp->oldpass, pw->pw_passwd), pw->pw_passwd) != 0)
+	}
+	for(lineno = 1; ; lineno++) {
+		if (fgets(buf, sizeof(buf), fpw) == NULL) {
+			if (feof(fpw))
+				warnx("%s: %s not found", mpwd,
+				    argp->newpw.pw_name);
+			else
+				warnx("%s: %s", mpwd, strerror(errno));
+			(void)fclose(fpw);
+			RETURN(1);
+		}
+		if ((p = strchr(buf, '\n')) == NULL) {
+			warnx("line %d too long", lineno);
+			(void)fclose(fpw);
+			RETURN(1);
+		}
+		/* get rid of trailing \n */
+		*p = '\0';
+		if (pw_scan(buf, &pw, NULL) == 0)
+			continue;
+		if (strncmp(argp->newpw.pw_name, pw.pw_name, MAXLOGNAME) == 0)
+			break;
+	}
+	fclose(fpw);
+	if (*pw.pw_passwd &&
+	    strcmp(crypt(argp->oldpass, pw.pw_passwd), pw.pw_passwd) != 0)
 		RETURN(1);
 
 	pw_init();
@@ -104,10 +136,10 @@ make_passwd(argp, rqstp, transp)
 		warnx("the passwd file is busy.");
 		RETURN(1);
 	}
-	pfd = open(_PATH_MASTERPASSWD, O_RDONLY, 0);
+	pfd = open(mpwd, O_RDONLY, 0);
 	if (pfd < 0) {
 		pw_abort();
-		warnx(_PATH_MASTERPASSWD);
+		warnx("%s", mpwd);
 		RETURN(1);
 	}
 
@@ -117,17 +149,17 @@ make_passwd(argp, rqstp, transp)
 	 * class and reset the timer.
 	 */
 	if (!nopw) {
-		pw->pw_passwd = argp->newpw.pw_passwd;
-		pw->pw_change = 0;
+		pw.pw_passwd = argp->newpw.pw_passwd;
+		pw.pw_change = 0;
 	}
 	if (!nogecos)
-		pw->pw_gecos = argp->newpw.pw_gecos;
+		pw.pw_gecos = argp->newpw.pw_gecos;
 	if (!noshell)
-		pw->pw_shell = argp->newpw.pw_shell;
+		pw.pw_shell = argp->newpw.pw_shell;
 
-	pw_copy(pfd, tfd, pw, NULL);
+	pw_copy(pfd, tfd, &pw, NULL);
 
-	if (pw_mkdb() < 0) {
+	if (pw_mkdb(pw.pw_name, 0) < 0) {
 		warnx("pw_mkdb failed");
 		pw_abort();
 		RETURN(1);
@@ -140,7 +172,7 @@ make_passwd(argp, rqstp, transp)
 
 	/* Update the YP maps. */
 	if (chdir("/var/yp"))
-		err(1, "/var/yp");
+		err(EXIT_FAILURE, "/var/yp");
 	(void) umask(022);
 	(void) system(make_arg);
 

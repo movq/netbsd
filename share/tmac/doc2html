@@ -1,6 +1,6 @@
-.\" $NetBSD: doc2html,v 1.16 2000/03/05 18:40:07 kleink Exp $
+.\" $NetBSD: doc2html,v 1.59 2008/09/14 20:29:10 apb Exp $
 .\"
-.\" Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
+.\" Copyright (c) 1998, 1999, 2008 The NetBSD Foundation, Inc.
 .\" All rights reserved.
 .\"
 .\" This code is derived from software contributed to The NetBSD Foundation
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -72,16 +65,20 @@ TODO:
 	was missing) it MUST have a doc2html@@ alias. (Scan for @@ to see.)
 ..
 .
+.if dError .Error - multiple inclusion of doc2html
+.
 .de TS
 <pre>
 ..
 .de TE
+.	DEBUG .tm TE
 </pre>
 ..
 .de PS
 <pre>
 ..
 .de PE
+.	DEBUG .tm PE
 </pre>
 ..
 .
@@ -117,7 +114,7 @@ TODO:
 ..
 .
 .doc-rlookup DOC_DEBUG_MODE 0
-.doc-rlookup DOC_XR 1
+.doc-rlookup DOC_XR 0
 .doc-slookup DOC_MANROOT ..
 .
 .nr in-pre 0
@@ -158,6 +155,7 @@ TODO:
 .ds Lt &lt;
 .ds Gt &gt;
 .ds & &amp;
+.ds Am &amp;
 .ds _ &nbsp;
 .ds q &quot;
 .ds body-params bgcolor="#FFFFFF" text="#000000"
@@ -170,8 +168,10 @@ TODO:
 .ds doc-punct { . , : ; ( ) [ ] }
 .ds close-mode
 .ds open-mode
-.ds recurse-prepend
 .ds doc-anchor
+.\" default EOL after .An
+.\" can be changed with .An -nosplit
+.ds an-eol <br>
 .ds Nm-save
 .ds T " x
 .ds tN <font\ size="-1">
@@ -202,16 +202,20 @@ TODO:
 .	as document-title " \\$*
 .	init-html
 ..
-.\"
 .\"----------------------------------------------------------------------
+.\" troff requests we delete
+.
+.rm wh
+.
 .\" troff requests we translate
-.\"
+.
 .rn br br-real
 .rn sp sp-real
 .rn fi fi-real
 .rn nf nf-real
+.
 .de br
-	<br>
+.	if \\n[in-pre]=0 <br>
 ..
 .de sp-nice-try-ross
 .	ie !\\n(.$ <br>
@@ -231,10 +235,12 @@ TODO:
 .	el <br><br>
 ..
 .de end-preformat
+.	DEBUG .tm end-preformat \\n[in-pre]
 .	if \\n[in-pre] </pre>
 .	nr in-pre 0
 ..
 .de fi
+.	DEBUG fi
 .	end-preformat
 ..
 .de nf
@@ -250,8 +256,8 @@ TODO:
 .	if \\w\\n[.z] .ab ERROR, unclosed quotation from line \
 \\n[quotation_line]
 .	br-real	\" should be unnecessary...we have fill turned off
-.	fl     	\" more paranoia
-</font></body>
+.	fl	\" more paranoia
+</body>
 </html>
 .	br-real
 .	fl
@@ -261,21 +267,19 @@ TODO:
 <html>
 <head>
 	<title>
-		\\*[document-title]
+		\\*[document-title]\\$*
 		\\*[title-section]
 	</title>
-
-        <style type="text/css">
-        <!--
+	<style type="text/css">
+	<!--
 		body { margin-left:4%; }
-		H1 { color: maroon; padding: 4pt; margin-left: -4% }
-		H2 { color: maroon; padding: 4pt; margin-left: -4% }
-		H3 { color: maroon; padding: 4pt; margin-left: -4% }
-		H4 { color: maroon; padding: 4pt; margin-left: -4% }
-		H5 { color: maroon; padding: 4pt; margin-left: -4% }
-        -->
-        </style>
-
+		H1, H2, H3, H4, H5 {
+			color: maroon; padding: 4pt; margin-left: -4%;
+			border: solid; border-width: thin; width: 100%;
+			background: rgb(204,204,255)
+		}
+	-->
+	</style>
 </head>
 <body \\*[body-params]>
 \\*[dot-de] init-html
@@ -317,17 +321,15 @@ TODO:
 .de Sh
 .	end-preformat
 .	init-html
-	<h3>
+	<h3 id="\\$*">
 	\\$*
 	</h3>
 ..
 .de Ss
 .	end-preformat
 .	init-html
-	<h4>
-	   <a name="\\$*">
+	<h4 id="\\$*">
 	\\$*
-	   </a>
 	</h4>
 ..
 .
@@ -404,6 +406,7 @@ TODO:
 .\\*[get-file]
 ..
 .de Ed
+.	DEBUG .tm Ed
 </pre>
 .	doc-pop .Ed
 .	if \\n[Bd-literal] </code>
@@ -449,6 +452,11 @@ TODO:
 .			ds list-end   </ol>
 .			ds list-tag-prefix <p>
 .			ds list-pp-prefix <li>
+.			shift
+.			continue
+.		\}
+.		if '\\$1'-nested' \{\
+.			\" this should suffice
 .			shift
 .			continue
 .		\}
@@ -518,7 +526,7 @@ TODO:
 .			ds list-pp-prefix <dd>
 .			shift
 .			continue
-.	 	\}
+.		\}
 .		ab Unknown .Bl list parameter \\$1 (#\\n(.c)
 .		break
 .	\}
@@ -564,20 +572,33 @@ Unknown .Bl list type \\$1 (#\\n(.c)
 .if !\\n(.$==1 .tm Usage: .Lb [library name]
 .if "\\$1"libarm32" \&ARM32 Architecture Library (libarm32, -larm32)
 .if "\\$1"libi386" \&i386 Architecture Library (libi386, -li386)
-.if "\\$1"libahdi" \&AHDI Disk Partition Library (libahdi, -lahdi)
+.if "\\$1"libm68k" \&m68k Architecture Library (libm68k, -lm68k)
+.if "\\$1"libbluetooth" \&Bluetooth Hosts Library (libbluetooth, -lbluetooth)
 .if "\\$1"libc" \&Standard C Library (libc, -lc)
+.if "\\$1"libcdk" \&Curses Development Kit Library (libcdk, -lcdk)
 .if "\\$1"libcompat" \&Compatibility Library (libcompat, -lcompat)
 .if "\\$1"libcrypt" \&Crypt Library (libcrypt, -lcrypt)
 .if "\\$1"libcurses" \&Curses Library (libcurses, -lcurses)
 .if "\\$1"libedit" \&Command Line Editor Library (libedit, -ledit)
+.if "\\$1"libevent" \&Event Notification Library (libevent, -levent)
+.if "\\$1"libform" \&Curses Form Library (libform, -lform)
+.if "\\$1"libintl" \&Internationalized Message Handling Library (libintl, -lintl)
 .if "\\$1"libipsec" \&IPsec Policy Control Library (libipsec, -lipsec)
 .if "\\$1"libkvm" \&Kernel Data Access Library (libkvm, -lkvm)
 .if "\\$1"libm" \&Math Library (libm, -lm)
+.if "\\$1"libmagic" \&Magic Number Recognition Library (libmagic, -lmagic)
 .if "\\$1"libmenu" \&Curses Menu Library (libmenu, -lmenu)
 .if "\\$1"libossaudio" \&OSS Audio Emulation Library (libossaudio, -lossaudio)
+.if "\\$1"libpcap" \&Packet Capture Library (libpcap, -lpcap)
+.if "\\$1"libpci" \&PCI Bus Access Library (libpci, -lpci)
+.if "\\$1"libpmc" \&Performance Counters Library (libpmc, -lpmc)
 .if "\\$1"libposix" \&POSIX Compatibility Library (libposix, -lposix)
+.if "\\$1"libpthread" \&POSIX Thread Library (libpthread, -lpthread)
 .if "\\$1"libresolv" \&DNS Resolver Library (libresolv, -lresolv)
+.if "\\$1"librt" \&POSIX Real-time Library (librt, -lrt)
+.if "\\$1"libsdp" \&Service Discovery Protocol Library (libsdp, -lsdp)
 .if "\\$1"libtermcap" \&Termcap Access Library (libtermcap, -ltermcap)
+.if "\\$1"libusbhid" \&USB Human Interface Devices Library (libusbhid, -lusbhid)
 .if "\\$1"libutil" \&System Utilities Library (libutil, -lutil)
 .if "\\$1"libz" \&Compression Library (libz, -lz) 
 .. 
@@ -599,7 +620,6 @@ Unknown .Bl list type \\$1 (#\\n(.c)
 .\"
 .de recurse
 .	nr r-lvl +1
-.	ds active-prepend \\*[recurse-prepend]
 .DEBUG .tm r \\n[r-lvl] __\\*[doc-pcresult]==\\$@__
 .	while \\n(.$ \{\
 .		doc-checkpunct \\$1 \\*[doc-punct]
@@ -616,12 +636,6 @@ Unknown .Bl list type \\$1 (#\\n(.c)
 .		ie \\n[is-request] \{\
 .			ds recurse-tmp1 \\$1
 .			shift
-.			if \\w?\\*[active-prepend]?&\\w?\\*[recurse-prepend]? \{\
-.				if \\n[doc-dosep] .as doc-pcresult \\*[sepstring]
-.				as doc-pcresult "\\*[active-prepend]
-.				nr doc-dosep 0
-.			\}
-.			ds recurse-prepend
 .			\\*[recurse-tmp1] \\$@
 .			break
 .		\}
@@ -637,8 +651,7 @@ Unknown .Bl list type \\$1 (#\\n(.c)
 .			\}
 .			if \\n[doc-dosep] .as doc-pcresult \\*[sepstring]
 .			nr doc-dosep 1
-.			as doc-pcresult \\*[active-prepend]\\$1
-.			ds recurse-prepend
+.			as doc-pcresult \\$1
 .			shift
 .			continue
 .		\}
@@ -679,7 +692,7 @@ Unknown .Bl list type \\$1 (#\\n(.c)
 .make-mode code <code> </code>
 .make-mode em <em> </em>
 .make-mode i <i> </i>
-.make-mode caps <font\ size="-1"> <font\ size="+0">
+.make-mode caps <font\ size="-1"> </font>
 .make-mode null \& \&
 .make-mode function <code> </code>
 .am mode-i-on
@@ -709,7 +722,7 @@ Unknown .Bl list type \\$1 (#\\n(.c)
 .de Fl
 .DEBUG .tm .Fl \\$*
 .	mode-bold-on
-.	ds recurse-prepend -
+.	doc-sep-append \-
 .	recurse \\$@
 .	mode-bold-off
 .	pc-fin
@@ -738,6 +751,7 @@ Unknown .Bl list type \\$1 (#\\n(.c)
 .DEBUG .tm .Fx \\$*
 .	as doc-pcresult FreeBSD
 .	recurse \\$@
+.	pc-fin
 ..
 .de Nm
 .	ds Nm-result \\*[Nm-save]
@@ -761,6 +775,15 @@ Unknown .Bl list type \\$1 (#\\n(.c)
 ..
 .de At
 AT&T UNIX\\$*
+..
+.de An
+.	if '\\$1'-nosplit' \{\
+.		ds an-eol
+.		shift
+.	\}
+.	recurse \\$@
+.	as doc-pcresult \\*[an-eol]
+.	pc-fin
 ..
 .de Lk
 .	as doc-pcresult <a href="\\$1">\\$1</a>
@@ -794,6 +817,11 @@ AT&T UNIX\\$*
 .	recurse \\$@
 .	pc-fin
 ..
+.de Ox
+.	as doc-pcresult OpenBSD
+.	recurse \\$@
+.	pc-fin
+..
 .de Ux
 .	as doc-pcresult UNIX
 .	recurse \\$@
@@ -820,60 +848,64 @@ AT&T UNIX\\$*
 ..
 .
 .de doc-start-quote 
-.       if \\n[r-lvl]&\\n[doc-dosep] .as doc-pcresult \\*[sepstring]
-.       as doc-pcresult \\$1
-.       nr doc-dosep 0
+.	if \\n[r-lvl]&\\n[doc-dosep] .as doc-pcresult \\*[sepstring]
+.	as doc-pcresult \\$1
+.	nr doc-dosep 0
 ..
 .
 .de safe-blm
 ..
 .
+.nr quote-level 0
 .de doc-quote-open
+.	nr quote-level +1
 .	blm safe-blm
 .	if \\n[r-lvl]&\\n[doc-dosep] .as doc-pcresult \\*[sepstring]
 .	nr doc-dosep 0
-.	ev quotation_ev
-.	  di quotation
-.	    br-real
-.	    nr quotation_line \\n[.c]
+.	ie \\n[quote-level]=1 \{\
+.		ev quotation_ev
+.		di quotation
+.		br-real
+.		nr quotation_line \\n[.c]
+.	\}
+.	el \{\
+.		di
+.		as quotation \\$1
+.		da quotation
+.	\}
 ..
 .
 .de general-close
+.	nr quote-level -1
 .	if \\w\\n[.z]=0 .Error no quotation is open
 .	br-real
-.	di
-.	ev
-.	if \\w\\n[.z]>0 \{\
-.		tm Already in a diversion?! \\n[.z]
-.		backtrace
-.		Error multiple diversions: two quotations open?
-.	\}
-.	if \\n[dn]=0 \{\
-.tm  gb1 \\n[dn] \\n[dl]
+.	if \\n[quote-level]=0 \{\
+.		di
+.		ev
 .		ev quotation_ev
 .		br-real
 .		da quotation
-.		nf
+.		nf-real
 .
 .		di
 .		ev
-.tm  gb2 \\n[dn] \\n[dl]
+.		as doc-pcresult \\$1\\*[quotation]\\
+.		blm Pp
 .	\}
-.	as doc-pcresult \\$1\\*[quotation]\\
 .
 .
-.	blm Pp
 ..
 .
 .de make-quoter
 \\*[dot-de] \\$1o
-.	doc-quote-open
+.	doc-quote-open \\$2
 .	recurse \\\\$@
 .	pc-fin
 \\*[dot-dot]
 \\*[dot-de] \\$1c
+.	DEBUG .tm CLOSE 1,\\\\$@,
 .	general-close \\$2
-.	shift
+.	DEBUG .tm CLOSE 2,\\\\$@,\\$3,
 .	recurse \\\\$@ \\$3
 .	pc-fin
 \\*[dot-dot]
@@ -884,13 +916,15 @@ AT&T UNIX\\$*
 \\*[dot-dot]
 ..
 .
-.\" generate Aq Ao Ac Bq Bo Bc Dq Do Dc Pq Po Pc Qq Qo Qc Sq So Sc Oo Oc
+.\" generate Aq Ao Ac Bq Bo Bc Brq Bro Brc Dq Do Dc
+.\"	Pq Po Pc Qq Qo Qc Sq So Sc Oo Oc
 .make-quoter A &lt; &gt;
-.make-quoter B \&[ \&]
-.make-quoter D \&`` \&''
-.make-quoter P \&( \&)
-.make-quoter Q \&" \&"
-.make-quoter S \&` \&'
+.make-quoter B \&[ ]
+.make-quoter Br \&{ }
+.make-quoter D \&`` ''
+.make-quoter P \&( )
+.make-quoter Q \&" "
+.make-quoter S \&` '
 .als Oo Bo
 .als Oc Bc
 .de Error
@@ -913,6 +947,7 @@ AT&T UNIX\\$*
 .	ds sepstring , \" (need the space)
 .	recurse \\$@
 .	as doc-pcresult \\*[close-mode])
+.	resetmode
 .	pc-fin
 ..
 .de Fo
@@ -949,14 +984,26 @@ AT&T UNIX\\$*
 .	pc-fin
 ..
 .de Xr
-.	ie \\n[DOC_XR] \{\
+.	nr have-sec 0
+.	if \\$21 .nr have-sec 1
+.	if \\$22 .nr have-sec 1
+.	if \\$23 .nr have-sec 1
+.	if \\$24 .nr have-sec 1
+.	if \\$25 .nr have-sec 1
+.	if \\$26 .nr have-sec 1
+.	if \\$27 .nr have-sec 1
+.	if \\$28 .nr have-sec 1
+.	if \\$29 .nr have-sec 1
+.	ie \\n[DOC_XR]:(\\n[have-sec]=0) \{\
 .		mode-code-on
-.		ie \\w\\$2=0 .as doc-pcresult \\$1
+.		ie \\n[have-sec]=0 .as doc-pcresult \\$1
 .		el .as doc-pcresult \\$1(\\$2)
 .		mode-code-off
 .	\}
 .	el \{\
-.		as doc-pcresult <a href="\\*[DOC_MANROOT]/html\\$2/m_\\$1.html">
+.		ds Xr-tmp \\$1
+.		if \\*[Xr-tmp]index .ds Xr-tmp xindex
+.		as doc-pcresult <a href="\\*[DOC_MANROOT]/html\\$2/\\$1.html">
 .		ie \\w\\$2=0 .as doc-pcresult \\$1
 .		el .as doc-pcresult \\$1(\\$2)
 .		as doc-pcresult </a>
@@ -1049,115 +1096,200 @@ AT&T UNIX\\$*
 .	\}
 .	el \{\
 .		ds std-tmp1 ERROR
-.	       if "\\$1"-p1003.1-96" \{\
-.			ds std-tmp1 \&ISO/IEC 9945-1:1996
+.\" ANSI/ISO C
+.		if "\\$1"-ansiC" \{\
+.			ds std-tmp1 \&ANSI X3.159-1989
 .			as std-tmp1 " \"exactly one space
-.			as std-tmp1 (``\\*(Px'')
-.	       \}
-.	       if "\\$1"-p1003.1c-95" \{\
-.			ds std-tmp1 \&IEEE Std1003.1c-1995
+.			as std-tmp1 (``ANSI C89'')
+.		\}
+.		if "\\$1"-ansiC-89" \{\
+.			ds std-tmp1 \&ANSI X3.159-1989
 .			as std-tmp1 " \"exactly one space
-.			as std-tmp1 (``\\*(Px'')
-.	       \}
-.	       if "\\$1"-p1003.1b-93" \{\
-.			ds std-tmp1 \&IEEE Std1003.1b-1993
+.			as std-tmp1 (``ANSI C89'')
+.		\}
+.		if "\\$1"-isoC" \{\
+.			ds std-tmp1 \&ISO/IEC 9899:1990
 .			as std-tmp1 " \"exactly one space
-.			as std-tmp1 (``\\*(Px'')
-.	       \}
-.	       if "\\$1"-p1003.1-90" \{\
-.			ds std-tmp1 \&IEEE Std1003.1-1990
+.			as std-tmp1 (``ISO C90'')
+.		\}
+.		if "\\$1"-isoC-90" \{\
+.			ds std-tmp1 \&ISO/IEC 9899:1990
 .			as std-tmp1 " \"exactly one space
-.			as std-tmp1 (``\\*(Px'')
-.	       \}
-.	       if "\\$1"-p1003.1-88" \{\
-.			ds std-tmp1 \&IEEE Std1003.1-1988
+.			as std-tmp1 (``ISO C90'')
+.		\}
+.		if "\\$1"-isoC-amd1" \{\
+.			ds std-tmp1 \&ISO/IEC 9899/AMD1:1990
 .			as std-tmp1 " \"exactly one space
-.			as std-tmp1 (``\\*(Px'')
-.	       \}
-.	       if "\\$1"-p1003.1" \{\
-.			ds std-tmp1 \&IEEE Std1003.1
+.			as std-tmp1 (``ISO C90'')
+.		\}
+.		if "\\$1"-isoC-tcor1" \{\
+.			ds std-tmp1 \&ISO/IEC 9899/TCOR1:1990
 .			as std-tmp1 " \"exactly one space
-.			as std-tmp1 (``\\*(Px'')
-.	       \}
-.	       if "\\$1"-p1003.2-92" \{\
-.			ds std-tmp1 \&IEEE Std1003.2-1992
+.			as std-tmp1 (``ISO C90'')
+.		\}
+.		if "\\$1"-isoC-tcor2" \{\
+.			ds std-tmp1 \&ISO/IEC 9899/TCOR2:1990
 .			as std-tmp1 " \"exactly one space
-.			as std-tmp1 (``\\*(Px.2'')
-.	       \}
-.	       if "\\$1"-p1003.2" \{\
-.			ds std-tmp1 \&IEEE Std1003.2
-.			as std-tmp1 " \"exactly one space
-.			as std-tmp1 (``\\*(Px.2'')
-.	       \}
-.	       if "\\$1"-isoC99" \{\
+.			as std-tmp1 (``ISO C90'')
+.		\}
+.		if "\\$1"-isoC-99" \{\
 .			ds std-tmp1 \&ISO/IEC 9899:1999
 .			as std-tmp1 " \"exactly one space
 .			as std-tmp1 (``ISO C99'')
-.	       \}
-.	       if "\\$1"-ansiC" \{\
-.			ds std-tmp1 \&ANSI X3.159-1989
+.		\}
+.\" POSIX Part 1: System API
+.		if "\\$1"-p1003.1" \{\
+.			ds std-tmp1 \&IEEE Std 1003.1
 .			as std-tmp1 " \"exactly one space
-.			as std-tmp1 (``ANSI C'')
-.	       \}
-.	       if "\\$1"-ansiC-89" \{\
-.			ds std-tmp1 \&ANSI X3.159-1989
+.			as std-tmp1 (``\\*(Px.1'')
+.		\}
+.		if "\\$1"-p1003.1-88" \{\
+.			ds std-tmp1 \&IEEE Std 1003.1-1988
 .			as std-tmp1 " \"exactly one space
-.			as std-tmp1 (``ANSI C'')
-.	       \}
-.	       if "\\$1"-ieee754" \{\
-.			ds std-tmp1 \&IEEE Std754-1985
-.	       \}
-.	       if "\\$1"-iso8802-3" \{\
-.			ds std-tmp1 \&ISO 8802-3:1989
-.	       \}
-.	       if "\\$1"-xpg3" \{\
-.			ds std-tmp1 X/Open Portability Guide Issue 3
+.			as std-tmp1 (``\\*(Px.1'')
+.		\}
+.		if "\\$1"-p1003.1-90" \{\
+.			ds std-tmp1 \&ISO/IEC 9945-1:1990
 .			as std-tmp1 " \"exactly one space
-.			as std-tmp1 (``XPG3'')
-.	       \}
-.	       if "\\$1"-xpg4" \{\
-.			ds std-tmp1 X/Open Portability Guide Issue 4
+.			as std-tmp1 (``\\*(Px.1'')
+.		\}
+.		if "\\$1"-iso9945-1-90" \{\
+.			ds std-tmp1 \&ISO/IEC 9945-1:1990
 .			as std-tmp1 " \"exactly one space
-.			as std-tmp1 (``XPG4'')
-.	       \}
-.	       if "\\$1"-xpg4.2" \{\
-.			ds std-tmp1 X/Open Portability Guide Issue 4.2
+.			as std-tmp1 (``\\*(Px.1'')
+.		\}
+.		if "\\$1"-p1003.1b-93" \{\
+.			ds std-tmp1 \&IEEE Std 1003.1b-1993
 .			as std-tmp1 " \"exactly one space
-.			as std-tmp1 (``XPG4.2'')
-.	       \}
-.	       if "\\$1"-xbd5" \{\
-.			ds std-tmp1 X/Open System Interface Definitions Issue 5
+.			as std-tmp1 (``\\*(Px.1'')
+.		\}
+.		if "\\$1"-p1003.1c-95" \{\
+.			ds std-tmp1 \&IEEE Std 1003.1c-1995
 .			as std-tmp1 " \"exactly one space
-.			as std-tmp1 (``\\*(tNXBD5\\*(aa'')
-.	       \}
-.	       if "\\$1"-xcu5" \{\
-.			ds std-tmp1 X/Open Commands and Utilities Issue 5
+.			as std-tmp1 (``\\*(Px.1'')
+.		\}
+.		if "\\$1"-p1003.1i-95" \{\
+.			ds std-tmp1 \&IEEE Std 1003.1i-1995
 .			as std-tmp1 " \"exactly one space
-.			as std-tmp1 (``\\*(tNXCU5\\*(aa'')
-.	       \}
-.	       if "\\$1"-xsh5" \{\
-.			ds std-tmp1 X/Open System Interfaces and Headers Issue 5
+.			as std-tmp1 (``\\*(Px.1'')
+.		\}
+.		if "\\$1"-p1003.1-96" \{\
+.			ds std-tmp1 \&ISO/IEC 9945-1:1996
 .			as std-tmp1 " \"exactly one space
-.			as std-tmp1 (``\\*(tNXSH5\\*(aa'')
-.	       \}
-.	       if "\\$1"-xns5" \{\
-.			ds std-tmp1 X/Open Networking Services Issue 5
+.			as std-tmp1 (``\\*(Px.1'')
+.		\}
+.		if "\\$1"-iso9945-1-96" \{\
+.			ds std-tmp1 \&ISO/IEC 9945-1:1996
 .			as std-tmp1 " \"exactly one space
-.			as std-tmp1 (``\\*(tNXNS5\\*(aa'')
-.	       \}
-.	       if "\\$1"-xcurses4.2" \{\
-.			ds std-tmp1 X/Open Curses Issue 4 Version 2
+.			as std-tmp1 (``\\*(Px.1'')
+.		\}
+.		if "\\$1"-p1003.1g-2000" \{\
+.			ds std-tmp1 \&IEEE Std 1003.1g-2000
 .			as std-tmp1 " \"exactly one space
-.			as std-tmp1 (``\\*(tNXCURSES4.2\\*(aa'')
-.	       \}
-.	       if "\\$1"-svid4" \{\
+.			as std-tmp1 (``\\*(Px.1'')
+.		\}
+.		if "\\$1"-p1003.1-2001" \{\
+.			ds std-tmp1 \&IEEE Std 1003.1-2001
+.			as std-tmp1 " \"exactly one space
+.			as std-tmp1 (``\\*(Px.1'')
+.		\}
+.		if "\\$1"-p1003.1-2004" \{\
+.			ds std-tmp1 \&IEEE Std 1003.1-2004
+.			as std-tmp1 " \"exactly one space
+.			as std-tmp1 (``\\*(Px.1'')
+.		\}
+.\" POSIX Part 2: Shell and Utilities
+.		if "\\$1"-p1003.2" \{\
+.			ds std-tmp1 \&IEEE Std 1003.2
+.			as std-tmp1 " \"exactly one space
+.			as std-tmp1 (``\\*(Px.2'')
+.		\}
+.		if "\\$1"-p1003.2-92" \{\
+.			ds std-tmp1 \&IEEE Std 1003.2-1992
+.			as std-tmp1 " \"exactly one space
+.			as std-tmp1 (``\\*(Px.2'')
+.		\}
+.		if "\\$1"-p1003.2a-92" \{\
+.			ds std-tmp1 \&IEEE Std 1003.2a-1992
+.			as std-tmp1 " \"exactly one space
+.			as std-tmp1 (``\\*(Px.2'')
+.		\}
+.		if "\\$1"-iso9945-2-93" \{\
+.			ds std-tmp1 \&ISO/IEC 9945-2:1993
+.			as std-tmp1 " \"exactly one space
+.			as std-tmp1 (``\\*(Px.2'')
+.		\}
+.\" X/Open
+.		if "\\$1"-susv2" \{\
+.			ds std-tmp1 \&Version 2 of the Single UNIX Specification
+.			as std-tmp1 " \"exactly one space
+.			as std-tmp1 (``SUSv2'')
+.		\}
+.		if "\\$1"-svid4" \{\
 .			ds std-tmp1 \&System V Interface Definition,
 .			as std-tmp1 " \"exactly one space
 .			as std-tmp1 \&Fourth Edition
 .			as std-tmp1 " \"exactly one space
 .			as std-tmp1 (``SVID4'')
-.	       \}
-.		if "\\*[std-tmp1]"ERROR" .tm ERROR, no such std: .St \\$*
+.		\}
+.		if "\\$1"-xbd5" \{\
+.			ds std-tmp1 X/Open System Interface Definitions Issue 5
+.			as std-tmp1 " \"exactly one space
+.			as std-tmp1 (``\\*(tNXBD5\\*(aa'')
+.		\}
+.		if "\\$1"-xcu5" \{\
+.			ds std-tmp1 X/Open Commands and Utilities Issue 5
+.			as std-tmp1 " \"exactly one space
+.			as std-tmp1 (``\\*(tNXCU5\\*(aa'')
+.		\}
+.		if "\\$1"-xcurses4.2" \{\
+.			ds std-tmp1 X/Open Curses, Issue 4, Version 2
+.			as std-tmp1 " \"exactly one space
+.			as std-tmp1 (``\\*(tNXCURSES4.2\\*(aa'')
+.		\}
+.		if "\\$1"-xns5" \{\
+.			ds std-tmp1 X/Open Networking Services Issue 5
+.			as std-tmp1 " \"exactly one space
+.			as std-tmp1 (``\\*(tNXNS5\\*(aa'')
+.		\}
+.		if "\\$1"-xns5.2" \{\
+.			ds std-tmp1 X/Open Networking Services Issue 5.2
+.			as std-tmp1 " \"exactly one space
+.			as std-tmp1 (``\\*(tNXNS5.2\\*(aa'')
+.		\}
+.		if "\\$1"-xpg3" \{\
+.			ds std-tmp1 X/Open Portability Guide Issue 3
+.			as std-tmp1 " \"exactly one space
+.			as std-tmp1 (``XPG3'')
+.		\}
+.		if "\\$1"-xpg4" \{\
+.			ds std-tmp1 X/Open Portability Guide Issue 4
+.			as std-tmp1 " \"exactly one space
+.			as std-tmp1 (``XPG4'')
+.		\}
+.		if "\\$1"-xpg4.2" \{\
+.			ds std-tmp1 X/Open Portability Guide Issue 4, Version 2
+.			as std-tmp1 " \"exactly one space
+.			as std-tmp1 (``XPG4.2'')
+.		\}
+.		if "\\$1"-xsh5" \{\
+.			ds std-tmp1 X/Open System Interfaces and Headers Issue 5
+.			as std-tmp1 " \"exactly one space
+.			as std-tmp1 (``\\*(tNXSH5\\*(aa'')
+.		\}
+.\" Miscellaneous
+.		if "\\$1"-ieee754" \{\
+.			ds std-tmp1 \&IEEE Std 754-1985
+.		\}
+.		if "\\$1"-ieee1275-94" \{\
+.			ds std-tmp1 \&IEEE Std 1275-1994
+.			as std-tmp1 " \"exactly one space
+.			as std-tmp1 (``Open Firmware'')
+.		\}
+.		if "\\$1"-iso8802-3" \{\
+.			ds std-tmp1 \&ISO/IEC 8802-3:1989
+.		\}
+.		if "\\*[std-tmp1]"ERROR" .Error no such std: .St \\$*
 .		shift
 .		as doc-pcresult \~\\*[std-tmp1]\~
 .		recurse \\$@
@@ -1176,6 +1308,7 @@ AT&T UNIX\\$*
 .	if "\\$1"V.2"  <code>AT&T</code> System V.2 <code>UNIX</code>\\$2
 .	if "\\$1"V.3"  <code>AT&T</code> System V.3 <code>UNIX</code>\\$2
 .	if "\\$1"V.4"  <code>AT&T</code> System V.4 <code>UNIX</code>\\$2
+.	if "\\$1"v1"  Version 1 <code>AT&T UNIX</code>\\$2
 .	if "\\$1"v5"  Version 5 <code>AT&T UNIX</code>\\$2
 .	if "\\$1"v6"  Version 6 <code>AT&T UNIX</code>\\$2
 .	if "\\$1"v7"  Version 7 <code>AT&T UNIX</code>\\$2
@@ -1187,6 +1320,8 @@ AT&T UNIX\\$*
 .	if "\\$1"V.2"  <code>AT&T</code> System V.2 <code>UNIX</code>
 .	if "\\$1"V.3"  <code>AT&T</code> System V.3 <code>UNIX</code>
 .	if "\\$1"V.4"  <code>AT&T</code> System V.4 <code>UNIX</code>
+.	if "\\$1"v1"  Version 1 <code>AT&T UNIX</code>
+.	if "\\$1"v5"  Version 5 <code>AT&T UNIX</code>
 .	if "\\$1"v6"  Version 6 <code>AT&T UNIX</code>
 .	if "\\$1"v7"  Version 7 <code>AT&T UNIX</code>
 .   \}
@@ -1220,6 +1355,7 @@ AT&T UNIX\\$*
 .als doc2html@@Op Op
 .als doc2html@@Em Em
 .als doc2html@@Fx Fx
+.als doc2html@@Ox Ox
 .als doc2html@@Nm Nm
 .als doc2html@@Nd Nd
 .als doc2html@@At At
@@ -1256,6 +1392,9 @@ AT&T UNIX\\$*
 .als doc2html@@Bq Bq
 .als doc2html@@Bo Bo
 .als doc2html@@Bc Bc
+.als doc2html@@Brq Brq
+.als doc2html@@Bro Bro
+.als doc2html@@Brc Brc
 .als doc2html@@Dq Dq
 .als doc2html@@Do Do
 .als doc2html@@Dc Dc
@@ -1274,6 +1413,7 @@ AT&T UNIX\\$*
 .als doc2html@@Mt Mt
 .als doc2html@@Lk Lk
 .als doc2html@@No No
+.als doc2html@@An An
 .
 .rn em doc-real-em
 .de em
@@ -1291,22 +1431,18 @@ AT&T UNIX\\$*
 	The body-params string used with -mdoc2html is used here as well.
 ..
 .de TH
-<html>
-<title>
-	\\$*
-.nr mo-section \\$2
-</title>
-<body \\*[body-params]>
+.	init-html \\$@
+.	nr mo-section \\$2
 ..
 .de SH
 .	end-preformat
 .	mo-end-dl
-<h3> \\$* </h3>
+<h3 id="\\$*"> \\$* </h3>
 ..
 .de SS
 .	end-preformat
 .	mo-end-dl
-<h4> \\$* </h4>
+<h4 id="\\$*"> \\$* </h4>
 ..
 .de B
 .	ie \\n(.$ <b>\&\\$*</b>
@@ -1316,11 +1452,10 @@ AT&T UNIX\\$*
 .	\}
 ..
 .de I
-.	it 1 mo-end-italic
 .	ie \\n(.$ <i>\&\\$*</i>
 .	el \{\
 .		if 1 <i>
-.		it 1 mo-end-bold
+.		it 1 mo-end-italic
 .	\}
 ..
 .de mo-end-bold
@@ -1335,7 +1470,7 @@ AT&T UNIX\\$*
 .	if \\n(.$ \&\\$*
 ..
 .de mo-end-smallcaps
-<font size=+0>
+</font>
 ..
 .de BI
 .	mo-try-link \\$1 \\$2
@@ -1390,12 +1525,13 @@ AT&T UNIX\\$*
 .	\}
 ..
 .de CT
-\&&lt;<font size=-1>CTRL/<font size=+0>\\$*&gt;
+\&&lt;<font size=-1>CTRL/</font>\\$*&gt;
 ..
 .de DS
 <code><pre>
 ..
 .de DE
+.	DEBUG .tm DE
 </pre></code>
 ..
 .als Ds DS

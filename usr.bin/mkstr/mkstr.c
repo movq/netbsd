@@ -1,4 +1,4 @@
-/*	$NetBSD: mkstr.c,v 1.8 1997/10/19 14:12:34 mrg Exp $	*/
+/*	$NetBSD: mkstr.c,v 1.12 2008/07/21 14:19:24 lukem Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)mkstr.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: mkstr.c,v 1.8 1997/10/19 14:12:34 mrg Exp $");
+__RCSID("$NetBSD: mkstr.c,v 1.12 2008/07/21 14:19:24 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -82,7 +78,7 @@ __RCSID("$NetBSD: mkstr.c,v 1.8 1997/10/19 14:12:34 mrg Exp $");
 
 FILE	*mesgread, *mesgwrite;
 char	*progname;
-char	usagestr[] =	"usage: %s [ - ] mesgfile prefix file ...\n";
+const char	usagestr[] =	"usage: %s [ - ] mesgfile prefix file ...\n";
 char	name[100], *np;
 
 void process __P((void));
@@ -114,11 +110,11 @@ main(argc, argv)
 		perror(argv[0]), exit(1);
 	inithash();
 	argc--, argv++;
-	strcpy(name, argv[0]);
+	strlcpy(name, argv[0], sizeof(name));
 	np = name + strlen(name);
 	argc--, argv++;
 	do {
-		strcpy(np, argv[0]);
+		strlcpy(np, argv[0], sizeof(name) - (np - name));
 		if (freopen(name, "w", stdout) == NULL)
 			perror(name), exit(1);
 		if (freopen(argv[0], "r", stdin) == NULL)

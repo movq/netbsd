@@ -1,4 +1,4 @@
-/*	$NetBSD: promdev.c,v 1.8 1999/04/28 13:20:55 christos Exp $ */
+/*	$NetBSD: promdev.c,v 1.21 2008/04/05 06:39:08 tsutsui Exp $ */
 
 /*
  * Copyright (c) 1993 Paul Kranenburg
@@ -38,7 +38,6 @@
 #include <sys/param.h>
 #include <sys/reboot.h>
 #include <sys/systm.h>
-#include <machine/idprom.h>
 #include <machine/oldmon.h>
 #include <machine/promlib.h>
 #include <machine/ctlreg.h>
@@ -46,35 +45,41 @@
 #include <machine/pte.h>
 
 #include <lib/libsa/stand.h>
-
+#include <lib/libkern/libkern.h>
 #include <sparc/stand/common/promdev.h>
+
+#ifndef BOOTXX
+#include <sys/disklabel.h>
+#include <dev/sun/disklabel.h>
+#include <dev/raidframe/raidframevar.h>
+#endif
 
 /* OBP V0-3 PROM vector */
 #define obpvec	((struct promvec *)romp)
 
-int	obp_close __P((struct open_file *));
-int	obp_strategy __P((void *, int, daddr_t, size_t, void *, size_t *));
-int	obp_v0_strategy __P((void *, int, daddr_t, size_t, void *, size_t *));
-ssize_t	obp_v0_xmit __P((struct promdata *, void *, size_t));
-ssize_t	obp_v0_recv __P((struct promdata *, void *, size_t));
-int	obp_v2_strategy __P((void *, int, daddr_t, size_t, void *, size_t *));
-ssize_t	obp_v2_xmit __P((struct promdata *, void *, size_t));
-ssize_t	obp_v2_recv __P((struct promdata *, void *, size_t));
-int	oldmon_close __P((struct open_file *));
-int	oldmon_strategy __P((void *, int, daddr_t, size_t, void *, size_t *));
-void	oldmon_iclose __P((struct saioreq *));
-int	oldmon_iopen __P((struct promdata *));
-ssize_t	oldmon_xmit __P((struct promdata *, void *, size_t));
-ssize_t	oldmon_recv __P((struct promdata *, void *, size_t));
+int	obp_close(struct open_file *);
+int	obp_strategy(void *, int, daddr_t, size_t, void *, size_t *);
+int	obp_v0_strategy(void *, int, daddr_t, size_t, void *, size_t *);
+ssize_t	obp_v0_xmit(struct promdata *, void *, size_t);
+ssize_t	obp_v0_recv(struct promdata *, void *, size_t);
+int	obp_v2_strategy(void *, int, daddr_t, size_t, void *, size_t *);
+ssize_t	obp_v2_xmit(struct promdata *, void *, size_t);
+ssize_t	obp_v2_recv(struct promdata *, void *, size_t);
+int	oldmon_close(struct open_file *);
+int	oldmon_strategy(void *, int, daddr_t, size_t, void *, size_t *);
+void	oldmon_iclose(struct saioreq *);
+int	oldmon_iopen(struct promdata *);
+ssize_t	oldmon_xmit(struct promdata *, void *, size_t);
+ssize_t	oldmon_recv(struct promdata *, void *, size_t);
 
-static char	*oldmon_mapin __P((u_long, int, int));
+static char	*oldmon_mapin(u_long, int, int);
 #ifndef BOOTXX
-static char	*mygetpropstring __P((int, char *));
-static int	getdevtype __P((int, char *));
+static char	*mygetpropstring(int, char *);
+static int	getdevtype(int, char *);
 #endif
 
-extern struct filesystem file_system_nfs[];
-extern struct filesystem file_system_ufs[];
+extern struct fs_ops file_system_nfs[];
+extern struct fs_ops file_system_ufs[];
 
 #define null_devopen	(void *)sparc_noop
 #define null_devioctl	(void *)sparc_noop
@@ -92,13 +97,16 @@ struct devsw obp_v2_devsw =
 	{ "obp v2", obp_v2_strategy, null_devopen, obp_close, null_devioctl };
 
 
-char	*prom_bootdevice;
+char	prom_bootdevice[MAX_PROM_PATH];
 static int	saveecho;
+
+#ifndef BOOTXX
+static daddr_t doffset = 0;
+#endif
 
 
 void
-putchar(c)
-	int c;
+putchar(int c)
 {
  
 	if (c == '\n')
@@ -107,19 +115,26 @@ putchar(c)
 }
 
 void
-_rtt()
+_rtt(void)
 {
+
 	prom_halt();
 }
 
 int
-devopen(f, fname, file)
-	struct open_file *f;
-	const char *fname;
-	char **file;
+devopen(struct open_file *f, const char *fname, char **file)
 {
-	int	error = 0, fd;
+	int	error = 0, fd = 0;
 	struct	promdata *pd;
+#ifndef BOOTXX
+	char *partition;
+	int part = 0;
+	char rawpart[MAX_PROM_PATH];
+	struct promdata *disk_pd;
+	char buf[DEV_BSIZE];
+	struct disklabel *dlp;
+	size_t read;
+#endif
 
 	pd = (struct promdata *)alloc(sizeof *pd);
 	f->f_devdata = (void *)pd;
@@ -140,7 +155,7 @@ devopen(f, fname, file)
 	case PROM_OBP_V2:
 	case PROM_OBP_V3:
 	case PROM_OPENFIRM:
-		if (prom_bootdevice == NULL) {
+		if (*prom_bootdevice == '\0') {
 			error = ENXIO;
 			break;
 		}
@@ -183,32 +198,103 @@ devopen(f, fname, file)
 		*file = (char *)fname;
 
 	if (pd->devtype == DT_NET) {
-		bcopy(file_system_nfs, file_system, sizeof(struct fs_ops));
+		nfsys = 1;
+		memcpy(file_system, file_system_nfs,
+		    sizeof(struct fs_ops) * nfsys);
 		if ((error = net_open(pd)) != 0) {
 			printf("Can't open NFS network connection on `%s'\n",
 				prom_bootdevice);
 			return (error);
 		}
-	} else
-		bcopy(file_system_ufs, file_system, sizeof(struct fs_ops));
+	} else {
+		memcpy(file_system, file_system_ufs,
+		    sizeof(struct fs_ops) * nfsys);
+
+#ifdef NOTDEF_DEBUG
+	printf("devopen: Checking disklabel for RAID partition\n");
+#endif
+
+		/*
+		 * We need to read from the raw partition (i.e. the
+		 * beginning of the disk in order to check the NetBSD
+		 * disklabel to see if the boot partition is type RAID.
+		 *
+		 * For machines with prom_version() == PROM_OLDMON, we
+		 * only handle boot from RAID for the first disk partition.
+		 */
+		disk_pd = (struct promdata *)alloc(sizeof *disk_pd);
+		memcpy(disk_pd, pd, sizeof(struct promdata));
+		if (prom_version() != PROM_OLDMON) {
+			strcpy(rawpart, prom_bootdevice);
+			if ((partition = strchr(rawpart, ':')) != '\0' &&
+		    	    *++partition >= 'a' &&
+			    *partition <= 'a' +  MAXPARTITIONS) {
+				part = *partition - 'a';
+				*partition = RAW_PART + 'a';
+			} else
+				strcat(rawpart, ":c");
+			if ((disk_pd->fd = prom_open(rawpart)) == 0)
+				return 0;
+		}
+		error = f->f_dev->dv_strategy(disk_pd, F_READ, LABELSECTOR,
+		    DEV_BSIZE, &buf, &read);
+		if (prom_version() != PROM_OLDMON)
+			prom_close(disk_pd->fd);
+		if (error || (read != DEV_BSIZE))
+			return 0;
+#ifdef NOTDEF_DEBUG
+		{
+			int x = 0;
+			char *p = (char *) buf;
+
+			printf("  Sector %d:\n", LABELSECTOR);
+			printf("00000000  ");
+			while (x < DEV_BSIZE) {
+				if (*p >= 0x00 && *p < 0x10)
+					printf("0%x ", *p & 0xff);
+				else
+					printf("%x ", *p & 0xff);
+				x++;
+				if (x && !(x % 8))
+					printf(" ");
+				if (x && !(x % 16)) {
+					if(x < 0x100)
+						printf("\n000000%x  ", x);
+					else
+						printf("\n00000%x  ", x);
+				}
+				p++;
+			}
+			printf("\n");
+		}
+#endif
+		/* Check for NetBSD disk label. */
+		dlp = (struct disklabel *) (buf + LABELOFFSET);
+		if (dlp->d_magic == DISKMAGIC && !dkcksum(dlp) &&
+		    dlp->d_partitions[part].p_fstype == FS_RAID) {
+#ifdef NOTDEF_DEBUG
+			printf("devopen: found RAID partition, "
+			    "adjusting offset to %d\n", RF_PROTECTED_SECTORS);
+#endif
+			doffset = RF_PROTECTED_SECTORS;
+		}
+	}
 #endif /* BOOTXX */
 	return (0);
 }
 
 
 int
-obp_v0_strategy(devdata, flag, dblk, size, buf, rsize)
-	void	*devdata;
-	int	flag;
-	daddr_t	dblk;
-	size_t	size;
-	void	*buf;
-	size_t	*rsize;
+obp_v0_strategy(void *devdata, int flag, daddr_t dblk, size_t size,
+		void *buf, size_t *rsize)
 {
 	int	n, error = 0;
 	struct	promdata *pd = (struct promdata *)devdata;
 	int	fd = pd->fd;
 
+#ifndef BOOTXX
+	dblk += doffset;
+#endif
 #ifdef DEBUG_PROM
 	printf("promstrategy: size=%d dblk=%d\n", size, dblk);
 #endif
@@ -238,18 +324,16 @@ obp_v0_strategy(devdata, flag, dblk, size, buf, rsize)
 }
 
 int
-obp_v2_strategy(devdata, flag, dblk, size, buf, rsize)
-	void	*devdata;
-	int	flag;
-	daddr_t	dblk;
-	size_t	size;
-	void	*buf;
-	size_t	*rsize;
+obp_v2_strategy(void *devdata, int flag, daddr_t dblk, size_t size,
+		void *buf, size_t *rsize)
 {
 	int	error = 0;
 	struct	promdata *pd = (struct promdata *)devdata;
 	int	fd = pd->fd;
 
+#ifndef BOOTXX
+	dblk += doffset;
+#endif
 #ifdef DEBUG_PROM
 	printf("promstrategy: size=%d dblk=%d\n", size, dblk);
 #endif
@@ -273,13 +357,8 @@ obp_v2_strategy(devdata, flag, dblk, size, buf, rsize)
  * On old-monitor machines, things work differently.
  */
 int
-oldmon_strategy(devdata, flag, dblk, size, buf, rsize)
-	void	*devdata;
-	int	flag;
-	daddr_t	dblk;
-	size_t	size;
-	void	*buf;
-	size_t	*rsize;
+oldmon_strategy(void *devdata, int flag, daddr_t dblk, size_t size,
+		void *buf, size_t *rsize)
 {
 	struct promdata	*pd = devdata;
 	struct saioreq	*si;
@@ -291,6 +370,9 @@ oldmon_strategy(devdata, flag, dblk, size, buf, rsize)
 	si = pd->si;
 	ops = si->si_boottab;
 
+#ifndef BOOTXX
+	dblk += doffset;
+#endif
 #ifdef DEBUG_PROM
 	printf("prom_strategy: size=%d dblk=%d\n", size, dblk);
 #endif
@@ -317,8 +399,7 @@ oldmon_strategy(devdata, flag, dblk, size, buf, rsize)
 }
 
 int
-obp_close(f)
-	struct open_file *f;
+obp_close(struct open_file *f)
 {
 	struct promdata *pd = f->f_devdata;
 	register int fd = pd->fd;
@@ -332,8 +413,7 @@ obp_close(f)
 }
 
 int
-oldmon_close(f)
-	struct open_file *f;
+oldmon_close(struct open_file *f)
 {
 	struct promdata *pd = f->f_devdata;
 
@@ -349,40 +429,28 @@ oldmon_close(f)
 
 #ifndef BOOTXX
 ssize_t
-obp_v0_xmit(pd, buf, len)
-	struct	promdata *pd;
-	void	*buf;
-	size_t	len;
+obp_v0_xmit(struct promdata *pd, void *buf, size_t len)
 {
 
 	return ((*obpvec->pv_v0devops.v0_wnet)(pd->fd, len, buf));
 }
 
 ssize_t
-obp_v2_xmit(pd, buf, len)
-	struct	promdata *pd;
-	void	*buf;
-	size_t	len;
+obp_v2_xmit(struct promdata *pd, void *buf, size_t len)
 {
 
 	return (prom_write(pd->fd, buf, len));
 }
 
 ssize_t
-obp_v0_recv(pd, buf, len)
-	struct	promdata *pd;
-	void	*buf;
-	size_t	len;
+obp_v0_recv(struct promdata *pd, void *buf, size_t len)
 {
 
 	return ((*obpvec->pv_v0devops.v0_rnet)(pd->fd, len, buf));
 }
 
 ssize_t
-obp_v2_recv(pd, buf, len)
-	struct	promdata *pd;
-	void	*buf;
-	size_t	len;
+obp_v2_recv(struct promdata *pd, void *buf, size_t len)
 {
 	int	n;
 
@@ -393,10 +461,7 @@ obp_v2_recv(pd, buf, len)
 }
 
 ssize_t
-oldmon_xmit(pd, buf, len)
-	struct	promdata *pd;
-	void	*buf;
-	size_t	len;
+oldmon_xmit(struct promdata *pd, void *buf, size_t len)
 {
 	struct saioreq	*si;
 	struct saif	*sif;
@@ -417,10 +482,7 @@ oldmon_xmit(pd, buf, len)
 }
 
 ssize_t
-oldmon_recv(pd, buf, len)
-	struct	promdata *pd;
-	void	*buf;
-	size_t	len;
+oldmon_recv(struct promdata *pd, void *buf, size_t len)
 {
 	struct saioreq	*si;
 	struct saif	*sif;
@@ -437,54 +499,19 @@ oldmon_recv(pd, buf, len)
 }
 
 int
-getchar()
+getchar(void)
 {
+
 	return (prom_getchar());
 }
 
 time_t
-getsecs()
+getsecs(void)
 {
+
 	(void)prom_peekchar();
 	return (prom_ticks() / 1000);
 }
-
-
-
-void
-prom_getether(fd, ea)
-	int fd;
-	u_char *ea;
-{
-static	struct idprom idprom;
-	char buf[64];
-	u_char *src, *dst;
-	int len, x;
-
-	switch (prom_version()) {
-	case PROM_OLDMON:
-		if (idprom.id_format == 0) {
-			dst = (char*)&idprom;
-			src = (char*)AC_IDPROM;
-			len = sizeof(struct idprom);
-			do {
-				x = lduba(src++, ASI_CONTROL);
-				*dst++ = x;
-			} while (--len > 0);
-		}
-		bcopy(idprom.id_ether, ea, 6);
-		break;
-	case PROM_OBP_V0:
-	case PROM_OBP_V2:
-		(void)(*obpvec->pv_enaddr)(fd, (char *)ea);
-		break;
-	case PROM_OBP_V3:
-		sprintf(buf, "%lx mac-address drop swap 6 cmove", (u_long)ea);
-		prom_interpret(buf);
-		break;
-	}
-}
-
 
 /*
  * A number of well-known devices on sun4s.
@@ -504,9 +531,7 @@ static struct dtab {
 };
 
 int
-getdevtype(fd, name)
-	int	fd;
-	char	*name;
+getdevtype(int fd, char *name)
 {
 	struct dtab *dp;
 	int node;
@@ -524,7 +549,8 @@ getdevtype(fd, name)
 
 	case PROM_OBP_V2:
 	case PROM_OBP_V3:
-		node = (*obpvec->pv_v2devops.v2_fd_phandle)(fd);
+	case PROM_OPENFIRM:
+		node = prom_instance_to_package(fd);
 		cp = mygetpropstring(node, "device_type");
 		if (strcmp(cp, "block") == 0)
 			return (DT_BLOCK);
@@ -543,9 +569,7 @@ getdevtype(fd, name)
  * subsequent calls.
  */
 char *
-mygetpropstring(node, name)
-	int node;
-	char *name;
+mygetpropstring(int node, char *name)
 {
 	int len;
 static	char buf[64];
@@ -569,8 +593,7 @@ struct saioreq prom_si;
 static int promdev_inuse;
 
 int
-oldmon_iopen(pd)
-	struct promdata	*pd;
+oldmon_iopen(struct promdata *pd)
 {
 	struct om_bootparam *bp;
 	struct om_boottable *ops;
@@ -648,8 +671,7 @@ oldmon_iopen(pd)
 }
 
 void
-oldmon_iclose(si)
-	struct saioreq *si;
+oldmon_iclose(struct saioreq *si)
 {
 	struct om_boottable *ops;
 	struct devinfo *dip;
@@ -694,19 +716,17 @@ static int oldmon_mapinfo_cnt =
 static u_long prom_devmap = MONSHORTSEG;
 
 static char *
-oldmon_mapin(physaddr, length, maptype)
-	u_long physaddr;
-	int length, maptype;
+oldmon_mapin(u_long physaddr, int length, int maptype)
 {
 	int i, pa, pte, va;
 
 	if (length > (4*NBPG))
-		panic("oldmon_mapin: length=%d\n", length);
+		panic("oldmon_mapin: length=%d", length);
 
 	for (i = 0; i < oldmon_mapinfo_cnt; i++)
 		if (oldmon_mapinfo[i].maptype == maptype)
 			goto found;
-	panic("oldmon_mapin: invalid maptype %d\n", maptype);
+	panic("oldmon_mapin: invalid maptype %d", maptype);
 
 found:
 	pte = oldmon_mapinfo[i].pgtype;

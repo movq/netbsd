@@ -1,4 +1,4 @@
-/*	$NetBSD: save.c,v 1.10 1999/09/09 17:30:20 jsm Exp $	*/
+/*	$NetBSD: save.c,v 1.12 2008/01/28 05:55:10 dholland Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)save.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: save.c,v 1.10 1999/09/09 17:30:20 jsm Exp $");
+__RCSID("$NetBSD: save.c,v 1.12 2008/01/28 05:55:10 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -64,7 +60,7 @@ bool
 save()
 {
 	char	*sp;
-	int	outf;
+	int	outfd;
 	time_t	*tp;
 	char	buf[80];
 	time_t	tme;
@@ -116,15 +112,15 @@ over:
 	    && getyn(OVERWRITEFILEPROMPT) == FALSE))
 		return FALSE;
 
-	if ((outf = creat(buf, 0644)) < 0) {
+	if ((outfd = creat(buf, 0644)) < 0) {
 		error(strerror(errno));
 		return FALSE;
 	}
 	mvwaddstr(Score, ERR_Y, ERR_X, buf);
 	wrefresh(Score);
 	time(tp);			/* get current time		*/
-	rv = varpush(outf, writev);
-	close(outf);
+	rv = varpush(outfd, writev);
+	close(outfd);
 	if (rv == FALSE) {
 		unlink(buf);
 	} else {

@@ -1,4 +1,4 @@
-/*	$NetBSD: rmdir.c,v 1.16 1998/07/28 05:31:27 mycroft Exp $	*/
+/* $NetBSD: rmdir.c,v 1.25 2008/07/20 00:52:40 lukem Exp $ */
 
 /*-
  * Copyright (c) 1992, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,38 +31,37 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1992, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1992, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)rmdir.c	8.3 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: rmdir.c,v 1.16 1998/07/28 05:31:27 mycroft Exp $");
+__RCSID("$NetBSD: rmdir.c,v 1.25 2008/07/20 00:52:40 lukem Exp $");
 #endif
 #endif /* not lint */
 
+#include <sys/param.h>
+
 #include <err.h>
-#include <errno.h>
+#include <locale.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <locale.h>
 #include <unistd.h>
 
-int rm_path __P((char *));
-void usage __P((void));
-int main __P((int, char *[]));
+int	rm_path(char *);
+void	usage(void);
+int	main(int, char *[]);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
-	int ch, errors;
-	int pflag;
+	int ch, errors, pflag;
 
+	setprogname(argv[0]);
 	(void)setlocale(LC_ALL, "");
 
 	pflag = 0;
@@ -86,14 +81,7 @@ main(argc, argv)
 		usage();
 
 	for (errors = 0; *argv; argv++) {
-		char *p;
-
-		/* Delete trailing slashes, per POSIX. */
-		p = *argv + strlen(*argv);
-		while (--p > *argv && *p == '/')
-			;
-		*++p = '\0';
-
+		/* We rely on the kernel to ignore trailing '/' characters. */
 		if (rmdir(*argv) < 0) {
 			warn("%s", *argv);
 			errors = 1;
@@ -106,16 +94,15 @@ main(argc, argv)
 }
 
 int
-rm_path(path)
-	char *path;
+rm_path(char *path)
 {
 	char *p;
 
 	while ((p = strrchr(path, '/')) != NULL) {
-		/* Delete trailing slashes. */
-		while (--p > path && *p == '/')
-			;
-		*++p = '\0';
+		*p = 0;
+		if (p[1] == 0)
+			/* Ignore trailing '/' on deleted name */
+			continue;
 
 		if (rmdir(path) < 0) {
 			warn("%s", path);
@@ -127,10 +114,9 @@ rm_path(path)
 }
 
 void
-usage()
+usage(void)
 {
-
-	(void)fprintf(stderr, "usage: rmdir [-p] directory ...\n");
+	(void)fprintf(stderr, "usage: %s [-p] directory ...\n", getprogname());
 	exit(1);
 	/* NOTREACHED */
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: ahbreg.h,v 1.9 1998/08/17 00:26:33 mycroft Exp $	*/
+/*	$NetBSD: ahbreg.h,v 1.16 2008/04/28 20:23:48 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -52,8 +45,8 @@
  * functioning of this software in any circumstances.
  */
 
-typedef u_long physaddr;
-typedef u_long physlen;
+typedef u_int32_t physaddr;
+typedef u_int32_t physlen;
 
 /*
  * Offset of AHA1740 registers, relative from slot base.
@@ -137,7 +130,7 @@ typedef u_long physlen;
 
 #define	G2STAT2_HOST_READY	0x01
 
-#define	AHB_NSEG	33	/* number of dma segments supported */
+#define	AHB_NSEG	33	/* number of DMA segments supported */
 
 struct ahb_dma_seg {
 	physaddr seg_addr;
@@ -167,8 +160,8 @@ struct ahb_ecb_status {
 #define	HS_SCSI_RESET_ADAPTER	0x22
 #define	HS_SCSI_RESET_INCOMING	0x23
 	u_char  target_stat;
-	u_long  resid_count;
-	u_long  resid_addr;
+	u_int32_t  resid_count;
+	u_int32_t  resid_addr;
 	u_short addit_status;
 	u_char  sense_len;
 	u_char  unused[9];
@@ -210,15 +203,17 @@ struct ahb_ecb {
 	u_char  req_sense_length;
 	u_char  scsi_cmd_length;
 	short   cksum;
-	struct scsi_generic scsi_cmd;
+	u_char	scsi_cmd[12];
+
+	/*-----------------end of hardware supported fields----------------*/
 
 	struct ahb_dma_seg ahb_dma[AHB_NSEG];
 	struct ahb_ecb_status ecb_status;
-	struct scsipi_sense_data ecb_sense;
-	/*-----------------end of hardware supported fields----------------*/
+	struct scsi_sense_data ecb_sense;
+
 	TAILQ_ENTRY(ahb_ecb) chain;
 	struct ahb_ecb *nexthash;
-	long hashkey;
+	int32_t hashkey;
 	struct scsipi_xfer *xs;	/* the scsipi_xfer for this cmd */
 	int flags;
 #define	ECB_ALLOC	0x01

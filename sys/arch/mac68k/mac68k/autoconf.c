@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.54 1999/11/05 19:06:39 scottr Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.72 2008/06/13 10:01:32 cegger Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -21,11 +21,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -52,6 +48,9 @@
  * and the drivers are initialized.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.72 2008/06/13 10:01:32 cegger Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/buf.h>
@@ -70,31 +69,32 @@
 #include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsiconf.h>
 
-struct device	*booted_device;
-int		booted_partition;
+#include "scsibus.h"
 
-static void findbootdev __P((void));
-static int target_to_unit __P((u_long, u_long, u_long));
+static void findbootdev(void);
+#if NSCSIBUS > 0
+static int target_to_unit(u_long, u_long, u_long);
+#endif /* NSCSIBUS > 0 */
 
 /*
  * cpu_configure:
  * called at boot time, configure all devices on the system
  */
 void
-cpu_configure()
+cpu_configure(void)
 {
 
 	mrg_init();		/* Init Mac ROM Glue */
 	startrtclock();		/* start before ADB attached */
 
-	if (config_rootfound("mainbus", "mainbus") == NULL)
+	if (config_rootfound("mainbus", NULL) == NULL)
 		panic("No mainbus found!");
 
 	(void)spl0();
 }
 
 void
-cpu_rootconf()
+cpu_rootconf(void)
 {
 
 	findbootdev();
@@ -112,36 +112,45 @@ cpu_rootconf()
 u_long	bootdev;
 
 static void
-findbootdev()
+findbootdev(void)
 {
-	struct device *dv;
-	int major, unit, i;
-	char buf[32];
+	device_t dv;
+	int major, unit, controller;
+	const char *name;
 
 	booted_device = NULL;
 	booted_partition = 0;	/* Assume root is on partition a */
 
 	major = B_TYPE(bootdev);
-	for (i = 0; dev_name2blk[i].d_name != NULL; i++)
-		if (major == dev_name2blk[i].d_maj)
-			break;
-	if (dev_name2blk[i].d_name == NULL)
+	name = devsw_blk2name(major);
+	if (name == NULL)
 		return;
 
 	unit = B_UNIT(bootdev);
 
-	bootdev &= ~(B_UNITMASK << B_UNITSHIFT);
-	unit = target_to_unit(-1, unit, 0);
-	bootdev |= (unit << B_UNITSHIFT);
-
-	sprintf(buf, "%s%d", dev_name2blk[i].d_name, unit);
-	for (dv = alldevs.tqh_first; dv != NULL;
-	    dv = dv->dv_list.tqe_next) {
-		if (strcmp(buf, dv->dv_xname) == 0) {
-			booted_device = dv;
-			return;
-		}
+	switch (major) {
+	case 4: /* SCSI drive */
+#if NSCSIBUS > 0
+		bootdev &= ~(B_UNITMASK << B_UNITSHIFT); /* XXX */
+		unit = target_to_unit(-1, unit, 0);
+		bootdev |= (unit << B_UNITSHIFT); /* XXX */
+#else /* NSCSIBUS > 0 */
+		panic("Boot device is on a SCSI drive but SCSI support "
+		    "is not present");
+#endif /* NSCSIBUS > 0 */
+		break;
+	case 22: /* IDE drive */
+		/*
+		 * controller(=channel=buses) uses only IDE drive.
+		 * Here, controller always is 0.
+		 */
+		controller = B_CONTROLLER(bootdev);
+		unit = unit + (controller<<1);
+		break;
 	}
+
+	if ((dv = device_find_by_driver_unit(name, unit)) != NULL)
+		booted_device = dv;
 }
 
 /*
@@ -149,13 +158,12 @@ findbootdev()
  * This could be tape, disk, CD.  The calling routine, though,
  * assumes DISK.  It would be nice to allow CD, too...
  */
+#if NSCSIBUS > 0
 static int
-target_to_unit(bus, target, lun)
-	u_long bus, target, lun;
+target_to_unit(u_long bus, u_long target, u_long lun)
 {
 	struct scsibus_softc	*scsi;
-	struct scsipi_link	*sc_link;
-	struct device		*sc_dev;
+	struct scsipi_periph	*periph;
 extern	struct cfdriver		scsibus_cd;
 
 	if (target < 0 || target > 7 || lun < 0 || lun > 7) {
@@ -166,16 +174,14 @@ extern	struct cfdriver		scsibus_cd;
 
 	if (bus == -1) {
 		for (bus = 0 ; bus < scsibus_cd.cd_ndevs ; bus++) {
-			if (scsibus_cd.cd_devs[bus]) {
-				scsi = (struct scsibus_softc *)
-						scsibus_cd.cd_devs[bus];
-				if (scsi->sc_link[target][lun]) {
-					sc_link = scsi->sc_link[target][lun];
-					sc_dev = (struct device *)
-							sc_link->device_softc;
-					return sc_dev->dv_unit;
-				}
-			}
+			scsi = device_lookup_private(&scsibus_cd, bus);
+			if (!scsi)
+				continue;
+			periph = scsipi_lookup_periph(scsi->sc_channel,
+			    target, lun);
+			if (!periph)
+				continue;
+			return device_unit(periph->periph_dev);
 		}
 		return -1;
 	}
@@ -183,13 +189,14 @@ extern	struct cfdriver		scsibus_cd;
 		printf("scsi target to unit, bus (%ld) out of range.\n", bus);
 		return -1;
 	}
-	if (scsibus_cd.cd_devs[bus]) {
-		scsi = (struct scsibus_softc *) scsibus_cd.cd_devs[bus];
-		if (scsi->sc_link[target][lun]) {
-			sc_link = scsi->sc_link[target][lun];
-			sc_dev = (struct device *) sc_link->device_softc;
-			return sc_dev->dv_unit;
-		}
-	}
-	return -1;
+	scsi = device_lookup_private(&scsibus_cd, bus);
+	if (!scsi)
+		return -1;
+
+	periph = scsipi_lookup_periph(scsi->sc_channel,
+	    target, lun);
+	if (!periph)
+		return -1;
+	return device_unit(periph->periph_dev);
 }
+#endif /* NSCSIBUS > 0 */

@@ -1,4 +1,4 @@
-/*	$NetBSD: SYS.h,v 1.6 1999/01/14 22:48:19 kleink Exp $	*/
+/* $NetBSD: SYS.h,v 1.8 2002/01/14 00:55:55 thorpej Exp $ */
 
 /*
  * Copyright (c) 1994, 1995 Carnegie-Mellon University.
@@ -49,18 +49,6 @@ LEAF(name,0);				/* XXX # of args? */	\
 LEAF(name,0);				/* XXX # of args? */	\
 	CALLSYS_NOERROR(name)
 
-
-#define RSYSCALL(name)						\
-	SYSCALL(name);						\
-	RET;							\
-END(name)
-
-#define RSYSCALL_NOERROR(name)					\
-	SYSCALL_NOERROR(name);					\
-	RET;							\
-END(name)
-
-
 #define	PSEUDO(label,name)					\
 LEAF(label,0);				/* XXX # of args? */	\
 	CALLSYS_ERROR(name);					\
@@ -72,3 +60,17 @@ LEAF(label,0);				/* XXX # of args? */	\
 	CALLSYS_NOERROR(name);					\
 	RET;							\
 END(label);
+
+#define RSYSCALL(name)						\
+	SYSCALL(name);						\
+	RET;							\
+END(name)
+
+#define RSYSCALL_NOERROR(name)					\
+	SYSCALL_NOERROR(name);					\
+	RET;							\
+END(name)
+
+#define	WSYSCALL(weak,strong)					\
+	WEAK_ALIAS(weak,strong);				\
+	PSEUDO(strong,weak)

@@ -1,4 +1,4 @@
-/*	$NetBSD: compress.c,v 1.17 1998/10/08 01:56:28 wsanchez Exp $	*/
+/*	$NetBSD: compress.c,v 1.24 2008/07/21 14:19:22 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1992, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1992, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)compress.c	8.2 (Berkeley) 1/7/94";
 #else
-__RCSID("$NetBSD: compress.c,v 1.17 1998/10/08 01:56:28 wsanchez Exp $");
+__RCSID("$NetBSD: compress.c,v 1.24 2008/07/21 14:19:22 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -53,35 +49,28 @@ __RCSID("$NetBSD: compress.c,v 1.17 1998/10/08 01:56:28 wsanchez Exp $");
 
 #include <err.h>
 #include <errno.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
-#ifdef __STDC__
-#include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
+void	compress(char *, char *, int);
+void	cwarn(const char *, ...) __attribute__((__format__(__printf__,1,2)));
+void	cwarnx(const char *, ...) __attribute__((__format__(__printf__,1,2)));
+void	decompress(char *, char *, int);
+int	permission(char *);
+void	setfile(char *, struct stat *);
+void	usage(int);
 
-void	compress __P((char *, char *, int));
-void	cwarn __P((const char *, ...));
-void	cwarnx __P((const char *, ...));
-void	decompress __P((char *, char *, int));
-int	permission __P((char *));
-void	setfile __P((char *, struct stat *));
-void	usage __P((int));
-
-int	main __P((int, char *[]));
-extern FILE *zopen __P((const char *fname, const char *mode, int bits));
+int	main(int, char *[]);
+extern FILE *zopen(const char *fname, const char *mode, int bits);
 
 int eval, force, verbose;
 int isstdout, isstdin;
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char **argv)
 {
         enum {COMPRESS, DECOMPRESS} style = COMPRESS;
 	size_t len;
@@ -210,12 +199,11 @@ main(argc, argv)
 }
 
 void
-compress(in, out, bits)
-	char *in, *out;
-	int bits;
+compress(char *in, char *out, int bits)
 {
 	int nr;
 	struct stat isb, sb;
+	const char *error = NULL;
 	FILE *ifp, *ofp;
 	int exists, isreg, oreg;
 	u_char buf[BUFSIZ];
@@ -250,23 +238,27 @@ compress(in, out, bits)
 		cwarn("%s", out);
 		goto err;
 	}
+	oreg <<= 1;
 	while ((nr = fread(buf, 1, sizeof(buf), ifp)) != 0)
 		if (fwrite(buf, 1, nr, ofp) != nr) {
 			cwarn("%s", out);
 			goto err;
 		}
 
-	if (ferror(ifp) || fclose(ifp)) {
-		cwarn("%s", in);
-		goto err;
-	}
+	if (ferror(ifp))
+		error = in;
+	if (fclose(ifp))
+		if (error == NULL)
+			error = in;
+	if (fclose(ofp))
+		if (error == NULL)
+			error = out;
 	ifp = NULL;
-
-	if (fclose(ofp)) {
-		cwarn("%s", out);
+	ofp = NULL;
+	if (error) {
+		cwarn("%s", error);
 		goto err;
 	}
-	ofp = NULL;
 
 	if (isreg && oreg) {
 		if (stat(out, &sb)) {
@@ -277,8 +269,6 @@ compress(in, out, bits)
 		if (!force && sb.st_size >= isb.st_size) {
 			if (verbose)
 		(void)printf("%s: file would grow; left unmodified\n", in);
-			if (unlink(out))
-				cwarn("%s", out);
 			goto err;
 		}
 
@@ -299,19 +289,16 @@ compress(in, out, bits)
 	}
 	return;
 
-err:	if (ofp) {
-		if (oreg)
-			(void)unlink(out);
+err:	if (ofp)
 		(void)fclose(ofp);
-	}
+	if (oreg == 2)
+		(void)unlink(out);
 	if (ifp)
 		(void)fclose(ifp);
 }
 
 void
-decompress(in, out, bits)
-	char *in, *out;
-	int bits;
+decompress(char *in, char *out, int bits)
 {
 	int nr;
 	struct stat sb;
@@ -349,19 +336,26 @@ decompress(in, out, bits)
 	} else
 		isreg = 0;
 
+	oreg <<= 1;
 	while ((nr = fread(buf, 1, sizeof(buf), ifp)) != 0)
 		if (fwrite(buf, 1, nr, ofp) != nr) {
 			cwarn("%s", out);
 			goto err;
 		}
 
-	if (ferror(ifp) || fclose(ifp)) {
+	if (ferror(ifp)) {
+		cwarn("%s", in);
+		goto err;
+	}
+	if (fclose(ifp)) {
+		ifp = NULL;
 		cwarn("%s", in);
 		goto err;
 	}
 	ifp = NULL;
 
 	if (fclose(ofp)) {
+		ofp = NULL;
 		cwarn("%s", out);
 		goto err;
 	}
@@ -374,19 +368,16 @@ decompress(in, out, bits)
 	}
 	return;
 
-err:	if (ofp) {
-		if (oreg)
-			(void)unlink(out);
+err:	if (ofp)
 		(void)fclose(ofp);
-	}
+	if (oreg == 2)
+		(void)unlink(out);
 	if (ifp)
 		(void)fclose(ifp);
 }
 
 void
-setfile(name, fs)
-	char *name;
-	struct stat *fs;
+setfile(char *name, struct stat *fs)
 {
 	static struct timeval tv[2];
 
@@ -421,8 +412,7 @@ setfile(name, fs)
 }
 
 int
-permission(fname)
-	char *fname;
+permission(char *fname)
 {
 	int ch, first;
 
@@ -436,55 +426,34 @@ permission(fname)
 }
 
 void
-usage(iscompress)
-	int iscompress;
+usage(int iscompress)
 {
 	if (iscompress)
 		(void)fprintf(stderr,
-		    "usage: compress [-cfv] [-b bits] [file ...]\n");
+		    "usage: compress [-cdfv] [-b bits] [file ...]\n");
 	else
 		(void)fprintf(stderr,
-		    "usage: uncompress [-c] [-b bits] [file ...]\n");
+		    "usage: uncompress [-cdfv] [-b bits] [file ...]\n");
 	exit(1);
 }
 
 void
-#if __STDC__
 cwarnx(const char *fmt, ...)
-#else
-cwarnx(fmt, va_alist)
-	int eval;
-	const char *fmt;
-	va_dcl
-#endif
 {
 	va_list ap;
-#if __STDC__
+
 	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
 	vwarnx(fmt, ap);
 	va_end(ap);
 	eval = 1;
 }
 
 void
-#if __STDC__
 cwarn(const char *fmt, ...)
-#else
-cwarn(fmt, va_alist)
-	int eval;
-	const char *fmt;
-	va_dcl
-#endif
 {
 	va_list ap;
-#if __STDC__
+
 	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
 	vwarn(fmt, ap);
 	va_end(ap);
 	eval = 1;

@@ -1,4 +1,4 @@
-/*	$NetBSD: db_memrw.c,v 1.1 1999/09/13 10:31:28 itojun Exp $	*/
+/*	$NetBSD: db_memrw.c,v 1.9 2008/06/07 03:25:13 uwe Exp $	*/
 
 /*
  * Mach Operating System
@@ -33,12 +33,16 @@
  * by DDB and KGDB.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: db_memrw.c,v 1.9 2008/06/07 03:25:13 uwe Exp $");
+
 #include <sys/param.h>
 #include <sys/proc.h>
 #include <sys/systm.h>
 
-#include <vm/vm.h>
+#include <uvm/uvm_extern.h>
 
+#include <sh3/cache.h>
 #include <machine/db_machdep.h>
 
 #include <ddb/db_access.h>
@@ -47,65 +51,47 @@
  * Read bytes from kernel address space for debugger.
  */
 void
-db_read_bytes(addr, size, data)
-	vaddr_t		addr;
-	register size_t	size;
-	register char	*data;
+db_read_bytes(vaddr_t addr, size_t size, char *data)
 {
-	register char	*src;
+	char *src = (char *)addr;
 
-	src = (char *)addr;
+	/* properly aligned 4-byte */
+	if (size == 4 && ((addr & 3) == 0) && (((uintptr_t)data & 3) == 0)) {
+		*(uint32_t *)data = *(uint32_t *)src;
+		return;
+	}
+
+	/* properly aligned 2-byte */
+	if (size == 2 && ((addr & 1) == 0) && (((uintptr_t)data & 1) == 0)) {
+		*(uint16_t *)data = *(uint16_t *)src;
+		return;
+	}
+
 	while (size-- > 0)
 		*data++ = *src++;
 }
 
-#if !defined(PMAP_NEW)
-pt_entry_t *pmap_pte __P((pmap_t, vaddr_t));
-#endif
 
 /*
  * Write bytes to kernel address space for debugger.
+ * XXX: need support for writing to P3 read-only text pages.
  */
 void
-db_write_bytes(addr, size, data)
-	vaddr_t		addr;
-	register size_t	size;
-	register char	*data;
+db_write_bytes(vaddr_t addr, size_t size, const char *data)
 {
-	register char	*dst;
+	char *dst = (char *)addr;
 
-	register pt_entry_t *ptep0 = 0;
-	pt_entry_t	oldmap0 = { 0 };
-	vaddr_t		addr1;
-	register pt_entry_t *ptep1 = 0;
-	pt_entry_t	oldmap1 = { 0 };
-	extern char	etext;
+	/* properly aligned 4-byte */
+	if (size == 4 && ((addr & 3) == 0) && (((uintptr_t)data & 3) == 0))
+		*(uint32_t *)dst = *(const uint32_t *)data;
 
-	if (addr >= VM_MIN_KERNEL_ADDRESS &&
-	    addr < (vaddrt_t)&etext) {
-		ptep0 = pmap_pte(pmap_kernel(), addr);
-		oldmap0 = *ptep0;
-		*(int *)ptep0 |= /* INTEL_PTE_WRITE */ PG_RW;
+	/* properly aligned 2-byte */
+	else if (size == 2 && ((addr & 1) == 0) && (((uintptr_t)data & 1) == 0))
+		*(uint16_t *)dst = *(const uint16_t *)data;
 
-		addr1 = sh3_trunc_page(addr + size - 1);
-		if (sh3_trunc_page(addr) != addr1) {
-			/* data crosses a page boundary */
-			ptep1 = pmap_pte(pmap_kernel(), addr1);
-			oldmap1 = *ptep1;
-			*(int *)ptep1 |= /* INTEL_PTE_WRITE */ PG_RW;
-		}
-		pmap_update();
-	}
+	else
+		while (size-- > 0)
+			*dst++ = *data++;
 
-	dst = (char *)addr;
-
-	while (size-- > 0)
-		*dst++ = *data++;
-
-	if (ptep0) {
-		*ptep0 = oldmap0;
-		if (ptep1)
-			*ptep1 = oldmap1;
-		pmap_update();
-	}
+	sh_icache_sync_all();
 }

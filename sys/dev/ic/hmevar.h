@@ -1,4 +1,4 @@
-/*	$NetBSD: hmevar.h,v 1.3 2000/03/23 07:01:30 thorpej Exp $	*/
+/*	$NetBSD: hmevar.h,v 1.17 2008/04/28 20:23:50 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -46,14 +39,14 @@
 
 struct hme_ring {
 	/* Ring Descriptors */
-	caddr_t		rb_membase;	/* Packet buffer: CPU address */
+	void *		rb_membase;	/* Packet buffer: CPU address */
 	bus_addr_t	rb_dmabase;	/* Packet buffer: DMA address */
-	caddr_t		rb_txd;		/* Transmit descriptors */
+	void *		rb_txd;		/* Transmit descriptors */
 	bus_addr_t	rb_txddma;	/* DMA address of same */
-	caddr_t		rb_rxd;		/* Receive descriptors */
+	void *		rb_rxd;		/* Receive descriptors */
 	bus_addr_t	rb_rxddma;	/* DMA address of same */
-	caddr_t		rb_txbuf;	/* Transmit buffers */
-	caddr_t		rb_rxbuf;	/* Receive buffers */
+	void *		rb_txbuf;	/* Transmit buffers */
+	void *		rb_rxbuf;	/* Receive buffers */
 	int		rb_ntbuf;	/* # of transmit buffers */
 	int		rb_nrbuf;	/* # of receive buffers */
 
@@ -67,12 +60,12 @@ struct hme_softc {
 	struct device	sc_dev;		/* boilerplate device view */
 	struct ethercom	sc_ethercom;	/* Ethernet common part */
 	struct mii_data	sc_mii;		/* MII media control */
-#define sc_media	sc_mii.mii_media/* shorthand */
 	struct callout	sc_tick_ch;	/* tick callout */
 
 	/* The following bus handles are to be provided by the bus front-end */
 	bus_space_tag_t	sc_bustag;	/* bus tag */
 	bus_dma_tag_t	sc_dmatag;	/* bus dma tag */
+	bus_dmamap_t	sc_dmamap;	/* bus dma handle */
 	bus_space_handle_t sc_seb;	/* HME Global registers */
 	bus_space_handle_t sc_erx;	/* HME ERX registers */
 	bus_space_handle_t sc_etx;	/* HME ETX registers */
@@ -81,22 +74,26 @@ struct hme_softc {
 	int		sc_burst;	/* DVMA burst size in effect */
 	int		sc_phys[2];	/* MII instance -> PHY map */
 
+	int		sc_pci;		/* XXXXX -- PCI buses are LE. */
+
 	/* Ring descriptor */
 	struct hme_ring		sc_rb;
 #if notused
-	void		(*sc_copytobuf) __P((struct hme_softc *,
-					     void *, void *, size_t));
-	void		(*sc_copyfrombuf) __P((struct hme_softc *,
-					      void *, void *, size_t));
+	void		(*sc_copytobuf)(struct hme_softc *,
+					     void *, void *, size_t);
+	void		(*sc_copyfrombuf)(struct hme_softc *,
+					      void *, void *, size_t);
 #endif
 
 	int			sc_debug;
 	void			*sc_sh;		/* shutdownhook cookie */
-	u_int8_t		sc_enaddr[6];	/* MAC address */
+	int			sc_ec_capenable;
+	short			sc_if_flags;
+	u_int8_t		sc_enaddr[ETHER_ADDR_LEN]; /* MAC address */
 
 	/* Special hardware hooks */
-	void	(*sc_hwreset) __P((struct hme_softc *));
-	void	(*sc_hwinit) __P((struct hme_softc *));
+	void	(*sc_hwreset)(struct hme_softc *);
+	void	(*sc_hwinit)(struct hme_softc *);
 
 #if NRND > 0
 	rndsource_element_t	rnd_source;
@@ -104,6 +101,6 @@ struct hme_softc {
 };
 
 
-void	hme_config __P((struct hme_softc *));
-void	hme_reset __P((struct hme_softc *));
-int	hme_intr __P((void *));
+void	hme_config(struct hme_softc *);
+void	hme_reset(struct hme_softc *);
+int	hme_intr(void *);

@@ -1,15 +1,73 @@
-/*	$NetBSD: hack.options.c,v 1.4 1997/10/19 16:58:42 christos Exp $	*/
+/*	$NetBSD: hack.options.c,v 1.7.42.1 2009/06/29 23:22:24 snj Exp $	*/
 
 /*
- * Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1985.
+ * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
+ * Amsterdam
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met:
+ *
+ * - Redistributions of source code must retain the above copyright notice,
+ * this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above copyright
+ * notice, this list of conditions and the following disclaimer in the
+ * documentation and/or other materials provided with the distribution.
+ *
+ * - Neither the name of the Stichting Centrum voor Wiskunde en
+ * Informatica, nor the names of its contributors may be used to endorse or
+ * promote products derived from this software without specific prior
+ * written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
+ * IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+ * PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER
+ * OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+ * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
+ * Copyright (c) 1982 Jay Fenlason <hack@gnu.org>
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+ * AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL
+ * THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.options.c,v 1.4 1997/10/19 16:58:42 christos Exp $");
+__RCSID("$NetBSD: hack.options.c,v 1.7.42.1 2009/06/29 23:22:24 snj Exp $");
 #endif				/* not lint */
 
 #include <stdlib.h>
+#include <unistd.h>
 #include "hack.h"
 #include "extern.h"
 
@@ -121,7 +179,6 @@ parseoptions(opts, from_env)
 		while (*op) {
 			num = 1;
 			if (digit(*op)) {
-/*###124 [cc] warning: implicit declaration of function `atoi'%%%*/
 				num = atoi(op);
 				while (digit(*op))
 					op++;
@@ -153,7 +210,7 @@ bad:
 		if (!strncmp(opts, "help", 4)) {
 			pline("%s%s%s",
 			      "To set options use `HACKOPTIONS=\"<options>\"' in your environment, or ",
-			      "give the command 'o' followed by the line `<options>' while playing. ",
+			      "give the command 'O' followed by the line `<options>' while playing. ",
 			      "Here <options> is a list of <option>s separated by commas.");
 			pline("%s%s%s",
 			      "Simple (boolean) options are rest_on_space, news, time, ",
@@ -168,7 +225,7 @@ bad:
 			return;
 		}
 		pline("Bad option: %s.", opts);
-		pline("Type `o help<cr>' for help.");
+		pline("Type `O help<cr>' for help.");
 		return;
 	}
 	puts("Bad syntax in HACKOPTIONS.");
@@ -182,7 +239,8 @@ bad:
 int
 doset()
 {
-	char            buf[BUFSZ];
+	char buf[BUFSZ];
+	size_t pos;
 
 	pline("What options do you want to set? ");
 	getlin(buf);
@@ -190,22 +248,24 @@ doset()
 		(void) strcpy(buf, "HACKOPTIONS=");
 		(void) strcat(buf, flags.female ? "female," : "male,");
 		if (flags.standout)
-			(void) strcat(buf, "standout,");
+			(void) strlcat(buf, "standout,", sizeof(buf));
 		if (flags.nonull)
-			(void) strcat(buf, "nonull,");
+			(void) strlcat(buf, "nonull,", sizeof(buf));
 		if (flags.nonews)
-			(void) strcat(buf, "nonews,");
+			(void) strlcat(buf, "nonews,", sizeof(buf));
 		if (flags.time)
-			(void) strcat(buf, "time,");
+			(void) strlcat(buf, "time,", sizeof(buf));
 		if (flags.notombstone)
-			(void) strcat(buf, "notombstone,");
+			(void) strlcat(buf, "notombstone,", sizeof(buf));
 		if (flags.no_rest_on_space)
-			(void) strcat(buf, "!rest_on_space,");
+			(void) strlcat(buf, "!rest_on_space,", sizeof(buf));
 		if (flags.end_top != 5 || flags.end_around != 4 || flags.end_own) {
-			(void) sprintf(eos(buf), "endgame: %u topscores/%u around me",
+			pos = strlen(buf);
+			(void) snprintf(buf+pos, sizeof(buf)-pos,
+				       "endgame: %u topscores/%u around me",
 				       flags.end_top, flags.end_around);
 			if (flags.end_own)
-				(void) strcat(buf, "/own scores");
+				(void) strlcat(buf, "/own scores", sizeof(buf));
 		} else {
 			char           *eop = eos(buf);
 			if (*--eop == ',')

@@ -1,4 +1,4 @@
-/*	$NetBSD: disklabel.c,v 1.26 2000/01/22 22:19:09 mycroft Exp $	*/
+/*	$NetBSD: disklabel.c,v 1.34 2006/03/19 02:17:16 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1987, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -33,12 +29,16 @@
  * SUCH DAMAGE.
  */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
 #if 0
 static char sccsid[] = "@(#)disklabel.c	8.2 (Berkeley) 5/3/95";
 #else
-__RCSID("$NetBSD: disklabel.c,v 1.26 2000/01/22 22:19:09 mycroft Exp $");
+__RCSID("$NetBSD: disklabel.c,v 1.34 2006/03/19 02:17:16 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -46,9 +46,16 @@ __RCSID("$NetBSD: disklabel.c,v 1.26 2000/01/22 22:19:09 mycroft Exp $");
 #include <sys/param.h>
 #define DKTYPENAMES
 #define FSTYPENAMES
-#include <sys/disklabel.h>
 #include <ufs/ufs/dinode.h>
 #include <ufs/ffs/fs.h>
+
+#if HAVE_NBTOOL_CONFIG_H
+#include <nbinclude/sys/disklabel.h>
+#include <nbinclude/disktab.h>
+#else
+#include <sys/disklabel.h>
+#include <disktab.h>
+#endif /* HAVE_NBTOOL_CONFIG_H */
 
 #include <assert.h>
 #include <ctype.h>
@@ -59,8 +66,6 @@ __RCSID("$NetBSD: disklabel.c,v 1.26 2000/01/22 22:19:09 mycroft Exp $");
 #include <string.h>
 #include <unistd.h>
 
-#include <disktab.h>
-
 #ifdef __weak_alias
 __weak_alias(getdiskbyname,_getdiskbyname)
 #endif
@@ -70,11 +75,11 @@ static void	error __P((int));
 #endif
 static int	gettype __P((char *, const char *const *));
 
-static char  	*db_array[2] = { _PATH_DISKTAB, 0 };
+static const char *db_array[2] = { _PATH_DISKTAB, 0 };
 
 int
 setdisktab(name)
-	char *name;
+	const char *name;
 {
 	if (!name || !*name)
 		return -1;
@@ -119,15 +124,18 @@ getdiskbyname(name)
 	cgetstr(buf, "b0", &dp->d_boot0);
 	cgetstr(buf, "b1", &dp->d_boot1);
 
-	if (cgetstr(buf, "ty", &cq) > 0 && strcmp(cq, "removable") == 0)
-		dp->d_flags |= D_REMOVABLE;
-	else  if (cq && strcmp(cq, "simulated") == 0)
-		dp->d_flags |= D_RAMDISK;
+	if (cgetstr(buf, "ty", &cq) >= 0) {
+		if (strcmp(cq, "removable") == 0)
+			dp->d_flags |= D_REMOVABLE;
+		else if (strcmp(cq, "simulated") == 0)
+			dp->d_flags |= D_RAMDISK;
+		free(cq);
+	}
 	if (cgetcap(buf, "sf", ':') != NULL)
 		dp->d_flags |= D_BADSECT;
 
 #define getnumdflt(field, dname, dflt) \
-    (field) = (u_int32_t) ((cgetnum(buf, dname, &f) == -1) ? (dflt) : f)
+    (field) = ((cgetnum(buf, dname, &f) == -1) ? (dflt) : (u_int32_t) f)
 #define	getnum(field, dname) \
 	if (cgetnum(buf, dname, &f) != -1) field = (u_int32_t)f
 
@@ -136,9 +144,10 @@ getdiskbyname(name)
 	getnum(dp->d_nsectors, "ns");
 	getnum(dp->d_ncylinders, "nc");
 
-	if (cgetstr(buf, "dt", &cq) > 0)
+	if (cgetstr(buf, "dt", &cq) >= 0) {
 		dp->d_type = gettype(cq, dktypenames);
-	else
+		free(cq);
+	} else
 		getnumdflt(dp->d_type, "dt", 0);
 	getnumdflt(dp->d_secpercyl, "sc", dp->d_nsectors * dp->d_ntracks);
 	getnumdflt(dp->d_secperunit, "su", dp->d_secpercyl * dp->d_ncylinders);
@@ -149,7 +158,7 @@ getdiskbyname(name)
 	getnumdflt(dp->d_headswitch, "hs", 0);
 	getnumdflt(dp->d_trkseek, "ts", 0);
 	getnumdflt(dp->d_bbsize, "bs", BBSIZE);
-	getnumdflt(dp->d_sbsize, "sb", SBSIZE);
+	getnumdflt(dp->d_sbsize, "sb", SBLOCKSIZE);
 	strcpy(psize, "px");	/* XXX: strcpy is safe */
 	strcpy(pbsize, "bx");	/* XXX: strcpy is safe */
 	strcpy(pfsize, "fx");	/* XXX: strcpy is safe */
@@ -177,8 +186,11 @@ getdiskbyname(name)
 					    (u_int8_t)(bsize / pp->p_fsize);
 			}
 			getnumdflt(pp->p_fstype, ptype, 0);
-			if (pp->p_fstype == 0 && cgetstr(buf, ptype, &cq) > 0)
-				pp->p_fstype = gettype(cq, fstypenames);
+			if (pp->p_fstype == 0)
+				if (cgetstr(buf, ptype, &cq) >= 0) {
+					pp->p_fstype = gettype(cq, fstypenames);
+					free(cq);
+				}
 			max = p;
 		}
 	}
@@ -208,7 +220,7 @@ gettype(t, names)
 	for (nm = names; *nm; nm++)
 		if (strcasecmp(t, *nm) == 0)
 			return (nm - names);
-	if (isdigit(*t))
+	if (isdigit((unsigned char) *t))
 		return (atoi(t));
 	return (0);
 }

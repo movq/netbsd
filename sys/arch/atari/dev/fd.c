@@ -1,4 +1,4 @@
-/*	$NetBSD: fd.c,v 1.36 2000/03/29 14:19:22 leo Exp $	*/
+/*	$NetBSD: fd.c,v 1.62 2008/06/11 14:35:53 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman.
@@ -48,12 +48,16 @@
  *   - Finish ioctl's
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.62 2008/06/11 14:35:53 tsutsui Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/callout.h>
 #include <sys/kernel.h>
 #include <sys/malloc.h>
 #include <sys/buf.h>
+#include <sys/bufq.h>
 #include <sys/proc.h>
 #include <sys/device.h>
 #include <sys/ioctl.h>
@@ -122,9 +126,9 @@ static short	motoron  = 0;		/* motor is spinning		*/
 static short	nopens   = 0;		/* Number of opens executed	*/
 
 static short	fd_state = FLP_IDLE;	/* Current driver state		*/
-static int	lock_stat= 0;		/* dma locking status		*/
+static int	lock_stat= 0;		/* DMA locking status		*/
 static short	fd_cmd   = 0;		/* command being executed	*/
-static char	*fd_error= NULL;	/* error from fd_xfer_ok()	*/
+static const char *fd_error= NULL;	/* error from fd_xfer_ok()	*/
 
 /*
  * Private per device data
@@ -132,7 +136,7 @@ static char	*fd_error= NULL;	/* error from fd_xfer_ok()	*/
 struct fd_softc {
 	struct device	sc_dv;		/* generic device info		*/
 	struct disk	dkdev;		/* generic disk info		*/
-	struct buf_queue bufq;		/* queue of buf's		*/
+	struct bufq_state *bufq;	/* queue of buf's		*/
 	struct callout	sc_motor_ch;
 	int		unit;		/* unit for atari controlling hw*/
 	int		nheads;		/* number of heads in use	*/
@@ -143,7 +147,7 @@ struct fd_softc {
 	short		flags;		/* misc flags			*/
 	short		part;		/* Current open partition	*/
 	int		sector;		/* logical sector for I/O	*/
-	caddr_t		io_data;	/* KVA for data transfer	*/
+	char		*io_data;	/* KVA for data transfer	*/
 	int		io_bytes;	/* bytes left for I/O		*/
 	int		io_dir;		/* B_READ/B_WRITE		*/
 	int		errcnt;		/* current error count		*/
@@ -192,16 +196,12 @@ static short	def_type = 0;		/* Reflects config-switches	*/
 
 typedef void	(*FPV) __P((void *));
 
-/*
- * {b,c}devsw[] function prototypes
- */
 dev_type_open(fdopen);
 dev_type_close(fdclose);
 dev_type_read(fdread);
 dev_type_write(fdwrite);
 dev_type_ioctl(fdioctl);
-dev_type_size(fdsize);
-dev_type_dump(fddump);
+dev_type_strategy(fdstrategy);
 
 /*
  * Private drive functions....
@@ -225,19 +225,19 @@ static void	fdmoff __P((struct fd_softc *));
        void	write_fdreg __P((u_short, u_short));
        u_char	read_dmastat __P((void));
 
-extern __inline__ u_char read_fdreg(u_short regno)
+extern inline u_char read_fdreg(u_short regno)
 {
 	DMA->dma_mode = regno;
 	return(DMA->dma_data);
 }
 
-extern __inline__ void write_fdreg(u_short regno, u_short val)
+extern inline void write_fdreg(u_short regno, u_short val)
 {
 	DMA->dma_mode = regno;
 	DMA->dma_data = val;
 }
 
-extern __inline__ u_char read_dmastat(void)
+extern inline u_char read_dmastat(void)
 {
 	DMA->dma_mode = FDC_CS | DMA_SCREG;
 	return(DMA->dma_stat);
@@ -271,8 +271,16 @@ static int	fdcmatch __P((struct device *, struct cfdata *, void *));
 static int	fdcprint __P((void *, const char *));
 static void	fdcattach __P((struct device *, struct device *, void *));
 
-struct cfattach fdc_ca = {
-	sizeof(struct device), fdcmatch, fdcattach
+CFATTACH_DECL(fdc, sizeof(struct device),
+    fdcmatch, fdcattach, NULL, NULL);
+
+const struct bdevsw fd_bdevsw = {
+	fdopen, fdclose, fdstrategy, fdioctl, nodump, nosize, D_DISK
+};
+
+const struct cdevsw fd_cdevsw = {
+	fdopen, fdclose, fdread, fdwrite, fdioctl,
+	nostop, notty, nopoll, nommap, nokqfilter, D_DISK
 };
 
 static int
@@ -346,7 +354,7 @@ void	*auxp;
 const char	*pnp;
 {
 	if (pnp != NULL)
-		printf("fd%d at %s:", (int)auxp, pnp);
+		aprint_normal("fd%d at %s:", (int)auxp, pnp);
 	
 	return(UNCONF);
 }
@@ -354,12 +362,10 @@ const char	*pnp;
 static int	fdmatch __P((struct device *, struct cfdata *, void *));
 static void	fdattach __P((struct device *, struct device *, void *));
 
-       void	fdstrategy __P((struct buf *));
 struct dkdriver fddkdriver = { fdstrategy };
 
-struct cfattach fd_ca = {
-	sizeof(struct fd_softc), fdmatch, fdattach
-};
+CFATTACH_DECL(fd, sizeof(struct fd_softc),
+    fdmatch, fdattach, NULL, NULL);
 
 extern struct cfdriver fd_cd;
 
@@ -381,9 +387,9 @@ void		*auxp;
 	struct fd_types *type;
 	u_short		swtch;
 
-	sc = (struct fd_softc *)dp;
+	sc = device_private(dp);
 
-	callout_init(&sc->sc_motor_ch);
+	callout_init(&sc->sc_motor_ch, 0);
 
 	/*
 	 * Find out if an Ajax chip might be installed. Set the default
@@ -400,18 +406,17 @@ void		*auxp;
 	/*
 	 * Initialize and attach the disk structure.
 	 */
-	sc->dkdev.dk_name = sc->sc_dv.dv_xname;
-	sc->dkdev.dk_driver = &fddkdriver;
+	disk_init(&sc->dkdev, sc->sc_dv.dv_xname, &fddkdriver);
 	disk_attach(&sc->dkdev);
 }
 
 int
-fdioctl(dev, cmd, addr, flag, p)
+fdioctl(dev, cmd, addr, flag, l)
 dev_t		dev;
 u_long		cmd;
 int		flag;
-caddr_t		addr;
-struct proc	*p;
+void *		addr;
+struct lwp	*l;
 {
 	struct fd_softc *sc;
 
@@ -457,10 +462,10 @@ struct proc	*p;
  *	partition 1: 780Kb
  */
 int
-fdopen(dev, flags, devtype, proc)
+fdopen(dev, flags, devtype, l)
 dev_t		dev;
 int		flags, devtype;
-struct proc	*proc;
+struct lwp	*l;
 {
 	struct fd_softc	*sc;
 	int		sps;
@@ -494,7 +499,7 @@ struct proc	*proc;
 	 */
 	sps = splbio();
 	while(sc->flags & FLPF_INOPEN)
-		tsleep((caddr_t)sc, PRIBIO, "fdopen", 0);
+		tsleep((void *)sc, PRIBIO, "fdopen", 0);
 	splx(sps);
 
 	if(!(sc->flags & FLPF_ISOPEN)) {
@@ -506,7 +511,7 @@ struct proc	*proc;
 
 		type = FLP_TYPE(dev);
 
-		BUFQ_INIT(&sc->bufq);
+		bufq_alloc(&sc->bufq, "disksort", BUFQ_SORT_RAWBLOCK);
 		sc->unit        = DISKUNIT(dev);
 		sc->part        = RAW_PART;
 		sc->nheads	= fdtypes[type].nheads;
@@ -528,9 +533,9 @@ struct proc	*proc;
 		st_dmagrab((dma_farg)fdcint, (dma_farg)fdstatus, sc,
 								&lock_stat, 0);
 		while(sc->flags & FLPF_GETSTAT)
-			tsleep((caddr_t)sc, PRIBIO, "fdopen", 0);
+			tsleep((void *)sc, PRIBIO, "fdopen", 0);
 		splx(sps);
-		wakeup((caddr_t)sc);
+		wakeup((void *)sc);
 
 		if((sc->flags & FLPF_WRTPROT) && (flags & FWRITE)) {
 			sc->flags = 0;
@@ -559,10 +564,10 @@ struct proc	*proc;
 }
 
 int
-fdclose(dev, flags, devtype, proc)
+fdclose(dev, flags, devtype, l)
 dev_t		dev;
 int		flags, devtype;
-struct proc	*proc;
+struct lwp	*l;
 {
 	struct fd_softc	*sc;
 
@@ -597,11 +602,11 @@ struct buf	*bp;
 	lp = sc->dkdev.dk_label;
 	if ((sc->flags & FLPF_HAVELAB) == 0) {
 		bp->b_error = EIO;
-		goto bad;
+		goto done;
 	}
 	if (bp->b_blkno < 0 || (bp->b_bcount % SECTOR_SIZE)) {
 		bp->b_error = EINVAL;
-		goto bad;
+		goto done;
 	}
 	if (bp->b_bcount == 0)
 		goto done;
@@ -614,7 +619,7 @@ struct buf	*bp;
 			goto done;
 		if (sz < 0) { /* Past EndOfDisk */
 			bp->b_error = EINVAL;
-			goto bad;
+			goto done;
 		}
 		/* Trucate it */
 		if (bp->b_flags & B_RAW)
@@ -629,7 +634,7 @@ struct buf	*bp;
 	 * queue the buf and kick the low level code
 	 */
 	sps = splbio();
-	disksort_blkno(&sc->bufq, bp);	/* XXX disksort_cylinder */
+	BUFQ_PUT(sc->bufq, bp);	/* XXX disksort_cylinder */
 	if (!lock_stat) {
 		if (fd_state & FLP_MON)
 			callout_stop(&sc->sc_motor_ch);
@@ -640,34 +645,9 @@ struct buf	*bp;
 	splx(sps);
 
 	return;
-bad:
-	bp->b_flags |= B_ERROR;
 done:
 	bp->b_resid = bp->b_bcount;
 	biodone(bp);
-}
-
-/*
- * no dumps to floppy disks thank you.
- */
-int
-fddump(dev, blkno, va, size)
-dev_t	dev;
-daddr_t	blkno;
-caddr_t	va;
-size_t	size;
-{
-	return(ENXIO);
-}
-
-/*
- * no dumps to floppy disks thank you.
- */
-int
-fdsize(dev)
-dev_t dev;
-{
-	return(-1);
 }
 
 int
@@ -704,8 +684,8 @@ struct fd_softc	*sc;
 }
 
 /*
- * Called through the dma-dispatcher. So we know we are the only ones
- * messing with the floppy-controler.
+ * Called through the DMA-dispatcher. So we know we are the only ones
+ * messing with the floppy-controller.
  * Initialize some fields in the fdsoftc for the state-machine and get
  * it going.
  */
@@ -715,7 +695,7 @@ struct fd_softc	*sc;
 {
 	struct buf	*bp;
 
-	bp	     = BUFQ_FIRST(&sc->bufq);
+	bp	     = BUFQ_PEEK(sc->bufq);
 	sc->sector   = bp->b_blkno;	/* Start sector for I/O		*/
 	sc->io_data  = bp->b_data;	/* KVA base for I/O		*/
 	sc->io_bytes = bp->b_bcount;	/* Transfer size in bytes	*/
@@ -731,7 +711,7 @@ struct fd_softc	*sc;
 
 /*
  * The current transaction is finished (for good or bad). Let go of
- * the dma-resources. Call biodone() to finish the transaction.
+ * the DMA-resources. Call biodone() to finish the transaction.
  * Find a new transaction to work on.
  */
 static void
@@ -743,7 +723,7 @@ register struct fd_softc	*sc;
 	int		i, sps;
 
 	/*
-	 * Give others a chance to use the dma.
+	 * Give others a chance to use the DMA.
 	 */
 	st_dmafree(sc, &lock_stat);
 
@@ -753,10 +733,9 @@ register struct fd_softc	*sc;
 		 * Finish current transaction.
 		 */
 		sps = splbio();
-		bp = BUFQ_FIRST(&sc->bufq);
+		bp = BUFQ_GET(sc->bufq);
 		if (bp == NULL)
 			panic("fddone");
-		BUFQ_REMOVE(&sc->bufq, bp);
 		splx(sps);
 
 #ifdef FLP_DEBUG
@@ -765,7 +744,8 @@ register struct fd_softc	*sc;
 #endif
 		bp->b_resid = sc->io_bytes;
 
-		disk_unbusy(&sc->dkdev, (bp->b_bcount - bp->b_resid));
+		disk_unbusy(&sc->dkdev, (bp->b_bcount - bp->b_resid),
+		    (bp->b_flags & B_READ));
 
 		biodone(bp);
 	}
@@ -780,9 +760,9 @@ register struct fd_softc	*sc;
 	for(i = sc->unit + 1; ;i++) {
 		if(i >= fd_cd.cd_ndevs)
 			i = 0;
-		if((sc1 = fd_cd.cd_devs[i]) == NULL)
+		if((sc1 = device_lookup_private(&fd_cd, i)) == NULL)
 			continue;
-		if (BUFQ_FIRST(&sc1->bufq) != NULL)
+		if (BUFQ_PEEK(sc1->bufq) != NULL)
 			break;
 		if(i == sc->unit) {
 			callout_reset(&sc->sc_motor_ch, FLP_MONDELAY,
@@ -820,7 +800,7 @@ int	drive, head, dense;
 			DMA->dma_drvmode = (FDC_HDSET|FDC_HDSIG);
 			break;
 		default:
-			panic("fdselect: unknown density code\n");
+			panic("fdselect: unknown density code");
 	}
 	if(i != selected) {
 		selected = i;
@@ -951,7 +931,7 @@ struct fd_softc	*sc;
 			bcopy(sc->io_data, sc->bounceb, SECTOR_SIZE);
 		sc->flags |= FLPF_BOUNCE;
 	}
-	st_dmaaddr_set((caddr_t)phys_addr);	/* DMA address setup */
+	st_dmaaddr_set((void *)phys_addr);	/* DMA address setup */
 
 #ifdef FLP_DEBUG
 	printf("fd_xfer:Start io (io_addr:%lx)\n", (u_long)kvtop(sc->io_data));
@@ -1018,15 +998,14 @@ struct fd_softc	*sc;
 			if(fd_state == FLP_STAT) {
 				sc->flags |= FLPF_EMPTY;
 				sc->flags &= ~FLPF_GETSTAT;
-				wakeup((caddr_t)sc);
+				wakeup((void *)sc);
 				fddone(sc);
 				return;
 			}
 
-			bp = BUFQ_FIRST(&sc->bufq);
+			bp = BUFQ_PEEK(sc->bufq);
 
 			bp->b_error  = EIO;
-			bp->b_flags |= B_ERROR;
 			fd_state     = FLP_MON;
 
 			break;
@@ -1045,7 +1024,7 @@ struct fd_softc	*sc;
 
 			if(fd_state == FLP_STAT) {
 				sc->flags &= ~FLPF_GETSTAT;
-				wakeup((caddr_t)sc);
+				wakeup((void *)sc);
 				fddone(sc);
 				return;
 			}
@@ -1101,7 +1080,7 @@ register struct fd_softc	*sc;
 			 */
 			status = read_dmastat();
 			if(!(status & DMAOK)) {
-				fd_error = "Dma error";
+				fd_error = "DMA error";
 				return(X_ERROR);
 			}
 			/*
@@ -1121,7 +1100,7 @@ register struct fd_softc	*sc;
 			 */
 			status = read_dmastat();
 			if(!(status & DMAOK)) {
-				fd_error = "Dma error";
+				fd_error = "DMA error";
 				return(X_ERROR);
 			}
 			/*
@@ -1287,7 +1266,7 @@ struct fd_softc	*fdsoftc;
 }
 
 /*
- * Used to find out wich drives are actually connected. We do this by issueing
+ * Used to find out wich drives are actually connected. We do this by issuing
  * is 'RESTORE' command and check if the 'track-0' bit is set. This also works
  * if the drive is present but no floppy is inserted.
  */

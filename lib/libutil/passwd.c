@@ -1,4 +1,4 @@
-/*	$NetBSD: passwd.c,v 1.19 1999/12/03 16:23:58 mjl Exp $	*/
+/*	$NetBSD: passwd.c,v 1.45 2006/12/20 16:47:13 christos Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993, 1994, 1995
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,10 +31,11 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: passwd.c,v 1.19 1999/12/03 16:23:58 mjl Exp $");
+__RCSID("$NetBSD: passwd.c,v 1.45 2006/12/20 16:47:13 christos Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>
+#include <sys/param.h>
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/resource.h>
@@ -52,6 +49,7 @@ __RCSID("$NetBSD: passwd.c,v 1.19 1999/12/03 16:23:58 mjl Exp $");
 #include <limits.h>
 #include <paths.h>
 #include <pwd.h>
+#include <grp.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -59,23 +57,74 @@ __RCSID("$NetBSD: passwd.c,v 1.19 1999/12/03 16:23:58 mjl Exp $");
 #include <unistd.h>
 #include <util.h>
 
-static void	pw_cont __P((int sig));
-static int	pw_equal __P((char *buf, struct passwd *old_pw));
+static const char      *pw_filename(const char *filename);
+static void		pw_cont(int sig);
+static int		pw_equal(char *buf, struct passwd *old_pw);
+static const char      *pw_default(const char *option);
+static int		read_line(FILE *fp, char *line, int max);
+static void		trim_whitespace(char *line);
+
+static	char	pw_prefix[MAXPATHLEN];
+
+const char *
+pw_getprefix(void)
+{
+
+	return(pw_prefix);
+}
 
 int
-pw_lock(retries)
-	int retries;
+pw_setprefix(const char *new_prefix)
 {
+	size_t length;
+
+	_DIAGASSERT(new_prefix != NULL);
+
+	length = strlen(new_prefix);
+	if (length < sizeof(pw_prefix)) {
+		(void)strcpy(pw_prefix, new_prefix);
+		while (length > 0 && pw_prefix[length - 1] == '/')
+			pw_prefix[--length] = '\0';
+		return(0);
+	}
+	errno = ENAMETOOLONG;
+	return(-1);
+}
+
+static const char *
+pw_filename(const char *filename)
+{
+	static char newfilename[MAXPATHLEN];
+
+	_DIAGASSERT(filename != NULL);
+
+	if (pw_prefix[0] == '\0')
+		return filename;
+
+	if (strlen(pw_prefix) + strlen(filename) < sizeof(newfilename))
+		return strcat(strcpy(newfilename, pw_prefix), filename);
+
+	errno = ENAMETOOLONG;
+	return(NULL);
+}
+
+int
+pw_lock(int retries)
+{
+	const char *filename;
 	int i, fd;
 	mode_t old_mode;
 	int oerrno;
 
 	/* Acquire the lock file. */
+	filename = pw_filename(_PATH_MASTERPASSWD_LOCK);
+	if (filename == NULL)
+		return(-1);
 	old_mode = umask(0);
-	fd = open(_PATH_MASTERPASSWD_LOCK, O_WRONLY|O_CREAT|O_EXCL, 0600);
+	fd = open(filename, O_WRONLY|O_CREAT|O_EXCL, 0600);
 	for (i = 0; i < retries && fd < 0 && errno == EEXIST; i++) {
 		sleep(1);
-		fd = open(_PATH_MASTERPASSWD_LOCK, O_WRONLY|O_CREAT|O_EXCL,
+		fd = open(filename, O_WRONLY|O_CREAT|O_EXCL,
 			  0600);
 	}
 	oerrno = errno;
@@ -85,9 +134,12 @@ pw_lock(retries)
 }
 
 int
-pw_mkdb()
+pw_mkdb(username, secureonly)
+	const char *username;
+	int secureonly;
 {
-	int pstat;
+	const char *args[9];
+	int pstat, i;
 	pid_t pid;
 
 	pid = vfork();
@@ -95,8 +147,22 @@ pw_mkdb()
 		return (-1);
 
 	if (pid == 0) {
-		execl(_PATH_PWD_MKDB, "pwd_mkdb", "-p",
-		      _PATH_MASTERPASSWD_LOCK, NULL);
+		args[0] = "pwd_mkdb";
+		args[1] = "-d";
+		args[2] = pw_prefix;
+		args[3] = "-p";
+		i = 4;
+
+		if (secureonly)
+			args[i++] = "-s";
+		if (username != NULL) {
+			args[i++] = "-u";
+			args[i++] = username;
+		}
+
+		args[i++] = pw_filename(_PATH_MASTERPASSWD_LOCK);
+		args[i] = NULL;
+		execv(_PATH_PWD_MKDB, (char * const *)__UNCONST(args));
 		_exit(1);
 	}
 	pid = waitpid(pid, &pstat, 0);
@@ -106,9 +172,12 @@ pw_mkdb()
 }
 
 int
-pw_abort()
+pw_abort(void)
 {
-	return(unlink(_PATH_MASTERPASSWD_LOCK));
+	const char *filename;
+
+	filename = pw_filename(_PATH_MASTERPASSWD_LOCK);
+	return((filename == NULL) ? -1 : unlink(filename));
 }
 
 /* Everything below this point is intended for the convenience of programs
@@ -118,8 +187,7 @@ pw_abort()
 static pid_t editpid = -1;
 
 static void
-pw_cont(sig)
-	int sig;
+pw_cont(int sig)
 {
 
 	if (editpid != -1)
@@ -127,7 +195,7 @@ pw_cont(sig)
 }
 
 void
-pw_init()
+pw_init(void)
 {
 	struct rlimit rlim;
 
@@ -154,20 +222,19 @@ pw_init()
 }
 
 void
-pw_edit(notsetuid, filename)
-	int notsetuid;
-	const char *filename;
+pw_edit(int notsetuid, const char *filename)
 {
 	int pstat;
-	char *p, *editor;
-	char *argp[] = { "sh", "-c", NULL, NULL };
-
-#ifdef __GNUC__
-	(void) &editor;
-#endif
+	char *p;
+	const char * volatile editor;
+	const char *argp[] = { "sh", "-c", NULL, NULL };
 
 	if (filename == NULL)
 		filename = _PATH_MASTERPASSWD_LOCK;
+
+	filename = pw_filename(filename);
+	if (filename == NULL)
+		return;
 
 	if ((editor = getenv("EDITOR")) == NULL)
 		editor = _PATH_VI;
@@ -188,7 +255,7 @@ pw_edit(notsetuid, filename)
 			setgid(getgid());
 			setuid(getuid());
 		}
-		execvp(_PATH_BSHELL, argp);
+		execvp(_PATH_BSHELL, (char *const *)__UNCONST(argp));
 		_exit(1);
 	}
 
@@ -209,7 +276,7 @@ pw_edit(notsetuid, filename)
 }
 
 void
-pw_prompt()
+pw_prompt(void)
 {
 	int c;
 
@@ -224,12 +291,10 @@ pw_prompt()
 
 /* for use in pw_copy(). Compare a pw entry to a pw struct. */
 static int
-pw_equal (buf, pw)
-	char *buf;
-	struct passwd *pw;
+pw_equal(char *buf, struct passwd *pw)
 {
 	struct passwd buf_pw;
-	int len;
+	size_t len;
 
 	_DIAGASSERT(buf != NULL);
 	_DIAGASSERT(pw != NULL);
@@ -251,87 +316,315 @@ pw_equal (buf, pw)
 }
 
 void
-pw_copy(ffd, tfd, pw, old_pw)
-	int ffd, tfd;
-	struct passwd *pw, *old_pw;
+pw_copy(int ffd, int tfd, struct passwd *pw, struct passwd *old_pw)
 {
+	char errbuf[200];
+	int rv;
+
+	rv = pw_copyx(ffd, tfd, pw, old_pw, errbuf, sizeof(errbuf));
+	if (rv == 0) {
+		warnx("%s", errbuf);
+		pw_error(NULL, 0, 1);
+	}
+}
+
+int
+pw_copyx(int ffd, int tfd, struct passwd *pw, struct passwd *old_pw,
+    char *errbuf, size_t errbufsz)
+{
+	const char *filename;
+	char mpwd[MAXPATHLEN], mpwdl[MAXPATHLEN], *p, buf[8192];
 	FILE *from, *to;
 	int done;
-	char *p, buf[8192];
 
 	_DIAGASSERT(pw != NULL);
+	_DIAGASSERT(errbuf != NULL);
 	/* old_pw may be NULL */
 
-	if (!(from = fdopen(ffd, "r")))
-		pw_error(_PATH_MASTERPASSWD, 1, 1);
-	if (!(to = fdopen(tfd, "w")))
-		pw_error(_PATH_MASTERPASSWD_LOCK, 1, 1);
+	if ((filename = pw_filename(_PATH_MASTERPASSWD)) == NULL) {
+		snprintf(errbuf, errbufsz, "%s: %s", pw_prefix,
+		    strerror(errno));
+		return (0);
+	}
+	(void)strcpy(mpwd, filename);
+	if ((filename = pw_filename(_PATH_MASTERPASSWD_LOCK)) == NULL) {
+		snprintf(errbuf, errbufsz, "%s: %s", pw_prefix,
+		    strerror(errno));
+		return (0);
+	}
+	(void)strcpy(mpwdl, filename);
 
-	for (done = 0; fgets(buf, sizeof(buf), from);) {
+	if (!(from = fdopen(ffd, "r"))) {
+		snprintf(errbuf, errbufsz, "%s: %s", mpwd, strerror(errno));
+		return (0);
+	}
+	if (!(to = fdopen(tfd, "w"))) {
+		snprintf(errbuf, errbufsz, "%s: %s", mpwdl, strerror(errno));
+		(void)fclose(from);
+		return (0);
+	}
+
+	for (done = 0; fgets(buf, (int)sizeof(buf), from);) {
 		if (!strchr(buf, '\n')) {
-			warnx("%s: line too long", _PATH_MASTERPASSWD);
-			pw_error(NULL, 0, 1);
+			snprintf(errbuf, errbufsz, "%s: line too long", mpwd);
+			(void)fclose(from);
+			(void)fclose(to);
+			return (0);
 		}
 		if (done) {
 			(void)fprintf(to, "%s", buf);
-			if (ferror(to))
-				goto err;
+			if (ferror(to)) {
+				snprintf(errbuf, errbufsz, "%s",
+				    strerror(errno));
+				(void)fclose(from);
+				(void)fclose(to);
+				return (0);
+			}
 			continue;
 		}
 		if (!(p = strchr(buf, ':'))) {
-			warnx("%s: corrupted entry", _PATH_MASTERPASSWD);
-			pw_error(NULL, 0, 1);
+			snprintf(errbuf, errbufsz, "%s: corrupted entry", mpwd);
+			(void)fclose(from);
+			(void)fclose(to);
+			return (0);
 		}
 		*p = '\0';
 		if (strcmp(buf, pw->pw_name)) {
 			*p = ':';
 			(void)fprintf(to, "%s", buf);
-			if (ferror(to))
-				goto err;
+			if (ferror(to)) {
+				snprintf(errbuf, errbufsz, "%s",
+				    strerror(errno));
+				(void)fclose(from);
+				(void)fclose(to);
+				return (0);
+			}
 			continue;
 		}
 		*p = ':';
 		if (old_pw && !pw_equal(buf, old_pw)) {
-			warnx("%s: entry inconsistent",
-			      _PATH_MASTERPASSWD);
-			pw_error(NULL, 0, 1);
+			snprintf(errbuf, errbufsz, "%s: entry inconsistent",
+			    mpwd);
+			(void)fclose(from);
+			(void)fclose(to);
+			return (0);
 		}
 		(void)fprintf(to, "%s:%s:%d:%d:%s:%ld:%ld:%s:%s:%s\n",
 		    pw->pw_name, pw->pw_passwd, pw->pw_uid, pw->pw_gid,
 		    pw->pw_class, (long)pw->pw_change, (long)pw->pw_expire,
 		    pw->pw_gecos, pw->pw_dir, pw->pw_shell);
 		done = 1;
-		if (ferror(to))
-			goto err;
+		if (ferror(to)) {
+			snprintf(errbuf, errbufsz, "%s", strerror(errno));
+			(void)fclose(from);
+			(void)fclose(to);
+			return (0);
+		}
 	}
 	/* Only append a new entry if real uid is root! */
 	if (!done) {
-		if (getuid() == 0)
+		if (getuid() == 0) {
 			(void)fprintf(to, "%s:%s:%d:%d:%s:%ld:%ld:%s:%s:%s\n",
 			    pw->pw_name, pw->pw_passwd, pw->pw_uid, pw->pw_gid,
 			    pw->pw_class, (long)pw->pw_change,
 			    (long)pw->pw_expire, pw->pw_gecos, pw->pw_dir,
 			    pw->pw_shell);
-		else
-			warnx("%s: changes not made, no such entry",
-			    _PATH_MASTERPASSWD);
+			done = 1;
+		} else {
+			snprintf(errbuf, errbufsz,
+			    "%s: changes not made, no such entry", mpwd);
+		}
 	}
 
-	if (ferror(to))
-err:		pw_error(NULL, 1, 1);
+	if (ferror(to)) {
+		snprintf(errbuf, errbufsz, "%s", strerror(errno));
+		(void)fclose(from);
+		(void)fclose(to);
+		return (0);
+	}
+	(void)fclose(from);
 	(void)fclose(to);
+
+	return (done);
 }
 
 void
-pw_error(name, err, eval)
-	const char *name;
-	int err, eval;
+pw_error(const char *name, int error, int eval)
 {
 
-	if (err)
-		warn(name);
+	if (error) {
+		if (name)
+			warn("%s", name);
+		else
+			warn(NULL);
+	}
 
-	warnx("%s: unchanged", _PATH_MASTERPASSWD);
+	warnx("%s%s: unchanged", pw_prefix, _PATH_MASTERPASSWD);
 	pw_abort();
 	exit(eval);
+}
+
+/* Removes head and/or tail spaces. */
+static void
+trim_whitespace(char *line)
+{
+	char *p;
+
+	_DIAGASSERT(line != NULL);
+
+	/* Remove leading spaces */
+	p = line;
+	while (isspace((unsigned char) *p))
+		p++;
+	memmove(line, p, strlen(p) + 1);
+
+	/* Remove trailing spaces */
+	p = line + strlen(line) - 1;
+	while (isspace((unsigned char) *p))
+		p--;
+	*(p + 1) = '\0';
+}
+
+
+/* Get one line, remove spaces from front and tail */
+static int
+read_line(FILE *fp, char *line, int max)
+{
+	char   *p;
+
+	_DIAGASSERT(fp != NULL);
+	_DIAGASSERT(line != NULL);
+
+	/* Read one line of config */
+	if (fgets(line, max, fp) == NULL)
+		return (0);
+
+	if ((p = strchr(line, '\n')) == NULL) {
+		warnx("line too long");
+		return (0);
+	}
+	*p = '\0';
+
+	/* Remove comments */
+	if ((p = strchr(line, '#')) != NULL)
+		*p = '\0';
+
+	trim_whitespace(line);
+	return (1);
+}
+
+static const char *
+pw_default(const char *option)
+{
+	static const char *options[][2] = {
+		{ "localcipher",	"old" },
+		{ "ypcipher",		"old" },
+	};
+	int i;
+
+	_DIAGASSERT(option != NULL);
+	for (i = 0; i < sizeof(options) / sizeof(options[0]); i++)
+		if (strcmp(options[i][0], option) == 0)
+			return (options[i][1]);
+
+	return (NULL);
+}
+
+/*
+ * Retrieve password information from the /etc/passwd.conf file, at the
+ * moment this is only for choosing the cipher to use.  It could easily be
+ * used for other authentication methods as well.
+ */
+void
+pw_getconf(char *data, size_t max, const char *key, const char *option)
+{
+	FILE *fp;
+	char line[LINE_MAX], *p, *p2;
+	static char result[LINE_MAX];
+	int got, found;
+	const char *cp;
+
+	_DIAGASSERT(data != NULL);
+	_DIAGASSERT(key != NULL);
+	_DIAGASSERT(option != NULL);
+
+	got = 0;
+	found = 0;
+	result[0] = '\0';
+
+	if ((fp = fopen(_PATH_PASSWD_CONF, "r")) == NULL) {
+		if ((cp = pw_default(option)) != NULL)
+			strlcpy(data, cp, max);
+		else
+			data[0] = '\0';
+		return;
+	}
+
+	while (!found && (got || read_line(fp, line, LINE_MAX))) {
+		got = 0;
+
+		if (strncmp(key, line, strlen(key)) != 0 ||
+		    line[strlen(key)] != ':')
+			continue;
+
+		/* Now we found our specified key */
+		while (read_line(fp, line, LINE_MAX)) {
+			/* Leaving key field */
+			if (line[0] != '\0' && strchr(line + 1, ':') != NULL) {
+				got = 1;
+				break;
+			}
+			p2 = line;
+			if ((p = strsep(&p2, "=")) == NULL || p2 == NULL)
+				continue;
+			trim_whitespace(p);
+
+			if (!strncmp(p, option, strlen(option))) {
+				trim_whitespace(p2);
+				strcpy(result, p2);
+				found = 1;
+				break;
+			}
+		}
+	}
+	fclose(fp);
+
+	if (!found)
+		errno = ENOENT;
+	if (!got)
+		errno = ENOTDIR;
+
+	/* 
+	 * If we got no result and were looking for a default
+	 * value, try hard coded defaults.
+	 */
+
+	if (strlen(result) == 0 && strcmp(key, "default") == 0 &&
+	    (cp = pw_default(option)) != NULL)
+		strlcpy(data, cp, max);
+	else 
+		strlcpy(data, result, max);
+}
+
+void
+pw_getpwconf(char *data, size_t max, const struct passwd *pwd,
+    const char *option)
+{
+	char grpkey[LINE_MAX];
+	struct group grs, *grp;
+	char grbuf[1024];
+
+	pw_getconf(data, max, pwd->pw_name, option);
+
+	/* Try to find an entry for the group */
+	if (*data == '\0') {
+		(void)getgrgid_r(pwd->pw_gid, &grs, grbuf, sizeof(grbuf), &grp);
+		if (grp != NULL) {
+			(void)snprintf(grpkey, sizeof(grpkey), ":%s",
+			    grp->gr_name);
+			pw_getconf(data, max, grpkey, option);
+		}
+		if (*data == '\0')
+		        pw_getconf(data, max, "default", option);
+	}
 }

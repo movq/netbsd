@@ -1,4 +1,4 @@
-.\"	$NetBSD: lp.1,v 1.5 1999/03/07 11:58:22 mycroft Exp $
+.\"	$NetBSD: lp.1,v 1.8 2003/02/25 10:36:11 wiz Exp $
 .\"
 .\" Copyright (c) 1995 Joerg Wunsch
 .\"
@@ -41,7 +41,7 @@
 .Nm lp
 .Nd front-end to the print spooler
 .Sh SYNOPSIS
-.Nm ""
+.Nm
 .Op Fl cs
 .Bk -words
 .Op Fl o Ar option
@@ -54,7 +54,7 @@
 .Ek
 .Op Ar
 .Sh DESCRIPTION
-.Nm Lp
+.Nm
 is a front-end to the print spooler as required by the
 .St -p1003.2
 specification.  It effectively invokes
@@ -96,7 +96,6 @@ As described above, the variables
 and
 .Ev PRINTER
 are examined to select the destination printer.
-
 .Sh SEE ALSO
 .Xr lpr 1
 .Sh STANDARDS
@@ -105,12 +104,12 @@ The
 command is expected to comply with the
 .St -p1003.2
 specification.
-.Sh AUTHOR
+.Sh AUTHORS
 This implementation of the
 .Nm
 command has been written by
-.if t J\(:org Wunsch.
-.if n Joerg Wunsch.
+.if t J\(:org Wunsch .
+.if n Joerg Wunsch .
 .Sh BUGS
 The
 .St -p1003.2

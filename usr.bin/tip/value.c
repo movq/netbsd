@@ -1,4 +1,4 @@
-/*	$NetBSD: value.c,v 1.9 1998/07/12 09:59:30 mrg Exp $	*/
+/*	$NetBSD: value.c,v 1.14 2006/12/14 17:09:43 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)value.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: value.c,v 1.9 1998/07/12 09:59:30 mrg Exp $");
+__RCSID("$NetBSD: value.c,v 1.14 2006/12/14 17:09:43 christos Exp $");
 #endif /* not lint */
 
 #include "tip.h"
@@ -47,17 +43,17 @@ __RCSID("$NetBSD: value.c,v 1.9 1998/07/12 09:59:30 mrg Exp $");
 
 static int col = 0;
 
-static	int	vaccess __P((unsigned, unsigned));
-static	void	vassign __P((value_t *, char *));
-static	value_t *vlookup __P((char *));
-static	void	vprint __P((value_t *));
-static	void	vtoken __P((char *));
+static	int	vaccess(int, int);
+static	void	vassign(value_t *, char *);
+static	value_t *vlookup(const char *);
+static	void	vprint(value_t *);
+static	void	vtoken(char *);
 
 /*
  * Variable manipulation
  */
 void
-vinit()
+vinit(void)
 {
 	value_t *p;
 	char *cp;
@@ -75,18 +71,18 @@ vinit()
 	 * Read the .tiprc file in the HOME directory
 	 *  for sets
 	 */
-	snprintf(file, sizeof(file), "%s/.tiprc", value(HOME));
+	(void)snprintf(file, sizeof(file), "%s/.tiprc", (char *)value(HOME));
 	if ((f = fopen(file, "r")) != NULL) {
 		char *tp;
 
 		while (fgets(file, sizeof(file)-1, f) != NULL) {
 			if (vflag)
-				printf("set %s", file);
+				(void)printf("set %s", file);
 			if ((tp = strrchr(file, '\n')) != NULL)
 				*tp = '\0';
 			vlex(file);
 		}
-		fclose(f);
+		(void)fclose(f);
 	}
 	/*
 	 * To allow definition of exception prior to fork
@@ -95,13 +91,11 @@ vinit()
 }
 
 void
-vassign(p, v)
-	value_t *p;
-	char *v;
+vassign(value_t *p, char *v)
 {
 
-	if (!vaccess(p->v_access, WRITE)) {
-		printf("access denied\r\n");
+	if (!vaccess(p->v_access, (unsigned int)WRITE)) {
+		(void)printf("access denied\r\n");
 		return;
 	}
 	switch (p->v_type&TMASK) {
@@ -112,7 +106,7 @@ vassign(p, v)
 		if (!(p->v_type&(ENVIRON|INIT)))
 			free(p->v_value);
 		if ((p->v_value = strdup(v)) == NULL) {
-			printf("out of core\r\n");
+			(void)printf("out of core\r\n");
 			return;
 		}
 		p->v_type &= ~(ENVIRON|INIT);
@@ -139,8 +133,7 @@ vassign(p, v)
 }
 
 void
-vlex(s)
-	char *s;
+vlex(char *s)
 {
 	value_t *p;
 
@@ -159,14 +152,13 @@ vlex(s)
 		} while (s);
 	}
 	if (col > 0) {
-		printf("\r\n");
+		(void)printf("\r\n");
 		col = 0;
 	}
 }
 
 static void
-vtoken(s)
-	char *s;
+vtoken(char *s)
 {
 	value_t *p;
 	char *cp;
@@ -200,65 +192,63 @@ vtoken(s)
 			return;
 		}
 	}
-	printf("%s: unknown variable\r\n", s);
+	(void)printf("%s: unknown variable\r\n", s);
 }
 
 static void
-vprint(p)
-	value_t *p;
+vprint(value_t *p)
 {
 	char *cp;
 
 	if (col > 0 && col < MIDDLE)
 		while (col++ < MIDDLE)
-			putchar(' ');
+			(void)putchar(' ');
 	col += strlen(p->v_name);
 	switch (p->v_type&TMASK) {
 
 	case BOOL:
 		if (boolean(p->v_value) == FALSE) {
 			col++;
-			putchar('!');
+			(void)putchar('!');
 		}
-		printf("%s", p->v_name);
+		(void)printf("%s", p->v_name);
 		break;
 
 	case STRING:
-		printf("%s=", p->v_name);
+		(void)printf("%s=", p->v_name);
 		col++;
 		if (p->v_value) {
 			cp = interp(p->v_value);
 			col += strlen(cp);
-			printf("%s", cp);
+			(void)printf("%s", cp);
 		}
 		break;
 
 	case NUMBER:
 		col += 6;
-		printf("%s=%-5d", p->v_name, (int)number(p->v_value));
+		(void)printf("%s=%-5d", p->v_name, (int)number(p->v_value));
 		break;
 
 	case CHAR:
-		printf("%s=", p->v_name);
+		(void)printf("%s=", p->v_name);
 		col++;
 		if (p->v_value) {
 			cp = ctrl(character(p->v_value));
 			col += strlen(cp);
-			printf("%s", cp);
+			(void)printf("%s", cp);
 		}
 		break;
 	}
 	if (col >= MIDDLE) {
 		col = 0;
-		printf("\r\n");
+		(void)printf("\r\n");
 		return;
 	}
 }
 
 
 static int
-vaccess(mode, rw)
-	unsigned mode, rw;
+vaccess(int mode, int rw)
 {
 
 	if (mode & (rw<<PUBLIC))
@@ -269,8 +259,7 @@ vaccess(mode, rw)
 }
 
 static value_t *
-vlookup(s)
-	char *s;
+vlookup(const char *s)
 {
 	value_t *p;
 
@@ -281,14 +270,12 @@ vlookup(s)
 }
 
 char *
-vinterp(s, stop)
-	char *s;
-	char stop;
+vinterp(char *s, char stp)
 {
 	char *p = s, c;
 	int num;
 
-	while ((c = *s++) && c != stop)
+	while ((c = *s++) && c != stp)
 		switch (c) {
 
 		case '^':
@@ -304,7 +291,7 @@ vinterp(s, stop)
 			if (c >= '0' && c <= '7')
 				num = (num<<3)+(c-'0');
 			else {
-				char *q = "n\nr\rt\tb\bf\f";
+				const char *q = "n\nr\rt\tb\bf\f";
 
 				for (; *q; q++)
 					if (c == *q++) {
@@ -330,7 +317,7 @@ vinterp(s, stop)
 			*p++ = c;
 		}
 	*p = '\0';
-	return (c == stop ? s-1 : NULL);
+	return (c == stp ? s-1 : NULL);
 }
 
 /*
@@ -338,13 +325,11 @@ vinterp(s, stop)
  */
 
 int
-vstring(s,v)
-	char *s;
-	char *v;
+vstring(const char *s, char *v)
 {
 	value_t *p;
 
-	p = vlookup(s); 
+	p = vlookup(s);
 	if (p == 0)
 		return (1);
 	if (p->v_type&NUMBER)

@@ -1,13 +1,21 @@
-#	$NetBSD: Makefile,v 1.37 1999/11/08 00:16:40 mycroft Exp $
+#	$NetBSD: Makefile,v 1.71.4.1 2008/12/13 21:27:34 bouyer Exp $
 
-SUBDIR=	adosfs arch compat dev filecorefs isofs miscfs msdosfs net \
-	netatalk netccitt netinet netinet6 netiso netkey netnatm netns \
-	nfs ntfs sys ufs uvm vm
+SUBDIR=	altq arch compat dev fs miscfs \
+	net net80211 netatalk netbt netipsec netinet netinet6 \
+        netisdn netiso netkey netnatm netsmb \
+	nfs opencrypto sys ufs uvm
 
-.if (${MACHINE_ARCH} != "mipseb" && ${MACHINE_ARCH} != "mipsel")
+# interrupt implementation depends on the kernel within the port
+.if (${MACHINE} != "evbppc")
+SUBDIR+=lkm modules
+.endif
 
-SUBDIR+= lkm
+# Speedup stubs for some subtrees that don't need to run these rules
+includes-lkm:
+	@true
 
+.if make(obj) || make(cleandir)
+SUBDIR+= rump
 .endif
 
 .include <bsd.kinc.mk>

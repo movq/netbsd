@@ -1,4 +1,4 @@
-/*	$NetBSD: mdb.c,v 1.14 1999/06/20 02:07:18 cgd Exp $	*/
+/*	$NetBSD: mdb.c,v 1.44 2008/01/16 09:21:33 tls Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -38,21 +38,34 @@
 
 /* mdb.c - menu database manipulation */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
+#include <sys/cdefs.h>
+
+#if defined(__RCSID) && !defined(lint)
+__RCSID("$NetBSD: mdb.c,v 1.44 2008/01/16 09:21:33 tls Exp $");
+#endif
+
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "mdb.h"
 #include "defs.h"
+#include "pathnames.h"
 
 /* Data */
+#undef MAX
 #define MAX 1000
 static int menu_no = 0;
 static id_rec *menus[MAX];
 
 /* Other defines */
-#define OPT_SUB    1
-#define OPT_ENDWIN 2
-#define OPT_EXIT   4
+#define OPT_SUB		1
+#define OPT_ENDWIN	2
+#define OPT_EXIT	4
 
 
 /* get_menu returns a pointer to a newly created id_rec or an old one. */
@@ -108,6 +121,7 @@ write_menu_file (char *initcode)
 	char sname[1024];
 	char *sys_prefix;
 	char *tmpstr;
+	int name_is_code;
 
 	int nlen;
 
@@ -128,7 +142,7 @@ write_menu_file (char *initcode)
 	/* Open the menu_sys file first. */
 	sys_prefix = getenv ("MENUDEF");
 	if (sys_prefix == NULL)
-		sys_prefix = "/usr/share/misc";
+		sys_prefix = _PATH_DEFSYSPREFIX;
 	snprintf (sname, 1024, "%s/%s", sys_prefix, sys_name);
 	sys_file = fopen (sname, "r");
 	if (sys_file == NULL) {
@@ -157,66 +171,81 @@ write_menu_file (char *initcode)
 		"#include <curses.h>\n\n"
 		);
 
+	if (do_msgxlat)
+		(void)fprintf(out_file, "#define MSG_XLAT(x) msg_string(x)\n");
+	else
+		(void)fprintf(out_file, "#define MSG_XLAT(x) (x)\n");
 	if (do_dynamic)
-		(void) fprintf (out_file, "#define DYNAMIC_MENUS\n\n");
+		(void)fprintf(out_file, "#define DYNAMIC_MENUS\n");
+	if (do_dynamic || do_msgxlat)
+		(void)fprintf(out_file, "\n");
 
-	(void) fprintf (out_file,
-		"typedef\n"
+	(void)fprintf(out_file,
+		"typedef struct menudesc menudesc;\n"	
+		"typedef struct menu_ent menu_ent;\n"	
 		"struct menu_ent {\n"
-		"	char   *opt_name;\n"
-		"	int	opt_menu;\n"
-		"	int	opt_flags;\n"
-		"	int	(*opt_action)(void);\n"
-		"} menu_ent ;\n\n"
-		"#define OPT_SUB    1\n"
-		"#define OPT_ENDWIN 2\n"
-		"#define OPT_EXIT   4\n"
-		"#define OPT_NOMENU -1\n\n"
-		"typedef\n"
+		"	const char	*opt_name;\n"
+		"	int		opt_menu;\n"
+		"	int		opt_flags;\n"
+		"	int		(*opt_action)(menudesc *, void *);\n"
+		"};\n\n"
+		"#define OPT_SUB	1\n"
+		"#define OPT_ENDWIN	2\n"
+		"#define OPT_EXIT	4\n"
+		"#define OPT_IGNORE	8\n"
+		"#define OPT_NOMENU	-1\n\n"
 		"struct menudesc {\n"
-		"	char     *title;\n"
-		"	int      y, x;\n"
-		"	int	 h, w;\n"
-		"	int	 mopt;\n"
-		"	int      numopts;\n"
-		"	int	 cursel;\n"
-		"	int	 topline;\n"
-		"	menu_ent *opts;\n"
-		"	WINDOW   *mw;\n"
-		"	char     *helpstr;\n"
-		"	char     *exitstr;\n"
-		"	void    (*post_act)(void);\n"
-		"	void    (*exit_act)(void);\n"
-		"} menudesc ;\n"
+		"	const char	*title;\n"
+		"	int		y, x;\n"
+		"	int		h, w;\n"
+		"	int		mopt;\n"
+		"	int		numopts;\n"
+		"	int		cursel;\n"
+		"	int		topline;\n"
+		"	menu_ent	*opts;\n"
+		"	WINDOW		*mw;\n"
+		"	WINDOW		*sv_mw;\n"
+		"	const char	*helpstr;\n"
+		"	const char	*exitstr;\n"
+		"	void		(*post_act)(menudesc *, void *);\n"
+		"	void		(*exit_act)(menudesc *, void *);\n"
+		"	void		(*draw_line)(menudesc *, int, void *);\n"
+		"};\n"
 		"\n"
 		"/* defines for mopt field. */\n"
-		"#define MC_NOEXITOPT 1\n"
-		"#define MC_NOBOX 2\n"
-		"#define MC_SCROLL 4\n"
-		);
-
-	if (do_dynamic)
-		(void) fprintf (out_file, "#define MC_VALID 8\n");
+#define STR(x) #x
+#define MC_OPT(x) "#define " #x " " STR(x) "\n"
+		MC_OPT(MC_NOEXITOPT)
+		MC_OPT(MC_NOBOX)
+		MC_OPT(MC_SCROLL)
+		MC_OPT(MC_NOSHORTCUT)
+		MC_OPT(MC_NOCLEAR)
+		MC_OPT(MC_DFLTEXIT)
+		MC_OPT(MC_ALWAYS_SCROLL)
+		MC_OPT(MC_SUBMENU)
+		MC_OPT(MC_VALID)
+#undef MC_OPT
+#undef STR
+	);
 
 	(void) fprintf (out_file, "%s",
 		"\n"
-		"/* initilization flag */\n"
-		"extern int __m_endwin;\n"
-		"\n"
 		"/* Prototypes */\n"
-		"int menu_init (void);\n"
-		"void process_menu (int num);\n"
-		"void __menu_initerror (void);\n"
+		"int menu_init(void);\n"
+		"void process_menu(int, void *);\n"
+		"void __menu_initerror(void);\n"
 		);
 
 	if (do_dynamic)
 		(void) fprintf (out_file, "%s",
-			"int new_menu (char * title, menu_ent * opts, "
-				"int numopts, \n"
-				"\tint x, int y, int h, int w, int mopt,\n"
-				"\tvoid (*post_act)(void), void (*exit_act), "
-				"char * help);\n"
-			"void free_menu (int menu_no);\n"
+			"int new_menu(const char *, menu_ent *, int, \n"
+			    "\tint, int, int, int, int,\n"
+			    "\tvoid (*)(menudesc *, void *), "
+			    "void (*)(menudesc *, int, void *),\n"
+			    "\tvoid (*)(menudesc *, void *), "
+			    "const char *, const char *);\n"
+			"void free_menu(int);\n"
+			"void set_menu_numopts(int, int);\n"
 			);
 
 	(void) fprintf (out_file, "\n/* Menu names */\n");
@@ -251,40 +280,35 @@ write_menu_file (char *initcode)
 	for (i=0; i<menu_no; i++) {
 		if (strlen(menus[i]->info->postact.code)) {
 			(void) fprintf (out_file,
-				"void menu_%d_postact(void);\n"
-				"void menu_%d_postact(void)\n{", i, i);
+				"/*ARGSUSED*/\n"
+				"static void menu_%d_postact(menudesc *menu, void *arg)\n{\n", i);
 			if (menus[i]->info->postact.endwin)
-				(void) fprintf (out_file, "\tendwin();\n"
-					"\t__m_endwin = 1;\n");
+				(void) fprintf (out_file, "\tendwin();\n");
 			(void) fprintf (out_file,
-					"\t%s\n}\n",
+					"\t%s\n}\n\n",
 					menus[i]->info->postact.code);
 		}
 		if (strlen(menus[i]->info->exitact.code)) {
 			(void) fprintf (out_file,
-				"void menu_%d_exitact(void);\n"
-				"void menu_%d_exitact(void)\n{", i, i);
+				"/*ARGSUSED*/\n"
+				"static void menu_%d_exitact(menudesc *menu, void *arg)\n{\n", i);
 			if (menus[i]->info->exitact.endwin)
-				(void) fprintf (out_file, "\tendwin();\n"
-					"\t__m_endwin = 1;\n");
+				(void) fprintf (out_file, "\tendwin();\n");
 			(void) fprintf (out_file, "\t%s\n}\n\n",
 					menus[i]->info->exitact.code);
 		}
 		j = 0;
 		toptn = menus[i]->info->optns;
-		while (toptn != NULL) {
-			if (strlen(toptn->optact.code)) {
-				(void) fprintf (out_file,
-					"int opt_act_%d_%d(void);\n"
-					"int opt_act_%d_%d(void)\n"
-					"{\t%s\n\treturn %s;\n}\n\n",
-					i, j, i, j, toptn->optact.code,
-					(toptn->doexit ? "1" : "0"));
-						
-				
-			}
-			j++;
-			toptn = toptn->next;
+		for (;toptn != NULL; j++, toptn = toptn->next) {
+			if (strlen(toptn->optact.code) == 0)
+				continue;
+
+			(void) fprintf (out_file,
+				"/*ARGSUSED*/\n"
+				"static int opt_act_%d_%d(menudesc *m, void *arg)\n"
+				"{\n\t%s\n\treturn %s;\n}\n\n",
+				i, j, toptn->optact.code,
+				(toptn->doexit ? "1" : "0"));
 		}
 
 	}
@@ -297,13 +321,15 @@ write_menu_file (char *initcode)
 				menus[i]->info->title);
 			exit (1);
 		}
-		toptn = menus[i]->info->optns;
-		j = 0;
 		(void) fprintf (out_file,
 				"static menu_ent optent%d[] = {\n", i);
-		while (toptn != NULL) {
-			(void) fprintf (out_file, "\t{\"%s,%d,%d,",
-				toptn->name+1, toptn->menu,
+		name_is_code = 0;
+		for (j = 0, toptn = menus[i]->info->optns; toptn;
+		    toptn = toptn->next, j++) {
+			name_is_code += toptn->name_is_code;
+			(void) fprintf (out_file, "\t{%s,%d,%d,",
+				toptn->name_is_code ? "0" : toptn->name,
+				toptn->menu,
 				(toptn->issub ? OPT_SUB : 0)
 				+(toptn->doexit ? OPT_EXIT : 0)
 				+(toptn->optact.endwin ? OPT_ENDWIN : 0));
@@ -314,19 +340,35 @@ write_menu_file (char *initcode)
 				(void) fprintf (out_file, "NULL}");
 			(void) fprintf (out_file, "%s\n",
 				(toptn->next ? "," : ""));
-			j++;
-			toptn = toptn->next;
 		}
 		(void) fprintf (out_file, "\t};\n\n");
 
+		if (name_is_code) {
+			menus[i]->info->name_is_code = 1;
+			fprintf(out_file, "static void menu_%d_legend("
+			    "menudesc *menu, int opt, void *arg)\n{\n"
+			    "\tswitch (opt) {\n", i);
+			for (j = 0, toptn = menus[i]->info->optns; toptn;
+			    toptn = toptn->next, j++) {
+				if (!toptn->name_is_code)
+					continue;
+				fprintf(out_file, "\tcase %d:\n\t\t{%s};\n"
+				    "\t\tbreak;\n", j, toptn->name);
+			}
+			fprintf(out_file, "\t}\n}\n\n");
+		}
 	}
 
 
 	/* menus */
+	if (!do_dynamic) {
+	    (void) fprintf (out_file, "static int num_menus = %d;\n", menu_no);
+	}
+
 	(void) fprintf (out_file, "static struct menudesc menu_def[] = {\n");
 	for (i=0; i<menu_no; i++) {
 		(void) fprintf (out_file,
-			"\t{%s,%d,%d,%d,%d,%d,%d,0,0,optent%d,NULL,",
+			"\t{%s,%d,%d,%d,%d,%d,%d,0,0,optent%d,NULL,NULL,",
 			menus[i]->info->title, 	menus[i]->info->y,
 			menus[i]->info->x, menus[i]->info->h,
 			menus[i]->info->w, menus[i]->info->mopt,
@@ -335,24 +377,29 @@ write_menu_file (char *initcode)
 			(void) fprintf (out_file, "NULL");
 		else {
 			tmpstr = menus[i]->info->helpstr;
-			/* Skip an initial newline. */
-			if (*tmpstr == '\n')
-				tmpstr++;
-			(void) fprintf (out_file, "\n\"");
-			while (*tmpstr)
-				if (*tmpstr != '\n')
-				  fputc (*tmpstr++, out_file);
-				else {
-					(void) fprintf (out_file, "\\n\\\n");
+			if (*tmpstr != '"')
+				(void)fprintf(out_file, "%s", tmpstr);
+			else {
+				/* Skip an initial newline. */
+				if (tmpstr[1] == '\n')
+					*++tmpstr = '"';
+				(void) fprintf (out_file, "\n");
+				while (*tmpstr) {
+					if (*tmpstr != '\n') {
+						fputc (*tmpstr++, out_file);
+						continue;
+					}
+					(void) fprintf (out_file, "\\n\"\n\"");
 					tmpstr++;
 				}
-			(void) fprintf (out_file, "\"");
+			}
 		}
 		(void) fprintf (out_file, ",");
-		if (menus[i]->info->mopt & NOEXITOPT)
+		if (menus[i]->info->mopt & MC_NOEXITOPT)
 			(void) fprintf (out_file, "NULL");
 		else if (menus[i]->info->exitstr != NULL)
-			(void) fprintf (out_file, menus[i]->info->exitstr);
+			(void) fprintf (out_file, "%s",
+				menus[i]->info->exitstr);
 		else
 			(void) fprintf (out_file, "\"Exit\"");
 		if (strlen(menus[i]->info->postact.code))
@@ -363,11 +410,16 @@ write_menu_file (char *initcode)
 			(void) fprintf (out_file, ",menu_%d_exitact", i);
 		else
 			(void) fprintf (out_file, ",NULL");
+		if (menus[i]->info->name_is_code)
+			(void) fprintf (out_file, ",menu_%d_legend", i);
+		else
+			(void) fprintf (out_file, ",NULL");
 
 		(void) fprintf (out_file, "},\n");
 
 	}
-	(void) fprintf (out_file, "{NULL}};\n\n");
+	(void) fprintf (out_file, "{NULL, 0, 0, 0, 0, 0, 0, 0, 0, "
+		"NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}};\n\n");
 
 	/* __menu_initerror: initscr failed. */
 	(void) fprintf (out_file, 
@@ -376,7 +428,8 @@ write_menu_file (char *initcode)
 	if (error_act.code == NULL) {
 		(void) fprintf (out_file,
 			"\t(void) fprintf (stderr, "
-				"\"Could not initialize curses\\n\");\n"
+			"\"%%s: Could not initialize curses\\n\", "
+			"getprogname());\n"
 			"\texit(1);\n"
 			"}\n");
 	} else {
@@ -387,7 +440,7 @@ write_menu_file (char *initcode)
 
 	/* Copy menu_sys.def file. */
 	while ((ch = fgetc(sys_file)) != '\014')  /* Control-L */
-		fputc(ch, out_file);     	
+		fputc(ch, out_file);
 
 	if (do_dynamic) {
 		while ((ch = fgetc(sys_file)) != '\n')

@@ -1,4 +1,4 @@
-/*	$NetBSD: kvm_vax.c,v 1.8 1999/07/02 15:28:51 simonb Exp $ */
+/*	$NetBSD: kvm_vax.c,v 1.16 2003/08/07 16:44:40 agc Exp $ */
 
 /*-
  * Copyright (c) 1992, 1993
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -53,13 +49,15 @@
 #include <stdlib.h>
 #include <kvm.h>
 
-#include <vm/vm.h>
-#include <vm/vm_param.h>
+#include <uvm/uvm_extern.h>
+
+#include <machine/vmparam.h>
 
 #include <limits.h>
 #include <db.h>
 
 #include "kvm_private.h"
+
 
 struct vmstate {
 	u_long end;
@@ -79,7 +77,7 @@ _kvm_initvtop(kd)
 {
 	struct vmstate *vm;
 	struct stat st;
-	struct nlist nlist[2];
+	struct nlist nl[2];
 
 	vm = (struct vmstate *)_kvm_malloc(kd, sizeof(*vm));
 	if (vm == 0)
@@ -91,13 +89,13 @@ _kvm_initvtop(kd)
 		return (-1);
 
 	/* Get end of kernel address */
-	nlist[0].n_name = "_end";
-	nlist[1].n_name = 0;
-	if (kvm_nlist(kd, nlist) != 0) {
+	nl[0].n_name = "_end";
+	nl[1].n_name = 0;
+	if (kvm_nlist(kd, nl) != 0) {
 		_kvm_err(kd, kd->program, "pmap_stod: no such symbol");
 		return (-1);
 	}
-	vm->end = (u_long)nlist[0].n_value;
+	vm->end = (u_long)nl[0].n_value;
 
 	return (0);
 }
@@ -108,7 +106,7 @@ _kvm_initvtop(kd)
  * Translate a kernel virtual address to a physical address using the
  * mapping information in kd->vm.  Returns the result in pa, and returns
  * the number of bytes that are contiguously available from this
- * physical address.  This routine is used only for crashdumps.
+ * physical address.  This routine is used only for crash dumps.
  */
 int
 _kvm_kvatop(kd, va, pa)
@@ -116,26 +114,26 @@ _kvm_kvatop(kd, va, pa)
 	u_long va;
 	u_long *pa;
 {
-	int end;
+	u_long end;
 
-	if (va < KERNBASE) {
-		_kvm_err(kd, 0, "invalid address (%x<%x)", va, KERNBASE);
+	if (va < (u_long) KERNBASE) {
+		_kvm_err(kd, 0, "invalid address (%lx<%lx)", va, (u_long) KERNBASE);
 		return (0);
 	}
 
 	end = kd->vmst->end;
 	if (va >= end) {
-		_kvm_err(kd, 0, "invalid address (%x>=%x)", va, end);
+		_kvm_err(kd, 0, "invalid address (%lx>=%lx)", va, end);
 		return (0);
 	}
 
-	*pa = (va - KERNBASE);
+	*pa = (va - (u_long) KERNBASE);
 	return (end - va);
 }
 
 /*
- * Translate a physical address to a file-offset in the crash-dump.
- * XXX - crash-dumps doesn't work anyway.
+ * Translate a physical address to a file-offset in the crash dump.
+ * XXX - crash dump doesn't work anyway.
  */
 off_t
 _kvm_pa2off(kd, pa)

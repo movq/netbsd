@@ -1,4 +1,4 @@
-/*	$NetBSD: portal_vfsops.c,v 1.23 2000/03/16 18:08:25 jdolecek Exp $	*/
+/*	$NetBSD: portal_vfsops.c,v 1.76 2008/06/28 01:34:06 rumble Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993, 1995
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -43,14 +39,17 @@
  * Portal Filesystem
  */
 
-#if defined(_KERNEL) && !defined(_LKM)
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: portal_vfsops.c,v 1.76 2008/06/28 01:34:06 rumble Exp $");
+
+#if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
 #endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/sysctl.h>
 #include <sys/time.h>
-#include <sys/types.h>
 #include <sys/proc.h>
 #include <sys/filedesc.h>
 #include <sys/file.h>
@@ -63,27 +62,20 @@
 #include <sys/socketvar.h>
 #include <sys/protosw.h>
 #include <sys/domain.h>
+#include <sys/dirent.h>
 #include <sys/un.h>
+#include <sys/kauth.h>
+#include <sys/module.h>
+
+#include <miscfs/genfs/genfs.h>
+
 #include <miscfs/portal/portal.h>
 
-void	portal_init __P((void));
-void	portal_done __P((void));
-int	portal_mount __P((struct mount *, const char *, void *,
-			  struct nameidata *, struct proc *));
-int	portal_start __P((struct mount *, int, struct proc *));
-int	portal_unmount __P((struct mount *, int, struct proc *));
-int	portal_root __P((struct mount *, struct vnode **));
-int	portal_quotactl __P((struct mount *, int, uid_t, caddr_t,
-			     struct proc *));
-int	portal_statfs __P((struct mount *, struct statfs *, struct proc *));
-int	portal_sync __P((struct mount *, int, struct ucred *, struct proc *));
-int	portal_vget __P((struct mount *, ino_t, struct vnode **));
-int	portal_fhtovp __P((struct mount *, struct fid *, struct vnode **));
-int	portal_checkexp __P((struct mount *, struct mbuf *, int *,
-			   struct ucred **));
-int	portal_vptofh __P((struct vnode *, struct fid *));
-int	portal_sysctl __P((int *, u_int, void *, size_t *, void *, size_t,
-			   struct proc *));
+MODULE(MODULE_CLASS_VFS, portal, NULL);
+
+VFS_PROTOS(portal);
+
+static struct sysctllog *portal_sysctl_log;
 
 void
 portal_init()
@@ -99,129 +91,125 @@ portal_done()
  * Mount the per-process file descriptors (/dev/fd)
  */
 int
-portal_mount(mp, path, data, ndp, p)
-	struct mount *mp;
-	const char *path;
-	void *data;
-	struct nameidata *ndp;
-	struct proc *p;
+portal_mount(
+    struct mount *mp,
+    const char *path,
+    void *data,
+    size_t *data_len)
 {
+	struct lwp *l = curlwp;
 	struct file *fp;
-	struct portal_args args;
+	struct portal_args *args = data;
 	struct portalmount *fmp;
 	struct socket *so;
 	struct vnode *rvp;
-	size_t size;
+	struct proc *p;
 	int error;
 
+	if (*data_len < sizeof *args)
+		return EINVAL;
+
+	p = l->l_proc;
+	if (mp->mnt_flag & MNT_GETARGS) {
+		fmp = VFSTOPORTAL(mp);
+		if (fmp == NULL)
+			return EIO;
+		args->pa_config = NULL;
+		args->pa_socket = 0;	/* XXX */
+		*data_len = sizeof *args;
+		return 0;
+	}
 	/*
 	 * Update is a no-op
 	 */
 	if (mp->mnt_flag & MNT_UPDATE)
 		return (EOPNOTSUPP);
 
-	error = copyin(data, (caddr_t) &args, sizeof(struct portal_args));
-	if (error)
-		return (error);
-
 	/* getsock() will use the descriptor for us */
-	if ((error = getsock(p->p_fd, args.pa_socket, &fp)) != 0)
-		return (error);
+	if ((fp = fd_getfile(args->pa_socket)) == NULL)
+		return (EBADF);
+	if (fp->f_type != DTYPE_SOCKET) {
+		fd_putfile(args->pa_socket);
+		return (ENOTSOCK);
+	}
 	so = (struct socket *) fp->f_data;
-	FILE_UNUSE(fp, NULL);
-	if (so->so_proto->pr_domain->dom_family != AF_LOCAL)
+	if (so->so_proto->pr_domain->dom_family != AF_LOCAL) {
+		fd_putfile(args->pa_socket);
 		return (ESOCKTNOSUPPORT);
+	}
 
 	error = getnewvnode(VT_PORTAL, mp, portal_vnodeop_p, &rvp); /* XXX */
-	if (error)
+	if (error) {
+		fd_putfile(args->pa_socket);
 		return (error);
+	}
 	MALLOC(rvp->v_data, void *, sizeof(struct portalnode),
 		M_TEMP, M_WAITOK);
 
 	fmp = (struct portalmount *) malloc(sizeof(struct portalmount),
 				 M_UFSMNT, M_WAITOK);	/* XXX */
 	rvp->v_type = VDIR;
-	rvp->v_flag |= VROOT;
+	rvp->v_vflag |= VV_ROOT;
 	VTOPORTAL(rvp)->pt_arg = 0;
 	VTOPORTAL(rvp)->pt_size = 0;
 	VTOPORTAL(rvp)->pt_fileid = PORTAL_ROOTFILEID;
 	fmp->pm_root = rvp;
-	fmp->pm_server = fp; fp->f_count++;
+	fmp->pm_server = fp;
+	mutex_enter(&fp->f_lock);
+	fp->f_count++;
+	mutex_exit(&fp->f_lock);
+	fd_putfile(args->pa_socket);
 
+	mp->mnt_stat.f_namemax = MAXNAMLEN;
 	mp->mnt_flag |= MNT_LOCAL;
-	mp->mnt_data = (qaddr_t)fmp;
-	vfs_getnewfsid(mp, MOUNT_PORTAL);
+	mp->mnt_data = fmp;
+	vfs_getnewfsid(mp);
 
-	(void) copyinstr(path, mp->mnt_stat.f_mntonname, MNAMELEN - 1, &size);
-	memset(mp->mnt_stat.f_mntonname + size, 0, MNAMELEN - size);
-	(void) copyinstr(args.pa_config, mp->mnt_stat.f_mntfromname,
-	    MNAMELEN - 1, &size);
-	memset(mp->mnt_stat.f_mntfromname + size, 0, MNAMELEN - size);
-	return (0);
+	return set_statvfs_info(path, UIO_USERSPACE, args->pa_config,
+	    UIO_USERSPACE, mp->mnt_op->vfs_name, mp, l);
 }
 
 int
-portal_start(mp, flags, p)
-	struct mount *mp;
-	int flags;
-	struct proc *p;
+portal_start(struct mount *mp, int flags)
 {
 
 	return (0);
 }
 
 int
-portal_unmount(mp, mntflags, p)
-	struct mount *mp;
-	int mntflags;
-	struct proc *p;
+portal_unmount(struct mount *mp, int mntflags)
 {
-	struct vnode *rootvp = VFSTOPORTAL(mp)->pm_root;
+	struct vnode *rtvp = VFSTOPORTAL(mp)->pm_root;
 	int error, flags = 0;
 
 	if (mntflags & MNT_FORCE)
 		flags |= FORCECLOSE;
 
-	/*
-	 * Clear out buffer cache.  I don't think we
-	 * ever get anything cached at this level at the
-	 * moment, but who knows...
-	 */
-#ifdef notyet
-	mntflushbuf(mp, 0); 
-	if (mntinvalbuf(mp, 1))
+	if (rtvp->v_usecount > 1 && (mntflags & MNT_FORCE) == 0)
 		return (EBUSY);
-#endif
-	if (rootvp->v_usecount > 1)
-		return (EBUSY);
-	if ((error = vflush(mp, rootvp, flags)) != 0)
+	if ((error = vflush(mp, rtvp, flags)) != 0)
 		return (error);
 
 	/*
-	 * Release reference on underlying root vnode
+	 * Blow it away for future re-use
 	 */
-	vrele(rootvp);
-	/*
-	 * And blow it away for future re-use
-	 */
-	vgone(rootvp);
+	vgone(rtvp);
 	/*
 	 * Shutdown the socket.  This will cause the select in the
 	 * daemon to wake up, and then the accept will get ECONNABORTED
 	 * which it interprets as a request to go and bury itself.
 	 */
-	FILE_USE(VFSTOPORTAL(mp)->pm_server);
 	soshutdown((struct socket *) VFSTOPORTAL(mp)->pm_server->f_data, 2);
 	/*
 	 * Discard reference to underlying file.  Must call closef because
 	 * this may be the last reference.
 	 */
-	closef(VFSTOPORTAL(mp)->pm_server, (struct proc *) 0);
+	closef(VFSTOPORTAL(mp)->pm_server);
 	/*
 	 * Finally, throw away the portalmount structure
 	 */
 	free(mp->mnt_data, M_UFSMNT);	/* XXX */
-	mp->mnt_data = 0;
+	mp->mnt_data = NULL;
 	return (0);
 }
 
@@ -243,133 +231,113 @@ portal_root(mp, vpp)
 }
 
 int
-portal_quotactl(mp, cmd, uid, arg, p)
-	struct mount *mp;
-	int cmd;
-	uid_t uid;
-	caddr_t arg;
-	struct proc *p;
-{
-
-	return (EOPNOTSUPP);
-}
-
-int
-portal_statfs(mp, sbp, p)
-	struct mount *mp;
-	struct statfs *sbp;
-	struct proc *p;
+portal_statvfs(struct mount *mp, struct statvfs *sbp)
 {
 
 	sbp->f_bsize = DEV_BSIZE;
+	sbp->f_frsize = DEV_BSIZE;
 	sbp->f_iosize = DEV_BSIZE;
 	sbp->f_blocks = 2;		/* 1K to keep df happy */
 	sbp->f_bfree = 0;
 	sbp->f_bavail = 0;
+	sbp->f_bresvd = 0;
 	sbp->f_files = 1;		/* Allow for "." */
 	sbp->f_ffree = 0;		/* See comments above */
-#ifdef COMPAT_09
-	sbp->f_type = 12;
-#else
-	sbp->f_type = 0;
-#endif
-	if (sbp != &mp->mnt_stat) {
-		memcpy(&sbp->f_fsid, &mp->mnt_stat.f_fsid, sizeof(sbp->f_fsid));
-		memcpy(sbp->f_mntonname, mp->mnt_stat.f_mntonname, MNAMELEN);
-		memcpy(sbp->f_mntfromname, mp->mnt_stat.f_mntfromname, MNAMELEN);
-	}
-	strncpy(sbp->f_fstypename, mp->mnt_op->vfs_name, MFSNAMELEN);
+	sbp->f_favail = 0;		/* See comments above */
+	sbp->f_fresvd = 0;
+	copy_statvfs_info(sbp, mp);
 	return (0);
 }
 
 /*ARGSUSED*/
 int
-portal_sync(mp, waitfor, uc, p)
-	struct mount *mp;
-	int waitfor;
-	struct ucred *uc;
-	struct proc *p;
+portal_sync(struct mount *mp, int waitfor,
+    kauth_cred_t uc)
 {
 
 	return (0);
 }
 
 int
-portal_vget(mp, ino, vpp)
-	struct mount *mp;
-	ino_t ino;
-	struct vnode **vpp;
+portal_vget(struct mount *mp, ino_t ino,
+    struct vnode **vpp)
 {
 
 	return (EOPNOTSUPP);
 }
 
-int
-portal_fhtovp(mp, fhp, vpp)
-	struct mount *mp;
-	struct fid *fhp;
-	struct vnode **vpp;
-{
+extern const struct vnodeopv_desc portal_vnodeop_opv_desc;
 
-	return (EOPNOTSUPP);
-}
-
-int
-portal_checkexp(mp, mb, what, anon)
-	struct mount *mp;
-	struct mbuf *mb;
-	int *what;
-	struct ucred **anon;
-{
-
-	return (EOPNOTSUPP);
-}
-
-int
-portal_vptofh(vp, fhp)
-	struct vnode *vp;
-	struct fid *fhp;
-{
-
-	return (EOPNOTSUPP);
-}
-
-int
-portal_sysctl(name, namelen, oldp, oldlenp, newp, newlen, p)
-	int *name;
-	u_int namelen;
-	void *oldp;
-	size_t *oldlenp;
-	void *newp;
-	size_t newlen;
-	struct proc *p;
-{
-	return (EOPNOTSUPP);
-}
-
-extern struct vnodeopv_desc portal_vnodeop_opv_desc;
-
-struct vnodeopv_desc *portal_vnodeopv_descs[] = {
+const struct vnodeopv_desc * const portal_vnodeopv_descs[] = {
 	&portal_vnodeop_opv_desc,
 	NULL,
 };
 
 struct vfsops portal_vfsops = {
 	MOUNT_PORTAL,
+	sizeof (struct portal_args),
 	portal_mount,
 	portal_start,
 	portal_unmount,
 	portal_root,
-	portal_quotactl,
-	portal_statfs,
+	(void *)eopnotsupp,		/* vfs_quotactl */
+	portal_statvfs,
 	portal_sync,
 	portal_vget,
-	portal_fhtovp,
-	portal_vptofh,
+	(void *)eopnotsupp,		/* vfs_fhtovp */
+	(void *)eopnotsupp,		/* vfs_vptofh */
 	portal_init,
+	NULL,
 	portal_done,
-	portal_sysctl,
 	NULL,				/* vfs_mountroot */
-	portal_checkexp,
+	(int (*)(struct mount *, struct vnode *, struct timespec *)) eopnotsupp,
+	vfs_stdextattrctl,
+	(void *)eopnotsupp,		/* vfs_suspendctl */
+	genfs_renamelock_enter,
+	genfs_renamelock_exit,
+	(void *)eopnotsupp,
 	portal_vnodeopv_descs,
+	0,
+	{ NULL, NULL },
 };
+
+static int
+portal_modcmd(modcmd_t cmd, void *arg)
+{
+	int error;
+
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+		error = vfs_attach(&portal_vfsops);
+		if (error != 0)
+			break;
+		sysctl_createv(&portal_sysctl_log, 0, NULL, NULL,
+			       CTLFLAG_PERMANENT,
+			       CTLTYPE_NODE, "vfs", NULL,
+			       NULL, 0, NULL, 0,
+			       CTL_VFS, CTL_EOL);
+		sysctl_createv(&portal_sysctl_log, 0, NULL, NULL,
+			       CTLFLAG_PERMANENT,
+			       CTLTYPE_NODE, "portal",
+			       SYSCTL_DESCR("Portal daemon file system"),
+			       NULL, 0, NULL, 0,
+			       CTL_VFS, 8, CTL_EOL);
+		/*
+		 * XXX the "8" above could be dynamic, thereby eliminating one
+		 * more instance of the "number to vfs" mapping problem, but
+		 * "8" is the order as taken from sys/mount.h
+		 */
+		break;
+	case MODULE_CMD_FINI:
+		error = vfs_detach(&portal_vfsops);
+		if (error != 0)
+			break;
+		sysctl_teardown(&portal_sysctl_log);
+		break;
+	default:
+		error = ENOTTY;
+		break;
+	}
+
+	return (error);
+}

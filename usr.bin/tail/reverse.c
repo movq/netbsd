@@ -1,4 +1,4 @@
-/*	$NetBSD: reverse.c,v 1.11 1999/07/21 06:38:50 cgd Exp $	*/
+/*	$NetBSD: reverse.c,v 1.19 2006/04/09 19:39:17 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)reverse.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: reverse.c,v 1.11 1999/07/21 06:38:50 cgd Exp $");
+__RCSID("$NetBSD: reverse.c,v 1.19 2006/04/09 19:39:17 christos Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -56,8 +52,8 @@ __RCSID("$NetBSD: reverse.c,v 1.11 1999/07/21 06:38:50 cgd Exp $");
 #include <string.h>
 #include "extern.h"
 
-static void r_buf __P((FILE *));
-static void r_reg __P((FILE *, enum STYLE, long, struct stat *));
+static void r_buf(FILE *);
+static void r_reg(FILE *, enum STYLE, off_t, struct stat *);
 
 /*
  * reverse -- display input in reverse order by line.
@@ -78,11 +74,7 @@ static void r_reg __P((FILE *, enum STYLE, long, struct stat *));
  *	NOREG	cyclically read input into a linked list of buffers
  */
 void
-reverse(fp, style, off, sbp)
-	FILE *fp;
-	enum STYLE style;
-	long off;
-	struct stat *sbp;
+reverse(FILE *fp, enum STYLE style, off_t off, struct stat *sbp)
 {
 	if (style != REVERSE && off == 0)
 		return;
@@ -111,11 +103,7 @@ reverse(fp, style, off, sbp)
  * r_reg -- display a regular file in reverse order by line.
  */
 static void
-r_reg(fp, style, off, sbp)
-	FILE *fp;
-	enum STYLE style;
-	long off;
-	struct stat *sbp;
+r_reg(FILE *fp, enum STYLE style, off_t off, struct stat *sbp)
 {
 	off_t size;
 	int llen;
@@ -174,8 +162,7 @@ typedef struct bf {
  * user warned).
  */
 static void
-r_buf(fp)
-	FILE *fp;
+r_buf(FILE *fp)
 {
 	BF *mark, *tl, *tr;
 	int ch, len, llen;
@@ -190,21 +177,35 @@ r_buf(fp)
 		 * linked list.  If out of memory, toss the LRU block and
 		 * keep going.
 		 */
-		if (enomem || (tl = malloc(sizeof(BF))) == NULL ||
+		if (enomem) {
+			if (!mark) {
+				errno = ENOMEM;
+				err(1, NULL);
+			}
+			tl = tl->next;
+			enomem += tl->len;
+		} else if ((tl = malloc(sizeof(BF))) == NULL ||
 		    (tl->l = malloc(BSZ)) == NULL) {
-			if (!mark)
-				err(1, "%s", strerror(errno));
-			tl = enomem ? tl->next : mark;
+			if (tl)
+				free(tl);
+			if (!mark) {
+				errno = ENOMEM;
+				err(1, NULL);
+			}
+			tl = mark;
 			enomem += tl->len;
 		} else if (mark) {
 			tl->next = mark;
 			tl->prev = mark->prev;
 			mark->prev->next = tl;
 			mark->prev = tl;
-		} else
-			mark->next = mark->prev = (mark = tl);
+		} else {
+			mark = tl;
+			mark->next = mark->prev = mark;
+		}
 
 		/* Fill the block with input data. */
+		ch = 0;
 		for (p = tl->l, len = 0;
 		    len < BSZ && (ch = getc(fp)) != EOF; ++len)
 			*p++ = ch;
@@ -227,7 +228,7 @@ r_buf(fp)
 
 	if (enomem) {
 		(void)fprintf(stderr,
-		    "tail: warning: %qd bytes discarded\n", (long long)enomem);
+		    "tail: warning: %lld bytes discarded\n", (long long)enomem);
 		rval = 1;
 	}
 

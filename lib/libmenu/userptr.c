@@ -1,4 +1,4 @@
-/*	$NetBSD: userptr.c,v 1.6 2000/03/05 04:09:53 blymn Exp $	*/
+/*	$NetBSD: userptr.c,v 1.9 2003/03/09 01:08:48 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1998-1999 Brett Lymn (blymn@baea.com.au, brett_lymn@yahoo.com.au)
@@ -10,7 +10,7 @@
  * 1. Redistributions of source code must retain the above copyright
  *    notice, this list of conditions and the following disclaimer.
  * 2. The name of the author may not be used to endorse or promote products
- *    derived from this software withough specific prior written permission
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -26,6 +26,9 @@
  *
  */
 
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: userptr.c,v 1.9 2003/03/09 01:08:48 lukem Exp $");
+
 #include <menu.h>
 #include <stdlib.h>
 #include <string.h>
@@ -40,9 +43,7 @@ extern ITEM _menui_default_item;
  * Set the item user pointer data
  */
 int
-set_item_userptr(param_item, userptr)
-        ITEM *param_item;
-        char *userptr;
+set_item_userptr(ITEM *param_item, char *userptr)
 {
 	ITEM *item = (param_item != NULL) ? param_item : &_menui_default_item;
 	
@@ -55,8 +56,7 @@ set_item_userptr(param_item, userptr)
  * Return the item user pointer
  */
 char *
-item_userptr(item)
-        ITEM *item;
+item_userptr(ITEM *item)
 {
 	if (item == NULL)
 		return _menui_default_item.userptr;
@@ -68,8 +68,7 @@ item_userptr(item)
  * Return the user pointer for the given menu
  */
 char *
-menu_userptr(menu)
-        MENU *menu;
+menu_userptr(MENU *menu)
 {
 	if (menu == NULL)
 		return _menui_default_menu.userptr;
@@ -81,9 +80,7 @@ menu_userptr(menu)
  * Set the user pointer for the given menu
  */
 int
-set_menu_userptr(param_menu, userptr)
-        MENU *param_menu;
-        char *userptr;
+set_menu_userptr(MENU *param_menu, char *userptr)
 {
 	MENU *menu = (param_menu != NULL) ? param_menu : &_menui_default_menu;
 

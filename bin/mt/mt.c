@@ -1,4 +1,4 @@
-/*	$NetBSD: mt.c,v 1.32 1999/09/07 13:56:53 simonb Exp $	*/
+/* $NetBSD: mt.c,v 1.46 2008/07/20 00:52:40 lukem Exp $ */
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)mt.c	8.2 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: mt.c,v 1.32 1999/09/07 13:56:53 simonb Exp $");
+__RCSID("$NetBSD: mt.c,v 1.46 2008/07/20 00:52:40 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -52,6 +48,7 @@ __RCSID("$NetBSD: mt.c,v 1.32 1999/09/07 13:56:53 simonb Exp $");
  *   magnetic tape manipulation program
  */
 #include <sys/types.h>
+#include <sys/param.h>
 #include <sys/ioctl.h>
 #include <sys/mtio.h>
 #include <sys/stat.h>
@@ -60,70 +57,71 @@ __RCSID("$NetBSD: mt.c,v 1.32 1999/09/07 13:56:53 simonb Exp $");
 #include <err.h>
 #include <fcntl.h>
 #include <paths.h>
+#include <rmt.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-
-#include <rmt.h>
 
 /* pseudo ioctl constants */
 #define MTASF	100
 
 struct commands {
 	const char *c_name;		/* command */
-	int c_spcl;			/* ioctl request */
+	size_t c_namelen;		/* command len */
+	u_long c_spcl;			/* ioctl request */
 	int c_code;			/* ioctl code for MTIOCTOP command */
 	int c_ronly;			/* open tape read-only */
 	int c_mincount;			/* min allowed count value */
 };
 
+#define CMD(a)	a, sizeof(a) - 1
 const struct commands com[] = {
-	{ "asf",	MTIOCTOP,     MTASF,      1,  1 },
-	{ "blocksize",	MTIOCTOP,     MTSETBSIZ,  1,  0 },
-	{ "bsf",	MTIOCTOP,     MTBSF,      1,  1 },
-	{ "bsr",	MTIOCTOP,     MTBSR,      1,  1 },
-	{ "compress",	MTIOCTOP,     MTCMPRESS,  1,  0 },
-	{ "density",	MTIOCTOP,     MTSETDNSTY, 1,  0 },
-	{ "eof",	MTIOCTOP,     MTWEOF,     0,  1 },
-	{ "eom",	MTIOCTOP,     MTEOM,      1,  0 },
-	{ "erase",	MTIOCTOP,     MTERASE,    0,  0 },
-	{ "fsf",	MTIOCTOP,     MTFSF,      1,  1 },
-	{ "fsr",	MTIOCTOP,     MTFSR,      1,  1 },
-	{ "offline",	MTIOCTOP,     MTOFFL,     1,  0 },
-	{ "rdhpos",     MTIOCRDHPOS,  0,          1,  0 },
-	{ "rdspos",     MTIOCRDSPOS,  0,          1,  0 },
-	{ "retension",	MTIOCTOP,     MTRETEN,    1,  0 },
-	{ "rewind",	MTIOCTOP,     MTREW,      1,  0 },
-	{ "rewoffl",	MTIOCTOP,     MTOFFL,     1,  0 },
-	{ "setblk",	MTIOCTOP,     MTSETBSIZ,  1,  0 },
-	{ "setdensity",	MTIOCTOP,     MTSETDNSTY, 1,  0 },
-	{ "sethpos",    MTIOCHLOCATE, 0,          1,  0 },
-	{ "setspos",    MTIOCSLOCATE, 0,          1,  0 },
-	{ "status",	MTIOCGET,     MTNOP,      1,  0 },
-	{ "weof",	MTIOCTOP,     MTWEOF,     0,  1 },
-	{ "eew",	MTIOCTOP,     MTEWARN,    1,  0 },
-	{ NULL }
+	{ CMD("asf"),		MTIOCTOP,     MTASF,      1,  0 },
+	{ CMD("blocksize"),	MTIOCTOP,     MTSETBSIZ,  1,  0 },
+	{ CMD("bsf"),		MTIOCTOP,     MTBSF,      1,  1 },
+	{ CMD("bsr"),		MTIOCTOP,     MTBSR,      1,  1 },
+	{ CMD("compress"),	MTIOCTOP,     MTCMPRESS,  1,  0 },
+	{ CMD("density"),	MTIOCTOP,     MTSETDNSTY, 1,  0 },
+	{ CMD("eof"),		MTIOCTOP,     MTWEOF,     0,  1 },
+	{ CMD("eom"),		MTIOCTOP,     MTEOM,      1,  0 },
+	{ CMD("erase"),		MTIOCTOP,     MTERASE,    0,  0 },
+	{ CMD("fsf"),		MTIOCTOP,     MTFSF,      1,  1 },
+	{ CMD("fsr"),		MTIOCTOP,     MTFSR,      1,  1 },
+	{ CMD("offline"),	MTIOCTOP,     MTOFFL,     1,  0 },
+	{ CMD("rdhpos"),	MTIOCRDHPOS,  0,          1,  0 },
+	{ CMD("rdspos"),	MTIOCRDSPOS,  0,          1,  0 },
+	{ CMD("retension"),	MTIOCTOP,     MTRETEN,    1,  0 },
+	{ CMD("rewind"),	MTIOCTOP,     MTREW,      1,  0 },
+	{ CMD("rewoffl"),	MTIOCTOP,     MTOFFL,     1,  0 },
+	{ CMD("setblk"),	MTIOCTOP,     MTSETBSIZ,  1,  0 },
+	{ CMD("setdensity"),	MTIOCTOP,     MTSETDNSTY, 1,  0 },
+	{ CMD("sethpos"),	MTIOCHLOCATE, 0,          1,  0 },
+	{ CMD("setspos"),	MTIOCSLOCATE, 0,          1,  0 },
+	{ CMD("status"),	MTIOCGET,     MTNOP,      1,  0 },
+	{ CMD("weof"),		MTIOCTOP,     MTWEOF,     0,  1 },
+	{ CMD("eew"),		MTIOCTOP,     MTEWARN,    1,  0 },
+	{ .c_name = NULL }
 };
 
-void printreg __P((const char *, u_int, const char *));
-void status __P((struct mtget *));
-void usage __P((void));
-int  main __P((int, char *[]));
+void printreg(const char *, u_int, const char *);
+void status(struct mtget *);
+void usage(void);
+int main(int, char *[]);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
-	const struct commands *comp = (const struct commands *) NULL;
+	const struct commands *cp, *comp;
 	struct mtget mt_status;
 	struct mtop mt_com;
-	int ch, len, mtfd, flags;
+	int ch, mtfd, flags;
 	char *p;
 	const char *tape;
 	int count;
+	size_t len;
 
+	setprogname(argv[0]);
 	if ((tape = getenv("TAPE")) == NULL)
 		tape = _PATH_DEFTAPE;
 
@@ -144,12 +142,18 @@ main(argc, argv)
 		usage();
 
 	len = strlen(p = *argv++);
-	for (comp = com;; comp++) {
-		if (comp->c_name == NULL)
-			errx(1, "%s: unknown command", p);
-		if (strncmp(p, comp->c_name, len) == 0)
-			break;
+	for (comp = NULL, cp = com; cp->c_name != NULL; cp++) {
+		size_t clen = MIN(len, cp->c_namelen);
+		if (strncmp(p, cp->c_name, clen) == 0) {
+			if (comp != NULL)
+				errx(1, "%s: Ambiguous command `%s' or `%s'?",
+				    p, cp->c_name, comp->c_name);
+			else
+				comp = cp;
+		}
 	}
+	if (comp == NULL)
+		errx(1, "%s: unknown command", p);
 
 	if (*argv) {
 		count = strtol(*argv, &p, 10);
@@ -166,6 +170,7 @@ main(argc, argv)
 	switch (comp->c_spcl) {
 	case MTIOCTOP:
 		if (comp->c_code == MTASF) {
+
 			/* If mtget.mt_fileno was implemented, We could
 			   compute the minimal seek needed to position
 			   the tape.  Until then, rewind and seek from
@@ -176,10 +181,12 @@ main(argc, argv)
 			if (ioctl(mtfd, MTIOCTOP, &mt_com) < 0)
 				err(2, "%s", tape);
 		
-			mt_com.mt_op = MTFSF;
-			mt_com.mt_count = count;
-			if (ioctl(mtfd, MTIOCTOP, &mt_com) < 0)
-				err(2, "%s", tape);
+			if (count > 0) {
+				mt_com.mt_op = MTFSF;
+				    mt_com.mt_count = count;
+				if (ioctl(mtfd, MTIOCTOP, &mt_com) < 0)
+				    err(2, "%s", tape);
+			}
 
 		} else {
 			mt_com.mt_op = comp->c_code;
@@ -211,7 +218,7 @@ main(argc, argv)
 		break;
 
 	default:
-		errx(1, "internal error: unknown request %d", comp->c_spcl);
+		errx(1, "internal error: unknown request %ld", comp->c_spcl);
 	}
 
 	exit(0);
@@ -242,7 +249,7 @@ const struct tape_desc {
 #endif
 #define SCSI_DS_BITS	"\20\5WriteProtect\2Mounted"
 	{ 0x7,		"SCSI",		SCSI_DS_BITS,	"76543210" },
-	{ 0 }
+	{ .t_type = 0 }
 };
 
 
@@ -250,8 +257,7 @@ const struct tape_desc {
  * Interpret the status buffer returned
  */
 void
-status(bp)
-	struct mtget *bp;
+status(struct mtget *bp)
 {
 	const struct tape_desc *mt;
 
@@ -282,20 +288,17 @@ status(bp)
  * Print a register a la the %b format of the kernel's printf.
  */
 void
-printreg(s, v, bits)
-	const char *s;
-	u_int v;
-	const char *bits;
+printreg(const char *s, u_int v, const char *bits)
 {
-	int i, any = 0;
+	int any, i;
 	char c;
 
+	any = 0;
 	if (bits && *bits == 8)
 		printf("%s=%o", s, v);
 	else
 		printf("%s=%x", s, v);
-	bits++;
-	if (v && *bits) {
+	if (v && bits && *++bits) {
 		putchar('<');
 		while ((i = *bits++)) {
 			if (v & (1 << (i-1))) {
@@ -313,9 +316,10 @@ printreg(s, v, bits)
 }
 
 void
-usage()
+usage(void)
 {
-	(void)fprintf(stderr, "usage: mt [-f device] command [ count ]\n");
+	(void)fprintf(stderr, "usage: %s [-f device] command [count]\n",
+	    getprogname());
 	exit(1);
 	/* NOTREACHED */
 }

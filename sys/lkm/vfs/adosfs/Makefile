@@ -1,10 +1,8 @@
-#	$NetBSD: Makefile,v 1.3 1999/02/13 02:54:52 lukem Exp $
+#	$NetBSD: Makefile,v 1.6 2002/12/23 17:23:13 jdolecek Exp $
 
 .include "../Makefile.inc"
 
-.PATH:	$S/adosfs ${.CURDIR}/..
-
-MKMAN=	no
+.PATH:	$S/fs/adosfs ${.CURDIR}/..
 
 KMOD=	adosfs
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.h,v 1.12 1998/07/28 11:41:58 mycroft Exp $	*/
+/*	$NetBSD: trap.h,v 1.18 2005/07/11 02:37:31 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -40,11 +36,11 @@
 
 extern int pendingsigs;
 
-int trapcmd __P((int, char **));
-void clear_traps __P((void));
-long setsignal __P((int));
-void ignoresig __P((int));
-void onsig __P((int));
-void dotrap __P((void));
-void setinteractive __P((int));
-void exitshell __P((int)) __attribute__((noreturn));
+int trapcmd(int, char **);
+void clear_traps(int);
+sig_t setsignal(int, int);
+void ignoresig(int, int);
+void onsig(int);
+void dotrap(void);
+void setinteractive(int);
+void exitshell(int) __attribute__((__noreturn__));

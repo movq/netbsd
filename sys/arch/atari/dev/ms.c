@@ -1,4 +1,4 @@
-/*	$NetBSD: ms.c,v 1.10 2000/03/23 06:36:04 thorpej Exp $	*/
+/*	$NetBSD: ms.c,v 1.20 2008/01/08 18:04:16 joerg Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman.
@@ -26,11 +26,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -54,6 +50,9 @@
 /*
  * Mouse driver.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ms.c,v 1.20 2008/01/08 18:04:16 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -89,6 +88,12 @@ dev_type_close(msclose);
 dev_type_read(msread);
 dev_type_ioctl(msioctl);
 dev_type_poll(mspoll);
+dev_type_kqfilter(mskqfilter);
+
+const struct cdevsw ms_cdevsw = {
+	msopen, msclose, msread, nowrite, msioctl,
+	nostop, notty, mspoll, nommap, mskqfilter,
+};
 
 static	void	ms_3b_delay __P((struct ms_softc *));
 
@@ -98,7 +103,7 @@ mouseattach(cnt)
 {
 	printf("1 mouse configured\n");
 	ms_softc[0].ms_emul3b = 1;
-	callout_init(&ms_softc[0].ms_delay_ch);
+	callout_init(&ms_softc[0].ms_delay_ch, 0);
 	return(NMOUSE);
 }
 
@@ -209,7 +214,7 @@ int		size, type;
 		}
 		fe->id    = LOC_X_DELTA;
 		fe->value = rel_ms->dx;
-		fe->time  = time;
+		getmicrotime(&fe->time);
 		if (put >= EV_QSIZE) {
 			put = 0;
 			fe  = &ms->ms_events.ev_q[0];
@@ -223,7 +228,7 @@ int		size, type;
 		}
 		fe->id    = LOC_Y_DELTA;
 		fe->value = rel_ms->dy;
-		fe->time  = time;
+		getmicrotime(&fe->time);
 		if (put >= EV_QSIZE) {
 			put = 0;
 			fe  = &ms->ms_events.ev_q[0];
@@ -241,7 +246,7 @@ int		size, type;
 				fe2->id = MS_LEFT;
 			else fe2->id = MS_MIDDLE;
 			fe2->value = rel_ms->id & bmask ? VKEY_DOWN : VKEY_UP;
-			fe2->time  = time;
+			getmicrotime(&fe2->time);
 		}
 	}
 
@@ -301,10 +306,10 @@ out:
 }
 
 int
-msopen(dev, flags, mode, p)
+msopen(dev, flags, mode, l)
 dev_t		dev;
 int		flags, mode;
-struct proc	*p;
+struct lwp	*l;
 {
 	u_char		report_ms_joy[] = { 0x14, 0x08 };
 	struct ms_softc	*ms;
@@ -319,7 +324,7 @@ struct proc	*p;
 	if (ms->ms_events.ev_io)
 		return(EBUSY);
 
-	ms->ms_events.ev_io = p;
+	ms->ms_events.ev_io = l->l_proc;
 	ms->ms_dx = ms->ms_dy = 0;
 	ms->ms_buttons = 0;
 	ms->ms_bq[0].id = ms->ms_bq[1].id = 0;
@@ -334,10 +339,10 @@ struct proc	*p;
 }
 
 int
-msclose(dev, flags, mode, p)
+msclose(dev, flags, mode, l)
 dev_t		dev;
 int		flags, mode;
-struct proc	*p;
+struct lwp	*l;
 {
 	u_char		disable_ms_joy[] = { 0x12, 0x1a };
 	int		unit;
@@ -368,12 +373,12 @@ int		flags;
 }
 
 int
-msioctl(dev, cmd, data, flag, p)
+msioctl(dev, cmd, data, flag, l)
 dev_t			dev;
 u_long			cmd;
-register caddr_t 	data;
+register void *	data;
 int			flag;
-struct proc		*p;
+struct lwp		*l;
 {
 	struct ms_softc *ms;
 	int		unit;
@@ -393,6 +398,11 @@ struct proc		*p;
 	case FIOASYNC:
 		ms->ms_events.ev_async = *(int *)data != 0;
 		return(0);
+	case FIOSETOWN:
+		if (-*(int *)data != ms->ms_events.ev_io->p_pgid
+		    && *(int *)data != ms->ms_events.ev_io->p_pid)
+			return(EPERM);
+		return(0);
 	case TIOCSPGRP:
 		if (*(int *)data != ms->ms_events.ev_io->p_pgid)
 			return(EPERM);
@@ -409,14 +419,23 @@ struct proc		*p;
 }
 
 int
-mspoll(dev, events, p)
+mspoll(dev, events, l)
 dev_t		dev;
 int		events;
-struct proc	*p;
+struct lwp	*l;
 {
 	struct ms_softc *ms;
 
 	ms = &ms_softc[minor(dev)];
-	return(ev_poll(&ms->ms_events, events, p));
+	return(ev_poll(&ms->ms_events, events, l));
+}
+
+int
+mskqfilter(dev_t dev, struct knote *kn)
+{
+	struct ms_softc *ms;
+
+	ms = &ms_softc[minor(dev)];
+	return (ev_kqfilter(&ms->ms_events, kn));
 }
 #endif /* NMOUSE > 0 */

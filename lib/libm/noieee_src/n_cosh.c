@@ -1,4 +1,4 @@
-/*      $NetBSD: n_cosh.c,v 1.5 1999/07/02 15:37:36 simonb Exp $ */
+/*      $NetBSD: n_cosh.c,v 1.8 2008/03/20 16:41:26 mhitch Exp $ */
 /*
  * Copyright (c) 1985, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -85,7 +81,14 @@ static char sccsid[] = "@(#)cosh.c	8.1 (Berkeley) 6/4/93";
  * shown.
  */
 
+#define _LIBM_STATIC
+#include "../src/namespace.h"
 #include "mathimpl.h"
+
+#ifdef __weak_alias
+__weak_alias(cosh, _cosh);
+__weak_alias(coshf, _coshf);
+#endif
 
 vc(mln2hi, 8.8029691931113054792E1   ,0f33,43b0,2bdb,c7e2,   7, .B00F33C7E22BDB)
 vc(mln2lo,-4.9650192275318476525E-16 ,1b60,a70f,582a,279e, -50,-.8F1B60279E582A)
@@ -102,13 +105,13 @@ ic(lnovfl, 7.0978271289338397310E2,     9, 1.62E42FEFA39EF)
 #endif
 
 #if defined(__vax__)||defined(tahoe)
-static int max = 126;
-#else	/* defined(__vax__)||defined(tahoe) */
-static int max = 1023;
+#define EXPMAX 126
+#else
+#define EXPMAX 1023
 #endif	/* defined(__vax__)||defined(tahoe) */
 
-double cosh(x)
-double x;
+double
+cosh(double x)
 {
 	static const double half=1.0/2.0,
 		one=1.0, small=1.0E-18; /* fl(1+small)==1 */
@@ -127,11 +130,17 @@ double x;
 	}
 
 	if( lnovfl <= x && x <= (lnovfl+0.7))
-        /* for x lies in [lnovfl, lnovfl+ln2], decrease x by ln(2^(max+1))
-         * and return 2^max*exp(x) to avoid unnecessary overflow
+        /* for x lies in [lnovfl, lnovfl+ln2], decrease x by ln(2^(EXPMAX+1))
+         * and return 2^EXPMAX*exp(x) to avoid unnecessary overflow
          */
-	    return(scalb(exp((x-mln2hi)-mln2lo), max));
+	    return(scalb(exp((x-mln2hi)-mln2lo), EXPMAX));
 
 	else
 	    return(exp(x)*half);	/* for large x,  cosh(x)=exp(x)/2 */
+}
+
+float
+coshf(float x)
+{
+	return(cosh((double)x));
 }

@@ -1,18 +1,16 @@
-#	$NetBSD: Makefile,v 1.14 1999/07/20 09:35:21 mrg Exp $
+#	$NetBSD: Makefile,v 1.21 2007/05/28 12:06:30 tls Exp $
 #	@(#)Makefile	8.1 (Berkeley) 7/19/93
 
-SRCTOP=	../..
-.include <bsd.crypto.mk>
+USE_FORT?= yes	# setuid
 
 PROG=	rlogin
-SRCS=	rlogin.c
+SRCS=	rlogin.c getport.c
+WARNS=	3
+
+.PATH.c: ${.CURDIR}/../rsh
+CPPFLAGS+=-I${.CURDIR}/../rsh
 
 BINOWN=	root
 BINMODE=4555
-#INSTALLFLAGS=-fschg
-
-.if defined(CRYPTOPATH)
-.sinclude "${CRYPTOPATH}/usr.bin/rlogin/Makefile.frag"
-.endif
 
 .include <bsd.prog.mk>

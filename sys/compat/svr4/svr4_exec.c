@@ -1,7 +1,7 @@
-/*	$NetBSD: svr4_exec.c,v 1.30 1999/10/25 13:55:07 kleink Exp $	 */
+/*	$NetBSD: svr4_exec.c,v 1.63 2008/10/15 06:51:20 wrstuden Exp $	 */
 
 /*-
- * Copyright (c) 1994 The NetBSD Foundation, Inc.
+ * Copyright (c) 1994, 2000 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,109 +29,74 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#define	ELFSIZE		32				/* XXX should die */
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: svr4_exec.c,v 1.63 2008/10/15 06:51:20 wrstuden Exp $");
+
+#if defined(_KERNEL_OPT)
+#include "opt_syscall_debug.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/kernel.h>
 #include <sys/proc.h>
-#include <sys/malloc.h>
-#include <sys/namei.h>
-#include <sys/vnode.h>
-#include <sys/exec_elf.h>
-#include <sys/exec.h>
 
-#include <sys/mman.h>
-#include <vm/vm.h>
-#include <vm/vm_param.h>
-#include <vm/vm_map.h>
+#include <uvm/uvm_extern.h>
 
-#include <machine/cpu.h>
-#include <machine/reg.h>
+#include <machine/svr4_machdep.h>
 
 #include <compat/svr4/svr4_types.h>
-#include <compat/svr4/svr4_util.h>
 #include <compat/svr4/svr4_syscall.h>
-#include <compat/svr4/svr4_exec.h>
 #include <compat/svr4/svr4_errno.h>
 #include <compat/svr4/svr4_signal.h>
+#include <compat/svr4/svr4_exec.h>
 
-static void *svr4_copyargs __P((struct exec_package *, struct ps_strings *,
-			       void *, void *));
-
-const char svr4_emul_path[] = "/emul/svr4";
 extern char svr4_sigcode[], svr4_esigcode[];
 extern struct sysent svr4_sysent[];
-extern char *svr4_syscallnames[];
+extern const char * const svr4_syscallnames[];
+#ifndef __HAVE_SYSCALL_INTERN
+void syscall(void);
+#endif
 
-struct emul emul_svr4 = {
+struct uvm_object *emul_svr4_object;
+
+const struct emul emul_svr4 = {
 	"svr4",
+	"/emul/svr4",
+#ifndef __HAVE_MINIMAL_EMUL
+	0,
 	native_to_svr4_errno,
-	svr4_sendsig,
 	SVR4_SYS_syscall,
-	SVR4_SYS_MAXSYSCALL,
+	SVR4_SYS_NSYSENT,
+#endif
 	svr4_sysent,
+#ifdef SYSCALL_DEBUG
 	svr4_syscallnames,
-	SVR4_AUX_ARGSIZ,
-	svr4_copyargs,
-	svr4_setregs,
+#else
+	NULL,
+#endif
+	svr4_sendsig,
+	trapsignal,
+	NULL,
 	svr4_sigcode,
 	svr4_esigcode,
-};
-
-static void *
-svr4_copyargs(pack, arginfo, stack, argp)
-	struct exec_package *pack;
-	struct ps_strings *arginfo;
-	void *stack;
-	void *argp;
-{
-	AuxInfo *a;
-
-	if (!(a = (AuxInfo *) elf32_copyargs(pack, arginfo, stack, argp)))
-		return NULL;
-#ifdef SVR4_COMPAT_SOLARIS2
-	if (pack->ep_emul_arg) {
-		a->au_type = AT_SUN_UID;
-		a->au_v = p->p_ucred->cr_uid;
-		a++;
-
-		a->au_type = AT_SUN_RUID;
-		a->au_v = p->p_cred->ruid;
-		a++;
-
-		a->au_type = AT_SUN_GID;
-		a->au_v = p->p_ucred->cr_gid;
-		a++;
-
-		a->au_type = AT_SUN_RGID;
-		a->au_v = p->p_cred->rgid;
-		a++;
-	}
+	&emul_svr4_object,
+	svr4_setregs,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+#ifdef __HAVE_SYSCALL_INTERN
+	svr4_syscall_intern,
+#else
+	syscall,
 #endif
-	return a;
-}
+	NULL,
+	NULL,
 
-int
-svr4_elf32_probe(p, epp, eh, itp, pos)
-	struct proc *p;
-	struct exec_package *epp;
-	Elf32_Ehdr *eh;
-	char *itp;
-	Elf32_Addr *pos;
-{
-	const char *bp;
-	int error;
-	size_t len;
-
-	if (itp[0]) {
-		if ((error = emul_find(p, NULL, svr4_emul_path, itp, &bp, 0)))
-			return error;
-		if ((error = copystr(bp, itp, MAXPATHLEN, &len)))
-			return error;
-		free((void *)bp, M_TEMP);
-	}
-	epp->ep_emul = &emul_svr4;
-	*pos = SVR4_INTERP_ADDR;
-	return 0;
-}
+	uvm_default_mapaddr,
+	NULL,	/* e_usertrap */
+	NULL,	/* e_sa */
+	0,	/* e_ucsize */
+	NULL,	/* e_startlwp */
+};

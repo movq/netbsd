@@ -1,4 +1,4 @@
-/*	$NetBSD: clock.c,v 1.1 2000/02/29 15:21:48 nonaka Exp $	*/
+/*	$NetBSD: clock.c,v 1.9 2006/04/10 18:40:06 garbled Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -34,38 +34,73 @@
 #include <lib/libsa/stand.h>
 #include <dev/isa/isareg.h>
 #include <dev/ic/i8253reg.h>
+#include <powerpc/spr.h>
 
 #include "boot.h"
 
 u_long ns_per_tick = NS_PER_TICK;
 
-static inline u_quad_t mftb __P((void));
+static inline u_quad_t mftb(void);
+static inline void mfrtc(u_long *, u_long *);
 
 static inline u_quad_t
-mftb()
+mftb(void)
 {
 	u_long scratch;
 	u_quad_t tb;
 
-	asm ("1: mftbu %0; mftb %0+1; mftbu %1; cmpw %0,%1; bne 1b"
+	__asm volatile ("1: mftbu %0; mftb %0+1; mftbu %1; cmpw %0,%1; bne 1b"
 	    : "=r"(tb), "=r"(scratch));
 	return (tb);
+}
+
+static inline void
+mfrtc(u_long *up, u_long *lp)
+{
+	u_long scratch;
+
+	__asm volatile ("1: mfspr %0,%3; mfspr %1,%4; mfspr %2,%3;"
+	    "cmpw %0,%2; bne 1b"
+	    : "=r"(*up), "=r"(*lp), "=r"(scratch)
+	    : "n"(SPR_RTCU_R), "n"(SPR_RTCL_R));
 }
 
 /*
  * Wait for about n microseconds (at least!).
  */
 void
-delay(n)
-	u_int n;
+delay(u_int n)
 {
 	u_quad_t tb;
 	u_long tbh, tbl, scratch;
+	unsigned int cpuvers;
 
-	tb = mftb();
-	tb += (n * 1000 + ns_per_tick - 1) / ns_per_tick;
-	tbh = tb >> 32;
-	tbl = tb;
-	asm ("1: mftbu %0; cmpw %0,%1; blt 1b; bgt 2f; mftb %0; cmpw 0, %0,%2; blt 1b; 2:"
-		:: "r"(scratch), "r"(tbh), "r"(tbl));
+	__asm volatile ("mfpvr %0" : "=r"(cpuvers));
+	cpuvers >>= 16;
+
+	if (cpuvers == MPC601) {
+		mfrtc(&tbh, &tbl);
+		while (n >= 1000000) {
+			tbh++;
+			n -= 1000000;
+		}
+		tbl += n * 1000;
+		if (tbl >= 1000000000) {
+			tbh++;
+			tbl -= 1000000000;
+		}
+		__asm volatile ("1: mfspr %0,%3; cmplw %0,%1; blt 1b; bgt 2f;"
+		    "mfspr %0,%4; cmplw %0,%2; blt 1b; 2:"
+		    : "=&r"(scratch)
+		    : "r"(tbh), "r"(tbl), "n"(SPR_RTCU_R), "n"(SPR_RTCL_R));
+	} else {
+		tb = mftb();
+		tb += (n * 1000 + ns_per_tick - 1) / ns_per_tick;
+		tbh = tb >> 32;
+		tbl = tb;
+		__asm volatile ("1: mftbu %0; cmpw %0,%1; blt 1b; bgt 2f;"
+		                  "mftb %0; cmpw %0,%2; blt 1b; 2:"
+		                  : "=&r"(scratch)
+		                  : "r"(tbh), "r"(tbl));
+	}
 }

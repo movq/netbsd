@@ -1,4 +1,4 @@
-/*	$NetBSD: locore_machdep.S,v 1.1.1.1 1999/09/16 12:23:20 takemura Exp $	*/
+/*	$NetBSD: locore_machdep.S,v 1.8 2005/12/11 12:17:33 christos Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -53,55 +49,33 @@
  *	@(#)locore.s	8.5 (Berkeley) 1/4/94
  */
 
-
-/*
- * DEcstation-specific mips locore code.
- */
-
 #include <mips/asm.h>
-#include <mips/cpuregs.h>	/* XXX - misnomer? */
+#include <mips/cpuregs.h>
+
+#include <hpcmips/vr/vr_asm.h>
 
 	.set	noreorder
 /*
- * GCC2 seems to want to call __main in main() for some reason.
+ * void vr_hibernate(void *addr, int len)
+ *	wipe out all physical memory and hibernate
  */
-LEAF(__main)
-	j	ra
-	nop
-END(__main)
+LEAF_NOPROFILE(vr_hibernate)
+	la	t0, evr_hibernate
+	la	t1, vr_hibernate
+	subu	t0, t1			# t0 = length of this function
+	addu	a0, t0
+	subu	a1, t0
 
-/*
- * Interrupt counters for vmstat.
- */
-	.data
-	.globl _C_LABEL(intrcnt)
-	.globl _C_LABEL(eintrcnt)
-	.globl _C_LABEL(intrnames)
-	.globl _C_LABEL(eintrnames)
-_C_LABEL(intrnames):
-	.asciiz	"softclock"
-	.asciiz	"softnet"
-	.asciiz	"serial0"
-	.asciiz	"serial1"
-	.asciiz	"serial2"
-	.asciiz	"ether"
-	.asciiz	"scsi"
-	.asciiz	"memory"
-	.asciiz	"clock"
-	.asciiz	"fpu"
-	.asciiz	"tcslot0"
-	.asciiz	"tcslot1"
-	.asciiz	"tcslot2"
-	.asciiz "dtop"
-	.asciiz "isdn"
-	.asciiz	"floppy"
-	.asciiz	"stray"
-	.asciiz	"nmi"
-	.asciiz	"lostclock"
-_C_LABEL(eintrnames):
-	.align	2
-_C_LABEL(intrcnt):
-	.word	0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, 0
-_C_LABEL(eintrcnt):
-	.word	0	# This shouldn't be needed but with 4.4bsd's as, the eintrcnt
-			#  label ends end up in a different section otherwise.
+1:	sw	zero, 0(a0)
+	subu	a1, 4
+	bnez	a1, 1b
+	addu	a0, 4			# BDSLOT
+
+	.word	VR_OPCODE_HIBERNATE
+	nop
+	nop
+	nop
+	nop
+	nop
+END(vr_hibernate)
+XLEAF(evr_hibernate)

@@ -1,4 +1,4 @@
-/*	$NetBSD: asm.h,v 1.19 1999/10/25 23:52:52 thorpej Exp $	*/
+/*	$NetBSD: asm.h,v 1.25 2008/04/28 20:23:26 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -105,8 +98,14 @@
 #define	_ENTRY(name) \
 	.text; .even; .globl name; .type name,@function; name:
 
+#ifdef __ELF__
+#define	MCOUNT_ENTRY	__mcount
+#else
+#define	MCOUNT_ENTRY	mcount
+#endif
+
 #ifdef GPROF
-#define _PROF_PROLOG	link %a6,#0; jbsr mcount; unlk %a6
+#define _PROF_PROLOG	link %a6,#0; jbsr MCOUNT_ENTRY; unlk %a6
 #else
 #define _PROF_PROLOG
 #endif
@@ -180,6 +179,8 @@
 	9:	.asciz	x			;	\
 		.even
 
+#endif /* _KERNEL */
+
 /*
  * Shorthand for defining vectors for the vector table.
  */
@@ -192,7 +193,17 @@
 #define	VECTOR_UNUSED					\
 	.long	0
 
-#endif /* _KERNEL */
+#ifdef __ELF__
+#define	WEAK_ALIAS(alias,sym)						\
+	.weak alias;							\
+	alias = sym
+#endif
+/*
+ * STRONG_ALIAS: create a strong alias.
+ */
+#define STRONG_ALIAS(alias,sym)						\
+	.globl alias;							\
+	alias = sym
 
 #ifdef __STDC__
 #define	__STRING(x)			#x
@@ -205,5 +216,17 @@
 	.stabs msg,30,0,0,0 ;						\
 	.stabs __STRING(_/**/sym),1,0,0,0
 #endif /* __STDC__ */
+
+/*
+ * Macros to hide shortcomings in the 68010.
+ */
+#ifndef __mc68010__
+#define	EXTBL(reg)					\
+	extbl	reg
+#else	/* __mc68010__ */
+#define	EXTBL(reg)					\
+	extw	reg		;			\
+	extl	reg
+#endif	/* __mc68010__ */
 
 #endif /* _M68K_ASM_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: midwayreg.h,v 1.9 1999/07/01 08:12:46 itojun Exp $	*/
+/*	$NetBSD: midwayreg.h,v 1.14 2007/03/04 06:01:58 christos Exp $	*/
 
 /*
  * m i d w a y r e g . h
@@ -9,11 +9,11 @@
  */
 
 #if defined(__FreeBSD__)
-typedef void * bus_space_tag_t;
+typedef void *bus_space_tag_t;
 typedef u_int32_t pci_chipset_tag_t;
-typedef caddr_t bus_space_handle_t;
+typedef void *bus_space_handle_t;
 typedef u_int32_t bus_size_t;
-typedef caddr_t bus_addr_t;
+typedef void *bus_addr_t;
 
 #define bus_space_read_4(t, h, o) ((void) t,                            \
     (*(volatile u_int32_t *)((h) + (o))))
@@ -38,14 +38,14 @@ typedef caddr_t bus_addr_t;
  *
  * in order to have a portable driver, the netbsd guys will not let us
  * use structs.   we have a bus_space_handle_t which is the en_base address.
- * everything else is an offset from that base.   all card data must be 
+ * everything else is an offset from that base.   all card data must be
  * accessed with bus_space_read_4()/bus_space_write_4():
  *
  * rv = bus_space_read_4(sc->en_memt, sc->en_base, BYTE_OFFSET);
  * bus_space_write_4(sc->en_memt, sc->en_base, BYTE_OFFSET, VALUE);
  *
  * en_card: the whole card (prom + phy + midway + obmem)
- * 	obmem contains: vci tab + dma queues (rx & tx) + service list + bufs
+ * 	obmem contains: vci tab + DMA queues (rx & tx) + service list + bufs
  */
 
 /* byte offsets from en_base of various items */
@@ -153,7 +153,7 @@ typedef caddr_t bus_addr_t;
  * obmem items
  */
 
-/* 
+/*
  * vci table in obmem (offset from MID_VCTOFF)
  */
 
@@ -168,10 +168,10 @@ typedef caddr_t bus_addr_t;
 #define MIDV_LOCTOPSHFT	8		/* shift to get top 11 bits of 19 */
 #define MIDV_LOCSHIFT	18
 #define MIDV_LOCMASK	0x7ff
-#define MIDV_LOC(X)	(((X) >> MIDV_LOCSHIFT) & MIDV_LOCMASK) 
+#define MIDV_LOC(X)	(((X) >> MIDV_LOCSHIFT) & MIDV_LOCMASK)
 					/* 11 most sig bits of addr */
 #define MIDV_SZSHIFT	15
-#define MIDV_SZ(X)	(((X) >> MIDV_SZSHIFT) & 7) 
+#define MIDV_SZ(X)	(((X) >> MIDV_SZSHIFT) & 7)
 					/* size encoded the usual way */
 #define MIDV_INSERVICE	0x1		/* in service list */
 
@@ -193,7 +193,7 @@ typedef caddr_t bus_addr_t;
 #define MID_CRC(N)	(MID_VC(N)|0xc)		/* CRC */
 
 /*
- * dma recv q.
+ * DMA recv q.
  */
 
 #define MID_DMA_END	(1 << 5)	/* for both tx and rx */
@@ -207,14 +207,14 @@ typedef caddr_t bus_addr_t;
 				/* convert byte offset to reg value */
 #define MID_DRQ_REG2A(N)	(((N) << 3) + MID_DRQOFF) /* and back */
 
-/* note: format of word 1 of RXQ is different beween ENI and ADP cards */
+/* note: format of word 1 of RXQ is different between ENI and ADP cards */
 #define MID_MK_RXQ_ENI(CNT,VC,END,TYPE) \
 	( ((CNT) << 16)|((VC) << 6)|(END)|(TYPE) )
 
 #define MID_MK_RXQ_ADP(CNT,VC,END,JK) \
 	( ((CNT) << 12)|((VC) << 2)|((END) >> 4)|(((JK) != 0) ? 1 : 0))
 /*
- * dma xmit q.
+ * DMA xmit q.
  */
 
 #define MID_DTQ_N	512			/* # of descriptors */
@@ -223,7 +223,7 @@ typedef caddr_t bus_addr_t;
 #define MID_DTQ_REG2A(N)	(((N) << 3) + MID_DTQOFF) /* and back */
 
 
-/* note: format of word 1 of TXQ is different beween ENI and ADP cards */
+/* note: format of word 1 of TXQ is different between ENI and ADP cards */
 #define MID_MK_TXQ_ENI(CNT,CHN,END,TYPE) \
 	( ((CNT) << 16)|((CHN) << 6)|(END)|(TYPE) )
 
@@ -231,7 +231,7 @@ typedef caddr_t bus_addr_t;
 	( ((CNT) << 12)|((CHN) << 2)|((END) >> 4)|(((JK) != 0) ? 1 : 0) )
 
 /*
- * dma types
+ * DMA types
  */
 
 #define MIDDMA_JK	0x3	/* just kidding */
@@ -247,7 +247,7 @@ typedef caddr_t bus_addr_t;
 #define MIDDMA_8WMAYBE	0xd	/* 8 words, maybe */
 #define MIDDMA_16WMAYBE	0xe	/* 16 words, maybe */
 
-#define MIDDMA_MAYBE	0xc	/* mask to detect WMAYBE dma code */
+#define MIDDMA_MAYBE	0xc	/* mask to detect WMAYBE DMA code */
 #define MIDDMA_MAXBURST	(16 * sizeof(u_int32_t))	/* largest burst */
 
 /*

@@ -1,7 +1,7 @@
-/*	$NetBSD: scsipi_ioctl.c,v 1.37 1999/09/30 22:57:54 thorpej Exp $	*/
+/*	$NetBSD: scsipi_ioctl.c,v 1.66 2008/07/14 12:36:44 drochner Exp $	*/
 
 /*-
- * Copyright (c) 1998 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 2004 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -43,12 +36,14 @@
  * Berkeley style copyright.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: scsipi_ioctl.c,v 1.66 2008/07/14 12:36:44 drochner Exp $");
+
 #include "opt_compat_freebsd.h"
 #include "opt_compat_netbsd.h"
 
-#include <sys/types.h>
-#include <sys/errno.h>
 #include <sys/param.h>
+#include <sys/errno.h>
 #include <sys/systm.h>
 #include <sys/malloc.h>
 #include <sys/buf.h>
@@ -58,6 +53,7 @@
 
 #include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsipiconf.h>
+#include <dev/scsipi/scsipi_base.h>
 #include <dev/scsipi/scsiconf.h>
 #include <sys/scsiio.h>
 
@@ -70,45 +66,39 @@ struct scsi_ioctl {
 	struct uio si_uio;
 	struct iovec si_iov;
 	scsireq_t si_screq;
-	struct scsipi_link *si_sc_link;
+	struct scsipi_periph *si_periph;
 };
 
-LIST_HEAD(, scsi_ioctl) si_head;
+static LIST_HEAD(, scsi_ioctl) si_head;
 
-struct	scsi_ioctl *si_find __P((struct buf *));
-void	si_free __P((struct scsi_ioctl *));
-struct	scsi_ioctl *si_get __P((void));
-void	scsistrategy __P((struct buf *));
-
-struct scsi_ioctl *
-si_get()
+static struct scsi_ioctl *
+si_get(void)
 {
 	struct scsi_ioctl *si;
 	int s;
 
-	si = malloc(sizeof(struct scsi_ioctl), M_TEMP, M_WAITOK);
-	bzero(si, sizeof(struct scsi_ioctl));
+	si = malloc(sizeof(struct scsi_ioctl), M_TEMP, M_WAITOK|M_ZERO);
+	buf_init(&si->si_bp);
 	s = splbio();
 	LIST_INSERT_HEAD(&si_head, si, si_list);
 	splx(s);
 	return (si);
 }
 
-void
-si_free(si)
-	struct scsi_ioctl *si;
+static void
+si_free(struct scsi_ioctl *si)
 {
 	int s;
 
 	s = splbio();
 	LIST_REMOVE(si, si_list);
 	splx(s);
+	buf_destroy(&si->si_bp);
 	free(si, M_TEMP);
 }
 
-struct scsi_ioctl *
-si_find(bp)
-	struct buf *bp;
+static struct scsi_ioctl *
+si_find(struct buf *bp)
 {
 	struct scsi_ioctl *si;
 	int s;
@@ -130,78 +120,88 @@ si_find(bp)
  * the device's queue if such exists.
  */
 void
-scsipi_user_done(xs)
-	struct scsipi_xfer *xs;
+scsipi_user_done(struct scsipi_xfer *xs)
 {
 	struct buf *bp;
 	struct scsi_ioctl *si;
 	scsireq_t *screq;
-	struct scsipi_link *sc_link;
+	struct scsipi_periph *periph = xs->xs_periph;
+	int s;
 
 	bp = xs->bp;
-	if (bp == NULL) {	/* ALL user requests must have a buf */
-		xs->sc_link->sc_print_addr(xs->sc_link);
-		printf("User command with no buf\n");
-		return;
+#ifdef DIAGNOSTIC
+	if (bp == NULL) {
+		scsipi_printaddr(periph);
+		printf("user command with no buf\n");
+		panic("scsipi_user_done");
 	}
+#endif
 	si = si_find(bp);
+#ifdef DIAGNOSTIC
 	if (si == NULL) {
-		xs->sc_link->sc_print_addr(xs->sc_link);
-		printf("User command with no ioctl\n");
-		return;
+		scsipi_printaddr(periph);
+		printf("user command with no ioctl\n");
+		panic("scsipi_user_done");
 	}
+#endif
+
 	screq = &si->si_screq;
-	sc_link = si->si_sc_link;
-	SC_DEBUG(xs->sc_link, SDEV_DB2, ("user-done\n"));
+
+	SC_DEBUG(xs->xs_periph, SCSIPI_DB2, ("user-done\n"));
 
 	screq->retsts = 0;
 	screq->status = xs->status;
 	switch (xs->error) {
 	case XS_NOERROR:
-		SC_DEBUG(sc_link, SDEV_DB3, ("no error\n"));
+		SC_DEBUG(periph, SCSIPI_DB3, ("no error\n"));
 		screq->datalen_used =
 		    xs->datalen - xs->resid;	/* probably rubbish */
 		screq->retsts = SCCMD_OK;
 		break;
 	case XS_SENSE:
-		SC_DEBUG(sc_link, SDEV_DB3, ("have sense\n"));
+		SC_DEBUG(periph, SCSIPI_DB3, ("have sense\n"));
 		screq->senselen_used = min(sizeof(xs->sense.scsi_sense),
 		    SENSEBUFLEN);
-		bcopy(&xs->sense.scsi_sense, screq->sense, screq->senselen);
+		memcpy(screq->sense, &xs->sense.scsi_sense, screq->senselen);
 		screq->retsts = SCCMD_SENSE;
 		break;
 	case XS_SHORTSENSE:
-		SC_DEBUG(sc_link, SDEV_DB3, ("have short sense\n"));
+		SC_DEBUG(periph, SCSIPI_DB3, ("have short sense\n"));
 		screq->senselen_used = min(sizeof(xs->sense.atapi_sense),
 		    SENSEBUFLEN);
-		bcopy(&xs->sense.scsi_sense, screq->sense, screq->senselen);
+		memcpy(screq->sense, &xs->sense.scsi_sense, screq->senselen);
 		screq->retsts = SCCMD_UNKNOWN; /* XXX need a shortsense here */
 		break;
 	case XS_DRIVER_STUFFUP:
-		sc_link->sc_print_addr(sc_link);
-		printf("host adapter code inconsistency\n");
+		scsipi_printaddr(periph);
+		printf("passthrough: adapter inconsistency\n");
 		screq->retsts = SCCMD_UNKNOWN;
 		break;
 	case XS_SELTIMEOUT:
-		SC_DEBUG(sc_link, SDEV_DB3, ("seltimeout\n"));
+		SC_DEBUG(periph, SCSIPI_DB3, ("seltimeout\n"));
 		screq->retsts = SCCMD_TIMEOUT;
 		break;
 	case XS_TIMEOUT:
-		SC_DEBUG(sc_link, SDEV_DB3, ("timeout\n"));
+		SC_DEBUG(periph, SCSIPI_DB3, ("timeout\n"));
 		screq->retsts = SCCMD_TIMEOUT;
 		break;
 	case XS_BUSY:
-		SC_DEBUG(sc_link, SDEV_DB3, ("busy\n"));
+		SC_DEBUG(periph, SCSIPI_DB3, ("busy\n"));
 		screq->retsts = SCCMD_BUSY;
 		break;
 	default:
-		sc_link->sc_print_addr(sc_link);
-		printf("unknown error category %d from host adapter code\n",
+		scsipi_printaddr(periph);
+		printf("unknown error category %d from adapter\n",
 		    xs->error);
 		screq->retsts = SCCMD_UNKNOWN;
 		break;
 	}
-	biodone(bp); 	/* we're waiting on it in scsi_strategy() */
+
+	if (xs->xs_control & XS_CTL_ASYNC) {
+		s = splbio();
+		scsipi_put_xs(xs);
+		splx(s);
+	}
 }
 
 
@@ -220,102 +220,86 @@ scsipi_user_done(xs)
  * from the cdevsw/bdevsw tables because they couldn't have added
  * the screq structure. [JRE]
  */
-void
-scsistrategy(bp)
-	struct buf *bp;
+static void
+scsistrategy(struct buf *bp)
 {
 	struct scsi_ioctl *si;
 	scsireq_t *screq;
-	struct scsipi_link *sc_link;
+	struct scsipi_periph *periph;
 	int error;
 	int flags = 0;
-	int s;
 
 	si = si_find(bp);
 	if (si == NULL) {
-		printf("user_strat: No ioctl\n");
+		printf("scsistrategy: "
+		    "No matching ioctl request found in queue\n");
 		error = EINVAL;
-		goto bad;
+		goto done;
 	}
 	screq = &si->si_screq;
-	sc_link = si->si_sc_link;
-	SC_DEBUG(sc_link, SDEV_DB2, ("user_strategy\n"));
+	periph = si->si_periph;
+	SC_DEBUG(periph, SCSIPI_DB2, ("user_strategy\n"));
 
 	/*
 	 * We're in trouble if physio tried to break up the transfer.
 	 */
 	if (bp->b_bcount != screq->datalen) {
-		sc_link->sc_print_addr(sc_link);
+		scsipi_printaddr(periph);
 		printf("physio split the request.. cannot proceed\n");
 		error = EIO;
-		goto bad;
+		goto done;
 	}
 
 	if (screq->timeout == 0) {
 		error = EINVAL;
-		goto bad;
+		goto done;
 	}
 
 	if (screq->cmdlen > sizeof(struct scsipi_generic)) {
-		sc_link->sc_print_addr(sc_link);
+		scsipi_printaddr(periph);
 		printf("cmdlen too big\n");
 		error = EFAULT;
-		goto bad;
+		goto done;
 	}
 
-	if (screq->flags & SCCMD_READ)
+	if ((screq->flags & SCCMD_READ) && screq->datalen > 0)
 		flags |= XS_CTL_DATA_IN;
-	if (screq->flags & SCCMD_WRITE)
+	if ((screq->flags & SCCMD_WRITE) && screq->datalen > 0)
 		flags |= XS_CTL_DATA_OUT;
 	if (screq->flags & SCCMD_TARGET)
 		flags |= XS_CTL_TARGET;
 	if (screq->flags & SCCMD_ESCAPE)
 		flags |= XS_CTL_ESCAPE;
 
-	error = scsipi_command(sc_link,
-	    (struct scsipi_generic *)screq->cmd, screq->cmdlen,
-	    (u_char *)bp->b_data, screq->datalen,
+	error = scsipi_command(periph, (void *)screq->cmd, screq->cmdlen,
+	    (void *)bp->b_data, screq->datalen,
 	    0, /* user must do the retries *//* ignored */
-	    screq->timeout, bp, flags | XS_CTL_USERCMD | XS_CTL_ASYNC);
+	    screq->timeout, bp, flags | XS_CTL_USERCMD);
 
-	/* because there is a bp, scsi_scsipi_cmd will return immediatly */
+done:
 	if (error)
-		goto bad;
-
-	SC_DEBUG(sc_link, SDEV_DB3, ("about to sleep\n"));
-	s = splbio();
-	while ((bp->b_flags & B_DONE) == 0)
-		tsleep(bp, PRIBIO, "scistr", 0);
-	splx(s);
-	SC_DEBUG(sc_link, SDEV_DB3, ("back from sleep\n"));
-
-	return;
-
-bad:
-	bp->b_flags |= B_ERROR;
+		bp->b_resid = bp->b_bcount;
 	bp->b_error = error;
 	biodone(bp);
+	return;
 }
 
 /*
  * Something (e.g. another driver) has called us
- * with an sc_link for a target/lun/adapter, and a scsi
- * specific ioctl to perform, better try.
- * If user-level type command, we must still be running
- * in the context of the calling process
+ * with a periph and a scsi-specific ioctl to perform,
+ * better try.  If user-level type command, we must
+ * still be running in the context of the calling process
  */
 int
-scsipi_do_ioctl(sc_link, dev, cmd, addr, flag, p)
-	struct scsipi_link *sc_link;
-	dev_t dev;
-	u_long cmd;
-	caddr_t addr;
-	int flag;
-	struct proc *p;
+scsipi_do_ioctl(struct scsipi_periph *periph, dev_t dev, u_long cmd,
+    void *addr, int flag, struct lwp *l)
 {
 	int error;
 
-	SC_DEBUG(sc_link, SDEV_DB2, ("scsipi_do_ioctl(0x%lx)\n", cmd));
+	SC_DEBUG(periph, SCSIPI_DB2, ("scsipi_do_ioctl(0x%lx)\n", cmd));
+
+	if (addr == NULL)
+		return EINVAL;
 
 	/* Check for the safe-ness of this request. */
 	switch (cmd) {
@@ -340,7 +324,7 @@ scsipi_do_ioctl(sc_link, dev, cmd, addr, flag, p)
 
 		si = si_get();
 		si->si_screq = *screq;
-		si->si_sc_link = sc_link;
+		si->si_periph = periph;
 		len = screq->datalen;
 		if (len) {
 			si->si_iov.iov_base = screq->databuf;
@@ -349,20 +333,24 @@ scsipi_do_ioctl(sc_link, dev, cmd, addr, flag, p)
 			si->si_uio.uio_iovcnt = 1;
 			si->si_uio.uio_resid = len;
 			si->si_uio.uio_offset = 0;
-			si->si_uio.uio_segflg = UIO_USERSPACE;
 			si->si_uio.uio_rw =
 			    (screq->flags & SCCMD_READ) ? UIO_READ : UIO_WRITE;
-			si->si_uio.uio_procp = p;
+			if ((flag & FKIOCTL) == 0) {
+				si->si_uio.uio_vmspace = l->l_proc->p_vmspace;
+			} else {
+				UIO_SETUP_SYSSPACE(&si->si_uio);
+			}
 			error = physio(scsistrategy, &si->si_bp, dev,
 			    (screq->flags & SCCMD_READ) ? B_READ : B_WRITE,
-			    sc_link->adapter->scsipi_minphys, &si->si_uio);
+			    periph->periph_channel->chan_adapter->adapt_minphys,
+			    &si->si_uio);
 		} else {
 			/* if no data, no need to translate it.. */
 			si->si_bp.b_flags = 0;
 			si->si_bp.b_data = 0;
 			si->si_bp.b_bcount = 0;
 			si->si_bp.b_dev = dev;
-			si->si_bp.b_proc = p;
+			si->si_bp.b_proc = l->l_proc;
 			scsistrategy(&si->si_bp);
 			error = si->si_bp.b_error;
 		}
@@ -373,16 +361,16 @@ scsipi_do_ioctl(sc_link, dev, cmd, addr, flag, p)
 	case SCIOCDEBUG: {
 		int level = *((int *)addr);
 
-		SC_DEBUG(sc_link, SDEV_DB3, ("debug set to %d\n", level));
-		sc_link->flags &= ~SDEV_DBX; /* clear debug bits */
+		SC_DEBUG(periph, SCSIPI_DB3, ("debug set to %d\n", level));
+		periph->periph_dbflags = 0;
 		if (level & 1)
-			sc_link->flags |= SDEV_DB1;
+			periph->periph_dbflags |= SCSIPI_DB1;
 		if (level & 2)
-			sc_link->flags |= SDEV_DB2;
+			periph->periph_dbflags |= SCSIPI_DB2;
 		if (level & 4)
-			sc_link->flags |= SDEV_DB3;
+			periph->periph_dbflags |= SCSIPI_DB3;
 		if (level & 8)
-			sc_link->flags |= SDEV_DB4;
+			periph->periph_dbflags |= SCSIPI_DB4;
 		return (0);
 	}
 	case SCIOCRECONFIG:
@@ -391,17 +379,19 @@ scsipi_do_ioctl(sc_link, dev, cmd, addr, flag, p)
 	case SCIOCIDENTIFY: {
 		struct scsi_addr *sca = (struct scsi_addr *)addr;
 
-		switch (sc_link->type) {
-		case BUS_SCSI:
+		switch (scsipi_periph_bustype(periph)) {
+		case SCSIPI_BUSTYPE_SCSI:
 			sca->type = TYPE_SCSI;
-			sca->addr.scsi.scbus = sc_link->scsipi_scsi.scsibus;
-			sca->addr.scsi.target = sc_link->scsipi_scsi.target;
-			sca->addr.scsi.lun = sc_link->scsipi_scsi.lun;
+			sca->addr.scsi.scbus =
+			    device_unit(device_parent(periph->periph_dev));
+			sca->addr.scsi.target = periph->periph_target;
+			sca->addr.scsi.lun = periph->periph_lun;
 			return (0);
-		case BUS_ATAPI:
+		case SCSIPI_BUSTYPE_ATAPI:
 			sca->type = TYPE_ATAPI;
-			sca->addr.atapi.atbus = sc_link->scsipi_atapi.atapibus;
-			sca->addr.atapi.drive = sc_link->scsipi_atapi.drive;
+			sca->addr.atapi.atbus =
+			    device_unit(device_parent(periph->periph_dev));
+			sca->addr.atapi.drive = periph->periph_target;
 			return (0);
 		}
 		return (ENXIO);
@@ -411,11 +401,12 @@ scsipi_do_ioctl(sc_link, dev, cmd, addr, flag, p)
 	case OSCIOCIDENTIFY: {
 		struct oscsi_addr *sca = (struct oscsi_addr *)addr;
 
-		switch (sc_link->type) {
-		case BUS_SCSI:
-			sca->scbus = sc_link->scsipi_scsi.scsibus;
-			sca->target = sc_link->scsipi_scsi.target;
-			sca->lun = sc_link->scsipi_scsi.lun;
+		switch (scsipi_periph_bustype(periph)) {
+		case SCSIPI_BUSTYPE_SCSI:
+			sca->scbus =
+			    device_unit(device_parent(periph->periph_dev));
+			sca->target = periph->periph_target;
+			sca->lun = periph->periph_lun;
 			return (0);
 		}
 		return (ENODEV);

@@ -1,4 +1,4 @@
-/*	$NetBSD: hist.c,v 1.11 1998/07/28 02:47:20 mycroft Exp $	*/
+/* $NetBSD: hist.c,v 1.18 2007/07/16 18:26:10 christos Exp $ */
 
 /*-
  * Copyright (c) 1980, 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,32 +34,30 @@
 #if 0
 static char sccsid[] = "@(#)hist.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: hist.c,v 1.11 1998/07/28 02:47:20 mycroft Exp $");
+__RCSID("$NetBSD: hist.c,v 1.18 2007/07/16 18:26:10 christos Exp $");
 #endif
 #endif /* not lint */
 
 #include <sys/types.h>
+
+#include <stdarg.h>
 #include <stdlib.h>
-#if __STDC__
-# include <stdarg.h>
-#else
-# include <varargs.h>
-#endif
 
 #include "csh.h"
 #include "extern.h"
 
-static void	hfree __P((struct Hist *));
-static void	dohist1 __P((struct Hist *, int *, int, int));
-static void	phist __P((struct Hist *, int));
+static void hfree(struct Hist *);
+static void dohist1(struct Hist *, int *, int, int);
+static void phist(struct Hist *, int);
 
 void
-savehist(sp)
-    struct wordent *sp;
+savehist(struct wordent *sp)
 {
     struct Hist *hp, *np;
-    int histlen = 0;
-    Char   *cp;
+    Char *cp;
+    int histlen;
+
+    histlen = 0;
 
     /* throw away null lines */
     if (sp->next->word[0] == '\n')
@@ -89,14 +83,11 @@ savehist(sp)
 }
 
 struct Hist *
-enthist(event, lp, docopy)
-    int     event;
-    struct wordent *lp;
-    bool    docopy;
+enthist(int event, struct wordent *lp, int docopy)
 {
     struct Hist *np;
 
-    np = (struct Hist *) xmalloc((size_t) sizeof(*np));
+    np = (struct Hist *)xmalloc((size_t)sizeof(*np));
     np->Hnum = np->Href = event;
     if (docopy) {
 	copylex(&np->Hlex, lp);
@@ -113,32 +104,31 @@ enthist(event, lp, docopy)
 }
 
 static void
-hfree(hp)
-    struct Hist *hp;
+hfree(struct Hist *hp)
 {
-
     freelex(&hp->Hlex);
     xfree((ptr_t) hp);
 }
 
 void
 /*ARGSUSED*/
-dohist(v, t)
-    Char **v;
-    struct command *t;
+dohist(Char **v, struct command *t)
 {
-    int     n, rflg = 0, hflg = 0;
-    sigset_t sigset;
+    sigset_t nsigset;
+    int hflg, n, rflg;
+
+    hflg = 0;
+    rflg = 0;
 
     if (getn(value(STRhistory)) == 0)
 	return;
     if (setintr) {
-	sigemptyset(&sigset);
-	(void) sigaddset(&sigset, SIGINT);
-	(void) sigprocmask(SIG_UNBLOCK, &sigset, NULL);
+	sigemptyset(&nsigset);
+	(void)sigaddset(&nsigset, SIGINT);
+	(void)sigprocmask(SIG_UNBLOCK, &nsigset, NULL);
     }
     while (*++v && **v == '-') {
-	Char   *vp = *v;
+	Char *vp = *v;
 
 	while (*++vp)
 	    switch (*vp) {
@@ -164,11 +154,11 @@ dohist(v, t)
 }
 
 static void
-dohist1(hp, np, rflg, hflg)
-    struct Hist *hp;
-    int    *np, rflg, hflg;
+dohist1(struct Hist *hp, int *np, int rflg, int hflg)
 {
-    bool    print = (*np) > 0;
+    int print;
+
+    print = (*np) > 0;
 
     for (; hp != 0; hp = hp->Hnext) {
 	(*np)--;
@@ -185,11 +175,9 @@ dohist1(hp, np, rflg, hflg)
 }
 
 static void
-phist(hp, hflg)
-    struct Hist *hp;
-    int     hflg;
+phist(struct Hist *hp, int hflg)
 {
     if (hflg == 0)
-	(void) fprintf(cshout, "%6d\t", hp->Hnum);
+	(void)fprintf(cshout, "%6d\t", hp->Hnum);
     prlex(cshout, &hp->Hlex);
 }

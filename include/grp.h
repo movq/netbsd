@@ -1,4 +1,4 @@
-/*	$NetBSD: grp.h,v 1.14 1998/07/28 16:27:48 mycroft Exp $	*/
+/*	$NetBSD: grp.h,v 1.24 2007/10/19 15:58:52 christos Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1993
@@ -17,11 +17,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -47,7 +43,7 @@
 #include <sys/featuretest.h>
 #include <sys/types.h>
 
-#if !defined(_POSIX_C_SOURCE) && !defined(_XOPEN_SOURCE)
+#if defined(_NETBSD_SOURCE)
 #define	_PATH_GROUP		"/etc/group"
 #endif
 
@@ -59,18 +55,29 @@ struct group {
 };
 
 __BEGIN_DECLS
-struct group	*getgrgid __P((gid_t));
-struct group	*getgrnam __P((const char *));
-#if !defined(_POSIX_C_SOURCE) || defined(_XOPEN_SOURCE)
-struct group	*getgrent __P((void));
-void		 setgrent __P((void));
-void		 endgrent __P((void));
+struct group	*getgrgid(gid_t);
+struct group	*getgrnam(const char *);
+#if (_POSIX_C_SOURCE - 0) >= 199506L || (_XOPEN_SOURCE - 0) >= 500 || \
+    defined(_REENTRANT) || defined(_NETBSD_SOURCE)
+int		 getgrgid_r(gid_t, struct group *, char *, size_t,
+				struct group **);
+int		 getgrnam_r(const char *, struct group *, char *, size_t,
+				struct group **);
 #endif
-#if !defined(_POSIX_C_SOURCE) && !defined(_XOPEN_SOURCE)
-void		 setgrfile __P((const char *));
-int		 setgroupent __P((int));
-const char	*group_from_gid __P((gid_t, int));
-int		 gid_from_group __P((const char *, gid_t *));
+#if defined(_XOPEN_SOURCE) || defined(_NETBSD_SOURCE)
+struct group	*getgrent(void);
+void		 setgrent(void);
+void		 endgrent(void);
+#endif
+#if defined(_NETBSD_SOURCE)
+void		 setgrfile(const char *);
+int		 setgroupent(int);
+int		 getgrent_r(struct group *, char *, size_t, struct group **);
+const char	*group_from_gid(gid_t, int);
+int		 gid_from_group(const char *, gid_t *);
+int		 pwcache_groupdb(int (*)(int), void (*)(void),
+				    struct group * (*)(const char *),
+				    struct group * (*)(gid_t));
 #endif
 __END_DECLS
 

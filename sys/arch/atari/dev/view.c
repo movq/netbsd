@@ -1,4 +1,4 @@
-/*	$NetBSD: view.c,v 1.16 1998/12/20 14:32:53 thomas Exp $	*/
+/*	$NetBSD: view.c,v 1.25 2008/03/23 15:50:51 cube Exp $	*/
 
 /*
  * Copyright (c) 1994 Christian E. Hopps
@@ -37,6 +37,9 @@
  * refered to by open/close/ioctl.  This device serves as
  * a interface to graphics. */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: view.c,v 1.25 2008/03/23 15:50:51 cube Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
@@ -46,7 +49,6 @@
 #include <sys/malloc.h>
 #include <sys/queue.h>
 #include <sys/conf.h>
-#include <sys/poll.h>
 #include <machine/cpu.h>
 #include <atari/dev/grfabs_reg.h>
 #include <atari/dev/viewioctl.h>
@@ -67,6 +69,16 @@ int view_default_y;
 int view_default_width  = 640;
 int view_default_height = 400;
 int view_default_depth  = 1;
+
+dev_type_open(viewopen);
+dev_type_close(viewclose);
+dev_type_ioctl(viewioctl);
+dev_type_mmap(viewmmap);
+
+const struct cdevsw view_cdevsw = {
+	viewopen, viewclose, nullread, nullwrite, viewioctl,
+	nostop, notty, nopoll, viewmmap, nokqfilter,
+};
 
 /* 
  *  functions for probeing.
@@ -242,7 +254,7 @@ colormap_t		*ucm;
 		return(EINVAL);
 		
 	/* add one incase of zero, ick. */
-	cme = malloc(sizeof(ucm->entry[0])*(ucm->size+1), M_IOCTLOPS,M_WAITOK);
+	cme = malloc(sizeof(ucm->entry[0])*(ucm->size+1), M_TEMP,M_WAITOK);
 	if (cme == NULL)
 		return(ENOMEM);
 
@@ -253,7 +265,7 @@ colormap_t		*ucm;
 		error = EINVAL;
 	else error = copyout(cme, uep, sizeof(ucm->entry[0]) * ucm->size);
 	ucm->entry = uep;	  /* set entry back to users. */
-	free(cme, M_IOCTLOPS);
+	free(cme, M_TEMP);
 	return(error);
 }
 
@@ -268,7 +280,7 @@ colormap_t		*ucm;
 	if(ucm->size > MAX_CENTRIES)
 		return(EINVAL);
 		
-	cm = malloc(sizeof(ucm->entry[0])*ucm->size + sizeof(*cm), M_IOCTLOPS,
+	cm = malloc(sizeof(ucm->entry[0])*ucm->size + sizeof(*cm), M_TEMP,
 								M_WAITOK);
 	if(cm == NULL)
 		return(ENOMEM);
@@ -279,7 +291,7 @@ colormap_t		*ucm;
 	    copyin(ucm->entry,cm->entry,sizeof(ucm->entry[0])*ucm->size)) == 0)
 	    && (vu->view == NULL || grf_use_colormap(vu->view, cm)))
 		error = EINVAL;
-	free(cm, M_IOCTLOPS);
+	free(cm, M_TEMP);
 	return(error);
 }
 
@@ -289,11 +301,11 @@ colormap_t		*ucm;
 
 /*ARGSUSED*/
 int
-viewopen(dev, flags, mode, p)
+viewopen(dev, flags, mode, l)
 dev_t		dev;
 int		flags;
 int		mode;
-struct proc	*p;
+struct lwp	*l;
 {
 	dimen_t			size;
 	struct view_softc	*vu;
@@ -325,11 +337,11 @@ struct proc	*p;
 
 /*ARGSUSED*/
 int
-viewclose (dev, flags, mode, p)
+viewclose (dev, flags, mode, l)
 	dev_t		dev;
 	int 		flags;
 	int		mode;
-	struct proc	*p;
+	struct lwp	*l;
 {
 	struct view_softc *vu;
 
@@ -347,12 +359,12 @@ viewclose (dev, flags, mode, p)
 
 /*ARGSUSED*/
 int
-viewioctl (dev, cmd, data, flag, p)
+viewioctl (dev, cmd, data, flag, l)
 dev_t		dev;
 u_long		cmd;
-caddr_t		data;
+void *		data;
 int		flag;
-struct proc	*p;
+struct lwp	*l;
 {
 	struct view_softc	*vu;
 	bmap_t			*bm;
@@ -377,7 +389,7 @@ struct proc	*p;
 	case VIOCGBMAP:
 		bm = (bmap_t *)data;
 		bcopy(vu->view->bitmap, bm, sizeof(bmap_t));
-		if (p != NOPROC) {
+		if (l != NOLWP) {
 			bm->plane      = NULL;
 			bm->hw_address = NULL;
 			bm->regs       = NULL;
@@ -391,17 +403,18 @@ struct proc	*p;
 		error = view_set_colormap(vu, (colormap_t *)data);
 		break;
 	default:
-		error = EINVAL;
+		error = EPASSTHROUGH;
 		break;
 	}
 	return(error);
 }
 
 /*ARGSUSED*/
-int
+paddr_t
 viewmmap(dev, off, prot)
-dev_t	dev;
-int	off, prot;
+	dev_t	dev;
+	off_t	off;
+	int	prot;
 {
 	struct view_softc	*vu;
 	bmap_t			*bm;
@@ -418,35 +431,21 @@ int	off, prot;
 	 * control registers
 	 */
 	if (off >= 0 && off < bm->reg_size)
-		return(((u_int)bm->hw_regs + off) >> PGSHIFT);
+		return(((paddr_t)bm->hw_regs + off) >> PGSHIFT);
 
 	/*
 	 * VGA memory
 	 */
 	if (off >= bmd_vga && off < (bmd_vga + bm->vga_mappable))
-		return(((u_int)bm->vga_address - bmd_vga + off) >> PGSHIFT);
+		return(((paddr_t)bm->vga_address - bmd_vga + off) >> PGSHIFT);
 
 	/*
 	 * frame buffer
 	 */
 	if (off >= bmd_lin && off < (bmd_lin + bm->phys_mappable))
-		return(((u_int)bmd_start - bmd_lin + off) >> PGSHIFT);
+		return(((paddr_t)bmd_start - bmd_lin + off) >> PGSHIFT);
 
 	return(-1);
-}
-
-/*ARGSUSED*/
-int
-viewpoll(dev, events, p)
-dev_t		dev;
-int		events;
-struct proc	*p;
-{
-	int revents = 0;
-
-	if (events & (POLLOUT | POLLWRNORM))
-		revents |= events & (POLLOUT | POLLWRNORM);
-	return (revents);
 }
 
 view_t	*

@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_evenodd_dagfuncs.h,v 1.2 1999/02/05 00:06:11 oster Exp $	*/
+/*	$NetBSD: rf_evenodd_dagfuncs.h,v 1.5 2005/12/11 12:23:37 christos Exp $	*/
 /*
  * rf_evenodd_dagfuncs.h
  */
@@ -45,15 +45,15 @@ void    rf_RegularESubroutine(RF_DagNode_t * node, char *ebuf);
 int     rf_RegularEFunc(RF_DagNode_t * node);
 void    rf_DegrESubroutine(RF_DagNode_t * node, char *ebuf);
 int     rf_Degraded_100_EOFunc(RF_DagNode_t * node);
-void 
+void
 rf_e_EncOneSect(RF_RowCol_t srcLogicCol, char *srcSecbuf,
     RF_RowCol_t destLogicCol, char *destSecbuf, int bytesPerSector);
-void 
+void
 rf_e_encToBuf(RF_Raid_t * raidPtr, RF_RowCol_t srcLogicCol,
     char *srcbuf, RF_RowCol_t destLogicCol, char *destbuf, int numSector);
 int     rf_RecoveryEFunc(RF_DagNode_t * node);
 int     rf_EO_DegradedWriteEFunc(RF_DagNode_t * node);
-void 
+void
 rf_doubleEOdecode(RF_Raid_t * raidPtr, char **rrdbuf, char **dest,
     RF_RowCol_t * fcol, char *pbuf, char *ebuf);
 int     rf_EvenOddDoubleRecoveryFunc(RF_DagNode_t * node);
@@ -71,7 +71,7 @@ int     rf_EOWriteDoubleRecoveryFunc(RF_DagNode_t * node);
 
 /*
  * RF_EO_MATRIX_DIM should be a prime number: and "bytesPerSector" should be
- * dividable by ( RF_EO_MATRIX_DIM - 1) to fully encode and utilize the space
+ * dividable by ( RF_EO_MATRIX_DIM - 1) to fully encode and use the space
  * in a sector, this number could also be 17. Tha later case doesn't apply
  * for disk array larger than 17 columns totally.
  */

@@ -1,4 +1,4 @@
-.\"	$NetBSD: esh.4,v 1.5 1999/12/15 22:07:31 abs Exp $
+.\"	$NetBSD: esh.4,v 1.10 2008/04/30 13:10:54 martin Exp $
 .\"
 .\" Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -15,13 +15,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -46,14 +39,14 @@
 .Sh DESCRIPTION
 The
 .Nm
-device driver supports the Essential Communications RoadRunner-based 
-HIPPI interfaces.  With some modifications, the driver could be 
+device driver supports the Essential Communications RoadRunner-based
+HIPPI interfaces.  With some modifications, the driver could be
 made to support the Gigabit Ethernet card based on the same chip.
 .Pp
 The driver supports both a normal network interface and a raw
 HIPPI Framing Protocol (HIPPI-FP) device.
-The HIPPI-FP interface is accessed via the 
-.Pa /dev/esh Ns Sy N/ulp Ns Sy N 
+The HIPPI-FP interface is accessed via the
+.Pa /dev/esh Ns Sy N/ulp Ns Sy N
 set of devices.  There are 255 available Upper Layer Protocols
 in FP;  these are selectable via the various device entries.
 .Pp
@@ -64,7 +57,9 @@ the default socket buffer size should be increased to at least
 192KB, regardless of the expected bandwidth-delay product of the
 network.
 .Pp
-HIPPI ARP is not widely used, and the NetBSD stack does not support it
+HIPPI ARP is not widely used, and the
+.Nx
+stack does not support it
 (yet).  In order to define the mappings between IP addresses and
 ifields (the HIPPI MAC addresses), the administrator must make
 link-layer entries in the routing table using the
@@ -73,18 +68,19 @@ command:
 .Bd -unfilled -offset indent
 route add -interface 129.99.154.101 -llinfo -link esh0:3.0.0.65
 .Ed
-.Pp
 .\" .Sh OPTIONS
 .Sh MEDIA SELECTION
 Media selection is not yet supported for this device.
 .\" .Sh DIAGNOSTICS
-.Sh BUGS
-The card must be tuned for proper and efficient DMA operation.
-The appropriate values vary based on the system.  
-The eshconfig(8) program is used for this.
 .Sh SEE ALSO
+.Xr intro 4 ,
+.Xr pci 4 ,
 .Xr eshconfig 8 ,
 .Xr ifconfig 8 ,
-.Xr intro 4 ,
-.Xr route 8 ,
-.Xr pci 4 
+.Xr route 8
+.Sh BUGS
+The card must be tuned for proper and efficient DMA operation.
+The appropriate values vary based on the system.
+The
+.Xr eshconfig 8
+program is used for this.

@@ -1,4 +1,4 @@
-/*	$NetBSD: isapnpres.c,v 1.9 1998/09/05 14:15:26 christos Exp $	*/
+/*	$NetBSD: isapnpres.c,v 1.19 2008/04/28 20:23:53 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,12 +33,15 @@
  * Resource parser for Plug and Play cards.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: isapnpres.c,v 1.19 2008/04/28 20:23:53 martin Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/malloc.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/isa/isavar.h>
 
@@ -53,18 +49,18 @@
 #include <dev/isapnp/isapnpvar.h>
 
 
-static int isapnp_wait_status __P((struct isapnp_softc *));
+static int isapnp_wait_status(struct isapnp_softc *);
 static struct isapnp_attach_args *
-    isapnp_newdev __P((struct isapnp_attach_args *));
+    isapnp_newdev(struct isapnp_attach_args *);
 static struct isapnp_attach_args *
-    isapnp_newconf __P((struct isapnp_attach_args *));
-static void isapnp_merge __P((struct isapnp_attach_args *,
-    const struct isapnp_attach_args *));
+    isapnp_newconf(struct isapnp_attach_args *);
+static void isapnp_merge(struct isapnp_attach_args *,
+    const struct isapnp_attach_args *);
 static struct isapnp_attach_args *
-    isapnp_flatten __P((struct isapnp_attach_args *));
-static int isapnp_process_tag __P((u_char, u_char, u_char *,
+    isapnp_flatten(struct isapnp_attach_args *);
+static int isapnp_process_tag(u_char, u_char, u_char *,
     struct isapnp_attach_args **, struct isapnp_attach_args **,
-    struct isapnp_attach_args **));
+    struct isapnp_attach_args **);
 
 
 /* isapnp_wait_status():
@@ -105,7 +101,7 @@ isapnp_newdev(card)
 	if (card->ipa_child == NULL)
 		card->ipa_child = dev;
 	else {
-		for (ipa = card->ipa_child; ipa->ipa_sibling != NULL; 
+		for (ipa = card->ipa_child; ipa->ipa_sibling != NULL;
 		    ipa = ipa->ipa_sibling)
 			continue;
 		ipa->ipa_sibling = dev;
@@ -276,7 +272,7 @@ isapnp_process_tag(tag, len, buf, card, dev, conf)
 		    (*conf)->ipa_pref);
 #endif
 		return 0;
-		
+
 	case ISAPNP_TAG_DEP_END:
 		DPRINTF(("<<<End dependent functions\n"));
 		*conf = NULL;
@@ -348,6 +344,8 @@ isapnp_process_tag(tag, len, buf, card, dev, conf)
 		r->maxbase = (buf[4] << 8) | buf[3];
 		r->align = buf[5];
 		r->length = buf[6];
+		if (r->length == 0)
+		    pa->ipa_nio--;
 #ifdef DEBUG_ISAPNP
 		isapnp_print_io("", r);
 #endif
@@ -360,6 +358,8 @@ isapnp_process_tag(tag, len, buf, card, dev, conf)
 		r->maxbase = r->minbase;
 		r->align = 1;
 		r->length = buf[2];
+		if (r->length == 0)
+		    pa->ipa_nio--;
 #ifdef DEBUG_ISAPNP
 		isapnp_print_io("FIXED ", r);
 #endif
@@ -376,6 +376,8 @@ isapnp_process_tag(tag, len, buf, card, dev, conf)
 		r->maxbase = (buf[4] << 16) | (buf[3] << 8);
 		r->align = (buf[6] << 8) | buf[5];
 		r->length = (buf[8] << 16) | (buf[7] << 8);
+		if (r->length == 0)
+		    pa->ipa_nmem--;
 #ifdef DEBUG_ISAPNP
 		isapnp_print_mem("", r);
 #endif
@@ -397,10 +399,12 @@ isapnp_process_tag(tag, len, buf, card, dev, conf)
 		    (buf[2] << 8) | buf[1];
 		r->maxbase = (buf[8] << 24) | (buf[7] << 16) |
 		    (buf[6] << 8) | buf[5];
-		r->align = (buf[12] << 24) | (buf[11] << 16) | 
+		r->align = (buf[12] << 24) | (buf[11] << 16) |
 		    (buf[10] << 8) | buf[9];
 		r->length = (buf[16] << 24) | (buf[15] << 16) |
 		    (buf[14] << 8) | buf[13];
+		if (r->length == 0)
+		    pa->ipa_nmem32--;
 #ifdef DEBUG_ISAPNP
 		isapnp_print_mem("32-bit ", r);
 #endif
@@ -415,6 +419,8 @@ isapnp_process_tag(tag, len, buf, card, dev, conf)
 		r->align = 1;
 		r->length = (buf[8] << 24) | (buf[7] << 16) |
 		    (buf[6] << 8) | buf[5];
+		if (r->length == 0)
+		    pa->ipa_nmem32--;
 #ifdef DEBUG_ISAPNP
 		isapnp_print_mem("FIXED 32-bit ", r);
 #endif
@@ -466,8 +472,9 @@ isapnp_get_resource(sc, c)
 
 		if (d != sc->sc_id[c][i] && i != ISAPNP_SERIAL_SIZE - 1) {
 			if (!warned) {
-				printf("%s: card %d violates PnP spec; byte %d\n",
-				    sc->sc_dev.dv_xname, c + 1, i);
+				aprint_error_dev(sc->sc_dev,
+				    "card %d violates PnP spec; byte %d\n",
+				    c + 1, i);
 				warned++;
 			}
 			if (i == 0) {
@@ -504,16 +511,22 @@ parse:
 		}
 
 		if (len >= ISAPNP_MAX_TAGSIZE) {
-			printf("%s: Maximum tag size exceeded, card %d\n",
-			    sc->sc_dev.dv_xname, c + 1);
-			len = ISAPNP_MAX_TAGSIZE;
+			aprint_error_dev(sc->sc_dev,
+			    "Maximum tag size exceeded, card %d\n",
+			    c + 1);
+			len = ISAPNP_MAX_TAGSIZE - 1;
 			if (++warned == 10)
 				goto bad;
 		}
 
-		if (isapnp_process_tag(tag, len, buf, &card, &dev, &conf) == -1)
-			printf("%s: No current device for tag, card %d\n",
-			    sc->sc_dev.dv_xname, c + 1);
+		if (isapnp_process_tag(tag, len, buf, &card, &dev,
+		    &conf) == -1) {
+			aprint_error_dev(sc->sc_dev,
+			    "No current device for tag, card %d\n",
+			    c + 1);
+			if (++warned == 10)
+				goto bad;
+		}
 	}
 	while (tag != ISAPNP_TAG_END);
 	return isapnp_flatten(card);
@@ -524,7 +537,7 @@ bad:
 		ISAPNP_FREE(card);
 		card = dev;
 	}
-	printf("%s: %s, card %d\n", sc->sc_dev.dv_xname,
+	aprint_normal_dev(sc->sc_dev, "%s, card %d\n",
 	    warned >= 10 ? "Too many tag errors" : "Resource timeout", c + 1);
 	return NULL;
 }

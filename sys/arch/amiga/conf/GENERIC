@@ -1,22 +1,35 @@
-#	$NetBSD: GENERIC,v 1.140 2000/03/23 22:44:42 is Exp $
+# $NetBSD: GENERIC,v 1.256 2008/09/24 17:27:49 tsutsui Exp $
+#
+# This file was automatically created.
+# Changes will be lost when make is run in this directory.
+#
+# Created from: # NetBSD: GENERIC.in,v 1.69 2008/09/24 17:26:37 tsutsui Exp $
+#
+# GENERIC machine description file
+#
+# This machine description file is used to generate the default NetBSD
+# kernel.  The generic kernel does not include all options, subsystems
+# and device drivers, but should be useful for most applications.
+#
+# The machine description file can be customised for your specific
+# machine to reduce the kernel size and improve its performance.
+#
+# For further information on compiling NetBSD kernels, see the config(8)
+# man page.
+#
+# For further information on hardware support for this architecture, see
+# the intro(4) man page.  For further information about kernel options
+# for this architecture, see the options(4) man page.  For an explanation
+# of each device driver in this file see the section 4 man page for the
+# device.
 
-#
-#if 0
-# GENERIC Amiga or DraCo
-#
-# This configuration file contains all possible options
-#
-# make AMIGA extracts the AMIGA configuration file.
-# make DRACO extracts the DRACO configuration file.
-# make INSTALL extracts the INSTALL configuration file.
-#
-# commit them, too.
-#endif
-#
 
 include "arch/amiga/conf/std.amiga"
 
-#ident 		"GENERIC-$Revision: 1.140 $"
+options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
+
+#ident 		"GENERIC-$Revision: 1.256 $"
+
 
 maxusers	8
 options 	RTC_OFFSET=0
@@ -24,44 +37,24 @@ options 	RTC_OFFSET=0
 #
 # mainboards to support (in addition to Amiga)
 #
-#ifdef DRACO_CONFIGURATION
 options 	DRACO
-
-#endif
-#ifdef AMIGA_CONFIGURATION
 options 	BB060STUPIDROM	# You need this, if you have a non-DraCo
-				# MC68060 with an OS ROM up to (at least) 
+				# MC68060 with an OS ROM up to (at least)
 				# V40 (OS3.1) and want to boot with the
 				# bootblock.
 				# You do not need this if you have a DraCo,
 				# have no 68060 or NEVER use the bootblock
-options		P5PPC68KBOARD	# Phase5 PPC/68K board support
-#endif
+options 	P5PPC68KBOARD	# Phase5 PPC/68K board support
 #
 # processors this kernel should support
 #
 options 	M68060		# support for 060
 options 	M060SP		# MC68060 software support (Required for 060)
-#ifdef AMIGA_CONFIGURATION
 options 	M68040		# support for 040
 options 	FPSP		# MC68040 floating point support
 options 	M68030		# support for 030
 options 	M68020		# support for 020/851
 options 	FPU_EMULATE	# FPU emulation
-#endif
-
-# Pull in config fragments for kernel crypto.  This is required for
-# options IPSEC etc. to work. If you want to run with IPSEC, uncomment
-# one of these, based on whether you use crypto-us or crypto-intl, and
-# adjust the prefixes as necessary.
-
-#prefix ../crypto-us/sys
-#cinclude "conf/files.crypto-us"
-#prefix
-
-#prefix ../crypto-intl/sys
-#cinclude "conf/files.crypto-intl"
-#prefix
 
 #
 # Networking options
@@ -70,34 +63,45 @@ options 	INET		# IP networking support (Required)
 options 	INET6		# IPV6
 #options 	IPSEC		# IP security
 #options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
+#options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	GATEWAY		# Packet forwarding
 #options 	DIRECTED_BROADCAST	# Broadcast across subnets
 
-#ifndef INSTALL_CONFIGURATION
 #options 	MROUTING	# Multicast routing
-options 	NS		# XNS
-#options 	NSIP		# XNS tunneling over IP
-options 	ISO,TPIP	# OSI
-options 	EON		# OSI tunneling over IP
-options 	CCITT,LLC,HDLC	# X.25
+#options 	PIM		# Protocol Independent Multicast
+#options 	ISO,TPIP	# OSI
+#options 	EON		# OSI tunneling over IP
 options 	NETATALK	# AppleTalk networking protocols
-#endif
+#options 	TCP_DEBUG	# Record last TCP_NDEBUG packets with SO_DEBUG
 
 options 	PPP_BSDCOMP	# BSD-Compress compression support for PPP
 options 	PPP_DEFLATE	# Deflate compression support for PPP
 options 	PPP_FILTER	# Active filter support for PPP (requires bpf)
 options 	PFIL_HOOKS	# pfil(9) packet filter hooks
 options 	IPFILTER_LOG	# ipmon(8) log support
+options 	IPFILTER_LOOKUP	# ippool(8) support
+#options 	IPFILTER_DEFAULT_BLOCK	# block all packets by default
+
+#options 	ALTQ		# Manipulate network interfaces' output queues
+#options 	ALTQ_BLUE	# Stochastic Fair Blue
+#options 	ALTQ_CBQ	# Class-Based Queueing
+#options 	ALTQ_CDNR	# Diffserv Traffic Conditioner
+#options 	ALTQ_FIFOQ	# First-In First-Out Queue
+#options 	ALTQ_FLOWVALVE	# RED/flow-valve (red-penalty-box)
+#options 	ALTQ_HFSC	# Hierarchical Fair Service Curve
+#options 	ALTQ_LOCALQ	# Local queueing discipline
+#options 	ALTQ_PRIQ	# Priority Queueing
+#options 	ALTQ_RED	# Random Early Detection
+#options 	ALTQ_RIO	# RED with IN/OUT
+#options 	ALTQ_WFQ	# Weighted Fair Queueing
 
 # Filesystems
 file-system 	FFS		# Berkeley fast file system
 file-system 	EXT2FS		# second extended file system (linux)
 #file-system 	LFS		# log-structured filesystem (experimental)
 
-#ifndef INSTALL_CONFIGURATION
 file-system 	MFS		# Memory based filesystem
-#endif
 
 file-system 	NFS		# Network File System client side code
 file-system 	ADOSFS		# AmigaDOS file system
@@ -106,7 +110,6 @@ file-system 	MSDOSFS		# MS-DOS filesystem
 
 file-system 	KERNFS		# kernel data-structure filesystem
 
-#ifndef INSTALL_CONFIGURATION
 file-system 	FDESC		# user file descriptor filesystem
 file-system 	NULLFS		# loopback filesystem
 file-system 	OVERLAY		# overlay filesystem
@@ -114,89 +117,97 @@ file-system 	OVERLAY		# overlay filesystem
 file-system 	PROCFS		# /proc filesystem
 file-system 	UMAPFS		# NULLFS + uid and gid remapping
 file-system 	UNION		# union filesystem
-#endif
+file-system	SMBFS		# experimental - CIFS; also needs nsmb (below)
+file-system	PTYFS		# /dev/pts/N support
+#file-system	TMPFS		# Efficient memory file-system
+#file-system	UDF		# experimental - OSTA UDF CD/DVD file-system
 
 # Filesystem options
 
 #options 	FFS_EI		# FFS Endian Independant support
+options 	WAPBL		# File system journaling support - Experimental
 
-#ifndef INSTALL_CONFIGURATION
 options 	QUOTA		# User and group quotas in FFS
-#options 	SOFTDEP         # FFS soft updates support.
+options 	SOFTDEP		# FFS soft updates support.
+#options	UFS_DIRHASH	# UFS Large Directory Hashing - Experimental
 options 	NFSSERVER	# Network File System server side code
-#endif
+#options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 
 #options 	EXT2FS_SYSTEM_FLAGS # makes ext2fs file flags (append and
 				# immutable) behave as system flags.
 
 #
-# Compatability options for various existing systems
+# Compatibility options for various existing systems
 #
 
-#ifndef INSTALL_CONFIGURATION
-options 	TCP_COMPAT_42	# compatibility with 4.2BSD TCP/IP
+#options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
 options 	COMPAT_43	# compatibility with 4.3BSD interfaces
 options 	COMPAT_09	# compatibility with NetBSD 0.9
 options 	COMPAT_10	# compatibility with NetBSD 1.0
 options 	COMPAT_12	# compatibility with NetBSD 1.2
 options 	COMPAT_13	# compatibility with NetBSD 1.3
 options 	COMPAT_14	# compatibility with NetBSD 1.4
+options 	COMPAT_15	# compatibility with NetBSD 1.5
+options 	COMPAT_16	# compatibility with NetBSD 1.6
+options 	COMPAT_20	# compatibility with NetBSD 2.0
+options 	COMPAT_30	# NetBSD 3.0 compatibility.
+options 	COMPAT_40	# NetBSD 4.0 compatibility.
 options 	COMPAT_SUNOS	# Support to run Sun (m68k) executables
 options 	COMPAT_SVR4	# Support to run SVR4 (m68k) executables
 options 	COMPAT_NOMID	# allow nonvalid machine id executables
 #options 	COMPAT_LINUX	# Support to run Linux/m68k executables
-options 	EXEC_ELF32	# 32-bit ELF executables (Linux, SVR4)
-#endif
 
-#ifndef INSTALL_CONFIGURATION
+options 	EXEC_AOUT	# 32-bit aout executables (NetBSD-1.5.x)
+options 	COMPAT_AOUT_M68K # actually make some system calls work.
+options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
+
 #
 # Support for System V IPC facilities.
 #
 options 	SYSVSHM		# System V-like shared memory
 options 	SYSVMSG		# System V-like messages
 options 	SYSVSEM		# System V-like semaphores
-#endif
+options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
 
 #
 # Support for various kernel options
 #
 
-#ifndef INSTALL_CONFIGURATION
 options 	KTRACE		# system call tracing support
 options 	LKM		# Loadable kernel modules
-options 	UCONSOLE	# anyone can redirect a virtual console
-#endif
-
-#options 	INSECURE	# allow, among other insecure stuff, LKM 
-				# loading in multi-user mode.
-options 	SCSIVERBOSE	# Verbose SCSI errors
-
-#ifndef INSTALL_CONFIGURATION
+#options 	INSECURE	# disable kernel security levels
+options 	SCSIVERBOSE	# human readable SCSI error messages
+options 	USERCONF	# userconf(4) support
 options 	NTP		# NTP phase/frequency locked loop
-#endif
+#options 	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)
+
+# Enable experimental buffer queue strategy for better responsiveness under 
+# high disk I/O load. Use it with caution - it's not proven to be stable yet.
+#options 	BUFQ_READPRIO
+#options 	BUFQ_PRIOCSCAN
 
 #
 # Misc. debugging options
 #
 options 	DDB		# Kernel debugger
 #options 	DDB_HISTORY_SIZE=100	# Enable history editing in DDB
-options 	DIAGNOSTIC	# Extra kernel sanity checks
+#options 	DIAGNOSTIC	# Extra kernel sanity checks
 #options 	DEBUG		# Enable misc. kernel debugging code
 #options 	SYSCALL_DEBUG	# debug all syscalls.
 #options 	SCSIDEBUG	# Add SCSI debugging statements
-#options 	PANICBUTTON	# Forced crash via keypress (???)
+#options 	PANICBUTTON	# Forced crash via keypress (?)
 
 #
 # Amiga specific options
 #
 #options 	LIMITMEM=24	# Do not use more than LIMITMEM MB of the
 				# first bank of RAM. (default: unlimited)
-#options	NKPTADD=4	# set this for 4 additional KPT pages
-#options	NKPTADDSHIFT=24	# set this for 1 additional KPT page
+#options 	NKPTADD=4	# set this for 4 additional KPT pages
+#options 	NKPTADDSHIFT=24	# set this for 1 additional KPT page
 				# per 16 MB (1<<24 bytes) of RAM
-                                # define and decrease this, or define and
-                                # increase NKPTADD if you get "out of PT pages"
-                                # panics.
+				# uncomment and decrease this, or uncomment and
+				# increase NKPTADD if you get "out of PT pages"
+				# panics.
 
 # ATTENTION: There is NO WARRANTY AT ALL that the sync will be complete
 # before the 10 secondinterval ends, or that KBDRESET does work at all.
@@ -208,16 +219,16 @@ options 	DIAGNOSTIC	# Extra kernel sanity checks
 #options 	SEROBUF_SIZE=32
 #options 	LEV6_DEFER	# defers l6 to l4 (below serial l5)
 
+#options	DEVRELOAD	# implement /dev/reload
+#				# currently only works for a.out kernels
+
 options 	RETINACONSOLE	# enable code to allow retina to be console
-#ifdef AMIGA_CONFIGURATION
 options 	ULOWELLCONSOLE	# enable code to allow a2410 to be console
 options 	CL5426CONSOLE	# Cirrus console
 options 	CV64CONSOLE	# CyberVision console
 options 	TSENGCONSOLE	# Tseng console
 options 	CV3DCONSOLE	# CyberVision 64/3D console
-#endif
 
-#ifdef AMIGA_CONFIGURATION
 options 	GRF_ECS		# Enhanced Chip Set
 options 	GRF_NTSC	# NTSC
 options 	GRF_PAL		# PAL
@@ -225,8 +236,12 @@ options 	GRF_A2024	# Support for the A2024
 options 	GRF_AGA		# AGA Chip Set
 options 	GRF_AGA_VGA	# AGA VGAONLY timing
 options 	GRF_SUPER72	# AGA Super-72
-#endif
 #options 	KFONT_8X11	# 8x11 font
+
+# select a font for the console according to the character set and keymap
+# you want to use
+options        KFONT_CONS_ISO8859_1
+#options         KFONT_CONS_ISO8859_2
 
 # This is how you would tell the kernel the A2410 oscillator frequencies:
 # The used frequencies are the defaults, and do not need option setting
@@ -246,43 +261,41 @@ options 	GRF_SUPER72	# AGA Super-72
 # enables the Hardwarecursor which does not work on some systems.
 #options 	RH_HARDWARECURSOR
 
-#ifdef AMIGA_CONFIGURATION
+# wscons aware interface to amiga custom chips.
+# If you enable it enable also wskbd.
+#
+
+#amidisplaycc0	at mainbus0		# wscons interface to custom chips
+#wsdisplay0	at amidisplaycc0 console ?
+#options 	WSEMUL_VT100
+#options 	FONT_VT220L8x10
+#options	FONT_VT220ISO8x16
+
 grfcc0		at mainbus0		# custom chips
 grfrt0		at zbus0		# retina II
-#endif
 grfrh0		at zbus0		# retina III
-#ifdef AMIGA_CONFIGURATION
-grfcl*		at zbus0		# Picasso II/Piccalo/Spectrum
+grfcl*		at zbus0		# Picasso II/Piccolo/Spectrum
 grful0		at zbus0		# A2410
 grfcv0		at zbus0		# CyberVision 64
 grfet*		at zbus0		# Tseng (oMniBus, Domino, Merlin)
 grfcv3d0	at zbus0		# CyberVision 64/3D
-#endif
 
-#ifdef AMIGA_CONFIGURATION
 grf0		at grfcc0
 grf1		at grfrt0
-#endif
 grf2		at grfrh0
-#ifdef AMIGA_CONFIGURATION
 grf3		at grfcl?
 grf4		at grful0
 grf5		at grfcv0
 grf6		at grfet?
 grf7		at grfcv3d0
-#endif
-#ifdef AMIGA_CONFIGURATION
 ite0		at grf0			# terminal emulators for grfs
 ite1		at grf1			# terminal emulators for grfs
-#endif
 ite2		at grf2			# terminal emulators for grfs
-#ifdef AMIGA_CONFIGURATION
 ite3		at grf3			# terminal emulators for grfs
 ite4		at grf4			# terminal emulators for grfs
 ite5		at grf5			# terminal emulators for grfs
 ite6		at grf6			# terminal emulators for grfs
 ite7		at grf7			# terminal emulators for grfs
-#endif
 
 msc0		at zbus0		# A2232 MSC multiport serial.
 mfc0		at zbus0		# MultiFaceCard I/O board
@@ -299,12 +312,24 @@ hyper*		at zbus?		# zbus HyperCom3/3+/4/4+
 com*		at hyper? port ?	# Hypercom3/4 serial ports
 lpt*		at hyper? port ?	# Hypercom3+/4+ parallel port
 
-# not enabled yet... needs more testing and clock frequency autodetection
-#iobl*		at zbus?		# zbus IOBlix
-#com*		at iobl? port ?		# IOBlix serial ports
-#lpt*		at iobl? port ?		# IOBlix parallel ports
+#options 	IOBZCLOCK=22118400 	# default, uncomment the next line
+#options 	IOBZCLOCK=24000000	# if needed.
 
-#ifdef AMIGA_CONFIGURATION
+iobl*		at zbus?		# zbus IOBlix
+com*		at iobl? port ?		# IOBlix serial ports
+lpt*		at iobl? port ?		# IOBlix parallel ports
+
+
+#
+# Keyboard device. Optionally can attach a wskbd.
+# wskbd works together with a wsdisplay so enable them both if you will.
+# Don't enable wskbd if you use ite.
+#
+# XXX in std.amiga: kbd0 at mainbus0
+
+#wskbd0		at kbd0 console ?
+
+
 #
 # Amiga Mainboard devices (sans graphics and keyboard)
 #
@@ -318,9 +343,10 @@ a34kbbc0	at mainbus0		# A3000/A4000 battery backed clock
 a2kbbc0 	at mainbus0		# A2000 battery backed clock
 aucc*		at mainbus0		# Amiga CC audio
 audio*		at aucc?
-#endif
 
-#ifdef DRACO_CONFIGURATION
+
+#wsmouse*	at ms?
+
 #
 # DraCo Mainboard devices (sans keyboard)
 #
@@ -329,21 +355,21 @@ drbbc0		at mainbus0		# DraCo battery backed clock
 drsupio0	at mainbus0		# DraCo superio chip
 com*		at drsupio? port ?	# DraCo serial
 lpt0		at drsupio? port ?	# DraCo parallel
-#endif
 
 #
 # Zorro-II, Zorro-III, DraCo Direct-Bus devices (sans graphics)
 #
 
-#ifndef DRACO_CONFIGURATION
-# Alas, Melody-Z2 dont configure in the DraCo bus. 
-melody* 	at zbus0		# Melody MPEG audio decoder
-audio*		at melody?
-#endif
+
+repulse*	at zbus0		# ALiENDESiGN Repulse
+audio*		at repulse?
+
+toccata*	at zbus0		# MacroSystem GmbH Toccata
+audio*		at toccata?
 
 # Ethernet cards:
 le*		at zbus0		# A2065, Ameristar, Ariadne
-ne*		at zbus0		# AriadneII
+ne*		at zbus0		# AriadneII, X-surf
 ed*		at zbus0		# Hydra, ASDG LanRover
 es*		at zbus0		# CEI A4066 EthernetPLUS
 qn*		at zbus0		# Quicknet
@@ -351,7 +377,6 @@ qn*		at zbus0		# Quicknet
 # Arcnet
 bah*		at zbus0		# C=/Ameristar A2060 / 560
 
-#ifdef AMIGA_CONFIGURATION
 # Greater Valley Product Bus
 gvpbus* 	at zbus0
 
@@ -382,9 +407,9 @@ aftsc0		at mainbus0		# A4000T scsi
 scsibus*	at aftsc0
 flsc0		at zbus0		# FastlaneZ3 scsi
 scsibus*	at flsc0
-bzsc0		at zbus0		# Blizzard 1230 I,II scsi 
+bzsc0		at zbus0		# Blizzard 1230 I,II scsi
 scsibus*	at bzsc0
-bzivsc0 	at zbus0		# Blizzard 12x0 IV scsi 
+bzivsc0 	at zbus0		# Blizzard 12x0 IV scsi
 scsibus*	at bzivsc0
 bztzsc0 	at zbus0		# Blizzard 2060 scsi
 scsibus*	at bztzsc0
@@ -396,38 +421,34 @@ cbiiisc0 	at zbus0		# Cyberstorm mk.III/Cyberstorm PPC SCSI
 scsibus*	at cbiiisc0
 empsc0		at zbus0		# Emplant scsi
 scsibus*	at empsc0
-idesc0		at mainbus0		# A4000 & A1200 IDE
-scsibus*	at idesc0
 
-# <<< comment out the idesc entries above if the following wdc/atapibus lines >>>
-# <<< are uncommented >>>
-#wdc0		at mainbus0		# A4000 & A1200 IDE bus
-#wd*		at wdc? drive ?		#  + drives
-#atapibus*	at wdc? channel ?	# ATAPI bus
-#cd*		at atapibus? drive ?	# ATAPI CD-ROM drives
-#sd*		at atapibus? drive ?	# ATAPI disk drives
+wdc0		at mainbus0		# A4000 & A1200 IDE bus
+wdc*		at zbus0		# Buddha / Catweasel
 
-#pccard0		at mainbus0
-#pcmcia*		at pccard0
-#com*		at pcmcia? function ?		# Modems and serial cards
-#pcmcom*		at pcmcia? function ?		# PCMCIA multi-port serial cards
-#aic*		at pcmcia? function ?		# Adaptec APA-1460 SCSI
-##wdc*		at pcmcia? function ?
-#awi*		at pcmcia? function ?		# BayStack 650 (802.11FH)
-##ep*		at pcmcia? function ?		# 3Com 3c589 and 3c562 Ethernet
-#mbe*		at pcmcia? function ?		# MB8696x based Ethernet
-#ne*		at pcmcia? function ?		# NE2000-compatible Ethernet
-#sm*		at pcmcia? function ?		# Megahertz Ethernet
-#mhzc*		at pcmcia? function ?    # Megahertz Ethernet/Modem combo cards
-#com*		at mhzc?
-#sm*		at mhzc?
+atabus* 	at wdc? channel ?	# ATA bus
+wd*		at atabus? drive ?	#  + drives
+atapibus*	at atabus?		# ATAPI bus
+cd*		at atapibus? drive ?	# ATAPI CD-ROM drives
+sd*		at atapibus? drive ?	# ATAPI disk drives
 
-#endif
+pccard0		at mainbus0
+pcmcia*		at pccard0
+com*		at pcmcia? function ?		# Modems and serial cards
+pcmcom*		at pcmcia? function ?		# PCMCIA multi-port serial cards
+aic*		at pcmcia? function ?		# Adaptec APA-1460 SCSI
+wdc*		at pcmcia? function ?
+awi*		at pcmcia? function ?		# BayStack 650 (802.11FH)
+ep*		at pcmcia? function ?		# 3Com 3c589 and 3c562 Ethernet
+mbe*		at pcmcia? function ?		# MB8696x based Ethernet
+ne*		at pcmcia? function ?		# NE2000-compatible Ethernet
+sm*		at pcmcia? function ?		# Megahertz Ethernet
+mhzc*		at pcmcia? function ?	# Megahertz Ethernet/Modem combo cards
+com*		at mhzc?
+sm*		at mhzc?
 
-#ifdef DRACO_CONFIGURATION
+
 drsc0		at mainbus0		# DraCo scsi
 scsibus*	at drsc0
-#endif
 
 
 # each hard drive from low target to high
@@ -435,31 +456,78 @@ scsibus*	at drsc0
 sd*	at scsibus? target ? lun ?	# scsi disks
 st*	at scsibus? target ? lun ?	# scsi tapes
 cd*	at scsibus? target ? lun ?	# scsi cds
-ss*	at scsibus? target ? lun ?	# scsi scanner
 ch*	at scsibus? target ? lun ?	# scsi autochangers
+ss*	at scsibus? target ? lun ?	# scsi scanner
 uk*	at scsibus? target ? lun ?	# scsi unknown
 
+#
+# accept filters
+pseudo-device	accf_data		# "dataready" accept filter
+pseudo-device	accf_http		# "httpready" accept filter
+
 pseudo-device	loop			# loopback network interface
-pseudo-device	sl		1	# SLIP network interfaces
-pseudo-device	ppp		1	# PPP network interfaces
-pseudo-device	tun		1	# network tunnel line discipline
-#pseudo-device	gre		2	# generic L3 over IP tunnel
-#pseudo-device	ipip		2	# IP Encapsulation within IP (RFC 2003)
-pseudo-device	bpfilter	16	# Berkeley packet filter
+pseudo-device	sl			# SLIP network interfaces
+pseudo-device	ppp			# PPP network interfaces
+pseudo-device	pppoe			# PPP over Ethernet (RFC 2516)
+pseudo-device	tun			# network tunnel line discipline
+pseudo-device	tap			# virtual Ethernet
+#pseudo-device	gre			# generic L3 over IP tunnel
+pseudo-device	bpfilter		# Berkeley packet filter
+#pseudo-device	carp			# Common Address Redundancy Protocol
 pseudo-device	ipfilter		# IP Filter package
-pseudo-device	gif		4	# IPv[46] over IPv[46] tunnel (RFC1933)
-#pseudo-device	faith		1	# IPv[46] tcp relay translation i/f
+pseudo-device	gif			# IPv[46] over IPv[46] tunnel (RFC1933)
+#pseudo-device	faith			# IPv[46] tcp relay translation i/f
+pseudo-device	stf			# 6to4 IPv6 over IPv4 encapsulation
+pseudo-device	vlan			# IEEE 802.1q encapsulation
+pseudo-device	bridge			# simple inter-network bridging
+#options	BRIDGE_IPF		# bridge uses IP/IPv6 pfil hooks too
+pseudo-device	agr			# IEEE 802.3ad link aggregation
+#pseudo-device	pf			# PF packet filter
+#pseudo-device	pflog			# PF log if
+pseudo-device	fss		4	# file system snapshot device
 
 pseudo-device	view		4	# views (needed for grfcc)
-pseudo-device	pty		16	# pseudo ptys
+pseudo-device	pty			# pseudo-terminals
+pseudo-device	clockctl		# user control of clock subsystem
 
-pseudo-device	vnd		4	# vnode pseudo-disks
+#pseudo-device	wsfont			# wsfont(4) dynamic font loading support
+#pseudo-device	wsmux			# mouse & keyboard multiplexor
+
+pseudo-device	vnd			# vnode pseudo-disks
+#options 	VND_COMPRESSION		# compressed vnd(4)
 pseudo-device	ccd		4	# concatenated disk devices
-#pseudo-device	raid		4	# RAIDframe disk driver
-#options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
+#pseudo-device	cgd		4	# cryptographic disk devices
+pseudo-device	raid		8	# RAIDframe disk driver
+options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
+# Options to enable various other RAIDframe RAID types.
+# options 	RF_INCLUDE_EVENODD=1
+# options 	RF_INCLUDE_RAID5_RS=1
+# options 	RF_INCLUDE_PARITYLOGGING=1
+# options 	RF_INCLUDE_CHAINDECLUSTER=1
+# options 	RF_INCLUDE_INTERDECLUSTER=1
+# options 	RF_INCLUDE_PARITY_DECLUSTERING=1
+# options 	RF_INCLUDE_PARITY_DECLUSTERING_DS=1
 
-# rnd is EXPERIMENTAL at this point.
-#pseudo-device  rnd                     # /dev/random and in-kernel generator
-#options        RND_COM                 # use "com" randomness as well (BROKEN)
+pseudo-device	rnd			# /dev/random and in-kernel generator
+#options 	RND_COM			# use "com" randomness as well (BROKEN)
+
+pseudo-device	ksyms			# /dev/ksyms (kernel symbols)
+pseudo-device	nsmb			# experimental - SMB requester
+
+# Veriexec
+#
+# a pseudo device needed for veriexec
+#pseudo-device	veriexec		1
+#
+# Uncomment the fingerprint methods below that are desired. Note that
+# removing fingerprint methods will have almost no impact on the kernel
+# code size.
+#
+#options VERIFIED_EXEC_FP_RMD160
+#options VERIFIED_EXEC_FP_SHA256
+#options VERIFIED_EXEC_FP_SHA384
+#options VERIFIED_EXEC_FP_SHA512
+#options VERIFIED_EXEC_FP_SHA1
+#options VERIFIED_EXEC_FP_MD5
 
 config	netbsd root on ? type ?

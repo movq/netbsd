@@ -1,4 +1,4 @@
-/*	$NetBSD: raster_text.c,v 1.4 2000/03/30 12:45:41 augustss Exp $ */
+/*	$NetBSD: raster_text.c,v 1.9 2007/03/04 06:02:39 christos Exp $ */
 
 /*-
  * Copyright (c) 1991, 1993
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -43,8 +39,11 @@
  * Text routines for raster library.
  */
 
-#ifdef _KERNEL
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: raster_text.c,v 1.9 2007/03/04 06:02:39 christos Exp $");
+
 #include <sys/param.h>
+#ifdef _KERNEL
 #include <sys/systm.h>
 #include <dev/rcons/raster.h>
 #ifdef COLORFONT_CACHE
@@ -52,7 +51,6 @@
 #define NEW(size) malloc(size, M_DEVBUF, M_NOWAIT)
 #endif
 #else
-#include <sys/types.h>
 #include <string.h>
 #include "raster.h"
 #ifdef COLORFONT_CACHE
@@ -244,7 +242,7 @@ raster_alloc( width, height, depth )
     r->depth = depth;
     r->linelongs = linelongs;
     r->pixels = (u_int32_t*) (r + 1);
-    r->data = (caddr_t) 0;
+    r->data = (void *) 0;
     return r;
     }
 #endif

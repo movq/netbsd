@@ -1,8 +1,11 @@
-#	$NetBSD: Makefile.inc,v 1.3 1999/03/04 20:32:19 wrstuden Exp $
+#	$NetBSD: Makefile.inc,v 1.10 2003/10/26 07:25:33 lukem Exp $
 
 # TOP is assumed to be defined by Makefile including this one.
 
 COMMONDIR=	${TOP}/bootfloppy-common
+
+.include <bsd.kernobj.mk>
+.include <bsd.own.mk>
 
 MOUNT_POINT?=	/mnt
 VND?=		vnd0
@@ -15,9 +18,9 @@ KERN?=		netbsd-xxx
 MDEC=		${DESTDIR}/usr/mdec
 
 LISTS=		${COMMONDIR}/list
-RAMDISK	!=cd $(.CURDIR)/../ramdisk/; \
-        printf "xxx: .MAKE\n\t@echo \$${.OBJDIR}/ramdisk.fs\n" | \
-	${MAKE} -s -f-
+
+RAMDISKDIR!=	cd $(.CURDIR)/../ramdisk && ${PRINTOBJDIR}
+RAMDISK=	${RAMDISKDIR}/ramdisk.fs
 
 DISKTYPE?=	floppy3
 DISKSIZE?=	2880
@@ -38,7 +41,8 @@ all:	netbsd.ram.gz
 	newfs -B be -m 0 -o space -i ${INO_BYTES} -c 80 ${VND_RDEV} ${DISKTYPE}
 	mount ${VND_DEV} ${MOUNT_POINT}
 	TOPDIR=${TOP} CURDIR=${.CURDIR} OBJDIR=${.OBJDIR} \
-	    TARGDIR=${MOUNT_POINT} sh ${TOP}/runlist.sh ${LISTS}
+	    KERNOBJDIR=${KERNOBJDIR} \
+	    TARGDIR=${MOUNT_POINT} ${HOST_SH} ${TOP}/runlist.sh ${LISTS}
 	@echo ""
 	@df -i ${MOUNT_POINT}
 	@echo ""
@@ -52,8 +56,8 @@ unconfig:
 
 netbsd.ram.gz: ${KERN} ${RAMDISK}
 	cp ${KERN} netbsd.tmp
-	mdsetimage -v netbsd.tmp ${RAMDISK}
-	gzip netbsd.tmp
+	${TOOL_MDSETIMAGE} -v netbsd.tmp ${RAMDISK}
+	gzip -9f netbsd.tmp
 	mv netbsd.tmp.gz ${.TARGET}
 
 clean cleandir:

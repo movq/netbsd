@@ -1,4 +1,4 @@
-/*	$NetBSD: wd80x3.c,v 1.6 1999/02/19 19:30:47 drochner Exp $	*/
+/*	$NetBSD: wd80x3.c,v 1.9 2008/04/28 20:23:25 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -69,7 +62,7 @@
 #include "etherdrv.h"
 #include <dev/ic/dp8390reg.h>
 #include "dp8390.h"
-#include <dev/isa/if_wereg.h>
+#include <dev/ic/wereg.h>
 
 #ifndef BASEREG
 #define BASEREG 0x240
@@ -85,7 +78,7 @@ extern int mapio __P((void));
 
 u_char eth_myaddr[6];
 
-static u_int8_t we_type;
+static uint8_t we_type;
 static int we_is16bit;
 
 #ifdef _STANDALONE
@@ -152,7 +145,7 @@ we_params()
 	case WE_TYPE_SMC8216C:
 	case WE_TYPE_SMC8216T:
 	    {
-		u_int8_t hwr;
+		uint8_t hwr;
 
 		typestr = (we_type == WE_TYPE_SMC8216C) ?
 		    "SMC8216/SMC8216C" : "SMC8216T";
@@ -220,10 +213,10 @@ EtherInit(myadr)
 	unsigned char *myadr;
 {
 	const char *typestr;
-	u_int8_t x;
+	uint8_t x;
 	int i;
-	u_int8_t laar_proto;
-	u_int8_t msr_proto;
+	uint8_t laar_proto;
+	uint8_t msr_proto;
 
 	dp8390_iobase = WD_BASEREG + WE_NIC_OFFSET;
 	dp8390_membase = WD_BASEMEM;

@@ -1,4 +1,4 @@
-/*	$NetBSD: pickmove.c,v 1.9 1999/09/18 19:38:51 jsm Exp $	*/
+/*	$NetBSD: pickmove.c,v 1.13 2008/01/28 07:01:01 dholland Exp $	*/
 
 /*
  * Copyright (c) 1994
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,14 +37,14 @@
 #if 0
 static char sccsid[] = "@(#)pickmove.c	8.2 (Berkeley) 5/3/95";
 #else
-__RCSID("$NetBSD: pickmove.c,v 1.9 1999/09/18 19:38:51 jsm Exp $");
+__RCSID("$NetBSD: pickmove.c,v 1.13 2008/01/28 07:01:01 dholland Exp $");
 #endif
 #endif /* not lint */
 
 #include <stdlib.h>
 #include <string.h>
 #include <curses.h>
-#include <machine/limits.h>
+#include <limits.h>
 
 #include "gomoku.h"
 
@@ -1054,7 +1050,7 @@ updatecombo(cbp, color)
 void
 appendcombo(cbp, color)
 	struct combostr *cbp;
-	int color __attribute__((__unused__));
+	int color __unused;
 {
 	struct combostr *pcbp, *ncbp;
 
@@ -1091,7 +1087,7 @@ checkframes(cbp, fcbp, osp, s, vertices)
 	struct ovlp_info *vertices;
 {
 	struct combostr *tcbp, *lcbp;
-	int i, n, mask, flg, verts, loop, index, fcnt;
+	int i, n, mask, flg, verts, loop, myindex, fcnt;
 	union comboval cb;
 	u_char *str;
 	short *ip;
@@ -1103,7 +1099,7 @@ checkframes(cbp, fcbp, osp, s, vertices)
 	fcnt = cb.c.a - 2;
 	verts = 0;
 	loop = 0;
-	index = cbp->c_nframes;
+	myindex = cbp->c_nframes;
 	n = (fcbp - frames) * FAREA;
 	str = &overlap[n];
 	ip = &intersect[n];
@@ -1118,7 +1114,7 @@ checkframes(cbp, fcbp, osp, s, vertices)
 			return (-1);	/* fcbp is already included */
 
 		/* check for intersection of 'tcbp' with 'fcbp' */
-		index--;
+		myindex--;
 		mask = str[tcbp - frames];
 		flg = cbp->c_flg;
 		n = i + ((flg & C_OPEN_1) != 0);
@@ -1161,7 +1157,7 @@ checkframes(cbp, fcbp, osp, s, vertices)
 				vertices->o_link = 1;
 				vertices->o_off = (n - tcbp->c_vertex) /
 					dd[tcbp->c_dir];
-				vertices->o_frameindex = index;
+				vertices->o_frameindex = myindex;
 				verts++;
 			}
 		}

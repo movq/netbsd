@@ -1,4 +1,4 @@
-.\"	$NetBSD: tsort.1,v 1.7 1997/10/20 01:09:53 lukem Exp $
+.\"	$NetBSD: tsort.1,v 1.10 2003/08/07 11:16:50 agc Exp $
 .\"
 .\" Copyright (c) 1990, 1993, 1994
 .\"	The Regents of the University of California.  All rights reserved.
@@ -14,11 +14,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -57,7 +53,7 @@ or from standard input if no file
 is given.
 .Pp
 Node names in the input are separated by white space and there must
-be an even number of node pairs.
+be an even number of node names.
 .Pp
 Presence of a node in a graph can be represented by an arc from the node
 to itself.
@@ -73,7 +69,8 @@ The options are as follows:
 Search for and display the longest cycle.
 Can take a very long time.
 .It Fl q
-Do not display informational messages about cycles.  This is primarily
+Do not display informational messages about cycles.
+This is primarily
 intended for building libraries, where optimal ordering is not critical,
 and cycles occur often.
 .El

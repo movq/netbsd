@@ -1,4 +1,4 @@
-/*	$NetBSD: mbufs.c,v 1.7 1999/03/04 03:02:02 bgrayson Exp $	*/
+/*	$NetBSD: mbufs.c,v 1.14 2006/10/22 16:43:24 christos Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1992, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,23 +34,20 @@
 #if 0
 static char sccsid[] = "@(#)mbufs.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: mbufs.c,v 1.7 1999/03/04 03:02:02 bgrayson Exp $");
+__RCSID("$NetBSD: mbufs.c,v 1.14 2006/10/22 16:43:24 christos Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
-#include <sys/types.h>
 #include <sys/mbuf.h>
 
 #include <stdlib.h>
-#include <string.h>
-#include <nlist.h>
-#include <paths.h>
+
 #include "systat.h"
 #include "extern.h"
 
 static struct mbstat *mb;
 
-char *mtnames[] = {
+const char *mtnames[] = {
 	"free",
 	"data",
 	"headers",
@@ -74,15 +67,14 @@ char *mtnames[] = {
 #define	NNAMES	(sizeof (mtnames) / sizeof (mtnames[0]))
 
 WINDOW *
-openmbufs()
+openmbufs(void)
 {
 
-	return (subwin(stdscr, LINES-5-1, 0, 5, 0));
+	return (subwin(stdscr, -1, 0, 5, 0));
 }
 
 void
-closembufs(w)
-	WINDOW *w;
+closembufs(WINDOW *w)
 {
 
 	if (w == NULL)
@@ -93,7 +85,7 @@ closembufs(w)
 }
 
 void
-labelmbufs()
+labelmbufs(void)
 {
 
 	wmove(wnd, 0, 0); wclrtoeol(wnd);
@@ -102,26 +94,26 @@ labelmbufs()
 }
 
 void
-showmbufs()
+showmbufs(void)
 {
-	int i, j, max, index;
+	int i, j, max, idx;
 	char buf[10];
 
 	if (mb == 0)
 		return;
 	for (j = 0; j < getmaxy(wnd); j++) {
-		max = 0, index = -1; 
+		max = 0, idx = -1; 
 		for (i = 0; i < getmaxy(wnd); i++)
 			if (mb->m_mtypes[i] > max) {
 				max = mb->m_mtypes[i];
-				index = i;
+				idx = i;
 			}
 		if (max == 0)
 			break;
 		if (j > NNAMES)
-			mvwprintw(wnd, 1+j, 0, "%10d", index);
+			mvwprintw(wnd, 1+j, 0, "%10d", idx);
 		else
-			mvwprintw(wnd, 1+j, 0, "%-10.10s", mtnames[index]);
+			mvwprintw(wnd, 1+j, 0, "%-10.10s", mtnames[idx]);
 		wmove(wnd, 1 + j, 10);
 		if (max > 60) {
 			snprintf(buf, sizeof buf, " %5d", max);
@@ -130,23 +122,22 @@ showmbufs()
 				waddch(wnd, 'X');
 			waddstr(wnd, buf);
 		} else {
-			while (max--)
-				waddch(wnd, 'X');
 			wclrtoeol(wnd);
+			whline(wnd, 'X', max);
 		}
-		mb->m_mtypes[index] = 0;
+		mb->m_mtypes[idx] = 0;
 	}
 	wmove(wnd, 1+j, 0); wclrtobot(wnd);
 }
 
 static struct nlist namelist[] = {
 #define	X_MBSTAT	0
-	{ "_mbstat" },
-	{ "" }
+	{ .n_name = "_mbstat" },
+	{ .n_name = NULL }
 };
 
 int
-initmbufs()
+initmbufs(void)
 {
 
 	if (namelist[X_MBSTAT].n_type == 0) {
@@ -155,7 +146,7 @@ initmbufs()
 			return(0);
 		}
 		if (namelist[X_MBSTAT].n_type == 0) {
-			error("namelist on %s failed", _PATH_UNIX);
+			error("No namelist");
 			return(0);
 		}
 	}
@@ -165,7 +156,7 @@ initmbufs()
 }
 
 void
-fetchmbufs()
+fetchmbufs(void)
 {
 
 	if (namelist[X_MBSTAT].n_type == 0)

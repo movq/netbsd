@@ -1,4 +1,4 @@
-/*	$NetBSD: xboxvar.h,v 1.2 2000/01/11 12:59:44 pk Exp $ */
+/*	$NetBSD: xboxvar.h,v 1.5 2008/04/28 20:23:57 martin Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -45,7 +38,7 @@
 struct xbox_attach_args {
 	bus_space_tag_t	xa_bustag;
 	bus_dma_tag_t	xa_dmatag;
-	char		*xa_name;	/* PROM node name */
+	const char	*xa_name;	/* PROM node name */
 	int		xa_node;	/* PROM handle */
 };
 #endif /* _XBOX_VAR_H */

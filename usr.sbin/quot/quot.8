@@ -27,7 +27,7 @@
 .\" OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 .\" ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.\"	$NetBSD: quot.8,v 1.10 1999/11/18 19:02:33 kristerw Exp $
+.\"	$NetBSD: quot.8,v 1.12.40.1 2009/04/08 23:06:15 snj Exp $
 .\"
 .Dd February 8, 1994
 .Dt QUOT 8
@@ -77,19 +77,20 @@ to get a report of files and their owners.
 In addition to the default output, display the number of files
 not accessed within 30, 60 and 90 days.
 .El
-.Sh ENVIRONMENT VARIABLES
+.Sh ENVIRONMENT
 .Bl -tag -width BLOCKSIZE
 .It Ev BLOCKSIZE
 If the environment variable
 .Ev BLOCKSIZE
 is set, and the
-.Gl k
+.Fl k
 option is not specified, the block counts will be displayed in units of that
 size block.
 .El
 .Sh SEE ALSO
 .Xr df 1 ,
 .Xr quota 1 ,
+.Xr getbsize 3 ,
 .Xr getmntinfo 3 ,
 .Xr fstab 5 ,
 .Xr mount 8

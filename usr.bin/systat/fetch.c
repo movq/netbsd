@@ -1,4 +1,4 @@
-/*	$NetBSD: fetch.c,v 1.5 1999/04/24 23:36:36 ross Exp $	*/
+/*	$NetBSD: fetch.c,v 1.12 2003/12/07 07:27:09 christos Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1992, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,22 +34,53 @@
 #if 0
 static char sccsid[] = "@(#)fetch.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: fetch.c,v 1.5 1999/04/24 23:36:36 ross Exp $");
+__RCSID("$NetBSD: fetch.c,v 1.12 2003/12/07 07:27:09 christos Exp $");
 #endif /* not lint */
 
-#include <sys/types.h>
+#include <sys/param.h>
+#include <sys/sched.h>
+#include <sys/sysctl.h>
+
+#include <string.h>
+#include <errno.h>
+
 #include "systat.h"
 #include "extern.h"
 
 ssize_t
-kvm_ckread(a, b, l)
-	void *a, *b;
-	size_t l;
+kvm_ckread(const void *a, void *b, size_t l, const char *name)
 {
 	if (kvm_read(kd, (u_long)a, b, l) != l) {
 		if (verbose)
-			error("error reading kmem at %x\n", a);
+			error("error reading kmem for %s at %p (%s)\n", name,
+			    a, strerror(errno));
 		return (0);
 	} else
 		return (1);
+}
+
+int
+fetch_cptime(u_int64_t *cptime)
+{
+	size_t ssize;
+	int mib[2];
+
+	/*
+	 * XXX Need to locate the `correct' CPU when looking for this
+	 * XXX in crash dumps.  Just don't report it for now, in that
+	 * XXX case.
+	 */
+	ssize = CPUSTATES * sizeof(u_int64_t);
+	memset(cptime, 0, ssize);
+	if (memf == NULL) {
+		mib[0] = CTL_KERN;
+		mib[1] = KERN_CP_TIME;
+		if (sysctl(mib, 2, cptime, &ssize, NULL, 0) < 0) {
+			if (verbose)
+				error("error fetching cp_time\n");
+			return (0);
+		} else
+			return (1);
+	}
+	return (1);
 }

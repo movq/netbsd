@@ -1,4 +1,4 @@
-/* $NetBSD: dec_3min.c,v 1.37 2000/03/06 03:13:35 mhitch Exp $ */
+/* $NetBSD: dec_3min.c,v 1.60 2008/03/15 08:50:08 tsutsui Exp $ */
 
 /*
  * Copyright (c) 1998 Jonathan Stone.  All rights reserved.
@@ -31,9 +31,42 @@
  */
 
 /*
- * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Systems Programming Group of the University of Utah Computer
+ * Science Department, The Mach Operating System project at
+ * Carnegie-Mellon University and Ralph Campbell.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ *	@(#)machdep.c	8.3 (Berkeley) 1/12/94
+ */
+/*
+ * Copyright (c) 1988 University of Utah.
  *
  * This code is derived from software contributed to Berkeley by
  * the Systems Programming Group of the University of Utah Computer
@@ -73,11 +106,12 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: dec_3min.c,v 1.37 2000/03/06 03:13:35 mhitch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dec_3min.c,v 1.60 2008/03/15 08:50:08 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
+#include <sys/timetc.h>
 
 #include <machine/cpu.h>
 #include <machine/intr.h>
@@ -93,77 +127,75 @@ __KERNEL_RCSID(0, "$NetBSD: dec_3min.c,v 1.37 2000/03/06 03:13:35 mhitch Exp $")
 #include <pmax/pmax/machdep.h>
 #include <pmax/pmax/kmin.h>		/* 3min baseboard addresses */
 #include <pmax/pmax/memc.h>		/* 3min/maxine memory errors */
-#include <pmax/tc/sccvar.h>
 
-#include "rasterconsole.h"
+#include <pmax/pmax/cons.h> 
+#include <dev/ic/z8530sc.h>                                          
+#include <dev/tc/zs_ioasicvar.h>
+#include "wsdisplay.h"
 
 void		dec_3min_init __P((void));		/* XXX */
 static void	dec_3min_bus_reset __P((void));
 static void	dec_3min_cons_init __P((void));
-static int	dec_3min_intr __P((unsigned, unsigned, unsigned, unsigned));
+static void	dec_3min_intr __P((unsigned, unsigned, unsigned, unsigned));
 static void	dec_3min_intr_establish __P((struct device *, void *,
 		    int, int (*)(void *), void *));
 
 static void	kn02ba_wbflush __P((void));
-static unsigned	kn02ba_clkread __P((void));
 
+static void	dec_3min_tc_init(void);
 
 /*
  * Local declarations.
  */
 static u_int32_t kmin_tc3_imask;
 
-#ifdef MIPS3
-static unsigned latched_cycle_cnt;
-#endif
-
-
-void
-dec_3min_init()
-{
-	int physmem_boardmax;
-
-	platform.iobus = "tcbus";
-	platform.bus_reset = dec_3min_bus_reset;
-	platform.cons_init = dec_3min_cons_init;
-	platform.iointr = dec_3min_intr;
-	platform.intr_establish = dec_3min_intr_establish;
-	platform.memsize = memsize_scan;
-	platform.clkread = kn02ba_clkread;
-
-	/* clear any memory errors */
-	*(u_int32_t *)MIPS_PHYS_TO_KSEG1(KMIN_REG_TIMEOUT) = 0;
-	kn02ba_wbflush();
-
-	ioasic_base = MIPS_PHYS_TO_KSEG1(KMIN_SYS_ASIC);
-	mips_hardware_intr = dec_3min_intr; 
-
+static const int dec_3min_ipl2spl_table[] = {
+	[IPL_NONE] = 0,
+	[IPL_SOFTCLOCK] = _SPL_SOFTCLOCK,
+	[IPL_SOFTNET] = _SPL_SOFTNET,
 	/*
 	 * Since all the motherboard interrupts come through the
 	 * IOASIC, it has to be turned off for all the spls and
 	 * since we don't know what kinds of devices are in the
 	 * TURBOchannel option slots, just splhigh().
 	 */
-	splvec.splbio = MIPS_SPL_0_1_2_3;
-	splvec.splnet = MIPS_SPL_0_1_2_3; 
-	splvec.spltty = MIPS_SPL_0_1_2_3;
-	splvec.splimp = MIPS_SPL_0_1_2_3;
-	splvec.splclock = MIPS_SPL_0_1_2_3;
-	splvec.splstatclock = MIPS_SPL_0_1_2_3;
+	[IPL_VM] = MIPS_SPL_0_1_2_3,
+	[IPL_SCHED] = MIPS_SPL_0_1_2_3,
+	[IPL_HIGH] = MIPS_SPL_0_1_2_3,
+};
+
+void
+dec_3min_init()
+{
+	platform.iobus = "tcbus";
+	platform.bus_reset = dec_3min_bus_reset;
+	platform.cons_init = dec_3min_cons_init;
+	platform.iointr = dec_3min_intr;
+	platform.intr_establish = dec_3min_intr_establish;
+	platform.memsize = memsize_bitmap;
+	platform.tc_init = dec_3min_tc_init;
+
+	/* clear any memory errors */
+	*(u_int32_t *)MIPS_PHYS_TO_KSEG1(KMIN_REG_TIMEOUT) = 0;
+	kn02ba_wbflush();
+
+	ioasic_base = MIPS_PHYS_TO_KSEG1(KMIN_SYS_ASIC);
+
+	ipl2spl_table = dec_3min_ipl2spl_table;
 
 	/* enable posting of MIPS_INT_MASK_3 to CAUSE register */
 	*(u_int32_t *)(ioasic_base + IOASIC_IMSK) = KMIN_INTR_CLOCK;
-	/* calibrate cpu_mhz value */ 
+	/* calibrate cpu_mhz value */
 	mc_cpuspeed(ioasic_base+IOASIC_SLOT_8_START, MIPS_INT_MASK_3);
 
 	*(u_int32_t *)(ioasic_base + IOASIC_LANCE_DECODE) = 0x3;
 	*(u_int32_t *)(ioasic_base + IOASIC_SCSI_DECODE) = 0xe;
-#if 0	
+#if 0
 	*(u_int32_t *)(ioasic_base + IOASIC_SCC0_DECODE) = (0x10|4);
 	*(u_int32_t *)(ioasic_base + IOASIC_SCC1_DECODE) = (0x10|6);
 	*(u_int32_t *)(ioasic_base + IOASIC_CSR) = 0x00000f00;
-#endif	
-  
+#endif
+
 	/* sanitize interrupt mask */
 	kmin_tc3_imask = (KMIN_INTR_CLOCK|KMIN_INTR_PSWARN|KMIN_INTR_TIMEOUT);
 	*(u_int32_t *)(ioasic_base + IOASIC_INTR) = 0;
@@ -186,7 +218,7 @@ dec_3min_init()
 }
 
 /*
- * Initalize the memory system and I/O buses.
+ * Initialize the memory system and I/O buses.
  */
 static void
 dec_3min_bus_reset()
@@ -207,17 +239,16 @@ static void
 dec_3min_cons_init()
 {
 	int kbd, crt, screen;
-	extern int tcfb_cnattach __P((int));		/* XXX */
 
 	kbd = crt = screen = 0;
 	prom_findcons(&kbd, &crt, &screen);
 
 	if (screen > 0) {
-#if NRASTERCONSOLE > 0
-		if (tcfb_cnattach(crt) > 0) {
-			scc_lk201_cnattach(ioasic_base, 0x180000);
-			return;
-		}
+#if NWSDISPLAY > 0
+ 		if (tcfb_cnattach(crt) > 0) {
+			zs_ioasic_lk201_cnattach(ioasic_base, 0x180000, 0);
+ 			return;
+ 		}
 #endif
 		printf("No framebuffer device configured for slot %d: ", crt);
 		printf("using serial console\n");
@@ -229,7 +260,7 @@ dec_3min_cons_init()
 	 */
 	DELAY(160000000 / 9600);	/* XXX */
 
-	scc_cnattach(ioasic_base, 0x180000);
+	zs_ioasic_cnattach(ioasic_base, 0x180000, 1);
 }
 
 static void
@@ -274,7 +305,7 @@ dec_3min_intr_establish(dev, cookie, level, handler, arg)
 		return;
 	}
 
-#if defined(DEBUG) || defined(DIAGNOSTIC)
+#if defined(DEBUG)
 	printf("3MIN: imask %x, enabling slot %d, dev %p handler %p\n",
 	    kmin_tc3_imask, (int)cookie, dev, handler);
 #endif
@@ -314,20 +345,20 @@ dec_3min_intr_establish(dev, cookie, level, handler, arg)
 }
 
 
-#define CHECKINTR(slot, bits)                                   \
+#define CHECKINTR(slot, bits)					\
     do {							\
-        if (can_serve & (bits)) {                               \
-                intrcnt[slot] += 1;                             \
-                (*intrtab[slot].ih_func)(intrtab[slot].ih_arg); \
-        }							\
+	if (can_serve & (bits)) {				\
+		intrtab[slot].ih_count.ev_count++;		\
+		(*intrtab[slot].ih_func)(intrtab[slot].ih_arg);	\
+	}							\
     } while (0)
 
-static int
-dec_3min_intr(cpumask, pc, status, cause)
-	unsigned cpumask;
-	unsigned pc;
+static void
+dec_3min_intr(status, cause, pc, ipending)
 	unsigned status;
 	unsigned cause;
+	unsigned pc;
+	unsigned ipending;
 {
 	static int user_warned = 0;
 	static int intr_depth = 0;
@@ -336,10 +367,10 @@ dec_3min_intr(cpumask, pc, status, cause)
 	intr_depth++;
 	old_mask = *(u_int32_t *)(ioasic_base + IOASIC_IMSK);
 
-	if (cpumask & MIPS_INT_MASK_4)
+	if (ipending & MIPS_INT_MASK_4)
 		prom_haltbutton();
 
-	if (cpumask & MIPS_INT_MASK_3) {
+	if (ipending & MIPS_INT_MASK_3) {
 		/* NB: status & MIPS_INT_MASK3 must also be set */
 		/* masked interrupts are still observable */
 		u_int32_t intr, imsk, can_serve, turnoff;
@@ -365,26 +396,24 @@ dec_3min_intr(cpumask, pc, status, cause)
 		if (turnoff)
 			*(u_int32_t *)(ioasic_base + IOASIC_INTR) = ~turnoff;
 
-		if (intr & KMIN_INTR_TIMEOUT)
+		if (intr & KMIN_INTR_TIMEOUT) {
 			kn02ba_errintr();
+			pmax_memerr_evcnt.ev_count++;
+		}
 
 		if (intr & KMIN_INTR_CLOCK) {
 			struct clockframe cf;
 
-			__asm __volatile("lbu $0,48(%0)" ::
+			__asm volatile("lbu $0,48(%0)" ::
 				"r"(ioasic_base + IOASIC_SLOT_8_START));
-#ifdef MIPS3
-			if (CPUISMIPS3) {
-				latched_cycle_cnt = mips3_cycle_count();
-			}
-#endif
+
 			cf.pc = pc;
 			cf.sr = status;
 			hardclock(&cf);
-			intrcnt[HARDCLOCK]++;
+			pmax_clock_evcnt.ev_count++;
 		}
 
-		/* If clock interrups were enabled, re-enable them ASAP. */
+		/* If clock interrupts were enabled, re-enable them ASAP. */
 		if (old_mask & KMIN_INTR_CLOCK) {
 			/* ioctl interrupt mask to splclock and higher */
 			*(u_int32_t *)(ioasic_base + IOASIC_IMSK)
@@ -427,18 +456,18 @@ dec_3min_intr(cpumask, pc, status, cause)
 			printf("%s\n", "Power supply overheating");
 		}
 	}
-	if ((cpumask & MIPS_INT_MASK_0) && intrtab[SYS_DEV_OPT0].ih_func) {
+	if ((ipending & MIPS_INT_MASK_0) && intrtab[SYS_DEV_OPT0].ih_func) {
 		(*intrtab[SYS_DEV_OPT0].ih_func)(intrtab[SYS_DEV_OPT0].ih_arg);
-		intrcnt[SYS_DEV_OPT0]++;
+		intrtab[SYS_DEV_OPT0].ih_count.ev_count++;
  	}
 
-	if ((cpumask & MIPS_INT_MASK_1) && intrtab[SYS_DEV_OPT1].ih_func) {
+	if ((ipending & MIPS_INT_MASK_1) && intrtab[SYS_DEV_OPT1].ih_func) {
 		(*intrtab[SYS_DEV_OPT1].ih_func)(intrtab[SYS_DEV_OPT1].ih_arg);
-		intrcnt[SYS_DEV_OPT1]++;
+		intrtab[SYS_DEV_OPT1].ih_count.ev_count++;
 	}
-	if ((cpumask & MIPS_INT_MASK_2) && intrtab[SYS_DEV_OPT2].ih_func) {
+	if ((ipending & MIPS_INT_MASK_2) && intrtab[SYS_DEV_OPT2].ih_func) {
 		(*intrtab[SYS_DEV_OPT2].ih_func)(intrtab[SYS_DEV_OPT2].ih_arg);
-		intrcnt[SYS_DEV_OPT2]++;
+		intrtab[SYS_DEV_OPT2].ih_count.ev_count++;
 	}
 
 done:
@@ -447,8 +476,7 @@ done:
 	intr_depth--;
 	*(u_int32_t *)(ioasic_base + IOASIC_IMSK) = old_mask;
 
-	
-	return (MIPS_SR_INT_IE | (status & ~cause & MIPS_HARD_INT_MASK));
+	_splset(MIPS_SR_INT_IE | (status & ~cause & MIPS_HARD_INT_MASK));
 }
 
 
@@ -463,22 +491,32 @@ static void
 kn02ba_wbflush()
 {
 	/* read twice IOASIC_IMSK */
-	__asm __volatile("lw $0,%0; lw $0,%0" ::
+	__asm volatile("lw $0,%0; lw $0,%0" ::
 	    "i"(MIPS_PHYS_TO_KSEG1(KMIN_REG_IMSK)));
 }
 
-static unsigned
-kn02ba_clkread()
-{
-#ifdef MIPS3
-	if (CPUISMIPS3) {
-		u_int32_t mips3_cycles;
+/*
+ * Support for using the MIPS 3 clock as a timecounter.
+ */
 
-		mips3_cycles = mips3_cycle_count() - latched_cycle_cnt;
-		/* XXX divides take 78 cycles: approximate with * 41/2048 */
-		return((mips3_cycles >> 6) + (mips3_cycles >> 8) +
-		       (mips3_cycles >> 11));
+void
+dec_3min_tc_init(void)
+{
+#if defined(MIPS3)
+	static struct timecounter tc =  {
+		.tc_get_timecount = (timecounter_get_t *)mips3_cp0_count_read,
+		.tc_counter_mask = ~0u,
+		.tc_name = "mips3_cp0_counter",
+		.tc_quality = 100,
+	};
+
+	if (MIPS_HAS_CLOCK) {
+		tc.tc_frequency = cpu_mhz * 1000000;
+		if (mips_cpu_flags & CPU_MIPS_DOUBLE_COUNT) {
+			tc.tc_frequency /= 2;
+		}
+
+		tc_init(&tc);
 	}
 #endif
-	return 0;
 }

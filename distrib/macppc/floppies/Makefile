@@ -1,5 +1,6 @@
-#	$NetBSD: Makefile,v 1.2 1999/01/27 12:04:32 tsubai Exp $
+#	$NetBSD: Makefile,v 1.5 2002/04/12 02:19:30 lukem Exp $
 
-SUBDIR=	ramdisk bootfloppy
+SUBDIR=	ramdisk .WAIT md-kernel .WAIT bootfloppy
+TARGETS+=release
 
 .include <bsd.subdir.mk>

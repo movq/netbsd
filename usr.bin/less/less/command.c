@@ -1,29 +1,13 @@
-/*	$NetBSD: command.c,v 1.7 1999/09/03 22:07:05 kleink Exp $	*/
+/*	$NetBSD: command.c,v 1.14 2008/02/16 07:20:54 matt Exp $	*/
 
 /*
- * Copyright (c) 1984,1985,1989,1994,1995,1996,1999  Mark Nudelman
- * All rights reserved.
+ * Copyright (C) 1984-2005  Mark Nudelman
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice in the documentation and/or other materials provided with 
- *    the distribution.
+ * You may distribute under the terms of either the GNU General Public
+ * License or the Less License, as specified in the README file.
  *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR 
- * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT 
- * OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR 
- * BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, 
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE 
- * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN 
- * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * For more information about less, or for information on how to 
+ * contact the author, see the README file.
  */
 
 
@@ -32,13 +16,17 @@
  */
 
 #include "less.h"
+#if MSDOS_COMPILER==WIN32C
+#include <windows.h>
+#endif
 #include "position.h"
 #include "option.h"
 #include "cmd.h"
 
-extern int erase_char, kill_char;
+extern int erase_char, erase2_char, kill_char;
 extern int sigs;
 extern int quit_at_eof;
+extern int quit_if_one_screen;
 extern int squished;
 extern int hit_eof;
 extern int sc_width;
@@ -58,16 +46,17 @@ extern char *curr_altfilename;
 extern char version[];
 extern struct scrpos initial_scrpos;
 extern IFILE curr_ifile;
-extern void constant *ml_search;
-extern void constant *ml_examine;
+extern void *constant ml_search;
+extern void *constant ml_examine;
 #if SHELL_ESCAPE || PIPEC
-extern void constant *ml_shell;
+extern void *constant ml_shell;
 #endif
 #if EDITOR
 extern char *editor;
 extern char *editproto;
 #endif
 extern int screen_trashed;	/* The screen has been overwritten */
+extern int shift_count;
 extern int be_helpful;
 
 public int helpprompt;
@@ -79,17 +68,18 @@ static char *shellcmd = NULL;	/* For holding last shell command for "!!" */
 #endif
 static int mca;			/* The multicharacter command (action) */
 static int search_type;		/* The previous type of search */
-static int number;		/* The number typed by the user */
+static LINENUM number;		/* The number typed by the user */
 static char optchar;
 static int optflag;
+static int optgetname;
 static POSITION bottompos;
+static int save_hshift;
 #if PIPEC
 static char pipec;
 #endif
 
-
 static void cmd_exec __P((void));
-static void start_mca __P((int, char *, constant void *));
+static void start_mca __P((int, char *, constant void *, int));
 static void mca_search __P((void));
 static void exec_mca __P((void));
 static int mca_char __P((int));
@@ -114,15 +104,16 @@ cmd_exec()
  * Set up the display to start a new multi-character command.
  */
 	static void
-start_mca(action, prompt, mlist)
+start_mca(action, prompt, mlist, cmdflags)
 	int action;
 	char *prompt;
 	constant void *mlist;
+	int cmdflags;
 {
 	mca = action;
 	clear_cmd();
 	cmd_putstr(prompt);
-	set_mlist(mlist);
+	set_mlist(mlist, cmdflags);
 }
 
 	public int
@@ -159,7 +150,40 @@ mca_search()
 		cmd_putstr("/");
 	else
 		cmd_putstr("?");
-	set_mlist(ml_search);
+	set_mlist(ml_search, 0);
+}
+
+/*
+ * Set up the display to start a new toggle-option command.
+ */
+	static void
+mca_opt_toggle()
+{
+	int no_prompt;
+	int flag;
+	char *dash;
+	
+	no_prompt = (optflag & OPT_NO_PROMPT);
+	flag = (optflag & ~OPT_NO_PROMPT);
+	dash = (flag == OPT_NO_TOGGLE) ? "_" : "-";
+
+	mca = A_OPT_TOGGLE;
+	clear_cmd();
+	cmd_putstr(dash);
+	if (optgetname)
+		cmd_putstr(dash);
+	if (no_prompt)
+		cmd_putstr("(P)");
+	switch (flag)
+	{
+	case OPT_UNSET:
+		cmd_putstr("+");
+		break;
+	case OPT_SET:
+		cmd_putstr("!");
+		break;
+	}
+	set_mlist(NULL, 0);
 }
 
 /*
@@ -177,7 +201,7 @@ exec_mca()
 	{
 	case A_F_SEARCH:
 	case A_B_SEARCH:
-		multi_search(cbuf, number);
+		multi_search(cbuf, (int) number);
 		break;
 	case A_FIRSTCMD:
 		/*
@@ -193,20 +217,24 @@ exec_mca()
 			every_first_cmd = save(cbuf);
 		break;
 	case A_OPT_TOGGLE:
-		toggle_option(optchar, cbuf, optflag);
+		toggle_option((unsigned char)optchar, cbuf, optflag);
 		optchar = '\0';
 		break;
 	case A_F_BRACKET:
-		match_brac(cbuf[0], cbuf[1], 1, number);
+		match_brac(cbuf[0], cbuf[1], 1, (int) number);
 		break;
 	case A_B_BRACKET:
-		match_brac(cbuf[1], cbuf[0], 0, number);
+		match_brac(cbuf[1], cbuf[0], 0, (int) number);
 		break;
 #if EXAMINE
 	case A_EXAMINE:
 		if (secure)
 			break;
 		edit_list(cbuf);
+#if TAGS
+		/* If tag structure is loaded then clean it up. */
+		cleantags();
+#endif
 		break;
 #endif
 #if SHELL_ESCAPE
@@ -252,6 +280,7 @@ mca_char(c)
 	char *p;
 	int flag;
 	char buf[3];
+	PARG parg;
 
 	switch (mca)
 	{
@@ -276,7 +305,7 @@ mca_char(c)
 		 * Terminated by a non-digit.
 		 */
 		if ((c < '0' || c > '9') && 
-		  editchar(c, EC_PEEK|EC_NOHISTORY|EC_NOCOMPLETE) == A_INVALID)
+		  editchar(c, EC_PEEK|EC_NOHISTORY|EC_NOCOMPLETE|EC_NORIGHTLEFT) == A_INVALID)
 		{
 			/*
 			 * Not part of the number.
@@ -297,35 +326,139 @@ mca_char(c)
 		 * so user doesn't have to hit RETURN.
 		 * If the first char is + or -, this indicates
 		 * OPT_UNSET or OPT_SET respectively, instead of OPT_TOGGLE.
+		 * "--" begins inputting a long option name.
 		 */
-		if (c == erase_char || c == kill_char)
-			break;
-		if (optchar != '\0' && optchar != '+' && optchar != '-')
-			/*
-			 * We already have the option letter.
-			 */
-			break;
-		switch (c)
+		if (optchar == '\0' && len_cmdbuf() == 0)
 		{
-		case '+':
-			optflag = OPT_UNSET;
-			break;
-		case '-':
-			optflag = OPT_SET;
-			break;
-		default:
-			optchar = c;
-			if (optflag != OPT_TOGGLE || single_char_option(c))
+			flag = (optflag & ~OPT_NO_PROMPT);
+			if (flag == OPT_NO_TOGGLE)
 			{
-				toggle_option(c, "", optflag);
-				return (MCA_DONE);
+				switch (c)
+				{
+				case '_':
+					/* "__" = long option name. */
+					optgetname = TRUE;
+					mca_opt_toggle();
+					return (MCA_MORE);
+				}
+			} else
+			{
+				switch (c)
+				{
+				case '+':
+					/* "-+" = UNSET. */
+					optflag = (flag == OPT_UNSET) ?
+						OPT_TOGGLE : OPT_UNSET;
+					mca_opt_toggle();
+					return (MCA_MORE);
+				case '!':
+					/* "-!" = SET */
+					optflag = (flag == OPT_SET) ?
+						OPT_TOGGLE : OPT_SET;
+					mca_opt_toggle();
+					return (MCA_MORE);
+				case CONTROL('P'):
+					optflag ^= OPT_NO_PROMPT;
+					mca_opt_toggle();
+					return (MCA_MORE);
+				case '-':
+					/* "--" = long option name. */
+					optgetname = TRUE;
+					mca_opt_toggle();
+					return (MCA_MORE);
+				}
 			}
-			break;
 		}
-		if (optchar == '+' || optchar == '-')
+		if (optgetname)
 		{
-			optchar = c;
-			break;
+			/*
+			 * We're getting a long option name.
+			 * See if we've matched an option name yet.
+			 * If so, display the complete name and stop 
+			 * accepting chars until user hits RETURN.
+			 */
+			struct loption *o;
+			char *oname;
+			int lc;
+
+			if (c == '\n' || c == '\r')
+			{
+				/*
+				 * When the user hits RETURN, make sure
+				 * we've matched an option name, then
+				 * pretend he just entered the equivalent
+				 * option letter.
+				 */
+				if (optchar == '\0')
+				{
+					parg.p_string = get_cmdbuf();
+					error("There is no --%s option", &parg);
+					return (MCA_DONE);
+				}
+				optgetname = FALSE;
+				cmd_reset();
+				c = optchar;
+			} else
+			{
+				if (optchar != '\0')
+				{
+					/*
+					 * Already have a match for the name.
+					 * Don't accept anything but erase/kill.
+					 */
+					if (c == erase_char ||
+					    c == erase2_char ||
+					    c == kill_char)
+						return (MCA_DONE);
+					return (MCA_MORE);
+				}
+				/*
+				 * Add char to cmd buffer and try to match
+				 * the option name.
+				 */
+				if (cmd_char(c) == CC_QUIT)
+					return (MCA_DONE);
+				p = get_cmdbuf();
+				lc = ASCII_IS_LOWER(p[0]);
+				o = findopt_name(&p, &oname, NULL);
+				if (o != NULL)
+				{
+					/*
+					 * Got a match.
+					 * Remember the option letter and
+					 * display the full option name.
+					 */
+					optchar = o->oletter;
+					if (!lc && ASCII_IS_LOWER(optchar))
+						optchar = ASCII_TO_UPPER(optchar);
+					cmd_reset();
+					mca_opt_toggle();
+					for (p = oname;  *p != '\0';  p++)
+					{
+						c = *p;
+						if (!lc && ASCII_IS_LOWER(c))
+							c = ASCII_TO_UPPER(c);
+						if (cmd_char(c) != CC_OK)
+							return (MCA_DONE);
+					}
+				}
+				return (MCA_MORE);
+			}
+		} else
+		{
+			if (c == erase_char || c == erase2_char || c == kill_char)
+				break;
+			if (optchar != '\0')
+				/* We already have the option letter. */
+				break;
+		}
+
+		optchar = c;
+		if ((optflag & ~OPT_NO_PROMPT) != OPT_TOGGLE ||
+		    single_char_option(c))
+		{
+			toggle_option(c, "", optflag);
+			return (MCA_DONE);
 		}
 		/*
 		 * Display a prompt appropriate for the option letter.
@@ -337,7 +470,7 @@ mca_char(c)
 			buf[2] = '\0';
 			p = buf;
 		}
-		start_mca(A_OPT_TOGGLE, p, (void*)NULL);
+		start_mca(A_OPT_TOGGLE, p, (void*)NULL, 0);
 		return (MCA_MORE);
 
 	case A_F_SEARCH:
@@ -403,6 +536,7 @@ mca_char(c)
 		exec_mca();
 		return (MCA_DONE);
 	}
+
 	/*
 	 * Append the char to the command buffer.
 	 */
@@ -484,12 +618,16 @@ prompt()
 	bottompos = position(BOTTOM_PLUS_ONE);
 
 	/*
-	 * If the -E flag is set and we've hit EOF on the last file, quit.
+	 * If we've hit EOF on the last file, and the -E flag is set
+	 * (or -F is set and this is the first prompt), then quit.
+	 * {{ Relying on "first prompt" to detect a single-screen file
+	 * fails if +G is used, for example. }}
 	 */
-	if (quit_at_eof == OPT_ONPLUS && hit_eof && 
-	    !(ch_getflags() & CH_HELPFILE) && 
+	if ((quit_at_eof == OPT_ONPLUS || quit_if_one_screen) &&
+	    hit_eof && !(ch_getflags() & CH_HELPFILE) && 
 	    next_ifile(curr_ifile) == NULL_IFILE)
 		quit(QUIT_OK);
+	quit_if_one_screen = FALSE;
 #if 0 /* This doesn't work well because some "te"s clear the screen. */
 	/*
 	 * If the -e flag is set and we've hit EOF on the last file,
@@ -500,37 +638,47 @@ prompt()
 		quit(QUIT_OK);
 #endif
 
+#if MSDOS_COMPILER==WIN32C
+	/* 
+	 * In Win32, display the file name in the window title.
+	 */
+	if (!(ch_getflags() & CH_HELPFILE))
+		SetConsoleTitle(pr_expand("Less?f - %f.", 0));
+#endif
 	/*
 	 * Select the proper prompt and display it.
 	 */
 	clear_cmd();
 	if (helpprompt) {
-		so_enter();
+		at_enter(AT_STANDOUT);
 		putstr("[Press 'h' for instructions.]");
-		so_exit();
+		at_exit();
 		helpprompt = 0;
 	} else {
 		p = pr_string();
-		if (p == NULL)
+		if (p == NULL || *p == '\0')
 			putchr(':');
 		else
 		{
-			so_enter();
+			at_enter(AT_STANDOUT);
 			putstr(p);
 			if (be_helpful)
 				putstr(" [Press space to continue, 'q' to quit.]");
-			so_exit();
+			at_exit();
 		}
 	}
 }
 
+/*
+ * Display the less version message.
+ */
 	public void
 dispversion()
 {
 	PARG parg;
 
 	parg.p_string = version;
-	error("less  version %s", &parg);
+	error("less %s", &parg);
 }
 
 /*
@@ -710,6 +858,9 @@ multi_search(pattern, n)
 		 * Restore the file we were originally viewing.
 		 */
 		reedit_ifile(save_ifile);
+	} else
+	{
+		unsave_ifile(save_ifile);
 	}
 }
 
@@ -728,6 +879,9 @@ commands()
 	char *extra;
 	char tbuf[2];
 	PARG parg;
+	IFILE old_ifile;
+	IFILE new_ifile;
+	char *tagfile;
 
 	search_type = SRCH_FORW;
 	wscroll = (sc_height + 1) / 2;
@@ -856,7 +1010,7 @@ commands()
 			/*
 			 * First digit of a number.
 			 */
-			start_mca(A_DIGIT, ":", (void*)NULL);
+			start_mca(A_DIGIT, ":", (void*)NULL, CF_QUIT_ON_ERASE);
 			goto again;
 
 		case A_F_WINDOW:
@@ -864,7 +1018,7 @@ commands()
 			 * Forward one window (and set the window size).
 			 */
 			if (number > 0)
-				swindow = number;
+				swindow = (int) number;
 			/* FALLTHRU */
 		case A_F_SCREEN:
 			/*
@@ -875,7 +1029,7 @@ commands()
 			cmd_exec();
 			if (show_attn)
 				set_attnpos(bottompos);
-			forward(number, 0, 1);
+			forward((int) number, 0, 1);
 			break;
 
 		case A_B_WINDOW:
@@ -883,7 +1037,7 @@ commands()
 			 * Backward one window (and set the window size).
 			 */
 			if (number > 0)
-				swindow = number;
+				swindow = (int) number;
 			/* FALLTHRU */
 		case A_B_SCREEN:
 			/*
@@ -892,7 +1046,7 @@ commands()
 			if (number <= 0)
 				number = get_swindow();
 			cmd_exec();
-			backward(number, 0, 1);
+			backward((int) number, 0, 1);
 			break;
 
 		case A_F_LINE:
@@ -904,7 +1058,7 @@ commands()
 			cmd_exec();
 			if (show_attn == OPT_ONPLUS && number > 1)
 				set_attnpos(bottompos);
-			forward(number, 0, 0);
+			forward((int) number, 0, 0);
 			break;
 
 		case A_B_LINE:
@@ -914,7 +1068,7 @@ commands()
 			if (number <= 0)
 				number = 1;
 			cmd_exec();
-			backward(number, 0, 0);
+			backward((int) number, 0, 0);
 			break;
 
 		case A_FF_LINE:
@@ -926,7 +1080,7 @@ commands()
 			cmd_exec();
 			if (show_attn == OPT_ONPLUS && number > 1)
 				set_attnpos(bottompos);
-			forward(number, 1, 0);
+			forward((int) number, 1, 0);
 			break;
 
 		case A_BF_LINE:
@@ -936,7 +1090,7 @@ commands()
 			if (number <= 0)
 				number = 1;
 			cmd_exec();
-			backward(number, 1, 0);
+			backward((int) number, 1, 0);
 			break;
 		
 		case A_FF_SCREEN:
@@ -948,7 +1102,7 @@ commands()
 			cmd_exec();
 			if (show_attn == OPT_ONPLUS)
 				set_attnpos(bottompos);
-			forward(number, 1, 0);
+			forward((int) number, 1, 0);
 			break;
 
 		case A_F_FOREVER:
@@ -978,7 +1132,7 @@ commands()
 			 * (default same as last 'd' or 'u' command).
 			 */
 			if (number > 0)
-				wscroll = number;
+				wscroll = (int) number;
 			cmd_exec();
 			if (show_attn == OPT_ONPLUS)
 				set_attnpos(bottompos);
@@ -991,7 +1145,7 @@ commands()
 			 * (default same as last 'd' or 'u' command).
 			 */
 			if (number > 0)
-				wscroll = number;
+				wscroll = (int) number;
 			cmd_exec();
 			backward(wscroll, 0, 0);
 			break;
@@ -1005,6 +1159,9 @@ commands()
 			{
 				ch_flush();
 				clr_linenum();
+#if HILITE_SEARCH
+				clr_hilite();
+#endif
 			}
 			/* FALLTHRU */
 		case A_REPAINT:
@@ -1034,7 +1191,7 @@ commands()
 			if (number > 100)
 				number = 100;
 			cmd_exec();
-			jump_percent(number);
+			jump_percent((int) number);
 			break;
 
 		case A_GOEND:
@@ -1055,7 +1212,7 @@ commands()
 			cmd_exec();
 			if (number < 0)
 				number = 0;
-			jump_line_loc((POSITION)number, jump_sline);
+			jump_line_loc((POSITION) number, jump_sline);
 			break;
 
 		case A_STAT:
@@ -1089,6 +1246,7 @@ commands()
 				 * just means return to viewing the
 				 * previous file.
 				 */
+				hshift = save_hshift;
 				if (edit_prev(1) == 0)
 					break;
 			}
@@ -1103,7 +1261,7 @@ commands()
 #define	DO_SEARCH()	if (number <= 0) number = 1;	\
 			mca_search();			\
 			cmd_exec();			\
-			multi_search((char *)NULL, number);
+			multi_search((char *)NULL, (int) number);
 
 
 		case A_F_SEARCH:
@@ -1178,6 +1336,8 @@ commands()
 			if (ch_getflags() & CH_HELPFILE)
 				break;
 			cmd_exec();
+			save_hshift = hshift;
+			hshift = 0;
 			(void) edit(FAKE_HELPFILE);
 			break;
 
@@ -1191,7 +1351,7 @@ commands()
 				error("Command not available", NULL_PARG);
 				break;
 			}
-			start_mca(A_EXAMINE, "Examine: ", ml_examine);
+			start_mca(A_EXAMINE, "Examine: ", ml_examine, 0);
 			c = getcc();
 			goto again;
 #else
@@ -1218,11 +1378,10 @@ commands()
 			}
 			if (curr_altfilename != NULL)
 			{
-				error("Cannot edit file processed with LESSOPEN", 
+				error("WARNING: This file was viewed via LESSOPEN",
 					NULL_PARG);
-				break;
 			}
-			start_mca(A_SHELL, "!", ml_shell);
+			start_mca(A_SHELL, "!", ml_shell, 0);
 			/*
 			 * Expand the editor prototype string
 			 * and pass it to the system to execute.
@@ -1242,9 +1401,16 @@ commands()
 			/*
 			 * Examine next file.
 			 */
+#if TAGS
+			if (ntags())
+			{
+				error("No next file", NULL_PARG);
+				break;
+			}
+#endif
 			if (number <= 0)
 				number = 1;
-			if (edit_next(number))
+			if (edit_next((int) number))
 			{
 				if (quit_at_eof && hit_eof && 
 				    !(ch_getflags() & CH_HELPFILE))
@@ -1258,13 +1424,62 @@ commands()
 			/*
 			 * Examine previous file.
 			 */
+#if TAGS
+			if (ntags())
+			{
+				error("No previous file", NULL_PARG);
+				break;
+			}
+#endif
 			if (number <= 0)
 				number = 1;
-			if (edit_prev(number))
+			if (edit_prev((int) number))
 			{
 				parg.p_string = (number > 1) ? "(N-th) " : "";
 				error("No %sprevious file", &parg);
 			}
+			break;
+
+		case A_NEXT_TAG:
+#if TAGS
+			if (number <= 0)
+				number = 1;
+			tagfile = nexttag((int) number);
+			if (tagfile == NULL)
+			{
+				error("No next tag", NULL_PARG);
+				break;
+			}
+			if (edit(tagfile) == 0)
+			{
+				POSITION pos = tagsearch();
+				if (pos != NULL_POSITION)
+					jump_loc(pos, jump_sline);
+			}
+#else
+			error("Command not available", NULL_PARG);
+#endif
+			break;
+
+		case A_PREV_TAG:
+#if TAGS
+			if (number <= 0)
+				number = 1;
+			tagfile = prevtag((int) number);
+			if (tagfile == NULL)
+			{
+				error("No previous tag", NULL_PARG);
+				break;
+			}
+			if (edit(tagfile) == 0)
+			{
+				POSITION pos = tagsearch();
+				if (pos != NULL_POSITION)
+					jump_loc(pos, jump_sline);
+			}
+#else
+			error("Command not available", NULL_PARG);
+#endif
 			break;
 
 		case A_INDEX_FILE:
@@ -1273,13 +1488,32 @@ commands()
 			 */
 			if (number <= 0)
 				number = 1;
-			if (edit_index(number))
+			if (edit_index((int) number))
 				error("No such file", NULL_PARG);
 			break;
 
+		case A_REMOVE_FILE:
+			if (ch_getflags() & CH_HELPFILE)
+				break;
+			old_ifile = curr_ifile;
+			new_ifile = getoff_ifile(curr_ifile);
+			if (new_ifile == NULL_IFILE)
+			{
+				bell();
+				break;
+			}
+			if (edit_ifile(new_ifile) != 0)
+			{
+				reedit_ifile(old_ifile);
+				break;
+			}
+			del_ifile(old_ifile);
+			break;
+
 		case A_OPT_TOGGLE:
-			start_mca(A_OPT_TOGGLE, "-", (void*)NULL);
 			optflag = OPT_TOGGLE;
+			optgetname = FALSE;
+			mca_opt_toggle();
 			c = getcc();
 			goto again;
 
@@ -1287,18 +1521,17 @@ commands()
 			/*
 			 * Report a flag setting.
 			 */
-			start_mca(A_DISP_OPTION, "_", (void*)NULL);
+			optflag = OPT_NO_TOGGLE;
+			optgetname = FALSE;
+			mca_opt_toggle();
 			c = getcc();
-			if (c == erase_char || c == kill_char)
-				break;
-			toggle_option(c, "", OPT_NO_TOGGLE);
-			break;
+			goto again;
 
 		case A_FIRSTCMD:
 			/*
 			 * Set an initial command for new files.
 			 */
-			start_mca(A_FIRSTCMD, "+", (void*)NULL);
+			start_mca(A_FIRSTCMD, "+", (void*)NULL, 0);
 			c = getcc();
 			goto again;
 
@@ -1312,7 +1545,7 @@ commands()
 				error("Command not available", NULL_PARG);
 				break;
 			}
-			start_mca(A_SHELL, "!", ml_shell);
+			start_mca(A_SHELL, "!", ml_shell, 0);
 			c = getcc();
 			goto again;
 #else
@@ -1326,10 +1559,10 @@ commands()
 			 */
 			if (ch_getflags() & CH_HELPFILE)
 				break;
-			start_mca(A_SETMARK, "mark: ", (void*)NULL);
+			start_mca(A_SETMARK, "mark: ", (void*)NULL, 0);
 			c = getcc();
-			if (c == erase_char || c == kill_char ||
-			    c == '\n' || c == '\r')
+			if (c == erase_char || c == erase2_char ||
+			    c == kill_char || c == '\n' || c == '\r')
 				break;
 			setmark(c);
 			break;
@@ -1338,10 +1571,10 @@ commands()
 			/*
 			 * Go to a mark.
 			 */
-			start_mca(A_GOMARK, "goto mark: ", (void*)NULL);
+			start_mca(A_GOMARK, "goto mark: ", (void*)NULL, 0);
 			c = getcc();
-			if (c == erase_char || c == kill_char || 
-			    c == '\n' || c == '\r')
+			if (c == erase_char || c == erase2_char ||
+			    c == kill_char || c == '\n' || c == '\r')
 				break;
 			gomark(c);
 			break;
@@ -1353,16 +1586,16 @@ commands()
 				error("Command not available", NULL_PARG);
 				break;
 			}
-			start_mca(A_PIPE, "|mark: ", (void*)NULL);
+			start_mca(A_PIPE, "|mark: ", (void*)NULL, 0);
 			c = getcc();
-			if (c == erase_char || c == kill_char)
+			if (c == erase_char || c == erase2_char || c == kill_char)
 				break;
 			if (c == '\n' || c == '\r')
 				c = '.';
 			if (badmark(c))
 				break;
 			pipec = c;
-			start_mca(A_PIPE, "!", ml_shell);
+			start_mca(A_PIPE, "!", ml_shell, 0);
 			c = getcc();
 			goto again;
 #else
@@ -1372,13 +1605,16 @@ commands()
 
 		case A_B_BRACKET:
 		case A_F_BRACKET:
-			start_mca(action, "Brackets: ", (void*)NULL);
+			start_mca(action, "Brackets: ", (void*)NULL, 0);
 			c = getcc();
 			goto again;
 
 		case A_LSHIFT:
-			if (number <= 0)
-				number = 8;
+			if (number > 0)
+				shift_count = number;
+			else
+				number = (shift_count > 0) ?
+					shift_count : sc_width / 2;
 			if (number > hshift)
 				number = hshift;
 			hshift -= number;
@@ -1386,8 +1622,11 @@ commands()
 			break;
 
 		case A_RSHIFT:
-			if (number <= 0)
-				number = 8;
+			if (number > 0)
+				shift_count = number;
+			else
+				number = (shift_count > 0) ?
+					shift_count : sc_width / 2;
 			hshift += number;
 			screen_trashed = 1;
 			break;
@@ -1401,7 +1640,8 @@ commands()
 			if (mca != A_PREFIX)
 			{
 				cmd_reset();
-				start_mca(A_PREFIX, " ", (void*)NULL);
+				start_mca(A_PREFIX, " ", (void*)NULL,
+					CF_QUIT_ON_ERASE);
 				(void) cmd_char(c);
 			}
 			c = getcc();

@@ -1,4 +1,4 @@
-/*	$NetBSD: strfile.c,v 1.19 2000/01/13 16:22:10 jsm Exp $	*/
+/*	$NetBSD: strfile.c,v 1.28 2008/09/29 12:30:12 agc Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -39,18 +35,20 @@
 #ifdef __NetBSD__
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1989, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)strfile.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: strfile.c,v 1.19 2000/01/13 16:22:10 jsm Exp $");
+__RCSID("$NetBSD: strfile.c,v 1.28 2008/09/29 12:30:12 agc Exp $");
 #endif
 #endif /* not lint */
 #endif /* __NetBSD__ */
+
+/* n.b.: this file is used at build-time - i.e. during build.sh. */
 
 # include	<sys/types.h>
 # include	<sys/param.h>
@@ -60,18 +58,42 @@ __RCSID("$NetBSD: strfile.c,v 1.19 2000/01/13 16:22:10 jsm Exp $");
 # include	<string.h>
 # include	<time.h>
 # include	<unistd.h>
+# include	<inttypes.h>
 
-# ifndef u_int32_t
-# define u_int32_t	unsigned int
-# endif
 # include	"strfile.h"
 
 # ifndef MAXPATHLEN
 # define	MAXPATHLEN	1024
 # endif	/* MAXPATHLEN */
 
+static uint32_t h2nl(uint32_t h);
+static void getargs(int argc, char **argv);
+static void usage(void);
+static void die(const char *str);
+static void dieperror(const char *fmt, char *file);
+static void add_offset(FILE *fp, off_t off);
+static void do_order(void);
+static int cmp_str(const void *vp1, const void *vp2);
+static void randomize(void);
+static void fwrite_be_offt(off_t off, FILE *f);
+
+static uint32_t
+h2nl(uint32_t h)
+{
+        unsigned char c[4];
+        uint32_t rv;
+
+        c[0] = (h >> 24) & 0xff;
+        c[1] = (h >> 16) & 0xff;
+        c[2] = (h >>  8) & 0xff;
+        c[3] = (h >>  0) & 0xff;
+        memcpy(&rv, c, sizeof rv);
+
+        return (rv);
+}
+
 /*
- *	This program takes a file composed of strings seperated by
+ *	This program takes a file composed of strings separated by
  * lines starting with two consecutive delimiting character (default
  * character is '%') and creates another file which consists of a table
  * describing the file (structure from "strfile.h"), a table of seek
@@ -133,9 +155,13 @@ STRFILE	Tbl;				/* statistics table */
 STR	*Firstch;			/* first chars of each string */
 
 #ifdef __GNUC__
-#define NORETURN	__attribute__((__noreturn__))
+#define NORETURN	__dead
 #else
 #define NORETURN
+#endif
+
+#ifndef __dead /* not NetBSD, presumably */
+#define __dead ;
 #endif
 
 void	add_offset(FILE *, off_t);
@@ -160,9 +186,7 @@ void	usage(void) NORETURN;
  *	and then seek back to the beginning to write in the table.
  */
 int
-main(ac, av)
-	int	ac;
-	char	*av[];
+main(int ac, char **av)
 {
 	char		*sp, dc;
 	FILE		*inf, *outf;
@@ -173,8 +197,8 @@ main(ac, av)
 	static char	string[257];
 
 	/* sanity test */
-	if (sizeof(u_int32_t) != 4)
-		die("sizeof(unsigned int) != 4");
+	if (sizeof(uint32_t) != 4)
+		die("sizeof(uint32_t) != 4");
 
 	getargs(ac, av);		/* evalute arguments */
 	dc = Delimch;
@@ -213,12 +237,12 @@ main(ac, av)
 			first = Oflag;
 		}
 		else if (first) {
-			for (nsp = sp; !isalnum(*nsp); nsp++)
+			for (nsp = sp; !isalnum((unsigned char)*nsp); nsp++)
 				continue;
 			ALLOC(Firstch, Num_pts);
 			fp = &Firstch[Num_pts - 1];
-			if (Iflag && isupper(*nsp))
-				fp->first = tolower(*nsp);
+			if (Iflag && isupper((unsigned char)*nsp))
+				fp->first = tolower((unsigned char)*nsp);
 			else
 				fp->first = *nsp;
 			fp->pos = Seekpts[Num_pts - 1];
@@ -253,11 +277,11 @@ main(ac, av)
 	}
 
 	(void) fseek(outf, (off_t) 0, SEEK_SET);
-	Tbl.str_version = htonl(Tbl.str_version);
-	Tbl.str_numstr = htonl(Num_pts - 1);
-	Tbl.str_longlen = htonl(Tbl.str_longlen);
-	Tbl.str_shortlen = htonl(Tbl.str_shortlen);
-	Tbl.str_flags = htonl(Tbl.str_flags);
+	Tbl.str_version = h2nl(Tbl.str_version);
+	Tbl.str_numstr = h2nl(Num_pts - 1);
+	Tbl.str_longlen = h2nl(Tbl.str_longlen);
+	Tbl.str_shortlen = h2nl(Tbl.str_shortlen);
+	Tbl.str_flags = h2nl(Tbl.str_flags);
 	(void) fwrite((char *) &Tbl, sizeof Tbl, 1, outf);
 	if (STORING_PTRS) {
 		for (p = Seekpts, cnt = Num_pts; cnt--; ++p)
@@ -273,10 +297,8 @@ main(ac, av)
 /*
  *	This routine evaluates arguments from the command line
  */
-void
-getargs(argc, argv)
-	int	argc;
-	char	**argv;
+static void
+getargs(int argc, char **argv)
 {
 	int	ch;
 	extern	int optind;
@@ -327,26 +349,23 @@ getargs(argc, argv)
 	}
 }
 
-void
-usage()
+static void
+usage(void)
 {
 	(void) fprintf(stderr,
 	    "strfile [-iorsx] [-c char] sourcefile [datafile]\n");
 	exit(1);
 }
 
-void
-die(str)
-	const char *str;
+static void
+die(const char *str)
 {
 	fprintf(stderr, "strfile: %s\n", str);
 	exit(1);
 }
 
-void
-dieperror(fmt, file)
-	const char *fmt;
-	char *file;
+static void
+dieperror(const char *fmt, char *file)
 {
 	fprintf(stderr, "strfile: ");
 	fprintf(stderr, fmt, file);
@@ -359,10 +378,8 @@ dieperror(fmt, file)
  * add_offset:
  *	Add an offset to the list, or write it out, as appropriate.
  */
-void
-add_offset(fp, off)
-	FILE	*fp;
-	off_t	off;
+static void
+add_offset(FILE *fp, off_t off)
 {
 
 	if (!STORING_PTRS) {
@@ -378,8 +395,8 @@ add_offset(fp, off)
  * do_order:
  *	Order the strings alphabetically (possibly ignoring case).
  */
-void
-do_order()
+static void
+do_order(void)
 {
 	int	i;
 	off_t	*lp;
@@ -398,9 +415,8 @@ do_order()
 	Tbl.str_flags |= STR_ORDERED;
 }
 
-int
-cmp_str(vp1, vp2)
-	const void *vp1, *vp2;
+static int
+cmp_str(const void *vp1, const void *vp2)
 {
 	const STR	*p1, *p2;
 	int	c1, c2;
@@ -454,8 +470,8 @@ cmp_str(vp1, vp2)
  *	not to randomize across delimiter boundaries.  All
  *	randomization is done within each block.
  */
-void
-randomize()
+static void
+randomize(void)
 {
 	int	cnt, i;
 	off_t	tmp;
@@ -483,10 +499,8 @@ randomize()
  *	Write out the off paramater as a 64 bit big endian number
  */
 
-void
-fwrite_be_offt(off, f)
-	off_t	 off;
-	FILE	*f;
+static void
+fwrite_be_offt(off_t off, FILE *f)
 {
 	int		i;
 	unsigned char	c[8];

@@ -1,4 +1,4 @@
-/* $NetBSD: boot.c,v 1.24 1999/11/13 21:38:20 thorpej Exp $ */
+/* $NetBSD: boot.c,v 1.28.88.2 2009/02/06 02:09:05 snj Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -72,6 +68,7 @@ char *kernelnames[] = {
 	"netbsd.bak",		"netbsd.bak.gz",
 	"netbsd.old",		"netbsd.old.gz",
 	"onetbsd",		"onetbsd.gz",
+	"netbsd.alpha",		"netbsd.alpha.gz",
 	NULL
 };
 
@@ -85,7 +82,7 @@ main(long fd)
 	char *name, **namep;
 	u_long marks[MARK_MAX];
 	u_int64_t entry;
-	int win;
+	int win, loadflag;
 
 	/* Init prom callback vector. */
 	init_prom_calls();
@@ -125,13 +122,24 @@ main(long fd)
 		gets(boot_file);
 	}
 
+#ifdef NO_LOAD_NOTE
+	loadflag = LOAD_KERNEL & ~LOAD_NOTE;
+#else
+	loadflag = LOAD_KERNEL;
+#endif
+
 	memset(marks, 0, sizeof marks);
-	if (boot_file[0] != '\0')
-		win = loadfile(name = boot_file, marks, LOAD_KERNEL) == 0;
-	else
+	if (boot_file[0] != '\0') {
+		name = boot_file;
+		win = loadfile(name, marks, loadflag) == 0;
+	} else {
+		name = NULL;	/* XXX gcc -Wuninitialized */
 		for (namep = kernelnames, win = 0; *namep != NULL && !win;
-		    namep++)
-			win = loadfile(name = *namep, marks, LOAD_KERNEL) == 0;
+		    namep++) {
+			name = *namep;
+			win = loadfile(name, marks, loadflag) == 0;
+		}
+	}
 
 	entry = marks[MARK_ENTRY];
 	booted_dev_close();
@@ -142,12 +150,12 @@ main(long fd)
 	/*
 	 * Fill in the bootinfo for the kernel.
 	 */
-	bzero(&bootinfo_v1, sizeof(bootinfo_v1));
+	memset(&bootinfo_v1, 0, sizeof(bootinfo_v1));
 	bootinfo_v1.ssym = marks[MARK_SYM];
 	bootinfo_v1.esym = marks[MARK_END];
-	bcopy(name, bootinfo_v1.booted_kernel,
+	memcpy(bootinfo_v1.booted_kernel, name,
 	    sizeof(bootinfo_v1.booted_kernel));
-	bcopy(boot_flags, bootinfo_v1.boot_flags,
+	memcpy(bootinfo_v1.boot_flags, boot_flags,
 	    sizeof(bootinfo_v1.boot_flags));
 	bootinfo_v1.hwrpb = (void *)HWRPB_ADDR;
 	bootinfo_v1.hwrpbsize = ((struct rpb *)HWRPB_ADDR)->rpb_size;

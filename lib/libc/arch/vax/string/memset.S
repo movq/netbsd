@@ -1,4 +1,4 @@
-/*	$NetBSD: memset.S,v 1.1 1996/05/19 15:57:49 ragge Exp $	*/
+/*	$NetBSD: memset.S,v 1.3 2003/08/07 16:42:32 agc Exp $	*/
 /*-
  * Copyright (c) 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,16 +37,16 @@
 #include "DEFS.h"
 
 ENTRY(memset, 0)
-	movl	4(ap),r3
+	movl	4(%ap),%r3
 1:
-	movzwl	$65535,r0
-	movq	8(ap),r1
-	cmpl	r2,r0
+	movzwl	$65535,%r0
+	movq	8(%ap),%r1
+	cmpl	%r2,%r0
 	jgtru	2f
-	movc5	$0,(r3),r1,r2,(r3)
-	movl	r1,r0
+	movc5	$0,(%r3),%r1,%r2,(%r3)
+	movl	%r1,%r0
 	ret
 2:
-	subl2	r0,12(ap)
-	movc5	$0,(r3),r1,r0,(r3)
+	subl2	%r0,12(%ap)
+	movc5	$0,(%r3),%r1,%r0,(%r3)
 	jbr	1b

@@ -1,7 +1,7 @@
-/*	$NetBSD: wsconsctl.c,v 1.2 1998/12/29 22:40:20 hannken Exp $ */
+/*	$NetBSD: wsconsctl.c,v 1.18 2008/08/25 00:14:46 dholland Exp $ */
 
 /*-
- * Copyright (c) 1998 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 2004 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,18 +29,19 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <fcntl.h>
+#include <sys/cdefs.h>
 #include <err.h>
+#include <fcntl.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
+
 #include "wsconsctl.h"
 
-#define PATH_KEYBOARD		"/dev/wskbd0"
-#define PATH_MOUSE		"/dev/wsmouse0"
+#define PATH_KEYBOARD		"/dev/wskbd"
+#define PATH_MOUSE		"/dev/wsmouse"
 #define PATH_DISPLAY		"/dev/ttyE0"
-
-extern const char *__progname;		/* from crt0.o */
 
 extern struct field keyboard_field_tab[];
 extern struct field mouse_field_tab[];
@@ -56,37 +50,37 @@ extern int keyboard_field_tab_len;
 extern int mouse_field_tab_len;
 extern int display_field_tab_len;
 
-static void usage __P((char *));
-int main __P((int, char **));
+static void usage(const char *) __dead;
 
 static void
-usage(msg)
-	char *msg;
+usage(const char *msg)
 {
+	const char *progname = getprogname();
+
 	if (msg != NULL)
-		fprintf(stderr, "%s: %s\n\n", __progname, msg);
+		(void)fprintf(stderr, "%s: %s\n\n", progname, msg);
 
-	fprintf(stderr, "usage: %s [-kmd] [-f file] [-n] name ...\n",
-		__progname);
-	fprintf(stderr, " -or-  %s [-kmd] [-f file] [-n] -w name=value ...\n",
-		__progname);
-	fprintf(stderr, " -or-  %s [-kmd] [-f file] [-n] -a\n", __progname);
+	(void)fprintf(stderr,
+	    "Usage: %s [-kmd] [-f file] [-n] name ...\n"
+	    " -or-  %s [-kmd] [-f file] [-n] -w name=value ...\n"
+	    " -or-  %s [-kmd] [-f file] [-n] -w name+=value ...\n"
+	    " -or-  %s [-kmd] [-f file] [-n] -a\n",
+	    progname, progname, progname, progname);
 
-	exit(1);
+	exit(EXIT_FAILURE);
 }
 
 int
-main(argc, argv)
-	int argc;
-	char **argv;
+main(int argc, char **argv)
 {
 	int i, ch, fd;
 	int aflag, dflag, kflag, mflag, wflag;
-	char *file, *sep, *p;
+	char *p;
+	const char *sep, *file;
 	struct field *f, *field_tab;
 	int do_merge, field_tab_len;
-	void (*getval) __P((int));
-	void (*putval) __P((int));
+	void (*getval)(int);
+	void (*putval)(int);
 
 	aflag = 0;
 	dflag = 0;
@@ -95,6 +89,10 @@ main(argc, argv)
 	wflag = 0;
 	file = NULL;
 	sep = "=";
+	field_tab = NULL;
+	field_tab_len = 0;
+	getval = NULL;
+	putval = NULL;
 
 	while ((ch = getopt(argc, argv, "adf:kmnw")) != -1) {
 		switch(ch) {
@@ -166,7 +164,7 @@ main(argc, argv)
 	if (fd < 0)
 		fd = open(file, O_RDONLY);
 	if (fd < 0)
-		err(1, "%s", file);
+		err(EXIT_FAILURE, "%s", file);
 
 	if (aflag != 0) {
 		for (i = 0; i < field_tab_len; i++)
@@ -175,16 +173,19 @@ main(argc, argv)
 		(*getval)(fd);
 		for (i = 0; i < field_tab_len; i++)
 			if (field_tab[i].flags & FLG_NOAUTO)
-				warnx("Use explicit arg to view %s.",
-				      field_tab[i].name);
-			else if (field_tab[i].flags & FLG_GET)
+				warnx("\"%s\" not shown with -a; use \"%s %s\""
+				    " to view.",
+				    field_tab[i].name,
+				    getprogname(), field_tab[i].name);
+			else if (field_tab[i].flags & FLG_GET &&
+				 !(field_tab[i].flags & FLG_DISABLED))
 				pr_field(field_tab + i, sep);
 	} else if (argc > 0) {
 		if (wflag != 0) {
 			for (i = 0; i < argc; i++) {
 				p = strchr(argv[i], '=');
 				if (p == NULL)
-					errx(1, "'=' not found");
+					errx(EXIT_FAILURE, "'=' not found");
 				if (p > argv[i] && *(p - 1) == '+') {
 					*(p - 1) = '\0';
 					do_merge = 1;
@@ -193,11 +194,13 @@ main(argc, argv)
 				*p++ = '\0';
 				f = field_by_name(argv[i]);
 				if ((f->flags & FLG_RDONLY) != 0)
-					errx(1, "%s: read only", argv[i]);
+					errx(EXIT_FAILURE, "%s: read only",
+					    argv[i]);
 				if (do_merge) {
 					if ((f->flags & FLG_MODIFY) == 0)
-						errx(1, "%s: can only be set",
-						     argv[i]);
+						errx(EXIT_FAILURE,
+						    "%s: can only be set",
+						    argv[i]);
 					f->flags |= FLG_GET;
 					(*getval)(fd);
 					f->flags &= ~FLG_GET;
@@ -211,16 +214,26 @@ main(argc, argv)
 			for (i = 0; i < argc; i++) {
 				f = field_by_name(argv[i]);
 				if ((f->flags & FLG_WRONLY) != 0)
-					errx(1, "%s: read only", argv[i]);
+					errx(EXIT_FAILURE, "%s: write only",
+					    argv[i]);
 				f->flags |= FLG_GET;
 			}
 			(*getval)(fd);
-			for (i = 0; i < field_tab_len; i++)
+			for (i = 0; i < field_tab_len; i++) {
+				if (field_tab[i].flags & FLG_DISABLED)
+					errx(EXIT_FAILURE,
+					    "%s: no kernel support",
+					    field_tab[i].name);
 				if (field_tab[i].flags & FLG_GET)
 					pr_field(field_tab + i, sep);
+			}
 		}
-	} else
+	} else {
+		close(fd);
 		usage(NULL);
+	}
 
-	exit(0);
+	close(fd);
+
+	return EXIT_SUCCESS;
 }

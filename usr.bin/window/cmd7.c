@@ -1,4 +1,4 @@
-/*	$NetBSD: cmd7.c,v 1.5 1998/10/14 00:58:47 wsanchez Exp $	*/
+/*	$NetBSD: cmd7.c,v 1.8 2006/05/02 22:30:25 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)cmd7.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: cmd7.c,v 1.5 1998/10/14 00:58:47 wsanchez Exp $");
+__RCSID("$NetBSD: cmd7.c,v 1.8 2006/05/02 22:30:25 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -50,17 +46,16 @@ __RCSID("$NetBSD: cmd7.c,v 1.5 1998/10/14 00:58:47 wsanchez Exp $");
 #include "defs.h"
 #include "window_string.h"
 
-void	unyank __P((void));
-void	yank_highlight __P((int, int, int, int));
-void	yank_highlight_line __P((int, int, int));
-void	yank_line __P((int, int, int));
+void	unyank(void);
+void	yank_highlight(int, int, int, int);
+void	yank_highlight_line(int, int, int);
+void	yank_line(int, int, int);
 
 /*
  * Window size.
  */
 void
-c_size(w)
-	struct ww *w;
+c_size(struct ww *w)
 {
 	int col, row;
 
@@ -110,7 +105,7 @@ struct yb {
 struct yb *yb_head, *yb_tail;
 
 void
-c_yank()
+c_yank(void)
 {
 	struct ww *w = selwin;
 	int col1, row1;
@@ -186,8 +181,7 @@ out:
 }
 
 void
-yank_highlight(row1, col1, row2, col2)
-	int row1, col1, row2, col2;
+yank_highlight(int row1, int col1, int row2, int col2)
 {
 	struct ww *w = selwin;
 	int r, c;
@@ -211,8 +205,7 @@ yank_highlight(row1, col1, row2, col2)
 }
 
 void
-yank_highlight_line(r, c, cend)
-	int r, c, cend;
+yank_highlight_line(int r, int c, int cend)
 {
 	struct ww *w = selwin;
 	char *win;
@@ -237,7 +230,7 @@ yank_highlight_line(r, c, cend)
 }
 
 void
-unyank()
+unyank(void)
 {
 	struct yb *yp, *yq;
 
@@ -250,8 +243,7 @@ unyank()
 }
 
 void
-yank_line(r, c, cend)
-	int r, c, cend;
+yank_line(int r, int c, int cend)
 {
 	struct yb *yp;
 	int nl = 0;
@@ -272,7 +264,10 @@ yank_line(r, c, cend)
 	yp->length = n = cend - c + 1;
 	if (nl)
 		yp->length++;
-	yp->line = str_alloc(yp->length + 1);
+	if ((yp->line = str_alloc(yp->length + 1)) == NULL) {
+		free(yp);
+		return;
+	}
 	for (bp += c, cp = yp->line; --n >= 0;)
 		*cp++ = bp++->c_c;
 	if (nl)
@@ -285,7 +280,7 @@ yank_line(r, c, cend)
 }
 
 void
-c_put()
+c_put(void)
 {
 	struct yb *yp;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: pvctxctl.c,v 1.2 1999/07/11 17:35:08 itojun Exp $	*/
+/*	$NetBSD: pvctxctl.c,v 1.5 2007/01/16 17:32:05 hubertf Exp $	*/
 
 /*
  * Copyright (C) 1998
@@ -37,7 +37,6 @@
 
 #include <sys/socket.h>
 #include <sys/ioctl.h>
-#include <sys/ioctl.h>
 #include <net/if.h>
 
 #include <net/if_atm.h>
@@ -64,7 +63,7 @@ int getinfo = 1;
 int subinterface = 0;
 int verbose = 1;
 
-int 
+int
 main(int argc, char **argv)
 {
 	struct pvctxreq pvcreq;
@@ -76,11 +75,11 @@ main(int argc, char **argv)
 		usage();
 
 	if_name = argv[1];
-	if (argc > 2 && isdigit(argv[2][0]))
+	if (argc > 2 && isdigit((unsigned char)argv[2][0]))
 		str2vc(argv[2], &vpi, &vci);
-    
+
 	optind = 3;
-	while ((ch = getopt(argc, argv, "p:b:j:snv")) != EOF) {
+	while ((ch = getopt(argc, argv, "p:b:j:snv")) != -1) {
 		switch (ch) {
 		case 'p':
 			pcr = strtol(optarg, NULL, 0);
@@ -173,7 +172,7 @@ main(int argc, char **argv)
 		printf("pcr:%d(%dKbps)\n", pcr, pcr * 48 * 8 / 1000);
 	else
 		printf("pcr:%d(%dMbps)\n", pcr, pcr * 48 * 8 / 1000000);
-    
+
 	close(s);
 
 	if (getinfo && pcr < 0) {

@@ -1,4 +1,4 @@
-/*	$NetBSD: options.c,v 1.6 1999/07/03 12:30:41 simonb Exp $	*/
+/*	$NetBSD: options.c,v 1.14 2005/09/24 14:26:12 christos Exp $	*/
 
  /*
   * General skeleton for adding options to the access control language. The
@@ -35,7 +35,7 @@
 #if 0
 static char sccsid[] = "@(#) options.c 1.17 96/02/11 17:01:31";
 #else
-__RCSID("$NetBSD: options.c,v 1.6 1999/07/03 12:30:41 simonb Exp $");
+__RCSID("$NetBSD: options.c,v 1.14 2005/09/24 14:26:12 christos Exp $");
 #endif
 #endif
 
@@ -56,10 +56,6 @@ __RCSID("$NetBSD: options.c,v 1.6 1999/07/03 12:30:41 simonb Exp $");
 #include <ctype.h>
 #include <setjmp.h>
 #include <string.h>
-
-#ifndef MAXPATHNAMELEN
-#define MAXPATHNAMELEN  BUFSIZ
-#endif
 
 /* Local stuff. */
 
@@ -246,7 +242,7 @@ static void banners_option(value, request)
 char   *value;
 struct request_info *request;
 {
-    char    path[MAXPATHNAMELEN];
+    char    path[MAXPATHLEN];
     char    ibuf[BUFSIZ];
     char    obuf[2 * BUFSIZ];
     struct stat st;
@@ -278,11 +274,12 @@ static void group_option(value, request)
 char   *value;
 struct request_info *request;
 {
-    struct group *grp;
+    struct group grs, *grp;
+    char grbuf[1024];
 
-    if ((grp = getgrnam(value)) == 0)
+    (void)getgrnam_r(value, &grs, grbuf, sizeof(grbuf), &grp);
+    if (grp == NULL)
 	tcpd_jump("unknown group: \"%s\"", value);
-    endgrent();
 
     if (dry_run == 0 && setgid(grp->gr_gid))
 	tcpd_jump("setgid(%s): %m", value);
@@ -296,14 +293,15 @@ static void user_option(value, request)
 char   *value;
 struct request_info *request;
 {
-    struct passwd *pwd;
+    struct passwd *pwd, pws;
     char   *group;
+    char   pwbuf[1024];
 
     if ((group = split_at(value, '.')) != 0)
 	group_option(group, request);
-    if ((pwd = getpwnam(value)) == 0)
+    (void)getpwnam_r(value, &pws, pwbuf, sizeof(pwbuf), &pwd);
+    if (pwd == NULL)
 	tcpd_jump("unknown user: \"%s\"", value);
-    endpwent();
 
     if (dry_run == 0 && setuid(pwd->pw_uid))
 	tcpd_jump("setuid(%s): %m", value);
@@ -397,8 +395,6 @@ static void twist_option(value, request)
 char   *value;
 struct request_info *request;
 {
-    char   *error;
-
     if (dry_run != 0) {
 	dry_run = 0;
     } else {
@@ -414,17 +410,15 @@ struct request_info *request;
 	if (maybe_dup2(request->fd, 0) != 0 ||
 	    maybe_dup2(request->fd, 1) != 1 ||
 	    maybe_dup2(request->fd, 2) != 2) {
-	    error = "twist_option: dup: %m";
+	    tcpd_warn("twist_option: dup: %m");
 	} else {
 	    if (request->fd > 2)
 		close(request->fd);
 	    (void) execl("/bin/sh", "sh", "-c", value, (char *) 0);
-	    error = "twist_option: /bin/sh: %m";
+	    tcpd_warn("twist_option: /bin/sh: %m");
 	}
 
 	/* Something went wrong: we MUST terminate the process. */
-
-	tcpd_warn(error);
 	clean_exit(request);
     }
 }
@@ -645,7 +639,7 @@ register char *string;
     char   *cp;
 
     for (cp = string; *cp; cp++) {
-	if (!isspace(*cp)) {
+	if (!isspace((unsigned char) *cp)) {
 	    if (start == 0)
 		start = cp;
 	    end = cp;

@@ -1,4 +1,4 @@
-/* 	$NetBSD: linux_signal.h,v 1.1 1998/12/15 19:25:41 itohy Exp $	*/
+/* 	$NetBSD: linux_signal.h,v 1.7 2008/04/28 20:23:42 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -75,18 +68,19 @@
 #define LINUX_SIGIO	29
 #define LINUX_SIGPWR	30
 #define LINUX_SIGUNUSED	31
+#define LINUX_SIGSYS	31
 
 #define LINUX_SIGIOT	LINUX_SIGABRT
 #define LINUX_SIGPOLL	LINUX_SIGIO
+
+/* Min/max real-time linux signal */
+#define LINUX_SIGRTMIN		32
+#define LINUX_SIGRTMAX		(LINUX__NSIG-1)
 
 #define LINUX__NSIG		64
 #define LINUX__NSIG_BPW		32
 #define LINUX__NSIG_WORDS	(LINUX__NSIG / LINUX__NSIG_BPW)
 #define LINUX_NSIG		32
-
-/* Min/max real-time linux signal */
-#define LINUX_SIGRTMIN		32
-#define LINUX_SIGRTMAX		(LINUX__NSIG-1)
 
 /* sa_flags */
 #define LINUX_SA_NOCLDSTOP	0x00000001
@@ -107,7 +101,9 @@
 #define LINUX_SIG_UNBLOCK	1
 #define LINUX_SIG_SETMASK	2
 
-typedef void	(*linux_handler_t) __P((int));
+#define	LINUX_MINSIGSTKSZ	2048
+
+typedef void	(*linux_handler_t)(int);
 
 typedef u_long	linux_old_sigset_t;
 typedef struct {
@@ -115,23 +111,23 @@ typedef struct {
 } linux_sigset_t;
 
 struct linux_old_sigaction {
-	linux_handler_t		sa_handler;
-	linux_old_sigset_t	sa_mask;
-	u_long			sa_flags;
-	void			(*sa_restorer) __P((void));
+	linux_handler_t		linux_sa_handler;
+	linux_old_sigset_t	linux_sa_mask;
+	u_long			linux_sa_flags;
+	void			(*linux_sa_restorer)(void);
 };
 
 /* Used in rt_* calls */
 struct linux_sigaction {
-	linux_handler_t		sa_handler;
-	u_long			sa_flags;
-	void			(*sa_restorer) __P((void));
-	linux_sigset_t		sa_mask;
+	linux_handler_t		linux_sa_handler;
+	u_long			linux_sa_flags;
+	void			(*linux_sa_restorer)(void);
+	linux_sigset_t		linux_sa_mask;
 };
 
 struct linux_k_sigaction {
 	struct linux_sigaction	sa;
-#define k_sa_restorer	sa.sa_restorer
+#define k_sa_restorer	sa.linux_sa_restorer
 };
 
 typedef struct linux_sigaltstack {

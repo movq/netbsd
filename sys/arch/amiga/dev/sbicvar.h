@@ -1,4 +1,4 @@
-/*	$NetBSD: sbicvar.h,v 1.15 2000/03/23 06:33:13 thorpej Exp $	*/
+/*	$NetBSD: sbicvar.h,v 1.23 2005/12/11 12:16:28 christos Exp $	*/
 
 /*
  * Copyright (c) 1990 The Regents of the University of California.
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -44,11 +40,11 @@
 
 /*
  * The largest single request will be MAXPHYS bytes which will require
- * at most MAXPHYS/NBPG+1 chain elements to describe, i.e. if none of
- * the buffer pages are physically contiguous (MAXPHYS/NBPG) and the
+ * at most MAXPHYS/PAGE_SIZE+1 chain elements to describe, i.e. if none of
+ * the buffer pages are physically contiguous (MAXPHYS/PAGE_SIZE) and the
  * buffer is not page aligned (+1).
  */
-#define	DMAMAXIO	(MAXPHYS/NBPG+1)
+#define	DMAMAXIO	(MAXPHYS/PAGE_SIZE+1)
 
 struct	dma_chain {
 	int	dc_count;
@@ -70,10 +66,9 @@ struct sbic_acb {
 #define ACB_FREE	0x00
 #define ACB_ACTIVE	0x01
 #define ACB_DONE	0x04
-#define ACB_CHKSENSE	0x08
 #define ACB_BBUF	0x10	/* DMA input needs to be copied from bounce */
 #define	ACB_DATAIN	0x20	/* DMA direction flag */
-	struct scsi_generic cmd;	/* SCSI command block */
+	struct scsipi_generic cmd;	/* SCSI command block */
 	int	 clen;
 	struct	dma_chain sc_kv;	/* Virtual address of whole DMA */
 	struct	dma_chain sc_pa;	/* Physical address of DMA segment */
@@ -95,13 +90,12 @@ struct sbic_tinfo {
 	int	dconns;		/* #disconnects */
 	int	touts;		/* #timeouts */
 	int	perrs;		/* #parity errors */
-	int	senses;		/* #request sense commands sent */
 	u_char*	bounce;		/* Bounce buffer for this device */
 	ushort	lubusy;		/* What local units/subr. are busy? */
 	u_char  flags;
 	u_char  period;		/* Period suggestion */
 	u_char  offset;		/* Offset suggestion */
-} tinfo_t;
+};
 
 struct	sbic_softc {
 	struct	device sc_dev;
@@ -114,8 +108,8 @@ struct	sbic_softc {
 	} sc_sync[8];
 	u_char	target;			/* Currently active target */
 	u_char  lun;
-	struct	scsipi_link sc_link;	/* proto for sub devices */
 	struct	scsipi_adapter sc_adapter;
+	struct	scsipi_channel sc_channel;
 	sbic_regmap_t	sc_sbic;	/* the two SBIC pointers */
 	volatile void 	*sc_cregs;	/* driver specific regs */
 
@@ -135,21 +129,21 @@ struct	sbic_softc {
 	u_char	sc_msg[7];
 	u_long	sc_clkfreq;
 	u_long	sc_tcnt;		/* number of bytes transfered */
-	u_short sc_dmacmd;		/* used by dma drivers */
-	u_short	sc_dmatimo;		/* dma timeout */
-	u_long	sc_dmamask;		/* dma valid mem mask */
+	u_short sc_dmacmd;		/* used by DMA drivers */
+	u_short	sc_dmatimo;		/* DMA timeout */
+	u_long	sc_dmamask;		/* DMA valid mem mask */
 	struct	dma_chain *sc_cur;
 	struct	dma_chain *sc_last;
-	int  (*sc_dmago)	__P((struct sbic_softc *, char *, int, int));
-	int  (*sc_dmanext)	__P((struct sbic_softc *));
-	void (*sc_enintr)	__P((struct sbic_softc *));
-	void (*sc_dmastop)	__P((struct sbic_softc *));
+	int  (*sc_dmago)(struct sbic_softc *, char *, int, int);
+	int  (*sc_dmanext)(struct sbic_softc *);
+	void (*sc_enintr)(struct sbic_softc *);
+	void (*sc_dmastop)(struct sbic_softc *);
 	u_short	gtsc_bankmask;		/* GVP specific bank selected */
 };
 
 /* sc_flags */
 #define	SBICF_ALIVE	0x01	/* controller initialized */
-#define SBICF_DCFLUSH	0x02	/* need flush for overlap after dma finishes */
+#define SBICF_DCFLUSH	0x02	/* need flush for overlap after DMA finishes */
 #define SBICF_SELECTED	0x04	/* bus is in selected state. */
 #define SBICF_ICMD	0x08	/* Immediate command in execution */
 #define SBICF_BADDMA	0x10	/* controller can only DMA to ztwobus space */
@@ -226,12 +220,12 @@ struct scsi_fmt_cdb {
 struct buf;
 struct scsipi_xfer;
 
-void sbic_minphys __P((struct buf *bp));
-int sbic_scsicmd __P((struct scsipi_xfer *));
-void sbicinit __P((struct sbic_softc *));
-int  sbicintr __P((struct sbic_softc *));
+void sbic_minphys(struct buf *bp);
+void sbic_scsipi_request(struct scsipi_channel *, scsipi_adapter_req_t, void *);
+void sbicinit(struct sbic_softc *);
+int  sbicintr(struct sbic_softc *);
 #ifdef DEBUG
-void sbic_dump __P((struct sbic_softc *dev));
+void sbic_dump(struct sbic_softc *dev);
 #endif
 
 #endif /* _SBICVAR_H_ */

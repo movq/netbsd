@@ -1,49 +1,82 @@
 #!/bin/sh
 #
-# $NetBSD: makesums,v 1.1 1999/07/22 20:10:17 is Exp $
+# $NetBSD: makesums,v 1.15 2006/01/08 10:10:03 apb Exp $
 #
-# Make checksum files.  Usage:
-# makesums [-t tardir] [setname ...]
+# Make checksum files for files in ``tardir''.  Usage:
+# makesums [-a] [-t tardir] [setname [...]]
 #
+# If -t is omitted, RELEASEDIR must be set and not empty.
+# The ``setname'' arguments comprise a list of files to checksum,
+# and may be omitted (in which case ``*.tgz'' is used).
+# If -A is given, then the checksum are appended to possibly existing files.
+# NOTE: Don't use this when running parallel jobs
+# If -a is given, then the list of sets is ignored, and ``*'' is used.
+#
+# After shell glob expansion, the list of sets is filtered to remove known
+# output file names (of the form *SUM, SHA512 and MD5), non-existent files, and
+# subdirectories. If this filtering leaves no files, then no output files are
+# produced. Otherwise the resulting list of files are checksummed and five
+# output files (BSDSUM, CKSUM, MD5, SHA512, SYSVSUM) are produced.
+#
+
+prog="${0##*/}"
+rundir="$(dirname "$0")" # ${0%/*} isn't good enough when there's no "/"
+. "${rundir}/sets.subr"
 
 # set defaults
-: ${MAKE=make}
-tars=$RELEASEDIR
+targetdir="${RELEASEDIR}"
+dash_all=no
+append=\>
+
+usage()
+{
+	cat 1>&2 <<USAGE
+Usage: ${prog} [-A] [-a] [-t targetdir] [setname [...]]
+	-A		Append to possible existing checksum files 
+	-a		checksum all plain files instead of [setname [...]]
+	-t targetdir	\${RELEASEDIR}		[${targetdir}]
+	setname [...]	sets to checksum 	[*.tgz]
+USAGE
+	exit 1
+}
 
 # handle args
-while : ; do
-	case $1 in
-	-t*)	
-		tars=$2; shift
+while getopts aAt: ch; do
+	case ${ch} in
+	A)
+		append=\>\>
 		;;
-	-*)
-		cat 1>&2 <<USAGE
-Usage: $0 [-t tars] [setname ...]
-	-t tars		\$RELEASEDIR		[$tars]
-	[setname ...]	sets to checksum 	[*.tgz]
-USAGE
-		exit 1
+	a)
+		dash_all=yes
+		;;
+	t)	
+		targetdir="${OPTARG}"
 		;;
 	*)
-		break
+		usage
 		;;
 	esac
-	shift
 done
-if [ -n "$*" ]; then
-	lists="$*"
-fi
+shift $((${OPTIND} - 1))
 
-if [ -z "$tars" ]; then
-	echo \$RELEASEDIR must be set
+if [ -z "${targetdir}" ]; then
+	echo >&2 "${prog}: \${RELEASEDIR} must be set or provided with -t"
 	exit 1
 fi
 
-cd $tars
-if [ -z "$lists" ]; then
-	lists=*.tgz
+cd "${targetdir}"
+pat="$*"
+if [ "${dash_all}" = yes ]; then
+	pat='*'
+elif [ -z "${pat}" ]; then
+	pat='*.tgz'
 fi
-cksum -o1 $lists > BSDSUM
-cksum     $lists > CKSUM
-cksum -m  $lists > MD5
-cksum -o2 $lists > SYSVSUM
+lists="$(${FIND} ${pat} -prune \( -type f -o -type l \) \
+	\! -name '*SUM' \! -name MD5 \! -name SHA512 2>/dev/null)"
+if [ -n "${lists}" ]; then
+	eval ${CKSUM} -o1 ${lists} ${append} BSDSUM
+	eval ${CKSUM}     ${lists} ${append} CKSUM
+	eval ${CKSUM} -a md5  ${lists} ${append} MD5
+	eval ${CKSUM} -o2 ${lists} ${append} SYSVSUM
+	eval ${CKSUM} -a sha512  ${lists} ${append} SHA512
+fi

@@ -1,4 +1,4 @@
-/*	$NetBSD: cfscores.c,v 1.8 1999/09/12 09:02:20 jsm Exp $	*/
+/*	$NetBSD: cfscores.c,v 1.15 2008/07/20 01:03:21 lukem Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)cfscores.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: cfscores.c,v 1.8 1999/09/12 09:02:20 jsm Exp $");
+__RCSID("$NetBSD: cfscores.c,v 1.15 2008/07/20 01:03:21 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -52,6 +48,8 @@ __RCSID("$NetBSD: cfscores.c,v 1.8 1999/09/12 09:02:20 jsm Exp $");
 #include <fcntl.h>
 #include <pwd.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include "pathnames.h"
 
@@ -68,19 +66,16 @@ struct betinfo {
 
 int dbfd;
 
-int	main __P((int, char *[]));
-void	printuser __P((const struct passwd *, int));
+void	printuser(const struct passwd *, int);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	struct passwd *pw;
-	int uid;
+	uid_t uid;
 
 	/* Revoke setgid privileges */
-	setregid(getgid(), getgid());
+	setgid(getgid());
 
 	if (argc > 2) {
 		printf("Usage: cfscores [user]\n");
@@ -118,18 +113,19 @@ main(argc, argv)
  * print out info for specified password entry
  */
 void
-printuser(pw, printfail)
-	const struct passwd *pw;
-	int printfail;
+printuser(const struct passwd *pw, int printfail)
 {
 	struct betinfo total;
+	off_t pos;
 	int i;
 
-	if (pw->pw_uid < 0) {
-		printf("Bad uid %d\n", pw->pw_uid);
+	pos = pw->pw_uid * (off_t)sizeof(struct betinfo);
+	/* test pos, not pw_uid; uid_t can be unsigned, which makes gcc warn */
+	if (pos < 0) {
+		printf("Bad uid %d\n", (int)pw->pw_uid);
 		return;
 	}
-	i = lseek(dbfd, pw->pw_uid * sizeof(struct betinfo), SEEK_SET);
+	i = lseek(dbfd, pos, SEEK_SET);
 	if (i < 0)
 		warn("lseek %s", _PATH_SCORE);
 	i = read(dbfd, (char *)&total, sizeof(total));

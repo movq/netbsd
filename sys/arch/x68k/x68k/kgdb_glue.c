@@ -1,4 +1,4 @@
-/*	$NetBSD: kgdb_glue.c,v 1.1 1996/05/05 12:17:25 oki Exp $	*/
+/*	$NetBSD: kgdb_glue.c,v 1.10 2007/10/17 19:58:04 garbled Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993
@@ -21,11 +21,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -48,6 +44,11 @@
  * This file must be compiled with gcc -fno-defer-pop.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: kgdb_glue.c,v 1.10 2007/10/17 19:58:04 garbled Exp $");
+
+#include "opt_kgdb.h"
+
 #ifdef KGDB
 
 #include <sys/param.h>
@@ -56,7 +57,7 @@
 #include <machine/reg.h>
 
 #ifndef lint
-static char rcsid[] = "$NetBSD: kgdb_glue.c,v 1.1 1996/05/05 12:17:25 oki Exp $";
+static char rcsid[] = "$NetBSD: kgdb_glue.c,v 1.10 2007/10/17 19:58:04 garbled Exp $";
 #endif
 
 #define KGDB_STACKSIZE 0x800
@@ -64,13 +65,11 @@ static char rcsid[] = "$NetBSD: kgdb_glue.c,v 1.1 1996/05/05 12:17:25 oki Exp $"
 
 u_long kgdb_stack[KGDB_STACKWORDS];
 
-#define getsp(v) asm("movl sp, %0" : "=r" (v))
-#define setsp(v) asm("movl %0, sp" :: "r" (v))
+#define getsp(v) __asm("movl %%sp, %0" : "=r" (v))
+#define setsp(v) __asm("movl %0, %%sp" :: "r" (v))
 
 static inline void
-copywords(src, dst, nbytes)
-	register u_long *src, *dst;
-	register u_int nbytes;
+copywords(u_long *src, u_long *dst, u_int nbytes)
 {
 	u_long *limit = src + (nbytes / sizeof(u_long));
 
@@ -81,9 +80,8 @@ copywords(src, dst, nbytes)
 		*(u_short *)dst = *(u_short *)src;
 }
 
-kgdb_trap_glue(type, frame)
-	int type;
-	struct frame frame;
+int
+kgdb_trap_glue(int type, struct frame frame)
 {
 	u_long osp, nsp;
 	u_int fsize, s;
@@ -139,15 +137,15 @@ kgdb_trap_glue(type, frame)
 	 * unneeded usp (we trapped from kernel mode) and pad word,
 	 * and return to the trapped thread.
 	 */
-	asm("moveml sp@+,#0x7FFF; addql #8,sp; rte");
+	__asm("moveml %sp@+,#0x7FFF; addql #8,sp; rte");
 }
 
 int kgdb_testval;
 
-kgdb_test(i)
-	int i;
+int
+kgdb_test(int i)
 {
-        ++kgdb_testval;
-        return (i + 1);
+	++kgdb_testval;
+	return (i + 1);
 }
 #endif /* KGDB */

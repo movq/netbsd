@@ -1,18 +1,18 @@
-#	$NetBSD: Makefile,v 1.5 1999/06/21 01:19:37 cgd Exp $
+#	$NetBSD: Makefile,v 1.10 2001/12/12 00:05:13 tv Exp $
 
-PROG=	netstat
-SRCS=	if.c inet.c main.c mbuf.c route.c
+SRCDIR=		${.CURDIR}/../../../usr.bin/netstat
 
-SRCDIR= ${.CURDIR}/../../../usr.bin/netstat
-CPPFLAGS+= -DSMALL -I${SRCDIR}
-LDADD=	-lkvm
-DPADD=	${LIBKVM}
-MKMAN=	no
-BINOWN=	root
-BINMODE=4555
+PROG=		netstat
+NOMAN=		# defined
 
-all: ${PROG}
+SRCS=		if.c inet.c main.c mbuf.c route.c
+
+CPPFLAGS+=	-DSMALL -I${SRCDIR}
+DPADD=		${LIBKVM}
+LDADD=		-lkvm
 
 .include <bsd.prog.mk>
 
-.PATH:  ${SRCDIR}
+BINOWN=		root
+BINMODE=	4555
+.PATH:		${SRCDIR}

@@ -1,20 +1,13 @@
-# $NetBSD: md.macppc,v 1.5 2000/01/24 07:25:02 mycroft Exp $
-./usr/lkm/adosfs.o
-./usr/lkm/cd9660.o
-./usr/lkm/coda.o
-./usr/lkm/ext2fs.o
-./usr/lkm/fdesc.o
-./usr/lkm/if_ipl.o
-./usr/lkm/kernfs.o
-./usr/lkm/mfs.o
-./usr/lkm/msdosfs.o
-./usr/lkm/ntfs.o
-./usr/lkm/nullfs.o
-./usr/lkm/overlay.o
-./usr/lkm/portal.o
-./usr/lkm/procfs.o
-./usr/lkm/umapfs.o
-./usr/mdec/bootxx
-./usr/mdec/installboot
-./usr/mdec/ofwboot
-./usr/mdec/ofwboot.elf
+# $NetBSD: md.macppc,v 1.25 2006/09/29 19:03:11 macallan Exp $
+./sbin/pdisk					base-sysutil-root
+./usr/mdec/bootxx				base-sysutil-bin
+./usr/mdec/installboot				base-obsolete		obsolete
+./usr/mdec/mbr					base-sysutil-bin
+./usr/mdec/ofwboot				base-sysutil-bin
+./usr/mdec/ofwboot.elf				base-sysutil-bin
+./usr/mdec/ofwboot.xcf				base-sysutil-bin
+./usr/sbin/apm					base-sysutil-bin
+./usr/sbin/apmd					base-sysutil-bin
+./usr/sbin/zzz					base-sysutil-bin
+./usr/sbin/eeprom				base-sysutil-bin
+./usr/sbin/ofctl				base-sysutil-bin

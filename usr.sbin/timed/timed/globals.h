@@ -1,4 +1,4 @@
-/*	$NetBSD: globals.h,v 1.5 2000/01/21 17:08:39 mycroft Exp $	*/
+/*	$NetBSD: globals.h,v 1.11 2007/01/25 23:25:20 cbiere Exp $	*/
 
 /*-
  * Copyright (c) 1985 The Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,13 +31,10 @@
  *	@(#)globals.h	8.1 (Berkeley) 6/6/93
  */
 
-#ifdef sgi
-#ident "$Revision: 1.5 $"
-#endif
-
 #include <sys/param.h>
 #include <sys/time.h>
 #include <sys/socket.h>
+#include <sys/poll.h>
 
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -53,20 +46,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <syslog.h>
-#include <syslog.h>
 #include <unistd.h>
 
 #include <protocols/timed.h>
-#ifdef sgi
-#include <bstring.h>
-#include <sys/clock.h>
-/* use the constant HZ instead of the function CLK_TCK */
-#undef CLK_TCK
-#define CLK_TCK HZ
-#else
 #define	SECHR	(60*60)
 #define	SECDAY	(24*SECHR)
-#endif /* sgi */
 
 extern int sock;
 
@@ -142,7 +126,7 @@ extern struct hosttbl hosttbl[NHOSTS+1];
 struct netinfo {
 	struct	netinfo *next;
 	struct	in_addr net;
-	u_long	mask;
+	in_addr_t mask;
 	struct	in_addr my_addr;
 	struct	sockaddr_in dest_addr;	/* broadcast addr or point-point */
 	long	status;
@@ -174,8 +158,7 @@ extern int nnets;			/* nets I am connected to */
 
 #define trace_sendto_err(addr) {					\
 	int st_errno = errno;						\
-	syslog(LOG_ERR, "%s %d: sendto %s: %m",				\
-		__FILE__, __LINE__, inet_ntoa(addr));			\
+	syslog(LOG_ERR, "sendto %s: %m", inet_ntoa(addr));		\
 	if (trace)							\
 		fprintf(fd, "%s %d: sendto %s: %d", __FILE__, __LINE__,	\
 			inet_ntoa(addr), st_errno);			\

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.16 1999/08/02 05:36:05 erh Exp $
+#	$NetBSD: Makefile,v 1.31 2008/10/25 22:35:37 apb Exp $
 # Copyright (c) 1992,1991 Carnegie Mellon University
 # All Rights Reserved.
 # 
@@ -25,7 +25,7 @@
 # Makefile to build sup (the client side), supfilesrv (the repository
 # side, and supscan (used by the repository. If you only want to sup
 # files from CMU, just build sup.
-# The header files: c.h, libc.h and sysent.h are only
+# The header files: c.h and libc.h are only
 # necessary if you are compiling on a non-Mach system. Likewise the
 # files in libextra.a are normally found in libcs.a on a Mach system.
 # DOPRINT_VA is used by vprintf.c and should be defined if your version
@@ -46,22 +46,38 @@
 
 #SITE			= SUNOS
 #SITE			= SOLARIS
-SITE			= NETBSD
+#SITE			= NETBSD
+#SITE			= FREEBSD
 #SITE			= CMUCS
+SITE1			!= uname -s | tr '[a-z]' '[A-Z]' \
+			    | ${TOOL_SED} -e s/_.*//g
+SITE2			= $(shell uname -s | tr '[a-z]' '[A-Z]' \
+			    | ${TOOL_SED} -e s/_.*//g)
+SITE			= ${SITE1}${SITE2}
+TARDIR			= sup-0.3
 
-NETBSD_DEFINES		= -UMACH -DVAR_TMP -DHAS_DAEMON -DHAS_POSIX_DIR
-SOLARIS_DEFINES		= -UMACH -DVAR_TMP -DHAS_POSIX_DIR -DNEED_VSNPRINTF -DNEED_READ_LINE
+LINUX_DEFINES		= -UMACH -DVAR_TMP -DHAS_DAEMON -DHAS_POSIX_DIR \
+			  -DNEED_SETPROCTITLE
+NETBSD_DEFINES		= -UMACH -DVAR_TMP -DHAS_DAEMON -DHAS_POSIX_DIR \
+			    -DHAS_FPARSELN -DHAS_FGETLN -DHAS_VIS
+FREEBSD_DEFINES		= -UMACH -DVAR_TMP -DHAS_DAEMON -DHAS_POSIX_DIR \
+			    -DHAS_FPARSELN -DHAS_FGETLN -DHAS_VIS
+SOLARIS_DEFINES		= -UMACH -DVAR_TMP -DHAS_POSIX_DIR -DNEED_VSNPRINTF
 AFS_DEFINES		= -DAFS -I/usr/afsws/include
-OSF_DEFINES		= -UMACH -DOSF -D_BSD -noshrlib -g -DNEED_VSNPRINTF -DVAR_TMP -DNEED_READ_LINE
-SUNOS_DEFINES		= -UMACH -D_BSD -DNEED_VSNPRINTF -DVAR_TMP -DHAS_POSIX_DIR -DHAS_DAEMON -DNEED_DAEMON -DNEED_READ_LINE
-CMUCS_DEFINES		= -DMACH -DDOPRINT_VA -DNEED_VPRINTF -DNEED_READ_LINE
+OSF_DEFINES		= -UMACH -DOSF -D_BSD -noshrlib -g -DNEED_VSNPRINTF \
+			    -DVAR_TMP
+SUNOS_DEFINES		= -UMACH -D_BSD -DNEED_VSNPRINTF -DVAR_TMP \
+			    -DHAS_POSIX_DIR -DHAS_DAEMON -DNEED_DAEMON
+CYGWIN_DEFINES	= -UMACH -DVAR_TMP -DHAS_POSIX_DIR
+CMUCS_DEFINES		= -DMACH -DDOPRINT_VA -DNEED_VPRINTF
 NON_MACH_DEFINES	= -UMACH
 
 
 #INSTALLATION PARAMETERS
-NETBSD_BINDIR		= /usr/local/sbin
-NETBSD_MAN1		= /usr/local/man/man1
-NETBSD_MAN8		= /usr/local/man/man8
+PREFIX		       ?= /usr/local/
+NETBSD_BINDIR		= ${PREFIX}/sbin
+NETBSD_MAN1		= ${PREFIX}/man/man1
+NETBSD_MAN8		= ${PREFIX}/man/man8
 
 CFLAGS			= ${DEFS} -O -I.
 
@@ -69,8 +85,8 @@ SUPCL			= supcmain.o supcvers.o supcparse.o supcname.o \
 			  supcmisc.o supcmeat.o
 SUPS			= scm.o scmio.o stree.o log.o supmsg.o netcrypt.o
 EXTRA			= atoo.o errmsg.o expand.o ffilecopy.o filecopy.o \
-			  nxtarg.o path.o quit.o read_line.o run.o salloc.o \
-			  skipto.o vprintf.o
+			  nxtarg.o path.o quit.o read_line.o run.o estrdup.o \
+			  skipto.o vprintf.o setproctitle.o
 
 
 PROGRAMS		= sup supscan supfilesrv
@@ -80,7 +96,11 @@ MAN8			= supservers.8
 AFS_LIBPATH		= /usr/afs/lib
 AFS_LIBS		= -L${AFS_LIBPATH}/afs -lkauth -lprot -L${AFS_LIBPATH} -lubik -lauth -lrxkad -lsys -ldes -lrx -llwp -lcmd -lcom_err -lc ${AFS_LIBPATH}/afs/util.a
 
-NETBSD_LIBS		= -lcrypt -lutil
+NETBSD_LIBS		= -lcrypt
+FREEBSD_LIBS		= -lcrypt
+DRAGONFLY_LIBS		= -lcrypt
+LINUX_LIBS		= -lcrypt
+CYGWIN_LIBS		= -lcrypt
 CMUCS_LIBS		= -lsys
 OSF_LIBS		= -lbsd
 EXTRALIBS		= libextra.a
@@ -91,21 +111,21 @@ supscan_OFILES		= supscan.o stree.o scan.o
 SOLARIS_LIBS		= -lsocket -lnsl
 SUNOS_LIBS		= 
 
-.for i in ${SITE}
-DEFS			= -UCMUCS -UCMU  ${${i}_DEFINES}
-LIBS			= ${EXTRALIBS} ${${i}_LIBS}
-.endfor
+DEFS			= -UCMUCS -UCMU  ${${SITE}_DEFINES}
+#DEFS			+= -DDEFDIR=\"${PREFIX}/libdata/sup\"
+#DEFS			+= -DEE_XXX -DDEFSCAN=\"/var/\" -DDEFUSER=\"nobody\"
+LIBS			= ${EXTRALIBS}
 
 all: ${PROGRAMS}
 
 sup: ${sup_OFILES} ${LIBS}
-	${CC} ${CFLAGS} -o sup ${sup_OFILES} ${LIBS} ${LIBS}
+	${CC} ${CFLAGS} -o sup ${sup_OFILES} ${LIBS} ${${SITE}_LIBS}
 
 supfilesrv: ${supfilesrv_OFILES} ${supfilesrv_LIBS}
-	${CC} ${CFLAGS} -o supfilesrv ${supfilesrv_OFILES} ${supfilesrv_LIBS} ${LIBS}
+	${CC} ${CFLAGS} -o supfilesrv ${supfilesrv_OFILES} ${supfilesrv_LIBS} ${LIBS} ${${SITE}_LIBS}
 
 supscan:  ${supscan_OFILES} ${LIBS}
-	${CC} ${CFLAGS} -o supscan ${supscan_OFILES} ${LIBS}
+	${CC} ${CFLAGS} -o supscan ${supscan_OFILES} ${LIBS} ${${SITE}_LIBS}
 
 libextra.a: ${EXTRA}
 	ar r libextra.a $?
@@ -122,6 +142,13 @@ install: ${PROGRAMS}
 netcrypt.c:
 	@echo "[ Using netcryptvoid.c ]"
 	cp netcryptvoid.c netcrypt.c
+
+tar:
+	mkdir ${TARDIR} ${TARDIR}/sys
+	cp -p *.[ch18] Makefile ${TARDIR}
+	cp -p sys/*.h ${TARDIR}/sys
+	tar -czf ${TARDIR}.tar.gz ${TARDIR}
+	rm -fr ${TARDIR}
 
 read_line.o: supextern.h
 scan.o:	sup.h

@@ -15,22 +15,23 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBM_SCCS) && !defined(lint)
-__RCSID("$NetBSD: w_sinhf.c,v 1.5 1999/07/02 15:37:45 simonb Exp $");
+__RCSID("$NetBSD: w_sinhf.c,v 1.7 2007/08/20 16:01:40 drochner Exp $");
 #endif
 
 /*
  * wrapper sinhf(x)
  */
 
+#include "namespace.h"
 #include "math.h"
 #include "math_private.h"
 
-#ifdef __STDC__
-	float sinhf(float x)		/* wrapper sinhf */
-#else
-	float sinhf(x)			/* wrapper sinhf */
-	float x;
+#ifdef __weak_alias
+__weak_alias(sinhf, _sinhf)
 #endif
+
+float
+sinhf(float x)		/* wrapper sinhf */
 {
 #ifdef _IEEE_LIBM
 	return __ieee754_sinhf(x);

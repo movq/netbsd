@@ -1,4 +1,4 @@
-/*	$NetBSD: leds.c,v 1.5 1998/02/05 04:57:38 gwr Exp $	*/
+/*	$NetBSD: leds.c,v 1.13 2008/04/28 20:23:38 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,6 +37,9 @@
  * array in which some pattern is animated.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: leds.c,v 1.13 2008/04/28 20:23:38 martin Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
@@ -51,6 +47,8 @@
 #include <sys/buf.h>
 #include <sys/malloc.h>
 #include <sys/proc.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <machine/autoconf.h>
 #include <machine/idprom.h>
@@ -62,7 +60,7 @@
 #endif
 #ifdef	_SUN3X_
 #include <sun3/sun3x/obio.h>
-static volatile u_int8_t *diagreg;
+static volatile uint8_t *diagreg;
 #endif
 
 static u_char led_countdown = 0;
@@ -88,13 +86,15 @@ static struct led_patterns ledpat = {
  * This is called early during startup to find the
  * diag register (LEDs) and turn on the light(s).
  */
-void
-leds_init()
+void 
+leds_init(void)
 {
-
 #ifdef	_SUN3X_
-	diagreg = obio_find_mapping(OBIO_DIAGREG, 1);
-	if (cpu_machine_id == SUN3X_MACH_80)
+	vaddr_t va;
+
+	find_prom_map(OBIO_DIAGREG, PMAP_OBIO, 1, &va);
+	diagreg = (void *)va;
+	if (cpu_machine_id == ID_SUN3X_80)
 		ledpat.patlen = 1;
 #endif	/* SUN3X */
 
@@ -105,10 +105,10 @@ leds_init()
 /*
  * This is called by the clock interrupt.
  */
-void
-leds_intr()
+void 
+leds_intr(void)
 {
-	register u_char i;
+	u_char i;
 
 	if (led_countdown) {
 		led_countdown--;
@@ -138,7 +138,7 @@ leds_uio(struct uio *uio)
 {
 	int cnt, error;
 	int off;	/* NOT off_t */
-	caddr_t va;
+	void *va;
 
 	off = uio->uio_offset;
 	if ((off < 0) || (off > sizeof(ledpat)))

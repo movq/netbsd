@@ -1,4 +1,4 @@
-/*	$NetBSD: ppi.c,v 1.18 2000/03/23 06:37:24 thorpej Exp $	*/
+/*	$NetBSD: ppi.c,v 1.42 2008/06/18 12:25:13 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -48,11 +41,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -75,6 +64,9 @@
  * Printer/Plotter HPIB interface
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ppi.c,v 1.42 2008/06/18 12:25:13 tsutsui Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/callout.h>
@@ -89,8 +81,10 @@
 
 #include <hp300/dev/ppiioctl.h>
 
+#include "ioconf.h"
+
 struct	ppi_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	int	sc_flags;
 	struct	hpibqueue sc_hq;	/* HP-IB job queue entry */
 	struct	ppiparam sc_param;
@@ -104,31 +98,36 @@ struct	ppi_softc {
 };
 
 /* sc_flags values */
-#define	PPIF_ALIVE	0x01	
-#define	PPIF_OPEN	0x02	
+#define PPIF_ALIVE	0x01
+#define PPIF_OPEN	0x02
 #define PPIF_UIO	0x04
 #define PPIF_TIMO	0x08
 #define PPIF_DELAY	0x10
 
-int	ppimatch __P((struct device *, struct cfdata *, void *));
-void	ppiattach __P((struct device *, struct device *, void *));
+static int	ppimatch(device_t, cfdata_t, void *);
+static void	ppiattach(device_t, device_t, void *);
 
-struct cfattach ppi_ca = {
-	sizeof(struct ppi_softc), ppimatch, ppiattach
+CFATTACH_DECL_NEW(ppi, sizeof(struct ppi_softc),
+    ppimatch, ppiattach, NULL, NULL);
+
+static dev_type_open(ppiopen);
+static dev_type_close(ppiclose);
+static dev_type_read(ppiread);
+static dev_type_write(ppiwrite);
+static dev_type_ioctl(ppiioctl);
+
+const struct cdevsw ppi_cdevsw = {
+	ppiopen, ppiclose, ppiread, ppiwrite, ppiioctl,
+	nostop, notty, nopoll, nommap, nokqfilter,
 };
 
-extern struct cfdriver ppi_cd;
+static void	ppistart(void *);
+static void	ppinoop(void *);
 
-void	ppistart __P((void *));
-void	ppinoop __P((void *));
-
-void	ppitimo __P((void *));
-int	ppirw __P((dev_t, struct uio *));
-int	ppihztoms __P((int));
-int	ppimstohz __P((int));
-
-bdev_decl(ppi);
-cdev_decl(ppi);
+static void	ppitimo(void *);
+static int	ppirw(dev_t, struct uio *);
+static int	ppihztoms(int);
+static int	ppimstohz(int);
 
 #define UNIT(x)		minor(x)
 
@@ -139,11 +138,8 @@ int	ppidebug = 0x80;
 #define PDB_NOCHECK	0x80
 #endif
 
-int
-ppimatch(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+static int
+ppimatch(device_t parent, cfdata_t cf, void *aux)
 {
 	struct hpibbus_attach_args *ha = aux;
 
@@ -153,33 +149,32 @@ ppimatch(parent, match, aux)
 	 * device by mistake.
 	 */
 	if (ha->ha_id & 0x200)
-		return (0);
+		return 0;
 
 	/*
 	 * To prevent matching all unused slots on the bus, we
 	 * don't allow wildcarded locators.
 	 */
-	if (match->hpibbuscf_slave == HPIBBUSCF_SLAVE_DEFAULT ||
-	    match->hpibbuscf_punit == HPIBBUSCF_PUNIT_DEFAULT)
-		return (0);
+	if (cf->hpibbuscf_slave == HPIBBUSCF_SLAVE_DEFAULT ||
+	    cf->hpibbuscf_punit == HPIBBUSCF_PUNIT_DEFAULT)
+		return 0;
 
-	return (1);
+	return 1;
 }
 
-void
-ppiattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+static void
+ppiattach(device_t parent, device_t self, void *aux)
 {
-	struct ppi_softc *sc = (struct ppi_softc *)self;
+	struct ppi_softc *sc = device_private(self);
 	struct hpibbus_attach_args *ha = aux;
 
-	printf("\n");
+	sc->sc_dev = self;
+	aprint_normal("\n");
 
 	sc->sc_slave = ha->ha_slave;
 
-	callout_init(&sc->sc_timo_ch);
-	callout_init(&sc->sc_start_ch);
+	callout_init(&sc->sc_timo_ch, 0);
+	callout_init(&sc->sc_start_ch, 0);
 
 	/* Initialize the hpib queue entry. */
 	sc->sc_hq.hq_softc = sc;
@@ -191,26 +186,23 @@ ppiattach(parent, self, aux)
 	sc->sc_flags = PPIF_ALIVE;
 }
 
-void
-ppinoop(arg)
-	void *arg;
+static void
+ppinoop(void *arg)
 {
 	/* Noop! */
 }
 
 int
-ppiopen(dev, flags, fmt, p)
-	dev_t dev;
-	int flags, fmt;
-	struct proc *p;
+ppiopen(dev_t dev, int flags, int fmt, struct lwp *l)
 {
-	int unit = UNIT(dev);
 	struct ppi_softc *sc;
 
-	if (unit >= ppi_cd.cd_ndevs ||
-	    (sc = ppi_cd.cd_devs[unit]) == NULL ||
-	    (sc->sc_flags & PPIF_ALIVE) == 0)
-		return (ENXIO);
+	sc = device_lookup_private(&ppi_cd,UNIT(dev));
+	if (sc == NULL)
+		return ENXIO;
+
+	if ((sc->sc_flags & PPIF_ALIVE) == 0)
+		return ENXIO;
 
 #ifdef DEBUG
 	if (ppidebug & PDB_FOLLOW)
@@ -218,23 +210,19 @@ ppiopen(dev, flags, fmt, p)
 		       dev, flags, sc->sc_flags);
 #endif
 	if (sc->sc_flags & PPIF_OPEN)
-		return (EBUSY);
+		return EBUSY;
 	sc->sc_flags |= PPIF_OPEN;
 	sc->sc_burst = PPI_BURST;
 	sc->sc_timo = ppimstohz(PPI_TIMO);
 	sc->sc_delay = ppimstohz(PPI_DELAY);
 	sc->sc_sec = -1;
-	return(0);
+	return 0;
 }
 
-int
-ppiclose(dev, flags, fmt, p)
-	dev_t dev;
-	int flags, fmt;
-	struct proc *p;
+static int
+ppiclose(dev_t dev, int flags, int fmt, struct lwp *l)
 {
-	int unit = UNIT(dev);
-	struct ppi_softc *sc = ppi_cd.cd_devs[unit];
+	struct ppi_softc *sc = device_lookup_private(&ppi_cd, UNIT(dev));
 
 #ifdef DEBUG
 	if (ppidebug & PDB_FOLLOW)
@@ -242,82 +230,71 @@ ppiclose(dev, flags, fmt, p)
 		       dev, flags, sc->sc_flags);
 #endif
 	sc->sc_flags &= ~PPIF_OPEN;
-	return(0);
+	return 0;
 }
 
-void
-ppistart(arg)
-	void *arg;
+static void
+ppistart(void *arg)
 {
 	struct ppi_softc *sc = arg;
 
 #ifdef DEBUG
 	if (ppidebug & PDB_FOLLOW)
-		printf("ppistart(%x)\n", sc->sc_dev.dv_unit);
+		printf("ppistart(%x)\n", device_unit(sc->sc_dev));
 #endif
 	sc->sc_flags &= ~PPIF_DELAY;
 	wakeup(sc);
 }
 
-void
-ppitimo(arg)
-	void *arg;
+static void
+ppitimo(void *arg)
 {
 	struct ppi_softc *sc = arg;
 
 #ifdef DEBUG
 	if (ppidebug & PDB_FOLLOW)
-		printf("ppitimo(%x)\n", sc->sc_dev.dv_unit);
+		printf("ppitimo(%x)\n", device_unit(sc->sc_dev));
 #endif
 	sc->sc_flags &= ~(PPIF_UIO|PPIF_TIMO);
 	wakeup(sc);
 }
 
-int
-ppiread(dev, uio, flags)
-	dev_t dev;
-	struct uio *uio;
-	int flags;
+static int
+ppiread(dev_t dev, struct uio *uio, int flags)
 {
 
 #ifdef DEBUG
 	if (ppidebug & PDB_FOLLOW)
 		printf("ppiread(%x, %p)\n", dev, uio);
 #endif
-	return (ppirw(dev, uio));
+	return ppirw(dev, uio);
 }
 
-int
-ppiwrite(dev, uio, flags)
-	dev_t dev;
-	struct uio *uio;
-	int flags;
+static int
+ppiwrite(dev_t dev, struct uio *uio, int flags)
 {
 
 #ifdef DEBUG
 	if (ppidebug & PDB_FOLLOW)
 		printf("ppiwrite(%x, %p)\n", dev, uio);
 #endif
-	return (ppirw(dev, uio));
+	return ppirw(dev, uio);
 }
 
-int
-ppirw(dev, uio)
-	dev_t dev;
-	struct uio *uio;
+static int
+ppirw(dev_t dev, struct uio *uio)
 {
-	int unit = UNIT(dev);
-	struct ppi_softc *sc = ppi_cd.cd_devs[unit];
-	int s, len, cnt;
+	struct ppi_softc *sc = device_lookup_private(&ppi_cd, UNIT(dev));
+	int s, s2, len, cnt;
 	char *cp;
 	int error = 0, gotdata = 0;
 	int buflen, ctlr, slave;
 	char *buf;
 
 	if (uio->uio_resid == 0)
-		return(0);
+		return 0;
 
-	ctlr = sc->sc_dev.dv_parent->dv_unit;
+	ctlr = device_unit(device_parent(sc->sc_dev));
 	slave = sc->sc_slave;
 
 #ifdef DEBUG
@@ -343,14 +320,15 @@ ppirw(dev, uio)
 				break;
 		}
 again:
-		s = splbio();
+		s = splsoftclock();
+		s2 = splbio();
 		if ((sc->sc_flags & PPIF_UIO) &&
-		    hpibreq(sc->sc_dev.dv_parent, &sc->sc_hq) == 0)
-			sleep(sc, PRIBIO+1);
+		    hpibreq(device_parent(sc->sc_dev), &sc->sc_hq) == 0)
+			(void) tsleep(sc, PRIBIO + 1, "ppirw", 0);
 		/*
 		 * Check if we timed out during sleep or uiomove
 		 */
-		(void) spllowersoftclock();
+		splx(s2);
 		if ((sc->sc_flags & PPIF_UIO) == 0) {
 #ifdef DEBUG
 			if (ppidebug & PDB_IO)
@@ -373,7 +351,7 @@ again:
 		else
 			cnt = hpibrecv(ctlr, slave, sc->sc_sec, cp, len);
 		s = splbio();
-		hpibfree(sc->sc_dev.dv_parent, &sc->sc_hq);
+		hpibfree(device_parent(sc->sc_dev), &sc->sc_hq);
 #ifdef DEBUG
 		if (ppidebug & PDB_IO)
 			printf("ppirw: %s(%d, %d, %x, %p, %d) -> %d\n",
@@ -458,18 +436,13 @@ again:
 	if (ppidebug & (PDB_FOLLOW|PDB_IO))
 		printf("ppirw: return %d, resid %d\n", error, uio->uio_resid);
 #endif
-	return (error);
+	return error;
 }
 
-int
-ppiioctl(dev, cmd, data, flag, p)
-	dev_t dev;
-	u_long cmd;
-	caddr_t data;
-	int flag;
-	struct proc *p;
+static int
+ppiioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
-	struct ppi_softc *sc = ppi_cd.cd_devs[UNIT(dev)];
+	struct ppi_softc *sc = device_lookup_private(&ppi_cd,UNIT(dev));
 	struct ppiparam *pp, *upp;
 	int error = 0;
 
@@ -486,7 +459,7 @@ ppiioctl(dev, cmd, data, flag, p)
 		upp = (struct ppiparam *)data;
 		if (upp->burst < PPI_BURST_MIN || upp->burst > PPI_BURST_MAX ||
 		    upp->delay < PPI_DELAY_MIN || upp->delay > PPI_DELAY_MAX)
-			return(EINVAL);
+			return EINVAL;
 		pp->burst = upp->burst;
 		pp->timo = ppimstohz(upp->timo);
 		pp->delay = ppimstohz(upp->delay);
@@ -495,26 +468,24 @@ ppiioctl(dev, cmd, data, flag, p)
 		sc->sc_sec = *(int *)data;
 		break;
 	default:
-		return(EINVAL);
+		return EINVAL;
 	}
-	return (error);
+	return error;
 }
 
-int
-ppihztoms(h)
-	int h;
+static int
+ppihztoms(int h)
 {
 	extern int hz;
 	int m = h;
 
 	if (m > 0)
 		m = m * 1000 / hz;
-	return(m);
+	return m;
 }
 
-int
-ppimstohz(m)
-	int m;
+static int
+ppimstohz(int m)
 {
 	extern int hz;
 	int h = m;
@@ -524,5 +495,5 @@ ppimstohz(m)
 		if (h == 0)
 			h = 1000 / hz;
 	}
-	return(h);
+	return h;
 }

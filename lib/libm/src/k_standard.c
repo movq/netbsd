@@ -12,7 +12,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBM_SCCS) && !defined(lint)
-__RCSID("$NetBSD: k_standard.c,v 1.8 1999/07/02 15:37:41 simonb Exp $");
+__RCSID("$NetBSD: k_standard.c,v 1.12 2005/07/21 16:58:39 christos Exp $");
 #endif
 
 #include "math.h"
@@ -28,11 +28,7 @@ __RCSID("$NetBSD: k_standard.c,v 1.8 1999/07/02 15:37:41 simonb Exp $");
 #undef fflush
 #endif	/* !defined(_USE_WRITE) */
 
-#ifdef __STDC__
 static const double zero = 0.0;	/* used as const */
-#else
-static double zero = 0.0;	/* used as const */
-#endif
 
 /*
  * Standard conformance (non-IEEE) on exception cases.
@@ -79,15 +75,13 @@ static double zero = 0.0;	/* used as const */
  *	40-- gamma(finite) overflow
  *	41-- gamma(-integer)
  *	42-- pow(NaN,0.0)
+ *	48-- log2(0)
+ *	49-- log2(x<0)
  */
 
 
-#ifdef __STDC__
-	double __kernel_standard(double x, double y, int type)
-#else
-	double __kernel_standard(x,y,type)
-	double x,y; int type;
-#endif
+double
+__kernel_standard(double x, double y, int type)
 {
 	struct exception exc;
 #ifndef HUGE_VAL	/* this is the only routine that uses HUGE_VAL */
@@ -776,6 +770,42 @@ static double zero = 0.0;	/* used as const */
 		    _LIB_VERSION == _POSIX_) exc.retval = 1.0;
 		else if (!matherr(&exc)) {
 			errno = EDOM;
+		}
+		break;
+	    case 48:
+	    case 148:
+		/* log2(0) */
+		exc.type = SING;
+		exc.name = type < 100 ? "log2" : "log2f";
+		if (_LIB_VERSION == _SVID_)
+		  exc.retval = -HUGE;
+		else
+		  exc.retval = -HUGE_VAL;
+		if (_LIB_VERSION == _POSIX_)
+		  errno = ERANGE;
+		else if (!matherr(&exc)) {
+		  if (_LIB_VERSION == _SVID_) {
+			(void) WRITE2("log2: SING error\n", 18);
+		      }
+		  errno = EDOM;
+		}
+		break;
+	    case 49:
+	    case 149:
+		/* log2(x<0) */
+		exc.type = DOMAIN;
+		exc.name = type < 100 ? "log2" : "log2f";
+		if (_LIB_VERSION == _SVID_)
+		  exc.retval = -HUGE;
+		else
+		  exc.retval = -HUGE_VAL;
+		if (_LIB_VERSION == _POSIX_)
+		  errno = EDOM;
+		else if (!matherr(&exc)) {
+		  if (_LIB_VERSION == _SVID_) {
+			(void) WRITE2("log2: DOMAIN error\n", 20);
+		      }
+		  errno = EDOM;
 		}
 		break;
 	}

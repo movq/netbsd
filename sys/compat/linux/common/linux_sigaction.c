@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_sigaction.c,v 1.19 2000/03/30 11:27:17 augustss Exp $	*/
+/*	$NetBSD: linux_sigaction.c,v 1.34 2008/10/17 20:21:34 njoly Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,6 +33,9 @@
  * heavily from: svr4_signal.c,v 1.7 1995/01/09 01:04:21 christos Exp
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: linux_sigaction.c,v 1.34 2008/10/17 20:21:34 njoly Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
@@ -54,27 +50,26 @@
 #include <compat/linux/common/linux_types.h>
 #include <compat/linux/common/linux_signal.h>
 #include <compat/linux/common/linux_util.h>
+#include <compat/linux/common/linux_ipc.h>
+#include <compat/linux/common/linux_sem.h>
 
 #include <compat/linux/linux_syscallargs.h>
 
 /* Used on: alpha (aka osf_sigaction), arm, i386, m68k, mips, ppc */
-/* Not used on: sparc, sparc64 */
+/* Not used on: sparc, sparc64, amd64 */
 
 /*
  * The Linux sigaction() system call. Do the usual conversions,
  * and just call sigaction().
  */
 int
-linux_sys_sigaction(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+linux_sys_sigaction(struct lwp *l, const struct linux_sys_sigaction_args *uap, register_t *retval)
 {
-	struct linux_sys_sigaction_args /* {
+	/* {
 		syscallarg(int) signum;
 		syscallarg(const struct linux_old_sigaction *) nsa;
 		syscallarg(struct linux_old_sigaction *) osa;
-	} */ *uap = v;
+	} */
 	struct linux_old_sigaction nlsa, olsa;
 	struct sigaction nbsa, obsa;
 	int error, sig;
@@ -86,17 +81,25 @@ linux_sys_sigaction(p, v, retval)
 		error = copyin(SCARG(uap, nsa), &nlsa, sizeof(nlsa));
 		if (error)
 			return (error);
-		linux_old_to_native_sigaction(&nlsa, &nbsa);
+		linux_old_to_native_sigaction(&nbsa, &nlsa);
 	}
 	sig = SCARG(uap, signum);
 	if (sig < 0 || sig >= LINUX__NSIG)
 		return (EINVAL);
-	error = sigaction1(p, linux_to_native_sig[sig],
-	    SCARG(uap, nsa) ? &nbsa : 0, SCARG(uap, osa) ? &obsa : 0);
-	if (error)
-		return (error);
+	if (sig > 0 && !linux_to_native_signo[sig]) {
+		/* Pretend that we did something useful for unknown signals. */
+		obsa.sa_handler = SIG_IGN;
+		sigemptyset(&obsa.sa_mask);
+		obsa.sa_flags = 0;
+	} else {
+		error = sigaction1(l, linux_to_native_signo[sig],
+		    SCARG(uap, nsa) ? &nbsa : 0, SCARG(uap, osa) ? &obsa : 0,
+		    NULL, 0);
+		if (error)
+			return (error);
+	}
 	if (SCARG(uap, osa)) {
-		native_to_linux_old_sigaction(&obsa, &olsa);
+		native_to_linux_old_sigaction(&olsa, &obsa);
 		error = copyout(&olsa, SCARG(uap, osa), sizeof(olsa));
 		if (error)
 			return (error);

@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.h,v 1.6 2000/01/23 21:01:55 soda Exp $	*/
+/*	$NetBSD: autoconf.h,v 1.13 2006/06/25 16:46:15 tsutsui Exp $	*/
 /*	$OpenBSD: autoconf.h,v 1.2 1997/03/12 19:16:54 pefo Exp $	*/
 /*	NetBSD: autoconf.h,v 1.1 1995/02/13 23:07:31 cgd Exp 	*/
 
@@ -30,7 +30,7 @@
  */
 
 /*
- * Machine-dependent structures of autoconfiguration
+ * Machine-dependent structures for autoconfiguration
  */
 
 #ifndef _ARC_AUTOCONF_H_
@@ -38,46 +38,20 @@
 
 struct confargs;
 
-typedef int (*intr_handler_t) __P((void *));
-
-struct abus {
-	struct	device *ab_dv;		/* back-pointer to device */
-	int	ab_type;		/* bus type (see below) */
-	void	(*ab_intr_establish)	/* bus's set-handler function */
-		    __P((struct confargs *, intr_handler_t, void *));
-	void	(*ab_intr_disestablish)	/* bus's unset-handler function */
-		    __P((struct confargs *));
-	caddr_t	(*ab_cvtaddr)		/* convert slot/offset to address */
-		    __P((struct confargs *));
-	int	(*ab_matchname)		/* see if name matches driver */
-		    __P((struct confargs *, char *));
-};
-
-#define	BUS_MAIN	1		/* mainbus */
-#define	BUS_PICA	2		/* PICA Bus */
-#define	BUS_ISABR	3		/* ISA Bridge Bus */
-#define	BUS_ALGOR	4		/* Algorithmics local bus */
-#define	BUS_PCIBR	5		/* Algorithmics PCI bridge */
-
-#define	BUS_INTR_ESTABLISH(ca, handler, val)				\
-	    (*(ca)->ca_bus->ab_intr_establish)((ca), (handler), (val))
-#define	BUS_INTR_DISESTABLISH(ca)					\
-	    (*(ca)->ca_bus->ab_intr_establish)(ca)
-#define	BUS_CVTADDR(ca)							\
-	    (*(ca)->ca_bus->ab_cvtaddr)(ca)
-#define	BUS_MATCHNAME(ca, name)						\
-	    (*(ca)->ca_bus->ab_matchname)((ca), (name))
+typedef int (*intr_handler_t)(void *);
 
 struct confargs {
-	char	*ca_name;		/* Device name. */
+	const char *ca_name;		/* Device name. */
 	int	ca_slot;		/* Device slot. */
 	int	ca_offset;		/* Offset into slot. */
-	struct	abus *ca_bus;		/* bus device resides on. */
 };
 
-void	set_clockintr __P((void (*)(struct clockframe *)));
-void	set_iointr __P((void (*)(void *, int)));
+void	makebootdev(const char *cp);
 
-void	initcpu __P((void));
-void	makebootdev __P((char *cp));
+/* serial console related variables */
+extern int com_freq;
+extern int com_console;
+extern int com_console_address;
+extern int com_console_speed;
+extern int com_console_mode;
 #endif /* _ARC_AUTOCONF_H_ */

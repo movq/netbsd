@@ -1,6 +1,6 @@
-.\"	$NetBSD: setregid.2,v 1.11 1999/12/02 21:42:39 kleink Exp $
+.\"	$NetBSD: setregid.2,v 1.23 2008/05/02 18:11:05 martin Exp $
 .\"
-.\" Copyright (c) 1998 The NetBSD Foundation, Inc.
+.\" Copyright (c) 1998, 2000, 2001 The NetBSD Foundation, Inc.
 .\" All rights reserved.
 .\"
 .\" This code is derived from software contributed to The NetBSD Foundation
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -46,11 +39,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -68,7 +57,7 @@
 .\"
 .\"     from: @(#)setregid.2	6.4 (Berkeley) 3/10/91
 .\"
-.Dd June 23, 1996
+.Dd January 5, 2001
 .Dt SETREGID 2
 .Os
 .Sh NAME
@@ -77,33 +66,41 @@
 .Sh LIBRARY
 .Lb libc
 .Sh SYNOPSIS
-.Fd #include <unistd.h>
+.In unistd.h
 .Ft int
 .Fn setregid "gid_t rgid" "gid_t egid"
 .Sh DESCRIPTION
+.Bf -symbolic
+This interface is made obsolete by the saved ID functionality in
+.Xr setgid 2
+and
+.Xr setegid 2 .
+.Ef
+.Pp
 The real and effective group ID's of the
-current process are set according to the arguments.  If the real group ID
-is changed, the saved group ID is changed to the new value of the effective
-group ID.
+current process are set according to the arguments.
+If the real group ID is changed, the saved group ID is changed to the
+new value of the effective group ID.
 .Pp
 If
 .Fa rgid
 or
 .Fa egid
-is -1, the current gid is filled in by the system.
+is \-1, the current gid is filled in by the system.
 Unprivileged users may change the real group
 ID to the effective group ID, and may change the effective group ID to the
 real group ID or the saved group ID; only the super-user may
 make other changes.
 .Pp
-The 
+The
 .Fn setregid
 function has been used to swap the real and effective group
 IDs in set-group-ID programs to temporarily relinquish the set-group-ID
-value.  This purpose is now better served by the use of the
+value.
+This purpose is now better served by the use of the
 .Fn setegid
 function (see
-.Xr setuid 2 ).
+.Xr setgid 2 ) .
 .Pp
 When setting the real and effective group IDs to the same value, this
 function is equivalent to the
@@ -114,8 +111,8 @@ the
 .Fn setegid
 function.
 .Sh RETURN VALUES
-Upon successful completion, a value of 0 is returned.  Otherwise,
-a value of -1 is returned and
+Upon successful completion, a value of 0 is returned.
+Otherwise, a value of \-1 is returned and
 .Va errno
 is set to indicate the error.
 .Sh ERRORS
@@ -134,11 +131,11 @@ was specified.
 The
 .Fn setregid
 function call appeared in
-.Bx 4.2
-and was dropped in
+.Bx 4.2 .
+An incompatible version was implemented in
 .Bx 4.4 .
 It was reimplemented in
 .Nx 1.2
 in a way compatible with
 .Bx 4.3 ,
-SunOS and Linux.
+SunOS and Linux, but should not be used in new code.

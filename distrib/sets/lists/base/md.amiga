@@ -1,15 +1,19 @@
-# $NetBSD: md.amiga,v 1.43 1999/05/18 23:18:17 tron Exp $
-./dev/mouse
-./sbin/binpatch
-./usr/mdec/installboot
-./usr/mdec/xxboot
-./usr/mdec/fdboot
-./usr/sbin/grfconfig
-./usr/sbin/iteconfig
-./usr/sbin/loadkmap
-./usr/sbin/videomode
-./usr/share/keymaps/amiga/din.map
-./usr/share/keymaps/amiga/es.map
-./usr/share/keymaps/amiga/fr.map
-./usr/share/keymaps/amiga/sw.map
-./usr/share/keymaps/amiga/us.map
+# $NetBSD: md.amiga,v 1.52 2004/01/11 10:24:58 lukem Exp $
+./sbin/binpatch					base-sysutil-root
+./usr/mdec/boot.amiga				base-sysutil-bin
+./usr/mdec/bootxx_fd				base-sysutil-bin
+./usr/mdec/bootxx_ffs				base-sysutil-bin
+./usr/mdec/fdboot				base-obsolete		obsolete
+./usr/mdec/installboot				base-obsolete		obsolete
+./usr/mdec/xxboot				base-obsolete		obsolete
+./usr/sbin/grfconfig				base-sysutil-bin
+./usr/sbin/iteconfig				base-sysutil-bin
+./usr/sbin/loadkmap				base-sysutil-bin
+./usr/sbin/videomode				base-sysutil-bin
+./usr/share/keymaps/amiga/din.map		base-sys-share
+./usr/share/keymaps/amiga/es.map		base-sys-share
+./usr/share/keymaps/amiga/fr.map		base-sys-share
+./usr/share/keymaps/amiga/pl_din.map		base-sys-share
+./usr/share/keymaps/amiga/pl_us.map		base-sys-share
+./usr/share/keymaps/amiga/sw.map		base-sys-share
+./usr/share/keymaps/amiga/us.map		base-sys-share

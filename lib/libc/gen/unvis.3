@@ -1,4 +1,4 @@
-.\"	$NetBSD: unvis.3,v 1.9 1998/04/28 20:11:36 fair Exp $
+.\"	$NetBSD: unvis.3,v 1.17 2005/11/10 17:23:26 christos Exp $
 .\"
 .\" Copyright (c) 1989, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -33,7 +29,7 @@
 .\"
 .\"     @(#)unvis.3	8.2 (Berkeley) 12/11/93
 .\"
-.Dd December 11, 1993
+.Dd November 11, 2005
 .Dt UNVIS 3
 .Os
 .Sh NAME
@@ -43,16 +39,19 @@
 .Sh LIBRARY
 .Lb libc
 .Sh SYNOPSIS
-.Fd #include <vis.h>
+.In vis.h
 .Ft int
-.Fn unvis "char *cp" "char c" "int *astate" "int flag"
+.Fn unvis "char *cp" "int c" "int *astate" "int flag"
 .Ft int
-.Fn strunvis "char *dst" "char *src"
+.Fn strunvis "char *dst" "const char *src"
+.Ft int
+.Fn strunvisx "char *dst" "const char *src" "int flag"
 .Sh DESCRIPTION
 The
-.Fn unvis
-and
+.Fn unvis ,
 .Fn strunvis
+and
+.Fn strunvisx
 functions
 are used to decode a visual representation of characters, as produced
 by the
@@ -92,6 +91,17 @@ should be equal to the size of
 (that is, no expansion takes place during decoding).
 .Pp
 The
+.Fn strunvisx
+function does the same as the
+.Fn strunvis
+function,
+but it allows you to add a flag that specifies the style the string
+.Ar src
+is encoded with.
+Currently, the only supported flag is
+.Dv VIS_HTTPSTYLE .
+.Pp
+The
 .Fn unvis
 function implements a state machine that can be used to decode an
 arbitrary stream of bytes.
@@ -111,7 +121,7 @@ They are:
 .Bl -tag -width UNVIS_VALIDPUSH
 .It Li \&0 (zero)
 Another character is necessary; nothing has been recognized yet.
-.It Dv UNVIS_VALID	
+.It Dv UNVIS_VALID
 A valid character has been recognized and is available at the location
 pointed to by cp.
 .It Dv UNVIS_VALIDPUSH
@@ -132,6 +142,14 @@ one more time with flag set to
 .Dv UNVIS_END
 to extract any remaining character (the character passed in is ignored).
 .Pp
+The
+.Ar flag
+argument is also used to specify the encoding style of the source.
+If set to
+.Dv VIS_HTTPSTYLE ,
+.Fn unvis
+will decode URI strings as specified in RFC 1808.
+.Pp
 The following code fragment illustrates a proper use of
 .Fn unvis .
 .Bd -literal -offset indent
@@ -140,28 +158,32 @@ char out;
 
 while ((ch = getchar()) != EOF) {
 again:
-	switch(unvis(&out, ch, &state, 0)) {
+	switch(unvis(\*[Am]out, ch, \*[Am]state, 0)) {
 	case 0:
 	case UNVIS_NOCHAR:
 		break;
 	case UNVIS_VALID:
-		(void) putchar(out);
+		(void)putchar(out);
 		break;
 	case UNVIS_VALIDPUSH:
-		(void) putchar(out);
+		(void)putchar(out);
 		goto again;
 	case UNVIS_SYNBAD:
-		(void)fprintf(stderr, "bad sequence!\n");
-	exit(1);
+		errx(EXIT_FAILURE, "Bad character sequence!");
 	}
 }
-if (unvis(&out, (char)0, &state, UNVIS_END) == UNVIS_VALID)
-	(void) putchar(out);
+if (unvis(\*[Am]out, '\e0', \*[Am]state, UNVIS_END) == UNVIS_VALID)
+	(void)putchar(out);
 .Ed
 .Sh SEE ALSO
-.Xr vis 1 ,
 .Xr unvis 1 ,
+.Xr vis 1 ,
 .Xr vis 3
+.Rs
+.%A R. Fielding
+.%T Relative Uniform Resource Locators
+.%O RFC1808
+.Re
 .Sh HISTORY
 The
 .Fn unvis

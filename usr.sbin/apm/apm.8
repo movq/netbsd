@@ -1,4 +1,4 @@
-.\"	$NetBSD: apm.8,v 1.13 2000/02/05 11:52:37 enami Exp $
+.\"	$NetBSD: apm.8,v 1.19 2008/09/25 22:44:51 reed Exp $
 .\"
 .\" Copyright (c) 1996 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -14,18 +14,11 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
 .\" TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-.\" PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS 
+.\" PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
 .\" BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
 .\" CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
 .\" SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
@@ -42,8 +35,8 @@
 .Nm zzz
 .Nd Advanced Power Management control program
 .Sh SYNOPSIS
-.Nm ""
-.Op Fl abdlsSvz
+.Nm
+.Op Fl abdlmsSvz
 .Bk -words
 .Op Fl f Ar sockname
 .Ek
@@ -58,6 +51,10 @@ communicates with the Advanced Power Management daemon,
 .Xr apmd 8 ,
 making requests of it for current power status or to place the system
 into a suspend or stand-by state.
+The
+.Nm
+tool is only installed on supported platforms.
+.Pp
 With no flags,
 .Nm
 displays the current power management state in verbose form.
@@ -83,7 +80,7 @@ Display if power management is enabled.
 .It Fl v
 Request more verbose description of the displayed states.
 .It Fl f Ar sockname
-Set the name of the socket via which to contact 
+Set the name of the socket via which to contact
 .Xr apmd 8
 to
 .Pa sockname .

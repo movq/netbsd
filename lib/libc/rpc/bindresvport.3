@@ -1,18 +1,18 @@
 .\"	@(#)bindresvport.3n	2.2 88/08/02 4.0 RPCSRC; from 1.7 88/03/14 SMI
-.\"	$NetBSD: bindresvport.3,v 1.7 2000/01/26 13:20:25 itojun Exp $
+.\"	$NetBSD: bindresvport.3,v 1.13 2007/01/27 07:58:47 cbiere Exp $
 .\"
-.Dd November 22, 1987
+.Dd January 27, 2007
 .Dt BINDRESVPORT 3
 .Os
 .Sh NAME
 .Nm bindresvport ,
 .Nm bindresvport_sa
-.Nd bind a socket to a privileged IP port
+.Nd bind a socket to a reserved privileged IP port
 .Sh LIBRARY
 .Lb libc
 .Sh SYNOPSIS
-.Fd #include <sys/types.h>
-.Fd #include <rpc/rpc.h>
+.In sys/types.h
+.In rpc/rpc.h
 .Ft int
 .Fn bindresvport "int sd" "struct sockaddr_in *sin"
 .Ft int
@@ -21,7 +21,7 @@
 .Fn bindresvport
 and
 .Fn bindresvport_sa
-are used to bind a socket descriptor to a privileged
+are used to bind a socket descriptor to a reserved privileged
 .Tn IP
 port, that is, a
 port number in the range 0-1023.
@@ -36,18 +36,18 @@ is a pointer to a
 .Ft "struct sockaddr_in"
 then the appropriate fields in the structure should be defined.
 Note that
-.Fa sin->sin_family
+.Fa sin-\*[Gt]sin_family
 must be initialized to the address family of the socket, passed by
 .Fa sd .
 If
-.Fa sin->sin_port
+.Fa sin-\*[Gt]sin_port
 is
 .Sq 0
-then an anonymous port (in the range 600-1023) will be
+then a port (in the range 600-1023) will be
 chosen, and if
 .Xr bind 2
 is successful, the
-.Fa sin->sin_port
+.Fa sin-\*[Gt]sin_port
 will be updated to contain the allocated port.
 .Pp
 If
@@ -55,10 +55,12 @@ If
 is the
 .Dv NULL
 pointer,
-an anonymous port will be allocated (as above).
+a port will be allocated (as above).
 However, there is no way for
 .Fn bindresvport
 to return the allocated port in this case.
+.Xr getsockname 2
+can be used to determine the assigned port.
 .Pp
 Only root can bind to a privileged port; this call will fail for any
 other users.
@@ -94,10 +96,11 @@ may also fail and set
 for any of the errors specified for the calls
 .Xr bind 2 ,
 .Xr getsockopt 2 ,
-or 
+or
 .Xr setsockopt 2 .
 .Sh SEE ALSO
 .Xr bind 2 ,
+.Xr getsockname 2 ,
 .Xr getsockopt 2 ,
 .Xr setsockopt 2 ,
-.Xr ip 4 .
+.Xr ip 4

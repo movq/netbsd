@@ -1,4 +1,4 @@
-/*	$NetBSD: mfp.c,v 1.5 2000/01/16 14:20:56 minoura Exp $	*/
+/*	$NetBSD: mfp.c,v 1.19 2007/03/11 08:09:24 isaki Exp $	*/
 
 /*-
  * Copyright (c) 1998 NetBSD Foundation, Inc.
@@ -37,9 +37,12 @@
  */
 
 /*
- * MFP is used as keyboard controler, which may be used before
+ * MFP is used as keyboard controller, which may be used before
  * ordinary initialization.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: mfp.c,v 1.19 2007/03/11 08:09:24 isaki Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -52,28 +55,25 @@
 #include <arch/x68k/dev/intiovar.h>
 #include <arch/x68k/dev/mfp.h>
 
-static int mfp_match __P((struct device *, struct cfdata *, void *));
-static void mfp_attach __P((struct device *, struct device *, void *));
-static void mfp_init __P((void));
-static void mfp_calibrate_delay __P((void));
+static int mfp_match(struct device *, struct cfdata *, void *);
+static void mfp_attach(struct device *, struct device *, void *);
+static void mfp_init(void);
+static void mfp_calibrate_delay(void);
 
-struct cfattach mfp_ca = {
-	sizeof(struct mfp_softc), mfp_match, mfp_attach
-};
+CFATTACH_DECL(mfp, sizeof(struct mfp_softc),
+    mfp_match, mfp_attach, NULL, NULL);
 
+static int mfp_attached;
 
 static int
-mfp_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+mfp_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct intio_attach_args *ia = aux;
 
 	/* mfp0 */
-	if (strcmp (ia->ia_name, "mfp") != 0)
+	if (strcmp(ia->ia_name, "mfp") != 0)
 		return 0;
-	if (cf->cf_unit != 0)
+	if (mfp_attached)
 		return (0);
 
 	if (ia->ia_addr == INTIOCF_ADDR_DEFAULT)
@@ -92,33 +92,32 @@ mfp_match(parent, cf, aux)
 
 
 static void
-mfp_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+mfp_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct mfp_softc *sc = (struct mfp_softc *)self;
 	struct intio_attach_args *ia = aux;
 
-	mfp_init ();
+	mfp_init();
 
 	if (sc != NULL) {
 		/* realconfig */
 		int r;
 
-		printf ("\n");
+		printf("\n");
 
+		mfp_attached = 1;
 		sc->sc_bst = ia->ia_bst;
 		sc->sc_intr = ia->ia_intr;
 		ia->ia_size = 0x30;
-		r = intio_map_allocate_region (parent, ia, INTIO_MAP_ALLOCATE);
+		r = intio_map_allocate_region(parent, ia, INTIO_MAP_ALLOCATE);
 #ifdef DIAGNOSTIC
 		if (r)
-			panic ("IO map for MFP corruption??");
+			panic("IO map for MFP corruption??");
 #endif
 		bus_space_map(ia->ia_bst, ia->ia_addr, 0x2000, 0, &sc->sc_bht);
-		config_found (self, "kbd", NULL);
-		config_found (self, "clock", NULL);
-		config_found (self, "pow", NULL);
+		config_found(self, __UNCONST("kbd"), NULL);
+		config_found(self, __UNCONST("clock"), NULL);
+		config_found(self, __UNCONST("pow"), NULL);
 	} else {
 		/*
 		 * Called from config_console;
@@ -129,7 +128,7 @@ mfp_attach(parent, self, aux)
 }
 
 static void
-mfp_init (void)
+mfp_init(void)
 {
 #if 0				/* done in x68k_init.c::intr_reset() */
 	mfp_set_vr(MFP_INTR);
@@ -150,7 +149,7 @@ mfp_init (void)
 }
 
 extern int delay_divisor;
-void	_delay __P((u_int));
+void	_delay(u_int);
 
 static void
 mfp_calibrate_delay(void)
@@ -185,13 +184,13 @@ mfp_calibrate_delay(void)
  * might be called before realconfig.
  */
 void
-mfp_wait_for_hsync (void)
+mfp_wait_for_hsync(void)
 {
 	/* wait for CRT HSYNC */
 	while (mfp_get_gpip() & MFP_GPIP_HSYNC)
-		asm("nop");
+		__asm("nop");
 	while (!(mfp_get_gpip() & MFP_GPIP_HSYNC))
-		asm("nop");
+		__asm("nop");
 }
 
 /*
@@ -200,8 +199,7 @@ mfp_wait_for_hsync (void)
  * might be called before realconfig.
  */
 int
-mfp_send_usart (command)
-	int command;
+mfp_send_usart(int command)
 {
 	while (!(mfp_get_tsr() & MFP_TSR_BE));
 	mfp_set_udr(command);
@@ -210,9 +208,9 @@ mfp_send_usart (command)
 }
 
 int
-mfp_recieve_usart(void)
+mfp_receive_usart(void)
 {
 	while (!(mfp_get_rsr() & MFP_RSR_BF))
-		asm("nop");
+		__asm("nop");
 	return mfp_get_udr();
 }

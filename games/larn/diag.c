@@ -1,19 +1,26 @@
-/*	$NetBSD: diag.c,v 1.8 1997/10/18 20:03:12 christos Exp $	*/
+/*	$NetBSD: diag.c,v 1.12 2008/02/03 19:20:41 dholland Exp $	*/
 
 /* diag.c		Larn is copyrighted 1986 by Noah Morgan. */
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: diag.c,v 1.8 1997/10/18 20:03:12 christos Exp $");
+__RCSID("$NetBSD: diag.c,v 1.12 2008/02/03 19:20:41 dholland Exp $");
 #endif				/* not lint */
 
 #include <sys/types.h>
 #include <sys/times.h>
 #include <sys/stat.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include "header.h"
 #include "extern.h"
+
+static void greedy(void);
+static void fsorry(void);
+static void fcheat(void);
+
 static struct tms cputime;
+
 /*
 	***************************
 	DIAG -- dungeon diagnostics
@@ -40,10 +47,10 @@ diag()
 
 	/* for the character attributes	 */
 
-	lprintf("\n\nPlayer attributes:\n\nHit points: %2d(%2d)", (long) c[HP], (long) c[HPMAX]);
-	lprintf("\ngold: %d  Experience: %d  Character level: %d  Level in caverns: %d",
+	lprintf("\n\nPlayer attributes:\n\nHit points: %2ld(%2ld)", (long) c[HP], (long) c[HPMAX]);
+	lprintf("\ngold: %ld  Experience: %ld  Character level: %ld  Level in caverns: %ld",
 	(long) c[GOLD], (long) c[EXPERIENCE], (long) c[LEVEL], (long) level);
-	lprintf("\nTotal types of monsters: %d", (long) MAXMONST + 8);
+	lprintf("\nTotal types of monsters: %ld", (long) MAXMONST + 8);
 
 	lprcat("\f\nHere's the dungeon:\n\n");
 
@@ -59,9 +66,9 @@ diag()
 	lprcat("   Monster Name      LEV  AC   DAM  ATT  DEF    GOLD   HP     EXP   \n");
 	lprcat("--------------------------------------------------------------------------\n");
 	for (i = 0; i <= MAXMONST + 8; i++) {
-		lprintf("%19s  %2d  %3d ", monster[i].name, (long) monster[i].level, (long) monster[i].armorclass);
-		lprintf(" %3d  %3d  %3d  ", (long) monster[i].damage, (long) monster[i].attack, (long) monster[i].defense);
-		lprintf("%6d  %3d   %6d\n", (long) monster[i].gold, (long) monster[i].hitpoints, (long) monster[i].experience);
+		lprintf("%19s  %2ld  %3ld ", monster[i].name, (long) monster[i].level, (long) monster[i].armorclass);
+		lprintf(" %3ld  %3ld  %3ld  ", (long) monster[i].damage, (long) monster[i].attack, (long) monster[i].defense);
+		lprintf("%6ld  %3ld   %6ld\n", (long) monster[i].gold, (long) monster[i].hitpoints, (long) monster[i].experience);
 	}
 
 	lprcat("\n\nHere's a Table for the to hit percentages\n");
@@ -76,7 +83,7 @@ diag()
 	for (i = 0; i <= MAXMONST + 8; i++) {
 		hit = 2 * monster[i].armorclass + 2 * monster[i].level + 16;
 		dam = 16 - c[HARDGAME];
-		lprintf("\n%20s   %2d/%2d/%2d       %2d/%2d/%2d       %2d/%2d/%2d",
+		lprintf("\n%20s   %2ld/%2ld/%2ld       %2ld/%2ld/%2ld       %2ld/%2ld/%2ld",
 			monster[i].name,
 			(long) (hit / 2), (long) max(0, dam + 2), (long) (monster[i].hitpoints / (dam + 2) + 1),
 			(long) ((hit + 2) / 2), (long) max(0, dam + 10), (long) (monster[i].hitpoints / (dam + 10) + 1),
@@ -100,9 +107,9 @@ diag()
 
 	lprcat("\n\nFor the c[] array:\n");
 	for (j = 0; j < 100; j += 10) {
-		lprintf("\nc[%2d] = ", (long) j);
+		lprintf("\nc[%2ld] = ", (long) j);
 		for (i = 0; i < 9; i++)
-			lprintf("%5d ", (long) c[i + j]);
+			lprintf("%5ld ", (long) c[i + j]);
 	}
 
 	lprcat("\n\nTest of random number generator ----------------");
@@ -113,7 +120,7 @@ diag()
 	for (i = 0; i < 25000; i++)
 		rndcount[rund(16)]++;
 	for (i = 0; i < 16; i++) {
-		lprintf("  %5d", (long) rndcount[i]);
+		lprintf("  %5ld", (long) rndcount[i]);
 		if (i == 7)
 			lprc('\n');
 	}
@@ -220,7 +227,7 @@ savegame(fname)
 	time(&zzz);
 	lprint((long) (zzz - initialtime));
 	lwrite((char *) &zzz, sizeof(long));
-	if (fstat(lfd, &statbuf) < 0)
+	if (fstat(io_outfd, &statbuf) < 0)
 		lprint(0L);
 	else
 		lprint((long) statbuf.st_ino);	/* inode # */
@@ -258,7 +265,7 @@ restoregame(fname)
 			lrfill((char *) &cell[k * MAXX * MAXY], sizeof(struct cel) * MAXY * MAXX);
 
 	lrfill((char *) &c[0], 100 * sizeof(long));
-	gltime = lrint();
+	gltime = larn_lrint();
 	level = c[CAVELEVEL] = lgetc();
 	playerx = lgetc();
 	playery = lgetc();
@@ -303,9 +310,9 @@ restoregame(fname)
 	}
 
 	time(&zzz);
-	initialtime = zzz - lrint();
-	fstat(fd, &filetimes);	/* get the creation and modification time of
-				 * file	 */
+	initialtime = zzz - larn_lrint();
+	/* get the creation and modification time of file */
+	fstat(io_infd, &filetimes);
 	lrfill((char *) &zzz, sizeof(long));
 	zzz += 6;
 	if (filetimes.st_ctime > zzz)
@@ -317,8 +324,9 @@ restoregame(fname)
 		return;
 	}			/* died a post mortem death */
 	oldx = oldy = 0;
-	i = lrint();		/* inode # */
-	if (i && (filetimes.st_ino != i))
+	/* XXX the following will break on 64-bit inode numbers */
+	i = larn_lrint();		/* inode # */
+	if (i && (filetimes.st_ino != (ino_t) i))
 		fsorry();
 	lrclose();
 	if (strcmp(fname, ckpfile) == 0) {
@@ -351,8 +359,8 @@ restoregame(fname)
 /*
 	subroutine to not allow greedy cheaters
  */
-void
-greedy()
+static void
+greedy(void)
 {
 #if WIZID
 	if (wizard)
@@ -373,8 +381,8 @@ greedy()
 	subroutine to not allow altered save files and terminate the attempted
 	restart
  */
-void
-fsorry()
+static void
+fsorry(void)
 {
 	lprcat("\nSorry, but your savefile has been altered.\n");
 	lprcat("However, seeing as I am a good sport, I will let you play.\n");
@@ -386,8 +394,8 @@ fsorry()
 /*
 	subroutine to not allow game if save file can't be deleted
  */
-void
-fcheat()
+static void
+fcheat(void)
 {
 #if WIZID
 	if (wizard)

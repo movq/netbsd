@@ -1,4 +1,4 @@
-/*	$NetBSD: getopt.c,v 1.1.1.1 1997/03/14 02:40:31 perry Exp $	*/
+/*	$NetBSD: getopt.c,v 1.4 2005/12/11 12:17:49 christos Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -36,7 +32,7 @@
 /* from: netbsd:lib/libc/stdlib/getopt.c */
 
 #include <lib/libkern/libkern.h>
-#include "stand.h"
+#include <lib/libsa/stand.h>
 
 int	opterr = 1,		/* if error message should be printed */
 	optind = 1,		/* index into parent argv vector */

@@ -1,4 +1,4 @@
-.\"	$NetBSD: math.3,v 1.8 1999/07/02 15:37:35 simonb Exp $
+.\"	$NetBSD: math.3,v 1.22 2007/02/26 12:10:56 drochner Exp $
 .\"
 .\" Copyright (c) 1985 Regents of the University of California.
 .\" All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -33,7 +29,7 @@
 .\"
 .\"	from: @(#)math.3	6.10 (Berkeley) 5/6/91
 .\"
-.TH MATH 3 "May 6, 1991"
+.TH MATH 3 "February 23, 2007"
 .UC 4
 .ds up \fIulp\fR
 .ds nn \fINaN\fR
@@ -50,7 +46,7 @@ These functions constitute the C math library,
 .I libm.
 The link editor searches this library under the \*(lq\-lm\*(rq option.
 Declarations for these functions may be obtained from the include file
-.RI < math.h >.
+.RI \*[Lt] math.h \*[Gt].
 .\" The Fortran math library is described in ``man 3f intro''.
 .SH "LIST OF FUNCTIONS"
 .sp 2
@@ -66,7 +62,6 @@ asinh	asinh.3	inverse hyperbolic function	3
 atan	atan.3	inverse trigonometric function	1
 atanh	atanh.3	inverse hyperbolic function	3
 atan2	atan2.3	inverse trigonometric function	2
-cabs	hypot.3	complex absolute value	1
 cbrt	sqrt.3	cube root	1
 ceil	ceil.3	integer no less than	0
 copysign	ieee.3	copy sign bit	0
@@ -84,13 +79,14 @@ hypot	hypot.3	Euclidean distance	1
 ilogb	ieee.3	exponent extraction	0
 isinf	isinf.3	test for infinity	0
 isnan	isnan.3	test for not-a-number	0
-j0	j0.3	bessel function	???
-j1	j0.3	bessel function	???
-jn	j0.3	bessel function	???
+j0	j0.3	Bessel function	???
+j1	j0.3	Bessel function	???
+jn	j0.3	Bessel function	???
 lgamma	lgamma.3	log gamma function	???
 log	exp.3	natural logarithm	1
 log10	exp.3	logarithm to base 10	3
 log1p	exp.3	log(1+x)	1
+nan	nan.3	return quiet \*(nn	0
 nextafter	ieee.3	next representable number	0
 pow	exp.3	exponential x**y	60\-500
 remainder	ieee.3	remainder	0
@@ -101,9 +97,32 @@ sinh	sinh.3	hyperbolic function	3
 sqrt	sqrt.3	square root	1
 tan	tan.3	trigonometric function	3
 tanh	tanh.3	hyperbolic function	3
-y0	j0.3	bessel function	???
-y1	j0.3	bessel function	???
-yn	j0.3	bessel function	???
+trunc	trunc.3	nearest integral value	3
+y0	j0.3	Bessel function	???
+y1	j0.3	Bessel function	???
+yn	j0.3	Bessel function	???
+.ta
+.fi
+.SH "LIST OF DEFINED VALUES"
+.sp 2
+.nf
+.ta \w'M_2_SQRTPI'u+2n +\w'1.12837916709551257390'u+4n +\w'2/sqrt(pi)'u+6nC
+\fIName\fP	\fIValue\fP	\fIDescription\fP
+.ta \w'M_2_SQRTPI'u+2n +\w'1.12837916709551257390'u+4n +\w'2/sqrt(pi)'u+6nC
+.sp 3p
+M_E	2.7182818284590452354	e
+M_LOG2E	1.4426950408889634074	log 2e
+M_LOG10E	0.43429448190325182765	log 10e
+M_LN2	0.69314718055994530942	log e2
+M_LN10	2.30258509299404568402	log e10
+M_PI	3.14159265358979323846	pi
+M_PI_2	1.57079632679489661923	pi/2
+M_PI_4	0.78539816339744830962	pi/4
+M_1_PI	0.31830988618379067154	1/pi
+M_2_PI	0.63661977236758134308	2/pi
+M_2_SQRTPI	1.12837916709551257390	2/sqrt(pi)
+M_SQRT2	1.41421356237309504880	sqrt(2)
+M_SQRT1_2	0.70710678118654752440	1/sqrt(2)
 .ta
 .fi
 .SH NOTES
@@ -112,18 +131,20 @@ in late 1985, most of the foregoing functions come in two
 versions, one for the double\-precision "D" format in the
 DEC VAX\-11 family of computers, another for double\-precision
 arithmetic conforming to the IEEE Standard 754 for Binary
-Floating\-Point Arithmetic.  The two versions behave very
+Floating\-Point Arithmetic.
+The two versions behave very
 similarly, as should be expected from programs more accurate
-and robust than was the norm when UNIX was born.  For
-instance, the programs are accurate to within the numbers
+and robust than was the norm when UNIX was born.
+For instance, the programs are accurate to within the numbers
 of \*(ups tabulated above; an \*(up is one \fIU\fRnit in the \fIL\fRast
-\fIP\fRlace.  And the programs have been cured of anomalies that
+\fIP\fRlace.
+And the programs have been cured of anomalies that
 afflicted the older math library \fIlibm\fR in which incidents like
 the following had been reported:
 .RS
 sqrt(\-1.0) = 0.0 and log(\-1.0) = \-1.7e38.
 .br
-cos(1.0e\-11) > cos(0.0) > 1.0.
+cos(1.0e\-11) \*[Gt] cos(0.0) \*[Gt] 1.0.
 .br
 pow(x,1.0)
 .if n \
@@ -142,16 +163,19 @@ explained, to which end the following notes are provided.
 \fBDEC VAX\-11 D_floating\-point:\fR
 .PP
 This is the format for which the original math library \fIlibm\fR
-was developed, and to which this manual is still principally
-dedicated.  It is \fIthe\fR double\-precision format for the PDP\-11
+was developed, and to which this manual is still principally dedicated.
+It is \fIthe\fR double\-precision format for the PDP\-11
 and the earlier VAX\-11 machines; VAX\-11s after 1983 were
 provided with an optional "G" format closer to the IEEE
-double\-precision format.  The earlier DEC MicroVAXs have no
-D format, only G double\-precision. (Why?  Why not?)
+double\-precision format.
+The earlier DEC MicroVAXs have no D format, only G double\-precision.
+(Why?
+Why not?)
 .PP
 Properties of D_floating\-point:
 .RS
-Wordsize: 64 bits, 8 bytes.  Radix: Binary.
+Wordsize: 64 bits, 8 bytes.
+Radix: Binary.
 .br
 Precision: 56
 .if n \
@@ -168,7 +192,7 @@ decimals.
 If x and x' are consecutive positive D_floating\-point
 numbers (they differ by 1 \*(up), then
 .br
-1.3e\-17 < 0.5**56 < (x'\-x)/x \(<= 0.5**55 < 2.8e\-17.
+1.3e\-17 \*[Lt] 0.5**56 \*[Lt] (x'\-x)/x \*[Le] 0.5**55 \*[Lt] 2.8e\-17.
 .RE
 .nf
 .ta \w'Range:'u+1n +\w'Underflow threshold'u+1n +\w'= 2.0**127'u+1n
@@ -190,8 +214,8 @@ It is possible to have x
 .if t \
 \(!=
 y and yet
-x\-y = 0 because of underflow.  Similarly
-x > y > 0 cannot prevent either x\(**y = 0
+x\-y = 0 because of underflow.
+Similarly x \*[Gt] y \*[Gt] 0 cannot prevent either x\(**y = 0
 or  y/x = 0 from happening without warning.
 .RE
 .RE
@@ -245,8 +269,7 @@ The situation is described in more detail in manual pages.
 \fIThis response seems excessively punitive, so it is destined
 to be replaced at some time in the foreseeable future by a
 more flexible but still uniform scheme being developed to
-handle all floating\-point arithmetic exceptions neatly.
-See infnan(3) for the present state of affairs.\fR
+handle all floating\-point arithmetic exceptions neatly.\fR
 .ll +0.5i
 .RE
 .PP
@@ -262,8 +285,8 @@ speed and accuracy; the \fIlibm\fR codes use tricky formulas
 compact enough that all of them may some day fit into a ROM.
 .PP
 More important, DEC regards the VMS codes as proprietary
-and guards them zealously against unauthorized use.  But the
-\fIlibm\fR codes in 4.3 BSD are intended for the public domain;
+and guards them zealously against unauthorized use.
+But the \fIlibm\fR codes in 4.3 BSD are intended for the public domain;
 they may be copied freely provided their provenance is always
 acknowledged, and provided users assist the authors in their
 researches by reporting experience with the codes.
@@ -280,7 +303,7 @@ produced by a host of manufacturers, among them ...
 .ta 0.5i +\w'Intel i8070, i80287'u+6n
 	Intel i8087, i80287	National Semiconductor  32081
 	Motorola 68881	Weitek WTL-1032, ... , -1165
-	Zilog Z8070	Western Electric (AT&T) WE32106.
+	Zilog Z8070	Western Electric (AT\*[Am]T) WE32106.
 .ta
 .fi
 Other implementations range from software, done thoroughly
@@ -297,12 +320,13 @@ nobody has volunteered to do that yet.
 .PP
 The codes in 4.3 BSD's \fIlibm\fR for machines that conform to
 IEEE 754 are intended primarily for the National Semi. 32081
-and WTL 1164/65.  To use these codes with the Intel or Zilog
+and WTL 1164/65.
+To use these codes with the Intel or Zilog
 chips, or with the Apple Macintosh or ELXSI 6400, is to
 forego the use of better codes provided (perhaps freely) by
 those companies and designed by some of the authors of the
 codes above.
-Except for \fIatan\fR, \fIcabs\fR, \fIcbrt\fR, \fIerf\fR,
+Except for \fIatan\fR, \fIcbrt\fR, \fIerf\fR,
 \fIerfc\fR, \fIhypot\fR, \fIj0\-jn\fR, \fIlgamma\fR, \fIpow\fR
 and \fIy0\-yn\fR,
 the Motorola 68881 has all the functions in \fIlibm\fR on chip,
@@ -323,7 +347,8 @@ IEEE 754 need use anything worse than the new \fIlibm\fR.
 .PP
 Properties of IEEE 754 Double\-Precision:
 .RS
-Wordsize: 64 bits, 8 bytes.  Radix: Binary.
+Wordsize: 64 bits, 8 bytes.
+Radix: Binary.
 .br
 Precision: 53
 .if n \
@@ -340,7 +365,7 @@ decimals.
 If x and x' are consecutive positive Double\-Precision
 numbers (they differ by 1 \*(up), then
 .br
-1.1e\-16 < 0.5**53 < (x'\-x)/x \(<= 0.5**52 < 2.3e\-16.
+1.1e\-16 \*[Lt] 0.5**53 \*[Lt] (x'\-x)/x \*[Le] 0.5**52 \*[Lt] 2.3e\-16.
 .RE
 .nf
 .ta \w'Range:'u+1n +\w'Underflow threshold'u+1n +\w'= 2.0**1024'u+1n
@@ -360,9 +385,10 @@ Zero is represented ambiguously as +0 or \-0.
 Its sign transforms correctly through multiplication or
 division, and is preserved by addition of zeros
 with like signs; but x\-x yields +0 for every
-finite x.  The only operations that reveal zero's
+finite x.
+The only operations that reveal zero's
 sign are division by zero and copysign(x,\(+-0).
-In particular, comparison (x > y, x \(>= y, etc.)
+In particular, comparison (x \*[Gt] y, x \*[Ge] y, etc.)
 cannot be affected by the sign of zero; but if
 finite x = y then
 .If
@@ -378,7 +404,8 @@ finite x = y then
 is signed.
 .RS
 it persists when added to itself
-or to any finite number.  Its sign transforms
+or to any finite number.
+Its sign transforms
 correctly through multiplication and division, and
 .If (finite)/\(+- \0=\0\(+-0
 (nonzero)/0 =
@@ -397,8 +424,8 @@ there are 2**53\-2 of them, all
 called \*(nn (\fIN\fRot \fIa N\fRumber).
 Some, called Signaling \*(nns, trap any floating\-point operation
 performed upon them; they are used to mark missing
-or uninitialized values, or nonexistent elements
-of arrays.  The rest are Quiet \*(nns; they are
+or uninitialized values, or nonexistent elements of arrays.
+The rest are Quiet \*(nns; they are
 the default results of Invalid Operations, and
 propagate through subsequent arithmetic operations.
 If x
@@ -407,7 +434,7 @@ If x
 .if t \
 \(!=
 x then x is \*(nn; every other predicate
-(x > y, x = y, x < y, ...) is FALSE if \*(nn is involved.
+(x \*[Gt] y, x = y, x \*[Lt] y, ...) is FALSE if \*(nn is involved.
 .br
 NOTE: Trichotomy is violated by \*(nn.
 .RS
@@ -431,15 +458,16 @@ sometimes provably so; for instance, for every
 x = 1.0, 2.0, 3.0, 4.0, ..., 2.0**52, we find
 (x/3.0)\(**3.0 == x and (x/10.0)\(**10.0 == x and ...
 despite that both the quotients and the products
-have been rounded.  Only rounding like IEEE 754
-can do that.  But no single kind of rounding can be
+have been rounded.
+Only rounding like IEEE 754 can do that.
+But no single kind of rounding can be
 proved best for every circumstance, so IEEE 754
 provides rounding towards zero or towards
 .If +
 or towards
 .If \-
-at the programmer's option.  And the
-same kinds of rounding are specified for
+at the programmer's option.
+And the same kinds of rounding are specified for
 Binary\-Decimal Conversions, at least for magnitudes
 between roughly 1.0e\-10 and 1.0e37.
 .RE
@@ -466,10 +494,11 @@ Inexact	Rounded value
 .ta
 .fi
 .RE
-NOTE:  An Exception is not an Error unless handled
-badly.  What makes a class of exceptions exceptional
+NOTE:  An Exception is not an Error unless handled badly.
+What makes a class of exceptions exceptional
 is that no single default response can be satisfactory
-in every instance.  On the other hand, if a default
+in every instance.
+On the other hand, if a default
 response will serve most instances satisfactorily,
 the unsatisfactory instances cannot justify aborting
 computation every time the exception occurs.
@@ -477,8 +506,8 @@ computation every time the exception occurs.
 .PP
 For each kind of floating\-point exception, IEEE 754
 provides a Flag that is raised each time its exception
-is signaled, and stays raised until the program resets
-it.  Programs may also test, save and restore a flag.
+is signaled, and stays raised until the program resets it.
+Programs may also test, save and restore a flag.
 Thus, IEEE 754 provides three ways by which programs
 may cope with exceptions for which the default result
 might be unsatisfactory:
@@ -495,8 +524,8 @@ an exception could have produced.
 CAUTION: The only reliable ways to discover
 whether Underflow has occurred are to test whether
 products or quotients lie closer to zero than the
-underflow threshold, or to test the Underflow
-flag.  (Sums and differences cannot underflow in
+underflow threshold, or to test the Underflow flag.
+(Sums and differences cannot underflow in
 IEEE 754; if x
 .if n \
 !=
@@ -504,7 +533,8 @@ IEEE 754; if x
 \(!=
 y then x\-y is correct to
 full precision and certainly nonzero regardless of
-how tiny it may be.)  Products and quotients that
+how tiny it may be.)
+Products and quotients that
 underflow gradually can lose accuracy gradually
 without vanishing, so comparing them with zero
 (as one might on a VAX) will not reveal the loss.
@@ -520,17 +550,18 @@ The same cannot be said of underflows flushed to 0.
 At the option of an implementor conforming to IEEE 754,
 other ways to cope with exceptions may be provided:
 .IP 4) \w'\0\0\0\0'u
-ABORT.  This mechanism classifies an exception in
+ABORT.
+This mechanism classifies an exception in
 advance as an incident to be handled by means
 traditionally associated with error\-handling
-statements like "ON ERROR GO TO ...".  Different
-languages offer different forms of this statement,
+statements like "ON ERROR GO TO ...".
+Different languages offer different forms of this statement,
 but most share the following characteristics:
 .IP \(em \w'\0\0\0\0'u
 No means is provided to substitute a value for
 the offending operation's result and resume
-computation from what may be the middle of an
-expression.  An exceptional result is abandoned.
+computation from what may be the middle of an expression.
+An exceptional result is abandoned.
 .IP \(em \w'\0\0\0\0'u
 In a subprogram that lacks an error\-handling
 statement, an exception causes the subprogram to
@@ -539,13 +570,16 @@ on back up the chain of calling subprograms until
 an error\-handling statement is encountered or the
 whole task is aborted and memory is dumped.
 .IP 5) \w'\0\0\0\0'u
-STOP.  This mechanism, requiring an interactive
+STOP.
+This mechanism, requiring an interactive
 debugging environment, is more for the programmer
-than the program.  It classifies an exception in
+than the program.
+It classifies an exception in
 advance as a symptom of a programmer's error; the
 exception suspends execution as near as it can to
 the offending operation so that the programmer can
-look around to see how it happened.  Quite often
+look around to see how it happened.
+Quite often
 the first several exceptions turn out to be quite
 unexceptionable, so the programmer ought ideally
 to be able to resume execution after each one as if
@@ -557,9 +591,9 @@ execution had not been stopped.
 The crucial problem for exception handling is the problem of
 Scope, and the problem's solution is understood, but not
 enough manpower was available to implement it fully in time
-to be distributed in 4.3 BSD's \fIlibm\fR.  Ideally, each
-elementary function should act as if it were indivisible, or
-atomic, in the sense that ...
+to be distributed in 4.3 BSD's \fIlibm\fR.
+Ideally, each elementary function should act
+as if it were indivisible, or atomic, in the sense that ...
 .IP i) \w'iii)'u+2n
 No exception should be signaled that is not deserved by
 the data supplied to that function.
@@ -576,20 +610,20 @@ with exception handling.
 .PP
 Ideally, every programmer should be able \fIconveniently\fR to
 turn a debugged subprogram into one that appears atomic to
-its users.  But simulating all three characteristics of an
+its users.
+But simulating all three characteristics of an
 atomic function is still a tedious affair, entailing hosts
 of tests and saves\-restores; work is under way to ameliorate
 the inconvenience.
 .PP
-Meanwhile, the functions in \fIlibm\fR are only approximately
-atomic.  They signal no inappropriate exception except
-possibly ...
+Meanwhile, the functions in \fIlibm\fR are only approximately atomic.
+They signal no inappropriate exception except possibly ...
 .RS
 Over/Underflow
 .RS
 when a result, if properly computed, might have lain barely within range, and
 .RE
-Inexact in \fIcabs\fR, \fIcbrt\fR, \fIhypot\fR, \fIlog10\fR and \fIpow\fR
+Inexact in \fIcbrt\fR, \fIhypot\fR, \fIlog10\fR and \fIpow\fR
 .RS
 when it happens to be exact, thanks to fortuitous cancellation of errors.
 .RE
@@ -617,14 +651,15 @@ Inexact is signaled only when
 greater range or precision would be needed to represent the exact result.
 .RE
 .RE
-.SH BUGS
-When signals are appropriate, they are emitted by certain
-operations within the codes, so a subroutine\-trace may be
-needed to identify the function with its signal in case
-method 5) above is in use.  And the codes all take the
-IEEE 754 defaults for granted; this means that a decision to
-trap all divisions by zero could disrupt a code that would
-otherwise get correct results despite division by zero.
+.\" .Sh FILES
+.\" .Bl -tag -width /usr/lib/libm_p.a -compact
+.\" .It Pa /usr/lib/libm.a
+.\" the static math library
+.\" .It Pa /usr/lib/libm.so
+.\" the dynamic math library
+.\" .It Pa /usr/lib/libm_p.a
+.\" the static math library compiled for profiling
+.\" .El
 .SH SEE ALSO
 An explanation of IEEE 754 and its proposed extension p854
 was published in the IEEE magazine MICRO in August 1984 under
@@ -632,7 +667,16 @@ the title "A Proposed Radix\- and Word\-length\-independent
 Standard for Floating\-point Arithmetic" by W. J. Cody et al.
 The manuals for Pascal, C and BASIC on the Apple Macintosh
 document the features of IEEE 754 pretty well.
-Articles in the IEEE magazine COMPUTER vol. 14 no. 3 (Mar.
-1981), and in the ACM SIGNUM Newsletter Special Issue of
+Articles in the IEEE magazine COMPUTER vol. 14 no. 3 (Mar. 1981),
+and in the ACM SIGNUM Newsletter Special Issue of
 Oct. 1979, may be helpful although they pertain to
 superseded drafts of the standard.
+.SH BUGS
+When signals are appropriate, they are emitted by certain
+operations within the codes, so a subroutine\-trace may be
+needed to identify the function with its signal in case
+method 5) above is in use.
+And the codes all take the
+IEEE 754 defaults for granted; this means that a decision to
+trap all divisions by zero could disrupt a code that would
+otherwise get correct results despite division by zero.

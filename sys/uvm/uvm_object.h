@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_object.h,v 1.8 1999/05/25 20:30:09 thorpej Exp $	*/
+/*	$NetBSD: uvm_object.h,v 1.26 2008/06/04 15:06:04 ad Exp $	*/
 
 /*
  *
@@ -41,16 +41,19 @@
  * uvm_object.h
  */
 
+#include <sys/rb.h>
+
 /*
  * uvm_object: all that is left of mach objects.
  */
 
 struct uvm_object {
-	simple_lock_data_t	vmobjlock;	/* lock on memq */
-	struct uvm_pagerops	*pgops;		/* pager ops */
+	kmutex_t		vmobjlock;	/* lock on memq */
+	const struct uvm_pagerops *pgops;	/* pager ops */
 	struct pglist		memq;		/* pages in this object */
 	int			uo_npages;	/* # of pages in memq */
-	int			uo_refs;	/* reference count */
+	unsigned		uo_refs;	/* reference count */
+	struct rb_tree		rb_tree;	/* tree of pages */
 };
 
 /*
@@ -64,22 +67,72 @@ struct uvm_object {
  * for kernel objects... when a kernel object is unmapped we always want
  * to free the resources associated with the mapping.   UVM_OBJ_KERN
  * allows us to decide which type of unmapping we want to do.
- *
- * in addition, we have kernel objects which may be used in an
- * interrupt context.  these objects get their mappings entered
- * with pmap_kenter*() and removed with pmap_kremove(), which
- * are safe to call in interrupt context, and must be used ONLY
- * for wired kernel mappings in these objects and their associated
- * maps.
  */
 #define UVM_OBJ_KERN		(-2)
-#define	UVM_OBJ_KERN_INTRSAFE	(-3)
 
 #define	UVM_OBJ_IS_KERN_OBJECT(uobj)					\
-	((uobj)->uo_refs == UVM_OBJ_KERN ||				\
-	 (uobj)->uo_refs == UVM_OBJ_KERN_INTRSAFE)
+	((uobj)->uo_refs == UVM_OBJ_KERN)
 
-#define	UVM_OBJ_IS_INTRSAFE_OBJECT(uobj)				\
-	((uobj)->uo_refs == UVM_OBJ_KERN_INTRSAFE)
+#ifdef _KERNEL
+
+extern const struct uvm_pagerops uvm_vnodeops;
+extern const struct uvm_pagerops uvm_deviceops;
+extern const struct uvm_pagerops ubc_pager;
+extern const struct uvm_pagerops aobj_pager;
+
+#define	UVM_OBJ_IS_VNODE(uobj)						\
+	((uobj)->pgops == &uvm_vnodeops)
+
+#define	UVM_OBJ_IS_DEVICE(uobj)						\
+	((uobj)->pgops == &uvm_deviceops)
+
+#define	UVM_OBJ_IS_VTEXT(uobj)						\
+	(UVM_OBJ_IS_VNODE(uobj) && uvn_text_p(uobj))
+
+#define	UVM_OBJ_IS_CLEAN(uobj)						\
+	(UVM_OBJ_IS_VNODE(uobj) && uvn_clean_p(uobj))
+
+/*
+ * UVM_OBJ_NEEDS_WRITEFAULT: true if the uobj needs to detect modification.
+ * (ie. wants to avoid writable user mappings.)
+ *
+ * XXX bad name
+ */
+
+#define	UVM_OBJ_NEEDS_WRITEFAULT(uobj)					\
+	(UVM_OBJ_IS_VNODE(uobj) && uvn_needs_writefault_p(uobj))
+
+#define	UVM_OBJ_IS_AOBJ(uobj)						\
+	((uobj)->pgops == &aobj_pager)
+
+extern const struct rb_tree_ops uvm_page_tree_ops;
+
+#define	UVM_OBJ_INIT(uobj, ops, refs)					\
+	do {								\
+		mutex_init(&(uobj)->vmobjlock, MUTEX_DEFAULT, IPL_NONE);\
+		(uobj)->pgops = (ops);					\
+		TAILQ_INIT(&(uobj)->memq);				\
+		(uobj)->uo_npages = 0;					\
+		(uobj)->uo_refs = (refs);				\
+		rb_tree_init(&(uobj)->rb_tree, &uvm_page_tree_ops);	\
+	} while (/* CONSTCOND */ 0)
+
+#ifdef DIAGNOSTIC
+#define	UVM_OBJ_DESTROY(uobj)						\
+	do {								\
+		voff_t _xo = 0;						\
+		void *_xn;						\
+		mutex_destroy(&(uobj)->vmobjlock);			\
+		_xn = rb_tree_find_node_geq(&(uobj)->rb_tree, &_xo);	\
+		KASSERT(_xn == NULL);					\
+	} while (/* CONSTCOND */ 0)
+#else
+#define	UVM_OBJ_DESTROY(uobj)						\
+	do {								\
+		mutex_destroy(&(uobj)->vmobjlock);			\
+	} while (/* CONSTCOND */ 0)
+#endif	/* DIAGNOSTIC */
+
+#endif /* _KERNEL */
 
 #endif /* _UVM_UVM_OBJECT_H_ */

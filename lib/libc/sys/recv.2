@@ -1,4 +1,4 @@
-.\"	$NetBSD: recv.2,v 1.16 1999/12/02 21:42:38 kleink Exp $
+.\"	$NetBSD: recv.2,v 1.27 2006/04/23 19:06:59 wiz Exp $
 .\"
 .\" Copyright (c) 1983, 1990, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -33,7 +29,7 @@
 .\"
 .\"     @(#)recv.2	8.3 (Berkeley) 2/21/94
 .\"
-.Dd February 21, 1994
+.Dd April 23, 2006
 .Dt RECV 2
 .Os
 .Sh NAME
@@ -44,12 +40,11 @@
 .Sh LIBRARY
 .Lb libc
 .Sh SYNOPSIS
-.Fd #include <sys/types.h>
-.Fd #include <sys/socket.h>
+.In sys/socket.h
 .Ft ssize_t
 .Fn recv "int s" "void *buf" "size_t len" "int flags"
 .Ft ssize_t
-.Fn recvfrom "int s" "void *buf" "size_t len" "int flags" "struct sockaddr *from" "socklen_t *fromlen"
+.Fn recvfrom "int s" "void * restrict buf" "size_t len" "int flags" "struct sockaddr * restrict from" "socklen_t * restrict fromlen"
 .Ft ssize_t
 .Fn recvmsg "int s" "struct msghdr *msg" "int flags"
 .Sh DESCRIPTION
@@ -71,9 +66,9 @@ the buffer associated with
 and modified on return to indicate the actual size of the
 address stored there.
 .Pp
-The 
+The
 .Fn recv
-call is normally used only on a 
+call is normally used only on a
 .Em connected
 socket (see
 .Xr connect 2 )
@@ -96,7 +91,7 @@ receive call waits for a message to arrive, unless
 the socket is nonblocking (see
 .Xr fcntl 2 )
 in which case the value
--1 is returned and the external variable
+\-1 is returned and the external variable
 .Va errno
 set to
 .Er EAGAIN .
@@ -112,13 +107,13 @@ described in
 .Pp
 The
 .Xr select 2
-or 
-.Xr poll 2 
+or
+.Xr poll 2
 call may be used to determine when more data arrive.
 .Pp
 The
 .Fa flags
-argument to a recv call is formed by 
+argument to a recv call is formed by
 .Em or Ap ing
 one or more of the values:
 .Bl -column MSG_WAITALL -offset indent
@@ -132,11 +127,15 @@ flag requests receipt of out-of-band data
 that would not be received in the normal data stream.
 Some protocols place expedited data at the head of the normal
 data queue, and thus this flag cannot be used with such protocols.
-The MSG_PEEK flag causes the receive operation to return data
+The
+.Dv MSG_PEEK
+flag causes the receive operation to return data
 from the beginning of the receive queue without removing that
 data from the queue.
 Thus, a subsequent receive call will return the same data.
-The MSG_WAITALL flag requests that the operation block until
+The
+.Dv MSG_WAITALL
+flag requests that the operation block until
 the full request is satisfied.
 However, the call may still return less data than requested
 if a signal is caught, an error or disconnect occurs,
@@ -144,7 +143,7 @@ or the next data to be received is of a different type than that returned.
 .Pp
 The
 .Fn recvmsg
-call uses a 
+call uses a
 .Fa msghdr
 structure to minimize the number of directly supplied parameters.
 This structure has the following form, as defined in
@@ -152,13 +151,13 @@ This structure has the following form, as defined in
 .Pp
 .Bd -literal
 struct msghdr {
-	caddr_t	msg_name;	/* optional address */
-	u_int	msg_namelen;	/* size of address */
-	struct	iovec *msg_iov;	/* scatter/gather array */
-	u_int	msg_iovlen;	/* # elements in msg_iov */
-	caddr_t	msg_control;	/* ancillary data, see below */
-	u_int	msg_controllen; /* ancillary data buffer len */
-	int	msg_flags;	/* flags on received message */
+	void		*msg_name;	/* optional address */
+	socklen_t	msg_namelen;	/* size of address */
+	struct iovec	*msg_iov;	/* scatter/gather array */
+	int		msg_iovlen;	/* # elements in msg_iov */
+	void		*msg_control;	/* ancillary data, see below */
+	socklen_t	msg_controllen; /* ancillary data buffer len */
+	int		msg_flags;	/* flags on received message */
 };
 .Ed
 .Pp
@@ -166,9 +165,14 @@ Here
 .Fa msg_name
 and
 .Fa msg_namelen
-specify the destination address if the socket is unconnected;
+specify the source address if the socket is unconnected;
 .Fa msg_name
 may be given as a null pointer if no names are desired or required.
+If the socket is connected,
+.Fa msg_name
+and
+.Fa msg_namelen
+are ignored.
 .Fa msg_iov
 and
 .Fa msg_iovlen
@@ -182,11 +186,11 @@ or other miscellaneous ancillary data.
 The messages are of the form:
 .Bd -literal
 struct cmsghdr {
-	u_int	cmsg_len;	/* data byte count, including hdr */
-	int	cmsg_level;	/* originating protocol */
-	int	cmsg_type;	/* protocol-specific type */
+	socklen_t	cmsg_len;	/* data byte count, including hdr */
+	int		cmsg_level;	/* originating protocol */
+	int		cmsg_type;	/* protocol-specific type */
 /* followed by
-	u_char	cmsg_data[]; */
+	u_char		cmsg_data[]; */
 };
 .Ed
 As an example, one could use this to learn of changes in the data-stream
@@ -223,9 +227,8 @@ control data were discarded due to lack of space in the buffer
 for ancillary data.
 .Dv MSG_OOB
 is returned to indicate that expedited or out-of-band data were received.
-.Pp
 .Sh RETURN VALUES
-These calls return the number of bytes received, or -1
+These calls return the number of bytes received, or \-1
 if an error occurred.
 .Sh ERRORS
 The calls fail if:
@@ -239,7 +242,7 @@ The socket is associated with a connection-oriented protocol
 and has not been connected (see
 .Xr connect 2
 and
-.Xr accept 2 ).
+.Xr accept 2 ) .
 .It Bq Er ENOTSOCK
 The argument
 .Fa s
@@ -274,10 +277,10 @@ or is greater than
 .El
 .Sh SEE ALSO
 .Xr fcntl 2 ,
-.Xr read 2 ,
-.Xr poll 2 ,
-.Xr select 2 ,
 .Xr getsockopt 2 ,
+.Xr poll 2 ,
+.Xr read 2 ,
+.Xr select 2 ,
 .Xr socket 2
 .Sh HISTORY
 The

@@ -1,25 +1,50 @@
-/*	$NetBSD: execute.c,v 1.2 1997/10/10 16:33:13 lukem Exp $	*/
+/*	$NetBSD: execute.c,v 1.5 2008/01/28 03:23:29 dholland Exp $	*/
 /*
- *  Hunt
- *  Copyright (c) 1985 Conrad C. Huang, Gregory S. Couch, Kenneth C.R.C. Arnold
- *  San Francisco, California
+ * Copyright (c) 1983-2003, Regents of the University of California.
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without 
+ * modification, are permitted provided that the following conditions are 
+ * met:
+ * 
+ * + Redistributions of source code must retain the above copyright 
+ *   notice, this list of conditions and the following disclaimer.
+ * + Redistributions in binary form must reproduce the above copyright 
+ *   notice, this list of conditions and the following disclaimer in the 
+ *   documentation and/or other materials provided with the distribution.
+ * + Neither the name of the University of California, San Francisco nor 
+ *   the names of its contributors may be used to endorse or promote 
+ *   products derived from this software without specific prior written 
+ *   permission.
+ * 
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS 
+ * IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED 
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A 
+ * PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT 
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT 
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, 
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY 
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT 
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: execute.c,v 1.2 1997/10/10 16:33:13 lukem Exp $");
+__RCSID("$NetBSD: execute.c,v 1.5 2008/01/28 03:23:29 dholland Exp $");
 #endif /* not lint */
 
 # include	<stdlib.h>
 # include	"hunt.h"
 
-static	void	cloak __P((PLAYER *));
-static	void	face __P((PLAYER *, int));
-static	void	fire __P((PLAYER *, int));
-static	void	fire_slime __P((PLAYER *, int));
-static	void	move_player __P((PLAYER *, int));
-static	void	pickup __P((PLAYER *, int, int, int, int));
-static	void	scan __P((PLAYER *));
+static	void	cloak(PLAYER *);
+static	void	turn_player(PLAYER *, int);
+static	void	fire(PLAYER *, int);
+static	void	fire_slime(PLAYER *, int);
+static	void	move_player(PLAYER *, int);
+static	void	pickup(PLAYER *, int, int, int, int);
+static	void	scan(PLAYER *);
 
 
 # ifdef MONITOR
@@ -79,25 +104,25 @@ execute(pp)
 		move_player(pp, LEFTS);
 		break;
 	  case 'H':
-		face(pp, LEFTS);
+		turn_player(pp, LEFTS);
 		break;
 	  case 'j':
 		move_player(pp, BELOW);
 		break;
 	  case 'J':
-		face(pp, BELOW);
+		turn_player(pp, BELOW);
 		break;
 	  case 'k':
 		move_player(pp, ABOVE);
 		break;
 	  case 'K':
-		face(pp, ABOVE);
+		turn_player(pp, ABOVE);
 		break;
 	  case 'l':
 		move_player(pp, RIGHT);
 		break;
 	  case 'L':
-		face(pp, RIGHT);
+		turn_player(pp, RIGHT);
 		break;
 	  case 'f':
 	  case '1':
@@ -299,11 +324,11 @@ move_player(pp, dir)
 }
 
 /*
- * face:
+ * turn_player:
  *	Change the direction the player is facing
  */
 static void
-face(pp, dir)
+turn_player(pp, dir)
 	PLAYER	*pp;
 	int	dir;
 {

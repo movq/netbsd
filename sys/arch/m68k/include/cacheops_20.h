@@ -1,4 +1,4 @@
-/*	$NetBSD: cacheops_20.h,v 1.5 1999/11/06 17:42:31 thorpej Exp $	*/
+/*	$NetBSD: cacheops_20.h,v 1.9 2008/04/28 20:23:26 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,60 +32,53 @@
 /*
  * Invalidate entire TLB.
  */
-void TBIA_20 __P((void));
-extern __inline void
-TBIA_20()
+static __inline void __attribute__((__unused__))
+TBIA_20(void)
 {
-	__asm __volatile (" pflusha");
+	__asm volatile (" pflusha");
 }
 
 /*
  * Invalidate any TLB entry for given VA (TB Invalidate Single)
  */
-void TBIS_20 __P((vaddr_t));
-extern __inline void
-TBIS_20(va)
-	vaddr_t	va;
+static __inline void __attribute__((__unused__))
+TBIS_20(vaddr_t	va)
 {
 
-	__asm __volatile (" pflushs	#0,#0,%0@" : : "a" (va) );
+	__asm volatile (" pflushs	#0,#0,%0@" : : "a" (va) );
 }
 
 /*
  * Invalidate supervisor side of TLB
  */
-void TBIAS_20 __P((void));
-extern __inline void
-TBIAS_20()
+static __inline void __attribute__((__unused__))
+TBIAS_20(void)
 {
-	__asm __volatile (" pflushs #4,#4");
+	__asm volatile (" pflushs #4,#4");
 }
 
 /*
  * Invalidate user side of TLB
  */
-void TBIAU_20 __P((void));
-extern __inline void
-TBIAU_20()
+static __inline void __attribute__((__unused__))
+TBIAU_20(void)
 {
-	__asm __volatile (" pflushs #0,#4;");
+	__asm volatile (" pflushs #0,#4;");
 }
 
 /*
  * Invalidate instruction cache
  */
-void ICIA_20 __P((void));
-extern __inline void
-ICIA_20()
+static __inline void __attribute__((__unused__))
+ICIA_20(void)
 {
-	__asm __volatile (" movc %0,%%cacr;" : : "d" (IC_CLEAR));
+	__asm volatile (" movc %0,%%cacr;" : : "d" (IC_CLEAR));
 }
 
-void ICPA_20 __P((void));
-extern __inline void
-ICPA_20()
+static __inline void __attribute__((__unused__))
+ICPA_20(void)
 {
-	__asm __volatile (" movc %0,%%cacr;" : : "d" (IC_CLEAR));
+	__asm volatile (" movc %0,%%cacr;" : : "d" (IC_CLEAR));
 }
 
 /*
@@ -109,9 +95,8 @@ ICPA_20()
 #define	DCFA_20()
 #define	DCPA_20()
 
-void PCIA_20 __P((void));
-extern __inline void
-PCIA_20()
+static __inline void __attribute__((__unused__))
+PCIA_20(void)
 {
-	__asm __volatile (" movc %0,%%cacr;" : : "d" (DC_CLEAR));
+	__asm volatile (" movc %0,%%cacr;" : : "d" (DC_CLEAR));
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: locate.c,v 1.9 1999/08/16 01:41:17 sjg Exp $	*/
+/*	$NetBSD: locate.c,v 1.16 2008/07/21 14:19:23 lukem Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,22 +34,22 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1989, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)locate.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: locate.c,v 1.9 1999/08/16 01:41:17 sjg Exp $");
+__RCSID("$NetBSD: locate.c,v 1.16 2008/07/21 14:19:23 lukem Exp $");
 #endif /* not lint */
 
 /*
  * Ref: Usenix ;login:, Vol 8, No 1, February/March, 1983, p. 8.
  *
  * Locate scans a file list for the full pathname of a file given only part
- * of the name.  The list has been processed with with "front-compression"
+ * of the name.  The list has been processed with "front-compression"
  * and bigram coding.  Front compression reduces space by a factor of 4-5,
  * bigram coding by a further 20-25%.
  *
@@ -83,7 +79,10 @@ __RCSID("$NetBSD: locate.c,v 1.9 1999/08/16 01:41:17 sjg Exp $");
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <err.h>
+#include <errno.h>
 #include <sys/queue.h>
+#include <sys/stat.h>
 
 #include "locate.h"
 #include "pathnames.h"
@@ -92,6 +91,7 @@ __RCSID("$NetBSD: locate.c,v 1.9 1999/08/16 01:41:17 sjg Exp $");
 struct locate_db {
 	LIST_ENTRY(locate_db) db_link;
 	FILE *db_fp;
+	const char *db_path;
 };
 LIST_HEAD(db_list, locate_db) db_list;
 
@@ -99,39 +99,45 @@ LIST_HEAD(db_list, locate_db) db_list;
 # define NEW(type)      (type *) malloc(sizeof (type))
 #endif
 
-void	add_db __P((char *));
-int	fastfind __P((FILE *, char *));
-int	main __P((int, char **));
-char   *patprep __P((char *));
+static void add_db(const char *);
+static int fastfind(FILE *, char *);
+static char *patprep(const char *);
+
+int	main(int, char **);
 
 
-void
-add_db(path)
-	char *path;
+static void
+add_db(const char *path)
 {
 	FILE *fp;
 	struct locate_db *dbp;
+	struct stat st;
 
-	if (!(path && *path))
-		path = _PATH_FCODES;
-	if ((fp = fopen(path, "r"))) {
-		dbp = NEW(struct locate_db);
-		dbp->db_fp = fp;
-		LIST_INSERT_HEAD(&db_list, dbp, db_link);
-	} else {
-		(void)fprintf(stderr, "locate: no database file %s.\n", path);
+	if (path == NULL || *path == '\0')
+		return;
+
+	if ((fp = fopen(path, "r")) == NULL)
+		err(1, "Can't open database `%s'", path);
+	if (fstat(fileno(fp), &st) == -1)
+		err(1, "Can't stat database `%s'", path);
+	if (S_ISDIR(st.st_mode)) {
+		errno = EISDIR;
+		err(1, "Can't use database `%s'", path);
 	}
+	dbp = NEW(struct locate_db);
+	dbp->db_fp = fp;
+	dbp->db_path = path;
+	LIST_INSERT_HEAD(&db_list, dbp, db_link);
 }
      
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
+	struct locate_db *dbp;
 	char *locate_path = getenv("LOCATE_PATH");
 	char *cp;
-	struct locate_db *dbp;
 	int c;
+	int rc;
 	int found = 0;
 	
 	LIST_INIT(&db_list);
@@ -144,7 +150,8 @@ main(argc, argv)
 		}
 	}
 	if (argc <= optind) {
-		(void)fprintf(stderr, "usage: locate [-d dbpath] pattern ...\n");
+		(void)fprintf(stderr, "Usage: %s [-d dbpath] pattern ...\n",
+		    getprogname());
 		exit(1);
 	}
 	if (!locate_path)
@@ -157,28 +164,33 @@ main(argc, argv)
 		}
 	}
 	add_db(locate_path);
-	if (db_list.lh_first == NULL)
+	if (LIST_EMPTY(&db_list))
 		exit(1);
 	for (; optind < argc; ++optind) {
-		for (dbp = db_list.lh_first; dbp != NULL;
-		     dbp = dbp->db_link.le_next) {
-			found |= fastfind(dbp->db_fp, argv[optind]);
+		LIST_FOREACH(dbp, &db_list, db_link) {
+			rc = fastfind(dbp->db_fp, argv[optind]);
+			if (rc > 0) {
+				/* some results found */
+				found = 1;
+			} else if (rc < 0) {
+				/* error */
+				errx(2, "Invalid data in database file `%s'",
+				    dbp->db_path);
+			}
 		}
 	}
 	exit(found == 0);
 }
 
-int
-fastfind(fp, pathpart)
-	FILE *fp;
-	char *pathpart;
+static int
+fastfind(FILE *fp, char *pathpart)
 {
 	char *p, *s;
 	int c;
 	int count, found, globflag, printed;
 	char *cutoff, *patend, *q;
 	char bigram1[NBG], bigram2[NBG], path[MAXPATHLEN];
-	
+
 	rewind(fp);
 	
 	for (c = 0, p = bigram1, s = bigram2; c < NBG; c++)
@@ -192,14 +204,23 @@ fastfind(fp, pathpart)
 	for (c = getc(fp), count = 0; c != EOF;) {
 		count += ((c == SWITCH) ? getw(fp) : c) - OFFSET;
 		/* overlay old path */
-		for (p = path + count; (c = getc(fp)) > SWITCH;)
+		for (p = path + count; (c = getc(fp)) > SWITCH;) {
+			/* sanity check */
+			if (p < path || p >= path + sizeof(path) - 1)
+				return -1;	/* invalid database file */
 			if (c < PARITY)
 				*p++ = c;
 			else {		/* bigrams are parity-marked */
 				c &= PARITY - 1;
+				/* sanity check */
+				if (c < 0 || c >= sizeof(bigram1)) 
+					return -1;	/* invalid database file */
 				*p++ = bigram1[c], *p++ = bigram2[c];
 			}
+		}
 		*p-- = '\0';
+		if (p < path || count < 0)
+			return -1;
 		cutoff = (found ? path : path + count);
 		for (found = 0, s = p; s >= cutoff; s--)
 			if (*s == *patend) {	/* fast first char check */
@@ -218,7 +239,7 @@ fastfind(fp, pathpart)
 				}
 			}
 	}
-	return (printed);
+	return printed;
 }
 
 /*
@@ -227,14 +248,14 @@ fastfind(fp, pathpart)
  */
 static char globfree[100];
 
-char *
-patprep(name)
-	char *name;
+static char *
+patprep(const char *name)
 {
-	char *endmark, *p, *subp;
+	const char *endmark, *p;
+	char *subp = globfree;
 
-	subp = globfree;
 	*subp++ = '\0';
+
 	p = name + strlen(name) - 1;
 	/* skip trailing metacharacters (and [] ranges) */
 	for (; p >= name; p--)
@@ -265,5 +286,5 @@ patprep(name)
 			*subp++ = *p++;
 	}
 	*subp = '\0';
-	return(--subp);
+	return --subp;
 }

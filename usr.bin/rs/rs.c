@@ -1,3 +1,5 @@
+/*	$NetBSD: rs.c,v 1.12 2008/07/21 14:19:25 lukem Exp $	*/
+
 /*-
  * Copyright (c) 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -10,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -33,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)rs.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: rs.c,v 1.4 1997/10/19 14:22:16 lukem Exp $");
+__RCSID("$NetBSD: rs.c,v 1.12 2008/07/21 14:19:25 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -56,6 +54,7 @@ __RCSID("$NetBSD: rs.c,v 1.4 1997/10/19 14:22:16 lukem Exp $");
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
 
 long	flags;
 #define	TRANSPOSE	000001
@@ -94,7 +93,8 @@ int	propgutter;
 char	isep = ' ', osep = ' ';
 int	owidth = 80, gutter = 2;
 
-void	  usage __P((char *, char *));
+void	  usage __P((char *, ...))
+     __attribute__((__format__(__printf__, 1, 2)));
 void	  getargs __P((int, char *[]));
 void	  getfile __P((void));
 int	  getline __P((void));
@@ -239,12 +239,15 @@ prints(s, col)
 }
 
 void
-usage(msg, s)
-	char *msg, *s;
+usage(char *msg, ...)
 {
-	warnx(msg, s);
+	va_list ap;
+
+	va_start(ap, msg);
+	vwarnx(msg, ap);
+	va_end(ap);
 	fprintf(stderr,
-"Usage:  rs [ -[csCS][x][kKgGw][N]tTeEnyjhHm ] [ rows [ cols ] ]\n");
+"usage:  rs [ -[csCS][x][kKgGw][N]tTeEnyjhHm ] [ rows [ cols ] ]\n");
 	exit(1);
 }
 
@@ -271,7 +274,7 @@ prepfile()
 	else if (orows == 0 && ocols == 0) {	/* decide rows and cols */
 		ocols = owidth / colw;
 		if (ocols == 0) {
-			warnx("Display width %d is less than column width %d\n", owidth, colw);
+			warnx("Display width %d is less than column width %d", owidth, colw);
 			ocols = 1;
 		}
 		if (ocols > nelem)
@@ -303,7 +306,7 @@ prepfile()
 				colwidths[i] = max + gutter;
 			}
 		else
-			for (i = 0; i < ocols; i++) {
+			for (ep = elem, i = 0; i < ocols; i++) {
 				for (j = i; j < nelem; j += ocols)
 					if ((n = strlen(ep[j])) > max)
 						max = n;
@@ -427,7 +430,7 @@ getargs(ac, av)
 			case 'w':		/* window width, default 80 */
 				p = getnum(&owidth, p, 0);
 				if (owidth <= 0)
-				usage("Width must be a positive integer", "");
+				usage("Width must be a positive integer");
 				break;
 			case 'K':			/* skip N lines */
 				flags |= SKIPPRINT;
@@ -497,7 +500,7 @@ getargs(ac, av)
 	case 0:
 		break;
 	default:
-		usage("Too many arguments.", "");
+		usage("Too many arguments.");
 	}
 }
 
@@ -510,10 +513,10 @@ getlist(list, p)
 	char *t;
 
 	for (t = p + 1; *t; t++) {
-		if (!isdigit(*t))
+		if (!isdigit((unsigned char)*t))
 			usage("Option %.1s requires a list of unsigned numbers separated by commas", t);
 		count++;
-		while (*t && isdigit(*t))
+		while (*t && isdigit((unsigned char)*t))
 			t++;
 		if (*t != ',')
 			break;
@@ -525,7 +528,7 @@ getlist(list, p)
 		(*list)[count++] = atoi(t);
 		printf("++ %d ", (*list)[count-1]);
 		fflush(stdout);
-		while (*t && isdigit(*t))
+		while (*t && isdigit((unsigned char)*t))
 			t++;
 		if (*t != ',')
 			break;
@@ -541,7 +544,7 @@ getnum(num, p, strict)	/* num = number p points to; if (strict) complain */
 {
 	char *t = p;
 
-	if (!isdigit(*++t)) {
+	if (!isdigit((unsigned char)*++t)) {
 		if (strict || *t == '-' || *t == '+')
 			usage("Option %.1s requires an unsigned integer", p);
 		*num = 0;
@@ -549,7 +552,7 @@ getnum(num, p, strict)	/* num = number p points to; if (strict) complain */
 	}
 	*num = atoi(t);
 	while (*++t)
-		if (!isdigit(*t))
+		if (!isdigit((unsigned char)*t))
 			break;
 	return(--t);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: device.h,v 1.1 1997/02/04 03:52:22 thorpej Exp $	*/
+/*	$NetBSD: device.h,v 1.5 2007/03/04 05:59:50 christos Exp $	*/
 
 /*
  * Copyright (c) 1982, 1990, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -36,9 +32,9 @@
  */
 
 struct hp_hw {
-	caddr_t	hw_pa;		/* physical address of control space */
+	void *	hw_pa;		/* physical address of control space */
 	int	hw_size;	/* size of control space */
-	caddr_t	hw_kva;		/* kernel virtual address of control space */
+	void *	hw_kva;		/* kernel virtual address of control space */
 	short	hw_id;		/* HW returned id */
 	short	hw_secid;	/* secondary HW id (displays) */
 	short	hw_type;	/* type (defined below) */
@@ -76,3 +72,5 @@ struct hp_hw {
 #define HW_ISHPIB(hw)	(((hw)->hw_type & C_MASK) == C_HPIB)
 #define HW_ISSCSI(hw)	(((hw)->hw_type & C_MASK) == C_SCSI)
 #define HW_ISDEV(hw,d)	(((hw)->hw_type & D_MASK) == (d))
+
+extern struct hp_hw sc_table[];

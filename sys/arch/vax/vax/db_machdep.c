@@ -1,4 +1,4 @@
-/*	$NetBSD: db_machdep.c,v 1.18 2000/03/04 07:27:49 matt Exp $	*/
+/*	$NetBSD: db_machdep.c,v 1.50 2008/03/11 05:34:03 matt Exp $	*/
 
 /* 
  * :set tabs=4
@@ -37,7 +37,12 @@
  * Interface to new debugger.
  * Taken from i386 port and modified for vax.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: db_machdep.c,v 1.50 2008/03/11 05:34:03 matt Exp $");
+
 #include "opt_ddb.h"
+#include "opt_multiprocessor.h"
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -45,16 +50,18 @@
 #include <sys/reboot.h>
 #include <sys/systm.h> /* just for boothowto --eichin */
 
-#include <vm/vm.h>
+#include <uvm/uvm_extern.h>
 
 #include <dev/cons.h>
 
+#include <machine/cpu.h>
 #include <machine/db_machdep.h>
 #include <machine/trap.h>
 #include <machine/frame.h>
 #include <machine/pcb.h>
-#include <machine/cpu.h>
-#include <machine/../vax/gencons.h>
+#include <machine/intr.h>
+#include <machine/rpb.h>
+#include <vax/vax/gencons.h>
 
 #include <ddb/db_sym.h>
 #include <ddb/db_command.h>
@@ -64,15 +71,54 @@
 #include <ddb/db_interface.h>
 #include <ddb/db_variables.h>
 
-extern	label_t	*db_recover;
+#include "ioconf.h"
 
-void	kdbprinttrap __P((int, int));
+db_regs_t ddb_regs;
+
+void	kdbprinttrap(int, int);
 
 int	db_active = 0;
 
-extern int qdpolling;
 static	int splsave; /* IPL before entering debugger */
 
+#ifdef MULTIPROCESSOR
+static struct cpu_info *stopcpu;
+/*
+ * Only the master CPU is allowed to enter DDB, but the correct frames
+ * must still be there. Keep the state-machine here.
+ */
+static int
+pause_cpus(void)
+{
+	volatile struct cpu_info *ci = curcpu();
+
+	if (stopcpu == NULL) {
+		stopcpu = curcpu();
+		cpu_send_ipi(IPI_DEST_ALL, IPI_DDB);
+	}
+	if ((ci->ci_flags & CI_MASTERCPU) == 0) {
+		ci->ci_flags |= CI_STOPPED;
+		while (ci->ci_flags & CI_STOPPED)
+			;
+		return 1;
+	} else
+		return 0;
+}
+
+static void
+resume_cpus(void)
+{
+	struct cpu_info *ci;
+	int i;
+
+	stopcpu = NULL;
+	for (i = 0; i < cpu_cd.cd_ndevs; i++) {
+		if ((ci = device_lookup_private(&cpu_cd, i)) == NULL)
+			continue;
+		ci->ci_flags &= ~CI_STOPPED;
+	}
+}
+#endif
 /*
  * VAX Call frame on the stack, this from
  * "Computer Programming and Architecture, The VAX-11"
@@ -80,16 +126,16 @@ static	int splsave; /* IPL before entering debugger */
  *			ISBN 0-932376-07-X
  */
 typedef struct __vax_frame {
-	u_int	vax_cond;				/* condition handler               */
-	u_int	vax_psw:16;				/* 16 bit processor status word    */
-	u_int	vax_regs:12;			/* Register save mask.             */
-	u_int	vax_zero:1;				/* Always zero                     */
-	u_int	vax_calls:1;			/* True if CALLS, false if CALLG   */
-	u_int	vax_spa:2;				/* Stack pointer alignment         */
-	u_int	*vax_ap;				/* argument pointer                */
-	struct __vax_frame	*vax_fp;	/* frame pointer of previous frame */
-	u_int	vax_pc;					/* program counter                 */
-	u_int	vax_args[1];			/* 0 or more arguments             */
+	u_int	vax_cond;		/* condition handler		   */
+	u_int	vax_psw:16;		/* 16 bit processor status word	   */
+	u_int	vax_regs:12;		/* Register save mask.		   */
+	u_int	vax_zero:1;		/* Always zero			   */
+	u_int	vax_calls:1;		/* True if CALLS, false if CALLG   */
+	u_int	vax_spa:2;		/* Stack pointer alignment	   */
+	u_int	*vax_ap;		/* argument pointer		   */
+	struct __vax_frame *vax_fp;	/* frame pointer of previous frame */
+	u_int	vax_pc;			/* program counter		   */
+	u_int	vax_args[1];		/* 0 or more arguments		   */
 } VAX_CALLFRAME;
 
 /*
@@ -99,23 +145,26 @@ typedef struct __vax_frame {
  * contain the registers when panic was called. (easy to debug).
  */
 void
-kdb_trap(frame)
-	struct trapframe *frame;
+kdb_trap(struct trapframe *frame)
 {
 	int s;
+#ifdef MULTIPROCESSOR
+	struct cpu_info *ci = curcpu();
+#endif
 
 	switch (frame->trap) {
 	case T_BPTFLT:	/* breakpoint */
-	case T_TRCTRAP:	/* single_step */
+	case T_TRCTRAP: /* single_step */
 		break;
 
 	/* XXX todo: should be migrated to use VAX_CALLFRAME at some point */
 	case T_KDBTRAP:
+#ifndef MULTIPROCESSOR	/* No fancy panic stack conversion here */
 		if (panicstr) {
 			struct	callsframe *pf, *df;
 
 			df = (void *)frame->fp; /* start of debug's calls */
-			pf = (void *)df->ca_fp;	/* start of panic's calls */
+			pf = (void *)df->ca_fp; /* start of panic's calls */
 			bcopy(&pf->ca_argno, &ddb_regs.r0, sizeof(int) * 12);
 			ddb_regs.fp = pf->ca_fp;
 			ddb_regs.pc = pf->ca_pc;
@@ -125,6 +174,7 @@ kdb_trap(frame)
 			ddb_regs.psl |= pf->ca_maskpsw & 0xffe0;
 			ddb_regs.psl |= (splsave << 16);
 		}
+#endif
 		break;
 
 	default:
@@ -138,35 +188,50 @@ kdb_trap(frame)
 		}
 	}
 
+#ifdef MULTIPROCESSOR
+	ci->ci_ddb_regs = frame;
+	if (pause_cpus())
+		return;
+#endif
+#ifndef MULTIPROCESSOR
 	if (!panicstr)
 		bcopy(frame, &ddb_regs, sizeof(struct trapframe));
+#else
+	bcopy(stopcpu->ci_ddb_regs, &ddb_regs, sizeof(struct trapframe));
+	printf("stopped on CPU %d\n", stopcpu->ci_cpuid);
+#endif
 
 	/* XXX Should switch to interrupt stack here, if needed. */
 
-	s = splimp();
+	s = splhigh();
 	db_active++;
-	cnpollc(TRUE);
+	cnpollc(true);
 	db_trap(frame->trap, frame->code);
-	cnpollc(FALSE);
+	cnpollc(false);
 	db_active--;
 	splx(s);
 
+#ifndef MULTIPROCESSOR
 	if (!panicstr)
 		bcopy(&ddb_regs, frame, sizeof(struct trapframe));
+#else
+	bcopy(&ddb_regs, stopcpu->ci_ddb_regs, sizeof(struct trapframe));
+#endif
 	frame->sp = mfpr(PR_USP);
-
-	return;
+#ifdef MULTIPROCESSOR
+	rpb.wait = 0;
+	resume_cpus();
+#endif
 }
 
-extern char *traptypes[];
+extern const char * const traptypes[];
 extern int no_traps;
 
 /*
  * Print trap reason.
  */
 void
-kdbprinttrap(type, code)
-	int type, code;
+kdbprinttrap(int type, int code)
 {
 	db_printf("kernel: ");
 	if (type >= no_traps || type < 0)
@@ -180,40 +245,32 @@ kdbprinttrap(type, code)
  * Read bytes from kernel address space for debugger.
  */
 void
-db_read_bytes(addr, size, data)
-	vaddr_t	addr;
-	register size_t	size;
-	register char	*data;
+db_read_bytes(vaddr_t addr, size_t size, char *data)
 {
-
-	memcpy(data, (caddr_t)addr, size);
+	memcpy(data, (void *)addr, size);
 }
 
 /*
  * Write bytes to kernel address space for debugger.
  */
 void
-db_write_bytes(addr, size, data)
-	vaddr_t	addr;
-	register size_t	size;
-	register char	*data;
+db_write_bytes(vaddr_t addr, size_t size, const char *data)
 {
-
-	memcpy((caddr_t)addr, data, size);
+	memcpy((void *)addr, data, size);
 }
 
 void
-Debugger()
+Debugger(void)
 {
-	splsave = splx(0xe);
-	mtpr(0xf, PR_SIRR); /* beg for debugger */
+	splsave = splx(0xe);	/* XXX WRONG (this can lower IPL) */
+	setsoftddb();		/* beg for debugger */
 	splx(splsave);
 }
 
 /*
  * Machine register set.
  */
-struct db_variable db_regs[] = {
+const struct db_variable db_regs[] = {
 	{"r0",	&ddb_regs.r0,	FCN_NULL},
 	{"r1",	&ddb_regs.r1,	FCN_NULL},
 	{"r2",	&ddb_regs.r2,	FCN_NULL},
@@ -224,15 +281,15 @@ struct db_variable db_regs[] = {
 	{"r7",	&ddb_regs.r7,	FCN_NULL},
 	{"r8",	&ddb_regs.r8,	FCN_NULL},
 	{"r9",	&ddb_regs.r9,	FCN_NULL},
-	{"r10",	&ddb_regs.r10,	FCN_NULL},
-	{"r11",	&ddb_regs.r11,	FCN_NULL},
+	{"r10", &ddb_regs.r10,	FCN_NULL},
+	{"r11", &ddb_regs.r11,	FCN_NULL},
 	{"ap",	&ddb_regs.ap,	FCN_NULL},
 	{"fp",	&ddb_regs.fp,	FCN_NULL},
 	{"sp",	&ddb_regs.sp,	FCN_NULL},
 	{"pc",	&ddb_regs.pc,	FCN_NULL},
-	{"psl",	&ddb_regs.psl,	FCN_NULL},
+	{"psl", &ddb_regs.psl,	FCN_NULL},
 };
-struct db_variable *db_eregs = db_regs + sizeof(db_regs)/sizeof(db_regs[0]);
+const struct db_variable * const db_eregs = db_regs + sizeof(db_regs)/sizeof(db_regs[0]);
 
 #define IN_USERLAND(x)	(((u_int)(x) & 0x80000000) == 0)
 
@@ -242,27 +299,28 @@ struct db_variable *db_eregs = db_regs + sizeof(db_regs)/sizeof(db_regs[0]);
  *	stackbase - Lowest stack value
  */
 static void
-db_dump_stack(VAX_CALLFRAME *fp, u_int stackbase) {
+db_dump_stack(VAX_CALLFRAME *fp, u_int stackbase,
+    void (*pr)(const char *, ...)) {
 	u_int nargs, arg_base, regs;
 	VAX_CALLFRAME *tmp_frame;
 	db_expr_t	diff;
 	db_sym_t	sym;
-	char		*symname;
+	const char	*symname;
+	extern int	sret;
+	extern unsigned int etext;
 
-	db_printf("Stack traceback : \n");
+	(*pr)("Stack traceback : \n");
 	if (IN_USERLAND(fp)) {
-		db_printf("  Process is executing in user space.\n");
+		(*pr)("	 Process is executing in user space.\n");
 		return;
 	}
 
-	while (((u_int)(fp->vax_fp) > stackbase) && 
+#if 0
+	while (((u_int)(fp->vax_fp) > stackbase - 0x100) && 
 			((u_int)(fp->vax_fp) < (stackbase + USPACE))) {
-
-		diff = INT_MAX;
-		symname = NULL;
-		sym = db_search_symbol(fp->vax_pc, DB_STGY_ANY, &diff);
-		db_symbol_values(sym, &symname, 0);
-		db_printf("%s+0x%lx(", symname, diff);
+#endif
+	while (!IN_USERLAND(fp->vax_fp)) {
+		u_int pc = fp->vax_pc;
 
 		/*
 		 * Figure out the arguments by using a bit of subtlety.
@@ -278,6 +336,34 @@ db_dump_stack(VAX_CALLFRAME *fp, u_int stackbase) {
 		 *    that identifies the number of arguments.
 		 *	arg_base+1 - arg_base+n are the argument pointers/contents.
 		 */
+
+
+		/* If this was due to a trap/fault, pull the correct pc
+		 * out of the trap frame.  */
+		if (pc == (u_int) &sret && fp->vax_fp != 0) {
+			struct trapframe *tf;
+			/* Isolate the saved register bits, and count them */
+			regs = fp->vax_regs;
+			for (arg_base = 0; regs != 0; regs >>= 1) {
+				if (regs & 1)
+					arg_base++;
+			}
+			tf = (struct trapframe *) &fp->vax_args[arg_base + 2];
+			(*pr)("0x%lx: trap type=0x%lx code=0x%lx pc=0x%lx psl=0x%lx\n",
+			      tf, tf->trap, tf->code, tf->pc, tf->psl);
+			pc = tf->pc;
+		}
+
+		diff = INT_MAX;
+		symname = NULL;
+		if (pc >= 0x80000000 && pc < (u_int) &etext) {
+			sym = db_search_symbol(pc, DB_STGY_ANY, &diff);
+			db_symbol_values(sym, &symname, 0);
+		}
+		if (symname != NULL)
+			(*pr)("0x%lx: %s+0x%lx(", fp, symname, diff);
+		else
+			(*pr)("0x%lx: %#x(", fp, pc);
 
 		/* First get the frame that called this function ... */
 		tmp_frame = fp->vax_fp;
@@ -295,12 +381,12 @@ db_dump_stack(VAX_CALLFRAME *fp, u_int stackbase) {
 			nargs--; /* reduce by one for formatting niceties */
 			arg_base++; /* skip past the actual number of arguments */
 			while (nargs--)
-				db_printf("0x%x,", tmp_frame->vax_args[arg_base++]);
+				(*pr)("%#x,", tmp_frame->vax_args[arg_base++]);
 
 			/* now print out the last arg with closing brace and \n */
-			db_printf("0x%x)\n", tmp_frame->vax_args[++arg_base]);
+			(*pr)("%#x)\n", tmp_frame->vax_args[arg_base]);
 		} else
-			db_printf("void)\n");
+			(*pr)("void)\n");
 		/* move to the next frame */
 		fp = fp->vax_fp;
 	}
@@ -309,24 +395,26 @@ db_dump_stack(VAX_CALLFRAME *fp, u_int stackbase) {
 /*
  * Implement the trace command which has the form:
  *
- *	trace				<-- Trace panic (same as before)
- *	trace	0x88888 	<-- Trace process whose address is 888888
- *	trace/t				<-- Trace current process (0 if no current proc)
- *	trace/t	0tnn		<-- Trace process nn (0t for decimal)
+ *	trace			<-- Trace panic (same as before)
+ *	trace	0x88888		<-- Trace frame whose address is 888888
+ *	trace/t			<-- Trace current process (0 if no current proc)
+ *	trace/t 0tnn		<-- Trace process nn (0t for decimal)
  */
 void
-db_stack_trace_cmd(addr, have_addr, count, modif)
-        db_expr_t       addr;		/* Address parameter */
-        boolean_t       have_addr;	/* True if addr is valid */
-        db_expr_t       count;		/* Optional count */
-        char            *modif;		/* pointer to flag modifier 't' */
+db_stack_trace_print(
+	db_expr_t	addr,		/* Address parameter */
+	bool		have_addr,	/* True if addr is valid */
+	db_expr_t	count,		/* Optional count */
+	const char	*modif,		/* pointer to flag modifier 't' */
+	void		(*pr)(const char *, ...)) /* Print function */
 {
-	extern vaddr_t 	proc0paddr;
-	struct proc	*p = curproc;
+	extern struct user *proc0paddr;
+	struct lwp	*l = curlwp;
+	struct proc	*p = l->l_proc;
 	struct user	*uarea;
 	int		trace_proc;
-	pid_t	curpid;
-	char	*s;
+	pid_t		curpid;
+	const char	*s;
  
 	/* Check to see if we're tracing a process */
 	trace_proc = 0;
@@ -337,14 +425,14 @@ db_stack_trace_cmd(addr, have_addr, count, modif)
 	}
 
 	/* Trace a panic */
-	if (! trace_proc) {
-		if (! panicstr) {
-			db_printf("Not a panic, use trace/t to trace a process.\n");
-			return;
-		}
-		db_printf("panic: %s\n", panicstr);
+	if (panicstr) {
+		(*pr)("panic: %s\n", panicstr);
 		/* xxx ? where did we panic and whose stack are we using? */
-		db_dump_stack((VAX_CALLFRAME *)(ddb_regs.sp), ddb_regs.ap);
+#ifdef MULTIPROCESSOR
+		db_dump_stack((VAX_CALLFRAME *)(ddb_regs.fp), ddb_regs.ap, pr);
+#else
+		db_dump_stack((VAX_CALLFRAME *)(ddb_regs.sp), ddb_regs.ap, pr);
+#endif
 		return;
 	}
 
@@ -354,7 +442,7 @@ db_stack_trace_cmd(addr, have_addr, count, modif)
 	 */
 	if (have_addr) {
 		if (trace_proc) {
-			p = pfind((int)addr);
+			p = p_find((int)addr, PFIND_LOCKED);
 			/* Try to be helpful by looking at it as if it were decimal */
 			if (p == NULL) {
 				u_int	tpid = 0;
@@ -363,71 +451,71 @@ db_stack_trace_cmd(addr, have_addr, count, modif)
 				while (foo != 0) {
 					int digit = (foo >> 28) & 0xf;
 					if (digit > 9) {
-						db_printf("  No such process.\n");
+						(*pr)("	 No such process.\n");
 						return;
 					}
 					tpid = tpid * 10 + digit;
 					foo = foo << 4;
 				}
-				p = pfind(tpid);
+				p = p_find(tpid, PFIND_LOCKED);
 				if (p == NULL) {
-					db_printf("  No such process.\n");
+					(*pr)("	 No such process.\n");
 					return;
 				}
 			}
 		} else {
-			p = (struct proc *)(addr);
-			if (pfind(p->p_pid) != p) {
-				db_printf("  This address does not point to a valid process.\n");
-				return;
-			}
+			db_dump_stack((VAX_CALLFRAME *)addr, 0, pr);
+			return;
 		}
+#if 0
 	} else {
-		if (trace_proc) {
-			p = curproc;
-			if (p == NULL) {
-				db_printf("trace: no current process! (ignored)\n");
+		if (!trace_proc) {
+			l = curlwp;
+			if (l == NULL) {
+				(*pr)("trace: no current process! (ignored)\n");
 				return;
 			}
 		} else {
 			if (! panicstr) {
-				db_printf("Not a panic, no active process, ignored.\n");
+				(*pr)("Not a panic, no active process, ignored.\n");
 				return;
 			}
 		}
+#endif
 	}
 	if (p == NULL) {
-		uarea = (struct user *)proc0paddr;
+		uarea = proc0paddr;
 		curpid = 0;
 	} else {
-		uarea = p->p_addr;
+		uarea = l->l_addr;
 		curpid = p->p_pid;
 	}
-	db_printf("Process %d\n", curpid);
-	db_printf("  PCB contents:\n");
-	db_printf("	KSP = 0x%x\n", (unsigned int)(uarea->u_pcb.KSP));
-	db_printf("	ESP = 0x%x\n", (unsigned int)(uarea->u_pcb.ESP));
-	db_printf("	SSP = 0x%x\n", (unsigned int)(uarea->u_pcb.SSP));
-	db_printf("	USP = 0x%x\n", (unsigned int)(uarea->u_pcb.USP));
-	db_printf("	R[00] = 0x%08x    R[06] = 0x%08x\n", 
+	(*pr)("Process %d.%d\n", curpid, l->l_lid);
+	(*pr)("	 PCB contents:\n");
+	(*pr)(" KSP = 0x%x\n", (unsigned int)(uarea->u_pcb.KSP));
+	(*pr)(" ESP = 0x%x\n", (unsigned int)(uarea->u_pcb.ESP));
+	(*pr)(" SSP = 0x%x\n", (unsigned int)(uarea->u_pcb.SSP));
+	(*pr)(" USP = 0x%x\n", (unsigned int)(uarea->u_pcb.USP));
+	(*pr)(" R[00] = 0x%08x	  R[06] = 0x%08x\n", 
 		(unsigned int)(uarea->u_pcb.R[0]), (unsigned int)(uarea->u_pcb.R[6]));
-	db_printf("	R[01] = 0x%08x    R[07] = 0x%08x\n", 
+	(*pr)(" R[01] = 0x%08x	  R[07] = 0x%08x\n", 
 		(unsigned int)(uarea->u_pcb.R[1]), (unsigned int)(uarea->u_pcb.R[7]));
-	db_printf("	R[02] = 0x%08x    R[08] = 0x%08x\n", 
+	(*pr)(" R[02] = 0x%08x	  R[08] = 0x%08x\n", 
 		(unsigned int)(uarea->u_pcb.R[2]), (unsigned int)(uarea->u_pcb.R[8]));
-	db_printf("	R[03] = 0x%08x    R[09] = 0x%08x\n", 
+	(*pr)(" R[03] = 0x%08x	  R[09] = 0x%08x\n", 
 		(unsigned int)(uarea->u_pcb.R[3]), (unsigned int)(uarea->u_pcb.R[9]));
-	db_printf("	R[04] = 0x%08x    R[10] = 0x%08x\n", 
+	(*pr)(" R[04] = 0x%08x	  R[10] = 0x%08x\n", 
 		(unsigned int)(uarea->u_pcb.R[4]), (unsigned int)(uarea->u_pcb.R[10]));
-	db_printf("	R[05] = 0x%08x    R[11] = 0x%08x\n", 
+	(*pr)(" R[05] = 0x%08x	  R[11] = 0x%08x\n", 
 		(unsigned int)(uarea->u_pcb.R[5]), (unsigned int)(uarea->u_pcb.R[11]));
-	db_printf("	AP = 0x%x\n", (unsigned int)(uarea->u_pcb.AP));
-	db_printf("	FP = 0x%x\n", (unsigned int)(uarea->u_pcb.FP));
-	db_printf("	PC = 0x%x\n", (unsigned int)(uarea->u_pcb.PC));
-	db_printf("	PSL = 0x%x\n", (unsigned int)(uarea->u_pcb.PSL));
-	db_printf("	Trap frame pointer: 0x%x\n", 
+	(*pr)(" AP = 0x%x\n", (unsigned int)(uarea->u_pcb.AP));
+	(*pr)(" FP = 0x%x\n", (unsigned int)(uarea->u_pcb.FP));
+	(*pr)(" PC = 0x%x\n", (unsigned int)(uarea->u_pcb.PC));
+	(*pr)(" PSL = 0x%x\n", (unsigned int)(uarea->u_pcb.PSL));
+	(*pr)(" Trap frame pointer: 0x%x\n", 
 							(unsigned int)(uarea->u_pcb.framep));
-	db_dump_stack((VAX_CALLFRAME *)(uarea->u_pcb.FP), (u_int) uarea->u_pcb.KSP);
+	db_dump_stack((VAX_CALLFRAME *)(uarea->u_pcb.FP),
+	    (u_int) uarea->u_pcb.KSP, pr);
 	return;
 #if 0
 	while (((u_int)(cur_frame->vax_fp) > stackbase) && 
@@ -439,7 +527,7 @@ db_stack_trace_cmd(addr, have_addr, count, modif)
 		symname = NULL;
 		sym = db_search_symbol(cur_frame->vax_pc, DB_STGY_ANY, &diff);
 		db_symbol_values(sym, &symname, 0);
-		db_printf("%s+0x%lx(", symname, diff);
+		(*pr)("%s+0x%lx(", symname, diff);
 
 		/*
 		 * Figure out the arguments by using a bit of subterfuge
@@ -472,12 +560,12 @@ db_stack_trace_cmd(addr, have_addr, count, modif)
 			nargs--; /* reduce by one for formatting niceties */
 			arg_base++; /* skip past the actual number of arguments */
 			while (nargs--)
-				db_printf("0x%x,", tmp_frame->vax_args[arg_base++]);
+				(*pr)("0x%x,", tmp_frame->vax_args[arg_base++]);
 
 			/* now print out the last arg with closing brace and \n */
-			db_printf("0x%x)\n", tmp_frame->vax_args[++arg_base]);
+			(*pr)("0x%x)\n", tmp_frame->vax_args[++arg_base]);
 		} else
-			db_printf("void)\n");
+			(*pr)("void)\n");
 		/* move to the next frame */
 		cur_frame = cur_frame->vax_fp;
 	}
@@ -499,19 +587,17 @@ db_stack_trace_cmd(addr, have_addr, count, modif)
 			paddr = proc0paddr;
 
 		stackbase = (ddb_regs.psl & PSL_IS ? istack : paddr);
- 	}
+	}
 #endif
 }
 
 static int ddbescape = 0;
 
 int
-kdbrint(tkn)
-	int tkn;
+kdbrint(int tkn)
 {
-
 	if (ddbescape && ((tkn & 0x7f) == 'D')) {
-		mtpr(0xf, PR_SIRR);
+		setsoftddb();
 		ddbescape = 0;
 		return 1;
 	}
@@ -530,3 +616,36 @@ kdbrint(tkn)
 	return 0;
 }
 
+#ifdef MULTIPROCESSOR
+
+static void
+db_mach_cpu(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
+{
+	struct cpu_info *ci;
+
+	if ((addr < 0) || (addr >= cpu_cd.cd_ndevs))
+		return db_printf("%ld: CPU out of range\n", addr);
+	if ((ci = device_lookup_private(&cpu_cd, addr)) == NULL)
+		return db_printf("%ld: CPU not configured\n", addr);
+
+	if ((ci != curcpu()) && ((ci->ci_flags & CI_STOPPED) == 0))
+		return db_printf("CPU %ld not stopped???\n", addr);
+
+	bcopy(&ddb_regs, stopcpu->ci_ddb_regs, sizeof(struct trapframe));
+	stopcpu = ci;
+	bcopy(stopcpu->ci_ddb_regs, &ddb_regs, sizeof(struct trapframe));
+	db_printf("using CPU %ld", addr);
+	if (ci->ci_curlwp)
+		db_printf(" in proc %d.%d (%s)\n",
+		    ci->ci_curlwp->l_proc->p_pid,
+		    ci->ci_curlwp->l_lid,
+		    ci->ci_curlwp->l_proc->p_comm);
+}
+#endif
+
+const struct db_command db_machine_command_table[] = {
+#ifdef MULTIPROCESSOR
+	{ DDB_ADD_CMD("cpu",	db_mach_cpu,	0,	NULL,NULL,NULL) },
+#endif
+	{ DDB_ADD_CMD(NULL,NULL,0,NULL,NULL,NULL) },
+};

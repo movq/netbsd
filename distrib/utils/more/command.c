@@ -1,7 +1,7 @@
-/*	$NetBSD: command.c,v 1.5 1998/02/09 07:40:15 thorpej Exp $	*/
+/*	$NetBSD: command.c,v 1.11 2004/09/01 01:46:56 chs Exp $	*/
 
 /*
- * Copyright (c) 1988 Mark Nudleman
+ * Copyright (c) 1988 Mark Nudelman
  * Copyright (c) 1988, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -13,11 +13,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -39,7 +35,7 @@
 #if 0
 static char sccsid[] = "@(#)command.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: command.c,v 1.5 1998/02/09 07:40:15 thorpej Exp $");
+__RCSID("$NetBSD: command.c,v 1.11 2004/09/01 01:46:56 chs Exp $");
 #endif
 #endif /* not lint */
 
@@ -185,19 +181,22 @@ prompt()
 		putstr(current_name);
 		putstr(":");
 		if (!ispipe) {
-			(void)sprintf(pbuf, " file %d/%d", curr_ac + 1, ac);
+			(void)snprintf(pbuf, sizeof(pbuf), " file %d/%d",
+			    curr_ac + 1, ac);
 			putstr(pbuf);
 		}
 		if (linenums) {
-			(void)sprintf(pbuf, " line %d", currline(BOTTOM));
+			(void)snprintf(pbuf, sizeof(pbuf), " line %d",
+			    currline(BOTTOM));
 			putstr(pbuf);
 		}
 		if ((pos = position(BOTTOM)) != NULL_POSITION) {
-			(void)sprintf(pbuf, " byte %qd", (long long)pos);
+			(void)snprintf(pbuf, sizeof(pbuf), " byte %lld",
+			    (long long)pos);
 			putstr(pbuf);
 			if (!ispipe && (len = ch_length())) {
-				(void)sprintf(pbuf, "/%qd pct %qd%%",
-				    (long long)len,
+				(void)snprintf(pbuf, sizeof(pbuf),
+				    "/%lld pct %lld%%", (long long)len,
 				    (long long)((100 * pos) / len));
 				putstr(pbuf);
 			}
@@ -219,7 +218,7 @@ prompt()
 		else if (!ispipe &&
 		    (pos = position(BOTTOM)) != NULL_POSITION &&
 		    (len = ch_length())) {
-			(void)sprintf(pbuf, " (%qd%%)",
+			(void)snprintf(pbuf, sizeof(pbuf), " (%lld%%)",
 			    (long long)((100 * pos) / len));
 			putstr(pbuf);
 		}
@@ -237,7 +236,7 @@ getcc()
 	/* left over from error() routine. */
 	if (cmdstack) {
 		ch = cmdstack;
-		cmdstack = NULL;
+		cmdstack = 0;
 		return(ch);
 	}
 	if (cp > cmdbuf && position(TOP) == NULL_POSITION) {
@@ -336,7 +335,7 @@ commands()
 	int action;
 
 	last_mca = 0;
-	scroll = (sc_height + 1) / 2;
+	scroll_lines = (sc_height + 1) / 2;
 
 	for (;;) {
 		mca = 0;
@@ -419,14 +418,14 @@ again:		if (sigs)
 		case A_F_SCROLL:	/* forward N lines */
 			CMD_EXEC;
 			if (number > 0)
-				scroll = number;
-			forward(scroll, 0);
+				scroll_lines = number;
+			forward(scroll_lines, 0);
 			break;
 		case A_B_SCROLL:	/* backward N lines */
 			CMD_EXEC;
 			if (number > 0)
-				scroll = number;
-			backward(scroll, 0);
+				scroll_lines = number;
+			backward(scroll_lines, 0);
 			break;
 		case A_FREPAINT:	/* flush buffers and repaint */
 			if (!ispipe) {
@@ -593,9 +592,10 @@ editfile()
 			dolinenumber = 0;
 	}
 	if (dolinenumber && (c = currline(MIDDLE)))
-		(void)sprintf(buf, "%s +%d %s", editor, c, current_file);
+		(void)snprintf(buf, sizeof(buf), "%s +%d %s", editor, c,
+		    current_file);
 	else
-		(void)sprintf(buf, "%s %s", editor, current_file);
+		(void)snprintf(buf, sizeof(buf), "%s %s", editor, current_file);
 	lsystem(buf);
 }
 

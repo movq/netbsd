@@ -1,13 +1,8 @@
-#	$NetBSD: Makefile,v 1.6 1999/12/05 22:10:57 jdolecek Exp $
+#	$NetBSD: Makefile,v 1.11 2008/05/03 14:48:32 lukem Exp $
+
+LIBISPRIVATE=	yes
 
 LIB=	common
 SRCS=	common.c common_vars.c displayq.c fatal.c rmjob.c startdaemon.c
-
-MKLINT=		no
-MKPIC=		no
-MKPROFILE=	no
-
-# only needed during build
-libinstall::
 
 .include <bsd.lib.mk>

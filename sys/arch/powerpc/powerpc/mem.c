@@ -1,9 +1,41 @@
-/*	$NetBSD: mem.c,v 1.6 1999/12/04 21:21:22 ragge Exp $ */
+/*	$NetBSD: mem.c,v 1.29 2007/03/04 06:00:38 christos Exp $ */
 
 /*
- * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1982, 1986, 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Systems Programming Group of the University of Utah Computer
+ * Science Department.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ *	@(#)mem.c	8.3 (Berkeley) 1/12/94
+ */
+/*
+ * Copyright (c) 1988 University of Utah.
  *
  * This code is derived from software contributed to Berkeley by
  * the Systems Programming Group of the University of Utah Computer
@@ -44,48 +76,40 @@
  * Memory special file
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: mem.c,v 1.29 2007/03/04 06:00:38 christos Exp $");
+
 #include <sys/param.h>
 #include <sys/conf.h>
 #include <sys/buf.h>
 #include <sys/systm.h>
 #include <sys/uio.h>
 #include <sys/malloc.h>
+#include <sys/proc.h>
+#include <sys/kauth.h>
 
-#include <vm/vm.h>
+#include <uvm/uvm_extern.h>
 
-/*ARGSUSED*/
-int
-mmopen(dev, flag, mode)
-	dev_t dev;
-	int flag, mode;
-{
-	return 0;
-}
+dev_type_read(mmrw);
+dev_type_ioctl(mmioctl);
+dev_type_mmap(mmmmap);
 
-/*ARGSUSED*/
-int
-mmclose(dev, flag, mode)
-	dev_t dev;
-	int flag, mode;
-{
-
-	return 0;
-}
+const struct cdevsw mem_cdevsw = {
+	nullopen, nullclose, mmrw, mmrw, mmioctl,
+	nostop, notty, nopoll, mmmmap, nokqfilter, D_OTHER,
+};
 
 /*ARGSUSED*/
 int
-mmrw(dev, uio, flags)
-	dev_t dev;
-	struct uio *uio;
-	int flags;
+mmrw(dev_t dev, struct uio *uio, int flags)
 {
-	vaddr_t o, v;
+	vaddr_t v;
 	u_int c;
 	struct iovec *iov;
 	int error = 0;
-	static caddr_t zeropage;
+	static void *zeropage;
 	
-	while (uio->uio_resid > 0 && error == 0) {
+	while (uio->uio_resid > 0 && !error) {
 		iov = uio->uio_iov;
 		if (iov->iov_len == 0) {
 			uio->uio_iov++;
@@ -96,59 +120,54 @@ mmrw(dev, uio, flags)
 		}
 		switch (minor(dev)) {
 
-/* minor device 0 is physical memory */
-		case 0:
+		case DEV_MEM:
 			v = uio->uio_offset;
 			c = uio->uio_resid;
-			/* This doesn't allow device mapping!	XXX */
-			pmap_real_memory(&v, &c);
-			error = uiomove((caddr_t)v, c, uio);
-			continue;
+			error = uiomove((void *)v, c, uio);
+			break;
 
-/* minor device 1 is kernel memory */
-		case 1:
+		case DEV_KMEM:
 			v = uio->uio_offset;
 			c = min(iov->iov_len, MAXPHYS);
-			error = uiomove((caddr_t)v, c, uio);
-			continue;
+			error = uiomove((void *)v, c, uio);
+			break;
 
-/* minor device 2 is EOF/RATHOLE */
-		case 2:
+		case DEV_NULL:
 			if (uio->uio_rw == UIO_WRITE)
 				uio->uio_resid = 0;
-			return 0;
+			return (0);
 
-/* minor device 12 (/dev/zero) is source of nulls on read, rathole on write */
-		case 12:
+		case DEV_ZERO:
 			if (uio->uio_rw == UIO_WRITE) {
-				c = iov->iov_len;
-				break;
+				uio->uio_resid = 0;
+				return (0);
 			}
 			if (zeropage == NULL) {
-				zeropage = (caddr_t)malloc(NBPG, M_TEMP, M_WAITOK);
-				bzero(zeropage, NBPG);
+				zeropage = (void *)
+				    malloc(PAGE_SIZE, M_TEMP, M_WAITOK);
+				memset(zeropage, 0, PAGE_SIZE);
 			}
-			c = min(iov->iov_len, NBPG);
+			c = min(iov->iov_len, PAGE_SIZE);
 			error = uiomove(zeropage, c, uio);
-			continue;
+			break;
 
 		default:
-			return ENXIO;
+			return (ENXIO);
 		}
-		if (error)
-			break;
-		iov->iov_base = (caddr_t)iov->iov_base + c;
-		iov->iov_len -= c;
-		uio->uio_offset += c;
-		uio->uio_resid -= c;
 	}
-	return error;
+	return (error);
 }
 
-int
-mmmmap(dev, off, prot)
-        dev_t dev;
-        int off, prot;
+paddr_t
+mmmmap(dev_t dev, off_t off, int prot)
 {
-	return -1;
+	struct lwp *l = curlwp;
+
+	if (minor(dev) != DEV_MEM)
+		return (-1);
+
+	if (atop(off) >= physmem && kauth_authorize_machdep(l->l_cred,
+	    KAUTH_MACHDEP_UNMANAGEDMEM, NULL, NULL, NULL, NULL) != 0)
+		return (-1);
+	return (trunc_page((paddr_t)off));
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: SYS.h,v 1.12 1999/10/25 23:48:07 thorpej Exp $	*/
+/*	$NetBSD: SYS.h,v 1.16 2003/08/07 16:42:09 agc Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -86,7 +82,16 @@
 
 #define RSYSCALL(x)							\
 	PSEUDO(x,x)
-	
+
+#ifdef WEAK_ALIAS
+#define	WSYSCALL(weak,strong)						\
+	WEAK_ALIAS(weak,strong);					\
+	PSEUDO(strong,weak)
+#else
+#define	WSYSCALL(weak,strong)						\
+	PSEUDO(weak,weak)
+#endif
+
 #define	ASMSTR		.asciz
 
 	.globl	CERROR

@@ -1,18 +1,22 @@
-#	$NetBSD: Makefile,v 1.6 1999/06/21 01:19:37 cgd Exp $
+#	$NetBSD: Makefile,v 1.16 2005/01/18 12:30:21 lukem Exp $
 #	@(#)Makefile	8.1 (Berkeley) 6/5/93
 
-PROG=	route
-MKMAN=	no
-SRCS=	route.c show.c keywords.c
+SRCDIR=		${.CURDIR}/../../../sbin/route
 
-SRCDIR= ${.CURDIR}/../../../sbin/route
-CPPFLAGS+= -DSMALL -I${SRCDIR}
+PROG=		route
+NOMAN=		# defined
 
-BINOWN=	root
-BINMODE=4555
+.include <bsd.own.mk>
 
-all: ${PROG}
+SRCS=		route.c show.c keywords.c
+
+CPPFLAGS+=	-DSMALL -I${SRCDIR}
+.if defined(SMALLPROG_INET6) && (${USE_INET6} != "no")
+CPPFLAGS+=	-DINET6
+.endif
 
 .include <bsd.prog.mk>
 
-.PATH:  ${SRCDIR}
+BINOWN=		root
+BINMODE=	4555
+.PATH:		${SRCDIR}

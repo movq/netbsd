@@ -1,4 +1,4 @@
-/*	$NetBSD: stddef.h,v 1.7 2000/01/10 16:58:38 kleink Exp $	*/
+/*	$NetBSD: stddef.h,v 1.15 2006/08/21 16:58:29 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,6 +34,8 @@
 #ifndef _STDDEF_H_
 #define _STDDEF_H_
 
+#include <sys/cdefs.h>
+#include <sys/featuretest.h>
 #include <machine/ansi.h>
 
 typedef	_BSD_PTRDIFF_T_	ptrdiff_t;
@@ -54,6 +52,16 @@ typedef	_BSD_WCHAR_T_	wchar_t;
 
 #include <sys/null.h>
 
-#define	offsetof(type, member)	((size_t)(&((type *)0)->member))
-
+#if __GNUC_PREREQ__(4, 0)
+#define	offsetof(type, member)	__builtin_offsetof(type, member)
+#elif !defined(__cplusplus)
+#define	offsetof(type, member)	((size_t)(unsigned long)(&((type *)0)->member))
+#else
+#if !__GNUC_PREREQ__(3, 4)
+#define __offsetof__(a) a
+#endif
+#define	offsetof(type, member) __offsetof__((reinterpret_cast<size_t> \
+    (&reinterpret_cast<const volatile char &>(static_cast<type *>(0)->member))))
+#endif  
+ 
 #endif /* _STDDEF_H_ */

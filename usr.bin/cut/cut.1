@@ -1,4 +1,4 @@
-.\"	$NetBSD: cut.1,v 1.8 1997/11/03 18:24:45 kleink Exp $
+.\"	$NetBSD: cut.1,v 1.14.26.1 2008/12/23 03:47:20 snj Exp $
 .\"
 .\" Copyright (c) 1989, 1990, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -14,11 +14,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -36,7 +32,7 @@
 .\"
 .\"     @(#)cut.1	8.1 (Berkeley) 6/6/93
 .\"
-.Dd June 6, 1993
+.Dd December 21, 2008
 .Dt CUT 1
 .Os
 .Sh NAME
@@ -47,10 +43,10 @@
 .Fl b Ar list
 .Op Fl n
 .Op Ar
-.Nm ""
+.Nm
 .Fl c Ar list
 .Op Ar
-.Nm ""
+.Nm
 .Fl f Ar list
 .Op Fl d Ar delim
 .Op Fl s
@@ -62,12 +58,20 @@ utility selects portions of each line (as specified by
 .Ar list  )
 from each
 .Ar file
-(or the standard input by default), and writes them to the
+and writes them to the
 standard output.
+If the
+.Ar file
+argument is a single dash
+.Pq Sq -
+or no
+.Ar file
+arguments were specified, lines are read from the standard input.
 The items specified by
 .Ar list
 can be in terms of column position or in terms of fields delimited
-by a special character. Column numbering starts from 1.
+by a special character.
+Column numbering starts from 1.
 .Pp
 .Ar List
 is a comma or whitespace separated set of increasing numbers and/or
@@ -88,7 +92,7 @@ input line.
 The options are as follows:
 .Bl -tag -width Fl
 .It Fl b Ar list
-The 
+The
 .Ar list
 specifies byte positions.
 .It Fl c Ar list
@@ -98,19 +102,23 @@ specifies character positions.
 .It Fl d Ar string
 Use the first character of
 .Ar string
-as the field delimiter character instead of the tab character.
+as the field delimiter character.
+The default is the
+.Aq TAB
+character.
 .It Fl f Ar list
 The
 .Ar list
-specifies fields, delimited in the input by a single tab character.
-Output fields are separated by a single tab character.
+specifies fields, separated by the field delimiter character.
+The selected fields are output,
+separated by the field delimiter character.
 .It Fl n
 Do not split multi-byte characters.
 .It Fl s
 Suppresses lines with no field delimiter characters.
 Unless specified, lines with no delimiters are passed through unmodified.
 .El
-.Pp
+.Sh EXIT STATUS
 .Nm
 exits 0 on success, 1 if an error occurred.
 .Sh SEE ALSO

@@ -1,4 +1,4 @@
-/*	$NetBSD: fnmatch.c,v 1.17 2000/01/22 22:19:10 mycroft Exp $	*/
+/*	$NetBSD: fnmatch.c,v 1.21 2005/12/24 21:11:16 perry Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993, 1994
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)fnmatch.c	8.2 (Berkeley) 4/16/94";
 #else
-__RCSID("$NetBSD: fnmatch.c,v 1.17 2000/01/22 22:19:10 mycroft Exp $");
+__RCSID("$NetBSD: fnmatch.c,v 1.21 2005/12/24 21:11:16 perry Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -53,6 +49,7 @@ __RCSID("$NetBSD: fnmatch.c,v 1.17 2000/01/22 22:19:10 mycroft Exp $");
 #include "namespace.h"
 
 #include <assert.h>
+#include <ctype.h>
 #include <fnmatch.h>
 #include <string.h>
 
@@ -63,6 +60,17 @@ __weak_alias(fnmatch,_fnmatch)
 #define	EOS	'\0'
 
 static const char *rangematch __P((const char *, int, int));
+
+static inline int
+foldcase(int ch, int flags)
+{
+
+	if ((flags & FNM_CASEFOLD) != 0 && isupper(ch))
+		return (tolower(ch));
+	return (ch);
+}
+
+#define	FOLDCASE(ch, flags)	foldcase((unsigned char)(ch), (flags))
 
 int
 fnmatch(pattern, string, flags)
@@ -76,8 +84,10 @@ fnmatch(pattern, string, flags)
 	_DIAGASSERT(string != NULL);
 
 	for (stringstart = string;;)
-		switch (c = *pattern++) {
+		switch (c = FOLDCASE(*pattern++, flags)) {
 		case EOS:
+			if ((flags & FNM_LEADING_DIR) && *string == '/')
+				return (0);
 			return (*string == EOS ? 0 : FNM_NOMATCH);
 		case '?':
 			if (*string == EOS)
@@ -91,10 +101,10 @@ fnmatch(pattern, string, flags)
 			++string;
 			break;
 		case '*':
-			c = *pattern;
+			c = FOLDCASE(*pattern, flags);
 			/* Collapse multiple stars. */
 			while (c == '*')
-				c = *++pattern;
+				c = FOLDCASE(*++pattern, flags);
 
 			if (*string == '.' && (flags & FNM_PERIOD) &&
 			    (string == stringstart ||
@@ -104,7 +114,8 @@ fnmatch(pattern, string, flags)
 			/* Optimize for pattern with * at end or before /. */
 			if (c == EOS) {
 				if (flags & FNM_PATHNAME)
-					return (strchr(string, '/') == NULL ?
+					return ((flags & FNM_LEADING_DIR) ||
+					    strchr(string, '/') == NULL ?
 					    0 : FNM_NOMATCH);
 				else
 					return (0);
@@ -115,8 +126,9 @@ fnmatch(pattern, string, flags)
 			}
 
 			/* General case, use recursion. */
-			while ((test = *string) != EOS) {
-				if (!fnmatch(pattern, string, flags & ~FNM_PERIOD))
+			while ((test = FOLDCASE(*string, flags)) != EOS) {
+				if (!fnmatch(pattern, string,
+					     flags & ~FNM_PERIOD))
 					return (0);
 				if (test == '/' && flags & FNM_PATHNAME)
 					break;
@@ -129,20 +141,21 @@ fnmatch(pattern, string, flags)
 			if (*string == '/' && flags & FNM_PATHNAME)
 				return (FNM_NOMATCH);
 			if ((pattern =
-			    rangematch(pattern, *string, flags)) == NULL)
+			    rangematch(pattern, FOLDCASE(*string, flags),
+				       flags)) == NULL)
 				return (FNM_NOMATCH);
 			++string;
 			break;
 		case '\\':
 			if (!(flags & FNM_NOESCAPE)) {
-				if ((c = *pattern++) == EOS) {
+				if ((c = FOLDCASE(*pattern++, flags)) == EOS) {
 					c = '\\';
 					--pattern;
 				}
 			}
 			/* FALLTHROUGH */
 		default:
-			if (c != *string++)
+			if (c != FOLDCASE(*string++, flags))
 				return (FNM_NOMATCH);
 			break;
 		}
@@ -169,16 +182,17 @@ rangematch(pattern, test, flags)
 	if ((negate = (*pattern == '!' || *pattern == '^')) != 0)
 		++pattern;
 	
-	for (ok = 0; (c = *pattern++) != ']';) {
+	for (ok = 0; (c = FOLDCASE(*pattern++, flags)) != ']';) {
 		if (c == '\\' && !(flags & FNM_NOESCAPE))
-			c = *pattern++;
+			c = FOLDCASE(*pattern++, flags);
 		if (c == EOS)
 			return (NULL);
 		if (*pattern == '-' 
-		    && (c2 = *(pattern+1)) != EOS && c2 != ']') {
+		    && (c2 = FOLDCASE(*(pattern+1), flags)) != EOS &&
+		        c2 != ']') {
 			pattern += 2;
 			if (c2 == '\\' && !(flags & FNM_NOESCAPE))
-				c2 = *pattern++;
+				c2 = FOLDCASE(*pattern++, flags);
 			if (c2 == EOS)
 				return (NULL);
 			if (c <= test && test <= c2)

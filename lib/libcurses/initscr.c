@@ -1,4 +1,4 @@
-/*	$NetBSD: initscr.c,v 1.11 1999/06/28 13:32:43 simonb Exp $	*/
+/*	$NetBSD: initscr.c,v 1.29 2007/01/22 21:14:53 jdc Exp $	*/
 
 /*
  * Copyright (c) 1981, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,32 +34,28 @@
 #if 0
 static char sccsid[] = "@(#)initscr.c	8.2 (Berkeley) 5/4/94";
 #else
-__RCSID("$NetBSD: initscr.c,v 1.11 1999/06/28 13:32:43 simonb Exp $");
+__RCSID("$NetBSD: initscr.c,v 1.29 2007/01/22 21:14:53 jdc Exp $");
 #endif
 #endif	/* not lint */
 
-#include <signal.h>
 #include <stdlib.h>
 
 #include "curses.h"
+#include "curses_private.h"
+
 
 /*
  * initscr --
  *	Initialize the current and standard screen.
  */
 WINDOW *
-initscr()
+initscr(void)
 {
-	char *sp;
+	const char *sp;
 
 #ifdef DEBUG
-	__CTRACE("initscr\n");
+	__CTRACE(__CTRACE_INIT, "initscr\n");
 #endif
-	__echoit = 1;
-        __pfast = __rawmode = __noqch = __endwin = 0;
-
-	if (gettmode() == ERR)
-		return (NULL);
 
 	/*
 	 * If My_term is set, or can't find a terminal in the environment,
@@ -71,34 +63,25 @@ initscr()
 	 */
 	if (My_term || (sp = getenv("TERM")) == NULL)
 		sp = Def_term;
-	if (setterm(sp) == ERR)
-		return (NULL);
 
-	/* Need either homing or cursor motion for refreshes */
-	if (!HO && !CM)
-		return (NULL);
+	/* LINTED const castaway; newterm does not modify sp! */
+	if ((_cursesi_screen = newterm((char *) sp, stdout, stdin)) == NULL)
+		return NULL;
 
-	if (curscr != NULL)
-		delwin(curscr);
-	if ((curscr = newwin(LINES, COLS, 0, 0)) == ERR)
-		return (NULL);
-	clearok(curscr, 1);
+	__echoit = _cursesi_screen->echoit;
+        __pfast = _cursesi_screen->pfast;
+	__rawmode = _cursesi_screen->rawmode;
+	__noqch = _cursesi_screen->noqch;
+	COLS = _cursesi_screen->COLS;
+	LINES = _cursesi_screen->LINES;
+	COLORS = _cursesi_screen->COLORS;
+	COLOR_PAIRS = _cursesi_screen->COLOR_PAIRS;
+	__GT = _cursesi_screen->GT;
+	__NONL = _cursesi_screen->NONL;
+	__UPPERCASE = _cursesi_screen->UPPERCASE;
 
-	if (stdscr != NULL)
-		delwin(stdscr);
-	if ((stdscr = newwin(LINES, COLS, 0, 0)) == ERR) {
-		delwin(curscr);
-		return (NULL);
-	}
-
-	__init_getch(sp);
-
-	__set_stophandler();
-
-#ifdef DEBUG
-	__CTRACE("initscr: LINES = %d, COLS = %d\n", LINES, COLS);
-#endif
-	__startwin();
+	set_term(_cursesi_screen);
+	wrefresh(curscr);
 
 	return (stdscr);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: kvm_sparc.c,v 1.21 1999/07/02 15:28:51 simonb Exp $	*/
+/*	$NetBSD: kvm_sparc.c,v 1.30 2008/10/25 19:09:10 mrg Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -42,7 +38,7 @@
 #if 0
 static char sccsid[] = "@(#)kvm_sparc.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: kvm_sparc.c,v 1.21 1999/07/02 15:28:51 simonb Exp $");
+__RCSID("$NetBSD: kvm_sparc.c,v 1.30 2008/10/25 19:09:10 mrg Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -62,9 +58,10 @@ __RCSID("$NetBSD: kvm_sparc.c,v 1.21 1999/07/02 15:28:51 simonb Exp $");
 #include <nlist.h>
 #include <kvm.h>
 
-#include <vm/vm.h>
-#include <vm/vm_param.h>
-#include <machine/kcore.h>
+#include <uvm/uvm_extern.h>
+
+#include <sparc/pmap.h>
+#include <sparc/kcore.h>
 
 #include <limits.h>
 #include <db.h>
@@ -76,10 +73,12 @@ static int cputyp = -1;
 static int pgshift;
 static int nptesg;	/* [sun4/sun4c] only */
 
+#undef VA_VPG
 #define VA_VPG(va)	((cputyp == CPU_SUN4C || cputyp == CPU_SUN4M) \
 				? VA_SUN4C_VPG(va) \
 				: VA_SUN4_VPG(va))
 
+#undef VA_OFF
 #define VA_OFF(va) (va & (kd->nbpg - 1))
 
 int _kvm_kvatop44c __P((kvm_t *, u_long, u_long *));
@@ -152,7 +151,7 @@ _kvm_initvtop(kd)
  * Translate a kernel virtual address to a physical address using the
  * mapping information in kd->vm.  Returns the result in pa, and returns
  * the number of bytes that are contiguously available from this
- * physical address.  This routine is used only for crashdumps.
+ * physical address.  This routine is used only for crash dumps.
  */
 int
 _kvm_kvatop(kd, va, pa)
@@ -227,7 +226,7 @@ _kvm_kvatop44c(kd, va, pa)
 		return (kd->nbpg - off);
 	}
 err:
-	_kvm_err(kd, 0, "invalid address (%x)", va);
+	_kvm_err(kd, 0, "invalid address (%lx)", va);
 	return (0);
 }
 
@@ -271,8 +270,8 @@ _kvm_kvatop4m(kd, va, pa)
 	if (foff == (off_t)-1)
 		return (0);
 
-	if (pread(kd->pmfd, &pte, sizeof(pte), foff) != sizeof(pte)) {
-		_kvm_syserr(kd, kd->program, "cannot read pte for %x", va);
+	if (_kvm_pread(kd, kd->pmfd, &pte, sizeof(pte), foff) != sizeof(pte)) {
+		_kvm_syserr(kd, kd->program, "cannot read pte for %lx", va);
 		return (0);
 	}
 
@@ -284,7 +283,7 @@ _kvm_kvatop4m(kd, va, pa)
 		return (kd->nbpg - off);
 	}
 err:
-	_kvm_err(kd, 0, "invalid address (%x)", va);
+	_kvm_err(kd, 0, "invalid address (%lx)", va);
 	return (0);
 }
 
@@ -348,13 +347,13 @@ _kvm_kvatop4u(kd, va, pa)
 	if ((pte & SPARC64_TLB_V) != 0)
 		return ((pte & SPARC64_TLB_PA_MASK) | (va & (kd->nbpg - 1)));
 err:
-	_kvm_err(kd, 0, "invalid address (%x)", va);
+	_kvm_err(kd, 0, "invalid address (%lx)", va);
 	return (0);
 }
 
 
 /*
- * Translate a physical address to a file-offset in the crash-dump.
+ * Translate a physical address to a file-offset in the crash dump.
  */
 off_t
 _kvm_pa2off(kd, pa)
@@ -382,7 +381,7 @@ _kvm_pa2off(kd, pa)
 		off += mp->size;
 	}
 	if (nmem < 0) {
-		_kvm_err(kd, 0, "invalid address (%x)", pa);
+		_kvm_err(kd, 0, "invalid address (%lx)", pa);
 		return (-1);
 	}
 

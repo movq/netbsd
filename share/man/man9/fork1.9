@@ -1,4 +1,4 @@
-.\"	$NetBSD: fork1.9,v 1.3 1999/03/16 00:40:47 garbled Exp $
+.\"	$NetBSD: fork1.9,v 1.14 2008/04/30 13:10:58 martin Exp $
 .\"
 .\" Copyright (c) 1998 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -15,13 +15,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -35,43 +28,58 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd January 6, 1998
+.Dd January 4, 2008
 .Dt FORK1 9
 .Os
 .Sh NAME
 .Nm fork1
 .Nd create a new process
 .Sh SYNOPSIS
-.Fd #include <sys/types.h>
-.Fd #include <sys/proc.h>
+.In sys/types.h
+.In sys/proc.h
 .Ft int
-.Fn "fork1" "struct proc *p1" "int flags" "register_t *retval" "struct proc **rnewprocp"
+.Fn "fork1" "struct lwp *l1" "int flags" "int exitsig" "void *stack" "size_t stacksize" "void (*func)(void *)" "void *arg" "register_t *retval" "struct proc **rnewprocp"
 .Sh DESCRIPTION
 .Fn fork1
-creates a new process out of
-.Ar p1 ,
-which is assumed to be the current process.  This function is used primarily
-to implement the
+creates a new process out of the process behind
+.Ar l1 ,
+which is assumed to be the current lwp.
+This function is used primarily to implement the
 .Xr fork 2
 and
 .Xr vfork 2
-system calls.
+system calls, but is versatile enough to be used as a backend for
+e.g. the
+.Xr __clone 2
+call.
 .Pp
 The
 .Ar flags
 argument controls the semantics of the fork operation, and is made up of
 the bitwise-OR of the following values:
-.Bl -tag -width FORK_SHAREVM
+.Bl -tag -width FORK_SHAREFILES
 .It FORK_PPWAIT
 The parent process will sleep until the child process successfully calls
 .Xr execve 2
 or exits (either by a call to
 .Xr _exit 2
-or abormally).
+or abnormally).
 .It FORK_SHAREVM
-The child process will share the parent's virtual address space.  If this
-flag is not specified, the child will get a copy-on-write snapshot of the
-parent's address space.
+The child process will share the parent's virtual address space.
+If this flag is not specified, the child will get a copy-on-write
+snapshot of the parent's address space.
+.It FORK_SHARECWD
+The child process will share the parent's current directory, root directory,
+and file creation mask.
+.It FORK_SHAREFILES
+The child process will share the parent's file descriptors.
+.It FORK_SHARESIGS
+The child process will share the parent's signal actions.
+.It FORK_NOWAIT
+The child process will at creation time be inherited by the init process.
+.It FORK_CLEANFILES
+The child process will not copy or share the parent's descriptors, but
+rather will start out with a clean set.
 .El
 .Pp
 A
@@ -79,8 +87,35 @@ A
 value of 0 indicates a standard fork operation.
 .Pp
 The
+.Ar exitsig
+argument controls the signal sent to the parent on child death.
+If normal operation desired, SIGCHLD should be supplied.
+.Pp
+It is possible to specify the child userspace stack location and size
+by using the
+.Ar stack
+and
+.Ar stacksize
+arguments, respectively.
+Values
+.Dv NULL
+and 0, respectively, will give the child the default values
+for the machine architecture in question.
+.Pp
+The arguments
+.Ar func
+and
+.Ar arg
+can be used to specify a kernel function to be called when the child process
+returns instead of
+.Fn child_return .
+These are used for example in starting the init process and creating kernel
+threads.
+.Pp
+The
 .Ar retval
-argument is provided for the use of system call stubs.  If
+argument is provided for the use of system call stubs.
+If
 .Ar retval
 is not NULL, it will hold the following values after successful completion
 of the fork operation:
@@ -88,8 +123,8 @@ of the fork operation:
 .It Ar retval[0]
 This will contain the pid of the child process.
 .It Ar retval[1]
-In the parent process, this will contain the value 0.  In the child process,
-this will contain 1.
+In the parent process, this will contain the value 0.
+In the child process, this will contain 1.
 .El
 .Pp
 User level system call stubs typically subtract 1 from
@@ -107,7 +142,8 @@ the fork operation.
 .Sh RETURN VALUES
 Upon successful completion of the fork operation,
 .Fn fork1
-returns 0.  Otherwise, the following error values are returned:
+returns 0.
+Otherwise, the following error values are returned:
 .Bl -tag -width [EAGAIN]
 .It Bq Er EAGAIN
 The limit on the total number of system processes would be exceeded.

@@ -1,4 +1,4 @@
-/*	$NetBSD: ibus.c,v 1.7 2000/02/29 04:41:48 nisimura Exp $	*/
+/*	$NetBSD: ibus.c,v 1.14 2007/03/04 06:00:33 christos Exp $	*/
 
 /*
  * Copyright (c) 1998 Jonathan Stone.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
-__KERNEL_RCSID(0, "$NetBSD: ibus.c,v 1.7 2000/02/29 04:41:48 nisimura Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ibus.c,v 1.14 2007/03/04 06:00:33 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -42,8 +42,6 @@ __KERNEL_RCSID(0, "$NetBSD: ibus.c,v 1.7 2000/02/29 04:41:48 nisimura Exp $");
 
 #include "locators.h"
 
-static int	ibussubmatch __P((struct device *, struct cfdata *, void *));
-
 void
 ibusattach(parent, self, aux)
 	struct device *parent, *self;
@@ -52,6 +50,7 @@ ibusattach(parent, self, aux)
 	struct ibus_dev_attach_args *ida = aux;
 	struct ibus_attach_args *ia;
 	int i;
+	int locs[IBUSCF_NLOCS];
 
 	printf("\n");
 
@@ -63,28 +62,14 @@ ibusattach(parent, self, aux)
 	for (i = 0; i < ida->ida_ndevs; i++) {
 		ia = &ida->ida_devs[i];
 		if (ia->ia_basz != 0 &&
-		    badaddr((caddr_t)ia->ia_addr, ia->ia_basz) != 0)
+		    badaddr((void *)ia->ia_addr, ia->ia_basz) != 0)
 			continue;
-		config_found_sm(self, ia, ibusprint, ibussubmatch);
+
+		locs[IBUSCF_ADDR] = MIPS_KSEG1_TO_PHYS(ia->ia_addr);
+
+		config_found_sm_loc(self, "ibus", locs, ia,
+				    ibusprint, config_stdsubmatch);
 	}
-}
-
-static int
-ibussubmatch(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
-{
-	struct ibus_attach_args *ia = aux;
-	paddr_t pa;
-
-	pa = MIPS_KSEG1_TO_PHYS(ia->ia_addr);
-
-	if (cf->cf_loc[IBUSCF_ADDR] != IBUSCF_ADDR_DEFAULT &&
-	    cf->cf_loc[IBUSCF_ADDR] != pa)
-		return (0);
-
-	return ((*cf->cf_attach->ca_match)(parent, cf, aux));
 }
 
 int
@@ -95,9 +80,9 @@ ibusprint(aux, pnp)
 	struct ibus_attach_args *ia = aux;
 
 	if (pnp)
-		printf("%s at %s", ia->ia_name, pnp);
+		aprint_normal("%s at %s", ia->ia_name, pnp);
 
-	printf(" addr 0x%x", MIPS_KSEG1_TO_PHYS(ia->ia_addr));
+	aprint_normal(" addr 0x%x", MIPS_KSEG1_TO_PHYS(ia->ia_addr));
 
 	return (UNCONF);
 }

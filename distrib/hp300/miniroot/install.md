@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-#	$NetBSD: install.md,v 1.6 1997/10/09 07:25:48 jtc Exp $
+#	$NetBSD: install.md,v 1.13.8.1 2009/06/19 21:38:04 snj Exp $
 #
 # Copyright (c) 1996 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -16,13 +16,6 @@
 # 2. Redistributions in binary form must reproduce the above copyright
 #    notice, this list of conditions and the following disclaimer in the
 #    documentation and/or other materials provided with the distribution.
-# 3. All advertising materials mentioning features or use of this software
-#    must display the following acknowledgement:
-#        This product includes software developed by the NetBSD
-#        Foundation, Inc. and its contributors.
-# 4. Neither the name of The NetBSD Foundation nor the names of its
-#    contributors may be used to endorse or promote products derived
-#    from this software without specific prior written permission.
 #
 # THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 # ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -76,36 +69,45 @@ __mfs_failed_1
 
 md_get_diskdevs() {
 	# return available disk devices
-	dmesg | grep "^rd[0-9]*:." | cut -d":" -f1 | sort -u
-	dmesg | grep "^sd[0-9]*:.*cylinders" | cut -d":" -f1 | sort -u
+	dmesg | awk -F : '/^rd[0-9]*:./ { print $1; }' | sort -u
+	dmesg | awk -F : '/^sd[0-9]*:.*sectors/ { print $1; }' | sort -u
 }
 
 md_get_cddevs() {
 	# return available CD-ROM devices
-	dmesg | grep "sd[0-9]*:.*CD-ROM" | cut -d":" -f1 | sort -u
+	dmesg | awk -F : '/^cd[0-9]*:/ { print $1; }' | sort -u
 }
 
 md_get_ifdevs() {
 	# return available network interfaces
-	dmesg | grep "^le[0-9]*:" | cut -d":" -f1 | sort -u
+	dmesg | awk -F : '/^le[0-9]*:/ { print $1; }' | sort -u
 }
 
 md_installboot() {
 	# $1 is the root disk
 
 	echo -n "Installing boot block..."
-	disklabel -W ${1}
-	disklabel -B ${1}
+	/usr/sbin/installboot -v /dev/r${1}c  /usr/mdec/uboot.lif
 	echo "done."
+}
+
+grep_check_q () {
+	pattern=$1; shift
+	awk 'BEGIN{ es=1; } /'"$pattern"'/{ es=0; } END{ exit es; }' "$@"
+}
+
+plain_grep () {
+	pattern=$1; shift
+	awk "/$pattern/"'{ print; }' "$@"
 }
 
 md_checkfordisklabel() {
 	# $1 is the disk to check
 
 	disklabel -r $1 > /dev/null 2> /tmp/checkfordisklabel
-	if grep "no disk label" /tmp/checkfordisklabel; then
+	if grep_check_q "no disk label" /tmp/checkfordisklabel; then
 		rval="1"
-	elif grep "disk label corrupted" /tmp/checkfordisklabel; then
+	elif grep_check_q "disk label corrupted" /tmp/checkfordisklabel; then
 		rval="2"
 	else
 		rval="0"
@@ -270,8 +272,8 @@ hp300_init_label_hpib_disk() {
 	# We look though the boot messages attempting to find
 	# the model number for the provided disk.
 	_hpib_disktype=""
-	if dmesg | grep "${1}: " > /dev/null 2>&1; then
-		_hpib_disktype=HP`dmesg | grep "${1}: " | sort -u | \
+	if dmesg | grep_check_q "${1}: "; then
+		_hpib_disktype=HP`dmesg | plain_grep "${1}: " | sort -u | \
 		    awk '{print $2}'`
 	fi
 	if [ "X${_hpib_disktype}" = "X" ]; then
@@ -285,8 +287,7 @@ hp300_init_label_hpib_disk() {
 	# layout.  If it doesn't, we have to treat it like a SCSI disk;
 	# i.e. prompt for geometry, and create a default to place
 	# on the disk.
-	if ! grep "${_hpib_disktype}[:|]" /etc/disktab > /dev/null \
-	    2>&1; then
+	if ! grep_check_q "${_hpib_disktype}[:|]" /etc/disktab; then
 		echo ""
 		echo "WARNING: can't find defaults for $1 ($_hpib_disktype)"
 		echo ""
@@ -444,9 +445,22 @@ __md_prep_disklabel_4
 }
 
 md_copy_kernel() {
-	echo -n "Copying kernel..."
-	cp -p /netbsd /mnt/netbsd
-	echo "done."
+	if [ ! -f /mnt/netbsd ]; then
+		echo -n "No kernel set extracted. Copying miniroot kernel..."
+		cp -p /netbsd /mnt/netbsd
+		echo "done."
+
+		cat << __md_copy_kernel_1
+
+The INSTALL kernel from the miniroot has been copied to your root disk.
+It has minimal facilities enabled.  The first thing you should do after
+installation is install an appropriate kernel for your machine (such as
+the GENERIC kernel).
+
+__md_copy_kernel_1
+		echo -n	"Press <return> to continue. "
+		getresp ""
+	fi
 }
 
 	# Note, while they might not seem machine-dependent, the

@@ -1,4 +1,4 @@
-.\"	$NetBSD: ik.4,v 1.6 1999/12/15 23:44:55 abs Exp $
+.\"	$NetBSD: ik.4,v 1.9 2003/08/07 10:31:13 agc Exp $
 .\"
 .\" Copyright (c) 1983, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -42,6 +38,10 @@
 .Sh SYNOPSIS
 .Cd "ik0 at uba? csr 0172460 vector ikintr"
 .Sh DESCRIPTION
+NOTE: This driver has not been ported from
+.Bx 4.4
+yet.
+.Pp
 The
 .Nm ik
 driver
@@ -68,7 +68,7 @@ returns the virtual address where the user process can
 find the interface registers.
 The
 .Dv IK_WAITINT
-.Xr ioctl
+.Xr ioctl 2
 suspends the user process until the ikonas device
 has interrupted (for whatever reason \(em the user process has to set
 the interrupt enables).

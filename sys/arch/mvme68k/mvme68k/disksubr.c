@@ -1,4 +1,4 @@
-/*	$NetBSD: disksubr.c,v 1.18 2000/03/18 22:33:06 scw Exp $	*/
+/*	$NetBSD: disksubr.c,v 1.33 2008/01/12 09:54:29 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1995 Dale Rahn.
@@ -30,6 +30,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.33 2008/01/12 09:54:29 tsutsui Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/buf.h>
@@ -48,72 +51,29 @@
 int disksubr_debug = 0;
 #endif
 
-static void bsdtocpulabel __P((struct disklabel *lp,
-	struct cpu_disklabel *clp));
-static void cputobsdlabel __P((struct disklabel *lp,
-	struct cpu_disklabel *clp));
+static void bsdtocpulabel(struct disklabel *lp, struct cpu_disklabel *clp);
+static void cputobsdlabel(struct disklabel *lp, struct cpu_disklabel *clp);
 
 #ifdef DEBUG
-static void printlp __P((struct disklabel *lp, char *str));
-static void printclp __P((struct cpu_disklabel *clp, char *str));
+static void printlp(struct disklabel *lp, const char *str);
+static void printclp(struct cpu_disklabel *clp, const char *str);
 #endif
 
-void
-dk_establish(dk, dev)
-	struct disk *dk;
-	struct device *dev;
-{
-	struct scsibus_softc *sbsc;
-	int target, lun;
-
-	if (bootpart == -1) /* ignore flag from controller driver? */
-		return;
-
-	/*
- 	 * scsi: sd,cd
- 	 */
-
-	if (strncmp("sd", dev->dv_xname, 2) == 0 ||
-	    strncmp("cd", dev->dv_xname, 2) == 0) {
-
-        	sbsc = (struct scsibus_softc *)dev->dv_parent;
-		target = bootctrllun % 8; /* XXX: 147 only */
-		lun = bootdevlun; /* XXX: 147, untested */
-
-		/* 
-		 * XXX: on the 167: 
-		 * ignore bootctrllun
-		 * target = bootdevlun / 10
-		 * lun = bootdevlun % 10
-		 */
-
-        	if (sbsc->sc_link[target][lun] != NULL &&
-            	    sbsc->sc_link[target][lun]->device_softc == (void *)dev) {
-			booted_device = dev;
-                	return;
-		}
-        }
-
-	return;
-}
 
 /*
  * Attempt to read a disk label from a device
- * using the indicated stategy routine.
+ * using the indicated strategy routine.
  * The label must be partly set up before this:
  * secpercyl and anything required in the strategy routine
  * (e.g., sector size) must be filled in before calling us.
  * Returns null on success and an error string on failure.
  */
-char *
-readdisklabel(dev, strat, lp, clp)
-	dev_t dev;
-	void (*strat)(struct buf *);
-	struct disklabel *lp;
-	struct cpu_disklabel *clp;
+const char *
+readdisklabel(dev_t dev, void (*strat)(struct buf *), struct disklabel *lp,
+    struct cpu_disklabel *clp)
 {
 	struct buf *bp;
-	char *msg = NULL;
+	const char *msg = NULL;
 
 	/* obtain buffer to probe drive with */
 	bp = geteblk((int)lp->d_secsize);
@@ -122,31 +82,30 @@ readdisklabel(dev, strat, lp, clp)
 	bp->b_dev = dev;
 	bp->b_blkno = 0; /* contained in block 0 */
 	bp->b_bcount = lp->d_secsize;
-	bp->b_flags = B_BUSY | B_READ;
+	bp->b_flags |= B_READ;
 	bp->b_cylinder = 0; /* contained in block 0 */
 	(*strat)(bp);
 
 	if (biowait(bp)) {
 		msg = "cpu_disklabel read error\n";
 	} else {
-		bcopy(bp->b_data, clp, sizeof (struct cpu_disklabel));
+		memcpy(clp, bp->b_data, sizeof (struct cpu_disklabel));
 	}
 
-	bp->b_flags = B_INVAL | B_AGE | B_READ;
-	brelse(bp);
+	brelse(bp, 0);
 
 	if (msg || clp->magic1 != DISKMAGIC || clp->magic2 != DISKMAGIC) {
-		return (msg); 
+		return msg; 
 	}
 
 	cputobsdlabel(lp, clp);
 #ifdef DEBUG
 	if(disksubr_debug > 0) {
-		printlp(lp, "readdisklabel:bsd label");
-		printclp(clp, "readdisklabel:cpu label");
+		printlp(lp, "%s:bsd label", __func__);
+		printclp(clp, "%s:cpu label", __func__);
 	}
 #endif
-	return (msg);
+	return msg;
 }
 
 /*
@@ -154,19 +113,17 @@ readdisklabel(dev, strat, lp, clp)
  * before setting it.
  */
 int
-setdisklabel(olp, nlp, openmask, clp)
-	struct disklabel *olp, *nlp;
-	u_long openmask;
-	struct cpu_disklabel *clp;
+setdisklabel(struct disklabel *olp, struct disklabel *nlp, u_long openmask,
+    struct cpu_disklabel *clp)
 {
 	int i;
 	struct partition *opp, *npp;
 
 #ifdef DEBUG
-	if(disksubr_debug > 0) {
-		printlp(nlp, "setdisklabel:new disklabel");
-		printlp(olp, "setdisklabel:old disklabel");
-		printclp(clp, "setdisklabel:cpu disklabel");
+	if (disksubr_debug > 0) {
+		printlp(nlp, "%s:new disklabel", __func__);
+		printlp(olp, "%s:old disklabel", __func__);
+		printclp(clp, "%s:cpu disklabel", __func__);
 	}
 #endif
 
@@ -174,19 +131,19 @@ setdisklabel(olp, nlp, openmask, clp)
 	/* sanity clause */
 	if (nlp->d_secpercyl == 0 || nlp->d_secsize == 0 ||
 	    (nlp->d_secsize % DEV_BSIZE) != 0)
-		return (EINVAL);
+		return EINVAL;
 
 	/* special case to allow disklabel to be invalidated */
 	if (nlp->d_magic == 0xffffffff) {
 		*olp = *nlp;
-		return (0);
+		return 0;
 	}
 
 	if (nlp->d_magic != DISKMAGIC || nlp->d_magic2 != DISKMAGIC ||
 	    dkcksum(nlp) != 0)
-		return (EINVAL);
+		return EINVAL;
 
-	while ((i = ffs((long)openmask)) != 0) {
+	while ((i = ffs(openmask)) != 0) {
 		i--;
 		openmask &= ~(1 << i);
 		if (nlp->d_npartitions <= i)
@@ -194,7 +151,7 @@ setdisklabel(olp, nlp, openmask, clp)
 		opp = &olp->d_partitions[i];
 		npp = &nlp->d_partitions[i];
 		if (npp->p_offset != opp->p_offset || npp->p_size < opp->p_size)
-			return (EBUSY);
+			return EBUSY;
 		/*
 		 * Copy internally-set partition information
 		 * if new label doesn't include it.		XXX
@@ -212,60 +169,58 @@ setdisklabel(olp, nlp, openmask, clp)
 	*olp = *nlp;
 #ifdef DEBUG
 	if(disksubr_debug > 0) {
-		printlp(olp, "setdisklabel:old->new disklabel");
+		printlp(olp, "%s:old->new disklabel", __func__);
 	}
 #endif
-	return (0);
+	return 0;
 }
 
 /*
  * Write disk label back to device after modification.
  */
 int
-writedisklabel(dev, strat, lp, clp)
-	dev_t dev;
-	void (*strat)(struct buf *);
-	struct disklabel *lp;
-	struct cpu_disklabel *clp;
+writedisklabel(dev_t dev, void (*strat)(struct buf *), struct disklabel *lp,
+    struct cpu_disklabel *clp)
 {
 	struct buf *bp;
 	int error;
 
 #ifdef DEBUG
 	if(disksubr_debug > 0) {
-		printlp(lp, "writedisklabel: bsd label");
+		printlp(lp, "%s: bsd label", __func__);
 	}
 #endif
 
-	/* obtain buffer to read initial cpu_disklabel, for bootloader size :-) */
+	/*
+	 * obtain buffer to read initial cpu_disklabel, for bootloader size :-)
+	 */
 	bp = geteblk((int)lp->d_secsize);
 
 	/* request no partition relocation by driver on I/O operations */
 	bp->b_dev = dev;
 	bp->b_blkno = 0; /* contained in block 0 */
 	bp->b_bcount = lp->d_secsize;
-	bp->b_flags = B_BUSY | B_READ;
+	bp->b_flags |= B_READ;
 	bp->b_cylinder = 0; /* contained in block 0 */
 	(*strat)(bp);
 
 	if ( (error = biowait(bp)) != 0 ) {
 		/* nothing */
 	} else {
-		bcopy(bp->b_data, clp, sizeof(struct cpu_disklabel));
+		memcpy(clp, bp->b_data, sizeof(struct cpu_disklabel));
 	}
 
-	bp->b_flags = B_INVAL | B_AGE | B_READ;
-	brelse(bp);
+	brelse(bp, 0);
 
 	if (error) {
-		return (error);
+		return error;
 	}
 
 	bsdtocpulabel(lp, clp);
 
 #ifdef DEBUG
 	if (disksubr_debug > 0) {
-		printclp(clp, "writedisklabel: cpu label");
+		printclp(clp, "%s:cpu label", __func__);
 	}
 #endif
 
@@ -274,75 +229,27 @@ writedisklabel(dev, strat, lp, clp)
 		/* obtain buffer to scrozz drive with */
 		bp = geteblk((int)lp->d_secsize);
 
-		bcopy(clp, bp->b_data, sizeof(struct cpu_disklabel));
+		memcpy(bp->b_data, clp, sizeof(struct cpu_disklabel));
 
-		/* request no partition relocation by driver on I/O operations */
+		/*
+		 * request no partition relocation by driver on I/O operations
+		 */
 		bp->b_dev = dev;
 		bp->b_blkno = 0; /* contained in block 0 */
 		bp->b_bcount = lp->d_secsize;
-		bp->b_flags = B_WRITE;
+		bp->b_flags |= B_WRITE;
 		bp->b_cylinder = 0; /* contained in block 0 */
 		(*strat)(bp);
 
 		error = biowait(bp);
 
-		bp->b_flags = B_INVAL | B_AGE | B_READ;
-		brelse(bp);
+		brelse(bp, 0);
 	}
-	return (error); 
+	return error; 
 }
-
-
-int
-bounds_check_with_label(bp, lp, wlabel)
-	struct buf *bp;
-	struct disklabel *lp;
-	int wlabel;
-{
-	struct partition *p = lp->d_partitions + DISKPART(bp->b_dev);
-	int maxsz = p->p_size;
-	int sz = (bp->b_bcount + DEV_BSIZE - 1) >> DEV_BSHIFT;
-
-	/* overwriting disk label ? */
-	/* XXX should also protect bootstrap in first 8K */
-	/* XXX this assumes everything <=LABELSECTOR is label! */
-	/*      (but since LABELSECTOR is zero, this is ok) */
-        if (bp->b_blkno + p->p_offset <= LABELSECTOR &&
-            (bp->b_flags & B_READ) == 0 && wlabel == 0) {
-                bp->b_error = EROFS;
-                goto bad;
-        }
-
-	/* beyond partition? */
-        if (bp->b_blkno < 0 || bp->b_blkno + sz > maxsz) {
-                /* if exactly at end of disk, return an EOF */
-                if (bp->b_blkno == maxsz) {
-                        bp->b_resid = bp->b_bcount;
-                        return(0);
-                }
-                /* or truncate if part of it fits */
-                sz = maxsz - bp->b_blkno;
-                if (sz <= 0) {
-			bp->b_error = EINVAL;
-                        goto bad;
-		}
-                bp->b_bcount = sz << DEV_BSHIFT;
-        }
-
-	/* calculate cylinder for disksort to order transfers with */
-        bp->b_cylinder = (bp->b_blkno + p->p_offset) / lp->d_secpercyl;
-	return(1);
-
-bad:
-	bp->b_flags |= B_ERROR;
-	return(-1);
-}
-
 
 static void
-bsdtocpulabel(lp, clp)
-	struct disklabel *lp;
-	struct cpu_disklabel *clp;
+bsdtocpulabel(struct disklabel *lp, struct cpu_disklabel *clp)
 {
 	int i;
 
@@ -394,32 +301,30 @@ bsdtocpulabel(lp, clp)
 	clp->sbsize = lp->d_sbsize;
 	clp->checksum = lp->d_checksum;
 	/* note: assume at least 4 partitions */
-	bcopy(&lp->d_partitions[0], clp->vid_4, sizeof(struct partition) * 4);
-	bzero(clp->cfg_4, sizeof(struct partition) * 12);
-	bcopy(&lp->d_partitions[4], clp->cfg_4, sizeof(struct partition) 
-		* ((MAXPARTITIONS < 16) ? (MAXPARTITIONS - 4) : 12));
+	memcpy(clp->vid_4, &lp->d_partitions[0], sizeof(struct partition) * 4);
+	memset(clp->cfg_4, 0, sizeof(struct partition) * 12);
+	memcpy(clp->cfg_4, &lp->d_partitions[4], sizeof(struct partition) 
+	    * ((MAXPARTITIONS < 16) ? (MAXPARTITIONS - 4) : 12));
 
 	/*
 	 * here are the parts of the cpu_disklabel the kernel must init.
 	 * see disklabel.h for more details
 	 * [note: this used to be handled by 'wrtvid']
 	 */
-	bcopy(VID_ID, clp->vid_id, sizeof(clp->vid_id));
+	memcpy(clp->vid_id, VID_ID, sizeof(clp->vid_id));
 	clp->vid_oss = VID_OSS;
 	clp->vid_osl = VID_OSL;
 	clp->vid_osa_u = VID_OSAU;
 	clp->vid_osa_l = VID_OSAL;
 	clp->vid_cas = VID_CAS;
 	clp->vid_cal = VID_CAL;
-	bcopy(VID_MOT, clp->vid_mot, sizeof(clp->vid_mot));
+	memcpy(clp->vid_mot, VID_MOT, sizeof(clp->vid_mot));
 	clp->cfg_rec = CFG_REC;
 	clp->cfg_psm = CFG_PSM;
 }
 
 static void
-cputobsdlabel(lp, clp)
-	struct disklabel *lp;
-	struct cpu_disklabel *clp;
+cputobsdlabel(struct disklabel *lp, struct cpu_disklabel *clp)
 {
 	int i;
 
@@ -478,9 +383,9 @@ cputobsdlabel(lp, clp)
 	lp->d_bbsize = clp->bbsize;
 	lp->d_sbsize = clp->sbsize;
 	/* note: assume at least 4 partitions */
-	bcopy(clp->vid_4, &lp->d_partitions[0], sizeof(struct partition) * 4);
-	bcopy(clp->cfg_4, &lp->d_partitions[4], sizeof(struct partition) 
-		* ((MAXPARTITIONS < 16) ? (MAXPARTITIONS - 4) : 12));
+	memcpy(&lp->d_partitions[0], clp->vid_4, sizeof(struct partition) * 4);
+	memcpy(&lp->d_partitions[4], clp->cfg_4, sizeof(struct partition) 
+	    * ((MAXPARTITIONS < 16) ? (MAXPARTITIONS - 4) : 12));
 	lp->d_checksum = 0;
 	lp->d_checksum = dkcksum(lp);
 #if DEBUG
@@ -492,9 +397,7 @@ cputobsdlabel(lp, clp)
 
 #ifdef DEBUG
 static void
-printlp(lp, str)
-	struct disklabel *lp;
-	char *str;
+printlp(struct disklabel *lp, const char *str)
 {
 	int i;
 
@@ -516,11 +419,9 @@ printlp(lp, str)
 }
 
 static void
-printclp(clp, str)
-	struct cpu_disklabel *clp;
-	char *str;
+printclp(struct cpu_disklabel *clp, const char *str)
 {
-	int max, i;
+	int maxp, i;
 
 	printf("%s\n", str);
 	printf("magic1 %lx\n", clp->magic1);
@@ -529,8 +430,8 @@ printclp(clp, str)
 	printf("secsize %x nsect %x ntrack %x ncylinders %x\n",
 	    clp->cfg_psm, clp->cfg_spt, clp->cfg_hds, clp->cfg_trk);
 	printf("Num partitions %x\n", clp->partitions);
-	max = clp->partitions < 16 ? clp->partitions : 16;
-	for (i = 0; i < max; i++) {
+	maxp = clp->partitions < 16 ? clp->partitions : 16;
+	for (i = 0; i < maxp; i++) {
 		struct partition *part;
 		const char *fstyp;
 

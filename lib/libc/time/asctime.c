@@ -1,4 +1,4 @@
-/*	$NetBSD: asctime.c,v 1.10 2000/01/22 22:19:21 mycroft Exp $	*/
+/*	$NetBSD: asctime.c,v 1.12 2006/10/15 15:32:42 perry Exp $	*/
 
 /*
 ** This file is in the public domain, so clarified as of
@@ -6,15 +6,13 @@
 */
 
 #include <sys/cdefs.h>
-#ifndef lint
-#ifndef NOID
+#if defined(LIBC_SCCS) && !defined(lint)
 #if 0
 static char	elsieid[] = "@(#)asctime.c	7.9";
 #else
-__RCSID("$NetBSD: asctime.c,v 1.10 2000/01/22 22:19:21 mycroft Exp $");
+__RCSID("$NetBSD: asctime.c,v 1.12 2006/10/15 15:32:42 perry Exp $");
 #endif
-#endif /* !defined NOID */
-#endif /* !defined lint */
+#endif /* LIBC_SCCS and not lint */
 
 /*LINTLIBRARY*/
 
@@ -44,10 +42,10 @@ asctime_r(timeptr, buf)
 register const struct tm *	timeptr;
 char *				buf;
 {
-	static const char	wday_name[][3] = {
+	static const char	*wday_name[7] = {
 		"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"
 	};
-	static const char	mon_name[][3] = {
+	static const char	*mon_name[12] = {
 		"Jan", "Feb", "Mar", "Apr", "May", "Jun",
 		"Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
 	};

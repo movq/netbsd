@@ -1,4 +1,4 @@
-/*	$NetBSD: dkbad.h,v 1.11 1998/03/25 09:55:49 leo Exp $	*/
+/*	$NetBSD: dkbad.h,v 1.15 2005/12/26 18:41:36 perry Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -61,11 +57,11 @@
 
 struct dkbad {
 	int32_t   bt_csn;		/* cartridge serial number */
-	u_int16_t bt_mbz;		/* unused; should be 0 */
-	u_int16_t bt_flag;		/* -1 => alignment cartridge */
+	uint16_t bt_mbz;		/* unused; should be 0 */
+	uint16_t bt_flag;		/* -1 => alignment cartridge */
 	struct bt_bad {
-		u_int16_t bt_cyl;	/* cylinder number of bad sector */
-		u_int16_t bt_trksec;	/* track and sector number */
+		uint16_t bt_cyl;	/* cylinder number of bad sector */
+		uint16_t bt_trksec;	/* track and sector number */
 	} bt_bad[NBT_BAD];
 };
 
@@ -80,4 +76,7 @@ struct dkbad {
 #define	BSE	2
 #define	CONT	3
 
+#ifdef _KERNEL
+int isbad(struct dkbad *, int, int, int);
+#endif
 #endif /* _SYS_DKBAD_H_ */

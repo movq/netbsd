@@ -1,4 +1,4 @@
-/*	$NetBSD: getifaddrs.c,v 1.2 2000/02/23 15:29:18 itojun Exp $	*/
+/*	$NetBSD: getifaddrs.c,v 1.11 2007/12/06 22:51:57 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1995, 1999
@@ -24,51 +24,35 @@
  *
  *	BSDI getifaddrs.c,v 2.12 2000/02/23 14:51:59 dab Exp
  */
+
+#include <sys/cdefs.h>
+#if defined(LIBC_SCCS) && !defined(lint)
+__RCSID("$NetBSD: getifaddrs.c,v 1.11 2007/12/06 22:51:57 dyoung Exp $");
+#endif /* LIBC_SCCS and not lint */
+
+#include "namespace.h"
 #include <sys/types.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <net/if.h>
-#ifdef	NET_RT_IFLIST
 #include <sys/param.h>
 #include <net/route.h>
 #include <sys/sysctl.h>
 #include <net/if_dl.h>
-#endif
 
+#include <assert.h>
 #include <errno.h>
 #include <ifaddrs.h>
 #include <stdlib.h>
 #include <string.h>
 
-#if !defined(AF_LINK)
-#define	SA_LEN(sa)	sizeof(struct sockaddr)
-#endif
-
-#if !defined(SA_LEN)
-#define	SA_LEN(sa)	(sa)->sa_len
+#ifdef __weak_alias
+__weak_alias(getifaddrs,_getifaddrs)
+__weak_alias(freeifaddrs,_freeifaddrs)
 #endif
 
 #define	SALIGN	(sizeof(long) - 1)
 #define	SA_RLEN(sa)	((sa)->sa_len ? (((sa)->sa_len + SALIGN) & ~SALIGN) : (SALIGN + 1))
-
-#ifndef	ALIGNBYTES
-/*
- * On systems with a routing socket, ALIGNBYTES should match the value
- * that the kernel uses when building the messages.
- */
-#define	ALIGNBYTES	XXX
-#endif
-#ifndef	ALIGN
-#define	ALIGN(p)	(((u_long)(p) + ALIGNBYTES) &~ ALIGNBYTES)
-#endif
-
-#if	_BSDI_VERSION >= 199701
-#define	HAVE_IFM_DATA
-#endif
-
-#if	_BSDI_VERSION >= 199802
-#define	HAVE_IFAM_DATA
-#endif
 
 int
 getifaddrs(struct ifaddrs **pif)
@@ -76,7 +60,6 @@ getifaddrs(struct ifaddrs **pif)
 	int icnt = 1;
 	int dcnt = 0;
 	int ncnt = 0;
-#ifdef	NET_RT_IFLIST
 	int mib[6];
 	size_t needed;
 	char *buf;
@@ -89,76 +72,65 @@ getifaddrs(struct ifaddrs **pif)
 	struct sockaddr_dl *dl;
 	struct sockaddr *sa;
 	struct ifaddrs *ifa, *ift;
-	u_short index = 0;
-#else	/* NET_RT_IFLIST */
-	char buf[1024];
-	int m, sock;
-	struct ifconf ifc;
-	struct ifreq *ifr;
-	struct ifreq *lifr;
-#endif	/* NET_RT_IFLIST */
+	u_short idx = 0;
 	int i;
 	size_t len, alen;
 	char *data;
 	char *names;
 
-#ifdef	NET_RT_IFLIST
+	_DIAGASSERT(pif != NULL);
+
 	mib[0] = CTL_NET;
 	mib[1] = PF_ROUTE;
 	mib[2] = 0;             /* protocol */
 	mib[3] = 0;             /* wildcard address family */
 	mib[4] = NET_RT_IFLIST;
 	mib[5] = 0;             /* no flags */
-	if (sysctl(mib, 6, NULL, &needed, NULL, 0) < 0)
+	if (sysctl(mib, __arraycount(mib), NULL, &needed, NULL, 0) < 0)
 		return (-1);
 	if ((buf = malloc(needed)) == NULL)
 		return (-1);
-	if (sysctl(mib, 6, buf, &needed, NULL, 0) < 0) {
+	if (sysctl(mib, __arraycount(mib), buf, &needed, NULL, 0) < 0) {
 		free(buf);
 		return (-1);
 	}
 
 	for (next = buf; next < buf + needed; next += rtm->rtm_msglen) {
-		rtm = (struct rt_msghdr *)next;
+		rtm = (struct rt_msghdr *)(void *)next;
 		if (rtm->rtm_version != RTM_VERSION)
 			continue;
 		switch (rtm->rtm_type) {
 		case RTM_IFINFO:
-			ifm = (struct if_msghdr *)rtm;
+			ifm = (struct if_msghdr *)(void *)rtm;
 			if (ifm->ifm_addrs & RTA_IFP) {
-				index = ifm->ifm_index;
+				idx = ifm->ifm_index;
 				++icnt;
-				dl = (struct sockaddr_dl *)(ifm + 1);
-				dcnt += SA_RLEN((struct sockaddr *)dl) +
-					ALIGNBYTES;
-#ifdef	HAVE_IFM_DATA
+				dl = (struct sockaddr_dl *)(void *)(ifm + 1);
+				dcnt += SA_RLEN((struct sockaddr *)(void*)dl) +
+				    ALIGNBYTES;
 				dcnt += sizeof(ifm->ifm_data);
-#endif	/* HAVE_IFM_DATA */
 				ncnt += dl->sdl_nlen + 1;
 			} else
-				index = 0;
+				idx = 0;
 			break;
 
 		case RTM_NEWADDR:
-			ifam = (struct ifa_msghdr *)rtm;
-			if (index && ifam->ifam_index != index)
+			ifam = (struct ifa_msghdr *)(void *)rtm;
+			if (idx && ifam->ifam_index != idx)
 				abort();	/* this cannot happen */
 
 #define	RTA_MASKS	(RTA_NETMASK | RTA_IFA | RTA_BRD)
-			if (index == 0 || (ifam->ifam_addrs & RTA_MASKS) == 0)
+			if (idx == 0 || (ifam->ifam_addrs & RTA_MASKS) == 0)
 				break;
-			p = (char *)(ifam + 1);
+			p = (char *)(void *)(ifam + 1);
 			++icnt;
-#ifdef	HAVE_IFAM_DATA
-			dcnt += sizeof(ifam->ifam_data) + ALIGNBYTES;
-#endif	/* HAVE_IFAM_DATA */
 			/* Scan to look for length of address */
 			alen = 0;
 			for (p0 = p, i = 0; i < RTAX_MAX; i++) {
 				if ((RTA_MASKS & ifam->ifam_addrs & (1 << i))
 				    == 0)
 					continue;
-				sa = (struct sockaddr *)p;
+				sa = (struct sockaddr *)(void *)p;
 				len = SA_RLEN(sa);
 				if (i == RTAX_IFA) {
 					alen = len;
@@ -170,9 +142,9 @@ getifaddrs(struct ifaddrs **pif)
 				if ((RTA_MASKS & ifam->ifam_addrs & (1 << i))
 				    == 0)
 					continue;
-				sa = (struct sockaddr *)p;
+				sa = (struct sockaddr *)(void *)p;
 				len = SA_RLEN(sa);
-				if (i == RTAX_NETMASK && SA_LEN(sa) == 0)
+				if (i == RTAX_NETMASK && sa->sa_len == 0)
 					dcnt += alen;
 				else
 					dcnt += len;
@@ -181,31 +153,6 @@ getifaddrs(struct ifaddrs **pif)
 			break;
 		}
 	}
-#else	/* NET_RT_IFLIST */
-	ifc.ifc_buf = buf;
-	ifc.ifc_len = sizeof(buf);
-
-	if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0)
-		return (-1);
-	i =  ioctl(sock, SIOCGIFCONF, (char *)&ifc);
-	close(sock);
-	if (i < 0)
-		return (-1);
-
-	ifr = ifc.ifc_req;
-	lifr = (struct ifreq *)&ifc.ifc_buf[ifc.ifc_len];
-
-	while (ifr < lifr) {
-		struct sockaddr *sa;
-
-		sa = &ifr->ifr_addr;
-		++icnt;
-		dcnt += SA_RLEN(sa);
-		ncnt += sizeof(ifr->ifr_name) + 1;
-		
-		ifr = (struct ifreq *)(((char *)sa) + SA_LEN(sa));
-	}
-#endif	/* NET_RT_IFLIST */
 
 	if (icnt + dcnt + ncnt == 1) {
 		*pif = NULL;
@@ -218,69 +165,66 @@ getifaddrs(struct ifaddrs **pif)
 		return(-1);
 	}
 
-	ifa = (struct ifaddrs *)data;
+	ifa = (struct ifaddrs *)(void *)data;
 	data += sizeof(struct ifaddrs) * icnt;
 	names = data + dcnt;
 
 	memset(ifa, 0, sizeof(struct ifaddrs) * icnt);
 	ift = ifa;
 
-#ifdef	NET_RT_IFLIST
-	index = 0;
+	idx = 0;
 	for (next = buf; next < buf + needed; next += rtm->rtm_msglen) {
-		rtm = (struct rt_msghdr *)next;
+		rtm = (struct rt_msghdr *)(void *)next;
 		if (rtm->rtm_version != RTM_VERSION)
 			continue;
 		switch (rtm->rtm_type) {
 		case RTM_IFINFO:
-			ifm = (struct if_msghdr *)rtm;
+			ifm = (struct if_msghdr *)(void *)rtm;
 			if (ifm->ifm_addrs & RTA_IFP) {
-				index = ifm->ifm_index;
-				dl = (struct sockaddr_dl *)(ifm + 1);
+				idx = ifm->ifm_index;
+				dl = (struct sockaddr_dl *)(void *)(ifm + 1);
 
 				cif = ift;
 				ift->ifa_name = names;
 				ift->ifa_flags = (int)ifm->ifm_flags;
-				memcpy(names, dl->sdl_data, dl->sdl_nlen);
+				memcpy(names, dl->sdl_data,
+				    (size_t)dl->sdl_nlen);
 				names[dl->sdl_nlen] = 0;
 				names += dl->sdl_nlen + 1;
 
-				ift->ifa_addr = (struct sockaddr *)data;
-				memcpy(data, dl, SA_LEN((struct sockaddr *)dl));
-				data += SA_RLEN((struct sockaddr *)dl);
+				ift->ifa_addr = (struct sockaddr *)(void *)data;
+				memcpy(data, dl, (size_t)((struct sockaddr *)
+				    (void *)dl)->sa_len);
+				data += SA_RLEN((struct sockaddr *)(void *)dl);
 
-#ifdef	HAVE_IFM_DATA
 				/* ifm_data needs to be aligned */
 				ift->ifa_data = data = (void *)ALIGN(data);
 				memcpy(data, &ifm->ifm_data, sizeof(ifm->ifm_data));
  				data += sizeof(ifm->ifm_data);
-#else	/* HAVE_IFM_DATA */
-				ift->ifa_data = NULL;
-#endif	/* HAVE_IFM_DATA */
 
 				ift = (ift->ifa_next = ift + 1);
 			} else
-				index = 0;
+				idx = 0;
 			break;
 
 		case RTM_NEWADDR:
-			ifam = (struct ifa_msghdr *)rtm;
-			if (index && ifam->ifam_index != index)
+			ifam = (struct ifa_msghdr *)(void *)rtm;
+			if (idx && ifam->ifam_index != idx)
 				abort();	/* this cannot happen */
 
-			if (index == 0 || (ifam->ifam_addrs & RTA_MASKS) == 0)
+			if (idx == 0 || (ifam->ifam_addrs & RTA_MASKS) == 0)
 				break;
 			ift->ifa_name = cif->ifa_name;
 			ift->ifa_flags = cif->ifa_flags;
 			ift->ifa_data = NULL;
-			p = (char *)(ifam + 1);
+			p = (char *)(void *)(ifam + 1);
 			/* Scan to look for length of address */
 			alen = 0;
 			for (p0 = p, i = 0; i < RTAX_MAX; i++) {
 				if ((RTA_MASKS & ifam->ifam_addrs & (1 << i))
 				    == 0)
 					continue;
-				sa = (struct sockaddr *)p;
+				sa = (struct sockaddr *)(void *)p;
 				len = SA_RLEN(sa);
 				if (i == RTAX_IFA) {
 					alen = len;
@@ -292,19 +236,20 @@ getifaddrs(struct ifaddrs **pif)
 				if ((RTA_MASKS & ifam->ifam_addrs & (1 << i))
 				    == 0)
 					continue;
-				sa = (struct sockaddr *)p;
+				sa = (struct sockaddr *)(void *)p;
 				len = SA_RLEN(sa);
 				switch (i) {
 				case RTAX_IFA:
-					ift->ifa_addr = (struct sockaddr *)data;
+					ift->ifa_addr =
+					    (struct sockaddr *)(void *)data;
 					memcpy(data, p, len);
 					data += len;
 					break;
 
 				case RTAX_NETMASK:
 					ift->ifa_netmask =
-					    (struct sockaddr *)data;
-					if (SA_LEN(sa) == 0) {
+					    (struct sockaddr *)(void *)data;
+					if (sa->sa_len == 0) {
 						memset(data, 0, alen);
 						data += alen;
 						break;
@@ -315,7 +260,7 @@ getifaddrs(struct ifaddrs **pif)
 
 				case RTAX_BRD:
 					ift->ifa_broadaddr =
-					    (struct sockaddr *)data;
+					    (struct sockaddr *)(void *)data;
 					memcpy(data, p, len);
 					data += len;
 					break;
@@ -323,12 +268,6 @@ getifaddrs(struct ifaddrs **pif)
 				p += len;
 			}
 
-#ifdef	HAVE_IFAM_DATA
-			/* ifam_data needs to be aligned */
-			ift->ifa_data = data = (void *)ALIGN(data);
-			memcpy(data, &ifam->ifam_data, sizeof(ifam->ifam_data));
-			data += sizeof(ifam->ifam_data);
-#endif	/* HAVE_IFAM_DATA */
 
 			ift = (ift->ifa_next = ift + 1);
 			break;
@@ -336,28 +275,6 @@ getifaddrs(struct ifaddrs **pif)
 	}
 
 	free(buf);
-#else	/* NET_RT_IFLIST */
-	ifr = ifc.ifc_req;
-	lifr = (struct ifreq *)&ifc.ifc_buf[ifc.ifc_len];
-
-	while (ifr < lifr) {
-		struct sockaddr *sa;
-
-		ift->ifa_name = names;
-		names[sizeof(ifr->ifr_name)] = 0;
-		strncpy(names, ifr->ifr_name, sizeof(ifr->ifr_name));
-		while (*names++)
-			;
-
-		ift->ifa_addr = (struct sockaddr *)data;
-		sa = &ifr->ifr_addr;
-		memcpy(data, sa, SA_LEN(sa));
-		data += SA_RLEN(sa);
-		
-		ifr = (struct ifreq *)(((char *)sa) + SA_LEN(sa));
-		ift = (ift->ifa_next = ift + 1);
-	}
-#endif	/* NET_RT_IFLIST */
 	if (--ift >= ifa) {
 		ift->ifa_next = NULL;
 		*pif = ifa;
@@ -371,5 +288,8 @@ getifaddrs(struct ifaddrs **pif)
 void
 freeifaddrs(struct ifaddrs *ifp)
 {
+
+	_DIAGASSERT(ifp != NULL);
+
 	free(ifp);
 }

@@ -1,4 +1,4 @@
-/* $NetBSD: am79c930reg.h,v 1.3 2000/03/22 11:22:22 onoe Exp $ */
+/* $NetBSD: am79c930reg.h,v 1.7 2008/04/28 20:23:49 martin Exp $ */
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -95,10 +88,10 @@
 #define AM79C930_LMA_HI 3	/* Local Memory Address register (high byte) */
 
 				/* set this bit to turn off ISAPnP version */
-#define AM79C930_LMA_HI_ISAPWRDWN	0x80	
- 
+#define AM79C930_LMA_HI_ISAPWRDWN	0x80
+
 /*
- * mmm, inconsistancy in chip documentation:
+ * mmm, inconsistency in chip documentation:
  * According to page 79--80, all four of the following are equivalent
  * and address the single byte pointed at by BSS_{FS,MBS} | LMA_{HI,LO}
  * According to tables on p63 and p67, they're the LSB through MSB

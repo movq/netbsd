@@ -1,4 +1,4 @@
-/*	$NetBSD: stty.h,v 1.8 1999/03/02 17:27:04 christos Exp $	*/
+/* $NetBSD: stty.h,v 1.10 2003/08/07 09:05:42 agc Exp $ */
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -34,6 +30,9 @@
  *
  *	@(#)stty.h	8.1 (Berkeley) 5/31/93
  */
+
+#ifndef _STTY_H_
+#define _STTY_H_
 
 #include <sys/ioctl.h>
 #include <termios.h>
@@ -58,3 +57,5 @@ struct cchar {
 enum FMT { STTY_NOTSET, STTY_GFLAG, STTY_BSD, STTY_POSIX };
 
 #define	LINELENGTH	72
+
+#endif /* !_STTY_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: menu.h,v 1.6 2000/03/10 09:06:21 itohy Exp $	*/
+/*	$NetBSD: menu.h,v 1.13 2004/03/22 19:01:09 jdc Exp $	*/
 
 /*-
  * Copyright (c) 1998-1999 Brett Lymn (blymn@baea.com.au, brett_lymn@yahoo.com.au)
@@ -10,7 +10,7 @@
  * 1. Redistributions of source code must retain the above copyright
  *    notice, this list of conditions and the following disclaimer.
  * 2. The name of the author may not be used to endorse or promote products
- *    derived from this software withough specific prior written permission
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -32,34 +32,29 @@
 #include <curses.h>
 #include <eti.h>
 
-/* the following is a hack to define attr_t until the curses lib
-   does it officially */
-#ifndef CURSES_V3
-typedef char attr_t;
-#endif
-
 /* requests for the menu_driver call */
-#define REQ_BASE_NUM      (0x100)
-#define REQ_LEFT_ITEM     (0x101)
-#define REQ_RIGHT_ITEM    (0x102)
-#define REQ_UP_ITEM       (0x103)
-#define REQ_DOWN_ITEM     (0x104)
-#define REQ_SCR_ULINE     (0x105)
-#define REQ_SCR_DLINE     (0x106)
-#define REQ_SCR_DPAGE     (0x107)
-#define REQ_SCR_UPAGE     (0x108)
-#define REQ_FIRST_ITEM    (0x109)
-#define REQ_LAST_ITEM     (0x10a)
-#define REQ_NEXT_ITEM     (0x10b)
-#define REQ_PREV_ITEM     (0x10c)
-#define REQ_TOGGLE_ITEM   (0x10d)
-#define REQ_CLEAR_PATTERN (0x10e)
-#define REQ_BACK_PATTERN  (0x10f)
-#define REQ_NEXT_MATCH    (0x110)
-#define REQ_PREV_MATCH    (0x111)
+#define REQ_BASE_NUM      (KEY_MAX + 0x200)
+#define REQ_LEFT_ITEM     (KEY_MAX + 0x201)
+#define REQ_RIGHT_ITEM    (KEY_MAX + 0x202)
+#define REQ_UP_ITEM       (KEY_MAX + 0x203)
+#define REQ_DOWN_ITEM     (KEY_MAX + 0x204)
+#define REQ_SCR_ULINE     (KEY_MAX + 0x205)
+#define REQ_SCR_DLINE     (KEY_MAX + 0x206)
+#define REQ_SCR_DPAGE     (KEY_MAX + 0x207)
+#define REQ_SCR_UPAGE     (KEY_MAX + 0x208)
+#define REQ_FIRST_ITEM    (KEY_MAX + 0x209)
+#define REQ_LAST_ITEM     (KEY_MAX + 0x20a)
+#define REQ_NEXT_ITEM     (KEY_MAX + 0x20b)
+#define REQ_PREV_ITEM     (KEY_MAX + 0x20c)
+#define REQ_TOGGLE_ITEM   (KEY_MAX + 0x20d)
+#define REQ_CLEAR_PATTERN (KEY_MAX + 0x20e)
+#define REQ_BACK_PATTERN  (KEY_MAX + 0x20f)
+#define REQ_NEXT_MATCH    (KEY_MAX + 0x210)
+#define REQ_PREV_MATCH    (KEY_MAX + 0x211)
 
-#define MAX_COMMAND       (0x111) /* last menu driver request - for application
-				     defined commands */
+#define MAX_COMMAND       (KEY_MAX + 0x211) /* last menu driver request
+					       - for application defined
+					       commands */
 
 /* Menu options */
 typedef unsigned int OPTIONS;
@@ -72,6 +67,7 @@ typedef unsigned int OPTIONS;
 #define O_SHOWMATCH  (0x10)
 #define O_NONCYCLIC  (0x20)
 #define O_SELECTABLE (0x40)
+#define O_RADIO      (0x80)
 
 typedef struct __menu_str {
         char *string;
@@ -137,76 +133,77 @@ struct __menu {
 				       before current item changes */
         WINDOW *menu_win; /* the menu window */
         WINDOW *menu_subwin; /* the menu subwindow */
-	int we_created;
+	WINDOW *scrwin; /* the window to write to */
 };
 
 
 /* Public function prototypes. */
 __BEGIN_DECLS
-int  menu_driver __P((MENU *, int));
-int scale_menu __P((MENU *, int *, int *));
-int set_top_row __P((MENU *, int));
-int pos_menu_cursor __P((MENU *));
-int top_row __P((MENU *));
+int  menu_driver(MENU *, int);
+int scale_menu(MENU *, int *, int *);
+int set_top_row(MENU *, int);
+int pos_menu_cursor(MENU *);
+int top_row(MENU *);
 
-int  free_menu __P((MENU *));
-char menu_back __P((MENU *));
-char menu_fore __P((MENU *));
-void menu_format __P((MENU *, int *, int *));
-char menu_grey __P((MENU *));
-Menu_Hook menu_init __P((MENU *));
-char *menu_mark __P((MENU *));
-OPTIONS menu_opts __P((MENU *));
-int menu_opts_off __P((MENU *, OPTIONS));
-int menu_opts_on __P((MENU *, OPTIONS));
-int menu_pad __P((MENU *));
-char *menu_pattern __P((MENU *));
-WINDOW *menu_sub __P((MENU *));
-Menu_Hook menu_term __P((MENU *));
-char *menu_unmark __P((MENU *));
-char *menu_userptr __P((MENU *));
-WINDOW *menu_win __P((MENU *));
-MENU *new_menu __P((ITEM **));
-int post_menu __P((MENU *));
-int set_menu_back __P((MENU *, int));
-int set_menu_fore __P((MENU *, int));
-int set_menu_format __P((MENU *, int, int));
-int set_menu_grey __P((MENU *, int));
-int set_menu_init __P((MENU *, Menu_Hook));
-int set_menu_items __P((MENU *, ITEM **));
-int set_menu_mark __P((MENU *, char *));
-int set_menu_opts __P((MENU *, OPTIONS));
-int set_menu_pad __P((MENU *, int));
-int set_menu_pattern __P((MENU *, char *));
-int  set_menu_sub __P((MENU *, WINDOW *));
-int set_menu_term __P((MENU *, Menu_Hook));
-int set_menu_unmark __P((MENU *, char *));
-int set_menu_userptr __P((MENU *, char *));
-int  set_menu_win __P((MENU *, WINDOW *));
-int unpost_menu __P((MENU *));
+int  free_menu(MENU *);
+char menu_back(MENU *);
+char menu_fore(MENU *);
+void menu_format(MENU *, int *, int *);
+char menu_grey(MENU *);
+Menu_Hook menu_init(MENU *);
+char *menu_mark(MENU *);
+OPTIONS menu_opts(MENU *);
+int menu_opts_off(MENU *, OPTIONS);
+int menu_opts_on(MENU *, OPTIONS);
+int menu_pad(MENU *);
+char *menu_pattern(MENU *);
+WINDOW *menu_sub(MENU *);
+Menu_Hook menu_term(MENU *);
+char *menu_unmark (MENU *);
+char *menu_userptr(MENU *);
+WINDOW *menu_win(MENU *);
+MENU *new_menu(ITEM **);
+int post_menu(MENU *);
+int set_menu_back(MENU *, attr_t);
+int set_menu_fore(MENU *, attr_t);
+int set_menu_format(MENU *, int, int);
+int set_menu_grey(MENU *, attr_t);
+int set_menu_init(MENU *, Menu_Hook);
+int set_menu_items(MENU *, ITEM **);
+int set_menu_mark(MENU *, char *);
+int set_menu_opts(MENU *, OPTIONS);
+int set_menu_pad(MENU *, int);
+int set_menu_pattern(MENU *, char *);
+int set_menu_sub(MENU *, WINDOW *);
+int set_menu_term(MENU *, Menu_Hook);
+int set_menu_unmark(MENU *, char *);
+int set_menu_userptr(MENU *, char *);
+int  set_menu_win(MENU *, WINDOW *);
+int unpost_menu(MENU *);
 
-ITEM *current_item __P((MENU *));
-int free_item __P((ITEM *));
-int item_count __P((MENU *));
-char *item_description __P((ITEM *));
-int item_index __P((ITEM *));
-Menu_Hook item_init __P((MENU *));
-char *item_name __P((ITEM *));
-OPTIONS item_opts __P((ITEM *));
-int item_opts_off __P((ITEM *, OPTIONS));
-int item_opts_on __P((ITEM *, OPTIONS));
-Menu_Hook item_term __P((MENU *));
-char *item_userptr __P((ITEM *));
-int item_value __P((ITEM *));
-int item_visible __P((ITEM *));
-ITEM **menu_items __P((MENU *));
-ITEM *new_item __P((char *, char *));
-int set_current_item __P((MENU *, ITEM *));
-int set_item_init __P((MENU *, Menu_Hook));
-int set_item_opts __P((ITEM *, OPTIONS));
-int set_item_term __P((MENU *, Menu_Hook));
-int set_item_userptr __P((ITEM *, char *));
-int set_item_value __P((ITEM *, int));
+ITEM *current_item(MENU *);
+int free_item(ITEM *);
+int item_count(MENU *);
+char *item_description(ITEM *);
+int item_index(ITEM *);
+Menu_Hook item_init(MENU *);
+char *item_name(ITEM *);
+OPTIONS item_opts(ITEM *);
+int item_opts_off(ITEM *, OPTIONS);
+int item_opts_on(ITEM *, OPTIONS);
+int item_selected(MENU *, int **); /* return the item index of selected */
+Menu_Hook item_term(MENU *);
+char *item_userptr(ITEM *);
+int item_value(ITEM *);
+int item_visible(ITEM *);
+ITEM **menu_items(MENU *);
+ITEM *new_item(char *, char *);
+int set_current_item(MENU *, ITEM *);
+int set_item_init(MENU *, Menu_Hook);
+int set_item_opts(ITEM *, OPTIONS);
+int set_item_term(MENU *, Menu_Hook);
+int set_item_userptr(ITEM *, char *);
+int set_item_value(ITEM *, int);
 
 __END_DECLS
 

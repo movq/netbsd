@@ -1,4 +1,4 @@
-/*	$NetBSD: if_inarp.h,v 1.30 2000/03/30 02:32:57 simonb Exp $	*/
+/*	$NetBSD: if_inarp.h,v 1.41 2008/10/24 17:07:33 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -65,21 +61,22 @@ struct sockaddr_inarp {
 
 #ifdef _KERNEL
 extern struct ifqueue arpintrq;
-void arp_ifinit __P((struct ifnet *, struct ifaddr *));
-void arp_rtrequest __P((int, struct rtentry *, struct sockaddr *));
-int arpresolve __P((struct ifnet *, struct rtentry *, struct mbuf *,
-		    struct sockaddr *, u_char *));
-void arpintr __P((void));
-void arp_drain __P((void));
+void arp_ifinit(struct ifnet *, struct ifaddr *);
+void arp_rtrequest(int, struct rtentry *, const struct rt_addrinfo *);
+int arpresolve(struct ifnet *, struct rtentry *, struct mbuf *,
+		    const struct sockaddr *, u_char *);
+void arpintr(void);
+void arprequest(struct ifnet *, const struct in_addr *, const struct in_addr *,
+    const u_int8_t *);
+void arp_init(void);
+void arp_drain(void);
+int arpioctl(u_long, void *);
+void arpwhohas(struct ifnet *, struct in_addr *);
 
-int arpioctl __P((u_long, caddr_t));
-void arpwhohas __P((struct ifnet *, struct in_addr *));
-
-void revarpinput __P((struct mbuf *));
-void in_revarpinput __P((struct mbuf *));
-void revarprequest __P((struct ifnet *));
-int revarpwhoarewe __P((struct ifnet *, struct in_addr *, struct in_addr *));
-int db_show_arptab __P((void));
+void revarpinput(struct mbuf *);
+void in_revarpinput(struct mbuf *);
+void revarprequest(struct ifnet *);
+int revarpwhoarewe(struct ifnet *, struct in_addr *, struct in_addr *);
 #endif
 
-#endif /* _NETINET_IF_INARP_H_ */
+#endif /* !_NETINET_IF_INARP_H_ */

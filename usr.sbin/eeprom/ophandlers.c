@@ -1,4 +1,4 @@
-/*	$NetBSD: ophandlers.c,v 1.6 1997/10/18 08:40:52 lukem Exp $	*/
+/*	$NetBSD: ophandlers.c,v 1.10 2008/04/28 20:24:15 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,6 @@
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <string.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -57,7 +49,7 @@ extern	int verbose;
 
 static	char err_str[BUFSIZE];
 
-static	void op_notsupp __P((struct extabent *, struct opiocdesc *, char *));
+static	void op_notsupp (struct extabent *, struct opiocdesc *, char *);
 
 /*
  * There are several known fields that I either don't know how to
@@ -75,6 +67,35 @@ static	struct extabent opextab[] = {
 	++eval;								\
 	return (err_str);						\
 };
+
+void
+op_action(keyword, arg)
+	char *keyword, *arg;
+{
+	char	*cp;
+
+	if ((cp = op_handler(keyword, arg)) != NULL)
+		warnx("%s", cp);
+	return;
+}
+
+#if defined(__sparc__) && !defined(__arch64__)
+int
+check_for_openprom()
+{
+	int fd, rv, optnode;
+
+	/* if we can't open it, obviously we can't use it. */
+	if ((fd = open(path_openprom, O_RDONLY)) < 0)
+		return (0);
+
+	/* check for the presence of OpenFirmware with OPIOCGETOPTNODE */
+	rv = ioctl(fd, OPIOCGETOPTNODE, (char *)&optnode);
+	close (fd);
+
+	return (rv == 0);
+}
+#endif
 
 char *
 op_handler(keyword, arg)

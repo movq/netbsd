@@ -1,4 +1,4 @@
-/*	$NetBSD: set.c,v 1.7 1997/10/14 02:07:59 lukem Exp $	*/
+/*	$NetBSD: set.c,v 1.11 2006/05/01 23:18:37 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)set.c	8.2 (Berkeley) 2/28/94";
 #endif
-__RCSID("$NetBSD: set.c,v 1.7 1997/10/14 02:07:59 lukem Exp $");
+__RCSID("$NetBSD: set.c,v 1.11 2006/05/01 23:18:37 christos Exp $");
 #endif /* not lint */
 
 #include <stdio.h>
@@ -157,7 +153,7 @@ reset_mode()
  * entry and command line and update their values in 'mode'.
  */
 void
-set_control_chars()
+set_control_chars(int erasechar, int intrchar, int killchar)
 {
 	char *bp, *p, bs_char, buf[1024];
 
@@ -196,8 +192,7 @@ set_control_chars()
  * uppercase to internal lowercase.
  */
 void
-set_conversions(usingupper)
-	int usingupper;
+set_conversions(int usingupper)
 {
 	if (tgetflag("UC") || usingupper) {
 #ifdef IUCLC
@@ -267,7 +262,7 @@ set_init()
 		}
 		bp = buf;
 		if (tgetstr("rf", &bp) != 0 || tgetstr("if", &bp) != 0) {
-			cat(buf);
+			tset_cat(buf);
 			settle = 1;
 		}
 	}
@@ -290,7 +285,7 @@ set_tabs()
 {
 	int c;
 	char *capsp, *clear_tabs;
-	char *set_column, *set_pos, *set_tab, *tg_out;
+	char *set_column, *set_tab, *tg_out;
 	char caps[1024];
 
 	capsp = caps;
@@ -302,7 +297,6 @@ set_tabs()
 	}
 
 	set_column = tgetstr("ch", &capsp);
-	set_pos = set_column ? NULL : tgetstr("cm", &capsp);
 
 	if (set_tab) {
 		for (c = 8; c < columns; c += 8) {
@@ -313,8 +307,6 @@ set_tabs()
 			tg_out = "OOPS";
 			if (set_column)
 				tg_out = tgoto(set_column, 0, c);
-			if (*tg_out == 'O' && set_pos)
-				tg_out = tgoto(set_pos, c, lines - 1);
 			if (*tg_out != 'O')
 				tputs(tg_out, 1, outc);
 			else

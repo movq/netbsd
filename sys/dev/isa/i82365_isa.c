@@ -1,6 +1,4 @@
-/*	$NetBSD: i82365_isa.c,v 1.13 2000/02/22 16:04:44 thorpej Exp $	*/
-
-#define	PCICISADEBUG
+/*	$NetBSD: i82365_isa.c,v 1.29 2008/06/26 12:33:17 drochner Exp $	*/
 
 /*
  * Copyright (c) 1997 Marc Horowitz.  All rights reserved.
@@ -31,17 +29,19 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/types.h>
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: i82365_isa.c,v 1.29 2008/06/26 12:33:17 drochner Exp $");
+
+#define	PCICISADEBUG
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/extent.h>
 #include <sys/malloc.h>
 
-#include <vm/vm.h>
-
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/isa/isareg.h>
 #include <dev/isa/isavar.h>
@@ -61,14 +61,13 @@ int	pcicisa_debug = 0;
 #define	DPRINTF(arg)
 #endif
 
-int	pcic_isa_probe __P((struct device *, struct cfdata *, void *));
-void	pcic_isa_attach __P((struct device *, struct device *, void *));
+int	pcic_isa_probe(struct device *, struct cfdata *, void *);
+void	pcic_isa_attach(struct device *, struct device *, void *);
 
-struct cfattach pcic_isa_ca = {
-	sizeof(struct pcic_isa_softc), pcic_isa_probe, pcic_isa_attach
-};
+CFATTACH_DECL(pcic_isa, sizeof(struct pcic_isa_softc),
+    pcic_isa_probe, pcic_isa_attach, NULL, NULL);
 
-static struct pcmcia_chip_functions pcic_isa_functions = {
+static const struct pcmcia_chip_functions pcic_isa_functions = {
 	pcic_chip_mem_alloc,
 	pcic_chip_mem_free,
 	pcic_chip_mem_map,
@@ -84,31 +83,46 @@ static struct pcmcia_chip_functions pcic_isa_functions = {
 
 	pcic_chip_socket_enable,
 	pcic_chip_socket_disable,
+	pcic_chip_socket_settype,
+	NULL,
 };
 
 int
-pcic_isa_probe(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+pcic_isa_probe(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_iot;
 	bus_space_handle_t ioh, memh;
-	int val, found;
+	int val, found, msize;
+
+	if (ia->ia_nio < 1)
+		return (0);
+	if (ia->ia_niomem < 1)
+		return (0);
+
+	if (ISA_DIRECT_CONFIG(ia))
+		return (0);
 
 	/* Disallow wildcarded i/o address. */
-	if (ia->ia_iobase == ISACF_PORT_DEFAULT)
+	if (ia->ia_io[0].ir_addr == ISA_UNKNOWN_PORT)
+		return (0);
+	if (ia->ia_iomem[0].ir_addr == ISA_UNKNOWN_IOMEM)
 		return (0);
 
-	if (bus_space_map(iot, ia->ia_iobase, PCIC_IOSIZE, 0, &ioh))
+	if (bus_space_map(iot, ia->ia_io[0].ir_addr, PCIC_IOSIZE, 0, &ioh))
 		return (0);
 
-	if (ia->ia_msize == -1)
-		ia->ia_msize = PCIC_MEMSIZE;
+	if (ia->ia_iomem[0].ir_size == ISA_UNKNOWN_IOSIZ)
+		msize = PCIC_MEMSIZE;
+	else
+		msize = ia->ia_iomem[0].ir_size;
 
-	if (bus_space_map(ia->ia_memt, ia->ia_maddr, ia->ia_msize, 0, &memh))
+	if (bus_space_map(ia->ia_memt, ia->ia_iomem[0].ir_addr,
+	    msize, 0, &memh)) {
+		bus_space_unmap(iot, ioh, PCIC_IOSIZE);
 		return (0);
+	}
 
 	found = 0;
 
@@ -150,20 +164,27 @@ pcic_isa_probe(parent, match, aux)
 
 
 	bus_space_unmap(iot, ioh, PCIC_IOSIZE);
-	bus_space_unmap(ia->ia_memt, memh, ia->ia_msize);
+	bus_space_unmap(ia->ia_memt, memh, msize);
 
 	if (!found)
 		return (0);
 
-	ia->ia_iosize = PCIC_IOSIZE;
+	ia->ia_nio = 1;
+	ia->ia_io[0].ir_size = PCIC_IOSIZE;
+
+	ia->ia_niomem = 1;
+	ia->ia_iomem[0].ir_size = msize;
+
+	/* IRQ is special. */
+
+	ia->ia_ndrq = 0;
 
 	return (1);
 }
 
 void
-pcic_isa_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+pcic_isa_attach( struct device *parent, struct device *self,
+    void *aux)
 {
 	struct pcic_softc *sc = (void *) self;
 	struct pcic_isa_softc *isc = (void *) self;
@@ -175,19 +196,21 @@ pcic_isa_attach(parent, self, aux)
 	bus_space_handle_t memh;
 
 	/* Map i/o space. */
-	if (bus_space_map(iot, ia->ia_iobase, ia->ia_iosize, 0, &ioh)) {
+	if (bus_space_map(iot, ia->ia_io[0].ir_addr, PCIC_IOSIZE, 0, &ioh)) {
 		printf(": can't map i/o space\n");
 		return;
 	}
 
 	/* Map mem space. */
-	if (bus_space_map(memt, ia->ia_maddr, ia->ia_msize, 0, &memh)) {
+	if (bus_space_map(memt, ia->ia_iomem[0].ir_addr,
+	    ia->ia_iomem[0].ir_size, 0, &memh)) {
 		printf(": can't map mem space\n");
 		return;
 	}
 
-	sc->membase = ia->ia_maddr;
-	sc->subregionmask = (1 << (ia->ia_msize / PCIC_MEM_PAGESIZE)) - 1;
+	sc->membase = ia->ia_iomem[0].ir_addr;
+	sc->subregionmask =
+	    (1 << (ia->ia_iomem[0].ir_size / PCIC_MEM_PAGESIZE)) - 1;
 
 	isc->sc_ic = ic;
 	sc->pct = (pcmcia_chipset_tag_t) & pcic_isa_functions;
@@ -196,12 +219,16 @@ pcic_isa_attach(parent, self, aux)
 	sc->ioh = ioh;
 	sc->memt = memt;
 	sc->memh = memh;
-	sc->irq = ia->ia_irq;
+	if (ia->ia_nirq > 0)
+		sc->irq = ia->ia_irq[0].ir_irq;
+	else
+		sc->irq = ISA_UNKNOWN_IRQ;
 
 	printf("\n");
 
 	pcic_attach(sc);
-	pcic_isa_bus_width_probe(sc, iot, ioh, ia->ia_iobase, ia->ia_iosize);
+	pcic_isa_bus_width_probe(sc, iot, ioh, ia->ia_io[0].ir_addr,
+	    PCIC_IOSIZE);
 	pcic_attach_sockets(sc);
 
 	config_interrupts(self, pcic_isa_config_interrupts);

@@ -1,4 +1,4 @@
-/*	$NetBSD: value.h,v 1.3 1995/09/28 10:35:00 tls Exp $	*/
+/*	$NetBSD: value.h,v 1.6 2008/07/25 06:53:43 gmcgarry Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -52,4 +48,5 @@ struct value {
 #define V_STR	2
 #define V_ERR	3
 
-#define val_free(v)	((v).v_type == V_STR ? str_free((v).v_str) : 0)
+#define val_free(v)	(((v).v_type == V_STR && (v).v_str) ? \
+    str_free((v).v_str) : (void)0)

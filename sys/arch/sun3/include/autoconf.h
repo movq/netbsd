@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.h,v 1.18 1998/02/08 05:02:50 gwr Exp $	*/
+/*	$NetBSD: autoconf.h,v 1.26 2008/04/28 20:23:38 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,6 +33,8 @@
  * Autoconfiguration information.
  * (machdep parts of driver/kernel interface)
  */
+
+#include <machine/bus.h>
 
 /*
  * These are the "bus" types, in attach order.
@@ -60,36 +55,32 @@
  * This is the "args" parameter to the bus match/attach functions.
  */
 struct confargs {
+	bus_space_tag_t ca_bustag;
+	bus_dma_tag_t ca_dmatag;
+	const char *ca_name;	
 	int ca_bustype;		/* BUS_OBIO, ... */
-	int ca_paddr;		/* physical address */
+	paddr_t ca_paddr;	/* physical address */
 	int ca_intpri;		/* interrupt priority level */
 	int ca_intvec;		/* interrupt vector index */
 };
+
+extern struct sun68k_bus_dma_tag mainbus_dma_tag;
+extern struct sun68k_bus_space_tag mainbus_space_tag;
 
 /* Locator aliases */
 #define cf_paddr	cf_loc[0]
 #define cf_intpri	cf_loc[1]
 #define cf_intvec	cf_loc[2]
 
-int bus_scan __P((struct device *, struct cfdata *, void *));
-int bus_print __P((void *, const char *));
-int bus_peek __P((int, int, int));
-void * bus_mapin __P((int, int, int));
-void bus_mapout __P((void *, int));
-void * bus_tmapin __P((int, int));
-void bus_tmapout __P((void *));
-
-/* These are how drivers connect interrupt handlers. */
-typedef int (*isr_func_t) __P((void *));
-void isr_add_autovect __P((isr_func_t, void *arg, int level));
-void isr_add_vectored __P((isr_func_t, void *arg, int pri, int vec));
-void isr_add_custom __P((int, void *));
-
-/* These control the software interrupt register. */
-void isr_soft_request __P((int level));
-void isr_soft_clear __P((int level));
+int bus_scan(struct device *, struct cfdata *, const int *, void *);
+int bus_print(void *, const char *);
+int bus_peek(int, int, int);
+void *bus_mapin(int, int, int);
+void bus_mapout(void *, int);
+void *bus_tmapin(int, int);
+void bus_tmapout(void *);
 
 /* Bus-error tolerant access to mapped address. */
-int 	peek_byte __P((caddr_t));
-int 	peek_word __P((caddr_t));
-int 	peek_long __P((caddr_t));
+int 	peek_byte(void *);
+int 	peek_word(void *);
+int 	peek_long(void *);

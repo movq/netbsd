@@ -1,4 +1,4 @@
-/*	$NetBSD: target.c,v 1.22 1999/06/20 06:08:15 cgd Exp $	*/
+/*	$NetBSD: target.c,v 1.51 2006/10/23 19:44:57 he Exp $	*/
 
 /*
  * Copyright 1997 Jonathan Stone
@@ -34,16 +34,51 @@
  *
  */
 
+/* Copyright below applies to the realpath() code */
+
+/*
+ * Copyright (c) 1989, 1991, 1993, 1995
+ *      The Regents of the University of California.  All rights reserved.
+ *      
+ * This code is derived from software contributed to Berkeley by
+ * Jan-Simon Pendry.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission. 
+ * 
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ */     
+
+
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: target.c,v 1.22 1999/06/20 06:08:15 cgd Exp $");
+__RCSID("$NetBSD: target.c,v 1.51 2006/10/23 19:44:57 he Exp $");
 #endif
 
 /*
  * target.c -- path-prefixing routines to access the target installation
- *  filesystems. Makes  the install tools more ndependent of whether
- *  we're installing into a separate filesystem hierarchy mounted under /mnt,
- *  or into the currently active root mounted on /.
+ *  filesystems. Makes the install tools more independent of whether
+ *  we're installing into a separate filesystem hierarchy mounted under
+ * /targetroot, or into the currently active root mounted on /.
  */
 
 #include <sys/param.h>			/* XXX vm_param.h always defines TRUE*/
@@ -52,6 +87,7 @@ __RCSID("$NetBSD: target.c,v 1.22 1999/06/20 06:08:15 cgd Exp $");
 #include <sys/stat.h>			/* stat() */
 #include <sys/mount.h>			/* statfs() */
 
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdarg.h>
 #include <unistd.h>
@@ -67,27 +103,22 @@ __RCSID("$NetBSD: target.c,v 1.22 1999/06/20 06:08:15 cgd Exp $");
 /*
  * local  prototypes 
  */
-static const char*	get_rootdev __P((void));
-static const char* mounted_rootpart __P((void));
-int target_on_current_disk __P((void));
-int must_mount_root __P((void));
 
-static void make_prefixed_dir __P((const char *prefix, const char *path));
-static int do_target_chdir __P((const char *dir, int flag));
-static const char* concat_paths __P((const char *prefix, const char *suffix));
-int	target_test(const char *test, const char *path);
-int	target_test_dir __P((const char *path));	/* deprecated */
-int	target_test_file __P((const char *path));	/* deprecated */
+static void make_prefixed_dir (const char *prefix, const char *path);
+static int do_target_chdir (const char *dir, int flag);
+int	target_test(unsigned int mode, const char *path);
+int	target_test_dir (const char *path);	/* deprecated */
+int	target_test_file (const char *path);	/* deprecated */
+int	target_test_symlink (const char *path);	/* deprecated */
 
 void backtowin(void);
 
-void unwind_mounts __P((void));
-int mount_with_unwind(const char *fstype, const char *from, const char *on);
+void unwind_mounts(void);
 
 /* Record a mount for later unwinding of target mounts. */
 struct unwind_mount {
 	struct unwind_mount *um_prev;
-	char um_mountpoint[STRSIZE];
+	char um_mountpoint[4];		/* Allocated longer... */
 };
 
 /* Unwind-mount stack */
@@ -102,224 +133,82 @@ struct unwind_mount *unwind_mountlist = NULL;
 /*
  * debugging helper. curses...
  */
+#if defined(DEBUG)  ||	defined(DEBUG_ROOT)
 void
-backtowin()
+backtowin(void)
 {
 
 	fflush(stdout);	/* curses does not leave stdout linebuffered. */
 	getchar();	/* wait for user to press return */
 	wrefresh(stdscr);
 }
+#endif
+
 
 /*
- * Get name of current root device  from kernel via sysctl. 
- * On NetBSD-1.3_ALPHA, this just returns the name of a
- * device (e.g., "sd0"), not a specific partition -- like "sd0a",
- * or "sd0b" for root-in-swap.
+ * Is the root partition we're running from the same as the root 
+ * which the user has selected to install/upgrade?
+ * Uses global variable "diskdev" to find the selected device for
+ * install/upgrade.
  */
-static const char *
-get_rootdev()
+int
+target_already_root(void)
+{
+
+	if (strcmp(diskdev, "") == 0)
+		/* No root partition was ever selected.
+		 * Assume that the currently mounted one should be used
+		 */
+		return 1;
+
+	return is_active_rootpart(diskdev, rootpart);
+}
+
+
+/*
+ * Is this device partition (e.g., "sd0a") mounted as root? 
+ */
+int
+is_active_rootpart(const char *dev, int ptn)
 {
 	int mib[2];
-	static char rootdev[STRSIZE];
+	char rootdev[SSTRSIZE];
+	int rootptn;
 	size_t varlen;
 
 	mib[0] = CTL_KERN;
 	mib[1] = KERN_ROOT_DEVICE;
 	varlen = sizeof(rootdev);
 	if (sysctl(mib, 2, rootdev, &varlen, NULL, 0) < 0)
-		return (NULL);
+		return 1;
 
-#ifdef	DEBUG
-	printf("get_rootdev(): sysctl returns %s\n", rootdev);
-#endif
-	return (rootdev);
-}
+	if (strcmp(dev, rootdev) != 0)
+		return 0;
 
+	mib[1] = KERN_ROOT_PARTITION;
+	varlen = sizeof rootptn;
+	if (sysctl(mib, 2, &rootptn, &varlen, NULL, 0) < 0)
+		return 1;
 
-/*
- * Check if current root and target are on the same 
- * device (e.g., both on "sd0") or on different devices
- * e.g., target is "sd0" and root is "le0" (nfs).
- */
-int
-target_on_current_disk()
-{
-	int same;
-
-	same = (strcmp(diskdev, get_rootdev()) == 0);
-	return (same);
-}
-
-/*
- * must_mount_root  -- check to see if the current root
- * partition  and the target root partition are on the same
- * device.  If they are, we need to have the root mounted read/write
- * in order to find out whether they're the same partition.
- * (this is arguably a bug in the kernel API.)
- *
- * check to see if they're
- */
-int
-must_mount_root()
-{
-	int result;
-
-#if defined(DEBUG)  ||	defined(DEBUG_ROOT)
-	endwin();
-	printf("must_mount_root\n");
-	backtowin();
-#endif
-
-	/* if they're  on different devices, we're OK. */
-	if (target_on_current_disk() == 0) {
-#if defined(DEBUG)  ||	defined(DEBUG_ROOT)
-		endwin();
-		printf("must_mount_root: %s and %s, no?\n",
-		    diskdev, get_rootdev());
-		fflush(stdout);
-		backtowin();
-#endif
-		return (0);
-	}
-
-	/* If they're on the same device, and root not mounted, yell. */
-	result = (strcmp(mounted_rootpart(), "root_device") == 0);
-
-#if defined(DEBUG)  ||	defined(DEBUG_ROOT)
-		endwin();
-		printf("must_mount_root %s and root_device gives %d\n",
-		    mounted_rootpart(), result);
-		fflush(stdout);
-		backtowin();
-#endif
-
-	return (result);
-}
-
-/*
- * Is the root pattion we're running from the same as the root 
- * which the  user has selected to install/upgrade?
- * Uses global variable "diskdev" to find the selected device for
- * install/upgrade.
- * FIXME -- disklabel-editing code assumes that partition 'a' is always root.
- */
-int
-target_already_root()
-{
-	register int result;
-	char diskdevroot[STRSIZE];
-
-	/* if they're  on different devices, we're OK. */
-	if (target_on_current_disk() == 0)
-		return (0);
-
-	/*
-	 * otherwise, install() or upgrade() should already did
-	 * have forced the user to explicitly mount the root,
-	 * so we can find out via statfs().  Abort if not.
-	 */
-
-	/* append 'a' to the partitionless target disk device name. */
-	snprintf(diskdevroot, STRSIZE, "%s%c", diskdev, 'a');
-	result = is_active_rootpart(diskdevroot);
-	return (result);
-}
-
-
-
-/*
- * ask the kernel what the current root is.
- * If it's "root_device", we should jsut give up now.
- * (Why won't the kernel tell us? If we booted with "n",
- * or an explicit bootpath,  the operator told *it* ....)
- *
- * Don't cache the answer in case the user suspnnds and remounts.
- */
-static const char *
-mounted_rootpart()
-{
-	struct statfs statfsbuf;
-	int result;
-
-	static char statrootstr[STRSIZE];
-	memset(&statfsbuf, 0, sizeof(statfsbuf));
-	result = statfs("/", &statfsbuf);
-	if (result < 0) {
-		fprintf(stderr, "Help! statfs() can't find root: %s\n",
-		    strerror(errno));
-		fflush(stderr);
-		if (logging)
-			fprintf(log, "Help! statfs() can't find root: %s\n",
-			    strerror(errno));
-		exit(errno);
-		return(0);
-	}
-#if defined(DEBUG)
-	endwin();
-	printf("mounted_rootpart: got %s on %s\n", 
-	    statfsbuf.f_mntonname, statfsbuf.f_mntfromname);
-	fflush(stdout);
-	backtowin();
-#endif
-
-	/*
-	 * Check for unmounted root. We can't tell which partition
-	 */
-	strncpy(statrootstr, statfsbuf.f_mntfromname, STRSIZE);
-	return (statrootstr);
-}
-
-/*
- * Is this device partition (e.g., "sd0a") mounted as root? 
- * Note difference from target_on_current_disk()!
- */
-int
-is_active_rootpart(devpart)
-	const char *devpart;
-{
-	const char *root = 0;
-	int result;
-	static char devdirdevpart[STRSIZE];
-
-	/* check to see if the devices match? */
-
-	/* this changes on mounts, so don't cache it. */
-	root = mounted_rootpart();
-
-	/* prepend /dev. */
-	/* XXX post-1.3, use strstr to strip "/dev" from input. */
-	snprintf(devdirdevpart, STRSIZE, "/dev/%s", devpart);
-
-	result = (strcmp(devdirdevpart, root) == 0);
-
-#if defined(DEBUG) || defined(DEBUG_ROOT)
-	endwin();
-	printf("is_active_rootpart: activeroot = %s, query=%s, mung=%s, answer=%d\n",
-	    root, devpart, devdirdevpart, result);
-	fflush(stdout);
-	backtowin();
-#endif
-
-	return (result);
+	return ptn == rootptn;
 }
 
 /*
  * Pathname  prefixing glue to support installation either 
  * from in-ramdisk miniroots or on-disk diskimages.
  * If our root is on the target disk, the install target is mounted
- * on /mnt and we need to prefix installed pathnames with /mnt.
+ * on /targetroot and we need to prefix installed pathnames with /targetroot.
  * otherwise we are installing to the currently-active root and
  * no prefix is needed.
  */
 const char *
-target_prefix()
+target_prefix(void)
 {
 	/*
 	 * XXX fetch sysctl variable for current root, and compare 
 	 * to the devicename of the install target disk.
 	 */
-	return(target_already_root() ? "" : "/mnt");
+	return(target_already_root() ? "" : targetroot_mnt);
 }
 
 /*
@@ -329,12 +218,10 @@ target_prefix()
  * next call to a target-prefixing  function, or to modify the inputs..
  * Used only  internally so this is probably safe.
  */
-static const char*  
-concat_paths(prefix, suffix)
-	const char* prefix;
-	const char *suffix;
+const char *  
+concat_paths(const char *prefix, const char *suffix)
 {
-	static char realpath[STRSIZE];
+	static char real_path[MAXPATHLEN];
 
 	/* absolute prefix and null suffix? */
 	if (prefix[0] == '/' && suffix[0] == 0)
@@ -346,10 +233,11 @@ concat_paths(prefix, suffix)
 
 	/* avoid "//" */
 	if (suffix[0] == '/' || suffix[0] == 0)
-		snprintf(realpath, STRSIZE, "%s%s", prefix, suffix);
+		snprintf(real_path, sizeof(real_path), "%s%s", prefix, suffix);
 	else
-		snprintf(realpath, STRSIZE, "%s/%s", prefix, suffix);
-	return (realpath);
+		snprintf(real_path, sizeof(real_path), "%s/%s", 
+		    prefix, suffix);
+	return (real_path);
 }
 
 /*
@@ -362,101 +250,31 @@ concat_paths(prefix, suffix)
  * Not static so other functions can generate target related file names.
  */
 const char *
-target_expand(tgtpath)
-	const char *tgtpath;
+target_expand(const char *tgtpath)
 {
 
 	return concat_paths(target_prefix(), tgtpath);
 }
 
-/* Make a directory, with a prefix like "/mnt" or possibly just "". */
+/* Make a directory, with a prefix like "/targetroot" or possibly just "". */
 static void 
-make_prefixed_dir(prefix, path)
-	const char *prefix;
-	const char *path;
+make_prefixed_dir(const char *prefix, const char *path)
 {
 
-	run_prog(0, 0, NULL, "/bin/mkdir -p %s", concat_paths(prefix, path));
+	run_program(0, "/bin/mkdir -p %s", concat_paths(prefix, path));
 }
 
-/* Make a directory with a pathname relative to the insatllation target. */
+/* Make a directory with a pathname relative to the installation target. */
 void
-make_target_dir(path)
-	const char *path;
+make_target_dir(const char *path)
 {
 
 	make_prefixed_dir(target_prefix(), path);
 }
 
-/* Make a directory with a pathname in the currently-mounted root. */
-void
-make_ramdisk_dir(path)
-	const char *path;
-{
-
-	make_prefixed_dir(path, "");
-}
-
-#if 0
-/* unused, will not work with new run.c */
-/*
- *
- * Append |string| to the  filename |path|, where |path| is
- * relative to the root of the install target.
- * for example, 
- *    echo_to_target_file( "Newbie.NetBSD.ORG", "/etc/myname");
- * would set the default hostname at the next reboot of the installed-on disk.
- */
-void
-append_to_target_file(path, string)
-	const char *path;
-	const char *string;
-{
-
-	run_prog(1, 0, NULL, "echo %s >> %s", string, target_expand(path));
-}
-
-/*
- * As append_to_target_file, but with ftrunc semantics. 
- */
-void
-echo_to_target_file(path, string)
-	const char *path;
-	const char *string;
-{
-	trunc_target_file(path);
-	append_to_target_file(path, string);
-}
-
-void
-sprintf_to_target_file(const char *path, const char *format, ...)
-{
-	char lines[STRSIZE];
-	va_list ap;
-
-	trunc_target_file(path);
-
-	va_start(ap, format);
-	vsnprintf(lines, STRSIZE, format, ap);
-	va_end(ap);
-
-	append_to_target_file(path, lines);
-}
-
-
-void
-trunc_target_file(path)
-	const char *path;
-{
-
-	run_prog(1, 0, NULL, "cat < /dev/null > %s",  target_expand(path));
-}
-#endif /* if 0 */
 
 static int
-do_target_chdir(dir, must_succeed)
-	const char *dir;
-	int must_succeed;
+do_target_chdir(const char *dir, int must_succeed)
 {
 	const char *tgt_dir;
 	int error;
@@ -469,11 +287,11 @@ do_target_chdir(dir, must_succeed)
 	if (chdir(tgt_dir) < 0)
 		error = errno;
 	if (logging) {
-		fprintf(log, "cd to %s\n", tgt_dir);
-		fflush(log);
+		fprintf(logfp, "cd to %s\n", tgt_dir);
+		fflush(logfp);
 	}
 	if (scripting) {
-		fprintf(script, "cd %s\n", tgt_dir);
+		scripting_fprintf(NULL, "cd %s\n", tgt_dir);
 		fflush(script);
 	}
 
@@ -481,10 +299,11 @@ do_target_chdir(dir, must_succeed)
 		fprintf(stderr, msg_string(MSG_realdir),
 		       target_prefix(), strerror(error));
 		if (logging)
-			fprintf(log, msg_string(MSG_realdir),
+			fprintf(logfp, msg_string(MSG_realdir),
 			       target_prefix(), strerror(error));
 		exit(1);
 	}
+	errno = error;
 	return (error);
 #else
 	printf("target_chdir (%s)\n", tgt_dir);
@@ -493,20 +312,20 @@ do_target_chdir(dir, must_succeed)
 }
 
 void
-target_chdir_or_die(dir)
-	const char *dir;
+target_chdir_or_die(const char *dir)
 {
 
-	(void) do_target_chdir(dir, 1);
+	(void)do_target_chdir(dir, 1);
 }
 
+#ifdef notdef
 int
-target_chdir(dir)
-	const char *dir;
+target_chdir(const char *dir)
 {
 
-	return(do_target_chdir(dir, 0));
+	return do_target_chdir(dir, 0);
 }
+#endif
 
 /*
  * Copy a file from the current root into the target system,
@@ -514,13 +333,11 @@ target_chdir(dir)
  * Does not check for copy-to-self when target is  current root.
  */
 int
-cp_to_target(srcpath, tgt_path)
-	const char *srcpath;
-	const char *tgt_path;
+cp_to_target(const char *srcpath, const char *tgt_path)
 {
-	const char *realpath = target_expand(tgt_path);
+	const char *real_path = target_expand(tgt_path);
 
-	return run_prog(0, 0, NULL, "/bin/cp %s %s", srcpath, realpath);
+	return run_program(0, "/bin/cp %s %s", srcpath, real_path);
 }
 
 /*
@@ -529,8 +346,7 @@ cp_to_target(srcpath, tgt_path)
  * If we're running in the target, do nothing. 
  */
 void
-dup_file_into_target(filename)
-	const char *filename;
+dup_file_into_target(const char *filename)
 {
 
 	if (!target_already_root())
@@ -539,25 +355,23 @@ dup_file_into_target(filename)
 
 
 /*
- * Do a mv where both pathnames are  within the target filesystem.
+ * Do a mv where both pathnames are within the target filesystem.
  */
-void mv_within_target_or_die(frompath, topath)
-	const char *frompath;
-	const char *topath;
+void
+mv_within_target_or_die(const char *frompath, const char *topath)
 {
 	char realfrom[STRSIZE];
 	char realto[STRSIZE];
 
-	strncpy(realfrom, target_expand(frompath), STRSIZE);
-	strncpy(realto, target_expand(topath), STRSIZE);
+	strlcpy(realfrom, target_expand(frompath), sizeof realfrom);
+	strlcpy(realto, target_expand(topath), sizeof realto);
 
-	run_prog(1, 0, NULL, "mv %s %s", realfrom, realto);
+	run_program(RUN_FATAL, "mv %s %s", realfrom, realto);
 }
 
-/* Do a cp where both pathnames are  within the target filesystem. */
-int cp_within_target(frompath, topath)
-	const char *frompath;
-	const char *topath;
+/* Do a cp where both pathnames are within the target filesystem. */
+int
+cp_within_target(const char *frompath, const char *topath, int optional)
 {
 	char realfrom[STRSIZE];
 	char realto[STRSIZE];
@@ -565,39 +379,37 @@ int cp_within_target(frompath, topath)
 	strncpy(realfrom, target_expand(frompath), STRSIZE);
 	strncpy(realto, target_expand(topath), STRSIZE);
 
-	return (run_prog(0, 0, NULL, "cp -p %s %s", realfrom, realto));
+	if (access(realfrom, R_OK) == -1 && optional)
+		return 0;
+	return (run_program(0, "cp -p %s %s", realfrom, realto));
 }
 
 /* fopen a pathname in the target. */
 FILE *
-target_fopen(filename, type)
-	const char *filename;
-	const char *type;
+target_fopen(const char *filename, const char *type)
 {
 
 	return fopen(target_expand(filename), type);
 }
 
 /*
- * Do a mount and record the mountpoint in a list of mounts to 
- * unwind after completing or aborting a mount.
+ * Do a mount onto a mountpoint in the install target.
+ * Record mountpoint so we can unmount when finished.
+ * NB: does not prefix mount-from, which probably breaks nullfs mounts.
  */
 int
-mount_with_unwind(fstype, from, on)
-	const char *fstype;
-	const char *from;
-	const char *on;
+target_mount(const char *opts, const char *from, int ptn, const char *on)
 {
+	struct unwind_mount *m;
 	int error;
-	struct unwind_mount * m;
+	int len;
 
-	m = malloc(sizeof(*m));
+	len = strlen(on);
+	m = malloc(sizeof *m + len);
 	if (m == 0)
 		return (ENOMEM);	/* XXX */
 
-	strncpy(m->um_mountpoint, on, STRSIZE);
-	m->um_prev = unwind_mountlist;
-        unwind_mountlist = m;
+	memcpy(m->um_mountpoint, on, len + 1);
 
 #ifdef DEBUG_UNWIND
 	endwin();
@@ -605,70 +417,52 @@ mount_with_unwind(fstype, from, on)
 	backtowin();
 #endif
 
-	error = run_prog(0, 0, NULL, "/sbin/mount %s %s %s", fstype, from, on);
-	return (error);
+	error = run_program(0, "/sbin/mount %s /dev/%s%c %s%s",
+			opts, from, 'a' + ptn, target_prefix(), on);
+	if (error) {
+		free(m);
+		return error;
+	}
+	m->um_prev = unwind_mountlist;
+	unwind_mountlist = m;
+	return 0;
 }
 
 /*
- * unwind the mount stack, umounting mounted filesystems.
+ * unwind the mount stack, unmounting mounted filesystems.
  * For now, ignore any errors in unmount. 
  * (Why would we be unable to unmount?  The user has suspended
  *  us and forked shell sitting somewhere in the target root?)
  */
 void
-unwind_mounts()
+unwind_mounts(void)
 {
-	struct unwind_mount *m, *prev;
-	volatile static int unwind_in_progress = 0;
+	struct unwind_mount *m;
+	static volatile int unwind_in_progress = 0;
 
 	/* signal safety */
 	if (unwind_in_progress)
 		return;
 	unwind_in_progress = 1;
 
-	prev = NULL;
-	for (m = unwind_mountlist; m;  ) {
-		struct unwind_mount *prev;
+	while ((m = unwind_mountlist) != NULL) {
+		unwind_mountlist = m->um_prev;
 #ifdef DEBUG_UNWIND
 		endwin();
 		fprintf(stderr, "unmounting %s\n", m->um_mountpoint);
 		backtowin();
 #endif
-		run_prog(0, 0, NULL, "/sbin/umount %s", m->um_mountpoint);
-		prev = m->um_prev;
+		run_program(0, "/sbin/umount %s%s",
+			target_prefix(), m->um_mountpoint);
 		free(m);
-		m = prev;
 	}
-	unwind_mountlist = NULL;
 	unwind_in_progress = 0;
 }
 
-/*
- * Do a mount onto a moutpoint in the install target.
- * NB: does not prefix mount-from, which probably breaks  nullfs mounts.
- */
 int
-target_mount(fstype, from, on)
-	const char *fstype;
-	const char *from;
-	const char *on;
+target_collect_file(int kind, char **buffer, const char *name)
 {
-	int error;
-	const char *realmount = target_expand(on);
-
-	/* mount and record for unmonting when done.  */
-	error = mount_with_unwind(fstype, from, realmount);
-
-	return (error);
-}
-
-int
-target_collect_file(kind, buffer, name)
-	int kind;
-	char **buffer;
-	char *name;
-{
-	const char *realname =target_expand(name);
+	const char *realname = target_expand(name);
 
 #ifdef	DEBUG
 	printf("collect real name %s\n", realname);
@@ -681,19 +475,16 @@ target_collect_file(kind, buffer, name)
  * by running  test "testflag" on the expanded target pathname.
  */
 int
-target_test(test, path)
-	const char *test;
-	const char *path;
+target_test(unsigned int mode, const char *path)
 {
-	const char *realpath = target_expand(path);
+	const char *real_path = target_expand(path);
 	register int result;
 
-	result = run_prog(0, 0, NULL, "test %s %s", test, realpath);
-	if (scripting)
-		(void)fprintf(script, "if [ $? != 0 ]; then echo \"%s does not exist!\"; fi\n", realpath);
+	result = !file_mode_match(real_path, mode);
+	scripting_fprintf(NULL, "if [ $? != 0 ]; then echo \"%s does not exist!\"; fi\n", real_path);
 
 #if defined(DEBUG)
-	printf("target_test(%s %s) returning %d\n", test, realpath, result);
+	printf("target_test(%o, %s) returning %d\n", mode, real_path, result);
 #endif
 	return (result);
 }
@@ -704,11 +495,10 @@ target_test(test, path)
  * Assumes that sysinst has already mounted the target root.
  */
 int
-target_test_dir(path)
-	const char *path;
+target_test_dir(const char *path)
 {
 
- 	return target_test("-d", path);
+ 	return target_test(S_IFDIR, path);
 }
 
 /*
@@ -717,23 +507,36 @@ target_test_dir(path)
  * Assumes that sysinst has already mounted the target root.
  */
 int
-target_test_file(path)
-	const char *path;
+target_test_file(const char *path)
 {
 
- 	return target_test("-f", path);
+ 	return target_test(S_IFREG, path);
 }
 
-int target_file_exists_p(path)
-	const char *path;
+int
+target_test_symlink(const char *path)
+{
+
+ 	return target_test(S_IFLNK, path);
+}
+
+int
+target_file_exists_p(const char *path)
 {
 
 	return (target_test_file(path) == 0);
 }
 
-int target_dir_exists_p(path)
-	const char *path;
+int
+target_dir_exists_p(const char *path)
 {
 
 	return (target_test_dir(path) == 0);
+}
+
+int
+target_symlink_exists_p(const char *path)
+{
+
+	return (target_test_symlink(path) == 0);
 }

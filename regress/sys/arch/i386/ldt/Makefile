@@ -1,10 +1,11 @@
-#	$NetBSD: Makefile,v 1.6 1999/02/13 02:54:32 lukem Exp $
-#
-PROG=	testldt
-MKMAN=	no
+#	$NetBSD: Makefile,v 1.9 2002/09/18 05:41:50 lukem Exp $
 
-DPADD+=	${LIBARCH}
-LDADD+=	-li386
+NOMAN=		# defined
+
+PROG=		testldt
+WARNS=		2
+DPADD+=		${LIBARCH}
+LDADD+=		-li386
 
 regress:
 	-@if ./testldt; \
@@ -14,4 +15,4 @@ regress:
 .include <bsd.prog.mk>
 
 # C Optimizer (-O) breaks this program - don't use !!
-COPTS+=-O0
+DBG:=		-O0

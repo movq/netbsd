@@ -1,4 +1,4 @@
-/*	$NetBSD: mb86960.c,v 1.38 2000/03/30 12:45:31 augustss Exp $	*/
+/*	$NetBSD: mb86960.c,v 1.70 2008/04/12 06:37:51 tsutsui Exp $	*/
 
 /*
  * All Rights Reserved, Copyright (C) Fujitsu Limited 1995
@@ -31,7 +31,8 @@
  * incurred with its use.
  */
 
-#define FE_VERSION "if_fe.c ver. 0.8"
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: mb86960.c,v 1.70 2008/04/12 06:37:51 tsutsui Exp $");
 
 /*
  * Device driver for Fujitsu MB86960A/MB86965A based Ethernet cards.
@@ -47,7 +48,6 @@
  */
 
 #include "opt_inet.h"
-#include "opt_ns.h"
 #include "bpfilter.h"
 #include "rnd.h"
 
@@ -77,90 +77,81 @@
 #include <netinet/if_inarp.h>
 #endif
 
-#ifdef NS
-#include <netns/ns.h>
-#include <netns/ns_if.h>
-#endif
 
 #if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
 #endif
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/ic/mb86960reg.h>
 #include <dev/ic/mb86960var.h>
 
 #ifndef __BUS_SPACE_HAS_STREAM_METHODS
+#define bus_space_write_stream_2	bus_space_write_2
 #define bus_space_write_multi_stream_2	bus_space_write_multi_2
 #define bus_space_read_multi_stream_2	bus_space_read_multi_2
 #endif /* __BUS_SPACE_HAS_STREAM_METHODS */
 
 /* Standard driver entry points.  These can be static. */
-void	mb86960_init	__P((struct mb86960_softc *));
-int	mb86960_ioctl	__P((struct ifnet *, u_long, caddr_t));
-void	mb86960_start	__P((struct ifnet *));
-void	mb86960_reset	__P((struct mb86960_softc *));
-void	mb86960_watchdog __P((struct ifnet *));
+void	mb86960_init(struct mb86960_softc *);
+int	mb86960_ioctl(struct ifnet *, u_long, void *);
+void	mb86960_start(struct ifnet *);
+void	mb86960_reset(struct mb86960_softc *);
+void	mb86960_watchdog(struct ifnet *);
 
 /* Local functions.  Order of declaration is confused.  FIXME. */
-int	mb86960_get_packet __P((struct mb86960_softc *, int));
-void	mb86960_stop __P((struct mb86960_softc *));
-void	mb86960_tint __P((struct mb86960_softc *, u_char));
-void	mb86960_rint __P((struct mb86960_softc *, u_char));
-static __inline__
-void	mb86960_xmit __P((struct mb86960_softc *));
-void	mb86960_write_mbufs __P((struct mb86960_softc *, struct mbuf *));
-static __inline__
-void	mb86960_droppacket __P((struct mb86960_softc *));
-void	mb86960_getmcaf __P((struct ethercom *, u_char *));
-void	mb86960_setmode __P((struct mb86960_softc *));
-void	mb86960_loadmar __P((struct mb86960_softc *));
+int	mb86960_get_packet(struct mb86960_softc *, u_int);
+void	mb86960_stop(struct mb86960_softc *);
+void	mb86960_tint(struct mb86960_softc *, uint8_t);
+void	mb86960_rint(struct mb86960_softc *, uint8_t);
+static inline
+void	mb86960_xmit(struct mb86960_softc *);
+void	mb86960_write_mbufs(struct mb86960_softc *, struct mbuf *);
+static inline
+void	mb86960_droppacket(struct mb86960_softc *);
+void	mb86960_getmcaf(struct ethercom *, uint8_t *);
+void	mb86960_setmode(struct mb86960_softc *);
+void	mb86960_loadmar(struct mb86960_softc *);
 
-int	mb86960_mediachange __P((struct ifnet *));
-void	mb86960_mediastatus __P((struct ifnet *, struct ifmediareq *));
+int	mb86960_mediachange(struct ifnet *);
+void	mb86960_mediastatus(struct ifnet *, struct ifmediareq *);
 
 #if FE_DEBUG >= 1
-void	mb86960_dump __P((int, struct mb86960_softc *));
+void	mb86960_dump(int, struct mb86960_softc *);
 #endif
 
 void
-mb86960_attach(sc, type, myea)
-	struct mb86960_softc *sc;
-	enum mb86960_type type;
-	u_int8_t *myea;
+mb86960_attach(struct mb86960_softc *sc, uint8_t *myea)
 {
 	bus_space_tag_t bst = sc->sc_bst;
 	bus_space_handle_t bsh = sc->sc_bsh;
 
-	sc->type = type;
-
 	/* Register values which depend on board design. */
 	sc->proto_dlcr4 = FE_D4_LBC_DISABLE | FE_D4_CNTRL;
 	sc->proto_dlcr5 = 0;
+	sc->proto_dlcr7 = FE_D7_BYTSWP_LH;
+	if ((sc->sc_flags & FE_FLAGS_MB86960) != 0)
+		sc->proto_dlcr7 |= FE_D7_ED_TEST; /* XXX */
 	sc->proto_bmpr13 = FE_B13_TPTYPE_UTP | FE_B13_PORT_AUTO;
 
-	switch (sc->type) {
-	case MB86960_TYPE_86960:
-		sc->proto_dlcr7 = FE_D7_BYTSWP_LH | FE_D7_IDENT_EC;
-		break;
-	case MB86960_TYPE_86965:
-		sc->proto_dlcr7 = FE_D7_BYTSWP_LH;
-		break;
-	}
-
 	/*
-	 * Program the 86960 as follows:
+	 * Program the 86960 as following defaults:
 	 *	SRAM: 32KB, 100ns, byte-wide access.
 	 *	Transmission buffer: 4KB x 2.
 	 *	System bus interface: 16 bits.
-	 * We cannot change these values but TXBSIZE, because they
-	 * are hard-wired on the board.  Modifying TXBSIZE will affect
+	 * These values except TXBSIZE should be modified as per
+	 * sc_flags which is set in MD attachments, because they
+	 * are hard-wired on the board. Modifying TXBSIZE will affect
 	 * the driver performance.
 	 */
 	sc->proto_dlcr6 = FE_D6_BUFSIZ_32KB | FE_D6_TXBSIZ_2x4KB |
-	    FE_D6_BBW_BYTE | FE_D6_SBW_WORD | FE_D6_SRAM_100ns;
+	    FE_D6_BBW_BYTE | FE_D6_SRAM_100ns;
+	if (sc->sc_flags & FE_FLAGS_SBW_BYTE)
+		sc->proto_dlcr6 |= FE_D6_SBW_BYTE;
+	if (sc->sc_flags & FE_FLAGS_SRAM_150ns)
+		sc->proto_dlcr6 &= ~FE_D6_SRAM_100ns;
 
 	/*
 	 * Minimum initialization of the hardware.
@@ -175,12 +166,12 @@ mb86960_attach(sc, type, myea)
 
 #ifdef DIAGNOSTIC
 	if (myea == NULL) {
-		printf("%s: ethernet address shouldn't be NULL\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev,
+		    "ethernet address shouldn't be NULL\n");
 		panic("NULL ethernet address");
 	}
 #endif
-	bcopy(myea, sc->sc_enaddr, sizeof(sc->sc_enaddr));
+	memcpy(sc->sc_enaddr, myea, sizeof(sc->sc_enaddr));
 
 	/* Disable all interrupts. */
 	bus_space_write_1(bst, bsh, FE_DLCR2, 0);
@@ -191,11 +182,9 @@ mb86960_attach(sc, type, myea)
  * Install interface into kernel networking data structures
  */
 void
-mb86960_config(sc, media, nmedia, defmedia)
-	struct mb86960_softc *sc;
-	int *media, nmedia, defmedia;
+mb86960_config(struct mb86960_softc *sc, int *media, int nmedia, int defmedia)
 {
-	struct cfdata *cf = sc->sc_dev.dv_cfdata;
+	cfdata_t cf = device_cfdata(sc->sc_dev);
 	struct ifnet *ifp = &sc->sc_ec.ec_if;
 	int i;
 
@@ -203,22 +192,23 @@ mb86960_config(sc, media, nmedia, defmedia)
 	mb86960_stop(sc);
 
 	/* Initialize ifnet structure. */
-	bcopy(sc->sc_dev.dv_xname, ifp->if_xname, IFNAMSIZ);
+	strlcpy(ifp->if_xname, device_xname(sc->sc_dev), IFNAMSIZ);
 	ifp->if_softc = sc;
 	ifp->if_start = mb86960_start;
 	ifp->if_ioctl = mb86960_ioctl;
 	ifp->if_watchdog = mb86960_watchdog;
 	ifp->if_flags =
 	    IFF_BROADCAST | IFF_SIMPLEX | IFF_NOTRAILERS | IFF_MULTICAST;
+	IFQ_SET_READY(&ifp->if_snd);
 
 #if FE_DEBUG >= 3
-	log(LOG_INFO, "%s: mb86960_config()\n", sc->sc_dev.dv_xname);
+	log(LOG_INFO, "%s: mb86960_config()\n", device_xname(sc->sc_dev));
 	mb86960_dump(LOG_INFO, sc);
 #endif
 
 #if FE_SINGLE_TRANSMISSION
 	/* Override txb config to allocate minimum. */
-	sc->proto_dlcr6 &= ~FE_D6_TXBSIZ
+	sc->proto_dlcr6 &= ~FE_D6_TXBSIZ;
 	sc->proto_dlcr6 |=  FE_D6_TXBSIZ_2x2KB;
 #endif
 
@@ -241,7 +231,7 @@ mb86960_config(sc, media, nmedia, defmedia)
 		/* Oops, we can't work with single buffer configuration. */
 #if FE_DEBUG >= 2
 		log(LOG_WARNING, "%s: strange TXBSIZ config; fixing\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(sc->sc_dev));
 #endif
 		sc->proto_dlcr6 &= ~FE_D6_TXBSIZ;
 		sc->proto_dlcr6 |=  FE_D6_TXBSIZ_2x2KB;
@@ -265,16 +255,12 @@ mb86960_config(sc, media, nmedia, defmedia)
 	if_attach(ifp);
 	ether_ifattach(ifp, sc->sc_enaddr);
 
-#if NBPFILTER > 0
-	/* If BPF is in the kernel, call the attach for it. */
-	bpfattach(&ifp->if_bpf, ifp, DLT_EN10MB, sizeof(struct ether_header));
-#endif
 #if NRND > 0
-	rnd_attach_source(&sc->rnd_source, sc->sc_dev.dv_xname,
+	rnd_attach_source(&sc->rnd_source, device_xname(sc->sc_dev),
 	    RND_TYPE_NET, 0);
 #endif
 	/* Print additional info when attached. */
-	printf("%s: Ethernet address %s\n", sc->sc_dev.dv_xname,
+	aprint_normal_dev(sc->sc_dev, "Ethernet address %s\n",
 	    ether_sprintf(sc->sc_enaddr));
 
 #if FE_DEBUG >= 3
@@ -331,37 +317,38 @@ mb86960_config(sc, media, nmedia, defmedia)
 			ram = 150;
 			break;
 		}
-		printf("%s: SRAM %dKB %dbit %dns, TXB %dKBx2, %dbit I/O\n",
-		    sc->sc_dev.dv_xname, buf, bbw, ram, txb, sbw);
+		aprint_debug_dev(sc->sc_dev,
+		    "SRAM %dKB %dbit %dns, TXB %dKBx2, %dbit I/O\n",
+		    buf, bbw, ram, txb, sbw);
 	}
 #endif
+
+	/* The attach is successful. */
+	sc->sc_stat |= FE_STAT_ATTACHED;
 }
 
 /*
  * Media change callback.
  */
 int
-mb86960_mediachange(ifp)
-	struct ifnet *ifp;
+mb86960_mediachange(struct ifnet *ifp)
 {
 	struct mb86960_softc *sc = ifp->if_softc;
 
 	if (sc->sc_mediachange)
-		return ((*sc->sc_mediachange)(sc));
-	return (0);
+		return (*sc->sc_mediachange)(sc);
+	return 0;
 }
 
 /*
  * Media status callback.
  */
 void
-mb86960_mediastatus(ifp, ifmr)
-	struct ifnet *ifp;
-	struct ifmediareq *ifmr;
+mb86960_mediastatus(struct ifnet *ifp, struct ifmediareq *ifmr)
 {
 	struct mb86960_softc *sc = ifp->if_softc;
 
-	if (sc->sc_enabled == 0) {
+	if ((sc->sc_stat & FE_STAT_ENABLED) == 0) {
 		ifmr->ifm_active = IFM_ETHER | IFM_NONE;
 		ifmr->ifm_status = 0;
 		return;
@@ -375,8 +362,7 @@ mb86960_mediastatus(ifp, ifmr)
  * Reset interface.
  */
 void
-mb86960_reset(sc)
-	struct mb86960_softc *sc;
+mb86960_reset(struct mb86960_softc *sc)
 {
 	int s;
 
@@ -393,14 +379,13 @@ mb86960_reset(sc)
  * if any, will be lost by stopping the interface.
  */
 void
-mb86960_stop(sc)
-	struct mb86960_softc *sc;
+mb86960_stop(struct mb86960_softc *sc)
 {
 	bus_space_tag_t bst = sc->sc_bst;
 	bus_space_handle_t bsh = sc->sc_bsh;
 
 #if FE_DEBUG >= 3
-	log(LOG_INFO, "%s: top of mb86960_stop()\n", sc->sc_dev.dv_xname);
+	log(LOG_INFO, "%s: top of mb86960_stop()\n", device_xname(sc->sc_dev));
 	mb86960_dump(LOG_INFO, sc);
 #endif
 
@@ -431,8 +416,8 @@ mb86960_stop(sc)
 	if (sc->stop_card)
 		(*sc->stop_card)(sc);
 
-#if DEBUG >= 3
-	log(LOG_INFO, "%s: end of mb86960_stop()\n", sc->sc_dev.dv_xname);
+#if FE_DEBUG >= 3
+	log(LOG_INFO, "%s: end of mb86960_stop()\n", sc->sc_dev));
 	mb86960_dump(LOG_INFO, sc);
 #endif
 }
@@ -442,12 +427,11 @@ mb86960_stop(sc)
  * generate an interrupt after a transmit has been started on it.
  */
 void
-mb86960_watchdog(ifp)
-	struct ifnet *ifp;
+mb86960_watchdog(struct ifnet *ifp)
 {
 	struct mb86960_softc *sc = ifp->if_softc;
 
-	log(LOG_ERR, "%s: device timeout\n", sc->sc_dev.dv_xname);
+	log(LOG_ERR, "%s: device timeout\n", device_xname(sc->sc_dev));
 #if FE_DEBUG >= 3
 	mb86960_dump(LOG_INFO, sc);
 #endif
@@ -461,9 +445,8 @@ mb86960_watchdog(ifp)
 /*
  * Drop (skip) a packet from receive buffer in 86960 memory.
  */
-static __inline__ void
-mb86960_droppacket(sc)
-	struct mb86960_softc *sc;
+static inline void
+mb86960_droppacket(struct mb86960_softc *sc)
 {
 	bus_space_tag_t bst = sc->sc_bst;
 	bus_space_handle_t bsh = sc->sc_bsh;
@@ -475,8 +458,7 @@ mb86960_droppacket(sc)
  * Initialize device.
  */
 void
-mb86960_init(sc)
-	struct mb86960_softc *sc;
+mb86960_init(struct mb86960_softc *sc)
 {
 	bus_space_tag_t bst = sc->sc_bst;
 	bus_space_handle_t bsh = sc->sc_bsh;
@@ -484,7 +466,7 @@ mb86960_init(sc)
 	int i;
 
 #if FE_DEBUG >= 3
-	log(LOG_INFO, "%s: top of mb86960_init()\n", sc->sc_dev.dv_xname);
+	log(LOG_INFO, "%s: top of mb86960_init()\n", device_xname(sc->sc_dev));
 	mb86960_dump(LOG_INFO, sc);
 #endif
 
@@ -501,7 +483,7 @@ mb86960_init(sc)
 		(*sc->init_card)(sc);
 
 #if FE_DEBUG >= 3
-	log(LOG_INFO, "%s: after init hook\n", sc->sc_dev.dv_xname);
+	log(LOG_INFO, "%s: after init hook\n", device_xname(sc->sc_dev));
 	mb86960_dump(LOG_INFO, sc);
 #endif
 
@@ -542,7 +524,8 @@ mb86960_init(sc)
 	bus_space_write_1(bst, bsh, FE_BMPR15, 0x00);
 
 #if FE_DEBUG >= 3
-	log(LOG_INFO, "%s: just before enabling DLC\n", sc->sc_dev.dv_xname);
+	log(LOG_INFO, "%s: just before enabling DLC\n",
+	    device_xname(sc->sc_dev));
 	mb86960_dump(LOG_INFO, sc);
 #endif
 
@@ -557,7 +540,8 @@ mb86960_init(sc)
 	delay(200);
 
 #if FE_DEBUG >= 3
-	log(LOG_INFO, "%s: just after enabling DLC\n", sc->sc_dev.dv_xname);
+	log(LOG_INFO, "%s: just after enabling DLC\n",
+	    device_xname(sc->sc_dev));
 	mb86960_dump(LOG_INFO, sc);
 #endif
 
@@ -582,16 +566,16 @@ mb86960_init(sc)
 #if FE_DEBUG >= 1
 	if (i >= FE_MAX_RECV_COUNT)
 		log(LOG_ERR, "%s: cannot empty receive buffer\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(sc->sc_dev));
 #endif
 #if FE_DEBUG >= 3
 	if (i < FE_MAX_RECV_COUNT)
 		log(LOG_INFO, "%s: receive buffer emptied (%d)\n",
-		    sc->sc_dev.dv_xname, i);
+		    device_xname(sc->sc_dev), i);
 #endif
 
 #if FE_DEBUG >= 3
-	log(LOG_INFO, "%s: after ERB loop\n", sc->sc_dev.dv_xname);
+	log(LOG_INFO, "%s: after ERB loop\n", device_xname(sc->sc_dev));
 	mb86960_dump(LOG_INFO, sc);
 #endif
 
@@ -600,7 +584,7 @@ mb86960_init(sc)
 	bus_space_write_1(bst, bsh, FE_DLCR1, 0xFF);	/* ditto. */
 
 #if FE_DEBUG >= 3
-	log(LOG_INFO, "%s: after FIXME\n", sc->sc_dev.dv_xname);
+	log(LOG_INFO, "%s: after FIXME\n", device_xname(sc->sc_dev));
 	mb86960_dump(LOG_INFO, sc);
 #endif
 
@@ -617,7 +601,7 @@ mb86960_init(sc)
 	mb86960_setmode(sc);
 
 #if FE_DEBUG >= 3
-	log(LOG_INFO, "%s: after setmode\n", sc->sc_dev.dv_xname);
+	log(LOG_INFO, "%s: after setmode\n", device_xname(sc->sc_dev));
 	mb86960_dump(LOG_INFO, sc);
 #endif
 
@@ -625,7 +609,7 @@ mb86960_init(sc)
 	mb86960_start(ifp);
 
 #if FE_DEBUG >= 3
-	log(LOG_INFO, "%s: end of mb86960_init()\n", sc->sc_dev.dv_xname);
+	log(LOG_INFO, "%s: end of mb86960_init()\n", device_xname(sc->sc_dev));
 	mb86960_dump(LOG_INFO, sc);
 #endif
 }
@@ -633,9 +617,8 @@ mb86960_init(sc)
 /*
  * This routine actually starts the transmission on the interface
  */
-static __inline__ void
-mb86960_xmit(sc)
-	struct mb86960_softc *sc;
+static inline void
+mb86960_xmit(struct mb86960_softc *sc)
 {
 	bus_space_tag_t bst = sc->sc_bst;
 	bus_space_handle_t bsh = sc->sc_bsh;
@@ -671,8 +654,7 @@ mb86960_xmit(sc)
  *     (i.e. that the output part of the interface is idle)
  */
 void
-mb86960_start(ifp)
-	struct ifnet *ifp;
+mb86960_start(struct ifnet *ifp)
 {
 	struct mb86960_softc *sc = ifp->if_softc;
 	struct mbuf *m;
@@ -689,7 +671,7 @@ mb86960_start(ifp)
 		 * as txb_size (which represents whole buffer.)
 		 */
 		log(LOG_ERR, "%s: inconsistent txb variables (%d, %d)\n",
-		    sc->sc_dev.dv_xname, sc->txb_count, sc->txb_free);
+		    device_xname(sc->sc_dev), sc->txb_count, sc->txb_free);
 		/*
 		 * So, what should I do, then?
 		 *
@@ -716,7 +698,7 @@ mb86960_start(ifp)
 	 */
 	if ((sc->txb_count > 0) && (sc->txb_sched == 0)) {
 		log(LOG_ERR, "%s: transmitter idle with %d buffered packets\n",
-		    sc->sc_dev.dv_xname, sc->txb_count);
+		    device_xname(sc->sc_dev), sc->txb_count);
 		mb86960_xmit(sc);
 	}
 #endif
@@ -730,7 +712,7 @@ mb86960_start(ifp)
 	 */
 	if (sc->filter_change) {
 		/*
-		 * Filter change requst is delayed only when the DLC is
+		 * Filter change request is delayed only when the DLC is
 		 * working.  DLC soon raise an interrupt after finishing
 		 * the work.
 		 */
@@ -743,7 +725,7 @@ mb86960_start(ifp)
 		 * We *could* do better job by peeking the send queue to
 		 * know the length of the next packet.  Current version just
 		 * tests against the worst case (i.e., longest packet).  FIXME.
-		 * 
+		 *
 		 * When adding the packet-peek feature, don't forget adding a
 		 * test on txb_count against QUEUEING_MAX.
 		 * There is a little chance the packet count exceeds
@@ -753,7 +735,7 @@ mb86960_start(ifp)
 		 * buffer can hold 130 blocks of 62 bytes long...
 		 */
 		if (sc->txb_free <
-		    (ETHER_MAX_LEN - ETHER_CRC_LEN) + FE_DATA_LEN_LEN) {
+		    (ETHER_MAX_LEN - ETHER_CRC_LEN) + FE_TXLEN_SIZE) {
 			/* No room. */
 			goto indicate_active;
 		}
@@ -768,7 +750,7 @@ mb86960_start(ifp)
 		/*
 		 * Get the next mbuf chain for a packet to send.
 		 */
-		IF_DEQUEUE(&ifp->if_snd, m);
+		IFQ_DEQUEUE(&ifp->if_snd, m);
 		if (m == 0) {
 			/* No more packets to send. */
 			goto indicate_inactive;
@@ -820,9 +802,7 @@ indicate_active:
  * The control flow of this function looks silly.  FIXME.
  */
 void
-mb86960_tint(sc, tstat)
-	struct mb86960_softc *sc;
-	u_char tstat;
+mb86960_tint(struct mb86960_softc *sc, uint8_t tstat)
 {
 	bus_space_tag_t bst = sc->sc_bst;
 	bus_space_handle_t bsh = sc->sc_bsh;
@@ -842,7 +822,7 @@ mb86960_tint(sc, tstat)
 
 #if FE_DEBUG >= 2
 		log(LOG_WARNING, "%s: excessive collision (%d/%d)\n",
-		    sc->sc_dev.dv_xname, left, sc->txb_sched);
+		    device_xname(sc->sc_dev), left, sc->txb_sched);
 #endif
 #if FE_DEBUG >= 3
 		mb86960_dump(LOG_INFO, sc);
@@ -892,7 +872,7 @@ mb86960_tint(sc, tstat)
 		 * packet transmission.  When we send two or more packets
 		 * with one start command (that's what we do when the
 		 * transmission queue is clauded), 86960 informs us number
-		 * of collisions occured on the last packet on the
+		 * of collisions occurred on the last packet on the
 		 * transmission only.  Number of collisions on previous
 		 * packets are lost.  I have told that the fact is clearly
 		 * stated in the Fujitsu document.
@@ -925,7 +905,7 @@ mb86960_tint(sc, tstat)
 			ifp->if_collisions += col;
 #if FE_DEBUG >= 4
 			log(LOG_WARNING, "%s: %d collision%s (%d)\n",
-			    sc->sc_dev.dv_xname, col, col == 1 ? "" : "s",
+			    device_xname(sc->sc_dev), col, col == 1 ? "" : "s",
 			    sc->txb_sched);
 #endif
 		}
@@ -941,7 +921,7 @@ mb86960_tint(sc, tstat)
 	if (sc->txb_sched == 0) {
 		/*
 		 * The transmitter is no more active.
-		 * Reset output active flag and watchdog timer. 
+		 * Reset output active flag and watchdog timer.
 		 */
 		ifp->if_flags &= ~IFF_OACTIVE;
 		ifp->if_timer = 0;
@@ -961,15 +941,12 @@ mb86960_tint(sc, tstat)
  * Ethernet interface receiver interrupt.
  */
 void
-mb86960_rint(sc, rstat)
-	struct mb86960_softc *sc;
-	u_char rstat;
+mb86960_rint(struct mb86960_softc *sc, uint8_t rstat)
 {
 	bus_space_tag_t bst = sc->sc_bst;
 	bus_space_handle_t bsh = sc->sc_bsh;
 	struct ifnet *ifp = &sc->sc_ec.ec_if;
-	int len;
-	u_char status;
+	u_int status, len;
 	int i;
 
 	/*
@@ -978,15 +955,18 @@ mb86960_rint(sc, rstat)
 	if (rstat & (FE_D1_OVRFLO | FE_D1_CRCERR | FE_D1_ALGERR |
 	    FE_D1_SRTPKT)) {
 #if FE_DEBUG >= 3
-		log(LOG_WARNING, "%s: receive error: %b\n",
-		    sc->sc_dev.dv_xname, rstat, FE_D1_ERRBITS);
+		char sbuf[sizeof(FE_D1_ERRBITS) + 64];
+
+		bitmask_snprintf(rstat, FE_D1_ERRBITS, sbuf, sizeof(sbuf));
+		log(LOG_WARNING, "%s: receive error: %s\n",
+		    device_xname(sc->sc_dev), sbuf);
 #endif
 		ifp->if_ierrors++;
 	}
 
 	/*
 	 * MB86960 has a flag indicating "receive queue empty."
-	 * We just loop cheking the flag to pull out all received
+	 * We just loop checking the flag to pull out all received
 	 * packets.
 	 *
 	 * We limit the number of iterrations to avoid infinite loop.
@@ -1000,15 +980,18 @@ mb86960_rint(sc, rstat)
 			break;
 
 		/*
-		 * Extract A receive status byte.
-		 * As our 86960 is in 16 bit bus access mode, we have to
-		 * use inw() to get the status byte.  The significant
-		 * value is returned in lower 8 bits.
+		 * Extract receive packet status from the receive
+		 * packet header.
 		 */
-		status = (u_char)bus_space_read_2(bst, bsh, FE_BMPR8);
+		if (sc->sc_flags & FE_FLAGS_SBW_BYTE) {
+			status = bus_space_read_1(bst, bsh, FE_BMPR8);
+			(void)bus_space_read_1(bst, bsh, FE_BMPR8);
+		} else
+			status = bus_space_read_2(bst, bsh, FE_BMPR8);
+
 #if FE_DEBUG >= 4
 		log(LOG_INFO, "%s: receive status = %02x\n",
-		    sc->sc_dev.dv_xname, status);
+		    device_xname(sc->sc_dev), status);
 #endif
 
 		/*
@@ -1016,7 +999,7 @@ mb86960_rint(sc, rstat)
 		 * the packet, unless the interface is in promiscuous
 		 * mode.
 		 */
-		if ((status & 0xF0) != 0x20) {	/* XXXX ? */
+		if ((status & FE_RXSTAT_GOODPKT) == 0) {
 			if ((ifp->if_flags & IFF_PROMISC) == 0) {
 				ifp->if_ierrors++;
 				mb86960_droppacket(sc);
@@ -1025,11 +1008,15 @@ mb86960_rint(sc, rstat)
 		}
 
 		/*
-		 * Extract the packet length.
+		 * Extract the packet length from the receive packet header.
 		 * It is a sum of a header (14 bytes) and a payload.
 		 * CRC has been stripped off by the 86960.
 		 */
-		len = bus_space_read_2(bst, bsh, FE_BMPR8);
+		if (sc->sc_flags & FE_FLAGS_SBW_BYTE) {
+			len  = bus_space_read_1(bst, bsh, FE_BMPR8);
+			len |= bus_space_read_1(bst, bsh, FE_BMPR8) << 8;
+		} else
+			len = bus_space_read_2(bst, bsh, FE_BMPR8);
 
 		/*
 		 * MB86965 checks the packet length and drop big packet
@@ -1045,7 +1032,7 @@ mb86960_rint(sc, rstat)
 #if FE_DEBUG >= 2
 			log(LOG_WARNING,
 			    "%s: received a %s packet? (%u bytes)\n",
-			    sc->sc_dev.dv_xname,
+			    device_xname(sc->sc_dev),
 			    len < ETHER_HDR_LEN ? "partial" : "big", len);
 #endif
 			ifp->if_ierrors++;
@@ -1063,19 +1050,19 @@ mb86960_rint(sc, rstat)
 		if (len < (ETHER_MIN_LEN - ETHER_CRC_LEN)) {
 			log(LOG_WARNING,
 			    "%s: received a short packet? (%u bytes)\n",
-			    sc->sc_dev.dv_xname, len);
+			    device_xname(sc->sc_dev), len);
 		}
-#endif 
+#endif
 
 		/*
 		 * Go get a packet.
 		 */
-		if (!mb86960_get_packet(sc, len)) {
+		if (mb86960_get_packet(sc, len) == 0) {
 			/* Skip a packet, updating statistics. */
 #if FE_DEBUG >= 2
 			log(LOG_WARNING,
 			    "%s: out of mbufs; dropping packet (%u bytes)\n",
-			    sc->sc_dev.dv_xname, len);
+			    device_xname(sc->sc_dev), len);
 #endif
 			ifp->if_ierrors++;
 			mb86960_droppacket(sc);
@@ -1097,21 +1084,20 @@ mb86960_rint(sc, rstat)
  * Ethernet interface interrupt processor
  */
 int
-mb86960_intr(arg)
-	void *arg;
+mb86960_intr(void *arg)
 {
 	struct mb86960_softc *sc = arg;
 	bus_space_tag_t bst = sc->sc_bst;
 	bus_space_handle_t bsh = sc->sc_bsh;
 	struct ifnet *ifp = &sc->sc_ec.ec_if;
-	u_char tstat, rstat;
+	uint8_t tstat, rstat;
 
-	if (sc->sc_enabled == 0 ||
-	    (sc->sc_dev.dv_flags & DVF_ACTIVE) == 0)
-		return (0);
+	if ((sc->sc_stat & FE_STAT_ENABLED) == 0 ||
+	    !device_is_active(sc->sc_dev))
+		return 0;
 
 #if FE_DEBUG >= 4
-	log(LOG_INFO, "%s: mb86960_intr()\n", sc->sc_dev.dv_xname);
+	log(LOG_INFO, "%s: mb86960_intr()\n", device_xname(sc->sc_dev));
 	mb86960_dump(LOG_INFO, sc);
 #endif
 
@@ -1121,7 +1107,7 @@ mb86960_intr(arg)
 	tstat = bus_space_read_1(bst, bsh, FE_DLCR0) & FE_TMASK;
 	rstat = bus_space_read_1(bst, bsh, FE_DLCR1) & FE_RMASK;
 	if (tstat == 0 && rstat == 0)
-		return (0);
+		return 0;
 
 	/*
 	 * Loop until there are no more new interrupt conditions.
@@ -1180,7 +1166,7 @@ mb86960_intr(arg)
 		tstat = bus_space_read_1(bst, bsh, FE_DLCR0) & FE_TMASK;
 		rstat = bus_space_read_1(bst, bsh, FE_DLCR1) & FE_RMASK;
 		if (tstat == 0 && rstat == 0)
-			return (1);
+			return 1;
 	}
 }
 
@@ -1188,10 +1174,7 @@ mb86960_intr(arg)
  * Process an ioctl request.  This code needs some work - it looks pretty ugly.
  */
 int
-mb86960_ioctl(ifp, cmd, data)
-	struct ifnet *ifp;
-	u_long cmd;
-	caddr_t data;
+mb86960_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
 	struct mb86960_softc *sc = ifp->if_softc;
 	struct ifaddr *ifa = (struct ifaddr *)data;
@@ -1199,7 +1182,7 @@ mb86960_ioctl(ifp, cmd, data)
 	int s, error = 0;
 
 #if FE_DEBUG >= 3
-	log(LOG_INFO, "%s: ioctl(%lx)\n", sc->sc_dev.dv_xname, cmd);
+	log(LOG_INFO, "%s: ioctl(%lx)\n", device_xname(sc->sc_dev), cmd);
 #endif
 
 	s = splnet();
@@ -1216,23 +1199,6 @@ mb86960_ioctl(ifp, cmd, data)
 			mb86960_init(sc);
 			arp_ifinit(ifp, ifa);
 			break;
-#endif
-#ifdef NS
-		case AF_NS:
-		    {
-			struct ns_addr *ina = &IA_SNS(ifa)->sns_addr;
-
-			if (ns_nullhost(*ina))
-				ina->x_host =
-				    *(union ns_host *)LLADDR(ifp->if_sadl);
-			else {
-				bcopy(ina->x_host.c_host, LLADDR(ifp->if_sadl),
-				    ETHER_ADDR_LEN);
-			}
-			/* Set new address. */
-			mb86960_init(sc);
-			break;
-		    }
 #endif
 		default:
 			mb86960_init(sc);
@@ -1266,11 +1232,11 @@ mb86960_ioctl(ifp, cmd, data)
 			 */
 			mb86960_setmode(sc);
 		}
-#if DEBUG >= 1
+#if FE_DEBUG >= 1
 		/* "ifconfig fe0 debug" to print register dump. */
 		if (ifp->if_flags & IFF_DEBUG) {
 			log(LOG_INFO, "%s: SIOCSIFFLAGS(DEBUG)\n",
-			    sc->sc_dev.dv_xname);
+			    device_xname(sc->sc_dev));
 			mb86960_dump(LOG_DEBUG, sc);
 		}
 #endif
@@ -1278,22 +1244,19 @@ mb86960_ioctl(ifp, cmd, data)
 
 	case SIOCADDMULTI:
 	case SIOCDELMULTI:
-		if (sc->sc_enabled == 0) {
+		if ((sc->sc_stat & FE_STAT_ENABLED) == 0) {
 			error = EIO;
 			break;
 		}
 
 		/* Update our multicast list. */
-		error = (cmd == SIOCADDMULTI) ?
-		    ether_addmulti(ifr, &sc->sc_ec) :
-		    ether_delmulti(ifr, &sc->sc_ec);
-
-		if (error == ENETRESET) {
+		if ((error = ether_ioctl(ifp, cmd, data)) == ENETRESET) {
 			/*
 			 * Multicast list has changed; set the hardware filter
 			 * accordingly.
 			 */
-			mb86960_setmode(sc);
+			if (ifp->if_flags & IFF_RUNNING)
+				mb86960_setmode(sc);
 			error = 0;
 		}
 		break;
@@ -1309,29 +1272,26 @@ mb86960_ioctl(ifp, cmd, data)
 	}
 
 	splx(s);
-	return (error);
+	return error;
 }
 
 /*
- * Retreive packet from receive buffer and send to the next level up via
+ * Retrieve packet from receive buffer and send to the next level up via
  * ether_input(). If there is a BPF listener, give a copy to BPF, too.
  * Returns 0 if success, -1 if error (i.e., mbuf allocation failure).
  */
 int
-mb86960_get_packet(sc, len)
-	struct mb86960_softc *sc;
-	int len;
+mb86960_get_packet(struct mb86960_softc *sc, u_int len)
 {
 	bus_space_tag_t bst = sc->sc_bst;
 	bus_space_handle_t bsh = sc->sc_bsh;
 	struct ifnet *ifp = &sc->sc_ec.ec_if;
-	struct ether_header *eh;
 	struct mbuf *m;
 
 	/* Allocate a header mbuf. */
 	MGETHDR(m, M_DONTWAIT, MT_DATA);
 	if (m == 0)
-		return (0);
+		return 0;
 	m->m_pkthdr.rcvif = ifp;
 	m->m_pkthdr.len = len;
 
@@ -1345,7 +1305,7 @@ mb86960_get_packet(sc, len)
 	 * least MINCLSIZE (208 bytes) to allocate a cluster.  For a
 	 * packet of a size between (MHLEN - 2) to (MINCLSIZE - 2),
 	 * our code violates the rule...
-	 * On the other hand, the current code is short, simle,
+	 * On the other hand, the current code is short, simple,
 	 * and fast, however.  It does no harmful thing, just waists
 	 * some memory.  Any comments?  FIXME.
 	 */
@@ -1355,7 +1315,7 @@ mb86960_get_packet(sc, len)
 		MCLGET(m, M_DONTWAIT);
 		if ((m->m_flags & M_EXT) == 0) {
 			m_freem(m);
-			return (0);
+			return 0;
 		}
 	}
 
@@ -1364,40 +1324,29 @@ mb86960_get_packet(sc, len)
 	 * header mbuf.
 	 */
 	m->m_data += EOFF;
-	eh = mtod(m, struct ether_header *);
 
 	/* Set the length of this packet. */
 	m->m_len = len;
 
 	/* Get a packet. */
-	bus_space_read_multi_stream_2(bst, bsh, FE_BMPR8, mtod(m, u_int16_t *),
-			       (len + 1) >> 1);
+	if (sc->sc_flags & FE_FLAGS_SBW_BYTE)
+		bus_space_read_multi_1(bst, bsh, FE_BMPR8,
+		    mtod(m, uint8_t *), len);
+	else
+		bus_space_read_multi_stream_2(bst, bsh, FE_BMPR8,
+		    mtod(m, uint16_t *), (len + 1) >> 1);
 
 #if NBPFILTER > 0
 	/*
 	 * Check if there's a BPF listener on this interface.  If so, hand off
 	 * the raw packet to bpf.
 	 */
-	if (ifp->if_bpf) {
+	if (ifp->if_bpf)
 		bpf_mtap(ifp->if_bpf, m);
-
-		/*
-		 * Note that the interface cannot be in promiscuous mode if
-		 * there are no BPF listeners.  And if we are in promiscuous
-		 * mode, we have to check if this packet is really ours.
-		 */
-		if ((ifp->if_flags & IFF_PROMISC) != 0 &&
-		    (eh->ether_dhost[0] & 1) == 0 && /* !mcast and !bcast */
-	  	    bcmp(eh->ether_dhost, sc->sc_enaddr,
-			sizeof(eh->ether_dhost)) != 0) {
-			m_freem(m);
-			return (1);
-		}
-	}
 #endif
 
 	(*ifp->if_input)(ifp, m);
-	return (1);
+	return 1;
 }
 
 /*
@@ -1406,40 +1355,37 @@ mb86960_get_packet(sc, len)
  *
  * If an mbuf chain is too long for an Ethernet frame, it is not sent.
  * Packets shorter than Ethernet minimum are legal, and we pad them
- * before sending out.  An exception is "partial" packets which are 
+ * before sending out.  An exception is "partial" packets which are
  * shorter than mandatory Ethernet header.
  *
  * I wrote a code for an experimental "delayed padding" technique.
  * When employed, it postpones the padding process for short packets.
- * If xmit() occured at the moment, the padding process is omitted, and
+ * If xmit() occurred at the moment, the padding process is omitted, and
  * garbages are sent as pad data.  If next packet is stored in the
  * transmission buffer before xmit(), write_mbuf() pads the previous
  * packet before transmitting new packet.  This *may* gain the
  * system performance (slightly).
  */
 void
-mb86960_write_mbufs(sc, m)
-	struct mb86960_softc *sc;
-	struct mbuf *m;
+mb86960_write_mbufs(struct mb86960_softc *sc, struct mbuf *m)
 {
 	bus_space_tag_t bst = sc->sc_bst;
 	bus_space_handle_t bsh = sc->sc_bsh;
-	u_char *data;
-	u_short savebyte;	/* WARNING: Architecture dependent! */
-	int totlen, len, wantbyte;
+	int totlen, len;
 #if FE_DEBUG >= 2
 	struct mbuf *mp;
 #endif
 
-	/* XXX thorpej 960116 - quiet bogus compiler warning. */
-	savebyte = 0;
-
 #if FE_DELAYED_PADDING
 	/* Do the "delayed padding." */
-	len = sc->txb_padding >> 1;
-	if (len > 0) {
-		while (--len >= 0)
-			bus_space_write_2(bst, bsh, FE_BMPR8, 0);
+	if (sc->txb_padding > 0) {
+		if (sc->sc_flags & FE_FLAGS_SBW_BYTE) {
+			for (len = sc->txb_padding; len > 0; len--)
+				bus_space_write_1(bst, bsh, FE_BMPR8, 0);
+		} else {
+			for (len = sc->txb_padding >> 1; len > 0; len--)
+				bus_space_write_2(bst, bsh, FE_BMPR8, 0);
+		}
 		sc->txb_padding = 0;
 	}
 #endif
@@ -1455,7 +1401,7 @@ mb86960_write_mbufs(sc, m)
 	/* Check if this matches the one in the packet header. */
 	if (totlen != m->m_pkthdr.len)
 		log(LOG_WARNING, "%s: packet length mismatch? (%d/%d)\n",
-		    sc->sc_dev.dv_xname, totlen, m->m_pkthdr.len);
+		    device_xname(sc->sc_dev), totlen, m->m_pkthdr.len);
 #else
 	/* Just use the length value in the packet header. */
 	totlen = m->m_pkthdr.len;
@@ -1470,7 +1416,7 @@ mb86960_write_mbufs(sc, m)
 	if (totlen > (ETHER_MAX_LEN - ETHER_CRC_LEN) ||
 	    totlen < ETHER_HDR_LEN) {
 		log(LOG_ERR, "%s: got a %s packet (%u bytes) to send\n",
-		    sc->sc_dev.dv_xname,
+		    device_xname(sc->sc_dev),
 		    totlen < ETHER_HDR_LEN ? "partial" : "big", totlen);
 		sc->sc_ec.ec_if.if_oerrors++;
 		return;
@@ -1485,15 +1431,22 @@ mb86960_write_mbufs(sc, m)
 	 * packet in the transmission buffer, we can skip the
 	 * padding process.  It may gain performance slightly.  FIXME.
 	 */
-	bus_space_write_2(bst, bsh, FE_BMPR8,
-	    max(totlen, (ETHER_MIN_LEN - ETHER_CRC_LEN)));
+	len = max(totlen, (ETHER_MIN_LEN - ETHER_CRC_LEN));
+	if (sc->sc_flags & FE_FLAGS_SBW_BYTE) {
+		bus_space_write_1(bst, bsh, FE_BMPR8, len);
+		bus_space_write_1(bst, bsh, FE_BMPR8, len >> 8);
+	} else {
+		bus_space_write_2(bst, bsh, FE_BMPR8, len);
+		/* roundup packet length since we will use word access */
+		totlen = (totlen + 1) & ~1;
+	}
 
 	/*
 	 * Update buffer status now.
-	 * Truncate the length up to an even number, since we use outw().
+	 * Truncate the length up to an even number
+	 * if the chip is set in SBW_WORD mode.
 	 */
-	totlen = (totlen + 1) & ~1;
-	sc->txb_free -= FE_DATA_LEN_LEN +
+	sc->txb_free -= FE_TXLEN_SIZE +
 	    max(totlen, (ETHER_MIN_LEN - ETHER_CRC_LEN));
 	sc->txb_count++;
 
@@ -1504,54 +1457,95 @@ mb86960_write_mbufs(sc, m)
 #endif
 
 	/*
-	 * Transfer the data from mbuf chain to the transmission buffer. 
-	 * MB86960 seems to require that data be transferred as words, and
-	 * only words.  So that we require some extra code to patch
-	 * over odd-length mbufs.
+	 * Transfer the data from mbuf chain to the transmission buffer.
+	 * If the MB86960 is configured in word mode, data needs to be
+	 * transferred as words, and only words.
+	 * So that we require some extra code to patch over odd-length
+	 * or unaligned mbufs.
 	 */
-	wantbyte = 0;
-	for (; m != 0; m = m->m_next) {
-		/* Ignore empty mbuf. */
-		len = m->m_len;
-		if (len == 0)
-			continue;
-
-		/* Find the actual data to send. */
-		data = mtod(m, caddr_t);
-
-		/* Finish the last byte. */
-		if (wantbyte) {
-			bus_space_write_2(bst, bsh, FE_BMPR8,
-			    savebyte | (*data << 8));
-			data++;
-			len--;
-			wantbyte = 0;
+	if (sc->sc_flags & FE_FLAGS_SBW_BYTE) {
+		/* It's simple in byte mode. */
+		for (; m != NULL; m = m->m_next) {
+			if (m->m_len) {
+				bus_space_write_multi_1(bst, bsh, FE_BMPR8,
+				    mtod(m, uint8_t *), m->m_len);
+			}
 		}
+	} else {
+		/* a bit trickier in word mode. */
+		uint8_t *data, savebyte[2];
+		int leftover;
 
-		/* Output contiguous words. */
-		if (len > 1)
-			bus_space_write_multi_stream_2(bst, bsh, FE_BMPR8,
-						(u_int16_t *)data, len >> 1);
+		leftover = 0;
+		savebyte[0] = savebyte[1] = 0;
 
-		/* Save remaining byte, if there is one. */
-		if (len & 1) {
-			data += len & ~1;
-			savebyte = *data;
-			wantbyte = 1;
+		for (; m != NULL; m = m->m_next) {
+			len = m->m_len;
+			if (len == 0)
+				continue;
+			data = mtod(m, uint8_t *);
+			while (len > 0) {
+				if (leftover) {
+					/*
+					 * Data left over (from mbuf or
+					 * realignment). Buffer the next
+					 * byte, and write it and the
+					 * leftover data out.
+					 */
+					savebyte[1] = *data++;
+					len--;
+					bus_space_write_stream_2(bst, bsh,
+					   FE_BMPR8, *(uint16_t *)savebyte);
+					leftover = 0;
+				} else if (BUS_SPACE_ALIGNED_POINTER(data,
+				    uint16_t) == 0) {
+					/*
+					 * Unaligned data; buffer the next byte.
+					 */
+					savebyte[0] = *data++;
+					len--;
+					leftover = 1;
+				} else {
+					/*
+					 * Aligned data; output contiguous
+					 * words as much as we can, then
+					 * buffer the remaining byte, if any.
+					 */
+					leftover = len & 1;
+					len &= ~1;
+					bus_space_write_multi_stream_2(bst, bsh,
+					    FE_BMPR8, (uint16_t *)data,
+					    len >> 1);
+					data += len;
+					if (leftover)
+						savebyte[0] = *data++;
+					len = 0;
+				}
+			}
+			if (len < 0)
+				panic("mb86960_write_mbufs: negative len");
+		}
+		if (leftover) {
+			savebyte[1] = 0;
+			bus_space_write_stream_2(bst, bsh, FE_BMPR8,
+			    *(uint16_t *)savebyte);
 		}
 	}
-
-	/* Spit the last byte, if the length is odd. */
-	if (wantbyte)
-		bus_space_write_2(bst, bsh, FE_BMPR8, savebyte);
-
-#if ! FE_DELAYED_PADDING
+#if FE_DELAYED_PADDING == 0
 	/*
 	 * Pad the packet to the minimum length if necessary.
 	 */
-	len = ((ETHER_MIN_LEN - ETHER_CRC_LEN) >> 1) - (totlen >> 1);
-	while (--len >= 0)
-		bus_space_write_2(bst, bsh, FE_BMPR8, 0);
+	len = (ETHER_MIN_LEN - ETHER_CRC_LEN) - totlen;
+	if (len > 0) {
+		if (sc->sc_flags & FE_FLAGS_SBW_BYTE) {
+			while (len-- > 0)
+				bus_space_write_1(bst, bsh, FE_BMPR8, 0);
+		} else {
+			len >>= 1;
+			while (len-- > 0)
+				bus_space_write_2(bst, bsh, FE_BMPR8, 0);
+		}
+	}
 #endif
 }
 
@@ -1560,21 +1554,11 @@ mb86960_write_mbufs(sc, m)
  * list of multicast addresses we need to listen to.
  */
 void
-mb86960_getmcaf(ec, af)
-	struct ethercom *ec;
-	u_char *af;
+mb86960_getmcaf(struct ethercom *ec, uint8_t *af)
 {
 	struct ifnet *ifp = &ec->ec_if;
 	struct ether_multi *enm;
-	u_char *cp;
-	u_int32_t crc;
-	static const u_int32_t crctab[] = {
-		0x00000000, 0x1db71064, 0x3b6e20c8, 0x26d930ac,
-		0x76dc4190, 0x6b6b51f4, 0x4db26158, 0x5005713c,
-		0xedb88320, 0xf00f9344, 0xd6d6a3e8, 0xcb61b38c,
-		0x9b64c2b0, 0x86d3d2d4, 0xa00ae278, 0xbdbdf21c
-	};
-	int len;
+	uint32_t crc;
 	struct ether_multistep step;
 
 	/*
@@ -1588,10 +1572,10 @@ mb86960_getmcaf(ec, af)
 	if ((ifp->if_flags & IFF_PROMISC) != 0)
 		goto allmulti;
 
-	af[0] = af[1] = af[2] = af[3] = af[4] = af[5] = af[6] = af[7] = 0x00;
+	memset(af, 0, FE_FILTER_LEN);
 	ETHER_FIRST_MULTI(step, ec, enm);
 	while (enm != NULL) {
-		if (bcmp(enm->enm_addrlo, enm->enm_addrhi,
+		if (memcmp(enm->enm_addrlo, enm->enm_addrhi,
 		    sizeof(enm->enm_addrlo)) != 0) {
 			/*
 			 * We must listen to a range of multicast addresses.
@@ -1604,13 +1588,8 @@ mb86960_getmcaf(ec, af)
 			goto allmulti;
 		}
 
-		cp = enm->enm_addrlo;
-		crc = 0xffffffff;
-		for (len = sizeof(enm->enm_addrlo); --len >= 0;) {
-			crc ^= *cp++;
-			crc = (crc >> 4) ^ crctab[crc & 0xf];
-			crc = (crc >> 4) ^ crctab[crc & 0xf];
-		}
+		crc = ether_crc32_le(enm->enm_addrlo, ETHER_ADDR_LEN);
+
 		/* Just want the 6 most significant bits. */
 		crc >>= 26;
 
@@ -1624,7 +1603,7 @@ mb86960_getmcaf(ec, af)
 
 allmulti:
 	ifp->if_flags |= IFF_ALLMULTI;
-	af[0] = af[1] = af[2] = af[3] = af[4] = af[5] = af[6] = af[7] = 0xff;
+	memset(af, 0xff, FE_FILTER_LEN);
 }
 
 /*
@@ -1632,8 +1611,7 @@ allmulti:
  * receiver in appropriate mode.
  */
 void
-mb86960_setmode(sc)
-	struct mb86960_softc *sc;
+mb86960_setmode(struct mb86960_softc *sc)
 {
 	bus_space_tag_t bst = sc->sc_bst;
 	bus_space_handle_t bsh = sc->sc_bsh;
@@ -1671,7 +1649,8 @@ mb86960_setmode(sc)
 		sc->filter_change = 0;
 
 #if FE_DEBUG >= 3
-		log(LOG_INFO, "%s: promiscuous mode\n", sc->sc_dev.dv_xname);
+		log(LOG_INFO, "%s: promiscuous mode\n",
+		    device_xname(sc->sc_dev));
 #endif
 		return;
 	}
@@ -1690,7 +1669,7 @@ mb86960_setmode(sc)
 #if FE_DEBUG >= 3
 	log(LOG_INFO,
 	    "%s: address filter: [%02x %02x %02x %02x %02x %02x %02x %02x]\n",
-	    sc->sc_dev.dv_xname,
+	    device_xname(sc->sc_dev),
 	    sc->filter[0], sc->filter[1], sc->filter[2], sc->filter[3],
 	    sc->filter[4], sc->filter[5], sc->filter[6], sc->filter[7]);
 #endif
@@ -1700,7 +1679,7 @@ mb86960_setmode(sc)
 	 *
 	 * Note that the DLC (Data Linc Control unit, i.e. transmitter
 	 * and receiver) must be stopped when feeding the filter, and
-	 * DLC trushes all packets in both transmission and receive
+	 * DLC trashes all packets in both transmission and receive
 	 * buffers when stopped.
 	 *
 	 * ... Are the above sentenses correct?  I have to check the
@@ -1724,7 +1703,7 @@ mb86960_setmode(sc)
 		 */
 #if FE_DEBUG >= 4
 		log(LOG_INFO, "%s: filter change delayed\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(sc->sc_dev));
 #endif
 	}
 }
@@ -1738,8 +1717,7 @@ mb86960_setmode(sc)
  * a device is RUNNING.  (I mistook the point in previous versions.)
  */
 void
-mb86960_loadmar(sc)
-	struct mb86960_softc *sc;
+mb86960_loadmar(struct mb86960_softc *sc)
 {
 	bus_space_tag_t bst = sc->sc_bst;
 	bus_space_handle_t bsh = sc->sc_bsh;
@@ -1767,7 +1745,7 @@ mb86960_loadmar(sc)
 	sc->filter_change = 0;
 
 #if FE_DEBUG >= 3
-	log(LOG_INFO, "%s: address filter changed\n", sc->sc_dev.dv_xname);
+	log(LOG_INFO, "%s: address filter changed\n", device_xname(sc->sc_dev));
 #endif
 }
 
@@ -1775,41 +1753,38 @@ mb86960_loadmar(sc)
  * Enable power on the interface.
  */
 int
-mb86960_enable(sc)
-	struct mb86960_softc *sc;
+mb86960_enable(struct mb86960_softc *sc)
 {
 
 #if FE_DEBUG >= 3
-	log(LOG_INFO, "%s: mb86960_enable()\n", sc->sc_dev.dv_xname);
+	log(LOG_INFO, "%s: mb86960_enable()\n", device_xname(sc->sc_dev));
 #endif
 
-	if (sc->sc_enabled == 0 && sc->sc_enable != NULL) {
+	if ((sc->sc_stat & FE_STAT_ENABLED) == 0 && sc->sc_enable != NULL) {
 		if ((*sc->sc_enable)(sc) != 0) {
-			printf("%s: device enable failed\n",
-			    sc->sc_dev.dv_xname);
-			return (EIO);
+			aprint_error_dev(sc->sc_dev, "device enable failed\n");
+			return EIO;
 		}
 	}
 
-	sc->sc_enabled = 1;
-	return (0);
+	sc->sc_stat |= FE_STAT_ENABLED;
+	return 0;
 }
 
 /*
  * Disable power on the interface.
  */
 void
-mb86960_disable(sc)
-	struct mb86960_softc *sc;
+mb86960_disable(struct mb86960_softc *sc)
 {
 
 #if FE_DEBUG >= 3
-	log(LOG_INFO, "%s: mb86960_disable()\n", sc->sc_dev.dv_xname);
+	log(LOG_INFO, "%s: mb86960_disable()\n", device_xname(sc->sc_dev));
 #endif
 
-	if (sc->sc_enabled != 0 && sc->sc_disable != NULL) {
+	if ((sc->sc_stat & FE_STAT_ENABLED) != 0 && sc->sc_disable != NULL) {
 		(*sc->sc_disable)(sc);
-		sc->sc_enabled = 0;
+		sc->sc_stat &= ~FE_STAT_ENABLED;
 	}
 }
 
@@ -1819,13 +1794,12 @@ mb86960_disable(sc)
  *	Handle device activation/deactivation requests.
  */
 int
-mb86960_activate(self, act)
-	struct device *self;
-	enum devact act;
+mb86960_activate(struct device *self, enum devact act)
 {
 	struct mb86960_softc *sc = (struct mb86960_softc *)self;
-	int rv = 0, s;
+	int rv, s;
 
+	rv = 0;
 	s = splnet();
 	switch (act) {
 	case DVACT_ACTIVATE:
@@ -1837,7 +1811,7 @@ mb86960_activate(self, act)
 		break;
 	}
 	splx(s);
-	return (rv);
+	return rv;
 }
 
 /*
@@ -1846,10 +1820,13 @@ mb86960_activate(self, act)
  *	Detach a MB86960 interface.
  */
 int
-mb86960_detach(sc)
-	struct mb86960_softc *sc;
+mb86960_detach(struct mb86960_softc *sc)
 {
 	struct ifnet *ifp = &sc->sc_ec.ec_if;
+
+	/* Succeed now if there's no work to do. */
+	if ((sc->sc_stat & FE_STAT_ATTACHED) == 0)
+		return 0;
 
 	/* Delete all media. */
 	ifmedia_delete_instance(&sc->sc_media, IFM_INST_ANY);
@@ -1858,25 +1835,96 @@ mb86960_detach(sc)
 	/* Unhook the entropy source. */
 	rnd_detach_source(&sc->rnd_source);
 #endif
-#if NBPFILTER > 0
-	bpfdetach(ifp);
-#endif
 	ether_ifdetach(ifp);
 	if_detach(ifp);
 
 	mb86960_disable(sc);
-	return (0);
+	return 0;
+}
+
+/*
+ * Routines to read all bytes from the config EEPROM (93C06) through MB86965A.
+ */
+void
+mb86965_read_eeprom(bus_space_tag_t iot, bus_space_handle_t ioh, uint8_t *data)
+{
+	int addr, op, bit;
+	uint16_t val;
+
+	/* Read bytes from EEPROM; two bytes per an iteration. */
+	for (addr = 0; addr < FE_EEPROM_SIZE / 2; addr++) {
+		/* Reset the EEPROM interface. */
+		bus_space_write_1(iot, ioh, FE_BMPR16, 0x00);
+		bus_space_write_1(iot, ioh, FE_BMPR17, 0x00);
+		bus_space_write_1(iot, ioh, FE_BMPR16, FE_B16_SELECT);
+
+		/* Send start bit. */
+		bus_space_write_1(iot, ioh, FE_BMPR17, FE_B17_DATA);
+		FE_EEPROM_DELAY();
+		bus_space_write_1(iot, ioh,
+		    FE_BMPR16, FE_B16_SELECT | FE_B16_CLOCK);
+		FE_EEPROM_DELAY();
+		bus_space_write_1(iot, ioh, FE_BMPR16, FE_B16_SELECT);
+
+		/* Send read command and read address. */
+		op = 0x80 | addr;	/* READ instruction */
+		for (bit = 8; bit > 0; bit--) {
+			bus_space_write_1(iot, ioh, FE_BMPR17,
+			    (op & (1 << (bit - 1))) ? FE_B17_DATA : 0);
+			FE_EEPROM_DELAY();
+			bus_space_write_1(iot, ioh,
+			    FE_BMPR16, FE_B16_SELECT | FE_B16_CLOCK);
+			FE_EEPROM_DELAY();
+			bus_space_write_1(iot, ioh, FE_BMPR16, FE_B16_SELECT);
+		}
+		bus_space_write_1(iot, ioh, FE_BMPR17, 0x00);
+
+		/* Read two bytes in each address */
+		val = 0;
+		for (bit = 16; bit > 0; bit--) {
+			FE_EEPROM_DELAY();
+			bus_space_write_1(iot, ioh,
+			    FE_BMPR16, FE_B16_SELECT | FE_B16_CLOCK);
+			FE_EEPROM_DELAY();
+			if (bus_space_read_1(iot, ioh, FE_BMPR17) &
+			    FE_B17_DATA)
+				val |= 1 << (bit - 1);
+			bus_space_write_1(iot, ioh,
+			    FE_BMPR16, FE_B16_SELECT);
+		}
+		data[addr * 2]     = val >> 8;
+		data[addr * 2 + 1] = val & 0xff;
+	}
+
+	/* Make sure the EEPROM is turned off. */
+	bus_space_write_1(iot, ioh, FE_BMPR16, 0);
+	bus_space_write_1(iot, ioh, FE_BMPR17, 0);
+
+#if FE_DEBUG >= 3
+	/* Report what we got. */
+	log(LOG_INFO, "mb86965_read_eeprom: "
+	    " %02x%02x%02x%02x %02x%02x%02x%02x -"
+	    " %02x%02x%02x%02x %02x%02x%02x%02x -"
+	    " %02x%02x%02x%02x %02x%02x%02x%02x -"
+	    " %02x%02x%02x%02x %02x%02x%02x%02x\n",
+	    data[ 0], data[ 1], data[ 2], data[ 3],
+	    data[ 4], data[ 5], data[ 6], data[ 7],
+	    data[ 8], data[ 9], data[10], data[11],
+	    data[12], data[13], data[14], data[15],
+	    data[16], data[17], data[18], data[19],
+	    data[20], data[21], data[22], data[23],
+	    data[24], data[25], data[26], data[27],
+	    data[28], data[29], data[30], data[31]);
+#endif
 }
 
 #if FE_DEBUG >= 1
 void
-mb86960_dump(level, sc)
-	int level;
-	struct mb86960_softc *sc;
+mb86960_dump(int level, struct mb86960_softc *sc)
 {
 	bus_space_tag_t bst = sc->sc_bst;
 	bus_space_handle_t bsh = sc->sc_bsh;
-	u_char save_dlcr7;
+	uint8_t save_dlcr7;
 
 	save_dlcr7 = bus_space_read_1(bst, bsh, FE_DLCR7);
 
@@ -1931,3 +1979,4 @@ mb86960_dump(level, sc)
 	bus_space_write_1(bst, bsh, FE_DLCR7, save_dlcr7);
 }
 #endif
+

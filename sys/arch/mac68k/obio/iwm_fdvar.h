@@ -1,4 +1,4 @@
-/*	$NetBSD: iwm_fdvar.h,v 1.5 2000/03/23 06:39:56 thorpej Exp $	*/
+/*	$NetBSD: iwm_fdvar.h,v 1.14 2008/05/26 17:58:37 hauke Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998 Hauke Fath.  All rights reserved.
@@ -11,8 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -88,7 +86,7 @@ struct fdInfo {
 	short	stepRate;		/* in ms (is a software delay) */
 	short	interleave;		/* Sector interleave */
 	short	physFormat;		/* GCR, MFM DD, MFM HD */
-	char	*description;
+	const char	*description;
 };
 typedef struct fdInfo fdInfo_t;
 
@@ -132,7 +130,7 @@ typedef struct iwmAttachArgs iwmAttachArgs_t;
 struct fd_softc {
 	struct device devInfo;		/* generic device info */
 	struct disk diskInfo;		/* generic disk info */
-	struct buf_queue bufQueue;	/* queue of buf's */
+	struct bufq_state *bufQueue;	/* queue of buf's */
 	int sc_active;			/* number of active requests */
 	struct callout motor_ch;	/* motor callout */
 
@@ -162,7 +160,7 @@ struct fd_softc {
 	daddr_t	startBlk;		/* Starting block # */
 	int	bytesLeft;		/* Bytes left to transfer */
 	int	bytesDone;		/* Bytes transferred */
-	caddr_t current_buffer; 	/* target of current data transfer */
+	char *current_buffer; 	/* target of current data transfer */
 	unsigned char *cbuf;		/* ptr to cylinder cache */
 	int	cachedSide;		/* Which head is cached? */
 	cylCacheSlot_t r_slots[IWM_MAX_GCR_SECTORS];
@@ -199,52 +197,35 @@ typedef struct iwm_softc iwm_softc_t;
  * IWM Loadable Kernel Module : Exported functions 
  */
 #ifdef _LKM
-int	fdModInit __P((void));
-void	fdModFree __P((void));
+int	fdModInit(void);
+void	fdModFree(void);
 #endif
 
-/*
- * This is the exported driver interface
- * (bdevsw[] & cdevsw[] function prototypes)
- *
- * (see <sys/conf.h>
- */
-dev_type_open(fdopen);
-dev_type_close(fdclose);
-dev_type_strategy(fdstrategy);
-dev_type_read(fdread);
-dev_type_write(fdwrite);
-dev_type_ioctl(fdioctl);
-dev_type_size(fdsize);
-dev_type_dump(fddump);
+int 	iwmInit(void);
+int 	iwmCheckDrive(int32_t);
+int	iwmSelectDrive(int32_t);
+int	iwmSelectSide(int32_t);
+int	iwmTrack00(void);
+int	iwmSeek(int32_t);
 
+int     iwmReadSector(sectorHdr_t *, cylCacheSlot_t *, void *);
+int	iwmWriteSector(sectorHdr_t *, cylCacheSlot_t *);
 
-int 	iwmInit __P((void));
-int 	iwmCheckDrive __P((int32_t drive));
-int	iwmSelectDrive __P((int32_t drive));
-int	iwmSelectSide __P((int32_t side));
-int	iwmTrack00 __P((void));
-int	iwmSeek __P((int32_t steps));
-
-int     iwmReadSector __P((sectorHdr_t *hdr, cylCacheSlot_t *r_slots, 
-			   caddr_t buf));
-int	iwmWriteSector __P((sectorHdr_t *hdr, cylCacheSlot_t *w_slots));
-
-int	iwmDiskEject __P((int32_t drive));		/* drive = [0..1] */
-int	iwmMotor __P((int32_t drive, int32_t onOff));	/* on(1)/off(0)	*/
+int	iwmDiskEject(int32_t);		/* drive = [0..1] */
+int	iwmMotor(int32_t, int32_t);	/* on(1)/off(0)	*/
 
 /*
  * Debugging only
  */
-int	iwmQueryDrvFlag __P((int32_t drive, int32_t reg)); /* reg = [0..15] */
+int	iwmQueryDrvFlag(int32_t, int32_t); /* reg = [0..15] */
 
 /* Make sure we run at splhigh when calling! */
-int	iwmReadSectHdr __P((sectorHdr_t *hdr));
+int	iwmReadSectHdr(sectorHdr_t *);
 
 #if 0 /* XXX not yet */
-int	iwmReadRawSector __P((int32_t ID, caddr_t buf));
-int	iwmWriteRawSector __P((int32_t ID, caddr_t buf));
-int	iwmReadRawTrack __P((int32_t mode, caddr_t buf));
+int	iwmReadRawSector(int32_t, void *);
+int	iwmWriteRawSector(int32_t, void *);
+int	iwmReadRawTrack(int32_t, void *);
 #endif
 
 #endif /* _MAC68K_FDVAR_H */

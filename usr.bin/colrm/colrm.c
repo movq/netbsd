@@ -1,4 +1,4 @@
-/*	$NetBSD: colrm.c,v 1.5 1997/10/18 13:00:20 lukem Exp $	*/
+/*	$NetBSD: colrm.c,v 1.8 2008/07/21 14:19:21 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1991, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1991, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)colrm.c	8.2 (Berkeley) 5/4/95";
 #endif
-__RCSID("$NetBSD: colrm.c,v 1.5 1997/10/18 13:00:20 lukem Exp $");
+__RCSID("$NetBSD: colrm.c,v 1.8 2008/07/21 14:19:21 lukem Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -58,14 +54,11 @@ __RCSID("$NetBSD: colrm.c,v 1.5 1997/10/18 13:00:20 lukem Exp $");
 
 #define	TAB	8
 
-void	check __P((FILE *));
-int	main __P((int, char **));
-void	usage __P((void));
+void	check(FILE *);
+void	usage(void);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	u_long column, start, stop;
 	int ch;
@@ -128,8 +121,7 @@ main(argc, argv)
 }
 
 void
-check(stream)
-	FILE *stream;
+check(FILE *stream)
 {
 	if (feof(stream))
 		exit(0);

@@ -1,26 +1,28 @@
-/*	$NetBSD: sock.c,v 1.1.1.1 1999/12/11 22:24:10 veego Exp $	*/
+/*	$NetBSD: sock.c,v 1.14 2008/05/20 07:08:06 darrenr Exp $	*/
 
 /*
  * sock.c (C) 1995-1998 Darren Reed
  *
- * Redistribution and use in source and binary forms are permitted
- * provided that this notice is preserved and due credit is given
- * to the original author and the contributors.
+ * See the IPFILTER.LICENCE file for details on licencing.
+ *
  */
 #if !defined(lint)
 static const char sccsid[] = "@(#)sock.c	1.2 1/11/96 (C)1995 Darren Reed";
-static const char rcsid[] = "@(#)Id: sock.c,v 2.1 1999/08/04 17:31:16 darrenr Exp";
+static const char rcsid[] = "@(#)Id: sock.c,v 2.8.4.7 2007/09/13 07:19:34 darrenr Exp";
 #endif
-#include <stdio.h>
-#include <unistd.h>
-#include <string.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <pwd.h>
+#include <sys/param.h>
 #include <sys/types.h>
 #include <sys/time.h>
-#include <sys/param.h>
 #include <sys/stat.h>
+#include <stdbool.h>
+#if defined(__NetBSD__) && defined(__vax__)
+/*
+ * XXX need to declare boolean_t for _KERNEL <sys/files.h>
+ * which ends up including <sys/device.h> for vax.  See PR#32907
+ * for further details.
+ */
+typedef int     boolean_t;
+#endif
 #ifndef	ultrix
 #include <fcntl.h>
 #endif
@@ -29,21 +31,27 @@ static const char rcsid[] = "@(#)Id: sock.c,v 2.1 1999/08/04 17:31:16 darrenr Ex
 #else
 # include <sys/dir.h>
 #endif
-#define _KERNEL
-#define	KERNEL
-#ifdef	ultrix
-# undef	LOCORE
-# include <sys/smp_lock.h>
+#if !defined(__osf__)
+# ifdef __NetBSD__ 
+#  include <machine/lock.h>
+#  include <sys/mutex.h>
+# endif
+# define _KERNEL
+# define	KERNEL
+# ifdef	ultrix
+#  undef	LOCORE
+#  include <sys/smp_lock.h>
+# endif
+# include <sys/file.h>
+# undef  _KERNEL
+# undef  KERNEL
 #endif
-#include <sys/file.h>
-#undef  _KERNEL
-#undef  KERNEL
 #include <nlist.h>
 #include <sys/user.h>
 #include <sys/socket.h>
 #include <sys/socketvar.h>
 #include <sys/proc.h>
-#if !defined(ultrix) && !defined(hpux)
+#if !defined(ultrix) && !defined(hpux) && !defined(__osf__)
 # include <kvm.h>
 #endif
 #ifdef sun
@@ -61,12 +69,24 @@ static const char rcsid[] = "@(#)Id: sock.c,v 2.1 1999/08/04 17:31:16 darrenr Ex
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
 #include <net/if.h>
-#include <net/route.h>
+#if defined(__FreeBSD__)
+# include "radix_ipf.h"
+#endif
+#ifndef __osf__
+# include <net/route.h>
+#endif
 #include <netinet/ip_var.h>
 #include <netinet/in_pcb.h>
 #include <netinet/tcp_timer.h>
 #include <netinet/tcp_var.h>
+#include <stdio.h>
+#include <unistd.h>
+#include <string.h>
+#include <stdlib.h>
+#include <stddef.h>
+#include <pwd.h>
 #include "ipsend.h"
+
 
 int	nproc;
 struct	proc	*proc;
@@ -189,8 +209,6 @@ struct	tcpiphdr *ti;
 
 	if (!(p = getproc()))
 		return NULL;
-printf("fl %x ty %x cn %d mc %d\n",
-f->f_flag, f->f_type, f->f_count, f->f_msgcount);
 	up = (struct user *)malloc(sizeof(*up));
 #ifndef	ultrix
 	if (KMCPY(up, p->p_uarea, sizeof(*up)) == -1)
@@ -284,26 +302,45 @@ struct	tcpiphdr *ti;
 		return NULL;
 
 	fd = (struct filedesc *)malloc(sizeof(*fd));
+	if (fd == NULL)
+		return NULL;
+#if defined( __FreeBSD_version) && __FreeBSD_version >= 500013
+	if (KMCPY(fd, p->ki_fd, sizeof(*fd)) == -1)
+	    {
+		fprintf(stderr, "read(%#lx,%#lx) failed\n",
+			(u_long)p, (u_long)p->ki_fd);
+		free(fd);
+		return NULL;
+	    }
+#else
 	if (KMCPY(fd, p->kp_proc.p_fd, sizeof(*fd)) == -1)
 	    {
 		fprintf(stderr, "read(%#lx,%#lx) failed\n",
 			(u_long)p, (u_long)p->kp_proc.p_fd);
+		free(fd);
 		return NULL;
 	    }
+#endif
+
+	o = NULL;
+	f = NULL;
+	s = NULL;
+	i = NULL;
+	t = NULL;
 
 	o = (struct file **)calloc(1, sizeof(*o) * (fd->fd_lastfile + 1));
 	if (KMCPY(o, fd->fd_ofiles, (fd->fd_lastfile + 1) * sizeof(*o)) == -1)
 	    {
 		fprintf(stderr, "read(%#lx,%#lx,%lu) - u_ofile - failed\n",
 			(u_long)fd->fd_ofiles, (u_long)o, (u_long)sizeof(*o));
-		return NULL;
+		goto finderror;
 	    }
 	f = (struct file *)calloc(1, sizeof(*f));
 	if (KMCPY(f, o[tfd], sizeof(*f)) == -1)
 	    {
 		fprintf(stderr, "read(%#lx,%#lx,%lu) - o[tfd] - failed\n",
 			(u_long)o[tfd], (u_long)f, (u_long)sizeof(*f));
-		return NULL;
+		goto finderror;
 	    }
 
 	s = (struct socket *)calloc(1, sizeof(*s));
@@ -311,7 +348,7 @@ struct	tcpiphdr *ti;
 	    {
 		fprintf(stderr, "read(%#lx,%#lx,%lu) - f_data - failed\n",
 			(u_long)f->f_data, (u_long)s, (u_long)sizeof(*s));
-		return NULL;
+		goto finderror;
 	    }
 
 	i = (struct inpcb *)calloc(1, sizeof(*i));
@@ -319,7 +356,7 @@ struct	tcpiphdr *ti;
 	    {
 		fprintf(stderr, "kvm_read(%#lx,%#lx,%lu) - so_pcb - failed\n",
 			(u_long)s->so_pcb, (u_long)i, (u_long)sizeof(*i));
-		return NULL;
+		goto finderror;
 	    }
 
 	t = (struct tcpcb *)calloc(1, sizeof(*t));
@@ -327,9 +364,22 @@ struct	tcpiphdr *ti;
 	    {
 		fprintf(stderr, "read(%#lx,%#lx,%lu) - inp_ppcb - failed\n",
 			(u_long)i->inp_ppcb, (u_long)t, (u_long)sizeof(*t));
-		return NULL;
+		goto finderror;
 	    }
 	return (struct tcpcb *)i->inp_ppcb;
+
+finderror:
+	if (o != NULL)
+		free(o);
+	if (f != NULL)
+		free(f);
+	if (s != NULL)
+		free(s);
+	if (i != NULL)
+		free(i);
+	if (t != NULL)
+		free(t);
+	return NULL;
 }
 #endif /* BSD < 199301 */
 
@@ -341,7 +391,8 @@ struct	in_addr	gwip;
 {
 	struct	sockaddr_in	rsin, lsin;
 	struct	tcpcb	*t, tcb;
-	int	fd, nfd, len;
+	int	fd, nfd;
+	socklen_t len;
 
 	printf("Dest. Port: %d\n", ti->ti_dport);
 
@@ -371,7 +422,10 @@ struct	in_addr	gwip;
 	(void) getsockname(fd, (struct sockaddr *)&lsin, &len);
 	ti->ti_sport = lsin.sin_port;
 	printf("sport %d\n", ntohs(lsin.sin_port));
-	nfd = initdevice(dev, ntohs(lsin.sin_port), 1);
+
+	nfd = initdevice(dev, 1);
+	if (nfd == -1)
+		return -1;
 
 	if (!(t = find_tcp(fd, ti)))
 		return -1;

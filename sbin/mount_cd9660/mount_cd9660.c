@@ -1,4 +1,4 @@
-/*	$NetBSD: mount_cd9660.c,v 1.10 1999/11/21 00:57:07 mjl Exp $	*/
+/*	$NetBSD: mount_cd9660.c,v 1.28 2008/08/05 20:57:45 pooka Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993, 1994
@@ -17,11 +17,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -42,15 +38,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1992, 1993, 1994\n\
-        The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1992, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)mount_cd9660.c	8.7 (Berkeley) 5/1/95";
 #else
-__RCSID("$NetBSD: mount_cd9660.c,v 1.10 1999/11/21 00:57:07 mjl Exp $");
+__RCSID("$NetBSD: mount_cd9660.c,v 1.28 2008/08/05 20:57:45 pooka Exp $");
 #endif
 #endif /* not lint */
 
@@ -62,45 +58,78 @@ __RCSID("$NetBSD: mount_cd9660.c,v 1.10 1999/11/21 00:57:07 mjl Exp $");
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <util.h>
 
 #include <isofs/cd9660/cd9660_mount.h>
 
-#include "mntopts.h"
+#include <mntopts.h>
 
-const struct mntopt mopts[] = {
+#include "mountprog.h"
+#include "mount_cd9660.h"
+
+static const struct mntopt mopts[] = {
 	MOPT_STDOPTS,
 	MOPT_UPDATE,
-	{ NULL }
+	MOPT_GETARGS,
+	{ "extatt", 0, ISOFSMNT_EXTATT, 1 },
+	{ "gens", 0, ISOFSMNT_GENS, 1 },
+	{ "maplcase", 1, ISOFSMNT_NOCASETRANS, 1 },
+	{ "nrr", 0, ISOFSMNT_NORRIP, 1 },
+	{ "rrip", 1, ISOFSMNT_NORRIP, 1 },
+	{ "joliet", 1, ISOFSMNT_NOJOLIET, 1 },
+	{ "rrcaseins", 0, ISOFSMNT_RRCASEINS, 1 },
+	MOPT_NULL,
 };
 
-int	main __P((int, char *[]));
-void	usage __P((void));
+static void	usage(void);
 
+#ifndef MOUNT_NOMAIN
 int
-main(argc, argv)
-	int argc;
-	char **argv;
+main(int argc, char **argv)
 {
-	struct iso_args args;
-	int ch, mntflags, opts;
+
+	setprogname(argv[0]);
+	return mount_cd9660(argc, argv);
+}
+#endif
+
+void
+mount_cd9660_parseargs(int argc, char **argv,
+	struct iso_args *args, int *mntflags,
+	char *canon_dev, char *canon_dir)
+{
+	int ch, opts;
+	mntoptparse_t mp;
 	char *dev, *dir;
 
-	mntflags = opts = 0;
-	while ((ch = getopt(argc, argv, "egjo:r")) != -1)
+	*mntflags = opts = 0;
+	memset(args, 0, sizeof(*args));
+	while ((ch = getopt(argc, argv, "egijo:r")) != -1)
 		switch (ch) {
 		case 'e':
+			/* obsolete, retained for compatibility only, use
+			 * -o extatt */
 			opts |= ISOFSMNT_EXTATT;
 			break;
 		case 'g':
+			/* obsolete, retained for compatibility only, use
+			 * -o gens */
 			opts |= ISOFSMNT_GENS;
 			break;
 		case 'j':
+			/* obsolete, retained fo compatibility only, use
+			 * -o nojoliet */
 			opts |= ISOFSMNT_NOJOLIET;
 			break;
 		case 'o':
-			getmntopts(optarg, mopts, &mntflags, 0);
+			mp = getmntopts(optarg, mopts, mntflags, &opts);
+			if (mp == NULL)
+				err(1, "getmntopts");
+			freemntopts(mp);
 			break;
 		case 'r':
+			/* obsolete, retained for compatibility only, use
+			 * -o norrip */
 			opts |= ISOFSMNT_NORRIP;
 			break;
 		case '?':
@@ -116,25 +145,43 @@ main(argc, argv)
 	dev = argv[0];
 	dir = argv[1];
 
+	pathadj(dev, canon_dev);
+	pathadj(dir, canon_dir);
+
 #define DEFAULT_ROOTUID	-2
 	/*
-	 * ISO 9660 filesystems are not writeable.
+	 * ISO 9660 filesystems are not writable.
 	 */
-	mntflags |= MNT_RDONLY;
-	args.export.ex_flags = MNT_EXRDONLY;
-	args.fspec = dev;
-	args.export.ex_root = DEFAULT_ROOTUID;
-	args.flags = opts;
+	*mntflags |= MNT_RDONLY;
+	args->fspec = dev;
+	args->flags = opts;
+}
 
-	if (mount(MOUNT_CD9660, dir, mntflags, &args) < 0)
-		err(1, "%s on %s", dev, dir);
+int
+mount_cd9660(int argc, char **argv)
+{
+	struct iso_args args;
+	char canon_dev[MAXPATHLEN], canon_dir[MAXPATHLEN];
+	int mntflags;
+
+	mount_cd9660_parseargs(argc, argv, &args, &mntflags,
+	    canon_dev, canon_dir);
+
+	if (mount(MOUNT_CD9660, canon_dir, mntflags, &args, sizeof args) == -1)
+		err(1, "%s on %s", canon_dev, canon_dir);
+	if (mntflags & MNT_GETARGS) {
+		char buf[2048];
+		(void)snprintb(buf, sizeof(buf), ISOFSMNT_BITS, args.flags);
+		printf("%s\n", buf);
+	}
+
 	exit(0);
 }
 
-void
-usage()
+static void
+usage(void)
 {
 	(void)fprintf(stderr,
-		"usage: mount_cd9660 [-egjr] [-o options] special node\n");
+		"usage: %s [-o options] special node\n", getprogname());
 	exit(1);
 }

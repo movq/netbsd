@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_oldselect.c,v 1.49 1998/10/04 00:02:39 fvdl Exp $	*/
+/*	$NetBSD: linux_oldselect.c,v 1.58 2008/06/18 12:24:18 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,14 +29,15 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: linux_oldselect.c,v 1.58 2008/06/18 12:24:18 tsutsui Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/mount.h>
 
+#include <sys/sched.h>
 #include <sys/syscallargs.h>
-
-#include <vm/vm.h>
-#include <vm/vm_param.h>
 
 #include <compat/linux/common/linux_types.h>
 #include <compat/linux/common/linux_misc.h>
@@ -62,21 +56,18 @@
  * in registers on the i386 like Linux wants to.
  */
 int
-linux_sys_oldselect(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+linux_sys_oldselect(struct lwp *l, const struct linux_sys_oldselect_args *uap, register_t *retval)
 {
-	struct linux_sys_oldselect_args /* {
+	/* {
 		syscallarg(struct linux_oldselect *) lsp;
-	} */ *uap = v;
+	} */
 	struct linux_oldselect ls;
 	int error;
 
 	if ((error = copyin(SCARG(uap, lsp), &ls, sizeof(ls))))
 		return error;
 
-	return linux_select1(p, retval, ls.nfds, ls.readfds, ls.writefds,
+	return linux_select1(l, retval, ls.nfds, ls.readfds, ls.writefds,
 	    ls.exceptfds, ls.timeout);
 }
 

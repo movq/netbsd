@@ -1,4 +1,4 @@
-/*	$NetBSD: fpu_fstore.c,v 1.7 1999/05/30 20:17:48 briggs Exp $	*/
+/*	$NetBSD: fpu_fstore.c,v 1.10 2007/03/09 16:23:01 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1995 Ken Nakata
@@ -24,6 +24,9 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: fpu_fstore.c,v 1.10 2007/03/09 16:23:01 tsutsui Exp $");
 
 #include <sys/types.h>
 #include <sys/signal.h>
@@ -112,7 +115,8 @@ fpu_emul_fstore(fe, insn)
     fpu_explode(fe, &fe->fe_f3, FTYPE_EXT, &fpregs[regnum * 3]);
 #if DEBUG_FPE
     {
-	static char *class_name[] = { "SNAN", "QNAN", "ZERO", "NUM", "INF" };
+	static const char *class_name[] =
+	    { "SNAN", "QNAN", "ZERO", "NUM", "INF" };
 	printf("  fpu_emul_fstore: fpn (%s,%c,%d,%08x,%08x,%08x)\n",
 	       class_name[fe->fe_f3.fp_class + 2],
 	       fe->fe_f3.fp_sign ? '-' : '+', fe->fe_f3.fp_exp,

@@ -1,4 +1,4 @@
-/*	$NetBSD: print.c,v 1.27 1999/11/09 15:06:31 drochner Exp $	*/
+/*	$NetBSD: print.c,v 1.42 2006/12/14 14:15:26 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993, 1994
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)print.c	8.5 (Berkeley) 7/28/94";
 #else
-__RCSID("$NetBSD: print.c,v 1.27 1999/11/09 15:06:31 drochner Exp $");
+__RCSID("$NetBSD: print.c,v 1.42 2006/12/14 14:15:26 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -59,23 +55,24 @@ __RCSID("$NetBSD: print.c,v 1.27 1999/11/09 15:06:31 drochner Exp $");
 #include <time.h>
 #include <tzfile.h>
 #include <unistd.h>
-#include <utmp.h>
+#include <util.h>
 
 #include "ls.h"
 #include "extern.h"
 
-static int	printaname __P((FTSENT *, int, int));
-static void	printlink __P((FTSENT *));
-static void	printtime __P((time_t));
-static int	printtype __P((u_int));
+extern int termwidth;
+
+static int	printaname(FTSENT *, int, int);
+static void	printlink(FTSENT *);
+static void	printtime(time_t);
+static int	printtype(u_int);
 
 static time_t	now;
 
 #define	IS_NOPRINT(p)	((p)->fts_number == NO_PRINT)
 
 void
-printscol(dp)
-	DISPLAY *dp;
+printscol(DISPLAY *dp)
 {
 	FTSENT *p;
 
@@ -88,19 +85,27 @@ printscol(dp)
 }
 
 void
-printlong(dp)
-	DISPLAY *dp;
+printlong(DISPLAY *dp)
 {
 	struct stat *sp;
 	FTSENT *p;
 	NAMES *np;
-	char buf[20];
+	char buf[20], szbuf[5];
 
 	now = time(NULL);
 
-	if (dp->list->fts_level != FTS_ROOTLEVEL && (f_longform || f_size))
-		(void)printf("total %llu\n",
-		    (long long)(howmany(dp->btotal, blocksize)));
+	if (dp->list->fts_level != FTS_ROOTLEVEL && (f_longform || f_size)) {
+		if (f_humanize) {
+			if ((humanize_number(szbuf, sizeof(szbuf), (int64_t)dp->stotal,
+			    "", HN_AUTOSCALE,
+			    (HN_DECIMAL | HN_B | HN_NOSPACE))) == -1)
+				err(1, "humanize_number");
+			(void)printf("total %s\n", szbuf);
+		} else {
+			(void)printf("total %llu\n",
+			    (long long)(howmany(dp->btotal, blocksize)));
+		}
+	}
 
 	for (p = dp->list; p; p = p->fts_link) {
 		if (IS_NOPRINT(p))
@@ -109,14 +114,27 @@ printlong(dp)
 		if (f_inode)
 			(void)printf("%*lu ", dp->s_inode,
 			    (unsigned long)sp->st_ino);
-		if (f_size)
+		if (f_size) {
+			if (f_humanize) {
+				if ((humanize_number(szbuf, sizeof(szbuf),
+					sp->st_blocks * S_BLKSIZE,
+			    "", HN_AUTOSCALE,
+			    (HN_DECIMAL | HN_B | HN_NOSPACE))) == -1)
+				err(1, "humanize_number");
+			(void)printf("%*s ", dp->s_block, szbuf);
+			} else {
 			(void)printf("%*llu ", dp->s_block,
-			    (long long)howmany(sp->st_blocks, blocksize));
+					(long long)howmany(sp->st_blocks,
+							   	blocksize));
+			}
+		}
 		(void)strmode(sp->st_mode, buf);
 		np = p->fts_pointer;
-		(void)printf("%s %*lu %-*s  %-*s  ", buf, dp->s_nlink,
-		    (unsigned long)sp->st_nlink, dp->s_user, np->user,
-		    dp->s_group, np->group);
+		(void)printf("%s %*lu ", buf, dp->s_nlink,
+		    (unsigned long)sp->st_nlink);
+		if (!f_grouponly)
+			(void)printf("%-*s  ", dp->s_user, np->user);
+		(void)printf("%-*s  ", dp->s_group, np->group);
 		if (f_flags)
 			(void)printf("%-*s ", dp->s_flags, np->flags);
 		if (S_ISCHR(sp->st_mode) || S_ISBLK(sp->st_mode))
@@ -124,15 +142,29 @@ printlong(dp)
 			    dp->s_major, major(sp->st_rdev), dp->s_minor,
 			    minor(sp->st_rdev));
 		else
-			(void)printf("%*llu ", dp->s_size,
-			    (long long)sp->st_size);
+			if (f_humanize) {
+				if ((humanize_number(szbuf, sizeof(szbuf),
+				    sp->st_size, "", HN_AUTOSCALE,
+				    (HN_DECIMAL | HN_B | HN_NOSPACE))) == -1)
+					err(1, "humanize_number");
+				(void)printf("%*s ", dp->s_size, szbuf);
+			} else {
+				(void)printf("%*llu ", dp->s_size,
+				    (long long)sp->st_size);
+			}
 		if (f_accesstime)
 			printtime(sp->st_atime);
 		else if (f_statustime)
 			printtime(sp->st_ctime);
 		else
 			printtime(sp->st_mtime);
-		(void)printf("%s", p->fts_name);
+		if (f_octal || f_octal_escape)
+			(void)safe_print(p->fts_name);
+		else if (f_nonprint)
+			(void)printescaped(p->fts_name);
+		else
+			(void)printf("%s", p->fts_name);
+
 		if (f_type || (f_typedir && S_ISDIR(sp->st_mode)))
 			(void)printtype(sp->st_mode);
 		if (S_ISLNK(sp->st_mode))
@@ -142,21 +174,24 @@ printlong(dp)
 }
 
 void
-printcol(dp)
-	DISPLAY *dp;
+printcol(DISPLAY *dp)
 {
-	extern int termwidth;
 	static FTSENT **array;
 	static int lastentries = -1;
 	FTSENT *p;
 	int base, chcnt, col, colwidth, num;
 	int numcols, numrows, row;
+	char szbuf[5];
 
 	colwidth = dp->maxlen;
 	if (f_inode)
 		colwidth += dp->s_inode + 1;
-	if (f_size)
-		colwidth += dp->s_block + 1;
+	if (f_size) {
+		if (f_humanize)
+			colwidth += dp->s_size + 1;
+		else
+			colwidth += dp->s_block + 1;
+	}
 	if (f_type || f_typedir)
 		colwidth += 1;
 
@@ -189,13 +224,22 @@ printcol(dp)
 	if (num % numcols)
 		++numrows;
 
-	if (dp->list->fts_level != FTS_ROOTLEVEL && (f_longform || f_size))
-		(void)printf("total %llu\n",
-		    (long long)(howmany(dp->btotal, blocksize)));
+	if (dp->list->fts_level != FTS_ROOTLEVEL && (f_longform || f_size)) {
+		if (f_humanize) {
+			if ((humanize_number(szbuf, sizeof(szbuf), (int64_t)dp->stotal,
+			    "", HN_AUTOSCALE,
+			    (HN_DECIMAL | HN_B | HN_NOSPACE))) == -1)
+				err(1, "humanize_number");
+			(void)printf("total %s\n", szbuf);
+		} else {
+			(void)printf("total %llu\n",
+			    (long long)(howmany(dp->btotal, blocksize)));
+		}
+	}
 	for (row = 0; row < numrows; ++row) {
 		for (base = row, chcnt = col = 0; col < numcols; ++col) {
 			chcnt = printaname(array[base], dp->s_inode,
-			    dp->s_block);
+			    f_humanize ? dp->s_size : dp->s_block);
 			if ((base += numrows) >= num)
 				break;
 			while (chcnt++ < colwidth)
@@ -206,19 +250,22 @@ printcol(dp)
 }
 
 void
-printacol(dp)
-	DISPLAY *dp;
+printacol(DISPLAY *dp)
 {
-	extern int termwidth;
 	FTSENT *p;
 	int chcnt, col, colwidth;
 	int numcols;
+	char szbuf[5];
 
 	colwidth = dp->maxlen;
 	if (f_inode)
 		colwidth += dp->s_inode + 1;
-	if (f_size)
-		colwidth += dp->s_block + 1;
+	if (f_size) {
+		if (f_humanize)
+			colwidth += dp->s_size + 1;
+		else
+			colwidth += dp->s_block + 1;
+	}
 	if (f_type || f_typedir)
 		colwidth += 1;
 
@@ -232,9 +279,18 @@ printacol(dp)
 	numcols = termwidth / colwidth;
 	colwidth = termwidth / numcols;		/* spread out if possible */
 
-	if (dp->list->fts_level != FTS_ROOTLEVEL && (f_longform || f_size))
-		(void)printf("total %llu\n", 
-		    (long long)(howmany(dp->btotal, blocksize)));
+	if (dp->list->fts_level != FTS_ROOTLEVEL && (f_longform || f_size)) {
+		if (f_humanize) {
+			if ((humanize_number(szbuf, sizeof(szbuf), (int64_t)dp->stotal,
+			    "", HN_AUTOSCALE,
+			    (HN_DECIMAL | HN_B | HN_NOSPACE))) == -1)
+				err(1, "humanize_number");
+			(void)printf("total %s\n", szbuf);
+		} else {
+			(void)printf("total %llu\n",
+			    (long long)(howmany(dp->btotal, blocksize)));
+		}
+	}
 	chcnt = col = 0;
 	for (p = dp->list; p; p = p->fts_link) {
 		if (IS_NOPRINT(p))
@@ -243,7 +299,8 @@ printacol(dp)
 			chcnt = col = 0;
 			(void)putchar('\n');
 		}
-		chcnt = printaname(p, dp->s_inode, dp->s_block);
+		chcnt = printaname(p, dp->s_inode,
+		    f_humanize ? dp->s_size : dp->s_block);
 		while (chcnt++ < colwidth)
 			(void)putchar(' ');
 		col++;
@@ -252,10 +309,8 @@ printacol(dp)
 }
 
 void
-printstream(dp)
-	DISPLAY *dp;
+printstream(DISPLAY *dp)
 {
-	extern int termwidth;
 	FTSENT *p;
 	int col;
 	int extwidth;
@@ -263,8 +318,12 @@ printstream(dp)
 	extwidth = 0;
 	if (f_inode)
 		extwidth += dp->s_inode + 1;
-	if (f_size)
-		extwidth += dp->s_block + 1;
+	if (f_size) {
+		if (f_humanize)
+			extwidth += dp->s_size + 1;
+		else 
+			extwidth += dp->s_block + 1;
+	}
 	if (f_type)
 		extwidth += 1;
 
@@ -278,7 +337,8 @@ printstream(dp)
 			else
 				(void)putchar(' '), col++;
 		}
-		col += printaname(p, dp->s_inode, dp->s_block);
+		col += printaname(p, dp->s_inode,
+		    f_humanize ? dp->s_size : dp->s_block);
 	}
 	(void)putchar('\n');
 }
@@ -288,29 +348,41 @@ printstream(dp)
  * return # of characters printed, no trailing characters.
  */
 static int
-printaname(p, inodefield, sizefield)
-	FTSENT *p;
-	int sizefield, inodefield;
+printaname(FTSENT *p, int inodefield, int sizefield)
 {
 	struct stat *sp;
 	int chcnt;
+	char szbuf[5];
 
 	sp = p->fts_statp;
 	chcnt = 0;
 	if (f_inode)
 		chcnt += printf("%*lu ", inodefield, (unsigned long)sp->st_ino);
-	if (f_size)
-		chcnt += printf("%*llu ", sizefield,
-		    (long long)howmany(sp->st_blocks, blocksize));
-	chcnt += printf("%s", p->fts_name);
+	if (f_size) {
+		if (f_humanize) {
+			if ((humanize_number(szbuf, sizeof(szbuf), sp->st_size,
+			    "", HN_AUTOSCALE,
+			    (HN_DECIMAL | HN_B | HN_NOSPACE))) == -1)
+				err(1, "humanize_number");
+			chcnt += printf("%*s ", sizefield, szbuf);
+		} else {
+			chcnt += printf("%*llu ", sizefield,
+			    (long long)howmany(sp->st_blocks, blocksize));
+		}
+	}
+	if (f_octal || f_octal_escape)
+		chcnt += safe_print(p->fts_name);
+	else if (f_nonprint)
+		chcnt += printescaped(p->fts_name);
+	else
+		chcnt += printf("%s", p->fts_name);
 	if (f_type || (f_typedir && S_ISDIR(sp->st_mode)))
 		chcnt += printtype(sp->st_mode);
 	return (chcnt);
 }
 
 static void
-printtime(ftime)
-	time_t ftime;
+printtime(time_t ftime)
 {
 	int i;
 	char *longstring;
@@ -335,8 +407,7 @@ printtime(ftime)
 }
 
 static int
-printtype(mode)
-	u_int mode;
+printtype(u_int mode)
 {
 	switch (mode & S_IFMT) {
 	case S_IFDIR:
@@ -363,15 +434,14 @@ printtype(mode)
 }
 
 static void
-printlink(p)
-	FTSENT *p;
+printlink(FTSENT *p)
 {
 	int lnklen;
 	char name[MAXPATHLEN + 1], path[MAXPATHLEN + 1];
 
 	if (p->fts_level == FTS_ROOTLEVEL)
 		(void)snprintf(name, sizeof(name), "%s", p->fts_name);
-	else 
+	else
 		(void)snprintf(name, sizeof(name),
 		    "%s/%s", p->fts_parent->fts_accpath, p->fts_name);
 	if ((lnklen = readlink(name, path, sizeof(path) - 1)) == -1) {
@@ -379,5 +449,11 @@ printlink(p)
 		return;
 	}
 	path[lnklen] = '\0';
-	(void)printf(" -> %s", path);
+	(void)printf(" -> ");
+	if (f_octal || f_octal_escape)
+		(void)safe_print(path);
+	else if (f_nonprint)
+		(void)printescaped(path);
+	else
+		(void)printf("%s", path);
 }

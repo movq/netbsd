@@ -1,4 +1,5 @@
-/*	$NetBSD: config.h,v 1.3 2000/02/02 04:07:50 itojun Exp $	*/
+/*	$NetBSD: config.h,v 1.6 2006/03/05 23:47:08 rpaulo Exp $	*/
+/*	$KAME: config.h,v 1.9 2003/08/06 04:19:40 ono Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, 1998, and 1999 WIDE Project.
@@ -30,6 +31,17 @@
  */
 
 extern void getconfig __P((char *));
-extern void delete_prefix __P((struct rainfo *, struct prefix *));
+extern void delete_prefix __P((struct prefix *));
+extern void invalidate_prefix __P((struct prefix *));
+extern void update_prefix __P((struct prefix *));
 extern void make_prefix __P((struct rainfo *, int, struct in6_addr *, int));
 extern void make_packet __P((struct rainfo *));
+extern void get_prefix __P((struct rainfo *));
+
+
+/*
+ * it is highly unlikely to have 100 prefix information options,
+ * so it should be okay to limit it
+ */
+#define MAXPREFIX	100
+#define MAXROUTE	100

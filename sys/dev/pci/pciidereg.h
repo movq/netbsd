@@ -1,4 +1,4 @@
-/*	$NetBSD: pciidereg.h,v 1.5 2000/03/09 20:26:31 soren Exp $	*/
+/*	$NetBSD: pciidereg.h,v 1.11 2006/11/24 22:04:25 wiz Exp $	*/
 
 /*
  * Copyright (c) 1998 Christopher G. Demetriou.  All rights reserved.
@@ -56,7 +56,7 @@
 /*
  * Bits in the PCI Programming Interface register (some are per-channel).
  * Bits 6-4 are defined as read-only in PCI 2.1 specification.
- * Microsoft proposed to use these bits for independant channels
+ * Microsoft proposed to use these bits for independent channels
  * enable/disable. This feature is enabled based on the value of bit 6.
  */
 #define PCIIDE_CHANSTATUS_EN		0x40
@@ -77,12 +77,13 @@
 #define PCIIDE_CHANNEL_NAME(chan)	((chan) == 0 ? "primary" : "secondary")
 
 /*
- * definitions for IDE DMA 
+ * definitions for IDE DMA
  * XXX maybe this should go elsewhere
  */
 
 /* secondary channel registers offset */
 #define IDEDMA_SCH_OFFSET 0x08
+#define IDEDMA_NREGS 8
 
 /* Bus master command register */
 #define IDEDMA_CMD 0x00
@@ -111,6 +112,3 @@ struct idedma_table {
 
 #define IDEDMA_BYTE_COUNT_MAX 0x00010000 /* Max I/O per table */
 #define IDEDMA_BYTE_COUNT_ALIGN 0x00010000
-
-/* Number of idedma table needed */
-#define NIDEDMA_TABLES (MAXPHYS/NBPG + 1)

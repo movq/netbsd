@@ -1,4 +1,4 @@
-/*	$NetBSD: zbus.c,v 1.43 1999/11/25 22:11:03 is Exp $	*/
+/*	$NetBSD: zbus.c,v 1.61 2007/10/17 19:53:17 garbled Exp $ */
 
 /*
  * Copyright (c) 1994 Christian E. Hopps
@@ -29,9 +29,16 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: zbus.c,v 1.61 2007/10/17 19:53:17 garbled Exp $");
+
 #include <sys/param.h>
 #include <sys/device.h>
 #include <sys/systm.h>
+
+#include <uvm/uvm_extern.h>
+
 #include <machine/cpu.h>
 #include <machine/pte.h>
 #include <amiga/amiga/cfdev.h>
@@ -39,7 +46,7 @@
 #include <amiga/dev/zbusvar.h>
 
 struct aconfdata {
-	char *name;
+	const char *name;
 	int manid;
 	int prodid;
 };
@@ -47,11 +54,16 @@ struct aconfdata {
 struct preconfdata {
 	int manid;
 	int prodid;
-	caddr_t vaddr;
+	void *vaddr;
 };
 
+vaddr_t		ZTWOROMADDR;
+vaddr_t		ZTWOMEMADDR;
+u_int		NZTWOMEMPG;
+vaddr_t		ZBUSADDR;	/* kva of Zorro bus I/O pages */
+u_int		ZBUSAVAIL;	/* bytes of Zorro bus I/O space left */
 
-/* 
+/*
  * explain the names.. 0123456789 => zothfisven
  */
 static struct aconfdata aconftab[] = {
@@ -109,7 +121,7 @@ static struct aconfdata aconftab[] = {
 	/* Village Tronic Ariadne II */
 	{ "ne",		2167,	202},
 	/* bsc/Alf Data */
-	{ "Tandem", 2092,    6 },	/* Tandem AT disk controler */
+	{ "Tandem", 2092,    6 },	/* Tandem AT disk controller */
 	{ "mfc",	2092,	16 },
 	{ "mfc",	2092,	17 },
 	{ "mfc",	2092,	18 },
@@ -162,13 +174,15 @@ static struct aconfdata aconftab[] = {
 	{ "aumld",	2145,	128 },	/* Melody MPEG layer 2 audio board */
 	/* Individual Computers Jens Schoenfeld */
 	{ "buddha",	4626,	0 },
-	{ "X-serve",	4626,	23 },	/* X-serve Ethernet */
+	{ "xsurf",	4626,	23 },	/* X-Surf Ethernet */
 	/* VMC Harald Frank */
 	{ "blst",	5001,	1},	/* ISDN Blaster */
 	{ "hyper4",	5001,	2},	/* Hypercom4-Zbus */
 	{ "hyper3Z",	5001,	3},	/* Hypercom3-Zbus */
 	{ "hyper4+",	5001,	6},	/* Hypercom4+ */
-	{ "hyper3+",	5001,	7}	/* Hypercom3+ */
+	{ "hyper3+",	5001,	7},	/* Hypercom3+ */
+	/* Matay Grzegorz Kraszewski */
+	{ "Prometheus",	44359,	1}	/* Prometheus PCI bridge */
 };
 static int naconfent = sizeof(aconftab) / sizeof(struct aconfdata);
 
@@ -206,19 +220,18 @@ static struct preconfdata preconftab[] = {
 static int npreconfent = sizeof(preconftab) / sizeof(struct preconfdata);
 
 
-void zbusattach __P((struct device *, struct device *, void *));
-int zbusprint __P((void *, const char *));
-int zbusmatch __P((struct device *, struct cfdata *, void *));
-caddr_t zbusmap __P((caddr_t, u_int));
-static char *aconflookup __P((int, int));
+void zbusattach(struct device *, struct device *, void *);
+int zbusprint(void *, const char *);
+int zbusmatch(struct device *, struct cfdata *, void *);
+void *zbusmap(void *, u_int);
+static const char *aconflookup(int, int);
 
 /*
  * given a manufacturer id and product id, find the name
  * that describes this board.
  */
-static char *
-aconflookup(mid, pid)
-	int mid, pid;
+static const char *
+aconflookup(int mid, int pid)
 {
 	struct aconfdata *adp, *eadp;
 
@@ -229,22 +242,18 @@ aconflookup(mid, pid)
 	return("board");
 }
 
-/* 
- * mainbus driver 
+/*
+ * mainbus driver
  */
 
-struct cfattach zbus_ca = {
-	sizeof(struct device), zbusmatch, zbusattach
-};
+CFATTACH_DECL(zbus, sizeof(struct device),
+    zbusmatch, zbusattach, NULL, NULL);
 
 static struct cfdata *early_cfdata;
 
 /*ARGSUSED*/
 int
-zbusmatch(pdp, cfp, auxp)
-	struct device *pdp;
-	struct cfdata *cfp;
-	void *auxp;
+zbusmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 {
 
 	if (matchname(auxp, "zbus") == 0)
@@ -260,9 +269,7 @@ zbusmatch(pdp, cfp, auxp)
  * with that driver if matched else print a diag.
  */
 void
-zbusattach(pdp, dp, auxp)
-	struct device *pdp, *dp;
-	void *auxp;
+zbusattach(struct device *pdp, struct device *dp, void *auxp)
 {
 	struct zbus_args za;
 	struct preconfdata *pcp, *epcp;
@@ -273,14 +280,15 @@ zbusattach(pdp, dp, auxp)
 	if (amiga_realconfig) {
 		if (ZTWOMEMADDR)
 			printf(": mem 0x%08lx-0x%08lx",
-			    ZTWOMEMADDR, ZTWOMEMADDR + NBPG * NZTWOMEMPG - 1);
+			    ZTWOMEMADDR,
+			    ZTWOMEMADDR + PAGE_SIZE * NZTWOMEMPG - 1);
 		if (ZBUSAVAIL)
 			printf (": i/o size 0x%08x", ZBUSAVAIL);
 		printf("\n");
 	}
 	for (cdp = cfdev; cdp < ecdp; cdp++) {
 		for (pcp = preconftab; pcp < epcp; pcp++) {
-			if (pcp->manid == cdp->rom.manid && 
+			if (pcp->manid == cdp->rom.manid &&
 			    pcp->prodid == cdp->rom.prodid)
 				break;
 		}
@@ -300,11 +308,12 @@ zbusattach(pdp, dp, auxp)
 		if (amiga_realconfig && pcp < epcp && pcp->vaddr)
 			za.va = pcp->vaddr;
 		else {
-			za.va = (void *) (isztwopa(za.pa) ? ztwomap(za.pa) 
-			    : zbusmap(za.pa, za.size));
+			za.va = (void *) (isztwopa(za.pa) ? 
+			    __UNVOLATILE(ztwomap(za.pa)) :
+			    zbusmap(za.pa, za.size));
 /*                     		??????? */
 			/*
-			 * save value if early console init 
+			 * save value if early console init
 			 */
 			if (amiga_realconfig == 0)
 				pcp->vaddr = za.va;
@@ -321,9 +330,7 @@ zbusattach(pdp, dp, auxp)
  * print configuration info.
  */
 int
-zbusprint(auxp, pnp)
-	void *auxp;
-	const char *pnp;
+zbusprint(void *auxp, const char *pnp)
 {
 	struct zbus_args *zap;
 	int rv;
@@ -332,12 +339,13 @@ zbusprint(auxp, pnp)
 	zap = auxp;
 
 	if (pnp) {
-		printf("%s at %s:", aconflookup(zap->manid, zap->prodid),
-		    pnp);
+		aprint_normal("%s at %s:",
+		    aconflookup(zap->manid, zap->prodid), pnp);
 		if (zap->manid == -1)
 			rv = UNSUPP;
 	}
-	printf(" pa %8p man/pro %d/%d", zap->pa, zap->manid, zap->prodid);
+	aprint_normal(" pa %8p man/pro %d/%d", zap->pa, zap->manid,
+	    zap->prodid);
 	return(rv);
 }
 
@@ -348,11 +356,10 @@ zbusprint(auxp, pnp)
  * Zorro devices) to have enough kva-space available, so there is no extra
  * range check done here.
  */
-caddr_t
-zbusmap (pa, size)
-	caddr_t pa;
-	u_int size;
+void *
+zbusmap(void *pa, u_int size)
 {
+#if defined(__m68k__)
 	static vaddr_t nextkva = 0;
 	vaddr_t kva;
 
@@ -367,6 +374,12 @@ zbusmap (pa, size)
 	nextkva += size;
 	if (nextkva > ZBUSADDR + ZBUSAVAIL)
 		panic("allocating too much Zorro I/O address space");
-	physaccess((caddr_t)kva, (caddr_t)pa, size, PG_RW|PG_CI);
-	return((caddr_t)kva);
+	physaccess((void *)kva, (void *)pa, size, PG_RW|PG_CI);
+	return((void *)kva);
+#else
+/*
+ * XXX we use direct constant mapping
+ */
+	return(pa);
+#endif
 }

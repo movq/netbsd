@@ -12,23 +12,23 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBM_SCCS) && !defined(lint)
-__RCSID("$NetBSD: w_atan2.c,v 1.8 1999/07/02 15:37:44 simonb Exp $");
+__RCSID("$NetBSD: w_atan2.c,v 1.10 2007/08/10 21:20:36 drochner Exp $");
 #endif
 
 /*
  * wrapper atan2(y,x)
  */
 
+#include "namespace.h"
 #include "math.h"
 #include "math_private.h"
 
-
-#ifdef __STDC__
-	double atan2(double y, double x)	/* wrapper atan2 */
-#else
-	double atan2(y,x)			/* wrapper atan2 */
-	double y,x;
+#ifdef __weak_alias
+__weak_alias(atan2, _atan2)
 #endif
+
+double
+atan2(double y, double x)	/* wrapper atan2 */
 {
 #ifdef _IEEE_LIBM
 	return __ieee754_atan2(y,x);

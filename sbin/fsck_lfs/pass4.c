@@ -1,4 +1,4 @@
-/*	$NetBSD: pass4.c,v 1.2 1999/07/03 19:55:03 kleink Exp $	*/
+/* $NetBSD: pass4.c,v 1.16 2006/11/09 19:36:36 christos Exp $	 */
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,22 +31,57 @@
 
 #include <sys/param.h>
 #include <sys/time.h>
-#include <ufs/ufs/dinode.h>
 #include <sys/mount.h>
+#include <ufs/ufs/inode.h>
+
+#define vnode uvnode
+#define buf ubuf
+#define panic call_panic
 #include <ufs/lfs/lfs.h>
+
+#include <err.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include "bufcache.h"
+#include "vnode.h"
+#include "lfs_user.h"
 
 #include "fsutil.h"
 #include "fsck.h"
 #include "extern.h"
 
-void
-pass4()
+extern SEGUSE *seg_table;
+
+static int check_orphan(struct inodesc *idp);
+
+static int
+check_orphan(struct inodesc *idp)
 {
-	register ino_t inumber;
-	register struct zlncnt *zlnp;
-	struct dinode *dp;
+	struct zlncnt *zlnp;
+	ino_t inumber = idp->id_number;
+
+	for (zlnp = orphead; zlnp; zlnp = zlnp->next) {
+		if (zlnp->zlncnt == inumber) {
+			/* Swap this with head */
+			zlnp->zlncnt = orphead->zlncnt;
+			zlnp = orphead;
+			orphead = orphead->next;
+			/* Free old head */
+			free((char *) zlnp);
+			clri(idp, "PROPERLY ORPHANED", 1);
+			return 1;
+		}
+	}
+	return 0;
+}
+
+void
+pass4(void)
+{
+	ino_t inumber;
+	struct zlncnt *zlnp;
+	struct ufs1_dinode *dp;
 	struct inodesc idesc;
 	int n;
 
@@ -65,14 +96,14 @@ pass4()
 		case DFOUND:
 			n = lncntp[inumber];
 			if (n)
-				adjust(&idesc, (short)n);
+				adjust(&idesc, (short) n);
 			else {
 				for (zlnp = zlnhead; zlnp; zlnp = zlnp->next)
 					if (zlnp->zlncnt == inumber) {
 						zlnp->zlncnt = zlnhead->zlncnt;
 						zlnp = zlnhead;
 						zlnhead = zlnhead->next;
-						free((char *)zlnp);
+						free((char *) zlnp);
 						clri(&idesc, "UNREF", 1);
 						break;
 					}
@@ -84,13 +115,21 @@ pass4()
 			break;
 
 		case DCLEAR:
+			if (check_orphan(&idesc))
+				break;
 			dp = ginode(inumber);
 			if (dp->di_size == 0) {
-				clri(&idesc, "ZERO LENGTH", 1);
+				const char * msg = (lncntp[inumber] ?
+					"ZERO LENGTH" : "UNREF ZERO LENGTH");
+				clri(&idesc, msg, 1);
 				break;
 			}
-			/* fall through */
+			clri(&idesc, "BAD/DUP", 1);
+			break;
+
 		case FCLEAR:
+			if (check_orphan(&idesc))
+				break;
 			clri(&idesc, "BAD/DUP", 1);
 			break;
 
@@ -98,35 +137,43 @@ pass4()
 			break;
 
 		default:
-			errexit("BAD STATE %d FOR INODE I=%d",
-			    statemap[inumber], inumber);
+			err(EEXIT, "BAD STATE %d FOR INODE I=%llu\n",
+			    statemap[inumber], (unsigned long long)inumber);
 		}
 	}
 }
 
 int
-pass4check(idesc)
-	register struct inodesc *idesc;
+pass4check(struct inodesc * idesc)
 {
-	register struct dups *dlp;
-	int nfrags, res = KEEPON;
+	struct dups *dlp;
+	int ndblks, res = KEEPON;
 	daddr_t blkno = idesc->id_blkno;
+	SEGUSE *sup;
+	struct ubuf *bp;
+	int sn;
 
-	for (nfrags = idesc->id_numfrags; nfrags > 0; blkno++, nfrags--) {
+	sn = dtosn(fs, blkno);
+	for (ndblks = fragstofsb(fs, idesc->id_numfrags); ndblks > 0; blkno++, ndblks--) {
 		if (chkrange(blkno, 1)) {
 			res = SKIP;
-		} else if (testbmap(blkno)) {
+		} else if (testbmap(blkno) || preen) {
 			for (dlp = duplist; dlp; dlp = dlp->next) {
 				if (dlp->dup != blkno)
 					continue;
 				dlp->dup = duplist->dup;
 				dlp = duplist;
 				duplist = duplist->next;
-				free((char *)dlp);
+				free((char *) dlp);
 				break;
 			}
 			if (dlp == 0) {
 				clrbmap(blkno);
+				LFS_SEGENTRY(sup, fs, sn, bp);
+				sup->su_nbytes -= fsbtob(fs, 1);
+				VOP_BWRITE(bp);
+				seg_table[sn].su_nbytes -= fsbtob(fs, 1);
+				++fs->lfs_bfree;
 				n_blks--;
 			}
 		}

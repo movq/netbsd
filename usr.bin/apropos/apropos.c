@@ -1,4 +1,4 @@
-/*	$NetBSD: apropos.c,v 1.14 1998/11/06 22:29:44 christos Exp $	*/
+/*	$NetBSD: apropos.c,v 1.29 2008/07/21 14:19:20 lukem Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -36,15 +32,15 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1987, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1987, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)apropos.c	8.8 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: apropos.c,v 1.14 1998/11/06 22:29:44 christos Exp $");
+__RCSID("$NetBSD: apropos.c,v 1.29 2008/07/21 14:19:20 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -55,28 +51,27 @@ __RCSID("$NetBSD: apropos.c,v 1.14 1998/11/06 22:29:44 christos Exp $");
 #include <err.h>
 #include <glob.h>
 #include <limits.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
-#include "config.h"
-#include "pathnames.h"
+#include "manconf.h"		/* from ../man/ */
+#include "pathnames.h"		/* from ../man/ */
 
-static int *found, foundman;
+static bool *found;
+static bool foundman = false;
 
 #define	MAXLINELEN	8192		/* max line handled */
 
-int main __P((int, char **));
-void apropos __P((char **, char *, int));
-void lowstr __P((char *, char *));
-int match __P((char *, char *));
-void usage __P((void));
+static void apropos(char **, char *, bool);
+static void lowstr(char *, char *);
+static bool match(char *, char *);
+static void usage(void) __dead;
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	ENTRY *ep;
 	TAG *tp;
@@ -86,7 +81,7 @@ main(argc, argv)
 
 	conffile = NULL;
 	p_augment = p_path = NULL;
-	while ((ch = getopt(argc, argv, "C:M:m:P:")) != -1)
+	while ((ch = getopt(argc, argv, "C:M:m:P:")) != -1) {
 		switch (ch) {
 		case 'C':
 			conffile = optarg;
@@ -102,44 +97,46 @@ main(argc, argv)
 		default:
 			usage();
 		}
+	}
 	argv += optind;
 	argc -= optind;
 
 	if (argc < 1)
 		usage();
 
-	if ((found = malloc((u_int)argc * sizeof(int))) == NULL)
-		err(1, "malloc");
-	memset(found, 0, argc * sizeof(int));
+	if ((found = malloc(argc * sizeof(*found))) == NULL)
+		err(EXIT_FAILURE, "malloc");
+	(void)memset(found, 0, argc * sizeof(*found));
 
 	for (p = argv; *p; ++p)			/* convert to lower-case */
 		lowstr(*p, *p);
 
 	if (p_augment)
-		apropos(argv, p_augment, 1);
+		apropos(argv, p_augment, true);
 	if (p_path || (p_path = getenv("MANPATH")))
-		apropos(argv, p_path, 1);
+		apropos(argv, p_path, true);
 	else {
 		config(conffile);
-		ep = (tp = getlist("_whatdb")) == NULL ?
-		    NULL : tp->list.tqh_first;
-		for (; ep != NULL; ep = ep->q.tqe_next) {
+		tp = gettag("_whatdb", 1);
+		if (!tp)
+			errx(EXIT_FAILURE, "malloc");
+		TAILQ_FOREACH(ep, &tp->entrylist, q) {
 			if ((rv = glob(ep->s, GLOB_BRACE | GLOB_NOSORT, NULL,
 			    &pg)) != 0) {
 				if (rv == GLOB_NOMATCH)
 					continue;
 				else
-					err(1, "glob"); 
+					err(EXIT_FAILURE, "glob");
 			}
 			if (pg.gl_pathc)
 				for (p = pg.gl_pathv; *p; p++)
-					apropos(argv, *p, 0);
+					apropos(argv, *p, false);
 			globfree(&pg);
 		}
 	}
 
 	if (!foundman)
-		errx(1, "no %s file found", _PATH_WHATIS);
+		errx(EXIT_FAILURE, "no %s file found", _PATH_WHATIS);
 
 	rv = 1;
 	for (p = argv; *p; ++p)
@@ -147,50 +144,51 @@ main(argc, argv)
 			rv = 0;
 		else
 			(void)printf("%s: nothing appropriate\n", *p);
-	exit(rv);
+	return rv;
 }
 
-void
-apropos(argv, path, buildpath)
-	char **argv, *path;
-	int buildpath;
+static void
+apropos(char **argv, char *path, bool buildpath)
 {
 	char *end, *name, **p;
-	char buf[MAXLINELEN + 1], wbuf[MAXLINELEN + 1];
+	char buf[MAXLINELEN + 1];
 	char hold[MAXPATHLEN + 1];
+	char wbuf[MAXLINELEN + 1];
 
 	for (name = path; name; name = end) {	/* through name list */
-		if ((end = strchr(name, ':')))
+		if ((end = strchr(name, ':')) != NULL)
 			*end++ = '\0';
 
 		if (buildpath) {
-			(void)sprintf(hold, "%s/%s", name, _PATH_WHATIS);
+			(void)snprintf(hold, sizeof(hold), "%s/%s", name,
+					_PATH_WHATIS);
 			name = hold;
 		}
 
 		if (!freopen(name, "r", stdin))
 			continue;
 
-		foundman = 1;
+		foundman = true;
 
 		/* for each file found */
-		while (fgets(buf, sizeof(buf), stdin)) {
+		while (fgets(buf, (int)sizeof(buf), stdin)) {
 			if (!strchr(buf, '\n')) {
 				warnx("%s: line too long", name);
 				continue;
 			}
 			lowstr(buf, wbuf);
-			for (p = argv; *p; ++p)
+			for (p = argv; *p; ++p) {
 				if (match(wbuf, *p)) {
 					(void)printf("%s", buf);
-					found[p - argv] = 1;
+					found[p - argv] = true;
 
 					/* only print line once */
 					while (*++p)
 						if (match(wbuf, *p))
-							found[p - argv] = 1;
+							found[p - argv] = true;
 					break;
 				}
+			}
 		}
 	}
 }
@@ -199,36 +197,34 @@ apropos(argv, path, buildpath)
  * match --
  *	match anywhere the string appears
  */
-int
-match(bp, str)
-	char *bp, *str;
+static bool
+match(char *bp, char *str)
 {
-	int len;
+	size_t len;
 	char test;
 
 	if (!*bp)
-		return (0);
+		return false;
 	/* backward compatible: everything matches empty string */
 	if (!*str)
-		return (1);
+		return true;
 	for (test = *str++, len = strlen(str); *bp;)
 		if (test == *bp++ && !strncmp(bp, str, len))
-			return (1);
-	return (0);
+			return true;
+	return false;
 }
 
 /*
  * lowstr --
  *	convert a string to lower case
  */
-void
-lowstr(from, to)
-	char *from, *to;
+static void
+lowstr(char *from, char *to)
 {
 	char ch;
 
 	while ((ch = *from++) && ch != '\n')
-		*to++ = isupper((unsigned char)ch) ? tolower(ch) : ch;
+		*to++ = tolower((unsigned char)ch);
 	*to = '\0';
 }
 
@@ -236,14 +232,13 @@ lowstr(from, to)
  * usage --
  *	print usage message and die
  */
-void
-usage()
+__dead
+static void
+usage(void)
 {
 
-	extern char *__progname;
-
 	(void)fprintf(stderr,
-	    "Usage: %s [-C file] [-M path] [-m path] keyword ...\n",
-	    __progname);
+	    "usage: %s [-C file] [-M path] [-m path] keyword ...\n",
+	    getprogname());
 	exit(1);
 }

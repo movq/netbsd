@@ -1,7 +1,6 @@
-/*	$NetBSD: ivsc.c,v 1.27 1999/01/10 13:17:01 tron Exp $	*/
+/*	$NetBSD: ivsc.c,v 1.35 2005/12/11 12:16:28 christos Exp $ */
 
 /*
- * Copyright (c) 1994 Michael L. Hitch
  * Copyright (c) 1982, 1990 The Regents of the University of California.
  * All rights reserved.
  *
@@ -13,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,6 +30,36 @@
  *
  *	@(#)ivsdma.c
  */
+
+/*
+ * Copyright (c) 1994 Michael L. Hitch
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ *	@(#)ivsdma.c
+ */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ivsc.c,v 1.35 2005/12/11 12:16:28 christos Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
@@ -49,21 +74,14 @@
 #include <amiga/dev/scivar.h>
 #include <amiga/dev/zbusvar.h>
 
-void ivscattach __P((struct device *, struct device *, void *));
-int ivscmatch __P((struct device *, struct cfdata *, void *));
+void ivscattach(struct device *, struct device *, void *);
+int ivscmatch(struct device *, struct cfdata *, void *);
 
-int ivsc_intr __P((void *));
-int ivsc_dma_xfer_in __P((struct sci_softc *dev, int len,
-    register u_char *buf, int phase));
-int ivsc_dma_xfer_out __P((struct sci_softc *dev, int len,
-    register u_char *buf, int phase));
-
-struct scsipi_device ivsc_scsidev = {
-	NULL,		/* use default error handler */
-	NULL,		/* do not have a start functio */
-	NULL,		/* have no async handler */
-	NULL,		/* Use default done routine */
-};
+int ivsc_intr(void *);
+int ivsc_dma_xfer_in(struct sci_softc *dev, int len,
+    register u_char *buf, int phase);
+int ivsc_dma_xfer_out(struct sci_softc *dev, int len,
+    register u_char *buf, int phase);
 
 
 #ifdef DEBUG
@@ -77,18 +95,14 @@ extern int sci_data_wait;
 
 int ivsdma_pseudo = 1;		/* 0=off, 1=on */
 
-struct cfattach ivsc_ca = {
-	sizeof(struct sci_softc), ivscmatch, ivscattach
-};
+CFATTACH_DECL(ivsc, sizeof(struct sci_softc),
+    ivscmatch, ivscattach, NULL, NULL);
 
 /*
  * if this is an IVS board
  */
 int
-ivscmatch(pdp, cfp, auxp)
-	struct device *pdp;
-	struct cfdata *cfp;
-	void *auxp;
+ivscmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 {
 	struct zbus_args *zap;
 
@@ -106,19 +120,18 @@ ivscmatch(pdp, cfp, auxp)
 }
 
 void
-ivscattach(pdp, dp, auxp)
-	struct device *pdp, *dp;
-	void *auxp;
+ivscattach(struct device *pdp, struct device *dp, void *auxp)
 {
 	volatile u_char *rp;
-	struct sci_softc *sc;
+	struct sci_softc *sc = (struct sci_softc *)dp;
 	struct zbus_args *zap;
+	struct scsipi_adapter *adapt = &sc->sc_adapter;
+	struct scsipi_channel *chan = &sc->sc_channel;
 
 	printf("\n");
 
 	zap = auxp;
-	
-	sc = (struct sci_softc *)dp;
+
 	rp = (u_char *)zap->va + 0x40;
 	sc->sci_data = rp;
 	sc->sci_odata = rp;
@@ -146,32 +159,37 @@ ivscattach(pdp, dp, auxp)
 
 	scireset(sc);
 
-	sc->sc_adapter.scsipi_cmd = sci_scsicmd;
-	sc->sc_adapter.scsipi_minphys = sci_minphys;
+	/*
+	 * Fill in the scsipi_adapter.
+	 */
+	memset(adapt, 0, sizeof(*adapt));
+	adapt->adapt_dev = &sc->sc_dev;
+	adapt->adapt_nchannels = 1;
+	adapt->adapt_openings = 7;
+	adapt->adapt_max_periph = 1;
+	adapt->adapt_request = sci_scsipi_request;
+	adapt->adapt_minphys = sci_minphys;
 
-	sc->sc_link.scsipi_scsi.channel = SCSI_CHANNEL_ONLY_ONE;
-	sc->sc_link.adapter_softc = sc;
-	sc->sc_link.scsipi_scsi.adapter_target = 7;
-	sc->sc_link.adapter = &sc->sc_adapter;
-	sc->sc_link.device = &ivsc_scsidev;
-	sc->sc_link.openings = 1;
-	sc->sc_link.scsipi_scsi.max_target = 7;
-	sc->sc_link.scsipi_scsi.max_lun = 7;
-	sc->sc_link.type = BUS_SCSI;
-	TAILQ_INIT(&sc->sc_xslist);
+	/*
+	 * Fill in the scsipi_channel.
+	 */
+	memset(chan, 0, sizeof(*chan));
+	chan->chan_adapter = adapt;
+	chan->chan_bustype = &scsi_bustype;
+	chan->chan_channel = 0;
+	chan->chan_ntargets = 8;
+	chan->chan_nluns = 8;
+	chan->chan_id = 7;
 
 	/*
 	 * attach all scsi units on us
 	 */
-	config_found(dp, &sc->sc_link, scsiprint);
+	config_found(dp, chan, scsiprint);
 }
 
 int
-ivsc_dma_xfer_in (dev, len, buf, phase)
-	struct sci_softc *dev;
-	int len;
-	register u_char *buf;
-	int phase;
+ivsc_dma_xfer_in(struct sci_softc *dev, int len, register u_char *buf,
+                 int phase)
 {
 	int wait = sci_data_wait;
 	volatile register u_char *sci_dma = dev->sci_idata + 0x20;
@@ -253,11 +271,8 @@ ivsc_dma_xfer_in (dev, len, buf, phase)
 }
 
 int
-ivsc_dma_xfer_out (dev, len, buf, phase)
-	struct sci_softc *dev;
-	int len;
-	register u_char *buf;
-	int phase;
+ivsc_dma_xfer_out(struct sci_softc *dev, int len, register u_char *buf,
+                  int phase)
 {
 	int wait = sci_data_wait;
 	volatile register u_char *sci_dma = dev->sci_data + 0x20;
@@ -304,8 +319,7 @@ ivsc_dma_xfer_out (dev, len, buf, phase)
 }
 
 int
-ivsc_intr(arg)
-	void *arg;
+ivsc_intr(void *arg)
 {
 	struct sci_softc *dev = arg;
 	u_char stat;

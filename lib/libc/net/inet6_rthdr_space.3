@@ -1,4 +1,5 @@
-.\"	$NetBSD: inet6_rthdr_space.3,v 1.2 1999/12/12 14:59:09 itojun Exp $
+.\"	$NetBSD: inet6_rthdr_space.3,v 1.15 2004/12/20 18:30:26 christos Exp $
+.\"	$KAME: inet6_rthdr_space.3,v 1.8 2000/05/17 14:30:15 itojun Exp $
 .\"
 .\" Copyright (c) 1983, 1987, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +12,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -31,10 +28,8 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"     KAME Id: inet6_rthdr_space.3,v 1.3 1999/12/12 14:58:04 itojun Exp
-.\"
 .Dd December 10, 1999
-.Dt INET6_OPTION_SPACE 3
+.Dt INET6_RTHDR_SPACE 3
 .Os
 .\"
 .Sh NAME
@@ -49,7 +44,7 @@
 .Nd IPv6 Routing Header Options manipulation
 .\"
 .Sh SYNOPSIS
-.Fd #include <netinet/in.h>
+.In netinet/in.h
 .Ft size_t
 .Fn inet6_rthdr_space "int type" "int segments"
 .Ft "struct cmsghdr *"
@@ -62,22 +57,23 @@
 .Fn inet6_rthdr_reverse "const struct cmsghdr *in" "struct cmsghdr *out"
 .Ft int
 .Fn inet6_rthdr_segments "const struct cmsghdr *cmsg"
-.Ft "struct in6_addr"
+.Ft "struct in6_addr *"
 .Fn inet6_rthdr_getaddr "struct cmsghdr *cmsg" "int index"
 .Ft int
 .Fn inet6_rthdr_getflags "const struct cmsghdr *cmsg" "int index"
 .\"
 .Sh DESCRIPTION
-RFC2292 IPv6 advanced API defines eight
+RFC 2292 IPv6 advanced API defines eight
 functions that the application calls to build and examine a Routing
-header.  Four functions build a Routing header:
+header.
+Four functions build a Routing header:
 .Bl -hang
 .It Fn inet6_rthdr_space
 return #bytes required for ancillary data
 .It Fn inet6_rthdr_init
 initialize ancillary data for Routing header
 .It Fn inet6_rthdr_add
-add IPv6 address & flags to Routing header
+add IPv6 address \*[Am] flags to Routing header
 .It Fn inet6_rthdr_lasthop
 specify the flags for the final hop
 .El
@@ -95,7 +91,7 @@ fetch one flag from a Routing header
 .El
 .Pp
 The function prototypes for these functions are all in the
-.Aq Li netinet/in.h
+.Aq Pa netinet/in.h
 header.
 .\"
 .Ss inet6_rthdr_space
@@ -106,7 +102,8 @@ containing the specified number of
 .Fa segments
 .Pq addresses .
 For an IPv6 Type 0 Routing header, the number
-of segments must be between 1 and 23, inclusive.  The return value
+of segments must be between 1 and 23, inclusive.
+The return value
 includes the size of the cmsghdr structure that precedes the Routing
 header, and any required padding.
 .Pp
@@ -265,7 +262,10 @@ or
 Upon an error the return value of the function is -1.
 .Pp
 Note: Addresses are indexed starting at 1, and flags starting at 0,
-to maintain consistency with the terminology and figures in RFC2460.
+to maintain consistency with the terminology and figures in RFC 2460.
+.\"
+.Sh EXAMPLES
+RFC 2292 gives comprehensive examples in chapter 8.
 .\"
 .Sh DIAGNOSTICS
 .Fn inet6_rthdr_space
@@ -289,36 +289,33 @@ and
 .Fn inet6_rthdr_getflags
 return -1 on error.
 .\"
-.Sh EXAMPLES
-RFC2292 gives comprehensive examples in chapter 8.
-.\"
 .Sh SEE ALSO
 .Rs
 .%A W. Stevens
 .%A M. Thomas
 .%T "Advanced Sockets API for IPv6"
-.%N RFC2292
+.%N RFC 2292
 .%D February 1998
 .Re
 .Rs
 .%A S. Deering
 .%A R. Hinden
 .%T "Internet Protocol, Version 6 (IPv6) Specification"
-.%N RFC2460
+.%N RFC 2460
 .%D December 1998
 .Re
+.\"
+.Sh STANDARDS
+The functions
+are documented in
+.Dq Advanced Sockets API for IPv6
+.Pq RFC 2292 .
 .\"
 .Sh HISTORY
 The implementation first appeared in KAME advanced networking kit.
 .\"
-.Sh STANDARDS
-The functions are
-are documented in
-.Dq Advanced Sockets API for IPv6
-.Pq RFC2292 .
-.\"
 .Sh BUGS
-The text was shamelessly copied from RFC2292.
+The text was shamelessly copied from RFC 2292.
 .Pp
 .Fn inet6_rthdr_reverse
 is not implemented yet.

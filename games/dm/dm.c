@@ -1,4 +1,4 @@
-/*	$NetBSD: dm.c,v 1.15 1999/09/22 18:54:42 jsm Exp $	*/
+/*	$NetBSD: dm.c,v 1.26 2008/07/20 01:03:21 lukem Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1987, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1987, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)dm.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: dm.c,v 1.15 1999/09/22 18:54:42 jsm Exp $");
+__RCSID("$NetBSD: dm.c,v 1.26 2008/07/20 01:03:21 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -61,8 +57,8 @@ __RCSID("$NetBSD: dm.c,v 1.15 1999/09/22 18:54:42 jsm Exp $");
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
-#include <utmp.h>
 
+#include "utmpentry.h"
 #include "pathnames.h"
 
 static time_t	now;			/* current time value */
@@ -70,21 +66,18 @@ static int	priority = 0;		/* priority game runs at */
 static char	*game,			/* requested game */
 		*gametty;		/* from tty? */
 
-void	c_day __P((const char *, const char *, const char *));
-void	c_game __P((const char *, const char  *, const char *, const char *));
-void	c_tty __P((const char *));
-const char *hour __P((int));
-double	load __P((void));
-int	main __P((int, char *[]));
-void	nogamefile __P((void));
-void	play __P((char **)) __attribute__((__noreturn__));
-void	read_config __P((void));
-int	users __P((void));
+void	c_day(const char *, const char *, const char *);
+void	c_game(const char *, const char  *, const char *, const char *);
+void	c_tty(const char *);
+const char *hour(int);
+double	load(void);
+void	nogamefile(void);
+void	play(char **) __dead;
+void	read_config(void);
+int	users(void);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc __unused, char *argv[])
 {
 	char *cp;
 
@@ -111,15 +104,11 @@ main(argc, argv)
  *	play the game
  */
 void
-play(args)
-	char **args;
+play(char **args)
 {
 	char pbuf[MAXPATHLEN];
 
-	(void)strncpy(pbuf, _PATH_HIDE, sizeof(pbuf) - 1);
-	(void)strncpy(pbuf + sizeof(_PATH_HIDE) - 1, game,
-	    sizeof(pbuf) - sizeof(_PATH_HIDE) - 1);
-	pbuf[sizeof(pbuf) - 1] = '\0';
+	snprintf(pbuf, sizeof(pbuf), "%s%s", _PATH_HIDE, game);
 	if (priority > 0)	/* < 0 requires root */
 		(void)setpriority(PRIO_PROCESS, 0, priority);
 	execv(pbuf, args);
@@ -131,7 +120,7 @@ play(args)
  *	read through config file, looking for key words.
  */
 void
-read_config()
+read_config(void)
 {
 	FILE *cfp;
 	char lbuf[BUFSIZ], f1[40], f2[40], f3[40], f4[40], f5[40];
@@ -141,19 +130,19 @@ read_config()
 	while (fgets(lbuf, sizeof(lbuf), cfp))
 		switch (*lbuf) {
 		case 'b':		/* badtty */
-			if (sscanf(lbuf, "%s%s", f1, f2) != 2 ||
+			if (sscanf(lbuf, "%39s%39s", f1, f2) != 2 ||
 			    strcasecmp(f1, "badtty"))
 				break;
 			c_tty(f2);
 			break;
 		case 'g':		/* game */
-			if (sscanf(lbuf, "%s%s%s%s%s",
+			if (sscanf(lbuf, "%39s%39s%39s%39s%39s",
 			    f1, f2, f3, f4, f5) != 5 || strcasecmp(f1, "game"))
 				break;
 			c_game(f2, f3, f4, f5);
 			break;
 		case 't':		/* time */
-			if (sscanf(lbuf, "%s%s%s%s", f1, f2, f3, f4) != 4 ||
+			if (sscanf(lbuf, "%39s%39s%39s%39s", f1, f2, f3, f4) != 4 ||
 			    strcasecmp(f1, "time"))
 				break;
 			c_day(f2, f3, f4);
@@ -166,8 +155,7 @@ read_config()
  *	if day is today, see if okay to play
  */
 void
-c_day(s_day, s_start, s_stop)
-	const char *s_day, *s_start, *s_stop;
+c_day(const char *s_day, const char *s_start, const char *s_stop)
 {
 	static const char *const days[] = {
 		"sunday", "monday", "tuesday", "wednesday",
@@ -180,7 +168,8 @@ c_day(s_day, s_start, s_stop)
 		ct = localtime(&now);
 	if (strcasecmp(s_day, days[ct->tm_wday]))
 		return;
-	if (!isdigit(*s_start) || !isdigit(*s_stop))
+	if (!isdigit((unsigned char)*s_start) || 
+	    !isdigit((unsigned char)*s_stop))
 		return;
 	start = atoi(s_start);
 	stop = atoi(s_stop);
@@ -198,8 +187,7 @@ c_day(s_day, s_start, s_stop)
  *	decide if this tty can be used for games.
  */
 void
-c_tty(tty)
-	const char *tty;
+c_tty(const char *tty)
 {
 	static int first = 1;
 	static char *p_tty;
@@ -218,8 +206,8 @@ c_tty(tty)
  *	see if game can be played now.
  */
 void
-c_game(s_game, s_load, s_users, s_priority)
-	const char *s_game, *s_load, *s_users, *s_priority;
+c_game(const char *s_game, const char *s_load, const char *s_users, 
+       const char *s_priority)
 {
 	static int found;
 
@@ -228,11 +216,11 @@ c_game(s_game, s_load, s_users, s_priority)
 	if (strcmp(game, s_game) && strcasecmp("default", s_game))
 		return;
 	++found;
-	if (isdigit(*s_load) && atoi(s_load) < load())
+	if (isdigit((unsigned char)*s_load) && atoi(s_load) < load())
 		errx(0, "Sorry, the load average is too high right now.");
-	if (isdigit(*s_users) && atoi(s_users) <= users())
+	if (isdigit((unsigned char)*s_users) && atoi(s_users) <= users())
 		errx(0, "Sorry, there are too many users logged on right now.");
-	if (isdigit(*s_priority))
+	if (isdigit((unsigned char)*s_priority))
 		priority = atoi(s_priority);
 }
 
@@ -241,7 +229,7 @@ c_game(s_game, s_load, s_users, s_priority)
  *	return 15 minute load average
  */
 double
-load()
+load(void)
 {
 	double avenrun[3];
 
@@ -257,22 +245,17 @@ load()
  *	count them.
  */
 int
-users()
+users(void)
 {
-	
-	int nusers, utmp;
-	struct utmp buf;
+	struct utmpentry *ep;
+	int nusers;
 
-	if ((utmp = open(_PATH_UTMP, O_RDONLY, 0)) < 0)
-		err(1, "%s", _PATH_UTMP);
-	for (nusers = 0; read(utmp, (char *)&buf, sizeof(struct utmp)) > 0;)
-		if (buf.ut_name[0] != '\0')
-			++nusers;
-	return (nusers);
+	nusers = getutentries(NULL, &ep);
+	return nusers;
 }
 
 void
-nogamefile()
+nogamefile(void)
 {
 	int fd, n;
 	char buf[BUFSIZ];
@@ -291,8 +274,7 @@ nogamefile()
  *	print out the hour in human form
  */
 const char *
-hour(h)
-	int h;
+hour(int h)
 {
 	static const char *const hours[] = {
 	    "midnight", "1am", "2am", "3am", "4am", "5am",
@@ -311,7 +293,7 @@ hour(h)
  * logfile --
  *	log play of game
  */
-logfile()
+logfile(void)
 {
 	struct passwd *pw;
 	FILE *lp;

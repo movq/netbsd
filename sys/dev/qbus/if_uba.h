@@ -1,4 +1,4 @@
-/*	$NetBSD: if_uba.h,v 1.7 1999/06/06 20:45:02 ragge Exp $	*/
+/*	$NetBSD: if_uba.h,v 1.15 2007/03/04 06:02:29 christos Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986 Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -40,7 +36,6 @@
  * for UNIBUS network interfaces.
  */
 
-#define	IF_MAXNUBAMR	10
 /*
  * Each interface has structures giving information
  * about UNIBUS resources held by the interface
@@ -68,10 +63,6 @@
  * Information per interface.
  */
 struct	ifubinfo {
-	short	iff_flags;			/* used during uballoc's */
-	short	iff_hlen;			/* local net header length */
-	struct	uba_regs *iff_uba;		/* uba adaptor regs, in vm */
-	struct	pte *iff_ubamr;			/* uba map regs, in vm */
 	struct	uba_softc *iff_softc;		/* uba */
 };
 
@@ -79,13 +70,11 @@ struct	ifubinfo {
  * Information per buffer.
  */
 struct ifrw {
-	caddr_t	ifrw_addr;			/* virt addr of header */
 	short	ifrw_bdp;			/* unibus bdp */
 	short	ifrw_flags;			/* type, etc. */
-#define	IFRW_W	0x01				/* is a transmit buffer */
-	int	ifrw_info;			/* value from ubaalloc */
-	int	ifrw_proto;			/* map register prototype */
-	struct	pte *ifrw_mr;			/* base of map registers */
+#define	IFRW_MBUF	0x01			/* uses DMA from mbuf */
+	bus_dmamap_t ifrw_map;			/* DMA map */
+	struct	mbuf *ifrw_mbuf;
 };
 
 /*
@@ -93,18 +82,19 @@ struct ifrw {
  */
 struct ifxmt {
 	struct	ifrw ifrw;
-	caddr_t	ifw_base;			/* virt addr of buffer */
-	struct	pte ifw_wmap[IF_MAXNUBAMR];	/* base pages for output */
-	struct	mbuf *ifw_xtofree;		/* pages being dma'd out */
-	short	ifw_xswapd;			/* mask of clusters swapped */
-	short	ifw_nmr;			/* number of entries in wmap */
+	void *	ifw_vaddr;			/* DMA memory virtual addr */
+	int	ifw_size;			/* Size of this DMA block */
 };
+#define	ifrw_addr	ifrw_mbuf->m_data
+#define ifrw_info	ifrw_map->dm_segs[0].ds_addr
 #define	ifw_addr	ifrw.ifrw_addr
 #define	ifw_bdp		ifrw.ifrw_bdp
 #define	ifw_flags	ifrw.ifrw_flags
 #define	ifw_info	ifrw.ifrw_info
 #define	ifw_proto	ifrw.ifrw_proto
 #define	ifw_mr		ifrw.ifrw_mr
+#define	ifw_map		ifrw.ifrw_map
+#define ifw_mbuf	ifrw.ifrw_mbuf
 
 /*
  * Most interfaces have a single receive and a single transmit buffer,
@@ -124,20 +114,21 @@ struct ifuba {
 #define	ifu_w		ifu_xmt.ifrw
 #define	ifu_xtofree	ifu_xmt.ifw_xtofree
 
-#ifdef 	_KERNEL
-#define	if_ubainit(ifuba, uban, hlen, nmr) \
-		if_ubaminit(&(ifuba)->ifu_info, uban, hlen, nmr, \
+#ifdef	_KERNEL
+#define	if_ubainit(ifuba, uban, size) \
+		if_ubaminit(&(ifuba)->ifu_info, uban, size, \
 			&(ifuba)->ifu_r, 1, &(ifuba)->ifu_xmt, 1)
-#define	if_rubaget(ifu, totlen, off0, ifp) \
-		if_ubaget(&(ifu)->ifu_info, &(ifu)->ifu_r, totlen, off0, ifp)
+#define	if_rubaget(ifu, ifp, len) \
+		if_ubaget(&(ifu)->ifu_info, &(ifu)->ifu_r, ifp, len)
 #define	if_wubaput(ifu, m) \
 		if_ubaput(&(ifu)->ifu_info, &(ifu)->ifu_xmt, m)
+#define if_wubaend(ifu) \
+		if_ubaend(&(ifu)->ifu_info, &(ifu)->ifu_xmt)
 
 /* Prototypes */
-int	if_ubaminit __P((struct ifubinfo *, struct uba_softc *, int, int,
-	    struct ifrw *, int, struct ifxmt *, int));
-int	if_ubaput __P((struct ifubinfo *, struct ifxmt *, struct mbuf *));
-struct mbuf *if_ubaget __P((struct ifubinfo *, struct ifrw *, int,
-	struct ifnet *));
-
+int if_ubaminit(struct ifubinfo *, struct uba_softc *, int,
+	    struct ifrw *, int, struct ifxmt *, int);
+int if_ubaput(struct ifubinfo *, struct ifxmt *, struct mbuf *);
+struct mbuf *if_ubaget(struct ifubinfo *, struct ifrw *, struct ifnet *, int);
+void if_ubaend(struct ifubinfo *ifu, struct ifxmt *);
 #endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: mkdict.c,v 1.6 1999/09/19 18:10:48 jsm Exp $	*/
+/* $NetBSD: mkdict.c,v 1.11 2005/07/01 16:38:24 jmc Exp $ */
 
 /*-
  * Copyright (c) 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -36,17 +32,15 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
-#endif /* not lint */
-
-#ifndef lint
+static const char copyright[] =
+    "@(#) Copyright (c) 1993\n\
+	The Regents of the University of California.  All rights reserved.\n";
 #if 0
 static char sccsid[] = "@(#)mkdict.c	8.1 (Berkeley) 6/11/93";
 #else
-__RCSID("$NetBSD: mkdict.c,v 1.6 1999/09/19 18:10:48 jsm Exp $");
+static const char rcsid[] = 
+    "$NetBSD: mkdict.c,v 1.11 2005/07/01 16:38:24 jmc Exp $";
 #endif
 #endif /* not lint */
 
@@ -62,16 +56,11 @@ __RCSID("$NetBSD: mkdict.c,v 1.6 1999/09/19 18:10:48 jsm Exp $");
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <err.h>
 
 #include "bog.h"
 
-int main __P((int, char *[]));
-
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	char *p, *q;
 	int ch, common, nwords;
@@ -85,7 +74,7 @@ main(argc, argv)
 	for (nwords = 1;
 	    fgets(buf[current], MAXWORDLEN + 1, stdin) != NULL; ++nwords) {
 		if ((p = strchr(buf[current], '\n')) == NULL) {
-			warnx("word too long: %s", buf[current]);
+			fprintf(stderr, "word too long: %s\n", buf[current]);
 			while ((ch = getc(stdin)) != EOF && ch != '\n')
 				;
 			if (ch == EOF)
@@ -94,7 +83,7 @@ main(argc, argv)
 		}
 		len = 0;
 		for (p = buf[current]; *p != '\n'; p++) {
-			if (!islower(*p))
+			if (!islower((unsigned char)*p))
 				break;
 			if (*p == 'q') {
 				q = p + 1;
@@ -125,9 +114,11 @@ main(argc, argv)
 		prev = !prev;
 		current = !current;
 	}
-	warnx("%d words", nwords);
+	fprintf(stderr, "%d words\n", nwords);
 	fflush(stdout);
-	if (ferror(stdout))
-		err(1, "writing standard output");
+	if (ferror(stdout)) {
+		perror("error writing standard output");
+		exit(1);
+	}
 	exit(0);
 }

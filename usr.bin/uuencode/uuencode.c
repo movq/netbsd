@@ -1,4 +1,4 @@
-/*	$NetBSD: uuencode.c,v 1.8 1997/10/20 02:51:01 lukem Exp $	*/
+/*	$NetBSD: uuencode.c,v 1.13.4.1 2008/11/29 23:14:56 snj Exp $	*/
 
 /*-
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)uuencode.c	8.2 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: uuencode.c,v 1.8 1997/10/20 02:51:01 lukem Exp $");
+__RCSID("$NetBSD: uuencode.c,v 1.13.4.1 2008/11/29 23:14:56 snj Exp $");
 #endif
 #endif /* not lint */
 
@@ -54,31 +50,41 @@ __RCSID("$NetBSD: uuencode.c,v 1.8 1997/10/20 02:51:01 lukem Exp $");
  */
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <netinet/in.h>
 #include <err.h>
 #include <errno.h>
 #include <locale.h>
+#include <resolv.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
-int	main __P((int, char **));
-static void encode __P((void));
-static void usage __P((void));
+int main(int, char *[]);
+static void encode(void);
+static void base64_encode(void);
+static void usage(void);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	struct stat sb;
-	int mode;
+	int base64, ch, mode;
 
 	mode = 0;
+	base64 = 0;
 	setlocale(LC_ALL, "");
+	setprogname(argv[0]);
 
-	while (getopt(argc, argv, "") != -1)
-		usage();
+	while ((ch = getopt(argc, argv, "m")) != -1) {
+		switch(ch) {
+		case 'm':
+			base64 = 1;
+			break;
+		default:
+			usage();
+		}
+	}
 	argv += optind;
 	argc -= optind;
 
@@ -99,9 +105,16 @@ main(argc, argv)
 		usage();
 	}
 
-	(void)printf("begin %o %s\n", mode, *argv);
-	encode();
-	(void)printf("end\n");
+	if (base64) {
+		(void)printf("begin-base64 %o %s\n", mode, *argv);
+		base64_encode();
+		(void)printf("====\n");
+	} else {
+		(void)printf("begin %o %s\n", mode, *argv);
+		encode();
+		(void)printf("end\n");
+	}
+
 	if (ferror(stdout))
 		err(1, "write error");
 	exit(0);
@@ -111,10 +124,38 @@ main(argc, argv)
 #define	ENC(c) ((c) ? ((c) & 077) + ' ': '`')
 
 /*
+ * copy from in to out, encoding in base64 as you go along.
+ */
+static void
+base64_encode(void)
+{
+	/*
+	 * Output must fit into 80 columns, chunks come in 4, leave 1.
+	 */
+#define GROUPS 	((70 / 4) - 1)
+	unsigned char buf[3];
+	char buf2[sizeof(buf) * 2 + 1];
+	size_t n;
+	int rv, sequence;
+
+	sequence = 0;
+
+	while ((n = fread(buf, 1, sizeof(buf), stdin))) {
+		++sequence;
+		rv = b64_ntop(buf, n, buf2, (sizeof(buf2) / sizeof(buf2[0])));
+		if (rv == -1)
+			errx(1, "b64_ntop: error encoding base64");
+		printf("%s%s", buf2, (sequence % GROUPS) ? "" : "\n");
+	}
+	if (sequence % GROUPS)
+		printf("\n");
+}
+
+/*
  * copy from in to out, encoding as you go along.
  */
 static void
-encode()
+encode(void)
 {
 	int ch, n;
 	char *p;
@@ -153,8 +194,9 @@ encode()
 }
 
 static void
-usage()
+usage(void)
 {
-	(void)fprintf(stderr,"usage: uuencode [infile] remotefile\n");
+	(void)fprintf(stderr, "usage: %s [-m] [inputfile] outputname\n",
+		      getprogname());
 	exit(1);
 }

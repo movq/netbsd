@@ -1,4 +1,4 @@
-/*	$NetBSD: nextrom.h,v 1.6 1999/03/24 23:15:59 dbj Exp $	*/
+/*	$NetBSD: nextrom.h,v 1.9 2007/03/04 06:00:27 christos Exp $	*/
 /*
  * Copyright (c) 1998 Darrin B. Jewell
  * All rights reserved.
@@ -124,7 +124,7 @@
 #import <mon/assym.h>
 #define	MG(type, off) \
 	((type) ((u_int) (mg) + off))
-#endif	MONITOR
+#endif	/* MONITOR */
 
 #import <mon/nvram.h>
 #import <mon/region.h>
@@ -155,7 +155,7 @@ struct mon_global {
 	char mg_inetntoa[18];
 	char mg_inputline[LMAX];
 	struct mon_region mg_region[N_SIMM];
-	caddr_t mg_alloc_base, mg_alloc_brk;
+	void *mg_alloc_base, mg_alloc_brk;
 	char *mg_boot_dev, *mg_boot_arg, *mg_boot_info, *mg_boot_file;
 	char mg_bootfile[NBOOTFILE];
 	enum SIO_ARGS mg_boot_how;
@@ -179,7 +179,7 @@ struct mon_global {
 	u_int	cursor_save[2][32];
 	int (*mg_getc)(), (*mg_try_getc)(), (*mg_putc)();
 	int (*mg_alert)(), (*mg_alert_confirm)();
-	caddr_t (*mg_alloc)();
+	void *(*mg_alloc)();
 	int (*mg_boot_slider)();
 	volatile u_char *eventc_latch;
 	volatile u_int event_high;
@@ -212,7 +212,7 @@ struct mon_global {
 };
 
 struct mon_global *restore_mg();
-caddr_t mon_alloc();
+void *mon_alloc();
 
 #endif /* if 0 */
 
@@ -236,7 +236,7 @@ caddr_t mon_alloc();
 #define	NeXT_WARP9	1
 #define	NeXT_X15	2
 #define	NeXT_WARP9C	3
-
+#define NeXT_TURBO_MONO	4
 #define NeXT_TURBO_COLOR 5			/* probed witnessed */
 
 #define	ROM_STACK_SIZE	(8192 - 2048)

@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_layout.h,v 1.3 1999/02/05 00:06:12 oster Exp $	*/
+/*	$NetBSD: rf_layout.h,v 1.17 2007/03/04 06:02:38 christos Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -32,103 +32,10 @@
 #ifndef _RF__RF_LAYOUT_H_
 #define _RF__RF_LAYOUT_H_
 
-#include "rf_types.h"
+#include <dev/raidframe/raidframevar.h>
 #include "rf_archs.h"
 #include "rf_alloclist.h"
 
-#ifndef _KERNEL
-#include <stdio.h>
-#endif
-
-/*****************************************************************************************
- *
- * This structure identifies all layout-specific operations and parameters.
- *
- ****************************************************************************************/
-
-typedef struct RF_LayoutSW_s {
-	RF_ParityConfig_t parityConfig;
-	char   *configName;
-
-#ifndef _KERNEL
-	/* layout-specific parsing */
-	int     (*MakeLayoutSpecific) (FILE * fp, RF_Config_t * cfgPtr, void *arg);
-	void   *makeLayoutSpecificArg;
-#endif				/* !KERNEL */
-
-#if RF_UTILITY == 0
-	/* initialization routine */
-	int     (*Configure) (RF_ShutdownList_t ** shutdownListp, RF_Raid_t * raidPtr, RF_Config_t * cfgPtr);
-
-	/* routine to map RAID sector address -> physical (row, col, offset) */
-	void    (*MapSector) (RF_Raid_t * raidPtr, RF_RaidAddr_t raidSector,
-	            RF_RowCol_t * row, RF_RowCol_t * col, RF_SectorNum_t * diskSector, int remap);
-
-	/* routine to map RAID sector address -> physical (r,c,o) of parity
-	 * unit */
-	void    (*MapParity) (RF_Raid_t * raidPtr, RF_RaidAddr_t raidSector,
-	            RF_RowCol_t * row, RF_RowCol_t * col, RF_SectorNum_t * diskSector, int remap);
-
-	/* routine to map RAID sector address -> physical (r,c,o) of Q unit */
-	void    (*MapQ) (RF_Raid_t * raidPtr, RF_RaidAddr_t raidSector, RF_RowCol_t * row,
-	            RF_RowCol_t * col, RF_SectorNum_t * diskSector, int remap);
-
-	/* routine to identify the disks comprising a stripe */
-	void    (*IdentifyStripe) (RF_Raid_t * raidPtr, RF_RaidAddr_t addr,
-	            RF_RowCol_t ** diskids, RF_RowCol_t * outRow);
-
-	/* routine to select a dag */
-	void    (*SelectionFunc) (RF_Raid_t * raidPtr, RF_IoType_t type,
-	            RF_AccessStripeMap_t * asmap,
-	            RF_VoidFuncPtr *);
-#if 0
-	void    (**createFunc) (RF_Raid_t *,
-	            RF_AccessStripeMap_t *,
-	            RF_DagHeader_t *, void *,
-	            RF_RaidAccessFlags_t,
-/**INDENT** Warning@88: Extra ) */
-	            RF_AllocListElem_t *));
-
-#endif
-
-	/* map a stripe ID to a parity stripe ID.  This is typically the
-	 * identity mapping */
-	void    (*MapSIDToPSID) (RF_RaidLayout_t * layoutPtr, RF_StripeNum_t stripeID,
-	            RF_StripeNum_t * psID, RF_ReconUnitNum_t * which_ru);
-
-	/* get default head separation limit (may be NULL) */
-	        RF_HeadSepLimit_t(*GetDefaultHeadSepLimit) (RF_Raid_t * raidPtr);
-
-	/* get default num recon buffers (may be NULL) */
-	int     (*GetDefaultNumFloatingReconBuffers) (RF_Raid_t * raidPtr);
-
-	/* get number of spare recon units (may be NULL) */
-	        RF_ReconUnitCount_t(*GetNumSpareRUs) (RF_Raid_t * raidPtr);
-
-	/* spare table installation (may be NULL) */
-	int     (*InstallSpareTable) (RF_Raid_t * raidPtr, RF_RowCol_t frow, RF_RowCol_t fcol);
-
-	/* recon buffer submission function */
-	int     (*SubmitReconBuffer) (RF_ReconBuffer_t * rbuf, int keep_it,
-	            int use_committed);
-
-	/*
-         * verify that parity information for a stripe is correct
-         * see rf_parityscan.h for return vals
-         */
-	int     (*VerifyParity) (RF_Raid_t * raidPtr, RF_RaidAddr_t raidAddr,
-	            RF_PhysDiskAddr_t * parityPDA, int correct_it, RF_RaidAccessFlags_t flags);
-
-	/* number of faults tolerated by this mapping */
-	int     faultsTolerated;
-
-	/* states to step through in an access. Must end with "LastState". The
-	 * default is DefaultStates in rf_layout.c */
-	RF_AccessState_t *states;
-
-	RF_AccessStripeMapFlags_t flags;
-#endif				/* RF_UTILITY == 0 */
-}       RF_LayoutSW_t;
 /* enables remapping to spare location under dist sparing */
 #define RF_REMAP       1
 #define RF_DONT_REMAP  0
@@ -162,8 +69,6 @@ struct RF_RaidLayout_s {
 					 * array */
 	RF_SectorCount_t dataSectorsPerStripe;
 	RF_StripeCount_t dataStripeUnitsPerDisk;
-	u_int   bytesPerStripeUnit;
-	u_int   dataBytesPerStripe;
 	RF_StripeCount_t numDataCol;	/* number of SUs of data per stripe
 					 * (name here is a la RAID4) */
 	RF_StripeCount_t numParityCol;	/* number of SUs of parity per stripe.
@@ -173,8 +78,8 @@ struct RF_RaidLayout_s {
 						 * now */
 	RF_StripeCount_t stripeUnitsPerDisk;
 
-	RF_LayoutSW_t *map;	/* ptr to struct holding mapping fns and
-				 * information */
+	const RF_LayoutSW_t *map;	/* ptr to struct holding mapping fns and
+					 * information */
 	void   *layoutSpecificInfo;	/* ptr to a structure holding
 					 * layout-specific params */
 };
@@ -194,12 +99,12 @@ struct RF_RaidLayout_s {
 #define RF_PDA_TYPE_Q      2
 
 struct RF_PhysDiskAddr_s {
-	RF_RowCol_t row, col;	/* disk identifier */
+	RF_RowCol_t col;	/* disk identifier */
 	RF_SectorNum_t startSector;	/* sector offset into the disk */
 	RF_SectorCount_t numSector;	/* number of sectors accessed */
 	int     type;		/* used by higher levels: currently, data,
 				 * parity, or q */
-	caddr_t bufPtr;		/* pointer to buffer supplying/receiving data */
+	void *bufPtr;		/* pointer to buffer supplying/receiving data */
 	RF_RaidAddr_t raidAddress;	/* raid address corresponding to this
 					 * physical disk address */
 	RF_PhysDiskAddr_t *next;
@@ -221,23 +126,15 @@ struct RF_AccessStripeMap_s {
 				 * or 1) */
 	int     numQFailed;	/* number of failed Q units accessed (0 or 1) */
 	RF_AccessStripeMapFlags_t flags;	/* various flags */
-#if 0
-	RF_PhysDiskAddr_t *failedPDA;	/* points to the PDA that has failed */
-	RF_PhysDiskAddr_t *failedPDAtwo;	/* points to the second PDA
-						 * that has failed, if any */
-#else
 	int     numFailedPDAs;	/* number of failed phys addrs */
 	RF_PhysDiskAddr_t *failedPDAs[RF_MAX_FAILED_PDA];	/* array of failed phys
 								 * addrs */
-#endif
 	RF_PhysDiskAddr_t *physInfo;	/* a list of PhysDiskAddr structs */
 	RF_PhysDiskAddr_t *parityInfo;	/* list of physical addrs for the
 					 * parity (P of P + Q ) */
 	RF_PhysDiskAddr_t *qInfo;	/* list of physical addrs for the Q of
 					 * P + Q */
 	RF_LockReqDesc_t lockReqDesc;	/* used for stripe locking */
-	RF_RowCol_t origRow;	/* the original row:  we may redirect the acc
-				 * to a different row */
 	RF_AccessStripeMap_t *next;
 };
 /* flag values */
@@ -265,6 +162,47 @@ struct RF_AccessStripeMapHeader_s {
 						 * Also used for making lists */
 	RF_AccessStripeMapHeader_t *next;
 };
+
+/* A structure to be used in a linked list to keep track of function pointers. */
+typedef struct RF_VoidFunctionPointerListElem_s RF_VoidFunctionPointerListElem_t;
+struct RF_VoidFunctionPointerListElem_s {
+	RF_VoidFuncPtr fn;
+	RF_VoidFunctionPointerListElem_t *next;
+};
+
+/* We need something to just be a linked list of anonymous pointers
+   to stuff */
+typedef struct RF_VoidPointerListElem_s RF_VoidPointerListElem_t;
+struct RF_VoidPointerListElem_s {
+	void *p;
+	RF_VoidPointerListElem_t *next;
+};
+
+/* A structure to be used in a linked list to keep track of ASM Headers */
+typedef struct RF_ASMHeaderListElem_s RF_ASMHeaderListElem_t;
+struct RF_ASMHeaderListElem_s {
+	RF_AccessStripeMapHeader_t *asmh;
+	RF_ASMHeaderListElem_t *next;
+};
+
+/* A structure to keep track of all the data structures associated with
+a failed stripe.  Used for constructing the appropriate DAGs in
+rf_SelectAlgorithm() in rf_aselect.c */
+typedef struct RF_FailedStripe_s RF_FailedStripe_t;
+struct RF_FailedStripe_s {
+	RF_VoidFunctionPointerListElem_t *vfple;   /* linked list of pointers to DAG creation
+						      functions for stripes */
+	RF_VoidFunctionPointerListElem_t *bvfple;  /* linked list of poitners to DAG creation
+						      functions for blocks */
+	RF_ASMHeaderListElem_t *asmh_u;            /* Access Stripe Map Headers for regular
+						      stripes */
+	RF_ASMHeaderListElem_t *asmh_b;            /* Access Stripe Map Headers used for the
+						      block functions */
+	RF_FailedStripe_t *next;
+};
+
+
+
 /*****************************************************************************************
  *
  * various routines mapping addresses in the RAID address space.  These work across
@@ -338,11 +276,11 @@ struct RF_AccessStripeMapHeader_s {
 #define rf_ParityStripeIDToRaidAddress(_layoutPtr_, _psid_) \
   ( (_psid_) * (_layoutPtr_)->SUsPerPU * (_layoutPtr_)->numDataCol * (_layoutPtr_)->sectorsPerStripeUnit )
 
-RF_LayoutSW_t *rf_GetLayout(RF_ParityConfig_t parityConfig);
-int 
+const RF_LayoutSW_t *rf_GetLayout(RF_ParityConfig_t parityConfig);
+int
 rf_ConfigureLayout(RF_ShutdownList_t ** listp, RF_Raid_t * raidPtr,
     RF_Config_t * cfgPtr);
-RF_StripeNum_t 
+RF_StripeNum_t
 rf_MapStripeIDToParityStripeID(RF_RaidLayout_t * layoutPtr,
     RF_StripeNum_t stripeID, RF_ReconUnitNum_t * which_ru);
 

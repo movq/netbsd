@@ -1,7 +1,7 @@
-/*	$NetBSD: tcp.c,v 1.3 2000/01/13 12:39:05 ad Exp $	*/
+/*	$NetBSD: tcp.c,v 1.15 2008/04/10 17:16:39 thorpej Exp $	*/
 
 /*
- * Copyright (c) 1999 Andy Doran <ad@NetBSD.org>
+ * Copyright (c) 1999, 2000 Andrew Doran <ad@NetBSD.org>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,12 +29,10 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: tcp.c,v 1.3 2000/01/13 12:39:05 ad Exp $");
+__RCSID("$NetBSD: tcp.c,v 1.15 2008/04/10 17:16:39 thorpej Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
-#include <sys/types.h>
-#include <sys/socket.h>
 #include <sys/sysctl.h>
 
 #include <netinet/in.h>
@@ -42,41 +40,44 @@ __RCSID("$NetBSD: tcp.c,v 1.3 2000/01/13 12:39:05 ad Exp $");
 #include <netinet/ip.h>
 #include <netinet/ip_var.h>
 #include <netinet/tcp.h>
-#include <netinet/tcp_seq.h>
-#include <netinet/tcp_fsm.h>
 #include <netinet/tcp_timer.h>
 #include <netinet/tcp_var.h>
 
-#include <stdlib.h>
 #include <string.h>
-#include <paths.h>
-#include <nlist.h>
-#include <kvm.h>
 
 #include "systat.h"
 #include "extern.h"
 
 #define LHD(row, str)		mvwprintw(wnd, row, 10, str)
 #define RHD(row, str)		mvwprintw(wnd, row, 45, str)
-#define SHOW(row, col, stat)	mvwprintw(wnd, row, col, "%9lu", curstat.stat)
+#define SHOW(row, col, stat) \
+    mvwprintw(wnd, row, col, "%9llu", (unsigned long long)curstat[stat])
 
-static struct tcpstat curstat, oldstat;
+enum update {
+	UPDATE_TIME,
+	UPDATE_BOOT,
+	UPDATE_RUN,
+};
+
+static enum update update = UPDATE_TIME;
+static uint64_t curstat[TCP_NSTATS];
+static uint64_t newstat[TCP_NSTATS];
+static uint64_t oldstat[TCP_NSTATS];
 
 static struct nlist namelist[] = {
-	{ "_tcpstat" },
-	{ "" }
+	{ .n_name = "_tcpstat" },
+	{ .n_name = NULL }
 };
 
 WINDOW *
 opentcp(void)
 {
 
-	return (subwin(stdscr, LINES-5-1, 0, 5, 0));
+	return (subwin(stdscr, -1, 0, 5, 0));
 }
 
 void
-closetcp(w)
-	WINDOW *w;
+closetcp(WINDOW *w)
 {
 
 	if (w != NULL) {
@@ -134,18 +135,18 @@ void
 showtcpsyn(void)
 {
 	
-	SHOW(0, 0, tcps_sc_added);
-	SHOW(1, 0, tcps_sc_completed);
-	SHOW(2, 0, tcps_sc_timed_out);
-	SHOW(3, 0, tcps_sc_dupesyn);
-	SHOW(4, 0, tcps_sc_collisions);
-	SHOW(5, 0, tcps_sc_retransmitted);
-	SHOW(6, 0, tcps_sc_aborted);
-	SHOW(7, 0, tcps_sc_overflowed);
-	SHOW(8, 0, tcps_sc_reset);
-	SHOW(9, 0, tcps_sc_unreach);
-	SHOW(10, 0, tcps_sc_bucketoverflow);
-	SHOW(11, 0, tcps_sc_dropped);
+	SHOW(0, 0, TCP_STAT_SC_ADDED);
+	SHOW(1, 0, TCP_STAT_SC_COMPLETED);
+	SHOW(2, 0, TCP_STAT_SC_TIMED_OUT);
+	SHOW(3, 0, TCP_STAT_SC_DUPESYN);
+	SHOW(4, 0, TCP_STAT_SC_COLLISIONS);
+	SHOW(5, 0, TCP_STAT_SC_RETRANSMITTED);
+	SHOW(6, 0, TCP_STAT_SC_ABORTED);
+	SHOW(7, 0, TCP_STAT_SC_OVERFLOWED);
+	SHOW(8, 0, TCP_STAT_SC_RESET);
+	SHOW(9, 0, TCP_STAT_SC_UNREACH);
+	SHOW(10, 0, TCP_STAT_SC_BUCKETOVERFLOW);
+	SHOW(11, 0, TCP_STAT_SC_DROPPED);
 }
 
 void
@@ -156,7 +157,7 @@ labeltcpsyn(void)
 	LHD(0,  "entries added");		
 	LHD(1,  "connections completed");
 	LHD(2,  "entries timed out");
-	LHD(3,  "duplicate SYNs recieved");
+	LHD(3,  "duplicate SYNs received");
 	LHD(4,  "hash collisions");
 	LHD(5,  "retransmissions");
 	LHD(6,  "entries aborted (no memory)");
@@ -171,57 +172,59 @@ void
 showtcp(void)
 {
 	
-	SHOW(0, 0, tcps_connattempt);		
-	SHOW(1, 0, tcps_accepts);		
-	SHOW(2, 0, tcps_connects);		
+	SHOW(0, 0, TCP_STAT_CONNATTEMPT);		
+	SHOW(1, 0, TCP_STAT_ACCEPTS);		
+	SHOW(2, 0, TCP_STAT_CONNECTS);		
 
-	SHOW(4, 0, tcps_drops);	
-	SHOW(5, 0, tcps_conndrops);
-	SHOW(6, 0, tcps_timeoutdrop);
-	SHOW(7, 0, tcps_keepdrops);
-	SHOW(8, 0, tcps_persistdrops);
+	SHOW(4, 0, TCP_STAT_DROPS);	
+	SHOW(5, 0, TCP_STAT_CONNDROPS);
+	SHOW(6, 0, TCP_STAT_TIMEOUTDROP);
+	SHOW(7, 0, TCP_STAT_KEEPDROPS);
+	SHOW(8, 0, TCP_STAT_PERSISTDROPS);
 
-	SHOW(10, 0, tcps_segstimed);
-	SHOW(11, 0, tcps_rttupdated);
-	SHOW(12, 0, tcps_delack);
-	SHOW(13, 0, tcps_rexmttimeo);
-	SHOW(14, 0, tcps_persisttimeo);
-	SHOW(15, 0, tcps_keepprobe);
-	SHOW(16, 0, tcps_keeptimeo);
+	SHOW(10, 0, TCP_STAT_SEGSTIMED);
+	SHOW(11, 0, TCP_STAT_RTTUPDATED);
+	SHOW(12, 0, TCP_STAT_DELACK);
+	SHOW(13, 0, TCP_STAT_REXMTTIMEO);
+	SHOW(14, 0, TCP_STAT_PERSISTTIMEO);
+	SHOW(15, 0, TCP_STAT_KEEPPROBE);
+	SHOW(16, 0, TCP_STAT_KEEPTIMEO);
 
-	SHOW(0, 35, tcps_sndtotal);
-	SHOW(1, 35, tcps_sndpack);
-	SHOW(2, 35, tcps_sndrexmitpack);
+	SHOW(0, 35, TCP_STAT_SNDTOTAL);
+	SHOW(1, 35, TCP_STAT_SNDPACK);
+	SHOW(2, 35, TCP_STAT_SNDREXMITPACK);
 
-	SHOW(3, 35, tcps_sndacks);
-	SHOW(4, 35, tcps_sndprobe);
-	SHOW(5, 35, tcps_sndwinup);
-	SHOW(6, 35, tcps_sndurg);
-	SHOW(7, 35, tcps_sndctrl);
+	SHOW(3, 35, TCP_STAT_SNDACKS);
+	SHOW(4, 35, TCP_STAT_SNDPROBE);
+	SHOW(5, 35, TCP_STAT_SNDWINUP);
+	SHOW(6, 35, TCP_STAT_SNDURG);
+	SHOW(7, 35, TCP_STAT_SNDCTRL);
 
-	SHOW(9, 35, tcps_rcvtotal);
-	SHOW(10, 35, tcps_rcvpack);
-	SHOW(11, 35, tcps_rcvduppack);
-	SHOW(12, 35, tcps_rcvpartduppack);
-	SHOW(13, 35, tcps_rcvoopack);
-	SHOW(14, 35, tcps_rcvdupack);
-	SHOW(15, 35, tcps_rcvackpack);
-	SHOW(16, 35, tcps_rcvwinprobe);
-	SHOW(17, 35, tcps_rcvwinupd);
+	SHOW(9, 35, TCP_STAT_RCVTOTAL);
+	SHOW(10, 35, TCP_STAT_RCVPACK);
+	SHOW(11, 35, TCP_STAT_RCVDUPPACK);
+	SHOW(12, 35, TCP_STAT_RCVPARTDUPPACK);
+	SHOW(13, 35, TCP_STAT_RCVOOPACK);
+	SHOW(14, 35, TCP_STAT_RCVDUPACK);
+	SHOW(15, 35, TCP_STAT_RCVACKPACK);
+	SHOW(16, 35, TCP_STAT_RCVWINPROBE);
+	SHOW(17, 35, TCP_STAT_RCVWINUPD);
 }
 
 int
 inittcp(void)
 {
 
-	if (namelist[0].n_type == 0) {
-		if (kvm_nlist(kd, namelist)) {
-			nlisterr(namelist);
-			return(0);
-		}
+	if (! use_sysctl) {
 		if (namelist[0].n_type == 0) {
-			error("No namelist");
-			return(0);
+			if (kvm_nlist(kd, namelist)) {
+				nlisterr(namelist);
+				return(0);
+			}
+			if (namelist[0].n_type == 0) {
+				error("No namelist");
+				return(0);
+			}
 		}
 	}
 	return 1;
@@ -230,7 +233,57 @@ inittcp(void)
 void
 fetchtcp(void)
 {
+	int i;
 
-	oldstat = curstat;
-	KREAD((void *)namelist[0].n_value, &curstat, sizeof(curstat));
+	if (use_sysctl) {
+		size_t size = sizeof(newstat);
+		
+		if (sysctlbyname("net.inet.tcp.stats", newstat, &size,
+				 NULL, 0) == -1)
+			return;
+	} else {
+		KREAD((void *)namelist[0].n_value, newstat, sizeof(newstat));
+	}
+
+	for (i = 0; i < TCP_NSTATS; i++)
+		xADJINETCTR(curstat, oldstat, newstat, i);
+
+	if (update == UPDATE_TIME)
+		memcpy(oldstat, newstat, sizeof(oldstat));
+}
+
+void
+tcp_boot(char *args)
+{
+
+	memset(oldstat, 0, sizeof(oldstat));
+	update = UPDATE_BOOT;
+}
+
+void
+tcp_run(char *args)
+{
+
+	if (update != UPDATE_RUN) {
+		memcpy(oldstat, newstat, sizeof(oldstat));
+		update = UPDATE_RUN;
+	}
+}
+
+void
+tcp_time(char *args)
+{
+
+	if (update != UPDATE_TIME) {
+		memcpy(oldstat, newstat, sizeof(oldstat));
+		update = UPDATE_TIME;
+	}
+}
+
+void
+tcp_zero(char *args)
+{
+
+	if (update == UPDATE_RUN)
+		memcpy(oldstat, newstat, sizeof(oldstat));
 }

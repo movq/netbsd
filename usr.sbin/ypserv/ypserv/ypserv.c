@@ -1,4 +1,4 @@
-/*	$NetBSD: ypserv.c,v 1.10 1999/06/06 02:43:05 thorpej Exp $	*/
+/*	$NetBSD: ypserv.c,v 1.22 2008/05/16 16:41:42 chuck Exp $	*/
 
 /*
  * Copyright (c) 1994 Mats O Jansson <moj@stacken.kth.se>
@@ -33,14 +33,12 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: ypserv.c,v 1.10 1999/06/06 02:43:05 thorpej Exp $");
+__RCSID("$NetBSD: ypserv.c,v 1.22 2008/05/16 16:41:42 chuck Exp $");
 #endif
 
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
-
-#include <netinet/in.h>
 
 #include <err.h>
 #include <netdb.h>
@@ -51,6 +49,8 @@ __RCSID("$NetBSD: ypserv.c,v 1.10 1999/06/06 02:43:05 thorpej Exp $");
 #include <syslog.h>
 #include <unistd.h>
 #include <util.h>
+#include <stdarg.h>
+#include <errno.h>
 
 #include <rpc/rpc.h>
 #include <rpc/xdr.h>
@@ -72,64 +72,48 @@ const char *clientstr;
 const char *svcname;
 #endif /* LIBWRAP */
 
-#ifdef __STDC__
-#define SIG_PF void(*)(int)
-#endif
-
-#define _RPCSVC_CLOSEDOWN 120
-static int _rpcpmstart;		/* Started by a port monitor ? */
-static int _rpcfdtype;		/* Whether Stream or Datagram ? */
-static int _rpcsvcdirty;	/* Still serving ? */
-
 int	usedns;
 #ifdef DEBUG
-int	foreground = 1;
+static int	foreground = 1;
 #else
-int	foreground;
+static int	foreground;
 #endif
 
 #ifdef LIBWRAP
 int	lflag;
 #endif
 
-extern	char *__progname;	/* from crt0.s */
+static struct bindsock {
+	sa_family_t family;
+	int type;
+	int proto;
+	const char *name;
+} socklist[] = {
+	{ AF_INET, SOCK_DGRAM, IPPROTO_UDP, "udp" },
+	{ AF_INET, SOCK_STREAM, IPPROTO_TCP, "tcp" },
+	{ AF_INET6, SOCK_DGRAM, IPPROTO_UDP, "udp6" },
+	{ AF_INET6, SOCK_STREAM, IPPROTO_TCP, "tcp6" },
+};
 
-int	main __P((int, char *[]));
-void	usage __P((void));
-
-void	sighandler __P((int));
-
-static	void closedown __P((void));
-
-static
-void _msgout(char* msg)
-{
-	if (foreground && ! _rpcpmstart)
-                warnx("%s", msg);
-        else
-                syslog(LOG_ERR, msg);
-}
+static void	usage(void) __dead;
+static int	bind_resv_port(int, sa_family_t, in_port_t);
+void		ypserv_sock_hostname(struct host_info *host);
 
 static void
-closedown()
+_msgout(int level, const char *msg, ...)
 {
-	if (_rpcsvcdirty == 0) {
-		extern fd_set svc_fdset;
-		static int size;
-		int i, openfd;
+	va_list ap;
+	va_start(ap, msg);
+	if (foreground)
+                vwarnx(msg, ap);
+        else
+		vsyslog(level, msg, ap);
+	va_end(ap);
+}
 
-		if (_rpcfdtype == SOCK_DGRAM)
-			exit(0);
-		if (size == 0) {
-			size = getdtablesize();
-		}
-		for (i = 0, openfd = 0; i < size && openfd < 2; i++)
-			if (FD_ISSET(i, &svc_fdset))
-				openfd++;
-		if (openfd <= (_rpcpmstart?0:1))
-			exit(0);
-	}
-	(void) alarm(_RPCSVC_CLOSEDOWN);
+void ypserv_sock_hostname(struct host_info *host)
+{
+	host->name[0] = 0;
 }
 
 static void
@@ -147,23 +131,31 @@ ypprog_2(struct svc_req *rqstp, SVCXPRT *transp)
 		struct ypreq_nokey ypproc_order_2_arg;
 		char * ypproc_maplist_2_arg;
 	} argument;
+	void *argp = &argument;
 	char *result;
 	xdrproc_t xdr_argument, xdr_result;
-	void *(*local) __P((void *, struct svc_req *));
+	void *(*local)(void *, struct svc_req *);
 #ifdef LIBWRAP
 	struct request_info req;
-	struct sockaddr_in *caller;
+	struct sockaddr *caller;
 #define	SVCNAME(x)	svcname = x
 #else
 #define	SVCNAME(x)	/* nothing */
 #endif
 
-	_rpcsvcdirty = 1;
-
 #ifdef LIBWRAP
-	caller = svc_getcaller(transp);
-	request_init(&req, RQ_DAEMON, __progname, RQ_CLIENT_SIN, caller, NULL);
+	caller = svc_getrpccaller(transp)->buf;
+	(void)request_init(&req, RQ_DAEMON, getprogname(), RQ_CLIENT_SIN,
+	    caller, NULL);
 	sock_methods(&req);
+
+	/*
+	 * Do not do hostname lookups!  This avoids possible delays due
+	 * to DNS, preventing a possible DoS attack, as well as possible 
+	 * circular lookups (e.g. a hostname lookup requiring a request 
+	 * to ourselves).
+	 */
+	req.hostname = ypserv_sock_hostname;
 #endif
 
 	switch (rqstp->rq_proc) {
@@ -253,7 +245,6 @@ ypprog_2(struct svc_req *rqstp, SVCXPRT *transp)
 
 	default:
 		svcerr_noproc(transp);
-		_rpcsvcdirty = 0;
 		return;
 	}
 
@@ -264,26 +255,23 @@ ypprog_2(struct svc_req *rqstp, SVCXPRT *transp)
 		syslog(deny_severity,
 		    "%s: refused request from %.500s", svcname, clientstr);
 		svcerr_auth(transp, AUTH_FAILED);
-		_rpcsvcdirty = 0;
 		return;
 	}
 #endif
 
-	(void) memset((char *)&argument, 0, sizeof (argument));
-	if (!svc_getargs(transp, xdr_argument, (caddr_t) &argument)) {
+	(void)memset(&argument, 0, sizeof (argument));
+	if (!svc_getargs(transp, xdr_argument, argp)) {
 		svcerr_decode(transp);
-		_rpcsvcdirty = 0;
 		return;
 	}
 	result = (*local)(&argument, rqstp);
 	if (result != NULL && !svc_sendreply(transp, xdr_result, result)) {
 		svcerr_systemerr(transp);
 	}
-	if (!svc_freeargs(transp, xdr_argument, (caddr_t) &argument)) {
-		_msgout("unable to free arguments");
+	if (!svc_freeargs(transp, xdr_argument, argp)) {
+		_msgout(LOG_ERR, "unable to free arguments");
 		exit(1);
 	}
-	_rpcsvcdirty = 0;
 	return;
 }
 
@@ -304,30 +292,28 @@ ypprog_1(struct svc_req *rqstp, SVCXPRT *transp)
 
 	default:
 		svcerr_noproc(transp);
-		_rpcsvcdirty = 0;
 		return;
 	}
 }
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
-	SVCXPRT *transp;
-	int sock, proto;
+	SVCXPRT *xprt;
+	struct netconfig *cfg = NULL;
+	int s;
 	struct sigaction sa;
-	int ch;
+	struct bindsock *bs;
+	in_port_t port = 0;
+	int ch, xcreated = 0, one = 1;
 
-	transp = NULL;		/* XXX gcc -Wuninitialized */
-	proto = 0;		/* XXX gcc -Wuninitialized */
+	setprogname(argv[0]);
 
 #ifdef LIBWRAP
-#define	GETOPTSTR	"dfl"
+#define	GETOPTSTR	"dflp:"
 #else
-#define	GETOPTSTR	"df"
+#define	GETOPTSTR	"dfp:"
 #endif
-
 	while ((ch = getopt(argc, argv, GETOPTSTR)) != -1) {
 		switch (ch) {
 		case 'd':
@@ -336,7 +322,9 @@ main(argc, argv)
 		case 'f':
 			foreground = 1;
 			break;
-
+		case 'p':
+			port = atoi(optarg);
+			break;
 #ifdef LIBWRAP
 		case 'l':
 			lflag = 1;
@@ -353,120 +341,118 @@ main(argc, argv)
 	if (geteuid() != 0)
 		errx(1, "must run as root");
 
-	if (!foreground && daemon(0, 0))
+	if (foreground == 0 && daemon(0, 0))
 		err(1, "can't detach");
 
-	openlog(__progname, LOG_PID, LOG_DAEMON);
+	openlog("ypserv", LOG_PID, LOG_DAEMON);
 	syslog(LOG_INFO, "starting");
-	pidfile(NULL);
+	(void)pidfile(NULL);
 
-	sock = RPC_ANYSOCK;
-	(void) pmap_unset(YPPROG, YPVERS);
-	(void) pmap_unset(YPPROG, YPVERS_ORIG);
+	(void) rpcb_unset((u_int)YPPROG, (u_int)YPVERS, NULL);
+	(void) rpcb_unset((u_int)YPPROG, (u_int)YPVERS_ORIG, NULL);
+
 
 	ypdb_init();	/* init db stuff */
 
-	sa.sa_handler = sighandler;
-	sa.sa_flags = 0;
+	sa.sa_handler = SIG_IGN;
+	sa.sa_flags = SA_NOCLDWAIT;
 	if (sigemptyset(&sa.sa_mask)) {
-		_msgout("sigemptyset: %m");
+		_msgout(LOG_ERR, "sigemptyset: %s", strerror(errno));
 		exit(1);
 	}
 	if (sigaction(SIGCHLD, &sa, NULL)) {
-		_msgout("sigaction: %m");
+		_msgout(LOG_ERR, "sigaction: %s", strerror(errno));
 		exit(1);
 	}
 
-	if ((_rpcfdtype == 0) || (_rpcfdtype == SOCK_DGRAM)) {
-		transp = svcudp_create(sock);
-		if (transp == NULL) {
-			_msgout("cannot create udp service.");
-			exit(1);
+	for (bs = socklist;
+	    bs < &socklist[sizeof(socklist) / sizeof(socklist[0])]; bs++) {
+
+		if ((s = socket(bs->family, bs->type, bs->proto)) == -1)
+			continue;
+
+		if (bs->family == AF_INET6) {
+			/*
+			 * We're doing host-based access checks here, so don't
+			 * allow v4-in-v6 to confuse things.
+			 */
+			if (setsockopt(s, IPPROTO_IPV6,
+			    IPV6_V6ONLY, &one, sizeof(one)) == -1) {
+				_msgout(LOG_ERR, 
+				    "can't disable v4-in-v6 on %s socket",
+				    bs->name);
+				exit(1);
+			}
 		}
-		if (transp->xp_port >= IPPORT_RESERVED) {
-			_msgout("udp service not bound to a privileged port.");
-			exit(1);
+
+		if ((cfg = getnetconfigent(bs->name)) == NULL) {
+			_msgout(LOG_ERR,
+			    "unable to get network configuration for %s port",
+			    bs->name);
+			goto out;
 		}
-		if (!_rpcpmstart)
-			proto = IPPROTO_UDP;
-		if (!svc_register(transp, YPPROG, YPVERS_ORIG, ypprog_1,
-		    proto)) {
-			_msgout(
-			    "unable to register (YPPROG, YPVERS_ORIG, udp).");
-			exit(1);
+
+		if (bind_resv_port(s, bs->family, port) != 0)
+			goto out;
+
+		if (bs->type == SOCK_STREAM) {
+			(void)listen(s, SOMAXCONN);
+			xprt = svc_vc_create(s, 0, 0);
+		} else {
+			xprt = svc_dg_create(s, 0, 0);
 		}
-		if (!svc_register(transp, YPPROG, YPVERS, ypprog_2, proto)) {
-			_msgout("unable to register (YPPROG, YPVERS, udp).");
-			exit(1);
+
+		if (xprt == NULL) {
+			_msgout(LOG_WARNING, "unable to create %s service",
+			    bs->name);
+			goto out;
+		}
+		if (svc_reg(xprt, (u_int)YPPROG, (u_int)YPVERS_ORIG, ypprog_1,
+		    cfg) == 0 ||
+		    svc_reg(xprt, (u_int)YPPROG, (u_int)YPVERS, ypprog_2,
+		    cfg) == 0) {
+			_msgout(LOG_WARNING, "unable to register %s service",
+			    bs->name);
+			goto out;
+		}
+		xcreated++;
+		freenetconfigent(cfg);
+		continue;
+out:
+		if (s != -1)
+			(void)close(s);
+		if (cfg) {
+			freenetconfigent(cfg);
+			cfg = NULL;
 		}
 	}
 
-	if ((_rpcfdtype == 0) || (_rpcfdtype == SOCK_STREAM)) {
-		if (_rpcpmstart)
-			transp = svcfd_create(sock, 0, 0);
-		else
-			transp = svctcp_create(sock, 0, 0);
-		if (transp == NULL) {
-			_msgout("cannot create tcp service.");
-			exit(1);
-		}
-		if (transp->xp_port >= IPPORT_RESERVED) {
-			_msgout("tcp service not bound to a privileged port.");
-			exit(1);
-		}
-		if (!_rpcpmstart)
-			proto = IPPROTO_TCP;
-		if (!svc_register(transp, YPPROG, YPVERS_ORIG, ypprog_1,
-		    proto)) {
-			_msgout(
-			    "unable to register (YPPROG, YPVERS_ORIG, tcp).");
-			exit(1);
-		}
-		if (!svc_register(transp, YPPROG, YPVERS, ypprog_2, proto)) {
-			_msgout("unable to register (YPPROG, YPVERS, tcp).");
-			exit(1);
-		}
-	}
-
-	if (transp == (SVCXPRT *)NULL) {
-		_msgout("could not create a handle");
+	if (xcreated == 0) {
+		_msgout(LOG_ERR, "unable to create any services");
 		exit(1);
 	}
-	if (_rpcpmstart) {
-		(void) signal(SIGALRM, (SIG_PF) closedown);
-		(void) alarm(_RPCSVC_CLOSEDOWN);
-	}
+
 	svc_run();
-	_msgout("svc_run returned");
+	_msgout(LOG_ERR, "svc_run returned");
 	exit(1);
 	/* NOTREACHED */
 }
 
-void
-sighandler(sig)
-	int sig;
-{
-
-	/* SIGCHLD */
-	while (wait3((int *)NULL, WNOHANG, (struct rusage *)NULL) > 0);
-}
-
-void
-usage()
+static void
+usage(void)
 {
 
 #ifdef LIBWRAP
-#define	USAGESTR	"usage: %s [-d] [-l]\n"
+#define	USAGESTR	"Usage: %s [-d] [-l] [-p <port>]\n"
 #else
-#define	USAGESTR	"usage: %s [-d]\n"
+#define	USAGESTR	"Usage: %s [-d] [-p <port>]\n"
 #endif
 
-	fprintf(stderr, USAGESTR, __progname);
+	(void)fprintf(stderr, USAGESTR, getprogname());
 	exit(1);
 
 #undef USAGESTR
 }
-
 
 /*
  * _yp_invalid_map: check if given map name isn't legal.
@@ -475,8 +461,7 @@ usage()
  * XXX: this probably should be in libc/yp/yplib.c
  */
 int
-_yp_invalid_map(map)
-	const char *map;
+_yp_invalid_map(const char *map)
 {
 	if (map == NULL || *map == '\0')
 		return 1;
@@ -487,5 +472,39 @@ _yp_invalid_map(map)
 	if (strchr(map, '/') != NULL)
 		return 1;
 
+	return 0;
+}
+
+static int
+bind_resv_port(int sock, sa_family_t family, in_port_t port)
+{
+	struct sockaddr *sa;
+	struct sockaddr_in sasin;
+	struct sockaddr_in6 sasin6;
+
+	switch (family) {
+	case AF_INET:
+		(void)memset(&sasin, 0, sizeof(sasin));
+		sasin.sin_len = sizeof(sasin);
+		sasin.sin_family = family;
+		sasin.sin_port = htons(port);
+		sa = (struct sockaddr *)(void *)&sasin;
+		break;
+	case AF_INET6:
+		(void)memset(&sasin6, 0, sizeof(sasin6));
+		sasin6.sin6_len = sizeof(sasin6);
+		sasin6.sin6_family = family;
+		sasin6.sin6_port = htons(port);
+		sa = (struct sockaddr *)(void *)&sasin6;
+		break;
+	default:
+		_msgout(LOG_ERR, "Unsupported address family %d", family);
+		return -1;
+	}
+	if (bindresvport_sa(sock, sa) == -1) {
+		_msgout(LOG_ERR, "Cannot bind to reserved port %d (%s)", port,
+		    strerror(errno));
+		return -1;
+	}
 	return 0;
 }

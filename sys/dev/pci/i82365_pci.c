@@ -1,4 +1,4 @@
-/*	$NetBSD: i82365_pci.c,v 1.11 2000/02/24 03:42:44 itohy Exp $	*/
+/*	$NetBSD: i82365_pci.c,v 1.26 2008/06/26 12:33:17 drochner Exp $	*/
 
 /*
  * Copyright (c) 1997 Marc Horowitz.  All rights reserved.
@@ -33,7 +33,9 @@
  * XXX this driver frontend is *very* i386 dependent and should be relocated
  */
 
-#include <sys/types.h>
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: i82365_pci.c,v 1.26 2008/06/26 12:33:17 drochner Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
@@ -55,14 +57,13 @@
  */
 #define	PCI_CBIO		0x10	/* Configuration Base IO Address */
 
-int	pcic_pci_match __P((struct device *, struct cfdata *, void *));
-void	pcic_pci_attach __P((struct device *, struct device *, void *));
+int	pcic_pci_match(struct device *, struct cfdata *, void *);
+void	pcic_pci_attach(struct device *, struct device *, void *);
 
-struct cfattach pcic_pci_ca = {
-	sizeof(struct pcic_pci_softc), pcic_pci_match, pcic_pci_attach
-};
+CFATTACH_DECL(pcic_pci, sizeof(struct pcic_pci_softc),
+    pcic_pci_match, pcic_pci_attach, NULL, NULL);
 
-static struct pcmcia_chip_functions pcic_pci_functions = {
+static const struct pcmcia_chip_functions pcic_pci_functions = {
 	pcic_chip_mem_alloc,
 	pcic_chip_mem_free,
 	pcic_chip_mem_map,
@@ -79,15 +80,16 @@ static struct pcmcia_chip_functions pcic_pci_functions = {
 
 	pcic_chip_socket_enable,
 	pcic_chip_socket_disable,
+	pcic_chip_socket_settype,
+
+	NULL,				/* card_detect */
 };
 
 static void pcic_pci_callback(struct device *);
 
 int
-pcic_pci_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata  *match;
-	void *aux;
+pcic_pci_match(struct device *parent, struct cfdata  *match,
+    void *aux)
 {
 	struct pci_attach_args *pa = (struct pci_attach_args *) aux;
 
@@ -106,12 +108,10 @@ pcic_pci_match(parent, match, aux)
 	return (1);
 }
 
-void pcic_isa_config_interrupts __P((struct device *));
+void pcic_isa_config_interrupts(struct device *);
 
 void
-pcic_pci_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+pcic_pci_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct pcic_softc *sc = (void *) self;
 	struct pcic_pci_softc *psc = (void *) self;
@@ -119,11 +119,13 @@ pcic_pci_attach(parent, self, aux)
 	pci_chipset_tag_t pc = pa->pa_pc;
 	bus_space_tag_t memt = pa->pa_memt;
 	bus_space_handle_t memh;
-	char *model;
+	const char *model;
+
+	aprint_naive(": PCMCIA controller\n");
 
 	if (pci_mapreg_map(pa, PCI_CBIO, PCI_MAPREG_TYPE_IO, 0,
 	    &sc->iot, &sc->ioh, NULL, NULL)) {
-		printf(": can't map i/o space\n");
+		aprint_error(": can't map i/o space\n");
 		return;
 	}
 
@@ -165,7 +167,7 @@ pcic_pci_attach(parent, self, aux)
 		break;
 	}
 
-	printf(": %s\n", model);
+	aprint_normal(": %s\n", model);
 
 	/* Enable the card. */
 	pci_conf_write(pc, pa->pa_tag, PCI_COMMAND_STATUS_REG,
@@ -184,8 +186,7 @@ pcic_pci_attach(parent, self, aux)
 		   PCIC_CIRRUS_EXT_CONTROL_1);
 	if ((pcic_read(&sc->handle[0], PCIC_CIRRUS_EXTENDED_DATA) &
 	    PCIC_CIRRUS_EXT_CONTROL_1_PCI_INTR_MASK)) {
-		printf("%s: PCI interrupts not supported\n",
-		       sc->dev.dv_xname);
+		aprint_error_dev(&sc->dev, "PCI interrupts not supported\n");
 		return;
 	}
 
@@ -196,7 +197,7 @@ pcic_pci_attach(parent, self, aux)
 	/* Map and establish the interrupt. */
 	sc->ih = pcic_pci_machdep_pcic_intr_establish(sc, pcic_intr);
 	if (sc->ih == NULL) {
-		printf("%s: couldn't map interrupt\n", sc->dev.dv_xname);
+		aprint_error_dev(&sc->dev, "couldn't map interrupt\n");
 		return;
 	}
 #endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: elink.h,v 1.8 1999/03/22 22:26:27 bad Exp $	*/
+/*	$NetBSD: elink.h,v 1.11 2008/04/28 20:23:52 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -43,5 +36,5 @@
 #define	ELINK_509_POLY	0xcf
 #define	TLINK_619_POLY	0x63
 
-void elink_reset __P((bus_space_tag_t, bus_space_handle_t, int));
-void elink_idseq __P((bus_space_tag_t, bus_space_handle_t, u_char p));
+void elink_reset(bus_space_tag_t, bus_space_handle_t, int);
+void elink_idseq(bus_space_tag_t, bus_space_handle_t, u_char p);

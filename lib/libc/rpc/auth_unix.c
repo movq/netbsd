@@ -1,4 +1,4 @@
-/*	$NetBSD: auth_unix.c,v 1.16 2000/01/22 22:19:17 mycroft Exp $	*/
+/*	$NetBSD: auth_unix.c,v 1.21 2008/04/25 17:44:44 christos Exp $	*/
 
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
@@ -35,7 +35,7 @@
 static char *sccsid = "@(#)auth_unix.c 1.19 87/08/11 Copyr 1984 Sun Micro";
 static char *sccsid = "@(#)auth_unix.c	2.2 88/08/01 4.0 RPCSRC";
 #else
-__RCSID("$NetBSD: auth_unix.c,v 1.16 2000/01/22 22:19:17 mycroft Exp $");
+__RCSID("$NetBSD: auth_unix.c,v 1.21 2008/04/25 17:44:44 christos Exp $");
 #endif
 #endif
 
@@ -52,7 +52,7 @@ __RCSID("$NetBSD: auth_unix.c,v 1.16 2000/01/22 22:19:17 mycroft Exp $");
  */
 
 #include "namespace.h"
-
+#include "reentrant.h"
 #include <sys/param.h>
 
 #include <assert.h>
@@ -80,17 +80,7 @@ static bool_t authunix_validate __P((AUTH *, struct opaque_auth *));
 static bool_t authunix_refresh __P((AUTH *));
 static void authunix_destroy __P((AUTH *));
 static void marshal_new_auth __P((AUTH *));
-
-/*
- * Unix authenticator operations vector
- */
-static const struct auth_ops auth_unix_ops = {
-	authunix_nextverf,
-	authunix_marshal,
-	authunix_validate,
-	authunix_refresh,
-	authunix_destroy
-};
+static const struct auth_ops *authunix_ops __P((void));
 
 /*
  * This struct is pointed to by the ah_private field of an auth_handle.
@@ -127,21 +117,21 @@ authunix_create(machname, uid, gid, len, aup_gids)
 	 * Allocate and set up auth handle
 	 */
 	au = NULL;
-	auth = (AUTH *)mem_alloc(sizeof(*auth));
+	auth = mem_alloc(sizeof(*auth));
 #ifndef KERNEL
 	if (auth == NULL) {
 		warnx("authunix_create: out of memory");
 		goto cleanup_authunix_create;
 	}
 #endif
-	au = (struct audata *)mem_alloc(sizeof(*au));
+	au = mem_alloc(sizeof(*au));
 #ifndef KERNEL
 	if (au == NULL) {
 		warnx("authunix_create: out of memory");
 		goto cleanup_authunix_create;
 	}
 #endif
-	auth->ah_ops = &auth_unix_ops;
+	auth->ah_ops = authunix_ops();
 	auth->ah_private = au;
 	auth->ah_verf = au->au_shcred = _null_auth;
 	au->au_shfaults = 0;
@@ -150,7 +140,7 @@ authunix_create(machname, uid, gid, len, aup_gids)
 	/*
 	 * fill in param struct from the given params
 	 */
-	(void)gettimeofday(&now,  (struct timezone *)0);
+	(void)gettimeofday(&now, NULL);
 	aup.aup_time = now.tv_sec;
 	aup.aup_machname = machname;
 	aup.aup_uid = uid;
@@ -167,9 +157,9 @@ authunix_create(machname, uid, gid, len, aup_gids)
 	au->au_origcred.oa_length = len = XDR_GETPOS(&xdrs);
 	au->au_origcred.oa_flavor = AUTH_UNIX;
 #ifdef KERNEL
-	au->au_origcred.oa_base = mem_alloc((u_int) len);
+	au->au_origcred.oa_base = mem_alloc((size_t)len);
 #else
-	if ((au->au_origcred.oa_base = mem_alloc((u_int) len)) == NULL) {
+	if ((au->au_origcred.oa_base = mem_alloc((size_t)len)) == NULL) {
 		warnx("authunix_create: out of memory");
 		goto cleanup_authunix_create;
 	}
@@ -296,11 +286,11 @@ authunix_refresh(auth)
 		/* there is no hope.  Punt */
 		return (FALSE);
 	}
-	au->au_shfaults ++;
+	au->au_shfaults++;
 
 	/* first deserialize the creds back into a struct authunix_parms */
 	aup.aup_machname = NULL;
-	aup.aup_gids = (int *)NULL;
+	aup.aup_gids = NULL;
 	xdrmem_create(&xdrs, au->au_origcred.oa_base,
 	    au->au_origcred.oa_length, XDR_DECODE);
 	stat = xdr_authunix_parms(&xdrs, &aup);
@@ -308,7 +298,7 @@ authunix_refresh(auth)
 		goto done;
 
 	/* update the time and serialize in place */
-	(void)gettimeofday(&now, (struct timezone *)0);
+	(void)gettimeofday(&now, NULL);
 	aup.aup_time = now.tv_sec;
 	xdrs.x_op = XDR_ENCODE;
 	XDR_SETPOS(&xdrs, 0);
@@ -369,4 +359,26 @@ marshal_new_auth(auth)
 	else
 		au->au_mpos = XDR_GETPOS(xdrs);
 	XDR_DESTROY(xdrs);
+}
+
+static const struct auth_ops *
+authunix_ops()
+{
+	static struct auth_ops ops;
+#ifdef _REENTRANT
+	extern mutex_t ops_lock;
+#endif
+
+	/* VARIABLES PROTECTED BY ops_lock: ops */
+
+	mutex_lock(&ops_lock);
+	if (ops.ah_nextverf == NULL) {
+		ops.ah_nextverf = authunix_nextverf;
+		ops.ah_marshal = authunix_marshal;
+		ops.ah_validate = authunix_validate;
+		ops.ah_refresh = authunix_refresh;
+		ops.ah_destroy = authunix_destroy;
+	}
+	mutex_unlock(&ops_lock);
+	return (&ops);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: standout.c,v 1.8 1999/04/13 14:08:19 mrg Exp $	*/
+/*	$NetBSD: standout.c,v 1.15 2004/01/20 08:30:41 wiz Exp $	*/
 
 /*
  * Copyright (c) 1981, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,36 +34,60 @@
 #if 0
 static char sccsid[] = "@(#)standout.c	8.3 (Berkeley) 8/10/94";
 #else
-__RCSID("$NetBSD: standout.c,v 1.8 1999/04/13 14:08:19 mrg Exp $");
+__RCSID("$NetBSD: standout.c,v 1.15 2004/01/20 08:30:41 wiz Exp $");
 #endif
 #endif				/* not lint */
 
 #include "curses.h"
+#include "curses_private.h"
+
+#ifndef _CURSES_USE_MACROS
 
 /*
- * wstandout
- *	Enter standout mode.
+ * standout --
+ *	Enter standout mode on stdscr.
  */
 int
-wstandout(win)
-	WINDOW *win;
+standout(void)
+{
+	return wstandout(stdscr);
+}
+
+/*
+ * standend --
+ *	Exit standout mode on stdscr.
+ */
+int
+standend(void)
+{
+	return wstandend(stdscr);
+}
+
+#endif
+
+/*
+ * wstandout --
+ *	Enter standout mode in window win.
+ */
+int
+wstandout(WINDOW *win)
 {
 	/*
 	 * If standout/standend strings, or can underline, set the
 	 * screen standout bit.
 	 */
-	if ((SO != NULL && SE != NULL) || UC != NULL)
-		win->flags |= __WSTANDOUT;
+	if ((__tc_so != NULL && __tc_se != NULL) || __tc_uc != NULL)
+		win->wattr |= __STANDOUT;
 	return (1);
 }
+
 /*
  * wstandend --
- *	Exit standout mode.
+ *	Exit standout mode in window win.
  */
 int
-wstandend(win)
-	WINDOW *win;
+wstandend(WINDOW *win)
 {
-	win->flags &= ~__WSTANDOUT;
+	win->wattr &= ~__STANDOUT;
 	return (1);
 }

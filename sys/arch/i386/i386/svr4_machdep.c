@@ -1,7 +1,7 @@
-/*	$NetBSD: svr4_machdep.c,v 1.46 1999/11/12 20:45:44 kleink Exp $	 */
+/*	$NetBSD: svr4_machdep.c,v 1.92 2008/09/19 19:15:58 christos Exp $	 */
 
 /*-
- * Copyright (c) 1994 The NetBSD Foundation, Inc.
+ * Copyright (c) 1994, 2000 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,8 +29,13 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: svr4_machdep.c,v 1.92 2008/09/19 19:15:58 christos Exp $");
+
+#if defined(_KERNEL_OPT)
 #include "opt_vm86.h"
 #include "opt_user_ldt.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -72,17 +70,15 @@
 #include <machine/vmparam.h>
 #include <machine/svr4_machdep.h>
 
-static void svr4_getsiginfo __P((union svr4_siginfo *, int, u_long, caddr_t));
-void svr4_fasttrap __P((struct trapframe));
+static void svr4_getsiginfo(union svr4_siginfo *, int, u_long, void *);
+void svr4_fasttrap(struct trapframe);
 
 #ifdef DEBUG_SVR4
-static void svr4_printmcontext __P((const char *, svr4_mcontext_t *));
+static void svr4_printmcontext(const char *, svr4_mcontext_t *);
 
 
 static void
-svr4_printmcontext(fun, mc)
-	const char *fun;
-	svr4_mcontext_t *mc;
+svr4_printmcontext(const char *fun, svr4_mcontext_t *mc)
 {
 	svr4_greg_t *r = mc->greg;
 
@@ -113,40 +109,39 @@ svr4_printmcontext(fun, mc)
 #endif
 
 void
-svr4_setregs(p, epp, stack)
-	struct proc *p;
-	struct exec_package *epp;
-	u_long stack;
+svr4_setregs(struct lwp *l, struct exec_package *epp, u_long stack)
 {
-	register struct pcb *pcb = &p->p_addr->u_pcb;
+	struct pcb *pcb = &l->l_addr->u_pcb;
+	struct trapframe *tf = l->l_md.md_regs;
 
-	setregs(p, epp, stack);
-	pcb->pcb_savefpu.sv_env.en_cw = __SVR4_NPXCW__;
+	setregs(l, epp, stack);
+	if (i386_use_fxsave)
+		pcb->pcb_savefpu.sv_xmm.sv_env.en_cw = __SVR4_NPXCW__;
+	else
+		pcb->pcb_savefpu.sv_87.sv_env.en_cw = __SVR4_NPXCW__;
+	tf->tf_cs = GSEL(LUCODEBIG_SEL, SEL_UPL);
 }
 
 void *
-svr4_getmcontext(p, mc, flags)
-	struct proc *p;
-	svr4_mcontext_t *mc;
-	u_long *flags;
+svr4_getmcontext(struct lwp *l, svr4_mcontext_t *mc, u_long *flags)
 {
-	register struct trapframe *tf = p->p_md.md_regs;
+	struct trapframe *tf = l->l_md.md_regs;
 	svr4_greg_t *r = mc->greg;
 
-	/* Save register context. */
-	tf = p->p_md.md_regs;
+	/* Save context. */
+	tf = l->l_md.md_regs;
 #ifdef VM86
 	if (tf->tf_eflags & PSL_VM) {
 		r[SVR4_X86_GS] = tf->tf_vm86_gs;
 		r[SVR4_X86_FS] = tf->tf_vm86_fs;
 		r[SVR4_X86_ES] = tf->tf_vm86_es;
 		r[SVR4_X86_DS] = tf->tf_vm86_ds;
-		r[SVR4_X86_EFL] = get_vflags(p);
+		r[SVR4_X86_EFL] = get_vflags(l);
 	} else
 #endif
 	{
-	        __asm("movl %%gs,%w0" : "=r" (r[SVR4_X86_GS]));
-		__asm("movl %%fs,%w0" : "=r" (r[SVR4_X86_FS]));
+		r[SVR4_X86_GS] = tf->tf_gs;
+		r[SVR4_X86_FS] = tf->tf_fs;
 		r[SVR4_X86_ES] = tf->tf_es;
 		r[SVR4_X86_DS] = tf->tf_ds;
 		r[SVR4_X86_EFL] = tf->tf_eflags;
@@ -185,16 +180,16 @@ svr4_getmcontext(p, mc, flags)
  * a machine fault.
  */
 int
-svr4_setmcontext(p, mc, flags)
-	struct proc *p;
-	svr4_mcontext_t *mc;
-	u_long flags;
+svr4_setmcontext(struct lwp *l, svr4_mcontext_t *mc, u_long flags)
 {
-	register struct trapframe *tf;
+	struct trapframe *tf;
 	svr4_greg_t *r = mc->greg;
+#ifdef VM86
+	struct proc *p = l->l_proc;
+#endif
 
 #ifdef DEBUG_SVR4
-	svr4_printcontext("setmcontext", mc);
+	svr4_printmcontext("setmcontext", mc);
 #endif  
 	/*
 	 * XXX: What to do with floating point stuff?
@@ -202,15 +197,18 @@ svr4_setmcontext(p, mc, flags)
 	if ((flags & SVR4_UC_CPU) == 0)
 		return 0;
 
-	/* Restore register context. */
-	tf = p->p_md.md_regs;
+	/* Restore context. */
+	tf = l->l_md.md_regs;
 #ifdef VM86
 	if (r[SVR4_X86_EFL] & PSL_VM) {
+		void syscall_vm86(struct trapframe *);
+
 		tf->tf_vm86_gs = r[SVR4_X86_GS];
 		tf->tf_vm86_fs = r[SVR4_X86_FS];
 		tf->tf_vm86_es = r[SVR4_X86_ES];
 		tf->tf_vm86_ds = r[SVR4_X86_DS];
-		set_vflags(p, r[SVR4_X86_EFL]);
+		set_vflags(l, r[SVR4_X86_EFL]);
+		p->p_md.md_syscall = syscall_vm86;
 	} else
 #endif
 	{
@@ -224,10 +222,16 @@ svr4_setmcontext(p, mc, flags)
 		    !USERMODE(r[SVR4_X86_CS], r[SVR4_X86_EFL]))
 			return (EINVAL);
 
-		/* %fs and %gs were restored by the trampoline. */
+		tf->tf_fs = r[SVR4_X86_FS];
+		tf->tf_gs = r[SVR4_X86_GS];
 		tf->tf_es = r[SVR4_X86_ES];
 		tf->tf_ds = r[SVR4_X86_DS];
-		tf->tf_eflags = r[SVR4_X86_EFL];
+#ifdef VM86
+		if (tf->tf_eflags & PSL_VM)
+			(*p->p_emul->e_syscall_intern)(p);
+#endif
+		tf->tf_eflags &= ~PSL_USER;
+		tf->tf_eflags |= r[SVR4_X86_EFL] & PSL_USER;
 	}
 	tf->tf_edi = r[SVR4_X86_EDI];
 	tf->tf_esi = r[SVR4_X86_ESI];
@@ -236,8 +240,6 @@ svr4_setmcontext(p, mc, flags)
 	tf->tf_edx = r[SVR4_X86_EDX];
 	tf->tf_ecx = r[SVR4_X86_ECX];
 	tf->tf_eax = r[SVR4_X86_EAX];
-	tf->tf_trapno = r[SVR4_X86_TRAPNO];
-	tf->tf_err = r[SVR4_X86_ERR];
 	tf->tf_eip = r[SVR4_X86_EIP];
 	tf->tf_cs = r[SVR4_X86_CS];
 	tf->tf_ss = r[SVR4_X86_SS];
@@ -248,13 +250,9 @@ svr4_setmcontext(p, mc, flags)
 
 
 static void
-svr4_getsiginfo(si, sig, code, addr)
-	union svr4_siginfo	*si;
-	int			 sig;
-	u_long			 code;
-	caddr_t			 addr;
+svr4_getsiginfo(union svr4_siginfo *si, int sig, u_long code, void * addr)
 {
-	si->si_signo = native_to_svr4_sig[sig];
+	si->si_signo = native_to_svr4_signo[sig];
 	si->si_errno = 0;
 	si->si_addr  = addr;
 
@@ -351,31 +349,18 @@ svr4_getsiginfo(si, sig, code, addr)
  * will return to the user pc, psl.
  */
 void
-svr4_sendsig(catcher, sig, mask, code)
-	sig_t catcher;
-	int sig;
-	sigset_t *mask;
-	u_long code;
+svr4_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 {
-	register struct proc *p = curproc;
-	register struct trapframe *tf;
-	struct svr4_sigframe *fp, frame;
-	struct sigacts *psp = p->p_sigacts;
-	int onstack;
+	u_long code = KSI_TRAPCODE(ksi);
+	int sig = ksi->ksi_signo;
+	struct lwp *l = curlwp;
+	struct proc *p = l->l_proc;
+	int onstack, error;
+	struct svr4_sigframe *fp = getframe(l, sig, &onstack), frame;
+	sig_t catcher = SIGACTION(p, sig).sa_handler;
+	struct sigaltstack *sas = &l->l_sigstk;
+	struct trapframe *tf = l->l_md.md_regs;
 
-	tf = p->p_md.md_regs;
-
-	/* Do we need to jump onto the signal stack? */
-	onstack =
-	    (psp->ps_sigstk.ss_flags & (SS_DISABLE | SS_ONSTACK)) == 0 &&
-	    (psp->ps_sigact[sig].sa_flags & SA_ONSTACK) != 0;
-
-	/* Allocate space for the signal handler context. */
-	if (onstack)
-		fp = (struct svr4_sigframe *)((caddr_t)psp->ps_sigstk.ss_sp +
-						       psp->ps_sigstk.ss_size);
-	else
-		fp = (struct svr4_sigframe *)tf->tf_esp;
 	fp--;
 
 	/* 
@@ -387,8 +372,8 @@ svr4_sendsig(catcher, sig, mask, code)
 	 *	- we don't pass the correct signal address [we need to
 	 *	  modify many kernel files to enable that]
 	 */
-	svr4_getcontext(p, &frame.sf_uc, mask);
-	svr4_getsiginfo(&frame.sf_si, sig, code, (caddr_t) tf->tf_eip);
+	svr4_getcontext(l, &frame.sf_uc);
+	svr4_getsiginfo(&frame.sf_si, sig, code, (void *) tf->tf_eip);
 
 	/* Build stack frame for signal trampoline. */
 	frame.sf_signum = frame.sf_si.si_signo;
@@ -401,45 +386,34 @@ svr4_sendsig(catcher, sig, mask, code)
 	       frame.sf_signum, frame.sf_sip, frame.sf_ucp, frame.sf_handler);
 #endif
 
-	if (copyout(&frame, fp, sizeof(frame)) != 0) {
+	sendsig_reset(l, sig);
+
+	mutex_exit(p->p_lock);
+	error = copyout(&frame, fp, sizeof(frame));
+	mutex_enter(p->p_lock);
+
+	if (error != 0) {
 		/*
 		 * Process has trashed its stack; give it an illegal
 		 * instruction to halt it in its tracks.
 		 */
-		sigexit(p, SIGILL);
+		sigexit(l, SIGILL);
 		/* NOTREACHED */
 	}
 
-	/*
-	 * Build context to run handler in.
-	 */
-	tf->tf_es = GSEL(GUDATA_SEL, SEL_UPL);
-	tf->tf_ds = GSEL(GUDATA_SEL, SEL_UPL);
-	tf->tf_eip = (int)psp->ps_sigcode;
-	tf->tf_cs = GSEL(GUCODE_SEL, SEL_UPL);
-	tf->tf_eflags &= ~(PSL_T|PSL_VM|PSL_AC);
-	tf->tf_esp = (int)fp;
-	tf->tf_ss = GSEL(GUDATA_SEL, SEL_UPL);
+	buildcontext(l, GUCODEBIG_SEL, p->p_sigctx.ps_sigcode, fp);
 
 	/* Remember that we're now on the signal stack. */
 	if (onstack)
-		psp->ps_sigstk.ss_flags |= SS_ONSTACK;
+		sas->ss_flags |= SS_ONSTACK;
 }
 
 /*
  * sysi86
  */
 int
-svr4_sys_sysarch(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+svr4_sys_sysarch(struct lwp *l, const struct svr4_sys_sysarch_args *uap, register_t *retval)
 {
-	struct svr4_sys_sysarch_args *uap = v;
-#ifdef USER_LDT
-	caddr_t sg = stackgap_init(p->p_emul);
-	int error;
-#endif
 	*retval = 0;	/* XXX: What to do */
 
 	switch (SCARG(uap, op)) {
@@ -449,25 +423,30 @@ svr4_sys_sysarch(p, v, retval)
 	case SVR4_SYSARCH_DSCR:
 #ifdef USER_LDT
 		{
-			struct i386_set_ldt_args sa, *sap;
-			struct sys_sysarch_args ua;
-
+			struct x86_set_ldt_args sa;
 			struct svr4_ssd ssd;
 			union descriptor bsd;
+			int error;
 
 			if ((error = copyin(SCARG(uap, a1), &ssd,
 					    sizeof(ssd))) != 0) {
-				printf("Cannot copy arg1\n");
+#ifdef DEBUG
+				printf("svr4_sys_sysarch: Cannot copy arg1\n");
+#endif
 				return error;
 			}
 
-			printf("s=%x, b=%x, l=%x, a1=%x a2=%x\n",
+#ifdef DEBUG
+			printf("svr4_sys_sysarch: s=%x, b=%x, l=%x, a1=%x a2=%x\n",
 			       ssd.selector, ssd.base, ssd.limit,
 			       ssd.access1, ssd.access2);
+#endif
 
 			/* We can only set ldt's for now. */
 			if (!ISLDT(ssd.selector)) {
-				printf("Not an ldt\n");
+#ifdef DEBUG
+				printf("svr4_sys_sysarch: Not an ldt\n");
+#endif
 				return EPERM;
 			}
 
@@ -490,25 +469,10 @@ svr4_sys_sysarch(p, v, retval)
 			bsd.sd.sd_gran = (ssd.access2 >> 3)& 0x1;
 
 			sa.start = IDXSEL(ssd.selector);
-			sa.desc = stackgap_alloc(&sg, sizeof(union descriptor));
+			sa.desc = NULL;
 			sa.num = 1;
-			sap = stackgap_alloc(&sg,
-					     sizeof(struct i386_set_ldt_args));
 
-			if ((error = copyout(&sa, sap, sizeof(sa))) != 0) {
-				printf("Cannot copyout args\n");
-				return error;
-			}
-
-			SCARG(&ua, op) = I386_SET_LDT;
-			SCARG(&ua, parms) = (char *) sap;
-
-			if ((error = copyout(&bsd, sa.desc, sizeof(bsd))) != 0) {
-				printf("Cannot copyout desc\n");
-				return error;
-			}
-
-			return sys_sysarch(p, &ua, retval);
+			return x86_set_ldt1(l, &sa, &bsd);
 		}
 #endif
 
@@ -523,16 +487,23 @@ svr4_sys_sysarch(p, v, retval)
  * Fast syscall gate trap...
  */
 void
-svr4_fasttrap(frame)
-	struct trapframe frame;
+svr4_fasttrap(struct trapframe frame)
 {
-	extern struct emul emul_svr4;
-	struct proc *p = curproc;
+	struct lwp *l = curlwp;
+	struct proc *p = l->l_proc;
+	struct timeval tv;
+	struct timeval rtime, stime;
+	struct timespec ts;
+	uint64_t tm;
 
-	p->p_md.md_regs = &frame;
+	l->l_md.md_regs = &frame;
 
 	if (p->p_emul != &emul_svr4) {
-		trapsignal(p, SIGBUS, 0);
+		ksiginfo_t ksi;
+		memset(&ksi, 0, sizeof(ksi));
+		ksi.ksi_signo = SIGILL;
+		ksi.ksi_code = ILL_ILLTRP;
+		trapsignal(l, &ksi);
 		return;
 	}
 
@@ -542,50 +513,47 @@ svr4_fasttrap(frame)
 		 * This is like gethrtime(3), returning the time expressed
 		 * in nanoseconds since an arbitrary time in the past and
 		 * guaranteed to be monotonically increasing, which we
-		 * obtain from mono_time(9).
+		 * obtain from nanouptime(9).
 		 */
-		{
-			struct timeval tv;
-			quad_t tm;
-			int s;
+		nanouptime(&ts);
 
-			s = splclock();
-			tv = mono_time;
-			splx(s);
-
-			tm = (u_quad_t) tv.tv_sec * 1000000000 +
-			    (u_quad_t) tv.tv_usec * 1000;
-			frame.tf_edx = ((u_int32_t *) &tm)[0];
-			frame.tf_eax = ((u_int32_t *) &tm)[1];
-		}
+		tm = ts.tv_nsec + ts.tv_sec * (uint64_t)1000000000u;
+		/* XXX: dsl - I would have expected the msb in %edx */
+		frame.tf_edx = tm & 0xffffffffu;
+		frame.tf_eax = (tm >> 32);
 		break;
 
 	case SVR4_TRAP_GETHRVTIME:
 		/*
-		 * This is like gethrvtime(3). returning the LWP's (now:
-		 * proc's) virtual time expressed in nanoseconds. It is
-		 * supposedly guaranteed to be monotonically increasing, but
-		 * for now using the process's real time augmented with its
-		 * current runtime is the best we can do.
+		 * This is like gethrvtime(3). returning the LWP's virtual
+		 * time expressed in nanoseconds. It is supposedly
+		 * guaranteed to be monotonically increasing, but for now
+		 * using the LWP's real time augmented with its current
+		 * runtime is the best we can do.
 		 */
-		{
-			struct timeval tv;
-			quad_t tm;
+		microtime(&tv);
+		bintime2timeval(&l->l_rtime, &rtime);
+		bintime2timeval(&l->l_stime, &stime);
 
-			microtime(&tv);
-
-			tm =
-			    (u_quad_t) (p->p_rtime.tv_sec +
-			                tv.tv_sec - runtime.tv_sec) * 1000000 +
-			    (u_quad_t) (p->p_rtime.tv_usec +
-			                tv.tv_usec - runtime.tv_usec) * 1000;
-			frame.tf_edx = ((u_int32_t *) &tm)[0];
-			frame.tf_eax = ((u_int32_t *) &tm)[1];
-		}
+		tm = (rtime.tv_sec + tv.tv_sec - stime.tv_sec) * 1000000ull;
+		tm += rtime.tv_usec + tv.tv_usec;
+		tm -= stime.tv_usec;
+		tm *= 1000u;
+		/* XXX: dsl - I would have expected the msb in %edx */
+		frame.tf_edx = tm & 0xffffffffu;
+		frame.tf_eax = (tm >> 32);
 		break;
 
-	case SVR4_TRAP_CLOCK_SETTIME:
-		uprintf("unimplemented svr4 fast trap CLOCK_SETTIME\n");
+	case SVR4_TRAP_GETHRESTIME:
+		/*
+		 * This is like clock_gettime(CLOCK_REALTIME, tp), returning
+		 * proc's wall time. Seconds are returned in %eax, nanoseconds
+		 * in %edx.
+		 */
+		nanotime(&ts);
+
+		frame.tf_eax = (uint32_t) ts.tv_sec;
+		frame.tf_edx = (uint32_t) ts.tv_nsec;
 		break;
 
 	default:

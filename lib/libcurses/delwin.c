@@ -1,4 +1,4 @@
-/*	$NetBSD: delwin.c,v 1.9 1999/04/13 14:08:18 mrg Exp $	*/
+/*	$NetBSD: delwin.c,v 1.16 2007/05/28 15:01:55 blymn Exp $	*/
 
 /*
  * Copyright (c) 1981, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,38 +34,60 @@
 #if 0
 static char sccsid[] = "@(#)delwin.c	8.2 (Berkeley) 5/4/94";
 #else
-__RCSID("$NetBSD: delwin.c,v 1.9 1999/04/13 14:08:18 mrg Exp $");
+__RCSID("$NetBSD: delwin.c,v 1.16 2007/05/28 15:01:55 blymn Exp $");
 #endif
 #endif				/* not lint */
 
 #include <stdlib.h>
 
 #include "curses.h"
+#include "curses_private.h"
 
 /*
  * delwin --
  *	Delete a window and release it back to the system.
  */
 int
-delwin(win)
-	WINDOW *win;
+delwin(WINDOW *win)
 {
-
 	WINDOW *wp, *np;
+	struct __winlist *wl, *pwl;
+	SCREEN *screen;
+
+#ifdef DEBUG
+	__CTRACE(__CTRACE_WINDOW, "delwin(%p)\n", win);
+#endif
+	/*
+	 * Free any storage used by non-spacing characters in the window.
+	 */
+#ifdef HAVE_WCHAR
+	__cursesi_win_free_nsp(win);
+#endif
 
 	if (win->orig == NULL) {
 		/*
 		 * If we are the original window, delete the space for all
-		 * the subwindows, the line space and the window space.
+		 * the subwindows and the window space.
 		 */
-		free(win->lspace);
 		free(win->wspace);
-		free(win->lines);
 		wp = win->nextp;
 		while (wp != win) {
 			np = wp->nextp;
 			delwin(wp);
 			wp = np;
+		}
+		/* Remove ourselves from the list of windows on the screen. */
+		pwl = NULL;
+		screen = win->screen;
+		for (wl = screen->winlistp; wl; pwl = wl, wl = wl->nextp) {
+			if (wl->winp != win)
+				continue;
+			if (pwl != NULL)
+				pwl->nextp = wl->nextp;
+			else
+				screen->winlistp = wl->nextp;
+			free(wl);
+			break;
 		}
 	} else {
 		/*
@@ -82,6 +100,14 @@ delwin(win)
 			continue;
 		wp->nextp = win->nextp;
 	}
+	free(win->lspace);
+	free(win->lines);
+	if (win == _cursesi_screen->curscr)
+		_cursesi_screen->curscr = NULL;
+	if (win == _cursesi_screen->stdscr)
+		_cursesi_screen->stdscr = NULL;
+	if (win == _cursesi_screen->__virtscr)
+		_cursesi_screen->__virtscr = NULL;
 	free(win);
 	return (OK);
 }

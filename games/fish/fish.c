@@ -1,4 +1,4 @@
-/*	$NetBSD: fish.c,v 1.12 2000/03/28 19:37:54 tron Exp $	*/
+/*	$NetBSD: fish.c,v 1.19 2008/07/20 01:03:21 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,15 +34,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1990, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1990, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)fish.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: fish.c,v 1.12 2000/03/28 19:37:54 tron Exp $");
+__RCSID("$NetBSD: fish.c,v 1.19 2008/07/20 01:03:21 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -82,32 +78,29 @@ int asked[RANKS], comphand[RANKS], deck[TOTCARDS];
 int userasked[RANKS], userhand[RANKS];
 int curcard = TOTCARDS;
 
-void	chkwinner __P((int, const int *));
-int	compmove __P((void));
-int	countbooks __P((const int *));
-int	countcards __P((const int *));
-int	drawcard __P((int, int *));
-int	gofish __P((int, int, int *));
-void	goodmove __P((int, int, int *, int *));
-void	init __P((void));
-void	instructions __P((void));
-int	main __P((int, char *[]));
-int	nrandom __P((int));
-void	printhand __P((const int *));
-void	printplayer __P((int));
-int	promove __P((void));
-void	usage __P((void)) __attribute__((__noreturn__));
-int	usermove __P((void));
+void	chkwinner(int, const int *);
+int	compmove(void);
+int	countbooks(const int *);
+int	countcards(const int *);
+int	drawcard(int, int *);
+int	gofish(int, int, int *);
+void	goodmove(int, int, int *, int *);
+void	init(void);
+void	instructions(void);
+int	nrandom(int);
+void	printhand(const int *);
+void	printplayer(int);
+int	promove(void);
+void	usage(void) __dead;
+int	usermove(void);
 
 int
-main(argc, argv)
-	int argc;
-	char **argv;
+main(int argc, char **argv)
 {
 	int ch, move;
 
 	/* Revoke setgid privileges */
-	setregid(getgid(), getgid());
+	setgid(getgid());
 
 	while ((ch = getopt(argc, argv, "p")) != -1)
 		switch(ch) {
@@ -154,7 +147,7 @@ istart:		for (;;) {
 }
 
 int
-usermove()
+usermove(void)
 {
 	int n;
 	const char *const *p;
@@ -209,7 +202,7 @@ usermove()
 }
 
 int
-compmove()
+compmove(void)
 {
 	static int lmove;
 
@@ -227,7 +220,7 @@ compmove()
 }
 
 int
-promove()
+promove(void)
 {
 	int i, max;
 
@@ -266,9 +259,7 @@ promove()
 }
 
 int
-drawcard(player, hand)
-	int player;
-	int *hand;
+drawcard(int player, int *hand)
 {
 	int card;
 
@@ -287,9 +278,7 @@ drawcard(player, hand)
 }
 
 int
-gofish(askedfor, player, hand)
-	int askedfor, player;
-	int *hand;
+gofish(int askedfor, int player, int *hand)
 {
 	printplayer(OTHER(player));
 	(void)printf("say \"GO FISH!\"\n");
@@ -304,9 +293,7 @@ gofish(askedfor, player, hand)
 }
 
 void
-goodmove(player, move, hand, opphand)
-	int player, move;
-	int *hand, *opphand;
+goodmove(int player, int move, int *hand, int *opphand)
 {
 	printplayer(OTHER(player));
 	(void)printf("have %d %s%s.\n",
@@ -328,9 +315,7 @@ goodmove(player, move, hand, opphand)
 }
 
 void
-chkwinner(player, hand)
-	int player;
-	const int *hand;
+chkwinner(int player, const int *hand)
 {
 	int cb, i, ub;
 
@@ -358,8 +343,7 @@ chkwinner(player, hand)
 }
 
 void
-printplayer(player)
-	int player;
+printplayer(int player)
 {
 	switch (player) {
 	case COMPUTER:
@@ -372,8 +356,7 @@ printplayer(player)
 }
 
 void
-printhand(hand)
-	const int *hand;
+printhand(const int *hand)
 {
 	int book, i, j;
 
@@ -393,8 +376,7 @@ printhand(hand)
 }
 
 int
-countcards(hand)
-	const int *hand;
+countcards(const int *hand)
 {
 	int i, count;
 
@@ -404,8 +386,7 @@ countcards(hand)
 }
 
 int
-countbooks(hand)
-	const int *hand;
+countbooks(const int *hand)
 {
 	int i, count;
 
@@ -421,7 +402,7 @@ countbooks(hand)
 }
 
 void
-init()
+init(void)
 {
 	int i, j, temp;
 
@@ -442,15 +423,14 @@ init()
 }
 
 int
-nrandom(n)
-	int n;
+nrandom(int n)
 {
 
 	return((int)random() % n);
 }
 
 void
-instructions()
+instructions(void)
 {
 	int input;
 	pid_t pid;
@@ -476,7 +456,7 @@ instructions()
 			err(1, "open %s", _PATH_INSTR);
 		if (dup2(fd, 0) == -1)
 			err(1, "dup2");
-		(void)execl("/bin/sh", "sh", "-c", pager, NULL);
+		(void)execl("/bin/sh", "sh", "-c", pager, (char *) NULL);
 		err(1, "exec sh -c %s", pager);
 		/*NOTREACHED*/
 	case -1:
@@ -491,7 +471,7 @@ instructions()
 }
 
 void
-usage()
+usage(void)
 {
 	(void)fprintf(stderr, "usage: fish [-p]\n");
 	exit(1);

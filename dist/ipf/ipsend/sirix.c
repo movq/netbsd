@@ -1,12 +1,11 @@
-/*	$NetBSD: sirix.c,v 1.1.1.1 1999/12/11 22:24:10 veego Exp $	*/
+/*	$NetBSD: sirix.c,v 1.4 2004/03/28 09:00:56 martti Exp $	*/
 
 /*
  * (C)opyright 1992-1998 Darren Reed.
  * (C)opyright 1997 Marc Boucher.
  *
- * Redistribution and use in source and binary forms are permitted
- * provided that this notice is preserved and due credit is given
- * to the original author and the contributors.
+ * See the IPFILTER.LICENCE file for details on licencing.
+ *
  */
 #include <stdio.h>
 #include <sys/types.h>
@@ -24,17 +23,15 @@
 #include <netinet/ip.h>
 #include <netinet/if_ether.h>
 #include <netinet/ip_var.h>
-#include <netinet/udp.h>
-#include <netinet/udp_var.h>
-#include <netinet/tcp.h>
 #include "ipsend.h"
+#include <netinet/udp_var.h>
 
 #if !defined(lint) && defined(LIBC_SCCS)
 static	char	sirix[] = "@(#)sirix.c	1.0 10/9/97 (C)1997 Marc Boucher";
 #endif
 
 
-int	initdevice(char *device, int sport, int tout)
+int	initdevice(char *device, int tout)
 {
 	int fd;
 	struct sockaddr_raw sr;

@@ -1,4 +1,4 @@
-/* $NetBSD: lemac.c,v 1.13 2000/03/06 21:02:01 thorpej Exp $ */
+/* $NetBSD: lemac.c,v 1.35 2008/04/08 12:07:26 cegger Exp $ */
 
 /*-
  * Copyright (c) 1994, 1995, 1997 Matt Thomas <matt@3am-software.com>
@@ -10,7 +10,7 @@
  * 1. Redistributions of source code must retain the above copyright
  *    notice, this list of conditions and the following disclaimer.
  * 2. The name of the author may not be used to endorse or promote products
- *    derived from this software withough specific prior written permission
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -33,8 +33,10 @@
  *   This driver supports the LEMAC DE203/204/205 cards.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: lemac.c,v 1.35 2008/04/08 12:07:26 cegger Exp $");
+
 #include "opt_inet.h"
-#include "opt_ns.h"
 #include "rnd.h"
 
 #include <sys/param.h>
@@ -65,12 +67,8 @@
 #include <netinet/if_inarp.h>
 #endif
 
-#ifdef NS
-#include <netns/ns.h>
-#include <netns/ns_if.h>
-#endif
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/ic/lemacreg.h>
 #include <dev/ic/lemacvar.h>
@@ -78,7 +76,7 @@
 #include <i386/isa/decether.h>
 #endif
 
-#include <vm/vm.h>
+#include <uvm/uvm_extern.h>
 
 #include "bpfilter.h"
 #if NBPFILTER > 0
@@ -95,7 +93,11 @@ static void lemac_rxd_intr(lemac_softc_t *sc, unsigned cs_value);
 static int  lemac_read_eeprom(lemac_softc_t *sc);
 static void lemac_init_adapmem(lemac_softc_t *sc);
 
-static const u_int16_t lemac_allmulti_mctbl[16] =  {
+static const u_int16_t lemac_allmulti_mctbl[LEMAC_MCTBL_SIZE/sizeof(u_int16_t)] =  {
+    0xFFFFU, 0xFFFFU, 0xFFFFU, 0xFFFFU,
+    0xFFFFU, 0xFFFFU, 0xFFFFU, 0xFFFFU,
+    0xFFFFU, 0xFFFFU, 0xFFFFU, 0xFFFFU,
+    0xFFFFU, 0xFFFFU, 0xFFFFU, 0xFFFFU,
     0xFFFFU, 0xFFFFU, 0xFFFFU, 0xFFFFU,
     0xFFFFU, 0xFFFFU, 0xFFFFU, 0xFFFFU,
     0xFFFFU, 0xFFFFU, 0xFFFFU, 0xFFFFU,
@@ -150,7 +152,7 @@ lemac_rxd_intr(
     }
 
     /*
-     *  Error during initializion.  Mark card as disabled.
+     *  Error during initialization.  Mark card as disabled.
      */
     printf("%s: recovery failed -- board disabled\n", sc->sc_if.if_xname);
 }
@@ -236,7 +238,7 @@ lemac_read_eeprom(
     if (sc->sc_eeprom[LEMAC_EEP_SWFLAGS] & LEMAC_EEP_SW_LAB)
 	sc->sc_txctl |= LEMAC_TX_LAB;
 
-    bcopy(&sc->sc_eeprom[LEMAC_EEP_PRDNM], sc->sc_prodname, LEMAC_EEP_PRDNMSZ);
+    memcpy(sc->sc_prodname, &sc->sc_eeprom[LEMAC_EEP_PRDNM], LEMAC_EEP_PRDNMSZ);
     sc->sc_prodname[LEMAC_EEP_PRDNMSZ] = '\0';
 
     return cksum % 256;
@@ -284,17 +286,6 @@ lemac_input(
 	LEMAC_GETBUF16(sc, offset, sizeof(eh) / 2, (void *) &eh);
     }
 
-    /*
-     * If this is single cast but not to us
-     * drop it!
-     */
-    if ((eh.ether_dhost[0] & 1) == 0
-#if NBPFILTER > 0
-	    && (sc->sc_if.if_flags & IFF_PROMISC) == 0
-#endif
-	    && !LEMAC_ADDREQUAL(eh.ether_dhost, sc->sc_enaddr))
-	return;
-
     MGETHDR(m, M_DONTWAIT, MT_DATA);
     if (m == NULL) {
 	sc->sc_if.if_ierrors++;
@@ -309,13 +300,13 @@ lemac_input(
 	}
     }
     m->m_data += 2;
-    bcopy((caddr_t)&eh, m->m_data, sizeof(eh));
+    memcpy(m->m_data, (void *)&eh, sizeof(eh));
     if (LEMAC_USE_PIO_MODE(sc)) {
 	LEMAC_INSB(sc, LEMAC_REG_DAT, length - sizeof(eh),
-		   mtod(m, caddr_t) + sizeof(eh));
+		   mtod(m, char *) + sizeof(eh));
     } else {
 	LEMAC_GETBUF16(sc, offset + sizeof(eh), (length - sizeof(eh)) / 2,
-		      (void *) (mtod(m, caddr_t) + sizeof(eh)));
+		      (void *)(mtod(m, char *) + sizeof(eh)));
 	if (length & 1)
 	    m->m_data[length - 1] = LEMAC_GET8(sc, offset + length - 1);
     }
@@ -350,7 +341,7 @@ lemac_rne_intr(
     while (rxcount--) {
 	unsigned rxpg = LEMAC_INB(sc, LEMAC_REG_RQ);
 	u_int32_t rxlen;
-	
+
 	sc->sc_if.if_ipackets++;
 	if (LEMAC_USE_PIO_MODE(sc)) {
 	    LEMAC_OUTB(sc, LEMAC_REG_IOP, rxpg);
@@ -373,7 +364,7 @@ lemac_rne_intr(
 	}
 	LEMAC_OUTB(sc, LEMAC_REG_FMQ, rxpg);  /* Return this page to Free Memory Queue */
     }  /* end while (recv_count--) */
-    
+
     return;
 }
 
@@ -391,15 +382,15 @@ lemac_read_macaddr(
 {
     int cksum, rom_cksum;
     unsigned char addrbuf[6];
-    
+
     if (!skippat) {
 	int idx, idx2, found, octet;
 	static u_char testpat[] = { 0xFF, 0, 0x55, 0xAA, 0xFF, 0, 0x55, 0xAA };
 	idx2 = found = 0;
-    
+
 	for (idx = 0; idx < 32; idx++) {
 	    octet = bus_space_read_1(iot, ioh, ioreg);
-	    
+
 	    if (octet == testpat[idx2]) {
 		if (++idx2 == sizeof(testpat)) {
 		    ++found;
@@ -409,7 +400,7 @@ lemac_read_macaddr(
 		idx2 = 0;
 	    }
 	}
-	
+
 	if (!found)
 	    return -1;
     }
@@ -421,7 +412,7 @@ lemac_read_macaddr(
     hwaddr[0] = bus_space_read_1(iot, ioh, ioreg);
     hwaddr[1] = bus_space_read_1(iot, ioh, ioreg);
 
-    /* hardware adddress can't be multicast */
+    /* hardware address can't be multicast */
     if (hwaddr[0] & 1)
 	return -1;
 
@@ -447,7 +438,7 @@ lemac_read_macaddr(
 
     rom_cksum = bus_space_read_1(iot, ioh, ioreg);
     rom_cksum |= bus_space_read_1(iot, ioh, ioreg) << 8;
-	
+
     if (cksum != rom_cksum)
 	return -1;
     return 0;
@@ -459,22 +450,13 @@ lemac_multicast_op(
     const u_char *mca,
     int enable)
 {
-    u_int idx, bit, crc = 0xFFFFFFFFUL;
-    static const u_int crctab[] = {
-	0x00000000, 0x1db71064, 0x3b6e20c8, 0x26d930ac,
-	0x76dc4190, 0x6b6b51f4, 0x4db26158, 0x5005713c,
-	0xedb88320, 0xf00f9344, 0xd6d6a3e8, 0xcb61b38c,
-	0x9b64c2b0, 0x86d3d2d4, 0xa00ae278, 0xbdbdf21c
-    };
+    u_int idx, bit, crc;
 
-    for (idx = 0; idx < 6; idx++) {
-	crc ^= *mca++;
-	crc = (crc >> 4) ^ crctab[crc & 0xf];
-	crc = (crc >> 4) ^ crctab[crc & 0xf];
-    }
+    crc = ether_crc32_le(mca, ETHER_ADDR_LEN);
+
     /*
      * The following two lines convert the N bit index into a longword index
-     * and a longword mask.  
+     * and a longword mask.
      */
 #if LEMAC_MCTBL_BITS < 0
     crc >>= (32 + LEMAC_MCTBL_BITS);
@@ -502,7 +484,7 @@ lemac_multicast_filter(
     struct ether_multistep step;
     struct ether_multi *enm;
 
-    bzero(sc->sc_mctbl, LEMAC_MCTBL_BITS / 8);
+    memset(sc->sc_mctbl, 0, LEMAC_MCTBL_BITS / 8);
 
     lemac_multicast_op(sc->sc_mctbl, etherbroadcastaddr, TRUE);
 
@@ -520,7 +502,7 @@ lemac_multicast_filter(
     sc->sc_if.if_flags &= ~IFF_ALLMULTI;
 }
 
-/* 
+/*
  * Do a hard reset of the board;
  */
 static void
@@ -544,7 +526,7 @@ lemac_reset(
      * is important because functions hereafter may rely on information
      * read from the EEPROM.
      */
-    if ((data = lemac_read_eeprom(sc)) != LEMAC_EEP_CKSUM) { 
+    if ((data = lemac_read_eeprom(sc)) != LEMAC_EEP_CKSUM) {
 	printf("%s: reset: EEPROM checksum failed (0x%x)\n",
 	       sc->sc_if.if_xname, data);
 	return;
@@ -616,7 +598,8 @@ lemac_init(
 	    LEMAC_INTR_DISABLE(sc);
 	    lemac_multicast_filter(sc);
 	    if (sc->sc_flags & LEMAC_ALLMULTI)
-		bcopy(lemac_allmulti_mctbl, sc->sc_mctbl, sizeof(sc->sc_mctbl));
+		memcpy(sc->sc_mctbl, lemac_allmulti_mctbl,
+		       sizeof(sc->sc_mctbl));
 	    if (LEMAC_USE_PIO_MODE(sc)) {
 		LEMAC_OUTB(sc, LEMAC_REG_IOP, 0);
 		LEMAC_OUTB(sc, LEMAC_REG_PI1, LEMAC_MCTBL_OFF & 0xFF);
@@ -643,22 +626,25 @@ lemac_init(
     }
 }
 
-static void 
+static void
 lemac_ifstart(
     struct ifnet *ifp)
 {
     lemac_softc_t * const sc = LEMAC_IFP_TO_SOFTC(ifp);
-    struct ifqueue * const ifq = &ifp->if_snd;
 
     if ((ifp->if_flags & IFF_RUNNING) == 0)
 	return;
 
     LEMAC_INTR_DISABLE(sc);
 
-    while (ifq->ifq_head != NULL) {
+    for (;;) {
 	struct mbuf *m;
 	struct mbuf *m0;
 	int tx_pg;
+
+	IFQ_POLL(&ifp->if_snd, m);
+	if (m == NULL)
+	    break;
 
 	if ((sc->sc_csr.csr_tqc = LEMAC_INB(sc, LEMAC_REG_TQC)) >= lemac_txmax) {
 	    sc->sc_cntrs.cntr_txfull++;
@@ -679,12 +665,12 @@ lemac_ifstart(
 	    break;
 	}
 
-	IF_DEQUEUE(ifq, m);
+	IFQ_DEQUEUE(&ifp->if_snd, m);
 
 	/*
 	 * The first four bytes of each transmit buffer are for
 	 * control information.  The first byte is the control
-	 * byte, then the length (why not word aligned??), then
+	 * byte, then the length (why not word aligned?), then
 	 * the offset to the buffer.
 	 */
 
@@ -736,7 +722,7 @@ lemac_ifstart(
 			cp += alen; txoff += alen; len -= alen;
 		    }
 		    if (len >= 2) {
-			LEMAC_PUTBUF16(sc, txoff, len / 2, (void *) cp);
+			LEMAC_PUTBUF16(sc, txoff, len / 2, (const void *) cp);
 			cp += len & ~1; txoff += len & ~1; len &= 1;
 		    }
 		}
@@ -762,7 +748,7 @@ static int
 lemac_ifioctl(
     struct ifnet *ifp,
     u_long cmd,
-    caddr_t data)
+    void *data)
 {
     lemac_softc_t * const sc = LEMAC_IFP_TO_SOFTC(ifp);
     int s;
@@ -784,22 +770,6 @@ lemac_ifioctl(
 		}
 #endif /* INET */
 
-#ifdef NS
-		/* This magic copied from if_is.c; I don't use XNS,
-		 * so I have no way of telling if this actually
-		 * works or not.
-		 */
-		case AF_NS: {
-		    struct ns_addr *ina = &(IA_SNS(ifa)->sns_addr);
-		    if (ns_nullhost(*ina)) {
-			ina->x_host = *(union ns_host *)sc->sc_enaddr;
-		    } else {
-			bcopy((caddr_t)ina->x_host.c_host, sc->sc_enaddr,
-			      ifp->if_addrlen);
-		    }
-		    break;
-		}
-#endif /* NS */
 
 		default: {
 		    break;
@@ -818,15 +788,10 @@ lemac_ifioctl(
 	    /*
 	     * Update multicast listeners
 	     */
-	    if (cmd == SIOCADDMULTI)
-		error = ether_addmulti((struct ifreq *)data, &sc->sc_ec);
-	    else
-		error = ether_delmulti((struct ifreq *)data, &sc->sc_ec);
-
-	    if (error == ENETRESET) {
-
+	    if ((error = ether_ioctl(ifp, cmd, data)) == ENETRESET) {
 		/* reset multicast filtering */
-		lemac_init(sc);
+		if (ifp->if_flags & IFF_RUNNING)
+		    lemac_init(sc);
 		error = 0;
 	    }
 	    break;
@@ -1026,13 +991,13 @@ lemac_ifattach(
 {
     struct ifnet * const ifp = &sc->sc_if;
 
-    bcopy(sc->sc_dv.dv_xname, ifp->if_xname, IFNAMSIZ);
+    strlcpy(ifp->if_xname, device_xname(&sc->sc_dv), IFNAMSIZ);
 
     lemac_reset(sc);
 
     (void) lemac_read_macaddr(sc->sc_enaddr, sc->sc_iot, sc->sc_ioh,
 			      LEMAC_REG_APD, 0);
-	
+
     printf(": %s\n", sc->sc_prodname);
 
     printf("%s: address %s, %dKB RAM, %s\n",
@@ -1054,15 +1019,13 @@ lemac_ifattach(
     if (sc->sc_flags & LEMAC_ALIVE) {
 	int media;
 
+	IFQ_SET_READY(&ifp->if_snd);
+
 	if_attach(ifp);
 	ether_ifattach(ifp, sc->sc_enaddr);
 
-#if NBPFILTER > 0
-	bpfattach(&ifp->if_bpf, ifp, DLT_EN10MB, sizeof(struct ether_header));
-#endif
-
 #if NRND > 0
-	rnd_attach_source(&sc->rnd_source, sc->sc_dv.dv_xname,
+	rnd_attach_source(&sc->rnd_source, device_xname(&sc->sc_dv),
 			  RND_TYPE_NET, 0);
 #endif
 

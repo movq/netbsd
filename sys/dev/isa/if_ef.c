@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ef.c,v 1.6 1999/01/08 19:22:36 augustss Exp $	*/
+/*	$NetBSD: if_ef.c,v 1.26 2008/04/28 20:23:52 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -35,6 +28,9 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_ef.c,v 1.26 2008/04/28 20:23:52 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -50,11 +46,9 @@
 #include <net/if_media.h>
 #include <net/if_ether.h>
 
-#include <vm/vm.h>
-
-#include <machine/cpu.h>
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/cpu.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/isa/isareg.h>
 #include <dev/isa/isavar.h>
@@ -94,25 +88,25 @@ int eftp_media[] = {
 #define NEFTP_MEDIA       (sizeof(eftp_media) / sizeof(eftp_media[0]))
 
 /* Routines required by the MI i82586 driver API */
-static void 	ef_reset __P((struct ie_softc *, int));
-static void 	ef_hwinit __P((struct ie_softc *));
-static void 	ef_atten __P((struct ie_softc *));
-static int 	ef_intrhook __P((struct ie_softc *, int));
+static void 	ef_reset(struct ie_softc *, int);
+static void 	ef_hwinit(struct ie_softc *);
+static void 	ef_atten(struct ie_softc *, int);
+static int 	ef_intrhook(struct ie_softc *, int);
 
-static void	ef_copyin __P((struct ie_softc *, void *, int, size_t));
-static void	ef_copyout __P((struct ie_softc *, const void *, int, size_t));
+static void	ef_copyin(struct ie_softc *, void *, int, size_t);
+static void	ef_copyout(struct ie_softc *, const void *, int, size_t);
 
-static u_int16_t ef_read_16 __P((struct ie_softc *, int));
-static void	ef_write_16 __P((struct ie_softc *, int, u_int16_t));
-static void	ef_write_24 __P((struct ie_softc *, int, int));
+static u_int16_t ef_read_16(struct ie_softc *, int);
+static void	ef_write_16(struct ie_softc *, int, u_int16_t);
+static void	ef_write_24(struct ie_softc *, int, int);
 
-static void	ef_mediastatus __P((struct ie_softc *, struct ifmediareq *));
+static void	ef_mediastatus(struct ie_softc *, struct ifmediareq *);
 
 /* Local routines */
-static int 	ef_port_check __P((bus_space_tag_t, bus_space_handle_t));
+static int 	ef_port_check(bus_space_tag_t, bus_space_handle_t);
 
-int ef_match __P((struct device *, struct cfdata *, void *));
-void ef_attach __P((struct device *, struct device *, void *));
+int ef_match(struct device *, struct cfdata *, void *);
+void ef_attach(struct device *, struct device *, void *);
 
 /*
  * This keeps track of which ISAs have been through an ie probe sequence.
@@ -148,19 +142,19 @@ ef_card_add(
     struct ef_isabus *bus,
     bus_addr_t iobase,
     bus_addr_t maddr,
-    bus_size_t msize,
+    bus_size_t msiz,
     int irq)
 {
 	int idx;
 
 	DPRINTF(("Adding 3c507 at 0x%x, IRQ %d, Mem 0x%lx/%ld\n",
-		 (u_int) iobase, irq, (u_long) maddr, msize));
+		 (u_int) iobase, irq, (u_long) maddr, msiz));
 
 	for (idx = 0; idx < MAXCARDS_PER_ISABUS; idx++) {
 		if (bus->isa_cards[idx].available == 0) {
 			bus->isa_cards[idx].iobase = iobase;
 			bus->isa_cards[idx].maddr = maddr;
-			bus->isa_cards[idx].msize = msize;
+			bus->isa_cards[idx].msize = msiz;
 			bus->isa_cards[idx].irq = irq;
 			bus->isa_cards[idx].available = 1;
 			break;
@@ -199,8 +193,7 @@ ef_reset(sc, why)
 }
 
 static void
-ef_atten(sc)
-	struct ie_softc *sc;
+ef_atten(struct ie_softc *sc, int why)
 {
 	struct ef_softc* esc = (struct ef_softc *) sc;
 	bus_space_write_1(esc->sc_regt, esc->sc_regh, EF_ATTN, 1);
@@ -303,8 +296,8 @@ ef_copyout (sc, src, offset, size)
 	}
 
 	dribble = size % 2;
-	bus_space_write_region_2(sc->bt, sc->bh, offset, (u_int16_t *)bptr,
-				 size >> 1);
+	bus_space_write_region_2(sc->bt, sc->bh, offset,
+	    (const u_int16_t *)bptr, size >> 1);
 	if (dribble) {
 		bptr += size - 1;
 		offset += size - 1;
@@ -349,10 +342,7 @@ ef_mediastatus(sc, ifmr)
 }
 
 int
-ef_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+ef_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct isa_attach_args * const ia = aux;
 
@@ -362,14 +352,17 @@ ef_match(parent, cf, aux)
 	bus_space_handle_t ioh;
 	bus_space_tag_t iot = ia->ia_iot;
 
+	if (ISA_DIRECT_CONFIG(ia))
+		return (0);
+
 	if (ef_isa_buses_inited == 0) {
 		LIST_INIT(&ef_isa_buses);
 		ef_isa_buses_inited = 1;
 	}
 
 	/*
-	* Probe this bus if we haven't done so already.
-	*/
+	 * Probe this bus if we haven't done so already.
+	 */
 	for (bus = ef_isa_buses.lh_first; bus != NULL;
 	     bus = bus->isa_link.le_next) {
 		if (bus->isa_bus == parent)
@@ -386,7 +379,7 @@ ef_match(parent, cf, aux)
 			malloc(sizeof(struct ef_isabus), M_DEVBUF, M_NOWAIT);
 		if (bus == NULL)
 		    panic("ef_isa_probe: can't allocate state storage for %s",
-			  parent->dv_xname);
+			  device_xname(parent));
 
 		bus->bus_state = 0;		/* nothing done yet */
 		bus->isa_bus = parent;
@@ -402,7 +395,7 @@ ef_match(parent, cf, aux)
 		 * Reset and put card in CONFIG state without
 		 * changing address.
 		 */
-		elink_reset(iot, ioh, parent->dv_unit);
+		elink_reset(iot, ioh, device_unit(parent));
 		elink_idseq(iot, ioh, ELINK_507_POLY);
 		elink_idseq(iot, ioh, ELINK_507_POLY);
 		bus_space_write_1(iot, ioh, 0, 0xff);
@@ -427,7 +420,7 @@ ef_match(parent, cf, aux)
 				int irq;
 				u_int8_t v;
 				bus_addr_t maddr;
-				bus_addr_t msize;
+				bus_addr_t msiz1;
 				bus_space_handle_t memh;
 
 				irq = bus_space_read_1(iot, ioh, EF_IRQ) &
@@ -436,35 +429,42 @@ ef_match(parent, cf, aux)
 				v = bus_space_read_1(iot, ioh, EF_MADDR);
 				maddr = EF_MADDR_BASE +
 				      ((v & EF_MADDR_MASK) << EF_MADDR_SHIFT);
-				msize = ((v & EF_MSIZE_MASK) + 1) *
+				msiz1 = ((v & EF_MSIZE_MASK) + 1) *
 					EF_MSIZE_STEP;
 
 				if (bus_space_map(ia->ia_memt, maddr,
-						  msize, 0, &memh) == 0) {
+						  msiz1, 0, &memh) == 0) {
 					    ef_card_add(bus, iobase, maddr,
-							msize, irq);
+							msiz1, irq);
 					    bus_space_unmap(ia->ia_memt,
-							    memh, msize);
+							    memh, msiz1);
 				}
 			}
 			bus_space_unmap(iot, ioh, EF_IOSIZE);
 		}
 	}
 
+	if (ia->ia_nio < 1)
+		return (0);
+	if (ia->ia_niomem < 1)
+		return (0);
+	if (ia->ia_nirq < 1)
+		return (0);
+
 	for (idx = 0; idx < MAXCARDS_PER_ISABUS; idx++) {
 		if (bus->isa_cards[idx].available != 1)
 			continue;
 
-		if (ia->ia_iobase != IOBASEUNK &&
-		    ia->ia_iobase != bus->isa_cards[idx].iobase)
+		if (ia->ia_io[0].ir_addr != ISA_UNKNOWN_PORT &&
+		    ia->ia_io[0].ir_addr != bus->isa_cards[idx].iobase)
 			continue;
 
-		if (ia->ia_maddr != MADDRUNK &&
-		    ia->ia_maddr != bus->isa_cards[idx].maddr)
+		if (ia->ia_iomem[0].ir_addr != ISA_UNKNOWN_IOMEM &&
+		    ia->ia_iomem[0].ir_addr != bus->isa_cards[idx].maddr)
 			continue;
 
-		if (ia->ia_irq != IRQUNK &&
-		    ia->ia_irq != bus->isa_cards[idx].irq)
+		if (ia->ia_irq[0].ir_irq != ISA_UNKNOWN_IRQ &&
+		    ia->ia_irq[0].ir_irq != bus->isa_cards[idx].irq)
 			continue;
 
 		break;
@@ -474,11 +474,20 @@ ef_match(parent, cf, aux)
 		return (0);
 
 	bus->isa_cards[idx].available++;
-	ia->ia_iobase = bus->isa_cards[idx].iobase;
-	ia->ia_irq    = bus->isa_cards[idx].irq;
-	ia->ia_iosize = EF_IOSIZE;
-	ia->ia_maddr  = bus->isa_cards[idx].maddr;
-	ia->ia_msize  = bus->isa_cards[idx].msize;
+
+	ia->ia_nio = 1;
+	ia->ia_io[0].ir_addr = bus->isa_cards[idx].iobase;
+	ia->ia_io[0].ir_size = EF_IOSIZE;
+
+	ia->ia_niomem = 1;
+	ia->ia_iomem[0].ir_addr = bus->isa_cards[idx].maddr;
+	ia->ia_iomem[0].ir_size = bus->isa_cards[idx].msize;
+
+	ia->ia_nirq = 1;
+	ia->ia_irq[0].ir_irq = bus->isa_cards[idx].irq;
+
+	ia->ia_ndrq = 0;
+
 	return (1);
 }
 
@@ -494,7 +503,7 @@ ef_attach(parent, self, aux)
 	bus_space_tag_t iot = ia->ia_iot;
 
 	int i;
-	char version[20];
+	char vers[20];
 	struct ef_isabus *bus;
 	u_int8_t partno[EF_TYPE_LEN];
 	bus_space_handle_t ioh, memh;
@@ -504,6 +513,8 @@ ef_attach(parent, self, aux)
 	sc->hwreset = ef_reset;
 	sc->chan_attn = ef_atten;
 	sc->intrhook = ef_intrhook;
+
+	sc->ie_bus_barrier = NULL;
 
 	sc->memcopyin = ef_copyin;
 	sc->memcopyout = ef_copyout;
@@ -532,14 +543,14 @@ ef_attach(parent, self, aux)
 	}
 
 	if (bus == NULL)
-		panic("%s: Can't find parent bus!", sc->sc_dev.dv_xname);
+		panic("%s: Can't find parent bus!", device_xname(&sc->sc_dev));
 
 
 	/* If the bus hasn't been transitioned to the RUN state, do so now */
 	if (bus->bus_state == 1) {
 		if (bus_space_map(iot, ELINK_ID_PORT, 1, 0, &ioh) != 0) {
 			DPRINTF(("\n%s: Can't map Elink ID port!\n",
-				sc->sc_dev.dv_xname));
+				device_xname(&sc->sc_dev)));
 			return;
 		}
 
@@ -552,32 +563,32 @@ ef_attach(parent, self, aux)
 	}
 
 	/* Map i/o space. */
-	if (bus_space_map(ia->ia_iot, ia->ia_iobase,
-			  ia->ia_iosize, 0, &ioh) != 0) {
+	if (bus_space_map(ia->ia_iot, ia->ia_io[0].ir_addr,
+			  ia->ia_io[0].ir_size, 0, &ioh) != 0) {
 
 		DPRINTF(("\n%s: can't map i/o space 0x%x-0x%x\n",
-			  sc->sc_dev.dv_xname, ia->ia_iobase,
-			  ia->ia_iobase + ia->ia_iosize - 1));
+			  device_xname(&sc->sc_dev), ia->ia_io[0].ir_addr,
+			  ia->ia_io[0].ir_addr + ia->ia_io[0].ir_size - 1));
 		return;
 	}
 
 	esc->sc_regt = ia->ia_iot;
 	esc->sc_regh = ioh;
 
-	if (bus_space_map(ia->ia_memt, ia->ia_maddr,
-			  ia->ia_msize, 0, &memh) != 0) {
+	if (bus_space_map(ia->ia_memt, ia->ia_iomem[0].ir_addr,
+			  ia->ia_iomem[0].ir_size, 0, &memh) != 0) {
 
 		DPRINTF(("\n%s: can't map iomem space 0x%x-0x%x\n",
-			sc->sc_dev.dv_xname, ia->ia_maddr,
+			device_xname(&sc->sc_dev), ia->ia_maddr,
 			ia->ia_maddr + ia->ia_msize - 1));
-		bus_space_unmap(ia->ia_iot, ioh, ia->ia_iosize);
+		bus_space_unmap(ia->ia_iot, ioh, ia->ia_io[0].ir_size);
 		return;
 	}
 
 	sc->bt = ia->ia_memt;
 	sc->bh = memh;
 
-	sc->sc_msize = ia->ia_msize;
+	sc->sc_msize = ia->ia_iomem[0].ir_size;
 	sc->sc_maddr = (void *)memh;
 	sc->sc_iobase = (char *)sc->sc_maddr + sc->sc_msize - (1 << 24);
 
@@ -593,7 +604,8 @@ ef_attach(parent, self, aux)
 	bus_space_set_region_1(sc->bt, sc->bh, 0, 0, sc->sc_msize);
 
 	/* set card to 16-bit bus mode */
-	bus_space_write_1(sc->bt, sc->bh, IE_SCP_BUS_USE((u_long)sc->scp), 0);
+	bus_space_write_1(sc->bt, sc->bh, IE_SCP_BUS_USE((u_long)sc->scp),
+			  IE_SYSBUS_16BIT);
 
 	/* set up pointers to key structures */
 	ef_write_24(sc, IE_SCP_ISCP((u_long)sc->scp), (u_long) sc->iscp);
@@ -605,9 +617,9 @@ ef_attach(parent, self, aux)
 			  BUS_SPACE_BARRIER_WRITE);
 	if (!i82586_proberam(sc)) {
 		DPRINTF(("\n%s: can't talk to i82586!\n",
-			sc->sc_dev.dv_xname));
-		bus_space_unmap(ia->ia_iot, ioh, ia->ia_iosize);
-		bus_space_unmap(ia->ia_memt, memh, ia->ia_msize);
+			device_xname(&sc->sc_dev)));
+		bus_space_unmap(ia->ia_iot, ioh, ia->ia_io[0].ir_size);
+		bus_space_unmap(ia->ia_memt, memh, ia->ia_iomem[0].ir_size);
 		return;
 	}
 
@@ -634,30 +646,30 @@ ef_attach(parent, self, aux)
 		ethaddr[i] = bus_space_read_1(esc->sc_regt, esc->sc_regh,
 					      EF_ADDR + i);
 
-	sprintf(version, "%s, rev. %d",
+	snprintf(vers, sizeof(vers), "%s, rev. %d",
 		(esc->card_type == EF_CARD_TP) ? "3C507-TP" : "3C507",
 		esc->card_rev);
 
 	if (esc->card_type == EF_CARD_TP)
-		i82586_attach(sc, version, ethaddr, eftp_media, NEFTP_MEDIA,
+		i82586_attach(sc, vers, ethaddr, eftp_media, NEFTP_MEDIA,
 			      eftp_media[0]);
 	else {
 		u_int8_t media = bus_space_read_1(esc->sc_regt, esc->sc_regh,
 						  EF_MEDIA);
 		media = (media & EF_MEDIA_MASK) >> EF_MEDIA_SHIFT;
 
-		i82586_attach(sc, version, ethaddr, ef_media, NEF_MEDIA,
+		i82586_attach(sc, vers, ethaddr, ef_media, NEF_MEDIA,
 			      ef_media[media]);
 	}
 
 	/* Clear the interrupt latch just in case. */
 	bus_space_write_1(esc->sc_regt, esc->sc_regh, EF_ICTRL, 1);
 
-	esc->sc_ih = isa_intr_establish(ia->ia_ic, ia->ia_irq, IST_EDGE,
-					IPL_NET, i82586_intr, sc);
+	esc->sc_ih = isa_intr_establish(ia->ia_ic, ia->ia_irq[0].ir_irq,
+	    IST_EDGE, IPL_NET, i82586_intr, sc);
 	if (esc->sc_ih == NULL) {
 		DPRINTF(("\n%s: can't establish interrupt\n",
-			sc->sc_dev.dv_xname));
+			device_xname(&sc->sc_dev)));
 	}
 }
 
@@ -668,7 +680,7 @@ ef_port_check(iot, ioh)
 {
 	int i;
         u_char ch;
-	u_char* signature = EF_SIGNATURE;
+	const u_char* signature = EF_SIGNATURE;
 
 	for (i = 0; i < strlen(signature); i++) {
 		ch = bus_space_read_1(iot, ioh, i);
@@ -684,7 +696,6 @@ ef_port_check(iot, ioh)
 	return 1;
 }
 
-struct cfattach ef_ca = {
-	sizeof(struct ef_softc), ef_match, ef_attach
-};
+CFATTACH_DECL(ef, sizeof(struct ef_softc),
+    ef_match, ef_attach, NULL, NULL);
 

@@ -1,4 +1,4 @@
-.\"	$NetBSD: readlink.2,v 1.12 1999/12/02 21:42:38 kleink Exp $
+.\"	$NetBSD: readlink.2,v 1.25 2004/05/13 10:20:58 wiz Exp $
 .\"
 .\" Copyright (c) 1983, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -33,7 +29,7 @@
 .\"
 .\"     @(#)readlink.2	8.1 (Berkeley) 6/4/93
 .\"
-.Dd June 4, 1993
+.Dd May 11, 2004
 .Dt READLINK 2
 .Os
 .Sh NAME
@@ -42,9 +38,9 @@
 .Sh LIBRARY
 .Lb libc
 .Sh SYNOPSIS
-.Fd #include <unistd.h>
-.Ft int
-.Fn readlink "const char *path" "char *buf" "size_t bufsiz"
+.In unistd.h
+.Ft ssize_t
+.Fn readlink "const char * restrict path" "char * restrict buf" "size_t bufsiz"
 .Sh DESCRIPTION
 .Fn readlink
 places the contents of the symbolic link
@@ -60,9 +56,25 @@ character to
 .Fa buf .
 .Sh RETURN VALUES
 The call returns the count of characters placed in the buffer
-if it succeeds, or a -1 if an error occurs, placing the error
+if it succeeds, or a \-1 if an error occurs, placing the error
 code in the global variable
 .Va errno .
+.Sh EXAMPLES
+A typical use is illustrated in the following piece of code
+which reads the contents of a symbolic link named
+.Pa /symbolic/link
+and stores them as null-terminated string:
+.Bd -literal -offset indent
+#include \*[Lt]limits.h\*[Gt]
+#include \*[Lt]unistd.h\*[Gt]
+
+char buf[PATH_MAX];
+ssize_t len;
+
+if ((len = readlink("/symbolic/link", buf, sizeof(buf)-1)) == -1)
+	error handling;
+buf[len] = '\e0';
+.Ed
 .Sh ERRORS
 .Fn readlink
 will fail if:
@@ -70,9 +82,9 @@ will fail if:
 .It Bq Er ENOTDIR
 A component of the path prefix is not a directory.
 .It Bq Er ENAMETOOLONG
-A component of a pathname exceeded 
+A component of a pathname exceeded
 .Dv {NAME_MAX}
-characters, or an entire path name exceeded 
+characters, or an entire path name exceeded
 .Dv {PATH_MAX}
 characters.
 .It Bq Er ENOENT
@@ -90,12 +102,23 @@ An I/O error occurred while reading from the file system.
 extends outside the process's allocated address space.
 .El
 .Sh SEE ALSO
-.Xr stat 2 ,
 .Xr lstat 2 ,
+.Xr stat 2 ,
 .Xr symlink 2 ,
 .Xr symlink 7
+.Sh STANDARDS
+The
+.Fn readlink
+function conforms to
+.St -p1003.1-2001 .
 .Sh HISTORY
 The
 .Fn readlink
-function call appeared in
+function appeared in
 .Bx 4.2 .
+The type returned was changed from
+.Ft int
+to
+.Ft ssize_t
+in
+.Nx 2.1 .

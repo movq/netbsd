@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.5 1994/06/29 06:41:07 cgd Exp $	*/
+/*	$NetBSD: main.c,v 1.14 2007/01/18 12:43:38 cbiere Exp $	*/
 
 /*
  * TODO:
@@ -11,11 +11,17 @@
  * However it does work...
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: main.c,v 1.14 2007/01/18 12:43:38 cbiere Exp $");
+
+#include <stdlib.h>
 #include <stdio.h>
 #include <strings.h>
+#include <time.h>
 #include "malloc.h"
 #include "debug.h"
 #include "main.h"
+#include "procs.h"
 
 int	debug[128];
 
@@ -42,10 +48,18 @@ char *synonyms[] = {
 	0
 };
 
+void FakeFilename();
+extern void llparse();
+extern void initsets();
+extern void init_alloc();
+extern void dump_predtable();
+extern void printprotoerrs();
+
+void
 usage(a)
-char *a;
+	char *a;
 {
-	fprintf(stderr, 
+	fprintf(stderr,
 	"usage: %s <transition file> {-D<debug options>} <other options>\n",
 		a);
 	fprintf(stderr, "\t<other options> is any combination of:\n");
@@ -55,9 +69,9 @@ char *a;
 	fprintf(stderr, "\t\t-I<initial values file name>\n");
 	fprintf(stderr, "\t\t-X<debugging file name>\n");
 	fprintf(stderr, "\t\t-K<directory name>\n");
-	fprintf(stderr, 
-	"\tThese names do NOT include the suffices (.c, .h)\n");
-	fprintf(stderr, 
+	fprintf(stderr,
+	"\tThese names do NOT include the suffixes (.c, .h)\n");
+	fprintf(stderr,
 	"\t\t-D<options> to turn on debug options for xebec itself\n");
 	fprintf(stderr, "\t-<nn> for levels of debugging output\n");
 	fprintf(stderr, "\t\t<nn> ranges from 1 to 3, 1 is default(everything)\n");
@@ -68,8 +82,9 @@ char *a;
 	Exit(-1);
 }
 
+void
 openfiles(proto)
-register char *proto;
+	register char *proto;
 {
 	register char *junk;
 	register int lenp = strlen(proto);
@@ -78,14 +93,12 @@ register char *proto;
 		fprintf(OUT, "openfiles %s\n",proto);
 	ENDDEBUG
 
-#define HEADER Header
-#define SOURCE Source
 #define DOIT(X)\
 	/* GAG */\
-	junk = Malloc( 2 + lenp + strlen(X/**/_name) );\
+	junk = Malloc( 2 + lenp + strlen(X ## _name) );\
 	(void) sprintf(junk, "%s_", proto);\
-	X/**/_name = strcat(junk, X/**/_name);\
-	X = fopen(X/**/_name, "w");\
+	X ## _name = strcat(junk, X ## _name);\
+	X = fopen(X ## _name, "w");\
 	if((X)==(FILE *)0)\
 	{ fprintf(stderr,"Open failed: %s\n", "X"); Exit(-1); }\
 	fprintf(X, "/* %cHeader%c */\n",'$', '$' );\
@@ -96,20 +109,21 @@ register char *proto;
 	IFDEBUG(X)
 #ifdef DEBUG
 		DOIT(astringfile);
-#endif DEBUG
-		fprintf(astringfile, 
-				"#ifndef _NFILE\n#include <stdio.h>\n#endif _NFILE\n" );
+#endif /* DEBUG */
+		fprintf(astringfile,
+				"#ifndef _NFILE\n#include <stdio.h>\n#endif /* _NFILE */\n" );
 	ENDDEBUG
 
 	DOIT(statevalfile);
 	DOIT(statefile);
 	DOIT(actfile);
 	fprintf(actfile,
-		"#ifndef lint\nstatic char *rcsid = \"$Header/**/$\";\n#endif lint\n");
+		"#ifndef lint\nstatic char *rcsid = \"%cHeader%c\";\n#endif /* lint */\n",
+		'$', '$');
 
 	if(pgoption)
 		putdriver(actfile, 15);
-	else 
+	else
 		putdriver(actfile, 14);
 
 	FakeFilename(actfile, Transfilename, lineno);
@@ -123,9 +137,10 @@ register char *proto;
 	initsets(eventfile_h, statefile);
 }
 
+void
 includecode(file, f)
-FILE *file;
-register char *f;
+	FILE *file;
+	register char *f;
 {
 	register int count=1;
 	static char o='{';
@@ -133,7 +148,7 @@ register char *f;
 	register char *g;
 
 	IFDEBUG(a)
-		fprintf(stdout, "including: %s, f=0x%x", f,f);
+		fprintf(stdout, "including: %s, f=%p", f,f);
 	ENDDEBUG
 	g = ++f;
 	while(count>0) {
@@ -149,6 +164,7 @@ register char *f;
 	FakeFilename(file, Transfilename, lineno);
 }
 
+void
 putincludes()
 {
 	FakeFilename(actfile, Transfilename, lineno);
@@ -161,6 +177,7 @@ putincludes()
 	FakeFilename(actfile, Transfilename, lineno);
 }
 
+int
 main(argc, argv)
 int argc;
 char *argv[];
@@ -196,23 +213,23 @@ char *argv[];
 			actfile_name =  (char *)strcpy(actfile_name,name);
 #ifdef LINT
 			name =
-#endif LINT
+#endif /* LINT */
 			strcat(actfile_name, ".c");
 			fprintf(stdout, "debugging file is %s\n",actfile_name);
 			break;
 		case 'K':
-			debug[c]=1;
+			debug[(unsigned char) c]=1;
 			fprintf(OUT, "option %c file %s\n",c, &argv[i][j+1]);
 			(void) strcpy(kerneldirname,&argv[i][++j]);
 			break;
 		case 'X':
-			debug[c]=1;
+			debug[(unsigned char) c]=1;
 			name = &argv[i][++j];
 			astringfile_name = Malloc( strlen(name)+4);
 			astringfile_name =  (char *)strcpy(astringfile_name,name);
 #ifdef LINT
 			name =
-#endif LINT
+#endif /* LINT */
 			strcat(astringfile_name, ".c");
 			fprintf(OUT, "option %c, astringfile name %s\n",c, name);
 			break;
@@ -222,7 +239,7 @@ char *argv[];
 			eventfile_h_name =  (char *)strcpy(eventfile_h_name,name);
 #ifdef LINT
 			name =
-#endif LINT
+#endif /* LINT */
 			strcat(eventfile_h_name, ".h");
 			fprintf(stdout, "event files is %s\n",eventfile_h_name);
 			break;
@@ -232,7 +249,7 @@ char *argv[];
 			statevalfile_name =  (char *)strcpy(statevalfile_name,name);
 #ifdef LINT
 			name =
-#endif LINT
+#endif /* LINT */
 			strcat(statevalfile_name, ".init");
 			fprintf(stdout, "state table initial values file is %s\n",statevalfile_name);
 			break;
@@ -242,7 +259,7 @@ char *argv[];
 			statefile_name =  (char *)strcpy(statefile_name,name);
 #ifdef LINT
 			name =
-#endif LINT
+#endif /* LINT */
 			strcat(statefile_name, ".h");
 			fprintf(stdout, "state file is %s\n",statefile_name);
 			break;
@@ -255,13 +272,13 @@ char *argv[];
 				debug['X']);
 			break;
 		case 'D':
-			while( c = argv[i][++j] ) {
+			while((c = argv[i][++j])) {
 				if(c ==  'X') {
 					fprintf(OUT, "debugging on");
 					if(debug['X']) fprintf(OUT,
 						" - overrides any -%d flags used\n", debug['X']);
 				}
-				debug[c]=1;
+				debug[(unsigned char) c]=1;
 				fprintf(OUT, "debug %c\n",c);
 			}
 			break;
@@ -291,10 +308,10 @@ char *argv[];
 			fprintf(OUT, "Option K overrides option X\n");
 			debug['X'] = 0;
 		}
-#endif notdef
+#endif /* notdef */
 		if(strlen(kerneldirname)<1) {
 			fprintf(OUT, "K option: dir name too short!\n");
-			exit(-1);
+			exit(1);
 		}
 		/* add ../name/ */
 		c = (char *) Malloc(strlen(kerneldirname)+6) ;
@@ -302,7 +319,7 @@ char *argv[];
 			fprintf(OUT, "Cannot allocate %d bytes for kerneldirname\n",
 				strlen(kerneldirname + 6) );
 			fprintf(OUT, "kerneldirname is %s\n", kerneldirname  );
-			exit(-1);
+			exit(1);
 		}
 		*c = '.';
 		*(c+1) = '.';
@@ -322,7 +339,7 @@ char *argv[];
 	fprintf(eventfile_h, "};/* end struct event */\n");
 	fprintf(eventfile_h, "\n#define %s_NEVENTS 0x%x\n", protocol, Nevents);
 	fprintf(eventfile_h,
-		"\n#define ATTR(X)ev_union.%s/**/X/**/\n",EV_PREFIX);
+		"\n#define ATTR(X)ev_union.%s ## X ## \n",EV_PREFIX);
 	(void) fclose(eventfile_h);
 
 	/* {{ */ fprintf(actfile, "\t}\nreturn 0;\n}\n"); /* end switch; end action() */
@@ -338,7 +355,7 @@ char *argv[];
 		/*
 		putdriver(actfile, 10);
 		*/
-		if(debug['K']) { 
+		if(debug['K']) {
 			putdriver(actfile, 11);
 		} else {
 			switch(debug['X']) {
@@ -356,8 +373,8 @@ char *argv[];
 	ENDDEBUG
 	putdriver(actfile, 8);
 	(void) fclose(actfile);
-	IFDEBUG(X) 
-		/* { */ 
+	IFDEBUG(X)
+		/* { */
 		fprintf(astringfile, "};\n");
 		(void) fclose(astringfile);
 	ENDDEBUG
@@ -369,13 +386,17 @@ char *argv[];
 
 	finish = time(0);
 	fprintf(stdout, "%d seconds\n", finish - start);
-	if( print_protoerrs ) 
+	if( print_protoerrs )
 		printprotoerrs();
+
+	exit(0);
 }
 
 int transno = 0;
 
+void
 Exit(n)
+	int n;
 {
 	fprintf(stderr, "Error at line %d\n",lineno);
 	if(transno) fprintf(stderr, "Transition number %d\n",transno);
@@ -386,7 +407,8 @@ Exit(n)
 	exit(n);
 }
 
-syntax() 
+#if 0
+syntax()
 {
 	static char *synt[] = {
 		"*PROTOCOL <string>\n",
@@ -397,14 +419,20 @@ syntax()
 		"*TRANSITIONS <string>\n",
 	};
 }
-	
+#endif
+
+void
 FakeFilename(outfile, name, l)
-FILE *outfile;
-char *name;
-int l;
+	FILE *outfile;
+	char *name;
+	int l;
 {
-	/*
+#if 0
 	doesn't work
 	fprintf(outfile, "\n\n\n\n# line %d \"%s\"\n", l, name);
-	*/
+#else
+	(void)outfile;
+	(void)name;
+	(void)l;
+#endif
 }

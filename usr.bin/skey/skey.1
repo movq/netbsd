@@ -1,17 +1,19 @@
-.\"	$NetBSD: skey.1,v 1.12 1999/03/22 18:16:43 garbled Exp $
+.\"	$NetBSD: skey.1,v 1.22 2005/09/11 23:25:32 wiz Exp $
 .\"
 .\"	from: @(#)skey.1	1.1 	10/28/93
 .\"
-.Dd 28 October 1993
+.Dd July 25, 2001
 .Dt SKEY 1
 .Os
 .Sh NAME
 .Nm skey
-.Nd interface to the S/Key one time password system
+.Nd respond to an OTP challenge
 .Sh SYNOPSIS
 .Nm
 .Op Fl n Ar count
 .Op Fl p Ar password
+.Op Fl t Ar hash
+.Op Fl x
 .Ar sequence#
 .Op /
 .Ar key
@@ -35,10 +37,10 @@ or
 Example use of the
 .Em S/Key
 program
-.Nm "" :
+.Nm :
 .Bd -literal -offset indent
 % skey  99  th91334
-Enter password: <your secret password is entered here>
+Enter password: \*[Lt]your secret password is entered here\*[Gt]
 OMEN US HORN OMIT BACK AHOY
 %
 .Ed
@@ -50,9 +52,9 @@ can then be used to log into a system.
 The programs that are part of the
 .Em S/Key
 system are:
-.Bl -tag -width skeyaudit...
+.Bl -tag -width skeyauditxxx
 .It Xr skeyinit 1
-used to setup your
+used to set up your
 .Em S/Key .
 .It Nm
 used to get the one time password(s).
@@ -77,13 +79,13 @@ one-time password(s), after requiring your secret password.
 If however, you misspell your secret password that you have given to
 .Xr skeyinit 1
 while running
-.Xr skey 1
+.Nm
 you will get a list of passwords
 that will not work, and no indication about the problem.
 .Pp
 Password sequence numbers count backward from 99.
 You can enter the passwords using small letters, even though
-.Xr skey 1
+.Nm
 prints them capitalized.
 .Pp
 The
@@ -93,19 +95,28 @@ argument asks for
 password sequences to be printed out ending with the requested
 sequence number.
 .Pp
+The hash algorithm is selected using the
+.Fl t Ar hash
+option, possible choices here are md4, md5 or sha1.
+.Pp
 The
 .Fl p Ar password
 allows the user to specify the
 .Em S/Key
 password on the command line.
-.Sh EXAMPLE
+.Pp
+To output the S/Key list in hexadecimal instead of words,
+use the
+.Fl x
+option.
+.Sh EXAMPLES
 Initialize generation of one time passwords:
 .Bd -literal -offset indent
 host% skeyinit
-Password: <normal login password>
+Password: \*[Lt]normal login password\*[Gt]
 [Adding username]
-Enter secret password: <new secret password>
-Again secret password: <new secret password again>
+Enter secret password: \*[Lt]new secret password\*[Gt]
+Again secret password: \*[Lt]new secret password again\*[Gt]
 ID username s/key is 99 host12345
 Next login password: SOME SIX WORDS THAT WERE COMPUTED
 .Ed
@@ -113,7 +124,7 @@ Next login password: SOME SIX WORDS THAT WERE COMPUTED
 Produce a list of one time passwords to take with to a conference:
 .Bd -literal -offset indent
 host% skey -n 3 99 host12345
-Enter secret password: <secret password as used with skeyinit>
+Enter secret password: \*[Lt]secret password as used with skeyinit\*[Gt]
 97: NOSE FOOT RUSH FEAR GREY JUST
 98: YAWN LEO DEED BIND WACK BRAE
 99: SOME SIX WORDS THAT WERE COMPUTED
@@ -125,7 +136,7 @@ is installed:
 .Bd -literal -offset indent
 host% telnet host
 
-login: <username>
+login: \*[Lt]username\*[Gt]
 Password [s/key 97 host12345]:
 .Ed
 .Pp
@@ -136,17 +147,19 @@ password at the prompt but also the normal one unless the
 flag is given to
 .Xr login 1 .
 .Sh SEE ALSO
+.Xr login 1 ,
 .Xr skeyaudit 1 ,
 .Xr skeyinfo 1 ,
 .Xr skeyinit 1 ,
-.Xr login 1 ,
 .Xr ftpd 8
+.Pp
+.Em RFC 2289
 .Sh TRADEMARKS AND PATENTS
 .Em S/Key
 is a trademark of
 .Tn Bellcore .
 .Sh AUTHORS
-Phil Karn,
-Neil M. Haller,
-John S. Walden,
-Scott Chasin
+.An Phil Karn
+.An Neil M. Haller
+.An John S. Walden
+.An Scott Chasin

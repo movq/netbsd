@@ -1,4 +1,4 @@
-/*	$NetBSD: sunos_machdep.c,v 1.8 1999/11/06 20:23:02 eeh Exp $	*/
+/*	$NetBSD: sunos_machdep.c,v 1.30 2008/05/29 14:51:26 mrg Exp $	*/
 
 /*
  * Copyright (c) 1995 Matthew R. Green
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Matthew R. Green for
- *      the NetBSD Project.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -32,9 +26,12 @@
  * SUCH DAMAGE.
  */
 
-/*
- * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: sunos_machdep.c,v 1.30 2008/05/29 14:51:26 mrg Exp $");
+
+#ifdef _KERNEL_OPT
+#include "opt_ddb.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -49,7 +46,11 @@
 #include <sys/signalvar.h>
 #include <sys/malloc.h>
 
+#include <compat/sys/signal.h>
+#include <compat/sys/signalvar.h>
+
 #include <sys/syscallargs.h>
+#include <compat/sunos/sunos.h>
 #include <compat/sunos/sunos_syscallargs.h>
 
 #include <machine/frame.h>
@@ -74,27 +75,25 @@ struct sunos_sigcontext {
 struct sunos_sigframe {
 	int	sf_signo;		/* signal number */
 	int	sf_code;		/* code */
-	u_int32_t	sf_scp;			/* SunOS user addr of sigcontext */
+	uint32_t	sf_scp;			/* SunOS user addr of sigcontext */
 	int	sf_addr;		/* SunOS compat, always 0 for now */
 	struct	sunos_sigcontext sf_sc;	/* actual sigcontext */
 };
 
 void
-sunos_sendsig(catcher, sig, mask, code)
-	sig_t catcher;
-	int sig;
-	sigset_t *mask;
-	u_long code;
+sunos_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 {
-	register struct proc *p = curproc;
-	register struct sigacts *psp = p->p_sigacts;
+	register struct lwp *l = curlwp;
+	struct proc *p = l->l_proc;
 	register struct sunos_sigframe *fp;
 	register struct trapframe64 *tf;
 	register int addr, onstack; 
 	struct rwindow32 *kwin, *oldsp, *newsp;
+	int sig = ksi->ksi_signo, error;
+	sig_t catcher = SIGACTION(p, sig).sa_handler;
 	struct sunos_sigframe sf;
 
-	tf = p->p_md.md_tf;
+	tf = (struct trapframe64 *)l->l_md.md_tf;
 	/* Need to attempt to zero extend this 32-bit pointer */
 	oldsp = (struct rwindow32 *)(u_long)(u_int)tf->tf_out[6];
 	/*
@@ -102,12 +101,12 @@ sunos_sendsig(catcher, sig, mask, code)
 	 * one signal frame, and align.
 	 */
 	onstack =
-	    (psp->ps_sigstk.ss_flags & (SS_DISABLE | SS_ONSTACK)) == 0 &&
-	    (psp->ps_sigact[sig].sa_flags & SA_ONSTACK) != 0;
+	    (l->l_sigstk.ss_flags & (SS_DISABLE | SS_ONSTACK)) == 0 &&
+	    (SIGACTION(p, sig).sa_flags & SA_ONSTACK) != 0;
 
 	if (onstack)
-		fp = (struct sunos_sigframe *)(psp->ps_sigstk.ss_sp +
-					       psp->ps_sigstk.ss_size);
+		fp = (struct sunos_sigframe *)((char *)l->l_sigstk.ss_sp +
+					l->l_sigstk.ss_size);
 	else
 		fp = (struct sunos_sigframe *)oldsp;
 	fp = (struct sunos_sigframe *)((long)(fp - 1) & ~7);
@@ -117,7 +116,9 @@ sunos_sendsig(catcher, sig, mask, code)
 	if ((sigdebug & SDB_KSTACK) && p->p_pid == sigpid) {
 		printf("sunos_sendsig: %s[%d] sig %d newusp %p scp %p oldsp %p\n",
 		    p->p_comm, p->p_pid, sig, fp, &fp->sf_sc, oldsp);
+#ifdef DDB
 		if (sigdebug & SDB_DDB) Debugger();
+#endif
 	}
 #endif
 	/*
@@ -126,14 +127,14 @@ sunos_sendsig(catcher, sig, mask, code)
 	 * directly in user space....
 	 */
 	sf.sf_signo = sig;
-	sf.sf_code = code;
+	sf.sf_code = ksi->ksi_trap;
 	sf.sf_scp = (u_long)&fp->sf_sc;
 	sf.sf_addr = 0;			/* XXX */
 
 	/*
 	 * Build the signal context to be used by sigreturn.
 	 */
-	sf.sf_sc.sc_onstack = psp->ps_sigstk.ss_flags & SS_ONSTACK;
+	sf.sf_sc.sc_onstack = l->l_sigstk.ss_flags & SS_ONSTACK;
 	native_sigset_to_sigset13(mask, &sf.sf_sc.sc_mask);
 	sf.sf_sc.sc_sp = (long)oldsp;
 	sf.sf_sc.sc_pc = tf->tf_pc;
@@ -151,6 +152,8 @@ sunos_sendsig(catcher, sig, mask, code)
 	 * joins seamlessly with the frame it was in when the signal occurred,
 	 * so that the debugger and _longjmp code can back up through it.
 	 */
+	sendsig_reset(l, sig);
+	mutex_exit(p->p_lock);
 	newsp = (struct rwindow32 *)((long)fp - sizeof(struct rwindow32));
 	write_user_windows();
 #ifdef DEBUG
@@ -158,10 +161,13 @@ sunos_sendsig(catcher, sig, mask, code)
 	    printf("sunos_sendsig: saving sf to %p, setting stack pointer %p to %p\n",
 		   fp, &(((struct rwindow32 *)newsp)->rw_in[6]), oldsp);
 #endif
-	kwin = (struct rwindow32 *)(((caddr_t)tf)-CCFSZ);
-	if (rwindow_save(p) || 
-	    copyout((caddr_t)&sf, (caddr_t)fp, sizeof sf) || 
-	    suword(&(((struct rwindow32 *)newsp)->rw_in[6]), (u_long)oldsp)) {
+	kwin = (struct rwindow32 *)(((char *)tf)-CCFSZ);
+	error = (rwindow_save(l) || 
+	    copyout((void *)&sf, (void *)fp, sizeof sf) || 
+	    suword(&(((struct rwindow32 *)newsp)->rw_in[6]), (u_long)oldsp));
+	mutex_enter(p->p_lock);
+
+	if (error) {
 		/*
 		 * Process has trashed its stack; give it an illegal
 		 * instruction to halt it in its tracks.
@@ -170,9 +176,11 @@ sunos_sendsig(catcher, sig, mask, code)
 		if ((sigdebug & SDB_KSTACK) && p->p_pid == sigpid)
 			printf("sunos_sendsig: window save or copyout error\n");
 		printf("sunos_sendsig: stack was trashed trying to send sig %d, sending SIGILL\n", sig);
+#ifdef DDB
 		if (sigdebug & SDB_DDB) Debugger();
 #endif
-		sigexit(p, SIGILL);
+#endif
+		sigexit(l, SIGILL);
 		/* NOTREACHED */
 	}
 
@@ -189,51 +197,48 @@ sunos_sendsig(catcher, sig, mask, code)
 	addr = (long)catcher;	/* user does his own trampolining */
 	tf->tf_pc = addr;
 	tf->tf_npc = addr + 4;
-	tf->tf_out[6] = (u_int64_t)(u_int)(u_long)newsp;
+	tf->tf_out[6] = (uint64_t)(u_int)(u_long)newsp;
 #ifdef DEBUG
 	if ((sigdebug & SDB_KSTACK) && p->p_pid == sigpid) {
 		printf("sunos_sendsig: about to return to catcher %p thru %p\n", 
-		       catcher, addr);
+		       catcher, (void *)(u_long)addr);
+#ifdef DDB
 		if (sigdebug & SDB_DDB) Debugger();
+#endif
 	}
 #endif
 }
 
 int
-sunos_sys_sigreturn(p, v, retval)
-        register struct proc *p;
-	void *v;
-	register_t *retval;
+sunos_sys_sigreturn(register struct lwp *l, const struct sunos_sys_sigreturn_args *uap, register_t *retval)
 {
-	struct sunos_sys_sigreturn_args /* 
-		syscallarg(struct sigcontext13 *) sigcntxp;
-	} */ *uap = v;
+	struct proc *p = l->l_proc;
 	struct sunos_sigcontext sc, *scp;
 	sigset_t mask;
 	struct trapframe64 *tf;
 
 	/* First ensure consistent stack state (see sendsig). */
 	write_user_windows();
-#if 0
-	/* Make sure our D$ is not polluted w/bad data */
-	blast_vcache();
-#endif
-	if (rwindow_save(p))
-		sigexit(p, SIGILL);
+	if (rwindow_save(l)) {
+		mutex_enter(p->p_lock);
+		sigexit(l, SIGILL);
+	}
 #ifdef DEBUG
 	if (sigdebug & SDB_FOLLOW) {
 		printf("sunos_sigreturn: %s[%d], sigcntxp %p\n",
 		    p->p_comm, p->p_pid, SCARG(uap, sigcntxp));
+#ifdef DDB
 		if (sigdebug & SDB_DDB) Debugger();
+#endif
 	}
 #endif
 
 	scp = (struct sunos_sigcontext *)SCARG(uap, sigcntxp);
-	if ((vaddr_t)scp & 3 || (copyin((caddr_t)scp, &sc, sizeof sc) != 0))
+	if ((vaddr_t)scp & 3 || (copyin((void *)scp, &sc, sizeof sc) != 0))
 		return (EFAULT);
 	scp = &sc;
 
-	tf = p->p_md.md_tf;
+	tf = (struct trapframe64 *)l->l_md.md_tf;
 	/*
 	 * Only the icc bits in the psr are used, so it need not be
 	 * verified.  pc and npc must be multiples of 4.  This is all
@@ -242,8 +247,10 @@ sunos_sys_sigreturn(p, v, retval)
 	if (((scp->sc_pc | scp->sc_npc) & 3) != 0 || scp->sc_pc == 0 || scp->sc_npc == 0)
 #ifdef DEBUG
 	{
-		printf("sunos_sigreturn: pc %p or npc %p invalid\n", scp->sc_pc, scp->sc_npc);
+		printf("sunos_sigreturn: pc %p or npc %p invalid\n", (void *)(u_long)scp->sc_pc, (void *)(u_long)scp->sc_npc);
+#ifdef DDB
 		Debugger();
+#endif
 		return (EINVAL);
 	}
 #endif
@@ -258,19 +265,22 @@ sunos_sys_sigreturn(p, v, retval)
 #ifdef DEBUG
 	if (sigdebug & SDB_FOLLOW) {
 		printf("sunos_sigreturn: return trapframe pc=%p sp=%p tstate=%llx\n",
-		       (vaddr_t)tf->tf_pc, (vaddr_t)tf->tf_out[6], tf->tf_tstate);
+		       (void *)(u_long)tf->tf_pc, (void *)(u_long)tf->tf_out[6], (unsigned long long)tf->tf_tstate);
+#ifdef DDB
 		if (sigdebug & SDB_DDB) Debugger();
+#endif
 	}
 #endif
 
+	mutex_enter(p->p_lock);
 	if (scp->sc_onstack & SS_ONSTACK)
-		p->p_sigacts->ps_sigstk.ss_flags |= SS_ONSTACK;
+		l->l_sigstk.ss_flags |= SS_ONSTACK;
 	else
-		p->p_sigacts->ps_sigstk.ss_flags &= ~SS_ONSTACK;
-
+		l->l_sigstk.ss_flags &= ~SS_ONSTACK;
 	/* Restore signal mask */
 	native_sigset13_to_sigset(&scp->sc_mask, &mask);
-	(void) sigprocmask1(p, SIG_SETMASK, &mask, 0);
+	(void) sigprocmask1(l, SIG_SETMASK, &mask, 0);
+	mutex_exit(p->p_lock);
 
 	return (EJUSTRETURN);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: utils.c,v 1.17 1999/03/01 18:57:29 mjl Exp $	*/
+/* $NetBSD: utils.c,v 1.34 2007/10/26 16:21:25 hira Exp $ */
 
 /*-
  * Copyright (c) 1991, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,13 +34,13 @@
 #if 0
 static char sccsid[] = "@(#)utils.c	8.3 (Berkeley) 4/1/94";
 #else
-__RCSID("$NetBSD: utils.c,v 1.17 1999/03/01 18:57:29 mjl Exp $");
+__RCSID("$NetBSD: utils.c,v 1.34 2007/10/26 16:21:25 hira Exp $");
 #endif
 #endif /* not lint */
 
+#include <sys/mman.h>
 #include <sys/param.h>
 #include <sys/stat.h>
-#include <sys/mman.h>
 #include <sys/time.h>
 
 #include <err.h>
@@ -59,9 +55,7 @@ __RCSID("$NetBSD: utils.c,v 1.17 1999/03/01 18:57:29 mjl Exp $");
 #include "extern.h"
 
 int
-set_utimes(file, fs)
-	const char * file;
-	struct stat * fs;
+set_utimes(const char *file, struct stat *fs)
 {
     static struct timeval tv[2];
 
@@ -76,23 +70,21 @@ set_utimes(file, fs)
 }
 
 int
-copy_file(entp, dne)
-	FTSENT *entp;
-	int dne;
+copy_file(FTSENT *entp, int dne)
 {
 	static char buf[MAXBSIZE];
 	struct stat to_stat, *fs;
-	int ch, checkch, from_fd, rcount, rval, to_fd, wcount;
-#ifdef VM_AND_BUFFER_CACHE_SYNCHRONIZED
+	int ch, checkch, from_fd, rcount, rval, to_fd, tolnk, wcount;
 	char *p;
-#endif
 	
 	if ((from_fd = open(entp->fts_path, O_RDONLY, 0)) == -1) {
 		warn("%s", entp->fts_path);
 		return (1);
 	}
 
+	to_fd = -1;
 	fs = entp->fts_statp;
+	tolnk = ((Rflag && !(Lflag || Hflag)) || Pflag);
 
 	/*
 	 * If the file exists and we're interactive, verify with the user.
@@ -103,6 +95,9 @@ copy_file(entp, dne)
 	 * modified by the umask.)
 	 */
 	if (!dne) {
+		struct stat sb;
+		int sval;
+
 		if (iflag) {
 			(void)fprintf(stderr, "overwrite %s? ", to.p_path);
 			checkch = ch = getchar();
@@ -113,13 +108,21 @@ copy_file(entp, dne)
 				return (0);
 			}
 		}
-		/* overwrite existing destination file name */
-		to_fd = open(to.p_path, O_WRONLY | O_TRUNC, 0);
+
+		sval = tolnk ?
+			lstat(to.p_path, &sb) : stat(to.p_path, &sb);
+		if (sval == -1) {
+			warn("stat: %s", to.p_path);
+			return (1);
+		}
+
+		if (!(tolnk && S_ISLNK(sb.st_mode)))
+			to_fd = open(to.p_path, O_WRONLY | O_TRUNC, 0);
 	} else
 		to_fd = open(to.p_path, O_WRONLY | O_TRUNC | O_CREAT,
 		    fs->st_mode & ~(S_ISUID | S_ISGID));
 
-	if (to_fd == -1 && fflag) {
+	if (to_fd == -1 && (fflag || tolnk)) {
 		/*
 		 * attempt to remove existing destination file name and
 		 * create a new file
@@ -132,7 +135,7 @@ copy_file(entp, dne)
 	if (to_fd == -1) {
 		warn("%s", to.p_path);
 		(void)close(from_fd);
-		return (1);;
+		return (1);
 	}
 
 	rval = 0;
@@ -141,34 +144,38 @@ copy_file(entp, dne)
 	 * There's no reason to do anything other than close the file
 	 * now if it's empty, so let's not bother.
 	 */
+
 	if (fs->st_size > 0) {
+
 		/*
-		 * Mmap and write if less than 8M (the limit is so we don't totally
-		 * trash memory on big files).  This is really a minor hack, but it
-		 * wins some CPU back.
+		 * Mmap and write if less than 8M (the limit is so
+		 * we don't totally trash memory on big files).
+		 * This is really a minor hack, but it wins some CPU back.
 		 */
-#ifdef VM_AND_BUFFER_CACHE_SYNCHRONIZED
+
 		if (fs->st_size <= 8 * 1048576) {
-			if ((p = mmap(NULL, (size_t)fs->st_size, PROT_READ,
-			    MAP_FILE|MAP_SHARED, from_fd, (off_t)0)) == (char *)-1) {
-				warn("%s", entp->fts_path);
-				rval = 1;
+			size_t fsize = (size_t)fs->st_size;
+			p = mmap(NULL, fsize, PROT_READ, MAP_FILE|MAP_SHARED,
+			    from_fd, (off_t)0);
+			if (p == MAP_FAILED) {
+				goto mmap_failed;
 			} else {
-				if (write(to_fd, p, fs->st_size) != fs->st_size) {
+				(void) madvise(p, (size_t)fs->st_size,
+				     MADV_SEQUENTIAL);
+				if (write(to_fd, p, fsize) !=
+				    fs->st_size) {
 					warn("%s", to.p_path);
 					rval = 1;
 				}
-				/* Some systems don't unmap on close(2). */
-				if (munmap(p, fs->st_size) < 0) {
+				if (munmap(p, fsize) < 0) {
 					warn("%s", entp->fts_path);
 					rval = 1;
 				}
 			}
-		} else
-#endif
-		{
+		} else {
+mmap_failed:
 			while ((rcount = read(from_fd, buf, MAXBSIZE)) > 0) {
-				wcount = write(to_fd, buf, rcount);
+				wcount = write(to_fd, buf, (size_t)rcount);
 				if (rcount != wcount || wcount == -1) {
 					warn("%s", to.p_path);
 					rval = 1;
@@ -196,7 +203,8 @@ copy_file(entp, dne)
 	 */
 #define	RETAINBITS \
 	(S_ISUID | S_ISGID | S_ISVTX | S_IRWXU | S_IRWXG | S_IRWXO)
-	else if (fs->st_mode & (S_ISUID | S_ISGID) && fs->st_uid == myuid) {
+	if (!pflag && dne
+	    && fs->st_mode & (S_ISUID | S_ISGID) && fs->st_uid == myuid) {
 		if (fstat(to_fd, &to_stat)) {
 			warn("%s", to.p_path);
 			rval = 1;
@@ -219,14 +227,12 @@ copy_file(entp, dne)
 }
 
 int
-copy_link(p, exists)
-	FTSENT *p;
-	int exists;
+copy_link(FTSENT *p, int exists)
 {
 	int len;
 	char target[MAXPATHLEN];
 
-	if ((len = readlink(p->fts_path, target, sizeof(target))) == -1) {
+	if ((len = readlink(p->fts_path, target, sizeof(target)-1)) == -1) {
 		warn("readlink: %s", p->fts_path);
 		return (1);
 	}
@@ -243,9 +249,7 @@ copy_link(p, exists)
 }
 
 int
-copy_fifo(from_stat, exists)
-	struct stat *from_stat;
-	int exists;
+copy_fifo(struct stat *from_stat, int exists)
 {
 	if (exists && unlink(to.p_path)) {
 		warn("unlink: %s", to.p_path);
@@ -259,9 +263,7 @@ copy_fifo(from_stat, exists)
 }
 
 int
-copy_special(from_stat, exists)
-	struct stat *from_stat;
-	int exists;
+copy_special(struct stat *from_stat, int exists)
 {
 	if (exists && unlink(to.p_path)) {
 		warn("unlink: %s", to.p_path);
@@ -285,9 +287,7 @@ copy_special(from_stat, exists)
  *   itself after close(fd).
  */
 int
-setfile(fs, fd)
-	struct stat *fs;
-	int fd;
+setfile(struct stat *fs, int fd)
 {
 	int rval, islink;
 
@@ -314,7 +314,8 @@ setfile(fs, fd)
 		rval = 1;
 	}
 
-	if (!islink) {
+	if (!islink && !Nflag) {
+		unsigned long fflags = fs->st_flags;
 		/*
 		 * XXX
 		 * NFS doesn't support chflags; ignore errors unless
@@ -324,8 +325,8 @@ setfile(fs, fd)
 		 * on a file that we copied, i.e., that we didn't create.)
 		 */
 		errno = 0;
-		if (fd ? fchflags(fd, fs->st_flags) :
-		    chflags(to.p_path, fs->st_flags))
+		if ((fd ? fchflags(fd, fflags) :
+		    chflags(to.p_path, fflags)) == -1)
 			if (errno != EOPNOTSUPP || fs->st_flags != 0) {
 				warn("chflags: %s", to.p_path);
 				rval = 1;
@@ -338,11 +339,12 @@ setfile(fs, fd)
 }
 
 void
-usage()
+usage(void)
 {
-	(void)fprintf(stderr, "%s\n%s\n",
-	    "usage: cp [-R [-H | -L | -P]] [-f | -i] [-p] src target",
-	    "       cp [-R [-H | -L | -P]] [-f | -i] [-p] src1 ... srcN directory");
+	(void)fprintf(stderr,
+	    "usage: %s [-R [-H | -L | -P]] [-f | -i] [-Npv] src target\n"
+	    "       %s [-R [-H | -L | -P]] [-f | -i] [-Npv] src1 ... srcN directory\n",
+	    getprogname(), getprogname());
 	exit(1);
 	/* NOTREACHED */
 }

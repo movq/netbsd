@@ -1,4 +1,4 @@
-/*	$NetBSD: timed.h,v 1.7 1998/02/10 00:38:24 perry Exp $	*/
+/*	$NetBSD: timed.h,v 1.11 2008/02/16 07:30:15 matt Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -46,9 +42,9 @@
 #define ANYADDR 	NULL
 
 struct tsp {
-	u_int8_t tsp_type;
-	u_int8_t tsp_vers;
-	u_int16_t tsp_seq;
+	uint8_t tsp_type;
+	uint8_t tsp_vers;
+	uint16_t tsp_seq;
 	union {
 		struct {
 			int32_t tv_sec;
@@ -94,7 +90,7 @@ struct tsp {
 #define	TSPTYPENUMBER		25
 
 #ifdef TSPTYPES
-char *tsptype[TSPTYPENUMBER] =
+const char * const tsptype[TSPTYPENUMBER] =
   { "ANY", "ADJTIME", "ACK", "MASTERREQ", "MASTERACK", "SETTIME", "MASTERUP", 
   "SLAVEUP", "ELECTION", "ACCEPT", "REFUSE", "CONFLICT", "RESOLVE", "QUIT", 
   "DATE", "DATEREQ", "DATEACK", "TRACEON", "TRACEOFF", "MSITE", "MSITEREQ",

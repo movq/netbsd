@@ -1,4 +1,4 @@
-/*	$NetBSD: quota.c,v 1.22 1999/12/16 17:29:52 bouyer Exp $	*/
+/*	$NetBSD: quota.c,v 1.32 2008/07/21 14:19:25 lukem Exp $	*/
 
 /*
  * Copyright (c) 1980, 1990, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,15 +34,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1990, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1990, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)quota.c	8.4 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: quota.c,v 1.22 1999/12/16 17:29:52 bouyer Exp $");
+__RCSID("$NetBSD: quota.c,v 1.32 2008/07/21 14:19:25 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -94,10 +90,10 @@ int	alldigits __P((char *));
 int	callaurpc __P((char *, int, int, int, xdrproc_t, void *,
 	    xdrproc_t, void *));
 int	main __P((int, char **));
-int	getnfsquota __P((struct statfs *, struct fstab *, struct quotause *,
+int	getnfsquota __P((struct statvfs *, struct fstab *, struct quotause *,
 	    long, int));
 struct quotause	*getprivs __P((long id, int quotatype));
-int	getufsquota __P((struct statfs *, struct fstab *, struct quotause *,
+int	getufsquota __P((struct statvfs *, struct fstab *, struct quotause *,
 	    long, int));
 void	heading __P((int, u_long, const char *, const char *));
 void	showgid __P((gid_t));
@@ -190,7 +186,7 @@ usage()
 {
 
 	fprintf(stderr, "%s\n%s\n%s\n",
-	    "Usage: quota [-guqv]",
+	    "usage: quota [-guqv]",
 	    "\tquota [-qv] -u username ...",
 	    "\tquota [-qv] -g groupname ...");
 	exit(1);
@@ -218,7 +214,7 @@ showuid(uid)
 }
 
 /*
- * Print out quotas for a specifed user name.
+ * Print out quotas for a specified user name.
  */
 void
 showusrname(name)
@@ -273,7 +269,7 @@ showgid(gid)
 }
 
 /*
- * Print out quotas for a specifed group name.
+ * Print out quotas for a specified group name.
  */
 void
 showgrpname(name)
@@ -467,7 +463,7 @@ getprivs(id, quotatype)
 	struct quotause *qup, *quptail;
 	struct fstab *fs;
 	struct quotause *quphead;
-	struct statfs *fst;
+	struct statvfs *fst;
 	int nfst, i;
 
 	qup = quphead = quptail = NULL;
@@ -482,11 +478,12 @@ getprivs(id, quotatype)
 			    (struct quotause *)malloc(sizeof *qup)) == NULL)
 				errx(2, "out of memory");
 		}
-		if (strncmp(fst[i].f_fstypename, "nfs", MFSNAMELEN) == 0) {
+		if (strncmp(fst[i].f_fstypename, "nfs", 
+		    sizeof(fst[i].f_fstypename)) == 0) {
 			if (getnfsquota(&fst[i], NULL, qup, id, quotatype) == 0)
 				continue;
 		} else if (strncmp(fst[i].f_fstypename, "ffs",
-		    MFSNAMELEN) == 0) {
+		    sizeof(fst[i].f_fstypename)) == 0) {
 			/*
 			 * XXX
 			 * UFS filesystems must be in /etc/fstab, and must
@@ -538,8 +535,7 @@ ufshasquota(fs, type, qfnamep)
 		    qfextension[GRPQUOTA], qfname);
 		initname = 1;
 	}
-	(void)strncpy(buf, fs->fs_mntops, sizeof(buf) - 1);
-	buf[sizeof(buf) - 1] = '\0';
+	(void)strlcpy(buf, fs->fs_mntops, sizeof(buf));
 	for (opt = strtok(buf, ","); opt; opt = strtok(NULL, ",")) {
 		if ((cp = strchr(opt, '=')) != NULL)
 			*cp++ = '\0';
@@ -562,7 +558,7 @@ ufshasquota(fs, type, qfnamep)
 
 int
 getufsquota(fst, fs, qup, id, quotatype)
-	struct statfs *fst;
+	struct statvfs *fst;
 	struct fstab *fs;
 	struct quotause *qup;
 	long id;
@@ -603,25 +599,21 @@ getufsquota(fst, fs, qup, id, quotatype)
 
 int
 getnfsquota(fst, fs, qup, id, quotatype)
-	struct statfs *fst;
+	struct statvfs *fst;
 	struct fstab *fs; 
 	struct quotause *qup;
 	long id;
 	int quotatype;
 {
 	struct getquota_args gq_args;
+	struct ext_getquota_args ext_gq_args;
 	struct getquota_rslt gq_rslt;
 	struct dqblk *dqp = &qup->dqblk;
 	struct timeval tv;
 	char *cp;
+	int ret;
 
-	if (fst->f_flags & MNT_LOCAL)
-		return (0);
-
-	/*
-	 * rpc.rquotad does not support group quotas
-	 */
-	if (quotatype != USRQUOTA)
+	if (fst->f_flag & MNT_LOCAL)
 		return (0);
 
 	/*
@@ -639,11 +631,26 @@ getnfsquota(fst, fs, qup, id, quotatype)
 		return (0);
 	}
 
-	gq_args.gqa_pathp = cp + 1;
-	gq_args.gqa_uid = id;
-	if (callaurpc(fst->f_mntfromname, RQUOTAPROG, RQUOTAVERS,
-	    RQUOTAPROC_GETQUOTA, xdr_getquota_args, &gq_args,
-	    xdr_getquota_rslt, &gq_rslt) != 0) {
+	ext_gq_args.gqa_pathp = cp + 1;
+	ext_gq_args.gqa_id = id;
+	ext_gq_args.gqa_type =
+	    (quotatype == USRQUOTA) ? RQUOTA_USRQUOTA : RQUOTA_GRPQUOTA;
+	ret = callaurpc(fst->f_mntfromname, RQUOTAPROG, EXT_RQUOTAVERS,
+	    RQUOTAPROC_GETQUOTA, xdr_ext_getquota_args, &ext_gq_args,
+	    xdr_getquota_rslt, &gq_rslt);
+	if (ret == RPC_PROGVERSMISMATCH) {
+		if (quotatype != USRQUOTA) {
+			*cp = ':';
+			return (0);
+		}
+		/* try RQUOTAVERS */
+		gq_args.gqa_pathp = cp + 1;
+		gq_args.gqa_uid = id;
+		ret = callaurpc(fst->f_mntfromname, RQUOTAPROG, RQUOTAVERS,
+		    RQUOTAPROC_GETQUOTA, xdr_getquota_args, &gq_args,
+			    xdr_getquota_rslt, &gq_rslt);
+	}
+	if (ret != RPC_SUCCESS) {
 		*cp = ':';
 		return (0);
 	}
@@ -659,13 +666,13 @@ getnfsquota(fst, fs, qup, id, quotatype)
 			/* blocks*/
 		dqp->dqb_bhardlimit =
 		    gq_rslt.getquota_rslt_u.gqr_rquota.rq_bhardlimit *
-		    gq_rslt.getquota_rslt_u.gqr_rquota.rq_bsize / DEV_BSIZE;
+		    (gq_rslt.getquota_rslt_u.gqr_rquota.rq_bsize / DEV_BSIZE);
 		dqp->dqb_bsoftlimit =
 		    gq_rslt.getquota_rslt_u.gqr_rquota.rq_bsoftlimit *
-		    gq_rslt.getquota_rslt_u.gqr_rquota.rq_bsize / DEV_BSIZE;
+		    (gq_rslt.getquota_rslt_u.gqr_rquota.rq_bsize / DEV_BSIZE);
 		dqp->dqb_curblocks =
 		    gq_rslt.getquota_rslt_u.gqr_rquota.rq_curblocks *
-		    gq_rslt.getquota_rslt_u.gqr_rquota.rq_bsize / DEV_BSIZE;
+		    (gq_rslt.getquota_rslt_u.gqr_rquota.rq_bsize / DEV_BSIZE);
 			/* inodes */
 		dqp->dqb_ihardlimit =
 			gq_rslt.getquota_rslt_u.gqr_rquota.rq_fhardlimit;

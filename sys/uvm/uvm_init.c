@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_init.c,v 1.12 2000/03/29 03:43:34 simonb Exp $	*/
+/*	$NetBSD: uvm_init.c,v 1.34 2008/10/18 03:46:22 rmind Exp $	*/
 
 /*
  *
@@ -38,41 +38,46 @@
  * uvm_init.c: init the vm system.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: uvm_init.c,v 1.34 2008/10/18 03:46:22 rmind Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/debug.h>
 #include <sys/file.h>
 #include <sys/filedesc.h>
 #include <sys/resourcevar.h>
+#include <sys/kmem.h>
 #include <sys/mman.h>
 #include <sys/proc.h>
 #include <sys/malloc.h>
 #include <sys/vnode.h>
 
-
-#include <vm/vm.h>
-#include <vm/vm_page.h>
-#include <vm/vm_kern.h>
-
 #include <uvm/uvm.h>
+#include <uvm/uvm_pdpolicy.h>
+#include <uvm/uvm_readahead.h>
 
 /*
- * struct uvm: we store all global vars in this structure to make them
+ * struct uvm: we store most global vars in this structure to make them
  * easier to spot...
  */
 
 struct uvm uvm;		/* decl */
 struct uvmexp uvmexp;	/* decl */
+struct uvm_object *uvm_kernel_object;
 
-/*
- * local prototypes
- */
+kmutex_t uvm_pageqlock;
+kmutex_t uvm_fpageqlock;
+kmutex_t uvm_kentry_lock;
+kmutex_t uvm_swap_data_lock;
+kmutex_t uvm_scheduler_mutex;
 
 /*
  * uvm_init: init the VM system.   called from kern/init_main.c.
  */
 
 void
-uvm_init()
+uvm_init(void)
 {
 	vaddr_t kvm_start, kvm_end;
 
@@ -90,6 +95,7 @@ uvm_init()
 
 	memset(&uvm, 0, sizeof(uvm));
 	averunnable.fscale = FSCALE;
+	uvm_amap_init();
 
 	/*
 	 * step 2: init the page sub-system.  this includes allocating the
@@ -111,8 +117,7 @@ uvm_init()
 
 	/*
 	 * step 4: setup the kernel's virtual memory data structures.  this
-	 * includes setting up the kernel_map/kernel_object and the kmem_map/
-	 * kmem_object.
+	 * includes setting up the kernel_map/kernel_object.
 	 */
 
 	uvm_km_init(kvm_start, kvm_end);
@@ -126,10 +131,15 @@ uvm_init()
 
 	/*
 	 * step 6: init the kernel memory allocator.   after this call the
-	 * kernel memory allocator (malloc) can be used.
+	 * kernel memory allocator (malloc) can be used. this includes
+	 * setting up the kmem_map.
 	 */
 
 	kmeminit();
+
+#ifdef DEBUG
+	debug_init();
+#endif
 
 	/*
 	 * step 7: init all pagers and the pager_map.
@@ -138,25 +148,46 @@ uvm_init()
 	uvm_pager_init();
 
 	/*
-	 * step 8: init anonymous memory systems (both amap and anons)
+	 * step 8: init the uvm_loan() facility.
 	 */
 
-	amap_init();		/* init amap module */
-	uvm_anon_init();	/* allocate initial anons */
+	uvm_loan_init();
 
 	/*
-	 * the VM system is now up!  now that malloc is up we can resize the
+	 * Initialize pools.  This must be done before anyone manipulates
+	 * any vm_maps because we use a pool for some map entry structures.
+	 */
+
+	pool_subsystem_init();
+
+	/*
+	 * init slab memory allocator kmem(9).
+	 */
+
+	kmem_init();
+
+	/*
+	 * the VM system is now up!  now that kmem is up we can resize the
 	 * <obj,off> => <page> hash table for general use and enable paging
 	 * of kernel objects.
 	 */
 
-	uvm_page_rehash();
 	uao_create(VM_MAX_KERNEL_ADDRESS - VM_MIN_KERNEL_ADDRESS,
 	    UAO_FLAG_KERNSWAP);
 
+	uvmpdpol_reinit();
+
 	/*
-	 * done!
+	 * init anonymous memory systems
 	 */
 
-	return;
+	uvm_anon_init();
+
+	uvm_uarea_init();
+
+	/*
+	 * init readahead module
+	 */
+
+	uvm_ra_init();
 }

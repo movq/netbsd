@@ -1,4 +1,4 @@
-/*	$NetBSD: position.c,v 1.8 1999/10/09 00:43:32 jtk Exp $	*/
+/*	$NetBSD: position.c,v 1.16 2003/09/14 19:20:20 jschauma Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993, 1994
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -42,7 +38,7 @@
 #if 0
 static char sccsid[] = "@(#)position.c	8.3 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: position.c,v 1.8 1999/10/09 00:43:32 jtk Exp $");
+__RCSID("$NetBSD: position.c,v 1.16 2003/09/14 19:20:20 jschauma Exp $");
 #endif
 #endif /* not lint */
 
@@ -50,9 +46,11 @@ __RCSID("$NetBSD: position.c,v 1.8 1999/10/09 00:43:32 jtk Exp $");
 #include <sys/stat.h>
 #include <sys/ioctl.h>
 #include <sys/mtio.h>
+#include <sys/time.h>
 
 #include <err.h>
 #include <errno.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -66,16 +64,19 @@ __RCSID("$NetBSD: position.c,v 1.8 1999/10/09 00:43:32 jtk Exp $");
  * output.
  */
 void
-pos_in()
+pos_in(void)
 {
 	int bcnt, cnt, nr, warned;
 
 	/* If not a pipe or tape device, try to seek on it. */
 	if (!(in.flags & (ISPIPE|ISTAPE))) {
-		if (lseek(in.fd, (off_t)in.offset * (off_t)in.dbsz, SEEK_CUR)
-		    == -1)
-			err(1, "%s", in.name);
+		if (lseek(in.fd,
+		    (off_t)in.offset * (off_t)in.dbsz, SEEK_CUR) == -1) {
+			err(EXIT_FAILURE, "%s", in.name);
+			/* NOTREACHED */
+		}
 		return;
+		/* NOTREACHED */
 	}
 
 	/*
@@ -100,7 +101,8 @@ pos_in()
 				--files_cnt;
 				continue;
 			}
-			errx(1, "skip reached end of input");
+			errx(EXIT_FAILURE, "skip reached end of input");
+			/* NOTREACHED */
 		}
 
 		/*
@@ -110,18 +112,20 @@ pos_in()
 		 */
 		if (ddflags & C_NOERROR) {
 			if (!warned) {
+
 				warn("%s", in.name);
 				warned = 1;
 				summary();
 			}
 			continue;
 		}
-		err(1, "%s", in.name);
+		err(EXIT_FAILURE, "%s", in.name);
+		/* NOTREACHED */
 	}
 }
 
 void
-pos_out()
+pos_out(void)
 {
 	struct mtop t_op;
 	int cnt, n;
@@ -134,7 +138,8 @@ pos_out()
 	if (!(out.flags & ISTAPE)) {
 		if (lseek(out.fd,
 		    (off_t)out.offset * (off_t)out.dbsz, SEEK_SET) == -1)
-			err(1, "%s", out.name);
+			err(EXIT_FAILURE, "%s", out.name);
+			/* NOTREACHED */
 		return;
 	}
 
@@ -144,7 +149,8 @@ pos_out()
 		t_op.mt_count = out.offset;
 
 		if (ioctl(out.fd, MTIOCTOP, &t_op) < 0)
-			err(1, "%s", out.name);
+			err(EXIT_FAILURE, "%s", out.name);
+			/* NOTREACHED */
 		return;
 	}
 
@@ -154,7 +160,8 @@ pos_out()
 			continue;
 
 		if (n < 0)
-			err(1, "%s", out.name);
+			err(EXIT_FAILURE, "%s", out.name);
+			/* NOTREACHED */
 
 		/*
 		 * If reach EOF, fill with NUL characters; first, back up over
@@ -164,11 +171,13 @@ pos_out()
 		t_op.mt_op = MTBSR;
 		t_op.mt_count = 1;
 		if (ioctl(out.fd, MTIOCTOP, &t_op) == -1)
-			err(1, "%s", out.name);
+			err(EXIT_FAILURE, "%s", out.name);
+			/* NOTREACHED */
 
 		while (cnt++ < out.offset)
-			if ((n = write(out.fd, out.db, out.dbsz)) != out.dbsz)
-				err(1, "%s", out.name);
+			if ((n = bwrite(out.fd, out.db, out.dbsz)) != out.dbsz)
+				err(EXIT_FAILURE, "%s", out.name);
+				/* NOTREACHED */
 		break;
 	}
 }

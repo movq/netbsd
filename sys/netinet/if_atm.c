@@ -1,4 +1,4 @@
-/*      $NetBSD: if_atm.c,v 1.12 2000/03/30 13:24:53 augustss Exp $       */
+/*      $NetBSD: if_atm.c,v 1.29 2008/10/24 17:07:33 dyoung Exp $       */
 
 /*
  *
@@ -36,6 +36,9 @@
  * IP <=> ATM address resolution.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_atm.c,v 1.29 2008/10/24 17:07:33 dyoung Exp $");
+
 #include "opt_inet.h"
 #include "opt_natm.h"
 
@@ -69,8 +72,6 @@
 #endif
 
 
-#define SDL(s) ((struct sockaddr_dl *)s)
-
 /*
  * atm_rtrequest: handle ATM rt request (in support of generic code)
  *   inputs: "req" = request code
@@ -79,19 +80,18 @@
  */
 
 void
-atm_rtrequest(req, rt, sa)
-	int req;
-	struct rtentry *rt;
-	struct sockaddr *sa;
+atm_rtrequest(int req, struct rtentry *rt, const struct rt_addrinfo *info)
 {
 	struct sockaddr *gate = rt->rt_gateway;
 	struct atm_pseudoioctl api;
 #ifdef NATM
-	struct sockaddr_in *sin;
+	const struct sockaddr_in *sin;
 	struct natmpcb *npcb = NULL;
-	struct atm_pseudohdr *aph;
+	const struct atm_pseudohdr *aph;
 #endif
-	static struct sockaddr_dl null_sdl = {sizeof(null_sdl), AF_LINK};
+	const struct ifnet *ifp = rt->rt_ifp;
+	uint8_t namelen = strlen(ifp->if_xname);
+	uint8_t addrlen = ifp->if_addrlen;
 
 	if (rt->rt_flags & RTF_GATEWAY)   /* link level requests only */
 		return;
@@ -111,11 +111,18 @@ atm_rtrequest(req, rt, sa)
 		 * case we are being called via "ifconfig" to set the address.
 		 */
 
-		if ((rt->rt_flags & RTF_HOST) == 0) { 
-			rt_setgate(rt,rt_key(rt),(struct sockaddr *)&null_sdl);
+		if ((rt->rt_flags & RTF_HOST) == 0) {
+			union {
+				struct sockaddr sa;
+				struct sockaddr_dl sdl;
+				struct sockaddr_storage ss;
+			} u;
+
+			sockaddr_dl_init(&u.sdl, sizeof(u.ss),
+			    ifp->if_index, ifp->if_type,
+			    NULL, namelen, NULL, addrlen);
+			rt_setgate(rt, &u.sa);
 			gate = rt->rt_gateway;
-			SDL(gate)->sdl_type = rt->rt_ifp->if_type;
-			SDL(gate)->sdl_index = rt->rt_ifp->if_index;
 			break;
 		}
 
@@ -124,7 +131,7 @@ atm_rtrequest(req, rt, sa)
 			break;
 		}
 		if (gate->sa_family != AF_LINK ||
-		    gate->sa_len < sizeof(null_sdl)) {
+		    gate->sa_len < sockaddr_dl_measure(namelen, addrlen)) {
 			log(LOG_DEBUG, "atm_rtrequest: bad gateway value");
 			break;
 		}
@@ -138,33 +145,32 @@ atm_rtrequest(req, rt, sa)
 		 * let native ATM know we are using this VCI/VPI
 		 * (i.e. reserve it)
 		 */
-		sin = (struct sockaddr_in *) rt_key(rt);
+		sin = satocsin(rt_getkey(rt));
 		if (sin->sin_family != AF_INET)
 			goto failed;
-		aph = (struct atm_pseudohdr *) LLADDR(SDL(gate));
-		npcb = npcb_add(NULL, rt->rt_ifp, ATM_PH_VCI(aph), 
+		aph = (const struct atm_pseudohdr *)CLLADDR(satosdl(gate));
+		npcb = npcb_add(NULL, rt->rt_ifp, ATM_PH_VCI(aph),
 						ATM_PH_VPI(aph));
-		if (npcb == NULL) 
+		if (npcb == NULL)
 			goto failed;
 		npcb->npcb_flags |= NPCB_IP;
 		npcb->ipaddr.s_addr = sin->sin_addr.s_addr;
 		/* XXX: move npcb to llinfo when ATM ARP is ready */
-		rt->rt_llinfo = (caddr_t) npcb;
+		rt->rt_llinfo = (void *) npcb;
 		rt->rt_flags |= RTF_LLINFO;
 #endif
 		/*
 		 * let the lower level know this circuit is active
 		 */
-		bcopy(LLADDR(SDL(gate)), &api.aph, sizeof(api.aph));
+		bcopy(CLLADDR(satocsdl(gate)), &api.aph, sizeof(api.aph));
 		api.rxhand = NULL;
-		if (rt->rt_ifp->if_ioctl(rt->rt_ifp, SIOCATMENA, 
-							(caddr_t)&api) != 0) {
+		if (rt->rt_ifp->if_ioctl(rt->rt_ifp, SIOCATMENA, &api) != 0) {
 			printf("atm: couldn't add VC\n");
 			goto failed;
 		}
 
-		SDL(gate)->sdl_type = rt->rt_ifp->if_type;
-		SDL(gate)->sdl_index = rt->rt_ifp->if_index;
+		satosdl(gate)->sdl_type = rt->rt_ifp->if_type;
+		satosdl(gate)->sdl_index = rt->rt_ifp->if_index;
 
 		break;
 
@@ -176,8 +182,8 @@ failed:
 			rt->rt_flags &= ~RTF_LLINFO;
 		}
 #endif
-		rtrequest(RTM_DELETE, rt_key(rt), (struct sockaddr *)0,
-			rt_mask(rt), 0, (struct rtentry **) 0);
+		rtrequest(RTM_DELETE, rt_getkey(rt), NULL,
+			rt_mask(rt), 0, NULL);
 		break;
 
 	case RTM_DELETE:
@@ -188,7 +194,7 @@ failed:
 		 */
 
 		if (rt->rt_flags & RTF_LLINFO) {
-			npcb_free((struct natmpcb *)rt->rt_llinfo, 
+			npcb_free((struct natmpcb *)rt->rt_llinfo,
 								NPCB_DESTROY);
 			rt->rt_llinfo = NULL;
 			rt->rt_flags &= ~RTF_LLINFO;
@@ -198,10 +204,9 @@ failed:
 		 * tell the lower layer to disable this circuit
 		 */
 
-		bcopy(LLADDR(SDL(gate)), &api.aph, sizeof(api.aph));
+		bcopy(CLLADDR(satocsdl(gate)), &api.aph, sizeof(api.aph));
 		api.rxhand = NULL;
-		(void)rt->rt_ifp->if_ioctl(rt->rt_ifp, SIOCATMDIS, 
-							(caddr_t)&api);
+		(void)rt->rt_ifp->if_ioctl(rt->rt_ifp, SIOCATMDIS, &api);
 
 		break;
 	}
@@ -215,7 +220,7 @@ failed:
  *     [3] "dst" = sockaddr_in (IP) address of dest.
  *   output:
  *     [4] "desten" = ATM pseudo header which we will fill in VPI/VCI info
- *   return: 
+ *   return:
  *     0 == resolve FAILED; note that "m" gets m_freem'd in this case
  *     1 == resolve OK; desten contains result
  *
@@ -224,14 +229,10 @@ failed:
  */
 
 int
-atmresolve(rt, m, dst, desten)
-	struct rtentry *rt;
-	struct mbuf *m;
-	struct sockaddr *dst;
-	struct atm_pseudohdr *desten;	/* OUT */
-
+atmresolve(struct rtentry *rt, struct mbuf *m, const struct sockaddr *dst,
+    struct atm_pseudohdr *desten /* OUT */)
 {
-	struct sockaddr_dl *sdl;
+	const struct sockaddr_dl *sdl;
 
 	if (m->m_flags & (M_BCAST|M_MCAST)) {
 		log(LOG_INFO, "atmresolve: BCAST/MCAST packet detected/dumped");
@@ -242,7 +243,7 @@ atmresolve(rt, m, dst, desten)
 		rt = RTALLOC1(dst, 0);
 		if (rt == NULL) goto bad; /* failed */
 		rt->rt_refcnt--;	/* don't keep LL references */
-		if ((rt->rt_flags & RTF_GATEWAY) != 0 || 
+		if ((rt->rt_flags & RTF_GATEWAY) != 0 ||
 			(rt->rt_flags & RTF_LLINFO) == 0 ||
 			/* XXX: are we using LLINFO? */
 			rt->rt_gateway->sa_family != AF_LINK) {
@@ -251,13 +252,13 @@ atmresolve(rt, m, dst, desten)
 	}
 
 	/*
-	 * note that rt_gateway is a sockaddr_dl which contains the 
+	 * note that rt_gateway is a sockaddr_dl which contains the
 	 * atm_pseudohdr data structure for this route.   we currently
 	 * don't need any rt_llinfo info (but will if we want to support
 	 * ATM ARP [c.f. if_ether.c]).
 	 */
 
-	sdl = SDL(rt->rt_gateway);
+	sdl = satocsdl(rt->rt_gateway);
 
 	/*
 	 * Check the address family and length is valid, the address
@@ -266,8 +267,8 @@ atmresolve(rt, m, dst, desten)
 
 
 	if (sdl->sdl_family == AF_LINK && sdl->sdl_alen == sizeof(*desten)) {
-		bcopy(LLADDR(sdl), desten, sdl->sdl_alen);
-		return(1);	/* ok, go for it! */
+		bcopy(CLLADDR(sdl), desten, sdl->sdl_alen);
+		return (1);	/* ok, go for it! */
 	}
 
 	/*
@@ -278,6 +279,6 @@ atmresolve(rt, m, dst, desten)
 
 bad:
 	m_freem(m);
-	return(0);
+	return (0);
 }
 #endif /* INET */

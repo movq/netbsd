@@ -1,4 +1,4 @@
-.\"	$NetBSD: rexecd.8,v 1.7 1999/03/22 18:25:45 garbled Exp $
+.\"	$NetBSD: rexecd.8,v 1.11 2003/08/07 09:46:46 agc Exp $
 .\"
 .\" Copyright (c) 1983, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -92,7 +88,7 @@ aborted with a diagnostic message returned.
 A NUL byte is returned on the initial socket and the command line
 is passed to the normal login shell of the user.
 The shell inherits the network connections established by
-.Nm "" .
+.Nm .
 .El
 .Sh DIAGNOSTICS
 Except for the last one listed below,
@@ -124,7 +120,7 @@ to the home directory failed.
 A
 .Xr fork 2
 by the server failed.
-.It Sy <shellname>: ...
+.It Sy \*[Lt]shellname\*[Gt]: ...
 The user's login shell could not be started.
 This message is returned
 on the connection associated with the
@@ -133,6 +129,11 @@ and is not preceded by a flag byte.
 .El
 .Sh SEE ALSO
 .Xr rexec 3
+.Sh HISTORY
+The
+.Nm
+command appeared in
+.Bx 4.2 .
 .Sh BUGS
 Indicating ``Login incorrect'' as opposed to ``Password incorrect''
 is a security breach which allows people to probe a system for users
@@ -140,11 +141,6 @@ with null passwords.
 .Pp
 A facility to allow all data and password exchanges to be encrypted should be
 present.
-.Sh HISTORY
-The
-.Nm
-command appeared in
-.Bx 4.2 .
 .Sh SECURITY CONSIDERATIONS
 As the passwords exchanged by the client and
 .Nm

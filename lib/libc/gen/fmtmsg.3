@@ -1,4 +1,4 @@
-.\"	$NetBSD: fmtmsg.3,v 1.1 1999/09/12 19:04:31 kleink Exp $
+.\"	$NetBSD: fmtmsg.3,v 1.6 2008/04/30 13:10:50 martin Exp $
 .\"
 .\" Copyright (c) 1999 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -43,7 +36,7 @@
 .Sh LIBRARY
 .Lb libc
 .Sh SYNOPSIS
-.Fd #include <fmtmsg.h>
+.In fmtmsg.h
 .Ft int
 .Fn fmtmsg "long classification" "const char *label" "int severity" "const char *text" "const char *action" "const char *tag"
 .Sh DESCRIPTION
@@ -62,18 +55,20 @@ and
 Further information such as the origin of the message, the recoverability
 from the condition causing the message and where to display the message
 is specified in
-.Fa classification.
+.Fa classification .
 .Ss classification
 The
 .Fa classification
 argument consists of a major classification and several sub-classifications.
 It has no effect on the content of the message displayed.
 With the exception of the display sub-classification, only a single identifier
-may be specified for each (sub-)classification.  The following classifications
+may be specified for each (sub-)classification.
+The following classifications
 are available:
 .Bl -tag -width MessageXSourceXSub-classificationsXX
 .It Major Classifications
-The source of the condition.  Available identifiers are:
+The source of the condition.
+Available identifiers are:
 .Dv MM_HARD
 (hardware),
 .Dv MM_SOFT
@@ -81,7 +76,8 @@ The source of the condition.  Available identifiers are:
 .Dv MM_FIRM
 (firmware).
 .It Message Source Sub-classifications
-The type of software detecting the condition.  Available identifiers are:
+The type of software detecting the condition.
+Available identifiers are:
 .Dv MM_APPL
 (application),
 .Dv MM_UTIL
@@ -112,9 +108,9 @@ must be specified.
 .Ss label
 The
 .Fa label
-argument identifies the source of the message.  It consists of two fields
-separated by a colon (:).  The first field is up to 10 characters, the second
-is up to 14 characters.
+argument identifies the source of the message.
+It consists of two fields separated by a colon (:).
+The first field is up to 10 characters, the second is up to 14 characters.
 .Pp
 If no
 .Fa label
@@ -143,7 +139,8 @@ level is to be supplied,
 .Dv MM_NOSEV
 must be specified.
 .Ss text
-The description of the condition the software encountered.  The character
+The description of the condition the software encountered.
+The character
 string is not limited to a specific size.
 .Pp
 If no
@@ -179,8 +176,8 @@ standard error stream (but not on the system console!) may be taken by
 setting the
 .Ev MSGVERB
 environment variable, which selects the subset of message components
-to be printed.  It consists of a colon-separated list of the optional
-keywords
+to be printed.
+It consists of a colon-separated list of the optional keywords
 .Fa label ,
 .Fa severity ,
 .Fa text ,
@@ -197,7 +194,7 @@ its content is ignored an all message components will be selected.
 .Pp
 Note that displaying a message on the system console may fail due to
 inappropriate privileges or a non-permissive file mode of the console device.
-.Sh RETURN VALUE
+.Sh RETURN VALUES
 The
 .Fn fmtmsg
 function returns one of the following values:

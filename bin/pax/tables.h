@@ -1,4 +1,4 @@
-/*	$NetBSD: tables.h,v 1.6 2000/03/21 02:15:24 thorpej Exp $	*/
+/*	$NetBSD: tables.h,v 1.10 2007/04/29 20:23:34 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 1992 Keith Muller.
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -81,7 +77,7 @@ typedef struct hrdlnk {
 typedef struct ftm {
 	int		namelen;	/* file name length */
 	time_t		mtime;		/* files last modification time */
-	off_t		seek;		/* loacation in scratch file */
+	off_t		seek;		/* location in scratch file */
 	struct ftm	*fow;
 } FTM;
 
@@ -137,7 +133,7 @@ typedef struct dlist {
 } DLIST;
 
 /*
- * ftree directory access time reset table. When we are done with with a
+ * ftree directory access time reset table. When we are done with a
  * subtree we reset the access and mod time of the directory when the tflag is
  * set. Not really explicitly specified in the pax spec, but easy and fast to
  * do (and this may have even been intended in the spec, it is not clear).

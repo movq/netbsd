@@ -1,7 +1,6 @@
-/*	$NetBSD: pass2.c,v 1.6 2000/01/28 16:01:46 bouyer Exp $	*/
+/*	$NetBSD: pass2.c,v 1.14 2008/03/16 23:17:55 lukem Exp $	*/
 
 /*
- * Copyright (c) 1997 Manuel Bouyer.
  * Copyright (c) 1980, 1986, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -13,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -34,12 +29,41 @@
  * SUCH DAMAGE.
  */
 
+/*
+ * Copyright (c) 1997 Manuel Bouyer.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)pass2.c	8.6 (Berkeley) 10/27/94";
 #else
-__RCSID("$NetBSD: pass2.c,v 1.6 2000/01/28 16:01:46 bouyer Exp $");
+__RCSID("$NetBSD: pass2.c,v 1.14 2008/03/16 23:17:55 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -58,14 +82,15 @@ __RCSID("$NetBSD: pass2.c,v 1.6 2000/01/28 16:01:46 bouyer Exp $");
 #include "fsck.h"
 #include "fsutil.h"
 #include "extern.h"
+#include "exitvalues.h"
 
 #define MINDIRSIZE	(sizeof (struct ext2fs_dirtemplate))
 
-static int pass2check __P((struct inodesc *));
-static int blksort __P((const void *, const void *));
+static int pass2check(struct inodesc *);
+static int blksort(const void *, const void *);
 
 void
-pass2()
+pass2(void)
 {
 	struct ext2fs_dinode *dp;
 	struct inoinfo **inpp, *inp;
@@ -79,9 +104,9 @@ pass2()
 	case USTATE:
 		pfatal("ROOT INODE UNALLOCATED");
 		if (reply("ALLOCATE") == 0)
-			errexit("%s\n", "");
+			exit(FSCK_EXIT_CHECK_FAILED);
 		if (allocdir(EXT2_ROOTINO, EXT2_ROOTINO, 0755) != EXT2_ROOTINO)
-			errexit("CANNOT ALLOCATE ROOT INODE\n");
+			errexit("CANNOT ALLOCATE ROOT INODE");
 		break;
 
 	case DCLEAR:
@@ -89,11 +114,11 @@ pass2()
 		if (reply("REALLOCATE")) {
 			freeino(EXT2_ROOTINO);
 			if (allocdir(EXT2_ROOTINO, EXT2_ROOTINO, 0755) != EXT2_ROOTINO)
-				errexit("CANNOT ALLOCATE ROOT INODE\n");
+				errexit("CANNOT ALLOCATE ROOT INODE");
 			break;
 		}
 		if (reply("CONTINUE") == 0)
-			errexit("%s\n", "");
+			exit(FSCK_EXIT_CHECK_FAILED);
 		break;
 
 	case FSTATE:
@@ -102,11 +127,11 @@ pass2()
 		if (reply("REALLOCATE")) {
 			freeino(EXT2_ROOTINO);
 			if (allocdir(EXT2_ROOTINO, EXT2_ROOTINO, 0755) != EXT2_ROOTINO)
-				errexit("CANNOT ALLOCATE ROOT INODE\n");
+				errexit("CANNOT ALLOCATE ROOT INODE");
 			break;
 		}
 		if (reply("FIX") == 0)
-			errexit("%s\n", "");
+			exit(FSCK_EXIT_CHECK_FAILED);
 		dp = ginode(EXT2_ROOTINO);
 		dp->e2di_mode = h2fs16((fs2h16(dp->e2di_mode) & ~IFMT) | IFDIR);
 		inodirty();
@@ -116,7 +141,7 @@ pass2()
 		break;
 
 	default:
-		errexit("BAD STATE %d FOR ROOT INODE\n", statemap[EXT2_ROOTINO]);
+		errexit("BAD STATE %d FOR ROOT INODE", statemap[EXT2_ROOTINO]);
 	}
 
 	/*
@@ -139,11 +164,12 @@ pass2()
 			inp->i_isize = roundup(MINDIRSIZE, sblock.e2fs_bsize);
 			if (reply("FIX") == 1) {
 				dp = ginode(inp->i_number);
-				dp->e2di_size = h2fs32(inp->i_isize);
+				inossize(dp, inp->i_isize);
 				inodirty();
 			}
 		} else if ((inp->i_isize & (sblock.e2fs_bsize - 1)) != 0) {
-			getpathname(pathbuf, inp->i_number, inp->i_number);
+			getpathname(pathbuf, sizeof(pathbuf), inp->i_number,
+			    inp->i_number);
 			pwarn("DIRECTORY %s: LENGTH %lu NOT MULTIPLE OF %d",
 			    pathbuf, (u_long)inp->i_isize, sblock.e2fs_bsize);
 			if (preen)
@@ -151,13 +177,13 @@ pass2()
 			inp->i_isize = roundup(inp->i_isize, sblock.e2fs_bsize);
 			if (preen || reply("ADJUST") == 1) {
 				dp = ginode(inp->i_number);
-				dp->e2di_size = h2fs32(inp->i_isize);
+				inossize(dp, inp->i_isize);
 				inodirty();
 			}
 		}
 		memset(&dino, 0, sizeof(struct ext2fs_dinode));
 		dino.e2di_mode = h2fs16(IFDIR);
-		dino.e2di_size = h2fs32(inp->i_isize);
+		inossize(&dino, inp->i_isize);
 		memcpy(&dino.e2di_blocks[0], &inp->i_blks[0], (size_t)inp->i_numblks);
 		curino.id_number = inp->i_number;
 		curino.id_parent = inp->i_parent;
@@ -199,14 +225,13 @@ pass2()
 }
 
 static int
-pass2check(idesc)
-	struct inodesc *idesc;
+pass2check(struct inodesc *idesc)
 {
 	struct ext2fs_direct *dirp = idesc->id_dirp;
 	struct inoinfo *inp;
 	int n, entrysize, ret = 0;
 	struct ext2fs_dinode *dp;
-	char *errmsg;
+	const char *errmsg;
 	struct ext2fs_direct proto;
 	char namebuf[MAXPATHLEN + 1];
 	char pathbuf[MAXPATHLEN + 1];
@@ -242,7 +267,7 @@ pass2check(idesc)
 		proto.e2d_type = EXT2_FT_DIR;
 	else
 		proto.e2d_type = 0;
-	(void)strcpy(proto.e2d_name, ".");
+	(void)strlcpy(proto.e2d_name, ".", sizeof(proto.e2d_name));
 	entrysize = EXT2FS_DIRSIZ(proto.e2d_namlen);
 	if (fs2h32(dirp->e2d_ino) != 0 && strcmp(dirp->e2d_name, "..") != 0) {
 		pfatal("CANNOT FIX, FIRST ENTRY IN DIRECTORY CONTAINS %s\n",
@@ -277,7 +302,7 @@ chk1:
 		proto.e2d_type = EXT2_FT_DIR;
 	else
 		proto.e2d_type = 0;
-	(void)strcpy(proto.e2d_name, "..");
+	(void)strlcpy(proto.e2d_name, "..", sizeof(proto.e2d_name));
 	entrysize = EXT2FS_DIRSIZ(2);
 	if (idesc->id_entryno == 0) {
 		n = EXT2FS_DIRSIZ(dirp->e2d_namlen);
@@ -394,10 +419,11 @@ again:
 		case DFOUND:
 			inp = getinoinfo(fs2h32(dirp->e2d_ino));
 			if (inp->i_parent != 0 && idesc->id_entryno > 2) {
-				getpathname(pathbuf, idesc->id_number,
-				    idesc->id_number);
-				getpathname(namebuf, fs2h32(dirp->e2d_ino),
-					fs2h32(dirp->e2d_ino));
+				getpathname(pathbuf, sizeof(pathbuf),
+				    idesc->id_number, idesc->id_number);
+				getpathname(namebuf, sizeof(namebuf),
+				    fs2h32(dirp->e2d_ino),
+				    fs2h32(dirp->e2d_ino));
 				pwarn("%s %s %s\n", pathbuf,
 				    "IS AN EXTRANEOUS HARD LINK TO DIRECTORY",
 				    namebuf);
@@ -428,7 +454,7 @@ again:
 			break;
 
 		default:
-			errexit("BAD STATE %d FOR INODE I=%d\n",
+			errexit("BAD STATE %d FOR INODE I=%d",
 			    statemap[fs2h32(dirp->e2d_ino)], fs2h32(dirp->e2d_ino));
 		}
 	}
@@ -442,9 +468,8 @@ again:
  * Routine to sort disk blocks.
  */
 static int
-blksort(inpp1, inpp2)
-	const void *inpp1, *inpp2;
+blksort(const void *inpp1, const void *inpp2)
 {
-	return ((* (struct inoinfo **) inpp1)->i_blks[0] -
-		(* (struct inoinfo **) inpp2)->i_blks[0]);
+	return ((* (const struct inoinfo * const*) inpp1)->i_blks[0] -
+		(* (const struct inoinfo * const*) inpp2)->i_blks[0]);
 }

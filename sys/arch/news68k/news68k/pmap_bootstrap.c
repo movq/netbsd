@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap_bootstrap.c,v 1.1 1999/12/09 14:53:18 tsutsui Exp $	*/
+/*	$NetBSD: pmap_bootstrap.c,v 1.19 2007/10/17 19:55:54 garbled Exp $	*/
 
 /* 
  * Copyright (c) 1991, 1993
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -42,12 +38,15 @@
  *	news68k/pmap_bootstrap.c - from hp300 and mvme68k
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: pmap_bootstrap.c,v 1.19 2007/10/17 19:55:54 garbled Exp $");
+
 #include <sys/param.h>
 
 #include <machine/cpu.h>
 #include <machine/pte.h>
 
-#include <vm/vm.h>
+#include <uvm/uvm_extern.h>
 
 #define RELOC(v, t)	*((t*)((u_int)&(v) + firstpa))
 
@@ -65,7 +64,7 @@ extern vsize_t mem_size;
 extern int protection_codes[];
 extern int pmap_aliasmask;
 
-void	pmap_bootstrap __P((paddr_t, paddr_t));
+void pmap_bootstrap(paddr_t, paddr_t);
 
 /*
  * Special purpose kernel virtual addresses, used for mapping
@@ -75,8 +74,9 @@ void	pmap_bootstrap __P((paddr_t, paddr_t));
  *	vmmap:		/dev/mem, crash dumps, parity error checking
  *	msgbufaddr:	kernel message buffer
  */
-caddr_t		CADDR1, CADDR2, vmmap;
-extern caddr_t	msgbufaddr;
+void *CADDR1, *CADDR2;
+char *vmmap;
+void *msgbufaddr;
 
 /*
  * Bootstrap the VM system.
@@ -90,11 +90,9 @@ extern caddr_t	msgbufaddr;
  * XXX a PIC compiler would make this much easier.
  */
 void
-pmap_bootstrap(nextpa, firstpa)
-	paddr_t nextpa;
-	paddr_t firstpa;
+pmap_bootstrap(paddr_t nextpa, paddr_t firstpa)
 {
-	paddr_t kstpa, kptpa, iiopa, eiopa, kptmpa, lkptpa, p0upa;
+	paddr_t kstpa, kptpa, kptmpa, p0upa;
 	u_int nptpages, kstsize;
 	st_entry_t protoste, *ste;
 	pt_entry_t protopte, *pte, *epte;
@@ -109,19 +107,11 @@ pmap_bootstrap(nextpa, firstpa)
 	 *	kptpa		statically allocated
 	 *			kernel PT pages		Sysptsize+ pages
 	 *
-	 *	iiopa		internal IO space
-	 *			PT pages		iiomapsize pages
-	 *
-	 *	eiopa		external IO space
-	 *			PT pages		eiomapsize pages
-	 *
 	 * [ Sysptsize is the number of pages of PT, IIOMAPSIZE and
 	 *   EIOMAPSIZE are the number of PTEs, hence we need to round
 	 *   the total to a page boundary with IO maps at the end. ]
 	 *
 	 *	kptmpa		kernel PT map		1 page
-	 *
-	 *	lkptpa		last kernel PT page	1 page
 	 *
 	 *	p0upa		proc 0 u-area		UPAGES pages
 	 *
@@ -146,19 +136,15 @@ pmap_bootstrap(nextpa, firstpa)
 	kstsize = 1;
 #endif
 	kstpa = nextpa;
-	nextpa += kstsize * NBPG;
+	nextpa += kstsize * PAGE_SIZE;
+	kptmpa = nextpa;
+	nextpa += PAGE_SIZE;
+	p0upa = nextpa;
+	nextpa += USPACE;
 	kptpa = nextpa;
 	nptpages = RELOC(Sysptsize, int) +
 		(iiomapsize + eiomapsize + NPTEPG - 1) / NPTEPG;
-	nextpa += nptpages * NBPG;
-	eiopa = nextpa - eiomapsize * sizeof(pt_entry_t);
-	iiopa = eiopa - iiomapsize * sizeof(pt_entry_t);
-	kptmpa = nextpa;
-	nextpa += NBPG;
-	lkptpa = nextpa;
-	nextpa += NBPG;
-	p0upa = nextpa;
-	nextpa += USPACE;
+	nextpa += nptpages * PAGE_SIZE;
 
 	/*
 	 * Clear all PTEs to zero
@@ -212,11 +198,11 @@ pmap_bootstrap(nextpa, firstpa)
 		 * Initialize level 2 descriptors (which immediately
 		 * follow the level 1 table).  We need:
 		 *	NPTEPG / SG4_LEV3SIZE
-		 * level 2 descriptors to map each of the nptpages+1
+		 * level 2 descriptors to map each of the nptpages
 		 * pages of PTEs.  Note that we set the "used" bit
 		 * now to save the HW the expense of doing it.
 		 */
-		num = (nptpages + 1) * (NPTEPG / SG4_LEV3SIZE);
+		num = nptpages * (NPTEPG / SG4_LEV3SIZE);
 		pte = &((u_int *)kstpa)[SG4_LEV1SIZE];
 		epte = &pte[num];
 		protoste = kptpa | SG_U | SG_RW | SG_V;
@@ -245,11 +231,11 @@ pmap_bootstrap(nextpa, firstpa)
 		*ste = (u_int)pte | SG_U | SG_RW | SG_V;
 		/*
 		 * Now initialize the final portion of that block of
-		 * descriptors to map the "last PT page".
+		 * descriptors to map Sysmap.
 		 */
 		pte = &((u_int *)kstpa)[kstsize*NPTEPG - NPTEPG/SG4_LEV3SIZE];
 		epte = &pte[NPTEPG/SG4_LEV3SIZE];
-		protoste = lkptpa | SG_U | SG_RW | SG_V;
+		protoste = kptmpa | SG_U | SG_RW | SG_V;
 		while (pte < epte) {
 			*pte++ = protoste;
 			protoste += (SG4_LEV3SIZE * sizeof(st_entry_t));
@@ -258,11 +244,11 @@ pmap_bootstrap(nextpa, firstpa)
 		 * Initialize Sysptmap
 		 */
 		pte = (u_int *)kptmpa;
-		epte = &pte[nptpages+1];
+		epte = &pte[nptpages];
 		protopte = kptpa | PG_RW | PG_CI | PG_V;
 		while (pte < epte) {
 			*pte++ = protopte;
-			protopte += NBPG;
+			protopte += PAGE_SIZE;
 		}
 		/*
 		 * Invalidate all but the last remaining entry.
@@ -271,56 +257,42 @@ pmap_bootstrap(nextpa, firstpa)
 		while (pte < epte) {
 			*pte++ = PG_NV;
 		}
-		*pte = lkptpa | PG_RW | PG_CI | PG_V;
+		/*
+		 * Initialize the last one to point to Sysptmap.
+		 */
+		*pte = kptmpa | PG_RW | PG_CI | PG_V;
 	} else
 #endif
 	{
 		/*
 		 * Map the page table pages in both the HW segment table
-		 * and the software Sysptmap.  Note that Sysptmap is also
-		 * considered a PT page hence the +1.
+		 * and the software Sysptmap.
 		 */
 		ste = (u_int *)kstpa;
 		pte = (u_int *)kptmpa;
-		epte = &pte[nptpages+1];
+		epte = &pte[nptpages];
 		protoste = kptpa | SG_RW | SG_V;
 		protopte = kptpa | PG_RW | PG_CI | PG_V;
 		while (pte < epte) {
 			*ste++ = protoste;
 			*pte++ = protopte;
-			protoste += NBPG;
-			protopte += NBPG;
+			protoste += PAGE_SIZE;
+			protopte += PAGE_SIZE;
 		}
 		/*
 		 * Invalidate all but the last remaining entries in both.
 		 */
-#if 1 /* XXX lkptpa is needed only hp300? */
 		epte = &((u_int *)kptmpa)[NPTEPG-1];
-#else
-		epte = &((u_int *)kptmpa)[NPTEPG];
-#endif
 		while (pte < epte) {
 			*ste++ = SG_NV;
 			*pte++ = PG_NV;
 		}
 		/*
-		 * Initialize the last to point to point to the page
-		 * table page allocated earlier.
+		 * Initialize the last one to point to Sysptmap.
 		 */
-#if 1
-		*ste = lkptpa | SG_RW | SG_V;
-		*pte = lkptpa | PG_RW | PG_CI | PG_V;
-#endif
+		*ste = kptmpa | SG_RW | SG_V;
+		*pte = kptmpa | PG_RW | PG_CI | PG_V;
 	}
-	/*
-	 * Invalidate all but the final entry in the last kernel PT page
-	 * (u-area PTEs will be validated later).  The final entry maps
-	 * the last page of physical memory.
-	 */
-	pte = (u_int *)lkptpa;
-	epte = &pte[NPTEPG];
-	while (pte < epte)
-		*pte++ = PG_NV;
 
 	/*
 	 * Initialize kernel page table.
@@ -339,7 +311,7 @@ pmap_bootstrap(nextpa, firstpa)
 	protopte = firstpa | PG_RO | PG_V;
 	while (pte < epte) {
 		*pte++ = protopte;
-		protopte += NBPG;
+		protopte += PAGE_SIZE;
 	}
 	/*
 	 * Validate PTEs for kernel data/bss, dynamic data allocated
@@ -357,18 +329,25 @@ pmap_bootstrap(nextpa, firstpa)
 #endif
 	while (pte < epte) {
 		*pte++ = protopte;
-		protopte += NBPG;
+		protopte += PAGE_SIZE;
 	}
 	/*
 	 * Finally, validate the internal IO space PTEs (RW+CI).
 	 */
-	pte = (u_int *)iiopa;
-	epte = (u_int *)eiopa;
+
+#define	PTE2VA(pte)	m68k_ptob(pte - ((pt_entry_t *)kptpa))
+
 	protopte = RELOC(intiobase_phys, u_int) | PG_RW | PG_CI | PG_V;
+	epte = &pte[iiomapsize];
+	RELOC(intiobase, char *) = (char *)PTE2VA(pte);
+	RELOC(intiolimit, char *) = (char *)PTE2VA(epte);
 	while (pte < epte) {
 		*pte++ = protopte;
-		protopte += NBPG;
+		protopte += PAGE_SIZE;
 	}
+	RELOC(extiobase, char *) = (char *)PTE2VA(pte);
+	pte += eiomapsize;
+	RELOC(virtual_avail, vaddr_t) = PTE2VA(pte);
 
 	/*
 	 * Calculate important exported kernel virtual addresses
@@ -385,23 +364,10 @@ pmap_bootstrap(nextpa, firstpa)
 		(pt_entry_t *)(kptmpa - firstpa);
 	/*
 	 * Sysmap: kernel page table (as mapped through Sysptmap)
-	 * Immediately follows `nptpages' of static kernel page table.
+	 * Allocated at the end of KVA space.
 	 */
 	RELOC(Sysmap, pt_entry_t *) =
-		(pt_entry_t *)m68k_ptob(nptpages * NPTEPG);
-	/*
-	 * intiobase, intiolimit: base and end of internal IO space.
-	 */
-	RELOC(intiobase, char *) =
-		(char *)m68k_ptob(nptpages*NPTEPG - (iiomapsize + eiomapsize));
-	RELOC(intiolimit, char *) =
-		(char *)m68k_ptob(nptpages*NPTEPG - eiomapsize);
-	/*
-	 * extiobase: base of external IO space.
-	 * eiomapsize pages at the end of the static kernel page table.
-	 */
-	RELOC(extiobase, char *) =
-		(char *)m68k_ptob(nptpages*NPTEPG - eiomapsize);
+	    (pt_entry_t *)m68k_ptob((NPTEPG - 1) * NPTEPG);
 
 	/*
 	 * Setup u-area for process 0.
@@ -432,8 +398,6 @@ pmap_bootstrap(nextpa, firstpa)
 	    (m68k_round_page(MSGBUFSIZE));
 	RELOC(mem_size, vsize_t) = m68k_ptob(RELOC(physmem, int));
 
-	RELOC(virtual_avail, vaddr_t) =
-		VM_MIN_KERNEL_ADDRESS + (vaddr_t)(nextpa - firstpa);
 	RELOC(virtual_end, vaddr_t) = VM_MAX_KERNEL_ADDRESS;
 
 #if 0
@@ -444,6 +408,14 @@ pmap_bootstrap(nextpa, firstpa)
 	 */
 	if (RELOC(ectype, int) == EC_VIRT) {
 		RELOC(pmap_aliasmask, int) = 0x3fff;	/* 16k */
+	}
+#endif
+#ifdef news1700
+	if (RELOC(systype, int) == NEWS1700) {
+		RELOC(cache_ctl, char *) = 0xe1300000 - INTIOBASE1700 +
+					  RELOC(intiobase, char *);
+		RELOC(cache_clr, char *) = 0xe1900000 - INTIOBASE1700 +
+					  RELOC(intiobase, char *);
 	}
 #endif
 
@@ -483,14 +455,14 @@ pmap_bootstrap(nextpa, firstpa)
 		 * descriptor mask noting that we have used:
 		 *	0:		level 1 table
 		 *	1 to `num':	map page tables
-		 *	MAXKL2SIZE-1:	maps last-page page table
+		 *	MAXKL2SIZE-1:	maps kptmpa
 		 */
 #ifdef M68040
 		if (RELOC(mmutype, int) == MMU_68040) {
 			int num;
-			
+
 			kpm->pm_stfree = ~l2tobm(0);
-			num = roundup((nptpages + 1) * (NPTEPG / SG4_LEV3SIZE),
+			num = roundup(nptpages * (NPTEPG / SG4_LEV3SIZE),
 				      SG4_LEV2SIZE) / SG4_LEV2SIZE;
 			while (num)
 				kpm->pm_stfree &= ~l2tobm(num--);
@@ -509,13 +481,13 @@ pmap_bootstrap(nextpa, firstpa)
 	{
 		vaddr_t va = RELOC(virtual_avail, vaddr_t);
 
-		RELOC(CADDR1, caddr_t) = (caddr_t)va;
-		va += NBPG;
-		RELOC(CADDR2, caddr_t) = (caddr_t)va;
-		va += NBPG;
-		RELOC(vmmap, caddr_t) = (caddr_t)va;
-		va += NBPG;
-		RELOC(msgbufaddr, caddr_t) = (caddr_t)va;
+		RELOC(CADDR1, void *) = (void *)va;
+		va += PAGE_SIZE;
+		RELOC(CADDR2, void *) = (void *)va;
+		va += PAGE_SIZE;
+		RELOC(vmmap, void *) = (void *)va;
+		va += PAGE_SIZE;
+		RELOC(msgbufaddr, void *) = (void *)va;
 		va += m68k_round_page(MSGBUFSIZE);
 		RELOC(virtual_avail, vaddr_t) = va;
 	}

@@ -1,21 +1,21 @@
-/* $NetBSD: tcvar.h,v 1.15 1999/11/15 03:41:49 nisimura Exp $ */
+/* $NetBSD: tcvar.h,v 1.23 2007/10/19 12:01:20 ad Exp $ */
 
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
- * 
+ *
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
+ *
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -34,7 +34,7 @@
  * Definitions for TURBOchannel autoconfiguration.
  */
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <dev/tc/tcreg.h>
 
 /*
@@ -51,7 +51,7 @@
 /*
  * Map the new definitions to the old.
  */
-#include <machine/intr.h>
+#include <sys/intr.h>
 
 #define tc_intrlevel_t	int
 
@@ -69,17 +69,18 @@ struct tc_softc {
 	int	sc_nslots;
 	struct tc_slotdesc *sc_slots;
 
-	void	(*sc_intr_establish) __P((struct device *, void *,
-			int, int (*)(void *), void *));
-	void	(*sc_intr_disestablish) __P((struct device *, void *));
-	bus_dma_tag_t (*sc_get_dma_tag) __P((int));
+	const struct evcnt *(*sc_intr_evcnt)(struct device *, void *);
+	void	(*sc_intr_establish)(struct device *, void *,
+			int, int (*)(void *), void *);
+	void	(*sc_intr_disestablish)(struct device *, void *);
+	bus_dma_tag_t (*sc_get_dma_tag)(int);
 };
 
 /*
  * Arguments used to attach TURBOchannel busses.
  */
 struct tcbus_attach_args {
-	char		*tba_busname;		/* XXX should be common */
+	const char		*tba_busname;	/* XXX should be common */
 	bus_space_tag_t tba_memt;
 
 	/* Bus information */
@@ -88,13 +89,14 @@ struct tcbus_attach_args {
 	struct tc_slotdesc *tba_slots;
 	u_int		tba_nbuiltins;
 	const struct tc_builtin *tba_builtins;
-	
+
 
 	/* TC bus resource management; XXX will move elsewhere eventually. */
-	void	(*tba_intr_establish) __P((struct device *, void *,
-			int, int (*)(void *), void *));
-	void	(*tba_intr_disestablish) __P((struct device *, void *));
-	bus_dma_tag_t (*tba_get_dma_tag) __P((int));
+	const struct evcnt *(*tba_intr_evcnt)(struct device *, void *);
+	void	(*tba_intr_establish)(struct device *, void *,
+			int, int (*)(void *), void *);
+	void	(*tba_intr_disestablish)(struct device *, void *);
+	bus_dma_tag_t (*tba_get_dma_tag)(int);
 };
 
 /*
@@ -127,7 +129,7 @@ struct tc_slotdesc {
  * machine-dependent code to the TURBOchannel bus driver.
  */
 struct tc_builtin {
-	char		*tcb_modname;
+	const char	*tcb_modname;
 	u_int		tcb_slot;
 	tc_offset_t	tcb_offset;
 	void		*tcb_cookie;
@@ -136,22 +138,12 @@ struct tc_builtin {
 /*
  * Interrupt establishment functions.
  */
-int	tc_checkslot __P((tc_addr_t, char *));
-void	tc_devinfo __P((const char *, char *));
-void	tcattach __P((struct device *, struct device *, void *));
-void	tc_intr_establish __P((struct device *, void *,
-					int, int (*)(void *), void *));
-void	tc_intr_disestablish __P((struct device *, void *));
-
-#include "locators.h"
-/*
- * Easy to remember names for TURBOchannel device locators.
- */
-#define	tccf_slot	cf_loc[TCCF_SLOT]		/* slot */
-#define	tccf_offset	cf_loc[TCCF_OFFSET]		/* offset */
-
-#define	TCCF_SLOT_UNKNOWN	TCCF_SLOT_DEFAULT
-#define	TCCF_OFFSET_UNKNOWN	TCCF_OFFSET_DEFAULT
+int	tc_checkslot(tc_addr_t, char *);
+void	tcattach(struct device *, struct device *, void *);
+const struct evcnt *tc_intr_evcnt(struct device *, void *);
+void	tc_intr_establish(struct device *, void *, int, int (*)(void *),
+	    void *);
+void	tc_intr_disestablish(struct device *, void *);
 
 /*
  * Miscellaneous definitions.

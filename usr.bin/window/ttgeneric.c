@@ -1,4 +1,4 @@
-/*	$NetBSD: ttgeneric.c,v 1.5 1998/08/25 20:59:43 ross Exp $	*/
+/*	$NetBSD: ttgeneric.c,v 1.9 2003/08/07 11:17:30 agc Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,11 +37,12 @@
 #if 0
 static char sccsid[] = "@(#)ttgeneric.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: ttgeneric.c,v 1.5 1998/08/25 20:59:43 ross Exp $");
+__RCSID("$NetBSD: ttgeneric.c,v 1.9 2003/08/07 11:17:30 agc Exp $");
 #endif
 #endif /* not lint */
 
 #include <stdlib.h>
+#include <string.h>
 #include <termcap.h>
 #include "ww.h"
 #include "tt.h"
@@ -128,28 +125,27 @@ int gen_LI;
 int gen_UG;
 int gen_SG;
 
-void	gen_clear __P((void));
-void	gen_clreol __P((void));
-void	gen_clreos __P((void));
-void	gen_delchar __P((int));
-void	gen_delline __P((int));
-void	gen_end __P((void));
-void	gen_inschar __P((char));
-void	gen_insline __P((int));
-void	gen_insspace __P((int));
-void	gen_move __P((int, int));
-void	gen_putc __P((char));
-void	gen_scroll_down __P((int));
-void	gen_scroll_up __P((int));
-void	gen_setinsert __P((char));
-void	gen_setmodes __P((int));
-void	gen_setscroll __P((int, int));
-void	gen_start __P((void));
-void	gen_write __P((char *, int));
+void	gen_clear(void);
+void	gen_clreol(void);
+void	gen_clreos(void);
+void	gen_delchar(int);
+void	gen_delline(int);
+void	gen_end(void);
+void	gen_inschar(char);
+void	gen_insline(int);
+void	gen_insspace(int);
+void	gen_move(int, int);
+void	gen_putc(char);
+void	gen_scroll_down(int);
+void	gen_scroll_up(int);
+void	gen_setinsert(char);
+void	gen_setmodes(int);
+void	gen_setscroll(int, int);
+void	gen_start(void);
+void	gen_write(char *, int);
 
 void
-gen_setinsert(new)
-	char new;
+gen_setinsert(char new)
 {
 	if (new) {
 		if (gen_IM)
@@ -161,8 +157,7 @@ gen_setinsert(new)
 }
 
 void
-gen_setmodes(new)
-	int new;
+gen_setmodes(int new)
 {
 	int diff;
 
@@ -172,16 +167,24 @@ gen_setmodes(new)
 			if (gen_SO)
 				ttxputs(gen_SO);
 		} else
-			if (gen_SE)
+			if (gen_SE) {
 				ttxputs(gen_SE);
+				if (!strcmp(gen_SE->ts_str, gen_UE->ts_str) &&
+				    gen_UE && gen_US && new & WWM_UL)
+					ttxputs(gen_US);
+			}
 	}
 	if (diff & WWM_UL) {
 		if (new & WWM_UL) {
 			if (gen_US)
 				ttxputs(gen_US);
 		} else
-			if (gen_UE)
+			if (gen_UE) {
 				ttxputs(gen_UE);
+				if (!strcmp(gen_UE->ts_str, gen_SE->ts_str) &&
+				    gen_SE && gen_SO && new & WWM_REV)
+					ttxputs(gen_SO);
+			}
 	}
 	if (diff & WWM_GRP) {
 		if (new & WWM_GRP) {
@@ -203,8 +206,7 @@ gen_setmodes(new)
 }
 
 void
-gen_insline(n)
-	int n;
+gen_insline(int n)
 {
 	if (tt.tt_modes)			/* for concept 100 */
 		gen_setmodes(0);
@@ -216,8 +218,7 @@ gen_insline(n)
 }
 
 void
-gen_delline(n)
-	int n;
+gen_delline(int n)
 {
 	if (tt.tt_modes)			/* for concept 100 */
 		gen_setmodes(0);
@@ -229,8 +230,7 @@ gen_delline(n)
 }
 
 void
-gen_putc(c)
-	char c;
+gen_putc(char c)
 {
 	if (tt.tt_insert)
 		gen_setinsert(0);
@@ -248,9 +248,7 @@ gen_putc(c)
 }
 
 void
-gen_write(p, n)
-	char *p;
-	int n;
+gen_write(char *p, int n)
 {
 	if (tt.tt_insert)
 		gen_setinsert(0);
@@ -269,8 +267,7 @@ gen_write(p, n)
 }
 
 void
-gen_move(row, col)
-	int row, col;
+gen_move(int row, int col)
 {
 	if (tt.tt_row == row && tt.tt_col == col)
 		return;
@@ -319,7 +316,7 @@ out:
 }
 
 void
-gen_start()
+gen_start(void)
 {
 	if (gen_VS)
 		ttxputs(gen_VS);
@@ -332,7 +329,7 @@ gen_start()
 }
 
 void
-gen_end()
+gen_end(void)
 {
 	if (tt.tt_insert)
 		gen_setinsert(0);
@@ -343,7 +340,7 @@ gen_end()
 }
 
 void
-gen_clreol()
+gen_clreol(void)
 {
 	if (tt.tt_modes)			/* for concept 100 */
 		gen_setmodes(0);
@@ -351,7 +348,7 @@ gen_clreol()
 }
 
 void
-gen_clreos()
+gen_clreos(void)
 {
 	if (tt.tt_modes)			/* for concept 100 */
 		gen_setmodes(0);
@@ -359,7 +356,7 @@ gen_clreos()
 }
 
 void
-gen_clear()
+gen_clear(void)
 {
 	if (tt.tt_modes)			/* for concept 100 */
 		gen_setmodes(0);
@@ -367,8 +364,7 @@ gen_clear()
 }
 
 void
-gen_inschar(c)
-	char c;
+gen_inschar(char c)
 {
 	if (!tt.tt_insert)
 		gen_setinsert(1);
@@ -390,8 +386,7 @@ gen_inschar(c)
 }
 
 void
-gen_insspace(n)
-	int n;
+gen_insspace(int n)
 {
 	if (gen_ICn)
 		ttpgoto(gen_ICn, 0, n, gen_CO - tt.tt_col);
@@ -401,8 +396,7 @@ gen_insspace(n)
 }
 
 void
-gen_delchar(n)
-	int n;
+gen_delchar(int n)
 {
 	if (gen_DCn)
 		ttpgoto(gen_DCn, 0, n, gen_CO - tt.tt_col);
@@ -412,8 +406,7 @@ gen_delchar(n)
 }
 
 void
-gen_scroll_down(n)
-	int n;
+gen_scroll_down(int n)
 {
 	gen_move(tt.tt_scroll_bot, 0);
 	if (gen_SFn)
@@ -424,8 +417,7 @@ gen_scroll_down(n)
 }
 
 void
-gen_scroll_up(n)
-	int n;
+gen_scroll_up(int n)
 {
 	gen_move(tt.tt_scroll_top, 0);
 	if (gen_SRn)
@@ -436,8 +428,7 @@ gen_scroll_up(n)
 }
 
 void
-gen_setscroll(top, bot)
-	int top, bot;
+gen_setscroll(int top, int bot)
 {
 	tttgoto(gen_CS, bot, top);
 	tt.tt_scroll_top = top;
@@ -446,7 +437,7 @@ gen_setscroll(top, bot)
 }
 
 int
-tt_generic()
+tt_generic(void)
 {
 	gen_PC = tttgetstr("pc");
 	PC = gen_PC ? *gen_PC->ts_str : 0;

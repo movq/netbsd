@@ -1,4 +1,4 @@
-.\"	$NetBSD: a.t,v 1.3 2000/03/13 23:03:37 soren Exp $
+.\"	$NetBSD: a.t,v 1.5 2004/02/13 11:36:08 wiz Exp $
 .\"
 .\" Copyright (c) 1986 The Regents of the University of California.
 .\" All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -73,7 +69,7 @@ Protection and sharing options are defined in \fI<sys/mman.h>\fP as:
 #define MAP_INHERIT	0x0040	/* region is retained after exec */
 #define MAP_HASSEMAPHORE	0x0080	/* region may contain semaphores */
 .DE
-The cpu-dependent size of a page is returned by the
+The CPU-dependent size of a page is returned by the
 \fIgetpagesize\fP system call:
 .DS
 pagesize = getpagesize();

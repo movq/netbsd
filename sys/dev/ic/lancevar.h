@@ -1,4 +1,4 @@
-/*	$NetBSD: lancevar.h,v 1.2 1998/08/15 10:51:18 mycroft Exp $	*/
+/*	$NetBSD: lancevar.h,v 1.12 2008/04/28 20:23:50 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,7 +37,7 @@
 #endif
 
 struct lance_softc {
-	struct	device sc_dev;		/* base device glue */
+	device_t sc_dev;		/* base device glue */
 	struct	ethercom sc_ethercom;	/* Ethernet common part */
 	struct	ifmedia sc_media;	/* our supported media */
 
@@ -56,15 +49,15 @@ struct lance_softc {
 	 *	zero bytes in buffer
 	 */
 	void	(*sc_copytodesc)
-		    __P((struct lance_softc *, void *, int, int));
+		   (struct lance_softc *, void *, int, int);
 	void	(*sc_copyfromdesc)
-		    __P((struct lance_softc *, void *, int, int));
+		   (struct lance_softc *, void *, int, int);
 	void	(*sc_copytobuf)
-		    __P((struct lance_softc *, void *, int, int));
+		   (struct lance_softc *, void *, int, int);
 	void	(*sc_copyfrombuf)
-		    __P((struct lance_softc *, void *, int, int));
+		   (struct lance_softc *, void *, int, int);
 	void	(*sc_zerobuf)
-		    __P((struct lance_softc *, int, int));
+		   (struct lance_softc *, int, int);
 
 	/*
 	 * Machine-dependent functions:
@@ -75,22 +68,21 @@ struct lance_softc {
 	 *	no carrier hook - may be NULL
 	 *	media change hook - may be NULL
 	 */
-	u_int16_t (*sc_rdcsr)
-		    __P((struct lance_softc *, u_int16_t));
+	uint16_t (*sc_rdcsr)
+		   (struct lance_softc *, uint16_t);
 	void	(*sc_wrcsr)
-		    __P((struct lance_softc *, u_int16_t, u_int16_t));
-	void	(*sc_hwreset) __P((struct lance_softc *));
-	void	(*sc_hwinit) __P((struct lance_softc *));
-	void	(*sc_nocarrier) __P((struct lance_softc *));
-	int	(*sc_mediachange) __P((struct lance_softc *));
-	void	(*sc_mediastatus) __P((struct lance_softc *,
-		    struct ifmediareq *));
+		   (struct lance_softc *, uint16_t, uint16_t);
+	void	(*sc_hwreset)(struct lance_softc *);
+	void	(*sc_hwinit)(struct lance_softc *);
+	void	(*sc_nocarrier)(struct lance_softc *);
+	int	(*sc_mediachange)(struct lance_softc *);
+	void	(*sc_mediastatus)(struct lance_softc *, struct ifmediareq *);
 
 	/*
 	 * Media-supported by this interface.  If this is NULL,
 	 * the only supported media is assumed to be "manual".
 	 */
-	int	*sc_supmedia;
+	const int	*sc_supmedia;
 	int	sc_nsupmedia;
 	int	sc_defaultmedia;
 
@@ -101,8 +93,8 @@ struct lance_softc {
 
 	void	*sc_sh;		/* shutdownhook cookie */
 
-	u_int16_t sc_conf3;	/* CSR3 value */
-	u_int16_t sc_saved_csr0;/* Value of csr0 at time of interrupt */
+	uint16_t sc_conf3;	/* CSR3 value */
+	uint16_t sc_saved_csr0;/* Value of csr0 at time of interrupt */
 
 	void	*sc_mem;	/* base address of RAM -- CPU's view */
 	u_long	sc_addr;	/* base address of RAM -- LANCE's view */
@@ -123,39 +115,39 @@ struct lance_softc {
 #ifdef LEDEBUG
 	int	sc_debug;
 #endif
-	u_int8_t sc_enaddr[6];
-	u_int8_t sc_pad[2];
+	uint8_t sc_enaddr[ETHER_ADDR_LEN];
+	uint8_t sc_pad[2];
 #if NRND > 0
 	rndsource_element_t	rnd_source;
 #endif
 
-	void (*sc_meminit) __P((struct lance_softc *));
-	void (*sc_start) __P((struct ifnet *));
+	void (*sc_meminit)(struct lance_softc *);
+	void (*sc_start)(struct ifnet *);
 };
 
-void lance_config __P((struct lance_softc *));
-void lance_reset __P((struct lance_softc *));
-void lance_init __P((struct lance_softc *));
-int lance_put __P((struct lance_softc *, int, struct mbuf *));
-void lance_read __P((struct lance_softc *, int, int)); 
-void lance_setladrf __P((struct ethercom *, u_int16_t *));
+void lance_config(struct lance_softc *);
+void lance_reset(struct lance_softc *);
+int lance_init(struct ifnet *);
+int lance_put(struct lance_softc *, int, struct mbuf *);
+void lance_read(struct lance_softc *, int, int);
+void lance_setladrf(struct ethercom *, uint16_t *);
 
 /*
- * The following functions are only useful on certain cpu/bus
+ * The following functions are only useful on certain CPU/bus
  * combinations.  They should be written in assembly language for
  * maximum efficiency, but machine-independent versions are provided
  * for drivers that have not yet been optimized.
  */
-void lance_copytobuf_contig __P((struct lance_softc *, void *, int, int));
-void lance_copyfrombuf_contig __P((struct lance_softc *, void *, int, int));
-void lance_zerobuf_contig __P((struct lance_softc *, int, int));
+void lance_copytobuf_contig(struct lance_softc *, void *, int, int);
+void lance_copyfrombuf_contig(struct lance_softc *, void *, int, int);
+void lance_zerobuf_contig(struct lance_softc *, int, int);
 
 #if 0	/* Example only - see lance.c */
-void lance_copytobuf_gap2 __P((struct lance_softc *, void *, int, int));
-void lance_copyfrombuf_gap2 __P((struct lance_softc *, void *, int, int));
-void lance_zerobuf_gap2 __P((struct lance_softc *, int, int));
+void lance_copytobuf_gap2(struct lance_softc *, void *, int, int);
+void lance_copyfrombuf_gap2(struct lance_softc *, void *, int, int);
+void lance_zerobuf_gap2(struct lance_softc *, int, int);
 
-void lance_copytobuf_gap16 __P((struct lance_softc *, void *, int, int));
-void lance_copyfrombuf_gap16 __P((struct lance_softc *, void *, int, int));
-void lance_zerobuf_gap16 __P((struct lance_softc *, int, int));
+void lance_copytobuf_gap16(struct lance_softc *, void *, int, int);
+void lance_copyfrombuf_gap16(struct lance_softc *, void *, int, int);
+void lance_zerobuf_gap16(struct lance_softc *, int, int);
 #endif /* Example only */

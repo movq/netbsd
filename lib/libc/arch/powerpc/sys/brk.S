@@ -1,4 +1,4 @@
-/*	$NetBSD: brk.S,v 1.7 2000/02/24 15:37:34 kleink Exp $	*/
+/*	$NetBSD: brk.S,v 1.10 2002/07/30 06:07:59 matt Exp $	*/
 
 #include "SYS.h"
 
@@ -6,37 +6,41 @@
 	.globl	_C_LABEL(__minbrk)
 	.globl	_C_LABEL(_end)
 
+#ifdef WEAK_ALIAS
+WEAK_ALIAS(brk, _brk)
+#endif
+
 	.data
 _C_LABEL(__minbrk):
 	.long	_C_LABEL(_end)		# XXX not used yet
 
 	.text
 
-ENTRY(brk)
+ENTRY(_brk)
 #ifdef PIC
-	mflr	10
+	mflr	%r10
 	bl	_GLOBAL_OFFSET_TABLE_@local-4
-	mflr	9
-	mtlr	10
-	lwz	5,_C_LABEL(_end)@got(9)
+	mflr	%r9
+	mtlr	%r10
+	lwz	%r5,_C_LABEL(_end)@got(%r9)
 #else
-	lis	5,_C_LABEL(_end)@ha	# r5 = &_end
-	addi	5,5,_C_LABEL(_end)@l
+	lis	%r5,_C_LABEL(_end)@ha	# r5 = &_end
+	addi	%r5,%r5,_C_LABEL(_end)@l
 #endif
-	cmplw	5,3			# if (&_end <= r3)
+	cmplw	%r5,%r3			# if (&_end <= r3)
 	bgt	0f
-	mr	5,3			# r5 = r3
+	mr	%r5,%r3			# r5 = r3
 0:
-	mr	3,5			# new break value
-	li	0,SYS_break
+	mr	%r3,%r5			# new break value
+	li	%r0,SYS_break
 	sc				# assume, that r5 is kept
 	bso	1f
 #ifdef PIC
-	lwz	6,_C_LABEL(__curbrk)@got(9)
-	stw	5,0(6)
+	lwz	%r6,_C_LABEL(__curbrk)@got(%r9)
+	stw	%r5,0(%r6)
 #else
-	lis	6,_C_LABEL(__curbrk)@ha	# record new break
-	stw	5,_C_LABEL(__curbrk)@l(6)
+	lis	%r6,_C_LABEL(__curbrk)@ha	# record new break
+	stw	%r5,_C_LABEL(__curbrk)@l(%r6)
 #endif
 	blr				# return 0
 

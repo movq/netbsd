@@ -1,4 +1,4 @@
-/*	$NetBSD: obiovar.h,v 1.4 1997/10/09 08:46:36 jtc Exp $	*/
+/*	$NetBSD: obiovar.h,v 1.8 2008/04/28 20:23:27 martin Exp $	*/
 
 /*
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -46,7 +39,6 @@
  */
 struct obio_attach_args {
 	int oa_addr;			/* physical address */
-	int oa_drq;			/* SCSI DRQ physical address */
-	int oa_hsk;			/* SCSI HSK physical address */
 	bus_space_tag_t oa_tag;		/* bus space tag */
+	bus_dma_tag_t oa_dmat;		/* bus dma tag */
 };

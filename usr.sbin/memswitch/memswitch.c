@@ -1,4 +1,4 @@
-/*	$NetBSD: memswitch.c,v 1.3 1999/06/28 08:48:35 minoura Exp $	*/
+/*	$NetBSD: memswitch.c,v 1.10 2008/04/28 20:24:16 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -70,9 +63,9 @@ int main __P((int, char*[]));
 void
 usage(void)
 {
-	fprintf (stderr, "Usage: %s -a\n", progname);
+	fprintf (stderr, "usage: %s -a\n", progname);
 	fprintf (stderr, "       %s [-h] variable ...\n", progname);
-	fprintf (stderr, "       %s variable=value ...\n", progname);
+	fprintf (stderr, "       %s -w variable=value ...\n", progname);
 	fprintf (stderr, "       %s [-rs] filename\n", progname);
 	exit(1);
 }
@@ -83,8 +76,6 @@ main(argc, argv)
 	char *argv[];
 {
 	int ch;
-	extern char *optarg;
-	extern int optind;
 	enum md {
 		MD_NONE, MD_WRITE, MD_HELP, MD_SHOWALL, MD_SAVE, MD_RESTORE
 	} mode = MD_NONE;
@@ -168,21 +159,22 @@ show_single(name)
 	const char *name;
 {
 	int i;
+	int n = 0;
 	char fullname[50];
 	char valuestr[MAXVALUELEN];
 
 	for (i = 0; i < number_of_props; i++) {
-		sprintf(fullname, "%s.%s",
-			properties[i].class, properties[i].node);
-		if (strcmp(name, fullname) == 0) {
+		snprintf(fullname, sizeof(fullname), "%s.%s",
+		    properties[i].class, properties[i].node);
+		if (strcmp(name, fullname) == 0 || strcmp(name, properties[i].class) == 0) {
 			properties[i].print (&properties[i], valuestr);
 			if (!nflag)
 				printf ("%s=%s\n", fullname, valuestr);
-			break;
+			n++;
 		}
 	}
-	if (i >= number_of_props) {
-		errx (1, "No such property: %s\n", name);
+	if (n == 0) {
+		errx (1, "No such %s: %s", strstr(name, ".")?"property":"class", name);
 	}
 
 	return;
@@ -210,7 +202,7 @@ modify_single(expr)
 	const char *expr;
 {
 	int i, l, n;
-	char *class, *node;
+	char *class = NULL, *node = NULL;
 	const char *value;
 	char valuestr[MAXVALUELEN];
 
@@ -228,7 +220,7 @@ modify_single(expr)
 		}
 	}
 	if (i >= n)
-		errx (1, "Invalid expression: %s\n", expr);
+		errx (1, "Invalid expression: %s", expr);
 
 	for ( ; i < n; i++) {
 		if (expr[i] == '=') {
@@ -241,7 +233,7 @@ modify_single(expr)
 		}
 	}
 	if (i >= n)
-		errx (1, "Invalid expression: %s\n", expr);
+		errx (1, "Invalid expression: %s", expr);
 
 	value = &(expr[++i]);
 
@@ -258,7 +250,7 @@ modify_single(expr)
 		}
 	}
 	if (i >= number_of_props) {
-		errx (1, "No such property: %s.%s\n", class, node);
+		errx (1, "No such property: %s.%s", class, node);
 	}
 
 	return;
@@ -273,8 +265,8 @@ help_single(name)
 	char valuestr[MAXVALUELEN];
 
 	for (i = 0; i < number_of_props; i++) {
-		sprintf(fullname, "%s.%s",
-			properties[i].class, properties[i].node);
+		snprintf(fullname, sizeof(fullname), "%s.%s",
+		    properties[i].class, properties[i].node);
 		if (strcmp(name, fullname) == 0) {
 			properties[i].print (&properties[i], valuestr);
 			if (!nflag)
@@ -285,7 +277,7 @@ help_single(name)
 		}
 	}
 	if (i >= number_of_props) {
-		errx (1, "No such property: %s\n", name);
+		errx (1, "No such property: %s", name);
 	}
 
 	return;

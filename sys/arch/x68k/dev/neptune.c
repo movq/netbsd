@@ -1,7 +1,7 @@
-/*	$NetBSD: neptune.c,v 1.4 2000/01/16 14:20:56 minoura Exp $	*/
+/*	$NetBSD: neptune.c,v 1.18 2008/06/25 08:14:59 isaki Exp $	*/
 
 /*-
- * Copyright (c) 1998 NetBSD Foundation, Inc.
+ * Copyright (c) 1998 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,12 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,6 +33,9 @@
  * Neptune-X -- X68k-ISA Bus Bridge
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: neptune.c,v 1.18 2008/06/25 08:14:59 isaki Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
@@ -52,13 +49,12 @@
 #include <arch/x68k/dev/neptunevar.h>
 
 /* bus_space stuff */
-static int neptune_bus_space_map __P((bus_space_tag_t, bus_addr_t, bus_size_t,
-				      int, bus_space_handle_t*));
-static void neptune_bus_space_unmap __P((bus_space_tag_t,
-					 bus_space_handle_t, bus_size_t));
-static int neptune_bus_space_subregion __P((bus_space_tag_t, bus_space_handle_t,
-					    bus_size_t, bus_size_t,
-					    bus_space_handle_t*));
+static int neptune_bus_space_map(bus_space_tag_t, bus_addr_t, bus_size_t,
+	int, bus_space_handle_t *);
+static void neptune_bus_space_unmap(bus_space_tag_t, bus_space_handle_t,
+	bus_size_t);
+static int neptune_bus_space_subregion(bus_space_tag_t, bus_space_handle_t,
+	bus_size_t, bus_size_t, bus_space_handle_t *);
 
 static struct x68k_bus_space neptune_bus = {
 #if 0
@@ -70,20 +66,16 @@ static struct x68k_bus_space neptune_bus = {
 };
 
 
-static int neptune_match __P((struct device *, struct cfdata *, void *));
-static void neptune_attach __P((struct device *, struct device *, void *));
-static int neptune_search __P((struct device *, struct cfdata *cf, void *));
-static int neptune_print __P((void *, const char *));
+static int neptune_match(device_t, cfdata_t, void *);
+static void neptune_attach(device_t, device_t, void *);
+static int neptune_search(device_t, cfdata_t, const int *, void *);
+static int neptune_print(void *, const char *);
 
-struct cfattach neptune_ca = {
-	sizeof(struct neptune_softc), neptune_match, neptune_attach
-};
+CFATTACH_DECL_NEW(neptune, sizeof(struct neptune_softc),
+    neptune_match, neptune_attach, NULL, NULL);
 
 static int
-neptune_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+neptune_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct intio_attach_args *ia = aux;
 
@@ -91,7 +83,7 @@ neptune_match(parent, cf, aux)
 		return 0;
 
 	ia->ia_size = 0x400;
-	if (intio_map_allocate_region (parent, ia, INTIO_MAP_TESTONLY))
+	if (intio_map_allocate_region(parent, ia, INTIO_MAP_TESTONLY))
 		return 0;
 
 	/* Neptune is a virtual device.  Always there. */
@@ -101,21 +93,19 @@ neptune_match(parent, cf, aux)
 
 
 static void
-neptune_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+neptune_attach(device_t parent, device_t self, void *aux)
 {
-	struct neptune_softc *sc = (struct neptune_softc *)self;
+	struct neptune_softc *sc = device_private(self);
 	struct intio_attach_args *ia = aux;
 	struct neptune_attach_args na;
 	int r;
-	struct cfdata *cf;
+	cfdata_t cf;
 
 	ia->ia_size = 0x400;
-	r = intio_map_allocate_region (parent, ia, INTIO_MAP_ALLOCATE);
+	r = intio_map_allocate_region(parent, ia, INTIO_MAP_ALLOCATE);
 #ifdef DIAGNOSTIC
 	if (r)
-		panic ("IO map for Neptune corruption??");
+		panic("IO map for Neptune corruption??");
 #endif
 
 	sc->sc_bst = malloc(sizeof(struct x68k_bus_space), M_DEVBUF, M_NOWAIT);
@@ -124,43 +114,38 @@ neptune_attach(parent, self, aux)
 	*sc->sc_bst = neptune_bus;
 	sc->sc_bst->x68k_bus_device = self;
 
-	sc->sc_addr = (vaddr_t) (ia->ia_addr - PHYS_INTIODEV + intiobase);
+	sc->sc_addr = (vaddr_t)(ia->ia_addr - PHYS_INTIODEV + intiobase);
 
 	na.na_bst = sc->sc_bst;
 	na.na_intr = ia->ia_intr;
 
-	cf = config_search (neptune_search, self, &na);
+	cf = config_search_ia(neptune_search, self, "neptune", &na);
 	if (cf) {
-		printf (": Neptune-X ISA bridge\n");
+		aprint_normal(": Neptune-X ISA bridge\n");
 		config_attach(self, cf, &na, neptune_print);
 	} else {
-		printf (": no device found.\n");
+		aprint_normal(": no device found.\n");
 		intio_map_free_region(parent, ia);
 	}
 }
 
 static int
-neptune_search(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+neptune_search(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
 {
 	struct neptune_attach_args *na = aux;
 
 	na->na_addr = cf->neptune_cf_addr;
 
-	return (*cf->cf_attach->ca_match)(parent, cf, na);
+	return config_match(parent, cf, na);
 }
 
 static int
-neptune_print(aux, name)
-	void *aux;
-	const char *name;
+neptune_print(void *aux, const char *name)
 {
 	struct neptune_attach_args *na = aux;
 
 /*	if (na->na_addr > 0)	*/
-		printf (" addr 0x%06x", na->na_addr);
+		aprint_normal(" addr 0x%06x", na->na_addr);
 
 	return (QUIET);
 }
@@ -170,22 +155,18 @@ neptune_print(aux, name)
  * neptune bus space stuff.
  */
 static int
-neptune_bus_space_map(t, bpa, size, flags, bshp)
-	bus_space_tag_t t;
-	bus_addr_t bpa;
-	bus_size_t size;
-	int flags;
-	bus_space_handle_t *bshp;
+neptune_bus_space_map(bus_space_tag_t t, bus_addr_t bpa, bus_size_t size,
+    int flags, bus_space_handle_t *bshp)
 {
-	vaddr_t start = ((struct neptune_softc*) ((struct x68k_bus_space*) t)
-			 ->x68k_bus_device)->sc_addr;
+	struct neptune_softc *sc = device_private(t->x68k_bus_device);
+	vaddr_t start = sc->sc_addr;
 
 	/*
 	 * Neptune bus is mapped permanently.
 	 */
 	*bshp = (bus_space_handle_t) ((u_int)start + ((u_int)bpa - 0x200) * 2);
 
-	if (badaddr((caddr_t)*bshp)) {
+	if (badaddr((void *)*bshp)) {
 		return 1;
 	}
 
@@ -195,20 +176,15 @@ neptune_bus_space_map(t, bpa, size, flags, bshp)
 }
 
 static void
-neptune_bus_space_unmap(t, bsh, size)
-	bus_space_tag_t t;
-	bus_space_handle_t bsh;
-	bus_size_t size;
+neptune_bus_space_unmap(bus_space_tag_t t, bus_space_handle_t bsh,
+    bus_size_t size)
 {
 	return;
 }
 
 static int
-neptune_bus_space_subregion(t, bsh, offset, size, nbshp)
-	bus_space_tag_t t;
-	bus_space_handle_t bsh;
-	bus_size_t offset, size;
-	bus_space_handle_t *nbshp;
+neptune_bus_space_subregion(bus_space_tag_t t, bus_space_handle_t bsh,
+    bus_size_t offset, bus_size_t size, bus_space_handle_t *nbshp)
 {
 
 	*nbshp = bsh + offset*2;

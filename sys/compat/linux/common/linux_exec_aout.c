@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_exec_aout.c,v 1.37 1999/02/09 20:37:19 christos Exp $	*/
+/*	$NetBSD: linux_exec_aout.c,v 1.65 2008/04/28 20:23:43 martin Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,6 +33,9 @@
  * based on exec_aout.c, sunos_exec.c and svr4_exec.c
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: linux_exec_aout.c,v 1.65 2008/04/28 20:23:43 martin Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
@@ -54,11 +50,7 @@
 #include <sys/mman.h>
 #include <sys/syscallargs.h>
 
-#include <vm/vm.h>
-#include <vm/vm_param.h>
-#include <vm/vm_map.h>
-
-#include <machine/cpu.h>
+#include <sys/cpu.h>
 #include <machine/reg.h>
 
 #include <compat/linux/common/linux_types.h>
@@ -66,63 +58,42 @@
 #include <compat/linux/common/linux_util.h>
 #include <compat/linux/common/linux_exec.h>
 #include <compat/linux/common/linux_machdep.h>
-#include <compat/linux/common/linux_errno.h>
 
 #include <compat/linux/linux_syscallargs.h>
 #include <compat/linux/linux_syscall.h>
 
+int linux_aout_copyargs(struct lwp *, struct exec_package *,
+    struct ps_strings *, char **, void *);
 
-static void *linux_aout_copyargs __P((struct exec_package *,
-    struct ps_strings *, void *, void *));
+static int exec_linux_aout_prep_zmagic(struct lwp *,
+    struct exec_package *);
+static int exec_linux_aout_prep_nmagic(struct lwp *,
+    struct exec_package *);
+static int exec_linux_aout_prep_omagic(struct lwp *,
+    struct exec_package *);
+static int exec_linux_aout_prep_qmagic(struct lwp *,
+    struct exec_package *);
 
-#define	LINUX_AOUT_AUX_ARGSIZ	2
-
-extern char linux_sigcode[], linux_esigcode[];
-extern struct sysent linux_sysent[];
-extern char *linux_syscallnames[];
-
-int exec_linux_aout_prep_zmagic __P((struct proc *, struct exec_package *));
-int exec_linux_aout_prep_nmagic __P((struct proc *, struct exec_package *));
-int exec_linux_aout_prep_omagic __P((struct proc *, struct exec_package *));
-int exec_linux_aout_prep_qmagic __P((struct proc *, struct exec_package *));
-
-struct emul emul_linux_aout = {
-	"linux",
-	native_to_linux_errno,
-	linux_sendsig,
-	LINUX_SYS_syscall,
-	LINUX_SYS_MAXSYSCALL,
-	linux_sysent,
-	linux_syscallnames,
-	LINUX_AOUT_AUX_ARGSIZ,
-	linux_aout_copyargs,
-	linux_setregs,
-	linux_sigcode,
-	linux_esigcode,
-};
-
-static void *
-linux_aout_copyargs(pack, arginfo, stack, argp)
-	struct exec_package *pack;
-	struct ps_strings *arginfo;
-	void *stack;
-	void *argp;
+int
+linux_aout_copyargs(struct lwp *l, struct exec_package *pack,
+    struct ps_strings *arginfo, char **stackp, void *argp)
 {
-	char **cpp = stack;
-	char **stk = stack;
+	char **cpp = (char **)*stackp;
+	char **stk = (char **)*stackp;
 	char *dp, *sp;
 	size_t len;
 	void *nullp = NULL;
 	int argc = arginfo->ps_nargvstr;
 	int envc = arginfo->ps_nenvstr;
+	int error;
 
-	if (copyout(&argc, cpp++, sizeof(argc)))
-		return NULL;
+	if ((error = copyout(&argc, cpp++, sizeof(argc))) != 0)
+		return error;
 
 	/* leave room for envp and argv */
 	cpp += 2;
-	if (copyout(&cpp, &stk[1], sizeof (cpp)))
-		return NULL;
+	if ((error = copyout(&cpp, &stk[1], sizeof (cpp))) != 0)
+		return error;
 
 	dp = (char *) (cpp + argc + envc + 2);
 	sp = argp;
@@ -131,33 +102,32 @@ linux_aout_copyargs(pack, arginfo, stack, argp)
 	arginfo->ps_argvstr = cpp; /* remember location of argv for later */
 
 	for (; --argc >= 0; sp += len, dp += len)
-		if (copyout(&dp, cpp++, sizeof(dp)) ||
-		    copyoutstr(sp, dp, ARG_MAX, &len))
-			return NULL;
+		if ((error = copyout(&dp, cpp++, sizeof(dp))) != 0 ||
+		    (error = copyoutstr(sp, dp, ARG_MAX, &len)) != 0)
+			return error;
 
-	if (copyout(&nullp, cpp++, sizeof(nullp)))
-		return NULL;
+	if ((error = copyout(&nullp, cpp++, sizeof(nullp))) != 0)
+		return error;
 
-	if (copyout(&cpp, &stk[2], sizeof (cpp)))
-		return NULL;
+	if ((error = copyout(&cpp, &stk[2], sizeof (cpp))) != 0)
+		return error;
 
 	arginfo->ps_envstr = cpp; /* remember location of envp for later */
 
 	for (; --envc >= 0; sp += len, dp += len)
-		if (copyout(&dp, cpp++, sizeof(dp)) ||
-		    copyoutstr(sp, dp, ARG_MAX, &len))
-			return NULL;
+		if ((error = copyout(&dp, cpp++, sizeof(dp))) != 0 ||
+		    (error = copyoutstr(sp, dp, ARG_MAX, &len)) != 0)
+			return error;
 
-	if (copyout(&nullp, cpp++, sizeof(nullp)))
-		return NULL;
+	if ((error = copyout(&nullp, cpp++, sizeof(nullp))) != 0)
+		return error;
 
-	return cpp;
+	*stackp = (char *)cpp;
+	return 0;
 }
 
 int
-exec_linux_aout_makecmds(p, epp)
-	struct proc *p;
-	struct exec_package *epp;
+exec_linux_aout_makecmds(struct lwp *l, struct exec_package *epp)
 {
 	struct exec *linux_ep = epp->ep_hdr;
 	int machtype, magic;
@@ -172,20 +142,18 @@ exec_linux_aout_makecmds(p, epp)
 
 	switch (magic) {
 	case QMAGIC:
-		error = exec_linux_aout_prep_qmagic(p, epp);
+		error = exec_linux_aout_prep_qmagic(l, epp);
 		break;
 	case ZMAGIC:
-		error = exec_linux_aout_prep_zmagic(p, epp);
+		error = exec_linux_aout_prep_zmagic(l, epp);
 		break;
 	case NMAGIC:
-		error = exec_linux_aout_prep_nmagic(p, epp);
+		error = exec_linux_aout_prep_nmagic(l, epp);
 		break;
 	case OMAGIC:
-		error = exec_linux_aout_prep_omagic(p, epp);
+		error = exec_linux_aout_prep_omagic(l, epp);
 		break;
 	}
-	if (error == 0)
-		epp->ep_emul = &emul_linux_aout;
 	return error;
 }
 
@@ -195,10 +163,8 @@ exec_linux_aout_makecmds(p, epp)
  * as an NMAGIC here. XXX
  */
 
-int
-exec_linux_aout_prep_zmagic(p, epp)
-	struct proc *p;
-	struct exec_package *epp;
+static int
+exec_linux_aout_prep_zmagic(struct lwp *l, struct exec_package *epp)
 {
 	struct exec *execp = epp->ep_hdr;
 
@@ -219,11 +185,12 @@ exec_linux_aout_prep_zmagic(p, epp)
 	    VM_PROT_READ|VM_PROT_WRITE|VM_PROT_EXECUTE);
 
 	/* set up command for bss segment */
-	NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_zero, execp->a_bss,
-	    epp->ep_daddr + execp->a_data, NULLVP, 0,
-	    VM_PROT_READ|VM_PROT_WRITE|VM_PROT_EXECUTE);
+	if (execp->a_bss)
+		NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_zero, execp->a_bss,
+		    epp->ep_daddr + execp->a_data, NULLVP, 0,
+		    VM_PROT_READ|VM_PROT_WRITE|VM_PROT_EXECUTE);
 
-	return exec_aout_setup_stack(p, epp);
+	return (*epp->ep_esch->es_setup_stack)(l, epp);
 }
 
 /*
@@ -231,10 +198,8 @@ exec_linux_aout_prep_zmagic(p, epp)
  * Not different from the normal stuff.
  */
 
-int
-exec_linux_aout_prep_nmagic(p, epp)
-	struct proc *p;
-	struct exec_package *epp;
+static int
+exec_linux_aout_prep_nmagic(struct lwp *l, struct exec_package *epp)
 {
 	struct exec *execp = epp->ep_hdr;
 	long bsize, baddr;
@@ -256,13 +221,13 @@ exec_linux_aout_prep_nmagic(p, epp)
 	    VM_PROT_READ|VM_PROT_WRITE|VM_PROT_EXECUTE);
 
 	/* set up command for bss segment */
-	baddr = roundup(epp->ep_daddr + execp->a_data, NBPG);
+	baddr = roundup(epp->ep_daddr + execp->a_data, PAGE_SIZE);
 	bsize = epp->ep_daddr + epp->ep_dsize - baddr;
 	if (bsize > 0)
 		NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_zero, bsize, baddr,
 		    NULLVP, 0, VM_PROT_READ|VM_PROT_WRITE|VM_PROT_EXECUTE);
 
-	return exec_aout_setup_stack(p, epp);
+	return (*epp->ep_esch->es_setup_stack)(l, epp);
 }
 
 /*
@@ -270,10 +235,8 @@ exec_linux_aout_prep_nmagic(p, epp)
  * Business as usual.
  */
 
-int
-exec_linux_aout_prep_omagic(p, epp)
-	struct proc *p;
-	struct exec_package *epp;
+static int
+exec_linux_aout_prep_omagic(struct lwp *l, struct exec_package *epp)
 {
 	struct exec *execp = epp->ep_hdr;
 	long dsize, bsize, baddr;
@@ -290,7 +253,7 @@ exec_linux_aout_prep_omagic(p, epp)
 	    LINUX_N_TXTOFF(*execp, OMAGIC), VM_PROT_READ|VM_PROT_WRITE|VM_PROT_EXECUTE);
 
 	/* set up command for bss segment */
-	baddr = roundup(epp->ep_daddr + execp->a_data, NBPG);
+	baddr = roundup(epp->ep_daddr + execp->a_data, PAGE_SIZE);
 	bsize = epp->ep_daddr + epp->ep_dsize - baddr;
 	if (bsize > 0)
 		NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_zero, bsize, baddr,
@@ -302,19 +265,19 @@ exec_linux_aout_prep_omagic(p, epp)
 	 * computed (in execve(2)) by rounding *up* `ep_tsize' and `ep_dsize'
 	 * respectively to page boundaries.
 	 * Compensate `ep_dsize' for the amount of data covered by the last
-	 * text page. 
+	 * text page.
 	 */
-	dsize = epp->ep_dsize + execp->a_text - roundup(execp->a_text, NBPG);
+	dsize = epp->ep_dsize + execp->a_text - roundup(execp->a_text,
+							PAGE_SIZE);
 	epp->ep_dsize = (dsize > 0) ? dsize : 0;
-	return exec_aout_setup_stack(p, epp);
+	return (*epp->ep_esch->es_setup_stack)(l, epp);
 }
 
-int
-exec_linux_aout_prep_qmagic(p, epp)
-	struct proc *p;
-	struct exec_package *epp;
+static int
+exec_linux_aout_prep_qmagic(struct lwp *l, struct exec_package *epp)
 {
 	struct exec *execp = epp->ep_hdr;
+	int error;
 
 	epp->ep_taddr = LINUX_N_TXTADDR(*execp, QMAGIC);
 	epp->ep_tsize = execp->a_text;
@@ -322,20 +285,9 @@ exec_linux_aout_prep_qmagic(p, epp)
 	epp->ep_dsize = execp->a_data + execp->a_bss;
 	epp->ep_entry = execp->a_entry;
 
-	/*
-	 * check if vnode is in open for writing, because we want to
-	 * demand-page out of it.  if it is, don't do it, for various
-	 * reasons
-	 */
-	if ((execp->a_text != 0 || execp->a_data != 0) &&
-	    epp->ep_vp->v_writecount != 0) {
-#ifdef DIAGNOSTIC
-		if (epp->ep_vp->v_flag & VTEXT)
-			panic("exec: a VTEXT vnode has writecount != 0\n");
-#endif
-		return ETXTBSY;
-	}
-	epp->ep_vp->v_flag |= VTEXT;
+	error = vn_marktext(epp->ep_vp);
+	if (error)
+		return (error);
 
 	/* set up command for text segment */
 	NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_pagedvn, execp->a_text,
@@ -348,111 +300,10 @@ exec_linux_aout_prep_qmagic(p, epp)
 	    VM_PROT_READ|VM_PROT_WRITE|VM_PROT_EXECUTE);
 
 	/* set up command for bss segment */
-	NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_zero, execp->a_bss,
-	    epp->ep_daddr + execp->a_data, NULLVP, 0,
-	    VM_PROT_READ|VM_PROT_WRITE|VM_PROT_EXECUTE);
+	if (execp->a_bss)
+		NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_zero, execp->a_bss,
+		    epp->ep_daddr + execp->a_data, NULLVP, 0,
+		    VM_PROT_READ|VM_PROT_WRITE|VM_PROT_EXECUTE);
 
-	return exec_aout_setup_stack(p, epp);
-}
-
-/*
- * The Linux system call to load shared libraries, a.out version. The
- * a.out shared libs are just files that are mapped onto a fixed
- * address in the process' address space. The address is given in
- * a_entry. Read in the header, set up some VM commands and run them.
- *
- * Yes, both text and data are mapped at once, so we're left with
- * writeable text for the shared libs. The Linux crt0 seemed to break
- * sometimes when data was mapped seperately. It munmapped a uselib()
- * of ld.so by hand, which failed with shared text and data for ld.so
- * Yuck.
- *
- * Because of the problem with ZMAGIC executables (text starts
- * at 0x400 in the file, but needs to be mapped at 0), ZMAGIC
- * shared libs are not handled very efficiently :-(
- */
-
-int
-linux_sys_uselib(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
-{
-	struct linux_sys_uselib_args /* {
-		syscallarg(const char *) path;
-	} */ *uap = v;
-	caddr_t sg;
-	long bsize, dsize, tsize, taddr, baddr, daddr;
-	struct nameidata ni;
-	struct vnode *vp;
-	struct exec hdr;
-	struct exec_vmcmd_set vcset;
-	int i, magic, error;
-	size_t rem;
-
-	sg = stackgap_init(p->p_emul);
-	LINUX_CHECK_ALT_EXIST(p, &sg, SCARG(uap, path));
-
-	NDINIT(&ni, LOOKUP, FOLLOW, UIO_USERSPACE, SCARG(uap, path), p);
-
-	if ((error = namei(&ni)))
-		return error;
-
-	vp = ni.ni_vp;
-
-	if ((error = vn_rdwr(UIO_READ, vp, (caddr_t) &hdr, LINUX_AOUT_HDR_SIZE,
-			     0, UIO_SYSSPACE, IO_NODELOCKED, p->p_ucred,
-			     &rem, p))) {
-		vrele(vp);
-		return error;
-	}
-
-	if (rem != 0) {
-		vrele(vp);
-		return ENOEXEC;
-	}
-
-	if (LINUX_N_MACHTYPE(&hdr) != LINUX_MID_MACHINE)
-		return ENOEXEC;
-
-	magic = LINUX_N_MAGIC(&hdr);
-	taddr = hdr.a_entry & (~(NBPG - 1));
-	tsize = hdr.a_text;
-	daddr = taddr + tsize;
-	dsize = hdr.a_data + hdr.a_bss;
-
-	if ((hdr.a_text != 0 || hdr.a_data != 0) && vp->v_writecount != 0) {
-		vrele(vp);
-                return ETXTBSY;
-        }
-	vp->v_flag |= VTEXT;
-
-	vcset.evs_cnt = 0;
-	vcset.evs_used = 0;
-
-	NEW_VMCMD(&vcset,
-		  magic == ZMAGIC ? vmcmd_map_readvn : vmcmd_map_pagedvn,
-		  hdr.a_text + hdr.a_data, taddr,
-		  vp, LINUX_N_TXTOFF(hdr, magic),
-		  VM_PROT_READ|VM_PROT_EXECUTE|VM_PROT_WRITE);
-
-	baddr = roundup(daddr + hdr.a_data, NBPG);
-	bsize = daddr + dsize - baddr;
-        if (bsize > 0) {
-                NEW_VMCMD(&vcset, vmcmd_map_zero, bsize, baddr,
-                    NULLVP, 0, VM_PROT_READ|VM_PROT_WRITE|VM_PROT_EXECUTE);
-	}
-
-	for (i = 0; i < vcset.evs_used && !error; i++) {
-		struct exec_vmcmd *vcp;
-
-		vcp = &vcset.evs_cmds[i];
-		error = (*vcp->ev_proc)(p, vcp);
-	}
-
-	kill_vmcmds(&vcset);
-
-	vrele(vp);
-
-	return error;
+	return (*epp->ep_esch->es_setup_stack)(l, epp);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: remote.c,v 1.8 1998/08/25 20:59:41 ross Exp $	*/
+/*	$NetBSD: remote.c,v 1.18 2008/07/21 14:19:26 lukem Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -13,11 +13,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -36,15 +32,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1992, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1992, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)remote.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: remote.c,v 1.8 1998/08/25 20:59:41 ross Exp $");
+__RCSID("$NetBSD: remote.c,v 1.18 2008/07/21 14:19:26 lukem Exp $");
 #endif /* not lint */
 
 #include "pathnames.h"
@@ -59,37 +55,40 @@ static char **caps[] = {
 	&ES, &EX, &FO, &RC, &RE, &PA
 };
 
-static char *capstrings[] = {
+static const char *capstrings[] = {
 	"at", "dv", "cm", "cu", "el", "ie", "oe", "pn", "pr",
 	"di", "es", "ex", "fo", "rc", "re", "pa", 0
 };
 
-static char	*db_array[3] = { _PATH_REMOTE, 0, 0 };
+static const char	*db_array[3] = { _PATH_REMOTE, 0, 0 };
 
 #define cgetflag(f)	(cgetcap(bp, f, ':') != NULL)
 
-static	void	getremcap __P((char *));
+static	void	getremcap(char *);
+
+static char tiprecord[] = "tip.record";
+static char wspace[] = "\t\n\b\f";
 
 static void
-getremcap(host)
-	char *host;
+getremcap(char *host)
 {
-	char **p, ***q;
+	const char **p;
+	char ***q;
 	char *bp;
 	char *rempath;
-	int   stat;
+	int   status;
 
 	rempath = getenv("REMOTE");
 	if (rempath != NULL) {
 		if (*rempath != '/')
 			/* we have an entry */
-			cgetset(rempath);
+			(void)cgetset(rempath);
 		else {	/* we have a path */
 			db_array[1] = rempath;
 			db_array[2] = _PATH_REMOTE;
 		}
 	}
-	if ((stat = cgetent(&bp, db_array, host)) < 0) {
+	if ((status = cgetent(&bp, db_array, host)) < 0) {
 		if (DV ||
 		    (host[0] == '/' && access(DV = host, R_OK | W_OK) == 0)) {
 			CU = DV;
@@ -101,17 +100,17 @@ getremcap(host)
 			FS = DEFFS;
 			return;
 		}
-		switch(stat) {
+		switch(status) {
 		case -1:
-			fprintf(stderr, "tip: unknown host %s\n", host);
+			warnx("unknown host %s", host);
 			break;
 		case -2:
-			fprintf(stderr, 
-			    "tip: can't open host description file\n");
+			warnx("can't open host description file");
 			break;
 		case -3:
-			fprintf(stderr, 
-			    "tip: possible reference loop in host description file\n");
+			warnx("possible reference loop in host "
+			    "description file");
+
 			break;
 		}
 		exit(3);
@@ -119,7 +118,7 @@ getremcap(host)
 
 	for (p = capstrings, q = caps; *p != NULL; p++, q++)
 		if (**q == NULL)
-			cgetstr(bp, *p, *q);
+			(void)cgetstr(bp, *p, *q);
 	if (!BR && (cgetnum(bp, "br", &BR) == -1))
 		BR = DEFBR;
 	if (cgetnum(bp, "fs", &FS) == -1)
@@ -129,14 +128,12 @@ getremcap(host)
 	else
 		DU = cgetflag("du");
 	if (DV == NULL) {
-		fprintf(stderr, "%s: missing device spec\n", host);
-		exit(3);
+		errx(3, "%s: missing device spec\n", host);
 	}
 	if (DU && CU == NULL)
 		CU = DV;
 	if (DU && PN == NULL) {
-		fprintf(stderr, "%s: missing phone number\n", host);
-		exit(3);
+		errx(3, "%s: missing phone number\n", host);
 	}
 
 	HD = cgetflag("hd");
@@ -177,18 +174,20 @@ getremcap(host)
 		setboolean(value(HALFDUPLEX), 1);
 	if (cgetflag("dc"))
 		DC = 1;
+	if (cgetflag("hf"))
+		setboolean(value(HARDWAREFLOW), 1);
 	if (RE == NULL)
-		RE = (char *)"tip.record";
+		RE = tiprecord;
 	if (EX == NULL)
-		EX = (char *)"\t\n\b\f";
+		EX = wspace;
 	if (ES != NULL)
-		vstring("es", ES);
+		(void)vstring("es", ES);
 	if (FO != NULL)
-		vstring("fo", FO);
+		(void)vstring("fo", FO);
 	if (PR != NULL)
-		vstring("pr", PR);
+		(void)vstring("pr", PR);
 	if (RC != NULL)
-		vstring("rc", RC);
+		(void)vstring("rc", RC);
 	if (cgetnum(bp, "dl", &DL) == -1)
 		DL = 0;
 	if (cgetnum(bp, "cl", &CL) == -1)
@@ -198,8 +197,7 @@ getremcap(host)
 }
 
 char *
-getremote(host)
-	char *host;
+getremote(char *host)
 {
 	char *cp;
 	static char *next;
@@ -207,8 +205,7 @@ getremote(host)
 
 	if (!lookedup) {
 		if (host == NULL && (host = getenv("HOST")) == NULL) {
-			fprintf(stderr, "tip: no host specified\n");
-			exit(3);
+			errx(3, "no host specified");
 		}
 		getremcap(host);
 		next = DV;

@@ -1,4 +1,4 @@
-/*	$NetBSD: isinf.c,v 1.5 2000/01/22 22:45:01 mycroft Exp $	*/
+/*	$NetBSD: isinf.c,v 1.8 2004/03/04 23:42:39 kleink Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,30 +34,18 @@
 #if 0
 static char sccsid[] = "@(#)isinf.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: isinf.c,v 1.5 2000/01/22 22:45:01 mycroft Exp $");
+__RCSID("$NetBSD: isinf.c,v 1.8 2004/03/04 23:42:39 kleink Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
-#include "namespace.h"
 #include <math.h>
 
-#ifdef __weak_alias
-__weak_alias(isnan,_isnan)
-__weak_alias(isinf,_isinf)
-#endif
+#undef isinf
+int isinf __P((double));
 
 /* ARGSUSED */
 int
-isnan(d)
-	double d;
+isinf(double d)
 {
-	return(0);
-}
-
-/* ARGSUSED */
-int
-isinf(d)
-	double d;
-{
-	return(0);
+	return (0);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: one.c,v 1.4 1997/10/10 08:59:47 lukem Exp $	*/
+/*	$NetBSD: one.c,v 1.6 2005/07/01 01:12:39 jmc Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,15 +34,14 @@
 #if 0
 static char sccsid[] = "@(#)one.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: one.c,v 1.4 1997/10/10 08:59:47 lukem Exp $");
+__RCSID("$NetBSD: one.c,v 1.6 2005/07/01 01:12:39 jmc Exp $");
 #endif
 #endif /* not lint */
 
 #include "back.h"
 
 int
-makmove(i)
-	int     i;
+makmove(int i)
 {
 	int     n, d;
 	int     max;
@@ -99,8 +94,7 @@ makmove(i)
 }
 
 void
-moverr(i)
-	int     i;
+moverr(int i)
 {
 	int     j;
 
@@ -122,8 +116,7 @@ moverr(i)
 
 
 int
-checkd(d)
-	int     d;
+checkd(int d)
 {
 	if (d0 != d)
 		swap;
@@ -131,7 +124,7 @@ checkd(d)
 }
 
 int
-last()
+last(void)
 {
 	int     i;
 
@@ -142,8 +135,7 @@ last()
 }
 
 void
-movback(i)
-	int     i;
+movback(int i)
 {
 	int     j;
 
@@ -152,8 +144,7 @@ movback(i)
 }
 
 void
-backone(i)
-	int     i;
+backone(int i)
 {
 	board[p[i]] += cturn;
 	if (g[i] != home) {

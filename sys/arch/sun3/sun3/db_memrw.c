@@ -1,4 +1,4 @@
-/*	$NetBSD: db_memrw.c,v 1.19 1998/02/05 04:57:31 gwr Exp $	*/
+/*	$NetBSD: db_memrw.c,v 1.27 2008/04/28 20:23:38 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -52,14 +45,18 @@
  * make sure to do the correct sized pointer access.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: db_memrw.c,v 1.27 2008/04/28 20:23:38 martin Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
 
-#include <vm/vm.h>
+#include <uvm/uvm_extern.h>
 
 #include <machine/db_machdep.h>
 #include <machine/pte.h>
+#include <m68k/cacheops.h>
 
 #include <sun3/sun3/machdep.h>
 
@@ -68,7 +65,7 @@
 extern char etext[];	/* defined by the linker */
 extern char	kernel_text[];	/* locore.s */
 
-static void db_write_text __P((char *, size_t size, char *));
+static void db_write_text(char *, size_t size, const char *);
 
 
 /*
@@ -76,21 +73,18 @@ static void db_write_text __P((char *, size_t size, char *));
  * This used to check for valid PTEs, but now that
  * traps in DDB work correctly, "Just Do It!"
  */
-void
-db_read_bytes(addr, size, data)
-	vm_offset_t	addr;
-	register size_t	size;
-	register char	*data;
+void 
+db_read_bytes(db_addr_t addr, size_t size, char *data)
 {
-	register char	*src = (char*)addr;
+	 char *src = (char *)addr;
 
 	if (size == 4) {
-		*((int*)data) = *((int*)src);
+		*((int *)data) = *((int *)src);
 		return;
 	}
 
 	if (size == 2) {
-		*((short*)data) = *((short*)src);
+		*((short *)data) = *((short *)src);
 		return;
 	}
 
@@ -104,14 +98,11 @@ db_read_bytes(addr, size, data)
  * Write bytes somewhere in kernel text.
  * Makes text page writable temporarily.
  */
-static void
-db_write_text(dst, size, data)
-	register char *dst;
-	register size_t	size;
-	register char	*data;
+static void 
+db_write_text(char *dst, size_t size, const char *data)
 {
-	int		oldpte, tmppte;
-	vm_offset_t pgva, prevpg;
+	int oldpte, tmppte;
+	vaddr_t pgva, prevpg;
 
 	/* Prevent restoring a garbage PTE. */
 	if (size <= 0)
@@ -181,13 +172,10 @@ db_write_text(dst, size, data)
 /*
  * Write bytes to kernel address space for debugger.
  */
-void
-db_write_bytes(addr, size, data)
-	vm_offset_t	addr;
-	register size_t	size;
-	register char	*data;
+void 
+db_write_bytes(db_addr_t addr, size_t size, const char *data)
 {
-	register char	*dst = (char *)addr;
+	char *dst = (char *)addr;
 
 	/* If any part is in kernel text, use db_write_text() */
 	if ((dst < etext) && ((dst + size) > kernel_text)) {
@@ -196,12 +184,12 @@ db_write_bytes(addr, size, data)
 	}
 
 	if (size == 4) {
-		*((int*)dst) = *((int*)data);
+		*((int *)dst) = *((const int *)data);
 		return;
 	}
 
 	if (size == 2) {
-		*((short*)dst) = *((short*)data);
+		*((short *)dst) = *((const short *)data);
 		return;
 	}
 

@@ -1,4 +1,4 @@
-.\"	$NetBSD: robots.6,v 1.7 1999/05/15 23:56:36 christos Exp $
+.\"	$NetBSD: robots.6,v 1.13 2005/09/15 02:09:41 wiz Exp $
 .\"
 .\" Copyright (c) 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -37,7 +33,7 @@
 .Dt ROBOTS 6
 .Os
 .Sh NAME
-.Nm robots 
+.Nm robots
 .Nd fight off villainous robots
 .Sh SYNOPSIS
 .Nm
@@ -61,7 +57,7 @@ you start on the next field.
 This keeps up until they finally get you.
 .Pp
 Robots are represented on the screen by a
-.Sq \+ ,
+.Sq \&+ ,
 the junk heaps from their collisions by a
 .Sq \(** ,
 and you
@@ -91,7 +87,7 @@ move one square down and right
 (also space) do nothing for one turn
 .It Ic HJKLBNYU
 run as far as possible in the given direction
-.It Ic \>
+.It Ic \*[Gt]
 do nothing for as long as possible
 .It Ic t
 teleport to a random location
@@ -106,7 +102,7 @@ redraw the screen
 All commands can be preceded by a count.
 .Pp
 If you use the
-.Sq Ic w 
+.Sq Ic w
 command and survive to the next level, you will get a bonus of 10%
 for each robot which died after you decided to wait.
 If you die, however, you get nothing.
@@ -139,18 +135,20 @@ very nice.
 .It Fl a
 Advance into the higher levels directly, skipping the lower, easier levels.
 .It Fl A
-Auto-bot mode. Let's the game play itself.
+Auto-bot mode.
+Lets the game play itself.
 .It Fl n
 Increase the number of games played by one.
 .El
-.Sh AUTHOR
-Ken Arnold
-Christos Zoulas	(autobot mode)
 .Sh FILES
 .Bl -tag -width /var/games/robots_roll -compact
 .It Pa /var/games/robots_roll
 the score file
 .El
+.Sh AUTHORS
+.An Ken Arnold
+.An Christos Zoulas
+(autobot mode)
 .Sh BUGS
 Bugs?
 You

@@ -1,4 +1,4 @@
-/*	$NetBSD: update.c,v 1.6 1999/08/31 13:58:58 itojun Exp $	*/
+/*	$NetBSD: update.c,v 1.8 2002/06/06 21:45:20 itojun Exp $	*/
 
  /*
   * Routines for controlled update/initialization of request structures.
@@ -20,7 +20,7 @@
 #if 0
 static char sccsid[] = "@(#) update.c 1.1 94/12/28 17:42:56";
 #else
-__RCSID("$NetBSD: update.c,v 1.6 1999/08/31 13:58:58 itojun Exp $");
+__RCSID("$NetBSD: update.c,v 1.8 2002/06/06 21:45:20 itojun Exp $");
 #endif
 #endif
 
@@ -85,7 +85,7 @@ va_list ap;
 	    ptr = request->server->addr;
 	    break;
 	}
-	STRN_CPY(ptr, va_arg(ap, char *), STRING_LENGTH);
+	strlcpy(ptr, va_arg(ap, char *), STRING_LENGTH);
     }
     return (request);
 }
@@ -106,7 +106,7 @@ struct request_info *VARARGS(request_init, struct request_info *, request)
     VASTART(ap, struct request_info *, request);
     *request = default_info;
     request->fd = -1;
-    (void)strncpy(request->daemon, unknown, sizeof(request->daemon) - 1);
+    (void)strlcpy(request->daemon, unknown, sizeof(request->daemon));
     (void)snprintf(request->pid, sizeof(request->pid), "%d", getpid());
     request->client->request = request;
     request->server->request = request;

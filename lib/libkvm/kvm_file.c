@@ -1,4 +1,4 @@
-/*	$NetBSD: kvm_file.c,v 1.14 1999/08/19 05:42:56 cgd Exp $	*/
+/*	$NetBSD: kvm_file.c,v 1.26 2008/03/12 05:57:28 mrg Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1992, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)kvm_file.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: kvm_file.c,v 1.14 1999/08/19 05:42:56 cgd Exp $");
+__RCSID("$NetBSD: kvm_file.c,v 1.26 2008/03/12 05:57:28 mrg Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -49,8 +45,12 @@ __RCSID("$NetBSD: kvm_file.c,v 1.14 1999/08/19 05:42:56 cgd Exp $");
  * most other applications are interested only in open/close/read/nlist).
  */
 
+#define _KERNEL
+#include <sys/types.h>
+#undef _KERNEL
 #include <sys/param.h>
 #include <sys/user.h>
+#include <sys/lwp.h>
 #include <sys/proc.h>
 #include <sys/exec.h>
 #define _KERNEL
@@ -58,12 +58,10 @@ __RCSID("$NetBSD: kvm_file.c,v 1.14 1999/08/19 05:42:56 cgd Exp $");
 #undef _KERNEL
 #include <sys/stat.h>
 #include <sys/ioctl.h>
-#include <sys/tty.h>
 #include <nlist.h>
 #include <kvm.h>
 
-#include <vm/vm.h>
-#include <vm/vm_param.h>
+#include <uvm/uvm_extern.h>
 
 #include <sys/sysctl.h>
 
@@ -85,12 +83,12 @@ kvm_deadfiles __P((kvm_t *, int, int, long, int));
  */
 /*ARGSUSED*/
 static int
-kvm_deadfiles(kd, op, arg, ofhead, nfiles)
+kvm_deadfiles(kd, op, arg, ofhead, numfiles)
 	kvm_t *kd;
-	int op, arg, nfiles;
+	int op, arg, numfiles;
 	long ofhead;
 {
-	int buflen = kd->arglen, n = 0;
+	size_t buflen = kd->argspc_len, n = 0;
 	struct file *fp;
 	struct filelist fhead;
 	char *where = kd->argspc;
@@ -122,11 +120,11 @@ kvm_deadfiles(kd, op, arg, ofhead, nfiles)
 			n++;
 		}
 	}
-	if (n != nfiles) {
+	if (n != numfiles) {
 		_kvm_err(kd, kd->program, "inconsistent nfiles");
 		return (0);
 	}
-	return (nfiles);
+	return (numfiles);
 }
 
 char *
@@ -141,7 +139,7 @@ kvm_getfiles(kd, op, arg, cnt)
 	struct file *fp, *fplim;
 	struct filelist fhead;
 
-	if (ISALIVE(kd)) {
+	if (ISSYSCTL(kd)) {
 		size = 0;
 		mib[0] = CTL_KERN;
 		mib[1] = KERN_FILE;
@@ -150,13 +148,7 @@ kvm_getfiles(kd, op, arg, cnt)
 			_kvm_syserr(kd, kd->program, "kvm_getprocs");
 			return (0);
 		}
-		if (kd->argspc == 0)
-			kd->argspc = (char *)_kvm_malloc(kd, size);
-		else if (kd->arglen < size)
-			kd->argspc = (char *)_kvm_realloc(kd, kd->argspc, size);
-		if (kd->argspc == 0)
-			return (0);
-		kd->arglen = size;
+		KVM_ALLOC(kd, argspc, size);
 		st = sysctl(mib, 2, kd->argspc, &size, NULL, 0);
 		if (st == -1 || size < sizeof(fhead)) {
 			_kvm_syserr(kd, kd->program, "kvm_getfiles");
@@ -187,13 +179,7 @@ kvm_getfiles(kd, op, arg, cnt)
 			return (0);
 		}
 		size = sizeof(fhead) + (numfiles + 10) * sizeof(struct file);
-		if (kd->argspc == 0)
-			kd->argspc = (char *)_kvm_malloc(kd, size);
-		else if (kd->arglen < size)
-			kd->argspc = (char *)_kvm_realloc(kd, kd->argspc, size);
-		if (kd->argspc == 0)
-			return (0);
-		kd->arglen = size;
+		KVM_ALLOC(kd, argspc, size);
 		numfiles = kvm_deadfiles(kd, op, arg, (long)nl[1].n_value,
 		    numfiles);
 		if (numfiles == 0)

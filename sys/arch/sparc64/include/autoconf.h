@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.h,v 1.9 2000/01/14 14:38:37 pk Exp $ */
+/*	$NetBSD: autoconf.h,v 1.28 2008/04/28 20:23:36 martin Exp $ */
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -57,11 +50,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -85,12 +74,12 @@
  */
 
 #include <machine/bus.h>
-#include <sparc64/dev/upavar.h>
+#include <machine/promlib.h>
 #include <dev/sbus/sbusvar.h>
 
 /* This is used to map device classes to IPLs */
 struct intrmap {
-	char	*in_class;
+	const char *in_class;
 	int	in_lev;
 };
 extern struct intrmap intrmap[];
@@ -103,6 +92,12 @@ extern struct intrmap intrmap[];
  * peripheral buses and things like FHC bus systems.
  */
 
+/* Encoding for one "reg" properties item */
+struct upa_reg {
+	int64_t	ur_paddr;
+	int64_t	ur_len;
+};
+
 /* 
  * Attach arguments presented by mainbus_attach() 
  *
@@ -111,31 +106,17 @@ extern struct intrmap intrmap[];
 struct mainbus_attach_args {
 	bus_space_tag_t	ma_bustag;	/* parent bus tag */
 	bus_dma_tag_t	ma_dmatag;
-	char		*ma_name;	/* PROM node name */
+	const char	*ma_name;	/* PROM node name */
 	struct upa_reg	*ma_reg;	/* "reg" properties */
 	u_int		*ma_address;	/* "address" properties -- 32 bits */
 	u_int		*ma_interrupts;	/* "interrupts" properties */
-	int		ma_upaid;	/* UPA bus ID */
+	int		ma_upaid;	/* UPA port ID */
 	int		ma_node;	/* PROM handle */
 	int		ma_nreg;	/* Counts for those properties */
 	int		ma_naddress;
 	int		ma_ninterrupts;
 	int		ma_pri;		/* priority (IPL) */
 };
-
-/*
- * length; the others convert or make some other guarantee.
- */
-long	getproplen __P((int node, char *name));
-int	getprop __P((int, char *, size_t, int *, void **));
-char	*getpropstring __P((int node, char *name));
-int	getpropint __P((int node, char *name, int deflt));
-
-/* Frequently used options node */
-extern int optionsnode;
-
-	/* new interfaces: */
-char	*getpropstringA __P((int, char *, char *));
 
 /*
  * The matchbyname function is useful in drivers that are matched
@@ -145,41 +126,15 @@ char	*getpropstringA __P((int, char *, char *));
  */
 struct device;
 struct cfdata;
-int	matchbyname __P((struct device *, struct cfdata *cf, void *aux));
+int	matchbyname(struct device *, struct cfdata *cf, void *aux);
 
 /*
  * `clockfreq' produces a printable representation of a clock frequency
  * (this is just a frill).
  */
-char	*clockfreq __P((long freq));
+char	*clockfreq(long freq);
 
-/* Openprom V2 style boot path */
-struct bootpath {
-	char	name[16];	/* name of this node */
-	int	val[3];		/* up to three optional values */
-	struct device *dev;	/* device that recognised this component */
-};
-struct bootpath	*bootpath_store __P((int, struct bootpath *));
-int		sd_crazymap __P((int));
+/* Kernel initialization routine. */
+void	bootstrap(void *, void *, void *, void *, void *);
 
-/* Parse a disk string into a dev_t, return device struct pointer */
-struct	device *parsedisk __P((char *, int, int, dev_t *));
-
-/* Establish a mountroot_hook, for benefit of floppy drive, mostly. */
-void	mountroot_hook_establish __P((void (*) __P((struct device *)),
-				      struct device *));
-
-void	bootstrap __P((int));
-int	firstchild __P((int));
-int	nextsibling __P((int));
-void	callrom __P((void));
-void	romboot __P((char *));
-void	romhalt __P((void));
-struct device *getdevunit __P((char *, int));
-void	*findzs __P((int));
-int	romgetcursoraddr __P((int **, int **));
-int	findroot __P((void));
-int	findnode __P((int, const char *));
-int	opennode __P((char *));
-int	node_has_property __P((int, const char *));
-
+int	romgetcursoraddr(int **, int **);

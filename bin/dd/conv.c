@@ -1,4 +1,4 @@
-/*	$NetBSD: conv.c,v 1.8 1998/07/28 05:15:46 mycroft Exp $	*/
+/*	$NetBSD: conv.c,v 1.17 2003/08/07 09:05:10 agc Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993, 1994
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -42,14 +38,16 @@
 #if 0
 static char sccsid[] = "@(#)conv.c	8.3 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: conv.c,v 1.8 1998/07/28 05:15:46 mycroft Exp $");
+__RCSID("$NetBSD: conv.c,v 1.17 2003/08/07 09:05:10 agc Exp $");
 #endif
 #endif /* not lint */
 
 #include <sys/param.h>
+#include <sys/time.h>
 
 #include <err.h>
 #include <string.h>
+#include <stdlib.h>
 
 #include "dd.h"
 #include "extern.h"
@@ -61,9 +59,9 @@ __RCSID("$NetBSD: conv.c,v 1.8 1998/07/28 05:15:46 mycroft Exp $");
  * Worst case buffer calculation is (ibs + obs - 1).
  */
 void
-def()
+def(void)
 {
-	int cnt;
+	uint64_t cnt;
 	u_char *inp;
 	const u_char *t;
 
@@ -90,8 +88,9 @@ def()
 }
 
 void
-def_close()
+def_close(void)
 {
+
 	/* Just update the count, everything is already in the buffer. */
 	if (in.dbcnt)
 		out.dbcnt = in.dbcnt;
@@ -100,11 +99,11 @@ def_close()
 #ifdef	NO_CONV
 /* Build a smaller version (i.e. for a miniroot) */
 /* These can not be called, but just in case...  */
-static char no_block[] = "unblock and -DNO_CONV?";
-void block()       { errx(1, no_block + 2); }
-void block_close() { errx(1, no_block + 2); }
-void unblock()       { errx(1, no_block); }
-void unblock_close() { errx(1, no_block); }
+static const char no_block[] = "unblock and -DNO_CONV?";
+void block(void)		{ errx(EXIT_FAILURE, "%s", no_block + 2); }
+void block_close(void)		{ errx(EXIT_FAILURE, "%s", no_block + 2); }
+void unblock(void)		{ errx(EXIT_FAILURE, "%s", no_block); }
+void unblock_close(void)	{ errx(EXIT_FAILURE, "%s", no_block); }
 #else	/* NO_CONV */
 
 /*
@@ -115,11 +114,11 @@ void unblock_close() { errx(1, no_block); }
  * max out buffer: obs + cbsz
  */
 void
-block()
+block(void)
 {
 	static int intrunc;
 	int ch = 0;	/* pacify gcc */
-	int cnt, maxlen;
+	uint64_t cnt, maxlen;
 	u_char *inp, *outp;
 	const u_char *t;
 
@@ -200,8 +199,9 @@ block()
 }
 
 void
-block_close()
+block_close(void)
 {
+
 	/*
 	 * Copy any remaining data into the output buffer and pad to a record.
 	 * Don't worry about truncation or translation, the input buffer is
@@ -227,16 +227,16 @@ block_close()
  * max out buffer: obs + cbsz
  */
 void
-unblock()
+unblock(void)
 {
-	int cnt;
+	uint64_t cnt;
 	u_char *inp;
 	const u_char *t;
 
 	/* Translation and case conversion. */
 	if ((t = ctab) != NULL)
-		for (cnt = in.dbrcnt, inp = in.dbp; cnt--;)
-			*--inp = t[*inp];
+		for (cnt = in.dbrcnt, inp = in.dbp - 1; cnt--; inp--)
+			*inp = t[*inp];
 	/*
 	 * Copy records (max cbsz size chunks) into the output buffer.  The
 	 * translation has to already be done or we might not recognize the
@@ -261,9 +261,9 @@ unblock()
 }
 
 void
-unblock_close()
+unblock_close(void)
 {
-	int cnt;
+	uint64_t cnt;
 	u_char *t;
 
 	if (in.dbcnt) {

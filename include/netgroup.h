@@ -1,4 +1,4 @@
-/*	$NetBSD: netgroup.h,v 1.6 1999/01/10 02:53:34 lukem Exp $	*/
+/*	$NetBSD: netgroup.h,v 1.9 2007/05/10 17:45:50 christos Exp $	*/
 
 /*
  * Copyright (c) 1994 Christos Zoulas
@@ -38,7 +38,7 @@
 
 #define	_PATH_NETGROUP		"/etc/netgroup"
 
-#define	_PATH_NETGROUP_DB	"/etc/netgroup.db"
+#define	_PATH_NETGROUP_DB	"/var/db/netgroup.db"
 
 #define	_PATH_NETGROUP_MKDB	"/usr/sbin/netgroup_mkdb"
 
@@ -59,15 +59,16 @@ struct netgroup {
 };
 
 __BEGIN_DECLS
-void	setnetgrent	__P((const char *));
-int	getnetgrent	__P((const char **, const char **, const char **));
-void	endnetgrent	__P((void));
-int	innetgr		__P((const char *, const char *, const char *,
-			     const char *));
+void	setnetgrent	(const char *);
+int	getnetgrent	(const char **, const char **, const char **);
+void	endnetgrent	(void);
+int	innetgr		(const char *, const char *, const char *,
+			     const char *);
 #ifdef _NETGROUP_PRIVATE
-char    *_ng_makekey __P((const char *, const char *, size_t));
-int	_ng_parse __P((char **, char **, struct netgroup **));
-void	_ng_print __P((char *, size_t, const struct netgroup *));
+char    *_ng_makekey(const char *, const char *, size_t);
+int	_ng_parse(char **, char **, struct netgroup **);
+void	_ng_print(char *, size_t, const struct netgroup *);
+void	_ng_cycle(const char *, const StringList *);
 #endif /* _NETGROUP_PRIVATE */
 
 __END_DECLS

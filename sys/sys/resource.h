@@ -1,4 +1,4 @@
-/*	$NetBSD: resource.h,v 1.20 1999/09/28 14:47:04 bouyer Exp $	*/
+/*	$NetBSD: resource.h,v 1.29.72.1 2009/04/01 00:25:22 snj Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,6 +34,7 @@
 #ifndef _SYS_RESOURCE_H_
 #define	_SYS_RESOURCE_H_
 
+#include <sys/featuretest.h>
 #include <sys/time.h>
 
 /*
@@ -61,7 +58,9 @@ struct	rusage {
 	struct timeval ru_utime;	/* user time used */
 	struct timeval ru_stime;	/* system time used */
 	long	ru_maxrss;		/* max resident set size */
+#ifdef _KERNEL
 #define	ru_first	ru_ixrss
+#endif
 	long	ru_ixrss;		/* integral shared memory size */
 	long	ru_idrss;		/* integral unshared data " */
 	long	ru_isrss;		/* integral unshared stack " */
@@ -75,7 +74,9 @@ struct	rusage {
 	long	ru_nsignals;		/* signals received */
 	long	ru_nvcsw;		/* voluntary context switches */
 	long	ru_nivcsw;		/* involuntary " */
+#ifdef _KERNEL
 #define	ru_last		ru_nivcsw
+#endif
 };
 
 /*
@@ -90,8 +91,13 @@ struct	rusage {
 #define	RLIMIT_MEMLOCK	6		/* locked-in-memory address space */
 #define	RLIMIT_NPROC	7		/* number of processes */
 #define	RLIMIT_NOFILE	8		/* number of open files */
+#define	RLIMIT_SBSIZE	9		/* maximum size of all socket buffers */
+#define	RLIMIT_AS	10		/* virtual process size (inclusive of mmap) */
+#define	RLIMIT_VMEM	RLIMIT_AS	/* common alias */
 
-#define	RLIM_NLIMITS	9		/* number of resource limits */
+#if defined(_NETBSD_SOURCE)
+#define	RLIM_NLIMITS	11		/* number of resource limits */
+#endif
 
 #define	RLIM_INFINITY	(~((u_quad_t)1 << 63))	/* no limit */
 #define	RLIM_SAVED_MAX	RLIM_INFINITY	/* unrepresentable hard limit */
@@ -110,7 +116,7 @@ struct rlimit {
 	rlim_t	rlim_max;		/* maximum value for rlim_cur */
 };
 
-#if !defined(_XOPEN_SOURCE)
+#if defined(_NETBSD_SOURCE)
 /* Load average structure. */
 struct loadavg {
 	fixpt_t	ldavg[3];
@@ -121,18 +127,18 @@ struct loadavg {
 #ifdef _KERNEL
 extern struct loadavg averunnable;
 struct pcred;
-int	dosetrlimit __P((struct proc *, struct pcred *, int, struct rlimit *));
-int	donice __P((struct proc *, struct proc *, int));
+int	dosetrlimit(struct lwp *, struct proc *, int, struct rlimit *);
+int	donice(struct lwp *, struct proc *, int);
 
 #else
 #include <sys/cdefs.h>
 
 __BEGIN_DECLS
-int	getpriority __P((int, int));
-int	getrlimit __P((int, struct rlimit *));
-int	getrusage __P((int, struct rusage *));
-int	setpriority __P((int, int, int));
-int	setrlimit __P((int, const struct rlimit *));
+int	getpriority(int, id_t);
+int	getrlimit(int, struct rlimit *);
+int	getrusage(int, struct rusage *);
+int	setpriority(int, id_t, int);
+int	setrlimit(int, const struct rlimit *);
 __END_DECLS
 
 #endif	/* _KERNEL */

@@ -1,4 +1,4 @@
-|	$NetBSD: vectors.s,v 1.9 1999/08/05 15:58:17 minoura Exp $
+|	$NetBSD: vectors.s,v 1.14 2007/10/17 19:58:05 garbled Exp $
 
 | Copyright (c) 1988 University of Utah
 | Copyright (c) 1990, 1993
@@ -76,7 +76,11 @@ GLOBAL(vectab)
 	VECTOR(illinst)
 #endif
 	VECTOR(trap2)		/* 34: trace */
-	VECTOR(trap3)		/* 35: sigreturn special syscall */
+#ifdef COMPAT_16
+	VECTOR(trap3)		/* 35: compat_16_sigreturn */
+#else
+	VECTOR(illinst)	
+#endif
 	VECTOR(illinst)		/* 36: TRAP instruction vector */
 	VECTOR(illinst)		/* 37: TRAP instruction vector */
 	VECTOR(illinst)		/* 38: TRAP instruction vector */
@@ -151,7 +155,7 @@ GLOBAL(vectab)
 	VECTOR(intiotrap)	/* 96: FDC */
 	VECTOR(fdeject)		/* 97: floppy ejection */
 	VECTOR(intiotrap)	/* 98: unassigned, reserved */
-	VECTOR(partrap)		/* 99: parallel port */
+	VECTOR(intiotrap)	/* 99: parallel port */
 	VECTOR(intiotrap)	/* 100: FDC DMA */
 	VECTOR(intiotrap)	/* 101: FDC DMA (error) */
 	VECTOR(intiotrap)	/* 102: unassigned, reserved */
@@ -166,7 +170,7 @@ GLOBAL(vectab)
 	VECTOR(intiotrap)	/* 111: unassigned, reserved */
 	VECTOR(intiotrap)	/* 112: Z8530 SCC (onboard) */
 	VECTOR(intiotrap)	/* 113: Z8530 SCC */
-	VECTOR(intiotrap)	/* 114: Z8530 SCC */; 
+	VECTOR(intiotrap)	/* 114: Z8530 SCC */
 	VECTOR(intiotrap)	/* 115: unassigned, reserved */
 	VECTOR(intiotrap)	/* 116: unassigned, reserved */
 	VECTOR(intiotrap)	/* 117: unassigned, reserved */

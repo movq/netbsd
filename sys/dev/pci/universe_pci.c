@@ -1,4 +1,4 @@
-/* $NetBSD: universe_pci.c,v 1.2 2000/03/12 11:21:02 drochner Exp $ */
+/* $NetBSD: universe_pci.c,v 1.8 2007/10/19 12:00:56 ad Exp $ */
 
 /*
  * Copyright (c) 1999
@@ -31,6 +31,9 @@
  * Newbridge/Tundra Universe II chip (CA91C142).
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: universe_pci.c,v 1.8 2007/10/19 12:00:56 ad Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
@@ -39,7 +42,7 @@
 #include <dev/pci/pcivar.h>
 /*#include <dev/pci/pcidevs.h>*/
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/vme/vmereg.h>
 #include <dev/vme/vmevar.h>
@@ -47,7 +50,7 @@
 #include <dev/ic/universereg.h>
 #include <dev/pci/universe_pci_var.h>
 
-int univ_pci_intr __P((void *));
+int univ_pci_intr(void *);
 
 #define read_csr_4(d, reg) \
   bus_space_read_4(d->csrt, d->csrh, offsetof(struct universereg, reg))
@@ -88,7 +91,7 @@ univ_pci_attach(d, pa, name, inthdl, intcookie)
 	struct univ_pci_data *d;
 	struct pci_attach_args *pa;
 	const char *name;
-	void (*inthdl) __P((void *, int, int));
+	void (*inthdl)(void *, int, int);
 	void *intcookie;
 {
 	pci_chipset_tag_t pc = pa->pa_pc;
@@ -131,16 +134,15 @@ univ_pci_attach(d, pa, name, inthdl, intcookie)
 	    PCI_COMMAND_MASTER_ENABLE);
 
 	reg = read_csr_4(d, misc_ctl);
-	printf("%s: ", name);
+	aprint_normal("%s: ", name);
 	if (reg & 0x00020000) /* SYSCON */
-		printf("VME bus controller, ");
+		aprint_normal("VME bus controller, ");
 	reg = read_csr_4(d, mast_ctl);
-	printf("requesting at VME bus level %d\n", (reg >> 22) & 3);
+	aprint_normal("requesting at VME bus level %d\n", (reg >> 22) & 3);
 
 	/* Map and establish the PCI interrupt. */
-	if (pci_intr_map(pc, pa->pa_intrtag, pa->pa_intrpin,
-	    pa->pa_intrline, &ih)) {
-		printf("%s: couldn't map interrupt\n", name);
+	if (pci_intr_map(pa, &ih)) {
+		aprint_error("%s: couldn't map interrupt\n", name);
 		return (-1);
 	}
 	intrstr = pci_intr_string(pc, ih);
@@ -150,13 +152,13 @@ univ_pci_attach(d, pa, name, inthdl, intcookie)
 	 */
 	d->ih = pci_intr_establish(pc, ih, IPL_BIO, univ_pci_intr, d);
 	if (d->ih == NULL) {
-		printf("%s: couldn't establish interrupt", name);
+		aprint_error("%s: couldn't establish interrupt", name);
 		if (intrstr != NULL)
-			printf(" at %s", intrstr);
-		printf("\n");
+			aprint_normal(" at %s", intrstr);
+		aprint_normal("\n");
 		return (-1);
 	}
-	printf("%s: interrupting at %s\n", name, intrstr);
+	aprint_normal("%s: interrupting at %s\n", name, intrstr);
 
 	/* handle all VME interrupts (XXX should be configurable) */
 	d->vmeinthandler = inthdl;

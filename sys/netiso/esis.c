@@ -1,4 +1,4 @@
-/*	$NetBSD: esis.c,v 1.25 2000/03/30 13:10:08 augustss Exp $	*/
+/*	$NetBSD: esis.c,v 1.52 2008/05/11 20:20:27 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -62,6 +58,9 @@ SOFTWARE.
  * ARGO Project, Computer Sciences Dept., University of Wisconsin - Madison
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: esis.c,v 1.52 2008/05/11 20:20:27 dyoung Exp $");
+
 #include "opt_iso.h"
 #ifdef ISO
 
@@ -76,6 +75,7 @@ SOFTWARE.
 #include <sys/errno.h>
 #include <sys/kernel.h>
 #include <sys/proc.h>
+#include <sys/kauth.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -103,14 +103,16 @@ SOFTWARE.
  *
  */
 LIST_HEAD(, rawcb) esis_pcb;
+struct esis_stat esis_stat;
 int             esis_sendspace = 2048;
 int             esis_recvspace = 2048;
 short           esis_holding_time = ESIS_HT;
 short           esis_config_time = ESIS_CONFIG;
 short           esis_esconfig_time = ESIS_CONFIG;
-extern int      iso_systype;
-struct sockaddr_dl esis_dl = {sizeof(esis_dl), AF_LINK};
-extern char     all_es_snpa[], all_is_snpa[];
+struct sockaddr_dl esis_dl = {
+	.sdl_len = sizeof(esis_dl), 
+	.sdl_family = AF_LINK,
+};
 
 struct callout	esis_config_ch;
 
@@ -121,7 +123,7 @@ struct callout	esis_config_ch;
 		return;\
 	} else {\
 		(m) = (m)->m_next;\
-		(cp) = mtod((m), caddr_t);\
+		(cp) = mtod((m), void *);\
 		(m)->m_len = 0;\
 	}
 
@@ -137,14 +139,14 @@ struct callout	esis_config_ch;
  * NOTES:
  */
 void
-esis_init()
+esis_init(void)
 {
 	extern struct clnl_protosw clnl_protox[256];
 
 	LIST_INIT(&esis_pcb);
 
-	callout_init(&snpac_age_ch);
-	callout_init(&esis_config_ch);
+	callout_init(&snpac_age_ch, 0);
+	callout_init(&esis_config_ch, 0);
 
 	callout_reset(&snpac_age_ch, hz, snpac_age, NULL);
 	callout_reset(&esis_config_ch, hz, esis_config, NULL);
@@ -168,11 +170,8 @@ esis_init()
  */
 /* ARGSUSED */
 int
-esis_usrreq(so, req, m, nam, control, p)
-	struct socket *so;
-	int req;
-	struct mbuf *m, *nam, *control;
-	struct proc *p;
+esis_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
+	struct mbuf *control, struct lwp *l)
 {
 	struct rawcb *rp;
 	int error = 0;
@@ -193,25 +192,29 @@ esis_usrreq(so, req, m, nam, control, p)
 	switch (req) {
 
 	case PRU_ATTACH:
+		sosetlock(so);
 		if (rp != 0) {
 			error = EISCONN;
 			break;
 		}
-		if (p == 0 || (error = suser(p->p_ucred, &p->p_acflag))) {
+
+		if (l == NULL) {
 			error = EACCES;
 			break;
 		}
+
+		/* XXX: raw socket permission is checked in socreate() */
+
 		if (so->so_snd.sb_hiwat == 0 || so->so_rcv.sb_hiwat == 0) {
 			error = soreserve(so, esis_sendspace, esis_recvspace);
 			if (error)
 				break;
 		}
-		MALLOC(rp, struct rawcb *, sizeof(*rp), M_PCB, M_WAITOK);
+		MALLOC(rp, struct rawcb *, sizeof(*rp), M_PCB, M_WAITOK|M_ZERO);
 		if (rp == 0) {
 			error = ENOBUFS;
 			break;
 		}
-		bzero(rp, sizeof(*rp));
 		rp->rcb_socket = so;
 		LIST_INSERT_HEAD(&esis_pcb, rp, rcb_list);
 		so->so_pcb = rp;
@@ -274,13 +277,7 @@ release:
  * NOTES:
  */
 void
-#if __STDC__
 esis_input(struct mbuf *m0, ...)
-#else
-esis_input(m0, va_alist)
-	struct mbuf    *m0;
-	va_dcl
-#endif
 {
 	struct snpa_hdr *shp;	/* subnetwork header */
 	struct esis_fixed *pdu = mtod(m0, struct esis_fixed *);
@@ -292,8 +289,7 @@ esis_input(m0, va_alist)
 	shp = va_arg(ap, struct snpa_hdr *);
 	va_end(ap);
 
-	for (ifa = shp->snh_ifp->if_addrlist.tqh_first; ifa != 0;
-	     ifa = ifa->ifa_list.tqe_next)
+	IFADDR_FOREACH(ifa, shp->snh_ifp)
 		if (ifa->ifa_addr->sa_family == AF_ISO)
 			break;
 	/* if we have no iso address just send it to the sockets */
@@ -351,28 +347,28 @@ bad:
  *			DA, BSNPA and NET in first mbuf.
  */
 void
-esis_rdoutput(inbound_shp, inbound_m, inbound_oidx, rd_dstnsap, rt)
-	struct snpa_hdr *inbound_shp;	/* snpa hdr from incoming packet */
-	struct mbuf    *inbound_m;	/* incoming pkt itself */
-	struct clnp_optidx *inbound_oidx;	/* clnp options assoc with
+esis_rdoutput(
+	struct snpa_hdr *inbound_shp,	/* snpa hdr from incoming packet */
+	struct mbuf    *inbound_m,	/* incoming pkt itself */
+	struct clnp_optidx *inbound_oidx,	/* clnp options assoc with
 						 * incoming pkt */
-	struct iso_addr *rd_dstnsap;	/* ultimate destination of pkt */
-	struct rtentry *rt;	/* snpa cache info regarding next hop of pkt */
+	struct iso_addr *rd_dstnsap,	/* ultimate destination of pkt */
+	struct rtentry *rt)	/* snpa cache info regarding next hop of pkt */
 {
 	struct mbuf    *m, *m0;
-	caddr_t         cp;
+	char *cp;
 	struct esis_fixed *pdu;
 	int             len;
 	struct sockaddr_iso siso;
 	struct ifnet   *ifp = inbound_shp->snh_ifp;
 	struct sockaddr_dl *sdl;
-	struct iso_addr *rd_gwnsap;
+	const struct iso_addr *rd_gwnsap;
 
 	if (rt->rt_flags & RTF_GATEWAY) {
 		rd_gwnsap = &satosiso(rt->rt_gateway)->siso_addr;
 		rt = rtalloc1(rt->rt_gateway, 0);
 	} else
-		rd_gwnsap = &satosiso(rt_key(rt))->siso_addr;
+		rd_gwnsap = &satocsiso(rt_getkey(rt))->siso_addr;
 	if (rt == 0 || (sdl = (struct sockaddr_dl *) rt->rt_gateway) == 0 ||
 	    sdl->sdl_family != AF_LINK) {
 		/*
@@ -400,10 +396,10 @@ esis_rdoutput(inbound_shp, inbound_m, inbound_oidx, rd_dstnsap, rt)
 		esis_stat.es_nomem++;
 		return;
 	}
-	bzero(mtod(m, caddr_t), MHLEN);
+	bzero(mtod(m, void *), MHLEN);
 
 	pdu = mtod(m, struct esis_fixed *);
-	cp = (caddr_t) (pdu + 1);	/* pointer arith.; 1st byte after
+	cp = (void *) (pdu + 1);	/* pointer arith.; 1st byte after
 					 * header */
 	len = sizeof(struct esis_fixed);
 
@@ -416,11 +412,11 @@ esis_rdoutput(inbound_shp, inbound_m, inbound_oidx, rd_dstnsap, rt)
 	HTOC(pdu->esis_ht_msb, pdu->esis_ht_lsb, esis_holding_time);
 
 	/* Insert destination address */
-	(void) esis_insert_addr(&cp, &len, rd_dstnsap, m, 0);
+	(void) esis_insert_addr((void **)&cp, &len, rd_dstnsap, m, 0);
 
 	/* Insert the snpa of better next hop */
 	*cp++ = sdl->sdl_alen;
-	bcopy(LLADDR(sdl), cp, sdl->sdl_alen);
+	bcopy(CLLADDR(sdl), cp, sdl->sdl_alen);
 	cp += sdl->sdl_alen;
 	len += (sdl->sdl_alen + 1);
 
@@ -439,7 +435,7 @@ esis_rdoutput(inbound_shp, inbound_m, inbound_oidx, rd_dstnsap, rt)
 			return;
 		}
 #endif
-		(void) esis_insert_addr(&cp, &len, rd_gwnsap, m, 0);
+		(void) esis_insert_addr((void **)&cp, &len, rd_gwnsap, m, 0);
 	} else {
 		*cp++ = 0;	/* NETL */
 		len++;
@@ -477,19 +473,19 @@ esis_rdoutput(inbound_shp, inbound_m, inbound_oidx, rd_dstnsap, rt)
 		 * the option code and length
 		 */
 		if (inbound_oidx->cni_qos_formatp) {
-			bcopy(mtod(inbound_m, caddr_t) +
+			memcpy(cp, mtod(inbound_m, char *) +
 				inbound_oidx->cni_qos_formatp - 2,
-			      cp, (unsigned) (inbound_oidx->cni_qos_len + 2));
+			      (unsigned) (inbound_oidx->cni_qos_len + 2));
 			cp += inbound_oidx->cni_qos_len + 2;
 		}
 		if (inbound_oidx->cni_priorp) {
-			bcopy(mtod(inbound_m, caddr_t) +
-				inbound_oidx->cni_priorp - 2, cp, 3);
+			memcpy(cp, mtod(inbound_m, char *) +
+				inbound_oidx->cni_priorp - 2, 3);
 			cp += 3;
 		}
 		if (inbound_oidx->cni_securep) {
-			bcopy(mtod(inbound_m, caddr_t) +
-				inbound_oidx->cni_securep - 2, cp,
+			memcpy(cp, mtod(inbound_m, char *) +
+				inbound_oidx->cni_securep - 2,
 			      (unsigned) (inbound_oidx->cni_secure_len + 2));
 			cp += inbound_oidx->cni_secure_len + 2;
 		}
@@ -499,7 +495,7 @@ esis_rdoutput(inbound_shp, inbound_m, inbound_oidx, rd_dstnsap, rt)
 	pdu->esis_hdr_len = m0->m_pkthdr.len = len;
 	iso_gen_csum(m0, ESIS_CKSUM_OFF, (int) pdu->esis_hdr_len);
 
-	bzero((caddr_t) & siso, sizeof(siso));
+	bzero((void *) & siso, sizeof(siso));
 	siso.siso_family = AF_ISO;
 	siso.siso_data[0] = AFI_SNA;
 	siso.siso_nlen = 6 + 1;	/* should be taken from snpa_hdr */
@@ -520,25 +516,25 @@ esis_rdoutput(inbound_shp, inbound_m, inbound_oidx, rd_dstnsap, rt)
  * NOTES:		Plus 1 here is for length byte
  */
 int
-esis_insert_addr(buf, len, isoa, m, nsellen)
-	caddr_t *buf;	/* ptr to buffer to put address into */
-	int            *len;	/* ptr to length of buffer so far */
-	struct iso_addr *isoa;	/* ptr to address */
-	struct mbuf *m;/* determine if there remains space */
-	int             nsellen;
+esis_insert_addr(
+	void **bufv,		/* ptr to buffer to put address into */
+	int     *len,		/* ptr to length of buffer so far */
+	const struct iso_addr *isoa,	/* ptr to address */
+	struct mbuf *m,		/* determine if there remains space */
+	int     nsellen)
 {
+	char *buf = *bufv;
 	int    newlen, result = 0;
 
-	isoa->isoa_len -= nsellen;
-	newlen = isoa->isoa_len + 1;
+	newlen = isoa->isoa_len - nsellen + 1;
 	if (newlen <= M_TRAILINGSPACE(m)) {
-		bcopy((caddr_t) isoa, *buf, newlen);
+		memcpy(buf, isoa, newlen);
 		*len += newlen;
-		*buf += newlen;
+		buf += newlen;
 		m->m_len += newlen;
 		result = 1;
 	}
-	isoa->isoa_len += nsellen;
+	*bufv = buf;
 	return (result);
 }
 
@@ -560,9 +556,9 @@ int             ESHonly = 0;
  * NOTES:
  */
 void
-esis_eshinput(m, shp)
-	struct mbuf    *m;	/* esh pdu */
-	struct snpa_hdr *shp;	/* subnetwork header */
+esis_eshinput(
+	struct mbuf    *m,	/* esh pdu */
+	struct snpa_hdr *shp)	/* subnetwork header */
 {
 	struct esis_fixed *pdu = mtod(m, struct esis_fixed *);
 	u_short         ht;	/* holding time */
@@ -590,8 +586,7 @@ esis_eshinput(m, shp)
 		 * See if we want to compress out multiple nsaps
 		 * differing only by nsel
 		 */
-		for (ifa = shp->snh_ifp->if_addrlist.tqh_first; ifa != 0;
-		     ifa = ifa->ifa_list.tqe_next)
+		IFADDR_FOREACH(ifa, shp->snh_ifp)
 			if (ifa->ifa_addr->sa_family == AF_ISO) {
 				nsellength =
 				((struct iso_ifaddr *) ifa)->ia_addr.siso_tlen;
@@ -624,9 +619,9 @@ esis_eshinput(m, shp)
 						       clnp_iso_addrp(nsap2));
 					}
 #endif
-					if (Bcmp(nsap->isoa_genaddr,
-						 nsap2->isoa_genaddr,
-						 nsap->isoa_len - nsellength)
+					if (memcmp(nsap->isoa_genaddr,
+						   nsap2->isoa_genaddr,
+						   nsap->isoa_len - nsellength)
 					     == 0) {
 						nlen = nsellength;
 						break;
@@ -662,9 +657,9 @@ bad:
  * NOTES:
  */
 void
-esis_ishinput(m, shp)
-	struct mbuf    *m;	/* esh pdu */
-	struct snpa_hdr *shp;	/* subnetwork header */
+esis_ishinput(
+	struct mbuf    *m,	/* esh pdu */
+	struct snpa_hdr *shp)	/* subnetwork header */
 {
 	struct esis_fixed *pdu = mtod(m, struct esis_fixed *);
 	u_short         ht, newct;	/* holding time */
@@ -735,9 +730,9 @@ bad:
  * NOTES:
  */
 void
-esis_rdinput(m0, shp)
-	struct mbuf    *m0;	/* esh pdu */
-	struct snpa_hdr *shp;	/* subnetwork header */
+esis_rdinput(
+	struct mbuf    *m0,	/* esh pdu */
+	struct snpa_hdr *shp)	/* subnetwork header */
 {
 	struct esis_fixed *pdu = mtod(m0, struct esis_fixed *);
 	u_short         ht;	/* holding time */
@@ -834,8 +829,7 @@ bad:	;	/* Needed by ESIS_NEXT_OPTION */
  */
 /*ARGSUSED*/
 void
-esis_config(v)
-	void *v;
+esis_config(void *v)
 {
 	struct ifnet *ifp;
 
@@ -853,19 +847,18 @@ esis_config(v)
 	 * work to advantage for non-broadcast media
 	 */
 
-	for (ifp = ifnet.tqh_first; ifp != 0; ifp = ifp->if_list.tqe_next) {
+	TAILQ_FOREACH(ifp, &ifnet, if_list) {
 		if ((ifp->if_flags & IFF_UP) &&
 		    (ifp->if_flags & IFF_BROADCAST)) {
 			/* search for an ISO address family */
 			struct ifaddr  *ifa;
 
-			for (ifa = ifp->if_addrlist.tqh_first; ifa != 0;
-			     ifa = ifa->ifa_list.tqe_next) {
+			IFADDR_FOREACH(ifa, ifp) {
 				if (ifa->ifa_addr->sa_family == AF_ISO) {
 					esis_shoutput(ifp,
 			      iso_systype & SNPA_ES ? ESIS_ESH : ESIS_ISH,
 			      esis_holding_time,
-			      (caddr_t) (iso_systype & SNPA_ES ? all_is_snpa :
+			      (iso_systype & SNPA_ES ? all_is_snpa :
 				     all_es_snpa), 6, (struct iso_addr *) 0);
 					break;
 				}
@@ -886,16 +879,16 @@ esis_config(v)
  * NOTES:
  */
 void
-esis_shoutput(ifp, type, ht, sn_addr, sn_len, isoa)
-	struct ifnet   *ifp;
-	int             type;
-	short           ht;
-	caddr_t         sn_addr;
-	int             sn_len;
-	struct iso_addr *isoa;
+esis_shoutput(
+	struct ifnet   *ifp,
+	int             type,
+	int             ht,
+	const void 	*sn_addr,
+	int             sn_len,
+	struct iso_addr *isoa)
 {
 	struct mbuf    *m, *m0;
-	caddr_t         cp, naddrp;
+	char *cp, *naddrp;
 	int             naddr = 0;
 	struct esis_fixed *pdu;
 	struct iso_ifaddr *ia;
@@ -919,7 +912,7 @@ esis_shoutput(ifp, type, ht, sn_addr, sn_len, isoa)
 		    type == ESIS_ESH ? "esh" : "ish",
 		    ht, sn_len);
 		for (i = 0; i < sn_len; i++)
-			printf("%x%c", *(sn_addr + i),
+			printf("%x%c", *((const char *)sn_addr + i),
 			    i < (sn_len - 1) ? ':' : ' ');
 		printf("\n");
 	}
@@ -929,10 +922,10 @@ esis_shoutput(ifp, type, ht, sn_addr, sn_len, isoa)
 		esis_stat.es_nomem++;
 		return;
 	}
-	bzero(mtod(m, caddr_t), MHLEN);
+	bzero(mtod(m, void *), MHLEN);
 
 	pdu = mtod(m, struct esis_fixed *);
-	naddrp = cp = (caddr_t) (pdu + 1);
+	naddrp = cp = (char *) (pdu + 1);
 	len = sizeof(struct esis_fixed);
 
 	/*
@@ -958,26 +951,25 @@ esis_shoutput(ifp, type, ht, sn_addr, sn_len, isoa)
 		 * multiple NSEL's we'll tack them on so he can compress
 		 * them out.
 		 */
-		(void) esis_insert_addr(&cp, &len, isoa, m, 0);
+		(void) esis_insert_addr((void **)&cp, &len, isoa, m, 0);
 		naddr = 1;
 	}
-	for (ia = iso_ifaddr.tqh_first; ia != 0; ia = ia->ia_list.tqe_next) {
+	TAILQ_FOREACH(ia, &iso_ifaddr, ia_list) {
 		int nsellen = (type == ESIS_ISH ? ia->ia_addr.siso_tlen : 0);
 		int n = ia->ia_addr.siso_nlen;
 		struct iso_ifaddr *ia2;
 
 		if (type == ESIS_ISH && naddr > 0)
 			break;
-		for (ia2 = iso_ifaddr.tqh_first; ia2 != ia;
-		     ia2 = ia2->ia_list.tqe_next)
-			if (Bcmp(ia->ia_addr.siso_data,
-				 ia2->ia_addr.siso_data, n) == 0)
+		TAILQ_FOREACH(ia2, &iso_ifaddr, ia_list)
+			if (memcmp(ia->ia_addr.siso_data,
+				   ia2->ia_addr.siso_data, n) == 0)
 				break;
 		if (ia2 != ia)
 			continue;	/* Means we have previously copied
 					 * this nsap */
-		if (isoa && Bcmp(ia->ia_addr.siso_data,
-				 isoa->isoa_genaddr, n) == 0) {
+		if (isoa && memcmp(ia->ia_addr.siso_data,
+				   isoa->isoa_genaddr, n) == 0) {
 			isoa = 0;
 			continue;	/* Ditto */
 		}
@@ -987,10 +979,10 @@ esis_shoutput(ifp, type, ht, sn_addr, sn_len, isoa)
 			    clnp_iso_addrp(&ia->ia_addr.siso_addr));
 		}
 #endif
-		if (!esis_insert_addr(&cp, &len,
+		if (!esis_insert_addr((void **)&cp, &len,
 				      &ia->ia_addr.siso_addr, m, nsellen)) {
 			EXTEND_PACKET(m, m0, cp);
-			(void) esis_insert_addr(&cp, &len,
+			(void) esis_insert_addr((void **)&cp, &len,
 						&ia->ia_addr.siso_addr, m,
 						nsellen);
 		}
@@ -1022,7 +1014,7 @@ esis_shoutput(ifp, type, ht, sn_addr, sn_len, isoa)
 	pdu->esis_hdr_len = len;
 	iso_gen_csum(m0, ESIS_CKSUM_OFF, (int) pdu->esis_hdr_len);
 
-	bzero((caddr_t) & siso, sizeof(siso));
+	bzero((void *) & siso, sizeof(siso));
 	siso.siso_family = AF_ISO;
 	siso.siso_data[0] = AFI_SNA;
 	siso.siso_nlen = sn_len + 1;
@@ -1042,13 +1034,7 @@ esis_shoutput(ifp, type, ht, sn_addr, sn_len, isoa)
  * NOTES:
  */
 void
-#if __STDC__
 isis_input(struct mbuf *m0, ...)
-#else
-isis_input(m0, va_alist)
-	struct mbuf    *m0;
-	va_dcl
-#endif
 {
 	struct snpa_hdr *shp;	/* subnetwork header */
 	struct rawcb *rp, *first_rp = 0;
@@ -1072,14 +1058,14 @@ isis_input(m0, va_alist)
 			    (i < 5) ? ':' : ' ');
 		printf(" to:");
 		for (i = 0; i < 6; i++)
-			printf("%x%c", shp->snh_dhost[i] & 0xff, 
+			printf("%x%c", shp->snh_dhost[i] & 0xff,
 			    (i < 5) ? ':' : ' ');
 		printf("\n");
 	}
 #endif
 	esis_dl.sdl_alen = ifp->if_addrlen;
 	esis_dl.sdl_index = ifp->if_index;
-	bcopy(shp->snh_shost, (caddr_t) esis_dl.sdl_data, esis_dl.sdl_alen);
+	bcopy(shp->snh_shost, (void *) esis_dl.sdl_data, esis_dl.sdl_alen);
 	for (rp = esis_pcb.lh_first; rp != 0; rp = rp->rcb_list.le_next) {
 		if (first_rp == 0) {
 			first_rp = rp;
@@ -1111,13 +1097,7 @@ isis_input(m0, va_alist)
 }
 
 int
-#if __STDC__
 isis_output(struct mbuf *m, ...)
-#else
-isis_output(m, va_alist)
-	struct mbuf    *m;
-	va_dcl
-#endif
 {
 	struct sockaddr_dl *sdl;
 	struct ifnet *ifp;
@@ -1130,6 +1110,16 @@ isis_output(m, va_alist)
 	va_start(ap, m);
 	sdl = va_arg(ap, struct sockaddr_dl *);
 	va_end(ap);
+
+	/* we assume here we have a sockaddr_dl ... check it */
+	if (sdl->sdl_family != AF_LINK) {
+		error = EINVAL;
+		goto release;
+	}
+	if (sdl->sdl_len < 8 + sdl->sdl_nlen + sdl->sdl_alen + sdl->sdl_slen) {
+		error = EINVAL;
+		goto release;
+	}
 
 	ifa = ifa_ifwithnet((struct sockaddr *) sdl);	/* get ifp from sdl */
 	if (ifa == 0) {
@@ -1145,7 +1135,8 @@ isis_output(m, va_alist)
 	sn_len = sdl->sdl_alen;
 #ifdef ARGO_DEBUG
 	if (argo_debug[D_ISISOUTPUT]) {
-		u_char *cp = (u_char *) LLADDR(sdl), *cplim = cp + sn_len;
+		const u_char *cp = (const u_char *)CLLADDR(sdl),
+		             *cplim = cp + sn_len;
 		printf("isis_output: ifp %p (%s), to: ",
 		    ifp, ifp->if_xname);
 		while (cp < cplim) {
@@ -1155,7 +1146,7 @@ isis_output(m, va_alist)
 		printf("\n");
 	}
 #endif
-	bzero((caddr_t) & siso, sizeof(siso));
+	bzero((void *) & siso, sizeof(siso));
 	siso.siso_family = AF_ISO;	/* This convention may be useful for
 					 * X.25 */
 	if (sn_len == 0)
@@ -1163,7 +1154,7 @@ isis_output(m, va_alist)
 	else {
 		siso.siso_data[0] = AFI_SNA;
 		siso.siso_nlen = sn_len + 1;
-		bcopy(LLADDR(sdl), siso.siso_data + 1, sn_len);
+		bcopy(CLLADDR(sdl), siso.siso_data + 1, sn_len);
 	}
 	error = (ifp->if_output) (ifp, m, sisotosa(&siso), 0);
 	if (error) {
@@ -1197,10 +1188,10 @@ release:
  *			back in if_down, we knew the ifp...
  */
 void *
-esis_ctlinput(req, siso, dummy)
-	int             req;	/* request: we handle only PRC_IFDOWN */
-	struct sockaddr *siso;	/* address of ifp */
-	void *dummy;
+esis_ctlinput(
+    int    req,			/* request: we handle only PRC_IFDOWN */
+    const struct sockaddr *siso,	/* address of ifp */
+    void *dummy)
 {
 	struct iso_ifaddr *ia;	/* scan through interface addresses */
 
@@ -1208,10 +1199,9 @@ esis_ctlinput(req, siso, dummy)
 	if (siso->sa_family != AF_ISO)
 		return NULL;
 	if (req == PRC_IFDOWN)
-		for (ia = iso_ifaddr.tqh_first; ia != 0;
-		     ia = ia->ia_list.tqe_next) {
+		TAILQ_FOREACH(ia, &iso_ifaddr, ia_list) {
 			if (iso_addrmatch(IA_SIS(ia),
-					  (struct sockaddr_iso *) siso))
+					  (const struct sockaddr_iso *)siso))
 				snpac_flushifp(ia->ia_ifp);
 		}
 	return NULL;

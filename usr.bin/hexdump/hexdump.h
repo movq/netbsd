@@ -1,4 +1,4 @@
-/*	$NetBSD: hexdump.h,v 1.5 1997/10/18 13:54:22 mrg Exp $	*/
+/*	$NetBSD: hexdump.h,v 1.10 2006/08/26 18:17:42 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -83,25 +79,23 @@ extern int length;			/* max bytes to read */
 extern off_t skip;			/* bytes to skip */
 extern enum _vflag vflag;
 
-void	 add __P((char *));
-void	 addfile __P((char *));
-void	 badcnt __P((char *));
-void	 badconv __P((char *));
-void	 badfmt __P((char *));
-void	 badsfmt __P((void));
-void	 bpad __P((PR *));
-void	 conv_c __P((PR *, u_char *));
-void	 conv_u __P((PR *, u_char *));
-void	 display __P((void));
-void	 doskip __P((char *, int));
-/*void	 err __P((const char *, ...));*/
-void	*emalloc __P((int));
-void	 escape __P((char *));
-u_char	*get __P((void));
-void	 newsyntax __P((int, char ***));
-int	 next __P((char **));
-void	 nomem __P((void));
-void	 oldsyntax __P((int, char ***));
-void	 rewrite __P((FS *));
-int	 size __P((FS *));
-void	 usage __P((void));
+void	 add(const char *);
+void	 addfile(char *);
+void	 badcnt(char *);
+void	 badconv(char *);
+void	 badfmt(const char *);
+void	 badsfmt(void);
+void	 bpad(PR *);
+void	 conv_c(PR *, u_char *);
+void	 conv_u(PR *, u_char *);
+void	 display(void);
+void	 doskip(const char *, int);
+/*void	 err(const char *, ...);*/
+void	 escape(char *);
+u_char	*get(void);
+void	 newsyntax(int, char ***);
+int	 next(char **);
+void	 oldsyntax(int, char ***);
+void	 rewrite(FS *);
+int	 size(FS *);
+void	 usage(void);

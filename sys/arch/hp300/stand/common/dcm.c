@@ -1,9 +1,41 @@
-/*	$NetBSD: dcm.c,v 1.2 1997/04/14 05:58:32 scottr Exp $	*/
+/*	$NetBSD: dcm.c,v 1.7 2007/03/04 05:59:50 christos Exp $	*/
 
 /*
- * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Systems Programming Group of the University of Utah Computer
+ * Science Department.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ *	@(#)dcm.c	8.1 (Berkeley) 6/10/93
+ */
+/*
+ * Copyright (c) 1988 University of Utah.
  *
  * This code is derived from software contributed to Berkeley by
  * the Systems Programming Group of the University of Utah Computer
@@ -55,15 +87,13 @@ struct dcmdevice *dcmcnaddr = NULL;
 #define	DCMCONUNIT	1	/* XXX */
 
 void
-dcmprobe(cp)
-	struct consdev *cp;
+dcmprobe(struct consdev *cp)
 {
-	extern struct hp_hw sc_table[];
-	register struct hp_hw *hw;
-	register struct dcmdevice *dcm;
+	struct hp_hw *hw;
+	struct dcmdevice *dcm;
 
 	for (hw = sc_table; hw < &sc_table[MAXCTLRS]; hw++)
-		if (HW_ISDEV(hw, D_COMMDCM) && !badaddr((caddr_t)hw->hw_kva))
+		if (HW_ISDEV(hw, D_COMMDCM) && !badaddr((void *)hw->hw_kva))
 			break;
 	if (!HW_ISDEV(hw, D_COMMDCM)) {
 		cp->cn_pri = CN_DEAD;
@@ -92,11 +122,10 @@ dcmprobe(cp)
 }
 
 void
-dcminit(cp)
-	struct consdev *cp;
+dcminit(struct consdev *cp)
 {
-	register struct dcmdevice *dcm = dcmcnaddr;
-	register int port = DCMCONUNIT;
+	struct dcmdevice *dcm = dcmcnaddr;
+	int port = DCMCONUNIT;
 
 	dcm->dcm_ic = IC_ID;
 	while (dcm->dcm_thead[port].ptr != dcm->dcm_ttail[port].ptr)
@@ -113,20 +142,19 @@ dcminit(cp)
 /* ARGSUSED */
 #ifndef SMALL
 int
-dcmgetchar(dev)
-	dev_t dev;
+dcmgetchar(dev_t dev)
 {
-	register struct dcmdevice *dcm = dcmcnaddr;
-	register struct dcmrfifo *fifo;
-	register struct dcmpreg *pp;
-	register unsigned head;
+	struct dcmdevice *dcm = dcmcnaddr;
+	struct dcmrfifo *fifo;
+	struct dcmpreg *pp;
+	unsigned int head;
 	int c, stat, port;
 
 	port = DCMCONUNIT;
 	pp = dcm_preg(dcm, port);
 	head = pp->r_head & RX_MASK;
 	if (head == (pp->r_tail & RX_MASK))
-		return(0);
+		return 0;
 	fifo = &dcm->dcm_rfifos[3-port][head>>1];
 	c = fifo->data_char;
 	stat = fifo->data_stat;
@@ -134,27 +162,25 @@ dcmgetchar(dev)
 	SEM_LOCK(dcm);
 	stat = dcm->dcm_iir;
 	SEM_UNLOCK(dcm);
-	return(c);
+	return c;
 }
 #else
 int
-dcmgetchar(dev)
-	dev_t dev;
+dcmgetchar(dev_t dev)
 {
-	return(0);
+
+	return 0;
 }
 #endif
 
 /* ARGSUSED */
 void
-dcmputchar(dev, c)
-	dev_t dev;
-	register int c;
+dcmputchar(dev_t dev, int c)
 {
-	register struct dcmdevice *dcm = dcmcnaddr;
-	register struct dcmpreg *pp;
-	register int timo;
-	unsigned tail;
+	struct dcmdevice *dcm = dcmcnaddr;
+	struct dcmpreg *pp;
+	int timo;
+	unsigned int tail;
 	int port, stat;
 
 	port = DCMCONUNIT;

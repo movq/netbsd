@@ -1,4 +1,4 @@
-/*	$NetBSD: rdisc.c,v 1.10 2000/03/02 21:00:41 christos Exp $	*/
+/*	$NetBSD: rdisc.c,v 1.17 2006/05/09 20:18:09 mrg Exp $	*/
 
 /*
  * Copyright (c) 1995
@@ -33,17 +33,19 @@
  * SUCH DAMAGE.
  */
 
-#if !defined(lint) && !defined(sgi) && !defined(__NetBSD__)
-static char sccsid[] __attribute__((unused)) = "@(#)rdisc.c	8.1 (Berkeley) x/y/95";
-#elif defined(__NetBSD__)
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: rdisc.c,v 1.10 2000/03/02 21:00:41 christos Exp $");
-#endif
-
 #include "defs.h"
 #include <netinet/in_systm.h>
 #include <netinet/ip.h>
 #include <netinet/ip_icmp.h>
+
+#ifdef __NetBSD__
+__RCSID("$NetBSD: rdisc.c,v 1.17 2006/05/09 20:18:09 mrg Exp $");
+#elif defined(__FreeBSD__)
+__RCSID("$FreeBSD$");
+#else
+__RCSID("Revision: 2.23 ");
+#ident "Revision: 2.23 "
+#endif
 
 /* router advertisement ICMP packet */
 struct icmp_ad {
@@ -86,7 +88,7 @@ struct dr {				/* accumulated advertisements */
     struct interface *dr_ifp;
     naddr   dr_gate;			/* gateway */
     time_t  dr_ts;			/* when received */
-    time_t  dr_life;			/* lifetime */
+    time_t  dr_life;			/* lifetime in host byte order */
     n_long  dr_recv_pref;		/* received but biased preference */
     n_long  dr_pref;			/* preference adjusted by metric */
 } *cur_drp, drs[MAX_ADS];
@@ -97,8 +99,10 @@ struct dr {				/* accumulated advertisements */
 #define UNSIGN_PREF(p) SIGN_PREF(p)
 /* adjust unsigned preference by interface metric,
  * without driving it to infinity */
-#define PREF(p, ifp) ((int)(p) <= (ifp)->int_metric ? ((p) != 0 ? 1 : 0) \
-		      : (p) - ((ifp)->int_metric))
+#define PREF(p, ifp) ((n_long)(p) <= (n_long)((ifp)->int_metric		\
+				      + (ifp)->int_adj_outmetric)	\
+		      ? ((p) != 0 ? 1 : 0)				\
+		      : (p) - ((ifp)->int_metric + (ifp)->int_adj_outmetric))
 
 static void rdisc_sort(void);
 
@@ -191,9 +195,13 @@ set_rdisc_mg(struct interface *ifp,
 		return;
 #endif
 	memset(&m, 0, sizeof(m));
+#ifdef MCAST_IFINDEX
+	m.imr_interface.s_addr = htonl(ifp->int_index);
+#else
 	m.imr_interface.s_addr = ((ifp->int_if_flags & IFF_POINTOPOINT)
 				  ? ifp->int_dstaddr
 				  : ifp->int_addr);
+#endif
 	if (supplier
 	    || (ifp->int_state & IS_NO_ADV_IN)
 	    || !on) {
@@ -567,7 +575,7 @@ static void
 parse_ad(naddr from,
 	 naddr gate,
 	 n_long pref,			/* signed and in network order */
-	 u_short life,
+	 u_short life,			/* in host byte order */
 	 struct interface *ifp)
 {
 	static struct msg_limit bad_gate;
@@ -649,7 +657,7 @@ parse_ad(naddr from,
 	new_drp->dr_ifp = ifp;
 	new_drp->dr_gate = gate;
 	new_drp->dr_ts = now.tv_sec;
-	new_drp->dr_life = ntohs(life);
+	new_drp->dr_life = life;
 	new_drp->dr_recv_pref = pref;
 	/* bias functional preference by metric of the interface */
 	new_drp->dr_pref = PREF(pref,ifp);
@@ -693,17 +701,17 @@ send_rdisc(union ad_u *p,
 	   naddr dst,			/* 0 or unicast destination */
 	   int	type)			/* 0=unicast, 1=bcast, 2=mcast */
 {
-	struct sockaddr_in sin;
+	struct sockaddr_in rsin;
 	int flags;
 	const char *msg;
 	naddr tgt_mcast;
 
 
-	memset(&sin, 0, sizeof(sin));
-	sin.sin_addr.s_addr = dst;
-	sin.sin_family = AF_INET;
+	memset(&rsin, 0, sizeof(rsin));
+	rsin.sin_addr.s_addr = dst;
+	rsin.sin_family = AF_INET;
 #ifdef _HAVE_SIN_LEN
-	sin.sin_len = sizeof(sin);
+	rsin.sin_len = sizeof(rsin);
 #endif
 	flags = MSG_DONTROUTE;
 
@@ -716,10 +724,10 @@ send_rdisc(union ad_u *p,
 	case 1:				/* broadcast */
 		if (ifp->int_if_flags & IFF_POINTOPOINT) {
 			msg = "Send pt-to-pt";
-			sin.sin_addr.s_addr = ifp->int_dstaddr;
+			rsin.sin_addr.s_addr = ifp->int_dstaddr;
 		} else {
 			msg = "Send broadcast";
-			sin.sin_addr.s_addr = ifp->int_brdaddr;
+			rsin.sin_addr.s_addr = ifp->int_brdaddr;
 		}
 		break;
 
@@ -733,6 +741,10 @@ send_rdisc(union ad_u *p,
 		}
 		if (rdisc_sock_mcast != ifp) {
 			/* select the right interface. */
+#ifdef MCAST_IFINDEX
+			/* specify ifindex */
+			tgt_mcast = htonl(ifp->int_index);
+#else
 #ifdef MCAST_PPP_BUG
 			/* Do not specify the primary interface explicitly
 			 * if we have the multicast point-to-point kernel
@@ -746,6 +758,7 @@ send_rdisc(union ad_u *p,
 			} else
 #endif
 			tgt_mcast = ifp->int_addr;
+#endif
 			if (0 > setsockopt(rdisc_sock,
 					   IPPROTO_IP, IP_MULTICAST_IF,
 					   &tgt_mcast, sizeof(tgt_mcast))) {
@@ -763,16 +776,16 @@ send_rdisc(union ad_u *p,
 	if (rdisc_sock < 0)
 		get_rdisc_sock();
 
-	trace_rdisc(msg, ifp->int_addr, sin.sin_addr.s_addr, ifp,
+	trace_rdisc(msg, ifp ? ifp->int_addr : 0, rsin.sin_addr.s_addr, ifp,
 		    p, p_size);
 
 	if (0 > sendto(rdisc_sock, p, p_size, flags,
-		       (struct sockaddr *)&sin, sizeof(sin))) {
+		       (struct sockaddr *)&rsin, sizeof(rsin))) {
 		if (ifp == 0 || !(ifp->int_state & IS_BROKE))
 			msglog("sendto(%s%s%s): %s",
 			       ifp != 0 ? ifp->int_name : "",
 			       ifp != 0 ? ", " : "",
-			       inet_ntoa(sin.sin_addr),
+			       inet_ntoa(rsin.sin_addr),
 			       strerror(errno));
 		if (ifp != 0)
 			if_sick(ifp);
@@ -944,7 +957,8 @@ read_d(void)
 	static struct msg_limit  bad_name;
 #endif
 	struct sockaddr_in from;
-	int n, fromlen, cc, hlen;
+	socklen_t fromlen;
+	int n, cc, hlen;
 	struct {
 #ifdef USE_PASSIFNAME
 		char	ifname[IFNAMSIZ];

@@ -1,4 +1,5 @@
-/*	$NetBSD: ts102reg.h,v 1.5 2000/03/09 07:04:10 garbled Exp $ */
+/*	$OpenBSD: ts102reg.h,v 1.3 2003/06/18 17:50:23 miod Exp $	*/
+/*	$NetBSD: ts102reg.h,v 1.12 2008/04/28 20:23:35 martin Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -65,7 +59,16 @@
 #define	TS102_REG_UCTRL_DATA	0x0024	/* Microcontroller Data Register */
 #define	TS102_REG_UCTRL_STS	0x0028	/* Microcontroller Status Register */
 
-/* TS102 Card Interrupt Register defintions.
+struct uctrl_regs {
+	volatile uint8_t	intr;	/* Microcontroller Interrupt Reg */
+	volatile uint8_t	filler0[3];
+	volatile uint8_t	data;	/* Microcontroller Data Reg */
+	volatile uint8_t	filler1[3];
+	volatile uint8_t	stat;	/* Microcontroller Status Reg */
+	volatile uint8_t	filler2[3];
+};
+
+/* TS102 Card Interrupt Register definitions.
  *
  * There is one 16-bit interrupt register for each card.  Each register
  * contains interrupt status (read) and clear (write) bits and an 
@@ -164,6 +167,7 @@
 #define	TS102_UCTRL_STS_TXNF_STA	0x02	/* transmit FIFO not full */
 #define	TS102_UCTRL_STS_RXNE_STA	0x04	/* receive FIFO not empty */
 #define	TS102_UCTRL_STS_RXO_STA		0x08	/* receive FIFO overflow */
+#define	TS102_UCTRL_STS_MASK		0x0F	/* Only 4 bits significant */
 
 enum ts102_opcode {			/* Argument	Returned */
     TS102_OP_RD_SERIAL_NUM=0x01,	/* none		ack + 4 bytes */
@@ -258,19 +262,20 @@ enum ts102_opcode {			/* Argument	Returned */
 #define	TS102_LCD_COMPOSE		0x0100
     TS102_OP_CTL_BITPORT=0x21,		/* mask		ack + 1 byte */
 #define	TS102_BITPORT_TFTPWR		0x01	/* TFT power (low) */
-#define	TS102_BITPORT_SYNCINVA		0x04	/* ext. monitor sync (low) */
-#define	TS102_BITPORT_SYNCINVB		0x08	/* ext. monitor sync (low) */
-#define	TS102_BITPORT_BP_DIS		0x10	/* no bootprom from pcmcia (high) */
+#define	TS102_BITPORT_SYNCINVA		0x02	/* ext. monitor sync (low) */
+#define	TS102_BITPORT_SYNCINVB		0x04	/* ext. monitor sync (low) */
+#define	TS102_BITPORT_BP_DIS		0x08	/* no bootprom from pcmcia (high) */
 						/* boot from pcmcia (low */
-#define	TS102_BITPORT_ENCSYNC		0x20	/* enab composite sync (low) */
+#define	TS102_BITPORT_ENCSYNC		0x10	/* enab composite sync (low) */
+#define TS102_BITPORT_DISKPOWER		0x20	/* power to internal disk */
     TS102_OP_CTL_DEV=0x22,		/* mask 	ack + 1 byte */
 #define TS102_DEVCTL_CHARGE_DISABLE	0x01	/* dis/en charging */
-#define TS102_DEVCTL_POINTER_DISABLE	0x04	/* dis/en pointer */
-#define TS102_DEVCTL_KEYCLICK		0x08	/* keyclick? */
-#define TS102_DEVCTL_INT_BTNCLICK	0x10	/* internal button click? */
+#define TS102_DEVCTL_POINTER_DISABLE	0x02	/* dis/en pointer */
+#define TS102_DEVCTL_KEYCLICK		0x04	/* keyclick? */
+#define TS102_DEVCTL_INT_BTNCLICK	0x10	/* beep on ext. mouse click */
 #define TS102_DEVCTL_EXT_BTNCLICK	0x20	/* ext. button click?? */
     TS102_OP_CTL_SPEAKER_VOLUME=0x23,	/* mask		ack + 1 byte */
-    TS102_OP_CTL_TFT_BIRGHNESS=0x24,	/* mask		ack + 1 byte */
+    TS102_OP_CTL_TFT_BRIGHTNESS=0x24,	/* mask		ack + 1 byte */
     TS102_OP_CTL_WATCHDOG=0x25,		/* mask		ack + 1 byte */
     TS102_OP_CTL_FCTRY_EEPROM=0x26,	/* mask		ack + 1 byte */
     TS102_OP_CTL_SECURITY_KEY=0x27,	/* no idea */

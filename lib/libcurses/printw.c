@@ -1,4 +1,4 @@
-/*	$NetBSD: printw.c,v 1.11 1999/04/13 14:08:18 mrg Exp $	*/
+/*	$NetBSD: printw.c,v 1.20 2007/01/21 13:25:36 jdc Exp $	*/
 
 /*
  * Copyright (c) 1981, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,23 +34,17 @@
 #if 0
 static char sccsid[] = "@(#)printw.c	8.3 (Berkeley) 5/4/94";
 #else
-__RCSID("$NetBSD: printw.c,v 1.11 1999/04/13 14:08:18 mrg Exp $");
+__RCSID("$NetBSD: printw.c,v 1.20 2007/01/21 13:25:36 jdc Exp $");
 #endif
 #endif				/* not lint */
 
-#ifdef __STDC__
 #include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
 
 #include "curses.h"
+#include "curses_private.h"
 
 /*
  * printw and friends.
- *
- * These routines make nonportable assumptions about varargs if __STDC__
- * is not in effect.
  */
 
 static int __winwrite __P((void *, const char *, int));
@@ -64,22 +54,12 @@ static int __winwrite __P((void *, const char *, int));
  *	Printf on the standard screen.
  */
 int
-#ifdef __STDC__
 printw(const char *fmt,...)
-#else
-printw(fmt, va_alist)
-	char   *fmt;
-va_dcl
-#endif
 {
 	va_list ap;
 	int     ret;
 
-#ifdef __STDC__
 	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
 	ret = vwprintw(stdscr, fmt, ap);
 	va_end(ap);
 	return (ret);
@@ -89,23 +69,12 @@ va_dcl
  *	Printf on the given window.
  */
 int
-#ifdef __STDC__
-wprintw(WINDOW * win, const char *fmt,...)
-#else
-wprintw(win, fmt, va_alist)
-	WINDOW *win;
-	char   *fmt;
-va_dcl
-#endif
+wprintw(WINDOW *win, const char *fmt,...)
 {
 	va_list ap;
 	int     ret;
 
-#ifdef __STDC__
 	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
 	ret = vwprintw(win, fmt, ap);
 	va_end(ap);
 	return (ret);
@@ -116,53 +85,29 @@ va_dcl
  *	arguments, they cannot be macros.  Sigh....
  */
 int
-#ifdef __STDC__
 mvprintw(int y, int x, const char *fmt,...)
-#else
-mvprintw(y, x, fmt, va_alist)
-	int     y, x;
-	char   *fmt;
-va_dcl
-#endif
 {
 	va_list ap;
 	int     ret;
 
-#ifdef __STDC__
-	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
 	if (move(y, x) != OK)
 		return (ERR);
+	va_start(ap, fmt);
 	ret = vwprintw(stdscr, fmt, ap);
 	va_end(ap);
 	return (ret);
 }
 
 int
-#ifdef __STDC__
-mvwprintw(WINDOW * win, int y, int x,
-    const char *fmt,...)
-#else
-mvwprintw(win, y, x, fmt, va_alist)
-	WINDOW *win;
-	int     y, x;
-	char   *fmt;
-va_dcl
-#endif
+mvwprintw(WINDOW * win, int y, int x, const char *fmt,...)
 {
 	va_list ap;
 	int     ret;
 
-#ifdef __STDC__
-	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
 	if (wmove(win, y, x) != OK)
 		return (ERR);
 
+	va_start(ap, fmt);
 	ret = vwprintw(win, fmt, ap);
 	va_end(ap);
 	return (ret);
@@ -180,8 +125,13 @@ __winwrite(cookie, buf, n)
 	int     c;
 
 	for (c = n, win = cookie; --c >= 0;)
-		if (waddch(win, *buf++) == ERR)
+	{
+#ifdef DEBUG
+		__CTRACE(__CTRACE_MISC, "__winwrite: %c\n", *buf);
+#endif
+		if (waddch(win, (chtype) (*buf++ & __CHARTEXT)) == ERR)
 			return (-1);
+	}
 	return (n);
 }
 /*
@@ -189,10 +139,7 @@ __winwrite(cookie, buf, n)
  *	This routine actually executes the printf and adds it to the window.
  */
 int
-vwprintw(win, fmt, ap)
-	WINDOW *win;
-	const char *fmt;
-	va_list ap;
+vwprintw(WINDOW *win, const char *fmt, _BSD_VA_LIST_ ap)
 {
 	FILE   *f;
 

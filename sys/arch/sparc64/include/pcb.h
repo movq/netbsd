@@ -1,4 +1,4 @@
-/*	$NetBSD: pcb.h,v 1.4 1999/12/30 16:22:12 eeh Exp $ */
+/*	$NetBSD: pcb.h,v 1.15 2007/03/04 06:00:49 christos Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -21,15 +21,41 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ *	@(#)pcb.h	8.1 (Berkeley) 6/11/93
+ */
+
+/*
+ * Copyright (c) 1996-2002 Eduardo Horvath.  All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the author nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
  * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
@@ -125,9 +151,9 @@
  * change this as soon as the new scheme is debugged.
  */
 struct pcb {
-	int64_t	pcb_sp;		/* sp (%o6) when switch() was called */
-	int64_t	pcb_pc;		/* pc (%o7) when switch() was called */
-	caddr_t	pcb_onfault;	/* for copyin/out */
+	uint64_t	pcb_sp;		/* sp (%o6) when switch() was called */
+	uint64_t	pcb_pc;		/* pc (%o7) when switch() was called */
+	void *	pcb_onfault;	/* for copyin/out */
 	short	pcb_pstate;	/* %pstate when switch() was called -- may be useful if we support multiple memory models */
 	char	pcb_nsaved;	/* number of windows saved in pcb */
 
@@ -135,11 +161,7 @@ struct pcb {
 	char	pcb_cwp;	/* %cwp when switch() was called */
 	char	pcb_pil;	/* %pil when switch() was called -- prolly not needed */
 
-#ifdef notdef
-	int	pcb_winof;	/* number of window overflow traps */
-	int	pcb_winuf;	/* number of window underflow traps */
-#endif
-	char*	lastcall;	/* DEBUG -- name of last system call */
+	const char *lastcall;	/* DEBUG -- name of last system call */
 	/* the following MUST be aligned on a 64-bit boundary */
 	struct	rwindow64 pcb_rw[PCB_MAXWIN];	/* saved windows */
 };
@@ -160,9 +182,7 @@ struct md_coredump {
 	struct	fpstate64 md_fpstate;
 };
 
-#ifdef _KERNEL
-extern struct pcb *cpcb;
-#else
+#ifndef _KERNEL
 /* Let gdb compile.  We need fancier macros to make these make sense. */
 #define pcb_psr	pcb_pstate
 #define pcb_wim	pcb_cwp

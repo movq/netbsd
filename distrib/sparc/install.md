@@ -1,4 +1,4 @@
-#	$NetBSD: install.md,v 1.12 1999/06/27 12:55:59 mrg Exp $
+#	$NetBSD: install.md,v 1.21 2008/04/30 13:10:49 martin Exp $
 #
 #
 # Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
 # 2. Redistributions in binary form must reproduce the above copyright
 #    notice, this list of conditions and the following disclaimer in the
 #    documentation and/or other materials provided with the distribution.
-# 3. All advertising materials mentioning features or use of this software
-#    must display the following acknowledgement:
-#        This product includes software developed by the NetBSD
-#        Foundation, Inc. and its contributors.
-# 4. Neither the name of The NetBSD Foundation nor the names of its
-#    contributors may be used to endorse or promote products derived
-#    from this software without specific prior written permission.
 #
 # THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 # ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,14 +34,11 @@
 #
 
 # Machine-dependent install sets
-MDSETS="kern xbase xcomp xcontrib xfont xserver"
+MDSETS="kern xbase xcomp xfont xserver"
 
 if [ "$MODE" = upgrade ]; then
 	RELOCATED_FILES_13="${RELOCATED_FILES_13} /usr/sbin/installboot /usr/mdec/installboot"
 fi
-
-# Mount /kern to get at /kern/msgbuf
-mount -t kernfs none /kern
 
 md_set_term() {
 	if [ ! -z "$TERM" ]; then
@@ -81,17 +71,17 @@ __mfs_failed_1
 
 md_get_diskdevs() {
 	# return available disk devices
-	< /kern/msgbuf sed -n -e 's/^\(sd[0-9]\) .*/\1/p' -e 's/^\(x[dy][0-9]\) .*/\1/p' | sort -u
+	dmesg | sed -n -e 's/^\(sd[0-9]\) .*/\1/p' -e 's/^\(x[dy][0-9]\) .*/\1/p' | sort -u
 }
 
 md_get_cddevs() {
 	# return available CDROM devices
-	< /kern/msgbuf sed -n -e 's/^\(cd[0-9]\) .*/\1/p' | sort -u
+	dmesg | sed -n -e 's/^\(cd[0-9]\) .*/\1/p' | sort -u
 }
 
 md_get_ifdevs() {
 	# return available network devices
-	< /kern/msgbuf sed -n -e 's/^\(le[0-9]\) .*/\1/p' -e 's/^\(ie[0-9]\) .*/\1/p' | sort -u
+	dmesg | sed -n -e 's/^\(le[0-9]\) .*/\1/p' -e 's/^\(ie[0-9]\) .*/\1/p' | sort -u
 }
 
 md_get_partition_range() {
@@ -100,8 +90,10 @@ md_get_partition_range() {
 }
 
 md_installboot() {
+	# $1 is the boot disk
 	echo "Installing boot block..."
-	/usr/mdec/binstall ffs /mnt
+	cp -p /usr/mdec/boot /mnt/boot
+	/usr/sbin/installboot -v /dev/r${1}a /usr/mdec/bootxx /boot
 }
 
 md_native_fstype() {
@@ -190,12 +182,15 @@ __md_prep_disklabel_1
 }
 
 md_copy_kernel() {
-	if [ -f /mnt/netbsd.GENERIC ]; then
-		echo -n "Linking /netbsd.GENERIC to /netbsd ... "
-		ln /mnt/netbsd.GENERIC /mnt/netbsd
-		echo "done."
-	else
-		echo "WARNING: No /netbsd.GENERIC!  Please install /netbsd manually!"
+	if [ ! -f /mnt/netbsd ]; then
+		echo -n "WARNING: No kernel installed; "
+		if [ -f /netbsd ]; then
+			echo -n "copying miniroot kernel... "
+			cp -p /netbsd /mnt/netbsd
+			echo "done."
+		else
+			echo -n "install a kernel manually."
+		fi
 	fi
 }
 
@@ -267,3 +262,123 @@ system has halted, reset the machine and boot from the disk.
 
 __congratulations_1
 }
+
+md_lib_is_aout() {
+	local r
+	test -h $1 && return 1
+	test -f $1 || return 1
+
+	[ "`dd if=$1 bs=1 skip=1 count=3 2> /dev/null`" = "ELF" ] && return 1
+	return 0
+}
+
+
+md_mv_usr_lib() {
+	local root
+	root=$1
+	for f in $root/usr/lib/lib*.so.[0-9]*.[0-9]* ; do
+		md_lib_is_aout $f || continue
+		mv -f $f $root/emul/aout/usr/lib || return 1
+	done
+	return 0
+}
+
+md_x_shlib_set_14=" \
+	libICE.so.6.3 \
+	libPEX5.so.6.0 \
+	libSM.so.6.0 \
+	libX11.so.6.1 \
+	libXIE.so.6.0 \
+	libXaw.so.6.1 \
+	libXext.so.6.3 \
+	libXi.so.6.0 \
+	libXmu.so.6.0 \
+	libXp.so.6.2 \
+	libXt.so.6.0 \
+	libXtst.so.6.1 \
+	liboldX.so.6.0"
+
+md_mv_x_lib() {
+	local root xlibdir
+	root=$1
+	xlibdir=$2
+	for f in $md_x_shlib_set_14; do
+		md_lib_is_aout $root/$xlibdir/$f || continue
+		mv -f $root/$xlibdir/$f $root/emul/aout/$xlibdir || return 1
+	done
+	return 0
+}
+
+md_mv_aout_libs()
+{
+	local root xlibdir
+
+	root=/mnt	# XXX - should be global
+
+	if [ -d $root/emul/aout/. ]; then
+		echo "Using existing /emul/aout directory"
+	else
+		echo "Creating /emul/aout hierachy"
+		mkdir -p $root/usr/aout || return 1
+
+		if [ ! -d $root/emul ]; then
+			mkdir $root/emul || return 1
+		fi
+
+		if [ -h $root/emul/aout ]; then
+			echo "Preserving existing symbolic link from /emul/aout"
+			mv -f $root/emul/aout $root/emul/aout.old || return 1
+		fi
+
+		ln -s ../usr/aout $root/emul/aout || return 1
+	fi
+
+	# Create /emul/aout/etc and /emul/aout/usr/lib
+	if [ ! -d $root/emul/aout/etc ]; then
+		mkdir $root/emul/aout/etc || return 1
+	fi
+	if [ ! -d $root/emul/aout/usr/lib ]; then
+		mkdir -p $root/emul/aout/usr/lib || return 1
+	fi
+
+	# Move ld.so.conf
+	if [ -f $root/etc/ld.so.conf ]; then
+		mv -f $root/etc/ld.so.conf $root/emul/aout/etc || return 1
+	fi
+
+	# Finally, move the aout shared libraries from /usr/lib
+	md_mv_usr_lib $root || return 1
+
+	# If X11 is installed, move the those libraries as well
+	xlibdir="/usr/X11R6/lib"
+	if [ -d $root/$xlibdir/. ]; then
+		mkdir -p $root/emul/aout/$xlibdir || return 1
+		md_mv_x_lib $root $xlibdir || return 1
+	fi
+
+	echo "a.out emulation environment setup completed."
+}
+
+md_prepare_upgrade()  
+{
+cat << 'EOF'
+This release uses the ELF binary object format. Existing (a.out) binaries
+can still be used on your system after it has been upgraded, provided
+that the shared libraries needed by those binaries are made available
+in the filesystem hierarchy rooted at /emul/aout.
+
+This upgrade procedure will now establish this hierarchy by moving all
+shared libraries in a.out format found in /usr/lib to /emul/aout/usr/lib.
+It will also move the X11 shared libraries in a.out format from previous
+NetBSD/sparc X11 installation sets, if they are installed.
+
+EOF
+	md_mv_aout_libs || {
+		echo "Failed to setup a.out emulation environment"
+		return 1
+	}
+	return 0
+}
+
+# Flag to notify upgrade.sh of the existence of md_prepare_upgrade()
+md_upgrade_prep_needed=1

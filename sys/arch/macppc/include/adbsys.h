@@ -1,4 +1,4 @@
-/*	$NetBSD: adbsys.h,v 1.3 1999/06/16 08:48:37 tsubai Exp $	*/
+/*	$NetBSD: adbsys.h,v 1.8 2007/01/17 23:36:37 macallan Exp $	*/
 
 /*-
  * Copyright (C) 1993, 1994	Allen K. Briggs, Chris P. Caputo,
@@ -99,6 +99,8 @@ typedef struct adb_dev_s{
 #define ADBADDR_TABLET	ADBADDR_ABS
 #define ADBADDR_MODEM	ADBADDR_DATATX
 
+#define ADBADDR_APM	0xac0ff		/* A faux-addr for the APM driver to
+					   latch onto */
 
 	/* Interesting keyboard handler IDs */
 #define ADB_STDKBD	1
@@ -119,6 +121,8 @@ typedef struct adb_dev_s{
 #define ADB_PBEXTKBD	24
 #define ADB_DESIGNKBD	27	/* XXX Needs to be verified XXX */
 #define ADB_PBJPKBD	30
+#define ADB_PBG3KBD	195
+#define ADB_IBOOKKBD	196	/* iBook, probably others? */
 #define ADB_PBG3JPKBD	201
 
 	/* Interesting mouse handler IDs */
@@ -128,6 +132,7 @@ typedef struct adb_dev_s{
 #define ADBMS_EXTENDED	4	/* Extended mouse protocol */
 #define ADBMS_USPEED	0x2f	/* MicroSpeed mouse */
 #define ADBMS_UCONTOUR	0x66	/* Contour mouse */
+#define ADBMS_TURBO	50	/* Kensington Turbo Mouse */
 
 	/* Interesting tablet handler ID */
 #define ADB_ARTPAD	58	/* WACOM ArtPad II tablet */

@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.9 1999/09/13 17:15:43 jsm Exp $	*/
+/*	$NetBSD: main.c,v 1.17 2008/08/08 16:10:47 drochner Exp $	*/
 
 /*
  * Phantasia 3.3.2 -- Interterminal fantasy game
@@ -27,6 +27,7 @@
  * AT&T is in no way connected with this game.
  */
 
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <pwd.h>
 
@@ -56,8 +57,10 @@
  */
 
 #include "include.h"
+#undef bool
+#include <curses.h>
 
-int	main __P((int, char **));
+int	main(int, char **);
 
 int
 main(argc, argv)
@@ -269,6 +272,8 @@ main(argc, argv)
 void
 initialstate()
 {
+	struct stat sb;
+
 	Beyond = FALSE;
 	Marsh = FALSE;
 	Throne = FALSE;
@@ -300,6 +305,16 @@ initialstate()
 
 	if ((Energyvoidfp = fopen(_PATH_VOID, "r+")) == NULL)
 		error(_PATH_VOID);
+	if (fstat(fileno(Energyvoidfp), &sb) == -1)
+		error("stat");
+	if (sb.st_size == 0) {
+		/* initialize grail to new location */
+		Enrgyvoid.ev_active = TRUE;
+		Enrgyvoid.ev_x = ROLL(-1.0e6, 2.0e6);
+		Enrgyvoid.ev_y = ROLL(-1.0e6, 2.0e6);
+		writevoid(&Enrgyvoid, 0L);
+	}
+
 	/* NOTREACHED */
 
 	srandom((unsigned) time(NULL));	/* prime random numbers */
@@ -704,8 +719,9 @@ titlelist()
 	    && fgets(Databuf, SZ_DATABUF, fp) != NULL) {
 		mvaddstr(19, 25, "The last character to die was:");
 		mvaddstr(20, 40 - strlen(Databuf) / 2, Databuf);
-		fclose(fp);
 	}
+	if (fp)
+		fclose(fp);
 	refresh();
 }
 
@@ -979,9 +995,12 @@ playinit()
 	signal(SIGPIPE, ill_sig);
 #endif
 
-	initscr();		/* turn on curses */
+	if (!initscr()) {	/* turn on curses */
+		fprintf(stderr, "couldn't initialize screen\n");
+		exit (0);
+	}
 	noecho();		/* do not echo input */
-	crmode();		/* do not process erase, kill */
+	cbreak();		/* do not process erase, kill */
 	clear();
 	refresh();
 	Windows = TRUE;		/* mark the state */
@@ -994,13 +1013,17 @@ cleanup(doexit)
 	if (Windows) {
 		move(LINES - 2, 0);
 		refresh();
-		nocrmode();
+		nocbreak();
 		endwin();
 	}
-	fclose(Playersfp);
-	fclose(Monstfp);
-	fclose(Messagefp);
-	fclose(Energyvoidfp);
+	if (Playersfp)
+		fclose(Playersfp);
+	if (Monstfp)
+		fclose(Monstfp);
+	if (Messagefp)
+		fclose(Messagefp);
+	if (Energyvoidfp)
+		fclose(Energyvoidfp);
 
 	if (doexit)
 		exit(0);

@@ -1,4 +1,4 @@
-/*	$NetBSD: io.c,v 1.3 1999/06/28 01:20:44 sakamoto Exp $	*/
+/*	$NetBSD: io.c,v 1.6 2008/05/26 16:28:39 kiyohara Exp $	*/
 
 /*-
  * Copyright (C) 1995-1997 Gary Thomas (gdt@linuxppc.org)
@@ -32,30 +32,37 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <stand.h>
+#include <lib/libsa/stand.h>
 #include "boot.h"
 
 volatile u_char *ISA_io  = (u_char *)0x80000000;
 volatile u_char *ISA_mem = (u_char *)0xC0000000;
 
 void
-outb(port, val)
-	int port;
-	char val;
+outb(int port, char val)
 {
+
 	ISA_io[port] = val;
 }
 
-u_char
-inb(port)
-	int port;
+void
+outw(int port, u_short val)
 {
-	return (ISA_io[port]);
+
+	outb(port, val >> 8);
+	outb(port + 1, val);
+}
+
+u_char
+inb(int port)
+{
+
+	return ISA_io[port];
 }
 
 u_long
-local_to_PCI(addr)
-	u_long addr;
+local_to_PCI(u_long addr)
 {
-	return ((addr & 0x7FFFFFFF) | 0x80000000);
+
+	return (addr & 0x7FFFFFFF) | 0x80000000;
 }

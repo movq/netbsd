@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_xxx.c,v 1.42 1998/03/01 02:22:31 fvdl Exp $	*/
+/*	$NetBSD: kern_xxx.c,v 1.70 2008/04/25 11:23:42 ad Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,31 +31,36 @@
  *	@(#)kern_xxx.c	8.3 (Berkeley) 2/14/95
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: kern_xxx.c,v 1.70 2008/04/25 11:23:42 ad Exp $");
+
+#include "opt_syscall_debug.h"
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/proc.h>
 #include <sys/reboot.h>
-#include <vm/vm.h>
+#include <sys/syscall.h>
 #include <sys/sysctl.h>
 #include <sys/mount.h>
+#include <sys/syscall.h>
 #include <sys/syscallargs.h>
+#include <sys/kauth.h>
 
 /* ARGSUSED */
 int
-sys_reboot(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+sys_reboot(struct lwp *l, const struct sys_reboot_args *uap, register_t *retval)
 {
-	struct sys_reboot_args /* {
+	/* {
 		syscallarg(int) opt;
 		syscallarg(char *) bootstr;
-	} */ *uap = v;
+	} */
 	int error;
 	char *bootstr, bs[128];
 
-	if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
+	if ((error = kauth_authorize_system(l->l_cred, KAUTH_SYSTEM_REBOOT,
+	    0, NULL, NULL, NULL)) != 0)
 		return (error);
 
 	/*
@@ -73,9 +74,28 @@ sys_reboot(p, v, retval)
 	/*
 	 * Not all ports use the bootstr currently.
 	 */
+	KERNEL_LOCK(1, NULL);
 	cpu_reboot(SCARG(uap, opt), bootstr);
+	KERNEL_UNLOCK_ONE(NULL);
 	return (0);
 }
+
+/*
+ * Pull in the indirect syscall functions here.
+ * They are only actually used if the ports syscall entry code
+ * doesn't special-case SYS_SYSCALL and SYS___SYSCALL
+ *
+ * In some cases the generated code for the two functions is identical,
+ * but there isn't a MI way of determining that - so we don't try.
+ */
+
+#define SYS_SYSCALL sys_syscall
+#include "sys_syscall.c"
+#undef SYS_SYSCALL
+
+#define SYS_SYSCALL sys___syscall
+#include "sys_syscall.c"
+#undef SYS_SYSCALL
 
 #ifdef SYSCALL_DEBUG
 #define	SCDEBUG_CALLS		0x0001	/* show calls */
@@ -90,12 +110,12 @@ int	scdebug = SCDEBUG_CALLS|SCDEBUG_RETURNS|SCDEBUG_SHOWARGS|SCDEBUG_ALL;
 #endif
 
 void
-scdebug_call(p, code, args)
-	struct proc *p;
-	register_t code, args[];
+scdebug_call(register_t code, const register_t args[])
 {
-	struct sysent *sy;
-	struct emul *em;
+	struct lwp *l = curlwp;
+	struct proc *p = l->l_proc;
+	const struct sysent *sy;
+	const struct emul *em;
 	int i;
 
 	if (!(scdebug & SCDEBUG_CALLS))
@@ -103,19 +123,25 @@ scdebug_call(p, code, args)
 
 	em = p->p_emul;
 	sy = &em->e_sysent[code];
-	if (!(scdebug & SCDEBUG_ALL || code < 0 || code >= em->e_nsysent ||
-	     sy->sy_call == sys_nosys))
+	if (!(scdebug & SCDEBUG_ALL || (int)code < 0
+#ifndef __HAVE_MINIMAL_EMUL
+	    || code >= em->e_nsysent
+#endif
+	    || sy->sy_call == sys_nosys))
 		return;
-		
+
 	printf("proc %d (%s): %s num ", p->p_pid, p->p_comm, em->e_name);
-	if (code < 0 || code >= em->e_nsysent)
-		printf("OUT OF RANGE (%d)", code);
+	if ((int)code < 0
+#ifndef __HAVE_MINIMAL_EMUL
+	    || code >= em->e_nsysent
+#endif
+	    )
+		printf("OUT OF RANGE (%ld)", (long)code);
 	else {
-		printf("%d call: %s", code, em->e_syscallnames[code]);
+		printf("%ld call: %s", (long)code, em->e_syscallnames[code]);
 		if (scdebug & SCDEBUG_SHOWARGS) {
 			printf("(");
-			for (i = 0; i < sy->sy_argsize / sizeof(register_t);
-			    i++)
+			for (i = 0; i < sy->sy_argsize/sizeof(register_t); i++)
 				printf("%s0x%lx", i == 0 ? "" : ", ",
 				    (long)args[i]);
 			printf(")");
@@ -125,29 +151,34 @@ scdebug_call(p, code, args)
 }
 
 void
-scdebug_ret(p, code, error, retval)
-	struct proc *p;
-	register_t code;
-	int error;
-	register_t retval[];
+scdebug_ret(register_t code, int error, const register_t retval[])
 {
-	struct sysent *sy;
-	struct emul *em;
+	struct lwp *l = curlwp;
+	struct proc *p = l->l_proc;
+	const struct sysent *sy;
+	const struct emul *em;
 
 	if (!(scdebug & SCDEBUG_RETURNS))
 		return;
 
 	em = p->p_emul;
 	sy = &em->e_sysent[code];
-	if (!(scdebug & SCDEBUG_ALL || code < 0 || code >= em->e_nsysent ||
-	    sy->sy_call == sys_nosys))
+	if (!(scdebug & SCDEBUG_ALL || (int)code < 0
+#ifndef __HAVE_MINIMAL_EMUL
+	    || (int)code >= em->e_nsysent
+#endif
+	    || sy->sy_call == sys_nosys))
 		return;
-		
+
 	printf("proc %d (%s): %s num ", p->p_pid, p->p_comm, em->e_name);
-	if (code < 0 || code >= em->e_nsysent)
-		printf("OUT OF RANGE (%d)", code);
+	if ((int)code < 0
+#ifndef __HAVE_MINIMAL_EMUL
+	    || code >= em->e_nsysent
+#endif
+	    )
+		printf("OUT OF RANGE (%ld)", (long)code);
 	else
-		printf("%d ret: err = %d, rv = 0x%lx,0x%lx", code,
+		printf("%ld ret: err = %d, rv = 0x%lx,0x%lx", (long)code,
 		    error, (long)retval[0], (long)retval[1]);
 	printf("\n");
 }

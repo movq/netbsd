@@ -1,7 +1,7 @@
-/*	$NetBSD: ebus.c,v 1.3 1999/06/05 14:18:26 mrg Exp $	*/
+/*	$NetBSD: ebus.c,v 1.53 2008/10/13 12:25:22 nakayama Exp $	*/
 
 /*
- * Copyright (c) 1999 Matthew R. Green
+ * Copyright (c) 1999, 2000, 2001 Matthew R. Green
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -12,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -28,17 +26,26 @@
  * SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ebus.c,v 1.53 2008/10/13 12:25:22 nakayama Exp $");
+
+#include "opt_ddb.h"
+
 /*
  * UltraSPARC 5 and beyond ebus support.
+ *
+ * note that this driver is not complete:
+ *	- interrupt establish is written and appears to work
+ *	- bus map code is written and appears to work
+ *	- ebus2 DMA code is completely unwritten, we just punt to
+ *	  the iommu.
  */
 
-#undef DEBUG
-#define DEBUG
-
 #ifdef DEBUG
-#define	EDB_PROM	0x1
-#define EDB_CHILD	0x2
-#define	EDB_INTRMAP	0x4
+#define	EDB_PROM	0x01
+#define EDB_CHILD	0x02
+#define	EDB_INTRMAP	0x04
+#define EDB_BUSMAP	0x08
 int ebus_debug = 0;
 #define DPRINTF(l, s)   do { if (ebus_debug & l) printf s; } while (0)
 #else
@@ -48,46 +55,101 @@ int ebus_debug = 0;
 #include <sys/param.h>
 #include <sys/conf.h>
 #include <sys/device.h>
+#include <sys/errno.h>
+#include <sys/extent.h>
 #include <sys/malloc.h>
 #include <sys/systm.h>
+#include <sys/time.h>
 
 #define _SPARC_BUS_DMA_PRIVATE
 #include <machine/bus.h>
 #include <machine/autoconf.h>
+#include <machine/openfirm.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcidevs.h>
 
-#include <sparc64/dev/ebusreg.h>
-#include <sparc64/dev/ebusvar.h>
+#include <sparc64/dev/iommureg.h>
+#include <sparc64/dev/iommuvar.h>
+#include <sparc64/dev/psychoreg.h>
+#include <sparc64/dev/psychovar.h>
+#include <dev/ebus/ebusreg.h>
+#include <dev/ebus/ebusvar.h>
 
-int	ebus_match __P((struct device *, struct cfdata *, void *));
-void	ebus_attach __P((struct device *, struct device *, void *));
+struct ebus_softc {
+	struct device			sc_dev;
 
-struct cfattach ebus_ca = {
-	sizeof(struct device), ebus_match, ebus_attach
+	int				sc_node;
+
+	bus_space_tag_t			sc_memtag;	/* from pci */
+	bus_space_tag_t			sc_iotag;	/* from pci */
+	bus_space_tag_t			sc_childbustag;	/* pass to children */
+	bus_dma_tag_t			sc_dmatag;
+
+	struct ebus_ranges		*sc_range;
+	struct ebus_interrupt_map	*sc_intmap;
+	struct ebus_interrupt_map_mask	sc_intmapmask;
+
+	int				sc_nrange;	/* counters */
+	int				sc_nintmap;
 };
 
-int	ebus_setup_attach_args __P((struct ebus_softc *, int,
-	    struct ebus_attach_args *));
-void	ebus_destroy_attach_args __P((struct ebus_attach_args *));
-int	ebus_print __P((void *, const char *));
-void	ebus_find_ino __P((struct ebus_softc *, struct ebus_attach_args *));
-int	ebus_find_node __P((struct ebus_softc *, struct pci_attach_args *));
+int	ebus_match(struct device *, struct cfdata *, void *);
+void	ebus_attach(struct device *, struct device *, void *);
+
+CFATTACH_DECL(ebus, sizeof(struct ebus_softc),
+    ebus_match, ebus_attach, NULL, NULL);
+
+bus_space_tag_t ebus_alloc_bus_tag(struct ebus_softc *, int);
+
+int	ebus_setup_attach_args(struct ebus_softc *, int,
+	    struct ebus_attach_args *);
+void	ebus_destroy_attach_args(struct ebus_attach_args *);
+int	ebus_print(void *, const char *);
+void	ebus_find_ino(struct ebus_softc *, struct ebus_attach_args *);
+
+/*
+ * here are our bus space and bus DMA routines.
+ */
+static paddr_t ebus_bus_mmap(bus_space_tag_t, bus_addr_t, off_t, int, int);
+static int _ebus_bus_map(bus_space_tag_t, bus_addr_t, bus_size_t, int, vaddr_t,
+	bus_space_handle_t *);
+static void *ebus_intr_establish(bus_space_tag_t, int, int, int (*)(void *),
+	void *, void(*)(void));
 
 int
-ebus_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+ebus_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
+	char *name;
+	int node;
 
-	if (PCI_CLASS(pa->pa_class) == PCI_CLASS_BRIDGE &&
-	    PCI_VENDOR(pa->pa_id) == PCI_VENDOR_SUN && 
-	    PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_SUN_EBUS)
+	/* Only attach if there's a PROM node. */
+	node = PCITAG_NODE(pa->pa_tag);
+	if (node == -1)
+		return (0);
+
+	if (PCI_CLASS(pa->pa_class) != PCI_CLASS_BRIDGE)
+		return (0);
+
+	/* Match a real ebus */
+	name = prom_getpropstring(node, "name");
+	if (PCI_VENDOR(pa->pa_id) == PCI_VENDOR_SUN &&
+	    PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_SUN_EBUS &&
+		strcmp(name, "ebus") == 0)
 		return (1);
+
+	/* Or a real ebus III */
+	if (PCI_VENDOR(pa->pa_id) == PCI_VENDOR_SUN &&
+	    PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_SUN_EBUSIII &&
+		strcmp(name, "ebus") == 0)
+		return (1);
+
+	/* Or a PCI-ISA bridge XXX I hope this is on-board. */
+	if (PCI_SUBCLASS(pa->pa_class) == PCI_SUBCLASS_BRIDGE_ISA) {
+		return (1);
+	}
 
 	return (0);
 }
@@ -97,29 +159,28 @@ ebus_match(parent, match, aux)
  * after the sbus code which does similar things.
  */
 void
-ebus_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+ebus_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct ebus_softc *sc = (struct ebus_softc *)self;
 	struct pci_attach_args *pa = aux;
 	struct ebus_attach_args eba;
 	struct ebus_interrupt_map_mask *immp;
-	int node, nmapmask, rv;
+	int node, nmapmask, error;
 	char devinfo[256];
 
 	printf("\n");
 
-	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo);
-	printf("%s: %s, revision 0x%02x\n", self->dv_xname, devinfo,
+	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
+	printf("%s: %s, revision 0x%02x\n", device_xname(self), devinfo,
 	    PCI_REVISION(pa->pa_class));
 
-	sc->sc_bustag = pa->pa_memt;
+	sc->sc_memtag = pa->pa_memt;
+	sc->sc_iotag = pa->pa_iot;
 	sc->sc_childbustag = ebus_alloc_bus_tag(sc, PCI_MEMORY_BUS_SPACE);
-	sc->sc_dmatag = ebus_alloc_dma_tag(sc, pa->pa_dmat);
+	sc->sc_dmatag = pa->pa_dmat;
 
-	node = ebus_find_node(sc, pa);
-	if (node == 0)
+	node = PCITAG_NODE(pa->pa_tag);
+	if (node == -1)
 		panic("could not find ebus node");
 
 	sc->sc_node = node;
@@ -129,52 +190,65 @@ ebus_attach(parent, self, aux)
 	 */
 	sc->sc_intmap = NULL;
 	sc->sc_range = NULL;
-	rv = getprop(node, "interrupt-map", sizeof(struct ebus_interrupt_map),
-	    &sc->sc_nintmap, (void **)&sc->sc_intmap);
-	if (rv)
-		panic("could not get ebus interrupt-map");
+	sc->sc_nintmap = 0;
+	error = prom_getprop(node, "interrupt-map",
+			sizeof(struct ebus_interrupt_map),
+			&sc->sc_nintmap, &sc->sc_intmap);
+	switch (error) {
+	case 0:
+		immp = &sc->sc_intmapmask;
+		nmapmask = sizeof(*immp);
+		error = prom_getprop(node, "interrupt-map-mask",
+			    sizeof(struct ebus_interrupt_map_mask), &nmapmask,
+			    &immp);
+		if (error)
+			panic("could not get ebus interrupt-map-mask, error %d",
+			    error);
+		if (nmapmask != 1)
+			panic("ebus interrupt-map-mask is broken");
+		break;
+	case ENOENT:
+		break;
+	default:
+		panic("ebus interrupt-map: error %d", error);
+		break;
+	}
 
-	immp = &sc->sc_intmapmask;
-	rv = getprop(node, "interrupt-map-mask",
-	    sizeof(struct ebus_interrupt_map_mask), &nmapmask,
-	    (void **)&immp);
-	if (rv)
-		panic("could not get ebus interrupt-map-mask");
-	if (nmapmask != 1)
-		panic("ebus interrupt-map-mask is broken");
-
-	rv = getprop(node, "ranges", sizeof(struct ebus_ranges),
-	    &sc->sc_nrange, (void **)&sc->sc_range);
-	if (rv)
-		panic("could not get ebus ranges");
+	error = prom_getprop(node, "ranges", sizeof(struct ebus_ranges),
+	    &sc->sc_nrange, &sc->sc_range);
+	if (error)
+		panic("ebus ranges: error %d", error);
 
 	/*
 	 * now attach all our children
 	 */
 	DPRINTF(EDB_CHILD, ("ebus node %08x, searching children...\n", node));
 	for (node = firstchild(node); node; node = nextsibling(node)) {
-		char *name = getpropstring(node, "name");
+		char *name = prom_getpropstring(node, "name");
 
 		if (ebus_setup_attach_args(sc, node, &eba) != 0) {
 			printf("ebus_attach: %s: incomplete\n", name);
 			continue;
+		} else {
+			DPRINTF(EDB_CHILD, ("- found child `%s', attaching\n",
+			    eba.ea_name));
+			(void)config_found(self, &eba, ebus_print);
 		}
-		DPRINTF(EDB_CHILD, ("- found child `%s', attaching\n", eba.ea_name));
-		(void)config_found(self, &eba, ebus_print);
 		ebus_destroy_attach_args(&eba);
 	}
 }
 
+int	ebus_setup_attach_args(struct ebus_softc *, int,
+	    struct ebus_attach_args *);
 int
-ebus_setup_attach_args(sc, node, ea)
-	struct ebus_softc	*sc;
-	int			node;
-	struct ebus_attach_args	*ea;
+ebus_setup_attach_args(struct ebus_softc *sc, int node,
+	struct ebus_attach_args	*ea)
 {
 	int	n, rv;
 
-	bzero(ea, sizeof(struct ebus_attach_args));
-	rv = getprop(node, "name", 1, &n, (void **)&ea->ea_name);
+	memset(ea, 0, sizeof(struct ebus_attach_args));
+	n = 0;
+	rv = prom_getprop(node, "name", 1, &n, &ea->ea_name);
 	if (rv != 0)
 		return (rv);
 	ea->ea_name[n] = '\0';
@@ -183,58 +257,63 @@ ebus_setup_attach_args(sc, node, ea)
 	ea->ea_bustag = sc->sc_childbustag;
 	ea->ea_dmatag = sc->sc_dmatag;
 
-	rv = getprop(node, "reg", sizeof(struct ebus_regs), &ea->ea_nregs,
-	    (void **)&ea->ea_regs);
+	rv = prom_getprop(node, "reg", sizeof(struct ebus_regs), &ea->ea_nreg,
+	    &ea->ea_reg);
 	if (rv)
 		return (rv);
 
-	rv = getprop(node, "address", sizeof(u_int32_t), &ea->ea_naddrs,
-	    (void **)&ea->ea_vaddrs);
+	rv = prom_getprop(node, "address", sizeof(uint32_t), &ea->ea_nvaddr,
+	    &ea->ea_vaddr);
 	if (rv != ENOENT) {
 		if (rv)
 			return (rv);
 
-		if (ea->ea_nregs != ea->ea_naddrs)
+		if (ea->ea_nreg != ea->ea_nvaddr)
 			printf("ebus loses: device %s: %d regs and %d addrs\n",
-			    ea->ea_name, ea->ea_nregs, ea->ea_naddrs);
+			    ea->ea_name, ea->ea_nreg, ea->ea_nvaddr);
 	} else
-		ea->ea_naddrs = 0;
+		ea->ea_nvaddr = 0;
 
-	if (getprop(node, "interrupts", sizeof(u_int32_t), &ea->ea_nintrs,
-	    (void **)&ea->ea_intrs))
-		ea->ea_nintrs = 0;
-	else 
+	if (prom_getprop(node, "interrupts", sizeof(uint32_t), &ea->ea_nintr,
+	    &ea->ea_intr))
+		ea->ea_nintr = 0;
+	else
 		ebus_find_ino(sc, ea);
 
 	return (0);
 }
 
 void
-ebus_destroy_attach_args(ea)
-	struct ebus_attach_args	*ea;
+ebus_destroy_attach_args(struct ebus_attach_args *ea)
 {
 
 	if (ea->ea_name)
 		free((void *)ea->ea_name, M_DEVBUF);
-	if (ea->ea_regs)
-		free((void *)ea->ea_regs, M_DEVBUF);
-	if (ea->ea_intrs)
-		free((void *)ea->ea_intrs, M_DEVBUF);
-	if (ea->ea_vaddrs)
-		free((void *)ea->ea_vaddrs, M_DEVBUF);
+	if (ea->ea_reg)
+		free((void *)ea->ea_reg, M_DEVBUF);
+	if (ea->ea_intr)
+		free((void *)ea->ea_intr, M_DEVBUF);
+	if (ea->ea_vaddr)
+		free((void *)ea->ea_vaddr, M_DEVBUF);
 }
 
 int
-ebus_print(aux, p)
-	void *aux;
-	const char *p;
+ebus_print(void *aux, const char *p)
 {
 	struct ebus_attach_args *ea = aux;
+	int i;
 
 	if (p)
-		printf("%s at %s", ea->ea_name, p);
+		aprint_normal("%s at %s", ea->ea_name, p);
+	for (i = 0; i < ea->ea_nreg; i++)
+		aprint_normal("%s %x-%x", i == 0 ? " addr" : ",",
+		    ea->ea_reg[i].lo,
+		    ea->ea_reg[i].lo + ea->ea_reg[i].size - 1);
+	for (i = 0; i < ea->ea_nintr; i++)
+		aprint_normal(" ipl %d", ea->ea_intr[i]);
 	return (UNCONF);
 }
+
 
 /*
  * find the INO values for each interrupt and fill them in.
@@ -246,85 +325,171 @@ ebus_print(aux, p)
  * to give the INO for this interrupt.
  */
 void
-ebus_find_ino(sc, ea)
-	struct ebus_softc *sc;
-	struct ebus_attach_args *ea;
+ebus_find_ino(struct ebus_softc *sc, struct ebus_attach_args *ea)
 {
-	u_int32_t hi, lo, intr;
+	uint32_t hi, lo, intr;
 	int i, j, k;
 
-	DPRINTF(EDB_INTRMAP, ("ebus_find_ino: searching %d interrupts", ea->ea_nintrs));
-	for (j = 0; j < ea->ea_nintrs; j++) {
-		intr = ea->ea_intrs[j] & sc->sc_intmapmask.intr;
+	if (sc->sc_nintmap == 0) {
+		for (i = 0; i < ea->ea_nintr; i++) {
+			OF_mapintr(ea->ea_node, &ea->ea_intr[i],
+				sizeof(ea->ea_intr[0]),
+				sizeof(ea->ea_intr[0]));
+		}
+		return;
+	}
 
-		DPRINTF(EDB_INTRMAP, ("; intr %x masked to %x", ea->ea_intrs[j], intr));
-		for (i = 0; i < ea->ea_nregs; i++) {
-			hi = ea->ea_regs[i].hi & sc->sc_intmapmask.hi;
-			lo = ea->ea_regs[i].lo & sc->sc_intmapmask.lo;
+	DPRINTF(EDB_INTRMAP,
+	    ("ebus_find_ino: searching %d interrupts", ea->ea_nintr));
 
-			DPRINTF(EDB_INTRMAP, ("; reg hi.lo %08x.08x masked to %08x.%08x", ea->ea_regs[i].hi, ea->ea_regs[i].lo, hi, lo));
+	for (j = 0; j < ea->ea_nintr; j++) {
+
+		intr = ea->ea_intr[j] & sc->sc_intmapmask.intr;
+
+		DPRINTF(EDB_INTRMAP,
+		    ("; intr %x masked to %x", ea->ea_intr[j], intr));
+		for (i = 0; i < ea->ea_nreg; i++) {
+			hi = ea->ea_reg[i].hi & sc->sc_intmapmask.hi;
+			lo = ea->ea_reg[i].lo & sc->sc_intmapmask.lo;
+
+			DPRINTF(EDB_INTRMAP,
+			    ("; reg hi.lo %08x.%08x masked to %08x.%08x",
+			    ea->ea_reg[i].hi, ea->ea_reg[i].lo, hi, lo));
 			for (k = 0; k < sc->sc_nintmap; k++) {
-				DPRINTF(EDB_INTRMAP, ("; checking hi.lo %08x.%08x intr %x", sc->sc_intmap[k].hi, sc->sc_intmap[k].lo, sc->sc_intmap[k].intr));
+				DPRINTF(EDB_INTRMAP,
+				    ("; checking hi.lo %08x.%08x intr %x",
+				    sc->sc_intmap[k].hi, sc->sc_intmap[k].lo,
+				    sc->sc_intmap[k].intr));
 				if (hi == sc->sc_intmap[k].hi &&
 				    lo == sc->sc_intmap[k].lo &&
 				    intr == sc->sc_intmap[k].intr) {
-					ea->ea_intrs[j] = sc->sc_intmap[k].cintr;
-					DPRINTF(EDB_INTRMAP, ("; FOUND IT! changing to %d\n", sc->sc_intmap[k].cintr));
+					ea->ea_intr[j] =
+					    sc->sc_intmap[k].cintr;
+					DPRINTF(EDB_INTRMAP,
+					    ("; FOUND IT! changing to %d\n",
+					    sc->sc_intmap[k].cintr));
 					goto next_intr;
 				}
 			}
 		}
-next_intr:
+next_intr:;
 	}
 }
 
 /*
- * what is our OFW node?
+ * bus space support.  <sparc64/dev/psychoreg.h> has a discussion
+ * about PCI physical addresses, which also applies to ebus.
  */
-int
-ebus_find_node(sc, pa)
-	struct ebus_softc *sc;
-	struct pci_attach_args *pa;
+bus_space_tag_t
+ebus_alloc_bus_tag(struct ebus_softc *sc, int type)
 {
-	int node = pa->pa_pc->node;
-	int n, *ap;
-	int pcibus, bus, dev, fn;
+	bus_space_tag_t bt;
 
-	DPRINTF(EDB_PROM, ("ebus_find_node: looking at pci node %08x\n", node));
-	for (node = firstchild(node); node; node = nextsibling(node)) {
-		char *name = getpropstring(node, "name");
+	bt = (bus_space_tag_t)
+		malloc(sizeof(struct sparc_bus_space_tag), M_DEVBUF, M_NOWAIT);
+	if (bt == NULL)
+		panic("could not allocate ebus bus tag");
 
-		DPRINTF(EDB_PROM, ("ebus_find_node: looking at PCI device `%s', node = %08x\n", name, node));
-		/* must be "ebus" */
-		if (strcmp(name, "ebus") != 0)
+	memset(bt, 0, sizeof *bt);
+	bt->cookie = sc;
+	bt->parent = sc->sc_memtag;
+	bt->type = type;
+	bt->sparc_bus_map = _ebus_bus_map;
+	bt->sparc_bus_mmap = ebus_bus_mmap;
+	bt->sparc_intr_establish = ebus_intr_establish;
+	return (bt);
+}
+
+static int
+_ebus_bus_map(bus_space_tag_t t, bus_addr_t ba, bus_size_t size, int flags,
+	vaddr_t va, bus_space_handle_t *hp)
+{
+	struct ebus_softc *sc = t->cookie;
+	paddr_t offset;
+	u_int bar;
+	int i, ss;
+
+	bar = BUS_ADDR_IOSPACE(ba);
+	offset = BUS_ADDR_PADDR(ba);
+
+	DPRINTF(EDB_BUSMAP,
+		("\n_ebus_bus_map: bar %d offset %08x sz %x flags %x va %p\n",
+		 (int)bar, (uint32_t)offset, (uint32_t)size,
+		 flags, (void *)va));
+
+	for (i = 0; i < sc->sc_nrange; i++) {
+		bus_addr_t pciaddr;
+
+		if (bar != sc->sc_range[i].child_hi)
+			continue;
+		if (offset < sc->sc_range[i].child_lo ||
+		    (offset + size) >
+		      (sc->sc_range[i].child_lo + sc->sc_range[i].size))
 			continue;
 
-		/* pull the PCI bus out of the pa_tag */
-		pcibus = (pa->pa_tag >> 16) & 0xff;
-		DPRINTF(EDB_PROM, ("; pcibus %d dev %d fn %d\n", pcibus, pa->pa_device, pa->pa_function));
+		/* Isolate address space and find the right tag */
+		ss = (sc->sc_range[i].phys_hi>>24)&3;
+		switch (ss) {
+		case 1:	/* I/O space */
+			t = sc->sc_iotag;
+			break;
+		case 2:	/* Memory space */
+			t = sc->sc_memtag;
+			break;
+		case 0:	/* Config space */
+		case 3:	/* 64-bit Memory space */
+		default: /* WTF? */
+			/* We don't handle these */
+			panic("_ebus_bus_map: illegal space %x", ss);
+			break;
+		}
+		pciaddr = ((bus_addr_t)sc->sc_range[i].phys_mid << 32UL) |
+				       sc->sc_range[i].phys_lo;
+		pciaddr += offset;
 
-		/* get the PCI bus/device/function for this node */
-		ap = NULL;
-		if (getprop(node, "reg", sizeof(int), &n,
-		    (void **)&ap))
+		DPRINTF(EDB_BUSMAP,
+			("_ebus_bus_map: mapping to PCI addr %x\n",
+			 (uint32_t)pciaddr));
+
+		/* pass it onto the psycho */
+		return (bus_space_map(t, pciaddr, size, flags, hp));
+	}
+	DPRINTF(EDB_BUSMAP, (": FAILED\n"));
+	return (EINVAL);
+}
+
+static paddr_t
+ebus_bus_mmap(bus_space_tag_t t, bus_addr_t paddr, off_t off, int prot,
+	int flags)
+{
+	bus_addr_t offset = paddr;
+	struct ebus_softc *sc = t->cookie;
+	int i;
+
+	for (i = 0; i < sc->sc_nrange; i++) {
+		bus_addr_t paddr1 =
+		    ((bus_addr_t)sc->sc_range[i].child_hi << 32) |
+		    sc->sc_range[i].child_lo;
+
+		if (offset != paddr1)
 			continue;
 
-		bus = (ap[0] >> 16) & 0xff;
-		dev = (ap[0] >> 11) & 0x1f;
-		fn = (ap[0] >> 8) & 0x7;
-
-		DPRINTF(EDB_PROM, ("; looking for bus %d dev %d fn %d\n", pcibus, pa->pa_device, pa->pa_function));
-		if (pa->pa_device != dev ||
-		    pa->pa_function != fn ||
-		    pcibus != bus)
-			continue;
-
-		DPRINTF(EDB_PROM, ("; found it, returning %08x\n", node));
-		/* found it! */
-		free(ap, M_DEVBUF);
-		return (node);
+		DPRINTF(EDB_BUSMAP, ("\n_ebus_bus_mmap: mapping paddr %qx\n",
+		    (unsigned long long)paddr1));
+		return (bus_space_mmap(sc->sc_memtag, paddr1, off,
+				       prot, flags));
 	}
 
-	/* damn! */
-	return (0);
+	return (-1);
+}
+
+/*
+ * install an interrupt handler for a ebus device
+ */
+void *
+ebus_intr_establish(bus_space_tag_t t, int pri, int level,
+	int (*handler)(void *), void *arg, void (*fastvec)(void) /* ignored */)
+{
+
+	return (bus_intr_establish(t->parent, pri, level, handler, arg));
 }

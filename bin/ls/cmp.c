@@ -1,4 +1,4 @@
-/*	$NetBSD: cmp.c,v 1.14 1998/10/09 02:00:39 enami Exp $	*/
+/*	$NetBSD: cmp.c,v 1.17 2003/08/07 09:05:14 agc Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)cmp.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: cmp.c,v 1.14 1998/10/09 02:00:39 enami Exp $");
+__RCSID("$NetBSD: cmp.c,v 1.17 2003/08/07 09:05:14 agc Exp $");
 #endif
 #endif /* not lint */
 
@@ -61,31 +57,31 @@ __RCSID("$NetBSD: cmp.c,v 1.14 1998/10/09 02:00:39 enami Exp $");
 #define MTIMENSEC_CMP(x, op, y) ((x)->st_mtimensec op (y)->st_mtimensec)
 #else
 #define ATIMENSEC_CMP(x, op, y) \
-	((x)->st_atimespec.ts_nsec op (y)->st_atimespec.ts_nsec)
+	((x)->st_atimespec.tv_nsec op (y)->st_atimespec.tv_nsec)
 #define CTIMENSEC_CMP(x, op, y) \
-	((x)->st_ctimespec.ts_nsec op (y)->st_ctimespec.ts_nsec)
+	((x)->st_ctimespec.tv_nsec op (y)->st_ctimespec.tv_nsec)
 #define MTIMENSEC_CMP(x, op, y) \
-	((x)->st_mtimespec.ts_nsec op (y)->st_mtimespec.ts_nsec)
+	((x)->st_mtimespec.tv_nsec op (y)->st_mtimespec.tv_nsec)
 #endif
 
 int
-namecmp(a, b)
-	const FTSENT *a, *b;
+namecmp(const FTSENT *a, const FTSENT *b)
 {
+
 	return (strcmp(a->fts_name, b->fts_name));
 }
 
 int
-revnamecmp(a, b)
-	const FTSENT *a, *b;
+revnamecmp(const FTSENT *a, const FTSENT *b)
 {
+
 	return (strcmp(b->fts_name, a->fts_name));
 }
 
 int
-modcmp(a, b)
-	const FTSENT *a, *b;
+modcmp(const FTSENT *a, const FTSENT *b)
 {
+
 	if (b->fts_statp->st_mtime > a->fts_statp->st_mtime)
 		return (1);
 	else if (b->fts_statp->st_mtime < a->fts_statp->st_mtime)
@@ -99,9 +95,9 @@ modcmp(a, b)
 }
 
 int
-revmodcmp(a, b)
-	const FTSENT *a, *b;
+revmodcmp(const FTSENT *a, const FTSENT *b)
 {
+
 	if (b->fts_statp->st_mtime > a->fts_statp->st_mtime)
 		return (-1);
 	else if (b->fts_statp->st_mtime < a->fts_statp->st_mtime)
@@ -115,9 +111,9 @@ revmodcmp(a, b)
 }
 
 int
-acccmp(a, b)
-	const FTSENT *a, *b;
+acccmp(const FTSENT *a, const FTSENT *b)
 {
+
 	if (b->fts_statp->st_atime > a->fts_statp->st_atime)
 		return (1);
 	else if (b->fts_statp->st_atime < a->fts_statp->st_atime)
@@ -131,9 +127,9 @@ acccmp(a, b)
 }
 
 int
-revacccmp(a, b)
-	const FTSENT *a, *b;
+revacccmp(const FTSENT *a, const FTSENT *b)
 {
+
 	if (b->fts_statp->st_atime > a->fts_statp->st_atime)
 		return (-1);
 	else if (b->fts_statp->st_atime < a->fts_statp->st_atime)
@@ -147,9 +143,9 @@ revacccmp(a, b)
 }
 
 int
-statcmp(a, b)
-	const FTSENT *a, *b;
+statcmp(const FTSENT *a, const FTSENT *b)
 {
+
 	if (b->fts_statp->st_ctime > a->fts_statp->st_ctime)
 		return (1);
 	else if (b->fts_statp->st_ctime < a->fts_statp->st_ctime)
@@ -163,9 +159,9 @@ statcmp(a, b)
 }
 
 int
-revstatcmp(a, b)
-	const FTSENT *a, *b;
+revstatcmp(const FTSENT *a, const FTSENT *b)
 {
+
 	if (b->fts_statp->st_ctime > a->fts_statp->st_ctime)
 		return (-1);
 	else if (b->fts_statp->st_ctime < a->fts_statp->st_ctime)
@@ -179,9 +175,9 @@ revstatcmp(a, b)
 }
 
 int
-sizecmp(a, b)
-	const FTSENT *a, *b;
+sizecmp(const FTSENT *a, const FTSENT *b)
 {
+
 	if (b->fts_statp->st_size > a->fts_statp->st_size)
 		return (1);
 	if (b->fts_statp->st_size < a->fts_statp->st_size)
@@ -191,9 +187,9 @@ sizecmp(a, b)
 }
 
 int
-revsizecmp(a, b)
-	const FTSENT *a, *b;
+revsizecmp(const FTSENT *a, const FTSENT *b)
 {
+
 	if (b->fts_statp->st_size > a->fts_statp->st_size)
 		return (-1);
 	if (b->fts_statp->st_size < a->fts_statp->st_size)

@@ -1,7 +1,7 @@
-/*	$NetBSD: net.h,v 1.13 1999/05/07 14:49:56 drochner Exp $	*/
+/*	$NetBSD: net.h,v 1.22 2008/03/25 22:54:54 christos Exp $	*/
 
 /*
- * Copyright (c) 1993 Adam Glass 
+ * Copyright (c) 1993 Adam Glass
  * Copyright (c) 1992 Regents of the University of California.
  * All rights reserved.
  *
@@ -43,14 +43,18 @@
 #define __IPADDR(x)	htonl((u_int32_t)(x))
 #endif
 
-#include "iodesc.h"
+#ifdef _STANDALONE
+#include <lib/libsa/iodesc.h>
+#else
+#include <iodesc.h>
+#endif
 
 #define BA { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff }
 
 /* Returns true if n_long's on the same net */
 #define	SAMENET(a1, a2, m) ((a1.s_addr & m) == (a2.s_addr & m))
 
-#define MACPY(s, d) bcopy((char *)s, (char *)d, 6)
+#define MACPY(s, d) memcpy(d, s, 6)
 
 #define MAXTMO 20	/* seconds */
 #define MINTMO 2	/* seconds */
@@ -73,22 +77,14 @@ extern	u_char bcea[6];
 extern	char rootpath[FNAME_SIZE];
 extern	char bootfile[FNAME_SIZE];
 extern	char hostname[FNAME_SIZE];
-extern	int hostnamelen;
-extern	char domainname[FNAME_SIZE];
-extern	int domainnamelen;
-extern	char ifname[IFNAME_SIZE];
 
 /* All of these are in network order. */
 extern	struct in_addr myip;
 extern	struct in_addr rootip;
-extern	struct in_addr swapip;
 extern	struct in_addr gateip;
-extern	struct in_addr nameip;
 extern	n_long netmask;
 
 extern	int debug;			/* defined in the machdep sources */
-
-extern struct iodesc sockets[SOPEN_MAX];
 
 /* ARP/RevARP functions: */
 u_char	*arpwhohas __P((struct iodesc *, struct in_addr));
@@ -96,23 +92,20 @@ void	arp_reply __P((struct iodesc *, void *));
 int	rarp_getipaddress __P((int));
 
 /* Link functions: */
-ssize_t sendether __P((struct iodesc *d, void *pkt, size_t len,
-			u_char *dea, int etype));
-ssize_t readether __P((struct iodesc *d, void *pkt, size_t len,
-			time_t tleft, u_int16_t *etype));
+ssize_t sendether __P((struct iodesc *, void *, size_t, u_char *, int));
+ssize_t readether __P((struct iodesc *, void *, size_t, time_t, u_int16_t *));
 
 ssize_t	sendudp __P((struct iodesc *, void *, size_t));
 ssize_t	readudp __P((struct iodesc *, void *, size_t, time_t));
 ssize_t	sendrecv __P((struct iodesc *,
-		      ssize_t (*)(struct iodesc *, void *, size_t),
+			ssize_t (*)(struct iodesc *, void *, size_t),
 			void *, size_t,
-		        ssize_t (*)(struct iodesc *, void *, size_t, time_t),
+			ssize_t (*)(struct iodesc *, void *, size_t, time_t),
 			void *, size_t));
 
 /* Utilities: */
-char	*ether_sprintf __P((u_char *));
-int	in_cksum __P((void *, int));
-int	in_cksum __P((void *, int));
+char	*ether_sprintf __P((const u_char *));
+int	ip_cksum __P((const void *, size_t));
 
 /* Machine-dependent functions: */
 time_t	getsecs __P((void));

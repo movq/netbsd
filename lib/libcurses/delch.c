@@ -1,4 +1,4 @@
-/*	$NetBSD: delch.c,v 1.10 1999/04/13 14:08:18 mrg Exp $	*/
+/*	$NetBSD: delch.c,v 1.21 2007/10/06 18:31:33 martin Exp $	*/
 
 /*
  * Copyright (c) 1981, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,24 +34,62 @@
 #if 0
 static char sccsid[] = "@(#)delch.c	8.2 (Berkeley) 5/4/94";
 #else
-__RCSID("$NetBSD: delch.c,v 1.10 1999/04/13 14:08:18 mrg Exp $");
+__RCSID("$NetBSD: delch.c,v 1.21 2007/10/06 18:31:33 martin Exp $");
 #endif
 #endif				/* not lint */
 
 #include <string.h>
+#include <stdlib.h>
 
 #include "curses.h"
+#include "curses_private.h"
+
+#ifndef _CURSES_USE_MACROS
+/*
+ * delch --
+ *	Do a delete-char on the line, leaving (cury, curx) unchanged.
+ */
+int
+delch(void)
+{
+	return wdelch(stdscr);
+}
+
+/*
+ * mvdelch --
+ *	Do a delete-char on the line at (y, x) on stdscr.
+ */
+int
+mvdelch(int y, int x)
+{
+	return mvwdelch(stdscr, y, x);
+}
+
+/*
+ * mvwdelch --
+ *	Do a delete-char on the line at (y, x) of the given window.
+ */
+int
+mvwdelch(WINDOW *win, int y, int x)
+{
+	if (wmove(win, y, x) == ERR)
+		return ERR;
+
+	return wdelch(win);
+}
+
+#endif
 
 /*
  * wdelch --
- *	Do an insert-char on the line, leaving (cury, curx) unchanged.
+ *	Do a delete-char on the line, leaving (cury, curx) unchanged.
  */
 int
-wdelch(win)
-	WINDOW *win;
+wdelch(WINDOW *win)
 {
 	__LDATA *end, *temp1, *temp2;
 
+#ifndef HAVE_WCHAR
 	end = &win->lines[win->cury]->line[win->maxx - 1];
 	temp1 = &win->lines[win->cury]->line[win->curx];
 	temp2 = temp1 + 1;
@@ -63,8 +97,51 @@ wdelch(win)
 		(void) memcpy(temp1, temp2, sizeof(__LDATA));
 		temp1++, temp2++;
 	}
-	temp1->ch = ' ';
-	temp1->attr = 0;
-	__touchline(win, (int) win->cury, (int) win->curx, (int) win->maxx - 1, 0);
+	temp1->ch = win->bch;
+	if (__using_color && win != curscr)
+		temp1->attr = win->battr & __COLOR;
+	else
+		temp1->attr = 0;
+	__touchline(win, (int) win->cury, (int) win->curx, (int) win->maxx - 1);
 	return (OK);
+#else
+	int cw, sx;
+	nschar_t *np, *tnp;
+
+	end = &win->lines[win->cury]->line[win->maxx - 1];
+	sx = win->curx;
+	temp1 = &win->lines[win->cury]->line[win->curx];
+	cw = WCOL( *temp1 );
+	if ( cw < 0 ) {
+		temp1 += cw;
+		sx += cw;
+		cw = WCOL( *temp1 );
+	}
+	np = temp1->nsp;
+	if (np) {
+		while ( np ) {
+			tnp = np->next;
+			free( np );
+			np = tnp;
+		}
+		temp1->nsp = NULL;
+	}
+	if ( sx + cw < win->maxx ) {
+		temp2 = temp1 + cw;
+		while ( temp1 < end - ( cw - 1 )) {
+			( void )memcpy( temp1, temp2, sizeof( __LDATA ));
+			temp1++, temp2++;
+		}
+	}
+	while ( temp1 <= end ) {
+		temp1->ch = ( wchar_t )btowc(( int ) win->bch );
+		temp1->attr = 0;
+		if (_cursesi_copy_nsp(win->bnsp, temp1) == ERR)
+			return ERR;
+		SET_WCOL(*temp1, 1);
+		temp1++;
+	}
+	__touchline(win, (int) win->cury, sx, (int) win->maxx - 1);
+	return (OK);
+#endif /* HAVE_WCHAR */
 }

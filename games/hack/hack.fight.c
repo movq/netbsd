@@ -1,12 +1,69 @@
-/*	$NetBSD: hack.fight.c,v 1.4 1997/10/19 16:58:00 christos Exp $	*/
+/*	$NetBSD: hack.fight.c,v 1.8.14.1 2009/06/29 23:22:24 snj Exp $	*/
 
 /*
- * Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1985.
+ * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
+ * Amsterdam
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met:
+ *
+ * - Redistributions of source code must retain the above copyright notice,
+ * this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above copyright
+ * notice, this list of conditions and the following disclaimer in the
+ * documentation and/or other materials provided with the distribution.
+ *
+ * - Neither the name of the Stichting Centrum voor Wiskunde en
+ * Informatica, nor the names of its contributors may be used to endorse or
+ * promote products derived from this software without specific prior
+ * written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
+ * IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+ * PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER
+ * OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+ * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
+ * Copyright (c) 1982 Jay Fenlason <hack@gnu.org>
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+ * AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL
+ * THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.fight.c,v 1.4 1997/10/19 16:58:00 christos Exp $");
+__RCSID("$NetBSD: hack.fight.c,v 1.8.14.1 2009/06/29 23:22:24 snj Exp $");
 #endif				/* not lint */
 
 #include "hack.h"
@@ -20,10 +77,11 @@ int
 hitmm(magr, mdef)
 	struct monst   *magr, *mdef;
 {
-	struct permonst *pa = magr->data, *pd = mdef->data;
-	int             hit;
+	const struct permonst *pa = magr->data, *pd = mdef->data;
+	int             didhit;
 	schar           tmp;
 	boolean         vis;
+
 	if (strchr("Eauy", pa->mlet))
 		return (0);
 	if (magr->mfroz)
@@ -34,8 +92,8 @@ hitmm(magr, mdef)
 		if (mdef->msleep)
 			mdef->msleep = 0;
 	}
-	hit = (tmp > rnd(20));
-	if (hit)
+	didhit = (tmp > rnd(20));
+	if (didhit)
 		mdef->msleep = 0;
 	vis = (cansee(magr->mx, magr->my) && cansee(mdef->mx, mdef->my));
 	if (vis) {
@@ -44,8 +102,8 @@ hitmm(magr, mdef)
 			seemimic(mdef);
 		if (magr->mimic)
 			seemimic(magr);
-		(void) sprintf(buf, "%s %s", Monnam(magr),
-			       hit ? "hits" : "misses");
+		(void) snprintf(buf, sizeof(buf), "%s %s", Monnam(magr),
+			       didhit ? "hits" : "misses");
 		pline("%s %s.", buf, monnam(mdef));
 	} else {
 		boolean         far = (dist(magr->mx, magr->my) > 15);
@@ -56,7 +114,7 @@ hitmm(magr, mdef)
 			      far ? " in the distance" : "");
 		}
 	}
-	if (hit) {
+	if (didhit) {
 		if (magr->data->mlet == 'c' && !magr->cham) {
 			magr->mhpmax += 3;
 			if (vis)
@@ -64,7 +122,7 @@ hitmm(magr, mdef)
 			else if (mdef->mtame)
 				pline("You have a peculiarly sad feeling for a moment, then it passes.");
 			monstone(mdef);
-			hit = 2;
+			didhit = 2;
 		} else if ((mdef->mhp -= d(pa->damn, pa->damd)) < 1) {
 			magr->mhpmax += 1 + rn2(pd->mlevel + 1);
 			if (magr->mtame && magr->mhpmax > 8 * pa->mlevel) {
@@ -78,10 +136,10 @@ hitmm(magr, mdef)
 			else if (mdef->mtame)
 				pline("You have a sad feeling for a moment, then it passes.");
 			mondied(mdef);
-			hit = 2;
+			didhit = 2;
 		}
 	}
-	return (hit);
+	return (didhit);
 }
 
 /* drop (perhaps) a cadaver and remove monster */
@@ -89,7 +147,7 @@ void
 mondied(mdef)
 	struct monst   *mdef;
 {
-	struct permonst *pd = mdef->data;
+	const struct permonst *pd = mdef->data;
 	if (letter(pd->mlet) && rn2(3)) {
 		(void) mkobj_at(pd->mlet, mdef->mx, mdef->my);
 		if (cansee(mdef->mx, mdef->my)) {
@@ -136,10 +194,11 @@ fightm(mtmp)
 int
 thitu(tlev, dam, name)
 	int tlev, dam;
-	char           *name;
+	const char           *name;
 {
 	char            buf[BUFSZ];
-	setan(name, buf);
+
+	setan(name, buf, sizeof(buf));
 	if (u.uac + tlev <= rnd(20)) {
 		if (Blind)
 			pline("It misses.");
@@ -195,10 +254,12 @@ hmon(mon, obj, thrown)		/* return TRUE if mon still alive */
 				freeinv(obj);
 				setworn((struct obj *) 0, obj->owornmask);
 				obfree(obj, (struct obj *) 0);
+				obj = NULL;
 				tmp++;
 			}
 		}
-		if (mon->data->mlet == 'O' && obj->otyp == TWO_HANDED_SWORD &&
+		if (mon->data->mlet == 'O' && obj != NULL &&
+		    obj->otyp == TWO_HANDED_SWORD &&
 		    !strcmp(ONAME(obj), "Orcrist"))
 			tmp += rnd(10);
 	} else
@@ -262,11 +323,13 @@ hmon(mon, obj, thrown)		/* return TRUE if mon still alive */
 		mon->mfleetim += 10 * rnd(tmp);
 	}
 	if (!hittxt) {
-		if (thrown)
+		if (thrown) {
 			/* this assumes that we cannot throw plural things */
+			if (obj == NULL)
+				panic("thrown non-object");
 			hit(xname(obj) /* or: objects[obj->otyp].oc_name */ ,
 			    mon, exclam(tmp));
-		else if (Blind)
+		} else if (Blind)
 			pline("You hit it.");
 		else
 			pline("You hit %s%s", monnam(mon), exclam(tmp));
@@ -291,7 +354,7 @@ attack(mtmp)
 {
 	schar           tmp;
 	boolean         malive = TRUE;
-	struct permonst *mdat;
+	const struct permonst *mdat;
 	mdat = mtmp->data;
 
 	u_wipe_engr(3);		/* andrew@orca: prevent unlimited pick-axe

@@ -1,4 +1,4 @@
-/*      $NetBSD: rtc.c,v 1.2 1999/03/26 06:54:40 dbj Exp $        */
+/*      $NetBSD: rtc.c,v 1.5 2006/03/08 03:29:49 christos Exp $        */
 /*
  * Copyright (c) 1997 Rolf Grossmann
  * All rights reserved.
@@ -34,9 +34,9 @@
 #include <machine/cpu.h>
 #include <stand.h>
 
-u_char rtc_read __P((u_char reg));
-void rtc_init __P((void));
-time_t getsecs __P((void));
+u_char rtc_read(u_char);
+void rtc_init(void);
+time_t getsecs(void);
 
 
 /* ### where shall I put this definition? */
@@ -107,10 +107,10 @@ getsecs(void)
 	u_int secs;
 	
 	if (new_clock) {
-		secs = rtc_read(RTC_CNTR3) << 24 |
-		       rtc_read(RTC_CNTR2) << 16 |
-		       rtc_read(RTC_CNTR1) << 8  |
-		       rtc_read(RTC_CNTR0);
+		secs = rtc_read(RTC_CNTR0) << 24 |
+		       rtc_read(RTC_CNTR1) << 16 |
+		       rtc_read(RTC_CNTR2) << 8  |
+		       rtc_read(RTC_CNTR3);
 	} else {
 		u_char d,h,m,s;
 #define BCD_DECODE(x) (((x) >> 4) * 10 + ((x) & 0xf))

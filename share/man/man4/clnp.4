@@ -1,4 +1,4 @@
-.\"	$NetBSD: clnp.4,v 1.5 1998/04/29 20:26:21 fair Exp $
+.\"	$NetBSD: clnp.4,v 1.9 2003/08/07 10:31:01 agc Exp $
 .\"
 .\" Copyright (c) 1990, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -40,9 +36,9 @@
 .Nm clnp
 .Nd Connectionless-Mode Network Protocol
 .Sh SYNOPSIS
-.Fd #include <sys/socket.h>
-.Fd #include <netiso/iso.h>
-.Fd #include <netiso/clnp.h>
+.In sys/socket.h
+.In netiso/iso.h
+.In netiso/clnp.h
 .Ft int
 .Fn socket AF_ISO SOCK_RAW 0
 .Sh DESCRIPTION
@@ -108,7 +104,7 @@ options.
 The options must be formatted exactly as specified by
 .Tn ISO
 8473, section 7.5
-.Dq Options Part.
+.Dq Options Part .
 Once an option has been set, it will
 be sent on all packets until a different option is set.
 .El
@@ -157,8 +153,8 @@ address exists.
 When specifying unsupported options.
 .El
 .Sh SEE ALSO
-.Xr send 2 ,
 .Xr recv 2 ,
+.Xr send 2 ,
 .Xr intro 4 ,
 .Xr iso 4
 .Sh BUGS

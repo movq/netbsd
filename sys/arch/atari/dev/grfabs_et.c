@@ -1,4 +1,4 @@
-/*	$NetBSD: grfabs_et.c,v 1.15 2000/02/11 21:36:38 leo Exp $	*/
+/*	$NetBSD: grfabs_et.c,v 1.27 2007/03/06 14:40:25 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1996 Leo Weppelman.
@@ -44,14 +44,17 @@
  * Thanks guys!
  *
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: grfabs_et.c,v 1.27 2007/03/06 14:40:25 tsutsui Exp $");
+
 #include <sys/param.h>
 #include <sys/queue.h>
 #include <sys/malloc.h>
 #include <sys/device.h>
 #include <sys/systm.h>
 
-#include <vm/vm.h>
-#include <vm/vm_kern.h>
+#include <uvm/uvm_extern.h>
 
 /*
  * For PCI probing...
@@ -113,7 +116,7 @@ struct grfabs_sw et_vid_sw = {
 
 static struct grfvideo_mode hw_modes[] = {
     { 
-	0, "", 25175000,		/* num, descr, pix-clock	*/
+	0, "", 22450000,		/* num, descr, pix-clock	*/
 	640, 400, 4,			/* width, height, depth		*/
 	632/8, 672/8, 688/8, 808/8, 768/8,/* HBS, HBE, HSS, HSE, HT	*/
 	399, 450, 408, 413, 449		/* VBS, VBE, VSS, VSE, VT	*/
@@ -151,8 +154,8 @@ static bmap_t	con_bm; /* XXX */
 
 struct grfabs_et_priv {
 	pcitag_t		pci_tag;
-	volatile caddr_t	regkva;
-	volatile caddr_t	memkva;
+	void			*regkva;
+	void 			*memkva;
 	u_int			linbase;
 	int			regsz;
 	int			memsz;
@@ -231,7 +234,7 @@ view_t *v;
 	if (mode->current_view == v) {
 #if 0
 		if (v->flags & VF_DISPLAY)
-			panic("Cannot shutdown display\n"); /* XXX */
+			panic("Cannot shutdown display"); /* XXX */
 #endif
 		mode->current_view = NULL;
 	}
@@ -247,11 +250,14 @@ view_t *v;
 	int		sv_size;
 	u_short		*src, *dst;
 	save_area_t	*sa;
+	volatile u_char *ba;
 
 	if (!atari_realconfig)
 		return;
 
-	if (RGfx(et_priv.regkva, GCT_ID_MISC) & 1) {
+	ba = et_priv.regkva;
+
+	if (RGfx(ba, GCT_ID_MISC) & 1) {
 #if 0 /* XXX: Can't use printf here.... */
 		printf("et_save_view: Don't know how to save"
 			" a graphics mode\n");
@@ -264,7 +270,7 @@ view_t *v;
 	/*
 	 * Calculate the size of the copy
 	 */
-	font_height = RCrt(et_priv.regkva, CRT_ID_MAX_ROW_ADDRESS) & 0x1f;
+	font_height = RCrt(ba, CRT_ID_MAX_ROW_ADDRESS) & 0x1f;
 	sv_size = bm->bytes_per_row * (bm->rows / (font_height + 1));
 	sv_size = min(SAVEBUF_SIZE, sv_size);
 
@@ -331,12 +337,12 @@ u_char   depth;
 	 * Initialize the bitmap
 	 */
 	bm->plane         = et_priv.memkva;
-	bm->vga_address   = (caddr_t)kvtop(et_priv.memkva);
+	bm->vga_address   = (void *)kvtop(et_priv.memkva);
 	bm->vga_base      = VGA_BASE;
-	bm->hw_address    = (caddr_t)(PCI_MEM_PHYS | et_priv.linbase);
+	bm->hw_address    = (void *)(PCI_MEM_PHYS | et_priv.linbase);
 	bm->lin_base      = et_priv.linbase;
 	bm->regs          = et_priv.regkva;
-	bm->hw_regs       = (caddr_t)kvtop(et_priv.regkva);
+	bm->hw_regs       = (void *)kvtop(et_priv.regkva);
 	bm->reg_size      = REG_MAPPABLE;
 	bm->phys_mappable = FRAME_MAPPABLE;
 	bm->vga_mappable  = VGA_MAPPABLE;
@@ -445,15 +451,32 @@ et_probe_card()
 
 	if (PCI_PRODUCT(id) ==  PCI_PRODUCT_TSENG_ET6000)
 		et_priv.board_type = BT_ET6000;
-	else et_priv.board_type = BT_ET4000;
+	else {
+#ifdef ET4000_HAS_2MB_MEM
+		volatile u_char *ba;
+#endif
+
+		et_priv.board_type = BT_ET4000;
+
+#ifdef ET4000_HAS_2MB_MEM
+		/* set KEY to access the tseng private registers */
+		ba = (volatile void *)pci_io_addr;
+		vgaw(ba, GREG_HERCULESCOMPAT, 0x03);
+		vgaw(ba, GREG_DISPMODECONTROL, 0xa0);
+
+		/* enable memory interleave */
+		WCrt(ba, CRT_ID_RASCAS_CONFIG, 0xa0);
+		WCrt(ba, CRT_ID_VIDEO_CONFIG2, 0x89);
+#endif
+	}
 
 	et_priv.pci_tag = tag;
 
 	/*
 	 * The things below are setup in atari_init.c
 	 */
-	et_priv.regkva  = (volatile caddr_t)pci_io_addr;
-	et_priv.memkva  = (volatile caddr_t)pci_mem_addr;
+	et_priv.regkva  = (void *)pci_io_addr;
+	et_priv.memkva  = (void *)pci_mem_addr;
 	et_priv.linbase = PCI_LINMEMBASE; /* XXX pci_conf_read??? */
 	et_priv.memsz   = PCI_VGA_SIZE;
 	et_priv.regsz   = PCI_IO_SIZE;
@@ -505,7 +528,7 @@ et_sv_reg_t		*regs;
 
 	regs->seq[SEQ_ID_RESET]           = 0x03; /* reset off		*/
 	regs->seq[SEQ_ID_CLOCKING_MODE]   = 0x21; /* Turn off screen	*/
-	regs->seq[SEQ_ID_MAP_MASK]        = 0xff; /* Cpu writes all planes*/
+	regs->seq[SEQ_ID_MAP_MASK]        = 0xff; /* CPU writes all planes*/
 	regs->seq[SEQ_ID_CHAR_MAP_SELECT] = 0x00; /* Char. generator 0	*/
 	regs->seq[SEQ_ID_MEMORY_MODE]     = 0x0e; /* Seq. Memory mode	*/
 
@@ -669,7 +692,7 @@ et_sv_reg_t	*et_regs;
 	et_regs->aux_mode    = RSeq(ba, SEQ_ID_AUXILIARY_MODE);
 	et_regs->seg_sel     = vgar(ba, GREG_SEGMENTSELECT);
 
-	s = splx(s);
+	splx(s);
 }
 
 void
@@ -720,5 +743,5 @@ et_sv_reg_t	*et_regs;
 	i = et_regs->seq[SEQ_ID_CLOCKING_MODE] & ~0x20;
 	WSeq(ba, SEQ_ID_CLOCKING_MODE, i);
 
-	s = splx(s);
+	splx(s);
 }

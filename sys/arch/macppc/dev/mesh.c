@@ -1,7 +1,8 @@
-/*	$NetBSD: mesh.c,v 1.4 2000/03/23 06:40:34 thorpej Exp $	*/
+/*	$NetBSD: mesh.c,v 1.26 2007/10/17 19:55:19 garbled Exp $	*/
 
 /*-
- * Copyright (C) 1999	Internet Research Institute, Inc.
+ * Copyright (c) 2000	Tsubai Masanari.
+ * Copyright (c) 1999	Internet Research Institute, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -31,6 +32,9 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: mesh.c,v 1.26 2007/10/17 19:55:19 garbled Exp $");
+
 #include <sys/param.h>
 #include <sys/buf.h>
 #include <sys/device.h>
@@ -40,7 +44,7 @@
 #include <sys/queue.h>
 #include <sys/systm.h>
 
-#include <vm/vm.h>
+#include <uvm/uvm_extern.h>
 
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
@@ -56,6 +60,12 @@
 #include <macppc/dev/dbdma.h>
 #include <macppc/dev/meshreg.h>
 
+#ifdef MESH_DEBUG
+# define DPRINTF printf
+#else
+# define DPRINTF while (0) printf
+#endif
+
 #define T_SYNCMODE 0x01		/* target uses sync mode */
 #define T_SYNCNEGO 0x02		/* sync negotiation done */
 
@@ -68,14 +78,13 @@ struct mesh_tinfo {
 /* scb flags */
 #define MESH_POLL	0x01
 #define MESH_CHECK	0x02
-#define MESH_SENSE	0x04
 #define MESH_READ	0x80
 
 struct mesh_scb {
 	TAILQ_ENTRY(mesh_scb) chain;
 	int flags;
 	struct scsipi_xfer *xs;
-	struct scsi_generic cmd;
+	struct scsipi_generic cmd;
 	int cmdlen;
 	int target;			/* target SCSI ID */
 	int resid;
@@ -89,7 +98,7 @@ struct mesh_scb {
 
 struct mesh_softc {
 	struct device sc_dev;		/* us as a device */
-	struct scsipi_link sc_link;
+	struct scsipi_channel sc_channel;
 	struct scsipi_adapter sc_adapter;
 
 	u_char *sc_reg;			/* MESH base address */
@@ -111,7 +120,6 @@ struct mesh_softc {
 
 	int sc_msgout;
 	int sc_imsglen;
-	int sc_omsglen;
 	u_char sc_imsg[16];
 	u_char sc_omsg[16];
 
@@ -125,8 +133,8 @@ struct mesh_softc {
 #define SEND_IDENTIFY	2
 #define SEND_SDTR	4
 
-static __inline int mesh_read_reg __P((struct mesh_softc *, int));
-static __inline void mesh_set_reg __P((struct mesh_softc *, int, int));
+static inline int mesh_read_reg __P((struct mesh_softc *, int));
+static inline void mesh_set_reg __P((struct mesh_softc *, int, int));
 
 int mesh_match __P((struct device *, struct cfdata *, void *));
 void mesh_attach __P((struct device *, struct device *, void *));
@@ -147,12 +155,12 @@ int mesh_stp __P((struct mesh_softc *, int));
 void mesh_setsync __P((struct mesh_softc *, struct mesh_tinfo *));
 struct mesh_scb *mesh_get_scb __P((struct mesh_softc *));
 void mesh_free_scb __P((struct mesh_softc *, struct mesh_scb *));
-int mesh_scsi_cmd __P((struct scsipi_xfer *));
+void mesh_scsi_request __P((struct scsipi_channel *,
+				scsipi_adapter_req_t, void *));
 void mesh_sched __P((struct mesh_softc *));
 int mesh_poll __P((struct mesh_softc *, struct scsipi_xfer *));
 void mesh_done __P((struct mesh_softc *, struct mesh_scb *));
 void mesh_timeout __P((void *));
-void mesh_sense __P((struct mesh_softc *, struct mesh_scb *));
 void mesh_minphys __P((struct buf *));
 
 
@@ -171,16 +179,8 @@ void mesh_minphys __P((struct buf *));
 
 #define MESH_PHASE_MASK	(MESH_STATUS0_MSG | MESH_STATUS0_CD | MESH_STATUS0_IO)
 
-struct cfattach mesh_ca = {
-	sizeof(struct mesh_softc), mesh_match, mesh_attach
-};
-
-struct scsipi_device mesh_dev = {
-	NULL,			/* Use default error handler */
-	NULL,			/* have a queue, served by this */
-	NULL,			/* have no async handler */
-	NULL,			/* Use default 'done' routine */
-};
+CFATTACH_DECL(mesh, sizeof(struct mesh_softc),
+    mesh_match, mesh_attach, NULL, NULL);
 
 int
 mesh_match(parent, cf, aux)
@@ -189,11 +189,17 @@ mesh_match(parent, cf, aux)
 	void *aux;
 {
 	struct confargs *ca = aux;
+	char compat[32];
 
-	if (strcmp(ca->ca_name, "mesh") != 0)
-		return 0;
+	if (strcmp(ca->ca_name, "mesh") == 0)
+		return 1;
 
-	return 1;
+	memset(compat, 0, sizeof(compat));
+	OF_getprop(ca->ca_node, "compatible", compat, sizeof(compat));
+	if (strcmp(compat, "chrp,mesh0") == 0)
+		return 1;
+
+	return 0;
 }
 
 void
@@ -213,7 +219,7 @@ mesh_attach(parent, self, aux)
 	sc->sc_irq = ca->ca_intr[0];
 	sc->sc_dmareg = mapiodev(reg[2], reg[3]);
 
-	sc->sc_cfflags = self->dv_cfdata->cf_flags;
+	sc->sc_cfflags = device_cfdata(self)->cf_flags;
 	sc->sc_meshid = mesh_read_reg(sc, MESH_MESH_ID) & 0x1f;
 #if 0
 	if (sc->sc_meshid != (MESH_SIGNATURE & 0x1f) {
@@ -242,22 +248,24 @@ mesh_attach(parent, self, aux)
 	printf(" irq %d: %dMHz, SCSI ID %d\n",
 		sc->sc_irq, sc->sc_freq, sc->sc_id);
 
-	sc->sc_adapter.scsipi_cmd = mesh_scsi_cmd;
-	sc->sc_adapter.scsipi_minphys = mesh_minphys;
+	sc->sc_adapter.adapt_dev = &sc->sc_dev;
+	sc->sc_adapter.adapt_nchannels = 1;
+	sc->sc_adapter.adapt_openings = 7;
+	sc->sc_adapter.adapt_max_periph = 1;
+	sc->sc_adapter.adapt_ioctl = NULL;
+	sc->sc_adapter.adapt_minphys = mesh_minphys;
+	sc->sc_adapter.adapt_request = mesh_scsi_request;
 
-	sc->sc_link.scsipi_scsi.channel = SCSI_CHANNEL_ONLY_ONE;
-	sc->sc_link.adapter_softc = sc;
-	sc->sc_link.scsipi_scsi.adapter_target = sc->sc_id;
-	sc->sc_link.adapter = &sc->sc_adapter;
-	sc->sc_link.device = &mesh_dev;
-	sc->sc_link.openings = 2;
-	sc->sc_link.scsipi_scsi.max_target = 7;
-	sc->sc_link.scsipi_scsi.max_lun = 7;
-	sc->sc_link.type = BUS_SCSI;
+	sc->sc_channel.chan_adapter = &sc->sc_adapter;
+	sc->sc_channel.chan_bustype = &scsi_bustype;
+	sc->sc_channel.chan_channel = 0;
+	sc->sc_channel.chan_ntargets = 8;
+	sc->sc_channel.chan_nluns = 8;
+	sc->sc_channel.chan_id = sc->sc_id;
 
-	config_found(&sc->sc_dev, &sc->sc_link, scsiprint);
+	config_found(&sc->sc_dev, &sc->sc_channel, scsiprint);
 
-	intr_establish(sc->sc_irq, IST_LEVEL, IPL_BIO, mesh_intr, sc);
+	intr_establish(sc->sc_irq, IST_EDGE, IPL_BIO, mesh_intr, sc);
 
 	/* Reset SCSI bus when halt. */
 	shutdownhook_establish(mesh_shutdownhook, sc);
@@ -295,7 +303,21 @@ mesh_shutdownhook(arg)
 
 	/* Set to async mode. */
 	mesh_set_reg(sc, MESH_SYNC_PARAM, 2);
+	mesh_bus_reset(sc);
 }
+
+#ifdef MESH_DEBUG
+static char scsi_phase[][8] = {
+	"DATAOUT",
+	"DATAIN",
+	"COMMAND",
+	"STATUS",
+	"",
+	"",
+	"MSGOUT",
+	"MSGIN"
+};
+#endif
 
 int
 mesh_intr(arg)
@@ -305,16 +327,12 @@ mesh_intr(arg)
 	struct mesh_scb *scb;
 	int fifocnt;
 	u_char intr, exception, error, status0, status1;
-	int i;
 
 	intr = mesh_read_reg(sc, MESH_INTERRUPT);
-
-#ifdef MESH_DEBUG
 	if (intr == 0) {
-		printf("mesh: stray interrupt\n");
+		DPRINTF("%s: stray interrupt\n", sc->sc_dev.dv_xname);
 		return 0;
 	}
-#endif
 
 	exception = mesh_read_reg(sc, MESH_EXCEPTION);
 	error = mesh_read_reg(sc, MESH_ERROR);
@@ -324,33 +342,58 @@ mesh_intr(arg)
 	/* clear interrupt */
 	mesh_set_reg(sc, MESH_INTERRUPT, intr);
 
+#ifdef MESH_DEBUG
+{
+	char buf1[64], buf2[64];
+
+	bitmask_snprintf(status0, MESH_STATUS0_BITMASK, buf1, sizeof buf1);
+	bitmask_snprintf(exception, MESH_EXC_BITMASK, buf2, sizeof buf2);
+	printf("mesh_intr status0 = 0x%s (%s), exc = 0x%s\n",
+	    buf1, scsi_phase[status0 & 7], buf2);
+}
+#endif
+
 	scb = sc->sc_nexus;
 	if (scb == NULL) {
-#ifdef MESH_DEBUG
-		printf("mesh: NULL nexus\n");
-#endif
+		DPRINTF("%s: NULL nexus\n", sc->sc_dev.dv_xname);
 		return 1;
 	}
 
-	if (sc->sc_flags & MESH_DMA_ACTIVE) {
-		dbdma_stop(sc->sc_dmareg);
+	if (intr & MESH_INTR_CMDDONE) {
+		if (sc->sc_flags & MESH_DMA_ACTIVE) {
+			dbdma_stop(sc->sc_dmareg);
 
-		sc->sc_flags &= ~MESH_DMA_ACTIVE;
-		scb->resid = MESH_GET_XFER(sc);
+			sc->sc_flags &= ~MESH_DMA_ACTIVE;
+			scb->resid = MESH_GET_XFER(sc);
 
-		fifocnt = mesh_read_reg(sc, MESH_FIFO_COUNT);
-		if (fifocnt != 0 && (scb->flags & MESH_READ)) {
-			char *cp = (char *)scb->daddr + scb->dlen - fifocnt;
+			fifocnt = mesh_read_reg(sc, MESH_FIFO_COUNT);
+			if (fifocnt != 0) {
+				if (scb->flags & MESH_READ) {
+					char *cp;
 
-			while (fifocnt > 0) {
-				*cp++ = mesh_read_reg(sc, MESH_FIFO);
-				fifocnt--;
+					cp = (char *)scb->daddr + scb->dlen
+						- fifocnt;
+					DPRINTF("fifocnt = %d, resid = %d\n",
+						fifocnt, scb->resid);
+					while (fifocnt > 0) {
+						*cp++ = mesh_read_reg(sc,
+								MESH_FIFO);
+						fifocnt--;
+					}
+				} else {
+					mesh_set_reg(sc, MESH_SEQUENCE,
+							MESH_CMD_FLUSH_FIFO);
+				}
+			} else {
+				/* Clear all interrupts */
+				mesh_set_reg(sc, MESH_INTERRUPT, 7);
 			}
-		} else
-			mesh_set_reg(sc, MESH_SEQUENCE, MESH_CMD_FLUSH_FIFO);
+		}
 	}
 
 	if (intr & MESH_INTR_ERROR) {
+		printf("%s: error %02x %02x\n",
+			sc->sc_dev.dv_xname, error, exception);
 		mesh_error(sc, scb, error, 0);
 		return 1;
 	}
@@ -364,15 +407,12 @@ mesh_intr(arg)
 
 		/* phase mismatch */
 		if (exception & MESH_EXC_PHASEMM) {
+			DPRINTF("%s: PHASE MISMATCH; nextstate = %d -> ",
+				sc->sc_dev.dv_xname, sc->sc_nextstate);
 			sc->sc_nextstate = status0 & MESH_PHASE_MASK;
-#if 0
-			printf("mesh: PHASE MISMATCH cdb =");
-			printf(" %02x", scb->cmd.opcode);
-			for (i = 0; i < 5; i++) {
-				printf(" %02x", scb->cmd.bytes[i]);
-			}
-			printf("\n");
-#endif
+
+			DPRINTF("%d, resid = %d\n",
+				sc->sc_nextstate, scb->resid);
 		}
 	}
 
@@ -402,7 +442,10 @@ mesh_intr(arg)
 		break;
 
 	default:
-		panic("mesh: unknown state (0x%x)", sc->sc_nextstate);
+		printf("%s: unknown state (%d)\n", sc->sc_dev.dv_xname,
+		    sc->sc_nextstate);
+		scb->xs->error = XS_DRIVER_STUFFUP;
+		mesh_done(sc, scb);
 	}
 
 	return 1;
@@ -415,7 +458,7 @@ mesh_error(sc, scb, error, exception)
 	int error, exception;
 {
 	if (error & MESH_ERR_SCSI_RESET) {
-		printf("mesh: SCSI RESET\n");
+		printf("%s: SCSI RESET\n", sc->sc_dev.dv_xname);
 
 		/* Wait until the RST signal is deasserted. */
 		while (mesh_read_reg(sc, MESH_BUS_STATUS1) & MESH_STATUS1_RST);
@@ -424,19 +467,19 @@ mesh_error(sc, scb, error, exception)
 	}
 
 	if (error & MESH_ERR_PARITY_ERR0) {
-		printf("mesh: parity error\n");
+		printf("%s: parity error\n", sc->sc_dev.dv_xname);
 		scb->xs->error = XS_DRIVER_STUFFUP;
 	}
 
 	if (error & MESH_ERR_DISCONNECT) {
-		printf("mesh: unexpected disconnect\n");
+		printf("%s: unexpected disconnect\n", sc->sc_dev.dv_xname);
 		if (sc->sc_nextstate != MESH_COMPLETE)
 			scb->xs->error = XS_DRIVER_STUFFUP;
 	}
 
 	if (exception & MESH_EXC_SELTO) {
 		/* XXX should reset bus here? */
-		scb->xs->error = XS_DRIVER_STUFFUP;
+		scb->xs->error = XS_SELTIMEOUT;
 	}
 
 	mesh_done(sc, scb);
@@ -448,6 +491,9 @@ mesh_select(sc, scb)
 	struct mesh_scb *scb;
 {
 	struct mesh_tinfo *ti = &sc->sc_tinfo[scb->target];
+	int timeout;
+
+	DPRINTF("mesh_select\n");
 
 	mesh_setsync(sc, ti);
 	MESH_SET_XFER(sc, 0);
@@ -474,7 +520,11 @@ mesh_select(sc, scb)
 	sc->sc_prevphase = MESH_SELECTING;
 	sc->sc_nextstate = MESH_IDENTIFY;
 
-	callout_reset(&scb->xs->xs_callout, 10 * hz, mesh_timeout, scb);
+	timeout = mstohz(scb->xs->timeout);
+	if (timeout == 0)
+		timeout = 1;
+
+	callout_reset(&scb->xs->xs_callout, timeout, mesh_timeout, scb);
 }
 
 void
@@ -482,10 +532,20 @@ mesh_identify(sc, scb)
 	struct mesh_softc *sc;
 	struct mesh_scb *scb;
 {
-	mesh_set_reg(sc, MESH_SEQUENCE, MESH_CMD_FLUSH_FIFO);
-	mesh_msgout(sc, SEND_IDENTIFY);
+	struct mesh_tinfo *ti = &sc->sc_tinfo[scb->target];
 
-	sc->sc_nextstate = MESH_COMMAND;
+	DPRINTF("mesh_identify\n");
+	mesh_set_reg(sc, MESH_SEQUENCE, MESH_CMD_FLUSH_FIFO);
+
+	if ((ti->flags & T_SYNCNEGO) == 0) {
+		ti->period = sc->sc_minsync;
+		ti->offset = 15;
+		mesh_msgout(sc, SEND_IDENTIFY | SEND_SDTR);
+		sc->sc_nextstate = MESH_MSGIN;
+	} else {
+		mesh_msgout(sc, SEND_IDENTIFY);
+		sc->sc_nextstate = MESH_COMMAND;
+	}
 }
 
 void
@@ -493,18 +553,15 @@ mesh_command(sc, scb)
 	struct mesh_softc *sc;
 	struct mesh_scb *scb;
 {
-	struct mesh_tinfo *ti = &sc->sc_tinfo[scb->target];
 	int i;
 	char *cmdp;
 
-	if ((ti->flags & T_SYNCNEGO) == 0) {
-		ti->period = sc->sc_minsync;
-		ti->offset = 15;
-		mesh_msgout(sc, SEND_SDTR);
-		sc->sc_prevphase = MESH_COMMAND;
-		sc->sc_nextstate = MESH_MSGIN;
-		return;
-	}
+#ifdef MESH_DEBUG
+	printf("mesh_command cdb = %02x", scb->cmd.opcode);
+	for (i = 0; i < 5; i++)
+		printf(" %02x", scb->cmd.bytes[i]);
+	printf("\n");
+#endif
 
 	mesh_set_reg(sc, MESH_SEQUENCE, MESH_CMD_FLUSH_FIFO);
 
@@ -526,7 +583,6 @@ mesh_dma_setup(sc, scb)
 	struct mesh_softc *sc;
 	struct mesh_scb *scb;
 {
-	struct scsipi_xfer *xs = scb->xs;
 	int datain = scb->flags & MESH_READ;
 	dbdma_command_t *cmdp;
 	u_int cmd;
@@ -538,7 +594,7 @@ mesh_dma_setup(sc, scb)
 
 	count = scb->dlen;
 
-	if (count / NBPG > 32)
+	if (count / PAGE_SIZE > 32)
 		panic("mesh: transfer size >= 128k");
 
 	va = scb->daddr;
@@ -546,7 +602,7 @@ mesh_dma_setup(sc, scb)
 
 	/* if va is not page-aligned, setup the first page */
 	if (offset != 0) {
-		int rest = NBPG - offset;	/* the rest in the page */
+		int rest = PAGE_SIZE - offset;	/* the rest in the page */
 
 		if (count > rest) {		/* if continues to next page */
 			DBDMA_BUILD(cmdp, cmd, 0, rest, vtophys(va),
@@ -559,15 +615,15 @@ mesh_dma_setup(sc, scb)
 	}
 
 	/* now va is page-aligned */
-	while (count > NBPG) {
-		DBDMA_BUILD(cmdp, cmd, 0, NBPG, vtophys(va),
+	while (count > PAGE_SIZE) {
+		DBDMA_BUILD(cmdp, cmd, 0, PAGE_SIZE, vtophys(va),
 			DBDMA_INT_NEVER, DBDMA_WAIT_NEVER, DBDMA_BRANCH_NEVER);
-		count -= NBPG;
-		va += NBPG;
+		count -= PAGE_SIZE;
+		va += PAGE_SIZE;
 		cmdp++;
 	}
 
-	/* the last page (count <= NBPG here) */
+	/* the last page (count <= PAGE_SIZE here) */
 	cmd = datain ? DBDMA_CMD_IN_LAST : DBDMA_CMD_OUT_LAST;
 	DBDMA_BUILD(cmdp, cmd , 0, count, vtophys(va),
 		DBDMA_INT_NEVER, DBDMA_WAIT_NEVER, DBDMA_BRANCH_NEVER);
@@ -582,6 +638,9 @@ mesh_dataio(sc, scb)
 	struct mesh_softc *sc;
 	struct mesh_scb *scb;
 {
+	DPRINTF("mesh_dataio len = %ld (%s)\n", scb->dlen,
+		scb->flags & MESH_READ ? "read" : "write");
+
 	mesh_dma_setup(sc, scb);
 
 	if (scb->dlen == 65536)
@@ -604,6 +663,7 @@ mesh_status(sc, scb)
 	struct mesh_scb *scb;
 {
 	if (mesh_read_reg(sc, MESH_FIFO_COUNT) == 0) {	/* XXX cheat */
+		DPRINTF("mesh_status(0)\n");
 		MESH_SET_XFER(sc, 1);
 		mesh_set_reg(sc, MESH_SEQUENCE, MESH_CMD_STATUS);
 		sc->sc_nextstate = MESH_STATUS;
@@ -611,6 +671,9 @@ mesh_status(sc, scb)
 	}
 
 	scb->status = mesh_read_reg(sc, MESH_FIFO);
+	DPRINTF("mesh_status(1): status = 0x%x\n", scb->status);
+	if (mesh_read_reg(sc, MESH_FIFO_COUNT) != 0)
+		DPRINTF("FIFO_COUNT=%d\n", mesh_read_reg(sc, MESH_FIFO_COUNT));
 
 	mesh_set_reg(sc, MESH_SEQUENCE, MESH_CMD_FLUSH_FIFO);
 	MESH_SET_XFER(sc, 1);
@@ -619,16 +682,12 @@ mesh_status(sc, scb)
 	sc->sc_nextstate = MESH_MSGIN;
 }
 
-#define IS1BYTEMSG(m) (((m) != 1 && (m) < 0x20) || (m) & 0x80)
-#define IS2BYTEMSG(m) (((m) & 0xf0) == 0x20)
-#define ISEXTMSG(m) ((m) == 1)
-
 void
 mesh_msgin(sc, scb)
 	struct mesh_softc *sc;
 	struct mesh_scb *scb;
 {
-	int i;
+	DPRINTF("mesh_msgin\n");
 
 	if (mesh_read_reg(sc, MESH_FIFO_COUNT) == 0) {	/* XXX cheat */
 		MESH_SET_XFER(sc, 1);
@@ -640,11 +699,11 @@ mesh_msgin(sc, scb)
 
 	sc->sc_imsg[sc->sc_imsglen++] = mesh_read_reg(sc, MESH_FIFO);
 
-	if (sc->sc_imsglen == 1 && IS1BYTEMSG(sc->sc_imsg[0]))
+	if (sc->sc_imsglen == 1 && MSG_IS1BYTE(sc->sc_imsg[0]))
 		goto gotit;
-	if (sc->sc_imsglen == 2 && IS2BYTEMSG(sc->sc_imsg[0]))
+	if (sc->sc_imsglen == 2 && MSG_IS2BYTE(sc->sc_imsg[0]))
 		goto gotit;
-	if (sc->sc_imsglen >= 3 && ISEXTMSG(sc->sc_imsg[0]) &&
+	if (sc->sc_imsglen >= 3 && MSG_ISEXTENDED(sc->sc_imsg[0]) &&
 	    sc->sc_imsglen == sc->sc_imsg[1] + 2)
 		goto gotit;
 
@@ -654,7 +713,7 @@ mesh_msgin(sc, scb)
 	return;
 
 gotit:
-#ifdef DEBUG
+#ifdef MESH_DEBUG
 	printf("msgin:");
 	for (i = 0; i < sc->sc_imsglen; i++)
 		printf(" 0x%02x", sc->sc_imsg[i]);
@@ -669,8 +728,7 @@ gotit:
 		return;
 
 	case MSG_MESSAGE_REJECT:
-		switch (sc->sc_msgout) {
-		case SEND_SDTR:
+		if (sc->sc_msgout & SEND_SDTR) {
 			printf("SDTR rejected\n");
 			printf("using async mode\n");
 			sc->sc_tinfo[scb->target].period = 0;
@@ -687,7 +745,7 @@ gotit:
 		goto extended_msg;
 
 	default:
-		scsi_print_addr(scb->xs->sc_link);
+		scsipi_printaddr(scb->xs->xs_periph);
 		printf("unrecognized MESSAGE(0x%02x); sending REJECT\n",
 			sc->sc_imsg[0]);
 
@@ -714,7 +772,7 @@ extended_msg:
 			mesh_msgout(sc, SEND_SDTR);
 			return;
 		}
-		scsi_print_addr(scb->xs->sc_link);
+		scsipi_printaddr(scb->xs->xs_periph);
 		/* XXX if (offset != 0) ... */
 		printf("max sync rate %d.%02dMb/s\n", r, s);
 		ti->period = period;
@@ -744,36 +802,49 @@ mesh_msgout(sc, msg)
 {
 	struct mesh_scb *scb = sc->sc_nexus;
 	struct mesh_tinfo *ti;
-	int lun, i;
+	int lun, len, i;
 
-	switch (msg) {
-	case SEND_REJECT:
-		sc->sc_omsglen = 1;
-		sc->sc_omsg[0] = MSG_MESSAGE_REJECT;
-		break;
-	case SEND_IDENTIFY:
-		lun = scb->xs->sc_link->scsipi_scsi.lun;
-		sc->sc_omsglen = 1;
-		sc->sc_omsg[0] = MSG_IDENTIFY(lun, 0);
-		break;
-	case SEND_SDTR:
-		ti = &sc->sc_tinfo[scb->target];
-		sc->sc_omsglen = 5;
-		sc->sc_omsg[0] = MSG_EXTENDED;
-		sc->sc_omsg[1] = 3;
-		sc->sc_omsg[2] = MSG_EXT_SDTR;
-		sc->sc_omsg[3] = ti->period;
-		sc->sc_omsg[4] = ti->offset;
-		break;
-	}
+	DPRINTF("mesh_msgout: sending");
+
 	sc->sc_msgout = msg;
+	len = 0;
 
-	MESH_SET_XFER(sc, sc->sc_omsglen);
-	mesh_set_reg(sc, MESH_SEQUENCE, MESH_CMD_MSGOUT | MESH_SEQ_ATN);
+	if (msg & SEND_REJECT) {
+		DPRINTF(" REJECT");
+		sc->sc_omsg[len++] = MSG_MESSAGE_REJECT;
+	}
+	if (msg & SEND_IDENTIFY) {
+		DPRINTF(" IDENTIFY");
+		lun = scb->xs->xs_periph->periph_lun;
+		sc->sc_omsg[len++] = MSG_IDENTIFY(lun, 0);
+	}
+	if (msg & SEND_SDTR) {
+		DPRINTF(" SDTR");
+		ti = &sc->sc_tinfo[scb->target];
+		sc->sc_omsg[len++] = MSG_EXTENDED;
+		sc->sc_omsg[len++] = 3;
+		sc->sc_omsg[len++] = MSG_EXT_SDTR;
+		sc->sc_omsg[len++] = ti->period;
+		sc->sc_omsg[len++] = ti->offset;
+	}
+	DPRINTF("\n");
 
-	for (i = 0; i < sc->sc_omsglen; i++)
+	MESH_SET_XFER(sc, len);
+	if (len == 1) {
+		mesh_set_reg(sc, MESH_SEQUENCE, MESH_CMD_MSGOUT);
+		mesh_set_reg(sc, MESH_FIFO, sc->sc_omsg[0]);
+	} else {
+		mesh_set_reg(sc, MESH_SEQUENCE, MESH_CMD_MSGOUT | MESH_SEQ_ATN);
+
+		for (i = 0; i < len - 1; i++)
+			mesh_set_reg(sc, MESH_FIFO, sc->sc_omsg[i]);
+
+		/* Wait for the FIFO empty... */
+		while (mesh_read_reg(sc, MESH_FIFO_COUNT) > 0);
+
+		/* ...then write the last byte. */
 		mesh_set_reg(sc, MESH_FIFO, sc->sc_omsg[i]);
-
+	}
 	sc->sc_nextstate = MESH_UNKNOWN;
 }
 
@@ -781,6 +852,8 @@ void
 mesh_bus_reset(sc)
 	struct mesh_softc *sc;
 {
+	DPRINTF("mesh_bus_reset\n");
+
 	/* Disable interrupts. */
 	mesh_set_reg(sc, MESH_INTR_MASK, 0);
 
@@ -797,6 +870,8 @@ mesh_reset(sc)
 	struct mesh_softc *sc;
 {
 	int i;
+
+	DPRINTF("mesh_reset\n");
 
 	/* Reset DMA first. */
 	dbdma_reset(sc->sc_dmareg);
@@ -833,9 +908,8 @@ mesh_reset(sc)
 
 		ti->flags = 0;
 		ti->period = ti->offset = 0;
-		if (sc->sc_cfflags & (1 << i)) {
+		if (sc->sc_cfflags & (0x100 << i))
 			ti->flags |= T_SYNCNEGO;
-		}
 	}
 	sc->sc_nexus = NULL;
 }
@@ -891,9 +965,8 @@ mesh_get_scb(sc)
 	int s;
 
 	s = splbio();
-	while ((scb = sc->free_scb.tqh_first) == NULL)
-		tsleep(&sc->free_scb, PRIBIO, "meshscb", 0);
-	TAILQ_REMOVE(&sc->free_scb, scb, chain);
+	if ((scb = sc->free_scb.tqh_first) != NULL)
+		TAILQ_REMOVE(&sc->free_scb, scb, chain);
 	splx(s);
 
 	return scb;
@@ -908,63 +981,93 @@ mesh_free_scb(sc, scb)
 
 	s = splbio();
 	TAILQ_INSERT_HEAD(&sc->free_scb, scb, chain);
-	if (scb->chain.tqe_next == NULL)
-		wakeup(&sc->free_scb);
 	splx(s);
 }
 
-int
-mesh_scsi_cmd(xs)
-	struct scsipi_xfer *xs;
+void
+mesh_scsi_request(chan, req, arg)
+	struct scsipi_channel *chan;
+	scsipi_adapter_req_t req;
+	void *arg;
 {
-	struct scsipi_link *sc_link = xs->sc_link;
-	struct mesh_softc *sc = sc_link->adapter_softc;
+	struct scsipi_xfer *xs;
+	struct scsipi_periph *periph;
+	struct mesh_softc *sc = (void *)chan->chan_adapter->adapt_dev;
 	struct mesh_scb *scb;
 	u_int flags;
 	int s;
 
-	flags = xs->xs_control;
+	switch (req) {
+	case ADAPTER_REQ_RUN_XFER:
+		xs = arg;
+		periph = xs->xs_periph;
+		flags = xs->xs_control;
 
-	scb = mesh_get_scb(sc);
-	scb->xs = xs;
-	scb->flags = 0;
-	scb->status = 0;
-	scb->daddr = (vaddr_t)xs->data;
-	scb->dlen = xs->datalen;
-	scb->resid = xs->datalen;
-	bcopy(xs->cmd, &scb->cmd, xs->cmdlen);
-	scb->cmdlen = xs->cmdlen;
 
-	scb->target = sc_link->scsipi_scsi.target;
-	sc->sc_imsglen = 0;	/* XXX ? */
+		if ((scb = mesh_get_scb(sc)) == NULL) {
+			xs->error = XS_RESOURCE_SHORTAGE;
+			scsipi_done(xs);
+			return;
+		}
+		scb->xs = xs;
+		scb->flags = 0;
+		scb->status = 0;
+		scb->daddr = (vaddr_t)xs->data;
+		scb->dlen = xs->datalen;
+		scb->resid = xs->datalen;
+		memcpy(&scb->cmd, xs->cmd, xs->cmdlen);
+		scb->cmdlen = xs->cmdlen;
+		scb->target = periph->periph_target;
+		sc->sc_imsglen = 0;	/* XXX ? */
 
-	if (flags & XS_CTL_POLL)
-		scb->flags |= MESH_POLL;
-#if 0
-	if (flags & XS_CTL_DATA_OUT)
-		scb->flags &= ~MESH_READ;
+#ifdef MESH_DEBUG
+{
+		int i;
+		printf("mesh_scsi_cmd: target = %d, cdb = %02x",
+		       scb->target, scb->cmd.opcode);
+		for (i = 0; i < 5; i++)
+			printf(" %02x", scb->cmd.bytes[i]);
+		printf("\n");
+}
 #endif
-	if (flags & XS_CTL_DATA_IN)
-		scb->flags |= MESH_READ;
 
-	s = splbio();
+		if (flags & XS_CTL_POLL)
+			scb->flags |= MESH_POLL;
+#if 0
+		if (flags & XS_CTL_DATA_OUT)
+			scb->flags &= ~MESH_READ;
+#endif
+		if (flags & XS_CTL_DATA_IN)
+			scb->flags |= MESH_READ;
 
-	TAILQ_INSERT_TAIL(&sc->ready_scb, scb, chain);
+		s = splbio();
 
-	if (sc->sc_nexus == NULL)	/* IDLE */
-		mesh_sched(sc);
+		TAILQ_INSERT_TAIL(&sc->ready_scb, scb, chain);
 
-	splx(s);
+		if (sc->sc_nexus == NULL)	/* IDLE */
+			mesh_sched(sc);
 
-	if ((flags & XS_CTL_POLL) == 0)
-		return SUCCESSFULLY_QUEUED;
+		splx(s);
 
-	if (mesh_poll(sc, xs)) {
-		printf("mesh: timeout\n");
-		if (mesh_poll(sc, xs))
-			printf("mesh: timeout again\n");
+		if ((flags & XS_CTL_POLL) == 0)
+			return;
+
+		if (mesh_poll(sc, xs)) {
+			printf("%s: timeout\n", sc->sc_dev.dv_xname);
+			if (mesh_poll(sc, xs))
+				printf("%s: timeout again\n", sc->sc_dev.dv_xname);
+		}
+		return;
+
+	case ADAPTER_REQ_GROW_RESOURCES:
+		/* XXX Not supported. */
+		return;
+
+	case ADAPTER_REQ_SET_XFER_MODE:
+		/* XXX Not supported. */
+		return;
 	}
-	return COMPLETE;
+
 }
 
 void
@@ -972,7 +1075,6 @@ mesh_sched(sc)
 	struct mesh_softc *sc;
 {
 	struct scsipi_xfer *xs;
-	struct scsipi_link *sc_link;
 	struct mesh_scb *scb;
 
 	scb = sc->ready_scb.tqh_first;
@@ -981,7 +1083,6 @@ start:
 		return;
 
 	xs = scb->xs;
-	sc_link = xs->sc_link;
 
 	if (sc->sc_nexus == NULL) {
 		TAILQ_REMOVE(&sc->ready_scb, scb, chain);
@@ -1007,7 +1108,7 @@ mesh_poll(sc, xs)
 
 		if (xs->xs_status & XS_STS_DONE)
 			return 0;
-		DELAY(1000);
+		delay(1000);
 		count--;
 	};
 	return 1;
@@ -1020,9 +1121,7 @@ mesh_done(sc, scb)
 {
 	struct scsipi_xfer *xs = scb->xs;
 
-#ifdef MESH_SHOWSTATE
-	printf("mesh_done\n");
-#endif
+	DPRINTF("mesh_done\n");
 
 	sc->sc_nextstate = MESH_BUSFREE;
 	sc->sc_nexus = NULL;
@@ -1034,29 +1133,11 @@ mesh_done(sc, scb)
 		printf("Target busy\n");
 	}
 
+	xs->status = scb->status;
+	xs->resid = scb->resid;
 	if (scb->status == SCSI_CHECK) {
-		if (scb->flags & MESH_SENSE) {
-			printf("mesh: SCSI_CHECK && MESH_SENSE?\n");
-			xs->xs_status |= XS_STS_DONE;
-			xs->error = XS_DRIVER_STUFFUP;
-			scsipi_done(xs);
-			mesh_free_scb(sc, scb);
-			return;
-		}
-		xs->resid = scb->resid;
-		mesh_sense(sc, scb);
-		return;
+		xs->error = XS_BUSY;
 	}
-
-	if (xs->error == XS_NOERROR) {
-		xs->status = scb->status;
-		if (scb->flags & MESH_SENSE)
-			xs->error = XS_SENSE;
-		else
-			xs->resid = scb->resid;
-	}
-
-	xs->xs_status |= XS_STS_DONE;
 
 	mesh_set_reg(sc, MESH_SYNC_PARAM, 2);
 
@@ -1072,27 +1153,28 @@ mesh_timeout(arg)
 	void *arg;
 {
 	struct mesh_scb *scb = arg;
-	struct mesh_softc *sc = scb->xs->sc_link->adapter_softc;
+	struct mesh_softc *sc =
+	    (void *)scb->xs->xs_periph->periph_channel->chan_adapter->adapt_dev;
 	int s;
 	int status0, status1;
-	int intr, error, exception;
+	int intr, error, exception, imsk;
 
-	printf("mesh: timeout state=%x\n", sc->sc_nextstate);
+	printf("%s: timeout state %d\n", sc->sc_dev.dv_xname, sc->sc_nextstate);
 
 	intr = mesh_read_reg(sc, MESH_INTERRUPT);
+	imsk = mesh_read_reg(sc, MESH_INTR_MASK);
 	exception = mesh_read_reg(sc, MESH_EXCEPTION);
 	error = mesh_read_reg(sc, MESH_ERROR);
 	status0 = mesh_read_reg(sc, MESH_BUS_STATUS0);
 	status1 = mesh_read_reg(sc, MESH_BUS_STATUS1);
 
-#if 0
-printf("intr 0x%02x, except 0x%02x, err 0x%02x\n", intr, exception, error);
-printf("current phase:"); mesh_showsignal(sc, status0, status1);
-#endif
+	printf("%s: intr/msk %02x/%02x, exc %02x, err %02x, st0/1 %02x/%02x\n",
+		sc->sc_dev.dv_xname,
+		intr, imsk, exception, error, status0, status1);
 
 	s = splbio();
 	if (sc->sc_flags & MESH_DMA_ACTIVE) {
-		printf("mesh: resetting dma\n");
+		printf("mesh: resetting DMA\n");
 		dbdma_reset(sc->sc_dmareg);
 	}
 	scb->xs->error = XS_TIMEOUT;
@@ -1101,32 +1183,6 @@ printf("current phase:"); mesh_showsignal(sc, status0, status1);
 	sc->sc_nextstate = MESH_COMPLETE;
 
 	splx(s);
-}
-
-void
-mesh_sense(sc, scb)
-	struct mesh_softc *sc;
-	struct mesh_scb *scb;
-{
-	struct scsipi_xfer *xs = scb->xs;
-	struct scsipi_link *sc_link = xs->sc_link;
-	struct scsipi_sense *ss = (void *)&scb->cmd;
-
-	bzero(ss, sizeof(*ss));
-	ss->opcode = REQUEST_SENSE;
-	ss->byte2 = sc_link->scsipi_scsi.lun << 5;
-	ss->length = sizeof(struct scsipi_sense_data);
-	scb->cmdlen = sizeof(*ss);
-	scb->daddr = (vaddr_t)&xs->sense.scsi_sense;
-	scb->dlen = sizeof(struct scsipi_sense_data);
-	scb->resid = scb->dlen;
-	bzero((void *)scb->daddr, scb->dlen);
-
-	scb->flags |= MESH_SENSE | MESH_READ;
-
-	TAILQ_INSERT_HEAD(&sc->ready_scb, scb, chain);
-	if (sc->sc_nexus == NULL)
-		mesh_sched(sc);
 }
 
 void

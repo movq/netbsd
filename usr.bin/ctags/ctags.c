@@ -1,4 +1,4 @@
-/*	$NetBSD: ctags.c,v 1.6 1998/08/25 20:59:36 ross Exp $	*/
+/*	$NetBSD: ctags.c,v 1.12 2008/07/21 14:19:22 lukem Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993, 1994, 1995
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -33,17 +29,21 @@
  * SUCH DAMAGE.
  */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
 #include <sys/cdefs.h>
-#ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1987, 1993, 1994, 1995\n\
-	The Regents of the University of California.  All rights reserved.\n");
+#if defined(__COPYRIGHT) && !defined(lint)
+__COPYRIGHT("@(#) Copyright (c) 1987, 1993, 1994, 1995\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
-#ifndef lint
+#if defined(__RCSID) && !defined(lint)
 #if 0
 static char sccsid[] = "@(#)ctags.c	8.4 (Berkeley) 2/7/95";
 #endif
-__RCSID("$NetBSD: ctags.c,v 1.6 1998/08/25 20:59:36 ross Exp $");
+__RCSID("$NetBSD: ctags.c,v 1.12 2008/07/21 14:19:22 lukem Exp $");
 #endif /* not lint */
 
 #include <err.h>
@@ -80,16 +80,13 @@ char	*curfile;		/* current input file name */
 char	searchar = '/';		/* use /.../ searches by default */
 char	lbuf[LINE_MAX];
 
-void	init __P((void));
-int	main __P((int, char **));
-void	find_entries __P((char *));
+void	init(void);
+void	find_entries(char *);
 
 int
-main(argc, argv)
-	int	argc;
-	char	**argv;
+main(int argc, char **argv)
 {
-	static char	*outfile = "tags";	/* output file */
+	static const char	*outfile = "tags";	/* output file */
 	int	aflag;				/* -a: append to tags */
 	int	uflag;				/* -u: update tags */
 	int	exit_val;			/* exit value */
@@ -160,7 +157,7 @@ usage:		(void)fprintf(stderr,
 		else {
 			if (uflag) {
 				for (step = 0; step < argc; step++) {
-					(void)sprintf(cmd,
+					(void)snprintf(cmd, sizeof(cmd),
 						"mv %s OTAGS; fgrep -v '\t%s\t' OTAGS >%s; rm OTAGS",
 							outfile, argv[step],
 							outfile);
@@ -173,8 +170,8 @@ usage:		(void)fprintf(stderr,
 			put_entries(head);
 			(void)fclose(outf);
 			if (uflag) {
-				(void)sprintf(cmd, "sort -o %s %s",
-						outfile, outfile);
+				(void)snprintf(cmd, sizeof(cmd),
+				    "sort -o %s %s", outfile, outfile);
 				system(cmd);
 			}
 		}
@@ -193,10 +190,10 @@ usage:		(void)fprintf(stderr,
  *	the string CWHITE, else NO.
  */
 void
-init()
+init(void)
 {
 	int		i;
-	unsigned char	*sp;
+	unsigned const char	*sp;
 
 	for (i = 0; i < 256; i++) {
 		_wht[i] = _etk[i] = _itk[i] = _btk[i] = NO;
@@ -225,8 +222,7 @@ init()
  *	which searches the file.
  */
 void
-find_entries(file)
-	char	*file;
+find_entries(char *file)
 {
 	char	*cp;
 
@@ -254,7 +250,7 @@ find_entries(file)
 				 * for C references.  This may be wrong.
 				 */
 				toss_yysec();
-				(void)strcpy(lbuf, "%%$");
+				(void)strlcpy(lbuf, "%%$", sizeof(lbuf));
 				pfnote("yylex", lineno);
 				rewind(inf);
 			}
@@ -265,7 +261,7 @@ find_entries(file)
 			 * for C references.  This may be wrong.
 			 */
 			toss_yysec();
-			(void)strcpy(lbuf, "%%$");
+			(void)strlcpy(lbuf, "%%$", sizeof(lbuf));
 			pfnote("yyparse", lineno);
 			y_entries();
 		}

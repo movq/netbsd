@@ -1,6 +1,4 @@
-/*	$NetBSD: tcic2_isa.c,v 1.2 1999/04/08 16:14:29 bad Exp $	*/
-
-#undef	TCICISADEBUG
+/*	$NetBSD: tcic2_isa.c,v 1.21 2008/06/26 12:33:17 drochner Exp $	*/
 
 /*
  *
@@ -33,18 +31,17 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: tcic2_isa.c,v 1.21 2008/06/26 12:33:17 drochner Exp $");
 
-#include <sys/types.h>
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/extent.h>
 #include <sys/malloc.h>
 
-#include <vm/vm.h>
-
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/isa/isareg.h>
 #include <dev/isa/isavar.h>
@@ -111,18 +108,17 @@ int	tcic_isa_debug = 1;
 #define	DPRINTF(arg)
 #endif
 
-int	tcic_isa_probe __P((struct device *, struct cfdata *, void *));
-void	tcic_isa_attach __P((struct device *, struct device *, void *));
+int	tcic_isa_probe(struct device *, struct cfdata *, void *);
+void	tcic_isa_attach(struct device *, struct device *, void *);
 
-void	*tcic_isa_chip_intr_establish __P((pcmcia_chipset_handle_t,
-	    struct pcmcia_function *, int, int (*) (void *), void *));
-void	tcic_isa_chip_intr_disestablish __P((pcmcia_chipset_handle_t, void *));
+void	*tcic_isa_chip_intr_establish(pcmcia_chipset_handle_t,
+	    struct pcmcia_function *, int, int (*) (void *), void *);
+void	tcic_isa_chip_intr_disestablish(pcmcia_chipset_handle_t, void *);
 
-struct cfattach tcic_isa_ca = {
-	sizeof(struct tcic_softc), tcic_isa_probe, tcic_isa_attach
-};
+CFATTACH_DECL(tcic_isa, sizeof(struct tcic_softc),
+    tcic_isa_probe, tcic_isa_attach, NULL, NULL);
 
-static struct pcmcia_chip_functions tcic_isa_functions = {
+static const struct pcmcia_chip_functions tcic_isa_functions = {
 	tcic_chip_mem_alloc,
 	tcic_chip_mem_free,
 	tcic_chip_mem_map,
@@ -138,33 +134,49 @@ static struct pcmcia_chip_functions tcic_isa_functions = {
 
 	tcic_chip_socket_enable,
 	tcic_chip_socket_disable,
+	tcic_chip_socket_settype,
+
+	NULL,	/* card_detect */
 };
 
 int
-tcic_isa_probe(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+tcic_isa_probe(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_iot;
 	bus_space_handle_t ioh, memh;
-	int val, found;
+	int val, found, msize;
+
+	if (ia->ia_nio < 1)
+		return (0);
+	if (ia->ia_niomem < 1)
+		return (0);
+
+	if (ISA_DIRECT_CONFIG(ia))
+		return (0);
 
 	/* Disallow wildcarded i/o address. */
-	if (ia->ia_iobase == ISACF_PORT_DEFAULT)
+	if (ia->ia_io[0].ir_addr == ISA_UNKNOWN_PORT)
+		return (0);
+	if (ia->ia_iomem[0].ir_addr == ISA_UNKNOWN_IOMEM)
 		return (0);
 
-	if (bus_space_map(iot, ia->ia_iobase, TCIC_IOSIZE, 0, &ioh))
+	if (bus_space_map(iot, ia->ia_io[0].ir_addr, TCIC_IOSIZE, 0, &ioh))
 		return (0);
 
-	if (ia->ia_msize == -1)
-		ia->ia_msize = TCIC_MEMSIZE;
+	if (ia->ia_iomem[0].ir_size == ISA_UNKNOWN_IOSIZ)
+		msize = TCIC_MEMSIZE;
+	else
+		msize = ia->ia_iomem[0].ir_size;
 
-	if (bus_space_map(ia->ia_memt, ia->ia_maddr, ia->ia_msize, 0, &memh))
+	if (bus_space_map(ia->ia_memt, ia->ia_iomem[0].ir_addr,
+	    msize, 0, &memh)) {
+		bus_space_unmap(iot, ioh, TCIC_IOSIZE);
 		return (0);
+	}
 
-	DPRINTF(("tcic probing 0x%03x\n", ia->ia_iobase));
+	DPRINTF(("tcic probing 0x%03x\n", ia->ia_iomem[0].ir_addr));
 	found = 0;
 
 	/*
@@ -179,24 +191,31 @@ tcic_isa_probe(parent, match, aux)
 				found++;
 		}
 	}
-	else
+	else {
 		DPRINTF(("tcic: reserved bits didn't check OK\n"));
+	}
 
 	bus_space_unmap(iot, ioh, TCIC_IOSIZE);
-	bus_space_unmap(ia->ia_memt, memh, ia->ia_msize);
+	bus_space_unmap(ia->ia_memt, memh, msize);
 
 	if (!found)
 		return (0);
 
-	ia->ia_iosize = TCIC_IOSIZE;
+	ia->ia_nio = 1;
+	ia->ia_io[0].ir_size = TCIC_IOSIZE;
+
+	ia->ia_niomem = 1;
+	ia->ia_iomem[0].ir_size = msize;
+
+	/* IRQ is special. */
+
+	ia->ia_ndrq = 0;
 
 	return (1);
 }
 
 void
-tcic_isa_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+tcic_isa_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct tcic_softc *sc = (void *) self;
 	struct isa_attach_args *ia = aux;
@@ -207,20 +226,22 @@ tcic_isa_attach(parent, self, aux)
 	bus_space_handle_t memh;
 
 	/* Map i/o space. */
-	if (bus_space_map(iot, ia->ia_iobase, ia->ia_iosize, 0, &ioh)) {
+	if (bus_space_map(iot, ia->ia_io[0].ir_addr, TCIC_IOSIZE, 0, &ioh)) {
 		printf(": can't map i/o space\n");
 		return;
 	}
 
 	/* Map mem space. */
-	if (bus_space_map(memt, ia->ia_maddr, ia->ia_msize, 0, &memh)) {
+	if (bus_space_map(memt, ia->ia_iomem[0].ir_addr,
+	    ia->ia_iomem[0].ir_size, 0, &memh)) {
 		printf(": can't map mem space\n");
 		return;
 	}
 
-	sc->membase = ia->ia_maddr;
-	sc->subregionmask = (1 << (ia->ia_msize / TCIC_MEM_PAGESIZE)) - 1;
-	sc->memsize2 = tcic_log2((u_int)ia->ia_msize);
+	sc->membase = ia->ia_iomem[0].ir_addr;
+	sc->subregionmask =
+	    (1 << (ia->ia_iomem[0].ir_size / TCIC_MEM_PAGESIZE)) - 1;
+	sc->memsize2 = tcic_log2((u_int)ia->ia_iomem[0].ir_size);
 
 	sc->intr_est = ic;
 	sc->pct = (pcmcia_chipset_tag_t) & tcic_isa_functions;
@@ -242,12 +263,16 @@ tcic_isa_attach(parent, self, aux)
 	 * scarce but for TCIC controllers very infrequent.
 	 */
 
-	if ((sc->irq = ia->ia_irq) == IRQUNK) {
+	if (ia->ia_nirq < 1)
+		sc->irq = ISA_UNKNOWN_IRQ;
+	else
+		sc->irq = ia->ia_irq[0].ir_irq;
+	if (sc->irq == ISA_UNKNOWN_IRQ) {
 		if (isa_intr_alloc(ic,
 		    sc->validirqs & (tcic_isa_intr_alloc_mask & 0xff00),
 		    IST_EDGE, &sc->irq)) {
-			printf("\n%s: can't allocate interrupt\n",
-			    sc->dev.dv_xname);
+			aprint_normal("\n");
+			aprint_error_dev(&sc->dev, "can't allocate interrupt\n");
 			return;
 		}
 		printf(": using irq %d", sc->irq);
@@ -266,7 +291,7 @@ tcic_isa_attach(parent, self, aux)
 	 * apparently missing a bit or more of address lines. (e.g.
 	 * CIRRUS_PD672X with Linksys EthernetCard ne2000 clone in TI
 	 * TravelMate 5000--not clear which is at fault)
-	 * 
+	 *
 	 * Add a kludge to detect 10 bit wide buses and deal with them,
 	 * and also a config file option to override the probe.
 	 */
@@ -289,7 +314,7 @@ tcic_isa_attach(parent, self, aux)
 #endif
 
 	DPRINTF(("%s: bus_space_alloc range 0x%04lx-0x%04lx)\n",
-	    sc->dev.dv_xname, (long) sc->iobase,
+	    device_xname(&sc->dev), (long) sc->iobase,
 	    (long) sc->iobase + sc->iosize));
 
 	if (tcic_isa_alloc_iobase && tcic_isa_alloc_iosize) {
@@ -297,13 +322,13 @@ tcic_isa_attach(parent, self, aux)
 		sc->iosize = tcic_isa_alloc_iosize;
 
 		DPRINTF(("%s: bus_space_alloc range 0x%04lx-0x%04lx "
-		    "(config override)\n", sc->dev.dv_xname, (long) sc->iobase,
+		    "(config override)\n", device_xname(&sc->dev), (long) sc->iobase,
 		    (long) sc->iobase + sc->iosize));
 	}
 	sc->ih = isa_intr_establish(ic, sc->irq, IST_EDGE, IPL_TTY,
 	    tcic_intr, sc);
 	if (sc->ih == NULL) {
-		printf("%s: can't establish interrupt\n", sc->dev.dv_xname);
+		printf("%s: can't establish interrupt\n", device_xname(&sc->dev));
 		return;
 	}
 
@@ -315,14 +340,14 @@ tcic_isa_chip_intr_establish(pch, pf, ipl, fct, arg)
 	pcmcia_chipset_handle_t pch;
 	struct pcmcia_function *pf;
 	int ipl;
-	int (*fct) __P((void *));
+	int (*fct)(void *);
 	void *arg;
 {
 	struct tcic_handle *h = (struct tcic_handle *) pch;
 	int irq, ist;
 	void *ih;
 
-	DPRINTF(("%s: tcic_isa_chip_intr_establish\n", h->sc->dev.dv_xname));
+	DPRINTF(("%s: tcic_isa_chip_intr_establish\n", device_xname(&h->sc->dev)));
 
 	/* XXX should we convert level to pulse? -chb  */
 	if (pf->cfe->flags & PCMCIA_CFE_IRQLEVEL)
@@ -339,16 +364,16 @@ tcic_isa_chip_intr_establish(pch, pf, ipl, fct, arg)
 	    fct, arg)) == NULL)
 		return (NULL);
 
-	DPRINTF(("%s: intr estrablished\n", h->sc->dev.dv_xname));
+	DPRINTF(("%s: intr estrablished\n", device_xname(&h->sc->dev)));
 
 	h->ih_irq = irq;
 
-	printf("%s: card irq %d\n", h->pcmcia->dv_xname, irq);
+	printf("%s: card irq %d\n", device_xname(h->pcmcia), irq);
 
 	return (ih);
 }
 
-void 
+void
 tcic_isa_chip_intr_disestablish(pch, ih)
 	pcmcia_chipset_handle_t pch;
 	void *ih;
@@ -356,7 +381,7 @@ tcic_isa_chip_intr_disestablish(pch, ih)
 	struct tcic_handle *h = (struct tcic_handle *) pch;
 	int val, reg;
 
-	DPRINTF(("%s: tcic_isa_chip_intr_disestablish\n", h->sc->dev.dv_xname));
+	DPRINTF(("%s: tcic_isa_chip_intr_disestablish\n", device_xname(&h->sc->dev)));
 
 	h->ih_irq = 0;
 

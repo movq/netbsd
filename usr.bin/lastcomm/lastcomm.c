@@ -1,4 +1,4 @@
-/*	$NetBSD: lastcomm.c,v 1.14 1998/04/02 10:22:03 kleink Exp $	*/
+/*	$NetBSD: lastcomm.c,v 1.20 2008/07/21 14:19:23 lukem Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)lastcomm.c	8.2 (Berkeley) 4/29/95";
 #endif
-__RCSID("$NetBSD: lastcomm.c,v 1.14 1998/04/02 10:22:03 kleink Exp $");
+__RCSID("$NetBSD: lastcomm.c,v 1.20 2008/07/21 14:19:23 lukem Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -65,17 +61,16 @@ __RCSID("$NetBSD: lastcomm.c,v 1.14 1998/04/02 10:22:03 kleink Exp $");
 #include <utmp.h>
 #include "pathnames.h"
 
-time_t	 expand __P((u_int));
-char	*flagbits __P((int));
-char	*getdev __P((dev_t));
-int	 main __P((int, char **));
-int	 requested __P((char *[], struct acct *));
-void	 usage __P((void));
+static time_t	 	 expand(u_int);
+static char		*flagbits(int);
+static const char	*getdev(dev_t);
+static int	 	 requested(char *[], struct acct *);
+static void	 	 usage(void) __dead;
+
+int	main(int, char **);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	char *p;
 	struct acct ab;
@@ -85,9 +80,10 @@ main(argc, argv)
 	time_t t;
 	double delta;
 	int ch;
-	char *acctfile;
+	const char *acctfile = _PATH_ACCT;
 
-	acctfile = _PATH_ACCT;
+	setprogname(argv[0]);
+
 	while ((ch = getopt(argc, argv, "f:")) != -1)
 		switch((char)ch) {
 		case 'f':
@@ -132,7 +128,7 @@ main(argc, argv)
 		} else
 			for (p = &ab.ac_comm[0];
 			    p < &ab.ac_comm[fldsiz(acct, ac_comm)] && *p; ++p)
-				if (!isprint(*p))
+				if (!isprint((unsigned char)*p))
 					*p = '?';
 		if (!*argv || requested(argv, &ab)) {
 
@@ -148,8 +144,8 @@ main(argc, argv)
 			     t / (double)AHZ, ctime(&ab.ac_btime));
 			delta = expand(ab.ac_etime) / (double)AHZ;
 			printf(" (%1.0f:%02.0f:%05.2f)\n",
-			       delta / SECSPERHOUR,
-			       fmod(delta, SECSPERHOUR) / SECSPERMIN,
+			       floor(delta / SECSPERHOUR),
+			       floor(fmod(delta, SECSPERHOUR) / SECSPERMIN),
 			       fmod(delta, SECSPERMIN));
 		}
 		/* are we at the beginning of the file yet? */
@@ -164,9 +160,8 @@ main(argc, argv)
 	exit(0);
 }
 
-time_t
-expand(t)
-	u_int t;
+static time_t
+expand(u_int t)
 {
 	time_t nt;
 
@@ -179,9 +174,8 @@ expand(t)
 	return (nt);
 }
 
-char *
-flagbits(f)
-	int f;
+static char *
+flagbits(int f)
 {
 	static char flags[20] = "-";
 	char *p;
@@ -198,10 +192,8 @@ flagbits(f)
 	return (flags);
 }
 
-int
-requested(argv, acp)
-	char *argv[];
-	struct acct *acp;
+static int
+requested(char *argv[], struct acct *acp)
 {
 	do {
 		if (!strcmp(user_from_uid(acp->ac_uid, 0), *argv))
@@ -214,12 +206,11 @@ requested(argv, acp)
 	return (0);
 }
 
-char *
-getdev(dev)
-	dev_t dev;
+static const char *
+getdev(dev_t dev)
 {
 	static dev_t lastdev = (dev_t)-1;
-	static char *lastname;
+	static const char *lastname;
 
 	if (dev == NODEV)			/* Special case. */
 		return ("__");
@@ -231,10 +222,11 @@ getdev(dev)
 	return (lastname);
 }
 
-void
-usage()
+static void
+usage(void)
 {
 	(void)fprintf(stderr,
-	    "lastcomm [ -f file ] [command ...] [user ...] [tty ...]\n");
+	    "Usage: %s [ -f file ] [command ...] [user ...] [tty ...]\n",
+	    getprogname());
 	exit(1);
 }

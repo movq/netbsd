@@ -1,59 +1,60 @@
-/*	$NetBSD: cpu.c,v 1.1 2000/03/19 23:07:44 soren Exp $	*/
+/*	$NetBSD: cpu.c,v 1.10 2008/05/09 10:59:55 tsutsui Exp $	*/
 
 /*
- * Copyright (c) 2000 Soren S. Jorvang.  All rights reserved.
+ * Copyright (c) 1994, 1995 Carnegie-Mellon University.
+ * All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions, and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
+ * Author: Chris G. Demetriou
  *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
+ * Permission to use, copy, modify and distribute this software and
+ * its documentation is hereby granted, provided that both the copyright
+ * notice and this permission notice appear in all copies of the
+ * software, derivative works or modified versions, and any portions
+ * thereof, and that both notices appear in supporting documentation.
+ *
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
+ * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
+ * 
+ * Carnegie Mellon requests users of this software to return to
+ *
+ *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
+ *  School of Computer Science
+ *  Carnegie Mellon University
+ *  Pittsburgh PA 15213-3890
+ *
+ * any improvements or extensions that they make and grant Carnegie the
+ * rights to redistribute these changes.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.10 2008/05/09 10:59:55 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
 #include <sys/systm.h>
 
-#include <machine/cpu.h>
 #include <machine/autoconf.h>
 
-static int	cpu_match(struct device *, struct cfdata *, void *);
-static void	cpu_attach(struct device *, struct device *, void *);
+#include "ioconf.h"
 
-struct cfattach cpu_ca = {
-	sizeof(struct device), cpu_match, cpu_attach
-};
+int	cpu_match(device_t, cfdata_t, void *);
+void	cpu_attach(device_t, device_t, void *);
 
-static int
-cpu_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+CFATTACH_DECL_NEW(cpu, 0,
+    cpu_match, cpu_attach, NULL, NULL);
+
+int
+cpu_match(device_t parent, cfdata_t cf, void *aux)
 {
+
 	return 1;
 }
 
-static void
-cpu_attach(parent, self, aux)
-	struct device *parent;
-	struct device *self;
-	void *aux;
+void
+cpu_attach(device_t parent, device_t self, void *aux)
 {
-	printf(": ");
+
+	aprint_normal(": ");
 	cpu_identify();
 }

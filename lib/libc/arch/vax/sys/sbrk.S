@@ -10,11 +10,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -33,31 +29,35 @@
 
 #if defined(SYSLIBC_SCCS) && !defined(lint)
 	/* .asciz "@(#)sbrk.s	8.1 (Berkeley) 6/4/93" */
-	.asciz "$NetBSD: sbrk.S,v 1.3 1999/01/14 22:48:22 kleink Exp $"
+	.asciz "$NetBSD: sbrk.S,v 1.10 2003/08/07 16:42:33 agc Exp $"
 #endif /* SYSLIBC_SCCS and not lint */
 
 #include "SYS.h"
 
-
 	.globl	_end
-	.globl	___minbrk
-	.globl	curbrk
+	.globl	_C_LABEL(__minbrk)
+	.globl	CURBRK
+
+#ifdef WEAK_ALIAS
+WEAK_ALIAS(sbrk, _sbrk)
+#endif
 
 	.data
-___minbrk:
+_C_LABEL(__minbrk):
 	.long	_end
-curbrk:	.long	_end
+CURBRK:
+	.long	_end
 	.text
 
-ENTRY(sbrk, 0)
-	addl3	curbrk,4(ap),-(sp)
+ENTRY(_sbrk, 0)
+	addl3	CURBRK,4(%ap),-(%sp)
 	pushl	$1
-	movl	ap,r3
-	movl	sp,ap
+	movl	%ap,%r3
+	movl	%sp,%ap
 	chmk	$ SYS_break
 	jcs 	err
-	movl	curbrk,r0
-	addl2	4(r3),curbrk
+	movl	CURBRK,%r0
+	addl2	4(%r3),CURBRK
 	ret
 err:
-	jmp	cerror
+	jmp	CERROR+2

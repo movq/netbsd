@@ -1,4 +1,4 @@
-/*	$NetBSD: vipw.c,v 1.6 1998/12/09 12:40:15 christos Exp $	*/
+/*	$NetBSD: vipw.c,v 1.13 2008/07/21 13:37:00 lukem Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,19 +31,20 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1987, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1987, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)vipw.c	8.3 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: vipw.c,v 1.6 1998/12/09 12:40:15 christos Exp $");
+__RCSID("$NetBSD: vipw.c,v 1.13 2008/07/21 13:37:00 lukem Exp $");
 #endif
 #endif /* not lint */
 
 #include <sys/types.h>
+#include <sys/param.h>
 #include <sys/stat.h>
 
 #include <err.h>
@@ -64,17 +61,24 @@ int	main __P((int, char **));
 static void	copyfile __P((int, int));
 static void	usage __P((void));
 
+char mpwd[MAXPATHLEN], mpwdl[MAXPATHLEN];
+
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
+	char *prefix;
 	int pfd, tfd;
 	struct stat begin, end;
 	int ch;
 
-	while ((ch = getopt(argc, argv, "")) != -1) {
+	prefix = "";
+	while ((ch = getopt(argc, argv, "d:")) != -1) {
 		switch (ch) {
+		case 'd':
+			prefix = optarg;
+			if (pw_setprefix(prefix) < 0)
+				err(1, "%s", prefix);
+			break;
 		case '?':
 		default:
 			usage();
@@ -86,32 +90,37 @@ main(argc, argv)
 	if (argc != 0)
 		usage();
 
+	(void)snprintf(mpwd, sizeof(mpwd), "%s%s", prefix, _PATH_MASTERPASSWD);
+	(void)snprintf(mpwdl, sizeof(mpwdl), "%s%s", prefix,
+		_PATH_MASTERPASSWD_LOCK);
+
 	pw_init();
 	tfd = pw_lock(0);
 	if (tfd < 0) {
 		if (errno == EEXIST)
 			errx(1, "the passwd file is busy.");
 		else
-			err(1, "%s", _PATH_MASTERPASSWD_LOCK);
+			err(1, "%s", mpwdl);
 	}
 
-	pfd = open(_PATH_MASTERPASSWD, O_RDONLY, 0);
+	pfd = open(mpwd, O_RDONLY, 0);
 	if (pfd < 0)
-		pw_error(_PATH_MASTERPASSWD, 1, 1);
+		pw_error(mpwd, 1, 1);
 	copyfile(pfd, tfd);
 	(void)close(tfd);
 
 	for (;;) {
-		if (stat(_PATH_MASTERPASSWD_LOCK, &begin))
-			pw_error(_PATH_MASTERPASSWD_LOCK, 1, 1);
+		if (stat(mpwdl, &begin))
+			pw_error(mpwdl, 1, 1);
 		pw_edit(0, NULL);
-		if (stat(_PATH_MASTERPASSWD_LOCK, &end))
-			pw_error(_PATH_MASTERPASSWD_LOCK, 1, 1);
-		if (begin.st_mtime == end.st_mtime) {
+		if (stat(mpwdl, &end))
+			pw_error(mpwdl, 1, 1);
+		if (begin.st_mtime == end.st_mtime &&
+		    begin.st_mtimensec == end.st_mtimensec) {
 			warnx("no changes made");
 			pw_error((char *)NULL, 0, 0);
 		}
-		if (pw_mkdb() == 0)
+		if (pw_mkdb(NULL, 0) == 0)
 			break;
 		pw_prompt();
 	}
@@ -119,8 +128,7 @@ main(argc, argv)
 }
 
 static void
-copyfile(from, to)
-	int from, to;
+copyfile(int from, int to)
 {
 	int nr, nw, off;
 	char buf[8*1024];
@@ -128,16 +136,15 @@ copyfile(from, to)
 	while ((nr = read(from, buf, sizeof(buf))) > 0)
 		for (off = 0; off < nr; nr -= nw, off += nw)
 			if ((nw = write(to, buf + off, nr)) < 0)
-				pw_error(_PATH_MASTERPASSWD_LOCK, 1, 1);
+				pw_error(mpwdl, 1, 1);
 	if (nr < 0)
-		pw_error(_PATH_MASTERPASSWD, 1, 1);
+		pw_error(mpwd, 1, 1);
 }
 
 static void
-usage()
+usage(void)
 {
-	extern char *__progname;
 
-	(void)fprintf(stderr, "Usage: %s\n", __progname);
+	(void)fprintf(stderr, "usage: %s [-d directory]\n", getprogname());
 	exit(1);
 }

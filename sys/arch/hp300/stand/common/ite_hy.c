@@ -1,9 +1,45 @@
-/*	$NetBSD: ite_hy.c,v 1.1 1997/02/04 03:52:33 thorpej Exp $	*/
+/*	$NetBSD: ite_hy.c,v 1.8 2007/03/07 09:10:21 he Exp $	*/
+
+/*
+ * Copyright (c) 1990, 1993
+ *	The Regents of the University of California.  All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Systems Programming Group of the University of Utah Computer
+ * Science Department and Mark Davies of the Department of Computer
+ * Science, Victoria University of Wellington, New Zealand.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ * from: Utah $Hdr: ite_hy.c 1.1 92/01/22$
+ *
+ *	@(#)ite_hy.c	8.1 (Berkeley) 6/10/93
+ */
 
 /*
  * Copyright (c) 1988 University of Utah.
- * Copyright (c) 1990, 1993
- *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * the Systems Programming Group of the University of Utah Computer
@@ -53,21 +89,19 @@
 #include <hp300/stand/common/samachdep.h>
 #include <hp300/stand/common/itevar.h>
 
-#define REGBASE	    	((struct hyboxfb *)(ip->regbase))
 #define WINDOWMOVER     hyper_windowmove
 
 #undef charX
 #define	charX(ip,c)	\
 	(((c) % (ip)->cpl) * ((((ip)->ftwidth + 7) / 8) * 8) + (ip)->fontx)
 
-void	hyper_ite_fontinit __P((struct ite_data *));
-void	hyper_windowmove __P((struct ite_data *, int, int, int, int,
-	    int, int, int));
+void hyper_ite_fontinit(struct ite_data *);
+void hyper_windowmove(struct ite_data *, int, int, int, int, int, int, int);
 
 void
-hyper_init(ip)
-	register struct ite_data *ip;
+hyper_init(struct ite_data *ip)
 {
+	struct hyboxfb *regbase = (void *)ip->regbase;
 	int width;
 
 	ite_fontinfo(ip);
@@ -75,7 +109,7 @@ hyper_init(ip)
 	ip->cpl      = (ip->fbwidth - ip->dwidth) / width;
 	ip->cblanky  = ip->fonty + ((128 / ip->cpl) +1) * ip->ftheight;
 
-	REGBASE->nblank = 0x05;
+	regbase->nblank = 0x05;
 	
 	/*
 	 * Clear the framebuffer on all planes.
@@ -93,15 +127,14 @@ hyper_init(ip)
 }
 
 void
-hyper_ite_fontinit(ip)
-	register struct ite_data *ip;
+hyper_ite_fontinit(struct ite_data *ip)
 {
-	register u_char *fbmem, *dp;
+	u_char *fbmem, *dp;
 	int c, l, b;
 	int stride, width;
 
 	dp = (u_char *)(getword(ip, getword(ip, FONTROM) + FONTADDR) +
-	    ip->regbase) + FONTDATA;
+	    (char *)ip->regbase) + FONTDATA;
 	stride = ip->fbwidth >> 3;
 	width = (ip->ftwidth + 7) / 8;
 
@@ -122,21 +155,18 @@ hyper_ite_fontinit(ip)
 }
 
 void
-hyper_putc(ip, c, dy, dx, mode)
-	register struct ite_data *ip;
-        register int dy, dx;
-	int c, mode;
+hyper_putc(struct ite_data *ip, int c, int dy, int dx, int mode)
 {
+
 	hyper_windowmove(ip, charY(ip, c), charX(ip, c),
 			 dy * ip->ftheight, dx * ip->ftwidth,
 			 ip->ftheight, ip->ftwidth, RR_COPY);
 }
 
 void
-hyper_cursor(ip, flag)
-	register struct ite_data *ip;
-        int flag;
+hyper_cursor(struct ite_data *ip, int flag)
 {
+
 	switch (flag) {
 	case MOVE_CURSOR:
 		erase_cursor(ip);
@@ -151,10 +181,9 @@ hyper_cursor(ip, flag)
 }
 
 void
-hyper_clear(ip, sy, sx, h, w)
-	struct ite_data *ip;
-	register int sy, sx, h, w;
+hyper_clear(struct ite_data *ip, int sy, int sx, int h, int w)
 {
+
 	hyper_windowmove(ip, sy * ip->ftheight, sx * ip->ftwidth,
 			 sy * ip->ftheight, sx * ip->ftwidth, 
 			 h  * ip->ftheight, w  * ip->ftwidth,
@@ -162,13 +191,10 @@ hyper_clear(ip, sy, sx, h, w)
 }
 
 void
-hyper_scroll(ip, sy, sx, count, dir)
-        register struct ite_data *ip;
-        register int sy, count;
-        int dir, sx;
+hyper_scroll(struct ite_data *ip, int sy, int sx, int count, int dir)
 {
-	register int dy = sy - count;
-	register int height = ip->rows - sy;
+	int dy = sy - count;
+	int height = ip->rows - sy;
 
 	hyper_cursor(ip, ERASE_CURSOR);
 
@@ -186,8 +212,7 @@ hyper_scroll(ip, sy, sx, count, dir)
  * than having to do the multiple reads and masks that we'd
  * have to do if we thought it was partial.
  */
-int starttab[32] =
-    {
+int starttab[32] = {
 	0x00000000,
 	0x7FFFFFFF,
 	0x3FFFFFFF,
@@ -220,10 +245,9 @@ int starttab[32] =
 	0x00000007,
 	0x00000003,
 	0x00000001
-    };
+};
 
-int endtab[32] =
-    {
+int endtab[32] = {
 	0x00000000,
 	0x80000000,
 	0xC0000000,
@@ -256,35 +280,32 @@ int endtab[32] =
 	0xFFFFFFF8,
 	0xFFFFFFFC,
 	0xFFFFFFFE
-    };
+};
 
 void
-hyper_windowmove(ip, sy, sx, dy, dx, h, w, func)
-	struct ite_data *ip;
-	int sy, sx, dy, dx, h, w, func;
+hyper_windowmove(struct ite_data *ip, int sy, int sx, int dy, int dx,
+    int h, int w, int func)
 {
-	unsigned int *psrcBase, *pdstBase;
-				/* start of src and dst bitmaps */
 	int width;		/* add to get to same position in next line */
 
 	unsigned int *psrcLine, *pdstLine;
-                                /* pointers to line with current src and dst */
-	register unsigned int *psrc;  /* pointer to current src longword */
-	register unsigned int *pdst;  /* pointer to current dst longword */
+				/* pointers to line with current src and dst */
+	unsigned int *psrc;	/* pointer to current src longword */
+	unsigned int *pdst;	/* pointer to current dst longword */
 
-                                /* following used for looping through a line */
+				/* following used for looping through a line */
 	unsigned int startmask, endmask;  /* masks for writing ends of dst */
 	int nlMiddle;		/* whole longwords in dst */
-	register int nl;	/* temp copy of nlMiddle */
-	register unsigned int tmpSrc;
-                                /* place to store full source word */
-	register int xoffSrc;	/* offset (>= 0, < 32) from which to
-                                   fetch whole longwords fetched
-                                   in src */
+	int nl;			/* temp copy of nlMiddle */
+	unsigned int tmpSrc;
+				/* place to store full source word */
+	int xoffSrc;		/* offset (>= 0, < 32) from which to
+				   fetch whole longwords fetched
+				   in src */
 	int nstart;		/* number of ragged bits at start of dst */
 	int nend;		/* number of ragged bits at end of dst */
 	int srcStartOver;	/* pulling nstart bits from src
-                                   overflows into the next word? */
+				   overflows into the next word? */
 
 	if (h == 0 || w == 0)
 		return;
@@ -294,87 +315,75 @@ hyper_windowmove(ip, sy, sx, dy, dx, h, w, func)
 	pdstLine = ((unsigned int *) ip->fbbase) + (dy * width);
 
 	/* x direction doesn't matter for < 1 longword */
-	if (w <= 32)
-	{
-	    int srcBit, dstBit;     /* bit offset of src and dst */
+	if (w <= 32) {
+		int srcBit, dstBit;     /* bit offset of src and dst */
 
-	    pdstLine += (dx >> 5);
-	    psrcLine += (sx >> 5);
-	    psrc = psrcLine;
-	    pdst = pdstLine;
-
-	    srcBit = sx & 0x1f;
-	    dstBit = dx & 0x1f;
-
-	    while(h--)
-	    {
-                getandputrop(psrc, srcBit, dstBit, w, pdst, func)
-	        pdst += width;
-		psrc += width;
-	    }
-	}
-	else
-        {
-	    maskbits(dx, w, startmask, endmask, nlMiddle)
-	    if (startmask)
-	      nstart = 32 - (dx & 0x1f);
-	    else
-	      nstart = 0;
-	    if (endmask)
-	      nend = (dx + w) & 0x1f;
-	    else
-	      nend = 0;
-
-	    xoffSrc = ((sx & 0x1f) + nstart) & 0x1f;
-	    srcStartOver = ((sx & 0x1f) + nstart) > 31;
-
-	    pdstLine += (dx >> 5);
-	    psrcLine += (sx >> 5);
-
-	    while (h--)
-	    {
-	        psrc = psrcLine;
+		pdstLine += (dx >> 5);
+		psrcLine += (sx >> 5);
+		psrc = psrcLine;
 		pdst = pdstLine;
 
+		srcBit = sx & 0x1f;
+		dstBit = dx & 0x1f;
+
+		while (h--) {
+			getandputrop(psrc, srcBit, dstBit, w, pdst, func);
+		        pdst += width;
+			psrc += width;
+		}
+	} else {
+		maskbits(dx, w, startmask, endmask, nlMiddle);
 		if (startmask)
-		{
-		    getandputrop(psrc, (sx & 0x1f),
-				 (dx & 0x1f), nstart, pdst, func)
-		    pdst++;
-		    if (srcStartOver)
-		        psrc++;
-		}
-
-		/* special case for aligned operations */
-		if (xoffSrc == 0)
-		{
-		    nl = nlMiddle;
-		    while (nl--)
-		    {
-		        DoRop (*pdst, func, *psrc++, *pdst);
-			pdst++;
-		    }
-		}
+			nstart = 32 - (dx & 0x1f);
 		else
-		{
-		    nl = nlMiddle + 1;
-		    while (--nl)
-		    {
-		        getunalignedword (psrc, xoffSrc, tmpSrc)
-			DoRop (*pdst, func, tmpSrc, *pdst);
-			pdst++;
-			psrc++;
-		    }
-		}
-
+			nstart = 0;
 		if (endmask)
-		{
-		    getandputrop0(psrc, xoffSrc, nend, pdst, func);
-		}
+			nend = (dx + w) & 0x1f;
+		else
+			nend = 0;
 
-		pdstLine += width;
-		psrcLine += width;
-	    }
+		xoffSrc = ((sx & 0x1f) + nstart) & 0x1f;
+		srcStartOver = ((sx & 0x1f) + nstart) > 31;
+
+		pdstLine += (dx >> 5);
+		psrcLine += (sx >> 5);
+
+		while (h--) {
+		        psrc = psrcLine;
+			pdst = pdstLine;
+
+			if (startmask) {
+				getandputrop(psrc, (sx & 0x1f),
+				    (dx & 0x1f), nstart, pdst, func);
+				pdst++;
+				if (srcStartOver)
+					psrc++;
+			}
+
+			/* special case for aligned operations */
+			if (xoffSrc == 0) {
+				nl = nlMiddle;
+				while (nl--) {
+					DoRop (*pdst, func, *psrc++, *pdst);
+					pdst++;
+		    		}
+			} else {
+				nl = nlMiddle + 1;
+				while (--nl) {
+					getunalignedword(psrc, xoffSrc, tmpSrc);
+					DoRop(*pdst, func, tmpSrc, *pdst);
+					pdst++;
+					psrc++;
+				}
+			}
+
+			if (endmask) {
+				getandputrop0(psrc, xoffSrc, nend, pdst, func);
+			}
+
+			pdstLine += width;
+			psrcLine += width;
+		}
 	}
 }
 #endif

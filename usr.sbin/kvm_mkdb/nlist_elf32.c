@@ -1,8 +1,9 @@
-/*	$NetBSD: nlist_elf32.c,v 1.10 1999/11/04 02:00:18 erh Exp $	*/
+/* $NetBSD: nlist_elf32.c,v 1.18 2003/11/12 13:31:07 grant Exp $ */
 
 /*
- * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
- *
+ * Copyright (c) 1996 Christopher G. Demetriou
+ * All rights reserved.
+ * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -13,11 +14,12 @@
  *    documentation and/or other materials provided with the distribution.
  * 3. All advertising materials mentioning features or use of this software
  *    must display the following acknowledgement:
- *      This product includes software developed by Christopher G. Demetriou
- *	for the NetBSD Project.
+ *          This product includes software developed for the
+ *          NetBSD Project.  See http://www.NetBSD.org/ for
+ *          information about NetBSD.
  * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
- *
+ *    derived from this software without specific prior written permission.
+ * 
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
  * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
@@ -28,11 +30,13 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * 
+ * <<Id: LICENSE,v 1.2 2000/06/14 15:57:33 cgd Exp>>
  */
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: nlist_elf32.c,v 1.10 1999/11/04 02:00:18 erh Exp $");
+__RCSID("$NetBSD: nlist_elf32.c,v 1.18 2003/11/12 13:31:07 grant Exp $");
 #endif /* not lint */
 
 /* If not included by nlist_elf64.c, ELFSIZE won't be defined. */
@@ -43,6 +47,9 @@ __RCSID("$NetBSD: nlist_elf32.c,v 1.10 1999/11/04 02:00:18 erh Exp $");
 #include <sys/param.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <sys/sysctl.h>
+#include <sys/ioctl.h>
+#include <sys/ksyms.h>
 
 #include <a.out.h>
 #include <db.h>
@@ -51,6 +58,7 @@ __RCSID("$NetBSD: nlist_elf32.c,v 1.10 1999/11/04 02:00:18 erh Exp $");
 #include <fcntl.h>
 #include <kvm.h>
 #include <limits.h>
+#include <paths.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -89,7 +97,7 @@ ELFNAMEEND(create_knlist)(name, db)
 	struct stat st;
 	struct nlist nbuf;
 	DBT key, data;
-	char *mappedfile, *symname, *fsymname, *tmpcp, *strtab;
+	char *mappedfile, *symname, *nsymname, *fsymname, *tmpcp, *strtab;
 	size_t mappedsize, symnamesize, fsymnamesize;
 	Elf_Ehdr *ehdrp;
 	Elf_Shdr *shdrp, *symshdrp, *symstrshdrp;
@@ -102,7 +110,7 @@ ELFNAMEEND(create_knlist)(name, db)
 	Elf64_Half nshdr;
 #endif
 	unsigned long i, nsyms;
-	int fd, rv;
+	int fd, rv, malloced = 0, isksyms;
 
 	rv = -1;
 #ifdef __GNUC__
@@ -127,15 +135,46 @@ ELFNAMEEND(create_knlist)(name, db)
 	if (st.st_size > SIZE_T_MAX)
 		BAD;
 
+
 	/*
 	 * Map the file in its entirety.
 	 */
+	mappedfile = MAP_FAILED;
 	mappedsize = st.st_size;
-	mappedfile = mmap(NULL, mappedsize, PROT_READ, MAP_PRIVATE|MAP_FILE,
-	    fd, 0);
-	if (mappedfile == (char *)-1)
-		BAD;
+	isksyms = S_ISCHR(st.st_mode) &&
+	    strncmp(name, _PATH_KSYMS, sizeof(_PATH_KSYMS)) == 0;
 
+	if (mappedsize == 0) {
+		/* if it's a character device, stat returns size 0 */
+		if (!isksyms)
+			BAD;
+	} else {
+		mappedfile = mmap(NULL, mappedsize, PROT_READ,
+		    MAP_PRIVATE|MAP_FILE, fd, 0);
+	}
+
+	/*
+	 * If mmap failed, try to read the file instead.
+	 */
+	if (mappedfile == MAP_FAILED) {
+		int allocsiz, readsz;
+
+		if (isksyms != 0) {
+			if (ioctl(fd, KIOCGSIZE, &allocsiz) < 0)
+				BAD;
+			mappedsize = allocsiz;
+		} else
+			allocsiz = mappedsize;
+
+		if ((mappedfile = malloc(mappedsize)) == NULL)
+			BAD;
+		malloced = 1;
+		if ((readsz = read(fd, mappedfile, mappedsize)) < 0)
+			BADUNMAP;
+
+		if (readsz != mappedsize) /* Sanity */
+			BADUNMAP;
+	}
 	/*
 	 * Make sure we can access the executable's header
 	 * directly, and make sure the recognize the executable
@@ -180,6 +219,8 @@ ELFNAMEEND(create_knlist)(name, db)
 		}
 	}
 
+	if (symshdrp == NULL)
+		badfmt("no symbol section header found");
 	if (symshdrp->sh_offset == 0)
 		badfmt("stripped");
 	if (check(symshdrp->sh_offset, symshdrp->sh_size))
@@ -228,14 +269,15 @@ ELFNAMEEND(create_knlist)(name, db)
 		fsymname = &strtab[symp[i].st_name];
 		fsymnamesize = strlen(fsymname) + 1;
 		while (symnamesize < fsymnamesize + 1) {
-			symnamesize *= 2;
-			if ((symname = realloc(symname, symnamesize)) == NULL) {
+			if ((nsymname = realloc(symname, symnamesize * 2)) == NULL) {
 				warn("malloc");
 				punt();
 			}
+			symname = nsymname;
+			symnamesize *= 2;
 		}
-		strcpy(symname, "_");
-		strcat(symname, fsymname);
+		strlcpy(symname, "_", symnamesize);
+		strlcat(symname, fsymname, symnamesize);
 
 		key.data = symname;
 		key.size = strlen((char *)key.data);
@@ -275,7 +317,7 @@ ELFNAMEEND(create_knlist)(name, db)
 
 		/*
 		 * If it's the kernel version string, we've gotta keep
-		 * some extra data around.  Under a seperate key,
+		 * some extra data around.  Under a separate key,
 		 * we enter the first line (i.e. up to the first newline,
 		 * with the newline replaced by a NUL to terminate the
 		 * entered string) of the version string.
@@ -284,9 +326,31 @@ ELFNAMEEND(create_knlist)(name, db)
 			key.data = (u_char *)VRS_KEY;
 			key.size = sizeof(VRS_KEY) - 1;
 			/* Find the version string, relative to its section */
-			data.data = strdup(&mappedfile[nbuf.n_value -
-			    shdrp[symp[i].st_shndx].sh_addr +
-			    shdrp[symp[i].st_shndx].sh_offset]);
+			if (isksyms) {
+				/* reading from /dev/ksyms, use sysctl */
+				size_t sz;
+				int mib[2];
+				char *kv;
+
+				mib[0] = CTL_KERN;
+				mib[1] = KERN_VERSION;
+				if (sysctl(mib, 2, NULL, &sz, NULL, 0) == -1) {
+					warn("sysctl version size");
+					punt();
+				}
+				if ((kv = malloc(sz)) == NULL) {
+					warn("malloc version string");
+					punt();
+				}
+				if (sysctl(mib, 2, kv, &sz, NULL, 0) == -1) {
+					warn("sysctl version string");
+					punt();
+				}
+				data.data = kv;
+			} else
+				data.data = strdup(&mappedfile[nbuf.n_value -
+				    shdrp[symp[i].st_shndx].sh_addr +
+				    shdrp[symp[i].st_shndx].sh_offset]);
 			/* assumes newline terminates version. */
 			if ((tmpcp = strchr(data.data, '\n')) != NULL)
 				*tmpcp = '\0';
@@ -309,7 +373,10 @@ ELFNAMEEND(create_knlist)(name, db)
 	rv = 0;
 
 unmap:
-	munmap(mappedfile, mappedsize);
+	if (malloced)
+		free(mappedfile);
+	else
+		munmap(mappedfile, mappedsize);
 out:
 	return (rv);
 }

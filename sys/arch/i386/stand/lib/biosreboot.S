@@ -1,4 +1,4 @@
-/*	$NetBSD: biosreboot.S,v 1.1 1997/04/13 18:45:37 perry Exp $	*/
+/*	$NetBSD: biosreboot.S,v 1.4 2005/12/11 12:17:48 christos Exp $	*/
 
 /*
  * Copyright (c) 1997
@@ -31,11 +31,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
-	
+
 
 #include <machine/asm.h>
-
-#define	data32	.byte 0x66
 
 	.text
 
@@ -49,13 +47,14 @@ ENTRY(reboot)
 	push	%edi
 
 	call	_C_LABEL(prot_to_real)
+	.code16
 
 	int	$0x19
 
 	/* NOTE: We should never even get past this point. */
-	
-	data32
-	call	_C_LABEL(real_to_prot)
+
+	calll	_C_LABEL(real_to_prot)
+	.code32
 
 	movl	%ebx, %eax
 

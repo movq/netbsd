@@ -1,4 +1,4 @@
-/*	$NetBSD: wwgets.c,v 1.7 1997/11/21 08:37:24 lukem Exp $	*/
+/*	$NetBSD: wwgets.c,v 1.9 2003/08/07 11:17:40 agc Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)wwgets.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: wwgets.c,v 1.7 1997/11/21 08:37:24 lukem Exp $");
+__RCSID("$NetBSD: wwgets.c,v 1.9 2003/08/07 11:17:40 agc Exp $");
 #endif
 #endif /* not lint */
 
@@ -49,13 +45,10 @@ __RCSID("$NetBSD: wwgets.c,v 1.7 1997/11/21 08:37:24 lukem Exp $");
 #include "ww.h"
 #include "char.h"
 
-static void rub __P((int, struct ww *));
+static void rub(int, struct ww *);
 
 void
-wwgets(buf, n, w)
-	char *buf;
-	int n;
-	struct ww *w;
+wwgets(char *buf, int n, struct ww *w)
 {
 	char *p = buf;
 	int c;
@@ -109,9 +102,7 @@ wwgets(buf, n, w)
 }
 
 static void
-rub(c, w)
-	int c;
-	struct ww *w;
+rub(int c, struct ww *w)
 {
 	int i;
 

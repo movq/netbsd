@@ -1,4 +1,4 @@
-.\"	$NetBSD: intro.4,v 1.13 1999/12/15 23:44:52 abs Exp $
+.\" $NetBSD: intro.4,v 1.26 2005/06/20 13:25:24 peter Exp $
 .\"
 .\" Copyright (c) 1997 Jonathan Stone
 .\" Copyright (c) 1994 Christopher G. Demetriou
@@ -14,9 +14,11 @@
 .\"    documentation and/or other materials provided with the distribution.
 .\" 3. All advertising materials mentioning features or use of this software
 .\"    must display the following acknowledgement:
-.\"      This product includes software developed by Christopher G. Demetriou.
+.\"          This product includes software developed for the
+.\"          NetBSD Project.  See http://www.NetBSD.org/ for
+.\"          information about NetBSD.
 .\" 4. The name of the author may not be used to endorse or promote products
-.\"    derived from this software without specific prior written permission
+.\"    derived from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
 .\" IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -29,7 +31,9 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd
+.\" <<Id: LICENSE,v 1.2 2000/06/14 15:57:33 cgd Exp>>
+.\"
+.Dd April 3, 2001
 .Dt INTRO 4 i386
 .Os
 .Sh NAME
@@ -44,7 +48,7 @@ In this part of the manual, the
 section of
 each configurable device gives a sample specification
 for use in constructing a system description for the
-.Xr config 8
+.Xr config 1
 program.
 The
 .Tn DIAGNOSTICS
@@ -109,6 +113,8 @@ communications device interface
 Parallel port device interface
 .It fdc
 Standard NEC 765 floppy disk controller.
+.It mca
+MCA I/O bus.
 .It mem
 Main memory interface
 .It npx
@@ -118,7 +124,7 @@ PCI I/O bus.
 .It eisa
 EISA I/O bus, either as main bus or via PCI-EISA bridge.
 .It isa
-ISA bus and ISA devices, either as main bus or via PCI-ISA brigde.
+ISA bus and ISA devices, either as main bus or via PCI-ISA bridge.
 .It isa
 isa I/O bus.
 .It isapnp
@@ -152,12 +158,9 @@ bus and associated device drivers.
 .\"
 .Pp
 Console devices using ISA, EISA, or PCI video adaptors and standard
-AT or PS/2 keyboards are supported by either the
-.Xr pccons 4
-basic console driver or the
-.Xr vt  4
-multpilexed virtual-console driver and optionally one or more of the following
-pointers:
+AT or PS/2 keyboards are supported by the machine independent
+.Xr wscons 4
+console driver.
 .\"
 .\"
 .\"
@@ -212,9 +215,9 @@ Ethernet interface
 .It el
 3Com 3c501 Ethernet board.
 .It ep
-3Com Etherlink III (3c5x9) Ethernet interface
+3Com EtherLink III (3c5x9) Ethernet interface
 .It ie
-Ethernet driver for the AT&T StarLAN 10, EN100, StarLan Fiber, and 3Com 3c507.
+Ethernet driver for the AT\*[Am]T StarLAN 10, EN100, StarLan Fiber, and 3Com 3c507.
 .It iy
 Ethernet driver for the ISA Intel EtherExpress PR0/10  adaptor.
 .It le
@@ -227,10 +230,10 @@ Ethernet driver for ThunderLAN-based Ethernet adaptor.
 .\"
 .\"
 .Pp
-Serial communcation cards:
+Serial communication cards:
 .Bl -tag -width speaker -offset indent -compact
 .It ast
-multiplexing serial communications card first made by AST. 
+multiplexing serial communications card first made by AST.
 .It boca
 Boca BB100[48] and BB2016 multiplexing serial communications cards.
 NS8250-, NS16450-, and NS16550-based asynchronous serial
@@ -265,7 +268,7 @@ Windows Sound System-compatible sound cards based on the ad1848 chip.
 .\"
 .\"
 .Pp
-Mouse and pointer  devices:
+Mouse and pointer devices:
 .Bl -tag -width speaker -offset indent -compact
 .It joy
 joystick game adaptor
@@ -283,10 +286,9 @@ Serial mice can be configured on any supported serial port.
 .\"
 .\"
 .Sh SEE ALSO
-.Xr intro 4 ,
+.Xr config 1 ,
 .Xr autoconf 4 ,
-.Xr netintro 4 ,
-.Xr config 8 .
+.Xr netintro 4
 .Sh HISTORY
 The
 .Tn i386

@@ -1,4 +1,4 @@
-/*	$NetBSD: iso_snpac.h,v 1.9 1996/02/13 22:10:29 christos Exp $	*/
+/*	$NetBSD: iso_snpac.h,v 1.11 2005/12/11 00:01:36 elad Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -61,6 +57,9 @@ SOFTWARE.
 /*
  * ARGO Project, Computer Sciences Dept., University of Wisconsin - Madison
  */
+
+#ifndef _NETISO_ISO_SNPAC_H_
+#define _NETISO_ISO_SNPAC_H_
 
 #define	MAX_SNPALEN		8	/* curiously equal to sizeof x.121 (
 					 * plus 1 for nibble len) addr */
@@ -107,3 +106,5 @@ struct llinfo_llc {
 
 #define	SIOCSSTYPE 	_IOW('a', 39, struct systype_req)	/* set system type */
 #define	SIOCGSTYPE 	_IOR('a', 40, struct systype_req)	/* get system type */
+
+#endif /* !_NETISO_ISO_SNPAC_H_ */

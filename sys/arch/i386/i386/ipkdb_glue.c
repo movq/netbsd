@@ -1,4 +1,4 @@
-/*	$NetBSD: ipkdb_glue.c,v 1.1 2000/03/22 20:58:27 ws Exp $	*/
+/*	$NetBSD: ipkdb_glue.c,v 1.9 2008/06/24 16:30:09 ad Exp $	*/
 
 /*
  * Copyright (C) 2000 Wolfgang Solfrank.
@@ -30,6 +30,9 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ipkdb_glue.c,v 1.9 2008/06/24 16:30:09 ad Exp $");
+
 #include "opt_ipkdb.h"
 
 #include <sys/param.h>
@@ -42,13 +45,13 @@
 
 int ipkdbregs[NREG];
 
-int ipkdb_trap_glue __P((struct trapframe));
+int ipkdb_trap_glue(struct trapframe);
 
 #ifdef	IPKDB_NE_PCI
 #include <dev/pci/pcivar.h>
 
-int ne_pci_ipkdb_attach __P((struct ipkdb_if *, bus_space_tag_t,		/* XXX */
-			     pci_chipset_tag_t, int, int));
+int ne_pci_ipkdb_attach(struct ipkdb_if *, bus_space_tag_t,		/* XXX */
+			pci_chipset_tag_t, int, int);
 #endif
 
 static char ipkdb_mode = IPKDB_CMD_EXIT;
@@ -69,8 +72,7 @@ void
 ipkdb_trap()
 {
 	ipkdb_mode = IPKDB_CMD_STEP;
-	__asm __volatile ("pushf; pop %%eax; orl %0,%%eax; push %%eax; popf"
-			  :: "i"(PSL_T));
+	x86_write_eflags(x86_read_eflags() | PSL_T));
 }
 
 int
@@ -84,7 +86,7 @@ ipkdb_trap_glue(frame)
 	    || (ipkdb_mode != IPKDB_CMD_STEP && frame.tf_trapno == T_TRCTRAP))
 		return 0;
 
-	__asm __volatile ("cli");		/* Interrupts need to be disabled while in IPKDB */
+	x86_disable_intr();		/* Interrupts need to be disabled while in IPKDB */
 	ipkdbregs[EAX] = frame.tf_eax;
 	ipkdbregs[ECX] = frame.tf_ecx;
 	ipkdbregs[EDX] = frame.tf_edx;
@@ -99,8 +101,8 @@ ipkdb_trap_glue(frame)
 	ipkdbregs[SS] = 0x10;
 	ipkdbregs[DS] = frame.tf_ds;
 	ipkdbregs[ES] = frame.tf_es;
-	__asm ("movl %%fs,%0; movl %%gs,%1"
-	       : "=r"(ipkdbregs[FS]), "=r"(ipkdbregs[GS]));
+	ipkdbregs[FS] = frame.tf_fs;
+	ipkdbregs[GS] = frame.tf_gs;
 
 	switch ((ipkdb_mode = ipkdbcmds())) {
 	case IPKDB_CMD_EXIT:
@@ -123,8 +125,8 @@ ipkdb_trap_glue(frame)
 	frame.tf_cs = ipkdbregs[CS];
 	frame.tf_ds = ipkdbregs[DS];
 	frame.tf_es = ipkdbregs[ES];
-	__asm __volatile ("movl %0,%%fs; movl %1,%%gs"
-			  :: "r"(ipkdbregs[FS]), "r"(ipkdbregs[GS]));
+	frame.tf_fs = ipkdbregs[FS];
+	frame.tf_gs = ipkdbregs[GS];
 
 	return 1;
 }
@@ -133,12 +135,18 @@ int
 ipkdbif_init(kip)
 	struct ipkdb_if *kip;
 {
-#ifdef	IPKDB_NE_PCI
-	pci_mode_detect();						/* XXX */
-	if (ne_pci_ipkdb_attach(kip, I386_BUS_SPACE_IO, NULL, 0, IPKDB_NE_PCISLOT) == 0) {
+#ifdef IPKDB_NE_PCI
+	pci_mode_detect();	/* XXX */
+
+#ifndef IPKDB_NE_PCISLOT
+#error You must specify the IPKDB_NE_PCISLOT to use IPKDB_NE_PCI.
+#endif
+
+	if (ne_pci_ipkdb_attach(kip, X86_BUS_SPACE_IO, NULL, 0,
+	    IPKDB_NE_PCISLOT) == 0) {
 		printf("IPKDB on %s\n", kip->name);
 		return 0;
 	}
-#endif
+#endif /* IPKDB_NE_PCI */
 	return -1;
 }

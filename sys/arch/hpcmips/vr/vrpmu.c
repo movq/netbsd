@@ -1,8 +1,9 @@
-/*	$NetBSD: vrpmu.c,v 1.6 2000/03/14 08:23:24 sato Exp $	*/
+/*	$NetBSD: vrpmu.c,v 1.18 2005/12/11 12:17:35 christos Exp $	*/
 
 /*
  * Copyright (c) 1999 M. Warner Losh.  All rights reserved.
- * Copyright (c) 1999 PocketBSD Project. All rights reserved.
+ * Copyright (c) 2000 SATO Kazumi. All rights reserved.
+ * Copyright (c) 1999,2000 PocketBSD Project. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -26,14 +27,18 @@
  * SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: vrpmu.c,v 1.18 2005/12/11 12:17:35 christos Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
 #include <machine/bus.h>
 #include <machine/config_hook.h>
+#include <machine/debug.h>
 
-#include <hpcmips/vr/vripvar.h>
+#include <hpcmips/vr/vripif.h>
 #include <hpcmips/vr/vrpmuvar.h>
 #include <hpcmips/vr/vrpmureg.h>
 
@@ -42,8 +47,6 @@
 #include <hpcmips/vr/bcuvar.h>
 #include <hpcmips/vr/bcureg.h>
 #endif
-
-int vrpmu_pwsw = 0;
 
 #ifdef VRPMUDEBUG
 #define DEBUG_BOOT	0x1	/* boot time */
@@ -54,7 +57,8 @@ int vrpmu_pwsw = 0;
 #endif /* VRPMUDEBUG_CONF */
 int vrpmudebug = VRPMUDEBUG_CONF;
 #define DPRINTF(flag, arg) if (vrpmudebug&flag) printf arg;
-#define DDUMP_INTR2(flag, arg1, arg2) if (vrpmudebug&flag) vrpmu_dump_intr2(arg1,arg2);
+#define DDUMP_INTR2(flag, arg1, arg2)					\
+	if (vrpmudebug&flag) vrpmu_dump_intr2(arg1,arg2);
 #define DDUMP_REGS(flag, arg) if (vrpmudebug&flag) vrpmu_dump_regs(arg);
 #else /* VRPMUDEBUG */
 #define DPRINTF(flag, arg)
@@ -62,55 +66,51 @@ int vrpmudebug = VRPMUDEBUG_CONF;
 #define DDUMP_REGS(flag, arg)
 #endif /* VRPMUDEBUG */
 
-static int vrpmumatch __P((struct device *, struct cfdata *, void *));
-static void vrpmuattach __P((struct device *, struct device *, void *));
+static int vrpmumatch(struct device *, struct cfdata *, void *);
+static void vrpmuattach(struct device *, struct device *, void *);
 
-static void vrpmu_write __P((struct vrpmu_softc *, int, unsigned short));
-static unsigned short vrpmu_read __P((struct vrpmu_softc *, int));
+static void vrpmu_write(struct vrpmu_softc *, int, unsigned short);
+static unsigned short vrpmu_read(struct vrpmu_softc *, int);
 
-int vrpmu_intr __P((void *));
-void vrpmu_dump_intr __P((void *));
-void vrpmu_dump_intr2 __P((unsigned int, unsigned int));
-void vrpmu_dump_regs __P((void *));
+int vrpmu_intr(void *);
+void vrpmu_dump_intr(void *);
+void vrpmu_dump_intr2(unsigned int, unsigned int);
+void vrpmu_dump_regs(void *);
 
-struct cfattach vrpmu_ca = {
-	sizeof(struct vrpmu_softc), vrpmumatch, vrpmuattach
-};
+CFATTACH_DECL(vrpmu, sizeof(struct vrpmu_softc),
+    vrpmumatch, vrpmuattach, NULL, NULL);
+
+struct vrpmu_softc *this_pmu;
 
 static inline void
-vrpmu_write(sc, port, val)
-	struct vrpmu_softc *sc;
-	int port;
-	unsigned short val;
+vrpmu_write(struct vrpmu_softc *sc, int port, unsigned short val)
 {
+
 	bus_space_write_2(sc->sc_iot, sc->sc_ioh, port, val);
 }
 
 static inline unsigned short
-vrpmu_read(sc, port)
-	struct vrpmu_softc *sc;
-	int port;
+vrpmu_read(struct vrpmu_softc *sc, int port)
 {
-	return bus_space_read_2(sc->sc_iot, sc->sc_ioh, port);
+
+	return (bus_space_read_2(sc->sc_iot, sc->sc_ioh, port));
 }
 
 static int
-vrpmumatch(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+vrpmumatch(struct device *parent, struct cfdata *cf, void *aux)
 {
-	return 1;
+
+	return (1);
 }
 
 static void
-vrpmuattach(parent, self, aux)
-	struct device *parent;
-	struct device *self;
-	void *aux;
+vrpmuattach(struct device *parent, struct device *self, void *aux)
 {
 	struct vrpmu_softc *sc = (struct vrpmu_softc *)self;
 	struct vrip_attach_args *va = aux;
+#if NVRBCU > 0
+	int cpuid;
+#endif /* NVRBCU > 0 */
 
 	bus_space_tag_t iot = va->va_iot;
 	bus_space_handle_t ioh;
@@ -124,8 +124,13 @@ vrpmuattach(parent, self, aux)
 	sc->sc_ioh = ioh;
 
 	if (!(sc->sc_handler = 
-	      vrip_intr_establish(va->va_vc, va->va_intr, IPL_TTY,
-				  vrpmu_intr, sc))) {
+	    vrip_intr_establish(va->va_vc, va->va_unit, 0, IPL_TTY,
+		vrpmu_intr, sc))) {
+		printf (": can't map interrupt line.\n");
+		return;
+	}
+	if (!vrip_intr_establish(va->va_vc, va->va_unit, 1, IPL_TTY,
+	    vrpmu_intr, sc)) {
 		printf (": can't map interrupt line.\n");
 		return;
 	}
@@ -137,6 +142,14 @@ vrpmuattach(parent, self, aux)
 	/* clear interrupt status */
 	vrpmu_write(sc, PMUINT_REG_W, PMUINT_ALL);
 	vrpmu_write(sc, PMUINT2_REG_W, PMUINT2_ALL);
+#if NVRBCU > 0
+	cpuid = vrbcu_vrip_getcpuid();
+	if (cpuid >= BCUREVID_RID_4111){
+		vrpmu_write(sc, PMUWAIT_REG_W, PMUWAIT_DEFAULT);
+	}
+#endif /* NVRBCU */
+
+	this_pmu = sc;
 }
 
 /*
@@ -144,24 +157,22 @@ vrpmuattach(parent, self, aux)
  *
  */
 void
-vrpmu_dump_intr(arg)
-	void *arg;
+vrpmu_dump_intr(void *arg)
 {
         struct vrpmu_softc *sc = arg;
 	unsigned int intstat1;
 	unsigned int intstat2;
+
 	intstat1 = vrpmu_read(sc, PMUINT_REG_W);
 	intstat2 = vrpmu_read(sc, PMUINT2_REG_W);
 	vrpmu_dump_intr2(intstat1, intstat2);
-
 }
 
 /*
  * dump PMU intr status regs
  */
 void
-vrpmu_dump_intr2(intstat1, intstat2)
-unsigned int intstat1, intstat2;
+vrpmu_dump_intr2(unsigned int intstat1, unsigned int intstat2)
 {
 	if (intstat1 & PMUINT_GPIO3)
 		printf("vrpmu: GPIO[3] activation\n");
@@ -205,8 +216,7 @@ unsigned int intstat1, intstat2;
  *
  */
 void
-vrpmu_dump_regs(arg)
-	void *arg;
+vrpmu_dump_regs(void *arg)
 {
         struct vrpmu_softc *sc = arg;
 	unsigned int intstat1;
@@ -221,10 +231,10 @@ vrpmu_dump_regs(arg)
 	/* others? XXXX */
 	reg = vrpmu_read(sc, PMUCNT_REG_W);
 	printf("vrpmu: cnt 0x%x: ", reg);
-	bitdisp16(reg);
+	dbg_bit_print(reg);
 	reg = vrpmu_read(sc, PMUCNT2_REG_W);
 	printf("vrpmu: cnt2 0x%x: ", reg);
-	bitdisp16(reg);
+	dbg_bit_print(reg);
 #if NVRBCU > 0
 	cpuid = vrbcu_vrip_getcpuid();
 	if (cpuid >= BCUREVID_RID_4111){
@@ -247,8 +257,7 @@ vrpmu_dump_regs(arg)
  * with the knowledge that we've gained.  For now we just report it.
  */
 int
-vrpmu_intr(arg)
-	void *arg;
+vrpmu_intr(void *arg)
 {
         struct vrpmu_softc *sc = arg;
 	unsigned int intstat1;
@@ -277,8 +286,8 @@ vrpmu_intr(arg)
 	if (intstat1 & PMUINT_RTC)
 		;
 	if (intstat1 & PMUINT_BATT)
-		;
-
+		config_hook_call(CONFIG_HOOK_PMEVENT,
+		    CONFIG_HOOK_PMEVENT_SUSPENDREQ, NULL);
 	if (intstat1 & PMUINT_TIMOUTRST)
 		;
 	if (intstat1 & PMUINT_RTCRST)
@@ -288,12 +297,18 @@ vrpmu_intr(arg)
 	if (intstat1 & PMUINT_DMSWRST)
 		;
 	if (intstat1 & PMUINT_BATTINTR)
-		;
+		config_hook_call(CONFIG_HOOK_PMEVENT,
+		    CONFIG_HOOK_PMEVENT_SUSPENDREQ, NULL);
 	if (intstat1 & PMUINT_POWERSW) {
-		vrpmu_pwsw = !vrpmu_pwsw;
+		/*
+		 * you can't detect when the button is released
+		 */
 		config_hook_call(CONFIG_HOOK_BUTTONEVENT,
-				 CONFIG_HOOK_BUTTONEVENT_POWER,
-				 (void*)vrpmu_pwsw);
+		    CONFIG_HOOK_BUTTONEVENT_POWER,
+		    (void*)1 /* on */);
+		config_hook_call(CONFIG_HOOK_BUTTONEVENT,
+		    CONFIG_HOOK_BUTTONEVENT_POWER,
+		    (void*)0 /* off */);
 	}
 
 	if (intstat2 & PMUINT_GPIO12)
@@ -305,5 +320,5 @@ vrpmu_intr(arg)
 	if (intstat2 & PMUINT_GPIO9)
 		;
 
-	return 0;
+	return (0);
 }

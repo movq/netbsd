@@ -1,14 +1,15 @@
-# $NetBSD: Makefile,v 1.1 1999/10/18 20:19:39 pk Exp $
+# $NetBSD: Makefile,v 1.6 2001/12/12 00:05:13 tv Exp $
 # Build ping without IPSEC
 
-SRCDIR= ${.CURDIR}/../../../sbin/ping
-PROG=	ping
-MKMAN=	no
-LDADD=	-lm
-CPPFLAGS+= -I${SRCDIR}
+SRCDIR=		${.CURDIR}/../../../sbin/ping
 
-all: ${PROG}
+PROG=		ping
+NOMAN=		# defined
+
+CPPFLAGS+=	-I${SRCDIR}
+DPADD=		${LIBM}
+LDADD=		-lm
 
 .include <bsd.prog.mk>
 
-.PATH:  ${SRCDIR}
+.PATH:		${SRCDIR}

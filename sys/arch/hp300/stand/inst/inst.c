@@ -1,4 +1,4 @@
-/*	$NetBSD: inst.c,v 1.6 1997/12/29 07:15:10 scottr Exp $	*/
+/*	$NetBSD: inst.c,v 1.18 2008/07/16 13:44:51 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -77,9 +70,9 @@
 #include <sys/param.h>
 #include <sys/reboot.h>
 #include <sys/disklabel.h>
-#include <a.out.h>
 
 #include <lib/libsa/stand.h>
+#include <lib/libkern/libkern.h>
 
 #include <hp300/stand/common/samachdep.h>
 
@@ -92,22 +85,23 @@ extern	int netio_ask;
 
 char	*kernel_name = "/netbsd";
 
-void	dsklabel __P((void));
-void	miniroot __P((void));
-void	bootmini __P((void));
-void	resetsys __P((void));
-void	gethelp __P((void));
-int	opendisk __P((char *, char *, int, char, int *));
-void	disklabel_edit __P((struct disklabel *));
-void	disklabel_show __P((struct disklabel *));
-int	disklabel_write __P((char *, int, struct open_file *));
-void	get_fstype __P((struct disklabel *lp, int));
-int	a2int __P((char *));
+void	main(void);
+void	dsklabel(void);
+void	miniroot(void);
+void	bootmini(void);
+void	resetsys(void);
+void	gethelp(void);
+int	opendisk(char *, char *, int, char, int *);
+void	disklabel_edit(struct disklabel *);
+void	disklabel_show(struct disklabel *);
+int	disklabel_write(char *, int, struct open_file *);
+void	get_fstype(struct disklabel *lp, int);
+int	a2int(char *);
 
 struct	inst_command {
 	char	*ic_cmd;		/* command name */
 	char	*ic_desc;		/* command description */
-	void	(*ic_func) __P((void));	/* handling function */
+	void	(*ic_func)(void);	/* handling function */
 } inst_commands[] = {
 	{ "disklabel",	"place partition map on disk",	dsklabel },
 	{ "miniroot",	"place miniroot on disk",	miniroot },
@@ -117,9 +111,10 @@ struct	inst_command {
 };
 #define NCMDS	(sizeof(inst_commands) / sizeof(inst_commands[0]))
 
-main()
+void
+main(void)
 {
-	int i, currname = 0;
+	int i;
 
 	/*
 	 * We want netopen() to ask for IP address, etc, rather
@@ -128,14 +123,14 @@ main()
 	netio_ask = 1;
 
 	printf("\n");
-	printf(">> %s, Revision %s\n", bootprog_name, bootprog_rev);
-	printf(">> (%s, %s)\n", bootprog_maker, bootprog_date);
+	printf(">> %s, Revision %s (from NetBSD %s)\n",
+	    bootprog_name, bootprog_rev, bootprog_kernrev);
 	printf(">> HP 9000/%s SPU\n", getmachineid());
 	gethelp();
 
 	for (;;) {
 		printf("sys_inst> ");
-		bzero(line, sizeof(line));
+		memset(line, 0, sizeof(line));
 		gets(line);
 		if (line[0] == '\n' || line[0] == '\0')
 			continue;
@@ -153,7 +148,7 @@ main()
 }
 
 void
-gethelp()
+gethelp(void)
 {
 	int i;
 
@@ -168,7 +163,7 @@ gethelp()
  * Note, this assumes 512 byte sectors.
  */
 void
-dsklabel()
+dsklabel(void)
 {
 	struct disklabel *lp;
 	struct open_file *disk_ofp;
@@ -177,12 +172,12 @@ dsklabel()
 	char block[DEV_BSIZE], diskname[64];
 	extern struct open_file files[];
 
-	printf("
-You will be asked several questions about your disk, most of which
-require prior knowledge of the disk's geometry.  There is no easy way
-for the system to provide this information for you.  If you do not have
-this information, please consult your disk's manual or another
-informative source.\n\n");
+	printf(
+"You will be asked several questions about your disk, most of which\n"
+"require prior knowledge of the disk's geometry.  There is no easy way\n"
+"for the system to provide this information for you.  If you do not have\n"
+"this information, please consult your disk's manual or another\n"
+"informative source.\n\n");
 
 	/* Error message printed by opendisk() */
 	if (opendisk("Disk to label?", diskname, sizeof(diskname),
@@ -191,19 +186,19 @@ informative source.\n\n");
 
 	disk_ofp = &files[dfd];
 
-	bzero(block, sizeof(block));
-	if (error = (*disk_ofp->f_dev->dv_strategy)(disk_ofp->f_devdata,
-	    F_READ, LABELSECTOR, sizeof(block), block, &xfersize)) {
+	memset(block, 0, sizeof(block));
+	if ((error = (*disk_ofp->f_dev->dv_strategy)(disk_ofp->f_devdata,
+	    F_READ, LABELSECTOR, sizeof(block), block, &xfersize)) != 0) {
 		printf("cannot read disk %s, errno = %d\n", diskname, error);
 		return;
 	}
 
-	printf("Sucessfully read %d bytes from %s\n", xfersize, diskname);
+	printf("Successfully read %d bytes from %s\n", xfersize, diskname);
 
 	lp = (struct disklabel *)((void *)(&block[LABELOFFSET]));
 
  disklabel_loop:
-	bzero(line, sizeof(line));
+	memset(line, 0, sizeof(line));
 	printf("(z)ap, (e)dit, (s)how, (w)rite, (d)one > ");
 	gets(line);
 	if (line[0] == '\n' || line[0] == '\0')
@@ -213,7 +208,7 @@ informative source.\n\n");
 	case 'z':
 	case 'Z': {
 		char zap[DEV_BSIZE];
-		bzero(zap, sizeof(zap));
+		memset(zap, 0, sizeof(zap));
 		(void)(*disk_ofp->f_dev->dv_strategy)(disk_ofp->f_devdata,
 		    F_WRITE, LABELSECTOR, sizeof(zap), zap, &xfersize);
 		}
@@ -238,7 +233,7 @@ informative source.\n\n");
 		if (disklabel_write(block, sizeof(block), disk_ofp))
 			goto out;
 		else
-			printf("Sucessfully wrote label to %s\n", diskname);
+			printf("Successfully wrote label to %s\n", diskname);
 		break;
 
 	case 'd':
@@ -247,7 +242,7 @@ informative source.\n\n");
 		/* NOTREACHED */
 
 	default:
-		printf("unkown command: %s\n", line);
+		printf("unknown command: %s\n", line);
 	}
 
 	goto disklabel_loop;
@@ -263,28 +258,28 @@ informative source.\n\n");
 
 #define GETNUM(out, num)						\
 	printf((out), (num));						\
-	bzero(line, sizeof(line));					\
+	memset(line, 0, sizeof(line));					\
 	gets(line);							\
 	if (line[0])							\
 		(num) = atoi(line);
 
 #define GETNUM2(out, num1, num2)					\
 	printf((out), (num1), (num2));					\
-	bzero(line, sizeof(line));					\
+	memset(line, 0, sizeof(line));					\
 	gets(line);							\
 	if (line[0])							\
 		(num2) = atoi(line);
 
 #define GETSTR(out, str)						\
 	printf((out), (str));						\
-	bzero(line, sizeof(line));					\
+	memset(line, 0, sizeof(line));					\
 	gets(line);							\
 	if (line[0])							\
 		strcpy((str), line);
 
 #define FLAGS(out, flag)						\
 	printf((out), lp->d_flags & (flag) ? 'y' : 'n');		\
-	bzero(line, sizeof(line));					\
+	memset(line, 0, sizeof(line));					\
 	gets(line);							\
 	if (line[0] == 'y' || line[0] == 'Y')				\
 		lp->d_flags |= (flag);					\
@@ -293,7 +288,7 @@ informative source.\n\n");
 
 struct fsname_to_type {
 	const char *name;
-	u_int8_t type;
+	uint8_t type;
 } n_to_t[] = {
 	{ "unused",	FS_UNUSED },
 	{ "ffs",	FS_BSDFFS },
@@ -303,9 +298,7 @@ struct fsname_to_type {
 };
 
 void
-get_fstype(lp, partno)
-	struct disklabel *lp;
-	int partno;
+get_fstype(struct disklabel *lp, int partno)
 {
 	static int blocksize = 8192;	/* XXX */
 	struct partition *pp = &lp->d_partitions[partno];
@@ -385,8 +378,7 @@ get_fstype(lp, partno)
 }
 
 void
-disklabel_edit(lp)
-	struct disklabel *lp;
+disklabel_edit(struct disklabel *lp)
 {
 	int i;
 
@@ -429,8 +421,8 @@ disklabel_edit(lp)
 		lp->d_secperunit = lp->d_ncylinders * lp->d_secpercyl;
 	GETNUM("Total sectors? [%d] ", lp->d_secperunit);
 
-	printf("
-Enter partition table.  Note, sizes and offsets are in sectors.\n\n");
+	printf(
+"Enter partition table.  Note, sizes and offsets are in sectors.\n\n");
 
 	lp->d_npartitions = MAXPARTITIONS;
 	for (i = 0; i < lp->d_npartitions; ++i) {
@@ -449,10 +441,9 @@ Enter partition table.  Note, sizes and offsets are in sectors.\n\n");
 }
 
 void
-disklabel_show(lp)
-	struct disklabel *lp;
+disklabel_show(struct disklabel *lp)
 {
-	int i, npart;
+	int i;
 	struct partition *pp;
 
 	/*
@@ -501,35 +492,28 @@ disklabel_show(lp)
 }
 
 int
-disklabel_write(block, len, ofp)
-	char *block;
-	int len;
-	struct open_file *ofp;
+disklabel_write(char *block, int len, struct open_file *ofp)
 {
 	int error = 0;
 	size_t xfersize;
 
-	if (error = (*ofp->f_dev->dv_strategy)(ofp->f_devdata, F_WRITE,
-	    LABELSECTOR, len, block, &xfersize))
+	if ((error = (*ofp->f_dev->dv_strategy)(ofp->f_devdata, F_WRITE,
+	    LABELSECTOR, len, block, &xfersize)) != 0)
 		printf("cannot write disklabel, errno = %d\n", error);
 
 	return (error);
 }
 
 int
-opendisk(question, diskname, len, partition, fdp)
-	char *question, *diskname;
-	int len;
-	char partition;
-	int *fdp;
+opendisk(char *question, char *diskname, int len, char partition, int *fdp)
 {
-	char fulldiskname[64], *filename;
-	int i, error = 0;
+	char fulldiskname[64];
+	int i;
 
  getdiskname:
 	printf("%s ", question);
-	bzero(diskname, len);
-	bzero(fulldiskname, sizeof(fulldiskname));
+	memset(diskname, 0, len);
+	memset(fulldiskname, 0, sizeof(fulldiskname));
 	gets(diskname);
 	if (diskname[0] == '\n' || diskname[0] == '\0')
 		goto getdiskname;
@@ -538,7 +522,7 @@ opendisk(question, diskname, len, partition, fdp)
 	 * devopen() is picky.  Make sure it gets the sort of string it
 	 * wants.
 	 */
-	bcopy(diskname, fulldiskname,
+	memcpy(fulldiskname, diskname,
 	    len < sizeof(fulldiskname) ? len : sizeof(fulldiskname));
 	for (i = 0; fulldiskname[i + 1] != '\0'; ++i)
 		/* Nothing. */ ;
@@ -553,10 +537,10 @@ opendisk(question, diskname, len, partition, fdp)
 	 */
 	if ((*fdp = open(fulldiskname, 1)) < 0) {
 		printf("cannot open %s\n", diskname);
-		return (1);
+		return 1;
 	}
 
-	return (0);
+	return 0;
 }
 
 /*
@@ -564,7 +548,7 @@ opendisk(question, diskname, len, partition, fdp)
  * of the specified disk.  Note, this assumes 512 byte sectors.
  */
 void
-miniroot()
+miniroot(void)
 {
 	int sfd, dfd, i, nblks;
 	char diskname[64], minirootname[128];
@@ -585,7 +569,7 @@ miniroot()
 
  getsource:
 	printf("Source? (N)FS, (t)ape, (d)one > ");
-	bzero(line, sizeof(line));
+	memset(line, 0, sizeof(line));
 	gets(line);
 	if (line[0] == '\0')
 		goto getsource;
@@ -595,8 +579,8 @@ miniroot()
 	case 'N':
  name_of_nfs_miniroot:
 		printf("Name of miniroot file? ");
-		bzero(line, sizeof(line));
-		bzero(minirootname, sizeof(minirootname));
+		memset(line, 0, sizeof(line));
+		memset(minirootname, 0, sizeof(minirootname));
 		gets(line);
 		if (line[0] == '\0')
 			goto name_of_nfs_miniroot;
@@ -626,9 +610,9 @@ miniroot()
 	case 'T':
  name_of_tape_miniroot:
 		printf("Which tape device? ");
-		bzero(line, sizeof(line));
-		bzero(minirootname, sizeof(minirootname));
-		bzero(tapename, sizeof(tapename));
+		memset(line, 0, sizeof(line));
+		memset(minirootname, 0, sizeof(minirootname));
+		memset(tapename, 0, sizeof(tapename));
 		gets(line);
 		if (line[0] == '\0')
 			goto name_of_tape_miniroot;
@@ -636,7 +620,7 @@ miniroot()
 		strcat(tapename, line);
 
 		printf("File number (first == 1)? ");
-		bzero(line, sizeof(line));
+		memset(line, 0, sizeof(line));
 		gets(line);
 		fileno = a2int(line);
 		if (fileno < 1 || fileno > 8) {
@@ -658,7 +642,7 @@ miniroot()
 
 		ignoreshread = 0;
 		printf("Copy how many %d byte blocks? ", DEV_BSIZE);
-		bzero(line, sizeof(line));
+		memset(line, 0, sizeof(line));
 		gets(line);
 		nblks = a2int(line);
 		if (nblks < 0) {
@@ -730,15 +714,15 @@ miniroot()
  * Boot the kernel from the miniroot image into single-user.
  */
 void
-bootmini()
+bootmini(void)
 {
 	char diskname[64], bootname[64];
 	int i;
 
  getdiskname:
 	printf("Disk to boot from? ");
-	bzero(diskname, sizeof(diskname));
-	bzero(bootname, sizeof(bootname));
+	memset(diskname, 0, sizeof(diskname));
+	memset(bootname, 0, sizeof(bootname));
 	gets(diskname);
 	if (diskname[0] == '\n' || diskname[0] == '\0')
 		goto getdiskname;
@@ -760,7 +744,7 @@ bootmini()
 	howto = RB_SINGLE;	/* _Always_ */
 
 	printf("booting: %s -s\n", bootname);
-	exec(bootname, lowram, howto);
+	exec_hp300(bootname, (u_long)lowram, howto);
 	printf("boot: %s\n", strerror(errno));
 }
 
@@ -768,20 +752,19 @@ bootmini()
  * Reset the system.
  */
 void
-resetsys()
+resetsys(void)
 {
 
 	call_req_reboot();
 	printf("panic: can't reboot, halting\n");
-	asm("stop #0x2700");
+	__asm("stop #0x2700");
 }
 
 /*
  * XXX Should have a generic atoi for libkern/libsa.
  */
 int
-a2int(cp)
-	char *cp;
+a2int(char *cp)
 {
 	int i = 0;
 

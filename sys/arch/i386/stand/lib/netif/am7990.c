@@ -1,4 +1,4 @@
-/*	$NetBSD: am7990.c,v 1.3 1997/06/13 13:45:50 drochner Exp $	*/
+/*	$NetBSD: am7990.c,v 1.6 2007/03/04 05:59:59 christos Exp $	*/
 
 /* mostly from netbsd:sys/arch/i386/netboot/ne2100.c
  memory allocation now 1 chunk, added deallocation
@@ -28,7 +28,7 @@ extern u_char eth_myaddr[6];
 
 extern int lance_rap, lance_rdp;
 
-static caddr_t dmamem;
+static void *dmamem;
 
 #define LA(adr) vtophys(adr)
 
@@ -95,7 +95,7 @@ void am7990_init()
     am7990_stop();
 
     /* fill lance initialization block */
-    bzero(initblock, sizeof(initblock_t));
+    memset(initblock, 0, sizeof(initblock_t));
 
     /* set my ethernet address */
     for(i=0; i<6; i++)
@@ -124,7 +124,7 @@ void am7990_init()
     }
 
     /* zero transmit ring */
-    bzero(tmd, sizeof(tmde_t));
+    memset(tmd, 0, sizeof(tmde_t));
 
     /* give lance the init block */
     addr = LA(initblock);
@@ -161,7 +161,7 @@ void EtherStop()
 {
     am7990_stop();
 
-    free(dmamem, sizeof(initblock_t) +
+    dealloc(dmamem, sizeof(initblock_t) +
 	 sizeof(tmde_t) + NRCVRING * sizeof(rmde_t) + 4);
 }
 
@@ -263,7 +263,7 @@ int maxlen;
     }
 
     if(len <= maxlen)
-      bcopy(rbuffer[next_rmd], pkt, len);
+      memcpy(pkt, rbuffer[next_rmd], len);
     else
       len = 0;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: fpu_implode.c,v 1.4 1999/05/30 20:17:48 briggs Exp $ */
+/*	$NetBSD: fpu_implode.c,v 1.9 2005/12/11 12:17:52 christos Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -21,11 +21,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -49,10 +45,13 @@
  * `packed binary' format.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: fpu_implode.c,v 1.9 2005/12/11 12:17:52 christos Exp $");
+
 #include <sys/types.h>
 #include <sys/systm.h>
 
-#include "ieee.h"
+#include <machine/ieee.h>
 #include <machine/reg.h>
 
 #include "fpu_emulate.h"
@@ -77,7 +76,7 @@ static u_int	fpu_ftox __P((struct fpemu *fe, struct fpn *fp, u_int *));
  * responsibility to fix this if necessary.
  */
 int
-round(register struct fpemu *fe, register struct fpn *fp)
+fpu_round(register struct fpemu *fe, register struct fpn *fp)
 {
 	register u_int m0, m1, m2;
 	register int gr, s;
@@ -207,7 +206,7 @@ fpu_ftoi(fe, fp)
 		 * into last mantissa word (this will not exceed 0xffffffff),
 		 * shifting any guard and round bits out into the sticky
 		 * bit.  Then ``round'' towards zero, i.e., just set an
-		 * inexact exception if sticky is set (see round()).
+		 * inexact exception if sticky is set (see fpu_round()).
 		 * If the result is > 0x80000000, or is positive and equals
 		 * 0x80000000, overflow; otherwise the last fraction word
 		 * is the result.
@@ -218,7 +217,7 @@ fpu_ftoi(fe, fp)
 		if (fpu_shr(fp, FP_NMANT - 1 - FP_NG - exp) != 0)
 			/* m68881/2 do not underflow when
 			   converting to integer */;
-		round(fe, fp);
+		fpu_round(fe, fp);
 		i = fp->fp_mant[2];
 		if (i >= ((u_int)0x80000000 + sign))
 			break;
@@ -288,7 +287,7 @@ fpu_ftos(fe, fp)
 		fe->fe_fpsr |= FPSR_UNFL;
 		/* -NG for g,r; -SNG_FRACBITS-exp for fraction */
 		(void) fpu_shr(fp, FP_NMANT - FP_NG - SNG_FRACBITS - exp);
-		if (round(fe, fp) && fp->fp_mant[2] == SNG_EXP(1))
+		if (fpu_round(fe, fp) && fp->fp_mant[2] == SNG_EXP(1))
 			return (sign | SNG_EXP(1) | 0);
 		if (fe->fe_fpsr & FPSR_INEX2)
 			fe->fe_fpsr |= FPSR_UNFL
@@ -301,7 +300,7 @@ fpu_ftos(fe, fp)
 	if ((fp->fp_mant[2] & SNG_EXP(1 << FP_NG)) == 0)
 		panic("fpu_ftos");
 #endif
-	if (round(fe, fp) && fp->fp_mant[2] == SNG_EXP(2))
+	if (fpu_round(fe, fp) && fp->fp_mant[2] == SNG_EXP(2))
 		exp++;
 	if (exp >= SNG_EXP_INFNAN) {
 		/* overflow to inf or to max single */
@@ -351,7 +350,7 @@ fpu_ftod(fe, fp, res)
 	if ((exp = fp->fp_exp + DBL_EXP_BIAS) <= 0) {
 		fe->fe_fpsr |= FPSR_UNFL;
 		(void) fpu_shr(fp, FP_NMANT - FP_NG - DBL_FRACBITS - exp);
-		if (round(fe, fp) && fp->fp_mant[1] == DBL_EXP(1)) {
+		if (fpu_round(fe, fp) && fp->fp_mant[1] == DBL_EXP(1)) {
 			res[1] = 0;
 			return (sign | DBL_EXP(1) | 0);
 		}
@@ -362,7 +361,7 @@ fpu_ftod(fe, fp, res)
 		goto done;
 	}
 	(void) fpu_shr(fp, FP_NMANT - FP_NG - 1 - DBL_FRACBITS);
-	if (round(fe, fp) && fp->fp_mant[1] == DBL_EXP(2))
+	if (fpu_round(fe, fp) && fp->fp_mant[1] == DBL_EXP(2))
 		exp++;
 	if (exp >= DBL_EXP_INFNAN) {
 		fe->fe_fpsr |= FPSR_OPERR | FPSR_INEX2 | FPSR_OVFL;
@@ -423,7 +422,7 @@ fpu_ftox(fe, fp, res)
 		/* I'm not sure about this <=... exp==0 doesn't mean
 		   it's a denormal in extended format */
 		(void) fpu_shr(fp, FP_NMANT - FP_NG - EXT_FRACBITS - exp);
-		if (round(fe, fp) && fp->fp_mant[1] == EXT_EXPLICIT1) {
+		if (fpu_round(fe, fp) && fp->fp_mant[1] == EXT_EXPLICIT1) {
 			res[1] = res[2] = 0;
 			return (sign | EXT_EXP(1) | 0);
 		}
@@ -436,7 +435,7 @@ fpu_ftox(fe, fp, res)
 #if (FP_NMANT - FP_NG - EXT_FRACBITS) > 0
 	(void) fpu_shr(fp, FP_NMANT - FP_NG - EXT_FRACBITS);
 #endif
-	if (round(fe, fp) && fp->fp_mant[0] == EXT_EXPLICIT2)
+	if (fpu_round(fe, fp) && fp->fp_mant[0] == EXT_EXPLICIT2)
 		exp++;
 	if (exp >= EXT_EXP_INFNAN) {
 		fe->fe_fpsr |= FPSR_OPERR | FPSR_INEX2 | FPSR_OVFL;

@@ -1,12 +1,69 @@
-/*	$NetBSD: hack.end.c,v 1.4 1997/10/19 16:57:55 christos Exp $	*/
+/*	$NetBSD: hack.end.c,v 1.9.14.1 2009/06/29 23:22:24 snj Exp $	*/
 
 /*
- * Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1985.
+ * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
+ * Amsterdam
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met:
+ *
+ * - Redistributions of source code must retain the above copyright notice,
+ * this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above copyright
+ * notice, this list of conditions and the following disclaimer in the
+ * documentation and/or other materials provided with the distribution.
+ *
+ * - Neither the name of the Stichting Centrum voor Wiskunde en
+ * Informatica, nor the names of its contributors may be used to endorse or
+ * promote products derived from this software without specific prior
+ * written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
+ * IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+ * PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER
+ * OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+ * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
+ * Copyright (c) 1982 Jay Fenlason <hack@gnu.org>
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+ * AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL
+ * THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.end.c,v 1.4 1997/10/19 16:57:55 christos Exp $");
+__RCSID("$NetBSD: hack.end.c,v 1.9.14.1 2009/06/29 23:22:24 snj Exp $");
 #endif				/* not lint */
 
 #include <signal.h>
@@ -14,7 +71,7 @@ __RCSID("$NetBSD: hack.end.c,v 1.4 1997/10/19 16:57:55 christos Exp $");
 #include <stdlib.h>
 #include "hack.h"
 #include "extern.h"
-#define	Sprintf	(void) sprintf
+#define	Snprintf	(void) snprintf
 
 xchar           maxdlevel = 1;
 
@@ -29,7 +86,7 @@ dodone()
 /*ARGSUSED*/
 void
 done1(n)
-	int n;
+	int n __unused;
 {
 	(void) signal(SIGINT, SIG_IGN);
 	pline("Really quit?");
@@ -51,7 +108,7 @@ int             done_hup;
 /*ARGSUSED*/
 void
 done_intr(n)
-	int n;
+	int n __unused;
 {
 	done_stopprint++;
 	(void) signal(SIGINT, SIG_IGN);
@@ -74,14 +131,15 @@ done_in_by(mtmp)
 	static char     buf[BUFSZ];
 	pline("You die ...");
 	if (mtmp->data->mlet == ' ') {
-		Sprintf(buf, "the ghost of %s", (char *) mtmp->mextra);
+		Snprintf(buf, sizeof(buf),
+			"the ghost of %s", (char *) mtmp->mextra);
 		killer = buf;
 	} else if (mtmp->mnamelth) {
-		Sprintf(buf, "%s called %s",
+		Snprintf(buf, sizeof(buf), "%s called %s",
 			mtmp->data->mname, NAME(mtmp));
 		killer = buf;
 	} else if (mtmp->minvis) {
-		Sprintf(buf, "invisible %s", mtmp->data->mname);
+		Snprintf(buf, sizeof(buf), "invisible %s", mtmp->data->mname);
 		killer = buf;
 	} else
 		killer = mtmp->data->mname;
@@ -95,7 +153,7 @@ done_in_by(mtmp)
 /* Be careful not to call panic from here! */
 void
 done(st1)
-	char           *st1;
+	const char           *st1;
 {
 
 #ifdef WIZARD
@@ -265,8 +323,8 @@ topten()
 	int             rank, rank0 = -1, rank1 = 0;
 	int             occ_cnt = PERSMAX;
 	struct toptenentry *t0, *t1, *tprev;
-	char           *recfile = RECORD;
-	char           *reclock = "record_lock";
+	const char     *recfile = RECORD;
+	const char     *reclock = "record_lock";
 	int             sleepct = 300;
 	FILE           *rfile;
 	int 		flg = 0;
@@ -391,8 +449,8 @@ topten()
 				t1->plchar, t1->sex, t1->name, t1->death);
 		if (done_stopprint)
 			continue;
-		if (rank > flags.end_top &&
-		    (rank < rank0 - flags.end_around || rank > rank0 + flags.end_around)
+		if (rank > (int)flags.end_top &&
+		    (rank < rank0 - (int)flags.end_around || rank > rank0 + (int)flags.end_around)
 		    && (!flags.end_own ||
 #ifdef PERS_IS_UID
 			t1->uid != t0->uid))
@@ -400,8 +458,8 @@ topten()
 			strncmp(t1->name, t0->name, NAMSZ)))
 #endif	/* PERS_IS_UID */
 			continue;
-		if (rank == rank0 - flags.end_around &&
-		    rank0 > flags.end_top + flags.end_around + 1 &&
+		if (rank == rank0 - (int)flags.end_around &&
+		    rank0 > (int)flags.end_top + (int)flags.end_around + 1 &&
 		    !flags.end_own)
 			(void) putchar('\n');
 		if (rank != rank0)
@@ -420,6 +478,7 @@ topten()
 		if (!done_stopprint)
 			(void) outentry(0, t0, 1);
 	(void) fclose(rfile);
+	free(t0);
 unlock:
 	(void) unlink(reclock);
 }
@@ -437,85 +496,120 @@ outheader()
 	puts(linebuf);
 }
 
-/* so>0: standout line; so=0: ordinary line; so<0: no output, return lth */
+/* so>0: standout line; so=0: ordinary line; so<0: no output, return length */
 int
-outentry(rank, t1, so)
-	struct toptenentry *t1;
+outentry(int rank, struct toptenentry *t1, int so)
 {
-	boolean         quit = FALSE, killed = FALSE, starv = FALSE;
+	boolean         quit = FALSE, gotkilled = FALSE, starv = FALSE;
 	char            linebuf[BUFSZ];
-	linebuf[0] = 0;
+	size_t pos;
+
+	linebuf[0] = '\0';
+	pos = 0;
+
 	if (rank)
-		Sprintf(eos(linebuf), "%3d", rank);
+		Snprintf(linebuf+pos, sizeof(linebuf)-pos, "%3d", rank);
 	else
-		Sprintf(eos(linebuf), "   ");
-	Sprintf(eos(linebuf), " %6ld %8s", t1->points, t1->name);
+		Snprintf(linebuf+pos, sizeof(linebuf)-pos, "   ");
+	pos = strlen(linebuf);
+
+	Snprintf(linebuf+pos, sizeof(linebuf)-pos, " %6ld %8s",
+		t1->points, t1->name);
+	pos = strlen(linebuf);
+
 	if (t1->plchar == 'X')
-		Sprintf(eos(linebuf), " ");
+		Snprintf(linebuf+pos, sizeof(linebuf)-pos, " ");
 	else
-		Sprintf(eos(linebuf), "-%c ", t1->plchar);
+		Snprintf(linebuf+pos, sizeof(linebuf)-pos, "-%c ", t1->plchar);
+	pos = strlen(linebuf);
+
 	if (!strncmp("escaped", t1->death, 7)) {
 		if (!strcmp(" (with amulet)", t1->death + 7))
-			Sprintf(eos(linebuf), "escaped the dungeon with amulet");
+			Snprintf(linebuf+pos, sizeof(linebuf)-pos,
+				"escaped the dungeon with amulet");
 		else
-			Sprintf(eos(linebuf), "escaped the dungeon [max level %d]",
+			Snprintf(linebuf+pos, sizeof(linebuf)-pos,
+				"escaped the dungeon [max level %d]",
 				t1->maxlvl);
+		pos = strlen(linebuf);
 	} else {
 		if (!strncmp(t1->death, "quit", 4)) {
 			quit = TRUE;
 			if (t1->maxhp < 3 * t1->hp && t1->maxlvl < 4)
-				Sprintf(eos(linebuf), "cravenly gave up");
+				Snprintf(linebuf+pos, sizeof(linebuf)-pos,
+					"cravenly gave up");
 			else
-				Sprintf(eos(linebuf), "quit");
-		} else if (!strcmp(t1->death, "choked"))
-			Sprintf(eos(linebuf), "choked on %s food",
+				Snprintf(linebuf+pos, sizeof(linebuf)-pos,
+					"quit");
+		} else if (!strcmp(t1->death, "choked")) {
+			Snprintf(linebuf+pos, sizeof(linebuf)-pos,
+				"choked on %s food",
 				(t1->sex == 'F') ? "her" : "his");
-		else if (!strncmp(t1->death, "starv", 5))
-			Sprintf(eos(linebuf), "starved to death"), starv = TRUE;
-		else
-			Sprintf(eos(linebuf), "was killed"), killed = TRUE;
-		Sprintf(eos(linebuf), " on%s level %d",
-			(killed || starv) ? "" : " dungeon", t1->level);
+		} else if (!strncmp(t1->death, "starv", 5)) {
+			Snprintf(linebuf+pos, sizeof(linebuf)-pos,
+				"starved to death");
+			starv = TRUE;
+		} else {
+			Snprintf(linebuf+pos, sizeof(linebuf)-pos,
+				"was killed");
+			gotkilled = TRUE;
+		}
+		pos = strlen(linebuf);
+
+		Snprintf(linebuf+pos, sizeof(linebuf)-pos, " on%s level %d",
+			(gotkilled || starv) ? "" : " dungeon", t1->level);
+		pos = strlen(linebuf);
+
 		if (t1->maxlvl != t1->level)
-			Sprintf(eos(linebuf), " [max %d]", t1->maxlvl);
+			Snprintf(linebuf+pos, sizeof(linebuf)-pos,
+				" [max %d]", t1->maxlvl);
+		pos = strlen(linebuf);
+
 		if (quit && t1->death[4])
-			Sprintf(eos(linebuf), t1->death + 4);
+			Snprintf(linebuf+pos, sizeof(linebuf)-pos,
+				 "%s", t1->death + 4);
+		pos = strlen(linebuf);
 	}
-	if (killed)
-		Sprintf(eos(linebuf), " by %s%s",
+	if (gotkilled) {
+		Snprintf(linebuf+pos, sizeof(linebuf)-pos, " by %s%s",
 			(!strncmp(t1->death, "trick", 5) || !strncmp(t1->death, "the ", 4))
 			? "" :
 			strchr(vowels, *t1->death) ? "an " : "a ",
 			t1->death);
-	Sprintf(eos(linebuf), ".");
+		pos = strlen(linebuf);
+	}
+	strlcat(linebuf, ".", sizeof(linebuf));
+	pos = strlen(linebuf);
 	if (t1->maxhp) {
-		char           *bp = eos(linebuf);
 		char            hpbuf[10];
-		int             hppos;
-		Sprintf(hpbuf, (t1->hp > 0) ? itoa(t1->hp) : "-");
+		unsigned        hppos;
+
+		strlcpy(hpbuf, (t1->hp > 0) ? itoa(t1->hp) : "-", sizeof(hpbuf));
 		hppos = COLNO - 7 - strlen(hpbuf);
-		if (bp <= linebuf + hppos) {
-			while (bp < linebuf + hppos)
-				*bp++ = ' ';
-			(void) strcpy(bp, hpbuf);
-			Sprintf(eos(bp), " [%d]", t1->maxhp);
+		if (pos <= hppos) {
+			while (pos < hppos)
+				linebuf[pos++] = ' ';
+			(void) strlcpy(linebuf+pos, hpbuf, sizeof(linebuf)-pos);
+			pos = strlen(linebuf);
+			Snprintf(linebuf+pos, sizeof(linebuf)-pos,
+				" [%d]", t1->maxhp);
+			pos = strlen(linebuf);
 		}
 	}
 	if (so == 0)
 		puts(linebuf);
 	else if (so > 0) {
-		char           *bp = eos(linebuf);
 		if (so >= COLNO)
 			so = COLNO - 1;
-		while (bp < linebuf + so)
-			*bp++ = ' ';
-		*bp = 0;
+		while (pos < (unsigned)so)
+			linebuf[pos++] = ' ';
+		linebuf[pos] = '\0';
 		standoutbeg();
 		fputs(linebuf, stdout);
 		standoutend();
 		(void) putchar('\n');
 	}
-	return (strlen(linebuf));
+	return /*(strlen(linebuf))*/ pos;
 }
 
 char           *
@@ -523,17 +617,18 @@ itoa(a)
 	int             a;
 {
 	static char     buf[12];
-	Sprintf(buf, "%d", a);
+	Snprintf(buf, sizeof(buf), "%d", a);
 	return (buf);
 }
 
-char           *
+const char           *
 ordin(n)
 	int             n;
 {
-	int             d = n % 10;
-	return ((d == 0 || d > 3 || n / 10 == 1) ? "th" : (d == 1) ? "st" :
-		(d == 2) ? "nd" : "rd");
+	int             dg = n % 10;
+
+	return ((dg == 0 || dg > 3 || n / 10 == 1) ? "th" : (dg == 1) ? "st" :
+		(dg == 2) ? "nd" : "rd");
 }
 
 void
@@ -593,7 +688,7 @@ prscore(argc, argv)
 	int             playerct;
 	int             rank;
 	struct toptenentry *t1, *t2;
-	char           *recfile = RECORD;
+	const char           *recfile = RECORD;
 	FILE           *rfile;
 	int		flg = 0;
 	int             i;

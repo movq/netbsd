@@ -22,7 +22,7 @@ SOFTWARE.
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: bootpef.c,v 1.4 1998/03/14 04:39:53 lukem Exp $");
+__RCSID("$NetBSD: bootpef.c,v 1.8 2008/05/02 19:22:10 xtraeme Exp $");
 #endif
 
 
@@ -40,11 +40,7 @@ __RCSID("$NetBSD: bootpef.c,v 1.4 1998/03/14 04:39:53 lukem Exp $");
 
 
 
-#ifdef	__STDC__
 #include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
 
 #include <sys/types.h>
 #include <sys/time.h>
@@ -58,17 +54,10 @@ __RCSID("$NetBSD: bootpef.c,v 1.4 1998/03/14 04:39:53 lukem Exp $");
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 #include <errno.h>
 #include <ctype.h>
 #include <syslog.h>
-
-#ifndef	USE_BFUNCS
-#include <memory.h>
-/* Yes, memcpy is OK here (no overlapped copies). */
-#define bcopy(a,b,c)    memcpy(b,a,c)
-#define bzero(p,l)      memset(p,0,l)
-#define bcmp(a,b,c)     memcmp(a,b,c)
-#endif
 
 #include "bootp.h"
 #include "hash.h"
@@ -92,24 +81,16 @@ __RCSID("$NetBSD: bootpef.c,v 1.4 1998/03/14 04:39:53 lukem Exp $");
  * Externals, forward declarations, and global variables
  */
 
-#ifdef	__STDC__
-#define P(args) args
-#else
-#define P(args) ()
-#endif
-
-static void mktagfile P((struct host *));
-static void usage P((void));
-int main P((int, char **));
-
-#undef P
+static void mktagfile(struct host *);
+static void usage(void);
+int main(int, char **);
 
 
 /*
  * General
  */
 
-char *progname;
+const char *progname;
 char *chdir_path;
 int debug = 0;					/* Debugging flag (level) */
 byte *buffer;
@@ -118,17 +99,18 @@ byte *buffer;
  * Globals below are associated with the bootp database file (bootptab).
  */
 
-char *bootptab = CONFIG_FILE;
+const char *bootptab = CONFIG_FILE;
 
 
 /*
  * Print "usage" message and exit
  */
 static void
-usage()
+usage(void)
 {
 	fprintf(stderr,
-	   "usage:  $s [ -c chdir ] [-d level] [-f configfile] [host...]\n");
+	    "usage: %s [-c chdir] [-d level] [-f configfile] [host ...]\n",
+	    getprogname());
 	fprintf(stderr, "\t -c n\tset current directory\n");
 	fprintf(stderr, "\t -d n\tset debug level\n");
 	fprintf(stderr, "\t -f n\tconfig file name\n");
@@ -141,9 +123,7 @@ usage()
  * main server loop is started.
  */
 int
-main(argc, argv)
-	int argc;
-	char **argv;
+main(int argc, char **argv)
 {
 	struct host *hp;
 	char *stmp;
@@ -287,8 +267,7 @@ main(argc, argv)
  */
 
 static void
-mktagfile(hp)
-	struct host *hp;
+mktagfile(struct host *hp)
 {
 	FILE *fp;
 	int bytesleft, len;

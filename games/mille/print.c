@@ -1,4 +1,4 @@
-/*	$NetBSD: print.c,v 1.8 1999/09/08 21:45:28 jsm Exp $	*/
+/*	$NetBSD: print.c,v 1.12 2007/12/15 19:44:42 perry Exp $	*/
 
 /*
  * Copyright (c) 1982, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)print.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: print.c,v 1.8 1999/09/08 21:45:28 jsm Exp $");
+__RCSID("$NetBSD: print.c,v 1.12 2007/12/15 19:44:42 perry Exp $");
 #endif
 #endif /* not lint */
 
@@ -89,7 +85,7 @@ prboard()
 	pp = &Player[PLAYER];
 	for (i = 0; i < HAND_SZ; i++)
 		show_card(i + 6, temp, pp->hand[i], &pp->sh_hand[i]);
-	mvprintw(6, COMP_STRT + CARD_STRT, "%2d", Topcard - Deck);
+	mvprintw(6, COMP_STRT + CARD_STRT, "%2ld", (long)(Topcard - Deck));
 	show_card(8, COMP_STRT + CARD_STRT, Discard, &Sh_discard);
 	if (End == 1000) {
 		move(EXT_Y, EXT_X);
@@ -125,7 +121,7 @@ prscore(for_real)
 #ifdef EXTRAP
 	bool	for_real;
 #else
-	bool	for_real __attribute__((__unused__));
+	bool	for_real __unused;
 #endif
 {
 	PLAY	*pp;

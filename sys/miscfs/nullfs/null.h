@@ -1,11 +1,11 @@
-/*	$NetBSD: null.h,v 1.11 2000/03/13 23:52:40 soren Exp $	*/
+/*	$NetBSD: null.h,v 1.18 2008/06/28 01:34:06 rumble Exp $	*/
 
 /*
  * Copyright (c) 1999 National Aeronautics & Space Administration
  * All rights reserved.
  *
- * This software was written by William Studnemund of the
- * Numerical Aerospace Similation Facility, NASA Ames Research Center.
+ * This software was written by William Studenmund of the
+ * Numerical Aerospace Simulation Facility, NASA Ames Research Center.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -48,11 +48,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -108,21 +104,22 @@ struct null_node {
 #define	null_vnode	ln.layer_vnode
 #define	null_flags	ln.layer_flags
 
-int null_node_create __P((struct mount *mp, struct vnode *target, struct vnode **vpp));
+int	null_node_create(struct mount *, struct vnode *,
+	    struct vnode **);
 
 #define	MOUNTTONULLMOUNT(mp) ((struct null_mount *)((mp)->mnt_data))
 #define	VTONULL(vp) ((struct null_node *)(vp)->v_data)
 #define	NULLTOV(xp) ((xp)->null_vnode)
 #ifdef NULLFS_DIAGNOSTIC
-extern struct vnode *layer_checkvp __P((struct vnode *vp, char *fil, int lno));
+struct vnode *layer_checkvp(struct vnode *, char *, int);
 #define	NULLVPTOLOWERVP(vp) layer_checkvp((vp), __FILE__, __LINE__)
 #else
 #define	NULLVPTOLOWERVP(vp) (VTONULL(vp)->null_lowervp)
 #endif
 
-extern int (**null_vnodeop_p) __P((void *));
+extern int (**null_vnodeop_p)(void *);
 extern struct vfsops nullfs_vfsops;
 
-void nullfs_init __P((void));
+void nullfs_init(void);
 
 #endif /* _KERNEL */

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ed.c,v 1.33 2000/02/11 19:09:56 is Exp $	*/
+/*	$NetBSD: if_ed.c,v 1.55 2007/10/17 19:53:16 garbled Exp $ */
 
 /*
  * Device driver for National Semiconductor DS8390/WD83C690 based ethernet
@@ -17,6 +17,10 @@
 
 #include "opt_inet.h"
 #include "opt_ns.h"
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_ed.c,v 1.55 2007/10/17 19:53:16 garbled Exp $");
+
 #include "bpfilter.h"
 
 #include <sys/param.h>
@@ -79,10 +83,10 @@ struct ed_softc {
 
 	u_char	cr_proto;	/* values always set in CR */
 
-	caddr_t	mem_start;	/* NIC memory start address */
-	caddr_t	mem_end;	/* NIC memory end address */
+	void *	mem_start;	/* NIC memory start address */
+	void *	mem_end;	/* NIC memory end address */
 	u_long	mem_size;	/* total NIC memory size */
-	caddr_t	mem_ring;	/* start of RX ring-buffer (in NIC mem) */
+	void *	mem_ring;	/* start of RX ring-buffer (in NIC mem) */
 
 	u_char	xmit_busy;	/* transmitter is busy */
 	u_char	txb_cnt;	/* number of transmit buffers */
@@ -97,40 +101,38 @@ struct ed_softc {
 	u_char	next_packet;	/* pointer to next unread RX packet */
 };
 
-int ed_zbus_match __P((struct device *, struct cfdata *, void *));
-void ed_zbus_attach __P((struct device *, struct device *, void *));
-int edintr __P((void *));
-int ed_ioctl __P((struct ifnet *, u_long, caddr_t));
-void ed_start __P((struct ifnet *));
-void ed_watchdog __P((struct ifnet *));
-void ed_reset __P((struct ed_softc *));
-void ed_init __P((struct ed_softc *));
-void ed_stop __P((struct ed_softc *));
-void ed_getmcaf __P((struct ethercom *, u_long *));
-u_short ed_put __P((struct ed_softc *, struct mbuf *, caddr_t));
+int ed_zbus_match(struct device *, struct cfdata *, void *);
+void ed_zbus_attach(struct device *, struct device *, void *);
+int edintr(void *);
+int ed_ioctl(struct ifnet *, u_long, void *);
+void ed_start(struct ifnet *);
+void ed_watchdog(struct ifnet *);
+void ed_reset(struct ed_softc *);
+void ed_init(struct ed_softc *);
+void ed_stop(struct ed_softc *);
+void ed_getmcaf(struct ethercom *, u_long *);
+u_short ed_put(struct ed_softc *, struct mbuf *, void *);
 
 #define inline	/* XXX for debugging porpoises */
 
-void ed_get_packet __P((struct ed_softc *, caddr_t, u_short));
-static inline void ed_rint __P((struct ed_softc *));
-static inline void ed_xmit __P((struct ed_softc *));
-static inline caddr_t ed_ring_copy __P((struct ed_softc *, caddr_t, caddr_t,
-					u_short));
+void ed_get_packet(struct ed_softc *, void *, u_short);
+static inline void ed_rint(struct ed_softc *);
+static inline void ed_xmit(struct ed_softc *);
+static inline void *ed_ring_copy(struct ed_softc *, void *, void *,
+					u_short);
 
-static inline void NIC_PUT __P((struct ed_softc *, int, u_char)); 
-static inline u_char NIC_GET __P((struct ed_softc *, int));
-static inline void word_copy __P((caddr_t, caddr_t, int));
-struct mbuf *ed_ring_to_mbuf __P((struct ed_softc *, caddr_t, struct mbuf *, u_short));
+static inline void NIC_PUT(struct ed_softc *, int, u_char);
+static inline u_char NIC_GET(struct ed_softc *, int);
+static inline void word_copy(void *, void *, int);
+static inline void word_zero(void *, int);
+struct mbuf *ed_ring_to_mbuf(struct ed_softc *, void *, struct mbuf *,
+					u_short);
 
-struct cfattach ed_zbus_ca = {
-	sizeof(struct ed_softc), ed_zbus_match, ed_zbus_attach
-};
+CFATTACH_DECL(ed_zbus, sizeof(struct ed_softc),
+    ed_zbus_match, ed_zbus_attach, NULL, NULL);
 
 static inline void
-NIC_PUT(sc, off, val)
-	struct ed_softc *sc;
-	int off;
-	u_char val;
+NIC_PUT(struct ed_softc *sc, int off, u_char val)
 {
 	sc->nic_addr[off * 2] = val;
 #ifdef not_def
@@ -144,9 +146,7 @@ NIC_PUT(sc, off, val)
 }
 
 static inline u_char
-NIC_GET(sc, off)
-	struct ed_softc *sc;
-	int off;
+NIC_GET(struct ed_softc *sc, int off)
 {
 	register u_char val;
 
@@ -166,9 +166,7 @@ NIC_GET(sc, off)
  * Memory copy, copies word at time.
  */
 static inline void
-word_copy(a, b, len)
-	caddr_t a, b;
-	int len;
+word_copy(void *a, void *b, int len)
 {
 	u_short *x = (u_short *)a,
 		*y = (u_short *)b;
@@ -178,11 +176,21 @@ word_copy(a, b, len)
 		*y++ = *x++;
 }
 
+/*
+ * zero memory, one word at time.
+ */
+static inline void
+word_zero(void *a, int len)
+{
+	u_short *x = (u_short *)a;
+
+	len >>= 1;
+	while (len--)
+		*x++ = 0;
+}
+
 int
-ed_zbus_match(parent, cfp, aux)
-	struct device *parent;
-	struct cfdata *cfp;
-	void *aux;
+ed_zbus_match(struct device *parent, struct cfdata *cfp, void *aux)
 {
 	struct zbus_args *zap = aux;
 
@@ -194,33 +202,31 @@ ed_zbus_match(parent, cfp, aux)
 }
 
 void
-ed_zbus_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+ed_zbus_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct ed_softc *sc = (void *)self;
 	struct zbus_args *zap = aux;
-	struct cfdata *cf = sc->sc_dev.dv_cfdata;
+	struct cfdata *cf = device_cfdata(&sc->sc_dev);
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
-	u_char *prom;
+	volatile u_char *prom;
 	int i;
 	u_int8_t myaddr[ETHER_ADDR_LEN];
 
 	if (zap->manid == HYDRA_MANID) {
 		sc->mem_start = zap->va;
 		sc->mem_size = 16384;
-		sc->nic_addr = sc->mem_start + HYDRA_NIC_BASE;
+		sc->nic_addr = (u_char *)sc->mem_start + HYDRA_NIC_BASE;
 		prom = (u_char *)sc->mem_start + HYDRA_ADDRPROM;
 	} else {
 		sc->mem_start = (u_char *)zap->va + 0x8000;
 		sc->mem_size = 16384;
-		sc->nic_addr = (u_char *)zap->va + ASDG_NIC_BASE;
-		prom = (u_char *)sc->nic_addr + ASDG_ADDRPROM;
+		sc->nic_addr = (volatile u_char *)zap->va + ASDG_NIC_BASE;
+		prom = (volatile u_char *)sc->nic_addr + ASDG_ADDRPROM;
 	}
 	sc->cr_proto = ED_CR_RD2;
 	sc->tx_page_start = 0;
 
-	sc->mem_end = sc->mem_start + sc->mem_size;
+	sc->mem_end = (u_char *)sc->mem_start + sc->mem_size;
 
 	/*
 	 * Use one xmit buffer if < 16k, two buffers otherwise (if not told
@@ -236,10 +242,11 @@ ed_zbus_attach(parent, self, aux)
 	sc->rec_page_stop = sc->tx_page_start + (sc->mem_size >> ED_PAGE_SHIFT);
 
 	sc->mem_ring =
-	    sc->mem_start + ((sc->txb_cnt * ED_TXBUF_SIZE) << ED_PAGE_SHIFT);
+	    (u_char *)sc->mem_start + 
+		((sc->txb_cnt * ED_TXBUF_SIZE) << ED_PAGE_SHIFT);
 
 	/*
-	 * Interupts must be inactive when reading the prom, as the interupt
+	 * Interrupts must be inactive when reading the prom, as the interrupt
 	 * line is shared with one of its address lines.
 	 */
 
@@ -271,10 +278,6 @@ ed_zbus_attach(parent, self, aux)
 	/* Print additional info when attached. */
 	printf(": address %s\n", ether_sprintf(myaddr));
 
-#if NBPFILTER > 0
-	bpfattach(&ifp->if_bpf, ifp, DLT_EN10MB, sizeof(struct ether_header));
-#endif
-
 	sc->sc_isr.isr_intr = edintr;
 	sc->sc_isr.isr_arg = sc;
 	sc->sc_isr.isr_ipl = 2;
@@ -285,8 +288,7 @@ ed_zbus_attach(parent, self, aux)
  * Reset interface.
  */
 void
-ed_reset(sc)
-	struct ed_softc *sc;
+ed_reset(struct ed_softc *sc)
 {
 	int s;
 
@@ -301,8 +303,7 @@ ed_reset(sc)
  * Take interface offline.
  */
 void
-ed_stop(sc)
-	struct ed_softc *sc;
+ed_stop(struct ed_softc *sc)
 {
 	int n = 5000;
 
@@ -322,8 +323,7 @@ ed_stop(sc)
  * an interrupt after a transmit has been started on it.
  */
 void
-ed_watchdog(ifp)
-	struct ifnet *ifp;
+ed_watchdog(struct ifnet *ifp)
 {
 	struct ed_softc *sc = ifp->if_softc;
 
@@ -337,8 +337,7 @@ ed_watchdog(ifp)
  * Initialize device.
  */
 void
-ed_init(sc)
-	struct ed_softc *sc;
+ed_init(struct ed_softc *sc)
 {
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	int i, s;
@@ -406,7 +405,7 @@ ed_init(sc)
 
 	/* Copy out our station address. */
 	for (i = 0; i < ETHER_ADDR_LEN; ++i)
-		NIC_PUT(sc, ED_P1_PAR0 + i, LLADDR(ifp->if_sadl)[i]);
+		NIC_PUT(sc, ED_P1_PAR0 + i, CLLADDR(ifp->if_sadl)[i]);
 
 	/* Set multicast filter on chip. */
 	ed_getmcaf(&sc->sc_ethercom, mcaf);
@@ -453,8 +452,7 @@ ed_init(sc)
  * This routine actually starts the transmission on the interface.
  */
 static inline void
-ed_xmit(sc)
-	struct ed_softc *sc;
+ed_xmit(struct ed_softc *sc)
 {
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	u_short len;
@@ -495,12 +493,11 @@ ed_xmit(sc)
  *     (i.e. that the output part of the interface is idle)
  */
 void
-ed_start(ifp)
-	struct ifnet *ifp;
+ed_start(struct ifnet *ifp)
 {
 	struct ed_softc *sc = ifp->if_softc;
 	struct mbuf *m0, *m;
-	caddr_t buffer;
+	void *buffer;
 	int len;
 
 outloop:
@@ -538,11 +535,12 @@ outloop:
 	m0 = m;
 
 	/* txb_new points to next open buffer slot. */
-	buffer = sc->mem_start + ((sc->txb_new * ED_TXBUF_SIZE) << ED_PAGE_SHIFT);
+	buffer = (char*)sc->mem_start +
+		((sc->txb_new * ED_TXBUF_SIZE) << ED_PAGE_SHIFT);
 
 	len = ed_put(sc, m, buffer);
 
-	sc->txb_len[sc->txb_new] = max(len, ETHER_MIN_LEN);
+	sc->txb_len[sc->txb_new] = len;
 	sc->txb_inuse++;
 
 	/* Point to next buffer slot and wrap if necessary. */
@@ -568,11 +566,10 @@ outloop:
  * Ethernet interface receiver interrupt.
  */
 static inline void
-ed_rint(sc)
-	struct ed_softc *sc;
+ed_rint(struct ed_softc *sc)
 {
 	struct ifnet *ifp;
-	caddr_t packet_ptr;
+	void *packet_ptr;
 	u_short len;
 	u_char nlen;
 	u_char boundary, current;
@@ -600,7 +597,7 @@ loop:
 
 	do {
 		/* Get pointer to this buffer's header structure. */
-		packet_ptr = sc->mem_ring +
+		packet_ptr = (char*)sc->mem_ring +
 		    ((sc->next_packet - sc->rec_page_start) << ED_PAGE_SHIFT);
 
 		/*
@@ -654,7 +651,8 @@ loop:
 		    packet_hdr.next_packet >= sc->rec_page_start &&
 		    packet_hdr.next_packet < sc->rec_page_stop) {
 			/* Go get packet. */
-			ed_get_packet(sc, packet_ptr + sizeof(struct ed_ring),
+			ed_get_packet(sc, (char*)packet_ptr +
+			    sizeof(struct ed_ring),
 			    len - sizeof(struct ed_ring));
 			++ifp->if_ipackets;
 		} else {
@@ -687,8 +685,7 @@ loop:
 
 /* Ethernet interface interrupt processor. */
 int
-edintr(arg)
-	void *arg;
+edintr(void *arg)
 {
 	struct ed_softc *sc = arg;
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
@@ -766,7 +763,7 @@ edintr(arg)
 
 			/*
 			 * Decrement buffer in-use count if not zero (can only
-			 * be zero if a transmitter interrupt occured while not
+			 * be zero if a transmitter interrupt occurred while not
 			 * actually transmitting).
 			 * If data is ready to transmit, start it transmitting,
 			 * otherwise defer until after handling receiver.
@@ -858,19 +855,15 @@ edintr(arg)
  * Process an ioctl request.  This code needs some work - it looks pretty ugly.
  */
 int
-ed_ioctl(ifp, command, data)
-	register struct ifnet *ifp;
-	u_long command;
-	caddr_t data;
+ed_ioctl(register struct ifnet *ifp, u_long cmd, void *data)
 {
 	struct ed_softc *sc = ifp->if_softc;
 	register struct ifaddr *ifa = (struct ifaddr *)data;
-	struct ifreq *ifr = (struct ifreq *)data;
 	int s, error = 0;
 
 	s = splnet();
 
-	switch (command) {
+	switch (cmd) {
 
 	case SIOCSIFADDR:
 		ifp->if_flags |= IFF_UP;
@@ -934,17 +927,15 @@ ed_ioctl(ifp, command, data)
 	case SIOCADDMULTI:
 	case SIOCDELMULTI:
 		/* Update our multicast list. */
-		error = (command == SIOCADDMULTI) ?
-		    ether_addmulti(ifr, &sc->sc_ethercom) :
-		    ether_delmulti(ifr, &sc->sc_ethercom);
-
-		if (error == ENETRESET) {
+		if ((error = ether_ioctl(ifp, cmd, data)) == ENETRESET) {
 			/*
 			 * Multicast list has changed; set the hardware filter
 			 * accordingly.
 			 */
-			ed_stop(sc); /* XXX for ds_setmcaf? */
-			ed_init(sc);
+			if (ifp->if_flags & IFF_RUNNING) {
+				ed_stop(sc); /* XXX for ds_setmcaf? */
+				ed_init(sc);
+			}
 			error = 0;
 		}
 		break;
@@ -958,16 +949,12 @@ ed_ioctl(ifp, command, data)
 }
 
 /*
- * Retreive packet from shared memory and send to the next level up via
+ * Retrieve packet from shared memory and send to the next level up via
  * ether_input().  If there is a BPF listener, give a copy to BPF, too.
  */
 void
-ed_get_packet(sc, buf, len)
-	struct ed_softc *sc;
-	caddr_t buf;
-	u_short len;
+ed_get_packet(struct ed_softc *sc, void *buf, u_short len)
 {
-	struct ether_header *eh;
 	struct mbuf *m;
 	struct ifnet *ifp;
 
@@ -993,10 +980,9 @@ ed_get_packet(sc, buf, len)
 	 * header mbuf.
 	 */
 	m->m_data += EOFF;
-	eh = mtod(m, struct ether_header *);
 
-	word_copy(buf, mtod(m, caddr_t), sizeof(struct ether_header));
-	buf += sizeof(struct ether_header);
+	word_copy(buf, mtod(m, void *), sizeof(struct ether_header));
+	buf = (char*)buf + sizeof(struct ether_header);
 	m->m_len += sizeof(struct ether_header);
 	len -= sizeof(struct ether_header);
 
@@ -1011,22 +997,8 @@ ed_get_packet(sc, buf, len)
 	 * Check if there's a BPF listener on this interface.  If so, hand off
 	 * the raw packet to bpf.
 	 */
-	if (ifp->if_bpf) {
+	if (ifp->if_bpf)
 		bpf_mtap(ifp->if_bpf, m);
-
-		/*
-		 * Note that the interface cannot be in promiscuous mode if
-		 * there are no BPF listeners.  And if we are in promiscuous
-		 * mode, we have to check if this packet is really ours.
-		 */
-		if ((ifp->if_flags & IFF_PROMISC) &&
-		    (eh->ether_dhost[0] & 1) == 0 && /* !mcast and !bcast */
-		    bcmp(eh->ether_dhost, LLADDR(ifp->if_sadl),
-			    sizeof(eh->ether_dhost)) != 0) {
-			m_freem(m);
-			return;
-		}
-	}
 #endif
 
 	(*ifp->if_input)(ifp, m);
@@ -1040,29 +1012,26 @@ ed_get_packet(sc, buf, len)
  * Given a source and destination address, copy 'amount' of a packet from the
  * ring buffer into a linear destination buffer.  Takes into account ring-wrap.
  */
-static inline caddr_t
-ed_ring_copy(sc, src, dst, amount)
-	struct ed_softc *sc;
-	caddr_t src, dst;
-	u_short amount;
+static inline void *
+ed_ring_copy(struct ed_softc *sc, void *src, void *dst, u_short amount)
 {
 	u_short tmp_amount;
 
 	/* Does copy wrap to lower addr in ring buffer? */
-	if (src + amount > sc->mem_end) {
-		tmp_amount = sc->mem_end - src;
+	if ((char*)src + amount > (char*)sc->mem_end) {
+		tmp_amount = (char*)sc->mem_end - (char*)src;
 
 		/* Copy amount up to end of NIC memory. */
 		word_copy(src, dst, tmp_amount);
 
 		amount -= tmp_amount;
 		src = sc->mem_ring;
-		dst += tmp_amount;
+		dst = (char*)dst + tmp_amount;
 	}
 
 	word_copy(src, dst, amount);
 
-	return (src + amount);
+	return ((char*)src + amount);
 }
 
 /*
@@ -1074,11 +1043,8 @@ ed_ring_copy(sc, src, dst, amount)
  * amount = amount of data to copy
  */
 struct mbuf *
-ed_ring_to_mbuf(sc, src, dst, total_len)
-	struct ed_softc *sc;
-	caddr_t src;
-	struct mbuf *dst;
-	u_short total_len;
+ed_ring_to_mbuf(struct ed_softc *sc, void *src, struct mbuf *dst,
+                u_short total_len)
 {
 	register struct mbuf *m = dst;
 
@@ -1115,7 +1081,7 @@ ed_ring_to_mbuf(sc, src, dst, total_len)
 			amount = min(total_len, M_TRAILINGSPACE(m));
 		}
 
-		src = ed_ring_copy(sc, src, mtod(m, caddr_t) + m->m_len,
+		src = ed_ring_copy(sc, src, mtod(m, char *) + m->m_len,
 		    amount);
 
 		m->m_len += amount;
@@ -1129,9 +1095,7 @@ ed_ring_to_mbuf(sc, src, dst, total_len)
  * need to listen to.
  */
 void
-ed_getmcaf(ac, af)
-	struct ethercom *ac;
-	u_long *af;
+ed_getmcaf(struct ethercom *ac, u_long *af)
 {
 	struct ifnet *ifp = &ac->ec_if;
 	struct ether_multi *enm;
@@ -1204,10 +1168,7 @@ ed_getmcaf(ac, af)
  *
  */
 u_short
-ed_put(sc, m, buf)
-	struct ed_softc *sc;
-	struct mbuf *m;
-	caddr_t buf;
+ed_put(struct ed_softc *sc, struct mbuf *m, void *buf)
 {
 	u_char *data, savebyte[2];
 	int len, wantbyte;
@@ -1224,7 +1185,7 @@ ed_put(sc, m, buf)
 			if (wantbyte) {
 				savebyte[1] = *data;
 				word_copy(savebyte, buf, 2);
-				buf += 2;
+				buf = (char*)buf + 2;
 				data++;
 				len--;
 				wantbyte = 0;
@@ -1232,7 +1193,7 @@ ed_put(sc, m, buf)
 			/* Output contiguous words. */
 			if (len > 1) {
 				word_copy(data, buf, len);
-				buf += len & ~1;
+				buf = (char*)buf + (len & ~1);
 				data += len & ~1;
 				len &= 1;
 			}
@@ -1247,7 +1208,12 @@ ed_put(sc, m, buf)
 	if (wantbyte) {
 		savebyte[1] = 0;
 		word_copy(savebyte, buf, 2);
-		buf += 2;
+		buf = (char*)buf + 2;
+		totlen++;
+	}
+	if (totlen < ETHER_MIN_LEN - ETHER_CRC_LEN) {
+		word_zero(buf, ETHER_MIN_LEN - ETHER_CRC_LEN - totlen);
+		totlen = ETHER_MIN_LEN - ETHER_CRC_LEN;
 	}
 
 	return (totlen);

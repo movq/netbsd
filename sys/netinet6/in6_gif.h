@@ -1,9 +1,10 @@
-/*	$NetBSD: in6_gif.h,v 1.3 1999/07/03 21:30:18 thorpej Exp $	*/
+/*	$NetBSD: in6_gif.h,v 1.13 2008/04/24 11:38:38 ad Exp $	*/
+/*	$KAME: in6_gif.h,v 1.7 2001/07/26 06:53:16 jinmei Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -15,7 +16,7 @@
  * 3. Neither the name of the project nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE PROJECT AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -33,8 +34,17 @@
 #define _NETINET6_IN6_GIF_H_
 
 #define GIF_HLIM	30
+extern int	ip6_gif_hlim;		/* Hop limit for gif encap packet */
 
-int in6_gif_input __P((struct mbuf **, int *, int));
-int in6_gif_output __P((struct ifnet *, int, struct mbuf *, struct rtentry *));
+struct gif_softc;
+struct sockaddr;
+int in6_gif_input(struct mbuf **, int *, int);
+int in6_gif_output(struct ifnet *, int, struct mbuf *);
+#ifdef GIF_ENCAPCHECK
+int gif_encapcheck6(struct mbuf *, int, int, void *);
+#endif
+int in6_gif_attach(struct gif_softc *);
+int in6_gif_detach(struct gif_softc *);
+void *in6_gif_ctlinput(int, const struct sockaddr *, void *);
 
-#endif /*_NETINET6_IN6_GIF_H_*/
+#endif /* !_NETINET6_IN6_GIF_H_ */

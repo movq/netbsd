@@ -1,4 +1,4 @@
-/*	$NetBSD: tp_astring.c,v 1.3 1996/02/13 22:10:37 christos Exp $	*/
+/*	$NetBSD: tp_astring.c,v 1.7 2005/12/11 12:25:12 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,7 +31,10 @@
  *	@(#)tp_astring.c	8.1 (Berkeley) 6/10/93
  */
 
-char           *tp_sstring[] = {
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: tp_astring.c,v 1.7 2005/12/11 12:25:12 christos Exp $");
+
+const char * const tp_sstring[] = {
 	"ST_ERROR(0x0)",
 	"TP_CLOSED(0x1)",
 	"TP_CRSENT(0x2)",
@@ -47,7 +46,7 @@ char           *tp_sstring[] = {
 	"TP_CONFIRMING(0x8)",
 };
 
-char           *tp_estring[] = {
+const char * const tp_estring[] = {
 	"TM_inact(0x0)",
 	"TM_retrans(0x1)",
 	"TM_sendack(0x2)",

@@ -1,8 +1,15 @@
-/*	$NetBSD: vmparam.h,v 1.5 2000/01/23 21:01:59 soda Exp $	*/
+/*	$NetBSD: vmparam.h,v 1.9 2005/12/11 12:16:39 christos Exp $	*/
 /*	$OpenBSD: vmparam.h,v 1.3 1997/04/19 17:19:59 pefo Exp $	*/
 /*	NetBSD: vmparam.h,v 1.5 1994/10/26 21:10:10 cgd Exp 	*/
 
 #include <mips/vmparam.h>
+
+/* VA 0xe0000000-0xffffffff is used for wired_map TLB entries. */
+#undef  VM_MAX_KERNEL_ADDRESS
+#define VM_MAX_KERNEL_ADDRESS		((vaddr_t)0xDFFFF000)
+
+#define VM_MIN_WIRED_MAP_ADDRESS	((vaddr_t)0xE0000000)
+#define VM_MAX_WIRED_MAP_ADDRESS	((vaddr_t)0xFFFFC000)
 
 /*
  * Maximum number of contigous physical memory segment.
@@ -12,18 +19,8 @@
 #define	VM_NFREELIST		1
 #define	VM_FREELIST_DEFAULT	0
 
-#if 0 /* changed in OpenBSD */
-#define	USRTEXT		0x00400000
+#ifndef KSEG2IOBUFSIZE
+#define KSEG2IOBUFSIZE	kseg2iobufsize	/* reserve PTEs for KSEG2 I/O space */
+
+extern vsize_t kseg2iobufsize;
 #endif
-
-#if 0 /* defined in <mips/vmparam.h> in NetBSD, but not defined in OpenBSD */
-#define	BTOPUSRSTACK	0x80000		/* btop(USRSTACK) */
-#define	LOWPAGES	0x00001
-#define	HIGHPAGES	0
-
-#define	mapin(pte, v, pfnum, prot) \
-	(*(int *)(pte) = ((pfnum) << PG_SHIFT) | (prot), MachTLBFlushAddr(v))
-#endif
-
-/* pcb base */
-/*#define	pcbb(p)		((u_int)(p)->p_addr) */

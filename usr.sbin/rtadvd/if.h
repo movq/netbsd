@@ -1,4 +1,5 @@
-/*	$NetBSD: if.h,v 1.2 1999/07/06 13:02:09 itojun Exp $	*/
+/*	$NetBSD: if.h,v 1.7 2006/03/05 23:47:08 rpaulo Exp $	*/
+/*	$KAME: if.h,v 1.12 2003/09/21 07:17:03 itojun Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, 1998, and 1999 WIDE Project.
@@ -35,23 +36,22 @@ extern struct if_msghdr **iflist;
 extern size_t ifblock_size;
 extern char *ifblock;
 
-struct sockaddr_dl *if_nametosdl __P((char *name));
-int if_getmtu __P((char *name));
-int if_getflags __P((int ifindex, int oifflags));
-int lladdropt_length __P((struct sockaddr_dl *sdl));
-void lladdropt_fill __P((struct sockaddr_dl *sdl, struct nd_opt_hdr *ndopt));
-int rtbuf_len __P((void));
-int get_rtinfo __P((char *buf, size_t *len));
-char *get_next_msg __P((char *buf, char *lim, int ifindex, size_t *lenp,
-			   int filter));
-struct in6_addr *get_addr __P((char *buf));
-int get_rtm_ifindex __P((char *buf));
-int get_ifm_ifindex __P((char *buf));
-int get_ifam_ifindex __P((char *buf));
-int get_ifm_flags __P((char *buf));
-int get_prefixlen __P((char *buf));
-int rtmsg_type __P((char *buf));
-int ifmsg_type __P((char *buf));
-int rtmsg_len __P((char *buf));
-int ifmsg_len __P((char *buf));
+struct nd_opt_hdr;
+struct sockaddr_dl *if_nametosdl __P((char *));
+int if_getmtu __P((char *));
+int if_getflags __P((int, int));
+int lladdropt_length __P((struct sockaddr_dl *));
+void lladdropt_fill __P((struct sockaddr_dl *, struct nd_opt_hdr *));
+char *get_next_msg __P((char *, char *, int, size_t *, int));
+struct in6_addr *get_addr __P((char *));
+int get_rtm_ifindex __P((char *));
+int get_ifm_ifindex __P((char *));
+int get_ifam_ifindex __P((char *));
+int get_ifm_flags __P((char *));
+int get_prefixlen __P((char *));
+int prefixlen __P((u_char *, u_char *));
+int rtmsg_type __P((char *));
+int ifmsg_type __P((char *));
+int rtmsg_len __P((char *));
+int ifmsg_len __P((char *));
 void init_iflist __P((void));

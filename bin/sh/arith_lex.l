@@ -1,5 +1,5 @@
 %{
-/*	$NetBSD: arith_lex.l,v 1.10 1999/02/05 07:52:52 christos Exp $	*/
+/*	$NetBSD: arith_lex.l,v 1.14 2007/03/25 06:29:26 apb Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -42,7 +38,7 @@
 #if 0
 static char sccsid[] = "@(#)arith_lex.l	8.3 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: arith_lex.l,v 1.10 1999/02/05 07:52:52 christos Exp $");
+__RCSID("$NetBSD: arith_lex.l,v 1.14 2007/03/25 06:29:26 apb Exp $");
 #endif
 #endif /* not lint */
 
@@ -50,9 +46,10 @@ __RCSID("$NetBSD: arith_lex.l,v 1.10 1999/02/05 07:52:52 christos Exp $");
 #include "arith.h"
 #include "error.h"
 #include "expand.h"
+#include "var.h"
 
-extern int yylval;
-extern char *arith_buf, *arith_startbuf;
+extern intmax_t yylval;
+extern const char *arith_buf, *arith_startbuf;
 #undef YY_INPUT
 #define YY_INPUT(buf,result,max) \
 	result = (*buf = *arith_buf++) ? 1 : YY_NULL;
@@ -61,7 +58,17 @@ extern char *arith_buf, *arith_startbuf;
 
 %%
 [ \t\n]	{ ; }
-[0-9]+	{ yylval = atol(yytext); return(ARITH_NUM); }
+0x[0-9a-fA-F]+	{ yylval = strtoimax(yytext, 0, 0); return(ARITH_NUM); }
+0[0-7]*		{ yylval = strtoimax(yytext, 0, 0); return(ARITH_NUM); }
+[1-9][0-9]*	{ yylval = strtoimax(yytext, 0, 0); return(ARITH_NUM); }
+[A-Za-z_][A-Za-z_0-9]*	{ char *v = lookupvar(yytext);
+			if (v) {
+				yylval = strtoimax(v, &v, 0);
+				if (*v == 0)
+					return ARITH_NUM;
+			}
+			error("arith: syntax error: \"%s\"", arith_startbuf);
+		}
 "("	{ return(ARITH_LPAREN); }
 ")"	{ return(ARITH_RPAREN); }
 "||"	{ return(ARITH_OR); }
@@ -84,7 +91,7 @@ extern char *arith_buf, *arith_startbuf;
 "-"	{ return(ARITH_SUB); }
 "~"	{ return(ARITH_BNOT); }
 "!"	{ return(ARITH_NOT); }
-.	{ error("arith: syntax error: \"%s\"\n", arith_startbuf); }
+.	{ error("arith: syntax error: \"%s\"", arith_startbuf); }
 %%
 
 void

@@ -1,4 +1,4 @@
-.\"	$NetBSD: rpc.yppasswdd.8,v 1.7 1999/06/28 01:21:51 abs Exp $
+.\"	$NetBSD: rpc.yppasswdd.8,v 1.15 2005/02/26 16:37:40 thorpej Exp $
 .\"
 .\" Copyright (c) 1994 Mats O Jansson <moj@stacken.kth.se>
 .\" All rights reserved.
@@ -29,36 +29,47 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.Dd July 3, 1994
+.Dd February 26, 2005
 .Dt RPC.YPPASSWDD 8
 .Os
 .Sh NAME
 .Nm rpc.yppasswdd
-.Nd YP update password file daemon
+.Nd NIS update password file daemon
 .Sh SYNOPSIS
 .Nm
+.Op Fl d Ar directory
 .Op Fl noshell
 .Op Fl nogecos
 .Op Fl nopw
-.Op Fl m Ar arg1 arg2 ... 
+.Op Fl m Ar arg1 Op Ar arg2 ...
 .Sh DESCRIPTION
 .Nm
 must be running on the
-.Tn YP
+.Tn NIS
 master server to allow users to change information
 in the password file.
 .Pp
 The options are as follows:
-.Bl -tag -width indent
+.Bl -tag -width XdXdirectoryXX -offset indent
+.It Fl d Ar directory
+Change the root directory of the password file from
+.Dq Pa /
+to
+.Ar directory .
+It is important to create the binary database files (pwd.db and spwd.db)
+when using this switch or the password change will fail.
+The databases need to be created only once with the following command:
+.Pp
+.Dl pwd_mkdb -d directory directory/etc/master.passwd
 .It Fl noshell
 Don't allow changes of the shell field in the passwd file.
 .It Fl nogecos
 Don't allow changes of the gecos field in the passwd file.
 .It Fl nopw
 Don't allow changes of the password in the passwd file.
-.It Fl m Ar arg1 arg2 ...
-Additional arguments to pass to 
-.Ar make 
+.It Fl m Ar arg1 Op Ar arg2 ...
+Additional arguments to pass to
+.Ar make
 in
 .Ar /var/yp .
 .El
@@ -71,8 +82,8 @@ in
 .Xr chpass 1 ,
 .Xr passwd 1 ,
 .Xr hosts_access 5 ,
-.Xr yp 8 ,
+.Xr nis 8 ,
 .Xr ypbind 8 ,
-.Xr ypserv 8 .
-.Sh AUTHOR
-Mats O Jansson <moj@stacken.kth.se>
+.Xr ypserv 8
+.Sh AUTHORS
+.An Mats O Jansson Aq moj@stacken.kth.se

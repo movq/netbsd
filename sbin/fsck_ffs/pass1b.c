@@ -1,4 +1,4 @@
-/*	$NetBSD: pass1b.c,v 1.13 1998/03/18 17:01:24 bouyer Exp $	*/
+/*	$NetBSD: pass1b.c,v 1.21 2005/01/20 15:29:40 xtraeme Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)pass1b.c	8.4 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: pass1b.c,v 1.13 1998/03/18 17:01:24 bouyer Exp $");
+__RCSID("$NetBSD: pass1b.c,v 1.21 2005/01/20 15:29:40 xtraeme Exp $");
 #endif
 #endif /* not lint */
 
@@ -52,15 +48,16 @@ __RCSID("$NetBSD: pass1b.c,v 1.13 1998/03/18 17:01:24 bouyer Exp $");
 
 #include "fsck.h"
 #include "extern.h"
+#include "fsutil.h"
 
 static  struct dups *duphead;
-static int pass1bcheck __P((struct inodesc *));
+static int pass1bcheck(struct inodesc *);
 
 void
-pass1b()
+pass1b(void)
 {
 	int c, i;
-	struct dinode *dp;
+	union dinode *dp;
 	struct inodesc idesc;
 	ino_t inumber;
 
@@ -70,6 +67,16 @@ pass1b()
 	duphead = duplist;
 	inumber = 0;
 	for (c = 0; c < sblock->fs_ncg; c++) {
+		if (got_siginfo) {
+			fprintf(stderr,
+			    "%s: phase 1b: cyl group %d of %d (%d%%)\n",
+			    cdevname(), c, sblock->fs_ncg,
+			    c * 100 / sblock->fs_ncg);
+			got_siginfo = 0;
+		}
+#ifdef PROGRESS
+		progress_bar(cdevname(), "phase 1b", c, sblock->fs_ncg);
+#endif /* PROGRESS */
 		for (i = 0; i < sblock->fs_ipg; i++, inumber++) {
 			if (inumber < ROOTINO)
 				continue;
@@ -77,20 +84,22 @@ pass1b()
 			if (dp == NULL)
 				continue;
 			idesc.id_number = inumber;
-			if (statemap[inumber] != USTATE &&
+			if (inoinfo(inumber)->ino_state != USTATE &&
 			    (ckinode(dp, &idesc) & STOP))
 				return;
 		}
 	}
+#ifdef PROGRESS
+	progress_done();
+#endif /* PROGRESS */
 }
 
 static int
-pass1bcheck(idesc)
-	struct inodesc *idesc;
+pass1bcheck(struct inodesc *idesc)
 {
 	struct dups *dlp;
 	int nfrags, res = KEEPON;
-	ufs_daddr_t blkno = idesc->id_blkno;
+	daddr_t blkno = idesc->id_blkno;
 
 	for (nfrags = idesc->id_numfrags; nfrags > 0; blkno++, nfrags--) {
 		if (chkrange(blkno, 1))

@@ -1,4 +1,4 @@
-/*	$NetBSD: config.h,v 1.1 1996/05/17 21:17:58 chuck Exp $	*/
+/*	$NetBSD: config.h,v 1.5 2008/01/12 09:54:32 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1995 Theo de Raadt
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Theo de Raadt
- * 4. The name of the Author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS
  * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -64,3 +59,5 @@ struct brdid {
 	u_short devnum;
 	u_long  bug;
 };
+
+void	machdep_common_ether(u_char *);

@@ -1,4 +1,4 @@
-/*	$NetBSD: event_var.h,v 1.2 1996/09/12 01:35:34 mrg Exp $	*/
+/*	$NetBSD: event_var.h,v 1.13 2008/04/24 15:35:28 ad Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -21,11 +21,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -67,19 +63,28 @@ struct evvar {
 #define	splev()	spltty()
 
 #define	EV_WAKEUP(ev) { \
-	selwakeup(&(ev)->ev_sel); \
+	selnotify(&(ev)->ev_sel, 0, 0); \
 	if ((ev)->ev_wanted) { \
 		(ev)->ev_wanted = 0; \
-		wakeup((caddr_t)(ev)); \
+		wakeup((void *)(ev)); \
 	} \
-	if ((ev)->ev_async) \
+	if ((ev)->ev_async) { \
+		mutex_enter(proc_lock); \
 		psignal((ev)->ev_io, SIGIO); \
+		mutex_exit(proc_lock); \
+	} \
 }
 
-void	ev_init __P((struct evvar *));
-void	ev_fini __P((struct evvar *));
-int	ev_read __P((struct evvar *, struct uio *, int));
-int	ev_poll __P((struct evvar *, int, struct proc *));
+void	ev_init(struct evvar *);
+void	ev_fini(struct evvar *);
+int	ev_read(struct evvar *, struct uio *, int);
+int	ev_poll(struct evvar *, int, struct lwp *);
+int	ev_kqfilter(struct evvar *, struct knote *);
+
+/*
+ * Hook for 32-bit compatibility on a 64-bit kernel.
+ */
+extern	int (*ev_out32_hook)(struct firm_event *, int, struct uio *);
 
 /*
  * PEVENT is set just above PSOCK, which is just above TTIPRI, on the

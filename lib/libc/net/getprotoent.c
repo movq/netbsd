@@ -1,8 +1,11 @@
-/*	$NetBSD: getprotoent.c,v 1.7 2000/01/22 22:19:15 mycroft Exp $	*/
+/*	$NetBSD: getprotoent.c,v 1.12 2008/04/28 20:23:00 martin Exp $	*/
 
-/*
- * Copyright (c) 1983, 1993
- *	The Regents of the University of California.  All rights reserved.
+/*-
+ * Copyright (c) 2004 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * This code is derived from software contributed to The NetBSD Foundation
+ * by Christos Zoulas.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -12,43 +15,31 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
-
 #include <sys/cdefs.h>
+
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)getprotoent.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: getprotoent.c,v 1.7 2000/01/22 22:19:15 mycroft Exp $");
-#endif
+__RCSID("$NetBSD: getprotoent.c,v 1.12 2008/04/28 20:23:00 martin Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
-#include <sys/types.h>
-#include <sys/socket.h>
+#include "reentrant.h"
+
 #include <netdb.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+
+#include "protoent.h"
 
 #ifdef __weak_alias
 __weak_alias(endprotoent,_endprotoent)
@@ -56,78 +47,34 @@ __weak_alias(getprotoent,_getprotoent)
 __weak_alias(setprotoent,_setprotoent)
 #endif
 
-#define	MAXALIASES	35
-
-static FILE *protof = NULL;
-static char line[BUFSIZ+1];
-static struct protoent proto;
-static char *proto_aliases[MAXALIASES];
-int _proto_stayopen;
+#ifdef _REENTRANT
+mutex_t _protoent_mutex = MUTEX_INITIALIZER;
+#endif
+struct protoent_data _protoent_data;
 
 void
-setprotoent(f)
-	int f;
+setprotoent(int f)
 {
-	if (protof == NULL)
-		protof = fopen(_PATH_PROTOCOLS, "r" );
-	else
-		rewind(protof);
-	_proto_stayopen |= f;
+	mutex_lock(&_protoent_mutex);
+	setprotoent_r(f, &_protoent_data);
+	mutex_unlock(&_protoent_mutex);
 }
 
 void
-endprotoent()
+endprotoent(void)
 {
-	if (protof) {
-		fclose(protof);
-		protof = NULL;
-	}
-	_proto_stayopen = 0;
+	mutex_lock(&_protoent_mutex);
+	endprotoent_r(&_protoent_data);
+	mutex_unlock(&_protoent_mutex);
 }
 
 struct protoent *
-getprotoent()
+getprotoent(void)
 {
-	char *p;
-	register char *cp, **q;
+	struct protoent *p;
 
-	if (protof == NULL && (protof = fopen(_PATH_PROTOCOLS, "r" )) == NULL)
-		return (NULL);
-again:
-	if ((p = fgets(line, BUFSIZ, protof)) == NULL)
-		return (NULL);
-	if (*p == '#')
-		goto again;
-	cp = strpbrk(p, "#\n");
-	if (cp == NULL)
-		goto again;
-	*cp = '\0';
-	proto.p_name = p;
-	cp = strpbrk(p, " \t");
-	if (cp == NULL)
-		goto again;
-	*cp++ = '\0';
-	while (*cp == ' ' || *cp == '\t')
-		cp++;
-	p = strpbrk(cp, " \t");
-	if (p != NULL)
-		*p++ = '\0';
-	proto.p_proto = atoi(cp);
-	q = proto.p_aliases = proto_aliases;
-	if (p != NULL) {
-		cp = p;
-		while (cp && *cp) {
-			if (*cp == ' ' || *cp == '\t') {
-				cp++;
-				continue;
-			}
-			if (q < &proto_aliases[MAXALIASES - 1])
-				*q++ = cp;
-			cp = strpbrk(cp, " \t");
-			if (cp != NULL)
-				*cp++ = '\0';
-		}
-	}
-	*q = NULL;
-	return (&proto);
+	mutex_lock(&_protoent_mutex);
+	p = getprotoent_r(&_protoent_data.proto, &_protoent_data);
+	mutex_unlock(&_protoent_mutex);
+	return (p);
 }

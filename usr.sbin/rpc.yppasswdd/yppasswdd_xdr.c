@@ -1,4 +1,4 @@
-/*	$NetBSD: yppasswdd_xdr.c,v 1.1.1.1 1996/08/09 10:19:49 thorpej Exp $	*/
+/*	$NetBSD: yppasswdd_xdr.c,v 1.2 2000/08/03 08:22:34 ad Exp $	*/
 
 /*
  * Copyright (c) 1994 Mats O Jansson <moj@stacken.kth.se>
@@ -31,50 +31,44 @@
  * SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+#ifndef lint
+__RCSID("$NetBSD: yppasswdd_xdr.c,v 1.2 2000/08/03 08:22:34 ad Exp $");
+#endif /* not lint */
+
 #include <rpc/rpc.h>
 #include <rpcsvc/yppasswd.h>
 
 bool_t
-xdr_x_passwd(xdrs, objp)
-	XDR *xdrs;
-	x_passwd *objp;
+xdr_x_passwd(XDR *xdrs, x_passwd *objp)
 {
 
-	if (!xdr_string(xdrs, &objp->pw_name, ~0)) {
+	if (!xdr_string(xdrs, &objp->pw_name, ~0))
 		return (FALSE);
-	}
-	if (!xdr_string(xdrs, &objp->pw_passwd, ~0)) {
+	if (!xdr_string(xdrs, &objp->pw_passwd, ~0))
 		return (FALSE);
-	}
-	if (!xdr_int(xdrs, &objp->pw_uid)) {
+	if (!xdr_int(xdrs, &objp->pw_uid))
 		return (FALSE);
-	}
-	if (!xdr_int(xdrs, &objp->pw_gid)) {
+	if (!xdr_int(xdrs, &objp->pw_gid))
 		return (FALSE);
-	}
-	if (!xdr_string(xdrs, &objp->pw_gecos, ~0)) {
+	if (!xdr_string(xdrs, &objp->pw_gecos, ~0))
 		return (FALSE);
-	}
-	if (!xdr_string(xdrs, &objp->pw_dir, ~0)) {
+	if (!xdr_string(xdrs, &objp->pw_dir, ~0))
 		return (FALSE);
-	}
-	if (!xdr_string(xdrs, &objp->pw_shell, ~0)) {
+	if (!xdr_string(xdrs, &objp->pw_shell, ~0))
 		return (FALSE);
-	}
+
 	return (TRUE);
 }
 
 bool_t
-xdr_yppasswd(xdrs, objp)
-	XDR *xdrs;
-	yppasswd *objp;
+xdr_yppasswd(XDR *xdrs, yppasswd *objp)
 {
 
-	if (!xdr_string(xdrs, &objp->oldpass, ~0)) {
+	if (!xdr_string(xdrs, &objp->oldpass, ~0))
 		return (FALSE);
-	}
-	if (!xdr_x_passwd(xdrs, &objp->newpw)) {
+	if (!xdr_x_passwd(xdrs, &objp->newpw))
 		return (FALSE);
-	}
+
 	return (TRUE);
 }

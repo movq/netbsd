@@ -1,12 +1,14 @@
-#	$NetBSD: Makefile,v 1.4 1999/02/13 02:54:32 lukem Exp $
+#	$NetBSD: Makefile,v 1.6 2002/09/18 04:16:01 lukem Exp $
 
-PROG=	re
-SRCS=	main.c split.c debug.c
-MKMAN=	no
+NOMAN=		# defined
 
-CPPFLAGS+= -I${.CURDIR}/../../../../lib/libc/regex
+.include <bsd.own.mk>
 
-TESTS=	${.CURDIR}/tests
+PROG=		re
+SRCS=		main.c split.c debug.c
+CPPFLAGS+=	-I${NETBSDSRCDIR}/lib/libc/regex
+
+TESTS=		${.CURDIR}/tests
 
 regress:
 	./re < ${TESTS}

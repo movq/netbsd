@@ -1,4 +1,4 @@
-/*	$NetBSD: ite_et.c,v 1.10 2000/03/29 14:19:23 leo Exp $	*/
+/*	$NetBSD: ite_et.c,v 1.20 2007/03/04 05:59:40 christos Exp $	*/
 
 /*
  * Copyright (c) 1996 Leo Weppelman.
@@ -29,6 +29,10 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ite_et.c,v 1.20 2007/03/04 05:59:40 christos Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/conf.h>
@@ -78,8 +82,8 @@ extern font_info	font_info_8x16;
 static void grfet_iteinit __P((struct grf_softc *));
 static void view_init __P((struct ite_softc *));
 static void view_deinit __P((struct ite_softc *));
-static int  iteet_ioctl __P((struct ite_softc *, u_long, caddr_t, int,
-							struct proc *));
+static int  iteet_ioctl __P((struct ite_softc *, u_long, void *, int,
+							struct lwp *));
 static int  ite_newsize __P((struct ite_softc *, struct itewinsize *));
 static void et_inittextmode __P((struct ite_softc *, et_sv_reg_t *, int));
 void et_cursor __P((struct ite_softc *ip, int flag));
@@ -95,9 +99,8 @@ void grfetattach __P((struct device *, struct device *, void *));
 int  grfetmatch __P((struct device *, struct cfdata *, void *));
 int  grfetprint __P((void *, const char *));
 
-struct cfattach grfet_ca = {
-	sizeof(struct grf_softc), grfetmatch, grfetattach
-};
+CFATTACH_DECL(grfet, sizeof(struct grf_softc),
+    grfetmatch, grfetattach, NULL, NULL);
 
 /*
  * only used in console init.
@@ -113,6 +116,7 @@ void		*auxp;
 	static int	card_probed  = -1;
 	static int	did_consinit = 0;
 	grf_auxp_t	*grf_auxp = auxp;
+	extern const struct cdevsw view_cdevsw;
 
 	if (card_probed <= 0) {
 		if (card_probed == 0) /* Probed but failed */
@@ -138,7 +142,7 @@ void		*auxp;
 		 */
 		if (did_consinit)
 			return 0;
-		if (viewopen(cfp->cf_unit, 0, 0, NULL))
+		if ((*view_cdevsw.d_open)(cfp->cf_unit, 0, 0, NULL))
 			return 0;
 		cfdata_grf = cfp;
 		did_consinit = 1;
@@ -161,7 +165,7 @@ void		*auxp;
 	 * Final constraint: each grf needs a view....
 	 */
 	if((cfdata_grf == NULL) || (did_consinit > 1)) {
-	    if(viewopen(cfp->cf_unit, 0, 0, NULL))
+	    if((*view_cdevsw.d_open)(cfp->cf_unit, 0, 0, NULL))
 		return 0;
 	}
 	did_consinit = 2;
@@ -178,24 +182,24 @@ struct device	*pdp, *dp;
 void		*auxp;
 {
 	static struct grf_softc		congrf;
+	static int			first_attach = 1;
 	       grf_auxp_t		*grf_bus_auxp = auxp;
 	       grf_auxp_t		grf_auxp;
 	       struct grf_softc		*gp;
 	       int			maj;
+	extern const struct cdevsw grf_cdevsw;
 
 	/*
 	 * find our major device number 
 	 */
-	for(maj = 0; maj < nchrdev; maj++)
-		if (cdevsw[maj].d_open == grfopen)
-			break;
+	maj = cdevsw_lookup_major(&grf_cdevsw);
 
 	/*
 	 * Handle exeption case: early console init
 	 */
 	if(dp == NULL) {
-		congrf.g_unit    = 0;
-		congrf.g_grfdev  = makedev(maj, 0);
+		congrf.g_unit    = cfdata_grf->cf_unit;
+		congrf.g_grfdev  = makedev(maj, congrf.g_unit);
 		congrf.g_itedev  = (dev_t)-1;
 		congrf.g_flags   = GF_ALIVE;
 		congrf.g_mode    = grf_mode;
@@ -210,10 +214,10 @@ void		*auxp;
 	}
 
 	gp = (struct grf_softc *)dp;
-	gp->g_unit = gp->g_device.dv_unit;
+	gp->g_unit = device_unit(&gp->g_device);
 	grfsp[gp->g_unit] = gp;
 
-	if((cfdata_grf != NULL) && (gp->g_unit == 0)) {
+	if((cfdata_grf != NULL) && (gp->g_unit == congrf.g_unit)) {
 		/*
 		 * We inited earlier just copy the info, take care
 		 * not to copy the device struct though.
@@ -243,9 +247,10 @@ void		*auxp;
 	config_found(dp, gp, grfetprint);
 
 	/*
-	 * If attaching unit 0, go ahead and 'find' the rest of us
+	 * If attaching the first unit, go ahead and 'find' the rest of us
 	 */
-	if (gp->g_unit == 0) {
+	if (first_attach) {
+		first_attach = 0;
 		grf_auxp.from_bus_match = 0;
 		for (grf_auxp.unit=0; grf_auxp.unit < NGRFET; grf_auxp.unit++) {
 		    config_found(pdp, (void*)&grf_auxp, grf_bus_auxp->busprint);
@@ -259,7 +264,7 @@ void *auxp;
 const char *pnp;
 {
 	if(pnp) /* XXX */
-		printf("ite at %s", pnp);
+		aprint_normal("ite at %s", pnp);
 	return(UNCONF);
 }
 
@@ -355,6 +360,7 @@ struct itewinsize	*winsz;
 	int			error = 0;
 	save_area_t		*et_save;
 	view_t			*view;
+	extern const struct cdevsw view_cdevsw;
 
 	vs.x      = winsz->x;
 	vs.y      = winsz->y;
@@ -362,8 +368,8 @@ struct itewinsize	*winsz;
 	vs.height = winsz->height;
 	vs.depth  = winsz->depth;
 
-	error = viewioctl(ip->grf->g_viewdev, VIOCSSIZE, (caddr_t)&vs, 0,
-								NOPROC);
+	error = (*view_cdevsw.d_ioctl)(ip->grf->g_viewdev, VIOCSSIZE,
+				       (void *)&vs, 0, NOLWP);
 	view  = viewview(ip->grf->g_viewdev);
 
 	/*
@@ -395,17 +401,19 @@ struct itewinsize	*winsz;
 }
 
 int
-iteet_ioctl(ip, cmd, addr, flag, p)
+iteet_ioctl(ip, cmd, addr, flag, l)
 struct ite_softc	*ip;
 u_long			cmd;
-caddr_t			addr;
+void *			addr;
 int			flag;
-struct proc		*p;
+struct lwp		*l;
 {
 	struct winsize		ws;
 	struct itewinsize	*is;
 	int			error = 0;
 	view_t			*view = viewview(ip->grf->g_viewdev);
+	extern const struct cdevsw ite_cdevsw;
+	extern const struct cdevsw view_cdevsw;
 
 	switch (cmd) {
 	case ITEIOCSWINSZ:
@@ -424,20 +432,22 @@ struct proc		*p;
 			 * XXX tell tty about the change 
 			 * XXX this is messy, but works 
 			 */
-			iteioctl(ip->grf->g_itedev,TIOCSWINSZ,(caddr_t)&ws,0,p);
+			(*ite_cdevsw.d_ioctl)(ip->grf->g_itedev, TIOCSWINSZ,
+					      (void *)&ws, 0, l);
 		}
 		break;
 	case VIOCSCMAP:
 	case VIOCGCMAP:
 		/*
-		 * XXX watchout for that NOPROC. its not really the kernel
+		 * XXX watchout for that NOLWP. its not really the kernel
 		 * XXX talking these two commands don't use the proc pointer
 		 * XXX though.
 		 */
-		error = viewioctl(ip->grf->g_viewdev, cmd, addr, flag, NOPROC);
+		error = (*view_cdevsw.d_ioctl)(ip->grf->g_viewdev, cmd, addr,
+					       flag, NOLWP);
 		break;
 	default:
-		error = -1;
+		error = EPASSTHROUGH;
 		break;
 	}
 	return (error);

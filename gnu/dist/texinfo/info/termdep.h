@@ -1,10 +1,10 @@
-/* termdep.h -- System things that terminal.c depends on.
-   $Id: termdep.h,v 1.1.1.1 1999/02/11 03:57:22 tv Exp $
+/*	$NetBSD: termdep.h,v 1.1.1.5 2008/09/02 07:50:08 christos Exp $	*/
 
-   This file is part of GNU Info, a program for reading online documentation
-   stored in Info format.
+/* termdep.h -- system things that terminal.c depends on.
+   Id: termdep.h,v 1.2 2004/04/11 17:56:46 karl Exp
 
-   Copyright (C) 1993, 96, 97 Free Software Foundation, Inc.
+   Copyright (C) 1993, 1996, 1997, 1998, 2001, 2002 Free Software
+   Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -49,6 +49,10 @@
 #    include <sgtty.h>
 #  endif /* !HAVE_TERMIO_H */
 #endif /* !HAVE_TERMIOS_H */
+
+#ifdef GWINSZ_IN_SYS_IOCTL
+#  include <sys/ioctl.h>
+#endif
 
 #ifdef HAVE_SYS_TTOLD_H
 #  include <sys/ttold.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ae.c,v 1.67 1998/01/12 19:22:07 thorpej Exp $	*/
+/*	$NetBSD: if_ae.c,v 1.79 2007/01/06 13:25:19 martin Exp $	*/
 
 /*
  * Device driver for National Semiconductor DS8390/WD83C690 based ethernet
@@ -12,6 +12,9 @@
  * the author responsible for the proper functioning of this software, nor does
  * the author assume any responsibility for damages incurred with its use.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_ae.c,v 1.79 2007/01/06 13:25:19 martin Exp $");
 
 #include "bpfilter.h"
 
@@ -31,13 +34,12 @@
 #include <dev/ic/dp8390var.h>
 #include <mac68k/dev/if_aevar.h>
 
+#define ETHER_PAD_LEN	(ETHER_MIN_LEN - ETHER_CRC_LEN)
+
 int
-ae_size_card_memory(bst, bsh, ofs)
-	bus_space_tag_t bst;
-	bus_space_handle_t bsh;
-	int ofs;
+ae_size_card_memory(bus_space_tag_t bst, bus_space_handle_t bsh, int ofs)
 {
-	int i1, i2, i3, i4;
+	int i1, i2, i3, i4, i8;
 
 	/*
 	 * banks; also assume it will generally mirror in upper banks
@@ -48,10 +50,29 @@ ae_size_card_memory(bst, bsh, ofs)
 	i3 = (8192 * 2);
 	i4 = (8192 * 3);
 
-	bus_space_write_2(bst, bsh, ofs + i1, 0x1111);
-	bus_space_write_2(bst, bsh, ofs + i2, 0x2222);
-	bus_space_write_2(bst, bsh, ofs + i3, 0x3333);
+	i8 = (8192 * 4);
+
+	bus_space_write_2(bst, bsh, ofs + i8, 0x8888);
 	bus_space_write_2(bst, bsh, ofs + i4, 0x4444);
+	bus_space_write_2(bst, bsh, ofs + i3, 0x3333);
+	bus_space_write_2(bst, bsh, ofs + i2, 0x2222);
+	bus_space_write_2(bst, bsh, ofs + i1, 0x1111);
+
+	/*
+	* 1) If the memory range is decoded completely, it does not
+	*    matter what we write first: High tags written into
+	*    the void are lost.
+	* 2) If the memory range is not decoded completely (banks are
+	*    mirrored), high tags are overwritten by lower ones.
+	* 3) Lazy implementation of pathological cases - none found yet.
+	*/
+
+	if (bus_space_read_2(bst, bsh, ofs + i1) == 0x1111 &&
+	    bus_space_read_2(bst, bsh, ofs + i2) == 0x2222 &&
+	    bus_space_read_2(bst, bsh, ofs + i3) == 0x3333 &&
+	    bus_space_read_2(bst, bsh, ofs + i4) == 0x4444 &&
+	    bus_space_read_2(bst, bsh, ofs + i8) == 0x8888)
+		return 8192 * 8;
 
 	if (bus_space_read_2(bst, bsh, ofs + i1) == 0x1111 &&
 	    bus_space_read_2(bst, bsh, ofs + i2) == 0x2222 &&
@@ -79,8 +100,7 @@ ae_size_card_memory(bst, bsh, ofs)
  * `interesting' combination.
  */
 int
-ae_test_mem(sc)
-	struct dp8390_softc *sc;
+ae_test_mem(struct dp8390_softc *sc)
 {
 	bus_space_tag_t buft = sc->sc_buft;
 	bus_space_handle_t bufh = sc->sc_bufh;
@@ -107,10 +127,7 @@ ae_test_mem(sc)
  * As in the test_mem function, we use word-wide writes.
  */
 int
-ae_write_mbuf(sc, m, buf)
-	struct dp8390_softc *sc;
-	struct mbuf *m;
-	int buf;
+ae_write_mbuf(struct dp8390_softc *sc, struct mbuf *m, int buf)
 {
 	u_char *data, savebyte[2];
 	int len, wantbyte;
@@ -127,7 +144,7 @@ ae_write_mbuf(sc, m, buf)
 			if (wantbyte) {
 				savebyte[1] = *data;
 				bus_space_write_region_2(sc->sc_buft,
-				    sc->sc_bufh, buf, savebyte, 1);
+				    sc->sc_bufh, buf, (u_int16_t *)savebyte, 1);
 				buf += 2;
 				data++;
 				len--;
@@ -135,8 +152,9 @@ ae_write_mbuf(sc, m, buf)
 			}
 			/* Output contiguous words. */
 			if (len > 1) {
-				bus_space_write_region_2(sc->sc_buft,
-				    sc->sc_bufh, buf, data, len >> 1);
+				bus_space_write_region_2(
+				    sc->sc_buft, sc->sc_bufh,
+				    buf, (u_int16_t *)data, len >> 1);
 				buf += len & ~1;
 				data += len & ~1;
 				len &= 1;
@@ -149,10 +167,20 @@ ae_write_mbuf(sc, m, buf)
 		}
 	}
 
+	len = ETHER_PAD_LEN - totlen;
 	if (wantbyte) {
 		savebyte[1] = 0;
 		bus_space_write_region_2(sc->sc_buft, sc->sc_bufh,
-		    buf, savebyte, 1);
+		    buf, (u_int16_t *)savebyte, 1);
+		buf += 2;
+		totlen++;
+		len--;
+	}
+	/* if sent data is shorter than EHTER_PAD_LEN, put 0 to padding */
+	if (len > 0) {
+		bus_space_set_region_2(sc->sc_buft, sc->sc_bufh, buf, 0,
+		    len >> 1);
+		totlen = ETHER_PAD_LEN;
 	}
 	return (totlen);
 }

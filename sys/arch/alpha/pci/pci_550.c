@@ -1,4 +1,4 @@
-/* $NetBSD: pci_550.c,v 1.14 2000/03/19 02:25:29 thorpej Exp $ */
+/* $NetBSD: pci_550.c,v 1.28 2008/04/28 20:23:11 martin Exp $ */
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -66,7 +59,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: pci_550.c,v 1.14 2000/03/19 02:25:29 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_550.c,v 1.28 2008/04/28 20:23:11 martin Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -77,7 +70,7 @@ __KERNEL_RCSID(0, "$NetBSD: pci_550.c,v 1.14 2000/03/19 02:25:29 thorpej Exp $")
 #include <sys/device.h>
 #include <sys/syslog.h>
 
-#include <vm/vm.h>
+#include <uvm/uvm_extern.h>
 
 #include <machine/autoconf.h>
 #include <machine/rpb.h>
@@ -92,18 +85,15 @@ __KERNEL_RCSID(0, "$NetBSD: pci_550.c,v 1.14 2000/03/19 02:25:29 thorpej Exp $")
 
 #include <alpha/pci/pci_550.h>
 
-#ifndef EVCNT_COUNTERS
-#include <machine/intrcnt.h>
-#endif
-
 #include "sio.h"
 #if NSIO
 #include <alpha/pci/siovar.h>
 #endif
 
-int	dec_550_intr_map __P((void *, pcitag_t, int, int,
+int	dec_550_intr_map __P((struct pci_attach_args *,
 	    pci_intr_handle_t *));
 const char *dec_550_intr_string __P((void *, pci_intr_handle_t));
+const struct evcnt *dec_550_intr_evcnt __P((void *, pci_intr_handle_t));
 void	*dec_550_intr_establish __P((void *, pci_intr_handle_t,
 	    int, int (*func)(void *), void *));
 void	dec_550_intr_disestablish __P((void *, void *));
@@ -123,19 +113,15 @@ void	*dec_550_pciide_compat_intr_establish __P((void *, struct device *,
 /*
  * Some Miata models, notably models with a Cypress PCI-ISA bridge, have
  * a PCI device (the OHCI USB controller) with interrupts tied to ISA IRQ
- * lines.  This IRQ is encoded as:
- *
- *	line = 0xe0 | isa_irq;
+ * lines.  This IRQ is encoded as: line = FLAG | isa_irq. Usually FLAG
+ * is 0xe0, however, it can be 0xf0.  We don't allow 0xf0 | irq15.
  */
-#define	DEC_550_LINE_IS_ISA(line)	((line) >= 0xe0 && (line) <= 0xef)
+#define	DEC_550_LINE_IS_ISA(line)	((line) >= 0xe0 && (line) <= 0xfe)
 #define	DEC_550_LINE_ISA_IRQ(line)	((line) & 0x0f)
 
 struct alpha_shared_intr *dec_550_pci_intr;
-#ifdef EVCNT_COUNTERS
-struct evcnt dec_550_intr_evcnt;
-#endif
 
-void	dec_550_iointr __P((void *framep, unsigned long vec));
+void	dec_550_iointr __P((void *arg, unsigned long vec));
 void	dec_550_intr_enable __P((int irq));
 void	dec_550_intr_disable __P((int irq));
 
@@ -145,11 +131,13 @@ pci_550_pickintr(ccp)
 {
 	bus_space_tag_t iot = &ccp->cc_iot;
 	pci_chipset_tag_t pc = &ccp->cc_pc;
+	char *cp;
 	int i;
 
         pc->pc_intr_v = ccp;
         pc->pc_intr_map = dec_550_intr_map;
         pc->pc_intr_string = dec_550_intr_string;
+	pc->pc_intr_evcnt = dec_550_intr_evcnt;
         pc->pc_intr_establish = dec_550_intr_establish;
         pc->pc_intr_disestablish = dec_550_intr_disestablish;
 
@@ -164,29 +152,32 @@ pci_550_pickintr(ccp)
 	for (i = 0; i < DEC_550_MAX_IRQ; i++)
 		dec_550_intr_disable(i);
 
-	dec_550_pci_intr = alpha_shared_intr_alloc(DEC_550_MAX_IRQ);
+	dec_550_pci_intr = alpha_shared_intr_alloc(DEC_550_MAX_IRQ, 8);
 	for (i = 0; i < DEC_550_MAX_IRQ; i++) {
 		alpha_shared_intr_set_maxstrays(dec_550_pci_intr, i,
 		    PCI_STRAY_MAX);
 		alpha_shared_intr_set_private(dec_550_pci_intr, i, ccp);
+		
+		cp = alpha_shared_intr_string(dec_550_pci_intr, i);
+		sprintf(cp, "irq %d", i);
+		evcnt_attach_dynamic(alpha_shared_intr_evcnt(
+		    dec_550_pci_intr, i), EVCNT_TYPE_INTR, NULL,
+		    "dec_550", cp);
 	}
 
 #if NSIO
 	sio_intr_setup(pc, iot);
 #endif
-
-	set_iointr(dec_550_iointr);
 }
 
 int     
-dec_550_intr_map(ccv, bustag, buspin, line, ihp)
-        void *ccv;
-        pcitag_t bustag; 
-        int buspin, line;
+dec_550_intr_map(pa, ihp)
+	struct pci_attach_args *pa;
         pci_intr_handle_t *ihp;
 {
-	struct cia_config *ccp = ccv;
-	pci_chipset_tag_t pc = &ccp->cc_pc;
+	pcitag_t bustag = pa->pa_intrtag;
+	int buspin = pa->pa_intrpin, line = pa->pa_intrline;
+	pci_chipset_tag_t pc = pa->pa_pc;
 	int bus, device, function;
 
 	if (buspin == 0) {
@@ -198,7 +189,7 @@ dec_550_intr_map(ccv, bustag, buspin, line, ihp)
 		return 1;
 	}
 
-	alpha_pci_decompose_tag(pc, bustag, &bus, &device, &function);
+	pci_decompose_tag(pc, bustag, &bus, &device, &function);
 
 	/*
 	 * There are two main variants of Miata: Miata 1 (Intel SIO)
@@ -251,10 +242,11 @@ dec_550_intr_map(ccv, bustag, buspin, line, ihp)
 	}
 #endif
 
-	if (DEC_550_LINE_IS_ISA(line) == 0 && line >= DEC_550_MAX_IRQ)
-		panic("dec_550_intr_map: dec 550 irq too large (%d)\n",
-		    line);
-
+	if (DEC_550_LINE_IS_ISA(line) == 0 && line >= DEC_550_MAX_IRQ) {
+		printf("dec_550_intr_map: irq %d out of range %d/%d/%d\n",
+		    line, bus, device, function);
+		return (1);
+	}
 	*ihp = line;
 	return (0);
 }
@@ -276,9 +268,30 @@ dec_550_intr_string(ccv, ih)
 #endif
 
 	if (ih >= DEC_550_MAX_IRQ)
-		panic("dec_550_intr_string: bogus 550 IRQ 0x%lx\n", ih);
+		panic("dec_550_intr_string: bogus 550 IRQ 0x%lx", ih);
 	sprintf(irqstr, "dec 550 irq %ld", ih);
 	return (irqstr);
+}
+
+const struct evcnt *
+dec_550_intr_evcnt(ccv, ih)
+	void *ccv;
+	pci_intr_handle_t ih;
+{
+#if 0
+	struct cia_config *ccp = ccv;
+#endif
+
+#if NSIO
+	if (DEC_550_LINE_IS_ISA(ih))
+		return (sio_intr_evcnt(NULL /*XXX*/,
+		    DEC_550_LINE_ISA_IRQ(ih)));
+#endif
+
+	if (ih >= DEC_550_MAX_IRQ)
+		panic("dec_550_intr_evcnt: bogus 550 IRQ 0x%lx", ih);
+
+	return (alpha_shared_intr_evcnt(dec_550_pci_intr, ih));
 }
 
 void *
@@ -300,13 +313,17 @@ dec_550_intr_establish(ccv, ih, level, func, arg)
 #endif
 
 	if (ih >= DEC_550_MAX_IRQ)
-		panic("dec_550_intr_establish: bogus dec 550 IRQ 0x%lx\n", ih);
+		panic("dec_550_intr_establish: bogus dec 550 IRQ 0x%lx", ih);
 
 	cookie = alpha_shared_intr_establish(dec_550_pci_intr, ih, IST_LEVEL,
 	    level, func, arg, "dec 550 irq");
 
-	if (cookie != NULL && alpha_shared_intr_isactive(dec_550_pci_intr, ih))
+	if (cookie != NULL &&
+	    alpha_shared_intr_firstactive(dec_550_pci_intr, ih)) {
+		scb_set(0x900 + SCB_IDXTOVEC(ih), dec_550_iointr, NULL,
+		    level);
 		dec_550_intr_enable(ih);
+	}
 	return (cookie);
 }
 
@@ -340,6 +357,7 @@ dec_550_intr_disestablish(ccv, cookie)
 		dec_550_intr_disable(irq);
 		alpha_shared_intr_set_dfltsharetype(dec_550_pci_intr, irq,
 		    IST_NONE);
+		scb_free(0x900 + SCB_IDXTOVEC(irq));
 	}
  
 	splx(s);
@@ -358,7 +376,7 @@ dec_550_pciide_compat_intr_establish(v, dev, pa, chan, func, arg)
 	void *cookie = NULL;
 	int bus, irq;
 
-	alpha_pci_decompose_tag(pc, pa->pa_tag, &bus, NULL, NULL);
+	pci_decompose_tag(pc, pa->pa_tag, &bus, NULL, NULL);
 
 	/*
 	 * If this isn't PCI bus #0, all bets are off.
@@ -370,46 +388,33 @@ dec_550_pciide_compat_intr_establish(v, dev, pa, chan, func, arg)
 #if NSIO
 	cookie = sio_intr_establish(NULL /*XXX*/, irq, IST_EDGE, IPL_BIO,
 	    func, arg);
+	if (cookie == NULL)
+		return (NULL);
+	printf("%s: %s channel interrupting at %s\n", dev->dv_xname,
+	    PCIIDE_CHANNEL_NAME(chan), sio_intr_string(NULL /*XXX*/, irq));
 #endif
 	return (cookie);
 }
 
 void
-dec_550_iointr(framep, vec)
-	void *framep;
+dec_550_iointr(arg, vec)
+	void *arg;
 	unsigned long vec;
 {
 	int irq; 
 
-	if (vec >= 0x900) {
-		irq = ((vec - 0x900) >> 4);
+	irq = SCB_VECTOIDX(vec - 0x900);
 
-		if (irq >= DEC_550_MAX_IRQ)
-			panic("550_iointr: vec 0x%lx out of range\n", vec);
+	if (irq >= DEC_550_MAX_IRQ)
+		panic("550_iointr: vec 0x%lx out of range", vec);
 
-#ifdef EVCNT_COUNTERS
-		dec_550_intr_evcnt.ev_count++;
-#else
-		if (DEC_550_MAX_IRQ != INTRCNT_DEC_550_IRQ_LEN)
-			panic("dec_550 interrupt counter sizes inconsistent");
-		intrcnt[INTRCNT_DEC_550_IRQ + irq]++;
-#endif
-
-		if (!alpha_shared_intr_dispatch(dec_550_pci_intr, irq)) {
-			alpha_shared_intr_stray(dec_550_pci_intr, irq,
-			    "dec 550 irq");
-			if (ALPHA_SHARED_INTR_DISABLE(dec_550_pci_intr, irq))
-				dec_550_intr_disable(irq);
-		}
-		return;
-	}
-#if NSIO
-	if (vec >= 0x800) {
-		sio_iointr(framep, vec);
-		return;
-	}
-#endif
-	panic("dec_550_iointr: weird vec 0x%lx\n", vec);
+	if (!alpha_shared_intr_dispatch(dec_550_pci_intr, irq)) {
+		alpha_shared_intr_stray(dec_550_pci_intr, irq,
+		    "dec 550 irq");
+		if (ALPHA_SHARED_INTR_DISABLE(dec_550_pci_intr, irq))
+			dec_550_intr_disable(irq);
+	} else
+		alpha_shared_intr_reset_strays(dec_550_pci_intr, irq);
 }
 
 void

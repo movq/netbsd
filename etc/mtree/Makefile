@@ -1,6 +1,6 @@
-#	$NetBSD: Makefile,v 1.3 1998/09/04 10:29:12 agc Exp $
+#	$NetBSD: Makefile,v 1.5 2004/05/16 09:53:09 lukem Exp $
 
-FILES=	NetBSD.dist special
+CONFIGFILES=	NetBSD.dist special
 FILESDIR=	/etc/mtree
 
 .include <bsd.prog.mk>

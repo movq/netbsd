@@ -1,37 +1,27 @@
-/*	$NetBSD: resend.c,v 1.1.1.1 1999/12/11 22:24:10 veego Exp $	*/
+/*	$NetBSD: resend.c,v 1.8 2007/04/14 20:34:22 martin Exp $	*/
 
 /*
  * resend.c (C) 1995-1998 Darren Reed
  *
- * This was written to test what size TCP fragments would get through
- * various TCP/IP packet filters, as used in IP firewalls.  In certain
- * conditions, enough of the TCP header is missing for unpredictable
- * results unless the filter is aware that this can happen.
+ * See the IPFILTER.LICENCE file for details on licencing.
  *
- * Redistribution and use in source and binary forms are permitted
- * provided that this notice is preserved and due credit is given
- * to the original author and the contributors.
  */
 #if !defined(lint)
 static const char sccsid[] = "@(#)resend.c	1.3 1/11/96 (C)1995 Darren Reed";
-static const char rcsid[] = "@(#)Id: resend.c,v 2.1 1999/08/04 17:31:12 darrenr Exp";
+static const char rcsid[] = "@(#)Id: resend.c,v 2.8.2.3 2007/02/17 12:41:51 darrenr Exp";
 #endif
-#include <stdio.h>
-#include <netdb.h>
-#include <string.h>
-#include <stdlib.h>
-#include <unistd.h>
+#include <sys/param.h>
 #include <sys/types.h>
 #include <sys/time.h>
 #include <sys/socket.h>
+#ifdef __osf__
+# include "radix_ipf_local.h"
+#endif
 #include <net/if.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netinet/in_systm.h>
 #include <netinet/ip.h>
-#include <netinet/tcp.h>
-#include <netinet/udp.h>
-#include <netinet/ip_icmp.h>
 #ifndef	linux
 # include <netinet/ip_var.h>
 # include <netinet/if_ether.h>
@@ -39,6 +29,11 @@ static const char rcsid[] = "@(#)Id: resend.c,v 2.1 1999/08/04 17:31:12 darrenr 
 #  include <net/if_var.h>
 # endif
 #endif
+#include <stdio.h>
+#include <netdb.h>
+#include <string.h>
+#include <stdlib.h>
+#include <unistd.h>
 #include "ipsend.h"
 
 extern	int	opts;
@@ -53,7 +48,7 @@ ip_t	*ip;
 	tcphdr_t *t;
 	int i, j;
 
-	t = (tcphdr_t *)((char *)ip + (ip->ip_hl << 2));
+	t = (tcphdr_t *)((char *)ip + (IP_HL(ip) << 2));
 	if (ip->ip_tos)
 		printf("tos %#x ", ip->ip_tos);
 	if (ip->ip_off & 0x3fff)
@@ -87,23 +82,32 @@ char	*datain;
 	ether_header_t	*eh;
 	char	dhost[6];
 	ip_t	*ip;
-	int	fd, wfd = initdevice(dev, 0, 5), len, i;
+	int	fd, wfd = initdevice(dev, 5), len, i;
+
+	if (wfd == -1)
+		return -1;
 
 	if (datain)
 		fd = (*r->r_open)(datain);
 	else
 		fd = (*r->r_open)("-");
- 
+
 	if (fd < 0)
 		exit(-1);
 
 	ip = (struct ip *)pbuf;
 	eh = (ether_header_t *)malloc(sizeof(*eh));
+	if(!eh)
+	    {
+		perror("malloc failed");
+		return -2;
+	    }
 
 	bzero((char *)A_A eh->ether_shost, sizeof(eh->ether_shost));
 	if (gwip.s_addr && (arp((char *)&gwip, dhost) == -1))
 	    {
 		perror("arp");
+		free(eh);
 		return -2;
 	    }
 
@@ -124,7 +128,7 @@ char	*datain;
 				      sizeof(dhost));
 			if (!ip->ip_sum)
 				ip->ip_sum = chksum((u_short *)ip,
-						    ip->ip_hl << 2);
+						    IP_HL(ip) << 2);
 			bcopy(ip, (char *)(eh + 1), len);
 			len += sizeof(*eh);
 			printpacket(ip);
@@ -140,5 +144,6 @@ char	*datain;
 		    }
 	    }
 	(*r->r_close)();
+	free(eh);
 	return 0;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: syslog.h,v 1.21 1999/08/27 01:14:16 thorpej Exp $	*/
+/*	$NetBSD: syslog.h,v 1.31 2008/08/27 21:17:28 tls Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1988, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -171,6 +167,24 @@ CODE facilitynames[] = {
 
 #ifndef _KERNEL
 
+/* Used by reentrant functions */
+
+struct syslog_data {
+	int	log_file;
+	int	connected;
+	int	opened;
+	int	log_stat;
+	const char 	*log_tag;
+	int 	log_fac;
+	int 	log_mask;
+};
+
+#define SYSLOG_DATA_INIT { \
+    .log_file = -1, \
+    .log_fac = LOG_USER, \
+    .log_mask = 0xff, \
+}
+
 /*
  * Don't use va_list in the vsyslog() prototype.   Va_list is typedef'd in two
  * places (<machine/varargs.h> and <machine/stdarg.h>), so if we include one
@@ -183,25 +197,34 @@ CODE facilitynames[] = {
 #include <sys/featuretest.h>
 
 __BEGIN_DECLS
-void	closelog __P((void));
-void	openlog __P((const char *, int, int));
-int	setlogmask __P((int));
-void	syslog __P((int, const char *, ...))
+void	closelog(void);
+void	openlog(const char *, int, int);
+int	setlogmask(int);
+void	syslog(int, const char *, ...)
     __attribute__((__format__(__printf__,2,3)));
-#if !defined(_XOPEN_SOURCE)
-void	vsyslog __P((int, const char *, _BSD_VA_LIST_));
+#if defined(_NETBSD_SOURCE)
+void	vsyslog(int, const char *, _BSD_VA_LIST_)
+    __attribute__((__format__(__printf__,2,0)));
+void	closelog_r(struct syslog_data *);
+void	openlog_r(const char *, int, int, struct syslog_data *);
+int	setlogmask_r(int, struct syslog_data *);
+void	syslog_r(int, struct syslog_data *, const char *, ...)
+    __attribute__((__format__(__printf__,3,4)));
+void	vsyslog_r(int, struct syslog_data *, const char *, _BSD_VA_LIST_)
+    __attribute__((__format__(__printf__,3,0)));
 #endif
 __END_DECLS
 
 #else /* !_KERNEL */
 
-void	logpri __P((int));
-void	log __P((int, const char *, ...))
-    __kprintf_attribute__((__format__(__kprintf__,2,3)));
-void	vlog __P((int, const char *, _BSD_VA_LIST_));
-void	addlog __P((const char *, ...))
-    __kprintf_attribute__((__format__(__kprintf__,1,2)));
-void	logwakeup __P((void));
+void	logpri(int);
+void	log(int, const char *, ...)
+    __attribute__((__format__(__printf__,2,3)));
+void	vlog(int, const char *, _BSD_VA_LIST_)
+    __attribute__((__format__(__printf__,2,0)));
+void	addlog(const char *, ...)
+    __attribute__((__format__(__printf__,1,2)));
+void	logwakeup(void);
 
 #endif /* !_KERNEL */
 

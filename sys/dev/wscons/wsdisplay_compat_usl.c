@@ -1,4 +1,4 @@
-/* $NetBSD: wsdisplay_compat_usl.c,v 1.12 2000/03/23 07:01:47 thorpej Exp $ */
+/* $NetBSD: wsdisplay_compat_usl.c,v 1.45 2008/04/24 15:35:28 ad Exp $ */
 
 /*
  * Copyright (c) 1998
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed for the NetBSD Project
- *	by Matthias Drochner.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -32,6 +26,9 @@
  *
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: wsdisplay_compat_usl.c,v 1.45 2008/04/24 15:35:28 ad Exp $");
+
 #include "opt_compat_freebsd.h"
 #include "opt_compat_netbsd.h"
 
@@ -44,6 +41,7 @@
 #include <sys/signalvar.h>
 #include <sys/malloc.h>
 #include <sys/errno.h>
+#include <sys/kauth.h>
 
 #include <dev/wscons/wsconsio.h>
 #include <dev/wscons/wsdisplayvar.h>
@@ -61,33 +59,31 @@ struct usl_syncdata {
 #define SF_ATTACHPENDING 2
 	int s_acqsig, s_relsig;
 	int s_frsig; /* unused */
-	void (*s_callback) __P((void *, int, int));
+	void (*s_callback)(void *, int, int);
 	void *s_cbarg;
-	struct callout s_attach_ch;
-	struct callout s_detach_ch;
+	callout_t s_attach_ch;
+	callout_t s_detach_ch;
 };
 
-static int usl_sync_init __P((struct wsscreen *, struct usl_syncdata **,
-			      struct proc *, int, int, int));
-static void usl_sync_done __P((struct usl_syncdata *));
-static int usl_sync_check __P((struct usl_syncdata *));
-static struct usl_syncdata *usl_sync_get __P((struct wsscreen *));
+static int usl_sync_init(struct wsscreen *, struct usl_syncdata **,
+			      struct proc *, int, int, int);
+static void usl_sync_done(struct usl_syncdata *);
+static int usl_sync_check(void *);
+static int usl_sync_check_sig(struct usl_syncdata *, int, int);
+static struct usl_syncdata *usl_sync_get(struct wsscreen *);
 
-static int usl_detachproc __P((void *, int,
-			       void (*)(void *, int, int), void *));
-static int usl_detachack __P((struct usl_syncdata *, int));
-static void usl_detachtimeout __P((void *));
-static int usl_attachproc __P((void *, int,
-			       void (*)(void *, int, int), void *));
-static int usl_attachack __P((struct usl_syncdata *, int));
-static void usl_attachtimeout __P((void *));
+static int usl_detachproc(void *, int, void (*)(void *, int, int), void *);
+static int usl_detachack(struct usl_syncdata *, int);
+static void usl_detachtimeout(void *);
+static int usl_attachproc(void *, int, void (*)(void *, int, int), void *);
+static int usl_attachack(struct usl_syncdata *, int);
+static void usl_attachtimeout(void *);
 
 static const struct wscons_syncops usl_syncops = {
 	usl_detachproc,
 	usl_attachproc,
-#define _usl_sync_check ((int (*) __P((void *)))usl_sync_check)
-	_usl_sync_check,
-#define _usl_sync_destroy ((void (*) __P((void *)))usl_sync_done)
+	usl_sync_check,
+#define _usl_sync_destroy ((void (*)(void *))usl_sync_done)
 	_usl_sync_destroy
 };
 
@@ -97,11 +93,8 @@ static const struct wscons_syncops usl_syncops = {
 static int wscompat_usl_synctimeout = WSCOMPAT_USL_SYNCTIMEOUT;
 
 static int
-usl_sync_init(scr, sdp, p, acqsig, relsig, frsig)
-	struct wsscreen *scr;
-	struct usl_syncdata **sdp;
-	struct proc *p;
-	int acqsig, relsig, frsig;
+usl_sync_init(struct wsscreen *scr, struct usl_syncdata **sdp,
+	struct proc *p, int acqsig, int relsig, int frsig)
 {
 	struct usl_syncdata *sd;
 	int res;
@@ -116,8 +109,10 @@ usl_sync_init(scr, sdp, p, acqsig, relsig, frsig)
 	sd->s_acqsig = acqsig;
 	sd->s_relsig = relsig;
 	sd->s_frsig = frsig;
-	callout_init(&sd->s_attach_ch);
-	callout_init(&sd->s_detach_ch);
+	callout_init(&sd->s_attach_ch, 0);
+	callout_setfunc(&sd->s_attach_ch, usl_attachtimeout, sd);
+	callout_init(&sd->s_detach_ch, 0);
+	callout_setfunc(&sd->s_detach_ch, usl_detachtimeout, sd);
 	res = wsscreen_attach_sync(scr, &usl_syncops, sd);
 	if (res) {
 		free(sd, M_DEVBUF);
@@ -128,8 +123,7 @@ usl_sync_init(scr, sdp, p, acqsig, relsig, frsig)
 }
 
 static void
-usl_sync_done(sd)
-	struct usl_syncdata *sd;
+usl_sync_done(struct usl_syncdata *sd)
 {
 	if (sd->s_flags & SF_DETACHPENDING) {
 		callout_stop(&sd->s_detach_ch);
@@ -144,38 +138,47 @@ usl_sync_done(sd)
 }
 
 static int
-usl_sync_check(sd)
-	struct usl_syncdata *sd;
+usl_sync_check_sig(struct usl_syncdata *sd, int sig, int flags)
 {
-	if (sd->s_proc == pfind(sd->s_pid))
+
+	mutex_enter(proc_lock);
+	if (sd->s_proc == p_find(sd->s_pid, PFIND_LOCKED)) {
+		sd->s_flags |= flags;
+		if (sig)
+			psignal(sd->s_proc, sig);
+		mutex_exit(proc_lock);
 		return (1);
+	}
+	mutex_exit(proc_lock);
+
 	printf("usl_sync_check: process %d died\n", sd->s_pid);
 	usl_sync_done(sd);
 	return (0);
 }
 
-static struct usl_syncdata *
-usl_sync_get(scr)
-	struct wsscreen *scr;
+static int
+usl_sync_check(void *vsd)
 {
-	struct usl_syncdata *sd;
 
-	if (wsscreen_lookup_sync(scr, &usl_syncops, (void **)&sd))
+	struct usl_syncdata *sd = vsd;
+	return usl_sync_check_sig(sd, 0, 0);
+}
+
+static struct usl_syncdata *
+usl_sync_get(struct wsscreen *scr)
+{
+	void *sd;
+
+	if (wsscreen_lookup_sync(scr, &usl_syncops, &sd))
 		return (0);
-	return (sd);
+	return (struct usl_syncdata *)sd;
 }
 
 static int
-usl_detachproc(cookie, waitok, callback, cbarg)
-	void *cookie;
-	int waitok;
-	void (*callback) __P((void *, int, int));
-	void *cbarg;
+usl_detachproc(void *cookie, int waitok,
+    void (*callback)(void *, int, int), void *cbarg)
 {
 	struct usl_syncdata *sd = cookie;
-
-	if (!usl_sync_check(sd))
-		return (0);
 
 	/* we really need a callback */
 	if (!callback)
@@ -188,18 +191,15 @@ usl_detachproc(cookie, waitok, callback, cbarg)
 	 */
 	sd->s_callback = callback;
 	sd->s_cbarg = cbarg;
-	sd->s_flags |= SF_DETACHPENDING;
-	psignal(sd->s_proc, sd->s_relsig);
-	callout_reset(&sd->s_detach_ch, wscompat_usl_synctimeout * hz,
-	    usl_detachtimeout, sd);
+	if (!usl_sync_check_sig(sd, sd->s_relsig, SF_DETACHPENDING))	
+		return (0);
 
+	callout_schedule(&sd->s_detach_ch, wscompat_usl_synctimeout * hz);
 	return (EAGAIN);
 }
 
 static int
-usl_detachack(sd, ack)
-	struct usl_syncdata *sd;
-	int ack;
+usl_detachack(struct usl_syncdata *sd, int ack)
 {
 	if (!(sd->s_flags & SF_DETACHPENDING)) {
 		printf("usl_detachack: not detaching\n");
@@ -216,8 +216,7 @@ usl_detachack(sd, ack)
 }
 
 static void
-usl_detachtimeout(arg)
-	void *arg;
+usl_detachtimeout(void *arg)
 {
 	struct usl_syncdata *sd = arg;
 
@@ -237,16 +236,10 @@ usl_detachtimeout(arg)
 }
 
 static int
-usl_attachproc(cookie, waitok, callback, cbarg)
-	void *cookie;
-	int waitok;
-	void (*callback) __P((void *, int, int));
-	void *cbarg;
+usl_attachproc(void *cookie, int waitok,
+    void (*callback)(void *, int, int), void *cbarg)
 {
 	struct usl_syncdata *sd = cookie;
-
-	if (!usl_sync_check(sd))
-		return (0);
 
 	/* we really need a callback */
 	if (!callback)
@@ -254,18 +247,15 @@ usl_attachproc(cookie, waitok, callback, cbarg)
 
 	sd->s_callback = callback;
 	sd->s_cbarg = cbarg;
-	sd->s_flags |= SF_ATTACHPENDING;
-	psignal(sd->s_proc, sd->s_acqsig);
-	callout_reset(&sd->s_attach_ch, wscompat_usl_synctimeout * hz,
-	    usl_attachtimeout, sd);
+	if (!usl_sync_check_sig(sd, sd->s_acqsig, SF_ATTACHPENDING))
+		return (0);
 
+	callout_schedule(&sd->s_attach_ch, wscompat_usl_synctimeout * hz);
 	return (EAGAIN);
 }
 
 static int
-usl_attachack(sd, ack)
-	struct usl_syncdata *sd;
-	int ack;
+usl_attachack(struct usl_syncdata *sd, int ack)
 {
 	if (!(sd->s_flags & SF_ATTACHPENDING)) {
 		printf("usl_attachack: not attaching\n");
@@ -282,8 +272,7 @@ usl_attachack(sd, ack)
 }
 
 static void
-usl_attachtimeout(arg)
-	void *arg;
+usl_attachtimeout(void *arg)
 {
 	struct usl_syncdata *sd = arg;
 
@@ -303,13 +292,10 @@ usl_attachtimeout(arg)
 }
 
 int
-wsdisplay_usl_ioctl1(sc, cmd, data, flag, p)
-	struct wsdisplay_softc *sc;
-	u_long cmd;
-	caddr_t data;
-	int flag;
-	struct proc *p;
+wsdisplay_usl_ioctl1(device_t dv, u_long cmd, void *data,
+    int flag, struct lwp *l)
 {
+	struct wsdisplay_softc *sc = device_private(dv);
 	int idx, maxidx;
 
 	switch (cmd) {
@@ -327,10 +313,22 @@ wsdisplay_usl_ioctl1(sc, cmd, data, flag, p)
 		*(int *)data = idx + 1;
 		return (0);
 	    case VT_ACTIVATE:
-		idx = *(int *)data - 1;
-		return (wsdisplay_switch((struct device *)sc, idx, 1));
+	    	/*
+	    	 * a gross and disgusting hack to make this abused up ioctl, 
+		 * which is a gross and disgusting hack on its own, work on
+		 * LP64/BE - we want the lower 32bit so we simply dereference
+		 * the argument pointer as long. May cause problems with 32bit
+		 * kernels on sparc64?
+		 */
+
+		idx = *(long *)data - 1;
+		if (idx < 0)
+			return (EINVAL);
+		return (wsdisplay_switch(dv, idx, 1));
 	    case VT_WAITACTIVE:
-		idx = *(int *)data - 1;
+		idx = *(long *)data - 1;
+		if (idx < 0)
+			return (EINVAL);
 		return (wsscreen_switchwait(sc, idx));
 	    case VT_GETSTATE:
 #define ss ((struct vt_stat *)data)
@@ -341,13 +339,13 @@ wsdisplay_usl_ioctl1(sc, cmd, data, flag, p)
 		for (idx = 0; idx <= maxidx; idx++)
 			if (wsdisplay_screenstate(sc, idx) == EBUSY)
 				ss->v_state |= (1 << (idx + 1));
-#undef s
+#undef ss
 		return (0);
 
 #ifdef WSDISPLAY_COMPAT_PCVT
 	    case VGAPCVTID:
 #define id ((struct pcvtid *)data)
-		strcpy(id->name, "pcvt");
+		strlcpy(id->name, "pcvt", sizeof(id->name));
 		id->rmajor = 3;
 		id->rminor = 32;
 #undef id
@@ -360,26 +358,20 @@ wsdisplay_usl_ioctl1(sc, cmd, data, flag, p)
 #endif
 
 	    default:
-		return (-1);
+		return (EPASSTHROUGH);
 	}
-
-	return (0);
 }
 
 int
-wsdisplay_usl_ioctl2(sc, scr, cmd, data, flag, p)
-	struct wsdisplay_softc *sc;
-	struct wsscreen *scr;
-	u_long cmd;
-	caddr_t data;
-	int flag;
-	struct proc *p;
+wsdisplay_usl_ioctl2(struct wsdisplay_softc *sc, struct wsscreen *scr,
+		     u_long cmd, void *data, int flag, struct lwp *l)
 {
-	int res;
-	struct usl_syncdata *sd;
-	int req, intarg;
-	struct wskbd_bell_data bd;
+	struct proc *p = l->l_proc;
+	int intarg = 0, res;
+	u_long req;
 	void *arg;
+	struct usl_syncdata *sd;
+	struct wskbd_bell_data bd;
 
 	switch (cmd) {
 	    case VT_SETMODE:
@@ -409,7 +401,7 @@ wsdisplay_usl_ioctl2(sc, scr, cmd, data, flag, p)
 #undef cmode
 		return (0);
 	    case VT_RELDISP:
-#define d (*(int *)data)
+#define d (*(long *)data)
 		sd = usl_sync_get(scr);
 		if (!sd)
 			return (EINVAL);
@@ -423,23 +415,24 @@ wsdisplay_usl_ioctl2(sc, scr, cmd, data, flag, p)
 			return (EINVAL);
 		}
 #undef d
-		return (0);
 
 	    case KDENABIO:
-		if (suser(p->p_ucred, &p->p_acflag) || securelevel > 1)
+#if defined(__i386__) && (defined(COMPAT_11) || defined(COMPAT_FREEBSD))
+		if (kauth_authorize_machdep(l->l_cred, KAUTH_MACHDEP_IOPL,
+		    NULL, NULL, NULL, NULL) != 0)
 			return (EPERM);
+#endif
 		/* FALLTHRU */
 	    case KDDISABIO:
-#if defined(__i386__)
-#if defined(COMPAT_10) || defined(COMPAT_11) || defined(COMPAT_FREEBSD)
+#if defined(__i386__) && (defined(COMPAT_11) || defined(COMPAT_FREEBSD))
 		{
-		struct trapframe *fp = (struct trapframe *)p->p_md.md_regs;
+			/* XXX NJWLWP */
+		struct trapframe *fp = (struct trapframe *)curlwp->l_md.md_regs;
 		if (cmd == KDENABIO)
 			fp->tf_eflags |= PSL_IOPL;
 		else
 			fp->tf_eflags &= ~PSL_IOPL;
 		}
-#endif
 #endif
 		return (0);
 	    case KDSETRAD:
@@ -447,7 +440,7 @@ wsdisplay_usl_ioctl2(sc, scr, cmd, data, flag, p)
 		return (0);
 
 	    default:
-		return (-1);
+		return (EPASSTHROUGH);
 
 	    /*
 	     * the following are converted to wsdisplay ioctls
@@ -527,8 +520,8 @@ wsdisplay_usl_ioctl2(sc, scr, cmd, data, flag, p)
 #endif
 	}
 
-	res = wsdisplay_internal_ioctl(sc, scr, req, arg, flag, p);
-	if (res)
+	res = wsdisplay_internal_ioctl(sc, scr, req, arg, flag, l);
+	if (res != EPASSTHROUGH)
 		return (res);
 
 	switch (cmd) {

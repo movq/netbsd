@@ -1,4 +1,4 @@
-/*	$NetBSD: warp.c,v 1.6 1998/09/11 14:28:28 hubertf Exp $	*/
+/*	$NetBSD: warp.c,v 1.8 2003/08/07 09:37:55 agc Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)warp.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: warp.c,v 1.6 1998/09/11 14:28:28 hubertf Exp $");
+__RCSID("$NetBSD: warp.c,v 1.8 2003/08/07 09:37:55 agc Exp $");
 #endif
 #endif /* not lint */
 
@@ -201,7 +197,7 @@ double	d;
 	/* test for just a lot of damage */
 	if (percent < 80)
 		lose(L_TOOFAST);
-	printf("Equilibrium restored -- extreme damage occured to ship systems\n");
+	printf("Equilibrium restored -- extreme damage occurred to ship systems\n");
 	for (i = 0; i < NDEV; i++)
 		damage(i, (3.0 * (franf() + franf()) + 1.0) * Param.damfac[i]);
 	Ship.shldup = 0;

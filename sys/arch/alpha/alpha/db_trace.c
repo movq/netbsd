@@ -1,4 +1,4 @@
-/* $NetBSD: db_trace.c,v 1.4 1999/07/12 07:37:14 ross Exp $ */
+/* $NetBSD: db_trace.c,v 1.24 2008/07/02 19:49:58 rmind Exp $ */
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -19,13 +19,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,12 +35,14 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.4 1999/07/12 07:37:14 ross Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.24 2008/07/02 19:49:58 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
 #include <sys/user.h>
+
+#include <machine/alpha.h>
 #include <machine/db_machdep.h>
 
 #include <alpha/alpha/db_instruction.h>
@@ -80,102 +75,187 @@ struct prologue_info {
  *		XentUna
  */
 
-extern void XentArith __P((void)), XentIF __P((void)), XentInt __P((void)),
-		XentMM __P((void)), XentSys __P((void)), XentUna __P((void)),
-		XentRestart __P((void));
-
 static struct special_symbol {
-	void (*ss_val) __P((void));
+	vaddr_t ss_val;
 	const char *ss_note;
 } special_symbols[] = {
-	{ &XentArith,	"arithmetic trap" },
-	{ &XentIF,	"instruction fault" },
-	{ &XentInt,	"interrupt" },
-	{ &XentMM,	"memory management fault" },
-	{ &XentSys,	"syscall" },
-	{ &XentUna,	"unaligned access fault" },
-	{ &XentRestart,	"console restart" },
-	{ NULL }
+	{ (vaddr_t)&XentArith,		"arithmetic trap" },
+	{ (vaddr_t)&XentIF,		"instruction fault" },
+	{ (vaddr_t)&XentInt,		"interrupt" },
+	{ (vaddr_t)&XentMM,		"memory management fault" },
+	{ (vaddr_t)&XentSys,		"syscall" },
+	{ (vaddr_t)&XentUna,		"unaligned access fault" },
+	{ (vaddr_t)&XentRestart,	"console restart" },
+	{ 0 }
 };
 
-static void decode_prologue __P((db_addr_t, db_addr_t, struct prologue_info *));
-static void decode_syscall(int, struct proc *);
-static int sym_is_trapsymbol __P((void *));
+/*
+ * Decode the function prologue for the function we're in, and note
+ * which registers are stored where, and how large the stack frame is.
+ */
+static void
+decode_prologue(db_addr_t callpc, db_addr_t func,
+    struct prologue_info *pi, void (*pr)(const char *, ...))
+{
+	long signed_immediate;
+	alpha_instruction ins;
+	db_expr_t pc;
+
+	pi->pi_regmask = 0;
+	pi->pi_frame_size = 0;
+
+#define	CHECK_FRAMESIZE							\
+do {									\
+	if (pi->pi_frame_size != 0) {					\
+		(*pr)("frame size botch: adjust register offsets?\n"); \
+	}								\
+} while (0)
+
+	for (pc = func; pc < callpc; pc += sizeof(alpha_instruction)) {
+		ins.bits = *(unsigned int *)pc;
+
+		if (ins.mem_format.opcode == op_lda &&
+		    ins.mem_format.ra == 30 &&
+		    ins.mem_format.rb == 30) {
+			/*
+			 * GCC 2.7-style stack adjust:
+			 *
+			 *	lda	sp, -64(sp)
+			 */
+			signed_immediate = (long)ins.mem_format.displacement;
+			/*
+			 * The assumption here is that a positive
+			 * stack offset is the function epilogue,
+			 * which may come before callpc when an
+			 * agressive optimizer (like GCC 3.3 or later)
+			 * has moved part of the function "out of
+			 * line", past the epilogue. Therefore, ignore
+			 * the positive offset so that
+			 * pi->pi_frame_size has the correct value
+			 * when we reach callpc.
+			 */
+			if (signed_immediate <= 0) {
+				CHECK_FRAMESIZE;
+				pi->pi_frame_size += -signed_immediate;
+			}
+		} else if (ins.operate_lit_format.opcode == op_arit &&
+			   ins.operate_lit_format.function == op_subq &&
+			   ins.operate_lit_format.ra == 30 &&
+			   ins.operate_lit_format.rc == 30) {
+			/*
+			 * EGCS-style stack adjust:
+			 *
+			 *	subq	sp, 64, sp
+			 */
+			CHECK_FRAMESIZE;
+			pi->pi_frame_size += ins.operate_lit_format.literal;
+		} else if (ins.mem_format.opcode == op_stq &&
+			   ins.mem_format.rb == 30 &&
+			   ins.mem_format.ra != 31) {
+			/* Store of (non-zero) register onto the stack. */
+			signed_immediate = (long)ins.mem_format.displacement;
+			pi->pi_regmask |= 1 << ins.mem_format.ra;
+			pi->pi_reg_offset[ins.mem_format.ra] = signed_immediate;
+		}
+	}
+}
+
+static int
+sym_is_trapsymbol(vaddr_t v)
+{
+	int i;
+
+	for (i = 0; special_symbols[i].ss_val != 0; ++i)
+		if (v == special_symbols[i].ss_val)
+			return 1;
+	return 0;
+}
+
+static void
+decode_syscall(int number, struct proc *p, void (*pr)(const char *, ...))
+{
+
+	(*pr)(" (%d)", number);
+}
 
 void
-db_stack_trace_cmd(addr, have_addr, count, modif)
-	db_expr_t addr;
-	boolean_t have_addr;
-	db_expr_t count;
-	char *modif;
+db_stack_trace_print(db_expr_t addr, bool have_addr, db_expr_t count,
+    const char *modif, void (*pr)(const char *, ...))
 {
 	db_addr_t callpc, frame, symval;
 	struct prologue_info pi;
-	void *symval_f;
 	db_expr_t diff;
 	db_sym_t sym;
 	int i;
 	u_long tfps;
-	char *symname;
+	const char *symname;
 	struct pcb *pcbp;
-	char c, *cp = modif;
+	const char *cp = modif;
 	struct trapframe *tf;
-	boolean_t ra_from_tf;
-	boolean_t ra_from_pcb;
+	bool ra_from_tf;
 	u_long last_ipl = ~0L;
 	struct proc *p = NULL;
-	boolean_t trace_thread = FALSE;
-	boolean_t have_trapframe = FALSE;
+	struct lwp *l = NULL;
+	char c;
+	bool trace_thread = false;
+	bool lwpaddr = false;
 
-	while ((c = *cp++) != 0)
+	while ((c = *cp++) != 0) {
 		trace_thread |= c == 't';
-	if (count == -1)
-		count = 65535;
+		trace_thread |= c == 'a';
+		lwpaddr |= c == 'a';
+	}
 
 	if (!have_addr) {
 		p = curproc;
 		addr = DDB_REGS->tf_regs[FRAME_SP] - FRAME_SIZE * 8;
 		tf = (struct trapframe *)addr;
-		have_trapframe = 1;
+		callpc = tf->tf_regs[FRAME_PC];
+		frame = (db_addr_t)tf + FRAME_SIZE * 8;
+		ra_from_tf = true;
 	} else {
 		if (trace_thread) {
-			db_printf ("trace: pid %d ", (int)addr);
-			p = pfind(addr);
-			if (p == NULL) {
-				db_printf("not found\n");
-				return;
-			}	
-			if ((p->p_flag & P_INMEM) == 0) {
-				db_printf("swapped out\n");
+			if (lwpaddr) {
+				l = (struct lwp *)addr;
+				p = l->l_proc;
+				(*pr)("trace: pid %d ", p->p_pid);
+			} else {
+				(*pr)("trace: pid %d ", (int)addr);
+				p = p_find(addr, PFIND_LOCKED);
+				if (p == NULL) {
+					(*pr)("not found\n");
+					return;
+				}
+				l = LIST_FIRST(&p->p_lwps);
+				KASSERT(l != NULL);
+			}
+			(*pr)("lid %d ", l->l_lid);
+			if ((l->l_flag & LW_INMEM) == 0) {
+				(*pr)("swapped out\n");
 				return;
 			}
-			pcbp = &p->p_addr->u_pcb;
+			pcbp = &l->l_addr->u_pcb;
 			addr = (db_expr_t)pcbp->pcb_hw.apcb_ksp;
 			callpc = pcbp->pcb_context[7];
-			db_printf("at 0x%lx\n", addr);
+			(*pr)("at 0x%lx\n", addr);
 		} else {
-			db_printf("alpha trace requires known PC =eject=\n");
+			(*pr)("alpha trace requires known PC =eject=\n");
 			return;
 		}
 		frame = addr;
+		tf = NULL;
+		ra_from_tf = false;
 	}
 
 	while (count--) {
-		if (have_trapframe) {
-			frame = (db_addr_t)tf + FRAME_SIZE * 8;
-			callpc = tf->tf_regs[FRAME_PC];
-			ra_from_tf = TRUE;
-			have_trapframe = 0;
-		}
 		sym = db_search_symbol(callpc, DB_STGY_ANY, &diff);
 		if (sym == DB_SYM_NULL)
 			break;
 
 		db_symbol_values(sym, &symname, (db_expr_t *)&symval);
-		symval_f = (void *)symval;
 
 		if (callpc < symval) {
-			db_printf("symbol botch: callpc 0x%lx < "
+			(*pr)("symbol botch: callpc 0x%lx < "
 			    "func 0x%lx (%s)\n", callpc, symval, symname);
 			return;
 		}
@@ -207,36 +287,38 @@ db_stack_trace_cmd(addr, have_addr, count, modif)
 		 * could get the arguments if we use a remote source-level
 		 * debugger (for serious debugging).
 		 */
-		db_printf("%s() at ", symname);
-		db_printsym(callpc, DB_STGY_PROC);
-		db_printf("\n");
+		(*pr)("%s() at ", symname);
+		db_printsym(callpc, DB_STGY_PROC, pr);
+		(*pr)("\n");
 
 		/*
 		 * If we are in a trap vector, frame points to a
 		 * trapframe.
 		 */
-		if (sym_is_trapsymbol(symval_f)) {
+		if (sym_is_trapsymbol(symval)) {
 			tf = (struct trapframe *)frame;
 
-			for (i = 0; special_symbols[i].ss_val != NULL; ++i)
-				if (symval_f == special_symbols[i].ss_val)
-					db_printf("--- %s",
+			for (i = 0; special_symbols[i].ss_val != 0; ++i)
+				if (symval == special_symbols[i].ss_val)
+					(*pr)("--- %s",
 					    special_symbols[i].ss_note);
 
 			tfps = tf->tf_regs[FRAME_PS];
-			if (symval_f == &XentSys)
-				decode_syscall(tf->tf_regs[FRAME_V0], p);
+			if (symval == (vaddr_t)&XentSys)
+				decode_syscall(tf->tf_regs[FRAME_V0], p, pr);
 			if ((tfps & ALPHA_PSL_IPL_MASK) != last_ipl) {
 				last_ipl = tfps & ALPHA_PSL_IPL_MASK;
-				if (symval_f != &XentSys)
-					db_printf(" (from ipl %ld)", last_ipl);
+				if (symval != (vaddr_t)&XentSys)
+					(*pr)(" (from ipl %ld)", last_ipl);
 			}
-			db_printf(" ---\n");
+			(*pr)(" ---\n");
 			if (tfps & ALPHA_PSL_USERMODE) {
-				db_printf("--- user mode ---\n");
+				(*pr)("--- user mode ---\n");
 				break;	/* Terminate search.  */
 			}
-			have_trapframe = 1;
+			callpc = tf->tf_regs[FRAME_PC];
+			frame = (db_addr_t)tf + FRAME_SIZE * 8;
+			ra_from_tf = true;
 			continue;
 		}
 
@@ -246,7 +328,7 @@ db_stack_trace_cmd(addr, have_addr, count, modif)
 		 *
 		 * XXX How does this interact w/ alloca()?!
 		 */
-		decode_prologue(callpc, symval, &pi);
+		decode_prologue(callpc, symval, &pi, pr);
 		if ((pi.pi_regmask & (1 << 26)) == 0) {
 			/*
 			 * No saved RA found.  We might have RA from
@@ -257,122 +339,12 @@ db_stack_trace_cmd(addr, have_addr, count, modif)
 			if (ra_from_tf)
 				callpc = tf->tf_regs[FRAME_RA];
 			else {
-				db_printf("--- root of call graph ---\n");
+				(*pr)("--- root of call graph ---\n");
 				break;
 			}
 		} else
 			callpc = *(u_long *)(frame + pi.pi_reg_offset[26]);
-		ra_from_tf = ra_from_pcb = FALSE;
-#if 0
-		/*
-		 * The call was actually made at RA - 4; the PC is
-		 * updated before being stored in RA.
-		 */
-		callpc -= 4;
-#endif
 		frame += pi.pi_frame_size;
+		ra_from_tf = false;
 	}
-}
-
-/*
- * Decode the function prologue for the function we're in, and note
- * which registers are stored where, and how large the stack frame is.
- */
-static void
-decode_prologue(callpc, func, pi)
-	db_addr_t callpc, func;
-	struct prologue_info *pi;
-{
-	long signed_immediate;
-	alpha_instruction ins;
-	db_expr_t pc;
-
-	pi->pi_regmask = 0;
-	pi->pi_frame_size = 0;
-
-#define	CHECK_FRAMESIZE							\
-do {									\
-	if (pi->pi_frame_size != 0) {					\
-		db_printf("frame size botch: adjust register offsets?\n"); \
-	}								\
-} while (0)
-
-	for (pc = func; pc < callpc; pc += sizeof(alpha_instruction)) {
-		ins.bits = *(unsigned int *)pc;
-
-		if (ins.mem_format.opcode == op_lda &&
-		    ins.mem_format.ra == 30 &&
-		    ins.mem_format.rb == 30) {
-			/*
-			 * GCC 2.7-style stack adjust:
-			 *
-			 *	lda	sp, -64(sp)
-			 */
-			signed_immediate = (long)ins.mem_format.displacement;
-#if 1
-			if (signed_immediate > 0)
-				db_printf("prologue botch: displacement %ld\n",
-				    signed_immediate);
-#endif
-			CHECK_FRAMESIZE;
-			pi->pi_frame_size += -signed_immediate;
-		} else if (ins.operate_lit_format.opcode == op_arit &&
-			   ins.operate_lit_format.function == op_subq &&
-			   ins.operate_lit_format.ra == 30 &&
-			   ins.operate_lit_format.rc == 30) {
-			/*
-			 * EGCS-style stack adjust:
-			 *
-			 *	subq	sp, 64, sp
-			 */
-			CHECK_FRAMESIZE;
-			pi->pi_frame_size += ins.operate_lit_format.literal;
-		} else if (ins.mem_format.opcode == op_stq &&
-			   ins.mem_format.rb == 30 &&
-			   ins.mem_format.ra != 31) {
-			/* Store of (non-zero) register onto the stack. */
-			signed_immediate = (long)ins.mem_format.displacement;
-			pi->pi_regmask |= 1 << ins.mem_format.ra;
-			pi->pi_reg_offset[ins.mem_format.ra] = signed_immediate;
-		}
-	}
-}
-
-static int
-sym_is_trapsymbol(v)
-	void *v;
-{
-	int i;
-
-	for (i = 0; special_symbols[i].ss_val != NULL; ++i)
-		if (v == special_symbols[i].ss_val)
-			return 1;
-	return 0;
-}
-
-static void
-decode_syscall(number, p)
-	int number;
-	struct proc *p;
-{
-	db_sym_t sym;
-	db_expr_t diff;
-	char *symname, *ename;
-	int (*f) __P((struct proc *, void *, register_t *));
-
-	db_printf(" (%d", number); /* ) */
-	if (!p)
-		goto out;
-	if (0 <= number && number < p->p_emul->e_nsysent) {
-		ename = p->p_emul->e_name;
-		f = p->p_emul->e_sysent[number].sy_call;
-		sym = db_search_symbol((db_addr_t)f, DB_STGY_ANY, &diff);
-		if (sym == DB_SYM_NULL || diff != 0)
-			goto out;
-		db_symbol_values(sym, &symname, NULL);
-		db_printf(", %s.%s", ename, symname);
-	}
-out:
-	db_printf(")");
-	return;
 }

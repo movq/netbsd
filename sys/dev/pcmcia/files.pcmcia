@@ -1,11 +1,11 @@
-#	$NetBSD: files.pcmcia,v 1.24 2000/03/19 21:54:02 mycroft Exp $
+#	$NetBSD: files.pcmcia,v 1.57 2008/09/30 16:51:45 jmcneill Exp $
 #
 # Config.new file and device description for machine-independent PCMCIA code.
 # Included by ports that need it.
 
-defopt	PCMCIAVERBOSE
+defflag				PCMCIAVERBOSE
 
-device	pcmcia {[function = -1], [irq = -1]}
+device	pcmcia {[function = -1]}
 file	dev/pcmcia/pcmcia.c			pcmcia
 file	dev/pcmcia/pcmcia_cis.c			pcmcia
 file	dev/pcmcia/pcmcia_cis_quirks.c		pcmcia
@@ -21,7 +21,7 @@ file	dev/pcmcia/if_ep_pcmcia.c		ep_pcmcia
 
 # National Semiconductor DS8390/WD83C690-based boards
 # (NE[12]000, and clones)
-attach	ne at pcmcia with ne_pcmcia: rtl80x9
+attach	ne at pcmcia with ne_pcmcia: rtl80x9, dl10019, ax88190, mii_bitbang
 file	dev/pcmcia/if_ne_pcmcia.c		ne_pcmcia
 
 # Adaptec APA-1460 SCSI Host Adapter
@@ -36,14 +36,12 @@ file	dev/pcmcia/nca_pcmcia.c			nca_pcmcia
 attach	esp at pcmcia with esp_pcmcia
 file	dev/pcmcia/esp_pcmcia.c			esp_pcmcia
 
+# Fujitsu MB87030-based cards
+attach	spc at pcmcia with spc_pcmcia
+file	dev/pcmcia/spc_pcmcia.c			spc_pcmcia
+
 attach	com at pcmcia with com_pcmcia
 file	dev/pcmcia/com_pcmcia.c			com_pcmcia
-
-# Digital RoamAbout / Lucent WaveLAN PCMCIA card
-attach	wl at pcmcia with wl_pcmcia
-file	dev/pcmcia/if_wl_pcmcia.c		wl_pcmcia
-defopt	opt_wl_pcmcia.h		WL_TIMER WLP_CC_DEBUG WL_DEBUG MMC_STATUS
-				WL_IFCNTRS WL_TIMING
 
 # PCMCIA IDE controller
 attach	wdc at pcmcia with wdc_pcmcia
@@ -58,8 +56,8 @@ attach	mbe at pcmcia with mbe_pcmcia
 file	dev/pcmcia/if_mbe_pcmcia.c		mbe_pcmcia
 
 # PCMCIA Floppy controller
-attach	fdc at pcmcia with fdc_pcmcia
-file	dev/pcmcia/fdc_pcmcia.c			fdc_pcmcia
+#attach	fdc at pcmcia with fdc_pcmcia
+#file	dev/pcmcia/fdc_pcmcia.c			fdc_pcmcia
 
 # PCMCIA multi-port serial cards
 device	pcmcom {[slave = -1]}
@@ -72,18 +70,13 @@ device	cnw: arp, ether, ifnet
 attach	cnw at pcmcia
 file	dev/pcmcia/if_cnw.c			cnw
 
-# Lucent WaveLan IEEE (802.11)
-device wi: arp, ether, ifnet
-attach wi at pcmcia
-file	dev/pcmcia/if_wi.c			wi
-
 # Megaherz combo cards
 device	mhzc { }
 attach	mhzc at pcmcia
 attach	com at mhzc with com_mhzc
 attach	sm at mhzc with sm_mhzc
 file	dev/pcmcia/mhzc.c			mhzc | com_mhzc | sm_mhzc
-						    needs-flag
+								needs-flag
 
 # Raylink/WebGear WLAN IEEE 802.11 FH
 device	ray: arp, ether, ifnet
@@ -91,13 +84,59 @@ attach	ray at pcmcia
 file	dev/pcmcia/if_ray.c			ray
 
 # AMD 79c930-based 802.11 cards (including BayStack 650 FH card).
-device awi: arp, ether, ifnet
-attach awi at pcmcia with awi_pcmcia
-
+attach	awi at pcmcia with awi_pcmcia
 file	dev/pcmcia/if_awi_pcmcia.c		awi_pcmcia
-file	dev/ic/awi.c				awi
-file	dev/ic/am79c930.c			awi
 
-device	xe: arp, ether, ifnet, mii
-attach	xe at pcmcia with xe_pcmcia
-file	dev/pcmcia/if_xe.c			xe_pcmcia
+# Lucent & Intersil WaveLan IEEE (802.11)
+attach	wi at pcmcia with wi_pcmcia
+file	dev/pcmcia/if_wi_pcmcia.c		wi_pcmcia
+# The spectrun24t firmware for symbol LA4100 cards is 70k, allow its exclusion
+defparam	opt_if_wi_pcmcia.h	WI_PCMCIA_SPECTRUM24T_FW=1
+
+# Xircom Ethernet and Ethernet+Modem cards
+device	xirc { }
+device	xi: arp, ether, ifnet, mii
+attach	xirc at pcmcia
+attach	com at xirc with com_xirc
+attach	xi at xirc with xi_xirc
+file	dev/pcmcia/xirc.c			xirc | com_xirc | xi_xirc
+								needs-flag
+file	dev/pcmcia/if_xi.c			xi
+
+# IBM Tropic-based Token Ring cards
+attach	tr at pcmcia with tr_pcmcia
+file	dev/pcmcia/if_tr_pcmcia.c		tr_pcmcia
+
+# Crystal Semiconductor CS8920 based cards
+attach	cs at pcmcia with cs_pcmcia
+file	dev/pcmcia/if_cs_pcmcia.c		cs_pcmcia
+
+# Aironet PC4500/PC4800
+attach	an at pcmcia with an_pcmcia
+file	dev/pcmcia/if_an_pcmcia.c		an_pcmcia
+
+# ISDN devices
+attach	isic at pcmcia with isic_pcmcia
+file	dev/pcmcia/isic_pcmcia.c		isic_pcmcia
+
+defflag	opt_isicpcmcia.h	ISICPCMCIA_AVM_A1 ISICPCMCIA_ELSA_ISDNMC
+				ISICPCMCIA_ELSA_MCALL ISICPCMCIA_SBSPEEDSTAR2
+
+file	dev/pcmcia/isic_pcmcia_avm_fritz.c	isic_pcmcia
+file	dev/pcmcia/isic_pcmcia_elsa_isdnmc.c	isic_pcmcia
+file	dev/pcmcia/isic_pcmcia_elsa_mcall.c	isic_pcmcia
+file	dev/pcmcia/isic_pcmcia_sbspeedstar2.c	isic_pcmcia
+
+# 3Com Bluetooth controller 3CRW6096
+device	bt3c: btbus, bluetooth, firmload
+attach	bt3c at pcmcia
+file	dev/pcmcia/bt3c.c			bt3c		needs-flag
+
+# USB controller
+attach	slhci at pcmcia with slhci_pcmcia
+file	dev/pcmcia/slhci_pcmcia.c		slhci_pcmcia
+
+# AnyCom BlueCard LSE041/039/139
+device	btbc: btbus, bluetooth
+attach	btbc at pcmcia
+file	dev/pcmcia/btbc.c			btbc

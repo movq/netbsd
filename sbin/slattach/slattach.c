@@ -1,4 +1,4 @@
-/*	$NetBSD: slattach.c,v 1.22 1999/09/03 13:31:29 proff Exp $	*/
+/*	$NetBSD: slattach.c,v 1.30 2008/07/20 01:20:23 lukem Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,15 +34,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1988, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1988, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)slattach.c	8.2 (Berkeley) 1/7/94";
 #else
-__RCSID("$NetBSD: slattach.c,v 1.22 1999/09/03 13:31:29 proff Exp $");
+__RCSID("$NetBSD: slattach.c,v 1.30 2008/07/20 01:20:23 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -74,22 +70,18 @@ int	slipdisc = SLIPDISC;
 
 char	devicename[32];
 
-int	main __P((int, char *[]));
-int	ttydisc __P((char *));
-void	usage __P((void));
-
+int	ttydisc(char *);
+void	usage(void);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	int fd;
 	char *dev = argv[1];
 	struct termios tty;
 	tcflag_t cflag = HUPCL;
 	int ch;
-	sigset_t sigset;
+	sigset_t nsigset;
 	int opt_detach = 1;
 
 	while ((ch = getopt(argc, argv, "hHlmns:t:")) != -1) {
@@ -149,14 +141,13 @@ main(argc, argv)
 		err(1, "TIOCSETD");
 	if (opt_detach && daemon(0, 0) != 0)
 		err(1, "couldn't detach");
-	sigemptyset(&sigset);
+	sigemptyset(&nsigset);
 	for (;;)
-		sigsuspend(&sigset);
+		sigsuspend(&nsigset);
 }
 
 int
-ttydisc(name)
-     char *name;
+ttydisc(char *name)
 {
 	if (strcmp(name, "slip") == 0)
 		return(SLIPDISC);
@@ -171,12 +162,11 @@ ttydisc(name)
 }
 
 void
-usage()
+usage(void)
 {
-	extern char *__progname;
 
 	(void)fprintf(stderr,
-	    "usage: %s [-t ldisc] [-hHlm] [-s baudrate] ttyname\n",
-		__progname);
+	    "usage: %s [-t ldisc] [-hHlmn] [-s baudrate] ttyname\n",
+		getprogname());
 	exit(1);
 }

@@ -1,17 +1,32 @@
-#	$NetBSD: Makefile,v 1.12 1999/12/12 11:30:19 veego Exp $
+#	$NetBSD: Makefile,v 1.24 2005/01/01 13:56:21 lukem Exp $
 
-PROG=	ipsend
-SRCS=	ipsend.c ip.c ipsopt.c 44arp.c sbpf.c iplang_l.l iplang_y.y
-YHEADER=1
-LDADD=	-ll
-DPADD=	${LIBL}
+.include <bsd.own.mk>
 
-CPPFLAGS+=-I${.CURDIR}/../../../dist/ipf -I${.CURDIR}/../../../dist/ipf/ipsend -I.
+PROG=		ipsend
+SRCS=		ipsend.c ip.c ipsopt.c iplang_y.c iplang_l.l sbpf.c \
+		sock.c 44arp.c
+MAN=		ipsend.1 ipsend.5
+DPADD+=		${LIBL}
+LDADD+=		-ll
 
-MAN=	ipsend.1 ipsend.5
+CPPFLAGS+=	-I${NETBSDSRCDIR}/dist/ipf/ipsend
+CPPFLAGS+=	-I${NETBSDSRCDIR}/dist/ipf/iplang
+CPPFLAGS+=	-I.
 
-.PATH:	${.CURDIR}/../../../dist/ipf/ipsend \
-	${.CURDIR}/../../../dist/ipf/iplang
+CLEANFILES+=	iplang_y.c iplang_y.h
+
+DPSRCS+=	iplang_y.h
+
+.PATH:		${NETBSDSRCDIR}/dist/ipf/ipsend \
+		${NETBSDSRCDIR}/dist/ipf/iplang
+
+iplang_y.c: iplang_y.y
+	${_MKTARGET_CREATE}
+	${YACC} -d ${.ALLSRC}
+	mv y.tab.c ${.TARGET}
+	mv y.tab.h ${.TARGET:.c=.h}
+
+iplang_y.h: iplang_y.c
 
 # XXX
 # We have a problem with make and linking ipsend

@@ -1,4 +1,4 @@
-/*	$NetBSD: main1.c,v 1.4 1998/02/22 15:40:40 christos Exp $	*/
+/*	$NetBSD: main1.c,v 1.19 2008/07/31 15:21:34 christos Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Jochen Pohl
@@ -31,15 +31,23 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-#ifndef lint
-__RCSID("$NetBSD");
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
 #endif
 
+#include <sys/cdefs.h>
+#if defined(__RCSID) && !defined(lint)
+__RCSID("$NetBSD: main1.c,v 1.19 2008/07/31 15:21:34 christos Exp $");
+#endif
+
+#include <sys/types.h>
 #include <stdio.h>
+#include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <err.h>
+#include <errno.h>
+#include <limits.h>
+#include <signal.h>
 
 #include "lint1.h"
 
@@ -48,9 +56,9 @@ int	yflag;
 
 /*
  * Print warnings if an assignment of an integertype to another integertype
- * causes an implizit narrowing conversion. If aflag is 1, these warnings
+ * causes an implicit narrowing conversion. If aflag is 1, these warnings
  * are printed only if the source type is at least as wide as long. If aflag
- * is greather then 1, they are always printed.
+ * is greater than 1, they are always printed.
  */
 int	aflag;
 
@@ -71,6 +79,9 @@ int	Fflag;
 
 /* Enable some extensions of gcc */
 int	gflag;
+
+/* Treat warnings as errors */
+int	wflag;
 
 /*
  * Apply a number of heuristic tests to attempt to intuit bugs, improve
@@ -93,6 +104,12 @@ int	sflag;
 /* Traditional C mode. */
 int	tflag;
 
+/* Enable C9X extensions */
+int	Sflag;
+
+/* Picky flag */
+int	Pflag;
+
 /*
  * Complain about functions and external variables used and not defined,
  * or defined and not used.
@@ -105,18 +122,31 @@ int	vflag = 1;
 /* Complain about structures which are never defined. */
 int	zflag = 1;
 
-static	void	usage __P((void));
+err_set	msgset;
 
-int main __P((int, char *[]));
+sig_atomic_t fpe;
+
+static	void	usage(void);
+
+int main(int, char *[]);
+
+/*ARGSUSED*/
+static void
+sigfpe(int s)
+{
+	fpe = 1;
+}
 
 int
-main(argc, argv)
-	int	argc;
-	char	*argv[];
+main(int argc, char *argv[])
 {
 	int	c;
+	char	*ptr;
 
-	while ((c = getopt(argc, argv, "abcdeghprstuvyzF")) != -1) {
+	setprogname(argv[0]);
+
+	ERR_ZERO(&msgset);
+	while ((c = getopt(argc, argv, "abcdeghmprstuvwyzFPSX:")) != -1) {
 		switch (c) {
 		case 'a':	aflag++;	break;
 		case 'b':	bflag = 1;	break;
@@ -127,14 +157,44 @@ main(argc, argv)
 		case 'g':	gflag = 1;	break;
 		case 'h':	hflag = 1;	break;
 		case 'p':	pflag = 1;	break;
+		case 'P':	Pflag = 1;	break;
 		case 'r':	rflag = 1;	break;
 		case 's':	sflag = 1;	break;
+		case 'S':	Sflag = 1;	break;
 		case 't':	tflag = 1;	break;
 		case 'u':	uflag = 0;	break;
+		case 'w':	wflag = 1;	break;
 		case 'v':	vflag = 0;	break;
 		case 'y':	yflag = 1;	break;
 		case 'z':	zflag = 0;	break;
-		case '?':	usage();
+
+		case 'm':
+			msglist();
+			return(0);
+
+		case 'X':
+			for (ptr = strtok(optarg, ","); ptr;
+			    ptr = strtok(NULL, ",")) {
+				char *eptr;
+				long msg;
+
+				errno = 0;
+				msg = strtol(ptr, &eptr, 0);
+				if ((msg == LONG_MIN || msg == LONG_MAX) &&
+				    errno == ERANGE)
+				    err(1, "invalid error message id '%s'",
+					ptr);
+				if (*eptr || ptr == eptr || msg < 0 ||
+				    msg >= ERR_SETSIZE)
+					errx(1, "invalid error message id '%s'",
+					    ptr);
+				ERR_SET(msg, &msgset);
+			}
+			break;
+		case '?':
+		default:
+			usage();
+			break;
 		}
 	}
 	argc -= optind;
@@ -153,6 +213,7 @@ main(argc, argv)
 	if (yflag)
 		yydebug = 1;
 
+	(void)signal(SIGFPE, sigfpe);
 	initmem();
 	initdecl();
 	initscan();
@@ -162,6 +223,9 @@ main(argc, argv)
 
 	/* Following warnings cannot be suppressed by LINTED */
 	nowarn = 0;
+#ifdef DEBUG
+	printf("%s, %d: nowarn = 0\n", curr_pos.p_file, curr_pos.p_line);
+#endif
 
 	chkglsyms();
 
@@ -171,14 +235,16 @@ main(argc, argv)
 }
 
 static void
-usage()
+usage(void)
 {
-	(void)fprintf(stderr, "usage: lint1 [-abcdeghprstuvyzF] src dest\n");
+	(void)fprintf(stderr,
+	    "Usage: %s [-abcdeghmprstuvwyzFS] [-X <id>[,<id>]... src dest\n",
+	    getprogname());
 	exit(1);
 }
-	
+
 void
-norecover()
+norecover(void)
 {
 	/* cannot recover from previous errors */
 	error(224);

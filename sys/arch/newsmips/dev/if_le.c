@@ -1,4 +1,4 @@
-/*	$NetBSD: if_le.c,v 1.6 2000/01/23 15:49:11 tsubai Exp $	*/
+/*	$NetBSD: if_le.c,v 1.17 2008/04/28 20:23:30 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -35,6 +28,9 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_le.c,v 1.17 2008/04/28 20:23:30 martin Exp $");
 
 #include "opt_inet.h"
 #include "bpfilter.h"
@@ -55,7 +51,6 @@
 #include <netinet/if_inarp.h>
 #endif
 
-#include <machine/autoconf.h>
 #include <machine/cpu.h>
 #include <machine/adrsmap.h>
 
@@ -64,13 +59,15 @@
 #include <dev/ic/am7990reg.h>
 #include <dev/ic/am7990var.h>
 
+#include <newsmips/dev/hbvar.h>
+
 /*
  * LANCE registers.
  * The real stuff is in dev/ic/am7990reg.h
  */
 struct lereg1 {
-	volatile u_int16_t	ler1_rdp;	/* data port */
-	volatile u_int16_t	ler1_rap;	/* register select port */
+	volatile uint16_t	ler1_rdp;	/* data port */
+	volatile uint16_t	ler1_rap;	/* register select port */
 };
 
 /*
@@ -83,14 +80,13 @@ struct	le_softc {
 	struct	lereg1 *sc_r1;		/* LANCE registers */
 };
 
-static int	le_match __P((struct device *, struct cfdata *, void *));
-static void	le_attach __P((struct device *, struct device *, void *));
+static int	le_match(device_t, cfdata_t, void *);
+static void	le_attach(device_t, device_t, void *);
 
-struct cfattach le_ca = {
-	sizeof(struct le_softc), le_match, le_attach
-};
+CFATTACH_DECL_NEW(le, sizeof(struct le_softc),
+    le_match, le_attach, NULL, NULL);
 
-#if defined(_KERNEL) && !defined(_LKM)
+#if defined(_KERNEL_OPT)
 #include "opt_ddb.h"
 #endif
 
@@ -98,93 +94,88 @@ struct cfattach le_ca = {
 #define	integrate
 #define hide
 #else
-#define	integrate	static __inline
+#define	integrate	static inline
 #define hide		static
 #endif
 
-hide void lewrcsr __P((struct lance_softc *, u_int16_t, u_int16_t));
-hide u_int16_t lerdcsr __P((struct lance_softc *, u_int16_t));  
+hide void lewrcsr(struct lance_softc *, uint16_t, uint16_t);
+hide uint16_t lerdcsr(struct lance_softc *, uint16_t);  
 
 hide void
-lewrcsr(sc, port, val)
-	struct lance_softc *sc;
-	u_int16_t port, val;
+lewrcsr(struct lance_softc *sc, uint16_t port, uint16_t val)
 {
-	register struct lereg1 *ler1 = ((struct le_softc *)sc)->sc_r1;
+	struct lereg1 *ler1 = ((struct le_softc *)sc)->sc_r1;
 
 	ler1->ler1_rap = port;
 	ler1->ler1_rdp = val;
 }
 
-hide u_int16_t
-lerdcsr(sc, port)
-	struct lance_softc *sc;
-	u_int16_t port;
+hide uint16_t
+lerdcsr(struct lance_softc *sc, uint16_t port)
 {
-	register struct lereg1 *ler1 = ((struct le_softc *)sc)->sc_r1;
-	u_int16_t val;
+	struct lereg1 *ler1 = ((struct le_softc *)sc)->sc_r1;
+	uint16_t val;
 
 	ler1->ler1_rap = port;
 	val = ler1->ler1_rdp;
-	return (val);
+	return val;
 } 
 
 int
-le_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+le_match(device_t parent, cfdata_t cf, void *aux)
 {
-	struct confargs *ca = aux;
+	struct hb_attach_args *ha = aux;
 
-	if (strcmp(ca->ca_name, "le"))
+	if (strcmp(ha->ha_name, "le"))
 		return 0;
 
-	if (badaddr((void *)cf->cf_addr, 1))
+	if (hb_badaddr((void *)ha->ha_addr, 1)) /* XXX */
 		return 0;
 
 	return 1;
 }
 
 void
-le_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+le_attach(device_t parent, device_t self, void *aux)
 {
-	struct le_softc *lesc = (struct le_softc *)self;
+	struct le_softc *lesc = device_private(self);
 	struct lance_softc *sc = &lesc->sc_am7990.lsc;
-	struct cfdata *cf = self->dv_cfdata;
-	int intlevel;
-	u_char *p;
+	struct hb_attach_args *ha = aux;
+	int intlevel, intmask;
+	uint8_t *p;
 
-	intlevel = cf->cf_level;
+	sc->sc_dev = self;
+	intlevel = ha->ha_level;
 	if (intlevel == -1) {
-		printf(": interrupt level not configured\n");
+		aprint_error(": interrupt level not configured\n");
 		return;
 	}
-	printf(" level %d", intlevel);
+	aprint_normal(" level %d", intlevel);
 
-	switch (cf->cf_addr) {
+	switch (ha->ha_addr) {
 
 	case LANCE_PORT:
 		sc->sc_mem = (void *)LANCE_MEMORY;
-		p = (u_char *)(ETHER_ID+16);
+		p = (uint8_t *)(ETHER_ID + 16);
+		intmask = INTST1_LANCE;
 		break;
 	case LANCE_PORT1:
 		sc->sc_mem = (void *)LANCE_MEMORY1;
-		p = (u_char *)(ETHER_ID1+16);
+		p = (uint8_t *)(ETHER_ID1 + 16);
+		intmask = INTST1_SLOT3; /* XXX not tested */
 		break;
 	case LANCE_PORT2:
 		sc->sc_mem = (void *)LANCE_MEMORY2;
-		p = (u_char *)(ETHER_ID2+16);
+		p = (uint8_t *)(ETHER_ID2 + 16);
+		intmask = INTST1_SLOT3; /* XXX not tested */
 		break;
 
 	default:
-		printf(": unknown LANCE addr\n");
+		aprint_error(": unknown LANCE addr\n");
 		return;
 	}
 
-	lesc->sc_r1 = (void *)cf->cf_addr;
+	lesc->sc_r1 = (void *)ha->ha_addr;
 
 	sc->sc_memsize = 0x4000;	/* 16K */
 	sc->sc_addr = (int)sc->sc_mem & 0x00ffffff;
@@ -214,5 +205,5 @@ le_attach(parent, self, aux)
 	sc->sc_hwinit = NULL;
 
 	am7990_config(&lesc->sc_am7990);
-	hb_intr_establish(intlevel, IPL_NET, am7990_intr, sc);
+	hb_intr_establish(intlevel, intmask, IPL_NET, am7990_intr, sc);
 }

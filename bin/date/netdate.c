@@ -1,4 +1,4 @@
-/*	$NetBSD: netdate.c,v 1.18 1998/12/19 22:44:19 kristerw Exp $	*/
+/* $NetBSD: netdate.c,v 1.27 2008/02/24 04:49:45 dholland Exp $ */
 
 /*-
  * Copyright (c) 1990, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)netdate.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: netdate.c,v 1.18 1998/12/19 22:44:19 kristerw Exp $");
+__RCSID("$NetBSD: netdate.c,v 1.27 2008/02/24 04:49:45 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -53,16 +49,26 @@ __RCSID("$NetBSD: netdate.c,v 1.18 1998/12/19 22:44:19 kristerw Exp $");
 
 #include <err.h>
 #include <errno.h>
+#include <poll.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 
 #include "extern.h"
 
-#define	WAITACK		2	/* seconds */
-#define	WAITDATEACK	5	/* seconds */
+#define	WAITACK		2000	/* milliseconds */
+#define	WAITDATEACK	5000	/* milliseconds */
 
 extern int retval;
+
+static const char *
+tsp_type_to_string(const struct tsp *msg)
+{
+	unsigned i;
+
+	i = msg->tsp_type;
+	return i < TSPTYPENUMBER ? tsptype[i] : "unknown";
+}
 
 /*
  * Set the date in the machines controlled by timedaemons by communicating the
@@ -72,20 +78,14 @@ extern int retval;
  * Returns 0 on success.  Returns > 0 on failure, setting retval to 2;
  */
 int
-netsettime(tval)
-	time_t tval;
+netsettime(time_t tval)
 {
-	struct timeval tout;
-	struct servent *sp;
+	struct sockaddr_in dest;
 	struct tsp msg;
-	struct sockaddr_in sin, dest, from;
-	fd_set ready;
-	long waittime;
-	int s, length, timed_ack, found, error;
-#ifdef IP_PORTRANGE
-	int on;
-#endif
 	char hostname[MAXHOSTNAMELEN];
+	struct servent *sp;
+	struct pollfd ready;
+	int found, s, timed_ack, waittime;
 
 	if ((sp = getservbyname("timed", "udp")) == NULL) {
 		warnx("udp/timed: unknown service");
@@ -94,35 +94,29 @@ netsettime(tval)
 
 	(void)memset(&dest, 0, sizeof(dest));
 #ifdef BSD4_4
-	dest.sin_len = sizeof(struct sockaddr_in);
+	dest.sin_len = sizeof(dest);
 #endif
 	dest.sin_family = AF_INET;
 	dest.sin_port = sp->s_port;
 	dest.sin_addr.s_addr = htonl(INADDR_ANY);
 	s = socket(AF_INET, SOCK_DGRAM, 0);
 	if (s < 0) {
-		if (errno != EPROTONOSUPPORT)
+		if (errno != EAFNOSUPPORT)
 			warn("timed");
 		return (retval = 2);
 	}
 
 #ifdef IP_PORTRANGE
-	on = IP_PORTRANGE_LOW;
-	if (setsockopt(s, IPPROTO_IP, IP_PORTRANGE, &on, sizeof(on)) < 0) {
-		warn("setsockopt");
-		goto bad;
-	}
-#endif
+	{
+		static const int on = IP_PORTRANGE_LOW;
 
-	(void)memset(&sin, 0, sizeof(sin));
-#ifdef BSD4_4
-	sin.sin_len = sizeof(struct sockaddr_in);
-#endif
-	sin.sin_family = AF_INET;
-	if (bind(s, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
-		warn("bind");
-		goto bad;
+		if (setsockopt(s, IPPROTO_IP, IP_PORTRANGE,
+			    &on, sizeof(on)) < 0) {
+			warn("setsockopt");
+			goto bad;
+		}
 	}
+#endif
 
 	msg.tsp_type = TSP_SETDATE;
 	msg.tsp_vers = TSPVERSION;
@@ -130,17 +124,16 @@ netsettime(tval)
 		warn("gethostname");
 		goto bad;
 	}
-	hostname[sizeof(hostname) - 1] = '\0';
-	(void)strncpy(msg.tsp_name, hostname, sizeof(hostname));
-	msg.tsp_seq = htons((u_short)0);
-	msg.tsp_time.tv_sec = htonl((u_long)tval);
-	msg.tsp_time.tv_usec = htonl((u_long)0);
-	length = sizeof(struct sockaddr_in);
-	if (connect(s, (struct sockaddr *)&dest, length) < 0) {
+	strncpy(msg.tsp_name, hostname, sizeof(msg.tsp_name));
+	msg.tsp_name[sizeof(msg.tsp_name) - 1] = '\0';
+	msg.tsp_seq = htons((uint16_t)0);
+	msg.tsp_time.tv_sec = htonl((uint32_t)tval); /* XXX: y2038 */
+	msg.tsp_time.tv_usec = htonl((uint32_t)0);
+	if (connect(s, (const struct sockaddr *)&dest, sizeof(dest)) < 0) {
 		warn("connect");
 		goto bad;
 	}
-	if (send(s, (char *)&msg, sizeof(struct tsp), 0) < 0) {
+	if (send(s, &msg, sizeof(msg), 0) < 0) {
 		if (errno != ECONNREFUSED)
 			warn("send");
 		goto bad;
@@ -148,30 +141,37 @@ netsettime(tval)
 
 	timed_ack = -1;
 	waittime = WAITACK;
+	ready.fd = s;
+	ready.events = POLLIN;
 loop:
-	tout.tv_sec = waittime;
-	tout.tv_usec = 0;
+	found = poll(&ready, 1, waittime);
 
-	FD_ZERO(&ready);
-	FD_SET(s, &ready);
-	found = select(FD_SETSIZE, &ready, (fd_set *)0, (fd_set *)0, &tout);
+	{
+		socklen_t length;
+		int error;
 
-	length = sizeof(error);
-	if (!getsockopt(s,
-	    SOL_SOCKET, SO_ERROR, (char *)&error, &length) && error) {
-		if (error != ECONNREFUSED)
-			warn("send (delayed error)");
-		goto bad;
-	}
-
-	if (found > 0 && FD_ISSET(s, &ready)) {
-		length = sizeof(struct sockaddr_in);
-		if (recvfrom(s, &msg, sizeof(struct tsp), 0,
-		    (struct sockaddr *)&from, &length) < 0) {
-			if (errno != ECONNREFUSED)
-				warn("recvfrom");
+		length = sizeof(error);
+		if (!getsockopt(s, SOL_SOCKET, SO_ERROR, &error, &length)
+		    && error) {
+			if (error != ECONNREFUSED)
+				warn("send (delayed error)");
 			goto bad;
 		}
+	}
+
+	if (found > 0 && ready.revents & POLLIN) {
+		ssize_t ret;
+
+		ret = recv(s, &msg, sizeof(msg), 0);
+		if (ret < 0) {
+			if (errno != ECONNREFUSED)
+				warn("recv");
+			goto bad;
+		} else if ((size_t)ret < sizeof(msg)) {
+			warnx("recv: incomplete packet");
+			goto bad;
+		}
+
 		msg.tsp_seq = ntohs(msg.tsp_seq);
 		msg.tsp_time.tv_sec = ntohl(msg.tsp_time.tv_sec);
 		msg.tsp_time.tv_usec = ntohl(msg.tsp_time.tv_usec);
@@ -185,7 +185,7 @@ loop:
 			return (0);
 		default:
 			warnx("wrong ack received from timed: %s", 
-			    tsptype[msg.tsp_type]);
+			    tsp_type_to_string(&msg));
 			timed_ack = -1;
 			break;
 		}

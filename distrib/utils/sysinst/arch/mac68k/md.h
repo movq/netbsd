@@ -1,4 +1,4 @@
-/*	$NetBSD: md.h,v 1.4 2000/03/28 00:29:55 thorpej Exp $	*/
+/*	$NetBSD: md.h,v 1.22 2006/02/26 10:25:53 dsl Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -37,32 +37,46 @@
  */
 
 #include <sys/disklabel.h>
+#include <sys/bootblock.h>
 
 /* md.h -- Machine specific definitions for the mac68k */
 
-EXTERN int bcyl, bhead, bsec, bsize, bcylsize;
-EXTERN int part[4][5] INIT({{0}});
-EXTERN int bsdpart;			/* partition in use by NetBSD */
-EXTERN int usefull;			/* on install, clobber entire disk */
+/*
+ * Apple Partition Map Types
+ *    Reserved - Entry hidden by sysinst from user
+ *    NetBSD   - Entry used for NetBSD
+ *    MacOS    - Entry used for MacOS and mapped to NetBSD
+ *    Other    - Entry use unknown, mapped for scratch. This may
+ *               include partitions used by other systems (Linux).
+ */     
+#define MAP_EOL      0
+#define MAP_RESERVED 1
+#define MAP_NETBSD   2
+#define MAP_MACOS    3
+#define MAP_OTHER    4
 
-/*  
- * Known partition types on a MacOS initialized disk
- *  Note: Setting the usable field on the last entry defines
- *        how unknown partition types will be handled.
- */ 
 typedef struct {
-        int usable;             /* Use type: 0=>reserved */
-        char *partype;
-        char *fstyp;
-} PTYPES;
+	int type;               /* Entry type from above */
+	const char *name;             /* Partition Type string */
+} MAP_TYPE;
 
-/*    
- * Define the classes of partitions types we can handle 
- */   
-#define TYP_RSRVD 0             /* Unusable low-level part of disk */
-#define TYP_AVAIL 1             /* Anything not used by MacOS or NetBSD */ 
-#define TYP_HFS   2             /* In use by MacOS */
-#define TYP_BSD   3             /* In use by NetBSD */
+/*
+ * Define Apple Partition Map types typically seen on 68k Macs
+ *    This should match the definitions in include/machine/disklabel.h
+ *    and must conform to the matching rules in arch/mac68k/mac68k/disksubr.c
+ */
+extern MAP_TYPE map_types[];
+
+/*
+ * Define NetBSD partition types
+ */
+#define ROOT_PART 1
+#define UFS_PART 2
+#define SWAP_PART 3
+#define HFS_PART 4
+#define SCRATCH_PART 5
+
+int usefull;			/* on install, clobber entire disk */
 
 typedef struct {
         int size;               /* number of blocks in map for I/O */
@@ -74,7 +88,7 @@ typedef struct {
         int usr_cnt;            /* number of usr partitions in map */
         int selected;           /* current partition selection in mblk */
 	int mblk[MAXPARTITIONS];/* map block number of usable partition */
-        struct part_map_entry *blk;
+        struct apple_part_map_entry *blk;
 } MAP;
 
 /*
@@ -84,18 +98,26 @@ typedef struct {
  */
 #define NEW_MAP_SIZE 15
 
-EXTERN MAP map;
+MAP map;
 
-int	edit_diskmap __P((void));		
+int	edit_diskmap (void);		
 void	disp_selected_part (int sel);
-int	part_type(int entry, char *fstyp, char *use, char *name);
-int	strnicmp(const char *c1, const char *c2, int n);
+int	whichType(struct apple_part_map_entry *);
+char	*getFstype(struct apple_part_map_entry *, int, char *);
+char	*getUse(struct apple_part_map_entry *, int, char *);
+char	*getName(struct apple_part_map_entry *, int, char *);
+int	stricmp(const char *c1, const char *c2);
+int	getFreeLabelEntry(char *);
+int	findStdType(int, char *, int, int *, int);
+void	setpartition(struct apple_part_map_entry *, char *, int);
 void	sortmerge(void);
-void	reset_part_flags(int part);
+void	reset_part_flags(struct apple_part_map_entry *);
 int	check_for_errors(void);
 void	report_errors(void);
 void	set_fdisk_info (void);		/* write incore info into disk */
 int	get_diskmap_info (void);
+void	md_select_kernel(void);
+int	md_debug_dump(char *);
 
 /* constants and defines */
 
@@ -113,7 +135,8 @@ typedef struct {
 	unsigned int root : 1;	/* FS contains a Root FS */
 	unsigned int usr  : 1;	/* FS contains a Usr FS */
 	unsigned int crit : 1;	/* FS contains a "Critical"? FS */
-	unsigned int      : 8;
+	unsigned int used : 1;  /* FS in use */
+	unsigned int      : 7;
 	unsigned int slice : 5;	/* Slice number to assocate with plus one */
 	unsigned int part  : 16; /* reserved, but we'll hide disk part here */
     } flags;
@@ -149,81 +172,37 @@ typedef struct {
     unsigned short 	ddPad[243];	/* ARRAY[0..242] OF INTEGER; not used */
 } Block0;
 
-EXTERN struct part_map_entry new_map[]
-#ifdef MAIN
-= {
-  {PART_ENTRY_MAGIC, 0xa5a5, 5,   1,   NEW_MAP_SIZE & 0x7e, "Macintosh",
-	"Apple_partition_map", 0,63, 0x37},
-  {PART_ENTRY_MAGIC, 0, 5, 64, 32, "Macintosh", "Apple_Driver", 0, 32, 0x37},
-  {PART_ENTRY_MAGIC, 0, 5, 96, 32, "Macintosh", "Apple_Driver43", 0, 32, 0x37},
-  {PART_ENTRY_MAGIC, 0, 5, 128, 4096, "untitled", "Apple_HFS", 0, 4096, 0x37},
-  {PART_ENTRY_MAGIC, 0, 5,4224, 0, "untitled", "Apple_Free", 0, 0, 0x37}
-}
-#endif
-;
-
-EXTERN Block0 new_block0;
+/*
+ * Default Disk Partition Map used for an uninitilized disk.
+ *  Has minimal entry for an old Apple SCSI driver, a newer 43 SCSI
+ *  driver and an IDE driver (for those Macs with IDE). 
+ */
+extern struct apple_part_map_entry new_map[];
 
 /* Megs required for a full X installation. */
 #define XNEEDMB 50
 
-/* Disk names. */
-EXTERN	char *disk_names[]
-#ifdef MAIN
-= {"wd", "sd", NULL}
-#endif
-;
-
-/* Legal start character for a disk for checking input. */
-#define ISDISKSTART(dn)	(dn == 'w' || dn == 's')
-
 /*
  * Machine-specific command to write a new label to a disk.
- * For example, i386  uses "/sbin/disklabel -w -r", just like i386
+ * For example, i386 uses "/sbin/disklabel -w -r", just like i386
  * miniroot scripts, though this may leave a bogus incore label.
- * Sun ports should probably use  DISKLABEL_CMD "/sbin/disklabel -w"
- * to get incore  to ondisk inode translation for the Sun proms.
- * If not defined, we assume the port does not support disklabels and  
+ * Sun ports should probably use DISKLABEL_CMD "/sbin/disklabel -w"
+ * to get incore to ondisk inode translation for the Sun proms.
+ * If not defined, we assume the port does not support disklabels and
  * hand-edited disklabel will NOT be written by MI code.
  *
  * The mac68k port doesn't support real disklabels so we don't define the
- * command string.  The Mac Disk Partition Map gets written in the
- * md_pre_disklabel() routine.
+ * command string. The Apple Disk Partition Map gets written in the
+ * md_pre_disklabel() routine, which also forces the incore copy to be
+ * updated. If native disklabels are supported or if disklabel() is
+ * fixed to work for writing labels, this command should be defined
+ * to a value that will force the writing of the label. In that case,
+ * the code in md_pre_disklabel() which forces the incore update can be
+ * removed, though its presence won't hurt.
  *
  * #define DISKLABEL_CMD
  */
 
 /* Definition of files to retrieve from ftp. */
-EXTERN distinfo dist_list[]
-#ifdef MAIN
-= {
-    {"kern",	1, NULL, "Kernel       : "},
-    {"kern_sbc",1, NULL, "Kernel (SBC) : "},
-    {"base",	1, NULL, "Base         : "},
-    {"etc",	1, NULL, "System (/etc): "},
-    {"comp",	1, NULL, "Compiler     : "},
-    {"games",	1, NULL, "Games        : "},
-    {"man",	1, NULL, "Manuals      : "},
-    {"misc",	1, NULL, "Miscellaneous: "},
-    {"text",	1, NULL, "Text tools   : "},
-    {"secr",	0, NULL, "Security     : "},
-
-    {"xbase",	1, NULL, "X11 clients  : "},
-    {"xfont",	1, NULL, "X11 fonts    : "},
-    {"xserver",	1, NULL, "X11 servers  : "},
-    {"xcontrib",1, NULL, "X11 contrib  : "},
-    {"xcomp",	1, NULL, "X programming: "},
-    {NULL, 0, NULL, NULL }
-}
-#endif
-;
-
-/*
- * Default fileystem type for floppy disks.
- */
-EXTERN char *fdtype INIT("msdos");
-
-/*
- *  prototypes for MD code.
- */
-
+#define SET_KERNEL_1_NAME	"kern-GENERIC"
+#define SET_KERNEL_2_NAME	"kern-GENERICSBC"

@@ -1,4 +1,4 @@
-/*	$NetBSD: pmatch.c,v 1.1 1998/06/21 18:43:35 christos Exp $	*/
+/*	$NetBSD: pmatch.c,v 1.5 2005/12/11 12:24:37 christos Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1991 The Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -34,7 +30,6 @@
  */
 
 #include <sys/param.h>
-#include <sys/types.h>
 #include <lib/libkern/libkern.h>
 /*
  * pmatch():
@@ -88,7 +83,7 @@ pmatch(string, pattern, estr)
 				case 2:
 					return 2;
 				default:
-					return -1;	
+					return -1;
 				}
 				*estr = string;
 			}
@@ -113,7 +108,7 @@ pmatch(string, pattern, estr)
 					continue;
 				if (rangec == '-' && *(pattern - 2) != '[' &&
 				    *pattern != ']') {
-					match = 
+					match =
 					    stringc <= (u_char)*pattern &&
 					    (u_char)*(pattern - 2) <= stringc;
 					pattern++;

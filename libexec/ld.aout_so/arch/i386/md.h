@@ -1,4 +1,4 @@
-/*	$NetBSD: md.h,v 1.12 1998/10/19 03:09:32 matt Exp $	*/
+/*	$NetBSD: md.h,v 1.15 2008/04/28 20:23:03 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -43,7 +36,7 @@
 #define	MAX_ALIGNMENT		(sizeof (long))
 
 #ifdef NetBSD
-#define PAGSIZ			__LDPGSZ
+#define PAGSIZ			AOUT_LDPGSZ
 #else
 #define PAGSIZ			4096
 #endif
@@ -93,7 +86,6 @@
 
 #define RELOC_STATICS_THROUGH_GOT_P(r)		(0)
 #define JMPSLOT_NEEDS_RELOC			(0)
-#define	RELOC_SYMBOLICS_THROUGH_JMPSLOT		(1)
 #define	JMPSLOT_NONEXTERN_IS_INTERMODULE	(0)
 
 #define md_got_reloc(r)			(0)

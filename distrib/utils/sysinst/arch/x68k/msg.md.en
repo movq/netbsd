@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.md.en,v 1.1 1999/07/09 15:29:45 minoura Exp $	*/
+/*	$NetBSD: msg.md.en,v 1.5 2003/07/07 12:30:27 dsl Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -40,35 +40,14 @@
 /* x68k machine dependent messages, english */
 
 
+message md_hello
+{If the floppy is not locked, you may now remove the disk.
+
+}
+
 message dobootblks
 {Installing boot blocks on %s....
 }
-
-message askfsroot
-{I will be asking for partition sizes and on some, mount points.
-
-First the root partition.  You have %d %s left on your disk.
-Root partition size? }
-
-message askfsswap
-{
-Next the swap partition.  You have %d %s left on your disk.
-Swap partition size? }
-
-message askfsusr
-{
-Next the /usr partition.  You have %d %s left on your disk.
-/usr partition size? }
-
-message otherparts
-{You still have some space remaining unallocated on your disk.  Please
-give sizes and mount points for the following partitions.
-
-}
-
-message askfspart
-{The next partition is /dev/%s%c.  You have %d %s left on your disk.
-Partition size? }
 
 message newdisk
 {It appears that your disk, %s, has no X68K disk mark. sysinst is
@@ -84,7 +63,11 @@ message emptypart
 {There is an valid partition %c after empty partition(s).
 Please re-edit the partition table.}
 
-/* XXX: not yet implemented
+message set_kernel_1
+{Kernel (GENERIC)}
+
+.if notyet
+/* XXX: not yet implemented */
 message existing
 {Do you want to preserve existing BSD partition(s)?}
 
@@ -97,4 +80,4 @@ message notfirst
 {NetBSD/x68k must be installed in the first part of the boot disk.
 The first part of %s is not free.
 }
-*/
+.endif

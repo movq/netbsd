@@ -1,4 +1,4 @@
-/* $NetBSD: cia.c,v 1.54 2000/03/19 01:43:25 thorpej Exp $ */
+/* $NetBSD: cia.c,v 1.65 2008/04/28 20:23:11 martin Exp $ */
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -72,18 +65,20 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: cia.c,v 1.54 2000/03/19 01:43:25 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cia.c,v 1.65 2008/04/28 20:23:11 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/malloc.h>
 #include <sys/device.h>
-#include <vm/vm.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <machine/autoconf.h>
 #include <machine/rpb.h>
 #include <machine/sysarch.h>
+#include <machine/alpha.h>
 
 #include <dev/isa/isareg.h>
 #include <dev/isa/isavar.h>
@@ -112,13 +107,10 @@ __KERNEL_RCSID(0, "$NetBSD: cia.c,v 1.54 2000/03/19 01:43:25 thorpej Exp $");
 int	ciamatch __P((struct device *, struct cfdata *, void *));
 void	ciaattach __P((struct device *, struct device *, void *));
 
-struct cfattach cia_ca = {
-	sizeof(struct cia_softc), ciamatch, ciaattach,
-};
+CFATTACH_DECL(cia, sizeof(struct cia_softc),
+    ciamatch, ciaattach, NULL, NULL);
 
 extern struct cfdriver cia_cd;
-
-static int	ciaprint __P((void *, const char *pnp));
 
 int	cia_bus_get_window __P((int, int,
 	    struct alpha_bus_space_translation *));
@@ -218,13 +210,11 @@ cia_init(ccp, mallocsafe)
 	 *	- It hasn't been disbled by the user,
 	 *	- it's enabled in CNFG,
 	 *	- we're implementation version ev5,
-	 *	- BWX is enabled in the CPU's capabilities mask (yes,
-	 *	  the bit is really cleared if the capability exists...)
+	 *	- BWX is enabled in the CPU's capabilities mask
 	 */
 	if ((pci_use_bwx || bus_use_bwx) &&
 	    (ccp->cc_cnfg & CNFG_BWEN) != 0 &&
-	    alpha_implver() == ALPHA_IMPLVER_EV5 &&
-	    alpha_amask(ALPHA_AMASK_BWX) == 0) {
+	    (cpu_amask & ALPHA_AMASK_BWX) != 0) {
 		u_int32_t ctrl;
 
 		if (pci_use_bwx)
@@ -411,32 +401,19 @@ ciaattach(parent, self, aux)
 		panic("ciaattach: shouldn't be here, really...");
 	}
 
-	pba.pba_busname = "pci";
 	pba.pba_iot = &ccp->cc_iot;
 	pba.pba_memt = &ccp->cc_memt;
 	pba.pba_dmat =
 	    alphabus_dma_get_tag(&ccp->cc_dmat_direct, ALPHA_BUS_PCI);
+	pba.pba_dmat64 = NULL;
 	pba.pba_pc = &ccp->cc_pc;
 	pba.pba_bus = 0;
+	pba.pba_bridgetag = NULL;
 	pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED;
 	if ((ccp->cc_flags & CCF_PYXISBUG) == 0)
 		pba.pba_flags |= PCI_FLAGS_MRL_OKAY | PCI_FLAGS_MRM_OKAY |
 		    PCI_FLAGS_MWI_OKAY;
-	config_found(self, &pba, ciaprint);
-}
-
-static int
-ciaprint(aux, pnp)
-	void *aux;
-	const char *pnp;
-{
-	register struct pcibus_attach_args *pba = aux;
-
-	/* only PCIs can attach to CIAs; easy. */
-	if (pnp)
-		printf("%s at %s", pba->pba_busname, pnp);
-	printf(" bus %d", pba->pba_bus);
-	return (UNCONF);
+	config_found_ia(self, "pcibus", &pba, pcibusprint);
 }
 
 int

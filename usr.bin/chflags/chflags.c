@@ -1,4 +1,4 @@
-/*	$NetBSD: chflags.c,v 1.6 1998/10/10 07:38:23 mrg Exp $	*/
+/*	$NetBSD: chflags.c,v 1.15 2008/07/21 14:19:21 lukem Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1992, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1992, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "from: @(#)chflags.c	8.5 (Berkeley) 4/1/94";
 #else
-__RCSID("$NetBSD: chflags.c,v 1.6 1998/10/10 07:38:23 mrg Exp $");
+__RCSID("$NetBSD: chflags.c,v 1.15 2008/07/21 14:19:21 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -57,41 +53,40 @@ __RCSID("$NetBSD: chflags.c,v 1.6 1998/10/10 07:38:23 mrg Exp $");
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <util.h>
 
-#include "stat_flags.h"
-
-int	main __P((int, char **));
-void	usage __P((void));
+void	usage(void);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	FTS *ftsp;
 	FTSENT *p;
-	u_long clear, set;
+	u_long clear, set, newflags;
 	long val;
-	int Hflag, Lflag, Pflag, Rflag, ch, fts_options, oct, rval;
+	int Hflag, Lflag, Rflag, ch, fts_options, hflag, oct, rval;
 	char *flags, *ep;
+	int (*change_flags)(const char *, u_long);
 
-	Hflag = Lflag = Pflag = Rflag = 0;
-	while ((ch = getopt(argc, argv, "HLPR")) != -1)
+	Hflag = Lflag = Rflag = hflag = 0;
+	while ((ch = getopt(argc, argv, "HLPRh")) != -1)
 		switch (ch) {
 		case 'H':
 			Hflag = 1;
-			Lflag = Pflag = 0;
+			Lflag = 0;
 			break;
 		case 'L':
 			Lflag = 1;
-			Hflag = Pflag = 0;
+			Hflag = 0;
 			break;
 		case 'P':
-			Pflag = 1;
 			Hflag = Lflag = 0;
 			break;
 		case 'R':
 			Rflag = 1;
+			break;
+		case 'h':
+			hflag = 1;
 			break;
 		case '?':
 		default:
@@ -111,7 +106,8 @@ main(argc, argv)
 			fts_options &= ~FTS_PHYSICAL;
 			fts_options |= FTS_LOGICAL;
 		}
-	}
+	} else if (!hflag)
+		fts_options |= FTS_COMFOLLOW;
 
 	flags = *argv;
 	if (*flags >= '0' && *flags <= '7') {
@@ -120,22 +116,23 @@ main(argc, argv)
 		if (val < 0)
 			errno = ERANGE;
 		if (errno)
-                        err(1, "invalid flags: %s", flags);
-                if (*ep)
-                        errx(1, "invalid flags: %s", flags);
+			err(1, "invalid flags: %s", flags);
+		if (*ep)
+			errx(1, "invalid flags: %s", flags);
 		set = val;
-                oct = 1;
+		oct = 1;
 	} else {
 		if (string_to_flags(&flags, &set, &clear))
-                        errx(1, "invalid flag: %s", flags);
+			errx(1, "invalid flag: %s", flags);
 		clear = ~clear;
 		oct = 0;
 	}
 
-	if ((ftsp = fts_open(++argv, fts_options , 0)) == NULL)
-		err(1, "fts_open `%s'", argv[0]); 
+	if ((ftsp = fts_open(++argv, fts_options, NULL)) == NULL)
+		err(1, "fts_open");
 
 	for (rval = 0; (p = fts_read(ftsp)) != NULL;) {
+		change_flags = chflags;
 		switch (p->fts_info) {
 		case FTS_D:
 			if (Rflag)		/* Change it at FTS_DP. */
@@ -151,28 +148,43 @@ main(argc, argv)
 			warnx("%s: %s", p->fts_path, strerror(p->fts_errno));
 			rval = 1;
 			continue;
-		case FTS_SL:			/* Ignore. */
-		case FTS_SLNONE:
+		case FTS_SL:			/* Ignore unless -h. */
+			/*
+			 * All symlinks we found while doing a physical
+			 * walk end up here.
+			 */
+			if (!hflag)
+				continue;
+			/*
+			 * Note that if we follow a symlink, fts_info is
+			 * not FTS_SL but FTS_F or whatever.  And we should
+			 * use lchflags only for FTS_SL and should use chflags
+			 * for others.
+			 */
+			change_flags = lchflags;
+			break;
+		case FTS_SLNONE:		/* Ignore. */
 			/*
 			 * The only symlinks that end up here are ones that
-			 * don't point to anything and ones that we found
-			 * doing a physical walk.
+			 * don't point to anything.  Note that if we are
+			 * doing a phisycal walk, we never reach here unless
+			 * we asked to follow explicitly.
 			 */
 			continue;
 		default:
 			break;
 		}
-		if (oct) {
-			if (!chflags(p->fts_accpath, set))
-				continue;
-		} else {
-			p->fts_statp->st_flags |= set;
-			p->fts_statp->st_flags &= clear;
-			if (!chflags(p->fts_accpath, p->fts_statp->st_flags))
-				continue;
+		if (oct)
+			newflags = set;
+		else {
+			newflags = p->fts_statp->st_flags;
+			newflags |= set;
+			newflags &= clear;
 		}
-		warn("%s", p->fts_path);
-		rval = 1;
+		if ((*change_flags)(p->fts_accpath, newflags)) {
+			warn("%s", p->fts_path);
+			rval = 1;
+		}
 	}
 	if (errno)
 		err(1, "fts_read");
@@ -180,9 +192,10 @@ main(argc, argv)
 }
 
 void
-usage()
+usage(void)
 {
+
 	(void)fprintf(stderr,
-	    "usage: chflags [-R [-H | -L | -P]] flags file ...\n");
+	    "usage: chflags [-R [-H | -L | -P]] [-h] flags file ...\n");
 	exit(1);
 }

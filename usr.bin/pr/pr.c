@@ -1,4 +1,4 @@
-/*	$NetBSD: pr.c,v 1.7 1998/12/19 20:16:50 christos Exp $	*/
+/*	$NetBSD: pr.c,v 1.19 2008/07/21 14:19:24 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1991 Keith Muller.
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -39,15 +35,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 from: static char sccsid[] = "@(#)pr.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: pr.c,v 1.7 1998/12/19 20:16:50 christos Exp $");
+__RCSID("$NetBSD: pr.c,v 1.19 2008/07/21 14:19:24 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -63,6 +59,7 @@ __RCSID("$NetBSD: pr.c,v 1.7 1998/12/19 20:16:50 christos Exp $");
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <util.h>
 
 #include "pr.h"
 #include "extern.h"
@@ -70,7 +67,7 @@ __RCSID("$NetBSD: pr.c,v 1.7 1998/12/19 20:16:50 christos Exp $");
 /*
  * pr:	a printing and pagination filter. If multiple input files
  *	are specified, each is read, formatted, and written to standard
- *	output. By default, input is seperated into 66-line pages, each
+ *	output. By default, input is separated into 66-line pages, each
  *	with a header that includes the page number, date, time and the
  *	files pathname.
  *
@@ -101,7 +98,7 @@ char	schar;			/* text column separation character */
 int	sflag;			/* -s option for multiple columns */
 int	nohead;			/* do not write head and trailer */
 int	pgwd;			/* page width with multiple col output */
-char	*timefrmt;		/* time conversion string */
+char	*timefrmt = TIMEFMT;	/* time conversion string */
 
 /*
  * misc globals
@@ -162,14 +159,15 @@ onecol(argc, argv)
 	int ips;
 	int ops;
 	int cps;
-	char *obuf;
+	char *obuf = NULL;
 	char *lbuf;
 	char *nbuf;
-	char *hbuf;
+	char *hbuf = NULL;
 	char *ohbuf;
-	FILE *inf;
+	FILE *inf = NULL;
 	char *fname;
 	int mor;
+	int error = 1;
 
 	if (nmwd)
 		num = nmwd + 1;
@@ -180,17 +178,13 @@ onecol(argc, argv)
 	/*
 	 * allocate line buffer
 	 */
-	if ((obuf = malloc((unsigned)(LBUF + off)*sizeof(char))) == NULL) {
-		mfail();
-		return(1);
-	}
+	if ((obuf = malloc((unsigned)(LBUF + off)*sizeof(char))) == NULL)
+		goto oomem;
 	/*
 	 * allocate header buffer
 	 */
-	if ((hbuf = malloc((unsigned)(HDBUF + offst)*sizeof(char))) == NULL) {
-		mfail();
-		return(1);
-	}
+	if ((hbuf = malloc((unsigned)(HDBUF + offst)*sizeof(char))) == NULL)
+		goto oomem;
 
 	ohbuf = hbuf + offst;
 	nbuf = obuf + offst;
@@ -238,7 +232,7 @@ onecol(argc, argv)
 					break;
 				if (!linecnt && !nohead &&
 					prhead(hbuf, fname, pagecnt))
-					return(1);
+					goto out;
 
 				/*
 				 * start of new line.
@@ -247,9 +241,9 @@ onecol(argc, argv)
 					if (num)
 						addnum(nbuf, num, ++lncnt);
 					if (otln(obuf,cnt+off, &ips, &ops, mor))
-						return(1);
+						goto out;
 				} else if (otln(lbuf, cnt, &ips, &ops, mor))
-					return(1);
+					goto out;
 
 				/*
 				 * if line bigger than buffer, get more
@@ -272,7 +266,7 @@ onecol(argc, argv)
 			 * fill to end of page
 			 */
 			if (linecnt && prtail(lines-linecnt-lrgln, lrgln))
-				return(1);
+				goto out;
 
 			/*
 			 * On EOF go to next file
@@ -285,8 +279,19 @@ onecol(argc, argv)
 			(void)fclose(inf);
 	}
 	if (eoptind < argc)
-		return(1);
-	return(0);
+		goto out;
+	error = 0;
+	goto out;
+oomem:
+	mfail();
+out:
+	if (obuf)
+		free(obuf);
+	if (hbuf)
+		free(hbuf);
+	if (inf != NULL && inf != stdin)
+		(void)fclose(inf);
+	return error;
 }
 
 /*
@@ -298,50 +303,47 @@ vertcol(argc, argv)
         char *argv[];
 {
 	char *ptbf;
-	char **lstdat;
+	char **lstdat = NULL;
 	int i;
 	int j;
 	int cnt = -1;
 	int pln;
-	int *indy;
+	int *indy = NULL;
 	int cvc;
-	int *lindy;
+	int *lindy = NULL;
 	int lncnt;
 	int stp;
 	int pagecnt;
 	int col = colwd + 1;
 	int mxlen = pgwd + offst + 1;
 	int mclcnt = clcnt - 1;
-	struct vcol *vc;
+	struct vcol *vc = NULL;
 	int mvc;
 	int tvc;
 	int cw = nmwd + 1;
 	int fullcol;
-	char *buf;
-	char *hbuf;
+	char *buf = NULL;
+	char *hbuf = NULL;
 	char *ohbuf;
 	char *fname;
-	FILE *inf;
+	FILE *inf = NULL;
 	int ips = 0;
 	int cps = 0;
 	int ops = 0;
 	int mor = 0;
+	int error = 1;
 
 	/*
 	 * allocate page buffer
 	 */
-	if ((buf = malloc((unsigned)lines*mxlen*sizeof(char))) == NULL) {
-		mfail();
-		return(1);
-	}
+	if ((buf = malloc((unsigned)lines*mxlen*sizeof(char))) == NULL)
+		goto oomem;
 
 	/*
 	 * allocate page header
 	 */
-	if ((hbuf = malloc((unsigned)(HDBUF + offst)*sizeof(char))) == NULL) {
-		mfail();
-		return(1);
-	}
+	if ((hbuf = malloc((unsigned)(HDBUF + offst)*sizeof(char))) == NULL)
+		goto oomem;
 	ohbuf = hbuf + offst;
 	if (offst)
 		(void)memset(hbuf, (int)' ', offst);
@@ -350,31 +352,22 @@ vertcol(argc, argv)
 	 * col pointers when no headers
 	 */
 	mvc = lines * clcnt;
-	if ((vc =
-	    (struct vcol *)malloc((unsigned)mvc*sizeof(struct vcol))) == NULL) {
-		mfail();
-		return(1);
-	}
+	if ((vc = malloc((unsigned)mvc*sizeof(struct vcol))) == NULL)
+		goto oomem;
 
 	/*
 	 * pointer into page where last data per line is located
 	 */
-	if ((lstdat = (char **)malloc((unsigned)lines*sizeof(char *))) == NULL){
-		mfail();
-		return(1);
-	}
+	if ((lstdat = malloc((unsigned)lines*sizeof(char *))) == NULL)
+		goto oomem;
 
 	/*
 	 * fast index lookups to locate start of lines
 	 */
-	if ((indy = (int *)malloc((unsigned)lines*sizeof(int))) == NULL) {
-		mfail();
-		return(1);
-	}
-	if ((lindy = (int *)malloc((unsigned)lines*sizeof(int))) == NULL) {
-		mfail();
-		return(1);
-	}
+	if ((indy = malloc((unsigned)lines*sizeof(int))) == NULL)
+		goto oomem;
+	if ((lindy = malloc((unsigned)lines*sizeof(int))) == NULL)
+		goto oomem;
 
 	if (nmwd)
 		fullcol = col + cw;
@@ -512,12 +505,14 @@ vertcol(argc, argv)
 				 * print header
 				 */
 				if (!nohead && prhead(hbuf, fname, pagecnt))
-					return(1);
+					goto out;
 				for (i = 0; i < pln; ++i) {
 					ips = 0;
 					ops = 0;
-					if (offst&& otln(buf,offst,&ips,&ops,1))
-						return(1);
+					if (offst&& otln(buf,offst,&ips,&ops,1)) {
+						error = 1;
+						goto out;
+					}
 					tvc = i;
 
 					for (j = 0; j < clcnt; ++j) {
@@ -542,7 +537,7 @@ vertcol(argc, argv)
 							cnt = fullcol;
 						if (otln(vc[tvc].pt, cnt, &ips,
 								&ops, 1))
-							return(1);
+							goto out;
 						tvc += pln;
 						if (tvc >= cvc)
 							break;
@@ -551,13 +546,13 @@ vertcol(argc, argv)
 					 * terminate line
 					 */
 					if (otln(buf, 0, &ips, &ops, 0))
-						return(1);
+						goto out;
 				}
 				/*
 				 * pad to end of page
 				 */
 				if (prtail((lines - pln), 0))
-					return(1);
+					goto out;
 				/*
 				 * done with output, go to next file
 				 */
@@ -576,7 +571,7 @@ vertcol(argc, argv)
 			 * print header
 			 */
 			if (pln && !nohead && prhead(hbuf, fname, pagecnt))
-				return(1);
+				goto out;
 
 			/*
 			 * output each line
@@ -586,14 +581,14 @@ vertcol(argc, argv)
 				if ((j = lstdat[i] - ptbf) <= offst)
 					break;
 				if (otln(ptbf, j, &ips, &ops, 0))
-					return(1);
+					goto out;
 			}
 
 			/*
 			 * pad to end of page
 			 */
 			if (pln && prtail((lines - pln), 0))
-				return(1);
+				goto out;
 
 			/*
 			 * if EOF go to next file
@@ -606,8 +601,25 @@ vertcol(argc, argv)
 			(void)fclose(inf);
 	}
 	if (eoptind < argc)
-		return(1);
-	return(0);
+		goto out;
+	error = 0;
+	goto out;
+oomem:
+	mfail();
+out:
+	if (buf)
+		free(buf);
+	if (hbuf)
+		free(hbuf);
+	if (vc)
+		free(vc);
+	if (lstdat)
+		free(lstdat);
+	if (indy)
+		free(lindy);
+	if (inf != NULL && inf != stdin)
+		(void)fclose(inf);
+	return error;
 }
 
 /*
@@ -627,28 +639,25 @@ horzcol(argc, argv)
 	int i;
 	int lncnt;
 	int pagecnt;
-	char *buf;
-	char *hbuf;
+	char *buf = NULL;
+	char *hbuf = NULL;
 	char *ohbuf;
 	char *fname;
-	FILE *inf;
+	FILE *inf = NULL;
 	int ips = 0;
 	int cps = 0;
 	int ops = 0;
 	int mor = 0;
+	int error = 1;
 
-	if ((buf = malloc((unsigned)(pgwd+offst+1)*sizeof(char))) == NULL) {
-		mfail();
-		return(1);
-	}
+	if ((buf = malloc((unsigned)(pgwd+offst+1)*sizeof(char))) == NULL)
+		goto oomem;
 
 	/*
 	 * page header
 	 */
-	if ((hbuf = malloc((unsigned)(HDBUF + offst)*sizeof(char))) == NULL) {
-		mfail();
-		return(1);
-	}
+	if ((hbuf = malloc((unsigned)(HDBUF + offst)*sizeof(char))) == NULL)
+		goto oomem;
 	ohbuf = hbuf + offst;
 	if (offst) {
 		(void)memset(buf, (int)' ', offst);
@@ -723,19 +732,19 @@ horzcol(argc, argv)
 					break;
 				if (!i && !nohead &&
 					prhead(hbuf, fname, pagecnt))
-					return(1);
+					goto out;
 				/*
 				 * output line
 				 */
 				if (otln(buf, j, &ips, &ops, 0))
-					return(1);
+					goto out;
 			}
 
 			/*
 			 * pad to end of page
 			 */
 			if (i && prtail(lines-i, 0))
-				return(1);
+				goto out;
 
 			/*
 			 * if EOF go to next file
@@ -748,8 +757,19 @@ horzcol(argc, argv)
 			(void)fclose(inf);
 	}
 	if (eoptind < argc)
-		return(1);
-	return(0);
+		goto out;
+	error = 0;
+	goto out;
+oomem:
+	mfail();
+out:
+	if (buf)
+		free(buf);
+	if (hbuf)
+		free(hbuf);
+	if (inf != NULL && inf != stdin)
+		(void)fclose(inf);
+	return error;
 }
 
 /*
@@ -767,36 +787,33 @@ mulfile(argc, argv)
 	int cnt;
 	char *lstdat;
 	int i;
-	FILE **fbuf;
+	FILE **fbuf = NULL;
 	int actf;
 	int lncnt;
 	int col;
 	int pagecnt;
 	int fproc;
-	char *buf;
-	char *hbuf;
+	char *buf = NULL;
+	char *hbuf = NULL;
 	char *ohbuf;
 	char *fname;
 	int ips = 0;
 	int cps = 0;
 	int ops = 0;
 	int mor = 0;
+	int error = 1;
 
 	/*
 	 * array of FILE *, one for each operand
 	 */
-	if ((fbuf = (FILE **)malloc((unsigned)clcnt*sizeof(FILE *))) == NULL) {
-		mfail();
-		return(1);
-	}
+	if ((fbuf = calloc(clcnt, sizeof(FILE *))) == NULL)
+		goto oomem;
 
 	/*
 	 * page header
 	 */
-	if ((hbuf = malloc((unsigned)(HDBUF + offst)*sizeof(char))) == NULL) {
-		mfail();
-		return(1);
-	}
+	if ((hbuf = malloc((unsigned)(HDBUF + offst)*sizeof(char))) == NULL)
+		goto oomem;
 	ohbuf = hbuf + offst;
 
 	/*
@@ -819,7 +836,7 @@ mulfile(argc, argv)
 	 * if no files, exit
 	 */
 	if (!j)
-		return(1);
+		goto out;
 
 	/*
 	 * calculate page boundries based on open file count
@@ -835,7 +852,7 @@ mulfile(argc, argv)
 	if (colwd < 1) {
 		(void)fprintf(err,
 		  "pr: page width too small for %d columns\n", clcnt);
-		return(1);
+		goto out;
 	}
 	actf = clcnt;
 	col = colwd + 1;
@@ -843,10 +860,8 @@ mulfile(argc, argv)
 	/*
 	 * line buffer
 	 */
-	if ((buf = malloc((unsigned)(pgwd+offst+1)*sizeof(char))) == NULL) {
-		mfail();
-		return(1);
-	}
+	if ((buf = malloc((unsigned)(pgwd+offst+1)*sizeof(char))) == NULL)
+		goto out;
 	if (offst) {
 		(void)memset(buf, (int)' ', offst);
 		(void)memset(hbuf, (int)' ', offst);
@@ -930,13 +945,13 @@ mulfile(argc, argv)
 				break;
 
 			if (!i && !nohead && prhead(hbuf, fname, pagecnt))
-				return(1);
+				goto out;
 
 			/*
 			 * output line
 			 */
 			if (otln(buf, j, &ips, &ops, 0))
-				return(1);
+				goto out;
 
 			/*
 			 * if no more active files, done
@@ -951,12 +966,27 @@ mulfile(argc, argv)
 		 * pad to end of page
 		 */
 		if (i && prtail(lines-i, 0))
-			return(1);
+			goto out;
 		++pagecnt;
 	}
 	if (eoptind < argc)
-		return(1);
-	return(0);
+		goto out;
+	error = 0;
+	goto out;
+oomem:
+	mfail();
+out:
+	if (fbuf) {
+		for (j = 0; j < clcnt; j++)
+			if (fbuf[j] && fbuf[j] != stdin)
+				(void)fclose(fbuf[j]);
+		free(fbuf);
+	}
+	if (hbuf)
+		free(hbuf);
+	if (buf)
+		free(buf);
+	return error;
 }
 
 /*
@@ -1126,6 +1156,13 @@ otln(buf, cnt, svips, svops, mor)
 			 */
 			while (ops < ips) {
 				/*
+				 * use one space if necessary
+				 */
+				if (ips - ops == 1) {
+					putchar(' ');
+					break;
+				}
+				/*
 				 * use as many ochar as will fit
 				 */
 				if ((tbps = ops + gap - (ops % gap)) > ips)
@@ -1170,6 +1207,13 @@ otln(buf, cnt, svips, svops, mor)
 
 		if (mor < 0) {
 			while (ops < ips) {
+				/*
+				 * use one space if necessary
+				 */
+				if (ips - ops == 1) {
+					putchar(' ');
+					break;
+				}
 				/*
 				 * use as many ochar as will fit
 				 */
@@ -1442,7 +1486,7 @@ prhead(buf, fname, pagcnt)
 	 * in the spec clearly does not limit length. No pr currently
 	 * restricts header length. However if we need to truncate in
 	 * an reasonable way, adjust the length of the printf by
-	 * changing HDFMT to allow a length max as an arguement printf.
+	 * changing HDFMT to allow a length max as an argument printf.
 	 * buf (which contains the offset spaces and time field could
 	 * also be trimmed
 	 *
@@ -1521,6 +1565,7 @@ terminate(which_sig)
 	int which_sig;
 {
 	flsh_errs();
+	(void)raise_default_signal(which_sig);
 	exit(1);
 }
 
@@ -1591,7 +1636,7 @@ setup(argc, argv)
 		}
 	} else
 		err = stderr;
-	while ((c = egetopt(argc, argv, "#adFmrte?h:i?l:n?o:s?w:")) != -1) {
+	while ((c = egetopt(argc, argv, "#adFmrte?h:i?l:n?o:s?T:w:")) != -1) {
 		switch (c) {
 		case '+':
 			if ((pgnm = atoi(eoptarg)) < 1) {
@@ -1714,11 +1759,14 @@ setup(argc, argv)
 				schar = SCHAR;
 			else
 				schar = *eoptarg++;
-			if (*eoptarg != '\0') {
+			if (eoptarg && *eoptarg != '\0') {
 				(void)fprintf(err,
 				      "pr: invalid value for -s %s\n", eoptarg);
 				return(1);
 			}
+			break;
+		case 'T':
+			timefrmt = eoptarg;
 			break;
 		case 't':
 			++nohead;
@@ -1820,7 +1868,5 @@ setup(argc, argv)
 		}
 	}
 
-	if ((timefrmt = getenv("LC_TIME")) == NULL)
-		timefrmt = TIMEFMT;
 	return(0);
 }

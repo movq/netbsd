@@ -1,4 +1,4 @@
-/*	$NetBSD: uboot.c,v 1.3 1997/04/27 21:17:13 thorpej Exp $	*/
+/*	$NetBSD: uboot.c,v 1.15 2008/07/16 13:44:51 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -36,10 +32,10 @@
  */
 
 #include <sys/param.h>
-#include <sys/reboot.h>
-#include <a.out.h>
+#include <sys/boot_flag.h>
 
 #include <lib/libsa/stand.h>
+#include <lib/libkern/libkern.h>
 
 #include <hp300/stand/common/samachdep.h>
 
@@ -70,13 +66,17 @@ char *names[] = {
 
 static int bdev, badapt, bctlr, bunit, bpart;
 
-main()
+void main(void);
+void getbootdev(int *);
+
+void
+main(void)
 {
 	int currname = 0;
 
 	printf("\n");
-	printf(">> %s, Revision %s\n", bootprog_name, bootprog_rev);  
-	printf(">> (%s, %s)\n", bootprog_maker, bootprog_date);
+	printf(">> %s, Revision %s (from NetBSD %s)\n",
+	    bootprog_name, bootprog_rev, bootprog_kernrev);
 	printf(">> HP 9000/%s SPU\n", getmachineid());
 	printf(">> Enter \"reset\" to reset system.\n");
 
@@ -96,47 +96,33 @@ main()
 			getbootdev(&howto);
 		} else
 			printf(": %s\n", name);
-
-		exec(name, lowram, howto);
+		exec_hp300(name, (u_long)lowram, howto);
 		printf("boot: %s\n", strerror(errno));
 	}
 }
 
-getbootdev(howto)
-	int *howto;
+void
+getbootdev(int *howto)
 {
 	char c, *ptr = line;
 
-	printf("Boot: [[[%s%d%c:]%s][-s][-a][-d]] :- ",
+	printf("Boot: [[[%s%d%c:]%s][-a][-c][-d][-s][-v][-q]] :- ",
 	    devsw[bdev].dv_name, bctlr + (8 * badapt), 'a' + bpart, name);
 
 	if (tgets(line)) {
 		if (strcmp(line, "reset") == 0) {
 			call_req_reboot();      /* reset machine */
 			printf("panic: can't reboot, halting\n");
-			asm("stop #0x2700");
+			__asm("stop #0x2700");
 		}
-		while (c = *ptr) {
+		while ((c = *ptr) != '\0') {
 			while (c == ' ')
 				c = *++ptr;
 			if (!c)
 				return;
 			if (c == '-')
 				while ((c = *++ptr) && c != ' ')
-					switch (c) {
-					case 'a':
-						*howto |= RB_ASKNAME;
-						continue;
-					case 's':
-						*howto |= RB_SINGLE;
-						continue;
-					case 'd':
-						*howto |= RB_KDB;
-						continue;
-					case 'b':
-						*howto |= RB_HALT;
-						continue;
-					}
+					BOOT_FLAG(c, *howto);
 			else {
 				name = ptr;
 				while ((c = *++ptr) && c != ' ');

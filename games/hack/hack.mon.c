@@ -1,12 +1,69 @@
-/*	$NetBSD: hack.mon.c,v 1.4 1997/10/19 16:58:34 christos Exp $	*/
+/*	$NetBSD: hack.mon.c,v 1.8 2008/01/28 06:55:41 dholland Exp $	*/
 
 /*
- * Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1985.
+ * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
+ * Amsterdam
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met:
+ *
+ * - Redistributions of source code must retain the above copyright notice,
+ * this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above copyright
+ * notice, this list of conditions and the following disclaimer in the
+ * documentation and/or other materials provided with the distribution.
+ *
+ * - Neither the name of the Stichting Centrum voor Wiskunde en
+ * Informatica, nor the names of its contributors may be used to endorse or
+ * promote products derived from this software without specific prior
+ * written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
+ * IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+ * PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER
+ * OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+ * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
+ * Copyright (c) 1982 Jay Fenlason <hack@gnu.org>
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+ * AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL
+ * THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.mon.c,v 1.4 1997/10/19 16:58:34 christos Exp $");
+__RCSID("$NetBSD: hack.mon.c,v 1.8 2008/01/28 06:55:41 dholland Exp $");
 #endif				/* not lint */
 
 #include <stdlib.h>
@@ -21,7 +78,7 @@ __RCSID("$NetBSD: hack.mon.c,v 1.4 1997/10/19 16:58:34 christos Exp $");
 int             warnlevel;	/* used by movemon and dochugw */
 long            lastwarntime;
 int             lastwarnlev;
-char           *warnings[] = {
+const char           *const warnings[] = {
 	"white", "pink", "red", "ruby", "purple", "black"
 };
 
@@ -93,7 +150,7 @@ next_mon:
 		warnlevel = SIZE(warnings) - 1;
 	if (warnlevel >= 0)
 		if (warnlevel > lastwarnlev || moves > lastwarntime + 5) {
-			char           *rr;
+			const char           *rr;
 			switch (Warning & (LEFT_RING | RIGHT_RING)) {
 			case LEFT_RING:
 				rr = "Your left ring glows";
@@ -118,7 +175,7 @@ next_mon:
 void
 justswld(mtmp, name)
 	struct monst   *mtmp;
-	char           *name;
+	const char           *name;
 {
 
 	mtmp->mx = u.ux;
@@ -137,7 +194,7 @@ void
 youswld(mtmp, dam, die, name)
 	struct monst   *mtmp;
 	int		dam, die;
-	char           *name;
+	const char           *name;
 {
 	if (mtmp != u.ustuck)
 		return;
@@ -160,9 +217,10 @@ dochugw(mtmp)
 {
 	int x = mtmp->mx;
 	int y = mtmp->my;
-	int d = dochug(mtmp);
+	int dead = dochug(mtmp);
 	int dd;
-	if (!d)			/* monster still alive */
+
+	if (!dead)		/* monster still alive */
 		if (Warning)
 			if (!mtmp->mpeaceful)
 				if (mtmp->data->mlevel > warnlevel)
@@ -170,7 +228,7 @@ dochugw(mtmp)
 						if (dd < 100)
 							if (!canseemon(mtmp))
 								warnlevel = mtmp->data->mlevel;
-	return (d);
+	return (dead);
 }
 
 /* returns 1 if monster died moving, 0 otherwise */
@@ -178,7 +236,7 @@ int
 dochug(mtmp)
 	struct monst   *mtmp;
 {
-	struct permonst *mdat;
+	const struct permonst *mdat;
 	int tmp = 0, nearby, scared;
 
 	if (mtmp->cham && !rn2(6))
@@ -260,8 +318,7 @@ dochug(mtmp)
 }
 
 int
-m_move(mtmp, after)
-	struct monst   *mtmp;
+m_move(struct monst *mtmp, int after)
 {
 	struct monst   *mtmp2;
 	int		nx, ny, omx, omy, appr, nearer, cnt, i, j;
@@ -444,6 +501,8 @@ nxti:		;
 	if (mmoved) {
 		if (info[chi] & ALLOW_M) {
 			mtmp2 = m_at(nix, niy);
+			if (mtmp2 == NULL)
+				panic("error in m_move");
 			if (hitmm(mtmp, mtmp2) == 1 && rn2(4) &&
 			    hitmm(mtmp2, mtmp) == 2)
 				return (2);
@@ -623,7 +682,7 @@ dist(x, y)
 
 void
 poisoned(string, pname)
-	char           *string, *pname;
+	const char           *string, *pname;
 {
 	int             i;
 
@@ -749,7 +808,7 @@ killed(mtmp)
 #define	NEW_SCORING
 #endif	/* lint */
 	int             tmp, nk, x, y;
-	struct permonst *mdat;
+	const struct permonst *mdat;
 
 	if (mtmp->cham)
 		mtmp->data = PM_CHAMELEON;
@@ -869,8 +928,7 @@ killed(mtmp)
 }
 
 void
-kludge(str, arg)
-	char           *str, *arg;
+kludge(const char *str, const char *arg)
 {
 	if (Blind) {
 		if (*str == '%')
@@ -897,7 +955,7 @@ int
 newcham(mtmp, mdat)		/* make a chameleon look like a new monster */
 /* returns 1 if the monster actually changed */
 	struct monst   *mtmp;
-	struct permonst *mdat;
+	const struct permonst *mdat;
 {
 	int mhp, hpn, hpd;
 

@@ -1,4 +1,4 @@
-/* $NetBSD: ieeefp.h,v 1.3 1999/04/29 02:55:50 ross Exp $ */
+/* $NetBSD: ieeefp.h,v 1.7 2008/08/06 03:54:50 matt Exp $ */
 
 /* 
  * Written by J.T. Conklin, Apr 28, 1995
@@ -8,38 +8,77 @@
 #ifndef _ALPHA_IEEEFP_H_
 #define _ALPHA_IEEEFP_H_
 
-typedef int fp_except;
-#define	FP_X_INV	0x01	/* invalid operation exception */
-#define	FP_X_DZ		0x02	/* divide-by-zero exception */
-#define	FP_X_OFL	0x04	/* overflow exception */
-#define	FP_X_UFL	0x08	/* underflow exception */
-#define	FP_X_IMP	0x10	/* imprecise (loss of precision; "inexact") */
-#define	FP_X_IOV	0x20    /* integer overflow XXX? */
+#include <sys/featuretest.h>
 
+#if defined(_NETBSD_SOURCE) || defined(_ISOC99_SOURCE)
+
+typedef int fenv_t;
+typedef int fexcept_t;
+
+#define	FE_INVALID	0x01	/* invalid operation exception */
+#define	FE_DIVBYZERO	0x02	/* divide-by-zero exception */
+#define	FE_OVERFLOW	0x04	/* overflow exception */
+#define	FE_UNDERFLOW	0x08	/* underflow exception */
+#define	FE_INEXACT	0x10	/* imprecise (loss of precision; "inexact") */
+#define	FE_IOVERFLOW	0x20    /* integer overflow */
+
+#define	FE_ALL_EXCEPT	0x3f
+
+/*
+ * These bits match the fpcr as well as bits 12:11
+ * in fp operate instructions
+ */
+#define	FE_TOWARDZERO	0	/* round to zero (truncate) */
+#define	FE_DOWNWARD	1	/* round toward negative infinity */
+#define	FE_TONEAREST	2	/* round to nearest representable number */
+#define	FE_UPWARD	3	/* round toward positive infinity */
+
+#if !defined(_ISOC99_SOURCE)
+
+typedef int fp_except;
+
+#if defined(_KERNEL)
+
+#include <sys/param.h>
+#include <sys/proc.h>
+#include <machine/fpu.h>
+#include <machine/alpha.h>
+
+/* FP_X_IOV is intentionally omitted from the architecture flags mask */
+
+#define	FP_AA_FLAGS (FP_X_INV | FP_X_DZ | FP_X_OFL | FP_X_UFL | FP_X_IMP)
+
+#define float_raise(f)						\
+	do curlwp->l_md.md_flags |= NETBSD_FLAG_TO_FP_C(f);	\
+	while(0)
+
+#define float_set_inexact()	float_raise(FP_X_IMP)
+#define float_set_invalid()	float_raise(FP_X_INV)
+#define	fpgetround()		(alpha_read_fpcr() >> 58 & 3)
+
+#endif /* _KERNEL */
+
+#define	FP_X_INV	FE_INVALID	/* invalid operation exception */
+#define	FP_X_DZ		FE_DIVBYZERO	/* divide-by-zero exception */
+#define	FP_X_OFL	FE_OVERFLOW	/* overflow exception */
+#define	FP_X_UFL	FE_UNDERFLOW	/* underflow exception */
+#define	FP_X_IMP	FE_INEXACT	/* imprecise (prec. loss; "inexact") */
+#define	FP_X_IOV	FE_IOVERFLOW	/* integer overflow */
+
+/*
+ * fp_rnd bits match the fpcr, below, as well as bits 12:11
+ * in fp operate instructions
+ */
 typedef enum {
-    FP_RZ=0,			/* round to zero (truncate) */
-    FP_RM=1,			/* round toward negative infinity */
-    FP_RN=2,			/* round to nearest representable number */
-    FP_RP=3			/* round toward positive infinity */
+    FP_RZ = FE_TOWARDZERO,	/* round to zero (truncate) */
+    FP_RM = FE_DOWNWARD,	/* round toward negative infinity */
+    FP_RN = FE_TONEAREST,	/* round to nearest representable number */
+    FP_RP = FE_UPWARD,		/* round toward positive infinity */
+    _FP_DYNAMIC=FP_RP
 } fp_rnd;
 
-#ifdef _KERNEL
-#define	FPCR_SUM	(1UL << 63)
-#define	FPCR_INED	(1UL << 62)
-#define	FPCR_UNFD	(1UL << 61)
-#define	FPCR_UNDZ	(1UL << 60)
-#define	FPCR_DYN(rm)	((unsigned long)(rm) << 58)
-#define	FPCR_IOV	(1UL << 57)
-#define	FPCR_INE	(1UL << 56)
-#define	FPCR_UNF	(1UL << 55)
-#define	FPCR_OVF	(1UL << 54)
-#define	FPCR_DZE	(1UL << 53)
-#define	FPCR_INV	(1UL << 52)
-#define	FPCR_OVFD	(1UL << 51)
-#define	FPCR_DZED	(1UL << 50)
-#define	FPCR_INVD	(1UL << 49)
-#define	FPCR_DNZ	(1UL << 48)
-#define	FPCR_DNOD	(1UL << 47)
-#endif
+#endif /* !_ISOC99_SOURCE */
+
+#endif	/* _NETBSD_SOURCE || _ISOC99_SOURCE */
 
 #endif /* _ALPHA_IEEEFP_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: net.c,v 1.1 1999/12/22 05:54:41 tsubai Exp $	*/
+/*	$NetBSD: net.c,v 1.4 2005/12/11 12:18:25 christos Exp $	*/
 
 /*
  * Copyright (c) 1995 Gordon W. Ross
@@ -56,13 +56,14 @@
 
 #include <lib/libsa/stand.h>
 #include <lib/libsa/net.h>
-#include <lib/libsa/netif.h>
 #include <lib/libsa/bootparam.h>
 #include <lib/libsa/nfs.h>
 
 #include <lib/libkern/libkern.h>
 
 #include <promdev.h>
+
+#include "netif_news.h"
 
 char rootpath[FNAME_SIZE];
 
@@ -74,15 +75,14 @@ static	int open_count;
  * This opens the low-level device and sets f->f_devdata.
  */
 int
-net_open(pd)
-	struct romdev *pd;
+net_open(struct romdev *pd)
 {
 	int error = 0;
 
 	/* On first open, do netif open, mount, etc. */
 	if (open_count == 0) {
 		/* Find network interface. */
-		if ((netdev_sock = netif_open(pd)) < 0) {
+		if ((netdev_sock = netif_news_open(pd)) < 0) {
 			error = errno;
 			goto bad;
 		}
@@ -91,25 +91,24 @@ net_open(pd)
 	}
 	open_count++;
 bad:
-	return (error);
+	return error;
 }
 
 int
-net_close(pd)
-	struct romdev *pd;
+net_close(struct romdev *pd)
 {
 	/* On last close, do netif close, etc. */
 	if (open_count <= 0)
-		return (0);
+		return 0;
 
 	if (--open_count == 0)
-		return (netif_close(netdev_sock));
+		netif_news_close(netdev_sock);
 
-	return (0);
+	return 0;
 }
 
 int
-net_mountroot()
+net_mountroot(void)
 {
 
 #ifdef DEBUG
@@ -164,5 +163,5 @@ net_mountroot()
 	if (nfs_mount(netdev_sock, rootip, rootpath) != 0)
 		return (errno);
 
-	return (0);
+	return 0;
 }

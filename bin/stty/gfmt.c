@@ -1,4 +1,4 @@
-/*	$NetBSD: gfmt.c,v 1.14 1999/06/10 14:59:50 mrg Exp $	*/
+/* $NetBSD: gfmt.c,v 1.16 2003/08/07 09:05:41 agc Exp $ */
 
 /*-
  * Copyright (c) 1991, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)gfmt.c	8.6 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: gfmt.c,v 1.14 1999/06/10 14:59:50 mrg Exp $");
+__RCSID("$NetBSD: gfmt.c,v 1.16 2003/08/07 09:05:41 agc Exp $");
 #endif
 #endif /* not lint */
 
@@ -51,11 +47,10 @@ __RCSID("$NetBSD: gfmt.c,v 1.14 1999/06/10 14:59:50 mrg Exp $");
 #include "stty.h"
 #include "extern.h"
 
-static void gerr __P((char *));
+static void gerr(char *);
 
 static void
-gerr(s)
-	char *s;
+gerr(char *s)
 {
 	if (s)
 		errx(1, "illegal gfmt1 option -- %s", s);
@@ -64,8 +59,7 @@ gerr(s)
 }
 
 void
-gprint(tp)
-	struct termios *tp;
+gprint(struct termios *tp)
 {
 	const struct cchar *cp;
 
@@ -77,9 +71,7 @@ gprint(tp)
 }
 
 void
-gread(tp, s) 
-	struct termios *tp;
-	char *s;
+gread(struct termios *tp, char *s) 
 {
 	const struct cchar *cp;
 	char *ep, *p;

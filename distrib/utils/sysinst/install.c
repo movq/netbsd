@@ -1,4 +1,4 @@
-/*	$NetBSD: install.c,v 1.19 1999/06/22 06:57:00 cgd Exp $	*/
+/*	$NetBSD: install.c,v 1.42 2006/04/05 16:55:01 garbled Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -47,48 +47,51 @@
 /* Do the system install. */
 
 void
-do_install()
+do_install(void)
 {
-	doingwhat = msg_string(MSG_install);
 
 	msg_display(MSG_installusure);
-	process_menu(MENU_noyes);
+	process_menu(MENU_noyes, NULL);
 	if (!yesno)
 		return;
-#if 0
-	if (!askyesno(0))
-		return;
-#endif
 	
 	get_ramsize();
 
-	if (find_disks() < 0)
+	if (find_disks(msg_string(MSG_install)) < 0)
 		return;
-
-	/* if we need the user to mount root, ask them to. */
-	if (must_mount_root()) {
-		msg_display(MSG_pleasemountroot, diskdev, diskdev, diskdev);
-		process_menu(MENU_ok);
-		return;
+	clear();
+	refresh();
+	
+	if (check_swap(diskdev, 0) > 0) {
+		msg_display(MSG_swapactive);
+		process_menu(MENU_ok, NULL);
+		if (check_swap(diskdev, 1) < 0) {
+			msg_display(MSG_swapdelfailed);
+			process_menu(MENU_ok, NULL);
+			if (!debug)
+				return;
+		}
 	}
+
+	process_menu(MENU_distset, NULL);
 
 	if (!md_get_info()) {
 		msg_display(MSG_abort);
-		process_menu(MENU_ok);
+		process_menu(MENU_ok, NULL);
 		return;
 	}
 
 	if (md_make_bsd_partitions() == 0) {
 		msg_display(MSG_abort);
-		process_menu(MENU_ok);
+		process_menu(MENU_ok, NULL);
 		return;
 	}
 
 	/* Last chance ... do you really want to do this? */
 	clear();
 	refresh();
-	msg_display(MSG_lastchance);
-	process_menu(MENU_noyes);
+	msg_display(MSG_lastchance, diskdev);
+	process_menu(MENU_noyes, NULL);
 	if (!yesno)
 		return;
 
@@ -113,19 +116,25 @@ do_install()
 	if (md_post_newfs() != 0)
 		return;
 
-	/* Done to here. */
-	msg_display(MSG_disksetupdone);
-
-	getchar();
-	puts(CL);		/* XXX */
-	wclear(stdscr);
-	wrefresh(stdscr);
-
 	/* Unpack the distribution. */
-	if (get_and_unpack_sets(MSG_instcomplete, MSG_abortinst) != 0)
+	if (get_and_unpack_sets(0, MSG_disksetupdone,
+	    MSG_extractcomplete, MSG_abortinst) != 0)
 		return;
 
+	if (md_post_extract() != 0)
+		return;
+
+	set_timezone();
+
+	set_crypt_type();
+
+	set_root_password();
+	set_root_shell();
+	
 	sanity_check();
 
 	md_cleanup_install();
+
+	msg_display(MSG_instcomplete);
+	process_menu(MENU_ok, NULL);
 }

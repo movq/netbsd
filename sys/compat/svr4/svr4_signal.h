@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_signal.h,v 1.18 1999/01/21 23:17:19 christos Exp $	 */
+/*	$NetBSD: svr4_signal.h,v 1.31 2008/04/28 20:23:45 martin Exp $	 */
 
 /*-
  * Copyright (c) 1994 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -75,7 +68,10 @@
 #define	SVR4_SIGPROF	29
 #define	SVR4_SIGXCPU	30
 #define	SVR4_SIGXFSZ	31
-#define SVR4_NSIG	32
+
+#define SVR4_SIGRTMIN	32
+#define SVR4_SIGRTMAX	63
+#define SVR4_NSIG	64
 
 #define	SVR4_SIGNO_MASK		0x00FF
 #define	SVR4_SIGNAL_MASK	0x0000
@@ -85,7 +81,7 @@
 #define	SVR4_SIGIGNORE_MASK	0x0800
 #define	SVR4_SIGPAUSE_MASK	0x1000
 
-typedef void (*svr4_sig_t) __P((int, svr4_siginfo_t *, void *));
+typedef void (*svr4_sig_t)(int, svr4_siginfo_t *, void *);
 #define	SVR4_SIG_DFL	(svr4_sig_t)	 0
 #define	SVR4_SIG_ERR	(svr4_sig_t)	-1
 #define	SVR4_SIG_IGN	(svr4_sig_t)	 1
@@ -103,10 +99,10 @@ typedef struct {
 } svr4_sigset_t;
 
 struct svr4_sigaction {
-	int		sa_flags;
-	svr4_sig_t	sa_handler;
-	svr4_sigset_t	sa_mask;
-	int 		sa_reserved[2];
+	int		svr4_sa_flags;
+	svr4_sig_t	svr4_sa_handler;
+	svr4_sigset_t	svr4_sa_mask;
+	int 		svr4_sa_reserved[2];
 };
 
 /* sa_flags */
@@ -130,12 +126,13 @@ struct svr4_sigaltstack {
 #define SVR4_SS_DISABLE		0x00000002
 #define SVR4_SS_ALLBITS		0x00000003
 
-extern int native_to_svr4_sig[];
-void native_to_svr4_sigset __P((const sigset_t *, svr4_sigset_t *));
-void svr4_to_native_sigset __P((const svr4_sigset_t *, sigset_t *));
-void native_to_svr4_sigaltstack __P((const struct sigaltstack *, struct svr4_sigaltstack *));
-void svr4_to_native_sigaltstack __P((const struct svr4_sigaltstack *, struct sigaltstack *));
-void svr4_sendsig __P((sig_t, int, sigset_t *, u_long));
+extern const int native_to_svr4_signo[];
+extern const int svr4_to_native_signo[];
+void native_to_svr4_sigset(const sigset_t *, svr4_sigset_t *);
+void svr4_to_native_sigset(const svr4_sigset_t *, sigset_t *);
+void native_to_svr4_sigaltstack(const struct sigaltstack *, struct svr4_sigaltstack *);
+void svr4_to_native_sigaltstack(const struct svr4_sigaltstack *, struct sigaltstack *);
+void svr4_sendsig(const struct ksiginfo *, const sigset_t *);
 
 /* sys_context() function codes */
 #define	SVR4_GETCONTEXT		0

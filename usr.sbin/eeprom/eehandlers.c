@@ -1,4 +1,4 @@
-/*	$NetBSD: eehandlers.c,v 1.6 1997/10/18 08:40:40 lukem Exp $	*/
+/*	$NetBSD: eehandlers.c,v 1.14 2008/04/28 20:24:15 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,12 +34,12 @@
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <util.h>
 
 #include <machine/eeprom.h>
 #ifdef __sparc__
@@ -63,13 +56,38 @@ extern	int fix_checksum;
 extern	int cksumfail;
 extern	u_short writecount;
 
-struct	timeb;
-extern	time_t get_date __P((char *, struct timeb *));
-
 static	char err_str[BUFSIZE];
 
-static	void badval __P((struct keytabent *, char *));
-static	int doio __P((struct keytabent *, u_char *, ssize_t, int));
+static	void badval (struct keytabent *, char *);
+static	int doio (struct keytabent *, u_char *, ssize_t, int);
+
+struct	keytabent eekeytab[] = {
+	{ "hwupdate",		0x10,	ee_hwupdate },
+	{ "memsize",		0x14,	ee_num8 },
+	{ "memtest",		0x15,	ee_num8 },
+	{ "scrsize",		0x16,	ee_screensize },
+	{ "watchdog_reboot",	0x17,	ee_truefalse },
+	{ "default_boot",	0x18,	ee_truefalse },
+	{ "bootdev",		0x19,	ee_bootdev },
+	{ "kbdtype",		0x1e,	ee_kbdtype },
+	{ "console",		0x1f,	ee_constype },
+	{ "keyclick",		0x21,	ee_truefalse },
+	{ "diagdev",		0x22,	ee_bootdev },
+	{ "diagpath",		0x28,	ee_diagpath },
+	{ "columns",		0x50,	ee_num8 },
+	{ "rows",		0x51,	ee_num8 },
+	{ "ttya_use_baud",	0x58,	ee_truefalse },
+	{ "ttya_baud",		0x59,	ee_num16 },
+	{ "ttya_no_rtsdtr",	0x5b,	ee_truefalse },
+	{ "ttyb_use_baud",	0x60,	ee_truefalse },
+	{ "ttyb_baud",		0x61,	ee_num16 },
+	{ "ttyb_no_rtsdtr",	0x63,	ee_truefalse },
+	{ "banner",		0x68,	ee_banner },
+	{ "secure",		0,	ee_notsupp },
+	{ "bad_login",		0,	ee_notsupp },
+	{ "password",		0,	ee_notsupp },
+	{ NULL,			0,	ee_notsupp },
+};
 
 #define BARF(kt) {							\
 	badval((kt), arg);						\
@@ -78,17 +96,43 @@ static	int doio __P((struct keytabent *, u_char *, ssize_t, int));
 }
 
 #define FAILEDREAD(kt) {						\
-	warnx(err_str);							\
+	warnx("%s", err_str);						\
 	warnx("failed to read field `%s'", (kt)->kt_keyword);		\
 	++eval;								\
 	return;								\
 }
 
 #define FAILEDWRITE(kt) {						\
-	warnx(err_str);							\
+	warnx("%s", err_str);						\
 	warnx("failed to update field `%s'", (kt)->kt_keyword);		\
 	++eval;								\
 	return;								\
+}
+
+void
+ee_action(keyword, arg)
+	char *keyword, *arg;
+{
+	struct keytabent *ktent;
+
+	for (ktent = eekeytab; ktent->kt_keyword != NULL; ++ktent) {
+		if (strcmp(ktent->kt_keyword, keyword) == 0) {
+			(*ktent->kt_handler)(ktent, arg);
+			return; 
+		}
+	}
+
+	warnx("unknown keyword %s", keyword);
+	++eval;
+}
+
+void
+ee_dump()
+{
+	struct keytabent *ktent;
+
+	for (ktent = eekeytab; ktent->kt_keyword != NULL; ++ktent)
+		(*ktent->kt_handler)(ktent, NULL);
 }
 
 void
@@ -108,7 +152,7 @@ ee_hwupdate(ktent, arg)
 				return;
 			}
 		} else
-			if ((t = get_date(arg, NULL)) == (time_t)(-1))
+			if ((t = parsedate(arg, NULL, NULL)) == (time_t)(-1))
 				BARF(ktent);
 
 		if (doio(ktent, (u_char *)&t, sizeof(t), IO_WRITE))
@@ -135,7 +179,7 @@ ee_num8(ktent, arg)
 
 	if (arg) {
 		for (i = 0; i < (strlen(arg) - 1); ++i)
-			if (!isdigit(arg[i]))
+			if (!isdigit((unsigned char)arg[i]))
 				BARF(ktent);
 		num32 = atoi(arg);
 		if (num32 > 0xff)
@@ -161,7 +205,7 @@ ee_num16(ktent, arg)
 
 	if (arg) {
 		for (i = 0; i < (strlen(arg) - 1); ++i)
-			if (!isdigit(arg[i]))
+			if (!isdigit((unsigned char)arg[i]))
 				BARF(ktent);
 		num32 = atoi(arg);
 		if (num32 > 0xffff)
@@ -341,7 +385,7 @@ ee_kbdtype(ktent, arg)
 
 	if (arg) {
 		for (i = 0; i < (strlen(arg) - 1); ++i)
-			if (!isdigit(arg[i]))
+			if (!isdigit((unsigned char)arg[i]))
 				BARF(ktent);
 		kbd2 = atoi(arg);
 		if (kbd2 > 0xff)

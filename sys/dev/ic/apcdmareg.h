@@ -1,4 +1,4 @@
-/*	$NetBSD: apcdmareg.h,v 1.1 1999/06/05 14:29:10 mrg Exp $	*/
+/*	$NetBSD: apcdmareg.h,v 1.6 2008/04/28 20:23:49 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,6 +34,9 @@
  * Thanks to Derrick J. Brashear for additional info on the
  * meaning of some of these bits.
  */
+#ifndef _DEV_IC_APCDMAREG_H_
+#define _DEV_IC_APCDMAREG_H_
+
 struct apc_dma {
 	volatile u_int32_t dmacsr;	/* APC CSR */
 	volatile u_int32_t lpad[3];	/* */
@@ -53,6 +49,19 @@ struct apc_dma {
 	volatile u_int32_t dmapnva;	/* Playback Next VAddress */
 	volatile u_int32_t dmapnc;	/* Playback Next Count */
 };
+
+/* same as above but as offsets for bus_space ops */
+#define APC_DMA_CSR	0
+#define APC_DMA_CVA	16
+#define APC_DMA_CC	20
+#define APC_DMA_CNVA	24
+#define APC_DMA_CNC	28
+#define APC_DMA_PVA	32
+#define APC_DMA_PC	36
+#define APC_DMA_PNVA	40
+#define APC_DMA_PNC	44
+
+#define APC_DMA_SIZE	48
 
 /*
  * APC CSR Register bit definitions
@@ -86,26 +95,22 @@ struct apc_dma {
 	"\14CM\13CD\12CMI\11CMIE\10PPAUSE\7CPAUSE\6PDN\4PGO\3CGO"
 
 /*
- * To start DMA, you write to dma[cp]nva and dma[cp]nc and set [CP]DMA_GO
- * in dmacsr. dma[cp]va and dma[cp]c, when read, appear to be the live
- * counter as the DMA operation progresses.
- * Supposedly, you get an interrupt with the "dirty" bits (APC_PD,APC_CD)
- * set, when the next DMA buffer can be programmed, while the current one
- * is still in progress. We don't currently use this feature, since I
- * haven't been able to make it work.. instead the next buffer goes in
- * as soon as we see a "pipe empty" (APC_PM) interrupt.
+ * Note that when we program CSR, we should be careful to not
+ * accidentally clear any pending interrupt bits (a pending interrupt
+ * reads as 1 and writing back 1 will clear), so instead of
+ *
+ *     dma->dmacsr |= bits;
+ *
+ * we should do
+ *
+ *     temp = dma->dmacsr & ~APC_INTR_MASK;
+ *     temp |= bits;
+ *     dma->dmacsr = temp;
+ *
+ * When clearing bits, always add APC_INTR_MASK, i.e.
+ *
+ *     dma->dmacsr &= ~(bits | APC_INTR_MASK);
  */
+#define APC_INTR_MASK	(APC_IP|APC_PI|APC_CI|APC_EI|APC_PMI|APC_CMI)
 
-/* It's not clear if there's a maximum DMA size.. */
-#define APC_MAX		(sc->sc_blksz)/*(16*1024)*/
-
-/*
- * List of device memory allocations (see cs4231_malloc/cs4231_free).
- */
-struct cs_dma {
-	struct	cs_dma *next;
-	caddr_t	addr;
-	bus_dma_segment_t segs[1];
-	int	nsegs;
-	size_t	size;
-};
+#endif /* _DEV_IC_APCDMAREG_H_ */

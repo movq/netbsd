@@ -1,9 +1,38 @@
-/*	$NetBSD: ahsc.c,v 1.26 2000/01/15 17:09:47 aymeric Exp $	*/
+/*	$NetBSD: ahsc.c,v 1.36 2008/06/13 08:13:37 cegger Exp $ */
+
+/*
+ * Copyright (c) 1982, 1990 The Regents of the University of California.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ *	@(#)dma.c
+ */
 
 /*
  * Copyright (c) 1994 Christian E. Hopps
- * Copyright (c) 1982, 1990 The Regents of the University of California.
- * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -35,6 +64,10 @@
  *
  *	@(#)dma.c
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ahsc.c,v 1.36 2008/06/13 08:13:37 cegger Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
@@ -55,43 +88,31 @@
 
 #include <machine/cpu.h>
 
-void ahscattach __P((struct device *, struct device *, void *));
-int ahscmatch __P((struct device *, struct cfdata *, void *));
+void ahscattach(struct device *, struct device *, void *);
+int ahscmatch(struct device *, struct cfdata *, void *);
 
-void ahsc_enintr __P((struct sbic_softc *));
-void ahsc_dmastop __P((struct sbic_softc *));
-int ahsc_dmanext __P((struct sbic_softc *));
-int ahsc_dmaintr __P((void *));
-int ahsc_dmago __P((struct sbic_softc *, char *, int, int));
+void ahsc_enintr(struct sbic_softc *);
+void ahsc_dmastop(struct sbic_softc *);
+int ahsc_dmanext(struct sbic_softc *);
+int ahsc_dmaintr(void *);
+int ahsc_dmago(struct sbic_softc *, char *, int, int);
 
 #ifdef DEBUG
-void ahsc_dump __P((void));
+void ahsc_dump(void);
 #endif
-
-struct scsipi_device ahsc_scsidev = {
-	NULL,		/* use default error handler */
-	NULL,		/* do not have a start functio */
-	NULL,		/* have no async handler */
-	NULL,		/* Use default done routine */
-};
-
 
 #ifdef DEBUG
 int	ahsc_dmadebug = 0;
 #endif
 
-struct cfattach ahsc_ca = {
-	sizeof(struct sbic_softc), ahscmatch, ahscattach
-};
+CFATTACH_DECL(ahsc, sizeof(struct sbic_softc),
+    ahscmatch, ahscattach, NULL, NULL);
 
 /*
  * if we are an A3000 we are here.
  */
 int
-ahscmatch(pdp, cfp, auxp)
-	struct device *pdp;
-	struct cfdata *cfp;
-	void *auxp;
+ahscmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 {
 	char *mbusstr;
 
@@ -102,23 +123,22 @@ ahscmatch(pdp, cfp, auxp)
 }
 
 void
-ahscattach(pdp, dp, auxp)
-	struct device *pdp, *dp;
-	void *auxp;
+ahscattach(struct device *pdp, struct device *dp, void *auxp)
 {
 	volatile struct sdmac *rp;
-	struct sbic_softc *sc;
+	struct sbic_softc *sc = (struct sbic_softc *)dp;
 	struct cfdev *cdp, *ecdp;
+	struct scsipi_adapter *adapt = &sc->sc_adapter;
+	struct scsipi_channel *chan = &sc->sc_channel;
 
 	ecdp = &cfdev[ncfdev];
-	
+
 	for (cdp = cfdev; cdp < ecdp; cdp++) {
-		if (cdp->rom.manid == 8738 && 
+		if (cdp->rom.manid == 8738 &&
 		    cdp->rom.prodid == 35)
 				break;
 	}
 
-	sc = (struct sbic_softc *)dp;
 	sc->sc_cregs = rp = ztwomap(0xdd0000);
 	/*
 	 * disable ints and reset bank register
@@ -132,14 +152,14 @@ ahscattach(pdp, dp, auxp)
 	sc->sc_dmacmd = 0;
 
 	/*
-	 * eveything is a valid dma address
+	 * everything is a valid DMA address
 	 */
 	sc->sc_dmamask = 0;
 
 	if (cdp < ecdp) {
 		sc->sc_sbic.sbic_asr_p =  ((vu_char *)rp + 0x43);
 		sc->sc_sbic.sbic_value_p =  ((vu_char *)rp + 0x47);
-		printf(": modified for Apollo cpu board\n");
+		printf(": modified for Apollo CPU board\n");
 	} else {
 		sc->sc_sbic.sbic_asr_p =  ((vu_char *)rp + 0x41);
 		sc->sc_sbic.sbic_value_p =  ((vu_char *)rp + 0x43);
@@ -148,18 +168,27 @@ ahscattach(pdp, dp, auxp)
 
 	sc->sc_clkfreq = sbic_clock_override ? sbic_clock_override : 143;
 
-	sc->sc_adapter.scsipi_cmd = sbic_scsicmd;
-	sc->sc_adapter.scsipi_minphys = sbic_minphys;
+	/*
+	 * Fill in the scsipi_adapter.
+	 */
+	memset(adapt, 0, sizeof(*adapt));
+	adapt->adapt_dev = &sc->sc_dev;
+	adapt->adapt_nchannels = 1;
+	adapt->adapt_openings = 7;
+	adapt->adapt_max_periph = 1;
+	adapt->adapt_request = sbic_scsipi_request;
+	adapt->adapt_minphys = sbic_minphys;
 
-	sc->sc_link.scsipi_scsi.channel = SCSI_CHANNEL_ONLY_ONE;
-	sc->sc_link.adapter_softc = sc;
-	sc->sc_link.scsipi_scsi.adapter_target = 7;
-	sc->sc_link.adapter = &sc->sc_adapter;
-	sc->sc_link.device = &ahsc_scsidev;
-	sc->sc_link.openings = 2;
-	sc->sc_link.scsipi_scsi.max_target = 7;
-	sc->sc_link.scsipi_scsi.max_lun = 7;
-	sc->sc_link.type = BUS_SCSI;
+	/*
+	 * Fill in the scsipi_channel.
+	 */
+	memset(chan, 0, sizeof(*chan));
+	chan->chan_adapter = adapt;
+	chan->chan_bustype = &scsi_bustype;
+	chan->chan_channel = 0;
+	chan->chan_ntargets = 8;
+	chan->chan_nluns = 8;
+	chan->chan_id = 7;
 
 	sbicinit(sc);
 
@@ -171,12 +200,11 @@ ahscattach(pdp, dp, auxp)
 	/*
 	 * attach all scsi units on us
 	 */
-	config_found(dp, &sc->sc_link, scsiprint);
+	config_found(dp, chan, scsiprint);
 }
 
 void
-ahsc_enintr(dev)
-	struct sbic_softc *dev;
+ahsc_enintr(struct sbic_softc *dev)
 {
 	volatile struct sdmac *sdp;
 
@@ -187,10 +215,7 @@ ahsc_enintr(dev)
 }
 
 int
-ahsc_dmago(dev, addr, count, flags)
-	struct sbic_softc *dev;
-	char *addr;
-	int count, flags;
+ahsc_dmago(struct sbic_softc *dev, char *addr, int count, int flags)
 {
 	volatile struct sdmac *sdp;
 
@@ -215,8 +240,7 @@ ahsc_dmago(dev, addr, count, flags)
 }
 
 void
-ahsc_dmastop(dev)
-	struct sbic_softc *dev;
+ahsc_dmastop(struct sbic_softc *dev)
 {
 	volatile struct sdmac *sdp;
 	int s;
@@ -238,8 +262,8 @@ ahsc_dmastop(dev)
 			while ((sdp->ISTR & ISTR_FE_FLG) == 0)
 				;
 		}
-		/* 
-		 * clear possible interrupt and stop dma
+		/*
+		 * clear possible interrupt and stop DMA
 		 */
 		sdp->CINT = 1;
 		sdp->SP_DMA = 1;
@@ -249,8 +273,7 @@ ahsc_dmastop(dev)
 }
 
 int
-ahsc_dmaintr(arg)
-	void *arg;
+ahsc_dmaintr(void *arg)
 {
 	struct sbic_softc *dev = arg;
 	volatile struct sdmac *sdp;
@@ -279,7 +302,7 @@ ahsc_dmaintr(arg)
 		sdp->CINT = 1;	/* clear possible interrupt */
 
 		/*
-		 * check for SCSI ints in the same go and 
+		 * check for SCSI ints in the same go and
 		 * eventually save an interrupt
 		 */
 	}
@@ -291,8 +314,7 @@ ahsc_dmaintr(arg)
 
 
 int
-ahsc_dmanext(dev)
-	struct sbic_softc *dev;
+ahsc_dmanext(struct sbic_softc *dev)
 {
 	volatile struct sdmac *sdp;
 
@@ -305,19 +327,19 @@ ahsc_dmanext(dev)
 		return(0);
 	}
 	if ((dev->sc_dmacmd & (CNTR_TCEN | CNTR_DDIR)) == 0) {
-		  /* 
+		  /*
 		   * only FLUSH if terminal count not enabled,
 		   * and reading from peripheral
 		   */
 		sdp->FLUSH = 1;
 		while ((sdp->ISTR & ISTR_FE_FLG) == 0)
 			;
-        }
-	/* 
-	 * clear possible interrupt and stop dma
+	}
+	/*
+	 * clear possible interrupt and stop DMA
 	 */
 	sdp->CINT = 1;	/* clear possible interrupt */
-	sdp->SP_DMA = 1;	/* stop dma */
+	sdp->SP_DMA = 1;	/* stop DMA */
 	sdp->CNTR = dev->sc_dmacmd;
 	sdp->ACR = (u_int)dev->sc_cur->dc_addr;
 	sdp->ST_DMA = 1;
@@ -328,13 +350,16 @@ ahsc_dmanext(dev)
 
 #ifdef DEBUG
 void
-ahsc_dump()
+ahsc_dump(void)
 {
 	extern struct cfdriver ahsc_cd;
+	struct sbic_softc *sc;
 	int i;
 
-	for (i = 0; i < ahsc_cd.cd_ndevs; ++i)
-		if (ahsc_cd.cd_devs[i])
-			sbic_dump(ahsc_cd.cd_devs[i]);
+	for (i = 0; i < ahsc_cd.cd_ndevs; ++i) {
+		sc = device_lookup_private(&ahsc_cd, i);
+		if (sc != NULL)
+			sbic_dump(sc);
+	}
 }
 #endif

@@ -1,4 +1,4 @@
-/*      $NetBSD: en.c,v 1.3 1999/05/07 16:19:28 drochner Exp $        */
+/*      $NetBSD: en.c,v 1.14 2005/12/11 12:18:29 christos Exp $        */
 /*
  * Copyright (c) 1996 Rolf Grossmann
  * All rights reserved.
@@ -48,6 +48,7 @@
 extern char *mg;
 #define	MON(type, off) (*(type *)((u_int) (mg) + off))
 
+#define PRINTF(x) printf x;
 #ifdef EN_DEBUG
 #define DPRINTF(x) printf x;
 #else
@@ -57,15 +58,14 @@ extern char *mg;
 #define	EN_TIMEOUT	2000000
 #define EN_RETRIES	10
 
-int en_match __P((struct netif *nif, void *machdep_hint));
-int en_probe __P((struct netif *nif, void *machdep_hint));
-void en_init __P((struct iodesc *desc, void *machdep_hint));
-int en_get __P((struct iodesc *a, void *b, size_t c, time_t d));
-int en_put __P((struct iodesc *a, void *b, size_t c));
-void en_end __P((struct netif *a));
+int en_match(struct netif *, void *);
+int en_probe(struct netif *, void *);
+void en_init(struct iodesc *, void *);
+int en_get(struct iodesc *, void *, size_t, time_t);
+int en_put(struct iodesc *, void *, size_t);
+void en_end(struct netif *);
 
-/* ### static int mountroot __P((int sock)); */
-static int en_wait_for_intr __P((int flag));
+static int en_wait_for_intr(int);
 
 struct netif_stats en_stats;
 
@@ -77,8 +77,10 @@ struct netif_dif en_ifs[] = {
 struct netif_driver en_driver = {
 	"en",
 	en_match, en_probe, en_init, en_get, en_put, en_end,
-	en_ifs, NENTS(en_ifs)
+	en_ifs, sizeof(en_ifs) / sizeof(en_ifs[0])
 };
+
+extern int turbo;
 
 /* ### int netdev_sock;
 static int open_count; */
@@ -115,7 +117,7 @@ en_init(struct iodesc *desc, void *machdep_hint)
 	int i;
 
 	DPRINTF(("en_init\n"));
-	
+
 	er = (struct en_regs *)P_ENET;
 	bmap_chip = (u_int *)P_BMAP;
 
@@ -123,31 +125,52 @@ en_init(struct iodesc *desc, void *machdep_hint)
 	dma_buffers[1] = DMA_ALIGN(char *, dma_buffer2);
 
 	er->reset = EN_RST_RESET;
+/* 	if (turbo) */
+/* 		er->reset = 0; */
 
-	/* ### we'll need this when we need to decide which interface to use
-	 bmap_chip[12] = 0x90000000;
-	 bmap_chip[13] = ~(0x80000000|0x10000000); * BMAP_TPE  ???
-	 */
-
-	er->txmode = EN_TMD_LB_DISABLE;
 	er->txmask = 0;
 	er->txstat = 0xff;
-	er->rxmode = EN_RMD_RECV_NORMAL;
+	if (turbo)
+		er->txmode = 0 | EN_TMD_COLLSHIFT;
+	else
+		er->txmode = EN_TMD_LB_DISABLE;
+
+	/* setup for bnc/tp */
+	if (!turbo) {
+		DPRINTF (("en_media: %s\n",
+			  (bmap_chip[13] & 0x20000000) ? "BNC" : "TP"));
+		if (!(bmap_chip[13] & 0x20000000)) {
+			bmap_chip[12] |= 0x90000000;
+			bmap_chip[13] |= (0x80000000|0x10000000); /* TP */
+		}
+	}
+
+/* 	if (turbo) { */
+/* 		er->txmode |= EN_TMD_COLLSHIFT; */
+/* 	} else { */
+/* 		er->txmode &= ~EN_TMD_LB_DISABLE; /\* ZZZ *\/ */
+/* 	} */
+
 	er->rxmask = 0;
 	er->rxstat = 0xff;
+	if (turbo)
+		er->rxmode = EN_RMD_TEST | EN_RMD_RECV_NORMAL;
+	else
+		er->rxmode = EN_RMD_RECV_NORMAL;
 	for (i=0; i<6; i++)
 	  er->addr[i] = desc->myea[i] = MON(char *,MG_clientetheraddr)[i];
-          
+
 	DPRINTF(("ethernet addr (%x:%x:%x:%x:%x:%x)\n",
 			desc->myea[0],desc->myea[1],desc->myea[2],
 			desc->myea[3],desc->myea[4],desc->myea[5]));
 
-	er->reset = 0;
+/* 	if (!turbo) */
+		er->reset = 0;
 }
 
 #if 0
 /* ### remove this when things work! */
-#define XCHR(x) "0123456789abcdef"[(x) & 0xf]
+#define XCHR(x) hexdigits[(x) & 0xf]
 void
 dump_pkt(unsigned char *pkt, size_t len)
 {
@@ -175,7 +198,7 @@ en_put(struct iodesc *desc, void *pkt, size_t len)
 	volatile struct dma_dev *txdma;
 	int state, txs;
 	int retries;
-	
+
 	DPRINTF(("en_put: %d bytes at 0x%lx\n", len, (unsigned long)pkt));
 #if 0
 	dump_pkt(pkt,len);
@@ -190,42 +213,48 @@ en_put(struct iodesc *desc, void *pkt, size_t len)
 		errno = EINVAL;
 		return -1;
 	}
-	
-	while ((er->txstat & EN_TXS_READY) == 0)
-		printf("en: tx not ready\n");
+
+	if (!turbo) {
+		while ((er->txstat & EN_TXS_READY) == 0)
+			printf("en: tx not ready\n");
+	}
 
 	for (retries = 0; retries < EN_RETRIES; retries++) {
 		er->txstat = 0xff;
 		bcopy(pkt, dma_buffers[0], len);
+		txdma->dd_csr = (turbo ? DMACSR_INITBUFTURBO : DMACSR_INITBUF) |
+			DMACSR_RESET | DMACSR_WRITE;
 		txdma->dd_csr = 0;
-		txdma->dd_csr = DMACSR_INITBUF | DMACSR_RESET | DMACSR_WRITE;
-		txdma->dd_next_initbuf = dma_buffers[0];
+		txdma->dd_next/* _initbuf */ = dma_buffers[0];
+		txdma->dd_start = (turbo ? dma_buffers[0] : 0);
 		txdma->dd_limit = ENDMA_ENDALIGN(char *,  dma_buffers[0]+len);
-		txdma->dd_start = 0;
 		txdma->dd_stop = 0;
 		txdma->dd_csr = DMACSR_SETENABLE;
-	
-		while(1) {
+		if (turbo)
+			er->txmode |= 0x80;
+
+		while (1) {
 			if (en_wait_for_intr(ENETX_DMA_INTR)) {
+				printf("en_put: timed out\n");
 				errno = EIO;
 				return -1;
 			}
-		
+
 			state = txdma->dd_csr &
 				(DMACSR_BUSEXC | DMACSR_COMPLETE
 				 | DMACSR_SUPDATE | DMACSR_ENABLE);
 
-#if 0
-			DPRINTF(("en_put: dma state = 0x%x.\n", state));
+#if 01
+			DPRINTF(("en_put: DMA state = 0x%x.\n", state));
 #endif
 			if (state & (DMACSR_COMPLETE|DMACSR_BUSEXC))
 				txdma->dd_csr = DMACSR_RESET | DMACSR_CLRCOMPLETE;
 				break;
 		}
-	
+
 		txs = er->txstat;
 
-#if 0
+#if 01
 		DPRINTF(("en_put: done txstat=%x.\n", txs));
 #endif
 
@@ -238,7 +267,7 @@ en_put(struct iodesc *desc, void *pkt, size_t len)
 		if ((txs & EN_TXS_COLLERR) == 0)
 			return len;		/* success */
 	}
-	
+
 	errno = EIO;		/* too many retries */
 	return -1;
 }
@@ -248,58 +277,74 @@ en_get(struct iodesc *desc, void *pkt, size_t len, time_t timeout)
 {
 	volatile struct en_regs *er;
 	volatile struct dma_dev *rxdma;
+	volatile struct dma_dev *txdma;
 	int state, rxs;
 	size_t rlen;
 	char *gotpkt;
-        
+
 	rxdma = (struct dma_dev *)P_ENETR_CSR;
+	txdma = (struct dma_dev *)P_ENETX_CSR;
 	er = (struct en_regs *)P_ENET;
+
+	DPRINTF(("en_get: rxdma->dd_csr = %x\n",rxdma->dd_csr));
 
 	er->rxstat = 0xff;
 
 	/* this is mouse's code now ... still doesn't work :( */
-	/* The previous comment is now a lie, this does work 
+	/* The previous comment is now a lie, this does work
 	 * Darrin B Jewell <jewell@mit.edu>  Sat Jan 24 21:44:56 1998
 	 */
 
 	rxdma->dd_csr = 0;
-	rxdma->dd_csr = DMACSR_INITBUF | DMACSR_READ | DMACSR_RESET;
+	rxdma->dd_csr = (turbo ? DMACSR_INITBUFTURBO : DMACSR_INITBUF) |
+		DMACSR_READ | DMACSR_RESET;
 
-	rxdma->dd_saved_next = 0;
-	rxdma->dd_saved_limit = 0;
-	rxdma->dd_saved_start = 0;
-	rxdma->dd_saved_stop = 0;
+	if (!turbo) {
+		rxdma->dd_saved_next = 0;
+		rxdma->dd_saved_limit = 0;
+		rxdma->dd_saved_start = 0;
+		rxdma->dd_saved_stop = 0;
+	} else {
+		rxdma->dd_saved_next = dma_buffers[0];
+	}
 
 	rxdma->dd_next = dma_buffers[0];
 	rxdma->dd_limit = DMA_ENDALIGN(char *, dma_buffers[0]+MAX_DMASIZE);
+#if 0
+	if (turbo) {
+		/* !!! not a typo: txdma */
+		txdma->dd_stop = dma_buffers[0];
+	}
+#endif
 	rxdma->dd_start = 0;
 	rxdma->dd_stop = 0;
-	rxdma->dd_csr = DMACSR_SETENABLE;
+	rxdma->dd_csr = DMACSR_SETENABLE | DMACSR_READ;
+	if (turbo)
+		er->rxmode = EN_RMD_TEST | EN_RMD_RECV_NORMAL;
+	else
+		er->rxmode = EN_RMD_RECV_NORMAL;
 
-#if 0
-	DPRINTF(("en_get: blocking on rcv dma\n"));
+#if 01
+	DPRINTF(("en_get: blocking on rcv DMA\n"));
 #endif
 
-	while(1) {
-		if (en_wait_for_intr(ENETR_DMA_INTR)) {	/* ### use timeout? */
-			errno = EIO;
- 			return -1;
-		}
-		
+	while (1) {
+		if (en_wait_for_intr(ENETR_DMA_INTR))	/* ### use timeout? */
+			return 0;
+
 		state = rxdma->dd_csr &
 			(DMACSR_BUSEXC | DMACSR_COMPLETE
 			 | DMACSR_SUPDATE | DMACSR_ENABLE);
-		DPRINTF(("en_get: dma state = 0x%x.\n", state));
+		DPRINTF(("en_get: DMA state = 0x%x.\n", state));
 		if ((state & DMACSR_ENABLE) == 0) {
 			rxdma->dd_csr = DMACSR_RESET | DMACSR_CLRCOMPLETE;
 			break;
 		}
 
 		if (state & DMACSR_COMPLETE) {
-			DPRINTF(("en_get: ending dma sequence\n"));
+			PRINTF(("en_get: ending DMA sequence\n"));
 			rxdma->dd_csr = DMACSR_CLRCOMPLETE;
 		}
-
 	}
 
 	rxs = er->rxstat;
@@ -310,8 +355,13 @@ en_get(struct iodesc *desc, void *pkt, size_t len, time_t timeout)
 		return -1;	/* receive failed */
 	}
 
-	gotpkt = rxdma->dd_saved_next;
-	rlen = rxdma->dd_next - rxdma->dd_saved_next;
+	if (turbo) {
+		gotpkt = rxdma->dd_saved_next;
+		rlen = rxdma->dd_next - rxdma->dd_saved_next;
+	} else {
+		gotpkt = rxdma->dd_saved_next;
+		rlen = rxdma->dd_next - rxdma->dd_saved_next;
+	}
 
 	if (gotpkt != dma_buffers[0]) {
 		printf("Unexpected received packet location\n");
@@ -333,14 +383,13 @@ en_get(struct iodesc *desc, void *pkt, size_t len, time_t timeout)
 dump_pkt(gotpkt, rlen < 255 ? rlen : 128);
 #endif
 
- DPRINTF(("en_get: done rxstat=%x.\n", rxs));
-	
+	DPRINTF(("en_get: done rxstat=%x.\n", rxs));
+
 	if (rlen > len) {
 		DPRINTF(("en_get: buffer too small. want %d, got %d\n",
 			 len, rlen));
 		rlen = len;
 	}
-
 
 	bcopy(gotpkt, pkt, rlen);
 
@@ -358,7 +407,7 @@ dump_pkt(gotpkt, rlen < 255 ? rlen : 128);
 void
 en_end(struct netif *a)
 {
-  DPRINTF(("en_end: WARNING not doing anything\n"));
+	DPRINTF(("en_end: WARNING not doing anything\n"));
 }
 
 #if 0
@@ -374,12 +423,12 @@ int
 enopen(struct open_file *f, char count, char lun, char part)
 {
 	int error;
-	
+
 	DPRINTF(("open: en(%d,%d,%d)\n", count, lun, part));
-	
+
 	if (count != 0 || lun != 0 || part != 0)
 		return EUNIT;	/* there can be exactly one ethernet */
-	
+
 	if (open_count == 0) {
 		/* Find network interface. */
 		if ((netdev_sock = netif_open(NULL)) < 0)
@@ -394,7 +443,7 @@ enopen(struct open_file *f, char count, char lun, char part)
 	f->f_devdata = NULL; /* ### nfs_root_node ?! */
 	return 0;
 }
-    
+
 int
 enclose(struct open_file *f)
 {
@@ -413,7 +462,7 @@ enstrategy(void *devdata, int rw, daddr_t dblk,
 }
 
 /* private function */
- 
+
 static int
 mountroot(int sock)
 {
@@ -423,16 +472,16 @@ mountroot(int sock)
 		0xc2793418
 	};
 	u_char *res;
-	
+
 	res = arpwhohas(socktodesc(sock), in);
 	panic("arpwhohas returned %s", res);
 #endif
 	/* 1. use bootp. This does most of the work for us. */
 	bootp(sock);
-    
+
 	if (myip.s_addr == 0 || rootip.s_addr == 0 || rootpath[0] == '\0')
 		return ETIMEDOUT;
-    
+
 	printf("Using IP address: %s\n", inet_ntoa(myip));
 	printf("root addr=%s path=%s\n", inet_ntoa(rootip), rootpath);
 
@@ -447,14 +496,13 @@ mountroot(int sock)
 static int
 en_wait_for_intr(int flag)
 {
-  volatile int *intrstat = MON(volatile int *,MG_intrstat);
+	volatile int *intrstat = MON(volatile int *, MG_intrstat);
 
 	int count;
 
-	for(count = 0; count < EN_TIMEOUT; count++)
+	for (count = 0; count < EN_TIMEOUT; count++)
 		if (*intrstat & flag)
 			return 0;
 
-	printf("enintr: timed out.\n");
 	return -1;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_machdep.h,v 1.9 1999/01/21 23:11:45 christos Exp $	 */
+/*	$NetBSD: svr4_machdep.h,v 1.16 2008/04/28 20:23:24 martin Exp $	 */
 
 /*-
  * Copyright (c) 1994 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -121,8 +114,13 @@ struct svr4_ssd {
 /*
  * Fast syscall gate traps.
  */
-#define	SVR4_TRAP_GETHRTIME	3
-#define	SVR4_TRAP_GETHRVTIME	4
-#define	SVR4_TRAP_CLOCK_SETTIME	5
+#define	SVR4_TRAP_FNULL		0	/* Null trap, for testing */
+#define	SVR4_TRAP_FGETFP	1	/* Get emulated FP context */
+#define	SVR4_TRAP_FSETFP	2	/* Set emulated FP context */
+#define	SVR4_TRAP_GETHRTIME	3	/* implements gethrtime(2) */
+#define	SVR4_TRAP_GETHRVTIME	4	/* implements gethrvtime(2) */
+#define	SVR4_TRAP_GETHRESTIME	5	/* clock_gettime(CLOCK_REALTIME, tp) */
+
+void svr4_syscall_intern(struct proc *);
 
 #endif /* !_I386_SVR4_MACHDEP_H_ */

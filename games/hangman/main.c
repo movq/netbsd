@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.8 1999/09/17 20:45:49 jsm Exp $	*/
+/*	$NetBSD: main.c,v 1.14 2008/08/08 16:10:47 drochner Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,18 +31,19 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)main.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: main.c,v 1.8 1999/09/17 20:45:49 jsm Exp $");
+__RCSID("$NetBSD: main.c,v 1.14 2008/08/08 16:10:47 drochner Exp $");
 #endif
 #endif /* not lint */
 
+#include	<err.h>
 #include	"hangman.h"
 
 /*
@@ -60,21 +57,27 @@ main(argc, argv)
 	int ch;
 
 	/* Revoke setgid privileges */
-	setregid(getgid(), getgid());
+	setgid(getgid());
 
-	while ((ch = getopt(argc, argv, "d:")) != -1) {
+	while ((ch = getopt(argc, argv, "d:m:")) != -1) {
 		switch (ch) {
 		case 'd':
 			Dict_name = optarg;
 			break;
+		case 'm':
+			Minlen = atoi(optarg);
+			if (Minlen < 2)
+				errx(1, "minimum word length too short");
+			break;
 		case '?':
 		default:
-			(void)fprintf(stderr, "usage: hangman [-d wordlist]\n");
+			(void)fprintf(stderr, "usage: hangman [-d wordlist] [-m minlen]\n");
 			exit(1);
 		}
 	}
 
-	initscr();
+	if (!initscr())
+		errx(0, "couldn't initialize screen");
 	signal(SIGINT, die);
 	setup();
 	for (;;) {
@@ -90,7 +93,7 @@ main(argc, argv)
  */
 void
 die(dummy)
-	int dummy __attribute__((__unused__));
+	int dummy __unused;
 {
 	mvcur(0, COLS - 1, LINES - 1, 0);
 	endwin();

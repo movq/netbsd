@@ -1,4 +1,4 @@
-/*	$NetBSD: bootinfo.c,v 1.1 1999/12/18 08:02:05 tsubai Exp $	*/
+/*	$NetBSD: bootinfo.c,v 1.6 2008/04/28 20:23:30 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -46,8 +39,7 @@ static char *bi_next;
 static int bi_size;
 
 void
-bi_init(addr)
-	paddr_t addr;
+bi_init(paddr_t addr)
 {
 	struct btinfo_common *bi;
 	struct btinfo_magic bi_magic;
@@ -63,9 +55,7 @@ bi_init(addr)
 }
 
 void
-bi_add(new, type, size)
-	void *new;
-	int type, size;
+bi_add(void *new, int type, int size)
 {
 	struct btinfo_common *bi;
 
@@ -75,9 +65,11 @@ bi_add(new, type, size)
 	bi = new;
 	bi->next = size;
 	bi->type = type;
-	bcopy(new, bi_next, size);
+	memcpy(bi_next, new, size);
 	bi_next += size;
 
 	bi = (struct btinfo_common *)bi_next;
 	bi->next = bi->type = 0;
+
+	bi_size += size;
 }

@@ -1,4 +1,4 @@
-.\"	$NetBSD: err.3,v 1.10 1999/03/22 19:44:40 garbled Exp $
+.\" $NetBSD: err.3,v 1.19 2003/08/10 10:45:33 wiz Exp $
 .\"
 .\" Copyright (c) 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -33,7 +29,7 @@
 .\"
 .\"	@(#)err.3	8.1 (Berkeley) 6/9/93
 .\"
-.Dd June 9, 1993
+.Dd March 21, 2001
 .Dt ERR 3
 .Os
 .Sh NAME
@@ -49,15 +45,15 @@
 .Sh LIBRARY
 .Lb libc
 .Sh SYNOPSIS
-.Fd #include <err.h>
+.In err.h
 .Ft void
-.Fn err "int eval" "const char *fmt" "..."
+.Fn err "int status" "const char *fmt" "..."
 .Ft void
-.Fn verr "int eval" "const char *fmt" "va_list args"
+.Fn verr "int status" "const char *fmt" "va_list args"
 .Ft void
-.Fn errx "int eval" "const char *fmt" "..."
+.Fn errx "int status" "const char *fmt" "..."
 .Ft void
-.Fn verrx "int eval" "const char *fmt" "va_list args"
+.Fn verrx "int status" "const char *fmt" "va_list args"
 .Ft void
 .Fn warn "const char *fmt" "..."
 .Ft void
@@ -77,7 +73,9 @@ In all cases, the last component of the program name, a colon character,
 and a space are output.
 If the
 .Fa fmt
-argument is not NULL, the formatted error message is output.
+argument is not
+.Dv NULL ,
+the formatted error message is output.
 In the case of the
 .Fn err ,
 .Fn verr ,
@@ -86,11 +84,19 @@ and
 .Fn vwarn
 functions, the error message string affiliated with the current value of
 the global variable
-.Va errno 
+.Va errno
 is output next, preceded by a colon character and a space if
 .Fa fmt
-is not NULL.
+is not
+.Dv NULL .
 In all cases, the output is followed by a newline character.
+The
+.Fn errx ,
+.Fn verrx ,
+.Fn warnx ,
+and
+.Fn vwarnx
+functions will not output this error message string.
 .Pp
 The
 .Fn err ,
@@ -98,21 +104,32 @@ The
 .Fn errx ,
 and
 .Fn verrx
-functions do not return, but exit with the value of the argument
-.Fa eval .
+functions do not return, but instead cause the program to terminate
+with the status value given by the argument
+.Fa status .
+It is often appropriate to use the value
+.Dv EXIT_FAILURE ,
+defined in
+.Aq Ar stdlib.h ,
+as the
+.Fa status
+argument given to these functions.
 .Sh EXAMPLES
-Display the current errno information string and exit:
+Display the current
+.Va errno
+information string and terminate with status indicating failure:
 .Bd -literal -offset indent
 if ((p = malloc(size)) == NULL)
-	err(1, NULL);
+	err(EXIT_FAILURE, NULL);
 if ((fd = open(file_name, O_RDONLY, 0)) == -1)
-	err(1, "%s", file_name);
+	err(EXIT_FAILURE, "%s", file_name);
 .Ed
 .Pp
-Display an error message and exit:
+Display an error message and terminate with status indicating failure:
 .Bd -literal -offset indent
-if (tm.tm_hour < START_TIME)
-	errx(1, "too early, wait until %s", start_time_string);
+if (tm.tm_hour \*[Lt] START_TIME)
+	errx(EXIT_FAILURE, "too early, wait until %s",
+	    start_time_string);
 .Ed
 .Pp
 Warn of an error:
@@ -124,11 +141,34 @@ if ((fd = open(block_device, O_RDONLY, 0)) == -1)
 	warn("%s", block_device);
 .Ed
 .Sh SEE ALSO
+.Xr exit 3 ,
+.Xr getprogname 3 ,
 .Xr strerror 3
 .Sh HISTORY
 The
 .Fn err
 and
 .Fn warn
-functions first appeared in 
+functions first appeared in
 .Bx 4.4 .
+.Sh CAVEATS
+It is important never to pass a string with user-supplied data as a
+format without using
+.Ql %s .
+An attacker can put format specifiers in the string to mangle your stack,
+leading to a possible security hole.
+This holds true even if you have built the string
+.Dq by hand
+using a function like
+.Fn snprintf ,
+as the resulting string may still contain user-supplied conversion specifiers
+for later interpolation by the
+.Fn err
+and
+.Fn warn
+functions.
+.Pp
+Always be sure to use the proper secure idiom:
+.Bd -literal -offset indent
+err(1, "%s", string);
+.Ed

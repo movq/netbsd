@@ -1,4 +1,4 @@
-|	$NetBSD: vectors.s,v 1.2 2000/03/10 19:06:43 tsutsui Exp $
+|	$NetBSD: vectors.s,v 1.6 2007/02/10 02:03:51 tsutsui Exp $
 
 | Copyright (c) 1997 Jason R. Thorpe.  All rights reserved.
 | Copyright (c) 1988 University of Utah
@@ -79,10 +79,10 @@ GLOBAL(vectab)
 	VECTOR(badtrap)		/* 23: unassigned, reserved */
 	VECTOR(spurintr)	/* 24: spurious interrupt */
 	VECTOR(lev1intr)	/* 25: level 1 interrupt autovector */
-	VECTOR(lev2intr)	/* 26: level 2 interrupt autovector */
+	VECTOR(intrhand_autovec)/* 26: level 2 interrupt autovector */
 	VECTOR(lev3intr)	/* 27: level 3 interrupt autovector */
 	VECTOR(lev4intr)	/* 28: level 4 interrupt autovector */
-	VECTOR(lev5intr)	/* 29: level 5 interrupt autovector */
+	VECTOR(intrhand_autovec)/* 29: level 5 interrupt autovector */
 	VECTOR(intrhand_autovec)/* 30: level 6 interrupt autovector */
 	VECTOR(intrhand_autovec)/* 31: level 7 interrupt autovector */
 	VECTOR(trap0)		/* 32: syscalls */
@@ -92,7 +92,11 @@ GLOBAL(vectab)
 	VECTOR(illinst)
 #endif
 	VECTOR(trap2)		/* 34: trace */
-	VECTOR(trap3)		/* 35: sigreturn special syscall */
+#ifdef COMPAT_16
+	VECTOR(trap3)		/* 35: compat_16_sigreturn */
+#else
+	VECTOR(illinst)	
+#endif
 	VECTOR(illinst)		/* 36: TRAP instruction vector */
 	VECTOR(illinst)		/* 37: TRAP instruction vector */
 	VECTOR(illinst)		/* 38: TRAP instruction vector */

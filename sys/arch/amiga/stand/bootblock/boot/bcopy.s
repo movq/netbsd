@@ -1,4 +1,4 @@
-/*	$NetBSD: bcopy.s,v 1.4 1999/02/16 23:34:11 is Exp $	*/
+/*	$NetBSD: bcopy.s,v 1.9 2008/04/28 20:23:13 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,33 +33,36 @@
  * Small but possibly slow bcopy/memcpy combo.
  */
 
+#include <machine/asm.h>
+
 	.text
 	.even
-.globl _bcopy,_memcpy
 
-_memcpy:
-	movel sp@(4),a0
-	movel sp@(8),a1
+ENTRY_NOPROFILE(memmove)
+ENTRY_NOPROFILE(memcpy)
+	movel %sp@(4),%a0
+	movel %sp@(8),%a1
 	jra Lcpy
-_bcopy:
-	movel sp@(4),a1
-	movel sp@(8),a0
+
+ENTRY_NOPROFILE(bcopy)
+	movel %sp@(4),%a1
+	movel %sp@(8),%a0
 Lcpy:
-	movel sp@(12),d0
+	movel %sp@(12),%d0
 	jeq L1
-	cmpl a1,a0
+	cmpl %a1,%a0
 	jcc L3
 L4:
-	moveb a1@+,a0@+
-	subql #1,d0
+	moveb %a1@+,%a0@+
+	subql #1,%d0
 	jne L4
 	rts
 L3:
-	addl d0,a1
-	addl d0,a0
+	addl %d0,%a1
+	addl %d0,%a0
 L9:
-	moveb a1@-,a0@-
-	subql #1,d0
+	moveb %a1@-,%a0@-
+	subql #1,%d0
 	jne L9
 L1:
 	rts

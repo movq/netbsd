@@ -1,4 +1,4 @@
-/*	$NetBSD: stdarg.h,v 1.17 2000/02/03 16:16:07 kleink Exp $	*/
+/*	$NetBSD: stdarg.h,v 1.22 2008/06/21 00:56:39 gmcgarry Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -44,9 +40,24 @@
 typedef _BSD_VA_LIST_	va_list;
 
 #ifdef __lint__
-#define __builtin_next_arg(t) ((t) ? 0 : 0)
+#define __builtin_next_arg(t)		((t) ? 0 : 0)
+#define	__builtin_stdarg_start(a, l)	((a) = ((l) ? 0 : 0))
+#define	__builtin_va_arg(a, t)		((a) ? 0 : 0)
+#define	__builtin_va_end		/* nothing */
+#define	__builtin_va_copy(d, s)		((d) = (s))
 #endif
 
+#if __GNUC_PREREQ__(2, 96)
+#define	va_start(ap, last)	__builtin_stdarg_start((ap), (last))
+#define	va_arg			__builtin_va_arg
+#define	va_end			__builtin_va_end
+#define	__va_copy(dest, src)	__builtin_va_copy((dest), (src))
+#elif defined(__PCC__)
+#define	va_start(ap, last)	__builtin_stdarg_start((ap), (last))
+#define	va_arg			__builtin_va_arg
+#define	va_end			__builtin_va_end
+#define	__va_copy(dest, src)	__builtin_va_copy((dest), (src))
+#else
 #define	__va_size(type) \
 	(((sizeof(type) + sizeof(long) - 1) / sizeof(long)) * sizeof(long))
 
@@ -56,13 +67,15 @@ typedef _BSD_VA_LIST_	va_list;
 #define	va_arg(ap, type) \
 	(*(type *)(void *)((ap) += __va_size(type), (ap) - __va_size(type)))
 
-#if !defined(_ANSI_SOURCE) && \
-    (!defined(_POSIX_C_SOURCE) && !defined(_XOPEN_SOURCE) || \
-     defined(_ISOC99_SOURCE) || (__STDC_VERSION__ - 0) >= 199901L)
-#define	va_copy(dest, src) \
-	((dest) = (src))
+#define	va_end(ap)	
+
+#define	__va_copy(dest, src)	((dest) = (src))
 #endif
 
-#define	va_end(ap)	
+#if !defined(_ANSI_SOURCE) &&						\
+    (defined(_ISOC99_SOURCE) || (__STDC_VERSION__ - 0) >= 199901L ||	\
+     defined(_NETBSD_SOURCE))
+#define	va_copy(dest, src)	__va_copy((dest), (src))
+#endif
 
 #endif /* !_I386_STDARG_H_ */

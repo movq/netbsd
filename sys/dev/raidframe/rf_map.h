@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_map.h,v 1.3 1999/02/05 00:06:12 oster Exp $	*/
+/*	$NetBSD: rf_map.h,v 1.13 2007/03/04 06:02:38 christos Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -31,63 +31,40 @@
 #ifndef _RF__RF_MAP_H_
 #define _RF__RF_MAP_H_
 
-#include "rf_types.h"
+#include <dev/raidframe/raidframevar.h>
+
 #include "rf_alloclist.h"
 #include "rf_raid.h"
 
 /* mapping structure allocation and free routines */
-RF_AccessStripeMapHeader_t *
-rf_MapAccess(RF_Raid_t * raidPtr,
-    RF_RaidAddr_t raidAddress, RF_SectorCount_t numBlocks,
-    caddr_t buffer, int remap);
-
-void 
-rf_MarkFailuresInASMList(RF_Raid_t * raidPtr,
-    RF_AccessStripeMapHeader_t * asm_h);
-
-RF_AccessStripeMap_t *rf_DuplicateASM(RF_AccessStripeMap_t * asmap);
-
-RF_PhysDiskAddr_t *rf_DuplicatePDA(RF_PhysDiskAddr_t * pda);
-
-int     rf_ConfigureMapModule(RF_ShutdownList_t ** listp);
-
+RF_AccessStripeMapHeader_t *rf_MapAccess(RF_Raid_t *, RF_RaidAddr_t,
+					 RF_SectorCount_t, void *, int);
+void rf_MarkFailuresInASMList(RF_Raid_t *, RF_AccessStripeMapHeader_t *);
+int rf_ConfigureMapModule(RF_ShutdownList_t **);
 RF_AccessStripeMapHeader_t *rf_AllocAccessStripeMapHeader(void);
-
-void    rf_FreeAccessStripeMapHeader(RF_AccessStripeMapHeader_t * p);
-
+void rf_FreeAccessStripeMapHeader(RF_AccessStripeMapHeader_t *);
 RF_PhysDiskAddr_t *rf_AllocPhysDiskAddr(void);
+RF_PhysDiskAddr_t *rf_AllocPDAList(int);
+void rf_FreePhysDiskAddr(RF_PhysDiskAddr_t *);
+RF_AccessStripeMap_t *rf_AllocASMList(int);
+void rf_FreeAccessStripeMap(RF_AccessStripeMapHeader_t *);
+int rf_CheckStripeForFailures(RF_Raid_t *, RF_AccessStripeMap_t *);
+int rf_NumFailedDataUnitsInStripe(RF_Raid_t *, RF_AccessStripeMap_t *);
+void rf_PrintAccessStripeMap(RF_AccessStripeMapHeader_t *);
+void rf_PrintFullAccessStripeMap(RF_AccessStripeMapHeader_t *, int);
+void rf_PrintRaidAddressInfo(RF_Raid_t *, RF_RaidAddr_t, RF_SectorCount_t);
+void rf_ASMParityAdjust(RF_PhysDiskAddr_t *, RF_StripeNum_t, RF_SectorNum_t,
+			RF_RaidLayout_t *, RF_AccessStripeMap_t *);
+void rf_ASMCheckStatus(RF_Raid_t *, RF_PhysDiskAddr_t *, RF_AccessStripeMap_t *,
+		       RF_RaidDisk_t *, int);
 
-RF_PhysDiskAddr_t *rf_AllocPDAList(int count);
-
-void    rf_FreePhysDiskAddr(RF_PhysDiskAddr_t * p);
-
-RF_AccessStripeMap_t *rf_AllocAccessStripeMapComponent(void);
-
-RF_AccessStripeMap_t *rf_AllocASMList(int count);
-
-void    rf_FreeAccessStripeMapComponent(RF_AccessStripeMap_t * p);
-
-void    rf_FreeAccessStripeMap(RF_AccessStripeMapHeader_t * hdr);
-
-int     rf_CheckStripeForFailures(RF_Raid_t * raidPtr, RF_AccessStripeMap_t * asmap);
-
-int     rf_NumFailedDataUnitsInStripe(RF_Raid_t * raidPtr, RF_AccessStripeMap_t * asmap);
-
-void    rf_PrintAccessStripeMap(RF_AccessStripeMapHeader_t * asm_h);
-
-void    rf_PrintFullAccessStripeMap(RF_AccessStripeMapHeader_t * asm_h, int prbuf);
-
-void 
-rf_PrintRaidAddressInfo(RF_Raid_t * raidPtr, RF_RaidAddr_t raidAddr,
-    RF_SectorCount_t numBlocks);
-
-void 
-rf_ASMParityAdjust(RF_PhysDiskAddr_t * toAdjust,
-    RF_StripeNum_t startAddrWithinStripe, RF_SectorNum_t endAddress,
-    RF_RaidLayout_t * layoutPtr, RF_AccessStripeMap_t * asm_p);
-
-void 
-rf_ASMCheckStatus(RF_Raid_t * raidPtr, RF_PhysDiskAddr_t * pda_p,
-    RF_AccessStripeMap_t * asm_p, RF_RaidDisk_t ** disks, int parity);
+RF_VoidFunctionPointerListElem_t *rf_AllocVFPListElem(void);
+void rf_FreeVFPListElem(RF_VoidFunctionPointerListElem_t *);
+RF_VoidPointerListElem_t *rf_AllocVPListElem(void);
+void rf_FreeVPListElem(RF_VoidPointerListElem_t *);
+RF_ASMHeaderListElem_t *rf_AllocASMHeaderListElem(void);
+void rf_FreeASMHeaderListElem(RF_ASMHeaderListElem_t *);
+RF_FailedStripe_t *rf_AllocFailedStripeStruct(void);
+void rf_FreeFailedStripeStruct(RF_FailedStripe_t *);
 
 #endif				/* !_RF__RF_MAP_H_ */

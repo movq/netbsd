@@ -1,4 +1,4 @@
-/*	$NetBSD: portald.h,v 1.5 1999/08/16 06:55:27 bgrayson Exp $	*/
+/*	$NetBSD: portald.h,v 1.9 2007/07/02 18:07:44 pooka Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -58,30 +54,31 @@ struct qelem {
 
 typedef struct provider provider;
 struct provider {
-	char *pr_match;
-	int (*pr_func) __P((struct portal_cred *,
-				char *key, char **v, int so, int *fdp));
+	const char *pr_match;
+	int (*pr_func)(struct portal_cred *,
+				char *key, char **v, int *fdp);
 };
 extern provider providers[];
 
 /*
  * Portal providers
  */
-extern int portal_exec __P((struct portal_cred *,
-				char *key, char **v, int so, int *fdp));
-extern int portal_file __P((struct portal_cred *,
-				char *key, char **v, int so, int *fdp));
-extern int portal_tcp __P((struct portal_cred *,
-				char *key, char **v, int so, int *fdp));
-extern int portal_rfilter __P((struct portal_cred *,
-				char *key, char **v, int so, int *fdp));
-extern int portal_wfilter __P((struct portal_cred *,
-				char *key, char **v, int so, int *fdp));
+extern int portal_exec(struct portal_cred *,
+				char *key, char **v, int *fdp);
+extern int portal_file(struct portal_cred *,
+				char *key, char **v, int *fdp);
+extern int portal_tcp(struct portal_cred *,
+				char *key, char **v, int *fdp);
+extern int portal_rfilter(struct portal_cred *,
+				char *key, char **v, int *fdp);
+extern int portal_wfilter(struct portal_cred *,
+				char *key, char **v, int *fdp);
 
 /*
  * Global functions
  */
-extern void activate __P((qelem *q, int so));
-extern char **conf_match __P((qelem *q, char *key));
-extern void conf_read __P((qelem *q, char *conf));
-extern int lose_credentials __P((struct portal_cred *));
+extern void activate(qelem *q, int so);
+extern int activate_argv(struct portal_cred *, char *, char **, int *);
+extern char **conf_match(qelem *q, char *key);
+extern int conf_read(qelem *q, const char *conf);
+extern int lose_credentials(struct portal_cred *);

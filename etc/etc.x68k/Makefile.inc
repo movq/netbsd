@@ -1,22 +1,20 @@
-#	$NetBSD: Makefile.inc,v 1.7 1999/12/24 17:03:34 minoura Exp $
+#	$NetBSD: Makefile.inc,v 1.19 2008/03/18 04:20:37 lukem Exp $
 #
 #	etc.x68k/Makefile.inc -- x68k-specific etc Makefile targets
 #
 
-# Set this for any kernels beyond GENERIC you want to include
-# in the distribution.
-EXTRA_KERNELS+= SMALL
-BUILD_KERNELS+=	INSTALL INSTALL_SMALL
+# If you change the list of distributed kernels, don't forget
+# to update the release documentation in distrib/notes/common/contents
 
-LOCALTIME=	Japan
+KERNEL_SETS=		GENERIC
 
-INSTALLATION_DIRS+=	installation/floppy	\
+BUILD_KERNELS=		INSTALL
+
+INSTALLATION_DIRS+=	installation/floppy \
 			installation/misc
 
+LOCALTIME=		Japan
+
 snap_md_post:
-.ifndef UPDATE
-	cd ${.CURDIR}/../distrib && ${MAKE} cleandir
-.endif
-	cd ${.CURDIR}/../distrib && ${MAKE} depend && ${MAKE}
-	cd ${.CURDIR}/../distrib/${MACHINE} && ${MAKE} release
-	cd ${.CURDIR}/../distrib/notes && ${MAKE} release
+	cd ${KERNSRCDIR}/arch/x68k/stand/loadbsd && ${MAKE} release
+	${MAKESUMS} -t ${RELEASEDIR}/${RELEASEMACHINEDIR}/installation/floppy '*.gz'

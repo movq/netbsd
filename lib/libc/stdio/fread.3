@@ -1,4 +1,4 @@
-.\"	$NetBSD: fread.3,v 1.6 1998/02/05 18:49:21 perry Exp $
+.\"	$NetBSD: fread.3,v 1.12.38.1 2008/12/23 03:50:57 snj Exp $
 .\"
 .\" Copyright (c) 1990, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -15,11 +15,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -37,7 +33,7 @@
 .\"
 .\"     @(#)fread.3	8.2 (Berkeley) 3/8/94
 .\"
-.Dd March 8, 1994
+.Dd December 19, 2008
 .Dt FREAD 3
 .Os
 .Sh NAME
@@ -47,11 +43,11 @@
 .Sh LIBRARY
 .Lb libc
 .Sh SYNOPSIS
-.Fd #include <stdio.h>
+.In stdio.h
 .Ft size_t
-.Fn fread "void *ptr" "size_t size" "size_t nmemb" "FILE *stream"
+.Fn fread "void * restrict ptr" "size_t size" "size_t nmemb" "FILE * restrict stream"
 .Ft size_t
-.Fn fwrite "const void *ptr" "size_t size" "size_t nmemb" "FILE *stream"
+.Fn fwrite "const void * restrict ptr" "size_t size" "size_t nmemb" "FILE * restrict stream"
 .Sh DESCRIPTION
 The function
 .Fn fread
@@ -74,6 +70,17 @@ bytes long, to the stream pointed to by
 .Fa stream ,
 obtaining them from the location given by
 .Fa ptr .
+.Pp
+Mixing
+.Fn fread
+and
+.Fn fwrite
+calls without setting the file position explicitly using
+.Fn fsetpos
+between read and write or write and read operations will lead to unexpected
+results because of buffering the file pointer not being set to the
+expected position after each operation completes.
+This behavior is allowed by ANSI C for efficiency and it will not be changed.
 .Sh RETURN VALUES
 The functions
 .Fn fread
@@ -82,6 +89,13 @@ and
 advance the file position indicator for the stream
 by the number of bytes read or written.
 They return the number of objects read or written.
+If
+.Fa size
+or
+.Fa nmemb
+is 0, the functions return 0 and the state of
+.Fa stream
+remains unchanged.
 If an error occurs, or the end-of-file is reached,
 the return value is a short object count (or zero).
 .Pp

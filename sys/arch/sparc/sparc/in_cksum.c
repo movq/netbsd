@@ -1,11 +1,70 @@
-/*	$NetBSD: in_cksum.c,v 1.9 1998/11/29 10:37:08 mycroft Exp $ */
+/*	$NetBSD: in_cksum.c,v 1.20 2008/05/30 02:29:37 mrg Exp $ */
+
+/*
+ * Copyright (c) 1995 Matthew R. Green.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
+ * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ */
+
+/*
+ * Copyright (c) 1992, 1993
+ *	The Regents of the University of California.  All rights reserved.
+ *
+ * All advertising materials mentioning features or use of this software
+ * must display the following acknowledgement:
+ *	This product includes software developed by the University of
+ *	California, and it's contributors.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ *	@(#)in_cksum.c	8.1 (Berkeley) 6/11/93
+ */
 
 /*
  * Copyright (c) 1995 Zubin Dittia.
- * Copyright (c) 1995 Matthew R. Green.
  * Copyright (c) 1994, 1998 Charles M. Hannum.
- * Copyright (c) 1992, 1993
- *	The Regents of the University of California.  All rights reserved.
  *
  * All advertising materials mentioning features or use of this software
  * must display the following acknowledgement:
@@ -43,9 +102,16 @@
  *	@(#)in_cksum.c	8.1 (Berkeley) 6/11/93
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: in_cksum.c,v 1.20 2008/05/30 02:29:37 mrg Exp $");
+
 #include <sys/param.h>
+#include <sys/systm.h>
 #include <sys/mbuf.h>
 #include <netinet/in.h>
+#include <netinet/in_systm.h>
+#include <netinet/ip.h>
+#include <netinet/ip_var.h>
 
 /*
  * Checksum routine for Internet Protocol family headers.
@@ -78,7 +144,7 @@
  * Zubin Dittia (zubin@dworkin.wustl.edu)
  */
 
-#define Asm	__asm __volatile
+#define Asm	__asm volatile
 #define ADD64		Asm("	ld [%4+ 0],%1;   ld [%4+ 4],%2;		\
 				addcc  %0,%1,%0; addxcc %0,%2,%0;	\
 				ld [%4+ 8],%1;   ld [%4+12],%2;		\
@@ -134,14 +200,11 @@
 #define ADDSHORT	{sum += *(u_short *)w;}
 #define ADVANCE(n)	{w += n; mlen -= n;}
 
-int
-in_cksum(m, len)
-	register struct mbuf *m;
-	register int len;
+static inline int
+in_cksum_internal(struct mbuf *m, int off, int len, u_int sum)
 {
-	register u_char *w;
-	register u_int sum = 0;
-	register int mlen = 0;
+	u_char *w;
+	int mlen = 0;
 	int byte_swapped = 0;
 
 	/*
@@ -149,13 +212,14 @@ in_cksum(m, len)
 	 * allow the compiler to pick which specific machine registers to
 	 * use, instead of hard-coding this in the asm code above.
 	 */
-	register u_int tmp1, tmp2;
+	u_int tmp1, tmp2;
 
 	for (; m && len; m = m->m_next) {
 		if (m->m_len == 0)
 			continue;
-		w = mtod(m, u_char *);
-		mlen = m->m_len;
+		w = mtod(m, u_char *) + off;
+		mlen = m->m_len - off;
+		off = 0;
 		if (len < mlen)
 			mlen = len;
 		len -= mlen;
@@ -177,7 +241,7 @@ in_cksum(m, len)
 		}
 
 		/*
-		 * Do as many 32 bit operattions as possible using the
+		 * Do as many 32 bit operations as possible using the
 		 * 64/32/16/8/4 macro's above, using as many as possible of
 		 * these.
 		 */
@@ -221,4 +285,50 @@ in_cksum(m, len)
 	ADDCARRY;
 
 	return (0xffff ^ sum);
+}
+
+int
+in_cksum(struct mbuf *m, int len)
+{
+
+	return (in_cksum_internal(m, 0, len, 0));
+}
+
+int
+in4_cksum(struct mbuf *m, uint8_t nxt, int off, int len)
+{
+	u_char *w;
+	u_int sum = 0;
+	struct ipovly ipov;
+
+	/*
+	 * Declare two temporary registers for use by the asm code.  We
+	 * allow the compiler to pick which specific machine registers to
+	 * use, instead of hard-coding this in the asm code above.
+	 */
+	u_int tmp1, tmp2;
+
+	if (nxt != 0) {
+		/* pseudo header */
+		memset(&ipov, 0, sizeof(ipov));
+		ipov.ih_len = htons(len);
+		ipov.ih_pr = nxt;
+		ipov.ih_src = mtod(m, struct ip *)->ip_src;
+		ipov.ih_dst = mtod(m, struct ip *)->ip_dst;
+		w = (u_char *)&ipov;
+		/* assumes sizeof(ipov) == 20 */
+		ADD16;
+		w += 16;
+		ADD4;
+	}
+
+	/* skip unnecessary part */
+	while (m && off > 0) {
+		if (m->m_len > off)
+			break;
+		off -= m->m_len;
+		m = m->m_next;
+	}
+
+	return (in_cksum_internal(m, off, len, sum));
 }

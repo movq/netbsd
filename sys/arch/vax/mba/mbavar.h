@@ -1,4 +1,4 @@
-/*	$NetBSD: mbavar.h,v 1.5 2000/01/21 23:39:56 thorpej Exp $ */
+/*	$NetBSD: mbavar.h,v 1.13 2008/10/16 12:47:22 hans Exp $ */
 /*
  * Copyright (c) 1994 Ludd, University of Lule}, Sweden
  * All rights reserved.
@@ -30,6 +30,7 @@
  */
 
 #include <sys/device.h>
+#include <machine/scb.h>
 
 #define MBCR_INIT	1
 #define	MBCR_IE		(1<<2)
@@ -51,6 +52,7 @@
  * Devices that have different device drivers.
  */
 enum	mb_devices {
+	MB_UK,	/* unknown */
 	MB_RP,	/* RM/RP disk */
 	MB_TU,	/* TM03 based tape, ex. TU45 or TU77 */
 	MB_MT	/* TU78 tape */
@@ -77,10 +79,12 @@ enum	xfer_action {
  * Info passed do unit device driver during autoconfig.
  */
 struct	mba_attach_args {
-	int	unit;
-        int	type;
-	char	*name;
-	enum	mb_devices devtyp;
+	int	ma_unit;
+        int	ma_type;
+	const char	*ma_name;
+	enum	mb_devices ma_devtyp;
+	bus_space_tag_t ma_iot;
+	bus_space_handle_t ma_ioh;
 };
 
 /*
@@ -88,34 +92,34 @@ struct	mba_attach_args {
  * and the unit device driver.
  */
 struct	mba_device {
-	struct	mba_device *md_back;	/* linked list of runnable devices */
-	    /* Start routine to be called by mbastart. */
-	void	(*md_start) __P((struct mba_device *));
-	    /* Routine to be called after attn intr */
-	int	(*md_attn)__P((struct mba_device *));
-	    /* Call after xfer finish */
-	enum	xfer_action (*md_finish) __P((struct mba_device *, int, int *));
-	void	*md_softc;	/* Backpointer to this units softc. */
-	struct	mba_softc *md_mba;
-	struct	buf_queue md_q;	/* queue of I/O requests */
+	STAILQ_ENTRY(mba_device) md_link; /* linked list of runnable devices */
+	void (*md_start)(struct mba_device *);
+				/* Start routine to be called by mbastart. */
+	int (*md_attn)(struct mba_device *);
+				/* Routine to be called after attn intr */
+	enum xfer_action (*md_finish)(struct mba_device *, int, int *);
+				/* Call after xfer finish */
+	void *md_softc;		/* Backpointer to this units softc. */
+	struct mba_softc *md_mba;
+	struct bufq_state *md_q;	/* queue of I/O requests */
 };
 
 struct	mba_softc {
-	struct  device sc_dev;
-	struct  ivec_dsp sc_dsp;	/* Interrupt catch routine */
-	struct  mba_regs *sc_mbareg;
-	struct	mba_device *sc_first, *sc_last;
-	enum    sc_state sc_state;
-	int	sc_physnr;		/* Physical number of this mba */
-	struct	mba_device *sc_md[MAXMBADEV];
+	device_t sc_dev;
+	bus_space_tag_t sc_iot;
+	bus_space_handle_t sc_ioh;
+	STAILQ_HEAD(,mba_device) sc_xfers;
+	struct evcnt sc_intrcnt;
+	enum sc_state sc_state;
+	struct mba_device *sc_md[MAXMBADEV];
 };
 
 struct  mbaunit {
 	int     nr;
-	char    *name;
+	const char    *name;
 	enum	mb_devices devtyp;
 };
 
 /* Common prototypes */
-void	mbaqueue __P((struct mba_device *));
+void	mbaqueue(struct mba_device *);
 

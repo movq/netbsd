@@ -1,9 +1,10 @@
-/*	$NetBSD: ipcomp.h,v 1.7 2000/01/06 15:46:10 itojun Exp $	*/
+/*	$NetBSD: ipcomp.h,v 1.13 2008/04/23 06:09:05 thorpej Exp $	*/
+/*	$KAME: ipcomp.h,v 1.11 2001/09/04 08:43:19 itojun Exp $	*/
 
 /*
  * Copyright (C) 1999 WIDE Project.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -15,7 +16,7 @@
  * 3. Neither the name of the project nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE PROJECT AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -36,7 +37,7 @@
 #ifndef _NETINET6_IPCOMP_H_
 #define _NETINET6_IPCOMP_H_
 
-#if defined(_KERNEL) && !defined(_LKM)
+#if defined(_KERNEL_OPT)
 #include "opt_inet.h"
 #endif
 
@@ -56,20 +57,22 @@ struct ipcomp {
 
 #if defined(KERNEL) || defined(_KERNEL)
 struct ipcomp_algorithm {
-	int (*compress) __P((struct mbuf *, struct mbuf *, size_t *));
-	int (*decompress) __P((struct mbuf *, struct mbuf *, size_t *));
+	int (*compress)(struct mbuf *, struct mbuf *, size_t *);
+	int (*decompress)(struct mbuf *, struct mbuf *, size_t *);
 	size_t minplen;		/* minimum required length for compression */
 };
 
 struct ipsecrequest;
-extern struct ipcomp_algorithm ipcomp_algorithms[];
-extern void ipcomp4_input __P((struct mbuf *, ...));
-extern int ipcomp4_output __P((struct mbuf *, struct ipsecrequest *));
+extern const struct ipcomp_algorithm *ipcomp_algorithm_lookup(int);
+extern void ipcomp4_init(void);
+extern void ipcomp4_input(struct mbuf *, ...);
+extern int ipcomp4_output(struct mbuf *, struct ipsecrequest *);
 #ifdef INET6
-extern int ipcomp6_input __P((struct mbuf **, int *, int));
-extern int ipcomp6_output __P((struct mbuf *, u_char *, struct mbuf *,
-	struct ipsecrequest *));
+extern void ipcomp6_init(void);
+extern int ipcomp6_input(struct mbuf **, int *, int);
+extern int ipcomp6_output(struct mbuf *, u_char *, struct mbuf *,
+	struct ipsecrequest *);
 #endif
-#endif /*KERNEL*/
+#endif /* KERNEL */
 
-#endif /*_NETINET6_IPCOMP_H_*/
+#endif /* !_NETINET6_IPCOMP_H_ */

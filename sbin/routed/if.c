@@ -1,4 +1,4 @@
-/*	$NetBSD: if.c,v 1.19 2000/03/02 20:57:42 christos Exp $	*/
+/*	$NetBSD: if.c,v 1.26 2007/08/14 03:39:19 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -33,15 +33,17 @@
  * SUCH DAMAGE.
  */
 
-#if !defined(lint) && !defined(sgi) && !defined(__NetBSD__)
-static char sccsid[] __attribute__((unused)) = "@(#)if.c	8.1 (Berkeley) 6/5/93";
-#elif defined(__NetBSD__)
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: if.c,v 1.19 2000/03/02 20:57:42 christos Exp $");
-#endif
-
 #include "defs.h"
 #include "pathnames.h"
+
+#ifdef __NetBSD__
+__RCSID("$NetBSD: if.c,v 1.26 2007/08/14 03:39:19 dyoung Exp $");
+#elif defined(__FreeBSD__)
+__RCSID("$FreeBSD$");
+#else
+__RCSID("Revision: 2.27 ");
+#ident "Revision: 2.27 "
+#endif
 
 struct interface *ifnet;		/* all interfaces */
 
@@ -213,14 +215,14 @@ ifwithname(char *name,			/* "ec0" or whatever */
 
 
 struct interface *
-ifwithindex(u_short index,
+ifwithindex(u_short ifindex,
 	    int rescan_ok)
 {
 	struct interface *ifp;
 
 	for (;;) {
 		for (ifp = ifnet; 0 != ifp; ifp = ifp->int_next) {
-			if (ifp->int_index == index)
+			if (ifp->int_index == ifindex)
 				return ifp;
 		}
 
@@ -243,6 +245,7 @@ struct interface *
 iflookup(naddr addr)
 {
 	struct interface *ifp, *maybe;
+	int once = 0;
 
 	maybe = 0;
 	for (;;) {
@@ -266,8 +269,9 @@ iflookup(naddr addr)
 			}
 		}
 
-		if (maybe != 0)
+		if (maybe != 0 || once || IF_RESCAN_DELAY())
 			return maybe;
+		once = 1;
 
 		/* If there is no known interface, maybe there is a
 		 * new interface.  So just once look for new interfaces.
@@ -404,7 +408,8 @@ check_dup(naddr addr,			/* IP address, so network byte order */
 		/* The local address can only be shared with a point-to-point
 		 * link.
 		 */
-		if (ifp->int_addr == addr
+		if ((!(ifp->int_state & IS_REMOTE) || !(if_flags & IS_REMOTE))
+		    && ifp->int_addr == addr
 		    && (((if_flags|ifp->int_if_flags) & IFF_POINTOPOINT) == 0))
 			return ifp;
 
@@ -496,10 +501,14 @@ ifdel(struct interface *ifp)
 #endif
 		    && rip_sock >= 0) {
 			m.imr_multiaddr.s_addr = htonl(INADDR_RIP_GROUP);
+#ifdef MCAST_IFINDEX
+			m.imr_interface.s_addr = htonl(ifp->int_index);
+#else
 			m.imr_interface.s_addr = ((ifp->int_if_flags
 						   & IFF_POINTOPOINT)
 						  ? ifp->int_dstaddr
 						  : ifp->int_addr);
+#endif
 			if (setsockopt(rip_sock,IPPROTO_IP,IP_DROP_MEMBERSHIP,
 				       &m, sizeof(m)) < 0
 			    && errno != EADDRNOTAVAIL
@@ -736,12 +745,11 @@ ifinit(void)
 		ifam2 = (struct ifa_msghdr*)((char*)ifam + ifam->ifam_msglen);
 
 #ifdef RTM_OIFINFO
-		if (ifam->ifam_type == RTM_OIFINFO) {
-			continue; /* just ignore compat message */
-		}
+		if (ifam->ifam_type == RTM_OIFINFO)
+			continue;	/* just ignore compat message */
 #endif
 		if (ifam->ifam_type == RTM_IFINFO) {
-			struct sockaddr_dl *sdl;
+			const struct sockaddr_dl *sdl;
 
 			ifm = (struct if_msghdr *)ifam;
 			/* make prototype structure for the IP aliases
@@ -761,10 +769,10 @@ ifinit(void)
 #ifdef sgi
 			ifs0.int_data.odrops = ifm->ifm_data.ifi_odrops;
 #endif
-			sdl = (struct sockaddr_dl *)(ifm + 1);
-			sdl->sdl_data[sdl->sdl_nlen] = 0;
-			strncpy(ifs0.int_name, sdl->sdl_data,
-				MIN(sizeof(ifs0.int_name), sdl->sdl_nlen));
+			sdl = (const struct sockaddr_dl *)(ifm + 1);
+			/* NUL-termination by memset, above. */
+			memcpy(ifs0.int_name, sdl->sdl_data,
+				MIN(sizeof(ifs0.int_name) - 1, sdl->sdl_nlen));
 			continue;
 		}
 		if (ifam->ifam_type != RTM_NEWADDR) {
@@ -977,6 +985,7 @@ ifinit(void)
 						  ifp->int_name,
 						  now.tv_sec-ifp->int_data.ts);
 					ifdel(ifp);
+					ifp = 0;
 				}
 				continue;
 			}
@@ -1131,6 +1140,9 @@ ifinit(void)
 					continue;
 				if (ifp1->int_dstaddr == RIP_DEFAULT)
 					continue;
+				/* ignore aliases on the right network */
+				if (!strcmp(ifp->int_name, ifp1->int_name))
+					continue;
 				if (on_net(ifp->int_dstaddr,
 					   ifp1->int_net, ifp1->int_mask)
 				    || on_net(ifp1->int_dstaddr,
@@ -1171,7 +1183,7 @@ ifinit(void)
 	/* If we are multi-homed, optionally advertise a route to
 	 * our main address.
 	 */
-	if (advertise_mhome
+	if ((advertise_mhome && ifp)
 	    || (tot_interfaces > 1
 		&& mhome
 		&& (ifp = ifwithaddr(myaddr, 0, 0)) != 0

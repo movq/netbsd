@@ -1,4 +1,4 @@
-/*	$NetBSD: pbsdboot.c,v 1.3 2000/03/19 11:10:58 takemura Exp $	*/
+/*	$NetBSD: pbsdboot.c,v 1.6 2007/03/05 21:05:01 dogcow Exp $	*/
 
 /*-
  * Copyright (c) 1999 Shin Takemura.
@@ -43,28 +43,36 @@ int
 pbsdboot(TCHAR *wkernel_name, int argc, char *argv[], struct bootinfo* bi)
 {
 	int i;
-	caddr_t start, end;
-	caddr_t argbuf, p;
+	void *start, end;
+	void *argbuf, *p;
 	struct bootinfo *bibuf;
 	int fd = -1;
 
+	stat_printf(TEXT("open %s..."), wkernel_name);
 	if (CheckCancel(0) || (fd = open((char*)wkernel_name, O_RDONLY)) < 0) {
 		msg_printf(MSG_ERROR, whoami, TEXT("open failed.\n"));
+		stat_printf(TEXT("open %s...failed"), wkernel_name);
 		goto cancel;
 	}
 
+	stat_printf(TEXT("read information from %s..."), wkernel_name);
 	if (CheckCancel(0) || getinfo(fd, &start, &end) < 0) {
+		stat_printf(TEXT("read information failed"), wkernel_name);
 		goto cancel;
 	}
 
+	stat_printf(TEXT("create memory map..."));
 	if (CheckCancel(0) || vmem_init(start, end) < 0) {
+		stat_printf(TEXT("create memory map...failed"));
 		goto cancel;
 	}
 	//vmem_dump_map();
 
+	stat_printf(TEXT("prepare boot information..."));
 	if ((argbuf = vmem_alloc()) == NULL ||
 		(bibuf = (struct bootinfo*)vmem_alloc()) == NULL) {
 		msg_printf(MSG_ERROR, whoami, TEXT("can't allocate argument page\n"));
+		stat_printf(TEXT("prepare boot information...failed"));
 		goto cancel;
 	}
 
@@ -76,7 +84,9 @@ pbsdboot(TCHAR *wkernel_name, int argc, char *argv[], struct bootinfo* bi)
 		p += arglen;
 	}
 
+	stat_printf(TEXT("loading..."));
 	if (CheckCancel(0) || loadfile(fd, &start) < 0) {
+		stat_printf(TEXT("loading...failed"));
 		goto cancel;
 	}
 
@@ -85,7 +95,9 @@ pbsdboot(TCHAR *wkernel_name, int argc, char *argv[], struct bootinfo* bi)
 		goto cancel;
 	}
 
+	stat_printf(TEXT("execute kernel..."));
 	vmem_exec(start, argc, (char**)argbuf, bibuf);
+	stat_printf(TEXT("execute kernel...failed"));
 
 cancel:
 	if (0 <= fd) {

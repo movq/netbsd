@@ -1,4 +1,4 @@
-/*	$NetBSD: conv.c,v 1.6 1997/10/19 02:34:02 lukem Exp $	*/
+/*	$NetBSD: conv.c,v 1.12 2006/01/04 01:30:21 perry Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -33,12 +29,16 @@
  * SUCH DAMAGE.
  */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
 #include <sys/cdefs.h>
-#ifndef lint
+#if !defined(lint)
 #if 0
 static char sccsid[] = "@(#)conv.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: conv.c,v 1.6 1997/10/19 02:34:02 lukem Exp $");
+__RCSID("$NetBSD: conv.c,v 1.12 2006/01/04 01:30:21 perry Exp $");
 #endif
 #endif /* not lint */
 
@@ -50,11 +50,10 @@ __RCSID("$NetBSD: conv.c,v 1.6 1997/10/19 02:34:02 lukem Exp $");
 #include "hexdump.h"
 
 void
-conv_c(pr, p)
-	PR *pr;
-	u_char *p;
+conv_c(PR *pr, u_char *p)
 {
-	char buf[10], *str;
+	char buf[10];
+	char const *str;
 
 	switch(*p) {
 	case '\0':
@@ -93,16 +92,15 @@ conv_c(pr, p)
 		*pr->cchar = 'c';
 		(void)printf(pr->fmt, *p);
 	} else {
-		(void)sprintf(str = buf, "%03o", (int)*p);
+		(void)sprintf(buf, "%03o", (int)*p);
+		str = buf;
 strpr:		*pr->cchar = 's';
 		(void)printf(pr->fmt, str);
 	}
 }
 
 void
-conv_u(pr, p)
-	PR *pr;
-	u_char *p;
+conv_u(PR *pr, u_char *p)
 {
 	static const char *list[] = {
 		"nul", "soh", "stx", "etx", "eot", "enq", "ack", "bel",

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ep_pci.c,v 1.32 1999/02/19 06:57:56 thorpej Exp $	*/
+/*	$NetBSD: if_ep_pci.c,v 1.49 2008/08/27 05:33:47 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -68,14 +61,13 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "opt_inet.h"
-#include "opt_ns.h"
-#include "bpfilter.h" 
- 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_ep_pci.c,v 1.49 2008/08/27 05:33:47 christos Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/mbuf.h> 
-#include <sys/socket.h> 
+#include <sys/mbuf.h>
+#include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <sys/errno.h>
 #include <sys/syslog.h>
@@ -87,27 +79,9 @@
 #include <net/if_ether.h>
 #include <net/if_media.h>
 
-#ifdef INET
-#include <netinet/in.h>
-#include <netinet/in_systm.h>
-#include <netinet/in_var.h>
-#include <netinet/ip.h> 
-#include <netinet/if_inarp.h>
-#endif
- 
-#ifdef NS
-#include <netns/ns.h>
-#include <netns/ns_if.h>
-#endif
-  
-#if NBPFILTER > 0
-#include <net/bpf.h>
-#include <net/bpfdesc.h>
-#endif
-
-#include <machine/cpu.h>
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/cpu.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/mii/miivar.h>
 
@@ -123,14 +97,13 @@
  */
 #define PCI_CBIO		0x10    /* Configuration Base IO Address */
 
-int ep_pci_match __P((struct device *, struct cfdata *, void *));
-void ep_pci_attach __P((struct device *, struct device *, void *));
+static int	ep_pci_match(device_t , cfdata_t , void *);
+static void	ep_pci_attach(device_t , device_t , void *);
 
-struct cfattach ep_pci_ca = {
-	sizeof(struct ep_softc), ep_pci_match, ep_pci_attach
-};
+CFATTACH_DECL_NEW(ep_pci, sizeof(struct ep_softc),
+    ep_pci_match, ep_pci_attach, NULL, NULL);
 
-struct ep_pci_product {
+static struct ep_pci_product {
 	u_int32_t	epp_prodid;	/* PCI product ID */
 	u_short		epp_chipset;	/* 3Com chipset used */
 	int		epp_flags;	/* initial softc flags */
@@ -173,12 +146,8 @@ struct ep_pci_product {
 	  0,				NULL },
 };
 
-const struct ep_pci_product *ep_pci_lookup
-    __P((const struct pci_attach_args *));
-
-const struct ep_pci_product *
-ep_pci_lookup(pa)
-	const struct pci_attach_args *pa;
+static const struct ep_pci_product *
+ep_pci_lookup(const struct pci_attach_args *pa)
 {
 	struct ep_pci_product *epp;
 
@@ -192,11 +161,8 @@ ep_pci_lookup(pa)
 	return (NULL);
 }
 
-int
-ep_pci_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+static int
+ep_pci_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = (struct pci_attach_args *) aux;
 
@@ -206,21 +172,21 @@ ep_pci_match(parent, match, aux)
 	return (0);
 }
 
-void
-ep_pci_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+static void
+ep_pci_attach(device_t parent, device_t self, void *aux)
 {
-	struct ep_softc *sc = (void *)self;
+	struct ep_softc *sc = device_private(self);
 	struct pci_attach_args *pa = aux;
 	pci_chipset_tag_t pc = pa->pa_pc;
 	pci_intr_handle_t ih;
 	const struct ep_pci_product *epp;
 	const char *intrstr = NULL;
 
+	aprint_naive(": Ethernet controller\n");
+
 	if (pci_mapreg_map(pa, PCI_CBIO, PCI_MAPREG_TYPE_IO, 0,
 	    &sc->sc_iot, &sc->sc_ioh, NULL, NULL)) {
-		printf(": can't map i/o space\n");
+		aprint_error(": can't map i/o space\n");
 		return;
 	}
 
@@ -230,8 +196,9 @@ ep_pci_attach(parent, self, aux)
 		panic("ep_pci_attach: impossible");
 	}
 
-	printf(": 3Com %s\n", epp->epp_name);
+	aprint_normal(": 3Com %s\n", epp->epp_name);
 
+	sc->sc_dev = self;
 	sc->enable = NULL;
 	sc->disable = NULL;
 	sc->enabled = 1;
@@ -245,22 +212,20 @@ ep_pci_attach(parent, self, aux)
 	    PCI_COMMAND_MASTER_ENABLE);
 
 	/* Map and establish the interrupt. */
-	if (pci_intr_map(pc, pa->pa_intrtag, pa->pa_intrpin,
-	    pa->pa_intrline, &ih)) {
-		printf("%s: couldn't map interrupt\n", sc->sc_dev.dv_xname);
+	if (pci_intr_map(pa, &ih)) {
+		aprint_error_dev(sc->sc_dev, "couldn't map interrupt\n");
 		return;
 	}
 	intrstr = pci_intr_string(pc, ih);
 	sc->sc_ih = pci_intr_establish(pc, ih, IPL_NET, epintr, sc);
 	if (sc->sc_ih == NULL) {
-		printf("%s: couldn't establish interrupt",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "couldn't establish interrupt");
 		if (intrstr != NULL)
-			printf(" at %s", intrstr);
-		printf("\n");
+			aprint_normal(" at %s", intrstr);
+		aprint_normal("\n");
 		return;
 	}
-	printf("%s: interrupting at %s\n", sc->sc_dev.dv_xname, intrstr);
+	aprint_normal_dev(sc->sc_dev, "interrupting at %s\n", intrstr);
 
 	epconfig(sc, epp->epp_chipset, NULL);
 }

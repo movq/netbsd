@@ -1,4 +1,4 @@
-/*	$NetBSD: read.c,v 1.7 1999/07/21 06:38:50 cgd Exp $	*/
+/*	$NetBSD: read.c,v 1.14 2008/09/30 04:03:37 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)read.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: read.c,v 1.7 1999/07/21 06:38:50 cgd Exp $");
+__RCSID("$NetBSD: read.c,v 1.14 2008/09/30 04:03:37 dholland Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -67,9 +63,7 @@ __RCSID("$NetBSD: read.c,v 1.7 1999/07/21 06:38:50 cgd Exp $");
  * Non-zero return means than a (non-fatal) error occurred.
  */
 int
-bytes(fp, off)
-	FILE *fp;
-	off_t off;
+bytes(FILE *fp, off_t off)
 {
 	int ch, len, tlen;
 	char *ep, *p, *t;
@@ -118,7 +112,7 @@ bytes(fp, off)
 	} else {
 		if (wrap && (len = ep - p))
 			WR(p, len);
-		if ((len = p - sp) == 0)
+		if ((len = p - sp) != 0)
 			WR(sp, len);
 	}
 	return (0);
@@ -137,9 +131,7 @@ bytes(fp, off)
  * Non-zero return means than a (non-fatal) error occurred.
  */
 int
-lines(fp, off)
-	FILE *fp;
-	off_t off;
+lines(FILE *fp, off_t off)
 {
 	struct {
 		u_int blen;
@@ -149,7 +141,7 @@ lines(fp, off)
 	int ch;
 	char *p;
 	int blen, cnt, recno, wrap;
-	char *sp;
+	char *sp, *n;
 
 	p = NULL;
 	if ((lines = malloc(off * sizeof(*lines))) == NULL)
@@ -162,17 +154,20 @@ lines(fp, off)
 
 	while ((ch = getc(fp)) != EOF) {
 		if (++cnt > blen) {
-			if ((sp = realloc(sp, blen += 1024)) == NULL)
+			if ((n = realloc(sp, blen + 1024)) == NULL)
 				err(1, "%s", strerror(errno));
+			sp = n;
+			blen += 1024;
 			p = sp + cnt - 1;
 		}
 		*p++ = ch;
 		if (ch == '\n') {
 			if (lines[recno].blen < cnt) {
-				lines[recno].blen = cnt + 256;
-				if ((lines[recno].l = realloc(lines[recno].l,
-				    lines[recno].blen)) == NULL)
+				if ((n = realloc(lines[recno].l,
+				    cnt + 256)) == NULL)
 					err(1, "%s", strerror(errno));
+				lines[recno].l = n;
+				lines[recno].blen = cnt + 256;
 			}
 			memmove(lines[recno].l, sp, lines[recno].len = cnt);
 			cnt = 0;
@@ -184,6 +179,7 @@ lines(fp, off)
 		}
 	}
 	if (ferror(fp)) {
+		free(lines);
 		ierr();
 		return (1);
 	}
@@ -209,5 +205,6 @@ lines(fp, off)
 		for (cnt = 0; cnt < recno; ++cnt)
 			WR(lines[cnt].l, lines[cnt].len);
 	}
+	free(lines);
 	return (0);
 }

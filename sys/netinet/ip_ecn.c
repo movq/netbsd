@@ -1,9 +1,10 @@
-/*	$NetBSD: ip_ecn.c,v 1.8 2000/01/06 07:31:08 itojun Exp $	*/
+/*	$NetBSD: ip_ecn.c,v 1.15 2006/09/05 00:29:36 rpaulo Exp $	*/
+/*	$KAME: ip_ecn.c,v 1.11 2001/05/03 16:09:29 itojun Exp $	*/
 
 /*
  * Copyright (C) 1999 WIDE Project.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -15,7 +16,7 @@
  * 3. Neither the name of the project nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE PROJECT AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -28,12 +29,14 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * KAME Id: ip_ecn.c,v 1.2 1999/07/30 12:17:15 itojun Exp
  */
 /*
  * ECN consideration on tunnel ingress/egress operation.
  * http://www.aciri.org/floyd/papers/draft-ipsec-ecn-00.txt
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ip_ecn.c,v 1.15 2006/09/05 00:29:36 rpaulo Exp $");
 
 #include "opt_inet.h"
 
@@ -43,16 +46,10 @@
 #include <sys/mbuf.h>
 #include <sys/errno.h>
 
-#ifdef INET
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
 #include <netinet/ip.h>
-#endif
-
 #ifdef INET6
-#ifndef INET
-#include <netinet/in.h>
-#endif
 #include <netinet/ip6.h>
 #endif
 
@@ -60,23 +57,20 @@
 
 /*
  * modify outer ECN (TOS) field on ingress operation (tunnel encapsulation).
- * call it after you've done the default initialization/copy for the outer.
  */
 void
-ip_ecn_ingress(mode, outer, inner)
-	int mode;
-	u_int8_t *outer;
-	u_int8_t *inner;
+ip_ecn_ingress(int mode, u_int8_t *outer, const u_int8_t *inner)
 {
 	if (!outer || !inner)
 		panic("NULL pointer passed to ip_ecn_ingress");
 
+	*outer = *inner;
 	switch (mode) {
 	case ECN_ALLOWED:		/* ECN allowed */
-		*outer &= ~IPTOS_CE;
+		*outer &= ~IPTOS_ECN_CE;
 		break;
 	case ECN_FORBIDDEN:		/* ECN forbidden */
-		*outer &= ~(IPTOS_ECT | IPTOS_CE);
+		*outer &= ~(IPTOS_ECN_ECT0 | IPTOS_ECN_CE);
 		break;
 	case ECN_NOCARE:	/* no consideration to ECN */
 		break;
@@ -85,21 +79,17 @@ ip_ecn_ingress(mode, outer, inner)
 
 /*
  * modify inner ECN (TOS) field on egress operation (tunnel decapsulation).
- * call it after you've done the default initialization/copy for the inner.
  */
 void
-ip_ecn_egress(mode, outer, inner)
-	int mode;
-	u_int8_t *outer;
-	u_int8_t *inner;
+ip_ecn_egress(int mode, const u_int8_t *outer, u_int8_t *inner)
 {
 	if (!outer || !inner)
 		panic("NULL pointer passed to ip_ecn_egress");
 
 	switch (mode) {
 	case ECN_ALLOWED:
-		if (*outer & IPTOS_CE)
-			*inner |= IPTOS_CE;
+		if (*outer & IPTOS_ECN_CE)
+			*inner |= IPTOS_ECN_CE;
 		break;
 	case ECN_FORBIDDEN:		/* ECN forbidden */
 	case ECN_NOCARE:	/* no consideration to ECN */
@@ -109,10 +99,7 @@ ip_ecn_egress(mode, outer, inner)
 
 #ifdef INET6
 void
-ip6_ecn_ingress(mode, outer, inner)
-	int mode;
-	u_int32_t *outer;
-	u_int32_t *inner;
+ip6_ecn_ingress(int mode, u_int32_t *outer, const u_int32_t *inner)
 {
 	u_int8_t outer8, inner8;
 
@@ -127,10 +114,7 @@ ip6_ecn_ingress(mode, outer, inner)
 }
 
 void
-ip6_ecn_egress(mode, outer, inner)
-	int mode;
-	u_int32_t *outer;
-	u_int32_t *inner;
+ip6_ecn_egress(int mode, const u_int32_t *outer, u_int32_t *inner)
 {
 	u_int8_t outer8, inner8;
 

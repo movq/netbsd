@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.10 2000/02/01 05:25:34 tsutsui Exp $
+#	$NetBSD: Makefile.inc,v 1.15 2007/10/17 19:55:04 garbled Exp $
 #
 #	Configuration variables (default values are below):
 #
@@ -16,10 +16,11 @@
 
 # Default values:
 FPSPDST?=	${.OBJDIR}/lib/fpsp
+FPSPDOTDIR?= ../../.
 
-FPSPDIR=	$S/arch/m68k/fpsp
+FPSPDIR=	${S:S@^.@${FPSPDOTDIR}@:Q}/arch/m68k/fpsp
 FPSPOBJ=	${FPSPDST}/fpsp.o
-FPSP!=	printf "\#ifdef FPSP\n${FPSPOBJ}\n\#endif\n" | ${CPP} -P -undef ${CPPFLAGS:M-DFPSP}
+FPSP!= grep '^\#define	FPSP	1$$' opt_fpsp.h >/dev/null && echo ${FPSPOBJ}
 
 
 #	    CC=${CC:Q} CFLAGS=${CFLAGS:Q} \
@@ -27,9 +28,13 @@ FPSP!=	printf "\#ifdef FPSP\n${FPSPOBJ}\n\#endif\n" | ${CPP} -P -undef ${CPPFLAG
 #	    LD=${LD:Q} STRIP=${STRIP:Q} \
 
 FPSPMAKE= \
-	cd ${FPSPDIR} && MAKEOBJDIR=${FPSPDST} ${MAKE} .OBJDIR=${FPSPDST} \
-	    MACHINE=${MACHINE} MACHINE_ARCH=${MACHINE_ARCH:Q} \
-	    FPSPCPPFLAGS=${CPPFLAGS:S@^-I.@-I../../.@g:Q} \
+	cd ${FPSPDST} && ${MAKE} -f ${FPSPDIR:Q}/Makefile \
+	    FPSPDIR=${FPSPDIR:Q} \
+	    CC=${CC:Q} CFLAGS=${CFLAGS:Q} \
+	    LD=${LD:Q} STRIP=${STRIP:Q} \
+	    MACHINE=${MACHINE} \
+	    MACHINE_ARCH=${MACHINE_ARCH:Q} \
+	    FPSPCPPFLAGS=${CPPFLAGS:S@^-I.@-I${FPSPDOTDIR}@g:Q} \
 	    FPSPMISCCPPFLAGS=${FPSPMISCCPPFLAGS:Q} \
 	    FPSPDIR=${FPSPDIR:Q} \
 	    ${FPSPMISCMAKEFLAGS}

@@ -1,4 +1,4 @@
-/*	$NetBSD: checknr.c,v 1.6 1998/11/06 22:57:55 christos Exp $	*/
+/*	$NetBSD: checknr.c,v 1.20 2008/07/21 14:19:21 lukem Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)checknr.c	8.1 (Berkeley) 6/6/93";
 #else 
-__RCSID("$NetBSD: checknr.c,v 1.6 1998/11/06 22:57:55 christos Exp $");
+__RCSID("$NetBSD: checknr.c,v 1.20 2008/07/21 14:19:21 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -55,6 +51,7 @@ __RCSID("$NetBSD: checknr.c,v 1.6 1998/11/06 22:57:55 christos Exp $");
  * structured typesetting.
  */
 #include <ctype.h>
+#include <err.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -124,12 +121,25 @@ struct brstr {
 	{"(q",	")q"},
 	{"(x",	")x"},
 	{"(z",	")z"},
+	/* The -mdoc package */
+	{"Ao",  "Ac"},
+	{"Bd",  "Ed"},
+	{"Bk",  "Ek"},
+	{"Bo",  "Bc"},
+	{"Do",  "Dc"},
+	{"Fo",  "Fc"},
+	{"Oo",  "Oc"},
+	{"Po",  "Pc"},
+	{"Qo",  "Qc"},
+	{"Rs",  "Re"},
+	{"So",  "Sc"},
+	{"Xo",  "Xc"},
 	/* Things needed by preprocessors */
 	{"EQ",	"EN"},
 	{"TS",	"TE"},
 	/* Refer */
 	{"[",	"]"},
-	{0,	0},
+	{0,	0}
 };
 
 /*
@@ -137,41 +147,51 @@ struct brstr {
  * Used so we can complain about unrecognized commands.
  */
 char *knowncmds[MAXCMDS] = {
-"$c", "$f", "$h", "$p", "$s", "(b", "(c", "(d", "(f", "(l", "(q", "(t",
-"(x", "(z", ")b", ")c", ")d", ")f", ")l", ")q", ")t", ")x", ")z", "++",
-"+c", "1C", "1c", "2C", "2c", "@(", "@)", "@C", "@D", "@F", "@I", "@M",
-"@c", "@e", "@f", "@h", "@m", "@n", "@o", "@p", "@r", "@t", "@z", "AB",
-"AE", "AF", "AI", "AL", "AM", "AS", "AT", "AU", "AX", "B",  "B1", "B2",
-"BD", "BE", "BG", "BL", "BS", "BT", "BX", "C1", "C2", "CD", "CM", "CT",
-"D",  "DA", "DE", "DF", "DL", "DS", "DT", "EC", "EF", "EG", "EH", "EM",
-"EN", "EQ", "EX", "FA", "FD", "FE", "FG", "FJ", "FK", "FL", "FN", "FO",
-"FQ", "FS", "FV", "FX", "H",  "HC", "HD", "HM", "HO", "HU", "I",  "ID",
-"IE", "IH", "IM", "IP", "IX", "IZ", "KD", "KE", "KF", "KQ", "KS", "LB",
-"LC", "LD", "LE", "LG", "LI", "LP", "MC", "ME", "MF", "MH", "ML", "MR",
-"MT", "ND", "NE", "NH", "NL", "NP", "NS", "OF", "OH", "OK", "OP", "P",
-"P1", "PF", "PH", "PP", "PT", "PX", "PY", "QE", "QP", "QS", "R",  "RA",
-"RC", "RE", "RL", "RP", "RQ", "RS", "RT", "S",  "S0", "S2", "S3", "SA",
-"SG", "SH", "SK", "SM", "SP", "SY", "T&", "TA", "TB", "TC", "TD", "TE",
-"TH", "TL", "TM", "TP", "TQ", "TR", "TS", "TX", "UL", "US", "UX", "VL",
-"WC", "WH", "XA", "XD", "XE", "XF", "XK", "XP", "XS", "[",  "[-", "[0",
-"[1", "[2", "[3", "[4", "[5", "[<", "[>", "[]", "]",  "]-", "]<", "]>",
-"][", "ab", "ac", "ad", "af", "am", "ar", "as", "b",  "ba", "bc", "bd",
-"bi", "bl", "bp", "br", "bx", "c.", "c2", "cc", "ce", "cf", "ch", "cs",
-"ct", "cu", "da", "de", "di", "dl", "dn", "ds", "dt", "dw", "dy", "ec",
-"ef", "eh", "el", "em", "eo", "ep", "ev", "ex", "fc", "fi", "fl", "fo",
-"fp", "ft", "fz", "hc", "he", "hl", "hp", "ht", "hw", "hx", "hy", "i",
-"ie", "if", "ig", "in", "ip", "it", "ix", "lc", "lg", "li", "ll", "ln",
-"lo", "lp", "ls", "lt", "m1", "m2", "m3", "m4", "mc", "mk", "mo", "n1",
-"n2", "na", "ne", "nf", "nh", "nl", "nm", "nn", "np", "nr", "ns", "nx",
-"of", "oh", "os", "pa", "pc", "pi", "pl", "pm", "pn", "po", "pp", "ps",
-"q",  "r",  "rb", "rd", "re", "rm", "rn", "ro", "rr", "rs", "rt", "sb",
-"sc", "sh", "sk", "so", "sp", "ss", "st", "sv", "sz", "ta", "tc", "th",
-"ti", "tl", "tm", "tp", "tr", "u",  "uf", "uh", "ul", "vs", "wh", "xp",
-"yr", 0
+"$c", "$f", "$h", "$p", "$s", "%A", "%B", "%C", "%D", "%I", "%J", "%N",
+"%O", "%P", "%Q", "%R", "%T", "%V", "(b", "(c", "(d", "(f", "(l", "(q",
+"(t", "(x", "(z", ")b", ")c", ")d", ")f", ")l", ")q", ")t", ")x",
+")z", "++", "+c", "1C", "1c", "2C", "2c", "@(", "@)", "@C", "@D",
+"@F", "@I", "@M", "@c", "@e", "@f", "@h", "@m", "@n", "@o", "@p",
+"@r", "@t", "@z", "AB", "AE", "AF", "AI", "AL", "AM", "AS", "AT",
+"AU", "AX", "Ac", "Ad", "An", "Ao", "Ap", "Aq", "Ar", "At", "B" ,  "B1",
+"B2", "BD", "BE", "BG", "BL", "BS", "BT", "BX", "Bc", "Bd", "Bf",
+"Bk", "Bl", "Bo", "Bq", "Bsx", "Bx", "C1", "C2", "CD", "CM", "CT",
+"Cd", "Cm", "D" , "D1", "DA", "DE", "DF", "DL", "DS", "DT", "Db", "Dc",
+"Dd", "Dl", "Do", "Dq", "Dt", "Dv", "EC", "EF", "EG", "EH", "EM",
+"EN", "EQ", "EX", "Ec", "Ed", "Ef", "Ek", "El", "Em", "Eo", "Er",
+"Ev", "FA", "FD", "FE", "FG", "FJ", "FK", "FL", "FN", "FO", "FQ",
+"FS", "FV", "FX", "Fa", "Fc", "Fd", "Fl", "Fn", "Fo", "Ft", "Fx",
+"H" , "HC", "HD", "HM", "HO", "HU", "I" , "ID", "IE", "IH", "IM",
+"IP", "IX", "IZ", "Ic", "In", "It", "KD", "KE", "KF", "KQ", "KS", "LB",
+"LC", "LD", "LE", "LG", "LI", "LP", "Lb", "Li", "MC", "ME", "MF",
+"MH", "ML", "MR", "MT", "ND", "NE", "NH", "NL", "NP", "NS", "Nd",
+"Nm", "No", "Ns", "Nx", "OF", "OH", "OK", "OP", "Oc", "Oo", "Op",
+"Os", "Ot", "Ox", "P" , "P1", "PF", "PH", "PP", "PT", "PX", "PY",
+"Pa", "Pc", "Pf", "Po", "Pp", "Pq", "QE", "QP", "QS", "Qc", "Ql",
+"Qo", "Qq", "R" , "RA", "RC", "RE", "RL", "RP", "RQ", "RS", "RT",
+"Re", "Rs", "S" , "S0", "S2", "S3", "SA", "SG", "SH", "SK", "SM",
+"SP", "SY", "Sc", "Sh", "Sm", "So", "Sq", "Ss", "St", "Sx", "Sy",
+"T&", "TA", "TB", "TC", "TD", "TE", "TH", "TL", "TM", "TP", "TQ",
+"TR", "TS", "TX", "Tn", "UL", "US", "UX", "Ud", "Ux", "VL", "Va", "Vt",
+"WC", "WH", "XA", "XD", "XE", "XF", "XK", "XP", "XS", "Xc", "Xo",
+"Xr", "[" , "[-", "[0", "[1", "[2", "[3", "[4", "[5", "[<", "[>",
+"[]", "\\{", "\\}", "]" , "]-", "]<", "]>", "][", "ab", "ac", "ad", "af", "am",
+"ar", "as", "b" , "ba", "bc", "bd", "bi", "bl", "bp", "br", "bx",
+"c.", "c2", "cc", "ce", "cf", "ch", "cs", "ct", "cu", "da", "de",
+"di", "dl", "dn", "ds", "dt", "dw", "dy", "ec", "ef", "eh", "el",
+"em", "eo", "ep", "ev", "ex", "fc", "fi", "fl", "fo", "fp", "ft",
+"fz", "hc", "he", "hl", "hp", "ht", "hw", "hx", "hy", "i" , "ie",
+"if", "ig", "in", "ip", "it", "ix", "lc", "lg", "li", "ll", "ln",
+"lo", "lp", "ls", "lt", "m1", "m2", "m3", "m4", "mc", "mk", "mo",
+"n1", "n2", "na", "ne", "nf", "nh", "nl", "nm", "nn", "np", "nr",
+"ns", "nx", "of", "oh", "os", "pa", "pc", "pi", "pl", "pm", "pn",
+"po", "pp", "ps", "q" , "r" , "rb", "rd", "re", "rm", "rn", "ro",
+"rr", "rs", "rt", "sb", "sc", "sh", "sk", "so", "sp", "ss", "st",
+"sv", "sz", "ta", "tc", "th", "ti", "tl", "tm", "tp", "tr", "u",
+"uf", "uh", "ul", "vs", "wh", "xp", "yr", 0
 };
 
 int	lineno;		/* current line number in input file */
-char	line[256];	/* the current line */
 char	*cfilename;	/* name of current file */
 int	nfiles;		/* number of files to process */
 int	fflag;		/* -f: ignore \f */
@@ -179,24 +199,22 @@ int	sflag;		/* -s: ignore \s */
 int	ncmds;		/* size of knowncmds */
 int	slot;		/* slot in knowncmds found by binsrch */
 
-void	addcmd __P((char *));
-void	addmac __P((char *));
-int	binsrch __P((char *));
-void	checkknown __P((char *));
-void	chkcmd __P((char *, char *));
-void	complain __P((int));
-int	eq __P((const void *, const void *));
-int	main __P((int, char **));
-void	nomatch __P((char *));
-void	pe __P((int));
-void	process __P((FILE *));
-void	prop __P((int));
-void	usage __P((void));
+void	addcmd(char *);
+void	addmac(char *);
+int	binsrch(char *);
+void	checkknown(char *);
+void	chkcmd(char *, char *);
+void	complain(int);
+int	eq(const void *, const void *);
+int	main(int, char **);
+void	nomatch(char *);
+void	pe(int);
+void	process(FILE *);
+void	prop(int);
+void	usage(void);
 
 int
-main(argc, argv)
-	int argc;
-	char **argv;
+main(int argc, char **argv)
 {
 	FILE *f;
 	int i;
@@ -218,10 +236,14 @@ main(argc, argv)
 			for (i=0; br[i].opbr; i++)
 				;
 			for (cp=argv[1]+3; cp[-1]; cp += 6) {
-				br[i].opbr = malloc(3);
-				strncpy(br[i].opbr, cp, 2);
-				br[i].clbr = malloc(3);
-				strncpy(br[i].clbr, cp+3, 2);
+				if (i >= MAXBR)
+					errx(1, "too many pairs");
+				if ((br[i].opbr = malloc(3)) == NULL)
+					err(1, "malloc");
+				strlcpy(br[i].opbr, cp, 3);
+				if ((br[i].clbr = malloc(3)) == NULL)
+					err(1, "malloc");
+				strlcpy(br[i].clbr, cp+3, 3);
 				addmac(br[i].opbr);	/* knows pairs are also known cmds */
 				addmac(br[i].clbr);
 				i++;
@@ -264,8 +286,10 @@ main(argc, argv)
 			f = fopen(cfilename, "r");
 			if (f == NULL)
 				perror(cfilename);
-			else
+			else {
 				process(f);
+				fclose(f);
+			}
 		}
 	} else {
 		cfilename = "stdin";
@@ -275,17 +299,19 @@ main(argc, argv)
 }
 
 void
-usage()
+usage(void)
 {
-	printf("Usage: checknr -s -f -a.xx.yy.xx.yy... -c.xx.xx.xx...\n");
+	(void)fprintf(stderr,
+	    "usage: %s [-fs] [-a.xx.yy.xx.yy...] [-c.xx.xx.xx...] file\n",
+	    getprogname());
 	exit(1);
 }
 
 void
-process(f)
-	FILE *f;
+process(FILE *f)
 {
 	int i, n;
+	char line[256];	/* the current line */
 	char mac[5];	/* The current macro or nroff command */
 	int pl;
 
@@ -339,7 +365,8 @@ process(f)
 						n = 10 * n + line[i] - '0';
 					i--;
 					if (n == 0) {
-						if (stk[stktop].opno == SZ) {
+						if (stktop >= 0 && 
+						    stk[stktop].opno == SZ) {
 							stktop--;
 						} else {
 							pe(lineno);
@@ -354,7 +381,8 @@ process(f)
 				} else if (!fflag && line[i]=='f') {
 					n = line[++i];
 					if (n == 'P') {
-						if (stk[stktop].opno == FT) {
+						if (stktop >= 0 && 
+						    stk[stktop].opno == FT) {
 							stktop--;
 						} else {
 							pe(lineno);
@@ -379,8 +407,7 @@ process(f)
 }
 
 void
-complain(i)
-	int i;
+complain(int i)
 {
 	pe(stk[i].lno);
 	printf("Unmatched ");
@@ -389,8 +416,7 @@ complain(i)
 }
 
 void
-prop(i)
-	int i;
+prop(int i)
 {
 	if (stk[i].pl == 0)
 		printf(".%s", br[stk[i].opno].opbr);
@@ -409,9 +435,7 @@ prop(i)
 }
 
 void
-chkcmd(line, mac)
-	char *line;
-	char *mac;
+chkcmd(char *line, char *mac)
 {
 	int i;
 
@@ -447,8 +471,7 @@ chkcmd(line, mac)
 }
 
 void
-nomatch(mac)
-	char *mac;
+nomatch(char *mac)
 {
 	int i, j;
 
@@ -493,25 +516,22 @@ nomatch(mac)
 
 /* eq: are two strings equal? */
 int
-eq(s1, s2)
-	const void *s1, *s2;
+eq(const void *s1, const void *s2)
 {
 	return (strcmp((char *)s1, (char *)s2) == 0);
 }
 
 /* print the first part of an error message, given the line number */
 void
-pe(lineno)
-	int lineno;
+pe(int pelineno)
 {
 	if (nfiles > 1)
 		printf("%s: ", cfilename);
-	printf("%d: ", lineno);
+	printf("%d: ", pelineno);
 }
 
 void
-checkknown(mac)
-	char *mac;
+checkknown(char *mac)
 {
 
 	if (eq(mac, "."))
@@ -529,8 +549,7 @@ checkknown(mac)
  * We have a .de xx line in "line".  Add xx to the list of known commands.
  */
 void
-addcmd(line)
-	char *line;
+addcmd(char *line)
 {
 	char *mac;
 
@@ -561,31 +580,32 @@ addcmd(line)
  * nroff programs, and the register loop below is pretty fast.
  */
 void
-addmac(mac)
-	char *mac;
+addmac(char *mac)
 {
 	char **src, **dest, **loc;
 
 	if (binsrch(mac) >= 0){	/* it's OK to redefine something */
 #ifdef DEBUG
 		printf("binsrch(%s) -> already in table\n", mac);
-#endif DEBUG
+#endif /* DEBUG */
 		return;
 	}
 	/* binsrch sets slot as a side effect */
 #ifdef DEBUG
-printf("binsrch(%s) -> %d\n", mac, slot);
+	printf("binsrch(%s) -> %d\n", mac, slot);
 #endif
 	loc = &knowncmds[slot];
 	src = &knowncmds[ncmds-1];
 	dest = src+1;
 	while (dest > loc)
 		*dest-- = *src--;
-	*loc = malloc(3);
-	strcpy(*loc, mac);
+	if ((*loc = strdup(mac)) == NULL)
+		err(1, "strdup");
 	ncmds++;
 #ifdef DEBUG
-printf("after: %s %s %s %s %s, %d cmds\n", knowncmds[slot-2], knowncmds[slot-1], knowncmds[slot], knowncmds[slot+1], knowncmds[slot+2], ncmds);
+	printf("after: %s %s %s %s %s, %d cmds\n", knowncmds[slot-2],
+	    knowncmds[slot-1], knowncmds[slot], knowncmds[slot+1],
+	    knowncmds[slot+2], ncmds);
 #endif
 }
 
@@ -594,8 +614,7 @@ printf("after: %s %s %s %s %s, %d cmds\n", knowncmds[slot-2], knowncmds[slot-1],
  * If found, return the index.  If not, return -1.
  */
 int
-binsrch(mac)
-	char *mac;
+binsrch(char *mac)
 {
 	char *p;	/* pointer to current cmd in list */
 	int d;		/* difference if any */

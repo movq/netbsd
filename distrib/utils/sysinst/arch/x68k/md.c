@@ -1,4 +1,4 @@
-/*	$NetBSD: md.c,v 1.5 1999/11/27 14:03:22 minoura Exp $ */
+/*	$NetBSD: md.c,v 1.36 2008/10/07 09:58:16 abs Exp $ */
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -50,7 +50,6 @@
 #include "md.h"
 #include "msg_defs.h"
 #include "menu_defs.h"
-#include "bsddisklabel.c"
 
 #ifdef notyet
 #undef NDOSPART 8
@@ -66,35 +65,32 @@ int md_nfreepart;
 int md_need_newdisk = 0;
 
 /* prototypes */
-static int md_newdisk __P((void));
-#define COPYRIGHT "NetBSD/x68k SCSI primary boot. "		\
-		  "(C) 1999 by The NetBSD Foundation, Inc. "	\
-		  "Written by sysinst."
+static int md_newdisk (void);
 
 int
 md_get_info(void)
 {
 	char buf[1024];
 	int fd;
-	char devname[100];
+	char dev_name[100];
 	struct disklabel disklabel;
 
-	snprintf(devname, 100, "/dev/r%sc", diskdev);
+	snprintf(dev_name, 100, "/dev/r%sc", diskdev);
 
-	fd = open(devname, O_RDONLY, 0);
+	fd = open(dev_name, O_RDONLY, 0);
 	if (fd < 0) {
 		if (logging)
-			(void)fprintf(log, "Can't open %s\n", devname);
+			(void)fprintf(logfp, "Can't open %s\n", dev_name);
 		endwin();
-		fprintf(stderr, "Can't open %s\n", devname);
+		fprintf(stderr, "Can't open %s\n", dev_name);
 		exit(1);
 	}
 	if (ioctl(fd, DIOCGDINFO, &disklabel) == -1) {
 		if (logging)
-			(void)fprintf(log, "Can't read disklabel on %s.\n",
-				devname);
+			(void)fprintf(logfp, "Can't read disklabel on %s.\n",
+				dev_name);
 		endwin();
-		fprintf(stderr, "Can't read disklabel on %s.\n", devname);
+		fprintf(stderr, "Can't read disklabel on %s.\n", dev_name);
 		close(fd);
 		exit(1);
 	}
@@ -114,7 +110,7 @@ md_get_info(void)
 
 	if (read(fd, buf, 1024) < 0) {
 		endwin();
-		fprintf(stderr, "Can't read %s\n", devname);
+		fprintf(stderr, "Can't read %s\n", dev_name);
 		close(fd);
 		exit(1);
 	}
@@ -124,7 +120,7 @@ md_get_info(void)
 	else
 		if (read(fd, md_disklabel, sizeof(md_disklabel)) < 0) {
 			endwin();
-			fprintf(stderr, "Can't read %s\n", devname);
+			fprintf(stderr, "Can't read %s\n", dev_name);
 			close(fd);
 			exit(1);
 		}
@@ -136,111 +132,8 @@ md_get_info(void)
 
 	close(fd);
 
-	/* Compute minimum NetBSD partition sizes (in sectors). */
-	minfsdmb = STDNEEDMB * (MEG / sectorsize);
-
 	return 1;
 }
-
-#ifndef DEBUG
-static int
-md_newdisk(void)
-{
-	int mbootfd;
-	char devname[100];
-	int fd;
-	char buf[1024];
-	size_t size = dlsize + 64;
-
-	snprintf(devname, 100, "/dev/r%sc", diskdev);
-	fd = open(devname, O_WRONLY);
-	if (fd < 0) {
-		endwin();
-		fprintf(stderr, "Can't open %s\n", devname);
-		exit(1);
-	}
-
-	msg_display(MSG_newdisk, diskdev, diskdev);
-
-	/* Write disk mark */
-	memset(buf, 0, 1024);
-	sprintf(buf, "X68SCSI1%c%c%c%c%c%c%c%c%s",
-		2, 0,
-		(size>>24)&0xff, (size>>16)&0xff, (size>>8)&0xff, size&0xff,
-		1, 0, COPYRIGHT);
-	lseek(fd, 0, SEEK_SET);
-	if (write(fd, buf, 1024) < 0) {
-		endwin();
-		close(fd);
-		fprintf(stderr, "Can't write mark on %s\n", devname);
-		exit(1);
-	}
-
-	/* Write primary boot */
-	memset(buf, 0, 1024);
-	mbootfd = open("/usr/mdec/mboot", O_RDONLY);
-	if (mbootfd < 0) {
-		endwin();
-		close(fd);
-		fprintf(stderr, "Can't read mboot.\n");
-		exit(1);
-	}
-	if (read(mbootfd, buf, 1024) < 0) {
-		endwin();
-		close(fd);
-		close(mbootfd);
-		fprintf(stderr, "Can't read mboot.\n");
-		exit(1);
-	}
-	close(mbootfd);
-	if (write(fd, buf, 1024) != 1024) {
-		endwin();
-		close(fd);
-		fprintf(stderr, "Can't write mboot.\n");
-		exit(1);
-	}
-
-	/* Create empty partition map */
-#ifdef notyet
-	memset(&md_disklabel, 0, sizeof(md_disklabel));
-	sprintf((char*) md_disklabel, "X68K%c%c%c%c%c%c%c%c%c%c%c%c",
-		0, 0, 0, 32,
-		(size>>24)&0xff, (size>>16)&0xff, (size>>8)&0xff, size&0xff,
-		(size>>24)&0xff, (size>>16)&0xff, (size>>8)&0xff, size&0xff);
-	if (write(fd, md_disklabel, 1024) < 0) {
-		endwin();
-		close(fd);
-		fprintf(stderr, "Can't create partition table.\n");
-		exit(1);
-	}
-#else
-	memset(buf, 0, 1024);
-	sprintf(buf, "X68K%c%c%c%c%c%c%c%c%c%c%c%c",
-		0, 0, 0, 32,
-		(size>>24)&0xff, (size>>16)&0xff, (size>>8)&0xff, size&0xff,
-		(size>>24)&0xff, (size>>16)&0xff, (size>>8)&0xff, size&0xff);
-	if (write(fd, buf, 1024) < 0) {
-		endwin();
-		close(fd);
-		fprintf(stderr, "Can't create partition table.\n");
-		exit(1);
-	}
-#endif
-
-	close (fd);
-
-	return 0;
-}
-#else
-static int
-md_newdisk(fd, size, buf)
-	int fd;
-	size_t size;
-	char *buf;
-{
-	return 0;
-}
-#endif
 
 #ifdef notyet
 static int
@@ -300,6 +193,15 @@ md_check_partitions(void)
 }
 #endif
 
+static int
+md_newdisk(void)
+{
+	msg_display(MSG_newdisk, diskdev, diskdev);
+
+	return run_program(RUN_FATAL|RUN_DISPLAY,
+	    "/usr/mdec/newdisk -v %s", diskdev);
+}
+
 /*
  * hook called before writing new disklabel.
  */
@@ -317,6 +219,9 @@ md_pre_disklabel(void)
 int
 md_post_disklabel(void)
 {
+	if (get_ramsize() < 6)
+		set_swap(diskdev, bsdlabel);
+
 	return 0;
 }
 
@@ -334,9 +239,13 @@ md_post_newfs(void)
 {
 	/* boot blocks ... */
 	msg_display(MSG_dobootblks, diskdev);
-	return run_prog(0, 1, NULL,
-	    "/usr/mdec/installboot -v /usr/mdec/sdboot /dev/r%sa",
-	    diskdev);
+	cp_to_target("/usr/mdec/boot", "/boot");
+	if (run_program(RUN_DISPLAY | RUN_NO_CLEAR,
+	    "/usr/mdec/installboot.new /usr/mdec/sdboot_ufs /dev/r%sa",
+	    diskdev))
+		process_menu(MENU_ok,
+			deconst("Warning: disk is probably not bootable"));
+	return 0;
 }
 
 /*
@@ -364,23 +273,23 @@ int
 md_check_partitions(void)
 {
 	/* X68k partitions must be in order of the range. */
-	int part, start = 0, last = A-1;
+	int part, start = 0, last = PART_A-1;
 
-	for (part = A; part < 8; part++) {
-		if (part == C)
+	for (part = PART_A; part < 8; part++) {
+		if (part == PART_C)
 			continue;
-		if (last >= A && bsdlabel[part].pi_size > 0) {
+		if (last >= PART_A && bsdlabel[part].pi_size > 0) {
 			msg_display(MSG_emptypart, part+'a');
-			process_menu(MENU_ok);
+			process_menu(MENU_ok, NULL);
 			return 0;
 		}
 		if (bsdlabel[part].pi_size == 0) {
-			if (last < A)
+			if (last < PART_A)
 				last = part;
 		} else {
 			if (start >= bsdlabel[part].pi_offset) {
 				msg_display(MSG_ordering, part+'a');
-				process_menu(MENU_yesno);
+				process_menu(MENU_yesno, NULL);
 				if (yesno)
 					return 0;
 			}
@@ -398,7 +307,8 @@ md_update(void)
 	endwin();
 	md_copy_filesystem();
 	md_post_newfs();
-	puts(CL);		/* XXX */
+	wrefresh(curscr);
+	wmove(stdscr, 0, 0);
 	wclear(stdscr);
 	wrefresh(stdscr);
 	return 1;
@@ -407,24 +317,33 @@ md_update(void)
 void
 md_cleanup_install(void)
 {
-	char realfrom[STRSIZE];
-	char realto[STRSIZE];
-	char sedcmd[STRSIZE];
+  
+#ifdef notyet			/* sed is too large for ramdisk */
+	enable_rc_conf();
+#endif
+}
 
-	strncpy(realfrom, target_expand("/etc/rc.conf"), STRSIZE);
-	strncpy(realto, target_expand("/etc/rc.conf.install"), STRSIZE);
+int
+md_pre_update()
+{
+	if (get_ramsize() < 6)
+		set_swap(diskdev, NULL);
+	return 1;
+}
 
-	sprintf(sedcmd, "sed 's/rc_configured=NO/rc_configured=YES/' < %s > %s",
-	    realfrom, realto);
-	if (logging)
-		(void)fprintf(log, "%s\n", sedcmd);
-	if (scripting)
-		(void)fprintf(script, "%s\n", sedcmd);
-	do_system(sedcmd);
+void
+md_init()
+{
+}
 
-	run_prog(1, 0, NULL, "mv -f %s %s", realto, realfrom);
+void
+md_init_set_status(int minimal)
+{
+	(void)minimal;
+}
 
-	run_prog(0, 0, NULL, "rm -f %s", target_expand("/sysinst"));
-	run_prog(0, 0, NULL, "rm -f %s", target_expand("/.termcap"));
-	run_prog(0, 0, NULL, "rm -f %s", target_expand("/.profile"));
+int
+md_post_extract(void)
+{
+	return 0;
 }

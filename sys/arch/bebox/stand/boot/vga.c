@@ -1,4 +1,4 @@
-/*	$NetBSD: vga.c,v 1.3 1999/06/28 01:20:45 sakamoto Exp $	*/
+/*	$NetBSD: vga.c,v 1.8 2008/05/26 16:28:39 kiyohara Exp $	*/
 
 /*-
  * Copyright (C) 1995-1997 Gary Thomas (gdt@linuxppc.org)
@@ -33,7 +33,7 @@
  */
 
 #ifdef CONS_VGA
-#include <stand.h>
+#include <lib/libsa/stand.h>
 #include "boot.h"
 
 #define	COL		80
@@ -44,13 +44,12 @@
 #define CGA_BASE	0x3D4
 #define CGA_BUF		0xB8000
 
-u_char background = 0;  /* Black */
-u_char foreground = 7;  /* White */
+static u_char background = 0;  /* Black */
+static u_char foreground = 7;  /* White */
 
 u_int addr_6845;
 u_short *Crtat;
 int lastpos;
-int scroll;
 
 /*
  * The current state of virtual displays
@@ -86,8 +85,14 @@ struct screen {
 u_short	pccolor;		/* color/attributes for tty output */
 u_short	pccolor_so;		/* color/attributes, standout mode */
 
+static void cursor(void);
+static void initscreen(void);
+void fillw(u_short, u_short *, int);
+void video_on(void);
+void video_off(void);
+
 /*
- * cursor() sets an offset (0-1999) into the 80x25 text area   
+ * cursor() sets an offset (0-1999) into the 80x25 text area
  */
 static void
 cursor()
@@ -124,10 +129,7 @@ initscreen()
 }
 
 void
-fillw(val, buf, num)
-	u_short val;
-	u_short *buf;
-	int num;
+fillw(u_short val, u_short *buf, int num)
 {
 	/* Need to byte swap value */
 	u_short tmp;
@@ -144,7 +146,7 @@ fillw(val, buf, num)
  * "ca" is the color/attributes value (left-shifted by 8)
  * or 0 if the current regular color for that screen is to be used.
  */
-void 
+void
 vga_putc(int c)
 {
 	struct screen *d = &screen;
@@ -191,9 +193,9 @@ vga_putc(int c)
 
 		default:
 			if (d->so) {
-				wrtchar(d->color_so|(c<<8), d); 
+				wrtchar(d->color_so|(c<<8), d);
 			} else {
-				wrtchar(d->color | (c<<8), d); 
+				wrtchar(d->color | (c<<8), d);
 			}
 			if (d->row >= COL)
 				d->row = 0;
@@ -279,16 +281,17 @@ vga_putc(int c)
 		case 'L':	/* Insert line */
 			i = (d->cp - base) / COL;
 			/* avoid deficiency of bcopy implementation */
+			/* XXX: comment and hack relevant? */
 			pp = base + COL * (ROW-2);
 			for (j = ROW - 1 - i; j--; pp -= COL)
-				bcopy(pp, pp + COL, COL * CHR);
+				memmove(pp + COL, pp, COL * CHR);
 			fillw(d->color|(' '<<8), base + i * COL, COL);
 			break;
 
 		case 'M':	/* Delete line */
 			i = (d->cp - base) / COL;
 			pp = base + i * COL;
-			bcopy(pp + COL, pp, (ROW-1 - i)*COL*CHR);
+			memmove(pp, pp + COL, (ROW-1 - i)*COL*CHR);
 			fillw(d->color|(' '<<8), base + COL * (ROW - 1), COL);
 			break;
 
@@ -381,10 +384,10 @@ vga_putc(int c)
 		break;
 	}
 	if (d->cp >= base + (COL * ROW)) { /* scroll check */
-		bcopy(base + COL, base, COL * (ROW - 1) * CHR);
+		memmove(base, base + COL, COL * (ROW - 1) * CHR);
 		fillw(d->color|(' '<<8), base + COL * (ROW - 1), COL);
 		d->cp -= COL;
-	}	
+	}
 	cursor();
 }
 

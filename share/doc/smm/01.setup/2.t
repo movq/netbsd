@@ -1,4 +1,4 @@
-.\"	$NetBSD: 2.t,v 1.2 1998/01/09 06:55:20 perry Exp $
+.\"	$NetBSD: 2.t,v 1.4 2004/02/13 11:36:08 wiz Exp $
 .\"
 .\" Copyright (c) 1988, 1993 The Regents of the University of California.
 .\" All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -438,7 +434,7 @@ is present.
 The \*(lqroot device?\*(rq prompt was printed by the system
 to ask you for the name of the root filesystem to use.
 This happens because the distribution system is a \fIgeneric\fP
-system, i.e., it can be bootstrapped on a cpu with its root device
+system, i.e., it can be bootstrapped on a CPU with its root device
 and paging area on any available disk drive.
 You will most likely respond to the root device question with ``sd0''
 if you are booting from a SCSI disk,

@@ -1,4 +1,4 @@
-/*	$NetBSD: proc.h,v 1.10 2000/03/28 02:58:46 simonb Exp $	*/
+/*	$NetBSD: proc.h,v 1.21 2007/11/16 07:36:11 skrll Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -40,15 +36,27 @@
 
 #ifndef _MIPS_PROC_H_
 #define _MIPS_PROC_H_
+
+#include <sys/param.h>
+
+struct lwp;
+
 /*
- * Machine-dependent part of the proc structure for MIPS
+ * Machine-dependent part of the lwp structure for MIPS
  */
-struct mdproc {
-	void *md_regs;		/* registers on current frame */
+
+struct mdlwp {
+	void	*md_regs;		/* registers on current frame */
 	int	md_flags;		/* machine-dependent flags */
 	int	md_upte[UPAGES];	/* ptes for mapping u page */
-	int	md_ss_addr;		/* single step address for ptrace */
+	vaddr_t	md_ss_addr;		/* single step address for ptrace */
 	int	md_ss_instr;		/* single step instruction for ptrace */
+	volatile int md_astpending;	/* AST pending on return to userland */
+};
+
+struct mdproc {
+					/* syscall entry for this process */
+	void	(*md_syscall)(struct lwp *, u_int, u_int, u_int);
 };
 
 /* md_flags */
@@ -59,11 +67,13 @@ struct mdproc {
  */
 struct frame {
 	mips_reg_t f_regs[38];
+	u_int32_t f_ppl;	/* previous priority level */
+	int32_t f_pad;		/* for 8 byte aligned */
 };
 
 #ifdef _KERNEL
 /* kernel single-step emulation */
-int mips_singlestep __P((struct proc *p));
+int mips_singlestep(struct lwp *l);
 #endif /* _KERNEL */
 
 #endif /* _MIPS_PROC_H_ */

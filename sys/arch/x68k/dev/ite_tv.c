@@ -1,4 +1,4 @@
-/*	$NetBSD: ite_tv.c,v 1.7 1999/06/27 14:14:30 minoura Exp $	*/
+/*	$NetBSD: ite_tv.c,v 1.15 2007/03/11 06:01:05 isaki Exp $	*/
 
 /*
  * Copyright (c) 1997 Masaru Oki.
@@ -29,6 +29,9 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ite_tv.c,v 1.15 2007/03/11 06:01:05 isaki Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -69,7 +72,7 @@
 u_int  tv_top;
 u_char *tv_row[PLANELINES];
 char   *tv_font[256];
-__volatile char *tv_kfont[0x7f];
+volatile char *tv_kfont[0x7f];
 
 u_char kern_font[256 * FONTHEIGHT];
 
@@ -77,25 +80,22 @@ u_char kern_font[256 * FONTHEIGHT];
 #define ROWOFFSET(y) ((y) * FONTHEIGHT * ROWBYTES)
 #define CHADDR(y, x) (tv_row[PHYSLINE(y)] + (x))
 
-#define SETGLYPH(to,from) bcopy(&kern_font[(to)*16], &kern_font[(from)*16],16)
+#define SETGLYPH(to,from) memcpy(&kern_font[(from)*16],&kern_font[(to)*16], 16)
 #define KFONTBASE(left)   ((left) * 32 * 0x5e - 0x21 * 32)
 
 /* prototype */
-void tv_init	__P((struct ite_softc *));
-void tv_deinit	__P((struct ite_softc *));
-void tv_putc	__P((struct ite_softc *, int, int, int, int));
-void tv_cursor	__P((struct ite_softc *, int));
-void tv_clear	__P((struct ite_softc *, int, int, int, int));
-void tv_scroll	__P((struct ite_softc *, int, int, int, int));
+void tv_init(struct ite_softc *);
+void tv_deinit(struct ite_softc *);
+void tv_putc(struct ite_softc *, int, int, int, int);
+void tv_cursor(struct ite_softc *, int);
+void tv_clear(struct ite_softc *, int, int, int, int);
+void tv_scroll(struct ite_softc *, int, int, int, int);
 
-__inline static int expbits __P((int));
-__inline static void txrascpy __P((u_char, u_char, short, signed short));
+inline static int expbits(int);
+inline static void txrascpy(u_char, u_char, short, signed short);
 
-static __inline void
-txrascpy (src, dst, size, mode)
-	u_char src, dst;
-	short size;
-	signed short mode;
+static inline void
+txrascpy(u_char src, u_char dst, short size, short mode)
 {
 	/*int s;*/
 	u_short saved_r21 = CRTC.r21;
@@ -137,30 +137,38 @@ txrascpy (src, dst, size, mode)
 }
 
 /*
- * Initialize
+ * Change glyphs from SRAM switch.
  */
 void
-tv_init(ip)
-	struct ite_softc *ip;
+ite_set_glyph(void)
 {
-	short i;
 	u_char glyph = IODEVbase->io_sram[0x59];
-
-	/*
-	 * initialize private variables
-	 */
-	tv_top = 0;
-	for (i = 0; i < PLANELINES; i++)
-		tv_row[i] = (void *)&IODEVbase->tvram[ROWOFFSET(i)];
-	/* shadow ANK font */
-	bcopy((void *)&IODEVbase->cgrom0_8x16, kern_font, 256 * FONTHEIGHT);
-	/* glyph */
+	
 	if (glyph & 4)
 		SETGLYPH(0x82, '|');
 	if (glyph & 2)
 		SETGLYPH(0x81, '~');
 	if (glyph & 1)
 		SETGLYPH(0x80, '\\');
+}
+
+/*
+ * Initialize
+ */
+void
+tv_init(struct ite_softc *ip)
+{
+	short i;
+
+	/*
+	 * initialize private variables
+	 */
+	tv_top = 0;
+	for (i = 0; i < PLANELINES; i++)
+		tv_row[i] = (void *)__UNVOLATILE(&IODEVbase->tvram[ROWOFFSET(i)]);
+	/* shadow ANK font */
+	memcpy(kern_font, (void *)&IODEVbase->cgrom0_8x16, 256 * FONTHEIGHT);
+	ite_set_glyph();
 	/* set font address cache */
 	for (i = 0; i < 256; i++)
 		tv_font[i] = &kern_font[i * FONTHEIGHT];
@@ -202,13 +210,12 @@ tv_init(ip)
  * Deinitialize
  */
 void
-tv_deinit(ip)
-	struct ite_softc *ip;
+tv_deinit(struct ite_softc *ip)
 {
 	ip->flags &= ~ITE_INITED; /* XXX? */
 }
 
-typedef void tv_putcfunc __P((struct ite_softc *, int, char *));
+typedef void tv_putcfunc(struct ite_softc *, int, char *);
 static tv_putcfunc tv_putc_nm;
 static tv_putcfunc tv_putc_in;
 static tv_putcfunc tv_putc_ul;
@@ -242,9 +249,7 @@ static tv_putcfunc *putc_func[ATTR_ALL + 1] = {
  * simple put character function
  */
 void
-tv_putc(ip, ch, y, x, mode)
-	struct ite_softc *ip;
-	int ch, y, x, mode;
+tv_putc(struct ite_softc *ip, int ch, int y, int x, int mode)
 {
 	char *p = CHADDR(y, x);
 	short fh;
@@ -270,20 +275,17 @@ tv_putc(ip, ch, y, x, mode)
 }
 
 void
-tv_putc_nm(ip, ch, p)
-	struct ite_softc *ip;
-	int ch;
-	char *p;
+tv_putc_nm(struct ite_softc *ip, int ch, char *p)
 {
 	short fh, hi;
 	char *f;
-	short *kf;
+	volatile short *kf;
 
 	hi = ip->save_char & 0x7f;
 
 	if (hi >= 0x21 && hi <= 0x7e) {
 		/* multibyte character */
-		kf = (short *)tv_kfont[hi];
+		kf = (volatile short *)tv_kfont[hi];
 		kf += (ch & 0x7f) * FONTHEIGHT;
 		/* draw plane */
 		for (fh = 0; fh < FONTHEIGHT; fh++, p += ROWBYTES)
@@ -302,20 +304,17 @@ tv_putc_nm(ip, ch, p)
 }
 
 void
-tv_putc_in(ip, ch, p)
-	struct ite_softc *ip;
-	int ch;
-	char *p;
+tv_putc_in(struct ite_softc *ip, int ch, char *p)
 {
 	short fh, hi;
 	char *f;
-	short *kf;
+	volatile short *kf;
 
 	hi = ip->save_char & 0x7f;
 
 	if (hi >= 0x21 && hi <= 0x7e) {
 		/* multibyte character */
-		kf = (short *)tv_kfont[hi];
+		kf = (volatile short *)tv_kfont[hi];
 		kf += (ch & 0x7f) * FONTHEIGHT;
 		/* draw plane */
 		for (fh = 0; fh < FONTHEIGHT; fh++, p += ROWBYTES)
@@ -334,20 +333,17 @@ tv_putc_in(ip, ch, p)
 }
 
 void
-tv_putc_bd(ip, ch, p)
-	struct ite_softc *ip;
-	int ch;
-	char *p;
+tv_putc_bd(struct ite_softc *ip, int ch, char *p)
 {
 	short fh, hi;
 	char *f;
-	short *kf;
+	volatile short *kf;
 
 	hi = ip->save_char & 0x7f;
 
 	if (hi >= 0x21 && hi <= 0x7e) {
 		/* multibyte character */
-		kf = (short *)tv_kfont[hi];
+		kf = (volatile short *)tv_kfont[hi];
 		kf += (ch & 0x7f) * FONTHEIGHT;
 		/* draw plane */
 		for (fh = 0; fh < FONTHEIGHT; fh++, p += ROWBYTES) {
@@ -369,9 +365,8 @@ tv_putc_bd(ip, ch, p)
 	}
 }
 
-__inline static int
-expbits (data)
-	int data;
+inline static int
+expbits(int data)
 {
 	int i, nd = 0;
 	if (data & 1)
@@ -385,20 +380,17 @@ expbits (data)
 }
 
 void
-tv_putc_ul(ip, ch, p)
-	struct ite_softc *ip;
-	int ch;
-	char *p;
+tv_putc_ul(struct ite_softc *ip, int ch, char *p)
 {
 	short fh, hi;
 	char *f;
-	short *kf;
+	volatile short *kf;
 
 	hi = ip->save_char & 0x7f;
 
 	if (hi >= 0x21 && hi <= 0x7e) {
 		/* multibyte character */
-		kf = (short *)tv_kfont[hi];
+		kf = (volatile short *)tv_kfont[hi];
 		kf += (ch & 0x7f) * FONTHEIGHT;
 		/* draw plane */
 		for (fh = 0; fh < UNDERLINE; fh++, p += ROWBYTES)
@@ -425,20 +417,17 @@ tv_putc_ul(ip, ch, p)
 }
 
 void
-tv_putc_bd_in(ip, ch, p)
-	struct ite_softc *ip;
-	int ch;
-	char *p;
+tv_putc_bd_in(struct ite_softc *ip, int ch, char *p)
 {
 	short fh, hi;
 	char *f;
-	short *kf;
+	volatile short *kf;
 
 	hi = ip->save_char & 0x7f;
 
 	if (hi >= 0x21 && hi <= 0x7e) {
 		/* multibyte character */
-		kf = (short *)tv_kfont[hi];
+		kf = (volatile short *)tv_kfont[hi];
 		kf += (ch & 0x7f) * FONTHEIGHT;
 		/* draw plane */
 		for (fh = 0; fh < FONTHEIGHT; fh++, p += ROWBYTES) {
@@ -461,20 +450,17 @@ tv_putc_bd_in(ip, ch, p)
 }
 
 void
-tv_putc_ul_in(ip, ch, p)
-	struct ite_softc *ip;
-	int ch;
-	char *p;
+tv_putc_ul_in(struct ite_softc *ip, int ch, char *p)
 {
 	short fh, hi;
 	char *f;
-	short *kf;
+	volatile short *kf;
 
 	hi = ip->save_char & 0x7f;
 
 	if (hi >= 0x21 && hi <= 0x7e) {
 		/* multibyte character */
-		kf = (short *)tv_kfont[hi];
+		kf = (volatile short *)tv_kfont[hi];
 		kf += (ch & 0x7f) * FONTHEIGHT;
 		/* draw plane */
 		for (fh = 0; fh < UNDERLINE; fh++, p += ROWBYTES)
@@ -501,20 +487,17 @@ tv_putc_ul_in(ip, ch, p)
 }
 
 void
-tv_putc_bd_ul(ip, ch, p)
-	struct ite_softc *ip;
-	int ch;
-	char *p;
+tv_putc_bd_ul(struct ite_softc *ip, int ch, char *p)
 {
 	short fh, hi;
 	char *f;
-	short *kf;
+	volatile short *kf;
 
 	hi = ip->save_char & 0x7f;
 
 	if (hi >= 0x21 && hi <= 0x7e) {
 		/* multibyte character */
-		kf = (short *)tv_kfont[hi];
+		kf = (volatile short *)tv_kfont[hi];
 		kf += (ch & 0x7f) * FONTHEIGHT;
 		/* draw plane */
 		for (fh = 0; fh < UNDERLINE; fh++, p += ROWBYTES) {
@@ -551,20 +534,17 @@ tv_putc_bd_ul(ip, ch, p)
 }
 
 void
-tv_putc_bd_ul_in(ip, ch, p)
-	struct ite_softc *ip;
-	int ch;
-	char *p;
+tv_putc_bd_ul_in(struct ite_softc *ip, int ch, char *p)
 {
 	short fh, hi;
 	char *f;
-	short *kf;
+	volatile short *kf;
 
 	hi = ip->save_char & 0x7f;
 
 	if (hi >= 0x21 && hi <= 0x7e) {
 		/* multibyte character */
-		kf = (short *)tv_kfont[hi];
+		kf = (volatile short *)tv_kfont[hi];
 		kf += (ch & 0x7f) * FONTHEIGHT;
 		/* draw plane */
 		for (fh = 0; fh < UNDERLINE; fh++, p += ROWBYTES) {
@@ -605,9 +585,7 @@ tv_putc_bd_ul_in(ip, ch, p)
  * draw/erase/move cursor
  */
 void
-tv_cursor(ip, flag)
-	struct ite_softc *ip;
-	int flag;
+tv_cursor(struct ite_softc *ip, int flag)
 {
 	u_char *p;
 	short fh;
@@ -649,9 +627,7 @@ tv_cursor(ip, flag)
  * clear rectangle
  */
 void
-tv_clear(ip, y, x, height, width)
-	struct ite_softc *ip;
-	int y, x, height, width;
+tv_clear(struct ite_softc *ip, int y, int x, int height, int width)
 {
 	char *p;
 	short fh;
@@ -666,7 +642,7 @@ tv_clear(ip, y, x, height, width)
 	while (height--) {
 		p = CHADDR(y++, x);
 		for (fh = 0; fh < FONTHEIGHT; fh++, p += ROWBYTES)
-			bzero(p, width);
+			memset(p, 0, width);
 	}
 	/* crtc mode reset */
 	CRTC.r21 = 0;
@@ -676,9 +652,7 @@ tv_clear(ip, y, x, height, width)
  * scroll lines/columns
  */
 void
-tv_scroll(ip, srcy, srcx, count, dir)
-	struct ite_softc *ip;
-	int srcy, srcx, count, dir;
+tv_scroll(struct ite_softc *ip, int srcy, int srcx, int count, int dir)
 {
 	int dst, siz, pl;
 
@@ -725,13 +699,13 @@ tv_scroll(ip, srcy, srcx, count, dir)
 		for (pl = 0; pl < PLANESIZE * 4; pl += PLANESIZE) {
 			short fh;
 			char *src = CHADDR(srcy, srcx) + pl;
-			char *dst = CHADDR(srcy, srcx - count) + pl;
+			char *dest = CHADDR(srcy, srcx - count) + pl;
 
 			siz = ip->cols - srcx;
 			for (fh = 0; fh < FONTHEIGHT; fh++) {
-				bcopy(src, dst, siz);
+				memcpy(dest, src, siz);
 				src += ROWBYTES;
-				dst += ROWBYTES;
+				dest += ROWBYTES;
 			}
 		}
 		break;
@@ -740,13 +714,13 @@ tv_scroll(ip, srcy, srcx, count, dir)
 		for (pl = 0; pl < PLANESIZE * 4; pl += PLANESIZE) {
 			short fh;
 			char *src = CHADDR(srcy, srcx) + pl;
-			char *dst = CHADDR(srcy, srcx + count) + pl;
+			char *dest = CHADDR(srcy, srcx + count) + pl;
 
 			siz = ip->cols - (srcx + count);
 			for (fh = 0; fh < FONTHEIGHT; fh++) {
-				bcopy(src, dst, siz);
+				memcpy(dest, src, siz);
 				src += ROWBYTES;
-				dst += ROWBYTES;
+				dest += ROWBYTES;
 			}
 		}
 		break;

@@ -1,4 +1,4 @@
-/* 	$NetBSD: intr.h,v 1.1 1998/08/18 23:55:00 matt Exp $	*/
+/* 	$NetBSD: intr.h,v 1.27 2008/02/20 16:37:52 matt Exp $	*/
 
 /*
  * Copyright (c) 1998 Matt Thomas.
@@ -32,26 +32,110 @@
 #ifndef _VAX_INTR_H_
 #define _VAX_INTR_H_
 
+#include <sys/queue.h>
+#include <machine/mtpr.h>
+
 /* Define the various Interrupt Priority Levels */
 
 /* Interrupt Priority Levels are not mutually exclusive. */
 
-#define IPL_BIO		0	/* block I/O */
-#define IPL_NET		1	/* network */
-#define IPL_TTY		2	/* terminal */
-#define IPL_IMP		3	/* memory allocation */
-#define	IPL_AUDIO	4	/* audio */
-#define IPL_CLOCK	5	/* clock */
-#define IPL_NONE	6
+/* Hardware interrupt levels are 16 (0x10) thru 31 (0x1f) */
+#define IPL_HIGH	0x1f	/* high -- blocks all interrupts */
+#define IPL_SCHED	0x18	/* clock */
+#define IPL_VM		0x17	/* memory allocation */
 
-#define IPL_LEVELS	7
+/* Software interrupt levels are 0 (0x00) thru 15 (0x0f) */
+#define IPL_SOFTDDB	0x0f	/* used by DDB on VAX */
+#define IPL_SOFTSERIAL	0x0d	/* soft serial */
+#define IPL_SOFTNET	0x0c	/* soft network */
+#define IPL_SOFTBIO	0x0b	/* soft bio */
+#define IPL_SOFTCLOCK	0x08
+#define IPL_NONE	0x00
 
-#define	IST_UNUSABLE	-1	/* interrupt cannot be used */
-#define	IST_NONE	0	/* none (dummy) */
-#define	IST_PULSE	1	/* pulsed */
-#define	IST_EDGE	2	/* edge-triggered */
-#define	IST_LEVEL	3	/* level-triggered */
+/* vax weirdness */
+#define IPL_UBA		IPL_VM	/* unibus adapters */
+#define IPL_CONSMEDIA	IPL_VM	/* console media */
 
-#include <machine/param.h>
+/* Misc */
+#define IPL_LEVELS	32
 
+#define IST_UNUSABLE	-1	/* interrupt cannot be used */
+#define IST_NONE	0	/* none (dummy) */
+#define IST_PULSE	1	/* pulsed */
+#define IST_EDGE	2	/* edge-triggered */
+#define IST_LEVEL	3	/* level-triggered */
+
+
+#ifdef _KERNEL
+typedef int ipl_t;
+
+static inline void
+_splset(ipl_t ipl)
+{
+	mtpr(ipl, PR_IPL);
+}
+
+static inline ipl_t
+_splget(void)
+{
+	return mfpr(PR_IPL);
+}
+
+static inline ipl_t
+splx(ipl_t new_ipl)
+{
+	ipl_t old_ipl = _splget();
+	_splset(new_ipl);
+	return old_ipl;
+}
+
+typedef struct {
+	uint8_t _ipl;
+} ipl_cookie_t;
+
+static inline ipl_cookie_t
+makeiplcookie(ipl_t ipl)
+{
+	return (ipl_cookie_t){._ipl = (uint8_t)ipl};
+}
+
+static inline int
+splraiseipl(ipl_cookie_t icookie)
+{
+	ipl_t newipl = icookie._ipl;
+	ipl_t oldipl;
+
+	oldipl = _splget();
+	if (newipl > oldipl) {
+		_splset(newipl);
+	}
+	return oldipl;
+}
+
+
+#define spl0()		_splset(IPL_NONE)		/* IPL00 */
+#define splddb()	splraiseipl(makeiplcookie(IPL_SOFTDDB)) /* IPL0F */
+#define splconsmedia()	splraiseipl(makeiplcookie(IPL_CONSMEDIA)) /* IPL17 */
+
+#include <sys/spl.h>
+
+/* These are better to use when playing with VAX buses */
+#define	spluba()	splraiseipl(makeiplcookie(IPL_UBA)) /* IPL17 */
+#define spl7()		splvm()
+
+/* schedule software interrupts
+ */
+#define setsoftddb()	((void)mtpr(IPL_SOFTDDB, PR_SIRR))
+
+#if !defined(_LOCORE)
+
+#if defined(__HAVE_FAST_SOFTINTS)
+static inline void
+softint_trigger(uintptr_t machdep)
+{
+	mtpr(machdep, PR_SIRR);
+}
+#endif /* __HAVE_FAST_SOFTINTS */
+#endif /* !_LOCORE */
+#endif /* _KERNEL */
 #endif	/* _VAX_INTR_H */

@@ -1,10 +1,38 @@
-/*	$NetBSD: cbc.c,v 1.13 1998/07/28 05:46:20 mycroft Exp $	*/
+/*	$NetBSD: cbc.c,v 1.18 2005/06/26 19:10:49 christos Exp $	*/
 
 /* cbc.c: This file contains the encryption routines for the ed line editor */
 /*-
  * Copyright (c) 1993 The Regents of the University of California.
  * All rights reserved.
  *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ *	from: @(#)bdes.c	5.5 (Berkeley) 6/27/91
+ */
+
+/*-
  * Copyright (c) 1993 Andrew Moore, Talke Studio.
  * All rights reserved.
  *
@@ -44,7 +72,7 @@
 #if 0
 static char *rcsid = "@(#)cbc.c,v 1.2 1994/02/01 00:34:36 alm Exp";
 #else
-__RCSID("$NetBSD: cbc.c,v 1.13 1998/07/28 05:46:20 mycroft Exp $");
+__RCSID("$NetBSD: cbc.c,v 1.18 2005/06/26 19:10:49 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -119,14 +147,14 @@ int des_n = 0;			/* index for put_des_char/get_des_char */
 
 /* init_des_cipher: initialize DES */
 void
-init_des_cipher()
+init_des_cipher(void)
 {
 #ifdef DES
 	int i;
 
 	des_ct = des_n = 0;
 
-	/* initialize the initialization vctor */
+	/* initialize the initialization vector */
 	MEMZERO(ivec, 8);
 
 	/* intialize the padding vector */
@@ -139,8 +167,7 @@ init_des_cipher()
 
 /* get_des_char: return next char in an encrypted file */
 int
-get_des_char(fp)
-	FILE *fp;
+get_des_char(FILE *fp)
 {
 #ifdef DES
 	if (des_n >= des_ct) {
@@ -156,9 +183,7 @@ get_des_char(fp)
 
 /* put_des_char: write a char to an encrypted file; return char written */
 int
-put_des_char(c, fp)
-	int c;
-	FILE *fp;
+put_des_char(int c, FILE *fp)
 {
 #ifdef DES
 	if (des_n == sizeof des_buf) {
@@ -174,8 +199,7 @@ put_des_char(c, fp)
 
 /* flush_des_file: flush an encrypted file's output; return status */
 int
-flush_des_file(fp)
-	FILE *fp;
+flush_des_file(FILE *fp)
 {
 #ifdef DES
 	if (des_n == sizeof des_buf) {
@@ -193,7 +217,7 @@ flush_des_file(fp)
  * get keyword from tty or stdin
  */
 int
-get_keyword()
+get_keyword(void)
 {
 	char *p;		/* used to obtain the key */
 	Desbuf msgbuf;			/* I/O buffer */
@@ -220,8 +244,7 @@ get_keyword()
  * print a warning message and, possibly, terminate
  */
 void
-des_error(s)
-	char *s;		/* the message */
+des_error(const char *s /* the message */)
 {
 	(void)sprintf(errmsg, "%s", s ? s : strerror(errno));
 }
@@ -230,9 +253,8 @@ des_error(s)
  * map a hex character to an integer
  */
 int
-hex_to_binary(c, radix)
-	int c;			/* char to be converted */
-	int radix;		/* base (2 to 16) */
+hex_to_binary(int c /* char to be converted */,
+	      int radix /* base (2 to 16) */)
 {
 	switch(c) {
 	case '0':		return(0x0);
@@ -262,9 +284,7 @@ hex_to_binary(c, radix)
  * convert the key to a bit pattern
  */
 void
-expand_des_key(obuf, ibuf)
-	char *obuf;			/* bit pattern */
-	char *ibuf;			/* the key itself */
+expand_des_key(char *obuf /* bit pattern */, char *inbuf /* the key itself */)
 {
 	int i, j;			/* counter in a for loop */
 	int nbuf[64];			/* used for hex/key translation */
@@ -272,13 +292,13 @@ expand_des_key(obuf, ibuf)
 	/*
 	 * leading '0x' or '0X' == hex key
 	 */
-	if (ibuf[0] == '0' && (ibuf[1] == 'x' || ibuf[1] == 'X')) {
-		ibuf = &ibuf[2];
+	if (inbuf[0] == '0' && (inbuf[1] == 'x' || inbuf[1] == 'X')) {
+		inbuf = &inbuf[2];
 		/*
 		 * now translate it, bombing on any illegal hex digit
 		 */
-		for (i = 0; ibuf[i] && i < 16; i++)
-			if ((nbuf[i] = hex_to_binary((int) ibuf[i], 16)) == -1)
+		for (i = 0; inbuf[i] && i < 16; i++)
+			if ((nbuf[i] = hex_to_binary((int) inbuf[i], 16)) == -1)
 				des_error("bad hex digit in key");
 		while (i < 16)
 			nbuf[i++] = 0;
@@ -292,13 +312,13 @@ expand_des_key(obuf, ibuf)
 	/*
 	 * leading '0b' or '0B' == binary key
 	 */
-	if (ibuf[0] == '0' && (ibuf[1] == 'b' || ibuf[1] == 'B')) {
-		ibuf = &ibuf[2];
+	if (inbuf[0] == '0' && (inbuf[1] == 'b' || inbuf[1] == 'B')) {
+		inbuf = &inbuf[2];
 		/*
 		 * now translate it, bombing on any illegal binary digit
 		 */
-		for (i = 0; ibuf[i] && i < 16; i++)
-			if ((nbuf[i] = hex_to_binary((int) ibuf[i], 2)) == -1)
+		for (i = 0; inbuf[i] && i < 16; i++)
+			if ((nbuf[i] = hex_to_binary((int) inbuf[i], 2)) == -1)
 				des_error("bad binary digit in key");
 		while (i < 64)
 			nbuf[i++] = 0;
@@ -312,7 +332,7 @@ expand_des_key(obuf, ibuf)
 	/*
 	 * no special leader -- ASCII
 	 */
-	(void)strncpy(obuf, ibuf, 8);
+	(void)strncpy(obuf, inbuf, 8);
 }
 
 /*****************
@@ -330,8 +350,7 @@ expand_des_key(obuf, ibuf)
  * DES ignores the low order bit of each character.
  */
 void
-set_des_key(buf)
-	Desbuf buf;				/* key block */
+set_des_key(Desbuf buf /* key block */)
 {
 	int i, j;				/* counter in a for loop */
 	int par;				/* parity counter */
@@ -360,10 +379,7 @@ set_des_key(buf)
  * This encrypts using the Cipher Block Chaining mode of DES
  */
 int
-cbc_encode(msgbuf, n, fp)
-	char *msgbuf;
-	int n;
-	FILE *fp;
+cbc_encode(char *msgbuf, int n, FILE *fp)
 {
 	int inverse = 0;	/* 0 to encrypt, 1 to decrypt */
 
@@ -399,11 +415,10 @@ cbc_encode(msgbuf, n, fp)
  * This decrypts using the Cipher Block Chaining mode of DES
  */
 int
-cbc_decode(msgbuf, fp)
-	char *msgbuf;		/* I/O buffer */
-	FILE *fp;			/* input file descriptor */
+cbc_decode(char *msgbuf /* I/O buffer */,
+	   FILE *fp /* input file descriptor */)
 {
-	Desbuf ibuf;	/* temp buffer for initialization vector */
+	Desbuf inbuf;	/* temp buffer for initialization vector */
 	int n;		/* number of bytes actually read */
 	int c;		/* used to test for EOF */
 	int inverse = 1;	/* 0 to encrypt, 1 to decrypt */
@@ -412,11 +427,11 @@ cbc_decode(msgbuf, fp)
 		/*
 		 * do the transformation
 		 */
-		MEMCPY(BUFFER(ibuf), BUFFER(msgbuf), 8);
+		MEMCPY(BUFFER(inbuf), BUFFER(msgbuf), 8);
 		DES_XFORM(UBUFFER(msgbuf));
 		for (c = 0; c < 8; c++)
 			UCHAR(msgbuf, c) ^= UCHAR(ivec, c);
-		MEMCPY(BUFFER(ivec), BUFFER(ibuf), 8);
+		MEMCPY(BUFFER(ivec), BUFFER(inbuf), 8);
 		/*
 		 * if the last one, handle it specially
 		 */

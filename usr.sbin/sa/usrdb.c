@@ -1,7 +1,9 @@
+/* $NetBSD: usrdb.c,v 1.11 2003/11/12 13:31:08 grant Exp $ */
+
 /*
  * Copyright (c) 1994 Christopher G. Demetriou
  * All rights reserved.
- *
+ * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -12,10 +14,12 @@
  *    documentation and/or other materials provided with the distribution.
  * 3. All advertising materials mentioning features or use of this software
  *    must display the following acknowledgement:
- *      This product includes software developed by Christopher G. Demetriou.
+ *          This product includes software developed for the
+ *          NetBSD Project.  See http://www.NetBSD.org/ for
+ *          information about NetBSD.
  * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
- *
+ *    derived from this software without specific prior written permission.
+ * 
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
  * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
@@ -26,11 +30,13 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * 
+ * <<Id: LICENSE,v 1.2 2000/06/14 15:57:33 cgd Exp>>
  */
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: usrdb.c,v 1.6 1997/10/19 09:56:23 mrg Exp $");
+__RCSID("$NetBSD: usrdb.c,v 1.11 2003/11/12 13:31:08 grant Exp $");
 #endif
 
 #include <sys/types.h>
@@ -54,11 +60,12 @@ usracct_init()
 	DB *saved_usracct_db;
 	BTREEINFO bti;
 	int error;
+	int ndups = 0;
 
 	memset(&bti, 0, sizeof(bti));
 	bti.compare = uid_compare;
 
-	usracct_db = dbopen(NULL, O_RDWR, 0, DB_BTREE, &bti);
+	usracct_db = dbopen(NULL, O_RDWR|O_CREAT|O_TRUNC, 0644, DB_BTREE, &bti);
 	if (usracct_db == NULL)
 		return (-1);
 
@@ -83,12 +90,23 @@ usracct_init()
 			goto closeout;
 		}
 		while (serr == 0) {
-			nerr = DB_PUT(usracct_db, &key, &data, 0);
+			nerr = DB_PUT(usracct_db, &key, &data, R_NOOVERWRITE);
 			if (nerr < 0) {
 				warn("initializing user accounting stats");
 				error = -1;
 				break;
 			} 
+			if (nerr == 1) {
+				warnx("duplicate key in `%s': %s",
+				    _PATH_USRACCT, fmt(&key));
+				if (ndups++ == 5) {
+					warnx("too many duplicate keys;"
+					    " `%s' possibly corrupted.",
+					    _PATH_USRACCT);
+					error = -1;
+					break;
+				}
+			}
 
 			serr = DB_SEQ(saved_usracct_db, &key, &data, R_NEXT);
 			if (serr < 0) {
@@ -236,7 +254,7 @@ usracct_print()
 	while (rv == 0) {
 		memcpy(ui, data.data, sizeof(struct userinfo));
 
-		printf("%-8s %9qu ",
+		printf("%-8s %9llu ",
 		    user_from_uid(ui->ui_uid, 0),
 		    (unsigned long long)ui->ui_calls);
 
@@ -249,19 +267,19 @@ usracct_print()
 
 		/* ui->ui_calls is always != 0 */
 		if (dflag)
-			printf("%12qu%s",
+			printf("%12llu%s",
 			    (unsigned long long)(ui->ui_io / ui->ui_calls),
 			    "avio");
 		else
-			printf("%12qu%s",
+			printf("%12llu%s",
 			    (unsigned long long)ui->ui_io, "tio");
 
 		/* t is always >= 0.0001; see above */
 		if (kflag)
-			printf("%12qu%s", (unsigned long long)(ui->ui_mem / t),
+			printf("%12llu%s", (unsigned long long)(ui->ui_mem / t),
 			    "k");
 		else
-			printf("%12qu%s", (unsigned long long)ui->ui_mem,
+			printf("%12llu%s", (unsigned long long)ui->ui_mem,
 			    "k*sec");
 
 		printf("\n");

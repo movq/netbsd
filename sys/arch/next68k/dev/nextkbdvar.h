@@ -1,4 +1,4 @@
-/* $NetBSD: nextkbdvar.h,v 1.1 1999/01/28 11:46:23 dbj Exp $ */
+/* $NetBSD: nextkbdvar.h,v 1.4 2005/12/11 12:18:25 christos Exp $ */
 /*
  * Copyright (c) 1998 Matt DeBergalis
  * All rights reserved.
@@ -29,7 +29,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-int nextkbd_cnattach __P((bus_space_tag_t));
+int nextkbd_cnattach(bus_space_tag_t);
 
 struct nextkbd_softc {
 	struct device sc_dev;
@@ -38,4 +38,7 @@ struct nextkbd_softc {
 	struct device *sc_wskbddev;
 
 	int enabled; /* XXX ? */
+	int sc_leds;
 };
+
+#define NEXT_WSKBD_LEDS (WSKBD_LED_CAPS)

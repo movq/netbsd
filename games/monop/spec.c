@@ -1,4 +1,4 @@
-/*	$NetBSD: spec.c,v 1.6 1999/09/08 21:17:52 jsm Exp $	*/
+/*	$NetBSD: spec.c,v 1.10 2008/02/24 01:57:34 dholland Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,22 +34,26 @@
 #if 0
 static char sccsid[] = "@(#)spec.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: spec.c,v 1.6 1999/09/08 21:17:52 jsm Exp $");
+__RCSID("$NetBSD: spec.c,v 1.10 2008/02/24 01:57:34 dholland Exp $");
 #endif
 #endif /* not lint */
 
-#include "monop.ext"
+#include "monop.h"
+#include "deck.h"
 
 static const char	*const perc[]	= {
 	"10%", "ten percent", "%", "$200", "200", 0
 	};
 
+/*
+ * collect income tax
+ */
 void
 inc_tax()
-{			/* collect income tax			*/
+{
 	int worth, com_num;
 
-	com_num = getinp("Do you wish to lose 10%% of your total worth or "
+	com_num = getinp("Do you wish to lose 10% of your total worth or "
 	    "$200? ", perc);
 	worth = cur_p->money + prop_worth(cur_p);
 	printf("You were worth $%d", worth);
@@ -77,27 +77,39 @@ inc_tax()
 		lucky("\nIt makes no difference!  ");
 }
 
+/*
+ * move player to jail
+ */
 void
 goto_jail()
-{			/* move player to jail			*/
+{
 	cur_p->loc = JAIL;
 }
 
+/*
+ * landing on luxury tax
+ */
 void
 lux_tax()
-{			/* landing on luxury tax		*/
+{
 	printf("You lose $75\n");
 	cur_p->money -= 75;
 }
 
+/*
+ * draw community chest card
+ */
 void
 cc()
-{				/* draw community chest card		*/
+{
 	get_card(&CC_D);
 }
 
+/*
+ * draw chance card
+ */
 void
 chance()
-{			/* draw chance card			*/
+{
 	get_card(&CH_D);
 }

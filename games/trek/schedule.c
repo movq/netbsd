@@ -1,4 +1,4 @@
-/*	$NetBSD: schedule.c,v 1.4 1997/10/12 21:25:11 christos Exp $	*/
+/*	$NetBSD: schedule.c,v 1.6.26.1 2009/04/01 21:41:49 snj Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,13 +34,14 @@
 #if 0
 static char sccsid[] = "@(#)schedule.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: schedule.c,v 1.4 1997/10/12 21:25:11 christos Exp $");
+__RCSID("$NetBSD: schedule.c,v 1.6.26.1 2009/04/01 21:41:49 snj Exp $");
 #endif
 #endif /* not lint */
 
 #include <stdio.h>
 #include <math.h>
 #include <err.h>
+#include <limits.h>
 #include "trek.h"
 
 /*
@@ -84,7 +81,7 @@ char	z;
 		e->x = x;
 		e->y = y;
 		e->systemname = z;
-		Now.eventptr[type] = e;
+		Now.eventptr[type & ~E_GHOST] = e;
 		return (e);
 	}
 	errx(1, "Cannot schedule event %d parm %d %d %d", type, x, y, z);
@@ -139,7 +136,7 @@ struct event	*e1;
 			e->evcode, e->date, e->x, e->y, e->systemname);
 #	endif
 	Now.eventptr[e->evcode & E_EVENT] = 0;
-	e->date = 1e50;
+	e->date = TOOLARGE;
 	e->evcode = 0;
 	return;
 }

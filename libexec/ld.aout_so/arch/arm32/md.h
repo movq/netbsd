@@ -1,4 +1,4 @@
-/*	$NetBSD: md.h,v 1.3 1998/10/19 03:09:31 matt Exp $	*/
+/*	$NetBSD: md.h,v 1.5 2002/12/10 17:14:35 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1997 Mark Brinicombe
@@ -42,7 +42,7 @@
 #define	MAX_ALIGNMENT		(sizeof (long))
 
 #ifdef NetBSD
-#define PAGSIZ			__LDPGSZ
+#define PAGSIZ			AOUT_LDPGSZ
 #else
 #define PAGSIZ			4096
 #endif
@@ -67,12 +67,11 @@
 #define	TEXT_START(ex)		((ex).a_entry < PAGSIZ ? 0 : 0x001000)
 #define	DATA_START(ex)		(N_GETMAGIC(ex) == OMAGIC \
 	 ? TEXT_START(ex) + (ex).a_text \
-	 : (TEXT_START(ex) + (ex).a_text + __LDPGSZ - 1) & ~(__LDPGSZ - 1))
+	 : (TEXT_START(ex) + (ex).a_text + AOUT_LDPGSZ - 1) & ~(AOUT_LDPGSZ - 1))
 #endif
 
 #define RELOC_STATICS_THROUGH_GOT_P(r)		(1)
 #define JMPSLOT_NEEDS_RELOC			(1)
-#define	RELOC_SYMBOLICS_THROUGH_JMPSLOT		(1)
 #define	JMPSLOT_NONEXTERN_IS_INTERMODULE	(0)
 
 #define md_got_reloc(r)			(-r->r_address)

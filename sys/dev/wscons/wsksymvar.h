@@ -1,4 +1,4 @@
-/*	$NetBSD: wsksymvar.h,v 1.8 1999/12/21 11:59:13 drochner Exp $ */
+/*	$NetBSD: wsksymvar.h,v 1.11 2008/04/28 20:24:01 martin Exp $ */
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,7 +37,7 @@
 #endif
 
 typedef u_int16_t keysym_t;
-typedef u_int16_t kbd_t;
+typedef u_int32_t kbd_t;
 
 struct wscons_keymap {
 	keysym_t command;
@@ -71,12 +64,12 @@ struct wskbd_mapdata {
 /*
  * Utility functions.
  */
-void	wskbd_get_mapentry __P((const struct wskbd_mapdata *, int,
-                                struct wscons_keymap *));
-void	wskbd_init_keymap __P((int, struct wscons_keymap **, int *));
-int	wskbd_load_keymap __P((const struct wskbd_mapdata *,
-                               struct wscons_keymap **, int *));
-keysym_t wskbd_compose_value __P((keysym_t *));
+void	wskbd_get_mapentry(const struct wskbd_mapdata *, int,
+			   struct wscons_keymap *);
+void	wskbd_init_keymap(int, struct wscons_keymap **, int *);
+int	wskbd_load_keymap(const struct wskbd_mapdata *,
+                          struct wscons_keymap **, int *);
+keysym_t wskbd_compose_value(keysym_t *);
 
 #endif
 

@@ -1,12 +1,12 @@
-/*	$NetBSD: if_tlp_pci.c,v 1.36 2000/03/26 10:53:39 soren Exp $	*/
+/*	$NetBSD: if_tlp_pci.c,v 1.106 2008/06/08 18:18:34 tsutsui Exp $	*/
 
 /*-
- * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 1999, 2000, 2002 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
  * by Jason R. Thorpe of the Numerical Aerospace Simulation Facility,
- * NASA Ames Research Center.
+ * NASA Ames Research Center; and Charles M. Hannum.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,13 +35,12 @@
  * Ethernet controller family driver.
  */
 
-#include "opt_inet.h"
-#include "opt_ns.h"
-#include "bpfilter.h"
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_tlp_pci.c,v 1.106 2008/06/08 18:18:34 tsutsui Exp $");
 
 #include <sys/param.h>
-#include <sys/systm.h> 
-#include <sys/mbuf.h>   
+#include <sys/systm.h>
+#include <sys/mbuf.h>
 #include <sys/malloc.h>
 #include <sys/kernel.h>
 #include <sys/socket.h>
@@ -57,28 +49,17 @@
 #include <sys/device.h>
 
 #include <machine/endian.h>
- 
+
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_media.h>
 #include <net/if_ether.h>
 
-#if NBPFILTER > 0 
-#include <net/bpf.h>
-#endif 
-
-#ifdef INET
-#include <netinet/in.h> 
-#include <netinet/if_inarp.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
+#ifdef __sparc__
+#include <machine/promlib.h>
 #endif
-
-#ifdef NS
-#include <netns/ns.h>
-#include <netns/ns_if.h>
-#endif
-
-#include <machine/bus.h>
-#include <machine/intr.h>
 
 #include <dev/mii/miivar.h>
 #include <dev/mii/mii_bitbang.h>
@@ -124,34 +105,25 @@ struct tulip_pci_softc {
 #define	TULIP_PCI_SHAREDROM	0x04	/* ROM is shared */
 #define	TULIP_PCI_SLAVEROM	0x08	/* slave of shared ROM */
 
-int	tlp_pci_match __P((struct device *, struct cfdata *, void *));
-void	tlp_pci_attach __P((struct device *, struct device *, void *));
+static int	tlp_pci_match(device_t, struct cfdata *, void *);
+static void	tlp_pci_attach(device_t, device_t, void *);
 
-struct cfattach tlp_pci_ca = {
-	sizeof(struct tulip_pci_softc), tlp_pci_match, tlp_pci_attach,
-};
+CFATTACH_DECL(tlp_pci, sizeof(struct tulip_pci_softc),
+    tlp_pci_match, tlp_pci_attach, NULL, NULL);
 
-const struct tulip_pci_product {
-	u_int32_t	tpp_vendor;	/* PCI vendor ID */
-	u_int32_t	tpp_product;	/* PCI product ID */
+static const struct tulip_pci_product {
+	uint32_t	tpp_vendor;	/* PCI vendor ID */
+	uint32_t	tpp_product;	/* PCI product ID */
 	tulip_chip_t	tpp_chip;	/* base Tulip chip type */
 } tlp_pci_products[] = {
-#ifdef TLP_MATCH_21040
 	{ PCI_VENDOR_DEC,		PCI_PRODUCT_DEC_21040,
 	  TULIP_CHIP_21040 },
-#endif
-#ifdef TLP_MATCH_21041
 	{ PCI_VENDOR_DEC,		PCI_PRODUCT_DEC_21041,
 	  TULIP_CHIP_21041 },
-#endif
-#ifdef TLP_MATCH_21140
 	{ PCI_VENDOR_DEC,		PCI_PRODUCT_DEC_21140,
 	  TULIP_CHIP_21140 },
-#endif
-#ifdef TLP_MATCH_21142
 	{ PCI_VENDOR_DEC,		PCI_PRODUCT_DEC_21142,
 	  TULIP_CHIP_21142 },
-#endif
 
 	{ PCI_VENDOR_LITEON,		PCI_PRODUCT_LITEON_82C168,
 	  TULIP_CHIP_82C168 },
@@ -176,45 +148,67 @@ const struct tulip_pci_product {
 	{ PCI_VENDOR_COMPEX,		PCI_PRODUCT_COMPEX_RL100ATX,
 	  TULIP_CHIP_WB89C840F },
 
-#if 0
 	{ PCI_VENDOR_DAVICOM,		PCI_PRODUCT_DAVICOM_DM9102,
 	  TULIP_CHIP_DM9102 },
-#endif
 
 	{ PCI_VENDOR_ADMTEK,		PCI_PRODUCT_ADMTEK_AL981,
 	  TULIP_CHIP_AL981 },
 
-#if 0
+	{ PCI_VENDOR_ADMTEK,		PCI_PRODUCT_ADMTEK_AN983,
+	  TULIP_CHIP_AN985 },
+	{ PCI_VENDOR_ADMTEK,		PCI_PRODUCT_ADMTEK_ADM9511,
+	  TULIP_CHIP_AN985 },
+	{ PCI_VENDOR_ADMTEK,		PCI_PRODUCT_ADMTEK_ADM9513,
+	  TULIP_CHIP_AN985 },
+	{ PCI_VENDOR_ACCTON,		PCI_PRODUCT_ACCTON_EN2242,
+	  TULIP_CHIP_AN985 },
+
+	{ PCI_VENDOR_3COM,		PCI_PRODUCT_3COM_3C910SOHOB,
+	  TULIP_CHIP_AN985 },
+
 	{ PCI_VENDOR_ASIX,		PCI_PRODUCT_ASIX_AX88140A,
 	  TULIP_CHIP_AX88140 },
-#endif
+
+	{ PCI_VENDOR_CONEXANT,		PCI_PRODUCT_CONEXANT_LANFINITY,
+	  TULIP_CHIP_RS7112 },
 
 	{ 0,				0,
 	  TULIP_CHIP_INVALID },
 };
 
 struct tlp_pci_quirks {
-	void		(*tpq_func) __P((struct tulip_pci_softc *,
-			    const u_int8_t *));
-	u_int8_t	tpq_oui[3];
+	void		(*tpq_func)(struct tulip_pci_softc *,
+			    const uint8_t *);
+	uint8_t		tpq_oui[3];
 };
 
-void	tlp_pci_dec_quirks __P((struct tulip_pci_softc *,
-	    const u_int8_t *));
+static void	tlp_pci_dec_quirks(struct tulip_pci_softc *,
+		    const uint8_t *);
 
-void	tlp_pci_znyx_21040_quirks __P((struct tulip_pci_softc *,
-	    const u_int8_t *));
-void	tlp_pci_smc_21040_quirks __P((struct tulip_pci_softc *,
-	    const u_int8_t *));
-void	tlp_pci_cogent_21040_quirks __P((struct tulip_pci_softc *,
-	    const u_int8_t *));
-void	tlp_pci_accton_21040_quirks __P((struct tulip_pci_softc *,
-	    const u_int8_t *));
+static void	tlp_pci_znyx_21040_quirks(struct tulip_pci_softc *,
+		    const uint8_t *);
+static void	tlp_pci_smc_21040_quirks(struct tulip_pci_softc *,
+		    const uint8_t *);
+static void	tlp_pci_cogent_21040_quirks(struct tulip_pci_softc *,
+		    const uint8_t *);
+static void	tlp_pci_accton_21040_quirks(struct tulip_pci_softc *,
+		    const uint8_t *);
 
-void	tlp_pci_cobalt_21142_quirks __P((struct tulip_pci_softc *,
-	    const u_int8_t *));
+static void	tlp_pci_cobalt_21142_quirks(struct tulip_pci_softc *,
+		    const uint8_t *);
+static void	tlp_pci_algor_21142_quirks(struct tulip_pci_softc *,
+		    const uint8_t *);
+static void	tlp_pci_netwinder_21142_quirks(struct tulip_pci_softc *,
+		    const uint8_t *);
+static void	tlp_pci_phobos_21142_quirks(struct tulip_pci_softc *,
+		    const uint8_t *);
+static void	tlp_pci_znyx_21142_quirks(struct tulip_pci_softc *,
+		    const uint8_t *);
 
-const struct tlp_pci_quirks tlp_pci_21040_quirks[] = {
+static void	tlp_pci_adaptec_quirks(struct tulip_pci_softc *,
+		    const uint8_t *);
+
+static const struct tlp_pci_quirks tlp_pci_21040_quirks[] = {
 	{ tlp_pci_znyx_21040_quirks,	{ 0x00, 0xc0, 0x95 } },
 	{ tlp_pci_smc_21040_quirks,	{ 0x00, 0x00, 0xc0 } },
 	{ tlp_pci_cogent_21040_quirks,	{ 0x00, 0x00, 0x92 } },
@@ -222,58 +216,73 @@ const struct tlp_pci_quirks tlp_pci_21040_quirks[] = {
 	{ NULL,				{ 0, 0, 0 } }
 };
 
-const struct tlp_pci_quirks tlp_pci_21041_quirks[] = {
+static const struct tlp_pci_quirks tlp_pci_21041_quirks[] = {
 	{ tlp_pci_dec_quirks,		{ 0x08, 0x00, 0x2b } },
 	{ tlp_pci_dec_quirks,		{ 0x00, 0x00, 0xf8 } },
 	{ NULL,				{ 0, 0, 0 } }
 };
 
-void	tlp_pci_asante_21140_quirks __P((struct tulip_pci_softc *,
-	    const u_int8_t *));
+static void	tlp_pci_asante_21140_quirks(struct tulip_pci_softc *,
+		    const uint8_t *);
+static void	tlp_pci_e100_quirks(struct tulip_pci_softc *,
+		    const uint8_t *);
+static void	tlp_pci_phobos_21140_quirks(struct tulip_pci_softc *,
+		    const uint8_t *);
+static void	tlp_pci_smc_21140_quirks(struct tulip_pci_softc *,
+		    const uint8_t *);
+static void	tlp_pci_vpc_21140_quirks(struct tulip_pci_softc *,
+		    const uint8_t *);
 
-const struct tlp_pci_quirks tlp_pci_21140_quirks[] = {
+static const struct tlp_pci_quirks tlp_pci_21140_quirks[] = {
 	{ tlp_pci_dec_quirks,		{ 0x08, 0x00, 0x2b } },
 	{ tlp_pci_dec_quirks,		{ 0x00, 0x00, 0xf8 } },
+	{ tlp_pci_e100_quirks,		{ 0x00, 0xa0, 0x59 } },
 	{ tlp_pci_asante_21140_quirks,	{ 0x00, 0x00, 0x94 } },
+	{ tlp_pci_adaptec_quirks,	{ 0x00, 0x00, 0x92 } },
+	{ tlp_pci_adaptec_quirks,	{ 0x00, 0x00, 0xd1 } },
+	{ tlp_pci_phobos_21140_quirks,	{ 0x00, 0x60, 0xf5 } },
+	{ tlp_pci_smc_21140_quirks,	{ 0x00, 0x00, 0xc0 } },
+	{ tlp_pci_vpc_21140_quirks,	{ 0x00, 0x03, 0xff } },
 	{ NULL,				{ 0, 0, 0 } }
 };
 
-const struct tlp_pci_quirks tlp_pci_21142_quirks[] = {
+static const struct tlp_pci_quirks tlp_pci_21142_quirks[] = {
 	{ tlp_pci_dec_quirks,		{ 0x08, 0x00, 0x2b } },
 	{ tlp_pci_dec_quirks,		{ 0x00, 0x00, 0xf8 } },
 	{ tlp_pci_cobalt_21142_quirks,	{ 0x00, 0x10, 0xe0 } },
+	{ tlp_pci_algor_21142_quirks,	{ 0x00, 0x40, 0xbc } },
+	{ tlp_pci_adaptec_quirks,	{ 0x00, 0x00, 0xd1 } },
+	{ tlp_pci_netwinder_21142_quirks,{ 0x00, 0x10, 0x57 } },
+	{ tlp_pci_phobos_21142_quirks,	{ 0x00, 0x60, 0xf5 } },
+	{ tlp_pci_znyx_21142_quirks,	{ 0x00, 0xc0, 0x95 } },
 	{ NULL,				{ 0, 0, 0 } }
 };
 
-int	tlp_pci_shared_intr __P((void *));
+static int	tlp_pci_shared_intr(void *);
 
-const struct tulip_pci_product *tlp_pci_lookup
-    __P((const struct pci_attach_args *));
-void tlp_pci_get_quirks __P((struct tulip_pci_softc *, const u_int8_t *,
-    const struct tlp_pci_quirks *));
-void tlp_pci_check_slaved __P((struct tulip_pci_softc *, int, int));
-
-const struct tulip_pci_product *
-tlp_pci_lookup(pa)
-	const struct pci_attach_args *pa;
+static const struct tulip_pci_product *
+tlp_pci_lookup(const struct pci_attach_args *pa)
 {
 	const struct tulip_pci_product *tpp;
+
+	/* Don't match lmc cards */
+	if (PCI_VENDOR(pci_conf_read(pa->pa_pc, pa->pa_tag,
+	    PCI_SUBSYS_ID_REG)) == PCI_VENDOR_LMC)
+		return NULL;
 
 	for (tpp = tlp_pci_products;
 	     tlp_chip_names[tpp->tpp_chip] != NULL;
 	     tpp++) {
 		if (PCI_VENDOR(pa->pa_id) == tpp->tpp_vendor &&
 		    PCI_PRODUCT(pa->pa_id) == tpp->tpp_product)
-			return (tpp);
+			return tpp;
 	}
-	return (NULL);
+	return NULL;
 }
 
-void
-tlp_pci_get_quirks(psc, enaddr, tpq)
-	struct tulip_pci_softc *psc;
-	const u_int8_t *enaddr;
-	const struct tlp_pci_quirks *tpq;
+static void
+tlp_pci_get_quirks(struct tulip_pci_softc *psc, const uint8_t *enaddr,
+    const struct tlp_pci_quirks *tpq)
 {
 
 	for (; tpq->tpq_func != NULL; tpq++) {
@@ -286,10 +295,8 @@ tlp_pci_get_quirks(psc, enaddr, tpq)
 	}
 }
 
-void
-tlp_pci_check_slaved(psc, shared, slaved)
-	struct tulip_pci_softc *psc;
-	int shared, slaved;
+static void
+tlp_pci_check_slaved(struct tulip_pci_softc *psc, int shared, int slaved)
 {
 	extern struct cfdriver tlp_cd;
 	struct tulip_pci_softc *cur, *best = NULL;
@@ -301,9 +308,10 @@ tlp_pci_check_slaved(psc, shared, slaved)
 	 * bus marked as shared.  That should be our master.
 	 */
 	for (i = 0; i < tlp_cd.cd_ndevs; i++) {
-		if ((cur = tlp_cd.cd_devs[i]) == NULL)
+		if ((cur = device_lookup_private(&tlp_cd, i)) == NULL)
 			continue;
-		if (cur->sc_tulip.sc_dev.dv_parent != sc->sc_dev.dv_parent)
+		if (device_parent(&cur->sc_tulip.sc_dev) !=
+		    device_parent(&sc->sc_dev))
 			continue;
 		if ((cur->sc_flags & shared) == 0)
 			continue;
@@ -320,26 +328,21 @@ tlp_pci_check_slaved(psc, shared, slaved)
 	}
 }
 
-int
-tlp_pci_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+static int
+tlp_pci_match(device_t parent, struct cfdata *match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
 	if (tlp_pci_lookup(pa) != NULL)
-		return (10);	/* beat if_de.c */
+		return 10;	/* beat if_de.c */
 
-	return (0);
+	return 0;
 }
 
-void
-tlp_pci_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+static void
+tlp_pci_attach(device_t parent, device_t self, void *aux)
 {
-	struct tulip_pci_softc *psc = (void *) self;
+	struct tulip_pci_softc *psc = device_private(self);
 	struct tulip_softc *sc = &psc->sc_tulip;
 	struct pci_attach_args *pa = aux;
 	pci_chipset_tag_t pc = pa->pa_pc;
@@ -349,10 +352,11 @@ tlp_pci_attach(parent, self, aux)
 	bus_space_handle_t ioh, memh;
 	int ioh_valid, memh_valid, i, j;
 	const struct tulip_pci_product *tpp;
-	u_int8_t enaddr[ETHER_ADDR_LEN];
-	u_int32_t val;
+	prop_data_t ea;
+	uint8_t enaddr[ETHER_ADDR_LEN];
+	uint32_t val = 0;
 	pcireg_t reg;
-	int pmreg;
+	int error;
 
 	sc->sc_devno = pa->pa_device;
 	psc->sc_pc = pa->pa_pc;
@@ -407,6 +411,8 @@ tlp_pci_attach(parent, self, aux)
 	case TULIP_CHIP_MX98715:
 		if (sc->sc_rev >= 0x20)
 			sc->sc_chip = TULIP_CHIP_MX98715A;
+		if (sc->sc_rev >= 0x25)
+			sc->sc_chip = TULIP_CHIP_MX98715AEC_X;
 		if (sc->sc_rev >= 0x30)
 			sc->sc_chip = TULIP_CHIP_MX98725;
 		break;
@@ -415,13 +421,41 @@ tlp_pci_attach(parent, self, aux)
 		sc->sc_regshift = 2;
 		break;
 
+	case TULIP_CHIP_AN985:
+		/*
+		 * The AN983 and AN985 are very similar, and are
+		 * differentiated by a "signature" register that
+		 * is like, but not identical, to a PCI ID register.
+		 */
+		reg = pci_conf_read(pc, pa->pa_tag, 0x80);
+		switch (reg) {
+		case 0x09811317:
+			sc->sc_chip = TULIP_CHIP_AN985;
+			break;
+
+		case 0x09851317:
+			sc->sc_chip = TULIP_CHIP_AN983;
+			break;
+
+		default:
+			/* Unknown -- use default. */
+			break;
+		}
+		break;
+
 	case TULIP_CHIP_AX88140:
 		if (sc->sc_rev >= 0x10)
 			sc->sc_chip = TULIP_CHIP_AX88141;
 		break;
 
+	case TULIP_CHIP_DM9102:
+		if (sc->sc_rev >= 0x30)
+			sc->sc_chip = TULIP_CHIP_DM9102A;
+		break;
+
 	default:
 		/* Nothing. */
+		break;
 	}
 
 	printf(": %s Ethernet, pass %d.%d\n",
@@ -432,7 +466,7 @@ tlp_pci_attach(parent, self, aux)
 	case TULIP_CHIP_21040:
 		if (sc->sc_rev < 0x20) {
 			printf("%s: 21040 must be at least pass 2.0\n",
-			    sc->sc_dev.dv_xname);
+			    device_xname(&sc->sc_dev));
 			return;
 		}
 		break;
@@ -440,13 +474,14 @@ tlp_pci_attach(parent, self, aux)
 	case TULIP_CHIP_21140:
 		if (sc->sc_rev < 0x11) {
 			printf("%s: 21140 must be at least pass 1.1\n",
-			    sc->sc_dev.dv_xname);
+			    device_xname(&sc->sc_dev));
 			return;
 		}
 		break;
 
 	default:
 		/* Nothing. */
+		break;
 	}
 
 	/*
@@ -461,7 +496,13 @@ tlp_pci_attach(parent, self, aux)
 	case TULIP_CHIP_MX98713A:
 	case TULIP_CHIP_MX98715:
 	case TULIP_CHIP_MX98715A:
+	case TULIP_CHIP_MX98715AEC_X:
 	case TULIP_CHIP_MX98725:
+	case TULIP_CHIP_DM9102:
+	case TULIP_CHIP_DM9102A:
+	case TULIP_CHIP_AX88140:
+	case TULIP_CHIP_AX88141:
+	case TULIP_CHIP_RS7112:
 		/*
 		 * Clear the "sleep mode" bit in the CFDA register.
 		 */
@@ -473,36 +514,27 @@ tlp_pci_attach(parent, self, aux)
 
 	default:
 		/* Nothing. */
+		break;
 	}
 
-	if (pci_get_capability(pc, pa->pa_tag, PCI_CAP_PWRMGMT, &pmreg, 0)) {
-		reg = pci_conf_read(pc, pa->pa_tag, pmreg + 4) & 0x3;
-		if (reg == 3) {
-			/*
-			 * The card has lost all configuration data in
-			 * this state, so punt.
-			 */
-			printf("%s: unable to wake up from power state D3\n",
-			    sc->sc_dev.dv_xname);
-			return;
-		}
-		if (reg != 0) {
-			printf("%s: waking up from power state D%d\n",
-			    sc->sc_dev.dv_xname, reg);
-			pci_conf_write(pc, pa->pa_tag, pmreg + 4, 0);
-		}
+	/* power up chip */
+	if ((error = pci_activate(pa->pa_pc, pa->pa_tag, self,
+	    NULL)) && error != EOPNOTSUPP) {
+		aprint_error_dev(&sc->sc_dev, "cannot activate %d\n",
+		    error);
+		return;
 	}
 
 	/*
 	 * Map the device.
 	 */
+
 	ioh_valid = (pci_mapreg_map(pa, TULIP_PCI_IOBA,
 	    PCI_MAPREG_TYPE_IO, 0,
 	    &iot, &ioh, NULL, NULL) == 0);
 	memh_valid = (pci_mapreg_map(pa, TULIP_PCI_MMBA,
 	    PCI_MAPREG_TYPE_MEM|PCI_MAPREG_MEM_TYPE_32BIT, 0,
 	    &memt, &memh, NULL, NULL) == 0);
-
 	if (memh_valid) {
 		sc->sc_st = memt;
 		sc->sc_sh = memh;
@@ -510,7 +542,7 @@ tlp_pci_attach(parent, self, aux)
 		sc->sc_st = iot;
 		sc->sc_sh = ioh;
 	} else {
-		printf(": unable to map device registers\n");
+		aprint_error_dev(&sc->sc_dev, "unable to map device registers\n");
 		return;
 	}
 
@@ -579,7 +611,7 @@ tlp_pci_attach(parent, self, aux)
 			}
 			if (val & PNIC_MIIROM_BUSY) {
 				printf("%s: EEPROM timed out\n",
-				    sc->sc_dev.dv_xname);
+				    device_xname(&sc->sc_dev));
 				return;
 			}
 			val &= PNIC_MIIROM_DATA;
@@ -590,7 +622,51 @@ tlp_pci_attach(parent, self, aux)
 	    }
 
 	default:
-		if (tlp_read_srom(sc) == 0)
+		/*
+		 * XXX This isn't quite the right way to do this; we should
+		 * XXX be attempting to fetch the mac-addr property in the
+		 * XXX bus-agnostic part of the driver independently.  But
+		 * XXX that requires a larger change in the SROM handling
+		 * XXX logic, and for now we can at least remove a machine-
+		 * XXX dependent wart from the PCI front-end.
+		 */
+		ea = prop_dictionary_get(device_properties(&sc->sc_dev),
+					 "mac-addr");
+		if (ea != NULL) {
+			extern int tlp_srom_debug;
+			KASSERT(prop_object_type(ea) == PROP_TYPE_DATA);
+			KASSERT(prop_data_size(ea) == ETHER_ADDR_LEN);
+
+			memcpy(enaddr, prop_data_data_nocopy(ea),
+			       ETHER_ADDR_LEN);
+
+			sc->sc_srom_addrbits = 6;
+			sc->sc_srom = malloc(TULIP_ROM_SIZE(6), M_DEVBUF,
+			    M_NOWAIT|M_ZERO);
+			memcpy(sc->sc_srom, enaddr, sizeof(enaddr));
+			if (tlp_srom_debug) {
+				printf("SROM CONTENTS:");
+				for (i = 0; i < TULIP_ROM_SIZE(6); i++) {
+					if ((i % 8) == 0)
+						printf("\n\t");
+					printf("0x%02x ", sc->sc_srom[i]);
+				}
+				printf("\n");
+			}
+			break;
+		}
+
+		/* Check for a slaved ROM on a multi-port board. */
+		tlp_pci_check_slaved(psc, TULIP_PCI_SHAREDROM,
+		    TULIP_PCI_SLAVEROM);
+		if (psc->sc_flags & TULIP_PCI_SLAVEROM) {
+			sc->sc_srom_addrbits =
+			    psc->sc_master->sc_tulip.sc_srom_addrbits;
+			sc->sc_srom = psc->sc_master->sc_tulip.sc_srom;
+			enaddr[5] +=
+			    sc->sc_devno - psc->sc_master->sc_tulip.sc_devno;
+		}
+		else if (tlp_read_srom(sc) == 0)
 			goto cant_cope;
 		break;
 	}
@@ -602,25 +678,12 @@ tlp_pci_attach(parent, self, aux)
 	 */
 	switch (sc->sc_chip) {
 	case TULIP_CHIP_21040:
-		/* Check for a slaved ROM on a multi-port board. */
-		tlp_pci_check_slaved(psc, TULIP_PCI_SHAREDROM,
-		    TULIP_PCI_SLAVEROM);
-		if (psc->sc_flags & TULIP_PCI_SLAVEROM)
-			memcpy(sc->sc_srom, psc->sc_master->sc_tulip.sc_srom,
-			    sizeof(sc->sc_srom));
-
 		/*
 		 * Parse the Ethernet Address ROM.
 		 */
 		if (tlp_parse_old_srom(sc, enaddr) == 0)
 			goto cant_cope;
 
-		/*
-		 * If we have a slaved ROM, adjust the Ethernet address.
-		 */
-		if (psc->sc_flags & TULIP_PCI_SLAVEROM)
-			enaddr[5] +=
-			    sc->sc_devno - psc->sc_master->sc_tulip.sc_devno;
 
 		/*
 		 * All 21040 boards start out with the same
@@ -635,13 +698,6 @@ tlp_pci_attach(parent, self, aux)
 		break;
 
 	case TULIP_CHIP_21041:
-		/* Check for a slaved ROM on a multi-port board. */
-		tlp_pci_check_slaved(psc, TULIP_PCI_SHAREDROM,
-		    TULIP_PCI_SLAVEROM);
-		if (psc->sc_flags & TULIP_PCI_SLAVEROM)
-			memcpy(sc->sc_srom, psc->sc_master->sc_tulip.sc_srom,
-			    sizeof(sc->sc_srom));
-
 		/* Check for new format SROM. */
 		if (tlp_isv_srom_enaddr(sc, enaddr) == 0) {
 			/*
@@ -703,8 +759,15 @@ tlp_pci_attach(parent, self, aux)
 			 * Not an ISV SROM; try the old DEC Ethernet Address
 			 * ROM format.
 			 */
-			if (tlp_parse_old_srom(sc, enaddr) == 0)
-				goto cant_cope;
+			if (tlp_parse_old_srom(sc, enaddr) == 0) {
+				/*
+				 * One last try: just copy the address
+				 * from offset 20 and try to look
+				 * up quirks.
+				 */
+				memcpy(enaddr, &sc->sc_srom[20],
+				    ETHER_ADDR_LEN);
+			}
 		} else {
 			/*
 			 * We start out with the 2114x ISV media switch.
@@ -771,6 +834,7 @@ tlp_pci_attach(parent, self, aux)
 
 	case TULIP_CHIP_MX98713A:
 	case TULIP_CHIP_MX98715A:
+	case TULIP_CHIP_MX98715AEC_X:
 	case TULIP_CHIP_MX98725:
 		/*
 		 * The MX98713A has an MII as well as an internal Nway block,
@@ -815,10 +879,95 @@ tlp_pci_attach(parent, self, aux)
 		sc->sc_mediasw = &tlp_al981_mediasw;
 		break;
 
+	case TULIP_CHIP_AN983:
+	case TULIP_CHIP_AN985:
+		/*
+		 * The ADMtek AN985's Ethernet address is located
+		 * at offset 8 of its EEPROM.
+		 */
+		memcpy(enaddr, &sc->sc_srom[8], ETHER_ADDR_LEN);
+
+		/*
+		 * The ADMtek AN985 can be configured in Single-Chip
+		 * mode or MAC-only mode.  Single-Chip uses the built-in
+		 * PHY, MAC-only has an external PHY (usually HomePNA).
+		 * The selection is based on an EEPROM setting, and both
+		 * PHYs are accessed via MII attached to SIO.
+		 *
+		 * The AN985 "ghosts" the internal PHY onto all
+		 * MII addresses, so we have to use a media init
+		 * routine that limits the search.
+		 * XXX How does this work with MAC-only mode?
+		 */
+		sc->sc_mediasw = &tlp_an985_mediasw;
+		break;
+
+	case TULIP_CHIP_DM9102:
+	case TULIP_CHIP_DM9102A:
+		/*
+		 * Some boards with the Davicom chip have an ISV
+		 * SROM (mostly DM9102A boards -- trying to describe
+		 * the HomePNA PHY, probably) although the data in
+		 * them is generally wrong.  Check for ISV format
+		 * and grab the Ethernet address that way, and if
+		 * that fails, fall back on grabbing it from an
+		 * observed offset of 20 (which is where it would
+		 * be in an ISV SROM anyhow, tho ISV can cope with
+		 * multi-port boards).
+		 */
+		if (!tlp_isv_srom_enaddr(sc, enaddr)) {
+#ifdef __sparc__
+			if ((sc->sc_srom[20] == 0 &&
+			     sc->sc_srom[21] == 0 &&
+			     sc->sc_srom[22] == 0) ||
+			    (sc->sc_srom[20] == 0xff &&
+			     sc->sc_srom[21] == 0xff &&
+			     sc->sc_srom[22] == 0xff)) {
+				prom_getether(PCITAG_NODE(pa->pa_tag), enaddr);
+			} else
+#endif
+			memcpy(enaddr, &sc->sc_srom[20], ETHER_ADDR_LEN);
+		}
+
+		/*
+		 * Davicom chips all have an internal MII interface
+		 * and a built-in PHY.  DM9102A also has a an external
+		 * MII interface, usually with a HomePNA PHY attached
+		 * to it.
+		 */
+		sc->sc_mediasw = &tlp_dm9102_mediasw;
+		break;
+
+	case TULIP_CHIP_AX88140:
+	case TULIP_CHIP_AX88141:
+		/*
+		 * ASIX AX88140/AX88141 Ethernet Address is located at offset
+		 * 20 of the SROM.
+		 */
+		memcpy(enaddr, &sc->sc_srom[20], ETHER_ADDR_LEN);
+
+		/*
+		 * ASIX AX88140A/AX88141 chip can have a built-in PHY or
+		 * an external MII interface.
+		 */
+		sc->sc_mediasw = &tlp_asix_mediasw;
+		break;
+
+	case TULIP_CHIP_RS7112:
+		/*
+		 * RS7112 Ethernet Address is located of offset 0x19a
+		 * of the SROM
+		 */
+		memcpy(enaddr, &sc->sc_srom[0x19a], ETHER_ADDR_LEN);
+
+		/* RS7112 chip has a PHY at MII address 1 */
+		sc->sc_mediasw = &tlp_rs7112_mediasw;
+		break;
+
 	default:
  cant_cope:
 		printf("%s: sorry, unable to handle your board\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(&sc->sc_dev));
 		return;
 	}
 
@@ -840,31 +989,28 @@ tlp_pci_attach(parent, self, aux)
 
 	if (psc->sc_flags & TULIP_PCI_SLAVEINTR) {
 		printf("%s: sharing interrupt with %s\n",
-		    sc->sc_dev.dv_xname,
-		    psc->sc_master->sc_tulip.sc_dev.dv_xname);
+		    device_xname(&sc->sc_dev),
+		    device_xname(&psc->sc_master->sc_tulip.sc_dev));
 	} else {
 		/*
 		 * Map and establish our interrupt.
 		 */
-		if (pci_intr_map(pc, pa->pa_intrtag, pa->pa_intrpin,
-		    pa->pa_intrline, &ih)) {
-			printf("%s: unable to map interrupt\n",
-			    sc->sc_dev.dv_xname);
+		if (pci_intr_map(pa, &ih)) {
+			aprint_error_dev(&sc->sc_dev, "unable to map interrupt\n");
 			return;
 		}
-		intrstr = pci_intr_string(pc, ih); 
+		intrstr = pci_intr_string(pc, ih);
 		psc->sc_ih = pci_intr_establish(pc, ih, IPL_NET,
 		    (psc->sc_flags & TULIP_PCI_SHAREDINTR) ?
 		    tlp_pci_shared_intr : tlp_intr, sc);
 		if (psc->sc_ih == NULL) {
-			printf("%s: unable to establish interrupt",
-			    sc->sc_dev.dv_xname);
+			aprint_error_dev(&sc->sc_dev, "unable to establish interrupt");
 			if (intrstr != NULL)
 				printf(" at %s", intrstr);
 			printf("\n");
 			return;
 		}
-		printf("%s: interrupting at %s\n", sc->sc_dev.dv_xname,
+		printf("%s: interrupting at %s\n", device_xname(&sc->sc_dev),
 		    intrstr);
 	}
 
@@ -874,9 +1020,8 @@ tlp_pci_attach(parent, self, aux)
 	tlp_attach(sc, enaddr);
 }
 
-int
-tlp_pci_shared_intr(arg)
-	void *arg;
+static int
+tlp_pci_shared_intr(void *arg)
 {
 	struct tulip_pci_softc *master = arg, *slave;
 	int rv = 0;
@@ -885,14 +1030,12 @@ tlp_pci_shared_intr(arg)
 	     slave != NULL;
 	     slave = LIST_NEXT(slave, sc_intrq))
 		rv |= tlp_intr(&slave->sc_tulip);
-	
-	return (rv);
+
+	return rv;
 }
 
-void
-tlp_pci_dec_quirks(psc, enaddr)
-	struct tulip_pci_softc *psc;
-	const u_int8_t *enaddr;
+static void
+tlp_pci_dec_quirks(struct tulip_pci_softc *psc, const uint8_t *enaddr)
 {
 	struct tulip_softc *sc = &psc->sc_tulip;
 
@@ -905,15 +1048,15 @@ tlp_pci_dec_quirks(psc, enaddr)
 	if (memcmp(&sc->sc_srom[29], "DE500", 5) == 0 ||
 	    memcmp(&sc->sc_srom[29], "DE450", 5) == 0)
 		memcpy(&sc->sc_name[4], &sc->sc_srom[29], 8);
+	else
+		sc->sc_name[3] = '\0';
 }
 
-void
-tlp_pci_znyx_21040_quirks(psc, enaddr)
-	struct tulip_pci_softc *psc;
-	const u_int8_t *enaddr;
+static void
+tlp_pci_znyx_21040_quirks(struct tulip_pci_softc *psc, const uint8_t *enaddr)
 {
 	struct tulip_softc *sc = &psc->sc_tulip;
-	u_int16_t id = 0;
+	uint16_t id = 0;
 
 	/*
 	 * If we have a slaved ROM, just copy the bits from the master.
@@ -963,6 +1106,7 @@ tlp_pci_znyx_21040_quirks(psc, enaddr)
 
 		default:
 			id = 0;
+			break;
 		}
 	}
 
@@ -981,13 +1125,62 @@ tlp_pci_znyx_21040_quirks(psc, enaddr)
 	strcpy(sc->sc_name, "ZNYX ZX31x");
 }
 
-void
-tlp_pci_smc_21040_quirks(psc, enaddr)
-	struct tulip_pci_softc *psc;
-	const u_int8_t *enaddr;
+static void	tlp_pci_znyx_21142_qs6611_reset(struct tulip_softc *);
+
+static void
+tlp_pci_znyx_21142_quirks(struct tulip_pci_softc *psc, const uint8_t *enaddr)
 {
 	struct tulip_softc *sc = &psc->sc_tulip;
-	u_int16_t id1, id2, ei;
+	pcireg_t subid;
+
+	subid = pci_conf_read(psc->sc_pc, psc->sc_pcitag, PCI_SUBSYS_ID_REG);
+
+	if (PCI_VENDOR(subid) != PCI_VENDOR_ZNYX)
+		return;		/* ? */
+
+	switch (PCI_PRODUCT(subid) & 0xff) {
+	/*
+	 * ZNYX 21143 boards with QS6611 PHY
+	 */
+	case 0x12:	/* ZX345Q */
+	case 0x13:	/* ZX346Q */
+	case 0x14:	/* ZX348Q */
+	case 0x18:	/* ZX414 */
+	case 0x19:	/* ZX412 */
+	case 0x1a:	/* ZX444 */
+	case 0x1b:	/* ZX442 */
+	case 0x23:	/* ZX212 */
+	case 0x24:	/* ZX214 */
+	case 0x29:	/* ZX374 */
+	case 0x2d:	/* ZX372 */
+	case 0x2b:	/* ZX244 */
+	case 0x2c:	/* ZX424 */
+	case 0x2e:	/* ZX422 */
+		printf("%s: QS6611 PHY\n", device_xname(&sc->sc_dev));
+		sc->sc_reset = tlp_pci_znyx_21142_qs6611_reset;
+		break;
+	}
+}
+
+static void
+tlp_pci_znyx_21142_qs6611_reset(struct tulip_softc *sc)
+{
+
+	/*
+	 * Reset QS6611 PHY.
+	 */
+	TULIP_WRITE(sc, CSR_SIAGEN,
+	    SIAGEN_CWE | SIAGEN_LGS1 | SIAGEN_ABM | (0xf << 16));
+	delay(200);
+	TULIP_WRITE(sc, CSR_SIAGEN, (0x4 << 16));
+	delay(10000);
+}
+
+static void
+tlp_pci_smc_21040_quirks(struct tulip_pci_softc *psc, const uint8_t *enaddr)
+{
+	struct tulip_softc *sc = &psc->sc_tulip;
+	uint16_t id1, id2, ei;
 	int auibnc = 0, utp = 0;
 	char *cp;
 
@@ -1025,31 +1218,25 @@ tlp_pci_smc_21040_quirks(psc, enaddr)
 		sc->sc_mediasw = &tlp_21040_auibnc_mediasw;
 }
 
-void
-tlp_pci_cogent_21040_quirks(psc, enaddr)
-	struct tulip_pci_softc *psc;
-	const u_int8_t *enaddr;
+static void
+tlp_pci_cogent_21040_quirks(struct tulip_pci_softc *psc, const uint8_t *enaddr)
 {
 
 	strcpy(psc->sc_tulip.sc_name, "Cogent multi-port");
 	psc->sc_flags |= TULIP_PCI_SHAREDINTR|TULIP_PCI_SHAREDROM;
 }
 
-void
-tlp_pci_accton_21040_quirks(psc, enaddr)
-	struct tulip_pci_softc *psc;
-	const u_int8_t *enaddr;
+static void
+tlp_pci_accton_21040_quirks(struct tulip_pci_softc *psc, const uint8_t *enaddr)
 {
 
 	strcpy(psc->sc_tulip.sc_name, "ACCTON EN1203");
 }
 
-void	tlp_pci_asante_21140_reset __P((struct tulip_softc *));
+static void	tlp_pci_asante_21140_reset(struct tulip_softc *);
 
-void
-tlp_pci_asante_21140_quirks(psc, enaddr)
-	struct tulip_pci_softc *psc;
-	const u_int8_t *enaddr;
+static void
+tlp_pci_asante_21140_quirks(struct tulip_pci_softc *psc, const uint8_t *enaddr)
 {
 	struct tulip_softc *sc = &psc->sc_tulip;
 
@@ -1070,9 +1257,23 @@ tlp_pci_asante_21140_quirks(psc, enaddr)
 	sc->sc_mediasw = &tlp_sio_mii_mediasw;
 }
 
-void
-tlp_pci_asante_21140_reset(sc)
-	struct tulip_softc *sc;
+static void
+tlp_pci_e100_quirks(struct tulip_pci_softc *psc, const uint8_t *enaddr)
+{
+	struct tulip_softc *sc = &psc->sc_tulip;
+
+	if (sc->sc_mediasw == &tlp_2114x_isv_mediasw)
+		return;
+
+	strcpy(sc->sc_name, "UMAX E100");
+
+	sc->sc_gp_dir = 0xbf;
+	sc->sc_reset = tlp_pci_asante_21140_reset;
+	sc->sc_mediasw = &tlp_sio_mii_mediasw;
+}
+
+static void
+tlp_pci_asante_21140_reset(struct tulip_softc *sc)
 {
 
 	TULIP_WRITE(sc, CSR_GPP, GPP_GPC | sc->sc_gp_dir);
@@ -1081,12 +1282,150 @@ tlp_pci_asante_21140_reset(sc)
 	TULIP_WRITE(sc, CSR_GPP, 0);
 }
 
-void	tlp_pci_cobalt_21142_reset __P((struct tulip_softc *));
+static void	tlp_pci_phobos_21140_reset(struct tulip_softc *);
 
-void
-tlp_pci_cobalt_21142_quirks(psc, enaddr)
-	struct tulip_pci_softc *psc;
-	const u_int8_t *enaddr;
+static void
+tlp_pci_phobos_21140_quirks(struct tulip_pci_softc *psc, const uint8_t *enaddr)
+{
+	struct tulip_softc *sc = &psc->sc_tulip;
+
+	/*
+	 * Phobo boards just use MII-on_SIO.
+	 */
+	sc->sc_mediasw = &tlp_sio_mii_mediasw;
+	sc->sc_reset = tlp_pci_phobos_21140_reset;
+
+	/*
+	 * These boards appear solely on sgimips machines behind a special
+	 * GIO<->PCI ASIC and require the DBO and BLE bits to be set in CSR0.
+	 */
+	sc->sc_flags |= (TULIPF_BLE | TULIPF_DBO);
+}
+
+static void
+tlp_pci_phobos_21140_reset(struct tulip_softc *sc)
+{
+
+	TULIP_WRITE(sc, CSR_GPP, 0x1fd);
+	delay(10);
+	TULIP_WRITE(sc, CSR_GPP, 0xfd);
+	delay(10);
+	TULIP_WRITE(sc, CSR_GPP, 0);
+}
+
+/*
+ * SMC 9332DST media switch.
+ */
+static void	tlp_smc9332dst_tmsw_init(struct tulip_softc *);
+
+static const struct tulip_mediasw tlp_smc9332dst_mediasw = {
+	tlp_smc9332dst_tmsw_init,
+	tlp_21140_gpio_get,
+	tlp_21140_gpio_set
+};
+
+static void
+tlp_pci_smc_21140_quirks(struct tulip_pci_softc *psc, const uint8_t *enaddr)
+{
+	struct tulip_softc *sc = &psc->sc_tulip;
+
+	if (sc->sc_mediasw != NULL) {
+		return;
+	}
+	strcpy(psc->sc_tulip.sc_name, "SMC 9332DST");
+	sc->sc_mediasw = &tlp_smc9332dst_mediasw;
+}
+
+static void
+tlp_smc9332dst_tmsw_init(struct tulip_softc *sc)
+{
+	struct tulip_21x4x_media *tm;
+	const char *sep = "";
+	uint32_t reg;
+	int i, cnt;
+
+	sc->sc_gp_dir = GPP_SMC9332DST_PINS;
+	sc->sc_opmode = OPMODE_MBO | OPMODE_PS;
+	TULIP_WRITE(sc, CSR_OPMODE, sc->sc_opmode);
+
+	ifmedia_init(&sc->sc_mii.mii_media, 0, tlp_mediachange,
+	    tlp_mediastatus);
+	printf("%s: ", device_xname(&sc->sc_dev));
+
+#define	ADD(m, c) \
+	tm = malloc(sizeof(*tm), M_DEVBUF, M_WAITOK|M_ZERO);		\
+	tm->tm_opmode = (c);						\
+	tm->tm_gpdata = GPP_SMC9332DST_INIT;				\
+	ifmedia_add(&sc->sc_mii.mii_media, (m), 0, tm)
+#define	PRINT(str)	printf("%s%s", sep, str); sep = ", "
+
+	ADD(IFM_MAKEWORD(IFM_ETHER, IFM_10_T, 0, 0), OPMODE_TTM);
+	PRINT("10baseT");
+
+	ADD(IFM_MAKEWORD(IFM_ETHER, IFM_10_T, IFM_FDX, 0),
+	    OPMODE_TTM | OPMODE_FD);
+	PRINT("10baseT-FDX");
+
+	ADD(IFM_MAKEWORD(IFM_ETHER, IFM_100_TX, 0, 0),
+	    OPMODE_PS | OPMODE_PCS | OPMODE_SCR);
+	PRINT("100baseTX");
+
+	ADD(IFM_MAKEWORD(IFM_ETHER, IFM_100_TX, IFM_FDX, 0),
+	    OPMODE_PS | OPMODE_PCS | OPMODE_SCR | OPMODE_FD);
+	PRINT("100baseTX-FDX");
+
+#undef ADD
+#undef PRINT
+
+	printf("\n");
+
+	tlp_reset(sc);
+	TULIP_WRITE(sc, CSR_OPMODE, sc->sc_opmode | OPMODE_PCS | OPMODE_SCR);
+	TULIP_WRITE(sc, CSR_GPP, GPP_GPC | sc->sc_gp_dir);
+	delay(10);
+	TULIP_WRITE(sc, CSR_GPP, GPP_SMC9332DST_INIT);
+	delay(200000);
+	cnt = 0;
+	for (i = 1000; i > 0; i--) {
+		reg = TULIP_READ(sc, CSR_GPP);
+		if ((~reg & (GPP_SMC9332DST_OK10 |
+			     GPP_SMC9332DST_OK100)) == 0) {
+			if (cnt++ > 100) {
+				break;
+			}
+		} else if ((reg & GPP_SMC9332DST_OK10) == 0) {
+			break;
+		} else {
+			cnt = 0;
+		}
+		delay(1000);
+	}
+	if (cnt > 100) {
+		ifmedia_set(&sc->sc_mii.mii_media, IFM_ETHER|IFM_100_TX);
+	} else {
+		ifmedia_set(&sc->sc_mii.mii_media, IFM_ETHER|IFM_10_T);
+	}
+}
+
+static void
+tlp_pci_vpc_21140_quirks(struct tulip_pci_softc *psc, const uint8_t *enaddr)
+{
+	struct tulip_softc *sc = &psc->sc_tulip;
+	char *p1 = (char *) &sc->sc_srom[32];
+	char *p2 = &sc->sc_name[0];
+
+	do {
+		if ((unsigned char) *p1 & 0x80)
+			*p2++ = ' ';
+		else
+			*p2++ = *p1;
+	} while (*p1++);
+}
+
+static void	tlp_pci_cobalt_21142_reset(struct tulip_softc *);
+
+static void
+tlp_pci_cobalt_21142_quirks(struct tulip_pci_softc *psc, const uint8_t *enaddr)
 {
 	struct tulip_softc *sc = &psc->sc_tulip;
 
@@ -1101,19 +1440,220 @@ tlp_pci_cobalt_21142_quirks(psc, enaddr)
 	 * pretty quickly, so we select that from the beginning to
 	 * avoid initial timeouts.
 	 */
-#define TXTH_SF		4
 	sc->sc_txthresh = TXTH_SF;
 }
 
-void
-tlp_pci_cobalt_21142_reset(sc)
-	struct tulip_softc *sc;
+static void
+tlp_pci_cobalt_21142_reset(struct tulip_softc *sc)
 {
+
 	/*
 	 * Reset PHY.
 	 */
 	TULIP_WRITE(sc, CSR_SIAGEN, SIAGEN_CWE | (1 << 16));
 	delay(10);
 	TULIP_WRITE(sc, CSR_SIAGEN, SIAGEN_CWE);
+	delay(10);
+}
+
+static void
+tlp_pci_algor_21142_quirks(struct tulip_pci_softc *psc, const uint8_t *enaddr)
+{
+	struct tulip_softc *sc = &psc->sc_tulip;
+
+	/*
+	 * Algorithmics boards just have MII-on-SIO.
+	 *
+	 * XXX They also have AUI on the serial interface.
+	 * XXX Deal with this.
+	 */
+	sc->sc_mediasw = &tlp_sio_mii_mediasw;
+}
+
+/*
+ * Cogent EM1x0 (aka. Adaptec ANA-6910) media switch.
+ */
+static void	tlp_cogent_em1x0_tmsw_init(struct tulip_softc *);
+
+static const struct tulip_mediasw tlp_cogent_em1x0_mediasw = {
+	tlp_cogent_em1x0_tmsw_init,
+	tlp_21140_gpio_get,
+	tlp_21140_gpio_set
+};
+
+static void
+tlp_pci_adaptec_quirks(struct tulip_pci_softc *psc, const uint8_t *enaddr)
+{
+	struct tulip_softc *sc = &psc->sc_tulip;
+	uint8_t *srom = sc->sc_srom, id0;
+	uint16_t id1, id2;
+
+	if (sc->sc_mediasw == NULL) {
+		id0 = srom[32];
+		switch (id0) {
+		case 0x12:
+			strcpy(psc->sc_tulip.sc_name, "Cogent EM100TX");
+			sc->sc_mediasw = &tlp_cogent_em1x0_mediasw;
+			break;
+
+		case 0x15:
+			strcpy(psc->sc_tulip.sc_name, "Cogent EM100FX");
+			sc->sc_mediasw = &tlp_cogent_em1x0_mediasw;
+			break;
+
+#if 0
+		case XXX:
+			strcpy(psc->sc_tulip.sc_name, "Cogent EM110TX");
+			sc->sc_mediasw = &tlp_cogent_em1x0_mediasw;
+			break;
+#endif
+
+		default:
+			printf("%s: unknown Cogent board ID 0x%02x\n",
+			    device_xname(&sc->sc_dev), id0);
+		}
+		return;
+	}
+
+	id1 = TULIP_ROM_GETW(srom, 0);
+	id2 = TULIP_ROM_GETW(srom, 2);
+	if (id1 != 0x1109) {
+		goto unknown;
+	}
+
+	switch (id2) {
+	case 0x1900:
+		strcpy(psc->sc_tulip.sc_name, "Adaptec ANA-6911");
+		break;
+
+	case 0x2400:
+		strcpy(psc->sc_tulip.sc_name, "Adaptec ANA-6944A");
+		psc->sc_flags |= TULIP_PCI_SHAREDINTR|TULIP_PCI_SHAREDROM;
+		break;
+
+	case 0x2b00:
+		strcpy(psc->sc_tulip.sc_name, "Adaptec ANA-6911A");
+		break;
+
+	case 0x3000:
+		strcpy(psc->sc_tulip.sc_name, "Adaptec ANA-6922");
+		psc->sc_flags |= TULIP_PCI_SHAREDINTR|TULIP_PCI_SHAREDROM;
+		break;
+
+	default:
+ unknown:
+		printf("%s: unknown Adaptec/Cogent board ID 0x%04x/0x%04x\n",
+		    device_xname(&sc->sc_dev), id1, id2);
+	}
+}
+
+static void
+tlp_cogent_em1x0_tmsw_init(struct tulip_softc *sc)
+{
+	struct tulip_21x4x_media *tm;
+	const char *sep = "";
+
+	sc->sc_gp_dir = GPP_COGENT_EM1x0_PINS;
+	sc->sc_opmode = OPMODE_MBO | OPMODE_PS;
+	TULIP_WRITE(sc, CSR_OPMODE, sc->sc_opmode);
+
+	ifmedia_init(&sc->sc_mii.mii_media, 0, tlp_mediachange,
+	    tlp_mediastatus);
+	printf("%s: ", device_xname(&sc->sc_dev));
+
+#define	ADD(m, c) \
+	tm = malloc(sizeof(*tm), M_DEVBUF, M_WAITOK|M_ZERO);		\
+	tm->tm_opmode = (c);						\
+	tm->tm_gpdata = GPP_COGENT_EM1x0_INIT;				\
+	ifmedia_add(&sc->sc_mii.mii_media, (m), 0, tm)
+#define	PRINT(str)	printf("%s%s", sep, str); sep = ", "
+
+	if (sc->sc_srom[32] == 0x15) {
+		ADD(IFM_MAKEWORD(IFM_ETHER, IFM_100_FX, 0, 0),
+		    OPMODE_PS | OPMODE_PCS);
+		PRINT("100baseFX");
+
+		ADD(IFM_MAKEWORD(IFM_ETHER, IFM_100_FX, IFM_FDX, 0),
+		    OPMODE_PS | OPMODE_PCS | OPMODE_FD);
+		PRINT("100baseFX-FDX");
+		printf("\n");
+
+		ifmedia_set(&sc->sc_mii.mii_media, IFM_ETHER|IFM_100_FX);
+	} else {
+		ADD(IFM_MAKEWORD(IFM_ETHER, IFM_100_TX, 0, 0),
+		    OPMODE_PS | OPMODE_PCS | OPMODE_SCR);
+		PRINT("100baseTX");
+
+		ADD(IFM_MAKEWORD(IFM_ETHER, IFM_100_FX, IFM_FDX, 0),
+		    OPMODE_PS | OPMODE_PCS | OPMODE_SCR | OPMODE_FD);
+		PRINT("100baseTX-FDX");
+		printf("\n");
+
+		ifmedia_set(&sc->sc_mii.mii_media, IFM_ETHER|IFM_100_TX);
+	}
+
+#undef ADD
+#undef PRINT
+}
+
+static void	tlp_pci_netwinder_21142_reset(struct tulip_softc *);
+
+static void
+tlp_pci_netwinder_21142_quirks(struct tulip_pci_softc *psc,
+    const uint8_t *enaddr)
+{
+	struct tulip_softc *sc = &psc->sc_tulip;
+
+	/*
+	 * Netwinders just use MII-on_SIO.
+	 */
+	sc->sc_mediasw = &tlp_sio_mii_mediasw;
+	sc->sc_reset = tlp_pci_netwinder_21142_reset;
+}
+
+void
+tlp_pci_netwinder_21142_reset(struct tulip_softc *sc)
+{
+
+	/*
+	 * Reset the PHY.
+	 */
+	TULIP_WRITE(sc, CSR_SIAGEN, 0x0821 << 16);
+	delay(10);
+	TULIP_WRITE(sc, CSR_SIAGEN, 0x0000 << 16);
+	delay(10);
+	TULIP_WRITE(sc, CSR_SIAGEN, 0x0001 << 16);
+	delay(10);
+}
+
+static void	tlp_pci_phobos_21142_reset(struct tulip_softc *);
+
+static void
+tlp_pci_phobos_21142_quirks(struct tulip_pci_softc *psc, const uint8_t *enaddr)
+{
+	struct tulip_softc *sc = &psc->sc_tulip;
+
+	/*
+	 * Phobo boards just use MII-on_SIO.
+	 */
+	sc->sc_mediasw = &tlp_sio_mii_mediasw;
+	sc->sc_reset = tlp_pci_phobos_21142_reset;
+
+	/*
+	 * These boards appear solely on sgimips machines behind a special
+	 * GIO<->PCI ASIC and require the DBO and BLE bits to be set in CSR0.
+	 */
+	sc->sc_flags |= (TULIPF_BLE | TULIPF_DBO);
+}
+
+static void
+tlp_pci_phobos_21142_reset(struct tulip_softc *sc)
+{
+	/*
+	 * Reset PHY.
+	 */
+	TULIP_WRITE(sc, CSR_SIAGEN, (0x880f << 16));
+	delay(10);
+	TULIP_WRITE(sc, CSR_SIAGEN, (0x800f << 16));
 	delay(10);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: ctype.h,v 1.17 1998/05/10 16:57:51 kleink Exp $	*/
+/*	$NetBSD: ctype.h,v 1.29 2005/12/26 19:01:47 perry Exp $	*/
 
 /*
  * Copyright (c) 1989 The Regents of the University of California.
@@ -17,11 +17,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -43,9 +39,8 @@
 #ifndef _CTYPE_H_
 #define _CTYPE_H_
 
-#include <sys/featuretest.h>
-
 #include <sys/cdefs.h>
+#include <sys/featuretest.h>
 
 #define	_U	0x01
 #define	_L	0x02
@@ -62,70 +57,76 @@ extern const short	*_toupper_tab_;
 
 
 __BEGIN_DECLS
-extern int	isalnum __P ((int));
-extern int	isalpha __P ((int));
-extern int	iscntrl __P ((int));
-extern int	isdigit __P ((int));
-extern int	isgraph __P ((int));
-extern int	islower __P ((int));
-extern int	isprint __P ((int));
-extern int	ispunct __P ((int));
-extern int	isspace __P ((int));
-extern int	isupper __P ((int));
-extern int	isxdigit __P ((int));
-extern int	tolower __P ((int));
-extern int	toupper __P ((int));
+int	isalnum(int);
+int	isalpha(int);
+int	iscntrl(int);
+int	isdigit(int);
+int	isgraph(int);
+int	islower(int);
+int	isprint(int);
+int	ispunct(int);
+int	isspace(int);
+int	isupper(int);
+int	isxdigit(int);
+int	tolower(int);
+int	toupper(int);
 
-#if !defined(_ANSI_SOURCE) && !defined(_POSIX_C_SOURCE) || \
-    defined(_XOPEN_SOURCE)
-extern int	isascii __P ((int));
-extern int	toascii __P ((int));
-extern int	_tolower __P ((int));
-extern int	_toupper __P ((int));
+#if defined(_XOPEN_SOURCE) || defined(_NETBSD_SOURCE)
+int	isascii(int);
+int	toascii(int);
+int	_tolower(int);
+int	_toupper(int);
 #endif
 
-#if !defined(_ANSI_SOURCE) && !defined(_POSIX_C_SOURCE) && \
-    !defined(_XOPEN_SOURCE)
-extern int	isblank __P ((int));
+#if defined(_ISOC99_SOURCE) || (_POSIX_C_SOURCE - 0) > 200112L || \
+    (_XOPEN_SOURCE - 0) > 600 || defined(_NETBSD_SOURCE)
+int	isblank(int);
 #endif
 __END_DECLS
 
-#define	isdigit(c)	((int)((_ctype_ + 1)[(int)(c)] & _N))
-#define	islower(c)	((int)((_ctype_ + 1)[(int)(c)] & _L))
-#define	isspace(c)	((int)((_ctype_ + 1)[(int)(c)] & _S))
-#define	ispunct(c)	((int)((_ctype_ + 1)[(int)(c)] & _P))
-#define	isupper(c)	((int)((_ctype_ + 1)[(int)(c)] & _U))
-#define	isalpha(c)	((int)((_ctype_ + 1)[(int)(c)] & (_U|_L)))
-#define	isxdigit(c)	((int)((_ctype_ + 1)[(int)(c)] & (_N|_X)))
-#define	isalnum(c)	((int)((_ctype_ + 1)[(int)(c)] & (_U|_L|_N)))
-#define	isprint(c)	((int)((_ctype_ + 1)[(int)(c)] & (_P|_U|_L|_N|_B)))
-#define	isgraph(c)	((int)((_ctype_ + 1)[(int)(c)] & (_P|_U|_L|_N)))
-#define	iscntrl(c)	((int)((_ctype_ + 1)[(int)(c)] & _C))
-#define	tolower(c)	((int)((_tolower_tab_ + 1)[(int)(c)]))
-#define	toupper(c)	((int)((_toupper_tab_ + 1)[(int)(c)]))
+#define	isdigit(c)	((int)((_ctype_ + 1)[(c)] & _N))
+#define	islower(c)	((int)((_ctype_ + 1)[(c)] & _L))
+#define	isspace(c)	((int)((_ctype_ + 1)[(c)] & _S))
+#define	ispunct(c)	((int)((_ctype_ + 1)[(c)] & _P))
+#define	isupper(c)	((int)((_ctype_ + 1)[(c)] & _U))
+#define	isalpha(c)	((int)((_ctype_ + 1)[(c)] & (_U|_L)))
+#define	isxdigit(c)	((int)((_ctype_ + 1)[(c)] & (_N|_X)))
+#define	isalnum(c)	((int)((_ctype_ + 1)[(c)] & (_U|_L|_N)))
+#define	isprint(c)	((int)((_ctype_ + 1)[(c)] & (_P|_U|_L|_N|_B)))
+#define	isgraph(c)	((int)((_ctype_ + 1)[(c)] & (_P|_U|_L|_N)))
+#define	iscntrl(c)	((int)((_ctype_ + 1)[(c)] & _C))
+#define	tolower(c)	((int)((_tolower_tab_ + 1)[(c)]))
+#define	toupper(c)	((int)((_toupper_tab_ + 1)[(c)]))
 
-#if !defined(_ANSI_SOURCE) && !defined (_POSIX_C_SOURCE) || \
-    defined(_XOPEN_SOURCE)
+#if defined(_XOPEN_SOURCE) || defined(_NETBSD_SOURCE)
 #define	isascii(c)	((unsigned)(c) <= 0177)
 #define	toascii(c)	((c) & 0177)
 #define _tolower(c)	((c) - 'A' + 'a')
 #define _toupper(c)	((c) - 'a' + 'A')
 #endif
 
-#if !defined(_ANSI_SOURCE) && !defined(_POSIX_C_SOURCE) && \
-    !defined(_XOPEN_SOURCE)
-#if notyet
-#define isblank(c)	((int)((_ctype_ + 1)[(int)(c)] & _B))
+#if defined(_ISO_C99_SOURCE) || (_POSIX_C_SOURCE - 0) > 200112L || \
+    (_XOPEN_SOURCE - 0) > 600 || defined(_NETBSD_SOURCE)
+
+/*
+ * isblank() is implemented as C function, due to insufficient bitwidth in
+ * _ctype_.  Note that _B does not mean isblank - it means isprint && !isgraph.
+ */
+#if 0
+#define isblank(c)	((int)((_ctype_ + 1)[(c)] & _B))
 #endif
+
 #endif
 
 #ifdef _CTYPE_PRIVATE
-#define _CTYPE_NUM_CHARS	(1<<(sizeof(char)<<3))
+#include <machine/limits.h>	/* for CHAR_BIT */
+
+#define _CTYPE_NUM_CHARS	(1 << CHAR_BIT)
 
 #define _CTYPE_ID	 	"BSDCTYPE"
 #define _CTYPE_REV		2
 
-extern const u_int8_t _C_ctype_[];
+extern const uint8_t _C_ctype_[];
 extern const int16_t _C_toupper_[];
 extern const int16_t _C_tolower_[];
 #endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: driver.c,v 1.4 1999/12/22 14:38:12 kleink Exp $	*/
+/*	$NetBSD: driver.c,v 1.9 2003/03/09 01:08:48 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1998-1999 Brett Lymn (blymn@baea.com.au, brett_lymn@yahoo.com.au)
@@ -10,7 +10,7 @@
  * 1. Redistributions of source code must retain the above copyright
  *    notice, this list of conditions and the following disclaimer.
  * 2. The name of the author may not be used to endorse or promote products
- *    derived from this software withough specific prior written permission
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -26,6 +26,9 @@
  *
  */
 
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: driver.c,v 1.9 2003/03/09 01:08:48 lukem Exp $");
+
 #include <menu.h>
 #include <ctype.h>
 #include <stdlib.h>
@@ -40,12 +43,12 @@
  * request and is not printable then it assumed to be a user defined command.
  */
 int
-menu_driver(menu, c)
-	MENU *menu;
-	int c;
+menu_driver(MENU *menu, int c)
 {
-	int drv_top_row, drv_scroll, it, status = E_OK;
+	int drv_top_row, drv_scroll, i, it, status = E_OK;
 	ITEM *drv_new_item;
+
+	i = 0;
 	
 	if (menu == NULL)
 		return E_BAD_ARGUMENT;
@@ -169,8 +172,32 @@ menu_driver(menu, c)
 			  }
 			  break;
 		  case REQ_TOGGLE_ITEM:
-			  if ((menu->opts & O_ONEVALUE) == O_ONEVALUE) {
-				  return E_REQUEST_DENIED;
+			  if ((menu->opts & (O_RADIO | O_ONEVALUE)) != 0) {
+			      if ((menu->opts & O_RADIO) == O_RADIO) {
+				  if ((drv_new_item->opts & O_SELECTABLE)
+							!= O_SELECTABLE)
+					  return E_NOT_SELECTABLE;
+
+				    /* don't deselect selected item */
+				  if (drv_new_item->selected == 1)
+					  return E_REQUEST_DENIED;
+				  
+				  /* deselect all items */
+			          for (i = 0; i < menu->item_count; i++) {
+				      if ((menu->items[i]->selected) &&
+					  (drv_new_item->index != i)) {
+				          menu->items[i]->selected ^= 1;
+					  _menui_draw_item(menu,
+						menu->items[i]->index);
+				      }
+				  }
+
+				    /* turn on selected item */
+				  drv_new_item->selected ^= 1;
+				  _menui_draw_item(menu, drv_new_item->index);
+			      } else {
+			      	  return E_REQUEST_DENIED;
+			      }
 			  } else {
 				  if ((drv_new_item->opts
 				       & O_SELECTABLE) == O_SELECTABLE) {
@@ -178,7 +205,7 @@ menu_driver(menu, c)
 					  drv_new_item->selected ^= 1;
 					    /* update item in menu */
 					  _menui_draw_item(menu,
-							    drv_new_item->index);
+						drv_new_item->index);
 				  } else {
 					  return E_NOT_SELECTABLE;
 				  }
@@ -218,10 +245,10 @@ menu_driver(menu, c)
 	} else if (c > MAX_COMMAND) {
 		  /* must be a user command */
 		return E_UNKNOWN_COMMAND;
-	} else if (isprint((char) c)) {
+	} else if (isprint((unsigned char) c)) {
 		  /* otherwise search items for the character. */
-		status = _menui_match_pattern(menu, c, MATCH_FORWARD,
-					       &it);
+		status = _menui_match_pattern(menu, (unsigned char) c,
+					       MATCH_FORWARD, &it);
 		drv_new_item = menu->items[it];
 
 		  /* update the position of the cursor if we are doing

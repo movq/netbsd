@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 1998/10/18 01:14:28 thorpej Exp $
+#	$NetBSD: Makefile,v 1.4 2005/06/27 01:00:06 christos Exp $
 
 SRCS=	scsictl.c scsi_sense.c scsi_subr.c
 

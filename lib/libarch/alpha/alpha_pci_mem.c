@@ -1,4 +1,4 @@
-/*	$NetBSD: alpha_pci_mem.c,v 1.1 2000/02/26 18:59:36 thorpej Exp $	*/
+/*	$NetBSD: alpha_pci_mem.c,v 1.5 2008/04/28 20:22:55 martin Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -57,11 +50,8 @@ struct alpha_bus_window *alpha_pci_mem_windows;
 int alpha_pci_mem_window_count;
 
 void *
-alpha_pci_mem_map(memaddr, memsize, flags, rabst)
-	bus_addr_t memaddr;
-	bus_size_t memsize;
-	int flags;
-	struct alpha_bus_space_translation *rabst;
+alpha_pci_mem_map(bus_addr_t memaddr, bus_size_t memsize, int flags,
+    struct alpha_bus_space_translation *rabst)
 {
 	struct alpha_bus_window *abw;
 	void *addr;
@@ -91,19 +81,31 @@ alpha_pci_mem_map(memaddr, memsize, flags, rabst)
 		    (memaddr + (memsize - 1)) > abw->abw_abst.abst_bus_end)
 			continue;
 
-		/* If we want linear, the window must be dense. */
-		if (linear && (abw->abw_abst.abst_flags & ABST_DENSE) == 0)
+		/*
+		 * Prefetchable memory must be mapped in dense space;
+		 * otherwise use sparse space.
+		 */
+		if (prefetchable &&
+		    (abw->abw_abst.abst_flags & ABST_DENSE) == 0)
+			continue;
+		if (!prefetchable &&
+		    (abw->abw_abst.abst_flags & ABST_DENSE) != 0)
 			continue;
 
 		/* Looks like we have a winner! */
 		goto found;
 	}
 
+	/* Not found in any of the windows. */
+	return (MAP_FAILED);
+
  found:
 	fd = open(_PATH_MEM, O_RDWR, 0600);
 	if (fd == -1)
 		return (MAP_FAILED);
 
+	if (prefetchable)
+		abw->abw_abst.abst_addr_shift = 0;
 	memsize <<= abw->abw_abst.abst_addr_shift;
 	offset = (memaddr - abw->abw_abst.abst_bus_start) <<
 	    abw->abw_abst.abst_addr_shift;
@@ -124,10 +126,9 @@ alpha_pci_mem_map(memaddr, memsize, flags, rabst)
 }
 
 void
-alpha_pci_mem_unmap(addr, size)
-	void *addr;
-	bus_size_t size;
+alpha_pci_mem_unmap(struct alpha_bus_space_translation *abst, void *addr,
+    bus_size_t size)
 {
 
-	(void) munmap(addr, size);
+	(void) munmap(addr, size << abst->abst_addr_shift);
 }

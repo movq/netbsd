@@ -1,5 +1,5 @@
 %{
-/*	$NetBSD: fgen.l,v 1.8 1999/06/08 12:45:47 tron Exp $	*/
+/*	$NetBSD: fgen.l,v 1.27 2006/04/22 17:51:09 christos Exp $	*/
 /* FLEX input for FORTH input file scanner */
 /*  
  * Copyright (c) 1998 Eduardo Horvath.
@@ -17,7 +17,7 @@
  *    must display the following acknowledgement:
  *      This product includes software developed by Eduardo Horvath.
  * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software withough specific prior written permission
+ *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -41,18 +41,28 @@
 	    }
 	    #define TOKEN struct tok
 */
+#include <sys/cdefs.h>
+#ifdef HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
+#if defined(__RCSID) && !defined(lint)
+__RCSID("$NetBSD: fgen.l,v 1.27 2006/04/22 17:51:09 christos Exp $");
+#endif
+
 %}
 
 %option yylineno
 
-decimal	[0-9]
-hex	[0-9A-Fa-f]
-octal	[0-7]
+decimal	[0-9.]
+hex	[0-9A-Fa-f.]
+octal	[0-7.]
 white	[ \t\n\r\f]
 tail	{white}
 
 %{
 #include <sys/types.h>
+#include <arpa/inet.h>
 
 #include <assert.h>
 #include <err.h>
@@ -90,8 +100,8 @@ int tokenizer = 0;
 Cell parse_stack[PSTKSIZ];
 int parse_stack_ptr = 0;
 
-int	main __P((int, char *[]));
-void	token_err __P((int, char *, char *, char *, ...));
+void	token_err __P((int, char *, char *, char *, ...))
+	__attribute__((__format__(__printf__, 4, 5)));
 YY_DECL;
 
 int debug = 0;
@@ -103,20 +113,17 @@ int debug = 0;
 
 %%
 
-0			{ token.type = TOK_OTHER; token.text = yytext;
-				return &token; }
+0		{ token.type = TOK_OTHER; token.text = yytext; return &token; }
 
-1			{ token.type = TOK_OTHER; token.text = yytext;
-				return &token; }
+1		{ token.type = TOK_OTHER; token.text = yytext; return &token; }
 
-2			{ token.type = TOK_OTHER; token.text = yytext;
-				return &token; }
+2		{ token.type = TOK_OTHER; token.text = yytext; return &token; }
 
-3			{ token.type = TOK_OTHER; token.text = yytext;
-				return &token; }
+3		{ token.type = TOK_OTHER; token.text = yytext; return &token; }
 
--1		{ token.type = TOK_OTHER; token.text = yytext;
-				return &token; }
+-1		{ token.type = TOK_OTHER; token.text = yytext; return &token; }
+
+\.		{ token.type = TOK_OTHER; token.text = yytext; return &token; }
 
 {white}*		/* whitespace -- keep looping */ ;
 
@@ -297,6 +304,7 @@ int spit __P((long));
 void sspit __P((char *));
 int apply_macros __P((YY_BUFFER_STATE, char *));
 int main __P((int argc, char *argv[]));
+Cell cvt __P((char *, char **, int base));
 
 /*
  * Standard FCode names and numbers.  Includes standard
@@ -673,7 +681,7 @@ struct fcode fcodes[] = {
 		{ "xwflip",			0x0252 },
 		{ "xwflips",			0x0253 },
 		{ "xwsplit",			0x0254 },
-		{ NULL, NULL }
+		{ NULL, 0 }
 };
 
 /*
@@ -715,6 +723,48 @@ struct macro macros[] = {
 	{ "(u,)",	"<# u#s u#>" },
 	{ NULL, NULL }
 };
+
+/*
+ * Utility functions.
+ */
+
+/*
+ * ASCII -> long int converter, eats `.'s
+ */
+#define strtol(x, y, z)		cvt(x, y, z)
+Cell
+cvt(s, e, base)
+char *s, **e; 
+int base;
+{
+	Cell v = 0;
+	int c, n = 0;
+
+	c = *s;
+	if (c == '-') { n = 1; s++; }
+
+	for (c = *s; (c = *s); s++) {
+
+		/* Ignore `.' */
+		if (c == '.') 
+			continue;
+		if (c >= '0' && c <= '9')
+			c -= '0';
+		else if (c >= 'a' && c <= 'f')
+			c += 10 - 'a';
+		else if (c >= 'A' && c <= 'F')
+			c += 10 - 'A';
+		if (c >= base)
+			break;
+		v *= base;
+		v += c;
+	}
+	if (e)
+		*e = s;
+	if (n)
+		return (-v);
+	return (v);
+}
 
 /*
  * Parser stack control functions.
@@ -943,7 +993,7 @@ void
 usage(me)
 	char *me;
 {
-	(void)fprintf(stderr, "%s: [-o <outfile>] <infile>\n", me);
+	(void)fprintf(stderr, "%s: [-d level] [-o outfile] infile\n", me);
 	exit(1);
 }
 
@@ -952,8 +1002,6 @@ main(argc, argv)
 	int argc;
 	char *argv[];
 {
-	extern char *optarg;
-	extern int optind;
 	int bflag, ch;
 	FILE *inf;
 	struct fcode_header *fheader;
@@ -973,9 +1021,7 @@ main(argc, argv)
 		case 'o':
 			outfile = optarg;
 			break;
-		case '?':
 		default:
-			warnx("Illegal argument: %c\n", ch);
 			usage(myname);
 		}
 	argc -= optind;
@@ -1018,7 +1064,7 @@ main(argc, argv)
 		fheader->checksum += outbuf[i];
 	fheader->checksum = htons(fheader->checksum);
 
-	if ((outf = open(outfile, O_WRONLY|O_CREAT|O_TRUNC, 0666)) == NULL)
+	if ((outf = open(outfile, O_WRONLY|O_CREAT|O_TRUNC, 0666)) == -1)
 		err(1, "can out open %s for writing", outfile);
 
 	if (write(outf, outbuf, outpos) != outpos) {
@@ -1069,10 +1115,19 @@ tokenize(input)
 			 * project.
 			 */
 			emit("b(lit)");
-			spit(value>>24);
+			spit((value>>24)&0x0ff);
 			spit((value>>16)&0x0ff);
 			spit((value>>8)&0x0ff);
 			spit(value&0x0ff);
+			if ((value>>32) != value && (value>>32) != 0 && 
+				(value>>32) != -1) {
+				emit("b(lit)");
+				spit((value>>56)&0x0ff);
+				spit((value>>48)&0x0ff);
+				spit((value>>40)&0x0ff);
+				spit((value>>32)&0x0ff);
+				emit("lxjoin");
+			}
 		}
 		break;
 		case TOK_C_LIT:
@@ -1218,6 +1273,8 @@ tokenize(input)
 			alias->name = strdup(token->text);
 			token = yylex();
 			if (token == NULL) {
+				free(alias->name);
+				free(alias);
 				(void)printf( "EOF in alias definition\n");
 				return;
 			}			
@@ -1399,10 +1456,18 @@ tokenize(input)
 				 * project.
 				 */
 				emit("b(lit)");
-				spit(value>>24);
+				spit((value>>24)&0x0ff);
 				spit((value>>16)&0x0ff);
 				spit((value>>8)&0x0ff);
 				spit(value&0x0ff);
+				if ((value>>32) != value && (value>>32) != 0) {
+					emit("b(lit)");
+					spit((value>>56)&0x0ff);
+					spit((value>>48)&0x0ff);
+					spit((value>>40)&0x0ff);
+					spit((value>>32)&0x0ff);
+					emit("lxjoin");
+				}
 			}
 			break;
 		case TOK_DEFER:
@@ -1600,10 +1665,18 @@ tokenize(input)
 				 * project.
 				 */
 				emit("b(lit)");
-				spit(value>>24);
+				spit((value>>24)&0x0ff);
 				spit((value>>16)&0x0ff);
 				spit((value>>8)&0x0ff);
 				spit(value&0x0ff);
+				if ((value>>32) != value && (value>>32) != 0) {
+					emit("b(lit)");
+					spit((value>>56)&0x0ff);
+					spit((value>>48)&0x0ff);
+					spit((value>>40)&0x0ff);
+					spit((value>>32)&0x0ff);
+					emit("lxjoin");
+				}
 			}
 			break;
 		case TOK_HEADERLESS:
@@ -1690,10 +1763,18 @@ tokenize(input)
 				 * project.
 				 */
 				emit("b(lit)");
-				spit(value>>24);
+				spit((value>>24)&0x0ff);
 				spit((value>>16)&0x0ff);
 				spit((value>>8)&0x0ff);
 				spit(value&0x0ff);
+				if ((value>>32) != value && (value>>32) != 0) {
+					emit("b(lit)");
+					spit((value>>56)&0x0ff);
+					spit((value>>48)&0x0ff);
+					spit((value>>40)&0x0ff);
+					spit((value>>32)&0x0ff);
+					emit("lxjoin");
+				}
 			}
 			break;
 		case TOK_OF:
@@ -1897,6 +1978,7 @@ tokenize(input)
 			}
 			break;
 		default:
+			/* Nothing */ ;
 		}
 	}
 	return;
@@ -1967,6 +2049,7 @@ spit(n)
 			exit(1);
 		}
 	}
+	if (debug > 1) printf("spitting %2.2x\n", (unsigned char)n);
 	outbuf[outpos++] = n;
 	return (count);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: bugdev.c,v 1.5 1998/09/05 15:20:48 pk Exp $	*/
+/*	$NetBSD: bugdev.c,v 1.12 2008/04/28 20:23:29 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,10 +33,10 @@
 #include <sys/disklabel.h>
 #include <machine/prom.h>
 
-#include "stand.h"
+#include <lib/libsa/stand.h>
 #include "libsa.h"
 
-void cputobsdlabel __P((struct disklabel *lp, struct cpu_disklabel *clp));
+void cputobsdlabel(struct disklabel *lp, struct cpu_disklabel *clp);
 
 int errno;
 
@@ -56,10 +49,7 @@ struct bugsc_softc {
 } bugsc_softc[1];
 
 int
-devopen(f, fname, file)
-	struct open_file *f;
-	const char *fname;
-	char **file;
+devopen(struct open_file *f, const char *fname, char **file)
 {
 	struct bugsc_softc *pp = &bugsc_softc[0];
 	int	error, pn = 0;
@@ -101,13 +91,13 @@ devopen(f, fname, file)
 
 	if (pp->fd < 0) {
 		printf("Can't open device `%s'\n", dev);
-		return (ENXIO);
+		return ENXIO;
 	}
 	error = bugscstrategy(pp, F_READ, LABELSECTOR, DEV_BSIZE, iobuf, &nrd);
 	if (error)
-		return (error);
+		return error;
 	if (nrd != DEV_BSIZE)
-		return (EINVAL);
+		return EINVAL;
 
 	/*LINTED*/
 	cputobsdlabel(&sdlabel, (struct cpu_disklabel *)&(iobuf[0]));
@@ -118,7 +108,7 @@ devopen(f, fname, file)
 	f->f_devdata = (void *)pp;
 	/*LINTED*/
 	*file = (char *)fname;
-	return (0);
+	return 0;
 }
 
 /* silly block scale factor */
@@ -126,13 +116,8 @@ devopen(f, fname, file)
 #define BUG_SCALE (512/BUG_BLOCK_SIZE)
 /*ARGSUSED*/
 int
-bugscstrategy(devdata, func, dblk, size, buf, rsize)
-	void *devdata;
-	int func;
-	daddr_t dblk;
-	size_t size;
-	void *buf;
-	size_t *rsize;
+bugscstrategy(void *devdata, int func, daddr_t dblk, size_t size, void *buf,
+	      size_t *rsize)
 {
 	struct mvmeprom_dskio dio;
 	struct bugsc_softc *pp = (struct bugsc_softc *)devdata;
@@ -156,18 +141,18 @@ bugscstrategy(devdata, func, dblk, size, buf, rsize)
 
 	*rsize = dio.blk_cnt * BUG_BLOCK_SIZE;
 #ifdef DEBUG
-printf("rsize %d status %x\n", *rsize, dio.status);
+	printf("rsize %d status %x\n", *rsize, dio.status);
 #endif
 
 	if (dio.status)
-		return (EIO);
-	return (0);
+		return EIO;
+	return 0;
 }
 
 int
-bugscopen(f)
-	struct open_file *f;
+bugscopen(struct open_file *f, ...)
 {
+
 #ifdef DEBUG
 	printf("bugscopen:\n");
 #endif
@@ -179,55 +164,51 @@ bugscopen(f)
 	printf("using mvmebug ctrl %d dev %d\n",
 	    bugsc_softc[0].ctrl, bugsc_softc[0].dev);
 #endif
-	return (0);
+	return 0;
 }
 
 /*ARGSUSED*/
 int
-bugscclose(f)
-	struct open_file *f;
+bugscclose(struct open_file *f)
 {
-	return (EIO);
+
+	return EIO;
 }
 
 /*ARGSUSED*/
 int
-bugscioctl(f, cmd, data)
-	struct open_file *f;
-	u_long cmd;
-	void *data;
+bugscioctl(struct open_file *f, u_long cmd, void *data)
 {
-	return (EIO);
+
+	return EIO;
 }
 
 void
-cputobsdlabel(lp, clp)
-	struct disklabel *lp;
-	struct cpu_disklabel *clp;
+cputobsdlabel(struct disklabel *lp, struct cpu_disklabel *clp)
 {
 	int i;
 
-	lp->d_magic   = (u_int32_t)clp->magic1;
-	lp->d_type    = (u_int16_t)clp->type;
-	lp->d_subtype = (u_int16_t)clp->subtype;
+	lp->d_magic   = (uint32_t)clp->magic1;
+	lp->d_type    = (uint16_t)clp->type;
+	lp->d_subtype = (uint16_t)clp->subtype;
 
-	bcopy(clp->vid_vd, lp->d_typename, 16);
-	bcopy(clp->packname, lp->d_packname, 16);
+	memcpy(lp->d_typename, clp->vid_vd, 16);
+	memcpy(lp->d_packname, clp->packname, 16);
 
-	lp->d_secsize        = (u_int32_t)clp->cfg_psm;
-	lp->d_nsectors       = (u_int32_t)clp->cfg_spt;
-	lp->d_ncylinders     = (u_int32_t)clp->cfg_trk; /* trk is num of cyl! */
-	lp->d_ntracks        = (u_int32_t)clp->cfg_hds;
-	lp->d_secpercyl      = (u_int32_t)clp->secpercyl;
-	lp->d_secperunit     = (u_int32_t)clp->secperunit;
-	lp->d_sparespertrack = (u_int16_t)clp->sparespertrack;
-	lp->d_sparespercyl   = (u_int16_t)clp->sparespercyl;
-	lp->d_acylinders     = (u_int32_t)clp->acylinders;
-	lp->d_rpm            = (u_int16_t)clp->rpm;
-	lp->d_interleave     = (u_int16_t)clp->cfg_ilv;
-	lp->d_trackskew      = (u_int16_t)clp->cfg_sof;
-	lp->d_cylskew        = (u_int16_t)clp->cylskew;
-	lp->d_headswitch     = (u_int32_t)clp->headswitch;
+	lp->d_secsize        = (uint32_t)clp->cfg_psm;
+	lp->d_nsectors       = (uint32_t)clp->cfg_spt;
+	lp->d_ncylinders     = (uint32_t)clp->cfg_trk; /* trk is num of cyl! */
+	lp->d_ntracks        = (uint32_t)clp->cfg_hds;
+	lp->d_secpercyl      = (uint32_t)clp->secpercyl;
+	lp->d_secperunit     = (uint32_t)clp->secperunit;
+	lp->d_sparespertrack = (uint16_t)clp->sparespertrack;
+	lp->d_sparespercyl   = (uint16_t)clp->sparespercyl;
+	lp->d_acylinders     = (uint32_t)clp->acylinders;
+	lp->d_rpm            = (uint16_t)clp->rpm;
+	lp->d_interleave     = (uint16_t)clp->cfg_ilv;
+	lp->d_trackskew      = (uint16_t)clp->cfg_sof;
+	lp->d_cylskew        = (uint16_t)clp->cylskew;
+	lp->d_headswitch     = (uint32_t)clp->headswitch;
 
 	/* this silly table is for winchester drives */
 	switch (clp->cfg_ssr) {
@@ -250,23 +231,24 @@ cputobsdlabel(lp, clp)
 		lp->d_trkseek = 0;
 		break;
 	}
-	lp->d_flags = (u_int32_t)clp->flags;
+	lp->d_flags = (uint32_t)clp->flags;
 
 	for (i = 0; i < NDDATA; i++)
-		lp->d_drivedata[i] = (u_int32_t)clp->drivedata[i];
+		lp->d_drivedata[i] = (uint32_t)clp->drivedata[i];
 
 	for (i = 0; i < NSPARE; i++)
-		lp->d_spare[i] = (u_int32_t)clp->spare[i];
+		lp->d_spare[i] = (uint32_t)clp->spare[i];
 
-	lp->d_magic2      = (u_int32_t)clp->magic2;
-	lp->d_checksum    = (u_int16_t)clp->checksum;
-	lp->d_npartitions = (u_int16_t)clp->partitions;
-	lp->d_bbsize      = (u_int32_t)clp->bbsize;
-	lp->d_sbsize      = (u_int32_t)clp->sbsize;
+	lp->d_magic2      = (uint32_t)clp->magic2;
+	lp->d_checksum    = (uint16_t)clp->checksum;
+	lp->d_npartitions = (uint16_t)clp->partitions;
+	lp->d_bbsize      = (uint32_t)clp->bbsize;
+	lp->d_sbsize      = (uint32_t)clp->sbsize;
 
-	bcopy(clp->vid_4, &(lp->d_partitions[0]),sizeof (struct partition) * 4);
+	memcpy(&(lp->d_partitions[0]), clp->vid_4,
+	    sizeof(struct partition) * 4);
 
 	/* CONSTCOND */
-	bcopy(clp->cfg_4, &(lp->d_partitions[4]), sizeof (struct partition) 
-		* ((MAXPARTITIONS < 16) ? (MAXPARTITIONS - 4) : 12));
+	memcpy(&(lp->d_partitions[4]), clp->cfg_4, sizeof(struct partition)
+	    * ((MAXPARTITIONS < 16) ? (MAXPARTITIONS - 4) : 12));
 }

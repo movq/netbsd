@@ -1,4 +1,4 @@
-/*	$NetBSD: cacheops_40.h,v 1.5 1999/11/06 17:42:32 thorpej Exp $	*/
+/*	$NetBSD: cacheops_40.h,v 1.11 2008/04/28 20:23:26 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,25 +32,22 @@
 /*
  * Invalidate entire TLB.
  */
-void TBIA_40 __P((void));
-extern __inline void
-TBIA_40()
+static __inline void __attribute__((__unused__))
+TBIA_40(void)
 {
-	__asm __volatile (" .word 0xf518" ); /*  pflusha */
+	__asm volatile (" .word 0xf518" ); /*  pflusha */
 }
 
 /*
  * Invalidate any TLB entry for given VA (TB Invalidate Single)
  */
-void TBIS_40 __P((vaddr_t));
-extern __inline void
-TBIS_40(va)
-	vaddr_t	va;
+static __inline void __attribute__((__unused__))
+TBIS_40(vaddr_t va)
 {
-	register vaddr_t	r_va __asm("%a0") = va;
+	register uint8_t *r_va __asm("%a0") = (void *)va;
 	int	tmp;
 
-	__asm __volatile (" movc   %1, %%dfc;"	/* select supervisor	*/
+	__asm volatile (" movc   %1, %%dfc;"	/* select supervisor	*/
 			  " .word 0xf508;"	/* pflush %a0@		*/
 			  " moveq  %3, %1;"	/* select user		*/
 			  " movc   %1, %%dfc;"
@@ -68,164 +58,140 @@ TBIS_40(va)
 /*
  * Invalidate supervisor side of TLB
  */
-void TBIAS_40 __P((void));
-extern __inline void
-TBIAS_40()
+static __inline void __attribute__((__unused__))
+TBIAS_40(void)
 {
 	/*
 	 * Cannot specify supervisor/user on pflusha, so we flush all
 	 */
-	__asm __volatile (" .word 0xf518;");
+	__asm volatile (" .word 0xf518;");
 }
 
 /*
  * Invalidate user side of TLB
  */
-void TBIAU_40 __P((void));
-extern __inline void
-TBIAU_40()
+static __inline void __attribute__((__unused__))
+TBIAU_40(void)
 {
 	/*
 	 * Cannot specify supervisor/user on pflusha, so we flush all
 	 */
-	__asm __volatile (" .word 0xf518;");
+	__asm volatile (" .word 0xf518;");
 }
 
 /*
  * Invalidate instruction cache
  */
-void ICIA_40 __P((void));
-extern __inline void
-ICIA_40()
+static __inline void __attribute__((__unused__))
+ICIA_40(void)
 {
-	__asm __volatile (" .word 0xf498;"); /* cinva ic */
+	__asm volatile (" .word 0xf498;"); /* cinva ic */
 }
 
-void ICPA_40 __P((void));
-extern __inline void
-ICPA_40()
+static __inline void __attribute__((__unused__))
+ICPA_40(void)
 {
-	__asm __volatile (" .word 0xf498;"); /* cinva ic */
+	__asm volatile (" .word 0xf498;"); /* cinva ic */
 }
 
 /*
  * Invalidate data cache.
  */
-void DCIA_40 __P((void));
-extern __inline void
-DCIA_40()
+static __inline void __attribute__((__unused__))
+DCIA_40(void)
 {
-	__asm __volatile (" .word 0xf478;"); /* cpusha dc */
+	__asm volatile (" .word 0xf478;"); /* cpusha dc */
 }
 
-void DCIS_40 __P((void));
-extern __inline void
-DCIS_40()
+static __inline void __attribute__((__unused__))
+DCIS_40(void)
 {
-	__asm __volatile (" .word 0xf478;"); /* cpusha dc */
+	__asm volatile (" .word 0xf478;"); /* cpusha dc */
 }
 
-void DCIU_40 __P((void));
-extern __inline void
-DCIU_40()
+static __inline void __attribute__((__unused__))
+DCIU_40(void)
 {
-	__asm __volatile (" .word 0xf478;"); /* cpusha dc */
+	__asm volatile (" .word 0xf478;"); /* cpusha dc */
 }
 
-void DCIAS_40 __P((paddr_t));
-extern __inline void
-DCIAS_40(pa)
-	paddr_t	pa;
+static __inline void __attribute__((__unused__))
+DCIAS_40(paddr_t pa)
 {
-	register paddr_t	r_pa __asm("%a0") = pa;
+	register uint8_t *r_pa __asm("%a0") = (void *)pa;
 
-	__asm __volatile (" .word 0xf468;" : : "a" (r_pa)); /* cpushl dc,%a0@ */
+	__asm volatile (" .word 0xf468;" : : "a" (r_pa)); /* cpushl dc,%a0@ */
 }
 
-void PCIA_40 __P((void));
-extern __inline void
-PCIA_40()
+static __inline void __attribute__((__unused__))
+PCIA_40(void)
 {
-	__asm __volatile (" .word 0xf478;"); /* cpusha dc */
+	__asm volatile (" .word 0xf478;"); /* cpusha dc */
 }
 
-void DCFA_40 __P((void));
-extern __inline void
-DCFA_40()
+static __inline void __attribute__((__unused__))
+DCFA_40(void)
 {
-	__asm __volatile (" .word 0xf478;"); /* cpusha dc */
+	__asm volatile (" .word 0xf478;"); /* cpusha dc */
 }
 
 /* invalidate instruction physical cache line */
-void ICPL_40 __P((paddr_t));
-extern __inline void
-ICPL_40(pa)
-	paddr_t	pa;
+static __inline void __attribute__((__unused__))
+ICPL_40(paddr_t pa)
 {
-	register paddr_t	r_pa __asm("%a0") = pa;
+	register uint8_t *r_pa __asm("%a0") = (void *)pa;
 
-	__asm __volatile (" .word 0xf488;" : : "a" (r_pa)); /* cinvl ic,%a0@ */
+	__asm volatile (" .word 0xf488;" : : "a" (r_pa)); /* cinvl ic,%a0@ */
 }
 
 /* invalidate instruction physical cache page */
-void ICPP_40 __P((paddr_t));
-extern __inline void
-ICPP_40(pa)
-	paddr_t	pa;
+static __inline void __attribute__((__unused__))
+ICPP_40(paddr_t pa)
 {
-	register paddr_t	r_pa __asm("%a0") = pa;
+	register uint8_t *r_pa __asm("%a0") = (void *)pa;
 
-	__asm __volatile (" .word 0xf490;" : : "a" (r_pa)); /* cinvp ic,%a0@ */
+	__asm volatile (" .word 0xf490;" : : "a" (r_pa)); /* cinvp ic,%a0@ */
 }
 
 /* invalidate data physical cache line */
-void DCPL_40 __P((paddr_t));
-extern __inline void
-DCPL_40(pa)
-	paddr_t	pa;
+static __inline void __attribute__((__unused__))
+DCPL_40(paddr_t pa)
 {
-	register paddr_t	r_pa __asm("%a0") = pa;
+	register uint8_t *r_pa __asm("%a0") = (void *)pa;
 
-	__asm __volatile (" .word 0xf448;" : : "a" (r_pa)); /* cinvl dc,%a0@ */
+	__asm volatile (" .word 0xf448;" : : "a" (r_pa)); /* cinvl dc,%a0@ */
 }
 
 /* invalidate data physical cache page */
-void DCPP_40 __P((paddr_t));
-extern __inline void
-DCPP_40(pa)
-	paddr_t	pa;
+static __inline void __attribute__((__unused__))
+DCPP_40(paddr_t pa)
 {
-	register paddr_t	r_pa __asm("%a0") = pa;
+	register uint8_t *r_pa __asm("%a0") = (void *)pa;
 
-	__asm __volatile (" .word 0xf450;" : : "a" (r_pa)); /* cinvp dc,%a0@ */
+	__asm volatile (" .word 0xf450;" : : "a" (r_pa)); /* cinvp dc,%a0@ */
 }
 
 /* invalidate data physical all */
-void DCPA_40 __P((void));
-extern __inline void
-DCPA_40()
+static __inline void __attribute__((__unused__))
+DCPA_40(void)
 {
-	__asm __volatile (" .word 0xf458;"); /* cinva dc */
+	__asm volatile (" .word 0xf458;"); /* cinva dc */
 }
 
 /* data cache flush line */
-void DCFL_40 __P((paddr_t));
-extern __inline void
-DCFL_40(pa)
-	paddr_t	pa;
+static __inline void __attribute__((__unused__))
+DCFL_40(paddr_t pa)
 {
-	register paddr_t	r_pa __asm("%a0") = pa;
+	register uint8_t *r_pa __asm("%a0") = (void *)pa;
 
-	__asm __volatile (" .word 0xf468;" : : "a" (r_pa)); /* cpushl dc,%a0@ */
+	__asm volatile (" .word 0xf468;" : : "a" (r_pa)); /* cpushl dc,%a0@ */
 }
 
 /* data cache flush page */
-void DCFP_40 __P((paddr_t));
-extern __inline void
-DCFP_40(pa)
-	paddr_t	pa;
+static __inline void __attribute__((__unused__))
+DCFP_40(paddr_t pa)
 {
-	register paddr_t	r_pa __asm("%a0") = pa;
+	register uint8_t *r_pa __asm("%a0") = (void *)pa;
 
-	__asm __volatile (" .word 0xf470;" : : "a" (r_pa)); /* cpushp dc,%a0@ */
+	__asm volatile (" .word 0xf470;" : : "a" (r_pa)); /* cpushp dc,%a0@ */
 }

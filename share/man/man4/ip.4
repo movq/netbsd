@@ -1,4 +1,4 @@
-.\"	$NetBSD: ip.4,v 1.10 1999/03/16 01:19:16 garbled Exp $
+.\"	$NetBSD: ip.4,v 1.23 2008/09/23 14:58:05 briggs Exp $
 .\"
 .\" Copyright (c) 1983, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -33,15 +29,15 @@
 .\"
 .\"     @(#)ip.4	8.2 (Berkeley) 11/30/93
 .\"
-.Dd November 30, 1993
+.Dd September 23, 2008
 .Dt IP 4
 .Os
 .Sh NAME
 .Nm ip
 .Nd Internet Protocol
 .Sh SYNOPSIS
-.Fd #include <sys/socket.h>
-.Fd #include <netinet/in.h>
+.In sys/socket.h
+.In netinet/in.h
 .Ft int
 .Fn socket AF_INET SOCK_RAW proto
 .Sh DESCRIPTION
@@ -61,7 +57,7 @@ when developing new protocols, or special-purpose applications.
 .Pp
 There are several
 .Tn IP-level
-.Xr setsockopt 2 / Ns Xr getsockopt 2
+.Xr setsockopt 2 Ns / Ns Xr getsockopt 2
 options.
 .Dv IP_OPTIONS
 may be used to provide
@@ -76,7 +72,7 @@ The format of
 .Tn IP
 options to be sent is that specified by the
 .Tn IP
-protocol specification (RFC-791), with one exception:
+protocol specification (RFC 791), with one exception:
 the list of addresses for Source Route options must include the first-hop
 gateway at the beginning of the list of gateways.
 The first-hop gateway address will be extracted from the option list
@@ -98,11 +94,20 @@ and
 sockets.
 For example,
 .Bd -literal
-int tos = IPTOS_LOWDELAY;       /* see <netinet/in.h> */
-setsockopt(s, IPPROTO_IP, IP_TOS, &tos, sizeof(tos));
+int tos = IPTOS_LOWDELAY;       /* see \*[Lt]netinet/ip.h\*[Gt] */
+setsockopt(s, IPPROTO_IP, IP_TOS, \*[Am]tos, sizeof(tos));
 
 int ttl = 60;                   /* max = 255 */
-setsockopt(s, IPPROTO_IP, IP_TTL, &ttl, sizeof(ttl));
+setsockopt(s, IPPROTO_IP, IP_TTL, \*[Am]ttl, sizeof(ttl));
+.Ed
+.Pp
+.Dv IP_IPSEC_POLICY
+controls IPSec policy for sockets.
+For example,
+.Bd -literal
+const char *policy = "in ipsec ah/transport//require";
+char *buf = ipsec_set_policy(policy, strlen(policy));
+setsockopt(s, IPPROTO_IP, IP_IPSEC_POLICY, buf, ipsec_get_policylen(buf));
 .Ed
 .Pp
 .Dv IP_PORTRANGE
@@ -112,8 +117,8 @@ and
 .Dv SOCK_DGRAM
 sockets. For example,
 .Bd -literal
-int range = IP_PORTRANGE_LOW;       /* see <netinet/in.h> */
-setsockopt(s, IPPROTO_IP, IP_PORTRANGE, &range, sizeof(range));
+int range = IP_PORTRANGE_LOW;       /* see \*[Lt]netinet/in.h\*[Gt] */
+setsockopt(s, IPPROTO_IP, IP_PORTRANGE, \*[Am]range, sizeof(range));
 .Ed
 .Pp
 If the
@@ -160,15 +165,14 @@ cmsg_len = sizeof(struct sockaddr_dl)
 cmsg_level = IPPROTO_IP
 cmsg_type = IP_RECVIF
 .Ed
-.Ss "Multicast Options"
-.Pp
+.Ss MULTICAST OPTIONS
 .Tn IP
 multicasting is supported only on
 .Dv AF_INET
 sockets of type
 .Dv SOCK_DGRAM
 and
-.Dv SOCK_RAW,
+.Dv SOCK_RAW ,
 and only on networks where the interface driver supports multicasting.
 .Pp
 The
@@ -177,7 +181,7 @@ option changes the time-to-live (TTL) for outgoing multicast datagrams
 in order to control the scope of the multicasts:
 .Bd -literal
 u_char ttl;	/* range: 0 to 255, default = 1 */
-setsockopt(s, IPPROTO_IP, IP_MULTICAST_TTL, &ttl, sizeof(ttl));
+setsockopt(s, IPPROTO_IP, IP_MULTICAST_TTL, \*[Am]ttl, sizeof(ttl));
 .Ed
 .Pp
 Datagrams with a TTL of 1 are not forwarded beyond the local network.
@@ -196,7 +200,7 @@ option overrides the default for
 subsequent transmissions from a given socket:
 .Bd -literal
 struct in_addr addr;
-setsockopt(s, IPPROTO_IP, IP_MULTICAST_IF, &addr, sizeof(addr));
+setsockopt(s, IPPROTO_IP, IP_MULTICAST_IF, \*[Am]addr, sizeof(addr));
 .Ed
 .Pp
 where "addr" is the local
@@ -210,7 +214,18 @@ be obtained via the
 and
 .Dv SIOCGIFFLAGS
 ioctls.
-Normal applications should not need to use this option.
+An application may also specify an alternative to the default network interface
+by index:
+.Bd -literal
+struct uint32_t idx = htonl(ifindex);
+setsockopt(s, IPPROTO_IP, IP_MULTICAST_IF, \*[Am]idx, sizeof(idx));
+.Ed
+.Pp
+where "ifindex" is an interface index as returned by
+.Xr if_nametoindex 3 .
+.Pp
+Normal applications should not need to use
+.Dv IP_MULTICAST_IF .
 .Pp
 If a multicast datagram is sent to a group to which the sending host itself
 belongs (on the outgoing interface), a copy of the datagram is, by default,
@@ -221,7 +236,7 @@ option gives the sender explicit control
 over whether or not subsequent datagrams are looped back:
 .Bd -literal
 u_char loop;	/* 0 = disable, 1 = enable (default) */
-setsockopt(s, IPPROTO_IP, IP_MULTICAST_LOOP, &loop, sizeof(loop));
+setsockopt(s, IPPROTO_IP, IP_MULTICAST_LOOP, \*[Am]loop, sizeof(loop));
 .Ed
 .Pp
 This option
@@ -245,7 +260,7 @@ To join a multicast group, use the
 option:
 .Bd -literal
 struct ip_mreq mreq;
-setsockopt(s, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq));
+setsockopt(s, IPPROTO_IP, IP_ADD_MEMBERSHIP, \*[Am]mreq, sizeof(mreq));
 .Ed
 .Pp
 where
@@ -275,7 +290,7 @@ Up to
 To drop a membership, use:
 .Bd -literal
 struct ip_mreq mreq;
-setsockopt(s, IPPROTO_IP, IP_DROP_MEMBERSHIP, &mreq, sizeof(mreq));
+setsockopt(s, IPPROTO_IP, IP_DROP_MEMBERSHIP, \*[Am]mreq, sizeof(mreq));
 .Ed
 .Pp
 where
@@ -283,8 +298,7 @@ where
 contains the same values as used to add the membership.
 Memberships are dropped when the socket is closed or the process exits.
 .\"-----------------------
-.Ss "Raw IP Sockets"
-.Pp
+.Ss RAW IP SOCKETS
 Raw
 .Tn IP
 sockets are connectionless, and are normally used with the
@@ -331,10 +345,10 @@ be used only with the
 .Dv SOCK_RAW
 type.
 .Bd -literal
-#include <netinet/ip.h>
+#include \*[Lt]netinet/ip.h\*[Gt]
 
 int hincl = 1;                  /* 1 = on, 0 = off */
-setsockopt(s, IPPROTO_IP, IP_HDRINCL, &hincl, sizeof(hincl));
+setsockopt(s, IPPROTO_IP, IP_HDRINCL, \*[Am]hincl, sizeof(hincl));
 .Ed
 .Pp
 Unlike previous
@@ -342,14 +356,14 @@ Unlike previous
 releases, the program must set all
 the fields of the IP header, including the following:
 .Bd -literal
-ip->ip_v = IPVERSION;
-ip->ip_hl = hlen >> 2;
-ip->ip_id = 0;  /* 0 means kernel set appropriate value */
-ip->ip_off = offset;
+ip-\*[Gt]ip_v = IPVERSION;
+ip-\*[Gt]ip_hl = hlen \*[Gt]\*[Gt] 2;
+ip-\*[Gt]ip_id = 0;  /* 0 means kernel set appropriate value */
+ip-\*[Gt]ip_off = offset;
 .Ed
 .Pp
 If the header source address is set to
-.Dv INADDR_ANY,
+.Dv INADDR_ANY ,
 the kernel will choose an appropriate address.
 .Sh DIAGNOSTICS
 A socket operation may fail with one of the following errors returned:
@@ -384,11 +398,12 @@ shorter than the minimum value or longer than the option buffer provided.
 .El
 .Sh SEE ALSO
 .Xr getsockopt 2 ,
-.Xr send 2 ,
 .Xr recv 2 ,
-.Xr intro 4 ,
+.Xr send 2 ,
+.Xr ipsec_set_policy 3 ,
 .Xr icmp 4 ,
-.Xr inet 4
+.Xr inet 4 ,
+.Xr intro 4
 .Rs
 .%R RFC
 .%N 791

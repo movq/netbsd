@@ -1,4 +1,4 @@
-/*	$NetBSD: getopt.c,v 1.17 2000/01/22 22:19:19 mycroft Exp $	*/
+/*	$NetBSD: getopt.c,v 1.27 2005/11/29 03:12:00 christos Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)getopt.c	8.3 (Berkeley) 4/27/95";
 #else
-__RCSID("$NetBSD: getopt.c,v 1.17 2000/01/22 22:19:19 mycroft Exp $");
+__RCSID("$NetBSD: getopt.c,v 1.27 2005/11/29 03:12:00 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -47,13 +43,13 @@ __RCSID("$NetBSD: getopt.c,v 1.17 2000/01/22 22:19:19 mycroft Exp $");
 #include <assert.h>
 #include <errno.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
 #ifdef __weak_alias
 __weak_alias(getopt,_getopt)
 #endif
-
 
 int	opterr = 1,		/* if error message should be printed */
 	optind = 1,		/* index into parent argv vector */
@@ -75,63 +71,75 @@ getopt(nargc, nargv, ostr)
 	char * const nargv[];
 	const char *ostr;
 {
-	extern char *__progname;
-	static char *place = EMSG;		/* option letter processing */
+	static const char *place = EMSG;	/* option letter processing */
 	char *oli;				/* option letter list index */
 
 	_DIAGASSERT(nargv != NULL);
 	_DIAGASSERT(ostr != NULL);
 
-	if (optreset || !*place) {		/* update scanning pointer */
+	if (optreset || *place == 0) {		/* update scanning pointer */
 		optreset = 0;
-		if (optind >= nargc || *(place = nargv[optind]) != '-') {
+		place = nargv[optind];
+		if (optind >= nargc || *place++ != '-') {
+			/* Argument is absent or is not an option */
 			place = EMSG;
 			return (-1);
 		}
-		if (place[1] && *++place == '-'	/* found "--" */
-		    && place[1] == '\0') {
+		optopt = *place++;
+		if (optopt == '-' && *place == 0) {
+			/* "--" => end of options */
 			++optind;
 			place = EMSG;
 			return (-1);
 		}
-	}					/* option letter okay? */
-	if ((optopt = (int)*place++) == (int)':' ||
-	    !(oli = strchr(ostr, optopt))) {
-		/*
-		 * if the user didn't specify '-' as an option,
-		 * assume it means -1.
-		 */
-		if (optopt == (int)'-')
-			return (-1);
-		if (!*place)
+		if (optopt == 0) {
+			/* Solitary '-', treat as a '-' option
+			   if the program (eg su) is looking for it. */
+			place = EMSG;
+			if (strchr(ostr, '-') == NULL)
+				return -1;
+			optopt = '-';
+		}
+	} else
+		optopt = *place++;
+
+	/* See if option letter is one the caller wanted... */
+	if (optopt == ':' || (oli = strchr(ostr, optopt)) == NULL) {
+		if (*place == 0)
 			++optind;
 		if (opterr && *ostr != ':')
 			(void)fprintf(stderr,
-			    "%s: illegal option -- %c\n", __progname, optopt);
+			    "%s: unknown option -- %c\n", getprogname(),
+			    optopt);
 		return (BADCH);
 	}
-	if (*++oli != ':') {			/* don't need argument */
+
+	/* Does this option need an argument? */
+	if (oli[1] != ':') {
+		/* don't need argument */
 		optarg = NULL;
-		if (!*place)
+		if (*place == 0)
 			++optind;
-	}
-	else {					/* need an argument */
-		if (*place)			/* no white space */
-			optarg = place;
-		else if (nargc <= ++optind) {	/* no arg */
+	} else {
+		/* Option-argument is either the rest of this argument or the
+		   entire next argument. */
+		if (*place)
+			optarg = __UNCONST(place);
+		else if (nargc > ++optind)
+			optarg = nargv[optind];
+		else {
+			/* option-argument absent */
 			place = EMSG;
 			if (*ostr == ':')
 				return (BADARG);
 			if (opterr)
 				(void)fprintf(stderr,
 				    "%s: option requires an argument -- %c\n",
-				    __progname, optopt);
+				    getprogname(), optopt);
 			return (BADCH);
 		}
-	 	else				/* white space */
-			optarg = nargv[optind];
 		place = EMSG;
 		++optind;
 	}
-	return (optopt);			/* dump back option letter */
+	return (optopt);			/* return option letter */
 }

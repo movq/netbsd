@@ -1,4 +1,4 @@
-.\"	$NetBSD: ypxfr.8,v 1.5 1999/03/07 11:58:27 mycroft Exp $
+.\"	$NetBSD: ypxfr.8,v 1.11 2005/02/26 16:36:25 thorpej Exp $
 .\"
 .\" Copyright (c) 1994 Mats O Jansson <moj@stacken.kth.se>
 .\" All rights reserved.
@@ -29,14 +29,14 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.Dd August 18, 1994
+.Dd February 26, 2005
 .Dt YPXFR 8
 .Os
 .Sh NAME
 .Nm ypxfr
-.Nd get a YP map from YP server
+.Nd get a NIS map from NIS server
 .Sh SYNOPSIS
-.Nm ""
+.Nm
 .Op Fl bcf
 .Bk -words
 .Op Fl C Ar tid prog ipadd port
@@ -54,15 +54,14 @@
 .Sh DESCRIPTION
 .Nm
 is the utility in
-.Tn YP
+.Tn NIS
 that transfers maps to the local host.
-.Pp
 .Pp
 The options are as follows:
 .Bl -tag -width indent
 .It Fl b
 Preserve the entry in the database informing a
-.Tn YP
+.Tn NIS
 server to use
 DNS to get information about unknown hosts. This option will only have
 effect on the maps
@@ -74,7 +73,7 @@ Don't send a "Clear current map" to local
 .Nm ypserv
 process. Useful if
 .Nm ypserv
-isn't running locally to avoid timeout message. 
+isn't running locally to avoid timeout message.
 .It Fl C Ar tid prog ipadd port
 This option is only used by
 .Nm ypserv .
@@ -83,16 +82,16 @@ This is to open communication with
 on another host.
 .It Fl d Ar domain
 Don't use default domain, use the specified domain.
-.It Fl f 
+.It Fl f
 Force map transfer, even if the master's version is older than the local copy.
 .It Fl h Ar host
-Get map from host insteed of the maps master host.
+Get map from host instead of the maps master host.
 .It Fl s Ar domain
 Specify a source domain other than the target domain.
 .El
 .Sh SEE ALSO
-.Xr yp 8 ,
+.Xr nis 8 ,
 .Xr yppush 8 ,
-.Xr ypserv 8 
-.Sh AUTHOR
-Mats O Jansson <moj@stacken.kth.se>
+.Xr ypserv 8
+.Sh AUTHORS
+.An Mats O Jansson Aq moj@stacken.kth.se

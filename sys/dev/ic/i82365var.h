@@ -1,4 +1,4 @@
-/*	$NetBSD: i82365var.h,v 1.15 2000/03/23 07:01:31 thorpej Exp $	*/
+/*	$NetBSD: i82365var.h,v 1.28 2007/12/05 07:58:30 ad Exp $	*/
 
 /*
  * Copyright (c) 1997 Marc Horowitz.  All rights reserved.
@@ -31,7 +31,7 @@
 
 #include <sys/device.h>
 #include <sys/callout.h>
-#include <sys/lock.h>
+#include <sys/mutex.h>
 
 #include <dev/pcmcia/pcmciareg.h>
 #include <dev/pcmcia/pcmciachip.h>
@@ -53,12 +53,13 @@ struct pcic_handle {
 	struct device *ph_parent;
 	bus_space_tag_t ph_bus_t;	/* I/O or MEM?  I don't mind */
 	bus_space_handle_t ph_bus_h;
-	u_int8_t (*ph_read) __P((struct pcic_handle *, int));
-	void (*ph_write) __P((struct pcic_handle *, int, u_int8_t));
+	u_int8_t (*ph_read)(struct pcic_handle *, int);
+	void (*ph_write)(struct pcic_handle *, int, u_int8_t);
 
 	int	vendor;		/* vendor of chip */
 	int	chip;		/* chip index 0 or 1 */
-	int	sock;
+	int	socket;		/* socket index 0 or 1 */
+	int	sock;		/* register offset */
 	int	flags;
 	int	laststate;
 	int	memalloc;
@@ -78,7 +79,7 @@ struct pcic_handle {
 	struct device *pcmcia;
 
 	int shutdown;
-	struct proc *event_thread;
+	struct lwp *event_thread;
 	SIMPLEQ_HEAD(, pcic_event) events;
 };
 
@@ -86,8 +87,7 @@ struct pcic_handle {
 #define	PCIC_FLAG_CARDP		0x0002
 #define	PCIC_FLAG_ENABLED	0x0004
 
-#define PCIC_LASTSTATE_PRESENT	0x0002
-#define PCIC_LASTSTATE_HALF	0x0001
+#define PCIC_LASTSTATE_PRESENT	0x0001
 #define PCIC_LASTSTATE_EMPTY	0x0000
 
 #define	C0SA	0
@@ -95,11 +95,16 @@ struct pcic_handle {
 #define	C1SA	PCIC_CHIP_OFFSET
 #define	C1SB	PCIC_CHIP_OFFSET + PCIC_SOCKET_OFFSET
 
+#define	PCIC_VENDOR_NONE		-1
 #define	PCIC_VENDOR_UNKNOWN		0
 #define	PCIC_VENDOR_I82365SLR0		1
 #define	PCIC_VENDOR_I82365SLR1		2
-#define	PCIC_VENDOR_CIRRUS_PD6710	3
-#define	PCIC_VENDOR_CIRRUS_PD672X	4
+#define	PCIC_VENDOR_CIRRUS_PD67XX	3
+#define PCIC_VENDOR_I82365SL_DF		4
+#define PCIC_VENDOR_IBM			5
+#define PCIC_VENDOR_IBM_KING		6
+#define PCIC_VENDOR_RICOH_5C296		7
+#define PCIC_VENDOR_RICOH_5C396		8
 
 /*
  * This is sort of arbitrary.  It merely needs to be "enough". It can be
@@ -124,7 +129,7 @@ struct pcic_softc {
 
 	pcmcia_chipset_tag_t pct;
 
-	struct lock sc_pcic_lock;
+	kmutex_t sc_pcic_lock;
 
 	/* this needs to be large enough to hold PCIC_MEM_PAGES bits */
 	int	subregionmask;
@@ -154,42 +159,43 @@ struct pcic_softc {
 };
 
 
-int	pcic_ident_ok __P((int));
-int	pcic_vendor __P((struct pcic_handle *));
-char	*pcic_vendor_to_string __P((int));
+int	pcic_ident_ok(int);
+int	pcic_vendor(struct pcic_handle *);
+const char *pcic_vendor_to_string(int);
 
-void	pcic_attach __P((struct pcic_softc *));
-void	pcic_attach_sockets __P((struct pcic_softc *));
-void	pcic_attach_sockets_finish __P((struct pcic_softc *));
-int	pcic_intr __P((void *arg));
+void	pcic_attach(struct pcic_softc *);
+void	pcic_attach_sockets(struct pcic_softc *);
+void	pcic_attach_sockets_finish(struct pcic_softc *);
+int	pcic_intr(void *arg);
 
 /*
-static inline int pcic_read __P((struct pcic_handle *, int));
-static inline void pcic_write __P((struct pcic_handle *, int, u_int8_t));
+static __inline int pcic_read(struct pcic_handle *, int);
+static __inline void pcic_write(struct pcic_handle *, int, u_int8_t);
 */
 
-int	pcic_chip_mem_alloc __P((pcmcia_chipset_handle_t, bus_size_t,
-	    struct pcmcia_mem_handle *));
-void	pcic_chip_mem_free __P((pcmcia_chipset_handle_t,
-	    struct pcmcia_mem_handle *));
-int	pcic_chip_mem_map __P((pcmcia_chipset_handle_t, int, bus_addr_t,
-	    bus_size_t, struct pcmcia_mem_handle *, bus_addr_t *, int *));
-void	pcic_chip_mem_unmap __P((pcmcia_chipset_handle_t, int));
+int	pcic_chip_mem_alloc(pcmcia_chipset_handle_t, bus_size_t,
+	    struct pcmcia_mem_handle *);
+void	pcic_chip_mem_free(pcmcia_chipset_handle_t,
+	    struct pcmcia_mem_handle *);
+int	pcic_chip_mem_map(pcmcia_chipset_handle_t, int, bus_addr_t,
+	    bus_size_t, struct pcmcia_mem_handle *, bus_size_t *, int *);
+void	pcic_chip_mem_unmap(pcmcia_chipset_handle_t, int);
 
-int	pcic_chip_io_alloc __P((pcmcia_chipset_handle_t, bus_addr_t,
-	    bus_size_t, bus_size_t, struct pcmcia_io_handle *));
-void	pcic_chip_io_free __P((pcmcia_chipset_handle_t,
-	    struct pcmcia_io_handle *));
-int	pcic_chip_io_map __P((pcmcia_chipset_handle_t, int, bus_addr_t,
-	    bus_size_t, struct pcmcia_io_handle *, int *));
-void	pcic_chip_io_unmap __P((pcmcia_chipset_handle_t, int));
+int	pcic_chip_io_alloc(pcmcia_chipset_handle_t, bus_addr_t,
+	    bus_size_t, bus_size_t, struct pcmcia_io_handle *);
+void	pcic_chip_io_free(pcmcia_chipset_handle_t,
+	    struct pcmcia_io_handle *);
+int	pcic_chip_io_map(pcmcia_chipset_handle_t, int, bus_addr_t,
+	    bus_size_t, struct pcmcia_io_handle *, int *);
+void	pcic_chip_io_unmap(pcmcia_chipset_handle_t, int);
 
-void	pcic_chip_socket_enable __P((pcmcia_chipset_handle_t));
-void	pcic_chip_socket_disable __P((pcmcia_chipset_handle_t));
+void	pcic_chip_socket_enable(pcmcia_chipset_handle_t);
+void	pcic_chip_socket_disable(pcmcia_chipset_handle_t);
+void	pcic_chip_socket_settype(pcmcia_chipset_handle_t, int);
 
 #if 0
 
-static __inline int pcic_read __P((struct pcic_handle *, int));
+static __inline int pcic_read(struct pcic_handle *, int);
 static __inline int
 pcic_read(h, idx)
 	struct pcic_handle *h;
@@ -201,7 +207,7 @@ pcic_read(h, idx)
 	return (bus_space_read_1(h->sc->iot, h->sc->ioh, PCIC_REG_DATA));
 }
 
-static __inline void pcic_write __P((struct pcic_handle *, int, int));
+static __inline void pcic_write(struct pcic_handle *, int, int);
 static __inline void
 pcic_write(h, idx, data)
 	struct pcic_handle *h;

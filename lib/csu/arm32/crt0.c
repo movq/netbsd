@@ -1,4 +1,4 @@
-/*	$NetBSD: crt0.c,v 1.9 1999/07/02 15:53:55 simonb Exp $	*/
+/*	$NetBSD: crt0.c,v 1.13 2008/06/21 00:52:52 gmcgarry Exp $	*/
 
 /*
  * Copyright (C) 1997 Mark Brinicombe
@@ -32,17 +32,28 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
 #include <stdlib.h>
 
 #include "common.h"
+
+#if defined (_ARM_ARCH_6) || defined (__ARM_ARCH_5__) || \
+    defined (__ARM_ARCH_5T__) || defined (__ARM_ARCH_5TE__) || \
+    defined (__ARM_ARCH_5TEJ__)
+#define _ARM_ARCH_5
+#endif
+
+#if defined (_ARM_ARCH_5) || defined (__ARM_ARCH_4T__)
+#define _ARM_ARCH_4T
+#endif
 
 #undef mmap
 #define mmap(addr, len, prot, flags, fd, off)   		\
 	__syscall(SYS_mmap, (addr), (len), (prot), (flags),	\
 	(fd), 0, (off_t)(off))
 
-extern	void		start __P((void)) asm("start");
-	void		__start __P((int, char *[], char *[]));
+extern	void		start(void) __asm("start");
+	void		__start(int, char *[], char *[]);
 
 __asm("
 	.text
@@ -61,22 +72,18 @@ start:
 	add	r2, r1, r0, lsl #2
 	add	r2, r2, #0x0004
 
-	b	___start
-
+	b	" ___STRING(_C_LABEL(__start)) "
 	.align	0
 Lps_strings:
-	.word	___ps_strings
+	.word	" ___STRING(_C_LABEL(__ps_strings)) "
 ");
 
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: crt0.c,v 1.9 1999/07/02 15:53:55 simonb Exp $");
+__RCSID("$NetBSD: crt0.c,v 1.13 2008/06/21 00:52:52 gmcgarry Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 void
-__start(argc, argv, envp)
-	int argc;
-	char *argv[];
-	char *envp[];
+__start(int argc, char **argv, char **envp)
 {
 	char *ap;
 
@@ -90,11 +97,7 @@ __start(argc, argv, envp)
 
 #ifdef	DYNAMIC
 	/* ld(1) convention: if DYNAMIC = 0 then statically linked */
-#ifdef	stupid_gcc
 	if (&_DYNAMIC)
-#else
-	if ( ({volatile caddr_t x = (caddr_t)&_DYNAMIC; x; }) )
-#endif
 		__load_rtld(&_DYNAMIC);
 #endif	/* DYNAMIC */
 
@@ -133,8 +136,15 @@ __asm("
 ___syscall:
 	swi	0
 	mvncs	r0, #0
-	mov	pc, lr
-");
+"
+#ifdef _ARM_ARCH_4T
+"	bx	lr
+"
+#else
+"	mov	pc, lr
+"
+#endif
+);
 #endif	/* DYNAMIC */
 
 #include "common.c"

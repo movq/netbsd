@@ -1,4 +1,4 @@
-/*	$NetBSD: smc91cxxreg.h,v 1.2 1997/09/02 00:10:58 thorpej Exp $	*/
+/*	$NetBSD: smc91cxxreg.h,v 1.5 2003/04/29 08:47:30 scw Exp $	*/
 
 /*
  * Copyright (c) 1996 Gardner Buchanan <gbuchanan@shl.com>
@@ -108,6 +108,7 @@
 #define	TCR_FDUPLX	0x0800	/* receive packets sent out */
 #define	TCR_STP_SQET	0x1000	/* stop transmitting if Signal quality error */
 #define	TCR_EPH_LOOP	0x2000	/* Enable internal digital loopback */
+#define	TCR_SWFDUP	0x8000	/* FEAST: Switched full-duplex (only w/ MII) */
 
 
 /*
@@ -146,7 +147,7 @@
 #define	RCR_RX_ABORT	0x0001	/* Received huge packet */
 #define	RCR_PROMISC	0x0002	/* enable promiscuous mode */
 #define	RCR_ALMUL	0x0004	/* receive all multicast packets */
-#define	RCR_ENABLE	0x0100	/* IFF this is set, we can recieve packets */
+#define	RCR_ENABLE	0x0100	/* IFF this is set, we can receive packets */
 #define	RCR_STRIP_CRC	0x0200	/* strips CRC */
 #define	RCR_GAIN_BITS	0x0c00	/* PLL Gain control (for testing) */
 #define	RCR_FILT_CAR	0x4000	/* Enable 12 bit carrier filter */
@@ -171,14 +172,37 @@
 
 #define	MIR_FREE_MASK	0xff00	/* Free memory pages available */
 #define	MIR_TOTAL_MASK	0x00ff	/* Total memory pages available */
+#define	 MIR_MULT_91C111  1
+#define  MIR_SCALE_91C9x  256
+#define  MIR_SCALE_91C111 2048
 
 
 /*
  * Memory Configuration
  */
-#define	MEM_CFG_REG_W	0x0a
+#define	MEM_CFG_REG_W		0x0a
 
+#define	MCR_MEM_MULT(x)	(((x)>>9)&7)	/* Memory size multiplier */
 #define	MCR_TXRSV_MASK	0x001f	/* Count of pages reserved for transmit */
+
+/*
+ * Receive/PHY Control Register (SM91C111 only)
+ */
+#define	RX_PHY_CONTROL_REG_W	0x0a	/* 91C111 only */
+
+#define	RPC_LSB_SHIFT		2	/* Shift for LED-B select bits */
+#define	RPC_LSA_SHIFT		5	/* Shift for LED-A select bits */
+#define	RPC_LS_MASK		0x7	/* LED Select mask */
+#define	RPC_LS_LINK_DETECT	0x0	/* 10/100 link detected */
+#define	RPC_LS_LINK_10MBPS	0x2	/* 10 MBPS link detected */
+#define	RPC_LS_FULL_DUPLEX	0x3	/* Full duplex operation */
+#define	RPC_LS_TXRX		0x4	/* Tx/Rx packet */
+#define	RPC_LS_LINK_100MBPS	0x5	/* 100 MBPS link detected */
+#define	RPC_LS_RX		0x6	/* Rx packet */
+#define	RPC_LS_TX		0x7	/* Tx packet */
+#define	RPC_ANEG		0x0800	/* Autonegotiate enable */
+#define	RPC_DPLX		0x1000	/* Duplex select (set = Full) */
+#define	RPC_SPEED		0x2000	/* Speed (set = 100mbps) */
 
 
 /*
@@ -203,6 +227,7 @@
 #define	CR_SET_SQLCH	0x0200	/* Squelch level */
 #define	CR_FULL_STEP	0x0400	/* AUI signalling mode */
 #define	CR_NOW_WAIT_ST	0x1000	/* Disable bus wait states */
+#define	CR_MII_SELECT 	0x8000	/* FEAST: MII port selected */
 
 
 /*
@@ -343,6 +368,7 @@
 #define	IM_RX_OVRN_INT	0x10	/* Receiver was overrun */
 #define	IM_EPH_INT	0x20	/* Misc. EPH conditions (see CONTROL_REG_W) */
 #define	IM_ERCV_INT	0x40	/* not on SMC9192 */
+#define	IM_MD_INT	0x80	/* SMC91C111 Internal PHY status change */
 
 
 /*
@@ -366,9 +392,17 @@
 /*
  * These registers do not exist on SMC9192, or at least
  * are not documented in the SMC91C92 data sheet.
+ *
  * The REVISION_REG_W register does however seem to work.
+ *
+ * On the FEAST, the low nibble controls the MII interface.
  */
 #define	MGMT_REG_W	0x08
+
+#define	MR_MDOE		0x08
+#define	MR_MCLK		0x04
+#define	MR_MDI		0x02
+#define	MR_MDO		0x01
 
 #define	REVISION_REG_W	0x0a	/* (hi: chip id low: rev #) */
 #define	RR_REV(x)	((x) & 0x0f)
@@ -384,6 +418,8 @@
 #define	CHIP_9194	4
 #define	CHIP_9195	5
 #define	CHIP_91100	7
+#define	CHIP_91100FD	8
+#define	CHIP_91C111	9
 
 
 /*

@@ -1,9 +1,47 @@
-/*	$NetBSD: z8530var.h,v 1.5 1997/10/20 08:14:04 scottr Exp $	*/
+/*	$NetBSD: z8530var.h,v 1.13 2008/03/29 19:15:34 tsutsui Exp $	*/
+
+/*
+ * Copyright (c) 1992, 1993
+ *	The Regents of the University of California.  All rights reserved.
+ *
+ * This software was developed by the Computer Systems Engineering group
+ * at Lawrence Berkeley Laboratory under DARPA contract BG 91-66 and
+ * contributed to Berkeley.
+ *
+ * All advertising materials mentioning features or use of this software
+ * must display the following acknowledgement:
+ *	This product includes software developed by the University of
+ *	California, Lawrence Berkeley Laboratory.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ *	@(#)zsvar.h	8.1 (Berkeley) 6/11/93
+ */
 
 /*
  * Copyright (c) 1994 Gordon W. Ross
- * Copyright (c) 1992, 1993
- *	The Regents of the University of California.  All rights reserved.
  *
  * This software was developed by the Computer Systems Engineering group
  * at Lawrence Berkeley Laboratory under DARPA contract BG 91-66 and
@@ -94,10 +132,11 @@ struct xzs_chanstate {
 };
 
 struct zsc_softc {
-	struct	device zsc_dev;		/* required first: base device */
+	device_t zsc_dev;		/* required first: base device */
 	struct	zs_chanstate *zsc_cs[2];	/* channel A and B soft state */
 	/* Machine-dependent part follows... */
 	struct xzs_chanstate xzsc_xcs_store[2];
+	void *zsc_softintr_cookie;
 };
 
 /*
@@ -112,23 +151,24 @@ struct zsc_softc {
  * XXX - no one seems to want to try and check this -wrs
  */
 
-u_char zs_read_reg __P((struct zs_chanstate *cs, u_char reg));
-u_char zs_read_csr __P((struct zs_chanstate *cs));
-u_char zs_read_data __P((struct zs_chanstate *cs));
+uint8_t zs_read_reg(struct zs_chanstate *, uint8_t);
+uint8_t zs_read_csr(struct zs_chanstate *);
+uint8_t zs_read_data(struct zs_chanstate *);
 
-void  zs_write_reg __P((struct zs_chanstate *cs, u_char reg, u_char val));
-void  zs_write_csr __P((struct zs_chanstate *cs, u_char val));
-void  zs_write_data __P((struct zs_chanstate *cs, u_char val));
+void  zs_write_reg(struct zs_chanstate *, uint8_t, uint8_t);
+void  zs_write_csr(struct zs_chanstate *, uint8_t);
+void  zs_write_data(struct zs_chanstate *, uint8_t);
 
 /* XXX - Could define splzs() here instead of in psl.h */
+#define IPL_ZS IPL_SERIAL
 
 /* Hook for MD ioctl support */
-int	zsmdioctl __P((struct zs_chanstate *cs, u_long cmd, caddr_t data));
+int	zsmdioctl(struct zs_chanstate *, u_long, void *);
 /* XXX - This is a bit gross... */
-#define ZS_MD_IOCTL zsmdioctl(cs, cmd, data)
+#define ZS_MD_IOCTL(cs, cmd, data) zsmdioctl(cs, cmd, data)
 
 /* Callback for "external" clock sources */
-void zsmd_setclock  __P((struct zs_chanstate *cs));
+void zsmd_setclock (struct zs_chanstate *);
 #define ZS_MD_SETCLK(cs) zsmd_setclock(cs)
 
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: proc.h,v 1.10 1995/08/06 05:33:23 mycroft Exp $	*/
+/*	$NetBSD: proc.h,v 1.36.8.1 2009/02/16 03:07:03 snj Exp $	*/
 
 /*
  * Copyright (c) 1991 Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,13 +31,42 @@
  *	@(#)proc.h	7.1 (Berkeley) 5/15/91
  */
 
+#ifndef _I386_PROC_H_
+#define _I386_PROC_H_
+
+#include <sys/user.h> /* for sizeof(struct user) */
+#include <machine/frame.h>
+
 /*
- * Machine-dependent part of the proc structure for i386.
+ * Machine-dependent part of the lwp structure for i386.
  */
-struct mdproc {
+struct pmap;
+struct vm_page;
+
+struct mdlwp {
 	struct	trapframe *md_regs;	/* registers on current frame */
 	int	md_flags;		/* machine-dependent flags */
+	volatile int md_astpending;	/* AST pending for this process */
+	struct pmap *md_gc_pmap;	/* pmap being garbage collected */
+	struct vm_page *md_gc_ptp;	/* pages from pmap g/c */
 };
 
 /* md_flags */
-#define	MDP_USEDFPU	0x0001	/* has used the FPU */
+#define	MDL_USEDFPU	0x0001	/* has used the FPU */
+#define	MDL_IOPL	0x0002	/* XEN: i/o privilege */
+
+struct mdproc {
+	int	md_flags;
+	void	(*md_syscall)(struct trapframe *);
+					/* Syscall handling function */
+};
+
+/* md_flags */
+#define MDP_USEDMTRR	0x0002	/* has set volatile MTRRs */
+
+/* kernel stack params */
+#define	UAREA_USER_OFFSET	(USPACE - ALIGN(sizeof(struct user)))
+#define	KSTACK_LOWEST_ADDR(l)	((void *)USER_TO_UAREA((l)->l_addr))
+#define	KSTACK_SIZE		UAREA_USER_OFFSET
+
+#endif /* _I386_PROC_H_ */

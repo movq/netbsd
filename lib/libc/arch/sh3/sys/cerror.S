@@ -1,4 +1,4 @@
-/*	$NetBSD: cerror.S,v 1.2 2000/03/27 16:27:16 msaitoh Exp $	*/
+/*	$NetBSD: cerror.S,v 1.10 2006/01/06 05:14:39 uwe Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -40,20 +36,64 @@
 
 #include <machine/asm.h>
 #if defined(SYSLIBC_SCCS) && !defined(lint)
-	RCSID("$NetBSD: cerror.S,v 1.2 2000/03/27 16:27:16 msaitoh Exp $")
+	RCSID("$NetBSD: cerror.S,v 1.10 2006/01/06 05:14:39 uwe Exp $")
 #endif /* SYSLIBC_SCCS and not lint */
 
 #include "SYS.h"
 
-	.align 2
-	
-	.globl	_errno
-cerror:
-	mov.l	L_errno, r1
-	mov.l	r0,@r1
-	mov	#0xff,r0
-	rts
-	mov	#0xff,r1
+#ifdef _REENTRANT
 
-	.align 2
-L_errno:	.long	_errno
+
+	.globl	_C_LABEL(__errno)
+
+	.align	2
+cerror:
+	mov.l	.L___errno, r1
+	PIC_PROLOGUE(.L_got)
+	sts.l   pr, @-sp
+1:	CALL	r1
+	 mov.l	r4, @-sp	! save error code
+	mov.l	@sp+, r4
+	lds.l   @sp+, pr
+	PIC_EPILOGUE
+	mov.l	r4, @r0
+	mov	#-1, r1
+	rts
+	 mov	#-1, r0
+
+	.align	2
+.L_got:		PIC_GOT_DATUM
+.L___errno:	CALL_DATUM(_C_LABEL(__errno), 1b)
+	SET_ASENTRY_SIZE(cerror)
+
+#else /* !_REENTRANT */
+
+
+	.globl	_C_LABEL(errno)
+
+	.align	2
+cerror:
+#ifdef PIC
+	mova	L_GOT, r0
+	mov.l	L_GOT, r1
+	add	r0, r1
+	mov.l	L_errno, r0
+	mov.l	@(r0, r1), r1
+	mov.l	r4, @r1
+#else
+	mov.l	L_errno, r1
+	mov.l	r4, @r1
+#endif
+	mov	#-1, r0
+	rts
+	 mov	#-1, r1
+
+	.align	2
+#ifdef PIC
+L_GOT:		.long	_GLOBAL_OFFSET_TABLE_
+L_errno:	.long	_C_LABEL(errno)@GOT
+#else
+L_errno:	.long	_C_LABEL(errno)
+#endif
+
+#endif /* !_REENTRANT */

@@ -1,4 +1,4 @@
-/*	$NetBSD: var.c,v 1.6 1998/10/14 00:58:49 wsanchez Exp $	*/
+/*	$NetBSD: var.c,v 1.9 2003/08/07 11:17:33 agc Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,11 +37,12 @@
 #if 0
 static char sccsid[] = "@(#)var.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: var.c,v 1.6 1998/10/14 00:58:49 wsanchez Exp $");
+__RCSID("$NetBSD: var.c,v 1.9 2003/08/07 11:17:33 agc Exp $");
 #endif
 #endif /* not lint */
 
 #include <stdlib.h>
+#include <string.h>
 #include "value.h"
 #define EXTERN
 #include "var.h"
@@ -53,10 +50,7 @@ __RCSID("$NetBSD: var.c,v 1.6 1998/10/14 00:58:49 wsanchez Exp $");
 #include "window_string.h"
 
 struct var *
-var_set1(head, name, v)
-	struct var **head;
-	char *name;
-	struct value *v;
+var_set1(struct var **head, char *name, struct value *v)
 {
 	struct var **p;
 	struct var *r;
@@ -89,10 +83,7 @@ var_set1(head, name, v)
 }
 
 struct var *
-var_setstr1(head, name, str)
-	struct var **head;
-	char *name;
-	char *str;
+var_setstr1(struct var **head, char *name, char *str)
 {
 	struct value v;
 
@@ -102,10 +93,7 @@ var_setstr1(head, name, str)
 }
 
 struct var *
-var_setnum1(head, name, num)
-	struct var **head;
-	char *name;
-	int num;
+var_setnum1(struct var **head, char *name, int num)
 {
 	struct value v;
 
@@ -115,9 +103,7 @@ var_setnum1(head, name, num)
 }
 
 int
-var_unset1(head, name)
-	struct var **head;
-	char *name;
+var_unset1(struct var **head, char *name)
 {
 	struct var **p;
 	struct var *r;
@@ -136,9 +122,7 @@ var_unset1(head, name)
 }
 
 struct var **
-var_lookup1(p, name)
-	struct var **p;
-	char *name;
+var_lookup1(struct var **p, char *name)
 {
 	int cmp;
 
@@ -154,10 +138,7 @@ var_lookup1(p, name)
 }
 
 int
-var_walk1(r, func, a)
-	struct var *r;
-	int (*func) __P((void *, struct var *));
-	void *a;
+var_walk1(struct var *r, int (*func) (void *, struct var *), void *a)
 {
 	if (r == 0)
 		return 0;

@@ -1,4 +1,4 @@
-/* $NetBSD: mktemp.c,v 1.2 1999/09/21 06:24:46 cgd Exp $ */
+/* $NetBSD: mktemp.c,v 1.10 2007/12/15 19:44:52 perry Exp $ */
 
 /*-
  * Copyright (c) 1994, 1995, 1996, 1998 Peter Wemm <peter@netplex.com.au>
@@ -36,7 +36,12 @@
  * more like the OpenBSD version - which was first to publish the interface.
  */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
 #include <sys/cdefs.h>
+#include <sys/types.h>
 #include <err.h>
 #include <paths.h>
 #include <stdio.h>
@@ -44,25 +49,22 @@
 #include <string.h>
 #include <unistd.h>
 
-#ifndef lint
-#if 0
-static const char rcsid[] =
-	"$FreeBSD: src/usr.bin/mktemp/mktemp.c,v 1.2 1998/05/05 06:13:47 charnier Exp $";
-#else
-__RCSID("$NetBSD: mktemp.c,v 1.2 1999/09/21 06:24:46 cgd Exp $");
-#endif
-#endif /* not lint */
+#if defined(__RCSID) && !defined(__lint)
+__RCSID("$NetBSD: mktemp.c,v 1.10 2007/12/15 19:44:52 perry Exp $");
+#endif /* !__lint */
 
-static void usage __P((void));
+static void usage(void) __dead;
 
 int
 main(int argc, char **argv)
 {
 	int c, fd, ret;
-	char *tmpdir, *prefix;
+	char *tmpdir;
+	const char *prefix;
 	char *name;
 	int dflag, qflag, tflag, uflag;
 
+	setprogname(*argv);
 	ret = dflag = qflag = tflag = uflag = 0;
 	prefix = "mktemp";
 	name = NULL;
@@ -96,15 +98,16 @@ main(int argc, char **argv)
 	if (tflag) {
 		tmpdir = getenv("TMPDIR");
 		if (tmpdir == NULL)
-			asprintf(&name, "%s%s.XXXXXXXX", _PATH_TMP, prefix);
+			(void)asprintf(&name, "%s%s.XXXXXXXX", _PATH_TMP,
+			    prefix);
 		else
-			asprintf(&name, "%s/%s.XXXXXXXX", tmpdir, prefix);
+			(void)asprintf(&name, "%s/%s.XXXXXXXX", tmpdir, prefix);
 		/* if this fails, the program is in big trouble already */
 		if (name == NULL) {
 			if (qflag)
-				return (1);
+				return 1;
 			else
-				errx(1, "cannot generate template");
+				errx(1, "Cannot generate template");
 		}
 	} else if (argc < 1) {
 		usage();
@@ -124,9 +127,9 @@ main(int argc, char **argv)
 				if (!qflag)
 					warn("mkdtemp failed on %s", name);
 			} else {
-				printf("%s\n", name);
+				(void)printf("%s\n", name);
 				if (uflag)
-					rmdir(name);
+					(void)rmdir(name);
 			}
 		} else {
 			fd = mkstemp(name);
@@ -135,23 +138,24 @@ main(int argc, char **argv)
 				if (!qflag)
 					warn("mkstemp failed on %s", name);
 			} else {
-				close(fd);
+				(void)close(fd);
 				if (uflag)
-					unlink(name);
-				printf("%s\n", name);
+					(void)unlink(name);
+				(void)printf("%s\n", name);
 			}
 		}
 		if (name)
 			free(name);
 		name = NULL;
 	}
-	return (ret);
+	return ret;
 }
 
 static void
-usage()
+usage(void)
 {
-	fprintf(stderr,
-		"usage: mktemp [-d] [-q] [-t prefix] [-u] [template ...]\n");
+	(void)fprintf(stderr,
+		"Usage: %s [-dqu] {-t prefix | template ...}\n",
+		getprogname());
 	exit (1);
 }

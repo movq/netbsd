@@ -1,16 +1,12 @@
-#	$NetBSD: std.mac68k,v 1.24 1999/11/15 19:00:28 fvdl Exp $
+#	$NetBSD: std.mac68k,v 1.29 2005/12/11 12:18:02 christos Exp $
 #
-# standard Macintosh information.
-# roughly copied from std.sparc 14 Oct 1993.
+# "options" common to all mac68k kernel configs
 
 machine	mac68k m68k
+include		"conf/std"	# MI standard options
 
-prefix ../gnu/sys
-cinclude "conf/files.softdep"
-prefix
-
-options HZ=60			# mac clock runs at 60hz
+options 	HZ=60			# mac clock runs at 60hz
 
 # Executable support
-options 	EXEC_AOUT	# a.out binary support
-options 	EXEC_SCRIPT	# shell script support
+options 	EXEC_ELF32	# support for exec'ing ELF
+options 	EXEC_SCRIPT	# support for #! scripts

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.7 1998/06/12 23:22:45 cgd Exp $
+#	$NetBSD: Makefile,v 1.9 2008/10/25 22:27:38 apb Exp $
 
 # Makefile for sparc tags file and boot blocks
 
@@ -13,7 +13,8 @@ DSPARC=	conf dev fpu include sparc
 tags:
 	-ctags -wdtf ${TSPARC} ${SSPARC} ${COMM}
 	egrep "^ENTRY(.*)|^ALTENTRY(.*)" ${ASPARC} | \
-	    sed "s;\([^:]*\):\([^(]*\)(\([^, )]*\)\(.*\);\3 \1 /^\2(\3\4$$/;" \
+	    ${TOOL_SED} -e \
+		"s;\([^:]*\):\([^(]*\)(\([^, )]*\)\(.*\);\3 \1 /^\2(\3\4$$/;" \
 	    >> tags
 	sort -o ${TSPARC} ${TSPARC}
 
@@ -22,6 +23,6 @@ links:
 	    cd $$i && rm -f tags; ln -s ../tags tags; done
 
 
-SUBDIR= include stand
+SUBDIR=	compile include stand
 
 .include <bsd.subdir.mk>

@@ -1,4 +1,4 @@
-/*	$NetBSD: modunload.c,v 1.11 1999/07/22 02:04:13 hubertf Exp $	*/
+/*	$NetBSD: modunload.c,v 1.13 2005/02/05 14:35:25 xtraeme Exp $	*/
 
 /*
  * Copyright (c) 1993 Terrence R. Lambert.
@@ -34,7 +34,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: modunload.c,v 1.11 1999/07/22 02:04:13 hubertf Exp $");
+__RCSID("$NetBSD: modunload.c,v 1.13 2005/02/05 14:35:25 xtraeme Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -52,12 +52,11 @@ __RCSID("$NetBSD: modunload.c,v 1.11 1999/07/22 02:04:13 hubertf Exp $");
 #include <unistd.h>
 #include "pathnames.h"
 
-void	cleanup __P((void));
-int	main __P((int, char *[]));
-void	usage __P((void));
+void	cleanup(void);
+void	usage(void);
 
 void
-usage()
+usage(void)
 {
 
 	fprintf(stderr, "usage:\n");
@@ -68,16 +67,14 @@ usage()
 int devfd;
 
 void
-cleanup()
+cleanup(void)
 {
 
 	close(devfd);
 }
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	int c;
 	int modnum = -1;
@@ -104,6 +101,27 @@ main(argc, argv)
 	}
 	argc -= optind;
 	argv += optind;
+
+	/*
+	 * If there is one argument remaining and neither -i nor -n
+	 * was given, try to guess what it is - if it's number,
+	 * take it as index of module to unload, otherwise take
+	 * it as module name to unload.
+	 */
+	if (argc == 1 && (modnum == -1 && modname == NULL)
+	    && strlen(argv[0]) > 0) {
+		long num;
+
+		errno = 0;
+		num = strtol(argv[0], &endptr, 10);
+
+		/* If valid number, use as index, otherwise as name */
+		if (*endptr == '\0' && errno != ERANGE)
+			modnum = num;
+		else
+			modname = argv[0];
+		argc = 0;
+	}
 
 	if (argc != 0 || (modnum == -1 && modname == NULL))
 		usage();

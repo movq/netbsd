@@ -1,6 +1,33 @@
-/*	$NetBSD: main.c,v 1.3 1997/11/01 06:20:49 lukem Exp $	*/
+/*	$NetBSD: main.c,v 1.8 2008/04/28 20:23:05 martin Exp $	*/
+
+/*-
+ * Copyright (c) 1993 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
 #include <regex.h>
@@ -37,7 +64,7 @@ char *argv[];
 	size_t len;
 	int c;
 	int errflg = 0;
-	register int i;
+	int i;
 	extern int optind;
 	extern char *optarg;
 
@@ -220,7 +247,7 @@ int opts;			/* may not match f1 */
 	int err;
 	int len;
 	char *type = (opts & REG_EXTENDED) ? "ERE" : "BRE";
-	register int i;
+	int i;
 	char *grump;
 	char f0copy[1000];
 	char f2copy[1000];
@@ -317,9 +344,9 @@ options(type, s)
 int type;			/* 'c' compile, 'e' exec */
 char *s;
 {
-	register char *p;
-	register int o = (type == 'c') ? copts : eopts;
-	register char *legal = (type == 'c') ? "bisnmp" : "^$#tl";
+	char *p;
+	int o = (type == 'c') ? copts : eopts;
+	char *legal = (type == 'c') ? "bisnmp" : "^$#tl";
 
 	for (p = s; *p != '\0'; p++)
 		if (strchr(legal, *p) != NULL)
@@ -379,11 +406,11 @@ char *s;
 
 /*
  - fixstr - transform magic characters in strings
- == void fixstr(register char *p);
+ == void fixstr(char *p);
  */
 void
 fixstr(p)
-register char *p;
+char *p;
 {
 	if (p == NULL)
 		return;
@@ -409,11 +436,11 @@ char *str;
 regmatch_t sub;
 char *should;
 {
-	register int len;
-	register int shlen;
-	register char *p;
+	int len;
+	int shlen;
+	char *p;
 	static char grump[500];
-	register char *at = NULL;
+	char *at = NULL;
 
 	if (should != NULL && strcmp(should, "-") == 0)
 		should = NULL;
@@ -446,7 +473,6 @@ char *should;
 	}
 
 	len = (int)(sub.rm_eo - sub.rm_so);
-	shlen = (int)strlen(should);
 	p = str + sub.rm_so;
 
 	/* check for not supposed to match */
@@ -456,6 +482,7 @@ char *should;
 	}
 
 	/* check for wrong match */
+	shlen = (int)strlen(should);
 	if (len != shlen || strncmp(p, should, (size_t)shlen) != 0) {
 		sprintf(grump, "matched `%.*s' instead", len, p);
 		return(grump);

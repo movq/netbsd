@@ -1,4 +1,4 @@
-/*	$NetBSD: bt_subr.c,v 1.2 1995/04/10 22:12:48 gwr Exp $ */
+/*	$NetBSD: bt_subr.c,v 1.9 2005/12/11 12:19:20 christos Exp $ */
 
 /*
  * Copyright (c) 1993
@@ -21,11 +21,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -44,11 +40,14 @@
  *	@(#)bt_subr.c	8.2 (Berkeley) 1/21/94
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: bt_subr.c,v 1.9 2005/12/11 12:19:20 christos Exp $");
+
 #include <sys/param.h>
 #include <sys/buf.h>
 #include <sys/errno.h>
 
-#include <machine/fbio.h>
+#include <dev/sun/fbio.h>
 
 #include "btreg.h"
 #include "btvar.h"
@@ -62,18 +61,15 @@
 /*
  * Implement an FBIOGETCMAP-like ioctl.
  */
-int
-bt_getcmap(p, cm, cmsize)
-	register struct fbcmap *p;
-	union bt_cmap *cm;
-	int cmsize;
+int 
+bt_getcmap(struct fbcmap *p, union bt_cmap *cm, int cmsize)
 {
-	register u_int i, start, count;
-	register u_char *cp;
+	u_int i, start, count;
+	u_char *cp;
 
 	start = p->index;
 	count = p->count;
-	if (start >= cmsize || start + count > cmsize)
+	if (start >= cmsize || count > cmsize - start)
 		return (EINVAL);
 	if (!useracc(p->red, count, B_WRITE) ||
 	    !useracc(p->green, count, B_WRITE) ||
@@ -90,18 +86,15 @@ bt_getcmap(p, cm, cmsize)
 /*
  * Implement the software portion of an FBIOPUTCMAP-like ioctl.
  */
-int
-bt_putcmap(p, cm, cmsize)
-	register struct fbcmap *p;
-	union bt_cmap *cm;
-	int cmsize;
+int 
+bt_putcmap(struct fbcmap *p, union bt_cmap *cm, int cmsize)
 {
-	register u_int i, start, count;
-	register u_char *cp;
+	u_int i, start, count;
+	u_char *cp;
 
 	start = p->index;
 	count = p->count;
-	if (start >= cmsize || start + count > cmsize)
+	if (start >= cmsize || count > cmsize - start)
 		return (EINVAL);
 	if (!useracc(p->red, count, B_READ) ||
 	    !useracc(p->green, count, B_READ) ||

@@ -1,4 +1,4 @@
-.\"	$NetBSD: stty.1,v 1.20 1999/03/24 06:27:49 mycroft Exp $
+.\"	$NetBSD: stty.1,v 1.34 2007/06/24 18:03:00 christos Exp $
 .\"
 .\" Copyright (c) 1990, 1993, 1994
 .\"	The Regents of the University of California.  All rights reserved.
@@ -14,11 +14,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -36,7 +32,7 @@
 .\"
 .\"     @(#)stty.1	8.5 (Berkeley) 6/1/94
 .\"
-.Dd June 1, 1994
+.Dd June 24, 2007
 .Dt STTY 1
 .Os
 .Sh NAME
@@ -74,8 +70,8 @@ in the traditional
 .It Fl f
 Open and use the terminal named by
 .Ar file
-rather than using standard input.  The file is opened
-using the
+rather than using standard input.
+The file is opened using the
 .Dv O_NONBLOCK
 flag of
 .Fn open ,
@@ -92,10 +88,10 @@ to restore the current terminal state as per
 .Pp
 The following arguments are available to set the terminal
 characteristics:
-.Ss Control Modes:
-.Pp
+.Ss Control Modes
 Control mode flags affect hardware characteristics associated with the
-terminal.  This corresponds to the c_cflag in the termios structure.
+terminal.
+This corresponds to the c_cflag in the termios structure.
 .Bl -tag -width Fl
 .It Cm parenb Pq Fl parenb
 Enable (disable) parity generation
@@ -151,7 +147,7 @@ Enable RTS/CTS flow control.
 .It Cm cdtrcts Pq Fl cdtrcts
 Enable DTR/CTS flow control (if supported).
 .El
-.Ss Input Modes:
+.Ss Input Modes
 This corresponds to the c_iflag in the termios structure.
 .Bl -tag -width Fl
 .It Cm ignbrk Pq Fl ignbrk
@@ -217,17 +213,19 @@ to restart output.
 .It Cm imaxbel Pq Fl imaxbel
 The system imposes a limit of
 .Dv MAX_INPUT
-(currently 255) characters in the input queue.  If
+(currently 255) characters in the input queue.
+If
 .Cm imaxbel
 is set and the input queue limit has been reached,
 subsequent input causes the system to send an ASCII BEL
-character to the output queue (the terminal beeps at you).  Otherwise,
+character to the output queue (the terminal beeps at you).
+Otherwise,
 if
 .Cm imaxbel
 is unset and the input queue is full, the next input character causes
 the entire input and output queues to be discarded.
 .El
-.Ss Output Modes:
+.Ss Output Modes
 This corresponds to the c_oflag of the termios structure.
 .Bl -tag -width Fl
 .It Cm opost Pq Fl opost
@@ -253,13 +251,12 @@ Do not (do) output CRs at column zero.
 .It Cm onlret Pq Fl onlret
 On the terminal NL performs (does not perform) the CR function.
 .El
-.Ss Local Modes:
-.Pp
+.Ss Local Modes
 Local mode flags (lflags) affect various and sundry characteristics of terminal
 processing.
 Historically the term "local" pertained to new job control features
 implemented by Jim Kulp on a
-.Tn Pdp 11/70
+.Tn PDP Ns -11/70
 at
 .Tn IIASA .
 Later the driver ran on the first
@@ -323,19 +320,21 @@ is disabled.
 .It Cm echoctl Pq Fl echoctl
 If
 .Cm echoctl
-is set, echo control characters as ^X.  Otherwise control characters
-echo as themselves.
+is set, echo control characters as ^X.
+Otherwise control characters echo as themselves.
 .It Cm echoprt Pq Fl echoprt
-For printing terminals. If set, echo erased characters backwards within ``\\''
-and ``/''.  Otherwise, disable this feature.
+For printing terminals.
+If set, echo erased characters backwards within ``\\''
+and ``/''.
+Otherwise, disable this feature.
 .It Cm noflsh Pq Fl noflsh
 Disable (enable) flush after
 .Dv INTR , QUIT , SUSP .
 .It Cm tostop Pq Fl tostop
 Send (do not send)
 .Dv SIGTTOU
-for background output.  This causes background jobs to stop if they attempt
-terminal output.
+for background output.
+This causes background jobs to stop if they attempt terminal output.
 .It Cm altwerase Pq Fl altwerase
 Use (do not use) an alternative word erase algorithm when processing
 .Dv WERASE
@@ -348,9 +347,9 @@ erased with simply an
 .Dv ERASE
 character.)
 .It Cm mdmbuf Pq Fl mdmbuf
-If set, flow control output based on condition of Carrier Detect.  Otherwise
-writes return an error if Carrier Detect is low (and Carrier is not being
-ignored with the
+If set, flow control output based on condition of Carrier Detect.
+Otherwise writes return an error if Carrier Detect is low (and Carrier
+is not being ignored with the
 .Dv CLOCAL
 flag.)
 .It Cm flusho Pq Fl flusho
@@ -360,7 +359,7 @@ Indicates input is (is not) pending after a switch from non-canonical
 to canonical mode and will be re-input when a read becomes pending
 or more input arrives.
 .El
-.Ss Control Characters:
+.Ss Control Characters
 .Bl -tag -width Fl
 .It Ar control-character Ar string
 Set
@@ -387,16 +386,17 @@ Recognized control-characters:
 .It eol2 Ta Tn VEOL2	EOL2 No character
 .It erase Ta Tn VERASE	ERASE No character
 .It werase Ta Tn VWERASE	WERASE No character
-.It intr Ta Tn VINTR	INTR No character
 .It kill Ta Tn VKILL	KILL No character
+.It reprint Ta Tn VREPRINT	REPRINT No character
+.It intr Ta Tn VINTR	INTR No character
 .It quit Ta Tn VQUIT	QUIT No character
 .It susp Ta Tn VSUSP	SUSP No character
+.It dsusp Ta Tn VDSUSP	DSUSP No character
 .It start Ta Tn VSTART	START No character
 .It stop Ta Tn VSTOP	STOP No character
-.It dsusp Ta Tn VDSUSP	DSUSP No character
 .It lnext Ta Tn VLNEXT	LNEXT No character
-.It reprint Ta Tn VREPRINT	REPRINT No character
 .It status Ta Tn VSTATUS	STATUS No character
+.It discard Ta Tn VDISCARD	DISCARD No character
 .El
 .Ed
 .It Cm min Ar number
@@ -410,18 +410,15 @@ are used in
 Non-Canonical mode input processing
 (-icanon).
 .El
-.Ss Combination Modes:
-.Pp
+.Ss Combination Modes
 .Bl -tag -width Fl
 .It Ar saved settings
-Set the current terminal
-characteristics to the saved settings
+Set the current terminal characteristics to the saved settings
 produced by the
 .Fl g
 option.
 .It Cm evenp No or Cm parity
-Enable parenb and cs7; disable
-parodd.
+Enable parenb and cs7; disable parodd.
 .It Cm oddp
 Enable parenb, cs7, and parodd.
 .It Fl parity , evenp ,  oddp
@@ -435,10 +432,11 @@ Reset
 .Dv ERASE
 and
 .Dv KILL
-characters
-back to system defaults.
+characters back to system defaults.
 .It Cm sane
 Resets all modes to reasonable values for interactive terminal use.
+.It Cm insane
+Resets all modes to unreasonable values for interactive terminal use.
 .It Cm tty
 Set the line discipline to the standard terminal line discipline
 .Dv TTYDISC .
@@ -448,17 +446,18 @@ Set (disable) all modes suitable for a CRT display device.
 Enable (disable) the system generated status line associated with
 processing a
 .Dv STATUS
-character (usually set to ^T).  The status line consists of the
+character (usually set to ^T).
+The status line consists of the
 system load average, the current command name, its process ID, the
 event the process is waiting on (or the status of the process), the user
-and system times, percent cpu, and current memory usage.
+and system times, percent CPU, and current memory usage.
 .It Cm columns Ar number
 The terminal size is recorded as having
 .Ar number
 columns.
 .It Cm cols Ar number
 is an alias for
-.Cm columns.
+.Cm columns .
 .It Cm rows Ar number
 The terminal size is recorded as having
 .Ar number
@@ -480,9 +479,10 @@ performed by either the terminal hardware or by the remote side connected
 to a pty.
 .It Cm raw Pq Fl raw
 If set, change the modes of the terminal so that no input or output processing
-is performed. If unset, change the modes of the terminal to some reasonable
-state that performs input and output processing.  Note that since the
-terminal driver no longer has a single
+is performed.
+If unset, change the modes of the terminal to some reasonable
+state that performs input and output processing.
+Note that since the terminal driver no longer has a single
 .Dv RAW
 bit, it is not possible to intuit what flags were set prior to setting
 .Cm raw .
@@ -491,20 +491,17 @@ This means that unsetting
 may not put back all the setting that were previously in effect.
 To set the terminal into a raw state and then accurately restore it, the following
 shell code is recommended:
-.nf
-
+.Bd -literal -offset indent
 save_state=$(stty -g)
 stty raw
 \&...
 stty "$save_state"
-
-.fi
+.Ed
 .It Cm size
 The size of the terminal is printed as two numbers on a single line,
 first rows, then columns.
 .El
-.Ss Compatibility Modes:
-.Pp
+.Ss Compatibility Modes
 These modes remain for compatibility with the previous version of
 the stty command.
 .Bl -tag -width Fl
@@ -523,7 +520,7 @@ If set, enables
 .Cm brkint , ixon , imaxbel , opost ,
 .Cm isig , iexten ,
 and
-.Cm Fl icanon .
+.Fl icanon .
 If unset, same as
 .Cm sane .
 .It Cm new
@@ -575,8 +572,7 @@ Same as the control character
 Same as the control character
 .Cm reprint .
 .El
-.Ss Control operations:
-.Pp
+.Ss Control operations
 These operations are not modes, but rather commands to be performed by
 the tty layer.
 .Bl -tag -width Fl
@@ -591,18 +587,20 @@ incoming STOP character when
 .Cm ixon
 is set.
 .El
-.Pp
+.Sh EXIT STATUS
 The
 .Nm
-utility exits with a value of 0 if successful, and >0 if an error occurs.
+utility exits with a value of 0 if successful, and \*[Gt]0 if an error occurs.
 .Sh SEE ALSO
-.Xr termios 4
+.Xr termios 4 ,
+.Xr tty 4
 .Sh STANDARDS
 The
 .Nm
 utility is expected to be
 .St -p1003.2
-compatible.  The flags
+compatible.
+The flags
 .Fl e
 and
 .Fl f

@@ -1,4 +1,4 @@
-/*	$NetBSD: locore_machdep.S,v 1.7 2000/03/03 12:32:43 soda Exp $	*/
+/*	$NetBSD: locore_machdep.S,v 1.15 2005/12/11 12:16:37 christos Exp $	*/
 /*	$OpenBSD: locore.S,v 1.12 1997/04/19 17:19:43 pefo Exp $	*/
 
 /*
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -336,74 +332,3 @@ LEAF(mdbpanic)
 	nop
 END(mdbpanic)
 #endif /* DEBUG */
-
-	.set	mips3
-
-/*--------------------------------------------------------------------------
- *
- * mips3_TLBWriteIndexedVPS --
- *
- *	Write the given entry into the TLB at the given index.
- *	Pass full r4000 tlb info including variable page size mask.
- *
- *	mips3_TLBWriteIndexed(index, tlb)
- *		unsigned index;
- *		tlb *tlb;
- *
- * Results:
- *	None.
- *
- * Side effects:
- *	TLB entry set.
- *
- *--------------------------------------------------------------------------
- */
-LEAF(mips3_TLBWriteIndexedVPS)
-	mfc0	v1, MIPS_COP_0_STATUS_REG	# Save the status register.
-	mtc0	zero, MIPS_COP_0_STATUS_REG	# Disable interrupts
-	nop
-	lw	a2, 8(a1)
-	lw	a3, 12(a1)
-	dmfc0	t0, MIPS_COP_0_TLB_HI		# Save the current PID.
-
-	dmtc0	a2, MIPS_COP_0_TLB_LO0		# Set up entry low0.
-	dmtc0	a3, MIPS_COP_0_TLB_LO1		# Set up entry low1.
-	nop
-	lw	a2, 0(a1)
-	lw	a3, 4(a1)
-	nop
-	mtc0	a0, MIPS_COP_0_TLB_INDEX	# Set the index.
-	dmtc0	a2, MIPS_COP_0_TLB_PG_MASK	# Set up entry mask.
-	dmtc0	a3, MIPS_COP_0_TLB_HI		# Set up entry high.
-	nop
-	tlbwi					# Write the TLB
-	nop
-	nop
-	nop					# Delay for effect
-	nop
-
-	dmtc0	t0, MIPS_COP_0_TLB_HI		# Restore the PID.
-	nop
-	dmtc0	zero, MIPS_COP_0_TLB_PG_MASK	# Default mask value.
-	j	ra
-	mtc0	v1, MIPS_COP_0_STATUS_REG	# Restore the status register
-END(mips3_TLBWriteIndexedVPS)
-
-
-/*
- * Interrupt counters for vmstat.
- */
-	.data
-	.globl _C_LABEL(intrcnt)
-	.globl _C_LABEL(eintrcnt)
-	.globl _C_LABEL(intrnames)
-	.globl _C_LABEL(eintrnames)
-_C_LABEL(intrnames):
-	.asciiz	"softclock"
-	.asciiz	"softnet"
-	.asciiz	"fpu"
-_C_LABEL(eintrnames):
-	.align	3
-_C_LABEL(intrcnt):
-	.word	0,0,0
-_C_LABEL(eintrcnt):

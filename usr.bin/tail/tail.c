@@ -13,11 +13,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -36,15 +32,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1991, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1991, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)tail.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: tail.c,v 1.7 1998/08/25 20:59:41 ross Exp $");
+__RCSID("$NetBSD: tail.c,v 1.13 2008/07/21 14:19:26 lukem Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -59,18 +55,16 @@ __RCSID("$NetBSD: tail.c,v 1.7 1998/08/25 20:59:41 ross Exp $");
 int fflag, rflag, rval;
 char *fname;
 
-int	main __P((int, char **));
-static void obsolete __P((char **));
-static void usage __P((void));
+int	main(int, char **);
+static void obsolete(char **);
+static void usage(void);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	struct stat sb;
 	FILE *fp;
-	long off;
+	off_t off;
 	enum STYLE style;
 	int ch, first;
 	char *p;
@@ -91,7 +85,7 @@ main(argc, argv)
 #define	ARG(units, forward, backward) {					\
 	if (style)							\
 		usage();						\
-	off = strtol(optarg, &p, 10) * (units);				\
+	off = strtoll(optarg, &p, 10) * (units);			\
 	if (*p)								\
 		err(1, "illegal offset -- %s", optarg);			\
 	switch(optarg[0]) {						\
@@ -219,8 +213,7 @@ main(argc, argv)
  * the option argument for a -b, -c or -n option gets converted.
  */
 static void
-obsolete(argv)
-	char *argv[];
+obsolete(char *argv[])
 {
 	char *ap, *p, *t;
 	int len;
@@ -234,7 +227,7 @@ obsolete(argv)
 		} else if (ap[1] == '-')
 			return;
 
-		switch(*++ap) {
+		switch (*++ap) {
 		/* Old-style option. */
 		case '0': case '1': case '2': case '3': case '4':
 		case '5': case '6': case '7': case '8': case '9':
@@ -302,9 +295,9 @@ obsolete(argv)
 }
 
 static void
-usage()
+usage(void)
 {
 	(void)fprintf(stderr,
-	    "usage: tail [-f | -r] [-b # | -c # | -n #] [file ...]\n");
+	    "usage: tail [-f | -F | -r] [-b # | -c # | -n #] [file ...]\n");
 	exit(1);
 }

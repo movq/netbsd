@@ -1,14 +1,12 @@
-#	$NetBSD: Makefile,v 1.4 1999/11/11 08:14:43 itohy Exp $
+#	$NetBSD: Makefile,v 1.8 2008/10/19 22:05:22 apb Exp $
 
 LIB=	dos
 
-MKLINT=no
-MKPROFILE=no
-MKPIC=no
+NOLINT=# defined
+NOPROFILE=# defined
+NOPIC=# defined
 
 CPPFLAGS+=	-I${.CURDIR}
-
-AWK?=	awk
 
 SRCS=	dos_rename.S
 SRCS+=	dos_cerror.S dos_procerr.S dos_errno.c dos_strerror.S
@@ -49,18 +47,21 @@ OBJS+=	${ASM}
 MAKECALL=${.CURDIR}/makedoscalls.awk
 
 ${ASM}: ${.CURDIR}/dos.h ${MAKECALL}
-	@echo creating ${.TARGET}
+	${_MKTARGET_COMPILE}
 	@grep -i 'DOS_${.PREFIX} ' ${.CURDIR}/dos.h | \
-	    ${AWK} -f ${MAKECALL} | ${CPP} ${CPPFLAGS} | ${AS} -o ${.TARGET}
+	    ${TOOL_AWK} -f ${MAKECALL} | ${CPP} ${CPPFLAGS} | \
+	    ${AS} -o ${.TARGET}
 
 MAKESTRERR=${.CURDIR}/makestrerror.awk
 
 dos_strerror.S: ${.CURDIR}/dos_errno.h ${MAKESTRERR}
-	@echo generating ${.TARGET}
-	@${AWK} -f ${MAKESTRERR} ${.CURDIR}/dos_errno.h > ${.TARGET}\
+	${_MKTARGET_CREATE}
+	@${TOOL_AWK} -f ${MAKESTRERR} ${.CURDIR}/dos_errno.h > ${.TARGET}\
 		|| ( rm -f ${.TARGET}; exit 1 )
 
 # only needed during build
 libinstall::
 
+.include <bsd.own.mk>
+.undef DESTDIR
 .include <bsd.lib.mk>

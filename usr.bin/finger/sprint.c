@@ -1,4 +1,4 @@
-/*	$NetBSD: sprint.c,v 1.10 1998/12/19 16:01:01 christos Exp $	*/
+/*	$NetBSD: sprint.c,v 1.17 2006/01/04 01:17:54 perry Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)sprint.c	8.3 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: sprint.c,v 1.10 1998/12/19 16:01:01 christos Exp $");
+__RCSID("$NetBSD: sprint.c,v 1.17 2006/01/04 01:17:54 perry Exp $");
 #endif
 #endif /* not lint */
 
@@ -54,18 +50,19 @@ __RCSID("$NetBSD: sprint.c,v 1.10 1998/12/19 16:01:01 christos Exp $");
 #include <err.h>
 #include <pwd.h>
 #include <errno.h>
-#include <utmp.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "utmpentry.h"
+
 #include "finger.h"
 #include "extern.h"
 
-static void	  stimeprint __P((WHERE *));
+static void	  stimeprint(WHERE *);
 
 void
-sflag_print()
+sflag_print(void)
 {
 	PERSON *pn;
 	WHERE *w;
@@ -74,12 +71,15 @@ sflag_print()
 	PERSON *tmp;
 	DBT data, key;
 
+	if (db == NULL)
+		return;
+
 	/*
 	 * short format --
 	 *	login name
 	 *	real name
-	 *	terminal name (the XX of ttyXX)
-	 *	if terminal writeable (add an '*' to the terminal name
+	 *	terminal name
+	 *	if terminal writable (add an '*' to the terminal name
 	 *		if not)
 	 *	if logged in show idle time and day logged in, else
 	 *		show last login date and time.  If > 6 months,
@@ -91,9 +91,9 @@ sflag_print()
 	 *		office location
 	 *		office phone
 	 */
-#define	MAXREALNAME	20
-	(void)printf("%-*s %-*s %s %s\n", UT_NAMESIZE, "Login", MAXREALNAME,
-	    "Name", "Tty  Idle  Login Time  ", (gflag) ? "" :
+#define	MAXREALNAME	18
+	(void)printf("%-*s %-*s %s %s\n", maxname, "Login", MAXREALNAME,
+	    "Name", " Tty      Idle  Login Time  ", (gflag) ? "" :
 	    (oflag) ? "Office     Office Phone" : "Where");
 
 	for (sflag = R_FIRST;; sflag = R_NEXT) {
@@ -106,8 +106,8 @@ sflag_print()
 		pn = tmp;
 
 		for (w = pn->whead; w != NULL; w = w->next) {
-			(void)printf("%-*.*s %-*.*s ", (int)UT_NAMESIZE, 
-			    (int)UT_NAMESIZE,
+			(void)printf("%-*.*s %-*.*s ", (int)maxname, 
+			    (int)maxname,
 			    pn->name, MAXREALNAME, MAXREALNAME,
 			    pn->realname ? pn->realname : "");
 			if (!w->loginat) {
@@ -117,11 +117,9 @@ sflag_print()
 			(void)putchar(w->info == LOGGEDIN && !w->writable ?
 			    '*' : ' ');
 			if (*w->tty)
-				(void)printf("%-2.2s ",
-				    w->tty[0] != 't' || w->tty[1] != 't' ||
-				    w->tty[2] != 'y' ? w->tty : w->tty + 3);
+				(void)printf("%-7.7s ", w->tty);
 			else
-				(void)printf("   ");
+				(void)printf("        ");
 			if (w->info == LOGGEDIN) {
 				stimeprint(w);
 				(void)printf("  ");
@@ -156,8 +154,7 @@ no_gecos:
 }
 
 static void
-stimeprint(w)
-	WHERE *w;
+stimeprint(WHERE *w)
 {
 	struct tm *delta;
 

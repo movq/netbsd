@@ -1,7 +1,7 @@
-/*	$NetBSD: wdc_amiga.c,v 1.5 2000/02/21 18:27:49 aymeric Exp $	*/
+/*	$NetBSD: wdc_amiga.c,v 1.31 2008/04/28 20:23:12 martin Exp $ */
 
 /*-
- * Copyright (c) 2000 The NetBSD Foundation, Inc.
+ * Copyright (c) 2000, 2003 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,6 +29,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: wdc_amiga.c,v 1.31 2008/04/28 20:23:12 martin Exp $");
+
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -45,7 +41,7 @@
 #include <machine/cpu.h>
 #include <machine/bus.h>
 #include <machine/intr.h>
-#include <machine/bswap.h>
+#include <sys/bswap.h>
 
 #include <amiga/amiga/cia.h>
 #include <amiga/amiga/custom.h>
@@ -58,8 +54,10 @@
 
 struct wdc_amiga_softc {
 	struct wdc_softc sc_wdcdev;
-	struct	channel_softc *wdc_chanptr;
-	struct  channel_softc wdc_channel;
+	struct	ata_channel *sc_chanlist[1];
+	struct  ata_channel sc_channel;
+	struct	ata_queue sc_chqueue;
+	struct wdc_regs sc_wdc_regs;
 	struct isr sc_isr;
 	volatile u_char *sc_intreg;
 	struct bus_space_tag cmd_iot;
@@ -67,19 +65,15 @@ struct wdc_amiga_softc {
 	char	sc_a1200;
 };
 
-int	wdc_amiga_probe	__P((struct device *, struct cfdata *, void *));
-void	wdc_amiga_attach	__P((struct device *, struct device *, void *));
-int	wdc_amiga_intr	__P((void *));
+int	wdc_amiga_probe(device_t, cfdata_t, void *);
+void	wdc_amiga_attach(device_t, device_t, void *);
+int	wdc_amiga_intr(void *);
 
-struct cfattach wdc_amiga_ca = {
-	sizeof(struct wdc_amiga_softc), wdc_amiga_probe, wdc_amiga_attach
-};
+CFATTACH_DECL_NEW(wdc_amiga, sizeof(struct wdc_amiga_softc),
+    wdc_amiga_probe, wdc_amiga_attach, NULL, NULL);
 
 int
-wdc_amiga_probe(parent, cfp, aux)
-	struct device *parent;
-	struct cfdata *cfp;
-	void *aux;
+wdc_amiga_probe(device_t parent, cfdata_t cfp, void *aux)
 {
 	if ((!is_a4000() && !is_a1200()) || !matchname(aux, "wdc"))
 		return(0);
@@ -87,70 +81,78 @@ wdc_amiga_probe(parent, cfp, aux)
 }
 
 void
-wdc_amiga_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+wdc_amiga_attach(device_t parent, device_t self, void *aux)
 {
-	struct wdc_amiga_softc *sc = (void *)self;
+	struct wdc_amiga_softc *sc = device_private(self);
+	struct wdc_regs *wdr;
+	int i;
 
-	printf("\n");
+	aprint_normal("\n");
+
+	sc->sc_wdcdev.sc_atac.atac_dev = self;
+	sc->sc_wdcdev.regs = wdr = &sc->sc_wdc_regs;
 
 	if (is_a4000()) {
 		sc->cmd_iot.base = (u_long)ztwomap(0xdd2020 + 2);
-		sc->sc_intreg = (u_char *)ztwomap(0xdd2020 + 0x1000);
+		sc->sc_intreg = (volatile u_char *)ztwomap(0xdd2020 + 0x1000);
 		sc->sc_a1200 = 0;
 	} else {
 		sc->cmd_iot.base = (u_long) ztwomap(0xda0000 + 2);
-		sc->ctl_iot.base = (u_long) ztwomap(0xda4000);
 		gayle_init();
 		sc->sc_intreg = &gayle.intreq;
 		sc->sc_a1200 = 1;
 	}
 	sc->cmd_iot.absm = sc->ctl_iot.absm = &amiga_bus_stride_4swap;
-	sc->wdc_channel.cmd_iot = &sc->cmd_iot;
-	sc->wdc_channel.ctl_iot = &sc->ctl_iot;
+	wdr->cmd_iot = &sc->cmd_iot;
+	wdr->ctl_iot = &sc->ctl_iot;
 
-	if (bus_space_map(sc->wdc_channel.cmd_iot, 0, 0x40, 0,
-			  &sc->wdc_channel.cmd_ioh)) {
-		printf("%s: couldn't map registers\n",
-		    sc->sc_wdcdev.sc_dev.dv_xname);
+	if (bus_space_map(wdr->cmd_iot, 0, 0x40, 0,
+			  &wdr->cmd_baseioh)) {
+		aprint_error_dev(self, "couldn't map registers\n");
 		return;
 	}
 
-	if (is_a1200())
-		sc->wdc_channel.ctl_ioh = sc->ctl_iot.base;
-	else if (bus_space_subregion(sc->wdc_channel.cmd_iot,
-	    sc->wdc_channel.cmd_ioh, 0x406, 1, &sc->wdc_channel.ctl_ioh))
+	for (i = 0; i < WDC_NREG; i++) {
+		if (bus_space_subregion(wdr->cmd_iot,
+		    wdr->cmd_baseioh, i, i == 0 ? 4 : 1,
+		    &wdr->cmd_iohs[i]) != 0) {
+
+			bus_space_unmap(wdr->cmd_iot,
+			    wdr->cmd_baseioh, 0x40);
+			aprint_error_dev(self, "couldn't map registers\n");
+			return;
+		}
+	}
+
+	if (bus_space_subregion(wdr->cmd_iot,
+	    wdr->cmd_baseioh, 0x406, 1, &wdr->ctl_ioh))
 		return;
 
-	sc->sc_wdcdev.cap = WDC_CAPABILITY_DATA16;
-	sc->sc_wdcdev.PIO_cap = 0;
-	sc->wdc_chanptr = &sc->wdc_channel;
-	sc->sc_wdcdev.channels = &sc->wdc_chanptr;
-	sc->sc_wdcdev.nchannels = 1;
-	sc->wdc_channel.channel = 0;
-	sc->wdc_channel.wdc = &sc->sc_wdcdev;
-	sc->wdc_channel.ch_queue = malloc(sizeof(struct channel_queue),
-	    M_DEVBUF, M_NOWAIT);
-	if (sc->wdc_channel.ch_queue == NULL) {
-	    printf("%s: can't allocate memory for command queue",
-		sc->sc_wdcdev.sc_dev.dv_xname);
-	    return;
-	}
+	sc->sc_wdcdev.sc_atac.atac_cap = ATAC_CAP_DATA16;
+	sc->sc_wdcdev.sc_atac.atac_pio_cap = 0;
+	sc->sc_chanlist[0] = &sc->sc_channel;
+	sc->sc_wdcdev.sc_atac.atac_channels = sc->sc_chanlist;
+	sc->sc_wdcdev.sc_atac.atac_nchannels = 1;
+	sc->sc_channel.ch_channel = 0;
+	sc->sc_channel.ch_atac = &sc->sc_wdcdev.sc_atac;
+	sc->sc_channel.ch_queue = &sc->sc_chqueue;
+	sc->sc_channel.ch_ndrive = 2;
+
+	wdc_init_shadow_regs(&sc->sc_channel);
+
 	sc->sc_isr.isr_intr = wdc_amiga_intr;
 	sc->sc_isr.isr_arg = sc;
 	sc->sc_isr.isr_ipl = 2;
 	add_isr (&sc->sc_isr);
 
-	if (is_a1200())
+	if (sc->sc_a1200)
 		gayle.intena |= GAYLE_INT_IDE;
 
-	wdcattach(&sc->wdc_channel);
+	wdcattach(&sc->sc_channel);
 }
 
 int
-wdc_amiga_intr(arg)
-	void *arg;
+wdc_amiga_intr(void *arg)
 {
 	struct wdc_amiga_softc *sc = (struct wdc_amiga_softc *)arg;
 	u_char intreq = *sc->sc_intreg;
@@ -159,7 +161,7 @@ wdc_amiga_intr(arg)
 	if (intreq & GAYLE_INT_IDE) {
 		if (sc->sc_a1200)
 			gayle.intreq = 0x7c | (intreq & 0x03);
-		ret = wdcintr(&sc->wdc_channel);
+		ret = wdcintr(&sc->sc_channel);
 	}
 
 	return ret;

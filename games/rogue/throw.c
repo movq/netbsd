@@ -1,4 +1,4 @@
-/*	$NetBSD: throw.c,v 1.5 1998/11/10 13:01:32 hubertf Exp $	*/
+/*	$NetBSD: throw.c,v 1.10 2008/01/14 03:50:03 dholland Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)throw.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: throw.c,v 1.5 1998/11/10 13:01:32 hubertf Exp $");
+__RCSID("$NetBSD: throw.c,v 1.10 2008/01/14 03:50:03 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -60,7 +56,7 @@ __RCSID("$NetBSD: throw.c,v 1.5 1998/11/10 13:01:32 hubertf Exp $");
 #include "rogue.h"
 
 void
-throw()
+throw(void)
 {
 	short wch, d;
 	boolean first_miss = 1;
@@ -71,7 +67,7 @@ throw()
 	while (!is_direction(dir = rgetchar(), &d)) {
 		sound_bell();
 		if (first_miss) {
-			message("direction? ", 0);
+			messagef(0, "direction? ");
 			first_miss = 0;
 		}
 	}
@@ -85,11 +81,11 @@ throw()
 	check_message();
 
 	if (!(weapon = get_letter_object(wch))) {
-		message("no such item.", 0);
+		messagef(0, "no such item.");
 		return;
 	}
 	if ((weapon->in_use_flags & BEING_USED) && weapon->is_cursed) {
-		message(curse_message, 0);
+		messagef(0, curse_message);
 		return;
 	}
 	row = rogue.row; col = rogue.col;
@@ -124,8 +120,7 @@ throw()
 }
 
 boolean
-throw_at_monster(monster, weapon)
-	object *monster, *weapon;
+throw_at_monster(object *monster, object *weapon)
 {
 	short damage, hit_chance;
 	short t;
@@ -146,24 +141,21 @@ throw_at_monster(monster, weapon)
 	}
 	t = weapon->quantity;
 	weapon->quantity = 1;
-	sprintf(hit_message, "the %s", name_of(weapon));
+	snprintf(hit_message, HIT_MESSAGE_SIZE, "the %s", name_of(weapon));
 	weapon->quantity = t;
 
 	if (!rand_percent(hit_chance)) {
-		(void) strcat(hit_message, "misses  ");
+		(void)strlcat(hit_message, "misses  ", HIT_MESSAGE_SIZE);
 		return(0);
 	}
 	s_con_mon(monster);
-	(void) strcat(hit_message, "hit  ");
-	(void) mon_damage(monster, damage);
+	(void)strlcat(hit_message, "hit  ", HIT_MESSAGE_SIZE);
+	(void)mon_damage(monster, damage);
 	return(1);
 }
 
 object *
-get_thrown_at_monster(obj, dir, row, col)
-	object *obj;
-	short dir;
-	short *row, *col;
+get_thrown_at_monster(object *obj, short dir, short *row, short *col)
 {
 	short orow, ocol;
 	short i, ch;
@@ -205,16 +197,16 @@ get_thrown_at_monster(obj, dir, row, col)
 }
 
 void
-flop_weapon(weapon, row, col)
-	object *weapon;
-	short row, col;
+flop_weapon(object *weapon, short row, short col)
 {
 	object *new_weapon, *monster;
 	short i = 0;
-	char msg[80];
 	boolean found = 0;
 	short mch, dch;
 	unsigned short mon;
+
+	if ((row < 0) || (row >= DROWS) || (col < 0) || (col >= DCOLS))
+		clean_up("flop_weapon:  weapon landed outside of dungeon");
 
 	while ((i < 9) && dungeon[row][col] & ~(FLOOR | TUNNEL | DOOR | MONSTER)) {
 		rand_around(i++, &row, &col);
@@ -258,16 +250,14 @@ flop_weapon(weapon, row, col)
 
 		t = weapon->quantity;
 		weapon->quantity = 1;
-		sprintf(msg, "the %svanishes as it hits the ground",
-		name_of(weapon));
+		messagef(0, "the %svanishes as it hits the ground",
+			name_of(weapon));
 		weapon->quantity = t;
-		message(msg, 0);
 	}
 }
 
 void
-rand_around(i, r, c)
-	short i, *r, *c;
+rand_around(short i, short *r, short *c)
 {
 	static char pos[] = "\010\007\001\003\004\005\002\006\0";
 	static short row, col;

@@ -1,4 +1,4 @@
-/* $NetBSD: blkdev.c,v 1.3 1999/11/13 21:38:20 thorpej Exp $ */
+/* $NetBSD: blkdev.c,v 1.7 2005/12/24 22:45:34 perry Exp $ */
 
 /*
  * Copyright (c) 1999 Christopher G. Demetriou.  All rights reserved.
@@ -45,11 +45,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -79,6 +75,9 @@
 #include "stand/common/common.h"
 #include "blkdev.h"
 
+#define	RF_PROTECTED_SECTORS	64	/* XXX refer to <.../rf_optnames.h> */
+
+
 /*
  * If BOOTXX_FS_TYPE is defined, we'll try to find and use the first
  * partition with that type mentioned in the disklabel, else default to
@@ -87,8 +86,15 @@
  * The old boot blocks used to look for a file system starting at block
  * 0.  It's not immediately obvious that change here is necessary or good,
  * so for now we don't bother looking for the specific type.
+ *
+ * However, for filesystem support on RAID1 sets we use a subset of the
+ * BOOTXX_FS_TYPE support.
  */
+#if defined(BOOTXX_RAID1_SUPPORT)
+#define BOOTXX_FS_TYPE
+#else
 #undef BOOTXX_FS_TYPE
+#endif
 
 int		blkdev_is_open;
 u_int32_t	blkdev_part_offset;
@@ -126,13 +132,18 @@ devopen(f, fname, file)
 	/* Try to read disk label and partition table information. */
 	blkdev_part_offset = 0;
 #if defined(BOOTXX_FS_TYPE)
-	i = diskstrategy(NULL, F_READ,
+	i = blkdevstrategy(NULL, F_READ,
 	    (daddr_t)LABELSECTOR, DEV_BSIZE, buf, &cnt);
 	if (i || cnt != DEV_BSIZE) {
 		return (ENXIO);
 	}
 	msg = getdisklabel(buf, &l);
 	if (msg == NULL) {
+#if defined(BOOTXX_RAID1_SUPPORT)
+		if (l.d_partitions[0].p_fstype == FS_RAID) {
+			blkdev_part_offset = RF_PROTECTED_SECTORS;
+		}
+#else
 		/*
 		 * there's a label.  find the first partition of the
 		 * type we want and use its offset.  if none are
@@ -144,6 +155,7 @@ devopen(f, fname, file)
 				break;
 			}
 		}
+#endif
 	} else {
 		/* just use offset 0; it's already set that way */
 	}
@@ -167,7 +179,7 @@ blkdevstrategy(devdata, rw, bn, reqcnt, addrvoid, cnt)
 
 	if ((reqcnt & 0xffffff) != reqcnt ||
 	    reqcnt == 0)
-		asm("call_pal 0");
+		__asm("call_pal 0");
 
 	twiddle();
 

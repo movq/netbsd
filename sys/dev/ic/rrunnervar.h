@@ -1,13 +1,13 @@
-/*	$NetBSD: rrunnervar.h,v 1.6 2000/01/21 23:39:58 thorpej Exp $	*/
+/*	$NetBSD: rrunnervar.h,v 1.13 2008/04/28 20:23:51 martin Exp $	*/
 
 /* Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code contributed to The NetBSD Foundation by Kevin M. Lahey
- * of the Numerical Aerospace Simulation Facility, NASA Ames Research 
+ * of the Numerical Aerospace Simulation Facility, NASA Ames Research
  * Center.
  *
- * Partially based on a HIPPI driver written by Essential Communications 
+ * Partially based on a HIPPI driver written by Essential Communications
  * Corporation.  Thanks to Jason Thorpe, Matt Jacob, and Fred Templin
  * for invaluable advice and encouragement!
  *
@@ -19,13 +19,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -70,7 +63,7 @@ struct rr_eeprom {
 	u_int32_t	ifr_length;	/* length in bytes to write */
 	u_int32_t	*ifr_buffer;	/* data to be written */
 };
-    
+
 #define EIOCGTUNE   1	/* retrieve tuning */
 #define EIOCSTUNE   2	/* set tuning */
 #define EIOCGEEPROM 3	/* get eeprom */
@@ -112,9 +105,9 @@ struct esh_send_ring_ctl {
 	size_t ec_len;			/* total length of current buf */
 	struct mbuf *ec_cur_mbuf;	/* current mbuf being processed */
 	struct buf *ec_cur_buf;		/* current buf being processed */
-	struct esh_dmainfo *ec_cur_dmainfo;	
+	struct esh_dmainfo *ec_cur_dmainfo;
 					/* current dmainfo being processed */
-	struct buf_queue ec_buf_queue;	/* queue of bufs to send */
+	struct bufq_state *ec_buf_queue;/* queue of bufs to send */
 	int ec_error;			/* encountered error? */
 	u_int16_t ec_producer;		/* latest buffer driver produced */
 	u_int16_t ec_consumer;		/* latest buffer runcode consumed */
@@ -165,24 +158,24 @@ struct esh_softc {
 
 	bus_dma_tag_t		sc_dmat;     /* dma tag */
 
-	bus_dma_segment_t	sc_dmaseg;   /* segment holding the various 
+	bus_dma_segment_t	sc_dmaseg;   /* segment holding the various
 					        data structures in host memory
 					        that are DMA'ed to the NIC */
 	bus_dmamap_t		sc_dma;	     /* dma map for the segment */
-	caddr_t			sc_dma_addr; /* address in kernel of DMA mem */
+	char 		        *sc_dma_addr; /* address in kernel of DMA mem */
 	bus_size_t		sc_dma_size; /* size of dma-able region */
 
-	u_int8_t	(*sc_bist_read) __P((struct esh_softc *));
-	void		(*sc_bist_write) __P((struct esh_softc *, u_int8_t));
+	u_int8_t	(*sc_bist_read)(struct esh_softc *);
+	void		(*sc_bist_write)(struct esh_softc *, u_int8_t);
 
-	/* 
+	/*
 	 * Definitions for the various driver structures that sit in host
 	 * memory and are read by the NIC via DMA:
 	 */
 
 	struct rr_gen_info	*sc_gen_info;	/* gen info block pointer */
 	bus_addr_t		sc_gen_info_dma;
-    
+
 	struct rr_ring_ctl	*sc_recv_ring_table;
 	bus_addr_t		sc_recv_ring_table_dma;
 
@@ -252,14 +245,14 @@ struct esh_softc {
 	u_int			sc_fp_rings;
 };
 
-void	eshconfig __P((struct esh_softc *));
-int	eshintr __P((void *));
+void	eshconfig(struct esh_softc *);
+int	eshintr(void *);
 #endif /* _KERNEL */
 
 /* Define a few constants for future use */
 
 #define ESH_MAX_NSEGS			512     /* room for 2MB of data */
-#define ESH_STATS_TIMER_DEFAULT		1030900  
+#define ESH_STATS_TIMER_DEFAULT		1030900
 	/* 1000000 usecs / 0.97 usecs/tick */
 
 #define NEXT_EVENT(i)  (((i) + 1) & (RR_EVENT_RING_SIZE - 1))

@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_ipc_10.c,v 1.9 1999/08/25 04:47:12 thorpej Exp $	*/
+/*	$NetBSD: kern_ipc_10.c,v 1.23 2007/12/20 23:02:44 dsl Exp $	*/
 
 /*
  * Copyright (c) 1994 Adam Glass and Charles M. Hannum.  All rights reserved.
@@ -30,6 +30,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: kern_ipc_10.c,v 1.23 2007/12/20 23:02:44 dsl Exp $");
+
 #include "opt_sysv.h"
 
 #include <sys/param.h>
@@ -37,38 +40,25 @@
 #include <sys/kernel.h>
 #include <sys/proc.h>
 #include <sys/sem.h>
-#include <sys/malloc.h>
 
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
 
 #include <compat/common/compat_util.h>
+#include <compat/sys/shm.h>
+#include <compat/sys/sem.h>
 
-#include <vm/vm.h>
-#include <vm/vm_map.h>
-#include <vm/vm_map.h>
-#include <vm/vm_kern.h>
-
-#ifdef SYSVSEM
+#if defined(SYSVSEM) && !defined(_LP64)
 int
-compat_10_sys_semsys(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+compat_10_sys_semsys(struct lwp *l, const struct compat_10_sys_semsys_args *uap, register_t *retval)
 {
-	struct compat_10_sys_semsys_args /* {
+	/* {
 		syscallarg(int) which;
 		syscallarg(int) a2;
 		syscallarg(int) a3;
 		syscallarg(int) a4;
 		syscallarg(int) a5;
-	} */ *uap = v;
-	struct compat_14_sys___semctl_args /* {
-		syscallarg(int) semid;
-		syscallarg(int) semnum;
-		syscallarg(int) cmd;
-		syscallarg(union __semun *) arg;
-	} */ __semctl_args;
+	} */
 	struct sys_semget_args /* {
 		syscallarg(key_t) key;
 		syscallarg(int) nsems;
@@ -82,34 +72,53 @@ compat_10_sys_semsys(p, v, retval)
 	struct sys_semconfig_args /* {
 		syscallarg(int) flag;
 	} */ semconfig_args;
-	caddr_t sg = stackgap_init(p->p_emul);
+	struct semid_ds sembuf;
+	struct semid_ds14 osembuf;
+	void *pass_arg;
+	int a5 = SCARG(uap, a5);
+	int error;
 
 	switch (SCARG(uap, which)) {
 	case 0:						/* __semctl() */
-		SCARG(&__semctl_args, semid) = SCARG(uap, a2);
-		SCARG(&__semctl_args, semnum) = SCARG(uap, a3);
-		SCARG(&__semctl_args, cmd) = SCARG(uap, a4);
-		SCARG(&__semctl_args, arg) = stackgap_alloc(&sg,
-			sizeof(union semun *));
-		copyout(&SCARG(uap, a5), SCARG(&__semctl_args, arg),
-			sizeof(union __semun));
-		return (compat_14_sys___semctl(p, &__semctl_args, retval));
+#define	semctl_semid	SCARG(uap, a2)
+#define	semctl_semnum	SCARG(uap, a3)
+#define	semctl_cmd	SCARG(uap, a4)
+#define	semctl_arg	((union __semun *)&a5)
+		pass_arg = get_semctl_arg(semctl_cmd, &sembuf, semctl_arg);
+		if (semctl_cmd == IPC_SET) {
+			error = copyin(semctl_arg->buf, &osembuf, sizeof osembuf);
+			if (error != 0)
+				return error;
+			semid_ds14_to_native(&osembuf, &sembuf);
+		}
+		error = semctl1(l, semctl_semid, semctl_semnum, semctl_cmd, 
+		    pass_arg, retval);
+		if (error == 0 && semctl_cmd == IPC_STAT) {
+			native_to_semid_ds14(&sembuf, &osembuf);
+			error = copyout(&osembuf, semctl_arg->buf, sizeof(osembuf));
+		}
+		return error;
+#undef	semctl_semid
+#undef	semctl_semnum
+#undef	semctl_cmd
+#undef	semctl_arg
 
 	case 1:						/* semget() */
 		SCARG(&semget_args, key) = SCARG(uap, a2);
 		SCARG(&semget_args, nsems) = SCARG(uap, a3);
 		SCARG(&semget_args, semflg) = SCARG(uap, a4);
-		return (sys_semget(p, &semget_args, retval));
+		return (sys_semget(l, &semget_args, retval));
 
 	case 2:						/* semop() */
 		SCARG(&semop_args, semid) = SCARG(uap, a2);
-		SCARG(&semop_args, sops) = (struct sembuf *)SCARG(uap, a3);
+		SCARG(&semop_args, sops) =
+		    (struct sembuf *)(u_long)SCARG(uap, a3);
 		SCARG(&semop_args, nsops) = SCARG(uap, a4);
-		return (sys_semop(p, &semop_args, retval));
+		return (sys_semop(l, &semop_args, retval));
 
 	case 3:						/* semconfig() */
 		SCARG(&semconfig_args, flag) = SCARG(uap, a2);
-		return (sys_semconfig(p, &semconfig_args, retval));
+		return (sys_semconfig(l, &semconfig_args, retval));
 
 	default:
 		return (EINVAL);
@@ -117,19 +126,16 @@ compat_10_sys_semsys(p, v, retval)
 }
 #endif
 
-#ifdef SYSVSHM
+#if defined(SYSVSHM) && !defined(_LP64)
 int
-compat_10_sys_shmsys(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+compat_10_sys_shmsys(struct lwp *l, const struct compat_10_sys_shmsys_args *uap, register_t *retval)
 {
-	struct compat_10_sys_shmsys_args /* {
+	/* {
 		syscallarg(int) which;
 		syscallarg(int) a2;
 		syscallarg(int) a3;
 		syscallarg(int) a4;
-	} */ *uap = v;
+	} */
 	struct sys_shmat_args /* {
 		syscallarg(int) shmid;
 		syscallarg(void *) shmaddr;
@@ -152,25 +158,28 @@ compat_10_sys_shmsys(p, v, retval)
 	switch (SCARG(uap, which)) {
 	case 0:						/* shmat() */
 		SCARG(&shmat_args, shmid) = SCARG(uap, a2);
-		SCARG(&shmat_args, shmaddr) = (void *)SCARG(uap, a3);
+		SCARG(&shmat_args, shmaddr) =
+		    (void *)(u_long)SCARG(uap, a3);
 		SCARG(&shmat_args, shmflg) = SCARG(uap, a4);
-		return (sys_shmat(p, &shmat_args, retval));
+		return (sys_shmat(l, &shmat_args, retval));
 
 	case 1:						/* shmctl() */
 		SCARG(&shmctl_args, shmid) = SCARG(uap, a2);
 		SCARG(&shmctl_args, cmd) = SCARG(uap, a3);
-		SCARG(&shmctl_args, buf) = (struct shmid_ds14 *)SCARG(uap, a4);
-		return (compat_14_sys_shmctl(p, &shmctl_args, retval));
+		SCARG(&shmctl_args, buf) =
+		    (struct shmid_ds14 *)(u_long)SCARG(uap, a4);
+		return (compat_14_sys_shmctl(l, &shmctl_args, retval));
 
 	case 2:						/* shmdt() */
-		SCARG(&shmdt_args, shmaddr) = (void *)SCARG(uap, a2);
-		return (sys_shmdt(p, &shmdt_args, retval));
+		SCARG(&shmdt_args, shmaddr) =
+		    (void *)(u_long)SCARG(uap, a2);
+		return (sys_shmdt(l, &shmdt_args, retval));
 
 	case 3:						/* shmget() */
 		SCARG(&shmget_args, key) = SCARG(uap, a2);
 		SCARG(&shmget_args, size) = SCARG(uap, a3);
 		SCARG(&shmget_args, shmflg) = SCARG(uap, a4);
-		return (sys_shmget(p, &shmget_args, retval));
+		return (sys_shmget(l, &shmget_args, retval));
 
 	default:
 		return (EINVAL);
@@ -178,21 +187,18 @@ compat_10_sys_shmsys(p, v, retval)
 }
 #endif
 
-#ifdef SYSVMSG
+#if defined(SYSVMSG) && !defined(_LP64)
 int
-compat_10_sys_msgsys(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+compat_10_sys_msgsys(struct lwp *l, const struct compat_10_sys_msgsys_args *uap, register_t *retval)
 {
-	struct compat_10_sys_msgsys_args /* {
+	/* {
 		syscallarg(int) which;
 		syscallarg(int) a2;
 		syscallarg(int) a3;
 		syscallarg(int) a4;
 		syscallarg(int) a5;
 		syscallarg(int) a6;
-	} */ *uap = v;
+	} */
 	struct compat_14_sys_msgctl_args /* {
 		syscallarg(int) msqid;
 		syscallarg(int) cmd;
@@ -221,28 +227,30 @@ compat_10_sys_msgsys(p, v, retval)
 		SCARG(&msgctl_args, msqid) = SCARG(uap, a2);
 		SCARG(&msgctl_args, cmd) = SCARG(uap, a3);
 		SCARG(&msgctl_args, buf) =
-		    (struct msqid_ds14 *)SCARG(uap, a4);
-		return (compat_14_sys_msgctl(p, &msgctl_args, retval));
+		    (struct msqid_ds14 *)(u_long)SCARG(uap, a4);
+		return (compat_14_sys_msgctl(l, &msgctl_args, retval));
 
 	case 1:					/* msgget() */
 		SCARG(&msgget_args, key) = SCARG(uap, a2);
 		SCARG(&msgget_args, msgflg) = SCARG(uap, a3);
-		return (sys_msgget(p, &msgget_args, retval));
+		return (sys_msgget(l, &msgget_args, retval));
 
 	case 2:					/* msgsnd() */
 		SCARG(&msgsnd_args, msqid) = SCARG(uap, a2);
-		SCARG(&msgsnd_args, msgp) = (void *)SCARG(uap, a3);
+		SCARG(&msgsnd_args, msgp) =
+		    (void *)(u_long)SCARG(uap, a3);
 		SCARG(&msgsnd_args, msgsz) = SCARG(uap, a4);
 		SCARG(&msgsnd_args, msgflg) = SCARG(uap, a5);
-		return (sys_msgsnd(p, &msgsnd_args, retval));
+		return (sys_msgsnd(l, &msgsnd_args, retval));
 
 	case 3:					/* msgrcv() */
 		SCARG(&msgrcv_args, msqid) = SCARG(uap, a2);
-		SCARG(&msgrcv_args, msgp) = (void *)SCARG(uap, a3);
+		SCARG(&msgrcv_args, msgp) =
+		    (void *)(u_long)SCARG(uap, a3);
 		SCARG(&msgrcv_args, msgsz) = SCARG(uap, a4);
 		SCARG(&msgrcv_args, msgtyp) = SCARG(uap, a5);
 		SCARG(&msgrcv_args, msgflg) = SCARG(uap, a6);
-		return (sys_msgrcv(p, &msgrcv_args, retval));
+		return (sys_msgrcv(l, &msgrcv_args, retval));
 
 	default:
 		return (EINVAL);

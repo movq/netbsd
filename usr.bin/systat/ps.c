@@ -1,4 +1,4 @@
-/*      $NetBSD: ps.c,v 1.13 2000/01/08 23:12:37 itojun Exp $  */
+/*      $NetBSD: ps.c,v 1.30.18.1 2009/04/01 00:25:23 snj Exp $  */
 
 /*-
  * Copyright (c) 1999
@@ -45,38 +45,35 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: ps.c,v 1.13 2000/01/08 23:12:37 itojun Exp $");
+__RCSID("$NetBSD: ps.c,v 1.30.18.1 2009/04/01 00:25:23 snj Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
-#include <sys/dkstat.h>
-#include <sys/dir.h>
-#include <sys/time.h>
-#include <sys/proc.h>
+#include <sys/sched.h>
 #include <sys/sysctl.h>
 #include <sys/user.h>
+
 #include <curses.h>
 #include <math.h>
-#include <nlist.h>
 #include <pwd.h>
 #include <stdlib.h>
 #include <string.h>
 #include <tzfile.h>
 #include <unistd.h>
 
-#include "extern.h"
 #include "systat.h"
+#include "extern.h"
 #include "ps.h"
 
-int compare_pctcpu_noidle __P((const void *, const void *));
-char *state2str __P((struct kinfo_proc *));
-char *tty2str __P((struct kinfo_proc *));
-int rss2int __P((struct kinfo_proc *));
-int vsz2int __P((struct kinfo_proc *));
-char *comm2str __P((struct kinfo_proc *));
-double pmem2float __P((struct kinfo_proc *));
-char *start2str __P((struct kinfo_proc *));
-char *time2str __P((struct kinfo_proc *));
+int compare_pctcpu_noidle(const void *, const void *);
+char *state2str(struct kinfo_proc2 *);
+char *tty2str(struct kinfo_proc2 *);
+int rss2int(struct kinfo_proc2 *);
+int vsz2int(struct kinfo_proc2 *);
+char *comm2str(struct kinfo_proc2 *);
+double pmem2float(struct kinfo_proc2 *);
+char *start2str(struct kinfo_proc2 *);
+char *time2str(struct kinfo_proc2 *);
 
 static time_t now;
 
@@ -88,19 +85,19 @@ static uid_t showuser = SHOWUSER_ANY;
 #endif
 
 void
-labelps ()
+labelps(void)
 {
 	mvwaddstr(wnd, 0, 0, "USER      PID %CPU %MEM    VSZ   RSS TT  STAT STARTED       TIME COMMAND");
 }
 
 void
-showps ()
+showps(void)
 {
 	int i, k, y, vsz, rss;
-	const char *user, *comm, *state, *tty, *start, *time;
+	const char *user, *comm, *state, *tty, *start, *time_str;
 	pid_t pid;
 	double pctcpu, pctmem;
-	struct  eproc *ep;
+	struct kinfo_proc2 *kp;
 
 	now = 0;	/* force start2str to reget current time */
 
@@ -114,11 +111,11 @@ showps ()
 		if (pt[k].pt_kp == NULL) /* We're all the way down to the imaginary idle proc */
 			break;
 
-		ep = &pt[k].pt_kp->kp_eproc;
-		if (showuser != SHOWUSER_ANY && ep->e_ucred.cr_uid != showuser)
+		kp = pt[k].pt_kp;
+		if (showuser != SHOWUSER_ANY && kp->p_uid != showuser)
 			continue;
-		user = user_from_uid(ep->e_ucred.cr_uid, 0);
-		pid = pt[k].pt_kp->kp_proc.p_pid;
+		user = user_from_uid(kp->p_uid, 0);
+		pid = kp->p_pid;
 		pctcpu = 100.0 * pt[k].pt_pctcpu;
 		pctmem = pmem2float(pt[k].pt_kp);
 		vsz = vsz2int(pt[k].pt_kp);
@@ -126,7 +123,7 @@ showps ()
 		tty = tty2str(pt[k].pt_kp);
 		state = state2str(pt[k].pt_kp);
 		start = start2str(pt[k].pt_kp);
-		time = time2str(pt[k].pt_kp);
+		time_str = time2str(pt[k].pt_kp);
 		comm = comm2str(pt[k].pt_kp);
 		/*comm = pt[k].pt_kp->kp_proc.p_comm; */
 
@@ -134,7 +131,8 @@ showps ()
 		wclrtoeol(wnd);
 		mvwprintw(wnd, y++, 0,
 		    "%-8.8s%5d %4.1f %4.1f %6d %5d %-3s %-4s %7s %10.10s %s",
-		    user, pid, pctcpu, pctmem, vsz, rss, tty, state, start, time, comm);
+		    user, pid, pctcpu, pctmem, vsz, rss, tty, state, start,
+		    time_str, comm);
 		i--;
 	}
 	wmove(wnd, y, 0);
@@ -142,57 +140,51 @@ showps ()
 }
 
 int
-compare_pctcpu_noidle (a, b)
-	const void *a, *b;
+compare_pctcpu_noidle(const void *a, const void *b)
 {
-	if (((struct p_times *) a)->pt_kp == NULL)
+	if (((const struct p_times *) a)->pt_kp == NULL)
 		return 1;
 
-	if (((struct p_times *) b)->pt_kp == NULL)
+	if (((const struct p_times *) b)->pt_kp == NULL)
 	 	return -1;
 
-	return (((struct p_times *) a)->pt_pctcpu >
-		((struct p_times *) b)->pt_pctcpu)? -1: 1;
+	return (((const struct p_times *) a)->pt_pctcpu >
+		((const struct p_times *) b)->pt_pctcpu)? -1: 1;
 }
 
 /* from here down adapted from .../src/usr.bin/ps/print.c .  Any mistakes are my own, however. */
 char *
-state2str(kp)
-	struct kinfo_proc *kp;
+state2str(struct kinfo_proc2 *kp)
 {       
-	struct proc *p;
-	struct eproc *e;
 	int flag; 
 	char *cp;
 	char buf[5];
 	static char statestr[4];
 
-	p = &(kp->kp_proc);
-	e = &(kp->kp_eproc);
-
-	flag = p->p_flag;
+	flag = kp->p_flag;
 	cp = buf;
 
-	switch (p->p_stat) {
-	case SSTOP:
+	switch (kp->p_stat) {
+	case LSSTOP:
 		*cp = 'T';
 		break;
 
-	case SSLEEP:
-		if (flag & P_SINTR)     /* interuptable (long) */
-			*cp = p->p_slptime >= MAXSLP ? 'I' : 'S';
+	case LSSLEEP:
+		if (flag & L_SINTR)     /* interruptable (long) */
+			*cp = kp->p_slptime >= maxslp ? 'I' : 'S';
 		else
 			*cp = 'D';
 		break;
 
-	case SRUN:
-	case SIDL:
+	case LSRUN:
+	case LSIDL:
+	case LSONPROC:
 		*cp = 'R';
 		break;
 
-	case SZOMB:
-#ifdef SDEAD
-	case SDEAD:
+	case LSZOMB:
+#ifdef LSDEAD
+	case LSDEAD:
 #endif
 		*cp = 'Z';
 		break;
@@ -201,24 +193,26 @@ state2str(kp)
 		*cp = '?';
 	}
 	cp++;
-	if (flag & P_INMEM) {
+	if (flag & L_INMEM) {
 	} else
 		*cp++ = 'W';
-	if (p->p_nice < NZERO)
+	if (kp->p_nice < NZERO)
 		*cp++ = '<';
-	else if (p->p_nice > NZERO)
+	else if (kp->p_nice > NZERO)
 		*cp++ = 'N';
 	if (flag & P_TRACED)
 		*cp++ = 'X';
-	if (flag & P_WEXIT && P_ZOMBIE(p) == 0)
+	if (flag & P_WEXIT &&
+	    /* XXX - I don't like this */
+	    (kp->p_stat != LSZOMB))
 		*cp++ = 'E';
 	if (flag & P_PPWAIT)
 		*cp++ = 'V';
-	if ((flag & P_SYSTEM) || p->p_holdcnt)
+	if ((flag & P_SYSTEM) || kp->p_holdcnt)
 		*cp++ = 'L';
-	if (e->e_flag & EPROC_SLEADER)
+	if (kp->p_eflag & EPROC_SLEADER)
 		*cp++ = 's'; 
-	if ((flag & P_CONTROLT) && e->e_pgid == e->e_tpgid)
+	if ((flag & P_CONTROLT) && kp->p__pgid == kp->p_tpgid)
 		*cp++ = '+';
 	*cp = '\0';
 	snprintf(statestr, sizeof(statestr), "%-s",  buf);
@@ -227,22 +221,20 @@ state2str(kp)
 }
 
 char *
-tty2str(kp)
-	struct kinfo_proc *kp;
+tty2str(struct kinfo_proc2 *kp)
 {
 	static char ttystr[4];
-	char *ttyname;
-	struct eproc *e;
+	char *tty_name;
 
-	e = &(kp->kp_eproc);
-
-	if (e->e_tdev == NODEV || (ttyname = devname(e->e_tdev, S_IFCHR)) == NULL)
-		strcpy(ttystr, "??");
+	if (kp->p_tdev == NODEV ||
+	    (tty_name = devname(kp->p_tdev, S_IFCHR)) == NULL)
+		strlcpy(ttystr, "??", sizeof(ttystr));
 	else {
-		if (strncmp(ttyname, "tty", 3) == 0 ||
-		    strncmp(ttyname, "dty", 3) == 0)
-			ttyname += 3;
-		snprintf(ttystr, sizeof(ttystr), "%s%c", ttyname, e->e_flag & EPROC_CTTY ? ' ' : '-');
+		if (strncmp(tty_name, "tty", 3) == 0 ||
+		    strncmp(tty_name, "dty", 3) == 0)
+			tty_name += 3;
+		snprintf(ttystr, sizeof(ttystr), "%s%c", tty_name,
+		    kp->p_eflag & EPROC_CTTY ? ' ' : '-');
 	}
 
 	return ttystr;
@@ -251,96 +243,88 @@ tty2str(kp)
 #define pgtok(a)	(((a)*getpagesize())/1024)
 
 int
-vsz2int(kp)
-	struct kinfo_proc *kp;
+vsz2int(struct kinfo_proc2 *kp)
 {
-	struct eproc *e;
 	int     i;
 
-	e = &(kp->kp_eproc);
-	i = pgtok(e->e_vm.vm_dsize + e->e_vm.vm_ssize + e->e_vm.vm_tsize);
+	i = pgtok(kp->p_vm_msize);
 
 	return ((i < 0) ? 0 : i);
-} 
+}
 
 int
-rss2int(kp)
-	struct kinfo_proc *kp;
+rss2int(struct kinfo_proc2 *kp)
 {
-	struct eproc *e;
 	int	i;
  
-	e = &(kp->kp_eproc);
-	i = pgtok(e->e_vm.vm_rssize);
+	i = pgtok(kp->p_vm_rssize);
 
 	/* XXX don't have info about shared */
 	return ((i < 0) ? 0 : i);
 }
 
 char *
-comm2str(kp)
-	struct kinfo_proc *kp;
+comm2str(struct kinfo_proc2 *kp)
 {
-	char **argv, **pt;
+	char **argv;
 	static char commstr[41];
-	struct proc *p;
 
-	p = &(kp->kp_proc);
 	commstr[0]='\0';
 
-	argv = kvm_getargv(kd, kp, 40);
-	if ((pt = argv) != NULL) {
-		while (*pt) {
-			strcat(commstr, *pt);
-			pt++;
-			strcat(commstr, " ");
+	argv = kvm_getargv2(kd, kp, 40);
+	if (argv != NULL) {
+		while (*argv) {
+			strlcat(commstr, *argv, sizeof(commstr));
+			argv++;
+			strlcat(commstr, " ", sizeof(commstr));
 		}
 	} else {
-		commstr[0] = '(';
-		commstr[1] = '\0';
-		strncat(commstr, p->p_comm, sizeof(commstr) - 1);
-		strcat(commstr, ")");
+		const char *fmt;
+
+		/*
+		 * Commands that don't set an argv vector are printed with
+		 * square brackets if they are system commands.  Otherwise
+		 * they are printed within parentheses.
+		 */
+		if (kp->p_flag & P_SYSTEM)
+			fmt = "[%s]";
+		else
+			fmt = "(%s)";
+
+		snprintf(commstr, sizeof(commstr), fmt, kp->p_comm);
 	}
 
 	return commstr;
 }
 
 double
-pmem2float(kp)
-	struct kinfo_proc *kp;
+pmem2float(struct kinfo_proc2 *kp)
 {	                       
-	struct proc *p;
-	struct eproc *e; 
 	double fracmem;
-	int szptudot;
+	int szptudot = 0;
 
-	p = &(kp->kp_proc);
-	e = &(kp->kp_eproc);
-
-	if ((p->p_flag & P_INMEM) == 0)
+	/* XXX - I don't like this. */
+	if ((kp->p_flag & L_INMEM) == 0)
 	        return (0.0);
+#ifdef USPACE
 	/* XXX want pmap ptpages, segtab, etc. (per architecture) */
 	szptudot = USPACE/getpagesize();
+#endif
 	/* XXX don't have info about shared */
-	fracmem = ((double)e->e_vm.vm_rssize + szptudot)/mempages;
+	fracmem = ((double)kp->p_vm_rssize + szptudot)/mempages;
 	return (fracmem >= 0) ? 100.0 * fracmem : 0;
 }
 
 char *
-start2str(kp)
-	struct kinfo_proc *kp; 
+start2str(struct kinfo_proc2 *kp)
 {
-	struct proc *p;
-	struct pstats pstats;
 	struct timeval u_start;
 	struct tm *tp;
 	time_t startt;
 	static char startstr[10];
 
-	p = &(kp->kp_proc);
-
-	kvm_read(kd, (u_long)&(p->p_addr->u_stats), (char *)&pstats, sizeof(pstats));
-	u_start = pstats.p_start;
+	u_start.tv_sec = kp->p_ustart_sec;
+	u_start.tv_usec = kp->p_ustart_usec;
 
 	startt = u_start.tv_sec;
 	tp = localtime(&startt);
@@ -348,11 +332,11 @@ start2str(kp)
 	        time(&now);
 	if (now - u_start.tv_sec < 24 * SECSPERHOUR) {
 		/* I *hate* SCCS... */
-	        static char fmt[] = __CONCAT("%l:%", "M%p");
+	        static char fmt[] = "%l:%" "M%p";
 	        strftime(startstr, sizeof(startstr) - 1, fmt, tp);
 	} else if (now - u_start.tv_sec < 7 * SECSPERDAY) {
 	        /* I *hate* SCCS... */
-	        static char fmt[] = __CONCAT("%a%", "I%p");
+	        static char fmt[] = "%a%" "I%p";
 	        strftime(startstr, sizeof(startstr) - 1, fmt, tp);
 	} else  
 	        strftime(startstr, sizeof(startstr) - 1, "%e%b%y", tp);
@@ -361,17 +345,14 @@ start2str(kp)
 }
 
 char *    
-time2str(kp)
-	struct kinfo_proc *kp;
+time2str(struct kinfo_proc2 *kp)
 {	       
 	long secs;
 	long psecs;     /* "parts" of a second. first micro, then centi */
 	static char timestr[10];
-	struct proc *p;
 
-	p = &(kp->kp_proc);
-	        
-	if (P_ZOMBIE(p)) {
+	/* XXX - I don't like this. */
+	if (kp->p_stat == SZOMB) {
 	        secs = 0;
 	        psecs = 0;
 	} else {
@@ -380,14 +361,16 @@ time2str(kp)
 	         * fix this, but it is not 100% trivial (and interrupt
 	         * time fractions only work on the sparc anyway).       XXX
 	         */
-	        secs = p->p_rtime.tv_sec;
-	        psecs = p->p_rtime.tv_usec;
-	        /* if (sumrusage) {
+	        secs = kp->p_rtime_sec;
+	        psecs = kp->p_rtime_usec;
+#if 0
+	        if (sumrusage) {
 	                secs += k->ki_u.u_cru.ru_utime.tv_sec +
 	                        k->ki_u.u_cru.ru_stime.tv_sec;
 	                psecs += k->ki_u.u_cru.ru_utime.tv_usec +
 	                        k->ki_u.u_cru.ru_stime.tv_usec;
-	        } */
+	        }
+#endif
 	        /*
 	         * round and scale to 100's
 	         */
@@ -395,20 +378,18 @@ time2str(kp)
 	        secs += psecs / 100;
 	        psecs = psecs % 100;
 	}
-	snprintf(timestr, sizeof(timestr), "%3ld:%02ld.%02ld", secs/60, secs%60, psecs);
+	snprintf(timestr, sizeof(timestr), "%3ld:%02ld.%02ld", secs/60,
+	    secs%60, psecs);
 
 	return timestr;
 }
 
 void
-ps_user(args)
-	char *args;
+ps_user(char *args)
 {
 	uid_t uid;
 
-	if (args == NULL)
-		args = "";
-	if (strcmp(args, "+") == 0) {
+	if (args == NULL || *args == 0 || strcmp(args, "+") == 0) {
 		uid = SHOWUSER_ANY;
 	} else if (uid_from_user(args, &uid) != 0) {
 		error("%s: unknown user", args);

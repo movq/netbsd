@@ -1,4 +1,4 @@
-/*	$NetBSD: zs_ap.c,v 1.4 2000/03/06 21:36:10 thorpej Exp $	*/
+/*	$NetBSD: zs_ap.c,v 1.25 2008/04/28 20:23:30 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,13 +37,18 @@
  * Sun keyboard/mouse uses the zs_kbd/zs_ms slaves.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: zs_ap.c,v 1.25 2008/04/28 20:23:30 martin Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/tty.h>
+#include <sys/conf.h>
+#include <sys/cpu.h>
+#include <sys/intr.h>
 
 #include <machine/adrsmap.h>
-#include <machine/cpu.h>
 #include <machine/z8530var.h>
 
 #include <dev/cons.h>
@@ -80,7 +78,7 @@
 #define PORTA_OFFSET	0x00050000
 #define   PORT_CTL		2
 #define     PORTCTL_RI		0x01
-#define     PORTCTL_DSR		0x02	
+#define     PORTCTL_DSR		0x02
 #define     PORTCTL_DTR		0x04
 #define   PORT_SEL		3
 #define     PORTSEL_LOCALTALK	0x01
@@ -92,7 +90,7 @@
 #define     INTMASK_SCC		0x01
 
 extern int zs_def_cflag;
-extern void (*zs_delay) __P((void));
+extern void (*zs_delay)(void);
 
 /*
  * The news5000 provides a 9.8304 MHz clock to the ZS chips.
@@ -103,13 +101,13 @@ extern void (*zs_delay) __P((void));
 
 /* The layout of this is hardware-dependent (padding, order). */
 struct zschan {
-	volatile u_char pad1[3];
-	volatile u_char zc_csr;		/* ctrl,status, and indirect access */
-	volatile u_char pad2[3];
-	volatile u_char zc_data;	/* data */
+	volatile uint8_t pad1[3];
+	volatile uint8_t zc_csr;	/* ctrl,status, and indirect access */
+	volatile uint8_t pad2[3];
+	volatile uint8_t zc_data;	/* data */
 };
 
-static caddr_t zsaddr[NZS];
+static void *zsaddr[NZS];
 
 /* Flags from cninit() */
 static int zs_hwflags[NZS][2];
@@ -117,7 +115,7 @@ static int zs_hwflags[NZS][2];
 /* Default speed for all channels */
 static int zs_defspeed = 9600;
 
-static u_char zs_init_reg[16] = {
+static uint8_t zs_init_reg[16] = {
 	0,	/* 0: CMD (reset, etc.) */
 	0,	/* 1: No interrupts yet. */
 	0,	/* IVECT */
@@ -136,19 +134,16 @@ static u_char zs_init_reg[16] = {
 	ZSWR15_BREAK_IE,
 };
 
-static struct zschan * zs_get_chan_addr __P((int, int));
-static void zs_ap_delay __P((void));
-static void zshard_ap __P((void *));
-static int zs_getc __P((void *));
-static void zs_putc __P((void *, int));
-int zshard __P((void *));
-int zs_get_speed __P((struct zs_chanstate *));
+static struct zschan * zs_get_chan_addr(int, int);
+static void zs_ap_delay(void);
+static int zshard_ap(void *);
+static int zs_getc(void *);
+static void zs_putc(void *, int);
 
 struct zschan *
-zs_get_chan_addr(zs_unit, channel)
-	int zs_unit, channel;
+zs_get_chan_addr(int zs_unit, int channel)
 {
-	caddr_t addr;
+	void *addr;
 	struct zschan *zc;
 
 	if (zs_unit >= NZS)
@@ -157,16 +152,17 @@ zs_get_chan_addr(zs_unit, channel)
 	if (addr == NULL)
 		return NULL;
 	if (channel == 0) {
-		zc = (void *)(addr + PORTA_OFFSET);
+		zc = (void *)((uint8_t *)addr + PORTA_OFFSET);
 	} else {
-		zc = (void *)(addr + PORTB_OFFSET);
+		zc = (void *)((uint8_t *)addr + PORTB_OFFSET);
 	}
-	return (zc);
+	return zc;
 }
 
 void
-zs_ap_delay()
+zs_ap_delay(void)
 {
+
 	ZS_DELAY();
 }
 
@@ -175,22 +171,17 @@ zs_ap_delay()
  ****************************************************************/
 
 /* Definition of the driver for autoconfig. */
-int zs_ap_match __P((struct device *, struct cfdata *, void *));
-void zs_ap_attach __P((struct device *, struct device *, void *));
-int zs_print __P((void *, const char *name));
+int zs_ap_match(device_t, cfdata_t, void *);
+void zs_ap_attach(device_t, device_t, void *);
 
-struct cfattach zsc_ap_ca = {
-	sizeof(struct zsc_softc), zs_ap_match, zs_ap_attach
-};
+CFATTACH_DECL_NEW(zsc_ap, sizeof(struct zsc_softc),
+    zs_ap_match, zs_ap_attach, NULL, NULL);
 
 /*
  * Is the zs chip present?
  */
 int
-zs_ap_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+zs_ap_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct apbus_attach_args *apa = aux;
 
@@ -207,12 +198,9 @@ zs_ap_match(parent, cf, aux)
  * not set up the keyboard as ttya, etc.
  */
 void
-zs_ap_attach(parent, self, aux)
-	struct device *parent;
-	struct device *self;
-	void *aux;
+zs_ap_attach(device_t parent, device_t self, void *aux)
 {
-	struct zsc_softc *zsc = (void *)self;
+	struct zsc_softc *zsc = device_private(self);
 	struct apbus_attach_args *apa = aux;
 	struct zsc_attach_args zsc_args;
 	volatile struct zschan *zc;
@@ -227,10 +215,11 @@ zs_ap_attach(parent, self, aux)
 	volatile u_int *esccregs = (void *)(apa->apa_hwbase + ESCC_REG);
 	static int didintr;
 
-	zs_unit = zsc->zsc_dev.dv_unit;
-	zsaddr[zs_unit] = (caddr_t)apa->apa_hwbase;
+	zsc->zsc_dev = self;
+	zs_unit = device_unit(self);
+	zsaddr[zs_unit] = (void *)apa->apa_hwbase;
 
-	printf(" slot%d addr 0x%lx\n", apa->apa_slotno, apa->apa_hwbase);
+	aprint_normal(" slot%d addr 0x%lx\n", apa->apa_slotno, apa->apa_hwbase);
 
 	txAfifo[DMA_MODE_REG] = rxAfifo[DMA_MODE_REG] = DMA_EXTRDY;
 	txBfifo[DMA_MODE_REG] = rxBfifo[DMA_MODE_REG] = DMA_EXTRDY;
@@ -255,6 +244,7 @@ zs_ap_attach(parent, self, aux)
 		cs = &zsc->zsc_cs_store[channel];
 		zsc->zsc_cs[channel] = cs;
 
+		zs_lock_init(cs);
 		cs->cs_channel = channel;
 		cs->cs_private = NULL;
 		cs->cs_ops = &zsops_null;
@@ -264,8 +254,8 @@ zs_ap_attach(parent, self, aux)
 		cs->cs_reg_csr  = &zc->zc_csr;
 		cs->cs_reg_data = &zc->zc_data;
 
-		bcopy(zs_init_reg, cs->cs_creg, 16);
-		bcopy(zs_init_reg, cs->cs_preg, 16);
+		memcpy(cs->cs_creg, zs_init_reg, 16);
+		memcpy(cs->cs_preg, zs_init_reg, 16);
 
 		/* XXX: Get these from the EEPROM instead? */
 		/* XXX: See the mvme167 code.  Better. */
@@ -296,8 +286,8 @@ zs_ap_attach(parent, self, aux)
 		 */
 		if (!config_found(self, (void *)&zsc_args, zs_print)) {
 			/* No sub-driver.  Just reset it. */
-			u_char reset = (channel == 0) ?
-				ZSWR9_A_RESET : ZSWR9_B_RESET;
+			uint8_t reset = (channel == 0) ?
+			    ZSWR9_A_RESET : ZSWR9_B_RESET;
 			s = splhigh();
 			zs_write_reg(cs, 9, reset);
 			splx(s);
@@ -312,6 +302,7 @@ zs_ap_attach(parent, self, aux)
 	if (!didintr) {
 		didintr = 1;
 
+		zsc->zsc_si = softint_establish(SOFTINT_SERIAL, zssoft, zsc);
 		apbus_intr_establish(1, /* interrupt level ( 0 or 1 ) */
 				     NEWS5000_INT1_SCC,
 				     0, /* priority */
@@ -347,26 +338,23 @@ zs_ap_attach(parent, self, aux)
 	splx(s);
 }
 
-/*
- * Our ZS chips all share a common, autovectored interrupt,
- * so we have to look at all of them on each interrupt.
- */
-static void
-zshard_ap(arg)
-	void *arg;
+static int
+zshard_ap(void *arg)
 {
+
 	zshard(arg);
+	return 1;
 }
 
 /*
  * Polled input char.
  */
 int
-zs_getc(arg)
-	void *arg;
+zs_getc(void *arg)
 {
-	register volatile struct zschan *zc = arg;
-	register int s, c, rr0;
+	volatile struct zschan *zc = arg;
+	int s, c;
+	uint8_t rr0;
 
 	s = splhigh();
 	/* Wait for a character to arrive. */
@@ -383,19 +371,18 @@ zs_getc(arg)
 	 * This is used by the kd driver to read scan codes,
 	 * so don't translate '\r' ==> '\n' here...
 	 */
-	return (c);
+	return c;
 }
 
 /*
  * Polled output char.
  */
 void
-zs_putc(arg, c)
-	void *arg;
-	int c;
+zs_putc(void *arg, int c)
 {
-	register volatile struct zschan *zc = arg;
-	register int s, rr0;
+	volatile struct zschan *zc = arg;
+	int s;
+	uint8_t rr0;
 
 	s = splhigh();
 	/* Wait for transmitter to become ready. */
@@ -411,54 +398,49 @@ zs_putc(arg, c)
 
 /*****************************************************************/
 
-static void zscnprobe __P((struct consdev *));
-static void zscninit __P((struct consdev *));
-static int  zscngetc __P((dev_t));
-static void zscnputc __P((dev_t, int));
-static void zscnpollc __P((dev_t, int));
+static void zscnprobe(struct consdev *);
+static void zscninit(struct consdev *);
+static int  zscngetc(dev_t);
+static void zscnputc(dev_t, int);
 
 struct consdev consdev_zs_ap = {
 	zscnprobe,
 	zscninit,
 	zscngetc,
 	zscnputc,
-	zscnpollc,
+	nullcnpollc,
 	NULL,
+	NULL,
+	NULL,
+	NODEV,
+	CN_DEAD
 };
 
-void
-zscnprobe(cn)
-	struct consdev *cn;
+static void
+zscnprobe(struct consdev *cn)
 {
 }
 
-void
-zscninit(cn)
-	struct consdev *cn;
+static void
+zscninit(struct consdev *cn)
 {
-	cn->cn_dev = makedev(zs_major, 0);
+	extern const struct cdevsw zstty_cdevsw;
+
+	cn->cn_dev = makedev(cdevsw_lookup_major(&zstty_cdevsw), 0);
 	cn->cn_pri = CN_REMOTE;
 	zs_hwflags[0][0] = ZS_HWFLAG_CONSOLE;
 }
 
-int
-zscngetc(dev)
-	dev_t dev;
+static int
+zscngetc(dev_t dev)
 {
+
 	return zs_getc((void *)NEWS5000_SCCPORT0A);
 }
 
-void
-zscnputc(dev, c)
-	dev_t dev;
-	int c;
+static void
+zscnputc(dev_t dev, int c)
 {
-	zs_putc((void *)NEWS5000_SCCPORT0A, c);
-}
 
-void
-zscnpollc(dev, on)
-	dev_t dev;
-	int on;
-{
+	zs_putc((void *)NEWS5000_SCCPORT0A, c);
 }

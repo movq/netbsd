@@ -1,4 +1,4 @@
-/* $NetBSD: a12c.c,v 1.5 1999/11/04 19:15:22 thorpej Exp $ */
+/* $NetBSD: a12c.c,v 1.18 2007/10/17 19:52:59 garbled Exp $ */
 
 /* [Notice revision 2.2]
  * Copyright (c) 1997, 1998 Avalon Computer Systems, Inc.
@@ -38,7 +38,7 @@
 #include "opt_avalon_a12.h"		/* Config options headers */
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: a12c.c,v 1.5 1999/11/04 19:15:22 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: a12c.c,v 1.18 2007/10/17 19:52:59 garbled Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -46,16 +46,17 @@ __KERNEL_RCSID(0, "$NetBSD: a12c.c,v 1.5 1999/11/04 19:15:22 thorpej Exp $");
 #include <sys/malloc.h>
 #include <sys/device.h>
 
-#include <vm/vm.h>
+#include <uvm/uvm_extern.h>
 
 #include <machine/autoconf.h>
 #include <machine/rpb.h>
 
 #include <dev/isa/isareg.h>
 #include <dev/isa/isavar.h>
-#include <dev/dec/clockvar.h>
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
+
+#include <alpha/alpha/clockvar.h>
 
 #include <alpha/pci/a12creg.h>
 #include <alpha/pci/a12cvar.h>
@@ -66,13 +67,10 @@ __KERNEL_RCSID(0, "$NetBSD: a12c.c,v 1.5 1999/11/04 19:15:22 thorpej Exp $");
 int	a12cmatch __P((struct device *, struct cfdata *, void *));
 void	a12cattach __P((struct device *, struct device *, void *));
 
-struct cfattach a12c_ca = {
-	sizeof(struct a12c_softc), a12cmatch, a12cattach,
-};
+CFATTACH_DECL(a12c, sizeof(struct a12c_softc),
+    a12cmatch, a12cattach, NULL, NULL);
 
 extern struct cfdriver a12c_cd;
-
-static int a12cprint __P((void *, const char *pnp));
 
 static const struct clocktime zeroct;
 
@@ -130,7 +128,6 @@ a12cattach(parent, self, aux)
 	struct a12c_softc *sc = (struct a12c_softc *)self;
 	struct a12c_config *ccp;
 	struct pcibus_attach_args pba;
-	extern const struct clockfns *clockfns;	/* XXX? */
 
 	/* note that we've attached the chipset; can't have 2 A12Cs. */
 	a12cfound = 1;
@@ -144,63 +141,34 @@ a12cattach(parent, self, aux)
 	a12c_init(ccp, 1);
 
 	/* XXX print chipset information */
-	printf(": driver %s over logic %x\n", "$Revision: 1.5 $", 
+	printf(": driver %s over logic %x\n", "$Revision: 1.18 $", 
 		A12_ALL_EXTRACT(REGVAL(A12_VERS)));
 
 	pci_a12_pickintr(ccp);
-#ifdef EVCNT_COUNTERS
-	evcnt_attach(self, "intr", &a12_intr_evcnt);
-#endif
-	clockfns = &noclock_fns;	/* XXX? */
+	clockattach(noclock_init, NULL);	/* XXX? */
 
-	bzero(&pba, sizeof(pba));
-	pba.pba_busname = "pci";
+	memset(&pba, 0, sizeof(pba));
 	pba.pba_iot = 0;
 	pba.pba_memt = ccp->ac_memt;
 	pba.pba_dmat = &ccp->ac_dmat_direct;
+	pba.pba_dmat64 = NULL;
 	pba.pba_pc = &ccp->ac_pc;
 	pba.pba_bus = 0;
+	pba.pba_bridgetag = NULL;
 	pba.pba_flags = PCI_FLAGS_MEM_ENABLED |
 	    PCI_FLAGS_MRL_OKAY | PCI_FLAGS_MRM_OKAY | PCI_FLAGS_MWI_OKAY;
 
-	config_found(self, &pba, a12cprint);
+	config_found_ia(self, "pcibus", &pba, pcibusprint);
 
-	pba.pba_busname = "xb";
 	pba.pba_bus     = 1;
-	config_found(self, &pba, NULL);
+	config_found_ia(self, "a12c_xb", &pba, NULL);
 
-	pba.pba_busname = "a12dc";
 	pba.pba_bus     = 2;
-	config_found(self, &pba, NULL);
+	config_found_ia(self, "a12c_a12dc", &pba, NULL);
 }
 
-static int
-a12cprint(aux, pnp)
-	void *aux;
-	const char *pnp;
+static void noclock_init(void (*)(void *), void *)
 {
-	register struct pcibus_attach_args *pba = aux;
 
-	/* can attach xbar or pci to a12c */
-	if (pnp)
-		printf("%s at %s", pba->pba_busname, pnp);
-	printf(" bus %d", pba->pba_bus);
-	return (UNCONF);
-}
-
-static void noclock_init(struct device *dev) {
-	dev = dev;
-}
-
-static void
-noclock_get(struct device *dev, time_t t, struct clocktime *ct)
-{
-	*ct = zeroct;
-}
-
-static void
-noclock_set(struct device *dev, struct clocktime *ct)
-{
-	if(dev!=NULL)
-		*ct = *ct;
+	/* nothing */
 }

@@ -1,4 +1,4 @@
-.\"	$NetBSD: 4.t,v 1.5 1998/01/10 00:11:36 perry Exp $
+.\"	$NetBSD: 4.t,v 1.8 2004/02/13 11:36:08 wiz Exp $
 .\"
 .\" Copyright (c) 1980, 1986, 1988 The Regents of the University of California.
 .\" All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -105,7 +101,7 @@ netiso	ISO protocols (TP-4, CLNP, CLTP, etc)
 netns	Xerox network systems protocols (IDP, SPP, etc)
 netx25	CCITT X.25 protocols (X.25 Packet Level, HDLC/LAPB)
 .TE
-.sp.05
+.sp 0.5
 A separate subdirectory is provided for each machine architecture
 .TS
 l l.
@@ -144,7 +140,7 @@ Devices supported by UNIX are implemented in the kernel
 by drivers whose source is kept in
 .Pn /sys/<architecture>/dev .
 These drivers are loaded
-into the system when included in a cpu specific configuration file
+into the system when included in a CPU specific configuration file
 kept in the conf directory.  Devices are accessed through special
 files in the filesystem, made by the
 .Xr mknod (8)

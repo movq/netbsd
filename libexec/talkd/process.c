@@ -1,4 +1,4 @@
-/*	$NetBSD: process.c,v 1.6 1998/07/04 19:31:05 mrg Exp $	*/
+/*	$NetBSD: process.c,v 1.12 2007/01/08 17:51:34 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)process.c	8.2 (Berkeley) 11/16/93";
 #else
-__RCSID("$NetBSD: process.c,v 1.6 1998/07/04 19:31:05 mrg Exp $");
+__RCSID("$NetBSD: process.c,v 1.12 2007/01/08 17:51:34 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -64,9 +60,10 @@ __RCSID("$NetBSD: process.c,v 1.6 1998/07/04 19:31:05 mrg Exp $");
 #include <stdio.h>
 #include <string.h>
 #include <paths.h>
-#include <utmp.h>
 
 #include "extern.h"
+
+#include "utmpentry.h"
 
 void
 process_request(mp, rp)
@@ -78,27 +75,27 @@ process_request(mp, rp)
 	rp->vers = TALK_VERSION;
 	rp->type = mp->type;
 	rp->id_num = htonl(0);
+	mp->id_num = ntohl(mp->id_num);
+	mp->addr.sa_family = ntohs(mp->addr.sa_family);
+	mp->ctl_addr.sa_family = ntohs(mp->ctl_addr.sa_family);
+	mp->pid = ntohl(mp->pid);
 	if (mp->vers != TALK_VERSION) {
 		syslog(LOG_WARNING, "Bad protocol version %d", mp->vers);
 		rp->answer = BADVERSION;
 		return;
 	}
-	mp->id_num = ntohl(mp->id_num);
-	mp->addr.sa_family = ntohs(mp->addr.sa_family);
 	if (mp->addr.sa_family != AF_INET) {
 		syslog(LOG_WARNING, "Bad address, family %d",
 		    mp->addr.sa_family);
 		rp->answer = BADADDR;
 		return;
 	}
-	mp->ctl_addr.sa_family = ntohs(mp->ctl_addr.sa_family);
 	if (mp->ctl_addr.sa_family != AF_INET) {
 		syslog(LOG_WARNING, "Bad control address, family %d",
 		    mp->ctl_addr.sa_family);
 		rp->answer = BADCTLADDR;
 		return;
 	}
-	mp->pid = ntohl(mp->pid);
 	if (debug || logging)
 		print_request("request", mp);
 	switch (mp->type) {
@@ -144,27 +141,28 @@ do_announce(mp, rp)
 	CTL_MSG *mp;
 	CTL_RESPONSE *rp;
 {
-	struct hostent *hp;
 	CTL_MSG *ptr;
 	int result;
+	char hostname[NI_MAXHOST];
+	struct sockaddr sa;
+
+	tsa2sa(&sa, &mp->ctl_addr);
 
 	/* see if the user is logged */
-	result = find_user(mp->r_name, mp->r_tty);
+	result = find_user(mp->r_name, mp->r_tty, sizeof(mp->r_tty));
 	if (result != SUCCESS) {
 		rp->answer = result;
 		return;
 	}
-#define	satosin(sa)	((struct sockaddr_in *)(sa))
-	hp = gethostbyaddr((char *)&satosin(&mp->ctl_addr)->sin_addr,
-		sizeof (struct in_addr), AF_INET);
-	if (hp == (struct hostent *)0) {
+	if (getnameinfo(&sa, sa.sa_len, hostname, sizeof(hostname), NULL,
+	    0, 0)) {
 		rp->answer = MACHINE_UNKNOWN;
 		return;
 	}
 	ptr = find_request(mp);
 	if (ptr == (CTL_MSG *) 0) {
 		insert_table(mp, rp);
-		rp->answer = announce(mp, hp->h_name);
+		rp->answer = announce(mp, hostname);
 		return;
 	}
 	if (mp->id_num > ptr->id_num) {
@@ -174,7 +172,7 @@ do_announce(mp, rp)
 		 */
 		ptr->id_num = new_id();
 		rp->id_num = htonl(ptr->id_num);
-		rp->answer = announce(mp, hp->h_name);
+		rp->answer = announce(mp, hostname);
 	} else {
 		/* a duplicated request, so ignore it */
 		rp->id_num = htonl(ptr->id_num);
@@ -186,55 +184,49 @@ do_announce(mp, rp)
  * Search utmp for the local user
  */
 int
-find_user(name, tty)
+find_user(name, tty, ttysize)
 	char *name, *tty;
+	size_t ttysize;
 {
-	struct utmp ubuf;
 	int status;
-	FILE *fd;
 	struct stat statb;
-	char line[sizeof(ubuf.ut_line) + 1];
-	char ftty[sizeof(_PATH_DEV) - 1 + sizeof(line)];
+	struct utmpentry *ep;
+	char ftty[sizeof(_PATH_DEV) + sizeof(ep->line)];
 	time_t atime = 0;
 	int anytty = 0;
 
-	if ((fd = fopen(_PATH_UTMP, "r")) == NULL) {
-		fprintf(stderr, "talkd: can't read %s.\n", _PATH_UTMP);
-		return (FAILED);
-	}
-#define SCMPN(a, b)	strncmp(a, b, sizeof (a))
+	(void)getutentries(NULL, &ep);
+
 	status = NOT_HERE;
-	(void) strcpy(ftty, _PATH_DEV);
+	(void) strlcpy(ftty, _PATH_DEV, sizeof(ftty));
 
 	if (*tty == '\0')
 		anytty = 1;
 
-	while (fread((char *) &ubuf, sizeof ubuf, 1, fd) == 1) {
-		if (SCMPN(ubuf.ut_name, name) != 0)
+	for (; ep; ep = ep->next) {
+		if (strcmp(ep->name, name) != 0)
 			continue;
-		(void)strncpy(line, ubuf.ut_line, sizeof(ubuf.ut_line));
-		line[sizeof(ubuf.ut_line)] = '\0';
 		if (anytty) {
 			/* no particular tty was requested */
-			/* XXX strcpy is safe */
-			(void)strcpy(ftty + sizeof(_PATH_DEV) - 1, line);
-			if (stat(ftty, &statb) == 0) {
-				if (!(statb.st_mode & S_IWGRP)) {
-					if (status != SUCCESS)
-						status = PERMISSION_DENIED;
-					continue;
-				}
-				if (statb.st_atime > atime) {
-					atime = statb.st_atime;
-					(void)strcpy(tty, line);
-					status = SUCCESS;
-				}
+			(void)strlcpy(ftty + sizeof(_PATH_DEV) - 1, ep->line,
+			     sizeof(ftty) - sizeof(_PATH_DEV) + 1);
+			if (stat(ftty, &statb) != 0)
+				continue;
+
+			if (!(statb.st_mode & S_IWGRP)) {
+				if (status != SUCCESS)
+					status = PERMISSION_DENIED;
+				continue;
 			}
-		} else if (strcmp(line, tty) == 0) {
+			if (statb.st_atime > atime &&
+			    strlcpy(tty, ep->line, ttysize) < ttysize) {
+				atime = statb.st_atime;
+				status = SUCCESS;
+			}
+		} else if (strcmp(ep->line, tty) == 0) {
 			status = SUCCESS;
 			break;
 		}
 	}
-	(void)fclose(fd);
 	return (status);
 }

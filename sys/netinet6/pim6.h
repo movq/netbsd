@@ -1,9 +1,10 @@
-/*	$NetBSD: pim6.h,v 1.3 1999/07/03 21:30:19 thorpej Exp $	*/
+/*	$NetBSD: pim6.h,v 1.5 2005/12/10 23:39:56 elad Exp $	*/
+/*	$KAME: pim6.h,v 1.3 2000/03/25 07:23:58 sumikawa Exp $	*/
 
 /*
  * Copyright (C) 1998 WIDE Project.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -15,7 +16,7 @@
  * 3. Neither the name of the project nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE PROJECT AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -28,6 +29,10 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+
+#ifndef _NETINET6_PIM6_H_
+#define _NETINET6_PIM6_H_
+
 /*
  * Protocol Independent Multicast (PIM) definitions
  *
@@ -59,10 +64,12 @@ struct pim {
 #define PIM_MINLEN	8		/* The header min. length is 8    */
 #define PIM6_REG_MINLEN	(PIM_MINLEN+40)	/* Register message + inner IP6 header */
 
-/* 
+/*
  * Message types
  */
 #define PIM_REGISTER	1	/* PIM Register type is 1 */
 
 /* second bit in reg_head is the null bit */
 #define PIM_NULL_REGISTER 0x40000000
+
+#endif /* !_NETINET6_PIM6_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: lshrsi3.S,v 1.1 1999/09/13 10:31:38 itojun Exp $	*/
+/*	$NetBSD: lshrsi3.S,v 1.5 2006/05/22 20:56:44 uwe Exp $	*/
 
 /*-
  * Copyright (C) 1999 Tsubai Masanari.  All rights reserved.
@@ -26,18 +26,18 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-	.globl	___lshrsi3
-	.text
+#include <machine/asm.h>
 
-___lshrsi3:
+
+NENTRY(__lshrsi3)
 	tst	r5, r5
 	bt	noshift
 
 	neg	r5, r5
 	shld	r5, r4
 	rts
-	mov	r4, r0
+	 mov	r4, r0
 
 noshift:
 	rts
-	mov	r4, r0
+	 mov	r4, r0

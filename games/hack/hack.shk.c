@@ -1,12 +1,69 @@
-/*	$NetBSD: hack.shk.c,v 1.4 1997/10/19 16:59:01 christos Exp $	*/
+/*	$NetBSD: hack.shk.c,v 1.8.30.1 2009/06/29 23:22:24 snj Exp $	*/
 
 /*
- * Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1985.
+ * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
+ * Amsterdam
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met:
+ *
+ * - Redistributions of source code must retain the above copyright notice,
+ * this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above copyright
+ * notice, this list of conditions and the following disclaimer in the
+ * documentation and/or other materials provided with the distribution.
+ *
+ * - Neither the name of the Stichting Centrum voor Wiskunde en
+ * Informatica, nor the names of its contributors may be used to endorse or
+ * promote products derived from this software without specific prior
+ * written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
+ * IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+ * PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER
+ * OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+ * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
+ * Copyright (c) 1982 Jay Fenlason <hack@gnu.org>
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+ * AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL
+ * THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.shk.c,v 1.4 1997/10/19 16:59:01 christos Exp $");
+__RCSID("$NetBSD: hack.shk.c,v 1.8.30.1 2009/06/29 23:22:24 snj Exp $");
 #endif				/* not lint */
 
 #include <stdlib.h>
@@ -14,14 +71,14 @@ __RCSID("$NetBSD: hack.shk.c,v 1.4 1997/10/19 16:59:01 christos Exp $");
 #include "extern.h"
 
 #ifndef QUEST
-static void setpaid __P((void));
-static void addupbill __P((void));
-static void findshk __P((int));
-static struct bill_x *onbill __P((struct obj *));
-static void pay __P((long, struct monst *));
-static int dopayobj __P((struct bill_x *));
-static int getprice __P((struct obj *));
-static int realhunger __P((void));
+static void setpaid(void);
+static void addupbill(void);
+static void findshk(int);
+static struct bill_x *onbill(struct obj *);
+static void pay(long, struct monst *);
+static int dopayobj(struct bill_x *);
+static int getprice(struct obj *);
+static int realhunger(void);
 #endif
 
 #ifdef QUEST
@@ -127,12 +184,12 @@ static long int followmsg;	/* last time of follow message */
  */
 
 
-char            shtypes[] = {	/* 8 shoptypes: 7 specialized, 1 mixed */
+const char shtypes[] = {	/* 8 shoptypes: 7 specialized, 1 mixed */
 	RING_SYM, WAND_SYM, WEAPON_SYM, FOOD_SYM, SCROLL_SYM,
 	POTION_SYM, ARMOR_SYM, 0
 };
 
-static char    *shopnam[] = {
+static const char    *const shopnam[] = {
 	"engagement ring", "walking cane", "antique weapon",
 	"delicatessen", "second hand book", "liquor",
 	"used armor", "assorted antiques"
@@ -781,17 +838,19 @@ doinvbill(mode)
 			thisused = bp->price * uquan;
 			totused += thisused;
 			obj->quan = uquan;	/* cheat doname */
-			(void) sprintf(buf, "x -  %s", doname(obj));
+			(void) snprintf(buf, sizeof(buf),
+					"x -  %s", doname(obj));
 			obj->quan = oquan;	/* restore value */
 			for (cnt = 0; buf[cnt]; cnt++);
 			while (cnt < 50)
 				buf[cnt++] = ' ';
-			(void) sprintf(&buf[cnt], " %5ld zorkmids", thisused);
+			(void) snprintf(buf+cnt, sizeof(buf)-cnt,
+					" %5ld zorkmids", thisused);
 			if (page_line(buf))
 				goto quit;
 		}
 	}
-	(void) sprintf(buf, "Total:%50ld zorkmids", totused);
+	(void) snprintf(buf, sizeof(buf), "Total:%50ld zorkmids", totused);
 	if (page_line("") || page_line(buf))
 		goto quit;
 	set_pager(1);
@@ -902,7 +961,7 @@ shk_move(shkp)
 	struct monst   *shkp;
 {
 	struct monst   *mtmp;
-	struct permonst *mdat = shkp->data;
+	const struct permonst *mdat = shkp->data;
 	xchar           gx, gy, omx, omy, nx, ny, nix, niy;
 	schar           appr, i;
 	int             udist;
@@ -1043,6 +1102,8 @@ notonl_ok:
 	if (nix != omx || niy != omy) {
 		if (info[chi] & ALLOW_M) {
 			mtmp = m_at(nix, niy);
+			if (mtmp == NULL)
+				panic("error in shk_move");
 			if (hitmm(shkp, mtmp) == 1 && rn2(3) &&
 			    hitmm(mtmp, shkp) == 2)
 				return (2);
@@ -1092,7 +1153,7 @@ shopdig(fall)
 #endif	/* QUEST */
 
 int
-online(x, y)
+online(int x, int y)
 {
 	return (x == u.ux || y == u.uy ||
 		(x - u.ux) * (x - u.ux) == (y - u.uy) * (y - u.uy));

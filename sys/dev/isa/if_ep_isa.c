@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ep_isa.c,v 1.26 1999/04/28 01:20:01 jonathan Exp $	*/
+/*	$NetBSD: if_ep_isa.c,v 1.43 2008/08/27 05:33:47 christos Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -68,9 +61,8 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "opt_inet.h"
-#include "opt_ns.h"
-#include "bpfilter.h"
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_ep_isa.c,v 1.43 2008/08/27 05:33:47 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -88,27 +80,9 @@
 #include <net/if_ether.h>
 #include <net/if_media.h>
 
-#ifdef INET
-#include <netinet/in.h>
-#include <netinet/in_systm.h>
-#include <netinet/in_var.h>
-#include <netinet/ip.h>
-#include <netinet/if_inarp.h>
-#endif
-
-#ifdef NS
-#include <netns/ns.h>
-#include <netns/ns_if.h>
-#endif
-
-#if NBPFILTER > 0
-#include <net/bpf.h>
-#include <net/bpfdesc.h>
-#endif
-
-#include <machine/cpu.h>
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/cpu.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/mii/miivar.h>
 
@@ -118,14 +92,13 @@
 #include <dev/isa/isavar.h>
 #include <dev/isa/elink.h>
 
-int ep_isa_probe __P((struct device *, struct cfdata *, void *));
-void ep_isa_attach __P((struct device *, struct device *, void *));
+int ep_isa_probe(device_t , cfdata_t , void *);
+void ep_isa_attach(device_t , device_t , void *);
 
-struct cfattach ep_isa_ca = {
-	sizeof(struct ep_softc), ep_isa_probe, ep_isa_attach
-};
+CFATTACH_DECL_NEW(ep_isa, sizeof(struct ep_softc),
+    ep_isa_probe, ep_isa_attach, NULL, NULL);
 
-static	void epaddcard __P((int, int, int, int));
+static	void epaddcard(int, int, int, int);
 
 /*
  * This keeps track of which ISAs have been through an ep probe sequence.
@@ -176,18 +149,18 @@ epaddcard(bus, iobase, irq, model)
  * calls we look for matching cards.
  */
 int
-ep_isa_probe(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+ep_isa_probe(device_t parent, cfdata_t match, void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_iot;
 	bus_space_handle_t ioh;
 	int slot, iobase, irq, i;
-	u_int16_t vendor, model;
+	u_int16_t vendor, model, eeprom_addr_cfg;
 	struct ep_isa_done_probe *er;
-	int bus = parent->dv_unit;
+	int bus = device_unit(parent);
+
+	if (ISA_DIRECT_CONFIG(ia))
+		return (0);
 
 	if (ep_isa_probes_initialized == 0) {
 		LIST_INIT(&ep_isa_all_probes);
@@ -199,7 +172,7 @@ ep_isa_probe(parent, match, aux)
 	 */
 	for (er = ep_isa_all_probes.lh_first; er != NULL;
 	    er = er->er_link.le_next)
-		if (er->er_bus == parent->dv_unit)
+		if (er->er_bus == device_unit(parent))
 			goto bus_probed;
 
 	/*
@@ -222,18 +195,18 @@ ep_isa_probe(parent, match, aux)
 	}
 
 	for (slot = 0; slot < MAXEPCARDS; slot++) {
-		elink_reset(iot, ioh, parent->dv_unit);
+		elink_reset(iot, ioh, device_unit(parent));
 		elink_idseq(iot, ioh, ELINK_509_POLY);
 
 		/* Untag all the adapters so they will talk to us. */
 		if (slot == 0)
 			bus_space_write_1(iot, ioh, 0, TAG_ADAPTER + 0);
 
-		vendor = htons(epreadeeprom(iot, ioh, EEPROM_MFG_ID));
+		vendor = bswap16(epreadeeprom(iot, ioh, EEPROM_MFG_ID));
 		if (vendor != MFG_ID)
 			continue;
 
-		model = htons(epreadeeprom(iot, ioh, EEPROM_PROD_ID));
+		model = bswap16(epreadeeprom(iot, ioh, EEPROM_PROD_ID));
 		/*
 		 * XXX: Add a new product id to check for other cards
 		 * (3c515?) and fix the check in ep_isa_attach.
@@ -246,8 +219,8 @@ ep_isa_probe(parent, match, aux)
 			continue;
 			}
 
-		iobase = epreadeeprom(iot, ioh, EEPROM_ADDR_CFG);
-		iobase = (iobase & 0x1f) * 0x10 + 0x200;
+		eeprom_addr_cfg = epreadeeprom(iot, ioh, EEPROM_ADDR_CFG);
+		iobase = (eeprom_addr_cfg & 0x1f) * 0x10 + 0x200;
 
 		irq = epreadeeprom(iot, ioh, EEPROM_RESOURCE_CFG);
 		irq >>= 12;
@@ -298,7 +271,7 @@ ep_isa_probe(parent, match, aux)
 			else if ((eepromrev & 0xF) < 1) {
 				/* 3C509B is adapter revision level 1. */
 #if 0
-				printf("ep_isa_probe revision level 0\n");
+				printf("ep_isa_probe: revision level 0\n");
 #endif
 			}
 			else if (eeprom_cap != 0x2083) {
@@ -310,10 +283,11 @@ ep_isa_probe(parent, match, aux)
 			else
 			  /*
 			   * we have a 3c509B with PnP capabilities.
-			   * Test partly documented bit which toggles when
-			   * in  PnP mode.
+			   * Test partly documented bits which toggle when
+			   * in PnP mode.
 			   */
-			if ((eeprom_hi & 8) != 0) {
+			if ((eeprom_hi & 0x8) != 0 || ((eeprom_hi & 0xc) == 0 &&
+			    (eeprom_addr_cfg & 0x80) != 0)) {
 				printf("3COM 3C509B Ethernet card in PnP mode\n");
 				continue;
 			}
@@ -338,48 +312,62 @@ ep_isa_probe(parent, match, aux)
 
 bus_probed:
 
+	if (ia->ia_nio < 1)
+		return (0);
+	if (ia->ia_nirq < 1)
+		return (0);
+
 	for (i = 0; i < nepcards; i++) {
 		if (epcards[i].bus != bus)
 			continue;
 		if (epcards[i].available == 0)
 			continue;
-		if (ia->ia_iobase != IOBASEUNK &&
-		    ia->ia_iobase != epcards[i].iobase)
+
+		if (ia->ia_io[0].ir_addr != ISA_UNKNOWN_PORT &&
+		    ia->ia_io[0].ir_addr != epcards[i].iobase)
 			continue;
-		if (ia->ia_irq != IRQUNK &&
-		    ia->ia_irq != epcards[i].irq)
+
+		if (ia->ia_irq[0].ir_irq != ISA_UNKNOWN_IRQ &&
+		    ia->ia_irq[0].ir_irq != epcards[i].irq)
 			continue;
+
 		goto good;
 	}
 	return 0;
 
 good:
 	epcards[i].available = 0;
-	ia->ia_iobase = epcards[i].iobase;
-	ia->ia_irq = epcards[i].irq;
-	ia->ia_iosize = 0x10;
-	ia->ia_msize = 0;
+
+	ia->ia_nio = 1;
+	ia->ia_io[0].ir_addr = epcards[i].iobase;
+	ia->ia_io[0].ir_size = 0x10;
+
+	ia->ia_nirq = 1;
+	ia->ia_irq[0].ir_irq = epcards[i].irq;
+
+	ia->ia_niomem = 0;
+	ia->ia_ndrq = 0;
+
 	ia->ia_aux = (void *)epcards[i].model;
 	return 1;
 }
 
 void
-ep_isa_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+ep_isa_attach(device_t parent, device_t self, void *aux)
 {
-	struct ep_softc *sc = (void *)self;
+	struct ep_softc *sc = device_private(self);
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_iot;
 	bus_space_handle_t ioh;
 	int chipset;
 
 	/* Map i/o space. */
-	if (bus_space_map(iot, ia->ia_iobase, ia->ia_iosize, 0, &ioh)) {
+	if (bus_space_map(iot, ia->ia_io[0].ir_addr, 0x10, 0, &ioh)) {
 		printf(": can't map i/o space\n");
 		return;
 	}
 
+	sc->sc_dev = self;
 	sc->sc_iot = iot;
 	sc->sc_ioh = ioh;
 	sc->bustype = ELINK_BUS_ISA;
@@ -401,6 +389,6 @@ ep_isa_attach(parent, self, aux)
 		return;
 	}
 
-	sc->sc_ih = isa_intr_establish(ia->ia_ic, ia->ia_irq, IST_EDGE,
-	    IPL_NET, epintr, sc);
+	sc->sc_ih = isa_intr_establish(ia->ia_ic, ia->ia_irq[0].ir_irq,
+	    IST_EDGE, IPL_NET, epintr, sc);
 }

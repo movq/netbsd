@@ -1,4 +1,4 @@
-.\"	$NetBSD: rlogin.1,v 1.9 1999/03/22 18:16:41 garbled Exp $
+.\"	$NetBSD: rlogin.1,v 1.25 2005/07/16 12:35:59 rpaulo Exp $
 .\"
 .\" Copyright (c) 1983, 1990, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -33,7 +29,7 @@
 .\"
 .\"	@(#)rlogin.1	8.2 (Berkeley) 4/29/95
 .\"
-.Dd April 29, 1995
+.Dd July 16, 2005
 .Dt RLOGIN 1
 .Os
 .Sh NAME
@@ -41,15 +37,15 @@
 .Nd remote login
 .Sh SYNOPSIS
 .Nm
-.Op Fl 8EKLdx
+.Op Fl 468Ed
 .Op Fl e Ar char
-.Op Fl k Ar realm
 .Op Fl l Ar username
+.Op Fl p Ar port
 .Ar host
-.Nm ""
-.Op Fl 8EKLdx
+.Nm
+.Op Fl 468Ed
 .Op Fl e Ar char
-.Op Fl k Ar realm
+.Op Fl p Ar port
 .Ar username@host
 .Sh DESCRIPTION
 .Nm
@@ -57,19 +53,22 @@ starts a terminal session on a remote host
 .Ar host  .
 .Pp
 .Nm
-first attempts to use the Kerberos authorization mechanism, described below.
-If the remote host does not supporting Kerberos the standard Berkeley
-.Pa rhosts
-authorization mechanism is used.
+first attempts to use the standard Berkeley
+.Em rhosts
+authorization mechanism.
 The options are as follows:
-.Bl -tag -width flag
+.Bl -tag -width XlXusernameX
+.It Fl 4
+Use IPv4 addresses only.
+.It Fl 6
+Use IPv6 addresses only.
 .It Fl 8
 The
 .Fl 8
 option allows an eight-bit input data path at all times; otherwise
 parity bits are stripped except when the remote side's stop and start
 characters are other than
-^S/^Q .
+.Sq \&^S/^Q .
 .It Fl E
 The
 .Fl E
@@ -77,123 +76,75 @@ option stops any character from being recognized as an escape character.
 When used with the
 .Fl 8
 option, this provides a completely transparent connection.
-.It Fl K
-The
-.Fl K
-option turns off all Kerberos authentication.
-.It Fl L
-The
-.Fl L
-option allows the rlogin session to be run in ``litout'' (see
-.Xr tty 4 )
-mode.
 .It Fl d
 The
 .Fl d
 option turns on socket debugging (see
 .Xr setsockopt 2 )
 on the TCP sockets used for communication with the remote host.
-.It Fl e
+.It Fl e Ar char
 The
 .Fl e
 option allows user specification of the escape character, which is
-``~'' by default.
+.Dq \&~
+by default.
 This specification may be as a literal character, or as an octal
 value in the form \ennn.
-.It Fl k
-The
-.Fl k
-option requests rlogin to obtain tickets for the remote host
-in realm
-.Ar realm
-instead of the remote host's realm as determined by
-.Xr krb_realmofhost  3  .
-.It Fl l
+.It Fl l Ar username
 the
 .Fl l
 option specifies an alternate
 .Ar username
 for the remote login.
 If this option is not specified, your local username will be used.
-.It Fl x
-The
-.Fl x
-option turns on
-.Tn DES
-encryption for all data passed via the
-rlogin session.
-This may impact response time and
-.Tn CPU
-utilization, but provides
-increased security.
+.It Fl p Ar port
+Uses the given
+.Ar port
+instead of the one assigned to the service
+.Dq login .
+May be given either as symbolic name or as number.
 .El
 .Pp
-A line of the form ``<escape char>.'' disconnects from the remote host.
-Similarly, the line ``<escape char>^Z'' will suspend the
+A line of the form
+.Dq Ao escape char Ac Ns \&.
+disconnects from the remote host.
+Similarly, the line
+.Dq Ao escape char Ac Ns ^Z
+will suspend the
 .Nm
-session, and ``<escape char><delayed-suspend char>'' suspends the
+session, and
+.Dq Ao escape char Ac Ns Aq delayed-suspend char
+suspends the
 send portion of the rlogin, but allows output from the remote system.
-By default, the tilde (``~'') character is the escape character, and
-normally control-Y (``^Y'') is the delayed-suspend character.
+By default, the tilde
+.Pq Dq \&~
+character is the escape character, and normally control-Y
+.Pq Dq \&^Y
+is the delayed-suspend character.
 .Pp
-All echoing takes place at the remote site, so that (except for delays)
-the
+All echoing takes place at the remote site, so that (except for delays) the
 .Nm
 is transparent.
 Flow control via ^S/^Q and flushing of input and output on interrupts
 are handled properly.
-.Sh KERBEROS AUTHENTICATION
-Each user may have a private authorization list in the file
-.Pa .klogin
-in their home directory.
-Each line in this file should contain a Kerberos principal name of the
-form
-.Ar principal.instance@realm  .
-If the originating user is authenticated to one of the principals named
-in
-.Pa .klogin ,
-access is granted to the account.
-The principal
-.Ar accountname.@localrealm
-is granted access if
-there is no
-.Pa .klogin
-file.
-Otherwise a login and password will be prompted for on the remote machine
-as in
-.Xr login  1  .
-To avoid certain security problems, the
-.Pa .klogin
-file must be owned by
-the remote user.
-.Pp
-If Kerberos authentication fails, a warning message is printed and the
-standard Berkeley
-.Nm
-is used instead.
 .Sh ENVIRONMENT
-The following environment variable is utilized by
-.Nm "" :
+The following environment variable is used by
+.Nm :
 .Bl -tag -width TERM
 .It Ev TERM
 Determines the user's terminal type.
 .El
 .Sh SEE ALSO
+.Xr rcmd 1 ,
 .Xr rsh 1 ,
-.Xr kerberos 3 ,
-.Xr krb_sendauth 3 ,
-.Xr krb_realmofhost 3 ,
+.Xr rcmd 3 ,
 .Xr hosts.equiv 5 ,
-.Xr rhosts 5
+.Xr rhosts 5 ,
+.Xr environ 7
 .Sh HISTORY
 The
 .Nm
 command appeared in
 .Bx 4.2 .
 .Sh BUGS
-.Nm
-will be replaced by
-.Xr telnet  1
-in the near future.
-.Pp
 More of the environment should be propagated.

@@ -1,4 +1,4 @@
-/*	$NetBSD: clnp_er.c,v 1.11 2000/03/30 13:10:06 augustss Exp $	*/
+/*	$NetBSD: clnp_er.c,v 1.24 2008/01/14 04:17:35 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -62,6 +58,9 @@ SOFTWARE.
  * ARGO Project, Computer Sciences Dept., University of Wisconsin - Madison
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: clnp_er.c,v 1.24 2008/01/14 04:17:35 dyoung Exp $");
+
 #include <sys/param.h>
 #include <sys/mbuf.h>
 #include <sys/domain.h>
@@ -84,14 +83,16 @@ SOFTWARE.
 #include <netiso/tp_param.h>
 #include <netiso/tp_var.h>
 
-static struct clnp_fixed er_template = {
+static const struct clnp_fixed er_template = {
 	ISO8473_CLNP,		/* network identifier */
 	0,			/* length */
 	ISO8473_V1,		/* version */
 	CLNP_TTL,		/* ttl */
 	CLNP_ER,		/* type */
-	0,			/* segment length */
-	0			/* checksum */
+	0,			/* segment length msb */
+	0,			/* segment length lsb */
+	0,			/* checksum msb */
+	0,			/* checksum lmsb */
 };
 
 /*
@@ -106,10 +107,10 @@ static struct clnp_fixed er_template = {
  * NOTES:
  */
 void
-clnp_er_input(m, src, reason)
-	struct mbuf    *m;	/* ptr to packet itself */
-	struct iso_addr *src;	/* ptr to src of er */
-	u_int           reason;	/* reason code of er */
+clnp_er_input(
+	struct mbuf    *m,	/* ptr to packet itself */
+	struct iso_addr *src,	/* ptr to src of er */
+	u_int           reason)	/* reason code of er */
 {
 	int             cmd = -1;
 
@@ -245,13 +246,12 @@ clnp_emit_er(m, reason)
 {
 	struct clnp_fixed *clnp = mtod(m, struct clnp_fixed *);
 	struct clnp_fixed *er;
-	struct route_iso route;
+	struct route route;
 	struct ifnet   *ifp;
-	struct sockaddr *first_hop;
+	const struct sockaddr *first_hop;
 	struct iso_addr src, dst, *our_addr;
-	caddr_t         hoff, hend;
-	int             total_len;	/* total len of dg */
-	struct mbuf    *m0;	/* contains er pdu hdr */
+	char *hoff, *hend;
+	int total_len;	/* total len of dg */
 	struct iso_ifaddr *ia = 0;
 
 #ifdef ARGO_DEBUG
@@ -261,7 +261,7 @@ clnp_emit_er(m, reason)
 	}
 #endif
 
-	bzero((caddr_t) & route, sizeof(route));
+	memset(&route, 0, sizeof(route));
 
 	/*
 	 * If header length is incorrect, or entire header is not contained
@@ -273,14 +273,14 @@ clnp_emit_er(m, reason)
 		goto bad;
 
 	/* extract src, dest address */
-	hend = (caddr_t) clnp + clnp->cnf_hdr_len;
-	hoff = (caddr_t) clnp + sizeof(struct clnp_fixed);
+	hend = (char *)clnp + clnp->cnf_hdr_len;
+	hoff = (char *)clnp + sizeof(struct clnp_fixed);
 	CLNP_EXTRACT_ADDR(dst, hoff, hend);
-	if (hoff == (caddr_t) 0) {
+	if (hoff == (void *) 0) {
 		goto bad;
 	}
 	CLNP_EXTRACT_ADDR(src, hoff, hend);
-	if (hoff == (caddr_t) 0) {
+	if (hoff == (void *) 0) {
 		goto bad;
 	}
 	/*
@@ -321,22 +321,27 @@ clnp_emit_er(m, reason)
 #ifdef ARGO_DEBUG
 	if (argo_debug[D_DISCARD]) {
 		printf("clnp_emit_er: packet routed to %s\n",
-		    clnp_iso_addrp(&satosiso(first_hop)->siso_addr));
+		    clnp_iso_addrp(&satocsiso(first_hop)->siso_addr));
 	}
 #endif
 
 	/* allocate mbuf for er pdu header: punt on no space */
-	MGET(m0, M_DONTWAIT, MT_HEADER);
-	if (m0 == 0)
+	/*
+	 * fixed part, two addresses and their length bytes, and a
+	 * 4-byte option
+	 */
+
+	M_PREPEND(m, sizeof(struct clnp_fixed) + 4 + 1 + 1 +
+			src.isoa_len + our_addr->isoa_len, M_DONTWAIT);
+	if (m == 0)
 		goto bad;
 
-	m0->m_next = m;
-	er = mtod(m0, struct clnp_fixed *);
+	er = mtod(m, struct clnp_fixed *);
 	*er = er_template;
 
 	/* setup src/dst on er pdu */
 	/* NOTE REVERSAL OF SRC/DST */
-	hoff = (caddr_t) er + sizeof(struct clnp_fixed);
+	hoff = (char *)er + sizeof(struct clnp_fixed);
 	CLNP_INSERT_ADDR(hoff, src);
 	CLNP_INSERT_ADDR(hoff, *our_addr);
 
@@ -352,20 +357,20 @@ clnp_emit_er(m, reason)
 	*hoff++ = 0;		/* error localization = not specified */
 
 	/* set length */
-	er->cnf_hdr_len = m0->m_len = (u_char) (hoff - (caddr_t) er);
-	total_len = m0->m_len + m->m_len;
+	er->cnf_hdr_len = (u_char) (hoff - (char *)er);
+	total_len = m->m_pkthdr.len;
 	HTOC(er->cnf_seglen_msb, er->cnf_seglen_lsb, total_len);
 
 	/* compute checksum (on header only) */
-	iso_gen_csum(m0, CLNP_CKSUM_OFF, (int) er->cnf_hdr_len);
+	iso_gen_csum(m, CLNP_CKSUM_OFF, (int) er->cnf_hdr_len);
 
 	/* trim packet if too large for interface */
 	if (total_len > ifp->if_mtu)
-		m_adj(m0, -(total_len - ifp->if_mtu));
+		m_adj(m, -(total_len - ifp->if_mtu));
 
 	/* send packet */
 	INCSTAT(cns_er_outhist[clnp_er_index(reason)]);
-	(void) (*ifp->if_output) (ifp, m0, first_hop, route.ro_rt);
+	(void) (*ifp->if_output) (ifp, m, first_hop, rtcache_validate(&route));
 	goto done;
 
 bad:
@@ -373,13 +378,11 @@ bad:
 
 done:
 	/* free route if it is a temp */
-	if (route.ro_rt != NULL)
-		RTFREE(route.ro_rt);
+	rtcache_free(&route);
 }
 
 int
-clnp_er_index(p)
-	u_int p;
+clnp_er_index(u_int p)
 {
 	u_char *cp = clnp_er_codes + CLNP_ERRORS;
 	while (cp > clnp_er_codes) {

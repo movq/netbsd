@@ -1,4 +1,4 @@
-/*	$NetBSD: inbound.c,v 1.5 1998/03/04 13:16:07 christos Exp $	*/
+/*	$NetBSD: inbound.c,v 1.7 2003/08/07 11:16:31 agc Exp $	*/
 
 /*-
  * Copyright (c) 1988 The Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)inbound.c	4.3 (Berkeley) 4/26/91";
 #else
-__RCSID("$NetBSD: inbound.c,v 1.5 1998/03/04 13:16:07 christos Exp $");
+__RCSID("$NetBSD: inbound.c,v 1.7 2003/08/07 11:16:31 agc Exp $");
 #endif
 #endif /* not lint */
 
@@ -106,19 +102,19 @@ extern int TransparentClock, OutputClock;
 extern int UnLocked;		/* keyboard is UnLocked? */
 
 
-static void Tab __P((void));
-static void BackTab __P((void));
-static void EraseEndOfField __P((void));
-static void Delete __P((int, int ));
-static void ColBak __P((void));
-static void ColTab __P((void));
-static void Home __P((void));
-static int LastOfField __P((int));
-static void FlushChar __P((void));
-static void AddChar __P((int));
-static void SendUnformatted __P((void));
-static int SendField __P((int, int));
-static void OneCharacter __P((int, int));
+static void Tab(void);
+static void BackTab(void);
+static void EraseEndOfField(void);
+static void Delete(int, int );
+static void ColBak(void);
+static void ColTab(void);
+static void Home(void);
+static int LastOfField(int);
+static void FlushChar(void);
+static void AddChar(int);
+static void SendUnformatted(void);
+static int SendField(int, int);
+static void OneCharacter(int, int);
 
 /*
  * init_inbound :

@@ -1,4 +1,4 @@
-/*	$NetBSD: disklabel.h,v 1.2 1999/10/11 05:29:05 shin Exp $	*/
+/*	$NetBSD: disklabel.h,v 1.8 2005/12/11 12:17:33 christos Exp $	*/
 
 /*
  * Copyright (c) 1994 Christopher G. Demetriou
@@ -33,25 +33,42 @@
 #ifndef _MACHINE_DISKLABEL_H_
 #define _MACHINE_DISKLABEL_H_
 
-#define	LABELSECTOR	1		/* sector containing label */
-#define	LABELOFFSET	0		/* offset of label in sector */
-#define	MAXPARTITIONS	8		/* number of partitions */
-#define	RAW_PART	3		/* raw partition: XX?d (XXX) */
+#define	LABELSECTOR		1	/* sector containing label */
+#define	LABELOFFSET		0	/* offset of label in sector */
+#define	MAXPARTITIONS		16	/* number of partitions */
+#define	OLDMAXPARTITIONS 	8	/* number of partitions before 1.6 */
+#define	RAW_PART		3	/* raw partition: XX?d (XXX) */
+
+/*
+ * We use the highest bit of the minor number for the partition number.
+ * This maintains backward compatibility with device nodes created before
+ * MAXPARTITIONS was increased.
+ */
+#define __HPCMIPS_MAXDISKS	((1 << 20) / MAXPARTITIONS)
+#define DISKUNIT(dev)	((minor(dev) / OLDMAXPARTITIONS) % __HPCMIPS_MAXDISKS)
+#define DISKPART(dev)	((minor(dev) % OLDMAXPARTITIONS) + \
+    ((minor(dev) / (__HPCMIPS_MAXDISKS * OLDMAXPARTITIONS)) * OLDMAXPARTITIONS))
+#define	DISKMINOR(unit, part) \
+    (((unit) * OLDMAXPARTITIONS) + ((part) % OLDMAXPARTITIONS) + \
+     ((part) / OLDMAXPARTITIONS) * (__HPCMIPS_MAXDISKS * OLDMAXPARTITIONS))
 
 /* Pull in MBR partition definitions. */
-#include <sys/disklabel_mbr.h>
+#if HAVE_NBTOOL_CONFIG_H
+#include <nbinclude/sys/bootblock.h>
+#else
+#include <sys/bootblock.h>
+#endif /* HAVE_NBTOOL_CONFIG_H */
 
 #ifndef __ASSEMBLER__
+#if HAVE_NBTOOL_CONFIG_H
+#include <nbinclude/sys/dkbad.h>
+#else
 #include <sys/dkbad.h>
+#endif /* HAVE_NBTOOL_CONFIG_H */
 struct cpu_disklabel {
-	struct mbr_partition dosparts[NMBRPART];
+	struct mbr_partition dosparts[MBR_PART_COUNT];
 	struct dkbad bad;
 };
-#endif
-
-#ifdef _KERNEL
-struct disklabel;
-int	bounds_check_with_label __P((struct buf *, struct disklabel *, int));
 #endif
 
 #endif /* _MACHINE_DISKLABEL_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: clnp_input.c,v 1.20 2000/03/30 13:10:06 augustss Exp $	*/
+/*	$NetBSD: clnp_input.c,v 1.36 2007/12/04 10:31:14 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -62,6 +58,9 @@ SOFTWARE.
  * ARGO Project, Computer Sciences Dept., University of Wisconsin - Madison
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: clnp_input.c,v 1.36 2007/12/04 10:31:14 dyoung Exp $");
+
 #include "opt_iso.h"
 
 #include <sys/param.h>
@@ -80,6 +79,8 @@ SOFTWARE.
 
 #include <net/if_ether.h>
 #include <net/if_fddi.h>
+
+#include <net/if_llc.h>
 
 #include <netiso/iso.h>
 #include <netiso/iso_var.h>
@@ -105,6 +106,9 @@ int             clnpqmaxlen = IFQ_MAXLEN;	/* RAH? why is this a
 void            x25esis_input();
 #endif
 #endif				/* ISO_X25ESIS */
+struct iso_ifaddrhead iso_ifaddr = TAILQ_HEAD_INITIALIZER(iso_ifaddr);
+struct ifqueue  clnlintrq;
+struct clnp_stat clnp_stat;
 
 /*
  * FUNCTION:		clnp_init
@@ -119,9 +123,9 @@ void            x25esis_input();
  * NOTES:
  */
 void
-clnp_init()
+clnp_init(void)
 {
-	struct protosw *pr;
+	const struct protosw *pr;
 
 	/*
 	 * CLNP protox initialization
@@ -142,8 +146,6 @@ clnp_init()
 	clnl_protox[ISO8473_CLNP].clnl_input = clnp_input;
 
 	clnlintrq.ifq_maxlen = clnpqmaxlen;
-
-	TAILQ_INIT(&iso_ifaddr);
 }
 
 /*
@@ -171,7 +173,7 @@ clnlintr()
 	 *	Get next datagram off clnl input queue
 	 */
 next:
-	s = splimp();
+	s = splnet();
 	/* IF_DEQUEUESNPAHDR(&clnlintrq, m, sh); */
 	IF_DEQUEUE(&clnlintrq, m);
 	splx(s);
@@ -183,37 +185,34 @@ next:
 		m_freem(m);
 		goto next;
 	}
-	bzero((caddr_t) & sh, sizeof(sh));
+	memset(&sh, 0, sizeof(sh));
 	sh.snh_flags = m->m_flags & (M_MCAST | M_BCAST);
 	switch ((sh.snh_ifp = m->m_pkthdr.rcvif)->if_type) {
 	case IFT_EON:
-		bcopy(mtod(m, caddr_t), (caddr_t) sh.snh_dhost, sizeof(u_long));
-		bcopy(sizeof(u_long) + mtod(m, caddr_t),
-		      (caddr_t) sh.snh_shost, sizeof(u_long));
+		(void)memcpy(sh.snh_dhost, mtod(m, char *), sizeof(u_long));
+		(void)memcpy(sh.snh_shost, sizeof(u_long) + mtod(m, char *),
+		     sizeof(u_long));
 		sh.snh_dhost[4] = mtod(m, u_char *)[sizeof(struct ip) +
 				     offsetof(struct eon_hdr, eonh_class)];
-		m->m_data += EONIPLEN;
-		m->m_len -= EONIPLEN;
-		m->m_pkthdr.len -= EONIPLEN;
+		m_adj(m, EONIPLEN);
 		break;
 	case IFT_ETHER:
-		bcopy((caddr_t) (mtod(m, struct ether_header *)->ether_dhost),
-		  (caddr_t) sh.snh_dhost, 2 * sizeof(sh.snh_dhost));
-		m->m_data += sizeof(struct ether_header);
-		m->m_len -= sizeof(struct ether_header);
-		m->m_pkthdr.len -= sizeof(struct ether_header);
+		(void)memcpy(sh.snh_dhost,
+		    mtod(m, struct ether_header *)->ether_dhost,
+		    2 * sizeof(sh.snh_dhost));
+		m_adj(m, sizeof(struct ether_header) + LLC_UFRAMELEN);
 		break;
 	case IFT_FDDI:
-		bcopy((caddr_t) (mtod(m, struct fddi_header *)->fddi_dhost),
-		  (caddr_t) sh.snh_dhost, 2 * sizeof(sh.snh_dhost));
-		m->m_data += sizeof(struct fddi_header);
-		m->m_len -= sizeof(struct fddi_header);
-		m->m_pkthdr.len -= sizeof(struct fddi_header);
+		(void)memcpy(sh.snh_dhost,
+		    mtod(m, struct fddi_header *)->fddi_dhost,
+		    2 * sizeof(sh.snh_dhost));
+		m_adj(m, sizeof(struct fddi_header) + LLC_UFRAMELEN);
 		break;
 	case IFT_PTPSERIAL:
+	case IFT_GIF:
 		/* nothing extra to get from the mbuf */
-		bzero((caddr_t)sh.snh_dhost, sizeof(sh.snh_dhost));
-		bzero((caddr_t)sh.snh_shost, sizeof(sh.snh_shost));
+		memset(sh.snh_dhost, 0, sizeof(sh.snh_dhost));
+		memset(sh.snh_shost, 0, sizeof(sh.snh_shost));
 		break;
 	default:
 		break;
@@ -292,13 +291,7 @@ next:
  *	will it be correctly aligned?
  */
 void
-#if __STDC__
 clnp_input(struct mbuf *m, ...)
-#else
-clnp_input(m, va_alist)
-	struct mbuf    *m;	/* ptr to first mbuf of pkt */
-	va_dcl
-#endif
 {
 	struct snpa_hdr *shp;	/* subnetwork header */
 	struct ifaddr *ifa;
@@ -308,8 +301,8 @@ clnp_input(m, va_alist)
 	struct sockaddr_iso target;	/* destination address of pkt */
 #define src	source.siso_addr
 #define dst	target.siso_addr
-	caddr_t         hoff;	/* current offset in packet */
-	caddr_t         hend;	/* address of end of header info */
+	char *hoff;	/* current offset in packet */
+	char *hend;	/* address of end of header info */
 	struct clnp_segment seg_part;	/* segment part of hdr */
 	int             seg_off = 0;	/* offset of segment part of hdr */
 	int             seg_len;/* length of packet data&hdr in bytes */
@@ -329,8 +322,7 @@ clnp_input(m, va_alist)
  	/*
  	 * make sure this interface has a ISO address
  	 */
-	for (ifa = shp->snh_ifp->if_addrlist.tqh_first; ifa != 0;
-	     ifa = ifa->ifa_list.tqe_next)
+	IFADDR_FOREACH(ifa, shp->snh_ifp)
 		if (ifa->ifa_addr->sa_family == AF_ISO)
 			break;
 	if (ifa == 0) {
@@ -341,7 +333,7 @@ clnp_input(m, va_alist)
 #ifdef ARGO_DEBUG
 	if (argo_debug[D_INPUT]) {
 		printf(
-		    "clnp_input: proccessing dg; First mbuf m_len %d, m_type x%x, %s\n",
+		    "clnp_input: processing dg; First mbuf m_len %d, m_type x%x, %s\n",
 		    m->m_len, m->m_type, IS_CLUSTER(m) ? "cluster" : "normal");
 	}
 #endif
@@ -363,7 +355,7 @@ clnp_input(m, va_alist)
 		struct mbuf    *mhead;
 		int             total_len = 0;
 		printf("clnp_input: clnp header:\n");
-		dump_buf(mtod(m, caddr_t), clnp->cnf_hdr_len);
+		dump_buf(mtod(m, void *), clnp->cnf_hdr_len);
 		printf("clnp_input: mbuf chain:\n");
 		for (mhead = m; mhead != NULL; mhead = mhead->m_next) {
 			printf("m %p, len %d\n", mhead, mhead->m_len);
@@ -395,22 +387,22 @@ clnp_input(m, va_alist)
 		return;
 
 	clnp = mtod(m, struct clnp_fixed *);
-	hend = (caddr_t) clnp + clnp->cnf_hdr_len;
+	hend = (char *) clnp + clnp->cnf_hdr_len;
 
 	/*
 	 * extract the source and destination address drop packet on failure
 	 */
 	source = target = blank_siso;
 
-	hoff = (caddr_t) clnp + sizeof(struct clnp_fixed);
+	hoff = (char *)clnp + sizeof(struct clnp_fixed);
 	CLNP_EXTRACT_ADDR(dst, hoff, hend);
-	if (hoff == (caddr_t) 0) {
+	if (hoff == NULL) {
 		INCSTAT(cns_badaddr);
 		clnp_discard(m, GEN_INCOMPLETE);
 		return;
 	}
 	CLNP_EXTRACT_ADDR(src, hoff, hend);
-	if (hoff == (caddr_t) 0) {
+	if (hoff == NULL) {
 		INCSTAT(cns_badaddr);
 		clnp_discard(m, GEN_INCOMPLETE);
 		return;
@@ -433,13 +425,13 @@ clnp_input(m, va_alist)
 			clnp_discard(m, GEN_INCOMPLETE);
 			return;
 		} else {
-			(void) bcopy(hoff, (caddr_t) & seg_part,
-				     sizeof(struct clnp_segment));
+			(void)memcpy(&seg_part, hoff,
+			    sizeof(struct clnp_segment));
 			/* make sure segmentation fields are in host order */
 			seg_part.cng_id = ntohs(seg_part.cng_id);
 			seg_part.cng_off = ntohs(seg_part.cng_off);
 			seg_part.cng_tot_len = ntohs(seg_part.cng_tot_len);
-			seg_off = hoff - (caddr_t) clnp;
+			seg_off = hoff - (char *)clnp;
 			hoff += sizeof(struct clnp_segment);
 		}
 	}
@@ -467,7 +459,7 @@ clnp_input(m, va_alist)
 #ifdef	DECBIT
 		/* check if the congestion experienced bit is set */
 		if (oidxp->cni_qos_formatp) {
-			caddr_t         qosp = CLNP_OFFTOOPT(m, oidxp->cni_qos_formatp);
+			char *         qosp = CLNP_OFFTOOPT(m, oidxp->cni_qos_formatp);
 			u_char          qos = *qosp;
 
 			need_afrin = ((qos & (CLNPOVAL_GLOBAL | CLNPOVAL_CONGESTED)) ==

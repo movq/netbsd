@@ -1,4 +1,4 @@
-/*	$NetBSD: pathnames.h,v 1.10 2000/03/06 21:42:26 lukem Exp $	*/
+/*	$NetBSD: pathnames.h,v 1.12 2004/12/11 18:37:26 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,11 +37,11 @@
 #define	_DEFAULT_CONFDIR	"/etc"
 #endif
 
-#define	_PATH_FTPCHROOT		"ftpchroot"
-#define	_PATH_FTPDCONF		"ftpd.conf"
-#define	_PATH_FTPLOGINMESG	"motd"
-#define	_PATH_FTPUSERS		"ftpusers"
-#define	_PATH_FTPWELCOME	"ftpwelcome"
+#define	_NAME_FTPCHROOT		"ftpchroot"
+#define	_NAME_FTPDCONF		"ftpd.conf"
+#define	_NAME_FTPLOGINMESG	"motd"
+#define	_NAME_FTPUSERS		"ftpusers"
+#define	_NAME_FTPWELCOME	"ftpwelcome"
 
 #define _PATH_CLASSPIDS		"/var/run/ftpd.pids-"
 

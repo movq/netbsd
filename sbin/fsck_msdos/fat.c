@@ -1,4 +1,4 @@
-/*	$NetBSD: fat.c,v 1.9 1998/01/22 18:48:44 ws Exp $	*/
+/*	$NetBSD: fat.c,v 1.21 2008/07/24 14:23:16 matthias Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997 Wolfgang Solfrank
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Martin Husemann
- *	and Wolfgang Solfrank.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHORS ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -35,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: fat.c,v 1.9 1998/01/22 18:48:44 ws Exp $");
+__RCSID("$NetBSD: fat.c,v 1.21 2008/07/24 14:23:16 matthias Exp $");
 #endif /* not lint */
 
 #include <stdlib.h>
@@ -47,19 +40,16 @@ __RCSID("$NetBSD: fat.c,v 1.9 1998/01/22 18:48:44 ws Exp $");
 #include "ext.h"
 #include "fsutil.h"
 
-static int checkclnum __P((struct bootblock *, int, cl_t, cl_t *));
-static int clustdiffer __P((cl_t, cl_t *, cl_t *, int));
-static int tryclear __P((struct bootblock *, struct fatEntry *, cl_t, cl_t *));
+static int checkclnum(struct bootblock *, int, cl_t, cl_t *);
+static int clustdiffer(cl_t, cl_t *, cl_t *, int);
+static int tryclear(struct bootblock *, struct fatEntry *, cl_t, cl_t *);
+static int _readfat(int, struct bootblock *, int, u_char **);
 
 /*
  * Check a cluster number for valid value
  */
 static int
-checkclnum(boot, fat, cl, next)
-	struct bootblock *boot;
-	int fat;
-	cl_t cl;
-	cl_t *next;
+checkclnum(struct bootblock *boot, int fat, cl_t cl, cl_t *next)
 {
 	if (*next >= (CLUST_RSRVD&boot->ClustMask))
 		*next |= ~boot->ClustMask;
@@ -87,50 +77,65 @@ checkclnum(boot, fat, cl, next)
 }
 
 /*
- * Read a FAT and decode it into internal format
+ * Read a FAT from disk. Returns 1 if successful, 0 otherwise.
  */
-int
-readfat(fs, boot, no, fp)
-	int fs;
-	struct bootblock *boot;
-	int no;
-	struct fatEntry **fp;
+static int
+_readfat(int fs, struct bootblock *boot, int no, u_char **buffer)
 {
-	struct fatEntry *fat;
-	u_char *buffer, *p;
-	cl_t cl;
 	off_t off;
-	int ret = FSOK;
+	size_t len;
 
-	boot->NumFree = boot->NumBad = 0;
-	fat = malloc(sizeof(struct fatEntry) * boot->NumClusters);
-	buffer = malloc(boot->FATsecs * boot->BytesPerSec);
-	if (fat == NULL || buffer == NULL) {
-		perror("No space for FAT");
-		if (fat)
-			free(fat);
-		return FSFATAL;
+	*buffer = malloc(len = boot->FATsecs * boot->BytesPerSec);
+	if (*buffer == NULL) {
+		perr("No space for FAT sectors (%zu)", len);
+		return 0;
 	}
-
-	memset(fat, 0, sizeof(struct fatEntry) * boot->NumClusters);
 
 	off = boot->ResSectors + no * boot->FATsecs;
 	off *= boot->BytesPerSec;
 
 	if (lseek(fs, off, SEEK_SET) != off) {
-		perror("Unable to read FAT");
-		free(buffer);
-		free(fat);
-		return FSFATAL;
+		perr("Unable to read FAT");
+		goto err;
 	}
 
-	if (read(fs, buffer, boot->FATsecs * boot->BytesPerSec)
+	if (read(fs, *buffer, boot->FATsecs * boot->BytesPerSec)
 	    != boot->FATsecs * boot->BytesPerSec) {
-		perror("Unable to read FAT");
+		perr("Unable to read FAT");
+		goto err;
+	}
+
+	return 1;
+
+    err:
+	free(*buffer);
+	return 0;
+}
+
+/*
+ * Read a FAT and decode it into internal format
+ */
+int
+readfat(int fs, struct bootblock *boot, int no, struct fatEntry **fp)
+{
+	struct fatEntry *fat;
+	u_char *buffer, *p;
+	cl_t cl;
+	int ret = FSOK;
+	size_t len;
+
+	boot->NumFree = boot->NumBad = 0;
+
+	if (!_readfat(fs, boot, no, &buffer))
+		return FSFATAL;
+
+	fat = malloc(len = boot->NumClusters * sizeof(struct fatEntry));
+	if (fat == NULL) {
+		perr("No space for FAT clusters (%zu)", len);
 		free(buffer);
-		free(fat);
 		return FSFATAL;
 	}
+	(void)memset(fat, 0, len);
 
 	if (buffer[0] != boot->Media
 	    || buffer[1] != 0xff || buffer[2] != 0xff
@@ -139,24 +144,47 @@ readfat(fs, boot, no, fp)
 		&& ((buffer[3]&0x0f) != 0x0f
 		    || buffer[4] != 0xff || buffer[5] != 0xff
 		    || buffer[6] != 0xff || (buffer[7]&0x0f) != 0x0f))) {
-		char *msg;
 
-		switch (boot->ClustMask) {
-		case CLUST32_MASK:
-			msg = "FAT starts with odd byte sequence (%02x%02x%02x%02x%02x%02x%02x%02x)\n";
-			break;
-		case CLUST16_MASK:
-			msg = "FAT starts with odd byte sequence (%02x%02x%02x%02x)\n";
-			break;
-		default:
-			msg = "FAT starts with odd byte sequence (%02x%02x%02x)\n";
-			break;
+		/* Windows 95 OSR2 (and possibly any later) changes
+		 * the FAT signature to 0xXXffff7f for FAT16 and to
+		 * 0xXXffff0fffffff07 for FAT32 upon boot, to know that the
+		 * filesystem is dirty if it doesn't reboot cleanly.
+		 * Check this special condition before errorring out.
+		 */
+		if (buffer[0] == boot->Media && buffer[1] == 0xff
+		    && buffer[2] == 0xff
+		    && ((boot->ClustMask == CLUST16_MASK && buffer[3] == 0x7f)
+			|| (boot->ClustMask == CLUST32_MASK
+			    && buffer[3] == 0x0f && buffer[4] == 0xff
+			    && buffer[5] == 0xff && buffer[6] == 0xff
+			    && buffer[7] == 0x07)))
+			ret |= FSDIRTY;
+		else {
+			/* just some odd byte sequence in FAT */
+
+			switch (boot->ClustMask) {
+			case CLUST32_MASK:
+				pwarn("%s (%02x%02x%02x%02x%02x%02x%02x%02x)\n",
+				      "FAT starts with odd byte sequence",
+				      buffer[0], buffer[1], buffer[2], buffer[3],
+				      buffer[4], buffer[5], buffer[6], buffer[7]);
+				break;
+			case CLUST16_MASK:
+				pwarn("%s (%02x%02x%02x%02x)\n",
+				    "FAT starts with odd byte sequence",
+				    buffer[0], buffer[1], buffer[2], buffer[3]);
+				break;
+			default:
+				pwarn("%s (%02x%02x%02x)\n",
+				    "FAT starts with odd byte sequence",
+				    buffer[0], buffer[1], buffer[2]);
+				break;
+			}
+
+
+			if (ask(1, "Correct"))
+				ret |= FSFIXFAT;
 		}
-		pwarn(msg,
-		      buffer[0], buffer[1], buffer[2], buffer[3],
-		      buffer[4], buffer[5], buffer[6], buffer[7]);
-		if (ask(1, "Correct"))
-			ret |= FSFATMOD;
 	}
 	switch (boot->ClustMask) {
 	case CLUST32_MASK:
@@ -200,16 +228,19 @@ readfat(fs, boot, no, fp)
 	}
 
 	free(buffer);
-	*fp = fat;
+	if (ret & FSFATAL) {
+		free(fat);
+		*fp = NULL;
+	} else
+		*fp = fat;
 	return ret;
 }
 
 /*
  * Get type of reserved cluster
  */
-char *
-rsrvdcltype(cl)
-	cl_t cl;
+const char *
+rsrvdcltype(cl_t cl)
 {
 	if (cl == CLUST_FREE)
 		return "free";
@@ -221,11 +252,7 @@ rsrvdcltype(cl)
 }
 
 static int
-clustdiffer(cl, cp1, cp2, fatnum)
-	cl_t cl;
-	cl_t *cp1;
-	cl_t *cp2;
-	int fatnum;
+clustdiffer(cl_t cl, cl_t *cp1, cl_t *cp2, int fatnum)
 {
 	if (*cp1 == CLUST_FREE || *cp1 >= CLUST_RSRVD) {
 		if (*cp2 == CLUST_FREE || *cp2 >= CLUST_RSRVD) {
@@ -295,11 +322,8 @@ clustdiffer(cl, cp1, cp2, fatnum)
  * into the first one.
  */
 int
-comparefat(boot, first, second, fatnum)
-	struct bootblock *boot;
-	struct fatEntry *first;
-	struct fatEntry *second;
-	int fatnum;
+comparefat(struct bootblock *boot, struct fatEntry *first,
+	   struct fatEntry *second, int fatnum)
 {
 	cl_t cl;
 	int ret = FSOK;
@@ -311,10 +335,7 @@ comparefat(boot, first, second, fatnum)
 }
 
 void
-clearchain(boot, fat, head)
-	struct bootblock *boot;
-	struct fatEntry *fat;
-	cl_t head;
+clearchain(struct bootblock *boot, struct fatEntry *fat, cl_t head)
 {
 	cl_t p, q;
 
@@ -328,17 +349,13 @@ clearchain(boot, fat, head)
 }
 
 int
-tryclear(boot, fat, head, trunc)
-	struct bootblock *boot;
-	struct fatEntry *fat;
-	cl_t head;
-	cl_t *trunc;
+tryclear(struct bootblock *boot, struct fatEntry *fat, cl_t head, cl_t *truncp)
 {
 	if (ask(0, "Clear chain starting at %u", head)) {
 		clearchain(boot, fat, head);
 		return FSFATMOD;
 	} else if (ask(0, "Truncate")) {
-		*trunc = CLUST_EOF;
+		*truncp = CLUST_EOF;
 		return FSFATMOD;
 	} else
 		return FSERROR;
@@ -348,9 +365,7 @@ tryclear(boot, fat, head, trunc)
  * Check a complete FAT in-memory for crosslinks
  */
 int
-checkfat(boot, fat)
-	struct bootblock *boot;
-	struct fatEntry *fat;
+checkfat(struct bootblock *boot, struct fatEntry *fat)
 {
 	cl_t head, p, h, n;
 	u_int len;
@@ -444,41 +459,67 @@ checkfat(boot, fat)
  * Write out FATs encoding them from the internal format
  */
 int
-writefat(fs, boot, fat)
-	int fs;
-	struct bootblock *boot;
-	struct fatEntry *fat;
+writefat(int fs, struct bootblock *boot, struct fatEntry *fat, int correct_fat)
 {
 	u_char *buffer, *p;
 	cl_t cl;
 	int i;
-	u_int32_t fatsz;
+	size_t fatsz;
 	off_t off;
 	int ret = FSOK;
 
 	buffer = malloc(fatsz = boot->FATsecs * boot->BytesPerSec);
 	if (buffer == NULL) {
-		perror("No space for FAT");
+		perr("No space for FAT sectors (%zu)", fatsz);
 		return FSFATAL;
 	}
 	memset(buffer, 0, fatsz);
 	boot->NumFree = 0;
 	p = buffer;
-	*p++ = (u_char)boot->Media;
-	*p++ = 0xff;
-	*p++ = 0xff;
-	switch (boot->ClustMask) {
-	case CLUST16_MASK:
-		*p++ = 0xff;
-		break;
-	case CLUST32_MASK:
-		*p++ = 0x0f;
+	if (correct_fat) {
+		*p++ = (u_char)boot->Media;
 		*p++ = 0xff;
 		*p++ = 0xff;
-		*p++ = 0xff;
-		*p++ = 0x0f;
-		break;
+		switch (boot->ClustMask) {
+		case CLUST16_MASK:
+			*p++ = 0xff;
+			break;
+		case CLUST32_MASK:
+			*p++ = 0x0f;
+			*p++ = 0xff;
+			*p++ = 0xff;
+			*p++ = 0xff;
+			*p++ = 0x0f;
+			break;
+		}
+	} else {
+		/* use same FAT signature as the old FAT has */
+		int count;
+		u_char *old_fat;
+
+		switch (boot->ClustMask) {
+		case CLUST32_MASK:
+			count = 8;
+			break;
+		case CLUST16_MASK:
+			count = 4;
+			break;
+		default:
+			count = 3;
+			break;
+		}
+
+		if (!_readfat(fs, boot, boot->ValidFat >= 0 ? boot->ValidFat :0,
+					 &old_fat)) {
+			free(buffer);
+			return FSFATAL;
+		}
+
+		memcpy(p, old_fat, count);
+		free(old_fat);
+		p += count;
 	}
+
 	for (cl = CLUST_FIRST; cl < boot->NumClusters; cl++) {
 		switch (boot->ClustMask) {
 		case CLUST32_MASK:
@@ -514,7 +555,7 @@ writefat(fs, boot, fat)
 		off *= boot->BytesPerSec;
 		if (lseek(fs, off, SEEK_SET) != off
 		    || write(fs, buffer, fatsz) != fatsz) {
-			perror("Unable to write FAT");
+			perr("Unable to write FAT");
 			ret = FSFATAL; /* Return immediately?		XXX */
 		}
 	}
@@ -526,15 +567,12 @@ writefat(fs, boot, fat)
  * Check a complete in-memory FAT for lost cluster chains
  */
 int
-checklost(dosfs, boot, fat)
-	int dosfs;
-	struct bootblock *boot;
-	struct fatEntry *fat;
+checklost(int dosfs, struct bootblock *boot, struct fatEntry *fat)
 {
 	cl_t head;
 	int mod = FSOK;
 	int ret;
-	
+
 	for (head = CLUST_FIRST; head < boot->NumClusters; head++) {
 		/* find next untravelled chain */
 		if (fat[head].head != head
@@ -566,9 +604,10 @@ checklost(dosfs, boot, fat)
 				ret = 1;
 			}
 		}
-		if (boot->NumFree && fat[boot->FSNext].next != CLUST_FREE) {
-			pwarn("Next free cluster in FSInfo block (%u) not free\n",
-			      boot->FSNext);
+		if (boot->FSNext >= boot->NumClusters || (boot->NumFree && fat[boot->FSNext].next != CLUST_FREE)) {
+			pwarn("Next free cluster in FSInfo block (%u) %s\n",
+			      boot->FSNext,
+			      (boot->FSNext >= boot->NumClusters) ? "invalid" : "not free");
 			if (ask(1, "fix"))
 				for (head = CLUST_FIRST; head < boot->NumClusters; head++)
 					if (fat[head].next == CLUST_FREE) {

@@ -1,4 +1,4 @@
-/*	$NetBSD: ctrace.c,v 1.6 1999/04/13 14:08:17 mrg Exp $	*/
+/*	$NetBSD: ctrace.c,v 1.19 2007/05/29 13:20:21 blymn Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,48 +34,86 @@
 #if 0
 static char sccsid[] = "@(#)ctrace.c	8.2 (Berkeley) 10/5/93";
 #else
-__RCSID("$NetBSD: ctrace.c,v 1.6 1999/04/13 14:08:17 mrg Exp $");
+__RCSID("$NetBSD: ctrace.c,v 1.19 2007/05/29 13:20:21 blymn Exp $");
 #endif
 #endif				/* not lint */
 
 #ifdef DEBUG
-#include <stdio.h>
-
-#ifdef __STDC__
 #include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
+#include <stdio.h>
+#include <stdlib.h>
+
+#include <sys/time.h>
+#include <string.h>
 
 #include "curses.h"
+#include "curses_private.h"
 
-#ifndef TFILE
-#define	TFILE	"__curses.out"
-#endif
+static FILE *tracefp = NULL;		/* Curses debugging file descriptor. */
 
-static FILE *tracefp;		/* Curses debugging file descriptor. */
+static int tracemask;	/* Areas of trace output we want. */
+
+static int init_done = 0;
 
 void
-#ifdef __STDC__
-__CTRACE(const char *fmt,...)
-#else
-__CTRACE(fmt, va_alist)
-	char   *fmt;
-va_dcl
-#endif
+__CTRACE_init()
 {
-	va_list ap;
-#ifdef __STDC__
-	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
-	if (tracefp == NULL)
-		tracefp = fopen(TFILE, "w");
-	if (tracefp == NULL)
+	char *tf, *tm;
+
+	tm = getenv("CURSES_TRACE_MASK");
+	if (tm == NULL)
+		tracemask = __CTRACE_ALL;
+	else {
+		tracemask = (int) strtol(tm, NULL, 0);
+	}
+	if (tracemask < 0)
+		tracemask = (0 - tracemask) ^ __CTRACE_ALL;
+	if (tracemask == 0)
 		return;
-	(void) vfprintf(tracefp, fmt, ap);
+
+	tf = getenv("CURSES_TRACE_FILE");
+
+	if ((tf != NULL) && !strcmp( tf, "<none>"))
+		tf = NULL;
+
+	if (tf != NULL)
+		tracefp = fopen(tf, "w");
+
+	init_done = 1;
+	__CTRACE(__CTRACE_ALL, "Trace mask: 0x%08x\n", tracemask);
+}
+
+void
+__CTRACE(int area, const char *fmt,...)
+{
+	struct timeval tv;
+        static int seencr = 1;
+	va_list ap;
+
+	if (!init_done)
+		__CTRACE_init();
+	if (tracefp == NULL || !(tracemask & area)) {
+		return;
+	}
+	gettimeofday(&tv, NULL);
+        if (seencr && (tracemask & __CTRACE_TSTAMP)) {
+                gettimeofday(&tv, NULL);
+                (void) fprintf(tracefp, "%lu.%06lu: ", tv.tv_sec, tv.tv_usec);
+        }
+	va_start(ap, fmt);
+        (void) vfprintf(tracefp, fmt, ap);
+        seencr = (strchr(fmt, '\n') != NULL);
 	va_end(ap);
 	(void) fflush(tracefp);
+}
+#else
+/* this kills the empty translation unit message from lint... */
+void
+__cursesi_make_lint_shut_up_if_debug_not_defined(void);
+
+void
+__cursesi_make_lint_shut_up_if_debug_not_defined(void)
+{
+	return;
 }
 #endif

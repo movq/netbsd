@@ -1,4 +1,4 @@
-/*	$NetBSD: hid.h,v 1.4 1999/11/18 23:32:26 augustss Exp $	*/
+/*	$NetBSD: hid.h,v 1.12 2008/04/28 20:23:59 martin Exp $	*/
 /*	$FreeBSD: src/sys/dev/usb/hid.h,v 1.7 1999/11/17 22:33:40 n_hibma Exp $ */
 
 /*
@@ -6,7 +6,7 @@
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Lennart Augustsson (augustss@carlstedt.se) at
+ * by Lennart Augustsson (lennart@augustsson.net) at
  * Carlstedt Research & Technology.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -17,13 +17,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,8 +31,13 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-enum hid_kind { 
-	hid_input, hid_output, hid_feature, hid_collection, hid_endcollection
+enum hid_kind {
+	hid_input,
+	hid_output,
+	hid_feature,
+	hid_collection,
+	hid_endcollection,
+	hid_none
 };
 
 struct hid_location {
@@ -80,12 +78,11 @@ struct hid_item {
 	struct hid_item *next;
 };
 
-struct hid_data *hid_start_parse __P((void *d, int len, int kindset));
-void hid_end_parse __P((struct hid_data *s));
-int hid_get_item __P((struct hid_data *s, struct hid_item *h));
-int hid_report_size __P((void *buf, int len, enum hid_kind k, u_int8_t *id));
-int hid_locate __P((void *desc, int size, u_int32_t usage, 
-		    enum hid_kind kind, struct hid_location *loc, 
-		    u_int32_t *flags));
-u_long hid_get_data __P((u_char *buf, struct hid_location *loc));
-int hid_is_collection __P((void *desc, int size, u_int32_t usage));
+struct hid_data *hid_start_parse(const void *, int, enum hid_kind);
+void hid_end_parse(struct hid_data *);
+int hid_get_item(struct hid_data *, struct hid_item *);
+int hid_report_size(const void *, int, enum hid_kind, u_int8_t);
+int hid_locate(const void *, int, u_int32_t, u_int8_t, enum hid_kind,
+    struct hid_location *, u_int32_t *);
+u_long hid_get_data(u_char *, struct hid_location *);
+int hid_is_collection(const void *, int, u_int8_t, u_int32_t);

@@ -1,4 +1,4 @@
-/*	$NetBSD: malloc.c,v 1.4 1994/06/29 06:41:10 cgd Exp $	*/
+/*	$NetBSD: malloc.c,v 1.10 2005/12/11 12:25:16 christos Exp $	*/
 
 /*
  * This code is such a kludge that I don't want to put my name on it.
@@ -6,41 +6,46 @@
  * However it does work...
  */
 
-/* 
+/*
  * a simple malloc
  * it might be brain-damaged but for the purposes of xebec
- * it's a whole lot faster than the c library malloc 
+ * it's a whole lot faster than the c library malloc
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: malloc.c,v 1.10 2005/12/11 12:25:16 christos Exp $");
 
 #include <stdio.h>
 #include "malloc.h"
 #include "debug.h"
+#include "main.h"
 #define CHUNKSIZE 4096*2
 
 static char *hiwat, *highend;
 int bytesmalloced=0;
 int byteswasted = 0;
 
-
+void
 init_alloc()
 {
 #ifdef LINT
 	hiwat = 0;
 	highend = 0;
-#else LINT
+#else /* !LINT */
 	extern char *sbrk();
 
 	hiwat = (char *) sbrk(0);
 	hiwat = (char *)((unsigned)(hiwat + 3) & ~0x3);
 	highend = hiwat;
-#endif LINT
+#endif /* LINT */
 }
 
+void
 HIWAT(s)
-char *s;
+	char *s;
 {
 	IFDEBUG(M)
-		fprintf(stdout, "HIWAT 0x%x  %s\n", hiwat,s);
+		fprintf(stdout, "HIWAT %p  %s\n", hiwat,s);
 		fflush(stdout);
 	ENDDEBUG
 }
@@ -63,7 +68,7 @@ int x;
 		fflush(stdout);
 	ENDDEBUG
 	IFDEBUG(M)
-		fprintf(stdout, "Malloc 0x%x, %d, hiwat 0x%x\n",
+		fprintf(stdout, "Malloc 0x%x, %d, hiwat %p\n",
 			total,total, hiwat);
 		fflush(stdout);
 	ENDDEBUG
@@ -72,7 +77,7 @@ int x;
 		if(((unsigned)(hiwat) & 0x3)) {
 			bytesmalloced = 4 - (int) ((unsigned)(hiwat) & 0x3);
 			hiwat = sbrk( bytesmalloced );
-		} else 
+		} else
 			bytesmalloced = 0;
 		firsttime = 0;
 		highend = hiwat;
@@ -89,7 +94,7 @@ int x;
 		if ( (hiwat + x) > highend) {
 			c = sbrk(CHUNKSIZE);
 			IFDEBUG(M)
-				fprintf(stdout, "hiwat 0x%x, x 0x%x, highend 0x%x, c 0x%x\n",
+				fprintf(stdout, "hiwat %p, x 0x%x, highend %p, c %p\n",
 						hiwat, x, highend, c);
 				fflush(stdout);
 			ENDDEBUG
@@ -124,11 +129,11 @@ int x;
 		hiwat = (char *)((unsigned)(hiwat + 3) & ~0x3);
 	}
 	IFDEBUG(M)
-		fprintf(stdout, "Malloc = 0x%x, bytesm 0x%x, wasted 0x%x, hiwat 0x%x\n",
+		fprintf(stdout, "Malloc = %p, bytesm 0x%x, wasted 0x%x, hiwat %p\n",
 			returnvalue, bytesmalloced, byteswasted, hiwat);
 	ENDDEBUG
 	IFDEBUG(N)
-		fprintf(stdout, "Malloc returns 0x%x, sbrk(0) 0x%x\n", returnvalue, sbrk(0));
+		fprintf(stdout, "Malloc returns %p, sbrk(0) %p\n", returnvalue, sbrk(0));
 		fflush(stdout);
 	ENDDEBUG
 	return(returnvalue);

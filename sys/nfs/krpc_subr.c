@@ -1,4 +1,4 @@
-/*	$NetBSD: krpc_subr.c,v 1.23 1998/08/09 21:19:49 perry Exp $	*/
+/*	$NetBSD: krpc_subr.c,v 1.33 2008/04/24 11:38:39 ad Exp $	*/
 
 /*
  * Copyright (c) 1995 Gordon Ross, Adam Glass
@@ -42,9 +42,11 @@
  *               @(#) Header: rpc.c,v 1.12 93/09/28 08:31:56 leres Exp  (LBL)
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: krpc_subr.c,v 1.33 2008/04/24 11:38:39 ad Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/conf.h>
 #include <sys/ioctl.h>
 #include <sys/proc.h>
 #include <sys/mount.h>
@@ -53,7 +55,6 @@
 #include <sys/socket.h>
 #include <sys/socketvar.h>
 
-#include <net/if.h>
 #include <netinet/in.h>
 
 #include <nfs/rpcv2.h>
@@ -130,10 +131,11 @@ static int krpccheck __P((struct mbuf*, void*));
  * Returns non-zero error on failure.
  */
 int
-krpc_portmap(sin,  prog, vers, proto, portp)
+krpc_portmap(sin,  prog, vers, proto, portp, l)
 	struct sockaddr_in *sin;		/* server address */
 	u_int prog, vers, proto;	/* host order */
 	u_int16_t *portp;	/* network order */
+	struct lwp *l;
 {
 	struct sdata {
 		u_int32_t prog;		/* call program */
@@ -166,8 +168,8 @@ krpc_portmap(sin,  prog, vers, proto, portp)
 
 	sin->sin_port = htons(PMAPPORT);
 	error = krpc_call(sin, PMAPPROG, PMAPVERS,
-					  PMAPPROC_GETPORT, &m, NULL);
-	if (error) 
+					  PMAPPROC_GETPORT, &m, NULL, l);
+	if (error)
 		return error;
 
 	if (m->m_len < sizeof(*rdata)) {
@@ -214,11 +216,12 @@ void *context;
  * the address from whence the response came is saved there.
  */
 int
-krpc_call(sa, prog, vers, func, data, from_p)
+krpc_call(sa, prog, vers, func, data, from_p, l)
 	struct sockaddr_in *sa;
 	u_int prog, vers, func;
 	struct mbuf **data;	/* input/output */
 	struct mbuf **from_p;	/* output */
+	struct lwp *l;
 {
 	struct socket *so;
 	struct sockaddr_in *sin;
@@ -241,9 +244,9 @@ krpc_call(sa, prog, vers, func, data, from_p)
 	from = NULL;
 
 	/*
-	 * Create socket and set its recieve timeout.
+	 * Create socket and set its receive timeout.
 	 */
-	if ((error = socreate(AF_INET, &so, SOCK_DGRAM, 0)))
+	if ((error = socreate(AF_INET, &so, SOCK_DGRAM, 0, l, NULL)))
 		goto out;
 
 	if ((error = nfs_boot_setrecvtimo(so)))
@@ -265,7 +268,7 @@ krpc_call(sa, prog, vers, func, data, from_p)
 	tport = IPPORT_RESERVED;
 	do {
 		tport--;
-		error = nfs_boot_sobind_ipport(so, tport);
+		error = nfs_boot_sobind_ipport(so, tport, l);
 	} while (error == EADDRINUSE &&
 			 tport > IPPORT_RESERVED / 2);
 	if (error) {
@@ -278,7 +281,7 @@ krpc_call(sa, prog, vers, func, data, from_p)
 	 */
 	nam = m_get(M_WAIT, MT_SONAME);
 	sin = mtod(nam, struct sockaddr_in *);
-	memcpy((caddr_t)sin, (caddr_t)sa,
+	memcpy((void *)sin, (void *)sa,
 		  (nam->m_len = sa->sin_len));
 
 	/*
@@ -288,7 +291,7 @@ krpc_call(sa, prog, vers, func, data, from_p)
 	mhead->m_next = *data;
 	call = mtod(mhead, struct rpc_call *);
 	mhead->m_len = sizeof(*call);
-	memset((caddr_t)call, 0, sizeof(*call));
+	memset((void *)call, 0, sizeof(*call));
 	/* rpc_call part */
 	xid++;
 	call->rp_xid = txdr_unsigned(xid);
@@ -316,7 +319,8 @@ krpc_call(sa, prog, vers, func, data, from_p)
 	mhead->m_pkthdr.len = len;
 	mhead->m_pkthdr.rcvif = NULL;
 
-	error = nfs_boot_sendrecv(so, nam, 0, mhead, krpccheck, &m, &from, &xid);
+	error = nfs_boot_sendrecv(so, nam, 0, mhead, krpccheck, &m, &from,
+	    &xid, l);
 	if (error)
 		goto out;
 
@@ -378,7 +382,7 @@ krpc_call(sa, prog, vers, func, data, from_p)
 
 	/* result */
 	*data = m;
-	if (from_p) {
+	if (from_p && error == 0) {
 		*from_p = from;
 		from = NULL;
 	}
@@ -423,7 +427,7 @@ xdr_string_encode(str, len)
 
 	m = m_get(M_WAIT, MT_DATA);
 	if (mlen > MLEN) {
-		MCLGET(m, M_WAIT);
+		m_clget(m, M_WAIT);
 		if ((m->m_flags & M_EXT) == 0) {
 			(void) m_free(m);	/* There can be only one. */
 			return (NULL);

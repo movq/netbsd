@@ -1,4 +1,4 @@
-/* @(#)s_ldexp.c 5.1 93/09/24 */
+/* @(#)s_ldexp0.c 5.1 93/09/24 */
 /*
  * ====================================================
  * Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
@@ -12,22 +12,18 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBM_SCCS) && !defined(lint)
-__RCSID("$NetBSD: s_ldexp.c,v 1.8 1999/07/02 15:37:43 simonb Exp $");
+__RCSID("$NetBSD: s_ldexp.c,v 1.10 2008/04/25 22:21:53 christos Exp $");
 #endif
 
 #include "math.h"
 #include "math_private.h"
 #include <errno.h>
 
-#ifdef __STDC__
-	double ldexp(double value, int exp)
-#else
-	double ldexp(value, exp)
-	double value; int exp;
-#endif
+double
+ldexp(double value, int exp0)
 {
 	if(!finite(value)||value==0.0) return value;
-	value = scalbn(value,exp);
+	value = scalbn(value,exp0);
 	if(!finite(value)||value==0.0) errno = ERANGE;
 	return value;
 }

@@ -1,4 +1,4 @@
-/* $NetBSD: compat_13_machdep.c,v 1.6 1999/08/16 02:59:22 simonb Exp $ */
+/* $NetBSD: compat_13_machdep.c,v 1.17 2008/04/24 18:39:20 ad Exp $ */
 
 /*
  * Copyright (c) 1994, 1995, 1996 Carnegie-Mellon University.
@@ -29,7 +29,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: compat_13_machdep.c,v 1.6 1999/08/16 02:59:22 simonb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: compat_13_machdep.c,v 1.17 2008/04/24 18:39:20 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -39,6 +39,9 @@ __KERNEL_RCSID(0, "$NetBSD: compat_13_machdep.c,v 1.6 1999/08/16 02:59:22 simonb
 #include <sys/user.h>
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
+
+#include <compat/sys/signal.h>
+#include <compat/sys/signalvar.h>
 
 #include <machine/cpu.h>
 #include <machine/reg.h>
@@ -56,15 +59,13 @@ __KERNEL_RCSID(0, "$NetBSD: compat_13_machdep.c,v 1.6 1999/08/16 02:59:22 simonb
  */
 /* ARGSUSED */
 int
-compat_13_sys_sigreturn(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+compat_13_sys_sigreturn(struct lwp *l, const struct compat_13_sys_sigreturn_args *uap, register_t *retval)
 {
-	struct compat_13_sys_sigreturn_args /* {
+	/* {
 		syscallarg(struct sigcontext13 *) sigcntxp;
-	} */ *uap = v;
+	} */
 	struct sigcontext13 *scp, ksc;
+	struct proc *p = l->l_proc;
 	sigset13_t mask13;
 	sigset_t mask;
 
@@ -77,40 +78,41 @@ compat_13_sys_sigreturn(p, v, retval)
 	if (ALIGN(scp) != (u_int64_t)scp)
 		return (EINVAL);
 
-	if (copyin((caddr_t)scp, &ksc, sizeof(ksc)) != 0)
+	if (copyin((void *)scp, &ksc, sizeof(ksc)) != 0)
 		return (EFAULT);
 
 	if (ksc.sc_regs[R_ZERO] != 0xACEDBADE)		/* magic number */
 		return (EINVAL);
 
 	/* Restore register context. */
-	p->p_md.md_tf->tf_regs[FRAME_PC] = ksc.sc_pc;
-	p->p_md.md_tf->tf_regs[FRAME_PS] =
+	l->l_md.md_tf->tf_regs[FRAME_PC] = ksc.sc_pc;
+	l->l_md.md_tf->tf_regs[FRAME_PS] =
 	    (ksc.sc_ps | ALPHA_PSL_USERSET) & ~ALPHA_PSL_USERCLR;
 
-	regtoframe((struct reg *)ksc.sc_regs, p->p_md.md_tf);
+	regtoframe((struct reg *)ksc.sc_regs, l->l_md.md_tf);
 	alpha_pal_wrusp(ksc.sc_regs[R_SP]);
 
 	/* XXX ksc.sc_ownedfp ? */
-	if (p == fpcurproc)
-		fpcurproc = NULL;
-	bcopy((struct fpreg *)ksc.sc_fpregs, &p->p_addr->u_pcb.pcb_fp,
+	if (l->l_addr->u_pcb.pcb_fpcpu != NULL)
+		fpusave_proc(l, 0);
+	memcpy(&l->l_addr->u_pcb.pcb_fp, (struct fpreg *)ksc.sc_fpregs,
 	    sizeof(struct fpreg));
 	/* XXX ksc.sc_fp_control ? */
 
+	mutex_enter(p->p_lock);
 	/* Restore signal stack. */
 	if (ksc.sc_onstack & SS_ONSTACK)
-		p->p_sigacts->ps_sigstk.ss_flags |= SS_ONSTACK;
+		l->l_sigstk.ss_flags |= SS_ONSTACK;
 	else
-		p->p_sigacts->ps_sigstk.ss_flags &= ~SS_ONSTACK;
-
+		l->l_sigstk.ss_flags &= ~SS_ONSTACK;
 	/*
 	 * Restore signal mask.  Note the mask is a "long" in the stack
 	 * frame.
 	 */
 	mask13 = ksc.sc_mask;
 	native_sigset13_to_sigset(&mask13, &mask);
-	(void) sigprocmask1(p, SIG_SETMASK, &mask, 0);
+	(void) sigprocmask1(l, SIG_SETMASK, &mask, 0);
+	mutex_exit(p->p_lock);
 
 	return (EJUSTRETURN);
 }

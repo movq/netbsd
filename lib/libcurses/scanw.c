@@ -1,4 +1,4 @@
-/*	$NetBSD: scanw.c,v 1.10 1999/04/13 14:08:19 mrg Exp $	*/
+/*	$NetBSD: scanw.c,v 1.19 2007/05/29 11:10:56 blymn Exp $	*/
 
 /*
  * Copyright (c) 1981, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)scanw.c	8.3 (Berkeley) 5/4/94";
 #else
-__RCSID("$NetBSD: scanw.c,v 1.10 1999/04/13 14:08:19 mrg Exp $");
+__RCSID("$NetBSD: scanw.c,v 1.19 2007/05/29 11:10:56 blymn Exp $");
 #endif
 #endif				/* not lint */
 
@@ -46,11 +42,7 @@ __RCSID("$NetBSD: scanw.c,v 1.10 1999/04/13 14:08:19 mrg Exp $");
  * scanw and friends.
  */
 
-#ifdef __STDC__
 #include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
 
 #include "curses.h"
 
@@ -59,22 +51,12 @@ __RCSID("$NetBSD: scanw.c,v 1.10 1999/04/13 14:08:19 mrg Exp $");
  *	Implement a scanf on the standard screen.
  */
 int
-#ifdef __STDC__
 scanw(const char *fmt,...)
-#else
-scanw(fmt, va_alist)
-	char   *fmt;
-va_dcl
-#endif
 {
 	va_list ap;
 	int     ret;
 
-#ifdef __STDC__
 	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
 	ret = vwscanw(stdscr, fmt, ap);
 	va_end(ap);
 	return (ret);
@@ -84,23 +66,12 @@ va_dcl
  *	Implements a scanf on the given window.
  */
 int
-#ifdef __STDC__
-wscanw(WINDOW * win, const char *fmt,...)
-#else
-wscanw(win, fmt, va_alist)
-	WINDOW *win;
-	char   *fmt;
-va_dcl
-#endif
+wscanw(WINDOW *win, const char *fmt,...)
 {
 	va_list ap;
 	int     ret;
 
-#ifdef __STDC__
 	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
 	ret = vwscanw(win, fmt, ap);
 	va_end(ap);
 	return (ret);
@@ -111,52 +82,28 @@ va_dcl
  *	arguments, they cannot be macros.  Another sigh....
  */
 int
-#ifdef __STDC__
 mvscanw(int y, int x, const char *fmt,...)
-#else
-mvscanw(y, x, fmt, va_alist)
-	int     y, x;
-	char   *fmt;
-va_dcl
-#endif
 {
 	va_list ap;
 	int     ret;
 
 	if (move(y, x) != OK)
 		return (ERR);
-#ifdef __STDC__
 	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
 	ret = vwscanw(stdscr, fmt, ap);
 	va_end(ap);
 	return (ret);
 }
 
 int
-#ifdef __STDC__
-mvwscanw(WINDOW * win, int y, int x,
-    const char *fmt,...)
-#else
-mvwscanw(win, y, x, fmt, va_alist)
-	WINDOW *win;
-	int     y, x;
-	char   *fmt;
-va_dcl
-#endif
+mvwscanw(WINDOW * win, int y, int x, const char *fmt,...)
 {
 	va_list ap;
 	int     ret;
 
 	if (move(y, x) != OK)
 		return (ERR);
-#ifdef __STDC__
 	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
 	ret = vwscanw(win, fmt, ap);
 	va_end(ap);
 	return (ret);
@@ -166,14 +113,11 @@ va_dcl
  *	This routine actually executes the scanf from the window.
  */
 int
-vwscanw(win, fmt, ap)
-	WINDOW *win;
-	const char *fmt;
-	va_list ap;
+vwscanw(WINDOW *win, const char *fmt, _BSD_VA_LIST_ ap)
 {
 
 	char    buf[1024];
 
-	return (wgetstr(win, buf) == OK ?
+	return (wgetnstr(win, buf, (int) sizeof(buf)) == OK ?
 	    vsscanf(buf, fmt, ap) : ERR);
 }

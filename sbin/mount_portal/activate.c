@@ -1,4 +1,4 @@
-/*	$NetBSD: activate.c,v 1.8 1997/09/21 02:35:40 enami Exp $	*/
+/*	$NetBSD: activate.c,v 1.14 2007/07/02 18:07:44 pooka Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: activate.c,v 1.8 1997/09/21 02:35:40 enami Exp $");
+__RCSID("$NetBSD: activate.c,v 1.14 2007/07/02 18:07:44 pooka Exp $");
 #endif /* not lint */
 
 #include <stdio.h>
@@ -59,38 +55,27 @@ __RCSID("$NetBSD: activate.c,v 1.8 1997/09/21 02:35:40 enami Exp $");
 
 #include "portald.h"
 
-static	int	activate_argv __P((struct portal_cred *, char *, char **,
-				    int, int *));
-static	int	get_request __P((int, struct portal_cred *, char *, int));
-static	void	send_reply __P((int, int, int));
+static	int	get_request(int, struct portal_cred *, char *, int);
+static	void	send_reply(int, int, int);
 
 /*
  * Scan the providers list and call the
  * appropriate function.
  */
-static int
-activate_argv(pcr, key, v, so, fdp)
-	struct portal_cred *pcr;
-	char *key;
-	char **v;
-	int so;
-	int *fdp;
+int
+activate_argv(struct portal_cred *pcr, char *key, char **v, int *fdp)
 {
 	provider *pr;
 
 	for (pr = providers; pr->pr_match; pr++)
 		if (strcmp(v[0], pr->pr_match) == 0)
-			return ((*pr->pr_func)(pcr, key, v, so, fdp));
+			return ((*pr->pr_func)(pcr, key, v, fdp));
 
 	return (ENOENT);
 }
 
 static int
-get_request(so, pcr, key, klen)
-	int so;
-	struct portal_cred *pcr;
-	char *key;
-	int klen;
+get_request(int so, struct portal_cred *pcr, char *key, int klen)
 {
 	struct iovec iov[2];
 	struct msghdr msg;
@@ -119,18 +104,15 @@ get_request(so, pcr, key, klen)
 }
 
 static void
-send_reply(so, fd, error)
-	int so;
-	int fd;
-	int error;
+send_reply(int so, int fd, int error)
 {
 	int n;
 	struct iovec iov;
 	struct msghdr msg;
-	struct {
-		struct cmsghdr cmsg;
-		int fd;
-	} ctl;
+	void *ctl = NULL;
+	struct cmsghdr *cmsg;
+	int *files;
+	socklen_t cmsgsize;
 
 	/*
 	 * Line up error code.  Don't worry about byte ordering
@@ -151,37 +133,52 @@ send_reply(so, fd, error)
 	 * construct a suitable rights control message.
 	 */
 	if (fd >= 0) {
-		ctl.fd = fd;
-		ctl.cmsg.cmsg_len = sizeof(ctl);
-		ctl.cmsg.cmsg_level = SOL_SOCKET;
-		ctl.cmsg.cmsg_type = SCM_RIGHTS;
-		msg.msg_control = (caddr_t) &ctl;
-		msg.msg_controllen = ctl.cmsg.cmsg_len;
+		cmsgsize = CMSG_LEN(sizeof(*files));
+
+		ctl = malloc(cmsgsize);
+		if (ctl == NULL) {
+			syslog(LOG_WARNING, "malloc control message: %m");
+			return;
+		}
+		memset(ctl, 0, cmsgsize);
+
+		cmsg = (struct cmsghdr *) ctl;
+		cmsg->cmsg_len = CMSG_LEN(sizeof(int));
+		cmsg->cmsg_level = SOL_SOCKET;
+		cmsg->cmsg_type = SCM_RIGHTS;
+
+		files = (int *)CMSG_DATA(cmsg);
+		files[0] = fd;
+
+		msg.msg_control = ctl;
+		msg.msg_controllen = cmsgsize;
 	}
 
 	/*
 	 * Send to kernel...
 	 */
 	if ((n = sendmsg(so, &msg, MSG_EOR)) < 0)
-		syslog(LOG_ERR, "send: %m");
+		syslog(LOG_WARNING, "send: %m");
 #ifdef DEBUG
 	fprintf(stderr, "sent %d bytes\n", n);
 #endif
 	sleep(1);	/*XXX*/
 #ifdef notdef
 	if (shutdown(so, 2) < 0)
-		syslog(LOG_ERR, "shutdown: %m");
+		syslog(LOG_WARNING, "shutdown: %m");
 #endif
 	/*
-	 * Throw away the open file descriptor
+	 * Throw away the open file descriptor and control
+	 * message buffer.
 	 */
-	(void) close(fd);
+	if (fd >= 0)
+		(void) close(fd);
+	if (ctl != NULL)
+		free(ctl);
 }
 
 void
-activate(q, so)
-	qelem *q;
-	int so;
+activate(qelem *q, int so)
 {
 	struct portal_cred pcred;
 	char key[MAXPATHLEN+1];
@@ -194,7 +191,7 @@ activate(q, so)
 	 */
 	error = get_request(so, &pcred, key, sizeof(key));
 	if (error) {
-		syslog(LOG_ERR, "activate: recvmsg: %m");
+		syslog(LOG_WARNING, "activate: recvmsg: %m");
 		goto drop;
 	}
 
@@ -212,7 +209,7 @@ activate(q, so)
 	 * otherwise simply return ENOENT.
 	 */
 	if (v) {
-		error = activate_argv(&pcred, key, v, so, &fd);
+		error = activate_argv(&pcred, key, v, &fd);
 		if (error)
 			fd = -1;
 		else if (fd < 0)

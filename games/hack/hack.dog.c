@@ -1,12 +1,69 @@
-/*	$NetBSD: hack.dog.c,v 1.4 1997/10/19 16:57:50 christos Exp $	*/
+/*	$NetBSD: hack.dog.c,v 1.9 2008/01/28 06:55:41 dholland Exp $	*/
 
 /*
- * Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1985.
+ * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
+ * Amsterdam
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met:
+ *
+ * - Redistributions of source code must retain the above copyright notice,
+ * this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above copyright
+ * notice, this list of conditions and the following disclaimer in the
+ * documentation and/or other materials provided with the distribution.
+ *
+ * - Neither the name of the Stichting Centrum voor Wiskunde en
+ * Informatica, nor the names of its contributors may be used to endorse or
+ * promote products derived from this software without specific prior
+ * written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
+ * IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+ * PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER
+ * OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+ * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
+ * Copyright (c) 1982 Jay Fenlason <hack@gnu.org>
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+ * AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL
+ * THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.dog.c,v 1.4 1997/10/19 16:57:50 christos Exp $");
+__RCSID("$NetBSD: hack.dog.c,v 1.9 2008/01/28 06:55:41 dholland Exp $");
 #endif				/* not lint */
 
 #include "hack.h"
@@ -15,11 +72,11 @@ __RCSID("$NetBSD: hack.dog.c,v 1.4 1997/10/19 16:57:50 christos Exp $");
 #include "def.edog.h"
 #include "def.mkroom.h"
 
-struct permonst li_dog =
+const struct permonst li_dog =
 {"little dog", 'd', 2, 18, 6, 1, 6, sizeof(struct edog)};
-struct permonst dog =
+const struct permonst dog =
 {"dog", 'd', 4, 16, 5, 1, 6, sizeof(struct edog)};
-struct permonst la_dog =
+const struct permonst la_dog =
 {"large dog", 'd', 6, 15, 4, 2, 4, sizeof(struct edog)};
 
 
@@ -131,13 +188,12 @@ dogfood(obj)
 
 /* return 0 (no move), 1 (move) or 2 (dead) */
 int
-dog_move(mtmp, after)
-	struct monst   *mtmp;
+dog_move(struct monst *mtmp, int after)
 {
 	int             nx, ny, omx, omy, appr, nearer, j;
 	int             udist, chi = 0, i, whappr;
 	struct monst   *mtmp2;
-	struct permonst *mdat = mtmp->data;
+	const struct permonst *mdat = mtmp->data;
 	struct edog    *edog = EDOG(mtmp);
 	struct obj     *obj;
 	struct trap    *trap;
@@ -183,7 +239,7 @@ dog_move(mtmp, after)
 	/* Note: if apport == 1 then our behaviour is independent of udist */
 	if (mtmp->minvent) {
 		if (!rn2(udist) || !rn2((int) edog->apport))
-			if (rn2(10) < edog->apport) {
+			if ((unsigned) rn2(10) < edog->apport) {
 				relobj(mtmp, (int) mtmp->minvis);
 				if (edog->apport > 1)
 					edog->apport--;
@@ -199,7 +255,7 @@ dog_move(mtmp, after)
 					goto eatobj;
 				}
 				if (obj->owt < 10 * mtmp->data->mlevel)
-					if (rn2(20) < edog->apport + 3)
+					if ((unsigned) rn2(20) < edog->apport + 3)
 						if (rn2(udist) || !rn2((int) edog->apport)) {
 							freeobj(obj);
 							unpobj(obj);
@@ -235,7 +291,7 @@ dog_move(mtmp, after)
 			}
 		} else if (gtyp == UNDEF && dogroom >= 0 &&
 			   uroom == dogroom &&
-			   !mtmp->minvent && edog->apport > rn2(8)) {
+			   !mtmp->minvent && edog->apport > (unsigned)rn2(8)) {
 			gx = obj->ox;
 			gy = obj->oy;
 			gtyp = APPORT;
@@ -310,6 +366,8 @@ dog_move(mtmp, after)
 		ny = poss[i].y;
 		if (info[i] & ALLOW_M) {
 			mtmp2 = m_at(nx, ny);
+			if (mtmp2 == NULL)
+				panic("error in dog_move");
 			if (mtmp2->data->mlevel >= mdat->mlevel + 2 ||
 			    mtmp2->data->mlet == 'c')
 				continue;

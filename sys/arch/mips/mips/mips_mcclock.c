@@ -1,4 +1,4 @@
-/* $NetBSD: mips_mcclock.c,v 1.9 2000/03/28 02:58:49 simonb Exp $ */
+/* $NetBSD: mips_mcclock.c,v 1.16 2008/01/03 22:35:27 joerg Exp $ */
 
 /*
  * Copyright (c) 1997 Jonathan Stone (hereinafter referred to as the author)
@@ -34,25 +34,25 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: mips_mcclock.c,v 1.9 2000/03/28 02:58:49 simonb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mips_mcclock.c,v 1.16 2008/01/03 22:35:27 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
+#include <dev/clock_subr.h>
 #include <dev/ic/mc146818reg.h>
 #include <dev/dec/mcclockvar.h>
 #include <dev/dec/mcclock_pad32.h>
 
-#include <mips/cpu.h>			/* CPUISMIPS3 */
+#include <mips/cpu.h>			/* MIPS_HAS_CLOCK */
+#include <mips/locore.h>		/* mips_cp0_cause_read() */
 #include <mips/mips/mips_mcclock.h>
 
 
-unsigned mips_mc_cpuspeed __P((void *, int, int (*)(void *, int)));
-int mips_mcclock_tickloop __P((void *, int));
-unsigned mips_mcclock_to_mhz __P((unsigned iters));
-
-u_int mips_read_causereg __P((void));
+unsigned mips_mc_cpuspeed(void *, int, int (*)(void *, int));
+int mips_mcclock_tickloop(void *, int);
+unsigned mips_mcclock_to_mhz(unsigned iters);
 
 
 /*
@@ -82,8 +82,7 @@ unsigned
 mips_mc_cpuspeed(mcclock_addr, clockmask, tickpollfn)
 	void *mcclock_addr;
 	int clockmask;
-	int (*tickpollfn) __P((void *mcclock_addr,
-			     int clockmask));
+	int (*tickpollfn)(void *mcclock_addr, int clockmask);
 {
 	int s;
 	int iters = 0;
@@ -96,7 +95,7 @@ mips_mc_cpuspeed(mcclock_addr, clockmask, tickpollfn)
 	s = splhigh();
 
 	/*
-	 * Enable periodic interrupst on the mc146818,
+	 * Enable periodic interrupts on the mc146818,
 	 * and set it up for 256Hz (4ms) interrupts.
 	 * Save any state we change so we can restore it on exit.
 	 */
@@ -148,7 +147,7 @@ mips_mcclock_tickloop(mcclock_addr, clockmask)
 	void *mcclock_addr;
 	int clockmask;
 {
-	int iters = 0;
+	int iters;
 	volatile int junk;
 	volatile struct mcclock_pad32_clockdatum *clk = mcclock_addr;
 
@@ -157,7 +156,7 @@ mips_mcclock_tickloop(mcclock_addr, clockmask)
 	junk++;	junk++;	junk++;	junk++;
 
 	/* Poll clock interrupt, waiting for next tick to happen. */
-	while ((mips_read_causereg() & clockmask) == 0)
+	while ((mips_cp0_cause_read() & clockmask) == 0)
 		;
 
 	/* Ack the mc146818 interrupt caused by starting tick. */
@@ -166,19 +165,12 @@ mips_mcclock_tickloop(mcclock_addr, clockmask)
 	junk++;	junk++;	junk++;	junk++;
 
 	/* Count loops until next tick-interrupt request occurs (4ms). */
-	if (CPUISMIPS3) {
-		while ((mips_read_causereg() & clockmask) == 0) {
-			__asm __volatile ("nop; nop; nop; nop");
-			iters++;
-		}
-	} else {
-		while ((mips_read_causereg() & clockmask) == 0) {
-			__asm __volatile ("nop; nop;");
-			iters++;
-		}
-	}
+	if (MIPS_HAS_CLOCK)
+		iters = mips_mcclock_loop_with_clock(clockmask);
+	else
+		iters = mips_mcclock_loop_without_clock(clockmask);
 
-	/* Ack the  interrupt from the just-gone-off tick */
+	/* Ack the interrupt from the just-gone-off tick */
 	junk = clk[MC_REGC].datum;
 
 	return (iters);
@@ -206,11 +198,11 @@ mips_mcclock_to_mhz(unsigned iters)
 	 *
 	 * r3000-core DECstations values fit to:
 	 *     iters per 4ms tick = 425 * MHz)
-	 *     instructions per mhz = kHz * 575
-	 * with about 2 Mhz slop to allow for variation.
+	 *     instructions per MHz = kHz * 575
+	 * with about 2 MHz slop to allow for variation.
 	 */
 
-#ifdef MIPS3
+#ifdef MIPS3_PLUS
 	if (CPUISMIPS3) {
 		if (iters < 18100) {
 			/* error */
@@ -232,7 +224,7 @@ mips_mcclock_to_mhz(unsigned iters)
 			cpuspeed = 38;	/* XXX */
 		}
 	}
-#endif /* MIPS3 */
+#endif /* MIPS3_PLUS */
 
 #ifdef MIPS1
 	if (!CPUISMIPS3) {

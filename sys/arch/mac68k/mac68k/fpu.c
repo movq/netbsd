@@ -1,4 +1,4 @@
-/*	$NetBSD: fpu.c,v 1.24 1998/04/20 06:46:16 scottr Exp $	*/
+/*	$NetBSD: fpu.c,v 1.38 2008/04/28 20:23:27 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,46 +29,30 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: fpu.c,v 1.38 2008/04/28 20:23:27 martin Exp $");
+
+#include "opt_fpu_emulate.h"
+
 /*
  * Floating Point Unit (MC68881/882/040)
  * Probe for the FPU at autoconfig time.
  */
 
 #include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/time.h>
-#include <sys/kernel.h>
-#include <sys/device.h>
 
-#include <machine/psl.h>
 #include <machine/cpu.h>
 #include <machine/frame.h>
 
 /*
  * FPU type; emulator uses FPU_NONE
  */
-int     fputype;
 
 extern label_t *nofault;
 
-static int  fpu_match __P((struct device *, struct cfdata *, void *));
-static void fpu_attach __P((struct device *, struct device *, void *));
-static int  fpu_probe __P((void));
+static int  fpu_probe(void);
 
-struct cfattach fpu_ca = {
-	sizeof(struct device), fpu_match, fpu_attach
-};
-
-static int
-fpu_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
-{
-	return 1;
-}
-
-static char *fpu_descr[] = {
+static const char *fpu_descr[] = {
 #ifdef	FPU_EMULATE
 	"emulator", 		/* 0 */
 #else
@@ -87,25 +64,27 @@ static char *fpu_descr[] = {
 	"mc68060",			/* 4 */
 	"unknown" };
 
-static void
-fpu_attach(parent, self, args)
-	struct device *parent;
-	struct device *self;
-	void *args;
+void
+initfpu(void)
 {
-	char *descr;
+	const char *descr;
 
 	fputype = fpu_probe();
+
+	/* Generate a reference FPU idle frame. */
+	if (fputype != FPU_NONE)
+		m68k_make_fpu_idle_frame();
+
 	if ((0 <= fputype) && (fputype <= 3))
 		descr = fpu_descr[fputype];
 	else
 		descr = "unknown type";
 
-	printf(" (%s)\n", descr);
+	printf("fpu: %s\n", descr);
 }
 
 static int
-fpu_probe()
+fpu_probe(void)
 {
 	/*
 	 * A 68881 idle frame is 28 bytes and a 68882's is 60 bytes.
@@ -127,7 +106,7 @@ fpu_probe()
 	 * state, so we can determine which we have by
 	 * examining the size of the FP state frame
 	 */
-	asm("fnop");
+	__asm("fnop");
 
 	nofault = 0;
 
@@ -143,7 +122,7 @@ fpu_probe()
 	 * have if this will.  We save the state in order to get the
 	 * size of the frame.
 	 */
-	asm("movl %0, a0; fsave a0@" : : "a" (fpframe) : "a0" );
+	__asm("movl %0,%%a0; fsave %%a0@" : : "a" (fpframe) : "a0");
 
 	b = *((u_char *)fpframe + 1);
 

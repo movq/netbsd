@@ -1,4 +1,4 @@
-/*	$NetBSD: msvar.h,v 1.1 1999/05/14 07:07:16 mrg Exp $	*/
+/*	$NetBSD: msvar.h,v 1.8 2008/03/29 19:15:36 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -21,11 +21,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -57,14 +53,9 @@
 #define	MS_TX_RING_SIZE	16
 #define MS_TX_RING_MASK (MS_TX_RING_SIZE-1)
 /*
- * Keyboard serial line speed is fixed at 1200 bps; mouse serial line
- * speed defaults to 1200 bps.
+ * mouse serial line speed defaults to 1200 bps.
  */
-#ifdef	SUN_MS_BPS
-#define	MS_BPS	SUN_MS_BPS
-#else
-#define MS_BPS 	1200
-#endif
+#define MS_DEFAULT_BPS 	1200
 
 /*
  * Mouse state.  A Mouse Systems mouse is a fairly simple device,
@@ -78,8 +69,21 @@
  * us sync up with the mouse after an error.)
  */
 struct ms_softc {
-	struct	device ms_dev;		/* required first: base device */
-	struct	zs_chanstate *ms_cs;
+	device_t ms_dev;		/* required first: base device */
+	union {
+		void *msu_priv;
+		struct zs_chanstate *msu_cs;
+	} ms_u;
+#define ms_priv	ms_u.msu_priv
+#define ms_cs	ms_u.msu_cs
+
+	/*
+	 * The deviopen and deviclose routines are provided
+	 * by the lower level driver and used as a back door
+	 * when opening and closing the internal device.
+	 */
+	int	(*ms_deviopen)	(struct device *, int);
+	int	(*ms_deviclose)	(struct device *, int);
 
 	/* Flags to communicate with ms_softintr() */
 	volatile int ms_intr_flags;
@@ -108,7 +112,9 @@ struct ms_softc {
 	 */
 	volatile int ms_ready;		/* event queue is ready */
 	struct	evvar ms_events;	/* event queue state */
+
+	struct device *ms_wsmousedev;
 };
 
 /* front-end call back for mouse input */
-void ms_input __P((struct ms_softc *, int c));
+void ms_input(struct ms_softc *, int c);

@@ -1,4 +1,4 @@
-/*	$NetBSD: alias.h,v 1.4 1995/05/11 21:28:42 christos Exp $	*/
+/*	$NetBSD: alias.h,v 1.6 2003/08/07 09:05:29 agc Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -47,7 +43,8 @@ struct alias {
 	int flag;
 };
 
-struct alias *lookupalias __P((char *, int));
-int aliascmd __P((int, char **));
-int unaliascmd __P((int, char **));
-void rmaliases __P((void));
+struct alias *lookupalias(char *, int);
+char *get_alias_text(char *);
+int aliascmd(int, char **);
+int unaliascmd(int, char **);
+void rmaliases(void);

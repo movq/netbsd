@@ -1,8 +1,3 @@
-/*	$NetBSD: psl.h,v 1.1.1.1 1995/03/26 07:12:06 leo Exp $	*/
-
-#ifndef _MACHINE_PSL_H_
-#define _MACHINE_PSL_H_
+/*	$NetBSD: psl.h,v 1.3 2005/12/11 12:16:59 christos Exp $	*/
 
 #include <m68k/psl.h>
-
-#endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: natm.h,v 1.2 1997/07/19 22:51:13 chuck Exp $	*/
+/*	$NetBSD: natm.h,v 1.9 2005/12/11 12:25:16 christos Exp $	*/
 
 /*
  *
@@ -32,6 +32,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifndef _NETNATM_NATM_H_
+#define _NETNATM_NATM_H_
+
 /*
  * natm.h: native mode atm
  */
@@ -42,7 +45,7 @@
  */
 
 #define PROTO_NATMAAL0		1
-#define PROTO_NATMAAL5		2	
+#define PROTO_NATMAAL5		2
 
 /*
  * sockaddr_natm
@@ -100,8 +103,8 @@ struct natmpcb {
 #define NPCB_DESTROY	1		/* destroy and be free */
 
 /*
- * NPCB_RAWCC is a hack which applies to connections in 'raw' mode.   it 
- * is used to override the sbspace() macro when you *really* don't want 
+ * NPCB_RAWCC is a hack which applies to connections in 'raw' mode.   it
+ * is used to override the sbspace() macro when you *really* don't want
  * to drop rcv data.   the recv socket buffer size is raised to this value.
  *
  * XXX: socket buffering needs to be looked at.
@@ -113,7 +116,7 @@ LIST_HEAD(npcblist, natmpcb);
 
 /* global data structures */
 
-struct npcblist natm_pcbs;		/* global list of pcbs */
+extern	struct npcblist natm_pcbs;	/* global list of pcbs */
 extern	struct ifqueue natmintrq;	/* natm packet input queue */
 #define	NATM_STAT
 #ifdef NATM_STAT
@@ -127,7 +130,7 @@ extern	u_int natm_sookcnt,
 struct atm_rawioctl {
   struct natmpcb *npcb;
   int rawvalue;
-}; 
+};
 #define SIOCXRAWATM     _IOWR('a', 125, struct atm_rawioctl)
 
 /* external functions */
@@ -140,7 +143,7 @@ struct	natmpcb *npcb_add __P((struct natmpcb *, struct ifnet *, int, int));
 /* natm.c */
 #if defined(__NetBSD__) || defined(__OpenBSD__)
 int	natm_usrreq __P((struct socket *, int, struct mbuf *,
-                             struct mbuf *, struct mbuf *, struct proc *));
+                             struct mbuf *, struct mbuf *, struct lwp *));
 #elif defined(__FreeBSD__)
 int	natm_usrreq __P((struct socket *, int, struct mbuf *,
                              struct mbuf *, struct mbuf *));
@@ -150,3 +153,5 @@ int	natm5_sysctl __P((int *, u_int, void *, size_t *, void *, size_t));
 void	natmintr __P((void));
 
 #endif
+
+#endif /* !_NETNATM_NATM_H_ */

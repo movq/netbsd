@@ -1,11 +1,10 @@
-/*	$NetBSD: slinux.c,v 1.1.1.1 1999/12/11 22:24:10 veego Exp $	*/
+/*	$NetBSD: slinux.c,v 1.3 2004/03/28 09:00:56 martti Exp $	*/
 
 /*
  * (C)opyright 1992-1998 Darren Reed. (from tcplog)
  *
- * Redistribution and use in source and binary forms are permitted
- * provided that this notice is preserved and due credit is given
- * to the original author and the contributors.
+ * See the IPFILTER.LICENCE file for details on licencing.
+ *
  */
 
 #include <stdio.h>
@@ -31,7 +30,7 @@
 
 #if !defined(lint)
 static const char sccsid[] = "@(#)slinux.c	1.2 8/25/95";
-static const char rcsid[] = "@(#)Id: slinux.c,v 2.1 1999/08/04 17:31:14 darrenr Exp";
+static const char rcsid[] = "@(#)Id: slinux.c,v 2.3 2001/06/09 17:09:26 darrenr Exp";
 #endif
 
 #define	CHUNKSIZE	8192
@@ -46,9 +45,9 @@ static	int	timeout;
 static	char	*eth_dev = NULL;
 
 
-int	initdevice(dev, sport, spare)
+int	initdevice(dev, spare)
 char	*dev;
-int	sport, spare;
+int	spare;
 {
 	int fd;
 

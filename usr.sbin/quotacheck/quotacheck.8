@@ -1,4 +1,4 @@
-.\"	$NetBSD: quotacheck.8,v 1.8 1999/03/30 23:58:46 abs Exp $
+.\"	$NetBSD: quotacheck.8,v 1.17 2004/01/05 18:46:44 wiz Exp $
 .\"
 .\" Copyright (c) 1983, 1990, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -14,11 +14,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -36,7 +32,7 @@
 .\"
 .\"     @(#)quotacheck.8	8.1 (Berkeley) 6/5/93
 .\"
-.Dd June 5, 1993
+.Dd January 5, 2004
 .Dt QUOTACHECK 8
 .Os
 .Sh NAME
@@ -44,14 +40,11 @@
 .Nd filesystem quota consistency checker
 .Sh SYNOPSIS
 .Nm
-.Op Fl g
-.Op Fl u
-.Op Fl v
+.Op Fl gquv
 .Ar filesystem Ar ...
-.Nm ""
-.Op Fl g
-.Op Fl u
-.Op Fl v
+.Nm
+.Op Fl gquv
+.Op Fl l Ar maxparallel
 .Fl a
 .Sh DESCRIPTION
 .Nm
@@ -78,17 +71,41 @@ to be read-write with disk quotas.
 By default only the types of quotas listed in
 .Pa /etc/fstab
 are checked.
+See also
+.Fl l .
 .It Fl g
 Only group quotas listed in
 .Pa /etc/fstab
 are to be checked.
+See also
+.Fl u .
+.It Fl l Ar maxparallel
+Limit the number of parallel checks to the number specified in
+the following argument.
+By default, the limit is the number of disks, running one process
+per disk.
+If a smaller limit is given, the disks are checked round-robin,
+one file system at a time.
+This option is only valid with
+.Fl a .
+.It Fl q
+.Nm
+runs more quickly,
+particularly on systems with sparse user id usage,
+but fails to correct quotas for users [groups]
+not in the system user [group] database,
+and owning no files on the filesystem,
+if the quota file incorrectly believes that they do.
 .It Fl u
 Only user quotas listed in
 .Pa /etc/fstab
 are to be checked.
+See also
+.Fl g .
 .It Fl v
 .Nm
-reports discrepancies between the
+is more verbose,
+and reports corrected discrepancies between the
 calculated and recorded disk quotas.
 .El
 .Pp
@@ -116,7 +133,7 @@ and
 which are located at the root of the associated file system.
 These defaults may be overridden in
 .Pa /etc/fstab .
-If a file is not present, 
+If a file is not present,
 .Nm
 will create it.
 .Pp
@@ -135,6 +152,18 @@ Thus, the filesystems
 checked should be quiescent while
 .Nm
 is running.
+.Pp
+If
+.Nm
+receives a
+.Dv SIGINFO
+signal
+(see the
+.Sy status
+argument for
+.Xr stty 1 ) ,
+a line will be written to the standard error output indicating
+the name of the device currently being checked and progress information.
 .Sh FILES
 .Bl -tag -width quota.group -compact
 .It Pa quota.user

@@ -1,4 +1,4 @@
-/*	$NetBSD: iso_chksum.c,v 1.13 2000/03/30 13:10:11 augustss Exp $	*/
+/*	$NetBSD: iso_chksum.c,v 1.23 2007/03/04 06:03:32 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -78,6 +74,9 @@ SOFTWARE.
  * adjacent, but may be physically located in separate mbufs.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(1, "$NetBSD: iso_chksum.c,v 1.23 2007/03/04 06:03:32 christos Exp $");
+
 #include "opt_iso.h"
 
 #ifdef ISO
@@ -85,6 +84,9 @@ SOFTWARE.
 #include <sys/systm.h>
 #include <sys/mbuf.h>
 #include <sys/socket.h>
+
+#include <uvm/uvm_extern.h>
+
 #include <net/if.h>
 #include <netiso/argo_debug.h>
 #include <netiso/iso.h>
@@ -109,9 +111,7 @@ SOFTWARE.
  *		 isn't worth it.
  */
 int
-iso_check_csum(m, len)
-	struct mbuf    *m;
-	int             len;
+iso_check_csum(struct mbuf *m, int len)
 {
 	u_char *p = mtod(m, u_char *);
 	u_long c0 = 0, c1 = 0;
@@ -185,10 +185,10 @@ iso_check_csum(m, len)
  */
 
 void
-iso_gen_csum(m, n, l)
-	struct mbuf    *m;
-	int             n;	/* offset of 2 checksum bytes */
-	int             l;
+iso_gen_csum(
+	struct mbuf    *m,
+	int             n,	/* offset of 2 checksum bytes */
+	int             l)
 {
 	u_char *p = mtod(m, u_char *);
 	int    c0 = 0, c1 = 0;
@@ -201,13 +201,13 @@ iso_gen_csum(m, n, l)
 
 #ifdef ARGO_DEBUG
 	if (argo_debug[D_CHKSUM]) {
-		printf("enter gen csum m %p n 0x%x l 0x%x\n", 
+		printf("enter gen csum m %p n 0x%x l 0x%x\n",
 		    m, n - 1, l);
 	}
 #endif
 
 	while (i < l) {
-		len = min(m->m_len, NBPG);
+		len = min(m->m_len, PAGE_SIZE);
 		/* RAH: don't cksum more than l bytes */
 		len = min(len, l - i);
 
@@ -267,10 +267,12 @@ iso_gen_csum(m, n, l)
 #endif
 
 	c1 = (((c0 * (l - n)) - c1) % 255);
-	*xloc = (u_char) ((c1 < 0) ? c1 + 255 : c1);
+	if (xloc)
+		*xloc = (u_char) ((c1 < 0) ? c1 + 255 : c1);
 
 	c1 = (-(int) (c1 + c0)) % 255;
-	*yloc = (u_char) (c1 < 0 ? c1 + 255 : c1);
+	if (yloc)
+		*yloc = (u_char) (c1 < 0 ? c1 + 255 : c1);
 
 #ifdef ARGO_DEBUG
 	if (argo_debug[D_CHKSUM]) {
@@ -293,8 +295,7 @@ iso_gen_csum(m, n, l)
  */
 
 int
-m_datalen(m)
-	struct mbuf *m;
+m_datalen(struct mbuf *m)
 {
 	int    datalen;
 
@@ -304,11 +305,10 @@ m_datalen(m)
 }
 
 int
-m_compress(in, out)
-	struct mbuf *in, **out;
+m_compress(struct mbuf *in, struct mbuf **out)
 {
 	int    datalen = 0;
-	int             s = splimp();
+	int             s = splnet();
 
 	if (in->m_next == NULL) {
 		*out = in;
@@ -332,7 +332,7 @@ m_compress(in, out)
 		return -1;
 	}
 	(*out)->m_len = 0;
-	(*out)->m_act = NULL;
+	(*out)->m_nextpkt = NULL;
 
 	while (in) {
 #ifdef ARGO_DEBUG
@@ -363,8 +363,8 @@ m_compress(in, out)
 				printf("m_compress copying len %d\n", len);
 			}
 #endif
-			bcopy(mtod(in, caddr_t), mtod((*out), caddr_t) + (*out)->m_len,
-			      (unsigned) len);
+			memcpy(mtod((*out), char *) + (*out)->m_len,
+			    mtod(in, void *), (unsigned) len);
 
 			(*out)->m_len += len;
 			in->m_len -= len;
@@ -383,7 +383,7 @@ m_compress(in, out)
 				return -1;
 			}
 			(*out)->m_len = 0;
-			(*out)->m_act = NULL;
+			(*out)->m_nextpkt = NULL;
 			*out = (*out)->m_next;
 		}
 	}

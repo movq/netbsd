@@ -1,4 +1,4 @@
-/*	$NetBSD: printf.c,v 1.8 1999/09/20 04:39:31 lukem Exp $	*/
+/*	$NetBSD: printf.c,v 1.11 2003/08/07 16:43:29 agc Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,37 +37,22 @@
 #if 0
 static char sccsid[] = "@(#)printf.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: printf.c,v 1.8 1999/09/20 04:39:31 lukem Exp $");
+__RCSID("$NetBSD: printf.c,v 1.11 2003/08/07 16:43:29 agc Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
 #include <assert.h>
 #include <errno.h>
-#include <stdio.h>
-#if __STDC__
 #include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
+#include <stdio.h>
 
 int
-#if __STDC__
 printf(char const *fmt, ...)
-#else
-printf(fmt, va_alist)
-	char *fmt;
-	va_dcl
-#endif
 {
 	int ret;
 	va_list ap;
 
-
-#if __STDC__
 	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
 	ret = vfprintf(stdout, fmt, ap);
 	va_end(ap);
 	return (ret);

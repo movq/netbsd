@@ -1,5 +1,5 @@
 #!/bin/sh -
-#	$NetBSD: rot13.sh,v 1.2 1995/03/21 15:08:23 cgd Exp $
+#	$NetBSD: rot13.sh,v 1.7 2005/04/09 02:02:15 atatat Exp $
 #
 # Copyright (c) 1992, 1993
 #	The Regents of the University of California.  All rights reserved.
@@ -35,4 +35,5 @@
 #	@(#)rot13.sh	8.1 (Berkeley) 5/31/93
 #
 
-caesar 13 $*
+games="$(dirname $0)"
+exec "$games/caesar" 13 "$@"

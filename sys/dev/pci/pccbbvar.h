@@ -1,4 +1,4 @@
-/*	$NetBSD: pccbbvar.h,v 1.12 2000/03/23 07:01:40 thorpej Exp $	*/
+/*	$NetBSD: pccbbvar.h,v 1.37 2008/06/26 20:57:10 drochner Exp $	*/
 /*
  * Copyright (c) 1999 HAYAKAWA Koichi.  All rights reserved.
  *
@@ -32,7 +32,6 @@
 /* require sys/queue.h */
 /* require sys/callout.h */
 /* require dev/ic/i82365reg.h */
-/* require dev/ic/i82365var.h */
 
 #ifndef _DEV_PCI_PCCBBVAR_H_
 #define	_DEV_PCI_PCCBBVAR_H_
@@ -43,54 +42,18 @@
 /* Chipset ID */
 #define	CB_UNKNOWN	0	/* NOT Cardbus-PCI bridge */
 #define	CB_TI113X	1	/* TI PCI1130/1131 */
-#define	CB_TI12XX	2	/* TI PCI1250/1220 */
+#define	CB_TI12XX	2	/* TI PCI12xx/14xx/44xx/15xx/45xx */
 #define	CB_RX5C47X	3	/* RICOH RX5C475/476/477 */
 #define	CB_RX5C46X	4	/* RICOH RX5C465/466/467 */
 #define	CB_TOPIC95	5	/* Toshiba ToPIC95 */
 #define	CB_TOPIC95B	6	/* Toshiba ToPIC95B */
 #define	CB_TOPIC97	7	/* Toshiba ToPIC97 */
 #define	CB_CIRRUS	8	/* Cirrus Logic CL-PD683X */
-#define	CB_CHIPS_LAST	9	/* Sentinel */
+#define	CB_TI125X	9	/* TI PCI1250/1251(B)/1450 */
+#define	CB_TI1420	10	/* TI PCI1420 */
+#define	CB_O2MICRO	11	/* O2 Micro 67xx/68xx/69xx */
 
-#if 0
-static char *cb_chipset_name[CB_CHIPS_LAST] = {
-	"unknown", "TI 113X", "TI 12XX", "RF5C47X", "RF5C46X", "ToPIC95",
-	"ToPIC95B", "ToPIC97", "CL-PD 683X",
-};
-#endif
-
-struct pccbb_softc;
 struct pccbb_intrhand_list;
-
-
-struct cbb_pcic_handle {
-	struct device *ph_parent;
-	bus_space_tag_t ph_base_t;
-	bus_space_handle_t ph_base_h;
-	u_int8_t (*ph_read) __P((struct cbb_pcic_handle *, int));
-	void (*ph_write) __P((struct cbb_pcic_handle *, int, u_int8_t));
-	int sock;
-
-	int vendor;
-	int flags;
-	int memalloc;
-	struct {
-		bus_addr_t addr;
-		bus_size_t size;
-		long offset;
-		int kind;
-	} mem[PCIC_MEM_WINS];
-	int ioalloc;
-	struct {
-		bus_addr_t addr;
-		bus_size_t size;
-		int width;
-	} io[PCIC_IO_WINS];
-	int ih_irq;
-	struct device *pcmcia;
-
-	int shutdown;
-};
 
 struct pccbb_win_chain {
 	bus_addr_t wc_start;		/* Caution: region [start, end], */
@@ -103,8 +66,26 @@ struct pccbb_win_chain {
 
 TAILQ_HEAD(pccbb_win_chain_head, pccbb_win_chain);
 
+struct pccbb_softc; /* forward */
+struct pcic_handle {
+	/* extracted from i82365var.h */
+	int     memalloc;
+	struct {
+		bus_addr_t      addr;
+		bus_size_t      size;
+		long            offset;
+		int             kind;
+	} mem[PCIC_MEM_WINS];
+	int	ioalloc;
+	struct {
+		bus_addr_t      addr;
+		bus_size_t      size;
+		int             width;
+	} io[PCIC_IO_WINS];
+};
+
 struct pccbb_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	bus_space_tag_t sc_iot;
 	bus_space_tag_t sc_memt;
 	bus_dma_tag_t sc_dmat;
@@ -116,19 +97,19 @@ struct pccbb_softc {
 
 	bus_space_tag_t sc_base_memt;
 	bus_space_handle_t sc_base_memh;
+	bus_size_t sc_base_size;
 
 	struct callout sc_insert_ch;
 
 	void *sc_ih;			/* interrupt handler */
-	int sc_intrline;		/* interrupt line */
-	pcitag_t sc_intrtag;		/* copy of pa->pa_intrtag */
-	pci_intr_pin_t sc_intrpin;	/* copy of pa->pa_intrpin */
-	int sc_function;
+	struct pci_attach_args sc_pa;	/* copy of our attach args */
 	u_int32_t sc_flags;
 #define	CBB_CARDEXIST	0x01
 #define	CBB_INSERTING	0x01000000
 #define	CBB_16BITCARD	0x04
 #define	CBB_32BITCARD	0x08
+#define	CBB_MEMHMAPPED	0x02000000
+#define	CBB_SPECMAPPED	0x04000000	/* "special" mapping */
 
 	pci_chipset_tag_t sc_pc;
 	pcitag_t sc_tag;
@@ -147,17 +128,14 @@ struct pccbb_softc {
 
 	/* pcmcia stuff */
 	struct pcic_handle sc_pcmcia_h;
-	pcmcia_chipset_tag_t sc_pct;
 	int sc_pcmcia_flags;
 #define	PCCBB_PCMCIA_IO_RELOC	0x01	/* IO addr relocatable stuff exists */
 #define	PCCBB_PCMCIA_MEM_32	0x02	/* 32-bit memory address ready */
-#define	PCCBB_PCMCIA_16BITONLY	0x04	/* 32-bit mode disable */
 
-	struct proc *sc_event_thread;
-	SIMPLEQ_HEAD(, pcic_event) sc_events;
+	volatile int sc_pwrcycle;
 
 	/* interrupt handler list on the bridge */
-	struct pccbb_intrhand_list *sc_pil;
+	LIST_HEAD(, pccbb_intrhand_list) sc_pil;
 	int sc_pil_intr_enable;	/* can i call intr handler for child device? */
 };
 
@@ -167,9 +145,13 @@ struct pccbb_softc {
  */
 
 struct pccbb_intrhand_list {
-	int (*pil_func) __P((void *));
+	int (*pil_func)(void *);
 	void *pil_arg;
-	struct pccbb_intrhand_list *pil_next;
+	ipl_cookie_t pil_icookie;
+	LIST_ENTRY(pccbb_intrhand_list) pil_next;
 };
+
+void pccbb_intr_route(struct pccbb_softc *sc);
+
 
 #endif /* _DEV_PCI_PCCBBREG_H_ */

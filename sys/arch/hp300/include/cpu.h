@@ -1,9 +1,43 @@
-/*	$NetBSD: cpu.h,v 1.33 1999/08/10 21:08:07 thorpej Exp $	*/
+/*	$NetBSD: cpu.h,v 1.59 2008/02/27 18:26:15 xtraeme Exp $	*/
 
 /*
- * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1982, 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Systems Programming Group of the University of Utah Computer
+ * Science Department.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ * from: Utah $Hdr: cpu.h 1.16 91/03/25$
+ *
+ *	@(#)cpu.h	8.4 (Berkeley) 1/5/94
+ */
+/*
+ * Copyright (c) 1988 University of Utah.
  *
  * This code is derived from software contributed to Berkeley by
  * the Systems Programming Group of the University of Utah Computer
@@ -45,6 +79,12 @@
 #ifndef _HP300_CPU_H_
 #define	_HP300_CPU_H_
 
+#if defined(_KERNEL)
+
+#if defined(_KERNEL_OPT)
+#include "opt_lockdebug.h"
+#endif
+
 /*
  * Exported definitions unique to hp300/68k cpu support.
  */
@@ -53,20 +93,35 @@
  * Get common m68k CPU definitions.
  */
 #include <m68k/cpu.h>
+#include <machine/hp300spu.h>
 
 /*
  * Get interrupt glue.
  */
 #include <machine/intr.h>
 
+#include <sys/cpu_data.h>
+struct cpu_info {
+	struct cpu_data ci_data;	/* MI per-cpu data */
+	cpuid_t	ci_cpuid;
+	int	ci_mtx_count;
+	int	ci_mtx_oldspl;
+	int	ci_want_resched;
+};
+
+extern struct cpu_info cpu_info_store;
+
+#define	curcpu()	(&cpu_info_store)
+
 /*
  * definitions of cpu-dependent requirements
  * referenced in generic code
  */
 #define	cpu_swapin(p)			/* nothing */
-#define	cpu_wait(p)			/* nothing */
 #define	cpu_swapout(p)			/* nothing */
 #define	cpu_number()			0
+
+void	cpu_proc_fork(struct proc *, struct proc *);
 
 /*
  * Arguments to hardclock and gatherstats encapsulate the previous
@@ -80,14 +135,14 @@ struct clockframe {
 };
 
 #define	CLKF_USERMODE(framep)	(((framep)->sr & PSL_S) == 0)
-#define	CLKF_BASEPRI(framep)	(((framep)->sr & PSL_IPL) == 0)
 #define	CLKF_PC(framep)		((framep)->pc)
 #if 0
 /* We would like to do it this way... */
 #define	CLKF_INTR(framep)	(((framep)->sr & PSL_M) == 0)
 #else
 /* but until we start using PSL_M, we have to do this instead */
-#define	CLKF_INTR(framep)	(0)	/* XXX */
+#include <machine/intr.h>
+#define	CLKF_INTR(framep)	(idepth > 1)	/* XXX */
 #endif
 
 
@@ -95,24 +150,27 @@ struct clockframe {
  * Preempt the current process if in interrupt from user mode,
  * or after the current trap/syscall if in system mode.
  */
-extern int want_resched;	/* resched() was called */
-#define	need_resched()	{ want_resched++; aston(); }
+#define	cpu_need_resched(ci, flags)	\
+	do { ci->ci_want_resched = 1; aston(); } while (/* CONSTCOND */0)
 
 /*
  * Give a profiling tick to the current process when the user profiling
  * buffer pages are invalid.  On the hp300, request an ast to send us
  * through trap, marking the proc as needing a profiling tick.
  */
-#define	need_proftick(p)	{ (p)->p_flag |= P_OWEUPC; aston(); }
+#define	cpu_need_proftick(l)	\
+	do { (l)->l_flag |= LP_OWEUPC; aston(); } while (/* CONSTCOND */0)
 
 /*
  * Notify the current process (p) that it has a signal pending,
  * process as soon as possible.
  */
-#define	signotify(p)	aston()
+#define	cpu_signotify(l)	aston()
 
 extern int astpending;		/* need to trap before returning to user mode */
 #define aston() (astpending++)
+
+#endif /* _KERNEL */
 
 /*
  * CTL_MACHDEP definitions.
@@ -120,74 +178,33 @@ extern int astpending;		/* need to trap before returning to user mode */
 #define	CPU_CONSDEV		1	/* dev_t: console terminal device */
 #define	CPU_MAXID		2	/* number of valid machdep ids */
 
-#define CTL_MACHDEP_NAMES { \
-	{ 0, 0 }, \
-	{ "console_device", CTLTYPE_STRUCT }, \
-}
-
 /*
  * The rest of this should probably be moved to <machine/hp300spu.h>,
  * although some of it could probably be put into generic 68k headers.
  */
 
 #ifdef _KERNEL
-extern	char *intiobase, *intiolimit;
-extern	void (*vectab[]) __P((void));
+extern	uint8_t *intiobase, *intiolimit, *extiobase;
+extern	void (*vectab[])(void);
 
-struct frame;
 struct fpframe;
-struct pcb;
 
 /* locore.s functions */
-void	m68881_save __P((struct fpframe *));
-void	m68881_restore __P((struct fpframe *));
-void	DCIA __P((void));
-void	DCIS __P((void));
-void	DCIU __P((void));
-void	ICIA __P((void));
-void	ICPA __P((void));
-void	PCIA __P((void));
-void	TBIA __P((void));
-void	TBIS __P((vaddr_t));
-void	TBIAS __P((void));
-void	TBIAU __P((void));
-#if defined(M68040)
-void	DCFA __P((void));
-void	DCFP __P((paddr_t));
-void	DCFL __P((paddr_t));
-void	DCPL __P((paddr_t));
-void	DCPP __P((paddr_t));
-void	ICPL __P((paddr_t));
-void	ICPP __P((paddr_t));
-#endif
-int	suline __P((caddr_t, caddr_t));
-void	savectx __P((struct pcb *));
-void	switch_exit __P((struct proc *));
-void	proc_trampoline __P((void));
-void	loadustp __P((int));
+void	m68881_save(struct fpframe *);
+void	m68881_restore(struct fpframe *);
+int	suline(void *, void *);
+void	loadustp(int);
 
-void	doboot __P((void))
-	__attribute__((__noreturn__));
-void	ecacheon __P((void));
-void	ecacheoff __P((void));
+void	doboot(void) __attribute__((__noreturn__));
+void	ecacheon(void);
+void	ecacheoff(void);
 
 /* clock.c functions */
-void	hp300_calibrate_delay __P((void));
+void	hp300_calibrate_delay(void);
 
 /* machdep.c functions */
-int	badaddr __P((caddr_t));
-int	badbaddr __P((caddr_t));
-
-/* sys_machdep.c functions */
-int	cachectl1 __P((unsigned long, vaddr_t, size_t, struct proc *));
-
-/* vm_machdep.c functions */
-void	physaccess __P((caddr_t, caddr_t, int, int));
-void	physunaccess __P((caddr_t, int));
-int	kvtop __P((caddr_t));
-
-/* trap.c functions */
-void	child_return __P((void *));
+int	badaddr(void *);
+int	badbaddr(void *);
 
 /* what is this supposed to do? i.e. how is it different than startrtclock? */
 #define	enablertclock()
@@ -212,10 +229,10 @@ void	child_return __P((void *));
  * conversion between physical and kernel virtual addresses is easy.
  */
 #define	ISIIOVA(va) \
-	((char *)(va) >= intiobase && (char *)(va) < intiolimit)
-#define	IIOV(pa)	((int)(pa)-INTIOBASE+(int)intiobase)
-#define	IIOP(va)	((int)(va)-(int)intiobase+INTIOBASE)
-#define	IIOPOFF(pa)	((int)(pa)-INTIOBASE)
+	((uint8_t *)(va) >= intiobase && (uint8_t *)(va) < intiolimit)
+#define	IIOV(pa)	((paddr_t)(pa)-INTIOBASE+(vaddr_t)intiobase)
+#define	IIOP(va)	((vaddr_t)(va)-(vaddr_t)intiobase+INTIOBASE)
+#define	IIOPOFF(pa)	((paddr_t)(pa)-INTIOBASE)
 #define	IIOMAPSIZE	btoc(INTIOTOP-INTIOBASE)	/* 2mb */
 
 /*
@@ -265,5 +282,23 @@ void	child_return __P((void *));
 
 #define	MMU_FAULT	(MMU_PTF|MMU_PF|MMU_WPF|MMU_BERR)
 #define	MMU_ENAB	(MMU_UMEN|MMU_SMEN|MMU_IEN|MMU_FPE)
+
+#if defined(CACHE_HAVE_PAC) || defined(CACHE_HAVE_VAC)
+#define M68K_CACHEOPS_MACHDEP
+#endif
+
+#ifdef CACHE_HAVE_PAC
+#define M68K_CACHEOPS_MACHDEP_PCIA
+#endif
+
+#ifdef CACHE_HAVE_VAC
+#define M68K_CACHEOPS_MACHDEP_DCIA
+#define M68K_CACHEOPS_MACHDEP_DCIS
+#define M68K_CACHEOPS_MACHDEP_DCIU
+#define M68K_CACHEOPS_MACHDEP_TBIA
+#define M68K_CACHEOPS_MACHDEP_TBIS
+#define M68K_CACHEOPS_MACHDEP_TBIAS
+#define M68K_CACHEOPS_MACHDEP_TBIAU
+#endif
 
 #endif /* _HP300_CPU_H_ */

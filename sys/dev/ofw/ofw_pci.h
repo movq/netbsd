@@ -1,4 +1,4 @@
-/*	$NetBSD: ofw_pci.h,v 1.2 1999/05/05 08:09:34 tsubai Exp $	*/
+/*	$NetBSD: ofw_pci.h,v 1.7 2008/04/28 20:23:54 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -59,7 +52,7 @@
  *	phys.lo cell:	llllllll llllllll llllllll llllllll
  *
  *	n	nonrelocatable
- *	p	prefectable
+ *	p	prefetchable
  *	t	aliased below 1MB (memory) or 64k (i/o)
  *	ss	space code
  *	b	bus number
@@ -86,5 +79,23 @@
 #define	OFW_PCI_PHYS_HI_SPACE_IO	0x01000000
 #define	OFW_PCI_PHYS_HI_SPACE_MEM32	0x02000000
 #define	OFW_PCI_PHYS_HI_SPACE_MEM64	0x03000000
+
+#define OFW_PCI_PHYS_HI_BUS(hi) \
+	(((hi) & OFW_PCI_PHYS_HI_BUSMASK) >> OFW_PCI_PHYS_HI_BUSSHIFT)
+#define OFW_PCI_PHYS_HI_DEVICE(hi) \
+	(((hi) & OFW_PCI_PHYS_HI_DEVICEMASK) >> OFW_PCI_PHYS_HI_DEVICESHIFT)
+#define OFW_PCI_PHYS_HI_FUNCTION(hi) \
+	(((hi) & OFW_PCI_PHYS_HI_FUNCTIONMASK) >> OFW_PCI_PHYS_HI_FUNCTIONSHIFT)
+
+/*
+ * This has the 3 32bit cell values, plus 2 more to make up a 64-bit size.
+ */
+struct ofw_pci_register {
+	u_int32_t	phys_hi;
+	u_int32_t	phys_mid;
+	u_int32_t	phys_lo;
+	u_int32_t	size_hi;
+	u_int32_t	size_lo;
+};
 
 #endif /* _DEV_OFW_OFW_PCI_H_ */

@@ -5,7 +5,7 @@ BACKGROUND
 The NCR 53C80 SCSI Bus Controller (SBC) is an early single-chip solution
 which formed the basis of many early SCSI host adapters for both the
 i386 and m68k platforms. The NCR 53C400 is a slightly more advanced
-chip which retains backward compatability with the 53C80.
+chip which retains backward compatibility with the 53C80.
 
 On the PC, the NCR 53C80 was most commonly used to implement simple, cheap
 SCSI host adapters that were bundled with tape and CD-ROM drives. Since
@@ -54,7 +54,7 @@ To setup the nca driver, the configuration file must contain the following:
 
 	options	NCR5380_USE_BUS_SPACE
 
-This line is required to add bus_space() compatability to the MI driver.
+This line is required to add bus_space() compatibility to the MI driver.
 
 Next you need to add one or more configuration lines for the nca devices:
 
@@ -81,7 +81,7 @@ The following is the probe output from my test system:
 	    The NetBSD Foundation, Inc.  All rights reserved.
 	Copyright (c) 1982, 1986, 1989, 1991, 1993
 	    The Regents of the University of California.  All rights reserved.
-	
+
 	NetBSD 1.3.2 (GENERIC) #2: Sun Oct  4 17:11:43 EDT 1998
 	    root@hefalump:/usr/src/sys/arch/i386/compile/GENERIC
 	cpu0: Intel 486DX (486-class)
@@ -124,13 +124,13 @@ As of this writing, the nca driver has two known limitations:
 1) No DMA or pseudo-DMA support
 
 This is unfortunate, but may be remedied in a later release. I would welcome
-any help by someone more familiar with DMA, particularly in relation to 
+any help by someone more familiar with DMA, particularly in relation to
 bus_space().
 
 As it is, however, performance of the nca driver is acceptable, though some
 of that may depend on one's definition of "acceptable". Remember that these
 were not high speed controller under the best conditions, so much of it is
-really the nature of the beast. It should be adequate for tapes, CD-ROMS, 
+really the nature of the beast. It should be adequate for tapes, CD-ROMS,
 and low-usage disk devices (e.g., Zip drives). If you want to drive a CD-R
 drive, then invest in an Adaptec 154X or a PCI controller.
 
@@ -145,7 +145,7 @@ PAS-16, however, the registers are mapped to two sets of ports- four
 sequential ports at the base address and four sequential ports located
 0x2000 higher. As I currently understand it, this is not supportable by
 the current bus_space() implementation nor is it possible for the driver
-to allocate a second bus_space_tag and _handle itself to accomodate the
+to allocate a second bus_space_tag and _handle itself to accommodate the
 second set of ports. Without either, it is very difficult to imagine how
 a portable linkage to the MI driver could be made.
 
@@ -177,7 +177,7 @@ so easy to write this driver. My thanks also to the authors of the
 FreeBSD nca driver for inspiration and 53C400 support.
 
 In the end, I hope that someone else can find this driver as useful as I
-have. If so, please drop me a line at jruschme@exit109.com and let me 
+have. If so, please drop me a line at jruschme@exit109.com and let me
 know about it.
 
 Share and enjoy

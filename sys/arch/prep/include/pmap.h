@@ -1,3 +1,3 @@
-/*	$NetBSD: pmap.h,v 1.1 2000/02/29 15:21:30 nonaka Exp $	*/
+/*	$NetBSD: pmap.h,v 1.5 2003/02/03 17:10:12 matt Exp $	*/
 
 #include <powerpc/pmap.h>

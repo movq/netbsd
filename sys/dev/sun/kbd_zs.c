@@ -1,4 +1,4 @@
-/*	$NetBSD: kbd_zs.c,v 1.5 2000/03/30 12:45:42 augustss Exp $	*/
+/*	$NetBSD: kbd_zs.c,v 1.23 2008/04/20 15:44:01 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -21,11 +21,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -45,9 +41,8 @@
  */
 
 /*
- * Keyboard driver (/dev/kbd -- note that we do not have minor numbers
- * [yet?]).  Translates incoming bytes to ASCII or to `firm_events' and
- * passes them up to the appropriate reader.
+ * /dev/kbd lower layer for sun keyboard off a zs channel.
+ * This driver uses kbdsun middle layer to hook up to /dev/kbd.
  */
 
 /*
@@ -56,6 +51,9 @@
  * This is the 8530 portion of the driver that will be attached to
  * the "zsc" driver for a Sun keyboard.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: kbd_zs.c,v 1.23 2008/04/20 15:44:01 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -72,20 +70,25 @@
 
 #include <dev/ic/z8530reg.h>
 #include <machine/z8530var.h>
-#include <machine/vuid_event.h>
-#include <machine/kbd.h>
+#include <dev/sun/vuid_event.h>
 #include <dev/sun/event_var.h>
+#include <dev/sun/kbd_reg.h>
 #include <dev/sun/kbd_xlate.h>
 #include <dev/sun/kbdvar.h>
+#include <dev/sun/kbdsunvar.h>
+
+#if NWSKBD > 0
+void kbd_wskbd_attach(struct kbd_softc *k, int isconsole);
+#endif
 
 /****************************************************************
  * Interface to the lower layer (zscc)
  ****************************************************************/
 
-static void kbd_zs_rxint __P((struct zs_chanstate *));
-static void kbd_zs_stint __P((struct zs_chanstate *, int));
-static void kbd_zs_txint __P((struct zs_chanstate *));
-static void kbd_zs_softint __P((struct zs_chanstate *));
+static void kbd_zs_rxint(struct zs_chanstate *);
+static void kbd_zs_stint(struct zs_chanstate *, int);
+static void kbd_zs_txint(struct zs_chanstate *);
+static void kbd_zs_softint(struct zs_chanstate *);
 
 struct zsops zsops_kbd = {
 	kbd_zs_rxint,	/* receive char available */
@@ -94,22 +97,21 @@ struct zsops zsops_kbd = {
 	kbd_zs_softint,	/* process software interrupt */
 };
 
-static int	kbd_zs_match(struct device *, struct cfdata *, void *);
-static void	kbd_zs_attach(struct device *, struct device *, void *);
-static void	kbd_zs_write_data __P((struct kbd_softc *, int));
+static int	kbd_zs_match(device_t, cfdata_t, void *);
+static void	kbd_zs_attach(device_t, device_t, void *);
+static void	kbd_zs_write_data(struct kbd_sun_softc *, int);
 
-struct cfattach kbd_zs_ca = {
-	sizeof(struct kbd_softc), kbd_zs_match, kbd_zs_attach
-};
+CFATTACH_DECL_NEW(kbd_zs, sizeof(struct kbd_sun_softc),
+    kbd_zs_match, kbd_zs_attach, NULL, NULL);
+
+/* Fall-back baud rate */
+int	kbd_zs_bps = KBD_DEFAULT_BPS;
 
 /*
  * kbd_zs_match: how is this zs channel configured?
  */
-int 
-kbd_zs_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void   *aux;
+int
+kbd_zs_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct zsc_attach_args *args = aux;
 
@@ -120,22 +122,23 @@ kbd_zs_match(parent, cf, aux)
 	return 0;
 }
 
-void 
-kbd_zs_attach(parent, self, aux)
-	struct device *parent, *self;
-	void   *aux;
-
+void
+kbd_zs_attach(device_t parent, device_t self, void *aux)
 {
-	struct zsc_softc *zsc = (void *) parent;
-	struct kbd_softc *k = (void *) self;
+	struct kbd_sun_softc *k = device_private(self);
+	struct zsc_softc *zsc = device_private(parent);
 	struct zsc_attach_args *args = aux;
 	struct zs_chanstate *cs;
-	struct cfdata *cf;
-	int channel, kbd_unit;
+	int channel;
 	int reset, s;
+	int bps;
 
-	cf = k->k_dev.dv_cfdata;
-	kbd_unit = k->k_dev.dv_unit;
+	k->k_kbd.k_dev = self;
+
+	/* provide upper layer with a link to the middle layer */
+	k->k_kbd.k_ops = &kbd_ops_sun;
+
+	/* provide middle layer with a link to the lower layer (i.e. us) */
 	channel = args->channel;
 	cs = zsc->zsc_cs[channel];
 	cs->cs_private = k;
@@ -143,64 +146,59 @@ kbd_zs_attach(parent, self, aux)
 	k->k_cs = cs;
 	k->k_write_data = kbd_zs_write_data;
 
+	if ((bps = cs->cs_defspeed) == 0)
+		bps = kbd_zs_bps;
+
+	aprint_normal(": baud rate %d", bps);
+
 	if ((args->hwflags & ZS_HWFLAG_CONSOLE_INPUT) != 0) {
 		/*
 		 * Hookup ourselves as the console input channel
 		 */
-		struct cons_channel *cc;
+		struct cons_channel *cc = kbd_cc_alloc(&k->k_kbd);
 
-		if ((cc = malloc(sizeof *cc, M_DEVBUF, M_NOWAIT)) == NULL)
+		if (cc == NULL)
 			return;
 
-		cc->cc_dev = self;
-		cc->cc_iopen = kbd_cc_open;
-		cc->cc_iclose = kbd_cc_close;
-		cc->cc_upstream = NULL;
-		cons_attach_input(cc);
-		k->k_cc = cc;
-		k->k_isconsole = 1;
-		printf(" (console input)");
+		cons_attach_input(cc, args->consdev);
+		k->k_kbd.k_isconsole = 1;
+		aprint_normal(" (console input)");
 	}
-	printf("\n");
-
-	callout_init(&k->k_repeat_ch);
+	aprint_normal("\n");
 
 	/* Initialize the speed, etc. */
 	s = splzs();
-	if (k->k_isconsole == 0) {
+	if (k->k_kbd.k_isconsole == 0) {
 		/* Not the console; may need reset. */
 		reset = (channel == 0) ?
-			ZSWR9_A_RESET : ZSWR9_B_RESET;
+		    ZSWR9_A_RESET : ZSWR9_B_RESET;
 		zs_write_reg(cs, 9, reset);
 	}
 	/* These are OK as set by zscc: WR3, WR4, WR5 */
 	/* We don't care about status interrupts. */
 	cs->cs_preg[1] = ZSWR1_RIE | ZSWR1_TIE;
-	(void) zs_set_speed(cs, KBD_BPS);
+	(void) zs_set_speed(cs, bps);
 	zs_loadchannelregs(cs);
 	splx(s);
 
 	/* Do this before any calls to kbd_rint(). */
-	kbd_xlate_init(&k->k_state);
-
-	/* XXX - Do this in open? */
-	k->k_repeat_start = hz/2;
-	k->k_repeat_step = hz/20;
+	kbd_xlate_init(&k->k_kbd.k_state);
 
 	/* Magic sequence. */
 	k->k_magic1 = KBD_L1;
 	k->k_magic2 = KBD_A;
+#if NWSKBD > 0
+	kbd_wskbd_attach(&k->k_kbd, k->k_kbd.k_isconsole);
+#endif
 }
 
 /*
- * used by kbd_start_tx();
+ * used by kbd_sun_start_tx();
  */
 void
-kbd_zs_write_data(k, c)
-	struct kbd_softc *k;
-	int c;
+kbd_zs_write_data(struct kbd_sun_softc *k, int c)
 {
-	int	s;
+	int s;
 
 	/* Need splzs to avoid interruption of the delay. */
 	s = splzs();
@@ -209,12 +207,11 @@ kbd_zs_write_data(k, c)
 }
 
 static void
-kbd_zs_rxint(cs)
-	struct zs_chanstate *cs;
+kbd_zs_rxint(struct zs_chanstate *cs)
 {
-	struct kbd_softc *k;
+	struct kbd_sun_softc *k;
 	int put, put_next;
-	u_char c, rr1;
+	uint8_t c, rr1;
 
 	k = cs->cs_private;
 	put = k->k_rbput;
@@ -240,12 +237,13 @@ kbd_zs_rxint(cs)
 		k->k_magic1_down = 0;
 		if (c == k->k_magic2) {
 			/* Magic "L1-A" sequence; enter debugger. */
-			if (k->k_isconsole) {
+			if (k->k_kbd.k_isconsole) {
 				zs_abort(cs);
 				/* Debugger done.  Fake L1-up to finish it. */
 				c = k->k_magic1 | KBD_UP;
 			} else {
-				printf("kbd: magic sequence, but not console\n");
+				printf("%s: magic sequence, but not console\n",
+				    device_xname(k->k_kbd.k_dev));
 			}
 		}
 	}
@@ -273,10 +271,9 @@ kbd_zs_rxint(cs)
 
 
 static void
-kbd_zs_txint(cs)
-	struct zs_chanstate *cs;
+kbd_zs_txint(struct zs_chanstate *cs)
 {
-	struct kbd_softc *k;
+	struct kbd_sun_softc *k;
 
 	k = cs->cs_private;
 	zs_write_csr(cs, ZSWR0_RESET_TXINT);
@@ -287,12 +284,10 @@ kbd_zs_txint(cs)
 
 
 static void
-kbd_zs_stint(cs, force)
-	struct zs_chanstate *cs;
-	int force;
+kbd_zs_stint(struct zs_chanstate *cs, int force)
 {
-	struct kbd_softc *k;
-	int rr0;
+	struct kbd_sun_softc *k;
+	uint8_t rr0;
 
 	k = cs->cs_private;
 
@@ -303,7 +298,7 @@ kbd_zs_stint(cs, force)
 	if (rr0 & ZSRR0_BREAK) {
 		/* Keyboard unplugged? */
 		zs_abort(cs);
-		return (0);
+		return;
 	}
 #endif
 
@@ -323,17 +318,16 @@ kbd_zs_stint(cs, force)
 }
 
 /*
- * Get input from the recieve ring and pass it on.
+ * Get input from the receive ring and pass it on.
  * Note: this is called at splsoftclock()
  */
 static void
-kbd_zs_softint(cs)
-	struct zs_chanstate *cs;
+kbd_zs_softint(struct zs_chanstate *cs)
 {
-	struct kbd_softc *k;
+	struct kbd_sun_softc *k;
 	int get, c, s;
 	int intr_flags;
-	u_short ring_data;
+	uint16_t ring_data;
 
 	k = cs->cs_private;
 
@@ -343,7 +337,7 @@ kbd_zs_softint(cs)
 	k->k_intr_flags = 0;
 
 	/* Now lower to spltty for the rest. */
-	(void) spltty();
+	(void)spltty();
 
 	/*
 	 * Copy data from the receive ring to the event layer.
@@ -364,21 +358,21 @@ kbd_zs_softint(cs)
 			 * send a reset to resync key translation.
 			 */
 			log(LOG_ERR, "%s: input error (0x%x)\n",
-				k->k_dev.dv_xname, ring_data);
+			    device_xname(k->k_kbd.k_dev), ring_data);
 			get = k->k_rbput; /* flush */
 			goto send_reset;
 		}
 
 		/* Pass this up to the "middle" layer. */
-		kbd_input_raw(k, c);
+		kbd_sun_input(k, c);
 	}
 	if (intr_flags & INTR_RX_OVERRUN) {
 		log(LOG_ERR, "%s: input overrun\n",
-		    k->k_dev.dv_xname);
+		    device_xname(k->k_kbd.k_dev));
 	send_reset:
 		/* Send a reset to resync translation. */
-		kbd_output(k, KBD_CMD_RESET);
-		kbd_start_tx(k);
+		kbd_sun_output(k, KBD_CMD_RESET);
+		kbd_sun_start_tx(k);
 	}
 	k->k_rbget = get;
 
@@ -388,7 +382,7 @@ kbd_zs_softint(cs)
 		 * clear busy and wakeup drain waiters.
 		 */
 		k->k_txflags &= ~K_TXBUSY;
-		kbd_start_tx(k);
+		kbd_sun_start_tx(k);
 	}
 
 	if (intr_flags & INTR_ST_CHECK) {
@@ -396,7 +390,7 @@ kbd_zs_softint(cs)
 		 * Status line change.  (Not expected.)
 		 */
 		log(LOG_ERR, "%s: status interrupt?\n",
-		    k->k_dev.dv_xname);
+		    device_xname(k->k_kbd.k_dev));
 		cs->cs_rr0_delta = 0;
 	}
 

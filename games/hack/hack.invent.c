@@ -1,14 +1,72 @@
-/*	$NetBSD: hack.invent.c,v 1.6 1997/10/23 07:05:55 fair Exp $	*/
+/*	$NetBSD: hack.invent.c,v 1.10.30.2 2009/06/29 23:25:09 snj Exp $	*/
 
 /*
- * Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1985.
+ * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
+ * Amsterdam
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met:
+ *
+ * - Redistributions of source code must retain the above copyright notice,
+ * this list of conditions and the following disclaimer.
+ *
+ * - Redistributions in binary form must reproduce the above copyright
+ * notice, this list of conditions and the following disclaimer in the
+ * documentation and/or other materials provided with the distribution.
+ *
+ * - Neither the name of the Stichting Centrum voor Wiskunde en
+ * Informatica, nor the names of its contributors may be used to endorse or
+ * promote products derived from this software without specific prior
+ * written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
+ * IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+ * PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER
+ * OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+ * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
+ * Copyright (c) 1982 Jay Fenlason <hack@gnu.org>
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+ * AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL
+ * THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.invent.c,v 1.6 1997/10/23 07:05:55 fair Exp $");
+__RCSID("$NetBSD: hack.invent.c,v 1.10.30.2 2009/06/29 23:25:09 snj Exp $");
 #endif				/* not lint */
 
+#include <assert.h>
 #include <stdlib.h>
 #include "hack.h"
 #include "extern.h"
@@ -21,8 +79,8 @@ __RCSID("$NetBSD: hack.invent.c,v 1.6 1997/10/23 07:05:55 fair Exp $");
 
 static int      lastinvnr = 51;	/* 0 ... 51 */
 
-static void assigninvlet __P((struct obj *));
-static char *xprname __P((struct obj *, char));
+static void assigninvlet(struct obj *);
+static char *xprname(struct obj *, char);
 
 static void
 assigninvlet(otmp)
@@ -157,9 +215,12 @@ freeobj(obj)
 	if (obj == fobj)
 		fobj = fobj->nobj;
 	else {
-		for (otmp = fobj; otmp->nobj != obj; otmp = otmp->nobj)
-			if (!otmp)
+		otmp = fobj;
+		while (otmp->nobj != obj) {
+			if (otmp->nobj == NULL)
 				panic("error in freeobj");
+			otmp = otmp->nobj;
+		}
 		otmp->nobj = obj->nobj;
 	}
 }
@@ -174,9 +235,12 @@ freegold(gold)
 	if (gold == fgold)
 		fgold = gold->ngold;
 	else {
-		for (gtmp = fgold; gtmp->ngold != gold; gtmp = gtmp->ngold)
-			if (!gtmp)
+		gtmp = fgold;
+		while (gtmp->ngold != gold) {
+			if (gtmp->ngold == NULL)
 				panic("error in freegold");
+			gtmp = gtmp->ngold;
+		}
 		gtmp->ngold = gold->ngold;
 	}
 	free((char *) gold);
@@ -335,7 +399,7 @@ mkgoldobj(q)
  */
 struct obj     *
 getobj(let, word)
-	char           *let, *word;
+	const char           *let, *word;
 {
 	struct obj     *otmp;
 	char            ilet, ilet1, ilet2;
@@ -508,18 +572,18 @@ ckunpaid(otmp)
 /* return the number of times fn was called successfully */
 int
 ggetobj(word, fn, max)
-	char *word;
-	int (*fn)  __P((struct obj *));
+	const char *word;
+	int (*fn)(struct obj *);
 	int max;
 {
 	char            buf[BUFSZ];
 	char           *ip;
 	char            sym;
-	int             oletct = 0, iletct = 0;
+	unsigned        oletct = 0, iletct = 0;
 	boolean         allflag = FALSE;
 	char            olets[20], ilets[20];
-	int           (*ckfn) __P((struct obj *)) =
-	    (int (*) __P((struct obj *))) 0;
+	int           (*ckfn)(struct obj *) =
+	    (int (*)(struct obj *)) 0;
 	xchar           allowgold = (u.ugold && !strcmp(word, "drop")) ? 1 : 0;	/* BAH */
 	if (!invent && !allowgold) {
 		pline("You have nothing to %s.", word);
@@ -546,6 +610,7 @@ ggetobj(word, fn, max)
 		if (invent)
 			ilets[iletct++] = 'a';
 		ilets[iletct] = 0;
+		assert(iletct < sizeof(ilets));
 	}
 	pline("What kinds of thing do you want to %s? [%s] ",
 	      word, ilets);
@@ -574,6 +639,7 @@ ggetobj(word, fn, max)
 				olets[oletct++] = sym;
 				olets[oletct] = 0;
 			}
+			assert(oletct < sizeof(olets));
 		} else
 			pline("You don't have any %c's.", sym);
 	}
@@ -595,8 +661,8 @@ askchain(objchn, olets, allflag, fn, ckfn, max)
 	struct obj     *objchn;
 	char           *olets;
 	int             allflag;
-	int           (*fn) __P((struct obj *));
-	int	      (*ckfn) __P((struct obj *));
+	int           (*fn)(struct obj *);
+	int	      (*ckfn)(struct obj *);
 	int             max;
 {
 	struct obj     *otmp, *otmp2;
@@ -670,7 +736,7 @@ xprname(obj, let)
 {
 	static char     li[BUFSZ];
 
-	(void) sprintf(li, "%c - %s.",
+	(void) snprintf(li, sizeof(li), "%c - %s.",
 		       flags.invlet_constant ? obj->invlet : let,
 		       doname(obj));
 	return (li);
@@ -691,7 +757,7 @@ doinv(lets)
 {
 	struct obj     *otmp;
 	char            ilet;
-	int             ct = 0;
+	unsigned        ct = 0;
 	char            any[BUFSZ];
 
 	morc = 0;		/* just to be sure */
@@ -714,6 +780,7 @@ doinv(lets)
 				ilet = 'A';
 	}
 	any[ct] = 0;
+	assert(ct < sizeof(any));
 	cornline(2, any);
 }
 
@@ -723,7 +790,7 @@ dotypeinv()
 	/* Changed to one type only, so he doesnt have to type cr */
 	char            c, ilet;
 	char            stuff[BUFSZ];
-	int             stct;
+	unsigned        stct;
 	struct obj     *otmp;
 	boolean         billx = inshop() && doinvbill(0);
 	boolean         unpd = FALSE;
@@ -749,6 +816,7 @@ dotypeinv()
 	if (billx)
 		stuff[stct++] = 'x';
 	stuff[stct] = 0;
+	assert(stct < sizeof(stuff));
 
 	if (stct > 1) {
 		pline("What type of object [%s] do you want an inventory of? ",
@@ -785,6 +853,8 @@ dotypeinv()
 				ilet = 'A';
 	}
 	stuff[stct] = '\0';
+	assert(stct < sizeof(stuff));
+
 	if (stct == 0)
 		pline("You have no such objects.");
 	else
@@ -799,7 +869,7 @@ dolook()
 {
 	struct obj     *otmp = NULL, *otmp0 = NULL;
 	struct gold    *gold = NULL;
-	char           *verb = Blind ? "feel" : "see";
+	const char     *verb = Blind ? "feel" : "see";
 	int             ct = 0;
 
 	if (!u.uswallow) {
@@ -834,7 +904,7 @@ dolook()
 	if (gold) {
 		char            gbuf[30];
 
-		(void) sprintf(gbuf, "%ld gold piece%s",
+		(void) snprintf(gbuf, sizeof(gbuf), "%ld gold piece%s",
 			       gold->amount, plur(gold->amount));
 		if (!ct++)
 			pline("You %s here %s.", verb, gbuf);
@@ -866,6 +936,7 @@ stackobj(obj)
 int
 merged(otmp, obj, lose)
 	struct obj     *otmp, *obj;
+	int lose;
 {
 	if (obj->otyp == otmp->otyp &&
 	    obj->unpaid == otmp->unpaid &&

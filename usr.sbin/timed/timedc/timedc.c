@@ -1,4 +1,4 @@
-/*	$NetBSD: timedc.c,v 1.6 1997/10/18 07:13:35 lukem Exp $	*/
+/*	$NetBSD: timedc.c,v 1.21 2008/07/21 13:37:00 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1985, 1993 The Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,22 +31,17 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT(
-"@(#) Copyright (c) 1985, 1993 The Regents of the University of California.\n\
- All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1985, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)timedc.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: timedc.c,v 1.6 1997/10/18 07:13:35 lukem Exp $");
+__RCSID("$NetBSD: timedc.c,v 1.21 2008/07/21 13:37:00 lukem Exp $");
 #endif
 #endif /* not lint */
-
-#ifdef sgi
-#ident "$Revision: 1.6 $"
-#endif
 
 #include "timedc.h"
 #include <ctype.h>
@@ -60,48 +51,49 @@ __RCSID("$NetBSD: timedc.c,v 1.6 1997/10/18 07:13:35 lukem Exp $");
 #include <string.h>
 #include <syslog.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <pwd.h>
+#include <err.h>
 
 int trace = 0;
 FILE *fd = 0;
 int	margc;
 int	fromatty;
-char	*margv[20];
+#define MAX_MARGV	20
+char	*margv[MAX_MARGV];
 char	cmdline[200];
 jmp_buf	toplevel;
-static struct cmd *getcmd(char *);
+static const struct cmd *getcmd(char *);
+static int drop_privileges(void);
 
 int
 main(int argc, char *argv[])
 {
-	register struct cmd *c;
+	const struct cmd *c;
 
-	openlog("timedc", LOG_ODELAY, LOG_AUTH);
+	fcntl(3, F_CLOSEM);
+	openlog("timedc", 0, LOG_AUTH);
 
 	/*
 	 * security dictates!
 	 */
-	if (priv_resources() < 0) {
-		fprintf(stderr, "Could not get privileged resources\n");
-		exit(1);
-	}
-	(void) setuid(getuid());
+	if (priv_resources() < 0)
+		errx(EXIT_FAILURE, "Could not get privileged resources");
+	if (drop_privileges() < 0)
+		errx(EXIT_FAILURE, "Could not drop privileges");
 
 	if (--argc > 0) {
 		c = getcmd(*++argv);
 		if (c == (struct cmd *)-1) {
 			printf("?Ambiguous command\n");
-			exit(1);
+			exit(EXIT_FAILURE);
 		}
 		if (c == 0) {
 			printf("?Invalid command\n");
-			exit(1);
-		}
-		if (c->c_priv && getuid()) {
-			printf("?Privileged command\n");
-			exit(1);
+			exit(EXIT_FAILURE);
 		}
 		(*c->c_handler)(argc, argv);
-		exit(0);
+		exit(EXIT_SUCCESS);
 	}
 
 	fromatty = isatty(fileno(stdin));
@@ -117,7 +109,10 @@ main(int argc, char *argv[])
 			quit(0, NULL);
 		if (cmdline[0] == 0)
 			break;
-		makeargv();
+		if (makeargv()) {
+			printf("?Too many arguments\n");
+			continue;
+		}
 		if (margv[0] == 0)
 			continue;
 		c = getcmd(margv[0]);
@@ -129,32 +124,29 @@ main(int argc, char *argv[])
 			printf("?Invalid command\n");
 			continue;
 		}
-		if (c->c_priv && getuid()) {
-			printf("?Privileged command\n");
-			continue;
-		}
 		(*c->c_handler)(margc, margv);
 	}
 	return 0;
 }
 
 void
-intr(signo)
-	int signo;
+intr(int signo)
 {
+	(void) signo;
 	if (!fromatty)
-		exit(0);
+		exit(EXIT_SUCCESS);
 	longjmp(toplevel, 1);
 }
 
 
-static struct cmd *
+static const struct cmd *
 getcmd(char *name)
 {
-	register char *p, *q;
-	register struct cmd *c, *found;
-	register int nmatches, longest;
-	extern struct cmd cmdtab[];
+	const char *p;
+	char *q;
+	const struct cmd *c, *found;
+	int nmatches, longest;
+	extern const struct cmd cmdtab[];
 	extern int NCMDS;
 
 	longest = 0;
@@ -182,27 +174,30 @@ getcmd(char *name)
 /*
  * Slice a string up into argc/argv.
  */
-void
-makeargv()
+int
+makeargv(void)
 {
-	register char *cp;
-	register char **argp = margv;
+	char *cp;
+	char **argp = margv;
 
 	margc = 0;
-	for (cp = cmdline; *cp;) {
-		while (isspace(*cp))
+	for (cp = cmdline; argp < &margv[MAX_MARGV - 1] && *cp;) {
+		while (isspace((unsigned char)*cp))
 			cp++;
 		if (*cp == '\0')
 			break;
 		*argp++ = cp;
 		margc += 1;
-		while (*cp != '\0' && !isspace(*cp))
+		while (*cp != '\0' && !isspace((unsigned char)*cp))
 			cp++;
 		if (*cp == '\0')
 			break;
 		*cp++ = '\0';
 	}
+	if (margc == MAX_MARGV - 1)
+		return 1;
 	*argp++ = 0;
+	return 0;
 }
 
 #define HELPINDENT (sizeof ("directory"))
@@ -211,15 +206,13 @@ makeargv()
  * Help command.
  */
 void
-help(argc, argv)
-	int argc;
-	char *argv[];
+help(int argc, char *argv[])
 {
-	register struct cmd *c;
-	extern struct cmd cmdtab[];
+	const struct cmd *c;
+	extern const struct cmd cmdtab[];
 
 	if (argc == 1) {
-		register int i, j, w;
+		int i, j, w;
 		int columns, width = 0, lines;
 		extern int NCMDS;
 
@@ -253,7 +246,7 @@ help(argc, argv)
 		return;
 	}
 	while (--argc > 0) {
-		register char *arg;
+		char *arg;
 		arg = *++argv;
 		c = getcmd(arg);
 		if (c == (struct cmd *)-1)
@@ -264,4 +257,33 @@ help(argc, argv)
 			printf("%-*s\t%s\n", (int)HELPINDENT,
 				c->c_name, c->c_help);
 	}
+}
+
+static int
+drop_privileges(void)
+{
+	static const char user[] = "_timedc";
+	const struct passwd *pw;
+	uid_t uid;
+	gid_t gid;
+
+	if ((pw = getpwnam(user)) == NULL) {
+		warnx("getpwnam(\"%s\") failed", user);
+		return -1;
+	}
+	uid = pw->pw_uid;
+	gid = pw->pw_gid;
+	if (setgroups(1, &gid)) {
+		warn("setgroups");
+		return -1;
+	}
+	if (setgid(gid)) {
+		warn("setgid");
+		return -1;
+	}
+	if (setuid(uid)) {
+		warn("setuid");
+		return -1;
+	}
+	return 0;
 }

@@ -1,7 +1,7 @@
-/*	$NetBSD: extern.h,v 1.52 2000/01/31 22:01:04 lukem Exp $	*/
+/*	$NetBSD: extern.h,v 1.75 2008/05/10 00:05:31 skd Exp $	*/
 
 /*-
- * Copyright (c) 1996-1999 The NetBSD Foundation, Inc.
+ * Copyright (c) 1996-2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -48,11 +41,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -74,7 +63,7 @@
 /*
  * Copyright (C) 1997 and 1998 WIDE Project.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -86,7 +75,7 @@
  * 3. Neither the name of the project nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE PROJECT AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -102,156 +91,160 @@
 
 struct sockaddr;
 struct tm;
+struct addrinfo;
 
-void	abort_remote __P((FILE *));
-void	abort_squared __P((int));
-void	abortpt __P((int));
-void	abortxfer __P((int));
-void	account __P((int, char **));
-void	alarmtimer __P((int));
-int	another __P((int *, char ***, const char *));
-int	auto_fetch __P((int, char **));
-void	blkfree __P((char **));
-void	cd __P((int, char **));
-void	cdup __P((int, char **));
-void	changetype __P((int, int));
-void	cleanuppeer __P((void));
-void	cmdabort __P((int));
-void	cmdtimeout __P((int));
-void	cmdscanner __P((void));
-int	command __P((const char *, ...));
+void	abort_remote(FILE *);
+void	abort_squared(int);
+void	abortpt(int);
+void	abortxfer(int);
+void	account(int, char **);
+void	ai_unmapped(struct addrinfo *);
+int	another(int *, char ***, const char *);
+int	auto_fetch(int, char **);
+int	auto_put(int, char **, const char *);
+void	blkfree(char **);
+void	cd(int, char **);
+void	cdup(int, char **);
+void	changetype(int, int);
+void	cleanuppeer(void);
+void	cmdabort(int);
+void	cmdtimeout(int);
+void	cmdscanner(void);
+int	command(const char *, ...)
+     __attribute__((__format__(__printf__, 1, 2)));
 #ifndef NO_EDITCOMPLETE
-unsigned char complete __P((EditLine *, int));
-void	controlediting __P((void));
+unsigned char complete(EditLine *, int);
+void	controlediting(void);
 #endif /* !NO_EDITCOMPLETE */
-void	crankrate __P((int));
-FILE   *dataconn __P((const char *));
-void	delete __P((int, char **));
-void	disconnect __P((int, char **));
-void	do_chmod __P((int, char **));
-void	do_umask __P((int, char **));
-char   *docase __P((char *));
-void	domacro __P((int, char **));
-char   *domap __P((char *));
-void	doproxy __P((int, char **));
-char   *dotrans __P((char *));
-int	foregroundproc __P((void));
-void	formatbuf __P((char *, size_t, const char *));
-void	ftpvis __P((char *, size_t, const char *, size_t));
-int	ftp_login __P((const char *, const char *, const char *));
-void	get __P((int, char **));
-struct cmd *getcmd __P((const char *));
-int	getit __P((int, char **, int, const char *));
-struct option *getoption __P((const char *));
-char   *getoptionvalue __P((const char *));
-int	getreply __P((int));
-char   *globulize __P((const char *));
-char   *gunique __P((const char *));
-void	help __P((int, char **));
-char   *hookup __P((char *, char *));
-void	idlecmd __P((int, char **));
-int	initconn __P((void));
-void	intr __P((int));
-int	isipv6addr __P((const char *));
-void	list_vertical __P((StringList *));
-void	lcd __P((int, char **));
-void	lostpeer __P((int));
-void	lpage __P((int, char **));
-void	lpwd __P((int, char **));
-void	ls __P((int, char **));
-void	mabort __P((void));
-void	macdef __P((int, char **));
-void	makeargv __P((void));
-void	makedir __P((int, char **));
-void	mdelete __P((int, char **));
-void	mget __P((int, char **));
-void	mintr __P((int));
-void	mls __P((int, char **));
-void	modtime __P((int, char **));
-void	mput __P((int, char **));
-char   *onoff __P((int));
-void	newer __P((int, char **));
-void	page __P((int, char **));
-int	parserate __P((int, char **, int));
-void	progressmeter __P((int));
-char   *prompt __P((void));
-void	proxabort __P((int));
-void	proxtrans __P((const char *, const char *, const char *));
-void	psabort __P((int));
-void	psummary __P((int));
-void	pswitch __P((int));
-void	ptransfer __P((int));
-void	put __P((int, char **));
-void	pwd __P((int, char **));
-void	quit __P((int, char **));
-void	quote __P((int, char **));
-void	quote1 __P((const char *, int, char **));
-void	recvrequest __P((const char *, const char *, const char *,
-	    const char *, int, int));
-void	reget __P((int, char **));
-char   *remglob __P((char **, int, char **));
-off_t	remotesize __P((const char *, int));
-time_t	remotemodtime __P((const char *, int));
-void	removedir __P((int, char **));
-void	renamefile __P((int, char **));
-void	reset __P((int, char **));
-void	restart __P((int, char **));
-void	rmthelp __P((int, char **));
-void	rmtstatus __P((int, char **));
-char   *rprompt __P((void));
-int	ruserpass __P((const char *, const char **, const char **,
-	    const char **));
-void	sendrequest __P((const char *, const char *, const char *, int));
-void	setascii __P((int, char **));
-void	setbell __P((int, char **));
-void	setbinary __P((int, char **));
-void	setcase __P((int, char **));
-void	setcr __P((int, char **));
-void	setdebug __P((int, char **));
-void	setedit __P((int, char **));
-void	setepsv4 __P((int, char **));
-void	setform __P((int, char **));
-void	setftmode __P((int, char **));
-void	setgate __P((int, char **));
-void	setglob __P((int, char **));
-void	sethash __P((int, char **));
-void	setnmap __P((int, char **));
-void	setntrans __P((int, char **));
-void	setoption __P((int, char **));
-void	setpassive __P((int, char **));
-void	setpeer __P((int, char **));
-void	setport __P((int, char **));
-void	setpreserve __P((int, char **));
-void	setprogress __P((int, char **));
-void	setprompt __P((int, char **));
-void	setrate __P((int, char **));
-void	setrunique __P((int, char **));
-void	setstruct __P((int, char **));
-void	setsunique __P((int, char **));
-void	settenex __P((int, char **));
-void	settrace __P((int, char **));
-void	setttywidth __P((int));
-void	settype __P((int, char **));
-void	setupsockbufsize __P((int));
-void	setverbose __P((int, char **));
-void	setxferbuf __P((int, char **));
-void	shell __P((int, char **));
-void	site __P((int, char **));
-void	sizecmd __P((int, char **));
-char   *slurpstring __P((void));
-void	status __P((int, char **));
-int	strsuftoi __P((const char *));
-void	syst __P((int, char **));
-int	togglevar __P((int, char **, int *, const char *));
-void	unsetoption __P((int, char **));
-void	updateremotepwd __P((void));
-void	usage __P((void));
-void	user __P((int, char **));
-int	xconnect __P((int, const struct sockaddr *, int));
-int	xlisten __P((int, int));
-void   *xmalloc __P((size_t));
-StringList *xsl_init __P((void));
-void	xsl_add __P((StringList *, char *));
-char   *xstrdup __P((const char *));
-sigfunc	xsignal __P((int, sigfunc));
-sigfunc	xsignal_restart __P((int, sigfunc, int));
+void	crankrate(int);
+FILE   *dataconn(const char *);
+void	delete(int, char **);
+void	disconnect(int, char **);
+void	do_chmod(int, char **);
+void	do_umask(int, char **);
+void	domacro(int, char **);
+void	doproxy(int, char **);
+void	feat(int, char **);
+void	fget(int, char **);
+int	fileindir(const char *, const char *);
+int	foregroundproc(void);
+void	formatbuf(char *, size_t, const char *);
+void	ftpvis(char *, size_t, const char *, size_t);
+int	ftp_login(const char *, const char *, const char *);
+void	get(int, char **);
+struct cmd *getcmd(const char *);
+int	getit(int, char **, int, const char *);
+int	getline(FILE *, char *, size_t, const char **);
+struct option *getoption(const char *);
+char   *getoptionvalue(const char *);
+void	getremoteinfo(void);
+int	getreply(int);
+char   *globulize(const char *);
+char   *gunique(const char *);
+void	help(int, char **);
+char   *hookup(char *, char *);
+void	idlecmd(int, char **);
+int	initconn(void);
+void	intr(int);
+int	isipv6addr(const char *);
+void	list_vertical(StringList *);
+void	lcd(int, char **);
+void	lostpeer(int);
+void	lpage(int, char **);
+void	lpwd(int, char **);
+void	ls(int, char **);
+void	macdef(int, char **);
+void	makeargv(void);
+void	makedir(int, char **);
+void	mdelete(int, char **);
+void	mget(int, char **);
+void	mls(int, char **);
+void	mlst(int, char **);
+void	modtime(int, char **);
+void	mput(int, char **);
+const char *onoff(int);
+void	opts(int, char **);
+void	newer(int, char **);
+void	page(int, char **);
+int	parserate(int, char **, int);
+char   *prompt(void);
+void	proxabort(int);
+void	proxtrans(const char *, const char *, const char *);
+void	psabort(int);
+void	pswitch(int);
+void	put(int, char **);
+void	pwd(int, char **);
+void	quit(int, char **);
+void	quote(int, char **);
+void	quote1(const char *, int, char **);
+void	recvrequest(const char *, const char *, const char *,
+	    const char *, int, int);
+void	reget(int, char **);
+char   *remglob(char **, int, const char **);
+time_t	remotemodtime(const char *, int);
+off_t	remotesize(const char *, int);
+void	removedir(int, char **);
+void	renamefile(int, char **);
+void	reset(int, char **);
+void	restart(int, char **);
+const char *rfc2822time(const struct tm *);
+void	rmthelp(int, char **);
+void	rmtstatus(int, char **);
+char   *rprompt(void);
+int	ruserpass(const char *, char **, char **, char **);
+void	sendrequest(const char *, const char *, const char *, int);
+void	setascii(int, char **);
+void	setbell(int, char **);
+void	setbinary(int, char **);
+void	setcase(int, char **);
+void	setcr(int, char **);
+void	setdebug(int, char **);
+void	setedit(int, char **);
+void	setepsv4(int, char **);
+void	setepsv6(int, char **);
+void	setepsv(int, char **);
+void	setform(int, char **);
+void	setftmode(int, char **);
+void	setgate(int, char **);
+void	setglob(int, char **);
+void	sethash(int, char **);
+void	setnmap(int, char **);
+void	setntrans(int, char **);
+void	setoption(int, char **);
+void	setpassive(int, char **);
+void	setpeer(int, char **);
+void	setport(int, char **);
+void	setpreserve(int, char **);
+void	setprogress(int, char **);
+void	setprompt(int, char **);
+void	setrate(int, char **);
+void	setrunique(int, char **);
+void	setstruct(int, char **);
+void	setsunique(int, char **);
+void	settenex(int, char **);
+void	settrace(int, char **);
+void	setttywidth(int);
+void	settype(int, char **);
+void	setupsockbufsize(int);
+void	setverbose(int, char **);
+void	setxferbuf(int, char **);
+void	shell(int, char **);
+void	site(int, char **);
+void	sizecmd(int, char **);
+char   *slurpstring(void);
+void	status(int, char **);
+int	strsuftoi(const char *);
+void	syst(int, char **);
+int	togglevar(int, char **, int *, const char *);
+void	unsetoption(int, char **);
+void	updatelocalcwd(void);
+void	updateremotecwd(void);
+void	usage(void);
+void	user(int, char **);
+int	ftp_connect(int, const struct sockaddr *, socklen_t);
+int	ftp_listen(int, int);
+int	ftp_poll(struct pollfd *, int, int);
+void   *ftp_malloc(size_t);
+StringList *ftp_sl_init(void);
+void	ftp_sl_add(StringList *, char *);
+char   *ftp_strdup(const char *);

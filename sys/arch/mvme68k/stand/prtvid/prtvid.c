@@ -1,17 +1,16 @@
-/*	$NetBSD: prtvid.c,v 1.1 1996/05/17 19:55:00 chuck Exp $	*/
+/*	$NetBSD: prtvid.c,v 1.3 2008/01/12 09:54:32 tsutsui Exp $	*/
 
 #include <stdio.h>
 #define __DBINTERFACE_PRIVATE
 #include <db.h>
 #include <machine/disklabel.h>
 
-main(argc, argv)
-	int argc;
-	char *argv[];
+int
+main(int argc, char *argv[])
 {
 	struct cpu_disklabel *cdl;
 
-	cdl = (struct cpu_disklabel *) malloc(sizeof (struct cpu_disklabel));
+	cdl = malloc(sizeof (struct cpu_disklabel));
 
 	fread(cdl, sizeof(struct cpu_disklabel), 1, stdin);
 
@@ -94,9 +93,9 @@ main(argc, argv)
 	    (char *)&(cdl->cfg_rsvc2) - (char *)(cdl));
 }
 
-swabvid(cdl)
-	struct cpu_disklabel *cdl;
+swabvid(struct cpu_disklabel *cdl)
 {
+
 	M_32_SWAP(cdl->vid_oss);
 	M_16_SWAP(cdl->vid_osl);
 	M_16_SWAP(cdl->vid_osa_u);
@@ -104,9 +103,9 @@ swabvid(cdl)
 	M_32_SWAP(cdl->vid_cas);
 }
 
-swabcfg(cdl)
-	struct cpu_disklabel *cdl;
+swabcfg(struct cpu_disklabel *cdl)
 {
+
 	printf("swapping cfg\n");
 
 	M_16_SWAP(cdl->cfg_atm);

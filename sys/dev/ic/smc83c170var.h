@@ -1,4 +1,4 @@
-/*	$NetBSD: smc83c170var.h,v 1.4 2000/03/23 07:01:32 thorpej Exp $	*/
+/*	$NetBSD: smc83c170var.h,v 1.13 2008/07/06 14:32:56 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -100,18 +93,25 @@ struct epic_descsoft {
  * Software state per device.
  */
 struct epic_softc {
-	struct device sc_dev;		/* generic device information */
+	device_t sc_dev;		/* generic device information */
 	bus_space_tag_t sc_st;		/* bus space tag */
 	bus_space_handle_t sc_sh;	/* bus space handle */
 	bus_dma_tag_t sc_dmat;		/* bus DMA tag */
 	struct ethercom sc_ethercom;	/* ethernet common data */
 	void *sc_sdhook;		/* shutdown hook */
 
+	int sc_hwflags;			/* info about board */
+#define EPIC_HAS_BNC		0x01	/* BNC on serial interface */
+#define EPIC_HAS_MII_FIBER	0x02	/* fiber on MII lxtphy */
+#define EPIC_DUPLEXLED_ON_694	0x04	/* duplex LED by software */
+
 	struct mii_data sc_mii;		/* MII/media information */
 	struct callout sc_mii_callout;	/* MII callout */
 
 	bus_dmamap_t sc_cddmamap;	/* control data DMA map */
 #define	sc_cddma	sc_cddmamap->dm_segs[0].ds_addr
+	bus_dmamap_t sc_nulldmamap;	/* DMA map for the pad buffer */
+#define sc_nulldma	sc_nulldmamap->dm_segs[0].ds_addr
 
 	/*
 	 * Software state for transmit and receive descriptors.
@@ -129,6 +129,8 @@ struct epic_softc {
 	int	sc_txlast;		/* last used TX descriptor */
 
 	int	sc_rxptr;		/* next ready RX descriptor */
+
+	u_int	sc_serinst;		/* ifmedia instance for serial mode */
 };
 
 #define	EPIC_CDTXADDR(sc, x)	((sc)->sc_cddma + EPIC_CDTXOFF((x)))
@@ -167,16 +169,15 @@ do {									\
 	 */								\
 	__m->m_data = __m->m_ext.ext_buf + 2;				\
 	__rxd->er_bufaddr = __ds->ds_dmamap->dm_segs[0].ds_addr + 2;	\
-	__rxd->er_buflength = __m->m_ext.ext_size - 2;			\
-	__rxd->er_control = 0;						\
-	__rxd->er_rxstatus = ER_RXSTAT_OWNER;				\
+	__rxd->er_control = RXCTL_BUFLENGTH(__m->m_ext.ext_size - 2);	\
 	__rxd->er_nextdesc = EPIC_CDRXADDR((sc), EPIC_NEXTRX((x)));	\
+	__rxd->er_rxstatus = ER_RXSTAT_OWNER;				\
 	EPIC_CDRXSYNC((sc), (x), BUS_DMASYNC_PREREAD|BUS_DMASYNC_PREWRITE); \
-} while (0)
+} while (/* CONSTCOND */ 0)
 
 #ifdef _KERNEL
-void	epic_attach __P((struct epic_softc *));
-int	epic_intr __P((void *));
+void	epic_attach(struct epic_softc *);
+int	epic_intr(void *);
 #endif /* _KERNEL */
 
 #endif /* _DEV_IC_SMC83C170VAR_H_ */

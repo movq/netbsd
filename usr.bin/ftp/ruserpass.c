@@ -1,4 +1,4 @@
-/*	$NetBSD: ruserpass.c,v 1.25 1999/10/24 12:31:41 lukem Exp $	*/
+/*	$NetBSD: ruserpass.c,v 1.33 2007/04/17 05:52:04 lukem Exp $	*/
 
 /*
  * Copyright (c) 1985, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)ruserpass.c	8.4 (Berkeley) 4/27/95";
 #else
-__RCSID("$NetBSD: ruserpass.c,v 1.25 1999/10/24 12:31:41 lukem Exp $");
+__RCSID("$NetBSD: ruserpass.c,v 1.33 2007/04/17 05:52:04 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -56,7 +52,7 @@ __RCSID("$NetBSD: ruserpass.c,v 1.25 1999/10/24 12:31:41 lukem Exp $");
 
 #include "ftp_var.h"
 
-static	int token __P((void));
+static	int token(void);
 static	FILE *cfile;
 
 #define	DEFAULT	1
@@ -70,7 +66,7 @@ static	FILE *cfile;
 static char tokval[100];
 
 static struct toktab {
-	char *tokstr;
+	const char *tokstr;
 	int tval;
 } toktab[] = {
 	{ "default",	DEFAULT },
@@ -84,27 +80,20 @@ static struct toktab {
 };
 
 int
-ruserpass(host, aname, apass, aacct)
-	const char *host;
-	const char **aname, **apass, **aacct;
+ruserpass(const char *host, char **aname, char **apass, char **aacct)
 {
-	char *hdir, buf[BUFSIZ], *tmp;
-	char myname[MAXHOSTNAMELEN + 1], *mydomain;
+	char *tmp;
+	const char *mydomain;
+	char myname[MAXHOSTNAMELEN + 1];
 	int t, i, c, usedefault = 0;
 	struct stat stb;
 
-	hdir = getenv("HOME");
-	if (hdir == NULL)
-		hdir = ".";
-	if (strlcpy(buf, hdir,      sizeof(buf)) >= sizeof(buf) ||
-	    strlcat(buf, "/.netrc", sizeof(buf)) >= sizeof(buf)) {
-		warnx("%s/.netrc: %s", hdir, strerror(ENAMETOOLONG));
+	if (netrc[0] == '\0')
 		return (0);
-	}
-	cfile = fopen(buf, "r");
+	cfile = fopen(netrc, "r");
 	if (cfile == NULL) {
 		if (errno != ENOENT)
-			warn("%s", buf);
+			warn("Can't read `%s'", netrc);
 		return (0);
 	}
 	if (gethostname(myname, sizeof(myname)) < 0)
@@ -112,8 +101,8 @@ ruserpass(host, aname, apass, aacct)
 	myname[sizeof(myname) - 1] = '\0';
 	if ((mydomain = strchr(myname, '.')) == NULL)
 		mydomain = "";
-next:
-	while ((t = token())) switch(t) {
+ next:
+	while ((t = token()) > 0) switch(t) {
 
 	case DEFAULT:
 		usedefault = 1;
@@ -121,7 +110,9 @@ next:
 
 	case MACH:
 		if (!usedefault) {
-			if (token() != ID)
+			if ((t = token()) == -1)
+				goto bad;
+			if (t != ID)
 				continue;
 			/*
 			 * Allow match either for user's input host name
@@ -145,12 +136,15 @@ next:
 			continue;
 		}
 	match:
-		while ((t = token()) && t != MACH && t != DEFAULT) switch(t) {
+		while ((t = token()) > 0 &&
+		    t != MACH && t != DEFAULT) switch(t) {
 
 		case LOGIN:
-			if (token()) {
+			if ((t = token()) == -1)
+				goto bad;
+			if (t) {
 				if (*aname == NULL)
-					*aname = xstrdup(tokval);
+					*aname = ftp_strdup(tokval);
 				else {
 					if (strcmp(*aname, tokval))
 						goto next;
@@ -161,22 +155,26 @@ next:
 			if ((*aname == NULL || strcmp(*aname, "anonymous")) &&
 			    fstat(fileno(cfile), &stb) >= 0 &&
 			    (stb.st_mode & 077) != 0) {
-	warnx("Error: .netrc file is readable by others.");
-	warnx("Remove password or make file unreadable by others.");
+	warnx("Error: .netrc file is readable by others");
+	warnx("Remove password or make file unreadable by others");
 				goto bad;
 			}
-			if (token() && *apass == NULL)
-				*apass = xstrdup(tokval);
+			if ((t = token()) == -1)
+				goto bad;
+			if (t && *apass == NULL)
+				*apass = ftp_strdup(tokval);
 			break;
 		case ACCOUNT:
 			if (fstat(fileno(cfile), &stb) >= 0
 			    && (stb.st_mode & 077) != 0) {
-	warnx("Error: .netrc file is readable by others.");
-	warnx("Remove account or make file unreadable by others.");
+	warnx("Error: .netrc file is readable by others");
+	warnx("Remove account or make file unreadable by others");
 				goto bad;
 			}
-			if (token() && *aacct == NULL)
-				*aacct = xstrdup(tokval);
+			if ((t = token()) == -1)
+				goto bad;
+			if (t && *aacct == NULL)
+				*aacct = ftp_strdup(tokval);
 			break;
 		case MACDEF:
 			if (proxy) {
@@ -236,9 +234,13 @@ next:
 				}
 				*tmp = c;
 				if (*tmp == '\n') {
-					if (*(tmp-1) == '\0') {
-					   macros[macnum++].mac_end = tmp - 1;
-					   break;
+					if (tmp == macros[macnum].mac_start) {
+						macros[macnum++].mac_end = tmp;
+						break;
+					} else if (*(tmp - 1) == '\0') {
+						macros[macnum++].mac_end =
+						    tmp - 1;
+						break;
 					}
 					*tmp = '\0';
 				}
@@ -251,21 +253,23 @@ next:
 			}
 			break;
 		default:
-			warnx("Unknown .netrc keyword %s", tokval);
+			warnx("Unknown .netrc keyword `%s'", tokval);
 			break;
 		}
 		goto done;
 	}
-done:
+ done:
+	if (t == -1)
+		goto bad;
 	(void)fclose(cfile);
 	return (0);
-bad:
+ bad:
 	(void)fclose(cfile);
 	return (-1);
 }
 
 static int
-token()
+token(void)
 {
 	char *cp;
 	int c;
@@ -282,16 +286,26 @@ token()
 	if (c == '"') {
 		while ((c = getc(cfile)) != EOF && c != '"') {
 			if (c == '\\')
-				c = getc(cfile);
+				if ((c = getc(cfile)) == EOF)
+					break;
 			*cp++ = c;
+			if (cp == tokval + sizeof(tokval)) {
+				warnx("Token in .netrc too long");
+				return (-1);
+			}
 		}
 	} else {
 		*cp++ = c;
 		while ((c = getc(cfile)) != EOF
 		    && c != '\n' && c != '\t' && c != ' ' && c != ',') {
 			if (c == '\\')
-				c = getc(cfile);
+				if ((c = getc(cfile)) == EOF)
+					break;
 			*cp++ = c;
+			if (cp == tokval + sizeof(tokval)) {
+				warnx("Token in .netrc too long");
+				return (-1);
+			}
 		}
 	}
 	*cp = 0;

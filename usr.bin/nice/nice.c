@@ -1,4 +1,4 @@
-/*	$NetBSD: nice.c,v 1.11 1998/12/19 20:11:20 christos Exp $	*/
+/*	$NetBSD: nice.c,v 1.15 2008/07/21 14:19:24 lukem Exp $	*/
 
 /*
  * Copyright (c) 1989 The Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,24 +31,24 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT(
-    "@(#) Copyright (c) 1989 The Regents of the University of California.\n\
- All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1989\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)nice.c	5.4 (Berkeley) 6/1/90";
 #endif
-__RCSID("$NetBSD: nice.c,v 1.11 1998/12/19 20:11:20 christos Exp $");
+__RCSID("$NetBSD: nice.c,v 1.15 2008/07/21 14:19:24 lukem Exp $");
 #endif /* not lint */
 
-#include <sys/types.h>
 #include <sys/time.h>
 #include <sys/resource.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 #include <locale.h>
 #include <ctype.h>
 #include <errno.h>
@@ -61,18 +57,18 @@ __RCSID("$NetBSD: nice.c,v 1.11 1998/12/19 20:11:20 christos Exp $");
 
 #define	DEFNICE	10
 
-int	main __P((int, char **));
-static void usage __P((void));
+static void usage(void) __dead;
 
 int
-main(argc, argv)
-	int argc;
-	char **argv;
+main(int argc, char **argv)
 {
+	char *ep;
 	int niceness = DEFNICE;
 	int c;
+	long tmp;
 
-	setlocale(LC_ALL, "");
+	setprogname(argv[0]);
+	(void)setlocale(LC_ALL, "");
 
         /* handle obsolete -number syntax */
         if (argc > 1 && argv[1][0] == '-' &&
@@ -84,16 +80,20 @@ main(argc, argv)
 	while ((c = getopt (argc, argv, "n:")) != -1) {
 		switch (c) {
 		case 'n':
-			niceness = atoi (optarg);
+			errno = 0;
+			tmp = strtol(optarg, &ep, 10);
+			if (*ep != '\0' || tmp < INT_MIN || tmp > INT_MAX)
+				errx(EXIT_FAILURE, "invalid argument: `%s'",
+				    optarg);
+			niceness = (int)tmp;
 			break;
-
-		case '?':
 		default:
 			usage();
 			break;
 		}
 	}
-	argc -= optind; argv += optind;
+	argc -= optind;
+	argv += optind;
 
 	if (argc == 0)
 		usage();
@@ -101,23 +101,23 @@ main(argc, argv)
 	errno = 0;
 	niceness += getpriority(PRIO_PROCESS, 0);
 	if (errno) {
-		err (1, "getpriority");
+		err(EXIT_FAILURE, "getpriority");
 		/* NOTREACHED */
 	}
-	if (setpriority(PRIO_PROCESS, 0, niceness)) {
-		warn ("setpriority");
+	if (setpriority(PRIO_PROCESS, 0, niceness) == -1) {
+		warn("setpriority");
 	}
 
-	execvp(argv[0], &argv[0]);
-	err ((errno == ENOENT) ? 127 : 126, "%s", argv[0]);
+	(void)execvp(argv[0], &argv[0]);
+	err((errno == ENOENT || errno == ENOTDIR) ? 127 : 126, "%s", argv[0]);
 	/* NOTREACHED */
 }
 
 static void
-usage()
+usage(void)
 {
 	(void)fprintf(stderr,
-	    "usage: nice [ -n increment ] utility [ argument ...]\n");
-	
-	exit(1);
+	    "Usage: %s [ -n increment ] utility [ argument ...]\n",
+	    getprogname());
+	exit(EXIT_FAILURE);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: pcnfsd_misc.c,v 1.5 1998/07/27 15:14:05 mycroft Exp $	*/
+/*	$NetBSD: pcnfsd_misc.c,v 1.11 2008/09/30 05:20:42 dholland Exp $	*/
 
 /* RE_SID: @(%)/usr/dosnfs/shades_SCCS/unix/pcnfsd/v2/src/SCCS/s.pcnfsd_misc.c 1.5 92/01/24 19:59:13 SMI */
 /*
@@ -36,6 +36,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <util.h>
 
 #ifdef ISC_2_0
 #include <sys/fcntl.h>
@@ -202,28 +203,29 @@ mapfont(f, i, b)
 
 	switch (f) {
 	case 'c':
-		(void) strcpy(fontname, "Courier");
+		(void) strlcpy(fontname, "Courier", sizeof(fontname));
 		break;
 	case 'h':
-		(void) strcpy(fontname, "Helvetica");
+		(void) strlcpy(fontname, "Helvetica", sizeof(fontname));
 		break;
 	case 't':
-		(void) strcpy(fontname, "Times");
+		(void) strlcpy(fontname, "Times", sizeof(fontname));
 		break;
 	default:
-		(void) strcpy(fontname, "Times-Roman");
+		(void) strlcpy(fontname, "Times-Roman", sizeof(fontname));
 		goto finis;
 	}
 	if (i != 'o' && b != 'b') {	/* no bold or oblique */
 		if (f == 't')	/* special case Times */
-			(void) strcat(fontname, "-Roman");
+			(void) strlcat(fontname, "-Roman", sizeof(fontname));
 		goto finis;
 	}
-	(void) strcat(fontname, "-");
+	(void) strlcat(fontname, "-", sizeof(fontname));
 	if (b == 'b')
-		(void) strcat(fontname, "Bold");
+		(void) strlcat(fontname, "Bold", sizeof(fontname));
 	if (i == 'o')		/* o-blique */
-		(void) strcat(fontname, f == 't' ? "Italic" : "Oblique");
+		(void) strlcat(fontname, f == 't' ? "Italic" : "Oblique",
+		    sizeof(fontname));
 
 finis:	return (&fontname[0]);
 }
@@ -244,23 +246,26 @@ run_ps630(f, opts)
 	char    commbuf[256];
 	int     i;
 
-	(void) strcpy(temp_file, f);
-	(void) strcat(temp_file, "X");	/* intermediate file name */
+	(void) strlcpy(temp_file, f, sizeof(temp_file));
+	(void) strlcat(temp_file, "X", sizeof(temp_file)); /* intermediate file name */
 
 #ifndef PS630_IS_BROKEN
-	(void) sprintf(commbuf, "ps630 -s %c%c -p %s -f ",
+	(void) snprintf(commbuf, sizeof(commbuf), "ps630 -s %c%c -p %s -f ",
 	    opts[2], opts[3], temp_file);
-	(void) strcat(commbuf, mapfont(opts[4], opts[5], opts[6]));
-	(void) strcat(commbuf, " -F ");
-	(void) strcat(commbuf, mapfont(opts[7], opts[8], opts[9]));
-	(void) strcat(commbuf, "  ");
-	(void) strcat(commbuf, f);
+	(void) strlcat(commbuf, mapfont(opts[4], opts[5], opts[6]),
+	    sizeof(commbuf));
+	(void) strlcat(commbuf, " -F ", sizeof(commbuf));
+	(void) strlcat(commbuf, mapfont(opts[7], opts[8], opts[9]),
+	    sizeof(commbuf));
+	(void) strlcat(commbuf, "  ", sizeof(commbuf));
+	(void) strlcat(commbuf, f, sizeof(commbuf));
 #else				/* PS630_IS_BROKEN */
 /*
  * The pitch and font features of ps630 appear to be broken at
  * this time.
  */
-	(void) sprintf(commbuf, "ps630 -p %s %s", temp_file, f);
+	(void) snprintf(commbuf, sizeof(commbuf), "ps630 -p %s %s",
+	    temp_file, f);
 #endif				/* PS630_IS_BROKEN */
 
 
@@ -292,13 +297,6 @@ run_ps630(f, opts)
 
 
 #ifdef WTMP
-
-#include <utmp.h>
-
-#ifndef	_PATH_WTMP
-#define _PATH_WTMP "/usr/adm/wtmp"
-#endif
-
 void
 wlogin(name, req)
 	char   *name;
@@ -306,9 +304,7 @@ wlogin(name, req)
 {
 	struct sockaddr_in *who;
 	struct hostent *hp;
-	char   *host;
-	struct utmp ut;
-	int     fd;
+	char *host;
 
 	if (!wtmp_enabled)
 		return;
@@ -321,21 +317,18 @@ wlogin(name, req)
 	    sizeof(struct in_addr),
 	    who->sin_family);
 
-	if (hp && (strlen(hp->h_name) <= sizeof(ut.ut_host))) {
+	if (hp) {
 		host = hp->h_name;
 	} else {
 		host = inet_ntoa(who->sin_addr);
 	}
 
-	(void) strcpy(ut.ut_line, "PC-NFS");
-	(void) strncpy(ut.ut_name, name, sizeof ut.ut_name);
-	(void) strncpy(ut.ut_host, host, sizeof ut.ut_host);
-	ut.ut_time = time((time_t *) 0);
-
-	if ((fd = open(_PATH_WTMP, O_WRONLY | O_APPEND, 0)) >= 0) {
-		(void) write(fd, (char *) &ut, sizeof(struct utmp));
-		(void) close(fd);
-	}
+#ifdef SUPPORT_UTMP
+	logwtmp("PC-NFS", name, host);
+#endif
+#ifdef SUPPORT_UTMPX
+	logwtmpx("PC-NFS", name, host, 0, USER_PROCESS);
+#endif
 }
 #endif				/* WTMP */
 
@@ -437,7 +430,7 @@ su_popen(user, cmd, maxtime)
 		if (pw) {
 			cached_uid = pw->pw_uid;
 			cached_gid = pw->pw_gid;
-			strcpy(cached_user, user);
+			strlcpy(cached_user, user, sizeof(cached_user));
 		} else {
 			cached_uid = (uid_t) (-2);
 			cached_gid = (gid_t) (-2);
@@ -498,7 +491,6 @@ su_pclose(ptr)
 
 
 
-#if XXX_unused
 /*
 ** The following routine reads a file "/etc/pcnfsd.conf" if present,
 ** and uses it to replace certain builtin elements, like the
@@ -514,8 +506,8 @@ su_pclose(ptr)
 **	printer name alias-for command
 **	wtmp yes|no
 */
-void
-config_from_file()
+static void
+config_from_file(void)
 {
 	FILE   *fd;
 	char    buff[1024];
@@ -540,7 +532,7 @@ config_from_file()
 		if (val == NULL)
 			continue;
 		if (!strcasecmp(kw, "spooldir")) {
-			strcpy(sp_name, val);
+			strlcpy(sp_name, val, sizeof(sp_name));
 			continue;
 		}
 #ifdef WTMP
@@ -550,7 +542,7 @@ config_from_file()
 			    !strcasecmp(val, "off") ||
 			    !strcasecmp(val, "disable") ||
 			    !strcmp(val, "0"))
-				wtmp_enabled = 0;;
+				wtmp_enabled = 0;
 			continue;
 		}
 #endif
@@ -566,8 +558,21 @@ config_from_file()
 	}
 	fclose(fd);
 }
-#endif	/* XXX_unused */
 
+/*
+** hack for main() - call config_from_file() then the real main
+** in the rpcgen output, which is hacked by CPPFLAGS to be "mymain"
+*/
+#undef main
+
+int mymain(int argc, char *argv[]);
+
+int
+main(int argc, char *argv[])
+{
+	config_from_file();
+	return mymain(argc, argv);
+}
 
 /*
 ** strembedded - returns true if s1 is embedded (in any case) in s2

@@ -1,8 +1,12 @@
-#	$NetBSD: Makefile,v 1.7 1997/10/24 09:00:37 lukem Exp $
+#	$NetBSD: Makefile,v 1.11 2006/11/20 22:06:26 dsl Exp $
 #	from: @(#)Makefile	5.6 (Berkeley) 3/12/91
 
+.ifdef SMALLPROG
+CPPFLAGS+=-DSMALL
+.endif
+
 PROG=	less
-CPPFLAGS+=-I${.CURDIR} -I${.CURDIR}/../lesskey
+CPPFLAGS+=-I${.CURDIR} -I${.CURDIR}/../lesskey -DSYSDIR=\"/etc\"
 SRCS=	brac.c ch.c charset.c cmdbuf.c command.c decode.c edit.c \
 	filename.c forwback.c help.c ifile.c input.c jump.c line.c \
 	linenum.c lsystem.c main.c mark.c optfunc.c option.c opttbl.c \

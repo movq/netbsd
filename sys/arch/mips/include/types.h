@@ -1,4 +1,4 @@
-/*	$NetBSD: types.h,v 1.22 2000/02/22 12:28:25 soda Exp $	*/
+/*	$NetBSD: types.h,v 1.43 2007/11/29 00:58:03 ad Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -42,60 +38,74 @@
 #define	_MACHTYPES_H_
 
 #include <sys/cdefs.h>
+#include <sys/featuretest.h>
+#include <mips/int_types.h>
 
 /*
  * Note that mips_reg_t is distinct from the register_t defined
  * in <types.h> to allow these structures to be as hidden from
  * the rest of the operating system as possible.
- *
  */
 
 #if defined(_MIPS_BSD_API) && _MIPS_BSD_API != _MIPS_BSD_API_LP32
-typedef long long mips_reg_t;
+typedef long long	mips_reg_t;
 typedef unsigned long long mips_ureg_t;
 #if _MIPS_BSD_API != _MIPS_BSD_API_LP32 && _MIPS_BSD_API != _MIPS_BSD_API_LP32_64CLEAN
 typedef	long long	mips_fpreg_t;
 #else
-typedef	int	mips_fpreg_t;
+typedef	int		mips_fpreg_t;
 #endif
 #else
-typedef long mips_reg_t;
-typedef unsigned long mips_ureg_t;
-typedef	long	mips_fpreg_t;
-#endif
-
-#if defined(_KERNEL)
-typedef struct label_t {
-	mips_reg_t val[12];
-} label_t;
+typedef long		mips_reg_t;
+typedef unsigned long	mips_ureg_t;
+typedef	long		mips_fpreg_t;
 #endif
 
 /* NB: This should probably be if defined(_KERNEL) */
-#if !defined(_POSIX_C_SOURCE) && !defined(_XOPEN_SOURCE)
+#if defined(_NETBSD_SOURCE)
+#if defined(_MIPS_PADDR_T_64BIT) && !defined(_LP64)
+typedef unsigned long long	paddr_t;
+typedef unsigned long long	psize_t;
+#else
 typedef unsigned long	paddr_t;
 typedef unsigned long	psize_t;
+#endif
 typedef unsigned long	vaddr_t;
 typedef unsigned long	vsize_t;
 #endif
 
-/*
- * Basic integral types.  Omit the typedef if
- * not possible for a machine/compiler combination.
- */
-#define	__BIT_TYPES_DEFINED__
-typedef	__signed char		   int8_t;
-typedef	unsigned char		 u_int8_t;
-typedef	short			  int16_t;
-typedef	unsigned short		u_int16_t;
-typedef	int			  int32_t;
-typedef	unsigned int		u_int32_t;
-/* LONGLONG */
-typedef	long long		  int64_t;
-/* LONGLONG */
-typedef	unsigned long long	u_int64_t;
+/* Make sure this is signed; we need pointers to be sign-extended. */
+#if defined(__mips_n32)
+typedef long long	register_t;
+#else
+typedef long		register_t;
+#endif /* __mips_n32 */
 
-typedef int32_t			register_t;
+#if defined(_KERNEL)
+typedef struct label_t {
+	register_t val[12];
+} label_t;
+#endif
+
+typedef	volatile int		__cpu_simple_lock_t;
+
+#define	__SIMPLELOCK_LOCKED	1
+#define	__SIMPLELOCK_UNLOCKED	0
 
 #define	__SWAP_BROKEN
+
+#define	__HAVE_AST_PERPROC
+#define	__HAVE_SYSCALL_INTERN
+#ifdef MIPS3_PLUS	/* XXX bogus! */
+#define	__HAVE_CPU_COUNTER
+#endif
+
+#ifdef _LP64
+#define	__HAVE_ATOMIC64_OPS
+#endif
+
+#if defined(_KERNEL)
+#define	__HAVE_RAS
+#endif
 
 #endif	/* _MACHTYPES_H_ */

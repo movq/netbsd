@@ -15,7 +15,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBM_SCCS) && !defined(lint)
-__RCSID("$NetBSD: w_lgammaf_r.c,v 1.5 1999/07/02 15:37:44 simonb Exp $");
+__RCSID("$NetBSD: w_lgammaf_r.c,v 1.7 2002/05/26 22:02:02 wiz Exp $");
 #endif
 
 /*
@@ -25,15 +25,8 @@ __RCSID("$NetBSD: w_lgammaf_r.c,v 1.5 1999/07/02 15:37:44 simonb Exp $");
 #include "math.h"
 #include "math_private.h"
 
-float lgammaf_r __P((float, int *));
-
-
-#ifdef __STDC__
-	float lgammaf_r(float x, int *signgamp) /* wrapper lgammaf_r */
-#else
-	float lgammaf_r(x,signgamp)              /* wrapper lgammaf_r */
-        float x; int *signgamp;
-#endif
+float
+lgammaf_r(float x, int *signgamp) /* wrapper lgammaf_r */
 {
 #ifdef _IEEE_LIBM
 	return __ieee754_lgammaf_r(x,signgamp);

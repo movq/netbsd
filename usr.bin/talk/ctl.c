@@ -1,4 +1,4 @@
-/*	$NetBSD: ctl.c,v 1.5 2000/03/02 17:37:46 christos Exp $	*/
+/*	$NetBSD: ctl.c,v 1.7 2004/03/20 17:07:33 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)ctl.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: ctl.c,v 1.5 2000/03/02 17:37:46 christos Exp $");
+__RCSID("$NetBSD: ctl.c,v 1.7 2004/03/20 17:07:33 christos Exp $");
 #endif /* not lint */
 
 /*
@@ -70,7 +66,7 @@ CTL_MSG msg;
 void
 open_sockt()
 {
-	int length;
+	socklen_t length;
 
 	
 	(void)memset(&my_addr, 0, sizeof(my_addr));
@@ -81,7 +77,7 @@ open_sockt()
 	my_addr.sin_addr = my_machine_addr;
 	my_addr.sin_port = 0;
 	sockt = socket(AF_INET, SOCK_STREAM, 0);
-	if (sockt <= 0)
+	if (sockt == -1)
 		p_error("Bad socket");
 	if (bind(sockt, (struct sockaddr *)&my_addr, sizeof(my_addr)) != 0)
 		p_error("Binding local socket");
@@ -94,7 +90,7 @@ open_sockt()
 void
 open_ctl() 
 {
-	int length;
+	socklen_t length;
 
 	(void)memset(&ctl_addr, 0, sizeof(ctl_addr));
 	ctl_addr.sin_family = AF_INET;
@@ -104,7 +100,7 @@ open_ctl()
 	ctl_addr.sin_port = 0;
 	ctl_addr.sin_addr = my_machine_addr;
 	ctl_sockt = socket(AF_INET, SOCK_DGRAM, 0);
-	if (ctl_sockt <= 0)
+	if (ctl_sockt == -1)
 		p_error("Bad socket");
 	if (bind(ctl_sockt,
 	    (struct sockaddr *)&ctl_addr, sizeof(ctl_addr)) != 0)

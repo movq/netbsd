@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ievar.h,v 1.11 2000/03/13 23:52:34 soren Exp $	*/
+/*	$NetBSD: if_ievar.h,v 1.15 2008/06/28 12:13:38 tsutsui Exp $	*/
 
 /*
  * Machine-dependent glue for the Intel Ethernet (ie) driver.
@@ -54,28 +54,28 @@ enum ie_hardware {
  * The Sun PROM leaves a page for us at the end of KVA space.
  */
 struct ie_softc {
-	struct device sc_dev;	/* device structure */
+	device_t sc_dev;	/* device structure */
 
 	struct ethercom sc_ethercom;/* system ethercom structure */
 #define	sc_if	sc_ethercom.ec_if 		/* network-visible interface */
 
 	/* XXX: This is used only during attach. */
-	u_int8_t sc_addr[ETHER_ADDR_LEN];
-	u_int8_t sc_pad1[2];
+	uint8_t sc_addr[ETHER_ADDR_LEN];
+	uint8_t sc_pad1[2];
 
 	int     sc_debug;	/* See IEDEBUG */
 
 	/* card dependent functions: */
-	void    (*reset_586) __P((struct ie_softc *));
-	void    (*chan_attn) __P((struct ie_softc *));
-	void    (*run_586)   __P((struct ie_softc *));
-	void	*(*sc_memcpy) __P((void *, const void *, size_t));
-	void	*(*sc_memset) __P((void *, int, size_t));
+	void    (*reset_586)(struct ie_softc *);
+	void    (*chan_attn)(struct ie_softc *);
+	void    (*run_586)  (struct ie_softc *);
+	void	*(*sc_memcpy)(void *, const void *, size_t);
+	void	*(*sc_memset)(void *, int, size_t);
 
-	caddr_t sc_iobase;	/* KVA of base of 24bit addr space */
-	caddr_t sc_maddr;	/* KVA of base of chip's RAM */
+	void *sc_iobase;	/* KVA of base of 24bit addr space */
+	void *sc_maddr;	/* KVA of base of chip's RAM */
 	u_int   sc_msize;	/* how much RAM we have/use */
-	caddr_t sc_reg;		/* KVA of card's register */
+	void *sc_reg;		/* KVA of card's register */
 
 	enum ie_hardware hard_type;	/* card type */
 
@@ -97,7 +97,7 @@ struct ie_softc {
 	 * pointer and size of a block of KVA where the buffers
 	 * are to be allocated from
 	 */
-	char * buf_area;
+	uint8_t *buf_area;
 	int     buf_area_sz;
 
 	/*
@@ -124,5 +124,5 @@ struct ie_softc {
 };
 
 
-extern void    ie_attach __P((struct ie_softc *));
-extern int  ie_intr __P((void *));
+extern void    ie_attach(struct ie_softc *);
+extern int  ie_intr(void *);

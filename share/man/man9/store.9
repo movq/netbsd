@@ -1,4 +1,4 @@
-.\"	$NetBSD: store.9,v 1.8 1999/03/16 00:40:48 garbled Exp $
+.\"	$NetBSD: store.9,v 1.10 2003/04/16 13:35:34 wiz Exp $
 .\"
 .\" Copyright (c) 1996 Jason R. Thorpe.
 .\" All rights reserved.
@@ -45,8 +45,8 @@
 .Nm suiword
 .Nd store data to user-space
 .Sh SYNOPSIS
-.Fd #include <sys/types.h>
-.Fd #include <sys/systm.h>
+.In sys/types.h
+.In sys/systm.h
 .Ft int
 .Fn subyte "void *base" "int c"
 .Ft int

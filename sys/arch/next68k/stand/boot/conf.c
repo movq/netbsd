@@ -1,4 +1,4 @@
-/*	$NetBSD: conf.c,v 1.1.1.1 1998/06/09 07:53:06 dbj Exp $	*/
+/*	$NetBSD: conf.c,v 1.7 2005/12/11 12:18:29 christos Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -53,23 +49,23 @@
  * Device configuration
  */
 
-extern int	sdstrategy __P((void *, int, daddr_t, size_t,
-				void *, size_t *));
-extern int	sdopen __P((struct open_file *, ...));
-extern int	sdclose __P((struct open_file *));
+extern int	sdstrategy(void *, int, daddr_t, size_t, void *, size_t *);
+extern int	sdopen(struct open_file *, ...);
+extern int	sdclose(struct open_file *);
 #define	sdioctl	noioctl
 
 /* ### now from libsa
-extern int	enstrategy __P((void *, int, daddr_t, size_t,
-				void *, size_t *));
-extern int	enopen __P((struct open_file *, ...));
-extern int	enclose __P((struct open_file *));
+extern int	enstrategy(void *, int, daddr_t, size_t, void *, size_t *);
+extern int	enopen(struct open_file *, ...);
+extern int	enclose(struct open_file *);
 #define	enioctl	noioctl
 */
 
 struct devsw devsw[] = {
 	{ "sd",	sdstrategy,	sdopen,	sdclose,	sdioctl },
 	{ "en",	net_strategy,	net_open, net_close,	net_ioctl },
+	{ "tp",	net_strategy,	net_open, net_close,	net_ioctl },
+	{ "xe",	net_strategy,	net_open, net_close,	net_ioctl },
 #if 0
 	{ "fd",	nullsys,	nodev,	nullsys,	noioctl },
 	{ "od",	nullsys,	nodev,	nullsys,	noioctl },
@@ -82,15 +78,15 @@ int	ndevs = (sizeof(devsw)/sizeof(devsw[0]));
  * Filesystem configuration
  */
 struct fs_ops file_system[] = {
-	{ ufs_open, ufs_close, ufs_read, ufs_write, ufs_seek, ufs_stat },
-	{ nfs_open, nfs_close, nfs_read, nfs_write, nfs_seek, nfs_stat },
+	FS_OPS(ufs),
+	FS_OPS(nfs),
 };
 
-int nfsys = NENTS(file_system);
+int nfsys = sizeof(file_system) / sizeof(file_system[0]);
 
 extern struct netif_driver en_driver;
 
 struct netif_driver *netif_drivers[] = {
 	&en_driver,
 };
-int n_netif_drivers = NENTS(netif_drivers);
+int n_netif_drivers = sizeof(netif_drivers) / sizeof(netif_drivers[0]);

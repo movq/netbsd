@@ -1,9 +1,43 @@
-/*	$NetBSD: clock.c,v 1.8 2000/01/19 02:52:21 msaitoh Exp $	*/
+/*	$NetBSD: clock.c,v 1.28 2008/06/25 08:14:59 isaki Exp $	*/
 
 /*
- * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1982, 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Systems Programming Group of the University of Utah Computer
+ * Science Department.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ * from: Utah $Hdr: clock.c 1.18 91/01/21$
+ *
+ *	@(#)clock.c	8.2 (Berkeley) 1/12/94
+ */
+/*
+ * Copyright (c) 1988 University of Utah.
  *
  * This code is derived from software contributed to Berkeley by
  * the Systems Programming Group of the University of Utah Computer
@@ -42,6 +76,9 @@
  *	@(#)clock.c	8.2 (Berkeley) 1/12/94
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.28 2008/06/25 08:14:59 isaki Exp $");
+
 #include "clock.h"
 
 #if NCLOCK > 0
@@ -50,69 +87,66 @@
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
+#include <sys/timetc.h>
 
 #include <machine/psl.h>
 #include <machine/cpu.h>
 #include <machine/bus.h>
 
+#include <dev/clock_subr.h>
+
 #include <arch/x68k/dev/mfp.h>
 #include <arch/x68k/dev/rtclock_var.h>
 
+static int clock_match(device_t, cfdata_t, void *);
+static void clock_attach(device_t, device_t, void *);
 
-struct clock_softc {
-	struct device		sc_dev;
-};
+CFATTACH_DECL_NEW(clock, 0,
+    clock_match, clock_attach, NULL, NULL);
 
-static int clock_match __P((struct device *, struct cfdata *, void *));
-static void clock_attach __P((struct device *, struct device *, void *));
+static int clock_attached;
 
-struct cfattach clock_ca = {
-	sizeof(struct clock_softc), clock_match, clock_attach
-};
-
+static unsigned mfp_get_timecount(struct timecounter *);
 
 static int
-clock_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+clock_match(device_t parent, cfdata_t cf, void *aux)
 {
+
 	if (strcmp (aux, "clock") != 0)
 		return (0);
-	if (cf->cf_unit != 0)
+	if (clock_attached)
 		return (0);
 	return 1;
 }
 
 
 static void
-clock_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+clock_attach(device_t parent, device_t self, void *aux)
 {
-	printf (": MFP timer C\n");
 
-	return;
+	clock_attached = 1;
+
+	aprint_normal(": MFP timer C\n");
 }
 
 
-/* We're using a 100 Hz clock. */
-
-#define CLK_INTERVAL 200
-#define CLOCKS_PER_SEC 100
-
-static int clkread __P((void));
+/*
+ * MFP of X68k uses 4MHz clock always and we use 1/200 prescaler here.
+ * Therefore, clock interval is 50 usec.
+ *
+ * Note that for timecounters, we'd like to use a finger grained clock, but
+ * since we only have an 8-bit clock, we can't do that without increasing
+ * the system clock rate.  (Otherwise the counter would roll in less than
+ * a single system clock.)
+ */
+#define CLK_RESOLUTION	(50)
+#define CLOCKS_PER_SEC	(1000000 / CLK_RESOLUTION)
 
 /*
  * Machine-dependent clock routines.
  *
  * Startrtclock restarts the real-time clock, which provides
  * hardclock interrupts to kern_clock.c.
- *
- * Inittodr initializes the time of day hardware which provides
- * date functions.
- *
- * Resettodr restores the time of day hardware after a time change.
  *
  * A note on the real-time clock:
  * We actually load the clock with CLK_INTERVAL-1 instead of CLK_INTERVAL.
@@ -126,13 +160,32 @@ static int clkread __P((void));
  *
  */
 void
-cpu_initclocks()
+cpu_initclocks(void)
 {
-	mfp_set_tcdcr(mfp_get_tcdcr() & 0x0f); /* stop timer C */
-	mfp_set_tcdr(CLK_INTERVAL);
+	static struct	timecounter tc = {
+		.tc_name = "mfp",
+		.tc_frequency = CLOCKS_PER_SEC,
+		.tc_counter_mask = 0xff,
+		.tc_get_timecount = mfp_get_timecount,
+		.tc_quality = 100,
+	};
+	
+	if (CLOCKS_PER_SEC % hz ||
+	    hz <= (CLOCKS_PER_SEC / 256) || hz > CLOCKS_PER_SEC) {
+		printf("cannot set %d Hz clock. using 100 Hz\n", hz);
+		hz = 100;
+	}
 
+	mfp_set_tcdcr(0);		/* stop timers C and D */
 	mfp_set_tcdcr(mfp_get_tcdcr() | 0x70); /* 1/200 delay mode */
+
+	mfp_set_tcdr(CLOCKS_PER_SEC / hz);
 	mfp_bit_set_ierb(MFP_INTR_TIMER_C);
+
+	mfp_set_tddr(0xff);	/* maximum free run -- only 8 bits wide */
+	mfp_set_tcdcr(mfp_get_tcdcr() | 0x07);	/* 1/200 prescaler */
+
+	tc_init(&tc);
 }
 
 /*
@@ -141,8 +194,7 @@ cpu_initclocks()
  * but that would be a drag.
  */
 void
-setstatclockrate(hz)
-	int hz;
+setstatclockrate(int newhz)
 {
 }
 
@@ -150,12 +202,13 @@ setstatclockrate(hz)
  * Returns number of usec since last recorded clock "tick"
  * (i.e. clock interrupt).
  */
-int
-clkread()
+unsigned
+mfp_get_timecount(struct timecounter *tc)
 {
-	return (mfp_get_tcdr() * CLOCKS_PER_SEC) / CLK_INTERVAL;
+	uint8_t	val;
+	val = ~(mfp_get_tddr());
+	return (val);
 }
-
 
 #if 0
 void
@@ -172,7 +225,7 @@ DELAY(mic)
 	 */
 
 	/*
-	 * this function uses HSync pulses as base units. The custom chips 
+	 * this function uses HSync pulses as base units. The custom chips
 	 * display only deals with 31.6kHz/2 refresh, this gives us a
 	 * resolution of 1/15800 s, which is ~63us (add some fuzz so we really
 	 * wait awhile, even if using small timeouts)
@@ -180,9 +233,9 @@ DELAY(mic)
 	n = mic/32 + 2;
 	do {
 		while ((mfp.gpip & MFP_GPIP_HSYNC) != 0)
-			asm("nop");
+			__asm("nop");
 		while ((mfp.gpip & MFP_GPIP_HSYNC) == 0)
-			asm("nop");
+			__asm("nop");
 	} while (n--);
 }
 #endif
@@ -209,7 +262,7 @@ DELAY(mic)
 #include <sys/resourcevar.h>
 #include <sys/ioctl.h>
 #include <sys/malloc.h>
-#include <vm/vm.h>
+#include <uvm/uvm_extern.h>	/* XXX needed? */
 #include <x68k/x68k/clockioctl.h>
 #include <sys/specdev.h>
 #include <sys/vnode.h>
@@ -224,8 +277,8 @@ int clockdebug = 0;
 #endif
 
 /*ARGSUSED*/
-clockopen(dev, flags)
-	dev_t dev;
+int
+clockopen(dev_t dev, int flags)
 {
 #ifdef PROFTIMER
 #ifdef PROF
@@ -249,31 +302,29 @@ clockopen(dev, flags)
 }
 
 /*ARGSUSED*/
-clockclose(dev, flags)
-	dev_t dev;
+int
+clockclose(dev_t dev, int flags)
 {
-	(void) clockunmmap(dev, (caddr_t)0, curproc);	/* XXX */
+	(void) clockunmmap(dev, NULL, curproc);	/* XXX */
 	stopclock();
 	clockon = 0;
 	return(0);
 }
 
 /*ARGSUSED*/
-clockioctl(dev, cmd, data, flag, p)
-	dev_t dev;
-	caddr_t data;
-	struct proc *p;
+int
+clockioctl(dev_t dev, u_long cmd, void *data, int flag, struct proc *p)
 {
 	int error = 0;
 	
 	switch (cmd) {
 
 	case CLOCKMAP:
-		error = clockmmap(dev, (caddr_t *)data, p);
+		error = clockmmap(dev, (void **)data, p);
 		break;
 
 	case CLOCKUNMAP:
-		error = clockunmmap(dev, *(caddr_t *)data, p);
+		error = clockunmmap(dev, *(void **)data, p);
 		break;
 
 	case CLOCKGETRES:
@@ -288,16 +339,14 @@ clockioctl(dev, cmd, data, flag, p)
 }
 
 /*ARGSUSED*/
-clockmap(dev, off, prot)
-	dev_t dev;
+int
+clockmap(dev_t dev, off_t off, int prot)
 {
-	return((off + (INTIOBASE+CLKBASE+CLKSR-1)) >> PGSHIFT);
+	return ((off + (INTIOBASE + CLKBASE + CLKSR - 1)) >> PGSHIFT);
 }
 
-clockmmap(dev, addrp, p)
-	dev_t dev;
-	caddr_t *addrp;
-	struct proc *p;
+int
+clockmmap(dev_t dev, void **addrp, struct proc *p)
 {
 	int error;
 	struct vnode vn;
@@ -308,31 +357,30 @@ clockmmap(dev, addrp, p)
 	if (*addrp)
 		flags |= MAP_FIXED;
 	else
-		*addrp = (caddr_t)0x1000000;	/* XXX */
+		*addrp = (void *)0x1000000;	/* XXX */
 	vn.v_type = VCHR;			/* XXX */
 	vn.v_specinfo = &si;			/* XXX */
 	vn.v_rdev = dev;			/* XXX */
 	error = vm_mmap(&p->p_vmspace->vm_map, (vaddr_t *)addrp,
-			PAGE_SIZE, VM_PROT_ALL, flags, (caddr_t)&vn, 0);
+			PAGE_SIZE, VM_PROT_ALL, flags, (void *)&vn, 0);
 	return(error);
 }
 
-clockunmmap(dev, addr, p)
-	dev_t dev;
-	caddr_t addr;
-	struct proc *p;
+int
+clockunmmap(dev_t dev, void *addr, struct proc *p)
 {
 	int rv;
 
 	if (addr == 0)
 		return(EINVAL);		/* XXX: how do we deal with this? */
-	rv = vm_deallocate(p->p_vmspace->vm_map, (vaddr_t)addr, PAGE_SIZE);
-	return(rv == KERN_SUCCESS ? 0 : EINVAL);
+	uvm_deallocate(p->p_vmspace->vm_map, (vaddr_t)addr, PAGE_SIZE);
+	return 0;
 }
 
-startclock()
+void
+startclock(void)
 {
-	register struct clkreg *clk = (struct clkreg *)clkstd[0];
+	struct clkreg *clk = (struct clkreg *)clkstd[0];
 
 	clk->clk_msb2 = -1; clk->clk_lsb2 = -1;
 	clk->clk_msb3 = -1; clk->clk_lsb3 = -1;
@@ -343,9 +391,10 @@ startclock()
 	clk->clk_cr1 = CLK_IENAB;
 }
 
-stopclock()
+void
+stopclock(void)
 {
-	register struct clkreg *clk = (struct clkreg *)clkstd[0];
+	struct clkreg *clk = (struct clkreg *)clkstd[0];
 
 	clk->clk_cr2 = CLK_CR3;
 	clk->clk_cr3 = 0;
@@ -368,7 +417,7 @@ stopclock()
  * locore has been changed to turn the profile clock on/off when switching
  * into/out of a process that is profiling (startprofclock/stopprofclock).
  * This reduces the impact of the profiling clock on other users, and might
- * possibly increase the accuracy of the profiling. 
+ * possibly increase the accuracy of the profiling.
  */
 int  profint   = PRF_INTERVAL;	/* Clock ticks between interrupts */
 int  profscale = 0;		/* Scale factor from sys clock to prof clock */
@@ -379,7 +428,8 @@ char profon    = 0;		/* Is profiling clock on? */
 #define	PRF_USER	0x01
 #define	PRF_KERNEL	0x80
 
-initprofclock()
+void
+initprofclock(void)
 {
 	struct proc *p = curproc;		/* XXX */
 
@@ -416,11 +466,13 @@ initprofclock()
 	profscale = CLK_INTERVAL / profint;
 }
 
-startprofclock()
+void
+startprofclock(void)
 {
 }
 
-stopprofclock()
+void
+stopprofclock(void)
 {
 }
 
@@ -429,10 +481,10 @@ stopprofclock()
  * profclock() is expanded in line in lev6intr() unless profiling kernel.
  * Assumes it is called with clock interrupts blocked.
  */
-profclock(pc, ps)
-	caddr_t pc;
-	int ps;
+void
+profclock(void *pc, int ps)
 {
+
 	/*
 	 * Came from user mode.
 	 * If this process is being profiled record the tick.
@@ -441,16 +493,18 @@ profclock(pc, ps)
 		if (p->p_stats.p_prof.pr_scale)
 			addupc(pc, &curproc->p_stats.p_prof, 1);
 	}
+
 	/*
 	 * Came from kernel (supervisor) mode.
 	 * If we are profiling the kernel, record the tick.
 	 */
 	else if (profiling < 2) {
-		register int s = pc - s_lowpc;
+		int s = pc - s_lowpc;
 
 		if (s < s_textsize)
 			kcount[s / (HISTFRACTION * sizeof (*kcount))]++;
 	}
+
 	/*
 	 * Kernel profiling was on but has been disabled.
 	 * Mark as no longer profiling kernel and if all profiling done,
@@ -465,71 +519,6 @@ profclock(pc, ps)
 #endif	/* PROF */
 #endif	/* PROFTIMER */
 
-/*
- * Return the best possible estimate of the current time.
- */
-void
-microtime(tvp)
-	register struct timeval *tvp;
-{
-	static struct timeval lasttime;
-
-	*tvp = time;
-	tvp->tv_usec += clkread();
-	while (tvp->tv_usec >= 1000000) {
-		tvp->tv_sec++;
-		tvp->tv_usec -= 1000000;
-	}
-	if (tvp->tv_sec == lasttime.tv_sec &&
-	    tvp->tv_usec <= lasttime.tv_usec &&
-	    (tvp->tv_usec = lasttime.tv_usec + 1) >= 1000000) {
-		tvp->tv_sec++;
-		tvp->tv_usec -= 1000000;
-	}
-	lasttime = *tvp;
-}
-
-/* this is a hook set by a clock driver for the configured realtime clock,
-   returning plain current unix-time */
-long (*gettod) __P((void)) = 0;
-long (*settod) __P((long)) = 0;
-
-/*
- * Initialize the time of day register, based on the time base which is, e.g.
- * from a filesystem.
- */
-void
-inittodr(base)
-	time_t base;
-{
-	u_long timbuf = base;	/* assume no battery clock exists */
-  
-	if (!gettod)
-		printf ("WARNING: no battery clock\n");
-	else
-		timbuf = gettod();
-  
-	if (timbuf < base) {
-		printf ("WARNING: bad date in battery clock\n");
-		timbuf = base;
-	}
-	if (base < 5*SECYR) {
-		printf("WARNING: preposterous time in file system");
-		timbuf = 6*SECYR + 186*SECDAY + SECDAY/2;
-		printf(" -- CHECK AND RESET THE DATE!\n");
-	}
-
-	/* Battery clock does not store usec's, so forget about it. */
-	time.tv_sec = timbuf;
-}
-
-void
-resettodr()
-{
-	if (settod)
-		if (settod (time.tv_sec) != 1)
-			printf("Cannot set battery backed clock\n");
-}
 #else	/* NCLOCK */
 #error loose.
 #endif

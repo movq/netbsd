@@ -1,4 +1,4 @@
-/*	$NetBSD: stdarg.h,v 1.19 2000/02/19 09:23:44 mycroft Exp $	*/
+/*	$NetBSD: stdarg.h,v 1.28 2008/06/21 00:56:39 gmcgarry Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -44,7 +40,32 @@
 typedef _BSD_VA_LIST_	va_list;
 
 #ifdef __lint__
-#define __builtin_next_arg(t) ((t) ? 0 : 0)
+
+#define va_start(ap, last)	((ap) = *(va_list *)0)
+#define va_arg(ap, type)	(*(type *)(void *)&(ap))
+#define va_end(ap)
+#define __va_copy(dest, src)	((dest) = (src))
+
+#elif __GNUC_PREREQ__(3, 0)
+
+#define va_start(ap, last)	__builtin_stdarg_start((ap), last)
+#define va_arg(ap, type)	__builtin_va_arg((ap), type)
+#define va_end(ap)		__builtin_va_end((ap))
+#define __va_copy(dest, src)	__builtin_va_copy((dest), (src))
+
+#elif defined(__PCC__)
+
+#define va_start(ap, last)	__builtin_stdarg_start((ap), last)
+#define va_arg(ap, type)	__builtin_va_arg((ap), type)
+#define va_end(ap)		__builtin_va_end((ap))
+#define __va_copy(dest, src)	__builtin_va_copy((dest), (src))
+
+#else
+
+#if defined(_MIPS_BSD_API) && \
+    !((_MIPS_BSD_API == _MIPS_BSD_API_LP32) || \
+      (_MIPS_BSD_API == _MIPS_BSD_API_LP32_64CLEAN))
+#error stdargs.h does not work with 64 bit ABIs
 #endif
 
 #define	va_start(ap, last) \
@@ -53,26 +74,29 @@ typedef _BSD_VA_LIST_	va_list;
 #if BYTE_ORDER == LITTLE_ENDIAN
 #define	va_arg(ap, T)							\
 	(((T *)(							\
-	    (ap) += (/*CONSTCOND*/ sizeof(T) <= sizeof(int)		\
+	    (ap) += (/*CONSTCOND*/ __alignof__(T) <= sizeof(int)	\
 		? sizeof(int) : ((long)(ap) & 4) + sizeof(T)),		\
-	    (ap) - (/*CONSTCOND*/ sizeof(T) <= sizeof(int)		\
+	    (ap) - (/*CONSTCOND*/ __alignof__(T) <= sizeof(int)		\
 		? sizeof(int) : sizeof(T))				\
  	))[0])
 #else
 #define	va_arg(ap, T)							\
 	(((T *)(							\
-	    (ap) += (/*CONSTCOND*/ sizeof(T) <= sizeof(int)		\
+	    (ap) += (/*CONSTCOND*/ __alignof__(T) <= sizeof(int)	\
 		? sizeof(int) : ((long)(ap) & 4) + sizeof(T))		\
  	))[-1])
 #endif
 
-#if !defined(_ANSI_SOURCE) && \
-    (!defined(_POSIX_C_SOURCE) && !defined(_XOPEN_SOURCE) || \
-     defined(_ISOC99_SOURCE) || (__STDC_VERSION__ - 0) >= 199901L)
-#define	va_copy(dest, src)						\
-	((dest) = (src))
+#define	va_end(ap)
+
+#define	__va_copy(dest, src)	((dest) = (src))
+
 #endif
 
-#define	va_end(ap)
+#if !defined(_ANSI_SOURCE) &&						\
+    (defined(_ISOC99_SOURCE) || (__STDC_VERSION__ - 0) >= 199901L ||	\
+     defined(_NETBSD_SOURCE))
+#define	va_copy(dest, src)	__va_copy((dest), (src))
+#endif
 
 #endif /* !_MIPS_STDARG_H_ */

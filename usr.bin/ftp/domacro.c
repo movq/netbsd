@@ -1,4 +1,4 @@
-/*	$NetBSD: domacro.c,v 1.15 1999/11/11 01:19:11 lukem Exp $	*/
+/*	$NetBSD: domacro.c,v 1.21 2005/06/29 02:31:19 christos Exp $	*/
 
 /*
  * Copyright (c) 1985, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)domacro.c	8.3 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: domacro.c,v 1.15 1999/11/11 01:19:11 lukem Exp $");
+__RCSID("$NetBSD: domacro.c,v 1.21 2005/06/29 02:31:19 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -49,73 +45,69 @@ __RCSID("$NetBSD: domacro.c,v 1.15 1999/11/11 01:19:11 lukem Exp $");
 #include "ftp_var.h"
 
 void
-domacro(argc, argv)
-	int argc;
-	char *argv[];
+domacro(int argc, char *argv[])
 {
 	int i, j, count = 2, loopflg = 0;
-	char *cp1, *cp2, line2[200];
+	char *cp1, *cp2, line2[FTPBUFLEN];
 	struct cmd *c;
 
 	if ((argc == 0 && argv != NULL) ||
 	    (argc < 2 && !another(&argc, &argv, "macro name"))) {
-		fprintf(ttyout, "usage: %s macro_name [args]\n", argv[0]);
+		UPRINTF("usage: %s macro_name [args]\n", argv[0]);
 		code = -1;
 		return;
 	}
 	for (i = 0; i < macnum; ++i) {
-		if (!strncmp(argv[1], macros[i].mac_name, 9)) {
+		if (!strncmp(argv[1], macros[i].mac_name, 9))
 			break;
-		}
 	}
 	if (i == macnum) {
 		fprintf(ttyout, "'%s' macro not found.\n", argv[1]);
 		code = -1;
 		return;
 	}
-	(void)strcpy(line2, line);
-TOP:
+	(void)strlcpy(line2, line, sizeof(line2));
+ TOP:
 	cp1 = macros[i].mac_start;
 	while (cp1 != macros[i].mac_end) {
-		while (isspace((unsigned char)*cp1)) {
+		while (isspace((unsigned char)*cp1))
 			cp1++;
-		}
 		cp2 = line;
 		while (*cp1 != '\0') {
-		      switch(*cp1) {
-			    case '\\':
-				 *cp2++ = *++cp1;
-				 break;
-			    case '$':
-				 if (isdigit((unsigned char)*(cp1+1))) {
-				    j = 0;
-				    while (isdigit((unsigned char)*++cp1)) {
-					  j = 10*j +  *cp1 - '0';
-				    }
-				    cp1--;
-				    if (argc - 2 >= j) {
-					(void)strcpy(cp2, argv[j+1]);
-					cp2 += strlen(argv[j+1]);
-				    }
-				    break;
-				 }
-				 if (*(cp1+1) == 'i') {
+			switch(*cp1) {
+			case '\\':
+				*cp2++ = *++cp1;
+				break;
+			case '$':
+				if (isdigit((unsigned char)*(cp1+1))) {
+					j = 0;
+					while (isdigit((unsigned char)*++cp1))
+						j = 10*j +  *cp1 - '0';
+					cp1--;
+					if (argc - 2 >= j) {
+						(void)strlcpy(cp2, argv[j+1],
+						    sizeof(line) - (cp2 - line));
+						cp2 += strlen(argv[j+1]);
+					}
+					break;
+				}
+				if (*(cp1+1) == 'i') {
 					loopflg = 1;
 					cp1++;
 					if (count < argc) {
-					   (void)strcpy(cp2, argv[count]);
-					   cp2 += strlen(argv[count]);
+						(void)strlcpy(cp2, argv[count],
+						    sizeof(line) - (cp2 - line));
+						cp2 += strlen(argv[count]);
 					}
 					break;
 				}
 				/* intentional drop through */
-			    default:
+			default:
 				*cp2++ = *cp1;
 				break;
-		      }
-		      if (*cp1 != '\0') {
-			 cp1++;
-		      }
+			}
+			if (*cp1 != '\0')
+				cp1++;
 		}
 		*cp2 = '\0';
 		makeargv();
@@ -123,34 +115,29 @@ TOP:
 		if (c == (struct cmd *)-1) {
 			fputs("?Ambiguous command.\n", ttyout);
 			code = -1;
-		}
-		else if (c == 0) {
+		} else if (c == 0) {
 			fputs("?Invalid command.\n", ttyout);
 			code = -1;
-		}
-		else if (c->c_conn && !connected) {
+		} else if (c->c_conn && !connected) {
 			fputs("Not connected.\n", ttyout);
 			code = -1;
-		}
-		else {
+		} else {
 			if (verbose) {
 				fputs(line, ttyout);
 				putc('\n', ttyout);
 			}
+			margv[0] = c->c_name;
 			(*c->c_handler)(margc, margv);
-			if (bell && c->c_bell) {
+			if (bell && c->c_bell)
 				(void)putc('\007', ttyout);
-			}
-			(void)strcpy(line, line2);
+			(void)strlcpy(line, line2, sizeof(line));
 			makeargv();
 			argc = margc;
 			argv = margv;
 		}
-		if (cp1 != macros[i].mac_end) {
+		if (cp1 != macros[i].mac_end)
 			cp1++;
-		}
 	}
-	if (loopflg && ++count < argc) {
+	if (loopflg && ++count < argc)
 		goto TOP;
-	}
 }

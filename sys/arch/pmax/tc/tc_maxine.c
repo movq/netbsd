@@ -1,4 +1,4 @@
-/*	$NetBSD: tc_maxine.c,v 1.5 2000/02/29 07:20:21 nisimura Exp $	*/
+/*	$NetBSD: tc_maxine.c,v 1.8 2005/12/11 12:18:41 christos Exp $	*/
 
 /*
  * Copyright (c) 1998 Jonathan Stone.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
-__KERNEL_RCSID(0, "$NetBSD: tc_maxine.c,v 1.5 2000/02/29 07:20:21 nisimura Exp $ ");
+__KERNEL_RCSID(0, "$NetBSD: tc_maxine.c,v 1.8 2005/12/11 12:18:41 christos Exp $ ");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -58,7 +58,7 @@ static struct tc_slotdesc tc_xine_slots [4] = {
 
 const struct tc_builtin tc_xine_builtins[] = {
 	{ "IOCTL   ",	3, 0x0, C(3), },
-	{ "PMAG-DV ",	2, 0x0, C(2), },	/* pretend as a TC device */
+	{ "PMAG-DV ",	2, 0x0, C(SYS_DEV_OPT2), },	/* pretend as a TC device */
 };
 
 struct tcbus_attach_args xine_tc_desc = {
@@ -66,6 +66,6 @@ struct tcbus_attach_args xine_tc_desc = {
   	TC_SPEED_12_5_MHZ,
 	XINE_TC_NSLOTS, tc_xine_slots,
 	2, tc_xine_builtins,
-	NULL, NULL,
+	NULL, NULL, NULL,
 	NULL,
 };

@@ -1,4 +1,4 @@
-/*	$NetBSD: map_parse.y,v 1.2 1999/02/08 11:08:23 hannken Exp $ */
+/*	$NetBSD: map_parse.y,v 1.7 2008/04/28 20:23:09 martin Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -43,11 +36,11 @@
  *				from the old to the new map. Therefore it
  *				is possible to exchange keys.
  *
- * kecode pos = sym ...		assign the symbols to key `pos'.
+ * keycode pos = sym ...	assign the symbols to key `pos'.
  *				The first symbol may be a command.
  *				The following symbols are assigned
  *				to the normal and altgr groups.
- *				Missing symbols are generated automacically
+ *				Missing symbols are generated automatically
  *				as either the upper case variant or the
  *				normal group.
  */
@@ -55,9 +48,13 @@
 %{
 
 #include <sys/time.h>
+
 #include <dev/wscons/wsksymdef.h>
 #include <dev/wscons/wsconsio.h>
+
 #include <err.h>
+#include <stdlib.h>
+
 #include "wsconsctl.h"
 
 extern struct wskbd_map_data kbmap;	/* from keyboard.c */
@@ -66,11 +63,10 @@ static struct wscons_keymap mapdata[KS_NUMKEYCODES];
 struct wskbd_map_data newkbmap;		/* used in util.c */
 static struct wscons_keymap *cur_mp;
 
-static int ksym_lookup __P((keysym_t));
+static int ksym_lookup(keysym_t);
 
 static int
-ksym_lookup(ksym)
-	keysym_t ksym;
+ksym_lookup(keysym_t ksym)
 {
 	int i;
 	struct wscons_keymap *mp;
@@ -83,7 +79,7 @@ ksym_lookup(ksym)
 			return(i);
 	}
 
-	errx(1, "keysym %s not found", ksym2name(ksym));
+	errx(EXIT_FAILURE, "keysym %s not found", ksym2name(ksym));
 }
 
 %}
@@ -140,7 +136,7 @@ keysym_expr	: T_KEYSYM keysym_var "=" keysym_var = {
 
 keycode_expr	: T_KEYCODE T_NUMBER "=" = {
 			if ($2 >= KS_NUMKEYCODES)
-				errx(1, "%d: keycode too large", $2);
+				errx(EXIT_FAILURE, "%d: keycode too large", $2);
 			if ($2 >= newkbmap.maplen)
 				newkbmap.maplen = $2 + 1;
 			cur_mp = mapdata + $2;
@@ -198,8 +194,8 @@ keysym_var	: T_KEYSYM_VAR = {
 %%
 
 void
-yyerror(msg)
-	char *msg;
+yyerror(const char *msg)
 {
-	errx(1, "parse: %s", msg);
+
+	errx(EXIT_FAILURE, "parse: %s", msg);
 }

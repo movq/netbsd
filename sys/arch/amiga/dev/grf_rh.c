@@ -1,4 +1,4 @@
-/*	$NetBSD: grf_rh.c,v 1.29 1999/03/25 23:19:59 is Exp $	*/
+/*	$NetBSD: grf_rh.c,v 1.50 2007/10/17 19:53:16 garbled Exp $ */
 
 /*
  * Copyright (c) 1994 Markus Wild
@@ -32,6 +32,10 @@
  */
 #include "opt_amigacons.h"
 #include "opt_retina.h"
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: grf_rh.c,v 1.50 2007/10/17 19:53:16 garbled Exp $");
+
 #include "grfrh.h"
 #if NGRFRH > 0
 
@@ -55,21 +59,20 @@
 
 enum mode_type { MT_TXTONLY, MT_GFXONLY, MT_BOTH };
 
-int rh_mondefok __P((struct MonDef *));
+int rh_mondefok(struct MonDef *);
 
-u_short rh_CompFQ __P((u_int fq));
-int rh_load_mon __P((struct grf_softc *gp, struct MonDef *md));
-int rh_getvmode __P((struct grf_softc *gp, struct grfvideo_mode *vm));
-int rh_setvmode __P((struct grf_softc *gp, unsigned int mode, 
-                     enum mode_type type));
+u_short rh_CompFQ(u_int fq);
+int rh_load_mon(struct grf_softc *gp, struct MonDef *md);
+int rh_getvmode(struct grf_softc *gp, struct grfvideo_mode *vm);
+int rh_setvmode(struct grf_softc *gp, unsigned int mode, enum mode_type type);
 
 /* make it patchable, and settable by kernel config option */
 #ifndef RH_MEMCLK
 #define RH_MEMCLK 61000000  /* this is the memory clock value, you shouldn't
-                               set it to less than 61000000, higher values may
-                               speed up blits a little bit, if you raise this
-                               value too much, some trash will appear on your
-                               screen. */
+			       set it to less than 61000000, higher values may
+			       speed up blits a little bit, if you raise this
+			       value too much, some trash will appear on your
+			       screen. */
 #endif
 int rh_memclk = RH_MEMCLK;
 
@@ -100,7 +103,7 @@ extern unsigned char kernel_font_8x11[];
  * graphics-board manufactured by MS MacroSystem GmbH from within NetBSD
  * for the Amiga.
  *
- * Thanks to MacroSystem for providing me with the neccessary information
+ * Thanks to MacroSystem for providing me with the necessary information
  * to create theese routines. The sparse documentation of this code
  * results from the agreements between MS and me.
  */
@@ -118,16 +121,18 @@ extern unsigned char kernel_font_8x11[];
 
 /* Convert big-endian long into little-endian long. */
 
-#define M2I(val)                                                     \
-	asm volatile (" rorw #8,%0   ;                               \
-	                swap %0      ;                               \
-	                rorw #8,%0   ; " : "=d" (val) : "0" (val));
-
-#define M2INS(val)                                                   \
-	asm volatile (" rorw #8,%0   ;                               \
-	                swap %0      ;                               \
-	                rorw #8,%0   ;                               \
- 			swap %0	     ; " : "=d" (val) : "0" (val));
+#ifdef __m68k__
+#define M2I(val)                                                         \
+	__asm volatile (" rorw #8,%0   ;                               \
+			    swap %0      ;                               \
+			    rorw #8,%0   ; " : "=d" (val) : "0" (val));
+#else
+#define M2I(val)                                                         \
+	val = ((val & 0xff000000) >> 24) |                               \
+	      ((val & 0x00ff0000) >> 8 ) |                               \
+	      ((val & 0x0000ff00) << 8 ) |                               \
+	      ((val & 0x000000ff) << 24)
+#endif
 
 #define ACM_OFFSET	(0x00b00000)
 #define LM_OFFSET	(0x00c00000)
@@ -142,8 +147,7 @@ static char optabs[] = {
 };
 
 void
-RZ3DisableHWC(gp)
-	struct grf_softc *gp;
+RZ3DisableHWC(struct grf_softc *gp)
 {
 	volatile void *ba = gp->g_regkva;
 
@@ -151,22 +155,18 @@ RZ3DisableHWC(gp)
 }
 
 void
-RZ3SetupHWC(gp, col1, col2, hsx, hsy, data)
-	struct grf_softc *gp;
-	unsigned char col1;
-	unsigned col2;
-	unsigned char hsx;
-	unsigned char hsy;
-	const unsigned long *data;
+RZ3SetupHWC(struct grf_softc *gp, unsigned char col1, unsigned col2,
+	    unsigned char hsx, unsigned char hsy, const unsigned long *data)
 {
 	volatile unsigned char *ba = gp->g_regkva;
-	unsigned long *c = (unsigned long *)(ba + LM_OFFSET + HWC_MEM_OFF);
+	unsigned long *c = (unsigned long *)__UNVOLATILE(ba);
+	c += LM_OFFSET + HWC_MEM_OFF;
 	const unsigned long *s = data;
 	struct MonDef *MonitorDef = (struct MonDef *) gp->g_data;
 #ifdef RH_64BIT_SPRITE
 	short x = (HWC_MEM_SIZE / (4*4)) - 1;
 #else
-        short x = (HWC_MEM_SIZE / (4*4*2)) - 1;
+	short x = (HWC_MEM_SIZE / (4*4*2)) - 1;
 #endif
 	/* copy only, if there is a data pointer. */
 	if (data) do {
@@ -178,27 +178,27 @@ RZ3SetupHWC(gp, col1, col2, hsx, hsy, data)
 
 	WSeq(ba, SEQ_ID_CURSOR_COLOR1, col1);
 	WSeq(ba, SEQ_ID_CURSOR_COLOR0, col2);
-        if (MonitorDef->DEP <= 8) {
+	if (MonitorDef->DEP <= 8) {
 #ifdef RH_64BIT_SPRITE
 		WSeq(ba, SEQ_ID_CURSOR_CONTROL, 0x85);
 #else
-                WSeq(ba, SEQ_ID_CURSOR_CONTROL, 0x03);
+		WSeq(ba, SEQ_ID_CURSOR_CONTROL, 0x03);
 #endif
-        }
-        else if (MonitorDef->DEP <= 16) {
+	}
+	else if (MonitorDef->DEP <= 16) {
 #ifdef RH_64BIT_SPRITE
 		WSeq(ba, SEQ_ID_CURSOR_CONTROL, 0xa5);
 #else
-                WSeq(ba, SEQ_ID_CURSOR_CONTROL, 0x23);
+		WSeq(ba, SEQ_ID_CURSOR_CONTROL, 0x23);
 #endif
-        }
-        else {
+	}
+	else {
 #ifdef RH_64BIT_SPRITE
-                WSeq(ba, SEQ_ID_CURSOR_CONTROL, 0xc5);
+		WSeq(ba, SEQ_ID_CURSOR_CONTROL, 0xc5);
 #else
-                WSeq(ba, SEQ_ID_CURSOR_CONTROL, 0x43);
+		WSeq(ba, SEQ_ID_CURSOR_CONTROL, 0x43);
 #endif
-        }
+	}
 	WSeq(ba, SEQ_ID_CURSOR_X_LOC_HI, 0x00);
 	WSeq(ba, SEQ_ID_CURSOR_X_LOC_LO, 0x00);
 	WSeq(ba, SEQ_ID_CURSOR_Y_LOC_HI, 0x00);
@@ -206,37 +206,31 @@ RZ3SetupHWC(gp, col1, col2, hsx, hsy, data)
 	WSeq(ba, SEQ_ID_CURSOR_X_INDEX, hsx);
 	WSeq(ba, SEQ_ID_CURSOR_Y_INDEX, hsy);
 	WSeq(ba, SEQ_ID_CURSOR_STORE_HI, 0x00);
-	WSeq(ba, SEQ_ID_CURSOR_STORE_LO,  ((HWC_MEM_OFF / 4) & 0x0000f));
-	WSeq(ba, SEQ_ID_CURSOR_ST_OFF_HI, (((HWC_MEM_OFF / 4) & 0xff000) >> 12));
-	WSeq(ba, SEQ_ID_CURSOR_ST_OFF_LO, (((HWC_MEM_OFF / 4) & 0x00ff0) >>  4));
+	WSeq(ba, SEQ_ID_CURSOR_STORE_LO, ((HWC_MEM_OFF / 4) & 0x0000f));
+	WSeq(ba, SEQ_ID_CURSOR_ST_OFF_HI,
+				(((HWC_MEM_OFF / 4) & 0xff000) >> 12));
+	WSeq(ba, SEQ_ID_CURSOR_ST_OFF_LO,
+				(((HWC_MEM_OFF / 4) & 0x00ff0) >>  4));
 	WSeq(ba, SEQ_ID_CURSOR_PIXELMASK, 0xff);
 }
 
 void
-RZ3AlphaErase (gp, xd, yd, w, h)
-	struct grf_softc *gp;
-	unsigned short xd;
-	unsigned short yd;
-	unsigned short  w;
-	unsigned short  h;
+RZ3AlphaErase(struct grf_softc *gp, unsigned short xd, unsigned short yd,
+	      unsigned short w, unsigned short h)
 {
 	const struct MonDef * md = (struct MonDef *) gp->g_data;
 	RZ3AlphaCopy(gp, xd, yd+md->TY, xd, yd, w, h);
 }
 
 void
-RZ3AlphaCopy (gp, xs, ys, xd, yd, w, h)
-	struct grf_softc *gp;
-	unsigned short xs;
-	unsigned short ys;
-	unsigned short xd;
-	unsigned short yd;
-	unsigned short  w;
-	unsigned short  h;
+RZ3AlphaCopy(struct grf_softc *gp, unsigned short xs, unsigned short ys,
+	     unsigned short xd, unsigned short yd, unsigned short w,
+	     unsigned short h)
 {
 	volatile unsigned char *ba = gp->g_regkva;
 	const struct MonDef *md = (struct MonDef *) gp->g_data;
-	volatile unsigned long *acm = (unsigned long *) (ba + ACM_OFFSET);
+	volatile unsigned long *acm = (volatile unsigned long *) (ba + 
+	    ACM_OFFSET);
 	unsigned short mod;
 
 	xs *= 4;
@@ -301,19 +295,20 @@ RZ3AlphaCopy (gp, xs, ys, xd, yd, w, h)
 }
 
 void
-RZ3BitBlit (gp, gbb)
-	struct grf_softc *gp;
-	struct grf_bitblt * gbb;
+RZ3BitBlit(struct grf_softc *gp, struct grf_bitblt *gbb)
 {
 	volatile unsigned char *ba = gp->g_regkva;
 	volatile unsigned char *lm = ba + LM_OFFSET;
-	volatile unsigned long *acm = (unsigned long *) (ba + ACM_OFFSET);
+	volatile unsigned long *acm = (volatile unsigned long *) (ba + 
+	    ACM_OFFSET);
 	const struct MonDef *md = (struct MonDef *) gp->g_data;
 	unsigned short mod;
 
 	{
-		unsigned long * pt = (unsigned long *) (lm + PAT_MEM_OFF);
-		unsigned long tmp  = gbb->mask | ((unsigned long)gbb->mask << 16);
+		volatile unsigned long * pt = 
+		    (volatile unsigned long *) (lm + PAT_MEM_OFF);
+		unsigned long tmp  =
+			gbb->mask | ((unsigned long) gbb->mask << 16);
 		*pt++ = tmp;
 		*pt   = tmp;
 	}
@@ -331,7 +326,8 @@ RZ3BitBlit (gp, gbb)
 		unsigned long dst = 8 * (gbb->dst_x + gbb->dst_y * md->TX);
 
 		if (optabs[gbb->op]) {
-			unsigned long src = 8 * (gbb->src_x + gbb->src_y * md->TX);
+			unsigned long src =
+				8 * (gbb->src_x + gbb->src_y * md->TX);
 
 			if (gbb->dst_x > gbb->src_x) {
 				mod &= ~0x8000;
@@ -375,19 +371,20 @@ RZ3BitBlit (gp, gbb)
 }
 
 void
-RZ3BitBlit16 (gp, gbb)
-	struct grf_softc *gp;
-	struct grf_bitblt * gbb;
+RZ3BitBlit16(struct grf_softc *gp, struct grf_bitblt *gbb)
 {
 	volatile unsigned char *ba = gp->g_regkva;
 	volatile unsigned char *lm = ba + LM_OFFSET;
-	volatile unsigned long * acm = (unsigned long *) (ba + ACM_OFFSET);
+	volatile unsigned long * acm = (volatile unsigned long *) (ba + 
+	    ACM_OFFSET);
 	const struct MonDef * md = (struct MonDef *) gp->g_data;
 	unsigned short mod;
 
 	{
-		unsigned long * pt = (unsigned long *) (lm + PAT_MEM_OFF);
-		unsigned long tmp  = gbb->mask | ((unsigned long)gbb->mask << 16);
+		volatile unsigned long * pt = 
+		    (volatile unsigned long *) (lm + PAT_MEM_OFF);
+		unsigned long tmp  =
+			gbb->mask | ((unsigned long) gbb->mask << 16);
 		*pt++ = tmp;
 		*pt++ = tmp;
 		*pt++ = tmp;
@@ -407,7 +404,8 @@ RZ3BitBlit16 (gp, gbb)
 		unsigned long dst = 8 * 2 * (gbb->dst_x + gbb->dst_y * md->TX);
 
 		if (optabs[gbb->op]) {
-			unsigned long src = 8 * 2 * (gbb->src_x + gbb->src_y * md->TX);
+			unsigned long src =
+				8 * 2 * (gbb->src_x + gbb->src_y * md->TX);
 
 			if (gbb->dst_x > gbb->src_x) {
 				mod &= ~0x8000;
@@ -452,94 +450,88 @@ RZ3BitBlit16 (gp, gbb)
 }
 
 void
-RZ3BitBlit24 (gp, gbb)
-     struct grf_softc *gp;
-     struct grf_bitblt * gbb;
+RZ3BitBlit24(struct grf_softc *gp, struct grf_bitblt *gbb)
 {
-        volatile unsigned char *ba = gp->g_regkva;
-        volatile unsigned char *lm = ba + LM_OFFSET;
-        volatile unsigned long * acm = (unsigned long *) (ba + ACM_OFFSET);
-        const struct MonDef * md = (struct MonDef *) gp->g_data;
-        unsigned short mod;
+	volatile unsigned char *ba = gp->g_regkva;
+	volatile unsigned char *lm = ba + LM_OFFSET;
+	volatile unsigned long * acm = (volatile unsigned long *) (ba + 
+	    ACM_OFFSET);
+	const struct MonDef * md = (struct MonDef *) gp->g_data;
+	unsigned short mod;
 
 
-        { 
-                unsigned long * pt = (unsigned long *) (lm + PAT_MEM_OFF);
-                unsigned long tmp  = gbb->mask | ((unsigned long)gbb->mask << 16);
-                *pt++ = tmp;
-                *pt++ = tmp;
-                *pt++ = tmp;
-                *pt++ = tmp;
-                *pt++ = tmp;
-                *pt   = tmp;
-        }
-        
-        {
-                
-                unsigned long tmp = optab[ gbb->op ] << 8;
-                *(acm + ACM_RASTEROP_ROTATION/4) = tmp;
-        }
-        
-        mod = 0xc0c2;
-        
-        {
-                unsigned long pat = 8 * PAT_MEM_OFF;
-                unsigned long dst = 8 * 3 * (gbb->dst_x + gbb->dst_y * md->TX);
-                
-                if (optabs[gbb->op]) {
-                        unsigned long src = 8 * 3 * (gbb->src_x + gbb->src_y * md->TX);
-                        
-                        if (gbb->dst_x > gbb->src_x ) {
-                                mod &= ~0x8000;
-                                src += 8 * 3 * (gbb->w);
-                                dst += 8 * 3 * (gbb->w);
-                                pat += 8 * 3 * 2;
-                        }
-                        if (gbb->dst_y > gbb->src_y) {
-                                mod &= ~0x4000;
-                                src += 8 * 3 * (gbb->h - 1) * md->TX;
-                                dst += 8 * 3 * (gbb->h - 1) * md->TX;
-                                pat += 8 * 4 * 3;
-                        }
-                        
-                        M2I(src);
-                        *(acm + ACM_SOURCE/4) = src;
-                }
-                
-                
-                M2I(pat);
-                *(acm + ACM_PATTERN/4) = pat;
-                
-                
-                M2I(dst);
-                *(acm + ACM_DESTINATION/4) = dst;
-        }
-        {
-                
-                unsigned long tmp = mod << 16;
-                *(acm + ACM_CONTROL/4) = tmp;
-        }
-        {
-                
-                unsigned long tmp  = gbb->w | (gbb->h << 16);
-                M2I(tmp);
-                *(acm + ACM_BITMAP_DIMENSION/4) = tmp;
-        }
-        
-        
-        *(((volatile unsigned char *)acm) + ACM_START_STATUS) = 0x00; 
-        *(((volatile unsigned char *)acm) + ACM_START_STATUS) = 0x01; 
-        
-        while ( (*(((volatile unsigned char *)acm) 
-                   + (ACM_START_STATUS+ 2)) & 1) == 0 ) {};
-        
+	{
+		volatile unsigned long * pt = 
+		    (volatile unsigned long *) (lm + PAT_MEM_OFF);
+		unsigned long tmp  =
+			gbb->mask | ((unsigned long) gbb->mask << 16);
+		*pt++ = tmp;
+		*pt++ = tmp;
+		*pt++ = tmp;
+		*pt++ = tmp;
+		*pt++ = tmp;
+		*pt   = tmp;
+	}
+
+	{
+		unsigned long tmp = optab[ gbb->op ] << 8;
+		*(acm + ACM_RASTEROP_ROTATION/4) = tmp;
+	}
+
+	mod = 0xc0c2;
+
+	{
+		unsigned long pat = 8 * PAT_MEM_OFF;
+		unsigned long dst = 8 * 3 * (gbb->dst_x + gbb->dst_y * md->TX);
+
+		if (optabs[gbb->op]) {
+			unsigned long src =
+				8 * 3 * (gbb->src_x + gbb->src_y * md->TX);
+
+			if (gbb->dst_x > gbb->src_x ) {
+				mod &= ~0x8000;
+				src += 8 * 3 * (gbb->w);
+				dst += 8 * 3 * (gbb->w);
+				pat += 8 * 3 * 2;
+			}
+			if (gbb->dst_y > gbb->src_y) {
+				mod &= ~0x4000;
+				src += 8 * 3 * (gbb->h - 1) * md->TX;
+				dst += 8 * 3 * (gbb->h - 1) * md->TX;
+				pat += 8 * 4 * 3;
+			}
+
+			M2I(src);
+			*(acm + ACM_SOURCE/4) = src;
+		}
+
+		M2I(pat);
+		*(acm + ACM_PATTERN/4) = pat;
+
+		M2I(dst);
+		*(acm + ACM_DESTINATION/4) = dst;
+	}
+	{
+		unsigned long tmp = mod << 16;
+		*(acm + ACM_CONTROL/4) = tmp;
+	}
+	{
+		unsigned long tmp  = gbb->w | (gbb->h << 16);
+		M2I(tmp);
+		*(acm + ACM_BITMAP_DIMENSION/4) = tmp;
+	}
+
+	*(((volatile unsigned char *)acm) + ACM_START_STATUS) = 0x00;
+	*(((volatile unsigned char *)acm) + ACM_START_STATUS) = 0x01;
+
+	while ( (*(((volatile unsigned char *)acm)
+		   + (ACM_START_STATUS+ 2)) & 1) == 0 ) {};
+
 }
 
 
 void
-RZ3SetCursorPos (gp, pos)
-	struct grf_softc *gp;
-	unsigned short pos;
+RZ3SetCursorPos(struct grf_softc *gp, unsigned short pos)
 {
 	volatile unsigned char *ba = gp->g_regkva;
 
@@ -549,11 +541,8 @@ RZ3SetCursorPos (gp, pos)
 }
 
 void
-RZ3LoadPalette (gp, pal, firstcol, colors)
-	struct grf_softc *gp;
-	unsigned char * pal;
-	unsigned char firstcol;
-	unsigned char colors;
+RZ3LoadPalette(struct grf_softc *gp, unsigned char *pal,
+	       unsigned char firstcol, unsigned char colors)
 {
 	volatile unsigned char *ba = gp->g_regkva;
 
@@ -578,10 +567,8 @@ RZ3LoadPalette (gp, pal, firstcol, colors)
 }
 
 void
-RZ3SetPalette (gp, colornum, red, green, blue)
-	struct grf_softc *gp;
-	unsigned char colornum;
-	unsigned char red, green, blue;
+RZ3SetPalette(struct grf_softc *gp, unsigned char colornum, unsigned char red,
+	      unsigned char green, unsigned char blue)
 {
 	volatile unsigned char *ba = gp->g_regkva;
 
@@ -594,9 +581,7 @@ RZ3SetPalette (gp, colornum, red, green, blue)
 }
 
 void
-RZ3SetPanning (gp, xoff, yoff)
-	struct grf_softc *gp;
-	unsigned short xoff, yoff;
+RZ3SetPanning(struct grf_softc *gp, unsigned short xoff, unsigned short yoff)
 {
 	volatile unsigned char *ba = gp->g_regkva;
 	struct grfinfo *gi = &gp->g_display;
@@ -606,8 +591,8 @@ RZ3SetPanning (gp, xoff, yoff)
 	gi->gd_fbx = xoff;
 	gi->gd_fby = yoff;
 
-        if (md->DEP > 8 && md->DEP <= 16) xoff *= 2;
-        else if (md->DEP > 16) xoff *= 3;
+	if (md->DEP > 8 && md->DEP <= 16) xoff *= 2;
+	else if (md->DEP > 16) xoff *= 3;
 
 	vgar(ba, ACT_ADDRESS_RESET);
 	WAttr(ba, ACT_ID_HOR_PEL_PANNING, (unsigned char)((xoff << 1) & 0x07));
@@ -616,10 +601,10 @@ RZ3SetPanning (gp, xoff, yoff)
 
 	if (md->DEP == 8)
 		off = ((yoff * md->TX)/ 4) + (xoff >> 2);
-        else if (md->DEP == 16) 
+	else if (md->DEP == 16)
 		off = ((yoff * md->TX * 2)/ 4) + (xoff >> 2);
-        else 
-                off = ((yoff * md->TX * 3)/ 4) + (xoff >> 2);
+	else
+		off = ((yoff * md->TX * 3)/ 4) + (xoff >> 2);
 	WCrt(ba, CRT_ID_START_ADDR_LOW, ((unsigned char)off));
 	off >>= 8;
 	WCrt(ba, CRT_ID_START_ADDR_HIGH, ((unsigned char)off));
@@ -631,9 +616,7 @@ RZ3SetPanning (gp, xoff, yoff)
 }
 
 void
-RZ3SetHWCloc (gp, x, y)
-	struct grf_softc *gp;
-	unsigned short x, y;
+RZ3SetHWCloc(struct grf_softc *gp, unsigned short x, unsigned short y)
 {
 	volatile unsigned char *ba = gp->g_regkva;
 	const struct MonDef *md = (struct MonDef *) gp->g_data;
@@ -669,8 +652,7 @@ RZ3SetHWCloc (gp, x, y)
 }
 
 u_short
-rh_CompFQ(fq)
-	u_int fq;
+rh_CompFQ(u_int fq)
 {
  	/* yuck... this sure could need some explanation.. */
 
@@ -723,13 +705,12 @@ rh_CompFQ(fq)
 }
 
 int
-rh_mondefok(mdp)
-	struct MonDef *mdp;
+rh_mondefok(struct MonDef *mdp)
 {
 	switch(mdp->DEP) {
 	    case 8:
 	    case 16:
-            case 24:
+	    case 24:
 		return(1);
 	    case 4:
 		if (mdp->FX == 4 || (mdp->FX >= 7 && mdp->FX <= 16))
@@ -742,31 +723,26 @@ rh_mondefok(mdp)
 
 
 int
-rh_load_mon(gp, md)
-	struct grf_softc *gp;
-	struct MonDef *md;
+rh_load_mon(struct grf_softc *gp, struct MonDef *md)
 {
 	struct grfinfo *gi = &gp->g_display;
-	volatile caddr_t ba;
-	volatile caddr_t fb;
+	volatile void *ba;
+	volatile void *fb;
 	short FW, clksel, HDE = 0, VDE;
-	unsigned short *c, z;
+	volatile unsigned short *c;
+	unsigned short z;
 	const unsigned char *f;
 
-	ba = gp->g_regkva;;
+	ba = gp->g_regkva;
 	fb = gp->g_fbkva;
 
-	/* provide all needed information in grf device-independant
+	/* provide all needed information in grf device-independent
 	 * locations */
-	gp->g_data 		= (caddr_t) md;
-	gi->gd_regaddr	 	= (caddr_t) kvtop (ba);
+	gp->g_data 		= (void *) md;
+	gi->gd_regaddr	 	= (void *) kvtop (__UNVOLATILE(ba));
 	gi->gd_regsize		= LM_OFFSET;
-	gi->gd_fbaddr		= (caddr_t) kvtop (fb);
+	gi->gd_fbaddr		= (void *) kvtop (__UNVOLATILE(fb));
 	gi->gd_fbsize		= MEMSIZE *1024*1024;
-#ifdef BANKEDDEVPAGER
-	/* we're not using banks NO MORE! */
-	gi->gd_bank_size	= 0;
-#endif
 	gi->gd_colors		= 1 << md->DEP;
 	gi->gd_planes		= md->DEP;
 
@@ -832,10 +808,10 @@ rh_load_mon(gp, md)
 		}
 	}
 
-        if      (md->DEP == 4)  HDE = (md->MW+md->FX-1)/md->FX;
-        else if (md->DEP == 8)  HDE = (md->MW+3)/4;
-        else if (md->DEP == 16) HDE = (md->MW*2+3)/4;
-        else if (md->DEP == 24) HDE = (md->MW*3+3)/4;
+	if      (md->DEP == 4)  HDE = (md->MW+md->FX-1)/md->FX;
+	else if (md->DEP == 8)  HDE = (md->MW+3)/4;
+	else if (md->DEP == 16) HDE = (md->MW*2+3)/4;
+	else if (md->DEP == 24) HDE = (md->MW*3+3)/4;
 
 	VDE = md->MH-1;
 
@@ -846,7 +822,8 @@ rh_load_mon(gp, md)
 
 	WSeq(ba, SEQ_ID_RESET, 0x00);
 	WSeq(ba, SEQ_ID_RESET, 0x03);
-	WSeq(ba, SEQ_ID_CLOCKING_MODE, 0x01 | ((md->FLG & MDF_CLKDIV2)/ MDF_CLKDIV2 * 8));
+	WSeq(ba, SEQ_ID_CLOCKING_MODE,
+		0x01 | ((md->FLG & MDF_CLKDIV2) / MDF_CLKDIV2 * 8));
 	WSeq(ba, SEQ_ID_MAP_MASK, 0x0f);
 	WSeq(ba, SEQ_ID_CHAR_MAP_SELECT, 0x00);
 	WSeq(ba, SEQ_ID_MEMORY_MODE, 0x06);
@@ -868,19 +845,19 @@ rh_load_mon(gp, md)
 	if (md->DEP == 4) {
 	  	/* 8bit pixel, no gfx byte path */
 		WSeq(ba, SEQ_ID_EXT_PIXEL_CNTL, 0x00);
-        }
-        else if (md->DEP == 8) {
+	}
+	else if (md->DEP == 8) {
 	  	/* 8bit pixel, gfx byte path */
 		WSeq(ba, SEQ_ID_EXT_PIXEL_CNTL, 0x01);
-        }
-        else if (md->DEP == 16) {
+	}
+	else if (md->DEP == 16) {
 	  	/* 16bit pixel, gfx byte path */
 		WSeq(ba, SEQ_ID_EXT_PIXEL_CNTL, 0x11);
 	}
-        else if (md->DEP == 24) {
-                /* 24bit pixel, gfx byte path */
-                WSeq(ba, SEQ_ID_EXT_PIXEL_CNTL, 0x21);  
-        }
+	else if (md->DEP == 24) {
+		/* 24bit pixel, gfx byte path */
+		WSeq(ba, SEQ_ID_EXT_PIXEL_CNTL, 0x21);
+	}
 	WSeq(ba, SEQ_ID_BUS_WIDTH_FEEDB, 0x04);
 	WSeq(ba, SEQ_ID_COLOR_EXP_WFG, 0x01);
 	WSeq(ba, SEQ_ID_COLOR_EXP_WBG, 0x00);
@@ -952,17 +929,17 @@ rh_load_mon(gp, md)
 	WCrt(ba, CRT_ID_END_VER_RETR, (md->VSE & 0xf) | 0x80 | 0x20);
 	WCrt(ba, CRT_ID_VER_DISP_ENA_END, VDE  & 0xff);
 
-        if (md->DEP == 4) {
-                WCrt(ba, CRT_ID_OFFSET, (HDE / 2) & 0xff );       
-        }
-        /* all gfx-modes are in byte-mode, means values are multiplied by 8 */
-        else if (md->DEP == 8) {
-                WCrt(ba, CRT_ID_OFFSET, (md->TX / 8) & 0xff );       
-        } else if (md->DEP == 16) {
-                WCrt(ba, CRT_ID_OFFSET, (md->TX / 4) & 0xff );       
-        } else {
-                WCrt(ba, CRT_ID_OFFSET, (md->TX * 3 / 8) & 0xff );       
-        }
+	if (md->DEP == 4) {
+		WCrt(ba, CRT_ID_OFFSET, (HDE / 2) & 0xff );
+	}
+	/* all gfx-modes are in byte-mode, means values are multiplied by 8 */
+	else if (md->DEP == 8) {
+		WCrt(ba, CRT_ID_OFFSET, (md->TX / 8) & 0xff );
+	} else if (md->DEP == 16) {
+		WCrt(ba, CRT_ID_OFFSET, (md->TX / 4) & 0xff );
+	} else {
+		WCrt(ba, CRT_ID_OFFSET, (md->TX * 3 / 8) & 0xff );
+	}
 
 	WCrt(ba, CRT_ID_UNDERLINE_LOC, (md->FY-1) & 0x1f);
 	WCrt(ba, CRT_ID_START_VER_BLANK, md->VBS & 0xff);
@@ -978,24 +955,26 @@ rh_load_mon(gp, md)
 		    ((md->HBS & 0x100) / 0x100 * 4)             |
 		    ((md->HSS & 0x100) / 0x100 * 8));
 
-        if (md->DEP == 4) {
-                WCrt(ba, CRT_ID_EXT_START_ADDR, (((HDE / 2) & 0x100)/0x100 * 16)); 
-        }
-        else if (md->DEP == 8) {
-                WCrt(ba, CRT_ID_EXT_START_ADDR, (((md->TX / 8) & 0x100)/0x100 * 16)); 
-        } else if (md->DEP == 16) {
-                WCrt(ba, CRT_ID_EXT_START_ADDR, (((md->TX / 4) & 0x100)/0x100 * 16)); 
-        } else {
-                WCrt(ba, CRT_ID_EXT_START_ADDR, (((md->TX * 3 / 8) & 0x100)/0x100 * 16)); 
-        }
+	if (md->DEP == 4)
+		WCrt(ba, CRT_ID_EXT_START_ADDR,
+			(((HDE / 2) & 0x100)/0x100 * 16));
+	else if (md->DEP == 8)
+		WCrt(ba, CRT_ID_EXT_START_ADDR,
+			(((md->TX / 8) & 0x100)/0x100 * 16));
+	else if (md->DEP == 16)
+		WCrt(ba, CRT_ID_EXT_START_ADDR,
+			(((md->TX / 4) & 0x100)/0x100 * 16));
+	else
+		WCrt(ba, CRT_ID_EXT_START_ADDR,
+			(((md->TX * 3 / 8) & 0x100)/0x100 * 16));
 
 	WCrt(ba, CRT_ID_EXT_HOR_TIMING2,
 		    ((md->HT  & 0x200)/ 0x200)       |
-	            (((HDE-1) & 0x200)/ 0x200 * 2  ) |
-	            ((md->HBS & 0x200)/ 0x200 * 4  ) |
-	            ((md->HSS & 0x200)/ 0x200 * 8  ) |
-	            ((md->HBE & 0xc0) / 0x40  * 16 ) |
-	            ((md->HSE & 0x60) / 0x20  * 64));
+		    (((HDE-1) & 0x200)/ 0x200 * 2  ) |
+		    ((md->HBS & 0x200)/ 0x200 * 4  ) |
+		    ((md->HSS & 0x200)/ 0x200 * 8  ) |
+		    ((md->HBE & 0xc0) / 0x40  * 16 ) |
+		    ((md->HSE & 0x60) / 0x20  * 64));
 
 	WCrt(ba, CRT_ID_EXT_VER_TIMING,
 		    ((md->VSE & 0x10) / 0x10  * 0x80  ) |
@@ -1010,7 +989,7 @@ rh_load_mon(gp, md)
 	{
 		unsigned short tmp = rh_CompFQ(md->FQ);
 		WPLL(ba, 2   , tmp);
-                tmp = rh_CompFQ(rh_memclk);
+		tmp = rh_CompFQ(rh_memclk);
 		WPLL(ba,10   , tmp);
 		WPLL(ba,14   , 0x22);
 	}
@@ -1061,18 +1040,18 @@ rh_load_mon(gp, md)
 	vgaw(ba, ACT_ADDRESS_W, 0x20);
 
 	vgaw(ba, VDAC_MASK, 0xff);
-        /* probably some PLL timing stuff here. The value
-           for 24bit was found by trial&error :-) */
-        if (md->DEP < 16) {
-                vgaw(ba, 0x83c6, ((0 & 7) << 5) ); 
-        }
-        else if (md->DEP == 16) {
+	/* probably some PLL timing stuff here. The value
+	   for 24bit was found by trial&error :-) */
+	if (md->DEP < 16) {
+		vgaw(ba, 0x83c6, ((0 & 7) << 5) );
+	}
+	else if (md->DEP == 16) {
 	  	/* well... */
-                vgaw(ba, 0x83c6, ((3 & 7) << 5) ); 
-        }
-        else if (md->DEP == 24) {
-                vgaw(ba, 0x83c6, 0xe0);
-        }
+		vgaw(ba, 0x83c6, ((3 & 7) << 5) );
+	}
+	else if (md->DEP == 24) {
+		vgaw(ba, 0x83c6, 0xe0);
+	}
 	vgaw(ba, VDAC_ADDRESS_W, 0x00);
 
 	if (md->DEP < 16) {
@@ -1099,7 +1078,7 @@ rh_load_mon(gp, md)
 			RZ3BitBlit(gp, &bb);
 		}
 
-		c = (unsigned short *)(ba + LM_OFFSET);
+		c = (volatile unsigned short *)((volatile char*)ba + LM_OFFSET);
 		c += 2 * md->FLo*32;
 		c += 1;
 		f = md->FData;
@@ -1121,7 +1100,9 @@ rh_load_mon(gp, md)
 			c += 2 * (32-md->FY);
 		}
 		{
-			unsigned long * pt = (unsigned long *) (ba + LM_OFFSET + PAT_MEM_OFF);
+			volatile unsigned long *pt = (volatile unsigned long *)
+						((volatile char *)ba +
+						 LM_OFFSET + PAT_MEM_OFF);
 			unsigned long tmp  = 0xffff0000;
 			*pt++ = tmp;
 			*pt = tmp;
@@ -1129,7 +1110,7 @@ rh_load_mon(gp, md)
 
 		WSeq(ba, SEQ_ID_MAP_MASK, 3);
 
-		c = (unsigned short *)(ba + LM_OFFSET);
+		c = (volatile unsigned short *)((volatile char*)ba + LM_OFFSET);
 		c += (md->TX-6)*2;
 		{
 		  	/* it's show-time :-) */
@@ -1157,9 +1138,9 @@ rh_load_mon(gp, md)
 
 		RZ3BitBlit(gp, &bb);
 
-                gi->gd_fbx = 0;
-                gi->gd_fby = 0;
-                
+		gi->gd_fbx = 0;
+		gi->gd_fby = 0;
+
 		return(1);
 	} else if (md->DEP == 16) {
 		struct grf_bitblt bb = {
@@ -1173,26 +1154,26 @@ rh_load_mon(gp, md)
 
 		RZ3BitBlit16(gp, &bb);
 
-                gi->gd_fbx = 0;
-                gi->gd_fby = 0;
-                
+		gi->gd_fbx = 0;
+		gi->gd_fby = 0;
+
 		return(1);
-        } else if (md->DEP == 24) {
-                struct grf_bitblt bb = {
-                        GRFBBOPset,
-                        0, 0,
-                        0, 0,
-                        md->TX, md->TY,
-                        0x0000
-                };
-                WSeq(ba, SEQ_ID_MAP_MASK, 0x0f );  
-                
-                RZ3BitBlit24(gp, &bb );
-                
-                gi->gd_fbx = 0;
-                gi->gd_fby = 0;
-                
-                return 1;
+	} else if (md->DEP == 24) {
+		struct grf_bitblt bb = {
+			GRFBBOPset,
+			0, 0,
+			0, 0,
+			md->TX, md->TY,
+			0x0000
+		};
+		WSeq(ba, SEQ_ID_MAP_MASK, 0x0f );
+
+		RZ3BitBlit24(gp, &bb );
+
+		gi->gd_fbx = 0;
+		gi->gd_fby = 0;
+
+		return 1;
 	} else
 		return(0);
 }
@@ -1262,8 +1243,8 @@ static struct MonDef monitor_defs[] = {
   /* Text-mode definitions */
 
   /* horizontal 31.5 kHz */
-  { 50000000,  28,  640, 512,   81, 86, 93, 98, 95, 513, 513, 521, 535, 535,
-      4, RZ3StdPalette, 80,  64,  5120,   FX,    FY, KERNEL_FONT,   32,  255},
+  { 50000000,  28,  640, 440,   81, 86, 93, 98, 95, 481, 490, 498, 522, 522,
+      4, RZ3StdPalette, 80,  55,  5120,   FX,    FY, KERNEL_FONT,   32,  255},
 
   /* horizontal 38kHz */
   { 75000000,  28,  768, 600,   97, 99,107,120,117, 601, 615, 625, 638, 638,
@@ -1294,6 +1275,14 @@ static struct MonDef monitor_defs[] = {
 
   /* 800 x 600, 8 Bit, 38537 Hz, 61 Hz */
   { 39000000,  0,  800, 600,  201,211,227,249,248, 601, 603, 613, 628, 628,
+      8, RZ3StdPalette,1280,1024,  5120,   FX,    FY, KERNEL_FONT,   32,  255},
+
+  /* 1024 x 768, 8 Bit, 63862 Hz, 79 Hz */
+  { 62000000,  0, 1024, 768,  257,257,277,317,316, 769, 771, 784, 804, 804,
+      8, RZ3StdPalette,1280,1024,  5120,   FX,    FY, KERNEL_FONT,   32,  255},
+
+  /* 1024 x 768, 8 Bit, 63862 Hz, 79 Hz */
+  { 77000000,  0, 1024, 768,  257,257,277,317,316, 769, 771, 784, 804, 804,
       8, RZ3StdPalette,1280,1024,  5120,   FX,    FY, KERNEL_FONT,   32,  255},
 
   /* 1024 x 768, 8 Bit, 63862 Hz, 79 Hz */
@@ -1396,6 +1385,14 @@ static struct MonDef monitor_defs[] = {
       8, RZ3StdPalette,  800,  600,  5120,   FX,    FY, KERNEL_FONT,   32,  255},
 
   /* 1024 x 768, 8 Bit, 63862 Hz, 79 Hz */
+  { 62000000,  0, 1024, 768,  257,257,277,317,316, 769, 771, 784, 804, 804,
+      8, RZ3StdPalette, 1024,  768,  5120,   FX,    FY, KERNEL_FONT,   32,  255},
+
+  /* 1024 x 768, 8 Bit, 63862 Hz, 79 Hz */
+  { 77000000,  0, 1024, 768,  257,257,277,317,316, 769, 771, 784, 804, 804,
+      8, RZ3StdPalette, 1024,  768,  5120,   FX,    FY, KERNEL_FONT,   32,  255},
+
+  /* 1024 x 768, 8 Bit, 63862 Hz, 79 Hz */
   { 82000000,  0, 1024, 768,  257,257,277,317,316, 769, 771, 784, 804, 804,
       8, RZ3StdPalette, 1024,  768,  5120,   FX,    FY, KERNEL_FONT,   32,  255},
 
@@ -1471,8 +1468,8 @@ static struct MonDef monitor_defs[] = {
   {110000000,  0,  800, 600,  601,602,647,723,722, 601, 602, 612, 628, 628,
       24,           0,  800,  600,  7200,   FX,    FY, KERNEL_FONT,   32,  255},
 
-  /* 800 x 600, 24 Bit, 43824 Hz, 69 Hz */ 
-  {132000000,  0,  800, 600,  601,641,688,749,748, 601, 611, 621, 628, 628,  
+  /* 800 x 600, 24 Bit, 43824 Hz, 69 Hz */
+  {132000000,  0,  800, 600,  601,641,688,749,748, 601, 611, 621, 628, 628,
       24,           0,  800,  600,  7200,   FX,    FY, KERNEL_FONT,   32,  255},
 
   /*1024 x 768, 24 Bit, 32051 Hz, 79 Hz i */
@@ -1499,6 +1496,8 @@ static const char *monitor_descr[] = {
   "GFX-8 (640x480) 31.5kHz",
   "GFX-8 (640x480) 38kHz",
   "GFX-8 (800x600) 38.5kHz",
+  "GFX-8 (1024x768) 44kHz",
+  "GFX-8 (1024x768) 50kHz",
   "GFX-8 (1024x768) 64kHz",
   "GFX-8 (1120x896) 64kHz",
   "GFX-8 (1152x910) 76kHz",
@@ -1528,22 +1527,18 @@ int rh_default_gfx = 4;
 
 static struct MonDef *current_mon;	/* EVIL */
 
-int  rh_mode     __P((struct grf_softc *, u_long, void *, u_long, int));
-void grfrhattach __P((struct device *, struct device *, void *));
-int  grfrhprint  __P((void *, const char *));
-int  grfrhmatch  __P((struct device *, struct cfdata *, void *));
+int  rh_mode(struct grf_softc *, u_long, void *, u_long, int);
+void grfrhattach(struct device *, struct device *, void *);
+int  grfrhprint(void *, const char *);
+int  grfrhmatch(struct device *, struct cfdata *, void *);
 
-struct cfattach grfrh_ca = {
-	sizeof(struct grf_softc), grfrhmatch, grfrhattach
-};
+CFATTACH_DECL(grfrh, sizeof(struct grf_softc),
+    grfrhmatch, grfrhattach, NULL, NULL);
 
 static struct cfdata *cfdata;
 
 int
-grfrhmatch(pdp, cfp, auxp)
-	struct device *pdp;
-	struct cfdata *cfp;
-	void *auxp;
+grfrhmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 {
 #ifdef RETINACONSOLE
 	static int rhconunit = -1;
@@ -1557,7 +1552,7 @@ grfrhmatch(pdp, cfp, auxp)
 		if (rhconunit != -1)
 #endif
 			return(0);
-	if (zap->manid != 18260 || 
+	if (zap->manid != 18260 ||
 			((zap->prodid != 16) && (zap->prodid != 19)))
 		return(0);
 #ifdef RETINACONSOLE
@@ -1580,9 +1575,7 @@ grfrhmatch(pdp, cfp, auxp)
 }
 
 void
-grfrhattach(pdp, dp, auxp)
-	struct device *pdp, *dp;
-	void *auxp;
+grfrhattach(struct device *pdp, struct device *dp, void *auxp)
 {
 	static struct grf_softc congrf;
 	struct zbus_args *zap;
@@ -1601,8 +1594,8 @@ grfrhattach(pdp, dp, auxp)
 		bcopy(&congrf.g_display, &gp->g_display,
 		    (char *)&gp[1] - (char *)&gp->g_display);
 	} else {
-		gp->g_regkva = (volatile caddr_t)zap->va;
-		gp->g_fbkva = (volatile caddr_t)zap->va + LM_OFFSET;
+		gp->g_regkva = (volatile void *)zap->va;
+		gp->g_fbkva = (volatile char *)zap->va + LM_OFFSET;
 		gp->g_unit = GRF_RETINAIII_UNIT;
 		gp->g_mode = rh_mode;
 		gp->g_conpri = grfrh_cnprobe();
@@ -1619,19 +1612,15 @@ grfrhattach(pdp, dp, auxp)
 }
 
 int
-grfrhprint(auxp, pnp)
-	void *auxp;
-	const char *pnp;
+grfrhprint(void *auxp, const char *pnp)
 {
 	if (pnp)
-		printf("ite at %s", pnp);
+		aprint_normal("ite at %s", pnp);
 	return(UNCONF);
 }
 
 int
-rh_getvmode(gp, vm)
-	struct grf_softc *gp;
-	struct grfvideo_mode *vm;
+rh_getvmode(struct grf_softc *gp, struct grfvideo_mode *vm)
 {
 	struct MonDef *md;
 	int vmul;
@@ -1646,36 +1635,36 @@ rh_getvmode(gp, vm)
 	strncpy (vm->mode_descr, monitor_descr[vm->mode_num - 1],
 	   sizeof (vm->mode_descr));
 	vm->pixel_clock  = md->FQ;
-        vm->disp_width   = (md->DEP == 4) ? md->MW : md->TX;
-        vm->disp_height  = (md->DEP == 4) ? md->MH : md->TY;
+	vm->disp_width   = (md->DEP == 4) ? md->MW : md->TX;
+	vm->disp_height  = (md->DEP == 4) ? md->MH : md->TY;
 	vm->depth        = md->DEP;
 
-	/* 
+	/*
 	 * From observation of the monitor definition table above, I guess
-	 * that the horizontal timings are in units of longwords. Hence, I 
+	 * that the horizontal timings are in units of longwords. Hence, I
 	 * get the pixels by multiplication with 32 and division by the depth.
-	 * The text modes, apparently marked by depth == 4, are even more 
-	 * wierd. According to a comment above, they are computed from a 
-	 * depth==8 mode thats for us: * 32 / 8) by applying another factor 
+	 * The text modes, apparently marked by depth == 4, are even more
+	 * weird. According to a comment above, they are computed from a
+	 * depth==8 mode thats for us: * 32 / 8) by applying another factor
 	 * of 4 / font width.
-	 * Reverse applying the latter formula most of the constants cancel	
+	 * Reverse applying the latter formula most of the constants cancel
 	 * themselves and we are left with a nice (* font width).
-	 * That is, internal timings are in units of longwords for graphics 
+	 * That is, internal timings are in units of longwords for graphics
 	 * modes, or in units of characters widths for text modes.
 	 * We better don't WRITE modes until this has been real live checked.
 	 *                    - Ignatios Souvatzis
 	 */
-          
+
 	if (md->DEP != 4) {
 		vm->hblank_start = md->HBS * 32 / md->DEP;
-		vm->hsync_start  = md->HSS * 32 / md->DEP;    
+		vm->hsync_start  = md->HSS * 32 / md->DEP;
 		vm->hsync_stop   = md->HSE * 32 / md->DEP;
 		vm->htotal       = md->HT * 32 / md->DEP;
 	} else {
 		vm->hblank_start = md->HBS * md->FX;
 		vm->hsync_start  = md->HSS * md->FX;
 		vm->hsync_stop   = md->HSE * md->FX;
-		vm->htotal       = md->HT * md->FX;    
+		vm->htotal       = md->HT * md->FX;
 	}
 
 	/* XXX move vm->disp_flags and vmul to rh_load_mon
@@ -1700,18 +1689,15 @@ rh_getvmode(gp, vm)
 
 
 int
-rh_setvmode(gp, mode, type)
-	struct grf_softc *gp;
-	unsigned mode;
-        enum mode_type type;
+rh_setvmode(struct grf_softc *gp, unsigned mode, enum mode_type type)
 {
 	int error;
 
 	if (!mode || mode > rh_mon_max)
 		return(EINVAL);
 
-        if ((type == MT_TXTONLY && monitor_defs[mode-1].DEP != 4)
-            || (type == MT_GFXONLY && monitor_defs[mode-1].DEP == 4))
+	if ((type == MT_TXTONLY && monitor_defs[mode-1].DEP != 4)
+	    || (type == MT_GFXONLY && monitor_defs[mode-1].DEP == 4))
 		return(EINVAL);
 
 	current_mon = monitor_defs + (mode - 1);
@@ -1727,20 +1713,16 @@ rh_setvmode(gp, mode, type)
  * Return a UNIX error number or 0 for success.
  */
 int
-rh_mode(gp, cmd, arg, a2, a3)
-	register struct grf_softc *gp;
-	u_long cmd;
-	void *arg;
-	u_long a2;
-	int a3;
+rh_mode(register struct grf_softc *gp, u_long cmd, void *arg, u_long a2,
+	int a3)
 {
 	switch (cmd) {
 	    case GM_GRFON:
-                rh_setvmode (gp, rh_default_gfx + 1, MT_GFXONLY);
+		rh_setvmode (gp, rh_default_gfx + 1, MT_GFXONLY);
 		return(0);
 
 	    case GM_GRFOFF:
-                rh_setvmode (gp, rh_default_mon + 1, MT_TXTONLY);
+		rh_setvmode (gp, rh_default_mon + 1, MT_TXTONLY);
 		return(0);
 
 	    case GM_GRFCONFIG:
@@ -1750,19 +1732,13 @@ rh_mode(gp, cmd, arg, a2, a3)
 		return(rh_getvmode (gp, (struct grfvideo_mode *) arg));
 
 	    case GM_GRFSETVMODE:
-                return(rh_setvmode (gp, *(unsigned *) arg, 
-                                    (gp->g_flags & GF_GRFON) ? MT_GFXONLY : MT_TXTONLY));
+		return(rh_setvmode(gp, *(unsigned *) arg,
+			(gp->g_flags & GF_GRFON) ? MT_GFXONLY : MT_TXTONLY));
 
 	    case GM_GRFGETNUMVM:
 		*(int *)arg = rh_mon_max;
 		return(0);
 
-#ifdef BANKEDDEVPAGER
-	    case GM_GRFGETBANK:
-	    case GM_GRFGETCURBANK:
-	    case GM_GRFSETBANK:
-		return(EINVAL);
-#endif
 	    case GM_GRFIOCTL:
 		return(rh_ioctl (gp, a2, arg));
 
@@ -1770,14 +1746,11 @@ rh_mode(gp, cmd, arg, a2, a3)
 		break;
 	}
 
-	return(EINVAL);
+	return(EPASSTHROUGH);
 }
 
 int
-rh_ioctl (gp, cmd, data)
-	register struct grf_softc *gp;
-	u_long cmd;
-	void *data;
+rh_ioctl(register struct grf_softc *gp, u_long cmd, void *data)
 {
 	switch (cmd) {
 #ifdef RH_HARDWARECURSOR
@@ -1816,14 +1789,12 @@ rh_ioctl (gp, cmd, data)
 		return (rh_blank(gp, (int *)data));
 	}
 
-	return(EINVAL);
+	return(EPASSTHROUGH);
 }
 
 
 int
-rh_getcmap (gfp, cmap)
-	struct grf_softc *gfp;
-	struct grf_colormap *cmap;
+rh_getcmap(struct grf_softc *gfp, struct grf_colormap *cmap)
 {
 	volatile unsigned char *ba;
 	u_char red[256], green[256], blue[256], *rp, *gp, *bp;
@@ -1833,7 +1804,7 @@ rh_getcmap (gfp, cmap)
 	if (cmap->count == 0 || cmap->index >= 256)
 		return 0;
 
-	if (cmap->index + cmap->count > 256)
+	if (cmap->count > 256 - cmap->index)
 		cmap->count = 256 - cmap->index;
 
 	ba = gfp->g_regkva;
@@ -1858,9 +1829,7 @@ rh_getcmap (gfp, cmap)
 }
 
 int
-rh_putcmap (gfp, cmap)
-	struct grf_softc *gfp;
-	struct grf_colormap *cmap;
+rh_putcmap(struct grf_softc *gfp, struct grf_colormap *cmap)
 {
 	volatile unsigned char *ba;
 	u_char red[256], green[256], blue[256], *rp, *gp, *bp;
@@ -1870,7 +1839,7 @@ rh_putcmap (gfp, cmap)
 	if (cmap->count == 0 || cmap->index >= 256)
 		return(0);
 
-	if (cmap->index + cmap->count > 256)
+	if (cmap->count > 256 - cmap->index)
 		cmap->count = 256 - cmap->index;
 
 	/* first copy the colors into kernelspace */
@@ -1897,9 +1866,7 @@ rh_putcmap (gfp, cmap)
 }
 
 int
-rh_getspritepos (gp, pos)
-	struct grf_softc *gp;
-	struct grf_position *pos;
+rh_getspritepos(struct grf_softc *gp, struct grf_position *pos)
 {
 	struct grfinfo *gi = &gp->g_display;
 #if 1
@@ -1933,9 +1900,7 @@ rh_setspritepos (gp, pos)
 }
 
 int
-rh_getspriteinfo (gp, info)
-	struct grf_softc *gp;
-	struct grf_spriteinfo *info;
+rh_getspriteinfo(struct grf_softc *gp, struct grf_spriteinfo *info)
 {
 	volatile unsigned char *ba, *fb;
 
@@ -1985,7 +1950,8 @@ rh_getspriteinfo (gp, info)
 #ifdef RH_64BIT_SPRITE
 		info->size.x = 64;
 		info->size.y = 64;
-		for (row = 0, hwp = (u_long *)(ba + LM_OFFSET + HWC_MEM_OFF),
+		for (row = 0, 
+		    hwp = (volatile u_long *)(ba + LM_OFFSET + HWC_MEM_OFF),
 		    mp = mask, imp = image;
 		    row < 64;
 		    row++) {
@@ -2004,20 +1970,21 @@ rh_getspriteinfo (gp, info)
 			*mp++  = (~bp20) & (bp20 & ~bp21);
 		}
 #else
-                info->size.x = 32;
-                info->size.y = 32;
-                for (row = 0, hwp = (u_long *)(ba + LM_OFFSET + HWC_MEM_OFF),
-                    mp = mask, imp = image;
-                    row < 32;
-                    row++) {
-                        u_long bp10, bp11;
-                        bp10 = *hwp++;
-                        bp11 = *hwp++;
-                        M2I (bp10);
-                        M2I (bp11);
-                        *imp++ = (~bp10) & bp11;
-                        *mp++  = (~bp10) | (bp10 & ~bp11);
-                }
+		info->size.x = 32;
+		info->size.y = 32;
+		for (row = 0, 
+		    hwp = (volatile u_long *)(ba + LM_OFFSET + HWC_MEM_OFF),
+		    mp = mask, imp = image;
+		    row < 32;
+		    row++) {
+			u_long bp10, bp11;
+			bp10 = *hwp++;
+			bp11 = *hwp++;
+			M2I (bp10);
+			M2I (bp11);
+			*imp++ = (~bp10) & bp11;
+			*mp++  = (~bp10) | (bp10 & ~bp11);
+		}
 #endif
 		copyout (image, info->image, sizeof (image));
 		copyout (mask, info->mask, sizeof (mask));
@@ -2026,9 +1993,7 @@ rh_getspriteinfo (gp, info)
 }
 
 int
-rh_setspriteinfo (gp, info)
-	struct grf_softc *gp;
-	struct grf_spriteinfo *info;
+rh_setspriteinfo(struct grf_softc *gp, struct grf_spriteinfo *info)
 {
 	volatile unsigned char *ba, *fb;
 #if 0
@@ -2056,10 +2021,10 @@ rh_setspriteinfo (gp, info)
 		if (info->size.x > 64)
 			info->size.x = 64;
 #else
-                if (info->size.y > 32)
-                        info->size.y = 32;
-                if (info->size.x > 32)
-                        info->size.x = 32;
+		if (info->size.y > 32)
+			info->size.y = 32;
+		if (info->size.x > 32)
+			info->size.x = 32;
 #endif
 
 		if (info->size.x < 32)
@@ -2071,7 +2036,7 @@ rh_setspriteinfo (gp, info)
 		copyin(info->image, image, info->size.y * info->size.x / 8);
 		copyin(info->mask, mask, info->size.y * info->size.x / 8);
 
-		hwp = (u_long *)(ba + LM_OFFSET + HWC_MEM_OFF);
+		hwp = (volatile u_long *)(ba + LM_OFFSET + HWC_MEM_OFF);
 
 		/*
 		 * setting it is slightly more difficult, because we can't
@@ -2121,10 +2086,10 @@ rh_setspriteinfo (gp, info)
 			*hwp++ = 0x00000000;
 		}
 #else
-                for (; row < 32; row++) {
-                        *hwp++ = 0xffffffff;
-                        *hwp++ = 0x00000000;
-                }
+		for (; row < 32; row++) {
+			*hwp++ = 0xffffffff;
+			*hwp++ = 0x00000000;
+		}
 #endif
 
 		free(image, M_TEMP);
@@ -2155,16 +2120,14 @@ rh_setspriteinfo (gp, info)
 }
 
 int
-rh_getspritemax (gp, pos)
-	struct grf_softc *gp;
-	struct grf_position *pos;
+rh_getspritemax(struct grf_softc *gp, struct grf_position *pos)
 {
 #ifdef RH_64BIT_SPRITE
 	pos->x = 64;
 	pos->y = 64;
 #else
-        pos->x = 32;
-        pos->y = 32;
+	pos->x = 32;
+	pos->y = 32;
 #endif
 
 	return(0);
@@ -2172,26 +2135,22 @@ rh_getspritemax (gp, pos)
 
 
 int
-rh_bitblt (gp, bb)
-	struct grf_softc *gp;
-	struct grf_bitblt *bb;
+rh_bitblt(struct grf_softc *gp, struct grf_bitblt *bb)
 {
 	struct MonDef *md = (struct MonDef *)gp->g_data;
-        if (md->DEP <= 8)
+	if (md->DEP <= 8)
 		RZ3BitBlit(gp, bb);
-        else if (md->DEP <= 16)
+	else if (md->DEP <= 16)
 		RZ3BitBlit16(gp, bb);
-        else
-                RZ3BitBlit24(gp, bb);
+	else
+		RZ3BitBlit24(gp, bb);
 
 	return(0);
 }
 
 
 int
-rh_blank(gp, on)
-	struct grf_softc *gp;
-	int *on;
+rh_blank(struct grf_softc *gp, int *on)
 {
 	struct MonDef *md = (struct MonDef *)gp->g_data;
 	int r;

@@ -1,4 +1,4 @@
-.\"	$NetBSD: stdarg.3,v 1.7 2000/02/04 14:21:07 kleink Exp $
+.\"	$NetBSD: stdarg.3,v 1.18 2003/09/08 17:54:34 wiz Exp $
 .\"
 .\" Copyright (c) 1990, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -15,11 +15,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -37,19 +33,18 @@
 .\"
 .\"	@(#)stdarg.3	8.1 (Berkeley) 6/5/93
 .\"
-.Dd January 18, 2000
+.Dd August 18, 2002
 .Dt STDARG 3
 .Os
 .Sh NAME
 .Nm stdarg ,
-.Nm varargs ,
 .Nm va_arg  ,
 .Nm va_copy  ,
 .Nm va_end ,
 .Nm va_start
 .Nd variable argument lists
 .Sh SYNOPSIS
-.Fd #include <stdarg.h>
+.In stdarg.h
 .Ft void
 .Fn va_start "va_list ap" last
 .Ft type
@@ -109,11 +104,11 @@ macro expands to an expression that has the type and value of the next
 argument in the call.
 The parameter
 .Fa ap
-is the 
+is the
 .Em va_list Fa ap
 initialized by
 .Fn va_start .
-Each call to 
+Each call to
 .Fn va_arg
 modifies
 .Fa ap
@@ -121,7 +116,7 @@ so that the next call returns the next argument.
 The parameter
 .Fa type
 is a type name specified so that the type of a pointer to an
-object that has the specified type can be obtained simply by 
+object that has the specified type can be obtained simply by
 adding a *
 to
 .Fa type .
@@ -132,11 +127,30 @@ is not compatible with the type of the actual next argument
 (as promoted according to the default argument promotions),
 random errors will occur.
 .Pp
+If the type in question is one that gets promoted, the promoted type
+should be used as the argument to
+.Fn va_arg .
+The following describes which types are promoted (and to what):
+.Bl -dash -compact
+.It
+.Va short
+is promoted to
+.Va int
+.It
+.Va float
+is promoted to
+.Va double
+.It
+.Va char
+is promoted to
+.Va int
+.El
+.Pp
 The first use of the
 .Fn va_arg
-macro after that of the 
+macro after that of the
 .Fn va_start
-macro returns the argument after 
+macro returns the argument after
 .Fa last .
 Successive invocations return the values of the remaining
 arguments.
@@ -152,7 +166,7 @@ as if the
 macro had been applied to it followed by the same sequence of uses of the
 .Fn va_arg
 macro as had previously been used to reach the present state of
-.Fa src.
+.Fa src .
 .Pp
 The
 .Fn va_copy
@@ -161,7 +175,7 @@ macro returns no value.
 The
 .Fn va_end
 macro handles a normal return from the function whose variable argument
-list was initialized by 
+list was initialized by
 .Fn va_start
 or
 .Fn va_copy .
@@ -171,15 +185,17 @@ The
 macro returns no value.
 .Sh EXAMPLES
 The function
-.Em foo
+.Fn foo
 takes a string of format characters and prints out the argument
 associated with each format character based on the type.
 .Bd -literal -offset indent
-void foo(char *fmt, ...)
+void
+foo(char *fmt, ...)
 {
 	va_list ap;
-	int d;
-	char c, *p, *s;
+	int d, c;
+	char *s;
+	double f;
 
 	va_start(ap, fmt);
 	while (*fmt)
@@ -193,9 +209,12 @@ void foo(char *fmt, ...)
 			printf("int %d\en", d);
 			break;
 		case 'c':			/* char */
-			c = va_arg(ap, char);
+			c = va_arg(ap, int);	/* promoted */
 			printf("char %c\en", c);
 			break;
+		case 'f':			/* float */
+			f = va_arg(ap, double); /* promoted */
+			printf("float %f\en", f);
 		}
 	va_end(ap);
 }
@@ -204,16 +223,29 @@ void foo(char *fmt, ...)
 The
 .Fn va_start ,
 .Fn va_arg ,
+.Fn va_copy ,
 and
 .Fn va_end
 macros conform to
+.St -isoC-99 .
+.Sh HISTORY
+The
+.Fn va_start ,
+.Fn va_arg
+and
+.Fn va_end
+macros were introduced in
 .St -ansiC .
+The
+.Fn va_copy
+macro was introduced in
+.St -isoC-99 .
 .Sh COMPATIBILITY
 These macros are
 .Em not
 compatible with the historic macros they replace.
 A backward compatible version can be found in the include
-file 
+file
 .Aq Pa varargs.h .
 .Sh BUGS
 Unlike the

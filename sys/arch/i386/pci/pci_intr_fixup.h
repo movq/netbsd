@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_intr_fixup.h,v 1.1 1999/11/17 01:20:38 thorpej Exp $	*/
+/*	$NetBSD: pci_intr_fixup.h,v 1.9 2006/06/22 16:24:34 jmcneill Exp $	*/
 
 /*
  * Copyright (c) 1999, by UCHIYAMA Yasushi
@@ -28,11 +28,11 @@
 typedef void *pciintr_icu_handle_t;
 
 struct pciintr_icu {
-	int	(*pi_getclink) __P((pciintr_icu_handle_t, int, int *));
-	int	(*pi_get_intr) __P((pciintr_icu_handle_t, int, int *));
-	int	(*pi_set_intr) __P((pciintr_icu_handle_t, int, int));
-	int	(*pi_get_trigger) __P((pciintr_icu_handle_t, int, int *));
-	int	(*pi_set_trigger) __P((pciintr_icu_handle_t, int, int));
+	int	(*pi_getclink)(pciintr_icu_handle_t, int, int *);
+	int	(*pi_get_intr)(pciintr_icu_handle_t, int, int *);
+	int	(*pi_set_intr)(pciintr_icu_handle_t, int, int);
+	int	(*pi_get_trigger)(pciintr_icu_handle_t, int, int *);
+	int	(*pi_set_trigger)(pciintr_icu_handle_t, int, int);
 };
 
 typedef const struct pciintr_icu *pciintr_icu_tag_t;
@@ -48,18 +48,30 @@ typedef const struct pciintr_icu *pciintr_icu_tag_t;
 #define	pciintr_icu_set_trigger(t, h, irq, trigger)			\
 	(*(t)->pi_set_trigger)((h), (irq), (trigger))
 
-int pci_intr_fixup __P((pci_chipset_tag_t, bus_space_tag_t, u_int16_t *));
+int pci_intr_fixup(pci_chipset_tag_t, bus_space_tag_t, uint16_t *);
 
 /*
  * Init functions for our known PCI ICUs.
  */
-int	piix_init __P((pci_chipset_tag_t, bus_space_tag_t, pcitag_t,
-	    pciintr_icu_tag_t *, pciintr_icu_handle_t *));
-int	opti82c558_init __P((pci_chipset_tag_t, bus_space_tag_t, pcitag_t,
-	    pciintr_icu_tag_t *, pciintr_icu_handle_t *));
-int	opti82c700_init __P((pci_chipset_tag_t, bus_space_tag_t, pcitag_t,
-	    pciintr_icu_tag_t *, pciintr_icu_handle_t *));
-int	via82c586_init __P((pci_chipset_tag_t, bus_space_tag_t, pcitag_t,
-	    pciintr_icu_tag_t *, pciintr_icu_handle_t *));
-int	sis85c503_init __P((pci_chipset_tag_t, bus_space_tag_t, pcitag_t,
-	    pciintr_icu_tag_t *, pciintr_icu_handle_t *));
+int	piix_init(pci_chipset_tag_t, bus_space_tag_t, pcitag_t,
+	    pciintr_icu_tag_t *, pciintr_icu_handle_t *);
+int	ich_init(pci_chipset_tag_t, bus_space_tag_t, pcitag_t,
+	    pciintr_icu_tag_t *, pciintr_icu_handle_t *);
+int	opti82c558_init(pci_chipset_tag_t, bus_space_tag_t, pcitag_t,
+	    pciintr_icu_tag_t *, pciintr_icu_handle_t *);
+int	opti82c700_init(pci_chipset_tag_t, bus_space_tag_t, pcitag_t,
+	    pciintr_icu_tag_t *, pciintr_icu_handle_t *);
+int	via82c586_init(pci_chipset_tag_t, bus_space_tag_t, pcitag_t,
+	    pciintr_icu_tag_t *, pciintr_icu_handle_t *);
+int	via8231_init(pci_chipset_tag_t, bus_space_tag_t, pcitag_t,
+	    pciintr_icu_tag_t *, pciintr_icu_handle_t *);
+int	sis85c503_init(pci_chipset_tag_t, bus_space_tag_t, pcitag_t,
+	    pciintr_icu_tag_t *, pciintr_icu_handle_t *);
+int	amd756_init(pci_chipset_tag_t, bus_space_tag_t, pcitag_t,
+	    pciintr_icu_tag_t *, pciintr_icu_handle_t *);
+int	ali1543_init(pci_chipset_tag_t, bus_space_tag_t, pcitag_t,
+	    pciintr_icu_tag_t *, pciintr_icu_handle_t *);
+/*
+ * Uninit functions for our known PCI ICUs.
+ */
+void	piix_uninit(pciintr_icu_handle_t);

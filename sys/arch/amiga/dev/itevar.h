@@ -1,4 +1,4 @@
-/*	$NetBSD: itevar.h,v 1.14 1996/04/21 21:12:03 veego Exp $	*/
+/*	$NetBSD: itevar.h,v 1.19 2007/03/04 05:59:23 christos Exp $	*/
 
 /*
  * Copyright (c) 1994 Christian E. Hopps
@@ -109,6 +109,7 @@ enum ite_flags {
 	ITE_ISOPEN = 0x8,		/* ite has been opened */
 	ITE_INGRF  = 0x10,		/* ite is in graphics mode */
 	ITE_ACTIVE = 0x20,		/* ite is an active terminal */
+	ITE_ATTACHED = 0x40,		/* ite is attached */
 };
 
 enum ite_replrules {
@@ -189,29 +190,24 @@ struct consdev;
 struct termios;
 
 /* console related function */
-void	itecnprobe __P((struct consdev *));
-void	itecninit __P((struct consdev *));
-int	itecngetc __P((dev_t));
-void	itecnputc __P((dev_t, int));
-void	ite_cnfinish __P((struct ite_softc *));
+void	itecnprobe(struct consdev *);
+void	itecninit(struct consdev *);
+int	itecngetc(dev_t);
+void	itecnputc(dev_t, int);
+void	ite_cnfinish(struct ite_softc *);
 
 /* standard ite device entry points. */
-void	iteinit __P((dev_t));
-int	iteopen __P((dev_t, int, int, struct proc *));
-int	iteclose __P((dev_t, int, int, struct proc *));
-int	iteread __P((dev_t, struct uio *, int));
-int	itewrite __P((dev_t, struct uio *, int));
-int	iteioctl __P((dev_t, u_long, caddr_t, int, struct proc *));
-void	itestart __P((struct tty *));
+void	iteinit(dev_t);
+void	itestart(struct tty *);
 
 /* ite functions */
-int	ite_on __P((dev_t, int));
-void	ite_off __P((dev_t, int));
-void	ite_reinit __P((dev_t));
-int	ite_param __P((struct tty *, struct termios *));
-void	ite_reset __P((struct ite_softc *));
-int	ite_cnfilter __P((u_char, enum caller));
-void	ite_filter __P((u_char ,enum caller));
-int	ite_grf_ioctl __P((struct ite_softc *, u_long, caddr_t, int, struct proc *));
+void	ite_on(dev_t, int);
+void	ite_off(dev_t, int);
+void	ite_reinit(dev_t);
+int	ite_param(struct tty *, struct termios *);
+void	ite_reset(struct ite_softc *);
+int	ite_cnfilter(u_char, enum caller);
+void	ite_filter(u_char ,enum caller);
+int	ite_grf_ioctl(struct ite_softc *, u_long, void *, int, struct lwp *);
 
 #endif /* _ITEVAR_H */

@@ -1,15 +1,15 @@
-#	$NetBSD: Makefile,v 1.1 1999/02/21 00:20:11 mjl Exp $
+#	$NetBSD: Makefile,v 1.4 2002/09/18 05:41:49 lukem Exp $
 
-PROG=   prn
-NOMAN=  t
-CLEANFILES+= t1 t2
+NOMAN=		# defined
 
-.PATH:  ${.CURDIR}/..
+PROG=		prename
+CPPFLAGS+=	-D_POSIX_SOURCE
+CLEANFILES+=	t1 t2
 
-CPPFLAGS+= -D_POSIX_SOURCE
+.PATH:		${.CURDIR}/..
 
 regress:
 	@echo Testing posix rename with -D_POSIX_SOURCE
-	./prn
+	./prename
 
 .include <bsd.prog.mk>

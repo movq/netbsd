@@ -1,4 +1,4 @@
-/*	$NetBSD: output.c,v 1.21 1998/01/31 12:37:55 christos Exp $	*/
+/*	$NetBSD: output.c,v 1.30 2008/10/12 01:40:37 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)output.c	8.2 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: output.c,v 1.21 1998/01/31 12:37:55 christos Exp $");
+__RCSID("$NetBSD: output.c,v 1.30 2008/10/12 01:40:37 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -76,7 +72,6 @@ __RCSID("$NetBSD: output.c,v 1.21 1998/01/31 12:37:55 christos Exp $");
 #define OUTBUFSIZ BUFSIZ
 #define BLOCK_OUT -2		/* output to a fixed block of memory */
 #define MEM_OUT -3		/* output to dynamically allocated memory */
-#define OUTPUT_ERR 01		/* error occurred on output */
 
 
 struct output output = {NULL, 0, NULL, OUTBUFSIZ, 1, 0};
@@ -110,11 +105,8 @@ RESET {
  */
 
 void
-open_mem(block, length, file)
-	char *block;
-	int length;
-	struct output *file;
-	{
+open_mem(char *block, int length, struct output *file)
+{
 	file->nextc = block;
 	file->nleft = --length;
 	file->fd = BLOCK_OUT;
@@ -124,26 +116,22 @@ open_mem(block, length, file)
 
 
 void
-out1str(p)
-	const char *p;
-	{
+out1str(const char *p)
+{
 	outstr(p, out1);
 }
 
 
 void
-out2str(p)
-	const char *p;
-	{
+out2str(const char *p)
+{
 	outstr(p, out2);
 }
 
 
 void
-outstr(p, file)
-	const char *p;
-	struct output *file;
-	{
+outstr(const char *p, struct output *file)
+{
 	while (*p)
 		outc(*p++, file);
 	if (file == out2)
@@ -155,9 +143,8 @@ char out_junk[16];
 
 
 void
-emptyoutbuf(dest)
-	struct output *dest;
-	{
+emptyoutbuf(struct output *dest)
+{
 	int offset;
 
 	if (dest->fd == BLOCK_OUT) {
@@ -186,16 +173,16 @@ emptyoutbuf(dest)
 
 
 void
-flushall() {
+flushall(void)
+{
 	flushout(&output);
 	flushout(&errout);
 }
 
 
 void
-flushout(dest)
-	struct output *dest;
-	{
+flushout(struct output *dest)
+{
 
 	if (dest->buf == NULL || dest->nextc == dest->buf || dest->fd < 0)
 		return;
@@ -207,7 +194,8 @@ flushout(dest)
 
 
 void
-freestdout() {
+freestdout(void)
+{
 	INTOFF;
 	if (output.buf) {
 		ckfree(output.buf);
@@ -219,95 +207,44 @@ freestdout() {
 
 
 void
-#ifdef __STDC__
 outfmt(struct output *file, const char *fmt, ...)
-#else
-void
-outfmt(va_alist)
-	va_dcl
-#endif
 {
 	va_list ap;
-#ifndef __STDC__
-	struct output *file;
-	const char *fmt;
 
-	va_start(ap);
-	file = va_arg(ap, struct output *);
-	fmt = va_arg(ap, const char *);
-#else
 	va_start(ap, fmt);
-#endif
 	doformat(file, fmt, ap);
 	va_end(ap);
 }
 
 
 void
-#ifdef __STDC__
 out1fmt(const char *fmt, ...)
-#else
-out1fmt(va_alist)
-	va_dcl
-#endif
 {
 	va_list ap;
-#ifndef __STDC__
-	const char *fmt;
 
-	va_start(ap);
-	fmt = va_arg(ap, const char *);
-#else
 	va_start(ap, fmt);
-#endif
 	doformat(out1, fmt, ap);
 	va_end(ap);
 }
 
 void
-#ifdef __STDC__
 dprintf(const char *fmt, ...)
-#else
-dprintf(va_alist)
-	va_dcl
-#endif
 {
 	va_list ap;
-#ifndef __STDC__
-	const char *fmt;
 
-	va_start(ap);
-	fmt = va_arg(ap, const char *);
-#else
 	va_start(ap, fmt);
-#endif
 	doformat(out2, fmt, ap);
 	va_end(ap);
 	flushout(out2);
 }
 
 void
-#ifdef __STDC__
 fmtstr(char *outbuf, size_t length, const char *fmt, ...)
-#else
-fmtstr(va_alist)
-	va_dcl
-#endif
 {
 	va_list ap;
 	struct output strout;
-#ifndef __STDC__
-	char *outbuf;
-	size_t length;
-	const char *fmt;
 
-	va_start(ap);
-	outbuf = va_arg(ap, char *);
-	length = va_arg(ap, size_t);
-	fmt = va_arg(ap, const char *);
-#else
 	va_start(ap, fmt);
-#endif
 	strout.nextc = outbuf;
 	strout.nleft = length;
 	strout.fd = BLOCK_OUT;
@@ -316,13 +253,14 @@ fmtstr(va_alist)
 	outc('\0', &strout);
 	if (strout.flags & OUTPUT_ERR)
 		outbuf[length - 1] = '\0';
+	va_end(ap);
 }
 
 /*
  * Formatted output.  This routine handles a subset of the printf formats:
  * - Formats supported: d, u, o, p, X, s, and c.
  * - The x format is also accepted but is treated like X.
- * - The l and q modifiers are accepted.
+ * - The l, ll and q modifiers are accepted.
  * - The - and # flags are accepted; # only works with the o format.
  * - Width and precision may be specified with any format except c.
  * - An * may be given for the width or precision.
@@ -333,15 +271,23 @@ fmtstr(va_alist)
 
 #define TEMPSIZE 24
 
-static const char digit[] = "0123456789ABCDEF";
-
+#ifdef BSD4_4
+#define HAVE_VASPRINTF 1
+#endif
 
 void
-doformat(dest, f, ap)
-	struct output *dest;
-	const char *f;		/* format string */
-	va_list ap;
-	{
+doformat(struct output *dest, const char *f, va_list ap)
+{
+#if	HAVE_VASPRINTF
+	char *s;
+
+	vasprintf(&s, f, ap);
+	if (s == NULL)
+		error("Could not allocate formatted output buffer");
+	outstr(s, dest);
+	free(s);     
+#else	/* !HAVE_VASPRINTF */
+	static const char digit[] = "0123456789ABCDEF";
 	char c;
 	char temp[TEMPSIZE];
 	int flushleft;
@@ -404,8 +350,12 @@ doformat(dest, f, ap)
 			}
 		}
 		if (*f == 'l') {
-			islong++;
 			f++;
+			if (*f == 'l') {
+				isquad++;
+				f++;
+			} else
+				islong++;
 		} else if (*f == 'q') {
 			isquad++;
 			f++;
@@ -517,6 +467,7 @@ number:		  /* process a number */
 		}
 		f++;
 	}
+#endif	/* !HAVE_VASPRINTF */
 }
 
 
@@ -526,11 +477,8 @@ number:		  /* process a number */
  */
 
 int
-xwrite(fd, buf, nbytes)
-	int fd;
-	char *buf;
-	int nbytes;
-	{
+xwrite(int fd, char *buf, int nbytes)
+{
 	int ntry;
 	int i;
 	int n;
@@ -560,10 +508,7 @@ xwrite(fd, buf, nbytes)
  */
 
 int
-xioctl(fd, request, arg)
-	int fd;
-	unsigned long request;
-	char * arg;
+xioctl(int fd, unsigned long request, char *arg)
 {
 	int i;
 

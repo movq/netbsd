@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-#	$NetBSD: install.md,v 1.2 1999/02/20 16:21:19 scw Exp $
+#	$NetBSD: install.md,v 1.5 2008/05/02 18:31:11 martin Exp $
 #
 # Copyright (c) 1996 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -16,19 +16,12 @@
 # 2. Redistributions in binary form must reproduce the above copyright
 #    notice, this list of conditions and the following disclaimer in the
 #    documentation and/or other materials provided with the distribution.
-# 3. All advertising materials mentioning features or use of this software
-#    must display the following acknowledgement:
-#        This product includes software developed by the NetBSD
-#        Foundation, Inc. and its contributors.
-# 4. Neither the name of The NetBSD Foundation nor the names of its
-#    contributors may be used to endorse or promote products derived
-#    from this software without specific prior written permission.
 #
 # THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 # ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
 # TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-# PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE
-# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+# PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+# BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
 # CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
 # SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
 # INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
@@ -67,7 +60,7 @@ md_makerootwritable() {
 	# Just remount the root device read-write.
 	__mount_kernfs
 	echo "Remounting root read-write..."
-	mount -u /kern/rootdev /
+	mount -t ffs -u /kern/rootdev /
 }
 
 md_get_diskdevs() {
@@ -113,14 +106,19 @@ md_native_fstype() {
 md_native_fsopts() {
 }
 
+grep_check () {
+	pattern=$1; shift
+	awk 'BEGIN{ es=1; } /'"$pattern"'/{ print; es=0; } END{ exit es; }' "$@"
+}
+
 md_checkfordisklabel() {
 	# $1 is the disk to check
 	local rval
 
 	disklabel $1 > /dev/null 2> /tmp/checkfordisklabel
-	if grep "no disk label" /tmp/checkfordisklabel; then
+	if grep_check "no disklabel" /tmp/checkfordisklabel; then
 		rval=1
-	elif grep "disk label corrupted" /tmp/checkfordisklabel; then
+	elif grep_check "disk label corrupted" /tmp/checkfordisklabel; then
 		rval=2
 	else
 		rval=0

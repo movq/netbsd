@@ -1,4 +1,4 @@
-/*	$NetBSD: fstat.h,v 1.3 2000/02/04 10:35:46 jdolecek Exp $	*/
+/*	$NetBSD: fstat.h,v 1.8 2008/07/22 22:58:04 christos Exp $	*/
 /*-
  * Copyright (c) 1988, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -45,6 +41,10 @@ struct  filestat {
  */
 #define KVM_READ(kaddr, paddr, len) \
 	(kvm_read(kd, (u_long)(kaddr), (void *)(paddr), (len)) == (len))
+#define KVM_NLIST(nl) \
+	kvm_nlist(kd, (nl))
+#define KVM_GETERR() \
+	kvm_geterr(kd)
 
 extern	kvm_t	*kd;
 extern	int	 vflg;
@@ -52,6 +52,10 @@ extern	pid_t	 Pid;
 
 #define dprintf	if (vflg) warnx
 
-mode_t	getftype __P((enum vtype));
-int	isofs_filestat __P((struct vnode *, struct filestat *));
-int	ntfs_filestat __P((struct vnode *, struct filestat *));
+mode_t	getftype(enum vtype);
+struct file;
+int	pmisc(struct file *, const char *);
+int	isofs_filestat(struct vnode *, struct filestat *);
+int	ntfs_filestat(struct vnode *, struct filestat *);
+int	ptyfs_filestat(struct vnode *, struct filestat *);
+int	tmpfs_filestat(struct vnode *, struct filestat *);

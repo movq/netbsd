@@ -1,4 +1,4 @@
-/*	$NetBSD: pi.c,v 1.7 2000/01/14 06:53:48 mjl Exp $	*/
+/*	$NetBSD: pi.c,v 1.12 2006/04/09 19:21:26 christos Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,24 +34,24 @@
 #if 0
 static char sccsid[] = "@(#)pi.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: pi.c,v 1.7 2000/01/14 06:53:48 mjl Exp $");
+__RCSID("$NetBSD: pi.c,v 1.12 2006/04/09 19:21:26 christos Exp $");
 #endif /* not lint */
 
 #include <stdio.h>
 #include <ctype.h>
 #include <string.h>
+#include <stdlib.h>
 #include "error.h"
 
-extern	char	*currentfilename;
 static	char	*c_linenumber;
 static	char	*unk_hdr[] = {"In", "program", "???"};
 static	char	**c_header = &unk_hdr[0];
 
-boolean	alldigits __P((char *));
-boolean	isdateformat __P((int, char **));
-boolean	instringset __P((char *, char **));
-Errorclass pi __P((void));
-boolean	piptr __P((char *));
+boolean	alldigits(char *);
+boolean	isdateformat(int, char **);
+boolean	instringset(char *, char **);
+Errorclass pi(void);
+boolean	piptr(char *);
 
 
 /*
@@ -168,8 +164,7 @@ char *pi_imp1[] = {"improperly", "used", "on", "line"};
 char *pi_imp2[] = {"improperly", "used", "on", "lines"};
 
 boolean
-alldigits(string)
-	char	*string;
+alldigits(char *string)
 {
 	for (; *string && isdigit((unsigned char)*string); string++)
 		continue;
@@ -177,9 +172,7 @@ alldigits(string)
 }
 
 boolean
-instringset(member, set)
-	char	*member;
-	char	**set;
+instringset(char *member, char **set)
 {
 	for(; *set; set++){
 		if (strcmp(*set, member) == 0)
@@ -189,9 +182,7 @@ instringset(member, set)
 }
 
 boolean
-isdateformat(wordc, wordv)
-	int	wordc;
-	char	**wordv;
+isdateformat(int wordc, char **wordv)
 {
 	return(
 	        (wordc == 5)
@@ -202,8 +193,7 @@ isdateformat(wordc, wordv)
 }
 
 boolean
-piptr(string)
-	char	*string;
+piptr(char *string)
 {
 	if (*string != '-')
 		return(FALSE);
@@ -221,7 +211,7 @@ extern	int	wordc;
 extern	char	**wordv;
 
 Errorclass
-pi()
+pi(void)
 {
 	char	**nwordv;
 
@@ -259,12 +249,12 @@ pi()
 		(void)substitute(wordv[2], '^', '|');
 		longpiptr = position(wordv[2],'|') > (6+8);
 		nwordv = wordvsplice(longpiptr ? 2 : 4, wordc, wordv+1);
-		nwordv[0] = strsave(currentfilename);
-		nwordv[1] = strsave(c_linenumber);
+		nwordv[0] = strdup(currentfilename);
+		nwordv[1] = strdup(c_linenumber);
 		if (!longpiptr){
 			nwordv[2] = "pascal errortype";
 			nwordv[3] = wordv[1];
-			nwordv[4] = strsave("%%%\n");
+			nwordv[4] = strdup("%%%\n");
 			if (strlen(nwordv[5]) > (8-2))	/* this is the pointer */
 				nwordv[5] += (8-2);	/* bump over 6 characters */
 		}
@@ -285,7 +275,7 @@ pi()
 		 */
 		language = INPI;
 		nwordv = wordvsplice(1, wordc, wordv + 1);
-		nwordv[0] = strsave(currentfilename);
+		nwordv[0] = strdup(currentfilename);
 		nwordv[1] = wordv[2];
 		nwordv[2] = wordv[1];
 		c_linenumber = wordv[2];
@@ -328,8 +318,12 @@ pi()
 		){
 			for (wordindex = undefined ? 5 : 6; wordindex <= wordc;
 			    wordindex++){
+				if (nwordv) {
+					free(nwordv[0]);
+					free(nwordv);
+				}
 				nwordv = wordvsplice(2, undefined ? 2 : 3, wordv+1);
-				nwordv[0] = strsave(currentfilename);
+				nwordv[0] = strdup(currentfilename);
 				nwordv[1] = wordv[wordindex];
 				if (wordindex != wordc)
 					erroradd(undefined ? 4 : 5, nwordv,
@@ -341,10 +335,10 @@ pi()
 		}
 
 		nwordv = wordvsplice(1+3, wordc, wordv+1);
-		nwordv[0] = strsave(currentfilename);
-		nwordv[1] = strsave(c_header[0]);
-		nwordv[2] = strsave(c_header[1]);
-		nwordv[3] = strsave(c_header[2]);
+		nwordv[0] = strdup(currentfilename);
+		nwordv[1] = strdup(c_header[0]);
+		nwordv[2] = strdup(c_header[1]);
+		nwordv[3] = strdup(c_header[2]);
 		wordv = nwordv - 1;
 		wordc += 1 + 3;
 		return(C_THISFILE);
@@ -357,8 +351,8 @@ pi()
 		 */
 		language = INPI;
 		nwordv = wordvsplice(1, wordc, wordv+1);
-		nwordv[0] = strsave(currentfilename);
-		nwordv[1] = strsave(c_linenumber);
+		nwordv[0] = strdup(currentfilename);
+		nwordv[1] = strdup(c_linenumber);
 		wordv = nwordv - 1;
 		wordc += 1;
 		return(C_TRUE);
@@ -371,7 +365,7 @@ pi()
 		 *	Have message that tells us we have changed files
 		 */
 		language = INPI;
-		currentfilename = strsave(wordv[6]);
+		currentfilename = strdup(wordv[6]);
 		clob_last(currentfilename, '\0');
 		return(C_SYNC);
 	}
@@ -409,7 +403,7 @@ pi()
 	){
 		language = INPI;
 		nwordv = wordvsplice(2, wordc, wordv+1);
-		nwordv[0] = strsave(currentfilename);
+		nwordv[0] = strdup(currentfilename);
 		nwordv[1] = structured ? wordv [5] : wordv[wordc];
 		wordc += 2;
 		wordv = nwordv - 1;

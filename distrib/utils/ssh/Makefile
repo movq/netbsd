@@ -1,9 +1,7 @@
-# $NetBSD: Makefile,v 1.2 1999/02/13 02:54:18 lukem Exp $
+# $NetBSD: Makefile,v 1.7 2001/12/12 00:05:10 tv Exp $
 # Small Shell (i.e. for boot media)
 
-PROG=	ssh
-MKMAN=	no
-
-all: ${PROG}
+PROG=		ssh
+NOMAN=		# defined
 
 .include <bsd.prog.mk>

@@ -1,4 +1,4 @@
-/*	$NetBSD: tftpsubs.h,v 1.2 1994/12/08 09:51:32 jtc Exp $	*/
+/*	$NetBSD: tftpsubs.h,v 1.5 2006/01/31 17:36:56 christos Exp $	*/
 
 /*
  * Copyright (c) 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -40,10 +36,10 @@
  * server.
  */
 struct tftphdr *r_init __P((void));
-void	read_ahead __P((FILE *, int));
-int	readit __P((FILE *, struct tftphdr **, int));
+void	read_ahead __P((FILE *, size_t, int));
+int	readit __P((FILE *, struct tftphdr **, size_t, int));
 
-int	synchnet __P((int));
+int	synchnet __P((int, size_t));
 
 struct tftphdr *w_init __P((void));
 int	write_behind __P((FILE *, int));

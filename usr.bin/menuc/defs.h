@@ -1,4 +1,4 @@
-/*	$NetBSD: defs.h,v 1.3 1998/07/01 07:46:02 phil Exp $	 */
+/*	$NetBSD: defs.h,v 1.8 2003/10/27 00:12:43 lukem Exp $	 */
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -38,6 +38,10 @@
 
 /* defs.h: definitions needed for the menu system. */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
 #include <stdio.h>
 
 #include "mdb.h"
@@ -62,6 +66,7 @@ EXTERN char *out_name INIT("menu_defs");
 EXTERN char *sys_name INIT("menu_sys.def");
 
 EXTERN int do_dynamic INIT(0);
+EXTERN int do_msgxlat INIT(0);
 EXTERN int line_no INIT(1);
 EXTERN int had_errors INIT(FALSE);
 EXTERN int max_strlen INIT(1);
@@ -76,25 +81,26 @@ EXTERN action error_act INIT({NULL});
 /* Prototypes. */
 
 /* From util.c */
-void yyerror (const char *, ...);
-void buff_add_ch (char);
-char *buff_copy (void); 
+void yyerror(const char *, ...)
+     __attribute__((__format__(__printf__, 1, 2)));
+void buff_add_ch(char);
+char *buff_copy(void); 
 
 /* from scan.l */
-int yylex (void);
+int yylex(void);
 
 /* from parse.y */
-int yyparse (void);
+int yyparse(void);
 
 /* Vars not defined in main.c */
 extern FILE *yyin;
 
 /* from avl.c */
-id_rec *find_id (id_rec *tree, char *id);
-int insert_id (id_rec **root, id_rec *new_id);
+id_rec *find_id(id_rec *, char *);
+int insert_id(id_rec **, id_rec *);
 
 /* from mdb.c */
-id_rec *get_menu (char *);
-void check_defined (void);
-void write_menu_file (char *);
+id_rec *get_menu(char *);
+void check_defined(void);
+void write_menu_file(char *);
 

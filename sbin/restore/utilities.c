@@ -1,4 +1,4 @@
-/*	$NetBSD: utilities.c,v 1.13 1997/09/16 13:44:17 lukem Exp $	*/
+/*	$NetBSD: utilities.c,v 1.22 2005/08/19 02:07:19 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)utilities.c	8.5 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: utilities.c,v 1.13 1997/09/16 13:44:17 lukem Exp $");
+__RCSID("$NetBSD: utilities.c,v 1.22 2005/08/19 02:07:19 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -48,6 +44,7 @@ __RCSID("$NetBSD: utilities.c,v 1.13 1997/09/16 13:44:17 lukem Exp $");
 #include <ufs/ufs/dinode.h>
 #include <ufs/ufs/dir.h>
 
+#include <err.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -61,8 +58,7 @@ __RCSID("$NetBSD: utilities.c,v 1.13 1997/09/16 13:44:17 lukem Exp $");
  * Insure that all the components of a pathname exist.
  */
 void
-pathcheck(name)
-	char *name;
+pathcheck(char *name)
 {
 	char *cp;
 	struct entry *ep;
@@ -90,8 +86,7 @@ pathcheck(name)
  * Change a name to a unique temporary name.
  */
 void
-mktempname(ep)
-	struct entry *ep;
+mktempname(struct entry *ep)
 {
 	char oldname[MAXPATHLEN];
 
@@ -109,8 +104,7 @@ mktempname(ep)
  * Generate a temporary name for an entry.
  */
 char *
-gentempname(ep)
-	struct entry *ep;
+gentempname(struct entry *ep)
 {
 	static char name[MAXPATHLEN];
 	struct entry *np;
@@ -121,8 +115,8 @@ gentempname(ep)
 		i++;
 	if (np == NULL)
 		badentry(ep, "not on ino list");
-	(void) snprintf(name, sizeof(name), "%s%ld%d", TMPHDR, (long) i,
-	    ep->e_ino);
+	(void)snprintf(name, sizeof(name), "%s%ld%llu", TMPHDR, (long) i,
+	    (unsigned long long)ep->e_ino);
 	return (name);
 }
 
@@ -130,8 +124,7 @@ gentempname(ep)
  * Rename a file or directory.
  */
 void
-renameit(from, to)
-	char *from, *to;
+renameit(char *from, const char *to)
 {
 	if (!Nflag && rename(from, to) < 0) {
 		fprintf(stderr, "warning: cannot rename %s to %s: %s\n",
@@ -145,8 +138,7 @@ renameit(from, to)
  * Create a new node (directory).
  */
 void
-newnode(np)
-	struct entry *np;
+newnode(struct entry *np)
 {
 	char *cp;
 
@@ -165,8 +157,7 @@ newnode(np)
  * Remove an old node (directory).
  */
 void
-removenode(ep)
-	struct entry *ep;
+removenode(struct entry *ep)
 {
 	char *cp;
 
@@ -188,8 +179,7 @@ removenode(ep)
  * Remove a leaf.
  */
 void
-removeleaf(ep)
-	struct entry *ep;
+removeleaf(struct entry *ep)
 {
 	char *cp;
 
@@ -209,9 +199,7 @@ removeleaf(ep)
  * Create a link.
  */
 int
-linkit(existing, new, type)
-	char *existing, *new;
-	int type;
+linkit(char *existing, char *new, int type)
 {
 
 	if (type == SYMLINK) {
@@ -241,8 +229,7 @@ linkit(existing, new, type)
  * Create a whiteout.
  */
 int
-addwhiteout(name)
-	char *name;
+addwhiteout(char *name)
 {
 
 	if (!Nflag && mknod(name, S_IFWHT, 0) < 0) {
@@ -258,8 +245,7 @@ addwhiteout(name)
  * Delete a whiteout.
  */
 void
-delwhiteout(ep)
-	struct entry *ep;
+delwhiteout(struct entry *ep)
 {
 	char *name;
 
@@ -280,8 +266,7 @@ delwhiteout(ep)
  * find lowest number file (above "start") that needs to be extracted
  */
 ino_t
-lowerbnd(start)
-	ino_t start;
+lowerbnd(ino_t start)
 {
 	struct entry *ep;
 
@@ -299,8 +284,7 @@ lowerbnd(start)
  * find highest number file (below "start") that needs to be extracted
  */
 ino_t
-upperbnd(start)
-	ino_t start;
+upperbnd(ino_t start)
 {
 	struct entry *ep;
 
@@ -318,12 +302,10 @@ upperbnd(start)
  * report on a badly formed entry
  */
 void
-badentry(ep, msg)
-	struct entry *ep;
-	char *msg;
+badentry(struct entry *ep, const char *message)
 {
 
-	fprintf(stderr, "bad entry: %s\n", msg);
+	fprintf(stderr, "bad entry: %s\n", message);
 	fprintf(stderr, "name: %s\n", myname(ep));
 	fprintf(stderr, "parent name %s\n", myname(ep->e_parent));
 	if (ep->e_sibling != NULL)
@@ -345,8 +327,7 @@ badentry(ep, msg)
  * Construct a string indicating the active flag bits of an entry.
  */
 char *
-flagvalues(ep)
-	struct entry *ep;
+flagvalues(struct entry *ep)
 {
 	static char flagbuf[BUFSIZ];
 
@@ -371,8 +352,7 @@ flagvalues(ep)
  * Check to see if a name is on a dump tape.
  */
 ino_t
-dirlookup(name)
-	const char *name;
+dirlookup(const char *name)
 {
 	struct direct *dp;
 	ino_t ino;
@@ -388,8 +368,7 @@ dirlookup(name)
  * Elicit a reply.
  */
 int
-reply(question)
-	char *question;
+reply(const char *question)
 {
 	char c;
 
@@ -409,29 +388,16 @@ reply(question)
 /*
  * handle unexpected inconsistencies
  */
-#if __STDC__
 #include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
 
 void
-#if __STDC__
 panic(const char *fmt, ...)
-#else
-panic(fmt, va_alist)
-	char *fmt;
-	va_dcl
-#endif
 {
 	va_list ap;
-#if __STDC__
-	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
 
+	va_start(ap, fmt);
 	vfprintf(stderr, fmt, ap);
+	va_end(ap);
 	if (yflag)
 		return;
 	if (reply("abort") == GOOD) {
@@ -439,4 +405,49 @@ panic(fmt, va_alist)
 			abort();
 		exit(1);
 	}
+}
+
+void
+writemtree(const char *name, const char *type,
+    const uid_t uid, const gid_t gid, const mode_t mode, const u_long flags)
+{
+	const char *sep = "";
+	if ((name[0] != '.') || (name[1] != '/' && name[1] != '\0'))
+		fprintf(Mtreefile, "./");
+	fprintf(Mtreefile, "%s type=%s uid=%d gid=%d mode=%#4.4o",
+	    name, type, uid, gid,
+	    mode & (S_IRWXU | S_IRWXG | S_IRWXO | S_ISUID | S_ISGID | S_ISTXT));
+	if (flags != 0)
+		fprintf(Mtreefile, " flags=");
+	if (flags & UF_NODUMP) {
+		fprintf(Mtreefile, "nodump");
+		sep=",";
+	}
+	if (flags & UF_IMMUTABLE) {
+		fprintf(Mtreefile, "%suchg", sep);
+		sep=",";
+	}
+	if (flags & UF_APPEND) {
+		fprintf(Mtreefile, "%suappnd", sep);
+		sep=",";
+	}
+	if (flags & UF_OPAQUE) {
+		fprintf(Mtreefile, "%sopaque", sep);
+		sep=",";
+	}
+	if (flags & SF_ARCHIVED) {
+		fprintf(Mtreefile, "%sarch", sep);
+		sep=",";
+	}
+	if (flags & SF_IMMUTABLE) {
+		fprintf(Mtreefile, "%sschg", sep);
+		sep=",";
+	}
+	if (flags & SF_APPEND) {
+		fprintf(Mtreefile, "%ssappnd", sep);
+		sep=",";
+	}
+	fprintf(Mtreefile, "\n");
+	if (ferror(Mtreefile))
+		err(1, "error writing to mtree file");
 }

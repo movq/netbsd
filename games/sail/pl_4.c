@@ -1,4 +1,4 @@
-/*	$NetBSD: pl_4.c,v 1.8 1999/09/08 21:17:59 jsm Exp $	*/
+/*	$NetBSD: pl_4.c,v 1.15 2004/11/05 21:30:32 dsl Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,14 +34,17 @@
 #if 0
 static char sccsid[] = "@(#)pl_4.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: pl_4.c,v 1.8 1999/09/08 21:17:59 jsm Exp $");
+__RCSID("$NetBSD: pl_4.c,v 1.15 2004/11/05 21:30:32 dsl Exp $");
 #endif
 #endif /* not lint */
 
+#include <sys/types.h>
+#include <ctype.h>
+#include "extern.h"
 #include "player.h"
 
 void
-changesail()
+changesail(void)
 {
 	int rig, full;
 
@@ -72,7 +71,7 @@ changesail()
 }
 
 void
-acceptsignal()
+acceptsignal(void)
 {
 	char buf[60];
 	char *p = buf;
@@ -87,7 +86,7 @@ acceptsignal()
 }
 
 void
-lookout()
+lookout(void)
 {
 	struct ship *sp;
 	char buf[3];
@@ -96,7 +95,7 @@ lookout()
 	sgetstr("What ship? ", buf, sizeof buf);
 	foreachship(sp) {
 		c = *countryname[sp->nationality];
-		if ((c == *buf || tolower(c) == *buf || colours(sp) == *buf)
+		if ((tolower((unsigned char)c) == *buf || colours(sp) == *buf)
 		    && (sp->file->stern == buf[1] || sterncolour(sp) == buf[1]
 			|| buf[1] == '?')) {
 			eyeball(sp);
@@ -105,9 +104,7 @@ lookout()
 }
 
 const char *
-saywhat(sp, flag)
-struct ship *sp;
-char flag;
+saywhat(struct ship *sp, int flag)
 {
 	if (sp->file->captain[0])
 		return sp->file->captain;
@@ -122,8 +119,7 @@ char flag;
 }
 
 void
-eyeball(ship)
-struct ship *ship;
+eyeball(struct ship *ship)
 {
 	int i;
 

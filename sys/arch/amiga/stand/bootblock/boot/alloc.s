@@ -1,7 +1,7 @@
-/* $NetBSD: alloc.s,v 1.4 1999/02/16 23:34:11 is Exp $ */
+/* $NetBSD: alloc.s,v 1.10 2008/04/28 20:23:13 martin Exp $ */
 
 /*-
- * Copyright (c) 1996 The NetBSD Foundation, Inc.
+ * Copyright (c) 1996,2006 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,23 +33,24 @@
  * Memory allocation through exec library.
  */
 
-	.globl	_SysBase
-	.globl	_alloc
-_alloc:
-	movl	a6,sp@-
-	movl	pc@(_SysBase:w),a6
-	movl	sp@(8),d0
-	movl	#0x50001,d1	| MEMF_CLEAR|MEMF_REVERSE|MEMF_PUBLIC for now.
-	jsr	a6@(-0x2ac)	| AllocVec
-	movl	sp@+,a6
+#include <machine/asm.h>
+
+ENTRY_NOPROFILE(alloc)
+	movl	%a6,%sp@-
+	movl	%pc@(_C_LABEL(SysBase):w),%a6
+	movl	%sp@(8),%d0
+	movl	#0x50001,%d1	| MEMF_CLEAR|MEMF_REVERSE|MEMF_PUBLIC for now.
+	jsr	%a6@(-0xc6)	| AllocMem
+	movl	%sp@+,%a6
+	movl	%d0,%a0		| Comply with ELF ABI
 	rts
 
-	.globl	_free
-_free:
-	movl	a6,sp@-
-	movl	pc@(_SysBase:w),a6
-	movl	sp@(8),a1
-	jsr	a6@(-0x2b2)	| FreeVec
-	movl	sp@+,a6
+ENTRY_NOPROFILE(dealloc)
+	movl	%a6,%sp@-
+	movl	%pc@(_C_LABEL(SysBase):w),%a6
+	movl	%sp@(8),%a1
+	movl	%sp@(12),%d0
+	jsr	%a6@(-0xd2)	| FreeMem
+	movl	%sp@+,%a6
 	rts
 

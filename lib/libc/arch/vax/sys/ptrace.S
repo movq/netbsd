@@ -10,11 +10,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -33,20 +29,20 @@
 
 #if defined(SYSLIBC_SCCS) && !defined(lint)
 	/* .asciz "@(#)ptrace.s	8.1 (Berkeley) 6/4/93" */
-	.asciz "$NetBSD: ptrace.S,v 1.3 2000/02/05 19:20:53 kleink Exp $"
+	.asciz "$NetBSD: ptrace.S,v 1.7 2003/08/07 16:42:33 agc Exp $"
 #endif /* SYSLIBC_SCCS and not lint */
 
 #include "SYS.h"
 
 ENTRY(ptrace, 0)
 #ifdef _REENTRANT
-	calls	$0,___errno
-	clrl	(r0)
+	calls	$0,_C_LABEL(__errno)
+	clrl	(%r0)
 #else
-	clrl	_errno
+	clrl	_C_LABEL(errno)
 #endif
 	chmk	$ SYS_ptrace
 	jcs	err
 	ret
 err:
-	jmp	cerror
+	jmp	CERROR+2

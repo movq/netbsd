@@ -1,4 +1,4 @@
-/* $NetBSD: login_cap.c,v 1.5 2000/02/10 20:52:54 mjl Exp $ */
+/*	$NetBSD: login_cap.c,v 1.29 2007/12/04 22:09:02 mjf Exp $	*/
 
 /*-
  * Copyright (c) 1995,1997 Berkeley Software Design, Inc. All rights reserved.
@@ -33,12 +33,19 @@
  *
  *	BSDI login_cap.c,v 2.13 1998/02/07 03:17:05 prb Exp
  */
+
+#include <sys/cdefs.h>
+#if defined(LIBC_SCCS) && !defined(lint)
+__RCSID("$NetBSD: login_cap.c,v 1.29 2007/12/04 22:09:02 mjf Exp $");
+#endif /* LIBC_SCCS and not lint */
  
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/resource.h>
+#include <sys/param.h>
 
+#include <assert.h>
 #include <ctype.h>
 #include <err.h>
 #include <errno.h>
@@ -52,27 +59,30 @@
 #include <string.h>
 #include <syslog.h>
 #include <unistd.h>
+#include <util.h>
 
-
-static	char *classfiles[] = { _PATH_LOGIN_CONF, 0 };
-static	void setuserpath __P((login_cap_t *, char *));
-static	u_quad_t multiply __P((u_quad_t, u_quad_t));
-static	u_quad_t strtolimit __P((char *, char **, int));
-static	u_quad_t strtosize __P((char *, char **, int));
-static	int gsetrl __P((login_cap_t *, int, char *, int type));
-static	int setuserenv __P((login_cap_t *));
-static	int isinfinite __P((const char *));
+static u_quad_t	multiply(u_quad_t, u_quad_t);
+static u_quad_t	strtolimit(const char *, char **, int);
+static u_quad_t	strtosize(const char *, char **, int);
+static int	gsetrl(login_cap_t *, int, const char *, int type);
+static int	isinfinite(const char *);
+static int	envset(void *, const char *, const char *, int);
 
 login_cap_t *
-login_getclass(class)
-	char *class;
+login_getclass(const char *class)
 {
+	const char *classfiles[2];
 	login_cap_t *lc;
 	int res;
 
-	for (res = 0; classfiles[res]; ++res)
-		if (secure_path(classfiles[res]) < 0)
-			return (0);
+	/* class may be NULL */
+
+	if (secure_path(_PATH_LOGIN_CONF) == 0) {
+		classfiles[0] = _PATH_LOGIN_CONF;
+		classfiles[1] = NULL;
+	} else {
+		classfiles[0] = NULL;
+	}
 
 	if ((lc = malloc(sizeof(login_cap_t))) == NULL) {
 		syslog(LOG_ERR, "%s:%d malloc: %m", __FILE__, __LINE__);
@@ -91,7 +101,15 @@ login_getclass(class)
 		return (0);
 	}
 
-	if ((res = cgetent(&lc->lc_cap, classfiles, lc->lc_class)) != 0 ) {
+	/*
+	 * Not having a login.conf file is not an error condition.
+	 * The individual routines deal reasonably with missing
+	 * capabilities and use default values.
+	 */
+	if (classfiles[0] == NULL)
+		return(lc);
+
+	if ((res = cgetent(&lc->lc_cap, classfiles, lc->lc_class)) != 0) {
 		lc->lc_cap = 0;
 		switch (res) {
 		case 1: 
@@ -99,10 +117,7 @@ login_getclass(class)
 				lc->lc_class);
 			break;
 		case -1:
-			if ((res = open(classfiles[0], 0)) >= 0)
-				close(res);
-			if (strcmp(lc->lc_class, LOGIN_DEFCLASS) == NULL &&
-			    res < 0)
+			if (strcmp(lc->lc_class, LOGIN_DEFCLASS) == 0)
 				return (lc);
 			syslog(LOG_ERR, "%s: unknown class", lc->lc_class);
 			break;
@@ -127,54 +142,58 @@ login_getclass(class)
 }
 
 login_cap_t *
-login_getpwclass(pwd)
-	const struct passwd *pwd;
+login_getpwclass(const struct passwd *pwd)
 {
+
+	/* pwd may be NULL */
+
 	return login_getclass(pwd ? pwd->pw_class : NULL);
 }
 
 char *
-login_getcapstr(lc, cap, def, e)
-	login_cap_t *lc;
-	char *cap;
-	char *def;
-	char *e;
+login_getcapstr(login_cap_t *lc, const char *cap, char *def, char *e)
 {
-	char *res;
+	char *res = NULL;
 	int status;
 
 	errno = 0;
+
+	_DIAGASSERT(cap != NULL);
 
 	if (!lc || !lc->lc_cap)
 		return (def);
 
 	switch (status = cgetstr(lc->lc_cap, cap, &res)) {
 	case -1:
+		if (res)
+			free(res);
 		return (def);
 	case -2:
 		syslog(LOG_ERR, "%s: getting capability %s: %m",
 		    lc->lc_class, cap);
+		if (res)
+			free(res);
 		return (e);
 	default:
 		if (status >= 0) 
 			return (res);
 		syslog(LOG_ERR, "%s: unexpected error with capability %s",
 		    lc->lc_class, cap);
+		if (res)
+			free(res);
 		return (e);
 	}
 }
 
 quad_t
-login_getcaptime(lc, cap, def, e)
-	login_cap_t *lc;
-	char *cap;
-	quad_t def;
-	quad_t e;
+login_getcaptime(login_cap_t *lc, const char *cap, quad_t def, quad_t e)
 {
 	char *ep;
-	char *res, *sres;
+	char *res = NULL, *sres;
 	int status;
 	quad_t q, r;
+
+	_DIAGASSERT(cap != NULL);
 
 	errno = 0;
 	if (!lc || !lc->lc_cap)
@@ -182,11 +201,15 @@ login_getcaptime(lc, cap, def, e)
 
 	switch (status = cgetstr(lc->lc_cap, cap, &res)) {
 	case -1:
+		if (res)
+			free(res);
 		return (def);
 	case -2:
 		syslog(LOG_ERR, "%s: getting capability %s: %m",
 		    lc->lc_class, cap);
 		errno = ERANGE;
+		if (res)
+			free(res);
 		return (e);
 	default:
 		if (status >= 0) 
@@ -194,6 +217,8 @@ login_getcaptime(lc, cap, def, e)
 		syslog(LOG_ERR, "%s: unexpected error with capability %s",
 		    lc->lc_class, cap);
 		errno = ERANGE;
+		if (res)
+			free(res);
 		return (e);
 	}
 
@@ -212,6 +237,7 @@ invalid:
 			syslog(LOG_ERR, "%s:%s=%s: invalid time",
 			    lc->lc_class, cap, sres);
 			errno = ERANGE;
+			free(sres);
 			return (e);
 		}
 		switch (*ep++) {
@@ -241,20 +267,19 @@ invalid:
 		res = ep;
 		q += r;
 	}
+	free(sres);
 	return (q);
 }
 
 quad_t
-login_getcapnum(lc, cap, def, e)
-	login_cap_t *lc;
-	char *cap;
-	quad_t def;
-	quad_t e;
+login_getcapnum(login_cap_t *lc, const char *cap, quad_t def, quad_t e)
 {
 	char *ep;
-	char *res;
+	char *res = NULL;
 	int status;
 	quad_t q;
+
+	_DIAGASSERT(cap != NULL);
 
 	errno = 0;
 	if (!lc || !lc->lc_cap)
@@ -262,11 +287,15 @@ login_getcapnum(lc, cap, def, e)
 
 	switch (status = cgetstr(lc->lc_cap, cap, &res)) {
 	case -1:
+		if (res)
+			free(res);
 		return (def);
 	case -2:
 		syslog(LOG_ERR, "%s: getting capability %s: %m",
 		    lc->lc_class, cap);
 		errno = ERANGE;
+		if (res)
+			free(res);
 		return (e);
 	default:
 		if (status >= 0) 
@@ -274,6 +303,8 @@ login_getcapnum(lc, cap, def, e)
 		syslog(LOG_ERR, "%s: unexpected error with capability %s",
 		    lc->lc_class, cap);
 		errno = ERANGE;
+		if (res)
+			free(res);
 		return (e);
 	}
 
@@ -287,22 +318,22 @@ login_getcapnum(lc, cap, def, e)
 		syslog(LOG_ERR, "%s:%s=%s: invalid number",
 		    lc->lc_class, cap, res);
 		errno = ERANGE;
+		free(res);
 		return (e);
 	}
+	free(res);
 	return (q);
 }
 
 quad_t
-login_getcapsize(lc, cap, def, e)
-	login_cap_t *lc;
-	char *cap;
-	quad_t def;
-	quad_t e;
+login_getcapsize(login_cap_t *lc, const char *cap, quad_t def, quad_t e)
 {
 	char *ep;
-	char *res;
+	char *res = NULL;
 	int status;
 	quad_t q;
+
+	_DIAGASSERT(cap != NULL);
 
 	errno = 0;
 
@@ -311,11 +342,15 @@ login_getcapsize(lc, cap, def, e)
 
 	switch (status = cgetstr(lc->lc_cap, cap, &res)) {
 	case -1:
+		if (res)
+			free(res);
 		return (def);
 	case -2:
 		syslog(LOG_ERR, "%s: getting capability %s: %m",
 		    lc->lc_class, cap);
 		errno = ERANGE;
+		if (res)
+			free(res);
 		return (e);
 	default:
 		if (status >= 0) 
@@ -323,6 +358,8 @@ login_getcapsize(lc, cap, def, e)
 		syslog(LOG_ERR, "%s: unexpected error with capability %s",
 		    lc->lc_class, cap);
 		errno = ERANGE;
+		if (res)
+			free(res);
 		return (e);
 	}
 
@@ -333,17 +370,19 @@ login_getcapsize(lc, cap, def, e)
 		syslog(LOG_ERR, "%s:%s=%s: invalid size",
 		    lc->lc_class, cap, res);
 		errno = ERANGE;
+		free(res);
 		return (e);
 	}
+	free(res);
 	return (q);
 }
 
 int
-login_getcapbool(lc, cap, def)
-	login_cap_t *lc;
-	char *cap;
-	u_int def;
+login_getcapbool(login_cap_t *lc, const char *cap, u_int def)
 {
+
+	_DIAGASSERT(cap != NULL);
+
 	if (!lc || !lc->lc_cap)
 		return (def);
 
@@ -351,9 +390,9 @@ login_getcapbool(lc, cap, def)
 }
 
 void
-login_close(lc)
-	login_cap_t *lc;
+login_close(login_cap_t *lc)
 {
+
 	if (lc) {
 		if (lc->lc_class)
 			free(lc->lc_class);
@@ -365,41 +404,40 @@ login_close(lc)
 	}
 }
 
-#define	CTIME	1
-#define	CSIZE	2
-#define	CNUMB	3
+#define	R_CTIME	1
+#define	R_CSIZE	2
+#define	R_CNUMB	3
 
 static struct {
 	int	what;
 	int	type;
-	char *	name;
+	const char *name;
 } r_list[] = {
-	{ RLIMIT_CPU,		CTIME, "cputime", },
-	{ RLIMIT_FSIZE,		CSIZE, "filesize", },
-	{ RLIMIT_DATA,		CSIZE, "datasize", },
-	{ RLIMIT_STACK,		CSIZE, "stacksize", },
-	{ RLIMIT_RSS,		CSIZE, "memoryuse", },
-	{ RLIMIT_MEMLOCK,	CSIZE, "memorylocked", },
-	{ RLIMIT_NPROC,		CNUMB, "maxproc", },
-	{ RLIMIT_NOFILE,	CNUMB, "openfiles", },
-	{ RLIMIT_CORE,		CSIZE, "coredumpsize", },
+	{ RLIMIT_CPU,		R_CTIME, "cputime", },
+	{ RLIMIT_FSIZE,		R_CSIZE, "filesize", },
+	{ RLIMIT_DATA,		R_CSIZE, "datasize", },
+	{ RLIMIT_STACK,		R_CSIZE, "stacksize", },
+	{ RLIMIT_RSS,		R_CSIZE, "memoryuse", },
+	{ RLIMIT_MEMLOCK,	R_CSIZE, "memorylocked", },
+	{ RLIMIT_NPROC,		R_CNUMB, "maxproc", },
+	{ RLIMIT_NOFILE,	R_CNUMB, "openfiles", },
+	{ RLIMIT_CORE,		R_CSIZE, "coredumpsize", },
+	{ RLIMIT_SBSIZE,	R_CSIZE, "sbsize", },
 	{ -1, 0, 0 }
 };
 
 static int
-gsetrl(lc, what, name, type)
-	login_cap_t *lc;
-	int what;
-	char *name;
-	int type;
+gsetrl(login_cap_t *lc, int what, const char *name, int type)
 {
 	struct rlimit rl;
 	struct rlimit r;
 	char name_cur[32];
 	char name_max[32];
 
-	sprintf(name_cur, "%s-cur", name);
-	sprintf(name_max, "%s-max", name);
+	_DIAGASSERT(name != NULL);
+
+	(void)snprintf(name_cur, sizeof(name_cur), "%s-cur", name);
+	(void)snprintf(name_max, sizeof(name_max), "%s-max", name);
 
 	if (getrlimit(what, &r)) {
 		syslog(LOG_ERR, "getting resource limit: %m");
@@ -410,25 +448,27 @@ gsetrl(lc, what, name, type)
 #define	RMAX	r.rlim_max
 
 	switch (type) {
-	case CTIME:
+	case R_CTIME:
 		RCUR = login_getcaptime(lc, name, RCUR, RCUR);
 		RMAX = login_getcaptime(lc, name, RMAX, RMAX);
 		rl.rlim_cur = login_getcaptime(lc, name_cur, RCUR, RCUR);
 		rl.rlim_max = login_getcaptime(lc, name_max, RMAX, RMAX);
 		break;
-	case CSIZE:
+	case R_CSIZE:
 		RCUR = login_getcapsize(lc, name, RCUR, RCUR);
 		RMAX = login_getcapsize(lc, name, RMAX, RMAX);
 		rl.rlim_cur = login_getcapsize(lc, name_cur, RCUR, RCUR);
 		rl.rlim_max = login_getcapsize(lc, name_max, RMAX, RMAX);
 		break;
-	case CNUMB:
+	case R_CNUMB:
 		RCUR = login_getcapnum(lc, name, RCUR, RCUR);
 		RMAX = login_getcapnum(lc, name, RMAX, RMAX);
 		rl.rlim_cur = login_getcapnum(lc, name_cur, RCUR, RCUR);
 		rl.rlim_max = login_getcapnum(lc, name_max, RMAX, RMAX);
 		break;
 	default:
+		syslog(LOG_ERR, "%s: invalid type %d setting resource limit %s",
+		    lc->lc_class, type, name);
 		return (-1);
 	}
 
@@ -443,64 +483,65 @@ gsetrl(lc, what, name, type)
 }
 
 static int
-setuserenv(lc)
-	login_cap_t *lc;
+/*ARGSUSED*/
+envset(void *envp __unused, const char *name, const char *value, int overwrite)
 {
-	char *stop = ", \t";
-	int i, count;
+	return setenv(name, value, overwrite);	
+}
+
+int
+setuserenv(login_cap_t *lc, envfunc_t senv, void *envp)
+{
+	const char *stop = ", \t";
+	size_t i, count;
 	char *ptr;
 	char **res;
 	char *str = login_getcapstr(lc, "setenv", NULL, NULL);
 		  
-	if(str == NULL || *str == '\0')
+	if (str == NULL || *str == '\0')
 		return 0;
 	
-	/* count the sub-strings */
+	/*
+	 * count the sub-strings, this may over-count since we don't
+	 * account for escaped delimiters.
+	 */
 	for (i = 1, ptr = str; *ptr; i++) {
 		ptr += strcspn(ptr, stop);
 		if (*ptr)
 			ptr++;
-		}
+	}
 
 	/* allocate ptr array and string */
 	count = i;
-	res = malloc( count * sizeof(char *) + strlen(str) + 1 );
+	res = malloc(count * sizeof(char *) + strlen(str) + 1);
 
-	if(!res)
+	if (!res)
 		return -1;
 	
-	ptr = (char *)res + count * sizeof(char *);
-	strcpy(ptr, str);
+	ptr = (char *)(void *)&res[count];
+	(void)strcpy(ptr, str);
 
 	/* split string */
-	for (i = 0; *ptr && i < count; i++) {
-		res[i] = ptr;
-		ptr += strcspn(ptr, stop);
-		if (*ptr)
-			*ptr++ = '\0';
-		}
+	for (i = 0; (res[i] = stresep(&ptr, stop, '\\')) != NULL; )
+		if (*res[i])
+			i++;
 	
-	res[i] = NULL;
+	count = i;
 
-	for (i = 0; i < count && res[i]; i++) {
-		if (*res[i] != '\0') {
-			if ((ptr = strchr(res[i], '=')))
-				*ptr++ = '\0';
-			else 
-				ptr = "";
-			setenv(res[i], ptr, 1);
-		}
+	for (i = 0; i < count; i++) {
+		if ((ptr = strchr(res[i], '=')) != NULL)
+			*ptr++ = '\0';
+		else 
+			ptr = NULL;
+		(void)(*senv)(envp, res[i], ptr ? ptr : "", 1);
 	}
 	
 	free(res);
 	return 0;
 }
 
-
 int
-setclasscontext(class, flags)
-	char *class;
-	u_int flags;
+setclasscontext(const char *class, u_int flags)
 {
 	int ret;
 	login_cap_t *lc;
@@ -515,15 +556,14 @@ setclasscontext(class, flags)
 }
 
 int
-setusercontext(lc, pwd, uid, flags)
-	login_cap_t *lc;
-	struct passwd *pwd;
-	uid_t uid;
-	u_int flags;
+setusercontext(login_cap_t *lc, struct passwd *pwd, uid_t uid, u_int flags)
 {
+	char per_user_tmp[MAXPATHLEN + 1];
+	const char *component_name;
 	login_cap_t *flc;
 	quad_t p;
 	int i;
+	ssize_t len;
 
 	flc = NULL;
 
@@ -537,33 +577,40 @@ setusercontext(lc, pwd, uid, flags)
 	if (pwd == NULL)
 		flags &= ~(LOGIN_SETGROUP|LOGIN_SETLOGIN);
 
+#ifdef LOGIN_OSETGROUP
+	if (pwd == NULL)
+		flags &= ~LOGIN_OSETGROUP;
+	if (flags & LOGIN_OSETGROUP)
+		flags = (flags & ~LOGIN_OSETGROUP) | LOGIN_SETGROUP;
+#endif
 	if (flags & LOGIN_SETRESOURCES)
 		for (i = 0; r_list[i].name; ++i) 
-			if (gsetrl(lc, r_list[i].what, r_list[i].name,
-			    r_list[i].type))
-				/* XXX - call syslog()? */;
+			(void)gsetrl(lc, r_list[i].what, r_list[i].name,
+			    r_list[i].type);
 
 	if (flags & LOGIN_SETPRIORITY) {
-		p = login_getcapnum(lc, "priority", 0LL, 0LL);
+		p = login_getcapnum(lc, "priority", (quad_t)0, (quad_t)0);
 
-		if (setpriority(PRIO_PROCESS, 0, (int)p) < 0)
+		if (setpriority(PRIO_PROCESS, 0, (int)p) == -1)
 			syslog(LOG_ERR, "%s: setpriority: %m", lc->lc_class);
 	}
 
 	if (flags & LOGIN_SETUMASK) {
 		p = login_getcapnum(lc, "umask", (quad_t) LOGIN_DEFUMASK,
-												   (quad_t) LOGIN_DEFUMASK);
+		    (quad_t)LOGIN_DEFUMASK);
 		umask((mode_t)p);
 	}
 
-	if (flags & LOGIN_SETGROUP) {
-		if (setgid(pwd->pw_gid) < 0) {
+	if (flags & LOGIN_SETGID) {
+		if (setgid(pwd->pw_gid) == -1) {
 			syslog(LOG_ERR, "setgid(%d): %m", pwd->pw_gid);
 			login_close(flc);
 			return (-1);
 		}
+	}
 
-		if (initgroups(pwd->pw_name, pwd->pw_gid) < 0) {
+	if (flags & LOGIN_SETGROUPS) {
+		if (initgroups(pwd->pw_name, pwd->pw_gid) == -1) {
 			syslog(LOG_ERR, "initgroups(%s,%d): %m",
 			    pwd->pw_name, pwd->pw_gid);
 			login_close(flc);
@@ -571,8 +618,81 @@ setusercontext(lc, pwd, uid, flags)
 		}
 	}
 
+	/* Create per-user temporary directories if needed. */
+	if ((len = readlink("/tmp", per_user_tmp, 
+	    sizeof(per_user_tmp) - 6)) != -1) {
+
+		static const char atuid[] = "/@ruid";
+		char *lp;
+
+		/* readlink does not nul-terminate the string */
+		per_user_tmp[len] = '\0';
+
+		/* Check if it's magic symlink. */
+		lp = strstr(per_user_tmp, atuid);
+		if (lp != NULL && *(lp + (sizeof(atuid) - 1)) == '\0') {
+			lp++;
+
+			if (snprintf(lp, 11, "/%u", pwd->pw_uid) > 10) {
+				syslog(LOG_ERR, "real temporary path too long");
+				login_close(flc);
+				return (-1);
+			}
+			if (mkdir(per_user_tmp, S_IRWXU) != -1) {
+				if (chown(per_user_tmp, pwd->pw_uid,
+				    pwd->pw_gid)) {
+					component_name = "chown";
+					goto out;
+				}
+
+				/* 
+			 	 * Must set sticky bit for tmp directory, some
+			 	 * programs rely on this.
+			 	 */
+				if(chmod(per_user_tmp, S_IRWXU | S_ISVTX)) {
+					component_name = "chmod";
+					goto out;
+				}
+			} else {
+				if (errno != EEXIST) {
+					component_name = "mkdir";
+					goto out;
+				} else {
+					/* 
+					 * We must ensure that we own the
+					 * directory and that is has the correct
+					 * permissions, otherwise a DOS attack
+					 * is possible.
+					 */
+					struct stat sb;
+					if (stat(per_user_tmp, &sb) == -1) {
+						component_name = "stat";
+						goto out;
+					}
+
+					if (sb.st_uid != pwd->pw_uid) {
+						if (chown(per_user_tmp, 
+						    pwd->pw_uid, pwd->pw_gid)) {
+							component_name = "chown";
+							goto out;
+						}
+					}
+
+					if (sb.st_mode != (S_IRWXU | S_ISVTX)) {
+						if (chmod(per_user_tmp, 
+						    S_IRWXU | S_ISVTX)) {
+							component_name = "chmod";
+							goto out;
+						}
+					}
+				}
+			}
+		}
+	}
+	errno = 0;
+
 	if (flags & LOGIN_SETLOGIN)
-		if (setlogin(pwd->pw_name) < 0) {
+		if (setlogin(pwd->pw_name) == -1) {
 			syslog(LOG_ERR, "setlogin(%s) failure: %m",
 			    pwd->pw_name);
 			login_close(flc);
@@ -580,31 +700,43 @@ setusercontext(lc, pwd, uid, flags)
 		}
 
 	if (flags & LOGIN_SETUSER)
-		if (setuid(uid) < 0) {
+		if (setuid(uid) == -1) {
 			syslog(LOG_ERR, "setuid(%d): %m", uid);
 			login_close(flc);
 			return (-1);
 		}
 
 	if (flags & LOGIN_SETENV)
-		setuserenv(lc);
+		setuserenv(lc, envset, NULL);
 
 	if (flags & LOGIN_SETPATH)
-		setuserpath(lc, pwd ? pwd->pw_dir : "");
+		setuserpath(lc, pwd ? pwd->pw_dir : "", envset, NULL);
 
 	login_close(flc);
 	return (0);
+
+out:
+	if (component_name != NULL) {
+		syslog(LOG_ERR, "%s %s: %m", component_name, per_user_tmp);
+		login_close(flc);
+		return (-1);
+	} else {
+		syslog(LOG_ERR, "%s: %m", per_user_tmp);
+		login_close(flc);
+		return (-1);
+	}
 }
 
-static void
-setuserpath(lc, home)
-	login_cap_t *lc;
-	char *home;
+void
+setuserpath(login_cap_t *lc, const char *home, envfunc_t senv, void *envp)
 {
 	size_t hlen, plen;
 	int cnt = 0;
 	char *path;
+	const char *cpath;
 	char *p, *q;
+
+	_DIAGASSERT(home != NULL);
 
 	hlen = strlen(home);
 
@@ -639,11 +771,12 @@ setuserpath(lc, home)
 				q += plen;
 			}
 			*q = '\0';
+			cpath = path;
 		} else
-			path = _PATH_DEFPATH;
+			cpath = _PATH_DEFPATH;
 	} else
-		path = _PATH_DEFPATH;
-	if (setenv("PATH", path, 1))
+		cpath = _PATH_DEFPATH;
+	if ((*senv)(envp, "PATH", cpath, 1))
 		warn("could not set PATH");
 }
 
@@ -656,18 +789,17 @@ setuserpath(lc, home)
  *	6) A number followed by a g (mult by 1024 * 1024 * 1024).
  *	7) A number followed by a t (mult by 1024 * 1024 * 1024 * 1024).
  *	8) Two or more numbers (with/without k,b,m,g, or t).
- *	   seperated by x (also * for backwards compatibility), specifying
+ *	   separated by x (also * for backwards compatibility), specifying
  *	   the product of the indicated values.
  */
-static
-u_quad_t
-strtosize(str, endptr, radix)
-	char *str;
-	char **endptr;
-	int radix;
+static u_quad_t
+strtosize(const char *str, char **endptr, int radix)
 {
 	u_quad_t num, num2;
 	char *expr, *expr2;
+
+	_DIAGASSERT(str != NULL);
+	/* endptr may be NULL */
 
 	errno = 0;
 	num = strtouq(str, &expr, radix);
@@ -734,16 +866,16 @@ erange:
 	return (UQUAD_MAX);
 }
 
-static
-u_quad_t
-strtolimit(str, endptr, radix)
-	char *str;
-	char **endptr;
-	int radix;
+static u_quad_t
+strtolimit(const char *str, char **endptr, int radix)
 {
+
+	_DIAGASSERT(str != NULL);
+	/* endptr may be NULL */
+
 	if (isinfinite(str)) {
 		if (endptr)
-			*endptr = str + strlen(str);
+			*endptr = (char *)__UNCONST(str) + strlen(str);
 		return ((u_quad_t)RLIM_INFINITY);
 	}
 	return (strtosize(str, endptr, radix));
@@ -761,7 +893,9 @@ isinfinite(const char *s)
 	};
 	const char **i;
 
-	for(i = infs; *i; i++) {
+	_DIAGASSERT(s != NULL);
+
+	for (i = infs; *i; i++) {
 		if (!strcasecmp(s, *i))
 			return 1;
 	}
@@ -769,9 +903,7 @@ isinfinite(const char *s)
 }
 
 static u_quad_t
-multiply(n1, n2)
-	u_quad_t n1;
-	u_quad_t n2;
+multiply(u_quad_t n1, u_quad_t n2)
 {
 	static int bpw = 0;
 	u_quad_t m;
@@ -853,4 +985,3 @@ multiply(n1, n2)
 
 	return (m);
 }
-

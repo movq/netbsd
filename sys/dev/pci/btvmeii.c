@@ -1,4 +1,4 @@
-/* $NetBSD: btvmeii.c,v 1.2 2000/03/12 11:23:06 drochner Exp $ */
+/* $NetBSD: btvmeii.c,v 1.14 2008/04/10 19:13:36 cegger Exp $ */
 
 /*
  * Copyright (c) 1999
@@ -31,15 +31,19 @@
  * Uses the common Tundra Universe code.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: btvmeii.c,v 1.14 2008/04/10 19:13:36 cegger Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/kernel.h>
 #include <sys/device.h>
 
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcidevs.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <sys/malloc.h>
 #include <sys/extent.h>
 
@@ -50,36 +54,36 @@
 
 #include <dev/pci/universe_pci_var.h>
 
-static int b3_2706_match __P((struct device *, struct cfdata *, void *));
-static void b3_2706_attach __P((struct device *, struct device *, void *));
+static int b3_2706_match(struct device *, struct cfdata *, void *);
+static void b3_2706_attach(struct device *, struct device *, void *);
 
 /* exported via tag structs */
-int b3_2706_map_vme __P((void *, vme_addr_t, vme_size_t,
+int b3_2706_map_vme(void *, vme_addr_t, vme_size_t,
 		      vme_am_t, vme_datasize_t, vme_swap_t,
-		      bus_space_tag_t *, bus_space_handle_t *, vme_mapresc_t*));
-void b3_2706_unmap_vme __P((void *, vme_mapresc_t));
+		      bus_space_tag_t *, bus_space_handle_t *, vme_mapresc_t*);
+void b3_2706_unmap_vme(void *, vme_mapresc_t);
 
-int b3_2706_vme_probe __P((void *, vme_addr_t, vme_size_t, vme_am_t,
+int b3_2706_vme_probe(void *, vme_addr_t, vme_size_t, vme_am_t,
 			vme_datasize_t,
 			int (*)(void *, bus_space_tag_t, bus_space_handle_t),
-			void *));
+			void *);
 
-int b3_2706_map_vmeint __P((void *, int, int, vme_intr_handle_t *));
-void *b3_2706_establish_vmeint __P((void *, vme_intr_handle_t, int,
-				 int (*)(void *), void *));
-void b3_2706_disestablish_vmeint __P((void *, void *));
-void b3_2706_vmeint __P((void *, int, int));
+int b3_2706_map_vmeint(void *, int, int, vme_intr_handle_t *);
+void *b3_2706_establish_vmeint(void *, vme_intr_handle_t, int,
+				 int (*)(void *), void *);
+void b3_2706_disestablish_vmeint(void *, void *);
+void b3_2706_vmeint(void *, int, int);
 
-int b3_2706_dmamap_create __P((void *, vme_size_t,
+int b3_2706_dmamap_create(void *, vme_size_t,
 			    vme_am_t, vme_datasize_t, vme_swap_t,
 			    int, vme_size_t, vme_addr_t,
-			    int, bus_dmamap_t *));
-void b3_2706_dmamap_destroy __P((void *, bus_dmamap_t));
+			    int, bus_dmamap_t *);
+void b3_2706_dmamap_destroy(void *, bus_dmamap_t);
 
-int b3_2706_dmamem_alloc __P((void *, vme_size_t,
+int b3_2706_dmamem_alloc(void *, vme_size_t,
 			      vme_am_t, vme_datasize_t, vme_swap_t,
-			      bus_dma_segment_t *, int, int *, int));
-void b3_2706_dmamem_free __P((void *, bus_dma_segment_t *, int));
+			      bus_dma_segment_t *, int, int *, int);
+void b3_2706_dmamem_free(void *, bus_dma_segment_t *, int);
 
 struct b3_2706_vmemaprescs {
 	int wnd;
@@ -90,7 +94,7 @@ struct b3_2706_vmemaprescs {
 
 struct b3_2706_vmeintrhand {
 	TAILQ_ENTRY(b3_2706_vmeintrhand) ih_next;
-	int (*ih_fun) __P((void*));
+	int (*ih_fun)(void*);
 	void *ih_arg;
 	int ih_level;
 	int ih_vector;
@@ -117,12 +121,8 @@ struct b3_2706_softc {
 	int strayintrs;
 };
 
-struct cfattach btvmeii_ca = {
-	sizeof(struct b3_2706_softc), b3_2706_match, b3_2706_attach,
-#if 0
-	b3_2706_detach
-#endif
-};
+CFATTACH_DECL(btvmeii, sizeof(struct b3_2706_softc),
+    b3_2706_match, b3_2706_attach, NULL, NULL);
 
 /*
  * The adapter consists of a DEC PCI-PCI-bridge with two
@@ -198,12 +198,13 @@ b3_2706_attach(parent, self, aux)
 
 	struct vmebus_attach_args vaa;
 
-	printf("\n");
+	aprint_naive(": VME bus adapter\n");
+	aprint_normal("\n");
 
 	secbus = PPB_BUSINFO_SECONDARY(pci_conf_read(pc, pa->pa_tag,
 						     PPB_REG_BUSINFO));
 
-	bcopy(pa, &aa, sizeof(struct pci_attach_args));
+	memcpy(&aa, pa, sizeof(struct pci_attach_args));
 	aa.pa_device = 4;
 	aa.pa_function = 0;
 	aa.pa_tag = pci_make_tag(pc, secbus, 4, 0);
@@ -217,10 +218,9 @@ b3_2706_attach(parent, self, aux)
 	aa.pa_intrpin =	((1 + aa.pa_intrswiz - 1) % 4) + 1;
 	aa.pa_intrline = PCI_INTERRUPT_LINE(intr);
 
-	if (univ_pci_attach(&sc->univdata, &aa, self->dv_xname,
+	if (univ_pci_attach(&sc->univdata, &aa, device_xname(self),
 			    b3_2706_vmeint, sc)) {
-		printf("%s: error initializing universe chip\n",
-		       self->dv_xname);
+		aprint_error_dev(self, "error initializing universe chip\n");
 		return;
 	}
 
@@ -234,7 +234,7 @@ b3_2706_attach(parent, self, aux)
 			    PCI_MAPREG_TYPE_MEM | PCI_MAPREG_MEM_TYPE_32BIT,
 			    &swappbase, 0, 0) ||
 	    bus_space_map(sc->swapt, swappbase, 4, 0, &sc->swaph)) {
-		printf("%s: can't map byteswap register\n", self->dv_xname);
+		aprint_error_dev(self, "can't map byteswap register\n");
 		return;
 	}
 	/*
@@ -250,11 +250,12 @@ b3_2706_attach(parent, self, aux)
 	if (pci_mapreg_info(pc, tag, 0x14,
 			    PCI_MAPREG_TYPE_MEM | PCI_MAPREG_MEM_TYPE_32BIT,
 			    &sc->vmepbase, 0, 0)) {
-		printf("%s: VME range not assigned\n", self->dv_xname);
+		aprint_error_dev(self, "VME range not assigned\n");
 		return;
 	}
 #ifdef BIT3DEBUG
-	printf("%s: VME window @%lx\n", self->dv_xname, (long)sc->vmepbase);
+	aprint_debug_dev(self, "VME window @%lx\n",
+	    (long)sc->vmepbase);
 #endif
 
 	for (i = 0; i < 8; i++) {
@@ -388,7 +389,7 @@ b3_2706_vme_probe(vsc, addr, len, am, datasize, callback, cbarg)
 	vme_size_t len;
 	vme_am_t am;
 	vme_datasize_t datasize;
-	int (*callback) __P((void *, bus_space_tag_t, bus_space_handle_t));
+	int (*callback)(void *, bus_space_tag_t, bus_space_handle_t);
 	void *cbarg;
 {
 	bus_space_tag_t tag;
@@ -457,13 +458,12 @@ b3_2706_establish_vmeint(vsc, handle, prior, func, arg)
 	void *vsc;
 	vme_intr_handle_t handle;
 	int prior;
-	int (*func) __P((void *));
+	int (*func)(void *);
 	void *arg;
 {
 	struct b3_2706_vmeintrhand *ih;
 	long lv;
 	int s;
-	extern int cold;
 
 	/* no point in sleeping unless someone can free memory. */
 	ih = malloc(sizeof *ih, M_DEVBUF, cold ? M_NOWAIT : M_WAITOK);
@@ -528,7 +528,7 @@ b3_2706_vmeint(vsc, level, vector)
 			/*
 			 * We should raise the interrupt level
 			 * to ih->ih_prior here. How to do this
-			 * machine-independantly?
+			 * machine-independently?
 			 * To be safe, raise to the maximum.
 			 */
 			s = splhigh();

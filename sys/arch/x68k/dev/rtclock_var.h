@@ -1,4 +1,4 @@
-/*	$NetBSD: rtclock_var.h,v 1.2 1999/03/16 16:30:20 minoura Exp $	*/
+/*	$NetBSD: rtclock_var.h,v 1.10 2008/06/25 08:14:59 isaki Exp $	*/
 
 /*
  * Copyright 1993, 1994 Masaru Oki
@@ -30,14 +30,17 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/*
+ * Should be splitted to _reg.h and _var.h
+ */
+
 #ifndef _RTCLOCKVAR_H_
 #define _RTCLOCKVAR_H_
 
 struct rtc_softc {
-	struct device		sc_dev;
-
 	bus_space_tag_t		sc_bst;
 	bus_space_handle_t	sc_bht;
+	struct todr_chip_handle	sc_todr;
 };
 
 /*
@@ -86,15 +89,10 @@ struct rtc_softc {
 #define RTC_LEAP	0x17
 #define RTC_UNUSED2	0x19
 
+#define RTC_BASE_YEAR	1980
 
-#define FEBRUARY	2
-#define	STARTOFTIME	1970
-#define SECDAY		86400L
-#define SECYR		(SECDAY * 365)
-
-#define	leapyear(year)		((year) % 4 == 0)
 #define	range_test(n, l, h)	if ((n) < (l) || (n) > (h)) return(0)
-#define	days_in_year(a) 	(leapyear(a) ? 366 : 365)
-#define	days_in_month(a) 	(month_days[(a) - 1])
+#define	range_test0(n, h)	if ((unsigned)(n) > (h)) return(0)
+				/* cast to unsigned in case n is signed */
 
 #endif /* _RTCLOCKVAR_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: txtwalk.c,v 1.5 1999/06/20 06:08:15 cgd Exp $	*/
+/*	$NetBSD: txtwalk.c,v 1.12 2006/01/12 22:02:44 dsl Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -10,16 +10,16 @@
  * modification, are permitted provided that the following conditions
  * are met:
  * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
+ *    notice, item list of conditions and the following disclaimer.
  * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
+ *    notice, item list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
+ * 3. All advertising materials mentioning features or use of item software
  *    must display the following acknowledgement:
  *      This product includes software developed for the NetBSD Project by
  *      Piermont Information Systems Inc.
  * 4. The name of Piermont Information Systems Inc. may not be used to endorse
- *    or promote products derived from this software without specific prior
+ *    or promote products derived from item software without specific prior
  *    written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY PIERMONT INFORMATION SYSTEMS INC. ``AS IS''
@@ -56,24 +56,20 @@
 
 /* prototypes */
 
-static void process __P((struct lookfor, char *));
-static void match __P((char *, struct lookfor *, int));
-static int finddata __P((struct lookfor, char *, struct data *, int *));
-static char *strndup __P((char *, int));
+static int process(const struct lookfor *, char *);
+static int match(char *, const struct lookfor *, size_t);
+static int finddata(const struct lookfor *, char *, struct data *, size_t *);
 
 /*
  * Walk the buffer, call match for each line.
  */
-void
-walk(buffer, size, these, numthese)
-	char *buffer;
-	size_t size;
-	struct lookfor *these;
-	int numthese;
+int
+walk(char *buffer, size_t size, const struct lookfor *these, size_t numthese)
 {
-	int i = 0;
-	int len;
+	size_t i = 0;
+	size_t len;
 	int line = 1;
+	int error;
 
 	while (i < size) {
 		/* Ignore zero characters. */
@@ -81,7 +77,7 @@ walk(buffer, size, these, numthese)
 			buffer++;
 			i++;
 		} else {
-			/* Assume this starts a line. */
+			/* Assume item starts a line. */
 			len = 0;
 			while (buffer[len] != '\n' && buffer[len] != '\0')
 				len++;
@@ -89,27 +85,28 @@ walk(buffer, size, these, numthese)
 #ifdef DEBUG
 			printf ("%5d: %s\n", line, buffer);
 #endif
-			match(buffer, these, numthese);
+			error = match(buffer, these, numthese);
+			if (error != 0)
+				return error;
 			buffer += len+1;
 			i += len+1;
 			line++;
 		}
 	}
+	return 0;
 }
 
 /*
  * Match the current line with a string of interest.
  * For each match in these, process the match.
  */
-static void
-match(line, these, numthese)
-	char *line;
-	struct lookfor *these;
-	int numthese;
+static int
+match(char *line, const struct lookfor *these, size_t numthese)
 {
-	int linelen;		/* Line length */
-	int patlen;		/* Pattern length */
-	int which;		/* Which pattern we are using */
+	size_t linelen;		/* Line length */
+	size_t patlen;		/* Pattern length */
+	size_t which;		/* Which pattern we are using */
+	int error;
 
 	linelen = strlen(line); 	
 
@@ -117,24 +114,28 @@ match(line, these, numthese)
 		patlen = strlen(these[which].head);
 		if (linelen < patlen)
 			continue;
-		if (strncmp(these[which].head, line, patlen) == 0)
-			process(these[which], line);
+		if (strncmp(these[which].head, line, patlen) == 0) {
+			error = process(&these[which], line);
+			if (error != 0)
+				return error;
+		}
 	}
+	return 0;
 }
 
 
 /* process the matched line. */
-static void
-process(this, line)
-	struct lookfor this;
-	char *line;
+static int
+process(const struct lookfor *item, char *line)
 {
 	struct data found[MAXDATA];
-	int numfound = 0;
-	char *p;
-	int   i, j;
+	size_t numfound = 0;
+	const char *p;
+	char *np;
+	size_t  i, j;
+	int error;
 	
-	if (finddata(this, line, found, &numfound)) {
+	if (finddata(item, line, found, &numfound)) {
 #ifdef DEBUG
 		printf("process: \"%s\"\n", line);
 		for (i = 0; i < numfound; i++) {
@@ -150,44 +151,47 @@ process(this, line)
 		}
 #endif
 		/* Process the stuff. */
-		switch (this.todo[0]) {
+		switch (item->todo[0]) {
 		case 'a':  /* Assign data */
-			p = this.todo;
+			p = item->todo;
 			j = 0;
 			while (*p && *p != '$')
 				p++;
 			if (*p)
 				p++;
-			while (*p && isdigit(*p)) {
-				i = atoi(p);
+			for (;;) {
+				i = strtoul(p, &np, 10);
+				if (p == np)
+				    break;
+				p = np;
 				switch (found[i].what) {
 				case INT:
-					*((int *)this.var+j)
+					*((int *)item->var+j)
 						= found[i].u.i_val;
 					break;
 				case STR:
-					strncpy(*((char **)this.var+j),
+					strlcpy(*((char **)item->var+j),
 					        found[i].u.s_val,
-						this.size-1);
-					found[i].u.s_val[this.size-1] = 0;
+						item->size);
 					break;
 				}
-				while (isdigit(*p))
-					p++;
 				while (*p && *p != '$')
 					p++;
 				if (*p)
 					p++;
 				j++;
-				if (j >= this.nument)
+				if (j >= item->nument)
 					break;
 			}
 			break;
 		case 'c':  /* Call a function with data. */
-			(*this.func)(found, numfound);
+			error = (*item->func)(found, numfound);
+			if (error != 0)
+				return error;
 			break;
 		}
 	}
+	return 0;
 }
 
 /*
@@ -198,17 +202,15 @@ process(this, line)
  * Side Effect -- sets numfound and found.
  */
 static int
-finddata(this, line, found, numfound )
-	struct lookfor this;
-	char *line;
-	struct data *found;
-	int *numfound;
+finddata(const struct lookfor *item, char *line, struct data *found, size_t *numfound)
 {
-	char *fmt = this.fmt;
-	int len;
+	const char *fmt;
+	size_t len;
+	char *np;
+	int i;
 
 	*numfound = 0;
-	while (*fmt) {
+	for (fmt = item->fmt; *fmt; fmt++) {
 		if (!*line && *fmt)
 			return 0;
 		if (*fmt == '%') {
@@ -225,71 +227,49 @@ finddata(this, line, found, numfound )
 				if (!fmt[1])
 					return 1;
 				if (fmt[1] == ' ')
-					while (*line && !isspace(*line))
+					while (*line && !isspace((unsigned char)*line))
 						line++;
 				else
 					while (*line && *line != fmt[1])
 						line++;
 				break;
 			case 'd':  /* Nextoken should be an integer. */
-				if (!isdigit(*line))
+				i = strtoul(line, &np, 10);
+				if (line == np)
 					return 0;
 				found[*numfound].what = INT;
-				found[(*numfound)++].u.i_val = atoi(line);
-				while (*line && isdigit(*line))
-					line++;
+				found[(*numfound)++].u.i_val = i;
+				line = np;
 				break;
 			case 's':  /* Matches a 'space' separated string. */
 				len = 0;
-				while (line[len] && !isspace(line[len])
+				while (line[len] && !isspace((unsigned char)line[len])
 				    && line[len] != fmt[1])
 					len++;
 				found[*numfound].what = STR;
-				found[*numfound].u.s_val = strndup(line, len);
-				if (found[(*numfound)++].u.s_val == NULL) {
-					(void)fprintf(stderr,
-					    "msgwalk: strndup: out of vm.\n");
-					exit(1);
-				}
-				line += len;
+				found[(*numfound)++].u.s_val = line;
+				line[len] = 0;
+				line += len + 1;
 				break;
 			default:
 				return 0;
 			}
-			
-		} else if (*fmt == ' ') {
-			while (*line && isspace(*line))
-				line++;
-		} else if (*line == *fmt) {
-			line++;
-		} else {
-			/* Mis match! */
-			return 0;
+			continue;
+
 		}
-		fmt++;
+		if (*fmt == ' ') {
+			while (isspace((unsigned char)*line))
+				line++;
+			continue;
+		}
+		if (*line == *fmt) {
+			line++;
+			continue;
+		}
+		/* Mis match! */
+		return 0;
 	}
 	
 	/* Ran out of fmt. */
 	return 1;
-}
-
-/*
- * Utility routines.... 
- */
-
-static char *
-strndup(str, len)
-	char *str;
-	int len;
-{
-	int alen;
-	char *val;
-	
-	alen = strlen(str);
-	alen = len < alen ? len + 1 : alen + 1;
-	val = (char *)malloc(alen);
-	if (!val)
-		return NULL;
-	strncpy(val, str, alen-1);
-	return val;
 }

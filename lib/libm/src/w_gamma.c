@@ -12,7 +12,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBM_SCCS) && !defined(lint)
-__RCSID("$NetBSD: w_gamma.c,v 1.9 1999/07/02 15:37:44 simonb Exp $");
+__RCSID("$NetBSD: w_gamma.c,v 1.11 2002/05/26 22:02:00 wiz Exp $");
 #endif
 
 /* double gamma(double x)
@@ -24,14 +24,8 @@ __RCSID("$NetBSD: w_gamma.c,v 1.9 1999/07/02 15:37:44 simonb Exp $");
 #include "math.h"
 #include "math_private.h"
 
-extern int signgam;
-
-#ifdef __STDC__
-	double gamma(double x)
-#else
-	double gamma(x)
-	double x;
-#endif
+double
+gamma(double x)
 {
 #ifdef _IEEE_LIBM
 	return __ieee754_lgamma_r(x,&signgam);

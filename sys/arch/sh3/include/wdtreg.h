@@ -1,4 +1,4 @@
-/* $NetBSD: wdtreg.h,v 1.3 2000/01/17 21:41:14 msaitoh Exp $ */
+/* $NetBSD: wdtreg.h,v 1.6 2005/12/11 12:18:59 christos Exp $ */
 
 /*-
  * Copyright (C) 1999 SAITOH Masanobu.  All rights reserved.
@@ -27,50 +27,51 @@
  */
 
 #ifndef _SH3_WDTREG_H_
-#define _SH3_WDTREG_H_
+#define	_SH3_WDTREG_H_
 
 /* WDT registers */
 
 #if !defined(SH4)
 
 /* SH3 definitions */
-
-#define	SHREG_WTCNT_R	(*(volatile unsigned char  *)0xffffff84)
-#define	SHREG_WTCNT_W	(*(volatile unsigned short *)0xffffff84)
-#define	SHREG_WTCSR_R	(*(volatile unsigned char  *)0xffffff86)
-#define	SHREG_WTCSR_W	(*(volatile unsigned short *)0xffffff86)
+#define	SHREG_WTCNT	0xffffff84
+#define	SHREG_WTCSR	0xffffff86
 
 #else
 
 /* SH4 definitions */
-
-#define	SHREG_WTCNT_R	(*(volatile unsigned char  *)0xffc00008)
-#define	SHREG_WTCNT_W	(*(volatile unsigned short *)0xffc00008)
-#define	SHREG_WTCSR_R	(*(volatile unsigned char  *)0xffc0000c)
-#define	SHREG_WTCSR_W	(*(volatile unsigned short *)0xffc0000c)
+#define	SHREG_WTCNT	0xffc00008
+#define	SHREG_WTCSR	0xffc0000c
 
 #endif
 
-#define WTCNT_W_M	0x5A00
-#define WTCSR_W_M	0xA500
+/* read as bytes, write as shorts with a magic number in the upper byte */
+#define	SHREG_WTCNT_R	(*(volatile unsigned char  *)SHREG_WTCNT)
+#define	SHREG_WTCNT_W	(*(volatile unsigned short *)SHREG_WTCNT)
+#define	SHREG_WTCSR_R	(*(volatile unsigned char  *)SHREG_WTCSR)
+#define	SHREG_WTCSR_W	(*(volatile unsigned short *)SHREG_WTCSR)
 
-#define WTCSR_TME	0x80
-#define WTCSR_WT	0x40
-#define WTCSR_RSTS	0x20
-#define WTCSR_WOVF	0x10
-#define WTCSR_IOVF	0x08
-#define WTCSR_CKS2	0x04
-#define WTCSR_CKS1	0x02
-#define WTCSR_CKS0	0x01
+/* magic upper bytes for write access */
+#define	WTCNT_W_M	0x5A00
+#define	WTCSR_W_M	0xA500
 
-#define WTCSR_CKS	0x07
-#define WTCSR_CKS_1	0x00
-#define WTCSR_CKS_4	0x01
-#define WTCSR_CKS_16	0x02
-#define WTCSR_CKS_32	0x03
-#define WTCSR_CKS_64	0x04
-#define WTCSR_CKS_256	0x05
-#define WTCSR_CKS_1024	0x06
-#define WTCSR_CKS_4096	0x07
+#define	WTCSR_TME	0x80
+#define	WTCSR_WT	0x40
+#define	WTCSR_RSTS	0x20
+#define	WTCSR_WOVF	0x10
+#define	WTCSR_IOVF	0x08
+#define	WTCSR_CKS2	0x04
+#define	WTCSR_CKS1	0x02
+#define	WTCSR_CKS0	0x01
+
+#define	WTCSR_CKS	0x07
+#define	WTCSR_CKS_1	0x00
+#define	WTCSR_CKS_4	0x01
+#define	WTCSR_CKS_16	0x02
+#define	WTCSR_CKS_32	0x03
+#define	WTCSR_CKS_64	0x04
+#define	WTCSR_CKS_256	0x05
+#define	WTCSR_CKS_1024	0x06
+#define	WTCSR_CKS_4096	0x07
 
 #endif	/* !_SH3_WDTREG_H_ */

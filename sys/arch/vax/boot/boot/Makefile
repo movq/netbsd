@@ -1,22 +1,25 @@
-#	$NetBSD: Makefile,v 1.5 2000/03/04 16:17:46 ragge Exp $
+#	$NetBSD: Makefile,v 1.37 2006/03/08 09:32:22 sekiya Exp $
 
-S=	${.CURDIR}/../../../../
+S=	${.CURDIR}/../../../..
+
+.include <bsd.own.mk>
 
 PROG=	boot
-NOMAN=	1
-DEVS=	hp.c ctu.c ra.c tmscp.c mfm.c if_qe.c if_le.c if_ze.c
-SRCS=	srt0.s boot.c devopen.c conf.c autoconf.c netio.c rom.c romread.s \
-	urem.s udiv.s consio.c str.s ${DEVS} findcpu.c
+DEVS=	hp.c ctu.c ra.c mfm.c if_qe.c if_le.c if_ze.c if_de.c if_ni.c
+SRCS=	srt0.S boot.c devopen.c conf.c autoconf.c netio.c rom.c romread.S \
+	consio.c consio2.S str.S ${DEVS} findcpu.c vers.c
+LIBC=
 
-CLEANFILES+=${PROG} ${PROG}.mop
-CPPFLAGS+=-DSUPPORT_BOOTPARAMS -DSUPPORT_BOOTP -DSUPPORT_DHCP -D_STANDALONE
+CLEANFILES+=${PROG} ${PROG}.sym vers.c
+CPPFLAGS+=-DSUPPORT_BOOTPARAMS -DSUPPORT_BOOTP -DSUPPORT_DHCP -D_STANDALONE \
+	-DNO_MID_CHECK
 #CPPFLAGS+=-DBOOTP_DEBUG -DNETIF_DEBUG -DETHER_DEBUG -DNFS_DEBUG -DDEV_DEBUG \
 #	-DRPC_DEBUG -DRARP_DEBUG -DPARANOID
-BINDIR=	/
+BINDIR=	
 MDEC_DIR=/usr/mdec
 
 SA_AS=	library
-SAMISCMAKEFLAGS=SA_USE_CREAD=yes SA_INCLUDE_NET=yes
+SAMISCMAKEFLAGS=SA_USE_CREAD=yes SA_INCLUDE_NET=yes SA_USE_LOADFILE=yes
 .include "${S}/lib/libsa/Makefile.inc"
 LIBSA=	${SALIB}
 
@@ -28,16 +31,18 @@ KERN_AS=library
 .include "${S}/lib/libkern/Makefile.inc"
 LIBKERN=${KERNLIB}
 
-${PROG}: ${OBJS} ${LIBSA} ${LIBZ} ${LIBKERN}
-	ld -N -Ttext ${RELOC} -e nisse -o ${PROG} ${OBJS} \
+.PHONY: vers.c
+vers.c: ${.CURDIR}/version
+	${HOST_SH} ${S}/conf/newvers_stand.sh -NM ${.CURDIR}/version "${MACHINE}"
+
+${PROG}: machine-links ${OBJS} ${LIBSA} ${LIBZ} ${LIBKERN}
+	${_MKTARGET_LINK}
+	${LD} -N -Ttext ${RELOC} -e nisse -o ${PROG}.sym ${OBJS} \
 	    ${LIBSA} ${LIBZ} ${LIBSA} ${LIBKERN}
-	/usr/sbin/mopa.out ${PROG} ${PROG}.mop
-	strip ${PROG}
-	size ${PROG}
+	${STRIP} -o ${PROG} ${PROG}.sym
 
 install:
-	${INSTALL} -c -m 555 -o ${BINOWN} -g ${BINGRP} ${PROG} ${DESTDIR}${BINDIR}
-	${INSTALL} -c -m 555 -o ${BINOWN} -g ${BINGRP} ${PROG} ${DESTDIR}${MDEC_DIR}
-	${INSTALL} -c -m 555 -o ${BINOWN} -g ${BINGRP} ${PROG}.mop ${DESTDIR}${MDEC_DIR}
+	${INSTALL_FILE} -o ${BINOWN} -g ${BINGRP} -m 555 \
+		${PROG} ${DESTDIR}${MDEC_DIR}/${PROG}
 
 .include <bsd.prog.mk>

@@ -1,4 +1,4 @@
-/* $NetBSD: mcpcia.c,v 1.7 1999/11/16 18:33:11 mjacob Exp $ */
+/* $NetBSD: mcpcia.c,v 1.22 2008/06/12 12:09:23 dogcow Exp $ */
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -74,7 +67,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: mcpcia.c,v 1.7 1999/11/16 18:33:11 mjacob Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mcpcia.c,v 1.22 2008/06/12 12:09:23 dogcow Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -83,7 +76,7 @@ __KERNEL_RCSID(0, "$NetBSD: mcpcia.c,v 1.7 1999/11/16 18:33:11 mjacob Exp $");
 
 #include <machine/autoconf.h>
 #include <machine/rpb.h>
-#include <machine/pte.h>
+#include <machine/sysarch.h>
 
 #include <alpha/mcbus/mcbusreg.h>
 #include <alpha/mcbus/mcbusvar.h>
@@ -91,7 +84,7 @@ __KERNEL_RCSID(0, "$NetBSD: mcpcia.c,v 1.7 1999/11/16 18:33:11 mjacob Exp $");
 #include <alpha/pci/mcpciavar.h>
 #include <alpha/pci/pci_kn300.h>
 
-#define KV(_addr)	((caddr_t)ALPHA_PHYS_TO_K0SEG((_addr)))
+#define KV(_addr)	((void *)ALPHA_PHYS_TO_K0SEG((_addr)))
 #define	MCPCIA_SYSBASE(mc)	\
 	((((unsigned long) (mc)->cc_gid) << MCBUS_GID_SHIFT) | \
 	 (((unsigned long) (mc)->cc_mid) << MCBUS_MID_SHIFT) | \
@@ -105,11 +98,8 @@ __KERNEL_RCSID(0, "$NetBSD: mcpcia.c,v 1.7 1999/11/16 18:33:11 mjacob Exp $");
 
 static int	mcpciamatch __P((struct device *, struct cfdata *, void *));
 static void	mcpciaattach __P((struct device *, struct device *, void *));
-struct cfattach mcpcia_ca = {
-	sizeof(struct mcpcia_softc), mcpciamatch, mcpciaattach
-};
-
-static int	mcpciaprint __P((void *, const char *));
+CFATTACH_DECL(mcpcia, sizeof(struct mcpcia_softc),
+    mcpciamatch, mcpciaattach, NULL, NULL);
 
 void	mcpcia_init0 __P((struct mcpcia_config *, int));
 
@@ -120,18 +110,8 @@ void	mcpcia_init0 __P((struct mcpcia_config *, int));
  */
 struct mcpcia_config mcpcia_console_configuration;
 
-static int
-mcpciaprint(aux, pnp)
-	void *aux;
-	const char *pnp;
-{
-	register struct pcibus_attach_args *pba = aux;
-	/* only PCIs can attach to MCPCIA for now */
-	if (pnp)
-		printf("%s at %s", pba->pba_busname, pnp);
-	printf(" bus %d", pba->pba_bus);
-	return (UNCONF);
-}
+int	mcpcia_bus_get_window __P((int, int,
+	    struct alpha_bus_space_translation *abst));
 
 static int
 mcpciamatch(parent, cf, aux)
@@ -200,28 +180,22 @@ mcpciaattach(parent, self, aux)
 	 * Set up interrupts
 	 */
 	pci_kn300_pickintr(ccp, first);
-#ifdef EVCNT_COUNTERS
-	if (first == 1) {
-		evcnt_attach(self, "intr", kn300_intr_evcnt);
-		first = 0;
-	}
-#else
 	first = 0;
-#endif
 
 	/*
 	 * Attach PCI bus
 	 */
-	pba.pba_busname = "pci";
 	pba.pba_iot = &ccp->cc_iot;
 	pba.pba_memt = &ccp->cc_memt;
 	pba.pba_dmat =	/* start with direct, may change... */
 	    alphabus_dma_get_tag(&ccp->cc_dmat_direct, ALPHA_BUS_PCI);
+	pba.pba_dmat64 = NULL;
 	pba.pba_pc = &ccp->cc_pc;
 	pba.pba_bus = 0;
+	pba.pba_bridgetag = NULL;
 	pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED |
 	    PCI_FLAGS_MRL_OKAY | PCI_FLAGS_MRM_OKAY | PCI_FLAGS_MWI_OKAY;
-	(void) config_found(self, &pba, mcpciaprint);
+	(void) config_found_ia(self, "pcibus", &pba, pcibusprint);
 
 	/*
 	 * Clear any errors that may have occurred during the probe
@@ -260,6 +234,11 @@ mcpcia_init()
 
 		if (EISA_PRESENT(REGVAL(MCPCIA_PCI_REV(ccp)))) {
 			mcpcia_init0(ccp, 0);
+
+			alpha_bus_window_count[ALPHA_BUS_TYPE_PCI_IO] = 2;
+			alpha_bus_window_count[ALPHA_BUS_TYPE_PCI_MEM] = 3;
+
+			alpha_bus_get_window = mcpcia_bus_get_window;
 			return;
 		}
 	}
@@ -296,19 +275,21 @@ mcpcia_init0(ccp, mallocsafe)
 	REGVAL(MCPCIA_CAP_ERR(ccp)) = 0xFFFFFFFF;
 	alpha_mb();
 
-	/*
-	 * Use this opportunity to also find out the MID and CPU
-	 * type of the currently running CPU (that's us, billybob....)
-	 */
-	ctl = REGVAL(MCPCIA_WHOAMI(ccp));
-	mcbus_primary.mcbus_cpu_mid = MCBUS_CPU_MID(ctl);
-	if ((MCBUS_CPU_INFO(ctl) & CPU_Fill_Err) == 0 &&
-	    mcbus_primary.mcbus_valid == 0) {
-		mcbus_primary.mcbus_bcache =
-		    MCBUS_CPU_INFO(ctl) & CPU_BCacheMask;
-		mcbus_primary.mcbus_valid = 1;
+	if (ccp == &mcpcia_console_configuration) {
+		/*
+		 * Use this opportunity to also find out the MID and CPU
+		 * type of the currently running CPU (that's us, billybob....)
+		 */
+		ctl = REGVAL(MCPCIA_WHOAMI(ccp));
+		mcbus_primary.mcbus_cpu_mid = MCBUS_CPU_MID(ctl);
+		if ((MCBUS_CPU_INFO(ctl) & CPU_Fill_Err) == 0 &&
+		    mcbus_primary.mcbus_valid == 0) {
+			mcbus_primary.mcbus_bcache =
+			    MCBUS_CPU_INFO(ctl) & CPU_BCacheMask;
+			mcbus_primary.mcbus_valid = 1;
+		}
+		alpha_mb();
 	}
-	alpha_mb();
 
 	ccp->cc_initted = 1;
 }
@@ -338,7 +319,7 @@ mcpcia_config_cleanup()
 	 * Turn on Hard, Soft error interrupts. Maybe i2c too.
 	 */
 	for (i = 0; i < mcpcia_cd.cd_ndevs; i++) {
-		if ((mcp = mcpcia_cd.cd_devs[i]) == NULL)
+		if ((mcp = device_lookup_private(&mcpcia_cd, i)) == NULL)
 			continue;
 		
 		ccp = mcp->mcpcia_cc;
@@ -357,4 +338,28 @@ mcpcia_config_cleanup()
 	(void) timeout (die_heathen_dog, &mcpcia_console_configuration,
 	    30 * hz);
 #endif
+}
+
+int
+mcpcia_bus_get_window(type, window, abst)
+	int type, window;
+	struct alpha_bus_space_translation *abst;
+{
+	struct mcpcia_config *ccp = &mcpcia_console_configuration;
+	bus_space_tag_t st;
+
+	switch (type) {
+	case ALPHA_BUS_TYPE_PCI_IO:
+		st = &ccp->cc_iot;
+		break;
+
+	case ALPHA_BUS_TYPE_PCI_MEM:
+		st = &ccp->cc_memt;
+		break;
+
+	default:
+		panic("mcpcia_bus_get_window");
+	}
+
+	return (alpha_bus_space_get_window(st, window, abst));
 }

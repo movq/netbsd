@@ -1,4 +1,4 @@
-/*	$NetBSD: play.c,v 1.5 1998/11/10 13:01:32 hubertf Exp $	*/
+/*	$NetBSD: play.c,v 1.9 2008/01/14 03:50:02 dholland Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)play.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: play.c,v 1.5 1998/11/10 13:01:32 hubertf Exp $");
+__RCSID("$NetBSD: play.c,v 1.9 2008/01/14 03:50:02 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -60,10 +56,11 @@ __RCSID("$NetBSD: play.c,v 1.5 1998/11/10 13:01:32 hubertf Exp $");
 #include "rogue.h"
 
 boolean interrupted = 0;
-const char *unknown_command = "unknown command";
+
+static const char unknown_command[] = "unknown command";
 
 void
-play_level()
+play_level(void)
 {
 	short ch;
 	int count;
@@ -71,7 +68,7 @@ play_level()
 	for (;;) {
 		interrupted = 0;
 		if (hit_message[0]) {
-			message(hit_message, 1);
+			messagef(1, "%s", hit_message);
 			hit_message[0] = 0;
 		}
 		if (trap_door) {
@@ -110,7 +107,7 @@ CH:
 		case 'u':
 		case 'n':
 		case 'b':
-			(void) one_move_rogue(ch, 1);
+			(void)one_move_rogue(ch, 1);
 			break;
 		case 'H':
 		case 'J':
@@ -218,7 +215,7 @@ CH:
 			throw();
 			break;
 		case 'v':
-			message("rogue-clone: Version III. (Tim Stoehr was here), tektronix!zeus!tims", 0);
+			messagef(0, "rogue-clone: Version III. (Tim Stoehr was here), tektronix!zeus!tims");
 			break;
 		case 'Q':
 			quit(0);
@@ -250,28 +247,28 @@ CH:
 			if (wizard) {
 				inventory(&level_objects, ALL_OBJECTS);
 			} else {
-				message(unknown_command, 0);
+				messagef(0, "%s", unknown_command);
 			}
 			break;
 		case '\023':
 			if (wizard) {
 				draw_magic_map();
 			} else {
-				message(unknown_command, 0);
+				messagef(0, "%s", unknown_command);
 			}
 			break;
 		case '\024':
 			if (wizard) {
 				show_traps();
 			} else {
-				message(unknown_command, 0);
+				messagef(0, "%s", unknown_command);
 			}
 			break;
 		case '\017':
 			if (wizard) {
 				show_objects();
 			} else {
-				message(unknown_command, 0);
+				messagef(0, "%s", unknown_command);
 			}
 			break;
 		case '\001':
@@ -281,21 +278,21 @@ CH:
 			if (wizard) {
 				c_object_for_wizard();
 			} else {
-				message(unknown_command, 0);
+				messagef(0, "%s", unknown_command);
 			}
 			break;
 		case '\015':
 			if (wizard) {
 				show_monsters();
 			} else {
-				message(unknown_command, 0);
+				messagef(0, "%s", unknown_command);
 			}
 			break;
 		case 'S':
 			save_game();
 			break;
 		default:
-			message(unknown_command, 0);
+			messagef(0, "%s", unknown_command);
 			break;
 		}
 	}

@@ -1,4 +1,4 @@
-.\"	$NetBSD: apply.1,v 1.8 1999/03/22 18:16:34 garbled Exp $
+.\"	$NetBSD: apply.1,v 1.12 2006/12/24 10:07:18 wiz Exp $
 .\"
 .\" Copyright (c) 1983, 1990, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -91,17 +87,22 @@ as a magic character may be changed with the
 .Fl a
 option.
 .El
-.Sh ENVIRONMENT VARIABLES
+.Sh ENVIRONMENT
 The following environment variable affects the execution of
-.Nm "" :
+.Nm :
 .Bl -tag -width SHELL
 .It Ev SHELL
 Pathname of shell to use.
 If this variable is not defined, the Bourne shell is used.
 .El
+.Sh FILES
+.Bl -tag -width /bin/sh -compact
+.It Pa /bin/sh
+Default shell
+.El
 .Sh EXAMPLES
 .Bl -tag -width apply -compact
-.It Li "apply echo a*"
+.It Li "apply echo *"
 is similar to
 .Xr ls 1 ;
 .It Li "apply \-2 cmp a1 b1 a2 b2 a3 b3"
@@ -114,21 +115,16 @@ runs
 links all files in the current directory to the directory
 .Pa /usr/joe .
 .El
-.Sh Files
-.Bl -tag -width /bin/sh -compact
-.It Pa /bin/sh
-Default shell
-.El
-.Sh AUTHOR
-Rob Pike
+.Sh HISTORY
+The
+.Nm
+command appeared in
+.Bx 4.2 .
+.Sh AUTHORS
+.An Rob Pike
 .Sh BUGS
 Shell metacharacters in
 .Ar command
 may have bizarre effects; it is best to enclose complicated
 commands in single quotes
 .Pq '' .
-.Sh HISTORY
-The
-.Nm
-command appeared in 
-.Bx 4.2 .

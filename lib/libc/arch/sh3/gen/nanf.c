@@ -1,18 +1,17 @@
-/*	$NetBSD: nanf.c,v 1.1 2000/01/17 16:27:53 kleink Exp $	*/
+/*	$NetBSD: nanf.c,v 1.3 2005/04/15 22:39:11 kleink Exp $	*/
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: nanf.c,v 1.1 2000/01/17 16:27:53 kleink Exp $");
+__RCSID("$NetBSD: nanf.c,v 1.3 2005/04/15 22:39:11 kleink Exp $");
 #endif /* LIBC_SCCS and not lint */
-
-/* nanf.c */
 
 #include <math.h>
 #include <machine/endian.h>
 
-/* bytes for quiet NaN on a SH3 (IEEE single precision) */
-#if BYTE_ORDER == LITTLE_ENDIAN
-const char __nanf[] = { 0, 0, (char)0xc0, 0x7f };
+/* bytes for quiet NaN (IEEE single precision) */
+const union __float_u __nanf =
+#if BYTE_ORDER == BIG_ENDIAN
+		{ { 0x7f, 0xa0,    0,    0 } };
 #else
-const char __nanf[] = { 0x7f, (char)0xc0, 0, 0 };
+		{ {    0,    0, 0xa0, 0x7f } };
 #endif

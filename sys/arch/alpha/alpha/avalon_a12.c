@@ -1,4 +1,4 @@
-/* $NetBSD: avalon_a12.c,v 1.4 1998/09/24 05:32:52 ross Exp $ */
+/* $NetBSD: avalon_a12.c,v 1.13 2006/02/25 17:32:43 thorpej Exp $ */
 
 /* [Notice revision 2.2]
  * Copyright (c) 1997, 1998 Avalon Computer Systems, Inc.
@@ -64,17 +64,18 @@
 #include "opt_avalon_a12.h"		/* Config options headers */
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: avalon_a12.c,v 1.4 1998/09/24 05:32:52 ross Exp $");
+__KERNEL_RCSID(0, "$NetBSD: avalon_a12.c,v 1.13 2006/02/25 17:32:43 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/termios.h>
+#include <sys/conf.h>
 #include <dev/cons.h>
 
 #include <machine/rpb.h>
 #include <machine/autoconf.h>
-#include <machine/conf.h>
+#include <machine/cpuconf.h>
 #include <machine/prom.h>
 
 #include <dev/pci/pcireg.h>
@@ -149,27 +150,26 @@ avalon_a12_device_register(dev, aux)
 	struct device *dev;
 	void *aux;
 {
-	static int found, initted, scsiboot, netboot;
-	static struct device *pcidev, *scsidev;
+	static int found, initted, diskboot, netboot;
+	static struct device *pcidev, *ctrlrdev;
 	struct bootdev_data *b = bootdev_data;
-	struct device *parent = dev->dv_parent;
-	struct cfdata *cf = dev->dv_cfdata;
-	struct cfdriver *cd = cf->cf_driver;
+	struct device *parent = device_parent(dev);
 
 	if (found)
 		return;
 
 	if (!initted) {
-		scsiboot = (strcmp(b->protocol, "SCSI") == 0);
-		netboot = (strcmp(b->protocol, "BOOTP") == 0);
+		diskboot = (strcasecmp(b->protocol, "SCSI") == 0);
+		netboot = (strcasecmp(b->protocol, "BOOTP") == 0) ||
+		    (strcasecmp(b->protocol, "MOP") == 0);
 #if 0
-		printf("scsiboot = %d, netboot = %d\n", scsiboot, netboot);
+		printf("diskboot = %d, netboot = %d\n", diskboot, netboot);
 #endif
 		initted =1;
 	}
 
 	if (pcidev == NULL) {
-		if (strcmp(cd->cd_name, "pci"))
+		if (!device_is_a(dev, "pci"))
 			return;
 		else {
 			struct pcibus_attach_args *pba = aux;
@@ -179,84 +179,64 @@ avalon_a12_device_register(dev, aux)
 	
 			pcidev = dev;
 #if 0
-			printf("\npcidev = %s\n", pcidev->dv_xname);
+			printf("\npcidev = %s\n", dev->dv_xname);
 #endif
 			return;
 		}
 	}
 
-	if (scsiboot && (scsidev == NULL)) {
+	if (ctrlrdev == NULL) {
 		if (parent != pcidev)
 			return;
 		else {
 			struct pci_attach_args *pa = aux;
+			int slot;
 
-			if ((b->slot % 1000) != pa->pa_device)
+			slot = pa->pa_bus * 1000 + pa->pa_function * 100 +
+			    pa->pa_device;
+			if (b->slot != slot)
 				return;
-
-			/* XXX function? */
 	
-			scsidev = dev;
+			if (netboot) {
+				booted_device = dev;
 #if 0
-			printf("\nscsidev = %s\n", scsidev->dv_xname);
+				printf("\nbooted_device = %s\n", dev->dv_xname);
 #endif
+				found = 1;
+			} else {
+				ctrlrdev = dev;
+#if 0
+				printf("\nctrlrdev = %s\n", dev->dv_xname);
+#endif
+			}
 			return;
 		}
 	}
 
-	if (scsiboot &&
-	    (!strcmp(cd->cd_name, "sd") ||
-	     !strcmp(cd->cd_name, "st") ||
-	     !strcmp(cd->cd_name, "cd"))) {
+	if (!diskboot)
+		return;
+
+	if (device_is_a(dev, "sd") ||
+	    device_is_a(dev, "st") ||
+	    device_is_a(dev, "cd")) {
 		struct scsipibus_attach_args *sa = aux;
+		struct scsipi_periph *periph = sa->sa_periph;
+		int unit;
 
-		if (parent->dv_parent != scsidev)
+		if (device_parent(parent) != ctrlrdev)
 			return;
 
-		if (b->unit / 100 != sa->sa_sc_link->scsipi_scsi.target)
+		unit = periph->periph_target * 100 + periph->periph_lun;
+		if (b->unit != unit)
 			return;
-
-		/* XXX LUN! */
-
-		switch (b->boot_dev_type) {
-		case 0:
-			if (strcmp(cd->cd_name, "sd") &&
-			    strcmp(cd->cd_name, "cd"))
-				return;
-			break;
-		case 1:
-			if (strcmp(cd->cd_name, "st"))
-				return;
-			break;
-		default:
+		if (b->channel != periph->periph_channel->chan_channel)
 			return;
-		}
 
 		/* we've found it! */
 		booted_device = dev;
 #if 0
-		printf("\nbooted_device = %s\n", booted_device->dv_xname);
+		printf("\nbooted_device = %s\n", dev->dv_xname);
 #endif
 		found = 1;
-	}
-
-	if (netboot) {
-		if (parent != pcidev)
-			return;
-		else {
-			struct pci_attach_args *pa = aux;
-
-			if ((b->slot % 1000) != pa->pa_device)
-				return;
-
-			/* XXX function? */
-	
-			booted_device = dev;
-#if 0
-			printf("\nbooted_device = %s\n", booted_device->dv_xname);
-#endif
-			found = 1;
-			return;
-		}
 	}
 }

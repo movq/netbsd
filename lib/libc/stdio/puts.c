@@ -1,4 +1,4 @@
-/*	$NetBSD: puts.c,v 1.10 1999/09/20 04:39:31 lukem Exp $	*/
+/*	$NetBSD: puts.c,v 1.15 2006/03/17 02:25:23 chris Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)puts.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: puts.c,v 1.10 1999/09/20 04:39:31 lukem Exp $");
+__RCSID("$NetBSD: puts.c,v 1.15 2006/03/17 02:25:23 chris Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -51,6 +47,7 @@ __RCSID("$NetBSD: puts.c,v 1.10 1999/09/20 04:39:31 lukem Exp $");
 #include <string.h>
 #include "fvwrite.h"
 #include "reentrant.h"
+#include "local.h"
 
 /*
  * Write the given string to stdout, appending a newline.
@@ -59,17 +56,21 @@ int
 puts(s)
 	char const *s;
 {
-	size_t c = strlen(s);
+	size_t c;
 	struct __suio uio;
 	struct __siov iov[2];
 	int r;
 
 	_DIAGASSERT(s != NULL);
 
-	/* LINTED we don't touch the string */
-	iov[0].iov_base = (void *)s;
+	if (s == NULL)
+		s = "(null)";
+
+	c = strlen(s);
+
+	iov[0].iov_base = __UNCONST(s);
 	iov[0].iov_len = c;
-	iov[1].iov_base = "\n";
+	iov[1].iov_base = __UNCONST("\n");
 	iov[1].iov_len = 1;
 	uio.uio_resid = c + 1;
 	uio.uio_iov = &iov[0];

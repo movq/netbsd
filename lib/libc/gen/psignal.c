@@ -1,4 +1,4 @@
-/*	$NetBSD: psignal.c,v 1.19 2000/01/22 22:19:11 mycroft Exp $	*/
+/*	$NetBSD: psignal.c,v 1.21 2005/11/29 03:11:59 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)psignal.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: psignal.c,v 1.19 2000/01/22 22:19:11 mycroft Exp $");
+__RCSID("$NetBSD: psignal.c,v 1.21 2005/11/29 03:11:59 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -69,19 +65,17 @@ psignal(sig, s)
 
 	v = iov;
 	if (s && *s) {
-		/* LINTED iov_base is not written to */
-		v->iov_base = (void *)s;
+		v->iov_base = __UNCONST(s);
 		v->iov_len = strlen(s);
 		v++;
-		v->iov_base = ": ";
+		v->iov_base = __UNCONST(": ");
 		v->iov_len = 2;
 		v++;
 	}
-	/* LINTED iov_base is not written to */
-	v->iov_base = (void *)__strsignal((int)sig, buf, sizeof(buf));
+	v->iov_base = __UNCONST(__strsignal((int)sig, buf, sizeof(buf)));
 	v->iov_len = strlen(v->iov_base);
 	v++;
-	v->iov_base = "\n";
+	v->iov_base = __UNCONST("\n");
 	v->iov_len = 1;
 	(void)writev(STDERR_FILENO, iov, (v - iov) + 1);
 }

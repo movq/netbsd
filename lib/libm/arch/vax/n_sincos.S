@@ -1,4 +1,4 @@
-/*	$NetBSD: n_sincos.S,v 1.3 1999/07/02 15:37:35 simonb Exp $	*/
+/*	$NetBSD: n_sincos.S,v 1.8 2003/08/07 16:44:45 agc Exp $	*/
 /*
  * Copyright (c) 1985, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -49,31 +45,33 @@
  * S. McDonald, April 4,  1985
  */
 #include <machine/asm.h>
-	.text
-	.align	1
-	.globl	_sin
-	.type	_sin@function
-_sin:
-	.word	0xffc		# save r2-r11
-	movq	4(ap),r0
-	bicw3	$0x807f,r0,r2
+
+ENTRY(sinf, 0)
+	cvtfd	4(%ap),-(%sp)
+	calls	$2,_C_LABEL(sin)
+	cvtdf	%r0,%r0
+	ret
+
+ENTRY(sin, 0xfc0)
+	movq	4(%ap),%r0
+	bicw3	$0x807f,%r0,%r2
 	beql	1f		# if x is zero or reserved operand then return x
 /*
  * Save the PSL's IV & FU bits on the stack.
  */
-	movpsl	r2
-	bicw3	$0xff9f,r2,-(sp)
+	movpsl	%r2
+	bicw3	$0xff9f,%r2,-(%sp)
 /*
  * Clear the IV & FU bits.
  */
 	bicpsw	$0x0060
 /*
- *  Entered by  sine    ; save  0  in  r4 .
+ *  Entered by  sine    ; save  0  in  %r4 .
  */
-	jsb	libm$argred
-	movl	$0,r4
-	jsb	libm$sincos
-	bispsw	(sp)+
+	jsb	_C_LABEL(__libm_argred)+2
+	movl	$0,%r4
+	jsb	_C_LABEL(__libm_sincos)+2
+	bispsw	(%sp)+
 1:	ret
 
 /*
@@ -82,30 +80,32 @@ _sin:
  * method: true range reduction to [-pi/4,pi/4], P. Tang  &  B. Corbett
  * S. McDonald, April 4,  1985
  */
-	.text
-	.align	1
-	.globl	_cos
-	.type	_cos,@function
-_cos:
-	.word	0xffc		# save r2-r11
-	movq	4(ap),r0
-	bicw3	$0x7f,r0,r2
-	cmpw	$0x8000,r2
+
+ENTRY(cosf, 0)
+	cvtfd	4(%ap),-(%sp)
+	calls	$2,_C_LABEL(cos)
+	cvtdf	%r0,%r0
+	ret
+
+ENTRY(cos, 0x0fc0)
+	movq	4(%ap),%r0
+	bicw3	$0x7f,%r0,%r2
+	cmpw	$0x8000,%r2
 	beql	1f		# if x is reserved operand then return x
 /*
  * Save the PSL's IV & FU bits on the stack.
  */
-	movpsl	r2
-	bicw3	$0xff9f,r2,-(sp)
+	movpsl	%r2
+	bicw3	$0xff9f,%r2,-(%sp)
 /*
  * Clear the IV & FU bits.
  */
 	bicpsw	$0x0060
 /*
- *  Entered by  cosine  ; save  1  in  r4 .
+ *  Entered by  cosine  ; save  1  in  %r4 .
  */
-	jsb	libm$argred
-	movl	$1,r4
-	jsb	libm$sincos
-	bispsw	(sp)+
+	jsb	_C_LABEL(__libm_argred)+2
+	movl	$1,%r4
+	jsb	_C_LABEL(__libm_sincos)+2
+	bispsw	(%sp)+
 1:	ret

@@ -1,11 +1,11 @@
-/*	$NetBSD: linux_mmap.h,v 1.1 1998/09/30 21:55:59 erh Exp $	*/
+/* $NetBSD: linux_mmap.h,v 1.6 2008/04/28 20:23:43 martin Exp $   */
 
 /*-
- * Copyright (c) 1998 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Eric Haszlakiewicz.
+ * by Eric Haszlakiewicz and Emmanuel Dreyfus.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,13 +29,17 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _PPC_LINUX_MMAP_H
-#define _PPC_LINUX_MMAP_H
+#ifndef _POWERPC_LINUX_MMAP_H
+#define _POWERPC_LINUX_MMAP_H
 
-/* LINUX_PROT_* defined in common/linux_mmap.h */
+/*
+ * LINUX_PROT_* are defined in common/linux_mmap.h
+ * LINUX_MAP_SHARED/PRIVATE are defined in common/linux_mmap.h
+ */
 
-/* LINUX_MAP_SHARED/PRIVATE defined in common/linux_mmap.h */
-
+/*
+ * From Linux's include/asm-ppc/mman.h
+ */
 #define LINUX_MAP_FIXED		0x0010
 #define LINUX_MAP_ANON		0x0020
 
@@ -52,6 +49,4 @@
 #define LINUX_MAP_DENYWRITE	0x0800
 #define	LINUX_MAP_EXECUTABLE	0x1000
 
-#define LINUX_MAP_IGNMASK	0x1940
-
-#endif /* !_PPC_LINUX_MMAP_H */
+#endif /* !_POWERPC_LINUX_MMAP_H */

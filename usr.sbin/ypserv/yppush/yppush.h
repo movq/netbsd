@@ -1,4 +1,4 @@
-/*	$NetBSD: yppush.h,v 1.1.1.1 1996/08/09 10:15:01 thorpej Exp $	*/
+/*	$NetBSD: yppush.h,v 1.3 2003/11/12 13:31:08 grant Exp $	*/
 
 /*
  * Copyright (c) 1996 Mats O Jansson <moj@stacken.kth.se>
@@ -33,7 +33,7 @@
 
 /*
  * This file was originally generated with rpcgen, then cleaned up
- * by Jason R. Thorpe <thorpej@NetBSD.ORG>.
+ * by Jason R. Thorpe <thorpej@NetBSD.org>.
  */
 
 #define YPPUSH_XFRRESPPROG ((unsigned long)0x40000000)
@@ -44,11 +44,11 @@
 #define YPPUSHPROC_XFRRESP ((unsigned long)1)
 #endif
 
-void	*yppushproc_null_1 __P((void *, CLIENT *));
-void	*yppushproc_null_1_svc __P((void *, struct svc_req *));
-void	*yppushproc_xfrresp_1 __P((struct yppushresp_xfr *, CLIENT *));
-void	*yppushproc_xfrresp_1_svc __P((void *, struct svc_req *));
+void	*yppushproc_null_1(void *, CLIENT *);
+void	*yppushproc_null_1_svc(void *, struct svc_req *);
+void	*yppushproc_xfrresp_1(struct yppushresp_xfr *, CLIENT *);
+void	*yppushproc_xfrresp_1_svc(void *, struct svc_req *);
 
-void	yppush_xfrrespprog_1 __P((struct svc_req *, SVCXPRT *));
+void	yppush_xfrrespprog_1(struct svc_req *, SVCXPRT *);
 
-char	*yppush_err_string __P((int));
+char	*yppush_err_string(int);

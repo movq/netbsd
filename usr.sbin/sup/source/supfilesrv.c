@@ -1,9 +1,9 @@
-/*	$NetBSD: supfilesrv.c,v 1.19 2000/01/21 17:08:38 mycroft Exp $	*/
+/*	$NetBSD: supfilesrv.c,v 1.41 2007/12/20 20:17:52 christos Exp $	*/
 
 /*
  * Copyright (c) 1992 Carnegie Mellon University
  * All Rights Reserved.
- * 
+ *
  * Permission to use, copy, modify and distribute this software and its
  * documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
@@ -50,27 +50,27 @@
  *	across the network to save BandWidth
  *
  * Revision 1.20  92/09/09  22:05:00  mrt
- * 	Added Brad's change to make sendfile take a va_list.
+ * 	Added Brad's change to make send_file take a va_list.
  * 	Added support in login to accept an non-encrypted login
  * 	message if no user or password is being sent. This supports
  * 	a non-crypting version of sup. Also fixed to skip leading
  * 	white space from crypts in host files.
  * 	[92/09/01            mrt]
- * 
+ *
  * Revision 1.19  92/08/11  12:07:59  mrt
  * 		Made maxchildren a patchable variable, which can be set by the
  * 		command line switch -C or else defaults to the MAXCHILDREN
  * 		defined in sup.h. Added most of Brad's STUMP changes.
  * 	Increased PGMVERSION to 12 to reflect substantial changes.
  * 	[92/07/28            mrt]
- * 
+ *
  * Revision 1.18  90/12/25  15:15:39  ern
  * 	Yet another rewrite of the logging code. Make up the text we will write
  * 	   and then get in, write it and get out.
  * 	Also set error on write-to-full-disk if the logging is for recording
  * 	   server is busy.
  * 	[90/12/25  15:15:15  ern]
- * 
+ *
  * Revision 1.17  90/05/07  09:31:13  dlc
  * 	Sigh, some more fixes to the new "crypt" file handling code.  First,
  * 	just because the "crypt" file is in a local file system does not mean
@@ -83,42 +83,42 @@
  * 	to cause fewer surprises to people supping out of a shared file system
  * 	such as AFS.
  * 	[90/05/07            dlc]
- * 
+ *
  * Revision 1.16  90/04/29  04:21:08  dlc
  * 	Fixed logic bug in docrypt() which would not get the stat information
  * 	from the crypt file if the crypt key had already been set from a
  * 	"host" file.
  * 	[90/04/29            dlc]
- * 
+ *
  * Revision 1.15  90/04/18  19:51:27  dlc
  * 	Added the new routines local_file(), link_nofollow() for use in
  * 	dectecting whether a file is located in a local file system.  These
  * 	routines probably should have been in another module, but only
  * 	supfilesrv needs to do the check and none of its other modules seemed
  * 	appropriate.  Note, the implementation should be changed once we have
- * 	direct kernel support, for example the fstatfs(2) system call, for
+ * 	direct kernel support, for example the fstatvfs(2) system call, for
  * 	detecting the type of file system a file resides.  Also, I changed
  * 	the routines which read the crosspatch crypt file or collection crypt
  * 	file to save the uid and gid from the stat information obtained via
  * 	the local_file() call (when the file is local) at the same time the
  * 	crypt key is read.  This change disallows non-local files for the
  * 	crypt key to plug a security hole involving the usage of the uid/gid
- * 	of the crypt file to define who the the file server should run as.  If
+ * 	of the crypt file to define who the file server should run as.  If
  * 	the saved uid/gid are both valid, then the server will set its uid/gid
  * 	to these values.
  * 	[90/04/18            dlc]
- * 
+ *
  * Revision 1.14  89/08/23  14:56:15  gm0w
  * 	Changed msgf routines to msg routines.
  * 	[89/08/23            gm0w]
- * 
+ *
  * Revision 1.13  89/08/03  19:57:33  mja
  * 	Remove setaid() call.
- * 
+ *
  * Revision 1.12  89/08/03  19:49:24  mja
  * 	Updated to use v*printf() in place of _doprnt().
  * 	[89/04/19            mja]
- * 
+ *
  * 11-Sep-88  Glenn Marcy (gm0w) at Carnegie-Mellon University
  *	Added code to record release name in logfile.
  *
@@ -208,30 +208,25 @@
  **********************************************************************
  */
 
-#include <libc.h>
 #ifdef AFS
 #include <afs/param.h>
 #undef MAXNAMLEN
 #endif
 #include <sys/param.h>
-#include <c.h>
 #include <signal.h>
 #include <errno.h>
 #include <setjmp.h>
 #include <pwd.h>
 #include <grp.h>
 #include <fcntl.h>
-#ifdef __STDC__
 #include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
 #include <sys/time.h>
 #include <sys/resource.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
 #include <sys/file.h>
 #include <sys/mount.h>
+#include <sys/socket.h>
 #ifndef HAS_POSIX_DIR
 #include <sys/dir.h>
 #else
@@ -245,23 +240,27 @@
 #include <sys/ttyloc.h>
 #include <access.h>
 #include <sys/viceioctl.h>
-#else	CMUCS
+#else				/* CMUCS */
 #define ACCESS_CODE_OK		0
 #define ACCESS_CODE_BADPASSWORD (-2)
-#endif  CMUCS
+#endif				/* CMUCS */
 
 #ifdef __SVR4
-# include <sys/mkdev.h>
-# include <sys/statvfs.h>
-#endif 
+#include <sys/mkdev.h>
+#include <sys/statvfs.h>
+#endif
 #ifdef LIBWRAP
 #include <tcpd.h>
-#endif  
+#endif
 
 #include "supcdefs.h"
 #include "supextern.h"
 #define MSGFILE
 #include "supmsg.h"
+#include "libc.h"
+#include "c.h"
+
+extern char *crypt(const char *, const char *);
 
 int maxchildren;
 
@@ -288,11 +287,11 @@ int runas_gid = -1;
  ***    D A T A   S T R U C T U R E S    ***
  *******************************************/
 
-struct hashstruct {			/* hash table for number lists */
-	int Hnum1;			/* numeric keys */
+struct hashstruct {		/* hash table for number lists */
+	int Hnum1;		/* numeric keys */
 	int Hnum2;
-	char *Hname;			/* string value */
-	TREE *Htree;			/* TREE value */
+	char *Hname;		/* string value */
+	TREE *Htree;		/* TREE value */
 	struct hashstruct *Hnext;
 };
 typedef struct hashstruct HASH;
@@ -301,230 +300,225 @@ typedef struct hashstruct HASH;
  ***    G L O B A L   V A R I A B L E S    ***
  *********************************************/
 
-char program[] = "supfilesrv";		/* program name for SCM messages */
-int progpid = -1;			/* and process id */
+char program[] = "supfilesrv";	/* program name for SCM messages */
+int progpid = -1;		/* and process id */
 
-jmp_buf sjbuf;				/* jump location for network errors */
-TREELIST *listTL;			/* list of trees to upgrade */
+jmp_buf sjbuf;			/* jump location for network errors */
+TREELIST *listTL;		/* list of trees to upgrade */
 
-int silent;				/* -S flag */
+int silent;			/* -S flag */
 #ifdef LIBWRAP
-int clog;				/* -l flag */
+int sup_clog;			/* -l flag */
 #endif
-int live;				/* -d flag */
-int dbgportsq;				/* -P flag */
-extern int scmdebug;			/* -N flag */
+int live;			/* -d flag */
+int dbgportsq;			/* -P flag */
+extern int scmdebug;		/* -N flag */
 extern int netfile;
 #ifdef RCS
-int candorcs;				/* -R flag */
+int candorcs;			/* -R flag */
 int dorcs = FALSE;
 #endif
 
-char *clienthost;			/* host name of client */
-int nchildren;				/* number of children that exist */
-char *prefix;				/* collection pathname prefix */
-char *release;				/* collection release name */
-char *cryptkey;				/* encryption key if non-null */
+int nchildren;			/* number of children that exist */
+char *prefix;			/* collection pathname prefix */
+char *release;			/* collection release name */
+char *cryptkey;			/* encryption key if non-null */
 #ifdef CVS
-char *cvs_root;				/* RCS root */
+char *cvs_root;			/* RCS root */
 #endif
-char *rcs_branch;			/* RCS branch name */
-int lockfd;				/* descriptor of lock file */
+char *rcs_branch;		/* RCS branch name */
+int lockfd;			/* descriptor of lock file */
 
 /* global variables for scan functions */
-int trace = FALSE;			/* directory scan trace */
-int cancompress = FALSE;		/* Can we compress files */
-int docompress = FALSE;			/* Do we compress files */
+int trace = FALSE;		/* directory scan trace */
+int cancompress = FALSE;	/* Can we compress files */
+int docompress = FALSE;		/* Do we compress files */
 
-HASH *uidH[HASHSIZE];			/* for uid and gid lookup */
+HASH *uidH[HASHSIZE];		/* for uid and gid lookup */
 HASH *gidH[HASHSIZE];
-HASH *inodeH[HASHSIZE];			/* for inode lookup for linked file check */
+HASH *inodeH[HASHSIZE];		/* for inode lookup for linked file check */
 
 
 /* supfilesrv.c */
-int main __P((int, char **));
-void chldsig __P((int));
-void usage __P((void));
-void init __P((int, char **));
-void answer __P((void));
-void srvsignon __P((void));
-void srvsetup __P((void));
-void docrypt __P((void));
-void srvlogin __P((void));
-void listfiles __P((void));
-int denyone __P((TREE *, void *));
-void sendfiles __P((void));
-int sendone __P((TREE *, void *));
-int senddir __P((TREE *, void *));
-int sendfile __P((TREE *, va_list));
-void srvfinishup __P((time_t));
-void Hfree __P((HASH **));
-HASH *Hlookup __P((HASH **, int, int ));
-void Hinsert __P((HASH **, int, int , char *, TREE *));
-TREE *linkcheck __P((TREE *, int, int ));
-char *uconvert __P((int));
-char *gconvert __P((int));
-char *changeuid __P((char *, char *, int, int ));
-void goaway __P((char *, ...));
-char *fmttime __P((time_t));
-int local_file __P((int, struct stat *));
-int stat_info_ok __P((struct stat *, struct stat *));
-int link_nofollow __P((int));
-int link_nofollow __P((int));
+int main(int, char **);
+void chldsig(int);
+void usage(void);
+void init(int, char **);
+void answer(void);
+void srvsignon(void);
+void srvsetup(void);
+void docrypt(void);
+void srvlogin(void);
+void listfiles(void);
+int denyone(TREE *, void *);
+void send_files(void);
+int send_one(TREE *, void *);
+int send_dir(TREE *, void *);
+int send_file(TREE *, va_list);
+void srvfinishup(time_t);
+void Hfree(HASH **);
+HASH *Hlookup(HASH **, int, int);
+void Hinsert(HASH **, int, int, char *, TREE *);
+TREE *linkcheck(TREE *, int, int);
+char *uconvert(int);
+char *gconvert(int);
+char *changeuid(char *, char *, int, int);
+void goaway(char *, ...);
+char *fmttime(time_t);
+int local_file(int, struct stat *);
+int stat_info_ok(struct stat *, struct stat *);
+int link_nofollow(int);
+int link_nofollow(int);
 
 /*************************************
  ***    M A I N   R O U T I N E    ***
  *************************************/
 
 int
-main (argc,argv)
-int argc;
-char **argv;
+main(int argc, char **argv)
 {
-	register int x,pid;
+	int x, pid;
 	sigset_t nset, oset;
-	struct sigaction chld,ign;
+	struct sigaction chld, ign;
 	time_t tloc;
 #ifdef LIBWRAP
-        struct request_info req;
-#endif  
+	struct request_info req;
+#endif
 
 	/* initialize global variables */
-	pgmversion = PGMVERSION;	/* export version number */
-	server = TRUE;			/* export that we're not a server */
-	collname = NULL;		/* no current collection yet */
+	pgmversion = PGMVERSION;/* export version number */
+	server = TRUE;		/* export that we're not a server */
+	collname = NULL;	/* no current collection yet */
 	maxchildren = MAXCHILDREN;	/* defined in sup.h */
 
-	init (argc,argv);		/* process arguments */
+	init(argc, argv);	/* process arguments */
 
 #ifdef HAS_DAEMON
-	if (!live)			/* if not debugging, turn into daemon */
+	if (!live)		/* if not debugging, turn into daemon */
 		daemon(0, 0);
 #endif
 
-	logopen ("supfile");
-	tloc = time ((time_t *)NULL);
-	loginfo ("SUP File Server Version %d.%d (%s) starting at %s",
-		PROTOVERSION,PGMVERSION,scmversion,fmttime (tloc));
+	logopen("supfile");
+	tloc = time((time_t *) NULL);
+	loginfo("SUP File Server Version %d.%d (%s) starting at %s",
+	    PROTOVERSION, PGMVERSION, scmversion, fmttime(tloc));
 	if (live) {
-		x = service ();
+		x = service();
 
 		if (x != SCMOK)
-			logquit (1,"Can't connect to network");
+			logquit(1, "Can't connect to network");
 #ifdef LIBWRAP
 		request_init(&req, RQ_DAEMON, "supfilesrv", RQ_FILE, netfile,
-		    NULL);      
+		    NULL);
 		fromhost(&req);
 		if (hosts_access(&req) == 0) {
 			logdeny("refused connection from %.500s",
-			    eval_client(&req));   
-			servicekill();       
+			    eval_client(&req));
+			servicekill();
 			exit(1);
 		}
-		if (clog) {
+		if (sup_clog) {
 			logallow("connection from %.500s", eval_client(&req));
 		}
 #endif
-		answer ();
-		(void) serviceend ();
-		exit (0);
+		answer();
+		(void) serviceend();
+		exit(0);
 	}
 	ign.sa_handler = SIG_IGN;
 	sigemptyset(&ign.sa_mask);
 	ign.sa_flags = 0;
-	(void) sigaction (SIGHUP,&ign,NULL);
-	(void) sigaction (SIGINT,&ign,NULL);
-	(void) sigaction (SIGPIPE,&ign,NULL);
+	(void) sigaction(SIGHUP, &ign, NULL);
+	(void) sigaction(SIGINT, &ign, NULL);
+	(void) sigaction(SIGPIPE, &ign, NULL);
 	chld.sa_handler = chldsig;
 	sigemptyset(&chld.sa_mask);
 	chld.sa_flags = 0;
-	(void) sigaction (SIGCHLD,&chld,NULL);
+	(void) sigaction(SIGCHLD, &chld, NULL);
 	nchildren = 0;
 	for (;;) {
-		x = service ();
+		x = service();
 		if (x != SCMOK) {
-			logerr ("Error in establishing network connection");
-			(void) servicekill ();
+			logerr("Error in establishing network connection");
+			(void) servicekill();
 			continue;
 		}
 		sigemptyset(&nset);
 		sigaddset(&nset, SIGCHLD);
 		sigprocmask(SIG_BLOCK, &nset, &oset);
-		if ((pid = fork()) == 0) { /* server process */
+		if ((pid = fork()) == 0) {	/* server process */
 #ifdef LIBWRAP
 			request_init(&req, RQ_DAEMON, "supfilesrv", RQ_FILE,
-			    netfile, NULL);      
+			    netfile, NULL);
 			fromhost(&req);
 			if (hosts_access(&req) == 0) {
 				logdeny("refused connection from %.500s",
-				    eval_client(&req));   
-				servicekill();       
+				    eval_client(&req));
+				servicekill();
 				exit(1);
 			}
-			if (clog) {
+			if (sup_clog) {
 				logallow("connection from %.500s",
 				    eval_client(&req));
 			}
 #endif
-			(void) serviceprep ();
-			answer ();
-			(void) serviceend ();
-			exit (0);
+			(void) serviceprep();
+			answer();
+			(void) serviceend();
+			exit(0);
 		}
-		(void) servicekill ();	/* parent */
-		if (pid > 0) nchildren++;
+		(void) servicekill();	/* parent */
+		if (pid > 0)
+			nchildren++;
 		(void) sigprocmask(SIG_SETMASK, &oset, NULL);
 	}
 }
-
 /*
  * Child status signal handler
  */
 
 void
-chldsig(snum)
-	int snum;
+chldsig(int snum __unused)
 {
 	int w;
 
-	while (wait3((int *) &w, WNOHANG, (struct rusage *)0) > 0) {
-		if (nchildren) nchildren--;
+	while (wait3((int *) &w, WNOHANG, (struct rusage *) 0) > 0) {
+		if (nchildren)
+			nchildren--;
 	}
 }
-
 /*****************************************
  ***    I N I T I A L I Z A T I O N    ***
  *****************************************/
 
 void
-usage ()
+usage(void)
 {
 #ifdef LIBWRAP
-	quit (1,"Usage: supfilesrv [ -l | -d | -P | -N | -C <max children> | -H <host> <user> <cryptfile> <supargs> ]\n");
+	quit(1, "Usage: supfilesrv [ -4 | -6 | -l | -d | -P | -N | -C <max children> | -H <host> <user> <cryptfile> <supargs> ]\n");
 #else
-	quit (1,"Usage: supfilesrv [ -d | -P | -N | -C <max children> | -H <host> <user> <cryptfile> <supargs> ]\n");
+	quit(1, "Usage: supfilesrv [ -4 | -6 | -d | -P | -N | -C <max children> | -H <host> <user> <cryptfile> <supargs> ]\n");
 #endif
 }
 
 void
-init (argc,argv)
-int argc;
-char **argv;
+init(int argc, char **argv)
 {
-	register int i;
-	register int x;
-	char *clienthost,*clientuser;
-	char *p,*q;
+	int i;
+	int x;
+	char *clienthost, *clientuser;
+	char *p, *q;
 	char buf[STRINGLENGTH];
 	int maxsleep;
-	register FILE *f;
+	FILE *f;
+	int af = AF_INET;
 
 #ifdef RCS
-        candorcs = FALSE;
+	candorcs = FALSE;
 #endif
 	live = FALSE;
 #ifdef LIBWRAP
-	clog = FALSE;
+	sup_clog = FALSE;
 #endif
 	dbgportsq = FALSE;
 	scmdebug = 0;
@@ -532,7 +526,7 @@ char **argv;
 	clientuser = NULL;
 	maxsleep = 5;
 	if (--argc < 0)
-		usage ();
+		usage();
 	argv++;
 	while (clienthost == NULL && argc > 0 && argv[0][0] == '-') {
 		switch (argv[0][1]) {
@@ -541,7 +535,7 @@ char **argv;
 			break;
 #ifdef LIBWRAP
 		case 'l':
-			clog = TRUE;
+			sup_clog = TRUE;
 			break;
 #endif
 		case 'd':
@@ -555,13 +549,13 @@ char **argv;
 			break;
 		case 'C':
 			if (--argc < 1)
-				quit (1,"Missing arg to -C\n");
+				quit(1, "Missing arg to -C\n");
 			argv++;
 			maxchildren = atoi(argv[0]);
 			break;
 		case 'H':
 			if (--argc < 3)
-				quit (1,"Missing args to -H\n");
+				quit(1, "Missing args to -H\n");
 			argv++;
 			clienthost = argv[0];
 			clientuser = argv[1];
@@ -570,12 +564,20 @@ char **argv;
 			argv += 2;
 			break;
 #ifdef RCS
-                case 'R':
-                        candorcs = TRUE;
-                        break;
+		case 'R':
+			candorcs = TRUE;
+			break;
+#endif
+		case '4':
+			af = AF_INET;
+			break;
+#ifdef AF_INET6
+		case '6':
+			af = AF_INET6;
+			break;
 #endif
 		default:
-			fprintf (stderr,"Unknown flag %s ignored\n",argv[0]);
+			fprintf(stderr, "Unknown flag %s ignored\n", argv[0]);
 			break;
 		}
 		--argc;
@@ -583,247 +585,262 @@ char **argv;
 	}
 	if (clienthost == NULL) {
 		if (argc != 0)
-			usage ();
-		x = servicesetup (dbgportsq ? DEBUGFPORT : FILEPORT);
+			usage();
+		x = servicesetup(dbgportsq ? DEBUGFPORT : FILEPORT, af);
 		if (x != SCMOK)
-			quit (1,"Error in network setup");
+			quit(1, "Error in network setup");
 		for (i = 0; i < HASHSIZE; i++)
 			uidH[i] = gidH[i] = inodeH[i] = NULL;
 		return;
 	}
 	server = FALSE;
 	if (argc < 1)
-		usage ();
-	f = fopen (cryptkey,"r");
+		usage();
+	f = fopen(cryptkey, "r");
 	if (f == NULL)
-		quit (1,"Unable to open cryptfile %s\n",cryptkey);
-	if ((p = fgets (buf,STRINGLENGTH,f)) != NULL) {
-		if ((q = index (p,'\n')) != NULL)  *q = '\0';
+		quit(1, "Unable to open cryptfile %s\n", cryptkey);
+	if ((p = fgets(buf, STRINGLENGTH, f)) != NULL) {
+		if ((q = index(p, '\n')) != NULL)
+			*q = '\0';
 		if (*p == '\0')
-			quit (1,"No cryptkey found in %s\n",cryptkey);
-		cryptkey = salloc (buf);
+			quit(1, "No cryptkey found in %s\n", cryptkey);
+		cryptkey = estrdup(buf);
 	}
-	(void) fclose (f);
-	x = request (dbgportsq ? DEBUGFPORT : FILEPORT,clienthost,&maxsleep);
+	(void) fclose(f);
+	x = request(dbgportsq ? DEBUGFPORT : FILEPORT, clienthost, &maxsleep);
 	if (x != SCMOK)
-		quit (1,"Unable to connect to host %s\n",clienthost);
-	x = msgsignon ();
+		quit(1, "Unable to connect to host %s\n", clienthost);
+	x = msgsignon();
 	if (x != SCMOK)
-		quit (1,"Error sending signon request to fileserver\n");
-	x = msgsignonack ();
+		quit(1, "Error sending signon request to fileserver\n");
+	x = msgsignonack();
 	if (x != SCMOK)
-		quit (1,"Error reading signon reply from fileserver\n");
-	printf ("SUP Fileserver %d.%d (%s) %d on %s\n",
-		protver,pgmver,scmver,fspid,remotehost());
-	free (scmver);
+		quit(1, "Error reading signon reply from fileserver\n");
+	printf("SUP Fileserver %d.%d (%s) %d on %s\n",
+	    protver, pgmver, scmver, fspid, remotehost());
+	free(scmver);
 	scmver = NULL;
 	if (protver < 7)
-		quit (1,"Remote fileserver does not implement reverse sup\n");
+		quit(1, "Remote fileserver does not implement reverse sup\n");
 	xpatch = TRUE;
 	xuser = clientuser;
-	x = msgsetup ();
+	x = msgsetup();
 	if (x != SCMOK)
-		quit (1,"Error sending setup request to fileserver\n");
-	x = msgsetupack ();
+		quit(1, "Error sending setup request to fileserver\n");
+	x = msgsetupack();
 	if (x != SCMOK)
-		quit (1,"Error reading setup reply from fileserver\n");
+		quit(1, "Error reading setup reply from fileserver\n");
 	switch (setupack) {
 	case FSETUPOK:
 		break;
 	case FSETUPSAME:
-		quit (1,"User %s not found on remote client\n",xuser);
+		quit(1, "User %s not found on remote client\n", xuser);
 	case FSETUPHOST:
-		quit (1,"This host has no permission to reverse sup\n");
+		quit(1, "This host has no permission to reverse sup\n");
 	default:
-		quit (1,"Unrecognized file server setup status %d\n",setupack);
+		quit(1, "Unrecognized file server setup status %d\n", setupack);
 	}
-	if (netcrypt (cryptkey) != SCMOK )
-		quit (1,"Running non-crypting fileserver\n");
+	if (netcrypt(cryptkey) != SCMOK)
+		quit(1, "Running non-crypting fileserver\n");
 	crypttest = CRYPTTEST;
-	x = msgcrypt ();
+	x = msgcrypt();
 	if (x != SCMOK)
-		quit (1,"Error sending encryption test request\n");
-	x = msgcryptok ();
+		quit(1, "Error sending encryption test request\n");
+	x = msgcryptok();
 	if (x == SCMEOF)
-		quit (1,"Data encryption test failed\n");
+		quit(1, "Data encryption test failed\n");
 	if (x != SCMOK)
-		quit (1,"Error reading encryption test reply\n");
+		quit(1, "Error reading encryption test reply\n");
 	logcrypt = CRYPTTEST;
 	loguser = NULL;
 	logpswd = NULL;
-	if (netcrypt (PSWDCRYPT) != SCMOK)	/* encrypt password data */
-		quit (1,"Running non-crypting fileserver\n");
-	x = msglogin ();
-	(void) netcrypt ((char *)NULL);	/* turn off encryption */
+	if (netcrypt(PSWDCRYPT) != SCMOK)	/* encrypt password data */
+		quit(1, "Running non-crypting fileserver\n");
+	x = msglogin();
+	(void) netcrypt((char *) NULL);	/* turn off encryption */
 	if (x != SCMOK)
-		quit (1,"Error sending login request to file server\n");
-	x = msglogack ();
+		quit(1, "Error sending login request to file server\n");
+	x = msglogack();
 	if (x != SCMOK)
-		quit (1,"Error reading login reply from file server\n");
+		quit(1, "Error reading login reply from file server\n");
 	if (logack == FLOGNG)
-		quit (1,"%s\nImproper login to %s account\n",logerror,xuser);
+		quit(1, "%s\nImproper login to %s account\n", logerror, xuser);
 	xargc = argc;
 	xargv = argv;
-	x = msgxpatch ();
+	x = msgxpatch();
 	if (x != SCMOK)
-		quit (1,"Error sending crosspatch request\n");
-    	crosspatch ();
-	exit (0);
+		quit(1, "Error sending crosspatch request\n");
+	crosspatch();
+	exit(0);
 }
-
 /*****************************************
  ***    A N S W E R   R E Q U E S T    ***
  *****************************************/
 
 void
-answer ()
+answer(void)
 {
 	time_t starttime;
-	register int x;
+	int x;
 
-	progpid = fspid = getpid ();
+	progpid = fspid = getpid();
 	collname = NULL;
 	basedir = NULL;
 	prefix = NULL;
 	release = NULL;
-        rcs_branch = NULL;
+	rcs_branch = NULL;
 #ifdef CVS
-        cvs_root = NULL;
+	cvs_root = NULL;
 #endif
 	goawayreason = NULL;
 	donereason = NULL;
 	lockfd = -1;
-	starttime = time ((time_t *)NULL);
-	if (!setjmp (sjbuf)) {
-		srvsignon ();
-		srvsetup ();
-		docrypt ();
-		srvlogin ();
+	starttime = time((time_t *) NULL);
+	if (!setjmp(sjbuf)) {
+		srvsignon();
+		srvsetup();
+		docrypt();
+		srvlogin();
 		if (xpatch) {
 			int fd;
 
-			x = msgxpatch ();
+			x = msgxpatch();
 			if (x != SCMOK)
-				exit (0);
+				exit(0);
 			xargv[0] = "sup";
 			xargv[1] = "-X";
-			xargv[xargc] = (char *)NULL;
-			(void) dup2 (netfile,0);
-			(void) dup2 (netfile,1);
-			(void) dup2 (netfile,2);
-			fd = getdtablesize ();
+			xargv[xargc] = (char *) NULL;
+			(void) dup2(netfile, 0);
+			(void) dup2(netfile, 1);
+			(void) dup2(netfile, 2);
+			fd = getdtablesize();
 			while (--fd > 2)
-				(void) close (fd);
-			execvp (xargv[0],xargv);
-			exit (0);
+				(void) close(fd);
+			execvp(xargv[0], xargv);
+			exit(0);
 		}
-		listfiles ();
-		sendfiles ();
+		listfiles();
+		send_files();
 	}
-	srvfinishup (starttime);
-	if (collname)  free (collname);
-	if (basedir)  free (basedir);
-	if (prefix)  free (prefix);
-	if (release)  free (release);
-	if (rcs_branch)  free (rcs_branch);
+	srvfinishup(starttime);
+	if (collname)
+		free(collname);
+	if (basedir)
+		free(basedir);
+	if (prefix)
+		free(prefix);
+	if (release)
+		free(release);
+	if (rcs_branch)
+		free(rcs_branch);
 #ifdef CVS
-	if (cvs_root)  free (cvs_root);
+	if (cvs_root)
+		free(cvs_root);
 #endif
 	if (goawayreason) {
 		if (donereason == goawayreason)
 			donereason = NULL;
-		free (goawayreason);
+		free(goawayreason);
 	}
-	if (donereason)  free (donereason);
-	if (lockfd >= 0)  (void) close (lockfd);
-	endpwent ();
-	(void) endgrent ();
+	if (donereason)
+		free(donereason);
+	if (lockfd >= 0)
+		(void) close(lockfd);
+	endpwent();
+	(void) endgrent();
 #if	CMUCS
-	endacent ();
-#endif	/* CMUCS */
-	Hfree (uidH);
-	Hfree (gidH);
-	Hfree (inodeH);
+	endacent();
+#endif				/* CMUCS */
+	Hfree(uidH);
+	Hfree(gidH);
+	Hfree(inodeH);
 }
-
 /*****************************************
  ***    S I G N   O N   C L I E N T    ***
  *****************************************/
 
 void
-srvsignon ()
+srvsignon(void)
 {
-	register int x;
+	int x;
 
 	xpatch = FALSE;
-	x = msgsignon ();
-	if (x != SCMOK)  goaway ("Error reading signon request from client");
-	x = msgsignonack ();
-	if (x != SCMOK)  goaway ("Error sending signon reply to client");
-	free (scmver);
+	x = msgsignon();
+	if (x != SCMOK)
+		goaway("Error reading signon request from client");
+	x = msgsignonack();
+	if (x != SCMOK)
+		goaway("Error sending signon reply to client");
+	free(scmver);
 	scmver = NULL;
 }
-
 /*****************************************************************
  ***    E X C H A N G E   S E T U P   I N F O R M A T I O N    ***
  *****************************************************************/
 
 void
-srvsetup ()
+srvsetup(void)
 {
-	register int x;
-	char *p,*q;
+	int x;
+	char *p, *q;
 	char buf[STRINGLENGTH];
-	register FILE *f;
+	FILE *f;
 	struct stat sbuf;
-	register TREELIST *tl;
+	TREELIST *tl;
 
 	if (protver > 7) {
 		cancompress = TRUE;
 	}
-	x = msgsetup ();
-	if (x != SCMOK)  goaway ("Error reading setup request from client");
+	x = msgsetup();
+	if (x != SCMOK)
+		goaway("Error reading setup request from client");
 	if (protver < 4) {
 		setupack = FSETUPOLD;
-		(void) msgsetupack ();
-		if (protver >= 6)  longjmp (sjbuf,TRUE);
-		goaway ("Sup client using obsolete version of protocol");
+		(void) msgsetupack();
+		if (protver >= 6)
+			longjmp(sjbuf, TRUE);
+		goaway("Sup client using obsolete version of protocol");
 	}
 	if (xpatch) {
-		register struct passwd *pw;
+		struct passwd *pw;
 
-		if ((pw = getpwnam (xuser)) == NULL) {
+		if ((pw = getpwnam(xuser)) == NULL) {
 			setupack = FSETUPSAME;
-			(void) msgsetupack ();
-			if (protver >= 6)  longjmp (sjbuf,TRUE);
-			goaway ("User `%s' not found", xuser);
+			(void) msgsetupack();
+			if (protver >= 6)
+				longjmp(sjbuf, TRUE);
+			goaway("User `%s' not found", xuser);
 		}
-		(void) free (xuser);
-		xuser = salloc (pw->pw_dir);
+		(void) free(xuser);
+		xuser = estrdup(pw->pw_dir);
 
 		/* check crosspatch host access file */
 		cryptkey = NULL;
-		(void) sprintf (buf,FILEXPATCH,xuser);
+		(void) sprintf(buf, FILEXPATCH, xuser);
 
 		/* Turn off link following */
 		if (link_nofollow(1) != -1) {
 			int hostok = FALSE;
 			/* get stat info before open */
 			if (stat(buf, &sbuf) == -1)
-				(void) bzero((char *)&sbuf, sizeof(sbuf));
+				(void) bzero(&sbuf, sizeof(sbuf));
 
-			if ((f = fopen (buf,"r")) != NULL) {
+			if ((f = fopen(buf, "r")) != NULL) {
 				struct stat fsbuf;
 
-				while ((p = fgets (buf,STRINGLENGTH,f)) != NULL) {
-					q = index (p,'\n');
-					if (q)  *q = 0;
-					if (index ("#;:",*p))  continue;
-					q = nxtarg (&p," \t");
-					if (*p == '\0')  continue;
-					if (!matchhost(q)) continue;
+				while ((p = fgets(buf, STRINGLENGTH, f)) != NULL) {
+					q = index(p, '\n');
+					if (q)
+						*q = 0;
+					if (index("#;:", *p))
+						continue;
+					q = nxtarg(&p, " \t");
+					if (*p == '\0')
+						continue;
+					if (!matchhost(q))
+						continue;
 
-					cryptkey = salloc (p);
+					cryptkey = estrdup(p);
 					hostok = TRUE;
 					if (local_file(fileno(f), &fsbuf) > 0
 					    && stat_info_ok(&sbuf, &fsbuf)) {
@@ -832,99 +849,107 @@ srvsetup ()
 					}
 					break;
 				}
-				(void) fclose (f);
+				(void) fclose(f);
 			}
-
 			/* Restore link following */
 			if (link_nofollow(0) == -1)
-				goaway ("Restore link following");
+				goaway("Restore link following");
 
 			if (!hostok) {
 				setupack = FSETUPHOST;
-				(void) msgsetupack ();
-				if (protver >= 6)  longjmp (sjbuf,TRUE);
-				goaway ("Host not on access list");
+				(void) msgsetupack();
+				if (protver >= 6)
+					longjmp(sjbuf, TRUE);
+				goaway("Host not on access list");
 			}
 		}
 		setupack = FSETUPOK;
-		x = msgsetupack ();
+		x = msgsetupack();
 		if (x != SCMOK)
-			goaway ("Error sending setup reply to client");
+			goaway("Error sending setup reply to client");
 		return;
 	}
 #ifdef RCS
-        if (candorcs && release != NULL &&
-            (strncmp(release, "RCS.", 4) == 0)) {
-                rcs_branch = salloc(&release[4]);
-                free(release);
-                release = salloc("RCS");
-                dorcs = TRUE;
-        }
+	if (candorcs && release != NULL &&
+	    (strncmp(release, "RCS.", 4) == 0)) {
+		rcs_branch = estrdup(&release[4]);
+		free(release);
+		release = estrdup("RCS");
+		dorcs = TRUE;
+	}
 #endif
 	if (release == NULL)
-		release = salloc (DEFRELEASE);
+		release = estrdup(DEFRELEASE);
 	if (basedir == NULL || *basedir == '\0') {
 		basedir = NULL;
-		(void) sprintf (buf,FILEDIRS,DEFDIR);
-		f = fopen (buf,"r");
+		(void) sprintf(buf, FILEDIRS, DEFDIR);
+		f = fopen(buf, "r");
 		if (f) {
-			while ((p = fgets (buf,STRINGLENGTH,f)) != NULL) {
-				q = index (p,'\n');
-				if (q)  *q = 0;
-				if (index ("#;:",*p))  continue;
-				q = nxtarg (&p," \t=");
-				if (strcmp(q,collname) == 0) {
-					basedir = skipover(p," \t=");
-					basedir = salloc (basedir);
+			while ((p = fgets(buf, STRINGLENGTH, f)) != NULL) {
+				q = index(p, '\n');
+				if (q)
+					*q = 0;
+				if (index("#;:", *p))
+					continue;
+				q = nxtarg(&p, " \t=");
+				if (strcmp(q, collname) == 0) {
+					basedir = skipover(p, " \t=");
+					basedir = estrdup(basedir);
 					break;
 				}
 			}
-			(void) fclose (f);
+			(void) fclose(f);
 		}
 		if (basedir == NULL) {
-			(void) sprintf (buf,FILEBASEDEFAULT,collname);
-			basedir = salloc(buf);
+			(void) sprintf(buf, FILEBASEDEFAULT, collname);
+			basedir = estrdup(buf);
 		}
 	}
-	if (chdir (basedir) < 0)
-		goaway ("Can't chdir to base directory %s",basedir);
-	(void) sprintf (buf,FILEPREFIX,collname);
-	f = fopen (buf,"r");
+	if (chdir(basedir) < 0)
+		goaway("Can't chdir to base directory %s", basedir);
+	(void) sprintf(buf, FILEPREFIX, collname);
+	f = fopen(buf, "r");
 	if (f) {
-		while ((p = fgets (buf,STRINGLENGTH,f)) != NULL) {
-			q = index (p,'\n');
-			if (q)  *q = 0;
-			if (index ("#;:",*p))  continue;
-			prefix = salloc(p);
-			if (chdir (prefix) < 0)
-				goaway ("Can't chdir to %s from base directory %s",
-					prefix,basedir);
+		while ((p = fgets(buf, STRINGLENGTH, f)) != NULL) {
+			q = index(p, '\n');
+			if (q)
+				*q = 0;
+			if (index("#;:", *p))
+				continue;
+			prefix = estrdup(p);
+			if (chdir(prefix) < 0)
+				goaway("Can't chdir to %s from base directory %s",
+				    prefix, basedir);
 			break;
 		}
-		(void) fclose (f);
+		(void) fclose(f);
 	}
-	x = stat (".",&sbuf);
-	if (prefix)  (void) chdir (basedir);
+	x = stat(".", &sbuf);
+	if (prefix)
+		(void) chdir(basedir);
 	if (x < 0)
-		goaway ("Can't stat base/prefix directory");
+		goaway("Can't stat base/prefix directory");
 	if (nchildren >= maxchildren) {
 		setupack = FSETUPBUSY;
-		(void) msgsetupack ();
-		if (protver >= 6)  longjmp (sjbuf,TRUE);
-		goaway ("Sup client told to try again later");
+		(void) msgsetupack();
+		if (protver >= 6)
+			longjmp(sjbuf, TRUE);
+		goaway("Sup client told to try again later");
 	}
 	if (sbuf.st_dev == basedev && sbuf.st_ino == baseino && samehost()) {
 		setupack = FSETUPSAME;
-		(void) msgsetupack ();
-		if (protver >= 6)  longjmp (sjbuf,TRUE);
-		goaway ("Attempt to upgrade to same directory on same host");
+		(void) msgsetupack();
+		if (protver >= 6)
+			longjmp(sjbuf, TRUE);
+		goaway("Attempt to upgrade to same directory on same host");
 	}
 	/* obtain release information */
-	if (!getrelease (release)) {
+	if (!getrelease(release)) {
 		setupack = FSETUPRELEASE;
-		(void) msgsetupack ();
-		if (protver >= 6)  longjmp (sjbuf,TRUE);
-		goaway ("Invalid release information");
+		(void) msgsetupack();
+		if (protver >= 6)
+			longjmp(sjbuf, TRUE);
+		goaway("Invalid release information");
 	}
 	/* check host access file */
 	cryptkey = NULL;
@@ -932,134 +957,142 @@ srvsetup ()
 		char *h;
 		if ((h = tl->TLhost) == NULL)
 			h = FILEHOSTDEF;
-		(void) sprintf (buf,FILEHOST,collname,h);
-		f = fopen (buf,"r");
+		(void) sprintf(buf, FILEHOST, collname, h);
+		f = fopen(buf, "r");
 		if (f) {
 			int hostok = FALSE;
-			while ((p = fgets (buf,STRINGLENGTH,f)) != NULL) {
+			while ((p = fgets(buf, STRINGLENGTH, f)) != NULL) {
 				int not;
-				q = index (p,'\n');
-				if (q)  *q = 0;
-				if (index ("#;:",*p))  continue;
-				q = nxtarg (&p," \t");
+				q = index(p, '\n');
+				if (q)
+					*q = 0;
+				if (index("#;:", *p))
+					continue;
+				q = nxtarg(&p, " \t");
 				if ((not = (*q == '!')) && *++q == '\0')
-					q = nxtarg (&p," \t");
+					q = nxtarg(&p, " \t");
 				hostok = (not == (matchhost(q) == 0));
 				if (hostok) {
-					while ((*p == ' ') || (*p == '\t')) p++;
-					if (*p)  cryptkey = salloc (p);
+					while ((*p == ' ') || (*p == '\t'))
+						p++;
+					if (*p)
+						cryptkey = estrdup(p);
 					break;
 				}
 			}
-			(void) fclose (f);
+			(void) fclose(f);
 			if (!hostok) {
 				setupack = FSETUPHOST;
-				(void) msgsetupack ();
-				if (protver >= 6)  longjmp (sjbuf,TRUE);
-				goaway ("Host not on access list for %s",
-					collname);
+				(void) msgsetupack();
+				if (protver >= 6)
+					longjmp(sjbuf, TRUE);
+				goaway("Host not on access list for %s",
+				    collname);
 			}
 		}
 	}
 	/* try to lock collection */
-	(void) sprintf (buf,FILELOCK,collname);
+	(void) sprintf(buf, FILELOCK, collname);
 #ifdef LOCK_SH
-	x = open (buf,O_RDONLY,0);
+	x = open(buf, O_RDONLY, 0);
 	if (x >= 0) {
-		if (flock (x,(LOCK_SH|LOCK_NB)) < 0) {
-			(void) close (x);
+		if (flock(x, (LOCK_SH | LOCK_NB)) < 0) {
+			(void) close(x);
 			if (errno != EWOULDBLOCK)
-				goaway ("Can't lock collection %s",collname);
+				goaway("Can't lock collection %s", collname);
 			setupack = FSETUPBUSY;
-			(void) msgsetupack ();
-			if (protver >= 6)  longjmp (sjbuf,TRUE);
-			goaway ("Sup client told to wait for lock");
+			(void) msgsetupack();
+			if (protver >= 6)
+				longjmp(sjbuf, TRUE);
+			goaway("Sup client told to wait for lock");
 		}
 		lockfd = x;
 	}
 #endif
 	setupack = FSETUPOK;
-	x = msgsetupack ();
-	if (x != SCMOK)  goaway ("Error sending setup reply to client");
+	x = msgsetupack();
+	if (x != SCMOK)
+		goaway("Error sending setup reply to client");
 }
 
 void
 /** Test data encryption **/
-docrypt ()
+docrypt(void)
 {
-	register int x;
-	char *p,*q;
+	int x;
+	char *p, *q;
 	char buf[STRINGLENGTH];
-	register FILE *f;
+	FILE *f;
 	struct stat sbuf;
 
 	if (!xpatch) {
-		(void) sprintf (buf,FILECRYPT,collname);
+		(void) sprintf(buf, FILECRYPT, collname);
 
 		/* Turn off link following */
 		if (link_nofollow(1) != -1) {
 			/* get stat info before open */
 			if (stat(buf, &sbuf) == -1)
-				(void) bzero((char *)&sbuf, sizeof(sbuf));
+				(void) bzero(&sbuf, sizeof(sbuf));
 
-			if ((f = fopen (buf,"r")) != NULL) {
+			if ((f = fopen(buf, "r")) != NULL) {
 				struct stat fsbuf;
 
 				if (cryptkey == NULL &&
-				    (p = fgets (buf,STRINGLENGTH,f))) {
-					if ((q = index (p,'\n')) != NULL)
+				    (p = fgets(buf, STRINGLENGTH, f))) {
+					if ((q = index(p, '\n')) != NULL)
 						*q = '\0';
-					if (*p)  cryptkey = salloc (buf);
+					if (*p)
+						cryptkey = estrdup(buf);
 				}
 				if (local_file(fileno(f), &fsbuf) > 0
 				    && stat_info_ok(&sbuf, &fsbuf)) {
 					runas_uid = sbuf.st_uid;
 					runas_gid = sbuf.st_gid;
 				}
-				(void) fclose (f);
+				(void) fclose(f);
 			}
 			/* Restore link following */
 			if (link_nofollow(0) == -1)
-				goaway ("Restore link following");
+				goaway("Restore link following");
 		}
 	}
-	if ( netcrypt (cryptkey) != SCMOK )
-		goaway ("Runing non-crypting supfilesrv");
-	x = msgcrypt ();
+	if (netcrypt(cryptkey) != SCMOK)
+		goaway("Runing non-crypting supfilesrv");
+	x = msgcrypt();
 	if (x != SCMOK)
-		goaway ("Error reading encryption test request from client");
-	(void) netcrypt ((char *)NULL);
-	if (strcmp(crypttest,CRYPTTEST) != 0)
-		goaway ("Client not encrypting data properly");
-	free (crypttest);
+		goaway("Error reading encryption test request from client");
+	(void) netcrypt((char *) NULL);
+	if (strcmp(crypttest, CRYPTTEST) != 0)
+		goaway("Client not encrypting data properly");
+	free(crypttest);
 	crypttest = NULL;
-	x = msgcryptok ();
+	x = msgcryptok();
 	if (x != SCMOK)
-		goaway ("Error sending encryption test reply to client");
+		goaway("Error sending encryption test reply to client");
 }
-
 /***************************************************************
  ***    C O N N E C T   T O   P R O P E R   A C C O U N T    ***
  ***************************************************************/
 
 void
-srvlogin ()
+srvlogin(void)
 {
-	register int x,fileuid = -1,filegid = -1;
+	int x, fileuid = -1, filegid = -1;
 
-	(void) netcrypt (PSWDCRYPT);	/* encrypt acct name and password */
-	x = msglogin ();
-	(void) netcrypt ((char *)NULL); /* turn off encryption */
-	if (x != SCMOK)  goaway ("Error reading login request from client");
-	if ( logcrypt ) {
-	    if (strcmp(logcrypt,CRYPTTEST) != 0) {
-		logack = FLOGNG;
-		logerror = "Improper login encryption";
-		(void) msglogack ();
-		goaway ("Client not encrypting login information properly");
-	    }
-	    free (logcrypt);
-	    logcrypt = NULL;
+	(void) netcrypt(PSWDCRYPT);	/* encrypt acct name and password */
+	x = msglogin();
+	(void) netcrypt((char *) NULL);	/* turn off encryption */
+	if (x != SCMOK)
+		goaway("Error reading login request from client");
+	if (logcrypt) {
+		if (strcmp(logcrypt, CRYPTTEST) != 0) {
+			logack = FLOGNG;
+			logerror = "Improper login encryption";
+			(void) msglogack();
+			goaway("Client not encrypting login information properly");
+		}
+		free(logcrypt);
+		logcrypt = NULL;
 	}
 	if (loguser == NULL) {
 		if (cryptkey) {
@@ -1068,190 +1101,197 @@ srvlogin ()
 				filegid = runas_gid;
 				loguser = NULL;
 			} else
-				loguser = salloc (DEFUSER);
+				loguser = estrdup(DEFUSER);
 		} else
-			loguser = salloc (DEFUSER);
+			loguser = estrdup(DEFUSER);
 	}
-	if ((logerror = changeuid (loguser,logpswd,fileuid,filegid)) != NULL) {
+	if ((logerror = changeuid(loguser, logpswd, fileuid, filegid)) != NULL) {
 		logack = FLOGNG;
-		(void) msglogack ();
-		if (protver >= 6)  longjmp (sjbuf,TRUE);
-		goaway ("Client denied login access");
+		(void) msglogack();
+		if (protver >= 6)
+			longjmp(sjbuf, TRUE);
+		goaway("Client denied login access");
 	}
-	if (loguser)  free (loguser);
-	if (logpswd)  free (logpswd);
+	if (loguser)
+		free(loguser);
+	if (logpswd)
+		free(logpswd);
 	logack = FLOGOK;
-	x = msglogack ();
-	if (x != SCMOK)  goaway ("Error sending login reply to client");
-	if (!xpatch)  /* restore desired encryption */
-		if (netcrypt (cryptkey) != SCMOK)
+	x = msglogack();
+	if (x != SCMOK)
+		goaway("Error sending login reply to client");
+	if (!xpatch)		/* restore desired encryption */
+		if (netcrypt(cryptkey) != SCMOK)
 			goaway("Running non-crypting supfilesrv");
-	free (cryptkey);
+	free(cryptkey);
 	cryptkey = NULL;
 }
-
 /*****************************************
  ***    M A K E   N A M E   L I S T    ***
  *****************************************/
 
 void
-listfiles ()
+listfiles(void)
 {
-	register int x;
+	int x;
 
 	refuseT = NULL;
-	x = msgrefuse ();
-	if (x != SCMOK)  goaway ("Error reading refuse list from client");
-	getscanlists ();
-	Tfree (&refuseT);
-	x = msglist ();
-	if (x != SCMOK)  goaway ("Error sending file list to client");
-	Tfree (&listT);
+	x = msgrefuse();
+	if (x != SCMOK)
+		goaway("Error reading refuse list from client");
+	getscanlists();
+	Tfree(&refuseT);
+	x = msglist();
+	if (x != SCMOK)
+		goaway("Error sending file list to client");
+	Tfree(&listT);
 	listT = NULL;
 	needT = NULL;
-	x = msgneed ();
+	x = msgneed();
 	if (x != SCMOK)
-		goaway ("Error reading needed files list from client");
+		goaway("Error reading needed files list from client");
 	denyT = NULL;
-	(void) Tprocess (needT,denyone, NULL);
-	Tfree (&needT);
-	x = msgdeny ();
-	if (x != SCMOK)  goaway ("Error sending denied files list to client");
-	Tfree (&denyT);
+	(void) Tprocess(needT, denyone, NULL);
+	Tfree(&needT);
+	x = msgdeny();
+	if (x != SCMOK)
+		goaway("Error sending denied files list to client");
+	Tfree(&denyT);
 }
 
 
 int
-denyone (t, v)
-register TREE *t;
-void *v;
+denyone(TREE * t, void *v __unused)
 {
-	register TREELIST *tl;
-	register char *name = t->Tname;
-	register int update = (t->Tflags&FUPDATE) != 0;
+	TREELIST *tl;
+	char *name = t->Tname;
+	int update = (t->Tflags & FUPDATE) != 0;
 	struct stat sbuf;
-	register TREE *tlink;
+	TREE *tlink;
 	char slinkname[STRINGLENGTH];
-	register int x;
+	int x;
 
 	for (tl = listTL; tl != NULL; tl = tl->TLnext)
-		if ((t = Tsearch (tl->TLtree,name)) != NULL)
+		if ((t = Tsearch(tl->TLtree, name)) != NULL)
 			break;
 	if (t == NULL) {
-		(void) Tinsert (&denyT,name,FALSE);
+		(void) Tinsert(&denyT, name, FALSE);
 		return (SCMOK);
 	}
-	cdprefix (tl->TLprefix);
+	cdprefix(tl->TLprefix);
 	if (S_ISLNK(t->Tmode))
-		x = lstat(name,&sbuf);
+		x = lstat(name, &sbuf);
 	else
-		x = stat(name,&sbuf);
-	if (x < 0 || (sbuf.st_mode&S_IFMT) != (t->Tmode&S_IFMT)) {
-		(void) Tinsert (&denyT,name,FALSE);
+		x = stat(name, &sbuf);
+	if (x < 0 || (sbuf.st_mode & S_IFMT) != (t->Tmode & S_IFMT)) {
+		(void) Tinsert(&denyT, name, FALSE);
 		return (SCMOK);
 	}
-	switch (t->Tmode&S_IFMT) {
+	switch (t->Tmode & S_IFMT) {
 	case S_IFLNK:
-		if ((x = readlink (name,slinkname,STRINGLENGTH)) <= 0) {
-			(void) Tinsert (&denyT,name,FALSE);
+		if ((x = readlink(name, slinkname, STRINGLENGTH - 1)) <= 0) {
+			(void) Tinsert(&denyT, name, FALSE);
 			return (SCMOK);
 		}
 		slinkname[x] = '\0';
-		(void) Tinsert (&t->Tlink,slinkname,FALSE);
+		(void) Tinsert(&t->Tlink, slinkname, FALSE);
 		break;
 	case S_IFREG:
 		if (sbuf.st_nlink > 1 &&
-		    (tlink = linkcheck (t,(int)sbuf.st_dev,(int)sbuf.st_ino)))
-		{
-			(void) Tinsert (&tlink->Tlink,name,FALSE);
+		    (tlink = linkcheck(t, (int) sbuf.st_dev, (int) sbuf.st_ino))) {
+			(void) Tinsert(&tlink->Tlink, name, FALSE);
 			return (SCMOK);
 		}
-		if (update)  t->Tflags |= FUPDATE;
+		if (update)
+			t->Tflags |= FUPDATE;
 	case S_IFDIR:
 		t->Tuid = sbuf.st_uid;
 		t->Tgid = sbuf.st_gid;
 		break;
 	default:
-		(void) Tinsert (&denyT,name,FALSE);
+		(void) Tinsert(&denyT, name, FALSE);
 		return (SCMOK);
 	}
 	t->Tflags |= FNEEDED;
 	return (SCMOK);
 }
-
 /*********************************
  ***    S E N D   F I L E S    ***
  *********************************/
 
 void
-sendfiles ()
+send_files(void)
 {
-	register TREELIST *tl;
-	register int x;
+	TREELIST *tl;
+	int x;
 
 	/* Does the protocol support compression */
 	if (cancompress) {
 		/* Check for compression on sending files */
 		x = msgcompress();
-		if ( x != SCMOK)
-			goaway ("Error sending compression check to server");
+		if (x != SCMOK)
+			goaway("Error sending compression check to server");
 	}
 	/* send all files */
 	for (tl = listTL; tl != NULL; tl = tl->TLnext) {
-		cdprefix (tl->TLprefix);
+		cdprefix(tl->TLprefix);
 #ifdef CVS
-                if (candorcs) {
-                        cvs_root = getcwd(NULL, 256);
-                        if (access("CVSROOT", F_OK) < 0)
-                                dorcs = FALSE;
-                        else {
-                                loginfo("is a CVSROOT \"%s\"\n", cvs_root);
-                                dorcs = TRUE;
-                        }
-                }
+		if (candorcs) {
+			cvs_root = getcwd(NULL, 256);
+			if (access("CVSROOT", F_OK) < 0)
+				dorcs = FALSE;
+			else {
+				loginfo("is a CVSROOT \"%s\"\n", cvs_root);
+				dorcs = TRUE;
+			}
+		}
 #endif
-		(void) Tprocess (tl->TLtree,sendone, NULL);
+		(void) Tprocess(tl->TLtree, send_one, NULL);
 	}
 	/* send directories in reverse order */
 	for (tl = listTL; tl != NULL; tl = tl->TLnext) {
-		cdprefix (tl->TLprefix);
-		(void) Trprocess (tl->TLtree,senddir, NULL);
+		cdprefix(tl->TLprefix);
+		(void) Trprocess(tl->TLtree, send_dir, NULL);
 	}
-	x = msgsend ();
+	x = msgsend();
 	if (x != SCMOK)
-		goaway ("Error reading receive file request from client");
+		goaway("Error reading receive file request from client");
 	upgradeT = NULL;
-	x = msgrecv (sendfile,0);
+	x = msgrecv(send_file, 0);
 	if (x != SCMOK)
-		goaway ("Error sending file to client");
+		goaway("Error sending file to client");
 }
 
 int
-sendone (t, v)
-TREE *t;
-void *v;
+send_one(TREE * t, void *v __unused)
 {
-	register int x,fd;
+	int x, fd;
 	char temp_file[STRINGLENGTH];
-	char *av[50];	/* More than enough */
+	char *av[50];		/* More than enough */
 
-	if ((t->Tflags&FNEEDED) == 0)	/* only send needed files */
+	if ((t->Tflags & FNEEDED) == 0)	/* only send needed files */
 		return (SCMOK);
-	if (S_ISDIR(t->Tmode)) /* send no directories this pass */
+	if (S_ISDIR(t->Tmode))	/* send no directories this pass */
 		return (SCMOK);
-	x = msgsend ();
-	if (x != SCMOK)  goaway ("Error reading receive file request from client");
-	upgradeT = t;			/* upgrade file pointer */
-	fd = -1;			/* no open file */
+	x = msgsend();
+	if (x != SCMOK)
+		goaway("Error reading receive file request from client");
+	upgradeT = t;		/* upgrade file pointer */
+	fd = -1;		/* no open file */
 	if (S_ISREG(t->Tmode)) {
-		if (!listonly && (t->Tflags&FUPDATE) == 0) {
+		if (!listonly && (t->Tflags & FUPDATE) == 0) {
 #ifdef RCS
-                        if (dorcs) {
-                                char rcs_release[STRINGLENGTH];
+			if (dorcs) {
+				char rcs_release[STRINGLENGTH];
 
 				tmpnam(rcs_file);
-                                if (strcmp(&t->Tname[strlen(t->Tname)-2], ",v") == 0) {
-                                        t->Tname[strlen(t->Tname)-2] = '\0';
+				fd = open(rcs_file, (O_WRONLY | O_CREAT | O_TRUNC | O_EXCL), 0600);
+				if (fd < 0)
+					goaway("We died trying to create temp file");
+				close(fd);
+				fd = -1;
+				if (strcmp(&t->Tname[strlen(t->Tname) - 2], ",v") == 0) {
+					t->Tname[strlen(t->Tname) - 2] = '\0';
 					ac = 0;
 #ifdef CVS
 					av[ac++] = "cvs";
@@ -1272,239 +1312,236 @@ void *v;
 					av[ac++] = "-p";
 					if (rcs_branch != NULL) {
 						sprintf(rcs_release, "-r%s",
-							rcs_branch);
+						    rcs_branch);
 						av[ac++] = rcs_release;
 					}
 #endif
 					av[ac++] = t->Tname;
 					av[ac++] = NULL;
 					status = runio(av, NULL, rcs_file,
-						       "/dev/null");
-                                        /*loginfo("using rcs mode \n");*/
-                                        if (status < 0 || WEXITSTATUS(status)) {
-                                                /* Just in case */
-                                                unlink(rcs_file);
-                                                if (status < 0) {
-                                                        goaway ("We died trying to run cvs or rcs on %s", rcs_file);
-                                                        t->Tmode = 0;
-                                                }
-                                                else {
+					    "/dev/null");
+					/* loginfo("using rcs mode \n"); */
+					if (status < 0 || WEXITSTATUS(status)) {
+						/* Just in case */
+						unlink(rcs_file);
+						if (status < 0) {
+							goaway("We died trying to run cvs or rcs on %s", rcs_file);
+							t->Tmode = 0;
+						} else {
 #if 0
-                                                        logerr("rcs command failed = %d\n",
-                                                               WEXITSTATUS(status));
+							logerr("rcs command failed = %d\n",
+							    WEXITSTATUS(status));
 #endif
-                                                        t->Tflags |= FUPDATE;
-                                                }
-                                        }
-                                        else if (docompress) {
-                                                tmpnam(temp_file);
+							t->Tflags |= FUPDATE;
+						}
+					} else if (docompress) {
+						tmpnam(temp_file);
 						av[0] = "gzip";
 						av[1] = "-cf";
 						av[2] = NULL;
 						if (runio(av, rcs_file, temp_file, NULL) != 0) {
-                                                        /* Just in case */
-                                                        unlink(temp_file);
-                                                        unlink(rcs_file);
-                                                        goaway ("We died trying to gzip %s", rcs_file);
-                                                        t->Tmode = 0;
-                                                }
-                                                fd = open (temp_file,O_RDONLY,0);
-                                        }
-                                        else
-                                                fd = open (rcs_file,O_RDONLY,0);
-                                }
-                        }
+							/* Just in case */
+							unlink(temp_file);
+							unlink(rcs_file);
+							goaway("We died trying to gzip %s", rcs_file);
+							t->Tmode = 0;
+						}
+						fd = open(temp_file, O_RDONLY, 0);
+					} else
+						fd = open(rcs_file, O_RDONLY, 0);
+				}
+			}
 #endif
-                        if (fd == -1) {
-                                if (docompress) {
-                                        tmpnam(temp_file);
+			if (fd == -1) {
+				if (docompress) {
+					snprintf(temp_file, sizeof(temp_file),
+					     "%s/supfilesrv.XXXXXX", P_tmpdir);
+					fd = mkstemp(temp_file);
+					if (fd < 0)
+						goaway("We died trying to create temp file");
+					close(fd);
+					fd = -1;
 					av[0] = "gzip";
 					av[1] = "-cf";
 					av[2] = NULL;
 					if (runio(av, t->Tname, temp_file, NULL) != 0) {
-                                                /* Just in case */
-                                                unlink(temp_file);
-                                                goaway ("We died trying to gzip %s", t->Tname);
-                                                t->Tmode = 0;
-                                        }
-                                        fd = open (temp_file,O_RDONLY,0);
-                                }
-                                else
-                                        fd = open (t->Tname,O_RDONLY,0);
-                        }
-			if (fd < 0 && (t->Tflags&FUPDATE) == 0)  t->Tmode = 0;
+						/* Just in case */
+						unlink(temp_file);
+						goaway("We died trying to gzip %s", t->Tname);
+						t->Tmode = 0;
+					}
+					fd = open(temp_file, O_RDONLY, 0);
+				} else
+					fd = open(t->Tname, O_RDONLY, 0);
+			}
+			if (fd < 0 && (t->Tflags & FUPDATE) == 0)
+				t->Tmode = 0;
 		}
 		if (t->Tmode) {
-			t->Tuser = salloc (uconvert (t->Tuid));
-			t->Tgroup = salloc (gconvert (t->Tgid));
+			t->Tuser = estrdup(uconvert(t->Tuid));
+			t->Tgroup = estrdup(gconvert(t->Tgid));
 		}
 	}
-	x = msgrecv (sendfile,fd);
+	x = msgrecv(send_file, fd);
 	if (docompress)
 		unlink(temp_file);
 #ifdef RCS
 	if (dorcs)
 		unlink(rcs_file);
 #endif
-	if (x != SCMOK)  goaway ("Error sending file %s to client", t->Tname);
+	if (x != SCMOK)
+		goaway("Error sending file %s to client", t->Tname);
 	return (SCMOK);
 }
 
 int
-senddir (t, v)
-TREE *t;
-void *v;
+send_dir(TREE * t, void *v __unused)
 {
-	register int x;
+	int x;
 
-	if ((t->Tflags&FNEEDED) == 0)	/* only send needed files */
+	if ((t->Tflags & FNEEDED) == 0)	/* only send needed files */
 		return (SCMOK);
-	if (!S_ISDIR(t->Tmode)) /* send only directories this pass */
+	if (!S_ISDIR(t->Tmode))	/* send only directories this pass */
 		return (SCMOK);
-	x = msgsend ();
-	if (x != SCMOK)  goaway ("Error reading receive file request from client");
-	upgradeT = t;			/* upgrade file pointer */
-	t->Tuser = salloc (uconvert (t->Tuid));
-	t->Tgroup = salloc (gconvert (t->Tgid));
-	x = msgrecv (sendfile,0);
-	if (x != SCMOK)  goaway ("Error sending file %s to client", t->Tname);
+	x = msgsend();
+	if (x != SCMOK)
+		goaway("Error reading receive file request from client");
+	upgradeT = t;		/* upgrade file pointer */
+	t->Tuser = estrdup(uconvert(t->Tuid));
+	t->Tgroup = estrdup(gconvert(t->Tgid));
+	x = msgrecv(send_file, 0);
+	if (x != SCMOK)
+		goaway("Error sending file %s to client", t->Tname);
 	return (SCMOK);
 }
 
 int
-sendfile(t, ap)
-	TREE *t;
-	va_list ap;
+send_file(TREE * t, va_list ap)
 {
-	register int x, fd;
+	int x, fd;
 
-	fd = va_arg(ap,int);
-	if (!S_ISREG(t->Tmode) || listonly || (t->Tflags&FUPDATE))
+	fd = va_arg(ap, int);
+	if (!S_ISREG(t->Tmode) || listonly || (t->Tflags & FUPDATE))
 		return (SCMOK);
-	x = writefile (fd);
-	if (x != SCMOK)  goaway ("Error sending file %s to client", t->Tname);
-        (void) close (fd);
+	x = writefile(fd);
+	if (x != SCMOK)
+		goaway("Error sending file %s to client", t->Tname);
+	(void) close(fd);
 	return (SCMOK);
 }
-
 /*****************************************
  ***    E N D   C O N N E C T I O N    ***
  *****************************************/
 
 void
-srvfinishup (starttime)
-time_t starttime;
+srvfinishup(time_t starttime)
 {
-	register int x = SCMOK;
+	int x = SCMOK;
 	char tmpbuf[BUFSIZ], *p, lognam[STRINGLENGTH];
 	int logfd;
 	time_t finishtime;
 	char *releasename;
 
-	(void) netcrypt ((char *)NULL);
+	(void) netcrypt((char *) NULL);
 	if (protver < 6) {
 		if (goawayreason != NULL)
-			free (goawayreason);
-		goawayreason = (char *)NULL;
+			free(goawayreason);
+		goawayreason = (char *) NULL;
 		x = msggoaway();
 		doneack = FDONESUCCESS;
-		donereason = salloc ("Unknown");
-	} else if (goawayreason == (char *)NULL)
-		x = msgdone ();
+		donereason = estrdup("Unknown");
+	} else if (goawayreason == (char *) NULL)
+		x = msgdone();
 	else {
 		doneack = FDONEGOAWAY;
 		donereason = goawayreason;
 	}
 	if (x == SCMEOF || x == SCMERR) {
 		doneack = FDONEUSRERROR;
-		donereason = salloc ("Premature EOF on network");
+		donereason = estrdup("Premature EOF on network");
 	} else if (x != SCMOK) {
 		doneack = FDONESRVERROR;
-		donereason = salloc ("Unknown SCM code");
+		donereason = estrdup("Unknown SCM code");
 	}
 	if (doneack == FDONEDONTLOG)
 		return;
 	if (donereason == NULL)
-		donereason = salloc ("No reason");
+		donereason = estrdup("No reason");
 	if (doneack == FDONESRVERROR || doneack == FDONEUSRERROR)
-		logerr ("%s", donereason);
+		logerr("%s", donereason);
 	else if (doneack == FDONEGOAWAY)
-		logerr ("GOAWAY: %s",donereason);
+		logerr("GOAWAY: %s", donereason);
 	else if (doneack != FDONESUCCESS)
-		logerr ("Reason %d:  %s",doneack,donereason);
+		logerr("Reason %d:  %s", doneack, donereason);
 	goawayreason = donereason;
-	cdprefix ((char *)NULL);
+	cdprefix((char *) NULL);
 	if (collname == NULL) {
-		logerr ("NULL collection in svrfinishup");
+		logerr("NULL collection in svrfinishup");
 		return;
 	}
-	(void) sprintf (lognam,FILELOGFILE,collname);
-	if ((logfd = open(lognam,O_APPEND|O_WRONLY,0644)) < 0)
-		return; /* can not open file up...error */
-	finishtime = time ((time_t *)NULL);
+	(void) sprintf(lognam, FILELOGFILE, collname);
+	if ((logfd = open(lognam, O_APPEND | O_WRONLY, 0644)) < 0)
+		return;		/* can not open file up...error */
+	finishtime = time((time_t *) NULL);
 	p = tmpbuf;
-	(void) sprintf (p,"%s ",fmttime (lasttime));
+	(void) sprintf(p, "%s ", fmttime(lasttime));
 	p += strlen(p);
-	(void) sprintf (p,"%s ",fmttime (starttime));
+	(void) sprintf(p, "%s ", fmttime(starttime));
 	p += strlen(p);
-	(void) sprintf (p,"%s ",fmttime (finishtime));
+	(void) sprintf(p, "%s ", fmttime(finishtime));
 	p += strlen(p);
 	if ((releasename = release) == NULL)
 		releasename = "UNKNOWN";
-	(void) sprintf (p,"%s %s %d %s\n",remotehost(),releasename,
-		FDONESUCCESS-doneack,donereason);
+	(void) sprintf(p, "%s %s %d %s\n", remotehost(), releasename,
+	    FDONESUCCESS - doneack, donereason);
 	p += strlen(p);
 #if	MACH
 	/* if we are busy dont get stuck updating the disk if full */
-	if(setupack == FSETUPBUSY) {
-	    long l = FIOCNOSPC_ERROR;
-	    ioctl(logfd, FIOCNOSPC, &l);
+	if (setupack == FSETUPBUSY) {
+		long l = FIOCNOSPC_ERROR;
+		ioctl(logfd, FIOCNOSPC, &l);
 	}
-#endif	/* MACH */
-	(void) write(logfd,tmpbuf,(p - tmpbuf));
+#endif				/* MACH */
+	(void) write(logfd, tmpbuf, (p - tmpbuf));
 	(void) close(logfd);
 }
-
 /***************************************************
  ***    H A S H   T A B L E   R O U T I N E S    ***
  ***************************************************/
 
 void
-Hfree (table)
-HASH **table;
+Hfree(HASH ** table)
 {
-	register HASH *h;
-	register int i;
+	HASH *h;
+	int i;
 	for (i = 0; i < HASHSIZE; i++)
 		while ((h = table[i]) != NULL) {
 			table[i] = h->Hnext;
-			if (h->Hname)  free (h->Hname);
-			free ((char *)h);
+			if (h->Hname)
+				free(h->Hname);
+			free(h);
 		}
 }
 
-HASH *Hlookup (table,num1,num2)
-HASH **table;
-int num1,num2;
+HASH *
+Hlookup(HASH ** table, int num1, int num2)
 {
-	register HASH *h;
-	register int hno;
-	hno = HASHFUNC(num1,num2);
+	HASH *h;
+	int hno;
+	hno = HASHFUNC(num1, num2);
 	for (h = table[hno]; h && (h->Hnum1 != num1 || h->Hnum2 != num2); h = h->Hnext);
 	return (h);
 }
 
 void
-Hinsert (table,num1,num2,name,tree)
-HASH **table;
-int num1,num2;
-char *name;
-TREE *tree;
+Hinsert(HASH ** table, int num1, int num2, char *name, TREE * tree)
 {
-	register HASH *h;
-	register int hno;
-	hno = HASHFUNC(num1,num2);
-	h = (HASH *) malloc (sizeof(HASH));
+	HASH *h;
+	int hno;
+	hno = HASHFUNC(num1, num2);
+	h = (HASH *) malloc(sizeof(HASH));
+	if (h == NULL)
+		goaway("Cannot allocate memory");
 	h->Hnum1 = num1;
 	h->Hnum2 = num2;
 	h->Hname = name;
@@ -1512,148 +1549,155 @@ TREE *tree;
 	h->Hnext = table[hno];
 	table[hno] = h;
 }
-
 /*********************************************
  ***    U T I L I T Y   R O U T I N E S    ***
  *********************************************/
 
-TREE *linkcheck (t,d,i)
-TREE *t;
-int d,i;			/* inode # and device # */
+TREE *
+linkcheck(TREE * t, int d, int i)
+ /* inode # and device # */
 {
-	register HASH *h;
-	h = Hlookup (inodeH,i,d);
-	if (h)  return (h->Htree);
-	Hinsert (inodeH,i,d,(char *)NULL,t);
-	return ((TREE *)NULL);
+	HASH *h;
+	h = Hlookup(inodeH, i, d);
+	if (h)
+		return (h->Htree);
+	Hinsert(inodeH, i, d, (char *) NULL, t);
+	return ((TREE *) NULL);
 }
 
-char *uconvert (uid)
-int uid;
+char *
+uconvert(int uid)
 {
-	register struct passwd *pw;
-	register char *p;
-	register HASH *u;
-	u = Hlookup (uidH,uid,0);
-	if (u)  return (u->Hname);
-	pw = getpwuid (uid);
-	if (pw == NULL)  return ("");
-	p = salloc (pw->pw_name);
-	Hinsert (uidH,uid,0,p,(TREE*)NULL);
+	struct passwd *pw;
+	char *p;
+	HASH *u;
+	u = Hlookup(uidH, uid, 0);
+	if (u)
+		return (u->Hname);
+	pw = getpwuid(uid);
+	if (pw == NULL)
+		return ("");
+	p = estrdup(pw->pw_name);
+	Hinsert(uidH, uid, 0, p, (TREE *) NULL);
 	return (p);
 }
 
-char *gconvert (gid)
-int gid;
+char *
+gconvert(int gid)
 {
-	register struct group *gr;
-	register char *p;
-	register HASH *g;
-	g = Hlookup (gidH,gid,0);
-	if (g)  return (g->Hname);
-	gr = getgrgid (gid);
-	if (gr == NULL)  return ("");
-	p = salloc (gr->gr_name);
-	Hinsert (gidH,gid,0,p,(TREE *)NULL);
+	struct group *gr;
+	char *p;
+	HASH *g;
+	g = Hlookup(gidH, gid, 0);
+	if (g)
+		return (g->Hname);
+	gr = getgrgid(gid);
+	if (gr == NULL)
+		return ("");
+	p = estrdup(gr->gr_name);
+	Hinsert(gidH, gid, 0, p, (TREE *) NULL);
 	return (p);
 }
 
-char *changeuid (namep,passwordp,fileuid,filegid)
-char *namep,*passwordp;
-int fileuid,filegid;
+char *
+changeuid(char *namep, char *passwordp, int fileuid, int filegid)
 {
-	char *group,*account,*pswdp;
+	char *group, *account, *pswdp;
 	struct passwd *pwd;
 	struct group *grp;
 #if	CMUCS
 	struct account *acc;
 	struct ttyloc tlc;
-#endif	/* CMUCS */
-	register int status = ACCESS_CODE_OK;
+#endif				/* CMUCS */
+	int status = ACCESS_CODE_OK;
 	char nbuf[STRINGLENGTH];
 	static char errbuf[STRINGLENGTH];
 #if	CMUCS
 	int *grps;
-#endif	/* CMUCS */
+#endif				/* CMUCS */
 	char *p = NULL;
 
 	if (namep == NULL) {
-		pwd = getpwuid (fileuid);
+		pwd = getpwuid(fileuid);
 		if (pwd == NULL) {
-			(void) sprintf (errbuf,"Reason:  Unknown user id %d",
-				fileuid);
+			(void) sprintf(errbuf, "Reason:  Unknown user id %d",
+			    fileuid);
 			return (errbuf);
 		}
-		grp = getgrgid (filegid);
-		if (grp)  group = strcpy (nbuf,grp->gr_name);
-		else  group = NULL;
+		grp = getgrgid(filegid);
+		if (grp)
+			group = strcpy(nbuf, grp->gr_name);
+		else
+			group = NULL;
 		account = NULL;
 		pswdp = NULL;
 	} else {
-		(void) strcpy (nbuf,namep);
-		account = group = index (nbuf,',');
+		(void) strcpy(nbuf, namep);
+		account = group = index(nbuf, ',');
 		if (group != NULL) {
 			*group++ = '\0';
-			account = index (group,',');
+			account = index(group, ',');
 			if (account != NULL) {
 				*account++ = '\0';
-				if (*account == '\0')  account = NULL;
+				if (*account == '\0')
+					account = NULL;
 			}
-			if (*group == '\0')  group = NULL;
+			if (*group == '\0')
+				group = NULL;
 		}
-		pwd = getpwnam (nbuf);
+		pwd = getpwnam(nbuf);
 		if (pwd == NULL) {
-			(void) sprintf (errbuf,"Reason:  Unknown user %s",
-				nbuf);
+			(void) sprintf(errbuf, "Reason:  Unknown user %s",
+			    nbuf);
 			return (errbuf);
 		}
-		if (strcmp (nbuf,DEFUSER) == 0)
+		if (strcmp(nbuf, DEFUSER) == 0)
 			pswdp = NULL;
 		else
 			pswdp = passwordp ? passwordp : "";
 #ifdef AFS
-                if (strcmp (nbuf,DEFUSER) != 0) {
-                        char *reason;
-                        setpag(); /* set a pag */
-                        if (ka_UserAuthenticate(pwd->pw_name, "", 0,
-                                                pswdp, 1, &reason)) {
-                                (void) sprintf (errbuf,"AFS authentication failed, %s",
-                                                reason);
-                                logerr ("Attempt by %s; %s",
-                                        nbuf, errbuf);
-                                return (errbuf);
-                        }
-                }
+		if (strcmp(nbuf, DEFUSER) != 0) {
+			char *reason;
+			setpag();	/* set a pag */
+			if (ka_UserAuthenticate(pwd->pw_name, "", 0,
+				pswdp, 1, &reason)) {
+				(void) sprintf(errbuf, "AFS authentication failed, %s",
+				    reason);
+				logerr("Attempt by %s; %s",
+				    nbuf, errbuf);
+				return (errbuf);
+			}
+		}
 #endif
 	}
-	if (getuid () != 0) {
-		if (getuid () == pwd->pw_uid)
+	if (getuid() != 0) {
+		if (getuid() == pwd->pw_uid)
 			return (NULL);
-		if (strcmp (pwd->pw_name,DEFUSER) == 0)
+		if (strcmp(pwd->pw_name, DEFUSER) == 0)
 			return (NULL);
-		logerr ("Fileserver not superuser");
+		logerr("Fileserver not superuser");
 		return ("Reason:  fileserver is not running privileged");
 	}
 #if	CMUCS
 	tlc.tlc_hostid = TLC_UNKHOST;
 	tlc.tlc_ttyid = TLC_UNKTTY;
-	if (okaccess(pwd->pw_name,ACCESS_TYPE_SU,0,-1,tlc) != 1)
+	if (okaccess(pwd->pw_name, ACCESS_TYPE_SU, 0, -1, tlc) != 1)
 		status = ACCESS_CODE_DENIED;
 	else {
 		grp = NULL;
 		acc = NULL;
-		status = oklogin(pwd->pw_name,group,&account,pswdp,&pwd,&grp,&acc,&grps);
+		status = oklogin(pwd->pw_name, group, &account, pswdp, &pwd, &grp, &acc, &grps);
 		if (status == ACCESS_CODE_OK) {
-			if ((p = okpassword(pswdp,pwd->pw_name,pwd->pw_gecos)) != NULL)
+			if ((p = okpassword(pswdp, pwd->pw_name, pwd->pw_gecos)) != NULL)
 				status = ACCESS_CODE_INSECUREPWD;
 		}
 	}
-#else	/* CMUCS */
+#else				/* CMUCS */
 	status = ACCESS_CODE_OK;
 	if (namep && strcmp(pwd->pw_name, DEFUSER) != 0)
-		if (strcmp(pwd->pw_passwd,(char *)crypt(pswdp,pwd->pw_passwd)))
+		if (pswdp == NULL || strcmp(pwd->pw_passwd, crypt(pswdp, pwd->pw_passwd)))
 			status = ACCESS_CODE_BADPASSWORD;
-#endif	/* CMUCS */
+#endif				/* CMUCS */
 	switch (status) {
 	case ACCESS_CODE_OK:
 		break;
@@ -1662,7 +1706,7 @@ int fileuid,filegid;
 		break;
 #if	CMUCS
 	case ACCESS_CODE_INSECUREPWD:
-		(void) sprintf (errbuf,"Reason:  %s",p);
+		(void) sprintf(errbuf, "Reason:  %s", p);
 		p = errbuf;
 		break;
 	case ACCESS_CODE_DENIED:
@@ -1701,82 +1745,66 @@ int fileuid,filegid;
 	case ACCESS_CODE_OOPS:
 		p = "Reason:  Internal error";
 		break;
-#endif	/* CMUCS */
+#endif				/* CMUCS */
 	default:
-		(void) sprintf (p = errbuf,"Reason:  Status %d",status);
+		(void) sprintf(p = errbuf, "Reason:  Status %d", status);
 		break;
 	}
-	if (pwd == NULL)
-		return (p);
 	if (status != ACCESS_CODE_OK) {
-		logerr ("Login failure for %s",pwd->pw_name);
-		logerr ("%s",p);
+		logerr("Login failure for %s", pwd->pw_name);
+		logerr("%s", p);
 #if	CMUCS
-		logaccess (pwd->pw_name,ACCESS_TYPE_SUP,status,0,-1,tlc);
-#endif	/* CMUCS */
+		logaccess(pwd->pw_name, ACCESS_TYPE_SUP, status, 0, -1, tlc);
+#endif				/* CMUCS */
 		return (p);
 	}
 #if	CMUCS
-	if (setgroups (grps[0], &grps[1]) < 0)
-		logerr ("setgroups: %%m");
-	if (setgid ((gid_t)grp->gr_gid) < 0)
-		logerr ("setgid: %%m");
-	if (setuid ((uid_t)pwd->pw_uid) < 0)
-		logerr ("setuid: %%m");
-#else   /* CMUCS */
-	if (initgroups (pwd->pw_name,pwd->pw_gid) < 0)
-		return("Error setting group list");
-	if (setgid (pwd->pw_gid) < 0)
-		logerr ("setgid: %%m");
-	if (setuid (pwd->pw_uid) < 0)
-		logerr ("setuid: %%m");
-#endif	/* CMUCS */
+	if (setgroups(grps[0], &grps[1]) < 0)
+		logerr("setgroups: %%m");
+	if (setgid((gid_t) grp->gr_gid) < 0)
+		logerr("setgid: %%m");
+	if (setuid((uid_t) pwd->pw_uid) < 0)
+		logerr("setuid: %%m");
+#else				/* CMUCS */
+	if (initgroups(pwd->pw_name, pwd->pw_gid) < 0)
+		return ("Error setting group list");
+	if (setgid(pwd->pw_gid) < 0)
+		logerr("setgid: %%m");
+	if (setuid(pwd->pw_uid) < 0)
+		logerr("setuid: %%m");
+#endif				/* CMUCS */
 	return (NULL);
 }
 
 void
-#ifdef __STDC__
-goaway (char *fmt,...)
-#else
-/*VARARGS*//*ARGSUSED*/
-goaway (va_alist)
-va_dcl
-#endif
+goaway(char *fmt, ...)
 {
 	char buf[STRINGLENGTH];
 	va_list ap;
 
-#ifdef __STDC__
-	va_start(ap,fmt);
-#else
-	register char *fmt;
-
-	va_start(ap);
-	fmt = va_arg(ap,char *);
-#endif
-	(void) netcrypt ((char *)NULL);
+	va_start(ap, fmt);
+	(void) netcrypt((char *) NULL);
 
 	vsnprintf(buf, sizeof(buf), fmt, ap);
 	va_end(ap);
-	goawayreason = salloc (buf);
-	(void) msggoaway ();
-	logerr ("%s",buf);
-	longjmp (sjbuf,TRUE);
+	goawayreason = estrdup(buf);
+	(void) msggoaway();
+	logerr("%s", buf);
+	longjmp(sjbuf, TRUE);
 }
 
-char *fmttime (time)
-time_t time;
+char *
+fmttime(time_t time)
 {
 	static char buf[STRINGLENGTH];
-	int len;
+	unsigned int len;
 
-	(void) strcpy (buf,ctime (&time));
-	len = strlen(buf+4)-6;
-	(void) strncpy (buf,buf+4,len);
+	(void) strcpy(buf, ctime(&time));
+	len = strlen(buf + 4) - 6;
+	(void) strncpy(buf, buf + 4, len);
 	buf[len] = '\0';
 	return (buf);
 }
-
 /*
  * Determine whether the file referenced by the file descriptor 'handle' can
  * be trusted, namely is it a file resident in the local file system.
@@ -1796,7 +1824,7 @@ time_t time;
  * Currently, the cases that we try to distinguish are RFS, AFS, NFS and
  * UFS, where the latter is considered a trusted file.  We assume that the
  * caller has disabled link following and will detect an attempt to access
- * a file through an RFS link, except in the case the the last component is
+ * a file through an RFS link, except in the case the last component is
  * an RFS link.  With link following disabled, the last component itself is
  * interpreted as a regular file if it is really an RFS link, so we
  * disallow the RFS link identified by group "symlink" and mode "IEXEC by
@@ -1808,7 +1836,7 @@ time_t time;
  * the major device number and seeing if it matches the known values for
  * MACH NSF/Sun OS 3.x or Sun OS 4.x.
  *
- * Having the fstatfs() system call would make this routine easier and
+ * Having the fstatvfs() system call would make this routine easier and
  * more reliable.
  *
  * Note, in order to make the checks simpler, the file referenced by the
@@ -1816,7 +1844,7 @@ time_t time;
  * following of the last path component disabled, the attempt to open a
  * file which is a symlink will succeed, so we check for the BSD symlink
  * file type here.  Also, the link following on/off and RFS file types
- * are only relevant in a MACH environment. 
+ * are only relevant in a MACH environment.
  */
 #ifdef	AFS
 #include <sys/viceioctl.h>
@@ -1824,9 +1852,8 @@ time_t time;
 
 #define SYMLINK_GRP 64
 
-int local_file(handle, sinfo)
-int handle;
-struct stat *sinfo;
+int
+local_file(int handle, struct stat * sinfo)
 {
 	struct stat sb;
 #ifdef	VIOCIGETCELL
@@ -1835,10 +1862,10 @@ struct stat *sinfo;
 	 */
 	struct ViceIoctl vdata;
 	char cellname[512];
-#endif	/* VIOCIGETCELL */
+#endif				/* VIOCIGETCELL */
 
 	if (fstat(handle, &sb) < 0)
-		return(-1);
+		return (-1);
 	if (sinfo != NULL)
 		*sinfo = sb;
 
@@ -1849,16 +1876,16 @@ struct stat *sinfo;
 	 * See <sys/inode.h>.
 	 */
 	if (sb.st_gid == SYMLINK_GRP
-		&& (sb.st_mode & (S_IFMT|S_IEXEC|(S_IEXEC>>3)|(S_IEXEC>>6)))
-			== (S_IFREG|S_IEXEC))
-		return(0);
-#endif	/* CMUCS */
+	    && (sb.st_mode & (S_IFMT | S_IEXEC | (S_IEXEC >> 3) | (S_IEXEC >> 6)))
+	    == (S_IFREG | S_IEXEC))
+		return (0);
+#endif				/* CMUCS */
 
 	/*
 	 * Do not trust BSD style symlinks either.
 	 */
 	if (S_ISLNK(sb.st_mode))
-		return(0);
+		return (0);
 
 #ifdef	VIOCIGETCELL
 	/*
@@ -1872,44 +1899,47 @@ struct stat *sinfo;
 	vdata.in_size = 0;
 	vdata.out_size = sizeof(cellname);
 	vdata.out = cellname;
-	if (ioctl(handle, VIOCIGETCELL, (char *)&vdata) != -1)
-		return(0);
+	if (ioctl(handle, VIOCIGETCELL, (char *) &vdata) != -1)
+		return (0);
 	if (errno != ENOTTY)
-		return(-1);
-#endif	/* VIOCIGETCELL */
+		return (-1);
+#endif				/* VIOCIGETCELL */
 
 	/*
 	 * Verify the file is not in NFS.
 	 *
 	 * Our current implementation and Sun OS 3.x use major device
 	 * 255 for NFS files; Sun OS 4.x seems to use 130 (I have only
-	 * determined this empirically -- DLC).  Without a fstatfs()
+	 * determined this empirically -- DLC).  Without a fstatvfs()
 	 * system call, this will have to do for now.
 	 */
-#ifdef __SVR4
+#if defined(__SVR4) || __NetBSD_Version__ > 299000900
 	{
 		struct statvfs sf;
 
 		if (fstatvfs(handle, &sf) == -1)
-			return(-1);
+			return (-1);
+#ifdef __SVR4
 		return strncmp(sf.f_basetype, "nfs", 3) != 0;
+#else
+		return strncmp(sf.f_fstypename, "nfs", 3) != 0;
+#endif
 	}
 #elif defined(__NetBSD__)
 	{
 		struct statfs sf;
 		if (fstatfs(handle, &sf) == -1)
-			return(-1);
+			return (-1);
 		return strncmp(sf.f_fstypename, "nfs", 3) != 0;
 	}
 #else
 	if (major(sb.st_dev) == 255 || major(sb.st_dev) == 130)
-		return(0);
+		return (0);
 	else
-		return(1);
+		return (1);
 #endif
 
 }
-
 /*
  * Companion routine for ensuring that a local file can be trusted.  Compare
  * various pieces of the stat information to make sure that the file can be
@@ -1925,23 +1955,22 @@ struct stat *sinfo;
  */
 
 
-int stat_info_ok(sb1, sb2)
-struct stat *sb1, *sb2;
+int
+stat_info_ok(struct stat * sb1, struct stat * sb2)
 {
-    return (sb1->st_ino == sb2->st_ino &&	/* Still the same file */
+	return (sb1->st_ino == sb2->st_ino &&	/* Still the same file */
 	    sb1->st_dev == sb2->st_dev &&	/* On the same device */
-	    sb1->st_mode == sb2->st_mode &&     /* Perms (and type) same */
-	    S_ISREG(sb1->st_mode) &&		/* Only allow reg files */
+	    sb1->st_mode == sb2->st_mode &&	/* Perms (and type) same */
+	    S_ISREG(sb1->st_mode) &&	/* Only allow reg files */
 	    (sb1->st_mode & 077) == 0 &&	/* Owner only perms */
 	    sb1->st_nlink == sb2->st_nlink &&	/* # hard links same... */
-	    sb1->st_nlink == 1 &&		/* and only 1 */
+	    sb1->st_nlink == 1 &&	/* and only 1 */
 	    sb1->st_uid == sb2->st_uid &&	/* owner and ... */
 	    sb1->st_gid == sb2->st_gid &&	/* group unchanged */
 	    sb1->st_mtime == sb2->st_mtime &&	/* Unmodified between stats */
 	    sb1->st_ctime == sb2->st_ctime);	/* Inode unchanged.  Hopefully
-						   a catch-all paranoid test */
+						 * a catch-all paranoid test */
 }
-
 #if MACH
 /*
  * Twiddle symbolic/RFS link following on/off.  This is a no-op in a non
@@ -1950,22 +1979,22 @@ struct stat *sb1, *sb2;
  */
 #include <sys/table.h>
 
-int link_nofollow(on)
-int on;
+int
+link_nofollow(int on)
 {
 	static int modes = -1;
 
 	if (modes == -1 && (modes = getmodes()) == -1)
-		return(-1);
+		return (-1);
 	if (on)
-		return(setmodes(modes | UMODE_NOFOLLOW));
-	return(setmodes(modes));
+		return (setmodes(modes | UMODE_NOFOLLOW));
+	return (setmodes(modes));
 }
-#else	/* MACH */
+#else				/* MACH */
 /*ARGSUSED*/
-int link_nofollow(on)
-int on;
+int
+link_nofollow(int on __unused)
 {
-	return(0);
+	return (0);
 }
-#endif	/* MACH */
+#endif				/* MACH */

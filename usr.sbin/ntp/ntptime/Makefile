@@ -1,14 +1,11 @@
-#	$NetBSD: Makefile,v 1.2 2000/03/29 13:54:45 simonb Exp $
+#	$NetBSD: Makefile,v 1.8 2006/07/29 08:18:36 kardel Exp $
 
 PROG=	ntptime
 MAN=	ntptime.8
 SRCS=	ntptime.c
 
-SRCS+=	version.c
+.include <bsd.own.mk>
+
 NTPSRCDIR=util
-CLEANFILES+=version.c version.o .version
 
 .include <bsd.prog.mk>
-
-version.c: ${OBJS:S/version.o//} ${LIBNTP}/libntp.a
-	sh ${.CURDIR}/../scripts/mkver ntpd

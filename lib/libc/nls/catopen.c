@@ -1,4 +1,4 @@
-/*	$NetBSD: catopen.c,v 1.16 1999/09/16 11:45:19 lukem Exp $	*/
+/*	$NetBSD: catopen.c,v 1.25.6.1 2009/01/15 03:24:08 snj Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,6 +29,11 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+#if defined(LIBC_SCCS) && !defined(lint)
+__RCSID("$NetBSD: catopen.c,v 1.25.6.1 2009/01/15 03:24:08 snj Exp $");
+#endif /* LIBC_SCCS and not lint */
+
 #define _NLS_PRIVATE
 
 #include "namespace.h"
@@ -46,10 +44,23 @@
 #include <assert.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <locale.h>
 #include <nl_types.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+
+#ifdef HAVE_CITRUS
+#include "citrus_namespace.h"
+#include "citrus_bcs.h"
+#include "citrus_region.h"
+#include "citrus_lookup.h"
+#include "citrus_aliasname_local.h"
+#else
+#include "aliasname_local.h"
+#endif
+
+#define NLS_ALIAS_DB "/usr/share/nls/nls.alias"
 
 #define NLS_DEFAULT_PATH "/usr/share/nls/%L/%N.cat:/usr/share/nls/%N/%L"
 #define NLS_DEFAULT_LANG "C"
@@ -60,19 +71,19 @@ __weak_alias(catopen, _catopen)
 
 static nl_catd load_msgcat __P((const char *));
 
-/* ARGSUSED */
 nl_catd
 _catopen(name, oflag)
 	const char *name;
 	int oflag;
 {
-	char tmppath[PATH_MAX];
-	char *nlspath;
-	char *lang;
-	char *s, *t;
-	const char *u;
+	char tmppath[PATH_MAX+1];
+	const char *nlspath;
+	const char *lang, *reallang;
+	char *t;
+	const char *s, *u;
 	nl_catd catd;
-		
+	char langbuf[PATH_MAX];
+
 	if (name == NULL || *name == '\0')
 		return (nl_catd)-1;
 
@@ -80,24 +91,29 @@ _catopen(name, oflag)
 	if (strchr(name, '/'))
 		return load_msgcat(name);
 
-	/*
-	 * XXX potential security problem here if this is used in a
-	 * set-id program, and NLSPATH or LANG are set to read files
-	 * the user normally does not have access to.
-	 */
-	if ((nlspath = getenv("NLSPATH")) == NULL)
+	if (issetugid() || (nlspath = getenv("NLSPATH")) == NULL)
 		nlspath = NLS_DEFAULT_PATH;
-	if ((lang = getenv("LANG")) == NULL)
+	if (oflag == NL_CAT_LOCALE) {
+		lang = setlocale(LC_MESSAGES, NULL);
+	}
+	else {
+		lang = getenv("LANG");
+	}
+	if (lang == NULL || strchr(lang, '/'))
 		lang = NLS_DEFAULT_LANG;
 
+	reallang = __unaliasname(NLS_ALIAS_DB, lang, langbuf, sizeof(langbuf));
+	if (reallang == NULL)
+		reallang = lang;
+
 	s = nlspath;
-	t = tmppath;	
+	t = tmppath;
 	do {
 		while (*s && *s != ':') {
 			if (*s == '%') {
 				switch (*(++s)) {
 				case 'L':	/* locale */
-					u = lang;
+					u = reallang;
 					while (*u && t < tmppath + PATH_MAX)
 						*t++ = *u++;
 					break;
@@ -158,7 +174,6 @@ load_msgcat(path)
 	close (fd);
 
 	if (data == (void *)-1) {
-		munmap(data, (size_t)st.st_size);
 		return (nl_catd)-1;
 	}
 

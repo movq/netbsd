@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_termios.h,v 1.1 1998/12/15 19:25:41 itohy Exp $	*/
+/*	$NetBSD: linux_termios.h,v 1.6 2008/04/28 20:23:42 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,6 +31,9 @@
 
 #ifndef _M68K_LINUX_TERMIOS_H
 #define _M68K_LINUX_TERMIOS_H
+
+#define LINUX_NCC 8
+#define LINUX_NCCS 19
 
 #define LINUX_TCGETS		_LINUX_IO('T', 1)
 #define LINUX_TCSETS		_LINUX_IO('T', 2)
@@ -83,7 +79,7 @@
 #define LINUX_TIOCGSID		_LINUX_IO('T', 41)
 
 #define LINUX_TIOCGPTN		_LINUX_IOR('T', 48, unsigned int)
-#define LINUX_TIOCSPTLCK	_LINUX_IOW('T', 49, int) 
+#define LINUX_TIOCSPTLCK	_LINUX_IOW('T', 49, int)
 
 #define LINUX_FIONCLEX		_LINUX_IO('T', 80)
 #define LINUX_FIOCLEX		_LINUX_IO('T', 81)

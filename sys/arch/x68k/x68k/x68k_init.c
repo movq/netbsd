@@ -1,4 +1,4 @@
-/*	$NetBSD: x68k_init.c,v 1.6 1999/03/16 16:30:24 minoura Exp $	*/
+/*	$NetBSD: x68k_init.c,v 1.10 2005/12/24 22:45:40 perry Exp $	*/
 
 /*
  * Copyright (c) 1996 Masaru Oki.
@@ -30,6 +30,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: x68k_init.c,v 1.10 2005/12/24 22:45:40 perry Exp $");
+
 #include <sys/param.h>
 #include <sys/device.h>
 
@@ -42,7 +45,7 @@
 
 volatile struct IODEVICE *IODEVbase = (volatile struct IODEVICE *) PHYS_IODEV;
 
-void intr_reset __P((void));
+void intr_reset(void);
 
 extern int iera;
 extern int ierb;
@@ -50,22 +53,22 @@ extern int ierb;
  * disable all interrupt.
  */
 void
-intr_reset()
+intr_reset(void)
 {
 	/* I/O Controller */
 	ioctlr.intr = 0;
 
 	/* Internal RS-232C port */
 	zsdev.zs_chan_a.zc_csr = 1;
-	asm("nop");
+	__asm("nop");
 	zsdev.zs_chan_a.zc_csr = 0;
-	asm("nop");
+	__asm("nop");
 
 	/* mouse */
 	zsdev.zs_chan_b.zc_csr = 1;
-	asm("nop");
+	__asm("nop");
 	zsdev.zs_chan_b.zc_csr = 0;
-	asm("nop");
+	__asm("nop");
 
 	mfp_send_usart(0x41);
 

@@ -1,4 +1,4 @@
-/* $NetBSD: apecs_dma.c,v 1.12 1998/08/14 16:50:04 thorpej Exp $ */
+/* $NetBSD: apecs_dma.c,v 1.16 2008/04/28 20:23:11 martin Exp $ */
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,14 +32,15 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: apecs_dma.c,v 1.12 1998/08/14 16:50:04 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: apecs_dma.c,v 1.16 2008/04/28 20:23:11 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
 #include <sys/malloc.h>
-#include <vm/vm.h>
+
+#include <uvm/uvm_extern.h>
 
 #define _ALPHA_BUS_DMA_PRIVATE
 #include <machine/bus.h>
@@ -57,11 +51,6 @@ __KERNEL_RCSID(0, "$NetBSD: apecs_dma.c,v 1.12 1998/08/14 16:50:04 thorpej Exp $
 #include <alpha/pci/apecsvar.h>
 
 bus_dma_tag_t apecs_dma_get_tag __P((bus_dma_tag_t, alpha_bus_t));
-
-int	apecs_bus_dmamap_create_sgmap __P((bus_dma_tag_t, bus_size_t, int,
-	    bus_size_t, bus_size_t, int, bus_dmamap_t *));
-
-void	apecs_bus_dmamap_destroy_sgmap __P((bus_dma_tag_t, bus_dmamap_t));
 
 int	apecs_bus_dmamap_load_sgmap __P((bus_dma_tag_t, bus_dmamap_t, void *,
 	    bus_size_t, struct proc *, int));
@@ -88,6 +77,9 @@ void	apecs_bus_dmamap_unload_sgmap __P((bus_dma_tag_t, bus_dmamap_t));
  */
 #define	APECS_SGMAP_MAPPED_BASE	(8*1024*1024)
 #define	APECS_SGMAP_MAPPED_SIZE	(8*1024*1024)
+
+/* APECS has a 256-byte out-bound DMA prefetch threshold. */
+#define	APECS_SGMAP_PFTHRESH	256
 
 /*
  * Macro to flush APECS scatter/gather TLB.
@@ -142,9 +134,10 @@ apecs_dma_init(acp)
 	t->_next_window = NULL;
 	t->_boundary = 0;
 	t->_sgmap = &acp->ac_sgmap;
+	t->_pfthresh = APECS_SGMAP_PFTHRESH;
 	t->_get_tag = apecs_dma_get_tag;
-	t->_dmamap_create = apecs_bus_dmamap_create_sgmap;
-	t->_dmamap_destroy = apecs_bus_dmamap_destroy_sgmap;
+	t->_dmamap_create = alpha_sgmap_dmamap_create;
+	t->_dmamap_destroy = alpha_sgmap_dmamap_destroy;
 	t->_dmamap_load = apecs_bus_dmamap_load_sgmap;
 	t->_dmamap_load_mbuf = apecs_bus_dmamap_load_mbuf_sgmap;
 	t->_dmamap_load_uio = apecs_bus_dmamap_load_uio_sgmap;
@@ -232,55 +225,6 @@ apecs_dma_get_tag(t, bustype)
 	default:
 		panic("apecs_dma_get_tag: shouldn't be here, really...");
 	}
-}
-
-/*
- * Create an APECS SGMAP-mapped DMA map.
- */
-int
-apecs_bus_dmamap_create_sgmap(t, size, nsegments, maxsegsz, boundary,
-    flags, dmamp)
-	bus_dma_tag_t t;
-	bus_size_t size;
-	int nsegments;
-	bus_size_t maxsegsz;
-	bus_size_t boundary;
-	int flags;
-	bus_dmamap_t *dmamp;
-{
-	bus_dmamap_t map;
-	int error;
-
-	error = _bus_dmamap_create(t, size, nsegments, maxsegsz,
-	    boundary, flags, dmamp);
-	if (error)
-		return (error);
-
-	map = *dmamp;
-
-	if (flags & BUS_DMA_ALLOCNOW) {
-		error = alpha_sgmap_alloc(map, round_page(size),
-		    t->_sgmap, flags);
-		if (error)
-			apecs_bus_dmamap_destroy_sgmap(t, map);
-	}
-
-	return (error);
-}
-
-/*
- * Destroy an APECS SGMAP-mapped DMA map.
- */
-void
-apecs_bus_dmamap_destroy_sgmap(t, map)
-	bus_dma_tag_t t;
-	bus_dmamap_t map;
-{
-
-	if (map->_dm_flags & DMAMAP_HAS_SGMAP)
-		alpha_sgmap_free(map, t->_sgmap);
-
-	_bus_dmamap_destroy(t, map);
 }
 
 /*

@@ -1,4 +1,4 @@
-/*	$NetBSD: table.c,v 1.5 1998/07/04 19:31:05 mrg Exp $	*/
+/*	$NetBSD: table.c,v 1.8 2008/03/04 03:05:00 dholland Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)table.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: table.c,v 1.5 1998/07/04 19:31:05 mrg Exp $");
+__RCSID("$NetBSD: table.c,v 1.8 2008/03/04 03:05:00 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -66,13 +62,12 @@ __RCSID("$NetBSD: table.c,v 1.5 1998/07/04 19:31:05 mrg Exp $");
 #define NIL ((TABLE_ENTRY *)0)
 
 struct	timeval tp;
-struct	timezone txp;
 
 typedef struct table_entry TABLE_ENTRY;
 
 struct table_entry {
 	CTL_MSG request;
-	long	time;
+	time_t	time;
 	TABLE_ENTRY *next;
 	TABLE_ENTRY *last;
 };
@@ -92,7 +87,7 @@ find_match(request)
 	TABLE_ENTRY *ptr;
 	time_t current_time;
 
-	gettimeofday(&tp, &txp);
+	gettimeofday(&tp, NULL);
 	current_time = tp.tv_sec;
 	if (debug)
 		print_request("find_match", request);
@@ -126,7 +121,7 @@ find_request(request)
 	TABLE_ENTRY *ptr;
 	time_t current_time;
 
-	gettimeofday(&tp, &txp);
+	gettimeofday(&tp, NULL);
 	current_time = tp.tv_sec;
 	/*
 	 * See if this is a repeated message, and check for
@@ -165,7 +160,7 @@ insert_table(request, response)
 	TABLE_ENTRY *ptr;
 	time_t current_time;
 
-	gettimeofday(&tp, &txp);
+	gettimeofday(&tp, NULL);
 	current_time = tp.tv_sec;
 	request->id_num = new_id();
 	response->id_num = htonl(request->id_num);

@@ -1,4 +1,4 @@
-/*	$NetBSD: snprintf.c,v 1.12 2000/01/22 22:19:19 mycroft Exp $	*/
+/*	$NetBSD: snprintf.c,v 1.22 2007/10/26 19:48:14 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)snprintf.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: snprintf.c,v 1.12 2000/01/22 22:19:19 mycroft Exp $");
+__RCSID("$NetBSD: snprintf.c,v 1.22 2007/10/26 19:48:14 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -49,11 +45,15 @@ __RCSID("$NetBSD: snprintf.c,v 1.12 2000/01/22 22:19:19 mycroft Exp $");
 
 #include <assert.h>
 #include <errno.h>
-#include <stdio.h>
-#if __STDC__
 #include <stdarg.h>
-#else
-#include <varargs.h>
+#include <stdio.h>
+
+#include "reentrant.h"
+#include "local.h"
+
+#if defined(_FORTIFY_SOURCE) && !defined(__lint__)
+#undef snprintf
+#define snprintf _snprintf
 #endif
 
 #ifdef __weak_alias
@@ -61,35 +61,33 @@ __weak_alias(snprintf,_snprintf)
 #endif
 
 int
-#if __STDC__
 snprintf(char *str, size_t n, char const *fmt, ...)
-#else
-snprintf(str, n, fmt, va_alist)
-	char *str;
-	size_t n;
-	char *fmt;
-	va_dcl
-#endif
 {
 	int ret;
 	va_list ap;
 	FILE f;
+	struct __sfileext fext;
+	unsigned char dummy[1];
 
-	_DIAGASSERT(str != NULL);
+	_DIAGASSERT(n == 0 || str != NULL);
 	_DIAGASSERT(fmt != NULL);
 
-	if ((int)n < 1)
+	if ((int)n < 0) {
+		errno = EINVAL;
 		return (-1);
-#if __STDC__
+	}
 	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
+	_FILEEXT_SETUP(&f, &fext);
 	f._file = -1;
 	f._flags = __SWR | __SSTR;
-	f._bf._base = f._p = (unsigned char *)str;
-	f._bf._size = f._w = n - 1;
-	ret = vfprintf(&f, fmt, ap);
+	if (n == 0) {
+		f._bf._base = f._p = dummy;
+		f._bf._size = f._w = 0;
+	} else {
+		f._bf._base = f._p = (unsigned char *)str;
+		f._bf._size = f._w = n - 1;
+	}
+	ret = __vfprintf_unlocked(&f, fmt, ap);
 	*f._p = 0;
 	va_end(ap);
 	return (ret);

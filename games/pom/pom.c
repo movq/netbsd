@@ -1,4 +1,4 @@
-/*	$NetBSD: pom.c,v 1.12 1999/09/14 20:00:07 jsm Exp $	*/
+/*	$NetBSD: pom.c,v 1.17 2008/07/20 01:03:22 lukem Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -14,11 +14,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -37,15 +33,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1989, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)pom.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: pom.c,v 1.12 1999/09/14 20:00:07 jsm Exp $");
+__RCSID("$NetBSD: pom.c,v 1.17 2008/07/20 01:03:22 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -88,17 +84,15 @@ __RCSID("$NetBSD: pom.c,v 1.12 1999/09/14 20:00:07 jsm Exp $");
 #define	Pzero	  36.340410	/* lunar mean long of perigee at EPOCH */
 #define	Nzero	  318.510107	/* lunar mean long of node at EPOCH */
 
-void	adj360 __P((double *));
-double	dtor __P((double));
-int	main __P((int, char *[]));
-double	potm __P((double));
-time_t	parsetime __P((char *));
-void	badformat __P((void)) __attribute__((__noreturn__));
+void	adj360(double *);
+double	dtor(double);
+int	main(int, char *[]);
+double	potm(double);
+time_t	parsetime(char *);
+void	badformat(void) __dead;
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	time_t tmpt, now;
 	double days, today, tomorrow;
@@ -146,7 +140,8 @@ main(argc, argv)
 				    today);
 		}
 	}
-	exit(0);
+
+	return EXIT_SUCCESS;
 }
 
 /*
@@ -154,8 +149,7 @@ main(argc, argv)
  *	return phase of the moon
  */
 double
-potm(days)
-	double days;
+potm(double days)
 {
 	double N, Msol, Ec, LambdaSol, l, Mm, Ev, Ac, A3, Mmprime;
 	double A4, lprime, V, ldprime, D, Nm;
@@ -191,8 +185,7 @@ potm(days)
  *	convert degrees to radians
  */
 double
-dtor(deg)
-	double deg;
+dtor(double deg)
 {
 	return(deg * PI / 180);
 }
@@ -202,8 +195,7 @@ dtor(deg)
  *	adjust value so 0 <= deg <= 360
  */
 void
-adj360(deg)
-	double *deg;
+adj360(double *deg)
 {
 	for (;;)
 		if (*deg < 0)
@@ -216,8 +208,7 @@ adj360(deg)
 
 #define	ATOI2(ar)	((ar)[0] - '0') * 10 + ((ar)[1] - '0'); (ar) += 2;
 time_t
-parsetime(p)
-	char *p;
+parsetime(char *p)
 {
 	struct tm *lt;
 	int bigyear;
@@ -278,9 +269,9 @@ parsetime(p)
 }
 
 void
-badformat()
+badformat(void)
 {
 	warnx("illegal time format");
 	(void)fprintf(stderr, "usage: pom [[[[[cc]yy]mm]dd]HH]\n");
-	exit(1);
+	exit(EXIT_FAILURE);
 }

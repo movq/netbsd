@@ -1,4 +1,4 @@
-/*	$NetBSD: look_up.c,v 1.4 1997/10/20 00:23:26 lukem Exp $	*/
+/*	$NetBSD: look_up.c,v 1.7 2005/09/24 16:40:01 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)look_up.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: look_up.c,v 1.4 1997/10/20 00:23:26 lukem Exp $");
+__RCSID("$NetBSD: look_up.c,v 1.7 2005/09/24 16:40:01 christos Exp $");
 #endif /* not lint */
 
 #include "talk.h"
@@ -54,11 +50,12 @@ check_local()
 {
 	CTL_RESPONSE response;
 	CTL_RESPONSE *rp = &response;
+	struct sockaddr addr;
 
 	/* the rest of msg was set up in get_names */
 #ifdef MSG_EOR
 	/* copy new style sockaddr to old, swap family (short in old) */
-	msg.ctl_addr = *(struct osockaddr *)&ctl_addr;
+	msg.ctl_addr = *(struct talkd_sockaddr *)(void *)&ctl_addr;
 	msg.ctl_addr.sa_family = htons(ctl_addr.sin_family);
 #else
 	msg.ctl_addr = *(struct sockaddr *)&ctl_addr;
@@ -74,9 +71,13 @@ check_local()
 	do {
 		if (rp->addr.sa_family != AF_INET)
 			p_error("Response uses invalid network address");
+
+		(void)memcpy(&addr, &rp->addr.sa_family, sizeof(addr));
+		addr.sa_family = rp->addr.sa_family;
+		addr.sa_len = sizeof(addr);
+
 		errno = 0;
-		if (connect(sockt,
-		    (struct sockaddr *)&rp->addr, sizeof (rp->addr)) != -1)
+		if (connect(sockt, &addr, sizeof(addr)) != -1)
 			return (1);
 	} while (errno == EINTR);
 	if (errno == ECONNREFUSED) {

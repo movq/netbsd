@@ -1,4 +1,4 @@
-/*	$NetBSD: misc.c,v 1.6 1999/10/04 23:33:25 lukem Exp $	*/
+/*	$NetBSD: misc.c,v 1.8 2006/05/01 23:18:37 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)misc.c	8.1 (Berkeley) 6/9/93";
 #endif
-__RCSID("$NetBSD: misc.c,v 1.6 1999/10/04 23:33:25 lukem Exp $");
+__RCSID("$NetBSD: misc.c,v 1.8 2006/05/01 23:18:37 christos Exp $");
 #endif /* not lint */
 
 #include <err.h>
@@ -51,7 +47,7 @@ __RCSID("$NetBSD: misc.c,v 1.6 1999/10/04 23:33:25 lukem Exp $");
 #include "extern.h"
 
 void
-cat(file)
+tset_cat(file)
 	char *file;
 {
 	register int fd, nr, nw;

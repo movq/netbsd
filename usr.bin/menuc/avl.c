@@ -1,4 +1,4 @@
-/*	$NetBSD: avl.c,v 1.1.1.1 1997/09/26 17:54:09 phil Exp $	*/
+/*	$NetBSD: avl.c,v 1.7 2005/02/11 06:21:22 simonb Exp $	*/
 
 /*
  * Copyright (c) 1997 Philip A. Nelson.
@@ -45,6 +45,19 @@
  *		/ * Other information fields. * /
  *	} id_rec;
  */
+
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
+#include <sys/cdefs.h>
+
+#if defined(__RCSID) && !defined(lint)
+__RCSID("$NetBSD: avl.c,v 1.7 2005/02/11 06:21:22 simonb Exp $");
+#endif
+
+
+#include <string.h>
 
 #include "defs.h"
 
@@ -97,14 +110,14 @@ int insert_id (id_rec **root, id_rec *new_id)
       if (insert_id (&((*root)->left), new_id))
 	{
 	  /* The height increased. */
-	  (*root)->balance --;
+	  (*root)->balance--;
 	  
 	  switch ((*root)->balance)
 	    {
 	    case  0:  /* no height increase. */
 	      return (FALSE);
 	    case -1:  /* height increase. */
-	      return (FALSE);
+	      return (TRUE);
 	    case -2:  /* we need to do a rebalancing act. */
 	      A = *root;
 	      B = (*root)->left;
@@ -151,13 +164,13 @@ int insert_id (id_rec **root, id_rec *new_id)
       if (insert_id (&((*root)->right), new_id))
 	{
 	  /* The height increased. */
-	  (*root)->balance ++;
+	  (*root)->balance++;
 	  switch ((*root)->balance)
 	    {
 	    case 0:  /* no height increase. */
 	      return (FALSE);
 	    case 1:  /* height increase. */
-	      return (FALSE);
+	      return (TRUE);
 	    case 2:  /* we need to do a rebalancing act. */
 	      A = *root;
 	      B = (*root)->right;

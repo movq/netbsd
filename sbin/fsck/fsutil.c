@@ -1,4 +1,4 @@
-/*	$NetBSD: fsutil.c,v 1.7 1998/07/30 17:41:03 thorpej Exp $	*/
+/*	$NetBSD: fsutil.c,v 1.18 2008/03/16 23:17:55 lukem Exp $	*/
 
 /*
  * Copyright (c) 1990, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,17 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: fsutil.c,v 1.7 1998/07/30 17:41:03 thorpej Exp $");
+__RCSID("$NetBSD: fsutil.c,v 1.18 2008/03/16 23:17:55 lukem Exp $");
 #endif /* not lint */
+
+#include <sys/param.h>
 
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#if __STDC__
 #include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
 #include <errno.h>
 #include <fstab.h>
 #include <err.h>
@@ -54,70 +48,66 @@ __RCSID("$NetBSD: fsutil.c,v 1.7 1998/07/30 17:41:03 thorpej Exp $");
 #include <sys/stat.h>
 
 #include "fsutil.h"
+#include "exitvalues.h"
 
 static const char *dev = NULL;
 static int hot = 0;
 static int preen = 0;
-
-extern char *__progname;
-
-static void vmsg __P((int, const char *, va_list));
+int quiet;
+#define F_ERROR	0x80000000
 
 void
-setcdevname(cd, pr)
-	const char *cd;
-	int pr;
+setcdevname(const char *cd, int pr)
 {
+
 	dev = cd;
 	preen = pr;
 }
 
 const char *
-cdevname()
+cdevname(void)
 {
+
 	return dev;
 }
 
 int
-hotroot()
+hotroot(void)
 {
+
 	return hot;
 }
 
 /*VARARGS*/
 void
-#if __STDC__
 errexit(const char *fmt, ...)
-#else
-errexit(va_alist)
-	va_dcl
-#endif
 {
 	va_list ap;
 
-#if __STDC__
 	va_start(ap, fmt);
-#else
-	const char *fmt;
-
-	va_start(ap);
-	fmt = va_arg(ap, const char *);
-#endif
 	(void) vfprintf(stderr, fmt, ap);
 	va_end(ap);
-	exit(8);
+	(void)fprintf(stderr, "\n");
+	exit(FSCK_EXIT_CHECK_FAILED);
 }
 
-static void
-vmsg(fatal, fmt, ap)
-	int fatal;
-	const char *fmt;
-	va_list ap;
+void
+vmsg(int fatal, const char *fmt, va_list ap)
 {
+	int serr = fatal & F_ERROR;
+	int serrno = errno;
+	fatal &= ~F_ERROR;
+
 	if (!fatal && preen)
-		(void) printf("%s: ", dev);
+		(void)printf("%s: ", dev);
+	if (quiet && !preen) {
+		(void)printf("** %s (vmsg)\n", dev);
+		quiet = 0;
+	}
 
 	(void) vprintf(fmt, ap);
+	if (serr) 
+		printf(" (%s)", strerror(serrno));
 
 	if (fatal && preen)
 		(void) printf("\n");
@@ -125,91 +115,58 @@ vmsg(fatal, fmt, ap)
 	if (fatal && preen) {
 		(void) printf(
 		    "%s: UNEXPECTED INCONSISTENCY; RUN %s MANUALLY.\n",
-		    dev, __progname);
-		exit(8);
+		    dev, getprogname());
+		exit(FSCK_EXIT_CHECK_FAILED);
 	}
 }
 
 /*VARARGS*/
 void
-#if __STDC__
 pfatal(const char *fmt, ...)
-#else
-pfatal(va_alist)
-	va_dcl
-#endif
 {
 	va_list ap;
 
-#if __STDC__
 	va_start(ap, fmt);
-#else
-	const char *fmt;
-
-	va_start(ap);
-	fmt = va_arg(ap, const char *);
-#endif
 	vmsg(1, fmt, ap);
 	va_end(ap);
 }
 
 /*VARARGS*/
 void
-#if __STDC__
 pwarn(const char *fmt, ...)
-#else
-pwarn(va_alist)
-	va_dcl
-#endif
 {
 	va_list ap;
-#if __STDC__
-	va_start(ap, fmt);
-#else
-	const char *fmt;
 
-	va_start(ap);
-	fmt = va_arg(ap, const char *);
-#endif
+	va_start(ap, fmt);
 	vmsg(0, fmt, ap);
 	va_end(ap);
 }
 
 void
-perror(s)
-	const char *s;
-{
-	pfatal("%s (%s)", s, strerror(errno));
-}
-
-void
-#if __STDC__
-panic(const char *fmt, ...)
-#else
-panic(va_alist)
-	va_dcl
-#endif
+perr(const char *fmt, ...)
 {
 	va_list ap;
 
-#if __STDC__
 	va_start(ap, fmt);
-#else
-	const char *fmt;
+	vmsg(1 | F_ERROR, fmt, ap);
+	va_end(ap);
+}
 
-	va_start(ap);
-	fmt = va_arg(ap, const char *);
-#endif
+void
+panic(const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
 	vmsg(1, fmt, ap);
 	va_end(ap);
-	exit(8);
+	exit(FSCK_EXIT_CHECK_FAILED);
 }
 
 const char *
-unrawname(name)
-	const char *name;
+unrawname(const char *name)
 {
-	static char unrawbuf[32];
+	static char unrawbuf[MAXPATHLEN];
 	const char *dp;
 	struct stat stb;
 
@@ -221,26 +178,26 @@ unrawname(name)
 		return (name);
 	if (dp[1] != 'r')
 		return (name);
-	(void)snprintf(unrawbuf, 32, "%.*s/%s", (int)(dp - name), name, dp + 2);
+	(void)snprintf(unrawbuf, sizeof(unrawbuf), "%.*s/%s",
+	    (int)(dp - name), name, dp + 2);
 	return (unrawbuf);
 }
 
 const char *
-rawname(name)
-	const char *name;
+rawname(const char *name)
 {
-	static char rawbuf[32];
+	static char rawbuf[MAXPATHLEN];
 	const char *dp;
 
 	if ((dp = strrchr(name, '/')) == 0)
 		return (0);
-	(void)snprintf(rawbuf, 32, "%.*s/r%s", (int)(dp - name), name, dp + 1);
+	(void)snprintf(rawbuf, sizeof(rawbuf), "%.*s/r%s",
+	    (int)(dp - name), name, dp + 1);
 	return (rawbuf);
 }
 
 const char *
-blockcheck(origname)
-	const char *origname;
+blockcheck(const char *origname)
 {
 	struct stat stslash, stblock, stchar;
 	const char *newname, *raw;
@@ -249,15 +206,13 @@ blockcheck(origname)
 
 	hot = 0;
 	if (stat("/", &stslash) < 0) {
-		perror("/");
-		printf("Can't stat root\n");
+		perr("Can't stat `/'");
 		return (origname);
 	}
 	newname = origname;
 retry:
 	if (stat(newname, &stblock) < 0) {
-		perror(newname);
-		printf("Can't stat %s\n", newname);
+		perr("Can't stat `%s'", newname);
 		return (origname);
 	}
 	if (S_ISBLK(stblock.st_mode)) {
@@ -265,8 +220,7 @@ retry:
 			hot++;
 		raw = rawname(newname);
 		if (stat(raw, &stchar) < 0) {
-			perror(raw);
-			printf("Can't stat %s\n", raw);
+			perr("Can't stat `%s'", raw);
 			return (origname);
 		}
 		if (S_ISCHR(stchar.st_mode)) {
@@ -289,44 +243,4 @@ retry:
 	 * let the user decide whether to use it.
 	 */
 	return (origname);
-}
-
-
-void *
-emalloc(s)
-	size_t s;
-{
-	void *p;
-
-	p = malloc(s);
-	if (p == NULL)
-		err(1, "malloc failed");
-	return (p);
-}
-
-
-void *
-erealloc(p, s)
-	void *p;
-	size_t s;
-{
-	void *q;
-
-	q = realloc(p, s);
-	if (q == NULL)
-		err(1, "realloc failed");
-	return (q);
-}
-
-
-char *
-estrdup(s)
-	const char *s;
-{
-	char *p;
-
-	p = strdup(s);
-	if (p == NULL)
-		err(1, "strdup failed");
-	return (p);
 }

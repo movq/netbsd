@@ -1,9 +1,11 @@
-#	$NetBSD: Makefile,v 1.12 1999/12/12 11:30:31 veego Exp $
+#	$NetBSD: Makefile,v 1.16 2004/03/29 04:40:07 lukem Exp $
 
-PROG=	iptest
-SRCS=	iptest.c iptests.c ip.c sbpf.c 44arp.c sock.c
-MAN=	iptest.1
-CPPFLAGS+=-I${.CURDIR}/../../../dist/ipf
+.include <bsd.own.mk>
 
-.PATH:	${.CURDIR}/../../../dist/ipf/ipsend
+PROG=		iptest
+SRCS=		iptest.c iptests.c ip.c sbpf.c sock.c 44arp.c
+MAN=		iptest.1
+
+.PATH:		${NETBSDSRCDIR}/dist/ipf/ipsend
+
 .include <bsd.prog.mk>

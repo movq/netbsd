@@ -1,4 +1,4 @@
-/* $NetBSD: wscons_rfont.h,v 1.1 1998/03/22 14:24:02 drochner Exp $ */
+/* $NetBSD: wscons_rfont.h,v 1.4 2007/01/13 18:42:45 cube Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -894,7 +890,8 @@ static u_int32_t gallant19_126_pixels[] = {
 };
 static struct raster gallant19_126 = { 12, 22, 1, 1, gallant19_126_pixels, 0 };
 
-#define	null2 {0}, {0}
+#define	null1 {0, 0, 0, 0, 0}
+#define	null2 null1, null1
 #define	null4 null2, null2
 #define	null8 null4, null4
 #define	null16 null8, null8
@@ -1001,7 +998,7 @@ struct raster_font gallant19 = {
 	{ &gallant19_124, 0, -15, 12, 0 },
 	{ &gallant19_125, 0, -15, 12, 0 },
 	{ &gallant19_126, 0, -15, 12, 0 },
-	{ 0 },
+	null1,
 	null128
     },
 #ifdef COLORFONT_CACHE

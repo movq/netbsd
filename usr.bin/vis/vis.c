@@ -1,4 +1,4 @@
-/*	$NetBSD: vis.c,v 1.5 1997/10/20 03:06:48 lukem Exp $	*/
+/*	$NetBSD: vis.c,v 1.12 2008/07/21 14:19:27 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1989, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)vis.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: vis.c,v 1.5 1997/10/20 03:06:48 lukem Exp $");
+__RCSID("$NetBSD: vis.c,v 1.12 2008/07/21 14:19:27 lukem Exp $");
 #endif /* not lint */
 
 #include <stdio.h>
@@ -54,6 +50,7 @@ __RCSID("$NetBSD: vis.c,v 1.5 1997/10/20 03:06:48 lukem Exp $");
 #include <vis.h>
 
 int eflags, fold, foldwidth=80, none, markeol, debug;
+char *extra;
 
 int foldit __P((char *, int, int));
 int main __P((int, char **));
@@ -66,8 +63,9 @@ main(argc, argv)
 {
 	FILE *fp;
 	int ch;
+	int rval;
 
-	while ((ch = getopt(argc, argv, "nwctsobfF:ld")) != -1)
+	while ((ch = getopt(argc, argv, "bcfhlnostwe:F:d")) != -1)
 		switch((char)ch) {
 		case 'n':
 			none++;
@@ -87,8 +85,14 @@ main(argc, argv)
 		case 'o':
 			eflags |= VIS_OCTAL;
 			break;
+		case 'h':
+			eflags |= VIS_HTTPSTYLE;
+			break;
 		case 'b':
 			eflags |= VIS_NOSLASH;
+			break;
+		case 'e':
+			extra = optarg;
 			break;
 		case 'F':
 			if ((foldwidth = atoi(optarg))<5) {
@@ -110,23 +114,29 @@ main(argc, argv)
 		case '?':
 		default:
 			fprintf(stderr, 
-		"usage: vis [-nwctsobf] [-F foldwidth]\n");
+			    "usage: %s [-bcfhlnostw] [-e extra] [-F foldwidth]"
+			    " [file ...]\n", getprogname());
 			exit(1);
 		}
 	argc -= optind;
 	argv += optind;
 
+	rval = 0;
+
 	if (*argv)
 		while (*argv) {
-			if ((fp=fopen(*argv, "r")) != NULL)
+			if ((fp=fopen(*argv, "r")) != NULL) {
 				process(fp, *argv);
-			else
+				fclose(fp);
+			} else {
 				warn("%s", *argv);
+				rval = 1;
+			}
 			argv++;
 		}
 	else
 		process(stdin, "<stdin>");
-	exit(0);
+	exit(rval);
 }
 	
 void
@@ -155,7 +165,9 @@ process(fp, filename)
 			*cp++ = '$';
 			*cp++ = '\n';
 			*cp = '\0';
-		} else 
+		} else if (extra)
+			(void) svis(buff, (char)c, eflags, (char)rachar, extra);
+		else
 			(void) vis(buff, (char)c, eflags, (char)rachar);
 
 		cp = buff;

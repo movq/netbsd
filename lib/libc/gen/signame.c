@@ -1,4 +1,4 @@
-/*	$NetBSD: signame.c,v 1.10 1998/12/01 20:31:41 thorpej Exp $	*/
+/*	$NetBSD: signame.c,v 1.13 2005/09/13 01:44:09 christos Exp $	*/
 
 /*
  * Copyright (c) 1983 Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,44 +34,78 @@
 #if 0
 static char sccsid[] = "from: @(#)siglist.c	5.6 (Berkeley) 2/23/91";*/
 #else
-__RCSID("$NetBSD: signame.c,v 1.10 1998/12/01 20:31:41 thorpej Exp $");
+__RCSID("$NetBSD: signame.c,v 1.13 2005/09/13 01:44:09 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
-__warn_references(sys_signame,
-    "warning: reference to compatibility sys_signame[]; include <signal.h> for correct reference")
+#include <signal.h>
+#include <unistd.h>
 
-const char *const sys_signame[] = {
-	"Signal 0",
-	"HUP",		/* SIGHUP */
-	"INT",		/* SIGINT */
-	"QUIT",		/* SIGQUIT */
-	"ILL",		/* SIGILL */
-	"TRAP",		/* SIGTRAP */
-	"ABRT",		/* SIGABRT */
-	"EMT",		/* SIGEMT */
-	"FPE",		/* SIGFPE */
-	"KILL",		/* SIGKILL */
-	"BUS",		/* SIGBUS */
-	"SEGV",		/* SIGSEGV */
-	"SYS",		/* SIGSYS */
-	"PIPE",		/* SIGPIPE */
-	"ALRM",		/* SIGALRM */
-	"TERM",		/* SIGTERM */
-	"URG",		/* SIGURG */
-	"STOP",		/* SIGSTOP */
-	"TSTP",		/* SIGTSTP */
-	"CONT",		/* SIGCONT */
-	"CHLD",		/* SIGCHLD */
-	"TTIN",		/* SIGTTIN */
-	"TTOU",		/* SIGTTOU */
-	"IO",		/* SIGIO */
-	"XCPU",		/* SIGXCPU */
-	"XFSZ",		/* SIGXFSZ */
-	"VTALRM",	/* SIGVTALRM */
-	"PROF",		/* SIGPROF */
-	"WINCH",	/* SIGWINCH */
-	"INFO",		/* SIGINFO */
-	"USR1",		/* SIGUSR1 */
-	"USR2"		/* SIGUSR2 */
+static const char *const __signame14[] = {
+	"Signal 0",	/* 0 */
+	"HUP",		/* 1 SIGHUP */
+	"INT",		/* 2 SIGINT */
+	"QUIT",		/* 3 SIGQUIT */
+	"ILL",		/* 4 SIGILL */
+	"TRAP",		/* 5 SIGTRAP */
+	"ABRT",		/* 6 SIGABRT */
+	"EMT",		/* 7 SIGEMT */
+	"FPE",		/* 8 SIGFPE */
+	"KILL",		/* 9 SIGKILL */
+	"BUS",		/* 10 SIGBUS */
+	"SEGV",		/* 11 SIGSEGV */
+	"SYS",		/* 12 SIGSYS */
+	"PIPE",		/* 13 SIGPIPE */
+	"ALRM",		/* 14 SIGALRM */
+	"TERM",		/* 15 SIGTERM */
+	"URG",		/* 16 SIGURG */
+	"STOP",		/* 17 SIGSTOP */
+	"TSTP",		/* 18 SIGTSTP */
+	"CONT",		/* 19 SIGCONT */
+	"CHLD",		/* 20 SIGCHLD */
+	"TTIN",		/* 21 SIGTTIN */
+	"TTOU",		/* 22 SIGTTOU */
+	"IO",		/* 23 SIGIO */
+	"XCPU",		/* 24 SIGXCPU */
+	"XFSZ",		/* 25 SIGXFSZ */
+	"VTALRM",	/* 26 SIGVTALRM */
+	"PROF",		/* 27 SIGPROF */
+	"WINCH",	/* 28 SIGWINCH */
+	"INFO",		/* 29 SIGINFO */
+	"USR1",		/* 30 SIGUSR1 */
+	"USR2",		/* 31 SIGUSR2 */
+	"PWR",		/* 32 SIGPWR */
+	"RT0",		/* 33 SIGRTMIN + 0 */
+	"RT1",		/* 34 SIGRTMIN + 1 */
+	"RT2",		/* 35 SIGRTMIN + 2 */
+	"RT3",		/* 36 SIGRTMIN + 3 */
+	"RT4",		/* 37 SIGRTMIN + 4 */
+	"RT5",		/* 38 SIGRTMIN + 5 */
+	"RT6",		/* 39 SIGRTMIN + 6 */
+	"RT7",		/* 40 SIGRTMIN + 7 */
+	"RT8",		/* 41 SIGRTMIN + 8 */
+	"RT9",		/* 42 SIGRTMIN + 9 */
+	"RT10",		/* 43 SIGRTMIN + 10 */
+	"RT11",		/* 44 SIGRTMIN + 11 */
+	"RT12",		/* 45 SIGRTMIN + 12 */
+	"RT13",		/* 46 SIGRTMIN + 13 */
+	"RT14",		/* 47 SIGRTMIN + 14 */
+	"RT15",		/* 48 SIGRTMIN + 15 */
+	"RT16",		/* 49 SIGRTMIN + 16 */
+	"RT17",		/* 50 SIGRTMIN + 17 */
+	"RT18",		/* 51 SIGRTMIN + 18 */
+	"RT19",		/* 52 SIGRTMIN + 19 */
+	"RT20",		/* 53 SIGRTMIN + 20 */
+	"RT21",		/* 54 SIGRTMIN + 21 */
+	"RT22",		/* 55 SIGRTMIN + 22 */
+	"RT23",		/* 56 SIGRTMIN + 23 */
+	"RT24",		/* 57 SIGRTMIN + 24 */
+	"RT25",		/* 58 SIGRTMIN + 25 */
+	"RT26",		/* 59 SIGRTMIN + 26 */
+	"RT27",		/* 60 SIGRTMIN + 27 */
+	"RT28",		/* 61 SIGRTMIN + 28 */
+	"RT29",		/* 62 SIGRTMIN + 29 */
+	"RT30",		/* 63 SIGRTMIN + 30 */
 };
+
+const char * const *__sys_signame14 = __signame14;

@@ -1,4 +1,4 @@
-/*	$NetBSD: ad1848var.h,v 1.32 2000/02/07 22:07:30 thorpej Exp $	*/
+/*	$NetBSD: ad1848var.h,v 1.43 2008/04/28 20:23:51 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD 
- *	  Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its 
- *    contributors may be used to endorse or promote products derived 
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -87,41 +80,43 @@ struct ad1848_isa_softc {
 	bus_size_t sc_play_maxsize;	/* playback DMA size */
 	int	sc_recdrq;		/* record/capture DMA */
 	bus_size_t sc_rec_maxsize;	/* record/capture DMA size */
-	
-	u_long	sc_interrupts;		/* number of interrupts taken */
-	void	(*sc_intr)(void *);	/* dma completion intr handler */
-	void	*sc_arg;		/* arg for sc_intr() */
 
-	/* Only used by pss XXX */
+	u_long	sc_interrupts;		/* number of interrupts taken */
+	void	(*sc_pintr)(void *);	/* play DMA completion intr handler */
+	void	*sc_parg;		/* arg for sc_pintr() */
+	void	(*sc_rintr)(void *);	/* rec. DMA completion intr handler */
+	void	*sc_rarg;		/* arg for sc_rintr() */
+
+	/* Only used by gus XXX */
 	int	sc_iobase;
 
 #ifndef AUDIO_NO_POWER_CTL
-	int	(*powerctl)__P((void *, int));
+	int	(*powerctl)(void *, int);
 	void	*powerarg;
 #endif
 };
 
 #ifdef _KERNEL
-int	ad1848_isa_mapprobe __P((struct ad1848_isa_softc *, int));
-int	ad1848_isa_probe __P((struct ad1848_isa_softc *));
-void	ad1848_isa_unmap __P((struct ad1848_isa_softc *));
-void	ad1848_isa_attach __P((struct ad1848_isa_softc *));
+int	ad1848_isa_mapprobe(struct ad1848_isa_softc *, int);
+int	ad1848_isa_probe(struct ad1848_isa_softc *);
+void	ad1848_isa_unmap(struct ad1848_isa_softc *);
+void	ad1848_isa_attach(struct ad1848_isa_softc *);
 
-int	ad1848_isa_open __P((void *, int));
-void	ad1848_isa_close __P((void *));
- 
-int	ad1848_isa_trigger_output __P((void *, void *, void *, int,
-	    void (*)(void *), void *, struct audio_params *));
-int	ad1848_isa_trigger_input __P((void *, void *, void *, int,
-	    void (*)(void *), void *, struct audio_params *));
-int	ad1848_isa_halt_output __P((void *));
-int	ad1848_isa_halt_input __P((void *));
+int	ad1848_isa_open(void *, int);
+void	ad1848_isa_close(void *);
 
-int	ad1848_isa_intr __P((void *));
+int	ad1848_isa_trigger_output(void *, void *, void *, int,
+	    void (*)(void *), void *, const audio_params_t *);
+int	ad1848_isa_trigger_input(void *, void *, void *, int,
+	    void (*)(void *), void *, const audio_params_t *);
+int	ad1848_isa_halt_output(void *);
+int	ad1848_isa_halt_input(void *);
 
-void   *ad1848_isa_malloc __P((void *, int, size_t, int, int));
-void	ad1848_isa_free __P((void *, void *, int));
-size_t	ad1848_isa_round_buffersize __P((void *, int, size_t));
-int	ad1848_isa_mappage __P((void *, void *, int, int));
-int	ad1848_isa_get_props __P((void *));
+int	ad1848_isa_intr(void *);
+
+void   *ad1848_isa_malloc(void *, int, size_t, struct malloc_type *, int);
+void	ad1848_isa_free(void *, void *, struct malloc_type *);
+size_t	ad1848_isa_round_buffersize(void *, int, size_t);
+paddr_t	ad1848_isa_mappage(void *, void *, off_t, int);
+int	ad1848_isa_get_props(void *);
 #endif

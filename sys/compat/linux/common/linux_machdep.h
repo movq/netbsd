@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_machdep.h,v 1.2 1998/12/15 19:31:39 itohy Exp $	*/
+/*	$NetBSD: linux_machdep.h,v 1.18 2008/04/28 20:23:43 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -45,8 +38,33 @@
 #include <compat/linux/arch/m68k/linux_machdep.h>
 #elif defined(__alpha__)
 #include <compat/linux/arch/alpha/linux_machdep.h>
+#elif defined(__powerpc__)
+#include <compat/linux/arch/powerpc/linux_machdep.h>
+#elif defined(__mips__)
+#include <compat/linux/arch/mips/linux_machdep.h>
+#elif defined(__arm__)
+#include <compat/linux/arch/arm/linux_machdep.h>
+#elif defined(__amd64__)
+#include <compat/linux/arch/amd64/linux_machdep.h>
 #else
 #error Undefined linux_machdep.h machine type.
 #endif
+
+#ifndef LINUX_UNAME_ARCH
+#define LINUX_UNAME_ARCH machine
+#endif
+
+#ifdef _KERNEL
+__BEGIN_DECLS
+void linux_sendsig(const ksiginfo_t *, const sigset_t *);
+dev_t linux_fakedev(dev_t, int);
+__END_DECLS
+#ifdef LINUX_NPTL
+__BEGIN_DECLS
+void *linux_get_newtls(struct lwp *);
+int linux_set_newtls(struct lwp *, void *);
+__END_DECLS
+#endif /* !LINUX_NPTL */
+#endif /* !_KERNEL */
 
 #endif /* !_LINUX_MACHDEP_H */

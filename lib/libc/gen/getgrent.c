@@ -1,9 +1,11 @@
-/*	$NetBSD: getgrent.c,v 1.39 2000/01/22 22:19:10 mycroft Exp $	*/
+/*	$NetBSD: getgrent.c,v 1.62 2008/04/28 20:22:59 martin Exp $	*/
 
-/*
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
- * Portions Copyright (c) 1994, Jason Downs. All Rights Reserved.
+/*-
+ * Copyright (c) 1999-2000, 2004-2005 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * This code is derived from software contributed to The NetBSD Foundation
+ * by Luke Mewburn.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -13,11 +15,33 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
+ * Copyright (c) 1989, 1993
+ *	The Regents of the University of California.  All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -34,301 +58,869 @@
  * SUCH DAMAGE.
  */
 
+/*
+ * Portions Copyright (c) 1994, Jason Downs. All Rights Reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR(S) ``AS IS'' AND ANY EXPRESS
+ * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR(S) BE LIABLE FOR ANY DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ */
+
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
 #if 0
 static char sccsid[] = "@(#)getgrent.c	8.2 (Berkeley) 3/21/94";
 #else
-__RCSID("$NetBSD: getgrent.c,v 1.39 2000/01/22 22:19:10 mycroft Exp $");
+__RCSID("$NetBSD: getgrent.c,v 1.62 2008/04/28 20:22:59 martin Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
+#include "reentrant.h"
 
-#include <sys/types.h>
+#include <sys/param.h>
 
 #include <assert.h>
 #include <errno.h>
 #include <grp.h>
 #include <limits.h>
 #include <nsswitch.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <syslog.h>
 
-#ifdef __STDC__
-#include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
-
 #ifdef HESIOD
 #include <hesiod.h>
 #endif
+
 #ifdef YP
 #include <rpc/rpc.h>
 #include <rpcsvc/yp_prot.h>
 #include <rpcsvc/ypclnt.h>
 #endif
 
-#if defined(YP) || defined(HESIOD)
-#define _GROUP_COMPAT
-#endif
+#include "gr_private.h"
 
 #ifdef __weak_alias
 __weak_alias(endgrent,_endgrent)
 __weak_alias(getgrent,_getgrent)
+__weak_alias(getgrent_r,_getgrent_r)
 __weak_alias(getgrgid,_getgrgid)
+__weak_alias(getgrgid_r,_getgrgid_r)
 __weak_alias(getgrnam,_getgrnam)
+__weak_alias(getgrnam_r,_getgrnam_r)
 __weak_alias(setgrent,_setgrent)
 __weak_alias(setgroupent,_setgroupent)
 #endif
 
-static FILE		*_gr_fp;
-static struct group	_gr_group;
-static int		_gr_stayopen;
-static int		_gr_filesdone;
-
-static void grcleanup	__P((void));
-static int grscan	__P((int, gid_t, const char *));
-static int matchline	__P((int, gid_t, const char *));
-static int start_gr	__P((void));
-
-#define	MAXGRP		200
-#define	MAXLINELENGTH	1024
-
-static __aconst char	*members[MAXGRP];
-static char		line[MAXLINELENGTH];
-
-#ifdef YP
-static char	*__ypcurrent, *__ypdomain;
-static int	 __ypcurrentlen;
-static int	 _gr_ypdone;
+#ifdef _REENTRANT
+mutex_t	__grmutex = MUTEX_INITIALIZER;
 #endif
 
-#ifdef HESIOD
-static int	_gr_hesnum;
-#endif
-
-#ifdef _GROUP_COMPAT
-enum _grmode { GRMODE_NONE, GRMODE_FULL, GRMODE_NAME };
-static enum _grmode	 __grmode;
-#endif
-
-struct group *
-getgrent()
+/*
+ * _gr_memfrombuf
+ *	Obtain want bytes from buffer (of size buflen) and return a pointer
+ *	to the available memory after adjusting buffer/buflen.
+ *	Returns NULL if there is insufficient space.
+ */
+static char *
+_gr_memfrombuf(size_t want, char **buffer, size_t *buflen)
 {
-	if ((!_gr_fp && !start_gr()) || !grscan(0, 0, NULL))
- 		return (NULL);
-	return &_gr_group;
-}
+	char	*rv;
 
-struct group *
-getgrnam(name)
-	const char *name;
-{
-	int rval;
-
-	_DIAGASSERT(name != NULL);
-
-	if (!start_gr())
+	if (want > *buflen) {
+		errno = ERANGE;
 		return NULL;
-	rval = grscan(1, 0, name);
-	if (!_gr_stayopen)
-		endgrent();
-	return (rval) ? &_gr_group : NULL;
-}
-
-struct group *
-getgrgid(gid)
-	gid_t gid;
-{
-	int rval;
-
-	if (!start_gr())
-		return NULL;
-	rval = grscan(1, gid, NULL);
-	if (!_gr_stayopen)
-		endgrent();
-	return (rval) ? &_gr_group : NULL;
-}
-
-void
-grcleanup()
-{
-	_gr_filesdone = 0;
-#ifdef YP
-	if (__ypcurrent)
-		free(__ypcurrent);
-	__ypcurrent = NULL;
-	_gr_ypdone = 0;
-#endif
-#ifdef HESIOD
-	_gr_hesnum = 0;
-#endif
-#ifdef _GROUP_COMPAT
-	__grmode = GRMODE_NONE;
-#endif
-}
-
-static int
-start_gr()
-{
-	grcleanup();
-	if (_gr_fp) {
-		rewind(_gr_fp);
-		return 1;
 	}
-	return (_gr_fp = fopen(_PATH_GROUP, "r")) ? 1 : 0;
+	rv = *buffer;
+	*buffer += want;
+	*buflen -= want;
+	return rv;
 }
 
-void
-setgrent()
+/*
+ * _gr_parse
+ *	Parses entry as a line per group(5) (without the trailing \n)
+ *	and fills in grp with corresponding values; memory for strings
+ *	and arrays will be allocated from buf (of size buflen).
+ *	Returns 1 if parsed successfully, 0 on parse failure.
+ */
+static int
+_gr_parse(const char *entry, struct group *grp, char *buf, size_t buflen)
 {
-	(void) setgroupent(0);
-}
+	unsigned long	id;
+	const char	*bp;
+	char		*ep;
+	size_t		count;
+	int		memc;
 
-int
-setgroupent(stayopen)
-	int stayopen;
-{
-	if (!start_gr())
+	_DIAGASSERT(entry != NULL);
+	_DIAGASSERT(grp != NULL);
+	_DIAGASSERT(buf != NULL);
+
+#define COPYTOBUF(to) \
+	do { \
+		(to) = _gr_memfrombuf(count+1, &buf, &buflen); \
+		if ((to) == NULL) \
+			return 0; \
+		memmove((to), entry, count); \
+		to[count] = '\0'; \
+	} while (0)	/* LINTED */
+
+#if 0
+	if (*entry == '+')			/* fail on compat `+' token */
 		return 0;
-	_gr_stayopen = stayopen;
+#endif
+
+	count = strcspn(entry, ":");		/* parse gr_name */
+	if (entry[count] == '\0')
+		return 0;
+	COPYTOBUF(grp->gr_name);
+	entry += count + 1;
+
+	count = strcspn(entry, ":");		/* parse gr_passwd */
+	if (entry[count] == '\0')
+		return 0;
+	COPYTOBUF(grp->gr_passwd);
+	entry += count + 1;
+
+	count = strcspn(entry, ":");		/* parse gr_gid */
+	if (entry[count] == '\0')
+		return 0;
+	id = strtoul(entry, &ep, 10);
+	if (id > GID_MAX || *ep != ':')
+		return 0;
+	grp->gr_gid = (gid_t)id;
+	entry += count + 1;
+
+	memc = 1;				/* for final NULL */
+	if (*entry != '\0')
+		memc++;				/* for first item */
+	for (bp = entry; *bp != '\0'; bp++) {
+		if (*bp == ',')
+			memc++;
+	}
+				/* grab ALIGNed char **gr_mem from buf */
+	ep = _gr_memfrombuf(memc * sizeof(char *) + ALIGNBYTES, &buf, &buflen);
+	grp->gr_mem = (char **)ALIGN(ep);
+	if (grp->gr_mem == NULL)
+		return 0;
+
+	for (memc = 0; *entry != '\0'; memc++) {
+		count = strcspn(entry, ",");	/* parse member */
+		COPYTOBUF(grp->gr_mem[memc]);
+		entry += count;
+		if (*entry == ',')
+			entry++;
+	}
+
+#undef COPYTOBUF
+
+	grp->gr_mem[memc] = NULL;
 	return 1;
 }
 
-void
-endgrent()
+/*
+ * _gr_copy
+ *	Copy the contents of fromgrp to grp; memory for strings
+ *	and arrays will be allocated from buf (of size buflen).
+ *	Returns 1 if copied successfully, 0 on copy failure.
+ *	NOTE: fromgrp must not use buf for its own pointers.
+ */
+static int
+_gr_copy(struct group *fromgrp, struct group *grp, char *buf, size_t buflen)
 {
-	grcleanup();
-	if (_gr_fp) {
-		(void)fclose(_gr_fp);
-		_gr_fp = NULL;
+	char	*ep;
+	int	memc;
+
+	_DIAGASSERT(fromgrp != NULL);
+	_DIAGASSERT(grp != NULL);
+	_DIAGASSERT(buf != NULL);
+
+#define COPYSTR(to, from) \
+	do { \
+		size_t count = strlen((from)); \
+		(to) = _gr_memfrombuf(count+1, &buf, &buflen); \
+		if ((to) == NULL) \
+			return 0; \
+		memmove((to), (from), count); \
+		to[count] = '\0'; \
+	} while (0)	/* LINTED */
+
+	COPYSTR(grp->gr_name, fromgrp->gr_name);
+	COPYSTR(grp->gr_passwd, fromgrp->gr_passwd);
+	grp->gr_gid = fromgrp->gr_gid;
+
+	for (memc = 0; fromgrp->gr_mem[memc]; memc++)
+		continue;
+	memc++;					/* for final NULL */
+
+				/* grab ALIGNed char **gr_mem from buf */
+	ep = _gr_memfrombuf(memc * sizeof(char *) + ALIGNBYTES, &buf, &buflen);
+	grp->gr_mem = (char **)ALIGN(ep);
+	if (grp->gr_mem == NULL)
+		return 0;
+
+	for (memc = 0; fromgrp->gr_mem[memc]; memc++) {
+		COPYSTR(grp->gr_mem[memc], fromgrp->gr_mem[memc]);
 	}
+
+#undef COPYSTR
+
+	grp->gr_mem[memc] = NULL;
+	return 1;
 }
 
+		/*
+		 *	files methods
+		 */
 
-static int _local_grscan __P((void *, void *, va_list));
-
-/*ARGSUSED*/
-static int
-_local_grscan(rv, cb_data, ap)
-	void	*rv;
-	void	*cb_data;
-	va_list	 ap;
+int
+__grstart_files(struct __grstate_files *state)
 {
-	int		 search = va_arg(ap, int);
-	gid_t		 gid = va_arg(ap, gid_t);
-	const char	*name = va_arg(ap, const char *);
 
-	if (_gr_filesdone)
-		return NS_NOTFOUND;
-	for (;;) {
-		if (!fgets(line, sizeof(line), _gr_fp)) {
-			if (!search)
-				_gr_filesdone = 1;
-			return NS_NOTFOUND;
-		}
-		/* skip lines that are too big */
-		if (!strchr(line, '\n')) {
+	_DIAGASSERT(state != NULL);
+
+	if (state->fp == NULL) {
+		state->fp = fopen(_PATH_GROUP, "r");
+		if (state->fp == NULL)
+			return NS_UNAVAIL;
+	} else {
+		rewind(state->fp);
+	}
+	return NS_SUCCESS;
+}
+
+int
+__grend_files(struct __grstate_files *state)
+{
+
+	_DIAGASSERT(state != NULL);
+
+	if (state->fp) {
+		(void) fclose(state->fp);
+		state->fp = NULL;
+	}
+	return NS_SUCCESS;
+}
+
+/*
+ * __grscan_files
+ *	Scan state->fp for the next desired entry.
+ *	If search is zero, return the next entry.
+ *	If search is non-zero, look for a specific name (if name != NULL),
+ *	or a specific gid (if name == NULL).
+ *	Sets *retval to the errno if the result is not NS_SUCCESS
+ *	or NS_NOTFOUND.
+ */
+int
+__grscan_files(int *retval, struct group *grp, char *buffer, size_t buflen,
+	struct __grstate_files *state, int search, const char *name, gid_t gid)
+{
+	int	rv;
+	char	filebuf[_GETGR_R_SIZE_MAX], *ep;
+
+	_DIAGASSERT(retval != NULL);
+	_DIAGASSERT(grp != NULL);
+	_DIAGASSERT(buffer != NULL);
+	_DIAGASSERT(state != NULL);
+	/* name is NULL to indicate searching for gid */
+
+	*retval = 0;
+
+	if (state->fp == NULL) {	/* only start if file not open yet */
+		rv = __grstart_files(state);
+		if (rv != NS_SUCCESS)
+			goto filesgrscan_out;
+	}
+
+	rv = NS_NOTFOUND;
+
+							/* scan line by line */
+	while (fgets(filebuf, sizeof(filebuf), state->fp) != NULL) {
+		ep = strchr(filebuf, '\n');
+		if (ep == NULL) {	/* skip lines that are too big */
 			int ch;
 
-			while ((ch = getc(_gr_fp)) != '\n' && ch != EOF)
-				;
+			while ((ch = getc(state->fp)) != '\n' && ch != EOF)
+				continue;
 			continue;
 		}
-		if (matchline(search, gid, name))
-			return NS_SUCCESS;
+		*ep = '\0';				/* clear trailing \n */
+
+		if (filebuf[0] == '+')			/* skip compat line */
+			continue;
+
+							/* validate line */
+		if (! _gr_parse(filebuf, grp, buffer, buflen)) {
+			continue;			/* skip bad lines */
+		}
+		if (! search) {				/* just want this one */
+			rv = NS_SUCCESS;
+			break;
+		}
+							/* want specific */
+		if ((name && strcmp(name, grp->gr_name) == 0) ||
+		    (!name && gid == grp->gr_gid)) {
+			rv = NS_SUCCESS;
+			break;
+		}
 	}
-	/* NOTREACHED */
+
+ filesgrscan_out:
+	if (rv != NS_SUCCESS && rv != NS_NOTFOUND)
+		*retval = errno;
+	return rv;
 }
+
+
+static struct __grstate_files	_files_state;
+					/* storage for non _r functions */
+static struct group		_files_group;
+static char			_files_groupbuf[_GETGR_R_SIZE_MAX];
+
+/*ARGSUSED*/
+static int
+_files_setgrent(void *nsrv, void *nscb, va_list ap)
+{
+
+	_files_state.stayopen = 0;
+	return __grstart_files(&_files_state);
+}
+
+/*ARGSUSED*/
+static int
+_files_setgroupent(void *nsrv, void *nscb, va_list ap)
+{
+	int	*retval		= va_arg(ap, int *);
+	int	 stayopen	= va_arg(ap, int);
+
+	int	rv;
+
+	_files_state.stayopen = stayopen;
+	rv = __grstart_files(&_files_state);
+	*retval = (rv == NS_SUCCESS);
+	return rv;
+}
+
+/*ARGSUSED*/
+static int
+_files_endgrent(void *nsrv, void *nscb, va_list ap)
+{
+
+	_files_state.stayopen = 0;
+	return __grend_files(&_files_state);
+}
+
+/*ARGSUSED*/
+static int
+_files_getgrent(void *nsrv, void *nscb, va_list ap)
+{
+	struct group	**retval = va_arg(ap, struct group **);
+
+	int	rv, rerror;
+
+	_DIAGASSERT(retval != NULL);
+
+	*retval = NULL;
+	rv = __grscan_files(&rerror, &_files_group,
+	    _files_groupbuf, sizeof(_files_groupbuf),
+	    &_files_state, 0, NULL, 0);
+	if (rv == NS_SUCCESS)
+		*retval = &_files_group;
+	return rv;
+}
+
+/*ARGSUSED*/
+static int
+_files_getgrent_r(void *nsrv, void *nscb, va_list ap)
+{
+	int		*retval	= va_arg(ap, int *);
+	struct group	*grp	= va_arg(ap, struct group *);
+	char		*buffer	= va_arg(ap, char *);
+	size_t		 buflen	= va_arg(ap, size_t);
+	struct group   **result	= va_arg(ap, struct group **);
+
+	int	rv;
+
+	_DIAGASSERT(retval != NULL);
+	_DIAGASSERT(grp != NULL);
+	_DIAGASSERT(buffer != NULL);
+	_DIAGASSERT(result != NULL);
+
+	rv = __grscan_files(retval, grp, buffer, buflen,
+	    &_files_state, 0, NULL, 0);
+	if (rv == NS_SUCCESS)
+		*result = grp;
+	else
+		*result = NULL;
+	return rv;
+}
+
+/*ARGSUSED*/
+static int
+_files_getgrgid(void *nsrv, void *nscb, va_list ap)
+{
+	struct group	**retval = va_arg(ap, struct group **);
+	gid_t		 gid	= va_arg(ap, gid_t);
+
+	int	rv, rerror;
+
+	_DIAGASSERT(retval != NULL);
+
+	*retval = NULL;
+	rv = __grstart_files(&_files_state);
+	if (rv != NS_SUCCESS)
+		return rv;
+	rv = __grscan_files(&rerror, &_files_group,
+	    _files_groupbuf, sizeof(_files_groupbuf),
+	    &_files_state, 1, NULL, gid);
+	if (!_files_state.stayopen)
+		__grend_files(&_files_state);
+	if (rv == NS_SUCCESS)
+		*retval = &_files_group;
+	return rv;
+}
+
+/*ARGSUSED*/
+static int
+_files_getgrgid_r(void *nsrv, void *nscb, va_list ap)
+{
+	int		*retval	= va_arg(ap, int *);
+	gid_t		 gid	= va_arg(ap, gid_t);
+	struct group	*grp	= va_arg(ap, struct group *);
+	char		*buffer	= va_arg(ap, char *);
+	size_t		 buflen	= va_arg(ap, size_t);
+	struct group   **result	= va_arg(ap, struct group **);
+
+	struct __grstate_files state;
+	int	rv;
+
+	_DIAGASSERT(retval != NULL);
+	_DIAGASSERT(grp != NULL);
+	_DIAGASSERT(buffer != NULL);
+	_DIAGASSERT(result != NULL);
+
+	*result = NULL;
+	memset(&state, 0, sizeof(state));
+	rv = __grscan_files(retval, grp, buffer, buflen, &state, 1, NULL, gid);
+	__grend_files(&state);
+	if (rv == NS_SUCCESS)
+		*result = grp;
+	return rv;
+}
+
+/*ARGSUSED*/
+static int
+_files_getgrnam(void *nsrv, void *nscb, va_list ap)
+{
+	struct group	**retval = va_arg(ap, struct group **);
+	const char	*name	= va_arg(ap, const char *);
+
+	int	rv, rerror;
+
+	_DIAGASSERT(retval != NULL);
+
+	*retval = NULL;
+	rv = __grstart_files(&_files_state);
+	if (rv != NS_SUCCESS)
+		return rv;
+	rv = __grscan_files(&rerror, &_files_group,
+	    _files_groupbuf, sizeof(_files_groupbuf),
+	    &_files_state, 1, name, 0);
+	if (!_files_state.stayopen)
+		__grend_files(&_files_state);
+	if (rv == NS_SUCCESS)
+		*retval = &_files_group;
+	return rv;
+}
+
+/*ARGSUSED*/
+static int
+_files_getgrnam_r(void *nsrv, void *nscb, va_list ap)
+{
+	int		*retval	= va_arg(ap, int *);
+	const char	*name	= va_arg(ap, const char *);
+	struct group	*grp	= va_arg(ap, struct group *);
+	char		*buffer	= va_arg(ap, char *);
+	size_t		 buflen	= va_arg(ap, size_t);
+	struct group   **result	= va_arg(ap, struct group **);
+
+	struct __grstate_files state;
+	int	rv;
+
+	_DIAGASSERT(retval != NULL);
+	_DIAGASSERT(grp != NULL);
+	_DIAGASSERT(buffer != NULL);
+	_DIAGASSERT(result != NULL);
+
+	*result = NULL;
+	memset(&state, 0, sizeof(state));
+	rv = __grscan_files(retval, grp, buffer, buflen, &state, 1, name, 0);
+	__grend_files(&state);
+	if (rv == NS_SUCCESS)
+		*result = grp;
+	return rv;
+}
+
 
 #ifdef HESIOD
-static int _dns_grscan __P((void *, void *, va_list));
+		/*
+		 *	dns methods
+		 */
 
-/*ARGSUSED*/
-static int
-_dns_grscan(rv, cb_data, ap)
-	void	*rv;
-	void	*cb_data;
-	va_list	 ap;
+int
+__grstart_dns(struct __grstate_dns *state)
 {
-	int		 search = va_arg(ap, int);
-	gid_t		 gid = va_arg(ap, gid_t);
-	const char	*name = va_arg(ap, const char *);
 
-	char		**hp;
-	void		 *context;
-	int		  r;
+	_DIAGASSERT(state != NULL);
 
-	r = NS_UNAVAIL;
-	if (!search && _gr_hesnum == -1)
-		return NS_NOTFOUND;
-	if (hesiod_init(&context) == -1)
-		return (r);
+	state->num = 0;
+	if (state->context == NULL) {			/* setup Hesiod */
+		if (hesiod_init(&state->context) == -1)
+			return NS_UNAVAIL;
+	}
 
-	for (;;) {
-		if (search) {
-			if (name)
-				strncpy(line, name, sizeof(line));
-			else
-				snprintf(line, sizeof(line), "%u",
-				    (unsigned int)gid);
-		} else {
-			snprintf(line, sizeof(line), "group-%u", _gr_hesnum);
-			_gr_hesnum++;
-		}
+	return NS_SUCCESS;
+}
 
-		line[sizeof(line) - 1] = '\0';
-		hp = hesiod_resolve(context, line, "group");
-		if (hp == NULL) {
-			if (errno == ENOENT) {
-				if (!search)
-					_gr_hesnum = -1;
-				r = NS_NOTFOUND;
-			}
+int
+__grend_dns(struct __grstate_dns *state)
+{
+
+	_DIAGASSERT(state != NULL);
+
+	state->num = 0;
+	if (state->context) {
+		hesiod_end(state->context);
+		state->context = NULL;
+	}
+	return NS_SUCCESS;
+}
+
+/*
+ * __grscan_dns
+ *	Search Hesiod for the next desired entry.
+ *	If search is zero, return the next entry.
+ *	If search is non-zero, look for a specific name (if name != NULL),
+ *	or a specific gid (if name == NULL).
+ */
+int
+__grscan_dns(int *retval, struct group *grp, char *buffer, size_t buflen,
+	struct __grstate_dns *state, int search, const char *name, gid_t gid)
+{
+	const char	**curzone;
+	char		**hp, *ep;
+	int		rv;
+
+	static const char *zones_gid_group[] = {
+		"gid",
+		"group",
+		NULL
+	};
+
+	static const char *zones_group[] = {
+		"group",
+		NULL
+	};
+
+	_DIAGASSERT(retval != NULL);
+	_DIAGASSERT(grp != NULL);
+	_DIAGASSERT(buffer != NULL);
+	_DIAGASSERT(state != NULL);
+	/* name is NULL to indicate searching for gid */
+
+	*retval = 0;
+
+	if (state->context == NULL) {	/* only start if Hesiod not setup */
+		rv = __grstart_dns(state);
+		if (rv != NS_SUCCESS)
+			return rv;
+	}
+
+ next_dns_entry:
+	hp = NULL;
+	rv = NS_NOTFOUND;
+
+	if (! search) {			/* find next entry */
+		if (state->num == -1)		/* exhausted search */
+			return NS_NOTFOUND;
+						/* find group-NNN */
+		snprintf(buffer, buflen, "group-%u", state->num);
+		state->num++;
+		curzone = zones_group;
+	} else if (name) {		/* find group name */
+		snprintf(buffer, buflen, "%s", name);
+		curzone = zones_group;
+	} else {			/* find gid */
+		snprintf(buffer, buflen, "%u", (unsigned int)gid);
+		curzone = zones_gid_group;
+	}
+
+	for (; *curzone; curzone++) {		/* search zones */
+		hp = hesiod_resolve(state->context, buffer, *curzone);
+		if (hp != NULL)
 			break;
-		}
-
-						/* only check first elem */
-		strncpy(line, hp[0], sizeof(line));
-		line[sizeof(line) - 1] = '\0';
-		hesiod_free_list(context, hp);
-		if (matchline(search, gid, name)) {
-			r = NS_SUCCESS;
-			break;
-		} else if (search) {
-			r = NS_NOTFOUND;
-			break;
+		if (errno != ENOENT) {
+			rv = NS_UNAVAIL;
+			goto dnsgrscan_out;
 		}
 	}
-	hesiod_end(context);
-	return (r);
-}
-#endif
+	if (*curzone == NULL) {
+		if (! search)
+			state->num = -1;
+		goto dnsgrscan_out;
+	}
 
-#ifdef YP
-static int _nis_grscan __P((void *, void *, va_list));
+	if ((ep = strchr(hp[0], '\n')) != NULL)
+		*ep = '\0';				/* clear trailing \n */
+	if (_gr_parse(hp[0], grp, buffer, buflen)) {	/* validate line */
+		if (! search) {				/* just want this one */
+			rv = NS_SUCCESS;
+		} else if ((name && strcmp(name, grp->gr_name) == 0) ||
+		    (!name && gid == grp->gr_gid)) {	/* want specific */
+			rv = NS_SUCCESS;
+		}
+	} else {					/* dodgy entry */
+		if (!search) {			/* try again if ! searching */
+			hesiod_free_list(state->context, hp);
+			goto next_dns_entry;
+		}
+	}
+
+ dnsgrscan_out:
+	if (rv != NS_SUCCESS && rv != NS_NOTFOUND)
+		*retval = errno;
+	if (hp)
+		hesiod_free_list(state->context, hp);
+	return rv;
+}
+
+static struct __grstate_dns	_dns_state;
+					/* storage for non _r functions */
+static struct group		_dns_group;
+static char			_dns_groupbuf[_GETGR_R_SIZE_MAX];
 
 /*ARGSUSED*/
 static int
-_nis_grscan(rv, cb_data, ap)
-	void	*rv;
-	void	*cb_data;
-	va_list	 ap;
+_dns_setgrent(void *nsrv, void *nscb, va_list ap)
 {
-	int		 search = va_arg(ap, int);
-	gid_t		 gid = va_arg(ap, gid_t);
-	const char	*name = va_arg(ap, const char *);
 
-	char	*key, *data;
-	int	 keylen, datalen;
-	int	 r;
+	_dns_state.stayopen = 0;
+	return __grstart_dns(&_dns_state);
+}
 
-	if(__ypdomain == NULL) {
-		switch (yp_get_default_domain(&__ypdomain)) {
+/*ARGSUSED*/
+static int
+_dns_setgroupent(void *nsrv, void *nscb, va_list ap)
+{
+	int	*retval		= va_arg(ap, int *);
+	int	 stayopen	= va_arg(ap, int);
+
+	int	rv;
+
+	_dns_state.stayopen = stayopen;
+	rv = __grstart_dns(&_dns_state);
+	*retval = (rv == NS_SUCCESS);
+	return rv;
+}
+
+/*ARGSUSED*/
+static int
+_dns_endgrent(void *nsrv, void *nscb, va_list ap)
+{
+
+	_dns_state.stayopen = 0;
+	return __grend_dns(&_dns_state);
+}
+
+/*ARGSUSED*/
+static int
+_dns_getgrent(void *nsrv, void *nscb, va_list ap)
+{
+	struct group	**retval = va_arg(ap, struct group **);
+
+	int	  rv, rerror;
+
+	_DIAGASSERT(retval != NULL);
+
+	*retval = NULL;
+	rv = __grscan_dns(&rerror, &_dns_group,
+	    _dns_groupbuf, sizeof(_dns_groupbuf), &_dns_state, 0, NULL, 0);
+	if (rv == NS_SUCCESS)
+		*retval = &_dns_group;
+	return rv;
+}
+
+/*ARGSUSED*/
+static int
+_dns_getgrent_r(void *nsrv, void *nscb, va_list ap)
+{
+	int		*retval	= va_arg(ap, int *);
+	struct group	*grp	= va_arg(ap, struct group *);
+	char		*buffer	= va_arg(ap, char *);
+	size_t		 buflen	= va_arg(ap, size_t);
+	struct group   **result	= va_arg(ap, struct group **);
+
+	int	rv;
+
+	_DIAGASSERT(retval != NULL);
+	_DIAGASSERT(grp != NULL);
+	_DIAGASSERT(buffer != NULL);
+	_DIAGASSERT(result != NULL);
+
+	rv = __grscan_dns(retval, grp, buffer, buflen,
+	    &_dns_state, 0, NULL, 0);
+	if (rv == NS_SUCCESS)
+		*result = grp;
+	else
+		*result = NULL;
+	return rv;
+}
+/*ARGSUSED*/
+static int
+_dns_getgrgid(void *nsrv, void *nscb, va_list ap)
+{
+	struct group	**retval = va_arg(ap, struct group **);
+	gid_t		 gid	= va_arg(ap, gid_t);
+
+	int	rv, rerror;
+
+	_DIAGASSERT(retval != NULL);
+
+	*retval = NULL;
+	rv = __grstart_dns(&_dns_state);
+	if (rv != NS_SUCCESS)
+		return rv;
+	rv = __grscan_dns(&rerror, &_dns_group,
+	    _dns_groupbuf, sizeof(_dns_groupbuf), &_dns_state, 1, NULL, gid);
+	if (!_dns_state.stayopen)
+		__grend_dns(&_dns_state);
+	if (rv == NS_SUCCESS)
+		*retval = &_dns_group;
+	return rv;
+}
+
+/*ARGSUSED*/
+static int
+_dns_getgrgid_r(void *nsrv, void *nscb, va_list ap)
+{
+	int		*retval	= va_arg(ap, int *);
+	gid_t		 gid	= va_arg(ap, gid_t);
+	struct group	*grp	= va_arg(ap, struct group *);
+	char		*buffer	= va_arg(ap, char *);
+	size_t		 buflen	= va_arg(ap, size_t);
+	struct group   **result	= va_arg(ap, struct group **);
+
+	struct __grstate_dns state;
+	int	rv;
+
+	_DIAGASSERT(retval != NULL);
+	_DIAGASSERT(grp != NULL);
+	_DIAGASSERT(buffer != NULL);
+	_DIAGASSERT(result != NULL);
+
+	*result = NULL;
+	memset(&state, 0, sizeof(state));
+	rv = __grscan_dns(retval, grp, buffer, buflen, &state, 1, NULL, gid);
+	__grend_dns(&state);
+	if (rv == NS_SUCCESS)
+		*result = grp;
+	return rv;
+}
+
+/*ARGSUSED*/
+static int
+_dns_getgrnam(void *nsrv, void *nscb, va_list ap)
+{
+	struct group	**retval = va_arg(ap, struct group **);
+	const char	*name	= va_arg(ap, const char *);
+
+	int	rv, rerror;
+
+	_DIAGASSERT(retval != NULL);
+
+	*retval = NULL;
+	rv = __grstart_dns(&_dns_state);
+	if (rv != NS_SUCCESS)
+		return rv;
+	rv = __grscan_dns(&rerror, &_dns_group,
+	    _dns_groupbuf, sizeof(_dns_groupbuf), &_dns_state, 1, name, 0);
+	if (!_dns_state.stayopen)
+		__grend_dns(&_dns_state);
+	if (rv == NS_SUCCESS)
+		*retval = &_dns_group;
+	return rv;
+}
+
+/*ARGSUSED*/
+static int
+_dns_getgrnam_r(void *nsrv, void *nscb, va_list ap)
+{
+	int		*retval	= va_arg(ap, int *);
+	const char	*name	= va_arg(ap, const char *);
+	struct group	*grp	= va_arg(ap, struct group *);
+	char		*buffer	= va_arg(ap, char *);
+	size_t		 buflen	= va_arg(ap, size_t);
+	struct group   **result	= va_arg(ap, struct group **);
+
+	struct __grstate_dns state;
+	int	rv;
+
+	_DIAGASSERT(retval != NULL);
+	_DIAGASSERT(grp != NULL);
+	_DIAGASSERT(buffer != NULL);
+	_DIAGASSERT(result != NULL);
+
+	*result = NULL;
+	memset(&state, 0, sizeof(state));
+	rv = __grscan_dns(retval, grp, buffer, buflen, &state, 1, name, 0);
+	__grend_dns(&state);
+	if (rv == NS_SUCCESS)
+		*result = grp;
+	return rv;
+}
+
+#endif /* HESIOD */
+
+
+#ifdef YP
+		/*
+		 *	nis methods
+		 */
+
+int
+__grstart_nis(struct __grstate_nis *state)
+{
+
+	_DIAGASSERT(state != NULL);
+
+	state->done = 0;
+	if (state->current) {
+		free(state->current);
+		state->current = NULL;
+	}
+	if (state->domain == NULL) {			/* setup NIS */
+		switch (yp_get_default_domain(&state->domain)) {
 		case 0:
 			break;
 		case YPERR_RESRC:
@@ -337,317 +929,1007 @@ _nis_grscan(rv, cb_data, ap)
 			return NS_UNAVAIL;
 		}
 	}
+	return NS_SUCCESS;
+}
 
-	if (search) {			/* specific group or gid */
-		if (name)
-			strncpy(line, name, sizeof(line));
-		else
-			snprintf(line, sizeof(line), "%u", (unsigned int)gid);
-		line[sizeof(line) - 1] = '\0';
-		data = NULL;
-		r = yp_match(__ypdomain,
-				(name) ? "group.byname" : "group.bygid",
-				line, (int)strlen(line), &data, &datalen);
-		switch (r) {
+int
+__grend_nis(struct __grstate_nis *state)
+{
+
+	_DIAGASSERT(state != NULL);
+
+	if (state->domain) {
+		state->domain = NULL;
+	}
+	state->done = 0;
+	if (state->current) {
+		free(state->current);
+		state->current = NULL;
+	}
+	return NS_SUCCESS;
+}
+
+/*
+ * __grscan_nis
+ *	Search NIS for the next desired entry.
+ *	If search is zero, return the next entry.
+ *	If search is non-zero, look for a specific name (if name != NULL),
+ *	or a specific gid (if name == NULL).
+ */
+int
+__grscan_nis(int *retval, struct group *grp, char *buffer, size_t buflen,
+	struct __grstate_nis *state, int search, const char *name, gid_t gid)
+{
+	const char *map;
+	char	*key, *data;
+	int	nisr, rv, keylen, datalen;
+
+	_DIAGASSERT(retval != NULL);
+	_DIAGASSERT(grp != NULL);
+	_DIAGASSERT(buffer != NULL);
+	_DIAGASSERT(state != NULL);
+	/* name is NULL to indicate searching for gid */
+
+	*retval = 0;
+
+	if (state->domain == NULL) {	/* only start if NIS not setup */
+		rv = __grstart_nis(state);
+		if (rv != NS_SUCCESS)
+			return rv;
+	}
+
+ next_nis_entry:
+	key = NULL;
+	data = NULL;
+	rv = NS_SUCCESS;
+
+	if (! search) 	{			/* find next entry */
+		if (state->done)			/* exhausted search */
+			return NS_NOTFOUND;
+		map = "group.byname";
+		if (state->current) {			/* already searching */
+			nisr = yp_next(state->domain, map,
+			    state->current, state->currentlen,
+			    &key, &keylen, &data, &datalen);
+			free(state->current);
+			state->current = NULL;
+			switch (nisr) {
+			case 0:
+				state->current = key;
+				state->currentlen = keylen;
+				key = NULL;
+				break;
+			case YPERR_NOMORE:
+				rv = NS_NOTFOUND;
+				state->done = 1;
+				break;
+			default:
+				rv = NS_UNAVAIL;
+				break;
+			}
+		} else {				/* new search */
+			if (yp_first(state->domain, map,
+			    &state->current, &state->currentlen,
+			    &data, &datalen)) {
+				rv = NS_UNAVAIL;
+			}
+		}
+	} else {				/* search for specific item */
+		if (name) {			/* find group name */
+			snprintf(buffer, buflen, "%s", name);
+			map = "group.byname";
+		} else {			/* find gid */
+			snprintf(buffer, buflen, "%u", (unsigned int)gid);
+			map = "group.bygid";
+		}
+		nisr = yp_match(state->domain, map, buffer, (int)strlen(buffer),
+		    &data, &datalen);
+		switch (nisr) {
 		case 0:
 			break;
 		case YPERR_KEY:
-			if (data)
-				free(data);
-			return NS_NOTFOUND;
+			rv = NS_NOTFOUND;
+			break;
 		default:
-			if (data)
+			rv = NS_UNAVAIL;
+			break;
+		}
+	}
+	if (rv == NS_SUCCESS) {				/* validate data */
+		data[datalen] = '\0';			/* clear trailing \n */
+		if (_gr_parse(data, grp, buffer, buflen)) {
+			if (! search) {			/* just want this one */
+				rv = NS_SUCCESS;
+			} else if ((name && strcmp(name, grp->gr_name) == 0) ||
+			    (!name && gid == grp->gr_gid)) {
+							/* want specific */
+				rv = NS_SUCCESS;
+			}
+		} else {				/* dodgy entry */
+			if (!search) {		/* try again if ! searching */
 				free(data);
-			return NS_UNAVAIL;
+				goto next_nis_entry;
+			}
 		}
-		data[datalen] = '\0';			/* clear trailing \n */
-		strncpy(line, data, sizeof(line));
-		line[sizeof(line) - 1] = '\0';
-		free(data);
-		if (matchline(search, gid, name))
-			return NS_SUCCESS;
-		else
-			return NS_NOTFOUND;
 	}
 
-						/* ! search */
-	if (_gr_ypdone)		
-		return NS_NOTFOUND;
-	for (;;) {
-		data = NULL;
-		if(__ypcurrent) {
-			key = NULL;
-			r = yp_next(__ypdomain, "group.byname",
-				__ypcurrent, __ypcurrentlen,
-				&key, &keylen, &data, &datalen);
-			free(__ypcurrent);
-			switch (r) {
-			case 0:
-				break;
-			case YPERR_NOMORE:
-				__ypcurrent = NULL;
-				if (key)
-					free(key);
-				if (data)
-					free(data);
-				_gr_ypdone = 1;
-				return NS_NOTFOUND;
-			default:
-				if (key)
-					free(key);
-				if (data)
-					free(data);
-				return NS_UNAVAIL;
-			}
-			__ypcurrent = key;
-			__ypcurrentlen = keylen;
-		} else {
-			if (yp_first(__ypdomain, "group.byname",
-					&__ypcurrent, &__ypcurrentlen,
-					&data, &datalen)) {
-				if (data);
-					free(data);
-				return NS_UNAVAIL;
-			}
-		}
-		data[datalen] = '\0';			/* clear trailing \n */
-		strncpy(line, data, sizeof(line));
-		line[sizeof(line) - 1] = '\0';
+	if (rv != NS_SUCCESS && rv != NS_NOTFOUND)
+		*retval = errno;
+	if (key)
+		free(key);
+	if (data)
 		free(data);
-		if (matchline(search, gid, name))
-			return NS_SUCCESS;
-	}
-	/* NOTREACHED */
+	return rv;
 }
-#endif
 
-#ifdef _GROUP_COMPAT
-/*
- * log an error if "files" or "compat" is specified in group_compat database
- */
-static int _bad_grscan __P((void *, void *, va_list));
+static struct __grstate_nis	_nis_state;
+					/* storage for non _r functions */
+static struct group		_nis_group;
+static char			_nis_groupbuf[_GETGR_R_SIZE_MAX];
 
 /*ARGSUSED*/
 static int
-_bad_grscan(rv, cb_data, ap)
-	void	*rv;
-	void	*cb_data;
-	va_list	 ap;
+_nis_setgrent(void *nsrv, void *nscb, va_list ap)
+{
+
+	_nis_state.stayopen = 0;
+	return __grstart_nis(&_nis_state);
+}
+
+/*ARGSUSED*/
+static int
+_nis_setgroupent(void *nsrv, void *nscb, va_list ap)
+{
+	int	*retval		= va_arg(ap, int *);
+	int	 stayopen	= va_arg(ap, int);
+
+	int	rv;
+
+	_nis_state.stayopen = stayopen;
+	rv = __grstart_nis(&_nis_state);
+	*retval = (rv == NS_SUCCESS);
+	return rv;
+}
+
+/*ARGSUSED*/
+static int
+_nis_endgrent(void *nsrv, void *nscb, va_list ap)
+{
+
+	return __grend_nis(&_nis_state);
+}
+
+/*ARGSUSED*/
+static int
+_nis_getgrent(void *nsrv, void *nscb, va_list ap)
+{
+	struct group	**retval = va_arg(ap, struct group **);
+
+	int	rv, rerror;
+
+	_DIAGASSERT(retval != NULL);
+
+	*retval = NULL;
+	rv = __grscan_nis(&rerror, &_nis_group,
+	    _nis_groupbuf, sizeof(_nis_groupbuf), &_nis_state, 0, NULL, 0);
+	if (rv == NS_SUCCESS)
+		*retval = &_nis_group;
+	return rv;
+}
+
+/*ARGSUSED*/
+static int
+_nis_getgrent_r(void *nsrv, void *nscb, va_list ap)
+{
+	int		*retval	= va_arg(ap, int *);
+	struct group	*grp	= va_arg(ap, struct group *);
+	char		*buffer	= va_arg(ap, char *);
+	size_t		 buflen	= va_arg(ap, size_t);
+	struct group   **result	= va_arg(ap, struct group **);
+
+	int	rv;
+
+	_DIAGASSERT(retval != NULL);
+	_DIAGASSERT(grp != NULL);
+	_DIAGASSERT(buffer != NULL);
+	_DIAGASSERT(result != NULL);
+
+	rv = __grscan_nis(retval, grp, buffer, buflen,
+	    &_nis_state, 0, NULL, 0);
+	if (rv == NS_SUCCESS)
+		*result = grp;
+	else
+		*result = NULL;
+	return rv;
+}
+
+/*ARGSUSED*/
+static int
+_nis_getgrgid(void *nsrv, void *nscb, va_list ap)
+{
+	struct group	**retval = va_arg(ap, struct group **);
+	gid_t		 gid	= va_arg(ap, gid_t);
+
+	int	rv, rerror;
+
+	_DIAGASSERT(retval != NULL);
+
+	*retval = NULL;
+	rv = __grstart_nis(&_nis_state);
+	if (rv != NS_SUCCESS)
+		return rv;
+	rv = __grscan_nis(&rerror, &_nis_group,
+	    _nis_groupbuf, sizeof(_nis_groupbuf), &_nis_state, 1, NULL, gid);
+	if (!_nis_state.stayopen)
+		__grend_nis(&_nis_state);
+	if (rv == NS_SUCCESS)
+		*retval = &_nis_group;
+	return rv;
+}
+
+/*ARGSUSED*/
+static int
+_nis_getgrgid_r(void *nsrv, void *nscb, va_list ap)
+{
+	int		*retval	= va_arg(ap, int *);
+	gid_t		 gid	= va_arg(ap, gid_t);
+	struct group	*grp	= va_arg(ap, struct group *);
+	char		*buffer	= va_arg(ap, char *);
+	size_t		 buflen	= va_arg(ap, size_t);
+	struct group   **result	= va_arg(ap, struct group **);
+
+	struct __grstate_nis state;
+	int	rv;
+
+	_DIAGASSERT(retval != NULL);
+	_DIAGASSERT(grp != NULL);
+	_DIAGASSERT(buffer != NULL);
+	_DIAGASSERT(result != NULL);
+
+	*result = NULL;
+	memset(&state, 0, sizeof(state));
+	rv = __grscan_nis(retval, grp, buffer, buflen, &state, 1, NULL, gid);
+	__grend_nis(&state);
+	if (rv == NS_SUCCESS)
+		*result = grp;
+	return rv;
+}
+
+/*ARGSUSED*/
+static int
+_nis_getgrnam(void *nsrv, void *nscb, va_list ap)
+{
+	struct group	**retval = va_arg(ap, struct group **);
+	const char	*name	= va_arg(ap, const char *);
+
+	int	rv, rerror;
+
+	_DIAGASSERT(retval != NULL);
+
+	*retval = NULL;
+	rv = __grstart_nis(&_nis_state);
+	if (rv != NS_SUCCESS)
+		return rv;
+	rv = __grscan_nis(&rerror, &_nis_group,
+	    _nis_groupbuf, sizeof(_nis_groupbuf), &_nis_state, 1, name, 0);
+	if (!_nis_state.stayopen)
+		__grend_nis(&_nis_state);
+	if (rv == NS_SUCCESS)
+		*retval = &_nis_group;
+	return rv;
+}
+
+/*ARGSUSED*/
+static int
+_nis_getgrnam_r(void *nsrv, void *nscb, va_list ap)
+{
+	int		*retval	= va_arg(ap, int *);
+	const char	*name	= va_arg(ap, const char *);
+	struct group	*grp	= va_arg(ap, struct group *);
+	char		*buffer	= va_arg(ap, char *);
+	size_t		 buflen	= va_arg(ap, size_t);
+	struct group   **result	= va_arg(ap, struct group **);
+
+	struct __grstate_nis state;
+	int	rv;
+
+	_DIAGASSERT(retval != NULL);
+	_DIAGASSERT(grp != NULL);
+	_DIAGASSERT(buffer != NULL);
+	_DIAGASSERT(result != NULL);
+
+	*result = NULL;
+	memset(&state, 0, sizeof(state));
+	rv = __grscan_nis(retval, grp, buffer, buflen, &state, 1, name, 0);
+	__grend_nis(&state);
+	if (rv == NS_SUCCESS)
+		*result = grp;
+	return rv;
+}
+
+#endif /* YP */
+
+
+#ifdef _GROUP_COMPAT
+		/*
+		 *	compat methods
+		 */
+
+int
+__grstart_compat(struct __grstate_compat *state)
+{
+
+	_DIAGASSERT(state != NULL);
+
+	if (state->fp == NULL) {
+		state->fp = fopen(_PATH_GROUP, "r");
+		if (state->fp == NULL)
+			return NS_UNAVAIL;
+	} else {
+		rewind(state->fp);
+	}
+	return NS_SUCCESS;
+}
+
+int
+__grend_compat(struct __grstate_compat *state)
+{
+
+	_DIAGASSERT(state != NULL);
+
+	if (state->name) {
+		free(state->name);
+		state->name = NULL;
+	}
+	if (state->fp) {
+		(void) fclose(state->fp);
+		state->fp = NULL;
+	}
+	return NS_SUCCESS;
+}
+
+
+/*
+ * __grbad_compat
+ *	log an error if "files" or "compat" is specified in
+ *	group_compat database
+ */
+/*ARGSUSED*/
+int
+__grbad_compat(void *nsrv, void *nscb, va_list ap)
 {
 	static int warned;
 
-	_DIAGASSERT(cb_data != NULL);
+	_DIAGASSERT(nsrv != NULL);
+	_DIAGASSERT(nscb != NULL);
 
 	if (!warned) {
 		syslog(LOG_ERR,
 			"nsswitch.conf group_compat database can't use '%s'",
-			(char *)cb_data);
+			(const char *)nscb);
 	}
 	warned = 1;
 	return NS_UNAVAIL;
 }
 
 /*
- * when a name lookup in compat mode is required, look it up in group_compat
- * nsswitch database. only Hesiod and NIS is supported - it doesn't make
- * sense to lookup compat names from 'files' or 'compat'
+ * __grscan_compat
+ *	Scan state->fp for the next desired entry.
+ *	If search is zero, return the next entry.
+ *	If search is non-zero, look for a specific name (if name != NULL),
+ *	or a specific gid (if name == NULL).
+ *	Sets *retval to the errno if the result is not NS_SUCCESS or
+ *	NS_NOTFOUND.
+ *
+ *	searchfunc is invoked when a compat "+" lookup is required;
+ *	searchcookie is passed as the first argument to searchfunc,
+ *	the second argument is the group result.
+ *	This should return NS_NOTFOUND when "no more groups" from compat src.
+ *	If searchfunc is NULL then nsdispatch of getgrent is used.
+ *	This is primarily intended for getgroupmembership(3)'s compat backend.
  */
-
-static int __grscancompat __P((int, gid_t, const char *));
-
-static int
-__grscancompat(search, gid, name)
-	int		 search;
-	gid_t		 gid;
-	const char	*name;
+int
+__grscan_compat(int *retval, struct group *grp, char *buffer, size_t buflen,
+	struct __grstate_compat *state, int search, const char *name, gid_t gid,
+	int (*searchfunc)(void *, struct group **), void *searchcookie)
 {
-	static const ns_dtab dtab[] = {
-		NS_FILES_CB(_bad_grscan, "files")
-		NS_DNS_CB(_dns_grscan, NULL)
-		NS_NIS_CB(_nis_grscan, NULL)
-		NS_COMPAT_CB(_bad_grscan, "compat")
-		{ 0 }
+	int		rv;
+	char		filebuf[_GETGR_R_SIZE_MAX], *ep;
+
+	static const ns_dtab compatentdtab[] = {
+		NS_FILES_CB(__grbad_compat, "files")
+		NS_DNS_CB(_dns_getgrent_r, NULL)
+		NS_NIS_CB(_nis_getgrent_r, NULL)
+		NS_COMPAT_CB(__grbad_compat, "compat")
+		NS_NULL_CB
 	};
-	static const ns_src defaultnis[] = {
-		{ NSSRC_NIS, 	NS_SUCCESS },
-		{ 0 }
+	static const ns_dtab compatgiddtab[] = {
+		NS_FILES_CB(__grbad_compat, "files")
+		NS_DNS_CB(_dns_getgrgid_r, NULL)
+		NS_NIS_CB(_nis_getgrgid_r, NULL)
+		NS_COMPAT_CB(__grbad_compat, "compat")
+		NS_NULL_CB
+	};
+	static const ns_dtab compatnamdtab[] = {
+		NS_FILES_CB(__grbad_compat, "files")
+		NS_DNS_CB(_dns_getgrnam_r, NULL)
+		NS_NIS_CB(_nis_getgrnam_r, NULL)
+		NS_COMPAT_CB(__grbad_compat, "compat")
+		NS_NULL_CB
 	};
 
-	_DIAGASSERT(name != NULL);
+	_DIAGASSERT(retval != NULL);
+	_DIAGASSERT(grp != NULL);
+	_DIAGASSERT(buffer != NULL);
+	_DIAGASSERT(state != NULL);
+	/* name is NULL to indicate searching for gid */
 
-	return (nsdispatch(NULL, dtab, NSDB_GROUP_COMPAT, "grscancompat",
-	    defaultnis, search, gid, name));
+	*retval = 0;
+
+	if (state->fp == NULL) {	/* only start if file not open yet */
+		rv = __grstart_compat(state);
+		if (rv != NS_SUCCESS)
+			goto compatgrscan_out;
+	}
+	rv = NS_NOTFOUND;
+
+	for (;;) {					/* loop through file */
+		if (state->name != NULL) {
+					/* processing compat entry */
+			int		crv, cretval;
+			struct group	cgrp, *cgrpres;
+
+			if (state->name[0]) {		/* specific +group: */
+				crv = nsdispatch(NULL, compatnamdtab,
+				    NSDB_GROUP_COMPAT, "getgrnam_r",
+				    __nsdefaultnis,
+				    &cretval, state->name,
+				    &cgrp, filebuf, sizeof(filebuf), &cgrpres);
+				free(state->name);	/* (only check 1 grp) */
+				state->name = NULL;
+			} else if (!search) {		/* any group */
+				if (searchfunc) {
+					crv = searchfunc(searchcookie,
+					    &cgrpres);
+				} else {
+					crv = nsdispatch(NULL, compatentdtab,
+					    NSDB_GROUP_COMPAT, "getgrent_r",
+					    __nsdefaultnis,
+					    &cretval, &cgrp, filebuf,
+					    sizeof(filebuf), &cgrpres);
+				}
+			} else if (name) {		/* specific group */
+				crv = nsdispatch(NULL, compatnamdtab,
+				    NSDB_GROUP_COMPAT, "getgrnam_r",
+				    __nsdefaultnis,
+				    &cretval, name,
+				    &cgrp, filebuf, sizeof(filebuf), &cgrpres);
+			} else {			/* specific gid */
+				crv = nsdispatch(NULL, compatgiddtab,
+				    NSDB_GROUP_COMPAT, "getgrgid_r",
+				    __nsdefaultnis,
+				    &cretval, gid,
+				    &cgrp, filebuf, sizeof(filebuf), &cgrpres);
+			}
+			if (crv != NS_SUCCESS) {	/* not found */
+				free(state->name);
+				state->name = NULL;
+				continue;		/* try next line */
+			}
+			if (!_gr_copy(cgrpres, grp, buffer, buflen)) {
+				rv = NS_UNAVAIL;
+				break;
+			}
+			goto compatgrscan_cmpgrp;	/* skip to grp test */
+		}
+
+							/* get next file line */
+		if (fgets(filebuf, sizeof(filebuf), state->fp) == NULL)
+			break;
+
+		ep = strchr(filebuf, '\n');
+		if (ep == NULL) {	/* skip lines that are too big */
+			int ch;
+
+			while ((ch = getc(state->fp)) != '\n' && ch != EOF)
+				continue;
+			continue;
+		}
+		*ep = '\0';				/* clear trailing \n */
+
+		if (filebuf[0] == '+') {		/* parse compat line */
+			if (state->name)
+				free(state->name);
+			state->name = NULL;
+			switch(filebuf[1]) {
+			case ':':
+			case '\0':
+				state->name = strdup("");
+				break;
+			default:
+				ep = strchr(filebuf + 1, ':');
+				if (ep == NULL)
+					break;
+				*ep = '\0';
+				state->name = strdup(filebuf + 1);
+				break;
+			}
+			if (state->name == NULL) {
+				rv = NS_UNAVAIL;
+				break;
+			}
+			continue;
+		}
+
+							/* validate line */
+		if (! _gr_parse(filebuf, grp, buffer, buflen)) {
+			continue;			/* skip bad lines */
+		}
+
+ compatgrscan_cmpgrp:
+		if (! search) {				/* just want this one */
+			rv = NS_SUCCESS;
+			break;
+		}
+							/* want specific */
+		if ((name && strcmp(name, grp->gr_name) == 0) ||
+		    (!name && gid == grp->gr_gid)) {
+			rv = NS_SUCCESS;
+			break;
+		}
+
+	}
+
+ compatgrscan_out:
+	if (rv != NS_SUCCESS && rv != NS_NOTFOUND)
+		*retval = errno;
+	return rv;
 }
-#endif
 
-
-static int _compat_grscan __P((void *, void *, va_list));
+static struct __grstate_compat	_compat_state;
+					/* storage for non _r functions */
+static struct group		_compat_group;
+static char			_compat_groupbuf[_GETGR_R_SIZE_MAX];
 
 /*ARGSUSED*/
 static int
-_compat_grscan(rv, cb_data, ap)
-	void	*rv;
-	void	*cb_data;
-	va_list	 ap;
+_compat_setgrent(void *nsrv, void *nscb, va_list ap)
 {
-	int		 search = va_arg(ap, int);
-	gid_t		 gid = va_arg(ap, gid_t);
-	const char	*name = va_arg(ap, const char *);
-
-#ifdef _GROUP_COMPAT
-	static char	*grname = NULL;
-#endif
-
-	for (;;) {
-#ifdef _GROUP_COMPAT
-		if(__grmode != GRMODE_NONE) {
-			int	 r;
-
-			switch(__grmode) {
-			case GRMODE_FULL:
-				r = __grscancompat(search, gid, name);
-				if (r == NS_SUCCESS)
-					return r;
-				__grmode = GRMODE_NONE;
-				break;
-			case GRMODE_NAME:
-				if(grname == (char *)NULL) {
-					__grmode = GRMODE_NONE;
-					break;
-				}
-				r = __grscancompat(1, 0, grname);
-				free(grname);
-				grname = (char *)NULL;
-				if (r != NS_SUCCESS)
-					break;
-				if (!search)
-					return NS_SUCCESS;
-				if (name) {
-					if (! strcmp(_gr_group.gr_name, name))
-						return NS_SUCCESS;
-				} else {
-					if (_gr_group.gr_gid == gid)
-						return NS_SUCCESS;
-				}
-				break;
-			case GRMODE_NONE:
-				abort();
-			}
-			continue;
-		}
-#endif /* _GROUP_COMPAT */
-
-		if (!fgets(line, sizeof(line), _gr_fp))
-			return NS_NOTFOUND;
-		/* skip lines that are too big */
-		if (!strchr(line, '\n')) {
-			int ch;
-
-			while ((ch = getc(_gr_fp)) != '\n' && ch != EOF)
-				;
-			continue;
-		}
-
-#ifdef _GROUP_COMPAT
-		if (line[0] == '+') {
-			char	*tptr, *bp;
-
-			switch(line[1]) {
-			case ':':
-			case '\0':
-			case '\n':
-				__grmode = GRMODE_FULL;
-				break;
-			default:
-				__grmode = GRMODE_NAME;
-				bp = line;
-				tptr = strsep(&bp, ":\n");
-				grname = strdup(tptr + 1);
-				break;
-			}
-			continue;
-		}
-#endif /* _GROUP_COMPAT */
-		if (matchline(search, gid, name))
-			return NS_SUCCESS;
-	}
-	/* NOTREACHED */
-}
-
-static int
-grscan(search, gid, name)
-	int		 search;
-	gid_t		 gid;
-	const char	*name;
-{
-	int		r;
 	static const ns_dtab dtab[] = {
-		NS_FILES_CB(_local_grscan, NULL)
-		NS_DNS_CB(_dns_grscan, NULL)
-		NS_NIS_CB(_nis_grscan, NULL)
-		NS_COMPAT_CB(_compat_grscan, NULL)
-		{ 0 }
-	};
-	static const ns_src compatsrc[] = {
-		{ NSSRC_COMPAT, NS_SUCCESS },
-		{ 0 }
+		NS_FILES_CB(__grbad_compat, "files")
+		NS_DNS_CB(_dns_setgrent, NULL)
+		NS_NIS_CB(_nis_setgrent, NULL)
+		NS_COMPAT_CB(__grbad_compat, "compat")
+		NS_NULL_CB
 	};
 
-	/* name may be NULL if search is nonzero */
+					/* force group_compat setgrent() */
+	(void) nsdispatch(NULL, dtab, NSDB_GROUP_COMPAT, "setgrent",
+	    __nsdefaultnis_forceall);
 
-	r = nsdispatch(NULL, dtab, NSDB_GROUP, "grscan", compatsrc,
-	    search, gid, name);
-	return (r == NS_SUCCESS) ? 1 : 0;
+					/* reset state, keep fp open */
+	_compat_state.stayopen = 0;
+	return __grstart_compat(&_compat_state);
 }
 
+/*ARGSUSED*/
 static int
-matchline(search, gid, name)
-	int		 search;
-	gid_t		 gid;
-	const char	*name;
+_compat_setgroupent(void *nsrv, void *nscb, va_list ap)
 {
-	unsigned long	id;
-	__aconst char	**m;
-	char		*cp, *bp, *ep;
+	int	*retval		= va_arg(ap, int *);
+	int	 stayopen	= va_arg(ap, int);
 
-	/* name may be NULL if search is nonzero */
+	int	rv;
 
-	if (line[0] == '+')
-		return 0;	/* sanity check to prevent recursion */
-	bp = line;
-	_gr_group.gr_name = strsep(&bp, ":\n");
-	if (search && name && strcmp(_gr_group.gr_name, name))
+	static const ns_dtab dtab[] = {
+		NS_FILES_CB(__grbad_compat, "files")
+		NS_DNS_CB(_dns_setgroupent, NULL)
+		NS_NIS_CB(_nis_setgroupent, NULL)
+		NS_COMPAT_CB(__grbad_compat, "compat")
+		NS_NULL_CB
+	};
+
+					/* force group_compat setgroupent() */
+	(void) nsdispatch(NULL, dtab, NSDB_GROUP_COMPAT, "setgroupent",
+	    __nsdefaultnis_forceall, &rv, stayopen);
+
+	_compat_state.stayopen = stayopen;
+	rv = __grstart_compat(&_compat_state);
+	*retval = (rv == NS_SUCCESS);
+	return rv;
+}
+
+/*ARGSUSED*/
+static int
+_compat_endgrent(void *nsrv, void *nscb, va_list ap)
+{
+	static const ns_dtab dtab[] = {
+		NS_FILES_CB(__grbad_compat, "files")
+		NS_DNS_CB(_dns_endgrent, NULL)
+		NS_NIS_CB(_nis_endgrent, NULL)
+		NS_COMPAT_CB(__grbad_compat, "compat")
+		NS_NULL_CB
+	};
+
+					/* force group_compat endgrent() */
+	(void) nsdispatch(NULL, dtab, NSDB_GROUP_COMPAT, "endgrent",
+	    __nsdefaultnis_forceall);
+
+					/* reset state, close fp */
+	_compat_state.stayopen = 0;
+	return __grend_compat(&_compat_state);
+}
+
+/*ARGSUSED*/
+static int
+_compat_getgrent(void *nsrv, void *nscb, va_list ap)
+{
+	struct group	**retval = va_arg(ap, struct group **);
+
+	int	rv, rerror;
+
+	_DIAGASSERT(retval != NULL);
+
+	*retval = NULL;
+	rv = __grscan_compat(&rerror, &_compat_group,
+	    _compat_groupbuf, sizeof(_compat_groupbuf),
+	    &_compat_state, 0, NULL, 0, NULL, NULL);
+	if (rv == NS_SUCCESS)
+		*retval = &_compat_group;
+	return rv;
+}
+
+/*ARGSUSED*/
+static int
+_compat_getgrent_r(void *nsrv, void *nscb, va_list ap)
+{
+	int		*retval	= va_arg(ap, int *);
+	struct group	*grp	= va_arg(ap, struct group *);
+	char		*buffer	= va_arg(ap, char *);
+	size_t		 buflen	= va_arg(ap, size_t);
+	struct group   **result	= va_arg(ap, struct group **);
+
+	int	rv;
+
+	_DIAGASSERT(retval != NULL);
+	_DIAGASSERT(grp != NULL);
+	_DIAGASSERT(buffer != NULL);
+	_DIAGASSERT(result != NULL);
+
+	rv = __grscan_compat(retval, grp, buffer, buflen,
+	    &_compat_state, 0, NULL, 0, NULL, NULL);
+	if (rv == NS_SUCCESS)
+		*result = grp;
+	else
+		*result = NULL;
+	return rv;
+}
+
+/*ARGSUSED*/
+static int
+_compat_getgrgid(void *nsrv, void *nscb, va_list ap)
+{
+	struct group	**retval = va_arg(ap, struct group **);
+	gid_t		 gid	= va_arg(ap, gid_t);
+
+	int	rv, rerror;
+
+	_DIAGASSERT(retval != NULL);
+
+	*retval = NULL;
+	rv = __grstart_compat(&_compat_state);
+	if (rv != NS_SUCCESS)
+		return rv;
+	rv = __grscan_compat(&rerror, &_compat_group,
+	    _compat_groupbuf, sizeof(_compat_groupbuf),
+	    &_compat_state, 1, NULL, gid, NULL, NULL);
+	if (!_compat_state.stayopen)
+		__grend_compat(&_compat_state);
+	if (rv == NS_SUCCESS)
+		*retval = &_compat_group;
+	return rv;
+}
+
+/*ARGSUSED*/
+static int
+_compat_getgrgid_r(void *nsrv, void *nscb, va_list ap)
+{
+	int		*retval	= va_arg(ap, int *);
+	gid_t		 gid	= va_arg(ap, gid_t);
+	struct group	*grp	= va_arg(ap, struct group *);
+	char		*buffer	= va_arg(ap, char *);
+	size_t		 buflen	= va_arg(ap, size_t);
+	struct group   **result	= va_arg(ap, struct group **);
+
+	struct __grstate_compat	state;
+	int		rv;
+
+	_DIAGASSERT(retval != NULL);
+	_DIAGASSERT(grp != NULL);
+	_DIAGASSERT(buffer != NULL);
+	_DIAGASSERT(result != NULL);
+
+	*result = NULL;
+	memset(&state, 0, sizeof(state));
+	rv = __grscan_compat(retval, grp, buffer, buflen, &state,
+	    1, NULL, gid, NULL, NULL);
+	__grend_compat(&state);
+	if (rv == NS_SUCCESS)
+		*result = grp;
+	return rv;
+}
+
+/*ARGSUSED*/
+static int
+_compat_getgrnam(void *nsrv, void *nscb, va_list ap)
+{
+	struct group	**retval = va_arg(ap, struct group **);
+	const char	*name	= va_arg(ap, const char *);
+
+	int	rv, rerror;
+
+	_DIAGASSERT(retval != NULL);
+
+	*retval = NULL;
+	rv = __grstart_compat(&_compat_state);
+	if (rv != NS_SUCCESS)
+		return rv;
+	rv = __grscan_compat(&rerror, &_compat_group,
+	    _compat_groupbuf, sizeof(_compat_groupbuf),
+	    &_compat_state, 1, name, 0, NULL, NULL);
+	if (!_compat_state.stayopen)
+		__grend_compat(&_compat_state);
+	if (rv == NS_SUCCESS)
+		*retval = &_compat_group;
+	return rv;
+}
+
+/*ARGSUSED*/
+static int
+_compat_getgrnam_r(void *nsrv, void *nscb, va_list ap)
+{
+	int		*retval	= va_arg(ap, int *);
+	const char	*name	= va_arg(ap, const char *);
+	struct group	*grp	= va_arg(ap, struct group *);
+	char		*buffer	= va_arg(ap, char *);
+	size_t		 buflen	= va_arg(ap, size_t);
+	struct group   **result	= va_arg(ap, struct group **);
+
+	struct __grstate_compat	state;
+	int		rv;
+
+	_DIAGASSERT(retval != NULL);
+	_DIAGASSERT(grp != NULL);
+	_DIAGASSERT(buffer != NULL);
+	_DIAGASSERT(result != NULL);
+
+	*result = NULL;
+	memset(&state, 0, sizeof(state));
+	rv = __grscan_compat(retval, grp, buffer, buflen, &state,
+	    1, name, 0, NULL, NULL);
+	__grend_compat(&state);
+	if (rv == NS_SUCCESS)
+		*result = grp;
+	return rv;
+}
+
+#endif	/* _GROUP_COMPAT */
+
+
+		/*
+		 *	public functions
+		 */
+
+struct group *
+getgrent(void)
+{
+	int		rv;
+	struct group	*retval;
+
+	static const ns_dtab dtab[] = {
+		NS_FILES_CB(_files_getgrent, NULL)
+		NS_DNS_CB(_dns_getgrent, NULL)
+		NS_NIS_CB(_nis_getgrent, NULL)
+		NS_COMPAT_CB(_compat_getgrent, NULL)
+		NS_NULL_CB
+	};
+
+	mutex_lock(&__grmutex);
+	rv = nsdispatch(NULL, dtab, NSDB_GROUP, "getgrent", __nsdefaultcompat,
+	    &retval);
+	mutex_unlock(&__grmutex);
+	return (rv == NS_SUCCESS) ? retval : NULL;
+}
+
+int
+getgrent_r(struct group *grp, char *buffer, size_t buflen,
+    struct group **result)
+{
+	int		rv, retval;
+
+	static const ns_dtab dtab[] = {
+		NS_FILES_CB(_files_getgrent_r, NULL)
+		NS_DNS_CB(_dns_getgrent_r, NULL)
+		NS_NIS_CB(_nis_getgrent_r, NULL)
+		NS_COMPAT_CB(_compat_getgrent_r, NULL)
+		NS_NULL_CB
+	};
+
+	mutex_lock(&__grmutex);
+	rv = nsdispatch(NULL, dtab, NSDB_GROUP, "getgrent_r", __nsdefaultcompat,
+	    &retval, grp, buffer, buflen, result);
+	mutex_unlock(&__grmutex);
+	switch (rv) {
+	case NS_SUCCESS:
+	case NS_NOTFOUND:
 		return 0;
-	_gr_group.gr_passwd = strsep(&bp, ":\n");
-	if (!(cp = strsep(&bp, ":\n")))
-		return 0;
-	id = strtoul(cp, &ep, 10);
-	if (id > GID_MAX || *ep != '\0')
-		return 0;
-	_gr_group.gr_gid = (gid_t)id;
-	if (search && name == NULL && _gr_group.gr_gid != gid)
-		return 0;
-	cp = NULL;
-	if (bp == NULL)
-		return 0;
-	for (_gr_group.gr_mem = m = members;; bp++) {
-		if (m == &members[MAXGRP - 1])
-			break;
-		if (*bp == ',') {
-			if (cp) {
-				*bp = '\0';
-				*m++ = cp;
-				cp = NULL;
-			}
-		} else if (*bp == '\0' || *bp == '\n' || *bp == ' ') {
-			if (cp) {
-				*bp = '\0';
-				*m++ = cp;
-			}
-			break;
-		} else if (cp == NULL)
-			cp = bp;
+	default:
+		return retval;
 	}
-	*m = NULL;
-	return 1;
+}
+
+
+struct group *
+getgrgid(gid_t gid)
+{
+	int		rv;
+	struct group	*retval;
+
+	static const ns_dtab dtab[] = {
+		NS_FILES_CB(_files_getgrgid, NULL)
+		NS_DNS_CB(_dns_getgrgid, NULL)
+		NS_NIS_CB(_nis_getgrgid, NULL)
+		NS_COMPAT_CB(_compat_getgrgid, NULL)
+		NS_NULL_CB
+	};
+
+	mutex_lock(&__grmutex);
+	rv = nsdispatch(NULL, dtab, NSDB_GROUP, "getgrgid", __nsdefaultcompat,
+	    &retval, gid);
+	mutex_unlock(&__grmutex);
+	return (rv == NS_SUCCESS) ? retval : NULL;
+}
+
+int
+getgrgid_r(gid_t gid, struct group *grp, char *buffer, size_t buflen,
+	struct group **result)
+{
+	int	rv, retval;
+
+	static const ns_dtab dtab[] = {
+		NS_FILES_CB(_files_getgrgid_r, NULL)
+		NS_DNS_CB(_dns_getgrgid_r, NULL)
+		NS_NIS_CB(_nis_getgrgid_r, NULL)
+		NS_COMPAT_CB(_compat_getgrgid_r, NULL)
+		NS_NULL_CB
+	};
+
+	_DIAGASSERT(grp != NULL);
+	_DIAGASSERT(buffer != NULL);
+	_DIAGASSERT(result != NULL);
+
+	*result = NULL;
+	retval = 0;
+	mutex_lock(&__grmutex);
+	rv = nsdispatch(NULL, dtab, NSDB_GROUP, "getgrgid_r", __nsdefaultcompat,
+	    &retval, gid, grp, buffer, buflen, result);
+	mutex_unlock(&__grmutex);
+	switch (rv) {
+	case NS_SUCCESS:
+	case NS_NOTFOUND:
+		return 0;
+	default:
+		return retval;
+	}
+}
+
+struct group *
+getgrnam(const char *name)
+{
+	int		rv;
+	struct group	*retval;
+
+	static const ns_dtab dtab[] = {
+		NS_FILES_CB(_files_getgrnam, NULL)
+		NS_DNS_CB(_dns_getgrnam, NULL)
+		NS_NIS_CB(_nis_getgrnam, NULL)
+		NS_COMPAT_CB(_compat_getgrnam, NULL)
+		NS_NULL_CB
+	};
+
+	mutex_lock(&__grmutex);
+	rv = nsdispatch(NULL, dtab, NSDB_GROUP, "getgrnam", __nsdefaultcompat,
+	    &retval, name);
+	mutex_unlock(&__grmutex);
+	return (rv == NS_SUCCESS) ? retval : NULL;
+}
+
+int
+getgrnam_r(const char *name, struct group *grp, char *buffer, size_t buflen,
+	struct group **result)
+{
+	int	rv, retval;
+
+	static const ns_dtab dtab[] = {
+		NS_FILES_CB(_files_getgrnam_r, NULL)
+		NS_DNS_CB(_dns_getgrnam_r, NULL)
+		NS_NIS_CB(_nis_getgrnam_r, NULL)
+		NS_COMPAT_CB(_compat_getgrnam_r, NULL)
+		NS_NULL_CB
+	};
+
+	_DIAGASSERT(name != NULL);
+	_DIAGASSERT(grp != NULL);
+	_DIAGASSERT(buffer != NULL);
+	_DIAGASSERT(result != NULL);
+
+	*result = NULL;
+	retval = 0;
+	mutex_lock(&__grmutex);
+	rv = nsdispatch(NULL, dtab, NSDB_GROUP, "getgrnam_r", __nsdefaultcompat,
+	    &retval, name, grp, buffer, buflen, result);
+	mutex_unlock(&__grmutex);
+	switch (rv) {
+	case NS_SUCCESS:
+	case NS_NOTFOUND:
+		return 0;
+	default:
+		return retval;
+	}
+}
+
+void
+endgrent(void)
+{
+	static const ns_dtab dtab[] = {
+		NS_FILES_CB(_files_endgrent, NULL)
+		NS_DNS_CB(_dns_endgrent, NULL)
+		NS_NIS_CB(_nis_endgrent, NULL)
+		NS_COMPAT_CB(_compat_endgrent, NULL)
+		NS_NULL_CB
+	};
+
+	mutex_lock(&__grmutex);
+					/* force all endgrent() methods */
+	(void) nsdispatch(NULL, dtab, NSDB_GROUP, "endgrent",
+	    __nsdefaultcompat_forceall);
+	mutex_unlock(&__grmutex);
+}
+
+int
+setgroupent(int stayopen)
+{
+	static const ns_dtab dtab[] = {
+		NS_FILES_CB(_files_setgroupent, NULL)
+		NS_DNS_CB(_dns_setgroupent, NULL)
+		NS_NIS_CB(_nis_setgroupent, NULL)
+		NS_COMPAT_CB(_compat_setgroupent, NULL)
+		NS_NULL_CB
+	};
+	int	rv, retval;
+
+	mutex_lock(&__grmutex);
+					/* force all setgroupent() methods */
+	rv = nsdispatch(NULL, dtab, NSDB_GROUP, "setgroupent",
+	    __nsdefaultcompat_forceall, &retval, stayopen);
+	mutex_unlock(&__grmutex);
+	return (rv == NS_SUCCESS) ? retval : 0;
+}
+
+void
+setgrent(void)
+{
+	static const ns_dtab dtab[] = {
+		NS_FILES_CB(_files_setgrent, NULL)
+		NS_DNS_CB(_dns_setgrent, NULL)
+		NS_NIS_CB(_nis_setgrent, NULL)
+		NS_COMPAT_CB(_compat_setgrent, NULL)
+		NS_NULL_CB
+	};
+
+	mutex_lock(&__grmutex);
+					/* force all setgrent() methods */
+	(void) nsdispatch(NULL, dtab, NSDB_GROUP, "setgrent",
+	    __nsdefaultcompat_forceall);
+	mutex_unlock(&__grmutex);
 }

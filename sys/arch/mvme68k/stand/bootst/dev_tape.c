@@ -1,4 +1,4 @@
-/*	$NetBSD: dev_tape.c,v 1.3 1998/09/05 15:20:47 pk Exp $	*/
+/*	$NetBSD: dev_tape.c,v 1.10.10.1 2009/04/12 02:19:56 snj Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,10 +37,13 @@
 
 #include <sys/types.h>
 #include <machine/prom.h>
+#include <machine/stdarg.h>
 
-#include "stand.h"
+#include <lib/libkern/libkern.h>
+
+#include <lib/libsa/stand.h>
 #include "libsa.h"
-
+#include "dev_tape.h"
 
 extern int debug;
 
@@ -62,29 +58,29 @@ static int hackprom_diskrd(struct mvmeprom_dskio *);
  * can open the appropriate tape segment.
  */
 int
-devopen(f, fname, file)
-	struct open_file *f;
-	const char *fname;		/* normally "1" */
-	char **file;
+devopen(struct open_file *f, const char *fname, char **file)
 {
 	struct devsw *dp;
-	int error;
 
-	*file = (char*)fname;
+	*file = (char *)fname;
 	dp = &devsw[0];
 	f->f_dev = dp;
 
 	/* The following will call tape_open() */
-	return (dp->dv_open(f, fname));
+	return dp->dv_open(f, fname);
 }
 
 int
-tape_open(f, fname)
-	struct open_file *f;
-	char *fname;		/* partition number, i.e. "1" */
+tape_open(struct open_file *f, ...)
 {
-	int	part;
+	char *fname;		/* partition number, i.e. "1" */
+	int part;
 	struct mvmeprom_dskio *ti;
+	va_list ap;
+
+	va_start(ap, f);
+	fname = va_arg(ap, char *);
+	va_end(ap);
 
 	/*
 	 * Set the tape segment number to the one indicated
@@ -100,7 +96,7 @@ tape_open(f, fname)
 	 * (determines what gets opened)
 	 */
 	ti = &tape_ioreq;
-	bzero((caddr_t)ti, sizeof(*ti));
+	memset((void *)ti, 0, sizeof(*ti));
 
 	ti->ctrl_lun = bugargs.ctrl_lun;
 	ti->dev_lun = bugargs.dev_lun;
@@ -113,15 +109,13 @@ tape_open(f, fname)
 
 	f->f_devdata = ti;
 
-	return (0);
+	return 0;
 }
 
 int
-tape_close(f)
-	struct open_file *f;
+tape_close(struct open_file *f)
 {
 	struct mvmeprom_dskio *ti;
-
 
 	ti = f->f_devdata;
 	f->f_devdata = NULL;
@@ -131,13 +125,8 @@ tape_close(f)
 #define MVMEPROM_SCALE (512/MVMEPROM_BLOCK_SIZE)
 
 int
-tape_strategy(devdata, flag, dblk, size, buf, rsize)
-	void	*devdata;
-	int	flag;
-	daddr_t	dblk;
-	u_int	size;
-	char	*buf;
-	u_int	*rsize;
+tape_strategy(void *devdata, int flag, daddr_t dblk, u_int size, void *buf,
+    u_int *rsize)
 {
 	struct mvmeprom_dskio *ti;
 	int ret;
@@ -145,7 +134,7 @@ tape_strategy(devdata, flag, dblk, size, buf, rsize)
 	ti = devdata;
 
 	if (flag != F_READ)
-		return(EROFS);
+		return EROFS;
 
 	ti->status = 0;
 	ti->pbuffer = buf;
@@ -153,23 +142,24 @@ tape_strategy(devdata, flag, dblk, size, buf, rsize)
 	ti->blk_cnt = size / (512 / MVMEPROM_SCALE);
 
 	/* work around for stupid '147 prom bug */
-	if ( bugargs.cputyp == 0x147 )
+	if (bugargs.cputyp == 0x147)
 		ret = hackprom_diskrd(ti);
 	else
 		ret = mvmeprom_diskrd(ti);
 
 	if (ret != 0)
-		return (EIO);
+		return EIO;
 
 	*rsize = (ti->blk_cnt / MVMEPROM_SCALE) * 512;
 	ti->flag |= IGNORE_FILENUM; /* ignore next time */
 
-	return (0);
+	return 0;
 }
 
 int
-tape_ioctl()
+tape_ioctl(struct open_file *f, u_long cmd, void *data)
 {
+
 	return EIO;
 }
 
@@ -178,10 +168,10 @@ hackprom_diskrd(struct mvmeprom_dskio *ti)
 {
 	static int blkoffset = 0;
 
-#define	hackload_addr	((char *) 0x080000)	/* Load tape segment here */
-#define hackload_blocks 0x2000			/* 2Mb worth */
+#define	hackload_addr	((char *)0x080000)	/* Load tape segment here */
+#define hackload_blocks 0x3000			/* 3Mb worth */
 
-	if ( (ti->flag & IGNORE_FILENUM) == 0 ) {
+	if ((ti->flag & IGNORE_FILENUM) == 0) {
 		/*
 		 * First time through. Load the whole tape segment...
 		 */
@@ -200,7 +190,7 @@ hackprom_diskrd(struct mvmeprom_dskio *ti)
 		 * PROM returns 1 on end-of-file. This isn't an
 		 * error in this instance, just in case you're wondering! ;-)
 		 */
-		if ( ret < 0 || ret > 1 )
+		if (ret < 0 || ret > 1)
 			return ret;
 
 		blkoffset = 0;
@@ -209,8 +199,8 @@ hackprom_diskrd(struct mvmeprom_dskio *ti)
 	/*
 	 * Grab the required number of block(s)
 	 */
-	bcopy(&(hackload_addr[blkoffset]), ti->pbuffer,
-	      ti->blk_cnt * MVMEPROM_BLOCK_SIZE);
+	memcpy(ti->pbuffer, &(hackload_addr[blkoffset]),
+	    ti->blk_cnt * MVMEPROM_BLOCK_SIZE);
 
 	blkoffset += (ti->blk_cnt * MVMEPROM_BLOCK_SIZE);
 

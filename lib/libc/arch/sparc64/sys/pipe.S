@@ -1,4 +1,4 @@
-/*	$NetBSD: pipe.S,v 1.1 1998/09/11 04:56:34 eeh Exp $	*/
+/*	$NetBSD: pipe.S,v 1.4 2003/08/07 16:42:30 agc Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -44,20 +40,24 @@
 #if 0
 	.asciz "@(#)pipe.s	8.1 (Berkeley) 6/4/93"
 #else
-	RCSID("$NetBSD: pipe.S,v 1.1 1998/09/11 04:56:34 eeh Exp $")
+	RCSID("$NetBSD: pipe.S,v 1.4 2003/08/07 16:42:30 agc Exp $")
 #endif
 #endif /* SYSLIBC_SCCS and not lint */
 
 #include "SYS.h"
 
-ENTRY(pipe)
-	mov	%o0, %o2	! save pointer
+#ifdef WEAK_ALIAS
+WEAK_ALIAS(pipe, _pipe)
+#endif
+
+ENTRY(_pipe)
+	mov	%o0, %o2	/* save pointer */
 	mov	SYS_pipe, %g1
-	t	ST_SYSCALL	! pipe()
+	t	ST_SYSCALL	/* pipe() */
 	bcc,a	1f
-	 st	%o0, [%o2]	! success, store fds
+	 st	%o0, [%o2]	/* success, store fds */
 	ERROR()
 1:
 	st	%o1, [%o2 + 4]
-	retl			! and return 0
+	retl			/* and return 0 */
 	 clr	%o0

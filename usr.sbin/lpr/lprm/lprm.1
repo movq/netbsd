@@ -1,4 +1,4 @@
-.\"	$NetBSD: lprm.1,v 1.9 1999/03/22 18:44:00 garbled Exp $
+.\"	$NetBSD: lprm.1,v 1.15 2003/08/07 11:25:30 agc Exp $
 .\"
 .\" Copyright (c) 1983, 1990, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -40,10 +36,13 @@
 .Nm lprm
 .Nd remove jobs from the line printer spooling queue
 .Sh SYNOPSIS
-.Nm ""
+.Nm
 .Op Fl
 .Bk -words
 .Op Fl P Ar printer
+.Ek
+.Bk -words
+.Op Fl w Ar maxwait
 .Ek
 .Op Ar job# ...
 .Op Ar user ...
@@ -64,6 +63,9 @@ Options and arguments:
 Specify the queue associated with a specific
 .Ar printer
 (otherwise the default printer is used).
+.It Fl w Ar maxwait
+Specify the maximum time to wait in seconds for remote responses.
+The default is 300 seconds or 5 minutes.
 .It Fl
 If a single
 .Sq Fl
@@ -98,7 +100,7 @@ If neither arguments or options are given,
 .Nm
 will delete the currently active job if it is
 owned by the user who invoked
-.Nm "" .
+.Nm .
 .Pp
 .Nm
 announces the names of any files it removes and is silent if
@@ -109,8 +111,8 @@ will kill off an active daemon, if necessary, before removing
 any spooling files.  If a daemon is killed, a new one is
 automatically restarted upon completion of file removals.
 .Sh ENVIRONMENT
-If the following environment variable exists, it is utilized by
-.Nm "" .
+If the following environment variable exists, it is used by
+.Nm .
 .Bl -tag -width PRINTER
 .It Ev PRINTER
 If the environment variable
@@ -119,7 +121,7 @@ exists,
 and a printer has not been specified with the
 .Fl P
 option,
-the default printer is assumed from 
+the default printer is assumed from
 .Ev PRINTER .
 .El
 .Sh FILES
@@ -132,18 +134,18 @@ Spooling directories.
 Lock file used to obtain the pid of the current
 daemon and the job number of the currently active job.
 .El
-.Sh SEE ALSO
-.Xr lpr 1 ,
-.Xr lpq 1 ,
-.Xr lpd 8
 .Sh DIAGNOSTICS
 .Dq Permission denied
 if the user tries to remove files other than his own.
-.Sh BUGS
-Since there are race conditions possible in the update of the lock file,
-the currently active job may be incorrectly identified.
+.Sh SEE ALSO
+.Xr lpq 1 ,
+.Xr lpr 1 ,
+.Xr lpd 8
 .Sh HISTORY
 The
 .Nm
 command appeared in
 .Bx 3.0 .
+.Sh BUGS
+Since there are race conditions possible in the update of the lock file,
+the currently active job may be incorrectly identified.

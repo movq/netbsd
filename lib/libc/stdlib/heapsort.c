@@ -1,4 +1,4 @@
-/*	$NetBSD: heapsort.c,v 1.12 2000/01/22 22:19:19 mycroft Exp $	*/
+/*	$NetBSD: heapsort.c,v 1.16 2008/03/11 18:04:59 rmind Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -36,12 +32,21 @@
  * SUCH DAMAGE.
  */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+/*
+ * XXX Undefine the renames of these functions so that we don't
+ * XXX rename the versions found in the host's headers by mistake!
+ */
+#undef heapsort
+#endif
+
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
 #if 0
 static char sccsid[] = "from: @(#)heapsort.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: heapsort.c,v 1.12 2000/01/22 22:19:19 mycroft Exp $");
+__RCSID("$NetBSD: heapsort.c,v 1.16 2008/03/11 18:04:59 rmind Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -51,6 +56,11 @@ __RCSID("$NetBSD: heapsort.c,v 1.12 2000/01/22 22:19:19 mycroft Exp $");
 #include <assert.h>
 #include <errno.h>
 #include <stdlib.h>
+
+#if HAVE_NBTOOL_CONFIG_H
+/* XXX Now, re-apply the renaming that we undid above. */
+#define heapsort	__nbcompat_heapsort
+#endif
 
 #ifdef __weak_alias
 __weak_alias(heapsort,_heapsort)
@@ -86,7 +96,7 @@ __weak_alias(heapsort,_heapsort)
  * Build the list into a heap, where a heap is defined such that for
  * the records K1 ... KN, Kj/2 >= Kj for 1 <= j/2 <= j <= N.
  *
- * There two cases.  If j == nmemb, select largest of Ki and Kj.  If
+ * There are two cases.  If j == nmemb, select largest of Ki and Kj.  If
  * j < nmemb, select largest of Ki, Kj and Kj+1.
  */
 #define CREATE(initval, nmemb, par_i, child_i, par, child, size, count, tmp) { \
@@ -108,12 +118,12 @@ __weak_alias(heapsort,_heapsort)
  * Select the top of the heap and 'heapify'.  Since by far the most expensive
  * action is the call to the compar function, a considerable optimization
  * in the average case can be achieved due to the fact that k, the displaced
- * elememt, is ususally quite small, so it would be preferable to first
+ * element, is usually quite small, so it would be preferable to first
  * heapify, always maintaining the invariant that the larger child is copied
  * over its parent's record.
  *
  * Then, starting from the *bottom* of the heap, finding k's correct place,
- * again maintianing the invariant.  As a result of the invariant no element
+ * again maintaining the invariant.  As a result of the invariant no element
  * is 'lost' when k is assigned its correct place in the heap.
  *
  * The time savings from this optimization are on the order of 15-20% for the
@@ -152,12 +162,10 @@ __weak_alias(heapsort,_heapsort)
  * only advantage over quicksort is that it requires little additional memory.
  */
 int
-heapsort(vbase, nmemb, size, compar)
-	void *vbase;
-	size_t nmemb, size;
-	int (*compar) __P((const void *, const void *));
+heapsort(void *vbase, size_t nmemb, size_t size,
+    int (*compar) __P((const void *, const void *)))
 {
-	int cnt, i, j, l;
+	size_t cnt, i, j, l;
 	char tmp, *tmp1, *tmp2;
 	char *base, *k, *p, *t;
 

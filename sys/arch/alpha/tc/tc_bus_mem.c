@@ -1,4 +1,4 @@
-/* $NetBSD: tc_bus_mem.c,v 1.21 2000/02/26 18:53:13 thorpej Exp $ */
+/* $NetBSD: tc_bus_mem.c,v 1.27 2005/12/11 12:16:20 christos Exp $ */
 
 /*
  * Copyright (c) 1996 Carnegie-Mellon University.
@@ -33,14 +33,15 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: tc_bus_mem.c,v 1.21 2000/02/26 18:53:13 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tc_bus_mem.c,v 1.27 2005/12/11 12:16:20 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/malloc.h>
 #include <sys/syslog.h>
 #include <sys/device.h>
-#include <vm/vm.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <machine/bus.h>
 #include <dev/tc/tcvar.h>
@@ -64,6 +65,12 @@ int		tc_mem_alloc __P((void *, bus_addr_t, bus_addr_t, bus_size_t,
 		    bus_size_t, bus_addr_t, int, bus_addr_t *,
 		    bus_space_handle_t *));
 void		tc_mem_free __P((void *, bus_space_handle_t, bus_size_t));
+
+/* get kernel virtual address */
+void *		tc_mem_vaddr __P((void *, bus_space_handle_t));
+
+/* mmap for user */
+paddr_t		tc_mem_mmap __P((void *, bus_addr_t, off_t, int, int));
 
 /* barrier */
 inline void	tc_mem_barrier __P((void *, bus_space_handle_t,
@@ -170,6 +177,12 @@ static struct alpha_bus_space tc_mem_space = {
 	/* allocation/deallocation */
 	tc_mem_alloc,
 	tc_mem_free,
+
+	/* get kernel virtual address */
+	tc_mem_vaddr,
+
+	/* mmap for user */
+	tc_mem_mmap,
 
 	/* barrier */
 	tc_mem_barrier,
@@ -344,6 +357,42 @@ tc_mem_free(v, bsh, size)
 	panic("tc_mem_free unimplemented");
 }
 
+void *
+tc_mem_vaddr(v, bsh)
+	void *v;
+	bus_space_handle_t bsh;
+{
+#ifdef DIAGNOSTIC
+	if ((bsh & TC_SPACE_SPARSE) != 0) {
+		/*
+		 * tc_mem_map() catches linear && !cacheable,
+		 * so we shouldn't come here
+		 */
+		panic("tc_mem_vaddr");
+	}
+#endif
+	return ((void *)bsh);
+}
+
+paddr_t
+tc_mem_mmap(v, addr, off, prot, flags)
+	void *v;
+	bus_addr_t addr;
+	off_t off;
+	int prot;
+	int flags;
+{
+	int linear = flags & BUS_SPACE_MAP_LINEAR;
+	bus_addr_t rv;
+
+	if (linear)
+		rv = addr + off;
+	else
+		rv = TC_DENSE_TO_SPARSE(addr + off);
+
+	return (alpha_btop(rv));
+}
+
 inline void
 tc_mem_barrier(v, h, o, l, f)
 	void *v;
@@ -474,7 +523,7 @@ tc_mem_write_1(v, memh, off, val)
 {
 
 	if ((memh & TC_SPACE_SPARSE) != 0) {
-		volatile u_int64_t *p, v;
+		volatile u_int64_t *p, vl;
 		u_int64_t shift, msk;
 
 		shift = off & 0x3;
@@ -483,7 +532,7 @@ tc_mem_write_1(v, memh, off, val)
 		p = (u_int64_t *)(memh + (off << 1));
 
 		msk = ~(0x1 << shift) & 0xf;
-		v = (msk << 32) | (((u_int64_t)val) << (shift * 8));
+		vl = (msk << 32) | (((u_int64_t)val) << (shift * 8));
 
 		*p = val;
 	} else {
@@ -504,7 +553,7 @@ tc_mem_write_2(v, memh, off, val)
 {
 
 	if ((memh & TC_SPACE_SPARSE) != 0) {
-		volatile u_int64_t *p, v;
+		volatile u_int64_t *p, vl;
 		u_int64_t shift, msk;
 
 		shift = off & 0x2;
@@ -513,7 +562,7 @@ tc_mem_write_2(v, memh, off, val)
 		p = (u_int64_t *)(memh + (off << 1));
 
 		msk = ~(0x3 << shift) & 0xf;
-		v = (msk << 32) | (((u_int64_t)val) << (shift * 8));
+		vl = (msk << 32) | (((u_int64_t)val) << (shift * 8));
 
 		*p = val;
 	} else {

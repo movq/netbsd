@@ -1,4 +1,4 @@
-/*      $NetBSD: if_atm.h,v 1.11 1999/11/19 20:41:19 thorpej Exp $       */
+/*      $NetBSD: if_atm.h,v 1.18 2008/02/20 17:05:52 matt Exp $       */
 
 /*
  *
@@ -47,10 +47,10 @@
 
 #ifndef NO_ATM_PVCEXT
 /*
- * ATM_PVCEXT enables PVC extention: VP/VC shaping
+ * ATM_PVCEXT enables PVC extension: VP/VC shaping
  * and PVC shadow interfaces.
  */
-#define ATM_PVCEXT	/* enable pvc extention */
+#define ATM_PVCEXT	/* enable pvc extension */
 #endif
 
 #if defined(__NetBSD__) || defined(__OpenBSD__) || defined(__bsdi__)
@@ -64,7 +64,7 @@
  */
 
 struct atm_pseudohdr {
-  u_int8_t atm_ph[4];	/* flags+VPI+VCI1(msb)+VCI2(lsb) */
+  uint8_t atm_ph[4];	/* flags+VPI+VCI1(msb)+VCI2(lsb) */
 };
 
 #define ATM_PH_FLAGS(X)	((X)->atm_ph[0])
@@ -125,9 +125,9 @@ struct pvctxreq {
 
 #define ATMLLC_HDR "\252\252\3\0\0\0"
 struct atmllc {
-  u_int8_t llchdr[6];	/* aa.aa.03.00.00.00 */
-  u_int8_t type[2];	/* "ethernet" type */
-} __attribute__((__packed__));
+  uint8_t llchdr[6];	/* aa.aa.03.00.00.00 */
+  uint8_t type[2];	/* "ethernet" type */
+} __packed;
 
 /* ATM_LLC macros: note type code in host byte order */
 #define ATM_LLC_TYPE(X) (((X)->type[0] << 8) | ((X)->type[1]))
@@ -137,11 +137,11 @@ struct atmllc {
 }
 
 #ifdef _KERNEL
-void	atm_ifattach __P((struct ifnet *));
-void	atm_input __P((struct ifnet *, struct atm_pseudohdr *,
-		struct mbuf *, void *));
-int	atm_output __P((struct ifnet *, struct mbuf *, struct sockaddr *, 
-		struct rtentry *));
+void	atm_ifattach(struct ifnet *);
+void	atm_input(struct ifnet *, struct atm_pseudohdr *,
+		struct mbuf *, void *);
+int	atm_output(struct ifnet *, struct mbuf *, const struct sockaddr *,
+		struct rtentry *);
 #endif
 #ifdef ATM_PVCEXT
 #ifdef _KERNEL
@@ -163,7 +163,7 @@ struct pvcsif {
 	int	sif_vci;		/* vci no */
 	LIST_ENTRY(pvcsif) sif_links;
 };
-struct ifnet *pvcsif_alloc __P((void));
+struct ifnet *pvcsif_alloc(void);
 #endif
 #endif /* ATM_PVCEXT */
-#endif /* _NET_IF_ATM_H_ */
+#endif /* !_NET_IF_ATM_H_ */

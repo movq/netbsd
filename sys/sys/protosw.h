@@ -1,4 +1,4 @@
-/*	$NetBSD: protosw.h,v 1.22 2000/02/17 10:59:41 darrenr Exp $	*/
+/*	$NetBSD: protosw.h,v 1.44 2008/08/06 15:01:24 plunky Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -61,16 +57,13 @@
  * described below.
  */
 
-/*
- * For pfil_head structure.
- */
-#include <net/pfil.h>
-
 struct mbuf;
 struct sockaddr;
 struct socket;
+struct sockopt;
 struct domain;
 struct proc;
+struct lwp;
 
 struct protosw {
 	int 	pr_type;		/* socket type used for */
@@ -80,32 +73,29 @@ struct protosw {
 
 /* protocol-protocol hooks */
 	void	(*pr_input)		/* input to protocol (from below) */
-			__P((struct mbuf *, ...));
+			(struct mbuf *, ...);
 	int	(*pr_output)		/* output to protocol (from above) */
-			__P((struct mbuf *, ...));
+			(struct mbuf *, ...);
 	void	*(*pr_ctlinput)		/* control input (from below) */
-			__P((int, struct sockaddr *, void *));
+			(int, const struct sockaddr *, void *);
 	int	(*pr_ctloutput)		/* control output (from above) */
-			__P((int, struct socket *, int, int, struct mbuf **));
+			(int, struct socket *, struct sockopt *);
 
 /* user-protocol hook */
 	int	(*pr_usrreq)		/* user request: see list below */
-			__P((struct socket *, int, struct mbuf *,
-			     struct mbuf *, struct mbuf *, struct proc *));
+			(struct socket *, int, struct mbuf *,
+			     struct mbuf *, struct mbuf *, struct lwp *);
 
 /* utility hooks */
 	void	(*pr_init)		/* initialization hook */
-			__P((void));
+			(void);
 
 	void	(*pr_fasttimo)		/* fast timeout (200ms) */
-			__P((void));
+			(void);
 	void	(*pr_slowtimo)		/* slow timeout (500ms) */
-			__P((void));
+			(void);
 	void	(*pr_drain)		/* flush any excess space possible */
-			__P((void));
-	int	(*pr_sysctl)		/* sysctl for protocol */
-			__P((int *, u_int, void *, size_t *, void *, size_t));
-	struct	pfil_head	pr_pfh;
+			(void);
 };
 
 #define	PR_SLOWHZ	2		/* 2 slow timeouts per second */
@@ -122,6 +112,12 @@ struct protosw {
 #define	PR_WANTRCVD	0x08		/* want PRU_RCVD calls */
 #define	PR_RIGHTS	0x10		/* passes capabilities */
 #define	PR_LISTEN	0x20		/* supports listen(2) and accept(2) */
+#define	PR_LASTHDR	0x40		/* enforce ipsec policy; last header */
+#define	PR_ABRTACPTDIS	0x80		/* abort on accept(2) to disconnected
+					   socket */
+#define PR_PURGEIF	0x100		/* might store struct ifnet pointer;
+					   PRU_PURGEIF must be called on ifnet
+					   deletion */
 
 /*
  * The arguments to usrreq are:
@@ -129,10 +125,10 @@ struct protosw {
  * where up is a (struct socket *), req is one of these requests,
  * m is a optional mbuf chain containing a message,
  * nam is an optional mbuf chain containing an address,
- * opt is a pointer to a socketopt structure or nil,
+ * opt is an optional mbuf containing socket options,
  * and p is a pointer to the process requesting the action (if any).
- * The protocol is responsible for disposal of the mbuf chain m,
- * the caller is responsible for any space held by nam and opt.
+ * The protocol is responsible for disposal of the mbuf chains m and opt,
+ * the caller is responsible for any space held by nam.
  * A non-zero return from usrreq gives an
  * UNIX error number which should be passed to higher level software.
  */
@@ -146,7 +142,7 @@ struct protosw {
 #define	PRU_SHUTDOWN		7	/* won't send any more data */
 #define	PRU_RCVD		8	/* have taken data; more room now */
 #define	PRU_SEND		9	/* send this data */
-#define	PRU_ABORT		10	/* abort (fast DISCONNECT, DETATCH) */
+#define	PRU_ABORT		10	/* abort (fast DISCONNECT, DETACH) */
 #define	PRU_CONTROL		11	/* control operations on protocol */
 #define	PRU_SENSE		12	/* return status into m */
 #define	PRU_RCVOOB		13	/* retrieve out of band data */
@@ -164,7 +160,7 @@ struct protosw {
 #define	PRU_NREQ		23
 
 #ifdef PRUREQUESTS
-char *prurequests[] = {
+static const char * const prurequests[] = {
 	"ATTACH",	"DETACH",	"BIND",		"LISTEN",
 	"CONNECT",	"ACCEPT",	"DISCONNECT",	"SHUTDOWN",
 	"RCVD",		"SEND",		"ABORT",	"CONTROL",
@@ -178,7 +174,7 @@ char *prurequests[] = {
  * The arguments to the ctlinput routine are
  *	(*protosw[].pr_ctlinput)(cmd, sa, arg);
  * where cmd is one of the commands below, sa is a pointer to a sockaddr,
- * and arg is an optional caddr_t argument used within a protocol family.
+ * and arg is an optional void *argument used within a protocol family.
  */
 #define	PRC_IFDOWN		0	/* interface transition */
 #define	PRC_ROUTEDEAD		1	/* select new route if possible ??? */
@@ -207,7 +203,7 @@ char *prurequests[] = {
 	((cmd) >= PRC_REDIRECT_NET && (cmd) <= PRC_REDIRECT_TOSHOST)
 
 #ifdef PRCREQUESTS
-char	*prcrequests[] = {
+static const char * const prcrequests[] = {
 	"IFDOWN", "ROUTEDEAD", "#2", "DEC-BIT-QUENCH2",
 	"QUENCH", "MSGSIZE", "HOSTDEAD", "#7",
 	"NET-UNREACH", "HOST-UNREACH", "PROTO-UNREACH", "PORT-UNREACH",
@@ -219,14 +215,9 @@ char	*prcrequests[] = {
 
 /*
  * The arguments to ctloutput are:
- *	(*protosw[].pr_ctloutput)(req, so, level, optname, optval);
+ *	(*protosw[].pr_ctloutput)(req, so, sopt);
  * req is one of the actions listed below, so is a (struct socket *),
- * level is an indication of which protocol layer the option is intended.
- * optname is a protocol dependent socket option request,
- * optval is a pointer to a mbuf-chain pointer, for value-return results.
- * The protocol is responsible for disposal of the mbuf chain *optval
- * if supplied,
- * the caller is responsible for any space held by *optval, when returned.
+ * sopt is a (struct sockopt *)
  * A non-zero return from usrreq gives an
  * UNIX error number which should be passed to higher level software.
  */
@@ -236,7 +227,7 @@ char	*prcrequests[] = {
 #define	PRCO_NCMDS	2
 
 #ifdef PRCOREQUESTS
-char	*prcorequests[] = {
+static const char * const prcorequests[] = {
 	"GETOPT", "SETOPT",
 };
 #endif
@@ -261,11 +252,52 @@ extern	u_int pffasttimo_now;
 #define	PRT_FAST_ISEXPIRED(t)	(PRT_FAST_ISARMED((t)) && (t) <= pffasttimo_now)
 
 struct sockaddr;
-struct protosw *pffindproto __P((int, int, int));
-struct protosw *pffindtype __P((int, int));
-struct domain *pffinddomain __P((int));
-extern struct protosw inetsw[];
-void pfctlinput __P((int, struct sockaddr *));
+const struct protosw *pffindproto(int, int, int);
+const struct protosw *pffindtype(int, int);
+struct domain *pffinddomain(int);
+void pfctlinput(int, const struct sockaddr *);
+void pfctlinput2(int, const struct sockaddr *, void *);
+
+/*
+ * Wrappers for non-MPSAFE protocols
+ */
+#include <sys/systm.h>	/* kernel_lock */
+
+#define	PR_WRAP_USRREQ(name)				\
+static int						\
+name##_wrapper(struct socket *a, int b, struct mbuf *c,	\
+     struct mbuf *d, struct mbuf *e, struct lwp *f)	\
+{							\
+	int rv;						\
+	KERNEL_LOCK(1, NULL);				\
+	rv = name(a, b, c, d, e, f);			\
+	KERNEL_UNLOCK_ONE(NULL);			\
+	return rv;					\
+}
+
+#define	PR_WRAP_CTLOUTPUT(name)				\
+static int						\
+name##_wrapper(int a, struct socket *b,			\
+    struct sockopt *c)					\
+{							\
+	int rv;						\
+	KERNEL_LOCK(1, NULL);				\
+	rv = name(a, b, c);				\
+	KERNEL_UNLOCK_ONE(NULL);			\
+	return rv;					\
+}
+
+#define	PR_WRAP_CTLINPUT(name)				\
+static void *						\
+name##_wrapper(int a, const struct sockaddr *b, void *c)\
+{							\
+	void *rv;					\
+	KERNEL_LOCK(1, NULL);				\
+	rv = name(a, b, c);				\
+	KERNEL_UNLOCK_ONE(NULL);			\
+	return rv;					\
+}
+
 #endif /* _KERNEL */
 
 #endif /* !_SYS_PROTOSW_H_ */

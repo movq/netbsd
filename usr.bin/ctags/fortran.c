@@ -1,4 +1,4 @@
-/*	$NetBSD: fortran.c,v 1.5 1998/11/06 23:06:38 christos Exp $	*/
+/*	$NetBSD: fortran.c,v 1.10 2005/02/17 17:29:58 xtraeme Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -33,12 +29,16 @@
  * SUCH DAMAGE.
  */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
 #include <sys/cdefs.h>
-#ifndef lint
+#if defined(__RCSID) && !defined(lint)
 #if 0
 static char sccsid[] = "@(#)fortran.c	8.3 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: fortran.c,v 1.5 1998/11/06 23:06:38 christos Exp $");
+__RCSID("$NetBSD: fortran.c,v 1.10 2005/02/17 17:29:58 xtraeme Exp $");
 #endif
 #endif /* not lint */
 
@@ -49,12 +49,12 @@ __RCSID("$NetBSD: fortran.c,v 1.5 1998/11/06 23:06:38 christos Exp $");
 
 #include "ctags.h"
 
-static void takeprec __P((void));
+static void takeprec(void);
 
 char *lbp;				/* line buffer pointer */
 
 int
-PF_funcs()
+PF_funcs(void)
 {
 	bool	pfcnt;			/* pascal/fortran functions found */
 	char	*cp;
@@ -129,7 +129,7 @@ PF_funcs()
 		if ((cp = lbp + 1) != NULL)
 			continue;
 		*cp = EOS;
-		(void)strcpy(tok, lbp);
+		(void)strlcpy(tok, lbp, sizeof(tok));
 		getline();			/* process line for ex(1) */
 		pfnote(tok, lineno);
 		pfcnt = YES;
@@ -142,8 +142,7 @@ PF_funcs()
  *	do case-independent strcmp
  */
 int
-cicmp(cp)
-	char	*cp;
+cicmp(const char *cp)
 {
 	int	len;
 	char	*bp;
@@ -159,7 +158,7 @@ cicmp(cp)
 }
 
 static void
-takeprec()
+takeprec(void)
 {
 	for (; isspace((unsigned char)*lbp); ++lbp)
 		continue;

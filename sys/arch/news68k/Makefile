@@ -1,8 +1,8 @@
-#	$NetBSD: Makefile,v 1.1 1999/12/09 14:53:00 tsutsui Exp $
+#	$NetBSD: Makefile,v 1.4 2008/10/25 22:27:38 apb Exp $
 
 # Makefile for news68k tags file
 
-# Find where mips source files are for inclusion in tags
+# Find where m68k source files are for inclusion in tags
 .include <../m68k/Makefile.inc>
 
 TNEWS68K=	../news68k/tags
@@ -18,7 +18,8 @@ DNEWS68K=	dev include
 tags:
 	-ctags -wdtf ${TNEWS68K} ${SNEWS68K} ${COMM}
 	egrep "^ENTRY(.*)|^ALTENTRY(.*)" ${ANEWS68K} | \
-	    sed "s;\([^:]*\):\([^(]*\)(\([^, )]*\)\(.*\);\3 \1 /^\2(\3\4$$/;" \
+	    ${TOOL_SED} -e \
+		"s;\([^:]*\):\([^(]*\)(\([^, )]*\)\(.*\);\3 \1 /^\2(\3\4$$/;" \
 	    >> ${TNEWS68K}
 	sort -o ${TNEWS68K} ${TNEWS68K}
 
@@ -26,6 +27,6 @@ links:
 	-for i in ${DNEWS68K}; do \
 	    cd $$i && rm -f tags; ln -s ../tags tags; done
 
-SUBDIR=	include stand
+SUBDIR=	compile include stand
 
 .include <bsd.subdir.mk>

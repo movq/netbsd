@@ -1,4 +1,4 @@
-/*	$NetBSD: if_gm.c,v 1.4 2000/03/26 09:15:17 tsubai Exp $	*/
+/*	$NetBSD: if_gm.c,v 1.33 2008/01/19 22:10:15 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 2000 Tsubai Masanari.  All rights reserved.
@@ -26,8 +26,11 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_gm.c,v 1.33 2008/01/19 22:10:15 dyoung Exp $");
+
 #include "opt_inet.h"
-#include "opt_ns.h"
+#include "rnd.h"
 #include "bpfilter.h"
 
 #include <sys/param.h>
@@ -39,7 +42,11 @@
 #include <sys/systm.h>
 #include <sys/callout.h>
 
-#include <vm/vm.h>
+#if NRND > 0
+#include <sys/rnd.h>
+#endif
+
+#include <uvm/uvm_extern.h>
 
 #include <net/if.h>
 #include <net/if_ether.h>
@@ -76,51 +83,53 @@ struct gmac_softc {
 	struct gmac_dma *sc_rxlist;
 	int sc_txnext;
 	int sc_rxlast;
-	caddr_t sc_txbuf[NTXBUF];
-	caddr_t sc_rxbuf[NRXBUF];
+	void *sc_txbuf[NTXBUF];
+	void *sc_rxbuf[NRXBUF];
 	struct mii_data sc_mii;
 	struct callout sc_tick_ch;
 	char sc_laddr[6];
+
+#if NRND > 0
+	rndsource_element_t sc_rnd_source; /* random source */
+#endif
 };
 
 #define sc_if sc_ethercom.ec_if
 
-int gmac_match __P((struct device *, struct cfdata *, void *));
-void gmac_attach __P((struct device *, struct device *, void *));
+int gmac_match(struct device *, struct cfdata *, void *);
+void gmac_attach(struct device *, struct device *, void *);
 
-static __inline u_int gmac_read_reg __P((struct gmac_softc *, int));
-static __inline void gmac_write_reg __P((struct gmac_softc *, int, u_int));
+static inline u_int gmac_read_reg(struct gmac_softc *, int);
+static inline void gmac_write_reg(struct gmac_softc *, int, u_int);
 
-static __inline void gmac_start_txdma __P((struct gmac_softc *));
-static __inline void gmac_start_rxdma __P((struct gmac_softc *));
-static __inline void gmac_stop_txdma __P((struct gmac_softc *));
-static __inline void gmac_stop_rxdma __P((struct gmac_softc *));
+static inline void gmac_start_txdma(struct gmac_softc *);
+static inline void gmac_start_rxdma(struct gmac_softc *);
+static inline void gmac_stop_txdma(struct gmac_softc *);
+static inline void gmac_stop_rxdma(struct gmac_softc *);
 
-int gmac_intr __P((void *));
-void gmac_tint __P((struct gmac_softc *));
-void gmac_rint __P((struct gmac_softc *));
-struct mbuf * gmac_get __P((struct gmac_softc *, caddr_t, int));
-void gmac_start __P((struct ifnet *));
-int gmac_put __P((struct gmac_softc *, caddr_t, struct mbuf *));
+int gmac_intr(void *);
+void gmac_tint(struct gmac_softc *);
+void gmac_rint(struct gmac_softc *);
+struct mbuf * gmac_get(struct gmac_softc *, void *, int);
+void gmac_start(struct ifnet *);
+int gmac_put(struct gmac_softc *, void *, struct mbuf *);
 
-void gmac_stop __P((struct gmac_softc *));
-void gmac_reset __P((struct gmac_softc *));
-void gmac_init __P((struct gmac_softc *));
-void gmac_init_mac __P((struct gmac_softc *));
+void gmac_stop(struct gmac_softc *);
+void gmac_reset(struct gmac_softc *);
+void gmac_init(struct gmac_softc *);
+void gmac_init_mac(struct gmac_softc *);
+void gmac_setladrf(struct gmac_softc *);
 
-int gmac_ioctl __P((struct ifnet *, u_long, caddr_t));
-void gmac_watchdog __P((struct ifnet *));
+int gmac_ioctl(struct ifnet *, u_long, void *);
+void gmac_watchdog(struct ifnet *);
 
-int gmac_mediachange __P((struct ifnet *));
-void gmac_mediastatus __P((struct ifnet *, struct ifmediareq *));
-int gmac_mii_readreg __P((struct device *, int, int));
-void gmac_mii_writereg __P((struct device *, int, int, int));
-void gmac_mii_statchg __P((struct device *));
-void gmac_mii_tick __P((void *));
+int gmac_mii_readreg(struct device *, int, int);
+void gmac_mii_writereg(struct device *, int, int, int);
+void gmac_mii_statchg(struct device *);
+void gmac_mii_tick(void *);
 
-struct cfattach gm_ca = {
-	sizeof(struct gmac_softc), gmac_match, gmac_attach
-};
+CFATTACH_DECL(gm, sizeof(struct gmac_softc),
+    gmac_match, gmac_attach, NULL, NULL);
 
 int
 gmac_match(parent, match, aux)
@@ -131,7 +140,9 @@ gmac_match(parent, match, aux)
 	struct pci_attach_args *pa = aux;
 
 	if (PCI_VENDOR(pa->pa_id) == PCI_VENDOR_APPLE &&
-	    PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_APPLE_GMAC)
+	    (PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_APPLE_GMAC ||
+	     PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_APPLE_GMAC2 ||
+	     PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_APPLE_GMAC3))
 		return 1;
 
 	return 0;
@@ -163,11 +174,10 @@ gmac_attach(parent, self, aux)
 	OF_getprop(node, "local-mac-address", laddr, sizeof laddr);
 	OF_getprop(node, "assigned-addresses", reg, sizeof reg);
 
-	bcopy(laddr, sc->sc_laddr, sizeof laddr);
+	memcpy(sc->sc_laddr, laddr, sizeof laddr);
 	sc->sc_reg = reg[2];
 
-	if (pci_intr_map(pa->pa_pc, pa->pa_intrtag, pa->pa_intrpin,
-	    pa->pa_intrline, &ih)) {
+	if (pci_intr_map(pa, &ih)) {
 		printf(": unable to map interrupt\n");
 		return;
 	}
@@ -181,14 +191,14 @@ gmac_attach(parent, self, aux)
 		return;
 	}
 
-	/* Setup packet buffers and dma descriptors. */
+	/* Setup packet buffers and DMA descriptors. */
 	p = malloc((NRXBUF + NTXBUF) * 2048 + 3 * 0x800, M_DEVBUF, M_NOWAIT);
 	if (p == NULL) {
 		printf(": cannot malloc buffers\n");
 		return;
 	}
 	p = (void *)roundup((vaddr_t)p, 0x800);
-	bzero(p, 2048 * (NRXBUF + NTXBUF) + 2 * 0x800);
+	memset(p, 0, 2048 * (NRXBUF + NTXBUF) + 2 * 0x800);
 
 	sc->sc_rxlist = (void *)p;
 	p += 0x800;
@@ -198,7 +208,7 @@ gmac_attach(parent, self, aux)
 	dp = sc->sc_rxlist;
 	for (i = 0; i < NRXBUF; i++) {
 		sc->sc_rxbuf[i] = p;
-		dp->address = htole32(vtophys(p));
+		dp->address = htole32(vtophys((vaddr_t)p));
 		dp->cmd = htole32(GMAC_OWN);
 		dp++;
 		p += 2048;
@@ -207,7 +217,7 @@ gmac_attach(parent, self, aux)
 	dp = sc->sc_txlist;
 	for (i = 0; i < NTXBUF; i++) {
 		sc->sc_txbuf[i] = p;
-		dp->address = htole32(vtophys(p));
+		dp->address = htole32(vtophys((vaddr_t)p));
 		dp++;
 		p += 2048;
 	}
@@ -215,26 +225,27 @@ gmac_attach(parent, self, aux)
 	printf(": Ethernet address %s\n", ether_sprintf(laddr));
 	printf("%s: interrupting at %s\n", sc->sc_dev.dv_xname, intrstr);
 
-	callout_init(&sc->sc_tick_ch);
+	callout_init(&sc->sc_tick_ch, 0);
 
 	gmac_reset(sc);
 	gmac_init_mac(sc);
 
-	bcopy(sc->sc_dev.dv_xname, ifp->if_xname, IFNAMSIZ);
+	memcpy(ifp->if_xname, sc->sc_dev.dv_xname, IFNAMSIZ);
 	ifp->if_softc = sc;
 	ifp->if_ioctl = gmac_ioctl;
 	ifp->if_start = gmac_start;
 	ifp->if_watchdog = gmac_watchdog;
 	ifp->if_flags =
 		IFF_BROADCAST | IFF_SIMPLEX | IFF_NOTRAILERS | IFF_MULTICAST;
-	ifp->if_flags |= IFF_ALLMULTI;
+	IFQ_SET_READY(&ifp->if_snd);
 
 	mii->mii_ifp = ifp;
 	mii->mii_readreg = gmac_mii_readreg;
 	mii->mii_writereg = gmac_mii_writereg;
 	mii->mii_statchg = gmac_mii_statchg;
 
-	ifmedia_init(&mii->mii_media, 0, gmac_mediachange, gmac_mediastatus);
+	sc->sc_ethercom.ec_mii = mii;
+	ifmedia_init(&mii->mii_media, 0, ether_mediachange, ether_mediastatus);
 	mii_attach(self, mii, 0xffffffff, MII_PHY_ANY, MII_OFFSET_ANY, 0);
 
 	/* Choose a default media. */
@@ -246,9 +257,9 @@ gmac_attach(parent, self, aux)
 
 	if_attach(ifp);
 	ether_ifattach(ifp, laddr);
-
-#if NBPFILTER > 0
-	bpfattach(&ifp->if_bpf, ifp, DLT_EN10MB, sizeof(struct ether_header));
+#if NRND > 0 
+	rnd_attach_source(&sc->sc_rnd_source, sc->sc_dev.dv_xname,
+	    RND_TYPE_NET, 0); 
 #endif
 }
 
@@ -342,6 +353,9 @@ gmac_intr(v)
 	if (status & GMAC_INT_TXEMPTY)
 		gmac_tint(sc);
 
+#if NRND > 0 
+	rnd_add_uint32(&sc->sc_rnd_source, status);
+#endif  
 	return 1;
 }
 
@@ -363,7 +377,7 @@ gmac_rint(sc)
 	struct ifnet *ifp = &sc->sc_if;
 	volatile struct gmac_dma *dp;
 	struct mbuf *m;
-	int i, len;
+	int i, j, len;
 	u_int cmd;
 
 	for (i = sc->sc_rxlast;; i++) {
@@ -394,23 +408,32 @@ gmac_rint(sc)
 		 * If so, hand off the raw packet to BPF.
 		 */
 		if (ifp->if_bpf)
-			bpf_tap(ifp->if_bpf, sc->sc_rxbuf[i], len);
+			bpf_mtap(ifp->if_bpf, m);
 #endif
 		(*ifp->if_input)(ifp, m);
 		ifp->if_ipackets++;
 
 next:
 		dp->cmd_hi = 0;
-		__asm __volatile ("sync");
+		__asm volatile ("sync");
 		dp->cmd = htole32(GMAC_OWN);
 	}
 	sc->sc_rxlast = i;
+
+	/* XXX Make sure free buffers have GMAC_OWN. */
+	i++;
+	for (j = 1; j < NRXBUF; j++) {
+		if (i == NRXBUF)
+			i = 0;
+		dp = &sc->sc_rxlist[i++];
+		dp->cmd = htole32(GMAC_OWN);
+	}
 }
 
 struct mbuf *
 gmac_get(sc, pkt, totlen)
 	struct gmac_softc *sc;
-	caddr_t pkt;
+	void *pkt;
 	int totlen;
 {
 	struct mbuf *m;
@@ -445,7 +468,7 @@ gmac_get(sc, pkt, totlen)
 			len = MCLBYTES;
 		}
 		m->m_len = len = min(totlen, len);
-		bcopy(pkt, mtod(m, caddr_t), len);
+		memcpy(mtod(m, void *), pkt, len);
 		pkt += len;
 		totlen -= len;
 		*mp = m;
@@ -461,7 +484,7 @@ gmac_start(ifp)
 {
 	struct gmac_softc *sc = ifp->if_softc;
 	struct mbuf *m;
-	caddr_t buff;
+	void *buff;
 	int i, tlen;
 	volatile struct gmac_dma *dp;
 
@@ -472,7 +495,7 @@ gmac_start(ifp)
 		if (ifp->if_flags & IFF_OACTIVE)
 			break;
 
-		IF_DEQUEUE(&ifp->if_snd, m);
+		IFQ_DEQUEUE(&ifp->if_snd, m);
 		if (m == 0)
 			break;
 
@@ -492,7 +515,7 @@ gmac_start(ifp)
 		i++;
 		if (i == NTXBUF)
 			i = 0;
-		__asm __volatile ("sync");
+		__asm volatile ("sync");
 
 		gmac_write_reg(sc, GMAC_TXDMAKICK, i);
 		sc->sc_txnext = i;
@@ -503,8 +526,9 @@ gmac_start(ifp)
 		 * packet before we commit it to the wire.
 		 */
 		if (ifp->if_bpf)
-			bpf_tap(ifp->if_bpf, buff, tlen);
+			bpf_mtap(ifp->if_bpf, m);
 #endif
+		m_freem(m);
 
 		i++;
 		if (i == NTXBUF)
@@ -519,22 +543,18 @@ gmac_start(ifp)
 int
 gmac_put(sc, buff, m)
 	struct gmac_softc *sc;
-	caddr_t buff;
+	void *buff;
 	struct mbuf *m;
 {
-	struct mbuf *n;
 	int len, tlen = 0;
 
-	for (; m; m = n) {
+	for (; m; m = m->m_next) {
 		len = m->m_len;
-		if (len == 0) {
-			MFREE(m, n);
+		if (len == 0)
 			continue;
-		}
-		bcopy(mtod(m, caddr_t), buff, len);
+		memcpy(buff, mtod(m, void *), len);
 		buff += len;
 		tlen += len;
-		MFREE(m, n);
 	}
 	if (tlen > 2048)
 		panic("%s: gmac_put packet overflow", sc->sc_dev.dv_xname);
@@ -566,12 +586,14 @@ gmac_reset(sc)
 	sc->sc_rxlast = 0;
 	for (i = 0; i < NRXBUF; i++)
 		sc->sc_rxlist[i].cmd = htole32(GMAC_OWN);
-	__asm __volatile ("sync");
+	__asm volatile ("sync");
 
 	gmac_write_reg(sc, GMAC_TXDMADESCBASEHI, 0);
-	gmac_write_reg(sc, GMAC_TXDMADESCBASELO, vtophys(sc->sc_txlist));
+	gmac_write_reg(sc, GMAC_TXDMADESCBASELO,
+		       vtophys((vaddr_t)sc->sc_txlist));
 	gmac_write_reg(sc, GMAC_RXDMADESCBASEHI, 0);
-	gmac_write_reg(sc, GMAC_RXDMADESCBASELO, vtophys(sc->sc_rxlist));
+	gmac_write_reg(sc, GMAC_RXDMADESCBASELO,
+		       vtophys((vaddr_t)sc->sc_rxlist));
 	gmac_write_reg(sc, GMAC_RXDMAKICK, NRXBUF);
 
 	splx(s);
@@ -607,7 +629,10 @@ gmac_init_mac(sc)
 	int i, tb;
 	char *laddr = sc->sc_laddr;
 
-	__asm ("mftb %0" : "=r"(tb));
+	if ((mfpvr() >> 16) == MPC601)
+		tb = mfrtcl();
+	else
+		tb = mftbl();
 	gmac_write_reg(sc, GMAC_RANDOMSEED, tb);
 
 	/* init-mii */
@@ -642,7 +667,7 @@ gmac_init_mac(sc)
 	gmac_write_reg(sc, GMAC_MACADDRFILT2_1MASK, 0);
 	gmac_write_reg(sc, GMAC_MACADDRFILT0MASK, 0);
 
-	for (i = 0; i < 0x6c; i+= 4)
+	for (i = 0; i < 0x6c; i += 4)
 		gmac_write_reg(sc, GMAC_HASHTABLE0 + i, 0);
 
 	gmac_write_reg(sc, GMAC_SLOTTIME, 0x40);
@@ -662,24 +687,94 @@ gmac_init_mac(sc)
 }
 
 void
+gmac_setladrf(sc)
+	struct gmac_softc *sc;
+{
+	struct ifnet *ifp = &sc->sc_if;
+	struct ether_multi *enm;
+	struct ether_multistep step;
+	struct ethercom *ec = &sc->sc_ethercom;
+	u_int32_t crc;
+	u_int32_t hash[16];
+	u_int v;
+	int i;
+
+	/* Clear hash table */
+	for (i = 0; i < 16; i++)
+		hash[i] = 0;
+
+	/* Get current RX configuration */
+	v = gmac_read_reg(sc, GMAC_RXMACCONFIG);
+
+	if ((ifp->if_flags & IFF_PROMISC) != 0) {
+		/* Turn on promiscuous mode; turn off the hash filter */
+		v |= GMAC_RXMAC_PR;
+		v &= ~GMAC_RXMAC_HEN;
+		ifp->if_flags |= IFF_ALLMULTI;
+		goto chipit;
+	}
+
+	/* Turn off promiscuous mode; turn on the hash filter */
+	v &= ~GMAC_RXMAC_PR;
+	v |= GMAC_RXMAC_HEN;
+
+	/*
+	 * Set up multicast address filter by passing all multicast addresses
+	 * through a crc generator, and then using the high order 8 bits as an
+	 * index into the 256 bit logical address filter.  The high order bit
+	 * selects the word, while the rest of the bits select the bit within
+	 * the word.
+	 */
+
+	ETHER_FIRST_MULTI(step, ec, enm);
+	while (enm != NULL) {
+		if (memcmp(enm->enm_addrlo, enm->enm_addrhi, 6)) {
+			/*
+			 * We must listen to a range of multicast addresses.
+			 * For now, just accept all multicasts, rather than
+			 * trying to set only those filter bits needed to match
+			 * the range.  (At this time, the only use of address
+			 * ranges is for IP multicast routing, for which the
+			 * range is big enough to require all bits set.)
+			 */
+			for (i = 0; i < 16; i++)
+				hash[i] = 0xffff;
+			ifp->if_flags |= IFF_ALLMULTI;
+			goto chipit;
+		}
+
+		crc = ether_crc32_le(enm->enm_addrlo, ETHER_ADDR_LEN);
+
+		/* Just want the 8 most significant bits. */
+		crc >>= 24;
+
+		/* Set the corresponding bit in the filter. */
+		hash[crc >> 4] |= 1 << (crc & 0xf);
+
+		ETHER_NEXT_MULTI(step, enm);
+	}
+
+	ifp->if_flags &= ~IFF_ALLMULTI;
+
+chipit:
+	/* Now load the hash table into the chip */
+	for (i = 0; i < 16; i++)
+		gmac_write_reg(sc, GMAC_HASHTABLE0 + i * 4, hash[i]);
+
+	gmac_write_reg(sc, GMAC_RXMACCONFIG, v);
+}
+
+void
 gmac_init(sc)
 	struct gmac_softc *sc;
 {
 	struct ifnet *ifp = &sc->sc_if;
-	u_int x;
-	int i;
 
 	gmac_stop_txdma(sc);
 	gmac_stop_rxdma(sc);
 
 	gmac_init_mac(sc);
-
-	x = gmac_read_reg(sc, GMAC_RXMACCONFIG);
-	if (ifp->if_flags & IFF_PROMISC)
-		x |= GMAC_RXMAC_PR;
-	else
-		x &= ~GMAC_RXMAC_PR;
-	gmac_write_reg(sc, GMAC_RXMACCONFIG, x);
+	gmac_setladrf(sc);
 
 	gmac_start_txdma(sc);
 	gmac_start_rxdma(sc);
@@ -699,7 +794,7 @@ int
 gmac_ioctl(ifp, cmd, data)
 	struct ifnet *ifp;
 	u_long cmd;
-	caddr_t data;
+	void *data;
 {
 	struct gmac_softc *sc = ifp->if_softc;
 	struct ifaddr *ifa = (struct ifaddr *)data;
@@ -719,24 +814,6 @@ gmac_ioctl(ifp, cmd, data)
 			gmac_init(sc);
 			arp_ifinit(ifp, ifa);
 			break;
-#endif
-#ifdef NS
-		case AF_NS:
-		    {
-			struct ns_addr *ina = &IA_SNS(ifa)->sns_addr;
-
-			if (ns_nullhost(*ina))
-				ina->x_host =
-				    *(union ns_host *)LLADDR(ifp->if_sadl);
-			else {
-				bcopy(ina->x_host.c_host,
-				    LLADDR(ifp->if_sadl),
-				    sizeof(sc->sc_enaddr));
-			}
-			/* Set new address. */
-			gmac_init(sc);
-			break;
-		    }
 #endif
 		default:
 			gmac_init(sc);
@@ -776,26 +853,20 @@ gmac_ioctl(ifp, cmd, data)
 
 	case SIOCADDMULTI:
 	case SIOCDELMULTI:
-		error = (cmd == SIOCADDMULTI) ?
-		    ether_addmulti(ifr, &sc->sc_ethercom) :
-		    ether_delmulti(ifr, &sc->sc_ethercom);
-
-		if (error == ENETRESET) {
+	case SIOCGIFMEDIA:
+	case SIOCSIFMEDIA:
+		if ((error = ether_ioctl(ifp, cmd, data)) == ENETRESET) {
 			/*
 			 * Multicast list has changed; set the hardware filter
 			 * accordingly.
 			 */
-			gmac_init(sc);
-			/* gmac_setladrf(sc); */
+			if (ifp->if_flags & IFF_RUNNING) {
+				gmac_init(sc);
+				/* gmac_setladrf(sc); */
+			}
 			error = 0;
 		}
 		break;
-
-	case SIOCGIFMEDIA:
-	case SIOCSIFMEDIA:
-		error = ifmedia_ioctl(ifp, ifr, &sc->sc_mii.mii_media, cmd);
-		break;
-
 	default:
 		error = EINVAL;
 	}
@@ -815,28 +886,6 @@ gmac_watchdog(ifp)
 
 	gmac_reset(sc);
 	gmac_init(sc);
-}
-
-int
-gmac_mediachange(ifp)
-	struct ifnet *ifp;
-{
-	struct gmac_softc *sc = ifp->if_softc;
-
-	return mii_mediachg(&sc->sc_mii);
-}
-
-void
-gmac_mediastatus(ifp, ifmr)
-	struct ifnet *ifp;
-	struct ifmediareq *ifmr;
-{
-	struct gmac_softc *sc = ifp->if_softc;
-
-	mii_pollstat(&sc->sc_mii);
-
-	ifmr->ifm_status = sc->sc_mii.mii_media_status;
-	ifmr->ifm_active = sc->sc_mii.mii_media_active;
 }
 
 int

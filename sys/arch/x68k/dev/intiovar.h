@@ -1,4 +1,4 @@
-/*	$NetBSD: intiovar.h,v 1.3 2000/01/16 14:20:55 minoura Exp $	*/
+/*	$NetBSD: intiovar.h,v 1.11 2008/06/25 08:14:59 isaki Exp $	*/
 
 /*
  *
@@ -55,7 +55,7 @@ struct intio_attach_args {
 	bus_space_tag_t	ia_bst;	/* bus_space tag */
 	bus_dma_tag_t	ia_dmat; /* bus_dma tag */
 
-	char		*ia_name; /* device name */
+	const char	*ia_name; /* device name */
 	int		ia_addr; /* addr */
 	int		ia_size;
 	int		ia_intr; /* interrupt vector */
@@ -64,30 +64,31 @@ struct intio_attach_args {
 };
 
 struct intio_softc {
-	struct device	sc_dev;
 	bus_space_tag_t	sc_bst;
 	bus_dma_tag_t	sc_dmat;
 	struct extent	*sc_map;
-	struct device	*sc_dmac;
+	device_t	sc_dmac;
 };
 
 enum intio_map_flag {
 	INTIO_MAP_ALLOCATE = 0,
 	INTIO_MAP_TESTONLY = 1
 };
-int intio_map_allocate_region __P((struct device*, struct intio_attach_args*, enum intio_map_flag));
-int intio_map_free_region __P((struct device*, struct intio_attach_args*));
+int intio_map_allocate_region(device_t, struct intio_attach_args *,
+	enum intio_map_flag);
+int intio_map_free_region(device_t, struct intio_attach_args *);
 
+typedef int (*intio_intr_handler_t)(void *);
 
-typedef int (*intio_intr_handler_t) __P((void*));
-
-int intio_intr_establish __P((int, const char *, intio_intr_handler_t, void *));
-int intio_intr_disestablish __P((int, void *));
-int intio_intr __P((struct frame *));
+int intio_intr_establish(int, const char *, intio_intr_handler_t, void *);
+int intio_intr_establish_ext(int, const char *, const char *,
+	intio_intr_handler_t, void *);
+int intio_intr_disestablish(int, void *);
+int intio_intr(struct frame *);
 
 
 #define PHYS_INTIODEV 0x00c00000
-  
+
 extern u_int8_t *intiobase;
 
 #define INTIO_ADDR(a)	((volatile u_int8_t *) (((u_int32_t) (a)) - (PHYS_INTIODEV) + intiobase))
@@ -134,7 +135,7 @@ extern u_int8_t *intiobase;
 #define intio_get_sysport_mpustat() \
 	(intio_sysport[sysport_mpustat])
 
-/* I/O controler (sicilian/pluto) */
+/* I/O controller (sicilian/pluto) */
 #define INTIO_SICILIAN		(0x00e9c000)
 #define intio_sicilian		INTIO_ADDR(INTIO_SICILIAN)
 #define sicilian_intr		1
@@ -160,7 +161,7 @@ extern u_int8_t *intiobase;
 
 #define intio_set_sicilian_ivec(a) \
 	intio_sicilian[sicilian_ivec] = (a)
-void intio_set_ivec __P((int));
+void intio_set_ivec(int);
 
 struct intio_dma_cookie {
 	int	id_flags;		/* flags; see below */

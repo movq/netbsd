@@ -1,4 +1,4 @@
-/*	$NetBSD: jail.c,v 1.5 1999/08/21 10:40:03 simonb Exp $	*/
+/*	$NetBSD: jail.c,v 1.9 2008/02/24 01:57:34 dholland Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,11 +34,11 @@
 #if 0
 static char sccsid[] = "@(#)jail.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: jail.c,v 1.5 1999/08/21 10:40:03 simonb Exp $");
+__RCSID("$NetBSD: jail.c,v 1.9 2008/02/24 01:57:34 dholland Exp $");
 #endif
 #endif /* not lint */
 
-#include "monop.ext"
+#include "monop.h"
 
 /*
  *	This routine uses a get-out-of-jail-free card to get the
@@ -62,21 +58,6 @@ card()
 	ret_card(cur_p);
 	cur_p->loc = 10;			/* just visiting	*/
 	cur_p->in_jail = 0;
-}
-
-/*
- *	This routine returns the players get-out-of-jail-free card
- * to a deck.
- */
-void
-ret_card(plr)
-	PLAY *plr;
-{
-	plr->num_gojf--;
-	if (CC_D.gojf_used)
-		CC_D.gojf_used = FALSE;
-	else
-		CH_D.gojf_used = FALSE;
 }
 
 /*
@@ -116,8 +97,7 @@ moveit:
 			return TRUE;
 		}
 		return FALSE;
-	}
-	else {
+	} else {
 		printf("Double roll gets you out.\n");
 		goto moveit;
 	}

@@ -1,4 +1,4 @@
-/*	$NetBSD: disks.c,v 1.9 1999/12/20 03:45:02 jwise Exp $	*/
+/*	$NetBSD: disks.c,v 1.16 2006/04/14 13:14:06 blymn Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1992, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,51 +34,53 @@
 #if 0
 static char sccsid[] = "@(#)disks.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: disks.c,v 1.9 1999/12/20 03:45:02 jwise Exp $");
+__RCSID("$NetBSD: disks.c,v 1.16 2006/04/14 13:14:06 blymn Exp $");
 #endif /* not lint */
 
-#include <sys/types.h>
-
-#include <stdio.h>
-#include <string.h>
-#include <unistd.h>
 #include <ctype.h>
+#include <string.h>
 
 #include "systat.h"
 #include "extern.h"
+#include "drvstats.h"
 
-static void dkselect __P((char *args, int truefalse, int selections[]));
+static void drvselect(char *args, int truefalse, int selections[]);
 
 void
-disks_add (args)
-	char *args;
+disks_add(char *args)
 {
-	dkselect(args, 1, dk_select);
+
+	if (args)
+		drvselect(args, 1, drv_select);
 }
 
 void
-disks_delete (args)
-	char *args;
+disks_remove(char *args)
 {
-	dkselect(args, 0, dk_select);
+
+	if (args)
+		drvselect(args, 0, drv_select);
 }
 
 void
-disks_drives (args)
-	char *args;
+disks_drives(char *args)
 {
 	int i;
 
-	move(CMDLINE, 0);
-	clrtoeol();
-	for (i = 0; i < dk_ndrive; i++)
-		printw("%s ", dr_name[i]);
+	if (args) {
+		for (i = 0; i < ndrive; i++)
+			drv_select[i] = 0;
+		disks_add(args);
+	} else {
+		move(CMDLINE, 0);
+		clrtoeol();
+		for (i = 0; i < ndrive; i++)
+			printw("%s ", dr_name[i]);
+	}
 }
 
 static void
-dkselect(args, truefalse, selections)
-	char *args;
-	int truefalse, selections[];
+drvselect(char *args, int truefalse, int selections[])
 {
 	char *cp;
 	int i;
@@ -100,13 +98,15 @@ dkselect(args, truefalse, selections)
 			*cp++ = '\0';
 		if (cp - args == 0)
 			break;
-		for (i = 0; i < dk_ndrive; i++)
+		for (i = 0; i < ndrive; i++)
 			if (strcmp(args, dr_name[i]) == 0) {
 				selections[i] = truefalse;
 				break;
 			}
-		if (i >= dk_ndrive)
+		if (i >= ndrive)
 			error("%s: unknown drive", args);
 		args = cp;
 	}
+	labels();
+	display(0);
 }

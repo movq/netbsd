@@ -1,4 +1,4 @@
-/*	$NetBSD: abort.c,v 1.11 1998/10/12 15:56:16 kleink Exp $	*/
+/*	$NetBSD: abort.c,v 1.12.38.1 2009/02/02 22:07:40 snj Exp $	*/
 
 /*
  * Copyright (c) 1985, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)abort.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: abort.c,v 1.11 1998/10/12 15:56:16 kleink Exp $");
+__RCSID("$NetBSD: abort.c,v 1.12.38.1 2009/02/02 22:07:40 snj Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -75,7 +71,7 @@ abort()
 			(*__cleanup)();
 	}
 
-	(void)kill(getpid(), SIGABRT);
+	(void)raise(SIGABRT);
 
 	/*
 	 * if SIGABRT ignored, or caught and the handler returns, do
@@ -83,6 +79,6 @@ abort()
 	 */
 	(void)signal(SIGABRT, SIG_DFL);
 	(void)sigprocmask(SIG_SETMASK, &mask, (sigset_t *)NULL);
-	(void)kill(getpid(), SIGABRT);
+	(void)raise(SIGABRT);
 	_exit(1);
 }

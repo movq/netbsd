@@ -1,4 +1,4 @@
-/*	$NetBSD: elinkxl.c,v 1.31 2000/03/30 12:45:30 augustss Exp $	*/
+/*	$NetBSD: elinkxl.c,v 1.105 2008/04/28 20:23:49 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,8 +29,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "opt_inet.h"
-#include "opt_ns.h"
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: elinkxl.c,v 1.105 2008/04/28 20:23:49 martin Exp $");
+
 #include "bpfilter.h"
 #include "rnd.h"
 
@@ -56,36 +50,22 @@
 #include <sys/rnd.h>
 #endif
 
+#include <uvm/uvm_extern.h>
+
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_ether.h>
 #include <net/if_media.h>
-
-#ifdef INET
-#include <netinet/in.h>
-#include <netinet/in_systm.h>
-#include <netinet/in_var.h>
-#include <netinet/ip.h>
-#include <netinet/if_inarp.h>
-#endif
-
-#ifdef NS
-#include <netns/ns.h>
-#include <netns/ns_if.h>
-#endif
 
 #if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
 #endif
 
-#include <machine/cpu.h>
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/cpu.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 #include <machine/endian.h>
-
-#include <vm/vm.h>
-#include <vm/pmap.h>
 
 #include <dev/mii/miivar.h>
 #include <dev/mii/mii.h>
@@ -101,36 +81,37 @@ int exdebug = 0;
 #endif
 
 /* ifmedia callbacks */
-int ex_media_chg __P((struct ifnet *ifp));
-void ex_media_stat __P((struct ifnet *ifp, struct ifmediareq *req));
+int ex_media_chg(struct ifnet *ifp);
+void ex_media_stat(struct ifnet *ifp, struct ifmediareq *req);
 
-void ex_probe_media __P((struct ex_softc *));
-void ex_set_filter __P((struct ex_softc *));
-void ex_set_media __P((struct ex_softc *));
-struct mbuf *ex_get __P((struct ex_softc *, int));
-u_int16_t ex_read_eeprom __P((struct ex_softc *, int));
-void ex_init __P((struct ex_softc *));
-void ex_read __P((struct ex_softc *));
-void ex_reset __P((struct ex_softc *));
-void ex_set_mc __P((struct ex_softc *));
-void ex_getstats __P((struct ex_softc *));
-void ex_printstats __P((struct ex_softc *));
-void ex_tick __P((void *));
+void ex_probe_media(struct ex_softc *);
+void ex_set_filter(struct ex_softc *);
+void ex_set_media(struct ex_softc *);
+void ex_set_xcvr(struct ex_softc *, uint16_t);
+struct mbuf *ex_get(struct ex_softc *, int);
+uint16_t ex_read_eeprom(struct ex_softc *, int);
+int ex_init(struct ifnet *);
+void ex_read(struct ex_softc *);
+void ex_reset(struct ex_softc *);
+void ex_set_mc(struct ex_softc *);
+void ex_getstats(struct ex_softc *);
+void ex_printstats(struct ex_softc *);
+void ex_tick(void *);
 
-static int ex_eeprom_busy __P((struct ex_softc *));
-static int ex_add_rxbuf __P((struct ex_softc *, struct ex_rxdesc *));
-static void ex_init_txdescs __P((struct ex_softc *));
+static int ex_eeprom_busy(struct ex_softc *);
+static int ex_add_rxbuf(struct ex_softc *, struct ex_rxdesc *);
+static void ex_init_txdescs(struct ex_softc *);
 
-static void ex_shutdown __P((void *));
-static void ex_start __P((struct ifnet *));
-static void ex_txstat __P((struct ex_softc *));
-static u_int16_t ex_mchash __P((u_char *));
+static void ex_setup_tx(struct ex_softc *);
+static bool ex_shutdown(device_t, int);
+static void ex_start(struct ifnet *);
+static void ex_txstat(struct ex_softc *);
 
-int ex_mii_readreg __P((struct device *, int, int));
-void ex_mii_writereg __P((struct device *, int, int, int));
-void ex_mii_statchg __P((struct device *));
+int ex_mii_readreg(device_t, int, int);
+void ex_mii_writereg(device_t, int, int, int);
+void ex_mii_statchg(device_t);
 
-void ex_probemedia __P((struct ex_softc *));
+void ex_probemedia(struct ex_softc *);
 
 /*
  * Structure to map media-present bits in boards to ifmedia codes and
@@ -173,8 +154,8 @@ struct ex_media ex_native_media[] = {
 /*
  * MII bit-bang glue.
  */
-u_int32_t ex_mii_bitbang_read __P((struct device *));
-void ex_mii_bitbang_write __P((struct device *, u_int32_t));
+uint32_t ex_mii_bitbang_read(device_t);
+void ex_mii_bitbang_write(device_t, uint32_t);
 
 const struct mii_bitbang_ops ex_mii_bitbang_ops = {
 	ex_mii_bitbang_read,
@@ -192,17 +173,16 @@ const struct mii_bitbang_ops ex_mii_bitbang_ops = {
  * Back-end attach and configure.
  */
 void
-ex_config(sc)
-	struct ex_softc *sc;
+ex_config(struct ex_softc *sc)
 {
 	struct ifnet *ifp;
-	u_int16_t val;
-	u_int8_t macaddr[ETHER_ADDR_LEN] = {0};
+	uint16_t val;
+	uint8_t macaddr[ETHER_ADDR_LEN] = {0};
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
 	int i, error, attach_stage;
 
-	callout_init(&sc->ex_mii_callout);
+	callout_init(&sc->ex_mii_callout, 0);
 
 	ex_reset(sc);
 
@@ -216,12 +196,21 @@ ex_config(sc)
 	macaddr[4] = val >> 8;
 	macaddr[5] = val & 0xff;
 
-	printf("%s: MAC address %s\n", sc->sc_dev.dv_xname,
-	    ether_sprintf(macaddr));
+	aprint_normal_dev(sc->sc_dev, "MAC address %s\n", ether_sprintf(macaddr));
 
-	if (sc->intr_ack) { /* 3C575BTX specific */
-	    GO_WINDOW(2);
-	    bus_space_write_2(sc->sc_iot, ioh, 12, 0x10|bus_space_read_2(sc->sc_iot, ioh, 12));
+	if (sc->ex_conf & (EX_CONF_INV_LED_POLARITY|EX_CONF_PHY_POWER)) {
+		GO_WINDOW(2);
+		val = bus_space_read_2(iot, ioh, ELINK_W2_RESET_OPTIONS);
+		if (sc->ex_conf & EX_CONF_INV_LED_POLARITY)
+			val |= ELINK_RESET_OPT_LEDPOLAR;
+		if (sc->ex_conf & EX_CONF_PHY_POWER)
+			val |= ELINK_RESET_OPT_PHYPOWER;
+		bus_space_write_2(iot, ioh, ELINK_W2_RESET_OPTIONS, val);
+	}
+	if (sc->ex_conf & EX_CONF_NO_XCVR_PWR) {
+		GO_WINDOW(0);
+		bus_space_write_2(iot, ioh, ELINK_W0_MFG_ID,
+		    EX_XCVR_PWR_MAGICBITS);
 	}
 
 	attach_stage = 0;
@@ -231,20 +220,20 @@ ex_config(sc)
 	 * map for them.
 	 */
 	if ((error = bus_dmamem_alloc(sc->sc_dmat,
-	    EX_NUPD * sizeof (struct ex_upd), NBPG, 0, &sc->sc_useg, 1, 
+	    EX_NUPD * sizeof (struct ex_upd), PAGE_SIZE, 0, &sc->sc_useg, 1,
             &sc->sc_urseg, BUS_DMA_NOWAIT)) != 0) {
-		printf("%s: can't allocate upload descriptors, error = %d\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(sc->sc_dev,
+		    "can't allocate upload descriptors, error = %d\n", error);
 		goto fail;
 	}
 
 	attach_stage = 1;
 
 	if ((error = bus_dmamem_map(sc->sc_dmat, &sc->sc_useg, sc->sc_urseg,
-	    EX_NUPD * sizeof (struct ex_upd), (caddr_t *)&sc->sc_upd,
+	    EX_NUPD * sizeof (struct ex_upd), (void **)&sc->sc_upd,
 	    BUS_DMA_NOWAIT|BUS_DMA_COHERENT)) != 0) {
-		printf("%s: can't map upload descriptors, error = %d\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(sc->sc_dev,
+		    "can't map upload descriptors, error = %d\n", error);
 		goto fail;
 	}
 
@@ -254,8 +243,8 @@ ex_config(sc)
 	    EX_NUPD * sizeof (struct ex_upd), 1,
 	    EX_NUPD * sizeof (struct ex_upd), 0, BUS_DMA_NOWAIT,
 	    &sc->sc_upd_dmamap)) != 0) {
-		printf("%s: can't create upload desc. DMA map, error = %d\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(sc->sc_dev,
+		    "can't create upload desc. DMA map, error = %d\n", error);
 		goto fail;
 	}
 
@@ -264,8 +253,8 @@ ex_config(sc)
 	if ((error = bus_dmamap_load(sc->sc_dmat, sc->sc_upd_dmamap,
 	    sc->sc_upd, EX_NUPD * sizeof (struct ex_upd), NULL,
 	    BUS_DMA_NOWAIT)) != 0) {
-		printf("%s: can't load upload desc. DMA map, error = %d\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(sc->sc_dev,
+		    "can't load upload desc. DMA map, error = %d\n", error);
 		goto fail;
 	}
 
@@ -276,44 +265,46 @@ ex_config(sc)
 	 * map for them.
 	 */
 	if ((error = bus_dmamem_alloc(sc->sc_dmat,
-	    EX_NDPD * sizeof (struct ex_dpd), NBPG, 0, &sc->sc_dseg, 1, 
+	    DPDMEM_SIZE + EX_IP4CSUMTX_PADLEN, PAGE_SIZE, 0, &sc->sc_dseg, 1,
 	    &sc->sc_drseg, BUS_DMA_NOWAIT)) != 0) {
-		printf("%s: can't allocate download descriptors, error = %d\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(sc->sc_dev,
+		    "can't allocate download descriptors, error = %d\n", error);
 		goto fail;
 	}
 
 	attach_stage = 5;
 
 	if ((error = bus_dmamem_map(sc->sc_dmat, &sc->sc_dseg, sc->sc_drseg,
-	    EX_NDPD * sizeof (struct ex_dpd), (caddr_t *)&sc->sc_dpd,
+	    DPDMEM_SIZE + EX_IP4CSUMTX_PADLEN, (void **)&sc->sc_dpd,
 	    BUS_DMA_NOWAIT|BUS_DMA_COHERENT)) != 0) {
-		printf("%s: can't map download descriptors, error = %d\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(sc->sc_dev,
+		    "can't map download descriptors, error = %d\n", error);
 		goto fail;
 	}
-	bzero(sc->sc_dpd, EX_NDPD * sizeof (struct ex_dpd));
+	memset(sc->sc_dpd, 0, DPDMEM_SIZE + EX_IP4CSUMTX_PADLEN);
 
 	attach_stage = 6;
 
 	if ((error = bus_dmamap_create(sc->sc_dmat,
-	    EX_NDPD * sizeof (struct ex_dpd), 1,
-	    EX_NDPD * sizeof (struct ex_dpd), 0, BUS_DMA_NOWAIT,
+	    DPDMEM_SIZE + EX_IP4CSUMTX_PADLEN, 1,
+	    DPDMEM_SIZE + EX_IP4CSUMTX_PADLEN, 0, BUS_DMA_NOWAIT,
 	    &sc->sc_dpd_dmamap)) != 0) {
-		printf("%s: can't create download desc. DMA map, error = %d\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(sc->sc_dev,
+		    "can't create download desc. DMA map, error = %d\n", error);
 		goto fail;
 	}
 
 	attach_stage = 7;
 
 	if ((error = bus_dmamap_load(sc->sc_dmat, sc->sc_dpd_dmamap,
-	    sc->sc_dpd, EX_NDPD * sizeof (struct ex_dpd), NULL,
+	    sc->sc_dpd, DPDMEM_SIZE + EX_IP4CSUMTX_PADLEN, NULL,
 	    BUS_DMA_NOWAIT)) != 0) {
-		printf("%s: can't load download desc. DMA map, error = %d\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(sc->sc_dev,
+		    "can't load download desc. DMA map, error = %d\n", error);
 		goto fail;
 	}
+	bus_dmamap_sync(sc->sc_dmat, sc->sc_dpd_dmamap,
+	    DPDMEMPAD_OFF, EX_IP4CSUMTX_PADLEN, BUS_DMASYNC_PREWRITE);
 
 	attach_stage = 8;
 
@@ -325,8 +316,9 @@ ex_config(sc)
 		if ((error = bus_dmamap_create(sc->sc_dmat, MCLBYTES,
 		    EX_NTFRAGS, MCLBYTES, 0, BUS_DMA_NOWAIT,
 		    &sc->sc_tx_dmamaps[i])) != 0) {
-			printf("%s: can't create tx DMA map %d, error = %d\n",
-			    sc->sc_dev.dv_xname, i, error);
+			aprint_error_dev(sc->sc_dev,
+			    "can't create tx DMA map %d, error = %d\n",
+			    i, error);
 			goto fail;
 		}
 	}
@@ -340,8 +332,9 @@ ex_config(sc)
 		if ((error = bus_dmamap_create(sc->sc_dmat, MCLBYTES,
 		    EX_NRFRAGS, MCLBYTES, 0, BUS_DMA_NOWAIT,
 		    &sc->sc_rx_dmamaps[i])) != 0) {
-			printf("%s: can't create rx DMA map %d, error = %d\n",
-			    sc->sc_dev.dv_xname, i, error);
+			aprint_error_dev(sc->sc_dev,
+			    "can't create rx DMA map %d, error = %d\n",
+			    i, error);
 			goto fail;
 		}
 	}
@@ -359,8 +352,8 @@ ex_config(sc)
 		sc->sc_upd[i].upd_frags[0].fr_len =
 		    htole32((MCLBYTES - 2) | EX_FR_LAST);
 		if (ex_add_rxbuf(sc, &sc->sc_rxdescs[i]) != 0) {
-			printf("%s: can't allocate or map rx buffers\n",
-			    sc->sc_dev.dv_xname);
+			aprint_error_dev(sc->sc_dev,
+			    "can't allocate or map rx buffers\n");
 			goto fail;
 		}
 	}
@@ -389,7 +382,7 @@ ex_config(sc)
 	sc->ex_mii.mii_readreg = ex_mii_readreg;
 	sc->ex_mii.mii_writereg = ex_mii_writereg;
 	sc->ex_mii.mii_statchg = ex_mii_statchg;
-	ifmedia_init(&sc->ex_mii.mii_media, 0, ex_media_chg,
+	ifmedia_init(&sc->ex_mii.mii_media, IFM_IMASK, ex_media_chg,
 	    ex_media_stat);
 
 	if (sc->ex_conf & EX_CONF_MII) {
@@ -397,21 +390,9 @@ ex_config(sc)
 		 * Find PHY, extract media information from it.
 		 * First, select the right transceiver.
 		 */
-		u_int32_t icfg;
+		ex_set_xcvr(sc, val);
 
-		GO_WINDOW(3);
-		icfg = bus_space_read_4(iot, ioh, ELINK_W3_INTERNAL_CONFIG);
-		icfg &= ~(CONFIG_XCVR_SEL << 16);
-		if (val & (ELINK_MEDIACAP_MII | ELINK_MEDIACAP_100BASET4))
-			icfg |= ELINKMEDIA_MII << (CONFIG_XCVR_SEL_SHIFT + 16);
-		if (val & ELINK_MEDIACAP_100BASETX)
-			icfg |= ELINKMEDIA_AUTO << (CONFIG_XCVR_SEL_SHIFT + 16);
-		if (val & ELINK_MEDIACAP_100BASEFX)
-			icfg |= ELINKMEDIA_100BASE_FX 
-				<< (CONFIG_XCVR_SEL_SHIFT + 16);
-		bus_space_write_4(iot, ioh, ELINK_W3_INTERNAL_CONFIG, icfg);
-
-		mii_attach(&sc->sc_dev, &sc->ex_mii, 0xffffffff,
+		mii_attach(sc->sc_dev, &sc->ex_mii, 0xffffffff,
 		    MII_PHY_ANY, MII_OFFSET_ANY, 0);
 		if (LIST_FIRST(&sc->ex_mii.mii_phys) == NULL) {
 			ifmedia_add(&sc->ex_mii.mii_media, IFM_ETHER|IFM_NONE,
@@ -423,13 +404,31 @@ ex_config(sc)
 	} else
 		ex_probemedia(sc);
 
-	bcopy(sc->sc_dev.dv_xname, ifp->if_xname, IFNAMSIZ);
+	strlcpy(ifp->if_xname, device_xname(sc->sc_dev), IFNAMSIZ);
 	ifp->if_softc = sc;
 	ifp->if_start = ex_start;
 	ifp->if_ioctl = ex_ioctl;
 	ifp->if_watchdog = ex_watchdog;
+	ifp->if_init = ex_init;
+	ifp->if_stop = ex_stop;
 	ifp->if_flags =
 	    IFF_BROADCAST | IFF_SIMPLEX | IFF_NOTRAILERS | IFF_MULTICAST;
+	sc->sc_if_flags = ifp->if_flags;
+	IFQ_SET_READY(&ifp->if_snd);
+
+	/*
+	 * We can support 802.1Q VLAN-sized frames.
+	 */
+	sc->sc_ethercom.ec_capabilities |= ETHERCAP_VLAN_MTU;
+
+	/*
+	 * The 3c90xB has hardware IPv4/TCPv4/UDPv4 checksum support.
+	 */
+	if (sc->ex_conf & EX_CONF_90XB)
+		sc->sc_ethercom.ec_if.if_capabilities |=
+		    IFCAP_CSUM_IPv4_Tx | IFCAP_CSUM_IPv4_Rx |
+		    IFCAP_CSUM_TCPv4_Tx | IFCAP_CSUM_TCPv4_Rx |
+		    IFCAP_CSUM_UDPv4_Tx | IFCAP_CSUM_UDPv4_Rx;
 
 	if_attach(ifp);
 	ether_ifattach(ifp, macaddr);
@@ -441,18 +440,18 @@ ex_config(sc)
 
 	/* TODO: set queues to 0 */
 
-#if NBPFILTER > 0
-	bpfattach(&sc->sc_ethercom.ec_if.if_bpf, ifp, DLT_EN10MB,
-		  sizeof(struct ether_header));
-#endif
-
 #if NRND > 0
-	rnd_attach_source(&sc->rnd_source, sc->sc_dev.dv_xname,
+	rnd_attach_source(&sc->rnd_source, device_xname(sc->sc_dev),
 			  RND_TYPE_NET, 0);
 #endif
 
-	/*  Establish callback to reset card when we reboot. */
-	sc->sc_sdhook = shutdownhook_establish(ex_shutdown, sc);
+	if (!pmf_device_register1(sc->sc_dev, NULL, NULL, ex_shutdown))
+		aprint_error_dev(sc->sc_dev, "couldn't establish power handler\n");
+	else
+		pmf_class_network_register(sc->sc_dev, &sc->sc_ethercom.ec_if);
+
+	/* The attach is successful. */
+	sc->ex_flags |= EX_FLAGS_ATTACHED;
 	return;
 
  fail:
@@ -493,7 +492,7 @@ ex_config(sc)
 		/* FALLTHROUGH */
 
 	case 6:
-		bus_dmamem_unmap(sc->sc_dmat, (caddr_t)sc->sc_dpd,
+		bus_dmamem_unmap(sc->sc_dmat, (void *)sc->sc_dpd,
 		    EX_NDPD * sizeof (struct ex_dpd));
 		/* FALLTHROUGH */
 
@@ -510,7 +509,7 @@ ex_config(sc)
 		/* FALLTHROUGH */
 
 	case 2:
-		bus_dmamem_unmap(sc->sc_dmat, (caddr_t)sc->sc_upd,
+		bus_dmamem_unmap(sc->sc_dmat, (void *)sc->sc_upd,
 		    EX_NUPD * sizeof (struct ex_upd));
 		/* FALLTHROUGH */
 
@@ -525,14 +524,13 @@ ex_config(sc)
  * Find the media present on non-MII chips.
  */
 void
-ex_probemedia(sc)
-	struct ex_softc *sc;
+ex_probemedia(struct ex_softc *sc)
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
 	struct ifmedia *ifm = &sc->ex_mii.mii_media;
 	struct ex_media *exm;
-	u_int16_t config1, reset_options, default_media;
+	uint16_t config1, reset_options, default_media;
 	int defmedia = 0;
 	const char *sep = "", *defmedianame = NULL;
 
@@ -543,17 +541,17 @@ ex_probemedia(sc)
 
 	default_media = (config1 & CONFIG_MEDIAMASK) >> CONFIG_MEDIAMASK_SHIFT;
 
-	printf("%s: ", sc->sc_dev.dv_xname);
-
 	/* Sanity check that there are any media! */
 	if ((reset_options & ELINK_PCI_MEDIAMASK) == 0) {
-		printf("no media present!\n");
+		aprint_error_dev(sc->sc_dev, "no media present!\n");
 		ifmedia_add(ifm, IFM_ETHER|IFM_NONE, 0, NULL);
 		ifmedia_set(ifm, IFM_ETHER|IFM_NONE);
 		return;
 	}
 
-#define	PRINT(s)	printf("%s%s", sep, s); sep = ", "
+	aprint_normal_dev(sc->sc_dev, "");
+
+#define	PRINT(str)	aprint_normal("%s%s", sep, str); sep = ", "
 
 	for (exm = ex_native_media; exm->exm_name != NULL; exm++) {
 		if (reset_options & exm->exm_mpbit) {
@@ -586,44 +584,18 @@ ex_probemedia(sc)
 		panic("ex_probemedia: impossible");
 #endif
 
-	printf(", default %s\n", defmedianame);
+	aprint_normal(", default %s\n", defmedianame);
 	ifmedia_set(ifm, defmedia);
 }
 
 /*
- * Bring device up.
+ * Setup transmitter parameters.
  */
-void
-ex_init(sc)
-	struct ex_softc *sc;
+static void
+ex_setup_tx(struct ex_softc *sc)
 {
-	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
-	int s, i;
-
-	s = splnet();
-
-	ex_waitcmd(sc);
-	ex_stop(sc);
-
-	/*
-	 * Set the station address and clear the station mask. The latter
-	 * is needed for 90x cards, 0 is the default for 90xB cards.
-	 */
-	GO_WINDOW(2);
-	for (i = 0; i < ETHER_ADDR_LEN; i++) {
-		bus_space_write_1(iot, ioh, ELINK_W2_ADDR_0 + i,
-		    LLADDR(ifp->if_sadl)[i]);
-		bus_space_write_1(iot, ioh, ELINK_W2_RECVMASK_0 + i, 0);
-	}
-
-	GO_WINDOW(3);
-
-	bus_space_write_2(iot, ioh, ELINK_COMMAND, RX_RESET);
-	ex_waitcmd(sc);
-	bus_space_write_2(iot, ioh, ELINK_COMMAND, TX_RESET);
-	ex_waitcmd(sc);
 
 	/*
 	 * Disable reclaim threshold for 90xB, set free threshold to
@@ -635,14 +607,72 @@ ex_init(sc)
 	else
 		bus_space_write_1(iot, ioh, ELINK_TXFREETHRESH, 6);
 
+	/* Setup early transmission start threshold. */
+	bus_space_write_2(iot, ioh, ELINK_COMMAND,
+	    ELINK_TXSTARTTHRESH | sc->tx_start_thresh);
+}
+
+/*
+ * Bring device up.
+ */
+int
+ex_init(struct ifnet *ifp)
+{
+	struct ex_softc *sc = ifp->if_softc;
+	bus_space_tag_t iot = sc->sc_iot;
+	bus_space_handle_t ioh = sc->sc_ioh;
+	int i;
+	uint16_t val;
+	int error = 0;
+
+	if ((error = ex_enable(sc)) != 0)
+		goto out;
+
+	ex_waitcmd(sc);
+	ex_stop(ifp, 0);
+
+	GO_WINDOW(2);
+
+	/* Turn on PHY power. */
+	if (sc->ex_conf & (EX_CONF_PHY_POWER | EX_CONF_INV_LED_POLARITY)) {
+		val = bus_space_read_2(iot, ioh, ELINK_W2_RESET_OPTIONS);
+		if (sc->ex_conf & EX_CONF_PHY_POWER)
+			val |= ELINK_RESET_OPT_PHYPOWER; /* turn on PHY power */
+		if (sc->ex_conf & EX_CONF_INV_LED_POLARITY)
+			val |= ELINK_RESET_OPT_LEDPOLAR; /* invert LED polarity */
+		bus_space_write_2(iot, ioh, ELINK_W2_RESET_OPTIONS, val);
+	}
+
+	/*
+	 * Set the station address and clear the station mask. The latter
+	 * is needed for 90x cards, 0 is the default for 90xB cards.
+	 */
+	for (i = 0; i < ETHER_ADDR_LEN; i++) {
+		bus_space_write_1(iot, ioh, ELINK_W2_ADDR_0 + i,
+		    CLLADDR(ifp->if_sadl)[i]);
+		bus_space_write_1(iot, ioh, ELINK_W2_RECVMASK_0 + i, 0);
+	}
+
+	GO_WINDOW(3);
+
+	bus_space_write_2(iot, ioh, ELINK_COMMAND, RX_RESET);
+	ex_waitcmd(sc);
+	bus_space_write_2(iot, ioh, ELINK_COMMAND, TX_RESET);
+	ex_waitcmd(sc);
+
+	/* Load Tx parameters. */
+	ex_setup_tx(sc);
+
 	bus_space_write_2(iot, ioh, ELINK_COMMAND,
 	    SET_RX_EARLY_THRESH | ELINK_THRESH_DISABLE);
 
 	bus_space_write_4(iot, ioh, ELINK_DMACTRL,
 	    bus_space_read_4(iot, ioh, ELINK_DMACTRL) | ELINK_DMAC_UPRXEAREN);
 
-	bus_space_write_2(iot, ioh, ELINK_COMMAND, SET_RD_0_MASK | S_MASK);
-	bus_space_write_2(iot, ioh, ELINK_COMMAND, SET_INTR_MASK | S_MASK);
+	bus_space_write_2(iot, ioh, ELINK_COMMAND,
+	    SET_RD_0_MASK | XL_WATCHED_INTERRUPTS);
+	bus_space_write_2(iot, ioh, ELINK_COMMAND,
+	    SET_INTR_MASK | XL_WATCHED_INTERRUPTS);
 
 	bus_space_write_2(iot, ioh, ELINK_COMMAND, ACK_INTR | 0xff);
 	if (sc->intr_ack)
@@ -660,147 +690,213 @@ ex_init(sc)
 	ifp->if_flags |= IFF_RUNNING;
 	ifp->if_flags &= ~IFF_OACTIVE;
 	ex_start(ifp);
+	sc->sc_if_flags = ifp->if_flags;
 
 	GO_WINDOW(1);
 
-	splx(s);
-
 	callout_reset(&sc->ex_mii_callout, hz, ex_tick, sc);
-}
 
-/*
- * Multicast hash filter according to the 3Com spec.
- */
-static u_int16_t
-ex_mchash(addr)
-	u_char *addr;
-{
-	u_int32_t crc, carry;
-	int i, j;
-	u_char c;
-
-	/* Compute CRC for the address value. */
-	crc = 0xffffffff; /* initial value */
-
-	for (i = 0; i < 6; i++) {
-		c = addr[i];
-		for (j = 0; j < 8; j++) {
-			carry = ((crc & 0x80000000) ? 1 : 0) ^ (c & 0x01);
-			crc <<= 1;
-			c >>= 1;
-			if (carry)
-				crc = (crc ^ 0x04c11db6) | carry;
-		}
+ out:
+	if (error) {
+		ifp->if_flags &= ~(IFF_RUNNING | IFF_OACTIVE);
+		ifp->if_timer = 0;
+		aprint_error_dev(sc->sc_dev, "interface not running\n");
 	}
-
-	/* Return the filter bit position. */
-	return(crc & 0x000000ff);
+	return (error);
 }
 
+#define	MCHASHSIZE		256
+#define	ex_mchash(addr)		(ether_crc32_be((addr), ETHER_ADDR_LEN) & \
+				    (MCHASHSIZE - 1))
 
 /*
  * Set multicast receive filter. Also take care of promiscuous mode
  * here (XXX).
  */
 void
-ex_set_mc(sc)
-	struct ex_softc *sc;
+ex_set_mc(struct ex_softc *sc)
 {
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	struct ethercom *ec = &sc->sc_ethercom;
 	struct ether_multi *enm;
 	struct ether_multistep estep;
 	int i;
-	u_int16_t mask = FIL_INDIVIDUAL | FIL_BRDCST;
+	uint16_t mask = FIL_INDIVIDUAL | FIL_BRDCST;
 
-	if (ifp->if_flags & IFF_PROMISC)
+	if (ifp->if_flags & IFF_PROMISC) {
 		mask |= FIL_PROMISC;
-	
-	if (!(ifp->if_flags & IFF_MULTICAST))
-		goto out;
-
-	if (!(sc->ex_conf & EX_CONF_90XB) || ifp->if_flags & IFF_ALLMULTI) {
-		mask |= (ifp->if_flags & IFF_MULTICAST) ? FIL_MULTICAST : 0;
-	} else {
-		ETHER_FIRST_MULTI(estep, ec, enm);
-		while (enm != NULL) {
-			if (bcmp(enm->enm_addrlo, enm->enm_addrhi,
-			    ETHER_ADDR_LEN) != 0)
-				goto out;
-			i = ex_mchash(enm->enm_addrlo);
-			bus_space_write_2(sc->sc_iot, sc->sc_ioh,
-			    ELINK_COMMAND, ELINK_SETHASHFILBIT | i);
-			ETHER_NEXT_MULTI(estep, enm);
-		}
-		mask |= FIL_MULTIHASH;
+		goto allmulti;
 	}
- out:
+
+	ETHER_FIRST_MULTI(estep, ec, enm);
+	if (enm == NULL)
+		goto nomulti;
+
+	if ((sc->ex_conf & EX_CONF_90XB) == 0)
+		/* No multicast hash filtering. */
+		goto allmulti;
+
+	for (i = 0; i < MCHASHSIZE; i++)
+		bus_space_write_2(sc->sc_iot, sc->sc_ioh,
+		    ELINK_COMMAND, ELINK_CLEARHASHFILBIT | i);
+
+	do {
+		if (memcmp(enm->enm_addrlo, enm->enm_addrhi,
+		    ETHER_ADDR_LEN) != 0)
+			goto allmulti;
+
+		i = ex_mchash(enm->enm_addrlo);
+		bus_space_write_2(sc->sc_iot, sc->sc_ioh,
+		    ELINK_COMMAND, ELINK_SETHASHFILBIT | i);
+		ETHER_NEXT_MULTI(estep, enm);
+	} while (enm != NULL);
+	mask |= FIL_MULTIHASH;
+
+nomulti:
+	ifp->if_flags &= ~IFF_ALLMULTI;
+	bus_space_write_2(sc->sc_iot, sc->sc_ioh, ELINK_COMMAND,
+	    SET_RX_FILTER | mask);
+	return;
+
+allmulti:
+	ifp->if_flags |= IFF_ALLMULTI;
+	mask |= FIL_MULTICAST;
 	bus_space_write_2(sc->sc_iot, sc->sc_ioh, ELINK_COMMAND,
 	    SET_RX_FILTER | mask);
 }
 
 
+/*
+ * The Tx Complete interrupts occur only on errors,
+ * and this is the error handler.
+ */
 static void
-ex_txstat(sc)
-	struct ex_softc *sc;
+ex_txstat(struct ex_softc *sc)
 {
+	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
-	int i;
+	int i, err = 0;
 
 	/*
 	 * We need to read+write TX_STATUS until we get a 0 status
 	 * in order to turn off the interrupt flag.
+	 * ELINK_TXSTATUS is in the upper byte of 2 with ELINK_TIMER.
 	 */
-	while ((i = bus_space_read_1(iot, ioh, ELINK_TXSTATUS)) & TXS_COMPLETE) {
-		bus_space_write_1(iot, ioh, ELINK_TXSTATUS, 0x0);
+	for (;;) {
+		i = bus_space_read_2(iot, ioh, ELINK_TIMER);
+		if ((i & TXS_COMPLETE) == 0)
+			break;
+		bus_space_write_2(iot, ioh, ELINK_TIMER, 0x0);
+		err |= i;
+	}
+	err &= ~TXS_TIMER;
 
-		if (i & TXS_JABBER) {
-			++sc->sc_ethercom.ec_if.if_oerrors;
-			if (sc->sc_ethercom.ec_if.if_flags & IFF_DEBUG)
-				printf("%s: jabber (%x)\n",
-				       sc->sc_dev.dv_xname, i);
-			ex_init(sc);
-			/* TODO: be more subtle here */
-		} else if (i & TXS_UNDERRUN) {
-			++sc->sc_ethercom.ec_if.if_oerrors;
-			if (sc->sc_ethercom.ec_if.if_flags & IFF_DEBUG)
-				printf("%s: fifo underrun (%x) @%d\n",
-				       sc->sc_dev.dv_xname, i,
-				       sc->tx_start_thresh);
-			if (sc->tx_succ_ok < 100)
-				    sc->tx_start_thresh = min(ETHER_MAX_LEN,
-					    sc->tx_start_thresh + 20);
+	if ((err & (TXS_UNDERRUN | TXS_JABBER | TXS_RECLAIM))
+	    || err == 0 /* should not happen, just in case */) {
+		/*
+		 * Make sure the transmission is stopped.
+		 */
+		bus_space_write_2(iot, ioh, ELINK_COMMAND, ELINK_DNSTALL);
+		for (i = 1000; i > 0; i--)
+			if ((bus_space_read_4(iot, ioh, ELINK_DMACTRL) &
+			    ELINK_DMAC_DNINPROG) == 0)
+				break;
+
+		/*
+		 * Reset the transmitter.
+		 */
+		bus_space_write_2(iot, ioh, ELINK_COMMAND, TX_RESET);
+
+		/* Resetting takes a while and we will do more than wait. */
+
+		ifp->if_flags &= ~IFF_OACTIVE;
+		++sc->sc_ethercom.ec_if.if_oerrors;
+		aprint_error_dev(sc->sc_dev, "%s%s%s",
+		    (err & TXS_UNDERRUN) ? " transmit underrun" : "",
+		    (err & TXS_JABBER) ? " jabber" : "",
+		    (err & TXS_RECLAIM) ? " reclaim" : "");
+		if (err == 0)
+			aprint_error(" unknown Tx error");
+		printf(" (%x)", err);
+		if (err & TXS_UNDERRUN) {
+			aprint_error(" @%d", sc->tx_start_thresh);
+			if (sc->tx_succ_ok < 256 &&
+			    (i = min(ETHER_MAX_LEN, sc->tx_start_thresh + 20))
+			    > sc->tx_start_thresh) {
+				aprint_error(", new threshold is %d", i);
+				sc->tx_start_thresh = i;
+			}
 			sc->tx_succ_ok = 0;
-			ex_init(sc);
-			/* TODO: be more subtle here */
-		} else if (i & TXS_MAX_COLLISION) {
+		}
+		aprint_error("\n");
+		if (err & TXS_MAX_COLLISION)
 			++sc->sc_ethercom.ec_if.if_collisions;
-			bus_space_write_2(iot, ioh, ELINK_COMMAND, TX_ENABLE);
-			sc->sc_ethercom.ec_if.if_flags &= ~IFF_OACTIVE;
-		} else
-			sc->tx_succ_ok = (sc->tx_succ_ok+1) & 127;
+
+		/* Wait for TX_RESET to finish. */
+		ex_waitcmd(sc);
+
+		/* Reload Tx parameters. */
+		ex_setup_tx(sc);
+	} else {
+		if (err & TXS_MAX_COLLISION)
+			++sc->sc_ethercom.ec_if.if_collisions;
+		sc->sc_ethercom.ec_if.if_flags &= ~IFF_OACTIVE;
+	}
+
+	bus_space_write_2(iot, ioh, ELINK_COMMAND, TX_ENABLE);
+
+	/* Retransmit current packet if any. */
+	if (sc->tx_head) {
+		ifp->if_flags |= IFF_OACTIVE;
+		bus_space_write_2(iot, ioh, ELINK_COMMAND,
+		    ELINK_DNUNSTALL);
+		bus_space_write_4(iot, ioh, ELINK_DNLISTPTR,
+		    DPD_DMADDR(sc, sc->tx_head));
+
+		/* Retrigger watchdog if stopped. */
+		if (ifp->if_timer == 0)
+			ifp->if_timer = 1;
 	}
 }
 
 int
-ex_media_chg(ifp)
-	struct ifnet *ifp;
+ex_media_chg(struct ifnet *ifp)
 {
-	struct ex_softc *sc = ifp->if_softc;
 
 	if (ifp->if_flags & IFF_UP)
-		ex_init(sc);
+		ex_init(ifp);
 	return 0;
 }
 
 void
-ex_set_media(sc)
-	struct ex_softc *sc;
+ex_set_xcvr(struct ex_softc *sc, const uint16_t media)
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
-	int config0, config1;
+	uint32_t icfg;
+
+	/*
+	 * We're already in Window 3
+	 */
+	icfg = bus_space_read_4(iot, ioh, ELINK_W3_INTERNAL_CONFIG);
+	icfg &= ~(CONFIG_XCVR_SEL << 16);
+	if (media & (ELINK_MEDIACAP_MII | ELINK_MEDIACAP_100BASET4))
+		icfg |= ELINKMEDIA_MII << (CONFIG_XCVR_SEL_SHIFT + 16);
+	if (media & ELINK_MEDIACAP_100BASETX)
+		icfg |= ELINKMEDIA_AUTO << (CONFIG_XCVR_SEL_SHIFT + 16);
+	if (media & ELINK_MEDIACAP_100BASEFX)
+		icfg |= ELINKMEDIA_100BASE_FX
+			<< (CONFIG_XCVR_SEL_SHIFT + 16);
+	bus_space_write_4(iot, ioh, ELINK_W3_INTERNAL_CONFIG, icfg);
+}
+
+void
+ex_set_media(struct ex_softc *sc)
+{
+	bus_space_tag_t iot = sc->sc_iot;
+	bus_space_handle_t ioh = sc->sc_ioh;
+	uint32_t configreg;
 
 	if (((sc->ex_conf & EX_CONF_MII) &&
 	    (sc->ex_mii.mii_media_active & IFM_FDX))
@@ -817,18 +913,11 @@ ex_set_media(sc)
 	 * PHY which media to use.
 	 */
 	if (sc->ex_conf & EX_CONF_MII) {
+		uint16_t val;
+
 		GO_WINDOW(3);
-
-		config0 = (u_int)bus_space_read_2(iot, ioh,
-		    ELINK_W3_INTERNAL_CONFIG);
-		config1 = (u_int)bus_space_read_2(iot, ioh,
-		    ELINK_W3_INTERNAL_CONFIG + 2);
-
-		config1 = config1 & ~CONFIG_MEDIAMASK;
-		config1 |= (ELINKMEDIA_MII << CONFIG_MEDIAMASK_SHIFT);
-
-		bus_space_write_2(iot, ioh, ELINK_W3_INTERNAL_CONFIG, config0);
-		bus_space_write_2(iot, ioh, ELINK_W3_INTERNAL_CONFIG + 2, config1);
+		val = bus_space_read_2(iot, ioh, ELINK_W3_RESET_OPTIONS);
+		ex_set_xcvr(sc, val);
 		mii_mediachg(&sc->ex_mii);
 		return;
 	}
@@ -876,15 +965,13 @@ ex_set_media(sc)
 	}
 
 	GO_WINDOW(3);
-	config0 = (u_int)bus_space_read_2(iot, ioh, ELINK_W3_INTERNAL_CONFIG);
-	config1 = (u_int)bus_space_read_2(iot, ioh, ELINK_W3_INTERNAL_CONFIG + 2);
+	configreg = bus_space_read_4(iot, ioh, ELINK_W3_INTERNAL_CONFIG);
 
-	config1 = config1 & ~CONFIG_MEDIAMASK;
-	config1 |= (sc->ex_mii.mii_media.ifm_cur->ifm_data <<
-	    CONFIG_MEDIAMASK_SHIFT);
+	configreg &= ~(CONFIG_MEDIAMASK << 16);
+	configreg |= (sc->ex_mii.mii_media.ifm_cur->ifm_data <<
+	    (CONFIG_MEDIAMASK_SHIFT + 16));
 
-	bus_space_write_2(iot, ioh, ELINK_W3_INTERNAL_CONFIG, config0);
-	bus_space_write_2(iot, ioh, ELINK_W3_INTERNAL_CONFIG + 2, config1);
+	bus_space_write_4(iot, ioh, ELINK_W3_INTERNAL_CONFIG, configreg);
 }
 
 /*
@@ -892,24 +979,27 @@ ex_set_media(sc)
  * (if_media callback, may be called before interface is brought up).
  */
 void
-ex_media_stat(ifp, req)
-	struct ifnet *ifp;
-	struct ifmediareq *req;
+ex_media_stat(struct ifnet *ifp, struct ifmediareq *req)
 {
 	struct ex_softc *sc = ifp->if_softc;
+	uint16_t help;
 
-	if (sc->ex_conf & EX_CONF_MII) {
-		mii_pollstat(&sc->ex_mii);
-		req->ifm_status = sc->ex_mii.mii_media_status;
-		req->ifm_active = sc->ex_mii.mii_media_active;
-	} else {
-		GO_WINDOW(4);
-		req->ifm_status = IFM_AVALID;
-		req->ifm_active = sc->ex_mii.mii_media.ifm_cur->ifm_media;
-		if (bus_space_read_2(sc->sc_iot, sc->sc_ioh,
-		    ELINK_W4_MEDIA_TYPE) & LINKBEAT_DETECT)
-			req->ifm_status |= IFM_ACTIVE;
-                GO_WINDOW(1);
+	if ((ifp->if_flags & (IFF_UP|IFF_RUNNING)) == (IFF_UP|IFF_RUNNING)) {
+		if (sc->ex_conf & EX_CONF_MII) {
+			mii_pollstat(&sc->ex_mii);
+			req->ifm_status = sc->ex_mii.mii_media_status;
+			req->ifm_active = sc->ex_mii.mii_media_active;
+		} else {
+			GO_WINDOW(4);
+			req->ifm_status = IFM_AVALID;
+			req->ifm_active =
+			    sc->ex_mii.mii_media.ifm_cur->ifm_media;
+			help = bus_space_read_2(sc->sc_iot, sc->sc_ioh,
+						ELINK_W4_MEDIA_TYPE);
+			if (help & LINKBEAT_DETECT)
+				req->ifm_status |= IFM_ACTIVE;
+			GO_WINDOW(1);
+		}
 	}
 }
 
@@ -919,8 +1009,7 @@ ex_media_stat(ifp, req)
  * Start outputting on the interface.
  */
 static void
-ex_start(ifp)
-	struct ifnet *ifp;
+ex_start(struct ifnet *ifp)
 {
 	struct ex_softc *sc = ifp->if_softc;
 	bus_space_tag_t iot = sc->sc_iot;
@@ -928,8 +1017,10 @@ ex_start(ifp)
 	volatile struct ex_fraghdr *fr = NULL;
 	volatile struct ex_dpd *dpd = NULL, *prevdpd = NULL;
 	struct ex_txdesc *txp;
+	struct mbuf *mb_head;
 	bus_dmamap_t dmamap;
-	int offset, totlen;
+	int m_csumflags, offset, seglen, totlen, segment, error;
+	uint32_t csum_flags;
 
 	if (sc->tx_head || sc->tx_free == NULL)
 		return;
@@ -940,21 +1031,24 @@ ex_start(ifp)
 	 * We're finished if there is nothing more to add to the list or if
 	 * we're all filled up with buffers to transmit.
 	 */
-	while (ifp->if_snd.ifq_head != NULL && sc->tx_free != NULL) {
-		struct mbuf *mb_head;
-		int segment, error;
-
+	while (sc->tx_free != NULL) {
 		/*
 		 * Grab a packet to transmit.
 		 */
-		IF_DEQUEUE(&ifp->if_snd, mb_head);
+		IFQ_DEQUEUE(&ifp->if_snd, mb_head);
+		if (mb_head == NULL)
+			break;
+
+		/*
+		 * mb_head might be updated later,
+		 * so preserve csum_flags here.
+		 */
+		m_csumflags = mb_head->m_pkthdr.csum_flags;
 
 		/*
 		 * Get pointer to next available tx desc.
 		 */
 		txp = sc->tx_free;
-		sc->tx_free = txp->tx_next;
-		txp->tx_next = NULL;
 		dmamap = txp->tx_dmamap;
 
 		/*
@@ -964,7 +1058,7 @@ ex_start(ifp)
 		 */
  reload:
 		error = bus_dmamap_load_mbuf(sc->sc_dmat, dmamap,
-		    mb_head, BUS_DMA_NOWAIT);
+		    mb_head, BUS_DMA_WRITE|BUS_DMA_NOWAIT);
 		switch (error) {
 		case 0:
 			/* Success. */
@@ -979,12 +1073,12 @@ ex_start(ifp)
 			 * mbuf chain first.  Bail out if we can't get the
 			 * new buffers.
 			 */
-			printf("%s: too many segments, ", sc->sc_dev.dv_xname);
+			aprint_error_dev(sc->sc_dev, "too many segments, ");
 
 			MGETHDR(mn, M_DONTWAIT, MT_DATA);
 			if (mn == NULL) {
 				m_freem(mb_head);
-				printf("aborting\n");
+				aprint_error("aborting\n");
 				goto out;
 			}
 			if (mb_head->m_pkthdr.len > MHLEN) {
@@ -992,16 +1086,16 @@ ex_start(ifp)
 				if ((mn->m_flags & M_EXT) == 0) {
 					m_freem(mn);
 					m_freem(mb_head);
-					printf("aborting\n");
+					aprint_error("aborting\n");
 					goto out;
 				}
 			}
 			m_copydata(mb_head, 0, mb_head->m_pkthdr.len,
-			    mtod(mn, caddr_t));
+			    mtod(mn, void *));
 			mn->m_pkthdr.len = mn->m_len = mb_head->m_pkthdr.len;
 			m_freem(mb_head);
 			mb_head = mn;
-			printf("retrying\n");
+			aprint_error("retrying\n");
 			goto reload;
 		    }
 
@@ -1009,21 +1103,44 @@ ex_start(ifp)
 			/*
 			 * Some other problem; report it.
 			 */
-			printf("%s: can't load mbuf chain, error = %d\n",
-			    sc->sc_dev.dv_xname, error);
+			aprint_error_dev(sc->sc_dev,
+			    "can't load mbuf chain, error = %d\n", error);
 			m_freem(mb_head);
 			goto out;
 		}
+
+		/*
+		 * remove our tx desc from freelist.
+		 */
+		sc->tx_free = txp->tx_next;
+		txp->tx_next = NULL;
 
 		fr = &txp->tx_dpd->dpd_frags[0];
 		totlen = 0;
 		for (segment = 0; segment < dmamap->dm_nsegs; segment++, fr++) {
 			fr->fr_addr = htole32(dmamap->dm_segs[segment].ds_addr);
-			fr->fr_len = htole32(dmamap->dm_segs[segment].ds_len);
-			totlen += dmamap->dm_segs[segment].ds_len;
+			seglen = dmamap->dm_segs[segment].ds_len;
+			fr->fr_len = htole32(seglen);
+			totlen += seglen;
 		}
-		fr--;
-		fr->fr_len |= htole32(EX_FR_LAST);
+		if (__predict_false(totlen <= EX_IP4CSUMTX_PADLEN &&
+		    (m_csumflags & M_CSUM_IPv4) != 0)) {
+			/*
+			 * Pad short packets to avoid ip4csum-tx bug.
+			 *
+			 * XXX Should we still consider if such short
+			 *     (36 bytes or less) packets might already
+			 *     occupy EX_NTFRAG (== 32) fragements here?
+			 */
+			KASSERT(segment < EX_NTFRAGS);
+			fr->fr_addr = htole32(DPDMEMPAD_DMADDR(sc));
+			seglen = EX_IP4CSUMTX_PADLEN + 1 - totlen;
+			fr->fr_len = htole32(EX_FR_LAST | seglen);
+			totlen += seglen;
+		} else {
+			fr--;
+			fr->fr_len |= htole32(EX_FR_LAST);
+		}
 		txp->tx_mbhead = mb_head;
 
 		bus_dmamap_sync(sc->sc_dmat, dmamap, 0, dmamap->dm_mapsize,
@@ -1033,8 +1150,27 @@ ex_start(ifp)
 		dpd->dpd_nextptr = 0;
 		dpd->dpd_fsh = htole32(totlen);
 
+		/* Byte-swap constants so compiler can optimize. */
+
+		if (sc->ex_conf & EX_CONF_90XB) {
+			csum_flags = 0;
+
+			if (m_csumflags & M_CSUM_IPv4)
+				csum_flags |= htole32(EX_DPD_IPCKSUM);
+
+			if (m_csumflags & M_CSUM_TCPv4)
+				csum_flags |= htole32(EX_DPD_TCPCKSUM);
+			else if (m_csumflags & M_CSUM_UDPv4)
+				csum_flags |= htole32(EX_DPD_UDPCKSUM);
+
+			dpd->dpd_fsh |= csum_flags;
+		} else {
+			KDASSERT((mb_head->m_pkthdr.csum_flags &
+			    (M_CSUM_IPv4|M_CSUM_TCPv4|M_CSUM_UDPv4)) == 0);
+		}
+
 		bus_dmamap_sync(sc->sc_dmat, sc->sc_dpd_dmamap,
-		    ((caddr_t)dpd - (caddr_t)sc->sc_dpd),
+		    ((const char *)(intptr_t)dpd - (const char *)sc->sc_dpd),
 		    sizeof (struct ex_dpd),
 		    BUS_DMASYNC_PREREAD|BUS_DMASYNC_PREWRITE);
 
@@ -1047,14 +1183,14 @@ ex_start(ifp)
 		 */
 		if (sc->tx_head != NULL) {
 			prevdpd = sc->tx_tail->tx_dpd;
-			offset = ((caddr_t)prevdpd - (caddr_t)sc->sc_dpd);
+			offset = ((const char *)(intptr_t)prevdpd - (const char *)sc->sc_dpd);
 			bus_dmamap_sync(sc->sc_dmat, sc->sc_dpd_dmamap,
 			    offset, sizeof (struct ex_dpd),
 			    BUS_DMASYNC_POSTREAD|BUS_DMASYNC_POSTWRITE);
 			prevdpd->dpd_nextptr = htole32(DPD_DMADDR(sc, txp));
 			bus_dmamap_sync(sc->sc_dmat, sc->sc_dpd_dmamap,
 			    offset, sizeof (struct ex_dpd),
-			    BUS_DMASYNC_PREREAD|BUS_DMASYNC_PREWRITE); 
+			    BUS_DMASYNC_PREREAD|BUS_DMASYNC_PREWRITE);
 			sc->tx_tail->tx_next = txp;
 			sc->tx_tail = txp;
 		} else {
@@ -1073,7 +1209,7 @@ ex_start(ifp)
 	if (sc->tx_head) {
 		sc->tx_tail->tx_dpd->dpd_fsh |= htole32(EX_DPD_DNIND);
 		bus_dmamap_sync(sc->sc_dmat, sc->sc_dpd_dmamap,
-		    ((caddr_t)sc->tx_tail->tx_dpd - (caddr_t)sc->sc_dpd),
+		    ((char *)sc->tx_tail->tx_dpd - (char *)sc->sc_dpd),
 		    sizeof (struct ex_dpd),
 		    BUS_DMASYNC_PREREAD|BUS_DMASYNC_PREWRITE);
 		ifp->if_flags |= IFF_OACTIVE;
@@ -1088,30 +1224,27 @@ ex_start(ifp)
 
 
 int
-ex_intr(arg)
-	void *arg;
+ex_intr(void *arg)
 {
 	struct ex_softc *sc = arg;
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
-	u_int16_t stat;
+	uint16_t stat;
 	int ret = 0;
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 
-	if (sc->enabled == 0 ||
-	    (sc->sc_dev.dv_flags & DVF_ACTIVE) == 0)
+	if ((ifp->if_flags & IFF_RUNNING) == 0 ||
+	    !device_is_active(sc->sc_dev))
 		return (0);
 
 	for (;;) {
-		bus_space_write_2(iot, ioh, ELINK_COMMAND, C_INTR_LATCH);
-
 		stat = bus_space_read_2(iot, ioh, ELINK_STATUS);
 
-		if ((stat & S_MASK) == 0) {
-			if ((stat & S_INTR_LATCH) == 0) {
+		if ((stat & XL_WATCHED_INTERRUPTS) == 0) {
+			if ((stat & INTR_LATCH) == 0) {
 #if 0
-				printf("%s: intr latch cleared\n",
-				       sc->sc_dev.dv_xname);
+				aprint_error_dev(sc->sc_dev,
+				       "intr latch cleared\n");
 #endif
 				break;
 			}
@@ -1123,24 +1256,35 @@ ex_intr(arg)
 		 * Acknowledge interrupts.
 		 */
 		bus_space_write_2(iot, ioh, ELINK_COMMAND, ACK_INTR |
-				  (stat & S_MASK));
+		    (stat & (XL_WATCHED_INTERRUPTS | INTR_LATCH)));
 		if (sc->intr_ack)
 			(*sc->intr_ack)(sc);
 
-		if (stat & S_HOST_ERROR) {
-			printf("%s: adapter failure (%x)\n",
-			    sc->sc_dev.dv_xname, stat);
+		if (stat & HOST_ERROR) {
+			aprint_error_dev(sc->sc_dev,
+			    "adapter failure (%x)\n", stat);
 			ex_reset(sc);
-			ex_init(sc);
+			ex_init(ifp);
 			return 1;
 		}
-		if (stat & S_TX_COMPLETE) {
-			ex_txstat(sc);
-		}
-		if (stat & S_UPD_STATS) {
+		if (stat & UPD_STATS) {
 			ex_getstats(sc);
 		}
-		if (stat & S_DN_COMPLETE) {
+		if (stat & TX_COMPLETE) {
+			ex_txstat(sc);
+#if 0
+			if (stat & DN_COMPLETE)
+				aprint_error_dev(sc->sc_dev,
+				    "Ignoring Dn interrupt (%x)\n", stat);
+#endif
+			/*
+			 * In some rare cases, both Tx Complete and
+			 * Dn Complete bits are set.  However, the packet
+			 * has been reloaded in ex_txstat() and should not
+			 * handle the Dn Complete event here.
+			 * Hence the "else" below.
+			 */
+		} else if (stat & DN_COMPLETE) {
 			struct ex_txdesc *txp, *ptxp = NULL;
 			bus_dmamap_t txmap;
 
@@ -1151,7 +1295,7 @@ ex_intr(arg)
 			    txp = txp->tx_next) {
 				bus_dmamap_sync(sc->sc_dmat,
 				    sc->sc_dpd_dmamap,
-				    (caddr_t)txp->tx_dpd - (caddr_t)sc->sc_dpd,
+				    (char *)txp->tx_dpd - (char *)sc->sc_dpd,
 				    sizeof (struct ex_dpd),
 				    BUS_DMASYNC_POSTREAD|BUS_DMASYNC_POSTWRITE);
 				if (txp->tx_mbhead != NULL) {
@@ -1177,29 +1321,32 @@ ex_intr(arg)
 
 			sc->tx_head = sc->tx_tail = NULL;
 			ifp->if_flags &= ~IFF_OACTIVE;
+
+			if (sc->tx_succ_ok < 256)
+				sc->tx_succ_ok++;
 		}
 
-		if (stat & S_UP_COMPLETE) {
+		if (stat & UP_COMPLETE) {
 			struct ex_rxdesc *rxd;
 			struct mbuf *m;
 			struct ex_upd *upd;
 			bus_dmamap_t rxmap;
-			u_int32_t pktstat;
+			uint32_t pktstat;
 
  rcvloop:
 			rxd = sc->rx_head;
 			rxmap = rxd->rx_dmamap;
 			m = rxd->rx_mbhead;
 			upd = rxd->rx_upd;
-			pktstat = le32toh(upd->upd_pktstatus);
 
 			bus_dmamap_sync(sc->sc_dmat, rxmap, 0,
 			    rxmap->dm_mapsize,
 			    BUS_DMASYNC_POSTREAD|BUS_DMASYNC_POSTWRITE);
 			bus_dmamap_sync(sc->sc_dmat, sc->sc_upd_dmamap,
-			    ((caddr_t)upd - (caddr_t)sc->sc_upd), 
+			    ((char *)upd - (char *)sc->sc_upd),
 			    sizeof (struct ex_upd),
 			    BUS_DMASYNC_POSTREAD|BUS_DMASYNC_POSTWRITE);
+			pktstat = le32toh(upd->upd_pktstatus);
 
 			if (pktstat & EX_UPD_COMPLETE) {
 				/*
@@ -1214,11 +1361,12 @@ ex_intr(arg)
 				 * instead.
 				 */
 				if (ex_add_rxbuf(sc, rxd) == 0) {
-					struct ether_header *eh;
-					u_int16_t total_len;
+					uint16_t total_len;
 
-
-					if (pktstat & EX_UPD_ERR) {
+					if (pktstat &
+					    ((sc->sc_ethercom.ec_capenable &
+					    ETHERCAP_VLAN_MTU) ?
+					    EX_UPD_ERR_VLAN : EX_UPD_ERR)) {
 						ifp->if_ierrors++;
 						m_freem(m);
 						goto rcvloop;
@@ -1232,29 +1380,30 @@ ex_intr(arg)
 					}
 					m->m_pkthdr.rcvif = ifp;
 					m->m_pkthdr.len = m->m_len = total_len;
-					eh = mtod(m, struct ether_header *);
 #if NBPFILTER > 0
-					if (ifp->if_bpf) {
-						bpf_tap(ifp->if_bpf,
-						    mtod(m, caddr_t),
-						    total_len); 
-						/*
-						 * Only pass this packet up
-						 * if it is for us.
-						 */
-						if ((ifp->if_flags &
-						    IFF_PROMISC) &&
-						    (eh->ether_dhost[0] & 1)
-						    == 0 &&
-						    bcmp(eh->ether_dhost,
-							LLADDR(ifp->if_sadl),
-							sizeof(eh->ether_dhost))
-							    != 0) {
-							m_freem(m);
-							goto rcvloop;
-						}
-					}
-#endif /* NBPFILTER > 0 */
+					if (ifp->if_bpf)
+						bpf_mtap(ifp->if_bpf, m);
+#endif
+		/*
+		 * Set the incoming checksum information for the packet.
+		 */
+		if ((sc->ex_conf & EX_CONF_90XB) != 0 &&
+		    (pktstat & EX_UPD_IPCHECKED) != 0) {
+			m->m_pkthdr.csum_flags |= M_CSUM_IPv4;
+			if (pktstat & EX_UPD_IPCKSUMERR)
+				m->m_pkthdr.csum_flags |= M_CSUM_IPv4_BAD;
+			if (pktstat & EX_UPD_TCPCHECKED) {
+				m->m_pkthdr.csum_flags |= M_CSUM_TCPv4;
+				if (pktstat & EX_UPD_TCPCKSUMERR)
+					m->m_pkthdr.csum_flags |=
+					    M_CSUM_TCP_UDP_BAD;
+			} else if (pktstat & EX_UPD_UDPCHECKED) {
+				m->m_pkthdr.csum_flags |= M_CSUM_UDPv4;
+				if (pktstat & EX_UPD_UDPCKSUMERR)
+					m->m_pkthdr.csum_flags |=
+					    M_CSUM_TCP_UDP_BAD;
+			}
+		}
 					(*ifp->if_input)(ifp, m);
 				}
 				goto rcvloop;
@@ -1264,133 +1413,90 @@ ex_intr(arg)
 			 * stalled. We could be more subtle about this.
 			 */
 			if (bus_space_read_4(iot, ioh, ELINK_UPLISTPTR) == 0) {
-				printf("%s: uplistptr was 0\n",
-				       sc->sc_dev.dv_xname);
-				ex_init(sc);
+				aprint_error_dev(sc->sc_dev,
+				       "uplistptr was 0\n");
+				ex_init(ifp);
 			} else if (bus_space_read_4(iot, ioh, ELINK_UPPKTSTATUS)
 				   & 0x2000) {
-				printf("%s: receive stalled\n",
-				       sc->sc_dev.dv_xname);
+				aprint_error_dev(sc->sc_dev,
+				       "receive stalled\n");
 				bus_space_write_2(iot, ioh, ELINK_COMMAND,
 						  ELINK_UPUNSTALL);
 			}
 		}
+
+#if NRND > 0
+		if (stat)
+			rnd_add_uint32(&sc->rnd_source, stat);
+#endif
 	}
 
 	/* no more interrupts */
-	if (ret && ifp->if_snd.ifq_head)
+	if (ret && IFQ_IS_EMPTY(&ifp->if_snd) == 0)
 		ex_start(ifp);
 	return ret;
 }
 
 int
-ex_ioctl(ifp, cmd, data)
-	struct ifnet *ifp;
-	u_long cmd;
-	caddr_t data;
+ex_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
 	struct ex_softc *sc = ifp->if_softc;
-	struct ifaddr *ifa = (struct ifaddr *)data;
 	struct ifreq *ifr = (struct ifreq *)data;
-	int s, error = 0;
+	int s, error;
 
 	s = splnet();
 
 	switch (cmd) {
-
-	case SIOCSIFADDR:
-		ifp->if_flags |= IFF_UP;
-		switch (ifa->ifa_addr->sa_family) {
-#ifdef INET
-		case AF_INET:
-			ex_init(sc);
-			arp_ifinit(&sc->sc_ethercom.ec_if, ifa);
-			break;
-#endif
-#ifdef NS
-		case AF_NS:
-		    {
-			struct ns_addr *ina = &IA_SNS(ifa)->sns_addr;
-
-			if (ns_nullhost(*ina))
-				ina->x_host = *(union ns_host *)
-				    LLADDR(ifp->if_sadl);
-			else
-				bcopy(ina->x_host.c_host, LLADDR(ifp->if_sadl),
-				    ifp->if_addrlen);
-			/* Set new address. */
-			ex_init(sc);
-			break;
-		    }
-#endif
-		default:
-			ex_init(sc);
-			break;
-		}
-		break;
 	case SIOCSIFMEDIA:
 	case SIOCGIFMEDIA:
 		error = ifmedia_ioctl(ifp, ifr, &sc->ex_mii.mii_media, cmd);
 		break;
-
 	case SIOCSIFFLAGS:
-		if ((ifp->if_flags & IFF_UP) == 0 &&
-		    (ifp->if_flags & IFF_RUNNING) != 0) {
-			/*
-			 * If interface is marked down and it is running, then
-			 * stop it.
-			 */
-			ex_stop(sc);
-			ifp->if_flags &= ~IFF_RUNNING;
-		} else if ((ifp->if_flags & IFF_UP) != 0 &&
-			   (ifp->if_flags & IFF_RUNNING) == 0) {
-			/*
-			 * If interface is marked up and it is stopped, then
-			 * start it.
-			 */
-			ex_init(sc);
-		} else if ((ifp->if_flags & IFF_UP) != 0) {
-			/*
-			 * Deal with other flags that change hardware
-			 * state, i.e. IFF_PROMISC.
-			 */
+		/* If the interface is up and running, only modify the receive
+		 * filter when setting promiscuous or debug mode.  Otherwise
+		 * fall through to ether_ioctl, which will reset the chip.
+		 */
+#define RESETIGN (IFF_CANTCHANGE|IFF_DEBUG)
+		if (((ifp->if_flags & (IFF_UP|IFF_RUNNING))
+		    == (IFF_UP|IFF_RUNNING))
+		    && ((ifp->if_flags & (~RESETIGN))
+		    == (sc->sc_if_flags & (~RESETIGN)))) {
 			ex_set_mc(sc);
+			error = 0;
+			break;
+#undef RESETIGN
 		}
-		break;
+		/* FALLTHROUGH */
+	default:
+		if ((error = ether_ioctl(ifp, cmd, data)) != ENETRESET)
+			break;
 
-	case SIOCADDMULTI:
-	case SIOCDELMULTI:
-		error = (cmd == SIOCADDMULTI) ?
-		    ether_addmulti(ifr, &sc->sc_ethercom) :
-		    ether_delmulti(ifr, &sc->sc_ethercom);
+		error = 0;
 
-		if (error == ENETRESET) {
+		if (cmd != SIOCADDMULTI && cmd != SIOCDELMULTI)
+			;
+		else if (ifp->if_flags & IFF_RUNNING) {
 			/*
 			 * Multicast list has changed; set the hardware filter
 			 * accordingly.
 			 */
 			ex_set_mc(sc);
-			error = 0;
 		}
-		break;
-
-	default:
-		error = EINVAL;
 		break;
 	}
 
+	sc->sc_if_flags = ifp->if_flags;
 	splx(s);
 	return (error);
 }
 
 void
-ex_getstats(sc)
-	struct ex_softc *sc;
+ex_getstats(struct ex_softc *sc)
 {
 	bus_space_handle_t ioh = sc->sc_ioh;
 	bus_space_tag_t iot = sc->sc_iot;
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
-	u_int8_t upperok;
+	uint8_t upperok;
 
 	GO_WINDOW(6);
 	upperok = bus_space_read_1(iot, ioh, UPPER_FRAMES_OK);
@@ -1402,31 +1508,34 @@ ex_getstats(sc)
 	ifp->if_collisions += bus_space_read_1(iot, ioh, TX_COLLISIONS);
 	/*
 	 * There seems to be no way to get the exact number of collisions,
-	 * this is the number that occured at the very least.
+	 * this is the number that occurred at the very least.
 	 */
 	ifp->if_collisions += 2 * bus_space_read_1(iot, ioh,
 	    TX_AFTER_X_COLLISIONS);
-	ifp->if_ibytes += bus_space_read_2(iot, ioh, RX_TOTAL_OK);
-	ifp->if_obytes += bus_space_read_2(iot, ioh, TX_TOTAL_OK);
+	/*
+	 * Interface byte counts are counted by ether_input() and
+	 * ether_output(), so don't accumulate them here.  Just
+	 * read the NIC counters so they don't generate overflow interrupts.
+	 * Upper byte counters are latched from reading the totals, so
+	 * they don't need to be read if we don't need their values.
+	 */
+	(void)bus_space_read_2(iot, ioh, RX_TOTAL_OK);
+	(void)bus_space_read_2(iot, ioh, TX_TOTAL_OK);
 
 	/*
 	 * Clear the following to avoid stats overflow interrupts
 	 */
-	bus_space_read_1(iot, ioh, TX_DEFERRALS);
-	bus_space_read_1(iot, ioh, TX_AFTER_1_COLLISION);
-	bus_space_read_1(iot, ioh, TX_NO_SQE);
-	bus_space_read_1(iot, ioh, TX_CD_LOST);
+	(void)bus_space_read_1(iot, ioh, TX_DEFERRALS);
+	(void)bus_space_read_1(iot, ioh, TX_AFTER_1_COLLISION);
+	(void)bus_space_read_1(iot, ioh, TX_NO_SQE);
+	(void)bus_space_read_1(iot, ioh, TX_CD_LOST);
 	GO_WINDOW(4);
-	bus_space_read_1(iot, ioh, ELINK_W4_BADSSD);
-	upperok = bus_space_read_1(iot, ioh, ELINK_W4_UBYTESOK);
-	ifp->if_ibytes += (upperok & 0x0f) << 16;
-	ifp->if_obytes += (upperok & 0xf0) << 12;
+	(void)bus_space_read_1(iot, ioh, ELINK_W4_BADSSD);
 	GO_WINDOW(1);
 }
 
 void
-ex_printstats(sc)
-	struct ex_softc *sc;
+ex_printstats(struct ex_softc *sc)
 {
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 
@@ -1441,13 +1550,12 @@ ex_printstats(sc)
 }
 
 void
-ex_tick(arg)
-	void *arg;
+ex_tick(void *arg)
 {
 	struct ex_softc *sc = arg;
 	int s;
 
-	if ((sc->sc_dev.dv_flags & DVF_ACTIVE) == 0)
+	if (!device_is_active(sc->sc_dev))
 		return;
 
 	s = splnet();
@@ -1456,7 +1564,7 @@ ex_tick(arg)
 		mii_tick(&sc->ex_mii);
 
 	if (!(bus_space_read_2((sc)->sc_iot, (sc)->sc_ioh, ELINK_STATUS)
-	    & S_COMMAND_IN_PROGRESS))
+	    & COMMAND_IN_PROGRESS))
 		ex_getstats(sc);
 
 	splx(s);
@@ -1465,34 +1573,40 @@ ex_tick(arg)
 }
 
 void
-ex_reset(sc)
-	struct ex_softc *sc;
+ex_reset(struct ex_softc *sc)
 {
-	bus_space_write_2(sc->sc_iot, sc->sc_ioh, ELINK_COMMAND, GLOBAL_RESET);
-	delay(400);
+	uint16_t val = GLOBAL_RESET;
+
+	if (sc->ex_conf & EX_CONF_RESETHACK)
+		val |= 0x10;
+	bus_space_write_2(sc->sc_iot, sc->sc_ioh, ELINK_COMMAND, val);
+	/*
+	 * XXX apparently the command in progress bit can't be trusted
+	 * during a reset, so we just always wait this long. Fortunately
+	 * we normally only reset the chip during autoconfig.
+	 */
+	delay(100000);
 	ex_waitcmd(sc);
 }
 
 void
-ex_watchdog(ifp)
-	struct ifnet *ifp;
+ex_watchdog(struct ifnet *ifp)
 {
 	struct ex_softc *sc = ifp->if_softc;
 
-	log(LOG_ERR, "%s: device timeout\n", sc->sc_dev.dv_xname);
+	log(LOG_ERR, "%s: device timeout\n", device_xname(sc->sc_dev));
 	++sc->sc_ethercom.ec_if.if_oerrors;
 
 	ex_reset(sc);
-	ex_init(sc);
+	ex_init(ifp);
 }
 
 void
-ex_stop(sc)
-	struct ex_softc *sc;
+ex_stop(struct ifnet *ifp, int disable)
 {
+	struct ex_softc *sc = ifp->if_softc;
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
-	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	struct ex_txdesc *tx;
 	struct ex_rxdesc *rx;
 	int i;
@@ -1509,7 +1623,7 @@ ex_stop(sc)
 		bus_dmamap_unload(sc->sc_dmat, tx->tx_dmamap);
 		tx->tx_dpd->dpd_fsh = tx->tx_dpd->dpd_nextptr = 0;
 		bus_dmamap_sync(sc->sc_dmat, sc->sc_dpd_dmamap,
-		    ((caddr_t)tx->tx_dpd - (caddr_t)sc->sc_dpd),
+		    ((char *)tx->tx_dpd - (char *)sc->sc_dpd),
 		    sizeof (struct ex_dpd),
 		    BUS_DMASYNC_PREREAD|BUS_DMASYNC_PREWRITE);
 	}
@@ -1527,19 +1641,22 @@ ex_stop(sc)
 		ex_add_rxbuf(sc, rx);
 	}
 
-	bus_space_write_2(iot, ioh, ELINK_COMMAND, C_INTR_LATCH);
+	bus_space_write_2(iot, ioh, ELINK_COMMAND, ACK_INTR | INTR_LATCH);
 
 	callout_stop(&sc->ex_mii_callout);
 	if (sc->ex_conf & EX_CONF_MII)
 		mii_down(&sc->ex_mii);
 
+	if (disable)
+		ex_disable(sc);
+
 	ifp->if_flags &= ~(IFF_RUNNING | IFF_OACTIVE);
+	sc->sc_if_flags = ifp->if_flags;
 	ifp->if_timer = 0;
 }
 
 static void
-ex_init_txdescs(sc)
-	struct ex_softc *sc;
+ex_init_txdescs(struct ex_softc *sc)
 {
 	int i;
 
@@ -1557,11 +1674,9 @@ ex_init_txdescs(sc)
 
 
 int
-ex_activate(self, act)
-	struct device *self;
-	enum devact act;
+ex_activate(device_t self, enum devact act)
 {
-	struct ex_softc *sc = (void *) self;
+	struct ex_softc *sc = device_private(self);
 	int s, error = 0;
 
 	s = splnet();
@@ -1583,12 +1698,15 @@ ex_activate(self, act)
 }
 
 int
-ex_detach(sc)
-	struct ex_softc *sc;
+ex_detach(struct ex_softc *sc)
 {
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	struct ex_rxdesc *rxd;
 	int i;
+
+	/* Succeed now if there's no work to do. */
+	if ((sc->ex_flags & EX_FLAGS_ATTACHED) == 0)
+		return (0);
 
 	/* Unhook our tick handler. */
 	callout_stop(&sc->ex_mii_callout);
@@ -1603,9 +1721,6 @@ ex_detach(sc)
 
 #if NRND > 0
 	rnd_detach_source(&sc->rnd_source);
-#endif
-#if NBPFILTER > 0
-	bpfdetach(ifp);
 #endif
 	ether_ifdetach(ifp);
 	if_detach(ifp);
@@ -1624,16 +1739,16 @@ ex_detach(sc)
 		bus_dmamap_destroy(sc->sc_dmat, sc->sc_tx_dmamaps[i]);
 	bus_dmamap_unload(sc->sc_dmat, sc->sc_dpd_dmamap);
 	bus_dmamap_destroy(sc->sc_dmat, sc->sc_dpd_dmamap);
-	bus_dmamem_unmap(sc->sc_dmat, (caddr_t)sc->sc_dpd,
+	bus_dmamem_unmap(sc->sc_dmat, (void *)sc->sc_dpd,
 	    EX_NDPD * sizeof (struct ex_dpd));
 	bus_dmamem_free(sc->sc_dmat, &sc->sc_dseg, sc->sc_drseg);
 	bus_dmamap_unload(sc->sc_dmat, sc->sc_upd_dmamap);
 	bus_dmamap_destroy(sc->sc_dmat, sc->sc_upd_dmamap);
-	bus_dmamem_unmap(sc->sc_dmat, (caddr_t)sc->sc_upd,
+	bus_dmamem_unmap(sc->sc_dmat, (void *)sc->sc_upd,
 	    EX_NUPD * sizeof (struct ex_upd));
 	bus_dmamem_free(sc->sc_dmat, &sc->sc_useg, sc->sc_urseg);
 
-	shutdownhook_disestablish(sc->sc_sdhook);
+	pmf_device_deregister(sc->sc_dev);
 
 	return (0);
 }
@@ -1641,41 +1756,40 @@ ex_detach(sc)
 /*
  * Before reboots, reset card completely.
  */
-static void
-ex_shutdown(arg)
-	void *arg;
+static bool
+ex_shutdown(device_t self, int flags)
 {
-	struct ex_softc *sc = arg;
+	struct ex_softc *sc = device_private(self);
 
-	ex_stop(sc);
+	ex_stop(&sc->sc_ethercom.ec_if, 1);
+	/*
+	 * Make sure the interface is powered up when we reboot,
+	 * otherwise firmware on some systems gets really confused.
+	 */
+	(void) ex_enable(sc);
+	return true;
 }
 
 /*
  * Read EEPROM data.
  * XXX what to do if EEPROM doesn't unbusy?
  */
-u_int16_t
-ex_read_eeprom(sc, offset)
-	struct ex_softc *sc;
-	int offset;
+uint16_t
+ex_read_eeprom(struct ex_softc *sc, int offset)
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
-	u_int16_t data = 0;
+	uint16_t data = 0, cmd = READ_EEPROM;
+	int off;
+
+	off = sc->ex_conf & EX_CONF_EEPROM_OFF ? 0x30 : 0;
+	cmd = sc->ex_conf & EX_CONF_EEPROM_8BIT ? READ_EEPROM8 : READ_EEPROM;
 
 	GO_WINDOW(0);
 	if (ex_eeprom_busy(sc))
 		goto out;
-	switch (sc->ex_bustype) {
-	case EX_BUS_PCI:
-		bus_space_write_1(iot, ioh, ELINK_W0_EEPROM_COMMAND,
- 		    READ_EEPROM | (offset & 0x3f));
-		break;
-	case EX_BUS_CARDBUS:
-		bus_space_write_2(iot, ioh, ELINK_W0_EEPROM_COMMAND,
-		    0x230 + (offset & 0x3f));
-		break;
-	}
+	bus_space_write_2(iot, ioh, ELINK_W0_EEPROM_COMMAND,
+	    cmd | (off + (offset & 0x3f)));
 	if (ex_eeprom_busy(sc))
 		goto out;
 	data = bus_space_read_2(iot, ioh, ELINK_W0_EEPROM_DATA);
@@ -1684,8 +1798,7 @@ out:
 }
 
 static int
-ex_eeprom_busy(sc)
-	struct ex_softc *sc;
+ex_eeprom_busy(struct ex_softc *sc)
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -1697,7 +1810,7 @@ ex_eeprom_busy(sc)
 			return 0;
 		delay(100);
 	}
-	printf("\n%s: eeprom stays busy.\n", sc->sc_dev.dv_xname);
+	aprint_error_dev(sc->sc_dev, "eeprom stays busy.\n");
 	return (1);
 }
 
@@ -1705,9 +1818,7 @@ ex_eeprom_busy(sc)
  * Create a new rx buffer and add it to the 'soft' rx list.
  */
 static int
-ex_add_rxbuf(sc, rxd)
-	struct ex_softc *sc;
-	struct ex_rxdesc *rxd;
+ex_add_rxbuf(struct ex_softc *sc, struct ex_rxdesc *rxd)
 {
 	struct mbuf *m, *oldm;
 	bus_dmamap_t rxmap;
@@ -1724,14 +1835,14 @@ ex_add_rxbuf(sc, rxd)
 			if (oldm == NULL)
 				return 1;
 			m = oldm;
-			m->m_data = m->m_ext.ext_buf;
+			MRESETDATA(m);
 			rval = 1;
 		}
 	} else {
 		if (oldm == NULL)
 			return 1;
 		m = oldm;
-		m->m_data = m->m_ext.ext_buf;
+		MRESETDATA(m);
 		rval = 1;
 	}
 
@@ -1742,10 +1853,11 @@ ex_add_rxbuf(sc, rxd)
 		if (oldm != NULL)
 			bus_dmamap_unload(sc->sc_dmat, rxmap);
 		error = bus_dmamap_load(sc->sc_dmat, rxmap,
-		    m->m_ext.ext_buf, MCLBYTES, NULL, BUS_DMA_NOWAIT);
+		    m->m_ext.ext_buf, MCLBYTES, NULL,
+		    BUS_DMA_READ|BUS_DMA_NOWAIT);
 		if (error) {
-			printf("%s: can't load rx buffer, error = %d\n",
-			    sc->sc_dev.dv_xname, error);
+			aprint_error_dev(sc->sc_dev, "can't load rx buffer, error = %d\n",
+			    error);
 			panic("ex_add_rxbuf");	/* XXX */
 		}
 	}
@@ -1767,9 +1879,9 @@ ex_add_rxbuf(sc, rxd)
 	if (sc->rx_head != NULL) {
 		sc->rx_tail->rx_next = rxd;
 		sc->rx_tail->rx_upd->upd_nextptr = htole32(sc->sc_upddma +
-		    ((caddr_t)rxd->rx_upd - (caddr_t)sc->sc_upd));
+		    ((char *)rxd->rx_upd - (char *)sc->sc_upd));
 		bus_dmamap_sync(sc->sc_dmat, sc->sc_upd_dmamap,
-		    (caddr_t)sc->rx_tail->rx_upd - (caddr_t)sc->sc_upd,
+		    (char *)sc->rx_tail->rx_upd - (char *)sc->sc_upd,
 		    sizeof (struct ex_upd),
 		    BUS_DMASYNC_PREREAD|BUS_DMASYNC_PREWRITE);
 	} else {
@@ -1780,38 +1892,33 @@ ex_add_rxbuf(sc, rxd)
 	bus_dmamap_sync(sc->sc_dmat, rxmap, 0, rxmap->dm_mapsize,
 	    BUS_DMASYNC_PREREAD|BUS_DMASYNC_PREWRITE);
 	bus_dmamap_sync(sc->sc_dmat, sc->sc_upd_dmamap,
-	    ((caddr_t)rxd->rx_upd - (caddr_t)sc->sc_upd),
+	    ((char *)rxd->rx_upd - (char *)sc->sc_upd),
 	    sizeof (struct ex_upd), BUS_DMASYNC_PREREAD|BUS_DMASYNC_PREWRITE);
 	return (rval);
 }
 
-u_int32_t
-ex_mii_bitbang_read(self)
-	struct device *self;
+uint32_t
+ex_mii_bitbang_read(device_t self)
 {
-	struct ex_softc *sc = (void *) self;
+	struct ex_softc *sc = device_private(self);
 
 	/* We're already in Window 4. */
 	return (bus_space_read_2(sc->sc_iot, sc->sc_ioh, ELINK_W4_PHYSMGMT));
 }
 
 void
-ex_mii_bitbang_write(self, val)
-	struct device *self;
-	u_int32_t val;
+ex_mii_bitbang_write(device_t self, uint32_t val)
 {
-	struct ex_softc *sc = (void *) self;
+	struct ex_softc *sc = device_private(self);
 
 	/* We're already in Window 4. */
 	bus_space_write_2(sc->sc_iot, sc->sc_ioh, ELINK_W4_PHYSMGMT, val);
 }
 
 int
-ex_mii_readreg(v, phy, reg)
-	struct device *v;
-	int phy, reg;
+ex_mii_readreg(device_t v, int phy, int reg)
 {
-	struct ex_softc *sc = (struct ex_softc *)v;
+	struct ex_softc *sc = device_private(v);
 	int val;
 
 	if ((sc->ex_conf & EX_CONF_INTPHY) && phy != ELINK_INTPHY_ID)
@@ -1827,13 +1934,9 @@ ex_mii_readreg(v, phy, reg)
 }
 
 void
-ex_mii_writereg(v, phy, reg, data)
-        struct device *v;
-        int phy;
-        int reg;
-        int data;
+ex_mii_writereg(device_t v, int phy, int reg, int data)
 {
-	struct ex_softc *sc = (struct ex_softc *)v;
+	struct ex_softc *sc = device_private(v);
 
 	GO_WINDOW(4);
 
@@ -1843,14 +1946,13 @@ ex_mii_writereg(v, phy, reg, data)
 }
 
 void
-ex_mii_statchg(v)
-	struct device *v;
+ex_mii_statchg(device_t v)
 {
-	struct ex_softc *sc = (struct ex_softc *)v;
+	struct ex_softc *sc = device_private(v);
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
 	int mctl;
- 
+
 	GO_WINDOW(3);
 	mctl = bus_space_read_2(iot, ioh, ELINK_W3_MAC_CONTROL);
 	if (sc->ex_mii.mii_media_active & IFM_FDX)
@@ -1860,3 +1962,26 @@ ex_mii_statchg(v)
 	bus_space_write_2(iot, ioh, ELINK_W3_MAC_CONTROL, mctl);
 	GO_WINDOW(1);   /* back to operating window */
 }
+
+int
+ex_enable(struct ex_softc *sc)
+{
+	if (sc->enabled == 0 && sc->enable != NULL) {
+		if ((*sc->enable)(sc) != 0) {
+			aprint_error_dev(sc->sc_dev, "device enable failed\n");
+			return (EIO);
+		}
+		sc->enabled = 1;
+	}
+	return (0);
+}
+
+void
+ex_disable(struct ex_softc *sc)
+{
+	if (sc->enabled == 1 && sc->disable != NULL) {
+		(*sc->disable)(sc);
+		sc->enabled = 0;
+	}
+}
+

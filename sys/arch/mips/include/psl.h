@@ -1,4 +1,4 @@
-/*	$NetBSD: psl.h,v 1.12 1999/01/31 00:55:41 castor Exp $	*/
+/*	$NetBSD: psl.h,v 1.17 2005/12/11 12:18:09 christos Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -39,21 +35,20 @@
  */
 
 /*
- * Define PSL_LOWIPL, PSL_USERSET, PSL_USERCLR, USERMODE, BASEPRI
- * for MI code, for MIPS1, MIPS3, or both, depending on the
- * configured CPU types.
+ * Define PSL_LOWIPL, PSL_USERSET, USERMODE for MI code, for
+ * MIPS1, MIPS3+, or both, depending on the configured CPU types.
  */
 
+#include <machine/cdefs.h>	/* for API selection */
 #include <mips/cpuregs.h>
 
 /*
- * mips3-specific  definitions
+ * mips3 (or greater)-specific  definitions
  */
 #define	MIPS3_PSL_LOWIPL	(MIPS3_INT_MASK | MIPS_SR_INT_IE)
 
 #if defined(_MIPS_BSD_API) && _MIPS_BSD_API != _MIPS_BSD_API_LP32
-#define MIPS3_PSL_XFLAGS	\
-		(MIPS3_SR_XX | MIPS3_SR_KX | MIPS3_SR_UX | MIPS3_SR_SX)
+#define MIPS3_PSL_XFLAGS	(MIPS3_SR_XX | MIPS3_SR_UX)
 #else
 #define MIPS3_PSL_XFLAGS	(0)
 #endif
@@ -65,26 +60,8 @@
 	 MIPS3_SR_EXL |		\
 	 MIPS3_INT_MASK)
 
-#define	MIPS3_PSL_USERCLR 	\
-	(MIPS_SR_COP_USABILITY |\
-	 MIPS_SR_BOOT_EXC_VEC |	\
-	 MIPS_SR_TLB_SHUTDOWN |	\
-	 MIPS_SR_PARITY_ERR |	\
-	 MIPS_SR_CACHE_MISS |	\
-	 MIPS_SR_PARITY_ZERO |	\
-	 MIPS_SR_SWAP_CACHES |	\
-	 MIPS_SR_ISOL_CACHES |	\
-	 MIPS_SR_KU_CUR |	\
-	 MIPS_SR_INT_IE |	\
-	 MIPS_SR_MBZ)
-
 #define	MIPS3_USERMODE(ps) \
 	(((ps) & MIPS3_SR_KSU_MASK) == MIPS3_SR_KSU_USER)
-
-#define	MIPS3_BASEPRI(ps) \
-	(((ps) & (MIPS3_INT_MASK | MIPS_SR_INT_ENA_PREV)) \
-			== (MIPS3_INT_MASK | MIPS_SR_INT_ENA_PREV))
-
 
 /*
  * mips1-specific definitions
@@ -98,58 +75,29 @@
 	 MIPS1_SR_INT_ENA_PREV |\
 	 MIPS_INT_MASK)
 
-#define	MIPS1_PSL_USERCLR \
-	(MIPS_SR_COP_USABILITY |\
-	 MIPS_SR_BOOT_EXC_VEC |	\
-	 MIPS_SR_TLB_SHUTDOWN |	\
-	 MIPS_SR_PARITY_ERR |	\
-	 MIPS_SR_CACHE_MISS |	\
-	 MIPS_SR_PARITY_ZERO |	\
-	 MIPS_SR_SWAP_CACHES |	\
-	 MIPS_SR_ISOL_CACHES |	\
-	 MIPS_SR_KU_CUR |	\
-	 MIPS_SR_INT_IE |	\
-	 MIPS_SR_MBZ)
-
 #define	MIPS1_USERMODE(ps) \
 	((ps) & MIPS1_SR_KU_PREV)
-
-#define	MIPS1_BASEPRI(ps) \
-		(((ps) & (MIPS_INT_MASK | MIPS1_SR_INT_ENA_PREV)) == \
-		 (MIPS_INT_MASK | MIPS1_SR_INT_ENA_PREV))
-
 
 /*
  * Choose mips3-only, mips1-only, or runtime-selected values.
  */
 
-#if defined(MIPS3) && !defined(MIPS1) /* mips3 only */
+#if defined(MIPS3_PLUS) && !defined(MIPS1) /* mips3 or greater only */
 # define  PSL_LOWIPL	MIPS3_PSL_LOWIPL
 # define  PSL_USERSET	MIPS3_PSL_USERSET
-# define  PSL_USERCLR	MIPS3_PSL_USERCLR
 # define  USERMODE(ps)	MIPS3_USERMODE(ps)
-# define  BASEPRI(ps)	MIPS3_BASEPRI(ps)
 #endif /* mips3 only */
 
 
-#if !defined(MIPS3) && defined(MIPS1) /* mips1 only */
+#if !defined(MIPS3_PLUS) && defined(MIPS1) /* mips1 only */
 # define  PSL_LOWIPL	MIPS1_PSL_LOWIPL
 # define  PSL_USERSET	MIPS1_PSL_USERSET
-# define  PSL_USERCLR	MIPS1_PSL_USERCLR
 # define  USERMODE(ps)	MIPS1_USERMODE(ps)
-# define  BASEPRI(ps)	MIPS1_BASEPRI(ps)
 #endif /* mips1 only */
 
 
-#if  MIPS3 +  MIPS1 > 1
-# define PSL_LOWIPL \
-	(CPUISMIPS3 ? MIPS3_PSL_LOWIPL : MIPS1_PSL_LOWIPL)
-#define PSL_USERSET \
-	(CPUISMIPS3 ? MIPS3_PSL_USERSET : MIPS1_PSL_USERSET)
-# define PSL_USRCLR \
-	(CPUISMIPS3 ? MIPS3_PSL_USRCLR : MIPS1_PSL_USRCLR)
-# define USERMODE(ps) \
-	(CPUISMIPS3 ? MIPS3_USERMODE(ps) : MIPS1_USERMODE(ps))
-# define  BASEPRI(ps)	\
-	(CPUISMIPS3 ? MIPS3_BASEPRI(ps) : MIPS1_BASEPRI(ps))
+#if  MIPS3_PLUS +  MIPS1 > 1
+# define PSL_LOWIPL	(CPUISMIPS3 ? MIPS3_PSL_LOWIPL : MIPS1_PSL_LOWIPL)
+# define PSL_USERSET	(CPUISMIPS3 ? MIPS3_PSL_USERSET : MIPS1_PSL_USERSET)
+# define USERMODE(ps)	(CPUISMIPS3 ? MIPS3_USERMODE(ps) : MIPS1_USERMODE(ps))
 #endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: mount_portal.c,v 1.16 2000/01/17 07:21:25 bgrayson Exp $	*/
+/*	$NetBSD: mount_portal.c,v 1.33 2008/07/20 01:20:22 lukem Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993, 1994
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,15 +34,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1992, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1992, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)mount_portal.c	8.6 (Berkeley) 4/26/95";
 #else
-__RCSID("$NetBSD: mount_portal.c,v 1.16 2000/01/17 07:21:25 bgrayson Exp $");
+__RCSID("$NetBSD: mount_portal.c,v 1.33 2008/07/20 01:20:22 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -60,34 +56,34 @@ __RCSID("$NetBSD: mount_portal.c,v 1.16 2000/01/17 07:21:25 bgrayson Exp $");
 
 #include <err.h>
 #include <errno.h>
+#include <poll.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
-#include "mntopts.h"
+#include <mntopts.h>
 #include "pathnames.h"
 #include "portald.h"
 
-const struct mntopt mopts[] = {
+static const struct mntopt mopts[] = {
 	MOPT_STDOPTS,
-	{ NULL }
+	MOPT_GETARGS,
+	MOPT_NULL,
 };
 
-static char *mountpt;		/* made available to signal handler */
+static char mountpt[MAXPATHLEN];  /* made available to signal handler */
 
-	int	main __P((int, char *[]));
-static	void	sigchld __P((int));
-static	void	sighup __P((int));
-static	void	sigterm __P((int));
-static	void	usage __P((void));
+static	void	sigchld(int);
+static	void	sighup(int);
+static	void	sigterm(int);
+static	void	usage(void);
 
 static sig_atomic_t readcf;	/* Set when SIGHUP received */
 
 static void
-sigchld(sig)
-	int sig;
+sigchld(int sig)
 {
 	pid_t pid;
 
@@ -98,16 +94,14 @@ sigchld(sig)
 }
 
 static void
-sighup(sig)
-	int sig;
+sighup(int sig)
 {
 
 	readcf = 1;
 }
 
 static void
-sigterm(sig)
-	int sig;
+sigterm(int sig)
 {
 
 	if (unmount(mountpt, MNT_FORCE) < 0)
@@ -116,15 +110,15 @@ sigterm(sig)
 }
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	struct portal_args args;
 	struct sockaddr_un un;
 	char *conf;
 	int mntflags = 0;
 	char tag[32];
+	char tmpdir[PATH_MAX];
+	mntoptparse_t mp;
 
 	qelem q;
 	int rc;
@@ -139,7 +133,10 @@ main(argc, argv)
 	while ((ch = getopt(argc, argv, "o:")) != -1) {
 		switch (ch) {
 		case 'o':
-			getmntopts(optarg, mopts, &mntflags, 0);
+			mp = getmntopts(optarg, mopts, &mntflags, 0);
+			if (mp == NULL)
+				err(1, "getmntopts");
+			freemntopts(mp);
 			break;
 		default:
 			error = 1;
@@ -157,7 +154,12 @@ main(argc, argv)
 	 * Get config file and mount point
 	 */
 	conf = argv[optind];
-	mountpt = argv[optind+1];
+	if (realpath(argv[optind+1], mountpt) == NULL) /* Check device path */
+		err(1, "realpath %s", argv[optind+1]);
+	if (strncmp(argv[optind+1], mountpt, MAXPATHLEN)) {
+		warnx("\"%s\" is a relative path.", argv[optind+1]);
+		warnx("using \"%s\" instead.", mountpt);
+	}
 
 	/*
 	 * If configuration file is not specified with an
@@ -167,49 +169,60 @@ main(argc, argv)
 	 */
 	if (conf[0] != '/') {
 	  errx(-1, "Error:  the configuration file must be specified as an\n"
-	      "absolute path, as the daemon chdir's to / immediately.\n");
+	      "absolute path, as the daemon chdir's to / immediately.");
 	}
 	/*
 	 * Construct the listening socket
 	 */
 	un.sun_family = AF_LOCAL;
-	if (sizeof(_PATH_TMPPORTAL) >= sizeof(un.sun_path))
+	strlcpy(tmpdir, _PATH_TMPPORTAL, sizeof(tmpdir));
+	mkdtemp(tmpdir);
+	un.sun_len = snprintf(un.sun_path, sizeof(un.sun_path),
+			"%s/%s", tmpdir, _PATH_PORTAL_FILE);
+	if (un.sun_len >= sizeof(un.sun_path))
 		errx(1, "portal socket name too long");
-	strcpy(un.sun_path, _PATH_TMPPORTAL);
-	mktemp(un.sun_path);
-	un.sun_len = strlen(un.sun_path);
 
 	so = socket(AF_LOCAL, SOCK_STREAM, 0);
 	if (so < 0)
 		err(1, "socket");
-	(void) unlink(un.sun_path);
 	if (bind(so, (struct sockaddr *) &un, sizeof(un)) < 0)
 		err(1, "bind() call");
+
+	/* path no longer needed */
 	(void) unlink(un.sun_path);
+	if (rmdir(tmpdir) != 0)
+		warn("failed to rmdir(%s)", tmpdir);
 
 	(void) listen(so, 5);
 
+	/*
+	 * Now it's good time to fork - all but the actual mount(2)
+	 * call is performed, and we need the new pid to fill in
+	 * the tag contents correctly. Since we need to print error message
+	 * in case mount(2) fails or DEBUG case, we don't let daemon(3) to
+	 * close the standard streams and handle them on our own later.
+	 */
+	daemon(0, 1);
+
 	args.pa_socket = so;
-	sprintf(tag, "portal:%d", getpid() + 1);
+	snprintf(tag, sizeof(tag), "portal:%d", getpid());
 	args.pa_config = tag;
 
-	rc = mount(MOUNT_PORTAL, mountpt, mntflags, &args);
-	if (rc < 0)
+	rc = mount(MOUNT_PORTAL, mountpt, mntflags, &args, sizeof args);
+	if (rc == -1)
 		err(1, "mount attempt on %s", mountpt);
 
-	/*
-	 * Everything is ready to go - now is a good time to fork
-	 */
+	/* mount(2) call succeeded, redirect standard streams to /dev/null */
+	freopen("/dev/null", "r", stdin);
+	freopen("/dev/null", "w", stdout);
 #ifndef DEBUG
-	daemon(0, 0);
-#else
-	daemon(0, 1);	/* Keep stderr around. */
+	freopen("/dev/null", "w", stderr);
 #endif
 
 	/*
 	 * Start logging (and change name)
 	 */
-	openlog("portald", LOG_CONS|LOG_PID, LOG_DAEMON);
+	openlog("portald", LOG_PID, LOG_DAEMON);
 
 	q.q_forw = q.q_back = &q;
 	readcf = 1;
@@ -223,11 +236,10 @@ main(argc, argv)
 	 */
 	for (;;) {
 		struct sockaddr_un un2;
-		int len2 = sizeof(un2);
+		socklen_t len2 = sizeof(un2);
 		int so2;
 		pid_t pid;
-		fd_set fdset;
-		int rc;
+		struct pollfd fdset[1];
 
 		/*
 		 * Check whether we need to re-read the configuration file
@@ -243,14 +255,13 @@ main(argc, argv)
 		 * Will get EINTR if a signal has arrived, so just
 		 * ignore that error code
 		 */
-		FD_ZERO(&fdset);
-		FD_SET(so, &fdset);
-		rc = select(so+1, &fdset, (fd_set *)0, (fd_set *)0,
-		    (struct timeval *)0);
+		fdset[0].fd = so;
+		fdset[0].events = POLLIN;
+		rc = poll(fdset, 1, INFTIM);
 		if (rc < 0) {
 			if (errno == EINTR)
 				continue;
-			syslog(LOG_ERR, "select: %m");
+			syslog(LOG_ERR, "poll: %m");
 			exit(1);
 		}
 		if (rc == 0)
@@ -280,7 +291,7 @@ main(argc, argv)
 				sleep(1);
 				goto eagain;
 			}
-			syslog(LOG_ERR, "fork: %m");
+			syslog(LOG_WARNING, "fork: %m");
 			break;
 		case 0:
 			(void) close(so);
@@ -295,7 +306,7 @@ main(argc, argv)
 }
 
 static void
-usage()
+usage(void)
 {
 
 	(void)fprintf(stderr,

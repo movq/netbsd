@@ -1,9 +1,10 @@
-/*	$NetBSD: mld6_var.h,v 1.3 1999/07/03 21:30:19 thorpej Exp $	*/
+/*	$NetBSD: mld6_var.h,v 1.9 2007/11/01 20:33:58 dyoung Exp $	*/
+/*	$KAME: mld6_var.h,v 1.4 2000/03/25 07:23:54 sumikawa Exp $	*/
 
 /*
  * Copyright (C) 1998 WIDE Project.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -15,7 +16,7 @@
  * 3. Neither the name of the project nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE PROJECT AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -29,24 +30,25 @@
  * SUCH DAMAGE.
  */
 
-#ifndef _NETINET6_MLD6_VAR_H_ 
-#define _NETINET6_MLD6_VAR_H_ 
+#ifndef _NETINET6_MLD6_VAR_H_
+#define _NETINET6_MLD6_VAR_H_
 
 #ifdef _KERNEL
 
-#define MLD6_RANDOM_DELAY(X) (random() % (X) + 1)
+#define MLD_RANDOM_DELAY(X)	(arc4random() % (X) + 1)
 
 /*
  * States for MLD stop-listening processing
  */
-#define MLD6_OTHERLISTENER			0
-#define MLD6_IREPORTEDLAST			1
+#define MLD_OTHERLISTENER			0
+#define MLD_IREPORTEDLAST			1
+#define MLD_REPORTPENDING			2 /* implementation specific */
 
-void	mld6_init __P((void));
-void	mld6_input __P((struct mbuf *, int));
-void	mld6_start_listening __P((struct in6_multi *));
-void	mld6_stop_listening __P((struct in6_multi *));
-void	mld6_fasttimeo __P((void));
+/* denotes that the MLD max response delay field specifies time in milliseconds */
+#define MLD_TIMER_SCALE	1000
+
+void	mld_init(void);
+void	mld_input(struct mbuf *, int);
 #endif /* _KERNEL */
 
-#endif /* _NETINET6_MLD6_VAR_H_ */
+#endif /* !_NETINET6_MLD6_VAR_H_ */

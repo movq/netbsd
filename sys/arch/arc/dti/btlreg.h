@@ -1,7 +1,7 @@
-/*	$NetBSD: btlreg.h,v 1.3 2000/02/22 11:26:01 soda Exp $	*/
+/*	$NetBSD: btlreg.h,v 1.8 2005/12/11 12:16:39 christos Exp $	*/
 
-typedef u_int8_t physaddr[4];
-typedef u_int8_t physlen[4];
+typedef uint8_t physaddr[4];
+typedef uint8_t physlen[4];
 #define	ltophys	_lto4l
 #define	phystol	_4ltol
 
@@ -101,7 +101,7 @@ struct bt_mbx_in {
 #if	defined(BIG_DMA)
 #define BT_NSEG 2048    /* Number of scatter gather segments - to much vm */
 #else
-#define	BT_NSEG	(MAXPHYS / NBPG)
+#define	BT_NSEG	(MAXPHYS / PAGE_SIZE)
 #endif /* BIG_DMA */
 
 struct bt_scat_gath {
@@ -125,7 +125,7 @@ struct bt_ccb {
 	/*------------------------------------longword boundary */
 	u_char target;
 	u_char lun;
-	struct scsi_generic scsi_cmd;
+	u_char scsi_cmd[12];
 	u_char dummy2[1];
 	u_char link_id;
 	/*------------------------------------longword boundary */
@@ -133,7 +133,7 @@ struct bt_ccb {
 	/*------------------------------------longword boundary */
 	physaddr sense_ptr;
 /*-----end of HW fields-----------------------longword boundary */
-	struct scsipi_sense_data scsi_sense;
+	struct scsi_sense_data scsi_sense;
 	/*------------------------------------longword boundary */
 	struct bt_scat_gath scat_gath[BT_NSEG];
 	/*------------------------------------longword boundary */

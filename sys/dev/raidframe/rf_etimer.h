@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_etimer.h,v 1.4 1999/08/13 03:26:55 oster Exp $	*/
+/*	$NetBSD: rf_etimer.h,v 1.11 2006/06/07 22:33:37 kardel Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -29,10 +29,10 @@
 #ifndef _RF__RF_TIMER_H_
 #define _RF__RF_TIMER_H_
 
-#include "rf_options.h"
 #include "rf_utils.h"
 
 #include <sys/time.h>
+#include <sys/kernel.h>
 
 struct RF_Etimer_s {
         struct timeval st;
@@ -40,24 +40,15 @@ struct RF_Etimer_s {
         struct timeval diff;
 };
 
-#if defined(_KERNEL)
-#include <sys/kernel.h>
-
 #define RF_ETIMER_START(_t_)                                    \
                 {                                               \
-                        int s;                                  \
-                        bzero(&(_t_), sizeof (_t_));            \
-                        s = splclock();                         \
-                        (_t_).st = mono_time;                   \
-                        splx(s);                                \
+                        memset(&(_t_), 0, sizeof (_t_));        \
+			getmicrouptime(&(_t_).st);		\
                 }
 
 #define RF_ETIMER_STOP(_t_)                                     \
                 {                                               \
-                        int s;                                  \
-                        s = splclock();                         \
-                        (_t_).et = mono_time;                   \
-                        splx(s);                                \
+			getmicrouptime(&(_t_).et);		\
                 }
 
 #define RF_ETIMER_EVAL(_t_)                                     \
@@ -67,7 +58,5 @@ struct RF_Etimer_s {
 
 #define RF_ETIMER_VAL_US(_t_)      (RF_TIMEVAL_TO_US((_t_).diff))
 #define RF_ETIMER_VAL_MS(_t_)      (RF_TIMEVAL_TO_US((_t_).diff)/1000)
-
-#endif /* _KERNEL */
 
 #endif				/* !_RF__RF_TIMER_H_ */

@@ -1,8 +1,9 @@
-/*	$NetBSD: nlist_coff.c,v 1.2 2000/01/07 09:40:34 msaitoh Exp $	*/
+/* $NetBSD: nlist_coff.c,v 1.8 2003/11/12 13:31:07 grant Exp $ */
 
 /*
- * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
- *
+ * Copyright (c) 1996 Christopher G. Demetriou
+ * All rights reserved.
+ * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -13,11 +14,12 @@
  *    documentation and/or other materials provided with the distribution.
  * 3. All advertising materials mentioning features or use of this software
  *    must display the following acknowledgement:
- *      This product includes software developed by Christopher G. Demetriou
- *	for the NetBSD Project.
+ *          This product includes software developed for the
+ *          NetBSD Project.  See http://www.NetBSD.org/ for
+ *          information about NetBSD.
  * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
- *
+ *    derived from this software without specific prior written permission.
+ * 
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
  * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
@@ -28,11 +30,13 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * 
+ * <<Id: LICENSE,v 1.2 2000/06/14 15:57:33 cgd Exp>>
  */
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: nlist_coff.c,v 1.2 2000/01/07 09:40:34 msaitoh Exp $");
+__RCSID("$NetBSD: nlist_coff.c,v 1.8 2003/11/12 13:31:07 grant Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -82,7 +86,7 @@ create_knlist_coff(name, db)
 	struct stat st;
 	struct nlist nbuf;
 	DBT key, data;
-	char *mappedfile, *symname, *fsymname;
+	char *mappedfile, *symname, *nsymname, *fsymname;
 	size_t mappedsize, symnamesize, fsymnamesize;
 	u_long symhdroff, extrstroff;
 	u_long symhdrsize, i, nesyms;
@@ -219,17 +223,18 @@ create_knlist_coff(name, db)
 		}
 		
 		while (symnamesize < fsymnamesize + 1) {
-			symnamesize *= 2;
-			if ((symname = realloc(symname, symnamesize)) == NULL){
+			if ((nsymname = realloc(symname, symnamesize * 2)) == NULL){
 				warn("malloc");
 				punt();
 			}
+			symname = nsymname;
+			symnamesize *= 2;
 		}
 #if 0
-		strcpy(symname, "_"); 
-		strcat(symname, fsymname);
+		strlcpy(symname, "_", symnamesize); 
+		strlcat(symname, fsymname, symnamesize);
 #else
-		strcpy(symname, fsymname);
+		strlcpy(symname, fsymname, symnamesize);
 #endif
 
 		key.data = symname;
@@ -254,7 +259,7 @@ create_knlist_coff(name, db)
 		}
 		/*
 		 * If it's the kernel version string, we've gotta keep
-		 * some extra data around.  Under a seperate key,
+		 * some extra data around.  Under a separate key,
 		 * we enter the first line (i.e. up to the first newline,
 		 * with the newline replaced by a NUL to terminate the
 		 * entered string) of the version string.

@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.c,v 1.8 2000/01/23 21:01:51 soda Exp $	*/
+/*	$NetBSD: cpu.c,v 1.16 2008/07/05 08:46:25 tsutsui Exp $	*/
 /*	$OpenBSD: cpu.c,v 1.8 1997/04/19 17:19:41 pefo Exp $ */
 
 /*
@@ -33,49 +33,46 @@
  *
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.16 2008/07/05 08:46:25 tsutsui Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
 #include <sys/user.h>
 #include <sys/device.h>
-#include <vm/vm.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <machine/cpu.h>
 #include <machine/autoconf.h>
 
+#include "ioconf.h"
 
 /* Definition of the driver for autoconfig. */
-static int	cpumatch(struct device *, struct cfdata *, void *);
-static void	cpuattach(struct device *, struct device *, void *);
+static int	cpumatch(device_t, cfdata_t, void *);
+static void	cpuattach(device_t, device_t, void *);
 
-struct cfattach cpu_ca = {
-	sizeof(struct device), cpumatch, cpuattach
-};
-extern struct cfdriver cpu_cd;
+CFATTACH_DECL_NEW(cpu, 0,
+    cpumatch, cpuattach, NULL, NULL);
 
 static int
-cpumatch(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+cpumatch(device_t parent, cfdata_t cf, void *aux)
 {
 	struct confargs *ca = aux;
 
 	/* make sure that we're looking for a CPU. */
 	if (strcmp(ca->ca_name, cpu_cd.cd_name) != 0)
-		return (0);
+		return 0;
 
-	return (1);
+	return 1;
 }
 
 static void
-cpuattach(parent, dev, aux)
-	struct device *parent;
-	struct device *dev;
-	void *aux;
+cpuattach(device_t parent, device_t self, void *aux)
 {
 
-	printf(": ");
+	aprint_normal(": ");
 
 #if 1
 	cpu_identify();

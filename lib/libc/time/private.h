@@ -1,4 +1,4 @@
-/*	$NetBSD: private.h,v 1.14 1999/11/10 20:32:31 kleink Exp $	*/
+/*	$NetBSD: private.h,v 1.24 2003/12/20 00:12:05 kleink Exp $	*/
 
 #ifndef PRIVATE_H
 #define PRIVATE_H
@@ -8,6 +8,11 @@
 #define TM_ZONE		tm_zone
 #define STD_INSPIRED	1
 #define HAVE_LONG_DOUBLE 1
+
+/* For when we build zic as a host tool. */
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
 
 /*
 ** This file is in the public domain, so clarified as of
@@ -29,7 +34,7 @@
 #ifndef lint
 #ifndef NOID
 #if 0
-static char	privatehid[] = "@(#)private.h	7.49";
+static char	privatehid[] = "@(#)private.h	7.53";
 #endif
 #endif /* !defined NOID */
 #endif /* !defined lint */
@@ -47,6 +52,10 @@ static char	privatehid[] = "@(#)private.h	7.49";
 #define HAVE_GETTEXT		0
 #endif /* !defined HAVE_GETTEXT */
 
+#ifndef HAVE_INCOMPATIBLE_CTIME_R
+#define HAVE_INCOMPATIBLE_CTIME_R	0
+#endif /* !defined INCOMPATIBLE_CTIME_R */
+
 #ifndef HAVE_SETTIMEOFDAY
 #define HAVE_SETTIMEOFDAY	3
 #endif /* !defined HAVE_SETTIMEOFDAY */
@@ -58,6 +67,10 @@ static char	privatehid[] = "@(#)private.h	7.49";
 #ifndef HAVE_SYMLINK
 #define HAVE_SYMLINK		1
 #endif /* !defined HAVE_SYMLINK */
+
+#ifndef HAVE_SYS_STAT_H
+#define HAVE_SYS_STAT_H		1
+#endif /* !defined HAVE_SYS_STAT_H */
 
 #ifndef HAVE_SYS_WAIT_H
 #define HAVE_SYS_WAIT_H		1
@@ -71,9 +84,14 @@ static char	privatehid[] = "@(#)private.h	7.49";
 #define HAVE_UTMPX_H		0
 #endif /* !defined HAVE_UTMPX_H */
 
-#ifndef LOCALE_HOME
-#define LOCALE_HOME		"/usr/lib/locale"
-#endif /* !defined LOCALE_HOME */
+#ifdef LOCALE_HOME
+#undef LOCALE_HOME		/* not to be handled by tzcode itself */
+#endif /* defined LOCALE_HOME */
+
+#if HAVE_INCOMPATIBLE_CTIME_R
+#define asctime_r _incompatible_asctime_r
+#define ctime_r _incompatible_ctime_r
+#endif /* HAVE_INCOMPATIBLE_CTIME_R */
 
 /*
 ** Nested includes
@@ -123,26 +141,11 @@ static char	privatehid[] = "@(#)private.h	7.49";
 */
 
 /*
-** SunOS 4.1.1 cc lacks const.
-*/
-
-#ifndef const
-#ifndef __STDC__
-#define const
-#endif /* !defined __STDC__ */
-#endif /* !defined const */
-
-/*
 ** SunOS 4.1.1 cc lacks prototypes.
 */
 
 #ifndef P
-#ifdef __STDC__
 #define P(x)	x
-#endif /* defined __STDC__ */
-#ifndef __STDC__
-#define P(x)	()
-#endif /* !defined __STDC__ */
 #endif /* !defined P */
 
 /*
@@ -186,10 +189,12 @@ static char	privatehid[] = "@(#)private.h	7.49";
 ** SunOS 4.1.1 libraries lack remove.
 */
 
+#ifndef __NetBSD__
 #ifndef remove
 extern int	unlink P((const char * filename));
 #define remove	unlink
 #endif /* !defined remove */
+#endif
 
 /*
 ** Some ancient errno.h implementations don't declare errno.
@@ -210,7 +215,8 @@ char *	imalloc P((int n));
 void *	irealloc P((void * pointer, int size));
 void	icfree P((char * pointer));
 void	ifree P((char * pointer));
-char *	scheck P((const char *string, const char *format));
+char *	scheck P((const char *string, const char *format))
+	__attribute__((__format_arg__(2)));
 
 
 /*
@@ -286,8 +292,15 @@ char *	scheck P((const char *string, const char *format));
 #define TZ_DOMAIN "tz"
 #endif /* !defined TZ_DOMAIN */
 
+#if HAVE_INCOMPATIBLE_CTIME_R
+#undef asctime_r
+#undef ctime_r
+char *asctime_r P((struct tm const *, char *));
+char *ctime_r P((time_t const *, char *));
+#endif /* HAVE_INCOMPATIBLE_CTIME_R */
+
 /*
-** UNIX was a registered trademark of UNIX System Laboratories in 1993.
+** UNIX was a registered trademark of The Open Group in 2003.
 */
 
 #endif /* !defined PRIVATE_H */

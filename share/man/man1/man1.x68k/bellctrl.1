@@ -1,4 +1,4 @@
-.\"	$NetBSD: bellctrl.1,v 1.6 1999/03/15 08:22:21 garbled Exp $
+.\"	$NetBSD: bellctrl.1,v 1.11 2002/02/13 08:17:27 ross Exp $
 .\"
 .\" Copyright (c) 1995 Takuya Harakawa.
 .\" All rights reserved.
@@ -33,21 +33,21 @@
 .\"
 .\"	from: @(#)bellctrl.1	6.19 (Berkeley) 7/27/91
 .\"
-.Dd Dec 15, 1995
-.Dt BELLCTRL 1
+.Dd December 15, 1995
+.Dt BELLCTRL 1 x68k
 .Os
 .Sh NAME
 .Nm bellctrl
-.Nd opm bell emulation preference utility.
+.Nd opm bell emulation preference utility
 .Sh SYNOPSIS
 .Nm bellctrl
 [-\fBb\fP] [\fBb\fP \fIon/off\fP] [\fBb\fP [\fIvolume\fP [\fIpitch\fP [\fIduration\fP]]]
 [\fBv\fP \fIdefault\fP]
 .Op Fl v Ar voicefile
 .Sh DESCRIPTION
-.Nm Bellctrl
+.Nm
 is used to set various preference options of the opm bell.
-
+.Pp
 The options are as follows:
 .Bl -tag -width Op
 .It Fl b
@@ -56,7 +56,7 @@ This option accepts up to three numerical parameters, a preceding
 dash(-), or a 'on/off' flag. If no parameters are given,
 or the 'on' flag is used, the system defaults will be used.
 If the dash or 'off' are given, the bell will be turned off.
-If only one numerical paramter is given, the bell volume will be
+If only one numerical parameter is given, the bell volume will be
 set to that value, as a percentage of its maximum.
 Like wise, the second numerical parameter specifies the bell pitch,
 in hertz, and the third numerical parameter specifies the duration
@@ -71,8 +71,8 @@ argument cause the voice parameter to be reset to the system default.
 The
 .Fl v
 option sets the voice parameter to given voice parameter file (
-.Ar voicefile).
+.Ar voicefile ) .
 .El
-.Sh AUTHOR
-.Nm Bellctrl
-was written by Takuya Harakawa <ussy@int.titech.ac.jp>.
+.Sh AUTHORS
+.Nm
+was written by Takuya Harakawa \*[Lt]ussy@int.titech.ac.jp\*[Gt].

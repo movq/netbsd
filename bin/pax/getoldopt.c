@@ -1,4 +1,4 @@
-/*	$NetBSD: getoldopt.c,v 1.8 2000/02/17 03:12:25 itohy Exp $	*/
+/*	$NetBSD: getoldopt.c,v 1.22 2006/02/11 10:43:18 dsl Exp $	*/
 
 /*
  * Plug-compatible replacement for getopt() for parsing tar-like
@@ -9,26 +9,32 @@
  * in the Public Domain for your edification and enjoyment.
  */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
 #include <sys/cdefs.h>
-#ifndef lint
-__RCSID("$NetBSD: getoldopt.c,v 1.8 2000/02/17 03:12:25 itohy Exp $");
+#if !defined(lint)
+__RCSID("$NetBSD: getoldopt.c,v 1.22 2006/02/11 10:43:18 dsl Exp $");
 #endif /* not lint */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "compat_getopt.h"
+#else
+#include <getopt.h>
+#endif
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <sys/stat.h>
 #include "pax.h"
 #include "extern.h"
 
 int
-getoldopt(argc, argv, optstring)
-	int	argc;
-	char	**argv;
-	char	*optstring;
+getoldopt(int argc, char **argv, const char *optstring,
+	struct option *longopts, int *idx)
 {
-	extern char	*optarg;	/* Points to next arg */
-	extern int	optind;		/* Global argv index */
 	static char	*key;		/* Points to next keyletter */
 	static char	use_getopt;	/* !=0 if argv[1][0] was '-' */
 	char		c;
@@ -45,19 +51,28 @@ getoldopt(argc, argv, optstring)
 			optind = 2;
 	}
 
-	if (use_getopt)
-		return getopt(argc, argv, optstring);
-
-	c = *key++;
-	if (c == '\0') {
-		key--;
-		return -1;
+	c = '\0';
+	if (!use_getopt) {
+		c = *key++;
+		if (c == '\0') {
+			key--;
+			use_getopt = 1;
+		}
 	}
+	if (use_getopt) {
+		if (longopts != NULL) {
+			return getopt_long(argc, argv, optstring,
+			    longopts, idx);
+		} else {
+			return getopt(argc, argv, optstring);
+		}
+	}
+
 	place = strchr(optstring, c);
 
 	if (place == NULL || c == ':') {
 		fprintf(stderr, "%s: unknown option %c\n", argv[0], c);
-		return('?');
+		return '?';
 	}
 
 	place++;
@@ -68,9 +83,9 @@ getoldopt(argc, argv, optstring)
 		} else {
 			fprintf(stderr, "%s: %c argument missing\n",
 				argv[0], c);
-			return('?');
+			return '?';
 		}
 	}
 
-	return(c);
+	return c;
 }

@@ -1,7 +1,11 @@
-/*	$NetBSD: tcbus.c,v 1.10 2000/02/29 09:03:30 nisimura Exp $	*/
+/*	$NetBSD: tcbus.c,v 1.21 2008/05/26 10:31:22 nisimura Exp $	*/
 
-/*
- * Copyright (c) 1999, 2000 Tohru Nishimura.  All rights reserved.
+/*-
+ * Copyright (c) 1999, 2000 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * This code is derived from software contributed to The NetBSD Foundation
+ * by Tohru Nishimura.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -11,27 +15,22 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Tohru Nishimura
- *	for the NetBSD Project.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
- * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
- * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
-__KERNEL_RCSID(0, "$NetBSD: tcbus.c,v 1.10 2000/02/29 09:03:30 nisimura Exp $");
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: tcbus.c,v 1.21 2008/05/26 10:31:22 nisimura Exp $");
 
 /*
  * Which system models were configured?
@@ -54,6 +53,7 @@ __KERNEL_RCSID(0, "$NetBSD: tcbus.c,v 1.10 2000/02/29 09:03:30 nisimura Exp $");
 #include <dev/tc/tcvar.h>
 #include <pmax/pmax/pmaxtype.h>
 
+static const struct evcnt *tc_ds_intr_evcnt __P((struct device *, void *));
 static void	tc_ds_intr_establish __P((struct device *, void *,
 				int, int (*)(void *), void *));
 static void	tc_ds_intr_disestablish __P((struct device *, void *));
@@ -67,9 +67,8 @@ extern struct tcbus_attach_args kn03_tc_desc[];	/* XXX */
 static int	tcbus_match __P((struct device *, struct cfdata *, void *));
 static void	tcbus_attach __P((struct device *, struct device *, void *));
 
-struct cfattach tcbus_ca = {
-	sizeof(struct tc_softc), tcbus_match, tcbus_attach,
-};
+CFATTACH_DECL(tcbus, sizeof(struct tc_softc),
+    tcbus_match, tcbus_attach, NULL, NULL);
 
 static int tcbus_found;
 
@@ -119,11 +118,25 @@ tcbus_attach(parent, self, aux)
 
 	tba->tba_busname = "tc";
 	tba->tba_memt = 0;
+	tba->tba_intr_evcnt = tc_ds_intr_evcnt;
 	tba->tba_intr_establish = tc_ds_intr_establish;
 	tba->tba_intr_disestablish = tc_ds_intr_disestablish;
 	tba->tba_get_dma_tag = tc_ds_get_dma_tag;
 
 	tcattach(parent, self, tba);
+}
+
+/*
+ * Dispatch to model specific interrupt line evcnt fetch rontine
+ */
+static const struct evcnt *
+tc_ds_intr_evcnt(dev, cookie)
+	struct device *dev;
+	void *cookie;
+{
+
+	/* XXX for now, no evcnt parent reported */
+	return NULL;
 }
 
 /*
@@ -134,11 +147,11 @@ tc_ds_intr_establish(dev, cookie, level, handler, val)
 	struct device *dev;
 	void *cookie;
 	int level;
-        int (*handler) __P((void *));
+	int (*handler) __P((void *));
 	void *val;
 {
 
-	 (*platform.intr_establish)(dev, cookie, level, handler, val);
+	(*platform.intr_establish)(dev, cookie, level, handler, val);
 }
 
 static void
@@ -147,7 +160,7 @@ tc_ds_intr_disestablish(dev, arg)
 	void *arg;
 {
 
-    	printf("cannot disestablish TC interrupts\n");
+	printf("cannot disestablish TC interrupts\n");
 }
 
 /*
@@ -163,26 +176,57 @@ tc_ds_get_dma_tag(slot)
 	return (&pmax_default_bus_dma_tag);
 }
 
-#include "rasterconsole.h"
+#include "wsdisplay.h"
 
-#if NRASTERCONSOLE > 0
+#if NWSDISPLAY > 0
 
-#include "mfb.h"
-#include "cfb.h"
 #include "sfb.h"
+/* #include "sfbp.h" */
+#include "cfb.h"
+#include "mfb.h"
+#include "tfb.h"
+#include "xcfb.h"
 #include "px.h"
+#include "pxg.h"
 
-#include <machine/pmioctl.h>	/* XXX */
-#include <machine/fbio.h>	/* XXX */
-#include <machine/fbvar.h>	/* XXX */
-#include <pmax/dev/fbreg.h>	/* XXX */
-#include <pmax/dev/cfbvar.h>
-#include <pmax/dev/mfbvar.h>
-#include <pmax/dev/sfbvar.h>
-#include <pmax/dev/pxreg.h>
-#include <pmax/dev/pxvar.h>
-
+#include <pmax/pmax/cons.h>
 #include <machine/dec_prom.h>
+
+int	tc_checkslot __P((tc_addr_t, char *));
+
+struct cnboards {
+	const char	*cb_tcname;
+	void	(*cb_cnattach)(tc_addr_t);
+} static const cnboards[] = {
+#if NXCFB > 0
+	{ "PMAG-DV ", xcfb_cnattach },
+#endif
+#if NSFB > 0
+	{ "PMAGB-BA", sfb_cnattach },
+#endif
+#if NSFBP > 0
+	{ "PMAGD   ", sfbp_cnattach },
+#endif
+#if NCFB > 0
+	{ "PMAG-BA ", cfb_cnattach },
+#endif
+#if NMFB > 0
+	{ "PMAG-AA ", mfb_cnattach },
+#endif
+#if NTFB > 0
+	{ "PMAG-JA ", tfb_cnattach },
+#endif
+#if NPX > 0
+	{ "PMAG-CA ", px_cnattach },
+#endif
+#if NPXG > 0
+	{ "PMAG-DA ", pxg_cnattach },
+	{ "PMAG-FA ", pxg_cnattach },
+	{ "PMAG-FB ", pxg_cnattach },
+	{ "PMAGB-FA", pxg_cnattach },
+	{ "PMAGB-FB", pxg_cnattach },
+#endif
+};
 
 int
 tcfb_cnattach(slotno)
@@ -190,36 +234,21 @@ tcfb_cnattach(slotno)
 {
 	paddr_t tcaddr;
 	char tcname[TC_ROM_LLEN];
+	int i;
 
 	tcaddr = (*callv->_slot_address)(slotno);
 	if (tc_badaddr(tcaddr) || tc_checkslot(tcaddr, tcname) == 0)
 		panic("TC console designated by PROM does not exist!?");
 
-#if NSFB > 0
-	if (strncmp("PMAGB-BA", tcname, TC_ROM_LLEN) == 0) {
-		return sfb_cnattach(tcaddr);
-	}
-#endif
-#if NCFB > 0
-	if (strncmp("PMAG-BA ", tcname, TC_ROM_LLEN) == 0) {
-		return cfb_cnattach(tcaddr);
-	}
-#endif
-#if NMFB > 0
-	if (strncmp("PMAG-AA ", tcname, TC_ROM_LLEN) == 0) {
-		return mfb_cnattach(tcaddr);
-	}
-#endif
-#if NPX > 0
-	if (strncmp("PMAG-CA ", tcname, TC_ROM_LLEN) == 0
-	    || strncmp("PMAG-DA ", tcname, TC_ROM_LLEN) == 0
-	    || strncmp("PMAG-FA ", tcname, TC_ROM_LLEN) == 0) {
-		int px_cnattach __P((paddr_t)); /* XXX much simpler XXX */
+	for (i = 0; i < sizeof(cnboards) / sizeof(cnboards[0]); i++)
+		if (strncmp(tcname, cnboards[i].cb_tcname, TC_ROM_LLEN) == 0)
+			break;
 
-		return px_cnattach(tcaddr);
-	}
-#endif
-	return 0;
+	if (i == sizeof(cnboards) / sizeof(cnboards[0]))
+		return (0);
+
+	(cnboards[i].cb_cnattach)((tc_addr_t)TC_PHYS_TO_UNCACHED(tcaddr));
+	return (1);
 }
 
-#endif
+#endif	/* NWSDISPLAY */

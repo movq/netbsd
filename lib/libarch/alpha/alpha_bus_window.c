@@ -1,4 +1,4 @@
-/*	$NetBSD: alpha_bus_window.c,v 1.1 2000/02/26 18:59:36 thorpej Exp $	*/
+/*	$NetBSD: alpha_bus_window.c,v 1.3 2008/04/28 20:22:55 martin Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -54,9 +47,7 @@
 #include <unistd.h>
 
 int
-alpha_bus_getwindows(type, abwp)
-	int type;
-	struct alpha_bus_window **abwp;
+alpha_bus_getwindows(int type, struct alpha_bus_window **abwp)
 {
 	struct alpha_bus_get_window_count_args count_args;
 	struct alpha_bus_get_window_args window_args;
@@ -87,8 +78,7 @@ alpha_bus_getwindows(type, abwp)
 }
 
 int
-alpha_bus_mapwindow(abw)
-	struct alpha_bus_window *abw;
+alpha_bus_mapwindow(struct alpha_bus_window *abw)
 {
 	struct alpha_bus_space_translation *abst = &abw->abw_abst;
 	void *addr;
@@ -117,8 +107,7 @@ alpha_bus_mapwindow(abw)
 }
 
 void
-alpha_bus_unmapwindow(abw)
-	struct alpha_bus_window *abw;
+alpha_bus_unmapwindow(struct alpha_bus_window *abw)
 {
 
 	(void) munmap(abw->abw_addr, abw->abw_size);

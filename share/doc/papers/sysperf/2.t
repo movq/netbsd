@@ -1,4 +1,4 @@
-.\"	$NetBSD: 2.t,v 1.2 1998/01/09 06:54:29 perry Exp $
+.\"	$NetBSD: 2.t,v 1.5 2004/02/13 11:36:08 wiz Exp $
 .\"
 .\" Copyright (c) 1985 The Regents of the University of California.
 .\" All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -54,12 +50,12 @@ virtual memory activity.
 By running \fIvmstat\fP
 when the system is active you can judge the system activity in several
 dimensions: job distribution, virtual memory load, paging and swapping
-activity, disk and cpu utilization.
+activity, disk and CPU utilization.
 Ideally, to have a balanced system in activity,
 there should be few blocked (b) jobs,
 there should be little paging or swapping activity, there should
 be available bandwidth on the disk devices (most single arms peak
-out at 25-35 tps in practice), and the user cpu utilization (us) should
+out at 25-35 tps in practice), and the user CPU utilization (us) should
 be high (above 50%).
 .PP
 If the system is busy, then the count of active jobs may be large,
@@ -75,7 +71,7 @@ when the system is busy (a ``vmstat 5'' gives all the
 numbers computed by the system), you can find
 imbalances by noting abnormal job distributions.  If many
 processes are blocked (b), then the disk subsystem
-is overloaded or imbalanced.  If you have several non-dma
+is overloaded or imbalanced.  If you have several non-DMA
 devices or open teletype lines that are ``ringing'', or user programs
 that are doing high-speed non-buffered input/output, then the system
 time may go high (60-80% or higher).

@@ -1,4 +1,4 @@
-/*	$NetBSD: dkstat.h,v 1.10 1998/02/10 00:25:28 perry Exp $	*/
+/*	$NetBSD: dkstat.h,v 1.17 2005/12/26 18:41:36 perry Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -17,11 +17,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -43,21 +39,11 @@
 #ifndef _SYS_DKSTAT_H_
 #define _SYS_DKSTAT_H_
 
-#define	CP_USER		0
-#define	CP_NICE		1
-#define	CP_SYS		2
-#define	CP_INTR		3
-#define	CP_IDLE		4
-#define	CPUSTATES	5
-
-#define	DK_NDRIVE	8
 #ifdef _KERNEL
-long cp_time[CPUSTATES];
-
-long tk_cancc;
-long tk_nin;
-long tk_nout;
-long tk_rawcc;
+extern uint64_t tk_cancc;
+extern uint64_t tk_nin;
+extern uint64_t tk_nout;
+extern uint64_t tk_rawcc;
 #endif
 
 #endif /* _SYS_DKSTAT_H_ */

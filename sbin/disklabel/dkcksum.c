@@ -1,4 +1,4 @@
-/*	$NetBSD: dkcksum.c,v 1.8 1997/09/14 08:50:18 lukem Exp $	*/
+/*	$NetBSD: dkcksum.c,v 1.11 2005/06/12 19:18:34 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -33,26 +29,34 @@
  * SUCH DAMAGE.
  */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)dkcksum.c	8.1 (Berkeley) 6/5/93";
 #else
-__RCSID("$NetBSD: dkcksum.c,v 1.8 1997/09/14 08:50:18 lukem Exp $");
+__RCSID("$NetBSD: dkcksum.c,v 1.11 2005/06/12 19:18:34 dyoung Exp $");
 #endif
 #endif /* not lint */
 
 #include <sys/types.h>
+#if HAVE_NBTOOL_CONFIG_H
+#include <nbinclude/sys/disklabel.h>
+#else
 #include <sys/disklabel.h>
+#endif /* HAVE_NBTOOL_CONFIG_H */
 #include "dkcksum.h"
 
 u_short
-dkcksum(lp)
-	struct disklabel *lp;
+dkcksum(struct disklabel *lp)
 {
-	u_short *start, *end;
-	u_short sum = 0;
+	u_short	*start, *end;
+	u_short	 sum;
 
+	sum = 0;
 	start = (u_short *)lp;
 	end = (u_short *)&lp->d_partitions[lp->d_npartitions];
 	while (start < end)

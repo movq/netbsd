@@ -1,4 +1,4 @@
-/*	$NetBSD: rtl80x9.c,v 1.3 2000/03/03 21:37:18 is Exp $	*/
+/*	$NetBSD: rtl80x9.c,v 1.14 2008/04/28 20:23:51 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,8 +30,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "opt_inet.h"
-#include "bpfilter.h"
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: rtl80x9.c,v 1.14 2008/04/28 20:23:51 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -51,13 +44,8 @@
 #include <net/if_ether.h>
 #include <net/if_media.h>
 
-#ifdef INET
-#include <netinet/in.h>
-#include <netinet/if_inarp.h>
-#endif
-
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/ic/dp8390reg.h>
 #include <dev/ic/dp8390var.h>
@@ -139,7 +127,11 @@ rtl80x9_init_card(sc)
 		break;
 
 	case IFM_10_T:
-		reg |= RTL3_CONFIG2_PL0;
+		/*
+		 * According to docs, this should be:
+		 * reg |= RTL3_CONFIG2_PL0;
+		 * but this doesn't work, so make it the same as AUTO.
+		 */
 		break;
 
 	case IFM_10_2:
@@ -164,9 +156,8 @@ rtl80x9_init_card(sc)
 }
 
 void
-rtl80x9_init_media(sc, mediap, nmediap, defmediap)
+rtl80x9_media_init(sc)
 	struct dp8390_softc *sc;
-	int **mediap, *nmediap, *defmediap;
 {
 	static int rtl80x9_media[] = {
 		IFM_ETHER|IFM_AUTO,
@@ -174,14 +165,14 @@ rtl80x9_init_media(sc, mediap, nmediap, defmediap)
 		IFM_ETHER|IFM_10_T|IFM_FDX,
 		IFM_ETHER|IFM_10_2,
 	};
+	static const int rtl80x9_nmedia =
+	    sizeof(rtl80x9_media) / sizeof(rtl80x9_media[0]);
 
+	int i, defmedia;
 	u_int8_t conf2, conf3;
 
-	*mediap = rtl80x9_media;
-	*nmediap = sizeof(rtl80x9_media) / sizeof(rtl80x9_media[0]);
-
-	printf("%s: 10base2, 10baseT, 10baseT-FDX, auto, default ",
-	    sc->sc_dev.dv_xname);
+	aprint_normal_dev(sc->sc_dev,
+	    "10base2, 10baseT, 10baseT-FDX, auto, default ");
 
 	bus_space_write_1(sc->sc_regt, sc->sc_regh, ED_P0_CR, ED_CR_PAGE_3);
 
@@ -192,27 +183,32 @@ rtl80x9_init_media(sc, mediap, nmediap, defmediap)
 	conf2 &= RTL3_CONFIG2_PL1|RTL3_CONFIG2_PL0;
 
 	switch (conf2) {
-	case 0:
-		*defmediap = IFM_ETHER|IFM_AUTO;
+	default:
+		defmedia = IFM_ETHER|IFM_AUTO;
 		printf("auto\n");
 		break;
 
 	case RTL3_CONFIG2_PL1|RTL3_CONFIG2_PL0:
 	case RTL3_CONFIG2_PL1:	/* XXX rtl docs sys 10base5, but chip cant do */
-		*defmediap = IFM_ETHER|IFM_10_2;
+		defmedia = IFM_ETHER|IFM_10_2;
 		printf("10base2\n");
 		break;
 
 	case RTL3_CONFIG2_PL0:
 		if (conf3 & RTL3_CONFIG3_FUDUP) {
-			*defmediap = IFM_ETHER|IFM_10_T|IFM_FDX;
+			defmedia = IFM_ETHER|IFM_10_T|IFM_FDX;
 			printf("10baseT-FDX\n");
 		} else {
-			*defmediap = IFM_ETHER|IFM_10_T;
+			defmedia = IFM_ETHER|IFM_10_T;
 			printf("10baseT\n");
 		}
 		break;
 	}
 
 	bus_space_write_1(sc->sc_regt, sc->sc_regh, ED_P0_CR, ED_CR_PAGE_0);
+
+	ifmedia_init(&sc->sc_media, 0, dp8390_mediachange, dp8390_mediastatus);
+	for (i = 0; i < rtl80x9_nmedia; i++)
+		ifmedia_add(&sc->sc_media, rtl80x9_media[i], 0, NULL);
+	ifmedia_set(&sc->sc_media, defmedia);
 }

@@ -1,4 +1,4 @@
-/*      $NetBSD: n_log__L.c,v 1.4 1999/07/02 15:37:37 simonb Exp $ */
+/*      $NetBSD: n_log__L.c,v 1.6 2003/08/07 16:44:52 agc Exp $ */
 /*
  * Copyright (c) 1985, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -72,6 +68,7 @@ static char sccsid[] = "@(#)log__L.c	8.1 (Berkeley) 6/4/93";
  * shown.
  */
 
+#define _LIBM_STATIC
 #include "mathimpl.h"
 
 vc(L1, 6.6666666666666703212E-1 ,aaaa,402a,aac5,aaaa,  0, .AAAAAAAAAAAAC5)
@@ -102,8 +99,8 @@ ic(L7, 1.4795612545334174692E-1, -3, 1.2F039F0085122)
 #define	L8	vccast(L8)
 #endif
 
-double __log__L(z)
-double z;
+double
+__log__L(double z)
 {
 #if defined(__vax__)||defined(tahoe)
     return(z*(L1+z*(L2+z*(L3+z*(L4+z*(L5+z*(L6+z*(L7+z*L8))))))));

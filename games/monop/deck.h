@@ -1,4 +1,4 @@
-/*	$NetBSD: deck.h,v 1.5 1999/08/21 10:40:03 simonb Exp $	*/
+/*	$NetBSD: deck.h,v 1.9 2008/02/24 02:43:18 dholland Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -39,14 +35,24 @@
 
 #define	bool	char
 
+struct cardinfo; /* private to cards.c */
+
 #define	CC_D	deck[0]
 #define	CH_D	deck[1]
 
 struct dk_st {			/* deck description structure		*/
 	int	num_cards;		/* number of cards in deck	*/
-	int	last_card;		/* number of last card picked	*/
+	int	top_card;		/* number of last card picked	*/
 	bool	gojf_used;		/* set if gojf card out of deck	*/
-	off_t	*offsets;		/* offsets for start of cards	*/
+	int	*cards;			/* which cards (indexes info[]) */
+	const struct cardinfo *info;	/* the static card data */
 };
 
 typedef struct dk_st	DECK;
+
+extern DECK	deck[2];
+
+/* cards.c */
+void init_decks(void);
+void get_card(DECK *);
+

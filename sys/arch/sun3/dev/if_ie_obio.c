@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ie_obio.c,v 1.15 1998/10/01 20:05:10 thorpej Exp $	*/
+/*	$NetBSD: if_ie_obio.c,v 1.25 2008/06/28 12:13:38 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,6 +32,10 @@
 /*
  * Machine-dependent glue for the Intel Ethernet (ie) driver.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_ie_obio.c,v 1.25 2008/06/28 12:13:38 tsutsui Exp $");
+
 #include "opt_inet.h"
 
 #include <sys/param.h>
@@ -67,50 +64,43 @@
 #include "if_iereg.h"
 #include "if_ievar.h"
 
-static void ie_obreset __P((struct ie_softc *));
-static void ie_obattend __P((struct ie_softc *));
-static void ie_obrun __P((struct ie_softc *));
+static void ie_obreset(struct ie_softc *);
+static void ie_obattend(struct ie_softc *);
+static void ie_obrun(struct ie_softc *);
 
 /*
  * New-style autoconfig attachment
  */
 
-static int  ie_obio_match __P((struct device *, struct cfdata *, void *));
-static void ie_obio_attach __P((struct device *, struct device *, void *));
+static int  ie_obio_match(device_t, cfdata_t, void *);
+static void ie_obio_attach(device_t, device_t, void *);
 
-struct cfattach ie_obio_ca = {
-	sizeof(struct ie_softc), ie_obio_match, ie_obio_attach
-};
+CFATTACH_DECL_NEW(ie_obio, sizeof(struct ie_softc),
+    ie_obio_match, ie_obio_attach, NULL, NULL);
 
-
-static int
-ie_obio_match(parent, cf, args)
-	struct device *parent;
-	struct cfdata *cf;
-	void *args;
+static int 
+ie_obio_match(device_t parent, cfdata_t cf, void *args)
 {
 	struct confargs *ca = args;
 
 	/* Make sure there is something there... */
 	if (bus_peek(ca->ca_bustype, ca->ca_paddr, 1) == -1)
-		return (0);
+		return 0;
 
 	/* Default interrupt priority. */
 	if (ca->ca_intpri == -1)
 		ca->ca_intpri = 3;
 
-	return (1);
+	return 1;
 }
 
-void
-ie_obio_attach(parent, self, args)
-	struct device *parent;
-	struct device *self;
-	void *args;
+void 
+ie_obio_attach(device_t parent, device_t self, void *args)
 {
-	struct ie_softc *sc = (void *) self;
+	struct ie_softc *sc = device_private(self);
 	struct confargs *ca = args;
 
+	sc->sc_dev = self;
 	sc->hard_type = IE_OBIO;
 	sc->reset_586 = ie_obreset;
 	sc->chan_attn = ie_obattend;
@@ -120,14 +110,14 @@ ie_obio_attach(parent, self, args)
 
 	/* Map in the control registers. */
 	sc->sc_reg = bus_mapin(ca->ca_bustype,
-		ca->ca_paddr, sizeof(struct ieob));
+	    ca->ca_paddr, sizeof(struct ieob));
 
 	/*
 	 * The on-board "ie" is wired-up such that its
 	 * memory access goes to the high 16 megabytes
 	 * of the on-board memory space (on-board DVMA).
 	 */
-	sc->sc_iobase = (caddr_t)DVMA_OBIO_SLAVE_BASE;
+	sc->sc_iobase = (void *)DVMA_OBIO_SLAVE_BASE;
 
 	/*
 	 * The on-board "ie" just uses main memory, so
@@ -150,7 +140,7 @@ ie_obio_attach(parent, self, args)
 	 * SCP happens to fall in a page used by the
 	 * PROM monitor, which the PROM knows about.
 	 */
-	sc->scp = (volatile void *) (sc->sc_iobase + IE_SCP_ADDR);
+	sc->scp = (volatile void *)((char *)sc->sc_iobase + IE_SCP_ADDR);
 
 	/*
 	 * The rest of ram is used for buffers.
@@ -159,7 +149,7 @@ ie_obio_attach(parent, self, args)
 	sc->buf_area_sz = sc->sc_msize;
 
 	/* Install interrupt handler. */
-	isr_add_autovect(ie_intr, (void *)sc, ca->ca_intpri);
+	isr_add_autovect(ie_intr, sc, ca->ca_intpri);
 
 	/* Set the ethernet address. */
 	idprom_etheraddr(sc->sc_addr);
@@ -174,11 +164,10 @@ ie_obio_attach(parent, self, args)
  */
 
 /* Whack the "channel attetion" line. */
-void
-ie_obattend(sc)
-	struct ie_softc *sc;
+void 
+ie_obattend(struct ie_softc *sc)
 {
-	volatile struct ieob *ieo = (struct ieob *) sc->sc_reg;
+	volatile struct ieob *ieo = (struct ieob *)sc->sc_reg;
 
 	ieo->obctrl |= IEOB_ATTEN;	/* flag! */
 	ieo->obctrl &= ~IEOB_ATTEN;	/* down. */
@@ -188,11 +177,10 @@ ie_obattend(sc)
  * This is called during driver attach.
  * Reset and initialize.
  */
-void
-ie_obreset(sc)
-	struct ie_softc *sc;
+void 
+ie_obreset(struct ie_softc *sc)
 {
-	volatile struct ieob *ieo = (struct ieob *) sc->sc_reg;
+	volatile struct ieob *ieo = (struct ieob *)sc->sc_reg;
 	ieo->obctrl = 0;
 	delay(20);
 	ieo->obctrl = (IEOB_NORSET | IEOB_ONAIR | IEOB_IENAB);
@@ -202,10 +190,9 @@ ie_obreset(sc)
  * This is called at the end of ieinit().
  * optional.
  */
-void
-ie_obrun(sc)
-	struct ie_softc *sc;
+void 
+ie_obrun(struct ie_softc *sc)
 {
+
 	/* do it all in reset */
 }
-

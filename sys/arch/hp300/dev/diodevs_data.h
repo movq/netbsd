@@ -1,10 +1,10 @@
-/*	$NetBSD: diodevs_data.h,v 1.7 1998/01/09 06:59:28 thorpej Exp $	*/
+/*	$NetBSD: diodevs_data.h,v 1.12 2008/04/28 20:23:19 martin Exp $	*/
 
 /*
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.
  *
  * generated from:
- *	NetBSD: diodevs,v 1.3 1997/10/09 09:06:50 jtc Exp 
+ *	NetBSD: diodevs,v 1.7 2003/11/23 01:57:35 tsutsui Exp 
  */
 
 /*-
@@ -22,13 +22,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -43,7 +36,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#define DIO_NDEVICES	45
+#define DIO_NDEVICES	46
 
 struct dio_devdata dio_devdatas[] = {
 	{ 0x02,	0,	1 },
@@ -54,7 +47,7 @@ struct dio_devdata dio_devdatas[] = {
 	{ 0x85,	0,	1 },
 	{ 0x15,	0,	1 },
 	{ 0x08,	0,	1 },
-	{ 0x80,	0,	1 },
+	{ 0x01,	0,	1 },
 	{ 0x00,	0,	1 },
 	{ 0x07,	0,	1 },
 	{ 0x27,	0,	1 },
@@ -80,6 +73,7 @@ struct dio_devdata dio_devdatas[] = {
 	{ 0x0a,	0,	1 },
 	{ 0x0b,	0,	1 },
 	{ 0x12,	0,	1 },
+	{ 0x13,	0,	1 },
 	{ 0x16,	0,	1 },
 	{ 0x19,	0,	1 },
 	{ 0x1a,	0,	4 },
@@ -103,7 +97,7 @@ struct dio_devdesc dio_devdescs[] = {
 	{ 0x85,	0,	DIO_DEVICE_DESC_DCMREM },
 	{ 0x15,	0,	DIO_DEVICE_DESC_LAN },
 	{ 0x08,	0,	DIO_DEVICE_DESC_FHPIB },
-	{ 0x80,	0,	DIO_DEVICE_DESC_NHPIB },
+	{ 0x01,	0,	DIO_DEVICE_DESC_NHPIB },
 	{ 0x00,	0,	DIO_DEVICE_DESC_IHPIB },
 	{ 0x07,	0,	DIO_DEVICE_DESC_SCSI0 },
 	{ 0x27,	0,	DIO_DEVICE_DESC_SCSI1 },
@@ -129,6 +123,7 @@ struct dio_devdesc dio_devdescs[] = {
 	{ 0x0a,	0,	DIO_DEVICE_DESC_MISC3 },
 	{ 0x0b,	0,	DIO_DEVICE_DESC_MISC4 },
 	{ 0x12,	0,	DIO_DEVICE_DESC_MISC5 },
+	{ 0x13,	0,	DIO_DEVICE_DESC_AUDIO },
 	{ 0x16,	0,	DIO_DEVICE_DESC_MISC6 },
 	{ 0x19,	0,	DIO_DEVICE_DESC_MISC7 },
 	{ 0x1a,	0,	DIO_DEVICE_DESC_MISC8 },

@@ -1,4 +1,4 @@
-/*	$NetBSD: elf_machdep.h,v 1.4 1999/10/25 13:55:10 kleink Exp $	*/
+/*	$NetBSD: elf_machdep.h,v 1.9 2006/03/14 21:37:48 cube Exp $	*/
 
 #define ELF32_MACHDEP_ENDIANNESS	ELFDATA2MSB
 #define	ELF32_MACHDEP_ID_CASES						\
@@ -12,6 +12,38 @@
 		case EM_SPARCV9:					\
 			break;
 
+#define	ELF32_MACHDEP_ID	EM_SPARC
+#define	ELF64_MACHDEP_ID	EM_SPARCV9
+
+#ifdef __arch64__
+#define ARCH_ELFSIZE		64	/* MD native binary size */
+#else
+#define ARCH_ELFSIZE		32	/* MD native binary size */
+#endif
+
+/* The following are what is used for AT_SUN_HWCAP: */
+#define AV_SPARC_HWMUL_32x32	1	/* 32x32-bit smul/umul is efficient */
+#define	AV_SPARC_HWDIV_32x32	2	/* 32x32-bit sdiv/udiv is efficient */
+#define	AV_SPARC_HWFSMULD	4	/* fsmuld is efficient */
+
+/*
+ * Here are some SPARC specific flags I can't 
+ * find a better home for.  They are used for AT_FLAGS
+ * and in the exec header.
+ */
+#define	EF_SPARCV9_MM		0x3
+#define	EF_SPARCV9_TSO		0x0
+#define	EF_SPARCV9_PSO		0x1
+#define	EF_SPARCV9_RMO		0x2
+
+#define EF_SPARC_32PLUS_MASK    0xffff00        /* bits indicating V8+ type */
+#define EF_SPARC_32PLUS         0x000100        /* generic V8+ features */
+#define EF_SPARC_EXT_MASK       0xffff00        /* bits for vendor extensions */
+#define	EF_SPARC_SUN_US1	0x000200	/* UltraSPARC 1 extensions */	
+#define	EF_SPARC_HAL_R1		0x000400	/* HAL R1 extensions */
+#define	EF_SPARC_SUN_US3	0x000800	/* UltraSPARC 3 extensions */
+
+/* Relocation types */
 #define R_SPARC_NONE		0
 #define R_SPARC_8		1
 #define R_SPARC_16		2
@@ -58,5 +90,16 @@
 #define R_SPARC_7		43
 #define R_SPARC_5		44
 #define R_SPARC_6		45
+#define	R_SPARC_DISP64		46
+#define	R_SPARC_PLT64		47
+#define	R_SPARC_HIX22		48
+#define	R_SPARC_LOX10		49
+#define	R_SPARC_H44		50
+#define	R_SPARC_M44		51
+#define	R_SPARC_L44		52
+#define	R_SPARC_REGISTER	53
+#define	R_SPARC_UA64		54
+#define	R_SPARC_UA16		55
+
 
 #define R_TYPE(name)		__CONCAT(R_SPARC_,name)

@@ -1,85 +1,58 @@
-#	$NetBSD: Makefile,v 1.16 2000/03/08 21:58:10 cjs Exp $
+#	$NetBSD: Makefile,v 1.39 2003/07/10 10:34:14 lukem Exp $
+#
+# boot.fs is the image for disk 1 of the two-set floppy based installation
+# method.
+#
+# It is constructed by injecting the microroot filesystem `ramdisk.fs'
+# into the md based kernel built from the INSTALL kernel configuration file.
+#
 
-TOP=		${.CURDIR}/..
-MINIROOT=	${.CURDIR}/../../miniroot
+.include <bsd.own.mk>
+.include "${NETBSDSRCDIR}/distrib/common/Makefile.distrib"
 
-.include "${TOP}/Makefile.inc"
+.include <bsd.kernobj.mk>
 
-.include <bsd.own.mk>	# So we use /etc/mk.conf.
+IMAGE=		boot.fs
+IMAGESIZE=	1440k
+LISTS=		${.CURDIR}/list
+MTREECONF=	${DISTRIBDIR}/common/mtree.dot
+IMAGEENDIAN=	be
+PRIMARYBOOT=	${DESTDIR}/usr/mdec/bootxx
+IMAGEDEPENDS=	netbsd.ram.gz ${DESTDIR}/usr/mdec/boot ${PRIMARYBOOT}
+IMAGEPOSTBUILD=	\
+	${TOOL_INSTALLBOOT} -v -m ${MACHINE} ${IMAGE} ${PRIMARYBOOT} /boot && \
+	printf 'V nhead 2\nV pcyl 80\nV ncyl 80\nV nsect 18\na 0 80/0/0\nW\n' \
+	    | ${TOOL_SUNLABEL} -nq ${IMAGE}
 
-KERN=		${TOP}/../../sys/arch/sparc/compile/INSTALL/netbsd
+RAMDISKDIR!=	cd ${.CURDIR}/../ramdisk && ${PRINTOBJDIR}
+RAMDISK=	${RAMDISKDIR}/ramdisk.fs
 
-MOUNT_POINT?=	/mnt
-VND?=		vnd0
-VND_DEV=	/dev/${VND}a
-VND_RDEV=	/dev/r${VND}a
-VND_CDEV=	/dev/${VND}c
-VND_CRDEV=	/dev/r${VND}c
+IMAGE_RELEASEDIR=	installation/bootfs
+
+MDSETTARGETS=		INSTALL ${RAMDISK} netbsd.ram
+MDSET_RELEASEDIR=	installation/bootfs
+MDSET_SUFFIXES.netbsd.ram=  aout create-aout
+
+# conjure up a magic header that is accepted by all Sun PROMS;
+# see src/usr.sbin/installboot/arch/sparc.c for details.
+#
+SUN_MAGIC_HEADER='\01\03\01\07\060\200\0\07\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0'
+
+create-aout=\
+	${OBJCOPY} -O binary ${.TARGET:R} ${.TARGET}.raw && \
+	( printf ${SUN_MAGIC_HEADER}; cat ${.TARGET}.raw ) > ${.TARGET}
+
+CLEANFILES+=	netbsd.ram.aout.raw
+
+
 FD?=		fd0
 FD_RDEV=	/dev/r${FD}a
-IMAGE?=		boot.fs
-MDEC=		${DESTDIR}/usr/mdec
-
-LISTS=		${.CURDIR}/list
-RAMDISK!=	cd ${TOP}/ramdisk/; \
-		printf "xxx: .MAKE\n\t@echo \$${.OBJDIR}/ramdisk.fs\n" |\
-		${MAKE} -s -f-
-
-DISKTYPE=	floppy
-
-# Some reasonable values for the -i parameter to newfs are:
-#
-#   6144	1147k, 189 inodes free
-#  16384	1159k,  93 inodes free
-# 204800	1167k,  29 inodes free
-INO_BYTES=	204800
-
-CLEANFILES+=	netbsd.ram.gz netbsd.tmp
-
-all:	netbsd.ram.gz
-	dd if=/dev/zero of=${IMAGE} bs=1440k count=1
-	vnconfig -t ${DISKTYPE} -v -c ${VND_CDEV} ${IMAGE}
-	disklabel -rw ${VND_CDEV} ${DISKTYPE}
-	disklabel -W ${VND_CDEV}
-	newfs -B be -m 0 -o space -i ${INO_BYTES} -c 80 ${VND_RDEV}
-	mount ${VND_DEV} ${MOUNT_POINT}
-	TOPDIR=${TOP} CURDIR=${MINIROOT} OBJDIR=${.OBJDIR} \
-	    TARGDIR=${MOUNT_POINT} sh ${MINIROOT}/runlist.sh ${LISTS}
-	@echo ""
-	@df -i ${MOUNT_POINT}
-	@echo ""
-	@echo "installing new bootblocks"
-	-rm -f ${MOUNT_POINT}/boot
-	/usr/mdec/binstall -v -b boot.700000 ffs ${MOUNT_POINT}
-	umount ${MOUNT_POINT}
-	vnconfig -u ${VND_CDEV}
-
-unconfig:
-	-umount -f ${MOUNT_POINT}
-	-vnconfig -u ${VND_DEV}
-
-netbsd.ram.gz: ${KERN} ${RAMDISK}
-	cp ${KERN} netbsd.tmp
-	mdsetimage -v netbsd.tmp ${RAMDISK}
-	gzip -9 netbsd.tmp
-	mv netbsd.tmp.gz ${.TARGET}
-
-clean cleandir distclean:
-	/bin/rm -f *.core ${IMAGE} ${CLEANFILES}
-
-depend install:
 
 real-floppy:
 	dd if=${IMAGE} of=${FD_RDEV} bs=32k
 
-.ifndef RELEASEDIR
-release:
-	@echo setenv RELEASEDIR first
-	@false
-.else
-release: $(IMAGE)
-	gzip -c -9 < $(.OBJDIR)/boot.fs \
-		> $(RELEASEDIR)/installation/bootfs/boot.fs.gz
-.endif	# RELEASEDIR check
 
-.include <bsd.obj.mk>
+.include "${DISTRIBDIR}/common/Makefile.image"
+.include "${DISTRIBDIR}/common/Makefile.mdset"
+
+.include <bsd.prog.mk>

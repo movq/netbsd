@@ -1,10 +1,11 @@
-/*	$NetBSD: tcpd.h,v 1.9 2000/02/05 19:14:57 danw Exp $	*/
+/*	$NetBSD: tcpd.h,v 1.12 2002/05/24 05:38:20 itojun Exp $	*/
  /*
   * @(#) tcpd.h 1.5 96/03/19 16:22:24
   * 
   * Author: Wietse Venema, Eindhoven University of Technology, The Netherlands.
   */
 
+#include <sys/cdefs.h>
 #include <stdio.h>
 
 /* Structure to describe one communications endpoint. */
@@ -58,8 +59,10 @@ struct request_info {
 #define STRING_UNKNOWN	"unknown"	/* lookup failed */
 #define STRING_PARANOID	"paranoid"	/* hostname conflict */
 
+__BEGIN_DECLS
 extern char unknown[];
 extern char paranoid[];
+__END_DECLS
 
 #define HOSTNAME_KNOWN(s) (STR_NE((s),unknown) && STR_NE((s),paranoid))
 
@@ -67,12 +70,8 @@ extern char paranoid[];
 
 /* Global functions. */
 
-#if defined(TLI) || defined(PTX) || defined(TLI_SEQUENT)
-extern void fromhost			/* get/validate client host info */
-		__P((struct request_info *));
-#else
+__BEGIN_DECLS
 #define fromhost sock_host		/* no TLI support needed */
-#endif
 
 extern int hosts_access			/* access control */
 		__P((struct request_info *));
@@ -173,15 +172,20 @@ extern void tli_host			/* look up endpoint addresses etc. */
   */
 
 extern void tcpd_warn			/* report problem and proceed */
-		__P((char *, ...));
+		__P((char *, ...))
+	__attribute__((__format__(__printf__, 1, 2)));
 extern void tcpd_jump			/* report problem and jump */
-		__P((char *, ...));
+		__P((char *, ...))
+	__attribute__((__format__(__printf__, 1, 2)));
+__END_DECLS
 
 struct tcpd_context {
     char   *file;			/* current file */
     int     line;			/* current line */
 };
+__BEGIN_DECLS
 extern struct tcpd_context tcpd_context;
+__END_DECLS
 
  /*
   * While processing access control rules, error conditions are handled by
@@ -201,45 +205,10 @@ extern struct tcpd_context tcpd_context;
   * behavior.
   */
 
+__BEGIN_DECLS
 extern void process_options		/* execute options */
 		__P((char *, struct request_info *));
 extern int dry_run;			/* verification flag */
 extern void fix_options			/* get rid of IP-level socket options */
 		__P((struct request_info *));
-/* Bug workarounds. */
-
-#ifdef INET_ADDR_BUG			/* inet_addr() returns struct */
-#define inet_addr fix_inet_addr
-extern long fix_inet_addr __P((char *));
-#endif
-
-#ifdef BROKEN_FGETS			/* partial reads from sockets */
-#define fgets fix_fgets
-extern char *fix_fgets __P((char *, int, FILE *));
-#endif
-
-#ifdef RECVFROM_BUG			/* no address family info */
-#define recvfrom fix_recvfrom
-extern int fix_recvfrom __P((int, char *, int, int, struct sockaddr *, int *));
-#endif
-
-#ifdef GETPEERNAME_BUG			/* claims success with UDP */
-#include <sys/socket.h>			/* XXX serious hack! */
-#define getpeername fix_getpeername
-extern int fix_getpeername __P((int, struct sockaddr *, int *));
-#endif
-
-#ifdef SOLARIS_24_GETHOSTBYNAME_BUG	/* lists addresses as aliases */
-#define gethostbyname fix_gethostbyname
-extern struct hostent *fix_gethostbyname __P((char *));
-#endif
-
-#ifdef USE_STRSEP			/* libc calls strtok() */
-#define strtok	fix_strtok
-extern char *fix_strtok __P((char *, char *));
-#endif
-
-#ifdef LIBC_CALLS_STRTOK		/* libc calls strtok() */
-#define strtok	my_strtok
-extern char *my_strtok __P((char *, char *));
-#endif
+__END_DECLS

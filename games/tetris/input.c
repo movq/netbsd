@@ -1,4 +1,4 @@
-/*	$NetBSD: input.c,v 1.4 1999/01/03 02:00:17 hubertf Exp $	*/
+/*	$NetBSD: input.c,v 1.10 2006/03/19 00:50:28 christos Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -44,6 +40,7 @@
 
 #include <sys/types.h>
 #include <sys/time.h>
+#include <sys/poll.h>
 
 #include <errno.h>
 #include <unistd.h>
@@ -65,49 +62,48 @@
 	}
 
 /*
- * Do a `read wait': select for reading from stdin, with timeout *tvp.
+ * Do a `read wait': poll for reading from stdin, with timeout *tvp.
  * On return, modify *tvp to reflect the amount of time spent waiting.
  * It will be positive only if input appeared before the time ran out;
  * otherwise it will be zero or perhaps negative.
  *
- * If tvp is nil, wait forever, but return if select is interrupted.
+ * If tvp is nil, wait forever, but return if poll is interrupted.
  *
  * Return 0 => no input, 1 => can read() from stdin
  */
 int
 rwait(tvp)
-	register struct timeval *tvp;
+	struct timeval *tvp;
 {
-	int i;
-	struct timeval starttv, endtv, *s;
+	struct pollfd set[1];
+	struct timeval starttv, endtv;
+	int timeout;
 #define	NILTZ ((struct timezone *)0)
 
-	/*
-	 * Someday, select() will do this for us.
-	 * Just in case that day is now, and no one has
-	 * changed this, we use a temporary.
-	 */
 	if (tvp) {
 		(void) gettimeofday(&starttv, NILTZ);
 		endtv = *tvp;
-		s = &endtv;
+		timeout = tvp->tv_sec * 1000 + tvp->tv_usec / 1000;
 	} else
-		s = 0;
+		timeout = INFTIM;
 again:
-	i = 1;
-	switch (select(1, (fd_set *)&i, (fd_set *)0, (fd_set *)0, s)) {
+	set[0].fd = STDIN_FILENO;
+	set[0].events = POLLIN;
+	switch (poll(set, 1, timeout)) {
 
 	case -1:
 		if (tvp == 0)
 			return (-1);
 		if (errno == EINTR)
 			goto again;
-		stop("select failed, help");
+		stop("poll failed, help");
 		/* NOTREACHED */
 
 	case 0:	/* timed out */
-		tvp->tv_sec = 0;
-		tvp->tv_usec = 0;
+		if (tvp) {
+			tvp->tv_sec = 0;
+			tvp->tv_usec = 0;
+		}
 		return (0);
 	}
 	if (tvp) {
@@ -120,7 +116,7 @@ again:
 }
 
 /*
- * `sleep' for the current turn time (using select).
+ * `sleep' for the current turn time.
  * Eat any input that might be available.
  */
 void

@@ -1,4 +1,4 @@
-/*	$NetBSD: stat.h,v 1.39 2000/02/03 02:01:53 cgd Exp $	*/
+/*	$NetBSD: stat.h,v 1.57 2008/07/31 05:38:06 simonb Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -17,11 +17,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -46,51 +42,9 @@
 #include <sys/featuretest.h>
 #include <sys/types.h>		/* XXX */
 
-#if !defined(_POSIX_C_SOURCE) && !defined(_XOPEN_SOURCE)
+#if defined(_NETBSD_SOURCE)
 #include <sys/time.h>
 #endif
-
-#ifdef _KERNEL
-struct stat43 {				/* BSD-4.3 stat struct */
-	u_int16_t st_dev;		/* inode's device */
-	ino_t	  st_ino;		/* inode's number */
-	u_int16_t st_mode;		/* inode protection mode */
-	u_int16_t st_nlink;		/* number of hard links */
-	u_int16_t st_uid;		/* user ID of the file's owner */
-	u_int16_t st_gid;		/* group ID of the file's group */
-	u_int16_t st_rdev;		/* device type */
-	int32_t	  st_size;		/* file size, in bytes */
-	struct	  timespec st_atimespec;/* time of last access */
-	struct	  timespec st_mtimespec;/* time of last data modification */
-	struct	  timespec st_ctimespec;/* time of last file status change */
-	int32_t	  st_blksize;		/* optimal blocksize for I/O */
-	int32_t	  st_blocks;		/* blocks allocated for file */
-	u_int32_t st_flags;		/* user defined flags for file */
-	u_int32_t st_gen;		/* file generation number */
-};
-#endif /* defined(_KERNEL) */
-
-#if defined(__LIBC12_SOURCE__) || defined(_KERNEL)
-struct stat12 {				/* NetBSD-1.2 stat struct */
-	dev_t	  st_dev;		/* inode's device */
-	ino_t	  st_ino;		/* inode's number */
-	u_int16_t st_mode;		/* inode protection mode */
-	u_int16_t st_nlink;		/* number of hard links */
-	uid_t	  st_uid;		/* user ID of the file's owner */
-	gid_t	  st_gid;		/* group ID of the file's group */
-	dev_t	  st_rdev;		/* device type */
-	struct	  timespec st_atimespec;/* time of last access */
-	struct	  timespec st_mtimespec;/* time of last data modification */
-	struct	  timespec st_ctimespec;/* time of last file status change */
-	off_t	  st_size;		/* file size, in bytes */
-	int64_t	  st_blocks;		/* blocks allocated for file */
-	u_int32_t st_blksize;		/* optimal blocksize for I/O */
-	u_int32_t st_flags;		/* user defined flags for file */
-	u_int32_t st_gen;		/* file generation number */
-	int32_t	  st_lspare;
-	int64_t	  st_qspare[2];
-};
-#endif /* defined(__LIBC12_SOURCE__) || defined(_KERNEL) */
 
 /*
  * On systems with 8 byte longs and 4 byte time_ts, padding the time_ts
@@ -100,7 +54,7 @@ struct stat12 {				/* NetBSD-1.2 stat struct */
  * should be removed the next time the stat structure ABI is changed.
  * (This will happen whever we change to 8 byte time_t.)
  */
-#if defined(__alpha__)			/* XXX XXX XXX */
+#if defined(_LP64)	/* XXXX  && _BSD_TIME_T_ == int */
 #define	__STATPAD(x)	int x;
 #else
 #define	__STATPAD(x)	/* nothing */
@@ -108,50 +62,55 @@ struct stat12 {				/* NetBSD-1.2 stat struct */
 
 struct stat {
 	dev_t	  st_dev;		/* inode's device */
-	ino_t	  st_ino;		/* inode's number */
 	mode_t	  st_mode;		/* inode protection mode */
+	ino_t	  st_ino;		/* inode's number */
 	nlink_t	  st_nlink;		/* number of hard links */
 	uid_t	  st_uid;		/* user ID of the file's owner */
 	gid_t	  st_gid;		/* group ID of the file's group */
 	dev_t	  st_rdev;		/* device type */
-#if !defined(_POSIX_C_SOURCE) && !defined(_XOPEN_SOURCE)
+#if defined(_NETBSD_SOURCE)
 	struct	  timespec st_atimespec;/* time of last access */
 	struct	  timespec st_mtimespec;/* time of last data modification */
 	struct	  timespec st_ctimespec;/* time of last file status change */
+	struct 	  timespec st_birthtimespec; /* time of creation */
 #else
-	__STATPAD(__pad0)
 	time_t	  st_atime;		/* time of last access */
-	__STATPAD(__pad1)
+	__STATPAD(__pad0)
 	long	  st_atimensec;		/* nsec of last access */
 	time_t	  st_mtime;		/* time of last data modification */
-	__STATPAD(__pad2)
+	__STATPAD(__pad1)
 	long	  st_mtimensec;		/* nsec of last data modification */
 	time_t	  st_ctime;		/* time of last file status change */
-	__STATPAD(__pad3)
+	__STATPAD(__pad2)
 	long	  st_ctimensec;		/* nsec of last file status change */
+	time_t	  st_birthtime;		/* time of creation */
+	__STATPAD(__pad3)
+	long	  st_birthtimensec;	/* nsec of time of creation */
 #endif
 	off_t	  st_size;		/* file size, in bytes */
 	blkcnt_t  st_blocks;		/* blocks allocated for file */
 	blksize_t st_blksize;		/* optimal blocksize for I/O */
-	u_int32_t st_flags;		/* user defined flags for file */
-	u_int32_t st_gen;		/* file generation number */
-	int64_t	  st_qspare[2];
+	uint32_t  st_flags;		/* user defined flags for file */
+	uint32_t  st_gen;		/* file generation number */
+	uint32_t  st_spare[2];
 };
 
 #undef __STATPAD
 
-#if !defined(_POSIX_C_SOURCE) && !defined(_XOPEN_SOURCE)
-#define	st_atime	st_atimespec.tv_sec
-#define	st_atimensec	st_atimespec.tv_nsec
-#define	st_mtime	st_mtimespec.tv_sec
-#define	st_mtimensec	st_mtimespec.tv_nsec
-#define	st_ctime	st_ctimespec.tv_sec
-#define	st_ctimensec	st_ctimespec.tv_nsec
+#if defined(_NETBSD_SOURCE)
+#define	st_atime		st_atimespec.tv_sec
+#define	st_atimensec		st_atimespec.tv_nsec
+#define	st_mtime		st_mtimespec.tv_sec
+#define	st_mtimensec		st_mtimespec.tv_nsec
+#define	st_ctime		st_ctimespec.tv_sec
+#define	st_ctimensec		st_ctimespec.tv_nsec
+#define st_birthtime		st_birthtimespec.tv_sec
+#define st_birthtimensec	st_birthtimespec.tv_nsec
 #endif
 
 #define	S_ISUID	0004000			/* set user id on execution */
 #define	S_ISGID	0002000			/* set group id on execution */
-#if !defined(_POSIX_C_SOURCE) && !defined(_XOPEN_SOURCE)
+#if defined(_NETBSD_SOURCE)
 #define	S_ISTXT	0001000			/* sticky bit */
 #endif
 
@@ -160,7 +119,7 @@ struct stat {
 #define	S_IWUSR	0000200			/* W for owner */
 #define	S_IXUSR	0000100			/* X for owner */
 
-#if !defined(_POSIX_C_SOURCE) && !defined(_XOPEN_SOURCE)
+#if defined(_NETBSD_SOURCE)
 #define	S_IREAD		S_IRUSR
 #define	S_IWRITE	S_IWUSR
 #define	S_IEXEC		S_IXUSR
@@ -189,7 +148,7 @@ struct stat {
 #define	_S_ARCH1  0200000		/* Archive state 1, ls -l shows 'a' */
 #define	_S_ARCH2  0400000		/* Archive state 2, ls -l shows 'A' */
 
-#if !defined(_POSIX_C_SOURCE) || defined(_XOPEN_SOURCE)
+#if defined(_XOPEN_SOURCE) || defined(_NETBSD_SOURCE)
 #define	S_IFMT	 _S_IFMT
 #define	S_IFIFO	 _S_IFIFO
 #define	S_IFCHR	 _S_IFCHR
@@ -199,8 +158,10 @@ struct stat {
 #define	S_IFLNK	 _S_IFLNK
 #define	S_ISVTX	 _S_ISVTX
 #endif
-#if !defined(_POSIX_C_SOURCE) && !defined(_XOPEN_SOURCE)
+#if ((_XOPEN_SOURCE - 0) >= 600) || defined(_NETBSD_SOURCE)
 #define	S_IFSOCK _S_IFSOCK
+#endif
+#if defined(_NETBSD_SOURCE)
 #define	S_IFWHT  _S_IFWHT
 
 #define	S_ARCH1	_S_ARCH1
@@ -212,15 +173,19 @@ struct stat {
 #define	S_ISBLK(m)	((m & _S_IFMT) == _S_IFBLK)	/* block special */
 #define	S_ISREG(m)	((m & _S_IFMT) == _S_IFREG)	/* regular file */
 #define	S_ISFIFO(m)	((m & _S_IFMT) == _S_IFIFO)	/* fifo */
-#if !defined(_POSIX_C_SOURCE) || defined(_XOPEN_SOURCE)
+#if ((_POSIX_C_SOURCE - 0) >= 200112L) || defined(_XOPEN_SOURCE) || \
+    defined(_NETBSD_SOURCE)
 #define	S_ISLNK(m)	((m & _S_IFMT) == _S_IFLNK)	/* symbolic link */
 #endif
-#if !defined(_POSIX_C_SOURCE) && !defined(_XOPEN_SOURCE)
+#if ((_POSIX_C_SOURCE - 0) >= 200112L) || ((_XOPEN_SOURCE - 0) >= 600) || \
+    defined(_NETBSD_SOURCE)
 #define	S_ISSOCK(m)	((m & _S_IFMT) == _S_IFSOCK)	/* socket */
+#endif
+#if defined(_NETBSD_SOURCE)
 #define	S_ISWHT(m)	((m & _S_IFMT) == _S_IFWHT)	/* whiteout */
 #endif
 
-#if !defined(_POSIX_C_SOURCE) && !defined(_XOPEN_SOURCE)
+#if defined(_NETBSD_SOURCE)
 #define	ACCESSPERMS	(S_IRWXU|S_IRWXG|S_IRWXO)	/* 0777 */
 							/* 7777 */
 #define	ALLPERMS	(S_ISUID|S_ISGID|S_ISTXT|S_IRWXU|S_IRWXG|S_IRWXO)
@@ -239,6 +204,7 @@ struct stat {
 #define	UF_IMMUTABLE	0x00000002	/* file may not be changed */
 #define	UF_APPEND	0x00000004	/* writes to file may only append */
 #define UF_OPAQUE	0x00000008	/* directory is opaque wrt. union */
+/*	UF_NOUNLINK	0x00000010	   [NOT IMPLEMENTED] */
 /*
  * Super-user changeable flags.
  */
@@ -246,6 +212,9 @@ struct stat {
 #define	SF_ARCHIVED	0x00010000	/* file is archived */
 #define	SF_IMMUTABLE	0x00020000	/* file may not be changed */
 #define	SF_APPEND	0x00040000	/* writes to file may only append */
+/*	SF_NOUNLINK	0x00100000	   [NOT IMPLEMENTED] */
+#define	SF_SNAPSHOT	0x00200000	/* snapshot inode */
+#define	SF_LOG		0x00400000	/* WAPBL log file inode */
 
 #ifdef _KERNEL
 /*
@@ -255,41 +224,34 @@ struct stat {
 #define	APPEND		(UF_APPEND | SF_APPEND)
 #define	IMMUTABLE	(UF_IMMUTABLE | SF_IMMUTABLE)
 #endif /* _KERNEL */
-#endif /* !_POSIX_C_SOURCE && !_XOPEN_SOURCE */
+#endif /* _NETBSD_SOURCE */
 
 #if !defined(_KERNEL) && !defined(_STANDALONE)
 #include <sys/cdefs.h>
 
 __BEGIN_DECLS
-int	chmod __P((const char *, mode_t));
-int	mkdir __P((const char *, mode_t));
-int	mkfifo __P((const char *, mode_t));
-#ifdef __LIBC12_SOURCE__
-int	stat __P((const char *, struct stat12 *));
-int	fstat __P((int, struct stat12 *));
-int	__stat13 __P((const char *, struct stat *));
-int	__fstat13 __P((int, struct stat *));
-#else
-int	stat __P((const char *, struct stat *))	__RENAME(__stat13);
-int	fstat __P((int, struct stat *))		__RENAME(__fstat13);
+int	chmod(const char *, mode_t);
+int	mkdir(const char *, mode_t);
+int	mkfifo(const char *, mode_t);
+#ifndef __LIBC12_SOURCE__
+int	stat(const char *, struct stat *) __RENAME(__stat30);
+int	fstat(int, struct stat *) __RENAME(__fstat30);
 #endif
-mode_t	umask __P((mode_t));
-#if !defined(_POSIX_C_SOURCE) || defined(_XOPEN_SOURCE)
-int	fchmod __P((int, mode_t));
-#ifdef __LIBC12_SOURCE__
-int	lstat __P((const char *, struct stat12 *));
-int	__lstat13 __P((const char *, struct stat *));
-#else
-int	lstat __P((const char *, struct stat *))	__RENAME(__lstat13);
+mode_t	umask(mode_t);
+#if defined(_XOPEN_SOURCE) || defined(_NETBSD_SOURCE)
+int	fchmod(int, mode_t);
+#ifndef __LIBC12_SOURCE__
+int	lstat(const char *, struct stat *) __RENAME(__lstat30);
 #endif
-int	mknod __P((const char *, mode_t, dev_t));
-#endif /* !defined(_POSIX_C_SOURCE) || defined(_XOPEN_SOURCE) */
+int	mknod(const char *, mode_t, dev_t);
+#endif /* defined(_XOPEN_SOURCE) || defined(_NETBSD_SOURCE) */
 
-#if !defined(_POSIX_C_SOURCE) && !defined(_XOPEN_SOURCE)
-int	chflags __P((const char *, unsigned long));
-int	fchflags __P((int, unsigned long));
-int	lchmod __P((const char *, mode_t));
-#endif /* !defined(_POSIX_C_SOURCE) && !defined(_XOPEN_SOURCE) */
+#if defined(_NETBSD_SOURCE)
+int	chflags(const char *, unsigned long);
+int	fchflags(int, unsigned long);
+int	lchflags(const char *, unsigned long);
+int	lchmod(const char *, mode_t);
+#endif /* defined(_NETBSD_SOURCE) */
 __END_DECLS
 
 #endif /* !_KERNEL && !_STANDALONE */

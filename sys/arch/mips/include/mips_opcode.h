@@ -1,4 +1,4 @@
-/*	$NetBSD: mips_opcode.h,v 1.6 1997/10/17 04:43:57 jonathan Exp $	*/
+/*	$NetBSD: mips_opcode.h,v 1.12 2005/12/11 12:18:09 christos Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -150,6 +146,8 @@ typedef union {
 #define OP_LDL		032		/* MIPS-II, for r4000 port */
 #define OP_LDR		033		/* MIPS-II, for r4000 port */
 
+#define OP_SPECIAL2	034		/* QED opcodes */
+
 #define OP_LB		040
 #define OP_LH		041
 #define OP_LWL		042
@@ -176,6 +174,7 @@ typedef union {
 #define OP_LWC2		062
 #define OP_LWC3		063
 #define OP_LLD		064		/* MIPS-II, for r4000 port */
+#define OP_LDC1		065
 #define OP_LD		067		/* MIPS-II, for r4000 port */
 
 #define OP_SC		070
@@ -184,6 +183,7 @@ typedef union {
 #define OP_SWC2		072
 #define OP_SWC3		073
 #define OP_SCD		074		/* MIPS-II, for r4000 port */
+#define OP_SDC1		075
 #define OP_SD		077		/* MIPS-II, for r4000 port */
 
 /*
@@ -250,6 +250,13 @@ typedef union {
 #define OP_DSRA32	077		/* MIPS-II, for r4000 port */
 
 /*
+ * Values for the 'func' field when 'op' == OP_SPECIAL2.
+ */
+#define OP_MAD		000		/* QED */
+#define OP_MADU		001		/* QED */
+#define OP_MUL		002		/* QED */
+
+/*
  * Values for the 'func' field when 'op' == OP_BCOND.
  */
 #define OP_BLTZ		000
@@ -264,7 +271,6 @@ typedef union {
 #define OP_TEQI		014		/* MIPS-II, for r4000 port */
 #define OP_TNEI		016		/* MIPS-II, for r4000 port */
 
-#define OP_BLTZAL	020
 #define OP_BLTZAL	020		/* MIPS-II, for r4000 port */
 #define OP_BGEZAL	021
 #define OP_BLTZALL	022

@@ -1,4 +1,4 @@
-/* $NetBSD: wsemul_vt100var.h,v 1.4 1998/12/04 20:48:04 drochner Exp $ */
+/* $NetBSD: wsemul_vt100var.h,v 1.13 2006/10/09 11:03:43 peter Exp $ */
 
 /*
  * Copyright (c) 1998
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed for the NetBSD Project
- *	by Matthias Drochner.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -39,13 +33,12 @@ struct wsemul_vt100_emuldata {
 	void *emulcookie;
 	int scrcapabilities;
 	u_int nrows, ncols, crow, ccol;
+	struct wsdisplay_msgattrs msgattrs;
 	long defattr;			/* default attribute */
 
 	long kernattr;			/* attribute for kernel output */
 	void *cbcookie;
-#ifdef DIAGNOSTIC
-	int console;
-#endif
+	int console;			/* used for DIAGNOSTIC */
 
 	u_int state;			/* processing state */
 	int flags;
@@ -57,7 +50,8 @@ struct wsemul_vt100_emuldata {
 #define VTFL_DECAWM	0x020	/* auto wrap */
 #define VTFL_CURSORON	0x040
 #define VTFL_NATCHARSET	0x080	/* national replacement charset mode */
-	long curattr;			/* currently used attribute */
+#define VTFL_SAVEDCURS	0x100	/* we have a saved cursor state */
+	long curattr, bkgdattr;		/* currently used attribute */
 	int attrflags, fgcol, bgcol;	/* properties of curattr */
 	u_int scrreg_startrow;
 	u_int scrreg_nrows;
@@ -86,7 +80,7 @@ struct wsemul_vt100_emuldata {
 #define DCSTYPE_TABRESTORE 1 /* DCS2$t */
 
 	u_int savedcursor_row, savedcursor_col;
-	long savedattr;
+	long savedattr, savedbkgdattr;
 	int savedattrflags, savedfgcol, savedbgcol;
 	int savedchartab0, savedchartab1;
 	u_int *savedchartab_G[4];
@@ -131,15 +125,15 @@ struct wsemul_vt100_emuldata {
  */
 #define WSEMUL_VT_ID2 "\033[>24;20;0c"
 
-void wsemul_vt100_reset __P((struct wsemul_vt100_emuldata *));
-void wsemul_vt100_scrollup __P((struct wsemul_vt100_emuldata *, int));
-void wsemul_vt100_scrolldown __P((struct wsemul_vt100_emuldata *, int));
-void wsemul_vt100_ed __P((struct wsemul_vt100_emuldata *, int));
-void wsemul_vt100_el __P((struct wsemul_vt100_emuldata *, int));
-void wsemul_vt100_handle_csi __P((struct wsemul_vt100_emuldata *, u_char));
-void wsemul_vt100_handle_dcs __P((struct wsemul_vt100_emuldata *));
+void wsemul_vt100_reset(struct wsemul_vt100_emuldata *);
+void wsemul_vt100_scrollup(struct wsemul_vt100_emuldata *, int);
+void wsemul_vt100_scrolldown(struct wsemul_vt100_emuldata *, int);
+void wsemul_vt100_ed(struct wsemul_vt100_emuldata *, int);
+void wsemul_vt100_el(struct wsemul_vt100_emuldata *, int);
+void wsemul_vt100_handle_csi(struct wsemul_vt100_emuldata *, u_char);
+void wsemul_vt100_handle_dcs(struct wsemul_vt100_emuldata *);
 
-int wsemul_vt100_translate __P((void *cookie, keysym_t, char **));
+int wsemul_vt100_translate(void *, keysym_t, const char **);
 
-void vt100_initchartables __P((struct wsemul_vt100_emuldata *));
-void vt100_setnrc __P((struct wsemul_vt100_emuldata *, int));
+void vt100_initchartables(struct wsemul_vt100_emuldata *);
+void vt100_setnrc(struct wsemul_vt100_emuldata *, int);

@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_bswap.h,v 1.5 1999/11/15 18:49:15 fvdl Exp $	*/
+/*	$NetBSD: ufs_bswap.h,v 1.18 2006/01/29 21:42:42 dsl Exp $	*/
 
 /*
  * Copyright (c) 1998 Manuel Bouyer.
@@ -13,74 +13,66 @@
  *    documentation and/or other materials provided with the distribution.
  * 3. All advertising materials mentioning features or use of this software
  *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
+ *	This product includes software developed by Manuel Bouyer.
+ * 4. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
 
-#if defined(_KERNEL) && !defined(_LKM)
+#ifndef _UFS_UFS_BSWAP_H_
+#define _UFS_UFS_BSWAP_H_
+
+#if defined(_KERNEL_OPT)
 #include "opt_ffs.h"
 #endif
 
-#include <machine/bswap.h>
+#include <sys/bswap.h>
 
 /* Macros to access UFS flags */
 #ifdef FFS_EI
-#define	UFS_MPNEEDSWAP(mp)	(VFSTOUFS(mp)->um_flags & UFS_NEEDSWAP)
+#define	UFS_MPNEEDSWAP(ump)	((ump)->um_flags & UFS_NEEDSWAP)
 #define UFS_FSNEEDSWAP(fs)	((fs)->fs_flags & FS_SWAPPED)
-#define	UFS_IPNEEDSWAP(ip)	UFS_MPNEEDSWAP(ITOV(ip)->v_mount)
+#define	UFS_IPNEEDSWAP(ip)	UFS_MPNEEDSWAP((ip)->i_ump)
 #else
-#define	UFS_MPNEEDSWAP(mp) (0)
-#define UFS_FSNEEDSWAP(fs) (0)
-#define	UFS_IPNEEDSWAP(ip) (0)
+#define	UFS_MPNEEDSWAP(ump)	(0)
+#define UFS_FSNEEDSWAP(fs)	(0)
+#define	UFS_IPNEEDSWAP(ip)	(0)
 #endif
 
 #if !defined(_KERNEL) || defined(FFS_EI)
-/* inlines for access to swaped datas */
-static __inline u_int16_t ufs_rw16 __P((u_int16_t, int));
-static __inline u_int32_t ufs_rw32 __P((u_int32_t, int));
-static __inline u_int64_t ufs_rw64 __P((u_int64_t, int));
+/* inlines for access to swapped data */
+static inline u_int16_t
+ufs_rw16(uint16_t a, int ns)
+{
+	return ((ns) ? bswap16(a) : (a));
+}
 
-static __inline u_int16_t
-ufs_rw16(a, ns)
-	u_int16_t a;
-	int ns;
+static inline u_int32_t
+ufs_rw32(uint32_t a, int ns)
 {
-	return ((ns) ?  bswap16(a) : (a));
+	return ((ns) ? bswap32(a) : (a));
 }
-static __inline u_int32_t
-ufs_rw32(a, ns)
-	u_int32_t a;
-	int ns;
+
+static inline u_int64_t
+ufs_rw64(uint64_t a, int ns)
 {
-	return ((ns) ?  bswap32(a) : (a));
-}
-static __inline u_int64_t
-ufs_rw64(a, ns)
-	u_int64_t a;
-	int ns;
-{
-	return ((ns) ?  bswap64(a) : (a));
+	return ((ns) ? bswap64(a) : (a));
 }
 #else
-#define ufs_rw16(a, ns) (a)
-#define ufs_rw32(a, ns) (a)
-#define ufs_rw64(a, ns) (a)
+#define ufs_rw16(a, ns) ((uint16_t)(a))
+#define ufs_rw32(a, ns) ((uint32_t)(a))
+#define ufs_rw64(a, ns) ((uint64_t)(a))
 #endif
 
 #define ufs_add16(a, b, ns) \
@@ -89,3 +81,5 @@ ufs_rw64(a, ns)
 	(a) = ufs_rw32(ufs_rw32((a), (ns)) + (b), (ns))
 #define ufs_add64(a, b, ns) \
 	(a) = ufs_rw64(ufs_rw64((a), (ns)) + (b), (ns))
+
+#endif /* !_UFS_UFS_BSWAP_H_ */

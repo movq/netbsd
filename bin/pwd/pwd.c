@@ -1,4 +1,4 @@
-/*	$NetBSD: pwd.c,v 1.13 1999/11/09 15:06:32 drochner Exp $	*/
+/* $NetBSD: pwd.c,v 1.21 2008/07/20 00:52:40 lukem Exp $ */
 
 /*
  * Copyright (c) 1991, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,52 +31,64 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1991, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1991, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)pwd.c	8.3 (Berkeley) 4/1/94";
 #else
-__RCSID("$NetBSD: pwd.c,v 1.13 1999/11/09 15:06:32 drochner Exp $");
+__RCSID("$NetBSD: pwd.c,v 1.21 2008/07/20 00:52:40 lukem Exp $");
 #endif
 #endif /* not lint */
 
-#include <sys/types.h>
+#include <sys/param.h>
 #include <sys/stat.h>
+#include <sys/types.h>
+
 #include <err.h>
 #include <errno.h>
+#include <locale.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
-static char *	getcwd_logical __P((char *, size_t));
-static void	usage __P((void));
-int		main __P((int, char *[]));
+static char *getcwd_logical(void);
+static void usage(void);
+
+/*
+ * Note that EEE Std 1003.1, 2003 requires that the default be -L.
+ * This is inconsistent with the historic behaviour of everything
+ * except the ksh builtin.
+ * To avoid breaking scripts the default has been kept as -P.
+ * (Some scripts run /bin/pwd in order to get 'pwd -P'.)
+ */
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
-	int ch;
-	int lFlag = 0;
+	int ch, lFlag;
 	const char *p;
 
-	while ((ch = getopt(argc, argv, "LP")) != -1)
+	setprogname(argv[0]);
+	(void)setlocale(LC_ALL, "");
+
+	lFlag = 0;
+	while ((ch = getopt(argc, argv, "LP")) != -1) {
 		switch (ch) {
 		case 'L':
-			lFlag=1;
+			lFlag = 1;
 			break;
 		case 'P':
-			lFlag=0;
+			lFlag = 0;
 			break;
 		case '?':
 		default:
 			usage();
 		}
+	}
 	argc -= optind;
 	argv += optind;
 
@@ -88,8 +96,10 @@ main(argc, argv)
 		usage();
 
 	if (lFlag)
-		p = getcwd_logical(NULL, 0);
+		p = getcwd_logical();
 	else
+		p = NULL;
+	if (p == NULL)
 		p = getcwd(NULL, 0);
 
 	if (p == NULL)
@@ -102,51 +112,32 @@ main(argc, argv)
 }
 
 static char *
-getcwd_logical(pt, size)
-	char *pt;
-	size_t size;
+getcwd_logical(void)
 {
 	char *pwd;
-	size_t pwdlen;
-	dev_t dev;
-	ino_t ino;
-	struct stat s;
+	struct stat s_pwd, s_dot;
 
 	/* Check $PWD -- if it's right, it's fast. */
-	if ((pwd = getenv("PWD")) != NULL && pwd[0] == '/') {
-		if (stat(pwd, &s) != -1) {
-			dev = s.st_dev;
-			ino = s.st_ino;
-			if (stat(".", &s) != -1 && dev == s.st_dev &&
-			    ino == s.st_ino) {
-				pwdlen = strlen(pwd);
-				if (pt) {
-					if (!size) {
-						errno = EINVAL;
-						return (NULL);
-					}
-					if (pwdlen + 1 > size) {
-						errno = ERANGE;
-						return (NULL);
-					}
-				} else if ((pt = malloc(pwdlen + 1)) == NULL)
-					return (NULL);
-				(void)memmove(pt, pwd, pwdlen);
-				pt[pwdlen] = '\0';
-				return (pt);
-			}
-		}
-	} else
-		errno = ENOENT;
-
-	return (NULL);
+	pwd = getenv("PWD");
+	if (pwd == NULL)
+		return NULL;
+	if (pwd[0] != '/')
+		return NULL;
+	if (strstr(pwd, "/./") != NULL)
+		return NULL;
+	if (strstr(pwd, "/../") != NULL)
+		return NULL;
+	if (stat(pwd, &s_pwd) == -1 || stat(".", &s_dot) == -1)
+		return NULL;
+	if (s_pwd.st_dev != s_dot.st_dev || s_pwd.st_ino != s_dot.st_ino)
+		return NULL;
+	return pwd;
 }
 
 static void
-usage()
+usage(void)
 {
-
-	(void)fprintf(stderr, "usage: pwd [-LP]\n");
+	(void)fprintf(stderr, "usage: %s [-LP]\n", getprogname());
 	exit(EXIT_FAILURE);
 	/* NOTREACHED */
 }

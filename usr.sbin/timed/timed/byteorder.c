@@ -10,11 +10,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -36,13 +32,9 @@
 #if 0
 static char sccsid[] = "@(#)byteorder.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: byteorder.c,v 1.5 1997/10/17 14:19:12 lukem Exp $");
+__RCSID("$NetBSD: byteorder.c,v 1.9 2007/01/25 23:25:20 cbiere Exp $");
 #endif
 #endif /* not lint */
-
-#ifdef sgi
-#ident "$Revision: 1.5 $"
-#endif
 
 #include "globals.h"
 
@@ -51,18 +43,17 @@ __RCSID("$NetBSD: byteorder.c,v 1.5 1997/10/17 14:19:12 lukem Exp $");
  * messages. Protocol is defined in /usr/include/protocols/timed.h
  */
 void
-bytenetorder(ptr)
-	struct tsp *ptr;
+bytenetorder(struct tsp *ptr)
 {
-	ptr->tsp_seq = htons((u_short)ptr->tsp_seq);
+	ptr->tsp_seq = htons((uint16_t)ptr->tsp_seq);
 	switch (ptr->tsp_type) {
 
 	case TSP_SETTIME:
 	case TSP_ADJTIME:
 	case TSP_SETDATE:
 	case TSP_SETDATEREQ:
-		ptr->tsp_time.tv_sec = htonl((u_long)ptr->tsp_time.tv_sec);
-		ptr->tsp_time.tv_usec = htonl((u_long)ptr->tsp_time.tv_usec);
+		ptr->tsp_time.tv_sec = htonl((uint32_t)ptr->tsp_time.tv_sec);
+		ptr->tsp_time.tv_usec = htonl((uint32_t)ptr->tsp_time.tv_usec);
 		break;
 	
 	default:
@@ -71,18 +62,17 @@ bytenetorder(ptr)
 }
 
 void
-bytehostorder(ptr)
-	struct tsp *ptr;
+bytehostorder(struct tsp *ptr)
 {
-	ptr->tsp_seq = ntohs((u_short)ptr->tsp_seq);
+	ptr->tsp_seq = ntohs((uint16_t)ptr->tsp_seq);
 	switch (ptr->tsp_type) {
 
 	case TSP_SETTIME:
 	case TSP_ADJTIME:
 	case TSP_SETDATE:
 	case TSP_SETDATEREQ:
-		ptr->tsp_time.tv_sec = ntohl((u_long)ptr->tsp_time.tv_sec);
-		ptr->tsp_time.tv_usec = ntohl((u_long)ptr->tsp_time.tv_usec);
+		ptr->tsp_time.tv_sec = ntohl((uint32_t)ptr->tsp_time.tv_sec);
+		ptr->tsp_time.tv_usec = ntohl((uint32_t)ptr->tsp_time.tv_usec);
 		break;
 	
 	default:

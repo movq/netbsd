@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.7 2000/02/14 04:36:20 aidan Exp $	*/
+/*	$NetBSD: extern.h,v 1.13 2006/03/23 23:37:07 wiz Exp $	*/
 
 /*
  * Copyright (c) 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,6 +31,29 @@
  *	@(#)extern.h	8.1 (Berkeley) 4/2/94
  */
 
+#ifdef USE_PAM
+
+void	usage(void);
+
+#ifdef KERBEROS5
+void	pwkrb5_usage(const char *);
+void	pwkrb5_argv0_usage(const char *);
+void	pwkrb5_process(const char *, int, char **);
+#endif
+
+#ifdef YP
+void	pwyp_usage(const char *);
+void	pwyp_argv0_usage(const char *);
+void	pwyp_process(const char *, int, char **);
+#endif
+
+void	pwlocal_usage(const char *);
+void	pwlocal_process(const char *, int, char **);
+
+void	pwpam_process(const char *, int, char **);
+
+#else /* ! USE_PAM */
+
 /* return values from pw_init() and pw_arg_end() */
 enum {
 	PW_USE_FORCE,
@@ -42,21 +61,12 @@ enum {
 	PW_DONT_USE
 };
 
-void to64(char *, long, int);
-
 #ifdef KERBEROS5
 int	krb5_init __P((const char *));
 int	krb5_arg __P((char, const char *));
 int	krb5_arg_end __P((void));
 void	krb5_end __P((void));
 int	krb5_chpw __P((const char *));
-#endif
-#ifdef KERBEROS
-int	krb4_init __P((const char *));
-int	krb4_arg __P((char, const char *));
-int	krb4_arg_end __P((void));
-void	krb4_end __P((void));
-int	krb4_chpw __P((const char *));
 #endif
 #ifdef YP
 int	yp_init __P((const char *));
@@ -71,3 +81,5 @@ int	local_arg __P((char, const char *));
 int	local_arg_end __P((void));
 void	local_end __P((void));
 int	local_chpw __P((const char *));
+
+#endif /* USE_PAM */

@@ -1,4 +1,4 @@
-.\"	$NetBSD: termios.4,v 1.15 2000/01/31 14:54:11 dmcmahill Exp $
+.\"	$NetBSD: termios.4,v 1.32 2006/10/13 20:31:27 wiz Exp $
 .\"
 .\" Copyright (c) 1991, 1992, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -33,14 +29,14 @@
 .\"
 .\"	@(#)termios.4	8.4 (Berkeley) 4/19/94
 .\"
-.Dd February 13, 1998
+.Dd October 7, 2006
 .Dt TERMIOS 4
 .Os
 .Sh NAME
 .Nm termios
 .Nd general terminal line discipline
 .Sh SYNOPSIS
-.Fd #include <termios.h>
+.In termios.h
 .Sh DESCRIPTION
 This describes a general terminal line discipline that is
 supported on tty asynchronous communication ports.
@@ -90,7 +86,7 @@ the job control related signals and system calls to within processes
 resulting from a particular instance of a "login".
 .Pp
 Typically, a session is created when a user logs in, and the login
-terminal is setup to be the controlling terminal; all processes
+terminal is set up to be the controlling terminal; all processes
 spawned from that login shell are in the same session, and inherit
 the controlling terminal.
 A job control shell operating interactively (that is, reading
@@ -116,7 +112,7 @@ sets the process group of the terminal back to its own process
 group (it puts itself into the foreground).
 .Pp
 If the job is to be started in the background (as denoted by the
-shell operator "&"), it never changes the process group of the
+shell operator "\*[Am]"), it never changes the process group of the
 terminal and doesn't wait for the job to complete (that is, it
 immediately attempts to read the next command).
 .Pp
@@ -192,12 +188,13 @@ the process's group
 unless one of the
 following special cases apply:  If the reading process is ignoring or
 blocking the
-.Dv SIGTTIN signal, or if the process group of the reading
-process is orphaned, the
+.Dv SIGTTIN
+signal, or if the process group of the reading process is orphaned,
+the
 .Xr read 2
 returns -1 with
 .Va errno set to
-.Er Dv EIO
+.Er EIO
 and no signal is sent.
 The default action of the
 .Dv SIGTTIN
@@ -229,7 +226,7 @@ the
 .Xr write 2
 returns -1 with
 errno set to
-.Er Dv EIO
+.Er EIO
 and no signal is sent.
 .Pp
 Certain calls that set terminal parameters are treated in the same
@@ -356,7 +353,7 @@ characters (see the
 is received.
 This processing affects data in the input queue that has not yet been
 delimited by a newline
-.Dv NL,
+.Dv NL ,
 .Dv EOF ,
 or
 .Dv EOL
@@ -412,7 +409,7 @@ and
 .Dv VTIME
 and
 their interactions are described below.
-.Ss "Case A: VMIN > 0, VTIME > 0"
+.Ss "Case A: VMIN \*[Gt] 0, VTIME \*[Gt] 0"
 In this case
 .Dv VTIME
 serves as an inter-byte timer and is activated after
@@ -441,19 +438,19 @@ expires at least one byte is returned because the timer would
 not have been enabled unless a byte was received.
 In this case
 .Pf \&( Dv VMIN
-> 0,
+\*[Gt] 0,
 .Dv VTIME
-> 0) the read blocks until the
+\*[Gt] 0) the read blocks until the
 .Dv VMIN
 and
 .Dv VTIME
 mechanisms are
 activated by the receipt of the first byte, or a signal is received.
-If data is in the buffer at the time of the 
+If data is in the buffer at the time of the
 .Xr read 2 ,
-the result is as if data had been received immediately after the 
+the result is as if data had been received immediately after the
 .Xr read 2 .
-.Ss "Case B: VMIN > 0, VTIME = 0"
+.Ss "Case B: VMIN \*[Gt] 0, VTIME = 0"
 In this case, since the value of
 .Dv VTIME
 is zero, the timer plays no role
@@ -471,7 +468,7 @@ read record-based terminal
 .Dv I/O
 may block indefinitely in the read
 operation.
-.Ss "Case C: VMIN = 0, VTIME > 0"
+.Ss "Case C: VMIN = 0, VTIME \*[Gt] 0"
 In this case, since
 .Dv VMIN
 = 0,
@@ -505,7 +502,7 @@ field (see the
 .Sx "Output Modes"
 section).
 The implementation may provide a buffering mechanism; as such, when
-a call to 
+a call to
 .Xr write 2
 completes, all of the bytes written have been scheduled for
 transmission to the device, but the transmission will not necessarily
@@ -607,7 +604,7 @@ is
 set, the
 .Dv EOF
 character is discarded when processed.
-.Dv NL
+.It Dv NL
 Special character on input and is recognized if the
 .Dv ICANON
 flag is set.
@@ -666,7 +663,7 @@ If
 is set, the
 .Dv START
 character is discarded when processed.
-.Dv CR
+.It Dv CR
 Special character on input and is recognized if the
 .Dv ICANON
 flag is set; it is the
@@ -691,14 +688,14 @@ character.
 The following special characters are extensions defined by this
 system and are not a part of
 .St -p1003.1
-.Nm "" .
+.Nm .
 .Bl -tag -width indent
 .It Dv EOL2
 Secondary
 .Dv EOL
 character.
 Same function as
-.Dv EOL.
+.Dv EOL .
 .It Dv WERASE
 Special character on input and is recognized if the
 .Dv ICANON
@@ -716,7 +713,7 @@ is set, first any preceding whitespace is erased, and then the
 maximal sequence of alphabetic/underscores or non alphabetic/underscores.
 As a special case in this second algorithm, the first previous
 non-whitespace character is skipped in determining whether the
-preceding word is a sequence of alphabetic/undercores.
+preceding word is a sequence of alphabetic/underscores.
 This sounds confusing but turns out to be quite practical.
 .It Dv REPRINT
 Special character on input and is recognized if the
@@ -731,7 +728,7 @@ character, except that
 the
 .Dv SIGTSTP
 signal is delivered when one of the processes
-in the foreground process group issues a 
+in the foreground process group issues a
 .Xr read 2
 to the controlling terminal.
 .It Dv LNEXT
@@ -761,7 +758,7 @@ causes the kernel to write a status message to the terminal
 that displays the current load average, the name of the
 command in the foreground, its process ID, the symbolic
 wait channel, the number of user and system seconds used,
-the percentage of cpu the process is getting, and the resident
+the percentage of CPU the process is getting, and the resident
 set size of the process.
 .El
 .Pp
@@ -796,7 +793,7 @@ signal is sent to the controlling
 process associated with the terminal.
 Unless other arrangements have
 been made, this causes the controlling process to terminate.
-Any subsequent call to the 
+Any subsequent call to the
 .Xr read 2
 function returns the value zero, indicating end of file.
 Thus, processes that read a terminal file and test for end-of-file
@@ -810,15 +807,14 @@ can terminate appropriately after a disconnect.
 .\" condition or the
 .\" .Pf [ Dv EIO
 .\" ] is returned.
-Any subsequent 
+Any subsequent
 .Xr write 2
 to the terminal device returns -1, with
 .Va errno
 set to
 .Er EIO ,
 until the device is closed.
-.Sh General Terminal Interface
-.Pp
+.Sh GENERAL TERMINAL INTERFACE
 .Ss Closing a Terminal Device File
 The last process to close a terminal device file causes any output
 to be sent to the device and any input to be discarded.
@@ -1058,7 +1054,7 @@ is set and the input queue is full, subsequent input shall cause an
 .Dv BEL
 character to be transmitted to the output queue.
 .Pp
-The initial input control value after 
+The initial input control value after
 .Xr open 2
 is implementation defined.
 .Ss Output Modes
@@ -1072,7 +1068,7 @@ and are composed of the following masks:
 /* enable following output processing */
 .It Dv ONLCR
 /* map NL to CR-NL (ala
-.Dv CRMOD)
+.Dv CRMOD )
 */
 .It Dv OCRNL
 /* map CR to NL */
@@ -1081,12 +1077,12 @@ and are composed of the following masks:
 .It Dv ONOEOT
 /* discard
 .Dv EOT Ns 's
-.Ql \&^D
-on output) */
+.Pq ^D
+on output */
 .It Dv ONOCR
 /* do not transmit CRs on column 0 */
 .It Dv ONLRET
-/* on the termianl NL performs the CR function */
+/* on the terminal NL performs the CR function */
 .El
 .Pp
 If
@@ -1159,8 +1155,9 @@ specified are supported by all hardware.
 .Dv CTS
 flow control of output */
 .It Dv CRTSCTS
-/* same as
-.Dv CCTS_OFLOW
+/* logically the same as
+.Dv CCTS_OFLOW \&|
+.Dv CCTS_IFLOW
 */
 .It Dv CRTS_IFLOW
 /* RTS flow control of input */
@@ -1220,7 +1217,7 @@ If
 .Dv CLOCAL
 is clear, the modem status lines are monitored.
 .Pp
-Under normal circumstances, a call to the 
+Under normal circumstances, a call to the
 .Xr open 2
 function waits for the modem connection to complete.
 However, if the
@@ -1228,19 +1225,49 @@ However, if the
 flag is set
 or if
 .Dv CLOCAL
-has been set, the 
+has been set, the
 .Xr open 2
 function returns immediately without waiting for the connection.
 .Pp
+If the
+.Xr tty 4
+.Dv TIOCFLAG_CLOCAL
+flag has been set on the port then the
+.Dv CLOCAL
+flag will automatically be set on every open.
+.Pp
 The
 .Dv CCTS_OFLOW
-.Pf ( Dv CRTSCTS )
-flag is currently unused.
+and
+.Dv CRTS_IFLOW
+flags are currently unused.
+Only
+.Dv CRTSCTS ,
+which has the combined effect, is implemented.
+Note that
+.Dv CRTSCTS
+support is hardware and driver dependent.
+Check the specific port driver manual page to see if hardware flow
+control is supported on the port you are using.
+.Pp
+If the
+.Xr tty 4
+.Dv TIOCFLAG_CRTSCTS
+flag has been set on the port then the
+.Dv CRTSCTS
+flag will automatically be set on every open.
 .Pp
 If
 .Dv MDMBUF
 is set then output flow control is controlled by the state
 of Carrier Detect.
+.Pp
+If the
+.Xr tty 4
+.Dv TIOCFLAG_MDMBUF
+flag has been set on the port then the
+.Dv MDMBUF
+flag will automatically be set on every open.
 .Pp
 If the object for which the control modes are set is not an asynchronous
 serial connection, some of the modes may be ignored; for example, if an
@@ -1301,9 +1328,9 @@ and
 .Dv VSTATUS
 */
 .It Dv PENDIN
-/* XXX retype pending input (state) */
+/* re-echo input buffer at next read */
 .It Dv NOFLSH
-/* don't flush after interrupt */
+/* don't flush output on signal */
 .El
 .Pp
 If
@@ -1387,10 +1414,10 @@ is set, canonical processing is enabled.
 This enables the
 erase and kill edit functions, and the assembly of input characters into
 lines delimited by
-.Dv NL,
+.Dv NL ,
 .Dv EOF ,
 and
-.Dv EOL,
+.Dv EOL ,
 as described in
 .Sx "Canonical Mode Input Processing" .
 .Pp
@@ -1538,10 +1565,10 @@ entries of the
 array.
 .Pp
 The initial values of the flags and control characters
-after 
+after
 .Xr open 2
 is set according to the values in the header
 .Aq Pa sys/ttydefaults.h .
 .Sh SEE ALSO
-.Xr tcsetattr 3 ,
-.Xr tcsendbreak 3
+.Xr tcsendbreak 3 ,
+.Xr tcsetattr 3

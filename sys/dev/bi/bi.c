@@ -1,4 +1,4 @@
-/*	$NetBSD: bi.c,v 1.14 2000/03/26 11:45:04 ragge Exp $ */
+/*	$NetBSD: bi.c,v 1.24 2008/03/11 05:34:01 matt Exp $ */
 /*
  * Copyright (c) 1996 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -13,7 +13,7 @@
  *    documentation and/or other materials provided with the distribution.
  * 3. All advertising materials mentioning features or use of this software
  *    must display the following acknowledgement:
- *      This product includes software developed at Ludd, University of 
+ *      This product includes software developed at Ludd, University of
  *      Lule}, Sweden and its contributors.
  * 4. The name of the author may not be used to endorse or promote products
  *    derived from this software without specific prior written permission
@@ -40,101 +40,107 @@
  *   handle BIbus errors more gracefully.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: bi.c,v 1.24 2008/03/11 05:34:01 matt Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 
-#include <machine/bus.h>
-#include <machine/cpu.h>
+#include <sys/bus.h>
+#include <sys/cpu.h>
 
 #include <dev/bi/bireg.h>
 #include <dev/bi/bivar.h>
 
-static int bi_print __P((void *, const char *));
+static int bi_print(void *, const char *);
 
-struct bi_list bi_list[] = {
-	{BIDT_MS820, 1, "ms820"},
-	{BIDT_DRB32, 0, "drb32"},
-	{BIDT_DWBUA, 0, "dwbua"},
-	{BIDT_KLESI, 0, "klesi"},
-	{BIDT_KA820, 1, "ka820"},
-	{BIDT_DB88,  0, "db88"},
-	{BIDT_CIBCA, 0, "cibca"},
-	{BIDT_DMB32, 0, "dmb32"},
-	{BIDT_CIBCI, 0, "cibci"},
-	{BIDT_KA800, 0, "ka800"},
-	{BIDT_KDB50, 0, "kdb50"},
-	{BIDT_DWMBA, 0, "dwmba"},
-	{BIDT_KFBTA, 0, "kfbta"},
-	{BIDT_DEBNK, 0, "debnk"},
-	{BIDT_DEBNA, 0, "debna"},
+static const struct bi_list bi_list[] = {
+	{BIDT_MS820, DT_HAVDRV, "ms820"},
+	{BIDT_DRB32, DT_UNSUPP, "drb32"},
+	{BIDT_DWBUA, DT_HAVDRV|DT_ADAPT, "dwbua"},
+	{BIDT_KLESI, DT_HAVDRV|DT_ADAPT, "klesi"},
+	{BIDT_KA820, DT_HAVDRV, "ka820"},
+	{BIDT_DB88,  DT_HAVDRV|DT_QUIET, "db88"},
+	{BIDT_CIBCA, DT_UNSUPP, "cibca"},
+	{BIDT_DMB32, DT_UNSUPP, "dmb32"},
+	{BIDT_CIBCI, DT_UNSUPP, "cibci"},
+	{BIDT_KA800, DT_UNSUPP, "ka800"},
+	{BIDT_KDB50, DT_HAVDRV|DT_VEC, "kdb50"},
+	{BIDT_DWMBA, DT_HAVDRV|DT_QUIET, "dwmba"},
+	{BIDT_KFBTA, DT_UNSUPP, "kfbta"},
+	{BIDT_DEBNK, DT_HAVDRV|DT_VEC, "debnk"},
+	{BIDT_DEBNA, DT_HAVDRV|DT_VEC, "debna"},
 	{0,0,0}
 };
 
 int
-bi_print(aux, name)
-	void *aux;
-	const char *name;
+bi_print(void *aux, const char *name)
 {
 	struct bi_attach_args *ba = aux;
-	struct bi_list *bl;
+	const struct bi_list *bl;
+	u_int16_t nr;
 
+	nr = bus_space_read_2(ba->ba_iot, ba->ba_ioh, 0);
 	for (bl = &bi_list[0]; bl->bl_nr; bl++)
-		if (bl->bl_nr == bus_space_read_2(ba->ba_iot, ba->ba_ioh, 0))
+		if (bl->bl_nr == nr)
 			break;
 
 	if (name) {
 		if (bl->bl_nr == 0)
-			printf("unknown device 0x%x",
-			    bus_space_read_2(ba->ba_iot, ba->ba_ioh, 0));
+			aprint_normal("unknown device 0x%x", nr);
 		else
-			printf(bl->bl_name);
-		printf(" at %s", name);
+			aprint_normal(bl->bl_name);
+		aprint_normal(" at %s", name);
 	}
-	printf(" node %d", ba->ba_nodenr);
+	aprint_normal(" node %d", ba->ba_nodenr);
+	if (bl->bl_havedriver & DT_VEC)
+		aprint_normal(" vec %o", ba->ba_ivec & 511);
 #ifdef DEBUG
 	if (bus_space_read_4(ba->ba_iot, ba->ba_ioh, BIREG_SADR) &&
 	    bus_space_read_4(ba->ba_iot, ba->ba_ioh, BIREG_EADR))
-		printf(" [sadr %x eadr %x]",
+		aprint_debug(" [sadr %x eadr %x]",
 		    bus_space_read_4(ba->ba_iot, ba->ba_ioh, BIREG_SADR),
 		    bus_space_read_4(ba->ba_iot, ba->ba_ioh, BIREG_EADR));
 #endif
-	return bl->bl_havedriver ? UNCONF : UNSUPP;
+	if (bl->bl_havedriver & DT_QUIET)
+		aprint_normal("\n");
+	return bl->bl_havedriver & DT_QUIET ? QUIET :
+	    bl->bl_havedriver & DT_HAVDRV ? UNCONF : UNSUPP;
 }
 
-static	int lastiv = 0;
-
 void
-bi_attach(sc)
-	struct bi_softc *sc;
+bi_attach(struct bi_softc *sc)
 {
 	struct bi_attach_args ba;
 	int nodenr;
 
-	printf("\n");
+	aprint_normal("\n");
 
 	ba.ba_iot = sc->sc_iot;
 	ba.ba_busnr = sc->sc_busnr;
 	ba.ba_dmat = sc->sc_dmat;
 	ba.ba_intcpu = sc->sc_intcpu;
+	ba.ba_icookie = sc;
 	/*
-	 * Interrupt numbers. All vectors from 256-512 are free, use
-	 * them for BI devices and just count them up.
-	 * Above 512 are only interrupt vectors for unibus devices.
+	 * Interrupt numbers. Assign them as described in
+	 * VAX 8800 system maintenance manual; this means like nexus
+	 * adapters have them assigned.
+	 * XXX - must address Unibus adapters.
 	 */
 	for (nodenr = 0; nodenr < NNODEBI; nodenr++) {
 		if (bus_space_map(sc->sc_iot, sc->sc_addr + BI_NODE(nodenr),
-		    NODESIZE, 0, &ba.ba_ioh)) {
-			printf("bi_attach: bus_space_map failed, node %d\n", 
-			    nodenr);
+		    BI_NODESIZE, 0, &ba.ba_ioh)) {
+			aprint_error_dev(sc->sc_dev,
+			    "bus_space_map failed, node %d\n", nodenr);
 			return;
 		}
-		if (badaddr((caddr_t)ba.ba_ioh, 4)) {
-			bus_space_unmap(sc->sc_iot, ba.ba_ioh, NODESIZE);
+		if (badaddr((void *)ba.ba_ioh, 4) ||
+		    (bus_space_read_2(ba.ba_iot, ba.ba_ioh, 0) == 0)) {
+			bus_space_unmap(ba.ba_iot, ba.ba_ioh, BI_NODESIZE);
 			continue;
 		}
 		ba.ba_nodenr = nodenr;
-		ba.ba_ivec = 256 + lastiv;
-		lastiv += 4;
-		config_found(&sc->sc_dev, &ba, bi_print);
+		ba.ba_ivec = sc->sc_lastiv + 64 + 4 * nodenr; /* all on spl5 */
+		config_found(sc->sc_dev, &ba, bi_print);
 	}
 }

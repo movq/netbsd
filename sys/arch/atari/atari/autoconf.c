@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.31 1999/09/17 19:59:40 thorpej Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.54 2007/12/03 15:33:21 ad Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman
@@ -30,6 +30,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.54 2007/12/03 15:33:21 ad Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/reboot.h>
@@ -42,7 +45,7 @@
 #include <machine/cpu.h>
 #include <atari/atari/device.h>
 
-static void findroot __P((struct device **, int *));
+static void findroot __P((void));
 void mbattach __P((struct device *, struct device *, void *));
 int mbprint __P((void *, const char *));
 int mbmatch __P((struct device *, struct cfdata *, void *));
@@ -60,17 +63,16 @@ cpu_configure()
 	
 	atari_realconfig = 1;
 
-	if (config_rootfound("mainbus", "mainbus") == NULL)
+	init_sicallback();
+
+	if (config_rootfound("mainbus", __UNCONST("mainbus")) == NULL)
 		panic("no mainbus found");
 }
 
 void
 cpu_rootconf()
 {
-	struct device *booted_device;
-	int booted_partition;
-
-	findroot(&booted_device, &booted_partition);
+	findroot();
 	setroot(booted_device, booted_partition);
 }
 
@@ -84,7 +86,7 @@ simple_devprint(auxp, pnp)
 }
 
 /*
- * use config_search to find appropriate device, then call that device
+ * use config_search_ia to find appropriate device, then call that device
  * directly with NULL device variable storage.  A device can then 
  * always tell the difference between the real and console init 
  * by checking for NULL.
@@ -98,19 +100,27 @@ atari_config_found(pcfp, pdp, auxp, pfn)
 {
 	struct device temp;
 	struct cfdata *cf;
+	const struct cfattach *ca;
 	extern int	atari_realconfig;
 
 	if (atari_realconfig)
 		return(config_found(pdp, auxp, pfn) != NULL);
 
+	memset(&temp, 0, sizeof(temp));
 	if (pdp == NULL)
 		pdp = &temp;
 
 	pdp->dv_cfdata = pcfp;
-	if ((cf = config_search((cfmatch_t)NULL, pdp, auxp)) != NULL) {
-		cf->cf_attach->ca_attach(pdp, NULL, auxp);
-		pdp->dv_cfdata = NULL;
-		return(1);
+	pdp->dv_cfdriver = config_cfdriver_lookup(pcfp->cf_name);
+	pdp->dv_unit = pcfp->cf_unit;
+
+	if ((cf = config_search_ia(NULL, pdp, NULL, auxp)) != NULL) {
+		ca = config_cfattach_lookup(cf->cf_name, cf->cf_atname);
+		if (ca != NULL) {
+			(*ca->ca_attach)(pdp, NULL, auxp);
+			pdp->dv_cfdata = NULL;
+			return(1);
+		}
 	}
 	pdp->dv_cfdata = NULL;
 	return(0);
@@ -126,13 +136,24 @@ config_console()
 {	
 	struct cfdata *cf;
 
+	config_init();
+
 	/*
 	 * we need mainbus' cfdata.
 	 */
-	cf = config_rootsearch(NULL, "mainbus", "mainbus");
+	cf = config_rootsearch(NULL, "mainbus", __UNCONST("mainbus"));
 	if (cf == NULL)
 		panic("no mainbus");
-	atari_config_found(cf, NULL, "grfbus", NULL);
+
+	/*
+	 * Note: The order of the 'atari_config_found()' calls is
+	 * important! On the Hades, the 'pci-side' of the config does
+	 * some setup for the 'grf-side'. This make it possible to use
+	 * a PCI card for both wscons and grfabs.
+	 */
+	atari_config_found(cf, NULL, __UNCONST("pcib")  , NULL);
+	atari_config_found(cf, NULL, __UNCONST("isab")  , NULL);
+	atari_config_found(cf, NULL, __UNCONST("grfbus"), NULL);
 }
 
 /*
@@ -178,22 +199,13 @@ struct cfdriver *genericconf[] = {
 };
 
 void
-findroot(devpp, partp)
-	struct device **devpp;
-	int *partp;
+findroot(void)
 {
 	struct disk *dkp;
 	struct partition *pp;
 	struct device **devs;
+	const struct bdevsw *bdev;
 	int i, maj, unit;
-
-	/*
-	 * Default to "not found".
-	 */
-	*devpp = NULL;
-
-	/* Always partition `a'. */
-	*partp = 0;
 
 	if (boothowto & RB_ASKNAME)
 		return;		/* Don't bother looking */
@@ -215,25 +227,28 @@ findroot(devpp, partp)
 			    dkp->dk_driver->d_strategy == NULL)
 				continue;
 			
-			for (maj = 0; maj < nblkdev; maj++)
-				if (bdevsw[maj].d_strategy ==
-				    dkp->dk_driver->d_strategy)
-					break;
+			maj = devsw_name2blk(genericconf[i]->cd_name, NULL, 0);
+			if (maj == -1)
+				continue;
+			bdev = bdevsw_lookup(makedev(maj, 0));
 #ifdef DIAGNOSTIC
-			if (maj >= nblkdev)
+			if (bdev == NULL)
 				panic("findroot: impossible");
 #endif
+			if (bdev == NULL ||
+			    bdev->d_strategy != dkp->dk_driver->d_strategy)
+				continue;
 
 			/* Open disk; forces read of disklabel. */
-			if ((*bdevsw[maj].d_open)(MAKEDISKDEV(maj,
-			    unit, 0), FREAD|FNONBLOCK, 0, &proc0))
+			if ((*bdev->d_open)(MAKEDISKDEV(maj,
+			    unit, 0), FREAD|FNONBLOCK, 0, &lwp0))
 				continue;
-			(void)(*bdevsw[maj].d_close)(MAKEDISKDEV(maj,
-			    unit, 0), FREAD|FNONBLOCK, 0, &proc0);
+			(void)(*bdev->d_close)(MAKEDISKDEV(maj,
+			    unit, 0), FREAD|FNONBLOCK, 0, &lwp0);
 			
-			pp = &dkp->dk_label->d_partitions[*partp];
+			pp = &dkp->dk_label->d_partitions[booted_partition];
 			if (pp->p_size != 0 && pp->p_fstype == FS_BSDFFS) {
-				*devpp = devs[unit];
+				booted_device = devs[unit];
 				return;
 			}
 		}
@@ -243,9 +258,10 @@ findroot(devpp, partp)
 /* 
  * mainbus driver 
  */
-struct cfattach mainbus_ca = {
-	sizeof(struct device), mbmatch, mbattach
-};
+CFATTACH_DECL(mainbus, sizeof(struct device),
+    mbmatch, mbattach, NULL, NULL);
+
+static int mb_attached;
 
 int
 mbmatch(pdp, cfp, auxp)
@@ -253,7 +269,7 @@ mbmatch(pdp, cfp, auxp)
 	struct cfdata	*cfp;
 	void		*auxp;
 {
-	if (cfp->cf_unit > 0)
+	if (mb_attached)
 		return(0);
 	/*
 	 * We are always here
@@ -269,20 +285,23 @@ mbattach(pdp, dp, auxp)
 	struct device *pdp, *dp;
 	void *auxp;
 {
+
+	mb_attached = 1;
+
 	printf ("\n");
-	config_found(dp, "clock"  , simple_devprint);
-	config_found(dp, "grfbus" , simple_devprint);
-	config_found(dp, "kbd"    , simple_devprint);
-	config_found(dp, "fdc"    , simple_devprint);
-	config_found(dp, "ser"    , simple_devprint);
-	config_found(dp, "zs"     , simple_devprint);
-	config_found(dp, "ncrscsi", simple_devprint);
-	config_found(dp, "nvr"    , simple_devprint);
-	config_found(dp, "lpt"    , simple_devprint);
-	config_found(dp, "wdc"    , simple_devprint);
-	config_found(dp, "isabus" , simple_devprint);
-	config_found(dp, "pcibus" , simple_devprint);
-	config_found(dp, "avmebus" , simple_devprint);
+	config_found(dp, __UNCONST("clock")   , simple_devprint);
+	config_found(dp, __UNCONST("grfbus")  , simple_devprint);
+	config_found(dp, __UNCONST("kbd")     , simple_devprint);
+	config_found(dp, __UNCONST("fdc")     , simple_devprint);
+	config_found(dp, __UNCONST("ser")     , simple_devprint);
+	config_found(dp, __UNCONST("zs")      , simple_devprint);
+	config_found(dp, __UNCONST("ncrscsi") , simple_devprint);
+	config_found(dp, __UNCONST("nvr")     , simple_devprint);
+	config_found(dp, __UNCONST("lpt")     , simple_devprint);
+	config_found(dp, __UNCONST("wdc")     , simple_devprint);
+	config_found(dp, __UNCONST("isab")    , simple_devprint);
+	config_found(dp, __UNCONST("pcib")    , simple_devprint);
+	config_found(dp, __UNCONST("avmebus") , simple_devprint);
 }
 
 int
@@ -291,6 +310,6 @@ mbprint(auxp, pnp)
 	const char *pnp;
 {
 	if (pnp)
-		printf("%s at %s", (char *)auxp, pnp);
+		aprint_normal("%s at %s", (char *)auxp, pnp);
 	return(UNCONF);
 }

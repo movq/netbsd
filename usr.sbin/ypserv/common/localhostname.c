@@ -1,4 +1,4 @@
-/*	$NetBSD: localhostname.c,v 1.6 1998/07/06 07:06:39 mrg Exp $	*/
+/*	$NetBSD: localhostname.c,v 1.9 2008/04/28 20:24:18 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,10 +31,12 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: localhostname.c,v 1.6 1998/07/06 07:06:39 mrg Exp $");
+__RCSID("$NetBSD: localhostname.c,v 1.9 2008/04/28 20:24:18 martin Exp $");
 #endif
 
 #include <sys/param.h>
+#include <sys/socket.h>
+
 #include <err.h>
 #include <netdb.h>
 #include <stdio.h>
@@ -51,13 +46,11 @@ __RCSID("$NetBSD: localhostname.c,v 1.6 1998/07/06 07:06:39 mrg Exp $");
 #include "protos.h"
 
 void
-localhostname(buf, buflen)
-	char *buf;
-	size_t buflen;
+localhostname(char *buf, size_t buflen)
 {
-	struct hostent *hp;
+	struct addrinfo *res, hints;
 	char hostname[MAXHOSTNAMELEN + 1];
-	int i;
+	int error;
 
 	if (gethostname(hostname, sizeof(hostname)))
 		err(1, "gethostname");
@@ -70,34 +63,21 @@ localhostname(buf, buflen)
 	 * just return it.
 	 */
 	if (strchr(hostname, '.')) {
-		snprintf(buf, buflen, "%s", hostname);
+		strlcpy(buf, hostname, buflen);
 		return;
 	}
 
 	/*
-	 * Lookup the host.  Return the first name that appears
-	 * to be fully-qualified.
+	 * Lookup the host.  Return the canonical name.
 	 */
-	hp = gethostbyname(hostname);
-	if (hp == NULL)
-		errx(1, "gethostbyname(%s) failed", hostname);
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_flags = AI_CANONNAME;
+	hints.ai_family = PF_UNSPEC;
 
-	if (strchr(hp->h_name, '.')) {
-		snprintf(buf, buflen, "%s", hp->h_name);
-		return;
-	}
-
-	if (hp->h_aliases != NULL && hp->h_aliases[0] != NULL) {
-		for (i = 0; hp->h_aliases[i] != NULL; i++) {
-			if (strchr(hp->h_aliases[i], '.')) {
-				snprintf(buf, buflen, "%s", hp->h_aliases[i]);
-				return;
-			}
-		}
-	}
-
-	/*
-	 * As a last resort, just return hostname.
-	 */
-	snprintf(buf, buflen, "%s", hostname);
+	error = getaddrinfo(hostname, NULL, &hints, &res);
+	if (error)
+		errx(1, "getaddrinfo(%s) failed: %s", hostname,
+		    gai_strerror(error));
+	strlcpy(buf, res->ai_canonname, buflen);
+	freeaddrinfo(res);
 }

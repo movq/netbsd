@@ -1,4 +1,4 @@
-/*	$NetBSD: sethostent.c,v 1.11 2000/01/22 22:19:16 mycroft Exp $	*/
+/*	$NetBSD: sethostent.c,v 1.16 2007/01/27 22:27:35 christos Exp $	*/
 
 /*
  * Copyright (c) 1985, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -39,7 +35,7 @@
 static char sccsid[] = "@(#)sethostent.c	8.1 (Berkeley) 6/4/93";
 static char rcsid[] = "Id: sethostent.c,v 8.5 1996/09/28 06:51:07 vixie Exp ";
 #else
-__RCSID("$NetBSD: sethostent.c,v 1.11 2000/01/22 22:19:16 mycroft Exp $");
+__RCSID("$NetBSD: sethostent.c,v 1.16 2007/01/27 22:27:35 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -55,22 +51,32 @@ __weak_alias(sethostent,_sethostent)
 __weak_alias(endhostent,_endhostent)
 #endif
 
-void	_res_close __P((void));
+void	_endhtent __P((void));
+#ifndef _REENTRANT
+void	res_close __P((void));
+#endif
+void	_sethtent __P((int));
 
 void
+/*ARGSUSED*/
 sethostent(stayopen)
 	int stayopen;
 {
-
+#ifndef _REENTRANT
 	if ((_res.options & RES_INIT) == 0 && res_init() == -1)
 		return;
 	if (stayopen)
 		_res.options |= RES_STAYOPEN | RES_USEVC;
+#endif
+	_sethtent(stayopen);
 }
 
 void
 endhostent()
 {
+#ifndef _REENTRANT
 	_res.options &= ~(RES_STAYOPEN | RES_USEVC);
 	res_close();
+#endif
+	_endhtent();
 }

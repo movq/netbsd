@@ -1,4 +1,4 @@
-/*	$NetBSD: closure.c,v 1.5 1997/07/25 16:46:29 perry Exp $	*/
+/*	$NetBSD: closure.c,v 1.8 2006/05/24 18:01:43 christos Exp $	*/
 
 /*
  * Copyright (c) 1989 The Regents of the University of California.
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -37,11 +33,11 @@
  */
 
 #include <sys/cdefs.h>
-#ifndef lint
+#if defined(__RCSID) && !defined(lint)
 #if 0
 static char sccsid[] = "@(#)closure.c	5.3 (Berkeley) 5/24/93";
 #else
-__RCSID("$NetBSD: closure.c,v 1.5 1997/07/25 16:46:29 perry Exp $");
+__RCSID("$NetBSD: closure.c,v 1.8 2006/05/24 18:01:43 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -54,10 +50,10 @@ unsigned *ruleset;
 static unsigned *first_derives;
 static unsigned *EFF;
 
-void set_EFF __P((void));
+static void set_EFF(void);
 
-void
-set_EFF()
+static void
+set_EFF(void)
 {
     unsigned *row;
     int symbol;
@@ -94,7 +90,7 @@ set_EFF()
 
 
 void
-set_first_derives()
+set_first_derives(void)
 {
     unsigned *rrow;
     unsigned *vrow;
@@ -152,9 +148,7 @@ set_first_derives()
 
 
 void
-closure(nucleus, n)
-short *nucleus;
-int n;
+closure(short *nucleus, int n)
 {
     int ruleno;
     unsigned word;
@@ -222,7 +216,7 @@ int n;
 
 
 void
-finalize_closure()
+finalize_closure(void)
 {
   FREE(itemset);
   FREE(ruleset);
@@ -232,8 +226,8 @@ finalize_closure()
 
 #ifdef	DEBUG
 
-print_closure(n)
-int n;
+void
+print_closure(int n)
 {
   short *isp;
 
@@ -243,7 +237,8 @@ int n;
 }
 
 
-print_EFF()
+void
+print_EFF(void)
 {
     int i, j;
     unsigned *rowp;
@@ -274,7 +269,8 @@ print_EFF()
 }
 
 
-print_first_derives()
+void
+print_first_derives(void)
 {
     int i;
     int j;

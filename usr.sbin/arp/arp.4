@@ -1,4 +1,4 @@
-.\"	$NetBSD: arp.4,v 1.4 1999/03/22 18:43:47 garbled Exp $
+.\"	$NetBSD: arp.4,v 1.10 2003/09/07 16:22:24 wiz Exp $
 .\"
 .\" Copyright (c) 1985, 1986, 1988, 1994
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -40,15 +36,15 @@
 .Nm arp
 .Nd Address Resolution Protocol
 .Sh SYNOPSIS
-.Fd #include <netinet/if_ether.h>
+.In netinet/if_ether.h
 .Sh DESCRIPTION
 The Address Resolution Protocol (ARP) is a protocol used to dynamically
-map between Internet host addresses and 10Mb/s Ethernet addresses.
-It is used by all the 10Mb/s Ethernet interface drivers.
-It is not specific to Internet protocols or to 10Mb/s Ethernet,
+map between Internet host addresses and Ethernet addresses.
+It is used by all the Ethernet interface drivers.
+It is not specific to Internet protocols or to Ethernet,
 but this implementation currently supports only that combination.
 .Pp
-ARP caches Internet-Ethernet address mappings. 
+ARP caches Internet-Ethernet address mappings.
 When an interface requests a mapping for an address not in the cache,
 ARP queues the message which requires the mapping and broadcasts
 a message on the associated network requesting the address mapping.
@@ -117,12 +113,11 @@ same Internet address.
 .Rs
 .%A Plummer, D.
 .%B "An Ethernet Address Resolution Protocol"
-.%T RFC826
+.%T RFC 826
 .Re
 .Rs
 .%A Leffler, S.J.
 .%A Karels, M.J.
 .%B "Trailer Encapsulations"
-.%T RFC893
+.%T RFC 893
 .Re
-

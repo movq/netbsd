@@ -1,4 +1,4 @@
-.\"	$NetBSD: route.8,v 1.19 1999/07/17 06:51:27 itojun Exp $
+.\"	$NetBSD: route.8,v 1.40 2006/08/06 23:38:13 wiz Exp $
 .\"
 .\" Copyright (c) 1983, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -33,15 +29,15 @@
 .\"
 .\"     @(#)route.8	8.4 (Berkeley) 6/1/94
 .\"
-.Dd October 23, 1998
+.Dd August 6, 2006
 .Dt ROUTE 8
-.Os BSD 4.4
+.Os
 .Sh NAME
 .Nm route
-.Nd manually manipulate the routing tables.
+.Nd manually manipulate the routing tables
 .Sh SYNOPSIS
 .Nm
-.Op Fl fnqv
+.Op Fl fnqSsv
 .Ar command
 .Oo
 .Op Ar modifiers
@@ -51,10 +47,16 @@
 .Nm
 is a utility used to manually manipulate the network
 routing tables.
-It normally is not needed, as a system routing table management
-daemon such as
+Except for setting up the default route, it is normally not needed,
+as a system routing table management daemon such as
 .Xr routed 8 ,
 should tend to this task.
+.Pp
+.Nm
+can be used to modify nearly any aspect of the routing policy,
+except packet forwarding, which can be manipulated through the
+.Xr sysctl 8
+command.
 .Pp
 The
 .Nm
@@ -85,7 +87,15 @@ names and numerical equivalents can be quite time consuming, and
 may require correct operation of the network; thus it may be expedient
 to forgo this, especially when attempting to repair networking operations).
 .It Fl q
-Suppress all output.
+Suppress all output from commands that manipulate the routing table.
+.It Fl S
+Print a space when a flag is missing so that flags are vertically aligned
+instead of printing the flags that are set as a contiguous string.
+.It Fl s
+(short) Suppresses all output from a
+.Cm get
+command except for the actual gateway that will be used.
+How the gateway is printed depends on the type of route being looked up.
 .It Fl v
 (verbose) Print additional details.
 .El
@@ -99,6 +109,8 @@ utility provides several commands:
 Add a route.
 .It Cm flush
 Remove all routes.
+.It Cm flushall
+Remove all routes including the default gateway.
 .It Cm delete
 Delete a specific route.
 .It Cm change
@@ -116,14 +128,16 @@ routing lookup misses, or suspected network partitionings.
 The monitor command has the syntax
 .Pp
 .Bd -filled -offset indent -compact
-.Nm "" Op Fl n
+.Nm
+.Op Fl n
 .Cm monitor
 .Ed
 .Pp
 The flush command has the syntax
 .Pp
 .Bd -filled -offset indent -compact
-.Nm "" Op Fl n
+.Nm
+.Op Fl n
 .Cm flush
 .Op Ar family
 .Ed
@@ -141,12 +155,13 @@ When the address family is specified by any of the
 or
 .Fl inet6
 modifiers, only routes having destinations with addresses in the
-delineated family will be deleted.
+delineated family will be manipulated.
 .Pp
 The other commands have the following syntax:
 .Pp
 .Bd -filled -offset indent -compact
-.Nm "" Op Fl n
+.Nm
+.Op Fl n
 .Ar command
 .Op Fl net No \&| Fl host
 .Ar destination gateway
@@ -175,6 +190,11 @@ or if the
 is the symbolic name of a network, then the route is
 assumed to be to a network; otherwise, it is presumed to be a
 route to a host.
+Optionally, the
+.Ar destination
+can also be specified in the
+.Ar net Ns / Ns Ar bits
+format.
 .Pp
 For example,
 .Li 128.32
@@ -185,11 +205,19 @@ is interpreted as
 .Fl host Li 128.32.0.130 ;
 .Fl net Li 128.32
 is interpreted as
-.Li 128.32.0.0;
+.Li 128.32.0.0 ;
 and
 .Fl net Li 128.32.130
 is interpreted as
 .Li 128.32.130.0 .
+.Pp
+The keyword
+.Cm default
+can be used as the
+.Ar destination
+to set up a default route to a smart
+.Ar gateway .
+If no other routes match, this default route will be used as a last resort.
 .Pp
 If the destination is directly reachable
 via an interface requiring
@@ -232,23 +260,26 @@ The implicit network mask generated in the
 case
 can be overridden by making sure this option follows the destination parameter.
 .Fl prefixlen
-is also available for similar purpose, in IPv6 case.
+is also available for similar purpose, in IPv4 and IPv6 case.
 .Pp
 Routes have associated flags which influence operation of the protocols
 when sending to destinations matched by the routes.
 These flags may be set (or sometimes cleared)
 by indicating the following corresponding modifiers:
 .Bd -literal
--cloning   RTF_CLONING    - generates a new route on use
--xresolve  RTF_XRESOLVE   - emit mesg on use (for external lookup)
--iface    ~RTF_GATEWAY    - destination is directly reachable
--static    RTF_STATIC     - manually added route
--nostatic ~RTF_STATIC     - pretend route added by kernel or daemon
--reject    RTF_REJECT     - emit an ICMP unreachable when matched
--blackhole RTF_BLACKHOLE  - silently discard pkts (during updates)
--proto1    RTF_PROTO1     - set protocol specific routing flag #1
--proto2    RTF_PROTO2     - set protocol specific routing flag #2
--llinfo    RTF_LLINFO     - validly translates proto addr to link addr
+-cloning    RTF_CLONING    - generates a new route on use
+-nocloning ~RTF_CLONING    - stop generating new routes on use
+-cloned     RTF_CLONED     - cloned route generated by RTF_CLONING
+-nocloned  ~RTF_CLONED     - prevent removal with RTF_CLONING parent
+-xresolve   RTF_XRESOLVE   - emit mesg on use (for external lookup)
+-iface     ~RTF_GATEWAY    - destination is directly reachable
+-static     RTF_STATIC     - manually added route
+-nostatic  ~RTF_STATIC     - pretend route added by kernel or daemon
+-reject     RTF_REJECT     - emit an ICMP unreachable when matched
+-blackhole  RTF_BLACKHOLE  - silently discard pkts (during updates)
+-proto1     RTF_PROTO1     - set protocol specific routing flag #1
+-proto2     RTF_PROTO2     - set protocol specific routing flag #2
+-llinfo     RTF_LLINFO     - validly translates proto addr to link addr
 .Ed
 .Pp
 The optional modifiers
@@ -305,6 +336,22 @@ and
 .Dv RTM_CHANGE .
 As such, only the super-user may modify
 the routing tables.
+.Sh EXIT STATUS
+The
+.Nm
+utility exits 0 on success, and \*[Gt]0 if an error occurs.
+This includes the use of the
+.Cm get
+command to look up a route that is incomplete.
+.Sh EXAMPLES
+This sets the default route to 192.168.0.1:
+.Dl route add default 192.168.0.1
+This shows all routes, without DNS resolution (this is useful if the
+DNS is not available):
+.Dl route -n show
+To install a static route through 10.200.0.1 to reach the network
+192.168.1.0/28, use this:
+.Dl route add -net 192.168.1.0 -netmask 255.255.255.240 10.200.0.1
 .Sh DIAGNOSTICS
 .Bl -tag -width Ds
 .It Sy "add [host \&| network ] %s: gateway %s flags %x"
@@ -340,10 +387,11 @@ Only root may modify the routing tables.
 These privileges are enforced by the kernel.
 .El
 .Sh SEE ALSO
+.Xr esis 4 ,
 .Xr netintro 4 ,
 .Xr route 4 ,
-.Xr esis 4 ,
-.Xr routed 8
+.Xr routed 8 ,
+.Xr sysctl 8
 .\" .Xr XNSrouted 8
 .Sh HISTORY
 The

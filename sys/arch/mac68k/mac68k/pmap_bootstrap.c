@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap_bootstrap.c,v 1.53 2000/02/14 07:01:49 scottr Exp $	*/
+/*	$NetBSD: pmap_bootstrap.c,v 1.74 2007/10/17 19:55:15 garbled Exp $	*/
 
 /* 
  * Copyright (c) 1991, 1993
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -39,23 +35,25 @@
  *	@(#)pmap_bootstrap.c	8.1 (Berkeley) 6/10/93
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: pmap_bootstrap.c,v 1.74 2007/10/17 19:55:15 garbled Exp $");
+
 #include "opt_ddb.h"
+#include "opt_kgdb.h"
 #include "zsc.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/reboot.h>
 
-#include <vm/vm.h>
+#include <uvm/uvm_extern.h>
 
 #include <machine/pte.h>
-#include <mac68k/mac68k/clockreg.h>
 #include <machine/vmparam.h>
 #include <machine/cpu.h>
 #include <machine/pmap.h>
 #include <machine/autoconf.h>
-
-#include <ufs/mfs/mfs_extern.h>
+#include <machine/video.h>
 
 #include <mac68k/mac68k/macrom.h>
 
@@ -87,13 +85,9 @@ u_long	high[8];
 u_long	maxaddr;	/* PA of the last physical page */
 int	vidlen;
 #define VIDMAPSIZE	btoc(vidlen)
-extern u_int32_t	mac68k_vidphys;
-extern u_int32_t	videoaddr;
-extern u_int32_t	videorowbytes;
-extern u_int32_t	videosize;
-static u_int32_t	newvideoaddr;
+static vaddr_t	newvideoaddr;
 
-extern caddr_t	ROMBase;
+extern void *	ROMBase;
 
 /*
  * Special purpose kernel virtual addresses, used for mapping
@@ -103,11 +97,12 @@ extern caddr_t	ROMBase;
  *	vmmap:		/dev/mem, crash dumps, parity error checking
  *	msgbufaddr:	kernel message buffer
  */
-caddr_t		CADDR1, CADDR2, vmmap;
-extern caddr_t	msgbufaddr;
+void *CADDR1, *CADDR2;
+char *vmmap;
+void *msgbufaddr;
 
-void	pmap_bootstrap __P((paddr_t, paddr_t));
-void	bootstrap_mac68k __P((int));
+void	pmap_bootstrap(paddr_t, paddr_t);
+void	bootstrap_mac68k(int);
 
 /*
  * Bootstrap the VM system.
@@ -120,11 +115,9 @@ void	bootstrap_mac68k __P((int));
  * on 12 May 1996, that was 0xf9000 beyond firstpa.
  */
 void
-pmap_bootstrap(nextpa, firstpa)
-	paddr_t nextpa;
-	paddr_t firstpa;
+pmap_bootstrap(paddr_t nextpa, paddr_t firstpa)
 {
-	paddr_t kstpa, kptpa, vidpa, iiopa, rompa, kptmpa, lkptpa, p0upa;
+	paddr_t kstpa, kptpa, kptmpa, lkptpa, p0upa;
 	u_int nptpages, kstsize;
 	paddr_t avail_next;
 	int avail_remaining;
@@ -132,9 +125,10 @@ pmap_bootstrap(nextpa, firstpa)
 	int i;
 	st_entry_t protoste, *ste;
 	pt_entry_t protopte, *pte, *epte;
+	extern char start[];
 
-	vidlen = m68k_round_page(((videosize >> 16) & 0xffff) * videorowbytes +
-	    m68k_page_offset(mac68k_vidphys));
+	vidlen = m68k_round_page(mac68k_video.mv_height *
+	    mac68k_video.mv_stride + m68k_page_offset(mac68k_video.mv_phys));
 
 	/*
 	 * Calculate important physical addresses:
@@ -144,15 +138,6 @@ pmap_bootstrap(nextpa, firstpa)
 	 *
 	 *	kptpa		statically allocated
 	 *			kernel PT pages		Sysptsize+ pages
-	 *
-	 *	vidpa		internal video space for some machines
-	 *			PT pages		VIDMAPSIZE pages
-	 *
-	 *	rompa 		ROM space
-	 *			PT pages		ROMMAPSIZE pages
-	 *
-	 *	iiopa		internal IO space
-	 *			PT pages		IIOMAPSIZE pages
 	 *
 	 * [ Sysptsize is the number of pages of PT, IIOMAPSIZE and
 	 *   NBMAPSIZE are the number of PTEs, hence we need to round
@@ -170,21 +155,17 @@ pmap_bootstrap(nextpa, firstpa)
 	else
 		kstsize = 1;
 	kstpa = nextpa;
-	nextpa += kstsize * NBPG;
+	nextpa += kstsize * PAGE_SIZE;
+	kptmpa = nextpa;
+	nextpa += PAGE_SIZE;
+	lkptpa = nextpa;
+	nextpa += PAGE_SIZE;
+	p0upa = nextpa;
+	nextpa += USPACE;
 	kptpa = nextpa;
 	nptpages = Sysptsize +
 		(IIOMAPSIZE + ROMMAPSIZE + VIDMAPSIZE + NPTEPG - 1) / NPTEPG;
-	nextpa += nptpages * NBPG;
-	vidpa = nextpa - VIDMAPSIZE * sizeof(pt_entry_t);
-	rompa = vidpa  - ROMMAPSIZE * sizeof(pt_entry_t);
-	iiopa = rompa  - IIOMAPSIZE * sizeof(pt_entry_t);
-	kptmpa = nextpa;
-	nextpa += NBPG;
-	lkptpa = nextpa;
-	nextpa += NBPG;
-	p0upa = nextpa;
-	nextpa += USPACE;
-
+	nextpa += nptpages * PAGE_SIZE;
 	
 	for (i = 0; i < numranges; i++)
 		if (low[i] <= firstpa && firstpa < high[i])
@@ -203,7 +184,7 @@ pmap_bootstrap(nextpa, firstpa)
 			printf("Older machines may need Mode32 to get that ");
 			printf("option.\n");
 		}
-		panic("Cannot work with the current memory mappings.\n");
+		panic("Cannot work with the current memory mappings.");
 	}
 
 	/*
@@ -240,11 +221,11 @@ pmap_bootstrap(nextpa, firstpa)
 		 * Initialize level 2 descriptors (which immediately
 		 * follow the level 1 table).  We need:
 		 *	NPTEPG / SG4_LEV3SIZE
-		 * level 2 descriptors to map each of the nptpages+1
+		 * level 2 descriptors to map each of the nptpages
 		 * pages of PTEs.  Note that we set the "used" bit
 		 * now to save the HW the expense of doing it.
 		 */
-		num = (nptpages + 1) * (NPTEPG / SG4_LEV3SIZE);
+		num = nptpages * (NPTEPG / SG4_LEV3SIZE);
 		pte = &(PA2VA(kstpa, u_int *))[SG4_LEV1SIZE];
 		epte = &pte[num];
 		protoste = kptpa | SG_U | SG_RW | SG_V;
@@ -273,10 +254,16 @@ pmap_bootstrap(nextpa, firstpa)
 		*ste = (u_int)pte | SG_U | SG_RW | SG_V;
 		/*
 		 * Now initialize the final portion of that block of
-		 * descriptors to map the "last PT page".
+		 * descriptors to map kptmpa and the "last PT page".
 		 */
 		pte = &(PA2VA(kstpa, u_int*))
-				[kstsize*NPTEPG - NPTEPG/SG4_LEV3SIZE];
+				[kstsize*NPTEPG - NPTEPG/SG4_LEV3SIZE*2];
+		epte = &pte[NPTEPG/SG4_LEV3SIZE];
+		protoste = kptmpa | SG_U | SG_RW | SG_V;
+		while (pte < epte) {
+			*pte++ = protoste;
+			protoste += (SG4_LEV3SIZE * sizeof(st_entry_t));
+		}
 		epte = &pte[NPTEPG/SG4_LEV3SIZE];
 		protoste = lkptpa | SG_U | SG_RW | SG_V;
 		while (pte < epte) {
@@ -287,53 +274,58 @@ pmap_bootstrap(nextpa, firstpa)
 		 * Initialize Sysptmap
 		 */
 		pte = PA2VA(kptmpa, u_int *);
-		epte = &pte[nptpages+1];
+		epte = &pte[nptpages];
 		protopte = kptpa | PG_RW | PG_CI | PG_V;
 		while (pte < epte) {
 			*pte++ = protopte;
-			protopte += NBPG;
+			protopte += PAGE_SIZE;
 		}
 		/*
-		 * Invalidate all but the last remaining entries in both.
+		 * Invalidate all but the last two remaining entries.
 		 */
-		epte = &(PA2VA(kptmpa, u_int *))[NPTEPG-1];
+		epte = &(PA2VA(kptmpa, u_int *))[NPTEPG-2];
 		while (pte < epte) {
 			*pte++ = PG_NV;
 		}
 		/*
-		 * Initialize the last to point to the page
+		 * Initialize the last ones to point to Sysptmap and the page
 		 * table page allocated earlier.
 		 */
+		*pte = kptmpa | PG_RW | PG_CI | PG_V;
+		pte++;
 		*pte = lkptpa | PG_RW | PG_CI | PG_V;
 	} else {
 		/*
 		 * Map the page table pages in both the HW segment table
-		 * and the software Sysptmap.  Note that Sysptmap is also
-		 * considered a PT page hence the +1.
+		 * and the software Sysptmap.
 		 */
 		ste = PA2VA(kstpa, u_int*);
 		pte = PA2VA(kptmpa, u_int*);
-		epte = &pte[nptpages+1];
+		epte = &pte[nptpages];
 		protoste = kptpa | SG_RW | SG_V;
 		protopte = kptpa | PG_RW | PG_CI | PG_V;
 		while (pte < epte) {
 			*ste++ = protoste;
 			*pte++ = protopte;
-			protoste += NBPG;
-			protopte += NBPG;
+			protoste += PAGE_SIZE;
+			protopte += PAGE_SIZE;
 		}
 		/*
-		 * Invalidate all but the last remaining entries in both.
+		 * Invalidate all but the last two remaining entries in both.
 		 */
-		epte = &(PA2VA(kptmpa, u_int *))[NPTEPG-1];
+		epte = &(PA2VA(kptmpa, u_int *))[NPTEPG-2];
 		while (pte < epte) {
 			*ste++ = SG_NV;
 			*pte++ = PG_NV;
 		}
 		/*
-		 * Initialize the last to point to point to the page
+		 * Initialize the last ones to point to Sysptmap and the page
 		 * table page allocated earlier.
 		 */
+		*ste = kptmpa | SG_RW | SG_V;
+		*pte = kptmpa | PG_RW | PG_CI | PG_V;
+		ste++;
+		pte++;
 		*ste = lkptpa | SG_RW | SG_V;
 		*pte = lkptpa | PG_RW | PG_CI | PG_V;
 	}
@@ -356,18 +348,23 @@ pmap_bootstrap(nextpa, firstpa)
 		*pte++ = PG_NV;
 
 	/*
-	 * Validate PTEs for kernel text (RO)
+	 * Validate PTEs for kernel text (RO).
+	 * Pages up to "start" must be writable for the ROM.
 	 */
 	pte = &(PA2VA(kptpa, u_int *))[m68k_btop(KERNBASE)];
-	epte = &pte[m68k_btop(m68k_trunc_page(&etext))];
-#if defined(KGDB) || defined(DDB)
-	protopte = firstpa | PG_RW | PG_V;	/* XXX RW for now */
-#else
-	protopte = firstpa | PG_RO | PG_V;
-#endif
+	/* XXX why KERNBASE relative? */
+	epte = &pte[m68k_btop(m68k_round_page(start))];
+	protopte = firstpa | PG_RW | PG_V;
 	while (pte < epte) {
 		*pte++ = protopte;
-		protopte += NBPG;
+		protopte += PAGE_SIZE;
+	}
+	/* XXX why KERNBASE relative? */
+	epte = &pte[m68k_btop(m68k_trunc_page(&etext))];
+	protopte = (protopte & ~PG_PROT) | PG_RO;
+	while (pte < epte) {
+		*pte++ = protopte;
+		protopte += PAGE_SIZE;
 	}
 	/*
 	 * Validate PTEs for kernel data/bss, dynamic data allocated
@@ -383,38 +380,39 @@ pmap_bootstrap(nextpa, firstpa)
 		protopte |= PG_CCB;
 	while (pte < epte) {
 		*pte++ = protopte;
-		protopte += NBPG;
-	}
-	/*
-	 * Finally, validate the internal IO space, ROM space, and
-	 * framebuffer PTEs (RW+CI).
-	 */
-	pte = PA2VA(iiopa, u_int *);
-	epte = PA2VA(rompa, u_int *);
-	protopte = IOBase | PG_RW | PG_CI | PG_V;
-	while (pte < epte) {
-		*pte++ = protopte;
-		protopte += NBPG;
+		protopte += PAGE_SIZE;
 	}
 
-	pte = PA2VA(rompa, u_int *);
-	epte = PA2VA(vidpa, u_int *);
-	protopte = ((u_int) ROMBase) | PG_RO | PG_V;
+#define	PTE2VA(pte)	m68k_ptob(pte - PA2VA(kptpa, pt_entry_t *))
+
+	protopte = IOBase | PG_RW | PG_CI | PG_V;
+	IOBase = PTE2VA(pte);
+	epte = &pte[IIOMAPSIZE];
 	while (pte < epte) {
 		*pte++ = protopte;
-		protopte += NBPG;
+		protopte += PAGE_SIZE;
+	}
+
+	protopte = (pt_entry_t)ROMBase | PG_RO | PG_V;
+	ROMBase = (void *)PTE2VA(pte);
+	epte = &pte[ROMMAPSIZE];
+	while (pte < epte) {
+		*pte++ = protopte;
+		protopte += PAGE_SIZE;
 	}
 
 	if (vidlen) {
-		pte = PA2VA(vidpa, u_int *);
-		epte = pte + VIDMAPSIZE;
-		protopte = m68k_trunc_page(mac68k_vidphys) |
+		protopte = m68k_trunc_page(mac68k_video.mv_phys) |
 		    PG_RW | PG_V | PG_CI;
+		newvideoaddr = PTE2VA(pte)
+		    + m68k_page_offset(mac68k_video.mv_phys);
+		epte = &pte[VIDMAPSIZE];
 		while (pte < epte) {
 			*pte++ = protopte;
-			protopte += NBPG;
+			protopte += PAGE_SIZE;
 		}
 	}
+	virtual_avail = PTE2VA(pte);
 
 	/*
 	 * Calculate important exported kernel virtual addresses
@@ -429,20 +427,9 @@ pmap_bootstrap(nextpa, firstpa)
 	Sysptmap = PA2VA(kptmpa, pt_entry_t *);
 	/*
 	 * Sysmap: kernel page table (as mapped through Sysptmap)
-	 * Immediately follows `nptpages' of static kernel page table.
+	 * Allocated at the end of KVA space.
 	 */
-	Sysmap = (pt_entry_t *)m68k_ptob(nptpages * NPTEPG);
-
-	IOBase = (u_long)m68k_ptob(nptpages * NPTEPG -
-	    (IIOMAPSIZE + ROMMAPSIZE + VIDMAPSIZE));
-
-	ROMBase = (char *)m68k_ptob(nptpages * NPTEPG -
-	    (ROMMAPSIZE + VIDMAPSIZE));
-
-	if (vidlen) {
-		newvideoaddr = (u_int32_t)m68k_ptob(nptpages * NPTEPG -
-		    VIDMAPSIZE) + m68k_page_offset(mac68k_vidphys);
-	}
+	Sysmap = (pt_entry_t *)m68k_ptob((NPTEPG - 2) * NPTEPG);
 
 	/*
 	 * Setup u-area for process 0.
@@ -491,7 +478,6 @@ pmap_bootstrap(nextpa, firstpa)
 	high[numranges - 1] -= (m68k_round_page(MSGBUFSIZE) + m68k_ptob(1));
 	avail_end = high[numranges - 1];
 	mem_size = m68k_ptob(physmem);
-	virtual_avail = VM_MIN_KERNEL_ADDRESS + (nextpa - firstpa);
 	virtual_end = VM_MAX_KERNEL_ADDRESS;
 
 	/*
@@ -514,7 +500,7 @@ pmap_bootstrap(nextpa, firstpa)
 	}
 
 	/*
-	 * Kernel page/segment table allocated in locore,
+	 * Kernel page/segment table allocated above,
 	 * just initialize pointers.
 	 */
 	{
@@ -530,13 +516,13 @@ pmap_bootstrap(nextpa, firstpa)
 		 * descriptor mask noting that we have used:
 		 *	0:		level 1 table
 		 *	1 to `num':	map page tables
-		 *	MAXKL2SIZE-1:	maps last-page page table
+		 *	MAXKL2SIZE-1:	maps kptmpa and last-page page table
 		 */
 		if (mmutype == MMU_68040) {
 			int num;
 			
 			kpm->pm_stfree = ~l2tobm(0);
-			num = roundup((nptpages + 1) * (NPTEPG / SG4_LEV3SIZE),
+			num = roundup(nptpages * (NPTEPG / SG4_LEV3SIZE),
 				      SG4_LEV2SIZE) / SG4_LEV2SIZE;
 			while (num)
 				kpm->pm_stfree &= ~l2tobm(num--);
@@ -554,34 +540,33 @@ pmap_bootstrap(nextpa, firstpa)
 	{
 		vaddr_t va = virtual_avail;
 
-		CADDR1 = (caddr_t)va;
-		va += NBPG;
-		CADDR2 = (caddr_t)va;
-		va += NBPG;
-		vmmap = (caddr_t)va;
-		va += NBPG;
-		msgbufaddr = (caddr_t)va;
+		CADDR1 = (void *)va;
+		va += PAGE_SIZE;
+		CADDR2 = (void *)va;
+		va += PAGE_SIZE;
+		vmmap = (void *)va;
+		va += PAGE_SIZE;
+		msgbufaddr = (void *)va;
 		va += m68k_round_page(MSGBUFSIZE);
 		virtual_avail = va;
 	}
 }
 
 void
-bootstrap_mac68k(tc)
-	int	tc;
+bootstrap_mac68k(int tc)
 {
 #if NZSC > 0
-	extern void zs_init __P((void));
+	extern void zs_init(void);
 #endif
 	extern int *esym;
 	paddr_t nextpa;
-	caddr_t oldROMBase;
+	void *oldROMBase;
 
 	if (mac68k_machine.do_graybars)
 		printf("Bootstrapping NetBSD/mac68k.\n");
 
 	oldROMBase = ROMBase;
-	mac68k_vidphys = videoaddr;
+	mac68k_video.mv_phys = mac68k_video.mv_kvaddr;
 
 	if (((tc & 0x80000000) && (mmutype == MMU_68030)) ||
 	    ((tc & 0x8000) && (mmutype == MMU_68040))) {
@@ -609,7 +594,7 @@ bootstrap_mac68k(tc)
 		printf("Pmap bootstrapped.\n");
 
 	if (!vidlen)
-		panic("Don't know how to relocate video!\n");
+		panic("Don't know how to relocate video!");
 
 	if (mac68k_machine.do_graybars)
 		printf("Moving ROMBase from %p to %p.\n", oldROMBase, ROMBase);
@@ -617,8 +602,8 @@ bootstrap_mac68k(tc)
 	mrg_fixupROMBase(oldROMBase, ROMBase);
 
 	if (mac68k_machine.do_graybars)
-		printf("Video address 0x%lx -> 0x%lx.\n",
-		    (unsigned long)videoaddr, (unsigned long)newvideoaddr);
+		printf("Video address 0x%p -> 0x%p.\n",
+		    (void *)mac68k_video.mv_kvaddr, (void *)newvideoaddr);
 
 	mac68k_set_io_offsets(IOBase);
 
@@ -636,5 +621,5 @@ bootstrap_mac68k(tc)
 		zs_init();
 #endif
 
-	videoaddr = newvideoaddr;
+	mac68k_video.mv_kvaddr = newvideoaddr;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_space.c,v 1.1 1998/01/11 21:40:52 thorpej Exp $	*/
+/*	$NetBSD: bus_space.c,v 1.17 2008/04/28 20:23:19 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,88 +33,80 @@
  * Implementation of bus_space mapping for the hp300.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: bus_space.c,v 1.17 2008/04/28 20:23:19 martin Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/map.h>
+#include <sys/extent.h>
 
+#include <machine/autoconf.h>
 #include <machine/bus.h>
 
-#include <vm/vm.h>
+#include <uvm/uvm_extern.h>
 
-extern struct map extiomap[];
-extern caddr_t extiobase;
 extern int *nofault;
 
 /* ARGSUSED */
 int
-bus_space_map(t, bpa, size, flags, bshp)
-	bus_space_tag_t t;
-	bus_addr_t bpa;
-	bus_size_t size;
-	int flags;
-	bus_space_handle_t *bshp;
+bus_space_map(bus_space_tag_t t, bus_addr_t bpa, bus_size_t size, int flags,
+    bus_space_handle_t *bshp)
 {
-	int idx, npgs;
-	caddr_t kva;
+	vaddr_t kva;
+	vsize_t offset;
+	int error;
 
-	if (t == HP300_BUS_SPACE_INTIO) {
+	if (t->bustype == HP300_BUS_SPACE_INTIO) {
 		/*
 		 * Intio space is direct-mapped in pmap_bootstrap(); just
 		 * do the translation.
 		 */
-		*bshp = (bus_space_handle_t)IIOV(bpa);
-		return (0);
+		*bshp = (bus_space_handle_t)IIOV(INTIOBASE + bpa);
+		return 0;
 	}
 
-	if (t != HP300_BUS_SPACE_DIO)
+	if (t->bustype != HP300_BUS_SPACE_DIO)
 		panic("bus_space_map: bad space tag");
 
 	/*
-	 * Allocate virtual address space from the extio resource map.
+	 * Allocate virtual address space from the extio extent map.
 	 */
-	size = m68k_round_page(size);
-	npgs = btoc(size);
-	idx = rmalloc(extiomap, npgs);
-	if (idx == 0)
-		return (ENOMEM);
-	kva = extiobase + ctob(idx - 1);
+	offset = m68k_page_offset(bpa);
+	size = m68k_round_page(offset + size);
+	error = extent_alloc(extio_ex, size, PAGE_SIZE, 0,
+	    EX_FAST | EX_NOWAIT | (extio_ex_malloc_safe ? EX_MALLOCOK : 0),
+	    &kva);
+	if (error)
+		return error;
 
 	/*
 	 * Map the range.  The range is always cache-inhibited on the hp300.
 	 */
-	physaccess(kva, (caddr_t)bpa, size, PG_RW|PG_CI);
+	physaccess((void *)kva, (void *)bpa, size, PG_RW|PG_CI);
 
 	/*
 	 * All done.
 	 */
-	*bshp = (bus_space_handle_t)kva;
-	return (0);
+	*bshp = (bus_space_handle_t)(kva + offset);
+	return 0;
 }
 
 /* ARGSUSED */
 int
-bus_space_alloc(t, rstart, rend, size, alignment, boundary, flags,
-    bpap, bshp)
-	bus_space_tag_t t;
-	bus_addr_t rstart, rend;
-	bus_size_t size, alignment, boundary;
-	int flags;
-	bus_addr_t *bpap;
-	bus_space_handle_t *bshp;
+bus_space_alloc(bus_space_tag_t t, bus_addr_t rstart, bus_addr_t rend,
+    bus_size_t size, bus_size_t alignment, bus_size_t boundary, int flags,
+    bus_addr_t *bpap, bus_space_handle_t *bshp)
 {
 
 	/*
 	 * Not meaningful on any currently-supported hp300 bus.
 	 */
-	return (EINVAL);
+	return EINVAL;
 }
 
 /* ARGSUSED */
 void
-bus_space_free(t, bsh, size)
-	bus_space_tag_t t;
-	bus_space_handle_t bsh;
-	bus_size_t size;
+bus_space_free(bus_space_tag_t t, bus_space_handle_t bsh, bus_size_t size)
 {
 
 	/*
@@ -131,14 +116,12 @@ bus_space_free(t, bsh, size)
 }
 
 void
-bus_space_unmap(t, bsh, size)
-	bus_space_tag_t t;
-	bus_space_handle_t bsh;
-	bus_size_t size;
+bus_space_unmap(bus_space_tag_t t, bus_space_handle_t bsh, bus_size_t size)
 {
-	int idx;
+	vaddr_t kva;
+	vsize_t offset;
 
-	if (t == HP300_BUS_SPACE_INTIO) {
+	if (t->bustype == HP300_BUS_SPACE_INTIO) {
 		/*
 		 * Intio space is direct-mapped in pmap_bootstrap(); nothing
 		 * to do
@@ -146,51 +129,47 @@ bus_space_unmap(t, bsh, size)
 		return;
 	}
 
-	if (t != HP300_BUS_SPACE_DIO)
+	if (t->bustype != HP300_BUS_SPACE_DIO)
 		panic("bus_space_map: bad space tag");
 
-	size = m68k_round_page(size);
+	kva = m68k_trunc_page(bsh);
+	offset = m68k_page_offset(bsh);
+	size = m68k_round_page(offset + size);
 
 #ifdef DIAGNOSTIC
-	if (bsh & PGOFSET)
-		panic("bus_space_unmap: unaligned");
-	if ((caddr_t)bsh < extiobase ||
-	    (caddr_t)bsh >= (extiobase + ctob(EIOMAPSIZE)))
+	if (bsh < (vaddr_t)extiobase ||
+	    bsh >= ((vaddr_t)extiobase + ptoa(EIOMAPSIZE)))
 		panic("bus_space_unmap: bad bus space handle");
 #endif
 
 	/*
 	 * Unmap the range.
 	 */
-	physunaccess((caddr_t)bsh, size);
+	physunaccess((void *)kva, size);
 
 	/*
-	 * Free it from the extio resource map.
+	 * Free it from the extio extent map.
 	 */
-	idx = btoc((caddr_t)bsh - extiobase) + 1;
-	rmfree(extiomap, btoc(size), idx);
+	if (extent_free(extio_ex, kva, size,
+	    EX_NOWAIT | (extio_ex_malloc_safe ? EX_MALLOCOK : 0)))
+		printf("bus_space_unmap: kva 0x%lx size 0x%lx: "
+		    "can't free region\n", (u_long) bsh, size);
 }
 
 /* ARGSUSED */
 int
-bus_space_subregion(t, bsh, offset, size, nbshp)
-	bus_space_tag_t t;
-	bus_space_handle_t bsh;
-	bus_size_t offset, size;
-	bus_space_handle_t *nbshp;
+bus_space_subregion(bus_space_tag_t t, bus_space_handle_t bsh,
+    bus_size_t offset, bus_size_t size, bus_space_handle_t *nbshp)
 {
 
 	*nbshp = bsh + offset;
-	return (0);
+	return 0;
 }
 
 /* ARGSUSED */
 int
-hp300_bus_space_probe(t, bsh, offset, sz)
-	bus_space_tag_t t;
-	bus_space_handle_t bsh;
-	bus_size_t offset;
-	int sz;
+hp300_bus_space_probe(bus_space_tag_t t, bus_space_handle_t bsh,
+    bus_size_t offset, int sz)
 {
 	label_t faultbuf;
 	int i;
@@ -198,7 +177,7 @@ hp300_bus_space_probe(t, bsh, offset, sz)
 	nofault = (int *)&faultbuf;
 	if (setjmp((label_t *)nofault)) {
 		nofault = NULL;
-		return (0);
+		return 0;
 	}
 
 	switch (sz) {
@@ -215,10 +194,10 @@ hp300_bus_space_probe(t, bsh, offset, sz)
 		break;
 
 	default:
-		panic("bus_space_probe: unupported data size %d\n", sz);
+		panic("bus_space_probe: unupported data size %d", sz);
 		/* NOTREACHED */
 	}
 
 	nofault = NULL;
-	return (1);
+	return 1;
 }

@@ -1,4 +1,4 @@
-/* $NetBSD: lunaws.c,v 1.4 2000/01/14 03:28:13 nisimura Exp $ */
+/* $NetBSD: lunaws.c,v 1.15 2008/06/13 09:58:06 cegger Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: lunaws.c,v 1.4 2000/01/14 03:28:13 nisimura Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lunaws.c,v 1.15 2008/06/13 09:58:06 cegger Exp $");
 
 #include "wsmouse.h"
 
@@ -81,7 +74,7 @@ static void omkbd_input __P((void *, int));
 static int  omkbd_decode __P((void *, int, u_int *, int *));
 static int  omkbd_enable __P((void *, int));
 static void omkbd_set_leds __P((void *, int));
-static int  omkbd_ioctl __P((void *, u_long, caddr_t, int, struct proc *));
+static int  omkbd_ioctl __P((void *, u_long, void *, int, struct lwp *));
 
 struct wscons_keydesc omkbd_keydesctab[];
 
@@ -105,7 +98,7 @@ static const struct wskbd_consops ws_consops = {
 
 #if NWSMOUSE > 0
 static int  omms_enable __P((void *));
-static int  omms_ioctl __P((void *, u_long, caddr_t, int, struct proc *));
+static int  omms_ioctl __P((void *, u_long, void *, int, struct lwp *));
 static void omms_disable __P((void *));
 
 static const struct wsmouse_accessops omms_accessops = {
@@ -119,14 +112,9 @@ static void wsintr __P((int));
 
 static int  wsmatch __P((struct device *, struct cfdata *, void *));
 static void wsattach __P((struct device *, struct device *, void *));
-static int  ws_submatch_kbd __P((struct device *, struct cfdata *, void *));
-#if NWSMOUSE > 0
-static int  ws_submatch_mouse __P((struct device *, struct cfdata *, void *));
-#endif
 
-const struct cfattach ws_ca = {
-	sizeof(struct ws_softc), wsmatch, wsattach
-};
+CFATTACH_DECL(ws, sizeof(struct ws_softc),
+    wsmatch, wsattach, NULL, NULL);
 extern struct cfdriver ws_cd;
 
 extern int  syscngetc __P((dev_t));
@@ -175,55 +163,26 @@ wsattach(parent, self, aux)
 	a.keymap = &omkbd_keymapdata;
 	a.accessops = &omkbd_accessops;
 	a.accesscookie = (void *)sc;
-	sc->sc_wskbddev = config_found_sm(self, &a, wskbddevprint,
-					ws_submatch_kbd);
+	sc->sc_wskbddev = config_found_ia(self, "wskbddev", &a,
+					  wskbddevprint);
 
 #if NWSMOUSE > 0
 	{
 	struct wsmousedev_attach_args b;
 	b.accessops = &omms_accessops;
 	b.accesscookie = (void *)sc;	
-	sc->sc_wsmousedev = config_found_sm(self, &b, wsmousedevprint,
-					ws_submatch_mouse);
+	sc->sc_wsmousedev = config_found_ia(self, "wsmousedev", &b,
+					    wsmousedevprint);
 	sc->sc_msreport = 0;
 	}
 #endif
 }
 
-static int
-ws_submatch_kbd(parent, cf, aux)
-        struct device *parent;
-        struct cfdata *cf;
-        void *aux;
-{
-
-        if (strcmp(cf->cf_driver->cd_name, "wskbd"))
-                return (0);
-        return ((*cf->cf_attach->ca_match)(parent, cf, aux));
-}
-
-#if NWSMOUSE > 0
-
-static int
-ws_submatch_mouse(parent, cf, aux)
-        struct device *parent;
-        struct cfdata *cf;
-        void *aux;
-{
-
-        if (strcmp(cf->cf_driver->cd_name, "wsmouse"))
-                return (0);
-        return ((*cf->cf_attach->ca_match)(parent, cf, aux));
-}
-
-#endif
-
 /*ARGSUSED*/
 static void
-wsintr(chan)
-	int chan;
+wsintr(int chan)
 {
-	struct ws_softc *sc = ws_cd.cd_devs[0];
+	struct ws_softc *sc = device_lookup_private(&ws_cd, 0);
 	struct sioreg *sio = sc->sc_ctl;
 	u_int code;
 	int rr;
@@ -249,7 +208,13 @@ wsintr(chan)
 					omkbd_input(sc, code);
 					continue;
 				}
-				sc->buttons = code & 07;
+				code = (code & 07) ^ 07;
+				/* LMR->RML: wsevent counts 0 for leftmost */
+				sc->buttons = (code & 02);
+				if (code & 01)
+					sc->buttons |= 04;
+				if (code & 04)
+					sc->buttons |= 01;
 				sc->sc_msreport = 1;
 			}
 			else if (sc->sc_msreport == 1) {
@@ -259,7 +224,10 @@ wsintr(chan)
 			else if (sc->sc_msreport == 2) {
 				sc->dy = (signed char)code;
 				wsmouse_input(sc->sc_wsmousedev,
-					sc->buttons, sc->dx, sc->dy, 0, 0);
+						sc->buttons,
+						sc->dx, sc->dy, 0, 0,
+						WSMOUSE_INPUT_DELTA);
+
 				sc->sc_msreport = 0;
 			}
 #else
@@ -465,12 +433,12 @@ omkbd_set_leds(v, leds)
 }
 
 static int
-omkbd_ioctl(v, cmd, data, flag, p)
+omkbd_ioctl(v, cmd, data, flag, l)
 	void *v;
 	u_long cmd;
-	caddr_t data;
+	void *data;
 	int flag;
-	struct proc *p;
+	struct lwp *l;
 {
 	switch (cmd) {
 	    case WSKBDIO_GTYPE:
@@ -481,7 +449,7 @@ omkbd_ioctl(v, cmd, data, flag, p)
 	    case WSKBDIO_COMPLEXBELL:	/* XXX capable of complex bell */
 		return 0;
 	}
-	return -1;
+	return EPASSTHROUGH;
 }
 
 #if NWSMOUSE > 0
@@ -499,18 +467,18 @@ omms_enable(v)
 
 /*ARGUSED*/
 static int
-omms_ioctl(v, cmd, data, flag, p)
+omms_ioctl(v, cmd, data, flag, l)
 	void *v;
 	u_long cmd;
-	caddr_t data;
+	void *data;
 	int flag;
-	struct proc *p;
+	struct lwp *l;
 {
 	if (cmd == WSMOUSEIO_GTYPE) {
 		*(u_int *)data = 0x19991005; /* XXX */
 		return 0;
 	}
-	return ENOTTY;
+	return EPASSTHROUGH;
 }
 
 static void

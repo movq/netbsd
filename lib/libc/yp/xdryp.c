@@ -1,10 +1,7 @@
-/*	$NetBSD: xdryp.c,v 1.25 2000/01/22 22:19:22 mycroft Exp $	*/
+/*	$NetBSD: xdryp.c,v 1.30 2006/05/11 17:11:57 mrg Exp $	*/
 
 /*
- * Copyright (c) 1996 Jason R. Thorpe <thorpej@NetBSD.ORG>.
- * All rights reserved.
- *
- * Copyright (c) 1992, 1993 Theo de Raadt <deraadt@fsa.ca>
+ * Copyright (c) 1996 Jason R. Thorpe <thorpej@NetBSD.org>.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -17,7 +14,6 @@
  *    documentation and/or other materials provided with the distribution.
  * 3. All advertising materials mentioning features or use of this software
  *    must display the following acknowledgement:
- *	This product includes software developed by Theo de Raadt.
  *	This product includes software developed for the NetBSD Project
  *	by Jason R. Thorpe.
  * 4. The name of the author may not be used to endorse or promote products
@@ -36,9 +32,36 @@
  * SUCH DAMAGE.
  */
 
+/*
+ * Copyright (c) 1992, 1993 Theo de Raadt <deraadt@fsa.ca>
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS
+ * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ */
+
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: xdryp.c,v 1.25 2000/01/22 22:19:22 mycroft Exp $");
+__RCSID("$NetBSD: xdryp.c,v 1.30 2006/05/11 17:11:57 mrg Exp $");
 #endif
 
 /*
@@ -187,7 +210,7 @@ xdr_datum(xdrs, objp)
 	_DIAGASSERT(xdrs != NULL);
 	_DIAGASSERT(objp != NULL);
 
-	return xdr_bytes(xdrs, (char **)&objp->dptr,
+	return xdr_bytes(xdrs, __UNCONST(&objp->dptr),
 	    (u_int *)&objp->dsize, YPMAXRECORD);
 }
 
@@ -200,10 +223,10 @@ xdr_ypreq_key(xdrs, objp)
 	_DIAGASSERT(xdrs != NULL);
 	_DIAGASSERT(objp != NULL);
 
-	if (!xdr_ypdomain_wrap_string(xdrs, (char **)&objp->domain))
+	if (!xdr_ypdomain_wrap_string(xdrs, __UNCONST(&objp->domain)))
 		return FALSE;
 
-	if (!xdr_ypmap_wrap_string(xdrs, (char **)&objp->map))
+	if (!xdr_ypmap_wrap_string(xdrs, __UNCONST(&objp->map)))
 		return FALSE;
 
 	if (!xdr_datum(xdrs, &objp->keydat))
@@ -221,10 +244,10 @@ xdr_ypreq_nokey(xdrs, objp)
 	_DIAGASSERT(xdrs != NULL);
 	_DIAGASSERT(objp != NULL);
 
-	if (!xdr_ypdomain_wrap_string(xdrs, (char **)&objp->domain))
+	if (!xdr_ypdomain_wrap_string(xdrs, __UNCONST(&objp->domain)))
 		return FALSE;
 
-	if (!xdr_ypmap_wrap_string(xdrs, (char **)&objp->map))
+	if (!xdr_ypmap_wrap_string(xdrs, __UNCONST(&objp->map)))
 		return FALSE;
 
 	return TRUE;
@@ -271,7 +294,7 @@ xdr_ypbind_resptype(xdrs, objp)
 	_DIAGASSERT(xdrs != NULL);
 	_DIAGASSERT(objp != NULL);
 
-	return xdr_enum(xdrs, (enum_t *)objp);
+	return xdr_enum(xdrs, (enum_t *)(void *)objp);
 }
 
 static bool_t
@@ -283,7 +306,7 @@ xdr_ypstat(xdrs, objp)
 	_DIAGASSERT(xdrs != NULL);
 	_DIAGASSERT(objp != NULL);
 
-	return xdr_enum(xdrs, (enum_t *)objp);
+	return xdr_enum(xdrs, (enum_t *)(void *)objp);
 }
 
 bool_t
@@ -322,7 +345,7 @@ xdr_ypresp_val(xdrs, objp)
 	_DIAGASSERT(xdrs != NULL);
 	_DIAGASSERT(objp != NULL);
 
-	if (!xdr_ypstat(xdrs, (enum ypbind_resptype *)&objp->status))
+	if (!xdr_ypstat(xdrs, (enum ypbind_resptype *)(void *)&objp->status))
 		return FALSE;
 
 	if (!xdr_datum(xdrs, &objp->valdat))
@@ -364,7 +387,7 @@ xdr_ypresp_key_val(xdrs, objp)
 	_DIAGASSERT(xdrs != NULL);
 	_DIAGASSERT(objp != NULL);
 
-	if (!xdr_ypstat(xdrs, (enum ypbind_resptype *)&objp->status))
+	if (!xdr_ypstat(xdrs, (enum ypbind_resptype *)(void *)&objp->status))
 		return FALSE;
 
 	if (!xdr_datum(xdrs, &objp->valdat))
@@ -414,10 +437,9 @@ xdr_ypall(xdrs, incallback)
 		 * error.
 		 */
 		if (status) {
-			/* LINTED const dropouts */
 			if ((*incallback->foreach)((int)out.status,
-			    (char *)out.keydat.dptr, out.keydat.dsize,
-			    (char *)out.valdat.dptr, out.valdat.dsize,
+			    __UNCONST(out.keydat.dptr), out.keydat.dsize,
+			    __UNCONST(out.valdat.dptr), out.valdat.dsize,
 			    incallback->data))
 				return TRUE;
 		} else
@@ -434,7 +456,7 @@ xdr_ypresp_master(xdrs, objp)
 	_DIAGASSERT(xdrs != NULL);
 	_DIAGASSERT(objp != NULL);
 
-	if (!xdr_ypstat(xdrs, (enum ypbind_resptype *)&objp->status))
+	if (!xdr_ypstat(xdrs, (enum ypbind_resptype *)(void *)&objp->status))
 		return FALSE;
 
 	if (!xdr_string(xdrs, &objp->master, YPMAXPEER))
@@ -467,7 +489,7 @@ xdr_ypmaplist(xdrs, objp)
 	if (!xdr_ypmaplist_str(xdrs, objp->ypml_name))
 		return FALSE;
 
-	if (!xdr_pointer(xdrs, (caddr_t *)&objp->ypml_next,
+	if (!xdr_pointer(xdrs, (char **)(void *)&objp->ypml_next,
 	    sizeof(struct ypmaplist), (xdrproc_t)xdr_ypmaplist))
 		return FALSE;
 
@@ -483,10 +505,10 @@ xdr_ypresp_maplist(xdrs, objp)
 	_DIAGASSERT(xdrs != NULL);
 	_DIAGASSERT(objp != NULL);
 
-	if (!xdr_ypstat(xdrs, (enum ypbind_resptype *)&objp->status))
+	if (!xdr_ypstat(xdrs, (enum ypbind_resptype *)(void *)&objp->status))
 		return FALSE;
 
-	if (!xdr_pointer(xdrs, (caddr_t *)&objp->list,
+	if (!xdr_pointer(xdrs, (char **)(void *)&objp->list,
 	    sizeof(struct ypmaplist), (xdrproc_t)xdr_ypmaplist))
 		return FALSE;
 
@@ -502,7 +524,7 @@ xdr_ypresp_order(xdrs, objp)
 	_DIAGASSERT(xdrs != NULL);
 	_DIAGASSERT(objp != NULL);
 
-	if (!xdr_ypstat(xdrs, (enum ypbind_resptype *)&objp->status))
+	if (!xdr_ypstat(xdrs, (enum ypbind_resptype *)(void *)&objp->status))
 		return FALSE;
 
 	if (!xdr_u_int(xdrs, &objp->ordernum))
@@ -544,10 +566,10 @@ xdr_ypmap_parms(xdrs, objp)
 	_DIAGASSERT(xdrs != NULL);
 	_DIAGASSERT(objp != NULL);
 
-	if (!xdr_ypdomain_wrap_string(xdrs, (char **)&objp->domain))
+	if (!xdr_ypdomain_wrap_string(xdrs, __UNCONST(&objp->domain)))
 		return FALSE;
 
-	if (!xdr_ypmap_wrap_string(xdrs, (char **)&objp->map))
+	if (!xdr_ypmap_wrap_string(xdrs, __UNCONST(&objp->map)))
 		return FALSE;
 
 	if (!xdr_u_int(xdrs, &objp->ordernum))

@@ -1,16 +1,23 @@
-#	$NetBSD: Makefile.inc,v 1.9 1997/11/20 00:12:30 mrg Exp $
+#	$NetBSD: Makefile.inc,v 1.13 2008/01/28 07:03:58 dholland Exp $
 #	@(#)Makefile.inc	8.1 (Berkeley) 5/31/93
 
-.if defined(HIDEGAME) && defined(PROG)
-BINDIR?=	/usr/games/hide
-BINGRP?=	games
+MKHIDEGAME?=	no
+
+.if defined(HIDEGAME) && (MKHIDEGAME!=no) && defined(PROG)
+BINDIR=		/usr/games/hide
+BINGRP=		games
 .if defined(SETGIDGAME)
-BINMODE?=	2550
+USE_FORT?=	yes
+BINMODE=	2550
 .else
-BINMODE?=	550
+BINMODE=	550
 .endif
 SYMLINKS+=	dm /usr/games/${PROG}
 .else
-BINDIR?=	/usr/games
+BINDIR=		/usr/games
+.if defined(SETGIDGAME)
+BINGRP=		games
+BINMODE=	2555
 .endif
-WARNS?=		1
+.endif
+WARNS?=		4

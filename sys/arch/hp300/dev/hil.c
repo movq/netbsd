@@ -1,9 +1,43 @@
-/*	$NetBSD: hil.c,v 1.39 2000/03/13 23:52:28 soren Exp $	*/
+/*	$NetBSD: hil.c,v 1.82 2008/06/13 09:41:15 cegger Exp $	*/
 
 /*
- * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Systems Programming Group of the University of Utah Computer
+ * Science Department.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ * from: Utah $Hdr: hil.c 1.38 92/01/21$
+ *
+ *	@(#)hil.c	8.2 (Berkeley) 1/12/94
+ */
+/*
+ * Copyright (c) 1988 University of Utah.
  *
  * This code is derived from software contributed to Berkeley by
  * the Systems Programming Group of the University of Utah Computer
@@ -42,7 +76,11 @@
  *	@(#)hil.c	8.2 (Berkeley) 1/12/94
  */
 
-#include "opt_compat_hpux.h"
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: hil.c,v 1.82 2008/06/13 09:41:15 cegger Exp $");
+
+#include "ite.h"
+#include "rnd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -56,6 +94,15 @@
 #include <sys/tty.h>
 #include <sys/uio.h>
 #include <sys/user.h>
+#include <sys/kauth.h>
+
+#include <uvm/uvm_extern.h>
+
+#if NRND > 0
+#include <sys/rnd.h>
+#endif
+
+#include <hp300/dev/intiovar.h>
 
 #include <hp300/dev/hilreg.h>
 #include <hp300/dev/hilioctl.h>
@@ -63,22 +110,21 @@
 #include <hp300/dev/itevar.h>
 #include <hp300/dev/kbdmap.h>
 
+#include <machine/bus.h>
 #include <machine/cpu.h>
 
-#ifdef hp300
-#define NHIL	1	/* XXX */
-#else
-#include "hil.h"
-#endif
+#include "ioconf.h"
 
-struct  hil_softc hil_softc[NHIL];
-struct	_hilbell default_bell = { BELLDUR, BELLFREQ };
-#ifdef hp800
-int	hilspl;
-#endif
+static int	hilmatch(device_t, cfdata_t, void *);
+static void	hilattach(device_t, device_t, void *);
+
+CFATTACH_DECL_NEW(hil, sizeof(struct hil_softc),
+    hilmatch, hilattach, NULL, NULL);
+
+static struct	_hilbell default_bell = { BELLDUR, BELLFREQ };
 
 #ifdef DEBUG
-int 	hildebug = 0;
+int	hildebug = 0;
 #define HDB_FOLLOW	0x01
 #define HDB_MMAP	0x02
 #define HDB_MASK	0x04
@@ -88,150 +134,169 @@ int 	hildebug = 0;
 #define HDB_EVENTS	0x80
 #endif
 
-#ifdef COMPAT_HPUX
-extern struct emul emul_hpux;
-#endif
-
-/* XXX ITE interface */
-char *kbd_keymap; 
-char *kbd_shiftmap;
-char *kbd_ctrlmap; 
-char *kbd_ctrlshiftmap;
-char **kbd_stringmap;
+extern struct kbdmap kbd_map[];
 
 /* symbolic sleep message strings */
-char hilin[] = "hilin";
+static const char hilin[] = "hilin";
 
-cdev_decl(hil);
+static dev_type_open(hilopen);
+static dev_type_close(hilclose);
+static dev_type_read(hilread);
+static dev_type_ioctl(hilioctl);
+static dev_type_poll(hilpoll);
+static dev_type_kqfilter(hilkqfilter);
 
-void	hilinfo __P((int));
-void	hilconfig __P((struct hil_softc *));
-void	hilreset __P((struct hil_softc *));
-void	hilbeep __P((struct hil_softc *, struct _hilbell *));
-int	hiliddev __P((struct hil_softc *));
+const struct cdevsw hil_cdevsw = {
+	hilopen, hilclose, hilread, nullwrite, hilioctl,
+	nostop, notty, hilpoll, nommap, hilkqfilter,
+};
 
-void	hilint __P((int));
-void	hil_process_int __P((struct hil_softc *, u_char, u_char));
-void	hilevent __P((struct hil_softc *));
-void	hpuxhilevent __P((struct hil_softc *, struct hilloopdev *));
+static void	hilattach_deferred(device_t);
 
-int	hilqalloc __P((struct hil_softc *, struct hilqinfo *, struct proc *));
-int	hilqfree __P((struct hil_softc *, int, struct proc *));
-int	hilqmap __P((struct hil_softc *, int, int, struct proc *));
-int	hilqunmap __P((struct hil_softc *, int, int, struct proc *));
+static void	hilinfo(struct hil_softc *);
+static void	hilconfig(struct hil_softc *);
+static void	hilreset(struct hil_softc *);
+static void	hilbeep(struct hil_softc *, const struct _hilbell *);
+static int	hiliddev(struct hil_softc *);
+
+static int	hilint(void *);
+static void	hil_process_int(struct hil_softc *, uint8_t, uint8_t);
+static void	hilevent(struct hil_softc *);
+static void	hpuxhilevent(struct hil_softc *, struct hilloopdev *);
+
+static int	hilqalloc(struct hil_softc *, struct hilqinfo *, struct proc *);
+static int	hilqfree(struct hil_softc *, int, struct proc *);
+static int	hilqmap(struct hil_softc *, int, int, struct lwp *);
+static int	hilqunmap(struct hil_softc *, int, int, struct proc *);
 
 #ifdef DEBUG
-void	printhilpollbuf __P((struct hil_softc *));
-void	printhilcmdbuf __P((struct hil_softc *));
-void	hilreport __P((struct hil_softc *));
+static void	printhilpollbuf(struct hil_softc *);
+static void	printhilcmdbuf(struct hil_softc *);
+static void	hilreport(struct hil_softc *);
 #endif /* DEBUG */
 
-void
-hilsoftinit(unit, hilbase)
-	int unit;
-	struct hil_dev *hilbase;
+static int
+hilmatch(device_t parent, cfdata_t cf, void *aux)
 {
-  	struct hil_softc *hilp = &hil_softc[unit];
+	struct intio_attach_args *ia = aux;
+
+	if (strcmp("hil", ia->ia_modname) != 0)
+		return 0;
+
+	return 1;
+}
+
+static void
+hilattach(device_t parent, device_t self, void *aux)
+{
+	struct hil_softc *sc = device_private(self);
+	struct intio_attach_args *ia = aux;
 	int i;
 
-	/* XXX ITE interface */
-	extern char us_keymap[], us_shiftmap[], us_ctrlmap[],
-		    us_ctrlshiftmap[], *us_stringmap[];
+	sc->sc_dev = self;
+	aprint_normal("\n");
 
 #ifdef DEBUG
 	if (hildebug & HDB_FOLLOW)
-		printf("hilsoftinit(%d, %p)\n", unit, hilbase);
+		aprint_debug("hilsoftinit(%p, %p)\n", sc,
+		    (void *)ia->ia_addr);
 #endif
 	/*
 	 * Initialize loop information
 	 */
-	hilp->hl_addr = hilbase;
-	hilp->hl_cmdending = FALSE;
-	hilp->hl_actdev = hilp->hl_cmddev = 0;
-	hilp->hl_cmddone = FALSE;
-	hilp->hl_cmdbp = hilp->hl_cmdbuf;
-	hilp->hl_pollbp = hilp->hl_pollbuf;
-	hilp->hl_kbddev = 0;
-	hilp->hl_kbdflags = 0;
+	sc->sc_addr = (struct hil_dev *)ia->ia_addr;
+	sc->sc_cmdending = false;
+	sc->sc_actdev = sc->sc_cmddev = 0;
+	sc->sc_cmddone = false;
+	sc->sc_cmdbp = sc->sc_cmdbuf;
+	sc->sc_pollbp = sc->sc_pollbuf;
+	sc->sc_kbddev = 0;
+	sc->sc_kbdflags = 0;
 	/*
 	 * Clear all queues and device associations with queues
 	 */
 	for (i = 0; i < NHILQ; i++) {
-		hilp->hl_queue[i].hq_eventqueue = NULL;
-		hilp->hl_queue[i].hq_procp = NULL;
-		hilp->hl_queue[i].hq_devmask = 0;
+		sc->sc_queue[i].hq_eventqueue = NULL;
+		sc->sc_queue[i].hq_procp = NULL;
+		sc->sc_queue[i].hq_devmask = 0;
 	}
-	for (i = 0; i < NHILD; i++)
-		hilp->hl_device[i].hd_qmask = 0;
-	hilp->hl_device[HILLOOPDEV].hd_flags = (HIL_ALIVE|HIL_PSEUDO);
+	for (i = 0; i < NHILD; i++) {
+		selinit(&sc->sc_device[i].hd_selr);
+		sc->sc_device[i].hd_qmask = 0;
+	}
+	sc->sc_device[HILLOOPDEV].hd_flags = (HIL_ALIVE|HIL_PSEUDO);
 
 	/*
 	 * Set up default keyboard language.  We always default
 	 * to US ASCII - it seems to work OK for non-recognized
 	 * keyboards.
 	 */
-	hilp->hl_kbdlang = KBD_DEFAULT;
-	kbd_keymap = us_keymap;			/* XXX */
-	kbd_shiftmap = us_shiftmap;		/* XXX */
-	kbd_ctrlmap = us_ctrlmap;		/* XXX */
-	kbd_ctrlshiftmap = us_ctrlshiftmap;	/* XXX */
-	kbd_stringmap = us_stringmap;		/* XXX */
+
+	sc->sc_kbdlang = KBD_DEFAULT;
+#if NITE > 0
+	{
+		struct kbdmap *km;
+		for (km = kbd_map; km->kbd_code; km++) {
+			if (km->kbd_code == KBD_US)
+				iteinstallkeymap(km);
+		}
+	}
+#endif
+
+	(void)intio_intr_establish(hilint, sc, ia->ia_ipl, IPL_TTY);
+
+	config_interrupts(self, hilattach_deferred);
 }
 
-void
-hilinit(unit, hilbase)
-	int unit;
-	struct hil_dev *hilbase;
+static void
+hilattach_deferred(device_t self)
 {
-  	struct hil_softc *hilp = &hil_softc[unit];
+	struct hil_softc *sc = device_private(self);
+
 #ifdef DEBUG
 	if (hildebug & HDB_FOLLOW)
-		printf("hilinit(%d, %p)\n", unit, hilbase);
+		aprint_debug("hilinit(%p, %p)\n", sc, sc->sc_addr);
 #endif
-	/*
-	 * Initialize software (if not already done).
-	 */
-	if ((hilp->hl_device[HILLOOPDEV].hd_flags & HIL_ALIVE) == 0)
-		hilsoftinit(unit, hilbase);
 	/*
 	 * Initialize hardware.
 	 * Reset the loop hardware, and collect keyboard/id info
 	 */
-	hilreset(hilp);
-	hilinfo(unit);
-	kbdenable(unit);
+	hilreset(sc);
+	hilinfo(sc);
+	hilkbdenable(sc);
 }
 
 /* ARGSUSED */
-int
-hilopen(dev, flags, mode, p)
-	dev_t dev;
-	int flags, mode;
-	struct proc *p;
+static int
+hilopen(dev_t dev, int flags, int mode, struct lwp *l)
 {
-  	struct hil_softc *hilp = &hil_softc[HILLOOP(dev)];
+	struct hil_softc *sc;
 	struct hilloopdev *dptr;
-	u_char device = HILUNIT(dev);
 	int s;
+#ifdef DEBUG
+	struct proc *p = l->l_proc;
+#endif
+
+	sc = device_lookup_private(&hil_cd, HILLOOP(dev));
 
 #ifdef DEBUG
 	if (hildebug & HDB_FOLLOW)
 		printf("hilopen(%d): loop %x device %x\n",
-		       p->p_pid, HILLOOP(dev), device);
+		    p->p_pid, HILLOOP(dev), HILUNIT(dev));
 #endif
-	
-	if ((hilp->hl_device[HILLOOPDEV].hd_flags & HIL_ALIVE) == 0)
-		return(ENXIO);
 
-	dptr = &hilp->hl_device[device];
+	if ((sc->sc_device[HILLOOPDEV].hd_flags & HIL_ALIVE) == 0)
+		return ENXIO;
+
+	dptr = &sc->sc_device[HILUNIT(dev)];
 	if ((dptr->hd_flags & HIL_ALIVE) == 0)
-		return(ENODEV);
+		return ENODEV;
 
 	/*
 	 * Pseudo-devices cannot be read, nothing more to do.
 	 */
 	if (dptr->hd_flags & HIL_PSEUDO)
-		return(0);
+		return 0;
 
 	/*
 	 * Open semantics:
@@ -241,22 +306,13 @@ hilopen(dev, flags, mode, p)
 	 * 3.	BSD processes default to shared queue interface.
 	 *	Multiple processes can open the device.
 	 */
-#ifdef COMPAT_HPUX
-	if (p->p_emul == &emul_hpux) {
-		if (dptr->hd_flags & (HIL_READIN|HIL_QUEUEIN))
-			return(EBUSY);
-		dptr->hd_flags |= HIL_READIN;
-	} else
-#endif
-	{
-		if (dptr->hd_flags & HIL_READIN)
-			return(EBUSY);
-		dptr->hd_flags |= HIL_QUEUEIN;
-	}
+	if (dptr->hd_flags & HIL_READIN)
+		return EBUSY;
+	dptr->hd_flags |= HIL_QUEUEIN;
 	if (flags & FNONBLOCK)
 		dptr->hd_flags |= HIL_NOBLOCK;
 	/*
-	 * It is safe to flush the read buffer as we are guarenteed
+	 * It is safe to flush the read buffer as we are guaranteed
 	 * that no one else is using it.
 	 */
 	if ((dptr->hd_flags & HIL_OPENED) == 0) {
@@ -264,64 +320,65 @@ hilopen(dev, flags, mode, p)
 		clalloc(&dptr->hd_queue, HILMAXCLIST, 0);
 	}
 
-	send_hil_cmd(hilp->hl_addr, HIL_INTON, NULL, 0, NULL);
+	send_hil_cmd(sc->sc_addr, HIL_INTON, NULL, 0, NULL);
 	/*
 	 * Opened the keyboard, put in raw mode.
 	 */
 	s = splhil();
-	if (device == hilp->hl_kbddev) {
-		u_char mask = 0;
-		send_hil_cmd(hilp->hl_addr, HIL_WRITEKBDSADR, &mask, 1, NULL);
-		hilp->hl_kbdflags |= KBD_RAW;
+	if (HILUNIT(dev) == sc->sc_kbddev) {
+		uint8_t mask = 0;
+		send_hil_cmd(sc->sc_addr, HIL_WRITEKBDSADR, &mask, 1, NULL);
+		sc->sc_kbdflags |= KBD_RAW;
 #ifdef DEBUG
 		if (hildebug & HDB_KEYBOARD)
-			printf("hilopen: keyboard %d raw\n", hilp->hl_kbddev);
+			printf("hilopen: keyboard %d raw\n", sc->sc_kbddev);
 #endif
 	}
 	splx(s);
-	return (0);
+	return 0;
 }
 
 /* ARGSUSED */
-int
-hilclose(dev, flags, mode, p)
-	dev_t dev;
-	int flags, mode;
-	struct proc *p;
+static int
+hilclose(dev_t dev, int flags, int mode, struct lwp *l)
 {
-  	struct hil_softc *hilp = &hil_softc[HILLOOP(dev)];
+	struct hil_softc *sc;
 	struct hilloopdev *dptr;
 	int i;
-	u_char device = HILUNIT(dev);
 	char mask, lpctrl;
 	int s;
 	extern struct emul emul_netbsd;
+#ifdef DEBUG
+	struct proc *p = l->l_proc;
+#endif
+
+	sc = device_lookup_private(&hil_cd, HILLOOP(dev));
 
 #ifdef DEBUG
 	if (hildebug & HDB_FOLLOW)
-		printf("hilclose(%d): device %x\n", p->p_pid, device);
+		printf("hilclose(%d): device %x\n", p->p_pid, HILUNIT(dev));
 #endif
 
-	dptr = &hilp->hl_device[device];
-	if (device && (dptr->hd_flags & HIL_PSEUDO))
-		return (0);
+	dptr = &sc->sc_device[HILUNIT(dev)];
+	if (HILUNIT(dev) && (dptr->hd_flags & HIL_PSEUDO))
+		return 0;
 
-	if (p && p->p_emul == &emul_netbsd) {
+	if (l && l->l_proc->p_emul == &emul_netbsd) {
 		/*
 		 * If this is the loop device,
 		 * free up all queues belonging to this process.
 		 */
-		if (device == 0) {
+		if (HILUNIT(dev) == 0) {
 			for (i = 0; i < NHILQ; i++)
-				if (hilp->hl_queue[i].hq_procp == p)
-					(void) hilqfree(hilp, i, p);
+				if (sc->sc_queue[i].hq_procp == l->l_proc)
+					(void) hilqfree(sc, i, l->l_proc);
 		} else {
-			mask = ~hildevmask(device);
+			mask = ~hildevmask(HILUNIT(dev));
 			s = splhil();
 			for (i = 0; i < NHILQ; i++)
-				if (hilp->hl_queue[i].hq_procp == p) {
+				if (sc->sc_queue[i].hq_procp == l->l_proc) {
 					dptr->hd_qmask &= ~hilqmask(i);
-					hilp->hl_queue[i].hq_devmask &= mask;
+					sc->sc_queue[i].hq_devmask &= mask;
 				}
 			splx(s);
 		}
@@ -335,51 +392,49 @@ hilclose(dev, flags, mode, p)
 	 * Set keyboard back to cooked mode when closed.
 	 */
 	s = splhil();
-	if (device && device == hilp->hl_kbddev) {
-		mask = 1 << (hilp->hl_kbddev - 1);
-		send_hil_cmd(hilp->hl_addr, HIL_WRITEKBDSADR, &mask, 1, NULL);
-		hilp->hl_kbdflags &= ~(KBD_RAW|KBD_AR1|KBD_AR2);
+	if (HILUNIT(dev) && HILUNIT(dev) == sc->sc_kbddev) {
+		mask = 1 << (sc->sc_kbddev - 1);
+		send_hil_cmd(sc->sc_addr, HIL_WRITEKBDSADR, &mask, 1, NULL);
+		sc->sc_kbdflags &= ~(KBD_RAW|KBD_AR1|KBD_AR2);
 		/*
 		 * XXX: We have had trouble with keyboards remaining raw
 		 * after close due to the LPC_KBDCOOK bit getting cleared
 		 * somewhere along the line.  Hence we check and reset
 		 * LPCTRL if necessary.
 		 */
-		send_hil_cmd(hilp->hl_addr, HIL_READLPCTRL, NULL, 0, &lpctrl);
+		send_hil_cmd(sc->sc_addr, HIL_READLPCTRL, NULL, 0, &lpctrl);
 		if ((lpctrl & LPC_KBDCOOK) == 0) {
 			printf("hilclose: bad LPCTRL %x, reset to %x\n",
-			       lpctrl, lpctrl|LPC_KBDCOOK);
+			    lpctrl, lpctrl|LPC_KBDCOOK);
 			lpctrl |= LPC_KBDCOOK;
-			send_hil_cmd(hilp->hl_addr, HIL_WRITELPCTRL,
+			send_hil_cmd(sc->sc_addr, HIL_WRITELPCTRL,
 					&lpctrl, 1, NULL);
 		}
 #ifdef DEBUG
 		if (hildebug & HDB_KEYBOARD)
 			printf("hilclose: keyboard %d cooked\n",
-			       hilp->hl_kbddev);
+			    sc->sc_kbddev);
 #endif
-		kbdenable(HILLOOP(dev));
+		hilkbdenable(sc);
 	}
 	splx(s);
-	return (0);
+	return 0;
 }
 
 /*
  * Read interface to HIL device.
  */
 /* ARGSUSED */
-int
-hilread(dev, uio, flag)
-	dev_t dev;
-	struct uio *uio;
-	int flag;
+static int
+hilread(dev_t dev, struct uio *uio, int flag)
 {
-	struct hil_softc *hilp = &hil_softc[HILLOOP(dev)];
+	struct hil_softc *sc;
 	struct hilloopdev *dptr;
 	int cc;
-	u_char device = HILUNIT(dev);
-	u_char buf[HILBUFSIZE];
+	uint8_t buf[HILBUFSIZE];
 	int error, s;
+
+	sc = device_lookup_private(&hil_cd, HILLOOP(dev));
 
 #if 0
 	/*
@@ -388,25 +443,25 @@ hilread(dev, uio, flag)
 	 * Check device number.
 	 * This check is necessary since loop can reconfigure.
 	 */
-	if (device > hilp->hl_maxdev)
-		return(ENODEV);
+	if (HILUNIT(dev) > sc->sc_maxdev)
+		return ENODEV;
 #endif
 
-	dptr = &hilp->hl_device[device];
+	dptr = &sc->sc_device[HILUNIT(dev)];
 	if ((dptr->hd_flags & HIL_READIN) == 0)
-		return(ENODEV);
+		return ENODEV;
 
 	s = splhil();
 	while (dptr->hd_queue.c_cc == 0) {
 		if (dptr->hd_flags & HIL_NOBLOCK) {
 			spl0();
-			return(EWOULDBLOCK);
+			return EWOULDBLOCK;
 		}
 		dptr->hd_flags |= HIL_ASLEEP;
-		if ((error = tsleep((caddr_t)dptr,
+		if ((error = tsleep((void *)dptr,
 		    TTIPRI | PCATCH, hilin, 0))) {
-			(void) spl0();
-			return (error);
+			(void)spl0();
+			return error;
 		}
 	}
 	splx(s);
@@ -414,38 +469,35 @@ hilread(dev, uio, flag)
 	error = 0;
 	while (uio->uio_resid > 0 && error == 0) {
 		cc = q_to_b(&dptr->hd_queue, buf,
-			    min(uio->uio_resid, HILBUFSIZE));
+		    min(uio->uio_resid, HILBUFSIZE));
 		if (cc <= 0)
 			break;
 		error = uiomove(buf, cc, uio);
 	}
-	return(error);
+	return error;
 }
 
-int
-hilioctl(dev, cmd, data, flag, p)
-	dev_t dev;
-	u_long cmd;
-	caddr_t data;
-	int flag;
-	struct proc *p;
+static int
+hilioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
-	struct hil_softc *hilp = &hil_softc[HILLOOP(dev)];
-	char device = HILUNIT(dev);
+	struct hil_softc *sc;
 	struct hilloopdev *dptr;
+	uint8_t *buf;
 	int i;
-	u_char hold;
+	uint8_t hold;
 	int error;
+
+	sc = device_lookup_private(&hil_cd, HILLOOP(dev));
 
 #ifdef DEBUG
 	if (hildebug & HDB_FOLLOW)
 		printf("hilioctl(%d): dev %x cmd %lx\n",
-		       p->p_pid, device, cmd);
+		    l->l_proc->p_pid, HILUNIT(dev), cmd);
 #endif
 
-	dptr = &hilp->hl_device[(int)device];
+	dptr = &sc->sc_device[HILUNIT(dev)];
 	if ((dptr->hd_flags & HIL_ALIVE) == 0)
-		return (ENODEV);
+		return ENODEV;
 
 	/*
 	 * Don't allow hardware ioctls on virtual devices.
@@ -460,7 +512,7 @@ hilioctl(dev, cmd, data, flag, p)
 		case HILIOCRN:
 		case HILIOCRS:
 		case HILIOCED:
-			return(ENODEV);
+			return ENODEV;
 
 		/*
 		 * XXX: should also return ENODEV but HP-UX compat
@@ -478,41 +530,38 @@ hilioctl(dev, cmd, data, flag, p)
 		}
 	}
 
-#ifdef COMPAT_HPUX
-	if (p->p_emul == &emul_hpux)
-		return(hpuxhilioctl(dev, cmd, data, flag));
-#endif
-
-	hilp->hl_cmdbp = hilp->hl_cmdbuf;
-	bzero((caddr_t)hilp->hl_cmdbuf, HILBUFSIZE);
-	hilp->hl_cmddev = device;
+	sc->sc_cmdbp = sc->sc_cmdbuf;
+	memset((void *)sc->sc_cmdbuf, 0, HILBUFSIZE);
+	sc->sc_cmddev = HILUNIT(dev);
 	error = 0;
 	switch (cmd) {
 
 	case HILIOCSBP:
 		/* Send four data bytes to the tone gererator. */
-		send_hil_cmd(hilp->hl_addr, HIL_STARTCMD, data, 4, NULL);
+		send_hil_cmd(sc->sc_addr, HIL_STARTCMD, data, 4, NULL);
 		/* Send the trigger beeper command to the 8042. */
-		send_hil_cmd(hilp->hl_addr, (cmd & 0xFF), NULL, 0, NULL);
+		send_hil_cmd(sc->sc_addr, (cmd & 0xFF), NULL, 0, NULL);
 		break;
 
 	case OHILIOCRRT:
 	case HILIOCRRT:
 		/* Transfer the real time to the 8042 data buffer */
-		send_hil_cmd(hilp->hl_addr, (cmd & 0xFF), NULL, 0, NULL);
+		send_hil_cmd(sc->sc_addr, (cmd & 0xFF), NULL, 0, NULL);
 		/* Read each byte of the real time */
+		buf = data;
 		for (i = 0; i < 5; i++) {
-			send_hil_cmd(hilp->hl_addr, HIL_READTIME + i, NULL,
+			send_hil_cmd(sc->sc_addr, HIL_READTIME + i, NULL,
 					0, &hold);
-			data[4-i] = hold;
+			buf[4 - i] = hold;
 		}
 		break;
-		
+
 	case HILIOCRT:
+		buf = data;
 		for (i = 0; i < 4; i++) {
-			send_hil_cmd(hilp->hl_addr, (cmd & 0xFF) + i,
+			send_hil_cmd(sc->sc_addr, (cmd & 0xFF) + i,
 					NULL, 0, &hold);
-			data[i] = hold;
+			buf[i] = hold;
 		}
 		break;
 
@@ -522,30 +571,30 @@ hilioctl(dev, cmd, data, flag, p)
 	case HILIOCRN:
 	case HILIOCRS:
 	case HILIOCED:
-	  	send_hildev_cmd(hilp, device, (cmd & 0xFF));
-		bcopy(hilp->hl_cmdbuf, data, hilp->hl_cmdbp-hilp->hl_cmdbuf);
-	  	break;
+		send_hildev_cmd(sc, HILUNIT(dev), (cmd & 0xFF));
+		memcpy(data, sc->sc_cmdbuf, sc->sc_cmdbp - sc->sc_cmdbuf);
+		break;
 
-        case HILIOCAROFF:
-        case HILIOCAR1:
-        case HILIOCAR2:
-		if (hilp->hl_kbddev) {
-			hilp->hl_cmddev = hilp->hl_kbddev;
-			send_hildev_cmd(hilp, hilp->hl_kbddev, (cmd & 0xFF));
-			hilp->hl_kbdflags &= ~(KBD_AR1|KBD_AR2);
+	case HILIOCAROFF:
+	case HILIOCAR1:
+	case HILIOCAR2:
+		if (sc->sc_kbddev) {
+			sc->sc_cmddev = sc->sc_kbddev;
+			send_hildev_cmd(sc, sc->sc_kbddev, (cmd & 0xFF));
+			sc->sc_kbdflags &= ~(KBD_AR1|KBD_AR2);
 			if (cmd == HILIOCAR1)
-				hilp->hl_kbdflags |= KBD_AR1;
+				sc->sc_kbdflags |= KBD_AR1;
 			else if (cmd == HILIOCAR2)
-				hilp->hl_kbdflags |= KBD_AR2;
+				sc->sc_kbdflags |= KBD_AR2;
 		}
 		break;
 
 	case HILIOCBEEP:
-		hilbeep(hilp, (struct _hilbell *)data);
+		hilbeep(sc, (struct _hilbell *)data);
 		break;
 
 	case FIONBIO:
-		dptr = &hilp->hl_device[(int)device];
+		dptr = &sc->sc_device[HILUNIT(dev)];
 		if (*(int *)data)
 			dptr->hd_flags |= HIL_NOBLOCK;
 		else
@@ -559,219 +608,78 @@ hilioctl(dev, cmd, data, flag, p)
 	case FIOASYNC:
 		break;
 
-        case HILIOCALLOCQ:
-		error = hilqalloc(hilp, (struct hilqinfo *)data, p);
+	case HILIOCALLOCQ:
+		error = hilqalloc(sc, (struct hilqinfo *)data, l->l_proc);
 		break;
 
-        case HILIOCFREEQ:
-		error = hilqfree(hilp, ((struct hilqinfo *)data)->qid, p);
+	case HILIOCFREEQ:
+		error = hilqfree(sc, ((struct hilqinfo *)data)->qid, l->l_proc);
 		break;
 
-        case HILIOCMAPQ:
-		error = hilqmap(hilp, *(int *)data, device, p);
+	case HILIOCMAPQ:
+		error = hilqmap(sc, *(int *)data, HILUNIT(dev), l);
 		break;
 
-        case HILIOCUNMAPQ:
-		error = hilqunmap(hilp, *(int *)data, device, p);
+	case HILIOCUNMAPQ:
+		error = hilqunmap(sc, *(int *)data, HILUNIT(dev), l->l_proc);
 		break;
 
 	case HILIOCHPUX:
-		dptr = &hilp->hl_device[(int)device];
+		dptr = &sc->sc_device[HILUNIT(dev)];
 		dptr->hd_flags |= HIL_READIN;
 		dptr->hd_flags &= ~HIL_QUEUEIN;
 		break;
 
-        case HILIOCRESET:
-	        hilreset(hilp);
+	case HILIOCRESET:
+		hilreset(sc);
 		break;
-		
+
 #ifdef DEBUG
-        case HILIOCTEST:
-		hildebug = *(int *) data;
+	case HILIOCTEST:
+		hildebug = *(int *)data;
 		break;
 #endif
 
-        default:
+	default:
 		error = EINVAL;
 		break;
 
 	}
-	hilp->hl_cmddev = 0;
-	return(error);
-}
-
-#ifdef COMPAT_HPUX
-/* ARGSUSED */
-int
-hpuxhilioctl(dev, cmd, data, flag)
-	dev_t dev;
-	int cmd, flag;
-	caddr_t data;
-{
-	struct hil_softc *hilp = &hil_softc[HILLOOP(dev)];
-	char device = HILUNIT(dev);
-	struct hilloopdev *dptr;
-	int i;
-	u_char hold;
-
-	hilp->hl_cmdbp = hilp->hl_cmdbuf;
-	bzero((caddr_t)hilp->hl_cmdbuf, HILBUFSIZE);
-	hilp->hl_cmddev = device;
-	switch (cmd) {
-
-	case HILSC:
-	case HILID:
-	case HILRN:
-	case HILRS:
-	case HILED:
-	case HILP1:
-	case HILP2:
-	case HILP3:
-	case HILP4:
-	case HILP5:
-	case HILP6:
-	case HILP7:
-	case HILP:
-	case HILA1:
-	case HILA2:
-	case HILA3:
-	case HILA4:
-	case HILA5:
-	case HILA6:
-	case HILA7:
-	case HILA:
-		send_hildev_cmd(hilp, device, (cmd & 0xFF));
-		bcopy(hilp->hl_cmdbuf, data, hilp->hl_cmdbp-hilp->hl_cmdbuf);
-	  	break;
-
-        case HILDKR:
-        case HILER1:
-        case HILER2:
-		if (hilp->hl_kbddev) {
-			hilp->hl_cmddev = hilp->hl_kbddev;
-			send_hildev_cmd(hilp, hilp->hl_kbddev, (cmd & 0xFF));
-			hilp->hl_kbdflags &= ~(KBD_AR1|KBD_AR2);
-			if (cmd == HILIOCAR1)
-				hilp->hl_kbdflags |= KBD_AR1;
-			else if (cmd == HILIOCAR2)
-				hilp->hl_kbdflags |= KBD_AR2;
-		}
-		break;
-
-	case EFTSBP:
-		/* Send four data bytes to the tone gererator. */
-		send_hil_cmd(hilp->hl_addr, HIL_STARTCMD, data, 4, NULL);
-		/* Send the trigger beeper command to the 8042. */
-		send_hil_cmd(hilp->hl_addr, (cmd & 0xFF), NULL, 0, NULL);
-		break;
-
-	case EFTRRT:
-		/* Transfer the real time to the 8042 data buffer */
-		send_hil_cmd(hilp->hl_addr, (cmd & 0xFF), NULL, 0, NULL);
-		/* Read each byte of the real time */
-		for (i = 0; i < 5; i++) {
-			send_hil_cmd(hilp->hl_addr, HIL_READTIME + i, NULL,
-					0, &hold);
-			data[4-i] = hold;
-		}
-		break;
-		
-	case EFTRT:
-		for (i = 0; i < 4; i++) {
-			send_hil_cmd(hilp->hl_addr, (cmd & 0xFF) + i,
-					NULL, 0, &hold);
-			data[i] = hold;
-		}
-		break;
-
-        case EFTRLC:
-        case EFTRCC:
-		send_hil_cmd(hilp->hl_addr, (cmd & 0xFF), NULL, 0, &hold);
-		*data = hold;
-		break;
-		
-        case EFTSRPG:
-        case EFTSRD:
-        case EFTSRR:
-		send_hil_cmd(hilp->hl_addr, (cmd & 0xFF), data, 1, NULL);
-		break;
-		
-	case EFTSBI:
-#ifdef hp800
-		/* XXX big magic */
-		hold = 7 - (*(u_char *)data >> 5);
-		*(int *)data = 0x84069008 | (hold << 8);
-		send_hil_cmd(hilp->hl_addr, HIL_STARTCMD, data, 4, NULL);
-		send_hil_cmd(hilp->hl_addr, 0xC4, NULL, 0, NULL);
-		break;
-#else
-		hilbeep(hilp, (struct _hilbell *)data);
-#endif
-		break;
-
-	case FIONBIO:
-		dptr = &hilp->hl_device[(int)device];
-		if (*(int *)data)
-			dptr->hd_flags |= HIL_NOBLOCK;
-		else
-			dptr->hd_flags &= ~HIL_NOBLOCK;
-		break;
-
-	case FIOASYNC:
-		break;
-
-        default:
-		hilp->hl_cmddev = 0;
-		return(EINVAL);
-	}
-	hilp->hl_cmddev = 0;
-	return(0);
-}
-#endif
-
-/* ARGSUSED */
-int
-hilmmap(dev, off, prot)
-	dev_t dev;
-	int off, prot;
-{
-	return (-1);
+	sc->sc_cmddev = 0;
+	return error;
 }
 
 /*ARGSUSED*/
-int
-hilpoll(dev, events, p)
-	dev_t dev;
-	int events;
-	struct proc *p;
+static int
+hilpoll(dev_t dev, int events, struct lwp *l)
 {
-	struct hil_softc *hilp = &hil_softc[HILLOOP(dev)];
+	struct hil_softc *sc;
 	struct hilloopdev *dptr;
 	struct hiliqueue *qp;
 	int mask;
-	int s, device, revents;
+	int s, revents;
+
+	sc = device_lookup_private(&hil_cd, HILLOOP(dev));
 
 	revents = events & (POLLOUT | POLLWRNORM);
 
 	/* Attempt to save some work. */
 	if ((events & (POLLIN | POLLRDNORM)) == 0)
-		return (revents);
-
-	device = HILUNIT(dev);
+		return revents;
 
 	/*
 	 * Read interface.
 	 * Return 1 if there is something in the queue, 0 ow.
 	 */
-	dptr = &hilp->hl_device[device];
+	dptr = &sc->sc_device[HILUNIT(dev)];
 	if (dptr->hd_flags & HIL_READIN) {
 		s = splhil();
 		if (dptr->hd_queue.c_cc > 0)
 			revents |= events & (POLLIN | POLLRDNORM);
 		else
-			selrecord(p, &dptr->hd_selr);
+			selrecord(l, &dptr->hd_selr);
 		splx(s);
-		return (revents);
+		return revents;
 	}
 
 	/*
@@ -779,8 +687,73 @@ hilpoll(dev, events, p)
 	 * Note that we do not do this for the read interface.
 	 * This is primarily to be consistant with HP-UX.
 	 */
-	if (device && (dptr->hd_flags & (HIL_ALIVE|HIL_PSEUDO)) != HIL_ALIVE)
-		return (revents | (events & (POLLIN | POLLRDNORM)));
+	if (HILUNIT(dev) &&
+	    (dptr->hd_flags & (HIL_ALIVE|HIL_PSEUDO)) != HIL_ALIVE)
+		return revents | (events & (POLLIN | POLLRDNORM));
+
+	/*
+	 * Select on loop device is special.
+	 * Check to see if there are any data for any loop device
+	 * provided it is associated with a queue belonging to this user.
+	 */
+	if (HILUNIT(dev) == 0)
+		mask = -1;
+	else
+		mask = hildevmask(HILUNIT(dev));
+	/*
+	 * Must check everybody with interrupts blocked to prevent races.
+	 */
+	s = splhil();
+	for (qp = sc->sc_queue; qp < &sc->sc_queue[NHILQ]; qp++)
+		if (qp->hq_procp == l->l_proc && (mask & qp->hq_devmask) &&
+		    qp->hq_eventqueue->hil_evqueue.head !=
+		    qp->hq_eventqueue->hil_evqueue.tail) {
+			splx(s);
+			return revents | (events & (POLLIN | POLLRDNORM));
+		}
+
+	selrecord(l, &dptr->hd_selr);
+	splx(s);
+	return revents;
+}
+
+static void
+filt_hilrdetach(struct knote *kn)
+{
+	dev_t dev = (intptr_t) kn->kn_hook;
+	struct hil_softc *sc = device_lookup_private(&hil_cd,HILLOOP(dev));
+	struct hilloopdev *dptr = &sc->sc_device[HILUNIT(dev)];
+	int s;
+
+	s = splhil();
+	SLIST_REMOVE(&dptr->hd_selr.sel_klist, kn, knote, kn_selnext);
+	splx(s);
+}
+
+static int
+filt_hilread(struct knote *kn, long hint)
+{
+	dev_t dev = (intptr_t) kn->kn_hook;
+	int device = HILUNIT(dev);
+	struct hil_softc *sc = device_lookup_private(&hil_cd,HILLOOP(dev));
+	struct hilloopdev *dptr = &sc->sc_device[device];
+	struct hiliqueue *qp;
+	int mask;
+
+	if (dptr->hd_flags & HIL_READIN) {
+		kn->kn_data = dptr->hd_queue.c_cc;
+		return kn->kn_data > 0;
+	}
+
+	/*
+	 * Make sure device is alive and real (or the loop device).
+	 * Note that we do not do this for the read interface.
+	 * This is primarily to be consistant with HP-UX.
+	 */
+	if (device && (dptr->hd_flags & (HIL_ALIVE|HIL_PSEUDO)) != HIL_ALIVE) {
+		kn->kn_data = 0; /* XXXLUKEM (thorpej): what to put here? */
+		return 1;
+	}
 
 	/*
 	 * Select on loop device is special.
@@ -793,45 +766,79 @@ hilpoll(dev, events, p)
 		mask = hildevmask(device);
 	/*
 	 * Must check everybody with interrupts blocked to prevent races.
+	 * (Interrupts are already blocked.)
 	 */
-	s = splhil();
-	for (qp = hilp->hl_queue; qp < &hilp->hl_queue[NHILQ]; qp++)
-		if (qp->hq_procp == p && (mask & qp->hq_devmask) &&
+	for (qp = sc->sc_queue; qp < &sc->sc_queue[NHILQ]; qp++) {
+		/* XXXLUKEM (thorpej): PROCESS CHECK! */
+		if (/*qp->hq_procp == l->l_proc &&*/ (mask & qp->hq_devmask) &&
 		    qp->hq_eventqueue->hil_evqueue.head !=
 		    qp->hq_eventqueue->hil_evqueue.tail) {
-			splx(s);
-			return (revents | (events & (POLLIN | POLLRDNORM)));
+			/* XXXLUKEM (thorpej): what to put here? */
+			kn->kn_data = 0;
+			return 1;
 		}
+	}
 
-	selrecord(p, &dptr->hd_selr);
+	return 0;
+}
+
+static const struct filterops hilread_filtops =
+	{ 1, NULL, filt_hilrdetach, filt_hilread };
+
+static const struct filterops hil_seltrue_filtops =
+	{ 1, NULL, filt_hilrdetach, filt_seltrue };
+
+static int
+hilkqfilter(dev_t dev, struct knote *kn)
+{
+	struct hil_softc *sc = device_lookup_private(&hil_cd,HILLOOP(dev));
+	struct hilloopdev *dptr = &sc->sc_device[HILUNIT(dev)];
+	struct klist *klist;
+	int s;
+
+	switch (kn->kn_filter) {
+	case EVFILT_READ:
+		klist = &dptr->hd_selr.sel_klist;
+		kn->kn_fop = &hilread_filtops;
+		break;
+
+	case EVFILT_WRITE:
+		klist = &dptr->hd_selr.sel_klist;
+		kn->kn_fop = &hil_seltrue_filtops;
+		break;
+
+	default:
+		return 1;
+	}
+
+	kn->kn_hook = (void *)(intptr_t) dev; /* XXX yuck */
+
+	s = splhil();
+	SLIST_INSERT_HEAD(klist, kn, kn_selnext);
 	splx(s);
-	return (revents);
+
+	return 0;
 }
 
 /*ARGSUSED*/
-void
-hilint(unit)
-	int unit;
+static int
+hilint(void *v)
 {
-#ifdef hp300
-	struct hil_softc *hilp = &hil_softc[0]; /* XXX how do we know on 300? */
-#else
-	struct hil_softc *hilp = &hil_softc[unit];
-#endif
-	struct hil_dev *hildevice = hilp->hl_addr;
-	u_char c, stat;
+	struct hil_softc *sc = v;
+	struct hil_dev *hildevice = sc->sc_addr;
+	uint8_t c, stat;
 
 	stat = READHILSTAT(hildevice);
 	c = READHILDATA(hildevice);		/* clears interrupt */
-	hil_process_int(hilp, stat, c);
+	hil_process_int(sc, stat, c);
+#if NRND > 0
+	rnd_add_uint32(&sc->rnd_source, (stat<<8)|c);
+#endif
+	return 1;
 }
 
-#include "ite.h"
-
-void
-hil_process_int(hilp, stat, c)
-	struct hil_softc *hilp;
-	u_char stat, c;
+static void
+hil_process_int(struct hil_softc *sc, uint8_t stat, uint8_t c)
 {
 #ifdef DEBUG
 	if (hildebug & HDB_EVENTS)
@@ -849,53 +856,54 @@ hil_process_int(hilp, stat, c)
 		itefilter(stat, c);
 		return;
 #endif
-		
+
 	case HIL_STATUS:			/* The status info. */
 		if (c & HIL_ERROR) {
-		  	hilp->hl_cmddone = TRUE;
+			sc->sc_cmddone = true;
 			if (c == HIL_RECONFIG)
-				hilconfig(hilp);
+				hilconfig(sc);
 			break;
 		}
 		if (c & HIL_COMMAND) {
-		  	if (c & HIL_POLLDATA)	/* End of data */
-				hilevent(hilp);
+			if (c & HIL_POLLDATA)	/* End of data */
+				hilevent(sc);
 			else			/* End of command */
-			  	hilp->hl_cmdending = TRUE;
-			hilp->hl_actdev = 0;
+				sc->sc_cmdending = true;
+			sc->sc_actdev = 0;
 		} else {
-		  	if (c & HIL_POLLDATA) {	/* Start of polled data */
-			  	if (hilp->hl_actdev != 0)
-					hilevent(hilp);
-				hilp->hl_actdev = (c & HIL_DEVMASK);
-				hilp->hl_pollbp = hilp->hl_pollbuf;
+			if (c & HIL_POLLDATA) {	/* Start of polled data */
+				if (sc->sc_actdev != 0)
+					hilevent(sc);
+				sc->sc_actdev = (c & HIL_DEVMASK);
+				sc->sc_pollbp = sc->sc_pollbuf;
 			} else {		/* Start of command */
-				if (hilp->hl_cmddev == (c & HIL_DEVMASK)) {
-					hilp->hl_cmdbp = hilp->hl_cmdbuf;
-					hilp->hl_actdev = 0;
+				if (sc->sc_cmddev == (c & HIL_DEVMASK)) {
+					sc->sc_cmdbp = sc->sc_cmdbuf;
+					sc->sc_actdev = 0;
 				}
 			}
 		}
-	        return;
+		return;
 
 	case HIL_DATA:
-		if (hilp->hl_actdev != 0)	/* Collecting poll data */
-			*hilp->hl_pollbp++ = c;
+		if (sc->sc_actdev != 0)	/* Collecting poll data */
+			*sc->sc_pollbp++ = c;
 		else {
-			if (hilp->hl_cmddev != 0) {  /* Collecting cmd data */
-			   if (hilp->hl_cmdending) {
-				hilp->hl_cmddone = TRUE;
-				hilp->hl_cmdending = FALSE;
-			   } else  
-				*hilp->hl_cmdbp++ = c;
-		        }
+			if (sc->sc_cmddev != 0) {  /* Collecting cmd data */
+				if (sc->sc_cmdending) {
+					sc->sc_cmddone = true;
+					sc->sc_cmdending = false;
+				} else
+					*sc->sc_cmdbp++ = c;
+			}
 		}
 		return;
-		
+
 	case 0:		/* force full jump table */
 	default:
 		return;
 	}
+
 }
 
 /*
@@ -908,23 +916,22 @@ hil_process_int(hilp, stat, c)
 #define HQVALID(eq) \
 	((eq)->size == HEVQSIZE && (eq)->tail >= 0 && (eq)->tail < HEVQSIZE)
 
-void
-hilevent(hilp)
-	struct hil_softc *hilp;
+static void
+hilevent(struct hil_softc *sc)
 {
-	struct hilloopdev *dptr = &hilp->hl_device[hilp->hl_actdev];
+	struct hilloopdev *dptr = &sc->sc_device[sc->sc_actdev];
 	int len, mask, qnum;
-	u_char *cp, *pp;
+	uint8_t *cp, *pp;
 	HILQ *hq;
 	struct timeval ourtime;
 	hil_packet *proto;
-	int s, len0;
+	int len0;
 	long tenths;
 
 #ifdef DEBUG
 	if (hildebug & HDB_EVENTS) {
-		printf("hilevent: dev %d pollbuf: ", hilp->hl_actdev);
-		printhilpollbuf(hilp);
+		printf("hilevent: dev %d pollbuf: ", sc->sc_actdev);
+		printhilpollbuf(sc);
 		printf("\n");
 	}
 #endif
@@ -934,7 +941,7 @@ hilevent(hilp)
 	 * that may have been in use at the time of an HILIOCHPUX call.
 	 */
 	if (dptr->hd_flags & HIL_READIN) {
-		hpuxhilevent(hilp, dptr);
+		hpuxhilevent(sc, dptr);
 		return;
 	}
 
@@ -943,15 +950,13 @@ hilevent(hilp)
 	 * in the packet (can this happen?) do nothing.
 	 */
 	if (dptr->hd_qmask == 0 ||
-	    (len0 = hilp->hl_pollbp - hilp->hl_pollbuf) <= 0)
+	    (len0 = sc->sc_pollbp - sc->sc_pollbuf) <= 0)
 		return;
 
 	/*
 	 * Everybody gets the same time stamp
 	 */
-	s = splclock();
-	ourtime = time;
-	splx(s);
+	microtime(&ourtime);
 	tenths = (ourtime.tv_sec * 100) + (ourtime.tv_usec / 10000);
 
 	proto = NULL;
@@ -960,8 +965,8 @@ hilevent(hilp)
 		if ((mask & hilqmask(qnum)) == 0)
 			continue;
 		mask &= ~hilqmask(qnum);
-		hq = hilp->hl_queue[qnum].hq_eventqueue;
-		
+		hq = sc->sc_queue[qnum].hq_eventqueue;
+
 		/*
 		 * Ensure that queue fields that we rely on are valid
 		 * and that there is space in the queue.  If either
@@ -974,16 +979,16 @@ hilevent(hilp)
 		 * Copy data to queue.
 		 * If this is the first queue we construct the packet
 		 * with length, timestamp and poll buffer data.
-		 * For second and sucessive packets we just duplicate
+		 * For second and successive packets we just duplicate
 		 * the first packet.
 		 */
-		pp = (u_char *) &hq->hil_event[hq->hil_evqueue.tail];
+		pp = (uint8_t *)&hq->hil_event[hq->hil_evqueue.tail];
 		if (proto == NULL) {
 			proto = (hil_packet *)pp;
-			cp = hilp->hl_pollbuf;
+			cp = sc->sc_pollbuf;
 			len = len0;
 			*pp++ = len + 6;
-			*pp++ = hilp->hl_actdev;
+			*pp++ = sc->sc_actdev;
 			*(long *)pp = tenths;
 			pp += sizeof(long);
 			do *pp++ = *cp++; while (--len);
@@ -997,29 +1002,24 @@ hilevent(hilp)
 	/*
 	 * Wake up anyone selecting on this device or the loop itself
 	 */
-	selwakeup(&dptr->hd_selr);
-	dptr = &hilp->hl_device[HILLOOPDEV];
-	selwakeup(&dptr->hd_selr);
+	selnotify(&dptr->hd_selr, 0, 0);
+	dptr = &sc->sc_device[HILLOOPDEV];
+	selnotify(&dptr->hd_selr, 0, 0);
 }
 
 #undef HQFULL
 
-void
-hpuxhilevent(hilp, dptr)
-	struct hil_softc *hilp;
-	struct hilloopdev *dptr;
+static void
+hpuxhilevent(struct hil_softc *sc, struct hilloopdev *dptr)
 {
 	int len;
 	struct timeval ourtime;
 	long tstamp;
-	int s;
 
 	/*
 	 * Everybody gets the same time stamp
 	 */
-	s = splclock();
-	ourtime = time;
-	splx(s);
+	microtime(&ourtime);
 	tstamp = (ourtime.tv_sec * 100) + (ourtime.tv_usec / 10000);
 
 	/*
@@ -1028,11 +1028,12 @@ hpuxhilevent(hilp, dptr)
 	 * This adds 5 bytes to the packet size. Make sure there is enough
 	 * room in the buffer for it, and if not, toss the packet.
 	 */
-	len = hilp->hl_pollbp - hilp->hl_pollbuf;
-	if (dptr->hd_queue.c_cc <= (HILMAXCLIST - (len+5))) {
+	len = sc->sc_pollbp - sc->sc_pollbuf;
+	if (dptr->hd_queue.c_cc <= (HILMAXCLIST - (len + 5))) {
 		putc(len+5, &dptr->hd_queue);
-		(void) b_to_q((u_char *)&tstamp, sizeof tstamp, &dptr->hd_queue);
-		(void) b_to_q((u_char *)hilp->hl_pollbuf, len, &dptr->hd_queue);
+		(void)b_to_q((uint8_t *)&tstamp, sizeof tstamp,
+		    &dptr->hd_queue);
+		(void)b_to_q((uint8_t *)sc->sc_pollbuf, len, &dptr->hd_queue);
 	}
 
 	/*
@@ -1040,108 +1041,96 @@ hpuxhilevent(hilp, dptr)
 	 */
 	if (dptr->hd_flags & HIL_ASLEEP) {
 		dptr->hd_flags &= ~HIL_ASLEEP;
-		wakeup((caddr_t)dptr);
+		wakeup((void *)dptr);
 	}
-	selwakeup(&dptr->hd_selr);
+	selnotify(&dptr->hd_selr, 0, 0);
 }
 
 /*
  * Shared queue manipulation routines
  */
 
-int
-hilqalloc(hilp, qip, p)
-	struct hil_softc *hilp;
-	struct hilqinfo *qip;
-	struct proc *p;
+static int
+hilqalloc(struct hil_softc *sc, struct hilqinfo *qip, struct proc *p)
 {
 
 #ifdef DEBUG
 	if (hildebug & HDB_FOLLOW)
 		printf("hilqalloc(%d): addr %p\n", p->p_pid, qip->addr);
 #endif
-	return(EINVAL);
+	return EINVAL;
 }
 
-int
-hilqfree(hilp, qnum, p)
-	struct hil_softc *hilp;
-	int qnum;
-	struct proc *p;
+static int
+hilqfree(struct hil_softc *sc, int qnum, struct proc *p)
 {
 
 #ifdef DEBUG
 	if (hildebug & HDB_FOLLOW)
 		printf("hilqfree(%d): qnum %d\n", p->p_pid, qnum);
 #endif
-	return(EINVAL);
+	return EINVAL;
 }
 
-int
-hilqmap(hilp, qnum, device, p)
-	struct hil_softc *hilp;
-	int qnum, device;
-	struct proc *p;
+static int
+hilqmap(struct hil_softc *sc, int qnum, int device, struct lwp *l)
 {
-	struct hilloopdev *dptr = &hilp->hl_device[device];
+	struct hilloopdev *dptr = &sc->sc_device[device];
 	int s;
 
 #ifdef DEBUG
 	if (hildebug & HDB_FOLLOW)
 		printf("hilqmap(%d): qnum %d device %x\n",
-		       p->p_pid, qnum, device);
+		    l->l_proc->p_pid, qnum, device);
 #endif
-	if (qnum >= NHILQ || hilp->hl_queue[qnum].hq_procp != p)
-		return(EINVAL);
+	if (qnum >= NHILQ || sc->sc_queue[qnum].hq_procp != l->l_proc)
+		return EINVAL;
 	if ((dptr->hd_flags & HIL_QUEUEIN) == 0)
-		return(EINVAL);
-	if (dptr->hd_qmask && p->p_ucred->cr_uid &&
-	    p->p_ucred->cr_uid != dptr->hd_uid)
-		return(EPERM);
+		return EINVAL;
+	if (dptr->hd_qmask && kauth_cred_geteuid(l->l_cred) &&
+	    kauth_cred_geteuid(l->l_cred) != dptr->hd_uid)
+		return EPERM;
 
-	hilp->hl_queue[qnum].hq_devmask |= hildevmask(device);
+	sc->sc_queue[qnum].hq_devmask |= hildevmask(device);
 	if (dptr->hd_qmask == 0)
-		dptr->hd_uid = p->p_ucred->cr_uid;
+		dptr->hd_uid = kauth_cred_geteuid(l->l_cred);
 	s = splhil();
 	dptr->hd_qmask |= hilqmask(qnum);
 	splx(s);
 #ifdef DEBUG
 	if (hildebug & HDB_MASK)
 		printf("hilqmap(%d): devmask %x qmask %x\n",
-		       p->p_pid, hilp->hl_queue[qnum].hq_devmask,
-		       dptr->hd_qmask);
+		    l->l_proc->p_pid, sc->sc_queue[qnum].hq_devmask,
+		    dptr->hd_qmask);
 #endif
-	return(0);
+	return 0;
 }
 
-int
-hilqunmap(hilp, qnum, device, p)
-	struct hil_softc *hilp;
-	int qnum, device;
-	struct proc *p;
+static int
+hilqunmap(struct hil_softc *sc, int qnum, int device, struct proc *p)
 {
 	int s;
 
 #ifdef DEBUG
 	if (hildebug & HDB_FOLLOW)
 		printf("hilqunmap(%d): qnum %d device %x\n",
-		       p->p_pid, qnum, device);
+		    p->p_pid, qnum, device);
 #endif
 
-	if (qnum >= NHILQ || hilp->hl_queue[qnum].hq_procp != p)
-		return(EINVAL);
+	if (qnum >= NHILQ || sc->sc_queue[qnum].hq_procp != p)
+		return EINVAL;
 
-	hilp->hl_queue[qnum].hq_devmask &= ~hildevmask(device);
+	sc->sc_queue[qnum].hq_devmask &= ~hildevmask(device);
 	s = splhil();
-	hilp->hl_device[device].hd_qmask &= ~hilqmask(qnum);
+	sc->sc_device[device].hd_qmask &= ~hilqmask(qnum);
 	splx(s);
 #ifdef DEBUG
 	if (hildebug & HDB_MASK)
 		printf("hilqunmap(%d): devmask %x qmask %x\n",
-		       p->p_pid, hilp->hl_queue[qnum].hq_devmask,
-		       hilp->hl_device[device].hd_qmask);
+		    p->p_pid, sc->sc_queue[qnum].hq_devmask,
+		    sc->sc_device[device].hd_qmask);
 #endif
-	return(0);
+	return 0;
 }
 
 /*
@@ -1151,21 +1140,20 @@ hilqunmap(hilp, qnum, device, p)
  */
 
 void
-kbdbell(unit)
-	int unit;
+hilkbdbell(void *v)
 {
-	struct hil_softc *hilp = &hil_softc[unit];
-
-	hilbeep(hilp, &default_bell);
+	hilbeep(v, &default_bell);
 }
 
 void
-kbdenable(unit)
-	int unit;
+hilkbdenable(void *v)
 {
-	struct hil_softc *hilp = &hil_softc[unit];
-	struct hil_dev *hildevice = hilp->hl_addr;
+	struct hil_softc *sc = v;
+	struct hil_dev *hildevice = HILADDR;
 	char db;
+
+	if (sc != NULL)
+		hildevice = sc->sc_addr;
 
 	/* Set the autorepeat rate */
 	db = ar_format(KBD_ARR);
@@ -1180,20 +1168,26 @@ kbdenable(unit)
 }
 
 void
-kbddisable(unit)
-	int unit;
+hilkbddisable(void *v)
 {
 }
 
+#if NITE > 0
 /*
  * The following chunk of code implements HIL console keyboard
  * support.
  */
 
-struct	hil_dev *hilkbd_cn_device;
-char	*kbd_cn_keymap;
-char	*kbd_cn_shiftmap;
-char	*kbd_cn_ctrlmap;
+static struct hil_dev *hilkbd_cn_device;
+static struct ite_kbdmap hilkbd_cn_map;
+static struct ite_kbdops hilkbd_cn_ops = {
+	hilkbdcngetc,
+	hilkbdenable,
+	hilkbdbell,
+	NULL,
+};
+
+extern char us_keymap[], us_shiftmap[], us_ctrlmap[];
 
 /*
  * XXX: read keyboard directly and return code.
@@ -1201,14 +1195,13 @@ char	*kbd_cn_ctrlmap;
  * reading from the keyboard in the normal, interrupt driven fashion.
  */
 int
-kbdgetc(statp)
-	int *statp;
+hilkbdcngetc(int *statp)
 {
 	int c, stat;
 	int s;
 
 	if (hilkbd_cn_device == NULL)
-		return (0);
+		return 0;
 
 	/*
 	 * XXX needs to be splraise because we could be called
@@ -1220,74 +1213,81 @@ kbdgetc(statp)
 	c = READHILDATA(hilkbd_cn_device);
 	splx(s);
 	*statp = stat;
-	return (c);
+	return c;
 }
 
 /*
  * Perform basic initialization of the HIL keyboard, suitable
  * for early console use.
  */
-void
-kbdcninit()
+int
+hilkbdcnattach(bus_space_tag_t bst, bus_addr_t addr)
 {
-	struct hil_dev *h = HILADDR;	/* == VA (see hilreg.h) */
+	void *va;
 	struct kbdmap *km;
+	bus_space_handle_t bsh;
 	u_char lang;
 
-	/* XXX from hil_keymaps.c */
-	extern char us_keymap[], us_shiftmap[], us_ctrlmap[];
+	if (bus_space_map(bst, addr, PAGE_SIZE, 0, &bsh))
+		return 1;
 
-	hilkbd_cn_device = h;
+	va = bus_space_vaddr(bst, bsh);
+	hilkbd_cn_device = (struct hil_dev *)va;
 
 	/* Default to US-ASCII keyboard. */
-	kbd_cn_keymap = us_keymap;
-	kbd_cn_shiftmap = us_shiftmap;
-	kbd_cn_ctrlmap = us_ctrlmap;
+	hilkbd_cn_map.keymap = us_keymap;
+	hilkbd_cn_map.shiftmap = us_shiftmap;
+	hilkbd_cn_map.ctrlmap = us_ctrlmap;
 
-	HILWAIT(h);
-	WRITEHILCMD(h, HIL_SETARR);
-	HILWAIT(h);
-	WRITEHILDATA(h, ar_format(KBD_ARR));
-	HILWAIT(h);
-	WRITEHILCMD(h, HIL_READKBDLANG);
-	HILDATAWAIT(h);
-	lang = READHILDATA(h);
+	HILWAIT(hilkbd_cn_device);
+	WRITEHILCMD(hilkbd_cn_device, HIL_SETARR);
+	HILWAIT(hilkbd_cn_device);
+	WRITEHILDATA(hilkbd_cn_device, ar_format(KBD_ARR));
+	HILWAIT(hilkbd_cn_device);
+	WRITEHILCMD(hilkbd_cn_device, HIL_READKBDLANG);
+	HILDATAWAIT(hilkbd_cn_device);
+	lang = READHILDATA(hilkbd_cn_device);
 	for (km = kbd_map; km->kbd_code; km++) {
 		if (km->kbd_code == lang) {
-			kbd_cn_keymap = km->kbd_keymap;
-			kbd_cn_shiftmap = km->kbd_shiftmap;
-			kbd_cn_ctrlmap = km->kbd_ctrlmap;
+			hilkbd_cn_map.keymap = km->kbd_keymap;
+			hilkbd_cn_map.shiftmap = km->kbd_shiftmap;
+			hilkbd_cn_map.ctrlmap = km->kbd_ctrlmap;
 		}
 	}
-	HILWAIT(h);
-	WRITEHILCMD(h, HIL_INTON);
+	HILWAIT(hilkbd_cn_device);
+	WRITEHILCMD(hilkbd_cn_device, HIL_INTON);
+
+	hilkbd_cn_ops.arg = NULL;
+	itekbdcnattach(&hilkbd_cn_ops, &hilkbd_cn_map);
+
+	return 0;
 }
 
-/* End of HIL console keyboard code. */
+#endif /* End of HIL console keyboard code. */
 
 /*
- * Recoginize and clear keyboard generated NMIs.
+ * Recognize and clear keyboard generated NMIs.
  * Returns 1 if it was ours, 0 otherwise.  Note that we cannot use
  * send_hil_cmd() to issue the clear NMI command as that would actually
- * lower the priority to splimp() and it doesn't wait for the completion
+ * lower the priority to splvm() and it doesn't wait for the completion
  * of the command.  Either of these conditions could result in the
  * interrupt reoccuring.  Note that we issue the CNMT command twice.
  * This seems to be needed, once is not always enough!?!
  */
 int
-kbdnmi()
+kbdnmi(void)
 {
-	struct hil_softc *hilp = &hil_softc[0]; /* XXX how do we know on 300? */
+	struct hil_dev *hl_addr = HILADDR;
 
 	if ((*KBDNMISTAT & KBDNMI) == 0)
-		return(0);
+		return 0;
 
-	HILWAIT(hilp->hl_addr);
-	WRITEHILCMD(hilp->hl_addr, HIL_CNMT);
-	HILWAIT(hilp->hl_addr);
-	WRITEHILCMD(hilp->hl_addr, HIL_CNMT);
-	HILWAIT(hilp->hl_addr);
-	return(1);
+	HILWAIT(hl_addr);
+	WRITEHILCMD(hl_addr, HIL_CNMT);
+	HILWAIT(hl_addr);
+	WRITEHILCMD(hl_addr, HIL_CNMT);
+	HILWAIT(hl_addr);
+	return 1;
 }
 
 #define HILSECURITY	0x33
@@ -1298,45 +1298,55 @@ kbdnmi()
  * Called at boot time to print out info about interesting devices
  */
 void
-hilinfo(unit)
-	int unit;
+hilinfo(struct hil_softc *sc)
 {
-  	struct hil_softc *hilp = &hil_softc[unit];
 	int id, len;
 	struct kbdmap *km;
 
 	/*
 	 * Keyboard info.
 	 */
-	if (hilp->hl_kbddev) {
-		printf("hil%d: ", hilp->hl_kbddev);
+	if (sc->sc_kbddev) {
+		aprint_normal("%s device %d: ", device_xname(sc->sc_dev),
+		    sc->sc_kbddev);
 		for (km = kbd_map; km->kbd_code; km++)
-			if (km->kbd_code == hilp->hl_kbdlang) {
-				printf("%s ", km->kbd_desc);
+			if (km->kbd_code == sc->sc_kbdlang) {
+				aprint_normal("%s ", km->kbd_desc);
 				break;
 			}
-		printf("keyboard\n");
+		aprint_normal("keyboard\n");
 	}
 	/*
 	 * ID module.
 	 * Attempt to locate the first ID module and print out its
 	 * security code.  Is this a good idea??
 	 */
-	id = hiliddev(hilp);
+	id = hiliddev(sc);
 	if (id) {
-		hilp->hl_cmdbp = hilp->hl_cmdbuf;
-		hilp->hl_cmddev = id;
-		send_hildev_cmd(hilp, id, HILSECURITY);
-		len = hilp->hl_cmdbp - hilp->hl_cmdbuf;
-		hilp->hl_cmdbp = hilp->hl_cmdbuf;
-		hilp->hl_cmddev = 0;
-		printf("hil%d: security code", id);
+		sc->sc_cmdbp = sc->sc_cmdbuf;
+		sc->sc_cmddev = id;
+		send_hildev_cmd(sc, id, HILSECURITY);
+		len = sc->sc_cmdbp - sc->sc_cmdbuf;
+		sc->sc_cmdbp = sc->sc_cmdbuf;
+		sc->sc_cmddev = 0;
+		aprint_normal_dev(sc->sc_dev, "security code");
 		for (id = 0; id < len; id++)
-			printf(" %x", hilp->hl_cmdbuf[id]);
+			aprint_normal(" %x", sc->sc_cmdbuf[id]);
 		while (id++ < 16)
-			printf(" 0");
-		printf("\n");
+			aprint_normal(" 0");
+		aprint_normal("\n");
 	}
+#if NRND > 0
+	/*
+	 * attach the device into the random source list
+	 * except from ID module (no point)
+	 */
+	if (!id) {
+		char buf[10];
+		sprintf(buf, "%s", device_xname(sc->sc_dev));
+		rnd_attach_source(&sc->rnd_source, buf, RND_TYPE_TTY, 0);
+	}
+#endif
 }
 
 #define HILAR1	0x3E
@@ -1359,8 +1369,7 @@ hilinfo(unit)
  * we prefer to just assume people won't move things around.
  */
 void
-hilconfig(hilp)
-	struct hil_softc *hilp;
+hilconfig(struct hil_softc *sc)
 {
 	u_char db;
 	int s;
@@ -1369,13 +1378,13 @@ hilconfig(hilp)
 #ifdef DEBUG
 	if (hildebug & HDB_CONFIG) {
 		printf("hilconfig: reconfigured: ");
-		send_hil_cmd(hilp->hl_addr, HIL_READLPSTAT, NULL, 0, &db);
+		send_hil_cmd(sc->sc_addr, HIL_READLPSTAT, NULL, 0, &db);
 		printf("LPSTAT %x, ", db);
-		send_hil_cmd(hilp->hl_addr, HIL_READLPCTRL, NULL, 0, &db);
+		send_hil_cmd(sc->sc_addr, HIL_READLPCTRL, NULL, 0, &db);
 		printf("LPCTRL %x, ", db);
-		send_hil_cmd(hilp->hl_addr, HIL_READKBDSADR, NULL, 0, &db);
+		send_hil_cmd(sc->sc_addr, HIL_READKBDSADR, NULL, 0, &db);
 		printf("KBDSADR %x\n", db);
-		hilreport(hilp);
+		hilreport(sc);
 	}
 #endif
 	/*
@@ -1383,25 +1392,25 @@ hilconfig(hilp)
 	 * Mark those as alive and real, all others as dead.
 	 */
 	db = 0;
-	send_hil_cmd(hilp->hl_addr, HIL_READLPSTAT, NULL, 0, &db);
-	hilp->hl_maxdev = db & LPS_DEVMASK;
+	send_hil_cmd(sc->sc_addr, HIL_READLPSTAT, NULL, 0, &db);
+	sc->sc_maxdev = db & LPS_DEVMASK;
 #ifdef DEBUG
 	if (hildebug & HDB_CONFIG)
-		printf("hilconfig: %d devices found\n", hilp->hl_maxdev);
+		printf("hilconfig: %d devices found\n", sc->sc_maxdev);
 #endif
 	for (db = 1; db < NHILD; db++) {
-		if (db <= hilp->hl_maxdev)
-			hilp->hl_device[db].hd_flags |= HIL_ALIVE;
+		if (db <= sc->sc_maxdev)
+			sc->sc_device[db].hd_flags |= HIL_ALIVE;
 		else
-			hilp->hl_device[db].hd_flags &= ~HIL_ALIVE;
-		hilp->hl_device[db].hd_flags &= ~HIL_PSEUDO;
+			sc->sc_device[db].hd_flags &= ~HIL_ALIVE;
+		sc->sc_device[db].hd_flags &= ~HIL_PSEUDO;
 	}
 #ifdef DEBUG
 	if (hildebug & (HDB_CONFIG|HDB_KEYBOARD))
-		printf("hilconfig: max device %d\n", hilp->hl_maxdev);
+		printf("hilconfig: max device %d\n", sc->sc_maxdev);
 #endif
-	if (hilp->hl_maxdev == 0) {
-		hilp->hl_kbddev = 0;
+	if (sc->sc_maxdev == 0) {
+		sc->sc_kbddev = 0;
 		splx(s);
 		return;
 	}
@@ -1410,76 +1419,71 @@ hilconfig(hilp)
 	 * (first one found).  If no keyboards found, we are all done.
 	 */
 	db = 0;
-	send_hil_cmd(hilp->hl_addr, HIL_READKBDSADR, NULL, 0, &db);
+	send_hil_cmd(sc->sc_addr, HIL_READKBDSADR, NULL, 0, &db);
 #ifdef DEBUG
 	if (hildebug & HDB_KEYBOARD)
 		printf("hilconfig: keyboard: KBDSADR %x, old %d, new %d\n",
-		       db, hilp->hl_kbddev, ffs((int)db));
+		    db, sc->sc_kbddev, ffs((int)db));
 #endif
-	hilp->hl_kbddev = ffs((int)db);
-	if (hilp->hl_kbddev == 0) {
+	sc->sc_kbddev = ffs((int)db);
+	if (sc->sc_kbddev == 0) {
 		splx(s);
 		return;
 	}
 	/*
 	 * Determine if the keyboard should be cooked or raw and configure it.
 	 */
-	db = (hilp->hl_kbdflags & KBD_RAW) ? 0 : 1 << (hilp->hl_kbddev - 1);
-	send_hil_cmd(hilp->hl_addr, HIL_WRITEKBDSADR, &db, 1, NULL);
+	db = (sc->sc_kbdflags & KBD_RAW) ? 0 : 1 << (sc->sc_kbddev - 1);
+	send_hil_cmd(sc->sc_addr, HIL_WRITEKBDSADR, &db, 1, NULL);
 	/*
 	 * Re-enable autorepeat in raw mode, cooked mode AR is not affected.
 	 */
-	if (hilp->hl_kbdflags & (KBD_AR1|KBD_AR2)) {
-		db = (hilp->hl_kbdflags & KBD_AR1) ? HILAR1 : HILAR2;
-		hilp->hl_cmddev = hilp->hl_kbddev;
-		send_hildev_cmd(hilp, hilp->hl_kbddev, db);
-		hilp->hl_cmddev = 0;
+	if (sc->sc_kbdflags & (KBD_AR1|KBD_AR2)) {
+		db = (sc->sc_kbdflags & KBD_AR1) ? HILAR1 : HILAR2;
+		sc->sc_cmddev = sc->sc_kbddev;
+		send_hildev_cmd(sc, sc->sc_kbddev, db);
+		sc->sc_cmddev = 0;
 	}
 	/*
 	 * Determine the keyboard language configuration, but don't
 	 * override a user-specified setting.
 	 */
 	db = 0;
-	send_hil_cmd(hilp->hl_addr, HIL_READKBDLANG, NULL, 0, &db);
+	send_hil_cmd(sc->sc_addr, HIL_READKBDLANG, NULL, 0, &db);
 #ifdef DEBUG
 	if (hildebug & HDB_KEYBOARD)
 		printf("hilconfig: language: old %x new %x\n",
-		       hilp->hl_kbdlang, db);
+		    sc->sc_kbdlang, db);
 #endif
-	if (hilp->hl_kbdlang != KBD_SPECIAL) {
+	if (sc->sc_kbdlang != KBD_SPECIAL) {
 		struct kbdmap *km;
 
+#if NITE > 0
 		for (km = kbd_map; km->kbd_code; km++) {
 			if (km->kbd_code == db) {
-				hilp->hl_kbdlang = db;
-				/* XXX */
-				kbd_keymap = km->kbd_keymap;
-				kbd_shiftmap = km->kbd_shiftmap;
-				kbd_ctrlmap = km->kbd_ctrlmap;
-				kbd_ctrlshiftmap = km->kbd_ctrlshiftmap;
-				kbd_stringmap = km->kbd_stringmap;
+				sc->sc_kbdlang = db;
+				iteinstallkeymap(km);
 				break;
 			}
 		}
+#endif
 		if (km->kbd_code == 0) {
-		    printf(
-		     "hilconfig: unknown keyboard type 0x%x, using default\n",
-		     db);
+			printf("hilconfig: unknown keyboard type 0x%x, "
+			    "using default\n", db);
 		}
 	}
 	splx(s);
 }
 
 void
-hilreset(hilp)
-	struct hil_softc *hilp;
+hilreset(struct hil_softc *sc)
 {
-	struct hil_dev *hildevice = hilp->hl_addr;
+	struct hil_dev *hildevice = sc->sc_addr;
 	u_char db;
 
 #ifdef DEBUG
 	if (hildebug & HDB_FOLLOW)
-		printf("hilreset(%p)\n", hilp);
+		printf("hilreset(%p)\n", sc);
 #endif
 	/*
 	 * Initialize the loop: reconfigure, don't report errors,
@@ -1502,7 +1506,7 @@ hilreset(hilp)
 	 */
 	do {
 		send_hil_cmd(hildevice, HIL_READLPSTAT, NULL, 0, &db);
-        } while ((db & (LPS_CONFFAIL|LPS_CONFGOOD)) == 0);
+	} while ((db & (LPS_CONFFAIL|LPS_CONFGOOD)) == 0);
 	/*
 	 * At this point, the loop should have reconfigured.
 	 * The reconfiguration interrupt has already called hilconfig()
@@ -1512,85 +1516,61 @@ hilreset(hilp)
 }
 
 void
-hilbeep(hilp, bp)
-	struct hil_softc *hilp;
-	struct _hilbell *bp;
+hilbeep(struct hil_softc *sc, const struct _hilbell *bp)
 {
+	struct hil_dev *hl_addr = HILADDR;
 	u_char buf[2];
+
+	if (sc != NULL)
+		hl_addr = sc->sc_addr;
 
 	buf[0] = ~((bp->duration - 10) / 10);
 	buf[1] = bp->frequency;
-	send_hil_cmd(hilp->hl_addr, HIL_SETTONE, buf, 2, NULL);
+	send_hil_cmd(hl_addr, HIL_SETTONE, buf, 2, NULL);
 }
 
 /*
  * Locate and return the address of the first ID module, 0 if none present.
  */
 int
-hiliddev(hilp)
-	struct hil_softc *hilp;
+hiliddev(struct hil_softc *sc)
 {
 	int i, len;
 
 #ifdef DEBUG
 	if (hildebug & HDB_IDMODULE)
 		printf("hiliddev(%p): max %d, looking for idmodule...",
-		       hilp, hilp->hl_maxdev);
+		    sc, sc->sc_maxdev);
 #endif
-	for (i = 1; i <= hilp->hl_maxdev; i++) {
-		hilp->hl_cmdbp = hilp->hl_cmdbuf;
-		hilp->hl_cmddev = i;
-		send_hildev_cmd(hilp, i, HILIDENTIFY);
+	for (i = 1; i <= sc->sc_maxdev; i++) {
+		sc->sc_cmdbp = sc->sc_cmdbuf;
+		sc->sc_cmddev = i;
+		send_hildev_cmd(sc, i, HILIDENTIFY);
 		/*
 		 * XXX: the final condition checks to ensure that the
 		 * device ID byte is in the range of the ID module (0x30-0x3F)
 		 */
-		len = hilp->hl_cmdbp - hilp->hl_cmdbuf;
-		if (len > 1 && (hilp->hl_cmdbuf[1] & HILSCBIT) &&
-		    (hilp->hl_cmdbuf[0] & 0xF0) == 0x30) {
-			hilp->hl_cmdbp = hilp->hl_cmdbuf;
-			hilp->hl_cmddev = i;
-			send_hildev_cmd(hilp, i, HILSECURITY);
+		len = sc->sc_cmdbp - sc->sc_cmdbuf;
+		if (len > 1 && (sc->sc_cmdbuf[1] & HILSCBIT) &&
+		    (sc->sc_cmdbuf[0] & 0xF0) == 0x30) {
+			sc->sc_cmdbp = sc->sc_cmdbuf;
+			sc->sc_cmddev = i;
+			send_hildev_cmd(sc, i, HILSECURITY);
 			break;
 		}
-	}		
-	hilp->hl_cmdbp = hilp->hl_cmdbuf;
-	hilp->hl_cmddev = 0;
+	}
+	sc->sc_cmdbp = sc->sc_cmdbuf;
+	sc->sc_cmddev = 0;
 #ifdef DEBUG
 	if (hildebug & HDB_IDMODULE) {
-		if (i <= hilp->hl_maxdev)
+		if (i <= sc->sc_maxdev)
 			printf("found at %d\n", i);
 		else
 			printf("not found\n");
 	}
 #endif
-	return(i <= hilp->hl_maxdev ? i : 0);
+	return i <= sc->sc_maxdev ? i : 0;
 }
-
-#ifdef COMPAT_HPUX
-/*
- * XXX map devno as expected by HP-UX
- */
-int
-hildevno(dev)
-	dev_t dev;
-{
-	int newdev;
-
-	newdev = 24 << 24;
-#ifdef HILCOMPAT
-	/*
-	 * XXX compat check
-	 * Don't convert old style specfiles already in correct format
-	 */
-	if (minor(dev) && (dev & 0xF) == 0)
-		newdev |= minor(dev);
-	else
-#endif
-	newdev |= (HILLOOP(dev) << 8) | (HILUNIT(dev) << 4);
-	return(newdev);
-}
-#endif
 
 /*
  * Low level routines which actually talk to the 8042 chip.
@@ -1599,22 +1579,20 @@ hildevno(dev)
 /*
  * Send a command to the 8042 with zero or more bytes of data.
  * If rdata is non-null, wait for and return a byte of data.
- * We run at splimp() to make the transaction as atomic as
+ * We run at splvm() to make the transaction as atomic as
  * possible without blocking the clock (is this necessary?)
  */
 void
-send_hil_cmd(hildevice, cmd, data, dlen, rdata)
-	struct hil_dev *hildevice;
-	u_char cmd, *data, dlen;
-	u_char *rdata;
+send_hil_cmd(struct hil_dev *hildevice, u_char cmd, u_char *data, u_char dlen,
+    u_char *rdata)
 {
 	u_char status;
-	int s = splimp();
+	int s = splvm();
 
 	HILWAIT(hildevice);
 	WRITEHILCMD(hildevice, cmd);
 	while (dlen--) {
-	  	HILWAIT(hildevice);
+		HILWAIT(hildevice);
 		WRITEHILDATA(hildevice, *data++);
 	}
 	if (rdata) {
@@ -1636,16 +1614,14 @@ send_hil_cmd(hildevice, cmd, data, dlen, rdata)
  * internally generated poll commands.
  *
  * splhigh is extremely conservative but insures atomic operation,
- * splimp (clock only interrupts) seems to be good enough in practice.
+ * splvm (clock only interrupts) seems to be good enough in practice.
  */
 void
-send_hildev_cmd(hilp, device, cmd)
-	struct hil_softc *hilp;
-	char device, cmd;
+send_hildev_cmd(struct hil_softc *sc, char device, char cmd)
 {
-	struct hil_dev *hildevice = hilp->hl_addr;
-	u_char status, c;
-	int s = splimp();
+	struct hil_dev *hildevice = sc->sc_addr;
+	uint8_t status, c;
+	int s = splvm();
 
 	polloff(hildevice);
 
@@ -1654,24 +1630,24 @@ send_hildev_cmd(hilp, device, cmd)
 	 */
 	HILWAIT(hildevice);
 	WRITEHILCMD(hildevice, HIL_STARTCMD);
-  	HILWAIT(hildevice);
+	HILWAIT(hildevice);
 	WRITEHILDATA(hildevice, 8 + device);
-  	HILWAIT(hildevice);
+	HILWAIT(hildevice);
 	WRITEHILDATA(hildevice, cmd);
-  	HILWAIT(hildevice);
+	HILWAIT(hildevice);
 	WRITEHILDATA(hildevice, HIL_TIMEOUT);
 	/*
 	 * Trigger the command and wait for completion
 	 */
 	HILWAIT(hildevice);
 	WRITEHILCMD(hildevice, HIL_TRIGGER);
-	hilp->hl_cmddone = FALSE;
+	sc->sc_cmddone = false;
 	do {
 		HILDATAWAIT(hildevice);
 		status = READHILSTAT(hildevice);
 		c = READHILDATA(hildevice);
-		hil_process_int(hilp, status, c);
-	} while (!hilp->hl_cmddone);
+		hil_process_int(sc, status, c);
+	} while (!sc->sc_cmddone);
 
 	pollon(hildevice);
 	splx(s);
@@ -1682,8 +1658,7 @@ send_hildev_cmd(hilp, device, cmd)
  * Also disables and enable auto-repeat.  Why?
  */
 void
-polloff(hildevice)
-	struct hil_dev *hildevice;
+polloff(struct hil_dev *hildevice)
 {
 	char db;
 
@@ -1709,7 +1684,7 @@ polloff(hildevice)
 	/*
 	 * Must wait til polling is really stopped
 	 */
-	do {	
+	do {
 		HILWAIT(hildevice);
 		WRITEHILCMD(hildevice, HIL_READBUSY);
 		HILDATAWAIT(hildevice);
@@ -1718,8 +1693,7 @@ polloff(hildevice)
 }
 
 void
-pollon(hildevice)
-	struct hil_dev *hildevice;
+pollon(struct hil_dev *hildevice)
 {
 	char db;
 
@@ -1745,58 +1719,55 @@ pollon(hildevice)
 }
 
 #ifdef DEBUG
-void
-printhilpollbuf(hilp)
-	struct hil_softc *hilp;
+static void
+printhilpollbuf(struct hil_softc *sc)
 {
-  	u_char *cp;
+	u_char *cp;
 	int i, len;
 
-	cp = hilp->hl_pollbuf;
-	len = hilp->hl_pollbp - cp;
+	cp = sc->sc_pollbuf;
+	len = sc->sc_pollbp - cp;
 	for (i = 0; i < len; i++)
-		printf("%x ", hilp->hl_pollbuf[i]);
+		printf("%x ", sc->sc_pollbuf[i]);
 	printf("\n");
 }
 
-void
-printhilcmdbuf(hilp)
-	struct hil_softc *hilp;
+static void
+printhilcmdbuf(struct hil_softc *sc)
 {
-  	u_char *cp;
+	u_char *cp;
 	int i, len;
 
-	cp = hilp->hl_cmdbuf;
-	len = hilp->hl_cmdbp - cp;
+	cp = sc->sc_cmdbuf;
+	len = sc->sc_cmdbp - cp;
 	for (i = 0; i < len; i++)
-		printf("%x ", hilp->hl_cmdbuf[i]);
+		printf("%x ", sc->sc_cmdbuf[i]);
 	printf("\n");
 }
 
-void
-hilreport(hilp)
-	struct hil_softc *hilp;
+static void
+hilreport(struct hil_softc *sc)
 {
 	int i, len;
 	int s = splhil();
 
-	for (i = 1; i <= hilp->hl_maxdev; i++) {
-		hilp->hl_cmdbp = hilp->hl_cmdbuf;
-		hilp->hl_cmddev = i;
-		send_hildev_cmd(hilp, i, HILIDENTIFY);
+	for (i = 1; i <= sc->sc_maxdev; i++) {
+		sc->sc_cmdbp = sc->sc_cmdbuf;
+		sc->sc_cmddev = i;
+		send_hildev_cmd(sc, i, HILIDENTIFY);
 		printf("hil%d: id: ", i);
-		printhilcmdbuf(hilp);
-		len = hilp->hl_cmdbp - hilp->hl_cmdbuf;
-		if (len > 1 && (hilp->hl_cmdbuf[1] & HILSCBIT)) {
-			hilp->hl_cmdbp = hilp->hl_cmdbuf;
-			hilp->hl_cmddev = i;
-			send_hildev_cmd(hilp, i, HILSECURITY);
+		printhilcmdbuf(sc);
+		len = sc->sc_cmdbp - sc->sc_cmdbuf;
+		if (len > 1 && (sc->sc_cmdbuf[1] & HILSCBIT)) {
+			sc->sc_cmdbp = sc->sc_cmdbuf;
+			sc->sc_cmddev = i;
+			send_hildev_cmd(sc, i, HILSECURITY);
 			printf("hil%d: sc: ", i);
-			printhilcmdbuf(hilp);
+			printhilcmdbuf(sc);
 		}
-	}		
-	hilp->hl_cmdbp = hilp->hl_cmdbuf;
-	hilp->hl_cmddev = 0;
+	}
+	sc->sc_cmdbp = sc->sc_cmdbuf;
+	sc->sc_cmddev = 0;
 	splx(s);
 }
 #endif

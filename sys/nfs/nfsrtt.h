@@ -1,4 +1,4 @@
-/*	$NetBSD: nfsrtt.h,v 1.5 1997/05/12 23:36:08 fvdl Exp $	*/
+/*	$NetBSD: nfsrtt.h,v 1.9 2006/12/28 00:39:03 yamt Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -80,7 +76,6 @@ struct nfsrtt {
 /*
  * Bits for the flags field.
  */
-#define	DRT_NQNFS	0x01	/* Rpc used Nqnfs protocol */
 #define	DRT_TCP		0x02	/* Client used TCP transport */
 #define	DRT_CACHEREPLY	0x04	/* Reply was from recent request cache */
 #define	DRT_CACHEDROP	0x08	/* Rpc request dropped, due to recent reply */
@@ -101,5 +96,9 @@ struct nfsdrt {
 		struct timeval tstamp;	/* Timestamp of log entry */
 	} drt[NFSRTTLOGSIZ];
 };
+
+#ifdef _KERNEL
+extern int nfsrtton;
+#endif
 
 #endif

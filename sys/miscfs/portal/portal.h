@@ -1,4 +1,4 @@
-/*	$NetBSD: portal.h,v 1.7 1996/02/09 22:40:40 christos Exp $	*/
+/*	$NetBSD: portal.h,v 1.14 2008/06/28 01:34:06 rumble Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -46,10 +42,10 @@ struct portal_args {
 
 struct portal_cred {
 	int		pcr_flag;		/* File open mode */
-	uid_t		pcr_uid;		/* From ucred */
-	gid_t		pcr_gid;		/* From ucred */
-	short		pcr_ngroups;		/* From ucred */
-	gid_t		pcr_groups[NGROUPS];	/* From ucred */
+	uid_t		pcr_uid;		/* From cred */
+	gid_t		pcr_gid;		/* From cred */
+	uint16_t	pcr_ngroups;		/* From cred */
+	gid_t		pcr_groups[NGROUPS];	/* From cred */
 };
 
 #ifdef _KERNEL
@@ -69,6 +65,7 @@ struct portalnode {
 
 #define PORTAL_ROOTFILEID	2
 
-extern int (**portal_vnodeop_p) __P((void *));
+extern int (**portal_vnodeop_p)(void *);
 extern struct vfsops portal_vfsops;
+
 #endif /* _KERNEL */

@@ -1,7 +1,7 @@
-/* $NetBSD: lock.h,v 1.4 1999/12/03 01:11:34 thorpej Exp $ */
+/* $NetBSD: lock.h,v 1.27 2008/04/28 20:23:11 martin Exp $ */
 
 /*-
- * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 1999, 2000 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,39 +32,53 @@
 
 /*
  * Machine-dependent spin lock operations.
- *
- * NOTE: We assume that SIMPLELOCK_UNLOCKED == 0, so we can simply
- * store `zero' to release a lock.
  */
 
 #ifndef _ALPHA_LOCK_H_
 #define	_ALPHA_LOCK_H_
 
-static __inline void cpu_simple_lock_init __P((__volatile struct simplelock *))
-	__attribute__((__unused__));
-static __inline void cpu_simple_lock __P((__volatile struct simplelock *))
-	__attribute__((__unused__));
-static __inline int cpu_simple_lock_try __P((__volatile struct simplelock *))
-	__attribute__((__unused__));
-static __inline void cpu_simple_unlock __P((__volatile struct simplelock *))
-	__attribute__((__unused__));
+#ifdef _KERNEL_OPT
+#include "opt_multiprocessor.h"
+#endif
 
-static __inline void
-cpu_simple_lock_init(alp)
-	__volatile struct simplelock *alp;
+static __inline int
+__SIMPLELOCK_LOCKED_P(__cpu_simple_lock_t *__ptr)
 {
+	return *__ptr == __SIMPLELOCK_LOCKED;
+}
 
-	__asm __volatile(
-		"# BEGIN cpu_simple_lock_init\n"
-		"	stl	$31, %0		\n"
-		"	mb			\n"
-		"	# END cpu_simple_lock_init"
-		: "=m" (alp->lock_data));
+static __inline int
+__SIMPLELOCK_UNLOCKED_P(__cpu_simple_lock_t *__ptr)
+{
+	return *__ptr == __SIMPLELOCK_UNLOCKED;
 }
 
 static __inline void
-cpu_simple_lock(alp)
-	__volatile struct simplelock *alp;
+__cpu_simple_lock_clear(__cpu_simple_lock_t *__ptr)
+{
+	*__ptr = __SIMPLELOCK_UNLOCKED;
+}
+
+static __inline void
+__cpu_simple_lock_set(__cpu_simple_lock_t *__ptr)
+{
+	*__ptr = __SIMPLELOCK_LOCKED;
+}
+
+static __inline void
+__cpu_simple_lock_init(__cpu_simple_lock_t *alp)
+{
+
+	__asm volatile(
+		"# BEGIN __cpu_simple_lock_init\n"
+		"	stl	$31, %0		\n"
+		"	mb			\n"
+		"	# END __cpu_simple_lock_init"
+		: "=m" (*alp));
+}
+
+static __inline void
+__cpu_simple_lock(__cpu_simple_lock_t *alp)
 {
 	unsigned long t0;
 
@@ -82,8 +89,8 @@ cpu_simple_lock(alp)
 	 * some work.
 	 */
 
-	__asm __volatile(
-		"# BEGIN cpu_simple_lock\n"
+	__asm volatile(
+		"# BEGIN __cpu_simple_lock\n"
 		"1:	ldl_l	%0, %3		\n"
 		"	bne	%0, 2f		\n"
 		"	bis	$31, %2, %0	\n"
@@ -96,19 +103,19 @@ cpu_simple_lock(alp)
 		"	br	2b		\n"
 		"3:	br	1b		\n"
 		"4:				\n"
-		"	# END cpu_simple_lock\n"
-		: "=r" (t0), "=m" (alp->lock_data)
-		: "i" (SIMPLELOCK_LOCKED), "1" (alp->lock_data));
+		"	# END __cpu_simple_lock\n"
+		: "=&r" (t0), "=m" (*alp)
+		: "i" (__SIMPLELOCK_LOCKED), "m" (*alp)
+		: "memory");
 }
 
 static __inline int
-cpu_simple_lock_try(alp)
-	__volatile struct simplelock *alp;
+__cpu_simple_lock_try(__cpu_simple_lock_t *alp)
 {
 	unsigned long t0, v0;
 
-	__asm __volatile(
-		"# BEGIN cpu_simple_lock_try\n"
+	__asm volatile(
+		"# BEGIN __cpu_simple_lock_try\n"
 		"1:	ldl_l	%0, %4		\n"
 		"	bne	%0, 2f		\n"
 		"	bis	$31, %3, %0	\n"
@@ -121,24 +128,69 @@ cpu_simple_lock_try(alp)
 		"	br	4f		\n"
 		"3:	br	1b		\n"
 		"4:				\n"
-		"	# END cpu_simple_lock_try"
-		: "=r" (t0), "=r" (v0), "=m" (alp->lock_data)
-		: "i" (SIMPLELOCK_LOCKED), "2" (alp->lock_data));
+		"	# END __cpu_simple_lock_try"
+		: "=&r" (t0), "=r" (v0), "=m" (*alp)
+		: "i" (__SIMPLELOCK_LOCKED), "m" (*alp)
+		: "memory");
 
-	return (v0);
+	return (v0 != 0);
 }
 
 static __inline void
-cpu_simple_unlock(alp)
-	__volatile struct simplelock *alp;
+__cpu_simple_unlock(__cpu_simple_lock_t *alp)
 {
 
-	__asm __volatile(
-		"# BEGIN cpu_simple_unlock\n"
-		"	stl	$31, %0		\n"
+	__asm volatile(
+		"# BEGIN __cpu_simple_unlock\n"
 		"	mb			\n"
-		"	# END cpu_simple_unlock"
-		: "=m" (alp->lock_data));
+		"	stl	$31, %0		\n"
+		"	# END __cpu_simple_unlock"
+		: "=m" (*alp));
+}
+
+#if defined(MULTIPROCESSOR)
+/*
+ * On the Alpha, interprocessor interrupts come in at device priority
+ * level.  This can cause some problems while waiting for r/w spinlocks
+ * from a high'ish priority level: IPIs that come in will not be processed.
+ * This can lead to deadlock.
+ *
+ * This hook allows IPIs to be processed while a spinlock's interlock
+ * is released.
+ */
+#define	SPINLOCK_SPIN_HOOK						\
+do {									\
+	struct cpu_info *__ci = curcpu();				\
+	int __s;							\
+									\
+	if (__ci->ci_ipis != 0) {					\
+		/* printf("CPU %lu has IPIs pending\n",			\
+		    __ci->ci_cpuid); */					\
+		__s = splipi();						\
+		alpha_ipi_process(__ci, NULL);				\
+		splx(__s);						\
+	}								\
+} while (0)
+#define	SPINLOCK_BACKOFF_HOOK	(void)nullop((void *)0)
+#endif /* MULTIPROCESSOR */
+
+static __inline void
+mb_read(void)
+{
+	__asm __volatile("mb" : : : "memory");
+}
+
+static __inline void
+mb_write(void)
+{
+	/* XXX wmb */
+	__asm __volatile("mb" : : : "memory");
+}
+
+static __inline void
+mb_memory(void)
+{
+	__asm __volatile("mb" : : : "memory");
 }
 
 #endif /* _ALPHA_LOCK_H_ */

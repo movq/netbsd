@@ -1,4 +1,4 @@
-/*	$NetBSD: hesiod.h,v 1.3 1999/01/24 23:53:18 lukem Exp $	*/
+/*	$NetBSD: hesiod.h,v 1.5 2008/04/28 20:22:54 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 1999 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -79,18 +72,18 @@
 #include <sys/cdefs.h>
 
 __BEGIN_DECLS
-int	hesiod_init	__P((void **));
-char  **hesiod_resolve	__P((void *, const char *, const char *));
-void	hesiod_free_list __P((void *, char **));
-char   *hesiod_to_bind	__P((void *, const char *, const char *));
-void	hesiod_end	__P((void *));
+int	hesiod_init	(void **);
+char  **hesiod_resolve	(void *, const char *, const char *);
+void	hesiod_free_list(void *, char **);
+char   *hesiod_to_bind	(void *, const char *, const char *);
+void	hesiod_end	(void *);
 
 				/* backwards compatibility */
-int	hes_init	__P((void));
-char   *hes_to_bind	__P((const char *, const char *));
-char  **hes_resolve	__P((const char *, const char *));
-int	hes_error	__P((void));
-void	hes_free	__P((char **));
+int	hes_init	(void);
+char   *hes_to_bind	(const char *, const char *);
+char  **hes_resolve	(const char *, const char *);
+int	hes_error	(void);
+void	hes_free	(char **);
 __END_DECLS
 
 #endif /* ! _HESIOD_H_ */

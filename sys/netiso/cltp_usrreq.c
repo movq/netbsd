@@ -1,4 +1,4 @@
-/*	$NetBSD: cltp_usrreq.c,v 1.17 2000/03/30 13:10:07 augustss Exp $	*/
+/*	$NetBSD: cltp_usrreq.c,v 1.34 2008/04/28 13:24:38 ad Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,6 +31,9 @@
  *	@(#)cltp_usrreq.c	8.1 (Berkeley) 6/10/93
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: cltp_usrreq.c,v 1.34 2008/04/28 13:24:38 ad Exp $");
+
 #ifndef CLTPOVAL_SRC		/* XXX -- till files gets changed */
 #include <sys/param.h>
 #include <sys/malloc.h>
@@ -45,6 +44,7 @@
 #include <sys/errno.h>
 #include <sys/stat.h>
 #include <sys/systm.h>
+#include <sys/proc.h>
 
 #include <net/if.h>
 #include <net/route.h>
@@ -73,18 +73,14 @@ cltp_init()
 	cltb.isop_next = cltb.isop_prev = &cltb;
 }
 
-int             cltp_cksum = 1;
+int cltp_cksum = 1;
+struct isopcb   cltb;
+struct cltpstat cltpstat;
 
 
 /* ARGUSED */
 void
-#if __STDC__
 cltp_input(struct mbuf *m0, ...)
-#else
-cltp_input(m0, va_alist)
-	struct mbuf    *m0;
-	va_dcl
-#endif
 {
 	struct sockaddr *srcsa, *dstsa;
 	u_int           cons_channel;
@@ -95,7 +91,7 @@ cltp_input(m0, va_alist)
 	struct sockaddr_iso *src;
 	int             len, hdrlen = *up + 1, dlen = 0;
 	u_char         *uplim = up + hdrlen;
-	caddr_t         dtsap = NULL;
+	void *        dtsap = NULL;
 	va_list ap;
 
 	va_start(ap, m0);
@@ -112,7 +108,8 @@ cltp_input(m0, va_alist)
 		switch (*up) {	/* process options */
 		case CLTPOVAL_SRC:
 			src->siso_tlen = up[1];
-			src->siso_len = up[1] + TSEL(src) - (caddr_t) src;
+			src->siso_len = up[1] +
+			    ((const char *)TSEL(src) - (const char *)src);
 			if (src->siso_len < sizeof(*src))
 				src->siso_len = sizeof(*src);
 			else if (src->siso_len > sizeof(*src)) {
@@ -121,14 +118,14 @@ cltp_input(m0, va_alist)
 					goto bad;
 				m_src->m_len = src->siso_len;
 				src = mtod(m_src, struct sockaddr_iso *);
-				bcopy((caddr_t) srcsa, (caddr_t) src, srcsa->sa_len);
+				bcopy((void *) srcsa, (void *) src, srcsa->sa_len);
 			}
-			bcopy((caddr_t) up + 2, TSEL(src), up[1]);
+			memcpy(WRITABLE_TSEL(src), (char *)up + 2, up[1]);
 			up += 2 + src->siso_tlen;
 			continue;
 
 		case CLTPOVAL_DST:
-			dtsap = 2 + (caddr_t) up;
+			dtsap = 2 + (char *)up;
 			dlen = up[1];
 			up += 2 + dlen;
 			continue;
@@ -187,19 +184,18 @@ cltp_notify(isop)
 }
 
 void
-cltp_ctlinput(cmd, sa, dummy)
-	int             cmd;
-	struct sockaddr *sa;
-	void *dummy;
+cltp_ctlinput(
+    int cmd,
+    const struct sockaddr *sa,
+    void *dummy)
 {
-	extern u_char   inetctlerrmap[];
-	struct sockaddr_iso *siso;
+	const struct sockaddr_iso *siso;
 
-	if ((unsigned) cmd > PRC_NCMDS)
+	if ((unsigned)cmd >= PRC_NCMDS)
 		return;
 	if (sa->sa_family != AF_ISO && sa->sa_family != AF_CCITT)
 		return;
-	siso = satosiso(sa);
+	siso = satocsiso(sa);
 	if (siso == 0 || siso->siso_nlen == 0)
 		return;
 
@@ -210,25 +206,19 @@ cltp_ctlinput(cmd, sa, dummy)
 	case PRC_REDIRECT_TOSNET:
 	case PRC_REDIRECT_TOSHOST:
 		iso_pcbnotify(&cltb, siso,
-			      (int) inetctlerrmap[cmd], iso_rtchange);
+			      (int) isoctlerrmap[cmd], iso_rtchange);
 		break;
 
 	default:
-		if (inetctlerrmap[cmd] == 0)
+		if (isoctlerrmap[cmd] == 0)
 			return;	/* XXX */
-		iso_pcbnotify(&cltb, siso, (int) inetctlerrmap[cmd],
+		iso_pcbnotify(&cltb, siso, (int) isoctlerrmap[cmd],
 			      cltp_notify);
 	}
 }
 
 int
-#if __STDC__
 cltp_output(struct mbuf *m, ...)
-#else
-cltp_output(m, va_alist)
-	struct mbuf *m;
-	va_dcl
-#endif
 {
 	struct isopcb *isop;
 	int    len;
@@ -264,12 +254,12 @@ cltp_output(m, va_alist)
 	up[2] = CLTPOVAL_SRC;
 	up[3] = (siso = isop->isop_laddr)->siso_tlen;
 	up += 4;
-	bcopy(TSEL(siso), (caddr_t) up, siso->siso_tlen);
+	bcopy(TSEL(siso), (void *) up, siso->siso_tlen);
 	up += siso->siso_tlen;
 	up[0] = CLTPOVAL_DST;
 	up[1] = (siso = isop->isop_faddr)->siso_tlen;
 	up += 2;
-	bcopy(TSEL(siso), (caddr_t) up, siso->siso_tlen);
+	bcopy(TSEL(siso), (void *) up, siso->siso_tlen);
 	/*
 	 * Stuff checksum and output datagram.
 	 */
@@ -293,22 +283,24 @@ u_long          cltp_recvspace = 40 * (1024 + sizeof(struct sockaddr_iso));
 
 /* ARGSUSED */
 int
-cltp_usrreq(so, req, m, nam, control, p)
+cltp_usrreq(so, req, m, nam, control, l)
 	struct socket *so;
 	int req;
 	struct mbuf *m, *nam, *control;
-	struct proc *p;
+	struct lwp *l;
 {
 	struct isopcb *isop;
 	int s;
 	int error = 0;
 
 	if (req == PRU_CONTROL)
-		return (iso_control(so, (long)m, (caddr_t)nam,
-		    (struct ifnet *)control, p));
+		return (iso_control(so, (long)m, (void *)nam,
+		    (struct ifnet *)control, l));
 
 	if (req == PRU_PURGEIF) {
+		mutex_enter(softnet_lock);
 		iso_purgeif((struct ifnet *)control);
+		mutex_exit(softnet_lock);
 		return (0);
 	}
 
@@ -326,6 +318,7 @@ cltp_usrreq(so, req, m, nam, control, p)
 	switch (req) {
 
 	case PRU_ATTACH:
+		sosetlock(so);
 		if (isop != 0) {
 			error = EISCONN;
 			break;
@@ -345,7 +338,7 @@ cltp_usrreq(so, req, m, nam, control, p)
 		break;
 
 	case PRU_BIND:
-		error = iso_pcbbind(isop, nam, p);
+		error = iso_pcbbind(isop, nam, l);
 		break;
 
 	case PRU_LISTEN:
@@ -353,7 +346,7 @@ cltp_usrreq(so, req, m, nam, control, p)
 		break;
 
 	case PRU_CONNECT:
-		error = iso_pcbconnect(isop, nam);
+		error = iso_pcbconnect(isop, nam, l);
 		if (error)
 			break;
 		soisconnected(so);
@@ -388,7 +381,7 @@ cltp_usrreq(so, req, m, nam, control, p)
 				error = EISCONN;
 				goto die;
 			}
-			error = iso_pcbconnect(isop, nam);
+			error = iso_pcbconnect(isop, nam, l);
 			if (error) {
 			die:
 				m_freem(m);

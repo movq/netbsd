@@ -1,4 +1,4 @@
-/*	$NetBSD: n_tan.S,v 1.3 1999/07/02 15:37:35 simonb Exp $	*/
+/*	$NetBSD: n_tan.S,v 1.6 2003/08/07 16:44:45 agc Exp $	*/
 /*
  * Copyright (c) 1985, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -34,6 +30,8 @@
  *	@(#)tan.s	8.1 (Berkeley) 6/4/93
  */
 
+#include <machine/asm.h>
+
 /*  This is the implementation of Peter Tang's double precision
  *  tangent for the VAX using Bob Corbett's argument reduction.
  *
@@ -46,51 +44,46 @@
  * method: true range reduction to [-pi/4,pi/4], P. Tang  &  B. Corbett
  * S. McDonald, April 4,  1985
  */
-	.text
-	.align	1
-	.globl	_tan
-	.type	_tan,@function
-
-_tan:	.word	0xffc		# save r2-r11
-	movq	4(ap),r0
-	bicw3	$0x807f,r0,r2
+ENTRY(tan, 0x0fc0)		# save %r6-%r11
+	movq	4(%ap),%r0
+	bicw3	$0x807f,%r0,%r2
 	beql	1f		# if x is zero or reserved operand then return x
 /*
  * Save the PSL's IV & FU bits on the stack.
  */
-	movpsl	r2
-	bicw3	$0xff9f,r2,-(sp)
+	movpsl	%r2
+	bicw3	$0xff9f,%r2,-(%sp)
 /*
  *  Clear the IV & FU bits.
  */
 	bicpsw	$0x0060
-	jsb	libm$argred
+	jsb	_C_LABEL(__libm_argred)+2
 /*
  *  At this point,
- *	   r0  contains the quadrant number, 0, 1, 2, or 3;
- *	r2/r1  contains the reduced argument as a D-format number;
- *  	   r3  contains a F-format extension to the reduced argument;
+ *	   %r0  contains the quadrant number, 0, 1, 2, or 3;
+ *	%r2/%r1  contains the reduced argument as a D-format number;
+ *  	   %r3  contains a F-format extension to the reduced argument;
  *
- *  Save  r3/r0  so that we can call cosine after calling sine.
+ *  Save  %r3/%r0  so that we can call cosine after calling sine.
  */
-	movq	r2,-(sp)
-	movq	r0,-(sp)
+	movq	%r2,-(%sp)
+	movq	%r0,-(%sp)
 /*
- *  Call sine.  r4 = 0  implies sine.
+ *  Call sine.  %r4 = 0  implies sine.
  */
-	movl	$0,r4
-	jsb	libm$sincos
+	movl	$0,%r4
+	jsb	_C_LABEL(__libm_sincos)+2
 /*
- *  Save  sin(x)  in  r11/r10 .
+ *  Save  sin(x)  in  %r11/%r10 .
  */
-	movd	r0,r10
+	movd	%r0,%r10
 /*
- *  Call cosine.  r4 = 1  implies cosine.
+ *  Call cosine.  %r4 = 1  implies cosine.
  */
-	movq	(sp)+,r0
-	movq	(sp)+,r2
-	movl	$1,r4
-	jsb	libm$sincos
-	divd3	r0,r10,r0
-	bispsw	(sp)+
+	movq	(%sp)+,%r0
+	movq	(%sp)+,%r2
+	movl	$1,%r4
+	jsb	_C_LABEL(__libm_sincos)+2
+	divd3	%r0,%r10,%r0
+	bispsw	(%sp)+
 1:	ret

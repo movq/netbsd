@@ -1,13 +1,14 @@
-#	$NetBSD: Makefile,v 1.2 1997/10/23 06:32:02 lukem Exp $
+#	$NetBSD: Makefile,v 1.7.4.1 2009/01/15 03:24:11 snj Exp $
+
+.include <bsd.own.mk>
 
 PROG=	chrtbl
 MAN=	chrtbl.8
 
-.PATH:	${.CURDIR}/../../lib/libc/locale
-
-CPPFLAGS+=-I${.CURDIR}/../../lib/libc/locale
-
-# ctypeio.c pulled in from ../../lib/libc/locale
 SRCS=	chrtbl.c ctypeio.c
 
 .include <bsd.prog.mk>
+
+.if (defined(HAVE_GCC) && ${HAVE_GCC} == 4) || defined(HAVE_PCC)
+COPTS.chrtbl.c+=	-Wno-pointer-sign
+.endif

@@ -1,8 +1,8 @@
-.\"	$NetBSD: mount_union.8,v 1.9 1999/03/07 11:02:08 mycroft Exp $
+.\"	$NetBSD: mount_union.8,v 1.18 2008/02/05 16:54:07 ad Exp $
 .\"
 .\" Copyright (c) 1994
 .\" The Regents of the University of California.  All rights reserved.
-.\" 
+.\"
 .\" This code is derived from software donated to Berkeley by
 .\" Jan-Simon Pendry.
 .\"
@@ -14,11 +14,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -36,23 +32,22 @@
 .\"
 .\"	@(#)mount_union.8	8.7 (Berkeley) 5/1/95
 .\"
-.Dd May 1, 1995
+.Dd Febuary 5, 2008
 .Dt MOUNT_UNION 8
-.Os BSD 4.4
+.Os
 .Sh NAME
 .Nm mount_union
 .Nd mount union filesystems
 .Sh SYNOPSIS
-.Nm ""
-.Op Fl br
+.Nm
+.Op Fl b
 .Op Fl o Ar options
 .Ar directory
 .Ar uniondir
 .Sh DESCRIPTION
 The
 .Nm
-command
-attaches
+command attaches
 .Ar directory
 above
 .Ar uniondir
@@ -66,6 +61,12 @@ layer and
 becomes the
 .Em lower
 layer.
+.Pp
+Both
+.Ar directory
+and
+.Ar uniondir
+are converted to absolute paths before use.
 .Pp
 The options are as follows:
 .Bl -tag -width indent
@@ -85,14 +86,7 @@ flag followed by a comma separated string of options.
 See the
 .Xr mount 8
 man page for possible options and their meanings.
-.It Fl r
-Hide the lower layer completely in the same way as mounting with
-.Xr mount_null 8 .
 .El
-.Pp
-To enforce filesystem security, the user mounting the filesystem
-must be superuser or else have write permission on the mounted-on
-directory.
 .Pp
 Filenames are looked up in the upper layer and then in the
 lower layer.
@@ -102,8 +96,9 @@ in the upper layer, then a
 directory will be created in the upper layer.
 It will be owned by the user who originally did the union mount,
 with mode
-.Dq rwxrwxrwx
-(0777) modified by the umask in effect at that time.
+.Qq rwxrwxrwx
+.Pq 0777
+modified by the umask in effect at that time.
 .Pp
 If a file exists in the upper layer then there is no way to access
 a file with the same name in the lower layer.
@@ -151,7 +146,9 @@ mount -t cd9660 -o ro /dev/cd0a /usr/src
 mount -t union /var/obj /usr/src
 .Ed
 .Pp
-mount the CD-ROM drive
+mount the
+.Tn CD-ROM
+drive
 .Pa /dev/cd0a
 on
 .Pa /usr/src
@@ -160,7 +157,8 @@ and then attaches
 on top.
 For most purposes the effect of this is to make the
 source tree appear writable
-even though it is stored on a CD-ROM.
+even though it is stored on a
+.Tn CD-ROM .
 .Pp
 The command
 .Bd -literal -offset indent
@@ -181,9 +179,15 @@ accessible via
 .Xr mount 2 ,
 .Xr unmount 2 ,
 .Xr fstab 5 ,
+.Xr fsck_ffs 8 ,
 .Xr mount 8 ,
 .Xr mount_null 8 ,
-.Xr fsck_ffs 8
+.Xr sysctl 8
+.Sh HISTORY
+The
+.Nm
+command first appeared in
+.Bx 4.4 .
 .Sh BUGS
 Without whiteout support from the filesystem backing the upper layer,
 there is no way that delete and rename operations on lower layer
@@ -191,7 +195,7 @@ objects can be done.
 An attempt to mount a union directory under one which does not
 have whiteout support will return
 .Dv EOPNOTSUPP
-(``Operation not supported'').
+.Pq Qq Operation not supported .
 Whiteout support can be added to an existing FFS filesystem
 by using the
 .Fl c
@@ -202,8 +206,3 @@ Running
 .Xr find 1
 over a union tree has the side-effect of creating
 a tree of shadow directories in the upper layer.
-.Sh HISTORY
-The
-.Nm
-command first appeared in
-.Bx 4.4 .

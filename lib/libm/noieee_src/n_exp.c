@@ -1,4 +1,4 @@
-/*      $NetBSD: n_exp.c,v 1.5 1999/07/02 15:37:36 simonb Exp $ */
+/*      $NetBSD: n_exp.c,v 1.8 2008/03/20 16:41:26 mhitch Exp $ */
 /*
  * Copyright (c) 1985, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -80,7 +76,14 @@ static char sccsid[] = "@(#)exp.c	8.1 (Berkeley) 6/4/93";
  * shown.
  */
 
+#define _LIBM_STATIC
+#include "../src/namespace.h"
 #include "mathimpl.h"
+
+#ifdef __weak_alias
+__weak_alias(exp, _exp);
+__weak_alias(expf, _expf);
+#endif
 
 vc(ln2hi,  6.9314718055829871446E-1  ,7217,4031,0000,f7d0,   0, .B17217F7D00000)
 vc(ln2lo,  1.6465949582897081279E-12 ,bcd5,2ce7,d9cc,e4f1, -39, .E7BCD5E4F1D9CC)
@@ -117,8 +120,8 @@ ic(lnhuge, 7.1602103751842355450E2,    9,  1.6602B15B7ECF2)
 ic(lntiny,-7.5137154372698068983E2,    9, -1.77AF8EBEAE354)
 ic(invln2, 1.4426950408889633870E0,    0,  1.71547652B82FE)
 
-double exp(x)
-double x;
+double
+exp(double x)
 {
 	double  z,hi,lo,c;
 	int k;
@@ -160,10 +163,16 @@ double x;
 	    return( finite(x) ?  scalb(1.0,5000)  : x);
 }
 
+float
+expf(float x)
+{
+	return(exp((double)x));
+}
+
 /* returns exp(r = x + c) for |c| < |x| with no overlap.  */
 
-double __exp__D(x, c)
-double x, c;
+double
+__exp__D(double x, double c)
 {
 	double  z,hi,lo;
 	int k;

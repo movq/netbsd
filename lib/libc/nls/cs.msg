@@ -66,7 +66,7 @@ $ EPIPE
 $ EDOM
 33 Èíselný argument mimo definièní obor
 $ ERANGE
-34 Èíselný výsledek je pøíli¹ velký
+34 Výsledek pøíli¹ velký nebo pøíli¹ malý
 $ EAGAIN, EWOULDBLOCK
 35 Prostøedek je doèasnì nedostupný
 $ EINPROGRESS
@@ -169,6 +169,28 @@ $ EOVERFLOW
 84 Hodnota je pro daný datový typ pøíli¹ velká
 $ EILSEQ
 85 Neplatná posloupnost bajtù
+$ ENOTSUP
+86 Nepodporováno
+$ ECANCELED
+87 Operace strornována
+$ EBADMSG
+88 ©patná nebo poru¹ená zpráva
+$ ENODATA
+89 ®ádná zpráva není dostupná
+$ ENOSR
+90 ®ádné STREAM prostøedky
+$ ENOSTR
+91 Není STREAM
+$ ETIME
+92 Vypr¹el èasový limit STREAM ioctl
+$ ENOATTR
+93 Atribut nebyl nalezen
+$ EMULTIHOP
+94 Pokus o spojení pøes více uzlù
+$ ENOLINK
+95 Odkaz byl zpøetrhán
+$ EPROTO
+96 Chyba protokolu
 $set 2
 $ SIGHUP
 1 Terminál odpojen

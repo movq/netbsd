@@ -1,31 +1,41 @@
-#	$NetBSD: Makefile,v 1.8 1999/03/15 07:46:11 leo Exp $
+#	$NetBSD: Makefile,v 1.27.88.1 2009/01/16 22:57:33 bouyer Exp $
 
 LIB=	sa
 
-MKPIC=no
-MKPROFILE=no
-OBJMACHINE=
+NOPIC=		# defined
+NOPROFILE=	# defined
+NOLINT=		# defnied
 
-CPPFLAGS+=	${DEFS} ${INCL}
-CFLAGS+=	-fomit-frame-pointer -Wall
 NO_NET=
 
-DEFS=	-D_STANDALONE
-INCL=	-I- -I${S_MACHSA} -I${S_KERN} -I${S_SA} -I${S}
+# Logically src/sys
+S=${.CURDIR}/../../../..
+S_SA=${S}/lib/libsa
+S_KERN=${S}/lib/libkern
+S_MACHSA=${S}/arch/atari/stand/libsa
+
+.include "${S}/../common/lib/libc/Makefile.inc"
+
+.include "../Makefile.booters"
+
+CPPFLAGS+=	-I. -I${S_MACHSA} -I${S_KERN} -I${S_SA} -I${S}
+
+.PATH:  ${S_SA} ${S_KERN}
 
 #
-# NetBSD/Atari specific replacements: stand.h dev.c
+# NetBSD/atari specific replacements: dev.c
 #
 
 # machine dependant routines
-SRCS=	consio.s diskio.c
+SRCS=	consio.S diskio.c
 
-# from lib/libkern
-SRCS+=	ashrdi3.c bzero.c strcmp.c strlen.c
+# from common/lib/libc
+SRCS+=	ashldi3.c ashrdi3.c bzero.c strcmp.c strlen.c
 
 # stand routines
-SRCS+=	alloc.c bcopy.c exec.c getfile.c gets.c globals.c \
-	memcpy.c printf.c strerror.c subr_prf.c twiddle.c
+SRCS+=	alloc.c bcmp.c bcopy.c exec.c files.c getfile.c gets.c globals.c \
+	panic.c memcmp.c memcpy.c memmove.c memset.c printf.c strerror.c \
+	subr_prf.c twiddle.c
 
 # io routines
 SRCS+=	close.c closeall.c dev.c disklabel.c dkcksum.c ioctl.c \
@@ -42,15 +52,9 @@ SRCS+=	bootp.c rarp.c bootparam.c
 # boot filesystems
 SRCS+=	ufs.c nfs.c
 
-# Logically src/sys
-S=${.CURDIR}/../../../..
-S_SA=${S}/lib/libsa
-S_KERN=${S}/lib/libkern
-S_MACHSA=${S}/arch/atari/stand/libsa
-
-.PATH:  ${S_SA} ${S_KERN}
-
 # only needed during build
 libinstall::
 
+.include <bsd.own.mk>
+.undef DESTDIR
 .include <bsd.lib.mk>

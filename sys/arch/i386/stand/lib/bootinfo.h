@@ -1,4 +1,4 @@
-/*	$NetBSD: bootinfo.h,v 1.5 1999/03/10 01:28:25 fvdl Exp $	*/
+/*	$NetBSD: bootinfo.h,v 1.9 2006/01/25 18:28:26 christos Exp $	*/
 
 /*
  * Copyright (c) 1997
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed for the NetBSD Project
- *	by Matthias Drochner.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -45,10 +39,10 @@ extern struct bootinfo *bootinfo;
                                         + ((max) - 1) * sizeof(physaddr_t))) \
                       ->nentries = 0
 
-#define BI_FREE() free(bootinfo, 0)
+#define BI_FREE() dealloc(bootinfo, 0)
 
-#define BI_ADD(x, type, size) bi_add((struct btinfo_common*)(x), type, size)
+#define BI_ADD(x, type, size) bi_add((struct btinfo_common *)(x), type, size)
 
-void bi_add __P((struct btinfo_common*, int, int));
-void bi_getbiosgeom __P((void));
-void bi_getmemmap __P((void));
+void bi_add(struct btinfo_common *, int, int);
+void bi_getbiosgeom(void);
+void bi_getmemmap(void);

@@ -1,4 +1,4 @@
-/*	$NetBSD: lint2.h,v 1.4 1997/11/03 22:37:03 cgd Exp $	*/
+/* $NetBSD: lint2.h,v 1.7 2005/04/07 16:28:40 christos Exp $ */
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All Rights Reserved.
@@ -37,7 +37,7 @@
 /*
  * Types are described by structures of type type_t.
  */
-typedef	struct type {
+struct type {
 	tspec_t	t_tspec;	/* type specifier */
 	u_int	t_const : 1;	/* constant */
 	u_int	t_volatile : 1;	/* volatile */
@@ -66,7 +66,7 @@ typedef	struct type {
 	} t_u;
 	struct	type *t_subt;	/* indirected type (array element, pointed to
 				   type, type of return value) */
-} type_t;
+};
 
 #define	t_dim		t_u._t_dim
 #define	t_tag		t_u._t_tag
@@ -100,7 +100,7 @@ typedef	struct {
 	u_short	p_line;		/* line number in p_src */
 	u_short	p_isrc;		/* index of (included) file */
 	u_short p_iline;	/* line number in p_iline */
-} pos_t;	
+} pos_t;
 
 /*
  * Used for definitions and declarations
@@ -117,7 +117,7 @@ typedef	struct sym {
 		u_int	s_def : 3;	/* DECL, TDEF or DEF */
 #else
 		def_t	s_def;
-#endif		
+#endif
 		u_int	s_rval : 1;	/* function has return value */
 		u_int	s_osdef : 1;	/* old style function definition */
 		u_int	s_static : 1;	/* symbol is static */

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 1999/12/14 20:55:28 thorpej Exp $
+#	$NetBSD: Makefile,v 1.8 2003/01/03 15:34:42 lukem Exp $
 
 PROGAOUT=	uboot
 PROGSOURCE=	uboot.c tgets.c
@@ -6,11 +6,13 @@ NEWVERSWHAT=	"Primary Boot"
 
 CPPFLAGS+=	-DSUPPORT_ETHERNET -DSUPPORT_TAPE -DSUPPORT_DISK
 
+.include "../Makefile.buildboot"
+
 install:
-	${INSTALL} -d -m 755 -o ${BINOWN} -g ${BINGRP} \
+	${INSTALL_DIR} -o ${BINOWN} -g ${BINGRP} -m 755 \
 	    ${DESTDIR}${BINDIR}/rbootd
-	${INSTALL} -c -o ${BINOWN} -g ${BINGRP} -m 444 uboot.lif \
-	    ${DESTDIR}${BINDIR}/uboot.lif
+	${INSTALL_FILE} -o ${BINOWN} -g ${BINGRP} -m 444 \
+	    uboot.lif ${DESTDIR}${BINDIR}/uboot.lif
 	rm -f ${DESTDIR}${BINDIR}/rdboot
 	ln ${DESTDIR}${BINDIR}/uboot.lif ${DESTDIR}${BINDIR}/rdboot
 	rm -f ${DESTDIR}${BINDIR}/bootrd
@@ -26,4 +28,6 @@ install:
 	rm -f ${DESTDIR}${BINDIR}/rbootd/SYS_UBOOT
 	ln ${DESTDIR}${BINDIR}/uboot.lif ${DESTDIR}${BINDIR}/rbootd/SYS_UBOOT
 
-.include "../Makefile.buildboot"
+release: check_RELEASEDIR .WAIT uboot.lif
+	${HOST_INSTALL_FILE} -m ${NONBINMODE} uboot.lif \
+	    ${RELEASEDIR}/${MACHINE}/installation/misc/SYS_UBOOT

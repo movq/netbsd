@@ -1,4 +1,4 @@
-/*	$NetBSD: sets.h,v 1.4 1994/06/29 06:41:17 cgd Exp $	*/
+/*	$NetBSD: sets.h,v 1.7 2005/12/11 12:25:16 christos Exp $	*/
 
 #define MAXEVENTS 200
 #define MAXSTATES 200
@@ -14,7 +14,7 @@ struct Object {
 	unsigned char obj_type; /* state or event */
 	char *obj_name;
 	char *obj_struc;
-	int obj_number; 
+	int obj_number;
 	struct Object *obj_members; /* must be null for kind==item */
 	/* for the tree */
 	struct Object *obj_left;
@@ -30,6 +30,10 @@ extern int Nevents, Nstates;
 int Eventshift;
 extern struct Object *CurrentEvent;
 
-extern struct Object *Lookup();
+extern struct Object *lookup();
 extern struct Object *defineset();
-
+extern void end_states();
+extern struct Object *Lookup();
+extern void defineitem();
+extern void member();
+extern void dump_trans();

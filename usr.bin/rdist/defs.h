@@ -1,4 +1,4 @@
-/*	$NetBSD: defs.h,v 1.12 1998/12/19 20:32:17 christos Exp $	*/
+/*	$NetBSD: defs.h,v 1.17 2006/03/18 09:46:35 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -153,30 +149,35 @@ extern struct group *gr;	/* pointer to static area used by getgrent */
 extern uid_t userid;		/* user's user ID */
 extern gid_t groupid;		/* user's group ID */
 
-int	 any __P((int, char *));
-char	*colon __P((char *));
-void	 cleanup __P((int));
-void	 define __P((char *));
-void	 docmds __P((char **, int, char **));
-void	 error __P((const char *, ...));
-int	 except __P((char *));
+int	 any(int, char *);
+char	*colon(char *);
+void	 cleanup(int);
+void	 define(char *);
+void	 docmds(char **, int, char **);
+void	 error(const char *, ...)
+     __attribute__((__format__(__printf__, 1, 2))) ;
+int	 except(char *);
 struct namelist *
-	 expand __P((struct namelist *, int));
-char	*exptilde __P((char [], char *));
-void	 fatal __P((const char *, ...));
-int	 inlist __P((struct namelist *, char *));
-void	 insert __P((char *,
-	    struct namelist *, struct namelist *, struct subcmd *));
-void	 install __P((char *, char *, int, int));
-void	 log __P((FILE *, const char *, ...));
+	 expand(struct namelist *, int);
+char	*exptilde(char [], char *);
+void	 fatal(const char *, ...)
+     __attribute__((__format__(__printf__, 1, 2)));
+int	 inlist(struct namelist *, char *);
+void	 insert(char *,
+	    struct namelist *, struct namelist *, struct subcmd *);
+void	 install(char *, char *, int, int);
+void	 dolog(FILE *, const char *, ...)
+     __attribute__((__format__(__printf__, 2, 3)));
 struct namelist *
-	 lookup __P((char *, int, struct namelist *));
-void	 lostconn __P((int));
+	 lookup(char *, int, struct namelist *);
+void	 lostconn(int);
 struct namelist *
-	 makenl __P((char *));
+	 makenl(char *);
+void	 freenl(struct namelist *);
 struct subcmd *
-	 makesubcmd __P((int));
-void	 prnames __P((struct namelist *));
-void	 server __P((void));
-void	 yyerror __P((char *));
-int	 yyparse __P((void));
+	 makesubcmd(int);
+void	 freesubcmd(struct subcmd *);
+void	 prnames(struct namelist *);
+void	 server(void);
+void	 yyerror(char *);
+int	 yyparse(void);

@@ -1,4 +1,4 @@
-.\"	$NetBSD: stdio.3,v 1.8 1999/03/22 19:44:57 garbled Exp $
+.\"	$NetBSD: stdio.3,v 1.19 2003/08/07 16:43:32 agc Exp $
 .\"
 .\" Copyright (c) 1990, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the University of
-.\"	California, Berkeley and its contributors.
-.\" 4. Neither the name of the University nor the names of its contributors
+.\" 3. Neither the name of the University nor the names of its contributors
 .\"    may be used to endorse or promote products derived from this software
 .\"    without specific prior written permission.
 .\"
@@ -33,7 +29,7 @@
 .\"
 .\"     @(#)stdio.3	8.7 (Berkeley) 4/19/94
 .\"
-.Dd April 19, 1994
+.Dd January 28, 2003
 .Dt STDIO 3
 .Os
 .Sh NAME
@@ -42,7 +38,7 @@
 .Sh LIBRARY
 .Lb libc
 .Sh SYNOPSIS
-.Fd #include <stdio.h>
+.In stdio.h
 .Fd FILE *stdin;
 .Fd FILE *stdout;
 .Fd FILE *stderr;
@@ -55,22 +51,25 @@ interface.
 Input and output is mapped into logical data streams
 and the physical
 .Tn I/O
-characteristics are concealed. The functions and macros are listed
-below; more information is available from the individual man pages.
+characteristics are concealed.
+The functions and macros are listed below;
+more information is available from the individual man pages.
 .Pp
 A stream is associated with an external file (which may be a physical
 device) by
 .Em opening
-a file, which may involve creating a new file. Creating an
-existing file causes its former contents to be discarded.
+a file, which may involve creating a new file.
+Creating an existing file causes its former contents to be discarded.
 If a file can support positioning requests (such as a disk file, as opposed
 to a terminal) then a
 .Em file position indicator
 associated with the stream is positioned at the start of the file (byte
-zero), unless the file is opened with append mode. If append mode
+zero), unless the file is opened with append mode.
+If append mode
 is used, the position indicator will be placed the end-of-file.
 The position indicator is maintained by subsequent reads, writes
-and positioning requests. All input occurs as if the characters
+and positioning requests.
+All input occurs as if the characters
 were read by successive calls to the
 .Xr fgetc 3
 function; all output takes place as if all characters were
@@ -89,12 +88,12 @@ object is indeterminate after a file is closed (garbage).
 .Pp
 A file may be subsequently reopened, by the same or another program
 execution, and its contents reclaimed or modified (if it can be repositioned
-at the start).  If the main function returns to its original caller, or
-the
+at the start).
+If the main function returns to its original caller, or the
 .Xr exit 3
 function is called, all open files are closed (hence all output
-streams are flushed) before program termination.  Other methods
-of program termination, such as
+streams are flushed) before program termination.
+Other methods of program termination, such as
 .Xr abort 3
 do not bother about closing files properly.
 .Pp
@@ -111,10 +110,10 @@ At program startup, three streams are predefined and need not be
 opened explicitly:
 .Bl -bullet -compact -offset indent
 .It
-.Em standard input 
+.Em standard input
 (for reading conventional input),
 .It
-.Em standard output 
+.Em standard output
 (for writing conventional output), and
 .It
 .Em standard error
@@ -156,15 +155,29 @@ The
 .Nm
 library is a part of the library
 .Pa libc.a
-and routines are automatically loaded as needed by the compilers
-.Xr cc 1
-and
-.Xr pc 1 .
+and routines are automatically loaded as needed by compilers such
+as
+.Xr cc 1 .
 The
 .Tn SYNOPSIS
 sections of the following manual pages indicate which include files
 are to be used, what the compiler declaration for the function
 looks like and which external variables are of interest.
+.Pp
+In multi-threaded applications, operations on streams perform implicit
+locking, except for the
+.Fa getc_unlocked ,
+.Fa getchar_unlocked ,
+.Fa putc_unlocked ,
+and
+.Fa putchar_unlocked
+functions.
+Explicit control of stream locking is available through the
+.Fa flockfile ,
+.Fa ftrylockfile ,
+and
+.Fa funlockfile
+functions .
 .Pp
 The following are defined as macros; these names may not be re-used
 without first removing their current definitions with
@@ -175,7 +188,7 @@ without first removing their current definitions with
 .Dv FOPEN_MAX ,
 .Dv L_cuserid ,
 .Dv L_ctermid ,
-.Dv L_tmpnam,
+.Dv L_tmpnam ,
 .Dv NULL ,
 .Dv SEEK_END ,
 .Dv SEEK_SET ,
@@ -188,9 +201,13 @@ without first removing their current definitions with
 .Fn freopen ,
 .Fn fwopen ,
 .Fn getc ,
+.Fn getc_unlocked ,
 .Fn getchar ,
+.Fn getchar_unlocked ,
 .Fn putc ,
+.Fn putc_unlocked ,
 .Fn putchar ,
+.Fn putchar_unlocked ,
 .Dv stderr ,
 .Dv stdin ,
 .Dv stdout .
@@ -200,29 +217,27 @@ Function versions of the macro functions
 .Fn clearerr ,
 .Fn fileno ,
 .Fn getc ,
+.Fn getc_unlocked ,
 .Fn getchar ,
+.Fn getchar_unlocked ,
 .Fn putc ,
+.Fn putc_unlocked ,
+.Fn putchar ,
 and
-.Fn putchar
+.Fn putchar_unlocked
 exist and will be used if the macros definitions are explicitly removed.
 .Sh SEE ALSO
-.Xr open 2 ,
 .Xr close 2 ,
+.Xr open 2 ,
 .Xr read 2 ,
 .Xr write 2
-.Sh BUGS
-The standard buffered functions do not interact well with certain other
-library and system functions, especially
-.Xr vfork 2
-and
-.Xr abort 3 .
 .Sh STANDARDS
 The
 .Nm
 library conforms to
 .St -ansiC .
 .Sh LIST OF FUNCTIONS
-.Bl -column "Description"
+.Bl -column "Functionxxxxxxxx" "Description"
 .Sy Function	Description
 clearerr	check and reset stream status
 fclose	close a stream
@@ -234,12 +249,15 @@ fgetc	get next character or word from input stream
 fgetln	get a line from a stream
 fgetpos	reposition a stream
 fgets	get a line from a stream
+fgetwc	get next wide character from input stream
 fileno	check and reset stream status
+flockfile	lock a stream
 fopen	stream open functions
 fprintf	formatted output conversion
 fpurge	flush a stream
 fputc	output a character or word to a stream
 fputs	output a line to a stream
+fputwc	output a wide character to a stream
 fread	binary stream input/output
 freopen	stream open functions
 fropen	open a stream
@@ -247,21 +265,36 @@ fscanf	input format conversion
 fseek	reposition a stream
 fsetpos	reposition a stream
 ftell	reposition a stream
+ftrylockfile	lock a stream (non-blocking)
+funlockfile	unlock a stream
 funopen	open a stream
+fwide	set/get orientation of a stream
 fwopen	open a stream
 fwrite	binary stream input/output
 getc	get next character or word from input stream
+getc_unlocked	get next character or word from input stream
+	(no implicit locking)
 getchar	get next character or word from input stream
+getchar_unlocked	get next character or word from input stream
+	(no implicit locking)
 gets	get a line from a stream
 getw	get next character or word from input stream
+getwc	get next wide character from input stream
+getwchar	get next wide character from input stream
 mkstemp	create unique temporary file
 mktemp	create unique temporary file
 perror	system error messages
 printf	formatted output conversion
 putc	output a character or word to a stream
+putc_unlocked	output a character or word to a stream
+	(no implicit locking)
 putchar	output a character or word to a stream
+putchar_unlocked	output a character or word to a stream
+	(no implicit locking)
 puts	output a line to a stream
 putw	output a character or word to a stream
+putwc	output a wide character to a stream
+putwchar	output a wide character to a stream
 remove	remove directory entry
 rewind	reposition a stream
 scanf	input format conversion
@@ -279,6 +312,7 @@ tempnam	temporary file routines
 tmpfile	temporary file routines
 tmpnam	temporary file routines
 ungetc	un-get character from input stream
+ungetwc	un-get wide character from input stream
 vfprintf	formatted output conversion
 vfscanf	input format conversion
 vprintf	formatted output conversion
@@ -287,3 +321,9 @@ vsnprintf	formatted output conversion
 vsprintf	formatted output conversion
 vsscanf	input format conversion
 .El
+.Sh BUGS
+The standard buffered functions do not interact well with certain other
+library and system functions, especially
+.Xr vfork 2
+and
+.Xr abort 3 .

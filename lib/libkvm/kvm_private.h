@@ -1,4 +1,4 @@
-/*	$NetBSD: kvm_private.h,v 1.8 1997/08/12 16:27:01 gwr Exp $	*/
+/*	$NetBSD: kvm_private.h,v 1.16 2008/01/15 13:57:42 ad Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -48,19 +44,23 @@ struct __kvm {
 	const char *program;
 	char	*errp;		/* XXX this can probably go away */
 	char	errbuf[_POSIX2_LINE_MAX];
-	DB	*db;
-#define ISALIVE(kd) ((kd)->vmfd >= 0)
-	int	pmfd;		/* physical memory file (or crashdump) */
-	int	vmfd;		/* virtual memory file (-1 if crashdump) */
+	int	pmfd;		/* physical memory file (or crash dump) */
+	int	vmfd;		/* virtual memory file (-1 if crash dump) */
 	int	swfd;		/* swap file (e.g., /dev/drum) */
 	int	nlfd;		/* namelist file (e.g., /vmunix) */
+	char	alive;		/* live kernel? */
 	struct kinfo_proc *procbase;
+	struct kinfo_proc2 *procbase2;
+	struct kinfo_lwp *lwpbase;
+	size_t  procbase_len;
+	size_t  procbase2_len;
+	size_t  lwpbase_len;
 	u_long	usrstack;		/* address of end of user stack */
 	u_long	min_uva, max_uva;	/* min/max user virtual address */
 	int	nbpg;		/* page size */
 	char	*swapspc;	/* (dynamic) storage for swapped pages */
 	char	*argspc, *argbuf; /* (dynamic) storage for argv strings */
-	int	arglen;		/* length of the above */
+	size_t	argspc_len;	/* length of the above */
 	char	**argv;		/* (dynamic) storage for argv pointers */
 	int	argc;		/* length of above (not actual # present) */
 
@@ -86,12 +86,26 @@ struct __kvm {
 	 */
 	struct pglist *vm_page_buckets;
 	int vm_page_hash_mask;
+	/* Buffer for raw disk I/O. */
+	size_t fdalign;
+	uint8_t *iobuf;
+	size_t iobufsz;
 };
+
+/* Levels of aliveness */
+#define	KVM_ALIVE_DEAD		0	/* dead, working from core file */
+#define	KVM_ALIVE_FILES		1	/* alive, working from open kmem/drum */
+#define	KVM_ALIVE_SYSCTL	2	/* alive, sysctl-type calls only */
+
+#define	ISALIVE(kd)	((kd)->alive != KVM_ALIVE_DEAD)
+#define	ISKMEM(kd)	((kd)->alive == KVM_ALIVE_FILES)
+#define	ISSYSCTL(kd)	((kd)->alive == KVM_ALIVE_SYSCTL || ISKMEM(kd))
 
 /*
  * Functions used internally by kvm, but across kvm modules.
  */
-void	 _kvm_err __P((kvm_t *kd, const char *program, const char *fmt, ...));
+void	 _kvm_err __P((kvm_t *kd, const char *program, const char *fmt, ...))
+	__attribute__((__format__(__printf__, 3, 4)));
 int	 _kvm_dump_mkheader __P((kvm_t *kd_live, kvm_t *kd_dump));
 void	 _kvm_freeprocs __P((kvm_t *kd));
 void	 _kvm_freevtop __P((kvm_t *));
@@ -102,4 +116,19 @@ void	*_kvm_malloc __P((kvm_t *kd, size_t));
 off_t	 _kvm_pa2off __P((kvm_t *, u_long));
 void	*_kvm_realloc __P((kvm_t *kd, void *, size_t));
 void	 _kvm_syserr
-	    __P((kvm_t *kd, const char *program, const char *fmt, ...));
+	    __P((kvm_t *kd, const char *program, const char *fmt, ...))
+	    __attribute__((__format__(__printf__, 3, 4)));
+ssize_t	_kvm_pread(kvm_t *, int, void *, size_t, off_t);
+
+#define KVM_ALLOC(kd, member, size) \
+    do { \
+	if (kd->member == NULL)	\
+		kd->member = _kvm_malloc(kd, kd->member ## _len = size); \
+	else if (kd->member ## _len < size) \
+		kd->member = _kvm_realloc(kd, kd->member, \
+		    kd->member ## _len = size); \
+	if (kd->member == NULL) { \
+		kd->member ## _len = 0; \
+		return (NULL); \
+	} \
+    } while (/*CONSTCOND*/0)

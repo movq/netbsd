@@ -1,4 +1,4 @@
-/*	$NetBSD: uhavar.h,v 1.11 1998/12/09 08:47:20 thorpej Exp $	*/
+/*	$NetBSD: uhavar.h,v 1.15 2008/04/28 20:23:51 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -54,9 +47,9 @@ struct uha_softc {
 
 	int sc_dmaflags;	/* bus-specific DMA map creation flags */
 
-	void (*start_mbox) __P((struct uha_softc *, struct uha_mscp *));
-	int (*poll) __P((struct uha_softc *, struct scsipi_xfer *, int));
-	void (*init) __P((struct uha_softc *));
+	void (*start_mbox)(struct uha_softc *, struct uha_mscp *);
+	int (*poll)(struct uha_softc *, struct scsipi_xfer *, int);
+	void (*init)(struct uha_softc *);
 
 	bus_dmamap_t sc_dmamap_mscp;	/* maps the mscps */
 	struct uha_mscp *sc_mscps;	/* all our mscps */
@@ -64,10 +57,9 @@ struct uha_softc {
 	struct uha_mscp *sc_mscphash[MSCP_HASH_SIZE];
 	TAILQ_HEAD(, uha_mscp) sc_free_mscp;
 	int sc_nummscps;
-	struct scsipi_link sc_link;
-	struct scsipi_adapter sc_adapter;
 
-	TAILQ_HEAD(, scsipi_xfer) sc_queue;
+	struct scsipi_adapter sc_adapter;
+	struct scsipi_channel sc_channel;
 };
 
 /*
@@ -80,7 +72,7 @@ struct uha_probe_data {
 	int sc_scsi_dev;
 };
 
-void	uha_attach __P((struct uha_softc *, struct uha_probe_data *));
-void	uha_timeout __P((void *arg));
-struct	uha_mscp *uha_mscp_phys_kv __P((struct uha_softc *, u_long));
-void	uha_done __P((struct uha_softc *, struct uha_mscp *));
+void	uha_attach(struct uha_softc *, struct uha_probe_data *);
+void	uha_timeout(void *arg);
+struct	uha_mscp *uha_mscp_phys_kv(struct uha_softc *, u_long);
+void	uha_done(struct uha_softc *, struct uha_mscp *);

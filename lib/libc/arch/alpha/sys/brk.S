@@ -1,4 +1,4 @@
-/*	$NetBSD: brk.S,v 1.5 1999/01/14 22:48:19 kleink Exp $	*/
+/* $NetBSD: brk.S,v 1.9 2001/05/07 17:19:17 kleink Exp $ */
 
 /*
  * Copyright (c) 1994, 1995 Carnegie-Mellon University.
@@ -32,12 +32,16 @@
 	.globl	_end
 IMPORT(__curbrk, 8)
 
+#ifdef WEAK_ALIAS
+WEAK_ALIAS(brk, _brk)
+#endif
+
 	.data
 EXPORT(__minbrk)
 	.quad	_end
 
 	.text
-LEAF(brk, 1)
+LEAF(_brk, 1)
 	br	pv, L1				/* XXX profiling */
 L1:	LDGP(pv)
 	ldq	v0, __minbrk
@@ -47,4 +51,4 @@ L1:	LDGP(pv)
 	stq	a0, __curbrk
 	mov	zero, v0
 	RET
-END(brk)
+END(_brk)

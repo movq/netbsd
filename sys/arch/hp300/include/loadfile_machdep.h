@@ -1,4 +1,4 @@
-/*	$NetBSD: loadfile_machdep.h,v 1.1 1999/12/14 20:52:58 thorpej Exp $	*/
+/*	$NetBSD: loadfile_machdep.h,v 1.7 2008/04/28 20:23:19 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,54 +29,51 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-/*
- * XXX THIS DOES NOT WORK PROPERLY YET!
- */
+#ifndef _HP300_LOADFILE_MACHDEP_H_
+#define	_HP300_LOADFILE_MACHDEP_H_
 
-#define ELFSIZE 32
+#define	BOOT_AOUT
+#define	BOOT_ELF32
 
-#define LOAD_KERNEL	(LOAD_ALL & ~LOAD_HDR)
-#define COUNT_KERNEL	(COUNT_ALL & ~COUNT_HDR)
+#define	LOAD_KERNEL	LOAD_ALL
+#define	COUNT_KERNEL	COUNT_ALL
 
 #ifdef _STANDALONE
 
-#define LOADADDR(a)		((a) + offset)
-#define ALIGNENTRY(a)		0
-#define READ(f, b, c)		pread((f), (void *)LOADADDR(b), (c))
-#define BCOPY(s, d, c)		vpbcopy((s), (void *)LOADADDR(d), (c))
-#define BZERO(d, c)		pbzero((void *)LOADADDR(d), (c))
+#define	LOADADDR(a)		((a) + offset)
+#define	ALIGNENTRY(a)		0
+#define	READ(f, b, c)		pread((f), (void *)LOADADDR(b), (c))
+#define	BCOPY(s, d, c)		vpbcopy((s), (void *)LOADADDR(d), (c))
+#define	BZERO(d, c)		pbzero((void *)LOADADDR(d), (c))
 #define	WARN(a)			(void)(printf a, \
 				    printf((errno ? ": %s\n" : "\n"), \
 				    strerror(errno)))
-#define PROGRESS(a)		(void) printf a
-#define ALLOC(a)		alloc(a)
-#define FREE(a, b)		free(a, b)
-#define OKMAGIC(a)		((a) == OMAGIC || (a) == NMAGIC ||	\
+#define	PROGRESS(a)		(void) printf a
+#define	ALLOC(a)		alloc(a)
+#define	DEALLOC(a, b)		dealloc(a, b)
+#define	OKMAGIC(a)		((a) == OMAGIC || (a) == NMAGIC ||	\
 				 (a) == ZMAGIC)
 
 #define	vpbcopy bcopy
 #define	pbzero  bzero
-#define pread   read
+#define	pread   read
 
 #else
 
-/*
- * XXX Not right, and we don't use it in userland yet.
- */
+#define	LOADADDR(a)		(((u_long)(a)) + offset)
+#define	ALIGNENTRY(a)		((u_long)(a))
+#define	READ(f, b, c)		read((f), (void *)LOADADDR(b), (c))
+#define	BCOPY(s, d, c)		memcpy((void *)LOADADDR(d), (void *)(s), (c))
+#define	BZERO(d, c)		memset((void *)LOADADDR(d), 0, (c))
+#define	WARN(a)			warn a
+#define	PROGRESS(a)		/* nothing */
+#define	ALLOC(a)		malloc(a)
+#define	DEALLOC(a, b)		free(a)
+#define	OKMAGIC(a)		((a) == OMAGIC)
 
-#define LOADADDR(a)		(((u_long)(a)) + offset)
-#define ALIGNENTRY(a)		((u_long)(a))
-#define READ(f, b, c)		read((f), (void *)LOADADDR(b), (c))
-#define BCOPY(s, d, c)		memcpy((void *)LOADADDR(d), (void *)(s), (c))
-#define BZERO(d, c)		memset((void *)LOADADDR(d), 0, (c))
-#define WARN(a)			warn a
-#define PROGRESS(a)		/* nothing */
-#define ALLOC(a)		malloc(a)
-#define FREE(a, b)		free(a)
-#define OKMAGIC(a)		((a) == OMAGIC)
-
-ssize_t vread __P((int, u_long, u_long *, size_t));
-void vcopy __P((u_long, u_long, u_long *, size_t));
-void vzero __P((u_long, u_long *, size_t));
+ssize_t	vread(int, u_long, u_long *, size_t);
+void	vcopy(u_long, u_long, u_long *, size_t);
+void	vzero(u_long, u_long *, size_t);
 
 #endif
+#endif /* ! _HP300_LOADFILE_MACHDEP_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_user.c,v 1.7 1999/03/25 18:48:56 mrg Exp $	*/
+/*	$NetBSD: uvm_user.c,v 1.13 2005/12/11 12:25:29 christos Exp $	*/
 
 /*
  *
@@ -38,31 +38,25 @@
  * uvm_user.c: high level uvm_allocate/uvm_deallocate interface into vm.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: uvm_user.c,v 1.13 2005/12/11 12:25:29 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
 
-#include <vm/vm.h>
 #include <uvm/uvm.h>
 
 /*
  * uvm_deallocate: deallocate memory (unmap)
  */
 
-int
-uvm_deallocate(map, start, size)
-	vm_map_t map;
-	vaddr_t start;
-	vsize_t size;
+void
+uvm_deallocate(struct vm_map *map, vaddr_t start, vsize_t size)
 {
 
-	if (map == NULL)
-		panic("uvm_deallocate with null map");
+	if (size == 0)
+		return;
 
-	if (size == (vaddr_t) 0)
-		return (KERN_SUCCESS);
-
-	return(uvm_unmap(map, trunc_page(start), round_page(start+size)));
-
+	uvm_unmap(map, trunc_page(start), round_page(start + size));
 }

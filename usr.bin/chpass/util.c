@@ -1,4 +1,4 @@
-/*	$NetBSD: util.c,v 1.10 1998/07/26 15:13:14 mycroft Exp $	*/
+/*	$NetBSD: util.c,v 1.12 2005/02/17 17:09:48 xtraeme Exp $	*/
 
 /*-
  * Copyright (c) 1988, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)util.c	8.4 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: util.c,v 1.10 1998/07/26 15:13:14 mycroft Exp $");
+__RCSID("$NetBSD: util.c,v 1.12 2005/02/17 17:09:48 xtraeme Exp $");
 #endif
 #endif /* not lint */
 
@@ -57,10 +53,7 @@ __RCSID("$NetBSD: util.c,v 1.10 1998/07/26 15:13:14 mycroft Exp $");
 #include "pathnames.h"
 
 char *
-ttoa(buf, len, tval)
-	char *buf;
-	size_t len;
-	time_t tval;
+ttoa(char *buf, size_t len, time_t tval)
 {
 
 	if (tval) {
@@ -75,9 +68,7 @@ ttoa(buf, len, tval)
 } 
 
 int
-atot(p, store)
-	const char *p;
-	time_t *store;
+atot(const char *p, time_t *store)
 {
 	static struct tm *lt;
 	struct tm tm;
@@ -105,8 +96,7 @@ atot(p, store)
 }
 
 const char *
-ok_shell(name)
-	const char *name;
+ok_shell(const char *name)
 {
 	char *p;
 	const char *sh;

@@ -1,4 +1,4 @@
-/*	$NetBSD: hayes.c,v 1.8 1998/07/12 09:14:20 mrg Exp $	*/
+/*	$NetBSD: hayes.c,v 1.15 2006/12/14 17:09:43 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)hayes.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: hayes.c,v 1.8 1998/07/12 09:14:20 mrg Exp $");
+__RCSID("$NetBSD: hayes.c,v 1.15 2006/12/14 17:09:43 christos Exp $");
 #endif /* not lint */
 
 /*
@@ -54,13 +50,13 @@ __RCSID("$NetBSD: hayes.c,v 1.8 1998/07/12 09:14:20 mrg Exp $");
  * before modem is hung up, removal of the DTR signal
  * has no effect (except that it prevents the modem from
  * recognizing commands).
- * (by Helge Skrivervik, Calma Company, Sunnyvale, CA. 1984) 
+ * (by Helge Skrivervik, Calma Company, Sunnyvale, CA. 1984)
  */
 /*
  * TODO:
  * It is probably not a good idea to switch the modem
  * state between 'verbose' and terse (status messages).
- * This should be kicked out and we should use verbose 
+ * This should be kicked out and we should use verbose
  * mode only. This would make it consistent with normal
  * interactive use thru the command 'tip dialer'.
  */
@@ -73,49 +69,39 @@ static	jmp_buf timeoutbuf;
 #define DUMBUFLEN	40
 static char dumbuf[DUMBUFLEN];
 
-#define	DIALING		1
-#define IDLE		2
-#define CONNECTED	3
-#define	FAILED		4
-static	int state = IDLE;
-
-static	void	error_rep __P((char));
-static	char	gobble __P((char *));
-static	void	goodbye __P((void));
-static	int	hay_sync __P((void));
-static	void	sigALRM __P((int));
+static	void	error_rep(char);
+static	char	gobble(const char *);
+static	void	goodbye(void);
+static	int	hay_sync(void);
+static	void	sigALRM(int);
 
 int
-hay_dialer(num, acu)
-	char *num;
-	char *acu;
+/*ARGSUSED*/
+hay_dialer(char *num, char *acu __unused)
 {
 	char *cp;
 	int connected = 0;
 	char dummy;
 	struct termios cntrl;
-#ifdef ACULOG
-	char line[80];
-#endif
+
 	if (hay_sync() == 0)		/* make sure we can talk to the modem */
 		return(0);
 	if (boolean(value(VERBOSE)))
-		printf("\ndialing...");
-	fflush(stdout);
-	tcgetattr(FD, &cntrl);
+		(void)printf("\ndialing...");
+	(void)fflush(stdout);
+	(void)tcgetattr(FD, &cntrl);
 	cntrl.c_cflag |= HUPCL;
-	tcsetattr(FD, TCSANOW, &cntrl);
-	tcflush(FD, TCIOFLUSH);
-	write(FD, "ATv0\r", 5);	/* tell modem to use short status codes */
-	gobble("\r");
-	gobble("\r");
-	write(FD, "ATTD", 4);	/* send dial command */
+	(void)tcsetattr(FD, TCSANOW, &cntrl);
+	(void)tcflush(FD, TCIOFLUSH);
+	(void)write(FD, "ATv0\r", 5);	/* tell modem to use short status codes */
+	(void)gobble("\r");
+	(void)gobble("\r");
+	(void)write(FD, "ATTD", 4);	/* send dial command */
 	for (cp = num; *cp; cp++)
 		if (*cp == '=')
 			*cp = ',';
-	write(FD, num, strlen(num));
-	state = DIALING;
-	write(FD, "\r", 1);
+	(void)write(FD, num, strlen(num));
+	(void)write(FD, "\r", 1);
 	connected = 0;
 	if (gobble("\r")) {
 		if ((dummy = gobble("01234")) != '1')
@@ -123,20 +109,9 @@ hay_dialer(num, acu)
 		else
 			connected = 1;
 	}
-	if (connected)
-		state = CONNECTED;
-	else {
-		state = FAILED;
+	if (!connected)
 		return (connected);	/* lets get out of here.. */
-	}
-	tcflush(FD, TCIOFLUSH);
-#ifdef ACULOG
-	if (timeout) {
-		(void)snprintf(line, sizeof line, "%d second dial timeout",
-			(int)number(value(DIALTIMEOUT)));
-		logent(value(HOST), num, "hayes", line);
-	}
-#endif
+	(void)tcflush(FD, TCIOFLUSH);
 	if (timeout)
 		hay_disconnect();	/* insurance */
 	return (connected);
@@ -144,113 +119,108 @@ hay_dialer(num, acu)
 
 
 void
-hay_disconnect()
+hay_disconnect(void)
 {
 
 	/* first hang up the modem*/
 #ifdef DEBUG
-	printf("\rdisconnecting modem....\n\r");
+	(void)printf("\rdisconnecting modem....\n\r");
 #endif
-	ioctl(FD, TIOCCDTR, 0);
-	sleep(1);
-	ioctl(FD, TIOCSDTR, 0);
+	(void)ioctl(FD, TIOCCDTR, 0);
+	(void)sleep(1);
+	(void)ioctl(FD, TIOCSDTR, 0);
 	goodbye();
 }
 
 void
-hay_abort()
+hay_abort(void)
 {
 
-	write(FD, "\r", 1);	/* send anything to abort the call */
+	(void)write(FD, "\r", 1);	/* send anything to abort the call */
 	hay_disconnect();
 }
 
 static void
-sigALRM(dummy)
-	int dummy;
+/*ARGSUSED*/
+sigALRM(int dummy __unused)
 {
 
-	printf("\07timeout waiting for reply\n\r");
+	(void)printf("\07timeout waiting for reply\n\r");
 	timeout = 1;
 	longjmp(timeoutbuf, 1);
 }
 
 static char
-gobble(match)
-	char *match;
+gobble(const char *match)
 {
 	char c;
 	sig_t f;
-	int i, status = 0;
-
-#if __GNUC__	/* XXX pacify gcc */
-	(void)&status;
-#endif
+	int i;
+	volatile int status = 0;
 
 	f = signal(SIGALRM, sigALRM);
 	timeout = 0;
 #ifdef DEBUG
-	printf("\ngobble: waiting for %s\n", match);
+	(void)printf("\ngobble: waiting for %s\n", match);
 #endif
 	do {
 		if (setjmp(timeoutbuf)) {
-			signal(SIGALRM, f);
+			(void)signal(SIGALRM, f);
 			return (0);
 		}
-		alarm(number(value(DIALTIMEOUT)));
-		read(FD, &c, 1);
-		alarm(0);
+		(void)alarm((unsigned int)number(value(DIALTIMEOUT)));
+		(void)read(FD, &c, 1);
+		(void)alarm(0);
 		c &= 0177;
 #ifdef DEBUG
-		printf("%c 0x%x ", c, c);
+		(void)printf("%c 0x%x ", c, c);
 #endif
 		for (i = 0; i < strlen(match); i++)
 			if (c == match[i])
 				status = c;
 	} while (status == 0);
-	signal(SIGALRM, SIG_DFL);
+	(void)signal(SIGALRM, SIG_DFL);
 #ifdef DEBUG
-	printf("\n");
+	(void)printf("\n");
 #endif
 	return (status);
 }
 
 static void
-error_rep(c)
-	char c;
+error_rep(char c)
 {
 
-	printf("\n\r");
+	(void)printf("\n\r");
 	switch (c) {
 
 	case '0':
-		printf("OK");
+		(void)printf("OK");
 		break;
 
 	case '1':
-		printf("CONNECT");
+		(void)printf("CONNECT");
 		break;
-	
+
 	case '2':
-		printf("RING");
+		(void)printf("RING");
 		break;
-	
+
 	case '3':
-		printf("NO CARRIER");
+		(void)printf("NO CARRIER");
 		break;
-	
+
 	case '4':
-		printf("ERROR in input");
+		(void)printf("ERROR in input");
 		break;
-	
+
 	case '5':
-		printf("CONNECT 1200");
+		(void)printf("CONNECT 1200");
 		break;
-	
+
 	default:
-		printf("Unknown Modem error: %c (0x%x)", c, c);
+		(void)printf("Unknown Modem error: %c (0x%x)", c, c);
 	}
-	printf("\n\r");
+	(void)printf("\n\r");
 	return;
 }
 
@@ -258,72 +228,72 @@ error_rep(c)
  * set modem back to normal verbose status codes.
  */
 void
-goodbye()
+goodbye(void)
 {
 	int len;
 	char c;
 
-	tcflush(FD, TCIOFLUSH);
+	(void)tcflush(FD, TCIOFLUSH);
 	if (hay_sync()) {
-		sleep(1);
+		(void)sleep(1);
 #ifndef DEBUG
-		tcflush(FD, TCIOFLUSH);
+		(void)tcflush(FD, TCIOFLUSH);
 #endif
-		write(FD, "ATH0\r", 5);		/* insurance */
+		(void)write(FD, "ATH0\r", 5);		/* insurance */
 #ifndef DEBUG
 		c = gobble("03");
 		if (c != '0' && c != '3') {
-			printf("cannot hang up modem\n\r");
-			printf("please use 'tip dialer' to make sure the line is hung up\n\r");
+			(void)printf("cannot hang up modem\n\r");
+			(void)printf("please use 'tip dialer' to make sure the line is hung up\n\r");
 		}
 #endif
-		sleep(1);
-		ioctl(FD, FIONREAD, &len);
+		(void)sleep(1);
+		(void)ioctl(FD, FIONREAD, &len);
 #ifdef DEBUG
-		printf("goodbye1: len=%d -- ", len);
+		(void)printf("goodbye1: len=%d -- ", len);
 		rlen = read(FD, dumbuf, min(len, DUMBUFLEN));
 		dumbuf[rlen] = '\0';
-		printf("read (%d): %s\r\n", rlen, dumbuf);
+		(void)printf("read (%d): %s\r\n", rlen, dumbuf);
 #endif
-		write(FD, "ATv1\r", 5);
-		sleep(1);
+		(void)write(FD, "ATv1\r", 5);
+		(void)sleep(1);
 #ifdef DEBUG
-		ioctl(FD, FIONREAD, &len);
-		printf("goodbye2: len=%d -- ", len);
+		(void)ioctl(FD, FIONREAD, &len);
+		(void)printf("goodbye2: len=%d -- ", len);
 		rlen = read(FD, dumbuf, min(len, DUMBUFLEN));
 		dumbuf[rlen] = '\0';
-		printf("read (%d): %s\r\n", rlen, dumbuf);
+		(void)printf("read (%d): %s\r\n", rlen, dumbuf);
 #endif
 	}
-	tcflush(FD, TCIOFLUSH);
-	ioctl(FD, TIOCCDTR, 0);		/* clear DTR (insurance) */
-	close(FD);
+	(void)tcflush(FD, TCIOFLUSH);
+	(void)ioctl(FD, TIOCCDTR, 0);		/* clear DTR (insurance) */
+	(void)close(FD);
 }
 
 #define MAXRETRY	5
 
 int
-hay_sync()
+hay_sync(void)
 {
 	int len, retry = 0;
 
 	while (retry++ <= MAXRETRY) {
-		write(FD, "AT\r", 3);
-		sleep(1);
-		ioctl(FD, FIONREAD, &len);
+		(void)write(FD, "AT\r", 3);
+		(void)sleep(1);
+		(void)ioctl(FD, FIONREAD, &len);
 		if (len) {
-			len = read(FD, dumbuf, min(len, DUMBUFLEN));
-			if (strchr(dumbuf, '0') || 
+			len = read(FD, dumbuf, (size_t)min(len, DUMBUFLEN));
+			if (strchr(dumbuf, '0') ||
 		   	(strchr(dumbuf, 'O') && strchr(dumbuf, 'K')))
 				return(1);
 #ifdef DEBUG
 			dumbuf[len] = '\0';
-			printf("hay_sync: (\"%s\") %d\n\r", dumbuf, retry);
+			(void)printf("hay_sync: (\"%s\") %d\n\r", dumbuf, retry);
 #endif
 		}
-		ioctl(FD, TIOCCDTR, 0);
-		ioctl(FD, TIOCSDTR, 0);
+		(void)ioctl(FD, TIOCCDTR, 0);
+		(void)ioctl(FD, TIOCSDTR, 0);
 	}
-	printf("Cannot synchronize with hayes...\n\r");
+	(void)printf("Cannot synchronize with hayes...\n\r");
 	return(0);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: kbdvar.h,v 1.2 1997/10/09 08:57:13 jtc Exp $	*/
+/*	$NetBSD: kbdvar.h,v 1.5 2008/04/28 20:23:19 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,24 +35,27 @@
  */
 
 struct kbdsw {
-	int	(*k_getc) __P((void));	/* get character */
-	void	(*k_nmi) __P((void));	/* handle non-maskable interrupt */
-	int	(*k_init) __P((void));	/* probe/initialize keyboard */
+	int	(*k_getc)(void);	/* get character */
+	void	(*k_nmi)(void);		/* handle non-maskable interrupt */
+	int	(*k_init)(void);	/* probe/initialize keyboard */
 };
 
 #ifdef ITECONSOLE
 
 extern struct kbdsw kbdsw[];
+void kbdinit(void);
+int kbdgetc(void);
+void kbdnmi(void);
 
 #ifdef HIL_KEYBOARD
-int	hilkbd_getc __P((void));
-void	hilkbd_nmi __P((void));
-int	hilkbd_init __P((void));
+int	hilkbd_getc(void);
+void	hilkbd_nmi(void);
+int	hilkbd_init(void);
 #endif
 
 #ifdef DOMAIN_KEYBOARD
-int	dnkbd_getc __P((void));
-void	dnkbd_nmi __P((void));
-int	dnkbd_init __P((void));
+int	dnkbd_getc(void);
+void	dnkbd_nmi(void);
+int	dnkbd_init(void);
 #endif
 #endif /* ITECONSOLE */

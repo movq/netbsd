@@ -1,4 +1,4 @@
-/*	$NetBSD: bhareg.h,v 1.14 1999/12/23 00:15:12 wrstuden Exp $	*/
+/*	$NetBSD: bhareg.h,v 1.20 2008/04/28 20:23:49 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -233,7 +226,7 @@ struct bha_ccb {
 	/*------------------------------------longword boundary */
 	physaddr	sense_ptr;
 /*-----end of HW fields-----------------------longword boundary */
-	struct scsipi_sense_data scsi_sense;
+	struct scsi_sense_data scsi_sense;
 	/*------------------------------------longword boundary */
 	struct bha_scat_gath scat_gath[BHA_NSEG];
 	/*------------------------------------longword boundary */
@@ -432,8 +425,8 @@ struct bha_setup_reply {
 	u_int8_t	low_disc_info;
 };
 
-/* additional reply data supplied by wide controlers */
-struct bus_setup_reply_wide {
+/* additional reply data supplied by wide controllers */
+struct bha_setup_reply_wide {
 	u_int8_t	signature;
 	u_int8_t	letter_d;
 	u_int8_t	ha_type;
@@ -452,7 +445,7 @@ struct bha_setup {
 		u_char	len;
 	} cmd;
 	struct bha_setup_reply reply;
-	struct bus_setup_reply_wide reply_w;	/* for wide controllers */
+	struct bha_setup_reply_wide reply_w;	/* for wide controllers */
 };
 
 struct bha_period_reply {

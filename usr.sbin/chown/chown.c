@@ -1,7 +1,7 @@
-/*	$NetBSD: chown.c,v 1.20 1999/11/09 15:06:30 drochner Exp $	*/
+/*	$NetBSD: chown.c,v 1.32 2008/07/21 13:36:57 lukem Exp $	*/
 
 /*
- * Copyright (c) 1988, 1993, 1994
+ * Copyright (c) 1988, 1993, 1994, 2003
  *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1988, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1988, 1993, 1994, 2003\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)chown.c	8.8 (Berkeley) 4/4/94";
 #else
-__RCSID("$NetBSD: chown.c,v 1.20 1999/11/09 15:06:30 drochner Exp $");
+__RCSID("$NetBSD: chown.c,v 1.32 2008/07/21 13:36:57 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -63,35 +59,32 @@ __RCSID("$NetBSD: chown.c,v 1.20 1999/11/09 15:06:30 drochner Exp $");
 #include <string.h>
 #include <unistd.h>
 
-static void	a_gid __P((const char *));
-static void	a_uid __P((const char *));
-static id_t	id __P((const char *, const char *));
-	int	main __P((int, char **));
-static void	usage __P((void));
+static void	a_gid(const char *);
+static void	a_uid(const char *);
+static id_t	id(const char *, const char *);
+static void	usage(void);
 
 static uid_t uid;
 static gid_t gid;
-static int Rflag, ischown, fflag;
+static int ischown;
 static char *myname;
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char **argv)
 {
 	FTS *ftsp;
 	FTSENT *p;
-	int Hflag, Lflag, ch, fts_options, hflag, rval;
+	int Hflag, Lflag, Rflag, ch, fflag, fts_options, hflag, rval, vflag;
 	char *cp;
-	int (*change_owner) __P((const char *, uid_t, gid_t));
-	
+	int (*change_owner)(const char *, uid_t, gid_t);
+
 	(void)setlocale(LC_ALL, "");
 
 	myname = (cp = strrchr(*argv, '/')) ? cp + 1 : *argv;
 	ischown = (myname[2] == 'o');
-	
-	Hflag = Lflag = hflag = 0;
-	while ((ch = getopt(argc, argv, "HLPRfh")) != -1)
+
+	Hflag = Lflag = Rflag = fflag = hflag = vflag = 0;
+	while ((ch = getopt(argc, argv, "HLPRfhv")) != -1)
 		switch (ch) {
 		case 'H':
 			Hflag = 1;
@@ -120,6 +113,9 @@ main(argc, argv)
 			 */
 			hflag = 1;
 			break;
+		case 'v':
+			vflag = 1;
+			break;
 		case '?':
 		default:
 			usage();
@@ -136,37 +132,39 @@ main(argc, argv)
 			fts_options |= FTS_COMFOLLOW;
 		if (Lflag) {
 			if (hflag)
-				errx(EXIT_FAILURE, "the -L and -h options may not be specified together.");
+				errx(EXIT_FAILURE,
+				    "the -L and -h options "
+				    "may not be specified together.");
 			fts_options &= ~FTS_PHYSICAL;
 			fts_options |= FTS_LOGICAL;
 		}
-	}
-	if (hflag)
-		change_owner = lchown;
-	else
-		change_owner = chown;
+	} else if (!hflag)
+		fts_options |= FTS_COMFOLLOW;
 
 	uid = (uid_t)-1;
 	gid = (gid_t)-1;
 	if (ischown) {
-#ifdef SUPPORT_DOT
-		if ((cp = strchr(*argv, '.')) != NULL) {
-			*cp++ = '\0';
-			a_gid(cp);
-		} else
-#endif
 		if ((cp = strchr(*argv, ':')) != NULL) {
 			*cp++ = '\0';
 			a_gid(cp);
-		} 
+		}
+#ifdef SUPPORT_DOT
+		else if ((cp = strrchr(*argv, '.')) != NULL) {
+			if (uid_from_user(*argv, &uid) == -1) {
+				*cp++ = '\0';
+				a_gid(cp);
+			}
+		}
+#endif
 		a_uid(*argv);
-	} else 
+	} else
 		a_gid(*argv);
 
 	if ((ftsp = fts_open(++argv, fts_options, NULL)) == NULL)
-		err(EXIT_FAILURE, NULL);
+		err(EXIT_FAILURE, "fts_open");
 
 	for (rval = EXIT_SUCCESS; (p = fts_read(ftsp)) != NULL;) {
+		change_owner = chown;
 		switch (p->fts_info) {
 		case FTS_D:
 			if (!Rflag)		/* Change it at FTS_DP. */
@@ -181,17 +179,29 @@ main(argc, argv)
 			warnx("%s: %s", p->fts_path, strerror(p->fts_errno));
 			rval = EXIT_FAILURE;
 			continue;
-		case FTS_SL:			/* Ignore. */
-		case FTS_SLNONE:
+		case FTS_SL:			/* Ignore unless -h. */
 			/*
-			 * The only symlinks that end up here are ones that
-			 * don't point to anything and ones that we found
-			 * doing a physical walk.
+			 * All symlinks we found while doing a physical
+			 * walk end up here.
 			 */
 			if (!hflag)
 				continue;
-			/* else */
-			/* FALLTHROUGH */
+			/*
+			 * Note that if we follow a symlink, fts_info is
+			 * not FTS_SL but FTS_F or whatever.  And we should
+			 * use lchown only for FTS_SL and should use chown
+			 * for others.
+			 */
+			change_owner = lchown;
+			break;
+		case FTS_SLNONE:		/* Ignore. */
+			/*
+			 * The only symlinks that end up here are ones that
+			 * don't point to anything.  Note that if we are
+			 * doing a phisycal walk, we never reach here unless
+			 * we asked to follow explicitly.
+			 */
+			continue;
 		default:
 			break;
 		}
@@ -199,6 +209,9 @@ main(argc, argv)
 		if ((*change_owner)(p->fts_accpath, uid, gid) && !fflag) {
 			warn("%s", p->fts_path);
 			rval = EXIT_FAILURE;
+		} else {
+			if (vflag)
+				printf("%s\n", p->fts_path);
 		}
 	}
 	if (errno)
@@ -208,35 +221,40 @@ main(argc, argv)
 }
 
 static void
-a_gid(s)
-	const char *s;
+a_gid(const char *s)
 {
 	struct group *gr;
 
 	if (*s == '\0')			/* Argument was "uid[:.]". */
 		return;
-	gid = ((gr = getgrnam(s)) == NULL) ? id(s, "group") : gr->gr_gid;
+	gr = *s == '#' ? NULL : getgrnam(s);
+	if (gr == NULL)
+		gid = id(s, "group");
+	else
+		gid = gr->gr_gid;
+	return;
 }
 
 static void
-a_uid(s)
-	const char *s;
+a_uid(const char *s)
 {
-	struct passwd *pw;
-
 	if (*s == '\0')			/* Argument was "[:.]gid". */
 		return;
-	uid = ((pw = getpwnam(s)) == NULL) ? id(s, "user") : pw->pw_uid;
+	if (*s == '#' || uid_from_user(s, &uid) == -1) {
+		uid = id(s, "user");
+	}
+	return;
 }
 
 static id_t
-id(name, type)
-	const char *name, *type;
+id(const char *name, const char *type)
 {
 	id_t val;
 	char *ep;
 
 	errno = 0;
+	if (*name == '#')
+		name++;
 	val = (id_t)strtoul(name, &ep, 10);
 	if (errno)
 		err(EXIT_FAILURE, "%s", name);
@@ -246,10 +264,11 @@ id(name, type)
 }
 
 static void
-usage()
+usage(void)
 {
+
 	(void)fprintf(stderr,
-	    "usage: %s [-R [-H | -L | -P]] [-fh] %s file ...\n",
+	    "usage: %s [-R [-H | -L | -P]] [-fhv] %s file ...\n",
 	    myname, ischown ? "[owner][:group]" : "group");
 	exit(EXIT_FAILURE);
 }

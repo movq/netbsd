@@ -32,17 +32,17 @@
  * Copyright (C) 1986 Sun Microsystems, Inc.
  *
  * protocol used between the UNIX kernel (the "client") and the
- * local lock manager.  The local lock manager is a deamon running
+ * local lock manager.  The local lock manager is a daemon running
  * above the kernel.
  */
 
 #ifndef RPC_HDR
 %#include <sys/cdefs.h>
-%#ifndef lint
+%#ifndef __lint__
 %/*static char sccsid[] = "from: @(#)klm_prot.x 1.7 87/07/08 Copyr 1987 Sun Micro";*/
 %/*static char sccsid[] = "from: @(#)klm_prot.x	2.1 88/08/01 4.0 RPCSRC";*/
-%__RCSID("$NetBSD: klm_prot.x,v 1.4 1999/07/02 15:44:13 simonb Exp $");
-%#endif /* not lint */
+%__RCSID("$NetBSD: klm_prot.x,v 1.6 2004/07/01 22:52:34 kleink Exp $");
+%#endif /* not __lint__ */
 #endif
 
 const	LM_MAXSTRLEN = 1024;

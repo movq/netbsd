@@ -1,16 +1,31 @@
-#	$NetBSD: Makefile,v 1.8 2000/01/23 17:04:07 mycroft Exp $
+#	$NetBSD: Makefile,v 1.23 2008/02/13 20:11:38 garbled Exp $
 
-S=	${.CURDIR}/../../../..
+S!=	cd ${.CURDIR}/../../../.. ; pwd
 
 PROG=		ofwboot
-SRCS=		Locore.c boot.c ofdev.c net.c netif_of.c alloc.c
-.PATH:		${S}/arch/ofppc/ofppc
+SRCS=		ofwstart.S Locore.c boot.c ofdev.c net.c netif_of.c vers.c
+CFLAGS+=	-msoft-float -Wno-main -ffreestanding
+#CPPFLAGS+=	-g -DALLOC_TRACE -DDEBUG #-DOFW_DEBUG -DNETIF_DEBUG
+#CPPFLAGS+=	-DOFWDUMP
+CPPFLAGS+=	-D_STANDALONE -DSUPPORT_DHCP -I${.CURDIR}
+CPPFLAGS+=	-DHEAP_VARIABLE
+DBG=		-Os -mmultiple
+
 SRCS+=		ofwmagic.S
 .PATH:		${S}/arch/powerpc/powerpc
-#CFLAGS+=	-DDEBUG -DNETIF_DEBUG
-MKMAN=		no
+
+SRCS+=		byteorder.c
+.PATH:		${S}/lib/libsa
+
+NOMAN=		# defined
 STRIPFLAG=
 BINMODE=	444
+
+# XXX SHOULD NOT NEED TO DEFINE THESE!
+LIBCRT0=
+LIBC=
+LIBCRTBEGIN=
+LIBCRTEND=
 
 NEWVERSWHAT=	"OpenFirmware Boot"
 
@@ -19,18 +34,18 @@ RELOC=		20000
 
 ENTRY=		_start
 
-CLEANFILES+=	vers.c vers.o
+CLEANFILES+=	vers.c
 
-CPPFLAGS+=	-I${.CURDIR}/../../.. -I${.CURDIR}/../../../.. -I${.OBJDIR}
+CPPFLAGS+=	-I. -I${S} -I${S}/../common/include
 CPPFLAGS+=	-DRELOC=0x${RELOC}
 CPPFLAGS+=	-DFIRMWORKSBUGS
-CPPFLAGS+=	-DPOWERPC_BOOT_AOUT
-CPPFLAGS+=	-DPOWERPC_BOOT_ELF
 CPPFLAGS+=	-DCOMPAT_386BSD_MBRPART
 
+.if !make(obj) && !make(clean) && !make(cleandir)
 .BEGIN:
 	@[ -h machine ] || ln -s ${S}/arch/${MACHINE}/include machine
 	@[ -h powerpc ] || ln -s ${S}/arch/powerpc/include powerpc
+.endif
 .NOPATH: machine powerpc
 CLEANFILES+= machine powerpc
 
@@ -46,14 +61,17 @@ LIBZ=		${ZLIB}
 
 ### find out what to use for libsa
 SA_AS=		library
-SAMISCMAKEFLAGS= SA_USE_CREAD=yes
+SAMISCMAKEFLAGS= SA_USE_CREAD=yes SA_USE_LOADFILE=yes
 .include "${S}/lib/libsa/Makefile.inc"
 LIBSA=		${SALIB}
 
+.PHONY: vers.c
+vers.c: version
+	${HOST_SH} ${S}/conf/newvers_stand.sh ${.CURDIR}/version "ofppc" ${NEWVERSWHAT}
+
 ${PROG}: ${OBJS} ${LIBSA} ${LIBZ} ${LIBKERN}
-	sh ${.CURDIR}/../newvers.sh ${.CURDIR}/version ${NEWVERSWHAT}
-	${COMPILE.c} vers.c
-	${LD} -X -Ttext ${RELOC} -e ${ENTRY} -o ${PROG} \
-	    ${OBJS} vers.o ${LIBSA} ${LIBZ} ${LIBKERN}
+	${LD} -s -N -T ${.CURDIR}/ldscript -Ttext ${RELOC} -Bstatic \
+	    -e ${ENTRY} -o ${PROG}.X ${OBJS} ${LIBSA} ${LIBZ} ${LIBKERN}
+	mv -f ${PROG}.X ${PROG}
 
 .include <bsd.prog.mk>

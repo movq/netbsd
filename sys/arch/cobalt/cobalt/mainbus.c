@@ -1,4 +1,4 @@
-/*	$NetBSD: mainbus.c,v 1.2 2000/03/31 14:51:50 soren Exp $	*/
+/*	$NetBSD: mainbus.c,v 1.18 2008/05/09 10:59:55 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 2000 Soren S. Jorvang.  All rights reserved.
@@ -25,68 +25,56 @@
  * SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.18 2008/05/09 10:59:55 tsutsui Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
-
-#include <dev/pci/pcivar.h>
 
 #include <mips/cpuregs.h>
 
 #include <machine/autoconf.h>
 
 #include "locators.h"
-#include "pci.h"
 
-static int	mainbus_match(struct device *, struct cfdata *, void *);
-static void	mainbus_attach(struct device *, struct device *, void *);
-static int	mainbus_search(struct device *, struct cfdata *, void *);
+static int	mainbus_match(device_t, cfdata_t, void *);
+static void	mainbus_attach(device_t, device_t, void *);
+static int	mainbus_search(device_t, cfdata_t,
+			       const int *, void *);
 int		mainbus_print(void *, const char *);
 
-struct cfattach mainbus_ca = {
-	sizeof(struct device), mainbus_match, mainbus_attach
-};
+CFATTACH_DECL_NEW(mainbus, 0,
+    mainbus_match, mainbus_attach, NULL, NULL);
 
 static int
-mainbus_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+mainbus_match(device_t parent, cfdata_t cf, void *aux)
 {
+
 	return 1;
 }
 
 static void
-mainbus_attach(parent, self, aux)
-	struct device *parent;
-	struct device *self;
-	void *aux;
+mainbus_attach(device_t parent, device_t self, void *aux)
 {
-	struct mainbus_attach_args *ma = aux;
+	struct mainbus_attach_args ma;
 
-	/*
-	 * XXX Check for Qube/RaQ 1 vs. 2.
-	 */
+	aprint_normal("\n");
 
-	printf("\n");
-	
-	config_search(mainbus_search, self, ma);
+	config_search_ia(mainbus_search, self, "mainbus", &ma);
 }
 
 static int
-mainbus_search(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf; 
-	void *aux;
-{ 
+mainbus_search(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
+{
 	struct mainbus_attach_args *ma = aux;
 
 	do {
 		ma->ma_addr = cf->cf_loc[MAINBUSCF_ADDR];
 		ma->ma_iot = 0;
-		ma->ma_ioh = MIPS_PHYS_TO_KSEG1(ma->ma_addr);
 		ma->ma_level = cf->cf_loc[MAINBUSCF_LEVEL];
-		if ((*cf->cf_attach->ca_match)(parent, cf, ma) > 0)
+		ma->ma_irq = cf->cf_loc[MAINBUSCF_IRQ];
+		if (config_match(parent, cf, ma) > 0)
 			config_attach(parent, cf, ma, mainbus_print);
 	} while (cf->cf_fstate == FSTATE_STAR);
 
@@ -94,9 +82,7 @@ mainbus_search(parent, cf, aux)
 }
 
 int
-mainbus_print(aux, pnp)
-	void *aux;
-	const char *pnp;
+mainbus_print(void *aux, const char *pnp)
 {
 	struct mainbus_attach_args *ma = aux;
 
@@ -104,9 +90,11 @@ mainbus_print(aux, pnp)
 		return QUIET;
 
 	if (ma->ma_addr != MAINBUSCF_ADDR_DEFAULT)
-		printf(" addr 0x%lx", ma->ma_addr);
+		aprint_normal(" addr 0x%lx", ma->ma_addr);
 	if (ma->ma_level != MAINBUSCF_LEVEL_DEFAULT)
-		printf(" level %d", ma->ma_level);
+		aprint_normal(" level %d", ma->ma_level);
+	if (ma->ma_irq != MAINBUSCF_IRQ_DEFAULT)
+		aprint_normal(" irq %d", ma->ma_irq);
 
 	return UNCONF;
 }

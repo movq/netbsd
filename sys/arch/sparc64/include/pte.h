@@ -1,4 +1,4 @@
-/*	$NetBSD: pte.h,v 1.5 1999/06/05 21:58:18 eeh Exp $ */
+/*	$NetBSD: pte.h,v 1.20 2008/03/14 15:40:02 nakayama Exp $ */
 
 /*
  * Copyright (c) 1996-1999 Eduardo Horvath
@@ -23,6 +23,13 @@
  *
  */
 
+#ifndef _MACHINE_PTE_H_
+#define _MACHINE_PTE_H_
+
+#if defined(_KERNEL_OPT)
+#include "opt_sparc_arch.h"
+#endif
+
 /*
  * Address translation works as follows:
  *
@@ -33,11 +40,11 @@
  *	Oh, here's the sun4u TTE for reference:
  *
  *	struct sun4u_tte {
- *		u_int64	tag_g:1,	(global flag)
+ *		uint64	tag_g:1,	(global flag)
  *			tag_ctxt:15,	(context for mapping)
  *			tag_unassigned:6,
  *			tag_va:42;	(virtual address bits<64:22>)
- *		u_int64	data_v:1,	(valid bit)
+ *		uint64	data_v:1,	(valid bit)
  *			data_size:2,	(page size [8K*8**<SIZE>])
  *			data_nfo:1,	(no-fault only)
  *			data_ie:1,	(invert endianness [inefficient])
@@ -48,15 +55,19 @@
  *			data_cacheable:2,	(cacheability control)
  *			data_e:1,	(explicit accesses only)
  *			data_priv:1,	(privileged page)
- *			data_w:1,	(writeable)
+ *			data_w:1,	(writable)
  *			data_g:1;	(same as tag_g)
  *	};	
  */
 
 /* virtual address to virtual page number */
+#define	VA_SUN4_VPG(va)		(((int)(va) >> 13) & 31)
+#define	VA_SUN4C_VPG(va)	(((int)(va) >> 12) & 63)
 #define	VA_SUN4U_VPG(va)	(((int)(va) >> 13) & 31)
 
 /* virtual address to offset within page */
+#define VA_SUN4_OFF(va)       	(((int)(va)) & 0x1FFF)
+#define VA_SUN4C_OFF(va)     	(((int)(va)) & 0xFFF)
 #define VA_SUN4U_OFF(va)       	(((int)(va)) & 0x1FFF)
 
 /* When we go to 64-bit VAs we need to handle the hole */
@@ -77,15 +88,17 @@
  *  we had a 64-bit compiler w/64-bit longs.  Otherwise it's
  *  a real pain to do this in C.
  */
+#if 0
+/* We don't use bitfeilds anyway. */
 struct sun4u_tag_fields {
-	u_int64_t	tag_g:1,	/* global flag */
+	uint64_t	tag_g:1,	/* global flag */
 		tag_ctxt:15,	/* context for mapping */
 		tag_unassigned:6,
 		tag_va:42;	/* virtual address bits<64:22> */
 };
 union sun4u_tag { struct sun4u_tag_fields f; int64_t tag; };
 struct sun4u_data_fields {
-	u_int64_t	data_v:1,	/* valid bit */
+	uint64_t	data_v:1,	/* valid bit */
 		data_size:2,	/* page size [8K*8**<SIZE>] */
 		data_nfo:1,	/* no-fault only */
 		data_ie:1,	/* invert endianness [inefficient] */
@@ -101,7 +114,7 @@ struct sun4u_data_fields {
 		data_cacheable:2,	/* cacheability control */
 		data_e:1,	/* explicit accesses only */
 		data_priv:1,	/* privileged page */
-		data_w:1,	/* writeable */
+		data_w:1,	/* writable */
 		data_g:1;	/* same as tag_g */
 };
 union sun4u_data { struct sun4u_data_fields f; int64_t data; };
@@ -109,11 +122,13 @@ struct sun4u_tte {
 	union sun4u_tag tag;
 	union sun4u_data data;
 };
+#else
+struct sun4u_tte {
+	int64_t tag;
+	int64_t data;
+};
+#endif
 typedef struct sun4u_tte pte_t;
-
-/* Assembly routine to flush a mapping */
-extern void tlb_flush_pte __P((vaddr_t addr, int ctx));
-extern void tlb_flush_ctx __P((int ctx));
 
 #endif /* _LOCORE */
 
@@ -125,14 +140,23 @@ extern void tlb_flush_ctx __P((int ctx));
 
 #define TSB_TAG_CTX(t)		((((int64_t)(t))>>TSB_TAG_CTX_SHIFT)&CTX_MASK)
 #define TSB_TAG_VA(t)		((((int64_t)(t))<<TSB_TAG_VA_SHIFT))
-#define TSB_TAG(g,ctx,va)	((((u_int64_t)((g)!=0))<<63)|(((u_int64_t)(ctx)&CTX_MASK)<<TSB_TAG_CTX_SHIFT)|(((u_int64_t)va)>>TSB_TAG_VA_SHIFT))
+#define TSB_TAG(g,ctx,va)	((((uint64_t)((g)!=0))<<63)|(((uint64_t)(ctx)&CTX_MASK)<<TSB_TAG_CTX_SHIFT)|(((uint64_t)va)>>TSB_TAG_VA_SHIFT))
+
+/* Page sizes */
+#define	PGSZ_8K			0
+#define	PGSZ_64K		1
+#define	PGSZ_512K		2
+#define	PGSZ_4M			3
+
+#define	PGSZ_SHIFT		61
+#define	TLB_SZ(s)		(((uint64_t)(s))<<PGSZ_SHIFT)
 
 /* TLB data masks */
 #define TLB_V			0x8000000000000000LL
-#define TLB_8K			0x0000000000000000LL
-#define TLB_64K			0x2000000000000000LL
-#define TLB_512K		0x4000000000000000LL
-#define TLB_4M			0x6000000000000000LL
+#define TLB_8K			TLB_SZ(PGSZ_8K)
+#define TLB_64K			TLB_SZ(PGSZ_64K)
+#define TLB_512K		TLB_SZ(PGSZ_512K)
+#define TLB_4M			TLB_SZ(PGSZ_4M)
 #define TLB_SZ_MASK		0x6000000000000000LL
 #define TLB_NFO			0x1000000000000000LL
 #define TLB_IE			0x0800000000000000LL
@@ -159,6 +183,9 @@ extern void tlb_flush_ctx __P((int ctx));
 #define TLB_P			0x0000000000000004LL
 #define TLB_W			0x0000000000000002LL
 #define TLB_G			0x0000000000000001LL
+
+/* Use a bit in the SOFT2 area to indicate a locked mapping. */
+#define	TLB_WIRED		0x0010000000000000LL
 
 /* 
  * The following bits are used by locore so they should
@@ -192,7 +219,7 @@ extern void tlb_flush_ctx __P((int ctx));
         "b\3E\0"        "b\2P\0"        "b\1W\0"        "b\0G\0"
 
 #define TSB_DATA(g,sz,pa,priv,write,cache,aliased,valid,ie) \
-(((valid)?TLB_V:0LL)|(sz)|(((u_int64_t)(pa))&TLB_PA_MASK)|\
+(((valid)?TLB_V:0LL)|TLB_SZ(sz)|(((uint64_t)(pa))&TLB_PA_MASK)|\
 ((cache)?((aliased)?TLB_CP:TLB_CACHE_MASK):TLB_E)|\
 ((priv)?TLB_P:0LL)|((write)?TLB_W:0LL)|((g)?TLB_G:0LL)|((ie)?TLB_IE:0LL))
 
@@ -209,3 +236,39 @@ extern void tlb_flush_ctx __P((int ctx));
 #define IOPTE_RSVD      0x000000f1
 #define IOPTE_WRITE     0x00000004
 #define IOPTE_VALID     0x00000002
+
+/*
+ * This is purely for compatibility with the old SPARC machines.
+ */
+#define	NBPRG	(1 << 24)	/* bytes per region */
+#define	RGSHIFT	24		/* log2(NBPRG) */
+#define NSEGRG	(NBPRG / NBPSG)	/* segments per region */
+
+#define	NBPSG	(1 << 18)	/* bytes per segment */
+#define	SGSHIFT	18		/* log2(NBPSG) */
+
+/* there is no `struct pte'; we just use `int'; this is for non-4M only */
+#define	PG_V		0x80000000
+#define	PG_PFNUM	0x0007ffff	/* n.b.: only 16 bits on sun4c */
+
+/* virtual address to virtual region number */
+#define	VA_VREG(va)	(((unsigned int)(va) >> RGSHIFT) & 255)
+
+/* virtual address to virtual segment number */
+#define	VA_VSEG(va)	(((unsigned int)(va) >> SGSHIFT) & 63)
+
+#ifndef _LOCORE
+typedef u_short pmeg_t;		/* 10 bits needed per Sun-4 segmap entry */
+#endif
+
+/*
+ * Here are the bit definitions for 4M/SRMMU pte's
+ */
+		/* MMU TABLE ENTRIES */
+#define SRMMU_TETYPE	0x3		/* mask for table entry type */
+#define SRMMU_TEPTE	0x2		/* Page Table Entry */
+		/* PTE FIELDS */
+#define SRMMU_PPNMASK	0xFFFFFF00
+#define SRMMU_PPNPASHIFT 0x4 		/* shift to put ppn into PAddr */
+
+#endif /* _MACHINE_PTE_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: ioccom.h,v 1.5 1998/03/01 02:24:12 fvdl Exp $	*/
+/*	$NetBSD: ioccom.h,v 1.9 2007/05/29 21:32:30 christos Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1990, 1993, 1994
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -44,9 +40,11 @@
  * upper word are used to encode the in/out status of the parameter.
  */
 #define	IOCPARM_MASK	0x1fff		/* parameter length, at most 13 bits */
-#define	IOCPARM_LEN(x)	(((x) >> 16) & IOCPARM_MASK)
-#define	IOCBASECMD(x)	((x) & ~(IOCPARM_MASK << 16))
-#define	IOCGROUP(x)	(((x) >> 8) & 0xff)
+#define	IOCPARM_SHIFT	16
+#define	IOCGROUP_SHIFT	8
+#define	IOCPARM_LEN(x)	(((x) >> IOCPARM_SHIFT) & IOCPARM_MASK)
+#define	IOCBASECMD(x)	((x) & ~(IOCPARM_MASK << IOCPARM_SHIFT))
+#define	IOCGROUP(x)	(((x) >> IOCGROUP_SHIFT) & 0xff)
 
 #define	IOCPARM_MAX	NBPG	/* max size of ioctl args, mult. of NBPG */
 				/* no parameters */
@@ -55,7 +53,7 @@
 #define	IOC_OUT		(unsigned long)0x40000000
 				/* copy parameters in */
 #define	IOC_IN		(unsigned long)0x80000000
-				/* copy paramters in and out */
+				/* copy parameters in and out */
 #define	IOC_INOUT	(IOC_IN|IOC_OUT)
 				/* mask for IN/OUT/VOID */
 #define	IOC_DIRMASK	(unsigned long)0xe0000000

@@ -1,4 +1,4 @@
-/*	$NetBSD: clock.c,v 1.3 2000/01/19 02:52:20 msaitoh Exp $	*/
+/*	$NetBSD: clock.c,v 1.11 2006/09/11 15:07:50 gdamore Exp $	*/
 /*
  * Copyright (c) 1998 Darrin B. Jewell
  * All rights reserved.
@@ -29,16 +29,24 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.11 2006/09/11 15:07:50 gdamore Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/tty.h>
+#include <sys/device.h>
 
 #include <machine/psl.h>
+#include <machine/bus.h>
 #include <machine/cpu.h>
 
 #include <next68k/dev/clockreg.h>
+#include <next68k/dev/intiovar.h>
+
+#include <next68k/next68k/rtc.h>
+#include <next68k/next68k/isr.h>
 
 /* @@@ This is pretty bogus and will need fixing once
  * things are working better.
@@ -58,86 +66,55 @@ int	delay_divisor = 2048/25;  /* delay constant */
  * Calibrate the delay constant.
  */
 void
-next68k_calibrate_delay()
+next68k_calibrate_delay(void)
 {
-  extern int delay_divisor;
+	extern int delay_divisor;
 
-  /* @@@ write this once we know how to read
-   * a real time clock
-   */
+	/* @@@ write this once we know how to read
+	 * a real time clock
+	 */
 
-  /*
-   * Sanity check the delay_divisor value.  If we totally lost,
-   * assume a 25MHz CPU;
-   */
-  if (delay_divisor == 0)
-    delay_divisor = 2048 / 25;
+	/*
+	 * Sanity check the delay_divisor value.  If we totally lost,
+	 * assume a 25MHz CPU;
+	 */
+	if (delay_divisor == 0)
+		delay_divisor = 2048 / 25;
 
-  /* Calculate CPU speed. */
-  cpuspeed = 2048 / delay_divisor;
+	/* Calculate CPU speed. */
+	cpuspeed = 2048 / delay_divisor;
 }
 
-#define	SECDAY		(24 * 60 * 60)
-#define	SECYR		(SECDAY * 365)
-
-/*
- * Set up the system's time, given a `reasonable' time value.
- */
-void
-inittodr(base)
-        time_t base;
-{
-  int badbase = 0;
-
-  if (base < 5*SECYR) {
-    printf("WARNING: preposterous time in file system");
-    base = 6*SECYR + 186*SECDAY + SECDAY/2;
-    badbase = 1;
-  }
-
-  if ((time.tv_sec = getsecs()) == 0) {
-    printf("WARNING: bad date in battery clock");
-    /*
-     * Believe the time in the file system for lack of
-     * anything better, resetting the clock.
-     */
-    time.tv_sec = base;
-    if (!badbase)
-      resettodr();
-  } else {
-    int deltat = time.tv_sec - base;
-    
-    if (deltat < 0)
-      deltat = -deltat;
-    if (deltat < 2 * SECDAY)
-      return;
-    printf("WARNING: clock %s %d days\n",
-           time.tv_sec < base ? "lost" : "gained", deltat / SECDAY);
-  }
-}
-
-void
-resettodr()
-{
-  setsecs(time.tv_sec);
-}
-
-int clock_intr __P((void *));
+int clock_intr(void *);
 
 int
-clock_intr(arg)
-     void *arg;
+clock_intr(void *arg)
 {
-  if (!INTR_OCCURRED(NEXT_I_TIMER)) return(0);
+	volatile struct timer_reg *timer;
+	int whilecount = 0;
 
-	{
-		volatile struct timer_reg *timer = IIOV(NEXT_P_TIMER);
-		timer->csr |= TIMER_UPDATE;
+	if (!INTR_OCCURRED(NEXT_I_TIMER)) {
+		return(0);
 	}
 
-	hardclock(arg);
+	do {
+		static int in_hardclock = 0;
+		int s;
+		
+		timer = (volatile struct timer_reg *)IIOV(NEXT_P_TIMER);
+		timer->csr |= TIMER_REG_UPDATE;
 
-  return(1);
+		if (! in_hardclock) {
+			in_hardclock = 1;
+			s = splclock ();
+			hardclock(arg);
+			splx(s);
+			in_hardclock = 0;
+		}
+		if (whilecount++ > 10)
+			panic ("whilecount");
+	} while (INTR_OCCURRED(NEXT_I_TIMER));
+	return(1);
 }
 
 /*
@@ -147,36 +124,28 @@ clock_intr(arg)
  * The frequencies of these clocks must be an even number of microseconds.
  */
 void
-cpu_initclocks()
+cpu_initclocks(void)
 {
-  rtc_init();
+	int s, cnt;
+	volatile struct timer_reg *timer;
 
-  hz = 100;
-
-  {
-    int s;
-    s = splclock();
-
-    {
-      volatile struct timer_reg *timer = IIOV(NEXT_P_TIMER);
-      int cnt = 1000000/hz;          /* usec timer */
-      timer->csr = 0;
-      timer->msb = (cnt>>8);
-      timer->lsb = cnt;
-      timer->csr = TIMER_ENABLE|TIMER_UPDATE;
-    }
-
-    isrlink_autovec(clock_intr, NULL, NEXT_I_IPL(NEXT_I_TIMER), 0);
-    INTR_ENABLE(NEXT_I_TIMER);
-
-    splx(s);
-  }
+	rtc_init();
+	hz = 100;
+	s = splclock();
+	timer = (volatile struct timer_reg *)IIOV(NEXT_P_TIMER);
+	cnt = 1000000/hz;          /* usec timer */
+	timer->csr = 0;
+	timer->msb = (cnt >> 8);
+	timer->lsb = cnt;
+	timer->csr = TIMER_REG_ENABLE|TIMER_REG_UPDATE;
+	isrlink_autovec(clock_intr, NULL, NEXT_I_IPL(NEXT_I_TIMER), 0, NULL);
+	INTR_ENABLE(NEXT_I_TIMER);
+	splx(s);
 }
 
 
 void
-setstatclockrate(newhz)
-	int newhz;
+setstatclockrate(int newhz)
 {
 
 	/* XXX should we do something here? XXX */
@@ -184,39 +153,7 @@ setstatclockrate(newhz)
 
 /* @@@ update this to use the usec timer 
  * Darrin B Jewell <jewell@mit.edu>  Sun Feb  8 05:01:02 1998
+ * XXX: Well, there is no more microtime.  But if there is a hardware
+ * timer of any sort, it could be added.   ENODOCS.  gdamore.
  */
 
-
-/*
- * Return the best possible estimate of the time in the timeval
- * to which tvp points.  We do this by returning the current time
- * plus the amount of time since the last clock interrupt (clock.c:clkread).
- *
- * Check that this time is no less than any previously-reported time,
- * which could happen around the time of a clock adjustment.  Just for fun,
- * we guarantee that the time will be greater than the value obtained by a
- * previous call.
- */
-
-void
-microtime(tvp)
-	register struct timeval *tvp;
-{
-	int s = splhigh();
-	static struct timeval lasttime;
-
-	*tvp = time;
-	tvp->tv_usec;
-	while (tvp->tv_usec >= 1000000) {
-		tvp->tv_sec++;
-		tvp->tv_usec -= 1000000;
-	}
-	if (tvp->tv_sec == lasttime.tv_sec &&
-	    tvp->tv_usec <= lasttime.tv_usec &&
-	    (tvp->tv_usec = lasttime.tv_usec + 1) >= 1000000) {
-		tvp->tv_sec++;
-		tvp->tv_usec -= 1000000;
-	}
-	lasttime = *tvp;
-	splx(s);
-}

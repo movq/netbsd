@@ -1,9 +1,41 @@
-/*	$NetBSD: regexec.c,v 1.15 2000/01/22 22:19:17 mycroft Exp $	*/
+/*	$NetBSD: regexec.c,v 1.20 2007/02/09 23:44:18 junyoung Exp $	*/
+
+/*-
+ * Copyright (c) 1992, 1993, 1994
+ *	The Regents of the University of California.  All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * Henry Spencer.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ *	@(#)regexec.c	8.3 (Berkeley) 3/20/94
+ */
 
 /*-
  * Copyright (c) 1992, 1993, 1994 Henry Spencer.
- * Copyright (c) 1992, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Henry Spencer.
@@ -44,7 +76,7 @@
 #if 0
 static char sccsid[] = "@(#)regexec.c	8.3 (Berkeley) 3/20/94";
 #else
-__RCSID("$NetBSD: regexec.c,v 1.15 2000/01/22 22:19:17 mycroft Exp $");
+__RCSID("$NetBSD: regexec.c,v 1.20 2007/02/09 23:44:18 junyoung Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -61,10 +93,10 @@ __RCSID("$NetBSD: regexec.c,v 1.15 2000/01/22 22:19:17 mycroft Exp $");
 #include <assert.h>
 #include <ctype.h>
 #include <limits.h>
-#include <regex.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <regex.h>
 
 #ifdef __weak_alias
 __weak_alias(regexec,_regexec)
@@ -130,10 +162,13 @@ __weak_alias(regexec,_regexec)
 #define	ASSIGN(d, s)	memcpy(d, s, (size_t)m->g->nstates)
 #define	EQ(a, b)	(memcmp(a, b, (size_t)m->g->nstates) == 0)
 #define	STATEVARS	int vn; char *space
-#define	STATESETUP(m, nv) { (m)->space = malloc((size_t)((nv)*(m)->g->nstates)); \
-				if ((m)->space == NULL) return(REG_ESPACE); \
-				(m)->vn = 0; }
-#define	STATETEARDOWN(m)	{ free((m)->space); }
+#define	STATESETUP(m, nv) \
+    if (((m)->space = malloc((size_t)((nv)*(m)->g->nstates))) == NULL) \
+	return(REG_ESPACE); \
+    else \
+	(m)->vn = 0
+
+#define	STATETEARDOWN(m)	{ free((m)->space); m->space = NULL; }
 #define	SETUP(v)	((v) = &m->space[(size_t)(m->vn++ * m->g->nstates)])
 #define	onestate	int
 #define	INIT(o, n)	((o) = (n))
@@ -165,12 +200,12 @@ __weak_alias(regexec,_regexec)
  * have been prototyped.
  */
 int				/* 0 success, REG_NOMATCH failure */
-regexec(preg, string, nmatch, pmatch, eflags)
-const regex_t *preg;
-const char *string;
-size_t nmatch;
-regmatch_t pmatch[];
-int eflags;
+regexec(
+    const regex_t *preg,
+    const char *string,
+    size_t nmatch,
+    regmatch_t pmatch[],
+    int eflags)
 {
 	struct re_guts *g = preg->re_g;
 	char *s;
@@ -190,8 +225,7 @@ int eflags;
 		return(REG_BADPAT);
 	eflags = GOODFLAGS(eflags);
 
-	/* LINTED we believe that the regex routines do not change the string */
-	s = (char *)string;
+	s = __UNCONST(string);
 
 	if (g->nstates <= CHAR_BIT*sizeof(states1) && !(eflags&REG_LARGE))
 		return(smatcher(g, s, nmatch, pmatch, eflags));

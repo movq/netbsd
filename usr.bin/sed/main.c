@@ -1,9 +1,39 @@
-/*	$NetBSD: main.c,v 1.10 1997/10/19 23:05:14 lukem Exp $	*/
+/*	$NetBSD: main.c,v 1.19 2008/09/16 13:32:04 perry Exp $	*/
+
+/*-
+ * Copyright (c) 1992, 1993
+ *	The Regents of the University of California.  All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * Diomidis Spinellis of Imperial College, University of London.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ */
 
 /*-
  * Copyright (c) 1992 Diomidis Spinellis.
- * Copyright (c) 1992, 1993
- *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * Diomidis Spinellis of Imperial College, University of London.
@@ -37,17 +67,21 @@
  * SUCH DAMAGE.
  */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1992, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1992, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)main.c	8.2 (Berkeley) 1/3/94";
 #else
-__RCSID("$NetBSD: main.c,v 1.10 1997/10/19 23:05:14 lukem Exp $");
+__RCSID("$NetBSD: main.c,v 1.19 2008/09/16 13:32:04 perry Exp $");
 #endif
 #endif /* not lint */
 
@@ -95,7 +129,7 @@ struct s_flist {
  */
 static struct s_flist *files, **fl_nextp = &files;
 
-int aflag, eflag, nflag;
+int aflag, eflag, nflag, ere;
 
 /*
  * Current file and line number; line numbers restart across compilation
@@ -105,19 +139,18 @@ char *fname;			/* File name. */
 u_long linenum;
 int lastline;			/* TRUE on the last line of the last file */
 
-static void add_compunit __P((enum e_cut, char *));
-static void add_file __P((char *));
-int	main __P((int, char **));
+static void add_compunit(enum e_cut, char *);
+static void add_file(char *);
+int	main(int, char **);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	int c, fflag;
 
+	setprogname(*argv);
 	fflag = 0;
-	while ((c = getopt(argc, argv, "ae:f:n")) != -1)
+	while ((c = getopt(argc, argv, "ae:f:nrE")) != -1)
 		switch (c) {
 		case 'a':
 			aflag = 1;
@@ -133,10 +166,15 @@ main(argc, argv)
 		case 'n':
 			nflag = 1;
 			break;
+		case 'r':
+		case 'E':
+			ere = REG_EXTENDED;
+			break;
 		default:
 		case '?':
 			(void)fprintf(stderr,
-"usage:\tsed script [-an] [file ...]\n\tsed [-an] [-e script] ... [-f script_file] ... [file ...]\n");
+"usage:\t%s [-aEnr] script [file ...]\n\t%s [-aEnr] [-e script] ... [-f script_file] ... [file ...]\n",
+			    getprogname(), getprogname());
 			exit(1);
 		}
 	argc -= optind;
@@ -168,9 +206,7 @@ main(argc, argv)
  * together.  Empty strings and files are ignored.
  */
 char *
-cu_fgets(buf, n)
-	char *buf;
-	int n;
+cu_fgets(char *buf, int n)
 {
 	static enum {ST_EOF, ST_FILE, ST_STRING} state = ST_EOF;
 	static FILE *f;		/* Current open file */
@@ -256,9 +292,7 @@ again:
  * Set len to the length of the line.
  */
 int
-mf_fgets(sp, spflag)
-	SPACE *sp;
-	enum e_spflag spflag;
+mf_fgets(SPACE *sp, enum e_spflag spflag)
 {
 	static FILE *f;		/* Current open file */
 	size_t len;
@@ -330,9 +364,7 @@ mf_fgets(sp, spflag)
  * Add a compilation unit to the linked list
  */
 static void
-add_compunit(type, s)
-	enum e_cut type;
-	char *s;
+add_compunit(enum e_cut type, char *s)
 {
 	struct s_compunit *cu;
 
@@ -348,8 +380,7 @@ add_compunit(type, s)
  * Add a file to the linked list
  */
 static void
-add_file(s)
-	char *s;
+add_file(char *s)
 {
 	struct s_flist *fp;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: kvm_getloadavg.c,v 1.5 1998/09/27 18:15:59 christos Exp $	*/
+/*	$NetBSD: kvm_getloadavg.c,v 1.8 2003/08/07 16:44:37 agc Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,16 +34,17 @@
 #if 0
 static char sccsid[] = "@(#)kvm_getloadavg.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: kvm_getloadavg.c,v 1.5 1998/09/27 18:15:59 christos Exp $");
+__RCSID("$NetBSD: kvm_getloadavg.c,v 1.8 2003/08/07 16:44:37 agc Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/param.h>
 #include <sys/time.h>
 #include <sys/resource.h>
+#include <sys/lwp.h>
 #include <sys/proc.h>
 #include <sys/sysctl.h>
-#include <vm/vm_param.h>
+#include <uvm/uvm_param.h>
 
 #include <db.h>
 #include <fcntl.h>

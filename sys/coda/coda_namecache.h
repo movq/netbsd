@@ -1,13 +1,13 @@
-/*	$NetBSD: coda_namecache.h,v 1.6 1999/10/17 23:39:15 cgd Exp $	*/
+/*	$NetBSD: coda_namecache.h,v 1.11 2007/11/22 22:26:19 plunky Exp $	*/
 
 /*
- * 
+ *
  *             Coda: an Experimental Distributed File System
  *                              Release 3.1
- * 
+ *
  *           Copyright (c) 1987-1998 Carnegie Mellon University
  *                          All Rights Reserved
- * 
+ *
  * Permission  to  use, copy, modify and distribute this software and its
  * documentation is hereby granted,  provided  that  both  the  copyright
  * notice  and  this  permission  notice  appear  in  all  copies  of the
@@ -16,22 +16,22 @@
  * that credit is given to Carnegie Mellon University  in  all  documents
  * and publicity pertaining to direct or indirect use of this code or its
  * derivatives.
- * 
+ *
  * CODA IS AN EXPERIMENTAL SOFTWARE SYSTEM AND IS  KNOWN  TO  HAVE  BUGS,
  * SOME  OF  WHICH MAY HAVE SERIOUS CONSEQUENCES.  CARNEGIE MELLON ALLOWS
  * FREE USE OF THIS SOFTWARE IN ITS "AS IS" CONDITION.   CARNEGIE  MELLON
  * DISCLAIMS  ANY  LIABILITY  OF  ANY  KIND  FOR  ANY  DAMAGES WHATSOEVER
  * RESULTING DIRECTLY OR INDIRECTLY FROM THE USE OF THIS SOFTWARE  OR  OF
  * ANY DERIVATIVE WORK.
- * 
+ *
  * Carnegie  Mellon  encourages  users  of  this  software  to return any
  * improvements or extensions that  they  make,  and  to  grant  Carnegie
  * Mellon the rights to redistribute these changes without encumbrance.
- * 
- * 	@(#) coda/coda_namecache.h,v 1.1.1.1 1998/08/29 21:26:46 rvb Exp $ 
+ *
+ * 	@(#) coda/coda_namecache.h,v 1.1.1.1 1998/08/29 21:26:46 rvb Exp $
  */
 
-/* 
+/*
  * Mach Operating System
  * Copyright (c) 1990 Carnegie-Mellon University
  * Copyright (c) 1989 Carnegie-Mellon University
@@ -58,7 +58,7 @@
  * Hash function for the primary hash.
  */
 
-/* 
+/*
  * First try -- (first + last letters + length + (int)cp) mod size
  * 2nd try -- same, except dir fid.vnode instead of cp
  */
@@ -77,61 +77,37 @@
 	((namelen == cp->namelen) && (dcp == cp->dcp) && \
 		 (bcmp(cp->name,name,namelen) == 0))
 
-/*
- * Functions to modify the hash and lru chains.
- * insque and remque assume that the pointers are the first thing
- * in the list node, thus the trickery for lru.
- */
-
-#define CODA_NC_HSHINS(elem, pred)	insque(elem,pred)
-#define CODA_NC_HSHREM(elem)		remque(elem)
-#define CODA_NC_HSHNUL(elem)		(elem)->hash_next = \
-					(elem)->hash_prev = (elem)
-
-#define CODA_NC_LRUINS(elem, pred)	insque(LRU_PART(elem), LRU_PART(pred))
-#define CODA_NC_LRUREM(elem)		remque(LRU_PART(elem));
-#define CODA_NC_LRUGET(lruhead)		LRU_TOP((lruhead).lru_prev)
-
 #define CODA_NC_VALID(cncp)	(cncp->dcp != (struct cnode *)0)
- 
-#define LRU_PART(cncp)			(struct coda_cache *) \
-				((char *)cncp + (2*sizeof(struct coda_cache *)))
-#define LRU_TOP(cncp)				(struct coda_cache *) \
-			((char *)cncp - (2*sizeof(struct coda_cache *)))
-#define DATA_PART(cncp)				(struct coda_cache *) \
-			((char *)cncp + (4*sizeof(struct coda_cache *)))
-#define DATA_SIZE	(sizeof(struct coda_cache)-(4*sizeof(struct coda_cache *)))
+
+#define DATA_PART(cncp)	(&((cncp)->cp))
+#define DATA_SIZE	(sizeof(struct coda_cache) - offsetof(struct coda_cache, cp))
 
 /*
  * Structure for an element in the CODA Name Cache.
- * NOTE: I use the position of arguments and their size in the
- * implementation of the functions CODA_NC_LRUINS, CODA_NC_LRUREM, and
- * DATA_PART.
  */
 
-struct coda_cache {	
-	struct coda_cache	*hash_next,*hash_prev;	/* Hash list */
-	struct coda_cache	*lru_next, *lru_prev;	/* LRU list */
+struct coda_cache {
+	LIST_ENTRY(coda_cache)	hash;		/* Hash list */
+	TAILQ_ENTRY(coda_cache)	lru;		/* LRU list */
 	struct cnode	*cp;			/* vnode of the file */
 	struct cnode	*dcp;			/* parent's cnode */
-	struct ucred	*cred;			/* user credentials */
+	kauth_cred_t    cred;			/* user credentials */
 	char		name[CODA_NC_NAMELEN];	/* segment name */
 	int		namelen;		/* length of name */
 };
 
 struct	coda_lru {		/* Start of LRU chain */
-	char *dummy1, *dummy2;			/* place holders */
-	struct coda_cache *lru_next, *lru_prev;   /* position of pointers is important */
+	TAILQ_HEAD(,coda_cache)	head;
 };
 
 
 struct coda_hash {		/* Start of Hash chain */
-	struct coda_cache *hash_next, *hash_prev; /* NOTE: chain pointers must be first */
-        int length;                             /* used for tuning purposes */
+	LIST_HEAD(,coda_cache)	head;
+	int			length;	/* used for tuning purposes */
 };
 
 
-/* 
+/*
  * Symbols to aid in debugging the namecache code. Assumes the existence
  * of the variable coda_nc_debug, which is defined in cfs_namecache.c
  */
@@ -139,14 +115,16 @@ struct coda_hash {		/* Start of Hash chain */
 
 /* Prototypes of functions exported within cfs */
 extern void coda_nc_init(void);
-extern void coda_nc_enter(struct cnode *, const char *, int, struct ucred *, struct cnode *);
-extern struct cnode *coda_nc_lookup(struct cnode *, const char *, int, struct ucred *);
+extern void coda_nc_enter(struct cnode *, const char *, int,
+    kauth_cred_t, struct cnode *);
+extern struct cnode *coda_nc_lookup(struct cnode *, const char *, int, 
+    kauth_cred_t);
 
-extern void coda_nc_zapParentfid(ViceFid *, enum dc_status);
-extern void coda_nc_zapfid(ViceFid *, enum dc_status);
-extern void coda_nc_zapvnode(ViceFid *, struct ucred *, enum dc_status);
+extern void coda_nc_zapParentfid(CodaFid *, enum dc_status);
+extern void coda_nc_zapfid(CodaFid *, enum dc_status);
+extern void coda_nc_zapvnode(CodaFid *, kauth_cred_t, enum dc_status);
 extern void coda_nc_zapfile(struct cnode *, const char *, int);
-extern void coda_nc_purge_user(vuid_t, enum dc_status);
+extern void coda_nc_purge_user(uid_t, enum dc_status);
 extern void coda_nc_flush(enum dc_status);
 
 extern void print_coda_nc(void);

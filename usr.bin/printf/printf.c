@@ -1,4 +1,4 @@
-/*	$NetBSD: printf.c,v 1.21 1998/12/19 20:21:44 christos Exp $	*/
+/*	$NetBSD: printf.c,v 1.33 2008/07/21 14:19:24 lukem Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -36,8 +32,8 @@
 #include <sys/cdefs.h>
 #ifndef lint
 #if !defined(BUILTIN) && !defined(SHELL)
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1989, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif
 #endif
 
@@ -45,7 +41,7 @@ __COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
 #if 0
 static char sccsid[] = "@(#)printf.c	8.2 (Berkeley) 3/22/95";
 #else
-__RCSID("$NetBSD: printf.c,v 1.21 1998/12/19 20:21:44 christos Exp $");
+__RCSID("$NetBSD: printf.c,v 1.33 2008/07/21 14:19:24 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -54,103 +50,86 @@ __RCSID("$NetBSD: printf.c,v 1.21 1998/12/19 20:21:44 christos Exp $");
 #include <ctype.h>
 #include <err.h>
 #include <errno.h>
+#include <inttypes.h>
 #include <limits.h>
 #include <locale.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
 #include <unistd.h>
 
-static int	 print_escape_str __P((const char *));
-static size_t	 print_escape __P((const char *));
+#ifdef __GNUC__
+#define ESCAPE '\e'
+#else
+#define ESCAPE 033
+#endif
 
-static int	 getchr __P((void));
-static double	 getdouble __P((void));
-static int	 getint __P((void));
-static long	 getlong __P((void));
-static unsigned long getulong __P ((void));
-static char	*getstr __P((void));
-static char	*mklong __P((const char *, int)); 
-static void      check_conversion __P((const char *, const char *));
-static void	 usage __P((void)); 
-     
+static void	 conv_escape_str(char *, void (*)(int));
+static char	*conv_escape(char *, char *);
+static char	*conv_expand(const char *);
+static int	 getchr(void);
+static double	 getdouble(void);
+static int	 getwidth(void);
+static intmax_t	 getintmax(void);
+static uintmax_t getuintmax(void);
+static char	*getstr(void);
+static char	*mklong(const char *, int);
+static void      check_conversion(const char *, const char *);
+static void	 usage(void); 
+
+static void	b_count(int);
+static void	b_output(int);
+static size_t	b_length;
+static char	*b_fmt;
+
 static int	rval;
 static char  **gargv;
 
-#ifdef BUILTIN
-int progprintf __P((int, char **));
-#else
-int main __P((int, char **));
+#ifdef BUILTIN		/* csh builtin */
+#define main progprintf
 #endif
 
-#define isodigit(c)	((c) >= '0' && (c) <= '7')
-#define octtobin(c)	((c) - '0')
-#define hextobin(c)	((c) >= 'A' && (c) <= 'F' ? c - 'A' + 10 : (c) >= 'a' && (c) <= 'f' ? c - 'a' + 10 : c - '0')
-
-#ifdef SHELL
+#ifdef SHELL		/* sh (aka ash) builtin */
 #define main printfcmd
 #include "../../bin/sh/bltin/bltin.h"
-
-#ifdef __STDC__
-#include <stdarg.h>
-#else
-#include <vararg.h>
-#endif
-
-static void warnx __P((const char *fmt, ...));
-
-static void 
-#ifdef __STDC__
-warnx(const char *fmt, ...)
-#else
-warnx(fmt, va_alist)
-	const char *fmt;
-	va_dcl
-#endif
-{
-	
-	char buf[64];
-	va_list ap;
-
-#ifdef __STDC__
-	va_start(ap, fmt);
-#else
-	va_start(ap);
-#endif
-	vsprintf(buf, fmt, ap);
-	va_end(ap);
-
-	error(buf);
-}
 #endif /* SHELL */
 
 #define PF(f, func) { \
-	if (fieldwidth) { \
-		if (precision) \
-			(void)printf(f, fieldwidth, precision, func); \
+	if (fieldwidth != -1) { \
+		if (precision != -1) \
+			error = printf(f, fieldwidth, precision, func); \
 		else \
-			(void)printf(f, fieldwidth, func); \
-	} else if (precision) \
-		(void)printf(f, precision, func); \
+			error = printf(f, fieldwidth, func); \
+	} else if (precision != -1) \
+		error = printf(f, precision, func); \
 	else \
-		(void)printf(f, func); \
+		error = printf(f, func); \
 }
 
-int
-#ifdef BUILTIN
-progprintf(argc, argv)
-#else
-main(argc, argv)
+#define APF(cpp, f, func) { \
+	if (fieldwidth != -1) { \
+		if (precision != -1) \
+			error = asprintf(cpp, f, fieldwidth, precision, func); \
+		else \
+			error = asprintf(cpp, f, fieldwidth, func); \
+	} else if (precision != -1) \
+		error = asprintf(cpp, f, precision, func); \
+	else \
+		error = asprintf(cpp, f, func); \
+}
+
+#ifdef main
+int main(int, char *[]);
 #endif
-	int argc;
-	char *argv[];
+int main(int argc, char *argv[])
 {
 	char *fmt, *start;
 	int fieldwidth, precision;
-	char convch, nextch;
+	char nextch;
 	char *format;
 	int ch;
+	int error;
 
 #if !defined(SHELL) && !defined(BUILTIN)
 	(void)setlocale (LC_ALL, "");
@@ -161,7 +140,7 @@ main(argc, argv)
 		case '?':
 		default:
 			usage();
-			return (1);
+			return 1;
 		}
 	}
 	argc -= optind;
@@ -169,7 +148,7 @@ main(argc, argv)
 
 	if (argc < 1) {
 		usage();
-		return (1);
+		return 1;
 	}
 
 	format = *argv;
@@ -188,359 +167,517 @@ main(argc, argv)
 		 */
 
 		/* find next format specification */
-		for (fmt = format; *fmt; fmt++) {
-			switch (*fmt) {
-			case '%':
-				start = fmt++;
+		for (fmt = format; (ch = *fmt++) != '\0';) {
+			if (ch == '\\') {
+				char c_ch;
+				fmt = conv_escape(fmt, &c_ch);
+				putchar(c_ch);
+				continue;
+			}
+			if (ch != '%' || (*fmt == '%' && ++fmt)) {
+				(void)putchar(ch);
+				continue;
+			}
 
-				if (*fmt == '%') {
-					(void)putchar('%');
-					break;
-				} else if (*fmt == 'b') {
-					char *p = getstr();
-					if (print_escape_str(p)) {
-						return (rval);
-					}
-					break;
-				}
+			/* Ok - we've found a format specification,
+			   Save its address for a later printf(). */
+			start = fmt - 1;
 
-				/* skip to field width */
-				for (; strchr(SKIP1, *fmt); ++fmt) ;
-				fieldwidth = *fmt == '*' ? getint() : 0;
+			/* skip to field width */
+			fmt += strspn(fmt, SKIP1);
+			fieldwidth = *fmt == '*' ? getwidth() : -1;
 
-				/* skip to possible '.', get following precision */
-				for (; strchr(SKIP2, *fmt); ++fmt) ;
-				if (*fmt == '.')
-					++fmt;
-				precision = *fmt == '*' ? getint() : 0;
+			/* skip to possible '.', get following precision */
+			fmt += strspn(fmt, SKIP2);
+			if (*fmt == '.')
+				++fmt;
+			precision = *fmt == '*' ? getwidth() : -1;
 
-				for (; strchr(SKIP2, *fmt); ++fmt) ;
-				if (!*fmt) {
-					warnx ("missing format character");
-					return(1);
-				}
+			fmt += strspn(fmt, SKIP2);
 
-				convch = *fmt;
-				nextch = *(fmt + 1);
-				*(fmt + 1) = '\0';
-				switch(convch) {
-				case 'c': {
-					char p = getchr();
-					PF(start, p);
-					break;
-				}
-				case 's': {
-					char *p = getstr();
-					PF(start, p);
-					break;
-				}
-				case 'd':
-				case 'i': {
-					char *f = mklong(start, convch);
-					long p = getlong();
-					PF(f, p);
-					break;
-				}
-				case 'o':
-				case 'u':
-				case 'x':
-				case 'X': {
-					char *f = mklong(start, convch);
-					unsigned long p = getulong();
-					PF(f, p);
-					break;
-				}
-				case 'e':
-				case 'E':
-				case 'f':
-				case 'g':
-				case 'G': {
-					double p = getdouble();
-					PF(start, p);
-					break;
-				}
-				default:
-					warnx ("%s: invalid directive", start);
-					return(1);
-				}
-				*(fmt + 1) = nextch;
-				break;
+			ch = *fmt;
+			if (!ch) {
+				warnx("missing format character");
+				return (1);
+			}
+			/* null terminate format string to we can use it
+			   as an argument to printf. */
+			nextch = fmt[1];
+			fmt[1] = 0;
+			switch (ch) {
 
-			case '\\':
-				fmt += print_escape(fmt);
-				break;
-
-			default:
-				(void)putchar(*fmt);
+			case 'B': {
+				const char *p = conv_expand(getstr());
+				if (p == NULL)
+					goto out;
+				*fmt = 's';
+				PF(start, p);
+				if (error < 0)
+					goto out;
 				break;
 			}
+			case 'b': {
+				/* There has to be a better way to do this,
+				 * but the string we generate might have
+				 * embedded nulls. */
+				static char *a, *t;
+				char *cp = getstr();
+				/* Free on entry in case shell longjumped out */
+				if (a != NULL)
+					free(a);
+				a = NULL;
+				if (t != NULL)
+					free(t);
+				t = NULL;
+				/* Count number of bytes we want to output */
+				b_length = 0;
+				conv_escape_str(cp, b_count);
+				t = malloc(b_length + 1);
+				if (t == NULL)
+					goto out;
+				(void)memset(t, 'x', b_length);
+				t[b_length] = 0;
+				/* Get printf to calculate the lengths */
+				*fmt = 's';
+				APF(&a, start, t);
+				if (error == -1)
+					goto out;
+				b_fmt = a;
+				/* Output leading spaces and data bytes */
+				conv_escape_str(cp, b_output);
+				/* Add any trailing spaces */
+				printf("%s", b_fmt);
+				break;
+			}
+			case 'c': {
+				char p = getchr();
+				PF(start, p);
+				if (error < 0)
+					goto out;
+				break;
+			}
+			case 's': {
+				char *p = getstr();
+				PF(start, p);
+				if (error < 0)
+					goto out;
+				break;
+			}
+			case 'd':
+			case 'i': {
+				intmax_t p = getintmax();
+				char *f = mklong(start, ch);
+				PF(f, p);
+				if (error < 0)
+					goto out;
+				break;
+			}
+			case 'o':
+			case 'u':
+			case 'x':
+			case 'X': {
+				uintmax_t p = getuintmax();
+				char *f = mklong(start, ch);
+				PF(f, p);
+				if (error < 0)
+					goto out;
+				break;
+			}
+			case 'e':
+			case 'E':
+			case 'f':
+			case 'g':
+			case 'G': {
+				double p = getdouble();
+				PF(start, p);
+				if (error < 0)
+					goto out;
+				break;
+			}
+			default:
+				warnx("%s: invalid directive", start);
+				return 1;
+			}
+			*fmt++ = ch;
+			*fmt = nextch;
+			/* escape if a \c was encountered */
+			if (rval & 0x100)
+				return rval & ~0x100;
 		}
-	} while (gargv > argv && *gargv);
+	} while (gargv != argv && *gargv);
 
-	return (rval);
+	return rval & ~0x100;
+out:
+	warn("print failed");
+	return 1;
+}
+
+/* helper functions for conv_escape_str */
+
+static void
+/*ARGSUSED*/
+b_count(int ch)
+{
+	b_length++;
+}
+
+/* Output one converted character for every 'x' in the 'format' */
+
+static void
+b_output(int ch)
+{
+	for (;;) {
+		switch (*b_fmt++) {
+		case 0:
+			b_fmt--;
+			return;
+		case ' ':
+			putchar(' ');
+			break;
+		default:
+			putchar(ch);
+			return;
+		}
+	}
 }
 
 
 /*
  * Print SysV echo(1) style escape string 
- *	Halts processing string and returns 1 if a \c escape is encountered.
+ *	Halts processing string if a \c escape is encountered.
  */
-static int
-print_escape_str(str)
-	const char *str;
+static void
+conv_escape_str(char *str, void (*do_putchar)(int))
 {
 	int value;
-	int c;
+	int ch;
+	char c;
 
-	while (*str) {
-		if (*str == '\\') {
-			str++;
-			/* 
-			 * %b string octal constants are not like those in C.
-			 * They start with a \0, and are followed by 0, 1, 2, 
-			 * or 3 octal digits. 
-			 */
-			if (*str == '0') {
-				str++;
-				for (c = 3, value = 0; c-- && isodigit(*str); str++) {
-					value <<= 3;
-					value += octtobin(*str);
-				}
-				(void)putchar(value);
-				str--;
-			} else if (*str == 'c') {
-				return 1;
-			} else {
-				str--;			
-				str += print_escape(str);
-			}
-		} else {
-			(void)putchar(*str);
+	while ((ch = *str++) != '\0') {
+		if (ch != '\\') {
+			do_putchar(ch);
+			continue;
 		}
-		str++;
-	}
 
-	return 0;
+		ch = *str++;
+		if (ch == 'c') {
+			/* \c as in SYSV echo - abort all processing.... */
+			rval |= 0x100;
+			break;
+		}
+
+		/* 
+		 * %b string octal constants are not like those in C.
+		 * They start with a \0, and are followed by 0, 1, 2, 
+		 * or 3 octal digits. 
+		 */
+		if (ch == '0') {
+			int octnum = 0, i;
+			for (i = 0; i < 3; i++) {
+				if (!isdigit((unsigned char)*str) || *str > '7')
+					break;
+				octnum = (octnum << 3) | (*str++ - '0');
+			}
+			do_putchar(octnum);
+			continue;
+		}
+
+		/* \[M][^|-]C as defined by vis(3) */
+		if (ch == 'M' && *str == '-') {
+			do_putchar(0200 | str[1]);
+			str += 2;
+			continue;
+		}
+		if (ch == 'M' && *str == '^') {
+			str++;
+			value = 0200;
+			ch = '^';
+		} else
+			value = 0;
+		if (ch == '^') {
+			ch = *str++;
+			if (ch == '?')
+				value |= 0177;
+			else
+				value |= ch & 037;
+			do_putchar(value);
+			continue;
+		}
+
+		/* Finally test for sequences valid in the format string */
+		str = conv_escape(str - 1, &c);
+		do_putchar(c);
+	}
 }
 
 /*
  * Print "standard" escape characters 
  */
-static size_t
-print_escape(str)
-	const char *str;
+static char *
+conv_escape(char *str, char *conv_ch)
 {
-	const char *start = str;
 	int value;
-	int c;
+	int ch;
+	char num_buf[4], *num_end;
 
-	str++;
+	ch = *str++;
 
-	switch (*str) {
+	switch (ch) {
 	case '0': case '1': case '2': case '3':
 	case '4': case '5': case '6': case '7':
-		for (c = 3, value = 0; c-- && isodigit(*str); str++) {
-			value <<= 3;
-			value += octtobin(*str);
-		}
-		(void)putchar(value);
-		return str - start - 1;
-		/* NOTREACHED */
+		num_buf[0] = ch;
+		ch = str[0];
+		num_buf[1] = ch;
+		num_buf[2] = ch ? str[1] : 0;
+		num_buf[3] = 0;
+		value = strtoul(num_buf, &num_end, 8);
+		str += num_end  - (num_buf + 1);
+		break;
 
 	case 'x':
-		str++;
-		for (value = 0; isxdigit((unsigned char)*str); str++) {
-			value <<= 4;
-			value += hextobin(*str);
-		}
-		if (value > UCHAR_MAX) {
-			warnx ("escape sequence out of range for character");
-			rval = 1;
-		}
-		(void)putchar (value);
-		return str - start - 1;
-		/* NOTREACHED */
-
-	case '\\':			/* backslash */
-		(void)putchar('\\');
+		/* Hexadecimal character constants are not required to be
+		   supported (by SuS v1) because there is no consistent
+		   way to detect the end of the constant.
+		   Supporting 2 byte constants is a compromise. */
+		ch = str[0];
+		num_buf[0] = ch;
+		num_buf[1] = ch ? str[1] : 0;
+		num_buf[2] = 0;
+		value = strtoul(num_buf, &num_end, 16);
+		str += num_end - num_buf;
 		break;
 
-	case '\'':			/* single quote */
-		(void)putchar('\'');
-		break;
-
-	case '"':			/* double quote */
-		(void)putchar('"');
-		break;
-
-	case 'a':			/* alert */
-#ifdef __STDC__
-		(void)putchar('\a');
-#else
-		(void)putchar(007);
-#endif
-		break;
-
-	case 'b':			/* backspace */
-		(void)putchar('\b');
-		break;
-
-	case 'e':			/* escape */
-#ifdef __GNUC__
-		(void)putchar('\e');
-#else
-		(void)putchar(033);
-#endif
-		break;
-
-	case 'f':			/* form-feed */
-		(void)putchar('\f');
-		break;
-
-	case 'n':			/* newline */
-		(void)putchar('\n');
-		break;
-
-	case 'r':			/* carriage-return */
-		(void)putchar('\r');
-		break;
-
-	case 't':			/* tab */
-		(void)putchar('\t');
-		break;
-
-	case 'v':			/* vertical-tab */
-		(void)putchar('\v');
-		break;
+	case '\\':	value = '\\';	break;	/* backslash */
+	case '\'':	value = '\'';	break;	/* single quote */
+	case '"':	value = '"';	break;	/* double quote */
+	case 'a':	value = '\a';	break;	/* alert */
+	case 'b':	value = '\b';	break;	/* backspace */
+	case 'e':	value = ESCAPE;	break;	/* escape */
+	case 'f':	value = '\f';	break;	/* form-feed */
+	case 'n':	value = '\n';	break;	/* newline */
+	case 'r':	value = '\r';	break;	/* carriage-return */
+	case 't':	value = '\t';	break;	/* tab */
+	case 'v':	value = '\v';	break;	/* vertical-tab */
 
 	default:
-		(void)putchar(*str);
-		warnx("unknown escape sequence `\\%c'", *str);
+		warnx("unknown escape sequence `\\%c'", ch);
 		rval = 1;
+		value = ch;
 		break;
 	}
 
-	return 1;
+	*conv_ch = value;
+	return str;
+}
+
+/* expand a string so that everything is printable */
+
+static char *
+conv_expand(const char *str)
+{
+	static char *conv_str;
+	char *cp;
+	int ch;
+
+	if (conv_str)
+		free(conv_str);
+	/* get a buffer that is definitely large enough.... */
+	conv_str = malloc(4 * strlen(str) + 1);
+	if (!conv_str)
+		return NULL;
+	cp = conv_str;
+
+	while ((ch = *(const unsigned char *)str++) != '\0') {
+		switch (ch) {
+		/* Use C escapes for expected control characters */
+		case '\\':	ch = '\\';	break;	/* backslash */
+		case '\'':	ch = '\'';	break;	/* single quote */
+		case '"':	ch = '"';	break;	/* double quote */
+		case '\a':	ch = 'a';	break;	/* alert */
+		case '\b':	ch = 'b';	break;	/* backspace */
+		case ESCAPE:	ch = 'e';	break;	/* escape */
+		case '\f':	ch = 'f';	break;	/* form-feed */
+		case '\n':	ch = 'n';	break;	/* newline */
+		case '\r':	ch = 'r';	break;	/* carriage-return */
+		case '\t':	ch = 't';	break;	/* tab */
+		case '\v':	ch = 'v';	break;	/* vertical-tab */
+		default:
+			/* Copy anything printable */
+			if (isprint(ch)) {
+				*cp++ = ch;
+				continue;
+			}
+			/* Use vis(3) encodings for the rest */
+			*cp++ = '\\';
+			if (ch & 0200) {
+				*cp++ = 'M';
+				ch &= ~0200;
+			}
+			if (ch == 0177) {
+				*cp++ = '^';
+				*cp++ = '?';
+				continue;
+			}
+			if (ch < 040) {
+				*cp++ = '^';
+				*cp++ = ch | 0100;
+				continue;
+			}
+			*cp++ = '-';
+			*cp++ = ch;
+			continue;
+		}
+		*cp++ = '\\';
+		*cp++ = ch;
+	}
+
+	*cp = 0;
+	return conv_str;
 }
 
 static char *
-mklong(str, ch)
-	const char *str;
-	char ch;
+mklong(const char *str, int ch)
 {
 	static char copy[64];
 	size_t len;	
 
 	len = strlen(str) + 2;
+	if (len > sizeof copy) {
+		warnx("format %s too complex\n", str);
+		len = 4;
+	}
 	(void)memmove(copy, str, len - 3);
-	copy[len - 3] = 'l';
+	copy[len - 3] = 'j';
 	copy[len - 2] = ch;
 	copy[len - 1] = '\0';
-	return (copy);	
+	return copy;	
 }
 
 static int
-getchr()
+getchr(void)
 {
 	if (!*gargv)
-		return ('\0');
-	return ((int)**gargv++);
+		return 0;
+	return (int)**gargv++;
 }
 
 static char *
-getstr()
+getstr(void)
 {
+	static char empty[] = "";
 	if (!*gargv)
-		return ("");
-	return (*gargv++);
+		return empty;
+	return *gargv++;
 }
 
-static char *Number = "+-.0123456789";
 static int
-getint()
-{
-	if (!*gargv)
-		return(0);
-
-	if (strchr(Number, **gargv))
-		return(atoi(*gargv++));
-
-	return 0;
-}
-
-static long
-getlong()
+getwidth(void)
 {
 	long val;
-	char *ep;
+	char *s, *ep;
 
+	s = *gargv;
 	if (!*gargv)
-		return(0L);
-
-	if (**gargv == '\"' || **gargv == '\'')
-		return (long) *((*gargv++)+1);
+		return (0);
+	gargv++;
 
 	errno = 0;
-	val = strtol (*gargv, &ep, 0);
-	check_conversion(*gargv++, ep);
+	val = strtoul(s, &ep, 0);
+	check_conversion(s, ep);
+
+	/* Arbitrarily 'restrict' field widths to 1Mbyte */
+	if (val < 0 || val > 1 << 20) {
+		warnx("%s: invalid field width", s);
+		return 0;
+	}
+
 	return val;
 }
 
-static unsigned long
-getulong()
+static intmax_t
+getintmax(void)
 {
-	unsigned long val;
-	char *ep;
+	intmax_t val;
+	char *cp, *ep;
 
-	if (!*gargv)
-		return(0UL);
+	cp = *gargv;
+	if (cp == NULL)
+		return 0;
+	gargv++;
 
-	if (**gargv == '\"' || **gargv == '\'')
-		return (unsigned long) *((*gargv++)+1);
+	if (*cp == '\"' || *cp == '\'')
+		return *(cp+1);
 
 	errno = 0;
-	val = strtoul (*gargv, &ep, 0);
-	check_conversion(*gargv++, ep);
+	val = strtoimax(cp, &ep, 0);
+	check_conversion(cp, ep);
+	return val;
+}
+
+static uintmax_t
+getuintmax(void)
+{
+	uintmax_t val;
+	char *cp, *ep;
+
+	cp = *gargv;
+	if (cp == NULL)
+		return 0;
+	gargv++;
+
+	if (*cp == '\"' || *cp == '\'')
+		return *(cp + 1);
+
+	/* strtoumax won't error -ve values */
+	while (isspace(*(unsigned char *)cp))
+		cp++;
+	if (*cp == '-') {
+		warnx("%s: expected positive numeric value", cp);
+		rval = 1;
+		return 0;
+	}
+
+	errno = 0;
+	val = strtoumax(cp, &ep, 0);
+	check_conversion(cp, ep);
 	return val;
 }
 
 static double
-getdouble()
+getdouble(void)
 {
 	double val;
 	char *ep;
 
 	if (!*gargv)
-		return(0.0);
+		return (0.0);
 
 	if (**gargv == '\"' || **gargv == '\'')
 		return (double) *((*gargv++)+1);
 
 	errno = 0;
-	val = strtod (*gargv, &ep);
+	val = strtod(*gargv, &ep);
 	check_conversion(*gargv++, ep);
 	return val;
 }
 
 static void
-check_conversion(s, ep)
-	const char *s;
-	const char *ep;
+check_conversion(const char *s, const char *ep)
 {
 	if (*ep) {
 		if (ep == s)
-			warnx ("%s: expected numeric value", s);
+			warnx("%s: expected numeric value", s);
 		else
-			warnx ("%s: not completely converted", s);
+			warnx("%s: not completely converted", s);
 		rval = 1;
 	} else if (errno == ERANGE) {
-		warnx ("%s: %s", s, strerror(ERANGE));
+		warnx("%s: %s", s, strerror(ERANGE));
 		rval = 1;
 	}
 }
 
 static void
-usage()
+usage(void)
 {
-	(void)fprintf(stderr, "usage: printf format [arg ...]\n");
+	(void)fprintf(stderr, "Usage: %s format [arg ...]\n", getprogname());
 }

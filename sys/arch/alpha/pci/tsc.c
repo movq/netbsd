@@ -1,4 +1,4 @@
-/* $NetBSD: tsc.c,v 1.2 1999/11/04 19:15:23 thorpej Exp $ */
+/* $NetBSD: tsc.c,v 1.13 2005/12/11 12:16:17 christos Exp $ */
 
 /*-
  * Copyright (c) 1999 by Ross Harvey.  All rights reserved.
@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: tsc.c,v 1.2 1999/11/04 19:15:23 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tsc.c,v 1.13 2005/12/11 12:16:17 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -44,6 +44,7 @@ __KERNEL_RCSID(0, "$NetBSD: tsc.c,v 1.2 1999/11/04 19:15:23 thorpej Exp $");
 
 #include <machine/autoconf.h>
 #include <machine/rpb.h>
+#include <machine/sysarch.h>
 
 #include <dev/isa/isareg.h>
 #include <dev/isa/isavar.h>
@@ -61,9 +62,8 @@ __KERNEL_RCSID(0, "$NetBSD: tsc.c,v 1.2 1999/11/04 19:15:23 thorpej Exp $");
 int	tscmatch __P((struct device *, struct cfdata *, void *));
 void	tscattach __P((struct device *, struct device *, void *));
 
-struct cfattach tsc_ca = {
-	sizeof(struct tsc_softc), tscmatch, tscattach,
-};
+CFATTACH_DECL(tsc, sizeof(struct tsc_softc),
+    tscmatch, tscattach, NULL, NULL);
 
 extern struct cfdriver tsc_cd;
 
@@ -74,17 +74,19 @@ static int tscprint __P((void *, const char *pnp));
 int	tspmatch __P((struct device *, struct cfdata *, void *));
 void	tspattach __P((struct device *, struct device *, void *));
 
-struct cfattach tsp_ca = {
-	sizeof(struct tsp_softc), tspmatch, tspattach,
-};
+CFATTACH_DECL(tsp, sizeof(struct tsp_softc),
+    tspmatch, tspattach, NULL, NULL);
 
 extern struct cfdriver tsp_cd;
 
-static int tspprint __P((void *, const char *pnp));
+static int tsp_bus_get_window __P((int, int,
+	struct alpha_bus_space_translation *));
 
 /* There can be only one */
-
 static int tscfound;
+
+/* Which hose is the display console connected to? */
+int tsp_console_hose;
 
 int
 tscmatch(parent, match, aux)
@@ -127,7 +129,7 @@ void tscattach(parent, self, aux)
 	}
 	printf(", Dchip 0 rev %d\n", (int)LDQP(TS_D_DREV) & 0xf);
 
-	bzero(&tsp, sizeof tsp);
+	memset(&tsp, 0, sizeof tsp);
 	tsp.tsp_name = "tsp";
 	config_found(self, &tsp, NULL);
 
@@ -145,7 +147,7 @@ tscprint(aux, p)
 	register struct tsp_attach_args *tsp = aux;
 
 	if(p)
-		printf("%s%d at %s", tsp->tsp_name, tsp->tsp_slot, p);
+		aprint_normal("%s%d at %s", tsp->tsp_name, tsp->tsp_slot, p);
 	return UNCONF;
 }
 
@@ -163,7 +165,8 @@ tspmatch(parent, match, aux)
 	    && strcmp(t->tsp_name, tsp_cd.cd_name) == 0;
 }
 
-void tspattach(parent, self, aux)
+void
+tspattach(parent, self, aux)
 	struct device *parent, *self;
 	void *aux;
 {
@@ -173,18 +176,29 @@ void tspattach(parent, self, aux)
 
 	printf("\n");
 	pcp = tsp_init(1, t->tsp_slot);
+
 	tsp_dma_init(pcp);
+	
+	/*
+	 * Do PCI memory initialization that needs to be deferred until
+	 * malloc is safe.  On the Tsunami, we need to do this after
+	 * DMA is initialized, as well.
+	 */
+	tsp_bus_mem_init2(&pcp->pc_memt, pcp);
+
 	pci_6600_pickintr(pcp);
-	pba.pba_busname = "pci";
+
 	pba.pba_iot = &pcp->pc_iot;
 	pba.pba_memt = &pcp->pc_memt;
 	pba.pba_dmat =
 	    alphabus_dma_get_tag(&pcp->pc_dmat_direct, ALPHA_BUS_PCI);
+	pba.pba_dmat64 = NULL;
 	pba.pba_pc = &pcp->pc_pc;
 	pba.pba_bus = 0;
+	pba.pba_bridgetag = NULL;
 	pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED |
 	    PCI_FLAGS_MRL_OKAY | PCI_FLAGS_MRM_OKAY | PCI_FLAGS_MWI_OKAY;
-	config_found(self, &pba, tspprint);
+	config_found_ia(self, "pcibus", &pba, pcibusprint);
 }
 
 struct tsp_config *
@@ -202,6 +216,11 @@ tsp_init(mallocsafe, n)
 	if (!pcp->pc_initted) {
 		tsp_bus_io_init(&pcp->pc_iot, pcp);
 		tsp_bus_mem_init(&pcp->pc_memt, pcp);
+
+		alpha_bus_window_count[ALPHA_BUS_TYPE_PCI_IO] = 1;
+		alpha_bus_window_count[ALPHA_BUS_TYPE_PCI_MEM] = 1;
+
+		alpha_bus_get_window = tsp_bus_get_window;
 	}
 	pcp->pc_mallocsafe = mallocsafe;
 	tsp_pci_init(&pcp->pc_pc, pcp);
@@ -210,14 +229,33 @@ tsp_init(mallocsafe, n)
 }
 
 static int
-tspprint(aux, p)
-	void *aux;
-	const char *p;
+tsp_bus_get_window(type, window, abst)
+	int type, window;
+	struct alpha_bus_space_translation *abst;
 {
-	register struct pcibus_attach_args *pci = aux;
+	struct tsp_config *tsp = &tsp_configuration[tsp_console_hose];
+	bus_space_tag_t st;
+	int error;
 
-	if(p)
-		printf("%s at %s", pci->pba_busname, p);
-	printf(" bus %d", pci->pba_bus);
-	return UNCONF;
+	switch (type) {
+	case ALPHA_BUS_TYPE_PCI_IO:
+		st = &tsp->pc_iot;
+		break;
+
+	case ALPHA_BUS_TYPE_PCI_MEM:
+		st = &tsp->pc_memt;
+		break;
+
+	default:
+		panic("tsp_bus_get_window");
+	}
+
+	error = alpha_bus_space_get_window(st, window, abst);
+	if (error)
+		return (error);
+
+	abst->abst_sys_start = TS_PHYSADDR(abst->abst_sys_start);
+	abst->abst_sys_end = TS_PHYSADDR(abst->abst_sys_end);
+
+	return (0);
 }

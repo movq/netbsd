@@ -1,4 +1,4 @@
-/*	$NetBSD: hunt.c,v 1.9 1998/07/12 09:59:30 mrg Exp $	*/
+/*	$NetBSD: hunt.c,v 1.16 2006/12/14 17:09:43 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)hunt.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: hunt.c,v 1.9 1998/07/12 09:59:30 mrg Exp $");
+__RCSID("$NetBSD: hunt.c,v 1.16 2006/12/14 17:09:43 christos Exp $");
 #endif /* not lint */
 
 #include "tip.h"
@@ -46,20 +42,18 @@ __RCSID("$NetBSD: hunt.c,v 1.9 1998/07/12 09:59:30 mrg Exp $");
 static	jmp_buf deadline;
 static	int deadfl;
 
-void	dead __P((int));
+void	dead(int);
 
 void
-dead(dummy)
-	int dummy;
+/*ARGSUSED*/
+dead(int dummy __unused)
 {
-
 	deadfl = 1;
 	longjmp(deadline, 1);
 }
 
 int
-hunt(name)
-	char *name;
+hunt(char *name)
 {
 	char *cp;
 	sig_t f;
@@ -67,9 +61,6 @@ hunt(name)
 	f = signal(SIGALRM, dead);
 	while ((cp = getremote(name)) != NULL) {
 		deadfl = 0;
-		uucplock = strrchr(cp, '/')+1;
-		if (uu_lock(uucplock) < 0)
-			continue;
 		/*
 		 * Straight through call units, such as the BIZCOMP,
 		 * VADIC and the DF, must indicate they're hardwired in
@@ -80,27 +71,31 @@ hunt(name)
 		if (!HW)
 			break;
 		if (setjmp(deadline) == 0) {
-			alarm(10);
+			(void)alarm(10);
 			FD = open(cp, (O_RDWR | (DC ? O_NONBLOCK : 0)));
 		}
-		alarm(0);
+		(void)alarm(0);
 		if (FD < 0) {
-			perror(cp);
+			warn(cp);
 			deadfl = 1;
-		}
-		if (!deadfl) {
+		} else if (!deadfl) {
 			struct termios cntrl;
 
-			tcgetattr(FD, &cntrl);
+			if (flock(FD, (LOCK_EX|LOCK_NB)) != 0) {
+				(void)close(FD);
+				FD = -1;
+				continue;
+			}
+
+			(void)tcgetattr(FD, &cntrl);
 			if (!DC)
 				cntrl.c_cflag |= HUPCL;
-			tcsetattr(FD, TCSAFLUSH, &cntrl);
-			ioctl(FD, TIOCEXCL, 0);
-			signal(SIGALRM, SIG_DFL);
+			(void)tcsetattr(FD, TCSAFLUSH, &cntrl);
+			(void)ioctl(FD, TIOCEXCL, 0);
+			(void)signal(SIGALRM, SIG_DFL);
 			return (cp != NULL);
 		}
-		(void)uu_unlock(uucplock);
 	}
-	signal(SIGALRM, f);
+	(void)signal(SIGALRM, f);
 	return (deadfl ? -1 : cp != NULL);
 }

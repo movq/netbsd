@@ -1,10 +1,48 @@
-/*	$NetBSD: bpf.c,v 1.9 1997/10/18 11:23:03 lukem Exp $	*/
+/*	$NetBSD: bpf.c,v 1.18 2004/12/01 23:13:09 christos Exp $	*/
+
+/*
+ * Copyright (c) 1992, 1993
+ *	The Regents of the University of California.  All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Center for Software Science of the University of Utah Computer
+ * Science Department.  CSS requests users of this software to return
+ * to css-dist@cs.utah.edu any improvements that they make and grant
+ * CSS redistribution rights.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ *	from: @(#)bpf.c	8.1 (Berkeley) 6/4/93
+ *
+ * From: Utah Hdr: bpf.c 3.1 92/07/06
+ * Author: Jeff Forys, University of Utah CSS
+ */
 
 /*
  * Copyright (c) 1988, 1992 The University of Utah and the Center
  *	for Software Science (CSS).
- * Copyright (c) 1992, 1993
- *	The Regents of the University of California.  All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
  * the Center for Software Science of the University of Utah Computer
@@ -51,7 +89,7 @@
 #if 0
 static char sccsid[] = "@(#)bpf.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: bpf.c,v 1.9 1997/10/18 11:23:03 lukem Exp $");
+__RCSID("$NetBSD: bpf.c,v 1.18 2004/12/01 23:13:09 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -69,7 +107,9 @@ __RCSID("$NetBSD: bpf.c,v 1.9 1997/10/18 11:23:03 lukem Exp $");
 #include <stdlib.h>
 #include <string.h>
 #include <syslog.h>
+#include <paths.h>
 #include <unistd.h>
+#include <ifaddrs.h>
 #include "defs.h"
 #include "pathnames.h"
 
@@ -93,20 +133,17 @@ int
 BpfOpen()
 {
 	struct ifreq ifr;
-	char bpfdev[32];
-	int n = 0;
+	u_int bufsize = 32768;
+	int n;
 
-	/*
-	 *  Open the first available BPF device.
-	 */
-	do {
-		(void) sprintf(bpfdev, _PATH_BPF, n++);
-		BpfFd = open(bpfdev, O_RDWR);
-	} while (BpfFd < 0 && (errno == EBUSY || errno == EPERM));
-
+	BpfFd = open(_PATH_BPF, O_RDWR);
 	if (BpfFd < 0) {
 		syslog(LOG_ERR, "bpf: no available devices: %m");
 		Exit(0);
+	}
+
+	if (ioctl(BpfFd, BIOCSBLEN, &bufsize) < 0) {
+		syslog(LOG_ERR, "bpf: ioctl(BIOCSBLEN,%d): %m", bufsize);
 	}
 
 	/*
@@ -223,76 +260,52 @@ char *
 BpfGetIntfName(errmsg)
 	char **errmsg;
 {
-	struct ifreq ibuf[8], *ifrp, *ifend, *mp;
-	struct ifconf ifc;
-	int fd;
+	struct ifaddrs *ifap, *ifa, *p;
 	int minunit, n;
 	char *cp;
-	static char device[sizeof(ifrp->ifr_name)];
+	static char device[IFNAMSIZ + 1];
 	static char errbuf[128] = "No Error!";
 
 	if (errmsg != NULL)
 		*errmsg = errbuf;
 
-	if ((fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-		(void) strcpy(errbuf, "bpf: socket: %m");
+	if (getifaddrs(&ifap) != 0) {
+		(void) strlcpy(errbuf, "bpf: getifaddrs: %m", sizeof(errbuf));
 		return(NULL);
 	}
-	ifc.ifc_len = sizeof ibuf;
-	ifc.ifc_buf = (caddr_t)ibuf;
 
-#ifdef OSIOCGIFCONF
-	if (ioctl(fd, OSIOCGIFCONF, (char *)&ifc) < 0 ||
-	    ifc.ifc_len < sizeof(struct ifreq)) {
-		(void) strcpy(errbuf, "bpf: ioctl(OSIOCGIFCONF): %m");
-		return(NULL);
-	}
-#else
-	if (ioctl(fd, SIOCGIFCONF, (char *)&ifc) < 0 ||
-	    ifc.ifc_len < sizeof(struct ifreq)) {
-		(void) strcpy(errbuf, "bpf: ioctl(SIOCGIFCONF): %m");
-		return(NULL);
-	}
-#endif
-	ifrp = ibuf;
-	ifend = (struct ifreq *)((char *)ibuf + ifc.ifc_len);
-	
-	mp = 0;
+	p = NULL;
 	minunit = 666;
-	for (; ifrp < ifend; ++ifrp) {
-		if (ioctl(fd, SIOCGIFFLAGS, (char *)ifrp) < 0) {
-			(void) strcpy(errbuf, "bpf: ioctl(SIOCGIFFLAGS): %m");
-			return(NULL);
-		}
-
+	for (ifa = ifap; ifa; ifa = ifa->ifa_next) {
 		/*
 		 *  If interface is down or this is the loopback interface,
 		 *  ignore it.
 		 */
-		if ((ifrp->ifr_flags & IFF_UP) == 0 ||
+		if ((ifa->ifa_flags & IFF_UP) == 0 ||
 #ifdef IFF_LOOPBACK
-		    (ifrp->ifr_flags & IFF_LOOPBACK))
+		    (ifa->ifa_flags & IFF_LOOPBACK))
 #else
-		    (strcmp(ifrp->ifr_name, "lo0") == 0))
+		    (strcmp(ifa->ifa_name, "lo0") == 0))
 #endif
 			continue;
 
-		for (cp = ifrp->ifr_name; !isdigit(*cp); ++cp)
+		for (cp = ifa->ifa_name; !isdigit((unsigned char)*cp); ++cp)
 			;
 		n = atoi(cp);
 		if (n < minunit) {
 			minunit = n;
-			mp = ifrp;
+			p = ifa;
 		}
 	}
-
-	(void) close(fd);
-	if (mp == 0) {
-		(void) strcpy(errbuf, "bpf: no interfaces found");
+	if (p == NULL) {
+		(void) strlcpy(errbuf, "bpf: no interfaces found",
+		    sizeof(errbuf));
+		freeifaddrs(ifap);
 		return(NULL);
 	}
 
-	(void) strcpy(device, mp->ifr_name);
+	(void) strlcpy(device, p->ifa_name, sizeof(device));
+	freeifaddrs(ifap);
 	return(device);
 }
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: uipc_proto.c,v 1.12 1999/07/01 07:59:57 itojun Exp $	*/
+/*	$NetBSD: uipc_proto.c,v 1.21 2008/04/24 11:38:36 ad Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,14 +31,17 @@
  *	@(#)uipc_proto.c	8.2 (Berkeley) 2/14/95
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: uipc_proto.c,v 1.21 2008/04/24 11:38:36 ad Exp $");
+
 #include <sys/param.h>
 #include <sys/socket.h>
 #include <sys/protosw.h>
 #include <sys/domain.h>
 #include <sys/mbuf.h>
-#include <sys/un.h> 
+#include <sys/un.h>
 #include <sys/socketvar.h>
-                        
+
 #include <net/if.h>
 #include <net/raw_cb.h>
 
@@ -50,26 +49,35 @@
  * Definitions of protocols supported in the UNIX domain.
  */
 
-extern	struct domain unixdomain;		/* or at least forward */
+DOMAIN_DEFINE(unixdomain);	/* forward define and add to link set */
 
-struct protosw unixsw[] = {
-{ SOCK_STREAM,	&unixdomain,	0,	PR_CONNREQUIRED|PR_WANTRCVD|PR_RIGHTS|PR_LISTEN,
-  0,		0,		0,		uipc_ctloutput,
-  uipc_usrreq,
-  0,		0,		0,		0,
-},
-{ SOCK_DGRAM,	&unixdomain,	0,		PR_ATOMIC|PR_ADDR|PR_RIGHTS,
-  0,		0,		0,		uipc_ctloutput,
-  uipc_usrreq,
-  0,		0,		0,		0,
-},
-{ 0,		0,		0,		0,
-  raw_input,	0,		raw_ctlinput,	0,
-  raw_usrreq,
-  raw_init,	0,		0,		0,
-}
+const struct protosw unixsw[] = {
+	{
+		.pr_type = SOCK_STREAM,
+		.pr_domain = &unixdomain,
+		.pr_flags = PR_CONNREQUIRED|PR_WANTRCVD|PR_RIGHTS|PR_LISTEN,
+		.pr_ctloutput = uipc_ctloutput,
+		.pr_usrreq = uipc_usrreq,
+	}, {
+		.pr_type = SOCK_DGRAM,
+		.pr_domain = &unixdomain,
+		.pr_flags = PR_ATOMIC|PR_ADDR|PR_RIGHTS,
+		.pr_ctloutput = uipc_ctloutput,
+		.pr_usrreq = uipc_usrreq,
+	}, {
+		.pr_input = raw_input,
+		.pr_ctlinput = raw_ctlinput,
+		.pr_usrreq = raw_usrreq,
+		.pr_init = raw_init,
+	}
 };
 
-struct domain unixdomain =
-    { AF_LOCAL, "unix", 0, unp_externalize, unp_dispose,
-      unixsw, &unixsw[sizeof(unixsw)/sizeof(unixsw[0])] };
+struct domain unixdomain = {
+	.dom_family = AF_LOCAL,
+	.dom_init = uipc_init,
+	.dom_name = "unix",
+	.dom_externalize = unp_externalize,
+	.dom_dispose = unp_dispose,
+	.dom_protosw = unixsw,
+	.dom_protoswNPROTOSW = &unixsw[__arraycount(unixsw)],
+};

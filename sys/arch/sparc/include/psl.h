@@ -1,4 +1,4 @@
-/*	$NetBSD: psl.h,v 1.20 2000/01/21 13:22:55 pk Exp $ */
+/*	$NetBSD: psl.h,v 1.44.62.1 2009/05/18 19:55:34 bouyer Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -21,11 +21,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -47,7 +43,8 @@
 #ifndef PSR_IMPL
 
 /*
- * SPARC Process Status Register (in psl.h for hysterical raisins).
+ * SPARC Process Status Register (in psl.h for hysterical raisins).  This
+ * doesn't exist on the V9.
  *
  * The picture in the Sun manuals looks like this:
  *	                                     1 1
@@ -58,69 +55,209 @@
  *	+-------+-------+-------+-----------+-+-+-------+-+-+-+---------+
  */
 
-#define	PSR_IMPL	0xf0000000	/* implementation */
-#define	PSR_VER		0x0f000000	/* version */
-#define	PSR_ICC		0x00f00000	/* integer condition codes */
-#define	PSR_N		0x00800000	/* negative */
-#define	PSR_Z		0x00400000	/* zero */
-#define	PSR_O		0x00200000	/* overflow */
-#define	PSR_C		0x00100000	/* carry */
-#define	PSR_EC		0x00002000	/* coprocessor enable */
-#define	PSR_EF		0x00001000	/* FP enable */
-#define	PSR_PIL		0x00000f00	/* interrupt level */
-#define	PSR_S		0x00000080	/* supervisor (kernel) mode */
-#define	PSR_PS		0x00000040	/* previous supervisor mode (traps) */
-#define	PSR_ET		0x00000020	/* trap enable */
-#define	PSR_CWP		0x0000001f	/* current window pointer */
+#define PSR_IMPL	0xf0000000	/* implementation */
+#define PSR_VER		0x0f000000	/* version */
+#define PSR_ICC		0x00f00000	/* integer condition codes */
+#define PSR_N		0x00800000	/* negative */
+#define PSR_Z		0x00400000	/* zero */
+#define PSR_O		0x00200000	/* overflow */
+#define PSR_C		0x00100000	/* carry */
+#define PSR_EC		0x00002000	/* coprocessor enable */
+#define PSR_EF		0x00001000	/* FP enable */
+#define PSR_PIL		0x00000f00	/* interrupt level */
+#define PSR_S		0x00000080	/* supervisor (kernel) mode */
+#define PSR_PS		0x00000040	/* previous supervisor mode (traps) */
+#define PSR_ET		0x00000020	/* trap enable */
+#define PSR_CWP		0x0000001f	/* current window pointer */
 
-#define	PSR_BITS "\20\16EC\15EF\10S\7PS\6ET"
+#define PSR_BITS "\20\16EC\15EF\10S\7PS\6ET"
 
-/* define audio software interrupts to be at software level 4 */
-#define	PIL_AUSOFT	4
-/* define floppy software interrupts to be at software level 4 too */
-#define PIL_FDSOFT	4
-/* network hardware interrupts at at most (XXX - is that true?) level 6 */
-#define	PIL_NET		6
-#define	PIL_CLOCK	10
+/* 
+ * SPARC V9 CCR register
+ */
+
+#define ICC_C	0x01L
+#define ICC_V	0x02L
+#define ICC_Z	0x04L
+#define ICC_N	0x08L
+#define XCC_SHIFT	4
+#define XCC_C	(ICC_C<<XCC_SHIFT)
+#define XCC_V	(ICC_V<<XCC_SHIFT)
+#define XCC_Z	(ICC_Z<<XCC_SHIFT)
+#define XCC_N	(ICC_N<<XCC_SHIFT)
+
+
+/*
+ * SPARC V9 PSTATE register (what replaces the PSR in V9)
+ *
+ * Here's the layout:
+ *
+ *    11   10    9     8   7  6   5     4     3     2     1   0
+ *  +------------------------------------------------------------+
+ *  | IG | MG | CLE | TLE | MM | RED | PEF | AM | PRIV | IE | AG |
+ *  +------------------------------------------------------------+
+ */
+
+#define PSTATE_IG	0x800	/* enable spitfire interrupt globals */
+#define PSTATE_MG	0x400	/* enable spitfire MMU globals */
+#define PSTATE_CLE	0x200	/* current little endian */
+#define PSTATE_TLE	0x100	/* traps little endian */
+#define PSTATE_MM	0x0c0	/* memory model */
+#define PSTATE_MM_TSO	0x000	/* total store order */
+#define PSTATE_MM_PSO	0x040	/* partial store order */
+#define PSTATE_MM_RMO	0x080	/* Relaxed memory order */
+#define PSTATE_RED	0x020	/* RED state */
+#define PSTATE_PEF	0x010	/* enable floating point */
+#define PSTATE_AM	0x008	/* 32-bit address masking */
+#define PSTATE_PRIV	0x004	/* privileged mode */
+#define PSTATE_IE	0x002	/* interrupt enable */
+#define PSTATE_AG	0x001	/* enable alternate globals */
+
+#define PSTATE_BITS "\20\14IG\13MG\12CLE\11TLE\10\7MM\6RED\5PEF\4AM\3PRIV\2IE\1AG"
+
+
+/*
+ * 32-bit code requires TSO or at best PSO since that's what's supported on
+ * SPARC V8 and earlier machines.
+ *
+ * 64-bit code sets the memory model in the ELF header.
+ *
+ * We're running kernel code in TSO for the moment so we don't need to worry
+ * about possible memory barrier bugs.
+ */
+
+#ifdef __arch64__
+#define PSTATE_PROM	(PSTATE_MM_TSO|PSTATE_PRIV)
+#define PSTATE_NUCLEUS	(PSTATE_MM_TSO|PSTATE_PRIV|PSTATE_AG)
+#define PSTATE_KERN	(PSTATE_MM_TSO|PSTATE_PRIV)
+#define PSTATE_INTR	(PSTATE_KERN|PSTATE_IE)
+#define PSTATE_USER32	(PSTATE_MM_TSO|PSTATE_AM|PSTATE_IE)
+#define PSTATE_USER	(PSTATE_MM_RMO|PSTATE_IE)
+#else
+#define PSTATE_PROM	(PSTATE_MM_TSO|PSTATE_PRIV)
+#define PSTATE_NUCLEUS	(PSTATE_MM_TSO|PSTATE_AM|PSTATE_PRIV|PSTATE_AG)
+#define PSTATE_KERN	(PSTATE_MM_TSO|PSTATE_AM|PSTATE_PRIV)
+#define PSTATE_INTR	(PSTATE_KERN|PSTATE_IE)
+#define PSTATE_USER32	(PSTATE_MM_TSO|PSTATE_AM|PSTATE_IE)
+#define PSTATE_USER	(PSTATE_MM_TSO|PSTATE_AM|PSTATE_IE)
+#endif
+
+/*
+ * SPARC V9 TSTATE register
+ *
+ *   39 32 31 24 23 18  17   8	7 5 4   0
+ *  +-----+-----+-----+--------+---+-----+
+ *  | CCR | ASI |  -  | PSTATE | - | CWP |
+ *  +-----+-----+-----+--------+---+-----+
+ * */
+
+#define TSTATE_CWP		0x01f
+#define TSTATE_PSTATE		0x6ff00
+#define TSTATE_PSTATE_SHIFT	8
+#define TSTATE_ASI		0xff000000LL
+#define TSTATE_ASI_SHIFT	24
+#define TSTATE_CCR		0xff00000000LL
+#define TSTATE_CCR_SHIFT	32
+
+#define PSRCC_TO_TSTATE(x)	(((int64_t)(x)&PSR_ICC)<<(TSTATE_CCR_SHIFT-19))
+#define TSTATECCR_TO_PSR(x)	(((x)&TSTATE_CCR)>>(TSTATE_CCR_SHIFT-19))
+
+/*
+ * These are here to simplify life.
+ */
+#define TSTATE_IG	(PSTATE_IG<<TSTATE_PSTATE_SHIFT)
+#define TSTATE_MG	(PSTATE_MG<<TSTATE_PSTATE_SHIFT)
+#define TSTATE_CLE	(PSTATE_CLE<<TSTATE_PSTATE_SHIFT)
+#define TSTATE_TLE	(PSTATE_TLE<<TSTATE_PSTATE_SHIFT)
+#define TSTATE_MM	(PSTATE_MM<<TSTATE_PSTATE_SHIFT)
+#define TSTATE_MM_TSO	(PSTATE_MM_TSO<<TSTATE_PSTATE_SHIFT)
+#define TSTATE_MM_PSO	(PSTATE_MM_PSO<<TSTATE_PSTATE_SHIFT)
+#define TSTATE_MM_RMO	(PSTATE_MM_RMO<<TSTATE_PSTATE_SHIFT)
+#define TSTATE_RED	(PSTATE_RED<<TSTATE_PSTATE_SHIFT)
+#define TSTATE_PEF	(PSTATE_PEF<<TSTATE_PSTATE_SHIFT)
+#define TSTATE_AM	(PSTATE_AM<<TSTATE_PSTATE_SHIFT)
+#define TSTATE_PRIV	(PSTATE_PRIV<<TSTATE_PSTATE_SHIFT)
+#define TSTATE_IE	(PSTATE_IE<<TSTATE_PSTATE_SHIFT)
+#define TSTATE_AG	(PSTATE_AG<<TSTATE_PSTATE_SHIFT)
+
+#define TSTATE_BITS "\20\14IG\13MG\12CLE\11TLE\10\7MM\6RED\5PEF\4AM\3PRIV\2IE\1AG"
+
+#define TSTATE_KERN	((TSTATE_KERN)<<TSTATE_PSTATE_SHIFT)
+#define TSTATE_USER	((TSTATE_USER)<<TSTATE_PSTATE_SHIFT)
+/*
+ * SPARC V9 VER version register.
+ *
+ *  63   48 47  32 31  24 23 16 15    8 7 5 4      0
+ * +-------+------+------+-----+-------+---+--------+
+ * | manuf | impl | mask |  -  | maxtl | - | maxwin |
+ * +-------+------+------+-----+-------+---+--------+
+ *
+ */
+
+#define VER_MANUF	0xffff000000000000LL
+#define VER_MANUF_SHIFT	48
+#define VER_IMPL	0x0000ffff00000000LL
+#define VER_IMPL_SHIFT	32
+#define VER_MASK	0x00000000ff000000LL
+#define VER_MASK_SHIFT	24
+#define VER_MAXTL	0x000000000000ff00LL
+#define VER_MAXTL_SHIFT	8
+#define VER_MAXWIN	0x000000000000001fLL
+
+/*
+ * Here are a few things to help us transition between user and kernel mode:
+ */
+
+/* Memory models */
+#define KERN_MM		PSTATE_MM_TSO
+#define USER_MM		PSTATE_MM_RMO
+
+/* 
+ * Register window handlers.  These point to generic routines that check the
+ * stack pointer and then vector to the real handler.  We could optimize this
+ * if we could guarantee only 32-bit or 64-bit stacks.
+ */
+#define WSTATE_KERN	026
+#define WSTATE_USER	022
+
+#define CWP		0x01f
+
+/* 64-byte alignment -- this seems the best place to put this. */
+#define BLOCK_SIZE	64
+#define BLOCK_ALIGN	0x3f
 
 #if defined(_KERNEL) && !defined(_LOCORE)
-
-static __inline int getpsr __P((void));
-static __inline void setpsr __P((int));
-static __inline int spl0 __P((void));
-static __inline int splhigh __P((void));
-static __inline void splx __P((int));
-static __inline int getmid __P((void));
 
 /*
  * GCC pseudo-functions for manipulating PSR (primarily PIL field).
  */
-static __inline int getpsr()
+static __inline int
+getpsr(void)
 {
 	int psr;
 
-	__asm __volatile("rd %%psr,%0" : "=r" (psr));
+	__asm volatile("rd %%psr,%0" : "=r" (psr));
 	return (psr);
 }
 
-static __inline int getmid()
+static __inline int
+getmid(void)
 {
 	int mid;
 
-	__asm __volatile("rd %%tbr,%0" : "=r" (mid));
+	__asm volatile("rd %%tbr,%0" : "=r" (mid));
 	return ((mid >> 20) & 0x3);
 }
 
-static __inline void setpsr(newpsr)
-	int newpsr;
+static __inline void
+setpsr(int newpsr)
 {
-	__asm __volatile("wr %0,0,%%psr" : : "r" (newpsr));
-	__asm __volatile("nop");
-	__asm __volatile("nop");
-	__asm __volatile("nop");
+	__asm volatile("wr %0,0,%%psr" : : "r" (newpsr) : "memory");
+	__asm volatile("nop; nop; nop");
 }
 
-static __inline int spl0()
+static __inline void
+spl0(void)
 {
 	int psr, oldipl;
 
@@ -129,16 +266,15 @@ static __inline int spl0()
 	 * which gives us the same value as the old psr but with all
 	 * the old PIL bits turned off.
 	 */
-	__asm __volatile("rd %%psr,%0" : "=r" (psr));
+	__asm volatile("rd %%psr,%0" : "=r" (psr) : : "memory");
 	oldipl = psr & PSR_PIL;
-	__asm __volatile("wr %0,%1,%%psr" : : "r" (psr), "r" (oldipl));
+	__asm volatile("wr %0,%1,%%psr" : : "r" (psr), "r" (oldipl));
 
 	/*
 	 * Three instructions must execute before we can depend
 	 * on the bits to be changed.
 	 */
-	__asm __volatile("nop; nop; nop");
-	return (oldipl);
+	__asm volatile("nop; nop; nop");
 }
 
 /*
@@ -146,103 +282,73 @@ static __inline int spl0()
  * (spl0 and splhigh are special since they put all 0s or all 1s
  * into the ipl field.)
  */
-#define	SPL(name, newipl) \
-static __inline int name __P((void)); \
-static __inline int name() \
+#define	_SPLSET(name, newipl) \
+static __inline void name(void) \
 { \
-	int psr, oldipl; \
-	__asm __volatile("rd %%psr,%0" : "=r" (psr)); \
-	oldipl = psr & PSR_PIL; \
-	psr &= ~oldipl; \
-	__asm __volatile("wr %0,%1,%%psr" : : \
+	int psr; \
+	__asm volatile("rd %%psr,%0" : "=r" (psr)); \
+	psr &= ~PSR_PIL; \
+	__asm volatile("wr %0,%1,%%psr" : : \
 	    "r" (psr), "n" ((newipl) << 8)); \
-	__asm __volatile("nop; nop; nop"); \
-	return (oldipl); \
-}
-/* A non-priority-decreasing version of SPL */
-#define	_SPLRAISE(name, newipl) \
-static __inline int name __P((void)); \
-static __inline int name() \
-{ \
-	int psr, oldipl; \
-	__asm __volatile("rd %%psr,%0" : "=r" (psr)); \
-	oldipl = psr & PSR_PIL; \
-	if ((newipl << 8) <= oldipl) \
-		return oldipl; \
-	psr &= ~oldipl; \
-	__asm __volatile("wr %0,%1,%%psr" : : \
-	    "r" (psr), "n" ((newipl) << 8)); \
-	__asm __volatile("nop; nop; nop"); \
-	return (oldipl); \
+	__asm volatile("nop; nop; nop" : : : "memory"); \
 }
 
-SPL(spllowersoftclock, 1)
+_SPLSET(spllowerschedclock, IPL_SCHED)
 
-_SPLRAISE(splsoftint, 1)
-#define	splsoftclock	splsoftint
-#define	splsoftnet	splsoftint
+typedef uint8_t ipl_t;
+typedef struct {
+	ipl_t _ipl;
+} ipl_cookie_t;
 
-
-/* audio software interrupts */
-_SPLRAISE(splausoft, PIL_AUSOFT)
-
-/* floppy software interrupts */
-_SPLRAISE(splfdsoft, PIL_FDSOFT)
-
-/* Block devices */
-_SPLRAISE(splbio, 5)
-
-/* network hardware interrupts are at level 6 */
-_SPLRAISE(splnet, PIL_NET)
-
-/* tty input runs at software level 6 */
-#define	PIL_TTY	6
-_SPLRAISE(spltty, PIL_TTY)
-
-/*
- * Memory allocation (must be as high as highest network, tty, or disk device)
- */
-_SPLRAISE(splimp, 7)
-_SPLRAISE(splpmap, 7)
-
-/* clock interrupts at level 10 */
-_SPLRAISE(splclock, PIL_CLOCK)
-
-/* fd hardware, ts102, and tadpole microcontoller interrupts are at level 11 */
-_SPLRAISE(splfd, 11)
-_SPLRAISE(splts102, 11)
-
-/* zs hardware interrupts are at level 12 */
-_SPLRAISE(splzs, 12)
-_SPLRAISE(splserial, 12) /* XXX - other serial hardware might not be at lvl 12 */
-
-/* audio hardware interrupts are at level 13 */
-_SPLRAISE(splaudio, 13)
-
-/* second sparc timer interrupts at level 14 */
-_SPLRAISE(splstatclock, 14)
-
-static __inline int splhigh()
+static inline ipl_cookie_t
+makeiplcookie(ipl_t ipl)
 {
+
+	return (ipl_cookie_t){._ipl = ipl};
+}
+
+/* Raise IPL and return previous value */
+static __inline int
+splraiseipl(ipl_cookie_t icookie)
+{
+	int newipl = icookie._ipl;
 	int psr, oldipl;
 
-	__asm __volatile("rd %%psr,%0" : "=r" (psr));
-	__asm __volatile("wr %0,0,%%psr" : : "r" (psr | PSR_PIL));
-	__asm __volatile("and %1,%2,%0; nop; nop" : "=r" (oldipl) : \
-	    "r" (psr), "n" (PSR_PIL));
+	__asm volatile("rd %%psr,%0" : "=r" (psr));
+
+	oldipl = psr & PSR_PIL;
+	newipl <<= 8;
+	if (newipl <= oldipl)
+		return (oldipl);
+
+	psr = (psr & ~oldipl) | newipl;
+
+	__asm volatile("wr %0,0,%%psr" : : "r" (psr));
+	__asm volatile("nop; nop; nop" : : : "memory");
+
 	return (oldipl);
 }
 
+#include <sys/spl.h>
+
+#define	splausoft()	splraiseipl(makeiplcookie(IPL_SOFTAUDIO))
+#define	splfdsoft()	splraiseipl(makeiplcookie(IPL_SOFTFDC))
+
+#define	splfd()		splraiseipl(makeiplcookie(IPL_FD))
+#define	splts102()	splraiseipl(makeiplcookie(IPL_TS102))
+
+#define	splzs()		splraiseipl(makeiplcookie(IPL_ZS))
+
 /* splx does not have a return value */
-static __inline void splx(newipl)
-	int newipl;
+static __inline void
+splx(int newipl)
 {
 	int psr;
 
-	__asm __volatile("rd %%psr,%0" : "=r" (psr));
-	__asm __volatile("wr %0,%1,%%psr" : : \
+	__asm volatile("rd %%psr,%0" : "=r" (psr) : : "memory");
+	__asm volatile("wr %0,%1,%%psr" : : \
 	    "r" (psr & ~PSR_PIL), "rn" (newipl));
-	__asm __volatile("nop; nop; nop");
+	__asm volatile("nop; nop; nop");
 }
 #endif /* KERNEL && !_LOCORE */
 

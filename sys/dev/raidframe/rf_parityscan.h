@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_parityscan.h,v 1.3 1999/02/05 00:06:14 oster Exp $	*/
+/*	$NetBSD: rf_parityscan.h,v 1.7 2005/12/11 12:23:37 christos Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -29,25 +29,20 @@
 #ifndef _RF__RF_PARITYSCAN_H_
 #define _RF__RF_PARITYSCAN_H_
 
-#include "rf_types.h"
+#include <dev/raidframe/raidframevar.h>
+
 #include "rf_alloclist.h"
 
-int     rf_RewriteParity(RF_Raid_t * raidPtr);
-int 
-rf_VerifyParityBasic(RF_Raid_t * raidPtr, RF_RaidAddr_t raidAddr,
-    RF_PhysDiskAddr_t * parityPDA, int correct_it, RF_RaidAccessFlags_t flags);
-int 
-rf_VerifyParity(RF_Raid_t * raidPtr, RF_AccessStripeMap_t * stripeMap,
-    int correct_it, RF_RaidAccessFlags_t flags);
-int     rf_TryToRedirectPDA(RF_Raid_t * raidPtr, RF_PhysDiskAddr_t * pda, int parity);
-int     rf_VerifyDegrModeWrite(RF_Raid_t * raidPtr, RF_AccessStripeMapHeader_t * asmh);
-RF_DagHeader_t *
-rf_MakeSimpleDAG(RF_Raid_t * raidPtr, int nNodes,
-    int bytesPerSU, char *databuf,
-    int (*doFunc) (RF_DagNode_t *),
-    int (*undoFunc) (RF_DagNode_t *),
-    char *name, RF_AllocListElem_t * alloclist,
-    RF_RaidAccessFlags_t flags, int priority);
+int     rf_RewriteParity(RF_Raid_t *);
+int 	rf_VerifyParityBasic(RF_Raid_t *, RF_RaidAddr_t, RF_PhysDiskAddr_t *,
+    int, RF_RaidAccessFlags_t);
+int	rf_VerifyParity(RF_Raid_t *, RF_AccessStripeMap_t *, int,
+    RF_RaidAccessFlags_t);
+int     rf_TryToRedirectPDA(RF_Raid_t *, RF_PhysDiskAddr_t *, int);
+int     rf_VerifyDegrModeWrite(RF_Raid_t *, RF_AccessStripeMapHeader_t *);
+RF_DagHeader_t *rf_MakeSimpleDAG(RF_Raid_t *, int, int, char *,
+    int (*)(RF_DagNode_t *), int (*) (RF_DagNode_t *), const char *,
+    RF_AllocListElem_t *, RF_RaidAccessFlags_t, int);
 
 #define RF_DO_CORRECT_PARITY   1
 #define RF_DONT_CORRECT_PARITY 0

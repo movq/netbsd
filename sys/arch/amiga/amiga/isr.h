@@ -1,4 +1,4 @@
-/*	$NetBSD: isr.h,v 1.8 1996/04/21 21:07:02 veego Exp $	*/
+/*	$NetBSD: isr.h,v 1.12 2005/12/11 12:16:26 christos Exp $	*/
 
 /*
  * Copyright (c) 1982 Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,10 +31,13 @@
  *	@(#)isr.h	7.1 (Berkeley) 5/8/90
  */
 
+#ifndef _AMIGA_ISR_H_
+#define _AMIGA_ISR_H_ 1
+
 struct isr {
 	struct	isr *isr_forw;
 	struct	isr *isr_back;
-	int	(*isr_intr) __P((void *));
+	int	(*isr_intr)(void *);
 	void	*isr_arg;
 	int	isr_ipl;
 };
@@ -47,10 +46,12 @@ struct isr {
 #define	ISRIPL(x)	((x) - 3)
 
 #ifdef _KERNEL
-void add_isr __P((struct isr *));
-void remove_isr __P((struct isr *));
-typedef void (*sifunc_t) __P((void *, void *));
-void alloc_sicallback __P((void));
-void add_sicallback __P((sifunc_t, void *, void *));
-void rem_sicallback __P((sifunc_t));
+void add_isr(struct isr *);
+void remove_isr(struct isr *);
+typedef void (*sifunc_t)(void *, void *);
+void alloc_sicallback(void);
+void add_sicallback(sifunc_t, void *, void *);
+void rem_sicallback(sifunc_t);
 #endif
+
+#endif /* _AMIGA_ISR_H_ */

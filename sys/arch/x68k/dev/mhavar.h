@@ -1,4 +1,4 @@
-/*	$NetBSD: mhavar.h,v 1.4 1999/03/22 08:54:14 minoura Exp $	*/
+/*	$NetBSD: mhavar.h,v 1.8 2007/03/04 06:01:06 christos Exp $	*/
 
 /*
  * Copyright (c) 1994 Peter Galbavy.  All rights reserved.
@@ -51,7 +51,7 @@ struct acb {
 #define	ACB_ABORTED	0x10
 #define	ACB_RESET	0x80
 #define ACB_SETQ(e, q)	do (e)->flags = ((e)->flags&~ACB_QBITS)|(q); while(0)
-	struct scsi_generic cmd;  /* SCSI command block */
+	struct scsipi_generic cmd;  /* SCSI command block */
 	int	 clen;
 	char	*daddr;		/* Saved data pointer */
 	int	 dleft;		/* Residue */
@@ -91,7 +91,7 @@ struct mha_softc {
 	volatile u_short *sc_ps;
 	volatile u_char *sc_pcx;
 
-	struct scsipi_link sc_link;	/* prototype for subdevs */
+	struct scsipi_channel sc_channel;
 	struct scsipi_adapter sc_adapter;
 
 	TAILQ_HEAD(, acb) free_list, ready_list, nexus_list;
@@ -138,7 +138,7 @@ struct mha_softc {
 	bus_dma_segment_t	sc_dmaseg[1];
 	int			sc_ndmasegs;
 	bus_dmamap_t		sc_dmamap;
-	caddr_t			sc_dmabuf;
+	void *			sc_dmabuf;
 	u_char			*sc_p;
 	u_int32_t		sc_dmasize;
 };

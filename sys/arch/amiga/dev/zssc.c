@@ -1,7 +1,6 @@
-/*	$NetBSD: zssc.c,v 1.28 1999/01/10 13:24:11 tron Exp $	*/
+/*	$NetBSD: zssc.c,v 1.41 2008/06/13 08:13:37 cegger Exp $ */
 
 /*
- * Copyright (c) 1994 Michael L. Hitch
  * Copyright (c) 1982, 1990 The Regents of the University of California.
  * All rights reserved.
  *
@@ -13,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -36,10 +31,42 @@
  *	@(#)dma.c
  */
 
+/*
+ * Copyright (c) 1994 Michael L. Hitch
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ *	@(#)dma.c
+ */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: zssc.c,v 1.41 2008/06/13 08:13:37 cegger Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
+
+#include <uvm/uvm_extern.h>
+
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsiconf.h>
@@ -51,36 +78,21 @@
 #include <amiga/dev/siopvar.h>
 #include <amiga/dev/zbusvar.h>
 
-void zsscattach __P((struct device *, struct device *, void *));
-int  zsscmatch __P((struct device *, struct cfdata *, void *));
-int  zssc_dmaintr __P((void *));
+void zsscattach(struct device *, struct device *, void *);
+int  zsscmatch(struct device *, struct cfdata *, void *);
+int  zssc_dmaintr(void *);
 #ifdef DEBUG
-void zssc_dump __P((void));
+void zssc_dump(void);
 #endif
 
-struct scsipi_device zssc_scsidev = {
-	NULL,		/* use default error handler */
-	NULL,		/* do not have a start functio */
-	NULL,		/* have no async handler */
-	NULL,		/* Use default done routine */
-};
-
-
-#ifdef DEBUG
-#endif
-
-struct cfattach zssc_ca = {
-	sizeof(struct siop_softc), zsscmatch, zsscattach
-};
+CFATTACH_DECL(zssc, sizeof(struct siop_softc),
+    zsscmatch, zsscattach, NULL, NULL);
 
 /*
  * if we are an PPI Zeus
  */
 int
-zsscmatch(pdp, cfp, auxp)
-	struct device *pdp;
-	struct cfdata *cfp;
-	void *auxp;
+zsscmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 {
 	struct zbus_args *zap;
 
@@ -91,9 +103,7 @@ zsscmatch(pdp, cfp, auxp)
 }
 
 void
-zsscattach(pdp, dp, auxp)
-	struct device *pdp, *dp;
-	void *auxp;
+zsscattach(struct device *pdp, struct device *dp, void *auxp)
 {
 	struct siop_softc *sc;
 	struct zbus_args *zap;
@@ -104,29 +114,31 @@ zsscattach(pdp, dp, auxp)
 	zap = auxp;
 
 	sc = (struct siop_softc *)dp;
-	sc->sc_siopp = rp = (siop_regmap_p)((caddr_t)zap->va + 0x4000);
+	sc->sc_siopp = rp = (siop_regmap_p)((char *)zap->va + 0x4000);
 
 	/*
 	 * CTEST7 = 00
 	 */
-	sc->sc_clock_freq = 66;		/* Clock = 66Mhz */
+	sc->sc_clock_freq = 66;		/* Clock = 66 MHz */
 	sc->sc_ctest7 = 0x00;
 	sc->sc_dcntl = 0x00;
 
 	alloc_sicallback();
 
-	sc->sc_adapter.scsipi_cmd = siop_scsicmd;
-	sc->sc_adapter.scsipi_minphys = siop_minphys;
+	sc->sc_adapter.adapt_dev = &sc->sc_dev;
+	sc->sc_adapter.adapt_nchannels = 1;
+	sc->sc_adapter.adapt_openings = 7;
+	sc->sc_adapter.adapt_max_periph = 1;
+	sc->sc_adapter.adapt_ioctl = NULL;
+	sc->sc_adapter.adapt_minphys = siop_minphys;
+	sc->sc_adapter.adapt_request = siop_scsipi_request;
 
-	sc->sc_link.scsipi_scsi.channel = SCSI_CHANNEL_ONLY_ONE;
-	sc->sc_link.adapter_softc = sc;
-	sc->sc_link.scsipi_scsi.adapter_target = 7;
-	sc->sc_link.adapter = &sc->sc_adapter;
-	sc->sc_link.device = &zssc_scsidev;
-	sc->sc_link.openings = 2;
-	sc->sc_link.scsipi_scsi.max_target = 7;
-	sc->sc_link.scsipi_scsi.max_lun = 7;
-	sc->sc_link.type = BUS_SCSI;
+	sc->sc_channel.chan_adapter = &sc->sc_adapter;
+	sc->sc_channel.chan_bustype = &scsi_bustype;
+	sc->sc_channel.chan_channel = 0;
+	sc->sc_channel.chan_ntargets = 8;
+	sc->sc_channel.chan_nluns = 8;
+	sc->sc_channel.chan_id = 7;
 
 	siopinitialize(sc);
 
@@ -138,7 +150,7 @@ zsscattach(pdp, dp, auxp)
 	/*
 	 * attach all scsi units on us
 	 */
-	config_found(dp, &sc->sc_link, scsiprint);
+	config_found(dp, &sc->sc_channel, scsiprint);
 }
 
 /*
@@ -150,8 +162,7 @@ zsscattach(pdp, dp, auxp)
  */
 
 int
-zssc_dmaintr(arg)
-	void *arg;
+zssc_dmaintr(void *arg)
 {
 	struct siop_softc *sc = arg;
 	siop_regmap_p rp;
@@ -183,13 +194,15 @@ zssc_dmaintr(arg)
 
 #ifdef DEBUG
 void
-zssc_dump()
+zssc_dump(void)
 {
 	extern struct cfdriver zssc_cd;
+	struct siop_softc *sc;
 	int i;
 
 	for (i = 0; i < zssc_cd.cd_ndevs; ++i)
-		if (zssc_cd.cd_devs[i])
-			siop_dump(zssc_cd.cd_devs[i]);
+		sc = device_lookup_softc(&zssc_cd, i);
+		if (sc != NULL)
+			siop_dump(sc);
 }
 #endif

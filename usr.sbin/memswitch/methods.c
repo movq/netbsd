@@ -1,4 +1,4 @@
-/*	$NetBSD: methods.c,v 1.3 1999/06/28 08:49:15 minoura Exp $	*/
+/*	$NetBSD: methods.c,v 1.6 2008/04/28 20:24:17 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -390,6 +383,7 @@ parse_bootdev (prop, value)
 {
 	const char *p = value;
 	int v;
+	char expr_scsi[32];
 
 	while (*p == ' ' || *p == '\t') p++;
 
@@ -417,6 +411,24 @@ parse_bootdev (prop, value)
 		}
 		v *= 0x0100;
 		v += 0x9070;
+	} else if (strncasecmp ("INSCSI", p, 6) == 0 ||
+		   strncasecmp ("EXSCSI", p, 6) == 0) {
+		int isin = strncasecmp ("EXSCSI", p, 6);
+
+		p += 6;
+		v = atoi_ (&p);
+		if (p == 0 || v < 0 || v > 7) {
+			warnx ("%s: Invalid value", value);
+			return -1;
+		}
+
+		/* change boot.romaddr */
+		sprintf(expr_scsi, "boot.romaddr=0x%06x",
+			(isin ? 0xfc0000 : 0xea0020) + v * 4);
+		modify_single(expr_scsi);
+
+		/* boot.device again */
+		v = 0xa000;
 	} else {
 		warnx ("%s: Invalid value", value);
 		return -1;
@@ -442,8 +454,9 @@ parse_serial (prop, value)
 	const char *p = value;
 	const char *q;
 	int baud, bit, parity, stop, flow;
-	int bauds[] = {75, 150, 300, 600, 1200, 2400, 4800, 9600, 17361, 0};
-	const char parities[] = "noe";
+	static const int bauds[] = {75, 150, 300, 600, 1200, 2400, 4800, 9600,
+	    17361, 0};
+	static const char parities[] = "noe";
 	int i;
 
 	while (*p == ' ' || *p == '\t') p++;
@@ -534,7 +547,7 @@ parse_srammode (prop, value)
 	struct property *prop;
 	const char *value;
 {
-	const char *sramstrs[] = {"unused", "SRAMDISK", "program"};
+	static const char *const sramstrs[] = {"unused", "SRAMDISK", "program"};
 	int i;
 
 	for (i = 0; i <= 2; i++) {
@@ -713,13 +726,14 @@ print_serial (prop, str)
 	char *str;
 {
 	unsigned int v;
-	char *baud, bit, parity, *stop, flow;
-	char *bauds[] = {"75", "150", "300", "600", "1200",
-			 "2400", "4800", "9600", "17361"};
-	const char bits[] = "5678";
-	const char parities[] = "noen";
-	char *stops[] = {"2", "1", "1.5", "2"};
-	const char flows[] = "-s";
+	const char *baud, *stop;
+	char bit, parity, flow;
+	static const char *const bauds[] = {"75", "150", "300", "600", "1200",
+			       "2400", "4800", "9600", "17361"};
+	static const char bits[] = "5678";
+	static const char parities[] = "noen";
+	static const char *const stops[] = {"2", "1", "1.5", "2"};
+	static const char flows[] = "-s";
 
 	if (prop->modified)
 		v = prop->modified_value.word[0];
@@ -745,7 +759,7 @@ print_srammode (prop, str)
 	char *str;
 {
 	int v;
-	const char *sramstrs[] = {"unused", "SRAMDISK", "program"};
+	static const char *const sramstrs[] = {"unused", "SRAMDISK", "program"};
 
 	if (prop->modified)
 		v = prop->modified_value.byte[0];

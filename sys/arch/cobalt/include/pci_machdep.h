@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_machdep.h,v 1.1 2000/03/19 23:07:47 soren Exp $	*/
+/*	$NetBSD: pci_machdep.h,v 1.10 2006/04/15 11:33:33 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -33,6 +33,13 @@
 /*
  * Machine-specific definitions for PCI autoconfiguration.
  */
+#define	__HAVE_PCIIDE_MACHDEP_COMPAT_INTR_ESTABLISH
+#define	__HAVE_PCI_CONF_HOOK
+
+/*
+ * Forward declarations.
+ */
+struct pci_attach_args;
 
 /*
  * Cobalt-specific PCI structure and type definitions.
@@ -44,9 +51,17 @@ extern struct cobalt_bus_dma_tag pci_bus_dma_tag;
 /*
  * Types provided to machine-independent PCI code
  */
-typedef void		*pci_chipset_tag_t;
-typedef u_int32_t	pcitag_t;
+typedef struct cobalt_pci_chipset *pci_chipset_tag_t;
+typedef uint32_t	pcitag_t;
 typedef int 		pci_intr_handle_t;
+
+struct cobalt_pci_chipset {
+	bus_space_tag_t pc_bst;		/* bus space tag for PCICFG regs */
+	bus_space_handle_t pc_bsh;	/* bus space handle for PCICFG regs */
+
+	struct extent *pc_memext;	/* PCI memory extent */
+	struct extent *pc_ioext;	/* PCI I/O extent */
+};
 
 /*
  * Functions provided to machine-independent PCI code.
@@ -60,9 +75,12 @@ void		pci_decompose_tag(pci_chipset_tag_t, pcitag_t,
 pcireg_t	pci_conf_read(pci_chipset_tag_t, pcitag_t, int);
 void		pci_conf_write(pci_chipset_tag_t, pcitag_t, int,
 			pcireg_t);
-int		pci_intr_map(pci_chipset_tag_t, pcitag_t, int, int,
-			pci_intr_handle_t *);
+int		pci_intr_map(struct pci_attach_args *, pci_intr_handle_t *);
 const char	*pci_intr_string(pci_chipset_tag_t, pci_intr_handle_t);
+const struct evcnt *pci_intr_evcnt(pci_chipset_tag_t, pci_intr_handle_t);
 void		*pci_intr_establish(pci_chipset_tag_t, pci_intr_handle_t,
 			int, int (*)(void *), void *);
 void		pci_intr_disestablish(pci_chipset_tag_t, void *);
+void		pci_conf_interrupt(pci_chipset_tag_t, int, int, int, int,
+			int *);
+int		pci_conf_hook(pci_chipset_tag_t, int, int, int, pcireg_t);

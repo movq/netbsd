@@ -1,4 +1,4 @@
-/*	$NetBSD: types.h,v 1.18 2000/03/04 07:27:49 matt Exp $	*/
+/*	$NetBSD: types.h,v 1.39 2008/02/20 16:37:52 matt Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -39,6 +35,8 @@
 #define	_MACHTYPES_H_
 
 #include <sys/cdefs.h>
+#include <sys/featuretest.h>
+#include <machine/int_types.h>
 
 #if defined(_KERNEL)
 typedef struct label_t {
@@ -47,31 +45,28 @@ typedef struct label_t {
 #endif
 
 /* NB: This should probably be if defined(_KERNEL) */
-#if !defined(_POSIX_C_SOURCE) && !defined(_XOPEN_SOURCE)
+#if defined(_NETBSD_SOURCE)
 typedef unsigned long	paddr_t;
 typedef unsigned long	psize_t;
 typedef unsigned long	vaddr_t;
 typedef unsigned long	vsize_t;
 #endif
 
+typedef int		register_t;
+
 /*
- * Basic integral types.  Omit the typedef if
- * not possible for a machine/compiler combination.
+ * BBCCI/BBSSI can operate on bytes so let's save some space.
  */
-#define __BIT_TYPES_DEFINED__
-typedef __signed char              int8_t;
-typedef unsigned char            u_int8_t;
-typedef short                     int16_t;
-typedef unsigned short          u_int16_t;
-typedef int                       int32_t;
-typedef unsigned int            u_int32_t;
-/* LONGLONG */
-typedef long long                 int64_t;
-/* LONGLONG */
-typedef unsigned long long      u_int64_t;
+typedef volatile char	__cpu_simple_lock_t;
 
-typedef int32_t                 register_t;
+#define __SIMPLELOCK_LOCKED	1
+#define __SIMPLELOCK_UNLOCKED	0
 
-#define __HAVE_DEVICE_REGISTER
+/* The VAX does not have strict alignment requirements. */
+#define	__NO_STRICT_ALIGNMENT
+
+#define	__HAVE_DEVICE_REGISTER
+#define	__HAVE_SYSCALL_INTERN
+#define	__HAVE_FAST_SOFTINTS
 
 #endif	/* _MACHTYPES_H_ */

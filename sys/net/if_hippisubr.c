@@ -1,4 +1,4 @@
-/*	$NetBSD: if_hippisubr.c,v 1.5 2000/03/30 09:45:35 augustss Exp $	*/
+/*	$NetBSD: if_hippisubr.c,v 1.34 2008/02/20 17:05:53 matt Exp $	*/
 
 /*
  * Copyright (c) 1982, 1989, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -33,7 +29,12 @@
  * SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_hippisubr.c,v 1.34 2008/02/20 17:05:53 matt Exp $");
+
 #include "opt_inet.h"
+
+#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -46,7 +47,7 @@
 #include <sys/errno.h>
 #include <sys/syslog.h>
 
-#include <machine/cpu.h>
+#include <sys/cpu.h>
 
 #include <net/if.h>
 #include <net/netisr.h>
@@ -55,25 +56,26 @@
 #include <net/if_dl.h>
 #include <net/if_types.h>
 
+#if NBPFILTER > 0
+#include <net/bpf.h>
+#endif
+
 #include <net/if_hippi.h>
 
 #include <netinet/in.h>
-#ifdef INET
+#if defined(INET) || defined(INET6)
 #include <netinet/in_var.h>
 #endif
 
 #define senderr(e) { error = (e); goto bad;}
 
-#define SIN(x) ((struct sockaddr_in *)x)
-#define SDL(x) ((struct sockaddr_dl *)x)
-
 #ifndef llc_snap
 #define	llc_snap	llc_un.type_snap
 #endif
 
-static	int hippi_output __P((struct ifnet *, struct mbuf *,
-	    struct sockaddr *, struct rtentry *)); 
-static	void hippi_input __P((struct ifnet *, struct mbuf *));
+static int	hippi_output(struct ifnet *, struct mbuf *,
+			     const struct sockaddr *, struct rtentry *);
+static void	hippi_input(struct ifnet *, struct mbuf *);
 
 /*
  * HIPPI output routine.
@@ -83,24 +85,21 @@ static	void hippi_input __P((struct ifnet *, struct mbuf *));
  */
 
 static int
-hippi_output(ifp, m0, dst, rt0)
-	struct ifnet *ifp;
-	struct mbuf *m0;
-	struct sockaddr *dst;
-	struct rtentry *rt0;
+hippi_output(struct ifnet *ifp, struct mbuf *m0, const struct sockaddr *dst,
+    struct rtentry *rt0)
 {
-	u_int16_t htype;
-	u_int32_t ifield = 0;
-	int s, error = 0;
+	uint16_t htype;
+	uint32_t ifield = 0;
+	int error = 0;
 	struct mbuf *m = m0;
 	struct rtentry *rt;
 	struct hippi_header *hh;
-	u_int32_t *cci;
-	u_int32_t d2_len;
+	uint32_t *cci;
+	uint32_t d2_len;
+	ALTQ_DECL(struct altq_pktattr pktattr;)
 
 	if ((ifp->if_flags & (IFF_UP|IFF_RUNNING)) != (IFF_UP|IFF_RUNNING))
 		senderr(ENETDOWN);
-	ifp->if_lastchange = time;
 
 	/* HIPPI doesn't really do broadcast or multicast right now */
 	if (m->m_flags & (M_BCAST | M_MCAST))
@@ -113,7 +112,7 @@ hippi_output(ifp, m0, dst, rt0)
 				if (rt->rt_ifp != ifp)
 					return (*rt->rt_ifp->if_output)
 							(ifp, m0, dst, rt);
-			} else 
+			} else
 				senderr(EHOSTUNREACH);
 		}
 		if ((rt->rt_flags & RTF_GATEWAY) && dst->sa_family != AF_NS) {
@@ -135,25 +134,42 @@ hippi_output(ifp, m0, dst, rt0)
 		}
 		if (rt->rt_flags & RTF_REJECT)
 			if (rt->rt_rmx.rmx_expire == 0 ||   /* XXX:  no ARP */
-			    time.tv_sec < rt->rt_rmx.rmx_expire)
+			    time_second < rt->rt_rmx.rmx_expire)
 				senderr(rt == rt0 ? EHOSTDOWN : EHOSTUNREACH);
 	}
-	switch (dst->sa_family) {
 
+	/*
+	 * If the queueing discipline needs packet classification,
+	 * do it before prepending link headers.
+	 */
+	IFQ_CLASSIFY(&ifp->if_snd, m, dst->sa_family, &pktattr);
+
+	switch (dst->sa_family) {
 #ifdef INET
-#ifdef INET6
-	case AF_INET6:
-#endif
 	case AF_INET:
 		if (rt) {
-			struct sockaddr_dl *sdl = 
-				(struct sockaddr_dl *) SDL(rt->rt_gateway);
+			const struct sockaddr_dl *sdl =
+			    satocsdl(rt->rt_gateway);
 			if (sdl->sdl_family == AF_LINK && sdl->sdl_alen != 0)
-				bcopy(LLADDR(sdl), &ifield, sizeof(ifield));
+				memcpy(&ifield, CLLADDR(sdl), sizeof(ifield));
 		}
 		if (!ifield)  /* XXX:  bogus check, but helps us get going */
 			senderr(EHOSTUNREACH);
 		htype = htons(ETHERTYPE_IP);
+		break;
+#endif
+
+#ifdef INET6
+	case AF_INET6:
+		if (rt) {
+			const struct sockaddr_dl *sdl =
+			    satocsdl(rt->rt_gateway);
+			if (sdl->sdl_family == AF_LINK && sdl->sdl_alen != 0)
+				memcpy(&ifield, CLLADDR(sdl), sizeof(ifield));
+		}
+		if (!ifield)  /* XXX:  bogus check, but helps us get going */
+			senderr(EHOSTUNREACH);
+		htype = htons(ETHERTYPE_IPV6);
 		break;
 #endif
 
@@ -171,10 +187,10 @@ hippi_output(ifp, m0, dst, rt0)
 		l = mtod(m, struct llc *);
 		l->llc_control = LLC_UI;
 		l->llc_dsap = l->llc_ssap = LLC_SNAP_LSAP;
-		l->llc_snap.org_code[0] = l->llc_snap.org_code[1] = 
+		l->llc_snap.org_code[0] = l->llc_snap.org_code[1] =
 			l->llc_snap.org_code[2] = 0;
-		bcopy((caddr_t) &htype, (caddr_t) &l->llc_snap.ether_type,
-		      sizeof(u_int16_t));
+		bcopy((void *) &htype, (void *) &l->llc_snap.ether_type,
+		      sizeof(uint16_t));
 	}
 
 	d2_len = m->m_pkthdr.len;
@@ -187,8 +203,8 @@ hippi_output(ifp, m0, dst, rt0)
 	M_PREPEND(m, sizeof (struct hippi_header) + 8, M_DONTWAIT);
 	if (m == 0)
 		senderr(ENOBUFS);
-	cci = mtod(m, u_int32_t *);
-	bzero(cci, sizeof(struct hippi_header) + 8);
+	cci = mtod(m, uint32_t *);
+	memset(cci, 0, sizeof(struct hippi_header) + 8);
 	cci[0] = 0;
 	cci[1] = ifield;
 	hh = (struct hippi_header *) &cci[2];
@@ -198,28 +214,13 @@ hippi_output(ifp, m0, dst, rt0)
 	hh->hi_fp.fp_d2_len = htonl(d2_len);
 
 	/* Pad out the D2 area to end on a quadword (64-bit) boundry. */
-    
+
 	if (d2_len % 8 != 0) {
-		static u_int32_t buffer[2] = {0, 0};
-		m_copyback(m, m->m_pkthdr.len, 8 - d2_len % 8, (caddr_t) buffer);
+		static uint32_t buffer[2] = {0, 0};
+		m_copyback(m, m->m_pkthdr.len, 8 - d2_len % 8, (void *) buffer);
 	}
 
-	s = splimp();
-	/*
-	 * Queue message on interface, and start output if interface
-	 * not yet active.
-	 */
-	if (IF_QFULL(&ifp->if_snd)) {
-		IF_DROP(&ifp->if_snd);
-		splx(s);
-		senderr(ENOBUFS);
-	}
-	ifp->if_obytes += m->m_pkthdr.len;
-	IF_ENQUEUE(&ifp->if_snd, m);
-	if ((ifp->if_flags & IFF_OACTIVE) == 0)
-		(*ifp->if_start)(ifp);
-	splx(s);
-	return (error);
+	return ifq_enqueue(ifp, m ALTQ_COMMA ALTQ_DECL(&pktattr));
 
  bad:
 	if (m)
@@ -234,13 +235,11 @@ hippi_output(ifp, m0, dst, rt0)
  */
 
 static void
-hippi_input(ifp, m)
-	struct ifnet *ifp;
-	struct mbuf *m;
+hippi_input(struct ifnet *ifp, struct mbuf *m)
 {
 	struct ifqueue *inq;
 	struct llc *l;
-	u_int16_t htype;
+	uint16_t htype;
 	struct hippi_header *hh;
 	int s;
 
@@ -253,12 +252,10 @@ hippi_input(ifp, m)
 
 	hh = mtod(m, struct hippi_header *);
 
-	ifp->if_lastchange = time;
 	ifp->if_ibytes += m->m_pkthdr.len;
 	if (hh->hi_le.le_dest_addr[0] & 1) {
-		if (bcmp((caddr_t)etherbroadcastaddr, 
-			 (caddr_t)hh->hi_le.le_dest_addr,
-			 sizeof(etherbroadcastaddr)) == 0)
+		if (memcmp(etherbroadcastaddr, hh->hi_le.le_dest_addr,
+		    sizeof(etherbroadcastaddr)) == 0)
 			m->m_flags |= M_BCAST;
 		else
 			m->m_flags |= M_MCAST;
@@ -278,12 +275,15 @@ hippi_input(ifp, m)
 	m_adj(m, 8);
 	switch (htype) {
 #ifdef INET
-#ifdef INET6
-	case ETHERTYPE_IPV6:
-#endif
 	case ETHERTYPE_IP:
 		schednetisr(NETISR_IP);
 		inq = &ipintrq;
+		break;
+#endif
+#ifdef INET6
+	case ETHERTYPE_IPV6:
+		schednetisr(NETISR_IPV6);
+		inq = &ip6intrq;
 		break;
 #endif
 	default:
@@ -291,7 +291,7 @@ hippi_input(ifp, m)
 		return;
 	}
 
-	s = splimp();
+	s = splnet();
 	if (IF_QFULL(inq)) {
 		IF_DROP(inq);
 		m_freem(m);
@@ -304,21 +304,17 @@ hippi_input(ifp, m)
  * Handle packet from HIPPI that has no MAC header
  */
 
+#ifdef INET
 void
-hippi_ip_input(ifp, m)
-	struct ifnet *ifp;
-	struct mbuf *m;
+hippi_ip_input(struct ifnet *ifp, struct mbuf *m)
 {
 	struct ifqueue *inq;
 	int s;
-	u_int32_t *ip;
-    
-	ip = mtod(m, u_int32_t *);
 
 	schednetisr(NETISR_IP);
 	inq = &ipintrq;
 
-	s = splimp();
+	s = splnet();
 	if (IF_QFULL(inq)) {
 		IF_DROP(inq);
 		m_freem(m);
@@ -326,29 +322,26 @@ hippi_ip_input(ifp, m)
 		IF_ENQUEUE(inq, m);
 	splx(s);
 }
-
+#endif
 
 /*
  * Perform common duties while attaching to interface list
  */
 void
-hippi_ifattach(ifp, lla)
-	struct ifnet *ifp;
-	caddr_t lla;
+hippi_ifattach(struct ifnet *ifp, void *lla)
 {
-	struct sockaddr_dl *sdl;
 
 	ifp->if_type = IFT_HIPPI;
-	ifp->if_addrlen = 6;  /* regular 802.3 MAC address */
 	ifp->if_hdrlen = sizeof(struct hippi_header) + 8; /* add CCI */
+	ifp->if_dlt = DLT_HIPPI;
 	ifp->if_mtu = HIPPIMTU;
 	ifp->if_output = hippi_output;
 	ifp->if_input = hippi_input;
 	ifp->if_baudrate = IF_Mbps(800);	/* XXX double-check */
-	if ((sdl = ifp->if_sadl) &&
-	    sdl->sdl_family == AF_LINK) {
-		sdl->sdl_type = IFT_HIPPI;
-		sdl->sdl_alen = ifp->if_addrlen;
-		bcopy((caddr_t)lla, LLADDR(sdl), ifp->if_addrlen);
-	}
+
+	if_set_sadl(ifp, lla, 6);
+
+#if NBPFILTER > 0
+	bpfattach(ifp, DLT_HIPPI, sizeof(struct hippi_header));
+#endif
 }

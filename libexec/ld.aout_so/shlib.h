@@ -1,4 +1,4 @@
-/*	$NetBSD: shlib.h,v 1.1 1998/12/15 23:16:14 pk Exp $	*/
+/*	$NetBSD: shlib.h,v 1.3 2008/04/28 20:23:03 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -43,7 +36,7 @@ extern char	**search_dirs;	/* Directories to search for libraries. */
 extern int	n_search_dirs;	/* Length of above. */
 
 char		*findshlib __P((char *, int *, int *, int));
-void		add_search_dir __P((char *));
+void		add_search_dir __P((const char *));
 void		add_search_path __P((char *));
 void		std_search_path __P((void));
 void		remove_search_dir __P((char *));

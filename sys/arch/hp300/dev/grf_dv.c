@@ -1,4 +1,4 @@
-/*	$NetBSD: grf_dv.c,v 1.15 1998/06/25 23:57:33 thorpej Exp $	*/
+/*	$NetBSD: grf_dv.c,v 1.40 2008/04/28 20:23:19 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,9 +30,43 @@
  */
 
 /*
- * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Systems Programming Group of the University of Utah Computer
+ * Science Department.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ * from: Utah $Hdr: grf_dv.c 1.12 93/08/13$
+ *
+ *	@(#)grf_dv.c	8.4 (Berkeley) 1/12/94
+ */
+/*
+ * Copyright (c) 1988 University of Utah.
  *
  * This code is derived from software contributed to Berkeley by
  * the Systems Programming Group of the University of Utah Computer
@@ -82,7 +109,8 @@
  * Graphics routines for the DaVinci, HP98730/98731 Graphics system.
  */
 
-#include "opt_compat_hpux.h"
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: grf_dv.c,v 1.40 2008/04/28 20:23:19 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -93,11 +121,14 @@
 #include <sys/proc.h>
 #include <sys/tty.h>
 
+#include <uvm/uvm_extern.h>
+
 #include <machine/autoconf.h>
 #include <machine/cpu.h>
 
 #include <dev/cons.h>
 
+#include <hp300/dev/dioreg.h>
 #include <hp300/dev/diovar.h>
 #include <hp300/dev/diodevs.h>
 #include <hp300/dev/intiovar.h>
@@ -112,122 +143,121 @@
 
 #include "ite.h"
 
-int	dv_init __P((struct grf_data *, int, caddr_t));
-int	dv_mode __P((struct grf_data *, int, caddr_t));
-void	dv_reset __P((struct dvboxfb *));
+static int	dv_init(struct grf_data *, int, uint8_t *);
+static int	dv_mode(struct grf_data *, int, void *);
+static void	dv_reset(struct dvboxfb *);
 
-int	dvbox_intio_match __P((struct device *, struct cfdata *, void *));
-void	dvbox_intio_attach __P((struct device *, struct device *, void *));
+static int	dvbox_intio_match(device_t, cfdata_t, void *);
+static void	dvbox_intio_attach(device_t, device_t, void *);
 
-int	dvbox_dio_match __P((struct device *, struct cfdata *, void *));
-void	dvbox_dio_attach __P((struct device *, struct device *, void *));
+static int	dvbox_dio_match(device_t, cfdata_t, void *);
+static void	dvbox_dio_attach(device_t, device_t, void *);
 
-int	dvbox_console_scan __P((int, caddr_t, void *));
-void	dvboxcnprobe __P((struct consdev *cp));
-void	dvboxcninit __P((struct consdev *cp));
+int	dvboxcnattach(bus_space_tag_t, bus_addr_t, int);
 
-struct cfattach dvbox_intio_ca = {
-	sizeof(struct grfdev_softc), dvbox_intio_match, dvbox_intio_attach
-};
+CFATTACH_DECL_NEW(dvbox_intio, sizeof(struct grfdev_softc),
+    dvbox_intio_match, dvbox_intio_attach, NULL, NULL);
 
-struct cfattach dvbox_dio_ca = {
-	sizeof(struct grfdev_softc), dvbox_dio_match, dvbox_dio_attach
-};
+CFATTACH_DECL_NEW(dvbox_dio, sizeof(struct grfdev_softc),
+    dvbox_dio_match, dvbox_dio_attach, NULL, NULL);
 
 /* DaVinci grf switch */
-struct grfsw dvbox_grfsw = {
+static struct grfsw dvbox_grfsw = {
 	GID_DAVINCI, GRFDAVINCI, "dvbox", dv_init, dv_mode
 };
 
+static int dvconscode;
+static void *dvconaddr;
+
 #if NITE > 0
-void	dvbox_init __P((struct ite_data *));
-void	dvbox_deinit __P((struct ite_data *));
-void	dvbox_putc __P((struct ite_data *, int, int, int, int));
-void	dvbox_cursor __P((struct ite_data *, int));
-void	dvbox_clear __P((struct ite_data *, int, int, int, int));
-void	dvbox_scroll __P((struct ite_data *, int, int, int, int));
-void	dvbox_windowmove __P((struct ite_data *, int, int, int, int,
-		int, int, int));
+static void	dvbox_init(struct ite_data *);
+static void	dvbox_deinit(struct ite_data *);
+static void	dvbox_putc(struct ite_data *, int, int, int, int);
+static void	dvbox_cursor(struct ite_data *, int);
+static void	dvbox_clear(struct ite_data *, int, int, int, int);
+static void	dvbox_scroll(struct ite_data *, int, int, int, int);
+static void	dvbox_windowmove(struct ite_data *, int, int, int, int,
+			int, int, int);
 
 /* DaVinci ite switch */
-struct itesw dvbox_itesw = {
+static struct itesw dvbox_itesw = {
 	dvbox_init, dvbox_deinit, dvbox_clear, dvbox_putc,
 	dvbox_cursor, dvbox_scroll, ite_readbyte, ite_writeglyph
 };
 #endif /* NITE > 0 */
 
-int
-dvbox_intio_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+static int
+dvbox_intio_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct intio_attach_args *ia = aux;
 	struct grfreg *grf;
 
-	grf = (struct grfreg *)IIOV(GRFIADDR);
-	if (badaddr((caddr_t)grf))
-		return (0);
+	if (strcmp("fb",ia->ia_modname) != 0)
+		return 0;
+
+	if (badaddr((void *)ia->ia_addr))
+		return 0;
+
+	grf = (struct grfreg *)ia->ia_addr;
 
 	if (grf->gr_id == DIO_DEVICE_ID_FRAMEBUFFER &&
 	    grf->gr_id2 == DIO_DEVICE_SECID_DAVINCI) {
-		ia->ia_addr = (bus_addr_t)GRFIADDR;
-		return (1);
+		return 1;
 	}
 
-	return (0);
+	return 0;
 }
 
-void
-dvbox_intio_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+static void
+dvbox_intio_attach(device_t parent, device_t self, void *aux)
 {
-	struct grfdev_softc *sc = (struct grfdev_softc *)self;
-	caddr_t grf;
+	struct grfdev_softc *sc = device_private(self);
+	struct intio_attach_args *ia = aux;
+	void *grf;
 
-	grf = (caddr_t)IIOV(GRFIADDR);
+	sc->sc_dev = self;
+
+	grf = (void *)ia->ia_addr;
 	sc->sc_scode = -1;	/* XXX internal i/o */
 
+	sc->sc_isconsole = (sc->sc_scode == dvconscode);
 	grfdev_attach(sc, dv_init, grf, &dvbox_grfsw);
 }
 
-int
-dvbox_dio_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+static int
+dvbox_dio_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct dio_attach_args *da = aux;
 
 	if (da->da_id == DIO_DEVICE_ID_FRAMEBUFFER &&
 	    da->da_secid == DIO_DEVICE_SECID_DAVINCI)
-		return (1);
+		return 1;
 
-	return (0);
+	return 0;
 }
 
-void
-dvbox_dio_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+static void
+dvbox_dio_attach(device_t parent, device_t self, void *aux)
 {
-	struct grfdev_softc *sc = (struct grfdev_softc *)self;
+	struct grfdev_softc *sc = device_private(self);
 	struct dio_attach_args *da = aux;
-	caddr_t grf;
+	bus_space_handle_t bsh;
+	void *grf;
 
+	sc->sc_dev = self;
 	sc->sc_scode = da->da_scode;
-	if (sc->sc_scode == conscode)
-		grf = conaddr;
+	if (sc->sc_scode == dvconscode)
+		grf = dvconaddr;
 	else {
-		grf = iomap(dio_scodetopa(sc->sc_scode), da->da_size);
-		if (grf == 0) {
-			printf("%s: can't map framebuffer\n",
-			    sc->sc_dev.dv_xname);
+		if (bus_space_map(da->da_bst, da->da_addr, da->da_size,
+		    0, &bsh)) {
+			aprint_error(": can't map framebuffer\n");
 			return;
 		}
+		grf = bus_space_vaddr(da->da_bst, bsh);
 	}
 
+	sc->sc_isconsole = (sc->sc_scode == dvconscode);
 	grfdev_attach(sc, dv_init, grf, &dvbox_grfsw);
 }
 
@@ -236,11 +266,8 @@ dvbox_dio_attach(parent, self, aux)
  * Must point g_display at a grfinfo structure describing the hardware.
  * Returns 0 if hardware not present, non-zero ow.
  */
-int
-dv_init(gp, scode, addr)
-	struct grf_data *gp;
-	int scode;
-	caddr_t addr;
+static int
+dv_init(struct grf_data *gp, int scode, uint8_t *addr)
 {
 	struct dvboxfb *dbp;
 	struct grfinfo *gi = &gp->g_display;
@@ -250,10 +277,10 @@ dv_init(gp, scode, addr)
 	 * If the console has been initialized, and it was us, there's
 	 * no need to repeat this.
 	 */
-	if (consinit_active || (scode != conscode)) {
-		dbp = (struct dvboxfb *) addr;
+	if (scode != dvconscode) {
+		dbp = (struct dvboxfb *)addr;
 		if (ISIIOVA(addr))
-			gi->gd_regaddr = (caddr_t) IIOP(addr);
+			gi->gd_regaddr = (void *)IIOP(addr);
 		else
 			gi->gd_regaddr = dio_scodetopa(scode);
 		gi->gd_regsize = 0x20000;
@@ -261,21 +288,21 @@ dv_init(gp, scode, addr)
 		gi->gd_fbheight = (dbp->fbhmsb << 8) | dbp->fbhlsb;
 		gi->gd_fbsize = gi->gd_fbwidth * gi->gd_fbheight;
 			fboff = (dbp->fbomsb << 8) | dbp->fbolsb;
-		gi->gd_fbaddr = (caddr_t) (*((u_char *)addr + fboff) << 16);
-		if (gi->gd_regaddr >= (caddr_t)DIOIIBASE) {
+		gi->gd_fbaddr = (void *)(*(addr + fboff) << 16);
+		if ((vaddr_t)gi->gd_regaddr >= DIOIIBASE) {
 			/*
 			 * For DIO II space the fbaddr just computed is
 			 * the offset from the select code base (regaddr)
 			 * of the framebuffer.  Hence it is also implicitly
 			 * the size of the set.
 			 */
-			gi->gd_regsize = (int) gi->gd_fbaddr;
-			gi->gd_fbaddr += (int) gi->gd_regaddr;
+			gi->gd_regsize = (int)gi->gd_fbaddr;
+			gi->gd_fbaddr += (int)gi->gd_regaddr;
 			gp->g_regkva = addr;
 			gp->g_fbkva = addr + gi->gd_regsize;
 		} else {
 			/*
-			 * For DIO space we need to map the seperate
+			 * For DIO space we need to map the separate
 			 * framebuffer.
 			 */
 			gp->g_regkva = addr;
@@ -288,17 +315,16 @@ dv_init(gp, scode, addr)
 
 		dv_reset(dbp);
 	}
-	return(1);
+	return 1;
 }
 
 /*
  *  Magic code herein.
  */
 void
-dv_reset(dbp)
-	struct dvboxfb *dbp;
+dv_reset(struct dvboxfb *dbp)
 {
-  	dbp->reset = 0x80;
+	dbp->reset = 0x80;
 	DELAY(100);
 
 	dbp->interrupt = 0x04;
@@ -347,11 +373,8 @@ dv_reset(dbp)
  * Right now all we can do is grfon/grfoff.
  * Return a UNIX error number or 0 for success.
  */
-int
-dv_mode(gp, cmd, data)
-	struct grf_data *gp;
-	int cmd;
-	caddr_t data;
+static int
+dv_mode(struct grf_data *gp, int cmd, void *data)
 {
 	struct dvboxfb *dbp;
 	int error = 0;
@@ -387,48 +410,11 @@ dv_mode(gp, cmd, data)
 		gp->g_data = 0;
 		break;
 
-#ifdef COMPAT_HPUX
-	case GM_DESCRIBE:
-	{
-		struct grf_fbinfo *fi = (struct grf_fbinfo *)data;
-		struct grfinfo *gi = &gp->g_display;
-		int i;
-
-		/* feed it what HP-UX expects */
-		fi->id = gi->gd_id;
-		fi->mapsize = gi->gd_fbsize;
-		fi->dwidth = gi->gd_dwidth;
-		fi->dlength = gi->gd_dheight;
-		fi->width = gi->gd_fbwidth;
-		fi->length = gi->gd_fbheight;
-		fi->bpp = NBBY;
-		fi->xlen = (fi->width * fi->bpp) / NBBY;
-		fi->npl = gi->gd_planes;
-		fi->bppu = fi->npl;
-		fi->nplbytes = fi->xlen * ((fi->length * fi->bpp) / NBBY);
-		bcopy("HP98730", fi->name, 8);
-		fi->attr = 2;	/* HW block mover */
-		/*
-		 * If mapped, return the UVA where mapped.
-		 */
-		if (gp->g_data) {
-			fi->regbase = gp->g_data;
-			fi->fbbase = fi->regbase + gp->g_display.gd_regsize;
-		} else {
-			fi->fbbase = 0;
-			fi->regbase = 0;
-		}
-		for (i = 0; i < 6; i++)
-			fi->regions[i] = 0;
-		break;
-	}
-#endif
-
 	default:
 		error = EINVAL;
 		break;
 	}
-	return(error);
+	return error;
 }
 
 #if NITE > 0
@@ -440,12 +426,11 @@ dv_mode(gp, cmd, data)
 #define REGBASE		((struct dvboxfb *)(ip->regbase))
 #define WINDOWMOVER	dvbox_windowmove
 
-void
-dvbox_init(ip)
-	struct ite_data *ip;
+static void
+dvbox_init(struct ite_data *ip)
 {
 	int i;
-	
+
 	/* XXX */
 	if (ip->regbase == 0) {
 		struct grf_data *gp = ip->grf;
@@ -478,8 +463,8 @@ dvbox_init(ip)
 	 * Lastly, turn on the box.
 	 */
 	REGBASE->interrupt = 0x04;
-	REGBASE->drive     = 0x10;		
- 	REGBASE->rep_rule  = RR_COPY << 4 | RR_COPY;
+	REGBASE->drive     = 0x10;
+	REGBASE->rep_rule  = RR_COPY << 4 | RR_COPY;
 	REGBASE->opwen     = 0x01;
 	REGBASE->fbwen     = 0x0;
 	REGBASE->fold      = 0x01;
@@ -517,7 +502,7 @@ dvbox_init(ip)
 		REGBASE->rgb[1].blue  = 0xFF;
 	}
 	REGBASE->cmapbank = 0;
-	
+
 	db_waitbusy(ip->regbase);
 
 	ite_fontinfo(ip);
@@ -537,32 +522,27 @@ dvbox_init(ip)
 			 ip->ftwidth, RR_COPYINVERTED);
 }
 
-void
-dvbox_deinit(ip)
-	struct ite_data *ip;
+static void
+dvbox_deinit(struct ite_data *ip)
 {
 	dvbox_windowmove(ip, 0, 0, 0, 0, ip->fbheight, ip->fbwidth, RR_CLEAR);
 	db_waitbusy(ip->regbase);
 
-   	ip->flags &= ~ITE_INITED;
+	ip->flags &= ~ITE_INITED;
 }
 
-void
-dvbox_putc(ip, c, dy, dx, mode)
-	struct ite_data *ip;
-        int dy, dx, c, mode;
+static void
+dvbox_putc(struct ite_data *ip, int c, int dy, int dx, int mode)
 {
-        int wrr = ((mode == ATTR_INV) ? RR_COPYINVERTED : RR_COPY);
-	
+	int wrr = ((mode == ATTR_INV) ? RR_COPYINVERTED : RR_COPY);
+
 	dvbox_windowmove(ip, charY(ip, c), charX(ip, c),
 			 dy * ip->ftheight, dx * ip->ftwidth,
 			 ip->ftheight, ip->ftwidth, wrr);
 }
 
-void
-dvbox_cursor(ip, flag)
-	struct ite_data *ip;
-        int flag;
+static void
+dvbox_cursor(struct ite_data *ip, int flag)
 {
 	if (flag == DRAW_CURSOR)
 		draw_cursor(ip)
@@ -574,21 +554,17 @@ dvbox_cursor(ip, flag)
 		erase_cursor(ip)
 }
 
-void
-dvbox_clear(ip, sy, sx, h, w)
-	struct ite_data *ip;
-	int sy, sx, h, w;
+static void
+dvbox_clear(struct ite_data *ip, int sy, int sx, int h, int w)
 {
 	dvbox_windowmove(ip, sy * ip->ftheight, sx * ip->ftwidth,
-			 sy * ip->ftheight, sx * ip->ftwidth, 
+			 sy * ip->ftheight, sx * ip->ftwidth,
 			 h  * ip->ftheight, w  * ip->ftwidth,
 			 RR_CLEAR);
 }
 
-void
-dvbox_scroll(ip, sy, sx, count, dir)
-        struct ite_data *ip;
-        int sy, count, dir, sx;
+static void
+dvbox_scroll(struct ite_data *ip, int sy, int sx, int count, int dir)
 {
 	int dy;
 	int dx = sx;
@@ -612,7 +588,7 @@ dvbox_scroll(ip, sy, sx, count, dir)
 		dy = sy;
 		dx = sx - count;
 		width = ip->cols - sx;
-	}		
+	}
 
 	dvbox_windowmove(ip, sy * ip->ftheight, sx * ip->ftwidth,
 			 dy * ip->ftheight, dx * ip->ftwidth,
@@ -620,15 +596,14 @@ dvbox_scroll(ip, sy, sx, count, dir)
 			 width  * ip->ftwidth, RR_COPY);
 }
 
-void
-dvbox_windowmove(ip, sy, sx, dy, dx, h, w, func)
-	struct ite_data *ip;
-	int sy, sx, dy, dx, h, w, func;
+static void
+dvbox_windowmove(struct ite_data *ip, int sy, int sx, int dy, int dx, int h,
+    int w, int func)
 {
 	struct dvboxfb *dp = REGBASE;
 	if (h == 0 || w == 0)
 		return;
-	
+
 	db_waitbusy(ip->regbase);
 	dp->rep_rule = func << 4 | func;
 	dp->source_y = sy;
@@ -645,129 +620,51 @@ dvbox_windowmove(ip, sy, sx, dy, dx, h, w, func)
  */
 
 int
-dvbox_console_scan(scode, va, arg)
-	int scode;
-	caddr_t va;
-	void *arg;
+dvboxcnattach(bus_space_tag_t bst, bus_addr_t addr, int scode)
 {
-	struct grfreg *grf = (struct grfreg *)va;
-	struct consdev *cp = arg;
-	u_char *dioiidev;
-	int force = 0, pri;
-
-	if ((grf->gr_id == GRFHWID) && (grf->gr_id2 == GID_DAVINCI)) {
-		pri = CN_NORMAL;
-
-#ifdef CONSCODE
-		/*
-		 * Raise our priority, if appropriate.
-		 */
-		if (scode == CONSCODE) {
-			pri = CN_REMOTE;
-			force = conforced = 1;
-		}
-#endif
-
-		/* Only raise priority. */
-		if (pri > cp->cn_pri)
-			cp->cn_pri = pri;
-
-		/*
-		 * If our priority is higher than the currently-remembered
-		 * console, stash our priority.
-		 */
-		if (((cn_tab == NULL) || (cp->cn_pri > cn_tab->cn_pri))
-		    || force) {
-			cn_tab = cp;
-			if (scode >= 132) {
-				dioiidev = (u_char *)va;
-				return ((dioiidev[0x101] + 1) * 0x100000);
-			}
-			return (DIOCSIZE);
-		}
-	}
-	return (0);
-}
-
-void
-dvboxcnprobe(cp)
-	struct consdev *cp;
-{
-	int maj;
-	caddr_t va;
+	bus_space_handle_t bsh;
+	void *va;
 	struct grfreg *grf;
-	int force = 0;
+	struct grf_data *gp = &grf_cn;
+	int size;
 
-	maj = ite_major();
-
-	/* initialize required fields */
-	cp->cn_dev = makedev(maj, 0);		/* XXX */
-	cp->cn_pri = CN_DEAD;
-
-	/* Abort early if console is already forced. */
-	if (conforced)
-		return;
-
-	/* Look for "internal" framebuffer. */
-	va = (caddr_t)IIOV(GRFIADDR);
+	if (bus_space_map(bst, addr, PAGE_SIZE, 0, &bsh))
+		return 1;
+	va = bus_space_vaddr(bst, bsh);
 	grf = (struct grfreg *)va;
-	if (!badaddr(va) &&
-	    ((grf->gr_id == GRFHWID) && (grf->gr_id2 == GID_DAVINCI))) {
-		cp->cn_pri = CN_INTERNAL;
 
-#ifdef CONSCODE
-		/*
-		 * Raise our priority and save some work, if appropriate.
-		 */
-		if (CONSCODE == -1) {
-			cp->cn_pri = CN_REMOTE;
-			force = conforced = 1;
-		}
-#endif
-
-		/*
-		 * If our priority is higher than the currently
-		 * remembered console, stash our priority, and
-		 * unmap whichever device might be currently mapped.
-		 * Since we're internal, we set the saved size to 0
-		 * so they don't attempt to unmap our fixed VA later.
-		 */
-		if (((cn_tab == NULL) || (cp->cn_pri > cn_tab->cn_pri))
-		    || force) {
-			cn_tab = cp;
-			if (convasize)
-				iounmap(conaddr, convasize);
-			conscode = -1;
-			conaddr = va;
-			convasize = 0;
-		}
+	if (badaddr(va) ||
+	    (grf->gr_id != GRFHWID) || (grf->gr_id2 != GID_DAVINCI)) {
+		bus_space_unmap(bst, bsh, PAGE_SIZE);
+		return 1;
 	}
 
-	console_scan(dvbox_console_scan, cp);
-}
+	size = DIO_SIZE(scode, va);
 
-void
-dvboxcninit(cp)
-	struct consdev *cp;
-{
-	struct grf_data *gp = &grf_cn;
+	bus_space_unmap(bst, bsh, PAGE_SIZE);
+	if (bus_space_map(bst, addr, size, 0, &bsh))
+		return 1;
+	va = bus_space_vaddr(bst, bsh);
 
 	/*
 	 * Initialize the framebuffer hardware.
 	 */
-	(void)dv_init(gp, conscode, conaddr);
+	(void)dv_init(gp, scode, va);
+	dvconscode = scode;
+	dvconaddr = va;
 
 	/*
 	 * Set up required grf data.
-	 */
+	*/
 	gp->g_sw = &dvbox_grfsw;
 	gp->g_display.gd_id = gp->g_sw->gd_swid;
 	gp->g_flags = GF_ALIVE;
 
 	/*
 	 * Initialize the terminal emulator.
-	 */
-	itecninit(gp, &dvbox_itesw);
+	*/
+	itedisplaycnattach(gp, &dvbox_itesw);
+	return 0;
 }
 
 #endif /* NITE > 0 */

@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.7 1999/10/04 23:33:24 lukem Exp $	*/
+/*	$NetBSD: extern.h,v 1.11 2006/05/01 23:18:37 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -41,15 +37,14 @@ extern short ospeed;
 
 extern struct termios mode, oldmode;
 extern int columns, isreset, lines;
-extern int erasechar, intrchar, killchar;
 
 void	 add_mapping __P((const char *, char *));
-void	 cat __P((char *));
-const	 char *get_termcap_entry __P((const char *, char **));
+void	 tset_cat __P((char *));
+const	 char *get_termcap_entry __P((const char *, char **, int));
 const	 char *mapped __P((const char *));
 int	 outc __P((int));
 void	 reset_mode __P((void));
-void	 set_control_chars __P((void));
+void	 set_control_chars __P((int, int, int));
 void	 set_conversions __P((int));
 void	 set_init __P((void));
 void	 wrtermcap __P((char *));

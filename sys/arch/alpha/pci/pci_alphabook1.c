@@ -1,4 +1,4 @@
-/* $NetBSD: pci_alphabook1.c,v 1.2 1998/11/19 02:35:39 ross Exp $ */
+/* $NetBSD: pci_alphabook1.c,v 1.9 2008/04/28 20:23:11 martin Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -66,7 +59,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: pci_alphabook1.c,v 1.2 1998/11/19 02:35:39 ross Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_alphabook1.c,v 1.9 2008/04/28 20:23:11 martin Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -74,12 +67,12 @@ __KERNEL_RCSID(0, "$NetBSD: pci_alphabook1.c,v 1.2 1998/11/19 02:35:39 ross Exp 
 #include <sys/systm.h>
 #include <sys/errno.h>
 #include <sys/device.h>
-#include <vm/vm.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <machine/autoconf.h>
 #include <machine/bus.h>
 #include <machine/intr.h>
-#include <machine/intrcnt.h>
 
 #include <dev/isa/isavar.h>
 #include <dev/pci/pcireg.h>
@@ -93,9 +86,9 @@ __KERNEL_RCSID(0, "$NetBSD: pci_alphabook1.c,v 1.2 1998/11/19 02:35:39 ross Exp 
 
 #include "sio.h"
 
-int     dec_alphabook1_intr_map __P((void *, pcitag_t, int, int,
-	    pci_intr_handle_t *));
+int     dec_alphabook1_intr_map __P((struct pci_attach_args *, pci_intr_handle_t *));
 const char *dec_alphabook1_intr_string __P((void *, pci_intr_handle_t));
+const struct evcnt *dec_alphabook1_intr_evcnt __P((void *, pci_intr_handle_t));
 void    *dec_alphabook1_intr_establish __P((void *, pci_intr_handle_t,
 	    int, int (*func)(void *), void *));
 void    dec_alphabook1_intr_disestablish __P((void *, void *));
@@ -122,6 +115,7 @@ pci_alphabook1_pickintr(lcp)
 	pc->pc_intr_v = lcp;
 	pc->pc_intr_map = dec_alphabook1_intr_map;
 	pc->pc_intr_string = dec_alphabook1_intr_string;
+	pc->pc_intr_evcnt = dec_alphabook1_intr_evcnt;
 	pc->pc_intr_establish = dec_alphabook1_intr_establish;
 	pc->pc_intr_disestablish = dec_alphabook1_intr_disestablish;
 
@@ -130,21 +124,19 @@ pci_alphabook1_pickintr(lcp)
 
 #if NSIO
 	sio_intr_setup(pc, iot);
-	set_iointr(&sio_iointr);
 #else
 	panic("pci_alphabook1_pickintr: no I/O interrupt handler (no sio)");
 #endif
 }
 
 int
-dec_alphabook1_intr_map(lcv, bustag, buspin, line, ihp)
-	void *lcv;
-	pcitag_t bustag;
-	int buspin, line;
+dec_alphabook1_intr_map(pa, ihp)
+	struct pci_attach_args *pa;
 	pci_intr_handle_t *ihp;
 {
-	struct lca_config *lcp = lcv;
-	pci_chipset_tag_t pc = &lcp->lc_pc;
+	pcitag_t bustag = pa->pa_intrtag;
+	int buspin = pa->pa_intrpin;
+	pci_chipset_tag_t pc = pa->pa_pc;
 	int device, irq;
 
 	if (buspin == 0) {
@@ -157,7 +149,7 @@ dec_alphabook1_intr_map(lcv, bustag, buspin, line, ihp)
 		return 1;
 	}
 
-	alpha_pci_decompose_tag(pc, bustag, NULL, &device, NULL);
+	pci_decompose_tag(pc, bustag, NULL, &device, NULL);
 
 	/*
 	 * There is only one interrupting PCI device on the AlphaBook: an
@@ -195,6 +187,18 @@ dec_alphabook1_intr_string(lcv, ih)
 #endif
 
 	return sio_intr_string(NULL /*XXX*/, ih);
+}
+
+const struct evcnt *
+dec_alphabook1_intr_evcnt(lcv, ih)
+	void *lcv;
+	pci_intr_handle_t ih;
+{
+#if 0
+	struct lca_config *lcp = lcv;
+#endif
+
+	return sio_intr_evcnt(NULL /*XXX*/, ih);
 }
 
 void *

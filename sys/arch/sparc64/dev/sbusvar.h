@@ -1,4 +1,4 @@
-/*	$NetBSD: sbusvar.h,v 1.7 1999/06/05 05:30:43 mrg Exp $ */
+/*	$NetBSD: sbusvar.h,v 1.15 2008/04/28 20:23:36 martin Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -57,11 +50,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -85,6 +74,14 @@
 
 #include <machine/bus.h>
 
+/*
+ * Macro to convert a PROM virtual address to a bus_space_handle_t.
+ * 
+ * Since this is SBus it's, always big-endian, so use ASI_PRIMARY.
+ */
+#define	sbus_promaddr_to_handle(tag, promaddr, hp)	\
+	sparc_promaddr_to_handle(tag, promaddr, hp)
+
 #include <sparc64/dev/iommuvar.h>
 
 /*
@@ -100,11 +97,10 @@
 struct sbus_softc {
 	struct	device		sc_dev;		/* base device */
 	bus_space_tag_t		sc_bustag;
+	bus_space_handle_t	sc_bh;
 	bus_dma_tag_t		sc_dmatag;
 	int			sc_clockfreq;	/* clock frequency (in Hz) */
 	struct sbusdev		*sc_sbdev;	/* list of all children */
-	struct sbus_range	*sc_range;
-	int			sc_nrange;
 	int			sc_burst;	/* burst transfer sizes supported */
 	int			*sc_intr2ipl;	/* Interrupt level translation */
 	int			*sc_intr_compat;/* `intr' property to sbus compat */
@@ -112,6 +108,8 @@ struct sbus_softc {
 	struct sysioreg		*sc_sysio;	/* SBUS control registers */
 	int			sc_ign;		/* Interrupt group number for this sysio */
 	struct iommu_state	sc_is;		/* IOMMU state, see iommureg.h */
+	struct strbuf_ctl	sc_sb;		/* Streaming buffer control */
+	int64_t			sc_flush;	/* Streaming buffer flush */
 };
 
 #endif /* _SBUS_VAR_SPARC64_H_ */

@@ -1,13 +1,13 @@
-/*	$NetBSD: ypserv_xdr.c,v 1.2 1997/10/15 05:01:52 lukem Exp $	*/
+/*	$NetBSD: ypserv_xdr.c,v 1.4 2003/11/12 13:31:08 grant Exp $	*/
 
 /*
  * This file was originally generated with rpcgen, then modified
- * by Jason R. Thorpe <thorpej@NetBSD.ORG>. 
+ * by Jason R. Thorpe <thorpej@NetBSD.org>. 
  */
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: ypserv_xdr.c,v 1.2 1997/10/15 05:01:52 lukem Exp $");
+__RCSID("$NetBSD: ypserv_xdr.c,v 1.4 2003/11/12 13:31:08 grant Exp $");
 #endif
 
 #include <sys/types.h>
@@ -19,9 +19,7 @@ __RCSID("$NetBSD: ypserv_xdr.c,v 1.2 1997/10/15 05:01:52 lukem Exp $");
 #include "ypserv.h"
 
 bool_t
-xdr_ypresp_all(xdrs, objp)
-	XDR *xdrs;
-	struct ypresp_all *objp;
+xdr_ypresp_all(XDR *xdrs, struct ypresp_all *objp)
 {
 
 	if (!xdr_bool(xdrs, &objp->more))

@@ -1,4 +1,4 @@
-/*	$NetBSD: hil.c,v 1.3 1997/10/04 17:20:19 thorpej Exp $	*/
+/*	$NetBSD: hil.c,v 1.12 2008/04/28 20:23:19 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,9 +30,43 @@
  */
 
 /*
- * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Systems Programming Group of the University of Utah Computer
+ * Science Department.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ * from: Utah Hdr: hil.c 1.1 89/08/22
+ *
+ *	@(#)hil.c	8.1 (Berkeley) 6/10/93
+ */
+/*
+ * Copyright (c) 1988 University of Utah.
  *
  * This code is derived from software contributed to Berkeley by
  * the Systems Programming Group of the University of Utah Computer
@@ -85,7 +112,6 @@
 #if defined(ITECONSOLE) && defined(HIL_KEYBOARD)
 
 #include <sys/param.h>
-#include <sys/device.h>			/* XXX */
 
 #include <hp300/dev/hilreg.h>
 #include <hp300/dev/kbdmap.h>
@@ -101,14 +127,14 @@
  * Supports only unshifted, shifted and control keys.
  */
 char hil_us_keymap[] = {
-	NULL,	'`',	'\\',	ESC,	NULL,	DEL,	NULL,	NULL,  
-	'\n',	'\t',	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,  
-	NULL,	'\n',	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,  
-	NULL,	'\t',	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,
-	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,
-	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	'\b',	NULL,
-	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,
-	ESC,	'\r',	NULL,	'\n',	'0',	'.',	',',	'+',
+	'\0',	'`',	'\\',	ESC,	'\0',	DEL,	'\0',	'\0',  
+	'\n',	'\t',	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',  
+	'\0',	'\n',	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',  
+	'\0',	'\t',	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',
+	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',
+	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',	'\b',	'\0',
+	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',
+	ESC,	'\r',	'\0',	'\n',	'0',	'.',	',',	'+',
 	'1',	'2',	'3',	'-',	'4',	'5',	'6',	'*',
 	'7',	'8',	'9',	'/',	'E',	'(',	')',	'^',
 	'1',	'2',	'3',	'4',	'5',	'6',	'7',	'8',
@@ -116,18 +142,18 @@ char hil_us_keymap[] = {
 	',',	'.',	'/',	'\040',	'o',	'p',	'k',	'l',
 	'q',	'w',	'e',	'r',	't',	'y',	'u',	'i',
 	'a',	's',	'd',	'f',	'g',	'h',	'j',	'm',
-	'z',	'x',	'c',	'v',	'b',	'n',	NULL,	NULL
+	'z',	'x',	'c',	'v',	'b',	'n',	'\0',	'\0'
 };
 
 char hil_us_shiftmap[] = {
-	NULL,	'~',	'|',	DEL,	NULL,	DEL,	NULL,	NULL,
-	'\n',	'\t',	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,
-	NULL,	'\n',	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,
-	NULL,	'\t',	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,
-	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,
-	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	DEL,	NULL,
-	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,
-	ESC,	'\r',	NULL,	'\n',	'0',	'.',	',',	'+',
+	'\0',	'~',	'|',	DEL,	'\0',	DEL,	'\0',	'\0',
+	'\n',	'\t',	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',
+	'\0',	'\n',	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',
+	'\0',	'\t',	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',
+	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',
+	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',	DEL,	'\0',
+	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',
+	ESC,	'\r',	'\0',	'\n',	'0',	'.',	',',	'+',
 	'1',	'2',	'3',	'-',	'4',	'5',	'6',	'*',
 	'7',	'8',	'9',	'/',	'`',	'|',	'\\',	'~',
 	'!',	'@',	'#',	'$',	'%',	'^',	'&',	'*',
@@ -135,18 +161,18 @@ char hil_us_shiftmap[] = {
 	'<',	'>',	'?',	'\040',	'O',	'P',	'K',	'L',
 	'Q',	'W',	'E',	'R',	'T',	'Y',	'U',	'I',
 	'A',	'S',	'D',	'F',	'G',	'H',	'J',	'M',
-	'Z',	'X',	'C',	'V',	'B',	'N',	NULL,	NULL
+	'Z',	'X',	'C',	'V',	'B',	'N',	'\0',	'\0'
 };
 
 char hil_us_ctrlmap[] = {
-	NULL,	'`',	'\034',	ESC,	NULL,	DEL,	NULL,	NULL,
-	'\n',	'\t',	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,
-	NULL,	'\n',	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,
-	NULL,	'\t',	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,
-	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,
-	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	'\b',	NULL,
-	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,
-	ESC,	'\r',	NULL,	'\n',	'0',	'.',	',',	'+',
+	'\0',	'`',	'\034',	ESC,	'\0',	DEL,	'\0',	'\0',
+	'\n',	'\t',	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',
+	'\0',	'\n',	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',
+	'\0',	'\t',	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',
+	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',
+	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',	'\b',	'\0',
+	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',
+	ESC,	'\r',	'\0',	'\n',	'0',	'.',	',',	'+',
 	'1',	'2',	'3',	'-',	'4',	'5',	'6',	'*',
 	'7',	'8',	'9',	'/',	'E',	'(',	')',	'\036',
 	'1',	'2',	'3',	'4',	'5',	'6',	'7',	'8',
@@ -154,19 +180,19 @@ char hil_us_ctrlmap[] = {
 	',',	'.',	'/',	'\040',	'\017',	'\020',	'\013',	'\014',
 	'\021',	'\027',	'\005',	'\022',	'\024',	'\031',	'\025',	'\011',
 	'\001',	'\023',	'\004',	'\006',	'\007',	'\010',	'\012',	'\015',
-	'\032',	'\030',	'\003',	'\026',	'\002',	'\016',	NULL,	NULL
+	'\032',	'\030',	'\003',	'\026',	'\002',	'\016',	'\0',	'\0'
 };
 
 #ifdef UK_KEYBOARD
 char hil_uk_keymap[] = {
-	NULL,	'`',	'<',	ESC,	NULL,	DEL,	NULL,	NULL,  
-	'\n',	'\t',	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,  
-	NULL,	'\n',	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,  
-	NULL,	'\t',	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,
-	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,
-	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	'\b',	NULL,
-	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,
-	ESC,	'\r',	NULL,	'\n',	'0',	'.',	',',	'+',
+	'\0',	'`',	'<',	ESC,	'\0',	DEL,	'\0',	'\0',  
+	'\n',	'\t',	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',  
+	'\0',	'\n',	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',  
+	'\0',	'\t',	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',
+	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',
+	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',	'\b',	'\0',
+	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',
+	ESC,	'\r',	'\0',	'\n',	'0',	'.',	',',	'+',
 	'1',	'2',	'3',	'-',	'4',	'5',	'6',	'*',
 	'7',	'8',	'9',	'/',	'E',	'(',	')',	'^',
 	'1',	'2',	'3',	'4',	'5',	'6',	'7',	'8',
@@ -174,18 +200,18 @@ char hil_uk_keymap[] = {
 	',',	'.',	'-',	'\040',	'o',	'p',	'k',	'l',
 	'q',	'w',	'e',	'r',	't',	'y',	'u',	'i',
 	'a',	's',	'd',	'f',	'g',	'h',	'j',	'm',
-	'z',	'x',	'c',	'v',	'b',	'n',	NULL,	NULL
+	'z',	'x',	'c',	'v',	'b',	'n',	'\0',	'\0'
 };
 
 char hil_uk_shiftmap[] = {
-	NULL,	'~',	'>',	DEL,	NULL,	DEL,	NULL,	NULL,
-	'\n',	'\t',	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,
-	NULL,	'\n',	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,
-	NULL,	'\t',	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,
-	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,
-	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	DEL,	NULL,
-	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,
-	ESC,	'\r',	NULL,	'\n',	'0',	'.',	',',	'+',
+	'\0',	'~',	'>',	DEL,	'\0',	DEL,	'\0',	'\0',
+	'\n',	'\t',	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',
+	'\0',	'\n',	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',
+	'\0',	'\t',	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',
+	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',
+	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',	DEL,	'\0',
+	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',
+	ESC,	'\r',	'\0',	'\n',	'0',	'.',	',',	'+',
 	'1',	'2',	'3',	'-',	'4',	'5',	'6',	'*',
 	'7',	'8',	'9',	'/',	'`',	'|',	'\\',	'~',
 	'!',	'\"',	'#',	'$',	'%',	'&',	'^',	'(',
@@ -193,18 +219,18 @@ char hil_uk_shiftmap[] = {
 	';',	':',	'_',	'\040',	'O',	'P',	'K',	'L',
 	'Q',	'W',	'E',	'R',	'T',	'Y',	'U',	'I',
 	'A',	'S',	'D',	'F',	'G',	'H',	'J',	'M',
-	'Z',	'X',	'C',	'V',	'B',	'N',	NULL,	NULL
+	'Z',	'X',	'C',	'V',	'B',	'N',	'\0',	'\0'
 };
 
 char hil_uk_ctrlmap[] = {
-	NULL,	'`',	'<',	ESC,	NULL,	DEL,	NULL,	NULL,
-	'\n',	'\t',	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,
-	NULL,	'\n',	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,
-	NULL,	'\t',	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,
-	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,
-	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	'\b',	NULL,
-	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,
-	ESC,	'\r',	NULL,	'\n',	'0',	'.',	',',	'+',
+	'\0',	'`',	'<',	ESC,	'\0',	DEL,	'\0',	'\0',
+	'\n',	'\t',	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',
+	'\0',	'\n',	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',
+	'\0',	'\t',	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',
+	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',
+	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',	'\b',	'\0',
+	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',	'\0',
+	ESC,	'\r',	'\0',	'\n',	'0',	'.',	',',	'+',
 	'1',	'2',	'3',	'-',	'4',	'5',	'6',	'*',
 	'7',	'8',	'9',	'/',	'E',	'(',	')',	'\036',
 	'1',	'2',	'3',	'4',	'5',	'6',	'7',	'8',
@@ -212,7 +238,7 @@ char hil_uk_ctrlmap[] = {
 	',',	'.',	'/',	'\040',	'\017',	'\020',	'\013',	'\014',
 	'\021',	'\027',	'\005',	'\022',	'\024',	'\031',	'\025',	'\011',
 	'\001',	'\023',	'\004',	'\006',	'\007',	'\010',	'\012',	'\015',
-	'\032',	'\030',	'\003',	'\026',	'\002',	'\016',	NULL,	NULL
+	'\032',	'\030',	'\003',	'\026',	'\002',	'\016',	'\0',	'\0'
 };
 #endif
 
@@ -221,16 +247,16 @@ char hil_uk_ctrlmap[] = {
  * Lookup is by hardware returned language code.
  */
 struct kbdmap hilkbd_map[] = {
-	KBD_US,		NULL,
-	hil_us_keymap,	hil_us_shiftmap, hil_us_ctrlmap, NULL,	NULL,
+	{ KBD_US, "",
+	    hil_us_keymap, hil_us_shiftmap, hil_us_ctrlmap, NULL, NULL},
 
 #ifdef UK_KEYBOARD
-	KBD_UK,		NULL,
-	hil_uk_keymap,	hil_uk_shiftmap, hil_uk_ctrlmap, NULL,	NULL,
+	{ KBD_UK, "",
+	    hil_uk_keymap, hil_uk_shiftmap, hil_uk_ctrlmap, NULL, NULL},
 #endif
 
-	0,		NULL,
-	NULL,		NULL,		NULL,		NULL,	NULL,
+	{ 0, "",
+	    NULL, NULL, NULL, NULL, NULL},
 };
 
 char	*hilkbd_keymap = hil_us_keymap;
@@ -238,14 +264,14 @@ char	*hilkbd_shiftmap = hil_us_shiftmap;
 char	*hilkbd_ctrlmap = hil_us_ctrlmap;
 
 int
-hilkbd_getc()
+hilkbd_getc(void)
 {
 	int status, c;
 	struct hil_dev *hiladdr = HILADDR;
 
 	status = hiladdr->hil_stat;
 	if ((status & HIL_DATA_RDY) == 0)
-		return(0);
+		return 0;
 	c = hiladdr->hil_data;
 	switch ((status>>KBD_SSHIFT) & KBD_SMASK) {
 	case KBD_SHIFT:
@@ -261,12 +287,12 @@ hilkbd_getc()
 		c = 0;
 		break;
 	}
-	return(c);
+	return c;
 }
 #endif /* SMALL */
 
 void
-hilkbd_nmi()
+hilkbd_nmi(void)
 {
 	struct hil_dev *hiladdr = HILADDR;
 
@@ -278,7 +304,7 @@ hilkbd_nmi()
 }
 
 int
-hilkbd_init()
+hilkbd_init(void)
 {
 	struct hil_dev *hiladdr = HILADDR;
 	struct kbdmap *km;
@@ -292,7 +318,7 @@ hilkbd_init()
 	HILDATAWAIT(hiladdr);
 	lang = hiladdr->hil_data;
 	if (lang == 0)
-		return (0);
+		return 0;
 
 	HILWAIT(hiladdr);
 	hiladdr->hil_cmd = HIL_SETARR;
@@ -311,5 +337,6 @@ hilkbd_init()
 	}
 	HILWAIT(hiladdr);
 	hiladdr->hil_cmd = HIL_INTON;
+	return 1;
 }
 #endif /* ITECONSOLE && HIL_KEYBOARD */

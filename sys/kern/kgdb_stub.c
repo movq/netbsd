@@ -1,4 +1,4 @@
-/*	$NetBSD: kgdb_stub.c,v 1.6 1998/08/30 20:30:57 scottr Exp $	*/
+/*	$NetBSD: kgdb_stub.c,v 1.22 2005/12/07 05:53:24 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1990, 1993
@@ -21,11 +21,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -45,44 +41,46 @@
  */
 
 /*
- * "Stub" to allow remote cpu to debug over a serial line using gdb.
+ * "Stub" to allow remote CPU to debug over a serial line using gdb.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: kgdb_stub.c,v 1.22 2005/12/07 05:53:24 thorpej Exp $");
+
+#include "opt_kgdb.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kgdb.h>
 
-/* #define	DEBUG_KGDB XXX */
+#undef	DEBUG_KGDB
+
+#ifdef DEBUG_KGDB
+#define DPRINTF(x)	printf x
+#else
+#define DPRINTF(x)
+#endif
 
 /* XXX: Maybe these should be in the MD files? */
-#ifndef KGDBDEV
-#define KGDBDEV -1
+#ifndef KGDB_DEV
+#define KGDB_DEV NODEV
 #endif
-#ifndef KGDBRATE
-#define KGDBRATE 19200
+#ifndef KGDB_DEVRATE
+#define KGDB_DEVRATE 19200
 #endif
 
-int kgdb_dev = KGDBDEV;		/* remote debugging device (-1 if none) */
-int kgdb_rate = KGDBRATE;	/* remote debugging baud rate */
+int kgdb_dev = KGDB_DEV;	/* remote debugging device (NODEV if none) */
+int kgdb_rate = KGDB_DEVRATE;	/* remote debugging baud rate */
 int kgdb_active = 0;		/* remote debugging active if != 0 */
 int kgdb_debug_init = 0;	/* != 0 waits for remote at system init */
 int kgdb_debug_panic = 0;	/* != 0 waits for remote on panic */
 label_t *kgdb_recover = 0;
 
-static void kgdb_copy __P((void *, void *, int));
-/* static void kgdb_zero __P((void *, int)); */
-static void kgdb_send __P((u_char *));
-static int kgdb_recv __P((u_char *, int));
-static int digit2i __P((u_char));
-static u_char i2digit __P((int));
-static void mem2hex __P((void *, void *, int));
-static u_char *hex2mem __P((void *, u_char *, int));
-static vaddr_t hex2i __P((u_char **));
-
-static int (*kgdb_getc) __P((void *));
-static void (*kgdb_putc) __P((void *, int));
+static int (*kgdb_getc)(void *);
+static void (*kgdb_putc)(void *, int);
 static void *kgdb_ioarg;
 
+/* KGDB_BUFLEN must be at least (2*KGDB_NUMREGS*sizeof(kgdb_reg_t)+1) */
 static u_char buffer[KGDB_BUFLEN];
 static kgdb_reg_t gdb_regs[KGDB_NUMREGS];
 
@@ -90,12 +88,17 @@ static kgdb_reg_t gdb_regs[KGDB_NUMREGS];
 #define PUTC(c)	((*kgdb_putc)(kgdb_ioarg, c))
 
 /*
+ * db_trap_callback can be hooked by MD port code to handle special
+ * cases such as disabling hardware watchdogs while in kgdb.  Name
+ * is shared with DDB.
+ */
+void (*db_trap_callback)(int);
+
+/*
  * This little routine exists simply so that bcopy() can be debugged.
  */
 static void
-kgdb_copy(vsrc, vdst, len)
-	void *vsrc, *vdst;
-	int len;
+kgdb_copy(void *vsrc, void *vdst, int len)
 {
 	char *src = vsrc;
 	char *dst = vdst;
@@ -107,9 +110,7 @@ kgdb_copy(vsrc, vdst, len)
 #if 0
 /* ditto for bzero */
 static void
-kgdb_zero(vptr, len)
-	void *vptr;
-	int len;
+kgdb_zero(void *vptr, int len)
 {
 	char *ptr = vptr;
 
@@ -124,16 +125,15 @@ kgdb_zero(vptr, len)
  * valid hex digit.
  */
 static int
-digit2i(c)
-	u_char c;
+digit2i(u_char c)
 {
 	if (c >= '0' && c <= '9')
 		return (c - '0');
 	else if (c >= 'a' && c <= 'f')
-		return (c - 'a' + 10);	
+		return (c - 'a' + 10);
 	else if (c >= 'A' && c <= 'F')
 
-		return (c - 'A' + 10);	
+		return (c - 'A' + 10);
 	else
 		return (-1);
 }
@@ -143,19 +143,16 @@ digit2i(c)
  * an hex digit.
  */
 static u_char
-i2digit(n)
-	int n;
+i2digit(int n)
 {
-	return ("0123456789abcdef"[n & 0x0f]);
+	return (hexdigits[n & 0x0f]);
 }
 
 /*
  * Convert a byte array into an hex string.
  */
 static void
-mem2hex(vdst, vsrc, len)
-	void *vdst, *vsrc;
-	int len;
+mem2hex(void *vdst, void *vsrc, int len)
 {
 	u_char *dst = vdst;
 	u_char *src = vsrc;
@@ -174,10 +171,7 @@ mem2hex(vdst, vsrc, len)
  * the middle of a byte, NULL is returned.
  */
 static u_char *
-hex2mem(vdst, src, maxlen)
-	void *vdst;
-	u_char *src;
-	int maxlen;
+hex2mem(void *vdst, u_char *src, int maxlen)
 {
 	u_char *dst = vdst;
 	int msb, lsb;
@@ -198,10 +192,9 @@ hex2mem(vdst, src, maxlen)
  * Convert an hex string into an integer.
  * This returns a pointer to the character following
  * the last valid hex digit.
- */ 
+ */
 static vaddr_t
-hex2i(srcp)
-	u_char **srcp;
+hex2i(u_char **srcp)
 {
 	char *src = *srcp;
 	vaddr_t r = 0;
@@ -220,15 +213,12 @@ hex2i(srcp)
  * Send a packet.
  */
 static void
-kgdb_send(bp)
-	u_char *bp;
+kgdb_send(const u_char *bp)
 {
-	u_char *p;
+	const u_char *p;
 	u_char csum, c;
 
-#ifdef	DEBUG_KGDB
-	printf("kgdb_send: %s\n", bp);
-#endif
+	DPRINTF(("kgdb_send: %s\n", bp));
 	do {
 		p = bp;
 		PUTC(KGDB_START);
@@ -246,21 +236,22 @@ kgdb_send(bp)
  * Receive a packet.
  */
 static int
-kgdb_recv(bp, maxlen)
-	u_char *bp;
-	int maxlen;
+kgdb_recv(u_char *bp, int maxlen)
 {
 	u_char *p;
-	int c, csum;
+	int c, csum, tmpcsum;
 	int len;
 
+	DPRINTF(("kgdb_recv:  "));
 	do {
 		p = bp;
 		csum = len = 0;
 		while ((c = GETC()) != KGDB_START)
-			;
+			DPRINTF(("%c",c));
+		DPRINTF(("%c Start ",c));
 
 		while ((c = GETC()) != KGDB_END && len < maxlen) {
+			DPRINTF(("%c",c));
 			c &= 0x7f;
 			csum += c;
 			*p++ = c;
@@ -268,19 +259,28 @@ kgdb_recv(bp, maxlen)
 		}
 		csum &= 0xff;
 		*p = '\0';
+		DPRINTF(("%c End ", c));
 
 		if (len >= maxlen) {
+			DPRINTF(("Long- "));
 			PUTC(KGDB_BADP);
 			continue;
 		}
+		tmpcsum = csum;
 
-		csum -= digit2i(GETC()) * 16;
-		csum -= digit2i(GETC());
+		c = GETC();
+		DPRINTF(("%c",c));
+		csum -= digit2i(c) * 16;
+		c = GETC();
+		DPRINTF(("%c",c));
+		csum -= digit2i(c);
 
 		if (csum == 0) {
+			DPRINTF(("Good+ "));
 			PUTC(KGDB_GOODP);
 			/* Sequence present? */
 			if (bp[2] == ':') {
+				DPRINTF(("Seq %c%c ", bp[0], bp[1]));
 				PUTC(bp[0]);
 				PUTC(bp[1]);
 				len -= 3;
@@ -288,11 +288,10 @@ kgdb_recv(bp, maxlen)
 			}
 			break;
 		}
+		DPRINTF((" Bad(wanted %x, off by %d)- ", tmpcsum, csum));
 		PUTC(KGDB_BADP);
 	} while (1);
-#ifdef	DEBUG_KGDB
-	printf("kgdb_recv: %s\n", bp);
-#endif
+	DPRINTF(("kgdb_recv: %s\n", bp));
 	return (len);
 }
 
@@ -300,10 +299,7 @@ kgdb_recv(bp, maxlen)
  * This is called by the appropriate tty driver.
  */
 void
-kgdb_attach(getfn, putfn, ioarg)
-	int (*getfn) __P((void *));
-	void (*putfn) __P((void *, int));
-	void *ioarg;
+kgdb_attach(int (*getfn)(void *), void (*putfn)(void *, int), void *ioarg)
 {
 	kgdb_getc = getfn;
 	kgdb_putc = putfn;
@@ -318,9 +314,7 @@ kgdb_attach(getfn, putfn, ioarg)
  * that is what the gdb/remote.c functions want to return.
  */
 int
-kgdb_trap(type, regs)
-	int type;
-	db_regs_t *regs;
+kgdb_trap(int type, db_regs_t *regs)
 {
 	label_t jmpbuf;
 	vaddr_t addr;
@@ -331,6 +325,10 @@ kgdb_trap(type, regs)
 		/* not debugging */
 		return (0);
 	}
+
+	db_clear_single_step(regs);
+
+	if (db_trap_callback) db_trap_callback(1);
 
 	/* Detect and recover from unexpected traps. */
 	if (kgdb_recover != 0) {
@@ -363,6 +361,7 @@ kgdb_trap(type, regs)
 	if (kgdb_active == 0) {
 		if (!IS_BREAKPOINT_TRAP(type, 0)) {
 			/* No debugger active -- let trap handle this. */
+			if (db_trap_callback) db_trap_callback(0);
 			return (0);
 		}
 		/* Make the PC point at the breakpoint... */
@@ -377,8 +376,8 @@ kgdb_trap(type, regs)
 #endif
 		kgdb_active = 1;
 	} else {
-		/* Tell remote host that an exception has occured. */
-		sprintf(buffer, "S%02x", kgdb_signal(type));
+		/* Tell remote host that an exception has occurred. */
+		snprintf(buffer, sizeof(buffer), "S%02x", kgdb_signal(type));
 		kgdb_send(buffer);
 	}
 
@@ -406,7 +405,8 @@ kgdb_trap(type, regs)
 			 * knowing if we're in or out of this loop
 			 * when he issues a "remote-signal".
 			 */
-			sprintf(buffer, "S%02x", kgdb_signal(type));
+			snprintf(buffer, sizeof(buffer), "S%02x",
+			    kgdb_signal(type));
 			kgdb_send(buffer);
 			continue;
 
@@ -480,10 +480,12 @@ kgdb_trap(type, regs)
 			kgdb_send("OK");
 			continue;
 
+		case KGDB_DETACH:
 		case KGDB_KILL:
 			kgdb_active = 0;
 			printf("kgdb detached\n");
 			db_clear_single_step(regs);
+			kgdb_send("OK");
 			goto out;
 
 		case KGDB_CONT:
@@ -495,7 +497,14 @@ kgdb_trap(type, regs)
 					continue;
 				}
 				PC_REGS(regs) = addr;
+				DPRINTF(("kgdb: continuing at %08lx\n", addr));
+
+			} else {
+				DPRINTF((
+				  "kgdb: continuing at old address %08lx\n",
+				  (vaddr_t)PC_REGS(regs)));
 			}
+
 			db_clear_single_step(regs);
 			goto out;
 
@@ -514,6 +523,7 @@ kgdb_trap(type, regs)
 		}
 	}
  out:
+	if (db_trap_callback) db_trap_callback(0);
 	kgdb_recover = 0;
 	return (1);
 }

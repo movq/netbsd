@@ -1,4 +1,4 @@
-/*	$NetBSD: ioat66.c,v 1.1 1999/11/15 21:13:38 mcr Exp $	*/
+/*	$NetBSD: ioat66.c,v 1.17 2008/04/08 20:08:50 cegger Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -33,13 +33,16 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ioat66.c,v 1.17 2008/04/08 20:08:50 cegger Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/termios.h>
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/ic/comreg.h>
 #include <dev/ic/comvar.h>
@@ -65,27 +68,27 @@ struct ioat66_softc {
 int ioatbases[NSLAVES]={0x220,0x228,0x240,0x248,0x260,0x268};
 #define IOAT66SHARED 0x208
 
-int ioat66probe __P((struct device *, struct cfdata *, void *));
-void ioat66attach __P((struct device *, struct device *, void *));
-int ioat66intr __P((void *));
-int ioat66print __P((void *, const char *));
+int ioat66probe(struct device *, struct cfdata *, void *);
+void ioat66attach(struct device *, struct device *, void *);
+int ioat66intr(void *);
 
-struct cfattach ioat_ca = {
-	sizeof(struct ioat66_softc), ioat66probe, ioat66attach,
-};
+CFATTACH_DECL(ioat, sizeof(struct ioat66_softc),
+    ioat66probe, ioat66attach, NULL, NULL);
 
 int
-ioat66probe(parent, self, aux)
-	struct device *parent;
-	struct cfdata *self;
-	void *aux;
+ioat66probe(struct device *parent, struct cfdata *self,
+    void *aux)
 {
 	struct isa_attach_args *ia = aux;
-	int iobase = ia->ia_iobase;
 	bus_space_tag_t iot = ia->ia_iot;
 	bus_space_handle_t ioh;
+	int iobase;
 	int i, rv = 1;
 
+	if (ia->ia_niomem < 1)
+		return (0);
+	if (ia->ia_nirq < 1)
+		return (0);
 	/*
 	 * Do the normal com probe for the first UART and assume
 	 * its presence, and the ability to map the other UARTS,
@@ -94,9 +97,13 @@ ioat66probe(parent, self, aux)
 	 */
 
 	/* Disallow wildcarded i/o address. */
-	if (ia->ia_iobase == ISACF_PORT_DEFAULT)
+	if (ia->ia_io[0].ir_addr == ISA_UNKNOWN_PORT)
+		return 0;
+
+	if (ia->ia_irq[0].ir_irq == ISA_UNKNOWN_IRQ)
 		return (0);
 
+	iobase = ia->ia_io[0].ir_addr;
 	/* if the first port is in use as console, then it. */
 	if (com_is_console(iot, iobase, 0))
 		goto checkmappings;
@@ -125,54 +132,43 @@ checkmappings:
 	}
 
 out:
-	if (rv)
-		ia->ia_iosize = NSLAVES * COM_NPORTS;
+	if (rv) {
+		ia->ia_nio = 1;
+		ia->ia_io[0].ir_size = NSLAVES * COM_NPORTS;
+		ia->ia_nirq = 1;
+		ia->ia_niomem = 0;
+		ia->ia_ndrq = 0;
+	}
 	return (rv);
 }
 
-int
-ioat66print(aux, pnp)
-	void *aux;
-	const char *pnp;
-{
-	struct commulti_attach_args *ca = aux;
-
-	if (pnp)
-		printf("com at %s", pnp);
-	printf(" slave %d", ca->ca_slave);
-	return (UNCONF);
-}
-
 void
-ioat66attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+ioat66attach(struct device *parent, struct device *self, void *aux)
 {
 	struct ioat66_softc *sc = (void *)self;
 	struct isa_attach_args *ia = aux;
 	struct commulti_attach_args ca;
 	bus_space_tag_t iot = ia->ia_iot;
-	int i, iobase;
+	int i, iobase, irq;
 
 	printf("\n");
 
 	sc->sc_iot = ia->ia_iot;
-	sc->sc_iobase = ia->ia_iobase;
+	sc->sc_iobase = ia->ia_io[0].ir_addr;
+	irq = ia->ia_irq[0].ir_irq;
 
 	for (i = 0; i < NSLAVES; i++) {
 		iobase = ioatbases[i];
 		if (!com_is_console(iot, iobase, &sc->sc_slaveioh[i]) &&
 		    bus_space_map(iot, iobase, COM_NPORTS, 0,
 			&sc->sc_slaveioh[i])) {
-			printf("%s: can't map i/o space for slave %d\n",
-			     sc->sc_dev.dv_xname, i);
+			aprint_error_dev(&sc->sc_dev, "can't map i/o space for slave %d\n", i);
 			return;
 		}
 	}
 
 	if(bus_space_map(iot, IOAT66SHARED, 1, 0, &sc->sc_intmasq)) {
-	  printf("%s: can't map shared interupt mask\n", 
-	 	 sc->sc_dev.dv_xname);
+	  aprint_error_dev(&sc->sc_dev, "can't map shared interrupt mask\n");
 	  return;
 	}
 
@@ -184,12 +180,12 @@ ioat66attach(parent, self, aux)
 		ca.ca_iobase = ioatbases[i];
 		ca.ca_noien = 0;
 
-		sc->sc_slaves[i] = config_found(self, &ca, ioat66print);
+		sc->sc_slaves[i] = config_found(self, &ca, commultiprint);
 		if (sc->sc_slaves[i] != NULL)
 			sc->sc_alive |= 1 << i;
 	}
 
-	sc->sc_ih = isa_intr_establish(ia->ia_ic, ia->ia_irq, IST_EDGE,
+	sc->sc_ih = isa_intr_establish(ia->ia_ic, irq, IST_EDGE,
 	    IPL_SERIAL, ioat66intr, sc);
 }
 

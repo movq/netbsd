@@ -1,4 +1,4 @@
-/* $NetBSD: dec_1000a.c,v 1.6 1999/12/03 22:48:22 thorpej Exp $ */
+/* $NetBSD: dec_1000a.c,v 1.26 2008/04/28 20:23:10 martin Exp $ */
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -17,13 +17,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -68,19 +61,22 @@
  * Additional Copyright (c) 1997 by Matthew Jacob for NASA/Ames Research Center
  */
 
+#include "opt_kgdb.h"
+
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: dec_1000a.c,v 1.6 1999/12/03 22:48:22 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dec_1000a.c,v 1.26 2008/04/28 20:23:10 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/termios.h>
+#include <sys/conf.h>
 #include <dev/cons.h>
 
 #include <machine/rpb.h>
 #include <machine/autoconf.h>
-#include <machine/conf.h>
+#include <machine/cpuconf.h>
 #include <machine/bus.h>
 
 #include <dev/ic/comreg.h>
@@ -88,6 +84,7 @@ __KERNEL_RCSID(0, "$NetBSD: dec_1000a.c,v 1.6 1999/12/03 22:48:22 thorpej Exp $"
 
 #include <dev/isa/isareg.h>
 #include <dev/isa/isavar.h>
+#include <dev/ic/i8042reg.h>
 #include <dev/ic/pckbcvar.h>
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
@@ -108,9 +105,18 @@ __KERNEL_RCSID(0, "$NetBSD: dec_1000a.c,v 1.6 1999/12/03 22:48:22 thorpej Exp $"
 #endif
 static int comcnrate = CONSPEED;
 
-void dec_1000a_init __P((void));
+void _dec_1000a_init __P((void));
 static void dec_1000a_cons_init __P((void));
 static void dec_1000a_device_register __P((struct device *, void *));
+
+#ifdef KGDB
+#include <machine/db_machdep.h>
+
+static const char *kgdb_devlist[] = {
+	"com",
+	NULL,
+};
+#endif /* KGDB */
 
 static const struct alpha_variation_table dec_1000_variations[] = {
 	{ 0, "AlphaServer 1000" },
@@ -123,7 +129,7 @@ static const struct alpha_variation_table dec_1000a_variations[] = {
 };
 
 void
-dec_1000a_init()
+_dec_1000a_init()
 {
 	u_int64_t variation;
 
@@ -175,10 +181,10 @@ dec_1000a_cons_init()
 		pcichipset = &acp->ac_pc;
 	}
 
-	ctb = (struct ctb *)(((caddr_t)hwrpb) + hwrpb->rpb_ctb_off);
+	ctb = (struct ctb *)(((char *)hwrpb) + hwrpb->rpb_ctb_off);
 
 	switch (ctb->ctb_term_type) {
-	case 2: 
+	case CTB_PRINTERPORT: 
 		/* serial console ... */
 		/* XXX */
 		{
@@ -190,26 +196,35 @@ dec_1000a_cons_init()
 			DELAY(160000000 / comcnrate);
 
 			if(comcnattach(iot, 0x3f8, comcnrate,
-			    COM_FREQ,
+			    COM_FREQ, COM_TYPE_NORMAL,
 			    (TTYDEF_CFLAG & ~(CSIZE | PARENB)) | CS8))
 				panic("can't init serial console");
 
 			break;
 		}
 
-	case 3:
+	case CTB_GRAPHICS:
 #if NPCKBD > 0
 		/* display console ... */
 		/* XXX */
-		(void) pckbc_cnattach(iot, IO_KBD, PCKBC_KBD_SLOT);
+		(void) pckbc_cnattach(iot, IO_KBD, KBCMDP, PCKBC_KBD_SLOT);
 
-		if (CTB_TURBOSLOT_TYPE(ctb->ctb_turboslot) ==
-		    CTB_TURBOSLOT_TYPE_ISA)
-			isa_display_console(iot, memt);
-		else
-			pci_display_console(iot, memt,
-			    pcichipset, CTB_TURBOSLOT_BUS(ctb->ctb_turboslot),
+		/*
+		 * AlphaServer 1000s have a firmware bug whereby the
+		 * built-in ISA VGA is reported incorrectly -- ctb_turboslot
+		 * is mostly 0.
+		 */
+		switch (CTB_TURBOSLOT_TYPE(ctb->ctb_turboslot)) {
+		case CTB_TURBOSLOT_TYPE_PCI:
+			pci_display_console(iot, memt, pcichipset,
+			    CTB_TURBOSLOT_BUS(ctb->ctb_turboslot),
 			    CTB_TURBOSLOT_SLOT(ctb->ctb_turboslot), 0);
+			break;
+
+		default:
+			isa_display_console(iot, memt);
+			break;
+		}
 #else
 		panic("not configured to use display && keyboard console");
 #endif
@@ -219,9 +234,13 @@ dec_1000a_cons_init()
 		printf("ctb->ctb_term_type = 0x%lx\n", ctb->ctb_term_type);
 		printf("ctb->ctb_turboslot = 0x%lx\n", ctb->ctb_turboslot);
 
-		panic("consinit: unknown console type %ld\n",
+		panic("consinit: unknown console type %ld",
 		    ctb->ctb_term_type);
 	}
+#ifdef KGDB
+	/* Attach the KGDB device. */
+	alpha_kgdb_init(kgdb_devlist, iot);
+#endif /* KGDB */
 }
 
 static void
@@ -229,27 +248,26 @@ dec_1000a_device_register(dev, aux)
 	struct device *dev;
 	void *aux;
 {
-	static int found, initted, scsiboot, netboot;
-	static struct device *pcidev, *scsidev;
+	static int found, initted, diskboot, netboot;
+	static struct device *pcidev, *ctrlrdev;
 	struct bootdev_data *b = bootdev_data;
-	struct device *parent = dev->dv_parent;
-	struct cfdata *cf = dev->dv_cfdata;
-	struct cfdriver *cd = cf->cf_driver;
+	struct device *parent = device_parent(dev);
 
 	if (found)
 		return;
 
 	if (!initted) {
-		scsiboot = (strcmp(b->protocol, "SCSI") == 0);
-		netboot = (strcmp(b->protocol, "BOOTP") == 0);
+		diskboot = (strcasecmp(b->protocol, "SCSI") == 0);
+		netboot = (strcasecmp(b->protocol, "BOOTP") == 0) ||
+		    (strcasecmp(b->protocol, "MOP") == 0);
 #if 0
-		printf("scsiboot = %d, netboot = %d\n", scsiboot, netboot);
+		printf("diskboot = %d, netboot = %d\n", diskboot, netboot);
 #endif
 		initted =1;
 	}
 
 	if (pcidev == NULL) {
-		if (strcmp(cd->cd_name, "pci"))
+		if (!device_is_a(dev, "pci"))
 			return;
 		else {
 			struct pcibus_attach_args *pba = aux;
@@ -259,84 +277,64 @@ dec_1000a_device_register(dev, aux)
 	
 			pcidev = dev;
 #if 0
-			printf("\npcidev = %s\n", pcidev->dv_xname);
+			printf("\npcidev = %s\n", dev->dv_xname);
 #endif
 			return;
 		}
 	}
 
-	if (scsiboot && (scsidev == NULL)) {
+	if (ctrlrdev == NULL) {
 		if (parent != pcidev)
 			return;
 		else {
 			struct pci_attach_args *pa = aux;
+			int slot;
 
-			if ((b->slot % 1000) != pa->pa_device)
+			slot = pa->pa_bus * 1000 + pa->pa_function * 100 +
+			    pa->pa_device;
+			if (b->slot != slot)
 				return;
 
-			/* XXX function? */
-	
-			scsidev = dev;
+			if (netboot) {
+				booted_device = dev;
 #if 0
-			printf("\nscsidev = %s\n", scsidev->dv_xname);
+				printf("\nbooted_device = %s\n", dev->dv_xname);
 #endif
+				found = 1;
+			} else {
+				ctrlrdev = dev;
+#if 0
+				printf("\nctrlrdev = %s\n", dev->dv_xname);
+#endif
+			}
 			return;
 		}
 	}
 
-	if (scsiboot &&
-	    (!strcmp(cd->cd_name, "sd") ||
-	     !strcmp(cd->cd_name, "st") ||
-	     !strcmp(cd->cd_name, "cd"))) {
+	if (!diskboot)
+		return;
+
+	if (device_is_a(dev, "sd") ||
+	    device_is_a(dev, "st") ||
+	    device_is_a(dev, "cd")) {
 		struct scsipibus_attach_args *sa = aux;
+		struct scsipi_periph *periph = sa->sa_periph;
+		int unit;
 
-		if (parent->dv_parent != scsidev)
+		if (device_parent(parent) != ctrlrdev)
 			return;
 
-		if (b->unit / 100 != sa->sa_sc_link->scsipi_scsi.target)
+		unit = periph->periph_target * 100 + periph->periph_lun;
+		if (b->unit != unit)
 			return;
-
-		/* XXX LUN! */
-
-		switch (b->boot_dev_type) {
-		case 0:
-			if (strcmp(cd->cd_name, "sd") &&
-			    strcmp(cd->cd_name, "cd"))
-				return;
-			break;
-		case 1:
-			if (strcmp(cd->cd_name, "st"))
-				return;
-			break;
-		default:
+		if (b->channel != periph->periph_channel->chan_channel)
 			return;
-		}
 
 		/* we've found it! */
 		booted_device = dev;
 #if 0
-		printf("\nbooted_device = %s\n", booted_device->dv_xname);
+		printf("\nbooted_device = %s\n", dev->dv_xname);
 #endif
 		found = 1;
-	}
-
-	if (netboot) {
-		if (parent != pcidev)
-			return;
-		else {
-			struct pci_attach_args *pa = aux;
-
-			if ((b->slot % 1000) != pa->pa_device)
-				return;
-
-			/* XXX function? */
-	
-			booted_device = dev;
-#if 0
-			printf("\nbooted_device = %s\n", booted_device->dv_xname);
-#endif
-			found = 1;
-			return;
-		}
 	}
 }

@@ -1,4 +1,4 @@
-/* $NetBSD: db_interface.c,v 1.8 1999/10/12 17:08:57 jdolecek Exp $ */
+/* $NetBSD: db_interface.c,v 1.27 2007/10/17 19:52:55 garbled Exp $ */
 
 /* 
  * Mach Operating System
@@ -48,20 +48,22 @@
  */
 
 #include "opt_ddb.h"
+#include "opt_multiprocessor.h"
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.8 1999/10/12 17:08:57 jdolecek Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.27 2007/10/17 19:52:55 garbled Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
 #include <sys/reboot.h>
 #include <sys/systm.h>
 
-#include <vm/vm.h>
+#include <uvm/uvm_extern.h>
 
 #include <dev/cons.h>
 
+#include <machine/alpha.h>
 #include <machine/db_machdep.h>
 #include <machine/pal.h>
 #include <machine/prom.h>
@@ -77,8 +79,6 @@ __KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.8 1999/10/12 17:08:57 jdolecek Ex
 #include <ddb/db_interface.h>
 
 
-extern label_t	*db_recover;
-
 #if 0
 extern char *trap_type[];
 extern int trap_types;
@@ -86,53 +86,89 @@ extern int trap_types;
 
 int	db_active = 0;
 
-void	db_mach_halt __P((db_expr_t, int, db_expr_t, char *));
-void	db_mach_reboot __P((db_expr_t, int, db_expr_t, char *));
+db_regs_t *ddb_regp;
 
-struct db_command db_machine_cmds[] = {
-	{ "halt",	db_mach_halt,	0,	0 },
-	{ "reboot",	db_mach_reboot,	0,	0 },
-	{ (char *)0, },
+#if defined(MULTIPROCESSOR)
+void	db_mach_cpu __P((db_expr_t, bool, db_expr_t, const char *));
+#endif
+
+const struct db_command db_machine_command_table[] = {
+#if defined(MULTIPROCESSOR)
+	{ DDB_ADD_CMD("cpu",	db_mach_cpu,	0,NULL,NULL,NULL) },
+#endif
+	{ DDB_ADD_CMD(NULL,     NULL,           0,NULL,NULL,NULL) },
 };
 
-struct db_variable db_regs[] = {
-	{	"v0",	&ddb_regs.tf_regs[FRAME_V0],	FCN_NULL	},
-	{	"t0",	&ddb_regs.tf_regs[FRAME_T0],	FCN_NULL	},
-	{	"t1",	&ddb_regs.tf_regs[FRAME_T1],	FCN_NULL	},
-	{	"t2",	&ddb_regs.tf_regs[FRAME_T2],	FCN_NULL	},
-	{	"t3",	&ddb_regs.tf_regs[FRAME_T3],	FCN_NULL	},
-	{	"t4",	&ddb_regs.tf_regs[FRAME_T4],	FCN_NULL	},
-	{	"t5",	&ddb_regs.tf_regs[FRAME_T5],	FCN_NULL	},
-	{	"t6",	&ddb_regs.tf_regs[FRAME_T6],	FCN_NULL	},
-	{	"t7",	&ddb_regs.tf_regs[FRAME_T7],	FCN_NULL	},
-	{	"s0",	&ddb_regs.tf_regs[FRAME_S0],	FCN_NULL	},
-	{	"s1",	&ddb_regs.tf_regs[FRAME_S1],	FCN_NULL	},
-	{	"s2",	&ddb_regs.tf_regs[FRAME_S2],	FCN_NULL	},
-	{	"s3",	&ddb_regs.tf_regs[FRAME_S3],	FCN_NULL	},
-	{	"s4",	&ddb_regs.tf_regs[FRAME_S4],	FCN_NULL	},
-	{	"s5",	&ddb_regs.tf_regs[FRAME_S5],	FCN_NULL	},
-	{	"s6",	&ddb_regs.tf_regs[FRAME_S6],	FCN_NULL	},
-	{	"a0",	&ddb_regs.tf_regs[FRAME_A0],	FCN_NULL	},
-	{	"a1",	&ddb_regs.tf_regs[FRAME_A1],	FCN_NULL	},
-	{	"a2",	&ddb_regs.tf_regs[FRAME_A2],	FCN_NULL	},
-	{	"a3",	&ddb_regs.tf_regs[FRAME_A3],	FCN_NULL	},
-	{	"a4",	&ddb_regs.tf_regs[FRAME_A4],	FCN_NULL	},
-	{	"a5",	&ddb_regs.tf_regs[FRAME_A5],	FCN_NULL	},
-	{	"t8",	&ddb_regs.tf_regs[FRAME_T8],	FCN_NULL	},
-	{	"t9",	&ddb_regs.tf_regs[FRAME_T9],	FCN_NULL	},
-	{	"t10",	&ddb_regs.tf_regs[FRAME_T10],	FCN_NULL	},
-	{	"t11",	&ddb_regs.tf_regs[FRAME_T11],	FCN_NULL	},
-	{	"ra",	&ddb_regs.tf_regs[FRAME_RA],	FCN_NULL	},
-	{	"t12",	&ddb_regs.tf_regs[FRAME_T12],	FCN_NULL	},
-	{	"at",	&ddb_regs.tf_regs[FRAME_AT],	FCN_NULL	},
-	{	"gp",	&ddb_regs.tf_regs[FRAME_GP],	FCN_NULL	},
-	{	"sp",	&ddb_regs.tf_regs[FRAME_SP],	FCN_NULL	},
-	{	"pc",	&ddb_regs.tf_regs[FRAME_PC],	FCN_NULL	},
-	{	"ps",	&ddb_regs.tf_regs[FRAME_PS],	FCN_NULL	},
-	{	"ai",	&ddb_regs.tf_regs[FRAME_T11],	FCN_NULL	},
-	{	"pv",	&ddb_regs.tf_regs[FRAME_T12],	FCN_NULL	},
+static int db_alpha_regop __P((const struct db_variable *, db_expr_t *, int));
+
+#define	dbreg(xx)	((long *)(xx))
+
+const struct db_variable db_regs[] = {
+	{	"v0",	dbreg(FRAME_V0),	db_alpha_regop	},
+	{	"t0",	dbreg(FRAME_T0),	db_alpha_regop	},
+	{	"t1",	dbreg(FRAME_T1),	db_alpha_regop	},
+	{	"t2",	dbreg(FRAME_T2),	db_alpha_regop	},
+	{	"t3",	dbreg(FRAME_T3),	db_alpha_regop	},
+	{	"t4",	dbreg(FRAME_T4),	db_alpha_regop	},
+	{	"t5",	dbreg(FRAME_T5),	db_alpha_regop	},
+	{	"t6",	dbreg(FRAME_T6),	db_alpha_regop	},
+	{	"t7",	dbreg(FRAME_T7),	db_alpha_regop	},
+	{	"s0",	dbreg(FRAME_S0),	db_alpha_regop	},
+	{	"s1",	dbreg(FRAME_S1),	db_alpha_regop	},
+	{	"s2",	dbreg(FRAME_S2),	db_alpha_regop	},
+	{	"s3",	dbreg(FRAME_S3),	db_alpha_regop	},
+	{	"s4",	dbreg(FRAME_S4),	db_alpha_regop	},
+	{	"s5",	dbreg(FRAME_S5),	db_alpha_regop	},
+	{	"s6",	dbreg(FRAME_S6),	db_alpha_regop	},
+	{	"a0",	dbreg(FRAME_A0),	db_alpha_regop	},
+	{	"a1",	dbreg(FRAME_A1),	db_alpha_regop	},
+	{	"a2",	dbreg(FRAME_A2),	db_alpha_regop	},
+	{	"a3",	dbreg(FRAME_A3),	db_alpha_regop	},
+	{	"a4",	dbreg(FRAME_A4),	db_alpha_regop	},
+	{	"a5",	dbreg(FRAME_A5),	db_alpha_regop	},
+	{	"t8",	dbreg(FRAME_T8),	db_alpha_regop	},
+	{	"t9",	dbreg(FRAME_T9),	db_alpha_regop	},
+	{	"t10",	dbreg(FRAME_T10),	db_alpha_regop	},
+	{	"t11",	dbreg(FRAME_T11),	db_alpha_regop	},
+	{	"ra",	dbreg(FRAME_RA),	db_alpha_regop	},
+	{	"t12",	dbreg(FRAME_T12),	db_alpha_regop	},
+	{	"at",	dbreg(FRAME_AT),	db_alpha_regop	},
+	{	"gp",	dbreg(FRAME_GP),	db_alpha_regop	},
+	{	"sp",	dbreg(FRAME_SP),	db_alpha_regop	},
+	{	"pc",	dbreg(FRAME_PC),	db_alpha_regop	},
+	{	"ps",	dbreg(FRAME_PS),	db_alpha_regop	},
+	{	"ai",	dbreg(FRAME_T11),	db_alpha_regop	},
+	{	"pv",	dbreg(FRAME_T12),	db_alpha_regop	},
 };
-struct db_variable *db_eregs = db_regs + sizeof(db_regs)/sizeof(db_regs[0]);
+const struct db_variable * const db_eregs = db_regs + sizeof(db_regs)/sizeof(db_regs[0]);
+
+static int
+db_alpha_regop(const struct db_variable *vp, db_expr_t *val, int opcode)
+{
+	unsigned long *tfaddr;
+	unsigned long zeroval = 0;
+	struct trapframe *f = NULL;
+
+	if (vp->modif != NULL && *vp->modif == 'u') {
+		if (curlwp != NULL)
+			f = curlwp->l_md.md_tf;
+	} else	f = DDB_REGS;
+	tfaddr = f == NULL ? &zeroval : &f->tf_regs[(u_long)vp->valuep];
+	switch (opcode) {
+	case DB_VAR_GET:
+		*val = *tfaddr;
+		break;
+
+	case DB_VAR_SET:
+		*tfaddr = *val;
+		break;
+
+	default:
+		panic("db_alpha_regop: unknown op %d", opcode);
+	}
+
+	return (0);
+}
 
 /*
  * ddb_trap - field a kernel trap
@@ -142,6 +178,7 @@ ddb_trap(a0, a1, a2, entry, regs)
 	unsigned long a0, a1, a2, entry;
 	db_regs_t *regs;
 {
+	struct cpu_info *ci = curcpu();
 	int s;
 
 	if (entry != ALPHA_KENTRY_IF ||
@@ -163,21 +200,22 @@ ddb_trap(a0, a1, a2, entry, regs)
 	 * alpha_debug() switches us to the debugger stack.
 	 */
 
-	ddb_regs = *regs;
+	/* Our register state is simply the trapframe. */
+	ddb_regp = ci->ci_db_regs = regs;
 
 	s = splhigh();
 
 	db_active++;
-	cnpollc(TRUE);		/* Set polling mode, unblank video */
+	cnpollc(true);		/* Set polling mode, unblank video */
 
 	db_trap(entry, a0);	/* Where the work happens */
 
-	cnpollc(FALSE);		/* Resume interrupt mode */
+	cnpollc(false);		/* Resume interrupt mode */
 	db_active--;
 
 	splx(s);
 
-	*regs = ddb_regs;
+	ddb_regp = ci->ci_db_regs = NULL;
 
 	/*
 	 * Tell caller "We HAVE handled the trap."
@@ -208,7 +246,7 @@ void
 db_write_bytes(addr, size, data)
 	vaddr_t		addr;
 	register size_t	size;
-	register char	*data;
+	register const char *data;
 {
 	register char	*dst;
 
@@ -222,48 +260,58 @@ void
 cpu_Debugger()
 {
 
-	__asm __volatile("call_pal 0x81");		/* bugchk */
-}
-
-/*
- * This is called before ddb_init() to install the
- * machine-specific command table.  (see machdep.c)
- */
-void
-db_machine_init()
-{
-
-	db_machine_commands_install(db_machine_cmds);
+	__asm volatile("call_pal 0x81");		/* bugchk */
 }
 
 /*
  * Alpha-specific ddb commands:
  *
- *	halt		set halt bit in rpb and halt
- *	reboot		set reboot bit in rpb and halt
+ *	cpu		tell DDB to use register state from the
+ *			CPU specified (MULTIPROCESSOR)
  */
 
+#if defined(MULTIPROCESSOR)
 void
-db_mach_halt(addr, have_addr, count, modif)
+db_mach_cpu(addr, have_addr, count, modif)
 	db_expr_t	addr;
-	int		have_addr;
+	bool		have_addr;
 	db_expr_t	count;
-	char *		modif;
+	const char *		modif;
 {
+	struct cpu_info *ci;
 
-	prom_halt(1);
+	if (!have_addr) {
+		cpu_debug_dump();
+		return;
+	}
+
+	if (addr < 0 || addr >= ALPHA_MAXPROCS) {
+		db_printf("CPU %ld out of range\n", addr);
+		return;
+	}
+
+	ci = cpu_info[addr];
+	if (ci == NULL) {
+		db_printf("CPU %ld is not configured\n", addr);
+		return;
+	}
+
+	if (ci != curcpu()) {
+		if ((ci->ci_flags & CPUF_PAUSED) == 0) {
+			db_printf("CPU %ld not paused\n", addr);
+			return;
+		}
+	}
+
+	if (ci->ci_db_regs == NULL) {
+		db_printf("CPU %ld has no register state\n", addr);
+		return;
+	}
+
+	db_printf("Using CPU %ld\n", addr);
+	ddb_regp = ci->ci_db_regs;
 }
-
-void
-db_mach_reboot(addr, have_addr, count, modif)
-	db_expr_t	addr;
-	int		have_addr;
-	db_expr_t	count;
-	char *		modif;
-{
-
-	prom_halt(0);
-}
+#endif /* MULTIPROCESSOR */
 
 /*
  * Map Alpha register numbers to trapframe/db_regs_t offsets.
@@ -327,7 +375,7 @@ db_register_value(regs, regno)
  * Support functions for software single-step.
  */
 
-boolean_t
+bool
 db_inst_call(ins)
 	int ins;
 {
@@ -339,7 +387,7 @@ db_inst_call(ins)
 	     (insn.jump_format.action & 1)));
 }
 
-boolean_t
+bool
 db_inst_return(ins)
 	int ins;
 {
@@ -350,7 +398,7 @@ db_inst_return(ins)
 	    (insn.jump_format.action == op_ret));
 }
 
-boolean_t
+bool
 db_inst_trap_return(ins)
 	int ins;
 {
@@ -361,7 +409,7 @@ db_inst_trap_return(ins)
 	    (insn.pal_format.function == PAL_OSF1_rti));
 }
 
-boolean_t
+bool
 db_inst_branch(ins)
 	int ins;
 {
@@ -385,13 +433,13 @@ db_inst_branch(ins)
 	case op_bne:
 	case op_bge:
 	case op_bgt:
-		return (TRUE);
+		return (true);
 	}
 
-	return (FALSE);
+	return (false);
 }
 
-boolean_t
+bool
 db_inst_unconditional_flow_transfer(ins)
 	int ins;
 {
@@ -401,22 +449,22 @@ db_inst_unconditional_flow_transfer(ins)
 	switch (insn.branch_format.opcode) {
 	case op_j:
 	case op_br:
-		return (TRUE);
+		return (true);
 
 	case op_pal:
 		switch (insn.pal_format.function) {
 		case PAL_OSF1_retsys:
 		case PAL_OSF1_rti:
 		case PAL_OSF1_callsys:
-			return (TRUE);
+			return (true);
 		}
 	}
 
-	return (FALSE);
+	return (false);
 }
 
 #if 0
-boolean_t
+bool
 db_inst_spill(ins, regn)
 	int ins, regn;
 {
@@ -428,7 +476,7 @@ db_inst_spill(ins, regn)
 }
 #endif
 
-boolean_t
+bool
 db_inst_load(ins)
 	int ins;
 {
@@ -440,26 +488,26 @@ db_inst_load(ins)
 	if (insn.mem_format.opcode == op_ldbu ||
 	    insn.mem_format.opcode == op_ldq_u ||
 	    insn.mem_format.opcode == op_ldwu)
-		return (TRUE);
+		return (true);
 	if ((insn.mem_format.opcode >= op_ldf) &&
 	    (insn.mem_format.opcode <= op_ldt))
-		return (TRUE);
+		return (true);
 	if ((insn.mem_format.opcode >= op_ldl) &&
 	    (insn.mem_format.opcode <= op_ldq_l))
-		return (TRUE);
+		return (true);
 
 	/* Prefetches. */
 	if (insn.mem_format.opcode == op_special) {
 		/* Note: MB is treated as a store. */
 		if ((insn.mem_format.displacement == (short)op_fetch) ||
 		    (insn.mem_format.displacement == (short)op_fetch_m))
-			return (TRUE);
+			return (true);
 	}
 
-	return (FALSE);
+	return (false);
 }
 
-boolean_t
+bool
 db_inst_store(ins)
 	int ins;
 {
@@ -471,21 +519,21 @@ db_inst_store(ins)
 	if (insn.mem_format.opcode == op_stw ||
 	    insn.mem_format.opcode == op_stb ||
 	    insn.mem_format.opcode == op_stq_u)
-		return (TRUE);
+		return (true);
 	if ((insn.mem_format.opcode >= op_stf) &&
 	    (insn.mem_format.opcode <= op_stt))
-		return (TRUE);
+		return (true);
 	if ((insn.mem_format.opcode >= op_stl) &&
 	    (insn.mem_format.opcode <= op_stq_c))
-		return (TRUE);
+		return (true);
 
 	/* Barriers. */
 	if (insn.mem_format.opcode == op_special) {
 		if (insn.mem_format.displacement == op_mb)
-			return (TRUE);
+			return (true);
 	}
 
-	return (FALSE);
+	return (false);
 }
 
 db_addr_t

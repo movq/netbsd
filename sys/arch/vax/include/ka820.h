@@ -1,4 +1,4 @@
-/*	$NetBSD: ka820.h,v 1.3 2000/01/24 02:40:32 matt Exp $	*/
+/*	$NetBSD: ka820.h,v 1.9 2008/03/11 05:34:02 matt Exp $	*/
 /*
  * Copyright (c) 1988 Regents of the University of California.
  * All rights reserved.
@@ -14,11 +14,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -38,8 +34,10 @@
  */
 
 /*
- * Definitions specific to the ka820 cpu.
+ * Definitions specific to the ka820 CPU.
  */
+#ifndef _VAX_KA820_H_
+#define _VAX_KA820_H_
 
 /*
  * Device addresses.
@@ -92,6 +90,7 @@
 
 /* interrupt vectors unique for this CPU */
 #define	KA820_INT_RXCD		0x58
+#define KA820_INT_IPINTR	0x80
 
 /* what the heck */
 #define KA820PORT_BITS \
@@ -139,5 +138,7 @@ struct ka820clock {
 	u_short csr3;
 };
 
-void	crxintr __P((void *arg));
-#endif
+void	crxintr(void *arg);
+#endif /* _LOCORE */
+
+#endif /* _VAX_KA820_H_ */

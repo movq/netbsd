@@ -1,4 +1,4 @@
-/*	$NetBSD: eshconfig.c,v 1.2 1998/11/20 17:23:27 kml Exp $	*/
+/*	$NetBSD: eshconfig.c,v 1.8 2008/05/02 19:59:19 xtraeme Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,7 +32,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: eshconfig.c,v 1.2 1998/11/20 17:23:27 kml Exp $");
+__RCSID("$NetBSD: eshconfig.c,v 1.8 2008/05/02 19:59:19 xtraeme Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -141,9 +134,9 @@ struct ifdrv ifd;
  */
 
 static int
-drvspec_ioctl(char *name, int fd, int cmd, int len, caddr_t data)
+drvspec_ioctl(char *lname, int fd, int cmd, int len, caddr_t data)
 {
-	strcpy(ifd.ifd_name, name);
+	strcpy(ifd.ifd_name, lname);
 	ifd.ifd_cmd = cmd;
 	ifd.ifd_len = len;
 	ifd.ifd_data = data;
@@ -232,7 +225,6 @@ main(argc, argv)
      int argc;
      char *argv[];
 {
-	extern int optind;
 	int ch;
 
 	/* Parse command-line options */
@@ -464,7 +456,7 @@ static void
 eeprom_download(const char *filename)
 {
 	FILE *fp;
-	struct rr_seg_descr *segd = NULL;
+	struct rr_seg_descr *segd = NULL, *nsegd;
 	char id[BUFSIZ];
 	char pad[BUFSIZ];
 	char buffer[BUFSIZ];
@@ -554,9 +546,10 @@ eeprom_download(const char *filename)
 		if (!in_segment) {
 			in_segment = 1;
 
-			segd = realloc(segd, sizeof(struct rr_seg_descr) * (segment + 1));
-			if (segd == NULL)
+			nsegd = realloc(segd, sizeof(struct rr_seg_descr) * (segment + 1));
+			if (nsegd == NULL)
 				err(6, "couldn't realloc segment descriptor space");
+			segd = nsegd;
 
 			segd[segment].start_addr = address * sizeof(u_int32_t);
 			segd[segment].ee_addr = segment_start;
@@ -641,7 +634,7 @@ rr_checksum(const u_int32_t *data, int length)
 
 struct stats_values {
 	int	 offset;
-	char *name;
+	const char *name;
 };
 
 struct stats_values stats_values[] = {
@@ -707,7 +700,7 @@ esh_reset()
 }
 
 static void
-esh_stats(int get_stats)
+esh_stats(int lget_stats)
 {
 	u_int32_t	*stats;
 	long long value;
@@ -720,14 +713,14 @@ esh_stats(int get_stats)
 	stats = rr_stats.rs_stats;
 
 	value = (((long long) stats[0x78 / 4]) << 32) | stats[0x7c / 4];
-	if (get_stats == 1 || value > 0)
-		printf("%12qd bytes sent\n", value);
+	if (lget_stats == 1 || value > 0)
+		printf("%12lld bytes sent\n", value);
 	value = ((long long) stats[0xb8 / 4] << 32) | stats[0xbc / 4];
-	if (get_stats == 1 || value > 0)
-		printf("%12qd bytes received\n", value);
+	if (lget_stats == 1 || value > 0)
+		printf("%12lld bytes received\n", value);
 
 	for (offset = 0; stats_values[offset].offset != 0; offset++) {
-		if (get_stats == 1 || stats[stats_values[offset].offset / 4] > 0)
+		if (lget_stats == 1 || stats[stats_values[offset].offset / 4] > 0)
 			printf("%12d %s\n", stats[stats_values[offset].offset / 4],
 			       stats_values[offset].name);
 	}
@@ -750,7 +743,7 @@ esh_tuning_stats()
 	printf("rt_tx_timeout = %x\n", rr_tune.rt_tx_timeout);
 	printf("rt_rx_timeout = %x\n", rr_tune.rt_rx_timeout);
 	printf("rt_pci_state = %x"
-	       "     min dma %x  read max %x write max %x\n", 
+	       "     min DMA %x  read max %x write max %x\n", 
 	       rr_tune.rt_pci_state,
 	       (rr_tune.rt_pci_state & RR_PS_MIN_DMA_MASK) 
 	       >> RR_PS_MIN_DMA_SHIFT,

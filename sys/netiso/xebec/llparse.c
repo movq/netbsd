@@ -1,16 +1,20 @@
-/*	$NetBSD: llparse.c,v 1.4 1994/06/29 06:41:02 cgd Exp $	*/
+/*	$NetBSD: llparse.c,v 1.12 2007/02/22 06:16:03 thorpej Exp $	*/
 
 /*
  * ************************* NOTICE *******************************
  * This code is in the public domain.  It cannot be copyrighted.
- * This ll parser was originally written by Keith Thompson for the 
+ * This ll parser was originally written by Keith Thompson for the
  * University of Wisconsin Crystal project.
  * It was based on an FMQ lr parser written by Jon Mauney at the
  * University of Wisconsin.
- * It was subsequently modified very slightly by Nancy Hall at the 
+ * It was subsequently modified very slightly by Nancy Hall at the
  * University of Wisconsin for the Crystal project.
  * ****************************************************************
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: llparse.c,v 1.12 2007/02/22 06:16:03 thorpej Exp $");
+
 #include "xebec.h"
 #include "llparse.h"
 #include "main.h"
@@ -24,13 +28,16 @@ short		llparsestack[STACKSIZE];
 short		llstackptr = 0;
 LLtoken		lltoken;
 
+void		prt_token();
+
+int
 llparse()
 {
-	register		havetoken = FALSE;
-	register		sym;
+	register int		havetoken = false;
+	register int		sym;
 	register LLtoken	*t = &lltoken;
-	register		parseaction;
-	register		accepted = FALSE;
+	register int		parseaction;
+	register int		accepted = false;
 
 	llpushprod(llnprods-1); /* $$$ ::= <start symbol>  */
 
@@ -61,7 +68,7 @@ llparse()
 
 			if(!havetoken) {
 				llgettoken(t);
-				havetoken = TRUE;
+				havetoken = true;
 			}
 
 			if(sym == t->llterm) {
@@ -69,13 +76,13 @@ llparse()
 				llaccept(t);
 				llstackptr--; /* pop terminal */
 				if(t->llterm == llnterms-1) { /* end symbol $$$ */
-					accepted = TRUE;
+					accepted = true;
 				} else {
-					havetoken = FALSE;
+					havetoken = false;
 				}
 			} else {
 				llparsererror(t); /* wrong terminal on input */
-				havetoken = FALSE;
+				havetoken = false;
 			}
 			continue;
 		}
@@ -84,7 +91,7 @@ llparse()
 
 		if(!havetoken) {
 			llgettoken(t);
-			havetoken = TRUE;
+			havetoken = true;
 		}
 
 		/* consult parse table  for new production */
@@ -93,7 +100,7 @@ llparse()
 		if(parseaction == 0) {
 			/* error entry */
 			llparsererror(t);
-			havetoken = FALSE;
+			havetoken = false;
 			continue;
 		}
 
@@ -104,7 +111,7 @@ llparse()
 				llpushprod(parseaction); /* push rhs of production */
 			} else {
 				llparsererror(t);
-				havetoken = FALSE;
+				havetoken = false;
 			}
 		} else {
 			llstackptr--; /* pop nonterminal */
@@ -115,12 +122,13 @@ llparse()
 	return(0);
 }
 
+void
 llpushprod(prod) 	/* recognize production prod - push rhs on stack */
-short prod;
+	short prod;
 {
-	register	start;
-	register	length;
-	register	count;
+	register int	start;
+	register int	length;
+	register int	count;
 
 	start = llprodindex[prod].llprodstart;
 	length = llprodindex[prod].llprodlength;
@@ -162,19 +170,20 @@ short prod;
 	}
 }
 
-
+int
 llepsilonok(term)
+	int term;
 {
-	register	ptr;
-	register	sym;
-	register	pact;
-	register	nomore;
-	register	rval;
+	register int	ptr;
+	register int	sym;
+	register int	pact;
+	register int	nomore;
+	register int	rval;
 
 	IFDEBUG(L)
 		printf("llepsilonok() enter\n");
 	ENDDEBUG
-	rval = TRUE;
+	rval = true;
 
 	ptr = llstackptr;
 
@@ -188,7 +197,7 @@ llepsilonok(term)
 		}
 
 		if(sym < llnterms) {
-			nomore = TRUE;
+			nomore = true;
 			rval = sym == term;
 			continue;
 		}
@@ -196,17 +205,17 @@ llepsilonok(term)
 		pact = llfindaction(sym, term);
 
 		if(pact == 0) {
-			nomore = TRUE;
-			rval = FALSE;
+			nomore = true;
+			rval = false;
 			continue;
 		}
 
-		if(llepsilon[pact] == TRUE) {
+		if(llepsilon[pact] == true) {
 			ptr--;
 			nomore = ptr == 0;
 		}
 		else {
-			nomore = TRUE;
+			nomore = true;
 		}
 
 	} while(!nomore);
@@ -215,9 +224,12 @@ llepsilonok(term)
 }
 
 
-short llfindaction(sym, term)
+short
+llfindaction(sym, term)
+	int sym;
+	int term;
 {
-	register	index;
+	register int	index;
 
 	IFDEBUG(L)
 		printf("llfindaction(sym=%d, term=%d) enter \n", sym, term);
@@ -233,7 +245,7 @@ short llfindaction(sym, term)
 	return(0);
 }
 
-
+void
 llparsererror(token)
 LLtoken *token;
 {
@@ -248,9 +260,9 @@ LLtoken *token;
 	Exit(-1);
 }
 
-
+void
 llgettoken(token)
-LLtoken *token;
+	LLtoken *token;
 {
 	llscan(token);
 	token->llstate = NORMAL;
@@ -283,8 +295,9 @@ struct llattr	llattrdesc[LLMAXDESC];
 
 int	lldescindex = 1;
 
-
+void
 llsetattr(n)
+	int n;
 {
 	register struct llattr *ptr;
 
@@ -293,21 +306,22 @@ llsetattr(n)
 	ENDDEBUG
 	if(lldescindex >= LLMAXDESC) {
 		fprintf(stdout, "llattribute stack overflow: desc\n");
-		fprintf(stdout, 
+		fprintf(stdout,
 			"lldescindex=0x%x, llattrtop=0x%x\n",lldescindex, llattrtop);
 		Exit(-1);
 	}
 	ptr = &llattrdesc[lldescindex];
 	ptr->llabase = &llattributes[llattrtop];
-	ptr->lloldtop = ++llattrtop; 
+	ptr->lloldtop = ++llattrtop;
 	ptr->llaindex = 1;
 	ptr->llacnt = n+1; /* the lhs ALWAYS uses an attr; it remains on the
 						stack when the production is recognized */
 	lldescindex++;
 }
 
+void
 llpushattr(attr)
-LLattrib attr;
+	LLattrib attr;
 {
 	struct llattr *a;
 
@@ -323,6 +337,7 @@ LLattrib attr;
 	a->llaindex++; /* inc count of attrs on the stack for this prod */
 }
 
+void
 llfinprod()
 {
 	IFDEBUG(L)
@@ -337,6 +352,7 @@ llfinprod()
 
 #ifndef LINT
 #ifdef DEBUG
+void
 dump_parse_stack()
 {
 	int ind;
@@ -349,18 +365,19 @@ dump_parse_stack()
 	}
 }
 
-#endif DEBUG
-#endif LINT
+#endif /* DEBUG */
+#endif /* !LINT */
 
+void
 prt_token(t)
-LLtoken *t;
+	LLtoken *t;
 {
-	fprintf(stdout, "t at 0x%x\n", t);
+	fprintf(stdout, "t at %p\n", t);
 	fprintf(stdout, "t->llterm=0x%x\n", t->llterm); (void) fflush(stdout);
 	fprintf(stdout, "TOK: %s\n", llstrings[t->llterm]);
 	(void) fflush(stdout);
 #ifdef LINT
 	/* to make lint shut up */
 	fprintf(stdout, "", llnterms, llnsyms, llnprods, llinfinite);
-#endif LINT
+#endif /* LINT */
 }

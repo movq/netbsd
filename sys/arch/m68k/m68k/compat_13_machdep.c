@@ -1,9 +1,42 @@
-/*	$NetBSD: compat_13_machdep.c,v 1.2 1999/08/16 02:59:23 simonb Exp $	*/
+/*	$NetBSD: compat_13_machdep.c,v 1.13 2008/04/24 18:39:20 ad Exp $	*/
 
 /*
- * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1982, 1986, 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * the Systems Programming Group of the University of Utah Computer
+ * Science Department.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ *	from: Utah Hdr: machdep.c 1.74 92/12/20
+ *	from: @(#)machdep.c	8.10 (Berkeley) 4/20/94
+ */
+/*
+ * Copyright (c) 1988 University of Utah.
  *
  * This code is derived from software contributed to Berkeley by
  * the Systems Programming Group of the University of Utah Computer
@@ -41,6 +74,9 @@
  *	from: @(#)machdep.c	8.10 (Berkeley) 4/20/94
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: compat_13_machdep.c,v 1.13 2008/04/24 18:39:20 ad Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
@@ -52,12 +88,11 @@
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
 
+#include <compat/sys/signal.h>
+#include <compat/sys/signalvar.h>
+
 #include <machine/cpu.h>
 #include <machine/reg.h>
-
-extern int fputype;
-extern short exframesize[];
-void	m68881_restore __P((struct fpframe *));
 
 /*
  * System call to cleanup state after a signal
@@ -70,14 +105,12 @@ void	m68881_restore __P((struct fpframe *));
  * a machine fault.
  */
 int
-compat_13_sys_sigreturn(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+compat_13_sys_sigreturn(struct lwp *l, const struct compat_13_sys_sigreturn_args *uap, register_t *retval)
 {
-	struct compat_13_sys_sigreturn_args /* {
+	/* {
 		syscallarg(struct sigcontext13 *) sigcntxp;
-	} */ *uap = v;
+	} */
+	struct proc *p = l->l_proc;
 	struct sigcontext13 *scp;
 	struct frame *frame;
 	struct sigcontext13 tsigc;
@@ -90,18 +123,18 @@ compat_13_sys_sigreturn(p, v, retval)
 	 */
 	scp = SCARG(uap, sigcntxp);
 	if ((int)scp & 1)
-		return (EINVAL);
+		return EINVAL;
 
 	if (copyin(scp, &tsigc, sizeof(tsigc)) != 0)
-		return (EFAULT);
+		return EFAULT;
 	scp = &tsigc;
 
 	/* Make sure the user isn't pulling a fast one on us! */
 	if ((scp->sc_ps & (PSL_MBZ|PSL_IPL|PSL_S)) != 0)
-		return (EINVAL);
+		return EINVAL;
 
 	/* Restore register context. */
-	frame = (struct frame *) p->p_md.md_regs;
+	frame = (struct frame *)l->l_md.md_regs;
 
 	/*
 	 * We only support restoring the sigcontext13 in this call.
@@ -109,7 +142,7 @@ compat_13_sys_sigreturn(p, v, retval)
 	 * we will not have a sigstate to restore.
 	 */
 	if (scp->sc_ap != 0)
-		return (EINVAL);
+		return EINVAL;
 
 	/*
 	 * Restore the user supplied information.
@@ -123,15 +156,19 @@ compat_13_sys_sigreturn(p, v, retval)
 	frame->f_pc = scp->sc_pc;
 	frame->f_sr = scp->sc_ps;
 
+	mutex_enter(p->p_lock);
+
 	/* Restore signal stack. */
 	if (scp->sc_onstack & SS_ONSTACK)
-		p->p_sigacts->ps_sigstk.ss_flags |= SS_ONSTACK;
+		l->l_sigstk.ss_flags |= SS_ONSTACK;
 	else
-		p->p_sigacts->ps_sigstk.ss_flags &= ~SS_ONSTACK;
+		l->l_sigstk.ss_flags &= ~SS_ONSTACK;
 
 	/* Restore signal mask. */
 	native_sigset13_to_sigset(&scp->sc_mask, &mask);
-	(void) sigprocmask1(p, SIG_SETMASK, &mask, 0);
+	(void)sigprocmask1(l, SIG_SETMASK, &mask, 0);
 
-	return (EJUSTRETURN);
+	mutex_exit(p->p_lock);
+
+	return EJUSTRETURN;
 }

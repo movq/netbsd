@@ -1,4 +1,4 @@
-/*	$NetBSD: tetris.c,v 1.14 2000/01/21 02:10:57 jsm Exp $	*/
+/*	$NetBSD: tetris.c,v 1.19 2008/07/20 01:03:22 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -40,8 +36,8 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1992, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1992, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 /*
@@ -78,11 +74,11 @@ gid_t	gid, egid;
 char	key_msg[100];
 int	showpreview;
 
-static	void	elide __P((void));
-static	void	setup_board __P((void));
-	int	main __P((int, char **));
-	void	onintr __P((int)) __attribute__((__noreturn__));
-	void	usage __P((void)) __attribute__((__noreturn__));
+static	void	elide(void);
+static	void	setup_board(void);
+	int	main(int, char **);
+	void	onintr(int) __dead;
+	void	usage(void) __dead;
 
 /*
  * Set up the initial board.  The bottom display row is completely set,
@@ -92,8 +88,8 @@ static	void	setup_board __P((void));
 static void
 setup_board()
 {
-	register int i;
-	register cell *p;
+	int i;
+	cell *p;
 
 	p = board;
 	for (i = B_SIZE; i; i--)
@@ -106,8 +102,8 @@ setup_board()
 static void
 elide()
 {
-	register int i, j, base;
-	register cell *p;
+	int i, j, base;
+	cell *p;
 
 	for (i = A_FIRST; i < A_LAST; i++) {
 		base = i * B_COLS + 1;
@@ -133,9 +129,9 @@ main(argc, argv)
 	int argc;
 	char *argv[];
 {
-	register int pos, c;
-	register const char *keys;
-	register int level = 2;
+	int pos, c;
+	const char *keys;
+	int level = 2;
 	char key_write[6][10];
 	int ch, i, j;
 	int fd;
@@ -326,7 +322,7 @@ main(argc, argv)
 
 void
 onintr(signo)
-	int signo __attribute__((__unused__));
+	int signo __unused;
 {
 	scr_clear();
 	scr_end();

@@ -1,11 +1,38 @@
-/*	$NetBSD: if_hp.c,v 1.30 2000/03/30 12:45:33 augustss Exp $	*/
+/*	$NetBSD: if_hp.c,v 1.44 2008/04/08 20:08:50 cegger Exp $	*/
 
 /* XXX THIS DRIVER IS BROKEN.  IT WILL NOT EVEN COMPILE. */
 
 /*-
- * Copyright (c) 1990, 1991 William F. Jolitz.
  * Copyright (c) 1990 The Regents of the University of California.
  * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ */
+
+/*-
+ * Copyright (c) 1990, 1991 William F. Jolitz.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -52,11 +79,13 @@
  * 18JAN1993.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_hp.c,v 1.44 2008/04/08 20:08:50 cegger Exp $");
+
 #include "hp.h"
 #if NHP > 0
 
 #include "opt_inet.h"
-#include "opt_ns.h"
 #include "rnd.h"
 
 #include <sys/param.h>
@@ -83,10 +112,6 @@
 #include <netinet/if_inarp.h>
 #endif
 
-#ifdef NS
-#include <netns/ns.h>
-#include <netns/ns_if.h>
-#endif
 
 #include "bpfilter.h"
 #if NBPFILTER > 0
@@ -95,7 +120,7 @@
 #include <net/bpfdesc.h>
 #endif
 
-#include <machine/cpu.h>
+#include <sys/cpu.h>
 #include <machine/pio.h>
 
 #include <i386/isa/isa_device.h>	/* XXX BROKEN */
@@ -137,13 +162,13 @@ struct hp_softc {
 	short   ns_mode;	/* word/byte mode */
 	short   ns_rcr;
 #if NBPFILTER > 0
-	caddr_t ns_bpf;
+	void *ns_bpf;
 #endif
 	u_int8_t ns_addrp[ETHER_ADDR_LEN]; /* hardware Ethernet address */
 
 #if NRND > 0
 	rndsource_element_t rnd_source;
-#endif	
+#endif
 }
         hp_softc[NHP];
 #define	ENBUFSIZE	(sizeof(struct ether_header) + ETHERMTU + 2 + ETHER_MIN_LEN)
@@ -221,7 +246,7 @@ hpprobe(dvp)
  */
 hpfetch(ns, up, ad, len)
 	struct hp_softc *ns;
-	caddr_t up;
+	void *up;
 {
 	u_char  cmd;
 	int	hpc = ns->ns_port;
@@ -232,7 +257,7 @@ hpfetch(ns, up, ad, len)
 	cmd = inb(hpc + ds_cmd);
 	outb(hpc + ds_cmd, DSCM_NODMA | DSCM_PG0 | DSCM_START);
 
-	/* Setup remote dma */
+	/* Setup remote DMA */
 	outb(hpc + ds0_isr, DSIS_RDC);
 
 	if (ns->ns_mode & DSDC_WTS)
@@ -262,10 +287,10 @@ hpfetch(ns, up, ad, len)
 
 #ifdef HP_32BIT
 	if (ns->ns_mode & DSDC_WTS)
-		len = (caddr_t) insd(hpc + hp_data, up, len >> 2) - up;
+		len = (void *) insd(hpc + hp_data, up, len >> 2) - up;
 	else
 #endif
-		len = (caddr_t) insw(hpc + hp_data, up, len >> 1) - up;
+		len = (void *) insw(hpc + hp_data, up, len >> 1) - up;
 
 #ifdef HP_DEBUG
 	printf("hpfetch: done len=%d\n", len);
@@ -283,7 +308,7 @@ hpfetch(ns, up, ad, len)
  */
 hpput(ns, up, ad, len)
 	struct hp_softc *ns;
-	caddr_t up;
+	void *up;
 {
 	u_char  cmd;
 	int	hpc = ns->ns_port;
@@ -294,7 +319,7 @@ hpput(ns, up, ad, len)
 	cmd = inb(hpc + ds_cmd);
 	outb(hpc + ds_cmd, DSCM_NODMA | DSCM_PG0 | DSCM_START);
 
-	/* Setup for remote dma */
+	/* Setup for remote DMA */
 	outb(hpc + ds0_isr, DSIS_RDC);
 
 	if (ns->ns_mode & DSDC_WTS)
@@ -336,10 +361,10 @@ hpput(ns, up, ad, len)
 
 #ifdef HP_32BIT
 	if (ns->ns_mode & DSDC_WTS)
-		len = (caddr_t) outsd(hpc + hp_data, up, len >> 2) - up;
+		len = (void *) outsd(hpc + hp_data, up, len >> 2) - up;
 	else
 #endif
-		len = (caddr_t) outsw(hpc + hp_data, up, len >> 1) - up;
+		len = (void *) outsw(hpc + hp_data, up, len >> 1) - up;
 
 #ifdef HP_DEBUG
 	printf("hpput: done len=%d\n", len);
@@ -422,6 +447,7 @@ hpattach(dvp)
 	ifp->if_ioctl = hpioctl;
 	ifp->if_reset = hpreset;
 	ifp->if_watchdog = 0;
+	IFQ_SET_READY(&ifp->if_snd);
 	if_attach(ifp);
 
 #if NBPFILTER > 0
@@ -430,7 +456,7 @@ hpattach(dvp)
 #endif
 
 #if NRND > 0
-	rnd_attach_source(&ns->rnd_source, ns->sc_dev.dv_xname,
+	rnd_attach_source(&ns->rnd_source, device_xname(&ns->sc_dev),
 			  RND_TYPE_NET, 0);
 #endif
 
@@ -449,7 +475,7 @@ hpinit(unit)
 	char   *cp;
 	int hpc = ns->ns_port;
 
-	if (ifp->if_addrlist == (struct ifaddr *) 0)
+	if (IFADDR_EMPTY(ifp))
 		return;
 	if (ifp->if_flags & IFF_RUNNING)
 		return;
@@ -542,7 +568,7 @@ hpstart(ifp)
 	if ((ns->ns_if.if_flags & IFF_RUNNING) == 0)
 		return;
 
-	IF_DEQUEUE(&ns->ns_if.if_snd, m);
+	IFQ_DEQUEUE(&ns->ns_if.if_snd, m);
 
 	if (m == 0)
 		return;
@@ -568,14 +594,14 @@ hpstart(ifp)
 	for (m0 = m; m != 0;) {
 		if (m->m_len & 1 && t > m->m_len) {
 			m->m_len -= 1;
-			hpput(ns, mtod(m, caddr_t), buffer, m->m_len);
+			hpput(ns, mtod(m, void *), buffer, m->m_len);
 			t -= m->m_len;
 			buffer += m->m_len;
 			m->m_data += m->m_len;
 			m->m_len = 1;
 			m = m_pullup(m, 2);
 		} else {
-			hpput(ns, mtod(m, caddr_t), buffer, m->m_len);
+			hpput(ns, mtod(m, void *), buffer, m->m_len);
 			t -= m->m_len;
 			buffer += m->m_len;
 			MFREE(m, m0);
@@ -589,6 +615,7 @@ hpstart(ifp)
 	len = total;
 	if (len < ETHER_MIN_LEN)
 		len = ETHER_MIN_LEN;
+#error broken here ! need to set to 0 the pad space in buffer !
 	outb(hpc + ds_cmd, DSCM_NODMA | DSCM_PG0 | DSCM_START);
 	outb(hpc + ds0_tbcr0, len & 0xff);
 	outb(hpc + ds0_tbcr1, (len >> 8) & 0xff);
@@ -668,7 +695,7 @@ loop:
 #endif
 
 			/* get length */
-			hpfetch(ns, (caddr_t) & ns->ns_ph, addr, sizeof ns->ns_ph);
+			hpfetch(ns, (void *) & ns->ns_ph, addr, sizeof ns->ns_ph);
 			addr += sizeof ns->ns_ph;
 
 #ifdef HP_DEBUG
@@ -684,7 +711,7 @@ loop:
 				/* Get packet header */
 				if (len > 14)
 					len = 14;
-				hpfetch(ns, (caddr_t) (ns->ns_pb), addr, len);
+				hpfetch(ns, (void *) (ns->ns_pb), addr, len);
 
 				/* move boundary up */
 				bnry = ns->ns_ph.pr_nxtpg;
@@ -728,7 +755,7 @@ loop:
 				while (1);
 			}
 			/* read packet */
-			hpfetch(ns, (caddr_t) (ns->ns_pb), addr, len);
+			hpfetch(ns, (void *) (ns->ns_pb), addr, len);
 
 			/* move boundary up */
 			bnry = ns->ns_ph.pr_nxtpg;
@@ -747,7 +774,7 @@ loop:
 			len -= sizeof(struct ether_header) + sizeof(long);
 
 			/* process packet */
-			hpread(ns, (caddr_t) (ns->ns_pb), len);
+			hpread(ns, (void *) (ns->ns_pb), len);
 		}
 	}
 	/* Transmit error */
@@ -813,7 +840,7 @@ hpread(ns, buf, len)
 	 */
 	eh = (struct ether_header *) buf;
 	etype = ntohs((u_short) eh->ether_type);
-#define	hpdataaddr(eh, off, type)	((type)(((caddr_t)((eh)+1)+(off))))
+#define	hpdataaddr(eh, off, type)	((type)(((void *)((eh)+1)+(off))))
 	if (etype >= ETHERTYPE_TRAIL &&
 	    etype < ETHERTYPE_TRAIL + ETHERTYPE_NTRAILER) {
 		off = (etype - ETHERTYPE_TRAIL) * 512;
@@ -836,9 +863,9 @@ hpread(ns, buf, len)
 #endif
 
 	if ((ns->ns_if.if_flags & IFF_PROMISC)
-	    && bcmp(eh->ether_dhost, ns->ns_addrp,
+	    && memcmp(eh->ether_dhost, ns->ns_addrp,
 		sizeof(eh->ether_dhost)) != 0
-	    && bcmp(eh->ether_dhost, etherbroadcastaddr,
+	    && memcmp(eh->ether_dhost, etherbroadcastaddr,
 		sizeof(eh->ether_dhost)) != 0)
 		return;
 
@@ -869,13 +896,13 @@ hpread(ns, buf, len)
  */
 struct mbuf *
 hpget(buf, totlen, off0, ifp)
-	caddr_t buf;
+	void *buf;
 	int     totlen, off0;
 	struct ifnet *ifp;
 {
 	struct mbuf *top, **mp, *m, *p;
 	int     off = off0, len;
-	caddr_t cp = buf;
+	void *cp = buf;
 	char   *epkt;
 
 	buf += sizeof(struct ether_header);
@@ -923,7 +950,7 @@ hpget(buf, totlen, off0, ifp)
 			} else
 				len = m->m_len;
 		}
-		bcopy(cp, mtod(m, caddr_t), (unsigned) len);
+		memcpy(mtod(m, void *), cp, (unsigned) len);
 		cp += len;
 		*mp = m;
 		mp = &m->m_next;
@@ -939,7 +966,7 @@ hpget(buf, totlen, off0, ifp)
 hpioctl(ifp, cmd, data)
 	struct ifnet *ifp;
 	u_long	cmd;
-	caddr_t data;
+	void *data;
 {
 	struct ifaddr *ifa = (struct ifaddr *) data;
 	struct hp_softc *ns = &hp_softc[ifp->if_unit];
@@ -960,27 +987,6 @@ hpioctl(ifp, cmd, data)
 			    IA_SIN(ifa)->sin_addr;
 			arpwhohas((struct arpcom *) ifp, &IA_SIN(ifa)->sin_addr);
 			break;
-#endif
-#ifdef NS
-		case AF_NS:
-			{
-				struct ns_addr *ina = &(IA_SNS(ifa)->sns_addr);
-
-				if (ns_nullhost(*ina))
-					ina->x_host = *(union ns_host *) (ns->ns_addrp);
-				else {
-					/*
-							 * The manual says we can't change the address
-							 * while the receiver is armed,
-							 * so reset everything
-							 */
-					ifp->if_flags &= ~IFF_RUNNING;
-					bcopy((caddr_t) ina->x_host.c_host,
-					    (caddr_t) ns->ns_addrp, sizeof(ns->ns_addrp));
-				}
-				hpinit(ifp->if_unit);	/* does hp_setaddr() */
-				break;
-			}
 #endif
 		default:
 			hpinit(ifp->if_unit);
@@ -1006,7 +1012,7 @@ hpioctl(ifp, cmd, data)
 
 #ifdef notdef
 	case SIOCGHWADDR:
-		bcopy((caddr_t) ns->ns_addrp, (caddr_t) & ifr->ifr_data,
+		memcpy((void *) & ifr->ifr_data, (void *) ns->ns_addrp,
 		    sizeof(ns->ns_addrp));
 		break;
 #endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: dvma.c,v 1.14 1999/11/13 00:32:19 thorpej Exp $	*/
+/*	$NetBSD: dvma.c,v 1.38 2008/04/28 20:23:38 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -75,25 +68,26 @@
  * routines that assist the driver in doing so.)
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: dvma.c,v 1.38 2008/04/28 20:23:38 martin Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/proc.h>
 #include <sys/malloc.h>
-#include <sys/map.h>
+#include <sys/extent.h>
 #include <sys/buf.h>
 #include <sys/vnode.h>
 #include <sys/user.h>
 #include <sys/core.h>
 #include <sys/exec.h>
 
-#include <vm/vm.h>
-#include <vm/vm_kern.h>
-#include <vm/vm_map.h>
-
 #include <uvm/uvm_extern.h>
 
+#define _SUN68K_BUS_DMA_PRIVATE
 #include <machine/autoconf.h>
+#include <machine/bus.h>
 #include <machine/cpu.h>
 #include <machine/dvma.h>
 #include <machine/pmap.h>
@@ -104,28 +98,25 @@
 #include <sun3/sun3x/iommu.h>
 
 /*
- * Use a resource map to manage DVMA scratch-memory pages.
+ * Use an extent map to manage DVMA scratch-memory pages.
  * Note: SunOS says last three pages are reserved (PROM?)
  * Note: need a separate map (sub-map?) for last 1MB for
  *       use by VME slave interface.
  */
 
 /* Number of slots in dvmamap. */
-int dvma_max_segs = btoc(DVMA_MAP_SIZE);
-struct map *dvmamap;
+struct extent *dvma_extent;
 
-void
-dvma_init()
+void 
+dvma_init(void)
 {
 
 	/*
-	 * Create the resource map for DVMA pages.
+	 * Create the extent map for DVMA pages.
 	 */
-	dvmamap = malloc((sizeof(struct map) * dvma_max_segs),
-					 M_DEVBUF, M_WAITOK);
-
-	rminit(dvmamap, btoc(DVMA_MAP_AVAIL), btoc(DVMA_MAP_BASE),
-		   "dvmamap", dvma_max_segs);
+	dvma_extent = extent_create("dvma", DVMA_MAP_BASE,
+	    DVMA_MAP_BASE + (DVMA_MAP_AVAIL - 1), M_DEVBUF,
+	    NULL, 0, EX_NOCOALESCE|EX_NOWAIT);
 
 	/*
 	 * Enable DVMA in the System Enable register.
@@ -141,16 +132,14 @@ dvma_init()
  * would be used by some OTHER bus-master besides the CPU.
  * (Examples: on-board ie/le, VME xy board).
  */
-u_long
-dvma_kvtopa(kva, bustype)
-	void * kva;
-	int bustype;
+u_long 
+dvma_kvtopa(void *kva, int bustype)
 {
 	u_long addr, mask;
 
 	addr = (u_long)kva;
 	if ((addr & DVMA_MAP_BASE) != DVMA_MAP_BASE)
-		panic("dvma_kvtopa: bad dmva addr=0x%x\n", addr);
+		panic("dvma_kvtopa: bad dmva addr=0x%lx", addr);
 
 	switch (bustype) {
 	case BUS_OBIO:
@@ -162,7 +151,7 @@ dvma_kvtopa(kva, bustype)
 		break;
 	}
 
-	return(addr & mask);
+	return addr & mask;
 }
 
 
@@ -171,18 +160,16 @@ dvma_kvtopa(kva, bustype)
  * to a kernel address in DVMA space.
  */
 void *
-dvma_mapin(kmem_va, len, canwait)
-	void *  kmem_va;
-	int     len, canwait;
+dvma_mapin(void *kmem_va, int len, int canwait)
 {
-	void * dvma_addr;
-	vm_offset_t kva, tva;
-	register int npf, s;
+	void *dvma_addr;
+	vaddr_t kva, tva;
+	int npf, s, error;
 	paddr_t pa;
-	long off, pn;
-	boolean_t rv;
+	long off;
+	bool rv;
 
-	kva = (u_long)kmem_va;
+	kva = (vaddr_t)kmem_va;
 #ifdef	DIAGNOSTIC
 	/*
 	 * Addresses below VM_MIN_KERNEL_ADDRESS are not part of the kernel
@@ -195,40 +182,30 @@ dvma_mapin(kmem_va, len, canwait)
 	/*
 	 * Calculate the offset of the data buffer from a page boundary.
 	 */
-	off = (int)kva & PGOFSET;
+	off = kva & PGOFSET;
 	kva -= off;	/* Truncate starting address to nearest page. */
 	len = round_page(len + off); /* Round the buffer length to pages. */
 	npf = btoc(len); /* Determine the number of pages to be mapped. */
 
-	s = splimp();
-	for (;;) {
-		/*
-		 * Try to allocate DVMA space of the appropriate size
-		 * in which to do a transfer.
-		 */
-		pn = rmalloc(dvmamap, npf);
-
-		if (pn != 0)
-			break;
-		if (canwait) {
-			(void)tsleep(dvmamap, PRIBIO+1, "physio", 0);
-			continue;
-		}
-		splx(s);
-		return NULL;
-	}
+	/*
+	 * Try to allocate DVMA space of the appropriate size
+	 * in which to do a transfer.
+	 */
+	s = splvm();
+	error = extent_alloc(dvma_extent, len, PAGE_SIZE, 0,
+	    EX_FAST | EX_NOWAIT | (canwait ? EX_WAITSPACE : 0), &tva);
 	splx(s);
-
+	if (error)
+		return NULL;
 	
 	/* 
 	 * Tva is the starting page to which the data buffer will be double
 	 * mapped.  Dvma_addr is the starting address of the buffer within
 	 * that page and is the return value of the function.
 	 */
-	tva = ctob(pn);
-	dvma_addr = (void *) (tva + off);
+	dvma_addr = (void *)(tva + off);
 
-	for (;npf--; kva += NBPG, tva += NBPG) {
+	for (; npf--; kva += PAGE_SIZE, tva += PAGE_SIZE) {
 		/*
 		 * Retrieve the physical address of each page in the buffer
 		 * and enter mappings into the I/O MMU so they may be seen
@@ -237,16 +214,16 @@ dvma_mapin(kmem_va, len, canwait)
 		 */
 		rv = pmap_extract(pmap_kernel(), kva, &pa);
 #ifdef	DEBUG
-		if (rv == FALSE)
+		if (rv == false)
 			panic("dvma_mapin: null page frame");
-#endif	DEBUG
+#endif	/* DEBUG */
 
 		iommu_enter((tva & IOMMU_VA_MASK), pa);
-		pmap_enter(pmap_kernel(), tva, pa | PMAP_NC,
-			VM_PROT_READ|VM_PROT_WRITE, PMAP_WIRED);
+		pmap_kenter_pa(tva, pa | PMAP_NC, VM_PROT_READ | VM_PROT_WRITE);
 	}
+	pmap_update(pmap_kernel());
 
-	return (dvma_addr);
+	return dvma_addr;
 }
 
 /*
@@ -256,10 +233,8 @@ dvma_mapin(kmem_va, len, canwait)
  *       synchronization between the DVMA cache and central RAM
  *       on the 3/470.
  */
-void
-dvma_mapout(dvma_addr, len)
-	void *	dvma_addr;
-	int		len;
+void 
+dvma_mapout(void *dvma_addr, int len)
 {
 	u_long kva;
 	int s, off;
@@ -270,21 +245,13 @@ dvma_mapout(dvma_addr, len)
 	len = round_page(len + off);
 
 	iommu_remove((kva & IOMMU_VA_MASK), len);
+	pmap_kremove(kva, len);
+	pmap_update(pmap_kernel());
 
-	/*
-	 * XXX - don't call pmap_remove() with DVMA space yet.
-	 * XXX   It cannot (currently) handle the removal
-	 * XXX   of address ranges which do not participate in the
-	 * XXX   PV system by virtue of their _virtual_ addresses.
-	 * XXX   DVMA is one of these special address spaces.
-	 */
-#ifdef	DVMA_ON_PVLIST
-	pmap_remove(pmap_kernel(), kva, kva + len);
-#endif	/* DVMA_ON_PVLIST */
-
-	s = splimp();
-	rmfree(dvmamap, btoc(len), btoc(kva));
-	wakeup(dvmamap);
+	s = splvm();
+	if (extent_free(dvma_extent, kva, len, EX_NOWAIT | EX_MALLOCOK))
+		panic("dvma_mapout: unable to free region: 0x%lx,0x%x",
+		    kva, len);
 	splx(s);
 }
 
@@ -293,33 +260,140 @@ dvma_mapout(dvma_addr, len)
  * (For sun3 compatibility - the ie driver.)
  */
 void *
-dvma_malloc(bytes)
-	size_t bytes;
+dvma_malloc(size_t bytes)
 {
 	void *new_mem, *dvma_mem;
-	vm_size_t new_size;
+	vsize_t new_size;
 
-	if (!bytes)
+	if (bytes == 0)
 		return NULL;
 	new_size = m68k_round_page(bytes);
-	new_mem = (void*)uvm_km_alloc(kernel_map, new_size);
-	if (!new_mem)
+	new_mem = (void *)uvm_km_alloc(kernel_map, new_size, 0, UVM_KMF_WIRED);
+	if (new_mem == 0)
 		return NULL;
 	dvma_mem = dvma_mapin(new_mem, new_size, 1);
-	return (dvma_mem);
+	return dvma_mem;
 }
 
 /*
  * Free pages from dvma_malloc()
  */
-void
-dvma_free(addr, size)
-	void *addr;
-	size_t size;
+void 
+dvma_free(void *addr, size_t size)
 {
-	vm_size_t sz = m68k_round_page(size);
+	vsize_t sz = m68k_round_page(size);
 
 	dvma_mapout(addr, sz);
 	/* XXX: need kmem address to free it...
 	   Oh well, we never call this anyway. */
+}
+
+int 
+_bus_dmamap_load_raw(bus_dma_tag_t t, bus_dmamap_t map, bus_dma_segment_t *segs,
+    int nsegs, bus_size_t size, int flags)
+{
+
+	panic("_bus_dmamap_load_raw(): not implemented yet.");
+}
+
+int
+_bus_dmamap_load(bus_dma_tag_t t, bus_dmamap_t map, void *buf,
+    bus_size_t buflen, struct proc *p, int flags)
+{
+	vaddr_t kva, dva;
+	vsize_t off, sgsize;
+	paddr_t pa;
+	pmap_t pmap;
+	int error, rv, s;
+
+	/*
+	 * Make sure that on error condition we return "no valid mappings".
+	 */
+	map->dm_nsegs = 0;
+	map->dm_mapsize = 0;
+
+	if (buflen > map->_dm_size)
+		return EINVAL;
+
+	kva = (vaddr_t)buf;
+	off = kva & PGOFSET;
+	sgsize = round_page(off + buflen);
+
+	/* Try to allocate DVMA space. */
+	s = splvm();
+	error = extent_alloc(dvma_extent, sgsize, PAGE_SIZE, 0,
+	    EX_FAST | ((flags & BUS_DMA_NOWAIT) == 0 ? EX_WAITOK : EX_NOWAIT),
+	    &dva);
+	splx(s);
+	if (error)
+		return ENOMEM;
+
+	/* Fill in the segment. */
+	map->dm_segs[0].ds_addr = dva + off;
+	map->dm_segs[0].ds_len = buflen;
+	map->dm_segs[0]._ds_va = dva;
+	map->dm_segs[0]._ds_sgsize = sgsize;
+
+	/*
+	 * Now map the DVMA addresses we allocated to point to the
+	 * pages of the caller's buffer.
+	 */
+	if (p != NULL)
+		pmap = p->p_vmspace->vm_map.pmap;
+	else
+		pmap = pmap_kernel();
+
+	while (sgsize > 0) {
+		rv = pmap_extract(pmap, kva, &pa);
+#ifdef DIAGNOSTIC
+		if (rv == false)
+			panic("%s: unmapped VA", __func__);
+#endif
+		iommu_enter((dva & IOMMU_VA_MASK), pa);
+		pmap_kenter_pa(dva, pa | PMAP_NC, VM_PROT_READ | VM_PROT_WRITE);
+		kva += PAGE_SIZE;
+		dva += PAGE_SIZE;
+		sgsize -= PAGE_SIZE;
+	}
+
+	map->dm_nsegs = 1;
+	map->dm_mapsize = map->dm_segs[0].ds_len;
+
+	return 0;
+}
+
+void 
+_bus_dmamap_unload(bus_dma_tag_t t, bus_dmamap_t map)
+{
+	bus_dma_segment_t *segs;
+	vaddr_t dva;
+	vsize_t sgsize;
+	int error, s;
+
+#ifdef DIAGNOSTIC
+	if (map->dm_nsegs != 1)
+		panic("%s: invalid nsegs = %d", __func__, map->dm_nsegs);
+#endif
+
+	segs = map->dm_segs;
+	dva = segs[0]._ds_va & ~PGOFSET;
+	sgsize = segs[0]._ds_sgsize;
+
+	/* Unmap the DVMA addresses. */
+	iommu_remove((dva & IOMMU_VA_MASK), sgsize);
+	pmap_kremove(dva, sgsize);
+	pmap_update(pmap_kernel());
+
+	/* Free the DVMA addresses. */
+	s = splvm();
+	error = extent_free(dvma_extent, dva, sgsize, EX_NOWAIT);
+	splx(s);
+#ifdef DIAGNOSTIC
+	if (error)
+		panic("%s: unable to free DVMA region", __func__);
+#endif
+
+	/* Mark the mappings as invalid. */
+	map->dm_mapsize = 0;
+	map->dm_nsegs = 0;
 }

@@ -1,16 +1,25 @@
-/*	$NetBSD: setup.c,v 1.10 1999/09/19 18:14:52 jsm Exp $	*/
+/*	$NetBSD: setup.c,v 1.18 2008/01/16 23:23:25 lukem Exp $	*/
 
 /*
  * setup.c - set up all files for Phantasia
+ * n.b.: this is used at build-time - i.e. during build.sh.
  */
+#ifdef __NetBSD__
+#include <sys/cdefs.h>
+#endif
+
 #include <sys/param.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include "include.h"
 
-int main __P((int, char *[]));
-void Error __P((const char *, const char *)) __attribute__((__noreturn__));
-double drandom __P((void));
+#ifndef __dead /* Not NetBSD */
+#define __dead
+#endif
+
+int main(int, char *[]);
+void Error(const char *, const char *) __dead;
+double drandom(void);
 
 /**/
 /************************************************************************
@@ -63,12 +72,12 @@ main(argc, argv)
 	int argc;
 	char *argv[];
 {
-	register const char *const *filename; /* for pointing to file names */
-	register int	fd;		/* file descriptor */
-	FILE	*fp;			/* for opening files */
+	const char *const *filename; /* for pointing to file names */
+	int		fd;		/* file descriptor */
+	FILE		*fp;			/* for opening files */
 	struct stat	fbuf;		/* for getting files statistics */
 	int ch;
-	char path[MAXPATHLEN], *prefix;
+	char *path;
 
 	while ((ch = getopt(argc, argv, "m:")) != -1)
 		switch(ch) {
@@ -86,31 +95,15 @@ main(argc, argv)
 
     umask(0117);		/* only owner can read/write created files */
 
-    prefix = getenv("DESTDIR");
-
     /* try to create data files */
     filename = &files[0];
     while (*filename != NULL)
 	/* create each file */
 	{
-	snprintf(path, sizeof(path), "%s%s", prefix?prefix:"", *filename);
+	path = strrchr(*filename, '/') + 1;
 	if (stat(path, &fbuf) == 0)
 	    /* file exists; remove it */
 	    {
-	    if (!strcmp(*filename, _PATH_PEOPLE))
-		/* do not reset character file if it already exists */
-		{
-		++filename;
-		continue;
-		}
-
-	    if (!strcmp(*filename, _PATH_SCORE))
-		/* do not reset score file if it already exists */
-		{
-		++filename;
-		continue;
-		}
-
 	    if (unlink(path) < 0)
 		Error("Cannot unlink %s.\n", path);
 		/*NOTREACHED*/
@@ -125,24 +118,13 @@ main(argc, argv)
 	++filename;			/* process next file */
 	}
 
-    /* put holy grail info into energy void file */
-    Enrgyvoid.ev_active = TRUE;
-    Enrgyvoid.ev_x = ROLL(-1.0e6, 2.0e6);
-    Enrgyvoid.ev_y = ROLL(-1.0e6, 2.0e6);
-    snprintf(path, sizeof(path), "%s%s", prefix?prefix:"", _PATH_VOID);
+    /* Initialize an empty file placeholder for the grail location. */
     if ((fp = fopen(path, "w")) == NULL)
-	Error("Cannot update %s.\n", path);
-    else
-	{
-	fwrite(&Enrgyvoid, SZ_VOIDSTRUCT, 1, fp);
-	fflush(fp);
-	if (ferror(fp))
-	    Error("Writing %s.\n", path);
-	fclose(fp);
-	}
+	Error("Cannot create %s.\n", path);
+    fclose(fp);
 
     /* create binary monster data base */
-    snprintf(path, sizeof(path), "%s%s", prefix?prefix:"", _PATH_MONST);
+    path = strrchr(_PATH_MONST, '/') + 1;
     if ((Monstfp = fopen(path, "w")) == NULL)
 	Error("Cannot update %s.\n", path);
     else
@@ -186,7 +168,7 @@ main(argc, argv)
     printf("One line 'motd' ? ");
     if (fgets(Databuf, SZ_DATABUF, stdin) == NULL)
 	Databuf[0] = '\0';
-    snprintf(path, sizeof(path), "%s%s", prefix?prefix:"", _PATH_MOTD);
+    path = strrchr(_PATH_MOTD, '/') + 1;
     if ((fp = fopen(path, "w")) == NULL)
 	Error("Cannot update %s.\n", path);
     else

@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_13_machdep.c,v 1.6 1999/11/06 20:18:13 eeh Exp $	*/
+/*	$NetBSD: compat_13_machdep.c,v 1.21 2008/04/28 20:23:37 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,6 +30,11 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: compat_13_machdep.c,v 1.21 2008/04/28 20:23:37 martin Exp $");
+
+#include "opt_ddb.h"
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
@@ -49,6 +47,8 @@
 #include <sys/syscallargs.h>
 #include <sparc64/sparc64/sigdebug.h>
 
+#include <compat/sys/signal.h>
+#include <compat/sys/signalvar.h>
 /*
  * System call to cleanup state after a signal
  * has been taken.  Reset signal mask and
@@ -60,45 +60,46 @@
  */
 /* ARGSUSED */
 int
-compat_13_sys_sigreturn(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+compat_13_sys_sigreturn(struct lwp *l, const struct compat_13_sys_sigreturn_args *uap, register_t *retval)
 {
-	struct compat_13_sys_sigreturn_args /* {
+	/* {
 		syscallarg(struct sigcontext13 *) sigcntxp;
-	} */ *uap = v;
+	} */
 	struct sigcontext13 sc, *scp;
-	sigset_t mask;
 	struct trapframe64 *tf;
+	struct proc *p = l->l_proc;
+	sigset_t mask;
 
 	/* First ensure consistent stack state (see sendsig). */
 	write_user_windows();
-#if 0
-	/* Make sure our D$ is not polluted w/bad data */
-	blast_vcache();
-#endif
-	if (rwindow_save(p)) {
+	if (rwindow_save(l)) {
 #ifdef DEBUG
-		printf("compat_13_sys_sigreturn: rwindow_save(%p) failed, sending SIGILL\n", p);
+		printf("compat_13_sys_sigreturn: rwindow_save(%p) failed, sending SIGILL\n", l);
+#ifdef DDB
 		Debugger();
 #endif
-		sigexit(p, SIGILL);
+#endif
+		mutex_enter(p->p_lock);
+		sigexit(l, SIGILL);
 	}
 #ifdef DEBUG
 	if (sigdebug & SDB_FOLLOW) {
 		printf("compat_13_sys_sigreturn: %s[%d], sigcntxp %p\n",
 		    p->p_comm, p->p_pid, SCARG(uap, sigcntxp));
+#ifdef DDB
 		if (sigdebug & SDB_DDB) Debugger();
+#endif
 	}
 #endif
 
 	scp = SCARG(uap, sigcntxp);
-	if ((vaddr_t)scp & 3 || (copyin((caddr_t)scp, &sc, sizeof sc) != 0))
+	if ((vaddr_t)scp & 3 || (copyin((void *)scp, &sc, sizeof sc) != 0))
 #ifdef DEBUG
 	{
 		printf("compat_13_sys_sigreturn: copyin failed: scp=%p\n", scp);
+#ifdef DDB
 		Debugger();
+#endif
 		return (EFAULT);
 	}
 #else
@@ -107,7 +108,7 @@ compat_13_sys_sigreturn(p, v, retval)
 
 	scp = &sc;
 
-	tf = p->p_md.md_tf;
+	tf = l->l_md.md_tf;
 	/*
 	 * Only the icc bits in the psr are used, so it need not be
 	 * verified.  pc and npc must be multiples of 4.  This is all
@@ -116,8 +117,11 @@ compat_13_sys_sigreturn(p, v, retval)
 	if (((scp->sc_pc | scp->sc_npc) & 3) != 0 || scp->sc_pc == 0 || scp->sc_npc == 0)
 #ifdef DEBUG
 	{
-		printf("compat_13_sys_sigreturn: pc %p or npc %p invalid\n", scp->sc_pc, scp->sc_npc);
+		printf("compat_13_sys_sigreturn: pc %p or npc %p invalid\n",
+			(void *)scp->sc_pc, (void *)scp->sc_npc);
+#ifdef DDB
 		Debugger();
+#endif
 		return (EINVAL);
 	}
 #endif
@@ -135,20 +139,25 @@ compat_13_sys_sigreturn(p, v, retval)
 	tf->tf_out[6] = scp->sc_sp;
 #ifdef DEBUG
 	if (sigdebug & SDB_FOLLOW) {
-		printf("compat_13_sys_sigreturn: return trapframe pc=%p sp=%p tstate=%llx\n",
-		       (vaddr_t)tf->tf_pc, (vaddr_t)tf->tf_out[6], tf->tf_tstate);
+		printf("compat_13_sys_sigreturn: return trapframe pc=%llx sp=%llx tstate=%llx\n",
+			(long long)tf->tf_pc, (long long)tf->tf_out[6],
+			(long long)tf->tf_tstate);
+#ifdef DDB
 		if (sigdebug & SDB_DDB) Debugger();
+#endif
 	}
 #endif
 
+	mutex_enter(p->p_lock);
 	if (scp->sc_onstack & SS_ONSTACK)
-		p->p_sigacts->ps_sigstk.ss_flags |= SS_ONSTACK;
+		l->l_sigstk.ss_flags |= SS_ONSTACK;
 	else
-		p->p_sigacts->ps_sigstk.ss_flags &= ~SS_ONSTACK;
+		l->l_sigstk.ss_flags &= ~SS_ONSTACK;
 
 	/* Restore signal mask */
 	native_sigset13_to_sigset(&scp->sc_mask, &mask);
-	(void) sigprocmask1(p, SIG_SETMASK, &mask, 0);
+	(void) sigprocmask1(l, SIG_SETMASK, &mask, 0);
+	mutex_exit(p->p_lock);
 
 	return (EJUSTRETURN);
 }
