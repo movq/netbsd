@@ -1,4 +1,4 @@
-/*	$NetBSD: key.c,v 1.1 2003/01/17 14:54:33 wiz Exp $	*/
+/*	$NetBSD: key.c,v 1.1.1.1 2003/01/17 14:54:33 wiz Exp $	*/
 
 /* key.c -- Generated array containing function names.
 
