@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.1 2000/08/09 13:35:23 leo Exp $
+# $NetBSD: Makefile,v 1.1.1.1 2000/08/09 13:35:23 leo Exp $
 # Build an ed without crypt support
 
 PROG=	ed
