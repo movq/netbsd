@@ -1,4 +1,4 @@
-/*	$NetBSD: mca_subr.c,v 1.3 2001/04/27 17:11:45 jdolecek Exp $	*/
+/*	$NetBSD: mca_subr.c,v 1.4 2001/04/27 18:03:41 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -90,5 +90,10 @@ int
 mca_match_disabled(id)
 	int id;
 {
+	switch (id) {
+	case MCA_PRODUCT_SKNETG:
+		return (1);
+	}
+
 	return (0);
 }
