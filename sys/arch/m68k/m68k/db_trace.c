@@ -1,4 +1,4 @@
-/*	$NetBSD: db_trace.c,v 1.23 1999/01/15 23:15:50 thorpej Exp $	*/
+/*	$NetBSD: db_trace.c,v 1.25 1999/04/05 17:17:04 scw Exp $	*/
 
 /* 
  * Mach Operating System
@@ -98,6 +98,10 @@ extern int curpcb;
 
 #define	get(addr, space) \
 		(db_get_value((db_addr_t)(addr), sizeof(int), FALSE))
+#define	get16(addr, space) \
+		(db_get_value((db_addr_t)(addr), sizeof(u_short), FALSE))
+
+#define	offsetof(type, member)	((size_t)(&((type *)0)->member))
 
 #define	NREGISTERS	16
 
@@ -475,6 +479,7 @@ db_stack_trace_cmd(addr, have_addr, count, modif)
 	char *		name;
 	struct stackpos pos;
 	boolean_t	kernel_only = TRUE;
+	int		fault_pc = 0;
 
 	{
 		char *cp = modif;
@@ -535,6 +540,46 @@ db_stack_trace_cmd(addr, have_addr, count, modif)
 				val = MAXINT;
 			}
 		}
+
+		/*
+		 * Since faultstkadj doesn't set up a valid stack frame,
+		 * we would assume it was the source of the fault. To
+		 * get around this we peek at the fourth argument of
+		 * "trap()" (the stack frame at the time of the fault)
+		 * to determine the _real_ value of PC when things wen
+		 * wrong.
+		 *
+		 * NOTE: If the argument list for 'trap()' ever changes,
+		 * we lose.
+		 */
+		if ( strcmp("_trap", name) == 0 ) {
+			int tfp;
+
+			/* Point to 'trap()'s 4th argument (frame structure) */
+			tfp = pos.k_fp + FR_SAVFP + 4 + (4 * 4);
+
+			/* Determine if fault was from kernel or user mode */
+			regp = tfp + offsetof(struct frame, f_sr);
+			if ( ! USERMODE(get16(regp, DSP)) ) {
+				/*
+				 * Definitely a kernel mode fault,
+				 * so get the PC at the time of the fault.
+				 */
+				regp = tfp + offsetof(struct frame, f_pc);
+				fault_pc = get(regp, DSP);
+			}
+		} else
+		if ( fault_pc ) {
+			if ( strcmp("faultstkadj", name) == 0 ) {
+				db_find_sym_and_offset(fault_pc, &name, &val);
+				if (name == 0) {
+					name = "?";
+					val = MAXINT;
+				}
+			}
+			fault_pc = 0;
+		}
+
 		db_printf("%s", name);
 		if (pos.k_entry != MAXINT && name) {
 			char *	entry_name;

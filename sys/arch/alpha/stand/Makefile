@@ -1,5 +1,10 @@
-# $NetBSD: Makefile,v 1.8 1997/09/05 20:20:17 thorpej Exp $
+# $NetBSD: Makefile,v 1.12 1999/04/05 03:35:24 cgd Exp $
 
-SUBDIR=	boot bootxx installboot netboot setnetbootinfo
+SUBDIR=		installboot mkbootimage setnetbootinfo
+SUBDIR+=	boot bootxx_cd9660 bootxx_ffs netboot ustarboot
+
+# temporary:
+SUBDIR+=	installboot.old
+SUBDIR+=	bootxx
 
 .include <bsd.subdir.mk>

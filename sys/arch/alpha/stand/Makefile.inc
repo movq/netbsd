@@ -1,10 +1,11 @@
-# $NetBSD: Makefile.inc,v 1.13 1998/09/28 21:18:56 thorpej Exp $
+# $NetBSD: Makefile.inc,v 1.15 1999/04/05 03:42:50 cgd Exp $
+
+.include <bsd.own.mk>
 
 BINDIR=			/usr/mdec
+WARNS?=			1
 
-CWARNFLAGS+=	-Wall
+MKMAN=			no
 
-HAVE_GCC28!=	${CC} --version | egrep "^(2\.8|egcs)" ; echo 
-.if (${HAVE_GCC28} != "")
-CWARNFLAGS+=	-Wno-main
-.endif
+CPPFLAGS+=		-I${.CURDIR}/../..
+LDSTATIC?=		-static
