@@ -1,4 +1,4 @@
-/*	$NetBSD: freebsd_misc.c,v 1.2 1996/05/03 17:03:10 christos Exp $	*/
+/*	$NetBSD: freebsd_misc.c,v 1.3 1997/10/20 22:05:23 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1995 Frank van der Linden
@@ -58,7 +58,7 @@ freebsd_sys_msync(p, v, retval)
 		syscallarg(size_t) len;
 		syscallarg(int) flags;
 	} */ *uap = v;
-	struct sys_msync_args bma;
+	struct sys___msync13_args bma;
 
 	/*
 	 * FreeBSD-2.0-RELEASE's msync(2) is compatible with NetBSD's.
@@ -67,7 +67,8 @@ freebsd_sys_msync(p, v, retval)
 	 */
 	SCARG(&bma, addr) = SCARG(uap, addr);
 	SCARG(&bma, len) = SCARG(uap, len);
-	return sys_msync(p, &bma, retval); /* XXX - simply ignores `flags' */
+	SCARG(&bma, flags) = SCARG(uap, flags);
+	return sys___msync13(p, &bma, retval);
 }
 
 /* just a place holder */
