@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.15 2001/10/06 12:25:56 bjh21 Exp $	*/
+/*	$NetBSD: param.h,v 1.16 2001/10/21 21:39:49 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Jochen Pohl
@@ -57,48 +57,9 @@
 #define	THSHSIZ2	1009
 
 /*
- * Should be set to 1 if the difference of two pointers is of type long
- * or the value of sizeof is of type unsigned long.
+ * Pull in target-specific parameters.
  */
-#if defined(__alpha__)
-#define PTRDIFF_IS_LONG		1
-#define SIZEOF_IS_ULONG		1
-#elif defined(__i386__)
-#define PTRDIFF_IS_LONG		0
-#define SIZEOF_IS_ULONG		0
-#elif defined(__m68k__)
-#define PTRDIFF_IS_LONG		0
-#define SIZEOF_IS_ULONG		0
-#elif defined(__mips__)
-#define PTRDIFF_IS_LONG		0
-#define SIZEOF_IS_ULONG		0
-#elif defined(__ns32k__)
-#define PTRDIFF_IS_LONG		0
-#define SIZEOF_IS_ULONG		0
-#elif defined(__sh3__)
-#define PTRDIFF_IS_LONG		0
-#define SIZEOF_IS_ULONG		0
-#elif defined(__sparc__)
-#define PTRDIFF_IS_LONG		1
-#define SIZEOF_IS_ULONG		1
-#elif defined(__sparc64__)
-#define PTRDIFF_IS_LONG		1
-#define SIZEOF_IS_ULONG		1
-#elif defined(__vax__)
-#define PTRDIFF_IS_LONG         0
-#define SIZEOF_IS_ULONG         0
-#elif defined(__arm__) && defined(__ELF__)
-#define PTRDIFF_IS_LONG		1
-#define SIZEOF_IS_ULONG		1
-#elif defined(__arm__) && !defined(__ELF__)
-#define PTRDIFF_IS_LONG		0
-#define SIZEOF_IS_ULONG		0
-#elif defined(__powerpc__) || defined(__ppc__)
-#define PTRDIFF_IS_LONG		0
-#define SIZEOF_IS_ULONG		0
-#else
-#error unknown machine type
-#endif
+#include "targparam.h"
 
 /*
  * Make sure this matches wchar_t.
