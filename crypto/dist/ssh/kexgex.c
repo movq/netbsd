@@ -1,4 +1,4 @@
-/*	$NetBSD: kexgex.c,v 1.1 2001/04/10 07:13:56 itojun Exp $	*/
+/*	$NetBSD: kexgex.c,v 1.1.1.1 2001/04/10 07:13:56 itojun Exp $	*/
 /*
  * Copyright (c) 2000 Niels Provos.  All rights reserved.
  * Copyright (c) 2001 Markus Friedl.  All rights reserved.
