@@ -1,4 +1,4 @@
-/*      $Id: eti.h,v 1.1 1999/11/23 11:12:34 blymn Exp $ */
+/*      $Id: eti.h,v 1.1.1.1 1999/11/23 11:12:34 blymn Exp $ */
 
 /*-
  * Copyright (c) 1998-1999 Brett Lymn (blymn@baea.com.au, brett_lymn@yahoo.com)

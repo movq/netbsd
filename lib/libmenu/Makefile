@@ -1,4 +1,4 @@
-#	$Id: Makefile,v 1.1 1999/11/23 11:12:34 blymn Exp $
+#	$Id: Makefile,v 1.1.1.1 1999/11/23 11:12:34 blymn Exp $
 #
 
 CPPFLAGS+=-I${.CURDIR} -DEXPOSE_PRIVATES
