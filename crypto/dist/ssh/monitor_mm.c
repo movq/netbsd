@@ -1,4 +1,4 @@
-/*	$NetBSD: monitor_mm.c,v 1.1 2002/04/22 07:38:03 itojun Exp $	*/
+/*	$NetBSD: monitor_mm.c,v 1.1.1.1 2002/04/22 07:38:03 itojun Exp $	*/
 /*
  * Copyright 2002 Niels Provos <provos@citi.umich.edu>
  * All rights reserved.
