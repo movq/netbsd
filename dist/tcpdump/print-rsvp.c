@@ -1,4 +1,4 @@
-/*	$NetBSD: print-rsvp.c,v 1.1.1.1 2004/09/27 17:07:24 dyoung Exp $	*/
+/*	$NetBSD: print-rsvp.c,v 1.1 2004/09/27 17:07:24 dyoung Exp $	*/
 
 /*
  * Redistribution and use in source and binary forms, with or without

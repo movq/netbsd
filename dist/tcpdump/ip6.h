@@ -1,7 +1,7 @@
-/*	$NetBSD: ip6.h,v 1.3 2004/09/27 23:04:24 dyoung Exp $	*/
+/*	$NetBSD: ip6.h,v 1.1 2001/06/25 19:26:32 itojun Exp $	*/
 
-/* @(#) Header: /tcpdump/master/tcpdump/ip6.h,v 1.6 2002/12/11 22:29:21 guy Exp (LBL) */
-/*	$NetBSD: ip6.h,v 1.3 2004/09/27 23:04:24 dyoung Exp $	*/
+/* @(#) Header: /tcpdump/master/tcpdump/ip6.h,v 1.3 2000/12/17 23:07:48 guy Exp (LBL) */
+/*	$NetBSD: ip6.h,v 1.1 2001/06/25 19:26:32 itojun Exp $	*/
 /*	$KAME: ip6.h,v 1.9 2000/07/02 21:01:32 itojun Exp $	*/
 
 /*
@@ -45,7 +45,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of the University nor the names of its contributors
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by the University of
+ *	California, Berkeley and its contributors.
+ * 4. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -185,8 +189,9 @@ struct ip6_frag {
 	u_int32_t ip6f_ident;		/* identification */
 };
 
-#define IP6F_OFF_MASK		0xfff8	/* mask out offset from ip6f_offlg */
-#define IP6F_RESERVED_MASK	0x0006	/* reserved bits in ip6f_offlg */
-#define IP6F_MORE_FRAG		0x0001	/* more-fragments flag */
+/* network endian */
+#define IP6F_OFF_MASK		((u_int16_t)htons(0xfff8))	/* mask out offset from _offlg */
+#define IP6F_RESERVED_MASK	((u_int16_t)htons(0x0006))	/* reserved bits in ip6f_offlg */
+#define IP6F_MORE_FRAG		((u_int16_t)htons(0x0001))	/* more-fragments flag */
 
 #endif /* not _NETINET_IP6_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: print-vrrp.c,v 1.5 2004/09/27 23:04:25 dyoung Exp $	*/
+/*	$NetBSD: print-vrrp.c,v 1.1 2001/06/25 19:26:40 itojun Exp $	*/
 
 /*
  * Copyright (c) 2000 William C. Fenner.
@@ -25,24 +25,20 @@
  * FOR A PARTICULAR PURPOSE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static const char rcsid[] _U_ =
-    "@(#) Header: /tcpdump/master/tcpdump/print-vrrp.c,v 1.7.2.2 2003/11/16 08:51:55 guy Exp";
-#else
-__RCSID("$NetBSD: print-vrrp.c,v 1.5 2004/09/27 23:04:25 dyoung Exp $");
-#endif
+static const char rcsid[] =
+    "@(#) Header: /tcpdump/master/tcpdump/print-vrrp.c,v 1.3 2000/10/10 05:05:08 guy Exp";
 #endif
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
 
-#include <tcpdump-stdinc.h>
-
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
+
+#include <netinet/in.h>
 
 #include "interface.h"
 #include "extract.h"
@@ -70,57 +66,40 @@ __RCSID("$NetBSD: print-vrrp.c,v 1.5 2004/09/27 23:04:25 dyoung Exp $");
  *    |                     Authentication Data (2)                   |
  *    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
  */
-
-/* Type */
-#define	VRRP_TYPE_ADVERTISEMENT	1
-
-static const struct tok type2str[] = {
-	{ VRRP_TYPE_ADVERTISEMENT,	"Advertisement"	},
-	{ 0,				NULL		}
-};
-
-/* Auth Type */
-#define	VRRP_AUTH_NONE		0
-#define	VRRP_AUTH_SIMPLE	1
-#define	VRRP_AUTH_AH		2
-
-static const struct tok auth2str[] = {
-	{ VRRP_AUTH_NONE,		"none"		},
-	{ VRRP_AUTH_SIMPLE,		"simple"	},
-	{ VRRP_AUTH_AH,			"ah"		},
-	{ 0,				NULL		}
-};
-
 void
 vrrp_print(register const u_char *bp, register u_int len, int ttl)
 {
 	int version, type, auth_type;
-	const char *type_s;
+	char *type_s;
 
 	TCHECK(bp[0]);
 	version = (bp[0] & 0xf0) >> 4;
 	type = bp[0] & 0x0f;
-	type_s = tok2str(type2str, "unknown type (%u)", type);
-	printf("VRRPv%u, %s", version, type_s);
+	if (type == 1)
+		type_s = "advertise";
+	else
+		type_s = "unknown";
+	printf("VRRPv%d-%s %d: ", version, type_s, len);
 	if (ttl != 255)
-		printf(", (ttl %u)", ttl);
-	if (version != 2 || type != VRRP_TYPE_ADVERTISEMENT)
+		printf("[ttl=%d!] ", ttl);
+	if (version != 2 || type != 1)
 		return;
 	TCHECK(bp[2]);
-	printf(", vrid %u, prio %u", bp[1], bp[2]);
+	printf("vrid=%d prio=%d", bp[1], bp[2]);
 	TCHECK(bp[5]);
 	auth_type = bp[4];
-	printf(", authtype %s", tok2str(auth2str, NULL, auth_type));
-	printf(", intvl %us, length %u", bp[5],len);
+	if (auth_type != 0)
+		printf(" authtype=%d", auth_type);
+	printf(" intvl=%d", bp[5]);
 	if (vflag) {
 		int naddrs = bp[3];
 		int i;
 		char c;
 
 		if (TTEST2(bp[0], len) && in_cksum((const u_short*)bp, len, 0))
-			printf(", (bad vrrp cksum %x)",
+			printf(" (bad vrrp cksum %x!)",
 				EXTRACT_16BITS(&bp[6]));
-		printf(", addrs");
+		printf(" addrs");
 		if (naddrs > 1)
 			printf("(%d)", naddrs);
 		printf(":");
@@ -132,11 +111,9 @@ vrrp_print(register const u_char *bp, register u_int len, int ttl)
 			c = ',';
 			bp += 4;
 		}
-		if (auth_type == VRRP_AUTH_SIMPLE) { /* simple text password */
+		if (auth_type == 1) { /* simple text password */
 			TCHECK(bp[7]);
-			printf(" auth \"");
-			fn_printn(bp, 8, NULL);
-			printf("\"");
+			printf(" auth %.8s", bp);
 		}
 	}
 	return;

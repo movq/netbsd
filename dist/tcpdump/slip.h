@@ -1,4 +1,4 @@
-/*	$NetBSD: slip.h,v 1.1.1.1 2001/06/25 19:26:40 itojun Exp $	*/
+/*	$NetBSD: slip.h,v 1.1 2001/06/25 19:26:40 itojun Exp $	*/
 
 /*
  * Definitions that user level programs might need to know to interact

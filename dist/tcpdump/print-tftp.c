@@ -1,4 +1,4 @@
-/*	$NetBSD: print-tftp.c,v 1.3 2004/09/27 23:04:25 dyoung Exp $	*/
+/*	$NetBSD: print-tftp.c,v 1.1 2001/06/25 19:26:40 itojun Exp $	*/
 
 /*
  * Copyright (c) 1990, 1991, 1993, 1994, 1995, 1996, 1997
@@ -23,33 +23,31 @@
  * Format and print trivial file transfer protocol packets.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static const char rcsid[] _U_ =
-    "@(#) Header: /tcpdump/master/tcpdump/print-tftp.c,v 1.35.2.2 2003/11/16 08:51:50 guy Exp (LBL)";
-#else
-__RCSID("$NetBSD: print-tftp.c,v 1.3 2004/09/27 23:04:25 dyoung Exp $");
-#endif
+static const char rcsid[] =
+    "@(#) Header: /tcpdump/master/tcpdump/print-tftp.c,v 1.31 1999/11/21 09:37:03 fenner Exp (LBL)";
 #endif
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
 
-#include <tcpdump-stdinc.h>
+#include <sys/param.h>
+#include <sys/time.h>
+
+#include <netinet/in.h>
 
 #ifdef SEGSIZE
 #undef SEGSIZE					/* SINIX sucks */
 #endif
 #include <arpa/tftp.h>
 
+#include <ctype.h>
 #include <stdio.h>
 #include <string.h>
 
 #include "interface.h"
 #include "addrtoname.h"
-#include "extract.h"
 
 /* op code to string mapping */
 static struct tok op2str[] = {
@@ -93,7 +91,7 @@ tftp_print(register const u_char *bp, u_int length)
 
 	/* Print tftp request type */
 	TCHECK(tp->th_opcode);
-	opcode = EXTRACT_16BITS(&tp->th_opcode);
+	opcode = ntohs(tp->th_opcode);
 	cp = tok2str(op2str, "tftp-#%d", opcode);
 	printf(" %s", cp);
 	/* Bail if bogus opcode */
@@ -116,18 +114,6 @@ tftp_print(register const u_char *bp, u_int length)
 		fputs(" \"", stdout);
 		i = fn_print(p, snapend);
 		putchar('"');
-
-		/* Print the mode and any options */
-		while ((p = (const u_char *)strchr((const char *)p, '\0')) != NULL) {
-			if (length <= (u_int)(p - (const u_char *)&tp->th_block))
-				break;
-			p++;
-			if (*p != '\0') {
-				putchar(' ');
-				fn_print(p, snapend);
-			}
-		}
-		
 		if (i)
 			goto trunc;
 		break;
@@ -135,14 +121,14 @@ tftp_print(register const u_char *bp, u_int length)
 	case ACK:
 	case DATA:
 		TCHECK(tp->th_block);
-		printf(" block %d", EXTRACT_16BITS(&tp->th_block));
+		printf(" block %d", ntohs(tp->th_block));
 		break;
 
 	case ERROR:
 		/* Print error code string */
 		TCHECK(tp->th_code);
 		printf(" %s ", tok2str(err2str, "tftp-err-#%d \"",
-				       EXTRACT_16BITS(&tp->th_code)));
+				       ntohs(tp->th_code)));
 		/* Print error message string */
 		i = fn_print((const u_char *)tp->th_data, snapend);
 		putchar('"');

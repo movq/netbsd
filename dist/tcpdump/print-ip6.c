@@ -1,4 +1,4 @@
-/*	$NetBSD: print-ip6.c,v 1.5 2004/09/27 23:04:24 dyoung Exp $	*/
+/*	$NetBSD: print-ip6.c,v 1.1 2001/06/25 19:26:35 itojun Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990, 1991, 1992, 1993, 1994
@@ -21,14 +21,9 @@
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static const char rcsid[] _U_ =
-    "@(#) Header: /tcpdump/master/tcpdump/print-ip6.c,v 1.32.2.8 2003/11/24 20:31:22 guy Exp";
-#else
-__RCSID("$NetBSD: print-ip6.c,v 1.5 2004/09/27 23:04:24 dyoung Exp $");
-#endif
+static const char rcsid[] =
+    "@(#) Header: /tcpdump/master/tcpdump/print-ip6.c,v 1.16 2000/11/17 19:08:15 itojun Exp";
 #endif
 
 #ifdef HAVE_CONFIG_H
@@ -37,66 +32,78 @@ __RCSID("$NetBSD: print-ip6.c,v 1.5 2004/09/27 23:04:24 dyoung Exp $");
 
 #ifdef INET6
 
-#include <tcpdump-stdinc.h>
+#include <sys/param.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+
+#include <netinet/in.h>
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <string.h>
 
 #include "interface.h"
 #include "addrtoname.h"
-#include "extract.h"
 
 #include "ip6.h"
-#include "ipproto.h"
 
 /*
  * print an IP6 datagram.
  */
 void
-ip6_print(register const u_char *bp, register u_int length)
+ip6_print(register const u_char *bp, register int length)
 {
 	register const struct ip6_hdr *ip6;
 	register int advance;
-	u_int len;
-	const u_char *ipend;
+	register int len;
 	register const u_char *cp;
-	register u_int payload_len;
 	int nh;
 	int fragmented = 0;
 	u_int flow;
-
+	
 	ip6 = (const struct ip6_hdr *)bp;
 
-	TCHECK(*ip6);
+#ifdef LBL_ALIGN
+	/*
+	 * The IP6 header is not 16-byte aligned, so copy into abuf.
+	 * This will never happen with BPF.  It does happen raw packet
+	 * dumps from -r.
+	 */
+	if ((u_long)ip6 & 15) {
+		static u_char *abuf;
+
+		if (abuf == NULL)
+			abuf = malloc(snaplen);
+		memcpy(abuf, ip6, min(length, snaplen));
+		snapend += abuf - (u_char *)ip6;
+		packetp = abuf;
+		ip6 = (struct ip6_hdr *)abuf;
+	}
+#endif
+	if ((u_char *)(ip6 + 1) > snapend) {
+		printf("[|ip6]");
+		return;
+	}
 	if (length < sizeof (struct ip6_hdr)) {
 		(void)printf("truncated-ip6 %d", length);
 		return;
 	}
+	advance = sizeof(struct ip6_hdr);
 
-	payload_len = EXTRACT_16BITS(&ip6->ip6_plen);
-	len = payload_len + sizeof(struct ip6_hdr);
-	if (length < len)
+	len = ntohs(ip6->ip6_plen);
+	if (length < len + advance)
 		(void)printf("truncated-ip6 - %d bytes missing!",
-			len - length);
-
-	/*
-	 * Cut off the snapshot length to the end of the IP payload.
-	 */
-	ipend = bp + len;
-	if (ipend < snapend)
-		snapend = ipend;
+			len + advance - length);
 
 	cp = (const u_char *)ip6;
-	advance = sizeof(struct ip6_hdr);
 	nh = ip6->ip6_nxt;
-	while (cp < snapend && advance > 0) {
+	while (cp < snapend) {
 		cp += advance;
-		len -= advance;
 
-		if (cp == (const u_char *)(ip6 + 1) &&
-		    nh != IPPROTO_TCP && nh != IPPROTO_UDP &&
-		    nh != IPPROTO_SCTP) {
+		if (cp == (u_char *)(ip6 + 1)
+		 && nh != IPPROTO_TCP && nh != IPPROTO_UDP) {
 			(void)printf("%s > %s: ", ip6addr_string(&ip6->ip6_src),
 				     ip6addr_string(&ip6->ip6_dst));
 		}
@@ -117,73 +124,68 @@ ip6_print(register const u_char *bp, register u_int length)
 			nh = *cp;
 			fragmented = 1;
 			break;
-
-		case IPPROTO_MOBILITY_OLD:
-		case IPPROTO_MOBILITY:
-			/*
-			 * XXX - we don't use "advance"; the current
-			 * "Mobility Support in IPv6" draft
-			 * (draft-ietf-mobileip-ipv6-24) says that
-			 * the next header field in a mobility header
-			 * should be IPPROTO_NONE, but speaks of
-			 * the possiblity of a future extension in
-			 * which payload can be piggybacked atop a
-			 * mobility header.
-			 */
-			advance = mobility_print(cp, (const u_char *)ip6);
-			nh = *cp;
-			goto end;
 		case IPPROTO_ROUTING:
 			advance = rt6_print(cp, (const u_char *)ip6);
 			nh = *cp;
 			break;
-		case IPPROTO_SCTP:
-			sctp_print(cp, (const u_char *)ip6, len);
-			goto end;
 		case IPPROTO_TCP:
-			tcp_print(cp, len, (const u_char *)ip6, fragmented);
+			tcp_print(cp, len + sizeof(struct ip6_hdr) - (cp - bp),
+				(const u_char *)ip6, fragmented);
 			goto end;
 		case IPPROTO_UDP:
-			udp_print(cp, len, (const u_char *)ip6, fragmented);
+			udp_print(cp, len + sizeof(struct ip6_hdr) - (cp - bp),
+				(const u_char *)ip6, fragmented);
 			goto end;
 		case IPPROTO_ICMPV6:
-			icmp6_print(cp, len, (const u_char *)ip6, fragmented);
+			icmp6_print(cp, (const u_char *)ip6);
 			goto end;
 		case IPPROTO_AH:
-			advance = ah_print(cp);
+			advance = ah_print(cp, (const u_char *)ip6);
 			nh = *cp;
 			break;
 		case IPPROTO_ESP:
 		    {
-			int enh, padlen;
-			advance = esp_print(cp, (const u_char *)ip6, &enh, &padlen);
+			int enh;
+			advance = esp_print(cp, (const u_char *)ip6, &enh);
+			if (enh < 0)
+				goto end;
 			nh = enh & 0xff;
-			len -= padlen;
 			break;
 		    }
+#ifndef IPPROTO_IPCOMP
+#define IPPROTO_IPCOMP	108
+#endif
 		case IPPROTO_IPCOMP:
 		    {
 			int enh;
-			advance = ipcomp_print(cp, &enh);
+			advance = ipcomp_print(cp, (const u_char *)ip6, &enh);
+			if (enh < 0)
+				goto end;
 			nh = enh & 0xff;
 			break;
 		    }
 
+#ifndef IPPROTO_PIM
+#define IPPROTO_PIM	103
+#endif
 		case IPPROTO_PIM:
 			pim_print(cp, len);
 			goto end;
+#ifndef IPPROTO_OSPF
+#define IPPROTO_OSPF 89
+#endif
 		case IPPROTO_OSPF:
 			ospf6_print(cp, len);
 			goto end;
-
 		case IPPROTO_IPV6:
 			ip6_print(cp, len);
 			goto end;
-
+#ifndef IPPROTO_IPV4
+#define IPPROTO_IPV4	4
+#endif
 		case IPPROTO_IPV4:
 			ip_print(cp, len);
 			goto end;
-
 		case IPPROTO_NONE:
 			(void)printf("no next header");
 			goto end;
@@ -195,8 +197,8 @@ ip6_print(register const u_char *bp, register u_int length)
 	}
 
  end:
-
-	flow = EXTRACT_32BITS(&ip6->ip6_flow);
+	
+	flow = ntohl(ip6->ip6_flow);
 #if 0
 	/* rfc1883 */
 	if (flow & 0x0f000000)
@@ -212,18 +214,15 @@ ip6_print(register const u_char *bp, register u_int length)
 #endif
 
 	if (ip6->ip6_hlim <= 1)
-		(void)printf(" [hlim %u]", ip6->ip6_hlim);
+		(void)printf(" [hlim %d]", (int)ip6->ip6_hlim);
 
 	if (vflag) {
 		printf(" (");
-		(void)printf("len %u", payload_len);
+		(void)printf("len %d", len);
 		if (ip6->ip6_hlim > 1)
 			(void)printf(", hlim %d", (int)ip6->ip6_hlim);
 		printf(")");
 	}
-	return;
-trunc:
-	(void)printf("[|ip6]");
 }
 
 #endif /* INET6 */

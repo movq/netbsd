@@ -1,4 +1,4 @@
-/*	$NetBSD: gmt2local.c,v 1.3 2004/09/27 23:04:24 dyoung Exp $	*/
+/*	$NetBSD: gmt2local.c,v 1.1 2001/06/25 19:26:31 itojun Exp $	*/
 
 /*
  * Copyright (c) 1997
@@ -21,23 +21,22 @@
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static const char rcsid[] _U_ =
-    "@(#) Header: /tcpdump/master/tcpdump/gmt2local.c,v 1.7.2.2 2003/11/16 08:51:06 guy Exp (LBL)";
-#else
-__RCSID("$NetBSD: gmt2local.c,v 1.3 2004/09/27 23:04:24 dyoung Exp $");
-#endif
+static const char rcsid[] =
+    "@(#) Header: /tcpdump/master/tcpdump/gmt2local.c,v 1.4 2000/07/11 00:49:02 assar Exp (LBL)";
 #endif
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
 
-#include <tcpdump-stdinc.h>
+#include <sys/types.h>
+#include <sys/time.h>
 
 #include <stdio.h>
+#ifdef TIME_WITH_SYS_TIME
+#include <time.h>
+#endif
 
 #ifdef HAVE_OS_PROTO_H
 #include "os-proto.h"

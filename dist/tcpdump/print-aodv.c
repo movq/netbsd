@@ -1,4 +1,4 @@
-/*	$NetBSD: print-aodv.c,v 1.1.1.1 2004/09/27 17:06:54 dyoung Exp $	*/
+/*	$NetBSD: print-aodv.c,v 1.1 2004/09/27 17:06:54 dyoung Exp $	*/
 
 /*
  * Copyright (c) 2003 Bruce M. Simpson <bms@spc.org>

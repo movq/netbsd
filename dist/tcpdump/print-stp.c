@@ -1,4 +1,4 @@
-/*	$NetBSD: print-stp.c,v 1.4 2004/09/27 23:04:25 dyoung Exp $	*/
+/*	$NetBSD: print-stp.c,v 1.1 2001/06/25 19:26:39 itojun Exp $	*/
 
 /*
  * Copyright (c) 2000 Lennert Buytenhek
@@ -11,21 +11,20 @@
  * Contributed by Lennert Buytenhek <buytenh@gnu.org>
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static const char rcsid[] _U_ =
-    "@(#) Header: /tcpdump/master/tcpdump/print-stp.c,v 1.11.2.2 2003/11/16 08:51:46 guy Exp";
-#else
-__RCSID("$NetBSD: print-stp.c,v 1.4 2004/09/27 23:04:25 dyoung Exp $");
-#endif
+static const char rcsid[] =
+    "@(#) Header: /tcpdump/master/tcpdump/print-stp.c,v 1.6 2000/09/29 04:58:50 guy Exp";
 #endif
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
 
-#include <tcpdump-stdinc.h>
+#include <sys/param.h>
+#include <sys/time.h>
+#include <sys/socket.h>
+
+#include <netinet/in.h>
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -43,7 +42,7 @@ stp_print_bridge_id(const u_char *p)
 }
 
 static void
-stp_print_config_bpdu(const u_char *p)
+stp_print_config_bpdu(const u_char *p, u_int length)
 {
 	printf("config ");
 	if (p[7] & 1)
@@ -66,7 +65,7 @@ stp_print_config_bpdu(const u_char *p)
 }
 
 static void
-stp_print_tcn_bpdu(void)
+stp_print_tcn_bpdu(const u_char *p, u_int length)
 {
 	printf("tcn");
 }
@@ -85,21 +84,21 @@ stp_print(const u_char *p, u_int length)
 		printf("unknown version");
 		return;
 	}
-
+		
 	switch (p[6])
 	{
-	case 0x00:
+	case 0:
 		if (length < 10)
 			goto trunc;
-		stp_print_config_bpdu(p);
+		stp_print_config_bpdu(p, length);
 		break;
 
-	case 0x80:
-		stp_print_tcn_bpdu();
+	case 1:
+		stp_print_tcn_bpdu(p, length);
 		break;
 
 	default:
-		printf("unknown type %i", p[6]);
+		printf("unknown type %i\n", p[6]);
 		break;
 	}
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: acconfig.h,v 1.1.1.4 2004/09/27 17:06:29 dyoung Exp $	*/
+/*	$NetBSD: acconfig.h,v 1.1 2001/06/25 19:26:28 itojun Exp $	*/
 
 /* "generated automatically" means DO NOT MAKE CHANGES TO config.h.in --
  * make them to acconfig.h and rerun autoheader */
@@ -67,27 +67,6 @@
 /* define if you have ether_ntohost() and it works */
 #undef USE_ETHER_NTOHOST
 
-/* define if libpcap has pcap_version */
-#undef HAVE_PCAP_VERSION
-
-/* define if libpcap has pcap_debug */
-#undef HAVE_PCAP_DEBUG
-
-/* define if libpcap has yydebug */
-#undef HAVE_YYDEBUG
-
-/* define if libpcap has pcap_list_datalinks() */
-#undef HAVE_PCAP_LIST_DATALINKS
-
-/* define if libpcap has pcap_set_datalink() */
-#undef HAVE_PCAP_SET_DATALINK
-
-/* define if libpcap has pcap_datalink_name_to_val() */
-#undef HAVE_PCAP_DATALINK_NAME_TO_VAL
-
-/* define if libpcap has pcap_datalink_val_to_description() */
-#undef HAVE_PCAP_DATALINK_VAL_TO_DESCRIPTION
-
 /* define if unaligned memory accesses fail */
 #undef LBL_ALIGN
 
@@ -105,26 +84,8 @@
 
 /* Workaround for missing sized types */
 /* XXX this should move to the more standard uint*_t */
-#undef int8_t
 #undef int16_t
 #undef int32_t
 #undef u_int16_t
 #undef u_int32_t
 #undef u_int8_t
-
-/* Whether or not to include the possibly-buggy SMB printer */
-#undef TCPDUMP_DO_SMB
-
-/* Long story short: aclocal.m4 depends on autoconf 2.13
- * implementation details wrt "const"; newer versions
- * have different implementation details so for now we
- * put "const" here.  This may cause duplicate definitions
- * in config.h but that should be OK since they're the same.
- */
-#undef const
-
-/* Define if you have the dnet_htoa function.  */
-#undef HAVE_DNET_HTOA
-
-/* Define if you have a dnet_htoa declaration in <netdnet/dnetdb.h>.  */
-#undef HAVE_NETDNET_DNETDB_H_DNET_HTOA

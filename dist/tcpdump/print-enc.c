@@ -1,4 +1,4 @@
-/*	$NetBSD: print-enc.c,v 1.1.1.1 2004/09/27 17:07:03 dyoung Exp $	*/
+/*	$NetBSD: print-enc.c,v 1.1 2004/09/27 17:07:03 dyoung Exp $	*/
 
 /*	$OpenBSD: print-enc.c,v 1.7 2002/02/19 19:39:40 millert Exp $	*/
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: slcompress.h,v 1.1.1.1 2001/06/25 19:26:40 itojun Exp $	*/
+/*	$NetBSD: slcompress.h,v 1.1 2001/06/25 19:26:40 itojun Exp $	*/
 
 /*
  * Definitions for tcp compression routines.

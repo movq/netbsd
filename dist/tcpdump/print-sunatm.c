@@ -1,4 +1,4 @@
-/*	$NetBSD: print-sunatm.c,v 1.1.1.1 2004/09/27 17:07:30 dyoung Exp $	*/
+/*	$NetBSD: print-sunatm.c,v 1.1 2004/09/27 17:07:30 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1997 Yen Yen Lim and North Dakota State University

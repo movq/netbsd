@@ -1,4 +1,4 @@
-/*	$NetBSD: print-ascii.c,v 1.4 2004/09/27 23:04:24 dyoung Exp $	*/
+/*	$NetBSD: print-ascii.c,v 1.1 2001/06/25 19:26:33 itojun Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -40,107 +40,79 @@
 #include "config.h"
 #endif
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static const char rcsid[] _U_ =
-     "@(#) Header: /tcpdump/master/tcpdump/print-ascii.c,v 1.10.2.3 2003/12/29 22:42:20 hannes Exp";
-#else
-__RCSID("$NetBSD: print-ascii.c,v 1.4 2004/09/27 23:04:24 dyoung Exp $");
+static const char rcsid[] =
+     "@(#) Header: /tcpdump/master/tcpdump/print-ascii.c,v 1.6 2000/01/29 16:47:46 itojun Exp";
 #endif
-#endif
-#include <tcpdump-stdinc.h>
 #include <stdio.h>
+#include <sys/types.h>
+#include <ctype.h>
 
 #include "interface.h"
 
-#define ASCII_LINELENGTH 300
 #define HEXDUMP_BYTES_PER_LINE 16
 #define HEXDUMP_SHORTS_PER_LINE (HEXDUMP_BYTES_PER_LINE / 2)
 #define HEXDUMP_HEXSTUFF_PER_SHORT 5 /* 4 hex digits and a space */
 #define HEXDUMP_HEXSTUFF_PER_LINE \
 		(HEXDUMP_HEXSTUFF_PER_SHORT * HEXDUMP_SHORTS_PER_LINE)
-
+     
 void
-ascii_print_with_offset(register const u_char *ident, register const u_char *cp, register u_int length,
+ascii_print_with_offset(register const u_char *cp, register u_int length,
 			register u_int oset)
 {
 	register u_int i;
 	register int s1, s2;
 	register int nshorts;
 	char hexstuff[HEXDUMP_SHORTS_PER_LINE*HEXDUMP_HEXSTUFF_PER_SHORT+1], *hsp;
-	char asciistuff[ASCII_LINELENGTH+1], *asp;
-	u_int maxlength = (Aflag ? ASCII_LINELENGTH : HEXDUMP_SHORTS_PER_LINE);
+	char asciistuff[HEXDUMP_BYTES_PER_LINE+1], *asp;
 
 	nshorts = length / sizeof(u_short);
 	i = 0;
 	hsp = hexstuff; asp = asciistuff;
-	if (Aflag) *(asp++) = '\n';
 	while (--nshorts >= 0) {
 		s1 = *cp++;
 		s2 = *cp++;
-		if (Aflag) {
-			i += 2;
-			*(asp++) = (isgraph(s1) ? s1 : (s1 != '\t' && s1 != ' ' && s1 != '\n' && s1 != '\r' ? '.' : s1) );
-			*(asp++) = (isgraph(s2) ? s2 : (s2 != '\t' && s2 != ' ' && s2 != '\n' && s2 != '\r' ? '.' : s2) );
-			if (s1 == '\n' || s2 == '\n') i = maxlength;
-
-		} else {
-			(void)snprintf(hsp, sizeof(hexstuff) - (hsp - hexstuff),
-			    " %02x%02x", s1, s2);
-			hsp += HEXDUMP_HEXSTUFF_PER_SHORT;
-			*(asp++) = (isgraph(s1) ? s1 : '.');
-			*(asp++) = (isgraph(s2) ? s2 : '.');
-			i++;
-		}
-		if (i >= maxlength) {
-			*hsp = *asp = '\0';
-			if (Aflag) {
-				(void)printf("%s", asciistuff);
-			} else {
-				(void)printf("%s0x%04x: %-*s  %s",
-				    ident, oset, HEXDUMP_HEXSTUFF_PER_LINE,
-				    hexstuff, asciistuff);
-			}
-			i = 0; hsp = hexstuff; asp = asciistuff;
-			oset += HEXDUMP_BYTES_PER_LINE;
+		(void)snprintf(hsp, sizeof(hexstuff) - (hsp - hexstuff),
+		    " %02x%02x", s1, s2);
+		hsp += HEXDUMP_HEXSTUFF_PER_SHORT;
+		*(asp++) = (isgraph(s1) ? s1 : '.');
+		*(asp++) = (isgraph(s2) ? s2 : '.');
+		if (++i >= HEXDUMP_SHORTS_PER_LINE) {
+		    *hsp = *asp = '\0';
+		    (void)printf("\n0x%04x\t%-*s\t%s",
+				 oset, HEXDUMP_HEXSTUFF_PER_LINE,
+				 hexstuff, asciistuff);
+		    i = 0; hsp = hexstuff; asp = asciistuff;
+		    oset += HEXDUMP_BYTES_PER_LINE;
 		}
 	}
 	if (length & 1) {
 		s1 = *cp++;
-		if (Aflag) {
-			*(asp++) = (isgraph(s1) ? s1 : (s1 != '\t' && s1 != ' ' && s1 != '\n' && s1 != '\r' ? '.' : s1) );
-		} else {
-			(void)snprintf(hsp, sizeof(hexstuff) - (hsp - hexstuff),
-			    " %02x", s1);
-			hsp += 3;
-			*(asp++) = (isgraph(s1) ? s1 : '.');
-		}
+		(void)snprintf(hsp, sizeof(hexstuff) - (hsp - hexstuff),
+		    " %02x", s1);
+		hsp += 3;
+		*(asp++) = (isgraph(s1) ? s1 : '.');
 		++i;
 	}
 	if (i > 0) {
 		*hsp = *asp = '\0';
-		if (Aflag) {
-			(void)printf("%s%s", ident, asciistuff);
-		} else {
-			(void)printf("%s0x%04x: %-*s  %s",
-			     ident, oset, HEXDUMP_HEXSTUFF_PER_LINE,
+		(void)printf("\n0x%04x\t%-*s\t%s",
+			     oset, HEXDUMP_HEXSTUFF_PER_LINE,
 			     hexstuff, asciistuff);
-		}
 	}
 }
 
 void
-ascii_print(register const u_char *ident, register const u_char *cp, register u_int length)
+ascii_print(register const u_char *cp, register u_int length)
 {
-	ascii_print_with_offset(ident, cp, length, 0);
+	ascii_print_with_offset(cp, length, 0);
 }
-
+	
 /*
  * telnet_print() wants this.  It is essentially default_print_unaligned()
  */
 void
-hex_print_with_offset(register const u_char *ident, register const u_char *cp, register u_int length,
+hex_print_with_offset(register const u_char *cp, register u_int length,
 		      register u_int oset)
 {
 	register u_int i, s;
@@ -150,7 +122,7 @@ hex_print_with_offset(register const u_char *ident, register const u_char *cp, r
 	i = 0;
 	while (--nshorts >= 0) {
 		if ((i++ % 8) == 0) {
-			(void)printf("%s0x%04x: ", ident, oset);
+			(void)printf("\n0x%04x\t", oset);
 			oset += HEXDUMP_BYTES_PER_LINE;
 		}
 		s = *cp++;
@@ -158,7 +130,7 @@ hex_print_with_offset(register const u_char *ident, register const u_char *cp, r
 	}
 	if (length & 1) {
 		if ((i % 8) == 0)
-			(void)printf("%s0x%04x: ", ident, oset);
+			(void)printf("\n0x%04x\t", oset);
 		(void)printf(" %02x", *cp);
 	}
 }
@@ -167,9 +139,9 @@ hex_print_with_offset(register const u_char *ident, register const u_char *cp, r
  * just for completeness
  */
 void
-hex_print(register const u_char *ident, register const u_char *cp, register u_int length)
+hex_print(register const u_char *cp, register u_int length)
 {
-	hex_print_with_offset(ident, cp, length, 0);
+	hex_print_with_offset(cp, length, 0);
 }
 
 #ifdef MAIN
@@ -186,5 +158,3 @@ main(int argc, char *argv[])
 	exit(0);
 }
 #endif /* MAIN */
-
-

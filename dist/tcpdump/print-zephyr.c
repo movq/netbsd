@@ -1,4 +1,4 @@
-/*	$NetBSD: print-zephyr.c,v 1.4 2004/09/27 23:04:25 dyoung Exp $	*/
+/*	$NetBSD: print-zephyr.c,v 1.1 2002/02/18 09:09:00 itojun Exp $	*/
 
 /*
  * Decode and print Zephyr packets.
@@ -20,25 +20,20 @@
  * PURPOSE.
  */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static const char rcsid[] _U_ =
-    "@(#) Header: /tcpdump/master/tcpdump/print-zephyr.c,v 1.6.2.2 2003/11/16 08:51:56 guy Exp";
-#else
-__RCSID("$NetBSD: print-zephyr.c,v 1.4 2004/09/27 23:04:25 dyoung Exp $");
-#endif
+static const char rcsid[] =
+    "@(#) Header: /tcpdump/master/tcpdump/print-zephyr.c,v 1.2 2001/09/11 02:37:12 guy Exp";
 #endif
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
 
-#include <tcpdump-stdinc.h>
-
 #include <stdio.h>
+#include <ctype.h>
 #include <string.h>
 #include <stdlib.h>
+#include <sys/types.h>
 
 #include "interface.h"
 
@@ -55,7 +50,7 @@ struct z_packet {
     char *inst;
     char *opcode;
     char *sender;
-    const char *recipient;
+    char *recipient;
     char *format;
     int cksum;
     int multi;
@@ -63,7 +58,7 @@ struct z_packet {
     /* Other fields follow here.. */
 };
 
-enum z_packet_type {
+enum {
     Z_PACKET_UNSAFE = 0,
     Z_PACKET_UNACKED,
     Z_PACKET_ACKED,
@@ -73,7 +68,7 @@ enum z_packet_type {
     Z_PACKET_SERVNAK,
     Z_PACKET_CLIENTACK,
     Z_PACKET_STAT
-};
+} z_packet_type;
 
 static struct tok z_types[] = {
     { Z_PACKET_UNSAFE,		"unsafe" },
@@ -112,7 +107,7 @@ parse_field(char **pptr, int *len)
 }
 
 static const char *
-z_triple(char *class, char *inst, const char *recipient)
+z_triple(char *class, char *inst, char *recipient)
 {
     if (!*recipient)
 	recipient = "*";
@@ -129,7 +124,7 @@ str_to_lower(char *string)
 
     string = z_buf;
     while (*string) {
-	*string = tolower((unsigned char)(*string));
+	*string = tolower(*string);
 	string++;
     }
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: print-cnfp.c,v 1.4 2004/09/27 23:04:24 dyoung Exp $	*/
+/*	$NetBSD: print-cnfp.c,v 1.1 2001/06/25 19:26:34 itojun Exp $	*/
 
 /*	$OpenBSD: print-cnfp.c,v 1.2 1998/06/25 20:26:59 mickey Exp $	*/
 
@@ -34,31 +34,30 @@
 
 /* Cisco NetFlow protocol */
 
-#include <sys/cdefs.h>
 #ifndef lint
-#if 0
-static const char rcsid[] _U_ =
-    "@(#) Header: /tcpdump/master/tcpdump/print-cnfp.c,v 1.14.2.2 2003/11/16 08:51:15 guy Exp";
-#else
-__RCSID("$NetBSD: print-cnfp.c,v 1.4 2004/09/27 23:04:24 dyoung Exp $");
-#endif
+static const char rcsid[] =
+    "@(#) Header: /tcpdump/master/tcpdump/print-cnfp.c,v 1.7 2001/02/21 09:05:39 guy Exp";
 #endif
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
 
-#include <tcpdump-stdinc.h>
+#include <sys/types.h>
+#include <sys/time.h>
+#include <sys/socket.h>
+#include <netdb.h>
+
+#include <netinet/in.h>
+
+#include <arpa/inet.h>
 
 #include <stdio.h>
 #include <string.h>
 
 #include "interface.h"
-#include "addrtoname.h"
-#include "extract.h"
 
 #include "tcp.h"
-#include "ipproto.h"
 
 struct nfhdr {
 	u_int32_t	ver_cnt;	/* version [15], and # of records */
@@ -86,7 +85,7 @@ struct nfrec {
 };
 
 void
-cnfp_print(const u_char *cp, const u_char *bp)
+cnfp_print(const u_char *cp, u_int len, const u_char *bp)
 {
 	register const struct nfhdr *nh;
 	register const struct nfrec *nr;
@@ -95,68 +94,68 @@ cnfp_print(const u_char *cp, const u_char *bp)
 	int nrecs, ver;
 	time_t t;
 
-	ip = (const struct ip *)bp;
-	nh = (const struct nfhdr *)cp;
+	ip = (struct ip *)bp;
+	nh = (struct nfhdr *)cp;
 
-	if ((const u_char *)(nh + 1) > snapend)
+	if ((u_char *)(nh + 1) > snapend)
 		return;
 
-	nrecs = EXTRACT_32BITS(&nh->ver_cnt) & 0xffff;
-	ver = (EXTRACT_32BITS(&nh->ver_cnt) & 0xffff0000) >> 16;
-	t = EXTRACT_32BITS(&nh->utc_sec);
+	nrecs = ntohl(nh->ver_cnt) & 0xffff;
+	ver = (ntohl(nh->ver_cnt) & 0xffff0000) >> 16;
+	t = ntohl(nh->utc_sec);
 /*	(p = ctime(&t))[24] = '\0'; */
 
 	printf("NetFlow v%x, %u.%03u uptime, %u.%09u, ", ver,
-	       EXTRACT_32BITS(&nh->msys_uptime)/1000,
-	       EXTRACT_32BITS(&nh->msys_uptime)%1000,
-	       EXTRACT_32BITS(&nh->utc_sec), EXTRACT_32BITS(&nh->utc_nsec));
+	       (unsigned)ntohl(nh->msys_uptime)/1000,
+	       (unsigned)ntohl(nh->msys_uptime)%1000,
+	       (unsigned)ntohl(nh->utc_sec), (unsigned)ntohl(nh->utc_nsec));
 
 	if (ver == 5 || ver == 6) {
-		printf("#%u, ", EXTRACT_32BITS(&nh->sequence));
-		nr = (const struct nfrec *)&nh[1];
+		printf("#%u, ", (unsigned)htonl(nh->sequence));
+		nr = (struct nfrec *)&nh[1];
 		snaplen -= 24;
 	} else {
-		nr = (const struct nfrec *)&nh->sequence;
+		nr = (struct nfrec *)&nh->sequence;
 		snaplen -= 16;
 	}
 
 	printf("%2u recs", nrecs);
 
-	for (; nrecs-- && (const u_char *)(nr + 1) <= snapend; nr++) {
+	for (; nrecs-- && (u_char *)(nr + 1) <= snapend; nr++) {
 		char buf[20];
 		char asbuf[20];
 
 		printf("\n  started %u.%03u, last %u.%03u",
-		       EXTRACT_32BITS(&nr->start_time)/1000,
-		       EXTRACT_32BITS(&nr->start_time)%1000,
-		       EXTRACT_32BITS(&nr->last_time)/1000,
-		       EXTRACT_32BITS(&nr->last_time)%1000);
+		       (unsigned)ntohl(nr->start_time)/1000,
+		       (unsigned)ntohl(nr->start_time)%1000,
+		       (unsigned)ntohl(nr->last_time)/1000,
+		       (unsigned)ntohl(nr->last_time)%1000);
 
 		asbuf[0] = buf[0] = '\0';
 		if (ver == 5 || ver == 6) {
 			snprintf(buf, sizeof(buf), "/%u",
-				 (EXTRACT_32BITS(&nr->masks) >> 24) & 0xff);
+				 (unsigned)(ntohl(nr->masks) >> 24) & 0xff);
 			snprintf(asbuf, sizeof(asbuf), ":%u",
-				 (EXTRACT_32BITS(&nr->asses) >> 16) & 0xffff);
+				 (unsigned)(ntohl(nr->asses) >> 16) & 0xffff);
 		}
-		printf("\n    %s%s%s:%u ", intoa(nr->src_ina.s_addr), buf, asbuf,
-			EXTRACT_32BITS(&nr->ports) >> 16);
+		printf("\n    %s%s%s:%u ", inet_ntoa(nr->src_ina), buf, asbuf,
+			(unsigned)ntohl(nr->ports) >> 16);
 
 		if (ver == 5 || ver ==6) {
 			snprintf(buf, sizeof(buf), "/%d",
-				 (EXTRACT_32BITS(&nr->masks) >> 16) & 0xff);
+				 (unsigned)(ntohl(nr->masks) >> 16) & 0xff);
 			snprintf(asbuf, sizeof(asbuf), ":%u",
-				 EXTRACT_32BITS(&nr->asses) & 0xffff);
+				 (unsigned)ntohl(nr->asses) & 0xffff);
 		}
-		printf("> %s%s%s:%u ", intoa(nr->dst_ina.s_addr), buf, asbuf,
-			EXTRACT_32BITS(&nr->ports) & 0xffff);
+		printf("> %s%s%s:%u ", inet_ntoa(nr->dst_ina), buf, asbuf,
+			(unsigned)ntohl(nr->ports) & 0xffff);
 
-		printf(">> %s\n    ", intoa(nr->nhop_ina.s_addr));
+		printf(">> %s\n    ", inet_ntoa(nr->nhop_ina));
 
-		pent = getprotobynumber((EXTRACT_32BITS(&nr->proto_tos) >> 8) & 0xff);
+		pent = getprotobynumber((ntohl(nr->proto_tos) >> 8) & 0xff);
 		if (!pent || nflag)
 			printf("%u ",
-			       (EXTRACT_32BITS(&nr->proto_tos) >> 8) & 0xff);
+			       (unsigned)(ntohl(nr->proto_tos) >> 8) & 0xff);
 		else
 			printf("%s ", pent->p_name);
 
@@ -164,9 +163,9 @@ cnfp_print(const u_char *cp, const u_char *bp)
 		if (pent && pent->p_proto == IPPROTO_TCP) {
 			int flags;
 			if (ver == 1)
-				flags = (EXTRACT_32BITS(&nr->asses) >> 24) & 0xff;
+				flags = (ntohl(nr->asses) >> 24) & 0xff;
 			else
-				flags = (EXTRACT_32BITS(&nr->proto_tos) >> 16) & 0xff;
+				flags = (ntohl(nr->proto_tos) >> 16) & 0xff;
 			if (flags & TH_FIN)	putchar('F');
 			if (flags & TH_SYN)	putchar('S');
 			if (flags & TH_RST)	putchar('R');
@@ -180,12 +179,12 @@ cnfp_print(const u_char *cp, const u_char *bp)
 		buf[0]='\0';
 		if (ver == 6) {
 			snprintf(buf, sizeof(buf), "(%u<>%u encaps)",
-				 (EXTRACT_32BITS(&nr->masks) >> 8) & 0xff,
-				 (EXTRACT_32BITS(&nr->masks)) & 0xff);
+				 (unsigned)(ntohl(nr->masks) >> 8) & 0xff,
+				 (unsigned)(ntohl(nr->masks)) & 0xff);
 		}
 		printf("tos %u, %u (%u octets) %s",
-		       EXTRACT_32BITS(&nr->proto_tos) & 0xff,
-		       EXTRACT_32BITS(&nr->packets),
-		       EXTRACT_32BITS(&nr->octets), buf);
+		       (unsigned)ntohl(nr->proto_tos) & 0xff,
+		       (unsigned)ntohl(nr->packets),
+		       (unsigned)ntohl(nr->octets), buf);
 	}
 }
