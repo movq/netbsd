@@ -38,7 +38,7 @@
  *
  *      %W% (Berkeley) %G%
  *
- * $Id: nfs_prot_osf5_1.h,v 1.1 2001/05/13 17:33:52 veego Exp $
+ * $Id: nfs_prot_osf5_1.h,v 1.1.1.1 2001/05/13 17:33:52 veego Exp $
  *
  */
 
