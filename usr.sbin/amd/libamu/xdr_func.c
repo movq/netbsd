@@ -38,7 +38,7 @@
  *
  *      %W% (Berkeley) %G%
  *
- * $Id: xdr_func.c,v 1.1 1997/09/22 21:11:19 christos Exp $
+ * $Id: xdr_func.c,v 1.1.1.1 1997/09/22 21:11:19 christos Exp $
  *
  */
 
