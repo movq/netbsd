@@ -35,11 +35,11 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#ident "$Id: cons.h,v 1.1 1993/09/29 06:09:17 briggs Exp $"
 /*
  * from: Utah $Hdr: cons.h 1.1 90/07/09$
  *
- *	@(#)cons.h	7.3 (Berkeley) 11/2/90
+ *	from: @(#)cons.h	7.3 (Berkeley) 11/2/90
+ *	$Id: cons.h,v 1.2 1993/11/29 00:40:43 briggs Exp $
  */
 
 struct consdev {
