@@ -30,14 +30,22 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- * $Id: console.h,v 1.2 1993/11/29 00:32:27 briggs Exp $
+ * $Id: console.h,v 1.3 1993/12/21 03:16:04 briggs Exp $
  *
  */
+
+struct beeps{
+	int freq;
+	int length;
+	int vol;
+};
 
 /* Must #include <sys/ioctl.h> for these to work: */
 #define CON_GETCURSOR TIOCMGET
 #define CON_SETCURSOR TIOCMSET
 #define CON_SETVT  	_IOW('t',190,int)
+#define CON_GETBEEP  	_IOR('t', 191, struct beeps)
+#define CON_SETBEEP  	_IOW('t', 192, struct beeps)
 
 /* Text attributes */
 #define T_NORMAL	0
