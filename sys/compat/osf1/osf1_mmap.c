@@ -1,4 +1,4 @@
-/* $NetBSD: osf1_mmap.c,v 1.3 1999/05/05 01:51:34 cgd Exp $ */
+/* $NetBSD: osf1_mmap.c,v 1.3.4.2 1999/06/21 19:26:58 cgd Exp $ */
 
 /*
  * Copyright (c) 1999 Christopher G. Demetriou.  All rights reserved.

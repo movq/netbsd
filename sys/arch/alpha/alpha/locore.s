@@ -1,4 +1,4 @@
-/* $NetBSD: locore.s,v 1.62 1999/04/20 21:11:59 thorpej Exp $ */
+/* $NetBSD: locore.s,v 1.60 1999/03/24 05:50:50 mrg Exp $ */
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -66,7 +66,6 @@
 
 .stabs	__FILE__,100,0,0,kernel_text
 
-#include "opt_ddb.h"
 #include "opt_multiprocessor.h"
 #include "opt_compat_linux.h"
 
@@ -76,7 +75,7 @@
 
 #include <machine/asm.h>
 
-__KERNEL_RCSID(0, "$NetBSD: locore.s,v 1.62 1999/04/20 21:11:59 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: locore.s,v 1.60 1999/03/24 05:50:50 mrg Exp $");
 
 #ifndef EVCNT_COUNTERS
 #include <machine/intrcnt.h>
@@ -219,12 +218,19 @@ Lstart1: LDGP(pv)
 	call_pal PAL_imb
 
 	/*
-	 * All ready to go!  Call main()!
+	 * Construct a fake trap frame, so execve() can work normally.
+	 * Note that setregs() is responsible for setting its contents
+	 * to 'reasonable' values.
 	 */
-	CALL(main)
+	lda	sp,-(FRAME_SIZE * 8)(sp)	/* space for struct trapframe */
+	mov	sp, a0				/* main()'s arg is frame ptr */
+	CALL(main)				/* go to main()! */
 
-	/* This should never happen. */
-	PANIC("main() returned",Lmain_returned_pmsg)
+	/*
+	 * Call exception_return, to simulate return from (fake)
+	 * exception to user-land, running process 1, init!
+	 */
+	jmp	zero, exception_return		/* "And that's all she wrote." */
 	END(locorestart)
 
 /**************************************************************************/
@@ -271,17 +277,6 @@ Lstart1: LDGP(pv)
  */
 #include <alpha/alpha/multiproc.s>
 #endif /* MULTIPROCESSOR */
-
-/**************************************************************************/
-
-/**************************************************************************/
-
-#if defined(DDB)
-/*
- * Pull in debugger glue.
- */
-#include <alpha/alpha/debug.s>
-#endif /* DDB */
 
 /**************************************************************************/
 

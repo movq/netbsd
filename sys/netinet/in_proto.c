@@ -1,4 +1,4 @@
-/*	$NetBSD: in_proto.c,v 1.30 1999/04/29 03:54:22 thorpej Exp $	*/
+/*	$NetBSD: in_proto.c,v 1.29.2.1 1999/04/29 14:44:48 perry Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993

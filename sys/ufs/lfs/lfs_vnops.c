@@ -1,4 +1,4 @@
-/*	$NetBSD: lfs_vnops.c,v 1.26 1999/04/12 00:36:47 perseant Exp $	*/
+/*	$NetBSD: lfs_vnops.c,v 1.25.2.1 1999/04/13 21:33:57 perseant Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.

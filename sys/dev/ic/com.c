@@ -1,4 +1,4 @@
-/*	$NetBSD: com.c,v 1.161 1999/04/19 19:27:31 ross Exp $	*/
+/*	$NetBSD: com.c,v 1.159.2.1 1999/04/19 20:37:57 perry Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.

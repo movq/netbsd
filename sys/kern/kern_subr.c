@@ -1,12 +1,12 @@
-/*	$NetBSD: kern_subr.c,v 1.48 1999/05/09 13:48:44 lukem Exp $	*/
+/*	$NetBSD: kern_subr.c,v 1.45 1999/03/24 05:51:25 mrg Exp $	*/
 
 /*-
- * Copyright (c) 1997, 1998, 1999 The NetBSD Foundation, Inc.
+ * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
  * by Jason R. Thorpe of the Numerical Aerospace Simulation Facility,
- * NASA Ames Research Center, and by Luke Mewburn.
+ * NASA Ames Research Center.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -949,45 +949,4 @@ getstr(cp, size)
 			*lp++ = c;
 		}
 	}
-}
-
-/*
- * snprintf() `bytes' into `buf', reformatting it so that the number
- * (plus a possible `xB' extension) fits into len bytes (including the
- * terminating NUL).  Returns the number of bytes stored in buf, or -1
- * if there was a problem.  E.g, given a len of 9: 
- *	bytes		result
- *	-----		------
- *	99999		`99999'
- *	100000		`97 KB'
- *	66715648	`65152 KB'
- *	252215296	`240 MB'
- */
-int
-format_bytes(buf, len, bytes)
-	char		*buf;
-	size_t		 len;
-	u_int64_t	 bytes;
-{
-		/* prefixes are: Kilo, Mega, Giga, Tera, Peta, Exa */
-	static const char prefixes[] = " KMGTPE";
-
-	int		i, r;
-	u_int64_t	max;
-
-	if (len > 0)
-		buf[0] = '\0';
-	if (len < 6)
-		return (-1);		/* not enough room for `xx yB\0' */
-
-	for (max = 1, i = 0; i < len - 4; i++)
-		max *= 10;
-	for (i = 0; bytes >= max && i < sizeof(prefixes); i++)
-		bytes /= 1024;
-
-	r = snprintf(buf, len, "%qd", (long long)bytes);
-	if (i > 0)
-		r += snprintf(buf + r, len - r, " %cB", prefixes[i]);
-
-	return (r);
 }

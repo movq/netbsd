@@ -1,4 +1,4 @@
-/*	$NetBSD: rpc_machdep.c,v 1.27 1999/04/06 06:57:00 mark Exp $	*/
+/*	$NetBSD: rpc_machdep.c,v 1.26.2.1 1999/04/06 21:10:19 mark Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_de.c,v 1.84 1999/04/12 04:31:55 cjs Exp $	*/
+/*	$NetBSD: if_de.c,v 1.83.2.1 1999/04/28 19:08:02 perry Exp $	*/
 
 /*-
  * Copyright (c) 1994-1997 Matt Thomas (matt@3am-software.com)

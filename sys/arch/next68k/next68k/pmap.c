@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.c,v 1.13 1999/04/22 04:24:54 chs Exp $        */
+/*	$NetBSD: pmap.c,v 1.12.2.1 1999/04/26 14:48:36 perry Exp $        */
 
 /*
  * This file was taken from mvme68k/mvme68k/pmap.c

@@ -1,4 +1,4 @@
-#	$NetBSD: GENERIC,v 1.33 1999/04/19 21:23:02 kleink Exp $
+#	$NetBSD: GENERIC,v 1.31.2.2 1999/04/19 05:07:27 cjs Exp $
 
 #
 #	GENERIC
@@ -21,7 +21,7 @@ options 	M68060
 #### System options specific to the x68k port
 
 options 	EXTENDED_MEMORY		# support for >16MB memory
-options 	FPU_EMULATE		# software fpu emulation for MC68030
+#options 	FPU_EMULATE		# software fpu emulation for MC68030
 options 	FPSP			# floating point emulation for MC68040
 options 	M060SP			# int/fp emulation for MC68060
 options 	JUPITER			# support for "Jupiter-X" accelerator
@@ -127,9 +127,8 @@ options 	COMPAT_12	# NetBSD 1.2 binary compatibility
 options 	COMPAT_13	# NetBSD 1.3 binary compatibility
 #options 	COMPAT_M68K4K	# NetBSD/m68k4k binaries
 #options 	COMPAT_SUNOS	# SunOS 4.x binary compatibility; broken
-#options 	COMPAT_SVR4	# SVR4 binary compatibility; broken
 #options 	COMPAT_LINUX	# Linux/m68k binary compatibility
-#options 	EXEC_ELF32	# 32-bit ELF executables (Linux, SVR4)
+#options 	EXEC_ELF32	# 32-bit ELF executables (Linux)
 
 ## File systems.
 file-system	FFS		# Berkeley Fast Filesystem

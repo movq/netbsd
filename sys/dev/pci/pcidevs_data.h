@@ -1,10 +1,10 @@
-/*	$NetBSD: pcidevs_data.h,v 1.124 1999/05/07 21:20:13 hwr Exp $	*/
+/*	$NetBSD: pcidevs_data.h,v 1.118.2.1 1999/04/13 22:52:43 jonathan Exp $	*/
 
 /*
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.
  *
  * generated from:
- *	NetBSD: pcidevs,v 1.119 1999/05/07 21:19:06 hwr Exp 
+ *	NetBSD: pcidevs,v 1.114 1999/04/12 23:18:16 jonathan Exp 
  */
 
 /*
@@ -508,12 +508,6 @@ struct pci_knowndev pci_knowndevs[] = {
 	    "Mach64 VT",
 	},
 	{
-	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_MACH64_B,
-	    0,
-	    "ATI Technologies",
-	    "Mach64 B",
-	},
-	{
 	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_MACH64_GT,
 	    0,
 	    "ATI Technologies",
@@ -578,12 +572,6 @@ struct pci_knowndev pci_knowndevs[] = {
 	    0,
 	    "Bit3 Computer Corp.",
 	    "PCI-VME Interface Mod. 617",
-	},
-	{
-	    PCI_VENDOR_BIT3, PCI_PRODUCT_BIT3_PCIVME618,
-	    0,
-	    "Bit3 Computer Corp.",
-	    "PCI-VME Interface Mod. 618",
 	},
 	{
 	    PCI_VENDOR_BIT3, PCI_PRODUCT_BIT3_PCIVME2706,
@@ -710,12 +698,6 @@ struct pci_knowndev pci_knowndevs[] = {
 	    0,
 	    "Cirrus Logic",
 	    "CL-PD6729",
-	},
-	{
-	    PCI_VENDOR_CIRRUS, PCI_PRODUCT_CIRRUS_CL_PD6832,
-	    0,
-	    "Cirrus Logic",
-	    "CL-PD6832 PCI-CardBus Bridge",
 	},
 	{
 	    PCI_VENDOR_CIRRUS, PCI_PRODUCT_CIRRUS_CL_GD7542,
@@ -1654,24 +1636,6 @@ struct pci_knowndev pci_knowndevs[] = {
 	    "Olicom OC-2326 10/100-TX Ethernet",
 	},
 	{
-	    PCI_VENDOR_SUN, PCI_PRODUCT_SUN_EBUS,
-	    0,
-	    "Sun Microsystems",
-	    "SPARC Ebus",
-	},
-	{
-	    PCI_VENDOR_SUN, PCI_PRODUCT_SUN_HMENETWORK,
-	    0,
-	    "Sun Microsystems",
-	    "SUNW,hme compatible Ethernet",
-	},
-	{
-	    PCI_VENDOR_SUN, PCI_PRODUCT_SUN_SIMBA,
-	    0,
-	    "Sun Microsystems",
-	    "Simba PCI bus",
-	},
-	{
 	    PCI_VENDOR_SYMBIOS, PCI_PRODUCT_SYMBIOS_810,
 	    0,
 	    "Symbios Logic",
@@ -2170,12 +2134,6 @@ struct pci_knowndev pci_knowndevs[] = {
 	    "5597/5598 USB host controller",
 	},
 	{
-	    PCI_VENDOR_SILMOTION, PCI_PRODUCT_SILMOTION_LYNX_E,
-	    0,
-	    "Silicon Motion",
-	    "Lynx E",
-	},
-	{
 	    PCI_VENDOR_SMC, PCI_PRODUCT_SMC_37C665,
 	    0,
 	    "Standard Microsystems",
@@ -2248,12 +2206,6 @@ struct pci_knowndev pci_knowndevs[] = {
 	    "TLAN",
 	},
 	{
-	    PCI_VENDOR_TI, PCI_PRODUCT_TI_PCILYNX,
-	    0,
-	    "Texas Instruments",
-	    "LYNX FireWire Host Controller",
-	},
-	{
 	    PCI_VENDOR_TI, PCI_PRODUCT_TI_PCI1130,
 	    0,
 	    "Texas Instruments",
@@ -2276,12 +2228,6 @@ struct pci_knowndev pci_knowndevs[] = {
 	    0,
 	    "Texas Instruments",
 	    "PCI1250 PCI-CardBus Bridge",
-	},
-	{
-	    PCI_VENDOR_TI, PCI_PRODUCT_TI_PCI1251,
-	    0,
-	    "Texas Instruments",
-	    "PCI1251 PCI-CardBus Bridge",
 	},
 	{
 	    PCI_VENDOR_TI, PCI_PRODUCT_TI_PCI1220,
@@ -5563,12 +5509,6 @@ struct pci_knowndev pci_knowndevs[] = {
 	    PCI_VENDOR_ESSTECH, 0,
 	    PCI_KNOWNDEV_NOPROD,
 	    "ESS Technology Inc",
-	    NULL,
-	},
-	{
-	    PCI_VENDOR_SILMOTION, 0,
-	    PCI_KNOWNDEV_NOPROD,
-	    "Silicon Motion",
 	    NULL,
 	},
 	{

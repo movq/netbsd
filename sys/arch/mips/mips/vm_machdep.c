@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.36 1999/05/13 21:58:34 thorpej Exp $	*/
+/*	$NetBSD: vm_machdep.c,v 1.34 1999/03/24 05:51:05 mrg Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.36 1999/05/13 21:58:34 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.34 1999/03/24 05:51:05 mrg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -74,10 +74,8 @@ extern paddr_t kvtophys __P((vaddr_t));	/* XXX */
  * cpu_fork() now returns just once.
  */
 void
-cpu_fork(p1, p2, stack, stacksize)
+cpu_fork(p1, p2)
 	struct proc *p1, *p2;
-	void *stack;
-	size_t stacksize;
 {
 	struct pcb *pcb;
 	struct frame *f;
@@ -89,7 +87,7 @@ cpu_fork(p1, p2, stack, stacksize)
 	if (CPUISMIPS3)
 		mips3_HitFlushDCache((vaddr_t)p2->p_addr, USPACE);
 #endif
-
+	
 	if (p1 == fpcurproc)
 		savefpregs(p1);
 
@@ -114,12 +112,6 @@ cpu_fork(p1, p2, stack, stacksize)
 	f = (struct frame *)((int)pcb + USPACE) - 1;
 	memcpy(f, p1->p_md.md_regs, sizeof(struct frame));
 	memset(((caddr_t) f) - 24, 0, 24);
-
-	/*
-	 * If specified, give the child a different stack.
-	 */
-	if (stack != NULL)
-		f->f_regs[SP] = (u_int)stack + stacksize;
 
 	p2->p_md.md_regs = (void *)f;
 	p2->p_md.md_flags = p1->p_md.md_flags & MDP_FPUSED;
@@ -205,7 +197,7 @@ cpu_exit(p)
 
 /*
  * Dump the machine specific segment at the start of a core dump.
- */
+ */     
 int
 cpu_coredump(p, vp, cred, chdr)
 	struct proc *p;

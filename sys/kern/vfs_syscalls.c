@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_syscalls.c,v 1.136 1999/05/06 17:11:04 christos Exp $	*/
+/*	$NetBSD: vfs_syscalls.c,v 1.133 1999/03/31 19:18:45 mycroft Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -111,7 +111,6 @@ const char *mountcompatnames[] = {
 	MOUNT_EXT2FS,	/* 17 */
 	MOUNT_CODA,	/* 18 */
 	MOUNT_FILECORE,	/* 19 */
-	MOUNT_NTFS,	/* 20 */
 };
 const int nmountcompatnames = sizeof(mountcompatnames) /
     sizeof(mountcompatnames[0]);
@@ -354,7 +353,7 @@ void
 checkdirs(olddp)
 	struct vnode *olddp;
 {
-	struct cwdinfo *cwdi;
+	struct filedesc *fdp;
 	struct vnode *newdp;
 	struct proc *p;
 
@@ -363,16 +362,16 @@ checkdirs(olddp)
 	if (VFS_ROOT(olddp->v_mountedhere, &newdp))
 		panic("mount: lost mount");
 	for (p = allproc.lh_first; p != 0; p = p->p_list.le_next) {
-		cwdi = p->p_cwdi;
-		if (cwdi->cwdi_cdir == olddp) {
-			vrele(cwdi->cwdi_cdir);
+		fdp = p->p_fd;
+		if (fdp->fd_cdir == olddp) {
+			vrele(fdp->fd_cdir);
 			VREF(newdp);
-			cwdi->cwdi_cdir = newdp;
+			fdp->fd_cdir = newdp;
 		}
-		if (cwdi->cwdi_rdir == olddp) {
-			vrele(cwdi->cwdi_rdir);
+		if (fdp->fd_rdir == olddp) {
+			vrele(fdp->fd_rdir);
 			VREF(newdp);
-			cwdi->cwdi_rdir = newdp;
+			fdp->fd_rdir = newdp;
 		}
 	}
 	if (rootvnode == olddp) {
@@ -618,18 +617,14 @@ sys_fstatfs(p, v, retval)
 	register struct statfs *sp;
 	int error;
 
-	/* getvnode() will use the descriptor for us */
 	if ((error = getvnode(p->p_fd, SCARG(uap, fd), &fp)) != 0)
 		return (error);
 	mp = ((struct vnode *)fp->f_data)->v_mount;
 	sp = &mp->mnt_stat;
 	if ((error = VFS_STATFS(mp, sp, p)) != 0)
-		goto out;
+		return (error);
 	sp->f_flags = mp->mnt_flag & MNT_VISFLAGMASK;
-	error = copyout(sp, SCARG(uap, buf), sizeof(*sp));
- out:
-	FILE_UNUSE(fp, p);
-	return (error);
+	return (copyout(sp, SCARG(uap, buf), sizeof(*sp)));
 }
 
 /*
@@ -708,14 +703,12 @@ sys_fchdir(p, v, retval)
 	struct sys_fchdir_args /* {
 		syscallarg(int) fd;
 	} */ *uap = v;
-	struct filedesc *fdp = p->p_fd;
-	struct cwdinfo *cwdi = p->p_cwdi;
+	register struct filedesc *fdp = p->p_fd;
 	struct vnode *vp, *tdp;
 	struct mount *mp;
 	struct file *fp;
 	int error;
 
-	/* getvnode() will use the descriptor for us */
 	if ((error = getvnode(fdp, SCARG(uap, fd), &fp)) != 0)
 		return (error);
 	vp = (struct vnode *)fp->f_data;
@@ -738,7 +731,7 @@ sys_fchdir(p, v, retval)
 	}
 	if (error) {
 		vput(vp);
-		goto out;
+		return (error);
 	}
 	VOP_UNLOCK(vp, 0);
 
@@ -746,17 +739,15 @@ sys_fchdir(p, v, retval)
 	 * Disallow changing to a directory not under the process's
 	 * current root directory (if there is one).
 	 */
-	if (cwdi->cwdi_rdir && !vn_isunder(vp, NULL, p)) {
+	if (fdp->fd_rdir &&
+	    !vn_isunder(vp, NULL, p)) {
 		vrele(vp);
-		error = EPERM;	/* operation not permitted */
-		goto out;
+		return EPERM;	/* operation not permitted */
 	}
 	
-	vrele(cwdi->cwdi_cdir);
-	cwdi->cwdi_cdir = vp;
- out:
-	FILE_UNUSE(fp, p);
-	return (error);
+	vrele(fdp->fd_cdir);
+	fdp->fd_cdir = vp;
+	return (0);
 }
 
 /*
@@ -770,15 +761,13 @@ sys_fchroot(p, v, retval)
 	register_t *retval;
 {
 	struct sys_fchroot_args *uap = v;
-	struct filedesc *fdp = p->p_fd;
-	struct cwdinfo *cwdi = p->p_cwdi;
+	struct filedesc	*fdp = p->p_fd;
 	struct vnode	*vp;
 	struct file	*fp;
 	int		 error;
 
 	if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
 		return error;
-	/* getvnode() will use the descriptor for us */
 	if ((error = getvnode(fdp, SCARG(uap, fd), &fp)) != 0)
 		return error;
 	vp = (struct vnode *) fp->f_data;
@@ -789,7 +778,7 @@ sys_fchroot(p, v, retval)
 		error = VOP_ACCESS(vp, VEXEC, p->p_ucred, p);
 	VOP_UNLOCK(vp, 0);
 	if (error)
-		goto out;
+		return error;
 	VREF(vp);
 
 	/*
@@ -797,22 +786,20 @@ sys_fchroot(p, v, retval)
 	 * the working directory.  Silently chdir to / if we aren't
 	 * already there.
 	 */
-	if (!vn_isunder(cwdi->cwdi_cdir, vp, p)) {
+	if (!vn_isunder(fdp->fd_cdir, vp, p)) {
 		/*
 		 * XXX would be more failsafe to change directory to a
 		 * deadfs node here instead
 		 */
-		vrele(cwdi->cwdi_cdir);
+		vrele(fdp->fd_cdir);
 		VREF(vp);
-		cwdi->cwdi_cdir = vp;
+		fdp->fd_cdir = vp;
 	}
 	
-	if (cwdi->cwdi_rdir != NULL)
-		vrele(cwdi->cwdi_rdir);
-	cwdi->cwdi_rdir = vp;
- out:
-	FILE_UNUSE(fp, p);
-	return (error);
+	if (fdp->fd_rdir != NULL)
+		vrele(fdp->fd_rdir);
+	fdp->fd_rdir = vp;
+	return 0;
 }
 
 
@@ -830,7 +817,7 @@ sys_chdir(p, v, retval)
 	struct sys_chdir_args /* {
 		syscallarg(const char *) path;
 	} */ *uap = v;
-	struct cwdinfo *cwdi = p->p_cwdi;
+	register struct filedesc *fdp = p->p_fd;
 	int error;
 	struct nameidata nd;
 
@@ -838,8 +825,8 @@ sys_chdir(p, v, retval)
 	    SCARG(uap, path), p);
 	if ((error = change_dir(&nd, p)) != 0)
 		return (error);
-	vrele(cwdi->cwdi_cdir);
-	cwdi->cwdi_cdir = nd.ni_vp;
+	vrele(fdp->fd_cdir);
+	fdp->fd_cdir = nd.ni_vp;
 	return (0);
 }
 
@@ -856,7 +843,7 @@ sys_chroot(p, v, retval)
 	struct sys_chroot_args /* {
 		syscallarg(const char *) path;
 	} */ *uap = v;
-	struct cwdinfo *cwdi = p->p_cwdi;
+	register struct filedesc *fdp = p->p_fd;
 	struct vnode *vp;
 	int error;
 	struct nameidata nd;
@@ -867,24 +854,24 @@ sys_chroot(p, v, retval)
 	    SCARG(uap, path), p);
 	if ((error = change_dir(&nd, p)) != 0)
 		return (error);
-	if (cwdi->cwdi_rdir != NULL)
-		vrele(cwdi->cwdi_rdir);
+	if (fdp->fd_rdir != NULL)
+		vrele(fdp->fd_rdir);
 	vp = nd.ni_vp;
-	cwdi->cwdi_rdir = vp;
+	fdp->fd_rdir = vp;
 
 	/*
 	 * Prevent escaping from chroot by putting the root under
 	 * the working directory.  Silently chdir to / if we aren't
 	 * already there.
 	 */
-	if (!vn_isunder(cwdi->cwdi_cdir, vp, p)) {
+	if (!vn_isunder(fdp->fd_cdir, vp, p)) {
 		/*
 		 * XXX would be more failsafe to change directory to a
 		 * deadfs node here instead
 		 */
-		vrele(cwdi->cwdi_cdir);
+		vrele(fdp->fd_cdir);
 		VREF(vp);
-		cwdi->cwdi_cdir = vp;
+		fdp->fd_cdir = vp;
 	}
 	
 	return (0);
@@ -931,11 +918,11 @@ sys_open(p, v, retval)
 		syscallarg(int) flags;
 		syscallarg(int) mode;
 	} */ *uap = v;
-	struct cwdinfo *cwdi = p->p_cwdi;
-	struct filedesc *fdp = p->p_fd;
-	struct file *fp;
-	struct vnode *vp;
+	register struct filedesc *fdp = p->p_fd;
+	register struct file *fp;
+	register struct vnode *vp;
 	int flags, cmode;
+	struct file *nfp;
 	int type, indx, error;
 	struct flock lf;
 	struct nameidata nd;
@@ -944,19 +931,18 @@ sys_open(p, v, retval)
 	flags = FFLAGS(SCARG(uap, flags));
 	if ((flags & (FREAD | FWRITE)) == 0)
 		return (EINVAL);
-	/* falloc() will use the file descriptor for us */
-	if ((error = falloc(p, &fp, &indx)) != 0)
+	if ((error = falloc(p, &nfp, &indx)) != 0)
 		return (error);
-	cmode = ((SCARG(uap, mode) &~ cwdi->cwdi_cmask) & ALLPERMS) &~ S_ISTXT;
+	fp = nfp;
+	cmode = ((SCARG(uap, mode) &~ fdp->fd_cmask) & ALLPERMS) &~ S_ISTXT;
 	NDINIT(&nd, LOOKUP, FOLLOW, UIO_USERSPACE, SCARG(uap, path), p);
 	p->p_dupfd = -indx - 1;			/* XXX check for fdopen */
 	if ((error = vn_open(&nd, flags, cmode)) != 0) {
-		FILE_UNUSE(fp, p);
 		ffree(fp);
 		if ((error == ENODEV || error == ENXIO) &&
 		    p->p_dupfd >= 0 &&			/* XXX from fdopen */
 		    (error =
-			dupfdopen(p, indx, p->p_dupfd, flags, error)) == 0) {
+			dupfdopen(fdp, indx, p->p_dupfd, flags, error)) == 0) {
 			*retval = indx;
 			return (0);
 		}
@@ -986,7 +972,6 @@ sys_open(p, v, retval)
 		error = VOP_ADVLOCK(vp, (caddr_t)fp, F_SETLK, &lf, type);
 		if (error) {
 			(void) vn_close(vp, fp->f_flag, fp->f_cred, p);
-			FILE_UNUSE(fp, p);
 			ffree(fp);
 			fdp->fd_ofiles[indx] = NULL;
 			return (error);
@@ -996,7 +981,6 @@ sys_open(p, v, retval)
 	}
 	VOP_UNLOCK(vp, 0);
 	*retval = indx;
-	FILE_UNUSE(fp, p);
 	return (0);
 }
 
@@ -1032,7 +1016,7 @@ sys_mknod(p, v, retval)
 	else {
 		VATTR_NULL(&vattr);
 		vattr.va_mode =
-		    (SCARG(uap, mode) & ALLPERMS) &~ p->p_cwdi->cwdi_cmask;
+		    (SCARG(uap, mode) & ALLPERMS) &~ p->p_fd->fd_cmask;
 		vattr.va_rdev = SCARG(uap, dev);
 		whiteout = 0;
 
@@ -1109,7 +1093,7 @@ sys_mkfifo(p, v, retval)
 	}
 	VATTR_NULL(&vattr);
 	vattr.va_type = VFIFO;
-	vattr.va_mode = (SCARG(uap, mode) & ALLPERMS) &~ p->p_cwdi->cwdi_cmask;
+	vattr.va_mode = (SCARG(uap, mode) & ALLPERMS) &~ p->p_fd->fd_cmask;
 	VOP_LEASE(nd.ni_dvp, p, p->p_ucred, LEASE_WRITE);
 	return (VOP_MKNOD(nd.ni_dvp, &nd.ni_vp, &nd.ni_cnd, &vattr));
 }
@@ -1194,7 +1178,7 @@ sys_symlink(p, v, retval)
 		goto out;
 	}
 	VATTR_NULL(&vattr);
-	vattr.va_mode = ACCESSPERMS &~ p->p_cwdi->cwdi_cmask;
+	vattr.va_mode = ACCESSPERMS &~ p->p_fd->fd_cmask;
 	VOP_LEASE(nd.ni_dvp, p, p->p_ucred, LEASE_WRITE);
 	error = VOP_SYMLINK(nd.ni_dvp, &nd.ni_vp, &nd.ni_cnd, &vattr, path);
 out:
@@ -1312,17 +1296,13 @@ sys_lseek(p, v, retval)
 	int error;
 
 	if ((u_int)SCARG(uap, fd) >= fdp->fd_nfiles ||
-	    (fp = fdp->fd_ofiles[SCARG(uap, fd)]) == NULL ||
-	    (fp->f_iflags & FIF_WANTCLOSE) != 0)
+	    (fp = fdp->fd_ofiles[SCARG(uap, fd)]) == NULL)
 		return (EBADF);
 
-	FILE_USE(fp);
-
 	vp = (struct vnode *)fp->f_data;
-	if (fp->f_type != DTYPE_VNODE || vp->v_type == VFIFO) {
-		error = ESPIPE;
-		goto out;
-	}
+	if (fp->f_type != DTYPE_VNODE
+	    || vp->v_type == VFIFO)
+		return (ESPIPE);
 
 	switch (SCARG(uap, whence)) {
 	case SEEK_CUR:
@@ -1331,23 +1311,20 @@ sys_lseek(p, v, retval)
 	case SEEK_END:
 		error = VOP_GETATTR(vp, &vattr, cred, p);
 		if (error)
-			goto out;
+			return (error);
 		newoff = SCARG(uap, offset) + vattr.va_size;
 		break;
 	case SEEK_SET:
 		newoff = SCARG(uap, offset);
 		break;
 	default:
-		error = EINVAL;
-		goto out;
+		return (EINVAL);
 	}
 	if ((error = VOP_SEEK(vp, fp->f_offset, newoff, cred)) != 0)
-		goto out;
+		return (error);
 
 	*(off_t *)retval = fp->f_offset = newoff;
- out:
-	FILE_UNUSE(fp, p);
-	return (error);
+	return (0);
 }
 
 /*
@@ -1373,17 +1350,13 @@ sys_pread(p, v, retval)
 
 	if ((u_int)fd >= fdp->fd_nfiles ||
 	    (fp = fdp->fd_ofiles[fd]) == NULL ||
-	    (fp->f_iflags & FIF_WANTCLOSE) != 0 ||
 	    (fp->f_flag & FREAD) == 0)
 		return (EBADF);
 
-	FILE_USE(fp);
-
 	vp = (struct vnode *)fp->f_data;
-	if (fp->f_type != DTYPE_VNODE || vp->v_type == VFIFO) {
-		error = ESPIPE;
-		goto out;
-	}
+	if (fp->f_type != DTYPE_VNODE
+	    || vp->v_type == VFIFO)
+		return (ESPIPE);
 
 	offset = SCARG(uap, offset);
 
@@ -1392,15 +1365,10 @@ sys_pread(p, v, retval)
 	 * XXX take any action on the seek operation.
 	 */
 	if ((error = VOP_SEEK(vp, fp->f_offset, offset, fp->f_cred)) != 0)
-		goto out;
+		return (error);
 
-	/* dofileread() will unuse the descriptor for us */
 	return (dofileread(p, fd, fp, SCARG(uap, buf), SCARG(uap, nbyte),
 	    &offset, 0, retval));
-
- out:
-	FILE_UNUSE(fp, p);
-	return (error);
 }
 
 /*
@@ -1426,17 +1394,13 @@ sys_preadv(p, v, retval)
 
 	if ((u_int)fd >= fdp->fd_nfiles ||
 	    (fp = fdp->fd_ofiles[fd]) == NULL ||
-	    (fp->f_iflags & FIF_WANTCLOSE) != 0 ||
 	    (fp->f_flag & FREAD) == 0)
 		return (EBADF);
 
-	FILE_USE(fp);
-
 	vp = (struct vnode *)fp->f_data;
-	if (fp->f_type != DTYPE_VNODE || vp->v_type == VFIFO) {
-		error = ESPIPE;
-		goto out;
-	}
+	if (fp->f_type != DTYPE_VNODE
+	    || vp->v_type == VFIFO)
+		return (ESPIPE);
 
 	offset = SCARG(uap, offset);
 
@@ -1445,15 +1409,10 @@ sys_preadv(p, v, retval)
 	 * XXX take any action on the seek operation.
 	 */
 	if ((error = VOP_SEEK(vp, fp->f_offset, offset, fp->f_cred)) != 0)
-		goto out;
+		return (error);
 
-	/* dofilereadv() will unuse the descriptor for us */
 	return (dofilereadv(p, fd, fp, SCARG(uap, iovp), SCARG(uap, iovcnt),
 	    &offset, 0, retval));
-
- out:
-	FILE_UNUSE(fp, p);
-	return (error);
 }
 
 /*
@@ -1479,17 +1438,13 @@ sys_pwrite(p, v, retval)
 
 	if ((u_int)fd >= fdp->fd_nfiles ||
 	    (fp = fdp->fd_ofiles[fd]) == NULL ||
-	    (fp->f_iflags & FIF_WANTCLOSE) != 0 ||
 	    (fp->f_flag & FWRITE) == 0)
 		return (EBADF);
 
-	FILE_USE(fp);
-
 	vp = (struct vnode *)fp->f_data;
-	if (fp->f_type != DTYPE_VNODE || vp->v_type == VFIFO) {
-		error = ESPIPE;
-		goto out;
-	}
+	if (fp->f_type != DTYPE_VNODE
+	    || vp->v_type == VFIFO)
+		return (ESPIPE);
 
 	offset = SCARG(uap, offset);
 
@@ -1498,15 +1453,10 @@ sys_pwrite(p, v, retval)
 	 * XXX take any action on the seek operation.
 	 */
 	if ((error = VOP_SEEK(vp, fp->f_offset, offset, fp->f_cred)) != 0)
-		goto out;
+		return (error);
 
-	/* dofilewrite() will unuse the descriptor for us */
 	return (dofilewrite(p, fd, fp, SCARG(uap, buf), SCARG(uap, nbyte),
 	    &offset, 0, retval));
-
- out:
-	FILE_UNUSE(fp, p);
-	return (error);
 }
 
 /*
@@ -1532,17 +1482,13 @@ sys_pwritev(p, v, retval)
 
 	if ((u_int)fd >= fdp->fd_nfiles ||
 	    (fp = fdp->fd_ofiles[fd]) == NULL ||
-	    (fp->f_iflags & FIF_WANTCLOSE) != 0 ||
 	    (fp->f_flag & FWRITE) == 0)
 		return (EBADF);
 
-	FILE_USE(fp);
-
 	vp = (struct vnode *)fp->f_data;
-	if (fp->f_type != DTYPE_VNODE || vp->v_type == VFIFO) {
-		error = ESPIPE;
-		goto out;
-	}
+	if (fp->f_type != DTYPE_VNODE
+	    || vp->v_type == VFIFO)
+		return (ESPIPE);
 
 	offset = SCARG(uap, offset);
 
@@ -1551,15 +1497,10 @@ sys_pwritev(p, v, retval)
 	 * XXX take any action on the seek operation.
 	 */
 	if ((error = VOP_SEEK(vp, fp->f_offset, offset, fp->f_cred)) != 0)
-		goto out;
+		return (error);
 
-	/* dofilewritev() will unuse the descriptor for us */
 	return (dofilewritev(p, fd, fp, SCARG(uap, iovp), SCARG(uap, iovcnt),
 	    &offset, 0, retval));
-
- out:
-	FILE_UNUSE(fp, p);
-	return (error);
 }
 
 /*
@@ -1792,7 +1733,6 @@ sys_fchflags(p, v, retval)
 	struct file *fp;
 	int error;
 
-	/* getvnode() will use the descriptor for us */
 	if ((error = getvnode(p->p_fd, SCARG(uap, fd), &fp)) != 0)
 		return (error);
 	vp = (struct vnode *)fp->f_data;
@@ -1802,7 +1742,6 @@ sys_fchflags(p, v, retval)
 	vattr.va_flags = SCARG(uap, flags);
 	error = VOP_SETATTR(vp, &vattr, p->p_ucred, p);
 	VOP_UNLOCK(vp, 0);
-	FILE_UNUSE(fp, p);
 	return (error);
 }
 
@@ -1850,13 +1789,10 @@ sys_fchmod(p, v, retval)
 	struct file *fp;
 	int error;
 
-	/* getvnode() will use the descriptor for us */
 	if ((error = getvnode(p->p_fd, SCARG(uap, fd), &fp)) != 0)
 		return (error);
 
-	error = change_mode((struct vnode *)fp->f_data, SCARG(uap, mode), p);
-	FILE_UNUSE(fp, p);
-	return (error);
+	return (change_mode((struct vnode *)fp->f_data, SCARG(uap, mode), p));
 }
 
 /*
@@ -1982,14 +1918,11 @@ sys_fchown(p, v, retval)
 	int error;
 	struct file *fp;
 
-	/* getvnode() will use the descriptor for us */
 	if ((error = getvnode(p->p_fd, SCARG(uap, fd), &fp)) != 0)
 		return (error);
 
-	error = change_owner((struct vnode *)fp->f_data, SCARG(uap, uid),
-	    SCARG(uap, gid), p, 0);
-	FILE_UNUSE(fp, p);
-	return (error);
+	return (change_owner((struct vnode *)fp->f_data, SCARG(uap, uid),
+	    SCARG(uap, gid), p, 0));
 }
 
 /*
@@ -2010,14 +1943,11 @@ sys___posix_fchown(p, v, retval)
 	int error;
 	struct file *fp;
 
-	/* getvnode() will use the descriptor for us */
 	if ((error = getvnode(p->p_fd, SCARG(uap, fd), &fp)) != 0)
 		return (error);
 
-	error = change_owner((struct vnode *)fp->f_data, SCARG(uap, uid),
-	    SCARG(uap, gid), p, 1);
-	FILE_UNUSE(fp, p);
-	return (error);
+	return (change_owner((struct vnode *)fp->f_data, SCARG(uap, uid),
+	    SCARG(uap, gid), p, 1));
 }
 
 /*
@@ -2180,13 +2110,11 @@ sys_futimes(p, v, retval)
 	int error;
 	struct file *fp;
 
-	/* getvnode() will use the descriptor for us */
 	if ((error = getvnode(p->p_fd, SCARG(uap, fd), &fp)) != 0)
 		return (error);
 
-	error = change_utimes((struct vnode *)fp->f_data, SCARG(uap, tptr), p);
-	FILE_UNUSE(fp, p);
-	return (error);
+	return (change_utimes((struct vnode *)fp->f_data, SCARG(uap, tptr),
+	    p));
 }
 
 /*
@@ -2309,13 +2237,10 @@ sys_ftruncate(p, v, retval)
 	struct file *fp;
 	int error;
 
-	/* getvnode() will use the descriptor for us */
 	if ((error = getvnode(p->p_fd, SCARG(uap, fd), &fp)) != 0)
 		return (error);
-	if ((fp->f_flag & FWRITE) == 0) {
-		error = EINVAL;
-		goto out;
-	}
+	if ((fp->f_flag & FWRITE) == 0)
+		return (EINVAL);
 	vp = (struct vnode *)fp->f_data;
 	VOP_LEASE(vp, p, p->p_ucred, LEASE_WRITE);
 	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
@@ -2327,8 +2252,6 @@ sys_ftruncate(p, v, retval)
 		error = VOP_SETATTR(vp, &vattr, fp->f_cred, p);
 	}
 	VOP_UNLOCK(vp, 0);
- out:
-	FILE_UNUSE(fp, p);
 	return (error);
 }
 
@@ -2349,14 +2272,12 @@ sys_fsync(p, v, retval)
 	struct file *fp;
 	int error;
 
-	/* getvnode() will use the descriptor for us */
 	if ((error = getvnode(p->p_fd, SCARG(uap, fd), &fp)) != 0)
 		return (error);
 	vp = (struct vnode *)fp->f_data;
 	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 	error = VOP_FSYNC(vp, fp->f_cred, FSYNC_WAIT, p);
 	VOP_UNLOCK(vp, 0);
-	FILE_UNUSE(fp, p);
 	return (error);
 }
 
@@ -2377,14 +2298,12 @@ sys_fdatasync(p, v, retval)
 	struct file *fp;
 	int error;
 
-	/* getvnode() will use the descriptor for us */
 	if ((error = getvnode(p->p_fd, SCARG(uap, fd), &fp)) != 0)
 		return (error);
 	vp = (struct vnode *)fp->f_data;
 	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 	error = VOP_FSYNC(vp, fp->f_cred, FSYNC_WAIT|FSYNC_DATAONLY, p);
 	VOP_UNLOCK(vp, 0);
-	FILE_UNUSE(fp, p);
 	return (error);
 }
 
@@ -2553,8 +2472,7 @@ sys_mkdir(p, v, retval)
 	}
 	VATTR_NULL(&vattr);
 	vattr.va_type = VDIR;
-	vattr.va_mode =
-	    (SCARG(uap, mode) & ACCESSPERMS) &~ p->p_cwdi->cwdi_cmask;
+	vattr.va_mode = (SCARG(uap, mode) & ACCESSPERMS) &~ p->p_fd->fd_cmask;
 	VOP_LEASE(nd.ni_dvp, p, p->p_ucred, LEASE_WRITE);
 	error = VOP_MKDIR(nd.ni_dvp, &nd.ni_vp, &nd.ni_cnd, &vattr);
 	if (!error)
@@ -2633,18 +2551,13 @@ sys_getdents(p, v, retval)
 	struct file *fp;
 	int error, done;
 
-	/* getvnode() will use the descriptor for us */
 	if ((error = getvnode(p->p_fd, SCARG(uap, fd), &fp)) != 0)
 		return (error);
-	if ((fp->f_flag & FREAD) == 0) {
-		error = EBADF;
-		goto out;
-	}
+	if ((fp->f_flag & FREAD) == 0)
+		return (EBADF);
 	error = vn_readdir(fp, SCARG(uap, buf), UIO_USERSPACE,
 			SCARG(uap, count), &done, p, 0, 0);
 	*retval = done;
- out:
-	FILE_UNUSE(fp, p);
 	return (error);
 }
 
@@ -2660,11 +2573,11 @@ sys_umask(p, v, retval)
 	struct sys_umask_args /* {
 		syscallarg(mode_t) newmask;
 	} */ *uap = v;
-	struct cwdinfo *cwdi;
+	register struct filedesc *fdp;
 
-	cwdi = p->p_cwdi;
-	*retval = cwdi->cwdi_cmask;
-	cwdi->cwdi_cmask = SCARG(uap, newmask) & ALLPERMS;
+	fdp = p->p_fd;
+	*retval = fdp->fd_cmask;
+	fdp->fd_cmask = SCARG(uap, newmask) & ALLPERMS;
 	return (0);
 }
 
@@ -2716,23 +2629,13 @@ getvnode(fdp, fd, fpp)
 	struct file *fp;
 
 	if ((u_int)fd >= fdp->fd_nfiles ||
-	    (fp = fdp->fd_ofiles[fd]) == NULL ||
-	    (fp->f_iflags & FIF_WANTCLOSE) != 0)
+	    (fp = fdp->fd_ofiles[fd]) == NULL)
 		return (EBADF);
-
-	FILE_USE(fp);
-
-	if (fp->f_type != DTYPE_VNODE) {
-		FILE_UNUSE(fp, NULL);
+	if (fp->f_type != DTYPE_VNODE)
 		return (EINVAL);
-	}
-
 	vp = (struct vnode *)fp->f_data;
-	if (vp->v_type == VBAD) {
-		FILE_UNUSE(fp, NULL);
+	if (vp->v_type == VBAD)
 		return (EBADF);
-	}
-
 	*fpp = fp;
 	return (0);
 }

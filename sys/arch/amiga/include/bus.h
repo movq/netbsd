@@ -1,4 +1,4 @@
-/*	$NetBSD: bus.h,v 1.11 1999/04/20 05:48:37 is Exp $	*/
+/*	$NetBSD: bus.h,v 1.10.2.1 1999/04/20 14:31:10 perry Exp $	*/
 
 /*
  * Copyright (c) 1996 Leo Weppelman.  All rights reserved.

@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.68 1999/05/13 14:23:42 minoura Exp $	*/
+/*	$NetBSD: machdep.c,v 1.60.2.1 1999/04/16 16:26:27 chs Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -128,6 +128,8 @@ int badbaddr __P((caddr_t));
 /* the following is used externally (sysctl_hw) */
 char	machine[] = MACHINE;	/* from <machine/param.h> */
 
+int cpuspeed;	/* XXX */
+
 vm_map_t exec_map = NULL;  
 vm_map_t mb_map = NULL;
 vm_map_t phys_map = NULL;
@@ -189,19 +191,6 @@ void	nmihand __P((struct frame));
 void	intrhand __P((int));
 
 /*
- * On the 68020/68030, the value of delay_divisor is roughly
- * 2048 / cpuspeed (where cpuspeed is in MHz).
- *
- * On the 68040, the value of delay_divisor is roughly
- * 759 / cpuspeed (where cpuspeed is in MHz).
- *
- * On the 68060, the value of delay_divisor is reported to be
- * 128 / cpuspeed (where cpuspeed is in MHz).
- */
-int	delay_divisor = 140;	/* assume some reasonable value to start */
-static int cpuspeed;		/* MPU clock (in MHz) */
-
-/*
  * Machine-dependent crash dump header info.
  */
 cpu_kcore_hdr_t cpu_kcore_hdr;
@@ -215,9 +204,15 @@ void
 consinit()
 {
 	/*
-	 * bring graphics layer up.
+	 * Set cpuspeed immediately since cninit() called routines
+	 * might use delay.  Note that we only set it if a custom value
+	 * has not already been specified.
 	 */
-	config_console();
+
+	cpuspeed = MHZ_25; /* XXX */
+
+	if (mmutype == MMU_68040)
+		cpuspeed *= 2;	/* XXX */
 
 	/*
 	 * Initialize the console before we print anything out.
@@ -316,7 +311,9 @@ again:
 	    (name) = (type *)v; v = (caddr_t)((name)+(num))
 #define	valloclim(name, type, num, lim) \
 	    (name) = (type *)v; v = (caddr_t)((lim) = ((name)+(num)))
-
+#ifdef REAL_CLISTS
+	valloc(cfree, struct cblock, nclist);
+#endif
 	valloc(callout, struct callout, ncallout);
 #ifdef SYSVSHM
 	valloc(shmsegs, struct shmid_ds, shminfo.shmmni);
@@ -460,7 +457,7 @@ again:
 	 * Finally, allocate mbuf cluster submap.
 	 */
 	mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				 nmbclusters * mclbytes, FALSE, FALSE, NULL);
+				 VM_MBUF_SIZE, FALSE, FALSE, NULL);
 
 	/*
 	 * Initialize callouts
@@ -526,16 +523,16 @@ setregs(p, pack, stack)
 /*
  * Info for CTL_HW
  */
-char	cpu_model[96];		/* max 85 chars */
+char	cpu_model[120];
 extern	char version[];
 static char *fpu_descr[] = {
 #ifdef	FPU_EMULATE
-	", emulator FPU", 	/* 0 */
+	"emulator FPU", 	/* 0 */
 #else
-	", no math support",	/* 0 */
+	"no math support",	/* 0 */
 #endif
-	", m68881 FPU",		/* 1 */
-	", m68882 FPU",		/* 2 */
+	" m68881 FPU",		/* 1 */
+	" m68882 FPU",		/* 2 */
 	"/FPU",			/* 3 */
 	"/FPU",			/* 4 */
 	};
@@ -545,7 +542,6 @@ identifycpu()
 {
         /* there's alot of XXX in here... */
 	char *cpu_type, *mach, *mmu, *fpu;
-	char clock[16];
 
 	/*
 	 * check machine type constant
@@ -577,20 +573,14 @@ identifycpu()
 		break;
 	}
 
-	cpuspeed = 2048 / delay_divisor;
-	sprintf(clock, "%dMHz", cpuspeed);
 	switch (cputype) {
 	case CPU_68060:
 		cpu_type = "m68060";
 		mmu = "/MMU";
-		cpuspeed = 128 / delay_divisor;
-		sprintf(clock, "%d/%dMHz", cpuspeed*2, cpuspeed);
 		break;
 	case CPU_68040:
 		cpu_type = "m68040";
 		mmu = "/MMU";
-		cpuspeed = 759 / delay_divisor;
-		sprintf(clock, "%d/%dMHz", cpuspeed*2, cpuspeed);
 		break;
 	case CPU_68030:
 		cpu_type = "m68030";
@@ -598,20 +588,19 @@ identifycpu()
 		break;
 	case CPU_68020:
 		cpu_type = "m68020";
-		mmu = ", m68851 MMU";
+		mmu = " m68851 MMU";
 		break;
 	default:
 		cpu_type = "unknown";
-		mmu = ", unknown MMU";
+		mmu = " unknown MMU";
 		break;
 	}
 	fputype = fpu_probe();
 	if (fputype >= 0 && fputype < sizeof(fpu_descr)/sizeof(fpu_descr[0]))
 		fpu = fpu_descr[fputype];
 	else
-		fpu = ", unknown FPU";
-	sprintf(cpu_model, "X68%s (%s CPU%s%s, %s clock)",
-		mach, cpu_type, mmu, fpu, clock);
+		fpu = " unknown FPU";
+	sprintf(cpu_model, "X68%s (%s CPU%s%s)", mach, cpu_type, mmu, fpu);
 	printf("%s\n", cpu_model);
 }
 
@@ -1386,7 +1375,7 @@ asm("end_check_mem:");
 	pmap_remove(pmap_kernel(), mem_v, mem_v+NBPG);
 	pmap_remove(pmap_kernel(), base_v, base_v+NBPG);
 
-	DPRINTF ((" End.\n"));
+	DPRINTF ((" End."));
 
 	DPRINTF (("Returning from mem_exists. result = %d\n", exists));
 
@@ -1400,7 +1389,6 @@ setmemrange(void)
 	psize_t s, min, max;
 	struct memlist *mlist = memlist;
 	u_long h;
-	int basemax = ctob(physmem);
 
 	/*
 	 * VM system is not started yet.  Use the first and second avalable
@@ -1435,12 +1423,12 @@ setmemrange(void)
 		 * But some type of extended memory is in 32bit address space.
 		 * Check whether.
 		 */
-		if (!mem_exists(mlist[i].base, basemax))
+		if (!mem_exists(mlist[i].base, avail_end))
 			continue;
 		h = 0;
 		/* range check */
 		for (s = min; s <= max; s += 0x00100000) {
-			if (!mem_exists(mlist[i].base + s - 4, basemax))
+			if (!mem_exists(mlist[i].base + s - 4, h))
 				break;
 			h = (u_long)(mlist[i].base + s);
 		}

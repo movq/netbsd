@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.c,v 1.34 1999/05/09 19:24:20 eeh Exp $	*/
+/*	$NetBSD: pmap.c,v 1.31.2.1 1999/04/16 16:24:41 chs Exp $	*/
 /* #define NO_VCACHE */ /* Don't forget the locked TLB in dostart */
 #define HWREF
 /* #define BOOT_DEBUG */
@@ -1526,12 +1526,10 @@ pmap_kremove(va, size)
 	int64_t data;
 	int i, flush = 0;
 
-#ifdef DEBUG
 	if (pmapdebug & PDB_DEMAP) {
 		printf("pmap_kremove: start %p size %lx\n",
 		       va, size);
 	}
-#endif
 	while (size >= NBPG) {
 		/*
 		 * Is this part of the permanent 4MB mapping?
@@ -1831,7 +1829,6 @@ pmap_enter(pm, va, pa, prot, wired, access_type)
 						tsb_enter(npv->pv_pmap->pm_ctx,(npv->pv_va&PV_VAMASK),
 							  pseg_get(npv->pv_pmap, va));
 #else
-						i = ptelookup_va(va);
 						if (tsb[i].tag.tag > 0 && tsb[i].tag.tag == 
 						    TSB_TAG(0,pm->pm_ctx,va)) {
 							/* 

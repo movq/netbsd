@@ -1,4 +1,4 @@
-/*	$NetBSD: msdosfs_vnops.c,v 1.80 1999/04/21 17:13:22 abs Exp $	*/
+/*	$NetBSD: msdosfs_vnops.c,v 1.79.2.1 1999/04/21 18:12:17 perry Exp $	*/
 
 /*-
  * Copyright (C) 1994, 1995, 1997 Wolfgang Solfrank.

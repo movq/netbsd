@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.12 1999/05/07 14:28:51 drochner Exp $
+#	$NetBSD: Makefile.inc,v 1.11 1998/09/05 15:15:19 lukem Exp $
 #
 #	Configuration variables (default values are below):
 #
@@ -19,9 +19,8 @@
 # Default values:
 SADST?=		${.OBJDIR}/lib/sa
 SA_AS?=		library
-SADOTDIR?= ../../.
 
-SADIR=		${S:S@^.@${SADOTDIR}@:Q}/lib/libsa
+SADIR=		$S/lib/libsa
 .if (${SA_AS} == "obj")
 SALIB=		${SADST}/libsa.o
 SALIB_PROF=	${SADST}/libsa.po
@@ -31,8 +30,7 @@ SALIB_PROF=	${SADST}/libsa_p.a
 .endif
 
 SAMAKE= \
-	cd ${SADST} && ${MAKE} -f ${SADIR:Q}/Makefile \
-	    SADIR=${SADIR:Q} \
+	cd ${SADIR} && MAKEOBJDIR=${SADST} ${MAKE} \
 	    CC=${CC:Q} CFLAGS=${CFLAGS:Q} \
 	    AS=${AS:Q} AFLAGS=${AFLAGS:Q} \
 	    LORDER=${LORDER:Q} \
@@ -41,7 +39,7 @@ SAMAKE= \
 	    AR=${AR:Q} NM=${NM:Q} \
 	    RANLIB=${RANLIB:Q} SIZE=${SIZE:Q} \
 	    MACHINE=${MACHINE} MACHINE_ARCH=${MACHINE_ARCH:Q} \
-	    SACPPFLAGS=${CPPFLAGS:S@^-I.@-I${SADOTDIR}@g:Q} \
+	    SACPPFLAGS=${CPPFLAGS:S@^-I.@-I../../.@g:Q} \
 	    SAMISCCPPFLAGS=${SAMISCCPPFLAGS:Q} \
 	    ${SAMISCMAKEFLAGS}
 
@@ -78,6 +76,3 @@ dependsalib:		.NOTMAIN __always_make_salib
 
 __always_make_salib:	.NOTMAIN
 	@mkdir -p ${SADST}
-
-.PHONY: __always_make_salib
-.PHONY: cleansalib cleandirsalib dependsalib

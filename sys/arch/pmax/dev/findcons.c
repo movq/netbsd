@@ -1,4 +1,4 @@
-/*	$NetBSD: findcons.c,v 1.12 1999/05/11 05:15:54 nisimura Exp $	*/
+/*	$NetBSD: findcons.c,v 1.8 1998/11/15 11:21:52 jonathan Exp $	*/
 
 /*
  * Copyright (c) 1998 Jonathan Stone
@@ -34,7 +34,7 @@
 
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
-__KERNEL_RCSID(0, "$NetBSD: findcons.c,v 1.12 1999/05/11 05:15:54 nisimura Exp $$");
+__KERNEL_RCSID(0, "$NetBSD: findcons.c,v 1.8 1998/11/15 11:21:52 jonathan Exp $$");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -58,7 +58,6 @@ struct consdev cd;
 /*
  * Kernel configuration dependencies.
  */
-#include "px.h"
 #include "pm.h"
 #include "cfb.h"
 #include "mfb.h"
@@ -86,6 +85,7 @@ struct consdev cd;
 #include <machine/fbvar.h>
 #include <pmax/dev/fbreg.h>
 
+#include <pmax/dev/promiovar.h>
 #include <pmax/dev/lk201var.h>
 #include <pmax/dev/rconsvar.h>
 
@@ -117,8 +117,7 @@ struct consdev cd;
 #include <pmax/dev/xcfbvar.h>
 #endif
 
-#define NWS	 (NXCFB + NPM + NMFB + NSFB + NCFB + NPX)
-
+#define NWS	 (NXCFB + NPM + NMFB + NSFB + NCFB)
 /*
  *  XXX Major device numbers for possible console devices.
  */
@@ -153,11 +152,10 @@ int	find_screen	__P((int prom_slot));
 int	find_serial	__P((int prom_slot));
 void	consinit	__P((void));
 
-extern void prom_findcons __P((int *, int *, int *));
-extern struct consdev promcd;
+
 
 /*
- * Keyboard physically present and driver configured on 3100?
+ * Keyboard physically present and driver configured on 3100? 
  */
 int
 dc_ds_kbd(kbd_slot)
@@ -315,9 +313,9 @@ tc_screen(crtslot)
 #endif
 	return 0;
 }
+  
 
-
-
+  
 /*
  * Look for screen.
  */
@@ -462,7 +460,7 @@ find_serial(comslot)
 
 /*
  * Pick a console.
- * Use the same devices as PROM says, if we have a driver.
+ * Use the same devices as PROM says, if we have a driver. 
  * if wedont' have a driver for the device the PROM chose,
  * pick the highest-priority device according to the Owners Guide rules.
  * If no match,  stick with the PROM and hope for the best.
@@ -503,13 +501,13 @@ consinit()
 		 * as an rcons device even if it's not the OS console.
 		 */
 	}
-
+	
 	/* Otherwise, try a serial port as console. */
 	if (find_serial(kbd)) {
 		cd.cn_pri = CN_REMOTE;
 		return;
 	}
-
+	
 	/*
 	 * Nothing worked. Revert to using PROM.
 	 * Maybe some device will usurp the console during

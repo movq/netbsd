@@ -1,4 +1,4 @@
-/* $NetBSD: vm_machdep.c,v 1.46 1999/05/13 21:58:32 thorpej Exp $ */
+/* $NetBSD: vm_machdep.c,v 1.45 1999/03/26 23:41:26 mycroft Exp $ */
 
 /*
  * Copyright (c) 1994, 1995, 1996 Carnegie-Mellon University.
@@ -29,7 +29,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.46 1999/05/13 21:58:32 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.45 1999/03/26 23:41:26 mycroft Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -139,10 +139,8 @@ cpu_exit(p)
  * the frame pointers on the stack after copying.
  */
 void
-cpu_fork(p1, p2, stack, stacksize)
+cpu_fork(p1, p2)
 	register struct proc *p1, *p2;
-	void *stack;
-	size_t stacksize;
 {
 	struct user *up = p2->p_addr;
 	int i;
@@ -221,12 +219,6 @@ cpu_fork(p1, p2, stack, stacksize)
 		p2tf->tf_regs[FRAME_V0] = p1->p_pid;	/* parent's pid */
 		p2tf->tf_regs[FRAME_A3] = 0;		/* no error */
 		p2tf->tf_regs[FRAME_A4] = 1;		/* is child */
-
-		/*
-		 * If specificed, give the child a different stack.
-		 */
-		if (stack != NULL)
-			p2tf->tf_regs[FRAME_SP] = (u_long)stack + stacksize;
 
 		/*
 		 * Arrange for continuation at child_return(), which

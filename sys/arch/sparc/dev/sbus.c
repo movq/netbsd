@@ -1,4 +1,4 @@
-/*	$NetBSD: sbus.c,v 1.35 1999/04/14 09:50:01 pk Exp $ */
+/*	$NetBSD: sbus.c,v 1.34.2.1 1999/04/14 21:18:30 pk Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.

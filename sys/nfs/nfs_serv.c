@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_serv.c,v 1.51 1999/05/04 16:01:37 sommerfe Exp $	*/
+/*	$NetBSD: nfs_serv.c,v 1.50.2.1 1999/05/04 17:10:00 perry Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993

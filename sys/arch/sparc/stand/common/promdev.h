@@ -1,4 +1,4 @@
-/*	$NetBSD: promdev.h,v 1.6 1999/04/30 09:29:40 christos Exp $ */
+/*	$NetBSD: promdev.h,v 1.5 1999/02/15 18:59:36 pk Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -52,7 +52,6 @@ struct promdata {
 
 #define DDB_MAGIC0	( ('D'<<24) | ('D'<<16) | ('B'<<8) | ('0') )
 #define DDB_MAGIC1	( ('D'<<24) | ('D'<<16) | ('B'<<8) | ('1') )
-#define DDB_MAGIC2	( ('D'<<24) | ('D'<<16) | ('B'<<8) | ('2') )
 
 extern time_t	getsecs __P((void));
 extern void	prom_getether __P((int, u_char *));

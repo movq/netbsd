@@ -1,4 +1,4 @@
-/*	$NetBSD: lfs_inode.c,v 1.24 1999/04/12 00:30:08 perseant Exp $	*/
+/*	$NetBSD: lfs_inode.c,v 1.22.2.1 1999/04/13 21:33:55 perseant Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.

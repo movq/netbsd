@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_aobj.c,v 1.19 1999/04/11 04:04:11 chs Exp $	*/
+/*	$NetBSD: uvm_aobj.c,v 1.18.2.1 1999/04/16 16:27:13 chs Exp $	*/
 
 /*
  * Copyright (c) 1998 Chuck Silvers, Charles D. Cranor and

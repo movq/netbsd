@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.11 1999/05/09 19:14:15 eeh Exp $
+#	$NetBSD: Makefile,v 1.9 1999/02/13 02:54:49 lukem Exp $
 
 CURDIR=	${.CURDIR}
 S=	${CURDIR}/../../../..
@@ -16,9 +16,9 @@ SRCS=		srt0.s Locore.c boot.c ofdev.c alloc.c net.c netif_of.c
 .if CROSS
 CEXTRAFLAG=	-nostdinc
 .else
-CEXTRAFLAGS=	-D_LP64
+CEXTRAFLAG=	-D_LP64
 .endif
-CFLAGS+=	${COPTS} -DNETIF_DEBUG -D__ELF__ ${CEXTRAFLAGS} -D_STANDALONE
+CFLAGS+=	${COPTS} -DNETIF_DEBUG -D__ELF__ -D_STANDALONE
 
 MKMAN=		no
 STRIPFLAG=
@@ -30,10 +30,7 @@ NEWVERSWHAT=	"OpenFirmware Boot"
 #
 # Elf64 defaults to 1MB
 #
-# We may get address conflicts with other bootloaders, say
-# Sun's ufsboot, so we'll pick a reasonably empty address.
-#
-RELOC=		800000
+RELOC=		100000
 
 ENTRY=		_start
 

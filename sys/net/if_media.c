@@ -1,4 +1,4 @@
-/*	$NetBSD: if_media.c,v 1.5 1999/04/30 17:47:36 thorpej Exp $	*/
+/*	$NetBSD: if_media.c,v 1.3 1998/08/30 07:39:39 enami Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.

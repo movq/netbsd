@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.2 1999/04/14 16:19:03 ragge Exp $ */
+/*	$NetBSD: autoconf.c,v 1.1.2.1 1999/04/15 14:20:08 ragge Exp $ */
 /*
  * Copyright (c) 1994, 1998 Ludd, University of Lule}, Sweden.
  * All rights reserved.

@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.99 1999/04/26 22:46:47 thorpej Exp $	*/
+/*	$NetBSD: machdep.c,v 1.96.2.1 1999/04/16 16:22:15 chs Exp $	*/
 
 /*-
  * Copyright (c) 1996 Matthias Pfaller.
@@ -67,6 +67,9 @@
 #include <sys/conf.h>
 #include <sys/file.h>
 #include <sys/callout.h>
+#ifdef REAL_CLISTS
+#include <sys/clist.h>
+#endif
 #include <sys/malloc.h>
 #include <sys/mbuf.h>
 #include <sys/msgbuf.h>
@@ -324,7 +327,7 @@ cpu_startup()
 	 * Finally, allocate mbuf cluster submap.
 	 */
 	mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-	    nmbclusters * mclbytes, FALSE, FALSE, NULL);
+	    VM_MBUF_SIZE, FALSE, FALSE, NULL);
 
 	/*
 	 * Tell the VM system that writing to kernel text isn't allowed.
@@ -369,7 +372,9 @@ allocsys(v)
 
 #define	valloc(name, type, num) \
 	    v = (caddr_t)(((name) = (type *)v) + (num))
-
+#ifdef REAL_CLISTS
+	valloc(cfree, struct cblock, nclist);
+#endif
 	valloc(callout, struct callout, ncallout);
 #ifdef SYSVSHM
 	valloc(shmsegs, struct shmid_ds, shminfo.shmmni);

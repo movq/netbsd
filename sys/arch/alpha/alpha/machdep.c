@@ -1,4 +1,4 @@
-/* $NetBSD: machdep.c,v 1.172 1999/04/29 03:02:20 ross Exp $ */
+/* $NetBSD: machdep.c,v 1.167.2.4 1999/04/29 14:41:58 perry Exp $ */
 
 /*-
  * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
@@ -82,7 +82,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.172 1999/04/29 03:02:20 ross Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.167.2.4 1999/04/29 14:41:58 perry Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -94,6 +94,9 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.172 1999/04/29 03:02:20 ross Exp $");
 #include <sys/reboot.h>
 #include <sys/device.h>
 #include <sys/file.h>
+#ifdef REAL_CLISTS
+#include <sys/clist.h>
+#endif
 #include <sys/callout.h>
 #include <sys/malloc.h>
 #include <sys/mbuf.h>
@@ -917,6 +920,9 @@ allocsys(v)
 #define valloc(name, type, num) \
 	    (name) = (type *)v; v = (caddr_t)ALIGN((name)+(num))
 
+#ifdef REAL_CLISTS
+	valloc(cfree, struct cblock, nclist);
+#endif
 	valloc(callout, struct callout, ncallout);
 #ifdef SYSVSHM
 	valloc(shmsegs, struct shmid_ds, shminfo.shmmni);
@@ -2164,26 +2170,25 @@ cpu_exec_ecoff_hook(p, epp)
 {
 	struct ecoff_exechdr *execp = (struct ecoff_exechdr *)epp->ep_hdr;
 	extern struct emul emul_netbsd;
-	int error;
-	extern int osf1_exec_ecoff_hook(struct proc *p,
-					struct exec_package *epp);
+#ifdef COMPAT_OSF1
+	extern struct emul emul_osf1;
+#endif
 
 	switch (execp->f.f_magic) {
 #ifdef COMPAT_OSF1
 	case ECOFF_MAGIC_ALPHA:
-		error = osf1_exec_ecoff_hook(p, epp);
+		epp->ep_emul = &emul_osf1;
 		break;
 #endif
 
 	case ECOFF_MAGIC_NETBSD_ALPHA:
 		epp->ep_emul = &emul_netbsd;
-		error = 0;
 		break;
 
 	default:
-		error = ENOEXEC;
+		return ENOEXEC;
 	}
-	return (error);
+	return 0;
 }
 #endif
 

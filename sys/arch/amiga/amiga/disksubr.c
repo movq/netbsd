@@ -1,4 +1,4 @@
-/*	$NetBSD: disksubr.c,v 1.29 1999/04/28 22:35:27 is Exp $	*/
+/*	$NetBSD: disksubr.c,v 1.28.8.1 1999/04/28 22:44:34 perry Exp $	*/
 
 /*
  * Copyright (c) 1994 Christian E. Hopps

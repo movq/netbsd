@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.c,v 1.142 1999/04/25 10:30:02 pk Exp $ */
+/*	$NetBSD: pmap.c,v 1.141.2.1 1999/04/26 15:43:49 perry Exp $ */
 
 /*
  * Copyright (c) 1996

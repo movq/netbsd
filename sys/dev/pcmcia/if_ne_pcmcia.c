@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ne_pcmcia.c,v 1.33 1999/04/16 22:35:49 abs Exp $	*/
+/*	$NetBSD: if_ne_pcmcia.c,v 1.31.2.2 1999/04/19 15:19:14 perry Exp $	*/
 
 /*
  * Copyright (c) 1997 Marc Horowitz.  All rights reserved.

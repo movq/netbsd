@@ -1,4 +1,4 @@
-/*	$NetBSD: lkc.c,v 1.10 1999/04/29 16:58:58 ragge Exp $ */
+/*	$NetBSD: lkc.c,v 1.9.2.1 1999/04/29 18:56:29 perry Exp $ */
 /*
  * Copyright (c) 1998 Ludd, University of Lule}, Sweden.
  * All rights reserved.

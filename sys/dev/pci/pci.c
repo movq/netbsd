@@ -1,4 +1,4 @@
-/*	$NetBSD: pci.c,v 1.42 1999/05/06 01:10:28 thorpej Exp $	*/
+/*	$NetBSD: pci.c,v 1.40 1998/11/07 16:47:22 drochner Exp $	*/
 
 /*
  * Copyright (c) 1995, 1996, 1997, 1998

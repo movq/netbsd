@@ -1,4 +1,4 @@
-/*	$NetBSD: db_interface.c,v 1.19 1999/04/12 20:38:20 pk Exp $ */
+/*	$NetBSD: db_interface.c,v 1.17.2.2 1999/04/12 21:27:07 pk Exp $ */
 
 /*
  * Mach Operating System

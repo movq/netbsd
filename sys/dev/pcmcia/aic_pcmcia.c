@@ -1,4 +1,4 @@
-/*	$NetBSD: aic_pcmcia.c,v 1.9 1999/04/27 02:53:30 thorpej Exp $	*/
+/*	$NetBSD: aic_pcmcia.c,v 1.8.4.1 1999/04/27 13:51:29 perry Exp $	*/
 
 /*
  * Copyright (c) 1997 Marc Horowitz.  All rights reserved.

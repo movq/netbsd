@@ -1,4 +1,4 @@
-/*	$NetBSD: lfs_syscalls.c,v 1.30 1999/04/14 19:37:28 perseant Exp $	*/
+/*	$NetBSD: lfs_syscalls.c,v 1.26.2.2 1999/04/15 17:30:28 perseant Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.

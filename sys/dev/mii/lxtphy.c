@@ -1,4 +1,4 @@
-/*	$NetBSD: lxtphy.c,v 1.10 1999/04/23 04:24:32 thorpej Exp $	*/
+/*	$NetBSD: lxtphy.c,v 1.9.6.1 1999/04/23 15:41:43 perry Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.

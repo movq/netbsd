@@ -1,4 +1,4 @@
-/*	$NetBSD: pciide.c,v 1.37 1999/05/05 15:24:59 bouyer Exp $	*/
+/*	$NetBSD: pciide.c,v 1.33.2.3 1999/05/05 17:13:24 perry Exp $	*/
 
 /*
  * Copyright (c) 1996, 1998 Christopher G. Demetriou.  All rights reserved.
@@ -42,9 +42,7 @@
  *
  */
 
-#ifndef WDCDEBUG
 #define WDCDEBUG
-#endif
 
 #define DEBUG_DMA   0x01
 #define DEBUG_XFERS  0x02

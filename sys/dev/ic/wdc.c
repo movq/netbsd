@@ -1,4 +1,4 @@
-/*	$NetBSD: wdc.c,v 1.67 1999/04/11 20:50:28 bouyer Exp $ */
+/*	$NetBSD: wdc.c,v 1.66.2.1 1999/04/12 09:14:30 bouyer Exp $ */
 
 
 /*

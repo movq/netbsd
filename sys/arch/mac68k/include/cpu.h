@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.61 1999/04/06 03:40:23 scottr Exp $	*/
+/*	$NetBSD: cpu.h,v 1.60.4.1 1999/04/21 14:53:44 perry Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.

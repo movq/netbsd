@@ -1,4 +1,4 @@
-#	$NetBSD: files.sparc,v 1.74 1999/05/12 12:48:27 mrg Exp $
+#	$NetBSD: files.sparc,v 1.70 1999/02/14 12:36:50 pk Exp $
 
 # @(#)files.sparc	8.1 (Berkeley) 7/19/93
 # sparc-specific configuration info
@@ -18,7 +18,7 @@ file	arch/sparc/sparc/iommu.c		iommu
 device obio { [addr = -1], [level = -1] }
 attach obio at mainbus
 
-include "dev/vme/files.vme"
+include "../../../dev/vme/files.vme"
 attach vme at mainbus with vme_mainbus
 attach vme at iommu with vme_iommu
 
@@ -76,17 +76,17 @@ attach fd at fdc
 file	arch/sparc/dev/fd.c			fdc | fd needs-flag
 file	arch/sparc/sparc/bsd_fdintr.s		fdc
 
-include "dev/sbus/files.sbus"
+include "../../../dev/sbus/files.sbus"
 attach sbus at mainbus with sbus_mainbus
 attach sbus at iommu with sbus_iommu
 file	arch/sparc/dev/sbus.c			sbus
 
 # network devices MII bus
-include "dev/mii/files.mii"
+include "../../../dev/mii/files.mii"
 
 # PCMCIA bus
-include "dev/pcmcia/files.pcmcia"
-include "dev/ata/files.ata"
+include "../../../dev/pcmcia/files.pcmcia"
+include "../../../dev/ata/files.ata"
 
 #
 # Console (zs) related stuff
@@ -113,7 +113,7 @@ file dev/sun/ms.c			ms needs-flag
 #
 # Machine-independent SCSI drivers
 #
-include "dev/scsipi/files.scsipi"
+include "../../../dev/scsipi/files.scsipi"
 
 major	{ cd = 18 }
 major	{ fd = 16 }
@@ -137,46 +137,43 @@ file	arch/sparc/sparc/amd7930intr.s		audioamd
 # Brooktree DAC attribute
 define bt_dac
 
-# Raster operations for RASTERCONSOLE (this is here so dependancies work).
-include "dev/rasops/files.rasops"
-
 # Include /dev/fb driver only if a framebuffer card is included
 define fb
 
-device bwtwo: fb, rasops1
+device bwtwo: fb
 attach bwtwo at sbus with bwtwo_sbus
 attach bwtwo at obio with bwtwo_obio
 file	arch/sparc/dev/bwtwo.c		bwtwo needs-flag
 
-device cgtwo: fb, rasops8
+device cgtwo: fb
 attach cgtwo at vme
 file	arch/sparc/dev/cgtwo.c		cgtwo needs-flag
 
-device cgthree: bt_dac, fb, rasops8
+device cgthree: bt_dac, fb
 attach cgthree at sbus with cgthree_sbus
 attach cgthree at obio with cgthree_obio
 file	arch/sparc/dev/cgthree.c	cgthree needs-flag
 
-device cgfour: bt_dac, fb, rasops8
+device cgfour: bt_dac, fb
 attach cgfour at obio
 file	arch/sparc/dev/cgfour.c		cgfour needs-flag
 
-device cgsix: bt_dac, fb, rasops8
+device cgsix: bt_dac, fb
 attach cgsix at sbus with cgsix_sbus
 attach cgsix at obio with cgsix_obio
 file	arch/sparc/dev/cgsix.c		cgsix needs-flag
 file	arch/sparc/dev/cgsix_sbus.c	cgsix_sbus & (sbus | obio)
 file	arch/sparc/dev/cgsix_obio.c	cgsix_obio & obio
 
-device cgeight: bt_dac, fb, rasops24
+device cgeight: bt_dac, fb
 attach cgeight at obio
 file	arch/sparc/dev/cgeight.c	cgeight needs-flag
 
-device tcx: bt_dac, fb, rasops8, rasops24
+device tcx: bt_dac, fb
 attach tcx at sbus
 file	arch/sparc/dev/tcx.c		tcx needs-flag
 
-device cgfourteen: fb, rasops32
+device cgfourteen: fb
 attach cgfourteen at obio
 file	arch/sparc/dev/cgfourteen.c	cgfourteen needs-flag
 
@@ -246,23 +243,19 @@ file	arch/sparc/sparc/db_disasm.c	ddb
 #
 # Raster Console
 #
-include "dev/rcons/files.rcons"
-include "dev/wsfont/files.wsfont"
+include "../../../dev/rcons/files.rcons"
 
 #
 # Compatibility modules
 #
 
 # SVR4 Binary Compatibility (COMPAT_SVR4)
-include "compat/svr4/files.svr4"
+include "../../../compat/svr4/files.svr4"
 file	arch/sparc/sparc/svr4_machdep.c	compat_svr4
 
 # SunOS Binary Compatibility (COMPAT_SUNOS)
-include "compat/sunos/files.sunos"
+include "../../../compat/sunos/files.sunos"
 file	arch/sparc/sparc/sunos_machdep.c compat_sunos
-
-# NetBSD a.out Binary Compatibility (COMPAT_AOUT)
-include "compat/aout/files.aout"
 
 # Binary compatibility with previous NetBSD releases (COMPAT_XX)
 file	arch/sparc/sparc/compat_13_machdep.c	compat_13

@@ -1,3 +1,0 @@
-# $NetBSD: md.bebox,v 1.2 1999/04/19 03:11:32 simonb Exp $
-./sbin/fdisk
-./usr/bin/fdformat

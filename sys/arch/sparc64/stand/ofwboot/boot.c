@@ -1,7 +1,6 @@
-/*	$NetBSD: boot.c,v 1.8 1999/05/09 19:15:08 eeh Exp $	*/
+/*	$NetBSD: boot.c,v 1.6 1999/01/17 20:07:52 eeh Exp $	*/
 #define DEBUG
 /*
- * Copyright (c) 1997, 1999 Eduardo E. Horvath.  All rights reserved.
  * Copyright (c) 1997 Jason R. Thorpe.  All rights reserved.
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
  * Copyright (C) 1995, 1996 TooLs GmbH.
@@ -61,28 +60,7 @@
 #include <sparc64/stand/ofwboot/ofdev.h>
 #include <sparc64/stand/ofwboot/openfirm.h>
 
-/*
- * Boot device is derived from ROM provided information, or if there is none,
- * this list is used in sequence, to find a kernel.
- */
-char *kernels[] = {
-	"netbsd ",
-	"netbsd.gz ",
-	"netbsd.old ",
-	"netbsd.old.gz ",
-	"onetbsd ",
-	"onetbsd.gz ",
-	"vmunix ",
-#ifdef notyet
-	"netbsd.pl ",
-	"netbsd.pl.gz ",
-	"netbsd.el ",
-	"netbsd.el.gz ",
-#endif
-	NULL
-};
-
-char *kernelname = kernels;
+const char kernelname[] = "netbsd ";
 char bootdev[128];
 char bootfile[128];
 int boothowto;
@@ -533,7 +511,7 @@ main()
 	int chosen;
 	char bootline[512];		/* Should check size? */
 	char *cp;
-	int i, fd;
+	int fd;
 	
 	printf(">> %s, Revision %s\n", bootprog_name, bootprog_rev);
 	printf(">> (%s, %s)\n", bootprog_maker, bootprog_date);
@@ -549,7 +527,7 @@ main()
 	}
 	prom2boot(bootdev);
 	parseargs(bootline, &boothowto);
-	for (i=0;;) {
+	for (;;) {
 		if (boothowto & RB_ASKNAME) {
 			printf("Boot: ");
 			gets(bootline);
@@ -559,19 +537,7 @@ main()
 			break;
 		if (errno)
 			printf("open %s: %s\n", opened_name, strerror(errno));
-		/*
-		 * if we have are not in askname mode, and we aren't using the
-		 * prom bootfile, try the next one (if it exits).  otherwise,
-		 * go into askname mode.
-		 */
-		if ((boothowto & RB_ASKNAME) == 0 &&
-		    i != -1 && kernels[++i]) {
-			kernelname = kernels[i];
-			printf(": trying %s...\n", kernelname);
-		} else {
-			printf("\n");
-			boothowto |= RB_ASKNAME;
-		}
+		boothowto |= RB_ASKNAME;
 	}
 #ifdef	__notyet__
 	OF_setprop(chosen, "bootpath", opened_name, strlen(opened_name) + 1);

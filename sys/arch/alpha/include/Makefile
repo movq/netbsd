@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.4 1999/04/30 00:58:32 ross Exp $
+#	$NetBSD: Makefile,v 1.2.4.2 1999/04/30 15:10:10 perry Exp $
 
 KDIR=	/sys/arch/alpha/include
 INCSDIR= /usr/include/alpha

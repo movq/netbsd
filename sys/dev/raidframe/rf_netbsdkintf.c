@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_netbsdkintf.c,v 1.18 1999/04/12 19:39:59 oster Exp $	*/
+/*	$NetBSD: rf_netbsdkintf.c,v 1.16.2.2 1999/04/12 22:09:10 oster Exp $	*/
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
  * All rights reserved.

@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_ipip.c,v 1.6 1999/04/04 09:10:27 tron Exp $	*/
+/*	$NetBSD: ip_ipip.c,v 1.3.2.1 1999/04/04 19:24:32 tron Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.

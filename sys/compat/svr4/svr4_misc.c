@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_misc.c,v 1.77 1999/05/08 01:23:01 kleink Exp $	 */
+/*	$NetBSD: svr4_misc.c,v 1.75 1999/03/24 05:51:20 mrg Exp $	 */
 
 /*-
  * Copyright (c) 1994 The NetBSD Foundation, Inc.
@@ -91,8 +91,6 @@
 #include <compat/svr4/svr4_sysconfig.h>
 #include <compat/svr4/svr4_acl.h>
 #include <compat/svr4/svr4_mman.h>
-
-#include <machine/cpu.h>
 
 #include <vm/vm.h>
 
@@ -266,20 +264,15 @@ svr4_sys_getdents64(p, v, retval)
 	off_t *cookiebuf = NULL, *cookie;
 	int ncookies;
 
-	/* getvnode() will use the descriptor for us */
 	if ((error = getvnode(p->p_fd, SCARG(uap, fd), &fp)) != 0)
 		return (error);
 
-	if ((fp->f_flag & FREAD) == 0) {
-		error = EBADF;
-		goto out1;
-	}
+	if ((fp->f_flag & FREAD) == 0)
+		return (EBADF);
 
 	vp = (struct vnode *)fp->f_data;
-	if (vp->v_type != VDIR) {
-		error = EINVAL;
-		goto out1;
-	}
+	if (vp->v_type != VDIR)
+		return (EINVAL);
 
 	buflen = min(MAXBSIZE, SCARG(uap, nbytes));
 	buf = malloc(buflen, M_TEMP, M_WAITOK);
@@ -357,8 +350,6 @@ out:
 	if (cookiebuf)
 		free(cookiebuf, M_TEMP);
 	free(buf, M_TEMP);
- out1:
-	FILE_UNUSE(fp, p);
 	return error;
 }
 
@@ -385,20 +376,15 @@ svr4_sys_getdents(p, v, retval)
 	off_t *cookiebuf = NULL, *cookie;
 	int ncookies;
 
-	/* getvnode() will use the descriptor for us */
 	if ((error = getvnode(p->p_fd, SCARG(uap, fd), &fp)) != 0)
 		return (error);
 
-	if ((fp->f_flag & FREAD) == 0) {
-		error = EBADF;
-		goto out1;
-	}
+	if ((fp->f_flag & FREAD) == 0)
+		return (EBADF);
 
 	vp = (struct vnode *)fp->f_data;
-	if (vp->v_type != VDIR) {
-		error = EINVAL;
-		goto out1;
-	}
+	if (vp->v_type != VDIR)
+		return (EINVAL);
 
 	buflen = min(MAXBSIZE, SCARG(uap, nbytes));
 	buf = malloc(buflen, M_TEMP, M_WAITOK);
@@ -480,8 +466,6 @@ out:
 	if (cookiebuf)
 		free(cookiebuf, M_TEMP);
 	free(buf, M_TEMP);
- out1:
-	FILE_UNUSE(fp, p);
 	return error;
 }
 

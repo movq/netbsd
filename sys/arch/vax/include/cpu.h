@@ -1,4 +1,4 @@
-/*      $NetBSD: cpu.h,v 1.36 1999/05/01 16:13:43 ragge Exp $      */
+/*      $NetBSD: cpu.h,v 1.34 1999/02/02 18:37:22 ragge Exp $      */
 
 /*
  * Copyright (c) 1994 Ludd, University of Lule}, Sweden
@@ -50,6 +50,7 @@
  */
 struct	cpu_dep {
 	void	(*cpu_steal_pages) __P((void)); /* pmap init before mm is on */
+	void	(*cpu_clock) __P((void)); /* CPU dep RT clock start */
 	int	(*cpu_mchk) __P((caddr_t));   /* Machine check handling */
 	void	(*cpu_memerr) __P((void)); /* Memory subsystem errors */
 	    /* Autoconfiguration */
@@ -108,7 +109,7 @@ extern	int     want_resched;   /* resched() was called */
 /*
  * This defines the I/O device register space size in pages.
  */
-#define	IOSPSZ	((64*1024) / VAX_NBPG)	/* 64k == 128 pages */
+#define	IOSPSZ	((1*1024*1024) / VAX_NBPG)	/* 1 MB  == 2k pages */
 
 struct device;
 

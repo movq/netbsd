@@ -1,5 +1,5 @@
-/* $NetBSD: ispvar.h,v 1.22 1999/05/12 18:59:24 mjacob Exp $ */
-/* release_5_11_99 */
+/* $NetBSD: ispvar.h,v 1.20 1999/03/26 22:39:45 mjacob Exp $ */
+/* release_03_25_99 */
 /*
  * Soft Definitions for for Qlogic ISP SCSI adapters.
  *
@@ -48,7 +48,7 @@
 #endif
 
 #define	ISP_CORE_VERSION_MAJOR	1
-#define	ISP_CORE_VERSION_MINOR	8
+#define	ISP_CORE_VERSION_MINOR	7
 
 /*
  * Vector for bus specific code to provide specific services.
@@ -95,12 +95,11 @@ struct ispmdvec {
 	((in == out)? (qlen - 1) : ((in > out)? \
 		((qlen - 1) - (in - out)) : (out - in - 1)))
 /*
- * SCSI Specific Host Adapter Parameters- per bus, per target
+ * SCSI Specific Host Adapter Parameters
  */
 
 typedef struct {
-	u_int		isp_gotdparms		: 1,
-        		isp_req_ack_active_neg	: 1,	
+        u_int		isp_req_ack_active_neg	: 1,	
 	        	isp_data_line_active_neg: 1,
 			isp_cmd_dma_burst_enable: 1,
 			isp_data_dma_burst_enabl: 1,
@@ -108,18 +107,20 @@ typedef struct {
 			isp_ultramode		: 1,
 			isp_diffmode		: 1,
 			isp_lvdmode		: 1,
-						: 1,
+			isp_fast_mttr		: 1,
 			isp_initiator_id	: 4,
         		isp_async_data_setup	: 4;
         u_int16_t	isp_selection_timeout;
         u_int16_t	isp_max_queue_depth;
+	u_int16_t	isp_clock;
 	u_int8_t	isp_tag_aging;
        	u_int8_t	isp_bus_reset_delay;
         u_int8_t	isp_retry_count;
         u_int8_t	isp_retry_delay;
 	struct {
-		u_int	dev_enable	:	1,	/* ignored */
-					:	1,
+		u_int
+			dev_enable	:	1,
+			dev_announced	:	1,
 			dev_update	:	1,
 			dev_refresh	:	1,
 			exc_throttle	:	8,
@@ -130,7 +131,7 @@ typedef struct {
 		u_int16_t	dev_flags;	/* goal device flags */
 		u_int16_t	cur_dflags;	/* current device flags */
 	} isp_devparam[MAX_TARGETS];
-} sdparam;
+} sdparam;	/* scsi device parameters */
 
 /*
  * Device Flags
@@ -161,15 +162,13 @@ typedef struct {
  * Fibre Channel Specifics
  */
 typedef struct {
-	u_int8_t		isp_gotdparms;
-	u_int8_t		isp_reserved;
+	u_int64_t		isp_wwn;	/* WWN of adapter */
 	u_int8_t		isp_loopid;	/* hard loop id */
 	u_int8_t		isp_alpa;	/* ALPA */
 	u_int8_t		isp_execthrottle;
         u_int8_t		isp_retry_delay;
         u_int8_t		isp_retry_count;
 	u_int8_t		isp_fwstate;	/* ISP F/W state */
-	u_int64_t		isp_wwn;	/* WWN of adapter */
 	u_int16_t		isp_maxalloc;
 	u_int16_t		isp_maxfrmlen;
 	u_int16_t		isp_fwoptions;
@@ -247,21 +246,21 @@ struct ispsoftc {
 	struct ispmdvec *	isp_mdvec;
 
 	/*
-	 * Mostly nonvolatile state.
+	 * Mostly nonvolatile state, debugging, etc..
 	 */
 
-	u_int		isp_clock	: 8,
+	u_int				: 8,
 			isp_confopts	: 8,
-			isp_fast_mttr	: 1,
-					: 1,
+			isp_port	: 1,	/* for dual ported impls */
 			isp_used	: 1,
 			isp_dblev	: 3,
+			isp_gotdparms	: 1,
 			isp_dogactive	: 1,
 			isp_bustype	: 1,	/* BUS Implementation */
 			isp_type	: 8;	/* HBA Type and Revision */
 
-	u_int16_t		isp_fwrev[3];	/* Running F/W revision */
-	u_int16_t		isp_romfw_rev[3]; /* 'ROM' F/W revision */
+	u_int16_t		isp_fwrev;	/* Running F/W revision */
+	u_int16_t		isp_romfw_rev;	/* 'ROM' F/W revision */
 	void * 			isp_param;
 
 	/*
@@ -269,12 +268,11 @@ struct ispsoftc {
 	 */
 
 	volatile u_int
-				:	13,
+				:	19,
 		isp_state	:	3,
-				:	2,
-		isp_sendmarker	:	2,	/* send a marker entry */
-		isp_update	:	2,	/* update parameters */
-		isp_nactive	:	10;	/* how many commands active */
+		isp_sendmarker	:	1,	/* send a marker entry */
+		isp_update	:	1,	/* update parameters */
+		isp_nactive	:	9;	/* how many commands active */
 
 	/*
 	 * Result and Request Queue indices.
@@ -340,10 +338,8 @@ struct ispsoftc {
 #define	ISP_CFG_NORELOAD	0x80	/* don't download f/w */
 #define	ISP_CFG_NONVRAM		0x40	/* ignore NVRAM */
 
-#define	ISP_FW_REV(maj, min, mic)	((maj << 24) | (min << 16) | mic)
-#define	ISP_FW_REVX(xp)	((xp[0]<<24) | (xp[1] << 16) | xp[2])
+#define	ISP_FW_REV(maj, min)	((maj) << 10| (min))
 
- 
 /*
  * Bus (implementation) types
  */
@@ -360,7 +356,6 @@ struct ispsoftc {
 #define	ISP_HA_SCSI_1040	0x4
 #define	ISP_HA_SCSI_1040A	0x5
 #define	ISP_HA_SCSI_1040B	0x6
-#define	ISP_HA_SCSI_1040C	0x7
 #define	ISP_HA_SCSI_1080	0xd
 #define	ISP_HA_SCSI_12X0	0xe
 #define	ISP_HA_FC		0xf0

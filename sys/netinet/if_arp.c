@@ -1,4 +1,4 @@
-/*	$NetBSD: if_arp.c,v 1.58 1999/05/04 20:50:35 is Exp $	*/
+/*	$NetBSD: if_arp.c,v 1.56.2.2 1999/05/04 22:28:45 perry Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: grf_obio.c,v 1.42 1999/04/28 05:24:08 scottr Exp $	*/
+/*	$NetBSD: grf_obio.c,v 1.41.4.1 1999/04/28 14:22:38 perry Exp $	*/
 
 /*
  * Copyright (C) 1998 Scott Reynolds

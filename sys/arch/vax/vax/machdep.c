@@ -1,4 +1,4 @@
-/* $NetBSD: machdep.c,v 1.82 1999/05/02 17:28:43 ragge Exp $	 */
+/* $NetBSD: machdep.c,v 1.76.2.1 1999/04/16 16:26:01 chs Exp $	 */
 
 /*
  * Copyright (c) 1994, 1998 Ludd, University of Lule}, Sweden.
@@ -275,6 +275,12 @@ cpu_startup()
 	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
 				 16 * NCARGS, TRUE, FALSE, NULL);
 
+	/*
+	 * Finally, allocate mbuf cluster submap.
+	 */
+	mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
+			       VM_MBUF_SIZE, FALSE, FALSE, NULL);
+
 #if VAX410 || VAX43
 	/*
 	 * Allocate a submap for physio
@@ -319,6 +325,9 @@ allocsys(v)
 #define valloc(name, type, num) \
 	    v = (caddr_t)(((name) = (type *)v) + (num))
 
+#ifdef REAL_CLISTS
+	valloc(cfree, struct cblock, nclist);
+#endif
 	valloc(callout, struct callout, ncallout);
 #ifdef SYSVSHM
 	valloc(shmsegs, struct shmid_ds, shminfo.shmmni);
@@ -398,6 +407,12 @@ cpu_dumpconf()
 		dumplo = btodb(CLBYTES);
 }
 
+void
+cpu_initclocks()
+{
+	(*dep_call->cpu_clock) ();
+}
+
 int
 cpu_sysctl(a, b, c, d, e, f, g)
 	int	*a;
@@ -445,10 +460,6 @@ consinit()
 //		ksym_init(&end, esym);
 		ddb_init(*(int *)&end, ((int *)&end) + 1, esym);
 	}
-#ifdef DEBUG
-	if (sizeof(struct user) > REDZONEADDR)
-		panic("struct user inside red zone");
-#endif
 #ifdef donotworkbyunknownreason
 	if (boothowto & RB_KDB)
 		Debugger();
@@ -811,8 +822,6 @@ process_sstep(p, sstep)
  * uses resource maps when allocating space, which is allocated from 
  * the IOMAP submap. The implementation is similar to the uba resource
  * map handling. Size is given in pages.
- * If the page requested is bigger than a logical page, space is
- * allocated from the kernel map instead.
  *
  * It is known that the first page in the iospace area is unused; it may
  * be use by console device drivers (before the map system is inited).
@@ -831,19 +840,13 @@ vax_map_physmem(phys, size)
 	if (!iospace_inited)
 		panic("vax_map_physmem: called before rminit()?!?");
 #endif
-	if (size >= LTOHPN) {
-		addr = uvm_km_valloc(kernel_map, size * VAX_NBPG);
-		if (addr == 0)
-			panic("vax_map_physmem: kernel map full");
-	} else {
-		pageno = rmalloc(iomap, size);
-		if (pageno == 0) {
-			if (warned++ == 0) /* Warn only once */
-				printf("vax_map_physmem: iomap too small");
-			return 0;
-		}
-		addr = iospace + (pageno * VAX_NBPG);
+	pageno = rmalloc(iomap, size);
+	if (pageno == 0) {
+		if (warned++ == 0) /* Warn only once */
+			printf("vax_map_physmem: iomap too small\n");
+		return 0;
 	}
+	addr = iospace + (pageno * VAX_NBPG);
 	ioaccess(addr, phys, size);
 #ifdef PHYSMEMDEBUG
 	printf("vax_map_physmem: alloc'ed %d pages for paddr %lx, at %lx\n",
@@ -866,9 +869,6 @@ vax_unmap_physmem(addr, size)
 	printf("vax_unmap_physmem: unmapping %d pages at addr %lx\n", 
 	    size, addr);
 #endif
+	rmfree(iomap, size, pageno);
 	iounaccess(addr, size);
-	if (size >= LTOHPN)
-		uvm_km_free(kernel_map, addr, size * VAX_NBPG);
-	else
-		rmfree(iomap, size, pageno);
 }

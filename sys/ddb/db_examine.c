@@ -1,4 +1,4 @@
-/*	$NetBSD: db_examine.c,v 1.15 1999/04/12 20:38:21 pk Exp $	*/
+/*	$NetBSD: db_examine.c,v 1.13.20.2 1999/04/12 21:27:07 pk Exp $	*/
 
 /*
  * Mach Operating System

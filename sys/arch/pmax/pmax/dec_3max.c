@@ -1,4 +1,4 @@
-/*	$NetBSD: dec_3max.c,v 1.10 1999/04/26 09:23:22 nisimura Exp $	*/
+/*	$NetBSD: dec_3max.c,v 1.8 1999/03/27 03:27:09 mhitch Exp $	*/
 
 /*
  * Copyright (c) 1998 Jonathan Stone.  All rights reserved.
@@ -73,7 +73,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: dec_3max.c,v 1.10 1999/04/26 09:23:22 nisimura Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dec_3max.c,v 1.8 1999/03/27 03:27:09 mhitch Exp $");
 
 #include <sys/types.h>
 #include <sys/systm.h>
@@ -114,8 +114,6 @@ void		dec_3max_device_register __P((struct device *, void *));
 
 static void	dec_3max_errintr __P((void));
 
-extern unsigned nullclkread __P((void));
-extern unsigned (*clkread) __P((void));
 
 /*
  * Fill in platform struct.
@@ -140,7 +138,7 @@ dec_3max_init()
 void
 dec_3max_os_init()
 {
-	int i;
+	register int i;
 
 	volatile int *csr_addr =
 		(volatile int *)MIPS_PHYS_TO_KSEG1(KN02_SYS_CSR);
@@ -168,10 +166,8 @@ dec_3max_os_init()
 		MIPS_PHYS_TO_KSEG1(KN02_SYS_CLOCK);
 
 	mc_cpuspeed(mcclock_addr, MIPS_INT_MASK_1);
-
-	/* no high resolution timer circuit; possibly never called */
-	clkread = nullclkread;
 }
+
 
 /*
  * Initalize the memory system and I/O buses.
@@ -209,12 +205,12 @@ dec_3max_device_register(dev, aux)
  */
 void
 dec_3max_enable_intr(slotno, handler, sc, on)
-	u_int slotno;
+	register u_int slotno;
 	int (*handler) __P((void* softc));
 	void *sc;
 	int on;
 {
-	volatile int *p_csr =
+	register volatile int *p_csr =
 		(volatile int *)MIPS_PHYS_TO_KSEG1(KN02_SYS_CSR);
 	int csr;
 	int s;
@@ -258,10 +254,10 @@ dec_3max_intr(mask, pc, statusReg, causeReg)
 	unsigned statusReg;
 	unsigned causeReg;
 {
-	unsigned i, m;
-	volatile struct chiptime *c =
+	register unsigned i, m;
+	register volatile struct chiptime *c =
 	    (volatile struct chiptime *) MIPS_PHYS_TO_KSEG1(KN02_SYS_CLOCK);
-	unsigned csr;
+	register unsigned csr;
 	int temp;
 	struct clockframe cf;
 	static int warned = 0;
@@ -288,7 +284,7 @@ dec_3max_intr(mask, pc, statusReg, causeReg)
 	}
 
 	/* If clock interrups were enabled, re-enable them ASAP. */
-	splx(MIPS_SR_INT_IE | (statusReg & MIPS_INT_MASK_1));
+	splx(MIPS_SR_INT_ENA_CUR | (statusReg & MIPS_INT_MASK_1));
 
 	if (mask & MIPS_INT_MASK_0) {
 		static int intr_map[8] = { SLOT0_INTR, SLOT1_INTR, SLOT2_INTR,
@@ -323,7 +319,8 @@ dec_3max_intr(mask, pc, statusReg, causeReg)
 		dec_3max_errintr();
 	}
 
-	return(MIPS_SR_INT_IE | (statusReg & ~causeReg & MIPS_HARD_INT_MASK));
+	return ((statusReg & ~causeReg & MIPS_HARD_INT_MASK) |
+		MIPS_SR_INT_ENA_CUR);
 }
 
 

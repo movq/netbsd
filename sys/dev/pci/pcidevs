@@ -1,4 +1,4 @@
-$NetBSD: pcidevs,v 1.119 1999/05/07 21:19:06 hwr Exp $
+$NetBSD: pcidevs,v 1.113.2.1 1999/04/13 22:52:42 jonathan Exp $
 
 /*
  * Copyright (c) 1995, 1996 Christopher G. Demetriou
@@ -493,7 +493,6 @@ vendor LINEARSYS	0x1254	Linear Systems
 vendor ASIX		0x125b	ASIX Electronics
 vendor AURORA		0x125c	Aurora Technologies
 vendor ESSTECH		0x125d	ESS Technology Inc
-vendor SILMOTION	0x126f	Silicon Motion
 vendor ENSONIQ		0x1274	Ensoniq
 vendor NETAPP		0x1275	Network Appliance
 vendor ROCKWELL		0x127a	Rockwell Semiconductor Systems
@@ -636,7 +635,6 @@ product ATI MACH64_CT	0x4354	Mach64 CT
 product ATI MACH64_CX	0x4358	Mach64 CX
 product ATI MACH64_ET	0x4554	Mach64 ET
 product ATI MACH64_VT	0x4654	Mach64 VT
-product ATI MACH64_B	0x4750	Mach64 B
 product ATI MACH64_GT	0x4754	Mach64 GT
 product ATI MACH64_GX	0x4758	Mach64 GX
 
@@ -658,7 +656,6 @@ product AVM FRITZ_CARD		0x0a00	Fritz! Card ISDN Interface
 
 /* Bit3 products */
 product BIT3 PCIVME617		0x0001	PCI-VME Interface Mod. 617
-product BIT3 PCIVME618		0x0010	PCI-VME Interface Mod. 618
 product BIT3 PCIVME2706		0x0300	PCI-VME Interface Mod. 2706
 
 /* Brooktree products */
@@ -690,7 +687,6 @@ product CIRRUS CL_GD5434_8	0x00a8	CL-GD5434-8
 product CIRRUS CL_GD5436	0x00ac	CL-GD5436
 product CIRRUS CL_GD5446	0x00b8	CL-GD5446
 product CIRRUS CL_PD6729	0x1100	CL-PD6729
-product	CIRRUS CL_PD6832	0x1100	CL-PD6832 PCI-CardBus Bridge
 product CIRRUS CL_GD7542	0x1200	CL-GD7542
 product CIRRUS CL_GD7543	0x1202	CL-GD7543
 product CIRRUS CL_GD7541	0x1204	CL-GD7541
@@ -936,11 +932,6 @@ product OLICOM OC2183	0x0013	Olicom OC-2183/2185 Ethernet
 product OLICOM OC2325	0x0012	Olicom OC-2325 Ethernet
 product OLICOM OC2326	0x0014	Olicom OC-2326 10/100-TX Ethernet
 
-/* Sun Microsystems products */
-product SUN EBUS	0x1000	SPARC Ebus
-product SUN HMENETWORK	0x1001	SUNW,hme compatible Ethernet
-product SUN SIMBA	0x5000	Simba PCI bus
-
 /* NCR/Symbios Logic products */
 product SYMBIOS 810	0x0001	53c810
 product SYMBIOS 820	0x0002	53c820
@@ -1066,9 +1057,6 @@ product SIS 5597_IDE		0x5513	5597/5598 IDE controller
 product SIS 5597_HB		0x5597	5597/5598 host bridge
 product SIS 5597_USB		0x7001	5597/5598 USB host controller
 
-/* Silicon Motion products */
-product SILMOTION LYNX_E	0x0810	Lynx E
-
 /* SMC products */
 product SMC 37C665	0x1000	FDC 37C665
 product SMC 37C922	0x1001	FDC 37C922
@@ -1094,12 +1082,10 @@ product TEKRAM2	DC690C		0x690c	DC-690C
 
 /* Texas Instruments products */
 product	TI	TLAN		0x0500	TLAN
-product	TI	PCILYNX		0x8000	LYNX FireWire Host Controller
 product TI	PCI1130		0xac12	PCI1130 PCI-CardBus Bridge
 product TI	PCI1031		0xac13	PCI1031 PCI-pcmcia Bridge
 product TI	PCI1131		0xac15	PCI1131 PCI-CardBus Bridge
 product TI	PCI1250		0xac16	PCI1250 PCI-CardBus Bridge
-product TI	PCI1251		0xac1d	PCI1251 PCI-CardBus Bridge
 product TI	PCI1220		0xac17	PCI1220 PCI-CardBus Bridge
 product TI	PCI1221		0xac19	PCI1221 PCI-CardBus Bridge
 product TI	PCI1225		0xac1C	PCI1225 PCI-CardBus Bridge

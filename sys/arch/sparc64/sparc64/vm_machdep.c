@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.16 1999/05/13 21:58:36 thorpej Exp $ */
+/*	$NetBSD: vm_machdep.c,v 1.15 1999/03/26 23:41:36 mycroft Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -215,10 +215,8 @@ char cpu_forkname[] = "cpu_fork()";
  * the first element in struct user.
  */
 void
-cpu_fork(p1, p2, stack, stacksize)
+cpu_fork(p1, p2)
 	register struct proc *p1, *p2;
-	void *stack;
-	size_t stacksize;
 {
 	register struct pcb *opcb = &p1->p_addr->u_pcb;
 	register struct pcb *npcb = &p2->p_addr->u_pcb;
@@ -287,12 +285,6 @@ cpu_fork(p1, p2, stack, stacksize)
 
 	/* Copy parent's trapframe */
 	*tf2 = *(struct trapframe *)((long)opcb + USPACE - sizeof(*tf2));
-
-	/*
-	 * If specified, give the child a different stack.
-	 */
-	if (stack != NULL)
-		tf2->tf_out[6] = (u_int64_t)stack + stacksize;
 
 	/* Duplicate efforts of syscall(), but slightly differently */
 	if (tf2->tf_global[1] & SYSCALL_G2RFLAG) {

@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.353 1999/05/12 19:28:29 thorpej Exp $	*/
+/*	$NetBSD: machdep.c,v 1.349.2.1 1999/04/16 16:17:27 chs Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -483,7 +483,7 @@ cpu_startup()
 	 * Finally, allocate mbuf cluster submap.
 	 */
 	mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-	    nmbclusters * mclbytes, FALSE, FALSE, NULL);
+	    VM_MBUF_SIZE, FALSE, FALSE, NULL);
 
 	/*
 	 * Initialize callouts
@@ -631,7 +631,9 @@ allocsys(v)
 
 #define	valloc(name, type, num) \
 	    v = (caddr_t)(((name) = (type *)v) + (num))
-
+#ifdef REAL_CLISTS
+	valloc(cfree, struct cblock, nclist);
+#endif
 	valloc(callout, struct callout, ncallout);
 #ifdef SYSVSHM
 	valloc(shmsegs, struct shmid_ds, shminfo.shmmni);
@@ -1664,7 +1666,8 @@ setregs(p, pack, stack)
 #endif
 
 #ifdef USER_LDT
-	pmap_ldt_cleanup(p);
+	if (pcb->pcb_flags & PCB_USER_LDT)
+		i386_user_cleanup(pcb);
 #endif
 
 	p->p_md.md_flags &= ~MDP_USEDFPU;

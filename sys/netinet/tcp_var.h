@@ -1,4 +1,4 @@
-/*	$NetBSD: tcp_var.h,v 1.59 1999/04/29 03:54:23 thorpej Exp $	*/
+/*	$NetBSD: tcp_var.h,v 1.58.2.1 1999/04/29 14:52:59 perry Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 1999 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: cd9660_lookup.c,v 1.21 1999/04/07 21:37:11 tron Exp $	*/
+/*	$NetBSD: cd9660_lookup.c,v 1.20.6.1 1999/04/07 23:03:17 tron Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1993, 1994

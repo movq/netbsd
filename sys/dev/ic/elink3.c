@@ -1,4 +1,4 @@
-/*	$NetBSD: elink3.c,v 1.57 1999/04/20 04:40:24 jonathan Exp $	*/
+/*	$NetBSD: elink3.c,v 1.54.2.1 1999/04/27 00:04:51 perry Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.

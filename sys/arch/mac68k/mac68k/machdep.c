@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.232 1999/05/03 19:10:54 scottr Exp $	*/
+/*	$NetBSD: machdep.c,v 1.227.2.1 1999/04/16 16:19:01 chs Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -277,20 +277,6 @@ mac68k_init()
 			    VM_FREELIST_DEFAULT);
 	}
 
-	/*
-	 * Initialize the I/O mem extent map.
-	 * Note: we don't have to check the return value since
-	 * creation of a fixed extent map will never fail (since
-	 * descriptor storage has already been allocated).
-	 *
-	 * N.B. The iomem extent manages _all_ physical addresses
-	 * on the machine.  When the amount of RAM is found, all
-	 * extents of RAM are allocated from the map.
-	 */
-	iomem_ex = extent_create("iomem", 0x0, 0xffffffff, M_DEVBUF,
-	    (caddr_t)iomem_ex_storage, sizeof(iomem_ex_storage),
-	    EX_NOCOALESCE|EX_NOWAIT);
-
 	/* Initialize the interrupt handlers. */
 	intr_init();
 
@@ -376,7 +362,7 @@ cpu_startup(void)
 	int vers;
 	int base, residual;
 	vaddr_t minaddr, maxaddr;
-	vsize_t size = 0;	/* To avoid compiler warning */
+	vm_size_t size = 0;	/* To avoid compiler warning */
 	int delay;
 
 	/*
@@ -428,7 +414,9 @@ again:
 	    (name) = (type *)v; v = (caddr_t)((name)+(num))
 #define	valloclim(name, type, num, lim) \
 	    (name) = (type *)v; v = (caddr_t)((lim) = ((name)+(num)))
-
+#ifdef REAL_CLISTS
+	valloc(cfree, struct cblock, nclist);
+#endif
 	valloc(callout, struct callout, ncallout);
 #ifdef SYSVSHM
 	valloc(shmsegs, struct shmid_ds, shminfo.shmmni);
@@ -492,7 +480,7 @@ again:
 	 * End of first pass, size has been calculated so allocate memory
 	 */
 	if (firstaddr == 0) {
-		size = (vsize_t)(v - firstaddr);
+		size = (vm_size_t)(v - firstaddr);
 		firstaddr = (caddr_t)uvm_km_alloc(kernel_map, round_page(size));
 		if (firstaddr == 0)
 			panic("startup: no room for tables");
@@ -501,7 +489,7 @@ again:
 	/*
 	 * End of second pass, addresses have been assigned
 	 */
-	if ((vsize_t)(v - firstaddr) != size)
+	if ((vm_size_t)(v - firstaddr) != size)
 		panic("startup: table size inconsistency");
 
 	/*
@@ -517,7 +505,7 @@ again:
 	base = bufpages / nbuf;
 	residual = bufpages % nbuf;
 	for (i = 0; i < nbuf; i++) {
-		vsize_t curbufsize;
+		vm_size_t curbufsize;
 		vaddr_t curbuf;
 		struct vm_page *pg;
 
@@ -559,7 +547,7 @@ again:
 	 * Finally, allocate mbuf cluster submap.
 	 */
 	mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-	    nmbclusters * mclbytes, FALSE, FALSE, NULL);
+	    VM_MBUF_SIZE, FALSE, FALSE, NULL);
 
 	/*
 	 * Initialize callouts
@@ -2317,6 +2305,20 @@ mac68k_set_io_offsets(base)
 	vaddr_t base;
 {
 	extern volatile u_char *sccA;
+
+	/*
+	 * Initialize the I/O mem extent map.
+	 * Note: we don't have to check the return value since
+	 * creation of a fixed extent map will never fail (since
+	 * descriptor storage has already been allocated).
+	 *
+	 * N.B. The iomem extent manages _all_ physical addresses
+	 * on the machine.  When the amount of RAM is found, all
+	 * extents of RAM are allocated from the map.
+	 */
+	iomem_ex = extent_create("iomem", 0x0, 0xffffffff, M_DEVBUF,
+	    (caddr_t)iomem_ex_storage, sizeof(iomem_ex_storage),
+	    EX_NOCOALESCE|EX_NOWAIT);
 
 	switch (current_mac_model->class) {
 	case MACH_CLASSQ:

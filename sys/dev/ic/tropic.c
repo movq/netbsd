@@ -1,4 +1,4 @@
-/*	$NetBSD: tropic.c,v 1.3 1999/04/29 15:47:02 bad Exp $	*/
+/*	$NetBSD: tropic.c,v 1.2.2.1 1999/04/29 22:22:08 perry Exp $	*/
 
 /* 
  * Ported to NetBSD by Onno van der Linden

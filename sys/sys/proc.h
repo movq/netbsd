@@ -1,4 +1,4 @@
-/*	$NetBSD: proc.h,v 1.77 1999/05/13 21:58:37 thorpej Exp $	*/
+/*	$NetBSD: proc.h,v 1.74 1999/03/25 04:45:56 sommerfe Exp $	*/
 
 /*-
  * Copyright (c) 1986, 1989, 1991, 1993
@@ -114,7 +114,6 @@ struct	proc {
 	/* substructures: */
 	struct	pcred *p_cred;		/* Process owner's identity. */
 	struct	filedesc *p_fd;		/* Ptr to open files structure. */
-	struct	cwdinfo *p_cwdi;	/* cdir/rdir/cmask info */
 	struct	pstats *p_stats;	/* Accounting/statistics (PROC ONLY). */
 	struct	plimit *p_limit;	/* Process limits. */
 	struct	vmspace *p_vmspace;	/* Address space. */
@@ -123,7 +122,6 @@ struct	proc {
 #define	p_ucred		p_cred->pc_ucred
 #define	p_rlimit	p_limit->pl_rlimit
 
-	int	p_exitsig;		/* signal to sent to parent on exit */
 	int	p_flag;			/* P_* flags. */
 	u_char	p_unused;		/* XXX: used to be emulation flag */
 	char	p_stat;			/* S* process status. */
@@ -232,13 +230,6 @@ struct	proc {
 #define	P_NOCLDWAIT	0x20000	/* No zombies if child dies */
 
 /*
- * Macro to compute the exit signal.
- */
-#define	P_EXITSIG(p)	((((p)->p_flag & (P_TRACED|P_FSTRACE)) ||	\
-			  (p)->p_pptr == initproc) ?			\
-			 SIGCHLD : p->p_exitsig)
-
-/*
  * MOVE TO ucred.h?
  *
  * Shareable process credentials (always resident).  This includes a reference
@@ -292,9 +283,6 @@ struct proclist_desc {
  */
 #define	FORK_PPWAIT	0x01		/* block parent until child exit */
 #define	FORK_SHAREVM	0x02		/* share vmspace with parent */
-#define	FORK_SHARECWD	0x04		/* share cdir/rdir/cmask */
-#define	FORK_SHAREFILES	0x08		/* share file descriptors */
-#define	FORK_SHARESIGS	0x10		/* share signal actions */
 
 #define	PIDHASH(pid)	(&pidhashtbl[(pid) & pidhash])
 extern LIST_HEAD(pidhashhead, proc) *pidhashtbl;
@@ -357,8 +345,7 @@ void	wakeup __P((void *chan));
 void	reaper __P((void));
 void	exit1 __P((struct proc *, int));
 void	exit2 __P((struct proc *));
-int	fork1 __P((struct proc *, int, int, void *, size_t, register_t *,
-	    struct proc **));
+int	fork1 __P((struct proc *, int, register_t *, struct proc **));
 void	kmeminit __P((void));
 void	rqinit __P((void));
 int	groupmember __P((gid_t, struct ucred *));

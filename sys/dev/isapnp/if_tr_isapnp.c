@@ -1,4 +1,4 @@
-/*	$NetBSD: if_tr_isapnp.c,v 1.3 1999/04/29 15:47:03 bad Exp $	*/
+/*	$NetBSD: if_tr_isapnp.c,v 1.2.2.1 1999/04/29 22:23:26 perry Exp $	*/
 
 /*
  * Copyright (c) 1999 The NetBSD Foundation, Inc.

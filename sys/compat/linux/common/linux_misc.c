@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_misc.c,v 1.55 1999/05/13 01:00:50 thorpej Exp $	*/
+/*	$NetBSD: linux_misc.c,v 1.53 1999/02/09 20:37:19 christos Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -147,7 +147,7 @@ linux_sys_wait4(p, v, retval)
 		syscallarg(struct rusage *) rusage;
 	} */ *uap = v;
 	struct sys_wait4_args w4a;
-	int error, *status, tstat, options, linux_options;
+	int error, *status, tstat;
 	caddr_t sg;
 
 	if (SCARG(uap, status) != NULL) {
@@ -156,22 +156,9 @@ linux_sys_wait4(p, v, retval)
 	} else
 		status = NULL;
 
-	linux_options = SCARG(uap, options);
-	options = 0;
-	if (linux_options &
-	    ~(LINUX_WAIT4_WNOHANG|LINUX_WAIT4_WUNTRACED|LINUX_WAIT4_WCLONE))
-		return (EINVAL);
-
-	if (linux_options & LINUX_WAIT4_WNOHANG)
-		options |= WNOHANG;
-	if (linux_options & LINUX_WAIT4_WUNTRACED)
-		options |= WUNTRACED;
-	if (linux_options & LINUX_WAIT4_WCLONE)
-		options |= WALTSIG;
-
 	SCARG(&w4a, pid) = SCARG(uap, pid);
 	SCARG(&w4a, status) = status;
-	SCARG(&w4a, options) = options;
+	SCARG(&w4a, options) = SCARG(uap, options);
 	SCARG(&w4a, rusage) = SCARG(uap, rusage);
 
 	if ((error = sys_wait4(p, &w4a, retval)))
@@ -561,23 +548,18 @@ linux_sys_getdents(p, v, retval)
 	off_t *cookiebuf = NULL, *cookie;
 	int ncookies;
 
-	/* getvnode() will use the descriptor for us */
 	if ((error = getvnode(p->p_fd, SCARG(uap, fd), &fp)) != 0)
 		return (error);
 
-	if ((fp->f_flag & FREAD) == 0) {
-		error = EBADF;
-		goto out1;
-	}
+	if ((fp->f_flag & FREAD) == 0)
+		return (EBADF);
 
 	vp = (struct vnode *)fp->f_data;
-	if (vp->v_type != VDIR) {
-		error = EINVAL;
-		goto out1;
-	}
+	if (vp->v_type != VDIR)
+		return (EINVAL);
 
 	if ((error = VOP_GETATTR(vp, &va, p->p_ucred, p)))
-		goto out1;
+		return error;
 
 	nbytes = SCARG(uap, count);
 	if (nbytes == 1) {	/* emulating old, broken behaviour */
@@ -684,8 +666,6 @@ out:
 	if (cookiebuf)
 		free(cookiebuf, M_TEMP);
 	free(buf, M_TEMP);
- out1:
-	FILE_UNUSE(fp, p);
 	return error;
 }
 
