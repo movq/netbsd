@@ -18,7 +18,7 @@
  * 29-Apr-92  Johannes Helander (jvh) at Helsinki University of Technology
  *	Created.
  *
- * 	$Id: alloca.s,v 1.1 1993/09/17 18:43:46 phil Exp $
+ * 	$Id: alloca.s,v 1.1.1.1 1993/09/17 18:43:47 phil Exp $
  */
 /*
  * Note: Saved registers are accessed through the frame pointer so 

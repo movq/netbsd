@@ -18,7 +18,7 @@
  * 29-Apr-92  Johannes Helander (jvh) at Helsinki University of Technology
  *	Created.
  *
- *	$Id: sigpending.s,v 1.1 1993/09/17 18:43:48 phil Exp $
+ *	$Id: sigpending.s,v 1.1.1.1 1993/09/17 18:43:49 phil Exp $
  */
 
 #include <sys/syscall.h>

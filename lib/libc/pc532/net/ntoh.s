@@ -30,7 +30,7 @@
  * 11-May-92  Johannes Helander (jvh) at Helsinki University of Technology
  *	Created.
  *
- *	$Id: ntoh.s,v 1.1 1993/09/17 18:43:47 phil Exp $
+ *	$Id: ntoh.s,v 1.1.1.1 1993/09/17 18:43:48 phil Exp $
  */
 
 #include <machine/asm.h>

@@ -35,7 +35,7 @@
  *
  *	@(#)SYS.h	5.5 (Berkeley) 5/7/91
  *
- *	$Id: SYS.h,v 1.1 1993/09/17 18:43:45 phil Exp $
+ *	$Id: SYS.h,v 1.1.1.1 1993/09/17 18:43:46 phil Exp $
  *
  *  Modified for the ns532 by Phil Nelson, 12/1/92
  *

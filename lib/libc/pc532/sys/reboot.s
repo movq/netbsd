@@ -16,7 +16,7 @@
 
 /*	This is a modified copy of mount.s.  Phil Nelson
  *
- *	$Id: reboot.s,v 1.1 1993/09/17 18:43:50 phil Exp $
+ *	$Id: reboot.s,v 1.1.1.1 1993/09/17 18:43:51 phil Exp $
  */
 
 #include <syscall.h>
