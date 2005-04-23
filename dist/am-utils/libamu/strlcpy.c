@@ -1,4 +1,4 @@
-/*	$NetBSD: strlcpy.c,v 1.1 2005/04/23 18:13:29 christos Exp $	*/
+/*	$NetBSD: strlcpy.c,v 1.1.1.1 2005/04/23 18:13:29 christos Exp $	*/
 
 /*
  * Copyright (c) 1997-2005 Erez Zadok
