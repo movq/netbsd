@@ -1,4 +1,4 @@
-/*	$NetBSD: umount_linux.c,v 1.1 2005/04/23 18:12:45 christos Exp $	*/
+/*	$NetBSD: umount_linux.c,v 1.1.1.1 2005/04/23 18:12:45 christos Exp $	*/
 
 /*
  * Copyright (c) 1997-2005 Erez Zadok
