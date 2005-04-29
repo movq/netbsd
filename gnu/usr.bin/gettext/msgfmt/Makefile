@@ -1,12 +1,8 @@
-#	$NetBSD: Makefile,v 1.1 2000/11/02 01:09:04 itojun Exp $
-
-.include <bsd.own.mk>
+#	$NetBSD: Makefile,v 1.1.1.1 2005/04/29 14:59:32 christos Exp $
 
 PROG=	msgfmt
-SRCS=	msgfmt.c open-po.c po-gram.gen.c po-hash.gen.c po-lex.c po.c \
-	str-list.c message.c dir-list.c
 
 .include <bsd.prog.mk>
 .include "${.CURDIR}/../Makefile.inc.prog"
 
-CPPFLAGS+=	-I${DIST}/gettext/intl
+CPPFLAGS+=-I${DIST}/gettext/gettext-runtime/intl
