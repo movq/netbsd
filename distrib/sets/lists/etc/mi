@@ -1,4 +1,13 @@
-# $NetBSD: mi,v 1.155 2005/04/25 11:38:01 wiz Exp $
+# $NetBSD: mi,v 1.153.2.6 2005/09/15 21:08:52 tron Exp $
+#
+# Note: end-user configuration files that are moved to another location
+#	should not be marked "obsolete"; they should just be removed from
+#	the set list, a custom fix should be added to postinstall(8), and
+#	an item should be added to src/UPDATING for MKUPDATE=yes users.
+#	This is an exception to the general rule that moved/removed files
+#	are marked as "obsolete", because we don't want to arbitrarily
+#	remove end-user configuration files.
+#
 ./.cshrc					etc-util-etc
 ./.profile					etc-util-etc
 ./dev/MAKEDEV					etc-sys-etc
@@ -18,6 +27,7 @@
 ./etc/default/weekly.conf			etc-obsolete		obsolete
 ./etc/defaults/daily.conf			etc-sys-defaults
 ./etc/defaults/monthly.conf			etc-sys-defaults
+./etc/defaults/pf.boot.conf			etc-sys-defaults	pf
 ./etc/defaults/rc.conf				etc-sys-defaults
 ./etc/defaults/security.conf			etc-sys-defaults
 ./etc/defaults/weekly.conf			etc-sys-defaults
@@ -66,10 +76,10 @@
 ./etc/mtree/NetBSD.dist				etc-sys-etc
 ./etc/mtree/set.etc				etc-sys-etc
 ./etc/mtree/special				etc-sys-etc
+./etc/named.conf				etc-bind-etc
 ./etc/namedb/127				etc-bind-etc
 ./etc/namedb/localhost				etc-bind-etc
 ./etc/namedb/loopback.v6			etc-bind-etc
-./etc/namedb/named.conf				etc-bind-etc
 ./etc/namedb/root.cache				etc-bind-etc
 ./etc/netconfig					etc-net-etc
 ./etc/networks					etc-net-etc
@@ -113,7 +123,7 @@
 ./etc/postfix/post-install			etc-postfix-etc		postfix
 ./etc/postfix/postfix-files			etc-postfix-etc		postfix
 ./etc/postfix/postfix-script			etc-postfix-etc		postfix
-./etc/postinstall				etc-obsolete		obsolete
+./etc/postinstall				etc-sys-etc		obsolete
 ./etc/powerd/scripts/power_button		etc-sysutil-etc
 ./etc/powerd/scripts/reset_button		etc-sysutil-etc
 ./etc/primes					etc-obsolete		obsolete
@@ -183,6 +193,7 @@
 ./etc/rc.d/ntpd					etc-ntp-rc
 ./etc/rc.d/ntpdate				etc-ntp-rc
 ./etc/rc.d/pf					etc-net-rc
+./etc/rc.d/pf_boot				etc-net-rc
 ./etc/rc.d/pflogd				etc-net-rc
 ./etc/rc.d/poffd				etc-sys-rc
 ./etc/rc.d/postfix				etc-postfix-rc
@@ -249,7 +260,7 @@
 ./etc/skel/.logout				etc-sys-etc
 ./etc/skel/.profile				etc-sys-etc
 ./etc/skeykeys					etc-sys-etc
-./etc/spamd.conf				etc-net-etc		pf
+./etc/spamd.conf				etc-obsolete		obsolete
 ./etc/spwd.db					etc-sys-etc
 ./etc/ssh/ssh_config				etc-secsh-etc		crypto
 ./etc/ssh/ssh_known_hosts			etc-secsh-etc		crypto

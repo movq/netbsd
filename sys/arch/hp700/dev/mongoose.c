@@ -1,4 +1,4 @@
-/*	$NetBSD: mongoose.c,v 1.10 2005/05/20 15:09:45 chs Exp $	*/
+/*	$NetBSD: mongoose.c,v 1.9 2004/08/30 15:05:17 drochner Exp $	*/
 
 /*	$OpenBSD: mongoose.c,v 1.7 2000/08/15 19:42:56 mickey Exp $	*/
 
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mongoose.c,v 1.10 2005/05/20 15:09:45 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mongoose.c,v 1.9 2004/08/30 15:05:17 drochner Exp $");
 
 #define MONGOOSE_DEBUG 9
 
@@ -494,13 +494,11 @@ void
 mg_isa_rr_2(void *v, bus_space_handle_t h, bus_size_t o, u_int16_t *a, bus_size_t c)
 {
 	u_int16_t r;
-	volatile u_int16_t *p;
 
 	h += o;
-	p = (void *)h;
 	while (c--) {
-		r = *p++;
-		*a++ = le16toh(r);
+		r = *((volatile u_int16_t *)h)++;
+		*(a++) = le16toh(r);
 	}
 }
 
@@ -508,13 +506,11 @@ void
 mg_isa_rr_4(void *v, bus_space_handle_t h, bus_size_t o, u_int32_t *a, bus_size_t c)
 {
 	u_int32_t r;
-	volatile u_int32_t *p;
 
 	h += o;
-	p = (void *)h;
 	while (c--) {
-		r = *p++;
-		*a++ = le32toh(r);
+		r = *((volatile u_int32_t *)h)++;
+		*(a++) = le32toh(r);
 	}
 }
 
@@ -522,13 +518,11 @@ void
 mg_isa_wr_2(void *v, bus_space_handle_t h, bus_size_t o, const u_int16_t *a, bus_size_t c)
 {
 	u_int16_t r;
-	volatile u_int16_t *p;
 
 	h += o;
-	p = (void *)h;
 	while (c--) {
-		r = *a++;
-		*p++ = htole16(r);
+		r = *(a++);
+		*((volatile u_int16_t *)h)++ = htole16(r);
 	}
 }
 
@@ -536,38 +530,30 @@ void
 mg_isa_wr_4(void *v, bus_space_handle_t h, bus_size_t o, const u_int32_t *a, bus_size_t c)
 {
 	u_int32_t r;
-	volatile u_int32_t *p;
 
 	h += o;
-	p = (void *)h;
 	while (c--) {
-		r = *a++;
-		*p++ = htole32(r);
+		r = *(a++);
+		*((volatile u_int32_t *)h)++ = htole32(r);
 	}
 }
 
 void
 mg_isa_sr_2(void *v, bus_space_handle_t h, bus_size_t o, u_int16_t vv, bus_size_t c)
 {
-	volatile u_int16_t *p;
-
 	vv = htole16(vv);
 	h += o;
-	p = (void *)h;
 	while (c--)
-		*p++ = vv;
+		*((volatile u_int16_t *)h)++ = vv;
 }
 
 void
 mg_isa_sr_4(void *v, bus_space_handle_t h, bus_size_t o, u_int32_t vv, bus_size_t c)
 {
-	volatile u_int32_t *p;
-
 	vv = htole32(vv);
 	h += o;
-	p = (void *)h;
 	while (c--)
-		*p++ = vv;
+		*((volatile u_int32_t *)h)++ = vv;
 }
 
 int

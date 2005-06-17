@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.26 2005/04/15 22:39:11 kleink Exp $
+#	$NetBSD: Makefile.inc,v 1.25.2.1 2005/04/19 12:32:38 tron Exp $
 
 SRCS+=	alloca.S fabs.S
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.257 2005/06/16 04:17:49 briggs Exp $ */
+/*	$NetBSD: machdep.c,v 1.253.2.1 2006/07/12 21:26:23 tron Exp $ */
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -78,7 +78,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.257 2005/06/16 04:17:49 briggs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.253.2.1 2006/07/12 21:26:23 tron Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_compat_sunos.h"
@@ -226,7 +226,7 @@ cpu_startup()
 	pmap_update(pmap_kernel());
 
 	/* Allocate virtual memory space */
-	va0 = va = uvm_km_alloc(kernel_map, size, 0, UVM_KMF_VAONLY);
+	va0 = va = uvm_km_valloc(kernel_map, size);
 	if (va == 0)
 		panic("cpu_start: no virtual memory for message buffer");
 
@@ -258,7 +258,7 @@ cpu_startup()
 	/*
 	 * Good {morning,afternoon,evening,night}.
 	 */
-	printf("%s%s", copyright, version);
+	printf(version);
 	/*identifycpu();*/
 	format_bytes(pbuf, sizeof(pbuf), ctob(physmem));
 	printf("total memory = %s\n", pbuf);
@@ -420,7 +420,7 @@ sysctl_machdep_boot(SYSCTLFN_ARGS)
 {
 	struct sysctlnode node = *rnode;
 	struct btinfo_kernelfile *bi_file;
-	const char *cp;
+	char *cp;
 
 
 	switch (node.sysctl_num) {
@@ -445,7 +445,7 @@ sysctl_machdep_boot(SYSCTLFN_ARGS)
 	if (cp == NULL || cp[0] == '\0')
 		return (ENOENT);
 
-	node.sysctl_data = __UNCONST(cp);
+	node.sysctl_data = cp;
 	node.sysctl_size = strlen(cp) + 1;
 	return (sysctl_lookup(SYSCTLFN_CALL(&node)));
 }
@@ -1080,7 +1080,7 @@ cpu_reboot(howto, user_boot_string)
 	}
 
 	/* Disable interrupts. But still allow IPI on MP systems */
-	if (sparc_ncpus > 1)
+	if (ncpu > 1)
 		(void)splsched();
 	else
 		(void)splhigh();
@@ -1469,7 +1469,7 @@ wcopy(vb1, vb2, l)
 {
 	const u_char *b1e, *b1 = vb1;
 	u_char *b2 = vb2;
-	const u_short *sp;
+	u_short *sp;
 	int bstore = 0;
 
 	if (l == 0)
@@ -1482,13 +1482,13 @@ wcopy(vb1, vb2, l)
 	}
 
 	/* middle, */
-	sp = (const u_short *)b1;
+	sp = (u_short *)b1;
 	b1e = b1 + l;
 	if (l & 1)
 		b1e--;
 	bstore = (u_long)b2 & 1;
 
-	while (sp < (const u_short *)b1e) {
+	while (sp < (u_short *)b1e) {
 		if (bstore) {
 			b2[1] = *sp & 0xff;
 			b2[0] = *sp >> 8;
@@ -1722,9 +1722,7 @@ _bus_dmamem_unmap(t, kva, size)
 #endif
 
 	size = round_page(size);
-	pmap_kremove((vaddr_t)kva, size);
-	pmap_update(pmap_kernel());
-	uvm_km_free(kernel_map, (vaddr_t)kva, size, UVM_KMF_VAONLY);
+	uvm_unmap(kernel_map, (vaddr_t)kva, (vaddr_t)kva + size);
 }
 
 /*
@@ -2079,7 +2077,7 @@ sun4_dmamem_map(t, segs, nsegs, size, kvap, flags)
 
 	size = round_page(size);
 
-	va = uvm_km_alloc(kernel_map, size, 0, UVM_KMF_VAONLY);
+	va = uvm_km_valloc(kernel_map, size);
 	if (va == 0)
 		return (ENOMEM);
 

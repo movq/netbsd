@@ -1,4 +1,4 @@
-/*	$NetBSD: st.c,v 1.181 2005/05/29 22:00:50 christos Exp $ */
+/*	$NetBSD: st.c,v 1.178.2.1 2005/04/06 11:57:03 tron Exp $ */
 
 /*-
  * Copyright (c) 1998, 2004 The NetBSD Foundation, Inc.
@@ -57,7 +57,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: st.c,v 1.181 2005/05/29 22:00:50 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: st.c,v 1.178.2.1 2005/04/06 11:57:03 tron Exp $");
 
 #include "opt_scsi.h"
 
@@ -481,11 +481,11 @@ stdetach(struct device *self, int flags)
 static void
 st_identify_drive(struct st_softc *st, struct scsipi_inquiry_pattern *inqbuf)
 {
-	const struct st_quirk_inquiry_pattern *finger;
+	struct st_quirk_inquiry_pattern *finger;
 	int priority;
 
-	finger = scsipi_inqmatch(inqbuf,
-	    st_quirk_patterns,
+	finger = (struct st_quirk_inquiry_pattern *)scsipi_inqmatch(inqbuf,
+	    (caddr_t)st_quirk_patterns,
 	    sizeof(st_quirk_patterns) / sizeof(st_quirk_patterns[0]),
 	    sizeof(st_quirk_patterns[0]), &priority);
 	if (priority != 0) {
@@ -506,7 +506,7 @@ static void
 st_loadquirks(struct st_softc *st)
 {
 	int i;
-	const struct	modes *mode;
+	struct	modes *mode;
 	struct	modes *mode2;
 
 	mode = st->quirkdata->modes;
@@ -1629,7 +1629,7 @@ try_new_value:
  * Do a synchronous read.
  */
 static int
-st_read(struct st_softc *st, char *bf, int size, int flags)
+st_read(struct st_softc *st, char *buf, int size, int flags)
 {
 	struct scsi_rw_tape cmd;
 
@@ -1647,7 +1647,7 @@ st_read(struct st_softc *st, char *bf, int size, int flags)
 	} else
 		_lto3b(size, cmd.len);
 	return (scsipi_command(st->sc_periph,
-	    (void *)&cmd, sizeof(cmd), (void *)bf, size, 0, ST_IO_TIME, NULL,
+	    (void *)&cmd, sizeof(cmd), (void *)buf, size, 0, ST_IO_TIME, NULL,
 	    flags | XS_CTL_DATA_IN));
 }
 
@@ -2068,8 +2068,9 @@ st_interpret_sense(struct scsipi_xfer *xs)
 	 * If it isn't a extended or extended/deferred error, let
 	 * the generic code handle it.
 	 */
-	if (SSD_RCODE(sense->response_code) != SSD_RCODE_CURRENT &&
-	    SSD_RCODE(sense->response_code) != SSD_RCODE_DEFERRED)
+	if ((sense->response_code & SSD_RCODE_VALID) == 0 ||
+	    (SSD_RCODE(sense->response_code) != SSD_RCODE_CURRENT &&
+	     SSD_RCODE(sense->response_code) != SSD_RCODE_DEFERRED))
 		return (retval);
 
 	if (sense->response_code & SSD_RCODE_VALID)
@@ -2332,12 +2333,12 @@ st_interpret_sense(struct scsipi_xfer *xs)
 static int
 st_touch_tape(struct st_softc *st)
 {
-	char *bf;
+	char *buf;
 	int readsize;
 	int error;
 
-	bf = malloc(1024, M_TEMP, M_NOWAIT);
-	if (bf == NULL)
+	buf = malloc(1024, M_TEMP, M_NOWAIT);
+	if (buf == NULL)
 		return (ENOMEM);
 
 	if ((error = st->ops(st, ST_OPS_MODESENSE, 0)) != 0)
@@ -2375,14 +2376,14 @@ st_touch_tape(struct st_softc *st)
 			st->blksize -= 512;
 			continue;
 		}
-		st_read(st, bf, readsize, XS_CTL_SILENT);	/* XXX */
+		st_read(st, buf, readsize, XS_CTL_SILENT);	/* XXX */
 		if ((error = st_rewind(st, 0, 0)) != 0) {
-bad:			free(bf, M_TEMP);
+bad:			free(buf, M_TEMP);
 			return (error);
 		}
 	} while (readsize != 1 && readsize > st->blksize);
 
-	free(bf, M_TEMP);
+	free(buf, M_TEMP);
 	return (0);
 }
 

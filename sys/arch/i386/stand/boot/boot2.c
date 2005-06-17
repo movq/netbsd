@@ -1,4 +1,4 @@
-/*	$NetBSD: boot2.c,v 1.7 2005/06/15 19:07:36 junyoung Exp $	*/
+/*	$NetBSD: boot2.c,v 1.5 2004/11/25 08:30:52 christos Exp $	*/
 
 /*
  * Copyright (c) 2003
@@ -86,7 +86,7 @@ static const char *default_filename;
 char *sprint_bootsel(const char *);
 void bootit(const char *, int, int);
 void print_banner(void);
-void boot2(u_int, u_int);
+void boot2(uint32_t, uint32_t);
 
 void	command_help(char *);
 void	command_ls(char *);
@@ -108,7 +108,7 @@ const struct bootblk_command commands[] = {
 
 int
 parsebootfile(const char *fname, char **fsname, char **devname,
-	      u_int *unit, u_int *partition, const char **file)
+	u_int *unit, u_int *partition, const char **file)
 {
 	const char *col;
 
@@ -119,21 +119,21 @@ parsebootfile(const char *fname, char **fsname, char **devname,
 	*file = default_filename;
 
 	if (fname == NULL)
-		return 0;
+		return(0);
 
-	if ((col = strchr(fname, ':'))) {	/* device given */
+	if((col = strchr(fname, ':'))) {	/* device given */
 		static char savedevname[MAXDEVNAME+1];
 		int devlen;
-		u_int u = 0, p = 0;
+		unsigned int u = 0, p = 0;
 		int i = 0;
 
 		devlen = col - fname;
 		if (devlen > MAXDEVNAME)
-			return EINVAL;
+			return(EINVAL);
 
 #define isvalidname(c) ((c) >= 'a' && (c) <= 'z')
 		if (!isvalidname(fname[i]))
-			return EINVAL;
+			return(EINVAL);
 		do {
 			savedevname[i] = fname[i];
 			i++;
@@ -143,7 +143,7 @@ parsebootfile(const char *fname, char **fsname, char **devname,
 #define isnum(c) ((c) >= '0' && (c) <= '9')
 		if (i < devlen) {
 			if (!isnum(fname[i]))
-				return EUNIT;
+				return(EUNIT);
 			do {
 				u *= 10;
 				u += fname[i++] - '0';
@@ -153,12 +153,12 @@ parsebootfile(const char *fname, char **fsname, char **devname,
 #define isvalidpart(c) ((c) >= 'a' && (c) <= 'z')
 		if (i < devlen) {
 			if (!isvalidpart(fname[i]))
-				return EPART;
+				return(EPART);
 			p = fname[i++] - 'a';
 		}
 
 		if (i != devlen)
-			return ENXIO;
+			return(ENXIO);
 
 		*devname = savedevname;
 		*unit = u;
@@ -169,7 +169,7 @@ parsebootfile(const char *fname, char **fsname, char **devname,
 	if (*fname)
 		*file = fname;
 
-	return 0;
+	return(0);
 }
 
 char *
@@ -183,9 +183,9 @@ sprint_bootsel(const char *filename)
 	if (parsebootfile(filename, &fsname, &devname, &unit,
 			  &partition, &file) == 0) {
 		sprintf(buf, "%s%d%c:%s", devname, unit, 'a' + partition, file);
-		return buf;
+		return(buf);
 	}
-	return "(invalid)";
+	return("(invalid)");
 }
 
 void
@@ -216,8 +216,9 @@ print_banner(void)
 	printf(">> Memory: %d/%d k\n", getbasemem(), getextmem());
 }
 
+
 void
-boot2(u_int boot_biosdev, u_int boot_biossector)
+boot2(uint32_t boot_biosdev, uint32_t boot_biossector)
 {
 	int currname;
 	char c;
@@ -236,7 +237,7 @@ boot2(u_int boot_biosdev, u_int boot_biossector)
 
 	/* try to set default device to what BIOS tells us */
 	bios2dev(boot_biosdev, &default_devname, &default_unit,
-		 boot_biossector, &default_partition);
+		boot_biossector, &default_partition);
 
 	/* if the user types "boot" without filename */
 	default_filename = DEFFILENAME;
@@ -362,7 +363,7 @@ command_consdev(char *arg)
 	const struct cons_devs *cdp;
 
 	for (cdp = cons_devs; cdp->name; cdp++) {
-		if (strcmp(arg, cdp->name) == 0) {
+		if (!strcmp(arg, cdp->name)) {
 			initio(cdp->tag);
 			print_banner();
 			return;

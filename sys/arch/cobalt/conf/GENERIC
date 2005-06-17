@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.73 2005/06/09 14:43:30 tsutsui Exp $
+# $NetBSD: GENERIC,v 1.70.2.6 2006/08/25 11:45:30 ghen Exp $
 #
 # GENERIC machine description file
 # 
@@ -22,7 +22,7 @@ include 	"arch/cobalt/conf/std.cobalt"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.73 $"
+#ident 		"GENERIC-$Revision: 1.70.2.6 $"
 
 maxusers	32
 
@@ -46,11 +46,10 @@ options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
 
 # Enable experimental buffer queue strategy for better responsiveness under 
 # high disk I/O load. Use it with caution - it's not proven to be stable yet.
-#options 	BUFQ_READPRIO
-#options 	BUFQ_PRIOCSCAN
+#options 	NEW_BUFQ_STRATEGY
 
 # Debugging options
-options 	DIAGNOSTIC	# extra kernel sanity checking
+#options 	DIAGNOSTIC	# extra kernel sanity checking
 #options 	DEBUG		# extra kernel debugging support
 #options 	KMEMSTATS	# kernel memory statistics (vmstat -m)
 options 	DDB		# kernel dynamic debugger
@@ -106,6 +105,7 @@ options 	INET		# Internet protocols
 #options 	INET6		# IPV6
 #options 	IPSEC		# IP security
 #options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
+#options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# packet forwarding of multicast packets
 #options 	PIM		# Protocol Independent Multicast
@@ -144,6 +144,13 @@ options 	SCSIVERBOSE	# human readable SCSI error messages
 #options 	MIIVERBOSE	# verbose PHY autoconfig messages
 
 options 	NFS_BOOT_DHCP
+
+# XXX Disable zero-copy page loaning in sosend() temporarily:
+#     PV mappings created by sosend_loan() in sys/kern/uipc_socket.c may
+#     produce virtual cache aliases and it seems to cause TLB MISS panic
+#     in cache flush code called from bus_dmamap_sync(9) PREWRITE ops
+#     during heavy TX packet traffic on tlp(4).
+options 	SOSEND_NO_LOAN
 
 config		netbsd	root on ? type ?
 
@@ -306,6 +313,7 @@ options 	RAID_AUTOCONFIG			# auto-configuration of RAID
 pseudo-device	fss		4		# file system snapshot device
 #pseudo-device	md		1		# memory disk device (ramdisk)
 #pseudo-device	vnd		4		# disk-like interface to files
+#options 	VND_COMPRESSION		# compressed vnd(4)
 
 # Network pseudo-devices
 pseudo-device	bpfilter	8		# Berkeley packet filter

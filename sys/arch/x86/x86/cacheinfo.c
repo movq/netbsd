@@ -1,4 +1,4 @@
-/*	$NetBSD: cacheinfo.c,v 1.7 2005/05/29 21:37:03 christos Exp $	*/
+/*	$NetBSD: cacheinfo.c,v 1.6 2004/08/17 15:27:46 briggs Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cacheinfo.c,v 1.7 2005/05/29 21:37:03 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cacheinfo.c,v 1.6 2004/08/17 15:27:46 briggs Exp $");
 
 #include <sys/types.h>
 #include <sys/systm.h>
@@ -46,14 +46,11 @@ __KERNEL_RCSID(0, "$NetBSD: cacheinfo.c,v 1.7 2005/05/29 21:37:03 christos Exp $
 #include <machine/cpu.h>
 #include <machine/specialreg.h>
 
-static const char *print_cache_config(struct cpu_info *, int, const char *,
-    const char *);
-static const char *print_tlb_config(struct cpu_info *, int, const char *,
-    const char *);
+static char *print_cache_config(struct cpu_info *, int, char *, char *);
+static char *print_tlb_config(struct cpu_info *, int, char *, char *);
 
-static const char *
-print_cache_config(struct cpu_info *ci, int cache_tag, const char *name,
-    const char *sep)
+static char *
+print_cache_config(struct cpu_info *ci, int cache_tag, char *name, char *sep)
 {
 	char cbuf[7];
 	struct x86_cache_info *cai = &ci->ci_cinfo[cache_tag];
@@ -91,9 +88,8 @@ print_cache_config(struct cpu_info *ci, int cache_tag, const char *name,
 	return ", ";
 }
 
-static const char *
-print_tlb_config(struct cpu_info *ci, int cache_tag, const char *name,
-    const char *sep)
+static char *
+print_tlb_config(struct cpu_info *ci, int cache_tag, char *name, char *sep)
 {
 	char cbuf[7];
 	struct x86_cache_info *cai = &ci->ci_cinfo[cache_tag];
@@ -336,7 +332,7 @@ via_cpu_cacheinfo(struct cpu_info *ci)
 void
 x86_print_cacheinfo(struct cpu_info *ci)
 {
-	const char *sep;
+	char *sep;
 
 	if (ci->ci_cinfo[CAI_ICACHE].cai_totalsize != 0 ||
 	    ci->ci_cinfo[CAI_DCACHE].cai_totalsize != 0) {

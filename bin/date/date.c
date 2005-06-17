@@ -1,4 +1,4 @@
-/* $NetBSD: date.c,v 1.39 2005/05/15 18:39:39 dsl Exp $ */
+/* $NetBSD: date.c,v 1.37 2003/08/07 09:05:09 agc Exp $ */
 
 /*
  * Copyright (c) 1985, 1987, 1988, 1993
@@ -40,7 +40,7 @@ __COPYRIGHT(
 #if 0
 static char sccsid[] = "@(#)date.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: date.c,v 1.39 2005/05/15 18:39:39 dsl Exp $");
+__RCSID("$NetBSD: date.c,v 1.37 2003/08/07 09:05:09 agc Exp $");
 #endif
 #endif /* not lint */
 
@@ -62,9 +62,8 @@ __RCSID("$NetBSD: date.c,v 1.39 2005/05/15 18:39:39 dsl Exp $");
 
 #include "extern.h"
 
-static time_t tval;
-static int aflag, rflag, nflag;
-int retval;
+time_t tval;
+int retval, nflag;
 
 int main(int, char *[]);
 static void badformat(void);
@@ -76,17 +75,14 @@ int
 main(int argc, char *argv[])
 {
 	char buf[1024], *format;
-	int ch;
+	int ch, rflag;
 
 	setprogname(argv[0]);
 	(void)setlocale(LC_ALL, "");
 
-	while ((ch = getopt(argc, argv, "anr:u")) != -1) {
+	rflag = 0;
+	while ((ch = getopt(argc, argv, "nr:u")) != -1)
 		switch((char)ch) {
-		case 'a':		/* adjust time slowly */
-			aflag = 1;
-			nflag = 1;
-			break;
 		case 'n':		/* don't set network */
 			nflag = 1;
 			break;
@@ -100,7 +96,6 @@ main(int argc, char *argv[])
 		default:
 			usage();
 		}
-	}
 	argc -= optind;
 	argv += optind;
 
@@ -149,7 +144,6 @@ static void
 setthetime(const char *p)
 {
 	struct timeval tv;
-	time_t new_time;
 	struct tm *lt;
 	const char *dot, *t;
 	int len, yearset;
@@ -209,36 +203,22 @@ setthetime(const char *p)
 	case 2:					/* mm */
 		lt->tm_min = ATOI2(p);
 		break;
-	case 0:					/* was just .sss */
-		if (len != 0)
-			break;
-		/* FALLTHROUGH */
 	default:
 		badformat();
 	}
 
 	/* convert broken-down time to UTC clock time */
-	if ((new_time = mktime(lt)) == -1)
+	if ((tval = mktime(lt)) == -1)
 		badtime();
 
 	/* set the time */
-	if (nflag || netsettime(new_time)) {
+	if (nflag || netsettime(tval)) {
 		logwtmp("|", "date", "");
-		if (aflag) {
-			tv.tv_sec = new_time - tval;
-			tv.tv_usec = 0;
-			if (adjtime(&tv, NULL)) {
-				perror("date: adjtime");
-				exit(1);
-			}
-		} else {
-			tval = new_time;
-			tv.tv_sec = tval;
-			tv.tv_usec = 0;
-			if (settimeofday(&tv, NULL)) {
-				perror("date: settimeofday");
-				exit(1);
-			}
+		tv.tv_sec = tval;
+		tv.tv_usec = 0;
+		if (settimeofday(&tv, NULL)) {
+			perror("date: settimeofday");
+			exit(1);
 		}
 		logwtmp("{", "date", "");
 	}
@@ -252,8 +232,8 @@ static void
 usage(void)
 {
 	(void)fprintf(stderr,
-	    "usage: %s [-u] [-r seconds] [+format]\n", getprogname());
-	(void)fprintf(stderr, "       %s [-anu] [[[[[cc]yy]mm]dd]hh]mm[.ss]\n", getprogname());
+	    "usage: %s [-nu] [-r seconds] [+format]\n", getprogname());
+	(void)fprintf(stderr, "       %s [[[[[cc]yy]mm]dd]hh]mm[.ss]\n", getprogname());
 	exit(1);
 	/* NOTREACHED */
 }

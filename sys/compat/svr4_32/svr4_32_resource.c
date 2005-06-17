@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_32_resource.c,v 1.5 2005/03/26 05:12:36 fvdl Exp $	 */
+/*	$NetBSD: svr4_32_resource.c,v 1.4.2.1 2005/09/18 20:09:50 tron Exp $	 */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_32_resource.c,v 1.5 2005/03/26 05:12:36 fvdl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_32_resource.c,v 1.4.2.1 2005/09/18 20:09:50 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

@@ -1,11 +1,20 @@
-/*	$NetBSD: perform.c,v 1.109 2005/04/07 20:22:40 tron Exp $	*/
+/*	$NetBSD: perform.c,v 1.107.2.7 2005/12/29 15:09:37 riz Exp $	*/
 
+#if HAVE_CONFIG_H
+#include "config.h"
+#endif
+#include <nbcompat.h>
+#if HAVE_SYS_CDEFS_H
 #include <sys/cdefs.h>
+#endif
+#if HAVE_SYS_QUEUE_H
+#include <sys/queue.h>
+#endif
 #ifndef lint
 #if 0
 static const char *rcsid = "from FreeBSD Id: perform.c,v 1.44 1997/10/13 15:03:46 jkh Exp";
 #else
-__RCSID("$NetBSD: perform.c,v 1.109 2005/04/07 20:22:40 tron Exp $");
+__RCSID("$NetBSD: perform.c,v 1.107.2.7 2005/12/29 15:09:37 riz Exp $");
 #endif
 #endif
 
@@ -29,23 +38,62 @@ __RCSID("$NetBSD: perform.c,v 1.109 2005/04/07 20:22:40 tron Exp $");
  *
  */
 
+#if HAVE_ASSERT_H
 #include <assert.h>
+#endif
+#if HAVE_ERR_H
 #include <err.h>
+#endif
+#if HAVE_ERRNO_H
+#include <errno.h>
+#endif
 #include "lib.h"
 #include "add.h"
 #include "verify.h"
 
+#if HAVE_INTTYPES_H
 #include <inttypes.h>
+#endif
+#if HAVE_SIGNAL_H
 #include <signal.h>
+#endif
+#if HAVE_STRING_H
 #include <string.h>
+#endif
+#if HAVE_STDLIB_H
 #include <stdlib.h>
+#endif
+#if HAVE_SYS_UTSNAME_H
 #include <sys/utsname.h>
+#endif
 
 static char LogDir[MaxPathSize];
 static int zapLogDir;		/* Should we delete LogDir? */
 
 static package_t Plist;
 static char *Home;
+
+static lfile_head_t files;
+
+/*
+ * Some systems such as OpenBSD-3.6 do not provide PRIu64.
+ * Others such as AIX-4.3.2 have a broken PRIu64 which includes
+ * a leading "%".
+ */
+#ifdef NEED_PRI_MACRO
+#  ifdef PRIu64
+#    undef PRIu64
+#  endif
+#  if SIZEOF_INT == 8
+#    define PRIu64 "u"
+#  elif SIZEOF_LONG == 8
+#    define PRIu64 "lu"
+#  elif SIZEOF_LONG_LONG == 8
+#    define PRIu64 "llu"
+#  else
+#    error "unable to find a suitable PRIu64"
+#  endif
+#endif
 
 /* used in build information */
 enum {
@@ -148,7 +196,8 @@ installprereq(const char *name, int *errc, int doupdate)
 			    Viewbase ? "-W" : "", Viewbase ? Viewbase : "",
 			    Force ? "-f" : "",
 			    Prefix ? "-p" : "", Prefix ? Prefix : "",
-			    Verbose ? "-v" : "", name, NULL)) {
+			    Verbose ? "-v" : "",
+			    "-A", name, NULL)) {
 		warnx("autoload of dependency `%s' failed%s",
 			name, Force ? " (proceeding anyway)" : "!");
 		if (!Force)
@@ -175,7 +224,7 @@ pkg_do(const char *pkg, lpkg_head_t *pkgs)
 	int	replacing = 0;
 	char   *where_to;
 	char   dbdir[MaxPathSize];
-	const char *exact, *extra1;
+	const char *exact;
 	FILE   *cfile;
 	int     errc, err_prescan;
 	plist_t *p;
@@ -185,6 +234,8 @@ pkg_do(const char *pkg, lpkg_head_t *pkgs)
 	int	rc;
 	uint64_t needed;
 	Boolean	is_depoted_pkg = FALSE;
+	lfile_t	*lfp;
+	int	result;
 
 	errc = 0;
 	zapLogDir = 0;
@@ -245,10 +296,9 @@ pkg_do(const char *pkg, lpkg_head_t *pkgs)
 						goto bomb;
 					}
 				}
-				extra1 = CONTENTS_FNAME;
+				LFILE_ADD(&files, lfp, CONTENTS_FNAME);
 			} else {
 			        /* some values for stdin */
-				extra1 = NULL;
 				sb.st_size = 100000;	/* Make up a plausible average size */
 			}
 			Home = make_playpen(playpen, sizeof(playpen), sb.st_size * 4);
@@ -256,7 +306,12 @@ pkg_do(const char *pkg, lpkg_head_t *pkgs)
 				warnx("unable to make playpen for %ld bytes",
 				      (long) (sb.st_size * 4));
 			where_to = Home;
-			if (unpack(pkg, extra1)) {
+			result = unpack(pkg, &files);
+			while ((lfp = TAILQ_FIRST(&files)) != NULL) {
+				TAILQ_REMOVE(&files, lfp, lf_link);
+				free(lfp);
+			}
+			if (result) {
 				warnx("unable to extract table of contents file from `%s' - not a package?",
 				      pkg);
 				goto bomb;
@@ -407,17 +462,8 @@ pkg_do(const char *pkg, lpkg_head_t *pkgs)
 
 	if (buildinfo[BI_IGNORE_RECOMMENDED] != NULL &&
 	    strcasecmp(buildinfo[BI_IGNORE_RECOMMENDED], "NO") != 0) {
-		warnx("Package `%s' has", pkg);
-		warnx("IGNORE_RECOMMENDED set: This package was built with");
-		warnx("dependency recommendations ignored.  It may have been");
-		warnx("built against a set of installed packages that is");
-		warnx("different from the recommended set of pre-requisites.");
-		warnx("As a consequence, this package may not work on this");
-		warnx("or other systems with a different set of packages.");
-		if (!Force && !getenv("PKG_IGNORE_RECOMMENDED")) {
-			    warnx("aborting.");
-			    goto bomb;
-		}
+		warnx("%s was built", pkg);
+		warnx("\t to ignore recommended dependencies, this may cause problems!\n");
 	}
 
 	/*
@@ -464,7 +510,15 @@ pkg_do(const char *pkg, lpkg_head_t *pkgs)
 
 	/* See if this package (exact version) is already registered */
 	if ((isdir(LogDir) || islinktodir(LogDir)) && !Force) {
-		warnx("package `%s' already recorded as installed", PkgName);
+		if (!Automatic && is_automatic_installed(LogDir)) {
+			if (mark_as_automatic_installed(LogDir, 0) == 0)
+				warnx("package `%s' was already installed as "
+				      "dependency, now marked as installed "
+				      "manually", PkgName);
+		} else {
+			warnx("package `%s' already recorded as installed",
+			      PkgName);
+		}
 		goto success;	/* close enough for government work */
 	}
 
@@ -908,6 +962,8 @@ ignore_replace_depends_check:
 					warnx("cannot properly close file %s", contents);
 			}
 		}
+		if (Automatic)
+			mark_as_automatic_installed(LogDir, 1);
 		if (Verbose)
 			printf("Package %s registered in %s\n", PkgName, LogDir);
 	}
@@ -983,8 +1039,11 @@ void
 cleanup(int signo)
 {
 	static int alreadyCleaning;
-	void    (*oldint) (int);
-	void    (*oldhup) (int);
+	void   (*oldint) (int);
+	void   (*oldhup) (int);
+	int    saved_errno;
+
+	saved_errno = errno;
 	oldint = signal(SIGINT, SIG_IGN);
 	oldhup = signal(SIGHUP, SIG_IGN);
 
@@ -1000,6 +1059,7 @@ cleanup(int signo)
 	}
 	signal(SIGINT, oldint);
 	signal(SIGHUP, oldhup);
+	errno = saved_errno;
 }
 
 int
@@ -1010,6 +1070,8 @@ pkg_perform(lpkg_head_t *pkgs)
 
 	signal(SIGINT, cleanup);
 	signal(SIGHUP, cleanup);
+
+	TAILQ_INIT(&files);
 
 	if (AddMode == SLAVE)
 		err_cnt = pkg_do(NULL, NULL);
@@ -1027,4 +1089,3 @@ pkg_perform(lpkg_head_t *pkgs)
 	
 	return err_cnt;
 }
-

@@ -1,4 +1,4 @@
-/*	$NetBSD: signal.c,v 1.5 2005/04/17 07:20:00 provos Exp $	*/
+/*	$NetBSD: signal.c,v 1.4 2004/08/07 21:09:47 provos Exp $	*/
 /*	$OpenBSD: select.c,v 1.2 2002/06/25 15:50:15 mickey Exp $	*/
 
 /*
@@ -46,19 +46,27 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
-#ifdef HAVE_FCNTL_H
-#include <fcntl.h>
+#include <err.h>
+
+#ifdef USE_LOG
+#include "log.h"
+#else
+#define LOG_DBG(x)
+#define log_error(x)	perror(x)
 #endif
 
 #include "event.h"
 #include "evsignal.h"
-#include "log.h"
 
 extern struct event_list signalqueue;
 
 static short evsigcaught[NSIG];
 static int needrecalc;
 volatile sig_atomic_t evsignal_caught = 0;
+
+void evsignal_process(void);
+int evsignal_recalc(sigset_t *);
+int evsignal_deliver(sigset_t *);
 
 static struct event ev_signal;
 static int ev_signal_pair[2];
@@ -73,18 +81,9 @@ static void evsignal_cb(int fd, short what, void *arg)
 
 	n = read(fd, signals, sizeof(signals));
 	if (n == -1)
-		event_err(1, "%s: read", __func__);
+		err(1, "%s: read", __func__);
 	event_add(ev, NULL);
 }
-
-#ifdef HAVE_SETFD
-#define FD_CLOSEONEXEC(x) do { \
-        if (fcntl(x, F_SETFD, 1) == -1) \
-                event_warn("fcntl(%d, F_SETFD)", x); \
-} while (0)
-#else
-#define FD_CLOSEONEXEC(x)
-#endif
 
 void
 evsignal_init(sigset_t *evsigmask)
@@ -97,10 +96,7 @@ evsignal_init(sigset_t *evsigmask)
 	 * signals that got delivered.
 	 */
 	if (socketpair(AF_UNIX, SOCK_STREAM, 0, ev_signal_pair) == -1)
-		event_err(1, "%s: socketpair", __func__);
-
-	FD_CLOSEONEXEC(ev_signal_pair[0]);
-	FD_CLOSEONEXEC(ev_signal_pair[1]);
+		err(1, "%s: socketpair", __func__);
 
 	event_set(&ev_signal, ev_signal_pair[1], EV_READ,
 	    evsignal_cb, &ev_signal);
@@ -113,7 +109,7 @@ evsignal_add(sigset_t *evsigmask, struct event *ev)
 	int evsignal;
 	
 	if (ev->ev_events & (EV_READ|EV_WRITE))
-		event_errx(1, "%s: EV_SIGNAL incompatible use", __func__);
+		errx(1, "%s: EV_SIGNAL incompatible use", __func__);
 	evsignal = EVENT_SIGNAL(ev);
 	sigaddset(evsigmask, evsignal);
 	

@@ -1,4 +1,4 @@
-/*	$NetBSD: ntfs_subr.c,v 1.16 2005/05/29 21:00:29 christos Exp $	*/
+/*	$NetBSD: ntfs_subr.c,v 1.14 2005/02/26 22:58:55 perry Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999 Semen Ustimenko (semenu@FreeBSD.org)
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ntfs_subr.c,v 1.16 2005/05/29 21:00:29 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ntfs_subr.c,v 1.14 2005/02/26 22:58:55 perry Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -1199,7 +1199,7 @@ ntfs_ntreaddir(
 	blsize = fp->f_dirblsz;
 	rdbuf = fp->f_dirblbuf;
 
-	dprintf(("ntfs_ntreaddir: rdbuf: %p, blsize: %d\n", rdbuf, blsize));
+	dprintf(("ntfs_ntreaddir: rdbuf: 0x%p, blsize: %d\n", rdbuf, blsize));
 
 	if (vap->va_a_iroot->ir_flag & NTFS_IRFLAG_INDXALLOC) {
 		error = ntfs_ntvattrget(ntmp, ip, NTFS_A_INDXBITMAP, "$I30",
@@ -1682,10 +1682,9 @@ ntfs_readntvattr_plain(
 				left -= tocopy;
 				off = 0;
 				if (uio) {
-					char vbuf[] = "";
 					size_t remains = tocopy;
 					for(; remains; remains--)
-						uiomove(vbuf, 1, uio);
+						uiomove("", 1, uio);
 				} else
 					bzero(data, tocopy);
 				data = data + tocopy;
@@ -1716,7 +1715,7 @@ ntfs_readattr_plain(
 	struct ntfsmount * ntmp,
 	struct ntnode * ip,
 	u_int32_t attrnum,
-	const char *attrname,
+	char *attrname,
 	off_t roff,
 	size_t rsize,
 	void *rdata,
@@ -1771,7 +1770,7 @@ ntfs_readattr(
 	struct ntfsmount * ntmp,
 	struct ntnode * ip,
 	u_int32_t attrnum,
-	const char *attrname,
+	char *attrname,
 	off_t roff,
 	size_t rsize,
 	void *rdata,
@@ -1831,10 +1830,9 @@ ntfs_readattr(
 					memcpy(data, cup + off, tocopy);
 			} else if (init == 0) {
 				if (uio) {
-					char vbuf[] = "";
 					size_t remains = tocopy;
 					for(; remains; remains--)
-						uiomove(vbuf, 1, uio);
+						uiomove("", 1, uio);
 				}
 				else
 					bzero(data, tocopy);
@@ -1915,10 +1913,10 @@ int
 ntfs_procfixups(
 		struct ntfsmount * ntmp,
 		u_int32_t magic,
-		caddr_t xbuf,
+		caddr_t buf,
 		size_t len)
 {
-	struct fixuphdr *fhp = (struct fixuphdr *) xbuf;
+	struct fixuphdr *fhp = (struct fixuphdr *) buf;
 	int             i;
 	u_int16_t       fixup;
 	u_int16_t      *fxp;
@@ -1939,8 +1937,8 @@ ntfs_procfixups(
 		printf("ntfs_procfixups: invalid offset: %x", fhp->fh_foff);
 		return (EINVAL);
 	}
-	fxp = (u_int16_t *) (xbuf + fhp->fh_foff);
-	cfxp = (u_int16_t *) (xbuf + ntmp->ntm_bps - 2);
+	fxp = (u_int16_t *) (buf + fhp->fh_foff);
+	cfxp = (u_int16_t *) (buf + ntmp->ntm_bps - 2);
 	fixup = *fxp++;
 	for (i = 1; i < fhp->fh_fnum; i++, fxp++) {
 		if (*cfxp != fixup) {
@@ -1969,7 +1967,7 @@ ntfs_runtocn(
 
 #if NTFS_DEBUG
 	int             i;
-	printf("ntfs_runtocn: run: %p, %ld bytes, vcn:%ld\n",
+	printf("ntfs_runtocn: run: 0x%p, %ld bytes, vcn:%ld\n",
 		run, len, (u_long) vcn);
 	printf("ntfs_runtocn: run: ");
 	for (i = 0; i < len; i++)

@@ -1,4 +1,4 @@
-/*	$NetBSD: fss.c,v 1.15 2005/04/17 16:28:26 hannken Exp $	*/
+/*	$NetBSD: fss.c,v 1.13.2.4 2006/04/21 12:08:50 tron Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fss.c,v 1.15 2005/04/17 16:28:26 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fss.c,v 1.13.2.4 2006/04/21 12:08:50 tron Exp $");
 
 #include "fss.h"
 
@@ -165,6 +165,7 @@ fssattach(int num)
 		sc->sc_unit = i;
 		sc->sc_bdev = NODEV;
 		simple_lock_init(&sc->sc_slock);
+		lockinit(&sc->sc_lock, PRIBIO, "fsslock", 0, 0);
 		bufq_alloc(&sc->sc_bufq, BUFQ_FCFS|BUFQ_SORT_RAWBLOCK);
 	}
 }
@@ -265,7 +266,7 @@ fss_write(dev_t dev, struct uio *uio, int flags)
 int
 fss_ioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
 {
-	int s, error;
+	int error;
 	struct fss_softc *sc;
 	struct fss_set *fss = (struct fss_set *)data;
 	struct fss_get *fsg = (struct fss_get *)data;
@@ -273,37 +274,31 @@ fss_ioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
 	if ((sc = FSS_DEV_TO_SOFTC(dev)) == NULL)
 		return ENODEV;
 
-	FSS_LOCK(sc, s);
-	while ((sc->sc_flags & FSS_EXCL) == FSS_EXCL) {
-		error = ltsleep(sc, PRIBIO|PCATCH, "fsslock", 0, &sc->sc_slock);
-		if (error) {
-			FSS_UNLOCK(sc, s);
-			return error;
-		}
-	}
-	sc->sc_flags |= FSS_EXCL;
-	FSS_UNLOCK(sc, s);
-
 	switch (cmd) {
 	case FSSIOCSET:
+		lockmgr(&sc->sc_lock, LK_EXCLUSIVE, NULL);
 		if ((flag & FWRITE) == 0)
 			error = EPERM;
 		else if ((sc->sc_flags & FSS_ACTIVE) != 0)
 			error = EBUSY;
 		else
 			error = fss_create_snapshot(sc, fss, p);
+		lockmgr(&sc->sc_lock, LK_RELEASE, NULL);
 		break;
 
 	case FSSIOCCLR:
+		lockmgr(&sc->sc_lock, LK_EXCLUSIVE, NULL);
 		if ((flag & FWRITE) == 0)
 			error = EPERM;
 		else if ((sc->sc_flags & FSS_ACTIVE) == 0)
 			error = ENXIO;
 		else
 			error = fss_delete_snapshot(sc, p);
+		lockmgr(&sc->sc_lock, LK_RELEASE, NULL);
 		break;
 
 	case FSSIOCGET:
+		lockmgr(&sc->sc_lock, LK_EXCLUSIVE, NULL);
 		switch (sc->sc_flags & (FSS_PERSISTENT | FSS_ACTIVE)) {
 		case FSS_ACTIVE:
 			memcpy(fsg->fsg_mount, sc->sc_mntname, MNAMELEN);
@@ -325,6 +320,7 @@ fss_ioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
 			error = ENXIO;
 			break;
 		}
+		lockmgr(&sc->sc_lock, LK_RELEASE, NULL);
 		break;
 
 	case FSSIOFSET:
@@ -341,11 +337,6 @@ fss_ioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
 		error = EINVAL;
 		break;
 	}
-
-	FSS_LOCK(sc, s);
-	sc->sc_flags &= ~FSS_EXCL;
-	FSS_UNLOCK(sc, s);
-	wakeup(sc);
 
 	return error;
 }
@@ -1385,6 +1376,7 @@ fss_bs_thread(void *arg)
 			bp->b_error = nbp->b_error;
 			bp->b_flags |= B_ERROR;
 			biodone(bp);
+			FSS_LOCK(sc, s);
 			continue;
 		}
 
@@ -1441,6 +1433,7 @@ fss_bs_thread(void *arg)
 				bp->b_resid = bp->b_bcount;
 				bp->b_error = error;
 				bp->b_flags |= B_ERROR;
+				FSS_LOCK(sc, s);
 				break;
 			}
 

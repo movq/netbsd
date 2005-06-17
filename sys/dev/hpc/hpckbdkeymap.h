@@ -1,4 +1,4 @@
-/*	$NetBSD: hpckbdkeymap.h,v 1.34 2005/01/19 03:23:50 uwe Exp $	*/
+/*	$NetBSD: hpckbdkeymap.h,v 1.34.6.2 2005/08/04 18:31:25 tron Exp $	*/
 
 /*-
  * Copyright (c) 1999-2002 The NetBSD Foundation, Inc.
@@ -102,16 +102,24 @@ const uint8_t tc5165_telios_jp_keymap[] = {
 /* 3 */	33,  19,  5,   61,  IGN, 46,  123, 60,
 /* 4 */	35,  21,  8,   64,  IGN, 48,  49,  63,
 /* 5 */	17,  16,  3,   IGN, 2,   30,  44,  41,
-/* 6 */	IGN, IGN, IGN, IGN, IGN, IGN, IGN, IGN,
+/* 6 */	IGN, IGN, IGN, IGN, IGN, IGN, 221, IGN,
 /* 7 */	IGN, IGN, IGN, IGN, IGN, IGN, 56,  IGN,
 /* 8 */	34,  20,  7,   IGN, 6,   47,  57,  62,
 /* 9 */	IGN, IGN, IGN, IGN, IGN, IGN, 29,  IGN,
 /*10 */	27,  125, 13,  203, 208, 40,  115, 68,
-/*11 */	39,  26,  25,  IGN, 12,  52,  53,  67,
-/*12 */	37,  24,  11,  IGN, 10,  38,  51,  66,
+/*11 */	39,  26,  25,  112, 12,  52,  53,  67,
+/*12 */	37,  24,  11,  121, 10,  38,  51,  66,
 /*13 */	23,  22,  9,   IGN, IGN, 36,  50,  65,
-/*14 */	28,  43,  14,  200, 205,  IGN, IGN, 211,
-/*15 */	IGN, IGN, IGN, IGN, IGN, IGN, 221, IGN
+/*14 */	28,  43,  14,  200, 205, IGN, IGN, 211,
+/*15 */	IGN, IGN, IGN, IGN, IGN, IGN, 184, IGN
+};
+
+static const keysym_t tc5165_telios_jp_cmdmap[] = {
+/*	pos      command		normal		shifted		*/
+	KC(184), KS_Cmd,		KS_Alt_R,	KS_Multi_key,
+	KC(205), KS_Cmd_BrightnessUp,	KS_Right,
+	KC(203), KS_Cmd_BrightnessDown,	KS_Left,
+	KC(57),  KS_Cmd_BacklightToggle,KS_space,
 };
 
 const uint8_t tc5165_compaq_c_jp_keymap[] = {
@@ -766,6 +774,7 @@ const int jornada6x0_special_keymap[] = {
 	[KEY_SPECIAL_LIGHT]	= -1
 };
 
+
 /*
  * HP 620LX
  */
@@ -790,10 +799,32 @@ const uint8_t hp620lx_jp_keytrans[] = {
 /*15 */	SPL, IGN, IGN, IGN, IGN, IGN, IGN, IGN  /* LED button */
 };
 
+/* Other models */
+const uint8_t hp620lx_intl_keytrans[] = {
+/*      0    1    2    3    4    5    6    7 */
+/* 0 */	2  , 16 , 219, UNK, IGN, UNK, 42 , 30 , /* REC button */
+/* 1 */	3  , 17 , 15 , 44 , UNK, 45 , 41 , 31 ,
+/* 2 */	4  , 18 , UNK, 69 , 59 , 46 , 1  , 32 ,
+/* 3 */	5  , 19 , UNK, UNK, 60 , 56 , UNK, 33 ,
+/* 4 */	6  , 20 , 47 , 57 , 61 , 48 , UNK, 34 ,
+/* 5 */	7  , 21 , UNK, UNK, 62 , 49 , UNK, 35 ,
+/* 6 */	8  , 22 , UNK, 184, 63 , 50 , UNK, 36 ,
+/* 7 */	9  , 23 , 52 , 211, 64 , 51 , UNK, 37 ,
+/* 8 */	10 , 24 , 53 , 203, 65 , 200, 39 , 38 ,
+/* 9 */	11 , 25 , 40 , 208, 66 , 205, 27 , 26 ,
+/*10 */	12 , 13 , 28 , UNK, UNK, UNK, 54 , 43 ,
+/*11 */	SPL, IGN, IGN, IGN, IGN, IGN, IGN, IGN, /* ON button */
+/*12 */	29 , IGN, IGN, IGN, IGN, IGN, IGN, IGN,
+/*13 */	14 , IGN, IGN, IGN, IGN, IGN, IGN, IGN,
+/*14 */	UNK, UNK, UNK, UNK, UNK, UNK, UNK, UNK,
+/*15 */	SPL, IGN, IGN, IGN, IGN, IGN, IGN, IGN  /* LED button */
+};
+
 const int hp620lx_special_keymap[] = {
 	[KEY_SPECIAL_OFF]	= 88,
 	[KEY_SPECIAL_LIGHT]	= 120
 };
+
 
 /*
  * HITACHI PERSONA HPW50PAD
@@ -886,7 +917,7 @@ const struct hpckbd_keymap_table {
 	{	&platid_mask_MACH_SHARP_TELIOS,
 		tc5165_telios_jp_keymap,
 		default_special_keymap,
-		NULLCMDMAP,
+		CMDMAP(tc5165_telios_jp_cmdmap),
 		KB_JP },
 	{	&platid_mask_MACH_SHARP_MOBILON,
 		tc5165_mobilon_keymap,
@@ -1059,6 +1090,13 @@ const struct hpckbd_keymap_table {
 		hp620lx_special_keymap,
 		NULLCMDMAP,
 		KB_JP },
+	/* Other models */
+	{	&platid_mask_MACH_HP_LX_620,
+		hp620lx_intl_keytrans,
+		hp620lx_special_keymap,
+		NULLCMDMAP,
+		KB_US },
+
 	/*
 	 * PERSONA HPW50PAD
 	 */

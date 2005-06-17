@@ -1,4 +1,4 @@
-#	$NetBSD: files,v 1.718 2005/06/12 00:24:32 matt Exp $
+#	$NetBSD: files,v 1.712.2.9 2006/04/08 23:32:10 tron Exp $
 
 #	@(#)files.newconf	7.5 (Berkeley) 5/10/93
 
@@ -68,6 +68,14 @@ defflag	opt_dkwedge.h		DKWEDGE_AUTODISCOVER
 				DKWEDGE_METHOD_BSDLABEL
 				DKWEDGE_METHOD_GPT
 				DKWEDGE_METHOD_MBR
+
+defflag opt_verified_exec.h	VERIFIED_EXEC
+				VERIFIED_EXEC_FP_SHA1
+				VERIFIED_EXEC_FP_SHA256
+				VERIFIED_EXEC_FP_SHA384
+				VERIFIED_EXEC_FP_SHA512
+				VERIFIED_EXEC_FP_MD5
+				VERIFIED_EXEC_FP_RMD160
 
 # compatibility options
 #
@@ -367,6 +375,11 @@ file	dev/ic/cac.c			cac
 
 attach	ld at cac with ld_cac
 file	dev/ic/ld_cac.c			ld_cac
+
+# HP/Compaq Command Interface for SCSI-3 Support
+#
+device ciss: scsi
+file	dev/ic/ciss.c			ciss
 
 # Mylex DAC960 RAID controllers
 #
@@ -669,11 +682,6 @@ file	dev/ic/smc83c170.c		epic
 define	sgec
 file	dev/ic/sgec.c			sgec
 
-# MB86950 Ethernet Controller
-#
-define	mb86950
-file	dev/ic/mb86950.c		mb86950
-
 # MB8696x Ethernet Controller
 #
 define	mb86960
@@ -712,9 +720,6 @@ file	dev/ic/com.c			com			needs-flag
 #
 device	pckbc: pckbport
 file	dev/ic/pckbc.c			pckbc			needs-flag
-
-device	attimer
-file	dev/ic/attimer.c		attimer			needs-flag
 
 # Cirrus Logic CD240[01] 4-port Multi-Protocol Communications Controller
 #
@@ -1058,6 +1063,7 @@ file	dev/ic/iavc.c			iavc
 # legitimate pseudo-devices
 #
 defpseudo vnd:		disk
+defflag opt_vnd.h	VND_COMPRESSION
 defpseudo ccd:		disk
 defpseudo cgd:		disk, des, blowfish, cast128, rijndael
 defpseudo md:		disk
@@ -1083,7 +1089,7 @@ defpseudo gre:		ifnet
 defpseudo gif:		ifnet
 defpseudo faith:	ifnet
 defpseudo stf:		ifnet
-defpseudo tap {[unit = -1]}:		ifnet, ether, bpf_filter
+defpseudo tap {[unit = -1]}:		ifnet, ether, arp, bpf_filter
 
 defpseudo sequencer
 defpseudo clockctl
@@ -1193,8 +1199,7 @@ file	kern/bufq_priocscan.c		bufq_priocscan
 file	kern/bufq_readprio.c		bufq_readprio | new_bufq_strategy
 file	kern/core_elf32.c		exec_elf32
 file	kern/core_elf64.c		exec_elf64
-file	kern/core_netbsd.c		exec_aout | exec_coff | exec_ecoff |
-					    exec_macho | lkm
+file	kern/core_netbsd.c
 file	kern/cnmagic.c
 file	kern/exec_aout.c		exec_aout
 file	kern/exec_conf.c
@@ -1241,7 +1246,6 @@ file	kern/kern_uuid.c
 file	kern/kern_xxx.c
 file	kern/kgdb_stub.c		kgdb
 file	kern/subr_autoconf.c
-file	kern/subr_blist.c
 file	kern/subr_devsw.c
 file	kern/subr_disk.c
 file	kern/subr_evcnt.c
@@ -1337,7 +1341,7 @@ file	net/raw_usrreq.c
 file	net/route.c
 file	net/rtsock.c
 file	net/slcompress.c		sl | ppp | strip | (irip & irip_vj)
-file	net/zlib.c			(ppp & ppp_deflate) | ipsec | opencrypto
+file	net/zlib.c			(ppp & ppp_deflate) | ipsec | opencrypto | vnd_compression
 file	net80211/ieee80211.c		wlan
 file	net80211/ieee80211_compat.c	wlan
 file	net80211/ieee80211_crypto.c	wlan
@@ -1418,5 +1422,3 @@ device	joy
 file	dev/ic/joy.c			joy needs-flag
 
 file	dev/ieee1394/fwiso.c		fwiso			needs-count
-
-include	"net/agr/files.agr"

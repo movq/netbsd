@@ -2,7 +2,7 @@
  *
  * Module Name: dbfileio - Debugger file I/O commands.  These can't usually
  *              be used when running the debugger in Ring 0 (Kernel mode)
- *              xRevision: 81 $
+ *              xRevision: 76 $
  *
  ******************************************************************************/
 
@@ -10,7 +10,7 @@
  *
  * 1. Copyright Notice
  *
- * Some or all of this work - Copyright (c) 1999 - 2005, Intel Corp.
+ * Some or all of this work - Copyright (c) 1999 - 2004, Intel Corp.
  * All rights reserved.
  *
  * 2. License
@@ -117,7 +117,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dbfileio.c,v 1.12 2005/05/02 14:52:09 kochi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dbfileio.c,v 1.11 2004/02/14 16:57:24 kochi Exp $");
 
 #include "acpi.h"
 #include "acdebug.h"
@@ -129,6 +129,7 @@ __KERNEL_RCSID(0, "$NetBSD: dbfileio.c,v 1.12 2005/05/02 14:52:09 kochi Exp $");
 #define _COMPONENT          ACPI_CA_DEBUGGER
         ACPI_MODULE_NAME    ("dbfileio")
 
+
 /*
  * NOTE: this is here for lack of a better place.  It is used in all
  * flavors of the debugger, need LCD file
@@ -136,22 +137,6 @@ __KERNEL_RCSID(0, "$NetBSD: dbfileio.c,v 1.12 2005/05/02 14:52:09 kochi Exp $");
 #ifdef ACPI_APPLICATION
 #include <stdio.h>
 FILE                        *AcpiGbl_DebugFile = NULL;
-#endif
-
-/* Local prototypes */
-
-#ifdef ACPI_APPLICATION
-
-static ACPI_STATUS
-AcpiDbCheckTextModeCorruption (
-    UINT8                   *Table,
-    UINT32                  TableLength,
-    UINT32                  FileLength);
-
-static ACPI_STATUS
-AeLocalLoadTable (
-    ACPI_TABLE_HEADER       *TablePtr);
-
 #endif
 
 
@@ -162,7 +147,7 @@ AeLocalLoadTable (
  *
  * PARAMETERS:  None
  *
- * RETURN:      None
+ * RETURN:      Status
  *
  * DESCRIPTION: If open, close the current debug output file
  *
@@ -192,7 +177,7 @@ AcpiDbCloseDebugFile (
  *
  * PARAMETERS:  Name                - Filename to open
  *
- * RETURN:      None
+ * RETURN:      Status
  *
  * DESCRIPTION: Open a file where debug output will be directed.
  *
@@ -253,9 +238,8 @@ AcpiDbCheckTextModeCorruption (
 
     if (TableLength != FileLength)
     {
-        ACPI_REPORT_WARNING ((
-            "File length (0x%X) is not the same as the table length (0x%X)\n",
-            FileLength, TableLength));
+        ACPI_REPORT_WARNING (("File length (0x%X) is not the same as the table length (0x%X)\n",
+                FileLength, TableLength));
     }
 
     /* Scan entire table to determine if each LF has been prefixed with a CR */
@@ -266,7 +250,7 @@ AcpiDbCheckTextModeCorruption (
         {
             if (Table[i - 1] != 0x0D)
             {
-                /* The LF does not have a preceeding CR, table not corrupted */
+                /* the LF does not have a preceeding CR, table is not corrupted */
 
                 return (AE_OK);
             }
@@ -327,30 +311,20 @@ AcpiDbReadTable (
 
     /* Read the table header */
 
-    if (fread (&TableHeader, 1, sizeof (TableHeader), fp) !=
-            sizeof (ACPI_TABLE_HEADER))
+    if (fread (&TableHeader, 1, sizeof (TableHeader), fp) != sizeof (ACPI_TABLE_HEADER))
     {
-        AcpiOsPrintf ("Could not read the table header\n");
-        return (AE_BAD_HEADER);
+        AcpiOsPrintf ("Couldn't read the table header\n");
+        return (AE_BAD_SIGNATURE);
     }
 
     /* Validate the table header/length */
 
     Status = AcpiTbValidateTableHeader (&TableHeader);
-    if (ACPI_FAILURE (Status))
+    if ((ACPI_FAILURE (Status)) ||
+        (TableHeader.Length > 0x800000))  /* 8 Mbyte should be enough */
     {
         AcpiOsPrintf ("Table header is invalid!\n");
-        return (Status);
-    }
-
-    /* File size must be at least as long as the Header-specified length */
-
-    if (TableHeader.Length > FileSize)
-    {
-        AcpiOsPrintf (
-            "TableHeader length [0x%X] greater than the input file size [0x%X]\n",
-            TableHeader.Length, FileSize);
-        return (AE_BAD_HEADER);
+        return (AE_ERROR);
     }
 
     /* We only support a limited number of table types */
@@ -359,8 +333,7 @@ AcpiDbReadTable (
         ACPI_STRNCMP ((char *) TableHeader.Signature, PSDT_SIG, 4) &&
         ACPI_STRNCMP ((char *) TableHeader.Signature, SSDT_SIG, 4))
     {
-        AcpiOsPrintf ("Table signature [%4.4s] is invalid or not supported\n",
-            (char *) TableHeader.Signature);
+        AcpiOsPrintf ("Table signature is invalid\n");
         ACPI_DUMP_BUFFER (&TableHeader, sizeof (ACPI_TABLE_HEADER));
         return (AE_ERROR);
     }
@@ -371,9 +344,8 @@ AcpiDbReadTable (
     *Table = AcpiOsAllocate ((size_t) (FileSize));
     if (!*Table)
     {
-        AcpiOsPrintf (
-            "Could not allocate memory for ACPI table %4.4s (size=0x%X)\n",
-            TableHeader.Signature, TableHeader.Length);
+        AcpiOsPrintf ("Could not allocate memory for ACPI table %4.4s (size=%X)\n",
+                    TableHeader.Signature, TableHeader.Length);
         return (AE_NO_MEMORY);
     }
 
@@ -410,6 +382,7 @@ AcpiDbReadTable (
 
     return (AE_ERROR);
 }
+#endif
 
 
 /*******************************************************************************
@@ -428,7 +401,7 @@ AcpiDbReadTable (
  *
  ******************************************************************************/
 
-static ACPI_STATUS
+ACPI_STATUS
 AeLocalLoadTable (
     ACPI_TABLE_HEADER       *Table)
 {
@@ -478,6 +451,7 @@ AeLocalLoadTable (
 }
 
 
+#ifdef ACPI_APPLICATION
 /*******************************************************************************
  *
  * FUNCTION:    AcpiDbReadTableFromFile
@@ -518,7 +492,7 @@ AcpiDbReadTableFromFile (
 
     if (ACPI_FAILURE (Status))
     {
-        AcpiOsPrintf ("Could not get table from the file\n");
+        AcpiOsPrintf ("Couldn't get table from the file\n");
         return (Status);
     }
 
@@ -531,8 +505,8 @@ AcpiDbReadTableFromFile (
  *
  * FUNCTION:    AcpiDbGetTableFromFile
  *
- * PARAMETERS:  Filename        - File where table is located
- *              ReturnTable     - Where a pointer to the table is returned
+ * PARAMETERS:  Filename         - File where table is located
+ *              Table            - Where a pointer to the table is returned
  *
  * RETURN:      Status
  *

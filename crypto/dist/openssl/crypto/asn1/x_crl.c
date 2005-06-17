@@ -63,6 +63,8 @@
 
 static int X509_REVOKED_cmp(const X509_REVOKED * const *a,
 				const X509_REVOKED * const *b);
+static int X509_REVOKED_seq_cmp(const X509_REVOKED * const *a,
+				const X509_REVOKED * const *b);
 
 ASN1_SEQUENCE(X509_REVOKED) = {
 	ASN1_SIMPLE(X509_REVOKED,serialNumber, ASN1_INTEGER),
@@ -70,28 +72,43 @@ ASN1_SEQUENCE(X509_REVOKED) = {
 	ASN1_SEQUENCE_OF_OPT(X509_REVOKED,extensions, X509_EXTENSION)
 } ASN1_SEQUENCE_END(X509_REVOKED)
 
-/* The X509_CRL_INFO structure needs a bit of customisation.
- * Since we cache the original encoding the signature wont be affected by
- * reordering of the revoked field.
+/* The X509_CRL_INFO structure needs a bit of customisation. This is actually
+ * mirroring the old behaviour: its purpose is to allow the use of
+ * sk_X509_REVOKED_find to lookup revoked certificates. Unfortunately
+ * this will zap the original order and the signature so we keep a copy
+ * of the original positions and reorder appropriately before encoding.
+ *
+ * Might want to see if there's a better way of doing this later...
  */
 static int crl_inf_cb(int operation, ASN1_VALUE **pval, const ASN1_ITEM *it)
 {
 	X509_CRL_INFO *a = (X509_CRL_INFO *)*pval;
+	int i;
+	int (*old_cmp)(const X509_REVOKED * const *,
+			const X509_REVOKED * const *);
 
 	if(!a || !a->revoked) return 1;
 	switch(operation) {
-		/* Just set cmp function here. We don't sort because that
-		 * would affect the output of X509_CRL_print().
-		 */
+
+		/* Save original order */
 		case ASN1_OP_D2I_POST:
+		for (i=0; i<sk_X509_REVOKED_num(a->revoked); i++)
+			sk_X509_REVOKED_value(a->revoked,i)->sequence=i;
 		sk_X509_REVOKED_set_cmp_func(a->revoked,X509_REVOKED_cmp);
+		break;
+
+		/* Restore original order */
+		case ASN1_OP_I2D_PRE:
+		old_cmp=sk_X509_REVOKED_set_cmp_func(a->revoked,X509_REVOKED_seq_cmp);
+		sk_X509_REVOKED_sort(a->revoked);
+		sk_X509_REVOKED_set_cmp_func(a->revoked,old_cmp);
 		break;
 	}
 	return 1;
 }
 
 
-ASN1_SEQUENCE_enc(X509_CRL_INFO, enc, crl_inf_cb) = {
+ASN1_SEQUENCE_cb(X509_CRL_INFO, crl_inf_cb) = {
 	ASN1_OPT(X509_CRL_INFO, version, ASN1_INTEGER),
 	ASN1_SIMPLE(X509_CRL_INFO, sig_alg, X509_ALGOR),
 	ASN1_SIMPLE(X509_CRL_INFO, issuer, X509_NAME),
@@ -99,7 +116,7 @@ ASN1_SEQUENCE_enc(X509_CRL_INFO, enc, crl_inf_cb) = {
 	ASN1_OPT(X509_CRL_INFO, nextUpdate, ASN1_TIME),
 	ASN1_SEQUENCE_OF_OPT(X509_CRL_INFO, revoked, X509_REVOKED),
 	ASN1_EXP_SEQUENCE_OF_OPT(X509_CRL_INFO, extensions, X509_EXTENSION, 0)
-} ASN1_SEQUENCE_END_enc(X509_CRL_INFO, X509_CRL_INFO)
+} ASN1_SEQUENCE_END_cb(X509_CRL_INFO, X509_CRL_INFO)
 
 ASN1_SEQUENCE_ref(X509_CRL, 0, CRYPTO_LOCK_X509_CRL) = {
 	ASN1_SIMPLE(X509_CRL, crl, X509_CRL_INFO),
@@ -120,6 +137,12 @@ static int X509_REVOKED_cmp(const X509_REVOKED * const *a,
 		(ASN1_STRING *)(*b)->serialNumber));
 	}
 
+static int X509_REVOKED_seq_cmp(const X509_REVOKED * const *a,
+				const X509_REVOKED * const *b)
+	{
+	return((*a)->sequence-(*b)->sequence);
+	}
+
 int X509_CRL_add0_revoked(X509_CRL *crl, X509_REVOKED *rev)
 {
 	X509_CRL_INFO *inf;
@@ -130,7 +153,6 @@ int X509_CRL_add0_revoked(X509_CRL *crl, X509_REVOKED *rev)
 		ASN1err(ASN1_F_X509_CRL_ADD0_REVOKED, ERR_R_MALLOC_FAILURE);
 		return 0;
 	}
-	inf->enc.modified = 1;
 	return 1;
 }
 

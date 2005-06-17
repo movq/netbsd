@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.60 2005/06/11 08:54:35 snj Exp $ */
+/*	$NetBSD: vm_machdep.c,v 1.57 2004/09/17 14:11:22 skrll Exp $ */
 
 /*
  * Copyright (c) 1996-2002 Eduardo Horvath.  All rights reserved.
@@ -50,7 +50,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.60 2005/06/11 08:54:35 snj Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.57 2004/09/17 14:11:22 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -94,7 +94,7 @@ vmapbuf(bp, len)
 	uva = trunc_page((vaddr_t)bp->b_data);
 	off = (vaddr_t)bp->b_data - uva;
 	len = round_page(off + len);
-	kva = uvm_km_alloc(kernel_map, len, 0, UVM_KMF_VAONLY | UVM_KMF_WAITVA);
+	kva = uvm_km_valloc_wait(kernel_map, len);
 	bp->b_data = (caddr_t)(kva + off);
 
 	upmap = vm_map_pmap(&bp->b_proc->p_vmspace->vm_map);
@@ -130,7 +130,7 @@ vunmapbuf(bp, len)
 	off = (vaddr_t)bp->b_data - kva;
 	len = round_page(off + len);
 	pmap_kremove(kva, len);
-	uvm_km_free(kernel_map, kva, len, UVM_KMF_VAONLY);
+	uvm_km_free_wakeup(kernel_map, kva, len);
 	bp->b_data = bp->b_saveaddr;
 	bp->b_saveaddr = NULL;
 }
@@ -328,20 +328,20 @@ cpu_lwp_free(l, proc)
  * (should this be defined elsewhere?  machdep.c?)
  */
 int
-cpu_coredump(struct lwp *l, void *iocookie, struct core *chdr)
+cpu_coredump(l, vp, cred, chdr)
+	struct lwp *l;
+	struct vnode *vp;
+	struct ucred *cred;
+	struct core *chdr;
 {
 	int error;
 	struct md_coredump md_core;
 	struct coreseg cseg;
 
-	if (iocookie == NULL) {
-		CORE_SETMAGIC(*chdr, COREMAGIC, MID_MACHINE, 0);
-		chdr->c_hdrsize = ALIGN(sizeof(*chdr));
-		chdr->c_seghdrsize = ALIGN(sizeof(cseg));
-		chdr->c_cpusize = sizeof(md_core);
-		chdr->c_nseg++;
-		return 0;
-	}
+	CORE_SETMAGIC(*chdr, COREMAGIC, MID_MACHINE, 0);
+	chdr->c_hdrsize = ALIGN(sizeof(*chdr));
+	chdr->c_seghdrsize = ALIGN(sizeof(cseg));
+	chdr->c_cpusize = sizeof(md_core);
 
 	/* Copy important fields over. */
 	md_core.md_tf.tf_tstate = l->l_md.md_tf->tf_tstate;
@@ -402,12 +402,18 @@ cpu_coredump(struct lwp *l, void *iocookie, struct core *chdr)
 	CORE_SETMAGIC(cseg, CORESEGMAGIC, MID_MACHINE, CORE_CPU);
 	cseg.c_addr = 0;
 	cseg.c_size = chdr->c_cpusize;
-
-	error = coredump_write(iocookie, UIO_SYSSPACE, &cseg,
-	    chdr->c_seghdrsize);
+	error = vn_rdwr(UIO_WRITE, vp, (caddr_t)&cseg, chdr->c_seghdrsize,
+	    (off_t)chdr->c_hdrsize, UIO_SYSSPACE,
+	    IO_NODELOCKED|IO_UNIT, cred, NULL, NULL);
 	if (error)
 		return error;
 
-	return coredump_write(iocookie, UIO_SYSSPACE, &md_core,
-	    sizeof(md_core));
+	error = vn_rdwr(UIO_WRITE, vp, (caddr_t)&md_core, sizeof(md_core),
+	    (off_t)(chdr->c_hdrsize + chdr->c_seghdrsize), UIO_SYSSPACE,
+	    IO_NODELOCKED|IO_UNIT, cred, NULL, NULL);
+	if (!error)
+		chdr->c_nseg++;
+
+	return error;
 }
+

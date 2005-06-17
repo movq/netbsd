@@ -1,4 +1,4 @@
-/*	$NetBSD: apm.c,v 1.87 2005/06/01 16:49:14 drochner Exp $ */
+/*	$NetBSD: apm.c,v 1.84 2004/08/30 15:05:17 drochner Exp $ */
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: apm.c,v 1.87 2005/06/01 16:49:14 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: apm.c,v 1.84 2004/08/30 15:05:17 drochner Exp $");
 
 #include "apm.h"
 #if NAPM > 1
@@ -248,7 +248,7 @@ static int apm_spl;		/* saved spl while suspended */
 
 #ifdef APMDEBUG
 int	apmcall_debug(int, struct bioscallregs *, int);
-static	void acallpr(int, const char *, struct bioscallregs *);
+static	void acallpr(int, char *, struct bioscallregs *);
 
 /* bitmask defns for printing apm call args/results */
 #define ACPF_AX		0x00000001
@@ -274,7 +274,7 @@ static	void acallpr(int, const char *, struct bioscallregs *);
 #define ACPF_EFLAGS 	0x00100000
 
 struct acallinfo {
-	const char *name;
+	char *name;
 	int inflag;
 	int outflag;
 };
@@ -302,7 +302,7 @@ static struct acallinfo aci[] = {
   { "timer_reqs", ACPF_BX|ACPF_CX, ACPF_CX },
 };
 
-static void acallpr(int flag, const char *tag, struct bioscallregs *b) {
+static void acallpr(int flag, char *tag, struct bioscallregs *b) {
   if (!flag) return;
   printf("%s ", tag);
   if (flag & ACPF_AX) 		printf("ax=%#x ", b->AX);
@@ -336,7 +336,7 @@ apmcall_debug(func, regs, line)
 {
 	int rv;
 	int print = (apmdebug & APMDEBUG_APMCALLS) != 0;
-	const char *name;
+	char *name;
 	int inf;
 	int outf = 0; /* XXX: gcc */
 		
@@ -636,7 +636,7 @@ apm_event_handle(sc, regs)
 {
 	int error, retval;
 	struct bioscallregs nregs;
-	const char *code;
+	char *code;
 
 	retval = 1;		/* assume we are going to make progress */
 

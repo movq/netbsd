@@ -1,4 +1,4 @@
-/*	$NetBSD: disk.c,v 1.7 2005/04/21 13:59:15 tsutsui Exp $	*/
+/*	$NetBSD: disk.c,v 1.5 2004/10/04 19:59:51 he Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -50,21 +50,26 @@
 extern const struct arcbios_fv *ARCBIOS;
 
 struct	disk_softc {
-	u_long	sc_fd;			/* ARCBIOS file id */
+	int	sc_fd;			/* PROM file id */
 	int	sc_part;		/* disk partition number */
 	struct	disklabel sc_label;	/* disk label for this disk */
 };
 
 int
-diskstrategy(void *devdata, int rw, daddr_t bn, size_t reqcnt, void *addr,
-    size_t *cnt)
+diskstrategy(devdata, rw, bn, reqcnt, addr, cnt)
+	void *devdata;
+	int rw;
+	daddr_t bn;
+	size_t reqcnt;
+	void *addr;
+	size_t *cnt;	/* out: number of bytes transfered */
 {
 	struct disk_softc *sc = (struct disk_softc *)devdata;
 	int part = sc->sc_part;
 	struct partition *pp = &sc->sc_label.d_partitions[part];
-	long error;
+	int s;
 	int64_t offset;
-	u_long count;
+	paddr_t count;
 
 	offset = bn;
 
@@ -73,7 +78,7 @@ diskstrategy(void *devdata, int rw, daddr_t bn, size_t reqcnt, void *addr,
 	 */
 	if (reqcnt & (DEV_BSIZE - 1)) {
 		*cnt = 0;
-		return EINVAL;
+		return (EINVAL);
 	}
 
 	offset += pp->p_offset;
@@ -86,15 +91,14 @@ diskstrategy(void *devdata, int rw, daddr_t bn, size_t reqcnt, void *addr,
 	 */
 	offset *= DEV_BSIZE;
 
-	error = (*ARCBIOS->Seek)(sc->sc_fd, &offset, 0);
-	if (error != ARCBIOS_ESUCCESS)
-		return EIO;
-	error = (*ARCBIOS->Read)(sc->sc_fd, addr, reqcnt, &count);
-	if (error != ARCBIOS_ESUCCESS)
-		return EIO;
+	s = ARCBIOS->Seek(sc->sc_fd, &offset, 0);
+	s = ARCBIOS->Read(sc->sc_fd, addr, reqcnt, &count);
+
+	if (s < 0)
+		return (EIO);
 
 	*cnt = count;
-	return 0;
+	return (0);
 }
 
 int
@@ -106,11 +110,9 @@ diskopen(struct open_file *f, ...)
 	struct disklabel *lp;
 #ifdef arc
 	char *msg, buf[DEV_BSIZE];
-	size_t cnt;
-	int mbrp_off, i;
 #endif
-	int error;
-	u_long fd;
+	int i;
+	paddr_t i_arg;
 	char *device;
 	va_list ap;
 
@@ -130,20 +132,20 @@ diskopen(struct open_file *f, ...)
 	 */
 	part = 0;
 
-	if (part >= MAXPARTITIONS)
-		return ENXIO;
+	if (part >= 16)
+		return (ENXIO);
 
-	error = (*ARCBIOS->Open)(device, 0, &fd);
-	if (error) {
-		printf("diskopen: open failed, errno = %d\n", error);
-		return ENXIO;
+	if (ARCBIOS->Open(device, 0, &i_arg)) {
+		printf("open failed\n");
+		return (ENXIO);
 	}
+	i = (int)i_arg;
 
 	sc = alloc(sizeof(struct disk_softc));
 	memset(sc, 0, sizeof(struct disk_softc));
 	f->f_devdata = (void *)sc;
 
-	sc->sc_fd = fd;
+	sc->sc_fd = i;
 	sc->sc_part = part;
 
 	/* try to read disk label and partition table information */
@@ -155,51 +157,35 @@ diskopen(struct open_file *f, ...)
 	lp->d_partitions[part].p_size = 0x7fffffff;
 
 #ifdef arc
-	error = diskstrategy(sc, F_READ, (daddr_t)LABELSECTOR, DEV_BSIZE,
+	i = diskstrategy(sc, F_READ, (daddr_t)LABELSECTOR, DEV_BSIZE,
 	    buf, &cnt);
-	if (error || cnt != DEV_BSIZE) {
-		printf("%s: can't read disklabel, errno = %d\n",
-		    device, error);
+	if (i || cnt != DEV_BSIZE) {
+		printf("%s: error reading disk label\n", device);
 		free(sc, sizeof(struct disk_softc));
-		return ENXIO;
+		return (ENXIO);
 	}
 	msg = getdisklabel(buf, lp);
 	if (msg) {
 		/* If no label, just assume 0 and return */
-		return 0;
-	}
-
-	/*
-	 * On arc, we can't open whole disk, but can open each partition with
-	 * OSLOADPARTITION like scsi(0)disk(0)rdisk()partition(1) etc.
-	 * Thus, we don't have to add offset of the MBR partition.
-	 */
-	/* XXX magic: partition 2 is whole NetBSD partition */
-	mbrp_off = lp->d_partitions[2].p_offset;
-	for (i = 0; i < MAXPARTITIONS; i++) {
-		if (lp->d_partitions[i].p_fstype != FS_UNUSED &&
-		    lp->d_partitions[i].p_offset >= mbrp_off)
-			lp->d_partitions[i].p_offset -= mbrp_off;
-	}
-
-	if (part >= lp->d_npartitions ||
-	    lp->d_partitions[part].p_fstype == FS_UNUSED ||
-	    lp->d_partitions[part].p_size == 0) {
-		free(sc, sizeof(struct disk_softc));
-		return ENXIO;
+		return (0);
 	}
 #endif
-	return 0;
+
+	if (part >= lp->d_npartitions || lp->d_partitions[part].p_size == 0) {
+		free(sc, sizeof(struct disk_softc));
+		return (ENXIO);
+	}
+	return (0);
 }
 
 #ifndef LIBSA_NO_DEV_CLOSE
 int
-diskclose(struct open_file *f)
+diskclose(f)
+	struct open_file *f;
 {
-
-	(*ARCBIOS->Close)(((struct disk_softc *)(f->f_devdata))->sc_fd);
+	ARCBIOS->Close(((struct disk_softc *)(f->f_devdata))->sc_fd);
 	free(f->f_devdata, sizeof(struct disk_softc));
-	f->f_devdata = NULL;
-	return 0;
+	f->f_devdata = (void *)0;
+	return (0);
 }
 #endif

@@ -1,4 +1,4 @@
-#	$NetBSD: files.i386,v 1.263 2005/05/15 22:20:23 fvdl Exp $
+#	$NetBSD: files.i386,v 1.262.10.1 2006/05/20 12:25:39 tron Exp $
 #
 # new style config file for i386 architecture
 #
@@ -190,6 +190,11 @@ device	elansc: sysmon_wdog
 attach	elansc at pci
 file	arch/i386/pci/elan520.c		elansc
 
+# AMD Geode SC1100 Watchdog Timer
+device	geodewdog: sysmon_wdog
+attach	geodewdog at pci
+file	arch/i386/pci/geode.c		geodewdog
+
 # PCI-EISA bridges
 device	pceb: eisabus, isabus
 attach	pceb at pci
@@ -357,7 +362,7 @@ include	"compat/linux/files.linux"
 include	"compat/linux/arch/i386/files.linux_i386"
 file	arch/i386/i386/linux_sigcode.S		compat_linux
 file	arch/i386/i386/linux_syscall.c		compat_linux
-file	arch/x86/x86/linux_trap.c		compat_linux
+file	arch/i386/i386/linux_trap.c		compat_linux
 
 # FreeBSD binary compatibility (COMPAT_FREEBSD)
 include	"compat/freebsd/files.freebsd"

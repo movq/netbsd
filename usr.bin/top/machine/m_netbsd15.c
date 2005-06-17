@@ -1,4 +1,4 @@
-/*	$NetBSD: m_netbsd15.c,v 1.23 2005/06/16 14:58:51 christos Exp $	*/
+/*	$NetBSD: m_netbsd15.c,v 1.22 2004/02/13 11:36:24 wiz Exp $	*/
 
 /*
  * top - a top users display for Unix
@@ -36,12 +36,12 @@
  *		Tomas Svensson <ts@unix1.net>
  *
  *
- * $Id: m_netbsd15.c,v 1.23 2005/06/16 14:58:51 christos Exp $
+ * $Id: m_netbsd15.c,v 1.22 2004/02/13 11:36:24 wiz Exp $
  */
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: m_netbsd15.c,v 1.23 2005/06/16 14:58:51 christos Exp $");
+__RCSID("$NetBSD: m_netbsd15.c,v 1.22 2004/02/13 11:36:24 wiz Exp $");
 #endif
 
 #include <sys/param.h>
@@ -68,9 +68,7 @@ __RCSID("$NetBSD: m_netbsd15.c,v 1.23 2005/06/16 14:58:51 christos Exp $");
 #include "display.h"
 #include "loadavg.h"
 
-static void percentages64 __P((int, int *, u_int64_t *, u_int64_t *,
-    u_int64_t *));
-static int get_cpunum __P((u_int64_t));
+void percentages64 __P((int, int *, u_int64_t *, u_int64_t *, u_int64_t *));
 
 
 /* get_process_info passes back a handle.  This is what it looks like: */
@@ -122,7 +120,6 @@ static int ccpu;
 
 static int ncpu = 0;
 static u_int64_t *cp_time;
-static u_int64_t *cp_id;
 static u_int64_t *cp_old;
 static u_int64_t *cp_diff;
 
@@ -204,17 +201,6 @@ static int pageshift;		/* log base 2 of the pagesize */
 
 #define pagetok(size) ((size) << pageshift)
 
-static int
-get_cpunum(id)
-	u_int64_t id;
-{
-	int i = 0;
-	for (i = 0; i < ncpu; i++)
-		if (id == cp_id[i])
-			return i;
-	return -1;
-}
-
 int
 machine_init(statics)
 	struct statics *statics;
@@ -244,20 +230,10 @@ machine_init(statics)
 		    strerror(errno));
 		return(-1);
 	}
-
 	/* Handle old call that returned only aggregate */
 	if (size == sizeof(cp_time[0]) * CPUSTATES)
 		ncpu = 1;
 
-	cp_id = malloc(sizeof(cp_id[0]) * ncpu);
-	mib[0] = CTL_KERN;
-	mib[1] = KERN_CP_ID;
-	size = sizeof(cp_id[0]) * ncpu;
-	if (sysctl(mib, 2, cp_id, &size, NULL, 0) < 0) {
-		fprintf(stderr, "top: sysctl kern.cp_id failed: %s\n",
-		    strerror(errno));
-		return(-1);
-	}
 	cpu_states = malloc(sizeof(cpu_states[0]) * CPUSTATES * ncpu);
 	cp_old = malloc(sizeof(cp_old[0]) * CPUSTATES * ncpu);
 	cp_diff = malloc(sizeof(cp_diff[0]) * CPUSTATES * ncpu);
@@ -593,8 +569,8 @@ format_next_process(handle, get_userid)
 		case LSONPROC:
 		case LSRUN:
 		case LSSLEEP:			
-			(void)snprintf(state, sizeof(state), "%.6s/%d", 
-			     statep, get_cpunum(pp->p_cpuid));
+			snprintf(state, sizeof(state), "%.6s/%lld", 
+				 statep, (long long)pp->p_cpuid);
 			statep = state;
 			break;
 		}
@@ -871,7 +847,7 @@ proc_owner(pid)
  *	useful on BSD mchines for calculating CPU state percentages.
  */
 
-static void
+void
 percentages64(cnt, out, new, old, diffs)
 	int cnt;
 	int *out;

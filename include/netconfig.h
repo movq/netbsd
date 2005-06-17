@@ -1,4 +1,4 @@
-/*	$NetBSD: netconfig.h,v 1.4 2005/05/15 20:54:47 dsl Exp $	*/
+/*	$NetBSD: netconfig.h,v 1.3 2005/02/03 04:39:32 perry Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -115,7 +115,7 @@ typedef struct {
 __BEGIN_DECLS
 void *setnetconfig(void);
 struct netconfig *getnetconfig(void *);
-struct netconfig *getnetconfigent(const char *);
+struct netconfig *getnetconfigent(char *);
 void freenetconfigent(struct netconfig *);
 int endnetconfig(void *);
 

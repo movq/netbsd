@@ -1,8 +1,8 @@
-/*	$NetBSD: db_disasm.c,v 1.19 2005/06/02 09:13:06 he Exp $	*/
+/*	$NetBSD: db_disasm.c,v 1.18 2004/06/09 19:19:05 kleink Exp $	*/
 /*	$OpenBSD: db_disasm.c,v 1.2 1996/12/28 06:21:48 rahnds Exp $	*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_disasm.c,v 1.19 2005/06/02 09:13:06 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_disasm.c,v 1.18 2004/06/09 19:19:05 kleink Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -68,7 +68,7 @@ enum function_mask {
 };
 
 struct opcode {
-	const char *name;
+	char *name;
 	u_int32_t mask;
 	u_int32_t code;
 	enum function_mask func;
@@ -400,7 +400,7 @@ const struct opcode opcodes_3f[] = {
 
 struct specialreg {
 	int reg;
-	const char *name;
+	char *name;
 };
 
 const struct specialreg sprregs[] = {
@@ -864,7 +864,7 @@ disasm_fields(const struct opcode *popcode, instr_t instr, vaddr_t loc,
 		u_int tbr;
 		u_int tbrl;
 		u_int tbrh;
-		const char *reg;
+		char *reg;
 		tbrl = extract_field(instr, 31 - 15, 5);
 		tbrh = extract_field(instr, 31 - 20, 5);
 		tbr = tbrh << 5 | tbrl;

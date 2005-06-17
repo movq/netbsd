@@ -1,4 +1,4 @@
-/*	$NetBSD: umct.c,v 1.17 2005/05/30 04:21:39 christos Exp $	*/
+/*	$NetBSD: umct.c,v 1.15 2004/09/13 12:55:49 drochner Exp $	*/
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: umct.c,v 1.17 2005/05/30 04:21:39 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: umct.c,v 1.15 2004/09/13 12:55:49 drochner Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -177,16 +177,15 @@ USB_ATTACH(umct)
 	usb_interface_descriptor_t *id;
 	usb_endpoint_descriptor_t *ed;
 
-	char *devinfop;
+	char devinfo[1024];
 	char *devname = USBDEVNAME(sc->sc_dev);
 	usbd_status err;
 	int i;
 	struct ucom_attach_args uca;
 
-	devinfop = usbd_devinfo_alloc(dev, 0);
-	USB_ATTACH_SETUP;
-	printf("%s: %s\n", devname, devinfop);
-	usbd_devinfo_free(devinfop);
+        usbd_devinfo(dev, 0, devinfo, sizeof(devinfo));
+        USB_ATTACH_SETUP;
+        printf("%s: %s\n", devname, devinfo);
 
         sc->sc_udev = dev;
 	sc->sc_product = uaa->product;
@@ -595,7 +594,7 @@ void
 umct_intr(usbd_xfer_handle xfer, usbd_private_handle priv, usbd_status status)
 {
 	struct umct_softc *sc = priv;
-	u_char *tbuf = sc->sc_intr_buf;
+	u_char *buf = sc->sc_intr_buf;
 	u_char mstatus;
 
 	if (sc->sc_dying)
@@ -612,10 +611,10 @@ umct_intr(usbd_xfer_handle xfer, usbd_private_handle priv, usbd_status status)
 	}
 
 	DPRINTF(("%s: umct status = MSR:%02x, LSR:%02x\n",
-		 USBDEVNAME(sc->sc_dev), tbuf[0],tbuf[1]));
+		 USBDEVNAME(sc->sc_dev), buf[0],buf[1]));
 
 	sc->sc_lsr = sc->sc_msr = 0;
-	mstatus = tbuf[0];
+	mstatus = buf[0];
 	if (ISSET(mstatus, MSR_DSR))
 		sc->sc_msr |= UMSR_DSR;
 	if (ISSET(mstatus, MSR_DCD))

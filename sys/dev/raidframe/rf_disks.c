@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_disks.c,v 1.58 2005/05/29 22:03:09 christos Exp $	*/
+/*	$NetBSD: rf_disks.c,v 1.57.2.1 2005/06/17 13:36:04 tron Exp $	*/
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -67,7 +67,7 @@
  ***************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_disks.c,v 1.58 2005/05/29 22:03:09 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_disks.c,v 1.57.2.1 2005/06/17 13:36:04 tron Exp $");
 
 #include <dev/raidframe/raidframevar.h>
 

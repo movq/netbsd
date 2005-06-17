@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_options.h,v 1.4 2005/05/29 22:03:09 christos Exp $	*/
+/*	$NetBSD: rf_options.h,v 1.3.56.1 2005/06/17 13:35:04 tron Exp $	*/
 /*
  * rf_options.h
  */

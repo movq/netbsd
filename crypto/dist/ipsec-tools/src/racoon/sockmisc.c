@@ -1,6 +1,6 @@
-/*	$NetBSD: sockmisc.c,v 1.1.1.2 2005/02/23 14:54:28 manu Exp $	*/
+/*	$NetBSD: sockmisc.c,v 1.1.1.2.2.3 2005/11/21 21:12:31 tron Exp $	*/
 
-/* Id: sockmisc.c,v 1.17 2004/11/20 16:16:59 monas Exp */
+/* Id: sockmisc.c,v 1.17.4.4 2005/10/04 09:54:27 manubsd Exp */
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -261,7 +261,7 @@ getlocaladdr(remote)
 	struct sockaddr *remote;
 {
 	struct sockaddr *local;
-	int local_len = sizeof(struct sockaddr_storage);
+	u_int local_len = sizeof(struct sockaddr_storage);
 	int s;	/* for dummy connection */
 
 	/* allocate buffer */
@@ -314,12 +314,12 @@ recvfromto(s, buf, buflen, flags, from, fromlen, to, tolen)
 	size_t buflen;
 	int flags;
 	struct sockaddr *from;
-	int *fromlen;
+	socklen_t *fromlen;
 	struct sockaddr *to;
-	int *tolen;
+	u_int *tolen;
 {
 	int otolen;
-	int len;
+	u_int len;
 	struct sockaddr_storage ss;
 	struct msghdr m;
 	struct cmsghdr *cm;
@@ -460,7 +460,7 @@ sendfromto(s, buf, buflen, src, dst, cnt)
 	struct sockaddr *dst;
 {
 	struct sockaddr_storage ss;
-	int len;
+	u_int len;
 	int i;
 
 	if (src->sa_family != dst->sa_family) {
@@ -614,7 +614,7 @@ sendfromto(s, buf, buflen, src, dst, cnt)
 			plog(LLV_DEBUG, LOCATION, NULL,
 				"%d times of %d bytes message will be sent "
 				"to %s\n",
-				i + 1, len, saddr2str(src));
+				i + 1, len, saddr2str(dst));
 		}
 		plogdump(LLV_DEBUG, (char *)buf, buflen);
 

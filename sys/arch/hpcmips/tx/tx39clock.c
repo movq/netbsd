@@ -1,4 +1,4 @@
-/*	$NetBSD: tx39clock.c,v 1.17 2005/06/07 12:10:44 he Exp $ */
+/*	$NetBSD: tx39clock.c,v 1.16 2003/12/30 03:54:35 shin Exp $ */
 
 /*-
  * Copyright (c) 1999-2002 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tx39clock.c,v 1.17 2005/06/07 12:10:44 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tx39clock.c,v 1.16 2003/12/30 03:54:35 shin Exp $");
 
 #include "opt_tx39clock_debug.h"
 
@@ -150,7 +150,7 @@ tx39clock_attach(struct device *parent, struct device *self, void *aux)
  * cpuspeed ... instructions-per-microsecond
  */
 void
-tx39clock_cpuspeed(int *cpuclock, int *cpu_speed)
+tx39clock_cpuspeed(int *cpuclock, int *cpuspeed)
 {
 	struct txtime t0, t1;
 	int elapsed;
@@ -175,7 +175,7 @@ tx39clock_cpuspeed(int *cpuclock, int *cpu_speed)
 	elapsed = t1.t_lo - t0.t_lo;
 
 	*cpuclock = (100000000 / elapsed) * TX39_RTCLOCK;
-	*cpu_speed = *cpuclock / 1000000;
+	*cpuspeed = *cpuclock / 1000000;
 }
 
 void

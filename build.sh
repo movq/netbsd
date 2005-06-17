@@ -1,5 +1,5 @@
 #! /usr/bin/env sh
-#	$NetBSD: build.sh,v 1.137 2005/05/29 10:54:40 bouyer Exp $
+#	$NetBSD: build.sh,v 1.134.2.2 2005/12/15 20:11:48 tron Exp $
 #
 # Copyright (c) 2001-2005 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -144,6 +144,7 @@ initdefaults()
 	# to minimize (cross-)build problems observed "in the field".
 	#
 	unsetmakeenv INFODIR
+	unsetmakeenv LESSCHARSET
 	setmakeenv LC_ALL C
 }
 
@@ -216,6 +217,19 @@ getarch()
 		;;
 	amd64)
 		MACHINE_ARCH=x86_64
+		;;
+
+	xen-*)
+		setmakeenv XEN_BUILD "${MACHINE##*-}"
+		setmakeenv KERNARCHDIR "arch/xen"
+		setmakeenv RELEASEMACHINE "xen"
+		setmakeenv RELEASEMACHINEDIR "${MACHINE}"
+		makewrappermachine=${MACHINE}
+		MACHINE=${MACHINE##*-}
+		getarch
+		;;
+
+	xen)			# no default MACHINE_ARCH
 		;;
 
 	alpha|i386|sparc|sparc64|vax)
@@ -850,16 +864,10 @@ createmakewrapper()
 		makewrapout=">>\${makewrapper}"
 	fi
 
-	case "${uname_s}" in
-	OpenBSD)
-		set +o braceexpand
-		;;
-	esac
-
 	eval cat <<EOF ${makewrapout}
 #! /bin/sh
 # Set proper variables to allow easy "make" building of a NetBSD subtree.
-# Generated from:  \$NetBSD: build.sh,v 1.137 2005/05/29 10:54:40 bouyer Exp $
+# Generated from:  \$NetBSD: build.sh,v 1.134.2.2 2005/12/15 20:11:48 tron Exp $
 # with these arguments: ${_args}
 #
 EOF

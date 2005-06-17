@@ -1,4 +1,4 @@
-/*	$NetBSD: options.c,v 1.88 2005/06/01 15:25:51 lukem Exp $	*/
+/*	$NetBSD: options.c,v 1.83 2005/02/10 17:48:33 jmc Exp $	*/
 
 /*-
  * Copyright (c) 1992 Keith Muller.
@@ -42,13 +42,14 @@
 #if 0
 static char sccsid[] = "@(#)options.c	8.2 (Berkeley) 4/18/94";
 #else
-__RCSID("$NetBSD: options.c,v 1.88 2005/06/01 15:25:51 lukem Exp $");
+__RCSID("$NetBSD: options.c,v 1.83 2005/02/10 17:48:33 jmc Exp $");
 #endif
 #endif /* not lint */
 
 #include <sys/types.h>
 #include <sys/time.h>
 #include <sys/stat.h>
+#include <sys/mtio.h>
 #include <sys/param.h>
 #include <ctype.h>
 #include <errno.h>
@@ -204,13 +205,11 @@ options(int argc, char **argv)
 	else
 		argv0 = argv[0];
 
-	if (strstr(argv0, NM_TAR)) {
-		argv0 = NM_TAR;
+	if (strcmp(NM_TAR, argv0) == 0)
 		tar_options(argc, argv);
-	} else if (strstr(argv0, NM_CPIO)) {
-		argv0 = NM_CPIO;
+	else if (strcmp(NM_CPIO, argv0) == 0)
 		cpio_options(argc, argv);
-	} else {
+	else {
 		argv0 = NM_PAX;
 		pax_options(argc, argv);
 	}
@@ -221,7 +220,6 @@ struct option pax_longopts[] = {
 						OPT_INSECURE },
 	{ "force-local",	no_argument,		0,
 						OPT_FORCE_LOCAL },
-	{ 0,			0,			0 },
 };
 
 /*
@@ -748,8 +746,6 @@ struct option tar_longopts[] = {
 						OPT_INSECURE },
 	{ "exclude",		required_argument,	0,
 						OPT_EXCLUDE },
-	{ "no-recursion",	no_argument,		0,
-						OPT_NORECURSE },
 #if !HAVE_NBTOOL_CONFIG_H
 	{ "chroot",		no_argument,		0,
 						OPT_CHROOT },
@@ -791,6 +787,8 @@ struct option tar_longopts[] = {
 	{ "verify",		no_argument,		0,	'W' },
 	{ "block-compress",	no_argument,		0,
 						OPT_BLOCK_COMPRESS },
+	{ "norecurse",		no_argument,		0,
+						OPT_NORECURSE },
 #endif
 	{ 0,			0,			0,	0 },
 };
@@ -1073,9 +1071,6 @@ tar_options(int argc, char **argv)
 			if (tar_gnutar_minus_minus_exclude(optarg) != 0)
 				tar_usage();
 			break;
-		case OPT_NORECURSE:
-			dflag = 1;
-			break;
 #if !HAVE_NBTOOL_CONFIG_H
 		case OPT_CHROOT:
 			do_chroot = 1;
@@ -1148,10 +1143,8 @@ tar_options(int argc, char **argv)
 						break;
 					file = *argv++;
 					dir = chdname;
-				} else {
+				} else
 					file = NULL;
-					dir = NULL;
-				}
 				if (file != NULL) {
 					FILE *fp;
 					char *str;
@@ -1233,10 +1226,8 @@ tar_options(int argc, char **argv)
 					break;
 				file = *argv++;
 				dir = NULL;
-			} else {
+			} else
 				file = NULL;
-				dir = NULL;
-			}
 			if (file != NULL) {
 				FILE *fp;
 				char *str;

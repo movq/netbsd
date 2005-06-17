@@ -1,4 +1,4 @@
-/* $NetBSD: cgd.c,v 1.26 2005/05/31 19:20:37 drochner Exp $ */
+/* $NetBSD: cgd.c,v 1.22.2.2 2005/04/06 11:58:58 tron Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cgd.c,v 1.26 2005/05/31 19:20:37 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cgd.c,v 1.22.2.2 2005/04/06 11:58:58 tron Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -124,7 +124,7 @@ int cgddebug = 0;
 #define DPRINTF(x,y)		IFDEBUG(x, printf y)
 #define DPRINTF_FOLLOW(y)	DPRINTF(CGDB_FOLLOW, y)
 
-static void	hexprint(const char *, void *, int);
+static void	hexprint(char *, void *, int);
 
 #else
 #define IFDEBUG(x,y)
@@ -166,12 +166,12 @@ getcgd_softc(dev_t dev)
 static void
 cgdsoftc_init(struct cgd_softc *cs, int num)
 {
-	char	sbuf[DK_XNAME_SIZE];
+	char	buf[DK_XNAME_SIZE];
 
 	memset(cs, 0x0, sizeof(*cs));
-	snprintf(sbuf, DK_XNAME_SIZE, "cgd%d", num);
+	snprintf(buf, DK_XNAME_SIZE, "cgd%d", num);
 	simple_lock_init(&cs->sc_slock);
-	dk_sc_init(&cs->sc_dksc, cs, sbuf);
+	dk_sc_init(&cs->sc_dksc, cs, buf);
 }
 
 void
@@ -692,7 +692,7 @@ bail:
  */
 
 static void
-blkno2blkno_buf(char *sbuf, daddr_t blkno)
+blkno2blkno_buf(char *buf, daddr_t blkno)
 {
 	int	i;
 
@@ -712,7 +712,7 @@ blkno2blkno_buf(char *sbuf, daddr_t blkno)
 	 * greater than or equal to sizeof(daddr_t).
 	 */
 	for (i=0; i < sizeof(daddr_t); i++) {
-		*sbuf++ = blkno & 0xff;
+		*buf++ = blkno & 0xff;
 		blkno >>= 8;
 	}
 }
@@ -787,7 +787,7 @@ cgd_cipher(struct cgd_softc *cs, caddr_t dst, caddr_t src,
 
 #ifdef DEBUG
 static void
-hexprint(const char *start, void *buf, int len)
+hexprint(char *start, void *buf, int len)
 {
 	char	*c = buf;
 

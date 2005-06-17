@@ -6,7 +6,7 @@ mkdir
 rmdir
 symlink
 */
-/*	$NetBSD: coda_vnops.c,v 1.41 2005/05/29 21:05:25 christos Exp $	*/
+/*	$NetBSD: coda_vnops.c,v 1.40 2005/02/26 23:04:16 perry Exp $	*/
 
 /*
  *
@@ -54,7 +54,7 @@ symlink
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: coda_vnops.c,v 1.41 2005/05/29 21:05:25 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: coda_vnops.c,v 1.40 2005/02/26 23:04:16 perry Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -517,8 +517,7 @@ coda_ioctl(v)
     /* Should we use the name cache here? It would get it from
        lookupname sooner or later anyway, right? */
 
-    NDINIT(&ndp, LOOKUP, (iap->follow ? FOLLOW : NOFOLLOW), UIO_USERSPACE,
-	iap->path, p);
+    NDINIT(&ndp, LOOKUP, (iap->follow ? FOLLOW : NOFOLLOW), UIO_USERSPACE, ((caddr_t)iap->path), p);
     error = namei(&ndp);
     tvp = ndp.ni_vp;
 
@@ -1889,7 +1888,7 @@ void
 print_vattr( attr )
 	struct vattr *attr;
 {
-    const char *typestr;
+    char *typestr;
 
     switch (attr->va_type) {
     case VNON:

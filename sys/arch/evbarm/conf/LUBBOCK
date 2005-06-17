@@ -56,6 +56,7 @@ options 	INET		# IP + ICMP + TCP + UDP
 options 	INET6		# IPV6
 #options 	IPSEC		# IP security
 #options 	IPSEC_ESP	# IP security (encryption part; define w/ IPSEC)
+#options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
 #options 	PIM		# Protocol Independent Multicast
@@ -158,14 +159,10 @@ options BTUARTCONSOLE
 options KGDB_DEVNAME="\"btuart\""   # ffuart or btuart
 options KGDB_DEVRATE=115200
 
-# DMAC support
-pxadmac0 	at pxaip? addr 0x40000000 intr 25
-options 	PXA2X0_DMAC_DMOVER_CONCURRENCY=4 # Enable dmover(9) backend
-#options 	PXA2X0_DMAC_FIXED_PRIORITY	 # Don't want multiple priority
+#aupxa0	at pxaip?		# AC97 interface
 
-# AC97 Audio support
-pxaacu0 	at pxaip? addr 0x40500000 intr 14
-audio*		at audiobus?
+# Audio support
+#audio*	at audiobus?
 
 # On-board device support
 obio0		at pxaip? intr 8

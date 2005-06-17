@@ -57,7 +57,6 @@
  */
 
 #include <openssl/rc4.h>
-#include <openssl/crypto.h>
 #include "rc4_locl.h"
 #include <openssl/opensslv.h>
 
@@ -86,7 +85,7 @@ const char *RC4_options(void)
  * Date: Wed, 14 Sep 1994 06:35:31 GMT
  */
 
-FIPS_NON_FIPS_VCIPHER_Init(RC4)
+void RC4_set_key(RC4_KEY *key, int len, const unsigned char *data)
 	{
         register RC4_INT tmp;
         register int id1,id2;
@@ -94,11 +93,6 @@ FIPS_NON_FIPS_VCIPHER_Init(RC4)
         unsigned int i;
         
         d= &(key->data[0]);
-#if defined(__ia64) || defined(__ia64__) || defined(_M_IA64)
-	/* see crypto/rc4/asm/rc4-ia64.S for further details... */
-	d=(RC4_INT *)(((size_t)(d+255))&~(sizeof(key->data)-1));
-#endif
-
 	for (i=0; i<256; i++)
 		d[i]=i;
         key->x = 0;     

@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_prot_darwin.h,v 1.1.1.6 2005/04/23 18:12:28 christos Exp $	*/
+/*	$NetBSD: nfs_prot_darwin.h,v 1.1.1.5.2.1 2005/08/16 13:02:20 tron Exp $	*/
 
 /*
  * Copyright (c) 1997-2005 Erez Zadok

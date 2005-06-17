@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.h,v 1.11 2005/06/09 16:02:19 he Exp $	*/
+/*	$NetBSD: autoconf.h,v 1.9 2005/01/22 07:35:34 tsutsui Exp $	*/
 /*	$OpenBSD: autoconf.h,v 1.2 1997/03/12 19:16:54 pefo Exp $	*/
 /*	NetBSD: autoconf.h,v 1.1 1995/02/13 23:07:31 cgd Exp 	*/
 
@@ -67,13 +67,13 @@ struct abus {
 	    (*(ca)->ca_bus->ab_matchname)((ca), (name))
 
 struct confargs {
-	const char *ca_name;		/* Device name. */
+	char	*ca_name;		/* Device name. */
 	int	ca_slot;		/* Device slot. */
 	int	ca_offset;		/* Offset into slot. */
 	struct	abus *ca_bus;		/* bus device resides on. */
 };
 
-void	makebootdev(const char *cp);
+void	makebootdev(char *cp);
 
 /* serial console related variables */
 extern int com_freq;

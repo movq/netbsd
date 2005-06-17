@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.157 2005/03/18 11:23:44 kleink Exp $
+#	$NetBSD: Makefile.inc,v 1.156.2.1 2005/03/20 12:11:34 tron Exp $
 #	@(#)Makefile.inc	8.3 (Berkeley) 10/24/94
 
 # sys sources

@@ -1,4 +1,4 @@
-/*	$NetBSD: akbdmap.h,v 1.7 2005/05/05 22:29:41 abs Exp $	*/
+/*	$NetBSD: akbdmap.h,v 1.6.10.1 2005/05/09 17:22:46 tron Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.

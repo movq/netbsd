@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.9 2005/05/06 21:51:21 jmc Exp $
+#	$NetBSD: Makefile,v 1.4.2.5 2005/07/10 15:33:32 tron Exp $
 
 WARNS=3
 PROG=	veriexecctl

@@ -37,7 +37,7 @@
  * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGES.
  *
- * $Id: aic7xxxvar.h,v 1.48 2005/05/30 04:43:46 christos Exp $
+ * $Id: aic7xxxvar.h,v 1.47.2.1 2005/11/29 10:23:14 tron Exp $
  *
  * $FreeBSD: /repoman/r/ncvs/src/sys/dev/aic7xxx/aic7xxx.h,v 1.44 2003/01/20 20:44:55 gibbs Exp $
  */
@@ -854,7 +854,7 @@ struct ahc_syncrate {
 #define		ST_SXFR	   0x010	/* Rate Single Transition Only */
 #define		DT_SXFR	   0x040	/* Rate Double Transition Only */
 	uint8_t period; /* Period to send to SCSI target */
-	const char *rate;
+	char *rate;
 };
 
 /* Safe and valid period for async negotiations. */
@@ -879,7 +879,7 @@ struct ahc_syncrate {
 struct ahc_phase_table_entry {
         uint8_t phase;
         uint8_t mesg_out; /* Message response to parity errors */
-	const char *phasemsg;
+	char *phasemsg;
 };
 
 /************************** Serial EEPROM Format ******************************/
@@ -1229,7 +1229,7 @@ typedef int (ahc_device_setup_t)(struct ahc_softc *);
 struct ahc_pci_identity {
 	uint64_t		 full_id;
 	uint64_t		 id_mask;
-	const char		*name;
+	char			*name;
 	ahc_device_setup_t	*setup;
 };
 extern struct ahc_pci_identity ahc_pci_ident_table [];
@@ -1285,7 +1285,7 @@ void			 ahc_softc_insert(struct ahc_softc *);
 struct ahc_softc	*ahc_find_softc(struct ahc_softc *);
 void			 ahc_set_unit(struct ahc_softc *, int);
 void			 ahc_set_name(struct ahc_softc *, char *);
-void			 ahc_alloc_scbs(struct ahc_softc *);
+int			 ahc_alloc_scbs(struct ahc_softc *);
 void			 ahc_free(struct ahc_softc *);
 int			 ahc_reset(struct ahc_softc *);
 void			 ahc_shutdown(void *);

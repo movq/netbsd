@@ -1,4 +1,4 @@
-#	$NetBSD: majors.bebox,v 1.13 2005/05/10 00:02:36 jdolecek Exp $
+#	$NetBSD: majors.bebox,v 1.12 2003/12/10 02:04:00 jmc Exp $
 #
 # Device majors for bebox
 #
@@ -61,8 +61,6 @@ device-major	systrace	char 59			systrace
 device-major	cgd		char 60  block 19	cgd
 device-major	ksyms		char 61			ksyms
 device-major	wsfont		char 62			wsfont
-
-device-major	nsmb		char 98			nsmb
 
 # Majors up to 143 are reserved for machine-dependant drivers.
 # New machine-independant driver majors are assigned in 

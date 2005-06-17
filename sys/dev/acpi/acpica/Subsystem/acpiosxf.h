@@ -12,7 +12,7 @@
  *
  * 1. Copyright Notice
  *
- * Some or all of this work - Copyright (c) 1999 - 2005, Intel Corp.
+ * Some or all of this work - Copyright (c) 1999 - 2004, Intel Corp.
  * All rights reserved.
  *
  * 2. License
@@ -153,6 +153,7 @@ typedef struct acpi_signal_fatal_info
 /*
  * OSL Initialization and shutdown primitives
  */
+
 ACPI_STATUS
 AcpiOsInitialize (
     void);
@@ -165,6 +166,7 @@ AcpiOsTerminate (
 /*
  * ACPI Table interfaces
  */
+
 ACPI_STATUS
 AcpiOsGetRootPointer (
     UINT32                  Flags,
@@ -184,6 +186,7 @@ AcpiOsTableOverride (
 /*
  * Synchronization primitives
  */
+
 ACPI_STATUS
 AcpiOsCreateSemaphore (
     UINT32                  MaxUnits,
@@ -227,6 +230,7 @@ AcpiOsReleaseLock (
 /*
  * Memory allocation and mapping
  */
+
 void *
 AcpiOsAllocate (
     ACPI_SIZE               Size);
@@ -255,21 +259,23 @@ AcpiOsGetPhysicalAddress (
 /*
  * Interrupt handlers
  */
+
 ACPI_STATUS
 AcpiOsInstallInterruptHandler (
     UINT32                  InterruptNumber,
-    ACPI_OSD_HANDLER        ServiceRoutine,
+    OSD_HANDLER             ServiceRoutine,
     void                    *Context);
 
 ACPI_STATUS
 AcpiOsRemoveInterruptHandler (
     UINT32                  InterruptNumber,
-    ACPI_OSD_HANDLER        ServiceRoutine);
+    OSD_HANDLER             ServiceRoutine);
 
 
 /*
  * Threads and Scheduling
  */
+
 UINT32
 AcpiOsGetThreadId (
     void);
@@ -277,16 +283,13 @@ AcpiOsGetThreadId (
 ACPI_STATUS
 AcpiOsQueueForExecution (
     UINT32                  Priority,
-    ACPI_OSD_EXEC_CALLBACK  Function,
-    void                    *Context);
-
-void
-AcpiOsWaitEventsComplete (
+    OSD_EXECUTION_CALLBACK  Function,
     void                    *Context);
 
 void
 AcpiOsSleep (
-    ACPI_INTEGER            Milliseconds);
+    UINT32                  Seconds,
+    UINT32                  Milliseconds);
 
 void
 AcpiOsStall (
@@ -296,6 +299,7 @@ AcpiOsStall (
 /*
  * Platform and hardware-independent I/O interfaces
  */
+
 ACPI_STATUS
 AcpiOsReadPort (
     ACPI_IO_ADDRESS         Address,
@@ -312,6 +316,7 @@ AcpiOsWritePort (
 /*
  * Platform and hardware-independent physical memory interfaces
  */
+
 ACPI_STATUS
 AcpiOsReadMemory (
     ACPI_PHYSICAL_ADDRESS   Address,
@@ -327,20 +332,19 @@ AcpiOsWriteMemory (
 
 /*
  * Platform and hardware-independent PCI configuration space access
- * Note: Can't use "Register" as a parameter, changed to "Reg" --
- * certain compilers complain.
  */
+
 ACPI_STATUS
 AcpiOsReadPciConfiguration (
     ACPI_PCI_ID             *PciId,
-    UINT32                  Reg,
+    UINT32                  Register,
     void                    *Value,
     UINT32                  Width);
 
 ACPI_STATUS
 AcpiOsWritePciConfiguration (
     ACPI_PCI_ID             *PciId,
-    UINT32                  Reg,
+    UINT32                  Register,
     ACPI_INTEGER            Value,
     UINT32                  Width);
 
@@ -349,13 +353,14 @@ AcpiOsWritePciConfiguration (
  */
 void
 AcpiOsDerivePciId(
-    ACPI_HANDLE             Rhandle,
-    ACPI_HANDLE             Chandle,
+    ACPI_HANDLE             rhandle,
+    ACPI_HANDLE             chandle,
     ACPI_PCI_ID             **PciId);
 
 /*
  * Miscellaneous
  */
+
 BOOLEAN
 AcpiOsReadable (
     void                    *Pointer,
@@ -366,18 +371,19 @@ AcpiOsWritable (
     void                    *Pointer,
     ACPI_SIZE               Length);
 
-UINT64
+UINT32
 AcpiOsGetTimer (
     void);
 
 ACPI_STATUS
 AcpiOsSignal (
     UINT32                  Function,
-    const void              *Info);
+    void                    *Info);
 
 /*
  * Debug print routines
  */
+
 void ACPI_INTERNAL_VAR_XFACE
 AcpiOsPrintf (
     const char              *Format,
@@ -396,6 +402,7 @@ AcpiOsRedirectOutput (
 /*
  * Debug input
  */
+
 UINT32
 AcpiOsGetLine (
     char                    *Buffer);
@@ -404,6 +411,7 @@ AcpiOsGetLine (
 /*
  * Directory manipulation
  */
+
 void *
 AcpiOsOpenDirectory (
     char                    *Pathname,
@@ -427,11 +435,13 @@ AcpiOsCloseDirectory (
 /*
  * Debug
  */
+
 void
 AcpiOsDbgAssert(
     void                    *FailedAssertion,
     void                    *FileName,
     UINT32                  LineNumber,
     char                    *Message);
+
 
 #endif /* __ACPIOSXF_H__ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: policy_parse.y,v 1.3 2005/05/20 00:57:33 manu Exp $	*/
+/*	$NetBSD: policy_parse.y,v 1.1.1.2.2.5 2005/11/21 21:12:30 tron Exp $	*/
 
 /*	$KAME: policy_parse.y,v 1.21 2003/12/12 08:01:26 itojun Exp $	*/
 
@@ -116,12 +116,12 @@ static struct sockaddr *parse_sockaddr __P((struct _val *addrbuf,
     struct _val *portbuf));
 static int rule_check __P((void));
 static int init_x_policy __P((void));
-static int set_x_request __P((struct sockaddr *src, struct sockaddr *dst));
-static int set_sockaddr __P((struct sockaddr *addr));
+static int set_x_request __P((struct sockaddr *, struct sockaddr *));
+static int set_sockaddr __P((struct sockaddr *));
 static void policy_parse_request_init __P((void));
-static caddr_t policy_parse __P((char *msg, int msglen));
+static void *policy_parse __P((const char *, int));
 
-extern void __policy__strbuffer__init__ __P((char *msg));
+extern void __policy__strbuffer__init__ __P((const char *));
 extern void __policy__strbuffer__free__ __P((void));
 extern int yyparse __P((void));
 extern int yylex __P((void));
@@ -536,7 +536,7 @@ set_x_request(src, dst)
 {
 	struct sadb_x_ipsecrequest *p;
 	int reqlen;
-	caddr_t n;
+	u_int8_t *n;
 
 	reqlen = sizeof(*p)
 		+ (src ? sysdep_sa_len(src) : 0)
@@ -603,9 +603,9 @@ policy_parse_request_init()
 	return;
 }
 
-static caddr_t
+static void *
 policy_parse(msg, msglen)
-	char *msg;
+	const char *msg;
 	int msglen;
 {
 	int error;
@@ -636,9 +636,9 @@ policy_parse(msg, msglen)
 	return pbuf;
 }
 
-caddr_t
+ipsec_policy_t
 ipsec_set_policy(msg, msglen)
-	char *msg;
+	__ipsec_const char *msg;
 	int msglen;
 {
 	caddr_t policy;
@@ -653,4 +653,3 @@ ipsec_set_policy(msg, msglen)
 	__ipsec_errcode = EIPSEC_NO_ERROR;
 	return policy;
 }
-

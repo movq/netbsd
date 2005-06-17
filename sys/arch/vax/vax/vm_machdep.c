@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.88 2005/06/12 04:39:37 matt Exp $	     */
+/*	$NetBSD: vm_machdep.c,v 1.85 2004/09/17 14:11:23 skrll Exp $	     */
 
 /*
  * Copyright (c) 1994 Ludd, University of Lule}, Sweden.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.88 2005/06/12 04:39:37 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.85 2004/09/17 14:11:23 skrll Exp $");
 
 #include "opt_compat_ultrix.h"
 #include "opt_multiprocessor.h"
@@ -232,34 +232,43 @@ sys_sysarch(l, v, retval)
  * way to do this, but good for my purposes so far.
  */
 int
-cpu_coredump(struct lwp *l, void *iocookie, struct core *chdr)
+cpu_coredump(l, vp, cred, chdr)
+	struct lwp *l;
+	struct vnode *vp;
+	struct ucred *cred;
+	struct core *chdr;
 {
-	struct md_coredump md_core;
+	struct trapframe *tf;
+	struct md_coredump state;
 	struct coreseg cseg;
 	int error;
 
-	if (iocookie == NULL) {
-		CORE_SETMAGIC(*chdr, COREMAGIC, MID_MACHINE, 0);
-		chdr->c_hdrsize = sizeof(struct core);
-		chdr->c_seghdrsize = sizeof(struct coreseg);
-		chdr->c_cpusize = sizeof(struct md_coredump);
-		chdr->c_nseg++;
-		return 0;
-	}
+	tf = l->l_addr->u_pcb.framep;
+	CORE_SETMAGIC(*chdr, COREMAGIC, MID_MACHINE, 0);
+	chdr->c_hdrsize = sizeof(struct core);
+	chdr->c_seghdrsize = sizeof(struct coreseg);
+	chdr->c_cpusize = sizeof(struct md_coredump);
 
-	md_core.md_tf = *(struct trapframe *)l->l_addr->u_pcb.framep; /*XXX*/
+	bcopy(tf, &state, sizeof(struct md_coredump));
 
 	CORE_SETMAGIC(cseg, CORESEGMAGIC, MID_MACHINE, CORE_CPU);
 	cseg.c_addr = 0;
 	cseg.c_size = chdr->c_cpusize;
 
-	error = coredump_write(iocookie, UIO_SYSSPACE, &cseg,
-	    chdr->c_seghdrsize);
+	error = vn_rdwr(UIO_WRITE, vp, (caddr_t)&cseg, chdr->c_seghdrsize,
+	    (off_t)chdr->c_hdrsize, UIO_SYSSPACE,
+	    IO_NODELOCKED|IO_UNIT, cred, NULL, NULL);
 	if (error)
 		return error;
 
-	return coredump_write(iocookie, UIO_SYSSPACE, &md_core,
-	    sizeof(md_core));
+	error = vn_rdwr(UIO_WRITE, vp, (caddr_t)&state, sizeof(state),
+	    (off_t)(chdr->c_hdrsize + chdr->c_seghdrsize), UIO_SYSSPACE,
+	    IO_NODELOCKED|IO_UNIT, cred, NULL, NULL);
+
+	if (!error)
+		chdr->c_nseg++;
+
+	return error;
 }
 
 /*
@@ -317,11 +326,10 @@ vmapbuf(bp, len)
 	if ((bp->b_flags & B_PHYS) == 0)
 		panic("vmapbuf");
 	p = bp->b_proc;
-	bp->b_saveaddr = bp->b_data;
-	faddr = trunc_page((vaddr_t)bp->b_saveaddr);
+	faddr = trunc_page((vaddr_t)bp->b_saveaddr = bp->b_data);
 	off = (vaddr_t)bp->b_data - faddr;
 	len = round_page(off + len);
-	taddr = uvm_km_alloc(phys_map, len, 0, UVM_KMF_VAONLY);
+	taddr = uvm_km_valloc_wait(phys_map, len);
 	bp->b_data = (caddr_t)(taddr + off);
 	len = atop(len);
 	while (len--) {
@@ -360,7 +368,7 @@ vunmapbuf(bp, len)
 	len = round_page(off + len);
 	pmap_remove(vm_map_pmap(phys_map), addr, addr + len);
 	pmap_update(vm_map_pmap(phys_map));
-	uvm_km_free(phys_map, addr, len, UVM_KMF_VAONLY);
+	uvm_km_free_wakeup(phys_map, addr, len);
 	bp->b_data = bp->b_saveaddr;
 	bp->b_saveaddr = NULL;
 #endif

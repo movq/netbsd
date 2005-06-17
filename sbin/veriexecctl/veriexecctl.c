@@ -1,4 +1,4 @@
-/*	$NetBSD: veriexecctl.c,v 1.16 2005/06/13 15:18:44 elad Exp $	*/
+/*	$NetBSD: veriexecctl.c,v 1.5.6.11 2005/07/02 15:46:26 tron Exp $	*/
 
 /*-
  * Copyright 2005 Elad Efrat <elad@bsd.org.il>

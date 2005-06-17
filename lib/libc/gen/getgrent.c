@@ -1,4 +1,4 @@
-/*	$NetBSD: getgrent.c,v 1.58 2005/04/19 05:27:58 lukem Exp $	*/
+/*	$NetBSD: getgrent.c,v 1.54.2.4 2005/07/11 21:27:00 tron Exp $	*/
 
 /*-
  * Copyright (c) 1999-2000, 2004-2005 The NetBSD Foundation, Inc.
@@ -95,7 +95,7 @@
 #if 0
 static char sccsid[] = "@(#)getgrent.c	8.2 (Berkeley) 3/21/94";
 #else
-__RCSID("$NetBSD: getgrent.c,v 1.58 2005/04/19 05:27:58 lukem Exp $");
+__RCSID("$NetBSD: getgrent.c,v 1.54.2.4 2005/07/11 21:27:00 tron Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 

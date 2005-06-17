@@ -1,4 +1,4 @@
-/*	$NetBSD: protoent.h,v 1.1 2005/04/18 19:39:45 kleink Exp $	*/
+/*	$NetBSD: protoent.h,v 1.1.2.2 2005/04/21 16:59:35 tron Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.

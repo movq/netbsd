@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_extern.h,v 1.43 2005/05/29 21:25:24 christos Exp $	*/
+/*	$NetBSD: ufs_extern.h,v 1.42.2.1 2005/08/24 18:43:38 riz Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993, 1994
@@ -120,7 +120,7 @@ int ufs_reclaim __P((struct vnode *, struct proc *));
 int ufs_balloc_range __P((struct vnode *, off_t, off_t, struct ucred *, int));
 
 /* ufs_lookup.c */
-void ufs_dirbad __P((struct inode *, doff_t, const char *));
+void ufs_dirbad __P((struct inode *, doff_t, char *));
 int ufs_dirbadentry __P((struct vnode *, struct direct *, int));
 void ufs_makedirentry __P((struct inode *, struct componentname *,
 			   struct direct *));
@@ -168,6 +168,7 @@ void ufs_vinit __P((struct mount *, int (**) __P((void *)),
 int ufs_makeinode __P((int, struct vnode *, struct vnode **,
 		       struct componentname *));
 int ufs_gop_alloc __P((struct vnode *, off_t, off_t, int, struct ucred *));
+void	ufs_gop_markupdate(struct vnode *, int);
 
 /*
  * Snapshot function prototypes.

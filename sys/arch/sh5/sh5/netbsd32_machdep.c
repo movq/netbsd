@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_machdep.c,v 1.8 2005/06/16 05:38:43 he Exp $	*/
+/*	$NetBSD: netbsd32_machdep.c,v 1.5.14.1 2005/09/30 08:50:32 tron Exp $	*/
 
 /*
  * Copyright 2002 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_machdep.c,v 1.8 2005/06/16 05:38:43 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_machdep.c,v 1.5.14.1 2005/09/30 08:50:32 tron Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_compat_netbsd.h"
@@ -99,10 +99,11 @@ compat_16_netbsd32___sigreturn14(struct lwp *l, void *v, register_t *retval)
 
 /*ARGSUSED*/
 int
-cpu_coredump32(struct lwp *l, void *cookie, struct core32 *chdr)
+cpu_coredump32(struct lwp *l, struct vnode *vp,
+    struct ucred *cred, struct core32 *chdr)
 {
 
-	return (EFAULT);
+	return (0);
 }
 
 int

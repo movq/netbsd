@@ -1,4 +1,4 @@
-/*	$NetBSD: tty_bsdpty.c,v 1.4 2005/05/29 22:24:15 christos Exp $	*/
+/*	$NetBSD: tty_bsdpty.c,v 1.3.2.1 2006/04/04 22:14:44 tron Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tty_bsdpty.c,v 1.4 2005/05/29 22:24:15 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tty_bsdpty.c,v 1.3.2.1 2006/04/04 22:14:44 tron Exp $");
 
 #include "opt_ptm.h"
 
@@ -94,22 +94,25 @@ pty_makename(struct ptm_pty *ptm, char *bf, size_t bufsiz, dev_t dev, char c)
 {
 	size_t nt;
 	dev_t minor = minor(dev);
+	const char *suffix;
+
 	if (bufsiz < TTY_NAMESIZE)
 		return EINVAL;
+
 	(void)memcpy(bf, TTY_TEMPLATE, TTY_NAMESIZE);
 
-	bf[5] = c;
-
 	if (minor < 256) {
+		suffix = TTY_OLD_SUFFIX;
 		nt = sizeof(TTY_OLD_SUFFIX) - 1;
-		bf[8] = TTY_LETTERS[minor / nt];
-		bf[9] = TTY_OLD_SUFFIX[minor % nt];
 	} else {
 		minor -= 256;
-		nt = sizeof(TTY_NEW_SUFFIX) - sizeof(TTY_OLD_SUFFIX);
-		bf[8] = TTY_LETTERS[minor / nt];
-		bf[9] = TTY_NEW_SUFFIX[minor % nt];
+		suffix = TTY_NEW_SUFFIX;
+		nt = sizeof(TTY_NEW_SUFFIX) - 1;
 	}
+
+	bf[5] = c;
+	bf[8] = TTY_LETTERS[minor / nt];
+	bf[9] = suffix[minor % nt];
 	return 0;
 }
 

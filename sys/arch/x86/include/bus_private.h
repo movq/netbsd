@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_private.h,v 1.1 2005/04/16 08:53:09 yamt Exp $	*/
+/*	$NetBSD: bus_private.h,v 1.1.2.5 2006/09/16 11:18:59 ghen Exp $	*/
 /*	NetBSD: bus.h,v 1.8 2005/03/09 19:04:46 matt Exp	*/
 
 /*-
@@ -98,12 +98,12 @@ void	_bus_dmamem_unmap(bus_dma_tag_t tag, caddr_t kva, size_t size);
 paddr_t	_bus_dmamem_mmap(bus_dma_tag_t tag, bus_dma_segment_t *segs,
 	    int nsegs, off_t off, int prot, int flags);
 
+#ifndef _BUS_DMAMEM_ALLOC_RANGE
 int	_bus_dmamem_alloc_range(bus_dma_tag_t tag, bus_size_t size,
 	    bus_size_t alignment, bus_size_t boundary,
 	    bus_dma_segment_t *segs, int nsegs, int *rsegs, int flags,
-	    paddr_t low, paddr_t high);
-
-
+	    bus_addr_t low, bus_addr_t high);
+#endif
 
 /*
  * Cookie used for bounce buffers. A pointer to one of these it stashed in
@@ -150,9 +150,22 @@ struct x86_bus_dma_cookie {
 #define _BUS_PHYS_TO_BUS(pa)	((bus_addr_t)(pa))
 #endif /* !defined(_BUS_PHYS_TO_BUS) */
 
+#if !defined(_BUS_BUS_TO_PHYS)
+#define _BUS_BUS_TO_PHYS(ba)	((paddr_t)(ba))
+#endif /* !defined(_BUS_BUS_TO_PHYS) */
+
 #if !defined(_BUS_VM_PAGE_TO_BUS)
 #define	_BUS_VM_PAGE_TO_BUS(pg)	_BUS_PHYS_TO_BUS(VM_PAGE_TO_PHYS(pg))
 #endif /* !defined(_BUS_VM_PAGE_TO_BUS) */
+
+#if !defined(_BUS_BUS_TO_VM_PAGE)
+#define	_BUS_BUS_TO_VM_PAGE(ba)	PHYS_TO_VM_PAGE(ba)
+#endif /* !defined(_BUS_BUS_TO_VM_PAGE) */
+
+#if !defined(_BUS_PMAP_ENTER)
+#define _BUS_PMAP_ENTER(pmap, va, ba, prot, flags) \
+    pmap_enter(pmap, va, ba, prot, flags)
+#endif /* _BUS_PMAP_ENTER */
 
 #if !defined(_BUS_VIRT_TO_BUS)
 #include <uvm/uvm_extern.h>
@@ -172,5 +185,14 @@ _bus_virt_to_bus(struct pmap *pm, vaddr_t va)
 	return _BUS_PHYS_TO_BUS(pa);
 }
 #endif /* !defined(_BUS_VIRT_TO_BUS) */
+
+/*
+ * by default, the end address of RAM visible on bus is the same as the
+ * largest physical address.
+ */
+#ifndef _BUS_AVAIL_END
+#define _BUS_AVAIL_END (avail_end)
+#endif
+
 
 #endif /* !defined(_X86_BUS_PRIVATE_H_) */

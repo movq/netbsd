@@ -1,4 +1,4 @@
-/*	$NetBSD: vnode.h,v 1.138 2005/06/13 20:17:54 elad Exp $	*/
+/*	$NetBSD: vnode.h,v 1.134.2.5 2005/08/24 18:43:38 riz Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -121,15 +121,12 @@ struct vnode {
 	struct lock	*v_vnlock;		/* pointer to lock */
 	void 		*v_data;		/* private data for fs */
 	struct klist	v_klist;		/* knotes attached to vnode */
-#ifdef VERIFIED_EXEC
-	u_char fp_status;			/* fingerprint status */
-	struct veriexec_hash_entry *vhe;	/* veriexec table entry */
-#endif
 };
 #define	v_mountedhere	v_un.vu_mountedhere
 #define	v_socket	v_un.vu_socket
 #define	v_specinfo	v_un.vu_specinfo
 #define	v_fifoinfo	v_un.vu_fifoinfo
+
 /*
  * All vnode locking operations should use vp->v_vnlock. For leaf filesystems
  * (such as ffs, lfs, msdosfs, etc), vp->v_vnlock = &vp->v_lock. For
@@ -153,6 +150,8 @@ struct vnode {
 	/* VISTTY used when reading dead vnodes */
 #define	VISTTY		0x0008	/* vnode represents a tty */
 #define	VEXECMAP	0x0010	/* vnode has PROT_EXEC mappings */
+#define	VWRITEMAP	0x0020	/* might have PROT_WRITE user mappings */
+#define	VWRITEMAPDIRTY	0x0040	/* might have dirty pages due to VWRITEMAP */
 #define	VLOCKSWORK	0x0080	/* FS supports locking discipline */
 #define	VXLOCK		0x0100	/* vnode is locked to change underlying type */
 #define	VXWANT		0x0200	/* process is waiting for vnode */
@@ -163,7 +162,7 @@ struct vnode {
 #define	VONWORKLST	0x4000	/* On syncer work-list */
 
 #define VNODE_FLAGBITS \
-    "\20\1ROOT\2TEXT\3SYSTEM\4ISTTY\5EXECMAP" \
+    "\20\1ROOT\2TEXT\3SYSTEM\4ISTTY\5EXECMAP\6WRITEMAP\7WRITEMAPDIRTY" \
     "\10VLOCKSWORK\11XLOCK\12XWANT\13BWAIT\14ALIASED" \
     "\15DIROP\16LAYER\17ONWORKLIST\20DIRTY"
 
@@ -180,18 +179,6 @@ extern struct simplelock global_v_numoutput_slock;
 	(vp)->v_numoutput++;				\
 	simple_unlock(&global_v_numoutput_slock);	\
 } while (/*CONSTCOND*/ 0)
-
-/*
- * Valid states for the fingerprint flag - if signed exec is being used
- */
-#ifdef VERIFIED_EXEC
-#define FINGERPRINT_NOTEVAL  0  /* fingerprint has not been evaluated */
-#define FINGERPRINT_VALID    1  /* fingerprint evaluated and matches list */
-#define FINGERPRINT_INDIRECT 2  /* fingerprint eval'd/matched but only
-                                   indirect execs allowed */
-#define FINGERPRINT_NOMATCH  3  /* fingerprint evaluated but does not match */
-#define FINGERPRINT_NOENTRY  4  /* fingerprint evaluated but no list entry */
-#endif
 
 /*
  * Vnode attributes.  A field value of VNOVAL represents a field whose value
@@ -689,7 +676,7 @@ void 	vgone(struct vnode *);
 void	vgonel(struct vnode *, struct proc *);
 int	vinvalbuf(struct vnode *, int, struct ucred *,
 	    struct proc *, int, int);
-void	vprint(const char *, struct vnode *);
+void	vprint(char *, struct vnode *);
 void 	vput(struct vnode *);
 int	vrecycle(struct vnode *, struct simplelock *, struct proc *);
 void 	vrele(struct vnode *);
@@ -727,12 +714,12 @@ int	vn_cow_disestablish(struct vnode *, int (*)(void *, struct buf *),
 void	vntblinit(void);
 
 /* misc stuff */
-void	vn_syncer_add_to_worklist(struct vnode *, int);
-void	vn_syncer_remove_from_worklist(struct vnode *);
+void	vn_syncer_add_to_worklist(struct vnode *vp, int delay);
+void	vn_syncer_remove_from_worklist(struct vnode *vp);
 int	speedup_syncer(void);
 
 /* from vfs_syscalls.c - abused by compat code */
-int	getvnode(struct filedesc *, int, struct file **);
+int	getvnode(struct filedesc *fdp, int fd, struct file **fpp);
 
 /* see vfssubr(9) */
 void	vfs_getnewfsid(struct mount *);

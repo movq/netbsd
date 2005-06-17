@@ -1,4 +1,4 @@
-/*	$NetBSD: cd9660_node.c,v 1.10 2005/05/29 21:00:29 christos Exp $	*/
+/*	$NetBSD: cd9660_node.c,v 1.9 2005/02/26 22:58:55 perry Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1989, 1994
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cd9660_node.c,v 1.10 2005/05/29 21:00:29 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cd9660_node.c,v 1.9 2005/02/26 22:58:55 perry Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -511,30 +511,30 @@ cd9660_tstamp_conv17(pi,pu)
 	u_char *pi;
 	struct timespec *pu;
 {
-	u_char tbuf[7];
+	u_char buf[7];
 
 	/* year:"0001"-"9999" -> -1900  */
-	tbuf[0] = cd9660_chars2ui(pi,4) - 1900;
+	buf[0] = cd9660_chars2ui(pi,4) - 1900;
 
 	/* month: " 1"-"12"      -> 1 - 12 */
-	tbuf[1] = cd9660_chars2ui(pi + 4,2);
+	buf[1] = cd9660_chars2ui(pi + 4,2);
 
 	/* day:   " 1"-"31"      -> 1 - 31 */
-	tbuf[2] = cd9660_chars2ui(pi + 6,2);
+	buf[2] = cd9660_chars2ui(pi + 6,2);
 
 	/* hour:  " 0"-"23"      -> 0 - 23 */
-	tbuf[3] = cd9660_chars2ui(pi + 8,2);
+	buf[3] = cd9660_chars2ui(pi + 8,2);
 
 	/* minute:" 0"-"59"      -> 0 - 59 */
-	tbuf[4] = cd9660_chars2ui(pi + 10,2);
+	buf[4] = cd9660_chars2ui(pi + 10,2);
 
 	/* second:" 0"-"59"      -> 0 - 59 */
-	tbuf[5] = cd9660_chars2ui(pi + 12,2);
+	buf[5] = cd9660_chars2ui(pi + 12,2);
 
 	/* difference of GMT */
-	tbuf[6] = pi[16];
+	buf[6] = pi[16];
 
-	return cd9660_tstamp_conv7(tbuf,pu);
+	return cd9660_tstamp_conv7(buf,pu);
 }
 
 ino_t

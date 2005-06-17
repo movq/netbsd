@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_sig.c,v 1.207 2005/06/10 05:10:13 matt Exp $	*/
+/*	$NetBSD: kern_sig.c,v 1.202.2.2 2005/11/13 13:55:27 tron Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1991, 1993
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_sig.c,v 1.207 2005/06/10 05:10:13 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_sig.c,v 1.202.2.2 2005/11/13 13:55:27 tron Exp $");
 
 #include "opt_ktrace.h"
 #include "opt_compat_sunos.h"
@@ -100,16 +100,15 @@ static void *
 sigacts_poolpage_alloc(struct pool *pp, int flags)
 {
 
-	return (void *)uvm_km_alloc(kernel_map,
-	    (PAGE_SIZE)*2, (PAGE_SIZE)*2,
-	    ((flags & PR_WAITOK) ? 0 : UVM_KMF_NOWAIT | UVM_KMF_TRYLOCK)
-	    | UVM_KMF_WIRED);
+	return (void *)uvm_km_kmemalloc1(kernel_map,
+	    uvm.kernel_object, (PAGE_SIZE)*2, (PAGE_SIZE)*2, UVM_UNKNOWN_OFFSET,
+	    (flags & PR_WAITOK) ? 0 : UVM_KMF_NOWAIT | UVM_KMF_TRYLOCK);
 }
 
 static void
 sigacts_poolpage_free(struct pool *pp, void *v)
 {
-        uvm_km_free(kernel_map, (vaddr_t)v, (PAGE_SIZE)*2, UVM_KMF_WIRED);
+        uvm_km_free(kernel_map, (vaddr_t)v, (PAGE_SIZE)*2);
 }
 
 static struct pool_allocator sigactspool_allocator = {
@@ -362,18 +361,6 @@ sigaction1(struct proc *p, int signum, const struct sigaction *nsa,
 					p->p_flag |= P_NOCLDWAIT;
 			} else
 				p->p_flag &= ~P_NOCLDWAIT;
-
-			if (nsa->sa_handler == SIG_IGN) {
-				/*
-				 * Paranoia: same as above.
-				 */
-				if (p->p_pid == 1)
-					p->p_flag &= ~P_CLDSIGIGN;
-				else
-					p->p_flag |= P_CLDSIGIGN;
-			} else
-				p->p_flag &= ~P_CLDSIGIGN;
-				
 		}
 		if ((nsa->sa_flags & SA_NODEFER) == 0)
 			sigaddset(&SIGACTION_PS(ps, signum).sa_mask, signum);
@@ -551,13 +538,7 @@ execsigs(struct proc *p)
 	}
 	sigemptyset(&p->p_sigctx.ps_sigcatch);
 	p->p_sigctx.ps_sigwaited = NULL;
-
-	/*
-	 * Reset no zombies if child dies flag as Solaris does.
-	 */
-	p->p_flag &= ~(P_NOCLDWAIT | P_CLDSIGIGN);
-	if (SIGACTION_PS(ps, SIGCHLD).sa_handler == SIG_IGN)
-		SIGACTION_PS(ps, SIGCHLD).sa_handler = SIG_DFL;
+	p->p_flag &= ~P_NOCLDSTOP;
 
 	/*
 	 * Reset stack state to the user stack.
@@ -1174,11 +1155,10 @@ kpsignal2(struct proc *p, const ksiginfo_t *ksi, int dolock)
 				if (l->l_stat == LSSLEEP &&
 				    l->l_flag & L_SINTR) {
 					/* ok to signal vp lwp */
+					break;
 				} else
 					l = NULL;
 			}
-			if (l == NULL)
-				allsusp = 1;
 		} else if (p->p_stat == SSTOP) {
 			SLIST_FOREACH(vp, &p->p_sa->sa_vps, savp_next) {
 				l = vp->savp_lwp;
@@ -1268,16 +1248,6 @@ kpsignal2(struct proc *p, const ksiginfo_t *ksi, int dolock)
 			 * them.
 			 */
 			if (allsusp && (signum == SIGKILL)) {
-				if (p->p_flag & P_SA) {
-					/*
-					 * get a suspended lwp from
-					 * the cache to send KILL
-					 * signal
-					 * XXXcl add signal checks at resume points
-					 */
-					suspended = sa_getcachelwp
-						(SLIST_FIRST(&p->p_sa->sa_vps));
-				}
 				lwp_continue(suspended);
 			}
 			goto done;
@@ -1388,6 +1358,20 @@ kpsignal2(struct proc *p, const ksiginfo_t *ksi, int dolock)
 		SCHED_UNLOCK(s);
 }
 
+siginfo_t *
+siginfo_alloc(int flags)
+{
+
+	return pool_get(&siginfo_pool, flags);
+}
+
+void
+siginfo_free(void *arg)
+{
+
+	pool_put(&siginfo_pool, arg);
+}
+
 void
 kpsendsig(struct lwp *l, const ksiginfo_t *ksi, const sigset_t *mask)
 {
@@ -1402,7 +1386,7 @@ kpsendsig(struct lwp *l, const ksiginfo_t *ksi, const sigset_t *mask)
 
 		f = l->l_flag & L_SA;
 		l->l_flag &= ~L_SA;
-		si = pool_get(&siginfo_pool, PR_WAITOK);
+		si = siginfo_alloc(PR_WAITOK);
 		si->_info = ksi->ksi_info;
 		le = li = NULL;
 		if (KSI_TRAP_P(ksi))
@@ -1410,8 +1394,8 @@ kpsendsig(struct lwp *l, const ksiginfo_t *ksi, const sigset_t *mask)
 		else
 			li = l;
 		if (sa_upcall(l, SA_UPCALL_SIGNAL | SA_UPCALL_DEFER, le, li,
-		    sizeof(*si), si) != 0) {
-			pool_put(&siginfo_pool, si);
+		    sizeof(*si), si, siginfo_free) != 0) {
+			siginfo_free(si);
 			if (KSI_TRAP_P(ksi))
 				/* XXX What do we do here?? */;
 		}
@@ -1657,7 +1641,7 @@ issignal(struct lwp *l)
  * on the run queue.
  */
 void
-proc_stop(struct proc *p, int dowakeup)
+proc_stop(struct proc *p, int wakeup)
 {
 	struct lwp *l;
 	struct proc *parent;
@@ -1751,7 +1735,7 @@ proc_stop(struct proc *p, int dowakeup)
  out:
 	/* XXX unlock process LWP state */
 
-	if (dowakeup)
+	if (wakeup)
 		sched_wakeup((caddr_t)p->p_pptr);
 }
 
@@ -2051,30 +2035,6 @@ sigexit(struct lwp *l, int signum)
 	/* NOTREACHED */
 }
 
-struct coredump_iostate {
-	struct proc *io_proc;
-	struct vnode *io_vp;
-	struct ucred *io_cred;
-	off_t io_offset;
-};
-
-int
-coredump_write(void *cookie, enum uio_seg segflg, const void *data, size_t len)
-{
-	struct coredump_iostate *io = cookie;
-	int error;
-
-	error = vn_rdwr(UIO_WRITE, io->io_vp, __UNCONST(data), len,
-	    io->io_offset, segflg,
-	    IO_NODELOCKED|IO_UNIT, io->io_cred, NULL,
-	    segflg == UIO_USERSPACE ? io->io_proc : NULL);
-	if (error)
-		return (error);
-
-	io->io_offset += len;
-	return (0);
-}
-
 /*
  * Dump core, into a file named "progname.core" or "core" (depending on the
  * value of shortcorename), unless the process was setuid/setgid.
@@ -2089,7 +2049,6 @@ coredump(struct lwp *l, const char *pattern)
 	struct nameidata	nd;
 	struct vattr		vattr;
 	struct mount		*mp;
-	struct coredump_iostate	io;
 	int			error, error1;
 	char			name[MAXPATHLEN];
 
@@ -2156,13 +2115,8 @@ restart:
 	VOP_SETATTR(vp, &vattr, cred, p);
 	p->p_acflag |= ACORE;
 
-	io.io_proc = p;
-	io.io_vp = vp;
-	io.io_cred = cred;
-	io.io_offset = 0;
-
 	/* Now dump the actual core file. */
-	error = (*p->p_execsw->es_coredump)(l, &io);
+	error = (*p->p_execsw->es_coredump)(l, vp, cred);
  out:
 	VOP_UNLOCK(vp, 0);
 	vn_finished_write(mp, 0);

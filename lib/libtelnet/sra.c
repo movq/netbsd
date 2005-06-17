@@ -32,7 +32,7 @@
 #ifdef notdef
 __FBSDID("$FreeBSD: src/contrib/telnet/libtelnet/sra.c,v 1.16 2002/05/06 09:48:02 markm Exp $");
 #else
-__RCSID("$NetBSD: sra.c,v 1.6 2005/05/05 23:21:58 lukem Exp $");
+__RCSID("$NetBSD: sra.c,v 1.1.2.5 2005/07/09 22:56:45 tron Exp $");
 #endif
 
 #ifdef	SRA

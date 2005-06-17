@@ -1,7 +1,7 @@
-/*	$NetBSD: ehci.c,v 1.104 2005/05/30 04:21:39 christos Exp $ */
+/*	$NetBSD: ehci.c,v 1.91.2.9 2006/08/11 04:22:21 riz Exp $ */
 
 /*
- * Copyright (c) 2004,2005 The NetBSD Foundation, Inc.
+ * Copyright (c) 2004 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -50,18 +50,22 @@
  * TODO:
  * 1) hold off explorations by companion controllers until ehci has started.
  *
- * 2) The EHCI driver lacks support for isochronous transfers, so
+ * 2) The EHCI driver lacks support for interrupt isochronous transfers, so
  *    devices using them don't work.
+ *    Interrupt transfers are not difficult, it's just not done.
  *
- * 3) The hub driver needs to handle and schedule the transaction translator,
- *    to assign place in frame where different devices get to go. See chapter
+ * 3) The meaty part to implement is the support for USB 2.0 hubs.
+ *    They are quite complicated since the need to be able to do
+ *    "transaction translation", i.e., converting to/from USB 2 and USB 1.
+ *    So the hub driver needs to handle and schedule these things, to
+ *    assign place in frame where different devices get to go. See chapter
  *    on hubs in USB 2.0 for details.
  *
  * 4) command failures are not recovered correctly
 */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ehci.c,v 1.104 2005/05/30 04:21:39 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ehci.c,v 1.91.2.9 2006/08/11 04:22:21 riz Exp $");
 
 #include "ohci.h"
 #include "uhci.h"
@@ -140,6 +144,7 @@ Static void		ehci_check_intr(ehci_softc_t *, struct ehci_xfer *);
 Static void		ehci_idone(struct ehci_xfer *);
 Static void		ehci_timeout(void *);
 Static void		ehci_timeout_task(void *);
+Static void		ehci_intrlist_timeout(void *);
 
 Static usbd_status	ehci_allocm(struct usbd_bus *, usb_dma_t *, u_int32_t);
 Static void		ehci_freem(struct usbd_bus *, usb_dma_t *);
@@ -186,7 +191,7 @@ Static void		ehci_device_isoc_done(usbd_xfer_handle);
 Static void		ehci_device_clear_toggle(usbd_pipe_handle pipe);
 Static void		ehci_noop(usbd_pipe_handle pipe);
 
-Static int		ehci_str(usb_string_descriptor_t *, int, const char *);
+Static int		ehci_str(usb_string_descriptor_t *, int, char *);
 Static void		ehci_pcd(ehci_softc_t *, usbd_xfer_handle);
 Static void		ehci_pcd_able(ehci_softc_t *, int);
 Static void		ehci_pcd_enable(void *);
@@ -322,7 +327,7 @@ static uint8_t revbits[EHCI_MAX_POLLRATE] = {
 usbd_status
 ehci_init(ehci_softc_t *sc)
 {
-	u_int32_t vers, sparams, cparams, hcr;
+	u_int32_t version, sparams, cparams, hcr;
 	u_int i;
 	usbd_status err;
 	ehci_soft_qh_t *sqh;
@@ -335,9 +340,9 @@ ehci_init(ehci_softc_t *sc)
 
 	sc->sc_offs = EREAD1(sc, EHCI_CAPLENGTH);
 
-	vers = EREAD2(sc, EHCI_HCIVERSION);
+	version = EREAD2(sc, EHCI_HCIVERSION);
 	aprint_normal("%s: EHCI version %x.%x\n", USBDEVNAME(sc->sc_bus.bdev),
-	       vers >> 8, vers & 0xff);
+	       version >> 8, version & 0xff);
 
 	sparams = EREAD4(sc, EHCI_HCSPARAMS);
 	DPRINTF(("ehci_init: sparams=0x%x\n", sparams));
@@ -493,6 +498,7 @@ ehci_init(ehci_softc_t *sc)
 	EOWRITE4(sc, EHCI_ASYNCLISTADDR, sqh->physaddr | EHCI_LINK_QH);
 
 	usb_callout_init(sc->sc_tmo_pcd);
+	usb_callout_init(sc->sc_tmo_intrlist);
 
 	lockinit(&sc->sc_doorbell_lock, PZERO, "ehcidb", 0, 0);
 
@@ -696,6 +702,12 @@ ehci_softintr(void *v)
 		ehci_check_intr(sc, ex);
 	}
 
+	/* Schedule a callout to catch any dropped transactions. */
+	if ((sc->sc_flags & EHCIF_DROPPED_INTR_WORKAROUND) &&
+	    !LIST_EMPTY(&sc->sc_intrhead))
+		usb_callout(sc->sc_tmo_intrlist, hz,
+		    ehci_intrlist_timeout, sc);
+
 #ifdef USB_USE_SOFTINTR
 	if (sc->sc_softwake) {
 		sc->sc_softwake = 0;
@@ -888,11 +900,12 @@ ehci_idone(struct ehci_xfer *ex)
 void
 ehci_waitintr(ehci_softc_t *sc, usbd_xfer_handle xfer)
 {
-	int timo;
+	int timo = xfer->timeout;
+	int usecs;
 	u_int32_t intrs;
 
 	xfer->status = USBD_IN_PROGRESS;
-	for (timo = xfer->timeout; timo >= 0; timo--) {
+	for (usecs = timo * 1000000 / hz; usecs > 0; usecs -= 1000) {
 		usb_delay_ms(&sc->sc_bus, 1);
 		if (sc->sc_dying)
 			break;
@@ -946,6 +959,7 @@ ehci_detach(struct ehci_softc *sc, int flags)
 	if (rv != 0)
 		return (rv);
 
+	usb_uncallout(sc->sc_tmo_intrlist, ehci_intrlist_timeout, sc);
 	usb_uncallout(sc->sc_tmo_pcd, ehci_pcd_enable, sc);
 
 	if (sc->sc_powerhook != NULL)
@@ -1376,13 +1390,16 @@ ehci_open(usbd_pipe_handle pipe)
 	case USB_SPEED_HIGH: speed = EHCI_QH_SPEED_HIGH; break;
 	default: panic("ehci_open: bad device speed %d", dev->speed);
 	}
-	if (speed != EHCI_QH_SPEED_HIGH && xfertype == UE_ISOCHRONOUS) {
-		printf("%s: *** WARNING: opening low/full speed isoc device, "
-		       "this does not work yet.\n",
+	if (speed != EHCI_QH_SPEED_HIGH) {
+		printf("%s: *** WARNING: opening low/full speed device, this "
+		       "may not work yet.\n",
 		       USBDEVNAME(sc->sc_bus.bdev));
 		DPRINTFN(1,("ehci_open: hshubaddr=%d hshubport=%d\n",
 			    hshubaddr, hshubport));
-		return USBD_INVAL;
+#if 0
+		if (xfertype != UE_CONTROL)
+			return USBD_INVAL;
+#endif
 	}
 
 	naks = 8;		/* XXX */
@@ -1629,7 +1646,7 @@ Static usb_hub_descriptor_t ehci_hubd = {
 };
 
 Static int
-ehci_str(usb_string_descriptor_t *p, int l, const char *s)
+ehci_str(usb_string_descriptor_t *p, int l, char *s)
 {
 	int i;
 
@@ -2829,6 +2846,29 @@ ehci_device_request(usbd_xfer_handle xfer)
 	usb_transfer_complete(xfer);
 	return (err);
 #undef exfer
+}
+
+/*
+ * Some EHCI chips from VIA seem to trigger interrupts before writing back the
+ * qTD status, or miss signalling occasionally under heavy load.  If the host
+ * machine is too fast, we we can miss transaction completion - when we scan
+ * the active list the transaction still seems to be active.  This generally
+ * exhibits itself as a umass stall that never recovers.
+ *
+ * We work around this behaviour by setting up this callback after any softintr
+ * that completes with transactions still pending, giving us another chance to
+ * check for completion after the writeback has taken place.
+ */
+void
+ehci_intrlist_timeout(void *arg)
+{
+	ehci_softc_t *sc = arg;
+	int s = splusb();
+
+	DPRINTF(("ehci_intrlist_timeout\n"));
+	usb_schedsoftintr(&sc->sc_bus);
+
+	splx(s);
 }
 
 /************************/

@@ -1,4 +1,4 @@
-/*	$NetBSD: twe.c,v 1.66 2005/05/30 04:35:23 christos Exp $	*/
+/*	$NetBSD: twe.c,v 1.64.2.1 2006/02/26 21:33:27 riz Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2001, 2002, 2003, 2004 The NetBSD Foundation, Inc.
@@ -70,7 +70,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: twe.c,v 1.66 2005/05/30 04:35:23 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: twe.c,v 1.64.2.1 2006/02/26 21:33:27 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -1218,7 +1218,7 @@ done:
  */
 static int
 twe_param_set(struct twe_softc *sc, int table_id, int param_id, size_t size,
-	      void *sbuf)
+	      void *buf)
 {
 	struct twe_ccb *ccb;
 	struct twe_cmd *tc;
@@ -1248,7 +1248,7 @@ twe_param_set(struct twe_softc *sc, int table_id, int param_id, size_t size,
 	tp->tp_table_id = htole16(table_id);
 	tp->tp_param_id = param_id;
 	tp->tp_param_size = size;
-	memcpy(tp->tp_data, sbuf, size);
+	memcpy(tp->tp_data, buf, size);
 
 	/* Map the transfer. */
 	if ((rv = twe_ccb_map(sc, ccb)) != 0) {
@@ -1538,8 +1538,8 @@ twe_ccb_map(struct twe_softc *sc, struct twe_ccb *ccb)
 	if (((u_long)ccb->ccb_data & (TWE_ALIGNMENT - 1)) != 0) {
 		s = splvm();
 		/* XXX */
-		ccb->ccb_abuf = uvm_km_alloc(kmem_map,
-		    ccb->ccb_datasize, 0, UVM_KMF_NOWAIT|UVM_KMF_WIRED);
+		ccb->ccb_abuf = uvm_km_kmemalloc(kmem_map, NULL,
+		    ccb->ccb_datasize, UVM_KMF_NOWAIT);
 		splx(s);
 		data = (void *)ccb->ccb_abuf;
 		if ((ccb->ccb_flags & TWE_CCB_DATA_OUT) != 0)
@@ -1561,7 +1561,7 @@ twe_ccb_map(struct twe_softc *sc, struct twe_ccb *ccb)
 			s = splvm();
 			/* XXX */
 			uvm_km_free(kmem_map, ccb->ccb_abuf,
-			    ccb->ccb_datasize, UVM_KMF_WIRED);
+			    ccb->ccb_datasize);
 			splx(s);
 		}
 		return (rv);
@@ -1646,8 +1646,7 @@ twe_ccb_unmap(struct twe_softc *sc, struct twe_ccb *ccb)
 			    ccb->ccb_datasize);
 		s = splvm();
 		/* XXX */
-		uvm_km_free(kmem_map, ccb->ccb_abuf, ccb->ccb_datasize,
-		    UVM_KMF_WIRED);
+		uvm_km_free(kmem_map, ccb->ccb_abuf, ccb->ccb_datasize);
 		splx(s);
 	}
 }
@@ -1902,6 +1901,7 @@ tweioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
 		}
 		error = copyout(param->tp_data, tp->tp_data,
 		    param->tp_param_size);
+		free(param, M_DEVBUF);
 		goto done;
 
 	case TWEIO_SET_PARAM:

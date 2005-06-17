@@ -192,9 +192,8 @@ int ASN1_GENERALIZEDTIME_set_string(ASN1_GENERALIZEDTIME *s, char *str)
 		{
 		if (s != NULL)
 			{
-			if (!ASN1_STRING_set((ASN1_STRING *)s,
-				(unsigned char *)str,t.length))
-				return 0;
+			ASN1_STRING_set((ASN1_STRING *)s,
+				(unsigned char *)str,t.length);
 			s->type=V_ASN1_GENERALIZEDTIME;
 			}
 		return(1);
@@ -224,12 +223,7 @@ ASN1_GENERALIZEDTIME *ASN1_GENERALIZEDTIME_set(ASN1_GENERALIZEDTIME *s,
 	if ((p == NULL) || ((size_t)s->length < len))
 		{
 		p=OPENSSL_malloc(len);
-		if (p == NULL)
-			{
-			ASN1err(ASN1_F_ASN1_GENERALIZEDTIME_SET,
-				ERR_R_MALLOC_FAILURE);
-			return(NULL);
-			}
+		if (p == NULL) return(NULL);
 		if (s->data != NULL)
 			OPENSSL_free(s->data);
 		s->data=(unsigned char *)p;

@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_private.h,v 1.1 2005/04/16 08:53:09 yamt Exp $	*/
+/*	$NetBSD: bus_private.h,v 1.1.2.5 2006/09/16 11:18:59 ghen Exp $	*/
 
 /*-
  * Copyright (c)2005 YAMAMOTO Takashi,
@@ -29,7 +29,11 @@
 #include <uvm/uvm_extern.h>
 
 #define	_BUS_PHYS_TO_BUS(pa)	((bus_addr_t)xpmap_ptom(pa))
+#define	_BUS_BUS_TO_PHYS(ba)	((paddr_t)xpmap_mtop(ba))
 #define	_BUS_VIRT_TO_BUS(pm, va) _bus_virt_to_bus((pm), (va))
+#define _BUS_BUS_TO_VM_PAGE(ba) (PHYS_TO_VM_PAGE(xpmap_mtop(ba)))
+#define _BUS_PMAP_ENTER(pmap, va, ba, prot, flags) \
+    pmap_enter(pmap, va, xpmap_mtop(ba), prot, flags)
 
 static __inline bus_addr_t _bus_virt_to_bus(struct pmap *, vaddr_t);
 
@@ -44,5 +48,17 @@ _bus_virt_to_bus(struct pmap *pm, vaddr_t va)
 
 	return ba;
 }
+
+/* we need our own bus_dmamem_alloc_range */
+#define _BUS_DMAMEM_ALLOC_RANGE _xen_bus_dmamem_alloc_range
+int _xen_bus_dmamem_alloc_range(bus_dma_tag_t, bus_size_t, bus_size_t,
+	    bus_size_t, bus_dma_segment_t *, int, int *, int,
+	    bus_addr_t, bus_addr_t);
+
+/*
+ * The higher machine address of our allocated range isn't know and can change
+ * over time. Just assume it's the largest possible value.
+ */
+#define _BUS_AVAIL_END ((bus_addr_t)0xffffffff)
 
 #include <x86/bus_private.h>

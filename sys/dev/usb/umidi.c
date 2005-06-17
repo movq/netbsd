@@ -1,4 +1,4 @@
-/*	$NetBSD: umidi.c,v 1.23 2005/05/11 10:02:28 augustss Exp $	*/
+/*	$NetBSD: umidi.c,v 1.22 2004/10/29 12:57:26 yamt Exp $	*/
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: umidi.c,v 1.23 2005/05/11 10:02:28 augustss Exp $");
+__KERNEL_RCSID(0, "$NetBSD: umidi.c,v 1.22 2004/10/29 12:57:26 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -164,13 +164,12 @@ USB_ATTACH(umidi)
 {
 	usbd_status err;
 	USB_ATTACH_START(umidi, sc, uaa);
-	char *devinfop;
+	char devinfo[1024];
 
 	DPRINTFN(1,("umidi_attach\n"));
 
-	devinfop = usbd_devinfo_alloc(uaa->device, 0);
-	printf("\n%s: %s\n", USBDEVNAME(sc->sc_dev), devinfop);
-	usbd_devinfo_free(devinfop);
+	usbd_devinfo(uaa->device, 0, devinfo, sizeof(devinfo));
+	printf("\n%s: %s\n", USBDEVNAME(sc->sc_dev), devinfo);
 
 	sc->sc_iface = uaa->iface;
 	sc->sc_udev = uaa->device;

@@ -1,4 +1,4 @@
-/*	$NetBSD: portal_vfsops.c,v 1.51 2005/05/29 21:55:34 christos Exp $	*/
+/*	$NetBSD: portal_vfsops.c,v 1.49 2005/02/26 22:59:00 perry Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993, 1995
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: portal_vfsops.c,v 1.51 2005/05/29 21:55:34 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: portal_vfsops.c,v 1.49 2005/02/26 22:59:00 perry Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
@@ -181,7 +181,7 @@ portal_unmount(mp, mntflags, p)
 	int mntflags;
 	struct proc *p;
 {
-	struct vnode *rtvp = VFSTOPORTAL(mp)->pm_root;
+	struct vnode *rootvp = VFSTOPORTAL(mp)->pm_root;
 	int error, flags = 0;
 
 	if (mntflags & MNT_FORCE)
@@ -197,19 +197,19 @@ portal_unmount(mp, mntflags, p)
 	if (mntinvalbuf(mp, 1))
 		return (EBUSY);
 #endif
-	if (rtvp->v_usecount > 1)
+	if (rootvp->v_usecount > 1)
 		return (EBUSY);
-	if ((error = vflush(mp, rtvp, flags)) != 0)
+	if ((error = vflush(mp, rootvp, flags)) != 0)
 		return (error);
 
 	/*
 	 * Release reference on underlying root vnode
 	 */
-	vrele(rtvp);
+	vrele(rootvp);
 	/*
 	 * And blow it away for future re-use
 	 */
-	vgone(rtvp);
+	vgone(rootvp);
 	/*
 	 * Shutdown the socket.  This will cause the select in the
 	 * daemon to wake up, and then the accept will get ECONNABORTED
@@ -384,4 +384,3 @@ struct vfsops portal_vfsops = {
 	vfs_stdextattrctl,
 	portal_vnodeopv_descs,
 };
-VFS_ATTACH(portal_vfsops);

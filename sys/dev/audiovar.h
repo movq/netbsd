@@ -1,4 +1,4 @@
-/*	$NetBSD: audiovar.h,v 1.32 2005/01/10 22:01:37 kent Exp $	*/
+/*	$NetBSD: audiovar.h,v 1.32.8.2 2006/04/19 20:59:13 tron Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -174,6 +174,9 @@ struct audio_softc {
 	audio_stream_t		sc_pstreams[AUDIO_MAX_FILTERS];
 	stream_filter_t		*sc_pfilters[AUDIO_MAX_FILTERS];
 	struct audio_ringbuffer	sc_pr;		/* Play ring */
+	int			sc_writing;
+	int			sc_waitcomp;
+	int			sc_changing;
 
 	/**
 	 *  hardware

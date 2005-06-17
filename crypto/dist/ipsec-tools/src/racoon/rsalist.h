@@ -1,4 +1,4 @@
-/*	$NetBSD: rsalist.h,v 1.1.1.2 2005/02/23 14:54:27 manu Exp $	*/
+/*	$NetBSD: rsalist.h,v 1.1.1.2.2.2 2005/11/21 21:12:31 tron Exp $	*/
 
 /* Id: rsalist.h,v 1.2 2004/07/12 20:43:51 ludvigm Exp */
 /*

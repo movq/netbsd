@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.72 2005/06/16 04:17:49 briggs Exp $ */
+/*	$NetBSD: cpu.h,v 1.68 2004/05/02 11:22:06 pk Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -157,7 +157,7 @@ void	*softnet_cookie;
 extern int cpu_arch;
 
 /* Number of CPUs in the system */
-extern int sparc_ncpus;
+extern int ncpu;
 
 /*
  * Interrupt handler chains.  Interrupt handlers should return 0 for

@@ -1,4 +1,4 @@
-/*	$NetBSD: libintl_local.h,v 1.10 2005/05/14 17:58:56 tshiozak Exp $	*/
+/*	$NetBSD: libintl_local.h,v 1.9 2004/09/23 21:35:27 tshiozak Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2001 Citrus Project,
@@ -97,7 +97,6 @@ struct mosysdepstr_h {
 	struct mosysdepsegentry_h segs[1];	/* text segments */
 };
 
-struct gettext_plural;
 struct mo_h {
 	u_int32_t mo_magic;	/* determines endian */
 	u_int32_t mo_revision;	/* file format revision: 0 */
@@ -105,8 +104,6 @@ struct mo_h {
 	struct moentry_h *mo_otable;	/* O: original text table offset */
 	struct moentry_h *mo_ttable;	/* T: translated text table offset */
 	const char *mo_header;
-	struct gettext_plural *mo_plural;
-	unsigned long mo_nplurals;
 	char *mo_charset;
 	u_int32_t mo_hsize;	/* S: size of hashing table */
 	u_int32_t *mo_htable;	/* H: hashing table */

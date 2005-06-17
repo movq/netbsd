@@ -1,4 +1,4 @@
-/*	$NetBSD: auth.h,v 1.19 2005/05/08 21:15:04 christos Exp $	*/
+/*	$NetBSD: auth.h,v 1.18.2.1 2006/10/26 09:39:56 ghen Exp $	*/
 /*	$OpenBSD: auth.h,v 1.50 2004/05/23 23:59:53 dtucker Exp $	*/
 
 /*
@@ -49,6 +49,7 @@ typedef struct KbdintDevice KbdintDevice;
 
 struct Authctxt {
 	int		 success;
+	int		 authenticated;	/* authenticated and alarms cancelled */
 	int		 postponed;	/* authentication needs another step */
 	int		 valid;		/* user exists and is allowed to login */
 	int		 attempt;
@@ -108,8 +109,6 @@ struct KbdintDevice
 	void	(*free_ctx)(void *ctx);
 };
 
-void 	 disable_forwarding(void);
-
 int      auth_rhosts(struct passwd *, const char *);
 int
 auth_rhosts2(struct passwd *, const char *, const char *, const char *);
@@ -152,7 +151,6 @@ void	do_authentication2(Authctxt *);
 
 void	auth_log(Authctxt *, int, char *, char *);
 void	userauth_finish(Authctxt *, int, char *);
-void	userauth_send_banner(const char *);
 int	auth_root_allowed(char *);
 
 char	*auth2_read_banner(void);

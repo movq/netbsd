@@ -1,4 +1,4 @@
-/*	$NetBSD: console.c,v 1.31 2005/06/03 18:55:12 martin Exp $	*/
+/*	$NetBSD: console.c,v 1.30 2004/12/30 23:18:09 rumble Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995, 1996 Carnegie-Mellon University.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: console.c,v 1.31 2005/06/03 18:55:12 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: console.c,v 1.30 2004/12/30 23:18:09 rumble Exp $");
 
 #include "opt_kgdb.h"
 
@@ -67,14 +67,14 @@ extern struct consdev zs_cn;
 extern void	zs_kgdb_init(void);
 
 void		kgdb_port_init(void);
-static int	zs_serial_init(const char *);
-static int	gio_video_init(const char *);
-static int	mace_serial_init(const char *);
+static int	zs_serial_init(char *);
+static int	gio_video_init(char *);
+static int	mace_serial_init(char *);
 
 void
 consinit()
 {
-	const char *consdev;
+	char *consdev;
 	
 	/* Ask ARCS what it is using for console output. */
 	consdev = ARCBIOS->GetEnvironmentVariable("ConsoleOut");
@@ -107,7 +107,7 @@ consinit()
 }
 
 static int
-zs_serial_init(const char *consdev)
+zs_serial_init(char *consdev)
 {
 #if (NZSC > 0)
 	if ((strlen(consdev) == 9) && (!strncmp(consdev, "serial", 6)) &&
@@ -123,7 +123,7 @@ zs_serial_init(const char *consdev)
 }
 
 static int
-gio_video_init(const char *consdev)
+gio_video_init(char *consdev)
 {
 #if (NGIO > 0)
 	if (strcmp(consdev, "video()") == 0) {
@@ -159,10 +159,10 @@ gio_video_init(const char *consdev)
 }
 
 static int
-mace_serial_init(const char *consdev)
+mace_serial_init(char *consdev)
 {
 #if (NCOM > 0)
-	const char     *dbaud;
+	char     *dbaud;
 	int       speed;
 	u_int32_t base;
 

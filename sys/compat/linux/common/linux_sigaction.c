@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_sigaction.c,v 1.26 2005/05/03 16:26:29 manu Exp $	*/
+/*	$NetBSD: linux_sigaction.c,v 1.25 2003/01/18 21:21:32 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_sigaction.c,v 1.26 2005/05/03 16:26:29 manu Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_sigaction.c,v 1.25 2003/01/18 21:21:32 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,9 +62,8 @@ __KERNEL_RCSID(0, "$NetBSD: linux_sigaction.c,v 1.26 2005/05/03 16:26:29 manu Ex
 #include <compat/linux/linux_syscallargs.h>
 
 /* Used on: alpha (aka osf_sigaction), arm, i386, m68k, mips, ppc */
-/* Not used on: sparc, sparc64, amd64 */
+/* Not used on: sparc, sparc64 */
 
-#ifndef __amd64__
 /*
  * The Linux sigaction() system call. Do the usual conversions,
  * and just call sigaction().
@@ -117,4 +116,3 @@ linux_sys_sigaction(l, v, retval)
 	}
 	return (0);
 }
-#endif /* !amd64 */

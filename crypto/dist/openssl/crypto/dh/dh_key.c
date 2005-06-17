@@ -62,8 +62,6 @@
 #include <openssl/rand.h>
 #include <openssl/dh.h>
 
-#ifndef OPENSSL_FIPS
-
 static int generate_key(DH *dh);
 static int compute_key(unsigned char *key, const BIGNUM *pub_key, DH *dh);
 static int dh_bn_mod_exp(const DH *dh, BIGNUM *r,
@@ -164,6 +162,12 @@ static int compute_key(unsigned char *key, const BIGNUM *pub_key, DH *dh)
 	BIGNUM *tmp;
 	int ret= -1;
 
+	if (BN_num_bits(dh->p) > OPENSSL_DH_MAX_MODULUS_BITS)
+		{
+		DHerr(DH_F_DH_COMPUTE_KEY,DH_R_MODULUS_TOO_LARGE);
+		return -1;
+		}
+
 	ctx = BN_CTX_new();
 	if (ctx == NULL) goto err;
 	BN_CTX_start(ctx);
@@ -222,5 +226,3 @@ static int dh_finish(DH *dh)
 		BN_MONT_CTX_free((BN_MONT_CTX *)dh->method_mont_p);
 	return(1);
 	}
-
-#endif

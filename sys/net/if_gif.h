@@ -1,4 +1,4 @@
-/*	$NetBSD: if_gif.h,v 1.10 2005/06/06 06:06:50 martin Exp $	*/
+/*	$NetBSD: if_gif.h,v 1.9.20.1 2006/01/08 15:48:46 riz Exp $	*/
 /*	$KAME: if_gif.h,v 1.23 2001/07/27 09:21:42 itojun Exp $	*/
 
 /*
@@ -65,7 +65,9 @@ struct gif_softc {
 #ifdef __HAVE_GENERIC_SOFT_INTERRUPTS
 	void	*gif_si;		/* softintr handle */
 #endif
+	long	gif_route_expire;
 };
+#define GIF_ROUTE_TTL	10
 
 #define gif_ro gifsc_gifscr.gifscr_ro
 #ifdef INET6
@@ -85,7 +87,7 @@ int gif_ioctl __P((struct ifnet *, u_long, caddr_t));
 int gif_set_tunnel __P((struct ifnet *, struct sockaddr *, struct sockaddr *));
 void gif_delete_tunnel __P((struct ifnet *));
 #ifdef GIF_ENCAPCHECK
-int gif_encapcheck __P((struct mbuf *, int, int, void *));
+int gif_encapcheck __P((const struct mbuf *, int, int, void *));
 #endif
 
 #endif /* _NET_IF_GIF_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: uipc_socket.c,v 1.111 2005/05/08 18:44:39 christos Exp $	*/
+/*	$NetBSD: uipc_socket.c,v 1.108.2.3 2006/10/25 12:58:56 ghen Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -68,7 +68,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uipc_socket.c,v 1.111 2005/05/08 18:44:39 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uipc_socket.c,v 1.108.2.3 2006/10/25 12:58:56 ghen Exp $");
 
 #include "opt_sock_counters.h"
 #include "opt_sosend_loan.h"
@@ -132,7 +132,7 @@ soinit(void)
 
 	/* Set the initial adjusted socket buffer size. */
 	if (sb_max_set(sb_max))
-		panic("bad initial sb_max value: %lu", sb_max);
+		panic("bad initial sb_max value: %lu\n", sb_max);
 
 }
 
@@ -234,7 +234,7 @@ sokvaalloc(vsize_t len, struct socket *so)
 	 * allocate kva.
 	 */
 
-	lva = uvm_km_alloc(kernel_map, len, 0, UVM_KMF_VAONLY | UVM_KMF_WAITVA);
+	lva = uvm_km_valloc_wait(kernel_map, len);
 	if (lva == 0) {
 		sokvaunreserve(len);
 		return (0);
@@ -255,7 +255,7 @@ sokvafree(vaddr_t sva, vsize_t len)
 	 * free kva.
 	 */
 
-	uvm_km_free(kernel_map, sva, len, UVM_KMF_VAONLY);
+	uvm_km_free(kernel_map, sva, len);
 
 	/*
 	 * unreserve kva.
@@ -480,9 +480,9 @@ socreate(int dom, struct socket **aso, int type, int proto, struct proc *p)
 	so->so_mowner = &prp->pr_domain->dom_mowner;
 #endif
 	if (p != 0)
-		so->so_uidinfo = uid_find(p->p_ucred->cr_uid);
+		so->so_uid = p->p_ucred->cr_uid;
 	else
-		so->so_uidinfo = uid_find(0);
+		so->so_uid = UID_MAX;
 	error = (*prp->pr_usrreq)(so, PRU_ATTACH, (struct mbuf *)0,
 	    (struct mbuf *)(long)proto, (struct mbuf *)0, p);
 	if (error) {
@@ -545,10 +545,10 @@ sofree(struct socket *so)
 			return;
 	}
 	if (so->so_rcv.sb_hiwat)
-		(void)chgsbsize(so->so_uidinfo, &so->so_rcv.sb_hiwat, 0,
+		(void)chgsbsize(so->so_uid, &so->so_rcv.sb_hiwat, 0,
 		    RLIM_INFINITY);
 	if (so->so_snd.sb_hiwat)
-		(void)chgsbsize(so->so_uidinfo, &so->so_snd.sb_hiwat, 0,
+		(void)chgsbsize(so->so_uid, &so->so_snd.sb_hiwat, 0,
 		    RLIM_INFINITY);
 	sbrelease(&so->so_snd, so);
 	sorflush(so);
@@ -1403,6 +1403,11 @@ sosetopt(struct socket *so, int level, int optname, struct mbuf *m0)
 		case SO_LINGER:
 			if (m == NULL || m->m_len != sizeof(struct linger)) {
 				error = EINVAL;
+				goto bad;
+			}
+			if (mtod(m, struct linger *)->l_linger < 0 ||
+			    mtod(m, struct linger *)->l_linger > (INT_MAX / hz)) {
+				error = EDOM;
 				goto bad;
 			}
 			so->so_linger = mtod(m, struct linger *)->l_linger;

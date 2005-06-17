@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.h,v 1.2 2005/06/03 20:16:27 rjs Exp $	*/
+/*	$NetBSD: autoconf.h,v 1.1 2003/10/19 03:33:50 matt Exp $	*/
 
 /*-
  * Copyright (C) 1998	Internet Research Institute, Inc.
@@ -32,7 +32,7 @@
  */
 
 struct confargs {
-	const char *ca_name;
+	char *ca_name;
 	u_int ca_node;
 	int ca_nreg;
 	u_int *ca_reg;

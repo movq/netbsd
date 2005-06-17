@@ -1,4 +1,4 @@
-/*	$NetBSD: if_tap.c,v 1.9 2005/06/10 10:28:17 bouyer Exp $	*/
+/*	$NetBSD: if_tap.c,v 1.6.2.2 2006/01/21 05:40:24 snj Exp $	*/
 
 /*
  *  Copyright (c) 2003, 2004 The NetBSD Foundation.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_tap.c,v 1.9 2005/06/10 10:28:17 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_tap.c,v 1.6.2.2 2006/01/21 05:40:24 snj Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "bpfilter.h"
@@ -1362,6 +1362,7 @@ tap_ether_aton(u_char *dest, char *str)
  *      @(#)if_ethersubr.c      8.2 (Berkeley) 4/4/96
  */
 
+static char digits[] = "0123456789abcdef";
 static char *
 tap_ether_sprintf(char *dest, const u_char *ap)
 {
@@ -1369,8 +1370,8 @@ tap_ether_sprintf(char *dest, const u_char *ap)
 	int i;
 
 	for (i = 0; i < 6; i++) {
-		*cp++ = hexdigits[*ap >> 4];
-		*cp++ = hexdigits[*ap++ & 0xf];
+		*cp++ = digits[*ap >> 4];
+		*cp++ = digits[*ap++ & 0xf];
 		*cp++ = ':';
 	}
 	*--cp = 0;

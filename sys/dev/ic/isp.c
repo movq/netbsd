@@ -1,4 +1,4 @@
-/* $NetBSD: isp.c,v 1.107 2005/05/30 04:43:46 christos Exp $ */
+/* $NetBSD: isp.c,v 1.106 2005/02/27 00:27:01 perry Exp $ */
 /*
  * This driver, which is contained in NetBSD in the files:
  *
@@ -68,7 +68,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isp.c,v 1.107 2005/05/30 04:43:46 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isp.c,v 1.106 2005/02/27 00:27:01 perry Exp $");
 
 #ifdef	__NetBSD__
 #include <dev/ic/isp_netbsd.h>
@@ -159,7 +159,7 @@ static int isp_getmap(struct ispsoftc *, fcpos_map_t *);
 static int isp_getpdb(struct ispsoftc *, int, isp_pdb_t *);
 static u_int64_t isp_get_portname(struct ispsoftc *, int, int);
 static int isp_fclink_test(struct ispsoftc *, int);
-static const char *isp2100_fw_statename(int);
+static char *isp2100_fw_statename(int);
 static int isp_pdb_sync(struct ispsoftc *);
 static int isp_scan_loop(struct ispsoftc *);
 static int isp_fabric_mbox_cmd(struct ispsoftc *, mbreg_t *);
@@ -193,7 +193,7 @@ isp_reset(struct ispsoftc *isp)
 	mbreg_t mbs;
 	u_int16_t code_org;
 	int loops, i, dodnld = 1;
-	const char *btype = "????";
+	char *btype = "????";
 
 	isp->isp_state = ISP_NILSTATE;
 
@@ -668,8 +668,7 @@ again:
 		code_org = ISP_CODE_ORG;
 
 	if (dodnld) {
-		/*XXXUNCONST*/
-		isp->isp_mbxworkp = __UNCONST(&isp->isp_mdvec->dv_ispfw[1]);
+		isp->isp_mbxworkp = (void *) &isp->isp_mdvec->dv_ispfw[1];
 		isp->isp_mbxwrk0 = isp->isp_mdvec->dv_ispfw[3] - 1;
 		isp->isp_mbxwrk1 = code_org + 1;
 		mbs.param[0] = MBOX_WRITE_RAM_WORD;
@@ -1555,7 +1554,7 @@ isp_get_portname(struct ispsoftc *isp, int loopid, int nodename)
 static int
 isp_fclink_test(struct ispsoftc *isp, int usdelay)
 {
-	static const char *toponames[] = {
+	static char *toponames[] = {
 		"Private Loop",
 		"FL Port",
 		"N-Port to N-Port",
@@ -1798,7 +1797,7 @@ not_on_fabric:
 	return (0);
 }
 
-static const char *
+static char *
 isp2100_fw_statename(int state)
 {
 	switch(state) {
@@ -2407,12 +2406,15 @@ isp_fabric_mbox_cmd(struct ispsoftc *isp, mbreg_t *mbp)
 		}
 		if (mbp->param[0] == MBOX_COMMAND_ERROR) {
 			char tbuf[16];
-			const char *m;
+			char *m;
 			switch (mbp->param[1]) {
 			case 1:
 				m = "No Loop";
 				break;
 			case 2:
+				m = "Failed to allocate IOCB buffer";
+				break;
+			case 3:
 				m = "Failed to allocate XCB buffer";
 				break;
 			case 4:
@@ -3528,14 +3530,14 @@ again:
 		if (mbox & 0x4000) {
 			isp->isp_intmboxc++;
 			if (isp->isp_mboxbsy) {
-				int j = 0, obits = isp->isp_obits;
-				isp->isp_mboxtmp[j++] = mbox;
-				for (j = 1; j < MAX_MAILBOX; j++) {
-					if ((obits & (1 << j)) == 0) {
+				int i = 0, obits = isp->isp_obits;
+				isp->isp_mboxtmp[i++] = mbox;
+				for (i = 1; i < MAX_MAILBOX; i++) {
+					if ((obits & (1 << i)) == 0) {
 						continue;
 					}
-					isp->isp_mboxtmp[j] =
-					    ISP_READ(isp, MBOX_OFF(j));
+					isp->isp_mboxtmp[i] =
+					    ISP_READ(isp, MBOX_OFF(i));
 				}
 				if (isp->isp_mbxwrk0) {
 					if (isp_mbox_continue(isp) == 0) {
@@ -4375,57 +4377,57 @@ isp_parse_status(struct ispsoftc *isp, ispstatusreq_t *sp, XS_T *xs)
 
 	case RQCS_TRANSPORT_ERROR:
 	{
-		char tbuf[172];
-		SNPRINTF(tbuf, sizeof (tbuf), "states=>");
+		char buf[172];
+		SNPRINTF(buf, sizeof (buf), "states=>");
 		if (sp->req_state_flags & RQSF_GOT_BUS) {
-			SNPRINTF(tbuf, sizeof (tbuf), "%s GOT_BUS", tbuf);
+			SNPRINTF(buf, sizeof (buf), "%s GOT_BUS", buf);
 		}
 		if (sp->req_state_flags & RQSF_GOT_TARGET) {
-			SNPRINTF(tbuf, sizeof (tbuf), "%s GOT_TGT", tbuf);
+			SNPRINTF(buf, sizeof (buf), "%s GOT_TGT", buf);
 		}
 		if (sp->req_state_flags & RQSF_SENT_CDB) {
-			SNPRINTF(tbuf, sizeof (tbuf), "%s SENT_CDB", tbuf);
+			SNPRINTF(buf, sizeof (buf), "%s SENT_CDB", buf);
 		}
 		if (sp->req_state_flags & RQSF_XFRD_DATA) {
-			SNPRINTF(tbuf, sizeof (tbuf), "%s XFRD_DATA", tbuf);
+			SNPRINTF(buf, sizeof (buf), "%s XFRD_DATA", buf);
 		}
 		if (sp->req_state_flags & RQSF_GOT_STATUS) {
-			SNPRINTF(tbuf, sizeof (tbuf), "%s GOT_STS", tbuf);
+			SNPRINTF(buf, sizeof (buf), "%s GOT_STS", buf);
 		}
 		if (sp->req_state_flags & RQSF_GOT_SENSE) {
-			SNPRINTF(tbuf, sizeof (tbuf), "%s GOT_SNS", tbuf);
+			SNPRINTF(buf, sizeof (buf), "%s GOT_SNS", buf);
 		}
 		if (sp->req_state_flags & RQSF_XFER_COMPLETE) {
-			SNPRINTF(tbuf, sizeof (tbuf), "%s XFR_CMPLT", tbuf);
+			SNPRINTF(buf, sizeof (buf), "%s XFR_CMPLT", buf);
 		}
-		SNPRINTF(tbuf, sizeof (tbuf), "%s\nstatus=>", tbuf);
+		SNPRINTF(buf, sizeof (buf), "%s\nstatus=>", buf);
 		if (sp->req_status_flags & RQSTF_DISCONNECT) {
-			SNPRINTF(tbuf, sizeof (tbuf), "%s Disconnect", tbuf);
+			SNPRINTF(buf, sizeof (buf), "%s Disconnect", buf);
 		}
 		if (sp->req_status_flags & RQSTF_SYNCHRONOUS) {
-			SNPRINTF(tbuf, sizeof (tbuf), "%s Sync_xfr", tbuf);
+			SNPRINTF(buf, sizeof (buf), "%s Sync_xfr", buf);
 		}
 		if (sp->req_status_flags & RQSTF_PARITY_ERROR) {
-			SNPRINTF(tbuf, sizeof (tbuf), "%s Parity", tbuf);
+			SNPRINTF(buf, sizeof (buf), "%s Parity", buf);
 		}
 		if (sp->req_status_flags & RQSTF_BUS_RESET) {
-			SNPRINTF(tbuf, sizeof (tbuf), "%s Bus_Reset", tbuf);
+			SNPRINTF(buf, sizeof (buf), "%s Bus_Reset", buf);
 		}
 		if (sp->req_status_flags & RQSTF_DEVICE_RESET) {
-			SNPRINTF(tbuf, sizeof (tbuf), "%s Device_Reset", tbuf);
+			SNPRINTF(buf, sizeof (buf), "%s Device_Reset", buf);
 		}
 		if (sp->req_status_flags & RQSTF_ABORTED) {
-			SNPRINTF(tbuf, sizeof (tbuf), "%s Aborted", tbuf);
+			SNPRINTF(buf, sizeof (buf), "%s Aborted", buf);
 		}
 		if (sp->req_status_flags & RQSTF_TIMEOUT) {
-			SNPRINTF(tbuf, sizeof (tbuf), "%s Timeout", tbuf);
+			SNPRINTF(buf, sizeof (buf), "%s Timeout", buf);
 		}
 		if (sp->req_status_flags & RQSTF_NEGOTIATION) {
-			SNPRINTF(tbuf, sizeof (tbuf), "%s Negotiation", tbuf);
+			SNPRINTF(buf, sizeof (buf), "%s Negotiation", buf);
 		}
-		isp_prt(isp, ISP_LOGERR, "%s", tbuf);
+		isp_prt(isp, ISP_LOGERR, "%s", buf);
 		isp_prt(isp, ISP_LOGERR, "transport error for %d.%d.%d:\n%s",
-		    XS_CHANNEL(xs), XS_TGT(xs), XS_LUN(xs), tbuf);
+		    XS_CHANNEL(xs), XS_TGT(xs), XS_LUN(xs), buf);
 		break;
 	}
 	case RQCS_RESET_OCCURRED:
@@ -4908,7 +4910,7 @@ static const u_int16_t mbpscsi[] = {
 };
 
 #ifndef	ISP_STRIPPED
-static const char *scsi_mbcmd_names[] = {
+static char *scsi_mbcmd_names[] = {
 	"NO-OP",
 	"LOAD RAM",
 	"EXEC FIRMWARE",
@@ -5144,7 +5146,7 @@ static const u_int16_t mbpfc[] = {
  */
 
 #ifndef	ISP_STRIPPED
-static const char *fc_mbcmd_names[] = {
+static char *fc_mbcmd_names[] = {
 	"NO-OP",
 	"LOAD RAM",
 	"EXEC FIRMWARE",
@@ -5316,8 +5318,7 @@ isp_mboxcmd_qnw(struct ispsoftc *isp, mbreg_t *mbp, int nodelay)
 static void
 isp_mboxcmd(struct ispsoftc *isp, mbreg_t *mbp, int logmask)
 {
-	const char *xname, *cname;
-	char tname[16], mname[16];
+	char *cname, *xname, tname[16], mname[16];
 	unsigned int lim, ibits, obits, box, opcode;
 	const u_int16_t *mcp;
 

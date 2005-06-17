@@ -1,4 +1,4 @@
-/*	$NetBSD: core_netbsd.c,v 1.11 2005/06/10 05:10:13 matt Exp $	*/
+/*	$NetBSD: core_netbsd.c,v 1.9 2005/02/26 21:34:55 perry Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -50,41 +50,34 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: core_netbsd.c,v 1.11 2005/06/10 05:10:13 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: core_netbsd.c,v 1.9 2005/02/26 21:34:55 perry Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/exec.h>
 #include <sys/proc.h>
 #include <sys/vnode.h>
 #include <sys/core.h>
 
 #include <uvm/uvm_extern.h>
 
-#ifndef CORENAME
-#define	CORENAME(x)	x
-#endif
-#ifdef COREINC
-#include COREINC
-#endif
-
 struct coredump_state {
-	struct CORENAME(core) core;
+	struct core core;
+	off_t offset;
 };
 
-int	CORENAME(coredump_countsegs_netbsd)(struct proc *, void *,
-	    struct uvm_coredump_state *);
-int	CORENAME(coredump_writesegs_netbsd)(struct proc *, void *,
-	    struct uvm_coredump_state *);
+int	coredump_writesegs_netbsd(struct proc *, struct vnode *,
+	    struct ucred *, struct uvm_coredump_state *);
 
 int
-CORENAME(coredump_netbsd)(struct lwp *l, void *iocookie)
+coredump_netbsd(struct lwp *l, struct vnode *vp, struct ucred *cred)
 {
 	struct coredump_state cs;
-	struct proc *p = l->l_proc;
-	struct vmspace *vm = p->p_vmspace;
+	struct proc *p;
+	struct vmspace *vm;
 	int error;
 
+	p = l->l_proc;
+	vm = p->p_vmspace;
 
 	cs.core.c_midmag = 0;
 	strncpy(cs.core.c_name, p->p_comm, MAXCOMLEN);
@@ -95,6 +88,9 @@ CORENAME(coredump_netbsd)(struct lwp *l, void *iocookie)
 	cs.core.c_tsize = (u_long)ctob(vm->vm_tsize);
 	cs.core.c_dsize = (u_long)ctob(vm->vm_dsize);
 	cs.core.c_ssize = (u_long)round_page(ctob(vm->vm_ssize));
+	error = cpu_coredump(l, vp, cred, &cs.core);
+	if (error)
+		return (error);
 
 #if 0
 	/*
@@ -107,51 +103,31 @@ CORENAME(coredump_netbsd)(struct lwp *l, void *iocookie)
 	memcpy(&p->p_addr->u_kproc.kp_proc, p, sizeof(struct proc));
 	fill_eproc(p, &p->p_addr->u_kproc.kp_eproc);
 #endif
-	error = CORENAME(cpu_coredump)(l, NULL, &cs.core);
-	if (error)
-		return (error);
-	error = uvm_coredump_walkmap(p, NULL,
-	    CORENAME(coredump_countsegs_netbsd), &cs);
+
+	cs.offset = cs.core.c_hdrsize + cs.core.c_seghdrsize +
+	    cs.core.c_cpusize;
+	error = uvm_coredump_walkmap(p, vp, cred, coredump_writesegs_netbsd,
+	    &cs);
 	if (error)
 		return (error);
 
-	/* First write out the core header. */
-	error = coredump_write(iocookie, UIO_SYSSPACE, &cs.core,
-	    cs.core.c_hdrsize);
-	if (error)
-		return (error);
+	/* Now write out the core header. */
+	error = vn_rdwr(UIO_WRITE, vp, (caddr_t)&cs.core,
+	    (int)cs.core.c_hdrsize, (off_t)0,
+	    UIO_SYSSPACE, IO_NODELOCKED|IO_UNIT, cred, NULL, NULL);
 
-	/* Then the CPU specific stuff */
-	error = CORENAME(cpu_coredump)(l, iocookie, &cs.core);
-	if (error)
-		return (error);
-
-	/* Finally, the address space dump */
-	return uvm_coredump_walkmap(p, iocookie,
-	    CORENAME(coredump_writesegs_netbsd), &cs);
+	return (error);
 }
 
 int
-CORENAME(coredump_countsegs_netbsd)(struct proc *p, void *iocookie,
+coredump_writesegs_netbsd(struct proc *p, struct vnode *vp, struct ucred *cred,
     struct uvm_coredump_state *us)
 {
 	struct coredump_state *cs = us->cookie;
-
-	if (us->start != us->realend)
-		cs->core.c_nseg++;
-
-	return (0);
-}
-
-int
-CORENAME(coredump_writesegs_netbsd)(struct proc *p, void *iocookie,
-    struct uvm_coredump_state *us)
-{
-	struct coredump_state *cs = us->cookie;
-	struct CORENAME(coreseg) cseg;
+	struct coreseg cseg;
 	int flag, error;
 
-	if (us->start == us->realend)
+	if (us->flags & UVM_COREDUMP_NODUMP)
 		return (0);
 
 	if (us->flags & UVM_COREDUMP_STACK)
@@ -166,11 +142,23 @@ CORENAME(coredump_writesegs_netbsd)(struct proc *p, void *iocookie,
 	cseg.c_addr = us->start;
 	cseg.c_size = us->end - us->start;
 
-	error = coredump_write(iocookie, UIO_SYSSPACE,
-	    &cseg, cs->core.c_seghdrsize);
+	error = vn_rdwr(UIO_WRITE, vp,
+	    (caddr_t)&cseg, cs->core.c_seghdrsize,
+	    cs->offset, UIO_SYSSPACE,
+	    IO_NODELOCKED|IO_UNIT, cred, NULL, NULL);
 	if (error)
 		return (error);
 
-	return coredump_write(iocookie, UIO_USERSPACE,
-	    (void *)(vaddr_t)us->start, cseg.c_size);
+	cs->offset += cs->core.c_seghdrsize;
+	error = vn_rdwr(UIO_WRITE, vp,
+	    (caddr_t) us->start, (int) cseg.c_size,
+	    cs->offset, UIO_USERSPACE,
+	    IO_NODELOCKED|IO_UNIT, cred, NULL, p);
+	if (error)
+		return (error);
+
+	cs->offset += cseg.c_size;
+	cs->core.c_nseg++;
+
+	return (0);
 }

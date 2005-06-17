@@ -1,6 +1,6 @@
-.\"	$NetBSD: racoon.conf.5,v 1.16 2005/05/25 16:57:39 wiz Exp $
+.\"	$NetBSD: racoon.conf.5,v 1.1.1.4.2.8 2005/11/21 21:12:31 tron Exp $
 .\"
-.\" $Id: racoon.conf.5,v 1.16 2005/05/25 16:57:39 wiz Exp $
+.\" Id: racoon.conf.5,v 1.27.2.11 2005/11/06 17:18:26 monas Exp
 .\"
 .\" Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
 .\" All rights reserved.
@@ -203,12 +203,19 @@ The file is growing because
 .Xr racoon 8
 simply adds SAs to it.
 You should maintain the file manually.
-.It Ic path script Ar path
+.It Ic path script Ar path ;
 .Xr racoon 8
 will search this directory for scripts hooks.
 If you run with privilege separation,
 .Xr racoon 8
 will refuse to execute a script stored outside of this directory.
+.It Ic path pidfile Ar file ;
+specifies file where to store PID of process. If path starts with 
+.Ic / 
+it is treated as
+an absolute path, otherwise relative to VARRUN directory specified at
+compilation time. Default is 
+.Ic racoon.pid 
 .El
 .\"
 .Ss File Inclusion
@@ -480,9 +487,6 @@ Default is
 .\"
 .It Ic mode_cfg (on \(ba off) ;
 Gather network information through ISAKMP mode configuration.
-This only works if
-.Ic hybrid_rsa_client
-is the approved proposal.
 Default is off.
 .\"
 .It Ic peers_certfile ( dnssec | Ar certfile ) ;
@@ -726,7 +730,7 @@ specify the encryption algorithm used for the phase 1 negotiation.
 This directive must be defined.
 .Ar algorithm
 is one of following:
-.Ic des , 3des , blowfish , cast128
+.Ic des , 3des , blowfish , cast128 , aes
 .\".Ic rc5 , idea
 for Oakley.
 For other transforms, this statement should not be used.
@@ -736,7 +740,7 @@ define the hash algorithm used for the phase 1 negotiation.
 This directive must be defined.
 .Ar algorithm
 is one of following:
-.Ic md5, sha1
+.Ic md5, sha1, sha256, sha384, sha512
 for Oakley.
 .\"
 .It Ic authentication_method Ar type ;
@@ -810,6 +814,13 @@ are constructed like:
 .Pp
 or
 .Pp
+.Ic subnet Ar address
+.Bq Ic / Ar prefix
+.Bq Ic [ Ar port ]
+.Ar ul_proto
+.Pp
+or
+.Pp
 .Ar idtype Ar string
 .Pp
 It means exactly the content of ID payload.
@@ -817,6 +828,12 @@ This is not like a filter rule.
 For example, if you define 3ffe:501:4819::/48 as
 .Ar source_id .
 3ffe:501:4819:1000:/64 will not match.
+.Pp
+In case of longest prefix (selecting single host) 
+.Ar address
+instructs to send ID type of ADDRESS, while
+.Ar subnet
+instructs to send ID type of SUBNET. Otherwise these instructions are identical.
 .Pp
 .Bl -tag -width Ds -compact
 .\"
@@ -877,12 +894,12 @@ Note that the kernel may not support the algorithm you have specified.
 .Ic des , 3des , des_iv64 , des_iv32 ,
 .Ic rc5 , rc4 , idea , 3idea ,
 .Ic cast128 , blowfish , null_enc ,
-.Ic twofish , rijndael
+.Ic twofish , rijndael , aes
 .Pq used with ESP
 .\"
 .It Ic authentication_algorithm Ar algorithms ;
 .Ic des , 3des , des_iv64 , des_iv32 ,
-.Ic hmac_md5 , hmac_sha1 , non_auth
+.Ic hmac_md5 , hmac_sha1 , hmac_sha256, hmac_sha384, hmac_sha512, non_auth
 .Pq used with ESP authentication and AH
 .\"
 .It Ic compression_algorithm Ar algorithms ;
@@ -939,15 +956,12 @@ The default is off.
 Defines the information to return for remote hosts' ISAKMP mode config
 requests.
 Also defines the authentication source for remote peers
-authenticating through Xauth/hybrid auth.
+authenticating through hybrid auth.
 .Pp
-This section is currently only useful if you selected the
-.Ic hybrid_rsa_server
-authentication method.
 The following are valid statements:
 .Bl -tag -width Ds -compact
 .It Ic auth_source (system \(ba radius \(ba pam) ;
-Specify the source for authentication of users through Xauth/hybrid auth.
+Specify the source for authentication of users through hybrid auth.
 .Ar system
 means to use the Unix user database.
 This is the default.
@@ -963,8 +977,8 @@ It works only if
 .Xr racoon 8
 was built with libpam support.
 .It Ic conf_source (local \(ba radius) ;
-Specify the source for IP addresses and netmask of users authenticated
-through Xauth/hybrid auth.
+Specify the source for IP addresses and netmask allocated through ISAKMP
+mode config. 
 .Ar local
 means to use the local IP pool defined by the
 .Ic network4
@@ -980,7 +994,7 @@ was built with libradius support, and the configuration is done in
 .Xr radius.conf 5 .
 RADIUS configuration requires RADIUS authentication.
 .It Ic accounting (none \(ba radius \(ba pam) ;
-Enable or disable accounting.
+Enable or disable accounting for Xauth logins and logouts.
 Default is
 .Ar none ,
 which disable accounting.
@@ -1002,7 +1016,7 @@ Specify the size of the IP address pool, either local or allocated
 through RADIUS.
 .Ic conf_source
 selects the local pool or the RADIUS configuration, but in both
-configuration, you cannot have more than
+configurations, you cannot have more than
 .Ar size
 users connected at the same time.
 The default is 255.

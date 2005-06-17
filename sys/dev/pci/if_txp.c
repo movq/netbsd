@@ -1,4 +1,4 @@
-/* $NetBSD: if_txp.c,v 1.11 2005/05/02 15:34:32 yamt Exp $ */
+/* $NetBSD: if_txp.c,v 1.10.2.1 2005/10/28 20:12:42 jmc Exp $ */
 
 /*
  * Copyright (c) 2001
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_txp.c,v 1.11 2005/05/02 15:34:32 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_txp.c,v 1.10.2.1 2005/10/28 20:12:42 jmc Exp $");
 
 #include "bpfilter.h"
 #include "opt_inet.h"
@@ -1467,7 +1467,7 @@ txp_start(ifp)
 		if (++cnt >= (TX_ENTRIES - 4))
 			goto oactive;
 
-		if ((mtag = VLAN_OUTPUT_TAG(sc->sc_ethercom, m)))
+		if ((mtag = VLAN_OUTPUT_TAG(&sc->sc_arpcom, m)))
 			txd->tx_pflags = TX_PFLAGS_VLAN |
 			  (htons(VLAN_TAG_VALUE(mtag)) << TX_PFLAGS_VLANTAG_S);
 
@@ -2065,15 +2065,14 @@ txp_capabilities(sc)
 	if (rsp->rsp_par2 & rsp->rsp_par3 & OFFLOAD_IPCKSUM) {
 		sc->sc_tx_capability |= OFFLOAD_IPCKSUM;
 		sc->sc_rx_capability |= OFFLOAD_IPCKSUM;
-		ifp->if_capabilities |= IFCAP_CSUM_IPv4_Tx | IFCAP_CSUM_IPv4_Rx;
+		ifp->if_capabilities |= IFCAP_CSUM_IPv4;
 	}
 
 	if (rsp->rsp_par2 & rsp->rsp_par3 & OFFLOAD_TCPCKSUM) {
 		sc->sc_rx_capability |= OFFLOAD_TCPCKSUM;
 #ifdef TRY_TX_TCP_CSUM
 		sc->sc_tx_capability |= OFFLOAD_TCPCKSUM;
-		ifp->if_capabilities |=
-		    IFCAP_CSUM_TCPv4_Tx | IFCAP_CSUM_TCPv4_Rx;
+		ifp->if_capabilities |= IFCAP_CSUM_TCPv4;
 #endif
 	}
 
@@ -2081,8 +2080,7 @@ txp_capabilities(sc)
 		sc->sc_rx_capability |= OFFLOAD_UDPCKSUM;
 #ifdef TRY_TX_UDP_CSUM
 		sc->sc_tx_capability |= OFFLOAD_UDPCKSUM;
-		ifp->if_capabilities |=
-		    IFCAP_CSUM_UDPv4_Tx | IFCAP_CSUM_UDPv4_Rx;
+		ifp->if_capabilities |= IFCAP_CSUM_UDPv4;
 #endif
 	}
 

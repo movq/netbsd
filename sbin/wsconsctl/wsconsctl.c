@@ -1,4 +1,4 @@
-/*	$NetBSD: wsconsctl.c,v 1.12 2005/06/02 00:15:02 lukem Exp $ */
+/*	$NetBSD: wsconsctl.c,v 1.10.2.1 2005/05/01 16:50:29 tron Exp $ */
 
 /*-
  * Copyright (c) 1998, 2004 The NetBSD Foundation, Inc.
@@ -94,10 +94,6 @@ main(int argc, char **argv)
 	wflag = 0;
 	file = NULL;
 	sep = "=";
-	field_tab = NULL;
-	field_tab_len = 0;
-	getval = NULL;
-	putval = NULL;
 
 	while ((ch = getopt(argc, argv, "adf:kmnw")) != -1) {
 		switch(ch) {

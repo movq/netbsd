@@ -1,14 +1,14 @@
-#	$NetBSD: Makefile,v 1.35 2005/04/07 16:28:40 christos Exp $
+#	$NetBSD: Makefile,v 1.34 2003/10/21 10:01:22 lukem Exp $
 
 .include <bsd.own.mk>
 
 PROG=		lint1
 SRCS=		cgram.y scan.l mem1.c mem.c err.c main1.c decl.c tree.c func.c \
-		init.c emit.c emit1.c inittyp.c tyname.c
+		init.c emit.c emit1.c inittyp.c
 MAN=		lint.7
 YHEADER=
 
-CPPFLAGS+=	-I${.CURDIR} -I. -DPASS=\"${PROG}.h\"
+CPPFLAGS+=	-I${.CURDIR} -I.
 
 .if ${OBJECT_FMT} == "a.out"
 CPPFLAGS+=	-DTARGET_OBJFMT_AOUT

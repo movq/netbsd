@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_aobj.c,v 1.66 2005/06/06 12:09:19 yamt Exp $	*/
+/*	$NetBSD: uvm_aobj.c,v 1.64 2004/04/25 16:42:44 simonb Exp $	*/
 
 /*
  * Copyright (c) 1998 Chuck Silvers, Charles D. Cranor and
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_aobj.c,v 1.66 2005/06/06 12:09:19 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_aobj.c,v 1.64 2004/04/25 16:42:44 simonb Exp $");
 
 #include "opt_uvmhist.h"
 
@@ -488,7 +488,6 @@ uao_create(size, flags)
 	static int kobj_alloced = 0;
 	int pages = round_page(size) >> PAGE_SHIFT;
 	struct uvm_aobj *aobj;
-	int refs;
 
 	/*
 	 * malloc a new aobj unless we are asked for the kernel object
@@ -499,18 +498,17 @@ uao_create(size, flags)
 		aobj = &kernel_object_store;
 		aobj->u_pages = pages;
 		aobj->u_flags = UAO_FLAG_NOSWAP;
-		refs = UVM_OBJ_KERN;
+		aobj->u_obj.uo_refs = UVM_OBJ_KERN;
 		kobj_alloced = UAO_FLAG_KERNOBJ;
 	} else if (flags & UAO_FLAG_KERNSWAP) {
 		KASSERT(kobj_alloced == UAO_FLAG_KERNOBJ);
 		aobj = &kernel_object_store;
 		kobj_alloced = UAO_FLAG_KERNSWAP;
-		refs = 0xdeadbeaf; /* XXX: gcc */
 	} else {
 		aobj = pool_get(&uvm_aobj_pool, PR_WAITOK);
 		aobj->u_pages = pages;
 		aobj->u_flags = 0;
-		refs = 1;
+		aobj->u_obj.uo_refs = 1;
 	}
 
 	/*
@@ -548,7 +546,10 @@ uao_create(size, flags)
  	 * init aobj fields
  	 */
 
-	UVM_OBJ_INIT(&aobj->u_obj, &aobj_pager, refs);
+	simple_lock_init(&aobj->u_obj.vmobjlock);
+	aobj->u_obj.pgops = &aobj_pager;
+	TAILQ_INIT(&aobj->u_obj.memq);
+	aobj->u_obj.uo_npages = 0;
 
 	/*
  	 * now that aobj is ready, add it to the global list
@@ -1335,11 +1336,11 @@ uao_pagein(aobj, startslot, endslot)
 
 	if (UAO_USES_SWHASH(aobj)) {
 		struct uao_swhash_elt *elt;
-		int buck;
+		int bucket;
 
 restart:
-		for (buck = aobj->u_swhashmask; buck >= 0; buck--) {
-			for (elt = LIST_FIRST(&aobj->u_swhash[buck]);
+		for (bucket = aobj->u_swhashmask; bucket >= 0; bucket--) {
+			for (elt = LIST_FIRST(&aobj->u_swhash[bucket]);
 			     elt != NULL;
 			     elt = LIST_NEXT(elt, list)) {
 				int i;

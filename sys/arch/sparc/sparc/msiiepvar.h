@@ -1,4 +1,4 @@
-/*	$NetBSD: msiiepvar.h,v 1.4 2005/06/03 22:17:18 martin Exp $ */
+/*	$NetBSD: msiiepvar.h,v 1.3 2002/03/28 19:50:21 uwe Exp $ */
 
 /*
  * Copyright (c) 2001 Valeriy E. Ushakov
@@ -31,7 +31,7 @@
 #define _SPARC_MSIIEP_VAR_H_
 
 struct msiiep_attach_args {
-	const char *msa_name;
+	char *msa_name;
 	struct mainbus_attach_args *msa_ma;
 };
 

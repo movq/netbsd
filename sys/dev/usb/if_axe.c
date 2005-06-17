@@ -1,4 +1,4 @@
-/*	$NetBSD: if_axe.c,v 1.9 2005/05/30 04:21:39 christos Exp $	*/
+/*	$NetBSD: if_axe.c,v 1.7.2.1 2005/11/10 23:56:13 snj Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998, 1999, 2000-2003
@@ -73,7 +73,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_axe.c,v 1.9 2005/05/30 04:21:39 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_axe.c,v 1.7.2.1 2005/11/10 23:56:13 snj Exp $");
 
 #if defined(__NetBSD__)
 #include "opt_inet.h"
@@ -167,7 +167,7 @@ Static const struct axe_type axe_devs[] = {
 	{ { USB_VENDOR_SITECOM,		USB_PRODUCT_SITECOM_LN029}, 0 },
 	{ { USB_VENDOR_SYSTEMTALKS,	USB_PRODUCT_SYSTEMTALKS_SGCX2UL}, 0 },
 };
-#define axe_lookup(v, p) ((const struct axe_type *)usb_lookup(axe_devs, v, p))
+#define axe_lookup(v, p) ((struct axe_type *)usb_lookup(axe_devs, v, p))
 
 USB_DECLARE_DRIVER(axe);
 
@@ -286,7 +286,7 @@ axe_miibus_readreg(device_ptr_t dev, int phy, int reg)
 	if (val)
 		sc->axe_phyaddrs[0] = phy;
 
-	return (val);
+	return (le16toh(val));
 }
 
 Static void
@@ -298,6 +298,7 @@ axe_miibus_writereg(device_ptr_t dev, int phy, int reg, int val)
 	if (sc->axe_dying)
 		return;
 
+	val = htole32(val);
 	axe_lock_mii(sc);
 	axe_cmd(sc, AXE_CMD_MII_OPMODE_SW, 0, 0, NULL);
 	err = axe_cmd(sc, AXE_CMD_MII_WRITE_REG, reg, phy, (void *)&val);
@@ -379,6 +380,7 @@ axe_setmulti(struct axe_softc *sc)
 	ifp = GET_IFP(sc);
 
 	axe_cmd(sc, AXE_CMD_RXCTL_READ, 0, 0, (void *)&rxmode);
+	rxmode = le16toh(rxmode);
 
 	if (ifp->if_flags & IFF_ALLMULTI || ifp->if_flags & IFF_PROMISC) {
 	allmulti:
@@ -450,12 +452,12 @@ USB_ATTACH(axe)
 	usb_endpoint_descriptor_t *ed;
 	struct mii_data	*mii;
 	u_char eaddr[ETHER_ADDR_LEN];
-	char *devinfop;
+	char devinfo[1024];
 	char *devname = USBDEVNAME(sc->axe_dev);
 	struct ifnet *ifp;
 	int i, s;
 
-	devinfop = usbd_devinfo_alloc(dev, 0);
+        usbd_devinfo(dev, 0, devinfo, sizeof devinfo);
 	USB_ATTACH_SETUP;
 
 	err = usbd_set_config_no(dev, AXE_CONFIG_NO, 1);
@@ -482,8 +484,7 @@ USB_ATTACH(axe)
 
 	id = usbd_get_interface_descriptor(sc->axe_iface);
 
-	printf("%s: %s\n", USBDEVNAME(sc->axe_dev), devinfop);
-	usbd_devinfo_free(devinfop);
+	printf("%s: %s\n", USBDEVNAME(sc->axe_dev), devinfo);
 
 	/* Find endpoints. */
 	for (i = 0; i < id->bNumEndpoints; i++) {
@@ -1231,7 +1232,7 @@ axe_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 
 				axe_cmd(sc, AXE_CMD_RXCTL_READ,
 					0, 0, (void *)&rxmode);
-				rxmode |= AXE_RXCMD_PROMISC;
+				rxmode = le16toh(rxmode) | AXE_RXCMD_PROMISC;
 				axe_cmd(sc, AXE_CMD_RXCTL_WRITE,
 					0, rxmode, NULL);
 
@@ -1241,7 +1242,7 @@ axe_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 			    sc->axe_if_flags & IFF_PROMISC) {
 				axe_cmd(sc, AXE_CMD_RXCTL_READ,
 					0, 0, (void *)&rxmode);
-				rxmode &= ~AXE_RXCMD_PROMISC;
+				rxmode = le16toh(rxmode) & ~AXE_RXCMD_PROMISC;
 				axe_cmd(sc, AXE_CMD_RXCTL_WRITE,
 					0, rxmode, NULL);
 				axe_setmulti(sc);

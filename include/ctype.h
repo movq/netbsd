@@ -1,4 +1,4 @@
-/*	$NetBSD: ctype.h,v 1.28 2005/04/15 23:46:07 rillig Exp $	*/
+/*	$NetBSD: ctype.h,v 1.27.2.1 2005/04/16 10:32:24 tron Exp $	*/
 
 /*
  * Copyright (c) 1989 The Regents of the University of California.

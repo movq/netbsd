@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.3 2005/04/16 22:49:37 bouyer Exp $	*/
+/*	$NetBSD: intr.h,v 1.1.18.2 2005/04/28 10:18:56 tron Exp $	*/
 /*	NetBSD intr.h,v 1.15 2004/10/31 10:39:34 yamt Exp	*/
 
 /*-

@@ -1,4 +1,4 @@
-/* $NetBSD: segwrite.c,v 1.9 2005/04/01 23:45:59 he Exp $ */
+/* $NetBSD: segwrite.c,v 1.7.2.1 2005/05/07 11:21:29 tron Exp $ */
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
  * All rights reserved.

@@ -1,4 +1,4 @@
-/*	$NetBSD: pcctwo_68k.c,v 1.5 2005/06/03 08:49:03 scw Exp $	*/
+/*	$NetBSD: pcctwo_68k.c,v 1.4 2003/07/15 02:43:47 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2002 The NetBSD Foundation, Inc.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pcctwo_68k.c,v 1.5 2005/06/03 08:49:03 scw Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pcctwo_68k.c,v 1.4 2003/07/15 02:43:47 lukem Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -73,7 +73,7 @@ extern struct cfdriver pcctwo_cd;
 /*
  * Devices that live on the PCCchip2, attached in this order.
  */
-static const struct pcctwo_device pcctwo_devices[] = {
+static struct pcctwo_device pcctwo_devices[] = {
 	{"clock", 0},
 	{"clmpcc", PCCTWO_SCC_OFF},
 	{"ie", PCCTWO_IE_OFF},
@@ -106,7 +106,7 @@ static int pcctwo_vec2icsr_1x7[] = {
 /*
  * Devices that live on the MCchip, attached in this order.
  */
-static const struct pcctwo_device mcchip_devices[] = {
+static struct pcctwo_device mcchip_devices[] = {
 	{"clock", 0},
 	{"zsc", MCCHIP_ZS0_OFF},
 	{"zsc", MCCHIP_ZS1_OFF},
@@ -194,7 +194,7 @@ pcctwoattach(parent, self, args)
 {
 	struct mainbus_attach_args *ma;
 	struct pcctwo_softc *sc;
-	const struct pcctwo_device *pd = NULL;
+	struct pcctwo_device *pd = NULL;
 	u_int8_t cid;
 
 	ma = args;

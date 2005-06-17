@@ -1,4 +1,4 @@
-/*      $NetBSD: ata.c,v 1.70 2005/05/29 22:11:28 christos Exp $      */
+/*      $NetBSD: ata.c,v 1.66.2.2 2005/05/28 13:08:04 tron Exp $      */
 
 /*
  * Copyright (c) 1998, 2001 Manuel Bouyer.  All rights reserved.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ata.c,v 1.70 2005/05/29 22:11:28 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ata.c,v 1.66.2.2 2005/05/28 13:08:04 tron Exp $");
 
 #ifndef ATADEBUG
 #define ATADEBUG
@@ -358,7 +358,7 @@ atabus_thread(void *arg)
 	}
 	splx(s);
 	chp->ch_thread = NULL;
-	wakeup(&chp->ch_flags);
+	wakeup((void *)&chp->ch_flags);
 	kthread_exit(0);
 }
 
@@ -509,7 +509,7 @@ atabus_detach(struct device *self, int flags)
 	splx(s);
 	wakeup(&chp->ch_thread);
 	while (chp->ch_thread != NULL)
-		(void) tsleep(&chp->ch_flags, PRIBIO, "atadown", 0);
+		(void) tsleep((void *)&chp->ch_flags, PRIBIO, "atadown", 0);
 
 	/* power hook */
 	if (sc->sc_powerhook)
@@ -993,14 +993,14 @@ ata_print_modes(struct ata_channel *chp)
 	int drive;
 	struct ata_drive_datas *drvp;
 
-	for (drive = 0; drive < chp->ch_ndrive; drive++) {
+	for (drive = 0; drive < 2; drive++) {
 		drvp = &chp->ch_drive[drive];
-		if ((drvp->drive_flags & DRIVE) == 0 || drvp->drv_softc == NULL)
+		if ((drvp->drive_flags & DRIVE) == 0)
 			continue;
 		aprint_normal("%s(%s:%d:%d): using PIO mode %d",
 			drvp->drv_softc->dv_xname,
 			atac->atac_dev.dv_xname,
-			chp->ch_channel, drvp->drive, drvp->PIO_mode);
+			chp->ch_channel, drive, drvp->PIO_mode);
 		if (drvp->drive_flags & DRIVE_DMA)
 			aprint_normal(", DMA mode %d", drvp->DMA_mode);
 		if (drvp->drive_flags & DRIVE_UDMA) {
@@ -1083,7 +1083,7 @@ ata_probe_caps(struct ata_drive_datas *drvp)
 	struct atac_softc *atac = chp->ch_atac;
 	struct device *drv_dev = drvp->drv_softc;
 	int i, printed, s;
-	const char *sep = "";
+	char *sep = "";
 	int cf_flags;
 
 	if (ata_get_params(drvp, AT_WAIT, &params) != CMD_OK) {

@@ -1,4 +1,4 @@
-/* $NetBSD: fsck_vars.h,v 1.9 2005/04/14 21:15:59 perseant Exp $	 */
+/* $NetBSD: fsck_vars.h,v 1.8.6.1 2005/05/07 11:21:29 tron Exp $	 */
 
 /*
  * Copyright (c) 1980, 1986, 1993

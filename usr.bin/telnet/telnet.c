@@ -1,4 +1,4 @@
-/*	$NetBSD: telnet.c,v 1.30 2005/03/29 12:18:28 drochner Exp $	*/
+/*	$NetBSD: telnet.c,v 1.29.2.1 2005/04/08 15:37:43 he Exp $	*/
 
 /*
  * Copyright (c) 1988, 1990, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)telnet.c	8.4 (Berkeley) 5/30/95";
 #else
-__RCSID("$NetBSD: telnet.c,v 1.30 2005/03/29 12:18:28 drochner Exp $");
+__RCSID("$NetBSD: telnet.c,v 1.29.2.1 2005/04/08 15:37:43 he Exp $");
 #endif
 #endif /* not lint */
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: msg_sys.def,v 1.32 2005/04/09 13:12:31 dsl Exp $	*/
+/*	$NetBSD: msg_sys.def,v 1.31.2.1 2006/09/16 16:08:30 ghen Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.

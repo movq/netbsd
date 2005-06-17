@@ -1,4 +1,4 @@
-/*	$NetBSD: cd9660_rrip.c,v 1.7 2005/05/29 21:00:29 christos Exp $	*/
+/*	$NetBSD: cd9660_rrip.c,v 1.6 2005/02/26 22:58:55 perry Exp $	*/
 
 /*-
  * Copyright (c) 1993, 1994
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cd9660_rrip.c,v 1.7 2005/05/29 21:00:29 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cd9660_rrip.c,v 1.6 2005/02/26 22:58:55 perry Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -122,8 +122,7 @@ cd9660_rrip_slink(v, ana)
 	ISO_RRIP_SLINK_COMPONENT *pcomp;
 	ISO_RRIP_SLINK_COMPONENT *pcompe;
 	int len, wlen, cont;
-	char *outbuf;
-	const char *inbuf;
+	char *outbuf, *inbuf;
 
 	pcomp = (ISO_RRIP_SLINK_COMPONENT *)p->component;
 	pcompe = (ISO_RRIP_SLINK_COMPONENT *)
@@ -232,7 +231,7 @@ cd9660_rrip_altname(v, ana)
 	ISO_RRIP_ANALYZE *ana;
 {
 	ISO_RRIP_ALTNAME *p = v;
-	const char *inbuf;
+	char *inbuf;
 	int wlen;
 	int cont;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: info_hesiod.c,v 1.5 2005/04/23 18:38:17 christos Exp $	*/
+/*	$NetBSD: info_hesiod.c,v 1.4.2.1 2005/08/16 13:02:13 tron Exp $	*/
 
 /*
  * Copyright (c) 1997-2005 Erez Zadok

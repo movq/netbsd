@@ -1,4 +1,4 @@
-/* $NetBSD: tea5757.c,v 1.4 2005/06/02 14:32:12 christos Exp $ */
+/* $NetBSD: tea5757.c,v 1.3 2003/07/14 15:47:12 lukem Exp $ */
 /*	$OpenBSD: tea5757.c,v 1.3 2002/01/07 18:32:19 mickey Exp $	*/
 
 /*
@@ -53,7 +53,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tea5757.c,v 1.4 2005/06/02 14:32:12 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tea5757.c,v 1.3 2003/07/14 15:47:12 lukem Exp $");
 
 #include <sys/param.h>
 #include <sys/radioio.h>
@@ -155,28 +155,39 @@ tea5757_set_freq(struct tea5757_t *tea, u_int32_t stereo, u_int32_t lock, u_int3
 u_int32_t
 tea5757_encode_lock(u_int8_t lock)
 {
+	u_int32_t ret;
+
 	if (lock < 8)
-		return TEA5757_S005;
-	if (lock < 15)
-		return TEA5757_S010;
-	if (lock < 51)
-		return TEA5757_S030;
-	return TEA5757_S150;
+		ret = TEA5757_S005;
+	else if (lock > 7 && lock < 15)
+		ret = TEA5757_S010;
+	else if (lock > 14 && lock < 51)
+		ret = TEA5757_S030;
+	else if (lock > 50)
+		ret = TEA5757_S150;
+
+	return ret;
 }
 
 u_int8_t
 tea5757_decode_lock(u_int32_t lock)
 {
+	u_int8_t ret = 150;
+
 	switch (lock) {
 	case TEA5757_S005:
-		return 5;
+		ret = 5;
+		break;
 	case TEA5757_S010:
-		return 10;
+		ret = 10;
 		break;
 	case TEA5757_S030:
-		return 30;
+		ret = 30;
+		break;
 	case TEA5757_S150:
-	default:
-		return 150;
+		ret = 150;
+		break;
 	}
+
+	return ret;
 }

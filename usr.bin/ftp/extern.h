@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.69 2005/06/10 00:18:46 lukem Exp $	*/
+/*	$NetBSD: extern.h,v 1.64.2.5 2005/07/24 10:29:52 tron Exp $	*/
 
 /*-
  * Copyright (c) 1996-2005 The NetBSD Foundation, Inc.

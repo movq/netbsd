@@ -1,4 +1,4 @@
-/* $NetBSD: pass5.c,v 1.16 2005/04/23 20:21:03 perseant Exp $	 */
+/* $NetBSD: pass5.c,v 1.14.2.1 2005/05/07 11:21:29 tron Exp $	 */
 
 /*-
  * Copyright (c) 2000, 2003 The NetBSD Foundation, Inc.

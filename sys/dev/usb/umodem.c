@@ -1,4 +1,4 @@
-/*	$NetBSD: umodem.c,v 1.53 2005/04/18 18:45:02 drochner Exp $	*/
+/*	$NetBSD: umodem.c,v 1.49.10.3 2005/04/17 10:29:57 tron Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -51,7 +51,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: umodem.c,v 1.53 2005/04/18 18:45:02 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: umodem.c,v 1.49.10.3 2005/04/17 10:29:57 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -77,6 +77,14 @@ __KERNEL_RCSID(0, "$NetBSD: umodem.c,v 1.53 2005/04/18 18:45:02 drochner Exp $")
 #include <dev/usb/usbdevs.h>
 #include <dev/usb/ucomvar.h>
 #include <dev/usb/umodemvar.h>
+
+#ifdef UMODEM_DEBUG
+#define DPRINTFN(n, x)	if (umodemdebug > (n)) logprintf x
+int	umodemdebug = 0;
+#else
+#define DPRINTFN(n, x)
+#endif
+#define DPRINTF(x) DPRINTFN(0, x)
 
 Static struct ucom_methods umodem_methods = {
 	umodem_get_status,

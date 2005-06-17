@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ae_nubus.c,v 1.36 2005/06/03 23:56:55 rjs Exp $	*/
+/*	$NetBSD: if_ae_nubus.c,v 1.35 2005/01/15 16:00:59 chs Exp $	*/
 
 /*
  * Copyright (C) 1997 Scott Reynolds
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ae_nubus.c,v 1.36 2005/06/03 23:56:55 rjs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ae_nubus.c,v 1.35 2005/01/15 16:00:59 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -130,7 +130,7 @@ ae_nubus_attach(struct device *parent, struct device *self, void *aux)
 	bus_space_tag_t bst;
 	bus_space_handle_t bsh;
 	int i, success;
-	const char *cardtype;
+	char *cardtype;
 
 	bst = na->na_tag;
 	if (bus_space_map(bst, NUBUS_SLOT2PA(na->slot), NBMEMSIZE,

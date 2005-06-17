@@ -1,4 +1,4 @@
-/*	$NetBSD: statd.c,v 1.23 2004/01/14 10:29:46 yamt Exp $	*/
+/*	$NetBSD: statd.c,v 1.23.6.3 2006/03/29 14:47:32 riz Exp $	*/
 
 /*
  * Copyright (c) 1997 Christos Zoulas. All rights reserved.
@@ -37,7 +37,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: statd.c,v 1.23 2004/01/14 10:29:46 yamt Exp $");
+__RCSID("$NetBSD: statd.c,v 1.23.6.3 2006/03/29 14:47:32 riz Exp $");
 #endif
 
 /* main() function for status monitor daemon.  Some of the code in this	*/
@@ -101,11 +101,6 @@ main(argc, argv)
 	struct sigaction nsa;
 	int maxrec = RPC_MAXDATASIZE;
 
-	sigemptyset(&nsa.sa_mask);
-	nsa.sa_flags = SA_NOCLDSTOP|SA_NOCLDWAIT;
-	nsa.sa_handler = SIG_IGN;
-	(void)sigaction(SIGCHLD, &nsa, NULL);
-
 	while ((ch = getopt(argc, argv, "d")) != (-1)) {
 		switch (ch) {
 		case 'd':
@@ -140,6 +135,12 @@ main(argc, argv)
 	 */
 	if (!debug)
 		daemon(0, 0);
+
+	sigemptyset(&nsa.sa_mask);
+	nsa.sa_flags = SA_NOCLDSTOP|SA_NOCLDWAIT;
+	nsa.sa_handler = SIG_IGN;
+	(void)sigaction(SIGCHLD, &nsa, NULL);
+
 	pidfile(NULL);
 	openlog("rpc.statd", 0, LOG_DAEMON);
 	if (debug)
@@ -241,12 +242,17 @@ bad:
  *
  */
 void
-change_host(hostname, hp)
-	char *hostname;
+change_host(hostnamep, hp)
+	char *hostnamep;
 	HostInfo *hp;
 {
 	DBT key, data;
 	char *ptr;
+	char hostname[MAXHOSTNAMELEN + 1];
+	HostInfo h;
+
+	strncpy(hostname, hostnamep, MAXHOSTNAMELEN + 1);
+	h = *hp;
 
 	for (ptr = hostname; *ptr; ptr++)
 		if (isupper((unsigned char) *ptr))
@@ -254,8 +260,8 @@ change_host(hostname, hp)
 
 	key.data = hostname;
 	key.size = ptr - hostname + 1;
-	data.data = hp;
-	data.size = sizeof(*hp);
+	data.data = &h;
+	data.size = sizeof(h);
 
 	switch ((*db->put)(db, &key, &data, 0)) {
 	case -1:
@@ -458,56 +464,44 @@ notify_one(key, hi, ptr)
 {
 	time_t now = *(time_t *) ptr;
 	char *name = key->data;
-	DBT data;
+	int error;
 
 	if (hi->notifyReqd == 0 || hi->notifyReqd > now)
 		return 0;
 
-	if (notify_one_host(name)) {
-give_up:
+	/*
+	 * If one of the initial attempts fails, we wait
+	 * for a while and have another go.  This is necessary
+	 * because when we have crashed, (eg. a power outage)
+	 * it is quite possible that we won't be able to
+	 * contact all monitored hosts immediately on restart,
+	 * either because they crashed too and take longer
+	 * to come up (in which case the notification isn't
+	 * really required), or more importantly if some
+	 * router etc. needed to reach the monitored host
+	 * has not come back up yet.  In this case, we will
+	 * be a bit late in re-establishing locks (after the
+	 * grace period) but that is the best we can do.  We
+	 * try 10 times at 5 sec intervals, 10 more times at
+	 * 1 minute intervals, then 24 more times at hourly
+	 * intervals, finally giving up altogether if the
+	 * host hasn't come back to life after 24 hours.
+	 */
+	if (notify_one_host(name) || hi->attempts++ >= 44) {
+		error = 0;
 		hi->notifyReqd = 0;
 		hi->attempts = 0;
-		data.data = hi;
-		data.size = sizeof(*hi);
-		switch ((*db->put)(db, key, &data, 0)) {
-		case -1:
-			syslog(LOG_ERR, "Error storing %s (%m)", name);
-		case 0:
-			return 0;
-
-		default:
-			abort();
-		}
-	}
-	else {
-		/*
-		 * If one of the initial attempts fails, we wait
-		 * for a while and have another go.  This is necessary
-		 * because when we have crashed, (eg. a power outage)
-		 * it is quite possible that we won't be able to
-		 * contact all monitored hosts immediately on restart,
-		 * either because they crashed too and take longer
-		 * to come up (in which case the notification isn't
-		 * really required), or more importantly if some
-		 * router etc. needed to reach the monitored host
-		 * has not come back up yet.  In this case, we will
-		 * be a bit late in re-establishing locks (after the
-		 * grace period) but that is the best we can do.  We
-		 * try 10 times at 5 sec intervals, 10 more times at
-		 * 1 minute intervals, then 24 more times at hourly
-		 * intervals, finally giving up altogether if the
-		 * host hasn't come back to life after 24 hours.
-		 */
-		if (hi->attempts++ >= 44)
-			goto give_up;
-		else if (hi->attempts < 10)
+	} else {
+		error = -1;
+		if (hi->attempts < 10)
 			hi->notifyReqd += 5;
 		else if (hi->attempts < 20)
 			hi->notifyReqd += 60;
 		else
 			hi->notifyReqd += 60 * 60;
-		return -1;
 	}
+	change_host(name, hi);
+	return error;
 }
 
 /* init_file -------------------------------------------------------------- */

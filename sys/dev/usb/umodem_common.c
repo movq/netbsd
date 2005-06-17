@@ -1,4 +1,4 @@
-/*	$NetBSD: umodem_common.c,v 1.5 2005/05/30 04:21:39 christos Exp $	*/
+/*	$NetBSD: umodem_common.c,v 1.3.2.4 2005/04/17 10:30:40 tron Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -51,7 +51,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: umodem_common.c,v 1.5 2005/05/30 04:21:39 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: umodem_common.c,v 1.3.2.4 2005/04/17 10:30:40 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -112,12 +112,12 @@ umodem_common_attach(device_ptr_t self, struct umodem_softc *sc,
 	usbd_device_handle dev = uaa->device;
 	usb_interface_descriptor_t *id;
 	usb_endpoint_descriptor_t *ed;
-	char *devinfop;
+	char devinfo[1024];
 	usbd_status err;
 	int data_ifcno;
 	int i;
 
-	devinfop = usbd_devinfo_alloc(uaa->device, 0);
+	usbd_devinfo(uaa->device, 0, devinfo, sizeof(devinfo));
 	USB_ATTACH_SETUP;
 
 	sc->sc_udev = dev;
@@ -125,8 +125,7 @@ umodem_common_attach(device_ptr_t self, struct umodem_softc *sc,
 
 	id = usbd_get_interface_descriptor(sc->sc_ctl_iface);
 	printf("%s: %s, iclass %d/%d\n", USBDEVNAME(sc->sc_dev),
-	       devinfop, id->bInterfaceClass, id->bInterfaceSubClass);
-	usbd_devinfo_free(devinfop);
+	       devinfo, id->bInterfaceClass, id->bInterfaceSubClass);
 	sc->sc_ctl_iface_no = id->bInterfaceNumber;
 
 	/* Get the data interface no. */
@@ -375,7 +374,7 @@ umodem_get_caps(usbd_device_handle dev, int *cm, int *acm,
 
 	*cm = *acm = 0;
 
-	cmd = (const usb_cdc_cm_descriptor_t *)usb_find_desc_if(dev,
+	cmd = (usb_cdc_cm_descriptor_t *)usb_find_desc_if(dev,
 							  UDESC_CS_INTERFACE,
 							  UDESCSUB_CDC_CM, id);
 	if (cmd == NULL) {
@@ -384,7 +383,7 @@ umodem_get_caps(usbd_device_handle dev, int *cm, int *acm,
 		*cm = cmd->bmCapabilities;
 	}
 
-	cad = (const usb_cdc_acm_descriptor_t *)usb_find_desc_if(dev,
+	cad = (usb_cdc_acm_descriptor_t *)usb_find_desc_if(dev,
 							   UDESC_CS_INTERFACE,
 							   UDESCSUB_CDC_ACM,
 							   id);
@@ -394,7 +393,7 @@ umodem_get_caps(usbd_device_handle dev, int *cm, int *acm,
 		*acm = cad->bmCapabilities;
 	}
 
-	cud = (const usb_cdc_union_descriptor_t *)usb_find_desc_if(dev,
+	cud = (usb_cdc_union_descriptor_t *)usb_find_desc_if(dev,
 							     UDESC_CS_INTERFACE,
 							     UDESCSUB_CDC_UNION,
 							     id);

@@ -26,7 +26,7 @@
 #include "uucp.h"
 
 #if USE_RCS_ID
-const char tcp_rcsid[] = "$Id: tcp.c,v 1.3 2005/04/25 03:43:22 matt Exp $";
+const char tcp_rcsid[] = "$Id: tcp.c,v 1.2 1998/04/17 23:39:29 ross Exp $";
 #endif
 
 #if HAVE_TCP
@@ -231,7 +231,7 @@ ftcp_open (qconn, ibaud, fwait)
 
   while (! FGOT_SIGNAL ())
     {
-      socklen_t clen;
+      int clen;
       int onew;
       pid_t ipid;
 

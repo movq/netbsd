@@ -1,4 +1,4 @@
-/*	$NetBSD: conf.h,v 1.118 2005/06/04 22:45:11 uwe Exp $	*/
+/*	$NetBSD: conf.h,v 1.116 2005/02/03 19:20:01 perry Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -154,7 +154,7 @@ extern	const char devioc[], devcls[];
  * Line discipline switch table
  */
 struct linesw {
-	const char *l_name;	/* Linesw name */
+	char	*l_name;	/* Linesw name */
 	int	l_no;		/* Linesw number (compatibility) */
 
 	int	(*l_open)	(dev_t, struct tty *);
@@ -174,8 +174,8 @@ extern struct linesw **linesw;
 extern int nlinesw;
 extern void ttyldisc_init(void);
 int ttyldisc_add(struct linesw *, int);
-struct linesw *ttyldisc_remove(const char *);
-struct linesw *ttyldisc_lookup(const char *);
+struct linesw *ttyldisc_remove(char *);
+struct linesw *ttyldisc_lookup(char *);
 
 /* For those defining their own line disciplines: */
 #define	ttynodisc ((int (*)(dev_t, struct tty *))enodev)

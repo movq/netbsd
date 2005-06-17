@@ -1,4 +1,4 @@
-/*	$NetBSD: pfkey_dump.c,v 1.4 2005/04/27 22:38:56 uwe Exp $	*/
+/*	$NetBSD: pfkey_dump.c,v 1.1.1.2.2.7 2005/12/07 18:18:47 tron Exp $	*/
 
 /*	$KAME: pfkey_dump.c,v 1.45 2003/09/08 10:14:56 itojun Exp $	*/
 
@@ -83,6 +83,7 @@
 
 #define GETMSGSTR(str, num) \
 do { \
+	/*CONSTCOND*/ \
 	if (sizeof((str)[0]) == 0 \
 	 || num >= sizeof(str)/sizeof((str)[0])) \
 		printf("%u ", (num)); \
@@ -90,7 +91,7 @@ do { \
 		printf("%u ", (num)); \
 	else \
 		printf("%s ", (str)[(num)]); \
-} while (0)
+} while (/*CONSTCOND*/0)
 
 #define GETMSGV2S(v2s, num) \
 do { \
@@ -103,13 +104,15 @@ do { \
 		printf("%s ", p->str); \
 	else \
 		printf("%u ", (num)); \
-} while (0)
+} while (/*CONSTCOND*/0)
 
 static char *str_ipaddr __P((struct sockaddr *));
+static char *str_ipport __P((struct sockaddr *));
 static char *str_prefport __P((u_int, u_int, u_int, u_int));
 static void str_upperspec __P((u_int, u_int, u_int));
 static char *str_time __P((time_t));
 static void str_lifetime_byte __P((struct sadb_lifetime *, char *));
+static void pfkey_sadump1(struct sadb_msg *, int);
 static void pfkey_spdump1(struct sadb_msg *, int);
 
 struct val2str {
@@ -159,13 +162,13 @@ static struct val2str str_alg_auth[] = {
 	{ SADB_X_AALG_TCP_MD5, "tcp-md5", },
 #endif
 #ifdef SADB_X_AALG_SHA2_256
-	{ SADB_X_AALG_SHA2_256, "hmac-sha2-256", },
+	{ SADB_X_AALG_SHA2_256, "hmac-sha256", },
 #endif
 #ifdef SADB_X_AALG_SHA2_384
-	{ SADB_X_AALG_SHA2_384, "hmac-sha2-384", },
+	{ SADB_X_AALG_SHA2_384, "hmac-sha384", },
 #endif
 #ifdef SADB_X_AALG_SHA2_512
-	{ SADB_X_AALG_SHA2_512, "hmac-sha2-512", },
+	{ SADB_X_AALG_SHA2_512, "hmac-sha512", },
 #endif
 #ifdef SADB_X_AALG_RIPEMD160HMAC
 	{ SADB_X_AALG_RIPEMD160HMAC, "hmac-ripemd160", },
@@ -209,22 +212,44 @@ static struct val2str str_alg_comp[] = {
 /*
  * dump SADB_MSG formated.  For debugging, you should use kdebug_sadb().
  */
+
 void
 pfkey_sadump(m)
 	struct sadb_msg *m;
+{
+	pfkey_sadump1(m, 0);
+}
+
+void
+pfkey_sadump_withports(m)
+	struct sadb_msg *m;
+{
+	pfkey_sadump1(m, 1);
+}
+
+void
+pfkey_sadump1(m, withports)
+	struct sadb_msg *m;
+	int withports;
 {
 	caddr_t mhp[SADB_EXT_MAX + 1];
 	struct sadb_sa *m_sa;
 	struct sadb_x_sa2 *m_sa2;
 	struct sadb_lifetime *m_lftc, *m_lfth, *m_lfts;
-	struct sadb_address *m_saddr, *m_daddr, *m_paddr;
+	struct sadb_address *m_saddr, *m_daddr;
+#ifdef notdef
+	struct sadb_address *m_paddr;
+#endif
 	struct sadb_key *m_auth, *m_enc;
+#ifdef notdef
 	struct sadb_ident *m_sid, *m_did;
 	struct sadb_sens *m_sens;
+#endif
 #ifdef SADB_X_EXT_NAT_T_TYPE
 	struct sadb_x_nat_t_type *natt_type;
 	struct sadb_x_nat_t_port *natt_sport, *natt_dport;
 	struct sadb_address *natt_oa;
+	struct sockaddr *sa;
 
 	int use_natt = 0;
 #endif
@@ -239,35 +264,42 @@ pfkey_sadump(m)
 		return;
 	}
 
-	m_sa = (struct sadb_sa *)mhp[SADB_EXT_SA];
-	m_sa2 = (struct sadb_x_sa2 *)mhp[SADB_X_EXT_SA2];
-	m_lftc = (struct sadb_lifetime *)mhp[SADB_EXT_LIFETIME_CURRENT];
-	m_lfth = (struct sadb_lifetime *)mhp[SADB_EXT_LIFETIME_HARD];
-	m_lfts = (struct sadb_lifetime *)mhp[SADB_EXT_LIFETIME_SOFT];
-	m_saddr = (struct sadb_address *)mhp[SADB_EXT_ADDRESS_SRC];
-	m_daddr = (struct sadb_address *)mhp[SADB_EXT_ADDRESS_DST];
-	m_paddr = (struct sadb_address *)mhp[SADB_EXT_ADDRESS_PROXY];
-	m_auth = (struct sadb_key *)mhp[SADB_EXT_KEY_AUTH];
-	m_enc = (struct sadb_key *)mhp[SADB_EXT_KEY_ENCRYPT];
-	m_sid = (struct sadb_ident *)mhp[SADB_EXT_IDENTITY_SRC];
-	m_did = (struct sadb_ident *)mhp[SADB_EXT_IDENTITY_DST];
-	m_sens = (struct sadb_sens *)mhp[SADB_EXT_SENSITIVITY];
+	m_sa = (void *)mhp[SADB_EXT_SA];
+	m_sa2 = (void *)mhp[SADB_X_EXT_SA2];
+	m_lftc = (void *)mhp[SADB_EXT_LIFETIME_CURRENT];
+	m_lfth = (void *)mhp[SADB_EXT_LIFETIME_HARD];
+	m_lfts = (void *)mhp[SADB_EXT_LIFETIME_SOFT];
+	m_saddr = (void *)mhp[SADB_EXT_ADDRESS_SRC];
+	m_daddr = (void *)mhp[SADB_EXT_ADDRESS_DST];
+#ifdef notdef
+	m_paddr = (void *)mhp[SADB_EXT_ADDRESS_PROXY];
+#endif
+	m_auth = (void *)mhp[SADB_EXT_KEY_AUTH];
+	m_enc = (void *)mhp[SADB_EXT_KEY_ENCRYPT];
+#ifdef notdef
+	m_sid = (void *)mhp[SADB_EXT_IDENTITY_SRC];
+	m_did = (void *)mhp[SADB_EXT_IDENTITY_DST];
+	m_sens = (void *)mhp[SADB_EXT_SENSITIVITY];
+#endif
 #ifdef SADB_X_EXT_NAT_T_TYPE
-	natt_type = (struct sadb_x_nat_t_type *)mhp[SADB_X_EXT_NAT_T_TYPE];
-	natt_sport = (struct sadb_x_nat_t_port *)mhp[SADB_X_EXT_NAT_T_SPORT];
-	natt_dport = (struct sadb_x_nat_t_port *)mhp[SADB_X_EXT_NAT_T_DPORT];
-	natt_oa = (struct sadb_address *)mhp[SADB_X_EXT_NAT_T_OA];
+	natt_type = (void *)mhp[SADB_X_EXT_NAT_T_TYPE];
+	natt_sport = (void *)mhp[SADB_X_EXT_NAT_T_SPORT];
+	natt_dport = (void *)mhp[SADB_X_EXT_NAT_T_DPORT];
+	natt_oa = (void *)mhp[SADB_X_EXT_NAT_T_OA];
 
 	if (natt_type && natt_type->sadb_x_nat_t_type_type)
 		use_natt = 1;
 #endif
-
 	/* source address */
 	if (m_saddr == NULL) {
 		printf("no ADDRESS_SRC extension.\n");
 		return;
 	}
-	printf("%s", str_ipaddr((struct sockaddr *)(m_saddr + 1)));
+	sa = (void *)(m_saddr + 1);
+	if (withports)
+		printf("%s[%s]", str_ipaddr(sa), str_ipport(sa));
+	else
+		printf("%s", str_ipaddr(sa));
 #ifdef SADB_X_EXT_NAT_T_TYPE
 	if (use_natt && natt_sport)
 		printf("[%u]", ntohs(natt_sport->sadb_x_nat_t_port_port));
@@ -279,7 +311,11 @@ pfkey_sadump(m)
 		printf(" no ADDRESS_DST extension.\n");
 		return;
 	}
-	printf("%s", str_ipaddr((struct sockaddr *)(m_daddr + 1)));
+	sa = (void *)(m_daddr + 1);
+	if (withports)
+		printf("%s[%s]", str_ipaddr(sa), str_ipport(sa));
+	else
+		printf("%s", str_ipaddr(sa));
 #ifdef SADB_X_EXT_NAT_T_TYPE
 	if (use_natt && natt_dport)
 		printf("[%u]", ntohs(natt_dport->sadb_x_nat_t_port_port));
@@ -320,7 +356,7 @@ pfkey_sadump(m)
 	/* other NAT-T information */
 	if (use_natt && natt_oa)
 		printf("\tNAT OA=%s\n",
-		       str_ipaddr((struct sockaddr *)(natt_oa + 1)));
+		       str_ipaddr((void *)(natt_oa + 1)));
 #endif
 
 	/* encryption key */
@@ -331,7 +367,7 @@ pfkey_sadump(m)
 		if (m_enc != NULL) {
 			printf("\tE: ");
 			GETMSGV2S(str_alg_enc, m_sa->sadb_sa_encrypt);
-			ipsec_hexdump((caddr_t)m_enc + sizeof(*m_enc),
+			ipsec_hexdump((caddr_t)(void *)m_enc + sizeof(*m_enc),
 				      m_enc->sadb_key_bits / 8);
 			printf("\n");
 		}
@@ -341,7 +377,7 @@ pfkey_sadump(m)
 	if (m_auth != NULL) {
 		printf("\tA: ");
 		GETMSGV2S(str_alg_auth, m_sa->sadb_sa_auth);
-		ipsec_hexdump((caddr_t)m_auth + sizeof(*m_auth),
+		ipsec_hexdump((caddr_t)(void *)m_auth + sizeof(*m_auth),
 		              m_auth->sadb_key_bits / 8);
 		printf("\n");
 	}
@@ -362,7 +398,7 @@ pfkey_sadump(m)
 		time_t tmp_time = time(0);
 
 		printf("\tcreated: %s",
-			str_time(m_lftc->sadb_lifetime_addtime));
+			str_time((long)m_lftc->sadb_lifetime_addtime));
 		printf("\tcurrent: %s\n", str_time(tmp_time));
 		printf("\tdiff: %lu(s)",
 			(u_long)(m_lftc->sadb_lifetime_addtime == 0 ?
@@ -376,7 +412,7 @@ pfkey_sadump(m)
 			0 : m_lfts->sadb_lifetime_addtime));
 
 		printf("\tlast: %s",
-			str_time(m_lftc->sadb_lifetime_usetime));
+			str_time((long)m_lftc->sadb_lifetime_usetime));
 		printf("\thard: %lu(s)",
 			(u_long)(m_lfth == NULL ?
 			0 : m_lfth->sadb_lifetime_usetime));
@@ -449,14 +485,14 @@ pfkey_spdump1(m, withports)
 		return;
 	}
 
-	m_saddr = (struct sadb_address *)mhp[SADB_EXT_ADDRESS_SRC];
-	m_daddr = (struct sadb_address *)mhp[SADB_EXT_ADDRESS_DST];
+	m_saddr = (void *)mhp[SADB_EXT_ADDRESS_SRC];
+	m_daddr = (void *)mhp[SADB_EXT_ADDRESS_DST];
 #ifdef SADB_X_EXT_TAG
-	m_tag = (struct sadb_x_tag *)mhp[SADB_X_EXT_TAG];
+	m_tag = (void *)mhp[SADB_X_EXT_TAG];
 #endif
-	m_xpl = (struct sadb_x_policy *)mhp[SADB_X_EXT_POLICY];
-	m_lftc = (struct sadb_lifetime *)mhp[SADB_EXT_LIFETIME_CURRENT];
-	m_lfth = (struct sadb_lifetime *)mhp[SADB_EXT_LIFETIME_HARD];
+	m_xpl = (void *)mhp[SADB_X_EXT_POLICY];
+	m_lftc = (void *)mhp[SADB_EXT_LIFETIME_CURRENT];
+	m_lfth = (void *)mhp[SADB_EXT_LIFETIME_HARD];
 
 #ifdef __linux__
 	/* *bsd indicates per-socket policies by omiting src and dst 
@@ -469,19 +505,20 @@ pfkey_spdump1(m, withports)
 #endif
 	if (m_saddr && m_daddr) {
 		/* source address */
-		sa = (struct sockaddr *)(m_saddr + 1);
+		sa = (void *)(m_saddr + 1);
 		switch (sa->sa_family) {
 		case AF_INET:
 		case AF_INET6:
-			if (getnameinfo(sa, sysdep_sa_len(sa), NULL, 0,
-			    pbuf, sizeof(pbuf), NI_NUMERICSERV) != 0)
+			if (getnameinfo(sa, (socklen_t)sysdep_sa_len(sa), NULL,
+			    0, pbuf, sizeof(pbuf), NI_NUMERICSERV) != 0)
 				sport = 0;	/*XXX*/
 			else
 				sport = atoi(pbuf);
 			printf("%s%s ", str_ipaddr(sa),
-				str_prefport(sa->sa_family,
-				    m_saddr->sadb_address_prefixlen, sport,
-				    m_saddr->sadb_address_proto));
+				str_prefport((u_int)sa->sa_family,
+				    (u_int)m_saddr->sadb_address_prefixlen, 
+				    (u_int)sport,
+				    (u_int)m_saddr->sadb_address_proto));
 			break;
 		default:
 			printf("unknown-af ");
@@ -489,19 +526,20 @@ pfkey_spdump1(m, withports)
 		}
 
 		/* destination address */
-		sa = (struct sockaddr *)(m_daddr + 1);
+		sa = (void *)(m_daddr + 1);
 		switch (sa->sa_family) {
 		case AF_INET:
 		case AF_INET6:
-			if (getnameinfo(sa, sysdep_sa_len(sa), NULL, 0,
-			    pbuf, sizeof(pbuf), NI_NUMERICSERV) != 0)
+			if (getnameinfo(sa, (socklen_t)sysdep_sa_len(sa), NULL,
+			    0, pbuf, sizeof(pbuf), NI_NUMERICSERV) != 0)
 				dport = 0;	/*XXX*/
 			else
 				dport = atoi(pbuf);
 			printf("%s%s ", str_ipaddr(sa),
-				str_prefport(sa->sa_family,
-				    m_daddr->sadb_address_prefixlen, dport,
-				    m_saddr->sadb_address_proto));
+				str_prefport((u_int)sa->sa_family,
+				    (u_int)m_daddr->sadb_address_prefixlen, 
+				    (u_int)dport,
+				    (u_int)m_saddr->sadb_address_proto));
 			break;
 		default:
 			printf("unknown-af ");
@@ -514,7 +552,8 @@ pfkey_spdump1(m, withports)
 			printf("upper layer protocol mismatched.\n");
 			return;
 		}
-		str_upperspec(m_saddr->sadb_address_proto, sport, dport);
+		str_upperspec((u_int)m_saddr->sadb_address_proto, (u_int)sport,
+		    (u_int)dport);
 	}
 #ifdef SADB_X_EXT_TAG
 	else if (m_tag)
@@ -532,9 +571,9 @@ pfkey_spdump1(m, withports)
 		return;
 	}
 	if (withports)
-		d_xpl = ipsec_dump_policy_withports((char *)m_xpl, "\n\t");
+		d_xpl = ipsec_dump_policy_withports(m_xpl, "\n\t");
 	else
-		d_xpl = ipsec_dump_policy((char *)m_xpl, "\n\t");
+		d_xpl = ipsec_dump_policy((ipsec_policy_t)m_xpl, "\n\t");
 		
 	if (!d_xpl)
 		printf("\n\tPolicy:[%s]\n", ipsec_strerror());
@@ -548,9 +587,9 @@ pfkey_spdump1(m, withports)
 	/* lifetime */
 	if (m_lftc) {
 		printf("\tcreated: %s  ",
-			str_time(m_lftc->sadb_lifetime_addtime));
+			str_time((long)m_lftc->sadb_lifetime_addtime));
 		printf("lastused: %s\n",
-			str_time(m_lftc->sadb_lifetime_usetime));
+			str_time((long)m_lftc->sadb_lifetime_usetime));
 	}
 	if (m_lfth) {
 		printf("\tlifetime: %lu(s) ",
@@ -584,10 +623,31 @@ str_ipaddr(sa)
 	if (sa == NULL)
 		return "";
 
-	if (getnameinfo(sa, sysdep_sa_len(sa), buf, sizeof(buf), NULL, 0, niflag) == 0)
+	if (getnameinfo(sa, (socklen_t)sysdep_sa_len(sa), buf, sizeof(buf), 
+	    NULL, 0, niflag) == 0)
 		return buf;
 	return NULL;
 }
+
+/*
+ * set "port" to buffer.
+ */
+static char *
+str_ipport(sa)
+	struct sockaddr *sa;
+{
+	static char buf[NI_MAXHOST];
+	const int niflag = NI_NUMERICSERV;
+
+	if (sa == NULL)
+		return "";
+
+	if (getnameinfo(sa, (socklen_t)sysdep_sa_len(sa), NULL, 0, 
+	    buf, sizeof(buf), niflag) == 0)
+		return buf;
+	return NULL;
+}
+
 
 /*
  * set "/prefix[port number]" to buffer.
@@ -649,7 +709,7 @@ str_upperspec(ulp, p1, p2)
 			printf("ip4");
 			break;
 		default:
-			ent = getprotobynumber(ulp);
+			ent = getprotobynumber((int)ulp);
 			if (ent)
 				printf("%s", ent->p_name);
 			else

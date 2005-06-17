@@ -1,4 +1,4 @@
-/*	$NetBSD: fwohci.c,v 1.88 2005/06/08 18:33:15 fair Exp $	*/
+/*	$NetBSD: fwohci.c,v 1.84 2005/02/27 00:27:17 perry Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -49,7 +49,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fwohci.c,v 1.88 2005/06/08 18:33:15 fair Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fwohci.c,v 1.84 2005/02/27 00:27:17 perry Exp $");
 
 #define FWOHCI_WAIT_DEBUG 1
 
@@ -144,12 +144,11 @@ int fwohci_itd_construct(struct fwohci_it_ctx *, struct fwohci_it_dmabuf *,
 void fwohci_itd_destruct(struct fwohci_it_dmabuf *);
 static int fwohci_itd_dmabuf_alloc(struct fwohci_it_dmabuf *);
 static void fwohci_itd_dmabuf_free(struct fwohci_it_dmabuf *);
-int fwohci_itd_link(volatile struct fwohci_it_dmabuf *,
-    volatile struct fwohci_it_dmabuf *);
-int fwohci_itd_unlink(volatile struct fwohci_it_dmabuf *);
-int fwohci_itd_writedata(volatile struct fwohci_it_dmabuf *, int,
+int fwohci_itd_link(struct fwohci_it_dmabuf *, struct fwohci_it_dmabuf *);
+int fwohci_itd_unlink(struct fwohci_it_dmabuf *);
+int fwohci_itd_writedata(struct fwohci_it_dmabuf *, int,
     struct ieee1394_it_datalist *);
-int fwohci_itd_isfilled(volatile struct fwohci_it_dmabuf *);
+int fwohci_itd_isfilled(struct fwohci_it_dmabuf *);
 
 static int  fwohci_buf_alloc(struct fwohci_softc *, struct fwohci_buf *);
 static void fwohci_buf_free(struct fwohci_softc *, struct fwohci_buf *);
@@ -597,9 +596,8 @@ fwohci_thread_init(void *arg)
 	sc->sc_shutdownhook = shutdownhook_establish(fwohci_shutdown, sc);
 	sc->sc_powerhook = powerhook_establish(fwohci_power, sc);
 
-	sc->sc_sc1394.sc1394_if = config_found(&sc->sc_sc1394.sc1394_dev,
-	    /*XXXUNCONST*/
-	    __UNCONST("fw"), fwohci_print);
+	sc->sc_sc1394.sc1394_if = config_found(&sc->sc_sc1394.sc1394_dev, "fw",
+	    fwohci_print);
 
 #if NFWISO > 0
 	fwiso_register_if(&sc->sc_sc1394);
@@ -4945,7 +4943,7 @@ fwohci_ir_intr(struct fwohci_softc *sc, struct fwohci_ir_ctx *irc)
 #ifdef FWOHCI_WAIT_DEBUG
 			irc->irc_cycle[1] = fwohci_cycletimer(irc->irc_sc);
 #endif
-			wakeup(irc->irc_waitchan);
+			wakeup((void *)irc->irc_waitchan);
 		}
 		selwakeup(&irc->irc_sel);
 		return;
@@ -5052,7 +5050,7 @@ fwohci_ir_read(struct device *dev, ieee1394_ir_tag_t tag, struct uio *uio,
 	}
 #endif /* USEDRAIN */
 
-	fdprev = fd = irc->irc_readtop;
+	fd = irc->irc_readtop;
 
 #if 0
 	if ((irc->irc_status & IRC_STATUS_RECEIVE) == 0
@@ -5060,6 +5058,7 @@ fwohci_ir_read(struct device *dev, ieee1394_ir_tag_t tag, struct uio *uio,
 		unsigned int s;
 		int i = 0;
 
+		fdprev = fd;
 		while (fd->fd_status != 0) {
 			s = data[14] << 8;
 			s |= data[15];
@@ -5682,7 +5681,7 @@ fwohci_it_ctx_writedata(ieee1394_it_tag_t it, int ndata,
 	struct fwohci_it_ctx *itc = (struct fwohci_it_ctx *)it;
 	int rv;
 	int writepkt = 0;
-	volatile struct fwohci_it_dmabuf *itd;
+	struct fwohci_it_dmabuf *itd;
 	int i = 0;
 
 	itd = itc->itc_buf_end;
@@ -5701,7 +5700,7 @@ fwohci_it_ctx_writedata(ieee1394_it_tag_t it, int ndata,
 				    itc->itc_buf_cnt);
 
 				itc->itc_waitchan = itc;
-				if (tsleep(itc->itc_waitchan,
+				if (tsleep((void *)itc->itc_waitchan,
 				    PCATCH, "fwohci it", 0) == EWOULDBLOCK) {
 					itc->itc_waitchan = NULL;
 					printf("fwohci0 signal\n");
@@ -5747,7 +5746,7 @@ fwohci_it_ctx_writedata(ieee1394_it_tag_t it, int ndata,
 #endif
 			if (itc->itc_buf_linkend != itc->itc_buf_end
 			    && fwohci_itd_hasdata(itc->itc_buf_end)) {
-				volatile struct fwohci_it_dmabuf *itdn = itc->itc_buf_linkend;
+				struct fwohci_it_dmabuf *itdn = itc->itc_buf_linkend;
 
 				INC_BUF(itc, itdn);
 				printf("connecting %d after %d\n",
@@ -5795,8 +5794,8 @@ fwohci_it_ctx_run(struct fwohci_it_ctx *itc)
 {
 	struct fwohci_softc *sc = itc->itc_sc;
 	int ctx = itc->itc_num;
-	volatile struct fwohci_it_dmabuf *itd = 
-	    (volatile struct fwohci_it_dmabuf *)itc->itc_buf_start;
+	struct fwohci_it_dmabuf *itd
+	    = (struct fwohci_it_dmabuf *)itc->itc_buf_start;
 	u_int32_t reg;
 	int i;
 
@@ -5813,7 +5812,7 @@ fwohci_it_ctx_run(struct fwohci_it_ctx *itc)
 	itd->itd_lastdesc->fd_branch = 0;
 
 	if (itc->itc_buf_cnt > 1) {
-		volatile struct fwohci_it_dmabuf *itdn = itd;
+		struct fwohci_it_dmabuf *itdn = itd;
 
 #if 0
 		INC_BUF(itc, itdn);
@@ -6010,7 +6009,7 @@ fwohci_it_ctx_flush(ieee1394_it_tag_t it)
 static void
 fwohci_it_intr(struct fwohci_softc *sc, struct fwohci_it_ctx *itc)
 {
-	volatile struct fwohci_it_dmabuf *itd, *newstartbuf;
+	struct fwohci_it_dmabuf *itd, *newstartbuf;
 	u_int16_t scratchval;
 	u_int32_t reg;
 
@@ -6035,11 +6034,10 @@ fwohci_it_intr(struct fwohci_softc *sc, struct fwohci_it_ctx *itc)
 	    itc->itc_buf_start->itd_num, itc->itc_buf_end->itd_num,
 	    itc->itc_buf_cnt);
 	{
-		u_int32_t cntlstatus
+		u_int32_t reg
 		    = OHCI_CSR_READ(sc, OHCI_REG_IsochronousCycleTimer);
-		printf("\t\tIsoCounter 0x%08x, %d %d %d\n", cntlstatus,
-		    (cntlstatus >> 25) & 0xfe, (cntlstatus >> 12) & 0x1fff,
-		    cntlstatus & 0xfff);
+		printf("\t\tIsoCounter 0x%08x, %d %d %d\n", reg,
+		    (reg >> 25) & 0xfe, (reg >> 12) & 0x1fff, reg & 0xfff);
 	}
 #endif /* FW_DEBUG */
 	/* end print out debug info */
@@ -6064,11 +6062,10 @@ fwohci_it_intr(struct fwohci_softc *sc, struct fwohci_it_ctx *itc)
 		    itc->itc_buf_start->itd_num, itc->itc_buf_end->itd_num,
 		    itc->itc_buf_cnt);
 		{
-			u_int32_t xreg
+			u_int32_t reg
 			    = OHCI_CSR_READ(sc, OHCI_REG_IsochronousCycleTimer);
 			printf("\t\tIsoCounter 0x%08x, %d %d %d\n", reg,
-			    (xreg >> 25) & 0xfe, (xreg >> 12) & 0x1fff,
-			    xreg & 0xfff);
+			    (reg >> 25) & 0xfe, (reg >> 12) & 0x1fff, reg & 0xfff);
 		}
 		printf("\t\tbranch of lastdesc 0x%08x\n",
 		    itc->itc_buf_start->itd_lastdesc->fd_branch);
@@ -6087,7 +6084,7 @@ fwohci_it_intr(struct fwohci_softc *sc, struct fwohci_it_ctx *itc)
 		INC_BUF(itc, newstartbuf);
 	}
 
-	itd = itc->itc_buf_start;
+	itd = (struct fwohci_it_dmabuf *)itc->itc_buf_start;
 	itc->itc_buf_start = newstartbuf;
 	while (itd != newstartbuf) {
 		itc->itc_outpkt += itd->itd_npacket;
@@ -6137,7 +6134,7 @@ fwohci_it_intr(struct fwohci_softc *sc, struct fwohci_it_ctx *itc)
 
 		/* send message */
 		if (itc->itc_waitchan != NULL) {
-			wakeup(itc->itc_waitchan);
+			wakeup((void *)itc->itc_waitchan);
 		}
 
 		return;
@@ -6193,7 +6190,7 @@ fwohci_it_intr(struct fwohci_softc *sc, struct fwohci_it_ctx *itc)
 	/* link if some valid DMA buffers exist */
 	if (itc->itc_buf_cnt > 1
 	    && itc->itc_buf_linkend != itc->itc_buf_end) {
-		volatile struct fwohci_it_dmabuf *itdprev;
+		struct fwohci_it_dmabuf *itdprev;
 		int i;
 
 		DPRINTF(("CTX %d: start linkend dataend bufs %d, %d, %d, %d\n",
@@ -6246,7 +6243,7 @@ fwohci_it_intr(struct fwohci_softc *sc, struct fwohci_it_ctx *itc)
 			    itc->itc_buf_cnt));
 		}
 	} else {
-		volatile struct fwohci_it_dmabuf *le;
+		struct fwohci_it_dmabuf *le;
 
 		le = itc->itc_buf_linkend;
 
@@ -6265,7 +6262,7 @@ fwohci_it_intr(struct fwohci_softc *sc, struct fwohci_it_ctx *itc)
 	/* send message */
 	if (itc->itc_waitchan != NULL) {
 		/*  */
-		wakeup(itc->itc_waitchan);
+		wakeup((void *)itc->itc_waitchan);
 	}
 }
 
@@ -6593,8 +6590,7 @@ fwohci_itd_dmabuf_free(struct fwohci_it_dmabuf *itd)
  *	error happens, return a negative value.
  */
 int
-fwohci_itd_link(volatile struct fwohci_it_dmabuf *itd,
-    volatile struct fwohci_it_dmabuf *itdc)
+fwohci_itd_link(struct fwohci_it_dmabuf *itd, struct fwohci_it_dmabuf *itdc)
 {
 	struct fwohci_desc *fd1, *fdc;
 
@@ -6661,7 +6657,7 @@ fwohci_itd_link(volatile struct fwohci_it_dmabuf *itd,
  *	arguent.
  */
 int
-fwohci_itd_unlink(volatile struct fwohci_it_dmabuf *itd)
+fwohci_itd_unlink(struct fwohci_it_dmabuf *itd)
 {
 	struct fwohci_desc *fd;
 
@@ -6698,7 +6694,7 @@ fwohci_itd_unlink(volatile struct fwohci_it_dmabuf *itd)
  *	negative value if an error happens
  */
 int
-fwohci_itd_writedata(volatile struct fwohci_it_dmabuf *itd, int ndata,
+fwohci_itd_writedata(struct fwohci_it_dmabuf *itd, int ndata,
     struct ieee1394_it_datalist *itdata)
 {
 	int writepkt;
@@ -6731,7 +6727,7 @@ fwohci_itd_writedata(volatile struct fwohci_it_dmabuf *itd, int ndata,
 	p = itd->itd_buf + itd->itd_maxsize * itd->itd_npacket;
 	fd = itd->itd_lastdesc;
 
-	DPRINTF(("fwohci_itd_writedata(%d[%p], %d, %p) invoked:\n",
+	DPRINTF(("fwohci_itd_writedata(%d[%p], %d, 0x%p) invoked:\n",
 	    itd->itd_num, itd, ndata, itdata));
 
 	for (writepkt = 0; writepkt < dspace; ++writepkt) {
@@ -6853,7 +6849,7 @@ fwohci_itd_writedata(volatile struct fwohci_it_dmabuf *itd, int ndata,
 
 
 int
-fwohci_itd_isfilled(volatile struct fwohci_it_dmabuf *itd)
+fwohci_itd_isfilled(struct fwohci_it_dmabuf *itd)
 {
 
 	return itd->itd_npacket*2 > itd->itd_maxpacket ? 1 : 0;

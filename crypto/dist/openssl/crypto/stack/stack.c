@@ -191,7 +191,8 @@ char *sk_delete(STACK *st, int loc)
 	char *ret;
 	int i,j;
 
-	if(!st || (loc < 0) || (loc >= st->num)) return NULL;
+	if ((st == NULL) || (st->num == 0) || (loc < 0)
+					 || (loc >= st->num)) return(NULL);
 
 	ret=st->data[loc];
 	if (loc != st->num-1)
@@ -305,13 +306,13 @@ int sk_num(const STACK *st)
 
 char *sk_value(const STACK *st, int i)
 {
-	if(!st || (i < 0) || (i >= st->num)) return NULL;
+	if(st == NULL) return NULL;
 	return st->data[i];
 }
 
 char *sk_set(STACK *st, int i, char *value)
 {
-	if(!st || (i < 0) || (i >= st->num)) return NULL;
+	if(st == NULL) return NULL;
 	return (st->data[i] = value);
 }
 
@@ -330,11 +331,4 @@ void sk_sort(STACK *st)
 		qsort(st->data,st->num,sizeof(char *), comp_func);
 		st->sorted=1;
 		}
-	}
-
-int sk_is_sorted(const STACK *st)
-	{
-	if (!st)
-		return 1;
-	return st->sorted;
 	}

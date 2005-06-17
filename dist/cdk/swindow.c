@@ -1,9 +1,9 @@
 #include <cdk.h>
 
 /*
- * $Author: lukem $
- * $Date: 2005/06/01 11:51:11 $
- * $Revision: 1.4 $
+ * $Author: tron $
+ * $Date: 2005/06/13 22:02:36 $
+ * $Revision: 1.3.8.1 $
  */
 
 /*

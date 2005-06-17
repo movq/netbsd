@@ -1,4 +1,4 @@
-/*	$NetBSD: procfs_machdep.c,v 1.21 2005/05/29 21:32:37 christos Exp $	*/
+/*	$NetBSD: procfs_machdep.c,v 1.20 2005/02/27 22:33:20 christos Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: procfs_machdep.c,v 1.21 2005/05/29 21:32:37 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: procfs_machdep.c,v 1.20 2005/02/27 22:33:20 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -75,7 +75,7 @@ static int procfs_getonecpu(int, struct cpu_info *, char *, int *);
  * In the multiprocessor case, this should be a loop over all CPUs.
  */
 int
-procfs_getcpuinfstr(char *bf, int *len)
+procfs_getcpuinfstr(char *buf, int *len)
 {
 	struct cpu_info *ci;
 	CPU_INFO_ITERATOR cii;
@@ -83,15 +83,15 @@ procfs_getcpuinfstr(char *bf, int *len)
 
 	*len = 0;
 	for (CPU_INFO_FOREACH(cii, ci)) {
-		if (procfs_getonecpu(i++, ci, bf, &used) == 0) {
+		if (procfs_getonecpu(i++, ci, buf, &used) == 0) {
 			*len += used;
 			total = 0;
 			break;
 		}
 		total -= used;
 		if (total > 0) {
-			bf += used;
-			*bf++ = '\n';
+			buf += used;
+			*buf++ = '\n';
 			*len += used + 1;
 			used = --total;
 			if (used == 0)
@@ -105,7 +105,7 @@ procfs_getcpuinfstr(char *bf, int *len)
 }
 
 static int
-procfs_getonecpu(int xcpu, struct cpu_info *ci, char *bf, int *len)
+procfs_getonecpu(int cpu, struct cpu_info *ci, char *buf, int *len)
 {
 	int left, l, i;
 	char featurebuf[256], *p;
@@ -122,7 +122,7 @@ procfs_getonecpu(int xcpu, struct cpu_info *ci, char *bf, int *len)
 		}
 	}
 
-	p = bf;
+	p = buf;
 	left = *len;
 	l = snprintf(p, left,
 		"processor\t: %d\n"
@@ -131,7 +131,7 @@ procfs_getonecpu(int xcpu, struct cpu_info *ci, char *bf, int *len)
 		"model\t\t: %d\n"
 		"model name\t: %s\n"
 		"stepping\t: ",
-		xcpu,
+		cpu,
 		(char *)ci->ci_vendor,
 		ci->ci_cpuid_level >= 0 ?
 		    ((ci->ci_signature >> 8) & 15) : cpu_class + 3,
@@ -187,7 +187,7 @@ procfs_getonecpu(int xcpu, struct cpu_info *ci, char *bf, int *len)
 
 	if (l > left)
 		return 0;
-	*len = (p + l) - bf;
+	*len = (p + l) - buf;
 
 	return 1;
 }

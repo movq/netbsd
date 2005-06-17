@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_exec.c,v 1.199 2005/06/10 23:32:16 elad Exp $	*/
+/*	$NetBSD: kern_exec.c,v 1.194.4.11 2005/10/31 13:25:31 tron Exp $	*/
 
 /*-
  * Copyright (C) 1993, 1994, 1996 Christopher G. Demetriou
@@ -33,11 +33,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_exec.c,v 1.199 2005/06/10 23:32:16 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_exec.c,v 1.194.4.11 2005/10/31 13:25:31 tron Exp $");
 
 #include "opt_ktrace.h"
 #include "opt_syscall_debug.h"
 #include "opt_compat_netbsd.h"
+#include "opt_verified_exec.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -201,7 +202,7 @@ static void link_es(struct execsw_entry **, const struct execsw *);
  * ON ENTRY:
  *	exec package with appropriate namei info
  *	proc pointer of exec'ing proc
- *      iff verified exec enabled then flag indicating a direct exec or
+ *      if verified exec enabled then flag indicating a direct exec or
  *        an indirect exec (i.e. for a shell script interpreter)
  *	NO SELF-LOCKED VNODES
  *
@@ -221,11 +222,8 @@ static void link_es(struct execsw_entry **, const struct execsw *);
  *			exec header unmodified.
  */
 int
-#ifdef VERIFIED_EXEC
-check_exec(struct proc *p, struct exec_package *epp, int direct_exec)
-#else
-check_exec(struct proc *p, struct exec_package *epp)
-#endif
+/*ARGSUSED*/
+check_exec(struct proc *p, struct exec_package *epp, int flag)
 {
 	int		error, i;
 	struct vnode	*vp;
@@ -269,9 +267,8 @@ check_exec(struct proc *p, struct exec_package *epp)
 
 
 #ifdef VERIFIED_EXEC
-        /* Evaluate signature for file... */
-        if ((error = veriexec_verify(p, vp, epp->ep_vap,
-				     epp->ep_name, direct_exec)) != 0)
+        if ((error = veriexec_verify(p, vp, epp->ep_vap, epp->ep_ndp->ni_dirp,
+				     flag, NULL)) != 0)
                 goto bad2;
 #endif
 
@@ -440,15 +437,14 @@ sys_execve(struct lwp *l, void *v, register_t *retval)
 #ifdef VERIFIED_EXEC
         if ((error = check_exec(p, &pack, VERIEXEC_DIRECT)) != 0)
 #else
-        if ((error = check_exec(p, &pack)) != 0)
+        if ((error = check_exec(p, &pack, 0)) != 0)
 #endif
 		goto freehdr;
 
 	/* XXX -- THE FOLLOWING SECTION NEEDS MAJOR CLEANUP */
 
 	/* allocate an argument buffer */
-	argp = (char *) uvm_km_alloc(exec_map, NCARGS, 0,
-	    UVM_KMF_PAGEABLE|UVM_KMF_WAITVA);
+	argp = (char *) uvm_km_valloc_wait(exec_map, NCARGS);
 #ifdef DIAGNOSTIC
 	if (argp == (vaddr_t) 0)
 		panic("execve: argp == NULL");
@@ -754,8 +750,11 @@ sys_execve(struct lwp *l, void *v, register_t *retval)
 			p->p_ucred->cr_uid = attr.va_uid;
 		if (attr.va_mode & S_ISGID)
 			p->p_ucred->cr_gid = attr.va_gid;
-	} else
-		p->p_flag &= ~P_SUGID;
+	} else {
+		if (p->p_ucred->cr_uid == p->p_cred->p_ruid &&
+		    p->p_ucred->cr_gid == p->p_cred->p_rgid)
+			p->p_flag &= ~P_SUGID;
+	}
 	p->p_cred->p_svuid = p->p_ucred->cr_uid;
 	p->p_cred->p_svgid = p->p_ucred->cr_gid;
 
@@ -768,7 +767,7 @@ sys_execve(struct lwp *l, void *v, register_t *retval)
 
 	doexechooks(p);
 
-	uvm_km_free(exec_map, (vaddr_t) argp, NCARGS, UVM_KMF_PAGEABLE);
+	uvm_km_free_wakeup(exec_map, (vaddr_t) argp, NCARGS);
 
 	PNBUF_PUT(nid.ni_cnd.cn_pnbuf);
 
@@ -859,7 +858,7 @@ sys_execve(struct lwp *l, void *v, register_t *retval)
 	VOP_CLOSE(pack.ep_vp, FREAD, cred, p);
 	vput(pack.ep_vp);
 	PNBUF_PUT(nid.ni_cnd.cn_pnbuf);
-	uvm_km_free(exec_map, (vaddr_t) argp, NCARGS, UVM_KMF_PAGEABLE);
+	uvm_km_free_wakeup(exec_map, (vaddr_t) argp, NCARGS);
 
  freehdr:
 	l->l_flag |= oldlwpflags;
@@ -887,7 +886,7 @@ sys_execve(struct lwp *l, void *v, register_t *retval)
 	if (pack.ep_emul_arg)
 		FREE(pack.ep_emul_arg, M_TEMP);
 	PNBUF_PUT(nid.ni_cnd.cn_pnbuf);
-	uvm_km_free(exec_map, (vaddr_t) argp, NCARGS, UVM_KMF_PAGEABLE);
+	uvm_km_free_wakeup(exec_map, (vaddr_t) argp, NCARGS);
 	free(pack.ep_hdr, M_EXEC);
 	exit1(l, W_EXITCODE(error, SIGABRT));
 
@@ -1239,8 +1238,7 @@ exec_init(int init_boot)
 	execsw = new_es;
 	nexecs = es_sz;
 	if (old_es)
-		/*XXXUNCONST*/
-		free(__UNCONST(old_es), M_EXEC);
+		free((void *)old_es, M_EXEC);
 
 	/*
 	 * Figure out the maximum size of an exec header.

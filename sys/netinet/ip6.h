@@ -1,4 +1,4 @@
-/*	$NetBSD: ip6.h,v 1.19 2005/05/29 21:41:23 christos Exp $	*/
+/*	$NetBSD: ip6.h,v 1.18 2004/07/09 09:15:02 itojun Exp $	*/
 /*	$KAME: ip6.h,v 1.45 2003/06/05 04:46:38 keiichi Exp $	*/
 
 /*
@@ -280,16 +280,16 @@ struct ip6_frag {
  */
 #define IP6_EXTHDR_GET(val, typ, m, off, len) \
 do {									\
-	struct mbuf *_t;						\
-	int _tmp;							\
+	struct mbuf *t;							\
+	int tmp;							\
 	if ((m)->m_len >= (off) + (len))				\
 		(val) = (typ)(mtod((m), caddr_t) + (off));		\
 	else {								\
-		_t = m_pulldown((m), (off), (len), &_tmp);		\
-		if (_t) {						\
-			if (_t->m_len < _tmp + (len))			\
+		t = m_pulldown((m), (off), (len), &tmp);		\
+		if (t) {						\
+			if (t->m_len < tmp + (len))			\
 				panic("m_pulldown malfunction");	\
-			(val) = (typ)(mtod(_t, caddr_t) + _tmp);	\
+			(val) = (typ)(mtod(t, caddr_t) + tmp);		\
 		} else {						\
 			(val) = (typ)NULL;				\
 			(m) = NULL;					\
@@ -299,15 +299,15 @@ do {									\
 
 #define IP6_EXTHDR_GET0(val, typ, m, off, len) \
 do {									\
-	struct mbuf *_t;						\
+	struct mbuf *t;							\
 	if ((off) == 0 && (m)->m_len >= len)				\
 		(val) = (typ)mtod((m), caddr_t);			\
 	else {								\
-		_t = m_pulldown((m), (off), (len), NULL);		\
-		if (_t) {						\
-			if (_t->m_len < (len))				\
+		t = m_pulldown((m), (off), (len), NULL);		\
+		if (t) {						\
+			if (t->m_len < (len))				\
 				panic("m_pulldown malfunction");	\
-			(val) = (typ)mtod(_t, caddr_t);			\
+			(val) = (typ)mtod(t, caddr_t);			\
 		} else {						\
 			(val) = (typ)NULL;				\
 			(m) = NULL;					\

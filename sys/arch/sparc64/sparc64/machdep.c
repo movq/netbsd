@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.181 2005/05/31 00:53:02 christos Exp $ */
+/*	$NetBSD: machdep.c,v 1.179 2005/03/09 19:04:45 matt Exp $ */
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -78,7 +78,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.181 2005/05/31 00:53:02 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.179 2005/03/09 19:04:45 matt Exp $");
 
 #include "opt_ddb.h"
 #include "opt_compat_netbsd.h"
@@ -198,7 +198,7 @@ cpu_startup()
 	/*
 	 * Good {morning,afternoon,evening,night}.
 	 */
-	printf("%s%s", copyright, version);
+	printf(version);
 	/*identifycpu();*/
 	format_bytes(pbuf, sizeof(pbuf), ctob((u_int64_t)physmem));
 	printf("total memory = %s\n", pbuf);
@@ -385,7 +385,7 @@ sysctl_machdep_boot(SYSCTLFN_ARGS)
 	struct sysctlnode node = *rnode;
 	u_int chosen;
 	char bootargs[256];
-	const char *cp;
+	char *cp;
 
 	if ((chosen = OF_finddevice("/chosen")) == -1)
 		return (ENOENT);
@@ -414,8 +414,7 @@ sysctl_machdep_boot(SYSCTLFN_ARGS)
 	if (cp == NULL || cp[0] == '\0')
 		return (ENOENT);
 
-	/*XXXUNCONST*/
-	node.sysctl_data = __UNCONST(cp);
+	node.sysctl_data = cp;
 	node.sysctl_size = strlen(cp) + 1;
 	return (sysctl_lookup(SYSCTLFN_CALL(&node)));
 }
@@ -1023,16 +1022,16 @@ _bus_dmamap_destroy(t, map)
  * bypass DVMA.
  */
 int
-_bus_dmamap_load(t, map, sbuf, buflen, p, flags)
+_bus_dmamap_load(t, map, buf, buflen, p, flags)
 	bus_dma_tag_t t;
 	bus_dmamap_t map;
-	void *sbuf;
+	void *buf;
 	bus_size_t buflen;
 	struct proc *p;
 	int flags;
 {
 	bus_size_t sgsize;
-	vaddr_t vaddr = (vaddr_t)sbuf;
+	vaddr_t vaddr = (vaddr_t)buf;
 	long incr;
 	int i;
 

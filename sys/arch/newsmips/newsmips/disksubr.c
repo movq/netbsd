@@ -1,4 +1,4 @@
-/*	$NetBSD: disksubr.c,v 1.19 2005/06/03 13:44:50 tsutsui Exp $	*/
+/*	$NetBSD: disksubr.c,v 1.17 2005/02/06 02:18:02 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1988 Regents of the University of California.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.19 2005/06/03 13:44:50 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.17 2005/02/06 02:18:02 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -50,30 +50,19 @@ __KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.19 2005/06/03 13:44:50 tsutsui Exp $"
  * Returns null on success and an error string on failure.
  */
 const char *
-readdisklabel(dev_t dev, void (*strat)(struct buf *), struct disklabel *lp,
+readdisklabel(dev_t dev, void (*strat)(struct buf *bp), struct disklabel *lp,
     struct cpu_disklabel *osdep)
 {
 	struct buf *bp;
 	struct disklabel *dlp;
-	const char *msg = NULL;
-	int i;
+	char *msg = NULL;
 
-	if (lp->d_secsize == 0)
-		lp->d_secsize = DEV_BSIZE;
 	if (lp->d_secperunit == 0)
 		lp->d_secperunit = 0x1fffffff;
-	if (lp->d_npartitions < RAW_PART + 1)
-		lp->d_npartitions = RAW_PART + 1;
-	for (i = 0; i < RAW_PART; i++) {
-		lp->d_partitions[i].p_size = 0;
-		lp->d_partitions[i].p_offset = 0;
-	}
-	if (lp->d_partitions[RAW_PART].p_size == 0)
-		lp->d_partitions[RAW_PART].p_size = lp->d_secperunit;
-	lp->d_partitions[RAW_PART].p_offset = 0;
-
-	lp->d_partitions[0].p_size = lp->d_partitions[RAW_PART].p_size;
-	lp->d_partitions[0].p_fstype = FS_BSDFFS;
+	lp->d_npartitions = 1;
+	if (lp->d_partitions[0].p_size == 0)
+		lp->d_partitions[0].p_size = 0x1fffffff;
+	lp->d_partitions[0].p_offset = 0;
 
 	bp = geteblk((int)lp->d_secsize);
 	bp->b_dev = dev;
@@ -82,10 +71,10 @@ readdisklabel(dev_t dev, void (*strat)(struct buf *), struct disklabel *lp,
 	bp->b_flags |= B_READ;
 	bp->b_cylinder = LABELSECTOR / lp->d_secpercyl;
 	(*strat)(bp);
-	if (biowait(bp))
+	if (biowait(bp)) {
 		msg = "I/O error";
-	else for (dlp = (struct disklabel *)bp->b_data;
-	    dlp <= (struct disklabel *)(bp->b_data + DEV_BSIZE - sizeof(*dlp));
+	} else for (dlp = (struct disklabel *)bp->b_data;
+	    dlp <= (struct disklabel *)(bp->b_data+DEV_BSIZE-sizeof(*dlp));
 	    dlp = (struct disklabel *)((char *)dlp + sizeof(long))) {
 		if (dlp->d_magic != DISKMAGIC || dlp->d_magic2 != DISKMAGIC) {
 			if (msg == NULL)
@@ -104,7 +93,8 @@ readdisklabel(dev_t dev, void (*strat)(struct buf *), struct disklabel *lp,
 }
 
 /*
- * Check new disk label for sensibility before setting it.
+ * Check new disk label for sensibility
+ * before setting it.
  */
 int
 setdisklabel(struct disklabel *olp, struct disklabel *nlp, u_long openmask,
@@ -136,8 +126,8 @@ setdisklabel(struct disklabel *olp, struct disklabel *nlp, u_long openmask,
 			npp->p_cpg = opp->p_cpg;
 		}
 	}
-	nlp->d_checksum = 0;
-	nlp->d_checksum = dkcksum(nlp);
+ 	nlp->d_checksum = 0;
+ 	nlp->d_checksum = dkcksum(nlp);
 	*olp = *nlp;
 	return 0;
 }
@@ -146,7 +136,7 @@ setdisklabel(struct disklabel *olp, struct disklabel *nlp, u_long openmask,
  * Write disk label back to device after modification.
  */
 int
-writedisklabel(dev_t dev, void (*strat)(struct buf *), struct disklabel *lp,
+writedisklabel(dev_t dev, void (*strat)(struct buf *bp), struct disklabel *lp,
     struct cpu_disklabel *osdep)
 {
 	struct buf *bp;
@@ -161,7 +151,7 @@ writedisklabel(dev_t dev, void (*strat)(struct buf *), struct disklabel *lp,
 		labelpart = 0;
 	}
 	bp = geteblk((int)lp->d_secsize);
-	bp->b_dev = MAKEDISKDEV(major(dev), DISKUNIT(dev), labelpart);
+	bp->b_dev = makedev(major(dev), DISKMINOR(DISKUNIT(dev), labelpart));
 	bp->b_blkno = LABELSECTOR;
 	bp->b_bcount = lp->d_secsize;
 	bp->b_flags |= B_READ;
@@ -183,12 +173,14 @@ writedisklabel(dev_t dev, void (*strat)(struct buf *), struct disklabel *lp,
 		}
 	}
 	error = ESRCH;
- done:
+done:
 	brelse(bp);
 	return error;
 }
 
 /*
+ * UNTESTED !!
+ *
  * Determine the size of the transfer, and make sure it is
  * within the boundaries of the partition. Adjust transfer
  * if needed, and signal errors or early completion.
@@ -230,7 +222,7 @@ bounds_check_with_label(struct disk *dk, struct buf *bp, int wlabel)
 	/* calculate cylinder for disksort to order transfers with */
 	bp->b_resid = (bp->b_blkno + p->p_offset) / lp->d_secpercyl;
 	return 1;
- bad:
+bad:
 	bp->b_flags |= B_ERROR;
 	return -1;
 }

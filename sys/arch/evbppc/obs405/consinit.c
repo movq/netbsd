@@ -1,4 +1,4 @@
-/*	$NetBSD: consinit.c,v 1.4 2005/03/18 14:12:34 shige Exp $	*/
+/*	$NetBSD: consinit.c,v 1.3.6.1 2005/09/14 20:53:59 tron Exp $	*/
 
 /*
  * Copyright (c) 2004 Shigeyuki Fukushima.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: consinit.c,v 1.4 2005/03/18 14:12:34 shige Exp $");
+__KERNEL_RCSID(0, "$NetBSD: consinit.c,v 1.3.6.1 2005/09/14 20:53:59 tron Exp $");
 
 #include <machine/obs405.h>
 #include <powerpc/ibm4xx/dev/comopbvar.h>

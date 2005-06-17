@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.73 2005/05/22 12:44:24 kleink Exp $
+#	$NetBSD: Makefile,v 1.71 2005/01/02 16:08:30 thorpej Exp $
 
 INCSDIR= /usr/include/sys
 
@@ -10,7 +10,7 @@ INCS=	acct.h agpio.h ansi.h ataio.h audioio.h \
 	dkbad.h dkio.h dkstat.h domain.h drvctlio.h dvdio.h \
 	endian.h envsys.h errno.h event.h exec.h exec_aout.h \
 	exec_coff.h exec_ecoff.h exec_elf.h exec_script.h extattr.h extent.h \
-	fcntl.h fd_set.h fdio.h featuretest.h file.h filedesc.h filio.h \
+	fcntl.h fdio.h featuretest.h file.h filedesc.h filio.h \
 	float_ieee754.h fstypes.h gmon.h hash.h \
 	ieee754.h inttypes.h ioccom.h ioctl.h ioctl_compat.h ipc.h \
 	joystick.h \
@@ -22,7 +22,7 @@ INCS=	acct.h agpio.h ansi.h ataio.h audioio.h \
 	param.h pipe.h pmc.h poll.h pool.h power.h proc.h properties.h \
 	protosw.h ptrace.h queue.h \
 	ras.h reboot.h radioio.h resource.h resourcevar.h rnd.h \
-	sa.h scanio.h sched.h scsiio.h select.h selinfo.h sem.h sha1.h shm.h \
+	sa.h scanio.h sched.h scsiio.h select.h sem.h sha1.h shm.h \
 	siginfo.h signal.h signalvar.h sigtypes.h socket.h \
 	socketvar.h sockio.h stat.h statvfs.h syscall.h syscallargs.h \
 	sysctl.h stdint.h swap.h syslimits.h syslog.h systm.h \

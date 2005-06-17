@@ -1,4 +1,4 @@
-/*	$NetBSD: acardide.c,v 1.17 2005/05/24 18:43:29 tsutsui Exp $	*/
+/*	$NetBSD: acardide.c,v 1.14 2004/08/21 00:28:34 thorpej Exp $	*/
 
 /*
  * Copyright (c) 2001 Izumi Tsutsui.
@@ -25,9 +25,6 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acardide.c,v 1.17 2005/05/24 18:43:29 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -68,12 +65,12 @@ static const struct pciide_product_desc pciide_acard_products[] =  {
 	},
 	{ PCI_PRODUCT_ACARD_ATP865,
 	  0,
-	  "Acard ATP865 Ultra133 IDE Controller",
+	  "Acard ATP865 Ultra100 IDE Controller",
 	  acard_chip_map,
 	},
 	{ PCI_PRODUCT_ACARD_ATP865A,
 	  0,
-	  "Acard ATP865-A Ultra133 IDE Controller",
+	  "Acard ATP865-A Ultra100 IDE Controller",
 	  acard_chip_map,
 	},
 	{ 0,
@@ -150,7 +147,7 @@ acard_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 		break;
 	case PCI_PRODUCT_ACARD_ATP865:
 	case PCI_PRODUCT_ACARD_ATP865A:
-		sc->sc_wdcdev.sc_atac.atac_udma_cap = 6;
+		sc->sc_wdcdev.sc_atac.atac_udma_cap = 5;
 		break;
 	default:
 		sc->sc_wdcdev.sc_atac.atac_udma_cap = 2;

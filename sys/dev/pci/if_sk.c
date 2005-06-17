@@ -1,4 +1,4 @@
-/*	$NetBSD: if_sk.c,v 1.15 2005/05/30 04:35:22 christos Exp $	*/
+/*	$NetBSD: if_sk.c,v 1.14.2.6 2006/06/04 08:53:50 tron Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -122,6 +122,7 @@
  */
 
 #include "bpfilter.h"
+#include "rnd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -133,6 +134,7 @@
 #include <sys/device.h>
 #include <sys/queue.h>
 #include <sys/callout.h>
+#include <sys/sysctl.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -150,6 +152,9 @@
 
 #if NBPFILTER > 0
 #include <net/bpf.h>
+#endif
+#if NRND > 0
+#include <sys/rnd.h>
 #endif
 
 #include <dev/mii/mii.h>
@@ -197,6 +202,8 @@ void sk_vpd_read_res(struct sk_softc *,
 					struct vpd_res *, int);
 void sk_vpd_read(struct sk_softc *);
 
+void sk_update_int_mod(struct sk_softc *);
+
 int sk_xmac_miibus_readreg(struct device *, int, int);
 void sk_xmac_miibus_writereg(struct device *, int, int, int);
 void sk_xmac_miibus_statchg(struct device *);
@@ -243,6 +250,9 @@ void sk_dump_bytes(const char *, int);
 #define SK_WIN_CLRBIT_2(sc, reg, x)	\
 	sk_win_write_2(sc, reg, sk_win_read_2(sc, reg) & ~x)
 
+static int sk_sysctl_handler(SYSCTLFN_PROTO);
+static int sk_root_num;
+
 /* supported device vendors */
 static const struct sk_product {
 	pci_vendor_id_t		sk_vendor;
@@ -250,7 +260,8 @@ static const struct sk_product {
 } sk_products[] = {
 	{ PCI_VENDOR_3COM, PCI_PRODUCT_3COM_3C940, },
 	{ PCI_VENDOR_DLINK, PCI_PRODUCT_DLINK_DGE530T, },
-	{ PCI_VENDOR_LINKSYS, PCI_PRODUCT_LINKSYS_EG1032, },
+	{ PCI_VENDOR_DLINK, PCI_PRODUCT_DLINK_DGE560T, },
+	{ PCI_VENDOR_DLINK, PCI_PRODUCT_DLINK_DGE560T_2, },
 	{ PCI_VENDOR_LINKSYS, PCI_PRODUCT_LINKSYS_EG1064, },
 	{ PCI_VENDOR_SCHNEIDERKOCH, PCI_PRODUCT_SCHNEIDERKOCH_SKNET_GE, },
 	{ PCI_VENDOR_SCHNEIDERKOCH, PCI_PRODUCT_SCHNEIDERKOCH_SK9821v2, },
@@ -258,6 +269,8 @@ static const struct sk_product {
 	{ PCI_VENDOR_GALILEO, PCI_PRODUCT_GALILEO_BELKIN, },
 	{ 0, 0, }
 };
+
+#define SK_LINKSYS_EG1032_SUBID	0x00151737
 
 static inline u_int32_t
 sk_win_read_4(struct sk_softc *sc, u_int32_t reg)
@@ -947,6 +960,39 @@ sk_ioctl(struct ifnet *ifp, u_long command, caddr_t data)
 	return(error);
 }
 
+void
+sk_update_int_mod(struct sk_softc *sc)
+{
+	u_int32_t sk_imtimer_ticks;
+
+	/*
+         * Configure interrupt moderation. The moderation timer
+	 * defers interrupts specified in the interrupt moderation
+	 * timer mask based on the timeout specified in the interrupt
+	 * moderation timer init register. Each bit in the timer
+	 * register represents one tick, so to specify a timeout in
+	 * microseconds, we have to multiply by the correct number of
+	 * ticks-per-microsecond.
+	 */
+	switch (sc->sk_type) {
+	case SK_GENESIS:
+		sk_imtimer_ticks = SK_IMTIMER_TICKS_GENESIS;
+		break;
+	case SK_YUKON_EC:
+		sk_imtimer_ticks = SK_IMTIMER_TICKS_YUKON_EC;
+		break;
+	default:
+		sk_imtimer_ticks = SK_IMTIMER_TICKS_YUKON;
+	}
+	aprint_verbose("%s: interrupt moderation is %d us\n",
+	    sc->sk_dev.dv_xname, sc->sk_int_mod);
+        sk_win_write_4(sc, SK_IMTIMERINIT, SK_IM_USECS(sc->sk_int_mod));
+        sk_win_write_4(sc, SK_IMMR, SK_ISR_TX1_S_EOF|SK_ISR_TX2_S_EOF|
+	    SK_ISR_RX1_EOF|SK_ISR_RX2_EOF);
+        sk_win_write_1(sc, SK_IMTIMERCTL, SK_IMCTL_START);
+	sc->sk_int_mod_pending = 0;
+}
+
 /*
  * Lookup: Check the PCI vendor and device, and return a pointer to
  * The structure if the IDs match against our list.
@@ -974,6 +1020,15 @@ skc_probe(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct pci_attach_args *pa = (struct pci_attach_args *)aux;
 	const struct sk_product *psk;
+	pcireg_t subid;
+
+	subid = pci_conf_read(pa->pa_pc, pa->pa_tag, PCI_SUBSYS_ID_REG);
+
+	/* special-case Linksys EG1032, since rev 3 uses re(4) */
+	if (PCI_VENDOR(pa->pa_id) == PCI_VENDOR_LINKSYS &&
+	    PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_LINKSYS_EG1032 &&
+	    subid == SK_LINKSYS_EG1032_SUBID)
+		return(1);
 
 	if ((psk = sk_lookup(pa))) {
 		return(1);
@@ -1016,18 +1071,7 @@ void sk_reset(struct sk_softc *sc)
 	/* Enable RAM interface */
 	sk_win_write_4(sc, SK_RAMCTL, SK_RAMCTL_UNRESET);
 
-	/*
-         * Configure interrupt moderation. The moderation timer
-	 * defers interrupts specified in the interrupt moderation
-	 * timer mask based on the timeout specified in the interrupt
-	 * moderation timer init register. Each bit in the timer
-	 * register represents 18.825ns, so to specify a timeout in
-	 * microseconds, we have to multiply by 54.
-	 */
-        sk_win_write_4(sc, SK_IMTIMERINIT, SK_IM_USECS(100));
-        sk_win_write_4(sc, SK_IMMR, SK_ISR_TX1_S_EOF|SK_ISR_TX2_S_EOF|
-	    SK_ISR_RX1_EOF|SK_ISR_RX2_EOF);
-        sk_win_write_1(sc, SK_IMTIMERCTL, SK_IMCTL_START);
+	sk_update_int_mod(sc);
 }
 
 int
@@ -1295,7 +1339,7 @@ sk_attach(struct device *parent, struct device *self, void *aux)
 	ether_ifattach(ifp, sc_if->sk_enaddr);
 
 #if NRND > 0
-        rnd_attach_source(&sc->rnd_source, sc->sc_dev.dv_xname,
+        rnd_attach_source(&sc->rnd_source, sc->sk_dev.dv_xname,
             RND_TYPE_NET, 0);
 #endif
 
@@ -1337,9 +1381,10 @@ skc_attach(struct device *parent, struct device *self, void *aux)
 	const char *intrstr = NULL;
 	bus_addr_t iobase;
 	bus_size_t iosize;
-	int s;
+	int s, rc, sk_nodenum;
 	u_int32_t command;
-	const char *revstr;
+	char *revstr;
+	struct sysctlnode *node;
 
 	DPRINTFN(2, ("begin skc_attach\n"));
 
@@ -1353,10 +1398,10 @@ skc_attach(struct device *parent, struct device *self, void *aux)
 	if (command == 0x01) {
 		command = pci_conf_read(pc, pa->pa_tag, SK_PCI_PWRMGMTCTRL);
 		if (command & SK_PSTATE_MASK) {
-			u_int32_t		xiobase, membase, irq;
+			u_int32_t		iobase, membase, irq;
 
 			/* Save important PCI config data. */
-			xiobase = pci_conf_read(pc, pa->pa_tag, SK_PCI_LOIO);
+			iobase = pci_conf_read(pc, pa->pa_tag, SK_PCI_LOIO);
 			membase = pci_conf_read(pc, pa->pa_tag, SK_PCI_LOMEM);
 			irq = pci_conf_read(pc, pa->pa_tag, SK_PCI_INTLINE);
 
@@ -1369,7 +1414,7 @@ skc_attach(struct device *parent, struct device *self, void *aux)
 			    SK_PCI_PWRMGMTCTRL, command);
 
 			/* Restore PCI config data. */
-			pci_conf_write(pc, pa->pa_tag, SK_PCI_LOIO, xiobase);
+			pci_conf_write(pc, pa->pa_tag, SK_PCI_LOIO, iobase);
 			pci_conf_write(pc, pa->pa_tag, SK_PCI_LOMEM, membase);
 			pci_conf_write(pc, pa->pa_tag, SK_PCI_INTLINE, irq);
 		}
@@ -1505,6 +1550,7 @@ skc_attach(struct device *parent, struct device *self, void *aux)
 		sc->sk_pmd = IFM_1000_CX;
 		break;
 	case SK_PMD_1000BASETX:
+	case SK_PMD_1000BASETX_ALT:
 		sc->sk_pmd = IFM_1000_T;
 		break;
 	default:
@@ -1522,12 +1568,16 @@ skc_attach(struct device *parent, struct device *self, void *aux)
 	case PCI_PRODUCT_SCHNEIDERKOCH_SK9821v2:
 	case PCI_PRODUCT_3COM_3C940:
 	case PCI_PRODUCT_DLINK_DGE530T:
+	case PCI_PRODUCT_DLINK_DGE560T:
+	case PCI_PRODUCT_DLINK_DGE560T_2:
 	case PCI_PRODUCT_LINKSYS_EG1032:
 	case PCI_PRODUCT_LINKSYS_EG1064:
 	case PCI_ID_CODE(PCI_VENDOR_SCHNEIDERKOCH,
 			 PCI_PRODUCT_SCHNEIDERKOCH_SK9821v2):
 	case PCI_ID_CODE(PCI_VENDOR_3COM,PCI_PRODUCT_3COM_3C940):
 	case PCI_ID_CODE(PCI_VENDOR_DLINK,PCI_PRODUCT_DLINK_DGE530T):
+	case PCI_ID_CODE(PCI_VENDOR_DLINK,PCI_PRODUCT_DLINK_DGE560T):
+	case PCI_ID_CODE(PCI_VENDOR_DLINK,PCI_PRODUCT_DLINK_DGE560T_2):
 	case PCI_ID_CODE(PCI_VENDOR_LINKSYS,PCI_PRODUCT_LINKSYS_EG1032):
 	case PCI_ID_CODE(PCI_VENDOR_LINKSYS,PCI_PRODUCT_LINKSYS_EG1064):
  		sc->sk_name = sc->sk_vpd_prodname;
@@ -1612,6 +1662,36 @@ skc_attach(struct device *parent, struct device *self, void *aux)
 
 	/* Turn on the 'driver is loaded' LED. */
 	CSR_WRITE_2(sc, SK_LED, SK_LED_GREEN_ON);
+
+	/* skc sysctl setup */
+
+	sc->sk_int_mod = SK_IM_DEFAULT;
+	sc->sk_int_mod_pending = 0;
+
+	if ((rc = sysctl_createv(&sc->sk_clog, 0, NULL, &node,
+	    0, CTLTYPE_NODE, sc->sk_dev.dv_xname,
+	    SYSCTL_DESCR("skc per-controller controls"),
+	    NULL, 0, NULL, 0, CTL_HW, sk_root_num, CTL_CREATE,
+	    CTL_EOL)) != 0) {
+		aprint_normal("%s: couldn't create sysctl node\n",
+		    sc->sk_dev.dv_xname);
+		goto fail;
+	}
+
+	sk_nodenum = node->sysctl_num;
+
+	/* interrupt moderation time in usecs */
+	if ((rc = sysctl_createv(&sc->sk_clog, 0, NULL, &node,
+	    CTLFLAG_READWRITE,
+	    CTLTYPE_INT, "int_mod",
+	    SYSCTL_DESCR("sk interrupt moderation timer"),
+	    sk_sysctl_handler, 0, sc,
+	    0, CTL_HW, sk_root_num, sk_nodenum, CTL_CREATE,
+	    CTL_EOL)) != 0) {
+		aprint_normal("%s: couldn't create int_mod sysctl node\n",
+		    sc->sk_dev.dv_xname);
+		goto fail;
+	}
 
 fail:
 	splx(s);
@@ -1759,11 +1839,13 @@ sk_start(struct ifnet *ifp)
 		return;
 
 	/* Transmit */
-	sc_if->sk_cdata.sk_tx_prod = idx;
-	CSR_WRITE_4(sc, sc_if->sk_tx_bmu, SK_TXBMU_TX_START);
+	if (idx != sc_if->sk_cdata.sk_tx_prod) {
+		sc_if->sk_cdata.sk_tx_prod = idx;
+		CSR_WRITE_4(sc, sc_if->sk_tx_bmu, SK_TXBMU_TX_START);
 
-	/* Set a timeout in case the chip goes out to lunch. */
-	ifp->if_timer = 5;
+		/* Set a timeout in case the chip goes out to lunch. */
+		ifp->if_timer = 5;
+	}
 }
 
 
@@ -1888,7 +1970,7 @@ void
 sk_txeof(struct sk_if_softc *sc_if)
 {
 	struct sk_softc		*sc = sc_if->sk_softc;
-	struct sk_tx_desc	*cur_tx = NULL;
+	struct sk_tx_desc	*cur_tx;
 	struct ifnet		*ifp = &sc_if->sk_ethercom.ec_if;
 	u_int32_t		idx;
 	struct sk_txmap_entry	*entry;
@@ -1937,10 +2019,10 @@ sk_txeof(struct sk_if_softc *sc_if)
 	else /* nudge chip to keep tx ring moving */
 		CSR_WRITE_4(sc, sc_if->sk_tx_bmu, SK_TXBMU_TX_START);
 
-	sc_if->sk_cdata.sk_tx_cons = idx;
-
-	if (cur_tx != NULL)
+	if (sc_if->sk_cdata.sk_tx_cnt < SK_TX_RING_CNT - 2)
 		ifp->if_flags &= ~IFF_OACTIVE;
+
+	sc_if->sk_cdata.sk_tx_cons = idx;
 }
 
 void
@@ -2158,6 +2240,14 @@ sk_intr(void *xsc)
 	if (ifp1 != NULL && !IFQ_IS_EMPTY(&ifp1->if_snd))
 		sk_start(ifp1);
 
+#if NRND > 0
+	if (RND_ENABLED(&sc->rnd_source))
+		rnd_add_uint32(&sc->rnd_source, status);
+#endif
+
+	if (sc->sk_int_mod_pending)
+		sk_update_int_mod(sc);
+
 	return (claimed);
 }
 
@@ -2331,10 +2421,20 @@ void sk_init_yukon(sc_if)
 {
 	u_int32_t		/*mac, */phy;
 	u_int16_t		reg;
+	struct sk_softc		*sc;
 	int			i;
 
 	DPRINTFN(1, ("sk_init_yukon: start: sk_csr=%#x\n",
 		     CSR_READ_4(sc_if->sk_softc, SK_CSR)));
+
+	sc = sc_if->sk_softc;
+	if (sc->sk_type == SK_YUKON_LITE &&
+	    sc->sk_rev >= SK_YUKON_LITE_REV_A3) {
+		/* Take PHY out of reset. */
+		sk_win_write_4(sc, SK_GPIO,
+			(sk_win_read_4(sc, SK_GPIO) | SK_GPIO_DIR9) & ~SK_GPIO_DAT9);
+	}
+
 
 	/* GMAC and GPHY Reset */
 	SK_IF_WRITE_4(sc_if, 0, SK_GPHY_CTRL, SK_GPHY_RESET_SET);
@@ -2459,10 +2559,16 @@ sk_init(struct ifnet *ifp)
 	struct sk_softc		*sc = sc_if->sk_softc;
 	struct mii_data		*mii = &sc_if->sk_mii;
 	int			s;
+	u_int32_t		imr, sk_imtimer_ticks;
 
 	DPRINTFN(1, ("sk_init\n"));
 
 	s = splnet();
+
+	if (ifp->if_flags & IFF_RUNNING) {
+		splx(s);
+		return 0;
+	}
 
 	/* Cancel pending I/O and free all RX/TX buffers. */
 	sk_stop(ifp,0);
@@ -2556,6 +2662,25 @@ sk_init(struct ifnet *ifp)
 		return(ENOBUFS);
 	}
 
+	/* Set interrupt moderation if changed via sysctl. */
+	switch (sc->sk_type) {
+	case SK_GENESIS:
+		sk_imtimer_ticks = SK_IMTIMER_TICKS_GENESIS;
+		break;
+	case SK_YUKON_EC:
+		sk_imtimer_ticks = SK_IMTIMER_TICKS_YUKON_EC;
+		break;
+	default:
+		sk_imtimer_ticks = SK_IMTIMER_TICKS_YUKON;
+	}
+	imr = sk_win_read_4(sc, SK_IMTIMERINIT);
+	if (imr != SK_IM_USECS(sc->sk_int_mod)) {
+		sk_win_write_4(sc, SK_IMTIMERINIT,
+		    SK_IM_USECS(sc->sk_int_mod));
+		aprint_verbose("%s: interrupt moderation is %d us\n",
+		    sc->sk_dev.dv_xname, sc->sk_int_mod);
+	}
+
 	/* Configure interrupt handling */
 	CSR_READ_4(sc, SK_ISSR);
 	if (sc_if->sk_port == SK_PORT_A)
@@ -2597,6 +2722,7 @@ sk_stop(struct ifnet *ifp, int disable)
 {
         struct sk_if_softc	*sc_if = ifp->if_softc;
 	struct sk_softc		*sc = sc_if->sk_softc;
+	//struct sk_txmap_entry	*dma;
 	int			i;
 
 	DPRINTFN(1, ("sk_stop\n"));
@@ -2758,3 +2884,57 @@ sk_dump_mbuf(struct mbuf *m)
 	}
 }
 #endif
+
+static int
+sk_sysctl_handler(SYSCTLFN_ARGS)
+{
+	int error, t;
+	struct sysctlnode node;
+	struct sk_softc *sc;
+
+	node = *rnode;
+	sc = node.sysctl_data;
+	t = sc->sk_int_mod;
+	node.sysctl_data = &t;
+	error = sysctl_lookup(SYSCTLFN_CALL(&node));
+	if (error || newp == NULL)
+		return (error);
+
+	if (t < SK_IM_MIN || t > SK_IM_MAX)
+		return (EINVAL);
+
+	/* update the softc with sysctl-changed value, and mark
+	   for hardware update */
+	sc->sk_int_mod = t;
+	sc->sk_int_mod_pending = 1;
+	return (0);
+}
+
+/*
+ * Set up sysctl(3) MIB, hw.sk.* - Individual controllers will be
+ * set up in skc_attach()
+ */
+SYSCTL_SETUP(sysctl_sk, "sysctl sk subtree setup")
+{
+	int rc;
+	struct sysctlnode *node;
+
+	if ((rc = sysctl_createv(clog, 0, NULL, NULL,
+	    0, CTLTYPE_NODE, "hw", NULL,
+	    NULL, 0, NULL, 0, CTL_HW, CTL_EOL)) != 0) {
+		goto err;
+	}
+
+	if ((rc = sysctl_createv(clog, 0, NULL, &node,
+	    0, CTLTYPE_NODE, "sk",
+	    SYSCTL_DESCR("sk interface controls"),
+	    NULL, 0, NULL, 0, CTL_HW, CTL_CREATE, CTL_EOL)) != 0) {
+		goto err;
+	}
+
+	sk_root_num = node->sysctl_num;
+	return;
+
+err:
+	printf("%s: syctl_createv failed (rc = %d)\n", __func__, rc);
+}

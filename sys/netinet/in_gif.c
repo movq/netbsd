@@ -1,4 +1,4 @@
-/*	$NetBSD: in_gif.c,v 1.44 2005/06/02 15:21:35 tron Exp $	*/
+/*	$NetBSD: in_gif.c,v 1.41.2.1 2006/01/08 15:48:46 riz Exp $	*/
 /*	$KAME: in_gif.c,v 1.66 2001/07/29 04:46:09 itojun Exp $	*/
 
 /*
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: in_gif.c,v 1.44 2005/06/02 15:21:35 tron Exp $");
+__KERNEL_RCSID(0, "$NetBSD: in_gif.c,v 1.41.2.1 2006/01/08 15:48:46 riz Exp $");
 
 #include "opt_inet.h"
 #include "opt_iso.h"
@@ -45,6 +45,7 @@ __KERNEL_RCSID(0, "$NetBSD: in_gif.c,v 1.44 2005/06/02 15:21:35 tron Exp $");
 #include <sys/ioctl.h>
 #include <sys/syslog.h>
 #include <sys/protosw.h>
+#include <sys/kernel.h>
 
 #include <net/if.h>
 #include <net/route.h>
@@ -196,8 +197,9 @@ in_gif_output(struct ifnet *ifp, int family, struct mbuf *m)
 		return ENOBUFS;
 	bcopy(&iphdr, mtod(m, struct ip *), sizeof(struct ip));
 
-	if (dst->sin_family != sin_dst->sin_family ||
-	    dst->sin_addr.s_addr != sin_dst->sin_addr.s_addr) {
+	if (sc->gif_route_expire - time.tv_sec <= 0 ||
+	    dst->sin_family != sin_dst->sin_family ||
+	    !in_hosteq(dst->sin_addr, sin_dst->sin_addr)) {
 		/* cache route doesn't match */
 		bzero(dst, sizeof(*dst));
 		dst->sin_family = sin_dst->sin_family;
@@ -221,6 +223,8 @@ in_gif_output(struct ifnet *ifp, int family, struct mbuf *m)
 			m_freem(m);
 			return ENETUNREACH;	/*XXX*/
 		}
+
+		sc->gif_route_expire = time.tv_sec + GIF_ROUTE_TTL;
 	}
 
 	error = ip_output(m, NULL, &sc->gif_ro, 0, NULL, NULL);
@@ -266,18 +270,18 @@ in_gif_input(struct mbuf *m, ...)
 #ifdef INET
 	case IPPROTO_IPV4:
 	    {
-		struct ip *xip;
+		struct ip *ip;
 		af = AF_INET;
-		if (m->m_len < sizeof(*xip)) {
-			m = m_pullup(m, sizeof(*xip));
+		if (m->m_len < sizeof(*ip)) {
+			m = m_pullup(m, sizeof(*ip));
 			if (!m)
 				return;
 		}
-		xip = mtod(m, struct ip *);
+		ip = mtod(m, struct ip *);
 		if (gifp->if_flags & IFF_LINK1)
-			ip_ecn_egress(ECN_ALLOWED, &otos, &xip->ip_tos);
+			ip_ecn_egress(ECN_ALLOWED, &otos, &ip->ip_tos);
 		else
-			ip_ecn_egress(ECN_NOCARE, &otos, &xip->ip_tos);
+			ip_ecn_egress(ECN_NOCARE, &otos, &ip->ip_tos);
 		break;
 	    }
 #endif
@@ -386,7 +390,7 @@ gif_validate4(const struct ip *ip, struct gif_softc *sc, struct ifnet *ifp)
  * matched the physical addr family.  see gif_encapcheck().
  */
 int
-gif_encapcheck4(struct mbuf *m, int off, int proto, void *arg)
+gif_encapcheck4(const struct mbuf *m, int off, int proto, void *arg)
 {
 	struct ip ip;
 	struct gif_softc *sc;
@@ -395,7 +399,8 @@ gif_encapcheck4(struct mbuf *m, int off, int proto, void *arg)
 	/* sanity check done in caller */
 	sc = (struct gif_softc *)arg;
 
-	m_copydata(m, 0, sizeof(ip), (caddr_t)&ip);
+	/* LINTED const cast */
+	m_copydata((struct mbuf *)m, 0, sizeof(ip), (caddr_t)&ip);
 	ifp = ((m->m_flags & M_PKTHDR) != 0) ? m->m_pkthdr.rcvif : NULL;
 
 	return gif_validate4(&ip, sc, ifp);
@@ -416,7 +421,7 @@ in_gif_attach(struct gif_softc *sc)
 		return EINVAL;
 	sc->encap_cookie4 = encap_attach(AF_INET, -1, sc->gif_psrc,
 	    (struct sockaddr *)&mask4, sc->gif_pdst, (struct sockaddr *)&mask4,
-	    (const struct protosw *)&in_gif_protosw, sc);
+	    (struct protosw *)&in_gif_protosw, sc);
 #else
 	sc->encap_cookie4 = encap_attach_func(AF_INET, -1, gif_encapcheck,
 	    &in_gif_protosw, sc);
@@ -434,5 +439,11 @@ in_gif_detach(struct gif_softc *sc)
 	error = encap_detach(sc->encap_cookie4);
 	if (error == 0)
 		sc->encap_cookie4 = NULL;
+
+	if (sc->gif_ro.ro_rt) {
+		RTFREE(sc->gif_ro.ro_rt);
+		sc->gif_ro.ro_rt = NULL;
+	}
+
 	return error;
 }

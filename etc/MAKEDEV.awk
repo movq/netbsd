@@ -1,6 +1,6 @@
 #!/usr/bin/awk -
 #
-#	$NetBSD: MAKEDEV.awk,v 1.16 2005/06/14 20:47:46 he Exp $
+#	$NetBSD: MAKEDEV.awk,v 1.15 2004/04/22 23:02:39 enami Exp $
 #
 # Copyright (c) 2003 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -137,10 +137,7 @@ BEGIN {
 				diskbackcompat = $3
 			else if ($1 == "#define" && $2 == "RAW_PART")
 				RAWDISK_OFF = $3
-			else if ($1 == "#include" && 
-				 $2 ~ "<.*/disklabel.h>" &&
-				 $2 !~ ".*nbinclude.*")
-			{
+			else if ($1 == "#include" && $2 ~ "<.*/disklabel.h>") {
 				# wrapper, switch to the right file
 				incdir = substr($2, 2)
 				sub("/.*", "", incdir)
@@ -214,7 +211,7 @@ BEGIN {
 	print "# Generated from:"
 
 	# MAKEDEV.awk (this script) RCS Id
-	ARCSID = "$NetBSD: MAKEDEV.awk,v 1.16 2005/06/14 20:47:46 he Exp $"
+	ARCSID = "$NetBSD: MAKEDEV.awk,v 1.15 2004/04/22 23:02:39 enami Exp $"
 	gsub(/\$/, "", ARCSID)
 	print "#	" ARCSID
 	

@@ -1,4 +1,4 @@
-/*	$NetBSD: auth-krb4.c,v 1.17 2005/04/23 16:55:03 christos Exp $	*/
+/*	$NetBSD: auth-krb4.c,v 1.15 2005/02/13 06:01:36 christos Exp $	*/
 /*
  * Copyright (c) 1999 Dug Song.  All rights reserved.
  *
@@ -25,7 +25,7 @@
 
 #include "includes.h"
 RCSID("$OpenBSD: auth-krb4.c,v 1.29 2003/02/21 10:34:48 mpech Exp $");
-__RCSID("$NetBSD: auth-krb4.c,v 1.17 2005/04/23 16:55:03 christos Exp $");
+__RCSID("$NetBSD: auth-krb4.c,v 1.15 2005/02/13 06:01:36 christos Exp $");
 
 #include "ssh.h"
 #include "ssh1.h"

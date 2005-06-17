@@ -22,7 +22,7 @@ include		"arch/alpha/conf/std.alpha"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.265 $"
+#ident 		"GENERIC-$Revision: 1.261.4.6 $"
 
 maxusers 32
 
@@ -54,11 +54,10 @@ options 	NTP			# kernel PLL for NTP
 
 # Enable experimental buffer queue strategy for better responsiveness under
 # high disk I/O load. Use it with caution - it's not proven to be stable yet.
-#options 	BUFQ_READPRIO
-#options 	BUFQ_PRIOCSCAN
+#options 	NEW_BUFQ_STRATEGY
 
 # Diagnostic/debugging support options
-options 	DIAGNOSTIC		# Cheap kernel consistency checks
+#options 	DIAGNOSTIC		# Cheap kernel consistency checks
 options 	DDB			# kernel debugger
 options 	DDB_HISTORY_SIZE=512	# enable history editing in DDB
 #makeoptions	DEBUG="-g"
@@ -93,6 +92,7 @@ options 	INET		# IP + ICMP + TCP + UDP
 options 	INET6		# IPV6
 #options 	IPSEC		# IP security
 #options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
+#options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
 #options 	PIM		# Protocol Independent Multicast
@@ -106,7 +106,7 @@ options 	INET6		# IPV6
 #options 	PPP_DEFLATE	# Deflate compression support for PPP
 #options 	PPP_FILTER	# Active filter support for PPP (requires bpf)
 #options 	PFIL_HOOKS	# pfil(9) packet filter hooks
-#options 	IPFILTER_LOG	# ipmon(8) log support
+options 	IPFILTER_LOG	# ipmon(8) log support
 #options 	IPFILTER_DEFAULT_BLOCK	# block all packets by default
 #options 	TCP_DEBUG	# Record last TCP_NDEBUG packets with SO_DEBUG
 
@@ -393,7 +393,6 @@ mcclock* at	isa? port 0x70
 pckbc*	at	isa?				# PC keyboard controller
 pckbd*	at	pckbc?				# PC keyboard (kbd port)
 pms*	at	pckbc?				# PS/2-style mouse (aux port)
-attimer* at	isa?				# AT Timer
 pcppi*	at	isa?				# PC prog. periph. interface
 spkr0	at	pcppi?				# IBM BASIC emulation
 isabeep0 at	pcppi?				# "keyboard" beep
@@ -621,6 +620,7 @@ pseudo-device	pppoe			# PPP over Ethernet (RFC 2516)
 pseudo-device	pty			# pseudo-terminals
 pseudo-device	sl		4
 pseudo-device	vnd		4
+#options 	VND_COMPRESSION		# compressed vnd(4)
 #pseudo-device	gre		2	# generic L3 over IP tunnel
 pseudo-device	gif		4	# IPv[46] over IPv[46] tunnel (RFC1933)
 #pseudo-device	faith		1	# IPv[46] tcp relay translation i/f

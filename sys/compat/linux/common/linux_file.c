@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_file.c,v 1.69 2005/05/29 22:08:16 christos Exp $	*/
+/*	$NetBSD: linux_file.c,v 1.66 2005/03/10 14:12:28 christos Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_file.c,v 1.69 2005/05/29 22:08:16 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_file.c,v 1.66 2005/03/10 14:12:28 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -76,10 +76,8 @@ static int linux_to_bsd_ioflags __P((int));
 static int bsd_to_linux_ioflags __P((int));
 static void bsd_to_linux_flock __P((struct flock *, struct linux_flock *));
 static void linux_to_bsd_flock __P((struct linux_flock *, struct flock *));
-#ifndef __amd64__
 static void bsd_to_linux_stat __P((struct stat *, struct linux_stat *));
 static int linux_stat1 __P((struct lwp *, void *, register_t *, int));
-#endif
 
 /*
  * Some file-related calls are handled here. The usual flag conversion
@@ -336,7 +334,7 @@ linux_sys_fcntl(l, v, retval)
 		retval[0] = bsd_to_linux_ioflags(retval[0]);
 		return 0;
 	case LINUX_F_SETFL: {
-		struct file	*fp1 = NULL;
+		struct file	*fp = NULL;
 
 		val = linux_to_bsd_ioflags((unsigned long)SCARG(uap, arg));
 		/*
@@ -356,19 +354,19 @@ linux_sys_fcntl(l, v, retval)
 		 * so that F_GETFL would report the ASYNC i/o is on.
 		 */
 		if (val & O_ASYNC) {
-			if (((fp1 = fd_getfile(p->p_fd, fd)) == NULL))
+			if (((fp = fd_getfile(p->p_fd, fd)) == NULL))
 			    return (EBADF);
 
-			FILE_USE(fp1);
+			FILE_USE(fp);
 
-			if (((fp1->f_type == DTYPE_SOCKET) && fp1->f_data
-			      && ((struct socket *)fp1->f_data)->so_state & SS_ISAPIPE)
-			    || (fp1->f_type == DTYPE_PIPE))
+			if (((fp->f_type == DTYPE_SOCKET) && fp->f_data
+			      && ((struct socket *)fp->f_data)->so_state & SS_ISAPIPE)
+			    || (fp->f_type == DTYPE_PIPE))
 				val &= ~O_ASYNC;
 			else {
 				/* not a pipe, do not modify anything */
-				FILE_UNUSE(fp1, p);
-				fp1 = NULL;
+				FILE_UNUSE(fp, p);
+				fp = NULL;
 			}
 		}
 
@@ -379,10 +377,10 @@ linux_sys_fcntl(l, v, retval)
 		error = sys_fcntl(l, &fca, retval);
 
 		/* Now set the FASYNC flag for pipes */
-		if (fp1) {
+		if (fp) {
 			if (!error)
-				fp1->f_flag |= FASYNC;
-			FILE_UNUSE(fp1, p);
+				fp->f_flag |= FASYNC;
+			FILE_UNUSE(fp, p);
 		}
 
 		return (error);
@@ -487,7 +485,6 @@ linux_sys_fcntl(l, v, retval)
 	return sys_fcntl(l, &fca, retval);
 }
 
-#if !defined(__amd64__)
 /*
  * Convert a NetBSD stat structure to a Linux stat structure.
  * Only the order of the fields and the padding in the structure
@@ -636,7 +633,6 @@ linux_sys_lstat(l, v, retval)
 
 	return linux_stat1(l, uap, retval, 1);
 }
-#endif /* !__amd64__ */
 
 /*
  * The following syscalls are mostly here because of the alternate path check.
@@ -777,8 +773,7 @@ linux_sys_chmod(l, v, retval)
 	return sys_chmod(l, uap, retval);
 }
 
-#if defined(__i386__) || defined(__m68k__) || \
-    defined(__arm__)
+#if defined(__i386__) || defined(__m68k__) || defined(__arm__)
 int
 linux_sys_chown16(l, v, retval)
 	struct lwp *l;
@@ -852,9 +847,9 @@ linux_sys_lchown16(l, v, retval)
 
 	return sys___posix_lchown(l, &bla, retval);
 }
-#endif /* __i386__ || __m68k__ || __arm__ || __amd64__ */
-#if defined (__i386__) || defined (__m68k__) || defined(__amd64__) || \
-    defined (__powerpc__) || defined (__mips__) || defined (__arm__)
+#endif /* __i386__ || __m68k__ || __arm__ */
+#if defined (__i386__) || defined (__m68k__) || \
+    defined (__powerpc__) || defined (__mips__) || defined(__arm__)
 int
 linux_sys_chown(l, v, retval)
 	struct lwp *l;
@@ -892,7 +887,7 @@ linux_sys_lchown(l, v, retval)
 
 	return sys___posix_lchown(l, uap, retval);
 }
-#endif /* __i386__||__m68k__||__powerpc__||__mips__||__arm__ ||__amd64__ */
+#endif /* __i386__ || __m68k__ || __powerpc__ || __mips__ || __arm__ */
 
 int
 linux_sys_rename(l, v, retval)
@@ -1005,7 +1000,6 @@ linux_sys_readlink(l, v, retval)
 	return sys_readlink(l, uap, retval);
 }
 
-#if !defined(__amd64__)
 int
 linux_sys_truncate(l, v, retval)
 	struct lwp *l;
@@ -1023,7 +1017,6 @@ linux_sys_truncate(l, v, retval)
 
 	return compat_43_sys_truncate(l, uap, retval);
 }
-#endif /* !__amd64__ */
 
 /*
  * This is just fsync() for now (just as it is in the Linux kernel)
@@ -1093,112 +1086,4 @@ linux_sys_pwrite(l, v, retval)
 	SCARG(&pra, offset) = SCARG(uap, offset);
 
 	return sys_pwrite(l, &pra, retval);
-}
-
-int
-linux_sys_setxattr(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
-{
-	return EOPNOTSUPP;
-}
-
-int
-linux_sys_lsetxattr(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
-{
-	return EOPNOTSUPP;
-}
-
-int
-linux_sys_fsetxattr(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
-{
-	return EOPNOTSUPP;
-}
-
-int
-linux_sys_getxattr(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
-{
-	return EOPNOTSUPP;
-}
-
-int
-linux_sys_lgetxattr(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
-{
-	return EOPNOTSUPP;
-}
-
-int
-linux_sys_fgetxattr(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
-{
-	return EOPNOTSUPP;
-}
-
-int
-linux_sys_listxattr(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
-{
-	return EOPNOTSUPP;
-}
-
-int
-linux_sys_llistxattr(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
-{
-	return EOPNOTSUPP;
-}
-
-int
-linux_sys_flistxattr(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
-{
-	return EOPNOTSUPP;
-}
-
-int
-linux_sys_removexattr(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
-{
-	return EOPNOTSUPP;
-}
-
-int
-linux_sys_lremovexattr(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
-{
-	return EOPNOTSUPP;
-}
-
-int
-linux_sys_fremovexattr(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
-{
-	return EOPNOTSUPP;
 }

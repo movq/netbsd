@@ -1,4 +1,4 @@
-/*	$NetBSD: autofs_linux.h,v 1.1.1.3 2005/04/23 18:12:20 christos Exp $	*/
+/*	$NetBSD: autofs_linux.h,v 1.1.1.2.2.1 2005/08/16 13:02:14 tron Exp $	*/
 
 #if !defined(HAVE_LINUX_AUTO_FS_H) && !defined(HAVE_LINUX_AUTO_FS4_H)
 /* We didn't find the headers, so we can't compile in the autofs support */

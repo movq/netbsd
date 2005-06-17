@@ -1,7 +1,7 @@
 /*******************************************************************************
  *
  * Module Name: dmbuffer - AML disassembler, buffer and string support
- *              xRevision: 17 $
+ *              xRevision: 13 $
  *
  ******************************************************************************/
 
@@ -9,7 +9,7 @@
  *
  * 1. Copyright Notice
  *
- * Some or all of this work - Copyright (c) 1999 - 2005, Intel Corp.
+ * Some or all of this work - Copyright (c) 1999 - 2004, Intel Corp.
  * All rights reserved.
  *
  * 2. License
@@ -116,7 +116,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dmbuffer.c,v 1.6 2005/05/02 14:52:09 kochi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dmbuffer.c,v 1.5 2004/02/14 16:57:24 kochi Exp $");
 
 #include "acpi.h"
 #include "acdisasm.h"
@@ -129,12 +129,6 @@ __KERNEL_RCSID(0, "$NetBSD: dmbuffer.c,v 1.6 2005/05/02 14:52:09 kochi Exp $");
 #define _COMPONENT          ACPI_CA_DEBUGGER
         ACPI_MODULE_NAME    ("dmbuffer")
 
-/* Local prototypes */
-
-static void
-AcpiDmUnicode (
-    ACPI_PARSE_OBJECT       *Op);
-
 
 /*******************************************************************************
  *
@@ -146,7 +140,7 @@ AcpiDmUnicode (
  *
  * RETURN:      None
  *
- * DESCRIPTION: Dump an AML "ByteList" in Hex format
+ * DESCRIPTION: Dump a list of bytes in Hex format
  *
  ******************************************************************************/
 
@@ -330,7 +324,7 @@ AcpiDmIsUnicodeBuffer (
  *
  * PARAMETERS:  Op              - Buffer Object to be examined
  *
- * RETURN:      TRUE if buffer contains a ASCII string, FALSE otherwise
+ * RETURN:      TRUE if buffer contains a ASCII string
  *
  * DESCRIPTION: Determine if a buffer Op contains a ASCII string
  *
@@ -402,7 +396,7 @@ AcpiDmIsStringBuffer (
  *
  ******************************************************************************/
 
-static void
+void
 AcpiDmUnicode (
     ACPI_PARSE_OBJECT       *Op)
 {

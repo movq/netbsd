@@ -9,7 +9,7 @@
  *
  * 1. Copyright Notice
  *
- * Some or all of this work - Copyright (c) 1999 - 2005, Intel Corp.
+ * Some or all of this work - Copyright (c) 1999 - 2004, Intel Corp.
  * All rights reserved.
  *
  * 2. License
@@ -122,9 +122,10 @@
 #include "actbl.h"
 
 
-/*
+ /*
  * Global interfaces
  */
+
 ACPI_STATUS
 AcpiInitializeSubsystem (
     void);
@@ -171,8 +172,9 @@ AcpiInstallInitializationHandler (
     UINT32                  Function);
 
 /*
- * ACPI Memory managment
+ * ACPI Memory manager
  */
+
 void *
 AcpiAllocate (
     UINT32                  Size);
@@ -189,6 +191,7 @@ AcpiFree (
 /*
  * ACPI table manipulation interfaces
  */
+
 ACPI_STATUS
 AcpiFindRootPointer (
     UINT32                  Flags,
@@ -220,7 +223,7 @@ AcpiGetTable (
 
 ACPI_STATUS
 AcpiGetFirmwareTable (
-    ACPI_CONST_STRING       Signature,
+    ACPI_STRING             Signature,
     UINT32                  Instance,
     UINT32                  Flags,
     ACPI_TABLE_HEADER       **TablePointer);
@@ -229,6 +232,7 @@ AcpiGetFirmwareTable (
 /*
  * Namespace and name interfaces
  */
+
 ACPI_STATUS
 AcpiWalkNamespace (
     ACPI_OBJECT_TYPE        Type,
@@ -254,7 +258,7 @@ AcpiGetName (
 ACPI_STATUS
 AcpiGetHandle (
     ACPI_HANDLE             Parent,
-    ACPI_CONST_STRING       Pathname,
+    ACPI_STRING             Pathname,
     ACPI_HANDLE             *RetHandle);
 
 ACPI_STATUS
@@ -278,17 +282,18 @@ AcpiGetData (
 /*
  * Object manipulation and enumeration
  */
+
 ACPI_STATUS
 AcpiEvaluateObject (
     ACPI_HANDLE             Object,
-    ACPI_CONST_STRING       Pathname,
+    ACPI_STRING             Pathname,
     ACPI_OBJECT_LIST        *ParameterObjects,
     ACPI_BUFFER             *ReturnObjectBuffer);
 
 ACPI_STATUS
 AcpiEvaluateObjectTyped (
     ACPI_HANDLE             Object,
-    ACPI_CONST_STRING       Pathname,
+    ACPI_STRING             Pathname,
     ACPI_OBJECT_LIST        *ExternalParams,
     ACPI_BUFFER             *ReturnBuffer,
     ACPI_OBJECT_TYPE        ReturnType);
@@ -319,6 +324,7 @@ AcpiGetParent (
 /*
  * Event handler interfaces
  */
+
 ACPI_STATUS
 AcpiInstallFixedEventHandler (
     UINT32                  AcpiEvent,
@@ -362,17 +368,9 @@ AcpiInstallGpeHandler (
     ACPI_HANDLE             GpeDevice,
     UINT32                  GpeNumber,
     UINT32                  Type,
-    ACPI_EVENT_HANDLER      Address,
+    ACPI_GPE_HANDLER        Handler,
     void                    *Context);
 
-ACPI_STATUS
-AcpiInstallExceptionHandler (
-    ACPI_EXCEPTION_HANDLER  Handler);
-
-
-/*
- * Event interfaces
- */
 ACPI_STATUS
 AcpiAcquireGlobalLock (
     UINT16                  Timeout,
@@ -386,7 +384,7 @@ ACPI_STATUS
 AcpiRemoveGpeHandler (
     ACPI_HANDLE             GpeDevice,
     UINT32                  GpeNumber,
-    ACPI_EVENT_HANDLER      Address);
+    ACPI_GPE_HANDLER        Handler);
 
 ACPI_STATUS
 AcpiEnableEvent (
@@ -406,12 +404,6 @@ ACPI_STATUS
 AcpiGetEventStatus (
     UINT32                  Event,
     ACPI_EVENT_STATUS       *EventStatus);
-
-ACPI_STATUS
-AcpiSetGpeType (
-    ACPI_HANDLE             GpeDevice,
-    UINT32                  GpeNumber,
-    UINT8                   Type);
 
 ACPI_STATUS
 AcpiEnableGpe (
@@ -453,6 +445,7 @@ AcpiRemoveGpeBlock (
 /*
  * Resource interfaces
  */
+
 typedef
 ACPI_STATUS (*ACPI_WALK_RESOURCE_CALLBACK) (
     ACPI_RESOURCE           *Resource,
@@ -472,7 +465,7 @@ AcpiGetPossibleResources(
 ACPI_STATUS
 AcpiWalkResources (
     ACPI_HANDLE                     DeviceHandle,
-    const char                      *Path,
+    char                            *Path,
     ACPI_WALK_RESOURCE_CALLBACK     UserFunction,
     void                            *Context);
 
@@ -494,6 +487,7 @@ AcpiResourceToAddress64 (
 /*
  * Hardware (ACPI device) interfaces
  */
+
 ACPI_STATUS
 AcpiGetRegister (
     UINT32                  RegisterId,

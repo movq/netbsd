@@ -1,6 +1,6 @@
 /* $SourceForge: bktr_core.c,v 1.6 2003/03/11 23:11:22 thomasklausner Exp $ */
 
-/*	$NetBSD: bktr_core.c,v 1.35 2005/05/30 06:41:55 wiz Exp $	*/
+/*	$NetBSD: bktr_core.c,v 1.33.16.1 2006/09/16 11:28:05 ghen Exp $	*/
 /* $FreeBSD: src/sys/dev/bktr/bktr_core.c,v 1.114 2000/10/31 13:09:56 roger Exp$ */
 
 /*
@@ -98,7 +98,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bktr_core.c,v 1.35 2005/05/30 06:41:55 wiz Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bktr_core.c,v 1.33.16.1 2006/09/16 11:28:05 ghen Exp $");
 
 #include "opt_bktr.h"		/* Include any kernel config options */
 
@@ -471,13 +471,13 @@ static int      i2c_read_byte(bktr_ptr_t bktr, unsigned char *data, int last);
 /*
  * the common attach code, used by all OS versions.
  */
-void
+int
 common_bktr_attach(bktr_ptr_t bktr, int unit, u_long pci_id, u_int rev)
 {
 #if defined(__NetBSD__)
-	vaddr_t		sbuf = 0;
+	vaddr_t		buf = 0;
 #else
-	vm_offset_t	sbuf = 0;
+	vm_offset_t	buf = 0;
 #endif
 
 /***************************************/
@@ -487,20 +487,30 @@ common_bktr_attach(bktr_ptr_t bktr, int unit, u_long pci_id, u_int rev)
         /* allocate space for DMA program */
         bktr->dma_prog = get_bktr_mem(bktr, &bktr->dm_prog,
 				      DMA_PROG_ALLOC);
+	if (bktr->dma_prog == 0)
+		return 0;
         bktr->odd_dma_prog = get_bktr_mem(bktr, &bktr->dm_oprog,
 					  DMA_PROG_ALLOC);
+	if (bktr->odd_dma_prog == 0)
+		return 0;
 
 	/* allocate space for the VBI buffer */
 	bktr->vbidata  = get_bktr_mem(bktr, &bktr->dm_vbidata,
 				      VBI_DATA_SIZE);
+	if (bktr->vbidata == 0)
+		return 0;
 	bktr->vbibuffer = get_bktr_mem(bktr, &bktr->dm_vbibuffer,
 				       VBI_BUFFER_SIZE);
+	if (bktr->vbibuffer == 0)
+		return 0;
 
         /* allocate space for pixel buffer */
         if (BROOKTREE_ALLOC)
-                sbuf = get_bktr_mem(bktr, &bktr->dm_mem, BROOKTREE_ALLOC);
+                buf = get_bktr_mem(bktr, &bktr->dm_mem, BROOKTREE_ALLOC);
+		if (buf == 0)
+			return 0;
         else
-                sbuf = 0;
+                buf = 0;
 #endif
 
 #if defined(__FreeBSD__) || defined(__bsdi__)
@@ -514,7 +524,7 @@ common_bktr_attach(bktr_ptr_t bktr, int unit, u_long pci_id, u_int rev)
 		bktr->odd_dma_prog = bktr_retrieve_address(unit, BKTR_MEM_ODD_DMA_PROG);
 		bktr->vbidata      = bktr_retrieve_address(unit, BKTR_MEM_VBIDATA);
 		bktr->vbibuffer    = bktr_retrieve_address(unit, BKTR_MEM_VBIBUFFER);
-		sbuf                = bktr_retrieve_address(unit, BKTR_MEM_BUF);
+		buf                = bktr_retrieve_address(unit, BKTR_MEM_BUF);
 		need_to_allocate_memory = 0;
 	}
 #endif
@@ -530,9 +540,9 @@ common_bktr_attach(bktr_ptr_t bktr, int unit, u_long pci_id, u_int rev)
 
 		/* allocate space for pixel buffer */
 		if (BROOKTREE_ALLOC)
-			sbuf = get_bktr_mem(unit, BROOKTREE_ALLOC);
+			buf = get_bktr_mem(unit, BROOKTREE_ALLOC);
 		else
-			sbuf = 0;
+			buf = 0;
 	}
 #endif	/* FreeBSD or BSDi */
 
@@ -543,18 +553,18 @@ bktr_store_address(unit, BKTR_MEM_DMA_PROG,     bktr->dma_prog);
 bktr_store_address(unit, BKTR_MEM_ODD_DMA_PROG, bktr->odd_dma_prog);
 bktr_store_address(unit, BKTR_MEM_VBIDATA,      bktr->vbidata);
 bktr_store_address(unit, BKTR_MEM_VBIBUFFER,    bktr->vbibuffer);
-bktr_store_address(unit, BKTR_MEM_BUF,          sbuf);
+bktr_store_address(unit, BKTR_MEM_BUF,          buf);
 #endif
 
 
 	if (bootverbose) {
 		printf("%s: buffer size %d, addr %p\n",
 			bktr_name(bktr), BROOKTREE_ALLOC,
-			(void *)(uintptr_t)vtophys(sbuf));
+			(void *)(uintptr_t)bktr->dm_mem->dm_segs[0].ds_addr);
 	}
 
-	if (sbuf != 0) {
-		bktr->bigbuf = sbuf;
+	if (buf != 0) {
+		bktr->bigbuf = buf;
 		bktr->alloc_pages = BROOKTREE_ALLOC_PAGES;
 		bzero((caddr_t) bktr->bigbuf, BROOKTREE_ALLOC);
 	} else {
@@ -625,7 +635,7 @@ bktr_store_address(unit, BKTR_MEM_BUF,          sbuf);
 
 	/* Initialise any MSP34xx or TDA98xx audio chips */
 	init_audio_devices(bktr);
-
+	return 1;
 }
 
 
@@ -758,7 +768,8 @@ common_bktr_intr(void *arg)
 			}
 		}
 
-		OUTL(bktr, BKTR_RISC_STRT_ADD, vtophys(bktr->dma_prog));
+		OUTL(bktr, BKTR_RISC_STRT_ADD,
+		    bktr->dm_prog->dm_segs[0].ds_addr);
 		OUTW(bktr, BKTR_GPIO_DMA_CTL, FIFO_ENABLED);
 		OUTW(bktr, BKTR_GPIO_DMA_CTL, bktr->capcontrol);
 
@@ -1293,9 +1304,9 @@ video_ioctl(bktr_ptr_t bktr, int unit, ioctl_cmd_t cmd, caddr_t arg, struct proc
 	struct meteor_video	*video;
 	struct bktr_capture_area *cap_area;
 #if defined(__NetBSD__)
-	vaddr_t			sbuf;
+	vaddr_t			buf;
 #else
-	vm_offset_t		sbuf;
+	vm_offset_t		buf;
 #endif
 	int                     i;
 	char                    char_temp;
@@ -1756,21 +1767,21 @@ video_ioctl(bktr_ptr_t bktr, int unit, ioctl_cmd_t cmd, caddr_t arg, struct proc
 #if defined(__NetBSD__) || defined(__OpenBSD__)
                                 bus_dmamap_t dmamap;
 
-                                sbuf = get_bktr_mem(bktr, &dmamap,
+                                buf = get_bktr_mem(bktr, &dmamap,
                                                    temp * PAGE_SIZE);
-                                if (sbuf != 0) {
+                                if (buf != 0) {
                                         free_bktr_mem(bktr, bktr->dm_mem,
                                                       bktr->bigbuf);
                                         bktr->dm_mem = dmamap;
 
 #else
-                                sbuf = get_bktr_mem(unit, temp*PAGE_SIZE);
-                                if (sbuf != 0) {
+                                buf = get_bktr_mem(unit, temp*PAGE_SIZE);
+                                if (buf != 0) {
                                         kmem_free(kernel_map, bktr->bigbuf,
                                           (bktr->alloc_pages * PAGE_SIZE));
 #endif
 
-					bktr->bigbuf = sbuf;
+					bktr->bigbuf = buf;
 					bktr->alloc_pages = temp;
 					if (bootverbose)
 						printf(
@@ -1910,7 +1921,7 @@ tuner_ioctl(bktr_ptr_t bktr, int unit, ioctl_cmd_t cmd, caddr_t arg, struct proc
 	unsigned int	temp, temp1;
 	int		offset;
 	int		count;
-	u_char		*sbuf;
+	u_char		*buf;
 	u_long          par;
 	u_char          write;
 	int             i2c_addr;
@@ -2184,24 +2195,24 @@ tuner_ioctl(bktr_ptr_t bktr, int unit, ioctl_cmd_t cmd, caddr_t arg, struct proc
 	case BT848_WEEPROM:	/* write eeprom */
 		offset = (((struct eeProm *)arg)->offset);
 		count = (((struct eeProm *)arg)->count);
-		sbuf = &(((struct eeProm *)arg)->bytes[0]);
-		if (writeEEProm(bktr, offset, count, sbuf) < 0)
+		buf = &(((struct eeProm *)arg)->bytes[0]);
+		if (writeEEProm(bktr, offset, count, buf) < 0)
 			return(EIO);
 		break;
 
 	case BT848_REEPROM:	/* read eeprom */
 		offset = (((struct eeProm *)arg)->offset);
 		count = (((struct eeProm *)arg)->count);
-		sbuf = &(((struct eeProm *)arg)->bytes[0]);
-		if (readEEProm(bktr, offset, count, sbuf) < 0)
+		buf = &(((struct eeProm *)arg)->bytes[0]);
+		if (readEEProm(bktr, offset, count, buf) < 0)
 			return(EIO);
 		break;
 
 	case BT848_SIGNATURE:
 		offset = (((struct eeProm *)arg)->offset);
 		count = (((struct eeProm *)arg)->count);
-		sbuf = &(((struct eeProm *)arg)->bytes[0]);
-		if (signCard(bktr, offset, count, sbuf) < 0)
+		buf = &(((struct eeProm *)arg)->bytes[0]);
+		if (signCard(bktr, offset, count, buf) < 0)
 			return(EIO);
 		break;
 
@@ -2735,7 +2746,7 @@ rgb_vbi_prog(bktr_ptr_t bktr, char i_flag, int cols, int rows, int interlace)
 	volatile u_long		pitch;
 	volatile u_long		*dma_prog;	/* DMA prog is an array of
 						32 bit RISC instructions */
-	volatile u_long		*loop_point;
+	volatile bus_addr_t	loop_point;
         const struct meteor_pixfmt_internal *pf_int = &pixfmt_table[bktr->pixfmt];
 	u_int                   Bpp = pf_int->public.Bpp;
 	unsigned int            vbisamples;     /* VBI samples per line */
@@ -2780,7 +2791,7 @@ rgb_vbi_prog(bktr_ptr_t bktr, char i_flag, int cols, int rows, int interlace)
 		pitch = bktr->video.width;
 	}
 	else {
-		target_buffer = (u_long) vtophys(bktr->bigbuf);
+		target_buffer = (u_long) bktr->dm_mem->dm_segs[0].ds_addr;
 		pitch = cols*Bpp;
 	}
 
@@ -2792,7 +2803,7 @@ rgb_vbi_prog(bktr_ptr_t bktr, char i_flag, int cols, int rows, int interlace)
 	*dma_prog++ = htole32(OP_SYNC | BKTR_RESYNC | BKTR_VRE);
 	*dma_prog++ = htole32(0);
 
-	loop_point = dma_prog;
+	loop_point = bktr->dm_prog->dm_segs[0].ds_addr;
 
 	/* store the VBI data */
 	/* look for sync with packed data */
@@ -2800,8 +2811,8 @@ rgb_vbi_prog(bktr_ptr_t bktr, char i_flag, int cols, int rows, int interlace)
 	*dma_prog++ = htole32(0);
 	for(i = 0; i < vbilines; i++) {
 		*dma_prog++ = htole32(OP_WRITE | OP_SOL | OP_EOL | vbisamples);
-		*dma_prog++ = htole32((u_long) vtophys(bktr->vbidata +
-					(i * VBI_LINE_SIZE)));
+		*dma_prog++ = htole32((u_long)
+		    bktr->dm_vbidata->dm_segs[0].ds_addr + (i * VBI_LINE_SIZE));
 	}
 
 	if ((i_flag == 2/*Odd*/) || (i_flag==3) /*interlaced*/) {
@@ -2851,8 +2862,9 @@ rgb_vbi_prog(bktr_ptr_t bktr, char i_flag, int cols, int rows, int interlace)
 	*dma_prog++ = htole32(0);
 	for(i = 0; i < vbilines; i++) {
 		*dma_prog++ = htole32(OP_WRITE | OP_SOL | OP_EOL | vbisamples);
-		*dma_prog++ = htole32((u_long) vtophys(bktr->vbidata +
-				((i+MAX_VBI_LINES) * VBI_LINE_SIZE)));
+		*dma_prog++ = htole32((u_long)
+		    bktr->dm_vbidata->dm_segs[0].ds_addr +
+		    ((i+MAX_VBI_LINES) * VBI_LINE_SIZE));
 	}
 
 	/* store the video image */
@@ -2901,7 +2913,7 @@ rgb_vbi_prog(bktr_ptr_t bktr, char i_flag, int cols, int rows, int interlace)
 	*dma_prog++ = htole32(0);  /* NULL WORD */
 
 	*dma_prog++ = htole32(OP_JUMP);
-	*dma_prog++ = htole32((u_long) vtophys((vaddr_t)loop_point));
+	*dma_prog++ = htole32(loop_point);
 	*dma_prog++ = htole32(0);  /* NULL WORD */
 
 }
@@ -2952,7 +2964,7 @@ rgb_prog(bktr_ptr_t bktr, char i_flag, int cols, int rows, int interlace)
 		pitch = bktr->video.width;
 	}
 	else {
-		target_buffer = (u_long) vtophys(bktr->bigbuf);
+		target_buffer = (u_long) bktr->dm_mem->dm_segs[0].ds_addr;
 		pitch = cols*Bpp;
 	}
 
@@ -2999,7 +3011,8 @@ rgb_prog(bktr_ptr_t bktr, char i_flag, int cols, int rows, int interlace)
 		*dma_prog++ = htole32(0);  /* NULL WORD */
 
 		*dma_prog++ = htole32(OP_JUMP);
-		*dma_prog++ = htole32((u_long) vtophys(bktr->dma_prog));
+		*dma_prog++ = htole32((u_long)
+				bktr->dm_prog->dm_segs[0].ds_addr);
 		return;
 
 	case 2:
@@ -3008,7 +3021,8 @@ rgb_prog(bktr_ptr_t bktr, char i_flag, int cols, int rows, int interlace)
 		*dma_prog++ = htole32(0);  /* NULL WORD */
 
 		*dma_prog++ = htole32(OP_JUMP);
-		*dma_prog++ = htole32((u_long) vtophys(bktr->dma_prog));
+		*dma_prog++ = htole32((u_long)
+				bktr->dm_prog->dm_segs[0].ds_addr);
 		return;
 
 	case 3:
@@ -3016,7 +3030,8 @@ rgb_prog(bktr_ptr_t bktr, char i_flag, int cols, int rows, int interlace)
 		*dma_prog++ = htole32(OP_SYNC | BKTR_GEN_IRQ | BKTR_RESYNC | BKTR_VRO);
 		*dma_prog++ = htole32(0);  /* NULL WORD */
 		*dma_prog++ = htole32(OP_JUMP);
-		*dma_prog++ = htole32((u_long) vtophys(bktr->odd_dma_prog));
+		*dma_prog++ = htole32((u_long)
+				bktr->dm_oprog->dm_segs[0].ds_addr);
 		break;
 	}
 
@@ -3063,7 +3078,7 @@ rgb_prog(bktr_ptr_t bktr, char i_flag, int cols, int rows, int interlace)
 	*dma_prog++ = htole32(OP_SYNC | BKTR_GEN_IRQ | BKTR_RESYNC | BKTR_VRE);
 	*dma_prog++ = htole32(0);  /* NULL WORD */
 	*dma_prog++ = htole32(OP_JUMP);
-	*dma_prog++ = htole32((u_long) vtophys(bktr->dma_prog));
+	*dma_prog++ = htole32((u_long) bktr->dm_prog->dm_segs[0].ds_addr);
 	*dma_prog++ = htole32(0);  /* NULL WORD */
 }
 
@@ -3106,7 +3121,7 @@ yuvpack_prog(bktr_ptr_t bktr, char i_flag,
 	if (bktr->video.addr)
 		target_buffer = (u_long) bktr->video.addr;
 	else
-		target_buffer = (u_long) vtophys(bktr->bigbuf);
+		target_buffer = (u_long) bktr->dm_mem->dm_segs[0].ds_addr;
 
 	buffer = target_buffer;
 
@@ -3132,7 +3147,8 @@ yuvpack_prog(bktr_ptr_t bktr, char i_flag,
 		*dma_prog++ = htole32(0);  /* NULL WORD */
 
 		*dma_prog++ = htole32(OP_JUMP);
-		*dma_prog++ = htole32((u_long) vtophys(bktr->dma_prog));
+		*dma_prog++ = htole32(
+				(u_long)bktr->dm_prog->dm_segs[0].ds_addr);
 		return;
 
 	case 2:
@@ -3140,7 +3156,8 @@ yuvpack_prog(bktr_ptr_t bktr, char i_flag,
 		*dma_prog++ = htole32(OP_SYNC | BKTR_GEN_IRQ | BKTR_VRO);
 		*dma_prog++ = htole32(0);  /* NULL WORD */
 		*dma_prog++ = htole32(OP_JUMP);
-		*dma_prog++ = htole32((u_long) vtophys(bktr->dma_prog));
+		*dma_prog++ = htole32((u_long)
+				bktr->dm_prog->dm_segs[0].ds_addr);
 		return;
 
 	case 3:
@@ -3148,7 +3165,8 @@ yuvpack_prog(bktr_ptr_t bktr, char i_flag,
 		*dma_prog++ = htole32(OP_SYNC | BKTR_GEN_IRQ | BKTR_RESYNC | BKTR_VRO);
 		*dma_prog++ = htole32(0);  /* NULL WORD */
 		*dma_prog++ = htole32(OP_JUMP);
-		*dma_prog++ = htole32((u_long) vtophys(bktr->odd_dma_prog));
+		*dma_prog++ = htole32((u_long)
+				bktr->dm_oprog->dm_segs[0].ds_addr);
 		break;
 	}
 
@@ -3175,10 +3193,10 @@ yuvpack_prog(bktr_ptr_t bktr, char i_flag,
 	*dma_prog++ = htole32(OP_SYNC | BKTR_GEN_IRQ | BKTR_RESYNC | BKTR_VRE);
 	*dma_prog++ = htole32(0);  /* NULL WORD */
 	*dma_prog++ = htole32(OP_JUMP);
-	*dma_prog++ = htole32((u_long) vtophys(bktr->dma_prog));
+	*dma_prog++ = htole32((u_long) bktr->dm_prog->dm_segs[0].ds_addr);
 
 	*dma_prog++ = htole32(OP_JUMP);
-	*dma_prog++ = htole32((u_long) vtophys(bktr->dma_prog));
+	*dma_prog++ = htole32((u_long)bktr->dm_prog->dm_segs[0].ds_addr);
 	*dma_prog++ = htole32(0);  /* NULL WORD */
 }
 
@@ -3224,7 +3242,7 @@ yuv422_prog(bktr_ptr_t bktr, char i_flag,
 	if (bktr->video.addr)
 		target_buffer = (u_long) bktr->video.addr;
 	else
-		target_buffer = (u_long) vtophys(bktr->bigbuf);
+		target_buffer = (u_long) bktr->dm_mem->dm_segs[0].ds_addr;
 
 	buffer = target_buffer;
 
@@ -3249,7 +3267,8 @@ yuv422_prog(bktr_ptr_t bktr, char i_flag,
 		*dma_prog++ = htole32(0);  /* NULL WORD */
 
 		*dma_prog++ = htole32(OP_JUMP);
-		*dma_prog++ = htole32((u_long) vtophys(bktr->dma_prog));
+		*dma_prog++ = htole32((u_long)
+				bktr->dm_prog->dm_segs[0].ds_addr);
 		return;
 
 	case 2:
@@ -3257,7 +3276,8 @@ yuv422_prog(bktr_ptr_t bktr, char i_flag,
 		*dma_prog++ = htole32(0);  /* NULL WORD */
 
 		*dma_prog++ = htole32(OP_JUMP);
-		*dma_prog++ = htole32((u_long) vtophys(bktr->dma_prog));
+		*dma_prog++ = htole32((u_long)
+				bktr->dm_prog->dm_segs[0].ds_addr);
 		return;
 
 	case 3:
@@ -3265,7 +3285,8 @@ yuv422_prog(bktr_ptr_t bktr, char i_flag,
 		*dma_prog++ = htole32(0);  /* NULL WORD */
 
 		*dma_prog++ = htole32(OP_JUMP);
-		*dma_prog++ = htole32((u_long) vtophys(bktr->odd_dma_prog));
+		*dma_prog++ = htole32((u_long)
+				bktr->dm_oprog->dm_segs[0].ds_addr);
 		break;
 	}
 
@@ -3291,7 +3312,7 @@ yuv422_prog(bktr_ptr_t bktr, char i_flag,
 	*dma_prog++ = htole32(OP_SYNC | BKTR_GEN_IRQ | BKTR_RESYNC | BKTR_VRE);
 	*dma_prog++ = htole32(0);  /* NULL WORD */
 	*dma_prog++ = htole32(OP_JUMP);
-	*dma_prog++ = htole32((u_long) vtophys(bktr->dma_prog));
+	*dma_prog++ = htole32((u_long)bktr->dm_prog->dm_segs[0].ds_addr);
 	*dma_prog++ = htole32(0);  /* NULL WORD */
 }
 
@@ -3325,7 +3346,7 @@ yuv12_prog(bktr_ptr_t bktr, char i_flag,
 	if (bktr->video.addr)
 		target_buffer = (u_long) bktr->video.addr;
 	else
-		target_buffer = (u_long) vtophys(bktr->bigbuf);
+		target_buffer = (u_long) bktr->dm_mem->dm_segs[0].ds_addr;
 
 	buffer = target_buffer;
 	t1 = buffer;
@@ -3353,7 +3374,8 @@ yuv12_prog(bktr_ptr_t bktr, char i_flag,
 		*dma_prog++ = htole32(0);  /* NULL WORD */
 
 		*dma_prog++ = htole32(OP_JUMP);
-		*dma_prog++ = htole32((u_long) vtophys(bktr->dma_prog));
+		*dma_prog++ = htole32((u_long)
+				bktr->dm_prog->dm_segs[0].ds_addr);
 		return;
 
 	case 2:
@@ -3361,14 +3383,16 @@ yuv12_prog(bktr_ptr_t bktr, char i_flag,
 		*dma_prog++ = htole32(0);  /* NULL WORD */
 
 		*dma_prog++ = htole32(OP_JUMP);
-		*dma_prog++ = htole32((u_long) vtophys(bktr->dma_prog));
+		*dma_prog++ = htole32((u_long)
+				bktr->dm_prog->dm_segs[0].ds_addr);
 		return;
 
 	case 3:
 		*dma_prog++ = htole32(OP_SYNC | BKTR_GEN_IRQ | BKTR_RESYNC | BKTR_VRO);
 		*dma_prog++ = htole32(0);  /* NULL WORD */
 		*dma_prog++ = htole32(OP_JUMP);
-		*dma_prog++ = htole32((u_long) vtophys(bktr->odd_dma_prog));
+		*dma_prog++ = htole32((u_long)
+				bktr->dm_oprog->dm_segs[0].ds_addr);
 		break;
 	}
 
@@ -3401,7 +3425,7 @@ yuv12_prog(bktr_ptr_t bktr, char i_flag,
 	*dma_prog++ = htole32(OP_SYNC | BKTR_GEN_IRQ | BKTR_RESYNC | BKTR_VRE);
 	*dma_prog++ = htole32(0);  /* NULL WORD */
 	*dma_prog++ = htole32(OP_JUMP);
-	*dma_prog++ = htole32((u_long) vtophys(bktr->dma_prog));
+	*dma_prog++ = htole32((u_long)bktr->dm_prog->dm_segs[0].ds_addr);
 	*dma_prog++ = htole32(0);  /* NULL WORD */
 }
 
@@ -3561,7 +3585,7 @@ build_dma_prog(bktr_ptr_t bktr, char i_flag)
 		break;
 	}
 
-	OUTL(bktr, BKTR_RISC_STRT_ADD, vtophys(bktr->dma_prog));
+	OUTL(bktr, BKTR_RISC_STRT_ADD, bktr->dm_prog->dm_segs[0].ds_addr);
 
 	rows = bktr->rows;
 	cols = bktr->cols;
@@ -3669,7 +3693,7 @@ start_capture(bktr_ptr_t bktr, unsigned type)
 	}
 
 
-	OUTL(bktr, BKTR_RISC_STRT_ADD, vtophys(bktr->dma_prog));
+	OUTL(bktr, BKTR_RISC_STRT_ADD, bktr->dm_prog->dm_segs[0].ds_addr);
 
 }
 

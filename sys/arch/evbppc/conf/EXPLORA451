@@ -1,4 +1,4 @@
-#	$NetBSD: EXPLORA451,v 1.13 2005/06/09 14:43:30 tsutsui Exp $
+#	$NetBSD: EXPLORA451,v 1.12.2.1 2005/07/18 21:13:03 riz Exp $
 #
 #	GENERIC -- everything that's currently supported
 #
@@ -44,8 +44,7 @@ options 	USERCONF	# userconf(4) support
 
 # Enable experimental buffer queue strategy for better responsiveness under 
 # high disk I/O load. Use it with caution - it's not proven to be stable yet.
-#options 	BUFQ_READPRIO
-#options 	BUFQ_PRIOCSCAN
+#options 	NEW_BUFQ_STRATEGY
 
 # Diagnostic/debugging support options
 options 	DIAGNOSTIC	# expensive kernel consistency checks
@@ -107,6 +106,7 @@ options 	INET		# IP + ICMP + TCP + UDP
 options 	INET6		# IPV6
 #options 	IPSEC		# IP security
 #options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
+#options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
 #options 	PIM		# Protocol Independent Multicast

@@ -1,4 +1,4 @@
-/*      $NetBSD: xennetback.c,v 1.11 2005/05/18 16:19:23 bouyer Exp $      */
+/*      $NetBSD: xennetback.c,v 1.4.2.8 2006/02/05 17:02:11 riz Exp $      */
 
 /*
  * Copyright (c) 2005 Manuel Bouyer.
@@ -146,8 +146,8 @@ xennetback_init()
 
 	XENPRINTF(("xennetback_init\n"));
 
-	xmit_pages_vaddr_base = uvm_km_alloc(kernel_map,
-	    NB_XMIT_PAGES_BATCH * PAGE_SIZE, 0, UVM_KMF_VAONLY);
+	xmit_pages_vaddr_base = uvm_km_valloc(kernel_map,
+	    NB_XMIT_PAGES_BATCH * PAGE_SIZE);
 	xmit_pages_vaddr_base = xmit_pages_vaddr_base >> PAGE_SHIFT;
 	xmit_pages_alloc = -1;
 	if (xmit_pages_vaddr_base == 0)
@@ -297,44 +297,34 @@ xnetback_ctrlif_rx(ctrl_msg_t *msg, unsigned long id)
 			req->status = NETIF_BE_STATUS_INTERFACE_CONNECTED;
 			goto end;
 		}
-		ring_rxaddr = uvm_km_alloc(kernel_map, PAGE_SIZE, 0,
-		    UVM_KMF_VAONLY);
+		ring_rxaddr = uvm_km_alloc(kernel_map, PAGE_SIZE);
 		if (ring_rxaddr == 0) {
 			printf("%s: can't alloc ring VM\n",
 			    xneti->xni_if.if_xname);
 			req->status = NETIF_BE_STATUS_OUT_OF_MEMORY;
 			goto end;
 		}
-		ring_txaddr = uvm_km_alloc(kernel_map, PAGE_SIZE, 0,
-		    UVM_KMF_VAONLY);
+		ring_txaddr = uvm_km_alloc(kernel_map, PAGE_SIZE);
 		if (ring_txaddr == 0) {
 			printf("%s: can't alloc ring VM\n",
 			    xneti->xni_if.if_xname);
-			uvm_km_free(kernel_map, ring_rxaddr, PAGE_SIZE,
-			    UVM_KMF_VAONLY);
+			uvm_km_free(kernel_map, ring_rxaddr, PAGE_SIZE);
 			req->status = NETIF_BE_STATUS_OUT_OF_MEMORY;
 			goto end;
 		}
 		xneti->xni_ma_rxring = req->rx_shmem_frame << PAGE_SHIFT;
 		xneti->xni_ma_txring = req->tx_shmem_frame << PAGE_SHIFT;
 		error = pmap_remap_pages(pmap_kernel(), ring_rxaddr,
-		   xneti->xni_ma_rxring, 1, PMAP_WIRED | PMAP_CANFAIL,
-		   req->domid);
+		   xneti->xni_ma_rxring, 1, VM_PROT_READ | VM_PROT_WRITE,
+		   PMAP_WIRED | PMAP_CANFAIL, req->domid);
+		if (error == 0)
+			error = pmap_remap_pages(pmap_kernel(), ring_txaddr,
+			   xneti->xni_ma_txring, 1,
+			   VM_PROT_READ | VM_PROT_WRITE,
+			   PMAP_WIRED | PMAP_CANFAIL, req->domid);
 		if (error) {
-			goto fail_1;
-		}
-		error = pmap_remap_pages(pmap_kernel(), ring_txaddr,
-		   xneti->xni_ma_txring, 1, PMAP_WIRED | PMAP_CANFAIL,
-		   req->domid);
-		if (error) {
-			pmap_remove(pmap_kernel(), ring_rxaddr,
-			    ring_rxaddr + PAGE_SIZE);
-			pmap_update();
-fail_1:
-			uvm_km_free(kernel_map, ring_rxaddr, PAGE_SIZE,
-			    UVM_KMF_VAONLY);
-			uvm_km_free(kernel_map, ring_txaddr, PAGE_SIZE,
-			    UVM_KMF_VAONLY);
+			uvm_km_free(kernel_map, ring_rxaddr, PAGE_SIZE);
+			uvm_km_free(kernel_map, ring_txaddr, PAGE_SIZE);
 			printf("%s: can't remap ring: error %d\n",
 			    xneti->xni_if.if_xname, error);
 			if (error == ENOMEM)
@@ -380,12 +370,10 @@ fail_1:
 		    xennetback_evthandler, xneti);
 		ring_addr = (vaddr_t)xneti->xni_rxring;
 		pmap_remove(pmap_kernel(), ring_addr, ring_addr + PAGE_SIZE);
-		uvm_km_free(kernel_map, ring_addr, PAGE_SIZE,
-		    UVM_KMF_VAONLY);
+		uvm_km_free(kernel_map, ring_addr, PAGE_SIZE);
 		ring_addr = (vaddr_t)xneti->xni_txring;
 		pmap_remove(pmap_kernel(), ring_addr, ring_addr + PAGE_SIZE);
-		uvm_km_free(kernel_map, ring_addr, PAGE_SIZE,
-		    UVM_KMF_VAONLY);
+		uvm_km_free(kernel_map, ring_addr, PAGE_SIZE);
 
 		req->status = NETIF_BE_STATUS_OKAY;
 		break;
@@ -508,8 +496,8 @@ again:
 			do_event = 1;
 
 		XENPRINTF(("%s pkg size %d\n", xneti->xni_if.if_xname, txreq->size));
-		if ((ifp->if_flags & (IFF_UP | IFF_RUNNING)) !=
-		    (IFF_UP | IFF_RUNNING)) {
+		if (__predict_false((ifp->if_flags & (IFF_UP | IFF_RUNNING)) !=
+		    (IFF_UP | IFF_RUNNING))) {
 			/* interface not up, drop */
 			txresp->id = txreq->id;
 			txresp->status = NETIF_RSP_DROPPED;
@@ -518,8 +506,8 @@ again:
 		/*
 		 * Do some sanity checks, and map the packet's page.
 		 */
-		if (txreq->size < ETHER_HDR_LEN ||
-		   txreq->size > (ETHER_MAX_LEN - ETHER_CRC_LEN)) {
+		if (__predict_false(txreq->size < ETHER_HDR_LEN ||
+		   txreq->size > (ETHER_MAX_LEN - ETHER_CRC_LEN))) {
 			printf("%s: packet size %d too big\n",
 			    ifp->if_xname, txreq->size);
 			txresp->id = txreq->id;
@@ -528,7 +516,8 @@ again:
 			continue;
 		}
 		/* don't cross page boundaries */
-		if ((txreq->addr & PAGE_MASK) + txreq->size > PAGE_SIZE) {
+		if (__predict_false(
+		    (txreq->addr & PAGE_MASK) + txreq->size > PAGE_SIZE)) {
 			printf("%s: packet cross page boundary\n",
 			    ifp->if_xname);
 			txresp->id = txreq->id;
@@ -538,7 +527,8 @@ again:
 		}
 
 		ma = txreq->addr  & ~PAGE_MASK;
-		if (xen_shm_map(&ma, 1, xneti->domid, &pkt, 0) != 0) {
+		if (__predict_false(
+		    xen_shm_map(&ma, 1, xneti->domid, &pkt, 0) != 0)) {
 			printf("%s: can't map packet page\n", ifp->if_xname);
 			txresp->id = txreq->id;
 			txresp->status = NETIF_RSP_ERROR;
@@ -546,16 +536,28 @@ again:
 			continue;
 		}
 		pkt |= (txreq->addr & PAGE_MASK);
+		if ((ifp->if_flags & IFF_PROMISC) == 0) {
+			struct ether_header *eh = (void *)pkt;
+			if (ETHER_IS_MULTICAST(eh->ether_dhost) == 0 &&
+			    memcmp(LLADDR(ifp->if_sadl), eh->ether_dhost,
+			    ETHER_ADDR_LEN) != 0) {
+				/* packet not for us */
+				xen_shm_unmap(pkt, &ma, 1, xneti->domid);
+				txresp->id = txreq->id;
+				txresp->status = NETIF_RSP_OKAY;
+				continue;
+			}
+		}
 		/* get a mbuf for this packet */
 		MGETHDR(m, M_DONTWAIT, MT_DATA);
-		if (m != NULL) {
+		if (__predict_true(m != NULL)) {
 			MCLGET(m, M_DONTWAIT);
-			if ((m->m_flags & M_EXT) == 0) {
+			if (__predict_false((m->m_flags & M_EXT) == 0)) {
 				m_freem(m);
 				m = NULL;
 			}
 		}
-		if (m == NULL) {
+		if (__predict_false(m == NULL)) {
 			txresp->id = txreq->id;
 			txresp->status = NETIF_RSP_DROPPED;
 			xen_shm_unmap(pkt, &ma, 1, xneti->domid);

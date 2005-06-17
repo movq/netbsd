@@ -1,4 +1,4 @@
-/*	$NetBSD: usb_subr.c,v 1.127 2005/06/16 12:55:25 christos Exp $	*/
+/*	$NetBSD: usb_subr.c,v 1.122.2.1 2005/10/06 11:40:52 tron Exp $	*/
 /*	$FreeBSD: src/sys/dev/usb/usb_subr.c,v 1.18 1999/11/17 22:33:47 n_hibma Exp $	*/
 
 /*
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: usb_subr.c,v 1.127 2005/06/16 12:55:25 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: usb_subr.c,v 1.122.2.1 2005/10/06 11:40:52 tron Exp $");
 
 #include "opt_usbverbose.h"
 
@@ -81,10 +81,8 @@ extern int usbdebug;
 #endif
 
 Static usbd_status usbd_set_config(usbd_device_handle, int);
-Static void usbd_devinfo(usbd_device_handle, int, char *, size_t);
-Static void usbd_devinfo_vp(usbd_device_handle dev,
-			    char v[USB_MAX_ENCODED_STRING_LEN],
-			    char p[USB_MAX_ENCODED_STRING_LEN], int usedev);
+Static void usbd_devinfo_vp(usbd_device_handle, char *, size_t, char *,
+	size_t, int);
 Static int usbd_getnewaddr(usbd_bus_handle bus);
 #if defined(__NetBSD__)
 Static int usbd_print(void *, const char *);
@@ -110,12 +108,12 @@ typedef u_int16_t usb_product_id_t;
  */
 struct usb_vendor {
 	usb_vendor_id_t		vendor;
-	const char		*vendorname;
+	char			*vendorname;
 };
 struct usb_product {
 	usb_vendor_id_t		vendor;
 	usb_product_id_t	product;
-	const char		*productname;
+	char			*productname;
 };
 
 #include <dev/usb/usbdevs_data.h>
@@ -193,31 +191,28 @@ usbd_get_string_desc(usbd_device_handle dev, int sindex, int langid,
 	return (USBD_NORMAL_COMPLETION);
 }
 
-static char *
-usbd_trim_spaces(char *b, size_t s, const char *p)
+static void
+usbd_trim_spaces(char *p)
 {
-	char *q, *e, *bp = b;
+	char *q, *e;
 
 	if (p == NULL)
-		return NULL;
-	(void)strlcpy(b, p, s);
-	q = e = b;
+		return;
+	q = e = p;
 	while (*q == ' ')	/* skip leading spaces */
 		q++;
-	while ((*b = *q++))	/* copy string */
-		if (*b++ != ' ') /* remember last non-space */
-			e = b;
-	*e = '\0';		/* kill trailing spaces */
-	return bp;
+	while ((*p = *q++))	/* copy string */
+		if (*p++ != ' ') /* remember last non-space */
+			e = p;
+	*e = 0;			/* kill trailing spaces */
 }
 
-Static void
-usbd_devinfo_vp(usbd_device_handle dev, char v[USB_MAX_ENCODED_STRING_LEN],
-		char p[USB_MAX_ENCODED_STRING_LEN], int usedev)
+void
+usbd_devinfo_vp(usbd_device_handle dev, char *v, size_t lv, char *p, size_t lp,
+	int usedev)
 {
 	usb_device_descriptor_t *udd = &dev->ddesc;
-	const char *vendor = NULL, *product = NULL;
-	char vdbuf[64], pdbuf[64];
+	char *vendor = NULL, *product = NULL;
 #ifdef USBVERBOSE
 	int n;
 #endif
@@ -232,12 +227,12 @@ usbd_devinfo_vp(usbd_device_handle dev, char v[USB_MAX_ENCODED_STRING_LEN],
 			vendor = NULL;
 		else
 			vendor = v;
-		vendor = usbd_trim_spaces(vdbuf, sizeof(vdbuf), vendor);
+		usbd_trim_spaces(vendor);
 		if (usbd_get_string(dev, udd->iProduct, p))
 			product = NULL;
 		else
 			product = p;
-		product = usbd_trim_spaces(pdbuf, sizeof(pdbuf), product);
+		usbd_trim_spaces(product);
 		if (vendor && !*vendor)
 			vendor = NULL;
 		if (product && !*product)
@@ -259,15 +254,14 @@ usbd_devinfo_vp(usbd_device_handle dev, char v[USB_MAX_ENCODED_STRING_LEN],
 				product = usb_products[n].productname;
 	}
 #endif
-	/* There is no need for strlcpy & snprintf below. */
 	if (vendor != NULL && *vendor)
-		strcpy(v, vendor);
+		strlcpy(v, vendor, lv);
 	else
-		sprintf(v, "vendor 0x%04x", UGETW(udd->idVendor));
+		snprintf(v, lv, "vendor 0x%04x", UGETW(udd->idVendor));
 	if (product != NULL && *product)
-		strcpy(p, product);
+		strlcpy(p, product, lp);
 	else
-		sprintf(p, "product 0x%04x", UGETW(udd->idProduct));
+		snprintf(p, lp, "product 0x%04x", UGETW(udd->idProduct));
 }
 
 int
@@ -276,18 +270,19 @@ usbd_printBCD(char *cp, size_t l, int bcd)
 	return (snprintf(cp, l, "%x.%02x", bcd >> 8, bcd & 0xff));
 }
 
-Static void
+void
 usbd_devinfo(usbd_device_handle dev, int showclass, char *cp, size_t l)
 {
 	usb_device_descriptor_t *udd = &dev->ddesc;
-	char vendor[USB_MAX_ENCODED_STRING_LEN];
-	char product[USB_MAX_ENCODED_STRING_LEN];
+	char vendor[USB_MAX_STRING_LEN];
+	char product[USB_MAX_STRING_LEN];
 	int bcdDevice, bcdUSB;
 	char *ep;
 
 	ep = cp + l;
 
-	usbd_devinfo_vp(dev, vendor, product, 1);
+	usbd_devinfo_vp(dev, vendor, sizeof(vendor), product,
+	    sizeof(product), 1);
 	cp += snprintf(cp, ep - cp, "%s %s", vendor, product);
 	if (showclass)
 		cp += snprintf(cp, ep - cp, ", class %d/%d",
@@ -300,22 +295,6 @@ usbd_devinfo(usbd_device_handle dev, int showclass, char *cp, size_t l)
 	cp += usbd_printBCD(cp, ep - cp, bcdDevice);
 	cp += snprintf(cp, ep - cp, ", addr %d", dev->address);
 	*cp = 0;
-}
-
-char *
-usbd_devinfo_alloc(usbd_device_handle dev, int showclass)
-{
-	char *devinfop;
-
-	devinfop = malloc(DEVINFOSIZE, M_TEMP, M_WAITOK);
-	usbd_devinfo(dev, showclass, devinfop, DEVINFOSIZE);
-	return devinfop;
-}
-
-void
-usbd_devinfo_free(char *devinfop)
-{
-	free(devinfop, M_TEMP);
 }
 
 /* Delay for a certain number of ms */
@@ -775,15 +754,6 @@ usbd_setup_pipe(usbd_device_handle dev, usbd_interface_handle iface,
 			 ep->edesc->bEndpointAddress, usbd_errstr(err)));
 		free(p, M_USB);
 		return (err);
-	}
-	/* Clear any stall and make sure DATA0 toggle will be used next. */
-	if (UE_GET_ADDR(ep->edesc->bEndpointAddress) != USB_CONTROL_ENDPOINT) {
-		err = usbd_clear_endpoint_stall(p);
-		/* Some devices reject this command, so ignore a STALL. */
-		if (err && err != USBD_STALLED) {
-			printf("usbd_setup_pipe: failed to start endpoint, %s\n", usbd_errstr(err));
-			return (err);
-		}
 	}
 	*pipe = p;
 	return (USBD_NORMAL_COMPLETION);
@@ -1277,13 +1247,10 @@ usbd_fill_deviceinfo(usbd_device_handle dev, struct usb_device_info *di,
 	di->udi_bus = USBDEVUNIT(dev->bus->bdev);
 	di->udi_addr = dev->address;
 	di->udi_cookie = dev->cookie;
-	usbd_devinfo_vp(dev, di->udi_vendor, di->udi_product, usedev);
+	usbd_devinfo_vp(dev, di->udi_vendor, sizeof(di->udi_vendor),
+	    di->udi_product, sizeof(di->udi_product), usedev);
 	usbd_printBCD(di->udi_release, sizeof(di->udi_release),
 	    UGETW(dev->ddesc.bcdDevice));
-	di->udi_serial[0] = 0;
-	if (usedev)
-		(void)usbd_get_string(dev, dev->ddesc.iSerialNumber,
-				      di->udi_serial);
 	di->udi_vendorNo = UGETW(dev->ddesc.idVendor);
 	di->udi_productNo = UGETW(dev->ddesc.idProduct);
 	di->udi_releaseNo = UGETW(dev->ddesc.bcdDevice);

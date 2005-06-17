@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_prf.c,v 1.12 2005/05/23 19:05:00 jmc Exp $	*/
+/*	$NetBSD: subr_prf.c,v 1.10 2003/08/07 16:32:30 agc Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -46,9 +46,6 @@ static void sputchar(int);
 static void kdoprnt(void (*)(int), const char *, va_list);
 
 static char *sbuf, *ebuf;
-
-const char HEXDIGITS[] = "0123456789ABCDEF";
-const char hexdigits[] = "0123456789abcdef";
 
 static void
 sputchar(int c)
@@ -152,7 +149,7 @@ kprintn(void (*put)(int), unsigned long ul, int base)
 
 	p = buf;
 	do {
-		*p++ = hexdigits[ul % base];
+		*p++ = "0123456789abcdef"[ul % base];
 	} while (ul /= base);
 	do {
 		put(*--p);

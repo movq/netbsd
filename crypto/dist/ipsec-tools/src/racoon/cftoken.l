@@ -1,6 +1,6 @@
-/*	$NetBSD: cftoken.l,v 1.2 2005/05/10 09:54:43 manu Exp $	*/
+/*	$NetBSD: cftoken.l,v 1.1.1.4.2.3 2005/11/21 21:12:30 tron Exp $	*/
 
-/* $Id: cftoken.l,v 1.2 2005/05/10 09:54:43 manu Exp $ */
+/* Id: cftoken.l,v 1.31.2.7 2005/11/06 17:18:26 monas Exp */
 
 %{
 /*
@@ -168,6 +168,8 @@ hexstring	0x{hexdigit}+
 <S_PTH>script 		{ YYD; yylval.num = LC_PATHTYPE_SCRIPT;
 				return(PATHTYPE); }
 <S_PTH>backupsa		{ YYD; yylval.num = LC_PATHTYPE_BACKUPSA;
+				return(PATHTYPE); }
+<S_PTH>pidfile		{ YYD; yylval.num = LC_PATHTYPE_PIDFILE;
 				return(PATHTYPE); }
 <S_PTH>{semi}		{ BEGIN S_INI; YYDB; return(EOS); }
 
@@ -400,16 +402,22 @@ non_auth	{ YYD; yylval.num = algtype_non_auth;	return(ALGORITHMTYPE); }
 hmac_md5	{ YYD; yylval.num = algtype_hmac_md5;	return(ALGORITHMTYPE); }
 hmac_sha1	{ YYD; yylval.num = algtype_hmac_sha1;	return(ALGORITHMTYPE); }
 hmac_sha2_256	{ YYD; yylval.num = algtype_hmac_sha2_256;	return(ALGORITHMTYPE); }
+hmac_sha256	{ YYD; yylval.num = algtype_hmac_sha2_256;	return(ALGORITHMTYPE); }
 hmac_sha2_384	{ YYD; yylval.num = algtype_hmac_sha2_384;	return(ALGORITHMTYPE); }
+hmac_sha384	{ YYD; yylval.num = algtype_hmac_sha2_384;	return(ALGORITHMTYPE); }
 hmac_sha2_512	{ YYD; yylval.num = algtype_hmac_sha2_512;	return(ALGORITHMTYPE); }
+hmac_sha512	{ YYD; yylval.num = algtype_hmac_sha2_512;	return(ALGORITHMTYPE); }
 des_mac		{ YYD; yylval.num = algtype_des_mac;	return(ALGORITHMTYPE); }
 kpdk		{ YYD; yylval.num = algtype_kpdk;	return(ALGORITHMTYPE); }
 md5		{ YYD; yylval.num = algtype_md5;	return(ALGORITHMTYPE); }
 sha1		{ YYD; yylval.num = algtype_sha1;	return(ALGORITHMTYPE); }
 tiger		{ YYD; yylval.num = algtype_tiger;	return(ALGORITHMTYPE); }
 sha2_256	{ YYD; yylval.num = algtype_sha2_256;	return(ALGORITHMTYPE); }
+sha256		{ YYD; yylval.num = algtype_sha2_256;	return(ALGORITHMTYPE); }
 sha2_384	{ YYD; yylval.num = algtype_sha2_384;	return(ALGORITHMTYPE); }
+sha384		{ YYD; yylval.num = algtype_sha2_384;	return(ALGORITHMTYPE); }
 sha2_512	{ YYD; yylval.num = algtype_sha2_512;	return(ALGORITHMTYPE); }
+sha512		{ YYD; yylval.num = algtype_sha2_512;	return(ALGORITHMTYPE); }
 oui		{ YYD; yylval.num = algtype_oui;	return(ALGORITHMTYPE); }
 deflate		{ YYD; yylval.num = algtype_deflate;	return(ALGORITHMTYPE); }
 lzs		{ YYD; yylval.num = algtype_lzs;	return(ALGORITHMTYPE); }
@@ -465,6 +473,7 @@ user_fqdn	{ YYD; yylval.num = IDTYPE_USERFQDN; return(IDENTIFIERTYPE); }
 fqdn		{ YYD; yylval.num = IDTYPE_FQDN; return(IDENTIFIERTYPE); }
 keyid		{ YYD; yylval.num = IDTYPE_KEYID; return(IDENTIFIERTYPE); }
 address		{ YYD; yylval.num = IDTYPE_ADDRESS; return(IDENTIFIERTYPE); }
+subnet		{ YYD; yylval.num = IDTYPE_SUBNET; return(IDENTIFIERTYPE); }
 asn1dn		{ YYD; yylval.num = IDTYPE_ASN1DN; return(IDENTIFIERTYPE); }
 certname	{ YYD; yywarn("certname will be obsoleted in near future."); yylval.num = IDTYPE_ASN1DN; return(IDENTIFIERTYPE); }
 
@@ -512,7 +521,7 @@ no		{ YYD; yylval.num = FALSE; return(BOOLEAN); }
 		}
 
 {quotedstring}	{
-			u_char *p = yytext;
+			char *p = yytext;
 
 			YYD;
 			while (*++p != '"') ;

@@ -1,11 +1,17 @@
-/*	$NetBSD: perform.c,v 1.40 2004/12/29 11:35:00 agc Exp $	*/
+/*	$NetBSD: perform.c,v 1.40.2.3 2005/11/27 15:46:04 riz Exp $	*/
 
+#if HAVE_CONFIG_H
+#include "config.h"
+#endif
+#include <nbcompat.h>
+#if HAVE_SYS_CDEFS_H
 #include <sys/cdefs.h>
+#endif
 #ifndef lint
 #if 0
 static const char *rcsid = "from FreeBSD Id: perform.c,v 1.38 1997/10/13 15:03:51 jkh Exp";
 #else
-__RCSID("$NetBSD: perform.c,v 1.40 2004/12/29 11:35:00 agc Exp $");
+__RCSID("$NetBSD: perform.c,v 1.40.2.3 2005/11/27 15:46:04 riz Exp $");
 #endif
 #endif
 
@@ -32,12 +38,21 @@ __RCSID("$NetBSD: perform.c,v 1.40 2004/12/29 11:35:00 agc Exp $");
 #include "lib.h"
 #include "create.h"
 
+#if HAVE_ERR_H
 #include <err.h>
+#endif
+#if HAVE_SIGNAL_H
 #include <signal.h>
+#endif
+#if HAVE_SYS_WAIT_H
 #include <sys/wait.h>
+#endif
+#if HAVE_UNISTD_H
 #include <unistd.h>
+#endif
 
 static char *Home;
+void cleanup_callback(void);
 
 static void
 make_dist(const char *home, const char *pkg, const char *suffix, const package_t *plist)
@@ -47,9 +62,8 @@ make_dist(const char *home, const char *pkg, const char *suffix, const package_t
 	int     ret;
 	char   *args[50];	/* Much more than enough. */
 	int     nargs = 1;
-	int     pipefds[2];
 	FILE   *totar;
-	pid_t   pid;
+	pipe_to_system_t	*to_pipe;
 
 	if ((args[0] = strrchr(TAR_CMD, '/')) == NULL)
 		args[0] = TAR_CMD;
@@ -79,30 +93,8 @@ make_dist(const char *home, const char *pkg, const char *suffix, const package_t
 	args[nargs++] = "-";	/* Use stdin for the file. */
 	args[nargs] = NULL;
 
-	/* Set up a pipe for passing the filenames, and fork off a tar process. */
-	if (pipe(pipefds) == -1) {
-		cleanup(0);
-		errx(2, "cannot create pipe");
-	}
-	if ((pid = fork()) == -1) {
-		cleanup(0);
-		errx(2, "cannot fork process for %s", TAR_CMD);
-	}
-	if (pid == 0) {		/* The child */
-		dup2(pipefds[0], 0);
-		close(pipefds[0]);
-		close(pipefds[1]);
-		execvp(TAR_CMD, args);
-		cleanup(0);
-		errx(2, "failed to execute %s command", TAR_CMD);
-	}
-
-	/* Meanwhile, back in the parent process ... */
-	close(pipefds[0]);
-	if ((totar = fdopen(pipefds[1], "w")) == NULL) {
-		cleanup(0);
-		errx(2, "fdopen failed");
-	}
+	to_pipe = pipe_to_system_begin(TAR_CMD, args, cleanup_callback);
+	totar = to_pipe->fp;
 
 	fprintf(totar, "%s\n", CONTENTS_FNAME);
 	fprintf(totar, "%s\n", COMMENT_FNAME);
@@ -159,8 +151,7 @@ make_dist(const char *home, const char *pkg, const char *suffix, const package_t
 		}
 	}
 
-	fclose(totar);
-	wait(&ret);
+	ret = pipe_to_system_end(to_pipe);
 	/* assume either signal or bad exit is enough for us */
 	if (ret) {
 		cleanup(0);
@@ -185,6 +176,14 @@ sanity_check(void)
 	}
 }
 
+/*
+ * Clean up callback for pipe_to_system()
+ */
+void
+cleanup_callback(void)
+{
+	cleanup(0);
+}
 
 /*
  * Clean up those things that would otherwise hang around

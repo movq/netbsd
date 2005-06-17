@@ -1,4 +1,4 @@
-/*	$NetBSD: mmfile.c,v 1.2 2005/04/22 21:01:10 christos Exp $	*/
+/*	$NetBSD: mmfile.c,v 1.1.1.2.6.1 2005/07/03 21:22:03 tron Exp $	*/
 
 /*-
  * Copyright (c) 1999 James Howard and Dag-Erling Coïdan Smørgrav
@@ -29,7 +29,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: mmfile.c,v 1.2 2005/04/22 21:01:10 christos Exp $");
+__RCSID("$NetBSD: mmfile.c,v 1.1.1.2.6.1 2005/07/03 21:22:03 tron Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>

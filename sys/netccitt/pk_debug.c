@@ -1,4 +1,4 @@
-/*	$NetBSD: pk_debug.c,v 1.13 2005/05/29 21:53:52 christos Exp $	*/
+/*	$NetBSD: pk_debug.c,v 1.12 2003/08/07 16:33:03 agc Exp $	*/
 
 /*
  * Copyright (c) 1990, 1993
@@ -74,7 +74,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pk_debug.c,v 1.13 2005/05/29 21:53:52 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pk_debug.c,v 1.12 2003/08/07 16:33:03 agc Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -91,13 +91,13 @@ __KERNEL_RCSID(0, "$NetBSD: pk_debug.c,v 1.13 2005/05/29 21:53:52 christos Exp $
 #include <netccitt/pk_var.h>
 #include <netccitt/pk_extern.h>
 
-const char	*pk_state[] = {
+char	*pk_state[] = {
 	"Listen",	"Ready",	"Received-Call",
 	"Sent-Call",	"Data-Transfer","Received-Clear",
 	"Sent-Clear",
 };
 
-const char   *pk_name[] = {
+char   *pk_name[] = {
 	"Call",		"Call-Conf",	"Clear",
 	"Clear-Conf",	"Data",		"Intr",		"Intr-Conf",
 	"Rr",		"Rnr",		"Reset",	"Reset-Conf",
@@ -109,7 +109,7 @@ void
 pk_trace (xcp, m, dir)
 	struct x25config *xcp;
 	struct mbuf *m;
-	const char *dir;
+	char *dir;
 {
 	char *s;
 	struct x25_packet *xp = mtod(m, struct x25_packet *);

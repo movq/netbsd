@@ -1,4 +1,4 @@
-#	$NetBSD: INSTALL,v 1.263 2005/03/25 23:28:44 cube Exp $
+#	$NetBSD: INSTALL,v 1.262.2.4 2006/07/31 12:35:22 tron Exp $
 #
 #	INSTALL - Installation kernel.
 #
@@ -277,7 +277,6 @@ wsdisplay*	at pcdisplay? console ?
 wskbd*		at pckbd? console ?
 #wsmouse*	at pms? mux 0
 
-attimer0	at isa?
 pcppi0		at isa?
 sysbeep0	at pcppi?
 
@@ -395,16 +394,19 @@ aac*	at pci? dev ? function ?	# Adaptec AAC family
 amr*	at pci? dev ? function ?	# AMI/LSI Logic MegaRAID
 cac*	at eisa? slot ?			# Compaq EISA array controllers
 cac*	at pci? dev ? function ?	# Compaq PCI array controllers
+ciss*	at pci? dev ? function ?	# HP Smart Array controllers
 icp*	at pci? dev ? function ?	# ICP-Vortex GDT & Intel RAID
 mlx*	at pci? dev ? function ?	# Mylex DAC960 & DEC SWXCR family
 mlx*	at eisa? slot ?			# Mylex DAC960 & DEC SWXCR family
 twe*	at pci? dev ? function ?	# 3ware Escalade RAID controllers
+twa*	at pci? dev ? function ?	# 3ware Escalade 9xxx RAID controllers
 
 ld*	at aac? unit ?			# logical disk devices
 ld*	at amr? unit ?
 ld*	at cac? unit ?
 ld*	at icp? unit ?
 ld*	at twe? unit ?
+ld*	at twa? unit ?
 ld*	at mlx? unit ?
 
 icpsp*	at icp? unit ?			# SCSI pass-through
@@ -432,6 +434,7 @@ rccide* 	at pci? dev ? function ?	# ServerWorks IDE controllers
 satalink*	at pci? dev ? function ?	# SiI SATALink controllers
 siside* 	at pci? dev ? function ?	# SiS IDE controllers
 slide* 		at pci? dev ? function ?	# Symphony Labs IDE controllers
+svwsata* 	at pci? dev ? function ?	# ServerWorks SATA controllers
 viaide* 	at pci? dev ? function ?	# VIA/AMD/Nvidia IDE controllers
 stpcide*	at pci? dev ? function ?	# STMicro STPC IDE controllers
 
@@ -519,6 +522,7 @@ le*	at pci? dev ? function ?	# PCnet-PCI Ethernet
 #lmc*	at pci? dev ? function ?	# Lan Media Corp SSI/HSSI/DS3
 mtd*	at pci? dev ? function ?	# Myson MTD803 3-in-1 Ethernet
 ne*	at pci? dev ? function ?	# NE2000-compatible Ethernet
+nfe*	at pci?	dev ? function ?	# NVIDIA nForce Ethernet
 #ntwoc*	at pci? dev ? function ?	# Riscom/N2 PCI Sync Serial
 pcn*	at pci? dev ? function ?	# AMD PCnet-PCI Ethernet
 re*	at pci? dev ? function ?	# Realtek 8139C+/8169/8169S/8110S

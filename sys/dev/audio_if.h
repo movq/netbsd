@@ -1,4 +1,4 @@
-/*	$NetBSD: audio_if.h,v 1.55 2005/01/10 22:01:37 kent Exp $	*/
+/*	$NetBSD: audio_if.h,v 1.55.8.2 2006/04/19 20:59:13 tron Exp $	*/
 
 /*
  * Copyright (c) 1994 Havard Eidnes.

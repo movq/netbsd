@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_page.c,v 1.104 2005/06/04 13:48:35 chs Exp $	*/
+/*	$NetBSD: uvm_page.c,v 1.101 2004/10/23 21:29:27 yamt Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -71,7 +71,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_page.c,v 1.104 2005/06/04 13:48:35 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_page.c,v 1.101 2004/10/23 21:29:27 yamt Exp $");
 
 #include "opt_uvmhist.h"
 
@@ -873,8 +873,7 @@ uvm_page_rehash()
 	 * allocate the new buckets
 	 */
 
-	newbuckets = (struct pglist *) uvm_km_alloc(kernel_map, newsize,
-	    0, UVM_KMF_WIRED);
+	newbuckets = (struct pglist *) uvm_km_alloc(kernel_map, newsize);
 	if (newbuckets == NULL) {
 		printf("uvm_page_physrehash: WARNING: could not grow page "
 		    "hash table\n");
@@ -908,8 +907,7 @@ uvm_page_rehash()
 	 */
 
 	if (oldbuckets != &uvm_bootbucket)
-		uvm_km_free(kernel_map, (vaddr_t) oldbuckets, oldsize,
-		    UVM_KMF_WIRED);
+		uvm_km_free(kernel_map, (vaddr_t) oldbuckets, oldsize);
 }
 
 /*
@@ -1183,7 +1181,7 @@ uvm_pagealloc_strat(obj, off, anon, flags, strat, free_list)
 	pg->uanon = anon;
 	pg->flags = PG_BUSY|PG_CLEAN|PG_FAKE;
 	if (anon) {
-		anon->an_page = pg;
+		anon->u.an_page = pg;
 		pg->pqflags = PQ_ANON;
 		uvmexp.anonpages++;
 	} else {
@@ -1364,7 +1362,7 @@ uvm_pagefree(pg)
 				pg->pqflags &= ~PQ_ANON;
 				uvmexp.anonpages--;
 			}
-			pg->uanon->an_page = NULL;
+			pg->uanon->u.an_page = NULL;
 			pg->uanon = NULL;
 		}
 		if (pg->flags & PG_WANTED) {
@@ -1387,7 +1385,7 @@ uvm_pagefree(pg)
 	if (pg->uobject != NULL) {
 		uvm_pageremove(pg);
 	} else if (pg->uanon != NULL) {
-		pg->uanon->an_page = NULL;
+		pg->uanon->u.an_page = NULL;
 		uvmexp.anonpages--;
 	}
 
@@ -1503,7 +1501,7 @@ uvm_page_unbusy(pgs, npgs)
 void
 uvm_page_own(pg, tag)
 	struct vm_page *pg;
-	const char *tag;
+	char *tag;
 {
 	KASSERT((pg->flags & (PG_PAGEOUT|PG_RELEASED)) == 0);
 

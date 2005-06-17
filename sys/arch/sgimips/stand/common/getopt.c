@@ -1,4 +1,4 @@
-/*	$NetBSD: getopt.c,v 1.2 2005/04/21 13:59:15 tsutsui Exp $	*/
+/*	$NetBSD: getopt.c,v 1.1 2003/11/11 06:28:15 sekiya Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993, 1994
@@ -49,7 +49,10 @@ char	*optarg;		/* argument associated with option */
  *	Parse argc/argv argument vector.
  */
 int
-getopt(int nargc, char * const *nargv, const char *ostr)
+getopt(nargc, nargv, ostr)
+	int nargc;
+	char * const *nargv;
+	const char *ostr;
 {
 	static char *place = EMSG;		/* option letter processing */
 	char *oli;				/* option letter list index */
@@ -58,12 +61,12 @@ getopt(int nargc, char * const *nargv, const char *ostr)
 		optreset = 0;
 		if (optind >= nargc || *(place = nargv[optind]) != '-') {
 			place = EMSG;
-			return -1;
+			return (-1);
 		}
 		if (place[1] && *++place == '-') {	/* found "--" */
 			++optind;
 			place = EMSG;
-			return -1;
+			return (-1);
 		}
 	}					/* option letter okay? */
 	if ((optopt = (int)*place++) == (int)':' ||
@@ -73,12 +76,12 @@ getopt(int nargc, char * const *nargv, const char *ostr)
 		 * assume it means -1.
 		 */
 		if (optopt == (int)'-')
-			return -1;
+			return (-1);
 		if (!*place)
 			++optind;
 		if (opterr && *ostr != ':')
 			printf("illegal option -- %c\n", optopt);
-		return BADCH;
+		return (BADCH);
 	}
 	if (*++oli != ':') {			/* don't need argument */
 		optarg = NULL;
@@ -91,16 +94,16 @@ getopt(int nargc, char * const *nargv, const char *ostr)
 		else if (nargc <= ++optind) {	/* no arg */
 			place = EMSG;
 			if (*ostr == ':')
-				return BADARG;
+				return (BADARG);
 			if (opterr)
 				printf("option requires an argument -- %c\n",
 				       optopt);
-			return BADCH;
+			return (BADCH);
 		}
 	 	else				/* white space */
 			optarg = nargv[optind];
 		place = EMSG;
 		++optind;
 	}
-	return optopt;				/* dump back option letter */
+	return (optopt);			/* dump back option letter */
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: drsupio.c,v 1.16 2005/06/13 21:34:16 jmc Exp $ */
+/*	$NetBSD: drsupio.c,v 1.15 2003/04/01 21:26:31 thorpej Exp $ */
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: drsupio.c,v 1.16 2005/06/13 21:34:16 jmc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: drsupio.c,v 1.15 2003/04/01 21:26:31 thorpej Exp $");
 
 /*
  * DraCo multi-io chip bus space stuff
@@ -88,7 +88,7 @@ drsupiomatch(struct device *parent, struct cfdata *cfp, void *auxp)
 }
 
 struct drsupio_devs {
-	const char *name;
+	char *name;
 	int off;
 	int arg;
 } drsupiodevs[] = {

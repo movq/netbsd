@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_general.h,v 1.15 2005/05/29 22:03:09 christos Exp $	*/
+/*	$NetBSD: rf_general.h,v 1.14.2.1 2005/06/17 13:35:31 tron Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.

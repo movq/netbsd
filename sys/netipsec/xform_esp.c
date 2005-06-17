@@ -1,4 +1,4 @@
-/*	$NetBSD: xform_esp.c,v 1.6 2005/05/27 22:30:03 seanb Exp $	*/
+/*	$NetBSD: xform_esp.c,v 1.5.16.1 2006/03/28 22:38:20 riz Exp $	*/
 /*	$FreeBSD: src/sys/netipsec/xform_esp.c,v 1.2.2.1 2003/01/24 05:11:36 sam Exp $	*/
 /*	$OpenBSD: ip_esp.c,v 1.69 2001/06/26 06:18:59 angelos Exp $ */
 
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xform_esp.c,v 1.6 2005/05/27 22:30:03 seanb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xform_esp.c,v 1.5.16.1 2006/03/28 22:38:20 riz Exp $");
 
 #include "opt_inet.h"
 #ifdef __FreeBSD__
@@ -204,7 +204,7 @@ esp_init(struct secasvar *sav, struct xformsw *xsp)
 	 *      compromise is to force it to zero here.
 	 */
 	sav->ivlen = (txform == &enc_xform_null ? 0 : txform->blocksize);
-	sav->iv = (caddr_t) malloc(sav->ivlen, M_SECA, M_WAITOK);
+	sav->iv = (caddr_t) malloc(sav->ivlen, M_XDATA, M_WAITOK);
 	if (sav->iv == NULL) {
 		DPRINTF(("esp_init: no memory for IV\n"));
 		return EINVAL;
@@ -567,6 +567,23 @@ esp_input_cb(struct cryptop *crp)
 	 * Packet is now decrypted.
 	 */
 	m->m_flags |= M_DECRYPTED;
+
+	/*
+	 * Update replay sequence number, if appropriate.
+	 */
+	if (sav->replay) {
+		u_int32_t seq;
+
+		m_copydata(m, skip + offsetof(struct newesp, esp_seq),
+		    sizeof (seq), (caddr_t) &seq);
+		if (ipsec_updatereplay(ntohl(seq), sav)) {
+			DPRINTF(("%s: packet replay check for %s\n", __func__,
+			    ipsec_logsastr(sav)));
+			espstat.esps_replay++;
+			error = ENOBUFS;
+			goto bad;
+		}
+	}
 
 	/* Determine the ESP header length */
 	if (sav->flags & SADB_X_EXT_OLD)

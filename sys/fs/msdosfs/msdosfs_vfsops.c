@@ -1,4 +1,4 @@
-/*	$NetBSD: msdosfs_vfsops.c,v 1.24 2005/05/29 21:00:29 christos Exp $	*/
+/*	$NetBSD: msdosfs_vfsops.c,v 1.22 2005/01/09 03:11:48 mycroft Exp $	*/
 
 /*-
  * Copyright (C) 1994, 1995, 1997 Wolfgang Solfrank.
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: msdosfs_vfsops.c,v 1.24 2005/05/29 21:00:29 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: msdosfs_vfsops.c,v 1.22 2005/01/09 03:11:48 mycroft Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_quota.h"
@@ -138,7 +138,6 @@ struct vfsops msdosfs_vfsops = {
 	vfs_stdextattrctl,
 	msdosfs_vnodeopv_descs,
 };
-VFS_ATTACH(msdosfs_vfsops);
 
 static int
 update_mp(mp, argp)
@@ -165,7 +164,7 @@ update_mp(mp, argp)
 		pmp->pm_flags |= MSDOSFSMNT_SHORTNAME;
 	else if (!(pmp->pm_flags &
 	    (MSDOSFSMNT_SHORTNAME | MSDOSFSMNT_LONGNAME))) {
-		struct vnode *rtvp;
+		struct vnode *rootvp;
 
 		/*
 		 * Try to divine whether to support Win'95 long filenames
@@ -173,12 +172,12 @@ update_mp(mp, argp)
 		if (FAT32(pmp))
 			pmp->pm_flags |= MSDOSFSMNT_LONGNAME;
 		else {
-			if ((error = msdosfs_root(mp, &rtvp)) != 0)
+			if ((error = msdosfs_root(mp, &rootvp)) != 0)
 				return error;
-			pmp->pm_flags |= findwin95(VTODE(rtvp))
+			pmp->pm_flags |= findwin95(VTODE(rootvp))
 				? MSDOSFSMNT_LONGNAME
 					: MSDOSFSMNT_SHORTNAME;
-			vput(rtvp);
+			vput(rootvp);
 		}
 	}
 
@@ -370,7 +369,7 @@ msdosfs_mount(mp, path, data, ndp, p)
 		}
 	}
 	if ((mp->mnt_flag & MNT_UPDATE) == 0) {
-		int xflags;
+		int flags;
 
 		/*
 		 * Disallow multiple mounts of the same device.
@@ -386,16 +385,16 @@ msdosfs_mount(mp, path, data, ndp, p)
 			goto fail;
 		}
 		if (mp->mnt_flag & MNT_RDONLY)
-			xflags = FREAD;
+			flags = FREAD;
 		else
-			xflags = FREAD|FWRITE;
-		error = VOP_OPEN(devvp, xflags, FSCRED, p);
+			flags = FREAD|FWRITE;
+		error = VOP_OPEN(devvp, flags, FSCRED, p);
 		if (error)
 			goto fail;
 		error = msdosfs_mountfs(devvp, mp, p, &args);
 		if (error) {
 			vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
-			(void) VOP_CLOSE(devvp, xflags, NOCRED, p);
+			(void) VOP_CLOSE(devvp, flags, NOCRED, p);
 			VOP_UNLOCK(devvp, 0);
 			goto fail;
 		}

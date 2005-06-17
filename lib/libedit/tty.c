@@ -1,4 +1,4 @@
-/*	$NetBSD: tty.c,v 1.23 2005/06/01 11:37:52 lukem Exp $	*/
+/*	$NetBSD: tty.c,v 1.21 2004/08/13 12:10:39 mycroft Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)tty.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: tty.c,v 1.23 2005/06/01 11:37:52 lukem Exp $");
+__RCSID("$NetBSD: tty.c,v 1.21 2004/08/13 12:10:39 mycroft Exp $");
 #endif
 #endif /* not lint && not SCCSID */
 
@@ -50,7 +50,7 @@ __RCSID("$NetBSD: tty.c,v 1.23 2005/06/01 11:37:52 lukem Exp $");
 
 typedef struct ttymodes_t {
 	const char *m_name;
-	unsigned int m_value;
+	u_int m_value;
 	int m_type;
 }          ttymodes_t;
 
@@ -1228,7 +1228,7 @@ tty_stty(EditLine *el, int argc __attribute__((__unused__)), const char **argv)
 		return (0);
 	}
 	while (argv && (s = *argv++)) {
-		const char *p;
+		char *p;
 		switch (*s) {
 		case '+':
 		case '-':
@@ -1239,10 +1239,10 @@ tty_stty(EditLine *el, int argc __attribute__((__unused__)), const char **argv)
 			break;
 		}
 		d = s;
-		p = strchr(s, '=');
+		if ((p = strchr(s, '=')) != NULL)
+			*p++ = '\0';
 		for (m = ttymodes; m->m_name; m++)
-			if ((p ? strncmp(m->m_name, d, (size_t)(p - d)) :
-			    strcmp(m->m_name, d)) == 0 &&
+			if (strcmp(m->m_name, d) == 0 &&
 			    (p == NULL || m->m_type == MD_CHAR))
 				break;
 
@@ -1253,7 +1253,7 @@ tty_stty(EditLine *el, int argc __attribute__((__unused__)), const char **argv)
 		}
 		if (p) {
 			int c = ffs((int)m->m_value);
-			int v = *++p ? parse__escape((const char **) &p) :
+			int v = *p ? parse__escape((const char **const) &p) :
 			    el->el_tty.t_vdisable;
 			assert(c-- != 0);
 			c = tty__getcharindex(c);

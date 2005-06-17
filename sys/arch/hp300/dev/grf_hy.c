@@ -1,4 +1,4 @@
-/*	$NetBSD: grf_hy.c,v 1.25 2005/06/03 11:52:50 tsutsui Exp $	*/
+/*	$NetBSD: grf_hy.c,v 1.24.8.1 2006/06/04 08:41:08 tron Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -120,7 +120,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: grf_hy.c,v 1.25 2005/06/03 11:52:50 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: grf_hy.c,v 1.24.8.1 2006/06/04 08:41:08 tron Exp $");
 
 #include "opt_compat_hpux.h"
 
@@ -141,6 +141,7 @@ __KERNEL_RCSID(0, "$NetBSD: grf_hy.c,v 1.25 2005/06/03 11:52:50 tsutsui Exp $");
 
 #include <dev/cons.h>
 
+#include <hp300/dev/dioreg.h>
 #include <hp300/dev/diovar.h>
 #include <hp300/dev/diodevs.h>
 #include <hp300/dev/intiovar.h>
@@ -417,8 +418,7 @@ hyper_deinit(struct ite_data *ip)
 static void
 hyper_ite_fontinit(struct ite_data *ip)
 {
-	volatile u_char *fbmem;
-	u_char *dp;
+	u_char *fbmem, *dp;
 	int c, l, b;
 	int stride, width;
 
@@ -428,7 +428,7 @@ hyper_ite_fontinit(struct ite_data *ip)
 	width = (ip->ftwidth + 7) / 8;
 
 	for (c = 0; c < 128; c++) {
-		fbmem = FBBASE +
+		fbmem = (u_char *) FBBASE +
 			(ip->fonty + (c / ip->cpl) * ip->ftheight) *
 			stride;
 		fbmem += (ip->fontx >> 3) + (c % ip->cpl) * width;
@@ -771,7 +771,7 @@ hypercnattach(bus_space_tag_t bst, bus_addr_t addr, int scode)
 		return (1);
 	}
 
-	if (scode > 132) {
+	if (DIO_ISDIOII(scode)) {
 		dioiidev = (uint8_t *)va;
 		size =  ((dioiidev[0x101] + 1) * 0x100000);
 	} else

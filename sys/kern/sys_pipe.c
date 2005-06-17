@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_pipe.c,v 1.65 2005/04/01 11:59:37 yamt Exp $	*/
+/*	$NetBSD: sys_pipe.c,v 1.64.2.1 2005/09/14 20:35:05 tron Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -83,7 +83,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_pipe.c,v 1.65 2005/04/01 11:59:37 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_pipe.c,v 1.64.2.1 2005/09/14 20:35:05 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -187,8 +187,7 @@ static void pipe_free_kmem(struct pipe *pipe);
 static int pipe_create(struct pipe **pipep, int allockva);
 static int pipelock(struct pipe *pipe, int catch);
 static __inline void pipeunlock(struct pipe *pipe);
-static void pipeselwakeup(struct pipe *pipe, struct pipe *sigp, void *data,
-    int code);
+static void pipeselwakeup(struct pipe *pipe, struct pipe *sigp, int code);
 #ifndef PIPE_NODIRECT
 static int pipe_direct_write(struct file *fp, struct pipe *wpipe,
     struct uio *uio);
@@ -288,8 +287,7 @@ pipespace(pipe, size)
 	 * Allocate pageable virtual address space. Physical memory is
 	 * allocated on demand.
 	 */
-	buffer = (caddr_t) uvm_km_alloc(kernel_map, round_page(size), 0,
-	    UVM_KMF_PAGEABLE);
+	buffer = (caddr_t) uvm_km_valloc(kernel_map, round_page(size));
 	if (buffer == NULL)
 		return (ENOMEM);
 
@@ -396,9 +394,8 @@ pipeunlock(pipe)
  * 'sigpipe' side of pipe.
  */
 static void
-pipeselwakeup(selp, sigp, data, code)
+pipeselwakeup(selp, sigp, code)
 	struct pipe *selp, *sigp;
-	void *data;
 	int code;
 {
 	int band;
@@ -563,8 +560,7 @@ again:
 			/*
 			 * We want to read more, wake up select/poll.
 			 */
-			pipeselwakeup(rpipe, rpipe->pipe_peer, fp->f_data,
-			    POLL_IN);
+			pipeselwakeup(rpipe, rpipe->pipe_peer, POLL_IN);
 
 			/*
 			 * If the "write-side" is blocked, wake it up now.
@@ -616,7 +612,7 @@ unlocked_error:
 	 */
 	if ((bp->size - bp->cnt) >= PIPE_BUF
 	    && (ocnt != bp->cnt || (rpipe->pipe_state & PIPE_SIGNALR))) {
-		pipeselwakeup(rpipe, rpipe->pipe_peer, fp->f_data, POLL_OUT);
+		pipeselwakeup(rpipe, rpipe->pipe_peer, POLL_OUT);
 		rpipe->pipe_state &= ~PIPE_SIGNALR;
 	}
 
@@ -636,8 +632,7 @@ pipe_loan_alloc(wpipe, npages)
 	vsize_t len;
 
 	len = (vsize_t)npages << PAGE_SHIFT;
-	wpipe->pipe_map.kva = uvm_km_alloc(kernel_map, len, 0,
-	    UVM_KMF_VAONLY | UVM_KMF_WAITVA);
+	wpipe->pipe_map.kva = uvm_km_valloc_wait(kernel_map, len);
 	if (wpipe->pipe_map.kva == 0)
 		return (ENOMEM);
 
@@ -658,7 +653,7 @@ pipe_loan_free(wpipe)
 	vsize_t len;
 
 	len = (vsize_t)wpipe->pipe_map.npages << PAGE_SHIFT;
-	uvm_km_free(kernel_map, wpipe->pipe_map.kva, len, UVM_KMF_VAONLY);
+	uvm_km_free(kernel_map, wpipe->pipe_map.kva, len);
 	wpipe->pipe_map.kva = 0;
 	amountpipekva -= len;
 	free(wpipe->pipe_map.pgs, M_PIPE);
@@ -774,7 +769,7 @@ pipe_direct_write(fp, wpipe, uio)
 			wpipe->pipe_state &= ~PIPE_WANTR;
 			wakeup(wpipe);
 		}
-		pipeselwakeup(wpipe, wpipe, fp->f_data, POLL_IN);
+		pipeselwakeup(wpipe, wpipe, POLL_IN);
 		error = ltsleep(wpipe, PSOCK | PCATCH, "pipdwt", 0,
 				&wpipe->pipe_slock);
 		if (error == 0 && wpipe->pipe_state & PIPE_EOF)
@@ -794,7 +789,7 @@ pipe_direct_write(fp, wpipe, uio)
 		pipe_loan_free(wpipe);
 
 	if (error) {
-		pipeselwakeup(wpipe, wpipe, fp->f_data, POLL_ERR);
+		pipeselwakeup(wpipe, wpipe, POLL_ERR);
 
 		/*
 		 * If nothing was read from what we offered, return error
@@ -1038,8 +1033,7 @@ retry:
 			 * wake up select/poll.
 			 */
 			if (bp->cnt)
-				pipeselwakeup(wpipe, wpipe, fp->f_data,
-				    POLL_OUT);
+				pipeselwakeup(wpipe, wpipe, POLL_OUT);
 
 			PIPE_LOCK(wpipe);
 			pipeunlock(wpipe);
@@ -1091,7 +1085,7 @@ retry:
 	 * is only done synchronously), so check only wpipe->pipe_buffer.cnt
 	 */
 	if (bp->cnt)
-		pipeselwakeup(wpipe, wpipe, fp->f_data, POLL_OUT);
+		pipeselwakeup(wpipe, wpipe, POLL_OUT);
 
 	/*
 	 * Arrange for next read(2) to do a signal.
@@ -1296,7 +1290,7 @@ pipe_free_kmem(pipe)
 		amountpipekva -= pipe->pipe_buffer.size;
 		uvm_km_free(kernel_map,
 			(vaddr_t)pipe->pipe_buffer.buffer,
-			pipe->pipe_buffer.size, UVM_KMF_PAGEABLE);
+			pipe->pipe_buffer.size);
 		pipe->pipe_buffer.buffer = NULL;
 	}
 #ifndef PIPE_NODIRECT
@@ -1326,16 +1320,16 @@ pipeclose(fp, pipe)
 retry:
 	PIPE_LOCK(pipe);
 
-	if (fp)
-		pipeselwakeup(pipe, pipe, fp->f_data, POLL_HUP);
+	pipeselwakeup(pipe, pipe, POLL_HUP);
 
 	/*
 	 * If the other side is blocked, wake it up saying that
 	 * we want to close it down.
 	 */
+	pipe->pipe_state |= PIPE_EOF;
 	while (pipe->pipe_busy) {
 		wakeup(pipe);
-		pipe->pipe_state |= PIPE_WANTCLOSE | PIPE_EOF;
+		pipe->pipe_state |= PIPE_WANTCLOSE;
 		ltsleep(pipe, PSOCK, "pipecl", 0, &pipe->pipe_slock);
 	}
 
@@ -1348,8 +1342,7 @@ retry:
 			PIPE_UNLOCK(pipe);
 			goto retry;
 		}
-		if (fp)
-			pipeselwakeup(ppipe, ppipe, fp->f_data, POLL_HUP);
+		pipeselwakeup(ppipe, ppipe, POLL_HUP);
 
 		ppipe->pipe_state |= PIPE_EOF;
 		wakeup(ppipe);

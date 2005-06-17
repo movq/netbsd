@@ -1,4 +1,4 @@
-/*	$NetBSD: mbr.c,v 1.68 2005/02/26 17:40:49 dsl Exp $ */
+/*	$NetBSD: mbr.c,v 1.68.2.4 2006/08/12 19:20:36 riz Exp $ */
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -701,6 +701,7 @@ edit_mbr_size(menudesc *m, void *arg)
 	}
 
 	start = mbri->sector + mbrp->mbrp_start;
+	/* We need to keep both the unrounded and rounded (_r) max and dflt */
 	dflt_r = (start + dflt) / sizemult - start / sizemult;
 	if (max == dflt)
 		max_r = dflt_r;
@@ -716,27 +717,31 @@ edit_mbr_size(menudesc *m, void *arg)
 			errmsg = MSG_Invalid_numeric;
 			continue;
 		}
-		if (new == 0 || new == max_r)
-			new = max;
-		else {
-			if (new == dflt_r)
-				new = dflt;
-			else {
-				/* Round end to cylinder boundary */
-				if (sizemult != 1) {
-					new *= sizemult;
-					new += ROUNDDOWN(start,current_cylsize);
-					new = ROUNDUP(new, current_cylsize);
-					new -= start;
-					while (new <= 0)
-						new += current_cylsize;
-				}
-			}
-		}
-		if (new > max) {
+		if (new > max_r) {
 			errmsg = MSG_Too_large;
 			continue;
 		}
+		if (new == 0)
+			/* Treat zero as a request for the maximum */
+			new = max_r;
+		if (new == dflt_r)
+			/* If unchanged, don't re-round size */
+			new = dflt;
+		else {
+			/* Round end to cylinder boundary */
+			if (sizemult != 1) {
+				new *= sizemult;
+				new += ROUNDDOWN(start,current_cylsize);
+				new = ROUNDUP(new, current_cylsize);
+				new -= start;
+				while (new <= 0)
+					new += current_cylsize;
+			}
+		}
+		if (new > max)
+			/* We rounded the value to above the max */
+			new = max;
+
 		if (new == dflt || opt >= MBR_PART_COUNT
 		    || !MBR_IS_EXTENDED(mbrp->mbrp_type))
 			break;
@@ -956,7 +961,7 @@ edit_mbr_entry(menudesc *m, void *arg)
 
 	if (ptn_menu == -1)
 		ptn_menu = new_menu(NULL, ptn_opts, nelem(ptn_opts),
-			15, 6, 0, 50,
+			15, 6, 0, 54,
 			MC_SUBMENU | MC_SCROLL | MC_NOCLEAR,
 			set_ptn_header, set_ptn_label, NULL,
 			NULL, MSG_Partition_OK);
@@ -1439,7 +1444,7 @@ read_mbr(const char *disk, mbr_info_t *mbri)
 					ext_size = mbrp->mbrp_size;
 			} else {
 				mbri->last_mounted[i] = strdup(get_last_mounted(
-					fd, mbri->sector + mbrp->mbrp_start));
+					fd, mbri->sector + mbrp->mbrp_start, NULL));
 #if BOOTSEL
 				if (ombri->install == 0 &&
 				    strcmp(mbri->last_mounted[i], "/") == 0)
@@ -1699,7 +1704,7 @@ guess_biosgeom_from_mbr(mbr_info_t *mbri, int *cyl, int *head, int *sec)
 			a2 -= s2;
 			num = (uint64_t)h1 * a2 - (quad_t)h2 * a1;
 			denom = (uint64_t)c2 * a1 - (quad_t)c1 * a2;
-			if (denom != 0 && num % denom == 0) {
+			if (num != 0 && denom != 0 && num % denom == 0) {
 				xheads = (int)(num / denom);
 				xsectors = a1 / (c1 * xheads + h1);
 				break;

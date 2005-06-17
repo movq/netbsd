@@ -1,4 +1,4 @@
-/*	$NetBSD: hash.c,v 1.21 2005/03/29 23:37:15 christos Exp $	*/
+/*	$NetBSD: hash.c,v 1.20.2.1 2005/03/30 10:26:40 tron Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)hash.c	8.9 (Berkeley) 6/16/94";
 #else
-__RCSID("$NetBSD: hash.c,v 1.21 2005/03/29 23:37:15 christos Exp $");
+__RCSID("$NetBSD: hash.c,v 1.20.2.1 2005/03/30 10:26:40 tron Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 

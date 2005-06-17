@@ -1,4 +1,4 @@
-/*	$NetBSD: if_wm.c,v 1.103 2005/05/02 15:34:32 yamt Exp $	*/
+/*	$NetBSD: if_wm.c,v 1.100.2.5 2006/07/07 06:24:40 tron Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002, 2003, 2004 Wasabi Systems, Inc.
@@ -47,7 +47,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_wm.c,v 1.103 2005/05/02 15:34:32 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_wm.c,v 1.100.2.5 2006/07/07 06:24:40 tron Exp $");
 
 #include "bpfilter.h"
 #include "rnd.h"
@@ -1218,9 +1218,7 @@ wm_attach(struct device *parent, struct device *self, void *aux)
 	 */
 	if (sc->sc_type >= WM_T_82543)
 		ifp->if_capabilities |=
-		    IFCAP_CSUM_IPv4_Tx | IFCAP_CSUM_IPv4_Rx |
-		    IFCAP_CSUM_TCPv4_Tx | IFCAP_CSUM_TCPv4_Rx |
-		    IFCAP_CSUM_UDPv4_Tx | IFCAP_CSUM_UDPv4_Rx;
+		    IFCAP_CSUM_IPv4 | IFCAP_CSUM_TCPv4 | IFCAP_CSUM_UDPv4;
 
 	/* 
 	 * If we're a i82544 or greater (except i82547), we can do
@@ -2205,9 +2203,11 @@ wm_rxintr(struct wm_softc *sc)
 		m = rxs->rxs_mbuf;
 
 		/*
-		 * Add a new receive buffer to the ring.
+		 * Add a new receive buffer to the ring, unless of
+		 * course the length is zero. Treat the latter as a
+		 * failed mapping.
 		 */
-		if (wm_add_rxbuf(sc, i) != 0) {
+		if ((len == 0) || (wm_add_rxbuf(sc, i) != 0)) {
 			/*
 			 * Failed, throw away what we've done so
 			 * far, and discard the rest of the packet.
@@ -2256,8 +2256,8 @@ wm_rxintr(struct wm_softc *sc)
 		m->m_len -= ETHER_CRC_LEN;
 
 		*sc->sc_rxtailp = NULL;
-		m = sc->sc_rxhead;
 		len = m->m_len + sc->sc_rxlen;
+		m = sc->sc_rxhead;
 
 		WM_RXCHAIN_RESET(sc);
 
@@ -2305,22 +2305,27 @@ wm_rxintr(struct wm_softc *sc)
 		/*
 		 * Set up checksum info for this packet.
 		 */
-		if (status & WRX_ST_IPCS) {
-			WM_EVCNT_INCR(&sc->sc_ev_rxipsum);
-			m->m_pkthdr.csum_flags |= M_CSUM_IPv4;
-			if (errors & WRX_ER_IPE)
-				m->m_pkthdr.csum_flags |= M_CSUM_IPv4_BAD;
-		}
-		if (status & WRX_ST_TCPCS) {
-			/*
-			 * Note: we don't know if this was TCP or UDP,
-			 * so we just set both bits, and expect the
-			 * upper layers to deal.
-			 */
-			WM_EVCNT_INCR(&sc->sc_ev_rxtusum);
-			m->m_pkthdr.csum_flags |= M_CSUM_TCPv4|M_CSUM_UDPv4;
-			if (errors & WRX_ER_TCPE)
-				m->m_pkthdr.csum_flags |= M_CSUM_TCP_UDP_BAD;
+		if ((status & WRX_ST_IXSM) == 0) {
+			if (status & WRX_ST_IPCS) {
+				WM_EVCNT_INCR(&sc->sc_ev_rxipsum);
+				m->m_pkthdr.csum_flags |= M_CSUM_IPv4;
+				if (errors & WRX_ER_IPE)
+					m->m_pkthdr.csum_flags |=
+					    M_CSUM_IPv4_BAD;
+			}
+			if (status & WRX_ST_TCPCS) {
+				/*
+				 * Note: we don't know if this was TCP or UDP,
+				 * so we just set both bits, and expect the
+				 * upper layers to deal.
+				 */
+				WM_EVCNT_INCR(&sc->sc_ev_rxtusum);
+				m->m_pkthdr.csum_flags |=
+				    M_CSUM_TCPv4|M_CSUM_UDPv4;
+				if (errors & WRX_ER_TCPE)
+					m->m_pkthdr.csum_flags |=
+					    M_CSUM_TCP_UDP_BAD;
+			}
 		}
 
 		ifp->if_ipackets++;
@@ -2693,15 +2698,15 @@ wm_init(struct ifnet *ifp)
 	 * Set up checksum offload parameters.
 	 */
 	reg = CSR_READ(sc, WMREG_RXCSUM);
-	if (ifp->if_capenable & IFCAP_CSUM_IPv4_Rx)
+	if (ifp->if_capenable & IFCAP_CSUM_IPv4)
 		reg |= RXCSUM_IPOFL;
 	else
 		reg &= ~RXCSUM_IPOFL;
-	if (ifp->if_capenable & (IFCAP_CSUM_TCPv4_Rx | IFCAP_CSUM_UDPv4_Rx))
+	if (ifp->if_capenable & (IFCAP_CSUM_TCPv4 | IFCAP_CSUM_UDPv4))
 		reg |= RXCSUM_IPOFL | RXCSUM_TUOFL;
 	else {
 		reg &= ~RXCSUM_TUOFL;
-		if ((ifp->if_capenable & IFCAP_CSUM_IPv4_Rx) == 0)
+		if ((ifp->if_capenable & IFCAP_CSUM_IPv4) == 0)
 			reg &= ~RXCSUM_IPOFL;
 	}
 	CSR_WRITE(sc, WMREG_RXCSUM, reg);

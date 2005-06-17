@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_state.c,v 1.7 2005/04/03 15:05:30 martti Exp $	*/
+/*	$NetBSD: ip_state.c,v 1.5.2.1 2005/04/04 18:25:59 tron Exp $	*/
 
 /*
  * Copyright (C) 1995-2003 by Darren Reed.
@@ -17,7 +17,7 @@
 #include <sys/file.h>
 #if defined(__NetBSD__) && (NetBSD >= 199905) && !defined(IPFILTER_LKM) && \
     defined(_KERNEL)
-# include "opt_ipfilter.h"
+# include "opt_ipfilter_log.h"
 #endif
 #if defined(_KERNEL) && defined(__FreeBSD_version) && \
     (__FreeBSD_version >= 400000) && !defined(KLD_MODULE)
@@ -110,7 +110,7 @@ struct file;
 #if !defined(lint)
 #if defined(__NetBSD__)
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ip_state.c,v 1.7 2005/04/03 15:05:30 martti Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ip_state.c,v 1.5.2.1 2005/04/04 18:25:59 tron Exp $");
 #else
 static const char sccsid[] = "@(#)ip_state.c	1.8 6/5/96 (C) 1993-2000 Darren Reed";
 static const char rcsid[] = "@(#)Id: ip_state.c,v 2.186.2.29 2005/03/28 10:47:54 darrenr Exp";

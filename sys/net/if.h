@@ -1,11 +1,11 @@
-/*	$NetBSD: if.h,v 1.108 2005/05/02 15:34:32 yamt Exp $	*/
+/*	$NetBSD: if.h,v 1.103 2005/03/06 00:08:30 matt Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by William Studenmund and Jason R. Thorpe.
+ * by William Studnemund and Jason R. Thorpe.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -122,7 +122,6 @@
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
-#include "agr.h"
 #endif
 
 struct mbuf;
@@ -289,10 +288,6 @@ struct ifnet {				/* and the entries */
 
 	void	*if_afdata[AF_MAX];
 	struct	mowner *if_mowner;	/* who owns mbufs for this interface */
-
-#if NAGR > 0
-	void	*if_agrprivate;
-#endif
 };
 #define	if_mtu		if_data.ifi_mtu
 #define	if_type		if_data.ifi_type
@@ -331,11 +326,6 @@ struct ifnet {				/* and the entries */
 #define	IFF_LINK2	0x4000		/* per link layer defined bit */
 #define	IFF_MULTICAST	0x8000		/* supports multicast */
 
-#define	IFFBITS \
-    "\020\1UP\2BROADCAST\3DEBUG\4LOOPBACK\5POINTOPOINT\6NOTRAILERS" \
-    "\7RUNNING\10NOARP\11PROMISC\12ALLMULTI\13OACTIVE\14SIMPLEX" \
-    "\15LINK0\16LINK1\17LINK2\20MULTICAST"
-
 /* flags set internally only: */
 #define	IFF_CANTCHANGE \
 	(IFF_BROADCAST|IFF_POINTOPOINT|IFF_RUNNING|IFF_OACTIVE|\
@@ -350,31 +340,14 @@ struct ifnet {				/* and the entries */
 #define	IF_Gbps(x)	(IF_Mbps((x) * 1000))	/* gigabits/sec. */
 
 /* Capabilities that interfaces can advertise. */
-#define	IFCAP_TSOv4		0x00080	/* can do TCPv4 segmentation offload */
-#define	IFCAP_CSUM_IPv4_Rx	0x00100	/* can do IPv4 header checksums (Rx) */
-#define	IFCAP_CSUM_IPv4_Tx	0x00200	/* can do IPv4 header checksums (Tx) */
-#define	IFCAP_CSUM_TCPv4_Rx	0x00400	/* can do IPv4/TCP checksums (Rx) */
-#define	IFCAP_CSUM_TCPv4_Tx	0x00800	/* can do IPv4/TCP checksums (Tx) */
-#define	IFCAP_CSUM_UDPv4_Rx	0x01000	/* can do IPv4/UDP checksums (Rx) */
-#define	IFCAP_CSUM_UDPv4_Tx	0x02000	/* can do IPv4/UDP checksums (Tx) */
-#define	IFCAP_CSUM_TCPv6_Rx	0x04000	/* can do IPv6/TCP checksums (Rx) */
-#define	IFCAP_CSUM_TCPv6_Tx	0x08000	/* can do IPv6/TCP checksums (Tx) */
-#define	IFCAP_CSUM_UDPv6_Rx	0x10000	/* can do IPv6/UDP checksums (Rx) */
-#define	IFCAP_CSUM_UDPv6_Tx	0x20000	/* can do IPv6/UDP checksums (Tx) */
-
-#define	IFCAPBITS		\
-	"\020"			\
-	"\10TSO4"		\
-	"\11IP4CSUM_Rx"		\
-	"\12IP4CSUM_Tx"		\
-	"\13TCP4CSUM_Rx"	\
-	"\14TCP4CSUM_Tx"	\
-	"\15UDP4CSUM_Rx"	\
-	"\16UDP4CSUM_Tx"	\
-	"\17TCP6CSUM_Rx"	\
-	"\20TCP6CSUM_Tx"	\
-	"\21UDP6CSUM_Rx"	\
-	"\22UDP6CSUM_Tx"
+#define	IFCAP_CSUM_IPv4		0x0001	/* can do IPv4 header checksums */
+#define	IFCAP_CSUM_TCPv4	0x0002	/* can do IPv4/TCP checksums */
+#define	IFCAP_CSUM_UDPv4	0x0004	/* can do IPv4/UDP checksums */
+#define	IFCAP_CSUM_TCPv6	0x0008	/* can do IPv6/TCP checksums */
+#define	IFCAP_CSUM_UDPv6	0x0010	/* can do IPv6/UDP checksums */
+#define	IFCAP_CSUM_TCPv4_Rx	0x0020	/* can do IPv4/TCP (Rx only) */
+#define	IFCAP_CSUM_UDPv4_Rx	0x0040	/* can do IPv4/UDP (Rx only) */
+#define	IFCAP_TSOv4		0x0080	/* can do TCPv4 segmentation offload */
 
 /*
  * Output queues (ifp->if_snd) and internetwork datagram level (pup level 1)
@@ -658,7 +631,6 @@ do {									\
 
 #ifdef ALTQ
 #define	ALTQ_DECL(x)		x
-#define ALTQ_COMMA		,
 
 #define IFQ_ENQUEUE(ifq, m, pattr, err)					\
 do {									\
@@ -722,7 +694,6 @@ do {									\
 } while (/*CONSTCOND*/ 0)
 #else /* ! ALTQ */
 #define	ALTQ_DECL(x)		/* nothing */
-#define ALTQ_COMMA
 
 #define	IFQ_ENQUEUE(ifq, m, pattr, err)					\
 do {									\
@@ -802,11 +773,6 @@ void	if_clone_detach __P((struct if_clone *));
 
 int	if_clone_create __P((const char *));
 int	if_clone_destroy __P((const char *));
-
-int	ifq_enqueue(struct ifnet *, struct mbuf * ALTQ_COMMA
-    ALTQ_DECL(struct altq_pktattr *));
-int	ifq_enqueue2(struct ifnet *, struct ifqueue *, struct mbuf * ALTQ_COMMA
-    ALTQ_DECL(struct altq_pktattr *));
 
 int	loioctl __P((struct ifnet *, u_long, caddr_t));
 void	loopattach __P((int));

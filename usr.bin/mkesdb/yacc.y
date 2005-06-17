@@ -1,4 +1,4 @@
-/*	$NetBSD: yacc.y,v 1.4 2005/06/02 02:09:25 lukem Exp $	*/
+/*	$NetBSD: yacc.y,v 1.3 2004/01/02 12:09:48 itojun Exp $	*/
 
 %{
 /*-
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(lint)
-__RCSID("$NetBSD: yacc.y,v 1.4 2005/06/02 02:09:25 lukem Exp $");
+__RCSID("$NetBSD: yacc.y,v 1.3 2004/01/02 12:09:48 itojun Exp $");
 #endif /* not lint */
 
 #include <assert.h>
@@ -303,7 +303,7 @@ main(int argc, char **argv)
 	int ch;
 	extern char *optarg;
 	extern int optind;
-	FILE *in = NULL;
+	FILE *in;
 	int mkdb = 0;
 
 	while ((ch=getopt(argc, argv, "do:m")) != EOF) {

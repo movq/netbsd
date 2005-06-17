@@ -1,4 +1,4 @@
-/*	$NetBSD: ufsmount.h,v 1.18 2005/05/22 08:35:28 hannken Exp $	*/
+/*	$NetBSD: ufsmount.h,v 1.17.10.1 2005/05/28 12:45:40 tron Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993

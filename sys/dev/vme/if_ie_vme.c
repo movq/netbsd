@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ie_vme.c,v 1.21 2005/06/03 22:00:34 tsutsui Exp $	*/
+/*	$NetBSD: if_ie_vme.c,v 1.20 2005/02/27 00:27:51 perry Exp $	*/
 
 /*-
  * Copyright (c) 1995 Charles D. Cranor
@@ -145,7 +145,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ie_vme.c,v 1.21 2005/06/03 22:00:34 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ie_vme.c,v 1.20 2005/02/27 00:27:51 perry Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -365,9 +365,9 @@ ie_memcopyout(sc, p, offset, size)
 	size_t help;
 
 	if ((offset & 1) && ((u_long)p & 1) && size > 0) {
-		bus_space_write_1(sc->bt, sc->bh, offset, *(const u_int8_t *)p);
+		bus_space_write_1(sc->bt, sc->bh, offset, *(u_int8_t *)p);
 		offset++;
-		p = (const u_int8_t *)p + 1;
+		p = (u_int8_t *)p + 1;
 		size--;
 	}
 
@@ -382,8 +382,8 @@ ie_memcopyout(sc, p, offset, size)
 		return;
 
 	offset += 2 * help;
-	p = (const u_int16_t *)p + help;
-	bus_space_write_1(sc->bt, sc->bh, offset, *(const u_int8_t *)p);
+	p = (u_int16_t *)p + help;
+	bus_space_write_1(sc->bt, sc->bh, offset, *(u_int8_t *)p);
 }
 
 /* read a 16-bit value at BH offset */
