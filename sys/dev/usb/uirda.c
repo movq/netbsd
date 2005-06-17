@@ -1,4 +1,4 @@
-/*	$NetBSD: uirda.c,v 1.19 2005/05/11 10:02:28 augustss Exp $	*/
+/*	$NetBSD: uirda.c,v 1.18 2004/10/23 13:28:26 augustss Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uirda.c,v 1.19 2005/05/11 10:02:28 augustss Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uirda.c,v 1.18 2004/10/23 13:28:26 augustss Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -291,7 +291,7 @@ USB_ATTACH(uirda)
 	USB_ATTACH_START(uirda, sc, uaa);
 	usbd_device_handle	dev = uaa->device;
 	usbd_interface_handle	iface = uaa->iface;
-	char			*devinfop;
+	char			devinfo[1024];
 	usb_endpoint_descriptor_t *ed;
 	usbd_status		err;
 	u_int8_t		epcount;
@@ -301,10 +301,9 @@ USB_ATTACH(uirda)
 
 	DPRINTFN(10,("uirda_attach: sc=%p\n", sc));
 
-	devinfop = usbd_devinfo_alloc(dev, 0);
+	usbd_devinfo(dev, 0, devinfo, sizeof(devinfo));
 	USB_ATTACH_SETUP;
-	printf("%s: %s\n", USBDEVNAME(sc->sc_dev), devinfop);
-	usbd_devinfo_free(devinfop);
+	printf("%s: %s\n", USBDEVNAME(sc->sc_dev), devinfo);
 
 	sc->sc_udev = dev;
 	sc->sc_iface = iface;

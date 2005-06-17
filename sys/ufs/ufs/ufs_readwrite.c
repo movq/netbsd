@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_readwrite.c,v 1.63 2005/04/19 20:59:05 perseant Exp $	*/
+/*	$NetBSD: ufs_readwrite.c,v 1.61.2.1 2005/05/07 11:21:30 tron Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(1, "$NetBSD: ufs_readwrite.c,v 1.63 2005/04/19 20:59:05 perseant Exp $");
+__KERNEL_RCSID(1, "$NetBSD: ufs_readwrite.c,v 1.61.2.1 2005/05/07 11:21:30 tron Exp $");
 
 #ifdef LFS_READWRITE
 #define	BLKSIZE(a, b, c)	blksize(a, b, c)

@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.39 2005/06/05 12:36:24 he Exp $	*/
+/*	$NetBSD: machdep.c,v 1.36 2005/01/22 15:36:09 chs Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -160,7 +160,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.39 2005/06/05 12:36:24 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.36 2005/01/22 15:36:09 chs Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -235,8 +235,6 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.39 2005/06/05 12:36:24 he Exp $");
 extern char kernel_text[];
 /* Defined by the linker */
 extern char etext[];
-/* Defined in vfs_bio.c */
-extern u_int bufpages;
 
 /* Our exported CPU info; we can have only one. */  
 struct cpu_info cpu_info_store;
@@ -317,7 +315,7 @@ cpu_startup(void)
 	/*
 	 * Good {morning,afternoon,evening,night}.
 	 */
-	printf("%s%s", copyright, version);
+	printf(version);
 	identifycpu();
 	fputype = FPU_NONE;
 #ifdef  FPU_EMULATE
@@ -340,8 +338,7 @@ cpu_startup(void)
 	/*
 	 * Get scratch page for dumpsys().
 	 */
-	if ((dumppage = uvm_km_alloc(kernel_map, PAGE_SIZE,0, UVM_KMF_WIRED))
-	    == 0)
+	if ((dumppage = uvm_km_alloc(kernel_map, PAGE_SIZE)) == 0)
 		panic("startup: alloc dumppage");
 
 
@@ -374,8 +371,7 @@ cpu_startup(void)
 	 * This page is handed to pmap_enter() therefore
 	 * it has to be in the normal kernel VA range.
 	 */
-	vmmap = uvm_km_alloc(kernel_map, PAGE_SIZE, 0,
-	    UVM_KMF_VAONLY | UVM_KMF_WAITVA);
+	vmmap = uvm_km_valloc_wait(kernel_map, PAGE_SIZE);
 
 	/*
 	 * Allocate DMA map for devices on the bus.

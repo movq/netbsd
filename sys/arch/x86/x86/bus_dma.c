@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_dma.c,v 1.21 2005/04/16 07:53:35 yamt Exp $	*/
+/*	$NetBSD: bus_dma.c,v 1.19.2.4 2006/09/16 11:18:59 ghen Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.21 2005/04/16 07:53:35 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.19.2.4 2006/09/16 11:18:59 ghen Exp $");
 
 /*
  * The following is included because _bus_dma_uiomove is derived from
@@ -139,6 +139,68 @@ static int _bus_dmamap_load_buffer(bus_dma_tag_t t, bus_dmamap_t map,
 static __inline int _bus_dmamap_load_busaddr(bus_dma_tag_t, bus_dmamap_t,
     bus_addr_t, int);
 
+#ifndef _BUS_DMAMEM_ALLOC_RANGE
+#define _BUS_DMAMEM_ALLOC_RANGE _bus_dmamem_alloc_range
+
+/*
+ * Allocate physical memory from the given physical address range.
+ * Called by DMA-safe memory allocation methods.
+ */
+int
+_bus_dmamem_alloc_range(bus_dma_tag_t t, bus_size_t size, bus_size_t alignment,
+    bus_size_t boundary, bus_dma_segment_t *segs, int nsegs, int *rsegs,
+    int flags, bus_addr_t low, bus_addr_t high)
+{
+	paddr_t curaddr, lastaddr;
+	struct vm_page *m;
+	struct pglist mlist;
+	int curseg, error;
+
+	/* Always round the size. */
+	size = round_page(size);
+
+	/*
+	 * Allocate pages from the VM system.
+	 */
+	error = uvm_pglistalloc(size, low, high, alignment, boundary,
+	    &mlist, nsegs, (flags & BUS_DMA_NOWAIT) == 0);
+	if (error)
+		return (error);
+
+	/*
+	 * Compute the location, size, and number of segments actually
+	 * returned by the VM code.
+	 */
+	m = mlist.tqh_first;
+	curseg = 0;
+	lastaddr = segs[curseg].ds_addr = VM_PAGE_TO_PHYS(m);
+	segs[curseg].ds_len = PAGE_SIZE;
+	m = m->pageq.tqe_next;
+
+	for (; m != NULL; m = m->pageq.tqe_next) {
+		curaddr = VM_PAGE_TO_PHYS(m);
+#ifdef DIAGNOSTIC
+		if (curaddr < low || curaddr >= high) {
+			printf("vm_page_alloc_memory returned non-sensical"
+			    " address 0x%lx\n", curaddr);
+			panic("_bus_dmamem_alloc_range");
+		}
+#endif
+		if (curaddr == (lastaddr + PAGE_SIZE))
+			segs[curseg].ds_len += PAGE_SIZE;
+		else {
+			curseg++;
+			segs[curseg].ds_addr = curaddr;
+			segs[curseg].ds_len = PAGE_SIZE;
+		}
+		lastaddr = curaddr;
+	}
+
+	*rsegs = curseg + 1;
+
+	return (0);
+}
+#endif /* _BUS_DMAMEM_ALLOC_RANGE */
 
 /*
  * Create a DMA map.
@@ -186,7 +248,7 @@ _bus_dmamap_create(bus_dma_tag_t t, bus_size_t size, int nsegments,
 
 	*dmamp = map;
 
-	if (t->_bounce_thresh == 0 || avail_end <= t->_bounce_thresh)
+	if (t->_bounce_thresh == 0 || _BUS_AVAIL_END <= t->_bounce_thresh)
 		map->_dm_bounce_thresh = 0;
 	cookieflags = 0;
 
@@ -791,14 +853,14 @@ _bus_dmamem_alloc(bus_dma_tag_t t, bus_size_t size, bus_size_t alignment,
     bus_size_t boundary, bus_dma_segment_t *segs, int nsegs, int *rsegs,
     int flags)
 {
-	paddr_t high;
+	bus_addr_t high;
 
-	if (t->_bounce_alloc_hi != 0 && avail_end > t->_bounce_alloc_hi)
+	if (t->_bounce_alloc_hi != 0 && _BUS_AVAIL_END > t->_bounce_alloc_hi)
 		high = trunc_page(t->_bounce_alloc_hi);
 	else
-		high = trunc_page(avail_end);
+		high = trunc_page(_BUS_AVAIL_END);
 
-	return (_bus_dmamem_alloc_range(t, size, alignment, boundary,
+	return (_BUS_DMAMEM_ALLOC_RANGE(t, size, alignment, boundary,
 	    segs, nsegs, rsegs, flags, t->_bounce_alloc_lo, high));
 }
 
@@ -938,7 +1000,7 @@ _bus_dmamem_free(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs)
 		for (addr = segs[curseg].ds_addr;
 		    addr < (segs[curseg].ds_addr + segs[curseg].ds_len);
 		    addr += PAGE_SIZE) {
-			m = PHYS_TO_VM_PAGE(addr);
+			m = _BUS_BUS_TO_VM_PAGE(addr);
 			TAILQ_INSERT_TAIL(&mlist, m, pageq);
 		}
 	}
@@ -968,7 +1030,7 @@ _bus_dmamem_map(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs,
 	nocache = (flags & BUS_DMA_NOCACHE) != 0 && pmap_cpu_has_pg_n();
 	marked = 0;
 
-	va = uvm_km_alloc(kernel_map, size, 0, UVM_KMF_VAONLY);
+	va = uvm_km_valloc(kernel_map, size);
 
 	if (va == 0)
 		return (ENOMEM);
@@ -981,7 +1043,7 @@ _bus_dmamem_map(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs,
 		    addr += PAGE_SIZE, va += PAGE_SIZE, size -= PAGE_SIZE) {
 			if (size == 0)
 				panic("_bus_dmamem_map: size botch");
-			pmap_enter(pmap_kernel(), va, addr,
+			_BUS_PMAP_ENTER(pmap_kernel(), va, addr,
 			    VM_PROT_READ | VM_PROT_WRITE,
 			    PMAP_WIRED | VM_PROT_READ | VM_PROT_WRITE);
 			/*
@@ -1041,9 +1103,7 @@ _bus_dmamem_unmap(bus_dma_tag_t t, caddr_t kva, size_t size)
 	if (marked)
 		pmap_tlb_shootnow(cpumask);
 
-	pmap_remove(pmap_kernel(), (vaddr_t)kva, (vaddr_t)kva + size);
-	pmap_update(pmap_kernel());
-	uvm_km_free(kernel_map, (vaddr_t)kva, size, UVM_KMF_VAONLY);
+	uvm_km_free(kernel_map, (vaddr_t)kva, size);
 }
 
 /*
@@ -1071,7 +1131,7 @@ _bus_dmamem_mmap(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs,
 			continue;
 		}
 
-		return (x86_btop((caddr_t)segs[i].ds_addr + off));
+		return (x86_btop(_BUS_BUS_TO_PHYS(segs[i].ds_addr + off)));
 	}
 
 	/* Page not found. */
@@ -1133,61 +1193,3 @@ _bus_dmamap_load_buffer(bus_dma_tag_t t, bus_dmamap_t map, void *buf,
 	return (0);
 }
 
-/*
- * Allocate physical memory from the given physical address range.
- * Called by DMA-safe memory allocation methods.
- */
-int
-_bus_dmamem_alloc_range(bus_dma_tag_t t, bus_size_t size, bus_size_t alignment,
-    bus_size_t boundary, bus_dma_segment_t *segs, int nsegs, int *rsegs,
-    int flags, paddr_t low, paddr_t high)
-{
-	paddr_t curaddr, lastaddr;
-	struct vm_page *m;
-	struct pglist mlist;
-	int curseg, error;
-
-	/* Always round the size. */
-	size = round_page(size);
-
-	/*
-	 * Allocate pages from the VM system.
-	 */
-	error = uvm_pglistalloc(size, low, high, alignment, boundary,
-	    &mlist, nsegs, (flags & BUS_DMA_NOWAIT) == 0);
-	if (error)
-		return (error);
-
-	/*
-	 * Compute the location, size, and number of segments actually
-	 * returned by the VM code.
-	 */
-	m = mlist.tqh_first;
-	curseg = 0;
-	lastaddr = segs[curseg].ds_addr = VM_PAGE_TO_PHYS(m);
-	segs[curseg].ds_len = PAGE_SIZE;
-	m = m->pageq.tqe_next;
-
-	for (; m != NULL; m = m->pageq.tqe_next) {
-		curaddr = VM_PAGE_TO_PHYS(m);
-#ifdef DIAGNOSTIC
-		if (curaddr < low || curaddr >= high) {
-			printf("vm_page_alloc_memory returned non-sensical"
-			    " address 0x%lx\n", curaddr);
-			panic("_bus_dmamem_alloc_range");
-		}
-#endif
-		if (curaddr == (lastaddr + PAGE_SIZE))
-			segs[curseg].ds_len += PAGE_SIZE;
-		else {
-			curseg++;
-			segs[curseg].ds_addr = curaddr;
-			segs[curseg].ds_len = PAGE_SIZE;
-		}
-		lastaddr = curaddr;
-	}
-
-	*rsegs = curseg + 1;
-
-	return (0);
-}

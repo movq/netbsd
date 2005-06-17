@@ -1,6 +1,6 @@
-/*	$NetBSD: isakmp_ident.c,v 1.1.1.2 2005/02/23 14:54:19 manu Exp $	*/
+/*	$NetBSD: isakmp_ident.c,v 1.1.1.2.2.3 2005/11/21 21:12:30 tron Exp $	*/
 
-/* Id: isakmp_ident.c,v 1.13 2005/01/29 16:34:25 vanhu Exp */
+/* Id: isakmp_ident.c,v 1.13.2.2 2005/11/21 09:46:23 vanhu Exp */
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -103,7 +103,7 @@ ident_i1send(iph1, msg)
 	struct payload_list *plist = NULL;
 	int error = -1;
 #ifdef ENABLE_NATT
-	vchar_t *vid_natt[MAX_NATT_VID_COUNT];
+	vchar_t *vid_natt[MAX_NATT_VID_COUNT] = { NULL };
 	int i;
 #endif
 #ifdef ENABLE_DPD
@@ -137,8 +137,6 @@ ident_i1send(iph1, msg)
 	/* set VID payload for NAT-T if NAT-T support allowed in the config file */
 	if (iph1->rmconf->nat_traversal) 
 		plist = isakmp_plist_append_natt_vids(plist, vid_natt);
-	else
-		vid_natt[0]=NULL;
 #endif
 #ifdef ENABLE_DPD
 	if(iph1->rmconf->dpd){
@@ -422,7 +420,7 @@ ident_i3recv(iph1, msg)
 #ifdef ENABLE_NATT
 		case ISAKMP_NPTYPE_NATD_DRAFT:
 		case ISAKMP_NPTYPE_NATD_RFC:
-			if (NATT_AVAILABLE(iph1) && iph1->natt_options &&
+			if (NATT_AVAILABLE(iph1) && iph1->natt_options != NULL &&
 			    pa->type == iph1->natt_options->payload_nat_d) {
 				natd_received = NULL;
 				if (isakmp_p2ph (&natd_received, pa->ptr) < 0)
@@ -1065,7 +1063,8 @@ ident_r2recv(iph1, msg)
 #ifdef ENABLE_NATT
 		case ISAKMP_NPTYPE_NATD_DRAFT:
 		case ISAKMP_NPTYPE_NATD_RFC:
-			if (pa->type == iph1->natt_options->payload_nat_d)
+			if (NATT_AVAILABLE(iph1) && iph1->natt_options != NULL &&
+			    pa->type == iph1->natt_options->payload_nat_d)
 			{
 				vchar_t *natd_received = NULL;
 				int natd_verified;

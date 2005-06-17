@@ -1,4 +1,4 @@
-/*	$NetBSD: stvar.h,v 1.13 2005/05/29 22:00:50 christos Exp $ */
+/*	$NetBSD: stvar.h,v 1.12 2005/02/01 00:19:34 reinoud Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -127,7 +127,7 @@ struct st_softc {
 /*--------------------parameters reported by the device ---------------------*/
 	int blkmin;		/* min blk size                       */
 	int blkmax;		/* max blk size                       */
-	const struct quirkdata *quirkdata;	/* if we have a rogue entry  */
+	struct quirkdata *quirkdata;	/* if we have a rogue entry          */
 /*--------------------parameters reported by the device for this media-------*/
 	u_long numblks;		/* nominal blocks capacity            */
 	int media_blksize;	/* 0 if not ST_FIXEDBLOCKS            */

@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32.h,v 1.33 2005/06/10 05:10:13 matt Exp $	*/
+/*	$NetBSD: netbsd32.h,v 1.30.2.1 2005/09/18 20:09:50 tron Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Matthew R. Green
@@ -556,8 +556,8 @@ typedef struct firm_event32 {
 	struct netbsd32_timeval time;
 } Firm_event32;
 
-void netbsd32_si_to_si32(siginfo32_t *, const siginfo_t *);
-void netbsd32_si32_to_si(siginfo_t *, const siginfo32_t *);
+void netbsd32_si_to_si32(siginfo32_t *, siginfo_t *);
+void netbsd32_si32_to_si(siginfo_t *, siginfo32_t *);
 
 /*
  * here are some macros to convert between netbsd32 and sparc64 types.
@@ -579,7 +579,7 @@ void netbsd32_si32_to_si(siginfo_t *, const siginfo32_t *);
 #define	NETBSD32TOX_UAP(name, type)	NETBSD32TOX(uap, &ua, name, type);
 #define	NETBSD32TOX64_UAP(name, type)	NETBSD32TOX64(uap, &ua, name, type);
 
-int	coredump_netbsd32(struct lwp *, void *);
+int	coredump_netbsd32(struct lwp *, struct vnode *, struct ucred *);
 
 /*
  * random other stuff

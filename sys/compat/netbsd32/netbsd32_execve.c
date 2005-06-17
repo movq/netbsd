@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_execve.c,v 1.22 2005/05/31 00:41:09 christos Exp $	*/
+/*	$NetBSD: netbsd32_execve.c,v 1.19.2.2 2005/09/12 13:45:06 tron Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Matthew R. Green
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_execve.c,v 1.22 2005/05/31 00:41:09 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_execve.c,v 1.19.2.2 2005/09/12 13:45:06 tron Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_ktrace.h"
@@ -152,15 +152,14 @@ netbsd32_execve2(l, uap, retval)
 #ifdef VERIFIED_EXEC
 	if ((error = check_exec(p, &pack, VERIEXEC_DIRECT)) != 0)
 #else
-	if ((error = check_exec(p, &pack)) != 0)
+	if ((error = check_exec(p, &pack, 0)) != 0)
 #endif
 		goto freehdr;
 
 	/* XXX -- THE FOLLOWING SECTION NEEDS MAJOR CLEANUP */
 
 	/* allocate an argument buffer */
-	argp = (char *) uvm_km_alloc(exec_map, NCARGS, 0,
-	    UVM_KMF_PAGEABLE|UVM_KMF_WAITVA);
+	argp = (char *) uvm_km_valloc_wait(exec_map, NCARGS);
 #ifdef DIAGNOSTIC
 	if (argp == (vaddr_t) 0)
 		panic("netbsd32_execve: argp == NULL");
@@ -187,7 +186,7 @@ netbsd32_execve2(l, uap, retval)
 	}
 
 	/* Now get argv & environment */
-	if (!(cpp = (const netbsd32_charp *)SCARG(uap, argp))) {
+	if (!(cpp = (netbsd32_charp *)SCARG(uap, argp))) {
 		error = EINVAL;
 		goto bad;
 	}
@@ -214,7 +213,7 @@ netbsd32_execve2(l, uap, retval)
 
 	envc = 0;
 	/* environment need not be there */
-	if ((cpp = (const netbsd32_charp *)SCARG(uap, envp)) != NULL ) {
+	if ((cpp = (netbsd32_charp *)SCARG(uap, envp)) != NULL ) {
 		while (1) {
 			len = argp + ARG_MAX - dp;
 			if ((error = copyin(cpp, &sp, sizeof(sp))) != 0)
@@ -428,7 +427,7 @@ netbsd32_execve2(l, uap, retval)
 
 	doexechooks(p);
 
-	uvm_km_free(exec_map, (vaddr_t) argp, NCARGS, UVM_KMF_PAGEABLE);
+	uvm_km_free_wakeup(exec_map, (vaddr_t) argp, NCARGS);
 
 	PNBUF_PUT(nid.ni_cnd.cn_pnbuf);
 	vn_lock(pack.ep_vp, LK_EXCLUSIVE | LK_RETRY);
@@ -499,7 +498,7 @@ bad:
 	VOP_CLOSE(pack.ep_vp, FREAD, cred, p);
 	vput(pack.ep_vp);
 	PNBUF_PUT(nid.ni_cnd.cn_pnbuf);
-	uvm_km_free(exec_map, (vaddr_t) argp, NCARGS, UVM_KMF_PAGEABLE);
+	uvm_km_free_wakeup(exec_map, (vaddr_t) argp, NCARGS);
 
 freehdr:
 #if defined(LKM) || defined(_LKM)
@@ -527,7 +526,7 @@ exec_abort:
 	vn_lock(pack.ep_vp, LK_EXCLUSIVE | LK_RETRY);
 	VOP_CLOSE(pack.ep_vp, FREAD, cred, p);
 	vput(pack.ep_vp);
-	uvm_km_free(exec_map, (vaddr_t) argp, NCARGS, UVM_KMF_PAGEABLE);
+	uvm_km_free_wakeup(exec_map, (vaddr_t) argp, NCARGS);
 	free(pack.ep_hdr, M_EXEC);
 	exit1(l, W_EXITCODE(error, SIGABRT));
 

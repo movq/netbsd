@@ -2,7 +2,7 @@
  *
  * Module Name: nsobject - Utilities for objects attached to namespace
  *                         table entries
- *              xRevision: 93 $
+ *              xRevision: 90 $
  *
  ******************************************************************************/
 
@@ -10,7 +10,7 @@
  *
  * 1. Copyright Notice
  *
- * Some or all of this work - Copyright (c) 1999 - 2005, Intel Corp.
+ * Some or all of this work - Copyright (c) 1999 - 2004, Intel Corp.
  * All rights reserved.
  *
  * 2. License
@@ -117,7 +117,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nsobject.c,v 1.11 2005/05/02 14:52:09 kochi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nsobject.c,v 1.10 2004/02/14 16:57:24 kochi Exp $");
 
 #define __NSOBJECT_C__
 
@@ -137,8 +137,6 @@ __KERNEL_RCSID(0, "$NetBSD: nsobject.c,v 1.11 2005/05/02 14:52:09 kochi Exp $");
  *              Object              - Object to be attached
  *              Type                - Type of object, or ACPI_TYPE_ANY if not
  *                                    known
- *
- * RETURN:      Status
  *
  * DESCRIPTION: Record the given object as the value associated with the
  *              name whose ACPI_HANDLE is passed.  If Object is NULL
@@ -179,8 +177,7 @@ AcpiNsAttachObject (
     {
         /* Null object */
 
-        ACPI_REPORT_ERROR ((
-            "NsAttachObject: Null object, but type not ACPI_TYPE_ANY\n"));
+        ACPI_REPORT_ERROR (("NsAttachObject: Null object, but type not ACPI_TYPE_ANY\n"));
         return_ACPI_STATUS (AE_BAD_PARAMETER);
     }
 
@@ -197,8 +194,7 @@ AcpiNsAttachObject (
 
     if (Node->Object == Object)
     {
-        ACPI_DEBUG_PRINT ((ACPI_DB_EXEC,
-            "Obj %p already installed in NameObj %p\n",
+        ACPI_DEBUG_PRINT ((ACPI_DB_EXEC, "Obj %p already installed in NameObj %p\n",
             Object, Node));
 
         return_ACPI_STATUS (AE_OK);
@@ -284,7 +280,7 @@ AcpiNsAttachObject (
  *
  * FUNCTION:    AcpiNsDetachObject
  *
- * PARAMETERS:  Node           - A Namespace node whose object will be detached
+ * PARAMETERS:  Node           - An node whose object will be detached
  *
  * RETURN:      None.
  *
@@ -343,7 +339,7 @@ AcpiNsDetachObject (
  *
  * FUNCTION:    AcpiNsGetAttachedObject
  *
- * PARAMETERS:  Node             - Namespace node
+ * PARAMETERS:  Node             - Parent Node to be examined
  *
  * RETURN:      Current value of the object field from the Node whose
  *              handle is passed
@@ -381,7 +377,7 @@ AcpiNsGetAttachedObject (
  *
  * FUNCTION:    AcpiNsGetSecondaryObject
  *
- * PARAMETERS:  Node             - Namespace node
+ * PARAMETERS:  Node             - Parent Node to be examined
  *
  * RETURN:      Current value of the object field from the Node whose
  *              handle is passed.

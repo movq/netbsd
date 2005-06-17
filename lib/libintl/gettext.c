@@ -1,4 +1,4 @@
-/*	$NetBSD: gettext.c,v 1.24 2005/06/01 11:08:57 lukem Exp $	*/
+/*	$NetBSD: gettext.c,v 1.20.2.1 2005/05/01 22:09:47 tron Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2001 Citrus Project,
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: gettext.c,v 1.24 2005/06/01 11:08:57 lukem Exp $");
+__RCSID("$NetBSD: gettext.c,v 1.20.2.1 2005/05/01 22:09:47 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/stat.h>
@@ -48,7 +48,6 @@ __RCSID("$NetBSD: gettext.c,v 1.24 2005/06/01 11:08:57 lukem Exp $");
 #include <libintl.h>
 #include <locale.h>
 #include "libintl_local.h"
-#include "plural_parser.h"
 #include "pathnames.h"
 
 static const char *lookup_category __P((int));
@@ -59,12 +58,9 @@ static u_int32_t flip __P((u_int32_t, u_int32_t));
 static int validate __P((void *, struct mohandle *));
 static int mapit __P((const char *, struct domainbinding *));
 static int unmapit __P((struct domainbinding *));
-static const char *lookup_hash __P((const char *, struct domainbinding *,
-				    size_t *));
-static const char *lookup_bsearch __P((const char *, struct domainbinding *,
-				       size_t *));
-static const char *lookup __P((const char *, struct domainbinding *,
-			       size_t *));
+static const char *lookup_hash __P((const char *, struct domainbinding *));
+static const char *lookup_bsearch __P((const char *, struct domainbinding *));
+static const char *lookup __P((const char *, struct domainbinding *));
 static const char *get_lang_env __P((const char *));
 
 /*
@@ -507,7 +503,7 @@ mapit(path, db)
 	const u_int32_t *htable;
 	struct moentry_h *p;
 	struct mo *mo;
-	size_t l, headerlen;
+	size_t l;
 	int i;
 	char *v;
 	struct mohandle *mohandle = &db->mohandle;
@@ -639,7 +635,7 @@ mapit(path, db)
 		}
 	}
 	/* grab MIME-header and charset field */
-	mohandle->mo.mo_header = lookup("", db, &headerlen);
+	mohandle->mo.mo_header = lookup("", db);
 	if (mohandle->mo.mo_header)
 		v = strstr(mohandle->mo.mo_header, "charset=");
 	else
@@ -652,10 +648,6 @@ mapit(path, db)
 		if (v)
 			*v = '\0';
 	}
-	if (_gettext_parse_plural(&mohandle->mo.mo_plural,
-				  &mohandle->mo.mo_nplurals,
-				  mohandle->mo.mo_header, headerlen))
-		mohandle->mo.mo_plural = NULL;
 
 	/*
 	 * XXX check charset, reject it if we are unable to support the charset
@@ -722,18 +714,15 @@ unmapit(db)
 		free_sysdep_table(mohandle->mo.mo_sysdep_ttable,
 				  mohandle->mo.mo_sysdep_nstring);
 	}
-	if (mohandle->mo.mo_plural)
-		_gettext_free_plural(mohandle->mo.mo_plural);
 	memset(&mohandle->mo, 0, sizeof(mohandle->mo));
 	return 0;
 }
 
 /* ARGSUSED */
 static const char *
-lookup_hash(msgid, db, rlen)
+lookup_hash(msgid, db)
 	const char *msgid;
 	struct domainbinding *db;
-	size_t *rlen;
 {
 	struct mohandle *mohandle = &db->mohandle;
 	u_int32_t idx, hashval, step, strno;
@@ -759,9 +748,6 @@ lookup_hash(msgid, db, rlen)
 			if (len <= mohandle->mo.mo_otable[strno].len &&
 			    !strcmp(msgid, mohandle->mo.mo_otable[strno].off)) {
 				/* hit */
-				if (rlen)
-					*rlen =
-					    mohandle->mo.mo_ttable[strno].len;
 				return mohandle->mo.mo_ttable[strno].off;
 			}
 		} else {
@@ -775,8 +761,6 @@ lookup_hash(msgid, db, rlen)
 				if (expand_sysdep(mohandle, sysdep_ttable))
 					/* memory exhausted */
 					return NULL;
-				if (rlen)
-					*rlen = sysdep_ttable->expanded_len;
 				return sysdep_ttable->expanded;
 			}
 		}
@@ -786,10 +770,9 @@ lookup_hash(msgid, db, rlen)
 }
 
 static const char *
-lookup_bsearch(msgid, db, rlen)
+lookup_bsearch(msgid, db)
 	const char *msgid;
 	struct domainbinding *db;
-	size_t *rlen;
 {
 	int top, bottom, middle, omiddle;
 	int n;
@@ -810,11 +793,8 @@ lookup_bsearch(msgid, db, rlen)
 			break;
 
 		n = strcmp(msgid, mohandle->mo.mo_otable[middle].off);
-		if (n == 0) {
-			if (rlen)
-				*rlen = mohandle->mo.mo_ttable[middle].len;
+		if (n == 0)
 			return (const char *)mohandle->mo.mo_ttable[middle].off;
-		}
 		else if (n < 0)
 			bottom = middle;
 		else
@@ -826,18 +806,17 @@ lookup_bsearch(msgid, db, rlen)
 }
 
 static const char *
-lookup(msgid, db, rlen)
+lookup(msgid, db)
 	const char *msgid;
 	struct domainbinding *db;
-	size_t *rlen;
 {
 	const char *v;
 
-	v = lookup_hash(msgid, db, rlen);
+	v = lookup_hash(msgid, db);
 	if (v)
 		return v;
 
-	return lookup_bsearch(msgid, db, rlen);
+	return lookup_bsearch(msgid, db);
 }
 
 static const char *
@@ -863,25 +842,6 @@ get_lang_env(const char *category_name)
 	return split_locale(lang);
 }
 
-static const char *
-get_indexed_string(const char *str, size_t len, unsigned long idx)
-{
-	while (idx > 0) {
-		if (len <= 1)
-			return str;
-		if (*str == '\0')
-			idx--;
-		if (len > 0) {
-			str++;
-			len--;
-		}
-	}
-	return str;
-}
-
-#define	_NGETTEXT_DEFAULT(msgid1, msgid2, n)	\
-	((char *)__UNCONST((n) == 1 ? (msgid1) : (msgid2)))
-
 char *
 dcngettext(domainname, msgid1, msgid2, n, category)
 	const char *domainname;
@@ -899,8 +859,10 @@ dcngettext(domainname, msgid1, msgid2, n, category)
 	static char *ocname = NULL;
 	static char *odomainname = NULL;
 	struct domainbinding *db;
-	unsigned long plural_index = 0;
-	size_t len;
+
+	msgid = (n == 1) ? msgid1 : msgid2;
+	if (msgid == NULL)
+		return NULL;
 
 	if (!domainname)
 		domainname = __current_domainname;
@@ -963,22 +925,8 @@ dcngettext(domainname, msgid1, msgid2, n, category)
 		strlcpy(olpath, lpath, sizeof(olpath));
 
 found:
-	if (db->mohandle.mo.mo_plural) {
-		plural_index =
-		    _gettext_calculate_plural(db->mohandle.mo.mo_plural, n);
-		if (plural_index >= db->mohandle.mo.mo_nplurals)
-			plural_index = 0;
-		msgid = msgid1;
-	} else
-		msgid = _NGETTEXT_DEFAULT(msgid1, msgid2, n);
-
-	if (msgid == NULL)
-		return NULL;
-
-	v = lookup(msgid, db, &len);
+	v = lookup(msgid, db);
 	if (v) {
-		if (db->mohandle.mo.mo_plural)
-			v = get_indexed_string(v, len, plural_index);
 		/*
 		 * convert the translated message's encoding.
 		 *
@@ -998,8 +946,6 @@ found:
 		msgid = v;
 	}
 
-	return (char *)__UNCONST(msgid);
-
 fail:
-	return _NGETTEXT_DEFAULT(msgid1, msgid2, n);
+	return (char *)__UNCONST(msgid);
 }

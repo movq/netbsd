@@ -1,4 +1,4 @@
-/* $NetBSD: cgd_crypto.c,v 1.4 2005/03/19 21:39:17 dan Exp $ */
+/* $NetBSD: cgd_crypto.c,v 1.3.14.1 2005/03/19 22:46:27 tron Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -44,7 +44,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cgd_crypto.c,v 1.4 2005/03/19 21:39:17 dan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cgd_crypto.c,v 1.3.14.1 2005/03/19 22:46:27 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

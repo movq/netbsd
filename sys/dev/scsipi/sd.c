@@ -1,4 +1,4 @@
-/*	$NetBSD: sd.c,v 1.240 2005/05/29 22:00:50 christos Exp $	*/
+/*	$NetBSD: sd.c,v 1.237.2.3 2005/12/29 15:21:00 riz Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2003, 2004 The NetBSD Foundation, Inc.
@@ -54,7 +54,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sd.c,v 1.240 2005/05/29 22:00:50 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sd.c,v 1.237.2.3 2005/12/29 15:21:00 riz Exp $");
 
 #include "opt_scsi.h"
 #include "rnd.h"
@@ -200,7 +200,7 @@ sdmatch(struct device *parent, struct cfdata *match, void *aux)
 	int priority;
 
 	(void)scsipi_inqmatch(&sa->sa_inqbuf,
-	    sd_patterns, sizeof(sd_patterns) / sizeof(sd_patterns[0]),
+	    (caddr_t)sd_patterns, sizeof(sd_patterns) / sizeof(sd_patterns[0]),
 	    sizeof(sd_patterns[0]), &priority);
 
 	return (priority);
@@ -950,7 +950,7 @@ static void
 sdminphys(struct buf *bp)
 {
 	struct sd_softc *sd = sd_cd.cd_devs[SDUNIT(bp->b_dev)];
-	long xmax;
+	long max;
 
 	/*
 	 * If the device is ancient, we want to make sure that
@@ -966,10 +966,10 @@ sdminphys(struct buf *bp)
 	if ((sd->flags & SDF_ANCIENT) &&
 	    ((sd->sc_periph->periph_flags &
 	    (PERIPH_REMOVABLE | PERIPH_MEDIA_LOADED)) != PERIPH_REMOVABLE)) {
-		xmax = sd->sc_dk.dk_label->d_secsize * 0xff;
+		max = sd->sc_dk.dk_label->d_secsize * 0xff;
 
-		if (bp->b_bcount > xmax)
-			bp->b_bcount = xmax;
+		if (bp->b_bcount > max)
+			bp->b_bcount = max;
 	}
 
 	scsipi_adapter_minphys(sd->sc_periph->periph_channel, bp);
@@ -1129,8 +1129,12 @@ bad:
 		return (0);
 
 	case DIOCLOCK:
-		return (scsipi_prevent(periph,
-		    (*(int *)addr) ? SPAMR_PREVENT_DT : SPAMR_ALLOW, 0));
+		if (periph->periph_flags & PERIPH_REMOVABLE)
+			return (scsipi_prevent(periph,
+			    (*(int *)addr) ?
+			    SPAMR_PREVENT_DT : SPAMR_ALLOW, 0));
+		else
+			return (ENOTTY);
 
 	case DIOCEJECT:
 		if ((periph->periph_flags & PERIPH_REMOVABLE) == 0)
@@ -1354,6 +1358,23 @@ sd_interpret_sense(struct scsipi_xfer *xs)
 		return (retval);
 
 	/*
+	 * Ignore errors from accessing illegal fields (e.g. trying to
+	 * lock the door of a digicam, which doesn't have a door that
+	 * can be locked) for the SCSI_PREVENT_ALLOW_MEDIUM_REMOVAL command.
+	 */
+	if (xs->cmd->opcode == SCSI_PREVENT_ALLOW_MEDIUM_REMOVAL &&
+	    SSD_SENSE_KEY(sense->flags) == SKEY_ILLEGAL_REQUEST &&
+	    sense->asc == 0x24 &&
+	    sense->ascq == 0x00) { /* Illegal field in CDB */
+		scsipi_printaddr(periph);
+		printf("no door lock\n");
+		periph->periph_flags &= ~PERIPH_REMOVABLE;
+		return 0;
+	}
+
+
+
+	/*
 	 * If the device is not open yet, let the generic code handle it.
 	 */
 	if ((periph->periph_flags & PERIPH_MEDIA_LOADED) == 0)
@@ -1363,8 +1384,9 @@ sd_interpret_sense(struct scsipi_xfer *xs)
 	 * If it isn't a extended or extended/deferred error, let
 	 * the generic code handle it.
 	 */
-	if (SSD_RCODE(sense->response_code) != SSD_RCODE_CURRENT &&
-	    SSD_RCODE(sense->response_code) != SSD_RCODE_DEFERRED)
+	if ((sense->response_code & SSD_RCODE_VALID) == 0 ||
+	    (SSD_RCODE(sense->response_code) != SSD_RCODE_CURRENT &&
+	     SSD_RCODE(sense->response_code) != SSD_RCODE_DEFERRED))
 		return (retval);
 
 	if (SSD_SENSE_KEY(sense->flags) == SKEY_NOT_READY &&

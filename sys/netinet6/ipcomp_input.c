@@ -1,4 +1,4 @@
-/*	$NetBSD: ipcomp_input.c,v 1.25 2005/05/20 01:25:17 manu Exp $	*/
+/*	$NetBSD: ipcomp_input.c,v 1.22.14.2 2005/07/18 21:06:51 riz Exp $	*/
 /*	$KAME: ipcomp_input.c,v 1.29 2001/09/04 08:43:19 itojun Exp $	*/
 
 /*
@@ -35,9 +35,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ipcomp_input.c,v 1.25 2005/05/20 01:25:17 manu Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ipcomp_input.c,v 1.22.14.2 2005/07/18 21:06:51 riz Exp $");
 
 #include "opt_inet.h"
+#include "opt_ipsec.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -60,7 +61,6 @@ __KERNEL_RCSID(0, "$NetBSD: ipcomp_input.c,v 1.25 2005/05/20 01:25:17 manu Exp $
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
 #include <netinet/in_var.h>
-#include <netinet/in_proto.h>
 #include <netinet/ip.h>
 #include <netinet/ip_var.h>
 #include <netinet/ip_ecn.h>
@@ -103,11 +103,6 @@ ipcomp4_input(m, va_alist)
 	struct secasvar *sav = NULL;
 	int off, proto;
 	va_list ap;
-	u_int16_t sport = 0;
-	u_int16_t dport = 0;
-#ifdef IPSEC_NAT_T
-	struct m_tag *tag = NULL;
-#endif
 
 	va_start(ap, m);
 	off = va_arg(ap, int);
@@ -120,13 +115,6 @@ ipcomp4_input(m, va_alist)
 		ipsecstat.in_inval++;
 		goto fail;
 	}
-#ifdef IPSEC_NAT_T
-	/* find the source port for NAT-T */
-	if ((tag = m_tag_find(m, PACKET_TAG_IPSEC_NAT_T_PORTS, NULL)) != NULL) {
-		sport = ((u_int16_t *)(tag + 1))[0];
-		dport = ((u_int16_t *)(tag + 1))[1];
-	}
-#endif
 
 	md = m_pulldown(m, off, sizeof(*ipcomp), NULL);
 	if (!md) {
@@ -150,7 +138,7 @@ ipcomp4_input(m, va_alist)
 	if (cpi >= IPCOMP_CPI_NEGOTIATE_MIN) {
 		sav = key_allocsa(AF_INET, (caddr_t)&ip->ip_src,
 			(caddr_t)&ip->ip_dst, IPPROTO_IPCOMP, htonl(cpi), 
-			sport, dport);
+			0, 0);
 		if (sav != NULL &&
 		    (sav->state == SADB_SASTATE_MATURE ||
 		     sav->state == SADB_SASTATE_DYING)) {

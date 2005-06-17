@@ -1,4 +1,4 @@
-#	$NetBSD: special,v 1.87 2005/05/22 14:34:20 lukem Exp $
+#	$NetBSD: special,v 1.82.2.7 2006/03/28 22:47:29 riz Exp $
 #	@(#)special	8.2 (Berkeley) 1/23/94
 #
 # Hand-crafted mtree specification for the dangerous files.
@@ -100,6 +100,7 @@
 ./etc/mtree/special		type=file mode=0444
 ./etc/mtree/special.local	type=file mode=0644 optional
 ./etc/mygate			type=file mode=0644 optional
+./etc/mygate6			type=file mode=0644 optional
 ./etc/myname			type=file mode=0644 optional
 ./etc/named.conf		type=file mode=0644 optional
 ./etc/namedb			type=dir  mode=0755
@@ -111,26 +112,6 @@
 ./etc/newsyslog.conf		type=file mode=0644
 ./etc/nsswitch.conf		type=file mode=0644
 ./etc/ntp.conf			type=file mode=0644 optional
-./etc/pam.conf			type=file mode=0644 optional
-./etc/pam.d			type=dir  mode=0755
-./etc/pam.d/display_manager	type=file mode=0644
-./etc/pam.d/ftpd		type=file mode=0644
-./etc/pam.d/gdm			type=file mode=0644
-./etc/pam.d/imap		type=file mode=0644
-./etc/pam.d/kde			type=file mode=0644
-./etc/pam.d/login		type=file mode=0644
-./etc/pam.d/other		type=file mode=0644
-./etc/pam.d/passwd		type=file mode=0644
-./etc/pam.d/pop3		type=file mode=0644
-./etc/pam.d/ppp			type=file mode=0644
-./etc/pam.d/rexecd		type=file mode=0644
-./etc/pam.d/rsh			type=file mode=0644
-./etc/pam.d/sshd		type=file mode=0644
-./etc/pam.d/su			type=file mode=0644
-./etc/pam.d/system		type=file mode=0644
-./etc/pam.d/telnetd		type=file mode=0644
-./etc/pam.d/xdm			type=file mode=0644
-./etc/pam.d/xserver		type=file mode=0644
 ./etc/passwd			type=file mode=0644
 ./etc/passwd.conf		type=file mode=0644 optional
 ./etc/phones			type=file mode=0644
@@ -201,6 +182,9 @@
 ./etc/rc.d/nfslocking		type=file mode=0555
 ./etc/rc.d/ntpd			type=file mode=0555
 ./etc/rc.d/ntpdate		type=file mode=0555
+./etc/rc.d/pf			type=file mode=0555
+./etc/rc.d/pf_boot		type=file mode=0555
+./etc/rc.d/pflogd		type=file mode=0555
 ./etc/rc.d/poffd		type=file mode=0555
 ./etc/rc.d/postfix		type=file mode=0555
 ./etc/rc.d/powerd		type=file mode=0555
@@ -338,7 +322,6 @@
 ./var/chroot/ntpd/var/db	type=dir  mode=0775 gname=ntpd
 ./var/chroot/ntpd/var/run	type=dir  mode=0775 gname=ntpd
 ./var/chroot/pflogd		type=dir  mode=0755
-./var/chroot/pfspamd		type=dir  mode=0755
 ./var/chroot/sshd		type=dir  mode=0755
 ./var/cron			type=dir  mode=0755
 ./var/cron/tabs			type=dir  mode=0700

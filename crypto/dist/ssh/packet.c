@@ -1,4 +1,4 @@
-/*	$NetBSD: packet.c,v 1.23 2005/04/23 16:53:28 christos Exp $	*/
+/*	$NetBSD: packet.c,v 1.22.2.1 2006/10/26 09:39:57 ghen Exp $	*/
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -38,8 +38,8 @@
  */
 
 #include "includes.h"
-RCSID("$OpenBSD: packet.c,v 1.116 2004/10/20 11:48:53 markus Exp $");
-__RCSID("$NetBSD: packet.c,v 1.23 2005/04/23 16:53:28 christos Exp $");
+RCSID("$OpenBSD: packet.c,v 1.115 2004/06/21 17:36:31 avsm Exp $");
+__RCSID("$NetBSD: packet.c,v 1.22.2.1 2006/10/26 09:39:57 ghen Exp $");
 
 #include <sys/queue.h>
 
@@ -936,9 +936,16 @@ packet_read_poll1(void)
 	 * (C)1998 CORE-SDI, Buenos Aires Argentina
 	 * Ariel Futoransky(futo@core-sdi.com)
 	 */
-	if (!receive_context.plaintext &&
-	    detect_attack(buffer_ptr(&input), padded_len, NULL) == DEATTACK_DETECTED)
-		packet_disconnect("crc32 compensation attack: network attack detected");
+	if (!receive_context.plaintext) {
+		switch (detect_attack(buffer_ptr(&input), padded_len, NULL)) {
+		case DEATTACK_DETECTED:
+			packet_disconnect("crc32 compensation attack: "
+				"network attack detected");
+		case DEATTACK_DOS_DETECTED:
+			packet_disconnect("deattack denial of "
+				"service detected");
+		}
+	}
 
 	/* Decrypt data to incoming_packet. */
 	buffer_clear(&incoming_packet);
@@ -978,8 +985,6 @@ packet_read_poll1(void)
 		    buffer_len(&compression_buffer));
 	}
 	type = buffer_get_char(&incoming_packet);
-	if (type < SSH_MSG_MIN || type > SSH_MSG_MAX)
-		packet_disconnect("Invalid ssh1 packet type: %d", type);
 	return type;
 }
 
@@ -1092,8 +1097,6 @@ packet_read_poll2(u_int32_t *seqnr_p)
 	 * return length of payload (without type field)
 	 */
 	type = buffer_get_char(&incoming_packet);
-	if (type < SSH2_MSG_MIN || type >= SSH2_MSG_LOCAL_MIN)
-		packet_disconnect("Invalid ssh2 packet type: %d", type);
 	if (type == SSH2_MSG_NEWKEYS)
 		set_newkeys(MODE_IN);
 #ifdef PACKET_DEBUG

@@ -169,7 +169,7 @@ int RSA_verify(int dtype, const unsigned char *m, unsigned int m_len,
 		}
 	if((dtype == NID_md5_sha1) && (m_len != SSL_SIG_LENGTH) ) {
 			RSAerr(RSA_F_RSA_VERIFY,RSA_R_INVALID_MESSAGE_LENGTH);
-			goto err;
+			return(0);
 	}
 	i=RSA_public_decrypt((int)siglen,sigbuf,s,rsa,RSA_PKCS1_PADDING);
 
@@ -185,6 +185,23 @@ int RSA_verify(int dtype, const unsigned char *m, unsigned int m_len,
 		sig=d2i_X509_SIG(NULL,&p,(long)i);
 
 		if (sig == NULL) goto err;
+
+		/* Excess data can be used to create forgeries */
+		if(p != s+i)
+			{
+			RSAerr(RSA_F_RSA_VERIFY,RSA_R_BAD_SIGNATURE);
+			goto err;
+			}
+
+		/* Parameters to the signature algorithm can also be used to
+		   create forgeries */
+		if(sig->algor->parameter
+		   && sig->algor->parameter->type != V_ASN1_NULL)
+			{
+			RSAerr(RSA_F_RSA_VERIFY,RSA_R_BAD_SIGNATURE);
+			goto err;
+			}
+
 		sigtype=OBJ_obj2nid(sig->algor->algorithm);
 
 
@@ -222,11 +239,8 @@ int RSA_verify(int dtype, const unsigned char *m, unsigned int m_len,
 	}
 err:
 	if (sig != NULL) X509_SIG_free(sig);
-	if (s != NULL)
-		{
-		OPENSSL_cleanse(s,(unsigned int)siglen);
-		OPENSSL_free(s);
-		}
+	OPENSSL_cleanse(s,(unsigned int)siglen);
+	OPENSSL_free(s);
 	return(ret);
 	}
 

@@ -1,4 +1,4 @@
-$NetBSD: pcmciadevs,v 1.211 2005/05/07 16:59:11 martin Exp $
+$NetBSD: pcmciadevs,v 1.208.6.7 2006/07/31 12:03:48 tron Exp $
 /* $FreeBSD: src/sys/dev/pccard/pccarddevs,v 1.20 2001/11/19 05:02:55 imp Exp $*/
 
 /*-
@@ -93,7 +93,7 @@ vendor BUFFALO			0x026f	BUFFALO (Melco Corporation)
 vendor LINKSYS2			0x0274  The Linksys Group
 vendor IODATA2			0x028a	I-O DATA
 vendor ASUSTEK			0x02aa	Asustek Computer
-vendor MICROSOFT		0x02d2	Microsoft Corporation
+vendor SIEMENS			0x02ac	Siemens
 vendor BREEZECOM		0x0a02	BreezeCOM
 vendor NEWMEDIA2		0x10cd	NewMedia
 vendor ACTIONTEC		0x1668	ACTIONTEC
@@ -291,9 +291,6 @@ product MEGAHERTZ2 XJACK	0x0103 Megahertz X-JACK Ethernet
 /* Melco Products */
 product MELCO LPC3_TX		0xc1ab Melco LPC3-TX
 
-/* Microsoft Products */
-product	MICROSOFT MN_520	0x0001 Microsoft MN-520 WLAN Card
-
 /* Motorola Products */
 product MOTOROLA POWER144	0x0105 Motorola Power 14.4 Modem
 product MOTOROLA PM100C		0x0302 Motorola Personal Messenger 100C CDPD Modem
@@ -337,7 +334,6 @@ product PANASONIC KME		0x2604 Panasonic CD-R/RW Interface
 /* Proxim */
 product PROXIM ROAMABOUT_2400FH	0x1058 Digital RoamAbout 2400FH
 product PROXIM RANGELAN2_7401	0x1158 Proxim RangeLAN2 7401
-product PROXIM RANGELANDS_8430  0x8000 Proxim RangeLAN-DS 8430
 
 /* Psion */
 product PSION GOLDCARD		0x0020 Psion Gold Card
@@ -378,6 +374,9 @@ product SOCKET DUAL_RS232	0x0006 Socket Communications Dual RS232
 product SOCKET LP_ETHER		0x000d Socket Communications LP-E
 product SOCKET LP_ETHER_CF	0x0075 Socket Communications LP-E CF
 product SOCKET LP_ETH_10_100_CF	0x0145 Socket Communications 10/100 Ethernet
+
+/* SpeedStream */
+product	SIEMENS	SS1021		0x0002	SpeedStream SS1021 WLAN
 
 /* Symbol */
 product	SYMBOL LA4100		0x0001	Symbol Spectrum24 LA4100 Series WLAN
@@ -527,7 +526,7 @@ product SVEC LANCARD		{ "SVEC", "FD605&spPCMCIA&spEtherNet&spCard", NULL, NULL }
 product SVEC PN650TX		-1 SVEC PN650TX 10/100 Dual Speed Fast Ethernet PC Card
 product SYNERGY21 S21810	{ "PCMCIA", "Ethernet", "A", NULL } Synergy 21 S21810+ NE2000 Compatible Card
 product TAMARACK ETHERNET	{ "TAMARACK", "Ethernet", "A", NULL } TAMARACK Ethernet Card
-product TEAC IDECARDII		{ NULL, "NinjaATA-", NULL, NULL } TEAC IDE Card/II
+product TEAC IDECARDII		{ "&sp", "NinjaATA-", NULL, NULL } TEAC IDE Card/II
 product TOSHIBA CBIDE2		{ "LOOKMEET", "CBIDE2&sp&sp&sp&sp&sp&sp", NULL, NULL } TOSHIBA PA2673U CBIDE2/16-bit mode (IO-DATA OEM)
 product XIRCOM CFE_10		{ "Xircom", "CompactCard&spEthernet", "CFE-10", NULL } Xircom CompactCard CFE-10
 product YEDATA EXTERNAL_FDD	{ "Y-E&spDATA", "External&spFDD", NULL, NULL } Y-E DATA External FDD

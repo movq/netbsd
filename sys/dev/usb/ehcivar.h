@@ -1,4 +1,4 @@
-/*	$NetBSD: ehcivar.h,v 1.19 2005/04/29 15:04:29 augustss Exp $ */
+/*	$NetBSD: ehcivar.h,v 1.17.8.2 2006/01/22 13:52:50 tron Exp $ */
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -92,8 +92,10 @@ typedef struct ehci_softc {
 	bus_space_handle_t ioh;
 	bus_size_t sc_size;
 	u_int sc_offs;			/* offset to operational regs */
+	int sc_flags;			/* misc flags */
+#define EHCIF_DROPPED_INTR_WORKAROUND	0x01
 
-	char sc_vendor[32];		/* vendor string for root hub */
+	char sc_vendor[16];		/* vendor string for root hub */
 	int sc_id_vendor;		/* vendor ID for root hub */
 
 	u_int32_t sc_cmd;		/* shadow of cmd reg during suspend */
@@ -133,6 +135,7 @@ typedef struct ehci_softc {
 	struct lock sc_doorbell_lock;
 
 	usb_callout_t sc_tmo_pcd;
+	usb_callout_t sc_tmo_intrlist;
 
 #if defined(__NetBSD__) || defined(__OpenBSD__)
 	device_ptr_t sc_child;		/* /dev/usb# device */

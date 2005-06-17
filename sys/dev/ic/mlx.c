@@ -1,4 +1,4 @@
-/*	$NetBSD: mlx.c,v 1.33 2005/05/30 04:43:47 christos Exp $	*/
+/*	$NetBSD: mlx.c,v 1.32.2.1 2005/08/04 18:25:16 tron Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -74,7 +74,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mlx.c,v 1.33 2005/05/30 04:43:47 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mlx.c,v 1.32.2.1 2005/08/04 18:25:16 tron Exp $");
 
 #include "ld.h"
 
@@ -536,7 +536,7 @@ static void
 mlx_describe(struct mlx_softc *mlx)
 {
 	struct mlx_cinfo *ci;
-	static char tbuf[80];
+	static char buf[80];
 	const char *model;
 	int i;
 
@@ -550,8 +550,8 @@ mlx_describe(struct mlx_softc *mlx)
 		}
 
 	if (model == NULL) {
-		snprintf(tbuf, sizeof(tbuf), " model 0x%x", ci->ci_hardware_id);
-		model = tbuf;
+		snprintf(buf, sizeof(buf), " model 0x%x", ci->ci_hardware_id);
+		model = buf;
 	}
 
 	printf("%s: DAC%s, %d channel%s, firmware %d.%02d-%c-%02d",
@@ -1121,6 +1121,7 @@ mlx_periodic_enquiry(struct mlx_ccb *mc)
 	u_int lsn;
 
 	mlx = (struct mlx_softc *)mc->mc_mx.mx_dv;
+	mlx_ccb_unmap(mlx, mc);
 
 	/*
 	 * Command completed OK?
@@ -2130,22 +2131,22 @@ mlx_ccb_submit(struct mlx_softc *mlx, struct mlx_ccb *mc)
 const char *
 mlx_ccb_diagnose(struct mlx_ccb *mc)
 {
-	static char tbuf[80];
+	static char buf[80];
 	int i;
 
 	for (i = 0; i < sizeof(mlx_msgs) / sizeof(mlx_msgs[0]); i++)
 		if ((mc->mc_mbox[0] == mlx_msgs[i].command ||
 		    mlx_msgs[i].command == 0) &&
 		    mc->mc_status == mlx_msgs[i].status) {
-			snprintf(tbuf, sizeof(tbuf), "%s (0x%x)",
+			snprintf(buf, sizeof(buf), "%s (0x%x)",
 			    mlx_status_msgs[mlx_msgs[i].msg], mc->mc_status);
-			return (tbuf);
+			return (buf);
 		}
 
-	snprintf(tbuf, sizeof(tbuf), "unknown response 0x%x for command 0x%x",
+	snprintf(buf, sizeof(buf), "unknown response 0x%x for command 0x%x",
 	    (int)mc->mc_status, (int)mc->mc_mbox[0]);
 
-	return (tbuf);
+	return (buf);
 }
 
 /*

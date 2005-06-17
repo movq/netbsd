@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_ktrace.c,v 1.97 2005/05/29 22:24:15 christos Exp $	*/
+/*	$NetBSD: kern_ktrace.c,v 1.96.4.1 2006/10/24 16:33:44 ghen Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_ktrace.c,v 1.97 2005/05/29 22:24:15 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_ktrace.c,v 1.96.4.1 2006/10/24 16:33:44 ghen Exp $");
 
 #include "opt_ktrace.h"
 #include "opt_compat_mach.h"
@@ -473,7 +473,7 @@ ktremul(struct proc *p)
 }
 
 void
-ktrkmem(struct proc *p, int type, const void *bf, size_t len)
+ktrkmem(struct proc *p, int type, const void *buf, size_t len)
 {
 	struct ktrace_entry *kte;
 	struct ktr_header *kth;
@@ -485,7 +485,7 @@ ktrkmem(struct proc *p, int type, const void *bf, size_t len)
 
 	kth->ktr_len = len;
 	kte->kte_buf = malloc(len, M_KTRACE, M_WAITOK);
-	memcpy(kte->kte_buf, bf, len);
+	memcpy(kte->kte_buf, buf, len);
 
 	ktraddentry(p, kte, KTA_WAITOK);
 	p->p_traceflag &= ~KTRFAC_ACTIVE;
@@ -640,13 +640,17 @@ out:
 	p->p_traceflag &= ~KTRFAC_ACTIVE;
 }
 
-void
+int
 ktruser(struct proc *p, const char *id, void *addr, size_t len, int ustr)
 {
 	struct ktrace_entry *kte;
 	struct ktr_header *kth;
 	struct ktr_user *ktp;
 	caddr_t user_dta;
+	int error;
+
+	if (len > KTR_USER_MAXLEN)
+		return ENOSPC;
 
 	p->p_traceflag |= KTRFAC_ACTIVE;
 	kte = pool_get(&kte_pool, PR_WAITOK);
@@ -662,7 +666,7 @@ ktruser(struct proc *p, const char *id, void *addr, size_t len, int ustr)
 	ktp->ktr_id[KTR_USER_MAXIDLEN-1] = '\0';
 
 	user_dta = (caddr_t)(ktp + 1);
-	if (copyin(addr, (void *)user_dta, len) != 0)
+	if ((error = copyin(addr, (void *)user_dta, len)) != 0)
 		len = 0;
 
 	kth->ktr_len = sizeof(struct ktr_user) + len;
@@ -670,6 +674,7 @@ ktruser(struct proc *p, const char *id, void *addr, size_t len, int ustr)
 
 	ktraddentry(p, kte, KTA_WAITOK);
 	p->p_traceflag &= ~KTRFAC_ACTIVE;
+	return error;
 }
 
 void
@@ -685,7 +690,7 @@ ktrmool(struct proc *p, const void *kaddr, size_t size, const void *uaddr)
 	struct ktrace_entry *kte;
 	struct ktr_header *kth;
 	struct ktr_mool *kp;
-	struct ktr_mool *bf;
+	struct ktr_mool *buf;
 
 	p->p_traceflag |= KTRFAC_ACTIVE;
 	kte = pool_get(&kte_pool, PR_WAITOK);
@@ -695,8 +700,8 @@ ktrmool(struct proc *p, const void *kaddr, size_t size, const void *uaddr)
 	kp = malloc(size + sizeof(*kp), M_KTRACE, M_WAITOK);
 	kp->uaddr = uaddr;
 	kp->size = size;
-	bf = kp + 1; /* Skip uaddr and size */
-	(void)memcpy(bf, kaddr, size);
+	buf = kp + 1; /* Skip uaddr and size */
+	(void)memcpy(buf, kaddr, size);
 
 	kth->ktr_len = size + sizeof(*kp);
 	kte->kte_buf = kp;
@@ -1212,13 +1217,10 @@ sys_utrace(struct lwp *l, void *v, register_t *retval)
 
 	if (!KTRPOINT(p, KTR_USER))
 		return (0);
+	
+	return ktruser(p, SCARG(uap, label), SCARG(uap, addr),
+		SCARG(uap, len), 1);
 
-	if (SCARG(uap, len) > KTR_USER_MAXLEN)
-		return (EINVAL);
-
-	ktruser(p, SCARG(uap, label), SCARG(uap, addr), SCARG(uap, len), 1);
-
-	return (0);
 #else /* !KTRACE */
 	return ENOSYS;
 #endif /* KTRACE */

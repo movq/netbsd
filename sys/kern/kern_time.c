@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_time.c,v 1.89 2005/05/29 22:24:15 christos Exp $	*/
+/*	$NetBSD: kern_time.c,v 1.88.2.3 2005/12/07 09:53:55 tron Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2004, 2005 The NetBSD Foundation, Inc.
@@ -68,7 +68,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_time.c,v 1.89 2005/05/29 22:24:15 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_time.c,v 1.88.2.3 2005/12/07 09:53:55 tron Exp $");
 
 #include "fs_nfs.h"
 #include "opt_nfs.h"
@@ -101,7 +101,6 @@ __KERNEL_RCSID(0, "$NetBSD: kern_time.c,v 1.89 2005/05/29 22:24:15 christos Exp 
 
 static void timerupcall(struct lwp *, void *);
 
-
 /* Time of day and interval timer support.
  *
  * These routines provide the kernel entry points to get and set
@@ -119,6 +118,28 @@ settime(struct timeval *tv)
 	struct cpu_info *ci;
 	int s;
 
+	/*
+	 * Don't allow the time to be set forward so far it will wrap
+	 * and become negative, thus allowing an attacker to bypass
+	 * the next check below.  The cutoff is 1 year before rollover
+	 * occurs, so even if the attacker uses adjtime(2) to move
+	 * the time past the cutoff, it will take a very long time
+	 * to get to the wrap point.
+	 *
+	 * XXX: we check against INT_MAX since on 64-bit
+	 *	platforms, sizeof(int) != sizeof(long) and
+	 *	time_t is 32 bits even when atv.tv_sec is 64 bits.
+	 */
+	if (tv->tv_sec > INT_MAX - 365*24*60*60) {
+		struct proc *p = curproc;
+		struct proc *pp = p->p_pptr;
+		log(LOG_WARNING, "pid %d (%s) "
+		    "invoked by uid %d ppid %d (%s) "
+		    "tried to set clock forward to %ld\n",
+		    p->p_pid, p->p_comm, pp->p_ucred->cr_uid,
+		    pp->p_pid, pp->p_comm, (long)tv->tv_sec);
+		return (EPERM);
+	}
 	/* WHAT DO WE DO ABOUT PENDING REAL-TIME TIMEOUTS??? */
 	s = splclock();
 	timersub(tv, &time, &delta);
@@ -275,7 +296,8 @@ sys_nanosleep(struct lwp *l, void *v, register_t *retval)
 	struct timeval atv, utv;
 	int error, s, timo;
 
-	error = copyin(SCARG(uap, rqtp), &rqt, sizeof(struct timespec));
+	error = copyin((caddr_t)SCARG(uap, rqtp), (caddr_t)&rqt,
+		       sizeof(struct timespec));
 	if (error)
 		return (error);
 
@@ -300,7 +322,7 @@ sys_nanosleep(struct lwp *l, void *v, register_t *retval)
 		error = 0;
 
 	if (SCARG(uap, rmtp)) {
-		int error1;
+		int error;
 
 		s = splclock();
 		utv = time;
@@ -311,10 +333,10 @@ sys_nanosleep(struct lwp *l, void *v, register_t *retval)
 			timerclear(&utv);
 
 		TIMEVAL_TO_TIMESPEC(&utv,&rmt);
-		error1 = copyout((caddr_t)&rmt, (caddr_t)SCARG(uap,rmtp),
+		error = copyout((caddr_t)&rmt, (caddr_t)SCARG(uap,rmtp),
 			sizeof(rmt));
-		if (error1)
-			return (error1);
+		if (error)
+			return (error);
 	}
 
 	return error;
@@ -857,7 +879,6 @@ timerupcall(struct lwp *l, void *arg)
 {
 	struct ptimers *pt = (struct ptimers *)arg;
 	unsigned int i, fired, done;
-	extern struct pool siginfo_pool;	/* XXX Ew. */
 
 	KDASSERT(l->l_proc->p_sa);
 	/* Bail out if we do not own the virtual processor */
@@ -875,11 +896,11 @@ timerupcall(struct lwp *l, void *arg)
 
 		f = l->l_flag & L_SA;
 		l->l_flag &= ~L_SA;
-		si = pool_get(&siginfo_pool, PR_WAITOK);
+		si = siginfo_alloc(PR_WAITOK);
 		si->_info = pt->pts_timers[i]->pt_info.ksi_info;
 		if (sa_upcall(l, SA_UPCALL_SIGEV | SA_UPCALL_DEFER, NULL, l,
-		    sizeof(*si), si) != 0) {
-			pool_put(&siginfo_pool, si);
+		    sizeof(*si), si, siginfo_free) != 0) {
+			siginfo_free(si);
 			/* XXX What do we do here?? */
 		} else
 			done |= mask;

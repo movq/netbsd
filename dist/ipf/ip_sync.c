@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_sync.c,v 1.1.1.3 2005/04/03 15:01:09 martti Exp $	*/
+/*	$NetBSD: ip_sync.c,v 1.1.1.2.2.1 2005/04/04 19:34:09 tron Exp $	*/
 
 /*
  * Copyright (C) 1995-1998 by Darren Reed.

@@ -1,4 +1,4 @@
-/*	$NetBSD: exec_elf32.c,v 1.104 2005/05/29 22:24:14 christos Exp $	*/
+/*	$NetBSD: exec_elf32.c,v 1.102.2.3 2006/03/20 17:45:24 riz Exp $	*/
 
 /*-
  * Copyright (c) 1994, 2000, 2005 The NetBSD Foundation, Inc.
@@ -64,7 +64,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(1, "$NetBSD: exec_elf32.c,v 1.104 2005/05/29 22:24:14 christos Exp $");
+__KERNEL_RCSID(1, "$NetBSD: exec_elf32.c,v 1.102.2.3 2006/03/20 17:45:24 riz Exp $");
 
 /* If not included by exec_elf64.c, ELFSIZE won't be defined. */
 #ifndef ELFSIZE
@@ -398,6 +398,18 @@ ELFNAME(load_file)(struct proc *p, struct exec_package *epp, char *path,
 	if ((error = exec_read_from(p, vp, eh.e_phoff, ph, phsize)) != 0)
 		goto bad;
 
+#ifdef ELF_INTERP_NON_RELOCATABLE
+	/*
+	 * Evil hack:  Only MIPS should be non-relocatable, and the
+	 * psections should have a high address (typically 0x5ffe0000).
+	 * If it's now relocatable, it should be linked at 0 and the
+	 * psections should have zeros in the upper part of the address.
+	 * Otherwise, force the load at the linked address.
+	 */
+	if (*last == ELF_LINK_ADDR && (ph->p_vaddr & 0xffff0000) == 0)
+		*last = ELFDEFNNAME(NO_ADDR);
+#endif
+
 	/*
 	 * If no position to load the interpreter was set by a probe
 	 * function, pick the same address that a non-fixed mmap(0, ..)
@@ -418,6 +430,11 @@ ELFNAME(load_file)(struct proc *p, struct exec_package *epp, char *path,
 				if (psize > limit)
 					limit = psize;
 			}
+		}
+
+		if (base_ph == NULL) {
+			error = ENOEXEC;
+			goto bad;
 		}
 
 		/*
@@ -672,7 +689,7 @@ ELFNAME2(exec,makecmds)(struct proc *p, struct exec_package *epp)
 	 */
 	if (interp) {
 		struct elf_args *ap;
-		int j = epp->ep_vmcmds.evs_used;
+		int i = epp->ep_vmcmds.evs_used;
 		u_long interp_offset;
 
 		MALLOC(ap, struct elf_args *, sizeof(struct elf_args),
@@ -682,7 +699,7 @@ ELFNAME2(exec,makecmds)(struct proc *p, struct exec_package *epp)
 			FREE(ap, M_TEMP);
 			goto bad;
 		}
-		ap->arg_interp = epp->ep_vmcmds.evs_cmds[j].ev_addr;
+		ap->arg_interp = epp->ep_vmcmds.evs_cmds[i].ev_addr;
 		epp->ep_entry = ap->arg_interp + interp_offset;
 		ap->arg_phaddr = phdr;
 

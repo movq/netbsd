@@ -1,7 +1,7 @@
-#	$NetBSD: install.md,v 1.23 2004/01/17 05:30:01 lukem Exp $
+#	$NetBSD: install.md,v 1.23.6.2 2006/01/27 22:45:44 tron Exp $
 #
 #
-# Copyright (c) 1996 The NetBSD Foundation, Inc.
+# Copyright (c) 1996,2006 The NetBSD Foundation, Inc.
 # All rights reserved.
 #
 # This code is derived from software contributed to The NetBSD Foundation
@@ -41,7 +41,7 @@
 #
 
 # Machine-dependent install sets
-MDSETS="kern-GENERIC xbase xcomp xfont xserver"
+MDSETS="kern-GENERIC xbase xcomp xetc xfont xserver"
 
 md_set_term() {
 	if [ ! -z "$TERM" ]; then
@@ -127,6 +127,10 @@ md_native_fsopts() {
 }
 
 md_prep_disklabel() {
+}
+
+md_view_labels_possible=1
+md_view_labels() {
 	_DKDEVS=`md_get_diskdevs`
 	echo "If you like, you can now examine the labels of your disks."
 	echo ""

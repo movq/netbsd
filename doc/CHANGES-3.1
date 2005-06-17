@@ -1,0 +1,4950 @@
+#	$NetBSD: CHANGES-3.1,v 1.1.2.186 2006/10/28 13:59:35 ghen Exp $
+
+A complete list of changes from the NetBSD 3.0 release to the NetBSD 3.1
+release:
+
+File						Revision(s)
+----						--------
+gnu/usr.bin/groff/tmac/mdoc.local		patch
+sys/sys/param.h					patch
+
+	Welcome to 3.0_STABLE
+
+doc/README.files				patch
+
+	Update for release and new CHANGES-3.1 file.
+
+usr.sbin/pkg_install/add/perform.c		1.115
+
+	(pkg_do) When marking already installed package as manually installed,
+	only print message if we succeeded.
+	[dillo, ticket #1039]
+
+sys/dev/mii/brgphy.c				1.24-1.25
+sys/dev/mii/miidevs				1.61
+sys/dev/mii/miidevs.h				regen
+sys/dev/mii/miidevs_data.h			regen
+
+	Add support for bcm5714 phys.
+	[jonathan, ticket #1044]
+
+sys/dev/scsipi/sd.c				1.242-1.243
+
+	Some USB devices reports themselves as removable, but have no door and
+	so don't support the SCSI_PREVENT_ALLOW_MEDIUM_REMOVAL command.
+	When an "Illegal field in CDB" is reported for this command, mark the
+	device as non-removable (which is always true for USB keys from the SCSI
+	point of view), print a message and ignore the error.
+	For DIOCLOCK, return ENOTTY if the device is not removable instead of
+	trying a command which will fail.
+	[bouyer, ticket #1045]
+
+usr.bin/gzip/gzip.c				1.81
+
+	Remove unhandled H option from getopt() argument.
+	Describe -l in usage. Both from Igor Sobrado in private mail.
+	While here, sort options.
+	[wiz, ticket #1053]
+
+sys/netinet/udp_usrreq.c			1.144
+
+	Fix a bug in ESP over UDP: because udp4_espinudp() called m_pullup, it
+	could modify the struct mbuf and calling functions (udp_input() and
+	udp4_realinput()) would have used a garbled local copy of the pointer.
+	The fix is not perfect. udp4_espinudp() should use m_pulldown()...
+	[manu, ticket #1052]
+
+lib/libdes/ornd_keys.c				1.2
+
+	Fix wrong buffer size calculation. From Henning Petersen in PR
+	lib/32291.
+	[martin, ticket #1056]
+
+usr.bin/su/su.1					1.45 via patch
+
+	Give a general description what this command does before going into
+	all the details.
+	[hubertf, ticket #1060]
+
+share/mk/bsd.README				1.167
+
+	document MKINET6 and USE_INET6
+	[hubertf, ticket #1066]
+
+lib/libc/gen/getcwd.c				1.41
+
+	Allow last component to be non-existing again.
+	This is what broke systrace's filename normalization.
+	Go back to original behavior as in revision 1.35: return resolved name,
+	but also set errno to ENOENT.
+	[elad, ticket #1068]
+
+sys/dev/pci/azalia.c				1.12-1.15
+sys/dev/pci/azalia.h				1.1-1.3
+sys/dev/pci/azalia_codec.c			1.1-1.3
+sys/dev/pci/files.pci				1.239
+
+	Improve support for ALC880/ALC882 codec.
+	[kent, ticket #916]
+
+sys/dev/ic/rtl81x9reg.h				1.14
+sys/dev/pci/if_re_pci.c				1.12
+
+	PR/32386: Dawid Szymanski (arhea). Add support for the 8169SB chipset.
+	From FreeBSD.
+	[rpaulo, ticket #1070]
+
+sys/kern/kern_subr.c				1.122
+
+	hold kernel_lock while calling systrace_exit().
+	fixes PR 25856.
+	[chs, ticket #1072]
+
+sbin/newfs/newfs.8				1.67 via patch
+
+	Xref newfs_msdos, noted by rabioli on Freenode #NetBSD
+	[hubertf, ticket #1073]
+
+sys/kern/kern_systrace.c			1.50 via patch
+
+	in systrace_make_msg(), sleep uninterruptibly while waiting for
+	the response from the systrace daemon, so that the message protocol
+	between the kernel and the daemon doesn't get out of sync.
+	fixes PR 29654.
+	[chs, ticket #1071]
+
+sys/arch/i386/i386/est.c			1.13
+
+	PR kern/32418: Support for the Pentium M 770.
+	[xtraeme, ticket #1075]
+
+xsrc/xfree/xc/programs/Xserver/hw/xfree86/drivers/nv/nv_dac.c 1.8
+xsrc/xfree/xc/programs/Xserver/hw/xfree86/drivers/nv/nv_driver.c 1.7
+xsrc/xfree/xc/programs/Xserver/hw/xfree86/drivers/nv/nv_hw.c 1.2
+xsrc/xfree/xc/programs/Xserver/hw/xfree86/drivers/nv/nv_include.h 1.2
+xsrc/xfree/xc/programs/Xserver/hw/xfree86/drivers/nv/nv_setup.c 1.7
+xsrc/xfree/xc/programs/Xserver/hw/xfree86/drivers/nv/nv_type.h 1.6
+xsrc/xfree/xc/programs/Xserver/hw/xfree86/drivers/nv/nv_video.c 1.2
+xsrc/xfree/xc/programs/Xserver/hw/xfree86/drivers/nv/riva_driver.c 1.2
+xsrc/xfree/xc/programs/Xserver/hw/xfree86/drivers/nv/riva_include.h 1.2
+
+	Sync the Nvidia drivers with XFree86's sources as of December 24th,
+	2005.  These changes fix lots of problems (i.e. freezes) with the
+	latest cards (such as a GeForce 6600GT).
+	[jmmv, ticket #1074]
+
+sys/arch/sparc64/dev/consinit.c			1.20
+
+	Check the PROM stdin path for the string "/usb@0".  If we find a
+	match, call ukbd_cnattach(), so that the USB keyboard will become
+	the console keyboard.  Makes the keyboard work on a Blade 100. 
+	[jdc, ticket #1076]
+
+lib/libc/gen/getcwd.c				1.42
+
+	Revert back to revision 1.40, as requested by cube@.
+	Unbreaks KDE.
+	[elad, ticket #1077]
+
+bin/systrace/intercept.c			1.26
+bin/systrace/intercept.h			1.18
+
+	Give systrace its own version of realpath() that does what it wants,
+	call it intercept_realpath().  Unbreaks systrace.
+	[elad, ticket #1078]
+
+sys/arch/i386/i386/identcpu.c			1.19
+
+	Add missing entries in cache information array for, at least,
+	Pentium M 770, 760, 750, 740 and 730.
+	[tron, ticket #1079]
+
+xsrc/xfree/xc/programs/Xserver/hw/netbsd/alpha/alphaFbs.c 1.2
+xsrc/xfree/xc/programs/Xserver/hw/netbsd/amiga/amigaFbs.c 1.2
+xsrc/xfree/xc/programs/Xserver/hw/netbsd/dec/decFbs.c 1.2
+xsrc/xfree/xc/programs/Xserver/hw/netbsd/dreamcast/dreamcastScreen.c 1.2
+xsrc/xfree/xc/programs/Xserver/hw/netbsd/hpc/hpcScreen.c 1.2
+xsrc/xfree/xc/programs/Xserver/hw/netbsd/macppc/macppcFbs.c 1.2
+xsrc/xfree/xc/programs/Xserver/hw/netbsd/newsmips/newsmipsScreen.c 1.2
+xsrc/xfree/xc/programs/Xserver/hw/netbsd/pmax/pmax_io.c 1.2
+xsrc/xfree/xc/programs/Xserver/hw/netbsd/vax/mono_io.c 1.2
+xsrc/xfree/xc/programs/Xserver/hw/netbsd/x68k/x68kFb.c 1.2
+
+	XFree86 4.x now passes SCREEN_SAVER_CYCLE to the display driver.  The
+	netbsd non-xfree86 servers treated this as an unblank event.  If the
+	server is set to prefer blanking, and has a cycle time, the sreen will
+	initially blank when the screen saver activates, and then unblank after
+	the cycle time and stay unblanked.  Treat the SCREEN_SAVER_CYCLE state
+	the same as SCREEN_SAVER_ON to keep the display blanked.
+	[mhitch, ticket #1080]
+
+gnu/dist/binutils/bfd/elf32-sh.c		1.2
+
+	Don't reset relocation for R_SH_REL32 in shared objects if the
+	symbol is locally called.  Makes hidden and protected symbols
+	in shared objects work.
+	[uwe, ticket #1081]
+
+gnu/dist/gdb/gdb/shnbsd-tdep.c			1.4
+
+	Handle the case when control transfer instruction jumps to its own
+	delay slot (e.g. PLT entries use such code).  We can not set the
+	breakpoint there, as trapa is illegal in the delay slot.  Set the
+	breakpoint to the next instruction instead.  We are guaranteed to
+	arrive there, as control transfers are illegal in the delay slot.
+	[uwe, ticket #1082]
+
+sys/arch/xen/conf/files.xen			1.29
+sys/arch/xen/xen/hypervisor.c			1.16
+sys/arch/xen/xen/if_xennet.c			1.31
+sys/arch/xen/xen/xbd.c				1.22
+
+	Define a xendevbus attribute and add it to hypervisor.  Use it for
+	xen devices which attach to hypervisor. This allows to use
+	config_found_ia() instead of config_found(), instead of relying
+	on the order of which device are written in ioconf.c.
+	[bouyer, ticket #1083]
+
+sys/arch/xen/xen/if_xennet.c			1.32,1.36
+
+	Replace MEXTMALLOC/memcpy with m_copyback().
+	[bouyer, ticket #1084]
+
+sys/arch/xen/i386/hypervisor_machdep.c		1.13
+sys/arch/xen/include/hypervisor.h		1.15
+sys/arch/xen/xen/hypervisor.c			1.17
+
+	inline 2 trivial functions that are called often (according to
+	profiling data).
+	[bouyer, ticket #1085]
+
+sys/dev/pci/pcidevs				1.755
+sys/dev/pci/pcidevs.h				regen
+sys/dev/pci/pcidevs_data.h			regen
+sys/dev/pci/viaide.c				1.27
+
+	Add support for nForce430 ATA133 and SATA controllers. My disks now run
+	at a decent speed.
+	[manu, ticket #1086]
+
+sys/dev/pci/pciide_common.c			1.29
+
+	Fix forcing use of DMA mode for the generic pciide driver:
+	default_chip_map() is called from pciide_attach() and at this point
+	we don't know which drives are here. Just assume all drives are
+	there and allocate DMA ressources for all of them.
+	[bouyer, ticket #1087]
+
+sbin/newfs/mkfs.c				1.93
+
+	The -b option is really on fsck_ffs, not fsck.
+	[hubertf, ticket #1088]
+
+sys/fs/union/union_vfsops.c			1.32
+
+	Change union_unmount() to not play with the fs root vnode explicitly.
+	Let it get recycled along with all of the others. This is important
+	as if the root vnode has already been reclaimed, then we get a panic
+	when we try to vget it.  This addresses PR: kern/31382
+	[wrstuden, ticket #1091]
+
+sys/net/if_gif.h				1.11
+sys/netinet/in_gif.c				1.45
+sys/netinet6/in6_gif.c				1.43
+
+	expire cached route. Fixes PR 22792.
+	[mlelstv, ticket #1092]
+
+lib/libpthread/arch/i386/pthread_switch.S	1.9
+lib/libpthread/arch/sparc/pthread_switch.S	1.8
+lib/libpthread/arch/sparc64/pthread_switch.S	1.9
+lib/libpthread/arch/x86_64/pthread_switch.S	1.11
+
+	Make libpthread really shared, i.e. not have text reocations.
+	[skrll, ticket #1093]
+
+share/man/man9/pfil.9				1.30 via patch
+
+	pfil_add_hook() and pfil_remove_hook() return int, not void.
+	[riz, ticket #1110]
+
+sys/net/if_bridge.c				1.35
+
+	Make sure we initialize all structs to 0.
+	[christos, ticket #1111]
+
+sys/dev/pci/pcidevs				1.753-1.1754
+sys/dev/pci/pcidevs.h				regen
+sys/dev/pci/pcidevs_data.h			regen
+
+	- Spell NVIDIA as "NVIDIA" instead of "Nvidia".
+	- Add entry for builtin ethernet of NVIDIA nForce4 chipset.
+	[tron, ticket #1112]
+
+lib/libpthread/arch/sh3/pthread_switch.S	1.6
+sys/arch/sh3/include/asm.h			1.18-1.24
+
+	Implement WARN_REFERENCES. Provide PIC macros. Adapt pthread_switch.S
+	to new PIC macros that are now in <machine/asm.h>.
+	[uwe, ticket #1094]
+
+lib/libpthread/arch/sh3/_context_u.S		1.5
+
+	In PIC code call setcontext(2) via PLT to avoid text reloc in the
+	shared library.
+	[uwe, ticket #1095]
+
+lib/libpthread/arch/x86_64/pthread_switch.S	1.12
+
+	Revert the locked_return_point change. This fixes PR bin/32479.
+	[skrll, ticket #1115]
+
+lib/libc/arch/sh3/gen/swapcontext.S		1.4-1.8
+
+	Use PLT for PIC calls to avoid text reloc in the shared library.
+	[uwe, ticket #1096]
+
+lib/libc/arch/sh3/sys/syscall.S			1.6
+lib/libc/arch/sh3/sys/exect.S			1.5
+lib/libc/arch/sh3/sys/__syscall.S		1.6
+
+	Replace with macros from SYS.h, no special treatment is necessary.
+	Avoid open-coded calls to cerror.
+	[uwe, ticket #1097]
+
+sys/arch/sh3/include/setjmp.h			1.3
+
+	Provide defines for offsets into the jump buffer.
+	[uwe, ticket #1098]
+
+lib/libpthread/arch/sh3/pthread_switch.S	1.7
+
+	Use PLT for PIC calls to avoid text relocs in the shared library.
+	[uwe, ticket #1099]
+
+sys/arch/xen/xen/xbdback.c			1.16 via patch
+
+	Avoid dom0 kernel crash when destroying a domain with active I/O going.
+	[bouyer, ticket #1106]
+
+sys/arch/xen/i386/npx.c				1.7
+
+	Fix the FPU problems detected by paranoia on a NetBSD/Xen guest,
+	PR port-xen/30977.
+	[bouyer, ticket #1107]
+
+lib/libc/arch/sparc/sys/ptrace.S		1.6-1.7
+
+	Use __errno in the _REENTRANT case.
+	[martin, ticket #1109]
+
+sys/dev/raidframe/rf_netbsdkintf.c		1.193
+
+	We need to mark used spares as failed if they encounter IO errors.
+	[oster, ticket #1114]
+
+sys/arch/xen/i386/pmap.c			1.14
+sys/arch/xen/include/pmap.h			1.5
+sys/arch/xen/xen/privcmd.c			1.6
+sys/arch/xen/xen/xbdback.c			1.15
+sys/arch/xen/xen/xennetback.c			1.12 via patch
+
+	Add a vm_prot_t parameter to pmap_remap_pages(), and use it for
+	the new PTE instead to always trying PG_RW and falling back to
+	PG_RO if this fails.  Use uvm_map_checkprot() in IOCTL_PRIVCMD_MMAP
+	and IOCTL_PRIVCMD_MMAP_BATCH to compute the appropriate
+	vm_prot_t for pmap_remap_pages().  Thanks to Jed Davis for
+	pointing out uvm_map_checkprot().
+	[bouyer, ticket #1104]
+
+sys/dev/ic/ninjascsi32.c			1.6
+
+	- Fix diagnostic panic for unaligned DMA buffer.
+	- Fix error cleanup path in attach.
+	[itohy, ticket #1117]
+
+lib/libcurses/touchwin.c			1.21
+
+	Don't crash if asked to touch more lines than there are in a window.
+	[jdc, ticket #1108]
+
+sys/net/if_tap.c				1.7
+share/man/man4/tap.4				1.5
+
+	Set bit 0x2 of the first byte of the generated MAC address, to
+	indicate it is a locally administered address.  Pointed out by
+	Ignatios Souvatzis.
+	[cube, ticket #1113]
+
+sys/arch/i386/conf/GENERIC_LAPTOP		1.166
+
+	Add commented out entries for BRIDGE_IPF, pf(4) and pflog(4) matching
+	the entries in "GENERIC".
+	[tron, ticket #1116]
+
+lib/libwrap/hosts_access.c			1.18
+
+	Use ntohl(host_address) so that RBL lookups work on little-endian hosts.
+	Tested on alpha, i386 and sparc64.  Fixes PR#30402.
+	[jdc, ticket #1118]
+
+sys/dev/pci/pccbb.c				1.127
+
+	Use aprint_debug() instead of printf() for obvious debug statement.
+	[uwe, ticket #1120]
+
+sys/arch/hpcsh/hpcsh/autoconf.c			1.17
+
+	#include "opt_md.h" as this file uses MEMORY_DISK_* options.
+	[uwe, ticket #1121]
+
+sys/conf/files					1.752
+
+	tap(4) depends on arp:  it is an Ethernet interface, after all.
+	Solves PR#32548 by Pawel Chwalowski.
+	[cube, ticket #1122]
+
+sys/dev/pci/pcidevs				1.739
+sys/dev/pci/pcidevs.h				regen
+sys/dev/pci/pcidevs_data.h			regen
+sys/dev/pci/pdcsata.c				1.4
+
+	PR#32238: Ryo Shimizu: Add support for Promise SATA300TX4 SATA
+	Controller (PDC40718)
+	[simonb, ticket #1126]
+
+sys/compat/ossaudio/ossaudio.c			1.48
+
+	Fix problem in ioctl() handling in OSS audio emulation which caused
+	unintentional changes of the audio settings e.g. when running "kphone".
+	[tron, ticket #1127]
+
+lib/libc/arch/sh3/gen/__setjmp14.S		patch
+lib/libc/arch/sh3/gen/__sigsetjmp14.S		patch
+lib/libc/arch/sh3/gen/setjmp.S			patch
+lib/libc/arch/sh3/gen/sigsetjmp.S		patch
+
+	Use PLT for PIC calls to avoids text relocs in the shared library.
+	[uwe, ticket #1100]
+
+lib/libc/arch/sh3/SYS.h				1.7-1.9
+lib/libc/arch/sh3/sys/__clone.S			1.4-1.6
+lib/libc/arch/sh3/sys/brk.S			1.10
+lib/libc/arch/sh3/sys/cerror.S			1.8-1.10
+lib/libc/arch/sh3/sys/fork.S			1.9
+lib/libc/arch/sh3/sys/ptrace.S			1.7
+lib/libc/arch/sh3/sys/sbrk.S			1.9
+lib/libc/arch/sh3/sys/sigprocmask.S		patch
+lib/libc/arch/sh3/sys/sigsuspend.S		patch
+
+	Eliminate text relocations in libc.so.
+	[uwe, ticket #1101]
+
+lib/libc/arch/sh3/sys/__vfork14.S		1.6
+lib/libc/arch/sh3/sys/Ovfork.S			patch
+
+	Use JUMP_CERROR instead of messing with errno directly.
+	Simplify.
+	[uwe, ticket #1102]
+
+lib/libc/arch/sh3/sys/ptrace.S			1.8
+
+	Provide _REENTRANT version of errno = 0;
+	[uwe, ticket #1103]
+
+sys/arch/xen/include/if_xennetvar.h		1.8
+sys/arch/xen/xen/if_xennet.c			1.33-1.35 via patch
+
+	- Use MCLGET() instead of local list of buffers.
+	- Garbage-collect struct xennet_txbuf usage.
+	- Don't allocate cluster mbufs unless needed.
+	- Remove no longer used macros.
+	[bouyer, ticket #1105]
+
+sys/dev/usb/ums.c				1.61-1.62
+
+	- Support more than 7 buttons for USB mice. This fixes PR kern/30248.
+	- Look for a wheel before looking for a Z dir. This makes Apple's
+	  Mightymouse work.
+	[uwe, ticket #1119]
+
+sys/dev/pci/ehci_pci.c				1.22
+sys/dev/usb/ehci.c				1.108
+sys/dev/usb/ehcivar.h				1.23
+
+	Add a workaround for VIA EHCI controllers to prevent unrecoverable
+	umass(4) stalls.
+	[xtraeme, ticket #1123]
+
+sys/dev/ic/wdc.c 1.231
+
+        After a reset don't wait for drives to come ready if there's no
+        drives.  fix a 30s hang after resume. Problem reported and fix
+	tested by Brian de Alwis.
+	[bouyer, ticket #1125]
+
+	tested by Brian de Alwis.
+	[bouyer, ticket #1125]
+
+lib/libc/rpc/xdr_rec.c				1.26
+
+	John Kohl: xdr_rec.c missing a bugfix for an improper security
+	check.  The correct way to check for a zero record length is to
+	check for it without the LAST_FRAG marker in it, since it's legal
+	to send a LAST_FRAG marker with 0 bytes of data.  PR#32572
+
+	[christos, ticket #1128]
+
+sys/dev/pci/azalia.c				1.17-1.19
+sys/dev/pci/azalia.h				1.5-1.6
+sys/dev/pci/azalia_codec.c			1.5-1.7
+
+	- Code cleanup.
+	- Various bug fixes including PR port-i386/32485.
+	- Support for 8ch playback with STAC9221D codec.
+	[kent, ticket #1124]
+
+distrib/amiga/stand/Makefile			1.2
+distrib/amiga/stand/loadbsd-2.14.gz.uue		delete
+distrib/amiga/stand/loadbsd-2.16.gz.uue		delete
+distrib/amiga/stand/loadbsd-2.16.uue		1.1
+distrib/amiga/stand/rdbinfo.gz.uue		delete
+distrib/amiga/stand/xstreamtodev.gz.uue		delete
+
+	Only provide uncompressed tools, so that they can be run directly
+	from CD-ROM, and buggy CD-ROM file systems aren't confused by two
+	tools with the same prefix.
+	[is, ticket #1129]
+
+distrib/amiga/miniroot/install.md		1.25
+distrib/miniroot/install.sh			1.23
+distrib/miniroot/upgrade.sh			1.21
+
+	Don't ask for the root device before the user had a chance to
+	identify how it's called under NetBSD.
+	[is, ticket #1130]
+
+sys/arch/i386/pnpbios/pciide_pnpbios.c		1.22 via patch
+
+	Update pciide at pnpbios to work with the last changes to wdc(4),
+	especially the deferral of drive probe. This fixes PR kern/23192.
+	[bouyer, ticket #1131]
+
+sys/dev/ata/wd.c				1.318
+
+	Fix support for 1 and 2TB disks (tested under qemu).
+	[abs, ticket #1132]
+
+sys/arch/i386/i386/est.c			1.15
+
+	PR port-i386/32606: Add support for the Pentium M 710.
+	[xtraeme, ticket #1134]
+
+sys/dev/pci/auixp.c				1.11
+
+	Duh! If askes to halt the input dont halt the output instead. This
+	also fixes the timeout on draining when closing.
+	[reinoud, ticket #1138]
+
+sys/dist/pf/net/pf_norm.c			1.11
+
+	Fix a bug in the fragment cache which could cause kernel panics.
+	[peter, ticket #1139]
+
+lib/libc/stdio/fseek.c				1.22
+
+	Must include "namespace.h" for fseeko()'s internal name.
+	[kleink, ticket #1140]
+
+lib/libc/include/namespace.h			1.110
+lib/libc/rpc/mt_misc.c				1.5
+
+	Need to give the various rpc locks private names (prefixing them with
+	__rpc_).  Rather than scattering changes around the 3rd-party RPC
+	code, place them in namespace.h.
+	[kleink, ticket #1142]
+
+sys/sys/socket.h				1.78
+
+	Since NULL isn't necessarily available, change CMSG_*() to use the
+	integer constant expression directly instead.
+	[kleink, ticket #1143]
+
+share/termcap/termcap.src			1.95
+
+	Wscons terminals only have 8 colours and don't need an NC entry.
+	Fixes PR misc/32135 by Pavel Cahyna.
+	[jdc, ticket #1144]
+
+sys/arch/hp300/stand/common/ite_dv.c		1.6
+sys/arch/hp300/stand/common/ite_gb.c		1.6
+sys/arch/hp300/stand/common/ite_hy.c		1.6
+sys/arch/hp300/stand/common/ite_rb.c		1.6
+sys/arch/hp300/stand/common/ite_tc.c		1.6
+
+	Fix bootloader so it doesn't print garbage to the bitmap console.
+	[tsutsui, ticket #1145]
+
+sys/arch/mac68k/dev/sbc.c			1.49
+
+	Add fault-protection in sbc_pdma_in() like in all the other PDMA
+	functions. This fixes PR port-mac68k/9679.
+	[chs, ticket #1146]
+
+sys/arch/sparc/include/param.h			1.64
+
+	Increase NKMEMPAGES_MAX_DEFAULT to 32 MB. This is needed on sun4m
+	machines with 512 MB of RAM, and it doesn't seem to cause any
+	problems on sun4c.
+	[chs, ticket #1147]
+
+sys/dev/rcons/rcons_subr.c			1.16
+
+	Avoid watchdog reset caused by output of certain characters on the
+	console. This fixes PR port-sparc/29948.
+	[chs, ticket #1148]
+
+sys/dev/pci/viaide.c				1.28
+
+	The NVidia nForce430 IDE Controller supports Ultra-DMA Mode 6,
+	enable it.
+	[xtraeme, ticket #1149]
+
+libexec/ld.elf_so/rtld.c			1.109
+
+	Fix a bug that showed up when debugging dynamically linked programs.
+	References from GDB to "printf" and various other functions would
+	find the versions in the dynamic linker itself, rather than the
+	versions in the program's libc. This fixes PR toolchain/32074.
+	[christos, ticket #1150]
+
+sys/arch/i386/conf/XEN0				1.26
+
+	Change number of vnd to 32 from 4, since many users of XEN0 will need
+	more.
+	[gdt, ticket #1151]
+
+sys/net/if_pppoe.c				1.64
+
+	Make sure error messages (received from the access concentrator) are
+	zero terminated.
+	[martin, ticket #1152]
+
+sys/dev/pcmcia/aic_pcmcia.c			patch
+doc/HACKS					patch
+
+	aic(4): work around rbus resource allocation problem so cards work
+	again.
+	[jnemeth, ticket #1153]
+
+sys/arch/xen/xen/if_xennet.c			1.42 via patch
+sys/arch/xen/xen/xennetback.c			1.20 via patch
+
+	Check the destination ethernet address when not in promiscous mode.
+	Fix problem where packets would be duplicated, possibly looping, when
+	a domU is doing IP routing.
+	[bouyer, ticket #1155]
+
+share/man/man4/pdcsata.4			1.2
+sys/dev/pci/pcidevs				1.758
+sys/dev/pci/pcidevs.h				regen
+sys/dev/pci/pcidevs_data.h			regen
+sys/dev/pci/pdcsata.c				1.6
+
+	Add support for Promise PDC2057x SATA/150 IDE controllers.
+	From FreeBSD, tested by Douglas Wade Needham.
+	[bouyer, ticket #1156]
+
+sys/arch/xen/i386/xen_machdep.c			1.16
+
+	Fix bad cut'n'paste: use the target of strncpy() in sizeof().
+	[bouyer, ticket #1157]
+
+sys/dev/pci/amdpm.c				1.9
+
+	PR/32220: Murray Armfield: Enable AMD768 random no generator.
+	[tls, ticket #1158]
+
+share/man/man4/amdpm.4				1.4
+sys/dev/pci/amdpm.c				1.10
+
+	Add support for the AMD8111 RNG; from Nicolas Joly in PR kern/32284.
+	[tls, ticket #1159]
+
+distrib/sets/lists/base/md.alpha		1.35
+sys/arch/alpha/stand/Makefile			1.16
+sys/arch/alpha/stand/boot/filesystem.c		1.11
+sys/arch/alpha/stand/bootxx_ffsv2/Makefile	1.1
+
+	Support booting from ffsv2 filesystems.
+	[abs, ticket #738]
+
+sys/dev/pci/if_sip.c				1.104
+sys/dev/pci/if_wm.c				1.111
+
+	In the receive interrupt handler, compute the packet length before  
+	resetting m to point to the first buffer in the packet. The bug would
+	cause the length of jumbo frames to be incorrect.
+	[thorpej, ticket #1161]
+
+sys/net/if_bridge.c				1.36
+
+	Fix memory disclosure in bridge(4).
+	[adrianp, ticket #1163]
+
+usr.sbin/wsconscfg/wsconscfg.8			1.16-1.17
+
+	Sort options. New sentence, new line. Fix typo.
+	[jmmv, ticket #1162]
+
+distrib/sparc/install.md			1.20
+distrib/sparc/miniroot/list			1.29
+
+	Change the old pre-sysinst install.md script to not need file(1)
+	and take that program and its associated "magic" database
+	out of the miniroot image. This fixes PR port-sparc/32379.
+	[chs, ticket #1163]
+
+sys/arch/sparc/include/vmparam.h		1.38
+
+	Reduce MAXSSIZ to 32 MB, like most other ports. This fixes
+	PR port-sparc/30918.
+	[chs, ticket #1165]
+
+sys/arch/amd64/amd64/pmap.c			patch
+sys/arch/amd64/include/param.h			1.2
+
+	Increase NKMEMPAGES_MAX_DEFAULT to 1 GB.
+	This allows lots more memory to be used for amaps, etc..
+	[chs, ticket #1166]
+
+sys/arch/i386/pci/pchb.c			1.57
+sys/arch/i386/pci/pchb_rnd.c			1.16
+sys/dev/pci/agp.c				1.37
+sys/dev/pci/agp_ali.c				1.9
+sys/dev/pci/agp_amd.c				1.14
+sys/dev/pci/agp_i810.c				1.28
+sys/dev/pci/agp_intel.c				1.17
+sys/dev/pci/agp_sis.c				1.8
+sys/dev/pci/agp_via.c				1.9
+sys/dev/pci/agpreg.h				1.10
+sys/dev/pci/agpvar.h				1.11
+sys/dev/pci/pcidevs				1.723,1.757
+sys/dev/pci/pcidevs.h				regen
+sys/dev/pci/pcidevs_data.h			regen
+
+	Add agp(4) support for Intel i915 chipset integrated graphics.
+	This fixes PR port-i386/32550.
+	[tron, ticket #1168]
+
+sys/arch/i386/pci/pchb_rnd.c			1.17-1.18
+sys/dev/pci/pcidevs				1.763,1.765
+sys/dev/pci/pcidevs.h				regen
+sys/dev/pci/pcidevs_data.h			regen
+
+	Add hardware RNG support for Intel i925X, i945G/P and i955X chipsets.
+	[tron, ticket #1169]
+
+sys/dev/raidframe/rf_driver.c			1.110
+sys/dev/raidframe/rf_psstatus.c			1.31
+sys/dev/raidframe/rf_psstatus.h			1.13
+
+	RAIDframe was erroneously re-initializing the Parity Stripe Status
+	pool each time a new array was configured.  This causes grief
+	with things like 'vmstat -m' by causing it to loop.  Make RAIDframe
+	only initialize PSS bits once.
+	[oster, ticket #1170]
+
+usr.bin/systat/ps.c				1.28
+
+	Print system processes' command names in square brackets, like ps(1)
+	does.
+	[kleink, ticket #1172]
+
+gnu/dist/binutils/ld/ChangeLog			1.2 via patch
+gnu/dist/binutils/ld/emulparams/elf32btsmip.sh	1.2
+
+	Pull in a change form binutils-current that removes the gap between
+	text and data on mips platforms which was dragged over from the
+	Irix defaults.
+	[skrll, ticket #1173]
+
+tools/gcc/README.mknative			1.5 via patch
+tools/toolchain/README.mknative			1.7
+
+	I haven't touched the mknative stuff since 2002. Take my name off of
+	the readmes, so I'm not implied as a point of contact.
+	[tv, ticket #1174]
+
+sys/arch/alpha/pci/pci_6600.c			1.14
+
+	Fix to properly add the dec_6600 interrupt event counters so the
+	interrupt counts can be displayed.
+	[mhitch, ticket #1175]
+
+lib/libpam/modules/pam_nologin/pam_nologin.c	1.6
+
+	Use the class of the user, not then default class, when checking for
+	nologin and ignorelogin login.conf(5) capabilities.
+	[bouyer, ticket #1176]
+
+sys/dist/pf/net/pf.c				1.21
+
+	Fix TCP/UDP checksum handling. This fixes PR kern/32874.
+	[peter, ticket #1177]
+
+sbin/ccdconfig/ccdconfig.c			1.42
+sys/dev/ccd.c					1.108
+
+	Fix "ccdconfig -g".
+	[lukem, ticket #1178]
+
+sys/dev/DEVNAMES				1.192 via patch
+sys/dev/i2c/adt7463.c				1.1
+sys/dev/i2c/adt7463reg.h			1.1
+sys/dev/i2c/files.i2c				1.7 via patch
+sys/dev/pci/amdpm.c				1.11
+sys/dev/pci/amdpm_smbus.c			1.1
+sys/dev/pci/amdpm_smbusreg.h			1.1
+sys/dev/pci/amdpmvar.h				1.1
+sys/dev/pci/files.pci				1.242
+
+	Add support for i2c bus on AMD-8111 used on many Opteron server
+	motherboards, and ADT 7463c thermal and voltage monitor found on
+	the Tyan S2881 and S2882-D(and probably other boards as well).
+	From PR kern/32463.
+	[tls, ticket #1179]
+
+sys/arch/amd64/conf/GENERIC			1.87
+sys/arch/i386/conf/GENERIC			1.727
+
+	Add amdpm(4). This fixes PR kern/32463.
+	[tls, ticket #1180]
+
+sys/arch/i386/pci/pchb_rnd.c			patch
+
+	Improve code probing for the Intel hardware RNG to avoid false
+	detections.
+	[tron, ticket #1181]
+
+sys/dev/pci/twe.c				1.74
+
+	Fix memory leak in the TWEIO_GET_PARAM ioctl.
+	[simonb, ticket #1182]
+
+gnu/dist/diffutils/src/sdiff.c			1.2
+
+	Merge the check_child_status function from diffutils-2.8.7.
+	The rest of the gnu/dist/diffutils tree remains at version 2.8.1.
+	[apb, ticket #1183]
+
+usr.sbin/etcupdate/etcupdate			1.23-1.25,1.28
+usr.sbin/etcupdate/etcupdate.8			1.11
+
+	Give etcupdate the ability to use etc.tgz and xetc.tgz.
+	* Expand the "-s" flag to -s {srcdir|tgzfile|tempdir}.
+	* Deprecate the "-b" flag.  It is replaced by "-s tempdir".
+	* Change "-s srcdir" to refer to the top of the source tree (e.g.
+  	/usr/src) instead of the etc subdirectory.
+	[apb, ticket #1184]
+
+usr.sbin/etcupdate/etcupdate			1.26-1.27
+
+	Pass BUILD=1 in make environment.
+	[apb, ticket #1185]
+
+xsrc/xfree/xc/programs/Xserver/hw/xfree86/drivers/i810/i830_driver.c 1.5
+
+	Apply patch by David Dawes, member of the XFree86 project, which allows
+	to use screen resolution larger than 640x480 with i830 chipsets.
+	This fixes PR xsrc/32939 by Louis Guillaume.
+	[tron, ticket #1186]
+
+lib/libc/gen/__getmntinfo13.c			1.2
+lib/libc/gen/getmntinfo.c			1.15
+lib/libc/sys/statfs.c				1.4
+
+	getmntinfo() is a compatibility function, so there is no point in
+	hiding references to the compatibility getfsstat()
+	The real problem behind PR lib/29919 was a stale weak_alias, so back
+	out the workaround.
+	[drochner, ticket #1187]
+
+usr.bin/login/login.c				1.87
+
+	Don't issue different message for root login on insecure terminal.
+	This fixes PR lib/31059.
+	[jnemeth, ticket #1198]
+
+lib/libpam/modules/pam_securetty/pam_securetty.c 1.5
+share/man/man8/afterboot.8			1.2
+usr.bin/login					1.13
+
+	Don't issue different message for root login on insecure terminal.
+	This fixes PR lib/30923.
+	[jnemeth, ticket #1199]
+
+sys/compat/osf1/syscalls.master			1.42
+sys/compat/osf1/osf1_syscall.h			regen
+sys/compat/osf1/osf1_syscallargs.h		regen
+sys/compat/osf1/osf1_syscalls.c			regen
+sys/compat/osf1/osf1_sysent.c			regen
+
+	Emulate setreuid()/setregid(). This fixes PR port-alpha/21870.
+	[drochner, ticket #1188]
+
+sys/ufs/ffs/ffs_vfsops.c			1.168
+
+	Fix crash in mount error handling.
+	[drochner, ticket #1189]
+
+sys/arch/i386/conf/XENU				1.18
+
+	Remove wscons options, XENU doens't have any wscons device.
+	[bouyer, ticket #1190]
+
+sys/arch/acorn26/acorn26/cpuswitch.c		1.7
+sys/arch/acorn26/acorn26/vm_machdep.c		1.10
+
+	Avoid panics under NetBSD/acorn26 whenever a process exits.
+	[bjh21, ticket #1191]
+
+sys/kern/subr_pool.c				1.112
+sys/sys/pool.h					1.48
+
+	Stop NetBSD-acorn26 from allocating eight times as much pool memory
+	as it needs, leading to a rapid exhaustion of physical memory. 
+	NetBSD-acorn26 now boots multi-user again.
+	[bjh21, ticket #1192]
+
+usr.bin/login/login.c				1.88
+
+	PR bin/23616: login might not back-off as expected.
+	[jnemeth, ticket #1200]
+
+usr.bin/login/login_pam.c			1.14
+
+	PR bin/23616: login might not back-off as expected.
+	[jnemeth, ticket #1201]
+
+sys/dev/fss.c					1.23
+sys/dev/fssvar.h				1.13
+
+	Prevent a hang when a process tries to open an fss device while
+	another process is in the middle of creating a snapshot with it.
+	This fixes PR kern/33060.                
+	[chs, ticket #1202]
+
+sys/dev/pci/pcidevs				1.774
+sys/dev/pci/pcidevs.h				regen
+sys/dev/pci/pcidevs_data.h			regen
+sys/dev/pci/if_rtk_pci.c			1.24
+
+	Add recognition of Nortel Baystack 21 as an RTK8139 variant.
+	This fixes PR kern/33044.
+	[he, ticket #1203]
+
+usr.bin/mail/send.c				1.24
+
+	PR security/32978: mail(1) creates record file with insecure umask.
+	[adrianp, ticket #1204]
+
+lib/libpam/modules/pam_unix/pam_unix.c		1.10
+
+	Fix an uninitialized variable, and remove some unreachable code.
+	[jnemeth, ticket #1206]
+
+usr.bin/systat/iostat.c				1.35
+
+	Count both read bytes and write bytes when we are not showing
+	separate read and write statistics.
+	[dsl, ticket #1208]
+
+sys/kern/exec_elf32.c				1.110-1.111
+
+	Found by coverity issue 887.  Check for NULL before using base_ph so
+	an interpreter that does not have PT_LOAD in the program header doesn't
+	crash the system.
+	[erh, ticket #1211]
+
+gnu/dist/sendmail/libsm/fflush.c		1.2
+gnu/dist/sendmail/libsm/local.h			1.2
+gnu/dist/sendmail/libsm/refill.c		1.2
+gnu/dist/sendmail/sendmail/collect.c		1.13
+gnu/dist/sendmail/sendmail/conf.c		1.21
+gnu/dist/sendmail/sendmail/deliver.c		1.14
+gnu/dist/sendmail/sendmail/headers.c		1.14
+gnu/dist/sendmail/sendmail/mime.c		1.8
+gnu/dist/sendmail/sendmail/parseaddr.c		1.16
+gnu/dist/sendmail/sendmail/savemail.c		1.11
+gnu/dist/sendmail/sendmail/sendmail.h		1.17
+gnu/dist/sendmail/sendmail/sfsasl.c		1.13
+gnu/dist/sendmail/sendmail/sfsasl.h		1.6
+gnu/dist/sendmail/sendmail/srvrsmtp.c		1.13
+gnu/dist/sendmail/sendmail/tls.c		1.2
+gnu/dist/sendmail/sendmail/usersmtp.c		1.13
+gnu/dist/sendmail/sendmail/util.c		1.13
+gnu/dist/sendmail/sendmail/version.c		1.17
+
+	Apply patch 8.13.5.p0 from sendmail.org; Although we are running 8.13.4,
+	this applied with mimimal fixes.
+	[christos, ticket #1221]
+
+lib/libcrypt/crypt.3				1.19
+
+	salt is in the second argument
+	[drochner, ticket #1212]
+
+distrib/sets/lists/comp/mi			1.815
+lib/libm/Makefile				1.69
+lib/libm/man/lrint.3				1.1
+
+	Add man page for l{,l}rint{,f}(3), very loosely based on the
+	FreeBSD one.
+	[drochner, ticket #1213]
+
+sys/dev/cardbus/cardbus.c			1.65
+
+	fix parsing of some informational CIS tuples: correct length and handle
+	the case correctly where a string is terminated with 0x00 0xff
+	[drochner, ticket #1214]
+
+sys/dev/usb/usb.c				1.83
+
+	Allow a NULL pointer as argument to usb_get_next_event(), and don't
+	allocate a "struct usb_event" on stack in usb_add_event().
+	[drochner, ticket #1215]
+
+lib/libc/gen/frexp_ieee754.c			1.5
+
+	scale denormal numbers, to get a meaningful exponent (and a mantissa
+	which just consists of the implicit bit),
+	fixes PR lib/32861 by FX Coudert
+	[drochner, ticket #1216]
+
+sys/kern/kern_sysctl.c				1.191
+
+	Check the "oldlen" argument to sysctl(2) before passing it
+	to vslock(9). This prevents a local DOS.
+	[drochner, ticket #1217]
+
+sys/arch/xen/xen/if_xennet.c			1.44
+
+	m_copyback() doesn't work the way I expexted it: it doesn't update the
+	mbuf fields, and it seems it doesn't allocate mbuf clusters for large
+	packets. So revert to using MCLGET() if needed and memcpy to get the
+	data in the mbuf.
+	[bouyer, ticket #1218]
+
+sbin/ifconfig/ifconfig.c			1.169
+sbin/ifconfig/ifconfig.8			1.79 vi patch
+
+	Added a new ifconfig flag, -h, allowing, in conjunction with -v,
+	the display of interface I/O bytes in human-format.
+	[rpaulo, ticket #1219]
+
+sys/dev/sun/cgsix.c				1.24
+
+	fixed a typo in cg6_ras_do_cursor and made using the blitter to draw the
+	cursor optional when using RASTERCONSOLE
+	[macallan, ticket #1220]
+
+sys/netipsec/xform_esp.c			1.8
+
+	FreeBSD SA-06:11 and CVE-2006-0905: update the replay sequence number
+	or else the anti-reply technique won't work as expected.
+	[rpaulo, ticket #1222]
+
+sys/arch/powerpc/powerpc/sig_machdep.c		1.25
+
+	Make cpu_setmcontext() fix up the passed-in MSR value.  PR#31386
+	[shige, ticket #1223]
+
+etc/defaults/rc.conf				1.74
+etc/mtree/special				1.93
+share/man/man5/rc.conf.5			1.99 via patch
+
+	Document the defaultroute6 rc.conf variable and the /etc/mygate6 file in
+	/etc/defaults/rc.conf, /etc/mtree/special, and rc.conf(5).
+	[ghen, ticket #1226]
+
+sys/dev/ata/wd.c				1.310 via patch
+
+	Use a pmatch(9) expression which should catch all present and future
+	seagate drives larger than 200GB for the WD_QUIRK_FORCE_LBA48 quirks.
+	Based on infos from
+	http://www.seagate.com/support/kb/disc/howto/interpret_model.html
+	[bouyer, ticket #1227]
+
+usr.sbin/rpc.statd/statd.c			1.27
+
+	Use sigaction(2) to setup automatic disposal of child processes after
+	daemonizing. This is more portable and avoids zombie "rpc.statd"
+	processes after an NFS client running e.g. Mac OS X shuts down.
+	[tron, ticket #1228]
+
+sys/dev/pci/if_sk.c				1.19
+sys/dev/pci/if_skvar.h				1.8
+
+	PR kern/31304: Contribute to the random pool.
+	[riz, ticket #1229]
+
+sys/dev/pci/if_sk.c				1.20 via patch
+sys/dev/pci/if_skreg.h				1.6
+sys/dev/pci/if_skvar.h				1.9
+
+	Not all chips supported by this driver use the same interrupt
+	moderation timer frequency. Also add sysctl support for changing
+	the interrupt moderation timer at runtime; each board is controlled
+	independently.
+	[riz, ticket #1230]
+
+sys/arch/xen/conf/Makefile.xen			patch
+sys/arch/xen/conf/files.xen			patch
+
+	Add support for ath at pci for XEN domain0.
+	[bouyer, ticket #1231]
+
+
+sys/dev/pcmcia/wdc_pcmcia.c			1.105
+
+	Make sure that disks are probed before trying to mount root, if the
+	card is plugged in at boot time. Fixes PR kern/33137.
+	[bouyer, ticket #1232]
+
+sys/arch/i386/i386/est.c			1.8,1.10-1.12,1.14,1.16-1.24 via patch
+
+	Improve Enhanced SpeedStep support:
+	- Recognize many more CPU modules.
+	- Properly handle LV and ULV CPUs.
+	[tron, ticket #1234]
+
+sys/netinet/in.c				1.105
+
+	Close NULL dereference when a GIFALIAS is performed on
+  	a non existant address.
+	[seanb, ticket #1235]
+
+share/man/man9/mbuf.9				1.41
+
+	Fix up the description of m_copyback_cow(), which was at best
+	ambiguous, and at worst, wrong.
+	[riz, ticket #1233]
+
+lib/libm/arch/i387/s_scalbn.S			1.8
+lib/libm/arch/i387/s_scalbnf.S			1.7
+
+	Fix the ldexp() bug reported on the port-amd64 mailing list.
+	[drochner, ticket #1236]
+
+etc/MAKEDEV.tmpl				1.51
+sys/kern/tty_bsdpty.c				1.6 via patch
+
+	Fix tty name resolution for high numbered ptys.
+	[christos, ticket #1237]
+
+etc/rc.subr					1.66
+
+	In order to handle some perl scripts running as daemons, add a
+	pattern which also matches "`basename $interpreter`: $command" in the
+	ps listing. This fixes PR bin/31932.
+	[he, ticket #1238]
+
+sys/arch/xen/include/if_xennetvar.h		1.9
+sys/arch/xen/xen/if_xennet.c			1.37
+
+	Significantly reduce the number of interrupts generated on the
+	xennet backend and thereby the time spent doing hypercalls.
+	[bouyer, ticket #1239]
+
+sys/arch/xen/xen/xbd.c				patch
+
+	Avoid panics under high system load. This fixes PR port-xen/33110.  
+	[jld, ticket #1240]
+
+sys/arch/m68k/include/signal.h			1.23
+sys/arch/hp300/stand/common/samachdep.h		1.11
+
+	Fix a huge number of "pkgsrc" build problems in by avoiding
+	namespace pollution.
+	[oster, ticket #1242, #1243]
+
+sys/kern/init_sysctl.c				1.65 via patch
+sys/sys/lwp.h					1.35-1.36 via patch
+sys/sys/proc.h					1.219 via patch
+
+	PR kern/32809: Conflicting flags in l_flag and p_flag caused
+	ps(1) to print incorrect information.
+	[pavel, ticket #1244]
+
+sys/arch/i386/conf/INSTALL_XEN3_U		patch
+sys/arch/i386/conf/XEN3_U			patch
+sys/arch/xen/conf/files.compat			patch
+sys/arch/xen/conf/files.xen			patch
+sys/arch/xen/i386/autoconf.c			patch
+sys/arch/xen/i386/genassym.cf			patch
+sys/arch/xen/i386/hypervisor_machdep.c		patch
+sys/arch/xen/i386/identcpu.c			patch
+sys/arch/xen/i386/locore.S			patch
+sys/arch/xen/i386/machdep.c			patch
+sys/arch/xen/i386/sys_machdep.c			patch
+sys/arch/xen/i386/trap.c			patch
+sys/arch/xen/i386/vector.S			patch
+sys/arch/xen/i386/xen_machdep.c			patch
+sys/arch/xen/include/cpufunc.h			patch
+sys/arch/xen/include/frameasm.h			patch
+sys/arch/xen/include/granttables.h		patch
+sys/arch/xen/include/hypervisor.h		patch
+sys/arch/xen/include/xen.h			patch
+sys/arch/xen/include/if_xennetvar.h		patch
+sys/arch/xen/include/segments.h			patch
+sys/arch/xen/include/xenbus.h			patch
+sys/arch/xen/include/xenpmap.h			patch
+sys/arch/xen/include/xen-public/xen.h		patch
+sys/arch/xen/include/xen3-public/COPYING	patch
+sys/arch/xen/include/xen3-public/arch-ia64.h	patch
+sys/arch/xen/include/xen3-public/arch-x86_64.h	patch
+sys/arch/xen/include/xen3-public/dom0_ops.h	patch
+sys/arch/xen/include/xen3-public/event_channel.h patch
+sys/arch/xen/include/xen3-public/grant_table.h	patch
+sys/arch/xen/include/xen3-public/memory.h	patch
+sys/arch/xen/include/xen3-public/physdev.h	patch
+sys/arch/xen/include/xen3-public/sched.h	patch
+sys/arch/xen/include/xen3-public/sched_ctl.h	patch
+sys/arch/xen/include/xen3-public/trace.h	patch
+sys/arch/xen/include/xen3-public/vcpu.h		patch
+sys/arch/xen/include/xen3-public/version.h	patch
+sys/arch/xen/include/xen3-public/arch-x86_32.h	patch
+sys/arch/xen/include/xen3-public/xen.h		patch
+sys/arch/xen/include/xen3-public/io/blkif.h	patch
+sys/arch/xen/include/xen3-public/io/console.h	patch
+sys/arch/xen/include/xen3-public/io/netif.h	patch
+sys/arch/xen/include/xen3-public/io/tpmif.h	patch
+sys/arch/xen/include/xen3-public/io/xenbus.h	patch
+sys/arch/xen/include/xen3-public/io/ring.h	patch
+sys/arch/xen/include/xen3-public/io/xs_wire.h	patch
+sys/arch/xen/xen/clock.c			patch
+sys/arch/xen/xen/ctrl_if.c			patch
+sys/arch/xen/xen/evtchn.c			patch
+sys/arch/xen/xen/hypervisor.c			patch
+sys/arch/xen/xen/if_xennet.c			patch
+sys/arch/xen/xen/if_xennet_xenbus.c		patch
+sys/arch/xen/xen/xbd_xenbus.c			patch
+sys/arch/xen/xen/xbd.c				patch
+sys/arch/xen/xen/xencons.c			patch
+sys/arch/xen/xen/xengnt.c			patch
+sys/arch/xen/xenbus/xenbus_client.c		patch
+sys/arch/xen/xenbus/xenbus_comms.c		patch
+sys/arch/xen/xenbus/xenbus_comms.h		patch
+sys/arch/xen/xenbus/xenbus_dev.c		patch
+sys/arch/xen/xenbus/xenbus_probe.c		patch
+sys/arch/xen/xenbus/xenbus_xs.c			patch
+
+	Add Xen-3 domU support.
+	[bouyer, ticket #1245]
+
+usr.bin/calendar/calendar.c			1.39
+
+	Correct logic error in wildcard handling, which was causing the
+	day-of-month on normal entries to always be treated as a wildcard.
+	[jld, ticket #1246]
+
+distrib/i386/floppies/instkernel/Makefile	1.5
+etc/etc.i386/Makefile.inc			1.42
+
+	Build XEN3_U and INSTALL_XEN3_U kernels as part of release process.
+	[bouyer, ticket #1248]
+
+distrib/sets/lists/man/mi			1.870 via patch
+share/man/man4/Makefile				1.378
+share/man/man4/ciss.4				1.1-1.2
+sys/conf/files					1.764
+sys/dev/ic/ciss.c				1.1
+sys/dev/ic/cissreg.h				1.1
+sys/dev/ic/cissvar.h				1.1
+sys/dev/pci/ciss_pci.c				1.1
+sys/dev/pci/files.pci				1.245
+sys/dev/pci/pcidevs				1.776
+sys/dev/pci/pcidevs.h				regen
+sys/dev/pci/pcidevs_data.h			regen
+
+	Add a driver, ciss(4), for the HP/Compaq drivers using the newer
+	"Command Interface to SCSI-3 Support" command interface.
+	[he, ticket #1247]
+
+sys/arch/m68k/include/frame.h			1.25
+
+	Fix build problems caused by recent "signal.h" changes.
+	[oster, ticket #1249]
+
+crypto/dist/ssh/includes.h			1.12
+crypto/dist/ssh/namespace.h			new file
+crypto/dist/ssh/readpassphrase.c		1.7
+crypto/dist/ssh/readpassphrase.h		1.6
+distrib/sets/lists/base/shl.mi			patch
+lib/libpam/libpam/Makefile			1.6 via patch
+lib/libssh/shlib_version			patch
+share/mk/bsd.prog.mk				1.208
+
+	Make PAM work on NetBSD ports without shared library support.
+	This fixes PR lib/32421.
+	[tsutsui, ticket #1256]
+
+etc/etc.cobalt/MAKEDEV.conf			1.3
+
+	Create LCD panel device node by default under NetBSD-cobalt.
+	[tsutsui, ticket #1257]
+
+sys/dev/audio.c					1.203 via patch
+sys/dev/audio_if.h				1.60 via patch
+sys/dev/audiovar.h				1.35 via patch
+
+	PR kern/32563: Fix the 'audioctl of death' problem.
+	[jmcneill, ticket #1277]
+
+sys/arch/mips/include/cpu.h			1.77
+sys/arch/mips/mips/fp.S				1.30
+
+	Avoid kernel panics caused by binaries compiled with "-mips2" or
+	better. This fixes PR port-mips/27298.
+	[tsutsui, ticket #1259]
+
+sys/arch/mips/conf/files.mips			1.54
+sys/arch/mips/mips/fp.S				1.31
+sys/arch/mips/mips/mips_fputrap.c		1.3-1.4
+
+	Update FPE trapsignal functions for new siginfo.
+	This fixes PR port-mips/26410.
+	[tsutsui, ticket #1260]
+
+lib/libpthread/arch/i386/pthread_md.h		1.7
+
+	Instead of using hard-coded values for various registers, get them 
+	rom the current context. Valid values can change depending on how
+	the kernel is setup. i386 and amd64 happen to be setup differently.
+	[cube, ticket #1265]
+
+sys/dev/audio.c					1.204 via patch
+sys/dev/audio_if.h				1.61
+sys/dev/audiovar.h				1.36
+
+	Don't use simple_locks; we can't hold them while calling malloc and
+	friends.
+	[jmcneill, ticket #1281]
+
+distrib/sets/lists/man/mi			1.863
+share/man/man4/Makefile				1.377
+share/man/man4/nfe.4				1.1-1.2
+sys/arch/amd64/conf/GENERIC			1.88
+sys/arch/amd64/conf/INSTALL			1.48
+sys/arch/i386/conf/GENERIC			1.733
+sys/arch/i386/conf/INSTALL			1.282
+sys/arch/i386/conf/XEN0				1.35
+sys/dev/mii/ciphy.c				1.5
+sys/dev/mii/ciphyreg.h				1.4 via patch
+sys/dev/pci/files.pci				1.244 via patch
+sys/dev/pci/if_nfe.c				1.1-1.3
+sys/dev/pci/if_nfereg.h				1.1
+sys/dev/pci/if_nfevar.h				1.1
+sys/dev/pci/pcidevs				1.775 via patch
+sys/dev/pci/pcidevs.h				regen
+sys/dev/pci/pcidevs_data.h			regen
+
+	Add NVIDIA nForce MCP Ethernet driver nfe(4).
+	[tron, ticket #1266]
+
+share/misc/airport				1.25-1.26,1.28-1.30
+
+	Updates for share/misc/airport.
+	[tron, ticket #1252]
+
+sys/arch/sparc64/conf/GENERIC32			1.122, 1.136
+
+	Add wm(4) support to sparc64 GENERIC32 config.
+	[tron, ticket #1267]
+
+sys/arch/amd64/conf/GENERIC			1.91
+sys/arch/amd64/conf/INSTALL			1.50
+sys/arch/i386/conf/GENERIC			1.741
+sys/arch/i386/conf/INSTALL			1.284
+sys/arch/i386/conf/INSTALL_SMALL		1.125
+sys/arch/i386/conf/INSTALL_TINY			1.102
+
+	Added ciss(4).
+	[martti, ticket #1258]
+
+sys/dev/ic/ciss.c				1.2
+
+	Repair commands with no SCSI transfer.
+	[martti, ticket #1275]
+
+sys/dev/pci/if_sip.c				1.107
+
+	PR kern/32644: Fix VLAN tagging in gsip(4) driver.
+	[pavel, ticket #1279]
+
+sys/dev/pci/if_sip.c				1.106
+
+	PR kern/32900 and 33216: Fix checksum support in the gsip(4) driver.
+	[pavel, ticket #1280]
+
+sys/dev/fss.c					1.24
+
+	Fix locking issue in fss(4).
+	[hannken, ticket #1282]
+
+sbin/dump/main.c				1.61
+
+	Emit "a snapshot of" message for snap_internal case too.
+	[hannken, ticket #1283]
+
+sys/arch/hp300/include/param.h			1.46
+sys/arch/mvme68k/include/param.h		1.27
+
+	Fix a huge number of "pkgsrc" build problems in by avoiding
+	inclusion of "sys/device.h" unless we are building a kernel.
+	[oster, ticket #1284]
+
+lib/libc/stdlib/rand48.3			1.11
+
+	correct multiplicand in pseudorandom generation
+	[drochner, ticket #1286]
+
+sys/compat/osf1/osf1_misc.c			1.72-1.73
+
+	- Consistently check the buffer length in getsysinfo(),
+ 	and require one additional byte for string termination
+ 	in the GSI_PLATFORM_NAME case.
+ 	This should fix PR kern/33198 by Nicolas Joly.
+	- Make sysinfo() behave more like the original: return
+ 	the length needed and copy out as much as possible.
+	- In sysinfo(), force NUL termination of truncated
+	strings if the buffer was too small, as OSF1 does
+	[drochner, ticket #1287]
+
+games/sail/pl_main.c				1.17
+
+	Fix buffer overflow (CVE-2006-1744).
+	[drochner, ticket #1289]
+
+sys/compat/mach/mach_vm.c			1.50
+
+	Make this compile without the KTRACE option enabled.
+	This fixes PR kern/33212.
+	[drochner, ticket #1288]
+
+sys/dev/scsipi/cd.c				1.224
+
+	Allow ejecting the media in a CD-ROM drive even if the media is bad.
+	This fixes PR kern/30288.
+	[pavel, ticket #1290]
+
+lib/libc/locale/wcstod.c			1.4-1.8
+regress/lib/libc/locale/wcstod/Makefile		1.1
+regress/lib/libc/locale/wcstod/wcstod_test.c	1.1
+
+	replaced by FreeBSD version wcstod(3) for make it work
+	with L"inf", L"nan", and hex conversion.
+	[tnozaki, ticket #1272]
+
+dist/pf/share/man/man4/pf.4			1.4
+dist/pf/share/man/man5/pf.conf.5		1.6
+
+	The "group" keyword is not supported in NetBSD, so:
+	- add a CAVEATS section to pf(4) and note it
+	- in the description in pf.conf(5) say it is unsupported
+	- remove it from the grammar in pf.conf(5).
+	[pavel, ticket #1291]
+
+sys/dev/mii/brgphy.c				1.27
+sys/dev/mii/miidevs				1.66
+sys/dev/mii/miidevs.h				regen
+sys/dev/mii/miidevs_data.h			regen
+
+	Add support for BCM5780 integral copper gigabit phy.
+	[jonathan, ticket #1292]
+
+lib/libc/rpc/clnt_vc.c				1.14
+
+	Fix some unpaired sigblocks which possibly leave the process with all
+	signals blocked. Fixes PR#22483
+	[drochner, ticket #1293]
+
+sys/arch/i386/conf/GENERIC_LAPTOP		1.181
+sys/arch/i386/conf/INSTALL_LAPTOP		1.100
+
+	Add sip(4) to support the network port of an Acer Aspire 1705SCi.
+	[tron, ticket #1294]
+
+sys/dev/pci/pcidevs				1.785
+sys/dev/pci/viaide.c				1.29
+
+	PR port-amd64/33393: viaide driver patch for VT8237R SATA.
+	[xtraeme, ticket #1295]
+
+sys/arch/sparc/include/ansi.h			1.16
+sys/arch/sparc/include/stdarg.h			1.22
+sys/arch/sparc64/include/ansi.h			1.10
+
+	For GCC3 and later, use the __builtin_va* constructs. PR#33169
+	[nakayama, ticket #1296]
+
+sys/net/if_pppoe.c				1.66
+
+	Don't allow to connect a non ethernet interface to a PPPoE interface.
+	[tron, ticket #1297]
+
+dist/pf/share/man/man4/pf.4			1.5 via patch
+dist/pf/share/man/man5/pf.conf.5		1.7 via patch
+
+	We do not support pfsync, so:
+	- remove xrefs to pfsync(4)
+	- remove the no-sync keyword from pf.conf(5)
+	- add a note to pf(4).
+	[pavel, ticket #1300]
+
+gnu/usr.bin/groff/tmac/mdoc.local		1.27-1.29
+
+	Add NetBSD 3.0.1 and 3.1 to the list of recognized operating systems.
+	[tron, ticket #1303]
+
+distrib/sets/lists/man/mi			1.862
+share/man/man4/Makefile				1.376 via patch
+share/man/man4/pciide.4				1.60
+share/man/man4/svwsata.4			1.1-1.2
+sys/arch/amd64/conf/GENERIC			1.94
+sys/arch/amd64/conf/INSTALL			1.53
+sys/arch/i386/conf/GENERIC			1.732
+sys/arch/i386/conf/INSTALL			1.281
+sys/arch/i386/conf/XEN0				1.34
+sys/dev/pci/files.pci				1.243
+sys/dev/pci/pcidevs				1.771-1.772 via patch
+sys/dev/pci/pcidevs.h				regen
+sys/dev/pci/pcidevs_data.h			regen
+sys/dev/pci/pciide_svwsata_reg.h		1.1
+sys/dev/pci/pciidevar.h				1.33
+sys/dev/pci/svwsata.c				1.1-1.2
+
+	Add svwsata(4), a driver for Serverworks K2 SATA, Frodo4, Frodo8 and
+	HT-1000 controllers.
+	[jonathan, ticket #1298]
+
+sys/arch/i386/conf/XEN0				1.18 via patch
+sys/arch/xen/conf/files.xen			1.31 via patch
+
+	Sync with i386/conf/GENERIC:
+	- add a buch of PCI storage devices
+	- add firewire devices
+	- add some missing PCI network devices
+	- add serial and parallel PCI adapters
+	- add lpt0 at isa
+	- add com1 at isa
+	  com0 not added for the benefit of serial console users
+	[bouyer, ticket #1311]
+
+usr.sbin/rtadvd/rtadvd.c			patch
+
+	Process Source Link-Layer Address (SLLA) option correctly.
+	[martti, ticket #1308]
+
+sys/sys/cdefs.h					1.59
+
+	Add an __UNVOLATILE() macro. It should be used with caution, but
+	it is required to use this whenever you want to pass a pointer to
+	volatile data e.g. to memset(). This allows us to still compile
+	files doing such things with -Wcast-qual and get the rest of the
+	code checked under that option.
+	[bouyer, ticket #1304]
+
+sys/arch/xen/xen/xencons.c			1.15
+
+	Fix a race condition which seems to be triggered by recent
+	xen3 hypervisor or tools.
+	[bouyer, ticket #1305]
+
+sys/netatalk/aarp.c				1.17
+
+	PR kern/31051: problem finding devices on AppleTalk(Netatalk) networks.
+	[hira, ticket #1310]
+
+sys/arch/amd64/amd64/fpu.c			1.14-1.15
+sys/arch/i386/isa/npx.c				1.112
+sys/arch/xen/i386/npx.c				1.8
+
+	Apply fix from FreeBSD's advisory: fxrstor on AMD FPU's does not
+	restore FIP,FDP,FOP thus leaking other process's execution history.
+	[adrianp, ticket #1321]
+
+dist/pf/share/man/man4/pf.4			patch
+dist/pf/share/man/man5/pf.conf.5		patch
+
+	Remove references to ALTQ and add a recipe to use the "old ALTQ".
+	[pavel, ticket #1312]
+
+distrib/notes/common/main			1.310
+
+	Update release engineering member list.
+	[ghen, ticket #1313]
+
+lib/libpthread/pthread.c			1.48
+
+	Fix bug which caused programs which are linked against "libpthread"
+	but don't use threads don't inherit the signal mask of the parent
+	process but start up with "all unblocked".
+	[drochner, ticket #1314]
+
+sys/dev/audio.c					1.205
+
+	Fixes a bug that audio_offset_t::samples for AUDIO_GETxOFFS has
+	incorrect value. It also affects SNDCTL_DSP_GETOPTR of
+	ossaudio. This fixes PR kern/32405.
+	[kent, ticket #1317]
+
+sys/dev/pci/azalia_codec.c			1.8
+
+	PR kern/33326: Fix incorrect ADC list for ALC880.
+	[kent, ticket #1318]
+
+sys/arch/xen/xen/xbd_xenbus.c			1.10 via patch
+
+	Fix configurations with more than one xbd attached at boot time.
+	[bouyer, ticket #1319]
+
+sys/dist/ipf/netinet/fil.c			1.24
+
+	Make sure IPF can correctly pullup short headers.
+	This fixes PR kern/33423.
+	[martti, ticket #1320]
+
+distrib/atari/floppies/prepare/Makefile		1.3
+distrib/atari/floppies/prepare/list		1.4
+
+	Add usr/bin/sort and install.sub to prepare.fs.
+	This fixes PR port-atari/33455.
+	[jdc, ticket #1322]
+
+distrib/sets/lists/comp/mi			1.882 via patch
+distrib/sets/lists/man/mi			1.891 via patch
+
+	Mark specific manpages, catpages, and info files as "gcccmds", so that
+	a "distribution" build with MKGCCCMDS=no and any of MKCATPAGES, MKMAN,
+	and MKINFO set to yes can still succeed.
+	[riz, ticket #1326]
+
+share/man/man4/ahc.4				1.30 via patch
+
+	Do not warn that Ultra160 controllers are limited to 80MB/s.
+	[pavel, ticket #1329]
+
+sys/arch/i386/i386/machdep.c			1.564-1.565
+
+	Reset the AMD Geode SC1100. Previously, the Geode hung after
+	printing "resetting...".  Now it really restarts.
+	[riz, ticket #1330]
+
+sys/arch/i386/conf/GENERIC			1.701
+sys/arch/i386/conf/files.i386			1.270
+sys/arch/i386/pci/geode.c			1.1
+sys/arch/i386/pci/geodereg.h			1.1
+
+	Add a driver for the watchdog timer on the AMD Geode SC1100.
+	[riz, ticket #1331]
+
+distrib/sets/lists/man/mi			1.829
+share/man/man4/man4.i386/Makefile		1.58
+share/man/man4/man4.i386/geodewdog.4		1.1
+
+	Add the manual page for geodewdog(4), the driver for the AMD Geode
+	SC1100's integrated watchdog timer.
+	[riz, ticket #1332]
+
+sys/arch/i386/pci/geode.c			1.2
+
+	Suppress false 'WARNING: LAST RESET DUE TO WATCHDOG EXPIRATION!'
+	indications by clearing the WDOVF status flag for real.
+	[riz, ticket #1333]
+
+sys/ufs/lfs/lfs.h				1.87-1.91,1.96-1.106
+sys/ufs/lfs/lfs_alloc.c				1.83-1.84,1.87-1.93
+sys/ufs/lfs/lfs_balloc.c			1.60
+sys/ufs/lfs/lfs_bio.c				1.86,1.91-1.92
+sys/ufs/lfs/lfs_debug.c				1.31-1.32
+sys/ufs/lfs/lfs_extern.h			1.68,1.76-1.78,1.80-1.81 via patch
+sys/ufs/lfs/lfs_inode.c				1.96,1.101-1.103 via patch
+sys/ufs/lfs/lfs_segment.c			1.164,1.165,1.170-1.178
+sys/ufs/lfs/lfs_subr.c				1.53,1.57-1.59
+sys/ufs/lfs/lfs_syscalls.c			1.106-1.107,1.109,1.111-1.112
+sys/ufs/lfs/lfs_vfsops.c			1.179-1.181,1.185,1.194-1.196,1.198-1.207,1.209 via patch
+sys/ufs/lfs/lfs_vnops.c				1.151-1.153,1.158-1.159,1.161-1.173,1.175,1.177 via patch
+sbin/newfs_lfs/extern.h				1.9
+sbin/newfs_lfs/make_lfs.c			1.7
+sbin/newfs_lfs/newfs.c				1.20
+sbin/newfs_lfs/newfs_lfs.8			1.21
+
+	Various fixes to LFS, including at least:
+	* Several MP locking fixes
+	* Fix a couple of deadlocks, including one between the pagedaemon,
+	  the cleaner and a writing process
+	* Make df output look rational
+	* Break out of VOP_PUTPAGES if we need the cleaner to run,
+	  without interrupting dirop writes.  Let the writer thread
+	  know to write individual vnodes rather than flush the whole
+	  filesystem.
+	* Keep the inode free list in order to minimize the cost of
+	  file creation on aged filesystems
+	* Address the case of "vinvalbuf: dirty blocks" panic when
+	  the cleaner tries to clean many small files at once
+	* Better segment use accounting when files are truncated while
+	  cleaning is occurring
+	[perseant, ticket #1327]
+
+sys/dev/ata/wd.c				1.324
+
+	Add yet another broken 160Gb seagate drive.
+	[bouyer, ticket #1337]
+
+sys/netinet6/ip6_input.c			1.87 via patch
+
+	In ip6_savecontrol(), ignore IPv4 packets.
+	From JINMEI Tatuya (KAME). PR#33269.
+	[rpaulo, ticket #1338]
+
+usr.bin/su/su_pam.c				1.12
+
+	Restore elevated priority before launching command in
+	user context.
+	[mlelstv, ticket #1343]
+
+usr.bin/ftp/util.c				1.135
+
+	Fix a NULL pointer dereference in ftp(1).
+	[jnemeth, ticket #1339]
+
+games/dm/dm.c					1.23
+
+	Read config more strictly.
+	[dan, ticket #1342]
+
+sys/kern/vfs_vnops.c				1.112
+
+	Limit the size of any kernel buffers allocated by the VOP_READDIR
+	routines to MAXBSIZE.
+	[simonb, ticket #1347]
+
+sys/dev/ic/rtl8169.c				1.23
+
+	Disable hardware VLAN tagging in re(4) to prevent untagged packets
+	from sometimes getting tagged incorrectly. This fixes PR kern/32643.
+	[pavel, ticket #1340]
+
+share/man/man4/raid.4				1.32
+
+	Mention that we can boot from RAID 1 sets on amd64 now too.
+	This fixes PR misc/31511.
+	[ghen, ticket #1344]
+
+sys/arch/hp300/dev/grf_dv.c			1.31
+sys/arch/hp300/dev/grf_gb.c			1.30
+sys/arch/hp300/dev/grf_hy.c			1.28
+sys/arch/hp300/dev/grf_rb.c			1.31
+sys/arch/hp300/dev/grf_tc.c			1.33
+
+	Fix boot failure problem on HP400t with fb console.
+	[tsutsui, ticket #1348]
+
+sys/dev/pci/pcidevs				1.788
+sys/dev/pci/pcidevs.h				regen
+sys/dev/pci/pcidevs_data.h			regen
+
+	Add a couple DLINK product IDs.
+	[riz, ticket #1349]
+
+sys/dev/pci/if_sk.c				1.26
+sys/dev/pci/if_skreg.h				1.7
+
+	Add support for the DLink DGE-530T revision B1 and the DGE-560T.
+	[riz, ticket #1350]
+
+sys/dev/pci/if_bge.c				patch
+sys/dev/pci/if_bgereg.h				patch
+sys/dev/pci/pcidevs				patch
+sys/dev/pci/pcidevs.h				regen
+sys/dev/pci/pcidevs_data.h			regen
+
+	Add support to bge(4) for bcm5714, bcm5715, bcm5780/HT-2000 and
+	bcm5752 chip variants.
+	[jonathan, ticket #1351]
+
+usr.bin/crunch/crunchgen/crunchgen.c		1.69
+
+	Fix problems with program names with a "-" in them, where crunchgen was
+	outputting the original program name for the stub name instead of the
+	mangled name.
+	[simonb, ticket #1355]
+
+dist/pf/share/man/man4/pf.4			patch
+dist/pf/share/man/man5/pf.conf.5		patch
+
+	Bump manual page date of after recent updates.
+	[pavel, ticket #1356]
+
+xsrc/xfree/xc/extras/freetype2/include/freetype/fterrdef.h	1.2
+xsrc/xfree/xc/extras/freetype2/src/base/ftmac.c			1.2
+xsrc/xfree/xc/extras/freetype2/src/base/ftutil.c		1.2
+xsrc/xfree/xc/extras/freetype2/src/bdf/bdflib.c			1.2
+xsrc/xfree/xc/extras/freetype2/src/cff/cffgload.c		1.2
+xsrc/xfree/xc/extras/freetype2/src/cff/cfftypes.h		1.2
+xsrc/xfree/xc/extras/freetype2/src/pshinter/pshglob.c		1.2
+xsrc/xfree/xc/extras/freetype2/src/sfnt/ttcmap0.c		1.2
+xsrc/xfree/xc/extras/freetype2/src/type1/t1load.c		1.2
+
+	Fixes for several integer overflows and null-pointer dereferences in
+	freetype2.
+	[tron, ticket #1354]
+
+games/tetris/scores.c				1.14
+
+	Check data read from "tetris.scores". This address CVE-2006-1539.
+	A standard NetBSD installation is not as much risk because "tetris"
+	is set-group-ID "games", and users shouldn't be in that group.
+	[dan, ticket #1368]
+
+sys/arch/cobalt/dev/gt.c			1.15-1.19
+sys/arch/cobalt/dev/gtreg.h			1.3-1.4
+sys/arch/cobalt/pci/pci_machdep.c		1.20-1.22
+
+	Fix possible problems and improve performance of certain PCI devices
+	under NetBSD-cobalt.
+	[tsutsui, ticket #1359]
+
+bin/sh/expand.c					1.74
+
+	Correct error when expanding "$@". This fixes PR bin/33472.
+	[dsl, ticket #1336]
+
+lib/libpam/modules/pam_unix/pam_unix.c		1.11
+
+	Make password aging work again. This fixes PR bin/30730 and
+	PR security/33502.
+	[jnemeth, ticket #1370]
+
+sys/dev/ata/wd.c				1.325 via patch
+
+	Adjust quirk entry for seagate drives. This fixes PR kern/33637.
+	[bouyer, ticket #1375]
+
+sys/dev/sysmon/sysmon_power.c			1.12
+
+	Correct a bug in power event queue management.
+	[freza, ticket #1369]
+
+distrib/i386/floppies/instkernel/Makefile	patch
+etc/etc.i386/Makefile.inc			1.44
+sys/arch/i386/conf/INSTALL_XEN2_DOMU		1.1 via patch
+sys/arch/i386/conf/INSTALL_XEN3_DOMU		1.1 via patch
+sys/arch/i386/conf/INSTALL_XEN3_U		delete
+sys/arch/i386/conf/INSTALL_XENU			delete
+sys/arch/i386/conf/XEN0				delete
+sys/arch/i386/conf/XEN2_DOM0			1.1 via patch
+sys/arch/i386/conf/XEN2_DOMU			1.1 via patch
+sys/arch/i386/conf/XEN3_DOMU			1.1 via patch
+sys/arch/i386/conf/XEN3_U			delete
+sys/arch/i386/conf/XENU				delete
+
+	Rename XEN kernel config files to be more consistent:
+	   INSTALL_XEN3_U  -> INSTALL_XEN3_DOMU
+	   INSTALL_XENU    -> INSTALL_XEN2_DOMU
+	   XEN0            -> XEN2_DOM0
+	   XEN3_U          -> XEN3_DOMU
+	   XENU            -> XEN2_DOMU
+	[hubertf, ticket #1371]
+
+lib/libpthread/pthread_sig.c			1.46
+
+	Fix bug in signal handling which could e.g get the MySQL daemon
+	stuck in a tight loop after receiving a HUP signal.
+	[chuck, ticket #1376]
+
+gnu/dist/sendmail/sendmail/deliver.c		patch
+gnu/dist/sendmail/sendmail/mime.c		patch
+gnu/dist/sendmail/sendmail/sendmail.h		patch
+gnu/dist/sendmail/sendmail/version.c		patch
+
+	Fix potential denial of service problem caused by excessive recursion
+	which leads to stack exhaustion when attempting delivery of a malformed
+	MIME message.
+	[adrianp, ticket #1382]
+
+sys/arch/xen/i386/identcpu.c			1.10 via patch
+sys/arch/xen/xen/clock.c			1.17-1.18,1.20-1.23 via patch
+
+	- Implement a xen-specific cc_microtime, which properly handles the
+	  Xen clock implementation. The MI cc_microtime could cause the clock
+	  to jump forward by up to 35mn.
+	- Have dom0 periodically set the Xen's time of day clock. This makes
+	  sure domUs start with the right time.
+	[bouyer, ticket 1372]
+
+share/man/man4/puc.4				1.19
+sys/dev/pci/pucdata.c				1.43-1.45
+
+	Add support for Moxa SmartIO CP104 and CP104-V2/PCI and
+	EXAR XR17D15x.
+	[bouyer, ticket #1373]
+
+sys/arch/xen/xen/clock.c			1.19
+sys/arch/xen/xen/ctrl_if.c			1.13
+sys/arch/xen/xen/if_xennet.c			1.45
+
+	Add some missing memory barriers.
+	[bouyer, ticket #1374]
+
+distrib/hp300/miniroot/install.md		1.9-1.10
+
+	Fix md_get_diskdevs() to match sd probe messages by MI SCSI drivers.
+	Also fix md_get_cddevs() to match cd probe messages by MI SCSI drivers.
+	[tsutsui, ticket #1381]
+
+sys/dev/ata/wd.c				1.326
+
+	Add yet another broken 160GB seagate drive (ST3160021A).
+	[gendalia, ticket #1396]
+
+sys/dev/pci/if_wm.c				1.124
+
+	Fix len=-4 issues in wm(4) driver.
+	[lukem, ticket #1400]
+
+etc/defaults/security.conf			1.18 via patch
+etc/security					1.98
+share/man/man5/security.conf.5			1.30-1.31
+
+	Implement check_devices_ignore_paths, which is a list of paths to
+	avoid traversing during check_devices.
+	[lukem, ticket #1377]
+
+xsrc/xfree/xc/programs/Xserver/hw/xfree86/common/xf86fbman.c 1.2
+
+	Fixes Xvideo on some resolutions and drivers such as 1680x1050 on "nv".
+	[jmmv, ticket #1383]
+
+lib/libc/string/wcscpy.c			1.3
+lib/libc/string/wcsncpy.c			1.3
+regress/lib/libc/string/wcsncpy/Makefile	1.1
+regress/lib/libc/string/wcsncpy/wcsncpy_test.c	1.1
+
+	Fix possible one byte buffer overrun in wcsncpy(3).
+	[tnozaki, ticket #1386]
+
+distrib/sets/lists/base/mi			patch
+distrib/sets/lists/man/mi			patch
+distrib/sets/lists/misc/mi			patch
+gnu/dist/postfix/AAAREADME			patch
+gnu/dist/postfix/COMPATIBILITY			patch
+gnu/dist/postfix/HISTORY			patch
+gnu/dist/postfix/INSTALL			patch
+gnu/dist/postfix/IPv6-ChangeLog			patch
+gnu/dist/postfix/Makefile.in			patch
+gnu/dist/postfix/RELEASE_NOTES			patch
+gnu/dist/postfix/RELEASE_NOTES-2.1		patch
+gnu/dist/postfix/TLS_ACKNOWLEDGEMENTS		patch
+gnu/dist/postfix/TLS_CHANGES			patch
+gnu/dist/postfix/TLS_LICENSE			patch
+gnu/dist/postfix/TLS_TODO			patch
+gnu/dist/postfix/makedefs			patch
+gnu/dist/postfix/postfix-install		patch
+gnu/dist/postfix/postfix2netbsd			patch
+gnu/dist/postfix/README_FILES/AAAREADME		patch
+gnu/dist/postfix/README_FILES/ADDRESS_REWRITING_README patch
+gnu/dist/postfix/README_FILES/ADDRESS_VERIFICATION_README patch
+gnu/dist/postfix/README_FILES/BACKSCATTER_README patch
+gnu/dist/postfix/README_FILES/BASIC_CONFIGURATION_README patch
+gnu/dist/postfix/README_FILES/CDB_README	patch
+gnu/dist/postfix/README_FILES/CONNECTION_CACHE_README patch
+gnu/dist/postfix/README_FILES/DATABASE_README	patch
+gnu/dist/postfix/README_FILES/DEBUG_README	patch
+gnu/dist/postfix/README_FILES/FILTER_README	patch
+gnu/dist/postfix/README_FILES/INSTALL		patch
+gnu/dist/postfix/README_FILES/IPV6_README	patch
+gnu/dist/postfix/README_FILES/LDAP_README	patch
+gnu/dist/postfix/README_FILES/LINUX_README	patch
+gnu/dist/postfix/README_FILES/MAILDROP_README	patch
+gnu/dist/postfix/README_FILES/MYSQL_README	patch
+gnu/dist/postfix/README_FILES/OVERVIEW		patch
+gnu/dist/postfix/README_FILES/PACKAGE_README	patch
+gnu/dist/postfix/README_FILES/PCRE_README	patch
+gnu/dist/postfix/README_FILES/PGSQL_README	patch
+gnu/dist/postfix/README_FILES/RELEASE_NOTES	patch
+gnu/dist/postfix/README_FILES/SASL_README	patch
+gnu/dist/postfix/README_FILES/SCHEDULER_README	patch
+gnu/dist/postfix/README_FILES/SMTPD_ACCESS_README patch
+gnu/dist/postfix/README_FILES/SMTPD_POLICY_README patch
+gnu/dist/postfix/README_FILES/SMTPD_PROXY_README patch
+gnu/dist/postfix/README_FILES/STANDARD_CONFIGURATION_README patch
+gnu/dist/postfix/README_FILES/TLS_README	patch
+gnu/dist/postfix/README_FILES/TUNING_README	patch
+gnu/dist/postfix/README_FILES/UUCP_README	patch
+gnu/dist/postfix/README_FILES/VIRTUAL_README	patch
+gnu/dist/postfix/README_FILES/XFORWARD_README	patch
+gnu/dist/postfix/auxiliary/qshape/qshape.pl	patch
+gnu/dist/postfix/conf/TLS_LICENSE		patch
+gnu/dist/postfix/conf/access			patch
+gnu/dist/postfix/conf/aliases			patch
+gnu/dist/postfix/conf/canonical			patch
+gnu/dist/postfix/conf/generic			patch
+gnu/dist/postfix/conf/header_checks		patch
+gnu/dist/postfix/conf/main.cf			patch
+gnu/dist/postfix/conf/master.cf			patch
+gnu/dist/postfix/conf/post-install		patch
+gnu/dist/postfix/conf/postfix-files		patch
+gnu/dist/postfix/conf/postfix-script		patch
+gnu/dist/postfix/conf/relocated			patch
+gnu/dist/postfix/conf/transport			patch
+gnu/dist/postfix/conf/virtual			patch
+gnu/dist/postfix/examples/chroot-setup/LINUX2	patch
+gnu/dist/postfix/examples/chroot-setup/Solaris10 patch
+gnu/dist/postfix/examples/chroot-setup/Solaris8 patch
+gnu/dist/postfix/html/ADDRESS_REWRITING_README.html patch
+gnu/dist/postfix/html/ADDRESS_VERIFICATION_README.html patch
+gnu/dist/postfix/html/BACKSCATTER_README.html	patch
+gnu/dist/postfix/html/BASIC_CONFIGURATION_README.html patch
+gnu/dist/postfix/html/CDB_README.html		patch
+gnu/dist/postfix/html/CONNECTION_CACHE_README.html patch
+gnu/dist/postfix/html/DATABASE_README.html	patch
+gnu/dist/postfix/html/DEBUG_README.html		patch
+gnu/dist/postfix/html/FILTER_README.html	patch
+gnu/dist/postfix/html/INSTALL.html		patch
+gnu/dist/postfix/html/IPV6_README.html		patch
+gnu/dist/postfix/html/LDAP_README.html		patch
+gnu/dist/postfix/html/LINUX_README.html		patch
+gnu/dist/postfix/html/MAILDROP_README.html	patch
+gnu/dist/postfix/html/MYSQL_README.html		patch
+gnu/dist/postfix/html/Makefile.in		patch
+gnu/dist/postfix/html/OVERVIEW.html		patch
+gnu/dist/postfix/html/PACKAGE_README.html	patch
+gnu/dist/postfix/html/PCRE_README.html		patch
+gnu/dist/postfix/html/PGSQL_README.html		patch
+gnu/dist/postfix/html/QSHAPE_README.html	patch
+gnu/dist/postfix/html/RESTRICTION_CLASS_README.html patch
+gnu/dist/postfix/html/SASL_README.html		patch
+gnu/dist/postfix/html/SCHEDULER_README.html	patch
+gnu/dist/postfix/html/SMTPD_ACCESS_README.html	patch
+gnu/dist/postfix/html/SMTPD_POLICY_README.html	patch
+gnu/dist/postfix/html/SMTPD_PROXY_README.html	patch
+gnu/dist/postfix/html/STANDARD_CONFIGURATION_README.html patch
+gnu/dist/postfix/html/TLS_README.html		patch
+gnu/dist/postfix/html/TUNING_README.html	patch
+gnu/dist/postfix/html/UUCP_README.html		patch
+gnu/dist/postfix/html/VIRTUAL_README.html	patch
+gnu/dist/postfix/html/XFORWARD_README.html	patch
+gnu/dist/postfix/html/access.5.html		patch
+gnu/dist/postfix/html/aliases.5.html		patch
+gnu/dist/postfix/html/anvil.8.html		patch
+gnu/dist/postfix/html/bounce.8.html		patch
+gnu/dist/postfix/html/canonical.5.html		patch
+gnu/dist/postfix/html/cidr_table.5.html		patch
+gnu/dist/postfix/html/cleanup.8.html		patch
+gnu/dist/postfix/html/defer.8.html		patch
+gnu/dist/postfix/html/discard.8.html		patch
+gnu/dist/postfix/html/error.8.html		patch
+gnu/dist/postfix/html/flush.8.html		patch
+gnu/dist/postfix/html/generic.5.html		patch
+gnu/dist/postfix/html/header_checks.5.html	patch
+gnu/dist/postfix/html/index.html		patch
+gnu/dist/postfix/html/ldap_table.5.html		patch
+gnu/dist/postfix/html/lmtp.8.html		patch
+gnu/dist/postfix/html/local.8.html		patch
+gnu/dist/postfix/html/mailq.1.html		patch
+gnu/dist/postfix/html/master.5.html		patch
+gnu/dist/postfix/html/master.8.html		patch
+gnu/dist/postfix/html/mysql_table.5.html	patch
+gnu/dist/postfix/html/newaliases.1.html		patch
+gnu/dist/postfix/html/nisplus_table.5.html	patch
+gnu/dist/postfix/html/oqmgr.8.html		patch
+gnu/dist/postfix/html/pcre_table.5.html		patch
+gnu/dist/postfix/html/pgsql_table.5.html	patch
+gnu/dist/postfix/html/pickup.8.html		patch
+gnu/dist/postfix/html/pipe.8.html		patch
+gnu/dist/postfix/html/postalias.1.html		patch
+gnu/dist/postfix/html/postcat.1.html		patch
+gnu/dist/postfix/html/postconf.1.html		patch
+gnu/dist/postfix/html/postconf.5.html		patch
+gnu/dist/postfix/html/postdrop.1.html		patch
+gnu/dist/postfix/html/postfix-manuals.html	patch
+gnu/dist/postfix/html/postfix.1.html		patch
+gnu/dist/postfix/html/postkick.1.html		patch
+gnu/dist/postfix/html/postlock.1.html		patch
+gnu/dist/postfix/html/postlog.1.html		patch
+gnu/dist/postfix/html/postmap.1.html		patch
+gnu/dist/postfix/html/postqueue.1.html		patch
+gnu/dist/postfix/html/postsuper.1.html		patch
+gnu/dist/postfix/html/proxymap.8.html		patch
+gnu/dist/postfix/html/qmgr.8.html		patch
+gnu/dist/postfix/html/qmqp-sink.1.html		patch
+gnu/dist/postfix/html/qmqp-source.1.html	patch
+gnu/dist/postfix/html/qmqpd.8.html		patch
+gnu/dist/postfix/html/qshape.1.html		patch
+gnu/dist/postfix/html/regexp_table.5.html	patch
+gnu/dist/postfix/html/relocated.5.html		patch
+gnu/dist/postfix/html/scache.8.html		patch
+gnu/dist/postfix/html/sendmail.1.html		patch
+gnu/dist/postfix/html/showq.8.html		patch
+gnu/dist/postfix/html/smtp-sink.1.html		patch
+gnu/dist/postfix/html/smtp-source.1.html	patch
+gnu/dist/postfix/html/smtp.8.html		patch
+gnu/dist/postfix/html/smtpd.8.html		patch
+gnu/dist/postfix/html/spawn.8.html		patch
+gnu/dist/postfix/html/tlsmgr.8.html		patch
+gnu/dist/postfix/html/trace.8.html		patch
+gnu/dist/postfix/html/transport.5.html		patch
+gnu/dist/postfix/html/trivial-rewrite.8.html	patch
+gnu/dist/postfix/html/verify.8.html		patch
+gnu/dist/postfix/html/virtual.5.html		patch
+gnu/dist/postfix/html/virtual.8.html		patch
+gnu/dist/postfix/man/Makefile.in		patch
+gnu/dist/postfix/man/Makefile.in.snapshot	patch
+gnu/dist/postfix/man/Makefile.in.stable		patch
+gnu/dist/postfix/man/man1/postalias.1		patch
+gnu/dist/postfix/man/man1/postcat.1		patch
+gnu/dist/postfix/man/man1/postconf.1		patch
+gnu/dist/postfix/man/man1/postdrop.1		patch
+gnu/dist/postfix/man/man1/postfix.1		patch
+gnu/dist/postfix/man/man1/postkick.1		patch
+gnu/dist/postfix/man/man1/postlock.1		patch
+gnu/dist/postfix/man/man1/postlog.1		patch
+gnu/dist/postfix/man/man1/postmap.1		patch
+gnu/dist/postfix/man/man1/postqueue.1		patch
+gnu/dist/postfix/man/man1/postsuper.1		patch
+gnu/dist/postfix/man/man1/qmqp-sink.1		patch
+gnu/dist/postfix/man/man1/qmqp-source.1		patch
+gnu/dist/postfix/man/man1/qshape.1		patch
+gnu/dist/postfix/man/man1/sendmail.1		patch
+gnu/dist/postfix/man/man1/smtp-sink.1		patch
+gnu/dist/postfix/man/man1/smtp-source.1		patch
+gnu/dist/postfix/man/man5/access.5		patch
+gnu/dist/postfix/man/man5/aliases.5		patch
+gnu/dist/postfix/man/man5/canonical.5		patch
+gnu/dist/postfix/man/man5/cidr_table.5		patch
+gnu/dist/postfix/man/man5/generic.5		patch
+gnu/dist/postfix/man/man5/header_checks.5	patch
+gnu/dist/postfix/man/man5/ldap_table.5		patch
+gnu/dist/postfix/man/man5/master.5		patch
+gnu/dist/postfix/man/man5/mysql_table.5		patch
+gnu/dist/postfix/man/man5/nisplus_table.5	patch
+gnu/dist/postfix/man/man5/pcre_table.5		patch
+gnu/dist/postfix/man/man5/pgsql_table.5		patch
+gnu/dist/postfix/man/man5/postconf.5		patch
+gnu/dist/postfix/man/man5/regexp_table.5	patch
+gnu/dist/postfix/man/man5/relocated.5		patch
+gnu/dist/postfix/man/man5/transport.5		patch
+gnu/dist/postfix/man/man5/virtual.5		patch
+gnu/dist/postfix/man/man8/anvil.8		patch
+gnu/dist/postfix/man/man8/bounce.8		patch
+gnu/dist/postfix/man/man8/cleanup.8		patch
+gnu/dist/postfix/man/man8/discard.8		patch
+gnu/dist/postfix/man/man8/error.8		patch
+gnu/dist/postfix/man/man8/flush.8		patch
+gnu/dist/postfix/man/man8/lmtp.8		patch
+gnu/dist/postfix/man/man8/local.8		patch
+gnu/dist/postfix/man/man8/master.8		patch
+gnu/dist/postfix/man/man8/oqmgr.8		patch
+gnu/dist/postfix/man/man8/pickup.8		patch
+gnu/dist/postfix/man/man8/pipe.8		patch
+gnu/dist/postfix/man/man8/proxymap.8		patch
+gnu/dist/postfix/man/man8/qmgr.8		patch
+gnu/dist/postfix/man/man8/qmqpd.8		patch
+gnu/dist/postfix/man/man8/scache.8		patch
+gnu/dist/postfix/man/man8/showq.8		patch
+gnu/dist/postfix/man/man8/smtp.8		patch
+gnu/dist/postfix/man/man8/smtpd.8		patch
+gnu/dist/postfix/man/man8/spawn.8		patch
+gnu/dist/postfix/man/man8/tlsmgr.8		patch
+gnu/dist/postfix/man/man8/trivial-rewrite.8	patch
+gnu/dist/postfix/man/man8/verify.8		patch
+gnu/dist/postfix/man/man8/virtual.8		patch
+gnu/dist/postfix/mantools/ccformat		patch
+gnu/dist/postfix/mantools/docparam		patch
+gnu/dist/postfix/mantools/docuseparam		patch
+gnu/dist/postfix/mantools/fixman		patch
+gnu/dist/postfix/mantools/make-relnotes		patch
+gnu/dist/postfix/mantools/makemanidx		patch
+gnu/dist/postfix/mantools/makepostconf		patch
+gnu/dist/postfix/mantools/makepostconflinks	patch
+gnu/dist/postfix/mantools/makereadme		patch
+gnu/dist/postfix/mantools/mandouble		patch
+gnu/dist/postfix/mantools/manlint		patch
+gnu/dist/postfix/mantools/manlint.stop		patch
+gnu/dist/postfix/mantools/manspell		patch
+gnu/dist/postfix/mantools/postconf2man		patch
+gnu/dist/postfix/mantools/postconffix		patch
+gnu/dist/postfix/mantools/postlink		patch
+gnu/dist/postfix/mantools/postlink.sed		patch
+gnu/dist/postfix/mantools/readme2html		patch
+gnu/dist/postfix/mantools/specmiss		patch
+gnu/dist/postfix/mantools/useparam		patch
+gnu/dist/postfix/mantools/user2var		patch
+gnu/dist/postfix/mantools/var2user		patch
+gnu/dist/postfix/mantools/xpostdef		patch
+gnu/dist/postfix/proto/ADDRESS_REWRITING_README.html patch
+gnu/dist/postfix/proto/ADDRESS_VERIFICATION_README.html patch
+gnu/dist/postfix/proto/BACKSCATTER_README.html	patch
+gnu/dist/postfix/proto/BASIC_CONFIGURATION_README.html patch
+gnu/dist/postfix/proto/CDB_README.html		patch
+gnu/dist/postfix/proto/CONNECTION_CACHE_README.html patch
+gnu/dist/postfix/proto/DATABASE_README.html	patch
+gnu/dist/postfix/proto/DEBUG_README.html	patch
+gnu/dist/postfix/proto/FILTER_README.html	patch
+gnu/dist/postfix/proto/INSTALL.html		patch
+gnu/dist/postfix/proto/IPV6_README.html		patch
+gnu/dist/postfix/proto/LDAP_README.html		patch
+gnu/dist/postfix/proto/LINUX_README.html	patch
+gnu/dist/postfix/proto/MAILDROP_README.html	patch
+gnu/dist/postfix/proto/MYSQL_README.html	patch
+gnu/dist/postfix/proto/Makefile.in		patch
+gnu/dist/postfix/proto/OVERVIEW.html		patch
+gnu/dist/postfix/proto/PACKAGE_README.html	patch
+gnu/dist/postfix/proto/PCRE_README.html		patch
+gnu/dist/postfix/proto/PGSQL_README.html	patch
+gnu/dist/postfix/proto/RESTRICTION_CLASS_README.html patch
+gnu/dist/postfix/proto/SASL_README.html		patch
+gnu/dist/postfix/proto/SCHEDULER_README.html	patch
+gnu/dist/postfix/proto/SMTPD_ACCESS_README.html patch
+gnu/dist/postfix/proto/SMTPD_POLICY_README.html patch
+gnu/dist/postfix/proto/SMTPD_PROXY_README.html	patch
+gnu/dist/postfix/proto/STANDARD_CONFIGURATION_README.html patch
+gnu/dist/postfix/proto/TLS_README.html		patch
+gnu/dist/postfix/proto/TUNING_README.html	patch
+gnu/dist/postfix/proto/UUCP_README.html		patch
+gnu/dist/postfix/proto/VIRTUAL_README.html	patch
+gnu/dist/postfix/proto/XFORWARD_README.html	patch
+gnu/dist/postfix/proto/access			patch
+gnu/dist/postfix/proto/aliases			patch
+gnu/dist/postfix/proto/canonical		patch
+gnu/dist/postfix/proto/cidr_table		patch
+gnu/dist/postfix/proto/generic			patch
+gnu/dist/postfix/proto/header_checks		patch
+gnu/dist/postfix/proto/ldap_table		patch
+gnu/dist/postfix/proto/master			patch
+gnu/dist/postfix/proto/mysql_table		patch
+gnu/dist/postfix/proto/nisplus_table		patch
+gnu/dist/postfix/proto/pcre_table		patch
+gnu/dist/postfix/proto/pgsql_table		patch
+gnu/dist/postfix/proto/postconf.html.prolog	patch
+gnu/dist/postfix/proto/postconf.man.epilog	patch
+gnu/dist/postfix/proto/postconf.man.prolog	patch
+gnu/dist/postfix/proto/postconf.proto		patch
+gnu/dist/postfix/proto/postconf.spec		patch
+gnu/dist/postfix/proto/regexp_table		patch
+gnu/dist/postfix/proto/relocated		patch
+gnu/dist/postfix/proto/stop			patch
+gnu/dist/postfix/proto/transport		patch
+gnu/dist/postfix/proto/virtual			patch
+gnu/dist/postfix/src/anvil/Makefile.in		patch
+gnu/dist/postfix/src/anvil/anvil.c		patch
+gnu/dist/postfix/src/bounce/Makefile.in		patch
+gnu/dist/postfix/src/bounce/bounce.c		patch
+gnu/dist/postfix/src/bounce/bounce_notify_util.c patch
+gnu/dist/postfix/src/cleanup/Makefile.in	patch
+gnu/dist/postfix/src/cleanup/cleanup.c		patch
+gnu/dist/postfix/src/cleanup/cleanup.h		patch
+gnu/dist/postfix/src/cleanup/cleanup_addr.c	patch
+gnu/dist/postfix/src/cleanup/cleanup_api.c	patch
+gnu/dist/postfix/src/cleanup/cleanup_envelope.c patch
+gnu/dist/postfix/src/cleanup/cleanup_extracted.c patch
+gnu/dist/postfix/src/cleanup/cleanup_init.c	patch
+gnu/dist/postfix/src/cleanup/cleanup_map11.c	patch
+gnu/dist/postfix/src/cleanup/cleanup_masquerade.c patch
+gnu/dist/postfix/src/cleanup/cleanup_message.c	patch
+gnu/dist/postfix/src/cleanup/cleanup_rewrite.c	patch
+gnu/dist/postfix/src/cleanup/cleanup_state.c	patch
+gnu/dist/postfix/src/discard/Makefile.in	patch
+gnu/dist/postfix/src/discard/discard.c		patch
+gnu/dist/postfix/src/dns/Makefile.in		patch
+gnu/dist/postfix/src/dns/dns.h			patch
+gnu/dist/postfix/src/dns/dns_lookup.c		patch
+gnu/dist/postfix/src/dns/dns_rr.c		patch
+gnu/dist/postfix/src/dns/dns_rr_eq_sa.c		patch
+gnu/dist/postfix/src/dns/dns_rr_eq_sa.in	patch
+gnu/dist/postfix/src/dns/dns_rr_eq_sa.ref	patch
+gnu/dist/postfix/src/dns/dns_rr_to_pa.c		patch
+gnu/dist/postfix/src/dns/dns_rr_to_pa.in	patch
+gnu/dist/postfix/src/dns/dns_rr_to_pa.ref	patch
+gnu/dist/postfix/src/dns/dns_rr_to_sa.c		patch
+gnu/dist/postfix/src/dns/dns_rr_to_sa.in	patch
+gnu/dist/postfix/src/dns/dns_rr_to_sa.ref	patch
+gnu/dist/postfix/src/dns/dns_sa_to_rr.c		patch
+gnu/dist/postfix/src/dns/dns_sa_to_rr.in	patch
+gnu/dist/postfix/src/dns/dns_sa_to_rr.ref	patch
+gnu/dist/postfix/src/dns/test_dns_lookup.c	patch
+gnu/dist/postfix/src/error/Makefile.in		patch
+gnu/dist/postfix/src/error/error.c		patch
+gnu/dist/postfix/src/flush/Makefile.in		patch
+gnu/dist/postfix/src/flush/flush.c		patch
+gnu/dist/postfix/src/fsstone/Makefile.in	patch
+gnu/dist/postfix/src/global/Makefile.in		patch
+gnu/dist/postfix/src/global/anvil_clnt.c	patch
+gnu/dist/postfix/src/global/anvil_clnt.h	patch
+gnu/dist/postfix/src/global/db_common.c		patch
+gnu/dist/postfix/src/global/db_common.h		patch
+gnu/dist/postfix/src/global/debug_process.c	patch
+gnu/dist/postfix/src/global/deliver_pass.c	patch
+gnu/dist/postfix/src/global/deliver_request.c	patch
+gnu/dist/postfix/src/global/deliver_request.h	patch
+gnu/dist/postfix/src/global/dict_ldap.c		patch
+gnu/dist/postfix/src/global/dict_mysql.c	patch
+gnu/dist/postfix/src/global/dict_pgsql.c	patch
+gnu/dist/postfix/src/global/dict_proxy.c	patch
+gnu/dist/postfix/src/global/ehlo_mask.c		patch
+gnu/dist/postfix/src/global/ehlo_mask.h		patch
+gnu/dist/postfix/src/global/ehlo_mask.in	patch
+gnu/dist/postfix/src/global/ehlo_mask.ref	patch
+gnu/dist/postfix/src/global/ext_prop.c		patch
+gnu/dist/postfix/src/global/ext_prop.h		patch
+gnu/dist/postfix/src/global/input_transp.c	patch
+gnu/dist/postfix/src/global/input_transp.h	patch
+gnu/dist/postfix/src/global/mail_addr_find.c	patch
+gnu/dist/postfix/src/global/mail_copy.c		patch
+gnu/dist/postfix/src/global/mail_params.c	patch
+gnu/dist/postfix/src/global/mail_params.h	patch
+gnu/dist/postfix/src/global/mail_proto.h	patch
+gnu/dist/postfix/src/global/mail_queue.c	patch
+gnu/dist/postfix/src/global/mail_queue.h	patch
+gnu/dist/postfix/src/global/mail_stream.c	patch
+gnu/dist/postfix/src/global/mail_stream.h	patch
+gnu/dist/postfix/src/global/mail_version.h	patch
+gnu/dist/postfix/src/global/match_parent_style.c patch
+gnu/dist/postfix/src/global/mime_state.c	patch
+gnu/dist/postfix/src/global/mkmap.h		patch
+gnu/dist/postfix/src/global/mkmap_cdb.c		patch
+gnu/dist/postfix/src/global/mkmap_open.c	patch
+gnu/dist/postfix/src/global/mkmap_sdbm.c	patch
+gnu/dist/postfix/src/global/mynetworks.c	patch
+gnu/dist/postfix/src/global/namadr_list.in	patch
+gnu/dist/postfix/src/global/namadr_list.ref	patch
+gnu/dist/postfix/src/global/own_inet_addr.c	patch
+gnu/dist/postfix/src/global/own_inet_addr.h	patch
+gnu/dist/postfix/src/global/pipe_command.c	patch
+gnu/dist/postfix/src/global/pipe_command.h	patch
+gnu/dist/postfix/src/global/resolve_clnt.c	patch
+gnu/dist/postfix/src/global/resolve_clnt.in	patch
+gnu/dist/postfix/src/global/resolve_clnt.ref	patch
+gnu/dist/postfix/src/global/resolve_local.c	patch
+gnu/dist/postfix/src/global/rewrite_clnt.c	patch
+gnu/dist/postfix/src/global/rewrite_clnt.h	patch
+gnu/dist/postfix/src/global/rewrite_clnt.in	patch
+gnu/dist/postfix/src/global/rewrite_clnt.ref	patch
+gnu/dist/postfix/src/global/scache.c		patch
+gnu/dist/postfix/src/global/scache.h		patch
+gnu/dist/postfix/src/global/scache_clnt.c	patch
+gnu/dist/postfix/src/global/scache_multi.c	patch
+gnu/dist/postfix/src/global/scache_multi.in	patch
+gnu/dist/postfix/src/global/scache_multi.ref	patch
+gnu/dist/postfix/src/global/scache_single.c	patch
+gnu/dist/postfix/src/global/smtp_stream.c	patch
+gnu/dist/postfix/src/global/smtp_stream.h	patch
+gnu/dist/postfix/src/global/user_acl.c		patch
+gnu/dist/postfix/src/global/user_acl.h		patch
+gnu/dist/postfix/src/global/valid_mailhost_addr.c patch
+gnu/dist/postfix/src/global/valid_mailhost_addr.h patch
+gnu/dist/postfix/src/global/verify_clnt.c	patch
+gnu/dist/postfix/src/global/wildcard_inet_addr.c patch
+gnu/dist/postfix/src/global/wildcard_inet_addr.h patch
+gnu/dist/postfix/src/global/xtext.c		patch
+gnu/dist/postfix/src/lmtp/Makefile.in		patch
+gnu/dist/postfix/src/lmtp/lmtp.c		patch
+gnu/dist/postfix/src/lmtp/lmtp.h		patch
+gnu/dist/postfix/src/lmtp/lmtp_addr.c		patch
+gnu/dist/postfix/src/lmtp/lmtp_chat.c		patch
+gnu/dist/postfix/src/lmtp/lmtp_connect.c	patch
+gnu/dist/postfix/src/lmtp/lmtp_proto.c		patch
+gnu/dist/postfix/src/lmtp/lmtp_sasl_glue.c	patch
+gnu/dist/postfix/src/lmtp/lmtp_trouble.c	patch
+gnu/dist/postfix/src/local/Makefile.in		patch
+gnu/dist/postfix/src/local/command.c		patch
+gnu/dist/postfix/src/local/forward.c		patch
+gnu/dist/postfix/src/local/local.c		patch
+gnu/dist/postfix/src/local/local.h		patch
+gnu/dist/postfix/src/local/local_expand.c	patch
+gnu/dist/postfix/src/local/maildir.c		patch
+gnu/dist/postfix/src/master/Makefile.in		patch
+gnu/dist/postfix/src/master/mail_server.h	patch
+gnu/dist/postfix/src/master/master.c		patch
+gnu/dist/postfix/src/master/master.h		patch
+gnu/dist/postfix/src/master/master_ent.c	patch
+gnu/dist/postfix/src/master/master_listen.c	patch
+gnu/dist/postfix/src/master/master_proto.c	patch
+gnu/dist/postfix/src/master/master_proto.h	patch
+gnu/dist/postfix/src/master/master_spawn.c	patch
+gnu/dist/postfix/src/master/master_status.c	patch
+gnu/dist/postfix/src/master/master_vars.c	patch
+gnu/dist/postfix/src/master/master_wakeup.c	patch
+gnu/dist/postfix/src/master/multi_server.c	patch
+gnu/dist/postfix/src/master/single_server.c	patch
+gnu/dist/postfix/src/master/trigger_server.c	patch
+gnu/dist/postfix/src/oqmgr/Makefile.in		patch
+gnu/dist/postfix/src/oqmgr/qmgr.c		patch
+gnu/dist/postfix/src/oqmgr/qmgr.h		patch
+gnu/dist/postfix/src/oqmgr/qmgr_deliver.c	patch
+gnu/dist/postfix/src/oqmgr/qmgr_entry.c		patch
+gnu/dist/postfix/src/oqmgr/qmgr_message.c	patch
+gnu/dist/postfix/src/oqmgr/qmgr_queue.c		patch
+gnu/dist/postfix/src/pickup/Makefile.in		patch
+gnu/dist/postfix/src/pickup/pickup.c		patch
+gnu/dist/postfix/src/pipe/Makefile.in		patch
+gnu/dist/postfix/src/pipe/pipe.c		patch
+gnu/dist/postfix/src/postalias/Makefile.in	patch
+gnu/dist/postfix/src/postalias/map-uABC1.ref	patch
+gnu/dist/postfix/src/postalias/map-uABC2.ref	patch
+gnu/dist/postfix/src/postalias/postalias.c	patch
+gnu/dist/postfix/src/postcat/Makefile.in	patch
+gnu/dist/postfix/src/postcat/postcat.c		patch
+gnu/dist/postfix/src/postconf/Makefile.in	patch
+gnu/dist/postfix/src/postconf/postconf.c	patch
+gnu/dist/postfix/src/postdrop/Makefile.in	patch
+gnu/dist/postfix/src/postdrop/postdrop.c	patch
+gnu/dist/postfix/src/postfix/Makefile.in	patch
+gnu/dist/postfix/src/postfix/postfix.c		patch
+gnu/dist/postfix/src/postkick/Makefile.in	patch
+gnu/dist/postfix/src/postkick/postkick.c	patch
+gnu/dist/postfix/src/postlock/Makefile.in	patch
+gnu/dist/postfix/src/postlock/postlock.c	patch
+gnu/dist/postfix/src/postlog/Makefile.in	patch
+gnu/dist/postfix/src/postlog/postlog.c		patch
+gnu/dist/postfix/src/postmap/Makefile.in	patch
+gnu/dist/postfix/src/postmap/map-uABC1.ref	patch
+gnu/dist/postfix/src/postmap/map-uABC2.ref	patch
+gnu/dist/postfix/src/postmap/postmap.c		patch
+gnu/dist/postfix/src/postqueue/Makefile.in	patch
+gnu/dist/postfix/src/postqueue/postqueue.c	patch
+gnu/dist/postfix/src/postsuper/Makefile.in	patch
+gnu/dist/postfix/src/postsuper/postsuper.c	patch
+gnu/dist/postfix/src/proxymap/Makefile.in	patch
+gnu/dist/postfix/src/proxymap/proxymap.c	patch
+gnu/dist/postfix/src/qmgr/Makefile.in		patch
+gnu/dist/postfix/src/qmgr/qmgr.c		patch
+gnu/dist/postfix/src/qmgr/qmgr.h		patch
+gnu/dist/postfix/src/qmgr/qmgr_deliver.c	patch
+gnu/dist/postfix/src/qmgr/qmgr_entry.c		patch
+gnu/dist/postfix/src/qmgr/qmgr_message.c	patch
+gnu/dist/postfix/src/qmgr/qmgr_queue.c		patch
+gnu/dist/postfix/src/qmqpd/Makefile.in		patch
+gnu/dist/postfix/src/qmqpd/qmqpd.c		patch
+gnu/dist/postfix/src/qmqpd/qmqpd.h		patch
+gnu/dist/postfix/src/qmqpd/qmqpd_peer.c		patch
+gnu/dist/postfix/src/scache/Makefile.in		patch
+gnu/dist/postfix/src/scache/scache.c		patch
+gnu/dist/postfix/src/sendmail/Makefile.in	patch
+gnu/dist/postfix/src/sendmail/sendmail.c	patch
+gnu/dist/postfix/src/showq/Makefile.in		patch
+gnu/dist/postfix/src/showq/showq.c		patch
+gnu/dist/postfix/src/smtp/Makefile.in		patch
+gnu/dist/postfix/src/smtp/map11_map		patch
+gnu/dist/postfix/src/smtp/smtp.c		patch
+gnu/dist/postfix/src/smtp/smtp.h		patch
+gnu/dist/postfix/src/smtp/smtp_addr.c		patch
+gnu/dist/postfix/src/smtp/smtp_addr.h		patch
+gnu/dist/postfix/src/smtp/smtp_chat.c		patch
+gnu/dist/postfix/src/smtp/smtp_connect.c	patch
+gnu/dist/postfix/src/smtp/smtp_map11.c		patch
+gnu/dist/postfix/src/smtp/smtp_map11.ref	patch
+gnu/dist/postfix/src/smtp/smtp_proto.c		patch
+gnu/dist/postfix/src/smtp/smtp_reuse.c		patch
+gnu/dist/postfix/src/smtp/smtp_reuse.h		patch
+gnu/dist/postfix/src/smtp/smtp_sasl.h		patch
+gnu/dist/postfix/src/smtp/smtp_sasl_glue.c	patch
+gnu/dist/postfix/src/smtp/smtp_sasl_proto.c	patch
+gnu/dist/postfix/src/smtp/smtp_session.c	patch
+gnu/dist/postfix/src/smtp/smtp_state.c		patch
+gnu/dist/postfix/src/smtp/smtp_trouble.c	patch
+gnu/dist/postfix/src/smtp/smtp_unalias.c	patch
+gnu/dist/postfix/src/smtpd/Makefile.in		patch
+gnu/dist/postfix/src/smtpd/smtpd.c		patch
+gnu/dist/postfix/src/smtpd/smtpd.h		patch
+gnu/dist/postfix/src/smtpd/smtpd_backup.in	patch
+gnu/dist/postfix/src/smtpd/smtpd_backup.ref	patch
+gnu/dist/postfix/src/smtpd/smtpd_check.c	patch
+gnu/dist/postfix/src/smtpd/smtpd_check.h	patch
+gnu/dist/postfix/src/smtpd/smtpd_check.in	patch
+gnu/dist/postfix/src/smtpd/smtpd_check.ref	patch
+gnu/dist/postfix/src/smtpd/smtpd_exp.ref	patch
+gnu/dist/postfix/src/smtpd/smtpd_peer.c		patch
+gnu/dist/postfix/src/smtpd/smtpd_proxy.c	patch
+gnu/dist/postfix/src/smtpd/smtpd_sasl_glue.c	patch
+gnu/dist/postfix/src/smtpd/smtpd_sasl_proto.c	patch
+gnu/dist/postfix/src/smtpd/smtpd_state.c	patch
+gnu/dist/postfix/src/smtpd/smtpd_xforward.c	patch
+gnu/dist/postfix/src/smtpstone/Makefile.in	patch
+gnu/dist/postfix/src/smtpstone/qmqp-sink.c	patch
+gnu/dist/postfix/src/smtpstone/qmqp-source.c	patch
+gnu/dist/postfix/src/smtpstone/smtp-sink.c	patch
+gnu/dist/postfix/src/smtpstone/smtp-source.c	patch
+gnu/dist/postfix/src/spawn/Makefile.in		patch
+gnu/dist/postfix/src/spawn/spawn.c		patch
+gnu/dist/postfix/src/tls/Makefile.in		patch
+gnu/dist/postfix/src/tls/tls.h			patch
+gnu/dist/postfix/src/tls/tls_bio_ops.c		patch
+gnu/dist/postfix/src/tls/tls_certkey.c		patch
+gnu/dist/postfix/src/tls/tls_client.c		patch
+gnu/dist/postfix/src/tls/tls_dh.c		patch
+gnu/dist/postfix/src/tls/tls_mgr.c		patch
+gnu/dist/postfix/src/tls/tls_mgr.h		patch
+gnu/dist/postfix/src/tls/tls_misc.c		patch
+gnu/dist/postfix/src/tls/tls_prng.h		patch
+gnu/dist/postfix/src/tls/tls_prng_dev.c		patch
+gnu/dist/postfix/src/tls/tls_prng_egd.c		patch
+gnu/dist/postfix/src/tls/tls_prng_exch.c	patch
+gnu/dist/postfix/src/tls/tls_prng_file.c	patch
+gnu/dist/postfix/src/tls/tls_rsa.c		patch
+gnu/dist/postfix/src/tls/tls_scache.c		patch
+gnu/dist/postfix/src/tls/tls_scache.h		patch
+gnu/dist/postfix/src/tls/tls_seed.c		patch
+gnu/dist/postfix/src/tls/tls_server.c		patch
+gnu/dist/postfix/src/tls/tls_session.c		patch
+gnu/dist/postfix/src/tls/tls_stream.c		patch
+gnu/dist/postfix/src/tls/tls_temp.c		patch
+gnu/dist/postfix/src/tls/tls_verify.c		patch
+gnu/dist/postfix/src/tlsmgr/Makefile.in		patch
+gnu/dist/postfix/src/tlsmgr/tlsmgr.c		patch
+gnu/dist/postfix/src/trivial-rewrite/Makefile.in patch
+gnu/dist/postfix/src/trivial-rewrite/resolve.c	patch
+gnu/dist/postfix/src/trivial-rewrite/rewrite.c	patch
+gnu/dist/postfix/src/trivial-rewrite/trivial-rewrite.c patch
+gnu/dist/postfix/src/trivial-rewrite/trivial-rewrite.h patch
+gnu/dist/postfix/src/util/Makefile.in		patch
+gnu/dist/postfix/src/util/argv.c		patch
+gnu/dist/postfix/src/util/argv.h		patch
+gnu/dist/postfix/src/util/attr.h		patch
+gnu/dist/postfix/src/util/attr_clnt.c		patch
+gnu/dist/postfix/src/util/attr_print0.c		patch
+gnu/dist/postfix/src/util/attr_print64.c	patch
+gnu/dist/postfix/src/util/attr_print_plain.c	patch
+gnu/dist/postfix/src/util/attr_scan0.c		patch
+gnu/dist/postfix/src/util/attr_scan0.ref	patch
+gnu/dist/postfix/src/util/attr_scan64.c		patch
+gnu/dist/postfix/src/util/attr_scan64.ref	patch
+gnu/dist/postfix/src/util/attr_scan_plain.c	patch
+gnu/dist/postfix/src/util/attr_scan_plain.ref	patch
+gnu/dist/postfix/src/util/base64_code.c		patch
+gnu/dist/postfix/src/util/binhash.c		patch
+gnu/dist/postfix/src/util/cidr_match.c		patch
+gnu/dist/postfix/src/util/cidr_match.h		patch
+gnu/dist/postfix/src/util/clean_env.c		patch
+gnu/dist/postfix/src/util/dict.c		patch
+gnu/dist/postfix/src/util/dict_alloc.c		patch
+gnu/dist/postfix/src/util/dict_cdb.c		patch
+gnu/dist/postfix/src/util/dict_cdb.h		patch
+gnu/dist/postfix/src/util/dict_cidr.c		patch
+gnu/dist/postfix/src/util/dict_cidr.in		patch
+gnu/dist/postfix/src/util/dict_cidr.map		patch
+gnu/dist/postfix/src/util/dict_cidr.ref		patch
+gnu/dist/postfix/src/util/dict_db.c		patch
+gnu/dist/postfix/src/util/dict_dbm.c		patch
+gnu/dist/postfix/src/util/dict_nis.c		patch
+gnu/dist/postfix/src/util/dict_nisplus.c	patch
+gnu/dist/postfix/src/util/dict_open.c		patch
+gnu/dist/postfix/src/util/dict_pcre.c		patch
+gnu/dist/postfix/src/util/dict_pcre.ref		patch
+gnu/dist/postfix/src/util/dict_regexp.c		patch
+gnu/dist/postfix/src/util/dict_sdbm.c		patch
+gnu/dist/postfix/src/util/dict_sdbm.h		patch
+gnu/dist/postfix/src/util/dummy_read.c		patch
+gnu/dist/postfix/src/util/dummy_write.c		patch
+gnu/dist/postfix/src/util/events.c		patch
+gnu/dist/postfix/src/util/exec_command.c	patch
+gnu/dist/postfix/src/util/find_inet.c		patch
+gnu/dist/postfix/src/util/hex_code.c		patch
+gnu/dist/postfix/src/util/hex_code.h		patch
+gnu/dist/postfix/src/util/hex_quote.c		patch
+gnu/dist/postfix/src/util/host_port.c		patch
+gnu/dist/postfix/src/util/host_port.h		patch
+gnu/dist/postfix/src/util/host_port.in		patch
+gnu/dist/postfix/src/util/host_port.ref		patch
+gnu/dist/postfix/src/util/inet_addr_host.c	patch
+gnu/dist/postfix/src/util/inet_addr_list.c	patch
+gnu/dist/postfix/src/util/inet_addr_list.h	patch
+gnu/dist/postfix/src/util/inet_addr_local.c	patch
+gnu/dist/postfix/src/util/inet_addr_local.h	patch
+gnu/dist/postfix/src/util/inet_connect.c	patch
+gnu/dist/postfix/src/util/inet_listen.c		patch
+gnu/dist/postfix/src/util/inet_proto.c		patch
+gnu/dist/postfix/src/util/inet_proto.h		patch
+gnu/dist/postfix/src/util/inet_util.c		patch
+gnu/dist/postfix/src/util/inet_util.h		patch
+gnu/dist/postfix/src/util/iostuff.h		patch
+gnu/dist/postfix/src/util/listen.h		patch
+gnu/dist/postfix/src/util/mac_expand.c		patch
+gnu/dist/postfix/src/util/mac_parse.c		patch
+gnu/dist/postfix/src/util/mac_parse.h		patch
+gnu/dist/postfix/src/util/make_dirs.c		patch
+gnu/dist/postfix/src/util/mask_addr.c		patch
+gnu/dist/postfix/src/util/mask_addr.h		patch
+gnu/dist/postfix/src/util/match_list.c		patch
+gnu/dist/postfix/src/util/match_ops.c		patch
+gnu/dist/postfix/src/util/msg_syslog.c		patch
+gnu/dist/postfix/src/util/myaddrinfo.c		patch
+gnu/dist/postfix/src/util/myaddrinfo.h		patch
+gnu/dist/postfix/src/util/myaddrinfo.ref	patch
+gnu/dist/postfix/src/util/myaddrinfo.ref2	patch
+gnu/dist/postfix/src/util/myaddrinfo4.ref	patch
+gnu/dist/postfix/src/util/myaddrinfo4.ref2	patch
+gnu/dist/postfix/src/util/name_mask.c		patch
+gnu/dist/postfix/src/util/name_mask.h		patch
+gnu/dist/postfix/src/util/netstring.c		patch
+gnu/dist/postfix/src/util/printable.c		patch
+gnu/dist/postfix/src/util/readlline.c		patch
+gnu/dist/postfix/src/util/ring.h		patch
+gnu/dist/postfix/src/util/sane_accept.c		patch
+gnu/dist/postfix/src/util/sock_addr.c		patch
+gnu/dist/postfix/src/util/sock_addr.h		patch
+gnu/dist/postfix/src/util/stream_recv_fd.c	patch
+gnu/dist/postfix/src/util/stream_send_fd.c	patch
+gnu/dist/postfix/src/util/sys_compat.c		patch
+gnu/dist/postfix/src/util/sys_defs.h		patch
+gnu/dist/postfix/src/util/unescape.c		patch
+gnu/dist/postfix/src/util/unix_recv_fd.c	patch
+gnu/dist/postfix/src/util/unix_send_fd.c	patch
+gnu/dist/postfix/src/util/upass_listen.c	patch
+gnu/dist/postfix/src/util/valid_hostname.c	patch
+gnu/dist/postfix/src/util/valid_hostname.h	patch
+gnu/dist/postfix/src/util/valid_hostname.in	patch
+gnu/dist/postfix/src/util/valid_hostname.ref	patch
+gnu/dist/postfix/src/util/vbuf_print.c		patch
+gnu/dist/postfix/src/util/vstream.c		patch
+gnu/dist/postfix/src/util/vstream.h		patch
+gnu/dist/postfix/src/util/vstring.c		patch
+gnu/dist/postfix/src/util/vstring.h		patch
+gnu/dist/postfix/src/util/vstring_vstream.c	patch
+gnu/dist/postfix/src/util/watchdog.c		patch
+gnu/dist/postfix/src/verify/Makefile.in		patch
+gnu/dist/postfix/src/verify/verify.c		patch
+gnu/dist/postfix/src/virtual/Makefile.in	patch
+gnu/dist/postfix/src/virtual/maildir.c		patch
+gnu/dist/postfix/src/virtual/virtual.c		patch
+gnu/usr.sbin/postfix/Makefile			patch
+gnu/usr.sbin/postfix/Makefile.inc		patch
+gnu/usr.sbin/postfix/README_FILES/Makefile	patch
+gnu/usr.sbin/postfix/anvil/Makefile		patch
+gnu/usr.sbin/postfix/conf/Makefile		patch
+gnu/usr.sbin/postfix/discard/Makefile		patch
+gnu/usr.sbin/postfix/dns/Makefile		patch
+gnu/usr.sbin/postfix/global/Makefile		patch
+gnu/usr.sbin/postfix/html/Makefile		patch
+gnu/usr.sbin/postfix/man/man1/Makefile		patch
+gnu/usr.sbin/postfix/man/man5/Makefile		patch
+gnu/usr.sbin/postfix/man/man8/Makefile		patch
+gnu/usr.sbin/postfix/scache/Makefile		patch
+gnu/usr.sbin/postfix/smtp/Makefile		patch
+gnu/usr.sbin/postfix/smtpd/Makefile		patch
+gnu/usr.sbin/postfix/tls/Makefile		patch
+gnu/usr.sbin/postfix/tlsmgr/Makefile		patch
+gnu/usr.sbin/postfix/util/Makefile		patch
+usr.sbin/postinstall/postinstall		patch
+
+	Update Postfix to version 2.2.10.
+	[ghen, ticket #1398]
+
+sys/arch/sparc/sparc/machdep.c			patch
+
+	Avoid panic in memory management on some SPARC systems with QFE cards.
+	This fixes PR port-sparc/33340 and  PR port-sparc/33894.
+	[fair, ticket #1401]
+
+lib/libc/gen/getpwent.c				1.72 via patch
+
+	Fix YP lookup performance regression between NetBSD 2.0 and 3.0.
+	[ginsbach, ticket #1399]
+
+dist/bind/CHANGES				patch
+dist/bind/COPYRIGHT				patch
+dist/bind/EXCLUDED				new
+dist/bind/FAQ					patch
+dist/bind/FAQ.xml				new
+dist/bind/KNOWN_DEFECTS				delete
+dist/bind/README				patch
+dist/bind/acconfig.h				patch
+dist/bind/bin/check/check-tool.c		patch
+dist/bind/bin/check/check-tool.h		patch
+dist/bind/bin/check/named-checkconf.8		patch
+dist/bind/bin/check/named-checkconf.c		patch
+dist/bind/bin/check/named-checkconf.docbook	patch
+dist/bind/bin/check/named-checkconf.html	patch
+dist/bind/bin/check/named-checkzone.8		patch
+dist/bind/bin/check/named-checkzone.c		patch
+dist/bind/bin/check/named-checkzone.docbook	patch
+dist/bind/bin/check/named-checkzone.html	patch
+dist/bind/bin/check/win32/namedcheckconf.dsp	patch
+dist/bind/bin/check/win32/namedcheckconf.dsw	patch
+dist/bind/bin/check/win32/namedcheckconf.mak	patch
+dist/bind/bin/check/win32/namedcheckzone.dsp	patch
+dist/bind/bin/check/win32/namedcheckzone.dsw	patch
+dist/bind/bin/check/win32/namedcheckzone.mak	patch
+dist/bind/bin/dig/dig.1				patch
+dist/bind/bin/dig/dig.c				patch
+dist/bind/bin/dig/dig.docbook			patch
+dist/bind/bin/dig/dig.html			patch
+dist/bind/bin/dig/dighost.c			patch
+dist/bind/bin/dig/host.1			patch
+dist/bind/bin/dig/host.c			patch
+dist/bind/bin/dig/host.docbook			patch
+dist/bind/bin/dig/host.html			patch
+dist/bind/bin/dig/include/dig/dig.h		patch
+dist/bind/bin/dig/nslookup.1			patch
+dist/bind/bin/dig/nslookup.c			patch
+dist/bind/bin/dig/nslookup.docbook		patch
+dist/bind/bin/dig/nslookup.html			patch
+dist/bind/bin/dig/win32/dig.dsp			patch
+dist/bind/bin/dig/win32/dig.dsw			patch
+dist/bind/bin/dig/win32/dig.mak			patch
+dist/bind/bin/dig/win32/host.dsp		patch
+dist/bind/bin/dig/win32/host.dsw		patch
+dist/bind/bin/dig/win32/host.mak		patch
+dist/bind/bin/dig/win32/nslookup.dsp		patch
+dist/bind/bin/dig/win32/nslookup.dsw		patch
+dist/bind/bin/dig/win32/nslookup.mak		patch
+dist/bind/bin/dnssec/Makefile.in		patch
+dist/bind/bin/dnssec/dnssec-keygen.8		patch
+dist/bind/bin/dnssec/dnssec-keygen.c		patch
+dist/bind/bin/dnssec/dnssec-keygen.docbook	patch
+dist/bind/bin/dnssec/dnssec-keygen.html		patch
+dist/bind/bin/dnssec/dnssec-makekeyset.8	delete
+dist/bind/bin/dnssec/dnssec-makekeyset.c	delete
+dist/bind/bin/dnssec/dnssec-makekeyset.docbook	delete
+dist/bind/bin/dnssec/dnssec-makekeyset.html	delete
+dist/bind/bin/dnssec/dnssec-signkey.8		delete
+dist/bind/bin/dnssec/dnssec-signkey.c		delete
+dist/bind/bin/dnssec/dnssec-signkey.docbook	delete
+dist/bind/bin/dnssec/dnssec-signkey.html	delete
+dist/bind/bin/dnssec/dnssec-signzone.8		patch
+dist/bind/bin/dnssec/dnssec-signzone.c		patch
+dist/bind/bin/dnssec/dnssec-signzone.docbook	patch
+dist/bind/bin/dnssec/dnssec-signzone.html	patch
+dist/bind/bin/dnssec/dnssectool.c		patch
+dist/bind/bin/dnssec/dnssectool.h		patch
+dist/bind/bin/dnssec/win32/keygen.dsp		patch
+dist/bind/bin/dnssec/win32/keygen.dsw		patch
+dist/bind/bin/dnssec/win32/keygen.mak		patch
+dist/bind/bin/dnssec/win32/makekeyset.dsp	delete
+dist/bind/bin/dnssec/win32/makekeyset.dsw	delete
+dist/bind/bin/dnssec/win32/makekeyset.mak	delete
+dist/bind/bin/dnssec/win32/nsupdate.dsp		patch
+dist/bind/bin/dnssec/win32/nsupdate.dsw		patch
+dist/bind/bin/dnssec/win32/signkey.dsp		delete
+dist/bind/bin/dnssec/win32/signkey.dsw		delete
+dist/bind/bin/dnssec/win32/signkey.mak		delete
+dist/bind/bin/dnssec/win32/signzone.dsp		patch
+dist/bind/bin/dnssec/win32/signzone.dsw		patch
+dist/bind/bin/dnssec/win32/signzone.mak		patch
+dist/bind/bin/named/Makefile.in			patch
+dist/bind/bin/named/aclconf.c			patch
+dist/bind/bin/named/client.c			patch
+dist/bind/bin/named/config.c			patch
+dist/bind/bin/named/control.c			patch
+dist/bind/bin/named/controlconf.c		patch
+dist/bind/bin/named/include/named/aclconf.h	patch
+dist/bind/bin/named/include/named/client.h	patch
+dist/bind/bin/named/include/named/config.h	patch
+dist/bind/bin/named/include/named/control.h	patch
+dist/bind/bin/named/include/named/globals.h	patch
+dist/bind/bin/named/include/named/interfacemgr.h patch
+dist/bind/bin/named/include/named/listenlist.h	patch
+dist/bind/bin/named/include/named/log.h		patch
+dist/bind/bin/named/include/named/logconf.h	patch
+dist/bind/bin/named/include/named/lwaddr.h	patch
+dist/bind/bin/named/include/named/lwdclient.h	patch
+dist/bind/bin/named/include/named/lwresd.h	patch
+dist/bind/bin/named/include/named/lwsearch.h	patch
+dist/bind/bin/named/include/named/main.h	patch
+dist/bind/bin/named/include/named/notify.h	patch
+dist/bind/bin/named/include/named/ns_smf_globals.h new
+dist/bind/bin/named/include/named/query.h	patch
+dist/bind/bin/named/include/named/server.h	patch
+dist/bind/bin/named/include/named/sortlist.h	patch
+dist/bind/bin/named/include/named/tkeyconf.h	patch
+dist/bind/bin/named/include/named/tsigconf.h	patch
+dist/bind/bin/named/include/named/types.h	patch
+dist/bind/bin/named/include/named/update.h	patch
+dist/bind/bin/named/include/named/xfrout.h	patch
+dist/bind/bin/named/include/named/zoneconf.h	patch
+dist/bind/bin/named/interfacemgr.c		patch
+dist/bind/bin/named/listenlist.c		patch
+dist/bind/bin/named/log.c			patch
+dist/bind/bin/named/logconf.c			patch
+dist/bind/bin/named/lwaddr.c			patch
+dist/bind/bin/named/lwdclient.c			patch
+dist/bind/bin/named/lwderror.c			patch
+dist/bind/bin/named/lwdgabn.c			patch
+dist/bind/bin/named/lwdgnba.c			patch
+dist/bind/bin/named/lwdgrbn.c			patch
+dist/bind/bin/named/lwdnoop.c			patch
+dist/bind/bin/named/lwresd.8			patch
+dist/bind/bin/named/lwresd.c			patch
+dist/bind/bin/named/lwresd.docbook		patch
+dist/bind/bin/named/lwresd.html			patch
+dist/bind/bin/named/lwsearch.c			patch
+dist/bind/bin/named/main.c			patch
+dist/bind/bin/named/named.8			patch
+dist/bind/bin/named/named.conf.5		patch
+dist/bind/bin/named/named.conf.docbook		patch
+dist/bind/bin/named/named.conf.html		patch
+dist/bind/bin/named/named.docbook		patch
+dist/bind/bin/named/named.html			patch
+dist/bind/bin/named/notify.c			patch
+dist/bind/bin/named/query.c			patch
+dist/bind/bin/named/server.c			patch
+dist/bind/bin/named/sortlist.c			patch
+dist/bind/bin/named/tkeyconf.c			patch
+dist/bind/bin/named/tsigconf.c			patch
+dist/bind/bin/named/unix/include/named/os.h	patch
+dist/bind/bin/named/unix/os.c			patch
+dist/bind/bin/named/update.c			patch
+dist/bind/bin/named/win32/include/named/ntservice.h patch
+dist/bind/bin/named/win32/include/named/os.h	patch
+dist/bind/bin/named/win32/named.dsp		patch
+dist/bind/bin/named/win32/named.dsw		patch
+dist/bind/bin/named/win32/named.mak		patch
+dist/bind/bin/named/win32/ntservice.c		patch
+dist/bind/bin/named/win32/os.c			patch
+dist/bind/bin/named/xfrout.c			patch
+dist/bind/bin/named/zoneconf.c			patch
+dist/bind/bin/nsupdate/nsupdate.8		patch
+dist/bind/bin/nsupdate/nsupdate.c		patch
+dist/bind/bin/nsupdate/nsupdate.docbook		patch
+dist/bind/bin/nsupdate/nsupdate.html		patch
+dist/bind/bin/nsupdate/win32/nsupdate.dsp	patch
+dist/bind/bin/nsupdate/win32/nsupdate.dsw	patch
+dist/bind/bin/nsupdate/win32/nsupdate.mak	patch
+dist/bind/bin/rndc/include/rndc/os.h		patch
+dist/bind/bin/rndc/rndc-confgen.8		patch
+dist/bind/bin/rndc/rndc-confgen.c		patch
+dist/bind/bin/rndc/rndc-confgen.docbook		patch
+dist/bind/bin/rndc/rndc-confgen.html		patch
+dist/bind/bin/rndc/rndc.8			patch
+dist/bind/bin/rndc/rndc.c			patch
+dist/bind/bin/rndc/rndc.conf.5			patch
+dist/bind/bin/rndc/rndc.conf.docbook		patch
+dist/bind/bin/rndc/rndc.conf.html		patch
+dist/bind/bin/rndc/rndc.docbook			patch
+dist/bind/bin/rndc/rndc.html			patch
+dist/bind/bin/rndc/unix/os.c			patch
+dist/bind/bin/rndc/util.c			patch
+dist/bind/bin/rndc/util.h			patch
+dist/bind/bin/rndc/win32/confgen.dsp		patch
+dist/bind/bin/rndc/win32/confgen.dsw		patch
+dist/bind/bin/rndc/win32/confgen.mak		patch
+dist/bind/bin/rndc/win32/os.c			patch
+dist/bind/bin/rndc/win32/rndc.dsp		patch
+dist/bind/bin/rndc/win32/rndc.dsw		patch
+dist/bind/bin/rndc/win32/rndc.mak		patch
+dist/bind/bin/tests/Makefile.in			patch
+dist/bind/bin/tests/adb_test.c			patch
+dist/bind/bin/tests/byaddr_test.c		patch
+dist/bind/bin/tests/byname_test.c		patch
+dist/bind/bin/tests/cfg_test.c			patch
+dist/bind/bin/tests/compress_test.c		patch
+dist/bind/bin/tests/db/t_db.c			patch
+dist/bind/bin/tests/db_test.c			patch
+dist/bind/bin/tests/dst/dst_test.c		patch
+dist/bind/bin/tests/dst/t_dst.c			patch
+dist/bind/bin/tests/entropy2_test.c		patch
+dist/bind/bin/tests/entropy_test.c		patch
+dist/bind/bin/tests/fsaccess_test.c		patch
+dist/bind/bin/tests/genrandom.c			patch
+dist/bind/bin/tests/gxba_test.c			patch
+dist/bind/bin/tests/gxbn_test.c			patch
+dist/bind/bin/tests/hash_test.c			patch
+dist/bind/bin/tests/inter_test.c		patch
+dist/bind/bin/tests/journalprint.c		patch
+dist/bind/bin/tests/keyboard_test.c		patch
+dist/bind/bin/tests/lex_test.c			patch
+dist/bind/bin/tests/lfsr_test.c			patch
+dist/bind/bin/tests/log_test.c			patch
+dist/bind/bin/tests/lwres_test.c		patch
+dist/bind/bin/tests/lwresconf_test.c		patch
+dist/bind/bin/tests/master/t_master.c		patch
+dist/bind/bin/tests/master_test.c		patch
+dist/bind/bin/tests/mem/Makefile.in		patch
+dist/bind/bin/tests/mem/t_mem.c			patch
+dist/bind/bin/tests/mempool_test.c		patch
+dist/bind/bin/tests/name_test.c			patch
+dist/bind/bin/tests/names/dns_label_countbits_data new
+dist/bind/bin/tests/names/dns_label_getbit_data new
+dist/bind/bin/tests/names/t_names.c		patch
+dist/bind/bin/tests/net/driver.c		patch
+dist/bind/bin/tests/net/driver.h		patch
+dist/bind/bin/tests/net/netaddr_multicast.c	patch
+dist/bind/bin/tests/net/sockaddr_multicast.c	patch
+dist/bind/bin/tests/net/testsuite.h		patch
+dist/bind/bin/tests/nxtify.c			new
+dist/bind/bin/tests/printmsg.c			patch
+dist/bind/bin/tests/printmsg.h			patch
+dist/bind/bin/tests/ratelimiter_test.c		patch
+dist/bind/bin/tests/rbt/t_rbt.c			patch
+dist/bind/bin/tests/rbt_test.c			patch
+dist/bind/bin/tests/rdata_test.c		patch
+dist/bind/bin/tests/rwlock_test.c		patch
+dist/bind/bin/tests/serial_test.c		patch
+dist/bind/bin/tests/shutdown_test.c		patch
+dist/bind/bin/tests/sig0_test.c			patch
+dist/bind/bin/tests/sock_test.c			patch
+dist/bind/bin/tests/sockaddr/t_sockaddr.c	patch
+dist/bind/bin/tests/sym_test.c			patch
+dist/bind/bin/tests/system/checkconf/bad.conf	new
+dist/bind/bin/tests/system/checkconf/good.conf	new
+dist/bind/bin/tests/system/checkconf/tests.sh	new
+dist/bind/bin/tests/system/conf.sh.in		patch
+dist/bind/bin/tests/system/dnssec/clean.sh	patch
+dist/bind/bin/tests/system/dnssec/prereq.sh	patch
+dist/bind/bin/tests/system/dnssec/tests.sh	patch
+dist/bind/bin/tests/system/ifconfig.sh		patch
+dist/bind/bin/tests/system/lwresd/lwtest.c	patch
+dist/bind/bin/tests/system/stress/ns1/root.db	new
+dist/bind/bin/tests/system/tkey/keycreate.c	patch
+dist/bind/bin/tests/system/tkey/keydelete.c	patch
+dist/bind/bin/tests/system/tkey/prereq.sh	patch
+dist/bind/bin/tests/system/views/clean.sh	patch
+dist/bind/bin/tests/system/xfer/knowngood.dig.out new
+dist/bind/bin/tests/system/xfer/ns2/example.db	new
+dist/bind/bin/tests/system/xfer/ns2/tsigzone.db new
+dist/bind/bin/tests/system/xfer/tests.sh	patch
+dist/bind/bin/tests/system/xferquota/clean.sh	patch
+dist/bind/bin/tests/task_test.c			patch
+dist/bind/bin/tests/tasks/t_tasks.c		patch
+dist/bind/bin/tests/timer_test.c		patch
+dist/bind/bin/tests/timers/t_timers.c		patch
+dist/bind/bin/tests/wire_test.c			patch
+dist/bind/bin/tests/zone_test.c			patch
+dist/bind/bin/win32/BINDInstall/BINDInstall.dsp patch
+dist/bind/bin/win32/BINDInstall/BINDInstall.dsw patch
+dist/bind/bin/win32/BINDInstall/BINDInstall.h	patch
+dist/bind/bin/win32/BINDInstall/BINDInstall.mak patch
+dist/bind/bin/win32/BINDInstall/BINDInstall.rc	patch
+dist/bind/bin/win32/BINDInstall/BINDInstallDlg.cpp patch
+dist/bind/bin/win32/BINDInstall/BINDInstallDlg.h patch
+dist/bind/bin/win32/BINDInstall/DirBrowse.h	patch
+dist/bind/bin/win32/BINDInstall/resource.h	patch
+dist/bind/config.guess				patch
+dist/bind/config.h.in				patch
+dist/bind/config.sub				patch
+dist/bind/config.threads.in			new
+dist/bind/configure				patch
+dist/bind/configure.in				patch
+dist/bind/contrib/idn/idnkit-1.0-src/patch/bind9/bind-9.3.1-patch new
+dist/bind/contrib/idn/idnkit-1.0-src/patch/bind9/bind-9.3.2-patch new
+dist/bind/contrib/named-bootconf/named-bootconf.sh patch
+dist/bind/contrib/nslint-2.1a3/lbl/gnuc.h	patch
+dist/bind/contrib/nslint-2.1a3/lbl/os-irix5.h	patch
+dist/bind/contrib/nslint-2.1a3/lbl/os-osf3.h	patch
+dist/bind/contrib/nslint-2.1a3/lbl/os-sunos4.h	patch
+dist/bind/contrib/nslint-2.1a3/lbl/os-ultrix4.h patch
+dist/bind/contrib/nslint-2.1a3/savestr.c	patch
+dist/bind/contrib/nslint-2.1a3/savestr.h	patch
+dist/bind/contrib/query-loc-0.3.0/ADDRESSES	new
+dist/bind/contrib/query-loc-0.3.0/ALGO		new
+dist/bind/contrib/query-loc-0.3.0/INSTALL	new
+dist/bind/contrib/query-loc-0.3.0/Makefile.in	new
+dist/bind/contrib/query-loc-0.3.0/README	new
+dist/bind/contrib/query-loc-0.3.0/USAGE		new
+dist/bind/contrib/query-loc-0.3.0/config.h.in	new
+dist/bind/contrib/query-loc-0.3.0/configure	new
+dist/bind/contrib/query-loc-0.3.0/configure.in	new
+dist/bind/contrib/query-loc-0.3.0/install-sh	new
+dist/bind/contrib/query-loc-0.3.0/loc.c		new
+dist/bind/contrib/query-loc-0.3.0/loc.h		new
+dist/bind/contrib/query-loc-0.3.0/loc_ntoa.c	new
+dist/bind/contrib/query-loc-0.3.0/query-loc.1	new
+dist/bind/contrib/query-loc-0.3.0/query-loc.c	new
+dist/bind/contrib/queryperf/queryperf.c		patch
+dist/bind/contrib/sdb/dir/dirdb.c		patch
+dist/bind/contrib/sdb/dir/dirdb.h		patch
+dist/bind/contrib/sdb/ldap/ldapdb.c		patch
+dist/bind/contrib/sdb/ldap/zone2ldap.c		patch
+dist/bind/contrib/sdb/pgsql/pgsqldb.c		patch
+dist/bind/contrib/sdb/pgsql/pgsqldb.h		patch
+dist/bind/contrib/sdb/pgsql/zonetodb.c		patch
+dist/bind/contrib/sdb/tcl/tcldb.c		patch
+dist/bind/contrib/sdb/tcl/tcldb.h		patch
+dist/bind/contrib/sdb/time/timedb.c		patch
+dist/bind/contrib/sdb/time/timedb.h		patch
+dist/bind/doc/Makefile.in			patch
+dist/bind/doc/arm/Bv9ARM-book.xml		patch
+dist/bind/doc/arm/Bv9ARM.ch01.html		patch
+dist/bind/doc/arm/Bv9ARM.ch02.html		patch
+dist/bind/doc/arm/Bv9ARM.ch03.html		patch
+dist/bind/doc/arm/Bv9ARM.ch04.html		patch
+dist/bind/doc/arm/Bv9ARM.ch05.html		patch
+dist/bind/doc/arm/Bv9ARM.ch06.html		patch
+dist/bind/doc/arm/Bv9ARM.ch07.html		patch
+dist/bind/doc/arm/Bv9ARM.ch08.html		patch
+dist/bind/doc/arm/Bv9ARM.ch09.html		patch
+dist/bind/doc/arm/Bv9ARM.html			patch
+dist/bind/doc/arm/Makefile.in			patch
+dist/bind/doc/arm/latex-fixup.pl		new
+dist/bind/doc/arm/nominum-docbook-html.dsl.in	delete
+dist/bind/doc/arm/nominum-docbook-print.dsl.in	delete
+dist/bind/doc/arm/validate.sh.in		delete
+dist/bind/doc/draft/draft-baba-dnsext-acl-reqts-00.txt new
+dist/bind/doc/draft/draft-dnsext-opcode-discover-01.txt new
+dist/bind/doc/draft/draft-esibov-dnsext-dynupdtld-00.txt new
+dist/bind/doc/draft/draft-hibbs-dns-server-mib-01.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-2929bis-01.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-aaaa-a6-01.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-ad-is-secure-06.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-apl-rr-02.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-axfr-clarify-03.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-delegation-signer-14.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-dhcid-rr-06.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-dhcid-rr-08.txt delete
+dist/bind/doc/draft/draft-ietf-dnsext-dhcid-rr-09.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-dns-name-p-s-00.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-dnsmib-historical-00.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-dnssec-bis-updates-01.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-dnssec-experiments-01.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-dnssec-intro-05.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-dnssec-intro-11.txt delete
+dist/bind/doc/draft/draft-ietf-dnsext-dnssec-okbit-02.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-dnssec-online-signing-00.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-dnssec-opt-in-05.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-dnssec-opt-in-07.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-dnssec-protocol-01.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-dnssec-protocol-07.txt delete
+dist/bind/doc/draft/draft-ietf-dnsext-dnssec-records-03.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-dnssec-records-09.txt delete
+dist/bind/doc/draft/draft-ietf-dnsext-dnssec-roadmap-07.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-dnssec-trans-02.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-ecc-key-03.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-ecc-key-07.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-edns0dot5-02.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-gss-tsig-06.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-insensitive-03.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-insensitive-04.txt delete
+dist/bind/doc/draft/draft-ietf-dnsext-insensitive-06.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-interop3597-01.txt delete
+dist/bind/doc/draft/draft-ietf-dnsext-interop3597-02.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-ipv6-dns-tradeoffs-00.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-ipv6-name-auto-reg-00.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-keyrr-key-signing-flag-06.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-mdns-19.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-mdns-33.txt delete
+dist/bind/doc/draft/draft-ietf-dnsext-mdns-43.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-message-size-01.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-not-existing-rr-01.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-nsec3-02.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-obsolete-iquery-04.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-parent-sig-00.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-parent-stores-zone-keys-01.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-rfc1886bis-02.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-rfc2536bis-dsa-00.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-rfc2536bis-dsa-06.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-rfc2538bis-04.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-rfc2539bis-dhk-00.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-rfc2539bis-dhk-06.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-rfc2782bis-01.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-signed-nonexistence-requirements-01.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-tkey-renewal-mode-03.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-tkey-renewal-mode-04.txt delete
+dist/bind/doc/draft/draft-ietf-dnsext-tkey-renewal-mode-05.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-trustupdate-threshold-00.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-trustupdate-timers-01.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-tsig-sha-00.txt delete
+dist/bind/doc/draft/draft-ietf-dnsext-tsig-sha-04.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-unknown-rrs-05.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-wcard-clarify-02.txt delete
+dist/bind/doc/draft/draft-ietf-dnsext-wcard-clarify-08.txt new
+dist/bind/doc/draft/draft-ietf-dnsext-zone-status-03.txt new
+dist/bind/doc/draft/draft-ietf-dnsop-bad-dns-res-02.txt delete
+dist/bind/doc/draft/draft-ietf-dnsop-bad-dns-res-04.txt new
+dist/bind/doc/draft/draft-ietf-dnsop-dnssec-operational-practices-01.txt delete
+dist/bind/doc/draft/draft-ietf-dnsop-dnssec-operational-practices-04.txt new
+dist/bind/doc/draft/draft-ietf-dnsop-hardie-shared-root-server-07.txt new
+dist/bind/doc/draft/draft-ietf-dnsop-inaddr-required-02.txt new
+dist/bind/doc/draft/draft-ietf-dnsop-inaddr-required-07.txt new
+dist/bind/doc/draft/draft-ietf-dnsop-interim-signed-root-01.txt new
+dist/bind/doc/draft/draft-ietf-dnsop-ipv6-dns-configuration-02.txt delete
+dist/bind/doc/draft/draft-ietf-dnsop-ipv6-dns-configuration-06.txt new
+dist/bind/doc/draft/draft-ietf-dnsop-ipv6-dns-issues-02.txt new
+dist/bind/doc/draft/draft-ietf-dnsop-ipv6-dns-issues-09.txt delete
+dist/bind/doc/draft/draft-ietf-dnsop-ipv6-dns-issues-11.txt new
+dist/bind/doc/draft/draft-ietf-dnsop-key-rollover-requirements-01.txt delete
+dist/bind/doc/draft/draft-ietf-dnsop-key-rollover-requirements-02.txt new
+dist/bind/doc/draft/draft-ietf-dnsop-keyhand-04.txt new
+dist/bind/doc/draft/draft-ietf-dnsop-misbehavior-against-aaaa-00.txt delete
+dist/bind/doc/draft/draft-ietf-dnsop-parent-sig-00.txt new
+dist/bind/doc/draft/draft-ietf-dnsop-respsize-01.txt delete
+dist/bind/doc/draft/draft-ietf-dnsop-respsize-02.txt new
+dist/bind/doc/draft/draft-ietf-dnsop-serverid-01.txt new
+dist/bind/doc/draft/draft-ietf-dnsop-serverid-02.txt delete
+dist/bind/doc/draft/draft-ietf-dnsop-serverid-04.txt new
+dist/bind/doc/draft/draft-ietf-enum-e164-gstn-np-01.txt new
+dist/bind/doc/draft/draft-ietf-enum-operation-02.txt new
+dist/bind/doc/draft/draft-ietf-idn-aceid-02.txt new
+dist/bind/doc/draft/draft-ietf-idn-amc-ace-m-00.txt new
+dist/bind/doc/draft/draft-ietf-idn-brace-00.txt new
+dist/bind/doc/draft/draft-ietf-idn-cjk-01.txt	new
+dist/bind/doc/draft/draft-ietf-idn-dnsii-mdnp-02.txt new
+dist/bind/doc/draft/draft-ietf-idn-dnsii-mdnr-01.txt new
+dist/bind/doc/draft/draft-ietf-idn-dnsii-trace-00.txt new
+dist/bind/doc/draft/draft-ietf-idn-dude-02.txt	new
+dist/bind/doc/draft/draft-ietf-idn-idna-03.txt	new
+dist/bind/doc/draft/draft-ietf-idn-idne-02.txt	new
+dist/bind/doc/draft/draft-ietf-idn-iptr-02.txt	new
+dist/bind/doc/draft/draft-ietf-idn-jpchar-01.txt new
+dist/bind/doc/draft/draft-ietf-idn-lace-01.txt	new
+dist/bind/doc/draft/draft-ietf-idn-mua-00.txt	new
+dist/bind/doc/draft/draft-ietf-idn-nameprep-03.txt new
+dist/bind/doc/draft/draft-ietf-idn-punycode-03.txt new
+dist/bind/doc/draft/draft-ietf-idn-race-03.txt	new
+dist/bind/doc/draft/draft-ietf-idn-requirements-05.txt new
+dist/bind/doc/draft/draft-ietf-idn-udns-02.txt	new
+dist/bind/doc/draft/draft-ietf-idn-uri-03.txt	new
+dist/bind/doc/draft/draft-ietf-idn-utf6-00.txt	new
+dist/bind/doc/draft/draft-ietf-idn-version-00.txt new
+dist/bind/doc/draft/draft-ietf-idn-vidn-01.txt	new
+dist/bind/doc/draft/draft-ietf-ipngwg-default-addr-select-05.txt new
+dist/bind/doc/draft/draft-ietf-ipngwg-dns-lookups-08.txt new
+dist/bind/doc/draft/draft-ietf-ipngwg-prefix-rr-disc-00.txt new
+dist/bind/doc/draft/draft-ietf-ipngwg-rfc2292bis-02.txt new
+dist/bind/doc/draft/draft-ietf-ipngwg-rfc2553bis-10.txt new
+dist/bind/doc/draft/draft-ietf-ipseckey-rr-09.txt delete
+dist/bind/doc/draft/draft-ietf-ipv6-dns-discovery-07.txt new
+dist/bind/doc/draft/draft-ietf-secsh-dns-04.txt new
+dist/bind/doc/draft/draft-jeong-hmipv6-dns-optimization-00.txt new
+dist/bind/doc/draft/draft-klensin-1591-reflections-02.txt new
+dist/bind/doc/draft/draft-klensin-dns-role-01.txt new
+dist/bind/doc/draft/draft-klensin-idn-tld-00.txt new
+dist/bind/doc/draft/draft-kosters-dnsext-dnssec-opt-in-01.txt new
+dist/bind/doc/draft/draft-lewis-dns-wildcard-clarify-00.txt new
+dist/bind/doc/draft/draft-macgowan-dnsext-label-intel-manage-00.txt new
+dist/bind/doc/draft/draft-manning-multicast-dns-02.txt new
+dist/bind/doc/draft/draft-msawyer-dnsext-edns-attributes-00.txt new
+dist/bind/doc/draft/draft-richardson-ipsec-rr-02.txt new
+dist/bind/doc/draft/draft-sawyer-dnsext-edns0-zone-option-00.txt new
+dist/bind/doc/draft/draft-skwan-utf8-dns-06.txt new
+dist/bind/doc/draft/draft-ymbk-6to4-arpa-delegation-00.txt new
+dist/bind/doc/misc/migration			patch
+dist/bind/doc/misc/options			patch
+dist/bind/doc/rfc/index				patch
+dist/bind/doc/rfc/rfc3757.txt			new
+dist/bind/doc/rfc/rfc3901.txt			new
+dist/bind/doc/rfc/rfc4025.txt			new
+dist/bind/doc/rfc/rfc4033.txt			new
+dist/bind/doc/rfc/rfc4034.txt			new
+dist/bind/doc/rfc/rfc4035.txt			new
+dist/bind/doc/rfc/rfc4074.txt			new
+dist/bind/doc/rfc/rfc4159.txt			new
+dist/bind/doc/xsl/Makefile.in			new
+dist/bind/doc/xsl/copyright.xsl			new
+dist/bind/doc/xsl/isc-docbook-chunk.xsl.in	new
+dist/bind/doc/xsl/isc-docbook-html.xsl.in	new
+dist/bind/doc/xsl/isc-docbook-latex.xsl.in	new
+dist/bind/doc/xsl/isc-manpage.xsl.in		new
+dist/bind/doc/xsl/pre-latex.xsl			new
+dist/bind/lib/bind/Makefile.in			patch
+dist/bind/lib/bind/aclocal.m4			patch
+dist/bind/lib/bind/api				patch
+dist/bind/lib/bind/bsd/utimes.c			patch
+dist/bind/lib/bind/config.h.in			patch
+dist/bind/lib/bind/configure			patch
+dist/bind/lib/bind/configure.in			patch
+dist/bind/lib/bind/dst/dst_api.c		patch
+dist/bind/lib/bind/dst/dst_internal.h		patch
+dist/bind/lib/bind/dst/hmac_link.c		patch
+dist/bind/lib/bind/dst/md5.h			patch
+dist/bind/lib/bind/dst/md5_dgst.c		patch
+dist/bind/lib/bind/dst/md5_locl.h		patch
+dist/bind/lib/bind/dst/support.c		patch
+dist/bind/lib/bind/include/arpa/inet.h		patch
+dist/bind/lib/bind/include/arpa/nameser.h	patch
+dist/bind/lib/bind/include/arpa/nameser_compat.h patch
+dist/bind/lib/bind/include/hesiod.h		patch
+dist/bind/lib/bind/include/irp.h		patch
+dist/bind/lib/bind/include/irs.h		patch
+dist/bind/lib/bind/include/isc/assertions.h	patch
+dist/bind/lib/bind/include/isc/ctl.h		patch
+dist/bind/lib/bind/include/isc/eventlib.h	patch
+dist/bind/lib/bind/include/isc/heap.h		patch
+dist/bind/lib/bind/include/isc/irpmarshall.h	patch
+dist/bind/lib/bind/include/isc/list.h		patch
+dist/bind/lib/bind/include/isc/logging.h	patch
+dist/bind/lib/bind/include/isc/memcluster.h	patch
+dist/bind/lib/bind/include/isc/misc.h		patch
+dist/bind/lib/bind/include/netdb.h		patch
+dist/bind/lib/bind/include/netgroup.h		patch
+dist/bind/lib/bind/include/res_update.h		patch
+dist/bind/lib/bind/include/resolv.h		patch
+dist/bind/lib/bind/include/resolv_mt.h		new
+dist/bind/lib/bind/inet/inet_addr.c		patch
+dist/bind/lib/bind/inet/inet_cidr_ntop.c	patch
+dist/bind/lib/bind/inet/inet_cidr_pton.c	patch
+dist/bind/lib/bind/inet/inet_data.c		patch
+dist/bind/lib/bind/inet/inet_makeaddr.c		patch
+dist/bind/lib/bind/inet/inet_net_ntop.c		patch
+dist/bind/lib/bind/inet/inet_net_pton.c		patch
+dist/bind/lib/bind/inet/inet_neta.c		patch
+dist/bind/lib/bind/inet/inet_network.c		patch
+dist/bind/lib/bind/inet/inet_ntop.c		patch
+dist/bind/lib/bind/inet/inet_pton.c		patch
+dist/bind/lib/bind/inet/nsap_addr.c		patch
+dist/bind/lib/bind/irs/Makefile.in		patch
+dist/bind/lib/bind/irs/dns.c			patch
+dist/bind/lib/bind/irs/dns_gr.c			patch
+dist/bind/lib/bind/irs/dns_ho.c			patch
+dist/bind/lib/bind/irs/dns_nw.c			patch
+dist/bind/lib/bind/irs/dns_p.h			patch
+dist/bind/lib/bind/irs/dns_pr.c			patch
+dist/bind/lib/bind/irs/dns_pw.c			patch
+dist/bind/lib/bind/irs/dns_sv.c			patch
+dist/bind/lib/bind/irs/gai_strerror.c		patch
+dist/bind/lib/bind/irs/gen.c			patch
+dist/bind/lib/bind/irs/gen_gr.c			patch
+dist/bind/lib/bind/irs/gen_ho.c			patch
+dist/bind/lib/bind/irs/gen_ng.c			patch
+dist/bind/lib/bind/irs/gen_nw.c			patch
+dist/bind/lib/bind/irs/gen_p.h			patch
+dist/bind/lib/bind/irs/gen_pr.c			patch
+dist/bind/lib/bind/irs/gen_pw.c			patch
+dist/bind/lib/bind/irs/gen_sv.c			patch
+dist/bind/lib/bind/irs/getaddrinfo.c		patch
+dist/bind/lib/bind/irs/getgrent.c		patch
+dist/bind/lib/bind/irs/getgrent_r.c		patch
+dist/bind/lib/bind/irs/gethostent.c		patch
+dist/bind/lib/bind/irs/gethostent_r.c		patch
+dist/bind/lib/bind/irs/getnameinfo.c		patch
+dist/bind/lib/bind/irs/getnetent.c		patch
+dist/bind/lib/bind/irs/getnetent_r.c		patch
+dist/bind/lib/bind/irs/getnetgrent.c		patch
+dist/bind/lib/bind/irs/getnetgrent_r.c		patch
+dist/bind/lib/bind/irs/getprotoent.c		patch
+dist/bind/lib/bind/irs/getprotoent_r.c		patch
+dist/bind/lib/bind/irs/getpwent.c		patch
+dist/bind/lib/bind/irs/getpwent_r.c		patch
+dist/bind/lib/bind/irs/getservent.c		patch
+dist/bind/lib/bind/irs/getservent_r.c		patch
+dist/bind/lib/bind/irs/hesiod.c			patch
+dist/bind/lib/bind/irs/hesiod_p.h		patch
+dist/bind/lib/bind/irs/irp.c			patch
+dist/bind/lib/bind/irs/irp_gr.c			patch
+dist/bind/lib/bind/irs/irp_ho.c			patch
+dist/bind/lib/bind/irs/irp_ng.c			patch
+dist/bind/lib/bind/irs/irp_nw.c			patch
+dist/bind/lib/bind/irs/irp_p.h			patch
+dist/bind/lib/bind/irs/irp_pr.c			patch
+dist/bind/lib/bind/irs/irp_pw.c			patch
+dist/bind/lib/bind/irs/irp_sv.c			patch
+dist/bind/lib/bind/irs/irpmarshall.c		patch
+dist/bind/lib/bind/irs/irs_data.c		patch
+dist/bind/lib/bind/irs/irs_data.h		patch
+dist/bind/lib/bind/irs/irs_p.h			patch
+dist/bind/lib/bind/irs/lcl.c			patch
+dist/bind/lib/bind/irs/lcl_gr.c			patch
+dist/bind/lib/bind/irs/lcl_ho.c			patch
+dist/bind/lib/bind/irs/lcl_ng.c			patch
+dist/bind/lib/bind/irs/lcl_nw.c			patch
+dist/bind/lib/bind/irs/lcl_p.h			patch
+dist/bind/lib/bind/irs/lcl_pr.c			patch
+dist/bind/lib/bind/irs/lcl_pw.c			patch
+dist/bind/lib/bind/irs/lcl_sv.c			patch
+dist/bind/lib/bind/irs/nis.c			patch
+dist/bind/lib/bind/irs/nis_gr.c			patch
+dist/bind/lib/bind/irs/nis_ho.c			patch
+dist/bind/lib/bind/irs/nis_ng.c			patch
+dist/bind/lib/bind/irs/nis_nw.c			patch
+dist/bind/lib/bind/irs/nis_p.h			patch
+dist/bind/lib/bind/irs/nis_pr.c			patch
+dist/bind/lib/bind/irs/nis_pw.c			patch
+dist/bind/lib/bind/irs/nis_sv.c			patch
+dist/bind/lib/bind/irs/nul_ng.c			patch
+dist/bind/lib/bind/irs/pathnames.h		patch
+dist/bind/lib/bind/irs/util.c			patch
+dist/bind/lib/bind/isc/assertions.c		patch
+dist/bind/lib/bind/isc/base64.c			patch
+dist/bind/lib/bind/isc/bitncmp.c		patch
+dist/bind/lib/bind/isc/ctl_clnt.c		patch
+dist/bind/lib/bind/isc/ctl_p.c			patch
+dist/bind/lib/bind/isc/ctl_srvr.c		patch
+dist/bind/lib/bind/isc/ev_connects.c		patch
+dist/bind/lib/bind/isc/ev_files.c		patch
+dist/bind/lib/bind/isc/ev_streams.c		patch
+dist/bind/lib/bind/isc/ev_timers.c		patch
+dist/bind/lib/bind/isc/ev_waits.c		patch
+dist/bind/lib/bind/isc/eventlib.c		patch
+dist/bind/lib/bind/isc/eventlib_p.h		patch
+dist/bind/lib/bind/isc/heap.c			patch
+dist/bind/lib/bind/isc/hex.c			patch
+dist/bind/lib/bind/isc/logging.c		patch
+dist/bind/lib/bind/isc/logging_p.h		patch
+dist/bind/lib/bind/isc/memcluster.c		patch
+dist/bind/lib/bind/isc/movefile.c		patch
+dist/bind/lib/bind/isc/tree.c			patch
+dist/bind/lib/bind/libtool.m4			delete
+dist/bind/lib/bind/ltmain.sh			delete
+dist/bind/lib/bind/make/rules.in		patch
+dist/bind/lib/bind/nameser/ns_date.c		patch
+dist/bind/lib/bind/nameser/ns_name.c		patch
+dist/bind/lib/bind/nameser/ns_netint.c		patch
+dist/bind/lib/bind/nameser/ns_parse.c		patch
+dist/bind/lib/bind/nameser/ns_print.c		patch
+dist/bind/lib/bind/nameser/ns_samedomain.c	patch
+dist/bind/lib/bind/nameser/ns_sign.c		patch
+dist/bind/lib/bind/nameser/ns_ttl.c		patch
+dist/bind/lib/bind/nameser/ns_verify.c		patch
+dist/bind/lib/bind/port/aix32/include/sys/bitypes.h patch
+dist/bind/lib/bind/port/aix32/include/sys/cdefs.h patch
+dist/bind/lib/bind/port/aix4/include/sys/bitypes.h patch
+dist/bind/lib/bind/port/aix4/include/sys/cdefs.h patch
+dist/bind/lib/bind/port/aix5/Makefile.in	new
+dist/bind/lib/bind/port/aix5/include/Makefile.in new
+dist/bind/lib/bind/port/aix5/include/sys/bitypes.h new
+dist/bind/lib/bind/port/aix5/include/sys/cdefs.h new
+dist/bind/lib/bind/port/aux3/include/sys/cdefs.h patch
+dist/bind/lib/bind/port/bsdos/include/sys/bitypes.h patch
+dist/bind/lib/bind/port/bsdos2/include/sys/bitypes.h patch
+dist/bind/lib/bind/port/darwin/include/sys/bitypes.h patch
+dist/bind/lib/bind/port/decunix/include/sys/bitypes.h patch
+dist/bind/lib/bind/port/freebsd/include/sys/bitypes.h patch
+dist/bind/lib/bind/port/hpux/include/sys/bitypes.h patch
+dist/bind/lib/bind/port/hpux/include/sys/cdefs.h patch
+dist/bind/lib/bind/port/hpux10/include/sys/bitypes.h patch
+dist/bind/lib/bind/port/hpux10/include/sys/cdefs.h patch
+dist/bind/lib/bind/port/hpux9/include/sys/bitypes.h patch
+dist/bind/lib/bind/port/hpux9/include/sys/cdefs.h patch
+dist/bind/lib/bind/port/irix/include/sys/bitypes.h patch
+dist/bind/lib/bind/port/irix/include/sys/cdefs.h patch
+dist/bind/lib/bind/port/lynxos/include/sys/bitypes.h patch
+dist/bind/lib/bind/port/lynxos/include/sys/cdefs.h patch
+dist/bind/lib/bind/port/mpe/include/sys/bitypes.h patch
+dist/bind/lib/bind/port/mpe/include/sys/cdefs.h patch
+dist/bind/lib/bind/port/mpe/include/sys/param.h patch
+dist/bind/lib/bind/port/netbsd/include/sys/bitypes.h patch
+dist/bind/lib/bind/port/next/include/sys/bitypes.h patch
+dist/bind/lib/bind/port/next/include/sys/cdefs.h patch
+dist/bind/lib/bind/port/openbsd/include/sys/bitypes.h patch
+dist/bind/lib/bind/port/qnx/include/Makefile.in patch
+dist/bind/lib/bind/port/qnx/include/sys/bitypes.h patch
+dist/bind/lib/bind/port/qnx/include/sys/cdefs.h patch
+dist/bind/lib/bind/port/rhapsody/include/sys/bitypes.h patch
+dist/bind/lib/bind/port/sco42/include/sys/bitypes.h patch
+dist/bind/lib/bind/port/sco42/include/sys/cdefs.h patch
+dist/bind/lib/bind/port/sco42/include/sys/un.h	patch
+dist/bind/lib/bind/port/solaris/include/sys/bitypes.h patch
+dist/bind/lib/bind/port/solaris/include/sys/cdefs.h patch
+dist/bind/lib/bind/port/sunos/include/sys/bitypes.h patch
+dist/bind/lib/bind/port/sunos/include/sys/cdefs.h patch
+dist/bind/lib/bind/port/ultrix/include/sys/bitypes.h patch
+dist/bind/lib/bind/port/unixware20/include/sys/bitypes.h patch
+dist/bind/lib/bind/port/unixware20/include/sys/cdefs.h patch
+dist/bind/lib/bind/port/unixware212/include/sys/bitypes.h patch
+dist/bind/lib/bind/port/unixware212/include/sys/cdefs.h patch
+dist/bind/lib/bind/port/unknown/include/Makefile.in patch
+dist/bind/lib/bind/port_after.h.in		patch
+dist/bind/lib/bind/port_before.h.in		patch
+dist/bind/lib/bind/resolv/Makefile.in		patch
+dist/bind/lib/bind/resolv/herror.c		patch
+dist/bind/lib/bind/resolv/mtctxres.c		new
+dist/bind/lib/bind/resolv/res_comp.c		patch
+dist/bind/lib/bind/resolv/res_data.c		patch
+dist/bind/lib/bind/resolv/res_debug.c		patch
+dist/bind/lib/bind/resolv/res_debug.h		patch
+dist/bind/lib/bind/resolv/res_findzonecut.c	patch
+dist/bind/lib/bind/resolv/res_init.c		patch
+dist/bind/lib/bind/resolv/res_mkquery.c		patch
+dist/bind/lib/bind/resolv/res_mkupdate.c	patch
+dist/bind/lib/bind/resolv/res_mkupdate.h	patch
+dist/bind/lib/bind/resolv/res_query.c		patch
+dist/bind/lib/bind/resolv/res_send.c		patch
+dist/bind/lib/bind/resolv/res_sendsigned.c	patch
+dist/bind/lib/bind/resolv/res_update.c		patch
+dist/bind/lib/bind9/Makefile.in			patch
+dist/bind/lib/bind9/api				patch
+dist/bind/lib/bind9/check.c			patch
+dist/bind/lib/bind9/getaddresses.c		patch
+dist/bind/lib/bind9/win32/libbind9.dsp		patch
+dist/bind/lib/bind9/win32/libbind9.dsw		patch
+dist/bind/lib/bind9/win32/libbind9.mak		patch
+dist/bind/lib/dns/Makefile.in			patch
+dist/bind/lib/dns/a6.c				new
+dist/bind/lib/dns/acl.c				patch
+dist/bind/lib/dns/adb.c				patch
+dist/bind/lib/dns/api				patch
+dist/bind/lib/dns/byaddr.c			patch
+dist/bind/lib/dns/cache.c			patch
+dist/bind/lib/dns/callbacks.c			patch
+dist/bind/lib/dns/compress.c			patch
+dist/bind/lib/dns/db.c				patch
+dist/bind/lib/dns/dbiterator.c			patch
+dist/bind/lib/dns/dbtable.c			patch
+dist/bind/lib/dns/diff.c			patch
+dist/bind/lib/dns/dispatch.c			patch
+dist/bind/lib/dns/dnssec.c			patch
+dist/bind/lib/dns/dst_api.c			new
+dist/bind/lib/dns/dst_internal.h		new
+dist/bind/lib/dns/dst_lib.c			new
+dist/bind/lib/dns/dst_openssl.h			new
+dist/bind/lib/dns/dst_parse.c			new
+dist/bind/lib/dns/dst_parse.h			new
+dist/bind/lib/dns/dst_result.c			new
+dist/bind/lib/dns/forward.c			patch
+dist/bind/lib/dns/gen-unix.h			patch
+dist/bind/lib/dns/gen-win32.h			patch
+dist/bind/lib/dns/gen.c				patch
+dist/bind/lib/dns/gssapi_link.c			new
+dist/bind/lib/dns/gssapictx.c			new
+dist/bind/lib/dns/hmac_link.c			new
+dist/bind/lib/dns/include/Makefile.in		patch
+dist/bind/lib/dns/include/dns/a6.h		new
+dist/bind/lib/dns/include/dns/acl.h		patch
+dist/bind/lib/dns/include/dns/adb.h		patch
+dist/bind/lib/dns/include/dns/bit.h		patch
+dist/bind/lib/dns/include/dns/byaddr.h		patch
+dist/bind/lib/dns/include/dns/cache.h		patch
+dist/bind/lib/dns/include/dns/callbacks.h	patch
+dist/bind/lib/dns/include/dns/cert.h		patch
+dist/bind/lib/dns/include/dns/compress.h	patch
+dist/bind/lib/dns/include/dns/db.h		patch
+dist/bind/lib/dns/include/dns/dbiterator.h	patch
+dist/bind/lib/dns/include/dns/dbtable.h		patch
+dist/bind/lib/dns/include/dns/diff.h		patch
+dist/bind/lib/dns/include/dns/dispatch.h	patch
+dist/bind/lib/dns/include/dns/dnssec.h		patch
+dist/bind/lib/dns/include/dns/events.h		patch
+dist/bind/lib/dns/include/dns/fixedname.h	patch
+dist/bind/lib/dns/include/dns/forward.h		patch
+dist/bind/lib/dns/include/dns/journal.h		patch
+dist/bind/lib/dns/include/dns/keyflags.h	patch
+dist/bind/lib/dns/include/dns/keytable.h	patch
+dist/bind/lib/dns/include/dns/keyvalues.h	patch
+dist/bind/lib/dns/include/dns/lib.h		patch
+dist/bind/lib/dns/include/dns/log.h		patch
+dist/bind/lib/dns/include/dns/lookup.h		patch
+dist/bind/lib/dns/include/dns/master.h		patch
+dist/bind/lib/dns/include/dns/masterdump.h	patch
+dist/bind/lib/dns/include/dns/message.h		patch
+dist/bind/lib/dns/include/dns/name.h		patch
+dist/bind/lib/dns/include/dns/ncache.h		patch
+dist/bind/lib/dns/include/dns/nxt.h		new
+dist/bind/lib/dns/include/dns/peer.h		patch
+dist/bind/lib/dns/include/dns/rbt.h		patch
+dist/bind/lib/dns/include/dns/rcode.h		patch
+dist/bind/lib/dns/include/dns/rdata.h		patch
+dist/bind/lib/dns/include/dns/rdataclass.h	patch
+dist/bind/lib/dns/include/dns/rdatalist.h	patch
+dist/bind/lib/dns/include/dns/rdataset.h	patch
+dist/bind/lib/dns/include/dns/rdatasetiter.h	patch
+dist/bind/lib/dns/include/dns/rdataslab.h	patch
+dist/bind/lib/dns/include/dns/rdatatype.h	patch
+dist/bind/lib/dns/include/dns/request.h		patch
+dist/bind/lib/dns/include/dns/resolver.h	patch
+dist/bind/lib/dns/include/dns/result.h		patch
+dist/bind/lib/dns/include/dns/rootns.h		patch
+dist/bind/lib/dns/include/dns/sdb.h		patch
+dist/bind/lib/dns/include/dns/secalg.h		patch
+dist/bind/lib/dns/include/dns/secproto.h	patch
+dist/bind/lib/dns/include/dns/soa.h		patch
+dist/bind/lib/dns/include/dns/ssu.h		patch
+dist/bind/lib/dns/include/dns/stats.h		patch
+dist/bind/lib/dns/include/dns/tcpmsg.h		patch
+dist/bind/lib/dns/include/dns/time.h		patch
+dist/bind/lib/dns/include/dns/timer.h		patch
+dist/bind/lib/dns/include/dns/tkey.h		patch
+dist/bind/lib/dns/include/dns/tsig.h		patch
+dist/bind/lib/dns/include/dns/ttl.h		patch
+dist/bind/lib/dns/include/dns/types.h		patch
+dist/bind/lib/dns/include/dns/validator.h	patch
+dist/bind/lib/dns/include/dns/view.h		patch
+dist/bind/lib/dns/include/dns/xfrin.h		patch
+dist/bind/lib/dns/include/dns/zone.h		patch
+dist/bind/lib/dns/include/dns/zonekey.h		patch
+dist/bind/lib/dns/include/dns/zt.h		patch
+dist/bind/lib/dns/include/dst/Makefile.in	new
+dist/bind/lib/dns/include/dst/dst.h		new
+dist/bind/lib/dns/include/dst/gssapi.h		new
+dist/bind/lib/dns/include/dst/lib.h		new
+dist/bind/lib/dns/include/dst/result.h		new
+dist/bind/lib/dns/journal.c			patch
+dist/bind/lib/dns/key.c				new
+dist/bind/lib/dns/keytable.c			patch
+dist/bind/lib/dns/lib.c				patch
+dist/bind/lib/dns/log.c				patch
+dist/bind/lib/dns/lookup.c			patch
+dist/bind/lib/dns/master.c			patch
+dist/bind/lib/dns/masterdump.c			patch
+dist/bind/lib/dns/message.c			patch
+dist/bind/lib/dns/name.c			patch
+dist/bind/lib/dns/ncache.c			patch
+dist/bind/lib/dns/nxt.c				new
+dist/bind/lib/dns/openssl_link.c		new
+dist/bind/lib/dns/openssldh_link.c		new
+dist/bind/lib/dns/openssldsa_link.c		new
+dist/bind/lib/dns/opensslrsa_link.c		new
+dist/bind/lib/dns/peer.c			patch
+dist/bind/lib/dns/rbt.c				patch
+dist/bind/lib/dns/rbtdb.c			patch
+dist/bind/lib/dns/rbtdb.h			patch
+dist/bind/lib/dns/rbtdb64.c			patch
+dist/bind/lib/dns/rbtdb64.h			patch
+dist/bind/lib/dns/rdata.c			patch
+dist/bind/lib/dns/rdata/any_255/tsig_250.c	patch
+dist/bind/lib/dns/rdata/any_255/tsig_250.h	patch
+dist/bind/lib/dns/rdata/generic/afsdb_18.c	patch
+dist/bind/lib/dns/rdata/generic/afsdb_18.h	patch
+dist/bind/lib/dns/rdata/generic/cert_37.c	patch
+dist/bind/lib/dns/rdata/generic/cert_37.h	patch
+dist/bind/lib/dns/rdata/generic/cname_5.c	patch
+dist/bind/lib/dns/rdata/generic/cname_5.h	patch
+dist/bind/lib/dns/rdata/generic/dlv_65323.c	patch
+dist/bind/lib/dns/rdata/generic/dlv_65323.h	patch
+dist/bind/lib/dns/rdata/generic/dname_39.c	patch
+dist/bind/lib/dns/rdata/generic/dname_39.h	patch
+dist/bind/lib/dns/rdata/generic/dnskey_48.c	patch
+dist/bind/lib/dns/rdata/generic/dnskey_48.h	patch
+dist/bind/lib/dns/rdata/generic/ds_43.c		patch
+dist/bind/lib/dns/rdata/generic/ds_43.h		patch
+dist/bind/lib/dns/rdata/generic/gpos_27.c	patch
+dist/bind/lib/dns/rdata/generic/gpos_27.h	patch
+dist/bind/lib/dns/rdata/generic/hinfo_13.c	patch
+dist/bind/lib/dns/rdata/generic/hinfo_13.h	patch
+dist/bind/lib/dns/rdata/generic/isdn_20.c	patch
+dist/bind/lib/dns/rdata/generic/isdn_20.h	patch
+dist/bind/lib/dns/rdata/generic/key_25.c	patch
+dist/bind/lib/dns/rdata/generic/key_25.h	patch
+dist/bind/lib/dns/rdata/generic/loc_29.c	patch
+dist/bind/lib/dns/rdata/generic/loc_29.h	patch
+dist/bind/lib/dns/rdata/generic/mb_7.c		patch
+dist/bind/lib/dns/rdata/generic/mb_7.h		patch
+dist/bind/lib/dns/rdata/generic/md_3.c		patch
+dist/bind/lib/dns/rdata/generic/md_3.h		patch
+dist/bind/lib/dns/rdata/generic/mf_4.c		patch
+dist/bind/lib/dns/rdata/generic/mf_4.h		patch
+dist/bind/lib/dns/rdata/generic/mg_8.c		patch
+dist/bind/lib/dns/rdata/generic/mg_8.h		patch
+dist/bind/lib/dns/rdata/generic/minfo_14.c	patch
+dist/bind/lib/dns/rdata/generic/minfo_14.h	patch
+dist/bind/lib/dns/rdata/generic/mr_9.c		patch
+dist/bind/lib/dns/rdata/generic/mr_9.h		patch
+dist/bind/lib/dns/rdata/generic/mx_15.c		patch
+dist/bind/lib/dns/rdata/generic/mx_15.h		patch
+dist/bind/lib/dns/rdata/generic/ns_2.c		patch
+dist/bind/lib/dns/rdata/generic/ns_2.h		patch
+dist/bind/lib/dns/rdata/generic/nsec_47.c	patch
+dist/bind/lib/dns/rdata/generic/nsec_47.h	patch
+dist/bind/lib/dns/rdata/generic/null_10.c	patch
+dist/bind/lib/dns/rdata/generic/null_10.h	patch
+dist/bind/lib/dns/rdata/generic/nxt_30.c	patch
+dist/bind/lib/dns/rdata/generic/nxt_30.h	patch
+dist/bind/lib/dns/rdata/generic/opt_41.c	patch
+dist/bind/lib/dns/rdata/generic/opt_41.h	patch
+dist/bind/lib/dns/rdata/generic/proforma.c	patch
+dist/bind/lib/dns/rdata/generic/proforma.h	patch
+dist/bind/lib/dns/rdata/generic/ptr_12.c	patch
+dist/bind/lib/dns/rdata/generic/ptr_12.h	patch
+dist/bind/lib/dns/rdata/generic/rp_17.c		patch
+dist/bind/lib/dns/rdata/generic/rp_17.h		patch
+dist/bind/lib/dns/rdata/generic/rrsig_46.c	patch
+dist/bind/lib/dns/rdata/generic/rrsig_46.h	patch
+dist/bind/lib/dns/rdata/generic/rt_21.c		patch
+dist/bind/lib/dns/rdata/generic/rt_21.h		patch
+dist/bind/lib/dns/rdata/generic/sig_24.c	patch
+dist/bind/lib/dns/rdata/generic/sig_24.h	patch
+dist/bind/lib/dns/rdata/generic/soa_6.c		patch
+dist/bind/lib/dns/rdata/generic/soa_6.h		patch
+dist/bind/lib/dns/rdata/generic/sshfp_44.c	patch
+dist/bind/lib/dns/rdata/generic/sshfp_44.h	patch
+dist/bind/lib/dns/rdata/generic/tkey_249.c	patch
+dist/bind/lib/dns/rdata/generic/tkey_249.h	patch
+dist/bind/lib/dns/rdata/generic/txt_16.c	patch
+dist/bind/lib/dns/rdata/generic/txt_16.h	patch
+dist/bind/lib/dns/rdata/generic/unspec_103.c	patch
+dist/bind/lib/dns/rdata/generic/unspec_103.h	patch
+dist/bind/lib/dns/rdata/generic/x25_19.c	patch
+dist/bind/lib/dns/rdata/generic/x25_19.h	patch
+dist/bind/lib/dns/rdata/hs_4/a_1.c		patch
+dist/bind/lib/dns/rdata/hs_4/a_1.h		patch
+dist/bind/lib/dns/rdata/in_1/a6_38.c		patch
+dist/bind/lib/dns/rdata/in_1/a6_38.h		patch
+dist/bind/lib/dns/rdata/in_1/a_1.c		patch
+dist/bind/lib/dns/rdata/in_1/a_1.h		patch
+dist/bind/lib/dns/rdata/in_1/aaaa_28.c		patch
+dist/bind/lib/dns/rdata/in_1/aaaa_28.h		patch
+dist/bind/lib/dns/rdata/in_1/apl_42.c		patch
+dist/bind/lib/dns/rdata/in_1/apl_42.h		patch
+dist/bind/lib/dns/rdata/in_1/kx_36.c		patch
+dist/bind/lib/dns/rdata/in_1/kx_36.h		patch
+dist/bind/lib/dns/rdata/in_1/naptr_35.c		patch
+dist/bind/lib/dns/rdata/in_1/naptr_35.h		patch
+dist/bind/lib/dns/rdata/in_1/nsap-ptr_23.c	patch
+dist/bind/lib/dns/rdata/in_1/nsap-ptr_23.h	patch
+dist/bind/lib/dns/rdata/in_1/nsap_22.c		patch
+dist/bind/lib/dns/rdata/in_1/nsap_22.h		patch
+dist/bind/lib/dns/rdata/in_1/px_26.c		patch
+dist/bind/lib/dns/rdata/in_1/px_26.h		patch
+dist/bind/lib/dns/rdata/in_1/srv_33.c		patch
+dist/bind/lib/dns/rdata/in_1/srv_33.h		patch
+dist/bind/lib/dns/rdata/in_1/wks_11.c		patch
+dist/bind/lib/dns/rdata/in_1/wks_11.h		patch
+dist/bind/lib/dns/rdata/rdatastructpre.h	patch
+dist/bind/lib/dns/rdata/rdatastructsuf.h	patch
+dist/bind/lib/dns/rdatalist.c			patch
+dist/bind/lib/dns/rdatalist_p.h			patch
+dist/bind/lib/dns/rdataset.c			patch
+dist/bind/lib/dns/rdatasetiter.c		patch
+dist/bind/lib/dns/rdataslab.c			patch
+dist/bind/lib/dns/request.c			patch
+dist/bind/lib/dns/resolver.c			patch
+dist/bind/lib/dns/result.c			patch
+dist/bind/lib/dns/rootns.c			patch
+dist/bind/lib/dns/sdb.c				patch
+dist/bind/lib/dns/sec/Makefile.in		delete
+dist/bind/lib/dns/sec/dst/Makefile.in		delete
+dist/bind/lib/dns/sec/dst/dst_api.c		delete
+dist/bind/lib/dns/sec/dst/dst_internal.h	delete
+dist/bind/lib/dns/sec/dst/dst_lib.c		delete
+dist/bind/lib/dns/sec/dst/dst_openssl.h		delete
+dist/bind/lib/dns/sec/dst/dst_parse.c		delete
+dist/bind/lib/dns/sec/dst/dst_parse.h		delete
+dist/bind/lib/dns/sec/dst/dst_result.c		delete
+dist/bind/lib/dns/sec/dst/gssapi_link.c		delete
+dist/bind/lib/dns/sec/dst/gssapictx.c		delete
+dist/bind/lib/dns/sec/dst/hmac_link.c		delete
+dist/bind/lib/dns/sec/dst/include/Makefile.in	delete
+dist/bind/lib/dns/sec/dst/include/dst/Makefile.in delete
+dist/bind/lib/dns/sec/dst/include/dst/dst.h	delete
+dist/bind/lib/dns/sec/dst/include/dst/gssapi.h	delete
+dist/bind/lib/dns/sec/dst/include/dst/lib.h	delete
+dist/bind/lib/dns/sec/dst/include/dst/result.h	delete
+dist/bind/lib/dns/sec/dst/key.c			delete
+dist/bind/lib/dns/sec/dst/openssl_link.c	delete
+dist/bind/lib/dns/sec/dst/openssldh_link.c	delete
+dist/bind/lib/dns/sec/dst/openssldsa_link.c	delete
+dist/bind/lib/dns/sec/dst/opensslrsa_link.c	delete
+dist/bind/lib/dns/soa.c				patch
+dist/bind/lib/dns/ssu.c				patch
+dist/bind/lib/dns/stats.c			patch
+dist/bind/lib/dns/tcpmsg.c			patch
+dist/bind/lib/dns/time.c			patch
+dist/bind/lib/dns/timer.c			patch
+dist/bind/lib/dns/tkey.c			patch
+dist/bind/lib/dns/tsig.c			patch
+dist/bind/lib/dns/ttl.c				patch
+dist/bind/lib/dns/validator.c			patch
+dist/bind/lib/dns/version.c			patch
+dist/bind/lib/dns/view.c			patch
+dist/bind/lib/dns/win32/DLLMain.c		patch
+dist/bind/lib/dns/win32/gen.dsp			patch
+dist/bind/lib/dns/win32/gen.dsw			patch
+dist/bind/lib/dns/win32/gen.mak			patch
+dist/bind/lib/dns/win32/libdns.dsp		patch
+dist/bind/lib/dns/win32/libdns.dsw		patch
+dist/bind/lib/dns/win32/libdns.mak		patch
+dist/bind/lib/dns/win32/version.c		patch
+dist/bind/lib/dns/xfrin.c			patch
+dist/bind/lib/dns/zone.c			patch
+dist/bind/lib/dns/zonekey.c			patch
+dist/bind/lib/dns/zt.c				patch
+dist/bind/lib/isc/api				patch
+dist/bind/lib/isc/assertions.c			patch
+dist/bind/lib/isc/base64.c			patch
+dist/bind/lib/isc/bitstring.c			patch
+dist/bind/lib/isc/buffer.c			patch
+dist/bind/lib/isc/bufferlist.c			patch
+dist/bind/lib/isc/commandline.c			patch
+dist/bind/lib/isc/entropy.c			patch
+dist/bind/lib/isc/error.c			patch
+dist/bind/lib/isc/event.c			patch
+dist/bind/lib/isc/fsaccess.c			patch
+dist/bind/lib/isc/hash.c			patch
+dist/bind/lib/isc/heap.c			patch
+dist/bind/lib/isc/hex.c				patch
+dist/bind/lib/isc/hmacmd5.c			patch
+dist/bind/lib/isc/include/isc/Makefile.in	patch
+dist/bind/lib/isc/include/isc/app.h		patch
+dist/bind/lib/isc/include/isc/assertions.h	patch
+dist/bind/lib/isc/include/isc/base64.h		patch
+dist/bind/lib/isc/include/isc/bitstring.h	patch
+dist/bind/lib/isc/include/isc/boolean.h		patch
+dist/bind/lib/isc/include/isc/buffer.h		patch
+dist/bind/lib/isc/include/isc/bufferlist.h	patch
+dist/bind/lib/isc/include/isc/commandline.h	patch
+dist/bind/lib/isc/include/isc/entropy.h		patch
+dist/bind/lib/isc/include/isc/error.h		patch
+dist/bind/lib/isc/include/isc/event.h		patch
+dist/bind/lib/isc/include/isc/eventclass.h	patch
+dist/bind/lib/isc/include/isc/file.h		patch
+dist/bind/lib/isc/include/isc/formatcheck.h	patch
+dist/bind/lib/isc/include/isc/fsaccess.h	patch
+dist/bind/lib/isc/include/isc/hash.h		patch
+dist/bind/lib/isc/include/isc/heap.h		patch
+dist/bind/lib/isc/include/isc/hex.h		patch
+dist/bind/lib/isc/include/isc/hmacmd5.h		patch
+dist/bind/lib/isc/include/isc/interfaceiter.h	patch
+dist/bind/lib/isc/include/isc/ipv6.h		patch
+dist/bind/lib/isc/include/isc/lang.h		patch
+dist/bind/lib/isc/include/isc/lex.h		patch
+dist/bind/lib/isc/include/isc/lfsr.h		patch
+dist/bind/lib/isc/include/isc/lib.h		patch
+dist/bind/lib/isc/include/isc/list.h		patch
+dist/bind/lib/isc/include/isc/log.h		patch
+dist/bind/lib/isc/include/isc/magic.h		patch
+dist/bind/lib/isc/include/isc/md5.h		patch
+dist/bind/lib/isc/include/isc/mem.h		patch
+dist/bind/lib/isc/include/isc/msgcat.h		patch
+dist/bind/lib/isc/include/isc/msgs.h		patch
+dist/bind/lib/isc/include/isc/mutexblock.h	patch
+dist/bind/lib/isc/include/isc/netaddr.h		patch
+dist/bind/lib/isc/include/isc/ondestroy.h	patch
+dist/bind/lib/isc/include/isc/os.h		patch
+dist/bind/lib/isc/include/isc/print.h		patch
+dist/bind/lib/isc/include/isc/quota.h		patch
+dist/bind/lib/isc/include/isc/random.h		patch
+dist/bind/lib/isc/include/isc/ratelimiter.h	patch
+dist/bind/lib/isc/include/isc/refcount.h	patch
+dist/bind/lib/isc/include/isc/region.h		patch
+dist/bind/lib/isc/include/isc/resource.h	patch
+dist/bind/lib/isc/include/isc/result.h		patch
+dist/bind/lib/isc/include/isc/resultclass.h	patch
+dist/bind/lib/isc/include/isc/rwlock.h		patch
+dist/bind/lib/isc/include/isc/serial.h		patch
+dist/bind/lib/isc/include/isc/sha1.h		patch
+dist/bind/lib/isc/include/isc/sockaddr.h	patch
+dist/bind/lib/isc/include/isc/socket.h		patch
+dist/bind/lib/isc/include/isc/stdio.h		patch
+dist/bind/lib/isc/include/isc/string.h		patch
+dist/bind/lib/isc/include/isc/symtab.h		patch
+dist/bind/lib/isc/include/isc/task.h		patch
+dist/bind/lib/isc/include/isc/taskpool.h	patch
+dist/bind/lib/isc/include/isc/timer.h		patch
+dist/bind/lib/isc/include/isc/types.h		patch
+dist/bind/lib/isc/include/isc/util.h		patch
+dist/bind/lib/isc/inet_aton.c			patch
+dist/bind/lib/isc/inet_ntop.c			patch
+dist/bind/lib/isc/inet_pton.c			patch
+dist/bind/lib/isc/lex.c				patch
+dist/bind/lib/isc/lfsr.c			patch
+dist/bind/lib/isc/lib.c				patch
+dist/bind/lib/isc/log.c				patch
+dist/bind/lib/isc/md5.c				patch
+dist/bind/lib/isc/mem.c				patch
+dist/bind/lib/isc/mutexblock.c			patch
+dist/bind/lib/isc/netaddr.c			patch
+dist/bind/lib/isc/nls/msgcat.c			patch
+dist/bind/lib/isc/nothreads/condition.c		patch
+dist/bind/lib/isc/nothreads/include/isc/condition.h patch
+dist/bind/lib/isc/nothreads/include/isc/mutex.h patch
+dist/bind/lib/isc/nothreads/include/isc/once.h	patch
+dist/bind/lib/isc/nothreads/include/isc/thread.h patch
+dist/bind/lib/isc/nothreads/mutex.c		patch
+dist/bind/lib/isc/nothreads/thread.c		patch
+dist/bind/lib/isc/ondestroy.c			patch
+dist/bind/lib/isc/print.c			patch
+dist/bind/lib/isc/pthreads/condition.c		patch
+dist/bind/lib/isc/pthreads/include/isc/condition.h patch
+dist/bind/lib/isc/pthreads/include/isc/mutex.h	patch
+dist/bind/lib/isc/pthreads/include/isc/once.h	patch
+dist/bind/lib/isc/pthreads/include/isc/thread.h patch
+dist/bind/lib/isc/pthreads/mutex.c		patch
+dist/bind/lib/isc/pthreads/thread.c		patch
+dist/bind/lib/isc/quota.c			patch
+dist/bind/lib/isc/random.c			patch
+dist/bind/lib/isc/ratelimiter.c			patch
+dist/bind/lib/isc/result.c			patch
+dist/bind/lib/isc/rwlock.c			patch
+dist/bind/lib/isc/serial.c			patch
+dist/bind/lib/isc/sha1.c			patch
+dist/bind/lib/isc/sockaddr.c			patch
+dist/bind/lib/isc/string.c			patch
+dist/bind/lib/isc/symtab.c			patch
+dist/bind/lib/isc/task.c			patch
+dist/bind/lib/isc/task_p.h			patch
+dist/bind/lib/isc/taskpool.c			patch
+dist/bind/lib/isc/timer.c			patch
+dist/bind/lib/isc/timer_p.h			patch
+dist/bind/lib/isc/unix/app.c			patch
+dist/bind/lib/isc/unix/dir.c			patch
+dist/bind/lib/isc/unix/entropy.c		patch
+dist/bind/lib/isc/unix/errno2result.c		patch
+dist/bind/lib/isc/unix/errno2result.h		patch
+dist/bind/lib/isc/unix/file.c			patch
+dist/bind/lib/isc/unix/fsaccess.c		patch
+dist/bind/lib/isc/unix/ifiter_ioctl.c		patch
+dist/bind/lib/isc/unix/ifiter_sysctl.c		patch
+dist/bind/lib/isc/unix/include/isc/dir.h	patch
+dist/bind/lib/isc/unix/include/isc/int.h	patch
+dist/bind/lib/isc/unix/include/isc/keyboard.h	patch
+dist/bind/lib/isc/unix/include/isc/net.h	patch
+dist/bind/lib/isc/unix/include/isc/netdb.h	patch
+dist/bind/lib/isc/unix/include/isc/offset.h	patch
+dist/bind/lib/isc/unix/include/isc/stat.h	patch
+dist/bind/lib/isc/unix/include/isc/stdtime.h	patch
+dist/bind/lib/isc/unix/include/isc/strerror.h	patch
+dist/bind/lib/isc/unix/include/isc/syslog.h	patch
+dist/bind/lib/isc/unix/include/isc/time.h	patch
+dist/bind/lib/isc/unix/interfaceiter.c		patch
+dist/bind/lib/isc/unix/ipv6.c			patch
+dist/bind/lib/isc/unix/keyboard.c		patch
+dist/bind/lib/isc/unix/net.c			patch
+dist/bind/lib/isc/unix/os.c			patch
+dist/bind/lib/isc/unix/resource.c		patch
+dist/bind/lib/isc/unix/socket.c			patch
+dist/bind/lib/isc/unix/socket_p.h		patch
+dist/bind/lib/isc/unix/stdio.c			patch
+dist/bind/lib/isc/unix/stdtime.c		patch
+dist/bind/lib/isc/unix/strerror.c		patch
+dist/bind/lib/isc/unix/syslog.c			patch
+dist/bind/lib/isc/unix/time.c			patch
+dist/bind/lib/isc/version.c			patch
+dist/bind/lib/isc/win32/DLLMain.c		patch
+dist/bind/lib/isc/win32/app.c			patch
+dist/bind/lib/isc/win32/condition.c		patch
+dist/bind/lib/isc/win32/dir.c			patch
+dist/bind/lib/isc/win32/entropy.c		patch
+dist/bind/lib/isc/win32/errno2result.c		patch
+dist/bind/lib/isc/win32/errno2result.h		patch
+dist/bind/lib/isc/win32/file.c			patch
+dist/bind/lib/isc/win32/fsaccess.c		patch
+dist/bind/lib/isc/win32/include/isc/bind_registry.h patch
+dist/bind/lib/isc/win32/include/isc/bindevt.h	patch
+dist/bind/lib/isc/win32/include/isc/condition.h patch
+dist/bind/lib/isc/win32/include/isc/dir.h	patch
+dist/bind/lib/isc/win32/include/isc/int.h	patch
+dist/bind/lib/isc/win32/include/isc/ipv6.h	patch
+dist/bind/lib/isc/win32/include/isc/keyboard.h	patch
+dist/bind/lib/isc/win32/include/isc/mutex.h	patch
+dist/bind/lib/isc/win32/include/isc/net.h	patch
+dist/bind/lib/isc/win32/include/isc/netdb.h	patch
+dist/bind/lib/isc/win32/include/isc/ntfile.h	new
+dist/bind/lib/isc/win32/include/isc/ntpaths.h	patch
+dist/bind/lib/isc/win32/include/isc/offset.h	patch
+dist/bind/lib/isc/win32/include/isc/once.h	patch
+dist/bind/lib/isc/win32/include/isc/platform.h	patch
+dist/bind/lib/isc/win32/include/isc/stat.h	patch
+dist/bind/lib/isc/win32/include/isc/stdtime.h	patch
+dist/bind/lib/isc/win32/include/isc/strerror.h	patch
+dist/bind/lib/isc/win32/include/isc/syslog.h	patch
+dist/bind/lib/isc/win32/include/isc/thread.h	patch
+dist/bind/lib/isc/win32/include/isc/time.h	patch
+dist/bind/lib/isc/win32/include/isc/win32os.h	patch
+dist/bind/lib/isc/win32/interfaceiter.c		patch
+dist/bind/lib/isc/win32/ipv6.c			patch
+dist/bind/lib/isc/win32/keyboard.c		patch
+dist/bind/lib/isc/win32/libisc.def		patch
+dist/bind/lib/isc/win32/libisc.dsw		patch
+dist/bind/lib/isc/win32/libisc.mak		patch
+dist/bind/lib/isc/win32/net.c			patch
+dist/bind/lib/isc/win32/netdb.h			patch
+dist/bind/lib/isc/win32/ntfile.c		new
+dist/bind/lib/isc/win32/ntpaths.c		patch
+dist/bind/lib/isc/win32/once.c			patch
+dist/bind/lib/isc/win32/os.c			patch
+dist/bind/lib/isc/win32/resource.c		patch
+dist/bind/lib/isc/win32/socket.c		patch
+dist/bind/lib/isc/win32/stdio.c			patch
+dist/bind/lib/isc/win32/stdtime.c		patch
+dist/bind/lib/isc/win32/strerror.c		patch
+dist/bind/lib/isc/win32/syslog.c		patch
+dist/bind/lib/isc/win32/syslog.h		patch
+dist/bind/lib/isc/win32/thread.c		patch
+dist/bind/lib/isc/win32/time.c			patch
+dist/bind/lib/isc/win32/unistd.h		patch
+dist/bind/lib/isc/win32/version.c		patch
+dist/bind/lib/isc/win32/win32os.c		patch
+dist/bind/lib/isccc/alist.c			patch
+dist/bind/lib/isccc/base64.c			patch
+dist/bind/lib/isccc/cc.c			patch
+dist/bind/lib/isccc/ccmsg.c			patch
+dist/bind/lib/isccc/include/isccc/alist.h	patch
+dist/bind/lib/isccc/include/isccc/base64.h	patch
+dist/bind/lib/isccc/include/isccc/cc.h		patch
+dist/bind/lib/isccc/include/isccc/ccmsg.h	patch
+dist/bind/lib/isccc/include/isccc/events.h	patch
+dist/bind/lib/isccc/include/isccc/lib.h		patch
+dist/bind/lib/isccc/include/isccc/result.h	patch
+dist/bind/lib/isccc/include/isccc/sexpr.h	patch
+dist/bind/lib/isccc/include/isccc/symtab.h	patch
+dist/bind/lib/isccc/include/isccc/symtype.h	patch
+dist/bind/lib/isccc/include/isccc/types.h	patch
+dist/bind/lib/isccc/include/isccc/util.h	patch
+dist/bind/lib/isccc/lib.c			patch
+dist/bind/lib/isccc/result.c			patch
+dist/bind/lib/isccc/sexpr.c			patch
+dist/bind/lib/isccc/symtab.c			patch
+dist/bind/lib/isccc/version.c			patch
+dist/bind/lib/isccc/win32/DLLMain.c		patch
+dist/bind/lib/isccc/win32/libisccc.dsp		patch
+dist/bind/lib/isccc/win32/libisccc.dsw		patch
+dist/bind/lib/isccc/win32/libisccc.mak		patch
+dist/bind/lib/isccc/win32/version.c		patch
+dist/bind/lib/isccfg/api			patch
+dist/bind/lib/isccfg/check.c			new
+dist/bind/lib/isccfg/include/isccfg/cfg.h	patch
+dist/bind/lib/isccfg/include/isccfg/check.h	new
+dist/bind/lib/isccfg/include/isccfg/grammar.h	patch
+dist/bind/lib/isccfg/include/isccfg/log.h	patch
+dist/bind/lib/isccfg/log.c			patch
+dist/bind/lib/isccfg/namedconf.c		patch
+dist/bind/lib/isccfg/parser.c			patch
+dist/bind/lib/isccfg/version.c			patch
+dist/bind/lib/isccfg/win32/DLLMain.c		patch
+dist/bind/lib/isccfg/win32/libisccfg.dsp	patch
+dist/bind/lib/isccfg/win32/libisccfg.dsw	patch
+dist/bind/lib/isccfg/win32/libisccfg.mak	patch
+dist/bind/lib/isccfg/win32/version.c		patch
+dist/bind/lib/lwres/Makefile.in			patch
+dist/bind/lib/lwres/api				patch
+dist/bind/lib/lwres/assert_p.h			patch
+dist/bind/lib/lwres/context.c			patch
+dist/bind/lib/lwres/context_p.h			patch
+dist/bind/lib/lwres/gai_strerror.c		patch
+dist/bind/lib/lwres/getaddrinfo.c		patch
+dist/bind/lib/lwres/gethost.c			patch
+dist/bind/lib/lwres/getipnode.c			patch
+dist/bind/lib/lwres/getnameinfo.c		patch
+dist/bind/lib/lwres/getrrset.c			patch
+dist/bind/lib/lwres/herror.c			patch
+dist/bind/lib/lwres/include/lwres/context.h	patch
+dist/bind/lib/lwres/include/lwres/int.h		patch
+dist/bind/lib/lwres/include/lwres/ipv6.h	patch
+dist/bind/lib/lwres/include/lwres/lang.h	patch
+dist/bind/lib/lwres/include/lwres/list.h	patch
+dist/bind/lib/lwres/include/lwres/lwbuffer.h	patch
+dist/bind/lib/lwres/include/lwres/lwpacket.h	patch
+dist/bind/lib/lwres/include/lwres/lwres.h	patch
+dist/bind/lib/lwres/include/lwres/platform.h.in patch
+dist/bind/lib/lwres/include/lwres/result.h	patch
+dist/bind/lib/lwres/include/lwres/stdlib.h	new
+dist/bind/lib/lwres/lwbuffer.c			patch
+dist/bind/lib/lwres/lwconfig.c			patch
+dist/bind/lib/lwres/lwinetaton.c		patch
+dist/bind/lib/lwres/lwinetntop.c		patch
+dist/bind/lib/lwres/lwinetpton.c		patch
+dist/bind/lib/lwres/lwpacket.c			patch
+dist/bind/lib/lwres/lwres_gabn.c		patch
+dist/bind/lib/lwres/lwres_gnba.c		patch
+dist/bind/lib/lwres/lwres_grbn.c		patch
+dist/bind/lib/lwres/lwres_noop.c		patch
+dist/bind/lib/lwres/lwresutil.c			patch
+dist/bind/lib/lwres/man/lwres.3			patch
+dist/bind/lib/lwres/man/lwres.docbook		patch
+dist/bind/lib/lwres/man/lwres.html		patch
+dist/bind/lib/lwres/man/lwres_buffer.3		patch
+dist/bind/lib/lwres/man/lwres_buffer.docbook	patch
+dist/bind/lib/lwres/man/lwres_buffer.html	patch
+dist/bind/lib/lwres/man/lwres_config.3		patch
+dist/bind/lib/lwres/man/lwres_config.docbook	patch
+dist/bind/lib/lwres/man/lwres_config.html	patch
+dist/bind/lib/lwres/man/lwres_context.3		patch
+dist/bind/lib/lwres/man/lwres_context.docbook	patch
+dist/bind/lib/lwres/man/lwres_context.html	patch
+dist/bind/lib/lwres/man/lwres_gabn.3		patch
+dist/bind/lib/lwres/man/lwres_gabn.docbook	patch
+dist/bind/lib/lwres/man/lwres_gabn.html		patch
+dist/bind/lib/lwres/man/lwres_gai_strerror.3	patch
+dist/bind/lib/lwres/man/lwres_gai_strerror.docbook patch
+dist/bind/lib/lwres/man/lwres_gai_strerror.html patch
+dist/bind/lib/lwres/man/lwres_getaddrinfo.3	patch
+dist/bind/lib/lwres/man/lwres_getaddrinfo.docbook patch
+dist/bind/lib/lwres/man/lwres_getaddrinfo.html	patch
+dist/bind/lib/lwres/man/lwres_gethostent.3	patch
+dist/bind/lib/lwres/man/lwres_gethostent.docbook patch
+dist/bind/lib/lwres/man/lwres_gethostent.html	patch
+dist/bind/lib/lwres/man/lwres_getipnode.3	patch
+dist/bind/lib/lwres/man/lwres_getipnode.docbook patch
+dist/bind/lib/lwres/man/lwres_getipnode.html	patch
+dist/bind/lib/lwres/man/lwres_getnameinfo.3	patch
+dist/bind/lib/lwres/man/lwres_getnameinfo.docbook patch
+dist/bind/lib/lwres/man/lwres_getnameinfo.html	patch
+dist/bind/lib/lwres/man/lwres_getrrsetbyname.3	patch
+dist/bind/lib/lwres/man/lwres_getrrsetbyname.docbook patch
+dist/bind/lib/lwres/man/lwres_getrrsetbyname.html patch
+dist/bind/lib/lwres/man/lwres_gnba.3		patch
+dist/bind/lib/lwres/man/lwres_gnba.docbook	patch
+dist/bind/lib/lwres/man/lwres_gnba.html		patch
+dist/bind/lib/lwres/man/lwres_hstrerror.3	patch
+dist/bind/lib/lwres/man/lwres_hstrerror.docbook patch
+dist/bind/lib/lwres/man/lwres_hstrerror.html	patch
+dist/bind/lib/lwres/man/lwres_inetntop.3	patch
+dist/bind/lib/lwres/man/lwres_inetntop.docbook	patch
+dist/bind/lib/lwres/man/lwres_inetntop.html	patch
+dist/bind/lib/lwres/man/lwres_noop.3		patch
+dist/bind/lib/lwres/man/lwres_noop.docbook	patch
+dist/bind/lib/lwres/man/lwres_noop.html		patch
+dist/bind/lib/lwres/man/lwres_packet.3		patch
+dist/bind/lib/lwres/man/lwres_packet.docbook	patch
+dist/bind/lib/lwres/man/lwres_packet.html	patch
+dist/bind/lib/lwres/man/lwres_resutil.3		patch
+dist/bind/lib/lwres/man/lwres_resutil.docbook	patch
+dist/bind/lib/lwres/man/lwres_resutil.html	patch
+dist/bind/lib/lwres/print.c			patch
+dist/bind/lib/lwres/strtoul.c			new
+dist/bind/lib/lwres/unix/include/lwres/net.h	patch
+dist/bind/lib/lwres/version.c			patch
+dist/bind/lib/lwres/win32/DLLMain.c		patch
+dist/bind/lib/lwres/win32/include/lwres/int.h	patch
+dist/bind/lib/lwres/win32/include/lwres/net.h	patch
+dist/bind/lib/lwres/win32/include/lwres/netdb.h patch
+dist/bind/lib/lwres/win32/include/lwres/platform.h patch
+dist/bind/lib/lwres/win32/liblwres.dsp		patch
+dist/bind/lib/lwres/win32/liblwres.dsw		patch
+dist/bind/lib/lwres/win32/liblwres.mak		patch
+dist/bind/lib/lwres/win32/version.c		patch
+dist/bind/lib/tests/Makefile.in			patch
+dist/bind/lib/tests/T_testlist.imp		new
+dist/bind/lib/tests/include/tests/t_api.h	patch
+dist/bind/lib/tests/t_api.c			patch
+dist/bind/lib/win32/bindevt/bindevt.c		patch
+dist/bind/lib/win32/bindevt/bindevt.dsp		patch
+dist/bind/lib/win32/bindevt/bindevt.dsw		patch
+dist/bind/lib/win32/bindevt/bindevt.mak		patch
+dist/bind/libtool.m4				patch
+dist/bind/ltmain.sh				patch
+dist/bind/make/includes.in			patch
+dist/bind/make/rules.in				patch
+dist/bind/version				patch
+dist/bind/win32utils/BINDBuild.dsw		patch
+dist/bind/win32utils/BuildAll.bat		patch
+dist/bind/win32utils/BuildSetup.bat		patch
+dist/bind/win32utils/dnsheadergen.bat		patch
+dist/bind/win32utils/readme1st.txt		patch
+dist/bind/win32utils/win32-build.txt		patch
+distrib/sets/lists/base/mi			patch
+distrib/sets/lists/man/mi			patch
+usr.sbin/bind/Makefile				patch
+usr.sbin/bind/Makefile.inc			patch
+usr.sbin/bind/check/Makefile			patch
+usr.sbin/bind/check/Makefile.inc		patch
+usr.sbin/bind/check/named-checkconf/Makefile	patch
+usr.sbin/bind/check/named-checkzone/Makefile	patch
+usr.sbin/bind/dnssec/Makefile			patch
+usr.sbin/bind/dnssec/Makefile.inc		patch
+usr.sbin/bind/dnssec/dnssec-keygen/Makefile	patch
+usr.sbin/bind/dnssec/dnssec-makekeyset/Makefile delete
+usr.sbin/bind/dnssec/dnssec-signkey/Makefile	delete
+usr.sbin/bind/dnssec/dnssec-signzone/Makefile	patch
+usr.sbin/bind/html/Makefile			patch
+usr.sbin/bind/include/config.h			patch
+usr.sbin/bind/include/dns/code.h		patch
+usr.sbin/bind/include/dns/enumclass.h		patch
+usr.sbin/bind/include/dns/enumtype.h		patch
+usr.sbin/bind/include/dns/rdatastruct.h		patch
+usr.sbin/bind/include/lwres/platform.h		patch
+
+	Update BIND to version 9.3.2.
+	[ghen, ticket #1425]
+
+dist/bind/bin/named/named.8			1.2
+dist/bind/bin/named/query.c			1.2
+dist/bind/lib/dns/adb.c				1.2
+dist/bind/lib/dns/message.c			1.2
+
+	- Fix references in named.conf(5).
+	- Fix bugs detected by Coverity CID 2486 and compiler warnings.
+	[ghen, ticket #1426]
+
+usr.sbin/bind/Makefile.inc			1.21,1.23
+
+	Enable SSL support in BIND.
+	[ghen, ticket #1427]
+
+sys/nfs/nfs_vnops.c				1.239-1.240 via patch
+sys/nfs/nfs_var.h				1.62 via patch
+
+	Fix race condition in NFS renaming that could cause the renamed file
+	to be deleted.
+	[jld, ticket #1424]
+
+share/man/man4/bce.4				1.3
+share/man/man4/bce.4				1.4
+
+	Note the 1GB problem with bce(4), and a workaround.
+	[dogcow, ticket #1429]
+
+sys/lkm/dev/pcilkm/Makefile			delete
+sys/lkm/dev/pcilkm/examples/auich/Makefile	delete
+sys/lkm/dev/pcilkm/examples/auich/README	delete
+sys/lkm/dev/pcilkm/examples/auich/auich_lkm.c	delete
+sys/lkm/dev/pcilkm/examples/pcienum/Makefile	delete
+sys/lkm/dev/pcilkm/examples/pcienum/pcienum_lkm.c delete
+sys/lkm/dev/pcilkm/pcilkm.4			delete
+sys/lkm/dev/pcilkm/pcilkm.h			delete
+sys/lkm/dev/pcilkm/pcilkm_lkm.c			delete
+
+	Remove that example.  It was obsolete even before 3.0 release.
+	[cube, ticket #1428]
+
+sys/dev/pci/pdcsata.c				1.7
+
+
+	Brian Buhrow: Fix a number of problems with the pdcsata driver:
+	The driver for the family of Promise SATA controllers,
+	/usr/src/sys/dev/pci/pdcsata.c is not very robust when it comes to
+	handling transient drive errors, or interrupt hickups when the card
+	is under load.  PR#33445.
+	[simonb, ticket #1430]
+
+sys/uvm/uvm_bio.c				patch
+
+	Avoid a panic in page fault handling that can occur under low-memory
+	conditions.
+	[jld, ticket #1323]
+
+distrib/sets/lists/base/mi			patch
+distrib/sets/lists/comp/mi			patch
+distrib/sets/lists/man/mi			patch
+etc/MAKEDEV.tmpl				patch
+etc/etc.amd64/MAKEDEV.conf			patch
+etc/etc.i386/MAKEDEV.conf			patch
+sbin/Makefile					patch
+sbin/amrctl/Makefile				new file
+sbin/amrctl/amrctl.8				new file
+sbin/amrctl/amrctl.c				new file
+share/man/man4/amr.4				patch
+sys/conf/majors					patch
+sys/dev/pci/Makefile				patch
+sys/dev/pci/amr.c				patch
+sys/dev/pci/amrio.h				new file
+sys/dev/pci/amrreg.h				patch
+sys/dev/pci/amrvar.h				patch
+sys/dev/pci/ld_amr.c				patch
+
+	Apply patch (requested by bouyer in ticket #1431):
+	- Add a /dev/amr* control file for amr(4) devices, which allows sending
+	  raw commands to the controller.
+	- Add a amrctl(8) control tool, which for now only allows to get status
+	  from the adapter (status of adapter, logical volumes and and
+	  individual drives).
+	[bouyer, ticket #1431]
+
+share/man/man4/azalia.4				1.3-1.4
+sys/dev/pci/azalia.c				1.20-1.38
+sys/dev/pci/azalia.h				1.7-1.14
+sys/dev/pci/azalia_codec.c			1.9-1.24
+sys/dev/pci/pcidevs				1.806 via patch
+sys/dev/pci/pcidevs.h				regen
+sys/dev/pci/pcidevs_data.h			regen
+
+	- Various bug fixes
+	- Support for more codecs
+	- Improve volume control.
+	- Update manual page.
+	[kent, ticket #1432]
+
+etc/MAKEDEV.tmpl				1.58
+
+	Create "/dev/ipsync", "/dev/ipscan" and "/dev/iplookup".
+	This fixes PR misc/33504.
+	[martti, ticket #1434]
+
+sys/arch/xen/xen/xbd_xenbus.c			patch
+
+	Fix random panics in xen3 domU after using the virtual disk character
+	device with unaligned buffers.
+	[bouyer, ticket #1437]
+
+sys/dev/pcmcia/if_wi_pcmcia.c			1.69 via patch
+sys/dev/pcmcia/pcmciadevs			1.217 via patch
+sys/dev/pcmcia/pcmciadevs.h			regen
+sys/dev/pcmcia/pcmciadevs_data.h		regen
+
+	Add support for Siemens SS1021 WLAN to wi(4).
+	[scottr, ticket #1436]
+
+distrib/sets/lists/man/mi			patch
+share/man/man4/Makefile				patch
+share/man/man4/twa.4				patch
+sys/arch/amd64/conf/GENERIC			patch
+sys/arch/amd64/conf/INSTALL			patch
+sys/arch/i386/conf/GENERIC			patch
+sys/arch/i386/conf/GENERIC.MPACPI		patch
+sys/arch/i386/conf/INSTALL			patch
+sys/arch/i386/conf/XEN2_DOM0			patch
+sys/dev/pci/files.pci				patch
+sys/dev/pci/ld_twa.c				patch
+sys/dev/pci/pcidevs				patch
+sys/dev/pci/pcidevs.h				regen
+sys/dev/pci/pcidevs_data.h			regen
+sys/dev/pci/twa.c				patch
+sys/dev/pci/twaio.h				patch
+sys/dev/pci/twareg.h				patch
+sys/dev/pci/twavar.h				patch
+
+	Add twa(4) driver for the 3ware Apache RAID controllers.
+	[bouyer, ticket #1441]
+
+sys/arch/i386/conf/INSTALL_XEN2_DOMU		patch
+sys/arch/i386/conf/XEN2_DOMU			patch
+sys/arch/i386/conf/XEN3_DOMU           		patch
+sys/arch/i386/conf/XEN2_DOM0			patch
+	
+	Correct entries for vnd(4) devices in Xen kernel configurations.
+	[martti, ticket #1443]
+
+xsrc/xfree/xc/programs/Xserver/hw/xfree86/drivers/nv/nv_driver.c 1.8
+xsrc/xfree/xc/programs/Xserver/hw/xfree86/drivers/nv/riva_driver.c 1.3
+
+	Fix unresolved symbol in the "nv" driver.
+	[jmmv, ticket #1439]
+
+gnu/dist/postfix/HISTORY			patch
+gnu/dist/postfix/RELEASE_NOTES			patch
+gnu/dist/postfix/README_FILES/PGSQL_README	patch
+gnu/dist/postfix/README_FILES/SMTPD_POLICY_README patch
+gnu/dist/postfix/html/PGSQL_README.html		patch
+gnu/dist/postfix/html/SMTPD_POLICY_README.html	patch
+gnu/dist/postfix/proto/PGSQL_README.html	patch
+gnu/dist/postfix/proto/SMTPD_POLICY_README.html	patch
+gnu/dist/postfix/global/dict_pgsql.c		patch
+gnu/dist/postfix/global/hold_message.c		patch
+gnu/dist/postfix/global/mail_proto.h		patch
+gnu/dist/postfix/global/mail_version.h		patch
+gnu/dist/postfix/global/tok822_parse.c		patch
+gnu/dist/postfix/smtp/smtp_proto.c		patch
+gnu/dist/postfix/smtp/smtp_reuse.c		patch
+gnu/dist/postfix/smtpd/smtpd.c			patch
+gnu/dist/postfix/smtpd/smtpd_check.c		patch
+gnu/dist/postfix/tls/tls_prng_exch.c		patch
+gnu/dist/postfix/util/safe_open.c		patch
+gnu/dist/postfix/util/sys_defs.h		patch
+
+	Update Postfix to version 2.2.11.
+	[ghen, ticket #1444]
+
+sys/dev/pci/pcidevs				1.813
+sys/dev/pci/pcidevs.h				regen
+sys/dev/pci/pcidevs_data.h			regen
+sys/dev/pci/viaide.c				1.32
+
+	Add support for nForce3 250 SATA2 to viaide(4) driver.
+	[xtraeme, ticket #1446]
+
+lib/libc/arch/i386/sys/__sigtramp2.S		1.2
+
+	Fix PR port-i386/34112 where a program could mysteriously exit on
+	return from a signal handler.
+	[jld, ticket #1447]
+
+sys/arch/xen/xen/if_xennet_xenbus.c		1.8
+
+	Add a missing break in a switch clause, causing the frontend to go to Closed
+	state when it should not.
+	[bouyer, ticket #1451]
+
+sys/arch/xen/xen/if_xennet.c			1.48
+sys/arch/xen/xen/if_xennet_xenbus.c		1.10
+
+	The receive buffer, once mapped back in the domU, is read/write and not
+	shared so there;s no problems marking the mbuf M_EXT_RW.
+	[bouyer, ticket #1452]
+
+sys/arch/xen/conf/kern.ldscript			delete
+
+	Remove unused file.  Probably unused since kernel config files were
+	moved to i386/conf.
+	[bouyer, ticket #1453]
+
+sys/arch/xen/xen/if_xennet_xenbus.c		1.11
+
+	Fix panics in m_makewritable() reported by several people.
+	[bouyer, ticket #1454]
+
+sys/dev/pci/hptide.c				1.21
+sys/dev/pci/pciide_hpt_reg.h			1.14
+
+	HPT368 support.
+	[xtraeme, ticket #1455]
+
+usr.bin/column/column.c				1.13-1.14
+
+	- PR bin/32322: Division by zero in column(1) with certain column
+	  widths.
+	- Plug memory leak.
+	[daniel, ticket #1449]
+
+etc/Makefile					1.334
+etc/motd.beta					1.1
+etc/motd.current				1.1
+etc/motd.rc					1.1
+
+	When using a development version of the system (be it current, a beta
+	or a release candidate), tell the user that he might expect problems
+	and how to effectively report them to the developers.
+	[jmmv, ticket #1450]
+
+usr.bin/whereis/whereis.c			1.18
+
+	PR bin/34114: which(1) doesn't handle commands given as absolute
+	pathnames.
+	[cube, ticket #1456]
+
+sys/ufs/lfs/lfs.h				1.108,1.111 via patch
+sys/ufs/lfs/lfs_extern.h			1.83,1.84 via patch
+sys/ufs/lfs/lfs_alloc.c				1.95 via patch
+sys/ufs/lfs/lfs_bio.c				1.94 via patch
+sys/ufs/lfs/lfs_segment.c			1.180-1.181,1.184-1.188 via patch
+sys/ufs/lfs/lfs_subr.c				1.60 via patch
+sys/ufs/lfs/lfs_vfsops.c			1.211-1.215 via patch
+sys/ufs/lfs/lfs_vnops.c				1.177-1.180 via patch
+
+	Synchronize LFS with NetBSD-current. This fixes the inode free list
+	errors caused by ticket #1327.
+	[perseant, ticket #1457]
+
+libexec/lfs_cleanerd/library.c			1.43
+
+	Remove bogus frees on uninitialized variable.
+	[perseant, ticket #1458]
+
+sys/dev/usb/ehci.c				1.96
+sys/dev/usb/ohci.c				1.159
+sys/dev/usb/uhci.c				1.188
+sys/dev/usb/usbdivar.h				1.74
+
+	Fix a race condition in xfer abort.  Derived from a FreeBSD patch.
+	Fixes occasional crashes while printing.  PR#33250
+	[abs, ticket #1459]
+
+distrib/sets/lists/base/mi                      1.556, 1.565
+distrib/sets/lists/man/mi                       1.792, 1.814
+sbin/Makefile                                   1.94
+sbin/scan_ffs/Makefile                          1.1-1.3, 1.5-1.7
+sbin/scan_ffs/scan_ffs.8                        1.1-1.6, patch
+sbin/scan_ffs/scan_ffs.c                        1.1-1.9
+
+	Add scan_ffs(8) from OpenBSD, modified for NetBSD to support FFSv2 and
+	LFS (scan_lfs(8)).  Utility to find FFSv1, FFSv2 and LFS partitions on
+	disks, useful to recover lost disklabels.
+	[ghen, ticket #1460]
+
+usr.bin/cut/cut.1				1.13-1.14
+usr.bin/cut/cut.c				1.21
+
+	PR/33995: Aleksey Cheusov: support use "-" to indicate stdin from SUS
+	[jnemeth, ticket #1461]
+
+distrib/utils/sysinst/label.c			1.48
+
+	pointer signedness comparison fixes (needed for following pullup).
+	[dsl, ticket #1462]
+
+distrib/utils/sysinst/defs.h			1.130
+distrib/utils/sysinst/label.c			1.49
+distrib/utils/sysinst/mbr.c			1.75
+
+	When we read 'last mounted' from an FFSv2 superblock set the flag to
+	default the partition to FFSv2 (instead of FFSv1).
+	This makes update installs add the correct bootstrap code.
+	Fixes PR/33682 and PR/32636 (and 33228 which has alrady been closed
+	as a duplicate of 32636).
+	[dsl, ticket #1463]
+
+sys/dev/pci/pcidevs				1.798, 1.819
+sys/dev/pci/pcidevs.h				regen
+sys/dev/pci/pcidevs_data.h			regen
+sys/dev/pci/pdcsata.c				1.8, 1.10
+
+	Add support for the Promise PDC20771, PDC20775 and PDC40518.
+	[xtraeme, ticket #1466]
+
+distrib/sets/lists/base/rescue.mi		1.18
+rescue/list					1.24
+
+	Add ex(1) to "/rescue". This won't add more than a few bytes to the
+	crunchgen binary since "ex" is just "vi -e" and vi(1) is already there.
+	[ghen, ticket #1467]
+
+distrib/notes/common/main			patch
+
+	Update list of developers.
+	[ghen, ticket #1468]
+
+lib/libc/locale/wcsrtombs.3			1.9, 1.10
+lib/libc/locale/wcstombs.3			1.8, 1.9
+
+	- wcstombs.3
+	    correct wrong prototype,
+	    reported by OpenBSD's PR 5171/library.
+	- wcsrtombs.3
+	    correct wrong prototype and misusage of the header file.
+	
+	Bump date for previous.
+	[tnozaki, ticket #1469]
+
+gnu/usr.bin/groff/tmac/mdoc.local		patch
+sys/sys/param.h					patch
+
+	Welcome to NetBSD 3.1_RC1.
+
+sbin/scan_ffs/Makefile				patch
+
+	Fix build of NetBSD-vax.
+	[ghen, ticket #1470]
+
+sys/net/if_spppsubr.c				1.96
+
+	Avoid buffer overflow in the in-kernel PPP code shared by ISDN PPP
+	interfaces ippp(4) and pppoe(4). This fixes SA2006-019 (CVE-2006-4304).
+	[adrianp, ticket #1476]
+
+etc/Makefile					1.335
+etc/motd.stable					1.1
+
+	Add a "how to report bugs" message for STABLE branches too, as they
+	really are development snapshots (although not as "bleeding edge" as
+	current).  Per tron@'s suggestion.
+
+	This way we get consistent messages along the development process.
+	Otherwise, STABLE could carry no message while a RC could, disappearing
+	again after the real formal release.  With this change only formal
+	releases do not carry any special message in motd.
+	[jmmv, ticket #1464]
+
+sys/kern/uipc_syscalls.c			1.102
+
+	Don't leave a dangling socket (no associated struct file) if
+	user supplied a bad name or anamelen parameter to accept(2).
+	If bad paramaters were suplied and a copyout() failed, the
+	struct file was cleaned up but not the associated socket.  This
+	could leave sockets in CLOSE_WAIT that could never be closed.
+	[seanb, ticket #1472]
+
+lib/libpthread/pthread_mutex.c			1.22
+
+	Close a window in which we can not notice a recently-slept-on-our
+	mutex thread, thus leaving a thread sleeping on an unlocked mutex.
+	
+	Reviewed by myself and Christos.
+	
+	Problem reported by Arne H. Juul, arnej at pvv dot ntnu dot no,
+	in PR 26208. This fix represents option 1 presented in the PR.
+	[wrstuden, ticket #1474]
+
+lib/libcurses/color.c				1.31
+lib/libcurses/delwin.c				1.14
+lib/libcurses/screen.c				1.18
+
+	Make sure we update the correct window when changing colour pairs.
+	When deleting windows and screens, also set to NULL the standard names
+	that refer to the window or screen just deleted.
+	Add some more debugging information.
+	[jdc, ticket #1475]
+
+share/man/man4/re.4				1.10
+
+	describe that hw VLAN tagging is not supported ATM.
+	(see sys/dev/ic/rtl8169.c rev. 1.23 .)
+	[pavel, ticket #1477]
+
+sys/arch/cobalt/conf/GENERIC			1.102
+sys/arch/cobalt/conf/INSTALL			1.24
+
+	Add option SOSEND_NO_LOAN to fix a panic on cobalt.
+	[tsutsui, ticket #1478]
+
+sys/dev/pci/if_fxp_pci.c			1.44,1.47
+sys/dev/pci/pcidevs				1.756,1.810
+
+	- PR/32494: Add ID 0x1068 for Intel PRO/100 VE (LOM) found on Sony Vaio
+	          S4HRP laptops.
+	- Recognize another Intel PRO/100 VM Network Controller.
+	[oster, ticket #1479]
+
+share/man/man8/afterboot.8			patch
+
+	Remove reference to sushi(8) from afterboot(8) because "sushi" will
+	be removed in NetBSD 4.0.
+	[ghen, ticket #1485]
+
+xsrc/xfree/xc/lib/font/bitmap/pcfread.c		1.2
+
+	Fix for CVE-2006-3467 via the X.Org foundation.
+	"Integer overflow in FreeType before 2.2 allows remote attackers to
+	cause a denial of service (crash) and possibly execute arbitrary code
+	via unknown vectors."
+	[adrianp, ticket #1486]
+
+usr.sbin/bind/Makefile.inc			1.24
+
+	Avoid named(8) crash on sparc and sparc64 by disabling threading
+	support on those platforms.
+	[jdc, ticket #1490]
+
+gnu/dist/sendmail/sendmail/main.c		patch
+
+	Fixes potential DoS attack with sendmail(8).
+	[adrianp, ticket #1495]
+
+bin/sh/expand.c					1.75-1.76
+
+	Fix corner case expansions of $@ and non-whitspace $IFS in /bin/sh.	
+	[dsl, tickets #1487 and #1488]
+
+sys/kern/vfs_subr.c				1.269
+
+	Fix the output of the ddb(4) "show mount" command.
+	[jld, ticket #1493]
+
+sbin/newfs_lfs/newfs.c				1.19
+
+	When testing seek speed (for the -A option), use sector-aligned
+	offsets so the reads don't always fail, and also be more careful
+	not to read off the end of the disk.  If a read does fail, error
+	out instead of silently leaving the loop early (and possibly
+	dividing by zero seconds), because it means our idea of the disk
+	size is wrong, or worse.
+	[jld, ticket #1494]
+
+gnu/usr.bin/groff/tmac/mdoc.local		patch
+sys/sys/param.h					patch
+
+	Welcome to NetBSD 3.1_RC2.
+
+dist/bind/bin/named/query.c			1.3
+dist/bind/lib/dns/resolver.c			1.2
+
+	Fixes for CVE-2006-4095 and CVE-2006-4096 from bind-9.3.2-P1.
+	[adrianp, ticket #1498]
+
+crypto/dist/openssl/crypto/rsa/rsa_sign.c	1.2-1.3
+
+	Fix for CVE-2006-4339 (RSA signature forgery) from openssl-0.9.7k.
+	[adrianp, ticket #1504]
+
+sys/arch/xen/conf/files.xen			1.46
+sys/arch/xen/include/shutdown_xenbus.h		1.1
+sys/arch/xen/xen/hypervisor.c			1.26
+sys/arch/xen/xen/shutdown_xenbus.c		1.1, patch
+sys/arch/xen/xenbus/xenbus_probe.c		1.13
+
+	Add "xm shutdown" support for xen3.
+	[jld, ticket #1499]
+
+sys/kern/uipc_usrreq.c				1.84
+
+	Honor the user's umask while creating local sockets.  Several other
+	systems do already this (such as FreeBSD, OpenBSD and Linux), so it
+	will improve portability of some third-party programs.
+	[martin, ticket #1500]
+
+sys/arch/xen/xen/clock.c			1.28
+
+	Prevent some unsafe debugging printf()'s by not enabling
+	options XEN_CLOCK_DEBUG automatically with options DEBUG.
+	[jld, ticket #1505]
+
+sys/arch/xen/xen/clock.c			1.26
+
+	Avoid hanging in the timer event handler when a glitch in Xen's
+	timekeeping occurs.
+	[jld, ticket #1506]
+
+sys/kern/uipc_mbuf.c				1.112
+
+	Fix a bug in collecting mbuf usage statistics in kernels built with the
+	MBUFTRACE debugging option.
+	[pavel, ticket #1503]
+
+sys/arch/sparc64/dev/ffb.c			1.28
+sys/arch/sparc64/dev/zs.c			1.61
+
+	Fix wrong prom_getoption() return value checks (fixes serial console on
+	second port of sbus machines)
+	[martin, ticket #1507]
+
+distrib/sparc64/instfs/Makefile.instfs		1.5
+
+	Fix creation of bpf(4) device nodes on the installation filesystem.
+	[martin, ticket #1508]
+
+distrib/utils/sysinst/geom.c			1.9
+distrib/utils/sysinst/net.c			1.110
+
+	The "request" arg of ioctl(2) is unsigned long, not int!  Sign extended
+	requests do not work on archs with sizeof(long) > sizeof(int).
+	Fixes DHCP on 64-bit archs in sysinst.
+	[martin, ticket #1509]
+
+sys/arch/x86/include/bus_private.h		1.6
+sys/arch/x86/x86/bus_dma.c			1.30
+sys/arch/xen/include/bus_private.h		1.7
+sys/arch/xen/x86/xen_bus_dma.c			1.7-1.8 via patch
+
+	Some bus_dma(9) fixes for Xen.
+	[bouyer, ticket #1510]
+
+sys/arch/mac68k/dev/if_ae.c			1.78
+sys/arch/mac68k/include/bus.h			1.25
+
+	Make ae(4) work properly on mac68k.
+	[tsutsui, ticket #1512]
+
+usr.bin/msgc/msg_sys.def			1.32
+
+	Stop sysinst from re-instating the default text when the user tries to
+	completely delete the input buffer.
+	[dsl, ticket #1513]
+
+share/man/man4/ath.4				1.11-1.12
+
+	Note that Netgear WG311 v3 does *not* use an Atheros chip.
+	[dillo, ticket #1514]
+
+sys/arch/xen/xen/clock.c			1.27
+
+	Xen3 changed how it presents wall-clock time to domains.  This change
+	has us set our clock to the correct current time on domU boot, rather
+	than to whatever time it was when the dom0 booted (which may have be
+	months earlier).
+	[jld, ticket #1515]
+
+xfree/xc/lib/font/Type1/afm.c			1.2
+xfree/xc/lib/font/Type1/scanfont.c		1.2
+xfree/xc/lib/font/Type1/util.c			1.2
+
+	Fix vulnerability in Adobe Type 1 font handling.
+	[adrianp, ticket #1516]
+
+sys/arch/sgimips/dev/int.c			1.12
+
+	Remove the 'FIFO Full' hack for interrupt vector 0.
+
+	It is unclear that this interrupt fails to latch as int2_wait_fifo()
+	depends on it doing so and appears to work. Furthermore, we were
+	previously unconditionally unmasking the interrupt 0 vector, which led
+	to more 'unexpected interrupt' messages on the console, rather than
+	avoiding them.
+	[rumble, ticket #1496]
+
+sys/arch/sgimips/hpc/haltwo.c			1.10
+
+	Check the haltwo hardware present bit in the match function, rather
+	than in the attach function after we've thwacked several registers and
+	potentially wedged the machine. This fixes booting on Challenge S
+	systems and addresses PR 25202.
+	[rumble, ticket #1497]
+
+sys/dist/ipf/netinet/ip_lookup.c		1.4
+
+	Fix error message when flushing ippool.
+	[christos, ticket #1501]
+
+dist/ipf/tools/ippool_y.y			1.2
+
+	Increase YYSTACKSIZE so that we can handle huge pools.
+	[christos, ticket #1502]
+
+gnu/usr.bin/groff/tmac/mdoc.local		patch
+sys/sys/param.h					patch
+
+	Welcome to NetBSD 3.1_RC3.
+
+crypto/dist/openssl/crypto/asn1/tasn_dec.c	patch
+crypto/dist/openssl/crypto/dh/dh.h		patch
+crypto/dist/openssl/crypto/dh/dh_err.c		patch
+crypto/dist/openssl/crypto/dh/dh_key.c		patch
+crypto/dist/openssl/crypto/dsa/dsa.h		patch
+crypto/dist/openssl/crypto/dsa/dsa_err.c	patch
+crypto/dist/openssl/crypto/dsa/dsa_ossl.c	patch
+crypto/dist/openssl/crypto/rsa/rsa.h		patch
+crypto/dist/openssl/crypto/rsa/rsa_eay.c	patch
+crypto/dist/openssl/crypto/rsa/rsa_err.c	patch
+crypto/dist/openssl/ssl/s2_clnt.c		patch
+crypto/dist/openssl/ssl/s3_srvr.c		patch
+crypto/dist/openssl/ssl/ssl_lib.c		patch
+
+	Fix security issues reported in CVE-2006-2937, CVE-2006-2940,
+	CVE-2006-3738 and CVE-2006-4343.
+	[ghen, ticket #1537]
+
+dist/ipf/ip_lookup.c				1.2
+
+	Userland equivalent of #1501.
+	[christos, ticket #1520]
+
+dist/pppd/pppd/options.c			1.4 via patch
+
+	Fix regression with active-filter functions introduced with pppd 2.4.3
+	[heinz, ticket #1521]
+
+lib/libc/net/getnetnamadr.c			1.34
+
+	Fix amd(8) coredumps on LP64 platforms when /etc/nsswitch.conf has
+	more than one source for netgroups.
+	[tsutsui, ticket #1522]
+
+sys/fs/msdosfs/denode.h				1.14
+sys/fs/msdosfs/msdosfs_fat.c			1.11
+sys/fs/msdosfs/msdosfs_vnops.c			1.31
+
+	Add a third entry to the FAT cache for msdosfs, which keeps the end
+	position from just before extending a file.  This keeps write speed
+	of large files constant.
+	[xtraeme, ticket #1525]
+
+gnu/dist/binutils/ChangeLog			patch
+gnu/dist/binutils/bfd/coff-alpha.c		patch
+gnu/dist/binutils/bfd/elf32-iq2000.c		patch
+gnu/dist/binutils/bfd/pdp11.c			patch
+gnu/dist/binutils/gas/as.h			patch
+gnu/dist/binutils/gas/itbl-lex.h		patch
+gnu/dist/binutils/gas/itbl-lex.l		patch
+gnu/dist/binutils/gas/itbl-parse.y		patch
+gnu/dist/binutils/gas/subsegs.h			patch
+gnu/dist/binutils/gas/tc.h			patch
+gnu/dist/binutils/gas/config/obj-coff.c		patch
+gnu/dist/binutils/gas/config/obj-ecoff.h	patch
+gnu/dist/binutils/gas/config/tc-arc.c		patch
+gnu/dist/binutils/gas/config/tc-arm.c		patch
+gnu/dist/binutils/gas/config/tc-cris.h		patch
+gnu/dist/binutils/gas/config/tc-frv.c		patch
+gnu/dist/binutils/gas/config/tc-mcore.c		patch
+gnu/dist/binutils/gas/config/tc-mips.c		patch
+gnu/dist/binutils/gas/config/tc-mmix.c		patch
+gnu/dist/binutils/gas/config/tc-s390.c		patch
+gnu/dist/binutils/gas/config/tc-sh.c		patch
+gnu/dist/binutils/gas/config/tc-sparc.c		patch
+gnu/dist/binutils/gas/config/tc-tic4x.c		patch
+gnu/dist/binutils/gas/config/tc-tic4x.h		patch
+gnu/dist/binutils/gas/config/tc-vax.c		patch
+gnu/dist/binutils/gas/config/tc-xstormy16.c	patch
+gnu/dist/binutils/opcodes/fr30-desc.h		patch
+gnu/dist/binutils/opcodes/frv-desc.h		patch
+gnu/dist/binutils/opcodes/ip2k-desc.h		patch
+gnu/dist/binutils/opcodes/iq2000-asm.c		patch
+gnu/dist/gcc/gcc/cp/decl.c			patch
+gnu/dist/gcc/include/obstack.h			patch
+gnu/dist/gdb/include/obstack.h			patch
+gnu/dist/groff/src/preproc/eqn/box.h		patch
+gnu/dist/groff/src/roff/troff/div.h		patch
+gnu/dist/groff/src/roff/troff/env.h		patch
+gnu/dist/groff/src/roff/troff/input.cpp		patch
+usr.bin/mkesdb/ldef.h				patch
+usr.sbin/makefs/ffs/ffs_alloc.c			patch
+usr.sbin/makefs/ffs/ufs_inode.h			patch
+
+	Fix cross-building NetBSD 3.x binutils with GCC 4.x.
+	[skrll, ticket #1529]
+
+sys/dev/isapnp/gus_isapnp.c			1.28
+
+	Call isa_drq_alloc to reserve DMA channel(s) for ISA devices.
+	Fixes the gus(4) audio driver.
+	[jmcneill, ticket #1531]
+
+etc/security					1.100
+
+	Improve security check for "/etc/exports":
+	1.) Properly handle line continuation and network exports.
+	2.) Make the report more compact.
+	[tron, ticket #1532]
+
+sys/arch/acorn32/podulebus/simide.c		1.24
+
+	Fix a panic on boot on acorn32 systems with simide(4) card.
+	[bjh21, ticket #1534]
+
+sys/arch/i386/conf/XEN2_DOM0			1.10
+
+	Fix typo.
+	[bouyer, ticket #1535]
+
+sbin/mount/mount.8				1.53 via patch, 1.54
+
+	Add a DIAGNOSTICS section, specifically to address the "Operation not
+	supported by device" error. Reference options(4). Bump date.
+	[tron, ticket #1540]
+
+dist/dhcp/client/dhclient.c			1.18 via patch
+
+	Teach dhclient(8) to exit gracefully if another instance is already
+	running instead of overwriten the PID file, removing IPv4 address from
+	the network interface(s) and leaving the system in a broken state.
+	[tron, ticket #1541]
+
+etc/rc.d/fsck					1.6
+
+	Trap SIGINT so that if fsck is interrupted by ^C, we drop into
+	single-user mode.
+	[riz, ticket #1542]
+
+distrib/cdrom/3.1.conf				1.1
+distrib/cdrom/NetBSD-3.1.mk			1.1
+
+	Add configuration files for the 3.1 release ISO's.
+	[tsutsui, ticket #1519]
+
+gnu/usr.bin/groff/tmac/mdoc.local		patch
+sys/sys/param.h					patch
+
+	Welcome to NetBSD 3.1_RC4.
+
+sys/compat/linux/common/linux_sg.c		1.6
+
+	Fix COMPAT_LINUX on m86k.
+	[tsutsui, ticket #1526]
+
+sys/arch/mac68k/obio/wdc_obio.c			1.22
+
+	Don't call wdc_init_shadow_regs() before struct ata_channel is properly
+	initilized in wdc_obio_attach().  Fixes NULL pointer deref during boot.
+	[tsutsui, ticket #1536]
+
+doc/LAST_MINUTE					patch
+
+	Add helpful advice for building kernels for machines with more than 2Gb
+	of memory.
+	[elad, ticket #1543]
+
+sys/kern/kern_systrace.c			1.59
+sys/sys/systrace.h				1.21
+
+	Fix an exploitable integer overflow found by Chris Evans of Google
+	Security: the systrace replace policy struct fields that were supplied
+	by the user were not checked properly and could access memory that was
+	not intended, for example they could be negative or much larger than
+	allowed.
+	[christos, ticket #1544]
+
+usr.sbin/dhcp/clientscript/dhclient-script	1.7
+
+	Remove the date from the generated resolv.conf file, since changes to
+	this file are tracked by /etc/security, making it (the backup) get
+	needlessly updated when you go to and from work every day.
+	[tron, ticket #1545]
+
+distrib/notes/mac68k/prep			1.15
+distrib/utils/sysinst/arch/mac68k/md.c		1.49
+
+	Fix sysinst on mac68k: make it newfs and mount the target filesystem.
+	[pavel, ticket #1548]
+
+sys/arch/amd64/amd64/trap.c			1.22
+
+	Use panic() instead of cpu_reboot() for unhandled kernel traps, to make
+	sure that NetBSD/amd64 actually reboots after certain panics instead of
+	halting and waiting for someone to press a key.
+	[tron, ticket #1550]
+
+usr.sbin/user/user.c				1.112
+
+	In userinfo, initialize buf (the buffer which will hold group names) to
+	be a null-terminated string.  Otherwise, if the user is not a member of
+	any secondary groups, buf is completely uninitialized and userinfo adds
+	garbage to the list of groups printed.
+	[pavel, ticket #1554]
+
+crypto/dist/ssh/sshd_config			1.25
+
+	Change the default sshd configuration file so that only protocol
+	version 2 is enabled by default.  Users can manually add back support
+	for protocol version 1 in their sshd_config if they have a specific
+	need for it.
+	[adrianp, ticket #1555]
+
+sys/net/bpf_filter.c				1.32
+
+	Be more robust in setting and detecting error values in bpf_filter()
+	and the MINDEX macro.  src/regress/sys/net/bpf/out-of-bounds now passes
+	the regression test.                                              
+	[oster, ticket #1539]
+
+sys/arch/xen/i386/locore.S			patch
+
+	Add VIRT_BASE, ELF_PADDR_OFFSET and VIRT_ENTRY strings to __xen_guest
+	ELF section, so that our kernels works with newer xen-3 hypervisors.
+	[bouyer, ticket #1560]
+
+sys/arch/acorn26/acorn26/vm_machdep.c		1.12
+
+	When forking a new LWP, if a new user stack pointer is provided, use
+	it.  Pass regress/lib/libc/clone.
+	[bjh21, ticket #1551]
+
+sys/arch/acorn26/acorn26/except.c		1.17
+
+	Remove a route by which a user can trivially panic NetBSD/acorn26.
+	Pass regress/sys/arch/arm/abort-fixup.
+	[bjh21, ticket #1552]
+
+sys/arch/acorn26/acorn26/cpuswitch.c		1.8
+
+	When processing RASes, only pay attention to, and change, the PC parts
+	of R15, leaving the PSR bits alone.  Pass regress/sys/kern/ras/ras1.
+	[bjh21, ticket #1553]
+
+sys/arch/sun3/sun3x/pmap.c			1.88,1.91
+
+	Handle unwiring page cases properly in pmap_enter(9) and
+	pmap_remove(9).  Fixes a longstanding "panic: get_a_table:
+	out of A tables" (and also B, C tables) problem on my 3/80.
+
+	While here, make this compile with PMAP_DEBUG.
+	[tsutsui, ticket #1518]
+
+lib/libc/rpc/svc_vc.c				1.20
+
+	Only retry if we were able to clean up some descriptors, this prevents
+	RPC services like NIS and NFS from getting stuck in an infinite loop.
+	[tron, ticket #1558]
+
+usr.sbin/bind/include/config.h			1.5
+
+	If we're not using pthreads, claim also that we don't have sigwait.
+	This works around the problems observed on sparc and sparc64 (where
+	we've disabled use of pthreads) where the BIND applications end up
+	being killed with SIGTERM instead of exiting gracefully.
+	[he, ticket #1565]
+
+sys/compat/darwin/darwin_iohidsystem.c		1.35 via patch
+sys/compat/darwin/darwin_ktrace.c		1.6 via patch
+sys/compat/freebsd/freebsd_misc.c		1.26 via patch
+sys/kern/kern_ktrace.c				1.110 via patch
+sys/sys/ktrace.h				1.45 via patch
+
+	Make ktruser enforce the maximum buffer length, and return an error.
+	[adrianp, ticket #1564]
+
+sys/kern/uipc_syscalls.c			1.104
+
+	Fix local denial of service (kernel panic through sendmsg()).
+	[elad, ticket #1566]
+
+sys/miscfs/procfs/procfs_linux.c		1.28
+
+	Fix a kernel panic when trying to access /emul/linux/proc/0/stat.
+	[elad, ticket #1567]
+
+sys/kern/sys_process.c				1.111 via patch
+
+	Don't allow ptrace to copyout arbitrary sized data.
+	[christos, ticket #1556]
+
+crypto/dist/ssh/auth.h				patch
+crypto/dist/ssh/deattack.c			patch
+crypto/dist/ssh/deattack.h			patch
+crypto/dist/ssh/log.c				patch
+crypto/dist/ssh/log.h				patch
+crypto/dist/ssh/packet.c			patch
+crypto/dist/ssh/session.c			patch
+crypto/dist/ssh/sshd.c				patch
+crypto/dist/ssh/version.h			patch
+
+	OpenSSH: fix CVE-2006-4924 and CVE-2006-5051
+	(patches backported from OpenSSH 4.4).
+	[adrianp, ticket #1569]
+
+sys/netinet/tcp_input.c				1.250
+
+	Don't accept TCP connections to broadcast addresses.
+	[rpaulo, ticket #1547]
+
+gnu/dist/grep/doc/grep.1			1.13
+
+	Fix two typo's in grep(1) manpage.
+	[pavel, ticket #1559]
+
+sys/net/if.c					1.172,1.173,1.175
+
+	Fix a memory disclosure in interface name buffer.
+	[christos, tickets #1563 and #1572]
+
+gnu/usr.bin/groff/tmac/mdoc.local		patch
+sys/sys/param.h					patch
+
+	Welcome to NetBSD 3.1.
+

@@ -1,4 +1,4 @@
-/*	$NetBSD: hydra.c,v 1.17 2005/04/01 11:59:21 yamt Exp $	*/
+/*	$NetBSD: hydra.c,v 1.16 2003/06/23 11:00:59 martin Exp $	*/
 
 /*-
  * Copyright (c) 2002 Ben Harris
@@ -31,7 +31,7 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: hydra.c,v 1.17 2005/04/01 11:59:21 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hydra.c,v 1.16 2003/06/23 11:00:59 martin Exp $");
 
 #include <sys/device.h>
 #include <sys/systm.h>
@@ -174,8 +174,7 @@ hydra_attach(struct device *parent, struct device *self, void *aux)
 	}
 	KASSERT(!TAILQ_EMPTY(&bootpglist));
 	sc->sc_bootpage_pa = TAILQ_FIRST(&bootpglist)->phys_addr;
-	sc->sc_bootpage_va = uvm_km_alloc(kernel_map, PAGE_SIZE, 0,
-	    UVM_KMF_VAONLY);
+	sc->sc_bootpage_va = uvm_km_valloc(kernel_map, PAGE_SIZE);
 	if (sc->sc_bootpage_va == 0) {
 		uvm_pglistfree(&bootpglist);
 		printf(": Can't allocate bootstrap memory.\n");

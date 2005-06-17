@@ -106,8 +106,7 @@ int getrec(uschar **pbuf, int *pbufsize, int isrecord)	/* get next input record 
 	int c;
 	static int firsttime = 1;
 	uschar *buf = *pbuf;
-	uschar save;
-	int bufsize = *pbufsize, savebufsize = *pbufsize;
+	int bufsize = *pbufsize;
 
 	if (firsttime) {
 		firsttime = 0;
@@ -119,7 +118,6 @@ int getrec(uschar **pbuf, int *pbufsize, int isrecord)	/* get next input record 
 		donefld = 0;
 		donerec = 1;
 	}
-	save = buf[0];
 	buf[0] = 0;
 	while (argno < *ARGC || infile == stdin) {
 		   dprintf( ("argno=%d, file=|%s|\n", argno, file) );
@@ -166,9 +164,8 @@ int getrec(uschar **pbuf, int *pbufsize, int isrecord)	/* get next input record 
 		infile = NULL;
 		argno++;
 	}
-	buf[0] = save;
 	*pbuf = buf;
-	*pbufsize = savebufsize;
+	*pbufsize = bufsize;
 	return 0;	/* true end of file */
 }
 
@@ -440,7 +437,7 @@ int refldbld(const char *rec, const char *fs)	/* build fields from reg expr in F
 			rec = patbeg + patlen;
 		} else {
 			   dprintf( ("no match %s\n", rec) );
-			strlcpy(fr, rec, sizeof(fields) - (fr - fields));
+			strcpy(fr, rec);
 			pfa->initstat = tempstat;
 			break;
 		}

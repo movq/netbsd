@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.4 2005/03/23 01:00:32 rtr Exp $
+#	$NetBSD: Makefile,v 1.3.4.1 2005/04/06 21:37:57 tron Exp $
 
 SUBDIR=	acecad mouse calcomp citron digitaledge dmc dynapro elographics fpit \
 	hyperpen js_x kbd magellan microtouch mutouch palmax penmount \

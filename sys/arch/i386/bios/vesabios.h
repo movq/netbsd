@@ -1,9 +1,13 @@
-/* $NetBSD: vesabios.h,v 1.4 2005/06/01 16:49:14 drochner Exp $ */
+/* $NetBSD: vesabios.h,v 1.3 2005/02/03 20:24:25 perry Exp $ */
 
 int vbeprobe(void);
 
+struct vesabios_attach_args {
+	char *vaa_busname;
+};
+
 struct vesabiosdev_attach_args {
-	const char *vbaa_type;
+	char *vbaa_type;
 	int *vbaa_modes;
 	int vbaa_nmodes;
 };

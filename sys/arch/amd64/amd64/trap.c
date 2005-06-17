@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.20 2005/05/20 12:49:14 fvdl Exp $	*/
+/*	$NetBSD: trap.c,v 1.19.10.1 2006/10/16 21:28:20 ghen Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -75,7 +75,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.20 2005/05/20 12:49:14 fvdl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.19.10.1 2006/10/16 21:28:20 ghen Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -153,8 +153,6 @@ int	trapdebug = 0;
 #endif
 
 #define	IDTVEC(name)	__CONCAT(X, name)
-
-#undef TRAP_SIGDEBUG
 
 #ifdef TRAP_SIGDEBUG
 static void frame_dump(struct trapframe *);
@@ -245,8 +243,7 @@ trap(frame)
 		    type, frame->tf_err, (u_long)frame->tf_rip, frame->tf_cs,
 		    frame->tf_rflags, rcr2(), curcpu()->ci_ilevel, frame->tf_rsp);
 
-		/* panic("trap"); */
-		cpu_reboot(RB_HALT, NULL);
+		panic("trap");
 		/*NOTREACHED*/
 
 	case T_PROTFLT:
@@ -441,9 +438,6 @@ copyfault:
 		extern struct vm_map *kernel_map;
 
 		cr2 = rcr2();
-		if (p->p_emul->e_usertrap != NULL &&
-		    (*p->p_emul->e_usertrap)(l, cr2, frame) != 0)
-			return;
 		KERNEL_PROC_LOCK(l);
 		if (l->l_flag & L_SA) {
 			l->l_savp->savp_faultaddr = (vaddr_t)cr2;

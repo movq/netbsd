@@ -1,4 +1,4 @@
-/*	$NetBSD: urio.c,v 1.20 2005/05/11 10:02:28 augustss Exp $	*/
+/*	$NetBSD: urio.c,v 1.19 2004/04/23 17:25:26 itojun Exp $	*/
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: urio.c,v 1.20 2005/05/11 10:02:28 augustss Exp $");
+__KERNEL_RCSID(0, "$NetBSD: urio.c,v 1.19 2004/04/23 17:25:26 itojun Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -167,7 +167,7 @@ USB_ATTACH(urio)
 	USB_ATTACH_START(urio, sc, uaa);
 	usbd_device_handle	dev = uaa->device;
 	usbd_interface_handle	iface;
-	char			*devinfop;
+	char			devinfo[1024];
 	usbd_status		err;
 	usb_endpoint_descriptor_t *ed;
 	u_int8_t		epcount;
@@ -175,10 +175,9 @@ USB_ATTACH(urio)
 
 	DPRINTFN(10,("urio_attach: sc=%p\n", sc));
 
-	devinfop = usbd_devinfo_alloc(dev, 0);
+	usbd_devinfo(dev, 0, devinfo, sizeof(devinfo));
 	USB_ATTACH_SETUP;
-	printf("%s: %s\n", USBDEVNAME(sc->sc_dev), devinfop);
-	usbd_devinfo_free(devinfop);
+	printf("%s: %s\n", USBDEVNAME(sc->sc_dev), devinfo);
 
 	err = usbd_set_config_no(dev, URIO_CONFIG_NO, 1);
 	if (err) {

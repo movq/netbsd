@@ -1,10 +1,10 @@
-/*	$NetBSD: miidevs.h,v 1.60 2005/03/16 17:22:11 briggs Exp $	*/
+/*	$NetBSD: miidevs.h,v 1.60.2.4 2006/04/28 22:25:19 riz Exp $	*/
 
 /*
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.
  *
  * generated from:
- *	NetBSD: miidevs,v 1.58 2005/03/16 17:20:28 briggs Exp
+ *	NetBSD
  */
 
 /*-
@@ -169,7 +169,11 @@
 #define	MII_STR_BROADCOM_BCM5705	"BCM5705 1000BASE-T media interface"
 #define	MII_MODEL_BROADCOM_BCM5750	0x0018
 #define	MII_STR_BROADCOM_BCM5750	"BCM5750 1000BASE-T media interface"
-
+#define	MII_MODEL_BROADCOM_BCM5714	0x0034
+#define	MII_STR_BROADCOM_BCM5714	"BCM5714 1000BASE-T media interface"
+#define	MII_MODEL_BROADCOM_BCM5780	0x0035
+#define	MII_STR_BROADCOM_BCM5780	"BCM5780 1000BASE-T media interface"
+ 
 /* Cicada Semiconductor PHYs (now owned by Vitesse?) */
 #define	MII_MODEL_CICADA_CS8201	0x0001
 #define	MII_STR_CICADA_CS8201	"Cicada CS8201 10/100/1000TX PHY"
@@ -184,6 +188,8 @@
 /* AMD Am79C873 seems to be a relabeled DM9101 */
 #define	MII_MODEL_xxDAVICOM_DM9101	0x0000
 #define	MII_STR_xxDAVICOM_DM9101	"DM9101 (AMD Am79C873) 10/100 media interface"
+#define	MII_MODEL_xxDAVICOM_DM9102	0x0004
+#define	MII_STR_xxDAVICOM_DM9102	"DM9102 10/100 media interface"
 
 /* Integrated Circuit Systems PHYs */
 #define	MII_MODEL_ICS_1889	0x0001
@@ -235,6 +241,8 @@
 #define	MII_STR_xxMARVELL_E1000_3	"Marvell 88E1000 Gigabit PHY"
 #define	MII_MODEL_xxMARVELL_E1000_5	0x0005
 #define	MII_STR_xxMARVELL_E1000_5	"Marvell 88E1000 Gigabit PHY"
+#define	MII_MODEL_xxMARVELL_E1111	0x000c
+#define	MII_STR_xxMARVELL_E1111	"Marvell 88E1111 Gigabit PHY"
 
 /* Myson Technology PHYs */
 #define	MII_MODEL_xxMYSON_MTD972	0x0000

@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.175 2005/04/25 15:02:07 lukem Exp $	*/
+/*	$NetBSD: machdep.c,v 1.173 2005/01/22 15:36:10 chs Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -78,7 +78,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.175 2005/04/25 15:02:07 lukem Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.173 2005/01/22 15:36:10 chs Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -240,7 +240,7 @@ cpu_startup(void)
 	/*
 	 * Good {morning,afternoon,evening,night}.
 	 */
-	printf("%s%s", copyright, version);
+	printf(version);
 	identifycpu();
 	initfpu();	/* also prints FPU type */
 
@@ -250,8 +250,7 @@ cpu_startup(void)
 	/*
 	 * Get scratch page for dumpsys().
 	 */
-	dumppage = uvm_km_alloc(kernel_map, PAGE_SIZE, 0, UVM_KMF_WIRED);
-	if (dumppage == 0)
+	if ((dumppage = uvm_km_alloc(kernel_map, PAGE_SIZE)) == 0)
 		panic("startup: alloc dumppage");
 
 
@@ -284,8 +283,7 @@ cpu_startup(void)
 	 * This page is handed to pmap_enter() therefore
 	 * it has to be in the normal kernel VA range.
 	 */
-	vmmap = uvm_km_alloc(kernel_map, PAGE_SIZE, 0,
-	    UVM_KMF_VAONLY | UVM_KMF_WAITVA);
+	vmmap = uvm_km_valloc_wait(kernel_map, PAGE_SIZE);
 
 	/*
 	 * Create the DVMA maps.

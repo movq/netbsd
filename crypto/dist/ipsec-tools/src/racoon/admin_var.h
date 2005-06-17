@@ -1,4 +1,4 @@
-/*	$NetBSD: admin_var.h,v 1.1.1.2 2005/02/23 14:54:10 manu Exp $	*/
+/*	$NetBSD: admin_var.h,v 1.1.1.2.2.2 2005/11/21 21:12:30 tron Exp $	*/
 
 /* Id: admin_var.h,v 1.7 2004/12/30 00:08:30 manubsd Exp */
 

@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: makeobsolete,v 1.25 2005/03/28 03:12:34 lukem Exp $
+# $NetBSD: makeobsolete,v 1.24.2.1 2005/04/06 22:23:22 tron Exp $
 #
 # Print out the obsolete files for a set
 # Usage: makeobsolete [-b] [-x] [-a arch] [-m machine] [-s setsdir] \

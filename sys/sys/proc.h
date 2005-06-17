@@ -1,4 +1,4 @@
-/*	$NetBSD: proc.h,v 1.201 2005/05/29 21:18:25 christos Exp $	*/
+/*	$NetBSD: proc.h,v 1.197.2.3 2006/04/07 12:31:52 tron Exp $	*/
 
 /*-
  * Copyright (c) 1986, 1989, 1991, 1993
@@ -128,9 +128,6 @@ struct emul {
 	int		(*e_fault)(struct proc *, vaddr_t, int, int);
 
 	vaddr_t		(*e_vm_default_addr)(struct proc *, vaddr_t, vsize_t);
-
-	/* Emulation-specific hook for userspace page faults */
-	int		(*e_usertrap)(struct lwp *, vaddr_t, void *);
 };
 
 /*
@@ -151,6 +148,7 @@ struct emul {
  *
  * Fields marked 'p:' are protected by the process's own p_lock.
  * Fields marked 'l:' are protected by the proclist_lock
+ * Fields marked 's:' are protected by the SCHED_LOCK.
  */
 struct proc {
 	LIST_ENTRY(proc) p_list;	/* List of all processes */
@@ -191,7 +189,7 @@ struct proc {
 #define	p_startzero	p_nlwps
 
 	int 		p_nlwps;	/* p: Number of LWPs */
-	int 		p_nrlwps;	/* p: Number of running LWPs */
+	int 		p_nrlwps;	/* s: Number of running LWPs */
 	int 		p_nzlwps;	/* p: Number of zombie LWPs */
 	int 		p_nlwpid;	/* p: Next LWP ID */
 
@@ -281,9 +279,12 @@ struct proc {
 /* These flags are kept in p_flag. */
 #define	P_ADVLOCK	0x00000001 /* Process may hold a POSIX advisory lock */
 #define	P_CONTROLT	0x00000002 /* Has a controlling terminal */
+#define	P_INMEM	     /* 0x00000004 */	L_INMEM
 #define	P_NOCLDSTOP	0x00000008 /* No SIGCHLD when children stop */
 #define	P_PPWAIT	0x00000010 /* Parent is waiting for child exec/exit */
 #define	P_PROFIL	0x00000020 /* Has started profiling */
+#define	P_SELECT     /* 0x00000040 */	L_SELECT
+#define	P_SINTR	     /* 0x00000080 */	L_SINTR
 #define	P_SUGID		0x00000100 /* Had set id privileges since last exec */
 #define	P_SYSTEM	0x00000200 /* System proc: no sigs, stats or swapping */
 #define	P_SA		0x00000400 /* Using scheduler activations */
@@ -295,14 +296,19 @@ struct proc {
 #define	P_FSTRACE	0x00010000 /* Debugger process being traced by procfs */
 #define	P_NOCLDWAIT	0x00020000 /* No zombies if child dies */
 #define	P_32		0x00040000 /* 32-bit process (used on 64-bit kernels) */
-#define	P_CLDSIGIGN	0x00080000 /* Process is ignoring SIGCHLD */
 #define	P_INEXEC	0x00100000 /* Process is exec'ing and can't be traced */
 #define	P_SYSTRACE	0x00200000 /* Process system call tracing active */
 #define	P_CHTRACED	0x00400000 /* Child has been traced & reparented */
 #define	P_STOPFORK	0x00800000 /* Child will be stopped on fork(2) */
 #define	P_STOPEXEC	0x01000000 /* Will be stopped on exec(2) */
 #define	P_STOPEXIT	0x02000000 /* Will be stopped at process exit */
+#define	P_UNUSED4    	0x08000000
+#define	P_UNUSED3	0x10000000
+#define	P_UNUSED2	0x20000000
+#define	P_UNUSED1	0x40000000
 #define	P_MARKER	0x80000000 /* Is a dummy marker process */
+
+#define	P_SHARED	(L_INMEM|L_SELECT|L_SINTR)
 
 /*
  * Macro to compute the exit signal to be delivered.
@@ -443,10 +449,10 @@ void	pgdelete(struct pgrp *);
 void	procinit(void);
 void	resetprocpriority(struct proc *);
 void	suspendsched(void);
-int	ltsleep(__volatile const void *, int, const char *, int,
+int	ltsleep(const void *, int, const char *, int,
 	    __volatile struct simplelock *);
-void	wakeup(__volatile const void *);
-void	wakeup_one(__volatile const void *);
+void	wakeup(const void *);
+void	wakeup_one(const void *);
 void	exit1(struct lwp *, int);
 int	find_stopped_child(struct proc *, pid_t, int, struct proc **);
 struct proc *proc_alloc(void);

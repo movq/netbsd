@@ -1,4 +1,4 @@
-.\"	$NetBSD: rc.conf.5,v 1.92 2004/07/22 03:44:12 atatat Exp $
+.\"	$NetBSD: rc.conf.5,v 1.92.2.2 2006/03/28 22:47:29 riz Exp $
 .\"
 .\" Copyright (c) 1996 Matthew R. Green
 .\" Copyright (c) 1997 Curt J. Sampson
@@ -32,7 +32,7 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.Dd July 21, 2004
+.Dd March 27, 2006
 .Dt RC.CONF 5
 .Os
 .Sh NAME
@@ -166,9 +166,15 @@ run by
 .Bl -tag -width net_interfaces
 .It Sy defaultroute
 A string.
-Default network route.
+Default IPv4 network route.
 If empty or not set, then the contents of
 .Pa /etc/mygate
+(if it exists) are used.
+.It Sy defaultroute6
+A string.
+Default IPv6 network route.
+If empty or not set, then the contents of
+.Pa /etc/mygate6
 (if it exists) are used.
 .It Sy domainname
 A string.
@@ -344,7 +350,7 @@ See
 .Sq YES
 or
 .Sq NO .
-Load verified exec fingerprints during startup.
+Load Veriexec fingerprints during startup.
 Read
 .Xr veriexecctl 8
 for more information.
@@ -379,6 +385,22 @@ will actually result in the system booting with securelevel set to 1, as
 will raise the level when
 .Xr rc 8
 completes.
+.It Sy veriexec_strict
+A number.
+Controls the strict level of Veriexec.
+Level 0 is learning mode, used when building the signatures file.
+It will only output messages but will not enforce anything.
+Level 1 will only prevent access to files with a fingerprint
+mismatch. Level 2 will also deny writing to and removing of
+monitored files, as well as enforce access type (as specified in
+the signatures file). Level 3 will take a step further and prevent
+access to files that are not monitored.
+.It Sy veriexec_verbose
+A number.
+Controls the verbosity of Veriexec.
+Recommended operation is at level 0, verbose output (mostly used when
+building the signatures file) is at level 1.
+Level 2 is for debugging only and should not be used.
 .El
 .Ss Networking startup
 .Bl -tag -width net_interfaces

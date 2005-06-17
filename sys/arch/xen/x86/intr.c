@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.c,v 1.6 2005/04/16 22:49:38 bouyer Exp $	*/
+/*	$NetBSD: intr.c,v 1.4.2.2 2005/04/28 10:19:24 tron Exp $	*/
 /*	NetBSD: intr.c,v 1.20 2004/10/23 21:27:35 yamt Exp	*/
 
 /*
@@ -104,7 +104,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.6 2005/04/16 22:49:38 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.4.2.2 2005/04/28 10:19:24 tron Exp $");
 
 #include "opt_multiprocessor.h"
 #include "opt_xen.h"

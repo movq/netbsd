@@ -1,4 +1,4 @@
-/*	$NetBSD: ieee754.h,v 1.5 2005/04/15 22:39:12 kleink Exp $	*/
+/*	$NetBSD: ieee754.h,v 1.4.16.1 2005/04/19 12:31:09 tron Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993

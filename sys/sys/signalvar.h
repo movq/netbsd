@@ -1,4 +1,4 @@
-/*	$NetBSD: signalvar.h,v 1.55 2005/06/10 05:10:13 matt Exp $	*/
+/*	$NetBSD: signalvar.h,v 1.54.4.1 2005/10/21 17:39:40 riz Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993
@@ -140,7 +140,7 @@ struct ucred;
  * Machine-independent functions:
  */
 int	coredump(struct lwp *, const char *);
-int	coredump_netbsd(struct lwp *, void *);
+int	coredump_netbsd(struct lwp *, struct vnode *, struct ucred *);
 void	execsigs(struct proc *);
 void	gsignal(int, int);
 void	kgsignal(int, struct ksiginfo *, void *);
@@ -177,11 +177,19 @@ void	sigactsunshare(struct proc *);
 void	sigactsfree(struct sigacts *);
 
 void	kpsendsig(struct lwp *, const struct ksiginfo *, const sigset_t *);
+siginfo_t *siginfo_alloc(int);
+void	siginfo_free(void *);
 
 /*
  * Machine-dependent functions:
  */
 void	sendsig(const struct ksiginfo *, const sigset_t *);
+struct core;
+struct core32;
+int	cpu_coredump(struct lwp *, struct vnode *, struct ucred *,
+	    struct core *);
+int	cpu_coredump32(struct lwp *, struct vnode *, struct ucred *,
+	    struct core32 *);
 
 /*
  * Compatibility functions.  See compat/common/kern_sig_13.c.

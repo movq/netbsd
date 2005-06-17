@@ -1,7 +1,7 @@
 /*******************************************************************************
  *
  * Module Name: nsalloc - Namespace allocation and deletion utilities
- *              xRevision: 92 $
+ *              xRevision: 84 $
  *
  ******************************************************************************/
 
@@ -9,7 +9,7 @@
  *
  * 1. Copyright Notice
  *
- * Some or all of this work - Copyright (c) 1999 - 2005, Intel Corp.
+ * Some or all of this work - Copyright (c) 1999 - 2004, Intel Corp.
  * All rights reserved.
  *
  * 2. License
@@ -116,7 +116,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nsalloc.c,v 1.15 2005/05/02 14:52:09 kochi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nsalloc.c,v 1.14 2004/04/23 02:58:29 simonb Exp $");
 
 #define __NSALLOC_C__
 
@@ -127,20 +127,14 @@ __KERNEL_RCSID(0, "$NetBSD: nsalloc.c,v 1.15 2005/05/02 14:52:09 kochi Exp $");
 #define _COMPONENT          ACPI_NAMESPACE
         ACPI_MODULE_NAME    ("nsalloc")
 
-/* Local prototypes */
-
-static void
-AcpiNsRemoveReference (
-    ACPI_NAMESPACE_NODE     *Node);
-
 
 /*******************************************************************************
  *
  * FUNCTION:    AcpiNsCreateNode
  *
- * PARAMETERS:  Name            - Name of the new node (4 char ACPI name)
+ * PARAMETERS:  AcpiName        - Name of the new node
  *
- * RETURN:      New namespace node (Null on failure)
+ * RETURN:      None
  *
  * DESCRIPTION: Create a namespace node
  *
@@ -236,6 +230,7 @@ AcpiNsDeleteNode (
         }
     }
 
+
     ACPI_MEM_TRACKING (AcpiGbl_MemoryLists[ACPI_MEM_LIST_NSNODE].TotalFreed++);
 
     /*
@@ -245,6 +240,60 @@ AcpiNsDeleteNode (
     ACPI_MEM_FREE (Node);
     return_VOID;
 }
+
+
+#ifdef ACPI_ALPHABETIC_NAMESPACE
+/*******************************************************************************
+ *
+ * FUNCTION:    AcpiNsCompareNames
+ *
+ * PARAMETERS:  Name1           - First name to compare
+ *              Name2           - Second name to compare
+ *
+ * RETURN:      value from strncmp
+ *
+ * DESCRIPTION: Compare two ACPI names.  Names that are prefixed with an
+ *              underscore are forced to be alphabetically first.
+ *
+ ******************************************************************************/
+
+int
+AcpiNsCompareNames (
+    char                    *Name1,
+    char                    *Name2)
+{
+    char                    ReversedName1[ACPI_NAME_SIZE];
+    char                    ReversedName2[ACPI_NAME_SIZE];
+    UINT32                  i;
+    UINT32                  j;
+
+
+    /*
+     * Replace all instances of "underscore" with a value that is smaller so
+     * that all names that are prefixed with underscore(s) are alphabetically
+     * first.
+     *
+     * Reverse the name bytewise so we can just do a 32-bit compare instead
+     * of a strncmp.
+     */
+    for (i = 0, j= (ACPI_NAME_SIZE - 1); i < ACPI_NAME_SIZE; i++, j--)
+    {
+        ReversedName1[j] = Name1[i];
+        if (Name1[i] == '_')
+        {
+            ReversedName1[j] = '*';
+        }
+
+        ReversedName2[j] = Name2[i];
+        if (Name2[i] == '_')
+        {
+            ReversedName2[j] = '*';
+        }
+    }
+
+    return (*(int *) ReversedName1 - *(int *) ReversedName2);
+}
+#endif
 
 
 /*******************************************************************************
@@ -313,8 +362,7 @@ AcpiNsInstallNode (
          * alphabetic placement.
          */
         PreviousChildNode = NULL;
-        while (AcpiNsCompareNames (AcpiUtGetNodeName (ChildNode),
-                                            AcpiUtGetNodeName (Node)) < 0)
+        while (AcpiNsCompareNames (AcpiUtGetNodeName (ChildNode), AcpiUtGetNodeName (Node)) < 0)
         {
             if (ChildNode->Flags & ANOBJ_END_OF_PEER_LIST)
             {
@@ -383,11 +431,10 @@ AcpiNsInstallNode (
     Node->OwnerId = OwnerId;
     Node->Type = (UINT8) Type;
 
-    ACPI_DEBUG_PRINT ((ACPI_DB_NAMES,
-        "%4.4s (%s) [Node %p Owner %X] added to %4.4s (%s) [Node %p]\n",
-        AcpiUtGetNodeName (Node), AcpiUtGetTypeName (Node->Type), Node, OwnerId,
+    ACPI_DEBUG_PRINT ((ACPI_DB_NAMES, "%4.4s (%s) added to %4.4s (%s) %p at %p\n",
+        AcpiUtGetNodeName (Node), AcpiUtGetTypeName (Node->Type),
         AcpiUtGetNodeName (ParentNode), AcpiUtGetTypeName (ParentNode->Type),
-        ParentNode));
+        ParentNode, Node));
 
     /*
      * Increment the reference count(s) of all parents up to
@@ -485,8 +532,7 @@ AcpiNsDeleteChildren (
 
         if (ChildNode->ReferenceCount != 1)
         {
-            ACPI_REPORT_WARNING ((
-                "Existing references (%d) on node being deleted (%p)\n",
+            ACPI_REPORT_WARNING (("Existing references (%d) on node being deleted (%p)\n",
                 ChildNode->ReferenceCount, ChildNode));
         }
 
@@ -556,15 +602,15 @@ AcpiNsDeleteNamespaceSubtree (
 
             /* Check if this node has any children */
 
-            if (AcpiNsGetNextNode (ACPI_TYPE_ANY, ChildNode, NULL))
+            if (AcpiNsGetNextNode (ACPI_TYPE_ANY, ChildNode, 0))
             {
                 /*
                  * There is at least one child of this node,
                  * visit the node
                  */
                 Level++;
-                ParentNode = ChildNode;
-                ChildNode  = NULL;
+                ParentNode    = ChildNode;
+                ChildNode     = 0;
             }
         }
         else
@@ -610,7 +656,7 @@ AcpiNsDeleteNamespaceSubtree (
  *
  ******************************************************************************/
 
-static void
+void
 AcpiNsRemoveReference (
     ACPI_NAMESPACE_NODE     *Node)
 {
@@ -719,8 +765,8 @@ AcpiNsDeleteNamespaceByOwner (
                  * visit the node
                  */
                 Level++;
-                ParentNode = ChildNode;
-                ChildNode  = NULL;
+                ParentNode    = ChildNode;
+                ChildNode     = NULL;
             }
             else if (ChildNode->OwnerId == OwnerId)
             {
@@ -754,59 +800,5 @@ AcpiNsDeleteNamespaceByOwner (
 
     return_VOID;
 }
-
-
-#ifdef ACPI_ALPHABETIC_NAMESPACE
-/*******************************************************************************
- *
- * FUNCTION:    AcpiNsCompareNames
- *
- * PARAMETERS:  Name1           - First name to compare
- *              Name2           - Second name to compare
- *
- * RETURN:      value from strncmp
- *
- * DESCRIPTION: Compare two ACPI names.  Names that are prefixed with an
- *              underscore are forced to be alphabetically first.
- *
- ******************************************************************************/
-
-int
-AcpiNsCompareNames (
-    char                    *Name1,
-    char                    *Name2)
-{
-    char                    ReversedName1[ACPI_NAME_SIZE];
-    char                    ReversedName2[ACPI_NAME_SIZE];
-    UINT32                  i;
-    UINT32                  j;
-
-
-    /*
-     * Replace all instances of "underscore" with a value that is smaller so
-     * that all names that are prefixed with underscore(s) are alphabetically
-     * first.
-     *
-     * Reverse the name bytewise so we can just do a 32-bit compare instead
-     * of a strncmp.
-     */
-    for (i = 0, j= (ACPI_NAME_SIZE - 1); i < ACPI_NAME_SIZE; i++, j--)
-    {
-        ReversedName1[j] = Name1[i];
-        if (Name1[i] == '_')
-        {
-            ReversedName1[j] = '*';
-        }
-
-        ReversedName2[j] = Name2[i];
-        if (Name2[i] == '_')
-        {
-            ReversedName2[j] = '*';
-        }
-    }
-
-    return (*(int *) ReversedName1 - *(int *) ReversedName2);
-}
-#endif
 
 

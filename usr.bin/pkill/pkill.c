@@ -1,4 +1,4 @@
-/*	$NetBSD: pkill.c,v 1.9 2005/03/16 08:52:20 sketch Exp $	*/
+/*	$NetBSD: pkill.c,v 1.9.2.7 2005/10/15 16:36:44 riz Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: pkill.c,v 1.9 2005/03/16 08:52:20 sketch Exp $");
+__RCSID("$NetBSD: pkill.c,v 1.9.2.7 2005/10/15 16:36:44 riz Exp $");
 #endif /* !lint */
 
 #include <sys/types.h>
@@ -61,6 +61,7 @@ __RCSID("$NetBSD: pkill.c,v 1.9 2005/03/16 08:52:20 sketch Exp $");
 #include <pwd.h>
 #include <grp.h>
 #include <errno.h>
+#include <paths.h>
 
 #define	STATUS_MATCH	0
 #define	STATUS_NOMATCH	1
@@ -83,48 +84,49 @@ struct list {
 
 SLIST_HEAD(listhead, list);
 
-struct kinfo_proc2	*plist;
-char	*selected;
-char	*delim = "\n";
-int	nproc;
-int	pgrep;
-int	signum = SIGTERM;
-int	newest;
-int	inverse;
-int	longfmt;
-int	matchargs;
-int	fullmatch;
-int	cflags = REG_EXTENDED;
-kvm_t	*kd;
-pid_t	mypid;
+static struct kinfo_proc2	*plist;
+static char	*selected;
+static const char *delim = "\n";
+static int	nproc;
+static int	pgrep;
+static int	signum = SIGTERM;
+static int	newest;
+static int	inverse;
+static int	longfmt;
+static int	matchargs;
+static int	fullmatch;
+static int	cflags = REG_EXTENDED;
+static kvm_t	*kd;
+static pid_t	mypid;
 
-struct listhead euidlist = SLIST_HEAD_INITIALIZER(list);
-struct listhead ruidlist = SLIST_HEAD_INITIALIZER(list);
-struct listhead rgidlist = SLIST_HEAD_INITIALIZER(list);
-struct listhead pgrplist = SLIST_HEAD_INITIALIZER(list);
-struct listhead ppidlist = SLIST_HEAD_INITIALIZER(list);
-struct listhead tdevlist = SLIST_HEAD_INITIALIZER(list);
-struct listhead sidlist = SLIST_HEAD_INITIALIZER(list);
+static struct listhead euidlist = SLIST_HEAD_INITIALIZER(list);
+static struct listhead ruidlist = SLIST_HEAD_INITIALIZER(list);
+static struct listhead rgidlist = SLIST_HEAD_INITIALIZER(list);
+static struct listhead pgrplist = SLIST_HEAD_INITIALIZER(list);
+static struct listhead ppidlist = SLIST_HEAD_INITIALIZER(list);
+static struct listhead tdevlist = SLIST_HEAD_INITIALIZER(list);
+static struct listhead sidlist = SLIST_HEAD_INITIALIZER(list);
 
 int	main(int, char **);
-void	usage(void);
-void	killact(struct kinfo_proc2 *);
-void	grepact(struct kinfo_proc2 *);
-void	makelist(struct listhead *, enum listtype, char *);
+static void	usage(void) __attribute__((__noreturn__));
+static int	killact(const struct kinfo_proc2 *);
+static int	grepact(const struct kinfo_proc2 *);
+static void	makelist(struct listhead *, enum listtype, char *);
 
 int
 main(int argc, char **argv)
 {
-	extern char *optarg;
-	extern int optind;
-	char buf[_POSIX2_LINE_MAX], *mstr, **pargv, *p, *q;
+	char buf[_POSIX2_LINE_MAX], **pargv, *q;
 	int i, j, ch, bestidx, rv, criteria;
-	void (*action)(struct kinfo_proc2 *);
-	struct kinfo_proc2 *kp;
+	int (*action)(const struct kinfo_proc2 *);
+	const struct kinfo_proc2 *kp;
 	struct list *li;
+	const char *mstr, *p;
 	u_int32_t bestsec, bestusec;
 	regex_t reg;
 	regmatch_t regmatch;
+
+	setprogname(argv[0]);
 
 	if (strcmp(getprogname(), "pgrep") == 0) {
 		action = grepact;
@@ -232,27 +234,30 @@ main(int argc, char **argv)
 	 */
 	kd = kvm_openfiles(NULL, NULL, NULL, KVM_NO_FILES, buf);
 	if (kd == NULL)
-		errx(STATUS_ERROR, "kvm_openfiles(): %s", buf);
+		errx(STATUS_ERROR, "Cannot open kernel files (%s)", buf);
 
 	plist = kvm_getproc2(kd, KERN_PROC_ALL, 0, sizeof(*plist), &nproc);
 	if (plist == NULL)
-		errx(STATUS_ERROR, "kvm_getproc2() failed");
+		errx(STATUS_ERROR, "Cannot get process list (%s)",
+		    kvm_geterr(kd));
 
 	/*
 	 * Allocate memory which will be used to keep track of the
 	 * selection.
 	 */
-	if ((selected = malloc(nproc)) == NULL)
-		errx(STATUS_ERROR, "memory allocation failure");
-	memset(selected, 0, nproc);
+	if ((selected = calloc((size_t)1, (size_t)nproc)) == NULL)
+		err(STATUS_ERROR, "Cannot allocate memory for %d processes",
+		    nproc);
 
 	/*
 	 * Refine the selection.
 	 */
 	for (; *argv != NULL; argv++) {
 		if ((rv = regcomp(&reg, *argv, cflags)) != 0) {
-			regerror(rv, &reg, buf, sizeof(buf));
-			errx(STATUS_BADUSAGE, "bad expression: %s", buf);
+			(void)regerror(rv, &reg, buf, sizeof(buf));
+			errx(STATUS_BADUSAGE,
+			    "Cannot compile regular expression `%s' (%s)",
+			    *argv, buf);
 		}
 
 		for (i = 0, kp = plist; i < nproc; i++, kp++) {
@@ -284,8 +289,10 @@ main(int argc, char **argv)
 				} else
 					selected[i] = 1;
 			} else if (rv != REG_NOMATCH) {
-				regerror(rv, &reg, buf, sizeof(buf));
-				errx(STATUS_ERROR, "regexec(): %s", buf);
+				(void)regerror(rv, &reg, buf, sizeof(buf));
+				errx(STATUS_ERROR,
+				    "Regular expression evaluation error (%s)",
+				    buf);
 			}
 		}
 
@@ -378,7 +385,7 @@ main(int argc, char **argv)
 			}
 		}
 
-		memset(selected, 0, nproc);
+		(void)memset(selected, 0, (size_t)nproc);
 		if (bestidx != -1)
 			selected[bestidx] = 1;
 	}
@@ -398,14 +405,13 @@ main(int argc, char **argv)
 		if ((kp->p_flag & P_SYSTEM) != 0)
 			continue;
 
-		rv = 1;
-		(*action)(kp);
+		rv |= (*action)(kp);
 	}
 
-	exit(rv ? STATUS_MATCH : STATUS_NOMATCH);
+	return rv ? STATUS_MATCH : STATUS_NOMATCH;
 }
 
-void
+static void
 usage(void)
 {
 	const char *ustr;
@@ -415,54 +421,81 @@ usage(void)
 	else
 		ustr = "[-signal] [-finvx]";
 
-	fprintf(stderr,
-		"usage: %s %s [-G gid] [-P ppid] [-U uid] [-g pgrp] [-s sid]\n"
+	(void)fprintf(stderr,
+		"Usage: %s %s [-G gid] [-P ppid] [-U uid] [-g pgrp] [-s sid]\n"
 		"             [-t tty] [-u euid] pattern ...\n", getprogname(),
 		ustr);
 
-	exit(STATUS_ERROR);
+	exit(STATUS_BADUSAGE);
 }
 
-void
-killact(struct kinfo_proc2 *kp)
+static int
+killact(const struct kinfo_proc2 *kp)
 {
+	if (kill(kp->p_pid, signum) == -1) {
 
-	if (kill(kp->p_pid, signum) == -1)
-		err(STATUS_ERROR, "signalling pid %d", (int)kp->p_pid);
+		/*
+		 * Check for ESRCH, which indicates that the process
+		 * disappeared between us matching it and us
+		 * signalling it; don't issue a warning about it.
+		 */
+		if (errno != ESRCH)
+			warn("signalling pid %d", (int)kp->p_pid);
+
+		/*
+		 * Return 0 to indicate that the process should not be
+		 * considered a match, since we didn't actually get to
+		 * signal it.
+		 */
+		return 0;
+	}
+
+	return 1;
 }
 
-void
-grepact(struct kinfo_proc2 *kp)
+static int
+grepact(const struct kinfo_proc2 *kp)
 {
 	char **argv;
 
 	if (longfmt && matchargs) {
-		if ((argv = kvm_getargv2(kd, kp, 0)) == NULL)
-			return;
 
-		printf("%d ", (int)kp->p_pid);
+		/*
+		 * If kvm_getargv2() failed the process has probably
+		 * disappeared.  Return 0 to indicate that the process
+		 * should not be considered a match, since we are no
+		 * longer in a position to output it as a match.
+		 */
+		if ((argv = kvm_getargv2(kd, kp, 0)) == NULL)
+			return 0;
+
+		(void)printf("%d ", (int)kp->p_pid);
 		for (; *argv != NULL; argv++) {
-			printf("%s", *argv);
+			(void)printf("%s", *argv);
 			if (argv[1] != NULL)
-				putchar(' ');
+				(void)putchar(' ');
 		}
 	} else if (longfmt)
-		printf("%d %s", (int)kp->p_pid, kp->p_comm);
+		(void)printf("%d %s", (int)kp->p_pid, kp->p_comm);
 	else
-		printf("%d", (int)kp->p_pid);
+		(void)printf("%d", (int)kp->p_pid);
 
-	printf("%s", delim);
+	(void)printf("%s", delim);
+
+	return 1;
 }
 
-void
+static void
 makelist(struct listhead *head, enum listtype type, char *src)
 {
 	struct list *li;
 	struct passwd *pw;
 	struct group *gr;
 	struct stat st;
-	char *sp, *p, buf[MAXPATHLEN];
+	char *sp, *ep, buf[MAXPATHLEN];
+	const char *p;
 	int empty;
+	const char *prefix = _PATH_DEV;
 
 	empty = 1;
 
@@ -471,12 +504,13 @@ makelist(struct listhead *head, enum listtype type, char *src)
 			usage();
 
 		if ((li = malloc(sizeof(*li))) == NULL)
-			errx(STATUS_ERROR, "memory allocation failure");
+			err(STATUS_ERROR, "Cannot allocate %zd bytes",
+			    sizeof(*li));
 		SLIST_INSERT_HEAD(head, li, li_chain);
 		empty = 0;
 
-		li->li_number = (uid_t)strtol(sp, &p, 0);
-		if (*p == '\0') {
+		li->li_number = (uid_t)strtol(sp, &ep, 0);
+		if (*ep == '\0') {
 			switch (type) {
 			case LT_PGRP:
 				if (li->li_number == 0)
@@ -488,6 +522,7 @@ makelist(struct listhead *head, enum listtype type, char *src)
 				break;
 			case LT_TTY:
 				usage();
+				/*NOTREACHED*/
 			default:
 				break;
 			}
@@ -497,13 +532,13 @@ makelist(struct listhead *head, enum listtype type, char *src)
 		switch (type) {
 		case LT_USER:
 			if ((pw = getpwnam(sp)) == NULL)
-				errx(STATUS_BADUSAGE, "unknown user `%s'",
+				errx(STATUS_BADUSAGE, "Unknown user `%s'",
 				    sp);
 			li->li_number = pw->pw_uid;
 			break;
 		case LT_GROUP:
 			if ((gr = getgrnam(sp)) == NULL)
-				errx(STATUS_BADUSAGE, "unknown group `%s'",
+				errx(STATUS_BADUSAGE, "Unknown group `%s'",
 				    sp);
 			li->li_number = gr->gr_gid;
 			break;
@@ -515,29 +550,28 @@ makelist(struct listhead *head, enum listtype type, char *src)
 				p = "console";
 			else if (strncmp(sp, "tty", 3) == 0)
 				p = sp;
-			else
-				p = NULL;
+			else {
+				p = sp;
+				prefix = _PATH_TTY;
+			}
 
-			if (p == NULL)
-				snprintf(buf, sizeof(buf), "/dev/tty%s", sp);
-			else
-				snprintf(buf, sizeof(buf), "/dev/%s", p);
+			(void)snprintf(buf, sizeof(buf), "%s%s", prefix, p);
 
-			if (stat(buf, &st) < 0) {
+			if (stat(buf, &st) == -1) {
 				if (errno == ENOENT)
 					errx(STATUS_BADUSAGE,
-					    "no such tty: `%s'", sp);
-				err(STATUS_ERROR, "stat(%s)", sp);
+					    "No such tty: `%s'", sp);
+				err(STATUS_ERROR, "Cannot access `%s'", sp);
 			}
 
 			if ((st.st_mode & S_IFCHR) == 0)
-				errx(STATUS_BADUSAGE, "not a tty: `%s'", sp);
+				errx(STATUS_BADUSAGE, "Not a tty: `%s'", sp);
 
 			li->li_number = st.st_rdev;
 			break;
 		default:
 			usage();
-		};
+		}
 	}
 
 	if (empty)

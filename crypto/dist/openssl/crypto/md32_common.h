@@ -128,10 +128,6 @@
  *					<appro@fy.chalmers.se>
  */
 
-#include <openssl/crypto.h>
-#include <openssl/fips.h>
-#include <openssl/err.h>
-
 #if !defined(DATA_ORDER_IS_BIG_ENDIAN) && !defined(DATA_ORDER_IS_LITTLE_ENDIAN)
 #error "DATA_ORDER must be defined!"
 #endif
@@ -210,7 +206,7 @@
 				: "cc");		\
 			   ret;				\
 			})
-#  elif defined(__powerpc) || defined(__ppc__) || defined(__powerpc64__)
+#  elif defined(__powerpc) || defined(__ppc)
 #   define ROTATE(a,n)	({ register unsigned int ret;	\
 				asm (			\
 				"rlwinm %0,%1,%2,0,31"	\
@@ -556,14 +552,6 @@ int HASH_FINAL (unsigned char *md, HASH_CTX *c)
 	register int i,j;
 	static const unsigned char end[4]={0x80,0x00,0x00,0x00};
 	const unsigned char *cp=end;
-
-#if 0
-	if(FIPS_mode() && !FIPS_md5_allowed())
-	    {
-	    FIPSerr(FIPS_F_HASH_FINAL,FIPS_R_NON_FIPS_METHOD);
-	    return 0;
-	    }
-#endif
 
 	/* c->num should definitly have room for at least one more byte. */
 	p=c->data;

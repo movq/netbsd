@@ -632,11 +632,6 @@ static int str_copy(CONF *conf, char *section, char **pto, char *from)
 			BUF_MEM_grow_clean(buf,(strlen(p)+len-(e-from)));
 			while (*p)
 				buf->data[to++]= *(p++);
-
-			/* Since we change the pointer 'from', we also have
-			   to change the perceived length of the string it
-			   points at.  /RL */
-			len -= e-from;
 			from=e;
 			}
 		else

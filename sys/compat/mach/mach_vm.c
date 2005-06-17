@@ -1,4 +1,4 @@
-/*	$NetBSD: mach_vm.c,v 1.48 2005/05/29 22:08:16 christos Exp $ */
+/*	$NetBSD: mach_vm.c,v 1.47.2.1 2006/04/27 20:34:42 tron Exp $ */
 
 /*-
  * Copyright (c) 2002-2003 The NetBSD Foundation, Inc.
@@ -39,7 +39,7 @@
 #include "opt_ktrace.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mach_vm.c,v 1.48 2005/05/29 22:08:16 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mach_vm.c,v 1.47.2.1 2006/04/27 20:34:42 tron Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -742,7 +742,7 @@ mach_vm_read(args)
 	size_t *msglen = args->rsize;
 	struct lwp *l = args->l;
 	struct lwp *tl = args->tl;
-	char *tbuf;
+	char *buf;
 	void *addr;
 	vaddr_t va;
 	size_t size;
@@ -763,27 +763,27 @@ mach_vm_read(args)
 	 * This is reasonable for small chunk of data, but we should
 	 * remap COW for areas bigger than a page.
 	 */
-	tbuf = malloc(size, M_EMULDATA, M_WAITOK);
+	buf = malloc(size, M_EMULDATA, M_WAITOK);
 
 	addr = (void *)req->req_addr;
-	if ((error = copyin_proc(tl->l_proc, addr, tbuf, size)) != 0) {
+	if ((error = copyin_proc(tl->l_proc, addr, buf, size)) != 0) {
 		printf("copyin_proc error = %d, addr = %p, size = %x\n", error, addr, size);
-		free(tbuf, M_WAITOK);
+		free(buf, M_WAITOK);
 		return mach_msg_error(args, EFAULT);
 	}
 
-	if ((error = copyout(tbuf, (void *)va, size)) != 0) {
+	if ((error = copyout(buf, (void *)va, size)) != 0) {
 		printf("copyout error = %d\n", error);
-		free(tbuf, M_WAITOK);
+		free(buf, M_WAITOK);
 		return mach_msg_error(args, EFAULT);
 	}
 
 #ifdef KTRACE
 	if (KTRPOINT(l->l_proc, KTR_MOOL) && error == 0)
-		ktrmool(l->l_proc, tbuf, size, (void *)va);
+		ktrmool(l->l_proc, buf, size, (void *)va);
 #endif
 
-	free(tbuf, M_WAITOK);
+	free(buf, M_WAITOK);
 
 	*msglen = sizeof(*rep);
 	mach_set_header(rep, req, *msglen);
@@ -803,11 +803,13 @@ mach_vm_write(args)
 	mach_vm_write_request_t *req = args->smsg;
 	mach_vm_write_reply_t *rep = args->rmsg;
 	size_t *msglen = args->rsize;
+#ifdef KTRACE
 	struct lwp *l = args->l;
+#endif
 	struct lwp *tl = args->tl;
 	size_t size;
 	void *addr;
-	char *tbuf;
+	char *buf;
 	int error;
 
 #ifdef DEBUG_MACH
@@ -821,27 +823,27 @@ mach_vm_write(args)
 	 * remap COW for areas bigger than a page.
 	 */
 	size = req->req_data.size;
-	tbuf = malloc(size, M_EMULDATA, M_WAITOK);
+	buf = malloc(size, M_EMULDATA, M_WAITOK);
 
-	if ((error = copyin(req->req_data.address, tbuf, size)) != 0) {
+	if ((error = copyin(req->req_data.address, buf, size)) != 0) {
 		printf("copyin error = %d\n", error);
-		free(tbuf, M_WAITOK);
+		free(buf, M_WAITOK);
 		return mach_msg_error(args, EFAULT);
 	}
 
 	addr = (void *)req->req_addr;
-	if ((error = copyout_proc(tl->l_proc, tbuf, addr, size)) != 0) {
+	if ((error = copyout_proc(tl->l_proc, buf, addr, size)) != 0) {
 		printf("copyout_proc error = %d\n", error);
-		free(tbuf, M_WAITOK);
+		free(buf, M_WAITOK);
 		return mach_msg_error(args, EFAULT);
 	}
 
 #ifdef KTRACE
 	if (KTRPOINT(l->l_proc, KTR_MOOL) && error == 0)
-		ktrmool(l->l_proc, tbuf, size, (void *)addr);
+		ktrmool(l->l_proc, buf, size, (void *)addr);
 #endif
 
-	free(tbuf, M_WAITOK);
+	free(buf, M_WAITOK);
 
 	*msglen = sizeof(*rep);
 	mach_set_header(rep, req, *msglen);

@@ -1,4 +1,4 @@
-/*	$NetBSD: __getmntinfo13.c,v 1.2 2005/04/12 20:49:19 drochner Exp $	*/
+/*	$NetBSD: __getmntinfo13.c,v 1.1.2.1 2006/03/01 17:12:05 riz Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)getmntinfo.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: __getmntinfo13.c,v 1.2 2005/04/12 20:49:19 drochner Exp $");
+__RCSID("$NetBSD: __getmntinfo13.c,v 1.1.2.1 2006/03/01 17:12:05 riz Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 

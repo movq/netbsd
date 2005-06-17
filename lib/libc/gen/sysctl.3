@@ -1,4 +1,4 @@
-.\"	$NetBSD: sysctl.3,v 1.149 2005/05/24 15:58:11 wiz Exp $
+.\"	$NetBSD: sysctl.3,v 1.142.2.7 2005/12/06 19:52:17 riz Exp $
 .\"
 .\" Copyright (c) 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"	@(#)sysctl.3	8.4 (Berkeley) 5/9/95
 .\"
-.Dd May 24, 2005
+.Dd June 20, 2005
 .Dt SYSCTL 3
 .Os
 .Sh NAME
@@ -768,9 +768,8 @@ privilege may change the value.
 The variables are as follows:
 .Bl -tag -width "123456"
 .It Li GPROF_STATE
-Profiling state.
-If set to GMON_PROF_ON, starts profiling.
-If set to GMON_PROF_OFF, stops profiling.
+Returns GMON_PROF_ON or GMON_PROF_OFF to show that profiling
+is running or stopped.
 .It Li GPROF_COUNT
 Array of statistical program counter counts.
 .It Li GPROF_FROMS
@@ -879,7 +878,7 @@ Only the superuser can modify these variables.
 .It VERIEXEC\_VERBOSE	integer	yes
 .It VERIEXEC\_STRICT	integer	raise only
 .It VERIEXEC\_ALGORITHMS	string	no
-.It VERIEXEC\_COUNT	node	foobar
+.It VERIEXEC\_COUNT	node	not applicable
 .El
 .Pp
 The variables are as follows:
@@ -892,21 +891,25 @@ mismatches, removal of entries from the tables, modification of a
 fingerprinted file.
 If 1, more messages will be printed (ie., when a file with a valid
 fingerprint is accessed).
+Verbose level 2 is debug mode.
 .It Li VERIEXEC_STRICT
 Controls the strict level of Verified Exec.
 The strict level defines how
 Verified Exec will treat various situations.
 In strict level 0, the system is in learning mode and will only warn about
 fingerprint mismatches, aswell as allow removal of fingerprinted files.
-In strict level 1, the system is in normal mode.
-It will enforce indirect
-execution if needed, prevent access to files with a fingerprint mismatch,
-and prevent removal of fingerprinted files.
-It will also prevent execution of files with no fingerprint.
-In strict level 2, the system is in critical mode.
+It is the only level where fingerprints can be loaded.
+In strict level 1, the system is in IDS mode.
+It will deny access to files with mismatched fingerprints.
+In strict level 2, the system is in IPS mode.
 It has all effects of
-strict level 1, plus it will deny access (read, write, exec, and delete)
-to files without a valid fingerprint.
+strict level 1, plus it will deny write access to monitored files,
+prevent their removal, and enforce access type (direct, indirect, file).
+Strict level 3 operates as lockdown mode.
+It will have all effects of
+strict level 2, but it will also prevent access to non-monitored files.
+Furthermore, it will prevent addition of new files to the system, and
+allow writing only to files opened before the strict level was raised.
 .It Li VERIEXEC_ALGORITHMS
 Returns a string with the supported algorithms in Verified Exec.
 .It Li VERIEXEC_COUNT
@@ -947,8 +950,6 @@ The string and integer information available for the CTL_NET level
 is detailed below.
 The changeable column shows whether a process with appropriate
 privilege may change the value.
-The second and third levels are typically the protocol family and
-protocol number, though this is not always the case.
 .Bl -column "Second level nameXXXXXX" "routing messagesXXX" -offset indent
 .It Sy Second level name	Type	Changeable
 .It PF\_ROUTE	routing messages	no
@@ -1037,10 +1038,10 @@ The currently defined protocols and names are:
 The variables are as follows:
 .Bl -tag -width "123456"
 .It Li ip.forwarding
-If set to 1, enables IP forwarding for the host,
+Returns 1 when IP forwarding is enabled for the host,
 meaning that the host is acting as a router.
 .It Li ip.redirect
-If set to 1, ICMP redirects may be sent by the host.
+Returns 1 when ICMP redirects may be sent by the host.
 This option is ignored unless the host is routing IP packets,
 and should normally be enabled on all systems.
 .It Li ip.ttl
@@ -1048,16 +1049,17 @@ The maximum time-to-live (hop count) value for an IP packet sourced by
 the system.
 This value applies to normal transport protocols, not to ICMP.
 .It Li ip.forwsrcrt
-If set to 1, enables forwarding of source-routed packets for the host.
+Returns 1 when forwarding of source-routed packets is enabled for
+the host.
 This value may only be changed if the kernel security level is less than 1.
 .It Li ip.directed-broadcast
-If set to 1, enables directed broadcast behavior for the host.
+Returns 1 if directed broadcast behavior is enabled for the host.
 .It Li ip.allowsrcrt
-If set to 1, the host accepts source routed packets.
+Returns 1 if the host accepts source routed packets.
 .It Li ip.subnetsarelocal
-If set to 1, subnets are to be considered local addresses.
+Returns 1 if subnets are to be considered local addresses.
 .It Li ip.mtudisc
-If set to 1, enables Path MTU Discovery (RFC 1191).
+If set to 1, Path MTU Discovery (RFC 1191) is enabled.
 When Path MTU Discovery is enabled, the transmitted TCP segment
 size will be determined by the advertised maximum segment size
 (MSS) from the remote end, as constrained by the path MTU.
@@ -1074,7 +1076,7 @@ This cannot be set to less than 1024 or greater than 65535, and must
 be greater than
 .Li ip.anonportmin .
 .It Li ip.mtudisctimeout
-The number of seconds in which a route added by the Path MTU
+Returns the number of seconds in which a route added by the Path MTU
 Discovery engine will time out.
 When the route times out, the Path
 MTU Discovery engine will attempt to probe a larger path MTU.
@@ -1109,7 +1111,7 @@ destination address to another local interface, or if addresses
 are added to the loopback interface instead of the interface where
 the packets for those packets are received.
 .It Li icmp.maskrepl
-If set to 1, ICMP network mask requests are to be answered.
+Returns 1 if ICMP network mask requests are to be answered.
 .It Li icmp.errppslimit
 The variable specifies the maximum number of outgoing ICMP error messages,
 per second.
@@ -1125,28 +1127,28 @@ The variable specifies lifetime of routing entries generated by incoming
 ICMP redirect.
 This defaults to 600 seconds.
 .It Li tcp.rfc1323
-If set to 1, enables RFC 1323 extensions to TCP.
+Returns 1 if RFC 1323 extensions to TCP are enabled.
 .It Li tcp.sendspace
-The default TCP send buffer size.
+Returns the default TCP send buffer size.
 .It Li tcp.recvspace
-The default TCP receive buffer size.
+Returns the default TCP receive buffer size.
 .It Li tcp.mssdflt
-The default maximum segment size both advertised to the peer
+Returns the default maximum segment size both advertised to the peer
 and to use when either the peer does not advertise a maximum segment size to
 us during connection setup or Path MTU Discovery
 .Li ( ip.mtudisc )
 is disabled.
 Do not change this value unless you really know what you are doing.
 .It Li tcp.syn_cache_limit
-The maximum number of entries allowed in the TCP compressed state
+Returns the maximum number of entries allowed in the TCP compressed state
 engine.
 .It Li tcp.syn_bucket_limit
-The maximum number of entries allowed per hash bucket in the TCP
+Returns the maximum number of entries allowed per hash bucket in the TCP
 compressed state engine.
 .It Li tcp.syn_cache_interval
-The TCP compressed state engine's timer interval.
+Returns the TCP compressed state engine's timer interval.
 .It Li tcp.init_win
-A value indicating the TCP initial congestion window.
+Returns a value indicating the TCP initial congestion window.
 If this value is 0, an auto-tuning algorithm designed to use an initial
 window of approximately 4K bytes is in use.
 Otherwise, this value indicates a fixed number of packets.
@@ -1155,12 +1157,15 @@ Like
 .Li tcp.init_win ,
 but used when communicating with hosts on a local network.
 .It Li tcp.mss_ifmtu
-If set to 1, TCP calculates the outgoing maximum segment size based on
+Returns 1 if TCP calculates the outgoing maximum segment size based on
 the MTU of the appropriate interface.
-If set to 0, it is calculated based on the greater of the MTU of the
+Otherwise, it is calculated based on the greater of the MTU of the
 interface, and the largest (non-loopback) interface MTU on the system.
 .It Li tcp.sack
-If set to 1, enables RFC 2018 Selective ACKnowledgement.
+TCP Selective ACKnowledgement (RFC 2018) is not implemented in
+.Nx
+at this time.
+Changing this value will have no effect.
 .It Li tcp.win_scale
 If rfc1323 is enabled, a value of 1 indicates RFC 1323 window scale options,
 for increasing the TCP window size, are enabled.
@@ -1168,22 +1173,23 @@ for increasing the TCP window size, are enabled.
 If rfc1323 is enabled, a value of 1 indicates RFC 1323 time stamp options,
 used for measuring TCP round trip times, are enabled.
 .It Li tcp.compat_42
-If set to 1, enables work-arounds for bugs in the 4.2BSD TCP implementation.
+Returns 1 if work-arounds for bugs in the 4.2BSD TCP implementation are
+enabled.
 Use of this option is not recommended, although it may be
 required in order to communicate with extremely old TCP implementations.
 .It Li tcp.cwm
-If set to 1, enables use of the Hughes/Touch/Heidemann Congestion Window
-Monitoring algorithm.
+Returns 1 if use of the Hughes/Touch/Heidemann Congestion Window Monitoring
+algorithm is enabled.
 This algorithm prevents line-rate bursts of packets that could
 otherwise occur when data begins flowing on an idle TCP connection.
 These line-rate bursts can contribute to network and router congestion.
 This can be particularly useful on World Wide Web servers
 which support HTTP/1.1, which has lingering connections.
 .It Li tcp.cwm_burstsize
-The Congestion Window Monitoring allowed burst size, in terms
+Returns the Congestion Window Monitoring allowed burst size, in terms
 of packet count.
 .It Li tcp.ack_on_push
-If set to 1, TCP is to immediately transmit an ACK upon reception of
+Returns 1 if TCP is to immediately transmit an ACK upon reception of
 a packet with PUSH set.
 This can avoid losing a round trip time in some rare situations,
 but has the caveat of potentially defeating TCP's delayed ACK algorithm.
@@ -1208,11 +1214,11 @@ of a clock that ticks tcp.slowhz times per second.
 (That is, their values
 must be divided by the tcp.slowhz value to get times in seconds.)
 .It Li tcp.newreno
-If set to 1, enables the use of J.
-Hoe's NewReno congestion control algorithm.
+Returns 1 if the use of J.
+Hoe's NewReno congestion control algorithm is enabled.
 This algorithm improves the start-up behavior of TCP connections.
 .It Li tcp.log_refused
-If set to 1, refused TCP connections to the host will be logged.
+Returns 1 if refused TCP connections to the host will be logged.
 .It Li tcp.rstppslimit
 The variable specifies the maximum number of outgoing TCP RST packets,
 per second.
@@ -1220,13 +1226,13 @@ TCP RST packet that exceeded the value are subject to rate limitation
 and will not go out from the node.
 Negative value disables rate limitation.
 .It Li udp.checksum
-If set to 1, UDP checksums are being computed.
+Returns 1 when UDP checksums are being computed.
 Received non-zero UDP checksums are always checked.
 Disabling UDP checksums is strongly discouraged.
 .It Li udp.sendspace
-The default UDP send buffer size.
+Returns the default UDP send buffer size.
 .It Li udp.recvspace
-The default UDP receive buffer size.
+Returns the default UDP receive buffer size.
 .El
 .Pp
 For variables net.*.ipsec, please refer to
@@ -1280,9 +1286,9 @@ The currently defined protocols and names are:
 The variables are as follows:
 .Bl -tag -width "123456"
 .It Li ip6.forwarding
-If set to 1, enables IPv6 forwarding for the node,
+Returns 1 when IPv6 forwarding is enabled for the node,
 meaning that the node is acting as a router.
-If set to 0, disables IPv6 forwarding for the node,
+Returns 0 when IPv6 forwarding is disabled for the node,
 meaning that the node is acting as a host.
 IPv6 specification defines node behavior for
 .Dq router
@@ -1293,7 +1299,7 @@ may cause serious trouble.
 It is recommended to configure the variable at bootstrap time,
 and bootstrap time only.
 .It Li ip6.redirect
-If set to 1, ICMPv6 redirects may be sent by the node.
+Returns 1 when ICMPv6 redirects may be sent by the node.
 This option is ignored unless the node is routing IP packets,
 and should normally be enabled on all systems.
 .It Li ip6.hlim

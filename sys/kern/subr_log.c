@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_log.c,v 1.34 2005/05/29 22:24:15 christos Exp $	*/
+/*	$NetBSD: subr_log.c,v 1.33 2003/09/22 12:59:57 christos Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_log.c,v 1.34 2005/05/29 22:24:15 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_log.c,v 1.33 2003/09/22 12:59:57 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -80,8 +80,8 @@ const struct cdevsw log_cdevsw = {
 };
 
 void
-initmsgbuf(bf, bufsize)
-	void *bf;
+initmsgbuf(buf, bufsize)
+	caddr_t buf;
 	size_t bufsize;
 {
 	struct kern_msgbuf *mbp;
@@ -91,7 +91,7 @@ initmsgbuf(bf, bufsize)
 	if (bufsize < sizeof(struct kern_msgbuf))
 		return;
 
-	mbp = msgbufp = (struct kern_msgbuf *)bf;
+	mbp = msgbufp = (struct kern_msgbuf *)buf;
 
 	new_bufs = bufsize - offsetof(struct kern_msgbuf, msg_bufc);
 	if ((mbp->msg_magic != MSG_MAGIC) || (mbp->msg_bufs != new_bufs) ||
@@ -103,7 +103,7 @@ initmsgbuf(bf, bufsize)
 		 * internally inconsistent, initialize it.
 		 */
 
-		memset(bf, 0, bufsize);
+		memset(buf, 0, bufsize);
 		mbp->msg_magic = MSG_MAGIC;
 		mbp->msg_bufs = new_bufs;
 	}

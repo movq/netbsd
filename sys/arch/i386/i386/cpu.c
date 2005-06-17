@@ -1,4 +1,4 @@
-/* $NetBSD: cpu.c,v 1.22 2005/06/15 01:52:39 christos Exp $ */
+/* $NetBSD: cpu.c,v 1.20.10.1 2005/07/18 20:49:00 riz Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -71,7 +71,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.22 2005/06/15 01:52:39 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.20.10.1 2005/07/18 20:49:00 riz Exp $");
 
 #include "opt_ddb.h"
 #include "opt_multiprocessor.h"
@@ -293,7 +293,7 @@ cpu_attach(parent, self, aux)
 	/*
 	 * Allocate UPAGES contiguous pages for the idle PCB and stack.
 	 */
-	kstack = uvm_km_alloc(kernel_map, USPACE, 0, UVM_KMF_WIRED);
+	kstack = uvm_km_alloc (kernel_map, USPACE);
 	if (kstack == 0) {
 		if (caa->cpu_role != CPU_ROLE_AP) {
 			panic("cpu_attach: unable to allocate idle stack for"
@@ -408,6 +408,19 @@ cpu_init(ci)
 	 */
 	if (ci->ci_cpu_class >= CPUCLASS_486)
 		lcr0(rcr0() | CR0_WP);
+#endif
+#if defined(I586_CPU) || defined(I686_CPU)
+#ifndef NO_TSC_TIME
+	/*
+	 * On systems with a cycle counter, use that for
+	 * interval timing inbetween hz ticks in microtime(9)
+	 * N.B. this is not a good idea on processors whose
+	 * frequency varies a lot over time (e.g. modern laptops)
+	 */
+	if (cpu_feature & CPUID_TSC) {
+		microtime_func = cc_microtime;
+	}
+#endif
 #endif
 #if defined(I686_CPU)
 	/*
@@ -553,7 +566,7 @@ cpu_boot_secondary(ci)
 		delay(10);
 	}
 	if (! (ci->ci_flags & CPUF_RUNNING)) {
-		printf("%s: failed to start\n", ci->ci_dev->dv_xname);
+		printf("CPU failed to start\n");
 #if defined(MPDEBUG) && defined(DDB)
 		printf("dropping into debugger; continue from here to resume boot\n");
 		Debugger();
@@ -696,8 +709,7 @@ cpu_set_tss_gates(struct cpu_info *ci)
 {
 	struct segment_descriptor sd;
 
-	ci->ci_doubleflt_stack = (char *)uvm_km_alloc(kernel_map, USPACE, 0,
-	    UVM_KMF_WIRED);
+	ci->ci_doubleflt_stack = (char *)uvm_km_alloc(kernel_map, USPACE);
 	cpu_init_tss(&ci->ci_doubleflt_tss, ci->ci_doubleflt_stack,
 	    IDTVEC(tss_trap08));
 	setsegment(&sd, &ci->ci_doubleflt_tss, sizeof(struct i386tss) - 1,
@@ -714,8 +726,7 @@ cpu_set_tss_gates(struct cpu_info *ci)
 	 * XXX overwriting the gate set in db_machine_init.
 	 * Should rearrange the code so that it's set only once.
 	 */
-	ci->ci_ddbipi_stack = (char *)uvm_km_alloc(kernel_map, USPACE, 0,
-	    UVM_KMF_WIRED);
+	ci->ci_ddbipi_stack = (char *)uvm_km_alloc(kernel_map, USPACE);
 	cpu_init_tss(&ci->ci_ddbipi_tss, ci->ci_ddbipi_stack,
 	    Xintrddbipi);
 

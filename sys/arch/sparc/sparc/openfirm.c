@@ -1,4 +1,4 @@
-/*	$NetBSD: openfirm.c,v 1.10 2005/05/31 00:54:57 christos Exp $	*/
+/*	$NetBSD: openfirm.c,v 1.9 2004/03/21 14:02:39 pk Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: openfirm.c,v 1.10 2005/05/31 00:54:57 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: openfirm.c,v 1.9 2004/03/21 14:02:39 pk Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -42,7 +42,8 @@ __KERNEL_RCSID(0, "$NetBSD: openfirm.c,v 1.10 2005/05/31 00:54:57 christos Exp $
 #include <lib/libkern/libkern.h>
 
 int
-OF_peer(int phandle)
+OF_peer(phandle)
+	int phandle;
 {
 	struct {
 		cell_t name;
@@ -62,7 +63,8 @@ OF_peer(int phandle)
 }
 
 int
-OF_child(int phandle)
+OF_child(phandle)
+	int phandle;
 {
 	struct {
 		cell_t name;
@@ -82,7 +84,8 @@ OF_child(int phandle)
 }
 
 int
-OF_parent(int phandle)
+OF_parent(phandle)
+	int phandle;
 {
 	struct {
 		cell_t name;
@@ -102,7 +105,8 @@ OF_parent(int phandle)
 }
 
 int
-OF_instance_to_package(int ihandle)
+OF_instance_to_package(ihandle)
+	int ihandle;
 {
 	static struct {
 		cell_t name;
@@ -123,7 +127,9 @@ OF_instance_to_package(int ihandle)
 
 /* Should really return a `long' */
 int
-OF_getproplen(int handle, const char *prop)
+OF_getproplen(handle, prop)
+	int handle;
+	char *prop;
 {
 	struct {
 		cell_t name;
@@ -145,7 +151,11 @@ OF_getproplen(int handle, const char *prop)
 }
 
 int
-OF_getprop(int handle, const char *prop, void *buf, int buflen)
+OF_getprop(handle, prop, buf, buflen)
+	int handle;
+	char *prop;
+	void *buf;
+	int buflen;
 {
 	struct {
 		cell_t name;
@@ -173,7 +183,11 @@ OF_getprop(int handle, const char *prop, void *buf, int buflen)
 }
 
 int
-OF_setprop(int handle, const char *prop, const void *buf, int buflen)
+OF_setprop(handle, prop, buf, buflen)
+	int handle;
+	char *prop;
+	const void *buf;
+	int buflen;
 {
 	struct {
 		cell_t name;
@@ -201,7 +215,10 @@ OF_setprop(int handle, const char *prop, const void *buf, int buflen)
 }
 
 int
-OF_nextprop(int handle, const char *prop, void *buf)
+OF_nextprop(handle, prop, buf)
+	int handle;
+	char *prop;
+	void *buf;
 {
 	struct {
 		cell_t name;
@@ -225,7 +242,8 @@ OF_nextprop(int handle, const char *prop, void *buf)
 }
 
 int
-OF_finddevice(const char *name)
+OF_finddevice(name)
+char *name;
 {
 	struct {
 		cell_t name;
@@ -245,7 +263,10 @@ OF_finddevice(const char *name)
 }
 
 int
-OF_instance_to_path(int ihandle, char *buf, int buflen)
+OF_instance_to_path(ihandle, buf, buflen)
+	int ihandle;
+	char *buf;
+	int buflen;
 {
 	struct {
 		cell_t name;
@@ -271,7 +292,10 @@ OF_instance_to_path(int ihandle, char *buf, int buflen)
 }
 
 int
-OF_package_to_path(int phandle, char *buf, int buflen)
+OF_package_to_path(phandle, buf, buflen)
+	int phandle;
+	char *buf;
+	int buflen;
 {
 	struct {
 		cell_t name;
@@ -300,7 +324,16 @@ OF_package_to_path(int phandle, char *buf, int buflen)
  * The following two functions may need to be re-worked to be 64-bit clean.
  */
 int
-OF_call_method(const char *method, int ihandle, int nargs, int nreturns, ...)
+#ifdef	__STDC__
+OF_call_method(char *method, int ihandle, int nargs, int nreturns, ...)
+#else
+OF_call_method(method, ihandle, nargs, nreturns, va_alist)
+	char *method;
+	int ihandle;
+	int nargs;
+	int nreturns;
+	va_dcl
+#endif
 {
 	va_list ap;
 	struct {
@@ -338,7 +371,15 @@ OF_call_method(const char *method, int ihandle, int nargs, int nreturns, ...)
 }
 
 int
-OF_call_method_1(const char *method, int ihandle, int nargs, ...)
+#ifdef	__STDC__
+OF_call_method_1(char *method, int ihandle, int nargs, ...)
+#else
+OF_call_method_1(method, ihandle, nargs, va_alist)
+	char *method;
+	int ihandle;
+	int nargs;
+	va_dcl
+#endif
 {
 	va_list ap;
 	struct {
@@ -370,7 +411,8 @@ OF_call_method_1(const char *method, int ihandle, int nargs, ...)
 }
 
 int
-OF_open(const char *dname)
+OF_open(dname)
+	char *dname;
 {
 	struct {
 		cell_t name;
@@ -393,7 +435,8 @@ OF_open(const char *dname)
 }
 
 void
-OF_close(int handle)
+OF_close(handle)
+	int handle;
 {
 	struct {
 		cell_t name;
@@ -410,7 +453,8 @@ OF_close(int handle)
 }
 
 int
-OF_test(const char* service)
+OF_test(service)
+	char* service;
 {
 	struct {
 		cell_t name;
@@ -430,7 +474,9 @@ OF_test(const char* service)
 }
 
 int
-OF_test_method(int service, const char* method)
+OF_test_method(service, method)
+	int service;
+	char* method;
 {
 	struct {
 		cell_t name;
@@ -456,7 +502,10 @@ OF_test_method(int service, const char* method)
  * This assumes that character devices don't read in multiples of NBPG.
  */
 int
-OF_read(int handle, void *addr, int len)
+OF_read(handle, addr, len)
+	int handle;
+	void *addr;
+	int len;
 {
 	struct {
 		cell_t name;
@@ -493,7 +542,10 @@ OF_read(int handle, void *addr, int len)
 }
 
 int
-OF_write(int handle, const void *addr, int len)
+OF_write(handle, addr, len)
+	int handle;
+	void *addr;
+	int len;
 {
 	struct {
 		cell_t name;
@@ -527,7 +579,9 @@ OF_write(int handle, const void *addr, int len)
 
 
 int
-OF_seek(int handle, u_quad_t pos)
+OF_seek(handle, pos)
+	int handle;
+	u_quad_t pos;
 {
 	struct {
 		cell_t name;
@@ -551,7 +605,8 @@ OF_seek(int handle, u_quad_t pos)
 }
 
 void
-OF_boot(const char *bootspec)
+OF_boot(bootspec)
+	char *bootspec;
 {
 	struct {
 		cell_t name;
@@ -572,7 +627,7 @@ OF_boot(const char *bootspec)
 }
 
 void
-OF_enter(void)
+OF_enter()
 {
 	struct {
 		cell_t name;
@@ -593,7 +648,7 @@ OF_enter(void)
 }
 
 void
-OF_exit(void)
+OF_exit()
 {
 	struct {
 		cell_t name;
@@ -615,7 +670,7 @@ OF_exit(void)
 }
 
 void
-OF_poweroff(void)
+OF_poweroff()
 {
 	struct {
 		cell_t name;
@@ -652,7 +707,9 @@ void
 }
 
 void
-OF_set_symbol_lookup(void (*s2v)(void *), void (*v2s)(void *))
+OF_set_symbol_lookup(s2v, v2s)
+	void (*s2v)(void *);
+	void (*v2s)(void *);
 {
 	struct {
 		cell_t name;
@@ -672,7 +729,15 @@ OF_set_symbol_lookup(void (*s2v)(void *), void (*v2s)(void *))
 }
 
 int
-OF_interpret(const char *cmd, int nargs, int nreturns, ...)
+#ifdef __STDC__
+OF_interpret(char *cmd, int nargs, int nreturns, ...)
+#else
+OF_interpret(cmd, nargs, nreturns, va_alist)
+	char *cmd;
+	int nargs;
+	int nreturns;
+	va_dcl
+#endif
 {
 	va_list ap;
 	struct {
@@ -702,7 +767,7 @@ OF_interpret(const char *cmd, int nargs, int nreturns, ...)
 }
 
 int
-OF_milliseconds(void)
+OF_milliseconds()
 {
 	struct {
 		cell_t name;

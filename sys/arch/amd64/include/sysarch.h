@@ -1,4 +1,4 @@
-/*	$NetBSD: sysarch.h,v 1.3 2005/05/15 21:39:56 fvdl Exp $	*/
+/*	$NetBSD: sysarch.h,v 1.2 2003/09/11 09:40:11 kleink Exp $	*/
 
 #ifndef _AMD64_SYSARCH_H_
 #define _AMD64_SYSARCH_H_
@@ -22,15 +22,21 @@
  * XXXfvdl todo.
  */
 
+#if 0
+
 struct x86_64_get_ldt_args {
-	void *desc;
-	unsigned len;
+	int start;
+	union descriptor *desc;
+	int num;
 };
 
 struct x86_64_set_ldt_args {
-	void *desc;
-	unsigned len;
+	int start;
+	union descriptor *desc;
+	int num;
 };
+
+#endif
 
 struct x86_64_iopl_args {
 	int iopl;
@@ -100,8 +106,8 @@ int x86_64_set_mtrr __P((struct lwp *, void *, register_t *));
 #include <sys/cdefs.h>
 
 __BEGIN_DECLS
-int x86_64_get_ldt __P((void *, int));
-int x86_64_set_ldt __P((void *, int));
+int x86_64_get_ldt __P((int, union descriptor *, int));
+int x86_64_set_ldt __P((int, union descriptor *, int));
 int x86_64_iopl __P((int));
 int x86_64_get_ioperm __P((u_long *));
 int x86_64_set_ioperm __P((u_long *));

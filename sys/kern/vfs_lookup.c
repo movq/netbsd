@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_lookup.c,v 1.60 2005/06/05 23:47:48 thorpej Exp $	*/
+/*	$NetBSD: vfs_lookup.c,v 1.57.2.3 2006/01/20 20:48:41 riz Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_lookup.c,v 1.60 2005/06/05 23:47:48 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_lookup.c,v 1.57.2.3 2006/01/20 20:48:41 riz Exp $");
 
 #include "opt_ktrace.h"
 #include "opt_systrace.h"
@@ -89,7 +89,8 @@ MALLOC_DEFINE(M_NAMEI, "namei", "namei path buffer");
  *	}
  */
 int
-namei(struct nameidata *ndp)
+namei(ndp)
+	struct nameidata *ndp;
 {
 	struct cwdinfo *cwdi;		/* pointer to cwd state */
 	char *cp;			/* pointer into pathname argument */
@@ -101,11 +102,11 @@ namei(struct nameidata *ndp)
 
 #ifdef DIAGNOSTIC
 	if (!cnp->cn_cred || !cnp->cn_proc)
-		panic("namei: bad cred/proc");
+		panic ("namei: bad cred/proc");
 	if (cnp->cn_nameiop & (~OPMASK))
-		panic("namei: nameiop contaminated with flags");
+		panic ("namei: nameiop contaminated with flags");
 	if (cnp->cn_flags & OPMASK)
-		panic("namei: flags contaminated with nameiops");
+		panic ("namei: flags contaminated with nameiops");
 #endif
 	cwdi = cnp->cn_proc->p_cwdi;
 
@@ -267,10 +268,10 @@ namei_hash(const char *name, const char **ep)
 	hash = HASH32_STR_INIT;
 	if (*ep != NULL) {
 		for (; name < *ep; name++)
-			hash = hash * 33 + *(const uint8_t *)name;
+			hash = hash * 33 + *(uint8_t *)name;
 	} else {
 		for (; *name != '\0' && *name != '/'; name++)
-			hash = hash * 33 + *(const uint8_t *)name;
+			hash = hash * 33 + *(uint8_t *)name;
 		*ep = name;
 	}
 	return (hash + (hash >> 5));
@@ -315,7 +316,8 @@ namei_hash(const char *name, const char **ep)
  *	    if WANTPARENT set, return unlocked parent in ni_dvp
  */
 int
-lookup(struct nameidata *ndp)
+lookup(ndp)
+	struct nameidata *ndp;
 {
 	const char *cp;			/* pointer into pathname argument */
 	struct vnode *dp = 0;		/* the directory we are searching */
@@ -670,7 +672,9 @@ bad:
  * Reacquire a path name component.
  */
 int
-relookup(struct vnode *dvp, struct vnode **vpp, struct componentname *cnp)
+relookup(dvp, vpp, cnp)
+	struct vnode *dvp, **vpp;
+	struct componentname *cnp;
 {
 	struct vnode *dp = 0;		/* the directory we are searching */
 	int wantparent;			/* 1 => wantparent or lockparent flag */
@@ -706,7 +710,7 @@ relookup(struct vnode *dvp, struct vnode **vpp, struct componentname *cnp)
 	if (newhash != cnp->cn_hash)
 		panic("relookup: bad hash");
 	if (cnp->cn_namelen != cp - cnp->cn_nameptr)
-		panic("relookup: bad len");
+		panic ("relookup: bad len");
 	while (*cp == '/')
 		cp++;
 	if (*cp != 0)
@@ -725,7 +729,7 @@ relookup(struct vnode *dvp, struct vnode **vpp, struct componentname *cnp)
 		panic("relookup: null name");
 
 	if (cnp->cn_flags & ISDOTDOT)
-		panic("relookup: lookup on dot-dot");
+		panic ("relookup: lookup on dot-dot");
 
 	/*
 	 * We now have a segment name to search for, and a directory to search.
@@ -762,7 +766,7 @@ relookup(struct vnode *dvp, struct vnode **vpp, struct componentname *cnp)
 	 * Check for symbolic link
 	 */
 	if (dp->v_type == VLNK && (cnp->cn_flags & FOLLOW))
-		panic("relookup: symlink found");
+		panic ("relookup: symlink found.\n");
 #endif
 
 	/*

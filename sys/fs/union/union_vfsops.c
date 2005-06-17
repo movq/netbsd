@@ -1,4 +1,4 @@
-/*	$NetBSD: union_vfsops.c,v 1.27 2005/05/29 21:00:29 christos Exp $	*/
+/*	$NetBSD: union_vfsops.c,v 1.25.2.2 2006/01/08 15:45:11 riz Exp $	*/
 
 /*
  * Copyright (c) 1994 The Regents of the University of California.
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: union_vfsops.c,v 1.27 2005/05/29 21:00:29 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: union_vfsops.c,v 1.25.2.2 2006/01/08 15:45:11 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -125,8 +125,7 @@ union_mount(mp, path, data, ndp, p)
 	struct vnode *upperrootvp = NULLVP;
 	struct union_mount *um = 0;
 	struct ucred *cred = 0;
-	const char *cp;
-	char *xp;
+	char *cp;
 	int len;
 	size_t size;
 
@@ -285,11 +284,11 @@ union_mount(mp, path, data, ndp, p)
 	len = strlen(cp);
 	memcpy(mp->mnt_stat.f_mntfromname, cp, len);
 
-	xp = mp->mnt_stat.f_mntfromname + len;
+	cp = mp->mnt_stat.f_mntfromname + len;
 	len = MNAMELEN - len;
 
-	(void) copyinstr(args.target, xp, len - 1, &size);
-	memset(xp + size, 0, len - size);
+	(void) copyinstr(args.target, cp, len - 1, &size);
+	memset(cp + size, 0, len - size);
 
 #ifdef UNION_DIAGNOSTIC
 	printf("union_mount: from %s, on %s\n",
@@ -340,16 +339,11 @@ union_unmount(mp, mntflags, p)
 	struct proc *p;
 {
 	struct union_mount *um = MOUNTTOUNIONMOUNT(mp);
-	struct vnode *um_rootvp;
-	int error;
 	int freeing;
 
 #ifdef UNION_DIAGNOSTIC
 	printf("union_unmount(mp = %p)\n", mp);
 #endif
-
-	if ((error = union_root(mp, &um_rootvp)) != 0)
-		return (error);
 
 	/*
 	 * Keep flushing vnodes from the mount list.
@@ -360,7 +354,7 @@ union_unmount(mp, mntflags, p)
 	 * (d) times, where (d) is the maximum tree depth
 	 * in the filesystem.
 	 */
-	for (freeing = 0; vflush(mp, um_rootvp, 0) != 0;) {
+	for (freeing = 0; vflush(mp, NULL, 0) != 0;) {
 		struct vnode *vp;
 		int n;
 
@@ -383,18 +377,9 @@ union_unmount(mp, mntflags, p)
 	 */
 
 	if (mntflags & MNT_FORCE)
-		vflush(mp, um_rootvp, FORCECLOSE);
+		vflush(mp, NULL, FORCECLOSE);
 
 
-	/* At this point the root vnode should have a single reference */
-	if (um_rootvp->v_usecount > 1) {
-		vput(um_rootvp);
-		return (EBUSY);
-	}
-
-#ifdef UNION_DIAGNOSTIC
-	vprint("union root", um_rootvp);
-#endif
 	/*
 	 * Discard references to upper and lower target vnodes.
 	 */
@@ -402,14 +387,6 @@ union_unmount(mp, mntflags, p)
 		vrele(um->um_lowervp);
 	vrele(um->um_uppervp);
 	crfree(um->um_cred);
-	/*
-	 * Release reference on underlying root vnode
-	 */
-	vput(um_rootvp);
-	/*
-	 * And blow it away for future re-use
-	 */
-	vgone(um_rootvp);
 	/*
 	 * Finally, throw away the union_mount structure
 	 */
@@ -483,7 +460,7 @@ union_statvfs(mp, sbp, p)
 {
 	int error;
 	struct union_mount *um = MOUNTTOUNIONMOUNT(mp);
-	struct statvfs *sbuf = malloc(sizeof(*sbuf), M_TEMP, M_WAITOK);
+	struct statvfs *sbuf = malloc(sizeof(*sbuf), M_TEMP, M_WAITOK | M_ZERO);
 	unsigned long lbsize;
 
 #ifdef UNION_DIAGNOSTIC
@@ -644,4 +621,3 @@ struct vfsops union_vfsops = {
 	vfs_stdextattrctl,
 	union_vnodeopv_descs,
 };
-VFS_ATTACH(union_vfsops);

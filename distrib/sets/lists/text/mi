@@ -1,4 +1,4 @@
-# $NetBSD: mi,v 1.24 2005/04/26 10:51:26 agc Exp $
+# $NetBSD: mi,v 1.22 2004/11/18 15:34:24 wiz Exp $
 ./etc/mtree/set.text				text-sys-root
 ./usr/bin/addftinfo				text-groff-bin
 ./usr/bin/checknr				text-groff-bin

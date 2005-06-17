@@ -65,7 +65,6 @@
 #include <openssl/rand.h>
 #include <openssl/asn1.h>
 
-#ifndef OPENSSL_FIPS
 static DSA_SIG *dsa_do_sign(const unsigned char *dgst, int dlen, DSA *dsa);
 static int dsa_sign_setup(DSA *dsa, BN_CTX *ctx_in, BIGNUM **kinvp, BIGNUM **rp);
 static int dsa_do_verify(const unsigned char *dgst, int dgst_len, DSA_SIG *sig,
@@ -245,6 +244,18 @@ static int dsa_do_verify(const unsigned char *dgst, int dgst_len, DSA_SIG *sig,
 		return -1;
 		}
 
+	if (BN_num_bits(dsa->q) != 160)
+		{
+		DSAerr(DSA_F_DSA_DO_VERIFY,DSA_R_BAD_Q_VALUE);
+		return -1;
+		}
+
+	if (BN_num_bits(dsa->p) > OPENSSL_DSA_MAX_MODULUS_BITS)
+		{
+		DSAerr(DSA_F_DSA_DO_VERIFY,DSA_R_MODULUS_TOO_LARGE);
+		return -1;
+		}
+
 	BN_init(&u1);
 	BN_init(&u2);
 	BN_init(&t1);
@@ -347,4 +358,3 @@ static int dsa_bn_mod_exp(DSA *dsa, BIGNUM *r, BIGNUM *a, const BIGNUM *p,
 {
 	return BN_mod_exp_mont(r, a, p, m, ctx, m_ctx);
 }
-#endif

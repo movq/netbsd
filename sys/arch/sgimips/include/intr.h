@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.18 2005/06/03 19:02:33 martin Exp $	*/
+/*	$NetBSD: intr.h,v 1.17 2004/07/07 00:08:43 sekiya Exp $	*/
 
 /*
  * Copyright (c) 2000 Soren S. Jorvang
@@ -104,16 +104,19 @@ extern void		_splnone(void);
 extern void		_setsoftintr(int);
 extern void		_clrsoftintr(int);
 
-extern u_int32_t 	splmasks[];
+extern u_int32_t 	biomask;
+extern u_int32_t 	netmask;
+extern u_int32_t 	ttymask;
+extern u_int32_t 	clockmask;
 
 #define splhigh()	_splraise(MIPS_INT_MASK)
 #define spl0()		(void)_spllower(0)
 #define splx(s)		(void)_splset(s)
-#define splbio()	_splraise(splmasks[IPL_BIO])
-#define splnet()	_splraise(splmasks[IPL_NET])
-#define spltty()	_splraise(splmasks[IPL_TTY])
+#define splbio()	_splraise(biomask)
+#define splnet()	_splraise(netmask)
+#define spltty()	_splraise(ttymask)
 #define splvm()		spltty()
-#define splclock()	_splraise(splmasks[IPL_CLOCK])
+#define splclock()	_splraise(clockmask)
 #define splstatclock()	splclock()
 
 #define	splsched()	splhigh()

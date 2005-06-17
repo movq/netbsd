@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.103 2005/06/16 04:17:50 briggs Exp $ */
+/*	$NetBSD: autoconf.c,v 1.100 2005/03/07 22:10:14 martin Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.103 2005/06/16 04:17:50 briggs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.100 2005/03/07 22:10:14 martin Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -128,7 +128,7 @@ char	machine_model[100];
 
 static	char *str2hex __P((char *, int *));
 static	int mbprint __P((void *, const char *));
-static	void crazymap __P((const char *, int *));
+static	void crazymap __P((char *, int *));
 int	st_crazymap __P((int));
 void	sync_crash __P((void));
 int	mainbus_match __P((struct device *, struct cfdata *, void *));
@@ -147,7 +147,6 @@ struct intrmap intrmap[] = {
 	{ "block",	PIL_FD },	/* Floppy disk */
 	{ "serial",	PIL_SER },	/* zs */
 	{ "scsi",	PIL_SCSI },
-	{ "scsi-2",	PIL_SCSI },
 	{ "network",	PIL_NET },
 	{ "display",	PIL_VIDEO },
 	{ "audio",	PIL_AUD },
@@ -214,17 +213,17 @@ static void
 get_ncpus()
 {
 	int node;
-	char sbuf[32];
+	char buf[32];
 
 	node = findroot();
 
-	sparc_ncpus = 0;
+	ncpus = 0;
 	for (node = OF_child(node); node; node = OF_peer(node)) {
-		if (OF_getprop(node, "device_type", sbuf, sizeof(sbuf)) <= 0)
+		if (OF_getprop(node, "device_type", buf, sizeof(buf)) <= 0)
 			continue;
-		if (strcmp(sbuf, "cpu") != 0)
+		if (strcmp(buf, "cpu") != 0)
 			continue;
-		sparc_ncpus++;
+		ncpus++;
 	}
 }
 
@@ -301,7 +300,7 @@ bootpath_build()
 	register char *cp, *pp;
 	register struct bootpath *bp;
 	register long chosen;
-	char sbuf[128];
+	char buf[128];
 
 	memset(bootpath, 0, sizeof(bootpath));
 	bp = bootpath;
@@ -310,8 +309,8 @@ bootpath_build()
 	 * Grab boot path from PROM
 	 */
 	chosen = OF_finddevice("/chosen");
-	OF_getprop(chosen, "bootpath", sbuf, sizeof(sbuf));
-	cp = sbuf;
+	OF_getprop(chosen, "bootpath", buf, sizeof(buf));
+	cp = buf;
 	while (cp != NULL && *cp == '/') {
 		/* Step over '/' */
 		++cp;
@@ -339,8 +338,8 @@ bootpath_build()
 	bootpath_print(bootpath);
 	
 	/* Setup pointer to boot flags */
-	OF_getprop(chosen, "bootargs", sbuf, sizeof(sbuf));
-	cp = sbuf;
+	OF_getprop(chosen, "bootargs", buf, sizeof(buf));
+	cp = buf;
 
 	/* Find start of boot flags */
 	while (*cp) {
@@ -436,7 +435,7 @@ bootpath_store(storep, bp)
  */
 static void
 crazymap(prop, map)
-	const char *prop;
+	char *prop;
 	int *map;
 {
 	int i;
@@ -545,18 +544,18 @@ clockfreq(freq)
 	long freq;
 {
 	char *p;
-	static char sbuf[10];
+	static char buf[10];
 
 	freq /= 1000;
-	sprintf(sbuf, "%ld", freq / 1000);
+	sprintf(buf, "%ld", freq / 1000);
 	freq %= 1000;
 	if (freq) {
 		freq += 1000;	/* now in 1000..1999 */
-		p = sbuf + strlen(sbuf);
+		p = buf + strlen(buf);
 		sprintf(p, "%ld", freq);
-		*p = '.';	/* now sbuf = %d.%3d */
+		*p = '.';	/* now buf = %d.%3d */
 	}
-	return (sbuf);
+	return (buf);
 }
 
 /* ARGSUSED */
@@ -602,7 +601,7 @@ extern struct sparc_bus_dma_tag mainbus_dma_tag;
 extern struct sparc_bus_space_tag mainbus_space_tag;
 
 	struct mainbus_attach_args ma;
-	char sbuf[32];
+	char buf[32];
 	const char *const *ssp, *sp = NULL;
 	int node0, node, rv, i;
 
@@ -632,7 +631,7 @@ extern struct sparc_bus_space_tag mainbus_space_tag;
 	 * EEPROM contains the Ethernet address for the LANCE chip.
 	 * If the device cannot be located or configured, panic.
 	 */
-	if (sparc_ncpus == 0)
+	if (ncpus == 0)
 		panic("None of the CPUs found");
 
 	/*
@@ -648,9 +647,9 @@ extern struct sparc_bus_space_tag mainbus_space_tag;
 
 	/* first early device to be configured is the CPU */
 	for (node = OF_child(node); node; node = OF_peer(node)) {
-		if (OF_getprop(node, "device_type", sbuf, sizeof(sbuf)) <= 0)
+		if (OF_getprop(node, "device_type", buf, sizeof(buf)) <= 0)
 			continue;
-		if (strcmp(sbuf, "cpu") != 0)
+		if (strcmp(buf, "cpu") != 0)
 			continue;
 		memset(&ma, 0, sizeof(ma));
 		ma.ma_bustag = &mainbus_space_tag;
@@ -674,13 +673,13 @@ extern struct sparc_bus_space_tag mainbus_space_tag;
 		int portid;
 
 		DPRINTF(ACDB_PROBE, ("Node: %x", node));
-		if ((OF_getprop(node, "device_type", sbuf, sizeof(sbuf)) > 0) &&
-		    strcmp(sbuf, "cpu") == 0)
+		if ((OF_getprop(node, "device_type", buf, sizeof(buf)) > 0) &&
+		    strcmp(buf, "cpu") == 0)
 			continue;
-		OF_getprop(node, "name", sbuf, sizeof(sbuf));
-		DPRINTF(ACDB_PROBE, (" name %s\n", sbuf));
+		OF_getprop(node, "name", buf, sizeof(buf));
+		DPRINTF(ACDB_PROBE, (" name %s\n", buf));
 		for (ssp = openboot_special; (sp = *ssp) != NULL; ssp++)
-			if (strcmp(sbuf, sp) == 0)
+			if (strcmp(buf, sp) == 0)
 				break;
 		if (sp != NULL)
 			continue; /* an "early" device already configured */
@@ -688,7 +687,7 @@ extern struct sparc_bus_space_tag mainbus_space_tag;
 		memset(&ma, 0, sizeof ma);
 		ma.ma_bustag = &mainbus_space_tag;
 		ma.ma_dmatag = &mainbus_dma_tag;
-		ma.ma_name = sbuf;
+		ma.ma_name = buf;
 		ma.ma_node = node;
 		if (OF_getprop(node, "upa-portid", &portid, sizeof(portid)) !=
 		    sizeof(portid)) 
@@ -791,7 +790,7 @@ void callrom()
  */
 struct device *
 getdevunit(name, unit)
-	const char *name;
+	char *name;
 	int unit;
 {
 	struct device *dev = alldevs.tqh_first;
@@ -841,7 +840,7 @@ static int instance_match __P((struct device *, void *, struct bootpath *));
 static void nail_bootdev __P((struct device *, struct bootpath *));
 
 static struct {
-	const char *name;
+	char	*name;
 	int	class;
 } bus_class_tab[] = {
 	{ "mainbus",	BUSCLASS_MAINBUS },
@@ -870,8 +869,8 @@ static struct {
  * A list of driver names may have differently named PROM nodes.
  */
 static struct {
-	const char *name;
-	const char *compat[6];
+	char	*name;
+	char	*compat[6];
 } dev_compat_tab[] = {
 	{ "dma",	{ "espdma", NULL }},
 	{ "isp",	{ "QLGC,isp", "PTI,isp", "ptiisp", "scsi", NULL }},

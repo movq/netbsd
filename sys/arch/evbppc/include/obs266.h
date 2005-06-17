@@ -1,4 +1,4 @@
-/*	$NetBSD: obs266.h,v 1.1 2005/03/18 14:12:34 shige Exp $	*/
+/*	$NetBSD: obs266.h,v 1.1.10.2 2005/09/14 20:53:59 tron Exp $	*/
 
 /*
  * Copyright 2004 Shigeyuki Fukushima.

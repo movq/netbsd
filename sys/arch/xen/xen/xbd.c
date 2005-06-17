@@ -1,4 +1,4 @@
-/* $NetBSD: xbd.c,v 1.20 2005/04/17 22:59:37 bouyer Exp $ */
+/* $NetBSD: xbd.c,v 1.14.2.8 2006/04/07 12:51:26 tron Exp $ */
 
 /*
  *
@@ -33,9 +33,9 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xbd.c,v 1.20 2005/04/17 22:59:37 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xbd.c,v 1.14.2.8 2006/04/07 12:51:26 tron Exp $");
 
-#include "xbd.h"
+#include "xbd_hypervisor.h"
 #include "rnd.h"
 
 #include <sys/types.h>
@@ -80,9 +80,9 @@ static void	send_interface_connect(void);
 static void xbd_attach(struct device *, struct device *, void *);
 static int xbd_detach(struct device *, int);
 
-#if NXBD > 0
+#if NXBD_HYPERVISOR > 0
 int xbd_match(struct device *, struct cfdata *, void *);
-CFATTACH_DECL(xbd, sizeof(struct xbd_softc),
+CFATTACH_DECL(xbd_hypervisor, sizeof(struct xbd_softc),
     xbd_match, xbd_attach, xbd_detach, NULL);
 
 extern struct cfdriver xbd_cd;
@@ -123,7 +123,7 @@ dev_type_strategy(xbdstrategy);
 dev_type_dump(xbddump);
 dev_type_size(xbdsize);
 
-#if NXBD > 0
+#if NXBD_HYPERVISOR > 0
 const struct bdevsw xbd_bdevsw = {
 	xbdopen, xbdclose, xbdstrategy, xbdioctl,
 	xbddump, xbdsize, D_DISK
@@ -208,7 +208,7 @@ static struct dk_intf dkintf_scsi = {
 };
 #endif
 
-#if NXBD > 0
+#if NXBD_HYPERVISOR > 0
 static struct xbd_attach_args xbd_ata = {
 	.xa_device = "xbd",
 	.xa_dkintf = &dkintf_esdi,
@@ -393,7 +393,7 @@ getxbd_softc(dev_t dev)
 
 	DPRINTF_FOLLOW(("getxbd_softc(0x%x): major = %d unit = %d\n", dev,
 	    major(dev), unit));
-#if NXBD > 0
+#if NXBD_HYPERVISOR > 0
 	if (major(dev) == xbd_major)
 		return device_lookup(&xbd_cd, unit);
 #endif
@@ -421,8 +421,8 @@ get_vbd_info(vdisk_t *disk_info)
 	blkif_response_t rsp;
 	paddr_t pa;
 
-	buf = (vdisk_t *)uvm_km_alloc(kmem_map, PAGE_SIZE, PAGE_SIZE,
-	    UVM_KMF_WIRED);
+	buf = (vdisk_t *)uvm_km_kmemalloc1(kmem_map, NULL,
+	    PAGE_SIZE, PAGE_SIZE, UVM_UNKNOWN_OFFSET, 0);
 	pmap_extract(pmap_kernel(), (vaddr_t)buf, &pa);
 	/* Probe for disk information. */
 	memset(&req, 0, sizeof(req));
@@ -438,7 +438,7 @@ get_vbd_info(vdisk_t *disk_info)
 
 	memcpy(disk_info, buf, nr * sizeof(vdisk_t));
 
-	uvm_km_free(kmem_map, (vaddr_t)buf, PAGE_SIZE, UVM_KMF_WIRED);
+	uvm_km_free(kmem_map, (vaddr_t)buf, PAGE_SIZE);
 
 	return nr;
 }
@@ -501,8 +501,7 @@ free_interface(void)
 
 	/* Free resources associated with old device channel. */
 	if (blk_ring) {
-		uvm_km_free(kmem_map, (vaddr_t)blk_ring, PAGE_SIZE,
-		    UVM_KMF_WIRED);
+		uvm_km_free(kmem_map, (vaddr_t)blk_ring, PAGE_SIZE);
 		blk_ring = NULL;
 	}
 
@@ -521,8 +520,8 @@ disconnect_interface(void)
 {
 
 	if (blk_ring == NULL)
-		blk_ring = (blkif_ring_t *)uvm_km_alloc(kmem_map,
-		    PAGE_SIZE, PAGE_SIZE, UVM_KMF_WIRED);
+		blk_ring = (blkif_ring_t *)uvm_km_kmemalloc1(kmem_map, NULL,
+		    PAGE_SIZE, PAGE_SIZE, UVM_UNKNOWN_OFFSET, 0);
 	memset(blk_ring, 0, PAGE_SIZE);
 	blk_ring->req_prod = blk_ring->resp_prod = resp_cons = req_prod =
 		last_req_prod = 0;
@@ -573,7 +572,7 @@ connect_interface(blkif_fe_interface_status_t *status)
 		xbda = get_xbda(xd);
 		if (xbda) {
 			xbda->xa_xd = xd;
-			config_found(blkctrl.xc_parent, xbda,
+			config_found_ia(blkctrl.xc_parent, "xendevbus", xbda,
 			    blkctrl.xc_cfprint);
 		}
 	}
@@ -660,8 +659,8 @@ vbd_update(void)
 			xbda = get_xbda(xd);
 			if (xbda) {
 				xbda->xa_xd = xd;
-				config_found(blkctrl.xc_parent, xbda,
-				    blkctrl.xc_cfprint);
+				config_found_ia(blkctrl.xc_parent, "xendevbus",
+				    xbda, blkctrl.xc_cfprint);
 			}
 			j++;
 		} else {
@@ -692,7 +691,7 @@ vbd_update(void)
 		xbda = get_xbda(xd);
 		if (xbda) {
 			xbda->xa_xd = xd;
-			config_found(blkctrl.xc_parent, xbda,
+			config_found_ia(blkctrl.xc_parent, "xendevbus", xbda,
 			    blkctrl.xc_cfprint);
 		}
 	}
@@ -923,7 +922,7 @@ xbd_scan(struct device *self, struct xbd_attach_args *mainbus_xbda,
 	blkctrl.xc_parent = self;
 	blkctrl.xc_cfprint = print;
 
-#if NXBD > 0
+#if NXBD_HYPERVISOR > 0
 	xbd_major = devsw_name2blk("xbd", NULL, 0);
 #endif
 #if NWD > 0
@@ -962,7 +961,7 @@ xbd_scan(struct device *self, struct xbd_attach_args *mainbus_xbda,
 	return 0;
 }
 
-#if NXBD > 0
+#if NXBD_HYPERVISOR > 0
 int
 xbd_match(struct device *parent, struct cfdata *match, void *aux)
 {
@@ -1141,15 +1140,18 @@ xbdsize(dev_t dev)
 	return dk_size(xs->sc_di, &xs->sc_dksc, dev);
 }
 
-static void
+static int
 map_align(struct xbdreq *xr)
 {
 	int s;
 
 	s = splvm();
-	xr->xr_aligned = uvm_km_alloc(kmem_map, xr->xr_bqueue, XEN_BSIZE,
-	    UVM_KMF_WIRED);
+	xr->xr_aligned = uvm_km_kmemalloc1(kmem_map, NULL,
+	    xr->xr_bqueue, XEN_BSIZE, UVM_UNKNOWN_OFFSET,
+	    UVM_KMF_NOWAIT);
 	splx(s);
+	if (xr->xr_aligned == 0)
+		return 0;
 	DPRINTF(XBDB_IO, ("map_align(%p): bp %p addr %p align 0x%08lx "
 	    "size 0x%04lx\n", xr, xr->xr_bp, xr->xr_bp->b_data,
 	    xr->xr_aligned, xr->xr_bqueue));
@@ -1157,6 +1159,7 @@ map_align(struct xbdreq *xr)
 	if ((xr->xr_bp->b_flags & B_READ) == 0)
 		memcpy((void *)xr->xr_aligned, xr->xr_bp->b_data,
 		    xr->xr_bqueue);
+	return 1;
 }
 
 static void
@@ -1171,8 +1174,7 @@ unmap_align(struct xbdreq *xr)
 	    "size 0x%04x\n", xr, xr->xr_bp, xr->xr_bp->b_data,
 	    xr->xr_aligned, xr->xr_bp->b_bcount));
 	s = splvm();
-	uvm_km_free(kmem_map, xr->xr_aligned, xr->xr_bp->b_bcount,
-	    UVM_KMF_WIRED);
+	uvm_km_free(kmem_map, xr->xr_aligned, xr->xr_bp->b_bcount);
 	splx(s);
 	xr->xr_aligned = (vaddr_t)0;
 }
@@ -1362,7 +1364,13 @@ xbdstart(struct dk_softc *dksc, struct buf *bp)
 	pxr->xr_sc = xs;
 
 	if (pxr->xr_data & (XEN_BSIZE - 1))
-		map_align(pxr);
+		if (!map_align(pxr)) { /* No memory; try later. */
+			DPRINTF(XBDB_IO, ("xbdstart: map_align failed\n"));
+			ret = -1;
+			disk_unbusy(&dksc->sc_dkdev, 0, bp->b_flags & B_READ);
+			PUT_XBDREQ(pxr);
+			goto out;
+		}
 
 	fill_ring(pxr);
 

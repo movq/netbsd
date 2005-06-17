@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_prf.c,v 1.98 2005/05/29 22:24:15 christos Exp $	*/
+/*	$NetBSD: subr_prf.c,v 1.96 2005/02/26 21:34:55 perry Exp $	*/
 
 /*-
  * Copyright (c) 1986, 1988, 1991, 1993
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_prf.c,v 1.98 2005/05/29 22:24:15 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_prf.c,v 1.96 2005/02/26 21:34:55 perry Exp $");
 
 #include "opt_ddb.h"
 #include "opt_ipkdb.h"
@@ -137,9 +137,6 @@ int	dumponpanic = DUMP_ON_PANIC;
 
 void (*v_putc)(int) = cnputc;	/* start with cnputc (normal cons) */
 void (*v_flush)(void) = cnflush;	/* start with cnflush (normal cons) */
-
-const char hexdigits[] = "0123456789abcdef";
-const char HEXDIGITS[] = "0123456789ABCDEF";
 
 
 /*
@@ -786,15 +783,15 @@ vprintf(fmt, ap)
  * sprintf: print a message to a buffer
  */
 int
-sprintf(char *bf, const char *fmt, ...)
+sprintf(char *buf, const char *fmt, ...)
 {
 	int retval;
 	va_list ap;
 
 	va_start(ap, fmt);
-	retval = kprintf(fmt, TOBUFONLY, NULL, bf, ap);
+	retval = kprintf(fmt, TOBUFONLY, NULL, buf, ap);
 	va_end(ap);
-	*(bf + retval) = 0;	/* null terminate */
+	*(buf + retval) = 0;	/* null terminate */
 	return(retval);
 }
 
@@ -803,15 +800,15 @@ sprintf(char *bf, const char *fmt, ...)
  */
 
 int
-vsprintf(bf, fmt, ap)
-	char *bf;
+vsprintf(buf, fmt, ap)
+	char *buf;
 	const char *fmt;
 	va_list ap;
 {
 	int retval;
 
-	retval = kprintf(fmt, TOBUFONLY, NULL, bf, ap);
-	*(bf + retval) = 0;	/* null terminate */
+	retval = kprintf(fmt, TOBUFONLY, NULL, buf, ap);
+	*(buf + retval) = 0;	/* null terminate */
 	return (retval);
 }
 
@@ -819,7 +816,7 @@ vsprintf(bf, fmt, ap)
  * snprintf: print a message to a buffer
  */
 int
-snprintf(char *bf, size_t size, const char *fmt, ...)
+snprintf(char *buf, size_t size, const char *fmt, ...)
 {
 	int retval;
 	va_list ap;
@@ -827,9 +824,9 @@ snprintf(char *bf, size_t size, const char *fmt, ...)
 
 	if (size < 1)
 		return (-1);
-	p = bf + size - 1;
+	p = buf + size - 1;
 	va_start(ap, fmt);
-	retval = kprintf(fmt, TOBUFONLY, &p, bf, ap);
+	retval = kprintf(fmt, TOBUFONLY, &p, buf, ap);
 	va_end(ap);
 	*(p) = 0;	/* null terminate */
 	return(retval);
@@ -839,8 +836,8 @@ snprintf(char *bf, size_t size, const char *fmt, ...)
  * vsnprintf: print a message to a buffer [already have va_alist]
  */
 int
-vsnprintf(bf, size, fmt, ap)
-        char *bf;
+vsnprintf(buf, size, fmt, ap)
+        char *buf;
         size_t size;
         const char *fmt;
         va_list ap;
@@ -850,8 +847,8 @@ vsnprintf(bf, size, fmt, ap)
 
 	if (size < 1)
 		return (-1);
-	p = bf + size - 1;
-	retval = kprintf(fmt, TOBUFONLY, &p, bf, ap);
+	p = buf + size - 1;
+	retval = kprintf(fmt, TOBUFONLY, &p, buf, ap);
 	*(p) = 0;	/* null terminate */
 	return(retval);
 }
@@ -862,21 +859,20 @@ vsnprintf(bf, size, fmt, ap)
  * => returns pointer to the buffer
  */
 char *
-bitmask_snprintf(val, p, bf, buflen)
+bitmask_snprintf(val, p, buf, buflen)
 	u_quad_t val;
 	const char *p;
-	char *bf;
+	char *buf;
 	size_t buflen;
 {
 	char *bp, *q;
 	size_t left;
-	const char *sbase;
-	char snbuf[KPRINTF_BUFSIZE];
+	char *sbase, snbuf[KPRINTF_BUFSIZE];
 	int base, bit, ch, len, sep;
 	u_quad_t field;
 
-	bp = bf;
-	memset(bf, 0, buflen);
+	bp = buf;
+	memset(buf, 0, buflen);
 
 	/*
 	 * Always leave room for the trailing NULL.
@@ -888,13 +884,13 @@ bitmask_snprintf(val, p, bf, buflen)
 	 * enough room.
 	 */
 	if (buflen < KPRINTF_BUFSIZE)
-		return (bf);
+		return (buf);
 
 	ch = *p++;
 	base = ch != '\177' ? ch : *p++;
 	sbase = base == 8 ? "%qo" : base == 10 ? "%qd" : base == 16 ? "%qx" : 0;
 	if (sbase == 0)
-		return (bf);	/* punt if not oct, dec, or hex */
+		return (buf);	/* punt if not oct, dec, or hex */
 
 	snprintf(snbuf, sizeof(snbuf), sbase, val);
 	for (q = snbuf ; *q ; q++) {
@@ -907,7 +903,7 @@ bitmask_snprintf(val, p, bf, buflen)
 	 * or if we don't have room for "<x>", we're done.
 	 */
 	if (((val == 0) && (ch != '\177')) || left < 3)
-		return (bf);
+		return (buf);
 
 #define PUTBYTE(b, c, l) do {	\
 	*(b)++ = (c);		\
@@ -992,7 +988,7 @@ bitmask_snprintf(val, p, bf, buflen)
 		PUTBYTE(bp, '>', left);
 
 out:
-	return (bf);
+	return (buf);
 
 #undef PUTBYTE
 #undef PUTSTR
@@ -1074,7 +1070,7 @@ kprintf(fmt0, oflags, vp, sbuf, ap)
 	char *sbuf;
 	va_list ap;
 {
-	const char *fmt;	/* format string */
+	char *fmt;		/* format string */
 	int ch;			/* character from fmt */
 	int n;			/* handy integer (short term usage) */
 	char *cp;		/* handy char pointer (short term usage) */
@@ -1089,8 +1085,8 @@ kprintf(fmt0, oflags, vp, sbuf, ap)
 	int dprec;		/* a copy of prec if [diouxX], 0 otherwise */
 	int realsz;		/* field size expanded by dprec */
 	int size;		/* size of converted field or string */
-	const char *xdigs;	/* digits for [xX] conversion */
-	char bf[KPRINTF_BUFSIZE]; /* space for %c, %[diouxX] */
+	char *xdigs;		/* digits for [xX] conversion */
+	char buf[KPRINTF_BUFSIZE]; /* space for %c, %[diouxX] */
 	char *tailp;		/* tail pointer for snprintf */
 
 	tailp = NULL;	/* XXX: shutup gcc */
@@ -1100,7 +1096,7 @@ kprintf(fmt0, oflags, vp, sbuf, ap)
 	cp = NULL;	/* XXX: shutup gcc */
 	size = 0;	/* XXX: shutup gcc */
 
-	fmt = fmt0;
+	fmt = (char *)fmt0;
 	ret = 0;
 
 	xdigs = NULL;		/* XXX: shut up gcc warning */
@@ -1209,7 +1205,7 @@ reswitch:	switch (ch) {
 			flags |= SIZEINT;
 			goto rflag;
 		case 'c':
-			*(cp = bf) = va_arg(ap, int);
+			*(cp = buf) = va_arg(ap, int);
 			size = 1;
 			sign = '\0';
 			break;
@@ -1259,14 +1255,13 @@ reswitch:	switch (ch) {
 			/* NOSTRICT */
 			_uquad = (u_long)va_arg(ap, void *);
 			base = HEX;
-			xdigs = hexdigits;
+			xdigs = "0123456789abcdef";
 			flags |= HEXPREFIX;
 			ch = 'x';
 			goto nosign;
 		case 's':
 			if ((cp = va_arg(ap, char *)) == NULL)
-				/*XXXUNCONST*/
-				cp = __UNCONST("(null)");
+				cp = "(null)";
 			if (prec >= 0) {
 				/*
 				 * can't use strlen; can only look for the
@@ -1293,10 +1288,10 @@ reswitch:	switch (ch) {
 			base = DEC;
 			goto nosign;
 		case 'X':
-			xdigs = hexdigits;
+			xdigs = "0123456789ABCDEF";
 			goto hex;
 		case 'x':
-			xdigs = hexdigits;
+			xdigs = "0123456789abcdef";
 hex:			_uquad = UARG();
 			base = HEX;
 			/* leading 0x/X only if non-zero */
@@ -1318,7 +1313,7 @@ number:			if ((dprec = prec) >= 0)
 			 * explicit precision of zero is no characters.''
 			 *	-- ANSI X3J11
 			 */
-			cp = bf + KPRINTF_BUFSIZE;
+			cp = buf + KPRINTF_BUFSIZE;
 			if (_uquad != 0 || prec != 0) {
 				/*
 				 * Unsigned mod is hard, and unsigned mod
@@ -1353,20 +1348,19 @@ number:			if ((dprec = prec) >= 0)
 					break;
 
 				default:
-					/*XXXUNCONST*/
-					cp = __UNCONST("bug in kprintf: bad base");
+					cp = "bug in kprintf: bad base";
 					size = strlen(cp);
 					goto skipsize;
 				}
 			}
-			size = bf + KPRINTF_BUFSIZE - cp;
+			size = buf + KPRINTF_BUFSIZE - cp;
 		skipsize:
 			break;
 		default:	/* "%?" prints ?, unless ? is NUL */
 			if (ch == '\0')
 				goto done;
 			/* pretend it was %c with argument ch */
-			cp = bf;
+			cp = buf;
 			*cp = ch;
 			size = 1;
 			sign = '\0';

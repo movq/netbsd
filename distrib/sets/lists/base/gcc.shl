@@ -1,4 +1,4 @@
-# $NetBSD: gcc.shl,v 1.5 2005/06/07 14:27:42 is Exp $
+# $NetBSD: gcc.shl,v 1.4.2.1 2005/06/11 12:21:41 tron Exp $
 ./usr/lib/libbfd.so.7				base-sys-shlib		bfd
 ./usr/lib/libbfd.so.7.0				base-sys-shlib		bfd
 ./usr/lib/libg2c.so				base-sys-shlib

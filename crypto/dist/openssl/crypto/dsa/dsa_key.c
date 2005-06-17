@@ -64,7 +64,6 @@
 #include <openssl/dsa.h>
 #include <openssl/rand.h>
 
-#ifndef OPENSSL_FIPS
 int DSA_generate_key(DSA *dsa)
 	{
 	int ok=0;
@@ -103,5 +102,4 @@ err:
 	if (ctx != NULL) BN_CTX_free(ctx);
 	return(ok);
 	}
-#endif
 #endif

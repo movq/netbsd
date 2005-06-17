@@ -1,4 +1,4 @@
-/*	$NetBSD: in6.c,v 1.93 2005/05/29 21:43:51 christos Exp $	*/
+/*	$NetBSD: in6.c,v 1.91 2005/02/01 15:29:23 drochner Exp $	*/
 /*	$KAME: in6.c,v 1.198 2001/07/18 09:12:38 itojun Exp $	*/
 
 /*
@@ -62,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: in6.c,v 1.93 2005/05/29 21:43:51 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: in6.c,v 1.91 2005/02/01 15:29:23 drochner Exp $");
 
 #include "opt_inet.h"
 #include "opt_pfil_hooks.h"
@@ -1449,21 +1449,21 @@ in6_lifaddr_ioctl(so, cmd, data, ifp, p)
 	case SIOCALIFADDR:
 	    {
 		struct in6_aliasreq ifra;
-		struct in6_addr *xhostid = NULL;
+		struct in6_addr *hostid = NULL;
 		int prefixlen;
 
 		if ((iflr->flags & IFLR_PREFIX) != 0) {
 			struct sockaddr_in6 *sin6;
 
 			/*
-			 * xhostid is to fill in the hostid part of the
-			 * address.  xhostid points to the first link-local
+			 * hostid is to fill in the hostid part of the
+			 * address.  hostid points to the first link-local
 			 * address attached to the interface.
 			 */
 			ifa = (struct ifaddr *)in6ifa_ifpforlinklocal(ifp, 0);
 			if (!ifa)
 				return EADDRNOTAVAIL;
-			xhostid = IFA_IN6(ifa);
+			hostid = IFA_IN6(ifa);
 
 		 	/* prefixlen must be <= 64. */
 			if (64 < iflr->prefixlen)
@@ -1485,22 +1485,22 @@ in6_lifaddr_ioctl(so, cmd, data, ifp, p)
 
 		bcopy(&iflr->addr, &ifra.ifra_addr,
 		    ((struct sockaddr *)&iflr->addr)->sa_len);
-		if (xhostid) {
+		if (hostid) {
 			/* fill in hostid part */
 			ifra.ifra_addr.sin6_addr.s6_addr32[2] =
-			    xhostid->s6_addr32[2];
+			    hostid->s6_addr32[2];
 			ifra.ifra_addr.sin6_addr.s6_addr32[3] =
-			    xhostid->s6_addr32[3];
+			    hostid->s6_addr32[3];
 		}
 
 		if (((struct sockaddr *)&iflr->dstaddr)->sa_family) { /* XXX */
 			bcopy(&iflr->dstaddr, &ifra.ifra_dstaddr,
 			    ((struct sockaddr *)&iflr->dstaddr)->sa_len);
-			if (xhostid) {
+			if (hostid) {
 				ifra.ifra_dstaddr.sin6_addr.s6_addr32[2] =
-				    xhostid->s6_addr32[2];
+				    hostid->s6_addr32[2];
 				ifra.ifra_dstaddr.sin6_addr.s6_addr32[3] =
-				    xhostid->s6_addr32[3];
+				    hostid->s6_addr32[3];
 			}
 		}
 
@@ -2027,6 +2027,7 @@ in6ifa_ifpwithaddr(ifp, addr)
 /*
  * Convert IP6 address to printable (loggable) representation.
  */
+static char digits[] = "0123456789abcdef";
 static int ip6round = 0;
 char *
 ip6_sprintf(addr)
@@ -2066,10 +2067,10 @@ ip6_sprintf(addr)
 			continue;
 		}
 		d = (const u_char *)a;
-		*cp++ = hexdigits[*d >> 4];
-		*cp++ = hexdigits[*d++ & 0xf];
-		*cp++ = hexdigits[*d >> 4];
-		*cp++ = hexdigits[*d & 0xf];
+		*cp++ = digits[*d >> 4];
+		*cp++ = digits[*d++ & 0xf];
+		*cp++ = digits[*d >> 4];
+		*cp++ = digits[*d & 0xf];
 		*cp++ = ':';
 		a++;
 	}

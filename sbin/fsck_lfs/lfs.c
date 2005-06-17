@@ -1,4 +1,4 @@
-/* $NetBSD: lfs.c,v 1.16 2005/06/08 19:09:55 perseant Exp $ */
+/* $NetBSD: lfs.c,v 1.8.2.1 2005/05/07 11:21:29 tron Exp $ */
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -240,8 +240,6 @@ ufs_getlbns(struct lfs * fs, struct uvnode * vp, daddr_t bn, struct indir * ap, 
 	int i, numlevels, off;
 	int lognindir, indir;
 
-	metalbn = 0;	/* XXXGCC -Wuninitialized [dreamcast] */
-
 	if (nump)
 		*nump = 0;
 	numlevels = 0;
@@ -426,7 +424,7 @@ lfs_vget(void *vfs, ino_t ino)
 	LFS_IENTRY(ifp, fs, ino, bp);
 	daddr = ifp->if_daddr;
 	brelse(bp);
-	if (daddr <= 0 || dtosn(fs, daddr) >= fs->lfs_nseg)
+	if (daddr == 0)
 		return NULL;
 	return lfs_raw_vget(fs, ino, fs->lfs_ivnode->v_fd, daddr);
 }
@@ -650,7 +648,6 @@ lfs_verify(struct lfs *sb0, struct lfs *sb1, struct uvnode *devvp, int debug)
 	 * different.
 	 */
 
-	osb = NULL;
 	if (debug)
 		printf("sb0 %lld, sb1 %lld\n", (long long) sb0->lfs_serial,
 		    (long long) sb1->lfs_serial);
@@ -812,98 +809,3 @@ call_panic(const char *fmt, ...)
         panic_func(1, fmt, ap);
 	va_end(ap);
 }
-
-/* Allocate a new inode. */
-struct uvnode *
-lfs_valloc(struct lfs *fs, ino_t ino)
-{
-	struct ubuf *bp, *cbp;
-	struct ifile *ifp;
-	ino_t new_ino;
-	int error;
-	int new_gen;
-	CLEANERINFO *cip;
-
-	/* Get the head of the freelist. */
-	LFS_GET_HEADFREE(fs, cip, cbp, &new_ino);
-
-	/*
-	 * Remove the inode from the free list and write the new start
-	 * of the free list into the superblock.
-	 */
-	LFS_IENTRY(ifp, fs, new_ino, bp);
-	if (ifp->if_daddr != LFS_UNUSED_DADDR)
-		panic("lfs_valloc: inuse inode %d on the free list", new_ino);
-	LFS_PUT_HEADFREE(fs, cip, cbp, ifp->if_nextfree);
-
-	new_gen = ifp->if_version; /* version was updated by vfree */
-	brelse(bp);
-
-	/* Extend IFILE so that the next lfs_valloc will succeed. */
-	if (fs->lfs_freehd == LFS_UNUSED_INUM) {
-		if ((error = extend_ifile(fs)) != 0) {
-			LFS_PUT_HEADFREE(fs, cip, cbp, new_ino);
-			return NULL;
-		}
-	}
-
-	/* Set superblock modified bit and increment file count. */
-        sbdirty();
-	++fs->lfs_nfiles;
-
-        return lfs_raw_vget(fs, ino, fs->lfs_devvp->v_fd, 0x0);
-}
-
-/*
- * Add a new block to the Ifile, to accommodate future file creations.
- */
-int
-extend_ifile(struct lfs *fs)
-{
-	struct uvnode *vp;
-	struct inode *ip;
-	IFILE *ifp;
-	IFILE_V1 *ifp_v1;
-	struct ubuf *bp, *cbp;
-	daddr_t i, blkno, max;
-	ino_t oldlast;
-	CLEANERINFO *cip;
-
-	vp = fs->lfs_ivnode;
-	ip = VTOI(vp);
-	blkno = lblkno(fs, ip->i_ffs1_size);
-
-	bp = getblk(vp, blkno, fs->lfs_bsize);	/* XXX VOP_BALLOC() */
-	ip->i_ffs1_size += fs->lfs_bsize;
-	
-	i = (blkno - fs->lfs_segtabsz - fs->lfs_cleansz) *
-		fs->lfs_ifpb;
-	LFS_GET_HEADFREE(fs, cip, cbp, &oldlast);
-	LFS_PUT_HEADFREE(fs, cip, cbp, i);
-	max = i + fs->lfs_ifpb;
-	fs->lfs_bfree -= btofsb(fs, fs->lfs_bsize);
-
-	if (fs->lfs_version == 1) {
-		for (ifp_v1 = (IFILE_V1 *)bp->b_data; i < max; ++ifp_v1) {
-			ifp_v1->if_version = 1;
-			ifp_v1->if_daddr = LFS_UNUSED_DADDR;
-			ifp_v1->if_nextfree = ++i;
-		}
-		ifp_v1--;
-		ifp_v1->if_nextfree = oldlast;
-	} else {
-		for (ifp = (IFILE *)bp->b_data; i < max; ++ifp) {
-			ifp->if_version = 1;
-			ifp->if_daddr = LFS_UNUSED_DADDR;
-			ifp->if_nextfree = ++i;
-		}
-		ifp--;
-		ifp->if_nextfree = oldlast;
-	}
-	LFS_PUT_TAILFREE(fs, cip, cbp, max - 1);
-
-	LFS_BWRITE_LOG(bp);
-
-	return 0;
-}
-

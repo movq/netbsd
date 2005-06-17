@@ -1,4 +1,4 @@
-/*	$NetBSD: ip6_mroute.c,v 1.64 2005/05/29 21:43:09 christos Exp $	*/
+/*	$NetBSD: ip6_mroute.c,v 1.63.2.1 2005/10/22 03:52:18 riz Exp $	*/
 /*	$KAME: ip6_mroute.c,v 1.49 2001/07/25 09:21:18 jinmei Exp $	*/
 
 /*
@@ -117,7 +117,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ip6_mroute.c,v 1.64 2005/05/29 21:43:09 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ip6_mroute.c,v 1.63.2.1 2005/10/22 03:52:18 riz Exp $");
 
 #include "opt_inet.h"
 #include "opt_mrouting.h"
@@ -178,7 +178,7 @@ struct mrt6stat	mrt6stat;
 
 struct mf6c	*mf6ctable[MF6CTBLSIZ];
 u_char		n6expire[MF6CTBLSIZ];
-static struct mif6 mif6table[MAXMIFS];
+struct mif6 mif6table[MAXMIFS];
 #ifdef MRT6DEBUG
 u_int		mrt6debug = 0;	  /* debug level 	*/
 #define DEBUG_MFC	0x02
@@ -628,6 +628,7 @@ ip6_mrouter_detach(ifp)
 	}
 }
 
+static struct sockaddr_in6 sin6 = { sizeof(sin6), AF_INET6 };
 
 /*
  * Add a mif to the mif table
@@ -1047,7 +1048,6 @@ ip6_mforward(ip6, ifp, m)
 	struct mbuf *mm;
 	int s;
 	mifi_t mifi;
-	struct sockaddr_in6 sin6;
 
 #ifdef MRT6DEBUG
 	if (mrt6debug & DEBUG_FORWARD)
@@ -1188,9 +1188,6 @@ ip6_mforward(ip6, ifp, m)
 			/*
 			 * Send message to routing daemon
 			 */
-			(void)memset(&sin6, 0, sizeof(sin6));
-			sin6.sin6_len = sizeof(sin6);
-			sin6.sin6_family = AF_INET6;
 			sin6.sin6_addr = ip6->ip6_src;
 
 			im = NULL;
@@ -1411,7 +1408,8 @@ ip6_mdq(m, ifp, rt)
 				 * unnecessary PIM assert.
 				 * XXX: M_LOOP is an ad-hoc hack...
 				 */
-				struct sockaddr_in6 sin6;
+				static struct sockaddr_in6 sin6 =
+				{ sizeof(sin6), AF_INET6 };
 
 				struct mbuf *mm;
 				struct mrt6msg *im;
@@ -1449,9 +1447,6 @@ ip6_mdq(m, ifp, rt)
 				     mifp++, iif++)
 					;
 
-				(void)memset(&sin6, 0, sizeof(sin6));
-				sin6.sin6_len = sizeof(sin6);
-				sin6.sin6_family = AF_INET6;
 				switch (ip6_mrouter_ver) {
 				case MRT6_OINIT:
 					oim->im6_mif = iif;
@@ -1643,7 +1638,7 @@ register_send(ip6, mif, m)
 {
 	struct mbuf *mm;
 	int i, len = m->m_pkthdr.len;
-	struct sockaddr_in6 sin6;
+	static struct sockaddr_in6 sin6 = { sizeof(sin6), AF_INET6 };
 	struct mrt6msg *im6;
 
 #ifdef MRT6DEBUG
@@ -1676,9 +1671,6 @@ register_send(ip6, mif, m)
 	/*
 	 * Send message to routing daemon
 	 */
-	(void)memset(&sin6, 0, sizeof(sin6));
-	sin6.sin6_len = sizeof(sin6);
-	sin6.sin6_family = AF_INET6;
 	sin6.sin6_addr = ip6->ip6_src;
 
 	im6 = mtod(mm, struct mrt6msg *);

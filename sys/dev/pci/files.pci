@@ -1,4 +1,4 @@
-#	$NetBSD: files.pci,v 1.232 2005/02/27 00:27:32 perry Exp $
+#	$NetBSD: files.pci,v 1.232.2.8 2006/07/31 12:35:22 tron Exp $
 #
 # Config file and device description for machine-independent PCI code.
 # Included by ports that need it.  Requires that the SCSI files be
@@ -59,6 +59,13 @@ file	dev/pci/twe.c			twe
 attach	ld at twe with ld_twe
 file	dev/pci/ld_twe.c		ld_twe
 
+device	twa {unit = -1} 
+attach	twa at pci	
+file	dev/pci/twa.c			twa
+
+attach	ld at twa with ld_twa
+file	dev/pci/ld_twa.c		ld_twa
+
 # AMI RAID controllers
 device	amr {unit = -1}
 attach	amr at pci
@@ -112,6 +119,10 @@ file	dev/ic/adwmcode.c		adw_pci
 device	pcscp: scsi, ncr53c9x
 attach	pcscp at pci
 file	dev/pci/pcscp.c			pcscp
+
+# HP/Compaq Command Interface to Scsi-3
+attach ciss at pci with ciss_pci
+file	dev/pci/ciss_pci.c		ciss_pci
 
 # BusLogic BT-9xx PCI family
 # device declaration in sys/conf/files
@@ -266,6 +277,11 @@ file	dev/pci/pdcide.c		pdcide
 device	rccide {[channel = -1]}: ata, pciide_common, wdc_common
 attach	rccide at pci
 file	dev/pci/rccide.c		rccide
+
+# ServerWorks SATA controllers
+device	svwsata: ata, pciide_common, wdc_common, sata
+attach	svwsata at pci
+file	dev/pci/svwsata.c		svwsata
 
 # Silicon Image SATALink controllers
 device	satalink {[channel = -1]}: ata, pciide_common, wdc_common, sata
@@ -436,6 +452,12 @@ file	dev/pci/auvia.c			auvia
 device	auixp: audiobus, auconv, mulaw, ac97, aurateconv
 attach	auixp at pci
 file	dev/pci/auixp.c			auixp
+
+# High Definition Audio
+device	azalia: audiobus, auconv, mulaw, ac97, aurateconv
+attach	azalia at pci
+file	dev/pci/azalia.c		azalia
+file	dev/pci/azalia_codec.c		azalia
 
 # NeoMagic 256 AC'97 Audio
 device	neo: audiobus, auconv, mulaw, ac97
@@ -644,9 +666,11 @@ file	dev/pci/viaenv.c		viaenv			needs-flag
 
 # AMD 768MPX power management controller
 defflag	opt_amdpm.h			AMDPM_RND_COUNTERS
-device	amdpm {}
+define	amdpm {}
+device	amdpm: i2cbus, amdpm
 attach	amdpm at pci
 file	dev/pci/amdpm.c			amdpm
+file	dev/pci/amdpm_smbus.c		amdpm
 
 # Hi/fn 7751
 device	hifn: opencrypto
@@ -757,6 +781,11 @@ file	dev/pci/if_ipw.c		ipw
 attach	njs at pci with njs_pci
 file	dev/pci/njs_pci.c		njs_pci
 
+# S2io Xframe 10 Gigabit ethernet (Xframe driver)
+device  xge: ether, ifnet, arp
+attach  xge  at pci 
+file    dev/pci/if_xge.c		xge
+
 # Intel PRO/Wireless 2200BG/2915ABG
 device	iwi: ifnet, wlan
 attach	iwi at pci
@@ -766,3 +795,8 @@ file	dev/pci/if_iwi.c		iwi
 device	vge: ether, ifnet, arp, mii
 attach	vge at pci
 file	dev/pci/if_vge.c		vge
+
+# NVIDIA nForce Ethernet
+device  nfe: ether, ifnet, mii, mii_phy
+attach  nfe at pci
+file    dev/pci/if_nfe.c                nfe

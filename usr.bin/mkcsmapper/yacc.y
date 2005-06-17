@@ -1,4 +1,4 @@
-/*	$NetBSD: yacc.y,v 1.6 2005/06/02 02:07:54 lukem Exp $	*/
+/*	$NetBSD: yacc.y,v 1.5 2004/01/05 19:20:10 itojun Exp $	*/
 
 %{
 /*-
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(lint)
-__RCSID("$NetBSD: yacc.y,v 1.6 2005/06/02 02:07:54 lukem Exp $");
+__RCSID("$NetBSD: yacc.y,v 1.5 2004/01/05 19:20:10 itojun Exp $");
 #endif /* not lint */
 
 #include <assert.h>
@@ -262,7 +262,7 @@ static void
 alloc_table(void)
 {
 	size_t i;
-	u_int32_t val = 0;
+	u_int32_t val;
 
 	table_size =
 	    (src_zone.row_end-src_zone.row_begin + 1) *
@@ -660,7 +660,7 @@ main(int argc, char **argv)
 	int ch;
 	extern char *optarg;
 	extern int optind;
-	FILE *in = NULL;
+	FILE *in;
 	int mkdb = 0, mkpv = 0;
 
 	while ((ch=getopt(argc, argv, "do:mp")) != EOF) {

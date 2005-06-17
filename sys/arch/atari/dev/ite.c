@@ -1,4 +1,4 @@
-/*	$NetBSD: ite.c,v 1.46 2005/06/04 14:42:36 he Exp $	*/
+/*	$NetBSD: ite.c,v 1.45 2005/03/02 08:14:26 chs Exp $	*/
 
 /*
  * Copyright (c) 1990 The Regents of the University of California.
@@ -81,7 +81,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ite.c,v 1.46 2005/06/04 14:42:36 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ite.c,v 1.45 2005/03/02 08:14:26 chs Exp $");
 
 #include "opt_ddb.h"
 
@@ -158,7 +158,7 @@ static __inline__ void ite_inline __P((struct ite_softc *, int));
 static __inline__ void ite_lf __P((struct ite_softc *));
 static __inline__ void ite_dnline __P((struct ite_softc *, int));
 static __inline__ void ite_rlf __P((struct ite_softc *));
-static __inline__ void ite_sendstr __P((const char *));
+static __inline__ void ite_sendstr __P((char *));
 static __inline__ void snap_cury __P((struct ite_softc *));
 
 static void	alignment_display __P((struct ite_softc *));
@@ -1144,7 +1144,7 @@ enum caller	caller;
 /* helper functions, makes the code below more readable */
 static __inline__ void
 ite_sendstr(str)
-	const char *str;
+	char *str;
 {
 	struct tty *kbd_tty;
 
@@ -2052,72 +2052,72 @@ iteputchar(c, ip)
 		  case 'm':
 		    /* big attribute setter/resetter */
 		    {
-		      char *chp;
+		      char *cp;
 		      *ip->ap = 0;
 		      /* kludge to make CSIm work (== CSI0m) */
 		      if (ip->ap == ip->argbuf)
 		        ip->ap++;
-		      for (chp = ip->argbuf; chp < ip->ap; )
+		      for (cp = ip->argbuf; cp < ip->ap; )
 		        {
-			  switch (*chp)
+			  switch (*cp)
 			    {
 			    case 0:
 			    case '0':
 			      clr_attr (ip, ATTR_ALL);
-			      chp++;
+			      cp++;
 			      break;
 			      
 			    case '1':
 			      set_attr (ip, ATTR_BOLD);
-			      chp++;
+			      cp++;
 			      break;
 			      
 			    case '2':
-			      switch (chp[1])
+			      switch (cp[1])
 			        {
 			        case '2':
 			          clr_attr (ip, ATTR_BOLD);
-			          chp += 2;
+			          cp += 2;
 			          break;
 			        
 			        case '4':
 			          clr_attr (ip, ATTR_UL);
-			          chp += 2;
+			          cp += 2;
 			          break;
 			          
 			        case '5':
 			          clr_attr (ip, ATTR_BLINK);
-			          chp += 2;
+			          cp += 2;
 			          break;
 			          
 			        case '7':
 			          clr_attr (ip, ATTR_INV);
-			          chp += 2;
+			          cp += 2;
 			          break;
 		        	
 		        	default:
-		        	  chp++;
+		        	  cp++;
 		        	  break;
 		        	}
 			      break;
 			      
 			    case '4':
 			      set_attr (ip, ATTR_UL);
-			      chp++;
+			      cp++;
 			      break;
 			      
 			    case '5':
 			      set_attr (ip, ATTR_BLINK);
-			      chp++;
+			      cp++;
 			      break;
 			      
 			    case '7':
 			      set_attr (ip, ATTR_INV);
-			      chp++;
+			      cp++;
 			      break;
 			    
 			    default:
-			      chp++;
+			      cp++;
 			      break;
 			    }
 		        }

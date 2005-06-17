@@ -1,4 +1,4 @@
-/* $NetBSD: setup.c,v 1.24 2005/06/08 19:09:55 perseant Exp $ */
+/* $NetBSD: setup.c,v 1.19.2.1 2005/05/07 11:21:29 tron Exp $ */
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -149,8 +149,6 @@ reset_maxino(ino_t len)
 	memset(statemap + maxino, 0, (len - maxino) * sizeof(char));
 	memset(typemap + maxino, 0, (len - maxino) * sizeof(char));
 	memset(lncntp + maxino, 0, (len - maxino) * sizeof(int16_t));
-
-	maxino = len;
 
 	return;
 }
@@ -324,18 +322,8 @@ setup(const char *dev)
 	 * allocate and initialize the necessary maps
 	 */
 	din_table = (ufs_daddr_t *) malloc(maxino * sizeof(*din_table));
-	if (din_table == NULL) {
-		printf("cannot alloc %lu bytes for din_table\n",
-		    (unsigned long) maxino * sizeof(*din_table));
-		goto badsblabel;
-	}
 	memset(din_table, 0, maxino * sizeof(*din_table));
 	seg_table = (SEGUSE *) malloc(fs->lfs_nseg * sizeof(SEGUSE));
-	if (seg_table == NULL) {
-		printf("cannot alloc %lu bytes for seg_table\n",
-		    (unsigned long) fs->lfs_nseg * sizeof(SEGUSE));
-		goto badsblabel;
-	}
 	memset(seg_table, 0, fs->lfs_nseg * sizeof(SEGUSE));
 	/* Get segment flags */
 	for (i = 0; i < fs->lfs_nseg; i++) {

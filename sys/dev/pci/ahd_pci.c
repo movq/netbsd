@@ -1,4 +1,4 @@
-/*	$NetBSD: ahd_pci.c,v 1.18 2005/05/30 04:35:22 christos Exp $	*/
+/*	$NetBSD: ahd_pci.c,v 1.15.2.2 2005/04/28 10:57:24 tron Exp $	*/
 
 /*
  * Product specific probe and attach routines for:
@@ -49,7 +49,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ahd_pci.c,v 1.18 2005/05/30 04:35:22 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ahd_pci.c,v 1.15.2.2 2005/04/28 10:57:24 tron Exp $");
 
 #define AHD_PCI_IOADDR	PCI_MAPREG_START	/* I/O Address */
 #define AHD_PCI_MEMADDR	(PCI_MAPREG_START + 4)	/* Mem I/O Address */
@@ -518,12 +518,12 @@ ahd_pci_attach(parent, self, aux)
 	 * 64bit bus (PCI64BIT set in devconfig).
 	 */
 	if ((ahd->flags & (AHD_39BIT_ADDRESSING|AHD_64BIT_ADDRESSING)) != 0) {
-		uint32_t dvconfig;
+		uint32_t devconfig;
 
 		aprint_normal("%s: Enabling 39Bit Addressing\n", ahd_name(ahd));
-		dvconfig = pci_conf_read(pa->pa_pc, pa->pa_tag, DEVCONFIG);
-		dvconfig |= DACEN;
-		pci_conf_write(pa->pa_pc, pa->pa_tag, DEVCONFIG, dvconfig);
+		devconfig = pci_conf_read(pa->pa_pc, pa->pa_tag, DEVCONFIG);
+		devconfig |= DACEN;
+		pci_conf_write(pa->pa_pc, pa->pa_tag, DEVCONFIG, devconfig);
 	}
 
 	/* Ensure busmastering is enabled */
@@ -649,11 +649,11 @@ ahd_pci_test_register_access(struct ahd_softc *ahd)
 		goto fail;
 
 	if ((ahd_inb(ahd, INTSTAT) & PCIINT) != 0) {
-		u_int trgpcistat;
+		u_int targpcistat;
 
 		ahd_set_modes(ahd, AHD_MODE_CFG, AHD_MODE_CFG);
-		trgpcistat = ahd_inb(ahd, TARGPCISTAT);
-		if ((trgpcistat & STA) != 0)
+		targpcistat = ahd_inb(ahd, TARGPCISTAT);
+		if ((targpcistat & STA) != 0)
 			goto fail;
 	}
 

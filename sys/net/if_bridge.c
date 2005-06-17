@@ -1,4 +1,4 @@
-/*	$NetBSD: if_bridge.c,v 1.31 2005/06/01 19:45:34 jdc Exp $	*/
+/*	$NetBSD: if_bridge.c,v 1.29.2.2 2006/02/12 16:49:50 tron Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -80,7 +80,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_bridge.c,v 1.31 2005/06/01 19:45:34 jdc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_bridge.c,v 1.29.2.2 2006/02/12 16:49:50 tron Exp $");
 
 #include "opt_bridge_ipf.h"
 #include "opt_inet.h"
@@ -485,6 +485,7 @@ bridge_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 			break;
 		}
 
+		memset(&args, 0, sizeof(args));
 		if (bc->bc_flags & BC_F_COPYIN) {
 			error = copyin(ifd->ifd_data, &args, ifd->ifd_len);
 			if (error)
@@ -771,6 +772,7 @@ bridge_ioctl_gifs(struct bridge_softc *sc, void *arg)
 
 	count = 0;
 	len = bifc->ifbic_len;
+	memset(&breq, 0, sizeof breq);
 	LIST_FOREACH(bif, &sc->sc_iflist, bif_next) {
 		if (len < sizeof(breq))
 			break;
@@ -808,6 +810,7 @@ bridge_ioctl_rts(struct bridge_softc *sc, void *arg)
 	LIST_FOREACH(brt, &sc->sc_rtlist, brt_list) {
 		if (len < sizeof(bareq))
 			goto out;
+		memset(&bareq, 0, sizeof(bareq));
 		strlcpy(bareq.ifba_ifsname, brt->brt_ifp->if_xname,
 		    sizeof(bareq.ifba_ifsname));
 		memcpy(bareq.ifba_dst, brt->brt_addr, sizeof(brt->brt_addr));
@@ -1968,7 +1971,7 @@ static int bridge_ipf(void *arg, struct mbuf **mp, struct ifnet *ifp, int dir)
 {
 	int snap, error;
 	struct ether_header *eh1, eh2;
-	struct llc llc1;
+	struct llc llc;
 	u_int16_t ether_type;
 
 	snap = 0;
@@ -1980,13 +1983,13 @@ static int bridge_ipf(void *arg, struct mbuf **mp, struct ifnet *ifp, int dir)
 	 * Check for SNAP/LLC.
 	 */
         if (ether_type < ETHERMTU) {
-                struct llc *llc2 = (struct llc *)(eh1 + 1);
+                struct llc *llc = (struct llc *)(eh1 + 1);
 
                 if ((*mp)->m_len >= ETHER_HDR_LEN + 8 &&
-                    llc2->llc_dsap == LLC_SNAP_LSAP &&
-                    llc2->llc_ssap == LLC_SNAP_LSAP &&
-                    llc2->llc_control == LLC_UI) {
-                	ether_type = htons(llc2->llc_un.type_snap.ether_type);
+                    llc->llc_dsap == LLC_SNAP_LSAP &&
+                    llc->llc_ssap == LLC_SNAP_LSAP &&
+                    llc->llc_control == LLC_UI) {
+                	ether_type = htons(llc->llc_un.type_snap.ether_type);
 			snap = 1;
                 }
         }
@@ -2019,7 +2022,7 @@ static int bridge_ipf(void *arg, struct mbuf **mp, struct ifnet *ifp, int dir)
 
 	/* Strip off snap header, if present */
 	if (snap) {
-		m_copydata(*mp, 0, sizeof(struct llc), (caddr_t) &llc1);
+		m_copydata(*mp, 0, sizeof(struct llc), (caddr_t) &llc);
 		m_adj(*mp, sizeof(struct llc));
 	}
 
@@ -2059,7 +2062,7 @@ static int bridge_ipf(void *arg, struct mbuf **mp, struct ifnet *ifp, int dir)
 		M_PREPEND(*mp, sizeof(struct llc), M_DONTWAIT);
 		if (*mp == NULL)
 			return error;
-		bcopy(&llc1, mtod(*mp, caddr_t), sizeof(struct llc));
+		bcopy(&llc, mtod(*mp, caddr_t), sizeof(struct llc));
 	}
 
 	M_PREPEND(*mp, ETHER_HDR_LEN, M_DONTWAIT);

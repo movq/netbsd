@@ -1,4 +1,4 @@
-/*	$NetBSD: pcap-bpf.c,v 1.14 2005/06/10 19:00:09 dyoung Exp $	*/
+/*	$NetBSD: pcap-bpf.c,v 1.13 2004/12/02 00:05:02 christos Exp $	*/
 
 /*
  * Copyright (c) 1993, 1994, 1995, 1996, 1998
@@ -26,7 +26,7 @@
 static const char rcsid[] =
     "@(#) Header: /tcpdump/master/libpcap/pcap-bpf.c,v 1.67.2.4 2003/11/22 00:06:28 guy Exp  (LBL)";
 #else
-__RCSID("$NetBSD: pcap-bpf.c,v 1.14 2005/06/10 19:00:09 dyoung Exp $");
+__RCSID("$NetBSD: pcap-bpf.c,v 1.13 2004/12/02 00:05:02 christos Exp $");
 #endif
 #endif
 
@@ -460,7 +460,7 @@ bpf_open(pcap_t *p, char *errbuf)
 {
 	int fd;
 #ifndef _PATH_BPF
-	int flags, n, tries;
+	int n = 0;
 	char device[sizeof "/dev/bpf0000000000"];
 #else
 	const char *device = _PATH_BPF;
@@ -480,14 +480,10 @@ bpf_open(pcap_t *p, char *errbuf)
 	/*
 	 * Go through all the minors and find one that isn't in use.
 	 */
-	for (tries = 0, flags = O_RDWR; tries < 2; tries++, flags = O_RDONLY) {
-		n = 0;
-		do {
-			(void)snprintf(device, sizeof(device), "/dev/bpf%d",
-			    n++);
-			fd = open(device, flags);
-		} while (fd < 0 && (errno == EBUSY || errno == EACCES));
-	}
+	do {
+		(void)snprintf(device, sizeof(device), "/dev/bpf%d", n++);
+		fd = open(device, O_RDWR);
+	} while (fd < 0 && errno == EBUSY);
 
 	/*
 	 * XXX better message for all minors used
@@ -496,8 +492,7 @@ bpf_open(pcap_t *p, char *errbuf)
 		(void)snprintf(errbuf, PCAP_ERRBUF_SIZE,
 		    "(no devices found) %s: %s", device, pcap_strerror(errno));
 #else
-	if ((fd = open(device, O_RDWR)) == -1 &&
-	    (errno != EACCES || (fd = open(device, O_RDONLY)) == -1))
+	if ((fd = open(device, O_RDWR)) == -1)
 		(void)snprintf(errbuf, PCAP_ERRBUF_SIZE,
 		    "(cannot open device) %s: %s", device, pcap_strerror(errno));
 #endif

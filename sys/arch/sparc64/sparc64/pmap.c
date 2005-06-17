@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.c,v 1.164 2005/06/16 04:17:50 briggs Exp $	*/
+/*	$NetBSD: pmap.c,v 1.160 2005/02/22 16:21:07 martin Exp $	*/
 /*
  *
  * Copyright (C) 1996-1999 Eduardo Horvath.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.164 2005/06/16 04:17:50 briggs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.160 2005/02/22 16:21:07 martin Exp $");
 
 #undef	NO_VCACHE /* Don't forget the locked TLB in dostart */
 #define	HWREF
@@ -339,7 +339,7 @@ static void pmap_enter_kpage(vaddr_t va, int64_t data)
 #ifdef DEBUG
 static void pmap_bootdebug(void)
 {
-	const char *cp = prom_getbootargs();
+	char *cp = prom_getbootargs();
 
 	for (;;)
 		switch (*++cp) {
@@ -611,7 +611,7 @@ pmap_bootstrap(kernelstart, kernelend, maxctx)
 			prom_map_phys(newkp, szdiff, newkv, -1);
 		}
 	} else {
-		psize_t sz1;
+		psize_t sz;
 remap_data:
 		/*
 		 * Either we're not at a 4MB boundary or we can't get the rest
@@ -619,30 +619,30 @@ remap_data:
 		 * Leave 1MB of extra fiddle space in the calculations.
 		 */
 
-		sz1 = (kdsize + 4*MEG - 1) & ~(4*MEG-1);
+		sz = (kdsize + 4*MEG - 1) & ~(4*MEG-1);
 		BDPRINTF(PDB_BOOT1,
 			 ("Allocating new %lx kernel data at 4MB boundary\n",
-			  (u_long)sz1));
-		if ((newkp = prom_alloc_phys(sz1, 4*MEG)) == (paddr_t)-1 ) {
+			  (u_long)sz));
+		if ((newkp = prom_alloc_phys(sz, 4*MEG)) == (paddr_t)-1 ) {
 			prom_printf("Cannot allocate new kernel\n");
 			prom_halt();
 		}
 		BDPRINTF(PDB_BOOT1, ("Allocating new va for buffer at %llx\n",
 				     (u_int64_t)newkp));
-		if ((newkv = (vaddr_t)prom_alloc_virt(sz1, 8)) ==
+		if ((newkv = (vaddr_t)prom_alloc_virt(sz, 8)) ==
 		    (vaddr_t)-1) {
 			prom_printf("Cannot allocate new kernel va\n");
 			prom_halt();
 		}
 		BDPRINTF(PDB_BOOT1, ("Mapping in buffer %llx at %llx\n",
 		    (u_int64_t)newkp, (u_int64_t)newkv));
-		prom_map_phys(newkp, sz1, (vaddr_t)newkv, -1);
+		prom_map_phys(newkp, sz, (vaddr_t)newkv, -1);
 		BDPRINTF(PDB_BOOT1, ("Copying %ld bytes kernel data...",
 			kdsize));
-		memset((void*)newkv, 0, sz1);
+		memset((void*)newkv, 0, sz);
 		memcpy((void*)newkv, (void*)kdata, kdsize);
 		BDPRINTF(PDB_BOOT1, ("done.  Swapping maps..unmap new\n"));
-		prom_unmap_virt((vaddr_t)newkv, sz1);
+		prom_unmap_virt((vaddr_t)newkv, sz);
 		BDPRINTF(PDB_BOOT, ("remap old "));
 #if 0
 		/*
@@ -650,7 +650,7 @@ remap_data:
 		 * data segment so we can't do this.  */
 		prom_unmap_virt((vaddr_t)kdatap, kdsize);
 #endif
-		prom_map_phys(newkp, sz1, kdata, -1);
+		prom_map_phys(newkp, sz, kdata, -1);
 		/*
 		 * we will map in 4MB, more than we allocated, to allow
 		 * further allocation
@@ -859,7 +859,7 @@ remap_data:
 	/*
 	 * Allocate a 64MB page for the cpu_info structure now.
 	 */
-	if ((cpu0paddr = prom_alloc_phys(8 * PAGE_SIZE * sparc_ncpus, 8 * PAGE_SIZE)) == 0 ) {
+	if ((cpu0paddr = prom_alloc_phys(8 * PAGE_SIZE * ncpus, 8 * PAGE_SIZE)) == 0 ) {
 		prom_printf("Cannot allocate new cpu_info\n");
 		prom_halt();
 	}
@@ -1206,12 +1206,12 @@ remap_data:
 				vmmap));
 
 		while (vmmap < u0[1]) {
-			int64_t data1;
+			int64_t data;
 
 			if (!pmap_get_page(&pa))
 				panic("pmap_bootstrap: no pages");
 			prom_map_phys(pa, PAGE_SIZE, vmmap, -1);
-			data1 = TSB_DATA(0 /* global */,
+			data = TSB_DATA(0 /* global */,
 				PGSZ_8K,
 				pa,
 				1 /* priv */,
@@ -1220,7 +1220,7 @@ remap_data:
 				FORCE_ALIAS /* ALIAS -- Disable D$ */,
 				1 /* valid */,
 				0 /* IE */);
-			pmap_enter_kpage(vmmap, data1);
+			pmap_enter_kpage(vmmap, data);
 			vmmap += PAGE_SIZE;
 		}
 		BDPRINTF(PDB_BOOT1,
@@ -1251,9 +1251,9 @@ remap_data:
 		 */
 		prom_map_phys(pa, 64*KB, CPUINFO_VA, -1);
 		for (i = 0; i < 8; i++) {
-			int64_t data1;
+			int64_t data;
 
-			data1 = TSB_DATA(0 /* global */,
+			data = TSB_DATA(0 /* global */,
 				PGSZ_8K,
 				pa,
 				1 /* priv */,
@@ -1262,7 +1262,7 @@ remap_data:
 				FORCE_ALIAS /* ALIAS -- Disable D$ */,
 				1 /* valid */,
 				0 /* IE */);
-			pmap_enter_kpage(vmmap, data1);
+			pmap_enter_kpage(vmmap, data);
 			vmmap += PAGE_SIZE;
 			pa += PAGE_SIZE;
 		}
@@ -1329,7 +1329,7 @@ pmap_init()
 		(paddr_t)PAGE_SIZE, (paddr_t)0, &pglist, 1, 0) != 0)
 		panic("pmap_init: no memory");
 
-	va = uvm_km_alloc(kernel_map, size, 0, UVM_KMF_VAONLY);
+	va = uvm_km_valloc(kernel_map, size);
 	if (va == 0)
 		panic("pmap_init: no memory");
 
@@ -3383,13 +3383,13 @@ pmap_free_page(paddr_t pa)
 
 #ifdef DDB
 
-void db_dump_pv __P((db_expr_t, int, db_expr_t, const char *));
+void db_dump_pv __P((db_expr_t, int, db_expr_t, char *));
 void
 db_dump_pv(addr, have_addr, count, modif)
 	db_expr_t addr;
 	int have_addr;
 	db_expr_t count;
-	const char *modif;
+	char *modif;
 {
 	struct vm_page *pg;
 	struct pv_entry *pv;

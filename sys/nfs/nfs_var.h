@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_var.h,v 1.50 2005/05/29 20:58:13 christos Exp $	*/
+/*	$NetBSD: nfs_var.h,v 1.49.4.1 2006/07/16 12:21:21 ghen Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -126,7 +126,7 @@ int nfs_renamerpc __P((struct vnode *, const char *, int, struct vnode *,
 int nfs_readdirrpc __P((struct vnode *, struct uio *, struct ucred *));
 int nfs_readdirplusrpc __P((struct vnode *, struct uio *, struct ucred *));
 int nfs_sillyrename __P((struct vnode *, struct vnode *,
-			 struct componentname *));
+			 struct componentname *, boolean_t));
 int nfs_lookitup __P((struct vnode *, const char *, int, struct ucred *,
 		      struct proc *, struct nfsnode **));
 int nfs_commit __P((struct vnode *, off_t, uint32_t, struct proc *));
@@ -234,7 +234,7 @@ void nfs_sndunlock __P((int *));
 int nfs_rcvlock __P((struct nfsreq *));
 void nfs_rcvunlock __P((struct nfsmount *));
 int nfs_getreq __P((struct nfsrv_descript *, struct nfsd *, int));
-int nfs_msg __P((struct proc *, const char *, const char *));
+int nfs_msg __P((struct proc *, char *, char *));
 void nfsrv_rcv __P((struct socket *, caddr_t, int));
 int nfsrv_getstream __P((struct nfssvc_sock *, int));
 int nfsrv_dorec __P((struct nfssvc_sock *, struct nfsd *,

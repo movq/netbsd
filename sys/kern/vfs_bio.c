@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_bio.c,v 1.146 2005/06/09 02:19:59 atatat Exp $	*/
+/*	$NetBSD: vfs_bio.c,v 1.142.2.1 2005/04/03 13:28:23 tron Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -81,7 +81,7 @@
 #include "opt_softdep.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_bio.c,v 1.146 2005/06/09 02:19:59 atatat Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_bio.c,v 1.142.2.1 2005/04/03 13:28:23 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -213,17 +213,15 @@ static void *
 bufpool_page_alloc(struct pool *pp, int flags)
 {
 
-	return (void *)uvm_km_alloc(buf_map,
-	    MAXBSIZE, MAXBSIZE,
-	    ((flags & PR_WAITOK) ? 0 : UVM_KMF_NOWAIT | UVM_KMF_TRYLOCK)
-	    | UVM_KMF_WIRED);
+	return (void *)uvm_km_kmemalloc1(buf_map,
+	    uvm.kernel_object, MAXBSIZE, MAXBSIZE, UVM_UNKNOWN_OFFSET,
+	    (flags & PR_WAITOK) ? 0 : UVM_KMF_NOWAIT | UVM_KMF_TRYLOCK);
 }
 
 static void
 bufpool_page_free(struct pool *pp, void *v)
 {
-
-	uvm_km_free(buf_map, (vaddr_t)v, MAXBSIZE, UVM_KMF_WIRED);
+	uvm_km_free(buf_map, (vaddr_t)v, MAXBSIZE);
 }
 
 static struct pool_allocator bufmempool_allocator = {
@@ -1711,7 +1709,7 @@ vfs_bufstats(void)
 	struct buf *bp;
 	struct bqueue *dp;
 	int counts[(MAXBSIZE / PAGE_SIZE) + 1];
-	static const char *bname[BQUEUES] = { "LOCKED", "LRU", "AGE" };
+	static char *bname[BQUEUES] = { "LOCKED", "LRU", "AGE" };
 
 	for (dp = bufqueues, i = 0; dp < &bufqueues[BQUEUES]; dp++, i++) {
 		count = 0;

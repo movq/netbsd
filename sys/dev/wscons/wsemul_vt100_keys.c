@@ -1,4 +1,4 @@
-/* $NetBSD: wsemul_vt100_keys.c,v 1.8 2005/05/29 21:56:35 christos Exp $ */
+/* $NetBSD: wsemul_vt100_keys.c,v 1.7 2004/07/28 12:34:05 jmmv Exp $ */
 
 /*
  * Copyright (c) 1998
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wsemul_vt100_keys.c,v 1.8 2005/05/29 21:56:35 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wsemul_vt100_keys.c,v 1.7 2004/07/28 12:34:05 jmmv Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -38,7 +38,7 @@ __KERNEL_RCSID(0, "$NetBSD: wsemul_vt100_keys.c,v 1.8 2005/05/29 21:56:35 christ
 #include <dev/wscons/wsksymdef.h>
 #include <dev/wscons/wsemul_vt100var.h>
 
-static const char *vt100_fkeys[] = {
+static char *vt100_fkeys[] = {
 	"\033[11~",	/* F1 */
 	"\033[12~",
 	"\033[13~",		/* F1-F5 normally don't send codes */
@@ -61,14 +61,14 @@ static const char *vt100_fkeys[] = {
 	"\033[34~",	/* F20 */
 };
 
-static const char *vt100_pfkeys[] = {
+static char *vt100_pfkeys[] = {
 	"\033OP",	/* PF1 */
 	"\033OQ",
 	"\033OR",
 	"\033OS",	/* PF4 */
 };
 
-static const char *vt100_numpad[] = {
+static char *vt100_numpad[] = {
 	"\033Op",	/* KP 0 */
 	"\033Oq",	/* KP 1 */
 	"\033Or",	/* KP 2 */
@@ -82,7 +82,7 @@ static const char *vt100_numpad[] = {
 };
 
 int
-wsemul_vt100_translate(void *cookie, keysym_t in, const char **out)
+wsemul_vt100_translate(void *cookie, keysym_t in, char **out)
 {
 	struct wsemul_vt100_emuldata *edp = cookie;
 	static char c;

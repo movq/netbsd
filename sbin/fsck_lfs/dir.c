@@ -1,4 +1,4 @@
-/* $NetBSD: dir.c,v 1.15 2005/06/08 19:09:55 perseant Exp $	 */
+/* $NetBSD: dir.c,v 1.14 2005/01/19 19:41:59 xtraeme Exp $	 */
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -541,7 +541,7 @@ makeentry(ino_t parent, ino_t ino, char *name)
 static int
 expanddir(struct uvnode *vp, struct ufs1_dinode *dp, char *name)
 {
-	daddr_t lastbn;
+	daddr_t lastbn, newblk;
 	struct ubuf *bp;
 	char *cp, firstblk[DIRBLKSIZ];
 
@@ -559,7 +559,7 @@ expanddir(struct uvnode *vp, struct ufs1_dinode *dp, char *name)
 	if (bp->b_flags & B_ERROR)
 		goto bad;
 	memcpy(firstblk, bp->b_data, DIRBLKSIZ);
-	bread(vp, lastbn, fs->lfs_bsize, NOCRED, &bp);
+	bread(vp, newblk, fs->lfs_bsize, NOCRED, &bp);
 	if (bp->b_flags & B_ERROR)
 		goto bad;
 	memcpy(bp->b_data, firstblk, DIRBLKSIZ);
@@ -586,6 +586,7 @@ bad:
 	dp->di_db[lastbn + 1] = 0;
 	dp->di_size -= fs->lfs_bsize;
 	dp->di_blocks -= btofsb(fs, fs->lfs_bsize);
+	freeblk(newblk, fs->lfs_frag);
 	return (0);
 }
 

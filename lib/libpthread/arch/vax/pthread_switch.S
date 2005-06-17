@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread_switch.S,v 1.6 2005/04/09 20:53:19 matt Exp $	*/
+/*	$NetBSD: pthread_switch.S,v 1.5 2003/09/07 14:47:56 cl Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2003 The NetBSD Foundation, Inc.
@@ -62,17 +62,13 @@
  */
 	
 #define STACK_SWITCH(pt)	\
-	movl	PT_TRAPUC(pt),%sp; \
+	movl	PT_TRAPUC(pt),%sp ; \
 	bneq	1f; \
 	movl	PT_UC(pt),%sp; \
-1:	subl2	$STACKSPACE,%sp; \
-	clrl	PT_TRAPUC(pt)
+1:	clrl	PT_TRAPUC(pt)
 
-/*
- * void pthread__switch(pthread_t self, pthread_t next);
- */
 ENTRY(pthread__switch, 0)
-	subl2	$CONTEXTSIZE, %sp
+	movab	-(CONTEXTSIZE)(%sp), %sp
 
 	/* Get the current context */
 	pushl	%sp
@@ -96,15 +92,9 @@ switch_return_point:
 /*
  * Helper switch code used by pthread__locked_switch() and 
  * pthread__upcall_switch() when they discover spinlock preemption.
- *
- * r3 = new pthread_t
- * r4 = lock flags
- * r5 = old pthread_t
  */
 
-	.globl	pthread__switch_away
 pthread__switch_away:
-switch_away:
 	STACK_SWITCH(%r3)
 
 	/* If we're invoked from the switch-to-next provisions of
@@ -121,8 +111,8 @@ switch_away:
  *           pt_spin_t *lock);
  */
 ENTRY(pthread__locked_switch, 0)
-	subl2	$CONTEXTSIZE,%sp
-	movl	8(%ap),%r5		/* r5 = next */
+	movab	-(CONTEXTSIZE)(%sp),%sp
+	movl	8(%ap),%r5
 
 	/* Make sure we get continuted */
 	incl	PT_SPINLOCKS(%r5)
@@ -131,7 +121,7 @@ ENTRY(pthread__locked_switch, 0)
 	pushl	%sp
 	calls	$1, _getcontext_u
 
-	movl	4(%ap),%r4		/* r4 = self */
+	movq	4(%ap),%r4
 
 	/* Edit the context to make it continue below, rather than here */
 	movab	locked_return_point, (UC_GREGS + _REG_PC)(%sp)
@@ -139,31 +129,27 @@ ENTRY(pthread__locked_switch, 0)
 
 	STACK_SWITCH(%r5)	/* sp = next->pt_uc */
 
-	/*
-	 * Check if the original thread was preempted while holding
-	 * its queue lock.
-	 */
+	/* Check if the switcher was preempted and continued to here. */
 	movl	PT_NEXT(%r4),%r3
 	beql	1f
 
-	/*
-	 * Yes, it was. Stash the thread we were going to
-	 * switch to, the lock the original thread was holding, 
-	 * and go to the next thread in the chain.
+	/* Yes, it was. Stash the thread we were going to switch to,
+	 * the lock the original thread was holding, 
+	 * and switch to the next thread in the continuation chain.
 	 * Mark the fact that this was a locked switch, and so the
 	 * thread does not need to be put on a run queue.
 	 * Don't release the lock. It's possible that if we do so,
 	 * PT_SWITCHTO will be stomped by another switch_lock and
 	 * preemption.
 	 */
+	movl	12(%ap), PT_HELDLOCK(%r4)
 	movl	%sp, PT_SWITCHTOUC(%r4)
 	movl	%r5, PT_SWITCHTO(%r4)
-	movl	12(%ap), PT_HELDLOCK(%r4)
-	decl	PT_SPINLOCKS(%r4)
+	incl	PT_SPINLOCKS(%r4)
 
-	movl	%r3, %r5		/* r3 = self->pt_next */
+	/* %r3 = self->pt_next */
 	movl	$1, %r4
-	jbr	switch_away		/* r3 = next, r5 = next */
+	brw	pthread__switch_away
 
 	/* No locked old-preemption */
 1:	/* We've moved to the new stack, and the old context has been 
@@ -176,18 +162,17 @@ ENTRY(pthread__locked_switch, 0)
 	clrl	*12(%ap)
 
 	/* .. and remove the fake lock */
-	decl	PT_SPINLOCKS(%r5)
+	incl	PT_SPINLOCKS(%r5)
 	
 	/* Check if we were preempted while holding the fake lock. */
 	movl	PT_NEXT(%r5),%r3
 	jeql	setcontext
 	
-	/* Yes, we were. Bummer. Go to the next element in the chain. */
+	/* Yes, we were. Go to the next element in the chain. */
 	movl	%sp, PT_SWITCHTOUC(%r5)
 	movl	%r5, PT_SWITCHTO(%r5)
-	movl	PT_NEXT(%r5), %r3
-	movl	$2, %r4
-	jbr	switch_away
+	clrl	%r4
+	brw	pthread__switch_away
 	NOTREACHED
 
 locked_return_point:	
@@ -200,16 +185,16 @@ locked_return_point:
  */
 
 ENTRY(pthread__upcall_switch, 0)
-	movq	4(%ap),%r4		/* r4 = self, r5 = next */
+	movq	4(%ap),%r4
 
 	/*
-	 * this code never returns, so we can treat r0-r5 as
+	 * this code never returns, so we can treat s0-s6 as
 	 * convenient registers that will be saved for us by callees,
 	 * but that we do not have to save.
 	 */
 	
 	/* Create a "fake" lock count so that this code will be continued */
-	incl	PT_SPINLOCKS(%r5)
+	incl	PT_SPINLOCKS(%r4)
 
 	STACK_SWITCH(%r5)
 
@@ -220,12 +205,10 @@ ENTRY(pthread__upcall_switch, 0)
 	/* Yes, it was. Stash the thread we were going to switch to,
 	 * and switch to the next thread in the continuation chain.
 	 */
-	movl	%sp,PT_SWITCHTOUC(%r4)
+	movl	%sp, PT_SWITCHTOUC(%r4)
 	movq	%r5,PT_SWITCHTO(%r4)
-	movl	PT_NEXT(%r4), %r3
-	movl	%r4, %r5
-	movl	$1, %r4
-	jbr	switch_away
+	movl	$1,%r4
+	brw	pthread__switch_away
 	
 	/* No old-upcall-preemption */
 1:	movq	%r4,-(%sp)
@@ -246,6 +229,5 @@ ENTRY(pthread__upcall_switch, 0)
 	 */
 	movl	%sp, PT_SWITCHTOUC(%r5)
 	movl	%r5, PT_SWITCHTO(%r5)
-	movl	PT_NEXT(%r5), %r3
-	movl	$1, %r4
-	jbr	switch_away	
+	clrl	%r4
+	brw	pthread__switch_away	

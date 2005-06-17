@@ -1,4 +1,4 @@
-/*	$NetBSD: switch_subr.s,v 1.12 2005/04/14 12:35:42 scw Exp $	*/
+/*	$NetBSD: switch_subr.s,v 1.11.14.1 2005/04/14 13:32:29 tron Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation.

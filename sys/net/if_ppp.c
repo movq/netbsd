@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ppp.c,v 1.101 2005/05/29 21:22:52 christos Exp $	*/
+/*	$NetBSD: if_ppp.c,v 1.96 2005/02/26 22:45:09 perry Exp $	*/
 /*	Id: if_ppp.c,v 1.6 1997/03/04 03:33:00 paulus Exp 	*/
 
 /*
@@ -102,7 +102,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ppp.c,v 1.101 2005/05/29 21:22:52 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ppp.c,v 1.96 2005/02/26 22:45:09 perry Exp $");
 
 #include "ppp.h"
 
@@ -521,13 +521,13 @@ pppioctl(sc, cmd, data, flag, p)
     case PPPIOCGRAWIN:
 	{
 	    struct ppp_rawin *rwin = (struct ppp_rawin *)data;
-	    u_char c, q = 0;
+	    u_char p, q = 0;
 
-	    for (c = sc->sc_rawin_start; c < sizeof(sc->sc_rawin.buf);)
-		rwin->buf[q++] = sc->sc_rawin.buf[c++];
+	    for (p = sc->sc_rawin_start; p < sizeof(sc->sc_rawin.buf);)
+		rwin->buf[q++] = sc->sc_rawin.buf[p++];
 
-	    for (c = 0; c < sc->sc_rawin_start;)
-		rwin->buf[q++] = sc->sc_rawin.buf[c++];
+	    for (p = 0; p < sc->sc_rawin_start;)
+		rwin->buf[q++] = sc->sc_rawin.buf[p++];
 
 	    rwin->count = sc->sc_rawin.count;
 	}
@@ -1024,9 +1024,24 @@ pppoutput(ifp, m0, dst, rtp)
 	m0->m_nextpkt = NULL;
 	sc->sc_npqtail = &m0->m_nextpkt;
     } else {
-	ifq = (m0->m_flags & M_HIGHPRI) ? &sc->sc_fastq : NULL;
-	if ((error = ifq_enqueue2(&sc->sc_if, ifq, m0
-		ALTQ_COMMA ALTQ_DECL(&pktattr))) != 0) {
+	if ((m0->m_flags & M_HIGHPRI)
+#ifdef ALTQ
+	    && ALTQ_IS_ENABLED(&sc->sc_if.if_snd) == 0
+#endif
+	    ) {
+	    ifq = &sc->sc_fastq;
+	    if (IF_QFULL(ifq) && dst->sa_family != AF_UNSPEC) {
+	        IF_DROP(ifq);
+		splx(s);
+		error = ENOBUFS;
+		goto bad;
+	    } else {
+		IF_ENQUEUE(ifq, m0);
+		error = 0;
+	    }
+	} else
+	    IFQ_ENQUEUE(&sc->sc_if.if_snd, m0, &pktattr, error);
+	if (error) {
 	    splx(s);
 	    sc->sc_if.if_oerrors++;
 	    sc->sc_stats.ppp_oerrors++;
@@ -1078,9 +1093,23 @@ ppp_requeue(sc)
 	     */
 	    *mpp = m->m_nextpkt;
 	    m->m_nextpkt = NULL;
-	    ifq = (m->m_flags & M_HIGHPRI) ? &sc->sc_fastq : NULL;
-	    if ((error = ifq_enqueue2(&sc->sc_if, ifq, m ALTQ_COMMA
-		ALTQ_DECL(NULL))) != 0) {
+	    if ((m->m_flags & M_HIGHPRI)
+#ifdef ALTQ
+		&& ALTQ_IS_ENABLED(&sc->sc_if.if_snd) == 0
+#endif
+		) {
+		ifq = &sc->sc_fastq;
+		if (IF_QFULL(ifq)) {
+		    IF_DROP(ifq);
+		    m_freem(m);
+		    error = ENOBUFS;
+		} else {
+		    IF_ENQUEUE(ifq, m);
+		    error = 0;
+		}
+	    } else
+		IFQ_ENQUEUE(&sc->sc_if.if_snd, m, NULL, error);
+	    if (error) {
 		sc->sc_if.if_oerrors++;
 		sc->sc_stats.ppp_oerrors++;
 	    }
@@ -1756,6 +1785,7 @@ pppdumpm(m0)
     char buf[3*MAX_DUMP_BYTES+4];
     char *bp = buf;
     struct mbuf *m;
+    static char digits[] = "0123456789abcdef";
 
     for (m = m0; m; m = m->m_next) {
 	int l = m->m_len;
@@ -1764,8 +1794,8 @@ pppdumpm(m0)
 	while (l--) {
 	    if (bp > buf + sizeof(buf) - 4)
 		goto done;
-	    *bp++ = hexdigits[*rptr >> 4]; /* convert byte to ascii hex */
-	    *bp++ = hexdigits[*rptr++ & 0xf];
+	    *bp++ = digits[*rptr >> 4]; /* convert byte to ascii hex */
+	    *bp++ = digits[*rptr++ & 0xf];
 	}
 
 	if (m->m_next) {

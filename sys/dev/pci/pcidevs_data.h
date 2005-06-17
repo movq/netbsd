@@ -1,10 +1,10 @@
-/*	$NetBSD: pcidevs_data.h,v 1.718 2005/06/15 17:59:14 bouyer Exp $	*/
+/*	$NetBSD: pcidevs_data.h,v 1.700.2.36 2006/08/27 09:38:24 ghen Exp $	*/
 
 /*
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.
  *
  * generated from:
- *	NetBSD: pcidevs,v 1.719 2005/06/15 17:58:02 bouyer Exp
+ *	NetBSD: pcidevs,v 1.701.2.37 2006/08/15 10:58:21 ghen Exp
  */
 
 /*
@@ -913,7 +913,7 @@ const struct pci_vendor pci_vendors[] = {
 	},
 	{
 	    PCI_VENDOR_NVIDIA,
-	    "Nvidia",
+	    "NVIDIA",
 	},
 	{
 	    PCI_VENDOR_EMULEX,
@@ -1348,7 +1348,7 @@ const struct pci_vendor pci_vendors[] = {
 	    "Nikon Systems",
 	},
 	{
-	    PCI_VENDOR_DIGIINTERNAT,
+	    PCI_VENDOR_DIGI,
 	    "Digi International",
 	},
 	{
@@ -1768,7 +1768,7 @@ const struct pci_vendor pci_vendors[] = {
 	    "Dolphin Interconnect Solutions",
 	},
 	{
-	    PCI_VENDOR_MRTMAGMA,
+	    PCI_VENDOR_MAGMA,
 	    "Mesa Ridge Technologies (MAGMA)",
 	},
 	{
@@ -1810,6 +1810,10 @@ const struct pci_vendor pci_vendors[] = {
 	{
 	    PCI_VENDOR_PMCSIERRA,
 	    "PMC-Sierra",
+	},
+	{
+	    PCI_VENDOR_COMTROL,
+	    "Comtrol",
 	},
 	{
 	    PCI_VENDOR_CYCLADES,
@@ -1886,6 +1890,10 @@ const struct pci_vendor pci_vendors[] = {
 	{
 	    PCI_VENDOR_INTERSIL,
 	    "Intersil",
+	},
+	{
+	    PCI_VENDOR_NORTEL,
+	    "Nortel Networks (Northern Telecom)",
 	},
 	{
 	    PCI_VENDOR_SILMOTION,
@@ -1988,6 +1996,10 @@ const struct pci_vendor pci_vendors[] = {
 	    "Netgear",
 	},
 	{
+	    PCI_VENDOR_MOXA,
+	    "Moxa Technologies",
+	},
+	{
 	    PCI_VENDOR_LEVELONE,
 	    "Level One",
 	},
@@ -2026,10 +2038,6 @@ const struct pci_vendor pci_vendors[] = {
 	{
 	    PCI_VENDOR_ETIMEDIA,
 	    "eTIMedia Technology",
-	},
-	{
-	    PCI_VENDOR_ICENSEMBLE,
-	    "IC Ensemble / VIA Technologies",
 	},
 	{
 	    PCI_VENDOR_MICROSOFT,
@@ -2146,6 +2154,10 @@ const struct pci_vendor pci_vendors[] = {
 	{
 	    PCI_VENDOR_GLOBALSUN,
 	    "Global Sun Tech",
+	},
+	{
+	    PCI_VENDOR_SAFENET,
+	    "SafeNet",
 	},
 	{
 	    PCI_VENDOR_LINKSYS,
@@ -2316,7 +2328,7 @@ const struct pci_vendor pci_vendors[] = {
 	    "INVALID VENDOR ID",
 	},
 };
-const int pci_nvendors = 569;
+const int pci_nvendors = 572;
 
 const struct pci_product pci_products[] = {
 	{
@@ -2578,6 +2590,14 @@ const struct pci_product pci_products[] = {
 	{
 	    PCI_VENDOR_3WARE, PCI_PRODUCT_3WARE_ESCALADE_ASIC,
 	    "Escalade IDE RAID (ASIC)",
+	},
+	{
+	    PCI_VENDOR_3WARE, PCI_PRODUCT_3WARE_9000,
+	    "9000-series RAID",
+	},
+	{
+	    PCI_VENDOR_3WARE, PCI_PRODUCT_3WARE_9550,
+	    "9550-series RAID",
 	},
 	{
 	    PCI_VENDOR_ABOCOM, PCI_PRODUCT_ABOCOM_FE2500,
@@ -3404,8 +3424,16 @@ const struct pci_product pci_products[] = {
 	    "ISDN",
 	},
 	{
+	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_RADEON_M24_1P,
+	    "Radeon Mobility X600",
+	},
+	{
 	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_RADEON_A3,
 	    "Radeon Mobility A3",
+	},
+	{
+	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_RADEON_9600_LE,
+	    "Radeon 9600 LE",
 	},
 	{
 	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_RADEON_9600_XT,
@@ -3414,6 +3442,10 @@ const struct pci_product pci_products[] = {
 	{
 	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_MACH32,
 	    "Mach32",
+	},
+	{
+	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_RADEON_9600_LE_S,
+	    "Radeon 9600 LE Secondary",
 	},
 	{
 	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_RADEON_9600_XT_S,
@@ -3556,6 +3588,10 @@ const struct pci_product pci_products[] = {
 	    "3D Rage IIC (AGP)",
 	},
 	{
+	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_RADEON_9000_PRO,
+	    "Radeon 9000 Pro",
+	},
+	{
 	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_RAGE_LT_PRO_AGP,
 	    "3D Rage LT Pro (AGP 133MHz)",
 	},
@@ -3654,10 +3690,6 @@ const struct pci_product pci_products[] = {
 	{
 	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_RADEON_9800_PRO,
 	    "Radeon 9800 Pro",
-	},
-	{
-	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_RADEON_MOB_9700,
-	    "Mobility Radeon 9700",
 	},
 	{
 	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_RADEON_MOB_T2,
@@ -3870,6 +3902,18 @@ const struct pci_product pci_products[] = {
 	{
 	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_RS300_AGP,
 	    "RS300 AGP Interface",
+	},
+	{
+	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_RADEON_9200_PRO_S,
+	    "Radeon 9200 Pro Secondary",
+	},
+	{
+	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_RADEON_9200_S,
+	    "Radeon 9200 Secondary",
+	},
+	{
+	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_RADEON_9200_PRO,
+	    "Radeon 9200 Pro",
 	},
 	{
 	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_RADEON_9200,
@@ -4120,6 +4164,22 @@ const struct pci_product pci_products[] = {
 	    "BCM5705 10/100/1000 Ethernet",
 	},
 	{
+	    PCI_VENDOR_BROADCOM, PCI_PRODUCT_BROADCOM_BCM5714,
+	    "BCM5714 10/100/1000 Ethernet",
+	},
+	{
+	    PCI_VENDOR_BROADCOM, PCI_PRODUCT_BROADCOM_BCM5714S,
+	    "BCM5714S 1000baseX Ethernet",
+	},
+	{
+	    PCI_VENDOR_BROADCOM, PCI_PRODUCT_BROADCOM_BCM5715,
+	    "BCM5715 10/100/1000 Ethernet",
+	},
+	{
+	    PCI_VENDOR_BROADCOM, PCI_PRODUCT_BROADCOM_BCM5715S,
+	    "BCM5715S 1000baseX Ethernet",
+	},
+	{
 	    PCI_VENDOR_BROADCOM, PCI_PRODUCT_BROADCOM_BCM5721,
 	    "BCM5721 10/100/1000 Ethernet",
 	},
@@ -4132,8 +4192,24 @@ const struct pci_product pci_products[] = {
 	    "BCM5751 10/100/1000 Ethernet",
 	},
 	{
+	    PCI_VENDOR_BROADCOM, PCI_PRODUCT_BROADCOM_BCM5752,
+	    "BCM5752 10/100/1000 Ethernet",
+	},
+	{
 	    PCI_VENDOR_BROADCOM, PCI_PRODUCT_BROADCOM_BCM5750M,
 	    "BCM5750M 10/100/1000 Ethernet",
+	},
+	{
+	    PCI_VENDOR_BROADCOM, PCI_PRODUCT_BROADCOM_BCM5751M,
+	    "BCM5751M 10/100/1000 Ethernet",
+	},
+	{
+	    PCI_VENDOR_BROADCOM, PCI_PRODUCT_BROADCOM_BCM5780,
+	    "BCM5780 1000baseT Ethernet",
+	},
+	{
+	    PCI_VENDOR_BROADCOM, PCI_PRODUCT_BROADCOM_BCM5780S,
+	    "BCM5780S 1000baseX Ethernet",
 	},
 	{
 	    PCI_VENDOR_BROADCOM, PCI_PRODUCT_BROADCOM_BCM5782,
@@ -4142,6 +4218,10 @@ const struct pci_product pci_products[] = {
 	{
 	    PCI_VENDOR_BROADCOM, PCI_PRODUCT_BROADCOM_BCM5788,
 	    "BCM5788 10/100/1000 Ethernet",
+	},
+	{
+	    PCI_VENDOR_BROADCOM, PCI_PRODUCT_BROADCOM_BCM5789,
+	    "BCM5789 10/100/1000 Ethernet",
 	},
 	{
 	    PCI_VENDOR_BROADCOM, PCI_PRODUCT_BROADCOM_BCM4401_B0,
@@ -4484,6 +4564,38 @@ const struct pci_product pci_products[] = {
 	    "Smart Array 532",
 	},
 	{
+	    PCI_VENDOR_COMPAQ, PCI_PRODUCT_COMPAQ_CSA5312,
+	    "Smart Array 5312",
+	},
+	{
+	    PCI_VENDOR_COMPAQ, PCI_PRODUCT_COMPAQ_CSA6i,
+	    "Smart Array 6i",
+	},
+	{
+	    PCI_VENDOR_COMPAQ, PCI_PRODUCT_COMPAQ_CSA641,
+	    "Smart Array 641",
+	},
+	{
+	    PCI_VENDOR_COMPAQ, PCI_PRODUCT_COMPAQ_CSA642,
+	    "Smart Array 642",
+	},
+	{
+	    PCI_VENDOR_COMPAQ, PCI_PRODUCT_COMPAQ_CSA6400,
+	    "Smart Array 6400",
+	},
+	{
+	    PCI_VENDOR_COMPAQ, PCI_PRODUCT_COMPAQ_CSA6400EM,
+	    "Smart Array 6400 EM",
+	},
+	{
+	    PCI_VENDOR_COMPAQ, PCI_PRODUCT_COMPAQ_CSA6422,
+	    "Smart Array 6422",
+	},
+	{
+	    PCI_VENDOR_COMPAQ, PCI_PRODUCT_COMPAQ_CSA64XX,
+	    "Smart Array 64xx",
+	},
+	{
 	    PCI_VENDOR_COMPAQ, PCI_PRODUCT_COMPAQ_USB,
 	    "USB Controller",
 	},
@@ -4532,8 +4644,20 @@ const struct pci_product pci_products[] = {
 	    "Deskpro 4000 5233MMX",
 	},
 	{
+	    PCI_VENDOR_COMPAQ, PCI_PRODUCT_COMPAQ_CSA5300_2,
+	    "Smart Array 5300 rev.2",
+	},
+	{
+	    PCI_VENDOR_COMPAQ, PCI_PRODUCT_COMPAQ_PRESARIO56XX,
+	    "Presario 56xx",
+	},
+	{
 	    PCI_VENDOR_COMPAQ, PCI_PRODUCT_COMPAQ_M700,
 	    "Armada M700",
+	},
+	{
+	    PCI_VENDOR_COMPAQ, PCI_PRODUCT_COMPAQ_CSA5i_2,
+	    "Smart Array 5i/532 rev.2",
 	},
 	{
 	    PCI_VENDOR_COMPAQ, PCI_PRODUCT_COMPAQ_NF3P_BNC,
@@ -4554,6 +4678,66 @@ const struct pci_product pci_products[] = {
 	{
 	    PCI_VENDOR_COMPEX, PCI_PRODUCT_COMPEX_RL100TX,
 	    "RL100-TX 10/100 Ethernet",
+	},
+	{
+	    PCI_VENDOR_COMTROL, PCI_PRODUCT_COMTROL_ROCKETPORT32EXT,
+	    "RocketPort 32 port external",
+	},
+	{
+	    PCI_VENDOR_COMTROL, PCI_PRODUCT_COMTROL_ROCKETPORT8EXT,
+	    "RocketPort 8 port external",
+	},
+	{
+	    PCI_VENDOR_COMTROL, PCI_PRODUCT_COMTROL_ROCKETPORT16EXT,
+	    "RocketPort 16 port external",
+	},
+	{
+	    PCI_VENDOR_COMTROL, PCI_PRODUCT_COMTROL_ROCKETPORT4QUAD,
+	    "RocketPort 4 port w/ quad cable",
+	},
+	{
+	    PCI_VENDOR_COMTROL, PCI_PRODUCT_COMTROL_ROCKETPORT8OCTA,
+	    "RocketPort 8 port w/ octa cable",
+	},
+	{
+	    PCI_VENDOR_COMTROL, PCI_PRODUCT_COMTROL_ROCKETPORT8RJ,
+	    "RocketPort 8 port w/ RJ11s",
+	},
+	{
+	    PCI_VENDOR_COMTROL, PCI_PRODUCT_COMTROL_ROCKETPORT4RJ,
+	    "RocketPort 4 port w/ RJ11s",
+	},
+	{
+	    PCI_VENDOR_COMTROL, PCI_PRODUCT_COMTROL_ROCKETPORT8DB,
+	    "RocketPort 8 port w/ DB78",
+	},
+	{
+	    PCI_VENDOR_COMTROL, PCI_PRODUCT_COMTROL_ROCKETPORT16DB,
+	    "RocketPort 16 port w/ DB78",
+	},
+	{
+	    PCI_VENDOR_COMTROL, PCI_PRODUCT_COMTROL_ROCKETPORTP4,
+	    "RocketPort Plus 4 port",
+	},
+	{
+	    PCI_VENDOR_COMTROL, PCI_PRODUCT_COMTROL_ROCKETPORTP8,
+	    "RocketPort Plus 8 port",
+	},
+	{
+	    PCI_VENDOR_COMTROL, PCI_PRODUCT_COMTROL_ROCKETMODEM6,
+	    "RocketModem 6 port",
+	},
+	{
+	    PCI_VENDOR_COMTROL, PCI_PRODUCT_COMTROL_ROCKETMODEM4,
+	    "RocketModem 4 port",
+	},
+	{
+	    PCI_VENDOR_COMTROL, PCI_PRODUCT_COMTROL_ROCKETPORTP232,
+	    "RocketPort 2 port RS232",
+	},
+	{
+	    PCI_VENDOR_COMTROL, PCI_PRODUCT_COMTROL_ROCKETPORTP422,
+	    "RocketPort 2 port RS422",
 	},
 	{
 	    PCI_VENDOR_CONEXANT, PCI_PRODUCT_CONEXANT_SOFTK56,
@@ -4852,6 +5036,14 @@ const struct pci_product pci_products[] = {
 	    "DGE-528T Gigabit Ethernet",
 	},
 	{
+	    PCI_VENDOR_DLINK, PCI_PRODUCT_DLINK_DGE560T,
+	    "DGE-560T Gigabit Ethernet",
+	},
+	{
+	    PCI_VENDOR_DLINK, PCI_PRODUCT_DLINK_DGE560T_2,
+	    "DGE-560T_2 Gigabit Ethernet",
+	},
+	{
 	    PCI_VENDOR_DLINK, PCI_PRODUCT_DLINK_DGE530T,
 	    "DGE-530T Gigabit Ethernet",
 	},
@@ -4876,8 +5068,16 @@ const struct pci_product pci_products[] = {
 	    "Memory Controller",
 	},
 	{
-	    PCI_VENDOR_DOLPHIN, PCI_PRODUCT_DOLPHIN_PCISCI,
-	    "PCI-SCI Bridge",
+	    PCI_VENDOR_DOLPHIN, PCI_PRODUCT_DOLPHIN_PCISCI32,
+	    "PCI-SCI Bridge (32-bit, 33 MHz)",
+	},
+	{
+	    PCI_VENDOR_DOLPHIN, PCI_PRODUCT_DOLPHIN_PCISCI64,
+	    "PCI-SCI Bridge (64-bit, 33 MHz)",
+	},
+	{
+	    PCI_VENDOR_DOLPHIN, PCI_PRODUCT_DOLPHIN_PCISCI66,
+	    "PCI-SCI Bridge (64-bit, 66 MHz)",
 	},
 	{
 	    PCI_VENDOR_DOMEX, PCI_PRODUCT_DOMEX_PCISCSI,
@@ -5220,6 +5420,98 @@ const struct pci_product pci_products[] = {
 	    "NetRaid-4M",
 	},
 	{
+	    PCI_VENDOR_HP, PCI_PRODUCT_HP_HPSAV100,
+	    "Smart Array V100",
+	},
+	{
+	    PCI_VENDOR_HP, PCI_PRODUCT_HP_HPSAE200I_1,
+	    "Smart Array E200i",
+	},
+	{
+	    PCI_VENDOR_HP, PCI_PRODUCT_HP_HPSAE200,
+	    "Smart Array E200",
+	},
+	{
+	    PCI_VENDOR_HP, PCI_PRODUCT_HP_HPSAE200I_2,
+	    "Smart Array E200i",
+	},
+	{
+	    PCI_VENDOR_HP, PCI_PRODUCT_HP_HPSAE200I_3,
+	    "Smart Array E200i",
+	},
+	{
+	    PCI_VENDOR_HP, PCI_PRODUCT_HP_HPSAE200I_4,
+	    "Smart Array E200i",
+	},
+	{
+	    PCI_VENDOR_HP, PCI_PRODUCT_HP_HPSA_1,
+	    "Smart Array",
+	},
+	{
+	    PCI_VENDOR_HP, PCI_PRODUCT_HP_HPSA_2,
+	    "Smart Array",
+	},
+	{
+	    PCI_VENDOR_HP, PCI_PRODUCT_HP_HPSAP800,
+	    "Smart Array P600",
+	},
+	{
+	    PCI_VENDOR_HP, PCI_PRODUCT_HP_HPSAP600,
+	    "Smart Array P600",
+	},
+	{
+	    PCI_VENDOR_HP, PCI_PRODUCT_HP_HPSA_3,
+	    "Smart Array",
+	},
+	{
+	    PCI_VENDOR_HP, PCI_PRODUCT_HP_HPSA_4,
+	    "Smart Array",
+	},
+	{
+	    PCI_VENDOR_HP, PCI_PRODUCT_HP_HPSA_5,
+	    "Smart Array",
+	},
+	{
+	    PCI_VENDOR_HP, PCI_PRODUCT_HP_HPSA_6,
+	    "Smart Array",
+	},
+	{
+	    PCI_VENDOR_HP, PCI_PRODUCT_HP_HPSAP400,
+	    "Smart Array P400",
+	},
+	{
+	    PCI_VENDOR_HP, PCI_PRODUCT_HP_HPSAP400I,
+	    "Smart Array P400i",
+	},
+	{
+	    PCI_VENDOR_HP, PCI_PRODUCT_HP_HPSA_7,
+	    "Smart Array",
+	},
+	{
+	    PCI_VENDOR_HP, PCI_PRODUCT_HP_HPSA_8,
+	    "Smart Array",
+	},
+	{
+	    PCI_VENDOR_HP, PCI_PRODUCT_HP_HPSA_9,
+	    "Smart Array",
+	},
+	{
+	    PCI_VENDOR_HP, PCI_PRODUCT_HP_HPSA_10,
+	    "Smart Array",
+	},
+	{
+	    PCI_VENDOR_HP, PCI_PRODUCT_HP_HPSA_11,
+	    "Smart Array",
+	},
+	{
+	    PCI_VENDOR_HP, PCI_PRODUCT_HP_HPSA_12,
+	    "Smart Array",
+	},
+	{
+	    PCI_VENDOR_HP, PCI_PRODUCT_HP_HPSA_13,
+	    "Smart Array",
+	},
+	{
 	    PCI_VENDOR_HIFN, PCI_PRODUCT_HIFN_7751,
 	    "7751",
 	},
@@ -5270,14 +5562,6 @@ const struct pci_product pci_products[] = {
 	{
 	    PCI_VENDOR_HITACHI, PCI_PRODUCT_HITACHI_SWC,
 	    "MSVCC01/02/03/04 Video Capture Cards",
-	},
-	{
-	    PCI_VENDOR_HITACHI, PCI_PRODUCT_HITACHI_SH7751,
-	    "SH7751 PCI Controller",
-	},
-	{
-	    PCI_VENDOR_HITACHI, PCI_PRODUCT_HITACHI_SH7751R,
-	    "SH7751R PCI Controller",
 	},
 	{
 	    PCI_VENDOR_IBM, PCI_PRODUCT_IBM_MCABRIDGE,
@@ -5352,16 +5636,12 @@ const struct pci_product pci_products[] = {
 	    "133 PCI-X Bridge",
 	},
 	{
+	    PCI_VENDOR_IBM, PCI_PRODUCT_IBM_SERVERAID4,
+	    "ServeRAID 4/5",
+	},
+	{
 	    PCI_VENDOR_IBM, PCI_PRODUCT_IBM_MPIC2,
 	    "MPIC-II",
-	},
-	{
-	    PCI_VENDOR_ICENSEMBLE, PCI_PRODUCT_ICENSEMBLE_ICE1712,
-	    "Envy24 Multichannel Audio Controller",
-	},
-	{
-	    PCI_VENDOR_ICENSEMBLE, PCI_PRODUCT_ICENSEMBLE_VT1720,
-	    "Envy24PT/HT Multi-Channel Audio Controller",
 	},
 	{
 	    PCI_VENDOR_ICOMPRESSION, PCI_PRODUCT_ICOMPRESSION_ITVC15,
@@ -5440,12 +5720,16 @@ const struct pci_product pci_products[] = {
 	    "80321 I/O Processor",
 	},
 	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_6700PXH_PCIE0,
-	    "6700PXH PCI Express-to-PCI Bridge #0",
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_SRCZCRX,
+	    "RAID controller",
 	},
 	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_6700PXH_PCIE1,
-	    "6700PXH PCI Express-to-PCI Bridge #1",
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_SRCU42E,
+	    "SCSI RAID controller",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_SRCS28X,
+	    "SATA RAID controller",
 	},
 	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_PCEB,
@@ -5664,6 +5948,10 @@ const struct pci_product pci_products[] = {
 	    "82801FB 10/100 Ethernet",
 	},
 	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_PRO_100_VE_5,
+	    "PRO/100 VE (LOM) Network Controller",
+	},
+	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82547GI,
 	    "i82547GI Gigabit Ethernet",
 	},
@@ -5694,6 +5982,10 @@ const struct pci_product pci_products[] = {
 	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82541PI,
 	    "i82541PI Gigabit Ethernet",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_PRO_100_VE_6,
+	    "PRO/100 VE Network Controller",
 	},
 	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82815_DC100_HUB,
@@ -6236,11 +6528,11 @@ const struct pci_product pci_products[] = {
 	    "82875P PCI-CSA Bridge",
 	},
 	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82915P_HB,
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82915G_HB,
 	    "82915P/G/GL Host",
 	},
 	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82915P_EXP,
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82915G_EX,
 	    "82915P/G/GL PCI Express Bridge",
 	},
 	{
@@ -6252,8 +6544,28 @@ const struct pci_product pci_products[] = {
 	    "82925X Host",
 	},
 	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82925X_EXP,
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82925X_EX,
 	    "82925X PCI Express Bridge",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82915GM_HB,
+	    "82915PM/GM/GMS,82910GML Host Bridge",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82915GM_EX,
+	    "82915PM/GM PCI Express Bridge",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82915GM_IGD,
+	    "82915GM/GMS Integrated Graphics Device",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82915PM_EX,
+	    "82915PM/GM PCI Express Bridge",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82915GM_IGD,
+	    "82915GM/GMS,82910GML Integrated Graphics Device",
 	},
 	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_6300ESB_LPC,
@@ -6302,6 +6614,10 @@ const struct pci_product pci_products[] = {
 	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_6300ESB_PCIX,
 	    "6300ESB PCI-X Bridge",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_6300ESB_RAID,
+	    "6300ESB SATA RAID Controller",
 	},
 	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82801FB_LPC,
@@ -6368,16 +6684,32 @@ const struct pci_product pci_products[] = {
 	    "82801FB/FR IDE Controller",
 	},
 	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82945P_MCH,
+	    "82945G/P Memory Controller Hub",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82945P_EXP,
+	    "82945G/P PCI Express Bridge",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82955X_HB,
+	    "82955X Host",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82955X_EXP,
+	    "82955X PCI Express Bridge",
+	},
+	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82915G_IGDC,
 	    "82915G/GL IGD Companion",
 	},
 	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82801G_LPC,
-	    "82801GB/GR LPC Interface Bridge",
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82915GM_IGDC,
+	    "82915GM/GMS IGD Companion",
 	},
 	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82801G_IDE,
-	    "82801GB/GR IDE Controller",
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82801G_LPC,
+	    "82801GB/GR LPC Interface Bridge",
 	},
 	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82801G_SATA,
@@ -6436,12 +6768,20 @@ const struct pci_product pci_products[] = {
 	    "82801GB/GR SMBus Controller",
 	},
 	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82801G_LAN,
+	    "82801GB/GR LAN Controller",
+	},
+	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82801G_ACM,
 	    "82801GB/GR AC'97 Modem Controller",
 	},
 	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82801G_ACA,
 	    "82801GB/GR AC'97 Audio Controller",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82801G_IDE,
+	    "82801GB/GR IDE Controller",
 	},
 	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82801G_EXP_5,
@@ -6468,22 +6808,6 @@ const struct pci_product pci_products[] = {
 	    "82855PM Power Management Controller",
 	},
 	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82830MP_IO_1,
-	    "82830MP CPU to I/O Bridge 1",
-	},
-	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82830MP_AGP,
-	    "82830MP CPU to AGP Bridge",
-	},
-	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82830MP_IV,
-	    "82830MP Integrated Video",
-	},
-	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82830MP_IO_2,
-	    "82830MP CPU to I/O Bridge 2",
-	},
-	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82855GM_MCH,
 	    "82855GM Host-Hub Controller",
 	},
@@ -6500,39 +6824,27 @@ const struct pci_product pci_products[] = {
 	    "82855GM GMCH Configuration Process",
 	},
 	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_E7525_MCH,
-	    "E7525 Memory Controller Hub",
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82830MP_IO_1,
+	    "82830MP CPU to I/O Bridge 1",
 	},
 	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_E7525_MCHER,
-	    "E7525 Error Reporting Device",
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82830MP_AGP,
+	    "82830MP CPU to AGP Bridge",
 	},
 	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_E7525_PCIE_A,
-	    "E7525 PCI Express Port A",
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82830MP_IV,
+	    "82830MP Integrated Video",
 	},
 	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_E7525_PCIE_A1,
-	    "E7525 PCI Express Port A1",
-	},
-	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_E7525_PCIE_B,
-	    "E7525 PCI Express Port B",
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82830MP_IO_2,
+	    "82830MP CPU to I/O Bridge 2",
 	},
 	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_PRO_WL_2200BG,
 	    "PRO/Wireless LAN 2200BG Mini-PCI Adapter",
 	},
 	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_PRO_WL_2225BG,
-	    "PRO/Wireless LAN 2225BG Mini-PCI Adapter",
-	},
-	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_PRO_WL_2915ABG_1,
-	    "PRO/Wireless LAN 2915ABG Mini-PCI Adapter",
-	},
-	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_PRO_WL_2915ABG_2,
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_PRO_WL_2915ABG,
 	    "PRO/Wireless LAN 2915ABG Mini-PCI Adapter",
 	},
 	{
@@ -6952,6 +7264,14 @@ const struct pci_product pci_products[] = {
 	    "Collage 155 ATM adapter",
 	},
 	{
+	    PCI_VENDOR_MAGMA, PCI_PRODUCT_MAGMA_SERIAL16,
+	    "16 DMA PCI-SLRS",
+	},
+	{
+	    PCI_VENDOR_MAGMA, PCI_PRODUCT_MAGMA_SERIAL4,
+	    "4 DMA PCI-SLRS",
+	},
+	{
 	    PCI_VENDOR_MATROX, PCI_PRODUCT_MATROX_ATLAS,
 	    "MGA PX2085 (\"Atlas\")",
 	},
@@ -7020,6 +7340,10 @@ const struct pci_product pci_products[] = {
 	    "Weasel Control",
 	},
 	{
+	    PCI_VENDOR_MITSUBISHIELEC, PCI_PRODUCT_MITSUBISHIELEC_TORNADO,
+	    "Tornado 3000 AGP",
+	},
+	{
 	    PCI_VENDOR_MOT, PCI_PRODUCT_MOT_MPC105,
 	    "MPC105 \"Eagle\" Host Bridge",
 	},
@@ -7050,6 +7374,26 @@ const struct pci_product pci_products[] = {
 	{
 	    PCI_VENDOR_MOT, PCI_PRODUCT_MOT_HAWK,
 	    "Hawk System Memory Controller & PCI Host Bridge",
+	},
+	{
+	    PCI_VENDOR_MOXA, PCI_PRODUCT_MOXA_C104H,
+	    "C104H",
+	},
+	{
+	    PCI_VENDOR_MOXA, PCI_PRODUCT_MOXA_CP104,
+	    "CP104UL",
+	},
+	{
+	    PCI_VENDOR_MOXA, PCI_PRODUCT_MOXA_CP114,
+	    "CP114",
+	},
+	{
+	    PCI_VENDOR_MOXA, PCI_PRODUCT_MOXA_C168H,
+	    "C168H",
+	},
+	{
+	    PCI_VENDOR_MUTECH, PCI_PRODUCT_MUTECH_MV1000,
+	    "MV1000",
 	},
 	{
 	    PCI_VENDOR_MYLEX, PCI_PRODUCT_MYLEX_RAID_V2,
@@ -7312,6 +7656,18 @@ const struct pci_product pci_products[] = {
 	    "PERC 4/SC",
 	},
 	{
+	    PCI_VENDOR_SYMBIOS, PCI_PRODUCT_SYMBIOS_MEGARAID_320X,
+	    "LSI Megaraid SCSI 320-X",
+	},
+	{
+	    PCI_VENDOR_SYMBIOS, PCI_PRODUCT_SYMBIOS_MEGARAID_320E,
+	    "LSI Megaraid SCSI 320-E",
+	},
+	{
+	    PCI_VENDOR_SYMBIOS, PCI_PRODUCT_SYMBIOS_MEGARAID_300X,
+	    "LSI Megaraid SATA (300-6X/300-8X)",
+	},
+	{
 	    PCI_VENDOR_SYMBIOS, PCI_PRODUCT_SYMBIOS_PE_GNIC,
 	    "Packet Engines G-NIC Ethernet",
 	},
@@ -7436,6 +7792,10 @@ const struct pci_product pci_products[] = {
 	    "NDR4600 Host-PCI Bridge",
 	},
 	{
+	    PCI_VENDOR_NORTEL, PCI_PRODUCT_NORTEL_BAYSTACK_21,
+	    "Baystack 21 (Accton MPX EN5038)",
+	},
+	{
 	    PCI_VENDOR_NUMBER9, PCI_PRODUCT_NUMBER9_I128,
 	    "Imagine-128",
 	},
@@ -7462,6 +7822,26 @@ const struct pci_product pci_products[] = {
 	{
 	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_RIVATNT2M64,
 	    "RIVA TNT2 Model 64",
+	},
+	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_MCP04_IDE,
+	    "MCP04 IDE",
+	},
+	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_MCP04_SATA,
+	    "MCP04 SATA",
+	},
+	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_MCP04_LAN1,
+	    "MCP04 Ethernet",
+	},
+	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_MCP04_LAN2,
+	    "MCP04 Ethernet",
+	},
+	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_MCP04_SATA2,
+	    "MCP04 SATA",
 	},
 	{
 	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_GEFORCE_6800U,
@@ -7496,6 +7876,14 @@ const struct pci_product pci_products[] = {
 	    "nForce4 Serial ATA 2",
 	},
 	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE4_LAN1,
+	    "nForce4 Ethernet",
+	},
+	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE4_LAN2,
+	    "nForce4 Ethernet",
+	},
+	{
 	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE4_AC,
 	    "nForce4 AC-97",
 	},
@@ -7512,7 +7900,7 @@ const struct pci_product pci_products[] = {
 	    "nForce2 ATA133 IDE",
 	},
 	{
-	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE2_NET,
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE2_LAN,
 	    "nForce2 Ethernet",
 	},
 	{
@@ -7552,6 +7940,10 @@ const struct pci_product pci_products[] = {
 	    "nForce2 Ultra 400 ATA133 IDE",
 	},
 	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE2_400_LAN1,
+	    "nForce2 Ultra 400 Ethernet",
+	},
+	{
 	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE2_400_OHCI,
 	    "nForce2 Ultra 400 USB Host Controller",
 	},
@@ -7566,6 +7958,10 @@ const struct pci_product pci_products[] = {
 	{
 	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE2_400_PPB,
 	    "nForce2 Ultra 400 PCI-PCI bridge",
+	},
+	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE2_400_LAN2,
+	    "nForce2 Ultra 400 Ethernet",
 	},
 	{
 	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE2_400_SATA,
@@ -7588,6 +7984,10 @@ const struct pci_product pci_products[] = {
 	    "nForce3 ATA133 IDE",
 	},
 	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE3_LAN1,
+	    "nForce3 Ethernet",
+	},
+	{
 	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE3_OHCI,
 	    "nForce3 USB Host Controller",
 	},
@@ -7604,6 +8004,14 @@ const struct pci_product pci_products[] = {
 	    "nForce3 PCI-PCI bridge",
 	},
 	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE3_LAN4,
+	    "nForce3 ethernet #4",
+	},
+	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE3_250_PCIB,
+	    "nForce3 250 PCI-ISA bridge",
+	},
+	{
 	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE3_250_PCHB,
 	    "nForce3 250 Host-PCI bridge",
 	},
@@ -7612,8 +8020,8 @@ const struct pci_product pci_products[] = {
 	    "nForce3 250 AGP",
 	},
 	{
-	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE3_250_PCIB,
-	    "nForce3 250 PCI-ISA bridge",
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE3_250_SATA,
+	    "nForce3 250 Serial ATA Controller",
 	},
 	{
 	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE3_250_SMBUS,
@@ -7626,6 +8034,10 @@ const struct pci_product pci_products[] = {
 	{
 	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE3_250_SATA,
 	    "nForce3 250 Serial ATA Controller",
+	},
+	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE3_250_LAN,
+	    "nForce3 250 Ethernet",
 	},
 	{
 	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE3_250_OHCI,
@@ -7644,8 +8056,20 @@ const struct pci_product pci_products[] = {
 	    "nForce3 250 PCI-PCI bridge",
 	},
 	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE3_250_SATA2,
+	    "nForce3 250 Serial ATA Controller",
+	},
+	{
 	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_ALADDINTNT2,
 	    "Aladdin TNT2",
+	},
+	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_QUADRO4_280NVS2,
+	    "Quadro4 280 NVS",
+	},
+	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_QUADROFX3400SLI,
+	    "Quadro FX 3400 SLI",
 	},
 	{
 	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_GEFORCE256,
@@ -7690,6 +8114,10 @@ const struct pci_product pci_products[] = {
 	{
 	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_QUADRO2,
 	    "Quadro2",
+	},
+	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_GEFORCE6200,
+	    "GeForce 6200TC",
 	},
 	{
 	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_GEFORCE4_MX460,
@@ -7750,6 +8178,14 @@ const struct pci_product pci_products[] = {
 	{
 	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE_ATA100,
 	    "nForce ATA100 IDE",
+	},
+	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE_USB,
+	    "nForce USB",
+	},
+	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE_LAN,
+	    "nForce Ethetnet",
 	},
 	{
 	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE2_PCHB,
@@ -7822,6 +8258,46 @@ const struct pci_product pci_products[] = {
 	{
 	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_QUADRO4_700XGL,
 	    "Quadro4 700XGL",
+	},
+	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE430_PCIB,
+	    "nForce430 PCI-ISA bridge",
+	},
+	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE430_SMBUS,
+	    "nForce430 SMBus Controller",
+	},
+	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE430_ATA133,
+	    "nForce430 ATA133 IDE Controller",
+	},
+	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE430_SATA1,
+	    "nForce430 Serial SATA Controller",
+	},
+	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE430_SATA2,
+	    "nForce430 Serial SATA Controller",
+	},
+	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE430_LAN1,
+	    "nForce430 Gigabit Ethernet Controller",
+	},
+	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE430_LAN2,
+	    "nForce430 Gigabit Ethernet Controller",
+	},
+	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE430_AC,
+	    "nForce430 AC-97",
+	},
+	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE430_OHCI,
+	    "nForce430 USB Controller",
+	},
+	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE430_EHCI,
+	    "nForce430 USB2 Controller",
 	},
 	{
 	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_GF4_TI_4800,
@@ -7914,6 +8390,34 @@ const struct pci_product pci_products[] = {
 	{
 	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_GF_FX5700_LE,
 	    "GeForce FX 5700 LE",
+	},
+	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_MCP55_SMB,
+	    "MCP55 SMBus",
+	},
+	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_MCP55_IDE,
+	    "MCP55 IDE",
+	},
+	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_MCP55_HDA,
+	    "HD Audio",
+	},
+	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_MCP55_LAN1,
+	    "MCP55 LAN",
+	},
+	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_MCP55_LAN2,
+	    "MCP55 LAN",
+	},
+	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_MCP55_SATA,
+	    "MCP55 SATA",
+	},
+	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_MCP55_SATA2,
+	    "MCP55 SATA",
 	},
 	{
 	    PCI_VENDOR_NVIDIA_SGS, PCI_PRODUCT_NVIDIA_SGS_RIVA128,
@@ -8114,6 +8618,38 @@ const struct pci_product pci_products[] = {
 	{
 	    PCI_VENDOR_PROMISE, PCI_PRODUCT_PROMISE_PDC20621,
 	    "PDC20621 dual Ultra/133 IDE controller",
+	},
+	{
+	    PCI_VENDOR_PROMISE, PCI_PRODUCT_PROMISE_PDC40718,
+	    "PDC40718 SATA/300 IDE controller",
+	},
+	{
+	    PCI_VENDOR_PROMISE, PCI_PRODUCT_PROMISE_PDC40518,
+	    "PDC40518 SATA/150 IDE controller",
+	},
+	{
+	    PCI_VENDOR_PROMISE, PCI_PRODUCT_PROMISE_PDC20775,
+	    "PDC20775 SATA/300 IDE controller",
+	},
+	{
+	    PCI_VENDOR_PROMISE, PCI_PRODUCT_PROMISE_PDC40719,
+	    "PDC40719 SATA/300 IDE controller",
+	},
+	{
+	    PCI_VENDOR_PROMISE, PCI_PRODUCT_PROMISE_PDC20571,
+	    "PDC20571 SATA/150 IDE controller",
+	},
+	{
+	    PCI_VENDOR_PROMISE, PCI_PRODUCT_PROMISE_PDC20575,
+	    "PDC20575 SATA/150 IDE controller",
+	},
+	{
+	    PCI_VENDOR_PROMISE, PCI_PRODUCT_PROMISE_PDC20579,
+	    "PDC20579 SATA/150 IDE controller",
+	},
+	{
+	    PCI_VENDOR_PROMISE, PCI_PRODUCT_PROMISE_PDC20771,
+	    "PDC20771 SATA/300 IDE controller",
 	},
 	{
 	    PCI_VENDOR_QLOGIC, PCI_PRODUCT_QLOGIC_ISP1020,
@@ -8384,6 +8920,10 @@ const struct pci_product pci_products[] = {
 	    "SonicVibes",
 	},
 	{
+	    PCI_VENDOR_SAFENET, PCI_PRODUCT_SAFENET_SAFEXCEL,
+	    "SafeXcel",
+	},
+	{
 	    PCI_VENDOR_SAMSUNGSEMI, PCI_PRODUCT_SAMSUNGSEMI_KS8920,
 	    "KS8920 10/100 Ethernet",
 	},
@@ -8494,6 +9034,26 @@ const struct pci_product pci_products[] = {
 	{
 	    PCI_VENDOR_SERVERWORKS, PCI_PRODUCT_SERVERWORKS_CSB6_LPC,
 	    "CSB6 ISA/LPC bridge",
+	},
+	{
+	    PCI_VENDOR_SERVERWORKS, PCI_PRODUCT_SERVERWORKS_K2_SATA,
+	    "K2 SATA",
+	},
+	{
+	    PCI_VENDOR_SERVERWORKS, PCI_PRODUCT_SERVERWORKS_FRODO4_SATA,
+	    "Frodo4 SATA",
+	},
+	{
+	    PCI_VENDOR_SERVERWORKS, PCI_PRODUCT_SERVERWORKS_FRODO8_SATA,
+	    "Frodo8 SATA",
+	},
+	{
+	    PCI_VENDOR_SERVERWORKS, PCI_PRODUCT_SERVERWORKS_HT1000_SATA,
+	    "HT-1000 SATA",
+	},
+	{
+	    PCI_VENDOR_SERVERWORKS, PCI_PRODUCT_SERVERWORKS_BCM5714,
+	    "bcm5714/bcm5715 integral PCI-E to PCI-X bridge",
 	},
 	{
 	    PCI_VENDOR_SGI, PCI_PRODUCT_SGI_IOC3,
@@ -8674,6 +9234,10 @@ const struct pci_product pci_products[] = {
 	{
 	    PCI_VENDOR_SIIG, PCI_PRODUCT_SIIG_CYBER20_2S1P850,
 	    "Cyber20x 2S1P 16850 PCI",
+	},
+	{
+	    PCI_VENDOR_SIIG, PCI_PRODUCT_SIIG_PCISERIAL8000P,
+	    "PCI Serial 8000 Plus",
 	},
 	{
 	    PCI_VENDOR_SIS, PCI_PRODUCT_SIS_86C201,
@@ -9372,10 +9936,6 @@ const struct pci_product pci_products[] = {
 	    "Fast Infrared Type DO",
 	},
 	{
-	    PCI_VENDOR_TRANSMETA, PCI_PRODUCT_TRANSMETA_TM8000NB,
-	    "TM8000 Integrated Northbridge",
-	},
-	{
 	    PCI_VENDOR_TRANSMETA, PCI_PRODUCT_TRANSMETA_NORTHBRIDGE,
 	    "Virtual Northbridge",
 	},
@@ -9780,6 +10340,10 @@ const struct pci_product pci_products[] = {
 	    "VT8237 Integrated SATA Controller",
 	},
 	{
+	    PCI_VENDOR_VIATECH, PCI_PRODUCT_VIATECH_VT8237R_SATA,
+	    "VT8237R Integrated SATA Controller",
+	},
+	{
 	    PCI_VENDOR_VIATECH, PCI_PRODUCT_VIATECH_VT6421_RAID,
 	    "VT6421 Serial RAID Controller",
 	},
@@ -9804,6 +10368,10 @@ const struct pci_product pci_products[] = {
 	    "VT8237 (Apollo KT600) PCI-ISA Bridge",
 	},
 	{
+	    PCI_VENDOR_VIATECH, PCI_PRODUCT_VIATECH_VT8237A_HDA,
+	    "VT8237A/VT8251 High Definition Audio Controller",
+	},
+	{
 	    PCI_VENDOR_VIATECH, PCI_PRODUCT_VIATECH_KT880_4,
 	    "KT880 CPU to PCI Bridge",
 	},
@@ -9821,7 +10389,7 @@ const struct pci_product pci_products[] = {
 	},
 	{
 	    PCI_VENDOR_VIATECH, PCI_PRODUCT_VIATECH_VT8231,
-	    "VT8231 IDE Controller",
+	    "VT8231 PCI-ISA Bridge",
 	},
 	{
 	    PCI_VENDOR_VIATECH, PCI_PRODUCT_VIATECH_VT8231_PWR,
@@ -10332,4 +10900,4 @@ const struct pci_product pci_products[] = {
 	    "Video Controller",
 	},
 };
-const int pci_nproducts = 2003;
+const int pci_nproducts = 2142;

@@ -1,4 +1,4 @@
-/*	$NetBSD: sunos32_ioctl.c,v 1.15 2005/05/31 00:42:10 christos Exp $	*/
+/*	$NetBSD: sunos32_ioctl.c,v 1.14 2004/04/25 06:23:40 matt Exp $	*/
 /* from: NetBSD: sunos_ioctl.c,v 1.35 2001/02/03 22:20:02 mrg Exp 	*/
 
 /*
@@ -56,7 +56,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sunos32_ioctl.c,v 1.15 2005/05/31 00:42:10 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sunos32_ioctl.c,v 1.14 2004/04/25 06:23:40 matt Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd32.h"
@@ -617,19 +617,19 @@ sunos32_sys_ioctl(l, v, retval)
  * Pseudo-tty ioctl translations.
  */
 	case _IOW('t', 32, int): {	/* TIOCTCNTL */
-		int error1, on;
+		int error, on;
 
-		error1 = copyin((caddr_t)(u_long)SCARG(uap, data), &on, sizeof (on));
-		if (error1)
-			return error1;
+		error = copyin((caddr_t)(u_long)SCARG(uap, data), &on, sizeof (on));
+		if (error)
+			return error;
 		return (*ctl)(fp, TIOCUCNTL, &on, p);
 	}
 	case _IOW('t', 33, int): {	/* TIOCSIGNAL */
-		int error1, sig;
+		int error, sig;
 
-		error1 = copyin((caddr_t)(u_long)SCARG(uap, data), &sig, sizeof (sig));
-		if (error1)
-			return error1;
+		error = copyin((caddr_t)(u_long)SCARG(uap, data), &sig, sizeof (sig));
+		if (error)
+			return error;
 		return (*ctl)(fp, TIOCSIG, &sig, p);
 	}
 
@@ -726,22 +726,22 @@ sunos32_sys_ioctl(l, v, retval)
 
 	case _IOWR('i', 20, struct ifconf):	/* SIOCGIFCONF */
 	    {
-		struct ifconf ifcf;
+		struct ifconf ifconf;
 
 		/*
 		 * XXX: two more problems
 		 * 1. our sockaddr's are variable length, not always sizeof(sockaddr)
 		 * 2. this returns a name per protocol, ie. it returns two "lo0"'s
 		 */
-		error = copyin((caddr_t)(u_long)SCARG(uap, data), &ifcf,
-		    sizeof (ifcf));
+		error = copyin((caddr_t)(u_long)SCARG(uap, data), &ifconf,
+		    sizeof (ifconf));
 		if (error)
 			return error;
-		error = (*ctl)(fp, OSIOCGIFCONF, &ifcf, p);
+		error = (*ctl)(fp, OSIOCGIFCONF, &ifconf, p);
 		if (error)
 			return error;
-		return copyout(&ifcf, (caddr_t)(u_long)SCARG(uap, data),
-		    sizeof (ifcf));
+		return copyout(&ifconf, (caddr_t)(u_long)SCARG(uap, data),
+		    sizeof (ifconf));
 	    }
 
 /*

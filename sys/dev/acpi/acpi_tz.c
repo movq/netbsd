@@ -1,4 +1,4 @@
-/* $NetBSD: acpi_tz.c,v 1.16 2005/05/29 20:56:02 christos Exp $ */
+/* $NetBSD: acpi_tz.c,v 1.14 2004/06/06 17:27:05 martin Exp $ */
 
 /*
  * Copyright (c) 2003 Jared D. McNeill <jmcneill@invisible.ca>
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi_tz.c,v 1.16 2005/05/29 20:56:02 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi_tz.c,v 1.14 2004/06/06 17:27:05 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -131,7 +131,7 @@ static void	acpitz_sane_temp(UINT32 *tmp);
 static ACPI_STATUS
 		acpitz_switch_cooler(ACPI_OBJECT *, void *);
 static void	acpitz_notify_handler(ACPI_HANDLE, UINT32, void *);
-static int	acpitz_get_integer(struct acpitz_softc *, const char *, UINT32 *);
+static int	acpitz_get_integer(struct acpitz_softc *, char *, UINT32 *);
 static void	acpitz_tick(void *);
 static void	acpitz_init_envsys(struct acpitz_softc *);
 static int	acpitz_gtredata(struct sysmon_envsys *,
@@ -508,7 +508,7 @@ static void
 acpitz_notify_handler(ACPI_HANDLE hdl, UINT32 notify, void *opaque)
 {
 	struct acpitz_softc *sc = opaque;
-	ACPI_OSD_EXEC_CALLBACK func = NULL;
+	OSD_EXECUTION_CALLBACK func = NULL;
 	const char *name;
 	int rv;
 
@@ -546,7 +546,7 @@ acpitz_sane_temp(UINT32 *tmp)
 }
 
 static int
-acpitz_get_integer(struct acpitz_softc *sc, const char *cm, UINT32 *val)
+acpitz_get_integer(struct acpitz_softc *sc, char *cm, UINT32 *val)
 {
 	ACPI_STATUS rv;
 	ACPI_INTEGER tmp;

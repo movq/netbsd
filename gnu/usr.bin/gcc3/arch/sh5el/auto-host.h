@@ -616,7 +616,7 @@
 
 /* Define if your linker links a mix of read-only
    and read-write sections into a read-write section. */
-/* #undef HAVE_LD_RO_RW_SECTION_MIXING */
+#define HAVE_LD_RO_RW_SECTION_MIXING 1
 
 /* Define if your linker supports --eh-frame-hdr option. */
 #define HAVE_LD_EH_FRAME_HDR 1

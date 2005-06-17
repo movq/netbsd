@@ -469,14 +469,7 @@ get_file_size (const char * file_name)
 		   file_name, strerror (errno));
     }  
   else if (! S_ISREG (statbuf.st_mode))
-    {
-      if (!S_ISCHR(statbuf.st_mode))
-	{
-	  non_fatal (_("Warning: '%s' is not an ordinary file"), file_name);
-	  return 0;
-	}
-      return statbuf.st_size ? statbuf.st_size : 1;
-    }
+    non_fatal (_("Warning: '%s' is not an ordinary file"), file_name);
   else
     return statbuf.st_size;
 

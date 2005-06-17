@@ -1,4 +1,4 @@
-/*	$NetBSD: ehci_pci.c,v 1.17 2005/02/27 00:27:32 perry Exp $	*/
+/*	$NetBSD: ehci_pci.c,v 1.17.2.2 2006/01/22 13:52:51 tron Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ehci_pci.c,v 1.17 2005/02/27 00:27:32 perry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ehci_pci.c,v 1.17.2.2 2006/01/22 13:52:51 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -48,6 +48,7 @@ __KERNEL_RCSID(0, "$NetBSD: ehci_pci.c,v 1.17 2005/02/27 00:27:32 perry Exp $");
 
 #include <machine/bus.h>
 
+#include <dev/pci/pcidevs.h>
 #include <dev/pci/pcivar.h>
 #include <dev/pci/usb_pci.h>
 
@@ -66,9 +67,8 @@ extern int ehcidebug;
 #define DPRINTF(x)
 #endif
 
-int	ehci_pci_match(struct device *, struct cfdata *, void *);
-void	ehci_pci_attach(struct device *, struct device *, void *);
-int	ehci_pci_detach(device_ptr_t, int);
+static void ehci_get_ownership(ehci_softc_t *sc, pci_chipset_tag_t pc,
+			       pcitag_t tag);
 
 struct ehci_pci_softc {
 	ehci_softc_t		sc;
@@ -77,10 +77,9 @@ struct ehci_pci_softc {
 	void 			*sc_ih;		/* interrupt vectoring */
 };
 
-CFATTACH_DECL(ehci_pci, sizeof(struct ehci_pci_softc),
-    ehci_pci_match, ehci_pci_attach, ehci_pci_detach, ehci_activate);
+#define EHCI_MAX_BIOS_WAIT		1000 /* ms */
 
-int
+static int
 ehci_pci_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct pci_attach_args *pa = (struct pci_attach_args *) aux;
@@ -93,7 +92,7 @@ ehci_pci_match(struct device *parent, struct cfdata *match, void *aux)
 	return (0);
 }
 
-void
+static void
 ehci_pci_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct ehci_pci_softc *sc = (struct ehci_pci_softc *)self;
@@ -177,6 +176,10 @@ ehci_pci_attach(struct device *parent, struct device *self, void *aux)
 		snprintf(sc->sc.sc_vendor, sizeof(sc->sc.sc_vendor),
 		    "vendor 0x%04x", PCI_VENDOR(pa->pa_id));
 
+	/* Enable workaround for dropped interrupts as required */
+	if (sc->sc.sc_id_vendor == PCI_VENDOR_VIATECH)
+		sc->sc.sc_flags |= EHCIF_DROPPED_INTR_WORKAROUND;
+
 	/*
 	 * Find companion controllers.  According to the spec they always
 	 * have lower function numbers so they should be enumerated already.
@@ -193,6 +196,8 @@ ehci_pci_attach(struct device *parent, struct device *self, void *aux)
 	}
 	sc->sc.sc_ncomp = ncomp;
 
+	ehci_get_ownership(&sc->sc, pc, tag);
+
 	r = ehci_init(&sc->sc);
 	if (r != USBD_NORMAL_COMPLETION) {
 		aprint_error("%s: init failed, error=%d\n", devname, r);
@@ -204,7 +209,7 @@ ehci_pci_attach(struct device *parent, struct device *self, void *aux)
 				       usbctlprint);
 }
 
-int
+static int
 ehci_pci_detach(device_ptr_t self, int flags)
 {
 	struct ehci_pci_softc *sc = (struct ehci_pci_softc *)self;
@@ -222,4 +227,83 @@ ehci_pci_detach(device_ptr_t self, int flags)
 		sc->sc.sc_size = 0;
 	}
 	return (0);
+}
+
+CFATTACH_DECL(ehci_pci, sizeof(struct ehci_pci_softc),
+    ehci_pci_match, ehci_pci_attach, ehci_pci_detach, ehci_activate);
+
+#ifdef EHCI_DEBUG
+static void
+ehci_dump_caps(ehci_softc_t *sc, pci_chipset_tag_t pc, pcitag_t tag)
+{
+	u_int32_t cparams, legctlsts, addr, cap, id;
+	int maxdump = 10;
+
+	cparams = EREAD4(sc, EHCI_HCCPARAMS);
+	addr = EHCI_HCC_EECP(cparams);
+	while (addr != 0) {
+		cap = pci_conf_read(pc, tag, addr);
+		id = EHCI_CAP_GET_ID(cap);
+		switch (id) {
+		case EHCI_CAP_ID_LEGACY:
+			legctlsts = pci_conf_read(pc, tag,
+						  addr + PCI_EHCI_USBLEGCTLSTS);
+			printf("ehci_dump_caps: legsup=0x%08x "
+			       "legctlsts=0x%08x\n", cap, legctlsts);
+			break;
+		default:
+			printf("ehci_dump_caps: cap=0x%08x\n", cap);
+			break;
+		}
+		if (--maxdump < 0)
+			break;
+		addr = EHCI_CAP_GET_NEXT(cap);
+	}
+}
+#endif
+
+static void
+ehci_get_ownership(ehci_softc_t *sc, pci_chipset_tag_t pc, pcitag_t tag)
+{
+	const char *devname = sc->sc_bus.bdev.dv_xname;
+	u_int32_t cparams, addr, cap, legsup;
+	int maxcap = 10;
+	int ms;
+
+#ifdef EHCI_DEBUG
+	if (ehcidebug)
+		ehci_dump_caps(sc, pc, tag);
+#endif
+	cparams = EREAD4(sc, EHCI_HCCPARAMS);
+	addr = EHCI_HCC_EECP(cparams);
+	while (addr != 0) {
+		cap = pci_conf_read(pc, tag, addr);
+		if (EHCI_CAP_GET_ID(cap) == EHCI_CAP_ID_LEGACY)
+			break;
+		if (--maxcap < 0) {
+			aprint_normal("%s: broken extended capabilities "
+				      "ignored\n", devname);
+			return;
+		}
+		addr = EHCI_CAP_GET_NEXT(cap);
+	}
+
+	legsup = pci_conf_read(pc, tag, addr + PCI_EHCI_USBLEGSUP);
+	/* Ask BIOS to give up ownership */
+	legsup |= EHCI_LEG_HC_OS_OWNED;
+	pci_conf_write(pc, tag, addr + PCI_EHCI_USBLEGSUP, legsup);
+	for (ms = 0; ms < EHCI_MAX_BIOS_WAIT; ms++) {
+		legsup = pci_conf_read(pc, tag, addr + PCI_EHCI_USBLEGSUP);
+		if (!(legsup & EHCI_LEG_HC_BIOS_OWNED))
+			break;
+		delay(1000);
+	}
+	if (ms == EHCI_MAX_BIOS_WAIT) {
+		aprint_normal("%s: BIOS refuses to give up ownership, "
+			      "using force\n", devname);
+		pci_conf_write(pc, tag, addr + PCI_EHCI_USBLEGSUP, 0);
+		pci_conf_write(pc, tag, addr + PCI_EHCI_USBLEGCTLSTS, 0);
+	} else {
+		aprint_normal("%s: BIOS has given up ownership\n", devname);
+	}
 }

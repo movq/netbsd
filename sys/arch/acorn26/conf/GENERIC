@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.29 2005/06/09 14:43:29 tsutsui Exp $
+# $NetBSD: GENERIC,v 1.28.4.3 2005/11/05 00:39:47 tron Exp $
 #
 # GENERIC machine description file
 # 
@@ -30,8 +30,8 @@ options 	CPU_ARM250
 options 	CPU_ARM3
 
 # Diagnostic/debugging support options
-options 	DIAGNOSTIC		# Cheap kernel consistency checks
-options 	DEBUG			# More expensive checks and printfs
+#options 	DIAGNOSTIC		# Cheap kernel consistency checks
+#options 	DEBUG			# More expensive checks and printfs
 options 	DDB			# kernel debugger
 #options 	SYSCALL_DEBUG		# trace syscall entry/exit
 #options 	SCSIDEBUG
@@ -79,6 +79,7 @@ options 	INET		# Internet protocol suite
 options 	INET6		# IPV6
 #options 	IPSEC		# IP security
 #options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
+#options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
 #options 	PIM		# Protocol Independent Multicast
@@ -140,8 +141,7 @@ options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
 
 # Enable experimental buffer queue strategy for better responsiveness under 
 # high disk I/O load. Use it with caution - it's not proven to be stable yet.
-#options 	BUFQ_READPRIO
-#options 	BUFQ_PRIOCSCAN
+#options 	NEW_BUFQ_STRATEGY
 
 # Disable kernel security.
 #options 	INSECURE
@@ -247,6 +247,7 @@ pseudo-device	pppoe			# PPP over Ethernet (RFC 2516)
 pseudo-device	pty			# pseudo-terminals
 pseudo-device	sl		4
 pseudo-device	vnd		4
+#options 	VND_COMPRESSION		# compressed vnd(4)
 pseudo-device	gre		2	# generic L3 over IP tunnel
 pseudo-device	gif		4	# IPv[46] over IPv[46] tunnel (RFC1933)
 pseudo-device	faith		1	# IPv[46] tcp relay translation i/f

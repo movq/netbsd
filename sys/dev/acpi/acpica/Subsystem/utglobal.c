@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Module Name: utglobal - Global variables for the ACPI subsystem
- *              xRevision: 211 $
+ *              xRevision: 192 $
  *
  *****************************************************************************/
 
@@ -9,7 +9,7 @@
  *
  * 1. Copyright Notice
  *
- * Some or all of this work - Copyright (c) 1999 - 2005, Intel Corp.
+ * Some or all of this work - Copyright (c) 1999 - 2004, Intel Corp.
  * All rights reserved.
  *
  * 2. License
@@ -115,7 +115,7 @@
  *****************************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: utglobal.c,v 1.14 2005/05/31 21:08:38 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: utglobal.c,v 1.11 2004/02/14 16:57:25 kochi Exp $");
 
 #define __UTGLOBAL_C__
 #define DEFINE_ACPI_GLOBALS
@@ -127,14 +127,13 @@ __KERNEL_RCSID(0, "$NetBSD: utglobal.c,v 1.14 2005/05/31 21:08:38 drochner Exp $
         ACPI_MODULE_NAME    ("utglobal")
 
 
-/*******************************************************************************
+/******************************************************************************
  *
  * FUNCTION:    AcpiFormatException
  *
  * PARAMETERS:  Status       - The ACPI_STATUS code to be formatted
  *
- * RETURN:      A string containing the exception text. A valid pointer is
- *              always returned.
+ * RETURN:      A string containing the exception  text
  *
  * DESCRIPTION: This function translates an ACPI exception into an ASCII string.
  *
@@ -144,8 +143,8 @@ const char *
 AcpiFormatException (
     ACPI_STATUS             Status)
 {
+    const char              *Exception = "UNKNOWN_STATUS_CODE";
     ACPI_STATUS             SubStatus;
-    const char              *Exception = NULL;
 
 
     ACPI_FUNCTION_NAME ("FormatException");
@@ -160,60 +159,61 @@ AcpiFormatException (
         if (SubStatus <= AE_CODE_ENV_MAX)
         {
             Exception = AcpiGbl_ExceptionNames_Env [SubStatus];
+            break;
         }
-        break;
+        goto Unknown;
 
     case AE_CODE_PROGRAMMER:
 
         if (SubStatus <= AE_CODE_PGM_MAX)
         {
             Exception = AcpiGbl_ExceptionNames_Pgm [SubStatus -1];
+            break;
         }
-        break;
+        goto Unknown;
 
     case AE_CODE_ACPI_TABLES:
 
         if (SubStatus <= AE_CODE_TBL_MAX)
         {
             Exception = AcpiGbl_ExceptionNames_Tbl [SubStatus -1];
+            break;
         }
-        break;
+        goto Unknown;
 
     case AE_CODE_AML:
 
         if (SubStatus <= AE_CODE_AML_MAX)
         {
             Exception = AcpiGbl_ExceptionNames_Aml [SubStatus -1];
+            break;
         }
-        break;
+        goto Unknown;
 
     case AE_CODE_CONTROL:
 
         if (SubStatus <= AE_CODE_CTRL_MAX)
         {
             Exception = AcpiGbl_ExceptionNames_Ctrl [SubStatus -1];
+            break;
         }
-        break;
+        goto Unknown;
 
     default:
-        break;
+        goto Unknown;
     }
 
-    if (!Exception)
-    {
-        /* Exception code was not recognized */
 
-        ACPI_DEBUG_PRINT ((ACPI_DB_ERROR,
-            "Unknown exception code: 0x%8.8X\n", Status));
+    return ((const char *) Exception);
 
-        return ((const char *) "UNKNOWN_STATUS_CODE");
-    }
+Unknown:
 
+    ACPI_DEBUG_PRINT ((ACPI_DB_ERROR, "Unknown exception code: 0x%8.8X\n", Status));
     return ((const char *) Exception);
 }
 
 
-/*******************************************************************************
+/******************************************************************************
  *
  * Static global variable initialization.
  *
@@ -254,87 +254,56 @@ BOOLEAN                     AcpiGbl_Shutdown = TRUE;
 
 const UINT8                 AcpiGbl_DecodeTo8bit [8] = {1,2,4,8,16,32,64,128};
 
-const char                  *AcpiGbl_SleepStateNames[ACPI_S_STATE_COUNT] =
-{
-    "\\_S0_",
-    "\\_S1_",
-    "\\_S2_",
-    "\\_S3_",
-    "\\_S4_",
-    "\\_S5_"
-};
-
-const char                  *AcpiGbl_HighestDstateNames[4] =
-{
-    "_S1D",
-    "_S2D",
-    "_S3D",
-    "_S4D"
-};
-
-/*
- * Strings supported by the _OSI predefined (internal) method.
- * When adding strings, be sure to update ACPI_NUM_OSI_STRINGS.
- */
-const char                  *AcpiGbl_ValidOsiStrings[ACPI_NUM_OSI_STRINGS] =
-{
-    /* Operating System Vendor Strings */
-
-    "Linux",
-    "Windows 2000",
-    "Windows 2001",
-    "Windows 2001.1",
-    "Windows 2001 SP0",
-    "Windows 2001 SP1",
-    "Windows 2001 SP2",
-    "Windows 2001 SP3",
-    "Windows 2001 SP4",
-
-    /* Feature Group Strings */
-
-    "Extended Address Space Descriptor"
-};
+const char                  *AcpiGbl_DbSleepStates[ACPI_S_STATE_COUNT] = {
+                                "\\_S0_",
+                                "\\_S1_",
+                                "\\_S2_",
+                                "\\_S3_",
+                                "\\_S4_",
+                                "\\_S5_"};
 
 
-/*******************************************************************************
+/******************************************************************************
  *
  * Namespace globals
  *
  ******************************************************************************/
 
+
 /*
  * Predefined ACPI Names (Built-in to the Interpreter)
  *
+ * Initial values are currently supported only for types String and Number.
+ * Both are specified as strings in this table.
+ *
  * NOTES:
- * 1) _SB_ is defined to be a device to allow \_SB_._INI to be run
+ * 1) _SB_ is defined to be a device to allow _SB_/_INI to be run
  *    during the initialization sequence.
- * 2) _TZ_ is defined to be a thermal zone in order to allow ASL code to
- *    perform a Notify() operation on it.
  */
+
 const ACPI_PREDEFINED_NAMES     AcpiGbl_PreDefinedNames[] =
 {
     {"_GPE",    ACPI_TYPE_LOCAL_SCOPE,      NULL},
     {"_PR_",    ACPI_TYPE_LOCAL_SCOPE,      NULL},
     {"_SB_",    ACPI_TYPE_DEVICE,           NULL},
     {"_SI_",    ACPI_TYPE_LOCAL_SCOPE,      NULL},
-    {"_TZ_",    ACPI_TYPE_THERMAL,          NULL},
-    {"_REV",    ACPI_TYPE_INTEGER,          (char *) ACPI_CA_SUPPORT_LEVEL},
+    {"_TZ_",    ACPI_TYPE_LOCAL_SCOPE,      NULL},
+    {"_REV",    ACPI_TYPE_INTEGER,          "2"},
     {"_OS_",    ACPI_TYPE_STRING,           ACPI_OS_NAME},
-    {"_GL_",    ACPI_TYPE_MUTEX,            (char *) 1},
+    {"_GL_",    ACPI_TYPE_MUTEX,            "0"},
 
-#if !defined (ACPI_NO_METHOD_EXECUTION) || defined (ACPI_CONSTANT_EVAL_ONLY)
-    {"_OSI",    ACPI_TYPE_METHOD,           (char *) 1},
+#if defined (ACPI_NO_METHOD_EXECUTION) || defined (ACPI_CONSTANT_EVAL_ONLY)
+    {"_OSI",    ACPI_TYPE_METHOD,           "1"},
 #endif
-
-    /* Table terminator */
-
-    {NULL,      ACPI_TYPE_ANY,              NULL}
+    {NULL,      ACPI_TYPE_ANY,              NULL}              /* Table terminator */
 };
+
 
 /*
  * Properties of the ACPI Object Types, both internal and external.
  * The table is indexed by values of ACPI_OBJECT_TYPE
  */
+
 const UINT8                     AcpiGbl_NsProperties[] =
 {
     ACPI_NS_NORMAL,                     /* 00 Any              */
@@ -359,40 +328,36 @@ const UINT8                     AcpiGbl_NsProperties[] =
     ACPI_NS_NORMAL,                     /* 19 IndexField       */
     ACPI_NS_NORMAL,                     /* 20 Reference        */
     ACPI_NS_NORMAL,                     /* 21 Alias            */
-    ACPI_NS_NORMAL,                     /* 22 MethodAlias      */
-    ACPI_NS_NORMAL,                     /* 23 Notify           */
-    ACPI_NS_NORMAL,                     /* 24 Address Handler  */
-    ACPI_NS_NEWSCOPE | ACPI_NS_LOCAL,   /* 25 Resource Desc    */
-    ACPI_NS_NEWSCOPE | ACPI_NS_LOCAL,   /* 26 Resource Field   */
-    ACPI_NS_NEWSCOPE,                   /* 27 Scope            */
-    ACPI_NS_NORMAL,                     /* 28 Extra            */
-    ACPI_NS_NORMAL,                     /* 29 Data             */
-    ACPI_NS_NORMAL                      /* 30 Invalid          */
+    ACPI_NS_NORMAL,                     /* 22 Notify           */
+    ACPI_NS_NORMAL,                     /* 23 Address Handler  */
+    ACPI_NS_NEWSCOPE | ACPI_NS_LOCAL,   /* 24 Resource Desc    */
+    ACPI_NS_NEWSCOPE | ACPI_NS_LOCAL,   /* 25 Resource Field   */
+    ACPI_NS_NEWSCOPE,                   /* 26 Scope            */
+    ACPI_NS_NORMAL,                     /* 27 Extra            */
+    ACPI_NS_NORMAL,                     /* 28 Data             */
+    ACPI_NS_NORMAL                      /* 29 Invalid          */
 };
 
 
 /* Hex to ASCII conversion table */
 
 static const char           AcpiGbl_HexToAscii[] =
-{
-    '0','1','2','3','4','5','6','7',
-    '8','9','A','B','C','D','E','F'
-};
+                                {'0','1','2','3','4','5','6','7',
+                                 '8','9','A','B','C','D','E','F'};
 
-
-/*******************************************************************************
+/*****************************************************************************
  *
  * FUNCTION:    AcpiUtHexToAsciiChar
  *
  * PARAMETERS:  Integer             - Contains the hex digit
  *              Position            - bit position of the digit within the
- *                                    integer (multiple of 4)
+ *                                    integer
  *
- * RETURN:      The converted Ascii character
+ * RETURN:      Ascii character
  *
- * DESCRIPTION: Convert a hex digit to an Ascii character
+ * DESCRIPTION: Convert a hex digit to an ascii character
  *
- ******************************************************************************/
+ ****************************************************************************/
 
 char
 AcpiUtHexToAsciiChar (
@@ -404,7 +369,7 @@ AcpiUtHexToAsciiChar (
 }
 
 
-/*******************************************************************************
+/******************************************************************************
  *
  * Table name globals
  *
@@ -413,11 +378,13 @@ AcpiUtHexToAsciiChar (
  * that are not used by the subsystem are simply ignored.
  *
  * Do NOT add any table to this list that is not consumed directly by this
- * subsystem (No MADT, ECDT, SBST, etc.)
+ * subsystem.
  *
  ******************************************************************************/
 
+
 ACPI_TABLE_LIST             AcpiGbl_TableLists[NUM_ACPI_TABLE_TYPES];
+
 
 ACPI_TABLE_SUPPORT          AcpiGbl_TableData[NUM_ACPI_TABLE_TYPES] =
 {
@@ -450,7 +417,6 @@ ACPI_BIT_REGISTER_INFO      AcpiGbl_BitRegisterInfo[ACPI_NUM_BITREG] =
     /* ACPI_BITREG_SLEEP_BUTTON_STATUS  */   {ACPI_REGISTER_PM1_STATUS,   ACPI_BITPOSITION_SLEEP_BUTTON_STATUS,   ACPI_BITMASK_SLEEP_BUTTON_STATUS},
     /* ACPI_BITREG_RT_CLOCK_STATUS      */   {ACPI_REGISTER_PM1_STATUS,   ACPI_BITPOSITION_RT_CLOCK_STATUS,       ACPI_BITMASK_RT_CLOCK_STATUS},
     /* ACPI_BITREG_WAKE_STATUS          */   {ACPI_REGISTER_PM1_STATUS,   ACPI_BITPOSITION_WAKE_STATUS,           ACPI_BITMASK_WAKE_STATUS},
-    /* ACPI_BITREG_PCIEXP_WAKE_STATUS   */   {ACPI_REGISTER_PM1_STATUS,   ACPI_BITPOSITION_PCIEXP_WAKE_STATUS,    ACPI_BITMASK_PCIEXP_WAKE_STATUS},
 
     /* ACPI_BITREG_TIMER_ENABLE         */   {ACPI_REGISTER_PM1_ENABLE,   ACPI_BITPOSITION_TIMER_ENABLE,          ACPI_BITMASK_TIMER_ENABLE},
     /* ACPI_BITREG_GLOBAL_LOCK_ENABLE   */   {ACPI_REGISTER_PM1_ENABLE,   ACPI_BITPOSITION_GLOBAL_LOCK_ENABLE,    ACPI_BITMASK_GLOBAL_LOCK_ENABLE},
@@ -458,7 +424,6 @@ ACPI_BIT_REGISTER_INFO      AcpiGbl_BitRegisterInfo[ACPI_NUM_BITREG] =
     /* ACPI_BITREG_SLEEP_BUTTON_ENABLE  */   {ACPI_REGISTER_PM1_ENABLE,   ACPI_BITPOSITION_SLEEP_BUTTON_ENABLE,   ACPI_BITMASK_SLEEP_BUTTON_ENABLE},
     /* ACPI_BITREG_RT_CLOCK_ENABLE      */   {ACPI_REGISTER_PM1_ENABLE,   ACPI_BITPOSITION_RT_CLOCK_ENABLE,       ACPI_BITMASK_RT_CLOCK_ENABLE},
     /* ACPI_BITREG_WAKE_ENABLE          */   {ACPI_REGISTER_PM1_ENABLE,   0,                                      0},
-    /* ACPI_BITREG_PCIEXP_WAKE_DISABLE  */   {ACPI_REGISTER_PM1_ENABLE,   ACPI_BITPOSITION_PCIEXP_WAKE_DISABLE,   ACPI_BITMASK_PCIEXP_WAKE_DISABLE},
 
     /* ACPI_BITREG_SCI_ENABLE           */   {ACPI_REGISTER_PM1_CONTROL,  ACPI_BITPOSITION_SCI_ENABLE,            ACPI_BITMASK_SCI_ENABLE},
     /* ACPI_BITREG_BUS_MASTER_RLD       */   {ACPI_REGISTER_PM1_CONTROL,  ACPI_BITPOSITION_BUS_MASTER_RLD,        ACPI_BITMASK_BUS_MASTER_RLD},
@@ -480,7 +445,7 @@ ACPI_FIXED_EVENT_INFO       AcpiGbl_FixedEventInfo[ACPI_NUM_FIXED_EVENTS] =
     /* ACPI_EVENT_RTC           */  {ACPI_BITREG_RT_CLOCK_STATUS,       ACPI_BITREG_RT_CLOCK_ENABLE,     ACPI_BITMASK_RT_CLOCK_STATUS,       ACPI_BITMASK_RT_CLOCK_ENABLE},
 };
 
-/*******************************************************************************
+/*****************************************************************************
  *
  * FUNCTION:    AcpiUtGetRegionName
  *
@@ -490,7 +455,7 @@ ACPI_FIXED_EVENT_INFO       AcpiGbl_FixedEventInfo[ACPI_NUM_FIXED_EVENTS] =
  *
  * DESCRIPTION: Translate a Space ID into a name string (Debug only)
  *
- ******************************************************************************/
+ ****************************************************************************/
 
 /* Region type decoding */
 
@@ -509,7 +474,7 @@ const char        *AcpiGbl_RegionTypes[ACPI_NUM_PREDEFINED_REGIONS] =
 };
 
 
-const char *
+char *
 AcpiUtGetRegionName (
     UINT8                   SpaceId)
 {
@@ -518,16 +483,17 @@ AcpiUtGetRegionName (
     {
         return ("UserDefinedRegion");
     }
+
     else if (SpaceId >= ACPI_NUM_PREDEFINED_REGIONS)
     {
         return ("InvalidSpaceId");
     }
 
-    return (AcpiGbl_RegionTypes[SpaceId]);
+    return ((char *) AcpiGbl_RegionTypes[SpaceId]);
 }
 
 
-/*******************************************************************************
+/*****************************************************************************
  *
  * FUNCTION:    AcpiUtGetEventName
  *
@@ -537,7 +503,7 @@ AcpiUtGetRegionName (
  *
  * DESCRIPTION: Translate a Event ID into a name string (Debug only)
  *
- ******************************************************************************/
+ ****************************************************************************/
 
 /* Event type decoding */
 
@@ -551,7 +517,7 @@ static const char        *AcpiGbl_EventTypes[ACPI_NUM_FIXED_EVENTS] =
 };
 
 
-const char *
+char *
 AcpiUtGetEventName (
     UINT32                  EventId)
 {
@@ -561,11 +527,11 @@ AcpiUtGetEventName (
         return ("InvalidEventID");
     }
 
-    return (AcpiGbl_EventTypes[EventId]);
+    return ((char *) AcpiGbl_EventTypes[EventId]);
 }
 
 
-/*******************************************************************************
+/*****************************************************************************
  *
  * FUNCTION:    AcpiUtGetTypeName
  *
@@ -575,21 +541,21 @@ AcpiUtGetEventName (
  *
  * DESCRIPTION: Translate a Type ID into a name string (Debug only)
  *
- ******************************************************************************/
+ ****************************************************************************/
 
 /*
  * Elements of AcpiGbl_NsTypeNames below must match
  * one-to-one with values of ACPI_OBJECT_TYPE
  *
- * The type ACPI_TYPE_ANY (Untyped) is used as a "don't care" when searching;
- * when stored in a table it really means that we have thus far seen no
- * evidence to indicate what type is actually going to be stored for this entry.
+ * The type ACPI_TYPE_ANY (Untyped) is used as a "don't care" when searching; when
+ * stored in a table it really means that we have thus far seen no evidence to
+ * indicatewhat type is actually going to be stored for this entry.
  */
+
 static const char           AcpiGbl_BadType[] = "UNDEFINED";
+#define TYPE_NAME_LENGTH    12                           /* Maximum length of each string */
 
-/* Printable names of the ACPI object types */
-
-static const char           *AcpiGbl_NsTypeNames[] =
+static const char           *AcpiGbl_NsTypeNames[] =    /* printable names of ACPI types */
 {
     /* 00 */ "Untyped",
     /* 01 */ "Integer",
@@ -613,33 +579,32 @@ static const char           *AcpiGbl_NsTypeNames[] =
     /* 19 */ "IndexField",
     /* 20 */ "Reference",
     /* 21 */ "Alias",
-    /* 22 */ "MethodAlias",
-    /* 23 */ "Notify",
-    /* 24 */ "AddrHandler",
-    /* 25 */ "ResourceDesc",
-    /* 26 */ "ResourceFld",
-    /* 27 */ "Scope",
-    /* 28 */ "Extra",
-    /* 29 */ "Data",
-    /* 30 */ "Invalid"
+    /* 22 */ "Notify",
+    /* 23 */ "AddrHandler",
+    /* 24 */ "ResourceDesc",
+    /* 25 */ "ResourceFld",
+    /* 26 */ "Scope",
+    /* 27 */ "Extra",
+    /* 28 */ "Data",
+    /* 39 */ "Invalid"
 };
 
 
-const char *
+char *
 AcpiUtGetTypeName (
     ACPI_OBJECT_TYPE        Type)
 {
 
     if (Type > ACPI_TYPE_INVALID)
     {
-        return (AcpiGbl_BadType);
+        return ((char *) AcpiGbl_BadType);
     }
 
-    return (AcpiGbl_NsTypeNames[Type]);
+    return ((char *) AcpiGbl_NsTypeNames[Type]);
 }
 
 
-const char *
+char *
 AcpiUtGetObjectTypeName (
     ACPI_OPERAND_OBJECT     *ObjDesc)
 {
@@ -653,7 +618,7 @@ AcpiUtGetObjectTypeName (
 }
 
 
-/*******************************************************************************
+/*****************************************************************************
  *
  * FUNCTION:    AcpiUtGetNodeName
  *
@@ -663,51 +628,37 @@ AcpiUtGetObjectTypeName (
  *
  * DESCRIPTION: Validate the node and return the node's ACPI name.
  *
- ******************************************************************************/
+ ****************************************************************************/
 
-const char *
+char *
 AcpiUtGetNodeName (
     void                    *Object)
 {
-    ACPI_NAMESPACE_NODE     *Node = (ACPI_NAMESPACE_NODE *) Object;
+    ACPI_NAMESPACE_NODE     *Node;
 
-
-    /* Must return a string of exactly 4 characters == ACPI_NAME_SIZE */
 
     if (!Object)
     {
-        return ("NULL");
+        return ("NULL NODE");
     }
 
-    /* Check for Root node */
-
-    if ((Object == ACPI_ROOT_OBJECT) ||
-        (Object == AcpiGbl_RootNode))
-    {
-        return ("\"\\\" ");
-    }
-
-    /* Descriptor must be a namespace node */
+    Node = (ACPI_NAMESPACE_NODE *) Object;
 
     if (Node->Descriptor != ACPI_DESC_TYPE_NAMED)
     {
-        return ("####");
+        return ("****");
     }
-
-    /* Name must be a valid ACPI name */
 
     if (!AcpiUtValidAcpiName (* (UINT32 *) Node->Name.Ascii))
     {
-        return ("????");
+        return ("----");
     }
-
-    /* Return the name */
 
     return (Node->Name.Ascii);
 }
 
 
-/*******************************************************************************
+/*****************************************************************************
  *
  * FUNCTION:    AcpiUtGetDescriptorName
  *
@@ -717,11 +668,9 @@ AcpiUtGetNodeName (
  *
  * DESCRIPTION: Validate object and return the descriptor type
  *
- ******************************************************************************/
+ ****************************************************************************/
 
-/* Printable names of object descriptor types */
-
-static const char           *AcpiGbl_DescTypeNames[] =
+static const char           *AcpiGbl_DescTypeNames[] =    /* printable names of descriptor types */
 {
     /* 00 */ "Invalid",
     /* 01 */ "Cached",
@@ -742,7 +691,7 @@ static const char           *AcpiGbl_DescTypeNames[] =
 };
 
 
-const char *
+char *
 AcpiUtGetDescriptorName (
     void                    *Object)
 {
@@ -754,10 +703,10 @@ AcpiUtGetDescriptorName (
 
     if (ACPI_GET_DESCRIPTOR_TYPE (Object) > ACPI_DESC_TYPE_MAX)
     {
-        return (AcpiGbl_BadType);
+        return ((char *) AcpiGbl_BadType);
     }
 
-    return (AcpiGbl_DescTypeNames[ACPI_GET_DESCRIPTOR_TYPE (Object)]);
+    return ((char *) AcpiGbl_DescTypeNames[ACPI_GET_DESCRIPTOR_TYPE (Object)]);
 
 }
 
@@ -767,20 +716,19 @@ AcpiUtGetDescriptorName (
  * Strings and procedures used for debug only
  */
 
-/*******************************************************************************
+/*****************************************************************************
  *
  * FUNCTION:    AcpiUtGetMutexName
  *
- * PARAMETERS:  MutexId         - The predefined ID for this mutex.
+ * PARAMETERS:  None.
  *
- * RETURN:      String containing the name of the mutex. Always returns a valid
- *              pointer.
+ * RETURN:      Status
  *
  * DESCRIPTION: Translate a mutex ID into a name string (Debug only)
  *
- ******************************************************************************/
+ ****************************************************************************/
 
-const char *
+char *
 AcpiUtGetMutexName (
     UINT32                  MutexId)
 {
@@ -792,20 +740,21 @@ AcpiUtGetMutexName (
 
     return (AcpiGbl_MutexNames[MutexId]);
 }
+
 #endif
 
 
-/*******************************************************************************
+/*****************************************************************************
  *
  * FUNCTION:    AcpiUtValidObjectType
  *
  * PARAMETERS:  Type            - Object type to be validated
  *
- * RETURN:      TRUE if valid object type, FALSE otherwise
+ * RETURN:      TRUE if valid object type
  *
  * DESCRIPTION: Validate an object type
  *
- ******************************************************************************/
+ ****************************************************************************/
 
 BOOLEAN
 AcpiUtValidObjectType (
@@ -823,7 +772,7 @@ AcpiUtValidObjectType (
 }
 
 
-/*******************************************************************************
+/****************************************************************************
  *
  * FUNCTION:    AcpiUtAllocateOwnerId
  *
@@ -831,10 +780,7 @@ AcpiUtValidObjectType (
  *
  * DESCRIPTION: Allocate a table or method owner id
  *
- * NOTE: This algorithm has a wraparound problem at 64K method invocations, and
- *       should be revisited (TBD)
- *
- ******************************************************************************/
+ ***************************************************************************/
 
 ACPI_OWNER_ID
 AcpiUtAllocateOwnerId (
@@ -890,18 +836,16 @@ AcpiUtAllocateOwnerId (
 }
 
 
-/*******************************************************************************
+/****************************************************************************
  *
  * FUNCTION:    AcpiUtInitGlobals
  *
- * PARAMETERS:  None
- *
- * RETURN:      None
+ * PARAMETERS:  none
  *
  * DESCRIPTION: Init library globals.  All globals that require specific
  *              initialization should be initialized here!
  *
- ******************************************************************************/
+ ***************************************************************************/
 
 void
 AcpiUtInitGlobals (
@@ -911,7 +855,6 @@ AcpiUtInitGlobals (
 
 
     ACPI_FUNCTION_TRACE ("UtInitGlobals");
-
 
     /* Memory allocation and cache lists */
 
@@ -971,7 +914,6 @@ AcpiUtInitGlobals (
 
     AcpiGbl_SystemNotify.Handler        = NULL;
     AcpiGbl_DeviceNotify.Handler        = NULL;
-    AcpiGbl_ExceptionHandler            = NULL;
     AcpiGbl_InitHandler                 = NULL;
 
     /* Global "typed" ACPI table pointers */
@@ -1006,7 +948,6 @@ AcpiUtInitGlobals (
     /* Hardware oriented */
 
     AcpiGbl_EventsInitialized           = FALSE;
-    AcpiGbl_SystemAwakeAndRunning       = TRUE;
 
     /* Namespace */
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: denode.h,v 1.4 2003/09/07 22:09:11 itojun Exp $	*/
+/*	$NetBSD: denode.h,v 1.4.14.4 2006/10/06 19:42:51 ghen Exp $	*/
 
 /*-
  * Copyright (C) 1994, 1995, 1997 Wolfgang Solfrank.
@@ -117,10 +117,11 @@ struct fatcache {
  * cache is probably pretty worthless if a file is opened by multiple
  * processes.
  */
-#define	FC_SIZE		2	/* number of entries in the cache */
+#define	FC_SIZE		3	/* number of entries in the cache */
 #define	FC_LASTMAP	0	/* entry the last call to pcbmap() resolved
 				 * to */
 #define	FC_LASTFC	1	/* entry for the last cluster in the file */
+#define	FC_NEXTTOLASTFC	2	/* entry for a close to the last cluster in the file */
 
 #define	FCE_EMPTY	0xffffffff	/* doesn't represent an actual cluster # */
 
@@ -130,6 +131,13 @@ struct fatcache {
 #define	fc_setcache(dep, slot, frcn, fsrcn) \
 	(dep)->de_fc[slot].fc_frcn = frcn; \
 	(dep)->de_fc[slot].fc_fsrcn = fsrcn;
+
+#define fc_last_to_nexttolast(dep) \
+	do {  \
+		(dep)->de_fc[FC_NEXTTOLASTFC].fc_frcn = (dep)->de_fc[FC_LASTFC].fc_frcn; \
+		(dep)->de_fc[FC_NEXTTOLASTFC].fc_fsrcn = (dep)->de_fc[FC_LASTFC].fc_fsrcn; \
+	} while (0)
+	 
 
 /*
  * This is the in memory variant of a dos directory entry.  It is usually
@@ -177,6 +185,9 @@ struct denode {
  */
 #define	WIN_MAXLEN	255
 
+/* Maximum size of a file on a FAT filesystem */
+#define MSDOSFS_FILESIZE_MAX	0xFFFFFFFFLL
+
 /*
  * Transfer directory entries between internal and external form.
  * dep is a struct denode * (internal form),
@@ -199,6 +210,8 @@ struct denode {
 
 #define DE_EXTERNALIZE32(dp, dep)			\
 	 putushort((dp)->deHighClust, (dep)->de_StartCluster >> 16)
+#define DE_EXTERNALIZE16(dp, dep)			\
+	 putushort((dp)->deHighClust, 0)
 #define DE_EXTERNALIZE(dp, dep)				\
 	(memcpy((dp)->deName, (dep)->de_Name, 11),	\
 	 (dp)->deAttributes = (dep)->de_Attributes,	\
@@ -211,7 +224,7 @@ struct denode {
 	 putushort((dp)->deStartCluster, (dep)->de_StartCluster), \
 	 putulong((dp)->deFileSize,			\
 	     ((dep)->de_Attributes & ATTR_DIRECTORY) ? 0 : (dep)->de_FileSize), \
-	 (FAT32((dep)->de_pmp) ? DE_EXTERNALIZE32((dp), (dep)) : 0))
+	 (FAT32((dep)->de_pmp) ? DE_EXTERNALIZE32((dp), (dep)) : DE_EXTERNALIZE16((dp), (dep))))
 
 #define	de_forw		de_chain[0]
 #define	de_back		de_chain[1]
@@ -307,4 +320,5 @@ int removede __P((struct denode *, struct denode *));
 int uniqdosname __P((struct denode *, struct componentname *, u_char *));
 int findwin95 __P((struct denode *));
 int msdosfs_gop_alloc __P((struct vnode *, off_t, off_t, int, struct ucred *));
+void msdosfs_gop_markupdate __P((struct vnode *, int));
 #endif	/* _KERNEL */

@@ -1,4 +1,4 @@
-/*	$NetBSD: aoutm68k_exec.c,v 1.19 2005/03/26 05:12:35 fvdl Exp $	*/
+/*	$NetBSD: aoutm68k_exec.c,v 1.18.10.1 2005/09/18 20:09:50 tron Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aoutm68k_exec.c,v 1.19 2005/03/26 05:12:35 fvdl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aoutm68k_exec.c,v 1.18.10.1 2005/09/18 20:09:50 tron Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_syscall_debug.h"

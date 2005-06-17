@@ -1,4 +1,4 @@
-/*	$NetBSD: verified_exec.c,v 1.14 2005/06/16 15:45:48 elad Exp $	*/
+/*	$NetBSD: verified_exec.c,v 1.5.2.16 2005/08/16 12:43:17 tron Exp $	*/
 
 /*-
  * Copyright 2005 Elad Efrat <elad@bsd.org.il>
@@ -31,9 +31,9 @@
 
 #include <sys/cdefs.h>
 #if defined(__NetBSD__)
-__KERNEL_RCSID(0, "$NetBSD: verified_exec.c,v 1.14 2005/06/16 15:45:48 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: verified_exec.c,v 1.5.2.16 2005/08/16 12:43:17 tron Exp $");
 #else
-__RCSID("$Id: verified_exec.c,v 1.14 2005/06/16 15:45:48 elad Exp $\n$NetBSD: verified_exec.c,v 1.14 2005/06/16 15:45:48 elad Exp $");
+__RCSID("$Id: verified_exec.c,v 1.5.2.16 2005/08/16 12:43:17 tron Exp $\n$NetBSD: verified_exec.c,v 1.5.2.16 2005/08/16 12:43:17 tron Exp $");
 #endif
 
 #include <sys/param.h>
@@ -113,25 +113,29 @@ veriexecattach(DEVPORT_DEVICE *parent, DEVPORT_DEVICE *self,
 		   void *aux)
 {
 	veriexec_dev_usage = 0;
-	veriexec_dprintf(("Veriexec: veriexecattach: Veriexec pseudo-device "
-	    "attached.\n"));
+
+	if (veriexec_verbose >= 2)
+		printf("Veriexec: veriexecattach: Veriexec pseudo-device"
+		       "attached.\n");
 }
 
 int
 veriexecopen(dev_t dev __unused, int flags __unused,
 		 int fmt __unused, struct proc *p __unused)
 {
-#ifdef VERIFIED_EXEC_DEBUG_VERBOSE
-	printf("Veriexec: veriexecopen: Veriexec load device open attempt by "
-	       "uid=%u, pid=%u. (dev=%d)\n", p->p_ucred->cr_uid,
-	       p->p_pid, dev);
-#endif
+	if (veriexec_verbose >= 2) {
+		printf("Veriexec: veriexecopen: Veriexec load device "
+		       "open attempt by uid=%u, pid=%u. (dev=%u)\n",
+		       p->p_ucred->cr_uid, p->p_pid, dev);
+	}
 
 	if (suser(p->p_ucred, &p->p_acflag) != 0)
 		return (EPERM);
 
 	if (veriexec_dev_usage > 0) {
-		veriexec_dprintf(("Veriexec: load device already in use\n"));
+		if (veriexec_verbose >= 2)
+			printf("Veriexec: load device already in use.\n");
+
 		return(EBUSY);
 	}
 
@@ -158,12 +162,9 @@ veriexecioctl(dev_t dev __unused, u_long cmd, caddr_t data,
 	int error = 0;
 	u_long hashmask;
 
-	/*
-	 * Don't allow updates in multi-user mode.
-	 */
-	if ((securelevel > 0) || (veriexec_strict > 0)) {
-		printf("Veriexec: veriexecioctl: Securelevel or strict "
-		       "mode, modifying veriexec tables is not permitted.\n"); 
+	if (veriexec_strict > 0) {
+		printf("Veriexec: veriexecioctl: Strict mode, modifying "
+		       "veriexec tables is not permitted.\n"); 
 
 		return (EPERM);
 	}
@@ -210,6 +211,7 @@ veriexecioctl(dev_t dev __unused, u_long cmd, caddr_t data,
 		error = namei(&nid);
 		if (error)
 			return (error);
+
 		/* Add only regular files. */
 		if (nid.ni_vp->v_type != VREG) {
 			printf("Veriexec: veriexecioctl: Not adding \"%s\": "
@@ -217,8 +219,6 @@ veriexecioctl(dev_t dev __unused, u_long cmd, caddr_t data,
 			vrele(nid.ni_vp);
 			return (EINVAL);
 		}
-
-		nid.ni_vp->fp_status = FINGERPRINT_NOTEVAL;
 
 		/* Get attributes for device and inode. */
 		error = VOP_GETATTR(nid.ni_vp, &va, p->p_ucred, p);
@@ -229,71 +229,70 @@ veriexecioctl(dev_t dev __unused, u_long cmd, caddr_t data,
 		vrele(nid.ni_vp);
 
 		/* Get table for the device. */
-		tbl = veriexec_tblfind(va.va_fsid);
+		/*
+		 * XXX: va_fsid is long (32/64 bits) and veriexec_tblfind()
+		 * XXX: is passed a dev_t - uint32_t.
+		 */
+		tbl = veriexec_tblfind((dev_t)va.va_fsid);
 		if (tbl == NULL) {
 			return (EINVAL);
 		}
 
-		hh = veriexec_lookup(va.va_fsid, va.va_fileid);
+		/*
+		 * XXX: Both va_fsid and va_fileid are long (32/64 bits), while
+		 * XXX: veriexec_lookup() is passed dev_t and ino_t - uint32_t.
+		 */
+		hh = veriexec_lookup((dev_t)va.va_fsid, (ino_t)va.va_fileid);
 		if (hh != NULL) {
 			/*
-			 * Duplicate entry. Still check the type to
-			 * ensure enforcement of a stricter policy.
-			 * I.e. if original entry was direct exec but
-			 * the new params flag the file as indirect or
-			 * file then update the hash entry to the new
-			 * type to ensure duplicate entries do not
-			 * degrade the security policy...
+			 * Duplicate entry means something is wrong in
+			 * the signature file. Just give collision info
+			 * and return.
 			 */
-			
-			if ((hh->type != params->type) &&
-			    ((params->type == VERIEXEC_INDIRECT) ||
-			     (params->type == VERIEXEC_FILE))) {
-				hh->type = params->type;
-				printf("Veriexec: veriexecioctl: Duplicate "
-				       "entry for %s, (dev=%lu, inode=%lu) "
-				       "but type mismatched. "
-				       "Updating type to stricter one.\n",
-				       params->file, va.va_fsid, va.va_fileid);
-			}
-			
-#ifdef VERIFIED_EXEC_DEBUG_VERBOSE
-			printf("Veriexec: veriexecioctl: Duplicate "
-			       "entry for %s. (dev=%lu, inode=%lu) "
-			       "Ignoring.\n", params->file,
-			       va.va_fsid, va.va_fileid);
-#endif
+			printf("veriexec: Duplicate entry. [%s, %ld:%ld] "
+			       "old[type=0x%02x, algorithm=%s], "
+			       "new[type=0x%02x, algorithm=%s] "
+			       "(%s fingerprint)\n",
+			       params->file, va.va_fsid, va.va_fileid,
+			       hh->type, hh->ops->type,
+			       params->type, params->fp_type,
+			       (((hh->ops->hash_len != params->size) ||
+				(memcmp(hh->fp, params->fingerprint,
+					min(hh->ops->hash_len, params->size))
+					!= 0)) ? "different" : "same"));
 
 			return (0);
 		}
 
 		e = malloc(sizeof(*e), M_TEMP, M_WAITOK);
-		e->inode = va.va_fileid;
+		/* XXX: va_fileid is long (32/64 bits), ino_t is uint32_t. */
+		e->inode = (ino_t)va.va_fileid;
 		e->type = params->type;
+		e->status = FINGERPRINT_NOTEVAL;
 		if ((e->ops = veriexec_find_ops(params->fp_type)) == NULL) {
 			free(e, M_TEMP);
 			printf("Veriexec: veriexecioctl: Invalid or unknown "
 			       "fingerprint type \"%s\" for file \"%s\" "
-			       "(dev=%lu, inode=%lu)\n", params->fp_type,
+			       "(dev=%ld, inode=%ld)\n", params->fp_type,
 			       params->file, va.va_fsid, va.va_fileid);
 			return(EINVAL);
 		}
 
-		  /*
-		   * Just a bit of a sanity check - require the size of
-		   * the fp to be passed in, check this against the expected
-		   * size.  Of course userland could lie deliberately, this
-		   * really only protects against the obvious fumble of
-		   * changing the fp type but not updating the fingerprint
-		   * string.
-		   */
+		/*
+		 * Just a bit of a sanity check - require the size of
+		 * the fp to be passed in, check this against the expected
+		 * size.  Of course userland could lie deliberately, this
+		 * really only protects against the obvious fumble of
+		 * changing the fp type but not updating the fingerprint
+		 * string.
+		 */
 		if (e->ops->hash_len != params->size) {
 			printf("Veriexec: veriexecioctl: Inconsistent "
 			       "fingerprint size for type \"%s\" for file "
-			       "\"%s\" (dev=%lu, inode=%lu), size was %u "
-			       "was expecting %lu\n", params->fp_type,
+			       "\"%s\" (dev=%ld, inode=%ld), size was %u "
+			       "was expecting %zu\n", params->fp_type,
 			       params->file, va.va_fsid, va.va_fileid,
-			       params->size, (unsigned long)e->ops->hash_len);
+			       params->size, e->ops->hash_len);
 			free(e, M_TEMP);
 			return(EINVAL);
 		}
@@ -301,9 +300,9 @@ veriexecioctl(dev_t dev __unused, u_long cmd, caddr_t data,
 		e->fp = malloc(e->ops->hash_len, M_TEMP, M_WAITOK);
 		memcpy(e->fp, params->fingerprint, e->ops->hash_len);
 
-		veriexec_dprintf(("Veriexec: veriexecioctl: New entry. (file=%s,"
-		    " dev=%d, inode=%u)\n", params->vxp_file, va.va_fsid,
-		    va.va_fileid));
+		veriexec_report("New entry.", params->file, &va, NULL,
+				REPORT_VERBOSE_HIGH, REPORT_NOALARM,
+				REPORT_NOPANIC);
 
 		error = veriexec_hashadd(tbl, e);
 

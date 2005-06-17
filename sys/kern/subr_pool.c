@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_pool.c,v 1.100 2005/04/01 11:59:37 yamt Exp $	*/
+/*	$NetBSD: subr_pool.c,v 1.99.8.2 2006/03/10 13:19:42 tron Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1999, 2000 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_pool.c,v 1.100 2005/04/01 11:59:37 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_pool.c,v 1.99.8.2 2006/03/10 13:19:42 tron Exp $");
 
 #include "opt_pool.h"
 #include "opt_poollog.h"
@@ -174,7 +174,7 @@ struct pool_item {
 /* The cache group pool. */
 static struct pool pcgpool;
 
-static void	pool_cache_reclaim(struct pool_cache *);
+static void	pool_cache_reclaim(struct pool_cache *, struct pool_pagelist *);
 
 static int	pool_catchup(struct pool *);
 static void	pool_prime_page(struct pool *, caddr_t,
@@ -384,6 +384,23 @@ pr_find_pagehead(struct pool *pp, caddr_t page)
 	return ph;
 }
 
+static void
+pr_pagelist_free(struct pool *pp, struct pool_pagelist *pq)
+{
+	struct pool_item_header *ph;
+	int s;
+
+	while ((ph = LIST_FIRST(pq)) != NULL) {
+		LIST_REMOVE(ph, ph_pagelist);
+		pool_allocator_free(pp, ph->ph_page);
+		if ((pp->pr_roflags & PR_PHINPAGE) == 0) {
+			s = splvm();
+			pool_put(pp->pr_phpool, ph);
+			splx(s);
+		}
+	}
+}
+
 /*
  * Remove a page from the pool.
  */
@@ -391,9 +408,8 @@ static __inline void
 pr_rmpage(struct pool *pp, struct pool_item_header *ph,
      struct pool_pagelist *pq)
 {
-	int s;
 
-	LOCK_ASSERT(!simple_lock_held(&pp->pr_slock) || pq != NULL);
+	LOCK_ASSERT(simple_lock_held(&pp->pr_slock));
 
 	/*
 	 * If the page was idle, decrement the idle page count.
@@ -411,21 +427,13 @@ pr_rmpage(struct pool *pp, struct pool_item_header *ph,
 	pp->pr_nitems -= pp->pr_itemsperpage;
 
 	/*
-	 * Unlink a page from the pool and release it (or queue it for release).
+	 * Unlink the page from the pool and queue it for release.
 	 */
 	LIST_REMOVE(ph, ph_pagelist);
 	if ((pp->pr_roflags & PR_PHINPAGE) == 0)
 		SPLAY_REMOVE(phtree, &pp->pr_phtree, ph);
-	if (pq) {
-		LIST_INSERT_HEAD(pq, ph, ph_pagelist);
-	} else {
-		pool_allocator_free(pp, ph->ph_page);
-		if ((pp->pr_roflags & PR_PHINPAGE) == 0) {
-			s = splvm();
-			pool_put(pp->pr_phpool, ph);
-			splx(s);
-		}
-	}
+	LIST_INSERT_HEAD(pq, ph, ph_pagelist);
+
 	pp->pr_npages--;
 	pp->pr_npagefree++;
 
@@ -472,35 +480,19 @@ pool_init(struct pool *pp, size_t size, u_int align, u_int ioff, int flags,
 		flags |= PR_LOGGING;
 #endif
 
-#ifdef POOL_SUBPAGE
-	/*
-	 * XXX We don't provide a real `nointr' back-end
-	 * yet; all sub-pages come from a kmem back-end.
-	 * maybe some day...
-	 */
-	if (palloc == NULL) {
-		extern struct pool_allocator pool_allocator_kmem_subpage;
-		palloc = &pool_allocator_kmem_subpage;
-	}
-	/*
-	 * We'll assume any user-specified back-end allocator
-	 * will deal with sub-pages, or simply don't care.
-	 */
-#else
 	if (palloc == NULL)
 		palloc = &pool_allocator_kmem;
+#ifdef POOL_SUBPAGE
+	if (size > palloc->pa_pagesz) {
+		if (palloc == &pool_allocator_kmem)
+			palloc = &pool_allocator_kmem_fullpage;
+		else if (palloc == &pool_allocator_nointr)
+			palloc = &pool_allocator_nointr_fullpage;
+	}		
 #endif /* POOL_SUBPAGE */
 	if ((palloc->pa_flags & PA_INITIALIZED) == 0) {
-		if (palloc->pa_pagesz == 0) {
-#ifdef POOL_SUBPAGE
-			if (palloc == &pool_allocator_kmem)
-				palloc->pa_pagesz = PAGE_SIZE;
-			else
-				palloc->pa_pagesz = POOL_SUBPAGE;
-#else
+		if (palloc->pa_pagesz == 0)
 			palloc->pa_pagesz = PAGE_SIZE;
-#endif /* POOL_SUBPAGE */
-		}
 
 		TAILQ_INIT(&palloc->pa_list);
 
@@ -696,20 +688,28 @@ pool_init(struct pool *pp, size_t size, u_int align, u_int ioff, int flags,
 void
 pool_destroy(struct pool *pp)
 {
+	struct pool_pagelist pq;
 	struct pool_item_header *ph;
-	struct pool_cache *pc;
 	int s;
 
-	/* Locking order: pool_allocator -> pool */
+	/* Remove from global pool list */
+	simple_lock(&pool_head_slock);
+	TAILQ_REMOVE(&pool_head, pp, pr_poollist);
+	if (drainpp == pp)
+		drainpp = NULL;
+	simple_unlock(&pool_head_slock);
+
+	/* Remove this pool from its allocator's list of pools. */
 	s = splvm();
 	simple_lock(&pp->pr_alloc->pa_slock);
 	TAILQ_REMOVE(&pp->pr_alloc->pa_list, pp, pr_alloc_list);
 	simple_unlock(&pp->pr_alloc->pa_slock);
 	splx(s);
 
-	/* Destroy all caches for this pool. */
-	while ((pc = TAILQ_FIRST(&pp->pr_cachelist)) != NULL)
-		pool_cache_destroy(pc);
+	s = splvm();
+	simple_lock(&pp->pr_slock);
+
+	KASSERT(TAILQ_EMPTY(&pp->pr_cachelist));
 
 #ifdef DIAGNOSTIC
 	if (pp->pr_nout != 0) {
@@ -719,19 +719,18 @@ pool_destroy(struct pool *pp)
 	}
 #endif
 
-	/* Remove all pages */
-	while ((ph = LIST_FIRST(&pp->pr_emptypages)) != NULL)
-		pr_rmpage(pp, ph, NULL);
 	KASSERT(LIST_EMPTY(&pp->pr_fullpages));
 	KASSERT(LIST_EMPTY(&pp->pr_partpages));
 
-	/* Remove from global pool list */
-	simple_lock(&pool_head_slock);
-	TAILQ_REMOVE(&pool_head, pp, pr_poollist);
-	if (drainpp == pp) {
-		drainpp = NULL;
-	}
-	simple_unlock(&pool_head_slock);
+	/* Remove all pages */
+	LIST_INIT(&pq);
+	while ((ph = LIST_FIRST(&pp->pr_emptypages)) != NULL)
+		pr_rmpage(pp, ph, &pq);
+
+	simple_unlock(&pp->pr_slock);
+	splx(s);
+
+	pr_pagelist_free(pp, &pq);
 
 #ifdef POOL_DIAGNOSTIC
 	if ((pp->pr_roflags & PR_LOGGING) != 0)
@@ -1037,7 +1036,7 @@ pool_get(struct pool *pp, int flags)
  * Internal version of pool_put().  Pool is already locked/entered.
  */
 static void
-pool_do_put(struct pool *pp, void *v)
+pool_do_put(struct pool *pp, void *v, struct pool_pagelist *pq)
 {
 	struct pool_item *pi = v;
 	struct pool_item_header *ph;
@@ -1125,9 +1124,7 @@ pool_do_put(struct pool *pp, void *v)
 		if (pp->pr_npages > pp->pr_minpages &&
 		    (pp->pr_npages > pp->pr_maxpages ||
 		     (pp->pr_alloc->pa_flags & PA_WANT) != 0)) {
-			simple_unlock(&pp->pr_slock);
-			pr_rmpage(pp, ph, NULL);
-			simple_lock(&pp->pr_slock);
+			pr_rmpage(pp, ph, pq);
 		} else {
 			LIST_REMOVE(ph, ph_pagelist);
 			LIST_INSERT_HEAD(&pp->pr_emptypages, ph, ph_pagelist);
@@ -1165,16 +1162,22 @@ pool_do_put(struct pool *pp, void *v)
 void
 _pool_put(struct pool *pp, void *v, const char *file, long line)
 {
+	struct pool_pagelist pq;
+
+	LIST_INIT(&pq);
 
 	simple_lock(&pp->pr_slock);
 	pr_enter(pp, file, line);
 
 	pr_log(pp, v, PRLOG_PUT, file, line);
 
-	pool_do_put(pp, v);
+	pool_do_put(pp, v, &pq);
 
 	pr_leave(pp);
 	simple_unlock(&pp->pr_slock);
+
+	if (! LIST_EMPTY(&pq))
+		pr_pagelist_free(pp, &pq);
 }
 #undef pool_put
 #endif /* POOL_DIAGNOSTIC */
@@ -1182,12 +1185,16 @@ _pool_put(struct pool *pp, void *v, const char *file, long line)
 void
 pool_put(struct pool *pp, void *v)
 {
+	struct pool_pagelist pq;
+
+	LIST_INIT(&pq);
 
 	simple_lock(&pp->pr_slock);
-
-	pool_do_put(pp, v);
-
+	pool_do_put(pp, v, &pq);
 	simple_unlock(&pp->pr_slock);
+
+	if (! LIST_EMPTY(&pq))
+		pr_pagelist_free(pp, &pq);
 }
 
 #ifdef POOL_DIAGNOSTIC
@@ -1469,7 +1476,7 @@ pool_reclaim(struct pool *pp)
 	 * Reclaim items from the pool's caches.
 	 */
 	TAILQ_FOREACH(pc, &pp->pr_cachelist, pc_poollist)
-		pool_cache_reclaim(pc);
+		pool_cache_reclaim(pc, &pq);
 
 	s = splclock();
 	curtime = mono_time;
@@ -1503,17 +1510,7 @@ pool_reclaim(struct pool *pp)
 	if (LIST_EMPTY(&pq))
 		return (0);
 
-	while ((ph = LIST_FIRST(&pq)) != NULL) {
-		LIST_REMOVE(ph, ph_pagelist);
-		pool_allocator_free(pp, ph->ph_page);
-		if (pp->pr_roflags & PR_PHINPAGE) {
-			continue;
-		}
-		s = splvm();
-		pool_put(pp->pr_phpool, ph);
-		splx(s);
-	}
-
+	pr_pagelist_free(pp, &pq);
 	return (1);
 }
 
@@ -2024,18 +2021,22 @@ pool_cache_destruct_object(struct pool_cache *pc, void *object)
 }
 
 /*
- * pool_cache_do_invalidate:
+ * pool_cache_invalidate:
  *
- *	This internal function implements pool_cache_invalidate() and
- *	pool_cache_reclaim().
+ *	Invalidate a pool cache (destruct and release all of the
+ *	cached objects).
  */
-static void
-pool_cache_do_invalidate(struct pool_cache *pc, int free_groups,
-    void (*putit)(struct pool *, void *))
+void
+pool_cache_invalidate(struct pool_cache *pc)
 {
+	struct pool_pagelist pq;
 	struct pool_cache_group *pcg, *npcg;
 	void *object;
-	int s;
+
+	LIST_INIT(&pq);
+
+	simple_lock(&pc->pc_slock);
+	simple_lock(&pc->pc_pool->pr_slock);
 
 	for (pcg = TAILQ_FIRST(&pc->pc_grouplist); pcg != NULL;
 	     pcg = npcg) {
@@ -2047,33 +2048,15 @@ pool_cache_do_invalidate(struct pool_cache *pc, int free_groups,
 				pc->pc_allocfrom = NULL;
 			if (pc->pc_dtor != NULL)
 				(*pc->pc_dtor)(pc->pc_arg, object);
-			(*putit)(pc->pc_pool, object);
-		}
-		if (free_groups) {
-			pc->pc_ngroups--;
-			TAILQ_REMOVE(&pc->pc_grouplist, pcg, pcg_list);
-			if (pc->pc_freeto == pcg)
-				pc->pc_freeto = NULL;
-			s = splvm();
-			pool_put(&pcgpool, pcg);
-			splx(s);
+			pool_do_put(pc->pc_pool, object, &pq);
 		}
 	}
-}
 
-/*
- * pool_cache_invalidate:
- *
- *	Invalidate a pool cache (destruct and release all of the
- *	cached objects).
- */
-void
-pool_cache_invalidate(struct pool_cache *pc)
-{
-
-	simple_lock(&pc->pc_slock);
-	pool_cache_do_invalidate(pc, 0, pool_put);
+	simple_unlock(&pc->pc_pool->pr_slock);
 	simple_unlock(&pc->pc_slock);
+
+	if (! LIST_EMPTY(&pq))
+		pr_pagelist_free(pc->pc_pool, &pq);
 }
 
 /*
@@ -2082,11 +2065,42 @@ pool_cache_invalidate(struct pool_cache *pc)
  *	Reclaim a pool cache for pool_reclaim().
  */
 static void
-pool_cache_reclaim(struct pool_cache *pc)
+pool_cache_reclaim(struct pool_cache *pc, struct pool_pagelist *pq)
 {
+	struct pool_cache_group *pcg, *npcg;
+	void *object;
+	int s;
 
-	simple_lock(&pc->pc_slock);
-	pool_cache_do_invalidate(pc, 1, pool_do_put);
+	/*
+	 * We're locking in the wrong order (normally pool_cache -> pool,
+	 * but the pool is already locked when we get here), so we have
+	 * to use trylock.  If we can't lock the pool_cache, it's not really
+	 * a big deal here.
+	 */
+	if (simple_lock_try(&pc->pc_slock) == 0)
+		return;
+
+	for (pcg = TAILQ_FIRST(&pc->pc_grouplist); pcg != NULL;
+	     pcg = npcg) {
+		npcg = TAILQ_NEXT(pcg, pcg_list);
+		while (pcg->pcg_avail != 0) {
+			pc->pc_nitems--;
+			object = pcg_get(pcg, NULL);
+			if (pcg->pcg_avail == 0 && pc->pc_allocfrom == pcg)
+				pc->pc_allocfrom = NULL;
+			if (pc->pc_dtor != NULL)
+				(*pc->pc_dtor)(pc->pc_arg, object);
+			pool_do_put(pc->pc_pool, object, pq);
+		}
+		pc->pc_ngroups--;
+		TAILQ_REMOVE(&pc->pc_grouplist, pcg, pcg_list);
+		if (pc->pc_freeto == pcg)
+			pc->pc_freeto = NULL;
+		s = splvm();
+		pool_put(&pcgpool, pcg);
+		splx(s);
+	}
+
 	simple_unlock(&pc->pc_slock);
 }
 
@@ -2106,23 +2120,42 @@ pool_cache_reclaim(struct pool_cache *pc)
 void	*pool_page_alloc(struct pool *, int);
 void	pool_page_free(struct pool *, void *);
 
+#ifdef POOL_SUBPAGE
+struct pool_allocator pool_allocator_kmem_fullpage = {
+	pool_page_alloc, pool_page_free, 0,
+};
+#else
 struct pool_allocator pool_allocator_kmem = {
 	pool_page_alloc, pool_page_free, 0,
 };
+#endif
 
 void	*pool_page_alloc_nointr(struct pool *, int);
 void	pool_page_free_nointr(struct pool *, void *);
 
+#ifdef POOL_SUBPAGE
+struct pool_allocator pool_allocator_nointr_fullpage = {
+	pool_page_alloc_nointr, pool_page_free_nointr, 0,
+};
+#else
 struct pool_allocator pool_allocator_nointr = {
 	pool_page_alloc_nointr, pool_page_free_nointr, 0,
 };
+#endif
 
 #ifdef POOL_SUBPAGE
 void	*pool_subpage_alloc(struct pool *, int);
 void	pool_subpage_free(struct pool *, void *);
 
-struct pool_allocator pool_allocator_kmem_subpage = {
-	pool_subpage_alloc, pool_subpage_free, 0,
+struct pool_allocator pool_allocator_kmem = {
+	pool_subpage_alloc, pool_subpage_free, POOL_SUBPAGE,
+};
+
+void	*pool_subpage_alloc_nointr(struct pool *, int);
+void	pool_subpage_free_nointr(struct pool *, void *);
+
+struct pool_allocator pool_allocator_nointr = {
+	pool_subpage_alloc, pool_subpage_free, POOL_SUBPAGE,
 };
 #endif /* POOL_SUBPAGE */
 
@@ -2251,7 +2284,7 @@ pool_page_alloc(struct pool *pp, int flags)
 {
 	boolean_t waitok = (flags & PR_WAITOK) ? TRUE : FALSE;
 
-	return ((void *) uvm_km_alloc_poolpage_cache(kmem_map, waitok));
+	return ((void *) uvm_km_alloc_poolpage_cache(kmem_map, NULL, waitok));
 }
 
 void
@@ -2266,14 +2299,14 @@ pool_page_alloc_meta(struct pool *pp, int flags)
 {
 	boolean_t waitok = (flags & PR_WAITOK) ? TRUE : FALSE;
 
-	return ((void *) uvm_km_alloc_poolpage(kmem_map, waitok));
+	return ((void *) uvm_km_alloc_poolpage1(kmem_map, NULL, waitok));
 }
 
 static void
 pool_page_free_meta(struct pool *pp, void *v)
 {
 
-	uvm_km_free_poolpage(kmem_map, (vaddr_t) v);
+	uvm_km_free_poolpage1(kmem_map, (vaddr_t) v);
 }
 
 #ifdef POOL_SUBPAGE
@@ -2300,25 +2333,26 @@ pool_subpage_free(struct pool *pp, void *v)
 
 /* We don't provide a real nointr allocator.  Maybe later. */
 void *
-pool_page_alloc_nointr(struct pool *pp, int flags)
+pool_subpage_alloc_nointr(struct pool *pp, int flags)
 {
 
 	return (pool_subpage_alloc(pp, flags));
 }
 
 void
-pool_page_free_nointr(struct pool *pp, void *v)
+pool_subpage_free_nointr(struct pool *pp, void *v)
 {
 
 	pool_subpage_free(pp, v);
 }
-#else
+#endif /* POOL_SUBPAGE */
 void *
 pool_page_alloc_nointr(struct pool *pp, int flags)
 {
 	boolean_t waitok = (flags & PR_WAITOK) ? TRUE : FALSE;
 
-	return ((void *) uvm_km_alloc_poolpage_cache(kernel_map, waitok));
+	return ((void *) uvm_km_alloc_poolpage_cache(kernel_map,
+	    uvm.kernel_object, waitok));
 }
 
 void
@@ -2327,4 +2361,3 @@ pool_page_free_nointr(struct pool *pp, void *v)
 
 	uvm_km_free_poolpage_cache(kernel_map, (vaddr_t) v);
 }
-#endif /* POOL_SUBPAGE */

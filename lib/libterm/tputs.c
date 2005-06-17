@@ -1,4 +1,4 @@
-/*	$NetBSD: tputs.c,v 1.23 2005/05/15 21:11:13 christos Exp $	*/
+/*	$NetBSD: tputs.c,v 1.22 2005/02/04 15:52:08 perry Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)tputs.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: tputs.c,v 1.23 2005/05/15 21:11:13 christos Exp $");
+__RCSID("$NetBSD: tputs.c,v 1.22 2005/02/04 15:52:08 perry Exp $");
 #endif
 #endif /* not lint */
 
@@ -43,7 +43,6 @@ __RCSID("$NetBSD: tputs.c,v 1.23 2005/05/15 21:11:13 christos Exp $");
 #include <termcap.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "termcap_private.h"
 #undef ospeed
 
 /* internal functions */
@@ -54,7 +53,8 @@ int _tputs_convert(const char **, int);
  * character for each speed as returned by gtty.  Thus since 300
  * baud returns a 7, there are 33.3 milliseconds per char at 300 baud.
  */
-const short __tmspc10[TMSPC10SIZE] = {
+static const
+short	tmspc10[] = {
 	0, 2000, 1333, 909, 743, 666, 500, 333, 166, 83, 55, 41, 20, 10, 5
 };
 
@@ -130,7 +130,8 @@ tputs(const char *cp, int affcnt, int (*outc)(int))
 	 */
 	if (i == 0)
 		return;
-	if (ospeed <= 0 || ospeed >= TMSPC10SIZE)
+	if (ospeed <= 0 ||
+	    (size_t) ospeed >= (sizeof tmspc10 / sizeof tmspc10[0]))
 		return;
 
 	/*
@@ -140,7 +141,7 @@ tputs(const char *cp, int affcnt, int (*outc)(int))
 	 * Transmitting pad characters slows many
 	 * terminals down and also loads the system.
 	 */
-	mspc10 = __tmspc10[ospeed];
+	mspc10 = tmspc10[ospeed];
 	i += mspc10 / 2;
 	for (i /= mspc10; i > 0; i--)
 		(void)(*outc)(PC);
@@ -195,7 +196,8 @@ t_puts(struct tinfo *info, const char *cp, int affcnt,
 	 */
 	if (i == 0)
 		return 0;
-	if (ospeed <= 0 || ospeed >= TMSPC10SIZE)
+	if (ospeed <= 0 ||
+	    (size_t) ospeed >= (sizeof tmspc10 / sizeof tmspc10[0]))
 		return 0;
 
 	/*
@@ -205,7 +207,7 @@ t_puts(struct tinfo *info, const char *cp, int affcnt,
 	 * Transmitting pad characters slows many
 	 * terminals down and also loads the system.
 	 */
-	mspc10 = __tmspc10[ospeed];
+	mspc10 = tmspc10[ospeed];
 	i += mspc10 / 2;
 	for (i /= mspc10; i > 0; i--)
 		(*outc)(pad[0], args);

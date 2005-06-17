@@ -1,4 +1,4 @@
-/*	$NetBSD: vidcrender.c,v 1.16 2005/06/09 09:24:45 he Exp $	*/
+/*	$NetBSD: vidcrender.c,v 1.14 2005/02/11 06:21:22 simonb Exp $	*/
 
 /*
  * Copyright (c) 1996 Mark Brinicombe
@@ -45,7 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vidcrender.c,v 1.16 2005/06/09 09:24:45 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vidcrender.c,v 1.14 2005/02/11 06:21:22 simonb Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -1246,8 +1246,7 @@ vidc_cursor_init(vc)
 
 	if (!cursor_data) {
 		/* Allocate cursor memory first time round */
-		cursor_data = (char *)uvm_km_alloc(kernel_map, PAGE_SIZE, 0,
-		    UVM_KMF_VAONLY);
+		cursor_data = (char *)uvm_km_zalloc(kernel_map, PAGE_SIZE);
 		if (!cursor_data)
 			panic("Cannot allocate memory for hardware cursor");
 		(void) pmap_extract(pmap_kernel(), (vaddr_t)cursor_data, &pa);
@@ -1610,20 +1609,20 @@ vidcrender_flash_go(vc)
 
 /* What does this function do ? */
 int 
-vidcrender_flash(vc, flashit)
+vidcrender_flash(vc, flash)
 	struct vconsole *vc;
-	int flashit;
+	int flash;
 {
-	flashit = flashit;
+	flash = flash;
 	return(0);
 }
 
 int
-vidcrender_cursorflash(vc, flashit)
+vidcrender_cursorflash(vc, flash)
 	struct vconsole *vc;
-	int flashit;
+	int flash;
 {
-	cursor_flash = flashit;
+	cursor_flash = flash;
 	return(0);
 }
 

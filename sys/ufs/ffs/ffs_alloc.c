@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs_alloc.c,v 1.84 2005/06/06 17:10:25 dbj Exp $	*/
+/*	$NetBSD: ffs_alloc.c,v 1.81.2.1 2005/05/28 12:45:49 tron Exp $	*/
 
 /*
  * Copyright (c) 2002 Networks Associates Technology, Inc.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ffs_alloc.c,v 1.84 2005/06/06 17:10:25 dbj Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ffs_alloc.c,v 1.81.2.1 2005/05/28 12:45:49 tron Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_ffs.h"
@@ -74,7 +74,7 @@ static daddr_t ffs_clusteralloc __P((struct inode *, int, daddr_t, int));
 #endif
 static ino_t ffs_dirpref __P((struct inode *));
 static daddr_t ffs_fragextend __P((struct inode *, int, daddr_t, int, int));
-static void ffs_fserr __P((struct fs *, u_int, const char *));
+static void ffs_fserr __P((struct fs *, u_int, char *));
 static daddr_t ffs_hashalloc __P((struct inode *, int, daddr_t, int,
     daddr_t (*)(struct inode *, int, daddr_t, int)));
 static daddr_t ffs_nodealloccg __P((struct inode *, int, daddr_t, int));
@@ -173,7 +173,8 @@ ffs_alloc(ip, lbn, bpref, size, cred, bnp)
 		cg = ino_to_cg(fs, ip->i_number);
 	else
 		cg = dtog(fs, bpref);
-	bno = ffs_hashalloc(ip, cg, bpref, size, ffs_alloccg);
+	bno = ffs_hashalloc(ip, cg, (long)bpref, size,
+	    			     ffs_alloccg);
 	if (bno > 0) {
 		DIP_ADD(ip, blocks, btodb(size));
 		ip->i_flag |= IN_CHANGE | IN_UPDATE;
@@ -2051,7 +2052,7 @@ static void
 ffs_fserr(fs, uid, cp)
 	struct fs *fs;
 	u_int uid;
-	const char *cp;
+	char *cp;
 {
 
 	log(LOG_ERR, "uid %d, pid %d, command %s, on %s: %s\n",

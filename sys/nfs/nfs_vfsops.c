@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_vfsops.c,v 1.148 2005/06/09 02:19:59 atatat Exp $	*/
+/*	$NetBSD: nfs_vfsops.c,v 1.145.2.1 2005/09/27 10:31:29 tron Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993, 1995
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nfs_vfsops.c,v 1.148 2005/06/09 02:19:59 atatat Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nfs_vfsops.c,v 1.145.2.1 2005/09/27 10:31:29 tron Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
@@ -116,7 +116,6 @@ struct vfsops nfs_vfsops = {
 	vfs_stdextattrctl,
 	nfs_vnodeopv_descs,
 };
-VFS_ATTACH(nfs_vfsops);
 
 extern u_int32_t nfs_procids[NFS_NPROCS];
 extern u_int32_t nfs_prog, nfs_vers;
@@ -234,7 +233,7 @@ nfs_fsinfo(nmp, vp, cred, p)
 	struct nfsv3_fsinfo *fsp;
 	caddr_t cp;
 	int32_t t1, t2;
-	u_int32_t *tl, pref, xmax;
+	u_int32_t *tl, pref, max;
 	caddr_t bpos, dpos, cp2;
 	int error = 0, retattr;
 	struct mbuf *mreq, *mrep, *md, *mb;
@@ -253,31 +252,31 @@ nfs_fsinfo(nmp, vp, cred, p)
 		    pref < nmp->nm_wsize && pref >= NFS_FABLKSIZE)
 			nmp->nm_wsize = (pref + NFS_FABLKSIZE - 1) &
 				~(NFS_FABLKSIZE - 1);
-		xmax = fxdr_unsigned(u_int32_t, fsp->fs_wtmax);
-		if (xmax < nmp->nm_wsize && xmax > 0) {
-			nmp->nm_wsize = xmax & ~(NFS_FABLKSIZE - 1);
+		max = fxdr_unsigned(u_int32_t, fsp->fs_wtmax);
+		if (max < nmp->nm_wsize && max > 0) {
+			nmp->nm_wsize = max & ~(NFS_FABLKSIZE - 1);
 			if (nmp->nm_wsize == 0)
-				nmp->nm_wsize = xmax;
+				nmp->nm_wsize = max;
 		}
 		pref = fxdr_unsigned(u_int32_t, fsp->fs_rtpref);
 		if ((nmp->nm_flag & NFSMNT_RSIZE) == 0 &&
 		    pref < nmp->nm_rsize && pref >= NFS_FABLKSIZE)
 			nmp->nm_rsize = (pref + NFS_FABLKSIZE - 1) &
 				~(NFS_FABLKSIZE - 1);
-		xmax = fxdr_unsigned(u_int32_t, fsp->fs_rtmax);
-		if (xmax < nmp->nm_rsize && xmax > 0) {
-			nmp->nm_rsize = xmax & ~(NFS_FABLKSIZE - 1);
+		max = fxdr_unsigned(u_int32_t, fsp->fs_rtmax);
+		if (max < nmp->nm_rsize && max > 0) {
+			nmp->nm_rsize = max & ~(NFS_FABLKSIZE - 1);
 			if (nmp->nm_rsize == 0)
-				nmp->nm_rsize = xmax;
+				nmp->nm_rsize = max;
 		}
 		pref = fxdr_unsigned(u_int32_t, fsp->fs_dtpref);
 		if (pref < nmp->nm_readdirsize && pref >= NFS_DIRFRAGSIZ)
 			nmp->nm_readdirsize = (pref + NFS_DIRFRAGSIZ - 1) &
 				~(NFS_DIRFRAGSIZ - 1);
-		if (xmax < nmp->nm_readdirsize && xmax > 0) {
-			nmp->nm_readdirsize = xmax & ~(NFS_DIRFRAGSIZ - 1);
+		if (max < nmp->nm_readdirsize && max > 0) {
+			nmp->nm_readdirsize = max & ~(NFS_DIRFRAGSIZ - 1);
 			if (nmp->nm_readdirsize == 0)
-				nmp->nm_readdirsize = xmax;
+				nmp->nm_readdirsize = max;
 		}
 		/* XXX */
 		nmp->nm_maxfilesize = (u_int64_t)0x80000000 * DEV_BSIZE - 1;
@@ -318,7 +317,7 @@ nfs_mountroot()
 	 * XXX time must be non-zero when we init the interface or else
 	 * the arp code will wedge.  [Fixed now in if_ether.c]
 	 * However, the NFS attribute cache gives false "hits" when
-	 * time.tv_sec < NFS_ATTRTIMEO(np) so keep this in for now.
+	 * time.tv_sec < NFS_ATTRTIMEO(nmp, np) so keep this in for now.
 	 */
 	if (time.tv_sec < NFS_MAXATTRTIMO)
 		time.tv_sec = NFS_MAXATTRTIMO;
@@ -387,7 +386,7 @@ nfs_mount_diskless(ndmntp, mntname, mpp, vpp, p)
 	struct mbuf *m;
 	int error;
 
-	vfs_rootmountalloc(MOUNT_NFS, mntname, &mp);
+	vfs_rootmountalloc(MOUNT_NFS, (char *)mntname, &mp);
 
 	mp->mnt_op = &nfs_vfsops;
 

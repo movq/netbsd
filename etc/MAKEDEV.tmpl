@@ -1,5 +1,5 @@
 #!/bin/sh -
-#	$NetBSD: MAKEDEV.tmpl,v 1.45 2005/06/16 15:31:21 elad Exp $
+#	$NetBSD: MAKEDEV.tmpl,v 1.40.2.7 2006/07/30 17:38:03 tron Exp $
 #
 # Copyright (c) 2003 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -218,6 +218,7 @@
 #	ad*	UNIBUS interface to Data Translation A/D converter
 #	agp*	AGP GART devices
 #	altq	ALTQ control interface
+#	amr*	AMI MegaRaid control device
 #	apm	power management device
 #	audio*	audio devices
 #	bell*	OPM bell device (x68k)
@@ -518,14 +519,15 @@ std)
 	fi
 	;;
 
-usb)
-	mkdev usb c %usb_chr% 255 444
-	;;
-
 usb*)
 	unit=${i#usb}
-	usb=usb$unit
-	mkdev usb$unit c %usb_chr% $unit
+	if [ "$unit" = "" ]; then
+		unit=255
+		usb=usb
+	else
+		usb=usb$unit
+	fi
+	mkdev $usb c %usb_chr% $unit
 	;;
 
 uhid*)
@@ -828,7 +830,7 @@ pty*)
 		warn "$i: pty unit conflicts with console ttyv0 device"
 		continue
 	fi
-	s2=$(($start % $nt - $s1 * $mult))
+	s2=$(($start % ($nt - $s1 * $mult)))
 	set -- $d2
 	shift $s2
 	t2=$1
@@ -917,6 +919,9 @@ ipl)
 	mkdev ipnat	c %ipl_chr% 1
 	mkdev ipstate	c %ipl_chr% 2
 	mkdev ipauth	c %ipl_chr% 3
+	mkdev ipsync	c %ipl_chr% 4
+	mkdev ipscan	c %ipl_chr% 5
+	mkdev iplookup	c %ipl_chr% 6
 	;;
 
 pf)
@@ -964,6 +969,11 @@ radio*)
 	unit=${i#radio}
 	: ${unit:-0}
 	mkdev radio$unit c %radio_chr% $unit 666
+	;;
+
+amr*)
+	unit=${i#amr}
+	mkdev amr$unit c %amr_chr% $unit
 	;;
 
 apm)

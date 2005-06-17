@@ -1,4 +1,4 @@
-# $NetBSD: FRAU-FARBISSINA,v 1.40 2005/05/31 22:23:52 tron Exp $
+# $NetBSD: FRAU-FARBISSINA,v 1.37.2.3 2005/07/18 21:14:51 riz Exp $
 #
 # frau-farbissina.shagadelic.org -- thorpej's AlphaServer 1200 MP hacking
 # box
@@ -7,7 +7,7 @@ include	"arch/alpha/conf/std.alpha"
 
 #options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"FRAU-FARBISSINA-$Revision: 1.40 $"
+#ident 		"FRAU-FARBISSINA-$Revision: 1.37.2.3 $"
 
 maxusers 64
 
@@ -62,6 +62,7 @@ options 	INET		# Internet protocol suite
 options 	INET6		# IPV6
 options 	IPSEC		# IP security
 options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
+options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 
 # 4.3BSD compatibility.  Should be optional, but necessary for now.
@@ -265,7 +266,6 @@ mcclock* at	isa? port 0x70
 pckbc*	at	isa?				# PC keyboard controller
 pckbd*	at	pckbc?				# PC keyboard (kbd port)
 pms*	at	pckbc?				# PS/2-style mouse (aux port)
-attimer* at	isa?				# AT Timer
 pcppi*	at	isa?				# PC prog. periph. interface
 spkr0	at	pcppi?				# IBM BASIC emulation
 isabeep0 at	pcppi?				# "keyboard" beep

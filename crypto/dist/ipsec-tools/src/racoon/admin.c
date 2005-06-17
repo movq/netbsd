@@ -1,6 +1,6 @@
-/*	$NetBSD: admin.c,v 1.3 2005/05/08 08:57:26 manu Exp $	*/
+/*	$NetBSD: admin.c,v 1.1.1.2.2.4 2005/11/21 21:12:30 tron Exp $	*/
 
-/* Id: admin.c,v 1.17 2005/01/02 08:39:09 manubsd Exp */
+/* Id: admin.c,v 1.17.2.4 2005/07/12 11:49:44 manubsd Exp */
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -98,7 +98,7 @@ admin_handler()
 {
 	int so2;
 	struct sockaddr_storage from;
-	int fromlen = sizeof(from);
+	socklen_t fromlen = sizeof(from);
 	struct admin_com com;
 	char *combuf = NULL;
 	pid_t pid = -1;
@@ -572,8 +572,10 @@ admin2pfkey_proto(proto)
 int
 admin_init()
 {
-	if (adminsock_path == NULL)
+	if (adminsock_path == NULL) {
+		lcconf->sock_admin = -1;
 		return 0;
+	}
 
 	memset(&sunaddr, 0, sizeof(sunaddr));
 	sunaddr.sun_family = AF_UNIX;

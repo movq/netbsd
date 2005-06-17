@@ -1,4 +1,4 @@
-#	$NetBSD: INSTALL_SMALL,v 1.113 2005/03/25 23:28:44 cube Exp $
+#	$NetBSD: INSTALL_SMALL,v 1.112.2.1 2006/04/20 14:30:29 tron Exp $
 #
 #	INSTALL_SMALL - Small Installation kernel.
 #
@@ -220,7 +220,6 @@ pc0	at isa? port 0x60 irq 1		# pccons generic PC console driver
 #options 	GERMAN_KBD
 #options 	NORWEGIAN_KBD
 
-#attimer0	at isa?
 #pcppi0	at isa?
 #sysbeep0	at pcppi?
 
@@ -323,6 +322,7 @@ cd*	at scsibus? target ? lun ?	# SCSI CD-ROM drives
 #aac*	at pci? dev ? function ?	# Adaptec AAC family
 #cac*	at eisa? slot ?			# Compaq EISA array controllers
 #cac*	at pci? dev ? function ?	# Compaq PCI array controllers
+#ciss*	at pci? dev ? function ?	# HP Smart Array controllers
 #icp*	at pci? dev ? function ?	# ICP-Vortex GDT & Intel RAID
 #mlx*	at pci? dev ? function ?	# Mylex DAC960 & DEC SWXCR family
 #mlx*	at eisa? slot ?			# Mylex DAC960 & DEC SWXCR family

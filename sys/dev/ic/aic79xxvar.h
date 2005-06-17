@@ -834,7 +834,7 @@ struct ahd_tmode_tstate {
 struct ahd_phase_table_entry {
         uint8_t phase;
         uint8_t mesg_out; /* Message response to parity errors */
-	const char *phasemsg;
+	char *phasemsg;
 };
 
 /************************** Serial EEPROM Format ******************************/
@@ -1324,7 +1324,7 @@ typedef int (ahd_device_setup_t)(struct ahd_softc *, struct pci_attach_args *);
 struct ahd_pci_identity {
 	uint64_t		 full_id;
 	uint64_t		 id_mask;
-	const char		*name;
+	char			*name;
 	ahd_device_setup_t	*setup;
 };
 extern struct ahd_pci_identity ahd_pci_ident_table [];
@@ -1334,7 +1334,7 @@ extern const u_int ahd_num_pci_devs;
 struct aic7770_identity {
 	uint32_t		 full_id;
 	uint32_t		 id_mask;
-	const char		*name;
+	char			*name;
 	ahd_device_setup_t	*setup;
 };
 extern struct aic7770_identity aic7770_ident_table [];
@@ -1389,7 +1389,7 @@ void			 ahd_set_unit(struct ahd_softc *, int);
 void			 ahd_set_name(struct ahd_softc *, char *);
 struct scb		*ahd_get_scb(struct ahd_softc *, u_int);
 void			 ahd_free_scb(struct ahd_softc *, struct scb *);
-void			 ahd_alloc_scbs(struct ahd_softc *);
+int			 ahd_alloc_scbs(struct ahd_softc *);
 void			 ahd_free(struct ahd_softc *);
 int			 ahd_reset(struct ahd_softc *, int);
 void			 ahd_shutdown(void *);

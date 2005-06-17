@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.31 2005/05/30 16:02:56 thorpej Exp $
+#	$NetBSD: Makefile,v 1.30.2.2 2005/06/18 11:04:44 tron Exp $
 #
 
 WARNS=	2
@@ -31,9 +31,10 @@ CPPFLAGS+=	-D__LIBPTHREAD_SOURCE__ -DPTHREAD_MLOCK_KLUDGE
 DPSRCS+=	assym.h
 CLEANFILES+=	assym.h
 
-assym.h: ${ARCHDIR}/genassym.cf pthread.h pthread_int.h pthread_md.h
+assym.h: genassym.sh ${ARCHDIR}/genassym.cf \
+		pthread.h pthread_int.h pthread_md.h
 	${_MKTARGET_CREATE}
-	${TOOL_GENASSYM} -- ${CC} ${CFLAGS} ${CPPFLAGS} ${PROF} \
+	${HOST_SH} ${.CURDIR}/genassym.sh ${CC} ${CFLAGS} ${CPPFLAGS} ${PROF} \
 		< ${ARCHDIR}/genassym.cf > assym.h.tmp && \
 	mv -f assym.h.tmp assym.h
 
@@ -105,8 +106,10 @@ MLINKS+=	pthread_attr.3 pthread_attr_init.3
 MLINKS+=	pthread_attr.3 pthread_attr_destroy.3
 MLINKS+=	pthread_attr.3 pthread_attr_setdetachstate.3
 MLINKS+=	pthread_attr.3 pthread_attr_getdetachstate.3
-MLINKS+=	pthread_barrierattr.3 pthread_barierattr_init.3
-MLINKS+=	pthread_barrierattr.3 pthread_barierattr_destroy.3
+MLINKS+=	pthread_attr.3 pthread_attr_setschedparam.3
+MLINKS+=	pthread_attr.3 pthread_attr_getschedparam.3
+MLINKS+=	pthread_barrierattr.3 pthread_barrierattr_init.3
+MLINKS+=	pthread_barrierattr.3 pthread_barrierattr_destroy.3
 MLINKS+=	pthread_cleanup_push.3 pthread_cleanup_pop.3
 MLINKS+=	pthread_cond_broadcast.3 pthread_cond_signal.3
 MLINKS+=	pthread_cond_wait.3 pthread_cond_timedwait.3

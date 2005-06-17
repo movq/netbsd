@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.122 2005/05/30 16:04:18 thorpej Exp $
+#	$NetBSD: Makefile,v 1.120 2005/01/10 02:32:46 lukem Exp $
 #	@(#)Makefile	8.2 (Berkeley) 2/3/94
 #
 # All library objects contain sccsid strings by default; they may be
@@ -76,10 +76,9 @@ INCSDIR=	/usr/include
 DPSRCS+=	assym.h
 CLEANFILES+=	assym.h assym.h.tmp
 
-assym.h: ${ARCHDIR}/genassym.cf
+assym.h: genassym.sh ${ARCHDIR}/genassym.cf
 	${_MKTARGET_CREATE}
-	${TOOL_GENASSYM} -- ${CC} ${CFLAGS} \
-		${CPPFLAGS} ${CPPFLAGS.assym.h} ${PROF} \
+	${HOST_SH} ${.CURDIR}/genassym.sh ${CC} ${CFLAGS} ${CPPFLAGS} ${PROF} \
 		< ${ARCHDIR}/genassym.cf > assym.h.tmp && \
 	mv -f assym.h.tmp assym.h
 .endif

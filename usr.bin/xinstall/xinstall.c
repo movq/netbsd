@@ -1,4 +1,4 @@
-/*	$NetBSD: xinstall.c,v 1.91 2005/06/11 22:59:05 christos Exp $	*/
+/*	$NetBSD: xinstall.c,v 1.87.2.3 2005/05/11 17:57:49 tron Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993
@@ -46,11 +46,10 @@ __COPYRIGHT("@(#) Copyright (c) 1987, 1993\n\
 #if 0
 static char sccsid[] = "@(#)xinstall.c	8.1 (Berkeley) 7/21/93";
 #else
-__RCSID("$NetBSD: xinstall.c,v 1.91 2005/06/11 22:59:05 christos Exp $");
+__RCSID("$NetBSD: xinstall.c,v 1.87.2.3 2005/05/11 17:57:49 tron Exp $");
 #endif
 #endif /* not lint */
 
-#define __MKTEMP_OK__	/* All uses of mktemp have been checked */
 #include <sys/param.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -399,7 +398,7 @@ do_link(char *from_name, char *to_name)
 	if (dorename) {
 		(void)snprintf(tmpl, sizeof(tmpl), "%s/inst.XXXXXX",
 		    xdirname(to_name));
-		/* This usage is safe. */
+		/* This usage is safe. The linker will bitch anyway. */
 		if (mktemp(tmpl) == NULL)
 			err(1, "%s: mktemp", tmpl);
 		ret = link(from_name, tmpl);
@@ -427,7 +426,7 @@ do_symlink(char *from_name, char *to_name)
 	if (dorename) {
 		(void)snprintf(tmpl, sizeof(tmpl), "%s/inst.XXXXXX",
 		    xdirname(to_name));
-		/* This usage is safe. */
+		/* This usage is safe. The linker will bitch anyway. */
 		if (mktemp(tmpl) == NULL)
 			err(1, "%s: mktemp", tmpl);
 

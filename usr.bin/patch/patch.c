@@ -1,4 +1,4 @@
-/*	$NetBSD: patch.c,v 1.24 2005/03/25 23:55:02 wiz Exp $	*/
+/*	$NetBSD: patch.c,v 1.22 2004/12/09 18:06:10 mycroft Exp $	*/
 
 /* patch - a program to apply diffs to original files
  *
@@ -25,7 +25,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: patch.c,v 1.24 2005/03/25 23:55:02 wiz Exp $");
+__RCSID("$NetBSD: patch.c,v 1.22 2004/12/09 18:06:10 mycroft Exp $");
 #endif /* not lint */
 
 #include "INTERN.h"
@@ -82,8 +82,6 @@ main(int argc, char *argv[])
 	filearg[i] = NULL;
 
     myuid = getuid();
-
-    check_only = FALSE;
 
     /* Cons up the names of the temporary files.  */
     {
@@ -400,10 +398,10 @@ decode_long_option(char *opt)
      */
     static struct option options[] = {
       { "batch",		't' },
+      { "check",		'C' },
       { "context",		'c' },
       { "debug",		'x' },
       { "directory",		'd' },
-      { "dry-run",		'C' },
       { "ed",			'e' },
       { "force",		'f' },
       { "forward",		'N' },
@@ -478,9 +476,6 @@ exclusive\n");
 		    break;
 		case 'c':
 		    diff_type = CONTEXT_DIFF;
-		    break;
-		case 'C':
-		    check_only = TRUE;
 		    break;
 		case 'd':
 		    if (!*++s)
@@ -578,7 +573,7 @@ exclusive\n");
 		    fprintf(stderr, "\
 Usage: patch [options] [origfile [patchfile]] [+ [options] [origfile]]...\n\
 Options:\n\
-       [-CcEeflNnRSstuv] [-B backup-prefix] [-b backup-ext] [-d directory]\n\
+       [-ceEflnNRsStuv] [-b backup-ext] [-B backup-prefix] [-d directory]\n\
        [-D symbol] [-Fmax-fuzz] [-o out-file] [-p[strip-count]]\n\
        [-r rej-name] [-V {numbered,existing,simple}]\n");
 		    my_exit(1);

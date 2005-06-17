@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_misc.c,v 1.139 2005/06/02 13:03:27 drochner Exp $	*/
+/*	$NetBSD: linux_misc.c,v 1.135.2.2 2005/11/01 22:31:17 tron Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998, 1999 The NetBSD Foundation, Inc.
@@ -64,7 +64,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_misc.c,v 1.139 2005/06/02 13:03:27 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_misc.c,v 1.135.2.2 2005/11/01 22:31:17 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -166,10 +166,8 @@ const int linux_fstypes_cnt = sizeof(linux_fstypes) / sizeof(linux_fstypes[0]);
 #endif
 
 /* Local linux_misc.c functions: */
-#ifndef __amd64__
 static void bsd_to_linux_statfs __P((const struct statvfs *,
     struct linux_statfs *));
-#endif
 static int linux_to_bsd_limit __P((int));
 static void linux_to_bsd_mmap_args __P((struct sys_mmap_args *,
     const struct linux_sys_mmap_args *));
@@ -302,7 +300,6 @@ linux_sys_brk(l, v, retval)
 	return 0;
 }
 
-#ifndef __amd64__
 /*
  * Convert NetBSD statvfs structure to Linux statfs structure.
  * Linux doesn't have f_flag, and we can't set f_frsize due
@@ -428,7 +425,6 @@ linux_sys_fstatfs(l, v, retval)
 
 	return copyout((caddr_t) &ltmp, (caddr_t) SCARG(uap, sp), sizeof ltmp);
 }
-#endif /* __amd64__ */
 
 /*
  * uname(). Just copy the info from the various strings stored in the
@@ -673,25 +669,33 @@ linux_sys_mprotect(l, v, retval)
 		syscallarg(unsigned long) len;
 		syscallarg(int) prot;
 	} */ *uap = v;
-	unsigned long end, start = (unsigned long)SCARG(uap, start), len;
-	int prot = SCARG(uap, prot);
 	struct vm_map_entry *entry;
-	struct vm_map *map = &l->l_proc->p_vmspace->vm_map;
+	struct vm_map *map;
+	struct proc *p;
+	vaddr_t end, start, len, stacklim;
+	int prot, grows;
+
+	start = (vaddr_t)SCARG(uap, start);
+	len = round_page(SCARG(uap, len));
+	prot = SCARG(uap, prot);
+	grows = prot & (LINUX_PROT_GROWSDOWN | LINUX_PROT_GROWSUP);
+	prot &= ~grows;
+	end = start + len;
 
 	if (start & PAGE_MASK)
 		return EINVAL;
-
-	len = round_page(SCARG(uap, len));
-	end = start + len;
-
 	if (end < start)
 		return EINVAL;
-	else if (end == start)
+	if (end == start)
 		return 0;
 
-	if (SCARG(uap, prot) & ~(PROT_READ | PROT_WRITE | PROT_EXEC))
+	if (prot & ~(PROT_READ | PROT_WRITE | PROT_EXEC))
+		return EINVAL;
+	if (grows == (LINUX_PROT_GROWSDOWN | LINUX_PROT_GROWSUP))
 		return EINVAL;
 
+	p = l->l_proc;
+	map = &p->p_vmspace->vm_map;
 	vm_map_lock(map);
 #ifdef notdef
 	VM_MAP_RANGE_CHECK(map, start, end);
@@ -699,6 +703,25 @@ linux_sys_mprotect(l, v, retval)
 	if (!uvm_map_lookup_entry(map, start, &entry) || entry->start > start) {
 		vm_map_unlock(map);
 		return ENOMEM;
+	}
+
+	/*
+	 * Approximate the behaviour of PROT_GROWS{DOWN,UP}.
+	 */
+
+	stacklim = (vaddr_t)p->p_limit->pl_rlimit[RLIMIT_STACK].rlim_cur;
+	if (grows & LINUX_PROT_GROWSDOWN) {
+		if (USRSTACK - stacklim <= start && start < USRSTACK) {
+			start = USRSTACK - stacklim;
+		} else {
+			start = entry->start;
+		}
+	} else if (grows & LINUX_PROT_GROWSUP) {
+		if (USRSTACK <= end && end < USRSTACK + stacklim) {
+			end = USRSTACK + stacklim;
+		} else {
+			end = entry->end;
+		}
 	}
 	vm_map_unlock(map);
 	return uvm_map_protect(map, start, end, prot, FALSE);
@@ -776,7 +799,7 @@ linux_sys_getdents(l, v, retval)
 	struct proc *p = l->l_proc;
 	struct dirent *bdp;
 	struct vnode *vp;
-	caddr_t	inp, tbuf;		/* BSD-format */
+	caddr_t	inp, buf;		/* BSD-format */
 	int len, reclen;		/* BSD-format */
 	caddr_t outp;			/* Linux-format */
 	int resid, linux_reclen = 0;	/* Linux-format */
@@ -819,12 +842,12 @@ linux_sys_getdents(l, v, retval)
 			buflen = va.va_blocksize;
 		oldcall = 0;
 	}
-	tbuf = malloc(buflen, M_TEMP, M_WAITOK);
+	buf = malloc(buflen, M_TEMP, M_WAITOK);
 
 	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 	off = fp->f_offset;
 again:
-	aiov.iov_base = tbuf;
+	aiov.iov_base = buf;
 	aiov.iov_len = buflen;
 	auio.uio_iov = &aiov;
 	auio.uio_iovcnt = 1;
@@ -842,7 +865,7 @@ again:
 	if (error)
 		goto out;
 
-	inp = tbuf;
+	inp = buf;
 	outp = (caddr_t)SCARG(uap, dent);
 	resid = nbytes;
 	if ((len = buflen - auio.uio_resid) == 0)
@@ -918,7 +941,7 @@ out:
 	VOP_UNLOCK(vp, 0);
 	if (cookiebuf)
 		free(cookiebuf, M_TEMP);
-	free(tbuf, M_TEMP);
+	free(buf, M_TEMP);
 out1:
 	FILE_UNUSE(fp, p);
 	return error;
@@ -1276,7 +1299,7 @@ out:
 	return error;
 }
 
-#endif /* __i386__ || __m68k__ || __amd64__ */
+#endif /* __i386__ || __m68k__ */
 
 /*
  * We have nonexistent fsuid equal to uid.
@@ -1379,7 +1402,7 @@ linux_sys_ptrace(l, v, retval)
 {
 	struct linux_sys_ptrace_args /* {
 		i386, m68k, powerpc: T=int
-		alpha, amd64: T=long
+		alpha: T=long
 		syscallarg(T) request;
 		syscallarg(T) pid;
 		syscallarg(T) addr;
@@ -1416,8 +1439,7 @@ linux_sys_ptrace(l, v, retval)
 			case LINUX_PTRACE_PEEKTEXT:
 			case LINUX_PTRACE_PEEKDATA:
 				error = copyout (retval,
-				    (caddr_t)SCARG(uap, data), 
-				    sizeof *retval);
+				    (caddr_t)SCARG(uap, data), sizeof *retval);
 				*retval = SCARG(uap, data);
 				break;
 			default:
@@ -1498,7 +1520,7 @@ linux_sys_swapon(l, v, retval)
 	} */ *uap = v;
 
 	SCARG(&ua, cmd) = SWAP_ON;
-	SCARG(&ua, arg) = (void *)__UNCONST(SCARG(uap, name));
+	SCARG(&ua, arg) = (void *)SCARG(uap, name);
 	SCARG(&ua, misc) = 0;	/* priority */
 	return (sys_swapctl(l, &ua, retval));
 }
@@ -1518,7 +1540,7 @@ linux_sys_swapoff(l, v, retval)
 	} */ *uap = v;
 
 	SCARG(&ua, cmd) = SWAP_OFF;
-	SCARG(&ua, arg) = __UNCONST(SCARG(uap, path)); /*XXXUNCONST*/
+	SCARG(&ua, arg) = (void *)SCARG(uap, path);
 	return (sys_swapctl(l, &ua, retval));
 }
 
@@ -1668,7 +1690,7 @@ linux_sys_setrlimit(l, v, retval)
 	} */ *uap = v;
 	struct proc *p = l->l_proc;
 	caddr_t sg = stackgap_init(p, 0);
-	struct sys_getrlimit_args ap;
+	struct sys_setrlimit_args ap;
 	struct rlimit rl;
 	struct orlimit orl;
 	int error;
@@ -1680,12 +1702,13 @@ linux_sys_setrlimit(l, v, retval)
 	if ((error = copyin(SCARG(uap, rlp), &orl, sizeof(orl))) != 0)
 		return error;
 	linux_to_bsd_rlimit(&rl, &orl);
-	if ((error = copyout(&rl, SCARG(&ap, rlp), sizeof(rl))) != 0)
+	/* XXX: alpha complains about this */
+	if ((error = copyout(&rl, (void *)SCARG(&ap, rlp), sizeof(rl))) != 0)
 		return error;
 	return sys_setrlimit(l, &ap, retval);
 }
 
-#if !defined(__mips__) && !defined(__amd64__)
+#ifndef __mips__
 /* XXX: this doesn't look 100% common, at least mips doesn't have it */
 int
 linux_sys_ugetrlimit(l, v, retval)

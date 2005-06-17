@@ -1,10 +1,10 @@
-/*	$NetBSD: pcmciadevs_data.h,v 1.213 2005/05/07 17:01:11 martin Exp $	*/
+/*	$NetBSD: pcmciadevs_data.h,v 1.210.2.5 2006/07/31 12:05:51 tron Exp $	*/
 
 /*
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.
  *
  * generated from:
- *	NetBSD: pcmciadevs,v 1.211 2005/05/07 16:59:11 martin Exp
+ *	NetBSD: pcmciadevs,v 1.208.6.7 2006/07/31 12:03:48 tron Exp
  */
 /* $FreeBSD: src/sys/dev/pccard/pccarddevs,v 1.20 2001/11/19 05:02:55 imp Exp $*/
 
@@ -736,13 +736,6 @@ struct pcmcia_knowndev pcmcia_knowndevs[] = {
 	    "Melco LPC3-TX",	}
 	,
 	{
-	    PCMCIA_VENDOR_MICROSOFT, PCMCIA_PRODUCT_MICROSOFT_MN_520,
-	    PCMCIA_CIS_MICROSOFT_MN_520,
-	    0,
-	    "Microsoft Corporation",
-	    "Microsoft MN-520 WLAN Card",	}
-	,
-	{
 	    PCMCIA_VENDOR_MOTOROLA, PCMCIA_PRODUCT_MOTOROLA_POWER144,
 	    PCMCIA_CIS_MOTOROLA_POWER144,
 	    0,
@@ -911,13 +904,6 @@ struct pcmcia_knowndev pcmcia_knowndevs[] = {
 	    "Proxim RangeLAN2 7401",	}
 	,
 	{
-	    PCMCIA_VENDOR_PROXIM, PCMCIA_PRODUCT_PROXIM_RANGELANDS_8430,
-	    PCMCIA_CIS_PROXIM_RANGELANDS_8430,
-	    0,
-	    "Proxim",
-	    "Proxim RangeLAN-DS 8430",	}
-	,
-	{
 	    PCMCIA_VENDOR_PSION, PCMCIA_PRODUCT_PSION_GOLDCARD,
 	    PCMCIA_CIS_PSION_GOLDCARD,
 	    0,
@@ -1049,6 +1035,13 @@ struct pcmcia_knowndev pcmcia_knowndevs[] = {
 	    0,
 	    "Socket Communications",
 	    "Socket Communications 10/100 Ethernet",	}
+	,
+	{
+	    PCMCIA_VENDOR_SIEMENS, PCMCIA_PRODUCT_SIEMENS_SS1021,
+	    PCMCIA_CIS_SIEMENS_SS1021,
+	    0,
+	    "Siemens",
+	    "SpeedStream SS1021 WLAN",	}
 	,
 	{
 	    PCMCIA_VENDOR_SYMBOL, PCMCIA_PRODUCT_SYMBOL_LA4100,
@@ -2111,11 +2104,11 @@ struct pcmcia_knowndev pcmcia_knowndevs[] = {
 	    NULL,
 	},
 	{
-	    PCMCIA_VENDOR_MICROSOFT,
+	    PCMCIA_VENDOR_SIEMENS,
 	    PCMCIA_KNOWNDEV_NOPROD,
 	    PCMCIA_CIS_INVALID,
 	    0,
-	    "Microsoft Corporation",
+	    "Siemens",
 	    NULL,
 	},
 	{

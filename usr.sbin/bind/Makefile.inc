@@ -1,16 +1,29 @@
-#	$NetBSD: Makefile.inc,v 1.19 2005/01/10 03:01:18 lukem Exp $
+#	$NetBSD: Makefile.inc,v 1.19.2.5 2006/08/29 09:33:14 ghen Exp $
 
 .if !defined(BIND9_MAKEFILE_INC)
 BIND9_MAKEFILE_INC=yes
 
 WARNS?=	1
 WFORMAT?=2
-NAMED_USE_PTHREADS?=yes
 
 .include <bsd.own.mk>
 
+.if ${MKCRYPTO} == "no"
+NAMED_USE_OPENSSL?=no
+.endif
+
+.if (${MACHINE_ARCH} == "sparc" || ${MACHINE_ARCH} == "sparc64")
+NAMED_USE_PTHREADS?=no
+.else
+NAMED_USE_PTHREADS?=yes
+.endif
+
+NAMED_USE_OPENSSL?=yes
+
 IDIST=		${NETBSDSRCDIR}/dist/bind
 BIND_SRCDIR=	${NETBSDSRCDIR}/usr.sbin/bind
+BIND_HTMLDIR=	/usr/share/doc/html/bind9
+
 .include "${IDIST}/version"
 
 VERSION=${MAJORVER}.${MINORVER}.${PATCHVER}${RELEASETYPE}${RELEASEVER}
@@ -52,6 +65,12 @@ DPADD+= ${LIBPTHREAD}
 MKPRIVATELIB=yes
 CPPFLAGS+= -DLIBINTERFACE=${LIBINTERFACE} \
 	-DLIBREVISION=${LIBREVISION} -DLIBAGE=${LIBAGE}
+.endif
+
+.if ${NAMED_USE_OPENSSL} == "yes"
+CPPFLAGS+=-DOPENSSL
+LDADD+= -lcrypto
+DPADD+= ${LIBCRYPTO}
 .endif
 
 .if ${NAMED_USE_PTHREADS} == "yes"

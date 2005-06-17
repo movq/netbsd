@@ -1,4 +1,4 @@
-/*	$NetBSD: pmc.c,v 1.12 2005/06/02 02:14:58 lukem Exp $	*/
+/*	$NetBSD: pmc.c,v 1.11.6.1 2005/06/15 05:14:13 snj Exp $	*/
 
 /*
  * Copyright 2000 Wasabi Systems, Inc.
@@ -37,7 +37,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: pmc.c,v 1.12 2005/06/02 02:14:58 lukem Exp $");
+__RCSID("$NetBSD: pmc.c,v 1.11.6.1 2005/06/15 05:14:13 snj Exp $");
 #endif
 
 #include <sys/types.h>

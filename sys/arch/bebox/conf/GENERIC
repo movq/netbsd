@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.82 2005/06/09 14:43:30 tsutsui Exp $
+# $NetBSD: GENERIC,v 1.80.2.3 2005/11/05 00:39:47 tron Exp $
 #
 # GENERIC machine description file
 # 
@@ -22,7 +22,7 @@ include 	"arch/bebox/conf/std.bebox"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.82 $"
+#ident 		"GENERIC-$Revision: 1.80.2.3 $"
 
 maxusers	32
 
@@ -33,8 +33,8 @@ maxusers	32
 #options 	IPKDBSECURE	# Allow debugging even when securelevel > 0
 makeoptions	DEBUG="-g"
 
-options 	DEBUG
-options 	DIAGNOSTIC
+#options 	DEBUG
+#options 	DIAGNOSTIC
 options 	TRAP_PANICWAIT
 options 	DDB
 #options 	DDB_HISTORY_SIZE=100	# Enable history editing in DDB
@@ -46,8 +46,7 @@ options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
 
 # Enable experimental buffer queue strategy for better responsiveness under 
 # high disk I/O load. Use it with caution - it's not proven to be stable yet.
-#options 	BUFQ_READPRIO
-#options 	BUFQ_PRIOCSCAN
+#options 	NEW_BUFQ_STRATEGY
 
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
 options 	COMPAT_43
@@ -86,6 +85,7 @@ options 	INET
 options 	INET6		# IPV6
 #options 	IPSEC		# IP security
 #options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
+#options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 
 #options 	TCP_DEBUG	# Record last TCP_NDEBUG packets with SO_DEBUG
@@ -110,6 +110,7 @@ config		netbsd	root on ? type ?
 #pseudo-device 	crypto			# opencrypto framework
 #pseudo-device	cgd		4	# cryptographic disk devices
 pseudo-device	vnd		4
+#options 	VND_COMPRESSION		# compressed vnd(4)
 pseudo-device	loop
 pseudo-device	bpfilter	8	# packet filter
 pseudo-device	gif		4	# IPv[46] over IPv[46] tunnel (RFC1933)
@@ -222,7 +223,6 @@ ne0	at isa? port 0x300 irq 5	# NE[12]000 ethernet cards
 
 #wss0	at isa? port 0x530 irq 10 drq 0	# Windows Sound System
 
-#attimer0	at isa?
 #pcppi0 at isa?
 #spkr0	at pcppi?
 

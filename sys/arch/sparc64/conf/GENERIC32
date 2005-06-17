@@ -1,10 +1,10 @@
-# 	$NetBSD: GENERIC32,v 1.108 2005/06/15 12:57:44 tron Exp $
+# 	$NetBSD: GENERIC32,v 1.98.2.13 2006/04/20 03:45:37 snj Exp $
 
 include "arch/sparc64/conf/std.sparc64"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.108 $"
+#ident 		"GENERIC-$Revision: 1.98.2.13 $"
 
 maxusers	64
 
@@ -56,8 +56,7 @@ options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
 
 # Enable experimental buffer queue strategy for better responsiveness under 
 # high disk I/O load. Use it with caution - it's not proven to be stable yet.
-#options 	BUFQ_READPRIO
-#options 	BUFQ_PRIOCSCAN
+#options 	NEW_BUFQ_STRATEGY
 
 ## NFS boot options; tries DHCP/BOOTP then BOOTPARAM
 options 	NFS_BOOT_BOOTPARAM
@@ -174,6 +173,7 @@ options 	INET		# IP (Internet Protocol) v4
 options 	INET6		# IPV6
 #options 	IPSEC		# IP security
 #options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
+#options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	GATEWAY		# packet forwarding ("router switch")
 options 	MROUTING	# packet forwarding of multicast packets
@@ -402,6 +402,7 @@ ld*	at mlx? unit ?
 ## miniroot images, etc.
 
 pseudo-device	vnd	4
+#options 	VND_COMPRESSION		# compressed vnd(4)
 
 ## Concatenated and striped disks; with this, you can create a software-based
 ## disk array similar to a "RAID 0" setup.  See ccd(4).
@@ -486,15 +487,18 @@ tl*	at pci? dev ? function ?	# ThunderLAN-based Ethernet
 tlp*	at pci? dev ? function ?	# DECchip 21x4x and clones
 vr*	at pci? dev ? function ?	# VIA Rhine Fast Ethernet
 wi*	at pci? dev ? function ?	# Lucent/Intersil WaveLAN/IEEE
+wm*	at pci? dev ? function ?	# Intel 8254x gigabit
 
 # MII/PHY support
-# XXX: only nsphy "tested"
+# XXX: only nsphy and igphy "tested"
 dmphy*	at mii? phy ?			# Davicom DM9101 PHYs
 exphy*	at mii? phy ?			# 3Com internal PHYs
 icsphy*	at mii? phy ?			# Integrated Circuit Systems ICS189x
 inphy*	at mii? phy ?			# Intel 82555 PHYs
 iophy*	at mii? phy ?			# Intel 82553 PHYs
+igphy*	at mii? phy ?			# Intel IGP01E1000
 lxtphy*	at mii? phy ?			# Level One LXT-970 PHYs
+makphy* at mii? phy ?			# Marvell Semiconductor 88E1000 PHYs
 nsphy*	at mii? phy ?			# NS83840 PHYs
 nsphyter* at mii? phy ?			# NS83843 PHYs
 qsphy*	at mii? phy ?			# Quality Semiconductor QS6612 PHYs

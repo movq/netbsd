@@ -1,4 +1,4 @@
-/*	$NetBSD: db_interface.c,v 1.63 2005/06/16 04:17:49 briggs Exp $ */
+/*	$NetBSD: db_interface.c,v 1.61.10.1 2005/10/30 18:18:13 tron Exp $ */
 
 /*
  * Mach Operating System
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.63 2005/06/16 04:17:49 briggs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.61.10.1 2005/10/30 18:18:13 tron Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -53,6 +53,7 @@ __KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.63 2005/06/16 04:17:49 briggs Exp
 #include <machine/db_machdep.h>
 
 #include <ddb/db_access.h>
+#include <ddb/ddbvar.h>
 
 #if defined(DDB)
 #include <ddb/db_command.h>
@@ -94,7 +95,7 @@ void
 db_write_bytes(addr, size, data)
 	vaddr_t	addr;
 	size_t	size;
-	const char	*data;
+	char	*data;
 {
 	extern char	etext[];
 	char	*dst;
@@ -201,16 +202,16 @@ int	db_active = 0;
 extern char *trap_type[];
 
 void kdb_kbd_trap __P((struct trapframe *));
-void db_prom_cmd __P((db_expr_t, int, db_expr_t, const char *));
-void db_proc_cmd __P((db_expr_t, int, db_expr_t, const char *));
-void db_dump_pcb __P((db_expr_t, int, db_expr_t, const char *));
-void db_lock_cmd __P((db_expr_t, int, db_expr_t, const char *));
-void db_simple_lock_cmd __P((db_expr_t, int, db_expr_t, const char *));
-void db_uvmhistdump __P((db_expr_t, int, db_expr_t, const char *));
+void db_prom_cmd __P((db_expr_t, int, db_expr_t, char *));
+void db_proc_cmd __P((db_expr_t, int, db_expr_t, char *));
+void db_dump_pcb __P((db_expr_t, int, db_expr_t, char *));
+void db_lock_cmd __P((db_expr_t, int, db_expr_t, char *));
+void db_simple_lock_cmd __P((db_expr_t, int, db_expr_t, char *));
+void db_uvmhistdump __P((db_expr_t, int, db_expr_t, char *));
 #ifdef MULTIPROCESSOR
-void db_cpu_cmd __P((db_expr_t, int, db_expr_t, const char *));
+void db_cpu_cmd __P((db_expr_t, int, db_expr_t, char *));
 #endif
-void db_page_cmd __P((db_expr_t, int, db_expr_t, const char *));
+void db_page_cmd __P((db_expr_t, int, db_expr_t, char *));
 
 /*
  * Received keyboard interrupt sequence.
@@ -310,6 +311,9 @@ kdb_trap(type, tf)
 	case -1:		/* keyboard interrupt */
 		break;
 	default:
+		if (!db_onpanic && db_recover==0)
+			return (0);
+
 		printf("kernel: %s trap\n", trap_type[type & 0xff]);
 		if (db_recover != 0) {
 			db_error("Faulted in DDB; continuing...\n");
@@ -359,7 +363,7 @@ db_proc_cmd(addr, have_addr, count, modif)
 	db_expr_t addr;
 	int have_addr;
 	db_expr_t count;
-	const char *modif;
+	char *modif;
 {
 	struct lwp *l;
 	struct proc *p;
@@ -400,7 +404,7 @@ db_dump_pcb(addr, have_addr, count, modif)
 	db_expr_t addr;
 	int have_addr;
 	db_expr_t count;
-	const char *modif;
+	char *modif;
 {
 	struct pcb *pcb;
 	char bits[64];
@@ -447,7 +451,7 @@ db_prom_cmd(addr, have_addr, count, modif)
 	db_expr_t addr;
 	int have_addr;
 	db_expr_t count;
-	const char *modif;
+	char *modif;
 {
 
 	prom_abort();
@@ -458,7 +462,7 @@ db_page_cmd(addr, have_addr, count, modif)
 	db_expr_t addr;
 	int have_addr;
 	db_expr_t count;
-	const char *modif;
+	char *modif;
 {
 
 	if (!have_addr) {
@@ -475,7 +479,7 @@ db_lock_cmd(addr, have_addr, count, modif)
 	db_expr_t addr;
 	int have_addr;
 	db_expr_t count;
-	const char *modif;
+	char *modif;
 {
 	struct lock *l;
 
@@ -497,7 +501,7 @@ db_simple_lock_cmd(addr, have_addr, count, modif)
 	db_expr_t addr;
 	int have_addr;
 	db_expr_t count;
-	const char *modif;
+	char *modif;
 {
 	struct simplelock *l;
 
@@ -533,7 +537,7 @@ db_cpu_cmd(addr, have_addr, count, modif)
 		return;
 	}
 	
-	if ((addr < 0) || (addr >= sparc_ncpus)) {
+	if ((addr < 0) || (addr >= ncpu)) {
 		db_printf("%ld: CPU out of range\n", addr);
 		return;
 	}
@@ -569,7 +573,7 @@ db_uvmhistdump(addr, have_addr, count, modif)
 	db_expr_t addr;
 	int have_addr;
 	db_expr_t count;
-	const char *modif;
+	char *modif;
 {
 
 	uvmhist_dump(uvm_histories.lh_first);

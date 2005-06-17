@@ -1,4 +1,4 @@
-/*	$NetBSD: xutil.c,v 1.12 2005/04/23 18:38:18 christos Exp $	*/
+/*	$NetBSD: xutil.c,v 1.11.2.1 2005/08/16 13:02:24 tron Exp $	*/
 
 /*
  * Copyright (c) 1997-2005 Erez Zadok

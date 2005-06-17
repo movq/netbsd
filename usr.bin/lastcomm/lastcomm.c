@@ -1,4 +1,4 @@
-/*	$NetBSD: lastcomm.c,v 1.18 2005/03/28 23:33:22 christos Exp $	*/
+/*	$NetBSD: lastcomm.c,v 1.16.2.1 2005/03/30 10:17:03 tron Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
 #if 0
 static char sccsid[] = "@(#)lastcomm.c	8.2 (Berkeley) 4/29/95";
 #endif
-__RCSID("$NetBSD: lastcomm.c,v 1.18 2005/03/28 23:33:22 christos Exp $");
+__RCSID("$NetBSD: lastcomm.c,v 1.16.2.1 2005/03/30 10:17:03 tron Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -61,16 +61,17 @@ __RCSID("$NetBSD: lastcomm.c,v 1.18 2005/03/28 23:33:22 christos Exp $");
 #include <utmp.h>
 #include "pathnames.h"
 
-static time_t	 	 expand(u_int);
-static char		*flagbits(int);
-static const char	*getdev(dev_t);
-static int	 	 requested(char *[], struct acct *);
-static void	 	 usage(void) __attribute__((__noreturn__));
-
-int	main(int, char **);
+time_t	 expand __P((u_int));
+char	*flagbits __P((int));
+char	*getdev __P((dev_t));
+int	 main __P((int, char **));
+int	 requested __P((char *[], struct acct *));
+void	 usage __P((void));
 
 int
-main(int argc, char *argv[])
+main(argc, argv)
+	int argc;
+	char *argv[];
 {
 	char *p;
 	struct acct ab;
@@ -80,10 +81,9 @@ main(int argc, char *argv[])
 	time_t t;
 	double delta;
 	int ch;
-	const char *acctfile = _PATH_ACCT;
+	char *acctfile;
 
-	setprogname(argv[0]);
-
+	acctfile = _PATH_ACCT;
 	while ((ch = getopt(argc, argv, "f:")) != -1)
 		switch((char)ch) {
 		case 'f':
@@ -160,8 +160,9 @@ main(int argc, char *argv[])
 	exit(0);
 }
 
-static time_t
-expand(u_int t)
+time_t
+expand(t)
+	u_int t;
 {
 	time_t nt;
 
@@ -174,8 +175,9 @@ expand(u_int t)
 	return (nt);
 }
 
-static char *
-flagbits(int f)
+char *
+flagbits(f)
+	int f;
 {
 	static char flags[20] = "-";
 	char *p;
@@ -192,8 +194,10 @@ flagbits(int f)
 	return (flags);
 }
 
-static int
-requested(char *argv[], struct acct *acp)
+int
+requested(argv, acp)
+	char *argv[];
+	struct acct *acp;
 {
 	do {
 		if (!strcmp(user_from_uid(acp->ac_uid, 0), *argv))
@@ -206,11 +210,12 @@ requested(char *argv[], struct acct *acp)
 	return (0);
 }
 
-static const char *
-getdev(dev_t dev)
+char *
+getdev(dev)
+	dev_t dev;
 {
 	static dev_t lastdev = (dev_t)-1;
-	static const char *lastname;
+	static char *lastname;
 
 	if (dev == NODEV)			/* Special case. */
 		return ("__");
@@ -222,11 +227,10 @@ getdev(dev_t dev)
 	return (lastname);
 }
 
-static void
-usage(void)
+void
+usage()
 {
 	(void)fprintf(stderr,
-	    "Usage: %s [ -f file ] [command ...] [user ...] [tty ...]\n",
-	    getprogname());
+	    "lastcomm [ -f file ] [command ...] [user ...] [tty ...]\n");
 	exit(1);
 }

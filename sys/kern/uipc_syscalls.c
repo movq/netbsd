@@ -1,4 +1,4 @@
-/*	$NetBSD: uipc_syscalls.c,v 1.92 2005/05/30 11:21:11 martin Exp $	*/
+/*	$NetBSD: uipc_syscalls.c,v 1.90.2.6 2006/10/24 16:59:08 ghen Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1990, 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uipc_syscalls.c,v 1.92 2005/05/30 11:21:11 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uipc_syscalls.c,v 1.90.2.6 2006/10/24 16:59:08 ghen Exp $");
 
 #include "opt_ktrace.h"
 #include "opt_pipe.h"
@@ -244,10 +244,12 @@ sys_accept(struct lwp *l, void *v, register_t *retval)
 			namelen = nam->m_len;
 		/* SHOULD COPY OUT A CHAIN HERE */
 		if ((error = copyout(mtod(nam, caddr_t),
-		    (caddr_t)SCARG(uap, name), namelen)) == 0)
-			error = copyout((caddr_t)&namelen,
-			    (caddr_t)SCARG(uap, anamelen),
-			    sizeof(*SCARG(uap, anamelen)));
+		    (caddr_t)SCARG(uap, name), namelen)) != 0 ||
+		    (error = copyout((caddr_t)&namelen,
+		    (caddr_t)SCARG(uap, anamelen),
+		    sizeof(*SCARG(uap, anamelen)))) != 0) {
+			soclose(so);
+		}
 	}
 	/* if an error occurred, free the file descriptor */
 	if (error) {
@@ -517,7 +519,7 @@ sendit(struct proc *p, int s, struct msghdr *mp, int flags, register_t *retsize)
 	} else
 		to = 0;
 	if (mp->msg_control) {
-		if (mp->msg_controllen < sizeof(struct cmsghdr)) {
+		if (mp->msg_controllen < CMSG_ALIGN(sizeof(struct cmsghdr))) {
 			error = EINVAL;
 			goto bad;
 		}
@@ -650,15 +652,16 @@ done:
  *  SCM_RIGHTS message; len is the length it is being truncated to.  p
  *  is the affected process.
  */
-static
-void adjust_rights(struct mbuf *m, int len, struct proc *p)
+static void
+adjust_rights(struct mbuf *m, int len, struct proc *p)
 {
 	int nfd;
 	int i;
 	int nok;
 	int *fdv;
 
-	nfd = (m->m_len - CMSG_LEN(0)) / sizeof(int);
+	nfd = m->m_len < CMSG_SPACE(sizeof(int)) ? 0
+	    : (m->m_len - CMSG_SPACE(sizeof(int))) / sizeof(int) + 1;
 	nok = (len < CMSG_LEN(0)) ? 0 : ((len - CMSG_LEN(0)) / sizeof(int));
 	fdv = (int *) CMSG_DATA(mtod(m,struct cmsghdr *));
 	for (i = nok; i < nfd; i++)

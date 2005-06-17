@@ -1,4 +1,4 @@
-/*	$NetBSD: fil.c,v 1.16 2005/06/11 12:31:40 darrenr Exp $	*/
+/*	$NetBSD: fil.c,v 1.11.2.2 2006/05/13 16:52:52 tron Exp $	*/
 
 /*
  * Copyright (C) 1993-2003 by Darren Reed.
@@ -17,7 +17,7 @@
 #include <sys/time.h>
 #if defined(__NetBSD__)
 # if (NetBSD >= 199905) && !defined(IPFILTER_LKM) && defined(_KERNEL)
-#  include "opt_ipfilter.h"
+#  include "opt_ipfilter_log.h"
 # endif
 #endif
 #if defined(_KERNEL) && defined(__FreeBSD_version) && \
@@ -135,7 +135,7 @@ struct file;
 #if !defined(lint)
 #if defined(__NetBSD__)
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fil.c,v 1.16 2005/06/11 12:31:40 darrenr Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fil.c,v 1.11.2.2 2006/05/13 16:52:52 tron Exp $");
 #else
 static const char sccsid[] = "@(#)fil.c	1.36 6/5/96 (C) 1993-2000 Darren Reed";
 static const char rcsid[] = "@(#)Id: fil.c,v 2.243.2.57 2005/03/28 10:47:50 darrenr Exp";
@@ -239,7 +239,7 @@ static	int		fr_grpmapinit __P((frentry_t *fr));
 static	INLINE void	*fr_resolvelookup __P((u_int, u_int, lookupfunc_t *));
 #endif
 static	void		frsynclist __P((frentry_t *, void *));
-static	ipftuneable_t	*fr_findtunebyname __P((const char *));
+static	ipftuneable_t	*fr_findtunebyname __P((char *));
 static	ipftuneable_t	*fr_findtunebycookie __P((void *, void **));
 
 
@@ -354,18 +354,18 @@ static	INLINE int	frpr_fragment6 __P((fr_info_t *));
 /* for IPv6 and marks the packet with FI_SHORT if so.  See function comment */
 /* for frpr_short() for more details.                                       */
 /* ------------------------------------------------------------------------ */
-static INLINE void frpr_short6(fin, xmin)
+static INLINE void frpr_short6(fin, min)
 fr_info_t *fin;
-int xmin;
+int min;
 {
 	fr_ip_t *fi = &fin->fin_fi;
 	int off;
 
 	off = fin->fin_off;
 	if (off == 0) {
-		if (fin->fin_plen < fin->fin_hlen + xmin)
+		if (fin->fin_plen < fin->fin_hlen + min)
 			fi->fi_flx |= FI_SHORT;
-	} else if (off < xmin) {
+	} else if (off < min) {
 		fi->fi_flx |= FI_SHORT;
 	}
 }
@@ -732,7 +732,7 @@ fr_info_t *fin;
 	int minicmpsz = sizeof(struct icmp6_hdr);
 	struct icmp6_hdr *icmp6;
 
-	if (frpr_pullup(fin, ICMP6ERR_MINPKTLEN + 8 - sizeof(ip6_t)) == -1)
+	if (frpr_pullup(fin, ICMP6ERR_MINPKTLEN - sizeof(ip6_t)) == -1)
 		return;
 
 	if (fin->fin_dlen > 1) {
@@ -850,18 +850,18 @@ int plen;
 /* start within the layer 4 header (hdrmin) or if it is at offset 0, the    */
 /* entire layer 4 header must be present (min).                             */
 /* ------------------------------------------------------------------------ */
-static INLINE void frpr_short(fin, xmin)
+static INLINE void frpr_short(fin, min)
 fr_info_t *fin;
-int xmin;
+int min;
 {
 	fr_ip_t *fi = &fin->fin_fi;
 	int off;
 
 	off = fin->fin_off;
 	if (off == 0) {
-		if (fin->fin_plen < fin->fin_hlen + xmin)
+		if (fin->fin_plen < fin->fin_hlen + min)
 			fi->fi_flx |= FI_SHORT;
-	} else if (off < xmin) {
+	} else if (off < min) {
 		fi->fi_flx |= FI_SHORT;
 	}
 }
@@ -2200,7 +2200,6 @@ int out;
 #ifdef USE_INET6
 	ip6_t *ip6;
 #endif
-	SPL_INT(s);
 
 	/*
 	 * The first part of fr_check() deals with making sure that what goes
@@ -2280,8 +2279,6 @@ int out;
 	fin->fin_dp = (char *)ip + hlen;
 
 	fin->fin_ipoff = (char *)ip - MTOD(m, char *);
-
-	SPL_NET(s);
 
 #ifdef	USE_INET6
 	if (v == 6) {
@@ -2511,9 +2508,7 @@ finished:
 #endif
 	}
 
-	SPL_X(s);
 	RWLOCK_EXIT(&ipf_global);
-
 #ifdef _KERNEL
 # if OpenBSD >= 200311    
 	if (FR_ISPASS(pass) && (v == 4)) {
@@ -3347,14 +3342,13 @@ int proto, flags;
 /* slen bytes.                                                              */
 /* ------------------------------------------------------------------------ */
 char *memstr(src, dst, slen, dlen)
-const char *src;
-char *dst;
-size_t slen, dlen;
+char *src, *dst;
+int slen, dlen;
 {
 	char *s = NULL;
 
 	while (dlen >= slen) {
-		if (memcmp(src, dst, slen) == 0) {
+		if (bcmp(src, dst, slen) == 0) {
 			s = dst;
 			break;
 		}
@@ -5770,7 +5764,7 @@ void *cookie, **next;
 /* to the matching structure.                                               */
 /* ------------------------------------------------------------------------ */
 static ipftuneable_t *fr_findtunebyname(name)
-const char *name;
+char *name;
 {
 	ipftuneable_t *ta;
 
@@ -5950,7 +5944,6 @@ void *data;
 				tu.ipft_vshort = *ta->ipft_pshort;
 			else if (ta->ipft_sz == sizeof(u_char))
 				tu.ipft_vchar = *ta->ipft_pchar;
-			tu.ipft_cookie = ta;
 			tu.ipft_sz = ta->ipft_sz;
 			tu.ipft_min = ta->ipft_min;
 			tu.ipft_max = ta->ipft_max;

@@ -1,4 +1,4 @@
-/*	$NetBSD: commands.c,v 1.61 2005/04/03 02:43:57 atatat Exp $	*/
+/*	$NetBSD: commands.c,v 1.60.2.1 2005/04/04 17:13:29 tron Exp $	*/
 
 /*
  * Copyright (C) 1997 and 1998 WIDE Project.
@@ -63,7 +63,7 @@
 #if 0
 static char sccsid[] = "@(#)commands.c	8.4 (Berkeley) 5/30/95";
 #else
-__RCSID("$NetBSD: commands.c,v 1.61 2005/04/03 02:43:57 atatat Exp $");
+__RCSID("$NetBSD: commands.c,v 1.60.2.1 2005/04/04 17:13:29 tron Exp $");
 #endif
 #endif /* not lint */
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: ftpd.c,v 1.165 2005/04/10 08:21:36 christos Exp $	*/
+/*	$NetBSD: ftpd.c,v 1.164.2.1 2005/07/05 21:48:49 tron Exp $	*/
 
 /*
  * Copyright (c) 1997-2004 The NetBSD Foundation, Inc.
@@ -105,7 +105,7 @@ __COPYRIGHT(
 #if 0
 static char sccsid[] = "@(#)ftpd.c	8.5 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: ftpd.c,v 1.165 2005/04/10 08:21:36 christos Exp $");
+__RCSID("$NetBSD: ftpd.c,v 1.164.2.1 2005/07/05 21:48:49 tron Exp $");
 #endif
 #endif /* not lint */
 

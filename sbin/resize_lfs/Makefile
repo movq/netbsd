@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2005/04/23 19:47:51 perseant Exp $
+#	$NetBSD: Makefile,v 1.1.2.2 2005/05/07 15:18:05 tron Exp $
 
 PROG=resize_lfs
 MAN=resize_lfs.8

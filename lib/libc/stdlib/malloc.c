@@ -1,4 +1,4 @@
-/*	$NetBSD: malloc.c,v 1.44 2005/06/12 05:21:28 lukem Exp $	*/
+/*	$NetBSD: malloc.c,v 1.43 2003/10/05 04:49:46 junyoung Exp $	*/
 
 /*
  * ----------------------------------------------------------------------------
@@ -69,9 +69,6 @@ void utrace(struct ut *, int);
 #   define HAS_UTRACE
 #   define UTRACE_LABEL "malloc",
 #include <sys/cdefs.h>
-#if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: malloc.c,v 1.44 2005/06/12 05:21:28 lukem Exp $");
-#endif /* LIBC_SCCS and not lint */
 #include <sys/types.h>
 int utrace(const char *, void *, size_t);
 

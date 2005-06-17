@@ -34,7 +34,7 @@
 #include "sia_locl.h"
 
 __RCSID("$KTH-KRB: sia.c,v 1.36 2001/09/13 01:19:14 assar Exp $"
-      "$NetBSD: sia.c,v 1.2 2005/04/19 12:55:31 christos Exp $");
+      "$NetBSD: sia.c,v 1.1.1.4.6.1 2005/04/21 18:47:48 tron Exp $");
 
 int 
 siad_init(void)

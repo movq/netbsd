@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.x11.mk,v 1.49 2005/04/06 08:32:11 martin Exp $
+#	$NetBSD: bsd.x11.mk,v 1.45.2.4 2005/04/12 09:32:01 tron Exp $
 
 .include <bsd.init.mk>
 

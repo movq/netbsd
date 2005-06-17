@@ -1,4 +1,4 @@
-/*	$NetBSD: calendar.c,v 1.37 2005/06/02 01:39:24 lukem Exp $	*/
+/*	$NetBSD: calendar.c,v 1.36.2.2 2006/04/07 13:03:39 tron Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993, 1994
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
 #if 0
 static char sccsid[] = "@(#)calendar.c	8.4 (Berkeley) 1/7/95";
 #endif
-__RCSID("$NetBSD: calendar.c,v 1.37 2005/06/02 01:39:24 lukem Exp $");
+__RCSID("$NetBSD: calendar.c,v 1.36.2.2 2006/04/07 13:03:39 tron Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -151,6 +151,7 @@ main(argc, argv)
 			break;
 		case 'x':
 			cpp_restricted = 1;
+			break;
 		case '?':
 		default:
 			usage();
@@ -183,7 +184,7 @@ main(argc, argv)
 static void
 cal(void)
 {
-	int printing = 0;
+	int printing;
 	FILE *fp;
 	char *line;
 
@@ -275,13 +276,13 @@ isnow(endp)
 		}
 	}
 
-	if (flags & (F_WILDMONTH|F_WILDDAY))
+	if ((flags & F_WILDMONTH) && (flags & F_WILDDAY))
 		return (1);
 
-	if ((flags & (F_WILDMONTH|F_ISDAY)) && (day == tp->tm_mday))
+	if ((flags & F_WILDMONTH) && (flags & F_ISDAY))
 		return (1);
 
-	if ((flags & (F_ISMONTH|F_WILDDAY)) && (month == tp->tm_mon + 1))
+	if (((flags & F_ISMONTH) && (flags & F_WILDDAY)) && (month == tp->tm_mon + 1))
 		return (1);
 
 	if (flags & F_ISDAY)

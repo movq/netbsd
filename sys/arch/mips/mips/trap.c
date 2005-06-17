@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.196 2005/06/01 16:53:07 drochner Exp $	*/
+/*	$NetBSD: trap.c,v 1.194 2004/08/28 17:53:01 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -78,7 +78,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.196 2005/06/01 16:53:07 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.194 2004/08/28 17:53:01 jdolecek Exp $");
 
 #include "opt_cputype.h"	/* which mips CPU levels do we support? */
 #include "opt_ktrace.h"
@@ -764,7 +764,7 @@ void mips_idle(void);	/* XXX */
  */
 
 /* forward */
-const char *fn_name(unsigned addr);
+char *fn_name(unsigned addr);
 void stacktrace_subr(int, int, int, int, u_int, u_int, u_int, u_int,
 	    void (*)(const char*, ...));
 
@@ -960,7 +960,7 @@ finish:
 #else
 #define Name(_fn) { _fn, "_fn"}
 #endif
-static struct { void *addr; const char *name;} names[] = {
+static struct { void *addr; char *name;} names[] = {
 	Name(stacktrace),
 	Name(stacktrace_subr),
 	Name(main),
@@ -991,7 +991,7 @@ static struct { void *addr; const char *name;} names[] = {
 /*
  * Map a function address to a string name, if known; or a hex string.
  */
-const char *
+char *
 fn_name(unsigned addr)
 {
 	static char buf[17];
@@ -999,7 +999,7 @@ fn_name(unsigned addr)
 #ifdef DDB
 	db_expr_t diff;
 	db_sym_t sym;
-	const char *symname;
+	char *symname;
 #endif
 
 #ifdef DDB

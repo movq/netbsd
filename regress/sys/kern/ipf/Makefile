@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.10 2005/04/03 15:05:30 martti Exp $
+#	$NetBSD: Makefile,v 1.9.2.1 2005/04/04 18:25:11 tron Exp $
 #
 # (C)opyright 1993-1996 by Darren Reed.
 #

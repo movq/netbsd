@@ -2,7 +2,7 @@
 /******************************************************************************
  *
  * Module Name: exoparg6 - AML execution - opcodes with 6 arguments
- *              xRevision: 23 $
+ *              xRevision: 13 $
  *
  *****************************************************************************/
 
@@ -10,7 +10,7 @@
  *
  * 1. Copyright Notice
  *
- * Some or all of this work - Copyright (c) 1999 - 2005, Intel Corp.
+ * Some or all of this work - Copyright (c) 1999 - 2004, Intel Corp.
  * All rights reserved.
  *
  * 2. License
@@ -117,7 +117,7 @@
  *****************************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: exoparg6.c,v 1.10 2005/05/02 14:52:09 kochi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: exoparg6.c,v 1.9 2004/02/14 16:57:24 kochi Exp $");
 
 #define __EXOPARG6_C__
 
@@ -153,139 +153,87 @@ __KERNEL_RCSID(0, "$NetBSD: exoparg6.c,v 1.10 2005/05/02 14:52:09 kochi Exp $");
  * fully resolved operands.
 !*/
 
-/* Local prototypes */
-
-static BOOLEAN
-AcpiExDoMatch (
-    UINT32                  MatchOp,
-    ACPI_OPERAND_OBJECT     *PackageObj,
-    ACPI_OPERAND_OBJECT     *MatchObj);
-
 
 /*******************************************************************************
  *
  * FUNCTION:    AcpiExDoMatch
  *
  * PARAMETERS:  MatchOp         - The AML match operand
- *              PackageObj      - Object from the target package
- *              MatchObj        - Object to be matched
+ *              PackageValue    - Value from the target package
+ *              MatchValue      - Value to be matched
  *
  * RETURN:      TRUE if the match is successful, FALSE otherwise
  *
- * DESCRIPTION: Implements the low-level match for the ASL Match operator.
- *              Package elements will be implicitly converted to the type of
- *              the match object (Integer/Buffer/String).
+ * DESCRIPTION: Implements the low-level match for the ASL Match operator
  *
  ******************************************************************************/
 
-static BOOLEAN
+BOOLEAN
 AcpiExDoMatch (
     UINT32                  MatchOp,
-    ACPI_OPERAND_OBJECT     *PackageObj,
-    ACPI_OPERAND_OBJECT     *MatchObj)
+    ACPI_INTEGER            PackageValue,
+    ACPI_INTEGER            MatchValue)
 {
-    BOOLEAN                 LogicalResult = TRUE;
-    ACPI_STATUS             Status;
 
-
-    /*
-     * Note: Since the PackageObj/MatchObj ordering is opposite to that of
-     * the standard logical operators, we have to reverse them when we call
-     * DoLogicalOp in order to make the implicit conversion rules work
-     * correctly. However, this means we have to flip the entire equation
-     * also. A bit ugly perhaps, but overall, better than fussing the
-     * parameters around at runtime, over and over again.
-     *
-     * Below, P[i] refers to the package element, M refers to the Match object.
-     */
     switch (MatchOp)
     {
-    case MATCH_MTR:
-
-        /* Always true */
+    case MATCH_MTR:   /* always true */
 
         break;
 
-    case MATCH_MEQ:
 
-        /*
-         * True if equal: (P[i] == M)
-         * Change to:     (M == P[i])
-         */
-        Status = AcpiExDoLogicalOp (AML_LEQUAL_OP, MatchObj, PackageObj,
-                    &LogicalResult);
-        if (ACPI_FAILURE (Status))
+    case MATCH_MEQ:   /* true if equal   */
+
+        if (PackageValue != MatchValue)
         {
             return (FALSE);
         }
         break;
 
-    case MATCH_MLE:
 
-        /*
-         * True if less than or equal: (P[i] <= M) (P[i] NotGreater than M)
-         * Change to:                  (M >= P[i]) (M NotLess than P[i])
-         */
-        Status = AcpiExDoLogicalOp (AML_LLESS_OP, MatchObj, PackageObj,
-                    &LogicalResult);
-        if (ACPI_FAILURE (Status))
-        {
-            return (FALSE);
-        }
-        LogicalResult = (BOOLEAN) !LogicalResult;
-        break;
+    case MATCH_MLE:   /* true if less than or equal  */
 
-    case MATCH_MLT:
-
-        /*
-         * True if less than: (P[i] < M)
-         * Change to:         (M > P[i])
-         */
-        Status = AcpiExDoLogicalOp (AML_LGREATER_OP, MatchObj, PackageObj,
-                    &LogicalResult);
-        if (ACPI_FAILURE (Status))
+        if (PackageValue > MatchValue)
         {
             return (FALSE);
         }
         break;
 
-    case MATCH_MGE:
 
-        /*
-         * True if greater than or equal: (P[i] >= M) (P[i] NotLess than M)
-         * Change to:                     (M <= P[i]) (M NotGreater than P[i])
-         */
-        Status = AcpiExDoLogicalOp (AML_LGREATER_OP, MatchObj, PackageObj,
-                    &LogicalResult);
-        if (ACPI_FAILURE (Status))
-        {
-            return (FALSE);
-        }
-        LogicalResult = (BOOLEAN)!LogicalResult;
-        break;
+    case MATCH_MLT:   /* true if less than   */
 
-    case MATCH_MGT:
-
-        /*
-         * True if greater than: (P[i] > M)
-         * Change to:            (M < P[i])
-         */
-        Status = AcpiExDoLogicalOp (AML_LLESS_OP, MatchObj, PackageObj,
-                    &LogicalResult);
-        if (ACPI_FAILURE (Status))
+        if (PackageValue >= MatchValue)
         {
             return (FALSE);
         }
         break;
 
-    default:
 
-        /* Undefined */
+    case MATCH_MGE:   /* true if greater than or equal   */
+
+        if (PackageValue < MatchValue)
+        {
+            return (FALSE);
+        }
+        break;
+
+
+    case MATCH_MGT:   /* true if greater than    */
+
+        if (PackageValue <= MatchValue)
+        {
+            return (FALSE);
+        }
+        break;
+
+
+    default:    /* undefined   */
 
         return (FALSE);
     }
 
-    return LogicalResult;
+
+    return TRUE;
 }
 
 
@@ -308,45 +256,38 @@ AcpiExOpcode_6A_0T_1R (
     ACPI_OPERAND_OBJECT     **Operand = &WalkState->Operands[0];
     ACPI_OPERAND_OBJECT     *ReturnDesc = NULL;
     ACPI_STATUS             Status = AE_OK;
-    ACPI_INTEGER            Index;
+    UINT32                  Index;
     ACPI_OPERAND_OBJECT     *ThisElement;
 
 
-    ACPI_FUNCTION_TRACE_STR ("ExOpcode_6A_0T_1R",
-        AcpiPsGetOpcodeName (WalkState->Opcode));
+    ACPI_FUNCTION_TRACE_STR ("ExOpcode_6A_0T_1R", AcpiPsGetOpcodeName (WalkState->Opcode));
 
 
     switch (WalkState->Opcode)
     {
     case AML_MATCH_OP:
         /*
-         * Match (SearchPkg[0], MatchOp1[1], MatchObj1[2],
-         *                      MatchOp2[3], MatchObj2[4], StartIndex[5])
+         * Match (SearchPackage[0], MatchOp1[1], MatchObject1[2],
+         *                          MatchOp2[3], MatchObject2[4], StartIndex[5])
          */
 
-        /* Validate both Match Term Operators (MTR, MEQ, etc.) */
+        /* Validate match comparison sub-opcodes */
 
         if ((Operand[1]->Integer.Value > MAX_MATCH_OPERATOR) ||
             (Operand[3]->Integer.Value > MAX_MATCH_OPERATOR))
         {
-            ACPI_DEBUG_PRINT ((ACPI_DB_ERROR, "Match operator out of range\n"));
+            ACPI_DEBUG_PRINT ((ACPI_DB_ERROR, "operation encoding out of range\n"));
             Status = AE_AML_OPERAND_VALUE;
             goto Cleanup;
         }
 
-        /* Get the package StartIndex, validate against the package length */
-
-        Index = Operand[5]->Integer.Value;
-        if (Index >= Operand[0]->Package.Count)
+        Index = (UINT32) Operand[5]->Integer.Value;
+        if (Index >= (UINT32) Operand[0]->Package.Count)
         {
-            ACPI_DEBUG_PRINT ((ACPI_DB_ERROR,
-                "Index (%X%8.8X) beyond package end (%X)\n",
-                ACPI_FORMAT_UINT64 (Index), Operand[0]->Package.Count));
+            ACPI_DEBUG_PRINT ((ACPI_DB_ERROR, "Index beyond package end\n"));
             Status = AE_AML_PACKAGE_LIMIT;
             goto Cleanup;
         }
-
-        /* Create an integer for the return value */
 
         ReturnDesc = AcpiUtCreateInternalObject (ACPI_TYPE_INTEGER);
         if (!ReturnDesc)
@@ -361,42 +302,40 @@ AcpiExOpcode_6A_0T_1R (
         ReturnDesc->Integer.Value = ACPI_INTEGER_MAX;
 
         /*
-         * Examine each element until a match is found. Both match conditions
-         * must be satisfied for a match to occur. Within the loop,
+         * Examine each element until a match is found.  Within the loop,
          * "continue" signifies that the current element does not match
          * and the next should be examined.
          *
          * Upon finding a match, the loop will terminate via "break" at
-         * the bottom.  If it terminates "normally", MatchValue will be
-         * ACPI_INTEGER_MAX (Ones) (its initial value) indicating that no
-         * match was found.
+         * the bottom.  If it terminates "normally", MatchValue will be -1
+         * (its initial value) indicating that no match was found.  When
+         * returned as a Number, this will produce the Ones value as specified.
          */
         for ( ; Index < Operand[0]->Package.Count; Index++)
         {
-            /* Get the current package element */
-
             ThisElement = Operand[0]->Package.Elements[Index];
 
-            /* Treat any uninitialized (NULL) elements as non-matching */
-
-            if (!ThisElement)
+            /*
+             * Treat any NULL or non-numeric elements as non-matching.
+             */
+            if (!ThisElement ||
+                ACPI_GET_OBJECT_TYPE (ThisElement) != ACPI_TYPE_INTEGER)
             {
                 continue;
             }
 
             /*
-             * Both match conditions must be satisfied. Execution of a continue
-             * (proceed to next iteration of enclosing for loop) signifies a
-             * non-match.
+             * "continue" (proceed to next iteration of enclosing
+             * "for" loop) signifies a non-match.
              */
             if (!AcpiExDoMatch ((UINT32) Operand[1]->Integer.Value,
-                                ThisElement, Operand[2]))
+                                ThisElement->Integer.Value, Operand[2]->Integer.Value))
             {
                 continue;
             }
 
             if (!AcpiExDoMatch ((UINT32) Operand[3]->Integer.Value,
-                                ThisElement, Operand[4]))
+                                ThisElement->Integer.Value, Operand[4]->Integer.Value))
             {
                 continue;
             }
@@ -406,6 +345,7 @@ AcpiExOpcode_6A_0T_1R (
             ReturnDesc->Integer.Value = Index;
             break;
         }
+
         break;
 
 
@@ -417,11 +357,12 @@ AcpiExOpcode_6A_0T_1R (
 
     default:
 
-        ACPI_REPORT_ERROR (("AcpiExOpcode_6A_0T_1R: Unknown opcode %X\n",
+        ACPI_REPORT_ERROR (("AcpiExOpcode_3A_0T_0R: Unknown opcode %X\n",
                 WalkState->Opcode));
         Status = AE_AML_BAD_OPCODE;
         goto Cleanup;
     }
+
 
     WalkState->ResultObj = ReturnDesc;
 

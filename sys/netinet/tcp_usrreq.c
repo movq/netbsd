@@ -1,4 +1,4 @@
-/*	$NetBSD: tcp_usrreq.c,v 1.105 2005/06/09 02:19:59 atatat Exp $	*/
+/*	$NetBSD: tcp_usrreq.c,v 1.100.2.2 2005/05/06 08:35:27 tron Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -100,7 +100,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tcp_usrreq.c,v 1.105 2005/06/09 02:19:59 atatat Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tcp_usrreq.c,v 1.100.2.2 2005/05/06 08:35:27 tron Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -1108,7 +1108,7 @@ sysctl_net_inet_tcp_ident(SYSCTLFN_ARGS)
 					   laddr, lport);
 		if (inb == NULL || (sockp = inb->inp_socket) == NULL)
 			return (ESRCH);
-		uid = sockp->so_uidinfo->ui_uid;
+		uid = sockp->so_uid;
 		if (oldp) {
 			sz = MIN(sizeof(uid), *oldlenp);
 			error = copyout(&uid, oldp, sz);
@@ -1167,7 +1167,7 @@ sysctl_net_inet_tcp_ident(SYSCTLFN_ARGS)
 		return (EPROTONOSUPPORT);
 	}
 
-	uid = sockp->so_uidinfo->ui_uid;
+	uid = sockp->so_uid;
 	if (oldp) {
 		sz = MIN(sizeof(uid), *oldlenp);
 		error = copyout(&uid, oldp, sz);
@@ -1190,14 +1190,14 @@ sysctl_inpcblist(SYSCTLFN_ARGS)
 {
 #ifdef INET
 	struct sockaddr_in *in;
-	const struct inpcb *inp;
+	struct inpcb *inp;
 #endif
 #ifdef INET6
 	struct sockaddr_in6 *in6;
-	const struct in6pcb *in6p;
+	struct in6pcb *in6p;
 #endif
-	struct inpcbtable *pcbtbl = __UNCONST(rnode->sysctl_data);
-	const struct inpcb_hdr *inph;
+	const struct inpcbtable *pcbtbl = rnode->sysctl_data;
+	struct inpcb_hdr *inph;
 	struct tcpcb *tp;
 	struct kinfo_pcb pcb;
 	char *dp;
@@ -1233,10 +1233,10 @@ sysctl_inpcblist(SYSCTLFN_ARGS)
 
 	CIRCLEQ_FOREACH(inph, &pcbtbl->inpt_queue, inph_queue) {
 #ifdef INET
-		inp = (const struct inpcb *)inph;
+		inp = (struct inpcb *)inph;
 #endif
 #ifdef INET6
-		in6p = (const struct in6pcb *)inph;
+		in6p = (struct in6pcb *)inph;
 #endif
 
 		if (inph->inph_af != pf)

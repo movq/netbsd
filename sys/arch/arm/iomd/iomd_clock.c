@@ -1,4 +1,4 @@
-/*	$NetBSD: iomd_clock.c,v 1.15 2005/06/04 20:14:24 he Exp $	*/
+/*	$NetBSD: iomd_clock.c,v 1.13 2005/02/26 12:00:52 simonb Exp $	*/
 
 /*
  * Copyright (c) 1994-1997 Mark Brinicombe.
@@ -175,19 +175,20 @@ statclockhandler(cookie)
 
 
 /*
- * void setstatclockrate(int newhz)
+ * void setstatclockrate(int hz)
  *
  * Set the stat clock rate. The stat clock uses timer1
  */
 
 void
-setstatclockrate(int newhz)
+setstatclockrate(hz)
+	int hz;
 {
 	int count;
     
-	count = TIMER_FREQUENCY / newhz;
+	count = TIMER_FREQUENCY / hz;
 
-	printf("Setting statclock to %dHz (%d ticks)\n", newhz, count);
+	printf("Setting statclock to %dHz (%d ticks)\n", hz, count);
 
 	bus_space_write_1(clock_sc->sc_iot, clock_sc->sc_ioh,
 	    IOMD_T1LOW, (count >> 0) & 0xff);
@@ -397,7 +398,7 @@ inittodr(time_t base)
 		badbase = 0;
 
 	if (todr_handle == NULL ||
-	    todr_gettime(todr_handle, &time) != 0 ||
+	    todr_gettime(todr_handle, (struct timeval *)&time) != 0 ||
 	    time.tv_sec == 0) {
 		/*
 		 * Believe the time in the file system for lack of
@@ -443,7 +444,7 @@ resettodr(void)
 		return;
 
 	if (todr_handle != NULL &&
-	    todr_settime(todr_handle, &time) != 0)
+	    todr_settime(todr_handle, (struct timeval *)&time) != 0)
 		printf("resettodr: failed to set time\n");
 }
 

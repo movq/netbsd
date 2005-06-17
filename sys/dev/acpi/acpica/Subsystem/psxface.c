@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Module Name: psxface - Parser external interfaces
- *              xRevision: 78 $
+ *              xRevision: 71 $
  *
  *****************************************************************************/
 
@@ -9,7 +9,7 @@
  *
  * 1. Copyright Notice
  *
- * Some or all of this work - Copyright (c) 1999 - 2005, Intel Corp.
+ * Some or all of this work - Copyright (c) 1999 - 2004, Intel Corp.
  * All rights reserved.
  *
  * 2. License
@@ -115,7 +115,7 @@
  *****************************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: psxface.c,v 1.11 2005/05/02 14:52:09 kochi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: psxface.c,v 1.10 2004/02/14 16:57:25 kochi Exp $");
 
 #define __PSXFACE_C__
 
@@ -134,16 +134,13 @@ __KERNEL_RCSID(0, "$NetBSD: psxface.c,v 1.11 2005/05/02 14:52:09 kochi Exp $");
  *
  * FUNCTION:    AcpiPsxExecute
  *
- * PARAMETERS:  Info            - Method info block, contains:
- *                  Node            - Method Node to execute
- *                  Parameters      - List of parameters to pass to the method,
+ * PARAMETERS:  MethodNode          - A method object containing both the AML
+ *                                    address and length.
+ *              **Params            - List of parameters to pass to method,
  *                                    terminated by NULL. Params itself may be
  *                                    NULL if no parameters are being passed.
- *                  ReturnObject    - Where to put method's return value (if
- *                                    any). If NULL, no value is returned.
- *                  ParameterType   - Type of Parameter list
- *                  ReturnObject    - Where to put method's return value (if
- *                                    any). If NULL, no value is returned.
+ *              **ReturnObjDesc     - Return object from execution of the
+ *                                    method.
  *
  * RETURN:      Status
  *
@@ -153,7 +150,9 @@ __KERNEL_RCSID(0, "$NetBSD: psxface.c,v 1.11 2005/05/02 14:52:09 kochi Exp $");
 
 ACPI_STATUS
 AcpiPsxExecute (
-    ACPI_PARAMETER_INFO     *Info)
+    ACPI_NAMESPACE_NODE     *MethodNode,
+    ACPI_OPERAND_OBJECT     **Params,
+    ACPI_OPERAND_OBJECT     **ReturnObjDesc)
 {
     ACPI_STATUS             Status;
     ACPI_OPERAND_OBJECT     *ObjDesc;
@@ -167,12 +166,12 @@ AcpiPsxExecute (
 
     /* Validate the Node and get the attached object */
 
-    if (!Info || !Info->Node)
+    if (!MethodNode)
     {
         return_ACPI_STATUS (AE_NULL_ENTRY);
     }
 
-    ObjDesc = AcpiNsGetAttachedObject (Info->Node);
+    ObjDesc = AcpiNsGetAttachedObject (MethodNode);
     if (!ObjDesc)
     {
         return_ACPI_STATUS (AE_NULL_OBJECT);
@@ -180,22 +179,21 @@ AcpiPsxExecute (
 
     /* Init for new method, wait on concurrency semaphore */
 
-    Status = AcpiDsBeginMethodExecution (Info->Node, ObjDesc, NULL);
+    Status = AcpiDsBeginMethodExecution (MethodNode, ObjDesc, NULL);
     if (ACPI_FAILURE (Status))
     {
         return_ACPI_STATUS (Status);
     }
 
-    if ((Info->ParameterType == ACPI_PARAM_ARGS) &&
-        (Info->Parameters))
+    if (Params)
     {
         /*
          * The caller "owns" the parameters, so give each one an extra
          * reference
          */
-        for (i = 0; Info->Parameters[i]; i++)
+        for (i = 0; Params[i]; i++)
         {
-            AcpiUtAddReference (Info->Parameters[i]);
+            AcpiUtAddReference (Params[i]);
         }
     }
 
@@ -205,7 +203,7 @@ AcpiPsxExecute (
      */
     ACPI_DEBUG_PRINT ((ACPI_DB_PARSE,
         "**** Begin Method Parse **** Entry=%p obj=%p\n",
-        Info->Node, ObjDesc));
+        MethodNode, ObjDesc));
 
     /* Create and init a Root Node */
 
@@ -233,9 +231,8 @@ AcpiPsxExecute (
         goto Cleanup2;
     }
 
-    Status = AcpiDsInitAmlWalk (WalkState, Op, Info->Node,
-                    ObjDesc->Method.AmlStart,
-                    ObjDesc->Method.AmlLength, NULL, 1);
+    Status = AcpiDsInitAmlWalk (WalkState, Op, MethodNode, ObjDesc->Method.AmlStart,
+                    ObjDesc->Method.AmlLength, NULL, NULL, 1);
     if (ACPI_FAILURE (Status))
     {
         goto Cleanup3;
@@ -248,6 +245,7 @@ AcpiPsxExecute (
     if (ACPI_FAILURE (Status))
     {
         goto Cleanup1; /* Walk state is already deleted */
+
     }
 
     /*
@@ -255,7 +253,7 @@ AcpiPsxExecute (
      */
     ACPI_DEBUG_PRINT ((ACPI_DB_PARSE,
         "**** Begin Method Execution **** Entry=%p obj=%p\n",
-        Info->Node, ObjDesc));
+        MethodNode, ObjDesc));
 
     /* Create and init a Root Node */
 
@@ -268,8 +266,8 @@ AcpiPsxExecute (
 
     /* Init new op with the method name and pointer back to the NS node */
 
-    AcpiPsSetName (Op, Info->Node->Name.Integer);
-    Op->Common.Node = Info->Node;
+    AcpiPsSetName (Op, MethodNode->Name.Integer);
+    Op->Common.Node = MethodNode;
 
     /* Create and initialize a new walk state */
 
@@ -280,16 +278,16 @@ AcpiPsxExecute (
         goto Cleanup2;
     }
 
-    Status = AcpiDsInitAmlWalk (WalkState, Op, Info->Node,
-                    ObjDesc->Method.AmlStart,
-                    ObjDesc->Method.AmlLength, Info, 3);
+    Status = AcpiDsInitAmlWalk (WalkState, Op, MethodNode, ObjDesc->Method.AmlStart,
+                    ObjDesc->Method.AmlLength, Params, ReturnObjDesc, 3);
     if (ACPI_FAILURE (Status))
     {
         goto Cleanup3;
     }
 
-    /* The walk of the parse tree is where we actually execute the method */
-
+    /*
+     * The walk of the parse tree is where we actually execute the method
+     */
     Status = AcpiPsParseAml (WalkState);
     goto Cleanup2; /* Walk state already deleted */
 
@@ -301,17 +299,15 @@ Cleanup2:
     AcpiPsDeleteParseTree (Op);
 
 Cleanup1:
-    if ((Info->ParameterType == ACPI_PARAM_ARGS) &&
-        (Info->Parameters))
+    if (Params)
     {
         /* Take away the extra reference that we gave the parameters above */
 
-        for (i = 0; Info->Parameters[i]; i++)
+        for (i = 0; Params[i]; i++)
         {
             /* Ignore errors, just do them all */
 
-            (void) AcpiUtUpdateObjectReference (
-                        Info->Parameters[i], REF_DECREMENT);
+            (void) AcpiUtUpdateObjectReference (Params[i], REF_DECREMENT);
         }
     }
 
@@ -324,11 +320,11 @@ Cleanup1:
      * If the method has returned an object, signal this to the caller with
      * a control exception code
      */
-    if (Info->ReturnObject)
+    if (*ReturnObjDesc)
     {
         ACPI_DEBUG_PRINT ((ACPI_DB_PARSE, "Method returned ObjDesc=%p\n",
-            Info->ReturnObject));
-        ACPI_DUMP_STACK_ENTRY (Info->ReturnObject);
+            *ReturnObjDesc));
+        ACPI_DUMP_STACK_ENTRY (*ReturnObjDesc);
 
         Status = AE_CTRL_RETURN_VALUE;
     }

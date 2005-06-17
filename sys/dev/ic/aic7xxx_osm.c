@@ -1,4 +1,4 @@
-/*	$NetBSD: aic7xxx_osm.c,v 1.17 2005/05/30 04:43:46 christos Exp $	*/
+/*	$NetBSD: aic7xxx_osm.c,v 1.16.2.2 2005/12/07 18:20:02 tron Exp $	*/
 
 /*
  * Bus independent FreeBSD shim for the aic7xxx based adaptec SCSI controllers
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aic7xxx_osm.c,v 1.17 2005/05/30 04:43:46 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aic7xxx_osm.c,v 1.16.2.2 2005/12/07 18:20:02 tron Exp $");
 
 #include <dev/ic/aic7xxx_osm.h>
 #include <dev/ic/aic7xxx_inline.h>
@@ -79,7 +79,7 @@ ahc_attach(struct ahc_softc *ahc)
 	ahc->sc_adapter.adapt_dev = &ahc->sc_dev;
 	ahc->sc_adapter.adapt_nchannels = (ahc->features & AHC_TWIN) ? 2 : 1;
 
-	ahc->sc_adapter.adapt_openings = AHC_MAX_QUEUE;
+	ahc->sc_adapter.adapt_openings = ahc->scb_data->numscbs - 1;
 	ahc->sc_adapter.adapt_max_periph = 16;
 
 	ahc->sc_adapter.adapt_ioctl = ahc_ioctl;
@@ -92,6 +92,7 @@ ahc_attach(struct ahc_softc *ahc)
         ahc->sc_channel.chan_ntargets = (ahc->features & AHC_WIDE) ? 16 : 8;
         ahc->sc_channel.chan_nluns = 8 /*AHC_NUM_LUNS*/;
         ahc->sc_channel.chan_id = ahc->our_id;
+	ahc->sc_channel.chan_flags |= SCSIPI_CHAN_CANGROW;
 
 	if (ahc->features & AHC_TWIN) {
 		ahc->sc_channel_b = ahc->sc_channel;
@@ -192,7 +193,9 @@ ahc_done(struct ahc_softc *ahc, struct scb *scb)
 		 * commands.
 		 */
 		LIST_FOREACH(list_scb, &ahc->pending_scbs, pending_links) {
-			if (!(list_scb->xs->xs_control & XS_CTL_POLL)) {
+			struct scsipi_xfer *xs = list_scb->xs;
+
+			if (!(xs->xs_control & XS_CTL_POLL)) {
 				callout_reset(&list_scb->xs->xs_callout,
 				    (list_scb->xs->timeout > 1000000) ?
 				    (list_scb->xs->timeout / 1000) * hz :
@@ -283,7 +286,7 @@ ahc_action(struct scsipi_channel *chan, scsipi_adapter_req_t req, void *arg)
         	struct hardware_scb *hscb;
 		u_int target_id;
 		u_int our_id;
-		u_long ss;
+		u_long s;
 
 		xs = arg;
 		periph = xs->xs_periph;
@@ -296,14 +299,14 @@ ahc_action(struct scsipi_channel *chan, scsipi_adapter_req_t req, void *arg)
 		/*
 		 * get an scb to use.
 		 */
-		ahc_lock(ahc, &ss);
+		ahc_lock(ahc, &s);
 		if ((scb = ahc_get_scb(ahc)) == NULL) {
 			xs->error = XS_RESOURCE_SHORTAGE;
-			ahc_unlock(ahc, &ss);
+			ahc_unlock(ahc, &s);
 			scsipi_done(xs);
 			return;
 		}
-		ahc_unlock(ahc, &ss);
+		ahc_unlock(ahc, &s);
 
 		hscb = scb->hscb;
 
@@ -328,7 +331,12 @@ ahc_action(struct scsipi_channel *chan, scsipi_adapter_req_t req, void *arg)
 		break;
 	  }
 	case ADAPTER_REQ_GROW_RESOURCES:
-  		printf("%s: ADAPTER_REQ_GROW_RESOURCES\n", ahc_name(ahc));
+#ifdef AHC_DEBUG
+		printf("%s: ADAPTER_REQ_GROW_RESOURCES\n", ahc_name(ahc));
+#endif
+  		chan->chan_adapter->adapt_openings += ahc_alloc_scbs(ahc);
+		if (ahc->scb_data->numscbs >= AHC_SCB_MAX_ALLOC)
+			chan->chan_flags &= ~SCSIPI_CHAN_CANGROW;
 		return;
 
 	case ADAPTER_REQ_SET_XFER_MODE:

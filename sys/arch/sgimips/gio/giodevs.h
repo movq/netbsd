@@ -1,10 +1,9 @@
-/*	$NetBSD: giodevs.h,v 1.4 2005/06/03 19:04:10 martin Exp $	*/
+/*	$NetBSD: giodevs.h,v 1.2 2004/01/11 01:48:46 sekiya Exp $	*/
 
 /*
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.
  */
 
-#define XPI	0x01	/* XPI low cost FDDI */
 #define GTR	0x02	/* GTR TokenRing */
 #define ISDN	0x04	/* Synchronous ISDN */
 #define CANON	0x06	/* Canon Interface */

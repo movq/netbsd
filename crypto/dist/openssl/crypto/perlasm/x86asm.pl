@@ -124,6 +124,4 @@ BSDI - a.out with a very primative version of as.
 EOF
 	}
 
-sub main'align() {} # swallow align statements in 0.9.7 context
-
 1;

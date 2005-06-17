@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.inc,v 1.13 2005/04/15 22:39:10 kleink Exp $
+# $NetBSD: Makefile.inc,v 1.12.6.1 2005/04/19 12:31:20 tron Exp $
 
 SRCS+=	alloca.S byte_swap_2.S byte_swap_4.S bswap64.c divsi3.S \
 	fabs.c flt_rounds.c

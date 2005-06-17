@@ -1,5 +1,5 @@
 \input texinfo          @c -*-texinfo-*-
-@c $NetBSD: am-utils.texi,v 1.7 2005/04/23 18:38:18 christos Exp $
+@c $NetBSD: am-utils.texi,v 1.6.2.1 2005/08/16 13:02:23 tron Exp $
 @c
 @c Copyright (c) 1997-2005 Erez Zadok
 @c Copyright (c) 1989 Jan-Simon Pendry

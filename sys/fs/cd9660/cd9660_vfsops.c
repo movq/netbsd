@@ -1,4 +1,4 @@
-/*	$NetBSD: cd9660_vfsops.c,v 1.23 2005/03/29 02:41:05 thorpej Exp $	*/
+/*	$NetBSD: cd9660_vfsops.c,v 1.22.2.1 2005/08/24 18:43:38 riz Exp $	*/
 
 /*-
  * Copyright (c) 1994
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cd9660_vfsops.c,v 1.23 2005/03/29 02:41:05 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cd9660_vfsops.c,v 1.22.2.1 2005/08/24 18:43:38 riz Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
@@ -106,10 +106,9 @@ struct vfsops cd9660_vfsops = {
 	vfs_stdextattrctl,
 	cd9660_vnodeopv_descs,
 };
-VFS_ATTACH(cd9660_vfsops);
 
-struct genfs_ops cd9660_genfsops = {
-	genfs_size,
+static const struct genfs_ops cd9660_genfsops = {
+	.gop_size = genfs_size,
 };
 
 /*

@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_disks.h,v 1.13 2005/05/29 22:03:09 christos Exp $	*/
+/*	$NetBSD: rf_disks.h,v 1.12.2.1 2005/06/17 13:35:24 tron Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.

@@ -1,4 +1,4 @@
-/* $NetBSD: pckbd.c,v 1.8 2005/05/29 22:16:36 christos Exp $ */
+/* $NetBSD: pckbd.c,v 1.3 2005/02/27 00:27:42 perry Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -75,7 +75,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pckbd.c,v 1.8 2005/05/29 22:16:36 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pckbd.c,v 1.3 2005/02/27 00:27:42 perry Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -87,19 +87,18 @@ __KERNEL_RCSID(0, "$NetBSD: pckbd.c,v 1.8 2005/05/29 22:16:36 christos Exp $");
 
 #include <dev/pckbport/pckbportvar.h>
 
+#include <dev/pckbport/pckbdreg.h>
+#include <dev/pckbport/pckbdvar.h>
+#include <dev/pckbport/wskbdmap_mfii.h>
+
 #include <dev/wscons/wsconsio.h>
 #include <dev/wscons/wskbdvar.h>
 #include <dev/wscons/wsksymdef.h>
 #include <dev/wscons/wsksymvar.h>
 
-#include <dev/pckbport/pckbdreg.h>
-#include <dev/pckbport/pckbdvar.h>
-#include <dev/pckbport/wskbdmap_mfii.h>
-
 #include "locators.h"
 
 #include "opt_pckbd_layout.h"
-#include "opt_pckbd_cnattach_may_fail.h"
 #include "opt_wsdisplay_compat.h"
 
 struct pckbd_internal {
@@ -210,7 +209,7 @@ pckbd_set_xtscancode(pckbport_tag_t kbctag, pckbport_slot_t kbcslot)
 		cmd[1] = 2;
 		res = pckbport_poll_cmd(kbctag, kbcslot, cmd, 2, 0, 0, 0);
 		if (res) {
-			u_char cmdb[1];
+			u_char cmd[1];
 #ifdef DEBUG
 			printf("pckbd: error setting scanset 2\n");
 #endif
@@ -220,8 +219,8 @@ pckbd_set_xtscancode(pckbport_tag_t kbctag, pckbport_slot_t kbcslot)
 			 * XXX ignore errors, scanset 2 should be
 			 * default anyway.
 			 */
-			cmdb[0] = KBC_RESET;
-			(void)pckbport_poll_cmd(kbctag, kbcslot, cmdb, 1, 1, 0, 1);
+			cmd[0] = KBC_RESET;
+			(void)pckbport_poll_cmd(kbctag, kbcslot, cmd, 1, 1, 0, 1);
 			pckbport_flush(kbctag, kbcslot);
 			res = 0;
 		}
@@ -547,13 +546,13 @@ pckbd_ioctl(void *v, u_long cmd, caddr_t data, int flag, struct proc *p)
 	case WSKBDIO_SETLEDS:
 	{
 		int res;
-		u_char cmdb[2];
+		u_char cmd[2];
 
-		cmdb[0] = KBC_MODEIND;
-		cmdb[1] = pckbd_led_encode(*(int *)data);
-		sc->sc_ledstate = cmdb[1];
+		cmd[0] = KBC_MODEIND;
+		cmd[1] = pckbd_led_encode(*(int *)data);
+		sc->sc_ledstate = cmd[1];
 		res = pckbport_enqueue_cmd(sc->id->t_kbctag, sc->id->t_kbcslot,
-					cmdb, 2, 0, 1, 0);
+					cmd, 2, 0, 1, 0);
 		return res;
 	}
 	case WSKBDIO_GETLEDS:
@@ -603,8 +602,7 @@ pckbd_cnattach(pckbport_tag_t kbctag, int kbcslot)
 	u_char cmd[1];
 
 	res = pckbd_init(&pckbd_consdata, kbctag, kbcslot, 1);
-	/* We may allow the console to be attached if no keyboard is present */
-#if defined(PCKBD_CNATTACH_MAY_FAIL)
+#if 0 /* we allow the console to be attached if no keyboard is present */
 	if (res)
 		return res;
 #endif
@@ -613,7 +611,7 @@ pckbd_cnattach(pckbport_tag_t kbctag, int kbcslot)
 	cmd[0] = KBC_ENABLE;
 	res = pckbport_poll_cmd(kbctag, kbcslot, cmd, 1, 0, 0, 0);
 
-#if defined(PCKBD_CNATTACH_MAY_FAIL)
+#if 0
 	if (res)
 		return res;
 #endif

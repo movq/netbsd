@@ -1,4 +1,4 @@
-/*	$NetBSD: test.c,v 1.18 2005/06/01 11:37:52 lukem Exp $	*/
+/*	$NetBSD: test.c,v 1.15 2003/12/08 12:03:01 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -42,7 +42,7 @@ __COPYRIGHT("@(#) Copyright (c) 1992, 1993\n\
 #if 0
 static char sccsid[] = "@(#)test.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: test.c,v 1.18 2005/06/01 11:37:52 lukem Exp $");
+__RCSID("$NetBSD: test.c,v 1.15 2003/12/08 12:03:01 lukem Exp $");
 #endif
 #endif /* not lint && not SCCSID */
 
@@ -61,9 +61,9 @@ __RCSID("$NetBSD: test.c,v 1.18 2005/06/01 11:37:52 lukem Exp $");
 #include "histedit.h"
 
 static int continuation = 0;
-volatile sig_atomic_t gotsig = 0;
+static EditLine *el = NULL;
 
-static	unsigned char	complete(EditLine *, int);
+static	u_char	complete(EditLine *, int);
 	int	main(int, char **);
 static	char   *prompt(EditLine *);
 static	void	sig(int);
@@ -80,7 +80,9 @@ prompt(EditLine *el)
 static void
 sig(int i)
 {
-	gotsig = i;
+
+	(void) fprintf(stderr, "Got signal %d.\n", i);
+	el_reset(el);
 }
 
 static unsigned char
@@ -95,8 +97,7 @@ complete(EditLine *el, int ch)
 	/*
 	 * Find the last word
 	 */
-	for (ptr = lf->cursor - 1;
-	    !isspace((unsigned char)*ptr) && ptr > lf->buffer; ptr--)
+	for (ptr = lf->cursor - 1; !isspace(*ptr) && ptr > lf->buffer; ptr--)
 		continue;
 	len = lf->cursor - ++ptr;
 
@@ -119,7 +120,6 @@ complete(EditLine *el, int ch)
 int
 main(int argc, char *argv[])
 {
-	EditLine *el = NULL;
 	int num;
 	const char *buf;
 	Tokenizer *tok;
@@ -185,12 +185,6 @@ main(int argc, char *argv[])
 		    (li->cursor >= li->lastchar) ? "" : li->cursor);
 
 #endif
-		if (gotsig) {
-			(void) fprintf(stderr, "Got signal %d.\n", gotsig);
-			gotsig = 0;
-			el_reset(el);
-		}
-
 		if (!continuation && num == 1)
 			continue;
 
@@ -272,7 +266,7 @@ main(int argc, char *argv[])
 		} else if (el_parse(el, ac, av) == -1) {
 			switch (fork()) {
 			case 0:
-				execvp(av[0], (char *const *)__UNCONST(av));
+				execvp(av[0], (char *const *)av);
 				perror(av[0]);
 				_exit(1);
 				/*NOTREACHED*/

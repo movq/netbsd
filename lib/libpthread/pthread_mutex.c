@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread_mutex.c,v 1.18 2004/03/14 01:19:42 cl Exp $	*/
+/*	$NetBSD: pthread_mutex.c,v 1.18.6.2 2006/08/25 11:36:36 ghen Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2003 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: pthread_mutex.c,v 1.18 2004/03/14 01:19:42 cl Exp $");
+__RCSID("$NetBSD: pthread_mutex.c,v 1.18.6.2 2006/08/25 11:36:36 ghen Exp $");
 
 #include <errno.h>
 #include <limits.h>
@@ -189,6 +189,7 @@ static int
 pthread_mutex_lock_slow(pthread_mutex_t *mutex)
 {
 	pthread_t self;
+	extern int pthread__started;
 
 	pthread__error(EINVAL, "Invalid mutex",
 	    mutex->ptm_magic == _PT_MUTEX_MAGIC);
@@ -202,6 +203,7 @@ pthread_mutex_lock_slow(pthread_mutex_t *mutex)
 		
 		/* Okay, didn't look free. Get the interlock... */
 		pthread_spinlock(self, &mutex->ptm_interlock);
+
 		/*
 		 * The mutex_unlock routine will get the interlock
 		 * before looking at the list of sleepers, so if the
@@ -240,6 +242,21 @@ pthread_mutex_lock_slow(pthread_mutex_t *mutex)
 					mp->recursecount++;
 					return 0;
 				}
+			}
+
+			if (pthread__started == 0) {
+				sigset_t ss;
+
+				/*
+				 * The spec says we must deadlock, so...
+				 */
+				pthread__assert(mp->type ==
+						PTHREAD_MUTEX_NORMAL);
+				(void) sigprocmask(SIG_SETMASK, NULL, &ss);
+				for (;;) {
+					sigsuspend(&ss);
+				}
+				/*NOTREACHED*/
 			}
 
 			/*
@@ -320,12 +337,13 @@ pthread_mutex_unlock(pthread_mutex_t *mutex)
 
 	GET_MUTEX_PRIVATE(mutex, mp);
 
+	self = pthread_self();
 	/*
 	 * These tests can be performed without holding the
 	 * interlock because these fields are only modified
 	 * if we know we own the mutex.
 	 */
-	weown = (pthread__id(mutex->ptm_owner) == pthread__self());
+	weown = (pthread__id(mutex->ptm_owner) == self);
 	switch (mp->type) {
 	case PTHREAD_MUTEX_RECURSIVE:
 		if (!weown)
@@ -361,9 +379,8 @@ pthread_mutex_unlock(pthread_mutex_t *mutex)
 	 * examination of the queue; if so, no harm is done, as the
 	 * waiter will loop and see that the mutex is still locked.
 	 */
+	pthread_spinlock(self, &mutex->ptm_interlock);
 	if (!PTQ_EMPTY(&mutex->ptm_blocked)) {
-		self = pthread__self();
-		pthread_spinlock(self, &mutex->ptm_interlock);
 		blocked = PTQ_FIRST(&mutex->ptm_blocked);
 		if (blocked) {
 			PTQ_REMOVE(&mutex->ptm_blocked, blocked, pt_sleep);
@@ -371,8 +388,8 @@ pthread_mutex_unlock(pthread_mutex_t *mutex)
 			/* Give the head of the blocked queue another try. */
 			pthread__sched(self, blocked);
 		}
-		pthread_spinunlock(self, &mutex->ptm_interlock);
 	}
+	pthread_spinunlock(self, &mutex->ptm_interlock);
 	return 0;
 }
 
