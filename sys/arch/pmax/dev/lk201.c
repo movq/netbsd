@@ -1,4 +1,4 @@
-/*	$NetBSD: lk201.c,v 1.22 2005/06/01 18:21:43 drochner Exp $	*/
+/*	$NetBSD: lk201.c,v 1.21 2003/07/15 02:54:39 lukem Exp $	*/
 
 /*
  * The LK201 keycode mapping routine is here, along with initialization
@@ -6,7 +6,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lk201.c,v 1.22 2005/06/01 18:21:43 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lk201.c,v 1.21 2003/07/15 02:54:39 lukem Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -192,7 +192,7 @@ static u_char lk_initstr[] = {
 struct {
 	int	ts_keycode;
 	int	ts_len;
-	const char *ts_string;
+	char	*ts_string;
 } static lk_keytostr[] = {			/* termcap name */
 	{ KBD_UP,	3, "\033[A" },		/* ku */
 	{ KBD_DOWN,	3, "\033[B" },		/* kd */
@@ -254,15 +254,14 @@ lk_bell(ring)
  * no valid mapping. Return length of mapped ASCII in *len - returned
  * string is not NUL terminated, as NUL is a valid code.
  */
-const char *
+char *
 lk_mapchar(cc, len)
 	int cc, *len;
 {
 	static u_char shiftDown, ctrlDown, capsLock;
-	static char buf[8];
-	static const char *lastStr;
+	static char buf[8], *lastStr;
 	static int lastLen;
-	const char *cp;
+	char *cp;
 	int i;
 	
 	cp = NULL;
@@ -402,7 +401,7 @@ int
 lk_getc(dev)
 	dev_t dev;	/* ignored */
 {
-	static const char *cp;
+	static char *cp;
 	static int len;
 	int c;
 
@@ -414,7 +413,7 @@ lk_getc(dev)
 #endif
 	for (;;) {
 		if (len != 0) {
-			c = *(const u_char *)cp++;
+			c = *(u_char *)cp++;
 			len--;
 			break;
 		}

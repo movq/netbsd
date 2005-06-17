@@ -1,10 +1,12 @@
-#	$NetBSD: Makefile,v 1.356 2005/04/25 00:43:26 blymn Exp $
+#	$NetBSD: Makefile,v 1.350.2.7 2005/09/13 21:00:39 tron Exp $
 #	@(#)Makefile	8.1 (Berkeley) 6/18/93
 
 MAN=	aac.4 acardide.4 aceride.4 acphy.4 adc.4 adv.4 \
-	adw.4 agp.4 agr.4 ahb.4 ahc.4 ahd.4 amdpm.4 amhphy.4 amr.4 \
-	an.4 aria.4 artsata.4 ata.4 atalk.4 ath.4 atppc.4 attimer.4 atw.4 \
-	auacer.4 audio.4 audiocs.4 auich.4 auixp.4 autri.4 auvia.4 awi.4 \
+	adw.4 agp.4 ahb.4 ahc.4 ahd.4 amdpm.4 amhphy.4 amr.4 \
+	an.4 aria.4 artsata.4 ata.4 atalk.4 ataraid.4 \
+	ath.4 atppc.4 atw.4 \
+	auacer.4 audio.4 audiocs.4 auich.4 \
+	auixp.4 autri.4 auvia.4 awi.4 azalia.4 \
 	bba.4 bce.4 be.4 bge.4 bha.4 bktr.4 bpf.4 bmtphy.4 \
 	brgphy.4 bridge.4 cac.4 cardbus.4 ccd.4 cd.4 \
 	cec.4 cgd.4 cfb.4 ch.4 ciphy.4 clcs.4 clct.4 clnp.4 \
@@ -16,7 +18,7 @@ MAN=	aac.4 acardide.4 aceride.4 acphy.4 adc.4 adv.4 \
 	esa.4 esiop.4 esl.4 esm.4 eso.4 exphy.4 fast_ipsec.4 fd.4 \
 	fpa.4 fms.4 fss.4 fwiso.4 fxp.4 gem.4 gentbi.4 \
 	glxtphy.4 gpib.4 gre.4 gphyter.4 gsip.4 hifn.4 hme.4 \
-	hptide.4 icmp.4 icp.4 icsphy.4 idp.4 ieee80211.4 ifmedia.4 \
+	hptide.4 icmp.4 icp.4 icsphy.4 idp.4 ifmedia.4 \
 	igsfb.4 iha.4 inet.4 inphy.4 intersil7170.4 \
 	ioasic.4 ioat.4 iop.4 iophy.4 iopsp.4 ip.4 ipkdb.4 ipw.4 \
 	iso.4 isp.4 iteide.4 iwi.4 ixpide.4 joy.4 kloader.4 ksyms.4 \
@@ -30,18 +32,18 @@ MAN=	aac.4 acardide.4 aceride.4 acphy.4 adc.4 adv.4 \
 	pdcide.4 pdcsata.4 piixide.4 pckbc.4 pckbd.4 pcn.4 pcppi.4 pcscp.4 \
 	pcweasel.4 pim.4 plip.4 pms.4 pnaphy.4 ppbus.4 ppp.4 \
 	pppoe.4 ptm.4 pty.4 puc.4 px.4 pxg.4 qe.4 qec.4 qsphy.4 \
-	raid.4 ray.4 rcons.4 re.4 rnd.4 route.4 rtk.4 satalink.4 \
+	raid.4 ray.4 rcons.4 re.4 rnd.4 route.4 rtk.4 rtw.4 satalink.4 \
 	sbus.4 scc.4 scsi.4 sd.4 se.4 sem.4 ses.4 sf.4 sfb.4 shb.4 \
 	siop.4 sip.4 siside.4 sk.4 sl.4 slide.4 \
 	sm.4 spc.4 speaker.4 spif.4 spp.4 sqphy.4 ss.4 \
 	st.4 ste.4 stge.4 sti.4 stpcide.4 sv.4 strip.4 swwdog.4 systrace.4 \
 	tap.4 tb.4 tc.4 tcds.4 tcp.4 termios.4 tfb.4 ti.4 \
-	tl.4 tlp.4 tlphy.4 tp.4 tr.4 tra.4 trm.4 tty.4 tun.4 \
+	tl.4 tlp.4 tlphy.4 tp.4 tr.4 trm.4 tty.4 tun.4 \
 	tqphy.4 twe.4 txp.4 ubsec.4 udp.4 uep.4 uha.4 uk.4 ukphy.4 \
 	unix.4 userconf.4 veriexec.4 vga.4 vge.4 viaide.4 \
 	vlan.4 vmmon.4 vmnet.4 vnd.4 vr.4 wd.4 wdc.4 \
 	wi.4 wm.4 wscons.4 wsdisplay.4 wsfont.4 wskbd.4 \
-	wsmouse.4 wsmux.4 xbox.4 yds.4 ym.4 zero.4 zstty.4 
+	wsmouse.4 wsmux.4 xbox.4 xge.4 yds.4 ym.4 zero.4 zstty.4 
 
 # USB devices
 MAN+=	uaudio.4 ubsa.4 ucom.4 udsbr.4 uftdi.4 ugen.4 uhid.4 \
@@ -137,8 +139,8 @@ MLINKS+=edc.4 i386/ed.4
 
 SUBDIR= man4.acorn26 man4.acorn32 man4.alpha man4.amiga man4.arc man4.atari \
 	man4.cobalt \
-	man4.dreamcast man4.evbarm man4.hp300 man4.hp700 man4.hpcsh \
-	man4.i386 man4.mac68k \
+	man4.dreamcast man4.evbarm man4.hp300 man4.hp700 man4.hpcmips \
+	man4.hpcsh man4.i386 man4.mac68k \
 	man4.macppc man4.mvme68k man4.pc532 man4.pmax man4.pmppc man4.sgimips \
 	man4.sparc man4.sparc64 man4.sun2 man4.sun3 man4.vax man4.x68k
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: bus.c,v 1.39 2005/04/01 11:59:25 yamt Exp $	*/
+/*	$NetBSD: bus.c,v 1.38 2005/03/10 18:16:01 matt Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bus.c,v 1.39 2005/04/01 11:59:25 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus.c,v 1.38 2005/03/10 18:16:01 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -263,7 +263,7 @@ bus_space_handle_t	*bshp;
 		return (0);
 	}
 
-	va = uvm_km_alloc(kernel_map, endpa - pa, 0, UVM_KMF_VAONLY);
+	va = uvm_km_valloc(kernel_map, endpa - pa);
 	if (va == 0)
 		return (ENOMEM);
 
@@ -312,11 +312,8 @@ bus_size_t		size;
 	/*
 	 * Free the kernel virtual mapping.
 	 */
-	if (!bootm_free(va, endva - va)) {
-		pmap_remove(pmap_kernel(), va, endva);
-		pmap_update(pmap_kernel());
-		uvm_km_free(kernel_map, va, endva - va, UVM_KMF_VAONLY);
-	}
+	if (!bootm_free(va, endva - va))
+		uvm_km_free(kernel_map, va, endva - va);
 
 	/*
 	 * Mark as free in the extent map.
@@ -724,7 +721,7 @@ bus_dmamem_map(t, segs, nsegs, size, kvap, flags)
 
 	size = round_page(size);
 
-	va = uvm_km_alloc(kernel_map, size, 0, UVM_KMF_VAONLY);
+	va = uvm_km_valloc(kernel_map, size);
 
 	if (va == 0)
 		return (ENOMEM);
@@ -765,9 +762,7 @@ bus_dmamem_unmap(t, kva, size)
 
 	size = round_page(size);
 
-	pmap_remove(pmap_kernel(), (vaddr_t)kva, (vaddr_t)kva + size);
-	pmap_update(pmap_kernel());
-	uvm_km_free(kernel_map, (vaddr_t)kva, size, UVM_KMF_VAONLY);
+	uvm_km_free(kernel_map, (vaddr_t)kva, size);
 }
 
 /*

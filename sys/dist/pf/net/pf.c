@@ -1,4 +1,4 @@
-/*	$NetBSD: pf.c,v 1.16 2005/06/15 01:48:20 lukem Exp $	*/
+/*	$NetBSD: pf.c,v 1.12.4.3 2005/08/15 13:14:14 tron Exp $	*/
 /*	$OpenBSD: pf.c,v 1.457.2.7 2005/01/06 14:11:56 brad Exp $ */
 
 /*
@@ -2418,12 +2418,12 @@ pf_socket_lookup(uid_t *uid, gid_t *gid, int direction, struct pf_pdesc *pd)
 #else
 	switch (pd->af) {
 	case AF_INET:
-		*uid = inp->inp_socket->so_uidinfo->ui_uid;
+		*uid = inp->inp_socket->so_uid;
 		/* XXX gid */
 		break;
 #ifdef INET6
 	case AF_INET6:
-		*uid = in6p->in6p_socket->so_uidinfo->ui_uid;
+		*uid = in6p->in6p_socket->so_uid;
 		/* XXX gid */
 		break;
 #endif

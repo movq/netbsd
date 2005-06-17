@@ -355,11 +355,7 @@ bad:
 
 	if (text) X509_CRL_print(out, x);
 
-	if (noout) 
-		{
-		ret = 0;
-		goto end;
-		}
+	if (noout) goto end;
 
 	if 	(outformat == FORMAT_ASN1)
 		i=(int)i2d_X509_CRL_bio(out,x);

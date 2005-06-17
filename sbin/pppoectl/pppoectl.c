@@ -1,4 +1,4 @@
-/*	$NetBSD: pppoectl.c,v 1.19 2005/05/10 06:49:10 martin Exp $	*/
+/*	$NetBSD: pppoectl.c,v 1.18.2.1 2005/05/11 12:25:49 tron Exp $	*/
 
 /*
  * Copyright (c) 1997 Joerg Wunsch
@@ -31,7 +31,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: pppoectl.c,v 1.19 2005/05/10 06:49:10 martin Exp $");
+__RCSID("$NetBSD: pppoectl.c,v 1.18.2.1 2005/05/11 12:25:49 tron Exp $");
 #endif
 
 

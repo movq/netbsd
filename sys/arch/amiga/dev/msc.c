@@ -1,4 +1,4 @@
-/*	$NetBSD: msc.c,v 1.29 2005/06/13 21:34:17 jmc Exp $ */
+/*	$NetBSD: msc.c,v 1.28 2004/04/25 06:23:41 matt Exp $ */
 
 /*
  * Copyright (c) 1982, 1986, 1990 The Regents of the University of California.
@@ -93,7 +93,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: msc.c,v 1.29 2005/06/13 21:34:17 jmc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: msc.c,v 1.28 2004/04/25 06:23:41 matt Exp $");
 
 #include "msc.h"
 
@@ -1198,7 +1198,7 @@ mscinitcard(struct zbus_args *zap)
 	(void)mlm->Enable6502Reset;
 
 	/* copy the code across to the board */
-	to = (volatile u_char *)mlm;
+	to = (u_char *)mlm;
 	from = msc6502code; bcount = sizeof(msc6502code) - 2;
 	start = *(short *)from; from += sizeof(start);
 	to += start;

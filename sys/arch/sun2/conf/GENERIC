@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.40 2005/06/09 14:43:31 tsutsui Exp $
+# $NetBSD: GENERIC,v 1.39.2.2 2005/08/14 21:14:58 riz Exp $
 #
 # GENERIC machine description file
 # 
@@ -25,7 +25,7 @@ include 	"arch/sun2/conf/std.sun2"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.40 $"
+#ident 		"GENERIC-$Revision: 1.39.2.2 $"
 
 # Machines to be supported by this kernel
 #options 	FPU_EMULATE
@@ -53,8 +53,7 @@ options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
 
 # Enable experimental buffer queue strategy for better responsiveness under 
 # high disk I/O load. Use it with caution - it's not proven to be stable yet.
-#options 	BUFQ_READPRIO
-#options 	BUFQ_PRIOCSCAN
+#options 	NEW_BUFQ_STRATEGY
 
 # Which kernel debugger?  Uncomment either this:
 options 	DDB
@@ -108,6 +107,7 @@ options 	INET		# IP prototol stack support
 #options 	INET6		# IPV6
 #options 	IPSEC		# IP security
 #options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
+#options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	GATEWAY		# IP packet forwarding
 #options 	ISO,TPIP	# OSI networking
@@ -275,6 +275,7 @@ pseudo-device	loop		1	# network loopback
 
 pseudo-device	pty		32	# pseudo-terminals
 #pseudo-device	vnd		4	# paging to files
+#options 	VND_COMPRESSION		# compressed vnd(4)
 #pseudo-device	ccd		4	# concatenated disks
 #pseudo-device	cgd		4	# cryptographic disk devices
 #pseudo-device	raid		4	# RAIDframe disk driver

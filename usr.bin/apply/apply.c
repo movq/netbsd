@@ -1,4 +1,4 @@
-/*	$NetBSD: apply.c,v 1.16 2005/05/08 19:53:57 matt Exp $	*/
+/*	$NetBSD: apply.c,v 1.15 2005/01/20 15:44:59 xtraeme Exp $	*/
 
 /*-
  * Copyright (c) 1994
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)apply.c	8.4 (Berkeley) 4/4/94";
 #else
-__RCSID("$NetBSD: apply.c,v 1.16 2005/05/08 19:53:57 matt Exp $");
+__RCSID("$NetBSD: apply.c,v 1.15 2005/01/20 15:44:59 xtraeme Exp $");
 #endif
 #endif /* not lint */
 
@@ -196,7 +196,7 @@ main(int argc, char *argv[])
 int
 shell_system(const char *command)
 {
-	static const char *name, *shell;
+	static char *name, *shell;
 	int status;
 	pid_t pid;
 	int omask;
@@ -204,7 +204,7 @@ shell_system(const char *command)
 
 	if (shell == NULL) {
 		if ((shell = getenv("SHELL")) == NULL)
-			shell = _PATH_BSHELL;
+			(const char *)shell = _PATH_BSHELL;
 		if ((name = strrchr(shell, '/')) == NULL)
 			name = shell;
 		else

@@ -1,4 +1,4 @@
-/* $NetBSD: if_wi_pcmcia.c,v 1.65 2005/06/10 14:08:06 itohy Exp $ */
+/* $NetBSD: if_wi_pcmcia.c,v 1.61.2.1 2005/05/07 23:08:34 tron Exp $ */
 
 /*-
  * Copyright (c) 2001, 2004 The NetBSD Foundation, Inc.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_wi_pcmcia.c,v 1.65 2005/06/10 14:08:06 itohy Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_wi_pcmcia.c,v 1.61.2.1 2005/05/07 23:08:34 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -214,9 +214,6 @@ static const struct pcmcia_product wi_pcmcia_products[] = {
 	{ PCMCIA_VENDOR_LINKSYS2, PCMCIA_PRODUCT_LINKSYS2_WCF11,
 	  PCMCIA_CIS_LINKSYS2_WCF11 },
 
-	{ PCMCIA_VENDOR_MICROSOFT, PCMCIA_PRODUCT_MICROSOFT_MN_520,
-	  PCMCIA_CIS_MICROSOFT_MN_520 },
-
 	{ PCMCIA_VENDOR_PLANEX, PCMCIA_PRODUCT_PLANEX_GWNS11H,
 	  PCMCIA_CIS_PLANEX_GWNS11H },
 
@@ -237,9 +234,6 @@ static const struct pcmcia_product wi_pcmcia_products[] = {
 
 	{ PCMCIA_VENDOR_ASUSTEK, PCMCIA_PRODUCT_ASUSTEK_WL_100,
 	  PCMCIA_CIS_ASUSTEK_WL_100 },
-
-	{ PCMCIA_VENDOR_PROXIM, PCMCIA_PRODUCT_PROXIM_RANGELANDS_8430,
-	  PCMCIA_CIS_PROXIM_RANGELANDS_8430 },
 };
 static const size_t wi_pcmcia_nproducts =
     sizeof(wi_pcmcia_products) / sizeof(wi_pcmcia_products[0]);
@@ -497,7 +491,6 @@ wi_pcmcia_write_firm(sc, buf, buflen, ebuf, ebuflen)
 	int buflen, ebuflen;
 {
 	const u_int8_t *p, *ep, *q, *eq;
-	char *endp;
 	u_int32_t addr, id, eid;
 	int i, len, elen, nblk, pdrlen;
 
@@ -509,10 +502,8 @@ wi_pcmcia_write_firm(sc, buf, buflen, ebuf, ebuflen)
 	while (p < ep && *p++ != ' ');	/* FILE: */
 	while (p < ep && *p++ != ' ');	/* filename */
 	while (p < ep && *p++ != ' ');	/* type of the firmware */
-	nblk = strtoul(p, &endp, 10);
-	p = (void *)endp;
-	pdrlen = strtoul(p + 1, &endp, 10);
-	p = (void *)endp;
+	nblk = strtoul(p, (void *)&p, 10);
+	pdrlen = strtoul(p + 1, (void *)&p, 10);
 	while (p < ep && *p++ != 0x1a);	/* skip rest of header */
 
 	/*

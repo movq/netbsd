@@ -1,4 +1,4 @@
-/*	$NetBSD: oea_machdep.c,v 1.22 2005/06/02 09:46:09 he Exp $	*/
+/*	$NetBSD: oea_machdep.c,v 1.19 2004/06/26 21:48:30 kleink Exp $	*/
 
 /*
  * Copyright (C) 2002 Matt Thomas
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: oea_machdep.c,v 1.22 2005/06/02 09:46:09 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: oea_machdep.c,v 1.19 2004/06/26 21:48:30 kleink Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_ddb.h"
@@ -589,33 +589,33 @@ oea_batinit(paddr_t pa, ...)
 	mem_regions(&allmem, &availmem);
 	if (cpuvers == MPC601) {
 		for (mp = allmem; mp->size; mp++) {
-			paddr_t paddr = mp->start & 0xff800000;
+			paddr_t pa = mp->start & 0xff800000;
 			paddr_t end = mp->start + mp->size;
 
 			do {
-				u_int ix = paddr >> 23;
+				u_int i = pa >> 23;
 
-				battable[ix].batl =
-				    BATL601(paddr, BAT601_BSM_8M, BAT601_V);
-				battable[ix].batu =
-				    BATU601(paddr, BAT601_M, BAT601_Ku, BAT601_PP_NONE);
-				paddr += (1 << 23);
-			} while (paddr < end);
+				battable[i].batl =
+				    BATL601(pa, BAT601_BSM_8M, BAT601_V);
+				battable[i].batu =
+				    BATU601(pa, BAT601_M, BAT601_Ku, BAT601_PP_NONE);
+				pa += (1 << 23);
+			} while (pa < end);
 		}
 	} else {
 		for (mp = allmem; mp->size; mp++) {
-			paddr_t paddr = mp->start & 0xf0000000;
+			paddr_t pa = mp->start & 0xf0000000;
 			paddr_t end = mp->start + mp->size;
 
 			do {
-				u_int ix = paddr >> 28;
+				u_int i = pa >> 28;
 
-				battable[ix].batl =
-				    BATL(paddr, BAT_M, BAT_PP_RW);
-				battable[ix].batu =
-				    BATU(paddr, BAT_BL_256M, BAT_Vs);
-				paddr += SEGMENT_LENGTH;
-			} while (paddr < end);
+				battable[i].batl =
+				    BATL(pa, BAT_M, BAT_PP_RW);
+				battable[i].batu =
+				    BATU(pa, BAT_BL_256M, BAT_Vs);
+				pa += SEGMENT_LENGTH;
+			} while (pa < end);
 		}
 	}
 }
@@ -682,7 +682,7 @@ oea_startup(const char *model)
 	}
 	initmsgbuf(v, sz);
 
-	printf("%s%s", copyright, version);
+	printf("%s", version);
 	if (model != NULL)
 		printf("Model: %s\n", model);
 	cpu_identify(NULL, 0);
@@ -802,7 +802,7 @@ mapiodev(paddr_t pa, psize_t len)
 	faddr = trunc_page(pa);
 	off = pa - faddr;
 	len = round_page(off + len);
-	va = taddr = uvm_km_alloc(kernel_map, len, 0, UVM_KMF_VAONLY);
+	va = taddr = uvm_km_valloc(kernel_map, len);
 
 	if (va == 0)
 		return NULL;

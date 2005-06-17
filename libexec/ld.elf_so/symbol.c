@@ -1,4 +1,4 @@
-/*	$NetBSD: symbol.c,v 1.39 2005/05/10 13:15:56 chs Exp $	 */
+/*	$NetBSD: symbol.c,v 1.38.2.1 2005/12/06 23:31:32 tron Exp $	 */
 
 /*
  * Copyright 1996 John D. Polstra.
@@ -40,7 +40,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: symbol.c,v 1.39 2005/05/10 13:15:56 chs Exp $");
+__RCSID("$NetBSD: symbol.c,v 1.38.2.1 2005/12/06 23:31:32 tron Exp $");
 #endif /* not lint */
 
 #include <err.h>

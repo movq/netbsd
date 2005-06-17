@@ -1,4 +1,4 @@
-/*	$NetBSD: intercept.c,v 1.20 2004/01/24 03:44:46 provos Exp $	*/
+/*	$NetBSD: intercept.c,v 1.20.6.2 2005/07/02 18:50:06 tron Exp $	*/
 /*	$OpenBSD: intercept.c,v 1.29 2002/08/28 03:30:27 itojun Exp $	*/
 /*
  * Copyright 2002 Niels Provos <provos@citi.umich.edu>
@@ -30,7 +30,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: intercept.c,v 1.20 2004/01/24 03:44:46 provos Exp $");
+__RCSID("$NetBSD: intercept.c,v 1.20.6.2 2005/07/02 18:50:06 tron Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>

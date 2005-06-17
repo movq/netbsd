@@ -1,4 +1,4 @@
-/*	$NetBSD: cache.c,v 1.28 2005/06/03 20:48:28 he Exp $	*/
+/*	$NetBSD: cache.c,v 1.26.2.3 2005/11/21 20:06:03 tron Exp $	*/
 
 /*
  * Copyright 2001, 2002 Wasabi Systems, Inc.
@@ -68,7 +68,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cache.c,v 1.28 2005/06/03 20:48:28 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cache.c,v 1.26.2.3 2005/11/21 20:06:03 tron Exp $");
 
 #include "opt_cputype.h"
 #include "opt_mips_cache.h"
@@ -499,8 +499,8 @@ primary_cache_is_2way:
 
 		mips3_get_cache_config(csizebase);
 
-		if (mips_picache_size > PAGE_SIZE ||
-		    mips_pdcache_size > PAGE_SIZE)
+		if ((mips_picache_size / mips_picache_ways) > PAGE_SIZE ||
+		    (mips_pdcache_size / mips_pdcache_ways) > PAGE_SIZE)
 			mips_cache_virtual_alias = 1;
 
 		switch (mips_picache_line_size) {
@@ -681,21 +681,27 @@ primary_cache_is_2way:
 	switch (MIPS_PRID_IMPL(cpu_id)) {
 #if defined(MIPS3) || defined(MIPS4)
 	case MIPS_R4000:
-#if 0
 		/*
-		 * R4000/R4400 always detects virtual alias as if
-		 * primary cache size is 32KB. Actual primary cache size
-		 * is ignored wrt VCED/VCEI.
-		 */
-		/*
-		 * XXX
-		 * It's still better to avoid virtual alias even with VCE,
-		 * isn't it?
+		 * R4000/R4400 detects virtual alias by VCE as if
+		 * its primary cache size were 32KB, because it always
+		 * compares 3 bits of vaddr[14:12] which causes
+		 * primary cache miss and PIdx[2:0] in the secondary
+		 * cache tag regardless of its primary cache size.
+		 * i.e. VCE could happen even if there is no actual
+		 * virtual alias on its 8KB or 16KB primary cache
+		 * which has only 1 or 2 bit valid PIdx in 4KB page.
+		 * Actual primary cache size is ignored wrt VCE
+		 * and virtual aliases are resolved by the VCE hander,
+		 * but it's still worth to avoid unnecessary VCE by
+		 * setting alias mask and prefer mask to 32K, though
+		 * some other possible aliases (maybe caused by KSEG0
+		 * accesses which can't be managed by PMAP_PREFER(9))
+		 * will still be resolved by the VCED/VCEI handler.
 		 */
 		mips_cache_alias_mask =
-			(MIPS3_MAX_PCACHE_SIZE - 1) & ~(PAGE_SIZE - 1);
+		    (MIPS3_MAX_PCACHE_SIZE - 1) & ~PAGE_MASK;	/* va[14:12] */
 		mips_cache_prefer_mask = MIPS3_MAX_PCACHE_SIZE - 1;
-#endif
+
 		mips_cache_virtual_alias = 0;
 		/* FALLTHROUGH */
 	case MIPS_R4600:
@@ -1073,11 +1079,9 @@ mips_config_cache_modern(void)
 		break;
 #ifdef MIPS_DISABLE_L1_CACHE
 	case 0:
-		mips_cache_ops.mco_icache_sync_all = cache_noop;
-		mips_cache_ops.mco_icache_sync_range =
-		    (void (*)(vaddr_t, vsize_t))cache_noop;
-		mips_cache_ops.mco_icache_sync_range_index =
-		    (void (*)(vaddr_t, vsize_t))cache_noop;
+		mips_cache_ops.mco_icache_sync_all = (void *)cache_noop;
+		mips_cache_ops.mco_icache_sync_range = (void *)cache_noop;
+		mips_cache_ops.mco_icache_sync_range_index = (void *)cache_noop;
 		break;
 #endif
 	default:
@@ -1118,20 +1122,17 @@ mips_config_cache_modern(void)
 		break;
 #ifdef MIPS_DISABLE_L1_CACHE
 	case 0:
-		mips_cache_ops.mco_pdcache_wbinv_all = cache_noop;
-		mips_cache_ops.mco_intern_pdcache_wbinv_all = cache_noop;
-		mips_cache_ops.mco_pdcache_wbinv_range =
-		    (void (*)(vaddr_t, vsize_t))cache_noop;
+		mips_cache_ops.mco_pdcache_wbinv_all = (void *)cache_noop;
+		mips_cache_ops.mco_intern_pdcache_wbinv_all =
+		    (void *)cache_noop;
+		mips_cache_ops.mco_pdcache_wbinv_range = (void *)cache_noop;
 		mips_cache_ops.mco_pdcache_wbinv_range_index =
-		    (void (*)(vaddr_t, vsize_t))cache_noop;
+		    (void *)cache_noop;
 		mips_cache_ops.mco_intern_pdcache_wbinv_range_index =
-		    (void (*)(vaddr_t, vsize_t))cache_noop;
-		mips_cache_ops.mco_pdcache_inv_range =
-		    (void (*)(vaddr_t, vsize_t))cache_noop;
-		mips_cache_ops.mco_pdcache_wb_range =
-		    (void (*)(vaddr_t, vsize_t))cache_noop;
-		mips_cache_ops.mco_intern_pdcache_wb_range =
-		    (void (*)(vaddr_t, vsize_t))cache_noop;
+		    (void *)cache_noop;
+		mips_cache_ops.mco_pdcache_inv_range = (void *)cache_noop;
+		mips_cache_ops.mco_pdcache_wb_range = (void *)cache_noop;
+		mips_cache_ops.mco_intern_pdcache_wb_range = (void *)cache_noop;
 		break;
 #endif
 	default:
@@ -1146,26 +1147,23 @@ mips_config_cache_modern(void)
 #ifdef CACHE_DEBUG
 		printf("  Dcache is coherent\n");
 #endif
-		mips_cache_ops.mco_pdcache_wbinv_all = cache_noop;
-		mips_cache_ops.mco_pdcache_wbinv_range =
-		    (void (*)(vaddr_t, vsize_t))cache_noop;
+		mips_cache_ops.mco_pdcache_wbinv_all = (void *)cache_noop;
+		mips_cache_ops.mco_pdcache_wbinv_range = (void *)cache_noop;
 		mips_cache_ops.mco_pdcache_wbinv_range_index =
-		    (void (*)(vaddr_t, vsize_t))cache_noop;
-		mips_cache_ops.mco_pdcache_inv_range =
-		    (void (*)(vaddr_t, vsize_t))cache_noop;
-		mips_cache_ops.mco_pdcache_wb_range =
-		    (void (*)(vaddr_t, vsize_t))cache_noop;
+		    (void *)cache_noop;
+		mips_cache_ops.mco_pdcache_inv_range = (void *)cache_noop;
+		mips_cache_ops.mco_pdcache_wb_range = (void *)cache_noop;
 	}
 	if (mips_cpu_flags & CPU_MIPS_I_D_CACHE_COHERENT) {
 #ifdef CACHE_DEBUG
 		printf("  Icache is coherent against Dcache\n");
 #endif
 		mips_cache_ops.mco_intern_pdcache_wbinv_all =
-		    cache_noop;
+		    (void *)cache_noop;
 		mips_cache_ops.mco_intern_pdcache_wbinv_range_index =
-		    (void (*)(vaddr_t, vsize_t))cache_noop;
+		    (void *)cache_noop;
 		mips_cache_ops.mco_intern_pdcache_wb_range =
-		    (void (*)(vaddr_t, vsize_t))cache_noop;
+		    (void *)cache_noop;
 	}
 }
 #endif /* MIPS32 || MIPS64 */

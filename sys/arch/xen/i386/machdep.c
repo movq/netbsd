@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.17 2005/06/15 22:08:08 bouyer Exp $	*/
+/*	$NetBSD: machdep.c,v 1.13.2.3 2005/08/25 20:16:21 tron Exp $	*/
 /*	NetBSD: machdep.c,v 1.559 2004/07/22 15:12:46 mycroft Exp 	*/
 
 /*-
@@ -73,7 +73,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.17 2005/06/15 22:08:08 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.13.2.3 2005/08/25 20:16:21 tron Exp $");
 
 #include "opt_beep.h"
 #include "opt_compat_ibcs2.h"
@@ -91,6 +91,8 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.17 2005/06/15 22:08:08 bouyer Exp $");
 #include "opt_user_ldt.h"
 #include "opt_vm86.h"
 #include "opt_xen.h"
+#include "isa.h"
+#include "pci.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -329,8 +331,7 @@ cpu_startup()
 	/*
 	 * Initialize error message buffer (et end of core).
 	 */
-	msgbuf_vaddr = uvm_km_alloc(kernel_map, x86_round_page(MSGBUFSIZE), 0,
-	    UVM_KMF_VAONLY);
+	msgbuf_vaddr = uvm_km_valloc(kernel_map, x86_round_page(MSGBUFSIZE));
 	if (msgbuf_vaddr == 0)
 		panic("failed to valloc msgbuf_vaddr");
 
@@ -342,7 +343,7 @@ cpu_startup()
 
 	initmsgbuf((caddr_t)msgbuf_vaddr, round_page(MSGBUFSIZE));
 
-	printf("%s%s", copyright, version);
+	printf("%s", version);
 
 #ifdef TRAPLOG
 	/*
@@ -1486,9 +1487,9 @@ init386(paddr_t first_avail)
 	XENPRINTK(("ptdpaddr %p atdevbase %p\n", (void *)PDPpaddr,
 		      (void *)atdevbase));
 
-#if defined(XEN) && defined(DOM0OPS)
+#if defined(XEN) && (NISA > 0 || NPCI > 0)
 	x86_bus_space_init();
-#endif /* defined(XEN) && defined(DOM0OPS) */
+#endif
 	consinit();	/* XXX SHOULD NOT BE DONE HERE */
 	xen_parse_cmdline(XEN_PARSE_BOOTFLAGS, NULL);
 	/*
@@ -1889,8 +1890,9 @@ init386(paddr_t first_avail)
 		}
 #endif
 		paddr=realmode_reserved_start+realmode_reserved_size-PAGE_SIZE;
-		pmap_kenter_pa((vaddr_t)vtopte(0), paddr,
-			   VM_PROT_READ|VM_PROT_WRITE);
+		pmap_enter(pmap_kernel(), (vaddr_t)vtopte(0), paddr,
+			   VM_PROT_READ|VM_PROT_WRITE,
+			   PMAP_WIRED|VM_PROT_READ|VM_PROT_WRITE);
 		pmap_update(pmap_kernel());
 		/* make sure it is clean before using */
 		memset(vtopte(0), 0, PAGE_SIZE);
@@ -1958,14 +1960,16 @@ init386(paddr_t first_avail)
 	}
 #endif
 
- 	pmap_kenter_pa(idt_vaddr, idt_paddr, VM_PROT_READ|VM_PROT_WRITE);
+	pmap_enter(pmap_kernel(), idt_vaddr, idt_paddr,
+	    VM_PROT_READ|VM_PROT_WRITE, PMAP_WIRED|VM_PROT_READ|VM_PROT_WRITE);
 	pmap_update(pmap_kernel());
 	memset((void *)idt_vaddr, 0, PAGE_SIZE);
 
 #if !defined(XEN)
 	idt = (struct gate_descriptor *)idt_vaddr;
 #ifdef I586_CPU
- 	pmap_kenter_pa(pentium_idt_vaddr, idt_paddr, VM_PROT_READ);
+	pmap_enter(pmap_kernel(), pentium_idt_vaddr, idt_paddr,
+	    VM_PROT_READ, PMAP_WIRED|VM_PROT_READ);
 	pentium_idt = (union descriptor *)pentium_idt_vaddr;
 #endif
 #endif

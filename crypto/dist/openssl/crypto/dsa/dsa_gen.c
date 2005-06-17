@@ -80,7 +80,6 @@
 #include <openssl/rand.h>
 #include <openssl/sha.h>
 
-#ifndef OPENSSL_FIPS
 DSA *DSA_generate_parameters(int bits,
 		unsigned char *seed_in, int seed_len,
 		int *counter_ret, unsigned long *h_ret,
@@ -128,9 +127,8 @@ DSA *DSA_generate_parameters(int bits,
 	c = BN_CTX_get(ctx2);
 	p = BN_CTX_get(ctx2);
 	test = BN_CTX_get(ctx2);
-	if (test == NULL) goto err;
 
-	if (!BN_lshift(test,BN_value_one(),bits-1)) goto err;
+	BN_lshift(test,BN_value_one(),bits-1);
 
 	for (;;)
 		{
@@ -198,7 +196,7 @@ DSA *DSA_generate_parameters(int bits,
 				callback(0,counter,cb_arg);
 
 			/* step 7 */
-			if (!BN_zero(W)) goto err;
+			BN_zero(W);
 			/* now 'buf' contains "SEED + offset - 1" */
 			for (k=0; k<=n; k++)
 				{
@@ -214,20 +212,20 @@ DSA *DSA_generate_parameters(int bits,
 				/* step 8 */
 				if (!BN_bin2bn(md,SHA_DIGEST_LENGTH,r0))
 					goto err;
-				if (!BN_lshift(r0,r0,160*k)) goto err;
-				if (!BN_add(W,W,r0)) goto err;
+				BN_lshift(r0,r0,160*k);
+				BN_add(W,W,r0);
 				}
 
 			/* more of step 8 */
-			if (!BN_mask_bits(W,bits-1)) goto err;
-			if (!BN_copy(X,W)) goto err;
-			if (!BN_add(X,X,test)) goto err;
+			BN_mask_bits(W,bits-1);
+			BN_copy(X,W); /* this should be ok */
+			BN_add(X,X,test); /* this should be ok */
 
 			/* step 9 */
-			if (!BN_lshift1(r0,q)) goto err;
-			if (!BN_mod(c,X,r0,ctx)) goto err;
-			if (!BN_sub(r0,c,BN_value_one())) goto err;
-			if (!BN_sub(p,X,r0)) goto err;
+			BN_lshift1(r0,q);
+			BN_mod(c,X,r0,ctx);
+			BN_sub(r0,c,BN_value_one());
+			BN_sub(p,X,r0);
 
 			/* step 10 */
 			if (BN_cmp(p,test) >= 0)
@@ -253,18 +251,18 @@ end:
 
 	/* We now need to generate g */
 	/* Set r0=(p-1)/q */
-	if (!BN_sub(test,p,BN_value_one())) goto err;
-	if (!BN_div(r0,NULL,test,q,ctx)) goto err;
+	BN_sub(test,p,BN_value_one());
+	BN_div(r0,NULL,test,q,ctx);
 
-	if (!BN_set_word(test,h)) goto err;
-	if (!BN_MONT_CTX_set(mont,p,ctx)) goto err;
+	BN_set_word(test,h);
+	BN_MONT_CTX_set(mont,p,ctx);
 
 	for (;;)
 		{
 		/* g=test^r0%p */
-		if (!BN_mod_exp_mont(g,test,r0,p,ctx,mont)) goto err;
+		BN_mod_exp_mont(g,test,r0,p,ctx,mont);
 		if (!BN_is_one(g)) break;
-		if (!BN_add(test,test,BN_value_one())) goto err;
+		BN_add(test,test,BN_value_one());
 		h++;
 		}
 
@@ -281,11 +279,6 @@ err:
 		ret->p=BN_dup(p);
 		ret->q=BN_dup(q);
 		ret->g=BN_dup(g);
-		if (ret->p == NULL || ret->q == NULL || ret->g == NULL)
-			{
-			ok=0;
-			goto err;
-			}
 		if ((m > 1) && (seed_in != NULL)) memcpy(seed_in,seed,20);
 		if (counter_ret != NULL) *counter_ret=counter;
 		if (h_ret != NULL) *h_ret=h;
@@ -300,6 +293,4 @@ err:
 	if (mont != NULL) BN_MONT_CTX_free(mont);
 	return(ok?ret:NULL);
 	}
-#endif /* ndef OPENSSL_FIPS */
-#endif /* ndef OPENSSL_NO_SHA */
-
+#endif

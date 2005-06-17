@@ -1,7 +1,7 @@
 /*******************************************************************************
  *
  * Module Name: nsaccess - Top-level functions for accessing ACPI namespace
- *              xRevision: 188 $
+ *              xRevision: 177 $
  *
  ******************************************************************************/
 
@@ -9,7 +9,7 @@
  *
  * 1. Copyright Notice
  *
- * Some or all of this work - Copyright (c) 1999 - 2005, Intel Corp.
+ * Some or all of this work - Copyright (c) 1999 - 2004, Intel Corp.
  * All rights reserved.
  *
  * 2. License
@@ -115,7 +115,7 @@
  *****************************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nsaccess.c,v 1.12 2005/05/29 20:56:02 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nsaccess.c,v 1.10 2004/02/14 16:57:24 kochi Exp $");
 
 #define __NSACCESS_C__
 
@@ -144,8 +144,7 @@ __KERNEL_RCSID(0, "$NetBSD: nsaccess.c,v 1.12 2005/05/29 20:56:02 christos Exp $
  ******************************************************************************/
 
 ACPI_STATUS
-AcpiNsRootInitialize (
-    void)
+AcpiNsRootInitialize (void)
 {
     ACPI_STATUS                 Status;
     const ACPI_PREDEFINED_NAMES *InitVal = NULL;
@@ -186,16 +185,8 @@ AcpiNsRootInitialize (
 
     for (InitVal = AcpiGbl_PreDefinedNames; InitVal->Name; InitVal++)
     {
-        /* _OSI is optional for now, will be permanent later */
-
-        if (!ACPI_STRCMP (InitVal->Name, "_OSI") && !AcpiGbl_CreateOsiMethod)
-        {
-            continue;
-        }
-
         Status = AcpiNsLookup (NULL, InitVal->Name, InitVal->Type,
-                        ACPI_IMODE_LOAD_PASS2, ACPI_NS_NO_UPSEARCH,
-                        NULL, &NewNode);
+                        ACPI_IMODE_LOAD_PASS2, ACPI_NS_NO_UPSEARCH, NULL, &NewNode);
 
         if (ACPI_FAILURE (Status) || (!NewNode)) /* Must be on same line for code converter */
         {
@@ -214,15 +205,13 @@ AcpiNsRootInitialize (
             Status = AcpiOsPredefinedOverride (InitVal, &Val);
             if (ACPI_FAILURE (Status))
             {
-                ACPI_DEBUG_PRINT ((ACPI_DB_ERROR,
-                    "Could not override predefined %s\n",
+                ACPI_DEBUG_PRINT ((ACPI_DB_ERROR, "Could not override predefined %s\n",
                     InitVal->Name));
             }
 
             if (!Val)
             {
-		/*XXXUNCONST*/
-                Val = (void *)(intptr_t)InitVal->Val;
+                Val = InitVal->Val;
             }
 
             /*
@@ -244,27 +233,22 @@ AcpiNsRootInitialize (
             switch (InitVal->Type)
             {
             case ACPI_TYPE_METHOD:
-                ObjDesc->Method.ParamCount = (UINT8) ACPI_TO_INTEGER (Val);
+                ObjDesc->Method.ParamCount =
+                        (UINT8) ACPI_STRTOUL (Val, NULL, 10);
                 ObjDesc->Common.Flags |= AOPOBJ_DATA_VALID;
 
-#if defined (_ACPI_ASL_COMPILER) || defined (_ACPI_DUMP_APP)
+#if defined (ACPI_NO_METHOD_EXECUTION) || defined (ACPI_CONSTANT_EVAL_ONLY)
 
-                /*
-                 * iASL Compiler cheats by putting parameter count
-                 * in the OwnerID
-                 */
+                /* Compiler cheats by putting parameter count in the OwnerID */
+
                 NewNode->OwnerId = ObjDesc->Method.ParamCount;
-#else
-                /* Mark this as a very SPECIAL method */
-
-                ObjDesc->Method.MethodFlags = AML_METHOD_INTERNAL_ONLY;
-                ObjDesc->Method.Implementation = AcpiUtOsiImplementation;
 #endif
                 break;
 
             case ACPI_TYPE_INTEGER:
 
-                ObjDesc->Integer.Value = ACPI_TO_INTEGER (Val);
+                ObjDesc->Integer.Value =
+                        (ACPI_INTEGER) ACPI_STRTOUL (Val, NULL, 10);
                 break;
 
 
@@ -282,7 +266,8 @@ AcpiNsRootInitialize (
             case ACPI_TYPE_MUTEX:
 
                 ObjDesc->Mutex.Node = NewNode;
-                ObjDesc->Mutex.SyncLevel = (UINT8) (ACPI_TO_INTEGER (Val) - 1);
+                ObjDesc->Mutex.SyncLevel =
+                            (UINT16) ACPI_STRTOUL (Val, NULL, 10);
 
                 if (ACPI_STRCMP (InitVal->Name, "_GL_") == 0)
                 {
@@ -294,7 +279,6 @@ AcpiNsRootInitialize (
                                             1, &ObjDesc->Mutex.Semaphore);
                     if (ACPI_FAILURE (Status))
                     {
-                        AcpiUtRemoveReference (ObjDesc);
                         goto UnlockAndExit;
                     }
 
@@ -312,7 +296,6 @@ AcpiNsRootInitialize (
                                         &ObjDesc->Mutex.Semaphore);
                     if (ACPI_FAILURE (Status))
                     {
-                        AcpiUtRemoveReference (ObjDesc);
                         goto UnlockAndExit;
                     }
                 }
@@ -320,7 +303,6 @@ AcpiNsRootInitialize (
 
 
             default:
-
                 ACPI_REPORT_ERROR (("Unsupported initial type value %X\n",
                     InitVal->Type));
                 AcpiUtRemoveReference (ObjDesc);
@@ -330,8 +312,7 @@ AcpiNsRootInitialize (
 
             /* Store pointer to value descriptor in the Node */
 
-            Status = AcpiNsAttachObject (NewNode, ObjDesc,
-                        ACPI_GET_OBJECT_TYPE (ObjDesc));
+            Status = AcpiNsAttachObject (NewNode, ObjDesc, ACPI_GET_OBJECT_TYPE (ObjDesc));
 
             /* Remove local reference to the object */
 
@@ -342,15 +323,6 @@ AcpiNsRootInitialize (
 
 UnlockAndExit:
     (void) AcpiUtReleaseMutex (ACPI_MTX_NAMESPACE);
-
-    /* Save a handle to "_GPE", it is always present */
-
-    if (ACPI_SUCCESS (Status))
-    {
-        Status = AcpiNsGetNodeByPath ("\\_GPE", NULL, ACPI_NS_NO_UPSEARCH,
-                        &AcpiGbl_FadtGpeDevice);
-    }
-
     return_ACPI_STATUS (Status);
 }
 
@@ -359,7 +331,7 @@ UnlockAndExit:
  *
  * FUNCTION:    AcpiNsLookup
  *
- * PARAMETERS:  ScopeInfo       - Current scope info block
+ * PARAMETERS:  PrefixNode      - Search scope if name is not fully qualified
  *              Pathname        - Search pathname, in internal format
  *                                (as represented in the AML stream)
  *              Type            - Type associated with name
@@ -381,7 +353,7 @@ UnlockAndExit:
 ACPI_STATUS
 AcpiNsLookup (
     ACPI_GENERIC_STATE      *ScopeInfo,
-    const char              *Pathname,
+    char                    *Pathname,
     ACPI_OBJECT_TYPE        Type,
     ACPI_INTERPRETER_MODE   InterpreterMode,
     UINT32                  Flags,
@@ -389,7 +361,7 @@ AcpiNsLookup (
     ACPI_NAMESPACE_NODE     **ReturnNode)
 {
     ACPI_STATUS             Status;
-    const char              *Path = Pathname;
+    char                    *Path = Pathname;
     ACPI_NAMESPACE_NODE     *PrefixNode;
     ACPI_NAMESPACE_NODE     *CurrentNode = NULL;
     ACPI_NAMESPACE_NODE     *ThisNode = NULL;
@@ -572,8 +544,7 @@ AcpiNsLookup (
             Type = ThisNode->Type;
 
             ACPI_DEBUG_PRINT ((ACPI_DB_NAMES,
-                "Prefix-only Pathname (Zero name segments), Flags=%X\n",
-                Flags));
+                "Prefix-only Pathname (Zero name segments), Flags=%X\n", Flags));
             break;
 
         case AML_DUAL_NAME_PREFIX:
@@ -669,7 +640,7 @@ AcpiNsLookup (
         /* Try to find the single (4 character) ACPI name */
 
         Status = AcpiNsSearchAndEnter (SimpleName, WalkState, CurrentNode,
-                    InterpreterMode, ThisSearchType, LocalFlags, &ThisNode);
+                        InterpreterMode, ThisSearchType, LocalFlags, &ThisNode);
         if (ACPI_FAILURE (Status))
         {
             if (Status == AE_NOT_FOUND)
@@ -702,7 +673,6 @@ AcpiNsLookup (
         if ((NumSegments        == 0)                               &&
             (TypeToCheckFor     != ACPI_TYPE_ANY)                   &&
             (TypeToCheckFor     != ACPI_TYPE_LOCAL_ALIAS)           &&
-            (TypeToCheckFor     != ACPI_TYPE_LOCAL_METHOD_ALIAS)    &&
             (TypeToCheckFor     != ACPI_TYPE_LOCAL_SCOPE)           &&
             (ThisNode->Type     != ACPI_TYPE_ANY)                   &&
             (ThisNode->Type     != TypeToCheckFor))

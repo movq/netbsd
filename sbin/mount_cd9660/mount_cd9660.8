@@ -1,4 +1,4 @@
-.\" $NetBSD: mount_cd9660.8,v 1.24 2005/03/29 01:24:10 hubertf Exp $
+.\" $NetBSD: mount_cd9660.8,v 1.23.2.1 2005/07/30 17:32:35 tron Exp $
 .\"
 .\" Copyright (c) 2004 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -64,7 +64,7 @@
 .\"
 .\"     @(#)mount_cd9660.8	8.3 (Berkeley) 3/27/94
 .\"
-.Dd March 29, 2005
+.Dd November 21, 2004
 .Dt MOUNT_CD9660 8
 .Os
 .Sh NAME
@@ -161,8 +161,7 @@ Same as
 .Xr mount 2 ,
 .Xr unmount 2 ,
 .Xr fstab 5 ,
-.Xr mount 8 ,
-.Xr mscdlabel 8
+.Xr mount 8
 .Sh HISTORY
 The
 .Nm
@@ -180,7 +179,7 @@ UTF-8 encoding of Unicode file names for Joliet filesystems was added in
 .Nx 3.0 .
 .Sh NOTES
 For Joliet filesystems, the Unicode file names used to be filtered
-to ISO-8869-1 character set.
+to ISO-8859-1 character set.
 This changed in
 .Nx 3.0 ,
 file names are encoded into UTF-8 now by default.

@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.8 2005/04/16 22:49:37 bouyer Exp $	*/
+/*	$NetBSD: cpu.h,v 1.7.12.1 2005/04/28 10:19:40 tron Exp $	*/
 /*	NetBSD: cpu.h,v 1.113 2004/02/20 17:35:01 yamt Exp 	*/
 
 /*-

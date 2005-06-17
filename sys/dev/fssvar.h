@@ -1,4 +1,4 @@
-/*	$NetBSD: fssvar.h,v 1.9 2005/04/17 16:28:26 hannken Exp $	*/
+/*	$NetBSD: fssvar.h,v 1.8.2.1 2005/04/21 19:01:59 tron Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: uvscom.c,v 1.15 2005/05/11 10:02:29 augustss Exp $	*/
+/*	$NetBSD: uvscom.c,v 1.14 2005/02/16 07:52:47 martin Exp $	*/
 /*-
  * Copyright (c) 2001-2002, Shunsuke Akiyama <akiyama@jp.FreeBSD.org>.
  * All rights reserved.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvscom.c,v 1.15 2005/05/11 10:02:29 augustss Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvscom.c,v 1.14 2005/02/16 07:52:47 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -276,16 +276,15 @@ USB_ATTACH(uvscom)
 	usb_config_descriptor_t *cdesc;
 	usb_interface_descriptor_t *id;
 	usb_endpoint_descriptor_t *ed;
-	char *devinfop;
+	char devinfo[1024];
 	const char *devname = USBDEVNAME(sc->sc_dev);
 	usbd_status err;
 	int i;
 	struct ucom_attach_args uca;
 
-	devinfop = usbd_devinfo_alloc(dev, 0);
+        usbd_devinfo(dev, 0, devinfo, sizeof(devinfo));
         USB_ATTACH_SETUP;
-        printf("%s: %s\n", devname, devinfop);
-	usbd_devinfo_free(devinfop);
+        printf("%s: %s\n", devname, devinfo);
 
         sc->sc_udev = dev;
 

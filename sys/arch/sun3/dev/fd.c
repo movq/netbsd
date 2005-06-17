@@ -1,4 +1,4 @@
-/*	$NetBSD: fd.c,v 1.43 2005/06/03 15:04:21 tsutsui Exp $	*/
+/*	$NetBSD: fd.c,v 1.42 2005/01/22 15:36:10 chs Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -72,7 +72,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.43 2005/06/03 15:04:21 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.42 2005/01/22 15:36:10 chs Exp $");
 
 #include "opt_ddb.h"
 
@@ -211,7 +211,7 @@ struct fd_type {
 	int	rate;		/* transfer speed code */
 	int	fillbyte;	/* format fill byte */
 	int	interleave;	/* interleave factor (formatting) */
-	const char *name;
+	char	*name;
 };
 
 /* The order of entries in the following table is important -- BEWARE! */
@@ -297,7 +297,7 @@ void	fd_motor_on(void *);
 int	fdcresult(struct fdc_softc *);
 int	out_fdc(struct fdc_softc *, u_char);
 void	fdcstart(struct fdc_softc *);
-void	fdcstatus(struct device *, int, const char *);
+void	fdcstatus(struct device *, int, char *);
 void	fdc_reset(struct fdc_softc *);
 void	fdctimeout(void *);
 void	fdcpseudointr(void *);
@@ -933,7 +933,7 @@ fdcstart(struct fdc_softc *fdc)
 }
 
 void 
-fdcstatus(struct device *dv, int n, const char *s)
+fdcstatus(struct device *dv, int n, char *s)
 {
 	struct fdc_softc *fdc = (void *)dv->dv_parent;
 	char bits[64];

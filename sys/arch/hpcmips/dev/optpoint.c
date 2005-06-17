@@ -1,4 +1,4 @@
-/*	$NetBSD: optpoint.c,v 1.2 2005/05/09 14:36:39 hamajima Exp $ */
+/*	$NetBSD: optpoint.c,v 1.1.2.3 2005/09/02 15:19:20 riz Exp $ */
 
 /*-
  * Copyright (c) 2005 HAMAJIMA Katsuomi. All rights reserved.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: optpoint.c,v 1.2 2005/05/09 14:36:39 hamajima Exp $");
+__KERNEL_RCSID(0, "$NetBSD: optpoint.c,v 1.1.2.3 2005/09/02 15:19:20 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

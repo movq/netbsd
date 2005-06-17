@@ -1,4 +1,4 @@
-/*	$NetBSD: lfs_vfsops.c,v 1.182 2005/06/09 02:19:59 atatat Exp $	*/
+/*	$NetBSD: lfs_vfsops.c,v 1.167.2.3 2005/08/24 18:43:37 riz Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001, 2002, 2003 The NetBSD Foundation, Inc.
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lfs_vfsops.c,v 1.182 2005/06/09 02:19:59 atatat Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lfs_vfsops.c,v 1.167.2.3 2005/08/24 18:43:37 riz Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_quota.h"
@@ -160,12 +160,12 @@ struct vfsops lfs_vfsops = {
 	vfs_stdextattrctl,
 	lfs_vnodeopv_descs,
 };
-VFS_ATTACH(lfs_vfsops);
 
-struct genfs_ops lfs_genfsops = {
-	lfs_gop_size,
-	ufs_gop_alloc,
-	lfs_gop_write,
+const struct genfs_ops lfs_genfsops = {
+	.gop_size = lfs_gop_size,
+	.gop_alloc = ufs_gop_alloc,
+	.gop_write = lfs_gop_write,
+	.gop_markupdate = ufs_gop_markupdate,
 };
 
 /*
@@ -486,12 +486,8 @@ lfs_mount(struct mount *mp, const char *path, void *data, struct nameidata *ndp,
 		}
 	}
 
-	error = set_statvfs_info(path, UIO_USERSPACE, args.fspec,
+	return set_statvfs_info(path, UIO_USERSPACE, args.fspec,
 	    UIO_USERSPACE, mp, p);
-	if (error == 0)
-		(void)strncpy(fs->lfs_fsmnt, mp->mnt_stat.f_mntonname,
-			      sizeof(fs->lfs_fsmnt));
-	return error;
 
 fail:
 	vrele(devvp);
@@ -507,7 +503,7 @@ fail:
  * Mark the block dirty.  Do segment and avail accounting.
  */
 static int
-update_meta(struct lfs *fs, ino_t ino, int vers, daddr_t lbn,
+update_meta(struct lfs *fs, ino_t ino, int version, daddr_t lbn,
 	    daddr_t ndaddr, size_t size, struct proc *p)
 {
 	int error;
@@ -524,7 +520,7 @@ update_meta(struct lfs *fs, ino_t ino, int vers, daddr_t lbn,
 
 	KASSERT(lbn >= 0);	/* no indirect blocks */
 
-	if ((error = lfs_rf_valloc(fs, ino, vers, p, &vp)) != 0) {
+	if ((error = lfs_rf_valloc(fs, ino, version, p, &vp)) != 0) {
 		DLOG((DLOG_RF, "update_meta: ino %d: lfs_rf_valloc"
 		      " returned %d\n", ino, error));
 		return error;
@@ -1749,8 +1745,8 @@ sysctl_lfs_dostats(SYSCTLFN_ARGS)
 }
 
 struct shortlong {
-	const char *sname;
-	const char *lname;
+	char *sname;
+	char *lname;
 };
 
 SYSCTL_SETUP(sysctl_vfs_lfs_setup, "sysctl vfs.lfs subtree setup")
@@ -1796,7 +1792,6 @@ SYSCTL_SETUP(sysctl_vfs_lfs_setup, "sysctl vfs.lfs subtree setup")
 		{ "vflush_invoked", "Number of time vflush was called" },
 		{ "clean_inlocked", "Number of vnodes skipped for VXLOCK" },
 		{ "clean_vnlocked", "Number of vnodes skipped for vget failure" },
-		{ "segs_reclaimed", "Number of segments reclaimed" },
 	};
 
 	sysctl_createv(clog, 0, NULL, NULL,
@@ -2026,7 +2021,7 @@ lfs_gop_write(struct vnode *vp, struct vm_page **pgs, int npages, int flags)
 	if ((kva = uvm_pagermapin(pgs, npages, UVMPAGER_MAPIN_WRITE |
 				      (((SEGSUM *)(sp->segsum))->ss_nfinfo < 1 ?
 				       UVMPAGER_MAPIN_WAITOK : 0))) == 0x0) {
-		int vers;
+		int version;
 
 		DLOG((DLOG_PAGE, "lfs_gop_write: forcing write\n"));
 #if 0
@@ -2041,10 +2036,10 @@ lfs_gop_write(struct vnode *vp, struct vm_page **pgs, int npages, int flags)
 		} else
 			lfs_updatemeta(sp);
 
-		vers = sp->fip->fi_version;
+		version = sp->fip->fi_version;
 		(void) lfs_writeseg(fs, sp);
 
-		sp->fip->fi_version = vers;
+		sp->fip->fi_version = version;
 		sp->fip->fi_ino = ip->i_number;
 		/* Add the current file to the segment summary. */
 		++((SEGSUM *)(sp->segsum))->ss_nfinfo;
@@ -2105,14 +2100,14 @@ lfs_gop_write(struct vnode *vp, struct vm_page **pgs, int npages, int flags)
 		/* If no room in the current segment, finish it up */
 		if (sp->sum_bytes_left < sizeof(int32_t) ||
 		    sp->seg_bytes_left < (1 << fs->lfs_bshift)) {
-			int vers;
+			int version;
 
 			lfs_updatemeta(sp);
 
-			vers = sp->fip->fi_version;
+			version = sp->fip->fi_version;
 			(void) lfs_writeseg(fs, sp);
 
-			sp->fip->fi_version = vers;
+			sp->fip->fi_version = version;
 			sp->fip->fi_ino = ip->i_number;
 			/* Add the current file to the segment summary. */
 			++((SEGSUM *)(sp->segsum))->ss_nfinfo;

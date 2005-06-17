@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.21 2005/04/25 15:02:04 lukem Exp $	*/
+/*	$NetBSD: machdep.c,v 1.20 2004/03/16 23:58:18 scw Exp $	*/
 
 /*
  * Copyright 2002 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.21 2005/04/25 15:02:04 lukem Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.20 2004/03/16 23:58:18 scw Exp $");
 
 #include "opt_sh5_debug.h"
 #include "opt_sh5_cpu.h"
@@ -344,9 +344,8 @@ cpu_startup(void)
 				 nmbclusters * mclbytes, VM_MAP_INTRSAFE,
 				 FALSE, NULL);
 
-	printf("%s%s", copyright, version);
 	strcpy(cpu_model, bootparams.bp_machine);
-	printf("%s, %d-bit mode\n", cpu_model,
+	printf("%s%s, %d-bit mode\n", version, cpu_model,
 	    (sizeof(void *) == 8) ? 64 : 32);
 
 	format_bytes(pbuf, sizeof(pbuf), ctob(physmem));

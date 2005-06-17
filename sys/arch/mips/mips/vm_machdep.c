@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.108 2005/06/10 05:10:12 matt Exp $	*/
+/*	$NetBSD: vm_machdep.c,v 1.105.8.1 2005/11/21 20:02:26 tron Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -79,7 +79,7 @@
 #include "opt_ddb.h"
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.108 2005/06/10 05:10:12 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.105.8.1 2005/11/21 20:02:26 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -254,7 +254,8 @@ cpu_exit(struct lwp *l)
  * Dump the machine specific segment at the start of a core dump.
  */
 int
-cpu_coredump(struct lwp *l, void *iocookie, struct core *chdr)
+cpu_coredump(struct lwp *l, struct vnode *vp, struct ucred *cred,
+    struct core *chdr)
 {
 	int error;
 	struct coreseg cseg;
@@ -263,14 +264,10 @@ cpu_coredump(struct lwp *l, void *iocookie, struct core *chdr)
 		struct fpreg fpregs;
 	} cpustate;
 
-	if (iocookie == NULL) {
-		CORE_SETMAGIC(*chdr, COREMAGIC, MID_MACHINE, 0);
-		chdr->c_hdrsize = ALIGN(sizeof(struct core));
-		chdr->c_seghdrsize = ALIGN(sizeof(struct coreseg));
-		chdr->c_cpusize = sizeof(struct cpustate);
-		chdr->c_nseg++;
-		return 0;
-	}
+	CORE_SETMAGIC(*chdr, COREMAGIC, MID_MACHINE, 0);
+	chdr->c_hdrsize = ALIGN(sizeof(struct core));
+	chdr->c_seghdrsize = ALIGN(sizeof(struct coreseg));
+	chdr->c_cpusize = sizeof(struct cpustate);
 
 	if ((l->l_md.md_flags & MDP_FPUSED) && l == fpcurlwp)
 		savefpregs(l);
@@ -280,14 +277,22 @@ cpu_coredump(struct lwp *l, void *iocookie, struct core *chdr)
 	CORE_SETMAGIC(cseg, CORESEGMAGIC, MID_MACHINE, CORE_CPU);
 	cseg.c_addr = 0;
 	cseg.c_size = chdr->c_cpusize;
-
-	error = coredump_write(iocookie, UIO_SYSSPACE, &cseg,
-	    chdr->c_seghdrsize);
+	error = vn_rdwr(UIO_WRITE, vp, (caddr_t)&cseg, chdr->c_seghdrsize,
+	    (off_t)chdr->c_hdrsize, UIO_SYSSPACE,
+	    IO_NODELOCKED|IO_UNIT, cred, NULL, NULL);
 	if (error)
 		return error;
 
-	return coredump_write(iocookie, UIO_SYSSPACE, &cpustate,
-	    chdr->c_cpusize);
+	error = vn_rdwr(UIO_WRITE, vp, (caddr_t)&cpustate,
+			(off_t)chdr->c_cpusize,
+			(off_t)(chdr->c_hdrsize + chdr->c_seghdrsize),
+			UIO_SYSSPACE, IO_NODELOCKED|IO_UNIT,
+			cred, NULL, NULL);
+
+	if (!error)
+		chdr->c_nseg++;
+
+	return error;
 }
 
 /*
@@ -308,12 +313,7 @@ vmapbuf(struct buf *bp, vsize_t len)
 	uva = mips_trunc_page(bp->b_saveaddr = bp->b_data);
 	off = (vaddr_t)bp->b_data - uva;
 	len = mips_round_page(off + len);
-	kva = vm_map_min(phys_map);
-	if (uvm_map(phys_map, &kva, len, NULL, uva, 0,
-	    UVM_MAPFLAG(UVM_PROT_ALL, UVM_PROT_ALL, UVM_INH_NONE,
-	    UVM_ADV_RANDOM, UVM_KMF_WAITVA | UVM_FLAG_QUANTUM)))
-		panic("vmapbuf: space");
-
+	kva = uvm_km_valloc_prefer_wait(phys_map, len, uva);
 	bp->b_data = (caddr_t)(kva + off);
 
 	upmap = vm_map_pmap(&bp->b_proc->p_vmspace->vm_map);
@@ -346,8 +346,7 @@ vunmapbuf(struct buf *bp, vsize_t len)
 	len = mips_round_page(off + len);
 	pmap_remove(vm_map_pmap(phys_map), kva, kva + len);
 	pmap_update(pmap_kernel());
-	uvm_unmap1(phys_map, kva, kva + len,
-	    UVM_FLAG_QUANTUM | UVM_FLAG_VAONLY);
+	uvm_km_free_wakeup(phys_map, kva, len);
 	bp->b_data = bp->b_saveaddr;
 	bp->b_saveaddr = NULL;
 }

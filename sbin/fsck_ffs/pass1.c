@@ -1,4 +1,4 @@
-/*	$NetBSD: pass1.c,v 1.38 2005/06/08 20:34:06 dbj Exp $	*/
+/*	$NetBSD: pass1.c,v 1.36.2.2 2005/12/07 19:37:52 riz Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)pass1.c	8.6 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: pass1.c,v 1.38 2005/06/08 20:34:06 dbj Exp $");
+__RCSID("$NetBSD: pass1.c,v 1.36.2.2 2005/12/07 19:37:52 riz Exp $");
 #endif
 #endif /* not lint */
 
@@ -319,7 +319,8 @@ checkinode(ino_t inumber, struct inodesc *idesc)
 			}
 		}
 	}
-	for (j = ndb; j < NDADDR; j++)
+	if (ndb < NDADDR) {
+	    for (j = ndb; j < NDADDR; j++)
 		if (DIP(dp, db[j]) != 0) {
 		    if (debug) {
 			if (!is_ufs2)
@@ -333,6 +334,7 @@ checkinode(ino_t inumber, struct inodesc *idesc)
 		    }
 		    goto unknown;
 		}
+	}
 
 	for (j = 0, ndb -= NDADDR; ndb > 0; j++)
 		ndb /= NINDIR(sblock);
@@ -395,27 +397,6 @@ checkinode(ino_t inumber, struct inodesc *idesc)
 	else
 		idesc->id_type = ADDR;
 	(void)ckinode(dp, idesc);
-#ifdef notyet
-	if (is_ufs2 && iswap32(dp->dp2.di_extsize) > 0) {
-		int ret, offset;
-		idesc->id_type = ADDR;
-		ndb = howmany(iswap32(dp->dp2.di_extsize), sblock->fs_bsize);
-		for (j = 0; j < NXADDR; j++) {
-			if (--ndb == 0 &&
-			    (offset = blkoff(sblock, iswap32(dp->dp2.di_extsize))) != 0)
-				idesc->id_numfrags = numfrags(sblock,
-				    fragroundup(sblock, offset));
-			else
-				idesc->id_numfrags = sblock->fs_frag;
-			if (dp->dp2.di_extb[j] == 0)
-				continue;
-			idesc->id_blkno = iswap64(dp->dp2.di_extb[j]);
-			ret = (*idesc->id_func)(idesc);
-			if (ret & STOP)
-				break;
-		}
-	}
-#endif
 	idesc->id_entryno *= btodb(sblock->fs_fsize);
 	if (is_ufs2)
 		blocks = iswap64(dp->dp2.di_blocks);

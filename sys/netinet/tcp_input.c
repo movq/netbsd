@@ -1,4 +1,4 @@
-/*	$NetBSD: tcp_input.c,v 1.229 2005/06/06 12:10:09 yamt Exp $	*/
+/*	$NetBSD: tcp_input.c,v 1.224.2.2 2005/04/28 11:02:08 tron Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -150,7 +150,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tcp_input.c,v 1.229 2005/06/06 12:10:09 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tcp_input.c,v 1.224.2.2 2005/04/28 11:02:08 tron Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -922,7 +922,6 @@ tcp_input(struct mbuf *m, ...)
 	va_list ap;
 	int af;		/* af on the wire */
 	struct mbuf *tcp_saveti = NULL;
-	uint32_t ts_rtt;
 
 	MCLAIM(m, &tcp_rx_mowner);
 	va_start(ap, m);
@@ -1540,11 +1539,9 @@ after_listen:
 		 * RTT calculation.  Since ts_ecr is unsigned, we can test both
 		 * at the same time.
 		 */
-		ts_rtt = TCP_TIMESTAMP(tp) - opti.ts_ecr + 1;
-		if (ts_rtt > TCP_PAWS_IDLE)
-			ts_rtt = 0;
-	} else {
-		ts_rtt = 0;
+		opti.ts_ecr = TCP_TIMESTAMP(tp) - opti.ts_ecr + 1;
+		if (opti.ts_ecr > TCP_PAWS_IDLE)
+			opti.ts_ecr = 0;
 	}
 
 	/*
@@ -1589,8 +1586,8 @@ after_listen:
 				 * this is a pure ack for outstanding data.
 				 */
 				++tcpstat.tcps_predack;
-				if (ts_rtt)
-					tcp_xmit_timer(tp, ts_rtt);
+				if (opti.ts_present && opti.ts_ecr)
+					tcp_xmit_timer(tp, opti.ts_ecr);
 				else if (tp->t_rtttime &&
 				    SEQ_GT(th->th_ack, tp->t_rtseq))
 					tcp_xmit_timer(tp,
@@ -2228,8 +2225,8 @@ after_listen:
 		 * timer backoff (cf., Phil Karn's retransmit alg.).
 		 * Recompute the initial retransmit timer.
 		 */
-		if (ts_rtt)
-			tcp_xmit_timer(tp, ts_rtt);
+		if (opti.ts_present && opti.ts_ecr)
+			tcp_xmit_timer(tp, opti.ts_ecr);
 		else if (tp->t_rtttime && SEQ_GT(th->th_ack, tp->t_rtseq))
 			tcp_xmit_timer(tp, tcp_now - tp->t_rtttime);
 
@@ -2249,7 +2246,9 @@ after_listen:
 		 * If the window gives us less than ssthresh packets
 		 * in flight, open exponentially (segsz per packet).
 		 * Otherwise open linearly: segsz per window
-		 * (segsz^2 / cwnd per packet).
+		 * (segsz^2 / cwnd per packet), plus a constant
+		 * fraction of a packet (segsz/8) to help larger windows
+		 * open quickly enough.
 		 *
 		 * If we are still in fast recovery (meaning we are using
 		 * NewReno and we have only received partial acks), do not
@@ -3179,9 +3178,9 @@ u_int32_t syn_hash1, syn_hash2;
 #ifndef INET6
 #define	SYN_HASHALL(hash, src, dst) \
 do {									\
-	hash = SYN_HASH(&((const struct sockaddr_in *)(src))->sin_addr,	\
-		((const struct sockaddr_in *)(src))->sin_port,		\
-		((const struct sockaddr_in *)(dst))->sin_port);		\
+	hash = SYN_HASH(&((struct sockaddr_in *)(src))->sin_addr,	\
+		((struct sockaddr_in *)(src))->sin_port,		\
+		((struct sockaddr_in *)(dst))->sin_port);		\
 } while (/*CONSTCOND*/ 0)
 #else
 #define SYN_HASH6(sa, sp, dp) \
@@ -3193,14 +3192,14 @@ do {									\
 do {									\
 	switch ((src)->sa_family) {					\
 	case AF_INET:							\
-		hash = SYN_HASH(&((const struct sockaddr_in *)(src))->sin_addr, \
-			((const struct sockaddr_in *)(src))->sin_port,	\
-			((const struct sockaddr_in *)(dst))->sin_port);	\
+		hash = SYN_HASH(&((struct sockaddr_in *)(src))->sin_addr, \
+			((struct sockaddr_in *)(src))->sin_port,	\
+			((struct sockaddr_in *)(dst))->sin_port);	\
 		break;							\
 	case AF_INET6:							\
-		hash = SYN_HASH6(&((const struct sockaddr_in6 *)(src))->sin6_addr, \
-			((const struct sockaddr_in6 *)(src))->sin6_port,	\
-			((const struct sockaddr_in6 *)(dst))->sin6_port);	\
+		hash = SYN_HASH6(&((struct sockaddr_in6 *)(src))->sin6_addr, \
+			((struct sockaddr_in6 *)(src))->sin6_port,	\
+			((struct sockaddr_in6 *)(dst))->sin6_port);	\
 		break;							\
 	default:							\
 		hash = 0;						\
@@ -3440,7 +3439,7 @@ syn_cache_cleanup(struct tcpcb *tp)
  * Find an entry in the syn cache.
  */
 struct syn_cache *
-syn_cache_lookup(const struct sockaddr *src, const struct sockaddr *dst,
+syn_cache_lookup(struct sockaddr *src, struct sockaddr *dst,
     struct syn_cache_head **headp)
 {
 	struct syn_cache *sc;
@@ -3815,7 +3814,7 @@ syn_cache_reset(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th)
 }
 
 void
-syn_cache_unreach(const struct sockaddr *src, const struct sockaddr *dst,
+syn_cache_unreach(struct sockaddr *src, struct sockaddr *dst,
     struct tcphdr *th)
 {
 	struct syn_cache *sc;

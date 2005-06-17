@@ -1,4 +1,4 @@
-/*	$NetBSD: uipc_mbuf.c,v 1.100 2005/06/06 06:06:50 martin Exp $	*/
+/*	$NetBSD: uipc_mbuf.c,v 1.92.6.2 2005/06/09 17:56:13 snj Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2001 The NetBSD Foundation, Inc.
@@ -69,7 +69,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uipc_mbuf.c,v 1.100 2005/06/06 06:06:50 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uipc_mbuf.c,v 1.92.6.2 2005/06/09 17:56:13 snj Exp $");
 
 #include "opt_mbuftrace.h"
 
@@ -346,14 +346,14 @@ mclpool_alloc(struct pool *pp, int flags)
 {
 	boolean_t waitok = (flags & PR_WAITOK) ? TRUE : FALSE;
 
-	return ((void *)uvm_km_alloc_poolpage(mb_map, waitok));
+	return ((void *)uvm_km_alloc_poolpage1(mb_map, NULL, waitok));
 }
 
 void
 mclpool_release(struct pool *pp, void *v)
 {
 
-	uvm_km_free_poolpage(mb_map, (vaddr_t)v);
+	uvm_km_free_poolpage1(mb_map, (vaddr_t)v);
 }
 
 /*ARGSUSED*/
@@ -670,22 +670,22 @@ nospace:
 void
 m_copydata(struct mbuf *m, int off, int len, void *vp)
 {
-	unsigned	count;
-	caddr_t		cp = vp;
+	unsigned count;
+	char *cp = vp;
 
 	if (off < 0 || len < 0)
 		panic("m_copydata: off %d, len %d", off, len);
 	while (off > 0) {
-		if (m == NULL)
-			panic("m_copydata: m == NULL, off %d", off);
+		if (m == 0)
+			panic("m_copydata: m == 0, off %d", off);
 		if (off < m->m_len)
 			break;
 		off -= m->m_len;
 		m = m->m_next;
 	}
 	while (len > 0) {
-		if (m == NULL)
-			panic("m_copydata: m == NULL, len %d", len);
+		if (m == 0)
+			panic("m_copydata: m == 0, len %d", len);
 		count = min(m->m_len - off, len);
 		memcpy(cp, mtod(m, caddr_t) + off, count);
 		len -= count;

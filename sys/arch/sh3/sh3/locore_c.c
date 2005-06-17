@@ -1,4 +1,4 @@
-/*	$NetBSD: locore_c.c,v 1.8 2005/05/31 22:06:51 uwe Exp $	*/
+/*	$NetBSD: locore_c.c,v 1.7 2003/11/16 00:07:13 uwe Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 2002 The NetBSD Foundation, Inc.
@@ -111,7 +111,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: locore_c.c,v 1.8 2005/05/31 22:06:51 uwe Exp $");
+__KERNEL_RCSID(0, "$NetBSD: locore_c.c,v 1.7 2003/11/16 00:07:13 uwe Exp $");
 
 #include "opt_lockdebug.h"
 
@@ -146,41 +146,41 @@ int want_resched;
 
 
 /*
- * Prepare context switch from olwp to nlwp.
+ * Prepare context switch from oldlwp to newlwp.
  * This code is shared by cpu_switch and cpu_switchto.
  */
 struct lwp *
-cpu_switch_prepare(struct lwp *olwp, struct lwp *nlwp)
+cpu_switch_prepare(struct lwp *oldlwp, struct lwp *newlwp)
 {
 
-	nlwp->l_stat = LSONPROC;
+	newlwp->l_stat = LSONPROC;
 
-	if (nlwp != olwp) {
-		struct proc *p = nlwp->l_proc;
+	if (newlwp != oldlwp) {
+		struct proc *p = newlwp->l_proc;
 
-		curpcb = nlwp->l_md.md_pcb;
-		pmap_activate(nlwp);
+		curpcb = newlwp->l_md.md_pcb;
+		pmap_activate(newlwp);
 
 		/* Check for Restartable Atomic Sequences. */
 		if (!LIST_EMPTY(&p->p_raslist)) {
 			caddr_t pc;
 
 			pc = ras_lookup(p,
-				(caddr_t)nlwp->l_md.md_regs->tf_spc);
+				(caddr_t)newlwp->l_md.md_regs->tf_spc);
 			if (pc != (caddr_t) -1)
-				nlwp->l_md.md_regs->tf_spc = (int) pc;
+				newlwp->l_md.md_regs->tf_spc = (int) pc;
 		}
 	}
 
-	curlwp = nlwp;
-	return (nlwp);
+	curlwp = newlwp;
+	return (newlwp);
 }
 
 /*
  * Find the highest priority lwp and prepare to switching to it.
  */
 struct lwp *
-cpu_switch_search(struct lwp *olwp)
+cpu_switch_search(struct lwp *oldlwp)
 {
 	struct prochd *q;
 	struct lwp *l;
@@ -200,7 +200,7 @@ cpu_switch_search(struct lwp *olwp)
 	want_resched = 0;
 	SCHED_UNLOCK_IDLE();
 
-	return (cpu_switch_prepare(olwp, l));
+	return (cpu_switch_prepare(oldlwp, l));
 }
 
 /*

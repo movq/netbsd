@@ -1,4 +1,4 @@
-/* $NetBSD: main.c,v 1.24 2005/04/23 20:21:03 perseant Exp $	 */
+/* $NetBSD: main.c,v 1.20.2.1 2005/05/07 11:21:29 tron Exp $	 */
 
 /*
  * Copyright (c) 1980, 1986, 1993

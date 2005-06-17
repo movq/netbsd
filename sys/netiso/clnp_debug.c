@@ -1,4 +1,4 @@
-/*	$NetBSD: clnp_debug.c,v 1.16 2005/05/29 21:27:45 christos Exp $	*/
+/*	$NetBSD: clnp_debug.c,v 1.14 2004/04/21 18:40:41 itojun Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -59,7 +59,7 @@ SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clnp_debug.c,v 1.16 2005/05/29 21:27:45 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clnp_debug.c,v 1.14 2004/04/21 18:40:41 itojun Exp $");
 
 #include <sys/param.h>
 #include <sys/mbuf.h>
@@ -136,6 +136,7 @@ main()
 #endif				/* TESTDEBUG */
 
 unsigned int    clnp_debug;
+static const char letters[] = "0123456789abcdef";
 
 char           *clnp_hexp (const char *, int, char *);
 char           *clnp_iso_addrp (struct iso_addr *);
@@ -151,9 +152,9 @@ clnp_hexp(const char *src, int len, char *where)
 	int             i;
 
 	for (i = 0; i < len; i++) {
-		int    j = ((const u_char *) src)[i];
-		*where++ = hexdigits[j >> 4];
-		*where++ = hexdigits[j & 0x0f];
+		int    j = ((u_char *) src)[i];
+		*where++ = letters[j >> 4];
+		*where++ = letters[j & 0x0f];
 	}
 	return where;
 }

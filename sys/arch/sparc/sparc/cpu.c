@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.c,v 1.191 2005/06/16 04:17:49 briggs Exp $ */
+/*	$NetBSD: cpu.c,v 1.186.10.1 2005/10/30 02:15:01 jmc Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -52,7 +52,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.191 2005/06/16 04:17:49 briggs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.186.10.1 2005/10/30 02:15:01 jmc Exp $");
 
 #include "opt_multiprocessor.h"
 #include "opt_lockdebug.h"
@@ -101,7 +101,7 @@ int	cpu_arch;			/* sparc architecture version */
 char	cpu_model[100];			/* machine model (primary CPU) */
 extern char machine_model[];
 
-int	sparc_ncpus;			/* # of CPUs detected by PROM */
+int	ncpu;				/* # of CPUs detected by PROM */
 struct	cpu_info **cpus;
 u_int	cpu_ready_mask;			/* the set of CPUs marked as READY */
 static	int cpu_instance;		/* current # of CPUs wired by us */
@@ -124,7 +124,7 @@ CFATTACH_DECL(cpu_cpuunit, sizeof(struct cpu_softc),
 
 static void cpu_attach(struct cpu_softc *, int, int);
 
-static const char *fsrtoname __P((int, int, int));
+static char *fsrtoname __P((int, int, int));
 void cache_print __P((struct cpu_softc *));
 void cpu_setup __P((void));
 void fpu_init __P((struct cpu_info *));
@@ -165,12 +165,9 @@ alloc_cpuinfo_global_va(ismaster, sizep)
 	 * determine the alignment (XXX).
 	 */
 	align = PAGE_SIZE;
-	if (CACHEINFO.c_totalsize > align) {
-		/* Need a power of two */
-		while (align <= CACHEINFO.c_totalsize)
-			align <<= 1;
-		align >>= 1;
-	}
+	if (CACHEINFO.c_totalsize > align)
+		/* Assumes `c_totalsize' is power of two */
+		align = CACHEINFO.c_totalsize;
 
 	sz = sizeof(struct cpu_info);
 
@@ -186,10 +183,7 @@ alloc_cpuinfo_global_va(ismaster, sizep)
 	sz = (sz + PAGE_SIZE - 1) & -PAGE_SIZE;
 	esz = sz + align - PAGE_SIZE;
 
-	sva = vm_map_min(kernel_map);
-	if (uvm_map(kernel_map, &sva, esz, NULL, UVM_UNKNOWN_OFFSET,
-	    0, UVM_MAPFLAG(UVM_PROT_ALL, UVM_PROT_ALL, UVM_INH_NONE,
-	    UVM_ADV_RANDOM, UVM_FLAG_NOWAIT)))
+	if ((sva = uvm_km_valloc(kernel_map, esz)) == 0)
 		panic("alloc_cpuinfo_global_va: no virtual space");
 
 	va = sva + (((CPUINFO_VA & (align - 1)) + align - sva) & (align - 1));
@@ -243,8 +237,7 @@ alloc_cpuinfo()
 	cpi->eintstack = cpi->idle_u = (void *)((vaddr_t)cpi + sz - USPACE);
 
 	/* Allocate virtual space for pmap page_copy/page_zero */
-	va = uvm_km_alloc(kernel_map, 2*PAGE_SIZE, 0, UVM_KMF_VAONLY);
-	if (va == 0)
+	if ((va = uvm_km_valloc(kernel_map, 2*PAGE_SIZE)) == 0)
 		panic("alloc_cpuinfo: no virtual space");
 
 	cpi->vpage[0] = (caddr_t)(va + 0);
@@ -427,8 +420,8 @@ cpu_attach(struct cpu_softc *sc, int node, int mid)
 	if (cpus == NULL) {
 		extern struct pcb idle_u[];
 
-		cpus = malloc(sparc_ncpus * sizeof(cpi), M_DEVBUF, M_NOWAIT);
-		bzero(cpus, sparc_ncpus * sizeof(cpi));
+		cpus = malloc(ncpu * sizeof(cpi), M_DEVBUF, M_NOWAIT);
+		bzero(cpus, ncpu * sizeof(cpi));
 
 		getcpuinfo(&cpuinfo, node);
 
@@ -492,7 +485,7 @@ cpu_attach(struct cpu_softc *sc, int node, int mid)
 	cpi->mid = mid;
 	cpi->node = node;
 
-	if (sparc_ncpus > 1) {
+	if (ncpu > 1) {
 		printf(": mid %d", mid);
 		if (mid == 0 && !CPU_ISSUN4D)
 			printf(" [WARNING: mid should not be 0]");
@@ -524,14 +517,14 @@ cpu_attach(struct cpu_softc *sc, int node, int mid)
 
 	cache_print(sc);
 
-	if (sparc_ncpus > 1 && cpu_instance == sparc_ncpus) {
+	if (ncpu > 1 && cpu_instance == ncpu) {
 		int n;
 		/*
 		 * Install MP cache flush functions, unless the
 		 * single-processor versions are no-ops.
 		 */
-		for (n = 0; n < sparc_ncpus; n++) {
-			cpi = cpus[n];
+		for (n = 0; n < ncpu; n++) {
+			struct cpu_info *cpi = cpus[n];
 			if (cpi == NULL)
 				continue;
 #define SET_CACHE_FUNC(x) \
@@ -554,14 +547,14 @@ cpu_boot_secondary_processors()
 {
 	int n;
 
-	if (cpu_instance != sparc_ncpus) {
+	if (cpu_instance != ncpu) {
 		printf("NOTICE: only %d out of %d CPUs were configured\n",
-			cpu_instance, sparc_ncpus);
+			cpu_instance, ncpu);
 		return;
 	}
 
 	printf("cpu0: booting secondary processors:");
-	for (n = 0; n < sparc_ncpus; n++) {
+	for (n = 0; n < ncpu; n++) {
 		struct cpu_info *cpi = cpus[n];
 
 		if (cpi == NULL || cpuinfo.mid == cpi->mid ||
@@ -647,8 +640,7 @@ extern void cpu_hatch __P((void));	/* in locore.s */
 	 * Wait for this CPU to spin up.
 	 */
 	for (n = 10000; n != 0; n--) {
-		cache_flush((caddr_t) __UNVOLATILE(&cpi->flags),
-			    sizeof(cpi->flags));
+		cache_flush((caddr_t)&cpi->flags, sizeof(cpi->flags));
 		if (cpi->flags & CPUFLG_HATCHED)
 			return;
 		delay(100);
@@ -709,7 +701,7 @@ xcall(func, trap, arg0, arg1, arg2, cpuset)
 	 * finished by the time we start looking.
 	 */
 	fasttrap = trap != NULL ? 1 : 0;
-	for (n = 0; n < sparc_ncpus; n++) {
+	for (n = 0; n < ncpu; n++) {
 		struct cpu_info *cpi = cpus[n];
 
 		/* Note: n == cpi->ci_cpuid */
@@ -749,7 +741,7 @@ xcall(func, trap, arg0, arg1, arg2, cpuset)
 		}
 
 		done = 1;
-		for (n = 0; n < sparc_ncpus; n++) {
+		for (n = 0; n < ncpu; n++) {
 			struct cpu_info *cpi = cpus[n];
 
 			if ((cpuset & (1 << n)) == 0)
@@ -783,7 +775,7 @@ mp_pause_cpus()
 	if (cpus == NULL)
 		return;
 
-	for (n = 0; n < sparc_ncpus; n++) {
+	for (n = 0; n < ncpu; n++) {
 		struct cpu_info *cpi = cpus[n];
 
 		if (cpi == NULL || cpuinfo.mid == cpi->mid)
@@ -810,7 +802,7 @@ mp_resume_cpus()
 	if (cpus == NULL)
 		return;
 
-	for (n = 0; n < sparc_ncpus; n++) {
+	for (n = 0; n < ncpu; n++) {
 		struct cpu_info *cpi = cpus[n];
 
 		if (cpi == NULL || cpuinfo.mid == cpi->mid)
@@ -836,7 +828,7 @@ mp_halt_cpus()
 	if (cpus == NULL)
 		return;
 
-	for (n = 0; n < sparc_ncpus; n++) {
+	for (n = 0; n < ncpu; n++) {
 		struct cpu_info *cpi = cpus[n];
 		int r;
 
@@ -863,7 +855,7 @@ mp_pause_cpus_ddb()
 	if (cpus == NULL)
 		return;
 
-	for (n = 0; n < sparc_ncpus; n++) {
+	for (n = 0; n < ncpu; n++) {
 		struct cpu_info *cpi = cpus[n];
 
 		if (cpi == NULL || cpi->mid == cpuinfo.mid)
@@ -882,7 +874,7 @@ mp_resume_cpus_ddb()
 	if (cpus == NULL)
 		return;
 
-	for (n = 0; n < sparc_ncpus; n++) {
+	for (n = 0; n < ncpu; n++) {
 		struct cpu_info *cpi = cpus[n];
 
 		if (cpi == NULL || cpuinfo.mid == cpi->mid)
@@ -948,7 +940,7 @@ cache_print(sc)
 	}
 
 	if (ci->c_split) {
-		const char *sep = "";
+		char *sep = "";
 
 		printf("%s", (ci->c_physical ? "physical " : ""));
 		if (ci->ic_totalsize > 0) {
@@ -1335,7 +1327,8 @@ getcacheinfo_obp(sc, node)
 
 		ci->c_l2linesize = min(ci->ic_l2linesize, ci->dc_l2linesize);
 		ci->c_linesize = min(ci->ic_linesize, ci->dc_linesize);
-		ci->c_totalsize = ci->ic_totalsize + ci->dc_totalsize;
+		ci->c_totalsize = max(ci->ic_totalsize, ci->dc_totalsize);
+		ci->c_nlines = ci->c_totalsize >> ci->c_l2linesize;
 	} else {
 		/* unified I/D cache */
 		ci->c_nlines = prom_getpropint(node, "cache-nlines", 128);
@@ -1788,7 +1781,7 @@ viking_module_error(void)
 	int n, fatal = 0;
 
 	/* Report on MXCC error registers in each module */
-	for (n = 0; n < sparc_ncpus; n++) {
+	for (n = 0; n < ncpu; n++) {
 		struct cpu_info *cpi = cpus[n];
 
 		if (cpi == NULL)
@@ -1856,7 +1849,8 @@ getcacheinfo_sun4d(sc, node)
 
 	ci->c_l2linesize = min(ci->ic_l2linesize, ci->dc_l2linesize);
 	ci->c_linesize = min(ci->ic_linesize, ci->dc_linesize);
-	ci->c_totalsize = ci->ic_totalsize + ci->dc_totalsize;
+	ci->c_totalsize = max(ci->ic_totalsize, ci->dc_totalsize);
+	ci->c_nlines = ci->c_totalsize >> ci->c_l2linesize;
 
 	if (node_has_property(node, "ecache-nlines")) {
 		/* we have a L2 "e"xternal cache */
@@ -1909,7 +1903,7 @@ struct cpu_conf {
 	int	cpu_vers;
 	int	mmu_impl;
 	int	mmu_vers;
-	const char	*name;
+	char	*name;
 	struct	module_info *minfo;
 } cpu_conf[] = {
 #if defined(SUN4)
@@ -2113,7 +2107,7 @@ struct info {
 	int	iu_impl;
 	int	iu_vers;
 	int	fpu_vers;
-	const char	*name;
+	char	*name;
 };
 
 /* XXX trim this table on a per-ARCH basis */
@@ -2164,7 +2158,7 @@ static struct info fpu_types[] = {
 	{ 0 }
 };
 
-static const char *
+static char *
 fsrtoname(impl, vers, fver)
 	int impl, vers, fver;
 {

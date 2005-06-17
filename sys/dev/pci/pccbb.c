@@ -1,4 +1,4 @@
-/*	$NetBSD: pccbb.c,v 1.121 2005/06/01 09:10:57 sekiya Exp $	*/
+/*	$NetBSD: pccbb.c,v 1.117.2.1 2005/03/27 16:33:48 tron Exp $	*/
 
 /*
  * Copyright (c) 1998, 1999 and 2000
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pccbb.c,v 1.121 2005/06/01 09:10:57 sekiya Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pccbb.c,v 1.117.2.1 2005/03/27 16:33:48 tron Exp $");
 
 /*
 #define CBB_DEBUG
@@ -100,16 +100,16 @@ struct cfdriver cbb_cd = {
 #define DELAY_MS(time, param)						\
     do {								\
 	if (cold == 0) {						\
-	    int xtick = (hz*(time))/1000;				\
+	    int tick = (hz*(time))/1000;				\
 									\
-	    if (xtick <= 1) {						\
-		xtick = 2;						\
+	    if (tick <= 1) {						\
+		tick = 2;						\
 	    }								\
-	    tsleep((void *)(param), PWAIT, "pccbb", xtick);		\
+	    tsleep((void *)(param), PWAIT, "pccbb", tick);		\
 	} else {							\
 	    delay((time)*1000);						\
 	}								\
-    } while (/*CONSTCOND*/0)
+    } while (0)
 
 int pcicbbmatch(struct device *, struct cfdata *, void *);
 void pccbbattach(struct device *, struct device *, void *);
@@ -530,7 +530,7 @@ pccbbattach(parent, self, aux)
 
 #if defined CBB_DEBUG
 	{
-		static const char *intrname[] = { "NON", "A", "B", "C", "D" };
+		static char *intrname[5] = { "NON", "A", "B", "C", "D" };
 		printf("%s: intrpin %s, intrtag %d\n", sc->sc_dev.dv_xname,
 		    intrname[pa->pa_intrpin], pa->pa_intrline);
 	}
@@ -617,7 +617,7 @@ pccbb_pci_callback(self)
 		}
 		sc->sc_base_memt = sc->sc_memt;
 		pci_conf_write(pc, sc->sc_tag, PCI_SOCKBASE, sockbase);
-		DPRINTF(("%s: CardBus register address 0x%lx -> 0x%lx\n",
+		DPRINTF(("%s: CardBus resister address 0x%lx -> 0x%lx\n",
 		    sc->sc_dev.dv_xname, (unsigned long)sockbase,
 		    (unsigned long)pci_conf_read(pc, sc->sc_tag,
 		    PCI_SOCKBASE)));
@@ -632,7 +632,7 @@ pccbb_pci_callback(self)
 			return;
 		}
 		pci_conf_write(pc, sc->sc_tag, PCI_SOCKBASE, sockbase);
-		DPRINTF(("%s: CardBus register address 0x%lx -> 0x%lx\n",
+		DPRINTF(("%s: CardBus resister address 0x%lx -> 0x%lx\n",
 		    sc->sc_dev.dv_xname, (unsigned long)sock_base,
 		    (unsigned long)pci_conf_read(pc,
 		    sc->sc_tag, PCI_SOCKBASE)));
@@ -2198,7 +2198,7 @@ pccbb_pcmcia_io_map(pch, width, offset, size, pcihp, windowp)
 	bus_addr_t ioaddr = pcihp->addr + offset;
 	int i, win;
 #if defined CBB_DEBUG
-	static const char *width_names[] = { "dynamic", "io8", "io16" };
+	static char *width_names[] = { "dynamic", "io8", "io16" };
 #endif
 
 	/* Sanity check I/O handle. */

@@ -1,6 +1,6 @@
 #!/bin/sh -
 #
-#	$NetBSD: security,v 1.95 2005/04/11 15:46:42 peter Exp $
+#	$NetBSD: security,v 1.94.2.1 2005/04/13 15:56:38 tron Exp $
 #	from: @(#)security	8.1 (Berkeley) 6/9/93
 #
 

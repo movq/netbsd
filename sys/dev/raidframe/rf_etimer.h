@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_etimer.h,v 1.9 2005/05/29 22:03:09 christos Exp $	*/
+/*	$NetBSD: rf_etimer.h,v 1.8.32.1 2005/06/17 13:35:37 tron Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.

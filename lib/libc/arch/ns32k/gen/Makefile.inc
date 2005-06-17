@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.23 2005/04/15 22:39:11 kleink Exp $
+#	$NetBSD: Makefile.inc,v 1.22.6.1 2005/04/19 12:32:26 tron Exp $
 
 # objects built from assembler sources (need lint stubs)
 ASSRCS+=alloca.S fabs.S modf.S

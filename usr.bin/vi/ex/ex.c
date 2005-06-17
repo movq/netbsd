@@ -1,4 +1,4 @@
-/*	$NetBSD: ex.c,v 1.15 2005/06/02 05:06:40 lukem Exp $	*/
+/*	$NetBSD: ex.c,v 1.14.2.1 2005/10/15 15:41:12 riz Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993, 1994
@@ -16,7 +16,7 @@
 #if 0
 static const char sccsid[] = "@(#)ex.c	10.57 (Berkeley) 10/10/96";
 #else
-__RCSID("$NetBSD: ex.c,v 1.15 2005/06/02 05:06:40 lukem Exp $");
+__RCSID("$NetBSD: ex.c,v 1.14.2.1 2005/10/15 15:41:12 riz Exp $");
 #endif
 #endif /* not lint */
 
@@ -218,7 +218,6 @@ ex_cmd(sp)
 
 	gp = sp->gp;
 	exp = EXP(sp);
-	ch = 0;		/* XXXGCC -Wuninitialized */
 
 	/*
 	 * We always start running the command on the top of the stack.
@@ -812,20 +811,6 @@ skip_srch:	if (ecp->cmd == &cmds[C_VISUAL_EX] && F_ISSET(sp, SC_VI))
 	ecp->save_cmd = p;
 	ecp->save_cmdlen = ecp->clen;
 	ecp->clen = ((ecp->save_cmd - ecp->cp) - 1) - discard;
-
-	/*
-	 * QUOTING NOTE:
-	 *
-	 * The "set tags" command historically used a backslash, not the
-	 * user's literal next character, to escape whitespace.  Handle
-	 * it here instead of complicating the argv_exp3() code.  Note,
-	 * this isn't a particularly complex trap, and if backslashes were
-	 * legal in set commands, this would have to be much more complicated.
-	 */
-	if (ecp->cmd == &cmds[C_SET])
-		for (p = ecp->cp, len = ecp->clen; len > 0; --len, ++p)
-			if (*p == '\\')
-				*p = CH_LITERAL;
 
 	/*
 	 * Set the default addresses.  It's an error to specify an address for

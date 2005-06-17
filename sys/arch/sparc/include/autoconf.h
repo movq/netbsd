@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.h,v 1.41 2005/06/03 22:17:18 martin Exp $ */
+/*	$NetBSD: autoconf.h,v 1.39 2004/06/28 10:14:13 pk Exp $ */
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -120,7 +120,7 @@ struct rom_range {		/* Only used on v3 PROMs */
 struct mainbus_attach_args {
 	bus_space_tag_t	ma_bustag;	/* parent bus tag */
 	bus_dma_tag_t	ma_dmatag;
-	const char	*ma_name;	/* PROM node name */
+	char		*ma_name;	/* PROM node name */
 	int		ma_node;	/* PROM handle */
 	bus_addr_t	ma_paddr;	/* register physical address */
 	bus_size_t	ma_size;	/* register physical size */
@@ -182,5 +182,5 @@ void	mountroot_hook_establish __P((void (*) __P((struct device *)),
 				      struct device *));
 
 void	bootstrap __P((void));
-struct device *getdevunit __P((const char *, int));
+struct device *getdevunit __P((char *, int));
 int	romgetcursoraddr __P((int **, int **));

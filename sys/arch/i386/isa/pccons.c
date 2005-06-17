@@ -1,4 +1,4 @@
-/*	$NetBSD: pccons.c,v 1.172 2005/06/02 13:04:05 christos Exp $	*/
+/*	$NetBSD: pccons.c,v 1.170 2005/02/03 21:08:58 perry Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -79,7 +79,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pccons.c,v 1.172 2005/06/02 13:04:05 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pccons.c,v 1.170 2005/02/03 21:08:58 perry Exp $");
 
 #include "opt_ddb.h"
 #include "opt_xserver.h"
@@ -270,7 +270,7 @@ static unsigned int addr_6845 = MONO_BASE;
 char *sget(void);
 #endif
 char *strans(u_char);
-void sput(const u_char *, int);
+void sput(u_char *, int);
 #ifdef XSERVER
 void pc_xmode_on(void);
 void pc_xmode_off(void);
@@ -396,7 +396,7 @@ kbc_put8042cmd(u_char val)
  * Pass command to keyboard itself
  */
 int
-kbd_cmd(u_char val, u_char dopoll)
+kbd_cmd(u_char val, u_char polling)
 {
 	u_int retries = 3;
 	register u_int i;
@@ -406,7 +406,7 @@ kbd_cmd(u_char val, u_char dopoll)
 			return (0);
 		ack = nak = 0;
 		outb(IO_KBD + KBOUTP, val);
-		if (dopoll)
+		if (polling)
 			for (i = 100000; i; i--) {
 				if (inb(IO_KBD + KBSTATP) & KBS_DIB) {
 					register u_char c;
@@ -1218,20 +1218,19 @@ pcparam(struct tty *tp, struct termios *t)
 void
 pcinit(void)
 {
-	u_short volatile *cptest;
-	u_short *cp;
+	u_short volatile *cp;
 	u_short was;
 	unsigned cursorat;
 
-	cptest = cp = ISA_HOLE_VADDR(CGA_BUF);
-	was = *cptest;
-	*cptest = (u_short) 0xA55A;
-	if (*cptest != 0xA55A) {
-		cptest = cp = ISA_HOLE_VADDR(MONO_BUF);
+	cp = ISA_HOLE_VADDR(CGA_BUF);
+	was = *cp;
+	*cp = (u_short) 0xA55A;
+	if (*cp != 0xA55A) {
+		cp = ISA_HOLE_VADDR(MONO_BUF);
 		addr_6845 = MONO_BASE;
 		vs.color = 0;
 	} else {
-		*cptest = was;
+		*cp = was;
 		addr_6845 = CGA_BASE;
 		vs.color = 1;
 	}
@@ -1265,28 +1264,23 @@ pcinit(void)
 	fillw((vs.at << 8) | ' ', crtat, vs.nchr - cursorat);
 }
 
-#define	wrtchar(c, at) \
-    do { \
-	    char *_cp = (char *)crtat; \
-	    *_cp++ = (c); \
-	    *_cp = (at); \
-	    crtat++; \
-	    vs.col++; \
-    } while (/*CONSTCOND*/0)
+#define	wrtchar(c, at) do {\
+	char *cp = (char *)crtat; *cp++ = (c); *cp = (at); crtat++; vs.col++; \
+} while (0)
 
 /* translate ANSI color codes to standard pc ones */
-static const char fgansitopc[] = {
+static char fgansitopc[] = {
 	FG_BLACK, FG_RED, FG_GREEN, FG_BROWN, FG_BLUE,
 	FG_MAGENTA, FG_CYAN, FG_LIGHTGREY
 };
 
-static const char bgansitopc[] = {
+static char bgansitopc[] = {
 	BG_BLACK, BG_RED, BG_GREEN, BG_BROWN, BG_BLUE,
 	BG_MAGENTA, BG_CYAN, BG_LIGHTGREY
 };
 
 #ifdef DISPLAY_ISO8859
-static const u_char iso2ibm437[] =
+static u_char iso2ibm437[] =
 {
            0,     0,     0,     0,     0,     0,     0,     0,
            0,     0,     0,     0,     0,     0,     0,     0,
@@ -1311,7 +1305,7 @@ static const u_char iso2ibm437[] =
  * `pc3' termcap emulation.
  */
 void
-sput(const u_char *cp, int n)
+sput(u_char *cp, int n)
 {
 	u_char c, scroll = 0;
 

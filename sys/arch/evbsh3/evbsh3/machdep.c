@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.54 2005/06/05 13:49:26 he Exp $	*/
+/*	$NetBSD: machdep.c,v 1.52 2005/03/11 07:06:54 matt Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -72,7 +72,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.54 2005/06/05 13:49:26 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.52 2005/03/11 07:06:54 matt Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -113,7 +113,7 @@ char machine[] = MACHINE;		/* evbsh3 */
 char machine_arch[] = MACHINE_ARCH;	/* sh3eb or sh3el */
 
 void initSH3 __P((void *));
-void LoadAndReset __P((const char *));
+void LoadAndReset __P((char *));
 void XLoadAndReset __P((char *));
 
 /*
@@ -134,14 +134,14 @@ cpu_startup()
 static int
 sysctl_machdep_loadandreset(SYSCTLFN_ARGS)
 {
-	const char *osimage;
+	char *osimage;
 	int error;
 
-	error = sysctl_lookup(SYSCTLFN_CALL(__UNCONST(rnode)));
+	error = sysctl_lookup(SYSCTLFN_CALL(rnode));
 	if (error || newp == NULL)
 		return (error);
 
-	osimage = (const char *)(*(const u_long *)newp);
+	osimage = (char *)(*(u_long *)newp);
 	LoadAndReset(osimage);
 	/* not reach here */
 	return (0);
@@ -441,7 +441,7 @@ shpcmcia_mem_add_mapping(bpa, size, type, bshp)
 		panic("sh3_pcmcia_mem_add_mapping: overflow");
 #endif
 
-	va = uvm_km_alloc(kernel_map, endpa - pa, 0, UVM_KMF_VAONLY);
+	va = uvm_km_valloc(kernel_map, endpa - pa);
 	if (va == 0){
 		printf("shpcmcia_add_mapping: nomem \n");
 		return (ENOMEM);
@@ -513,9 +513,7 @@ shpcmcia_memio_unmap(t, bsh, size)
 	/*
 	 * Free the kernel virtual mapping.
 	 */
-	pmap_kremove(va, endva - va);
-	pmap_update(pmap_kernel());
-	uvm_km_free(kernel_map, va, endva - va, UVM_KMF_VAONLY);
+	uvm_km_free(kernel_map, va, endva - va);
 
 #if 0
 	if (extent_free(ex, bpa, size,
@@ -698,11 +696,11 @@ InitializeBsc()
 
 void
 LoadAndReset(osimage)
-	const char *osimage;
+	char *osimage;
 {
 	void *buf_addr;
 	u_long size;
-	const u_long *src;
+	u_long *src;
 	u_long *dest;
 	u_long csum = 0;
 	u_long csum2 = 0;
@@ -711,8 +709,8 @@ LoadAndReset(osimage)
 	printf("LoadAndReset: copy start\n");
 	buf_addr = (void *)OSIMAGE_BUF_ADDR;
 
-	size = *(const u_long *)osimage;
-	src = (const u_long *)osimage;
+	size = *(u_long *)osimage;
+	src = (u_long *)osimage;
 	dest = buf_addr;
 
 	size = (size + sizeof(u_long) * 2 + 3) >> 2;

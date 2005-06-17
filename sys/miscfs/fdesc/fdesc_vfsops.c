@@ -1,4 +1,4 @@
-/*	$NetBSD: fdesc_vfsops.c,v 1.55 2005/05/29 21:55:33 christos Exp $	*/
+/*	$NetBSD: fdesc_vfsops.c,v 1.53 2005/01/02 16:08:29 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993, 1995
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fdesc_vfsops.c,v 1.55 2005/05/29 21:55:33 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fdesc_vfsops.c,v 1.53 2005/01/02 16:08:29 thorpej Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
@@ -135,7 +135,7 @@ fdesc_unmount(mp, mntflags, p)
 {
 	int error;
 	int flags = 0;
-	struct vnode *rtvp = VFSTOFDESC(mp)->f_root;
+	struct vnode *rootvp = VFSTOFDESC(mp)->f_root;
 
 	if (mntflags & MNT_FORCE)
 		flags |= FORCECLOSE;
@@ -145,19 +145,19 @@ fdesc_unmount(mp, mntflags, p)
 	 * ever get anything cached at this level at the
 	 * moment, but who knows...
 	 */
-	if (rtvp->v_usecount > 1)
+	if (rootvp->v_usecount > 1)
 		return (EBUSY);
-	if ((error = vflush(mp, rtvp, flags)) != 0)
+	if ((error = vflush(mp, rootvp, flags)) != 0)
 		return (error);
 
 	/*
 	 * Release reference on underlying root vnode
 	 */
-	vrele(rtvp);
+	vrele(rootvp);
 	/*
 	 * And blow it away for future re-use
 	 */
-	vgone(rtvp);
+	vgone(rootvp);
 	/*
 	 * Finally, throw away the fdescmount structure
 	 */
@@ -353,4 +353,3 @@ struct vfsops fdesc_vfsops = {
 	vfs_stdextattrctl,
 	fdesc_vnodeopv_descs,
 };
-VFS_ATTACH(fdesc_vfsops);

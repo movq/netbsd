@@ -1,6 +1,6 @@
 /* $SourceForge: bktr_core.c,v 1.6 2003/03/11 23:11:22 thomasklausner Exp $ */
 
-/*	$NetBSD: bktr_core.c,v 1.35 2005/05/30 06:41:55 wiz Exp $	*/
+/*	$NetBSD: bktr_core.c,v 1.33 2003/06/29 22:30:29 fvdl Exp $	*/
 /* $FreeBSD: src/sys/dev/bktr/bktr_core.c,v 1.114 2000/10/31 13:09:56 roger Exp$ */
 
 /*
@@ -98,7 +98,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bktr_core.c,v 1.35 2005/05/30 06:41:55 wiz Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bktr_core.c,v 1.33 2003/06/29 22:30:29 fvdl Exp $");
 
 #include "opt_bktr.h"		/* Include any kernel config options */
 
@@ -475,9 +475,9 @@ void
 common_bktr_attach(bktr_ptr_t bktr, int unit, u_long pci_id, u_int rev)
 {
 #if defined(__NetBSD__)
-	vaddr_t		sbuf = 0;
+	vaddr_t		buf = 0;
 #else
-	vm_offset_t	sbuf = 0;
+	vm_offset_t	buf = 0;
 #endif
 
 /***************************************/
@@ -498,9 +498,9 @@ common_bktr_attach(bktr_ptr_t bktr, int unit, u_long pci_id, u_int rev)
 
         /* allocate space for pixel buffer */
         if (BROOKTREE_ALLOC)
-                sbuf = get_bktr_mem(bktr, &bktr->dm_mem, BROOKTREE_ALLOC);
+                buf = get_bktr_mem(bktr, &bktr->dm_mem, BROOKTREE_ALLOC);
         else
-                sbuf = 0;
+                buf = 0;
 #endif
 
 #if defined(__FreeBSD__) || defined(__bsdi__)
@@ -514,7 +514,7 @@ common_bktr_attach(bktr_ptr_t bktr, int unit, u_long pci_id, u_int rev)
 		bktr->odd_dma_prog = bktr_retrieve_address(unit, BKTR_MEM_ODD_DMA_PROG);
 		bktr->vbidata      = bktr_retrieve_address(unit, BKTR_MEM_VBIDATA);
 		bktr->vbibuffer    = bktr_retrieve_address(unit, BKTR_MEM_VBIBUFFER);
-		sbuf                = bktr_retrieve_address(unit, BKTR_MEM_BUF);
+		buf                = bktr_retrieve_address(unit, BKTR_MEM_BUF);
 		need_to_allocate_memory = 0;
 	}
 #endif
@@ -530,9 +530,9 @@ common_bktr_attach(bktr_ptr_t bktr, int unit, u_long pci_id, u_int rev)
 
 		/* allocate space for pixel buffer */
 		if (BROOKTREE_ALLOC)
-			sbuf = get_bktr_mem(unit, BROOKTREE_ALLOC);
+			buf = get_bktr_mem(unit, BROOKTREE_ALLOC);
 		else
-			sbuf = 0;
+			buf = 0;
 	}
 #endif	/* FreeBSD or BSDi */
 
@@ -543,18 +543,18 @@ bktr_store_address(unit, BKTR_MEM_DMA_PROG,     bktr->dma_prog);
 bktr_store_address(unit, BKTR_MEM_ODD_DMA_PROG, bktr->odd_dma_prog);
 bktr_store_address(unit, BKTR_MEM_VBIDATA,      bktr->vbidata);
 bktr_store_address(unit, BKTR_MEM_VBIBUFFER,    bktr->vbibuffer);
-bktr_store_address(unit, BKTR_MEM_BUF,          sbuf);
+bktr_store_address(unit, BKTR_MEM_BUF,          buf);
 #endif
 
 
 	if (bootverbose) {
 		printf("%s: buffer size %d, addr %p\n",
 			bktr_name(bktr), BROOKTREE_ALLOC,
-			(void *)(uintptr_t)vtophys(sbuf));
+			(void *)(uintptr_t)vtophys(buf));
 	}
 
-	if (sbuf != 0) {
-		bktr->bigbuf = sbuf;
+	if (buf != 0) {
+		bktr->bigbuf = buf;
 		bktr->alloc_pages = BROOKTREE_ALLOC_PAGES;
 		bzero((caddr_t) bktr->bigbuf, BROOKTREE_ALLOC);
 	} else {
@@ -1293,9 +1293,9 @@ video_ioctl(bktr_ptr_t bktr, int unit, ioctl_cmd_t cmd, caddr_t arg, struct proc
 	struct meteor_video	*video;
 	struct bktr_capture_area *cap_area;
 #if defined(__NetBSD__)
-	vaddr_t			sbuf;
+	vaddr_t			buf;
 #else
-	vm_offset_t		sbuf;
+	vm_offset_t		buf;
 #endif
 	int                     i;
 	char                    char_temp;
@@ -1756,21 +1756,21 @@ video_ioctl(bktr_ptr_t bktr, int unit, ioctl_cmd_t cmd, caddr_t arg, struct proc
 #if defined(__NetBSD__) || defined(__OpenBSD__)
                                 bus_dmamap_t dmamap;
 
-                                sbuf = get_bktr_mem(bktr, &dmamap,
+                                buf = get_bktr_mem(bktr, &dmamap,
                                                    temp * PAGE_SIZE);
-                                if (sbuf != 0) {
+                                if (buf != 0) {
                                         free_bktr_mem(bktr, bktr->dm_mem,
                                                       bktr->bigbuf);
                                         bktr->dm_mem = dmamap;
 
 #else
-                                sbuf = get_bktr_mem(unit, temp*PAGE_SIZE);
-                                if (sbuf != 0) {
+                                buf = get_bktr_mem(unit, temp*PAGE_SIZE);
+                                if (buf != 0) {
                                         kmem_free(kernel_map, bktr->bigbuf,
                                           (bktr->alloc_pages * PAGE_SIZE));
 #endif
 
-					bktr->bigbuf = sbuf;
+					bktr->bigbuf = buf;
 					bktr->alloc_pages = temp;
 					if (bootverbose)
 						printf(
@@ -1910,7 +1910,7 @@ tuner_ioctl(bktr_ptr_t bktr, int unit, ioctl_cmd_t cmd, caddr_t arg, struct proc
 	unsigned int	temp, temp1;
 	int		offset;
 	int		count;
-	u_char		*sbuf;
+	u_char		*buf;
 	u_long          par;
 	u_char          write;
 	int             i2c_addr;
@@ -2184,24 +2184,24 @@ tuner_ioctl(bktr_ptr_t bktr, int unit, ioctl_cmd_t cmd, caddr_t arg, struct proc
 	case BT848_WEEPROM:	/* write eeprom */
 		offset = (((struct eeProm *)arg)->offset);
 		count = (((struct eeProm *)arg)->count);
-		sbuf = &(((struct eeProm *)arg)->bytes[0]);
-		if (writeEEProm(bktr, offset, count, sbuf) < 0)
+		buf = &(((struct eeProm *)arg)->bytes[0]);
+		if (writeEEProm(bktr, offset, count, buf) < 0)
 			return(EIO);
 		break;
 
 	case BT848_REEPROM:	/* read eeprom */
 		offset = (((struct eeProm *)arg)->offset);
 		count = (((struct eeProm *)arg)->count);
-		sbuf = &(((struct eeProm *)arg)->bytes[0]);
-		if (readEEProm(bktr, offset, count, sbuf) < 0)
+		buf = &(((struct eeProm *)arg)->bytes[0]);
+		if (readEEProm(bktr, offset, count, buf) < 0)
 			return(EIO);
 		break;
 
 	case BT848_SIGNATURE:
 		offset = (((struct eeProm *)arg)->offset);
 		count = (((struct eeProm *)arg)->count);
-		sbuf = &(((struct eeProm *)arg)->bytes[0]);
-		if (signCard(bktr, offset, count, sbuf) < 0)
+		buf = &(((struct eeProm *)arg)->bytes[0]);
+		if (signCard(bktr, offset, count, buf) < 0)
 			return(EIO);
 		break;
 

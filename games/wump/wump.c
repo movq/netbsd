@@ -1,4 +1,4 @@
-/*	$NetBSD: wump.c,v 1.18 2005/03/21 18:45:18 jwise Exp $	*/
+/*	$NetBSD: wump.c,v 1.17 2005/02/15 12:56:20 jsm Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -43,7 +43,7 @@ __COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
 #if 0
 static char sccsid[] = "@(#)wump.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: wump.c,v 1.18 2005/03/21 18:45:18 jwise Exp $");
+__RCSID("$NetBSD: wump.c,v 1.17 2005/02/15 12:56:20 jsm Exp $");
 #endif
 #endif /* not lint */
 
@@ -142,7 +142,7 @@ main(argc, argv)
 	int argc;
 	char **argv;
 {
-	int c, e=0;
+	int c;
 
 	/* Revoke setgid privileges */
 	setgid(getgid());
@@ -238,13 +238,11 @@ quiver holds %d custom super anti-evil Wumpus arrows.  Good luck.\n",
 			display_room_stats();
 			(void)printf("Move or shoot? (m-s) ");
 			(void)fflush(stdout);
-			if (!fgets(answer, sizeof(answer), stdin)) {
-				e=1;
+			if (!fgets(answer, sizeof(answer), stdin))
 				break;
-			}
-		} while (!(e = take_action()));
+		} while (!take_action());
 
-		if (e || !getans("\nCare to play another game? (y-n) "))
+		if (!getans("\nCare to play another game? (y-n) "))
 			exit(0);
 		if (getans("In the same cave? (y-n) "))
 			clear_things_in_cave();

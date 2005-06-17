@@ -37,10 +37,7 @@
 
 #include <stdlib.h>
 #include <openssl/aes.h>
-#include <openssl/fips.h>
 #include "aes_locl.h"
-
-#ifndef OPENSSL_FIPS
 
 /*
 Te0[x] = S [x].[02, 01, 01, 03];
@@ -1258,4 +1255,3 @@ void AES_decrypt(const unsigned char *in, unsigned char *out,
 	PUTU32(out + 12, s3);
 }
 
-#endif /* ndef OPENSSL_FIPS */

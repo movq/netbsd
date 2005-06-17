@@ -1,4 +1,4 @@
-/*	$NetBSD: tx39spivar.h,v 1.1 2005/05/04 07:54:39 hamajima Exp $	*/
+/*	$NetBSD: tx39spivar.h,v 1.1.2.2 2005/05/07 11:34:57 tron Exp $	*/
 
 /*-
  * Copyright (c) 2005 HAMAJIMA Katsuomi. All rights reserved.

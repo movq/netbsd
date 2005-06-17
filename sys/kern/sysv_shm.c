@@ -1,4 +1,4 @@
-/*	$NetBSD: sysv_shm.c,v 1.84 2005/04/01 11:59:37 yamt Exp $	*/
+/*	$NetBSD: sysv_shm.c,v 1.82.10.1 2005/09/18 20:09:50 tron Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -68,7 +68,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sysv_shm.c,v 1.84 2005/04/01 11:59:37 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sysv_shm.c,v 1.82.10.1 2005/09/18 20:09:50 tron Exp $");
 
 #define SYSVSHM
 
@@ -676,8 +676,7 @@ shminit()
 
 	/* Allocate pageable memory for our structures */
 	sz = shminfo.shmmni * sizeof(struct shmid_ds);
-	v = uvm_km_alloc(kernel_map, round_page(sz), 0, UVM_KMF_WIRED);
-	if (v == 0)
+	if ((v = uvm_km_alloc(kernel_map, round_page(sz))) == 0)
 		panic("sysv_shm: cannot allocate memory");
 	shmsegs = (void *)v;
 

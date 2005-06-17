@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.305 2005/06/16 22:45:46 jmc Exp $	*/
+/*	$NetBSD: machdep.c,v 1.303.2.1 2005/11/01 22:33:25 tron Exp $	*/
 
 /*
  * Copyright (c) 1982, 1990 The Regents of the University of California.
@@ -107,7 +107,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.305 2005/06/16 22:45:46 jmc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.303.2.1 2005/11/01 22:33:25 tron Exp $");
 
 #include "opt_adb.h"
 #include "opt_ddb.h"
@@ -266,7 +266,7 @@ int	cpu_dump(int (*)(dev_t, daddr_t, caddr_t, size_t), daddr_t *);
 void	cpu_init_kcore_hdr(void);
 
 void		getenvvars(u_long, char *);
-static long	getenv(const char *);
+static long	getenv(char *);
 
 /* functions called from locore.s */
 void	dumpsys(void);
@@ -423,7 +423,7 @@ cpu_startup(void)
 {
 	int vers;
 	vaddr_t minaddr, maxaddr;
-	int xdelay;
+	int delay;
 	char pbuf[9];
 
 	/*
@@ -434,7 +434,7 @@ cpu_startup(void)
 	/*
 	 * Good {morning,afternoon,evening,night}.
 	 */
-	printf("%s%s", copyright, version);
+	printf(version);
 	identifycpu();
 
 	vers = mac68k_machine.booter_version;
@@ -448,7 +448,7 @@ cpu_startup(void)
 		printf("Booter version %d.%d is necessary to fully support\n",
 		    CURRENTBOOTERVER / 100, CURRENTBOOTERVER % 100);
 		printf("this kernel.\n\n");
-		for (xdelay = 0; xdelay < 1000000; xdelay++);
+		for (delay = 0; delay < 1000000; delay++);
 	}
 	format_bytes(pbuf, sizeof(pbuf), ctob(physmem));
 	printf("total memory = %s\n", pbuf);
@@ -681,13 +681,15 @@ cpu_init_kcore_hdr(void)
  * Compute the size of the machine-dependent crash dump header.
  * Returns size in disk blocks.
  */
+
+#define CHDRSIZE (ALIGN(sizeof(kcore_seg_t)) + ALIGN(sizeof(cpu_kcore_hdr_t)))
+#define MDHDRSIZE roundup(CHDRSIZE, dbtob(1))
+
 int
 cpu_dumpsize(void)
 {
-	int size;
 
-	size = ALIGN(sizeof(kcore_seg_t)) + ALIGN(sizeof(cpu_kcore_hdr_t));
-	return (btodb(roundup(size, dbtob(1))));
+	return btodb(MDHDRSIZE);
 }
 
 /*
@@ -696,7 +698,7 @@ cpu_dumpsize(void)
 int
 cpu_dump(int (*dump)(dev_t, daddr_t, caddr_t, size_t), daddr_t *blknop)
 {
-	int buf[dbtob(1) / sizeof(int)];
+	int buf[MDHDRSIZE / sizeof(int)];
 	cpu_kcore_hdr_t *chdr;
 	kcore_seg_t *kseg;
 	int error;
@@ -707,7 +709,7 @@ cpu_dump(int (*dump)(dev_t, daddr_t, caddr_t, size_t), daddr_t *blknop)
 
 	/* Create the segment header. */
 	CORE_SETMAGIC(*kseg, KCORE_MAGIC, MID_MACHINE, CORE_CPU);
-	kseg->c_size = dbtob(1) - ALIGN(sizeof(kcore_seg_t));
+	kseg->c_size = MDHDRSIZE - ALIGN(sizeof(kcore_seg_t));
 
 	bcopy(&cpu_kcore_hdr, chdr, sizeof(cpu_kcore_hdr_t));
 	error = (*dump)(dumpdev, *blknop, (caddr_t)buf, sizeof(buf));
@@ -1154,7 +1156,7 @@ getenvvars(u_long flag, char *buf)
 }
 
 static long
-getenv(const char *str)
+getenv(char *str)
 {
 	/*
 	 * Returns the value of the environment variable "str".
@@ -1165,8 +1167,7 @@ getenv(const char *str)
 	 * there without an "=val".
 	 */
 
-	char *s;
-	const char *s1;
+	char *s, *s1;
 	int val, base;
 
 	s = envbuf;
@@ -2026,7 +2027,7 @@ static void
 identifycpu(void)
 {
 	extern u_int delay_factor;
-	const char *mpu;
+	char *mpu;
 
 	switch (cputype) {
 	case CPU_68020:
@@ -2428,10 +2429,10 @@ get_physical(u_int addr, u_long * phys)
 	return 1;
 }
 
-static void	check_video(const char *, u_long, u_long);
+static void	check_video(char *, u_long, u_long);
 
 static void
-check_video(const char *id, u_long limit, u_long maxm)
+check_video(char *id, u_long limit, u_long maxm)
 {
 	u_long addr, phys;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: txcsbusvar.h,v 1.3 2005/06/07 12:19:46 he Exp $ */
+/*	$NetBSD: txcsbusvar.h,v 1.2 2001/06/14 11:09:56 uch Exp $ */
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -40,7 +40,7 @@
  *	Chip Select bus attach arguments.
  */
 struct csbus_attach_args {
-	const char *cba_busname;
+	char *cba_busname;
 	tx_chipset_tag_t cba_tc;
 };
 

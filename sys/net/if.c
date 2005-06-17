@@ -1,4 +1,4 @@
-/*	$NetBSD: if.c,v 1.158 2005/05/29 21:22:52 christos Exp $	*/
+/*	$NetBSD: if.c,v 1.154.2.1 2005/08/15 19:04:56 tron Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -97,7 +97,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if.c,v 1.158 2005/05/29 21:22:52 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if.c,v 1.154.2.1 2005/08/15 19:04:56 tron Exp $");
 
 #include "opt_inet.h"
 
@@ -617,6 +617,13 @@ if_detach(ifp)
 			panic("if_detach: no domain for AF %d",
 			    family);
 #endif
+		/*
+		 * XXX These PURGEIF calls are redundant with the
+		 * purge-all-families calls below, but are left in for
+		 * now both to make a smaller change, and to avoid
+		 * unplanned interactions with clearing of
+		 * ifp->if_addrlist.
+		 */
 		purged = 0;
 		for (pr = dp->dom_protosw;
 		     pr < dp->dom_protoswNPROTOSW; pr++) {
@@ -651,6 +658,29 @@ if_detach(ifp)
 		if (dp->dom_ifdetach && ifp->if_afdata[dp->dom_family])
 			(*dp->dom_ifdetach)(ifp,
 			    ifp->if_afdata[dp->dom_family]);
+
+		/*
+		 * One would expect multicast memberships (INET and
+		 * INET6) on UDP sockets to be purged by the PURGEIF
+		 * calls above, but if all addresses were removed from
+		 * the interface prior to destruction, the calls will
+		 * not be made (e.g. ppp, for which pppd(8) generally
+		 * removes addresses before destroying the interface).
+		 * Because there is no invariant that multicast
+		 * memberships only exist for interfaces with IPv4
+		 * addresses, we must call PURGEIF regardless of
+		 * addresses.  (Protocols which might store ifnet
+		 * pointers are marked with PR_PURGEIF.)
+		 */
+		for (pr = dp->dom_protosw;
+		     pr < dp->dom_protoswNPROTOSW; pr++) {
+			so.so_proto = pr;
+			if (pr->pr_usrreq != NULL &&
+			    pr->pr_flags & PR_PURGEIF)
+				(void) (*pr->pr_usrreq)(&so,
+				    PRU_PURGEIF, NULL, NULL,
+				    (struct mbuf *) ifp, curproc);
+		}
 	}
 
 	/* Announce that the interface is gone. */
@@ -925,7 +955,7 @@ ifa_ifwithaddr(addr)
 	struct ifaddr *ifa;
 
 #define	equal(a1, a2) \
-  (bcmp((a1), (a2), ((const struct sockaddr *)(a1))->sa_len) == 0)
+  (bcmp((caddr_t)(a1), (caddr_t)(a2), ((struct sockaddr *)(a1))->sa_len) == 0)
 
 	for (ifp = TAILQ_FIRST(&ifnet); ifp != NULL;
 	     ifp = TAILQ_NEXT(ifp, if_list)) {
@@ -994,7 +1024,7 @@ ifa_ifwithnet(addr)
 	char *addr_data = addr->sa_data, *cplim;
 
 	if (af == AF_LINK) {
-		sdl = (const struct sockaddr_dl *)addr;
+		sdl = (struct sockaddr_dl *)addr;
 		if (sdl->sdl_index && sdl->sdl_index < if_indexlim &&
 		    ifindex2ifnet[sdl->sdl_index] &&
 		    ifindex2ifnet[sdl->sdl_index]->if_output != if_nulloutput)
@@ -1003,12 +1033,12 @@ ifa_ifwithnet(addr)
 #ifdef NETATALK
 	if (af == AF_APPLETALK) {
 		const struct sockaddr_at *sat, *sat2;
-		sat = (const struct sockaddr_at *)addr;
+		sat = (struct sockaddr_at *)addr;
 		for (ifp = TAILQ_FIRST(&ifnet); ifp != NULL;
 		     ifp = TAILQ_NEXT(ifp, if_list)) {
 			if (ifp->if_output == if_nulloutput)
 				continue;
-			ifa = at_ifawithnet((const struct sockaddr_at *)addr, ifp);
+			ifa = at_ifawithnet((struct sockaddr_at *)addr, ifp);
 			if (ifa == NULL)
 				continue;
 			sat2 = (struct sockaddr_at *)ifa->ifa_addr;
@@ -1463,38 +1493,30 @@ ifioctl(so, cmd, data, p)
 			/* Pre-compute the checksum flags mask. */
 			ifp->if_csum_flags_tx = 0;
 			ifp->if_csum_flags_rx = 0;
-			if (ifp->if_capenable & IFCAP_CSUM_IPv4_Tx) {
+			if (ifp->if_capenable & IFCAP_CSUM_IPv4) {
 				ifp->if_csum_flags_tx |= M_CSUM_IPv4;
-			}
-			if (ifp->if_capenable & IFCAP_CSUM_IPv4_Rx) {
 				ifp->if_csum_flags_rx |= M_CSUM_IPv4;
 			}
 
-			if (ifp->if_capenable & IFCAP_CSUM_TCPv4_Tx) {
+			if (ifp->if_capenable & IFCAP_CSUM_TCPv4) {
 				ifp->if_csum_flags_tx |= M_CSUM_TCPv4;
-			}
-			if (ifp->if_capenable & IFCAP_CSUM_TCPv4_Rx) {
 				ifp->if_csum_flags_rx |= M_CSUM_TCPv4;
-			}
+			} else if (ifp->if_capenable & IFCAP_CSUM_TCPv4_Rx)
+				ifp->if_csum_flags_rx |= M_CSUM_TCPv4;
 
-			if (ifp->if_capenable & IFCAP_CSUM_UDPv4_Tx) {
+			if (ifp->if_capenable & IFCAP_CSUM_UDPv4) {
 				ifp->if_csum_flags_tx |= M_CSUM_UDPv4;
-			}
-			if (ifp->if_capenable & IFCAP_CSUM_UDPv4_Rx) {
 				ifp->if_csum_flags_rx |= M_CSUM_UDPv4;
-			}
+			} else if (ifp->if_capenable & IFCAP_CSUM_UDPv4_Rx)
+				ifp->if_csum_flags_rx |= M_CSUM_UDPv4;
 
-			if (ifp->if_capenable & IFCAP_CSUM_TCPv6_Tx) {
+			if (ifp->if_capenable & IFCAP_CSUM_TCPv6) {
 				ifp->if_csum_flags_tx |= M_CSUM_TCPv6;
-			}
-			if (ifp->if_capenable & IFCAP_CSUM_TCPv6_Rx) {
 				ifp->if_csum_flags_rx |= M_CSUM_TCPv6;
 			}
 
-			if (ifp->if_capenable & IFCAP_CSUM_UDPv6_Tx) {
+			if (ifp->if_capenable & IFCAP_CSUM_UDPv6) {
 				ifp->if_csum_flags_tx |= M_CSUM_UDPv6;
-			}
-			if (ifp->if_capenable & IFCAP_CSUM_UDPv6_Rx) {
 				ifp->if_csum_flags_rx |= M_CSUM_UDPv6;
 			}
 
@@ -1735,66 +1757,6 @@ ifconf(cmd, data)
 		ifc->ifc_len = space;
 	return (error);
 }
-
-/*
- * Queue message on interface, and start output if interface
- * not yet active.
- */
-int
-ifq_enqueue(struct ifnet *ifp, struct mbuf *m
-    ALTQ_COMMA ALTQ_DECL(struct altq_pktattr *pktattr))
-{
-	int len = m->m_pkthdr.len;
-	int mflags = m->m_flags;
-	int s = splnet();
-	int error;
-
-	IFQ_ENQUEUE(&ifp->if_snd, m, pktattr, error);
-	if (error) {
-		splx(s);
-		return error;
-	}
-	ifp->if_obytes += len;
-	if (mflags & M_MCAST)
-		ifp->if_omcasts++;
-	if ((ifp->if_flags & IFF_OACTIVE) == 0)
-		(*ifp->if_start)(ifp);
-	splx(s);
-	return error;
-}
-
-/*
- * Queue message on interface, possibly using a second fast queue
- */
-int
-ifq_enqueue2(struct ifnet *ifp, struct ifqueue *ifq, struct mbuf *m
-    ALTQ_COMMA ALTQ_DECL(struct altq_pktattr *pktattr))
-{
-	int error = 0;
-
-	if (ifq != NULL
-#ifdef ALTQ
-	    && ALTQ_IS_ENABLED(&ifp->if_snd) == 0
-#endif
-	    ) {
-		if (IF_QFULL(ifq)) {
-			IF_DROP(&ifp->if_snd);
-			m_freem(m);
-			if (error == 0)
-				error = ENOBUFS;
-		}
-		else
-			IF_ENQUEUE(ifq, m);
-	} else
-		IFQ_ENQUEUE(&ifp->if_snd, m, pktattr, error);
-	if (error != 0) {
-		++ifp->if_oerrors;
-		return error;
-	}
-
-	return 0;
-}
-
 
 #if defined(INET) || defined(INET6)
 static void

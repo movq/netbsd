@@ -1,4 +1,4 @@
-/*	$NetBSD: conf_tok.l,v 1.1.1.8 2005/04/23 18:09:22 christos Exp $	*/
+/*	$NetBSD: conf_tok.l,v 1.1.1.7.2.1 2005/08/16 13:02:13 tron Exp $	*/
 
 %{
 /*

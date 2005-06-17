@@ -1,4 +1,4 @@
-/*	$NetBSD: lfs_syscalls.c,v 1.107 2005/05/25 01:50:01 perseant Exp $	*/
+/*	$NetBSD: lfs_syscalls.c,v 1.103.2.1 2005/05/07 11:21:30 tron Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001, 2002, 2003 The NetBSD Foundation, Inc.
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lfs_syscalls.c,v 1.107 2005/05/25 01:50:01 perseant Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lfs_syscalls.c,v 1.103.2.1 2005/05/07 11:21:30 tron Exp $");
 
 #ifndef LFS
 # define LFS		/* for prototypes in syscallargs.h */
@@ -877,7 +877,6 @@ sys_lfs_segclean(struct lwp *l, void *v, register_t *retval)
 int
 lfs_do_segclean(struct lfs *fs, unsigned long segnum)
 {
-	extern int lfs_dostats;
 	struct buf *bp;
 	CLEANERINFO *cip;
 	SEGUSE *sup;
@@ -894,14 +893,10 @@ lfs_do_segclean(struct lfs *fs, unsigned long segnum)
 		return (EBUSY);
 	}
 	if (sup->su_flags & SEGUSE_ACTIVE) {
-		DLOG((DLOG_CLEAN, "lfs_segclean: not cleaning segment %lu:"
-		      " segment is active\n", segnum));
 		brelse(bp);
 		return (EBUSY);
 	}
 	if (!(sup->su_flags & SEGUSE_DIRTY)) {
-		DLOG((DLOG_CLEAN, "lfs_segclean: not cleaning segment %lu:"
-		      " segment is already clean\n", segnum));
 		brelse(bp);
 		return (EALREADY);
 	}
@@ -934,9 +929,6 @@ lfs_do_segclean(struct lfs *fs, unsigned long segnum)
 	(void) LFS_BWRITE_LOG(bp);
 	wakeup(&fs->lfs_avail);
 
-	if (lfs_dostats)
-		++lfs_stats.segs_reclaimed;
-
 	return (0);
 }
 
@@ -953,7 +945,7 @@ lfs_segwait(fsid_t *fsidp, struct timeval *tv)
 	u_long timeout;
 	int error, s;
 
-	if (fsidp == NULL || (mntp = vfs_getvfs(fsidp)) == NULL)
+	if ((mntp = vfs_getvfs(fsidp)) == NULL)
 		addr = &lfs_allclean_wakeup;
 	else
 		addr = &VFSTOUFS(mntp)->um_lfs->lfs_nextseg;

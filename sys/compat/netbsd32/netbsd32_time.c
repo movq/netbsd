@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_time.c,v 1.9 2005/05/31 00:41:09 christos Exp $	*/
+/*	$NetBSD: netbsd32_time.c,v 1.8 2005/02/26 23:10:21 perry Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Matthew R. Green
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_time.c,v 1.9 2005/05/31 00:41:09 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_time.c,v 1.8 2005/02/26 23:10:21 perry Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_ntp.h"
@@ -684,7 +684,7 @@ netbsd32_nanosleep(l, v, retval)
 		error = 0;
 
 	if (SCARG(uap, rmtp)) {
-		int error1;
+		int error;
 
 		s = splclock();
 		utv = time;
@@ -696,10 +696,10 @@ netbsd32_nanosleep(l, v, retval)
 
 		TIMEVAL_TO_TIMESPEC(&utv,&rmt);
 		netbsd32_from_timespec(&rmt, &ts32);
-		error1 = copyout(&ts32,
-		    NETBSD32PTR64(SCARG(uap,rmtp)), sizeof(ts32));
-		if (error1)
-			return (error1);
+		error = copyout((caddr_t)&ts32,
+		    (caddr_t)NETBSD32PTR64(SCARG(uap,rmtp)), sizeof(ts32));
+		if (error)
+			return (error);
 	}
 
 	return error;

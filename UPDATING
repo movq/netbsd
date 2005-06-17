@@ -1,4 +1,4 @@
-$NetBSD: UPDATING,v 1.140 2005/06/03 11:02:59 yamt Exp $
+$NetBSD: UPDATING,v 1.135.2.2 2005/09/15 21:05:48 tron Exp $
 
 This file (UPDATING) is intended to be a brief reference to recent
 changes that might cause problems in the build process, and a guide for
@@ -16,28 +16,16 @@ See also: BUILDING, build.sh, Makefile.
 Recent changes:
 ^^^^^^^^^^^^^^^
 
-20050531:
-	genassym.sh(8) was moved to genassym(8). You need to either build
-	tools first or install the version of genassym from /usr/sbin before
-	you can build a kernel again.
-
-20050520:
-	Because a kernfs bug which xentools relies on was fixed,
-	xentools up to xentools20-2.0.3nb4 won't work with new kernel.
+20050830:
+	named.conf was moved from /etc/namedb to /etc.
+	postinstall(8) migrates this during interactive use.
+	Users of MKUPDATE=yes will need to manually rectify
+	this in their DESTDIR.
 
 20050417:
 	postinstall(8) was moved from /etc to /usr/sbin and made part
 	of the "base" set, to make it easier to invoke after an
 	upgrade.
-
-20050325:
-	pcppi(4) was separated in two devices, adding attimer(4).  Be sure
-	to add a config line for an attimer(4) device in your kernel
-	configuration, or you won't be able to set the pitch of the beep
-	with wsconsctl.  Depending on the default value for the pitch, you
-	might even not hear any more beep.  Also, it is advised to attach both
-	devices the same way (i.e., both on isa or both on acpi) or the
-	pcppi(4) device may fail to find the attimer(4) one.
 
 20050211:
 	Fixes to tools/Makefile.gnuhost may cause UPDATE=1 builds in

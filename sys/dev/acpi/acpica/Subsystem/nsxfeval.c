@@ -2,7 +2,7 @@
  *
  * Module Name: nsxfeval - Public interfaces to the ACPI subsystem
  *                         ACPI Object evaluation interfaces
- *              xRevision: 17 $
+ *              xRevision: 11 $
  *
  ******************************************************************************/
 
@@ -10,7 +10,7 @@
  *
  * 1. Copyright Notice
  *
- * Some or all of this work - Copyright (c) 1999 - 2005, Intel Corp.
+ * Some or all of this work - Copyright (c) 1999 - 2004, Intel Corp.
  * All rights reserved.
  *
  * 2. License
@@ -117,13 +117,12 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nsxfeval.c,v 1.7 2005/05/29 20:56:02 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nsxfeval.c,v 1.5 2004/02/14 16:57:25 kochi Exp $");
 
 #define __NSXFEVAL_C__
 
 #include "acpi.h"
 #include "acnamesp.h"
-#include "acinterp.h"
 
 
 #define _COMPONENT          ACPI_NAMESPACE
@@ -135,11 +134,11 @@ __KERNEL_RCSID(0, "$NetBSD: nsxfeval.c,v 1.7 2005/05/29 20:56:02 christos Exp $"
  * FUNCTION:    AcpiEvaluateObjectTyped
  *
  * PARAMETERS:  Handle              - Object handle (optional)
- *              Pathname            - Object pathname (optional)
- *              ExternalParams      - List of parameters to pass to method,
+ *              *Pathname           - Object pathname (optional)
+ *              **ExternalParams    - List of parameters to pass to method,
  *                                    terminated by NULL.  May be NULL
  *                                    if no parameters are being passed.
- *              ReturnBuffer        - Where to put method's return value (if
+ *              *ReturnBuffer       - Where to put method's return value (if
  *                                    any).  If NULL, no value is returned.
  *              ReturnType          - Expected type of return object
  *
@@ -154,7 +153,7 @@ __KERNEL_RCSID(0, "$NetBSD: nsxfeval.c,v 1.7 2005/05/29 20:56:02 christos Exp $"
 ACPI_STATUS
 AcpiEvaluateObjectTyped (
     ACPI_HANDLE             Handle,
-    ACPI_CONST_STRING       Pathname,
+    ACPI_STRING             Pathname,
     ACPI_OBJECT_LIST        *ExternalParams,
     ACPI_BUFFER             *ReturnBuffer,
     ACPI_OBJECT_TYPE        ReturnType)
@@ -235,11 +234,11 @@ AcpiEvaluateObjectTyped (
  * FUNCTION:    AcpiEvaluateObject
  *
  * PARAMETERS:  Handle              - Object handle (optional)
- *              Pathname            - Object pathname (optional)
- *              ExternalParams      - List of parameters to pass to method,
+ *              *Pathname           - Object pathname (optional)
+ *              **ExternalParams    - List of parameters to pass to method,
  *                                    terminated by NULL.  May be NULL
  *                                    if no parameters are being passed.
- *              ReturnBuffer        - Where to put method's return value (if
+ *              *ReturnBuffer       - Where to put method's return value (if
  *                                    any).  If NULL, no value is returned.
  *
  * RETURN:      Status
@@ -253,24 +252,19 @@ AcpiEvaluateObjectTyped (
 ACPI_STATUS
 AcpiEvaluateObject (
     ACPI_HANDLE             Handle,
-    ACPI_CONST_STRING       Pathname,
+    ACPI_STRING             Pathname,
     ACPI_OBJECT_LIST        *ExternalParams,
     ACPI_BUFFER             *ReturnBuffer)
 {
     ACPI_STATUS             Status;
-    ACPI_STATUS             Status2;
-    ACPI_PARAMETER_INFO     Info;
+    ACPI_OPERAND_OBJECT     **InternalParams = NULL;
+    ACPI_OPERAND_OBJECT     *InternalReturnObj = NULL;
     ACPI_SIZE               BufferSpaceNeeded;
     UINT32                  i;
 
 
     ACPI_FUNCTION_TRACE ("AcpiEvaluateObject");
 
-
-    Info.Node = Handle;
-    Info.Parameters = NULL;
-    Info.ReturnObject = NULL;
-    Info.ParameterType = ACPI_PARAM_ARGS;
 
     /*
      * If there are parameters to be passed to the object
@@ -283,10 +277,9 @@ AcpiEvaluateObject (
          * Allocate a new parameter block for the internal objects
          * Add 1 to count to allow for null terminated internal list
          */
-        Info.Parameters = ACPI_MEM_CALLOCATE (
-                                ((ACPI_SIZE) ExternalParams->Count + 1) *
-                                sizeof (void *));
-        if (!Info.Parameters)
+        InternalParams = ACPI_MEM_CALLOCATE (((ACPI_SIZE) ExternalParams->Count + 1) *
+                                                sizeof (void *));
+        if (!InternalParams)
         {
             return_ACPI_STATUS (AE_NO_MEMORY);
         }
@@ -298,16 +291,15 @@ AcpiEvaluateObject (
         for (i = 0; i < ExternalParams->Count; i++)
         {
             Status = AcpiUtCopyEobjectToIobject (&ExternalParams->Pointer[i],
-                                                 &Info.Parameters[i]);
+                                                &InternalParams[i]);
             if (ACPI_FAILURE (Status))
             {
-                AcpiUtDeleteInternalObjectList (Info.Parameters);
+                AcpiUtDeleteInternalObjectList (InternalParams);
                 return_ACPI_STATUS (Status);
             }
         }
-        Info.Parameters[ExternalParams->Count] = NULL;
+        InternalParams[ExternalParams->Count] = NULL;
     }
-
 
     /*
      * Three major cases:
@@ -321,7 +313,8 @@ AcpiEvaluateObject (
         /*
          *  The path is fully qualified, just evaluate by name
          */
-        Status = AcpiNsEvaluateByName (Pathname, &Info);
+        Status = AcpiNsEvaluateByName (Pathname, InternalParams,
+                    &InternalReturnObj);
     }
     else if (!Handle)
     {
@@ -356,14 +349,16 @@ AcpiEvaluateObject (
              * The null pathname case means the handle is for
              * the actual object to be evaluated
              */
-            Status = AcpiNsEvaluateByHandle (&Info);
+            Status = AcpiNsEvaluateByHandle (Handle, InternalParams,
+                            &InternalReturnObj);
         }
         else
         {
            /*
             * Both a Handle and a relative Pathname
             */
-            Status = AcpiNsEvaluateRelative (Pathname, &Info);
+            Status = AcpiNsEvaluateRelative (Handle, Pathname, InternalParams,
+                            &InternalReturnObj);
         }
     }
 
@@ -374,13 +369,13 @@ AcpiEvaluateObject (
      */
     if (ReturnBuffer)
     {
-        if (!Info.ReturnObject)
+        if (!InternalReturnObj)
         {
             ReturnBuffer->Length = 0;
         }
         else
         {
-            if (ACPI_GET_DESCRIPTOR_TYPE (Info.ReturnObject) == ACPI_DESC_TYPE_NAMED)
+            if (ACPI_GET_DESCRIPTOR_TYPE (InternalReturnObj) == ACPI_DESC_TYPE_NAMED)
             {
                 /*
                  * If we received a NS Node as a return object, this means that
@@ -391,7 +386,7 @@ AcpiEvaluateObject (
                  * support for various types at a later date if necessary.
                  */
                 Status = AE_TYPE;
-                Info.ReturnObject = NULL;   /* No need to delete a NS Node */
+                InternalReturnObj = NULL;   /* No need to delete a NS Node */
                 ReturnBuffer->Length = 0;
             }
 
@@ -401,14 +396,13 @@ AcpiEvaluateObject (
                  * Find out how large a buffer is needed
                  * to contain the returned object
                  */
-                Status = AcpiUtGetObjectSize (Info.ReturnObject,
+                Status = AcpiUtGetObjectSize (InternalReturnObj,
                                                 &BufferSpaceNeeded);
                 if (ACPI_SUCCESS (Status))
                 {
                     /* Validate/Allocate/Clear caller buffer */
 
-                    Status = AcpiUtInitializeBuffer (ReturnBuffer,
-                                    BufferSpaceNeeded);
+                    Status = AcpiUtInitializeBuffer (ReturnBuffer, BufferSpaceNeeded);
                     if (ACPI_FAILURE (Status))
                     {
                         /*
@@ -416,15 +410,14 @@ AcpiEvaluateObject (
                          */
                         ACPI_DEBUG_PRINT ((ACPI_DB_INFO,
                             "Needed buffer size %X, %s\n",
-                            (UINT32) BufferSpaceNeeded,
-                            AcpiFormatException (Status)));
+                            (UINT32) BufferSpaceNeeded, AcpiFormatException (Status)));
                     }
                     else
                     {
                         /*
                          *  We have enough space for the object, build it
                          */
-                        Status = AcpiUtCopyIobjectToEobject (Info.ReturnObject,
+                        Status = AcpiUtCopyIobjectToEobject (InternalReturnObj,
                                         ReturnBuffer);
                     }
                 }
@@ -432,32 +425,25 @@ AcpiEvaluateObject (
         }
     }
 
-    if (Info.ReturnObject)
+    /* Delete the return and parameter objects */
+
+    if (InternalReturnObj)
     {
         /*
-         * Delete the internal return object.  NOTE: Interpreter
-         * must be locked to avoid race condition.
+         * Delete the internal return object. (Or at least
+         * decrement the reference count by one)
          */
-        Status2 = AcpiExEnterInterpreter ();
-        if (ACPI_SUCCESS (Status2))
-        {
-            /*
-             * Delete the internal return object. (Or at least
-             * decrement the reference count by one)
-             */
-            AcpiUtRemoveReference (Info.ReturnObject);
-            AcpiExExitInterpreter ();
-        }
+        AcpiUtRemoveReference (InternalReturnObj);
     }
 
     /*
      * Free the input parameter list (if we created one),
      */
-    if (Info.Parameters)
+    if (InternalParams)
     {
         /* Free the allocated parameter block */
 
-        AcpiUtDeleteInternalObjectList (Info.Parameters);
+        AcpiUtDeleteInternalObjectList (InternalParams);
     }
 
     return_ACPI_STATUS (Status);
@@ -530,8 +516,7 @@ AcpiWalkNamespace (
         return_ACPI_STATUS (Status);
     }
 
-    Status = AcpiNsWalkNamespace (Type, StartObject, MaxDepth,
-                    ACPI_NS_WALK_UNLOCK,
+    Status = AcpiNsWalkNamespace (Type, StartObject, MaxDepth, ACPI_NS_WALK_UNLOCK,
                     UserFunction, Context, ReturnValue);
 
     (void) AcpiUtReleaseMutex (ACPI_MTX_NAMESPACE);
@@ -645,8 +630,7 @@ AcpiNsGetDeviceCallback (
         }
     }
 
-    Status = Info->UserFunction (ObjHandle, NestingLevel, Info->Context,
-                ReturnValue);
+    Status = Info->UserFunction (ObjHandle, NestingLevel, Info->Context, ReturnValue);
     return (Status);
 }
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_compat.h,v 1.7 2005/06/11 12:12:59 darrenr Exp $	*/
+/*	$NetBSD: ip_compat.h,v 1.4.4.1 2005/04/04 18:25:24 tron Exp $	*/
 
 /*
  * Copyright (C) 1993-2001, 2003 by Darren Reed.
@@ -1561,12 +1561,6 @@ extern	char	*fr_getifname __P((struct ifnet *, char *));
 #ifndef	ATOMIC_INC
 # define	ATOMIC_INC(x)		(x)++
 # define	ATOMIC_DEC(x)		(x)--
-#endif
-
-#if defined(USE_SPL) && defined(_KERNEL)
-# define	SPL_INT(x)	int x
-#else
-# define	SPL_INT(x)
 #endif
 
 /*

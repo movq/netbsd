@@ -1,4 +1,4 @@
-/*	$NetBSD: ipsec.c,v 1.17 2005/06/10 13:22:42 christos Exp $	*/
+/*	$NetBSD: ipsec.c,v 1.15 2005/02/26 22:45:13 perry Exp $	*/
 /*	$FreeBSD: /usr/local/www/cvsroot/FreeBSD/src/sys/netipsec/ipsec.c,v 1.2.2.2 2003/07/01 01:38:13 sam Exp $	*/
 /*	$KAME: ipsec.c,v 1.103 2001/05/24 07:14:18 sakane Exp $	*/
 
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ipsec.c,v 1.17 2005/06/10 13:22:42 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ipsec.c,v 1.15 2005/02/26 22:45:13 perry Exp $");
 
 /*
  * IPsec controller part.
@@ -985,7 +985,7 @@ ipsec6_get_ulp(m, spidx, needport)
 
 	/* sanity check */
 	if (m == NULL)
-		panic("ipsec6_get_ulp: NULL pointer was passed");
+		panic("ipsec6_get_ulp: NULL pointer was passed.\n");
 
 	KEYDEBUG(KEYDEBUG_IPSEC_DUMP,
 		printf("ipsec6_get_ulp:\n"); kdebug_mbuf(m));
@@ -1089,7 +1089,7 @@ ipsec_init_policy(so, pcb_sp)
 
 	/* sanity check. */
 	if (so == NULL || pcb_sp == NULL)
-		panic("ipsec_init_policy: NULL pointer was passed");
+		panic("ipsec_init_policy: NULL pointer was passed.\n");
 
 	new = (struct inpcbpolicy *) malloc(sizeof(struct inpcbpolicy),
 					    M_SECA, M_NOWAIT|M_ZERO);
@@ -1522,7 +1522,7 @@ ipsec_get_reqlevel(isr)
 #endif /* INET6 */
 	default:
 		panic("key_get_reqlevel: unknown af %u",
-		    isr->sp->spidx.src.sa.sa_family);
+			isr->sp->spidx.src.sa.sa_family);
 	}
 
 #undef IPSEC_CHECK_DEFAULT
@@ -1551,8 +1551,9 @@ ipsec_get_reqlevel(isr)
 			level = IPSEC_LEVEL_USE;
 			break;
 		default:
-			panic("ipsec_get_reqlevel: Illegal protocol defined %u",
-			    isr->saidx.proto);
+			panic("ipsec_get_reqlevel: "
+				"Illegal protocol defined %u\n",
+				isr->saidx.proto);
 		}
 		break;
 
@@ -1565,7 +1566,7 @@ ipsec_get_reqlevel(isr)
 		break;
 
 	default:
-		panic("ipsec_get_reqlevel: Illegal IPsec level %u",
+		panic("ipsec_get_reqlevel: Illegal IPsec level %u\n",
 			isr->level);
 	}
 
@@ -2078,7 +2079,7 @@ inet_ntoa4(struct in_addr ina)
 }
 
 /* Return a printable string for the address. */
-const char *
+char *
 ipsec_address(union sockaddr_union* sa)
 {
 	switch (sa->sa.sa_family) {

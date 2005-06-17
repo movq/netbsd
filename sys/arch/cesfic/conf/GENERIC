@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.30 2005/06/09 14:43:30 tsutsui Exp $
+# $NetBSD: GENERIC,v 1.29.2.2 2005/11/05 00:39:47 tron Exp $
 #
 # GENERIC machine description file
 # 
@@ -36,8 +36,7 @@ options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
 
 # Enable experimental buffer queue strategy for better responsiveness under 
 # high disk I/O load. Use it with caution - it's not proven to be stable yet.
-#options 	BUFQ_READPRIO
-#options 	BUFQ_PRIOCSCAN
+#options 	NEW_BUFQ_STRATEGY
 
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
 options 	COMPAT_43	# compatibility with 4.3BSD interfaces
@@ -110,8 +109,8 @@ options 	COMPAT_M68K4K	# compat. with NetBSD/m68k4k binaries
 options 	COMPAT_AOUT_M68K # support for NetBSD a.out executables
 
 # Debugging options
-options 	DIAGNOSTIC	# Extra kernel sanity checks
-options 	DEBUG		# Enable misc. kernel debugging code
+#options 	DIAGNOSTIC	# Extra kernel sanity checks
+#options 	DEBUG		# Enable misc. kernel debugging code
 options 	DDB		# Kernel Dynamic Debugger
 #options 	KGDB
 makeoptions	DEBUG="-g"	# netbsd.gdb with full debugging symbols
@@ -135,6 +134,7 @@ pseudo-device	pty		64	# pseudo ptys
 #pseudo-device	bridge			# simple inter-network bridging
 #options	BRIDGE_IPF		# bridge uses IP/IPv6 pfil hooks too
 #pseudo-device	vnd		4	# vnode pseudo-disks
+#options 	VND_COMPRESSION		# compressed vnd(4)
 #pseudo-device	ccd		4	# concatenated disk devices
 #pseudo-device	cgd		4	# cryptographic disk devices
 pseudo-device	loop			# loopback network interface

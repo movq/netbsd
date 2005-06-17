@@ -1,4 +1,4 @@
-/*	$NetBSD: printfr.c,v 1.1.1.4 2005/04/03 15:01:42 martti Exp $	*/
+/*	$NetBSD: printfr.c,v 1.1.1.3.2.1 2005/04/04 19:34:15 tron Exp $	*/
 
 /*
  * Copyright (C) 1993-2001 by Darren Reed.

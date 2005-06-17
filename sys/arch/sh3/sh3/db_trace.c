@@ -1,4 +1,4 @@
-/*	$NetBSD: db_trace.c,v 1.16 2005/05/31 00:40:17 chs Exp $	*/
+/*	$NetBSD: db_trace.c,v 1.13 2004/02/23 01:06:53 uwe Exp $	*/
 
 /*-
  * Copyright (c) 2000 Tsubai Masanari.  All rights reserved.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.16 2005/05/31 00:40:17 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.13 2004/02/23 01:06:53 uwe Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -78,63 +78,38 @@ const struct db_variable * const db_eregs =
 
 void
 db_stack_trace_print(db_expr_t addr, boolean_t have_addr, db_expr_t count,
-    const char *modif, void (*print)(const char *, ...))
+    char *modif, void (*print)(const char *, ...))
 {
 	db_addr_t callpc, frame, lastframe;
-	uint32_t vbr;
-
-	asm volatile("stc vbr, %0" : "=r"(vbr));
 
 	frame = ddb_regs.tf_r14;
 	callpc = ddb_regs.tf_spc;
 
 	lastframe = 0;
 	while (count > 0 && frame != 0) {
-		/* Are we crossing a trap frame? */
-		if ((callpc & ~PAGE_MASK) == vbr) {
-			struct trapframe *tf = (void *)frame;
+		char *name;
+		db_expr_t offset;
+		db_sym_t sym;
 
-			frame = tf->tf_r14;
-			callpc = tf->tf_spc;
+		DPRINTF("    (1)newpc 0x%lx, newfp 0x%lx\n", callpc, frame);
+		sym = db_search_symbol(callpc, DB_STGY_ANY, &offset);
+		db_symbol_values(sym, &name, NULL);
 
-			(*print)("<EXPEVT %03x; SSR=%08x> at ",
-				 tf->tf_expevt, tf->tf_ssr);
-			db_printsym(callpc, DB_STGY_PROC, print);
-			(*print)("\n");
-
-			/* XXX: don't venture into the userland yet */
-			if ((tf->tf_ssr & PSL_MD) == 0)
-				break;
-		} else {
-			const char *name;
-			db_expr_t offset;
-			db_sym_t sym;
-
-
-			DPRINTF("    (1)newpc 0x%lx, newfp 0x%lx\n",
-				callpc, frame);
-
-			sym = db_search_symbol(callpc, DB_STGY_ANY, &offset);
-			db_symbol_values(sym, &name, NULL);
-
-			if (lastframe == 0 && sym == 0) {
-				printf("symbol not found\n");
-				break;
-			}
-
-			db_nextframe(callpc - offset, &frame, &callpc);
-			DPRINTF("    (2)newpc 0x%lx, newfp 0x%lx\n",
-				callpc, frame);
-
-			if (callpc == 0 && lastframe == 0)
-				callpc = (db_addr_t)ddb_regs.tf_pr;
-			DPRINTF("    (3)newpc 0x%lx, newfp 0x%lx\n",
-				callpc, frame);
-
-			(*print)("%s() at ", name ? name : "");
-			db_printsym(callpc, DB_STGY_PROC, print);
-			(*print)("\n");
+		if (lastframe == 0 && sym == 0) {
+			printf("symbol not found\n");
+			break;
 		}
+
+		db_nextframe(callpc - offset, &frame, &callpc);
+		DPRINTF("    (2)newpc 0x%lx, newfp 0x%lx\n", callpc, frame);
+
+		if (callpc == 0 && lastframe == 0)
+			callpc = (db_addr_t)ddb_regs.tf_pr;
+		DPRINTF("    (3)newpc 0x%lx, newfp 0x%lx\n", callpc, frame);
+
+		(*print)("%s() at ", name ? name : "");
+		db_printsym(callpc, DB_STGY_PROC, print);
+		(*print)("\n");
 
 		count--;
 		lastframe = frame;
@@ -145,7 +120,7 @@ void
 db_nextframe(
 	db_addr_t pc,		/* in: entry address of current function */
 	db_addr_t *fp,		/* in: current fp, out: parent fp */
-	db_addr_t *pr)		/* out: parent pr */
+	db_addr_t *pr)		/* out: parent fp */
 {
 	int *frame = (void *)*fp;
 	int i, inst;

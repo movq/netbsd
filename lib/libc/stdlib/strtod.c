@@ -1,4 +1,4 @@
-/*	$NetBSD: strtod.c,v 1.48 2005/04/24 23:29:06 christos Exp $	*/
+/*	$NetBSD: strtod.c,v 1.45.2.1 2005/04/19 13:35:54 tron Exp $	*/
 
 /****************************************************************
  *
@@ -93,7 +93,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: strtod.c,v 1.48 2005/04/24 23:29:06 christos Exp $");
+__RCSID("$NetBSD: strtod.c,v 1.45.2.1 2005/04/19 13:35:54 tron Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"

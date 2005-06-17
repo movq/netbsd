@@ -1,4 +1,4 @@
-/*	$NetBSD: svc_raw.c,v 1.18 2005/06/09 22:13:17 yamt Exp $	*/
+/*	$NetBSD: svc_raw.c,v 1.17.6.1 2005/11/21 20:15:20 tron Exp $	*/
 
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
@@ -39,7 +39,7 @@
 #if 0
 static char sccsid[] = "@(#)svc_raw.c 1.25 89/01/31 Copyr 1984 Sun Micro";
 #else
-__RCSID("$NetBSD: svc_raw.c,v 1.18 2005/06/09 22:13:17 yamt Exp $");
+__RCSID("$NetBSD: svc_raw.c,v 1.17.6.1 2005/11/21 20:15:20 tron Exp $");
 #endif
 #endif
 

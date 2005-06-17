@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_swap.c,v 1.92 2005/05/29 21:06:33 christos Exp $	*/
+/*	$NetBSD: uvm_swap.c,v 1.89 2004/10/28 07:07:47 yamt Exp $	*/
 
 /*
  * Copyright (c) 1995, 1996, 1997 Matthew R. Green
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_swap.c,v 1.92 2005/05/29 21:06:33 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_swap.c,v 1.89 2004/10/28 07:07:47 yamt Exp $");
 
 #include "fs_nfs.h"
 #include "opt_uvmhist.h"
@@ -53,7 +53,6 @@ __KERNEL_RCSID(0, "$NetBSD: uvm_swap.c,v 1.92 2005/05/29 21:06:33 christos Exp $
 #include <sys/vnode.h>
 #include <sys/file.h>
 #include <sys/extent.h>
-#include <sys/blist.h>
 #include <sys/mount.h>
 #include <sys/pool.h>
 #include <sys/sa.h>
@@ -136,7 +135,8 @@ struct swapdev {
 	int			swd_npgbad;	/* #pages bad */
 	int			swd_drumoffset;	/* page0 offset in drum */
 	int			swd_drumsize;	/* #pages in drum */
-	blist_t			swd_blist;	/* blist for this swapdev */
+	struct extent		*swd_ex;	/* extent for this swapdev */
+	char			swd_exname[12];	/* name of extent above */
 	struct vnode		*swd_vp;	/* backing vnode */
 	CIRCLEQ_ENTRY(swapdev)	swd_next;	/* priority circleq */
 
@@ -185,9 +185,9 @@ POOL_INIT(vndxfer_pool, sizeof(struct vndxfer), 0, 0, 0, "swp vnx", NULL);
 POOL_INIT(vndbuf_pool, sizeof(struct vndbuf), 0, 0, 0, "swp vnd", NULL);
 
 #define	getvndxfer(vnx)	do {						\
-	int sp = splbio();						\
+	int s = splbio();						\
 	vnx = pool_get(&vndxfer_pool, PR_WAITOK);			\
-	splx(sp);							\
+	splx(s);							\
 } while (/*CONSTCOND*/ 0)
 
 #define putvndxfer(vnx) {						\
@@ -195,9 +195,9 @@ POOL_INIT(vndbuf_pool, sizeof(struct vndbuf), 0, 0, 0, "swp vnd", NULL);
 }
 
 #define	getvndbuf(vbp)	do {						\
-	int sp = splbio();						\
+	int s = splbio();						\
 	vbp = pool_get(&vndbuf_pool, PR_WAITOK);			\
-	splx(sp);							\
+	splx(s);							\
 } while (/*CONSTCOND*/ 0)
 
 #define putvndbuf(vbp) {						\
@@ -510,7 +510,7 @@ sys_swapctl(l, v, retval)
 		sep = (struct swapent *)malloc(len, M_TEMP, M_WAITOK);
 
 		uvm_swap_stats(SCARG(uap, cmd), sep, misc, retval);
-		error = copyout(sep, SCARG(uap, arg), len);
+		error = copyout(sep, (void *)SCARG(uap, arg), len);
 
 		free(sep, M_TEMP);
 		UVMHIST_LOG(pdhist, "<- done SWAP_STATS", 0, 0, 0, 0);
@@ -767,6 +767,7 @@ swap_on(p, sdp)
 	struct proc *p;
 	struct swapdev *sdp;
 {
+	static int count = 0;	/* static */
 	struct vnode *vp;
 	int error, npages, nblocks, size;
 	long addr;
@@ -888,10 +889,17 @@ swap_on(p, sdp)
 	/*
 	 * now we need to allocate an extent to manage this swap device
 	 */
+	snprintf(sdp->swd_exname, sizeof(sdp->swd_exname), "swap0x%04x",
+	    count++);
 
-	sdp->swd_blist = blist_create(npages);
-	/* mark all expect the `saved' region free. */
-	blist_free(sdp->swd_blist, addr, size);
+	/* note that extent_create's 3rd arg is inclusive, thus "- 1" */
+	sdp->swd_ex = extent_create(sdp->swd_exname, 0, npages - 1, M_VMSWAP,
+				    0, 0, EX_WAITOK);
+	/* allocate the `saved' region from the extent so it won't be used */
+	if (addr) {
+		if (extent_alloc_region(sdp->swd_ex, 0, addr, EX_WAITOK))
+			panic("disklabel region");
+	}
 
 	/*
 	 * if the vnode we are swapping to is the root vnode
@@ -925,13 +933,22 @@ swap_on(p, sdp)
 		if (rootpages > size)
 			panic("swap_on: miniroot larger than swap?");
 
-		if (rootpages != blist_fill(sdp->swd_blist, addr, rootpages)) {
+		if (extent_alloc_region(sdp->swd_ex, addr,
+					rootpages, EX_WAITOK))
 			panic("swap_on: unable to preserve miniroot");
-		}
 
 		size -= rootpages;
 		printf("Preserved %d pages of miniroot ", rootpages);
 		printf("leaving %d pages of swap\n", size);
+	}
+
+  	/*
+	 * try to add anons to reflect the new swap space.
+	 */
+
+	error = uvm_anon_add(size);
+	if (error) {
+		goto bad;
 	}
 
 	/*
@@ -962,8 +979,8 @@ swap_on(p, sdp)
 	 */
 
 bad:
-	if (sdp->swd_blist) {
-		blist_destroy(sdp->swd_blist);
+	if (sdp->swd_ex) {
+		extent_destroy(sdp->swd_ex);
 	}
 	if (vp != rootvp) {
 		(void)VOP_CLOSE(vp, FREAD|FWRITE, p->p_ucred, p);
@@ -981,8 +998,7 @@ swap_off(p, sdp)
 	struct proc *p;
 	struct swapdev *sdp;
 {
-	int npages = sdp->swd_npages;
-	int error = 0;
+	int npages =  sdp->swd_npages;
 
 	UVMHIST_FUNC("swap_off"); UVMHIST_CALLED(pdhist);
 	UVMHIST_LOG(pdhist, "  dev=%x, npages=%d", sdp->swd_dev,npages,0,0);
@@ -1001,21 +1017,16 @@ swap_off(p, sdp)
 
 	if (uao_swap_off(sdp->swd_drumoffset,
 			 sdp->swd_drumoffset + sdp->swd_drumsize) ||
-	    amap_swap_off(sdp->swd_drumoffset,
+	    anon_swap_off(sdp->swd_drumoffset,
 			  sdp->swd_drumoffset + sdp->swd_drumsize)) {
-		error = ENOMEM;
-	} else if (sdp->swd_npginuse > sdp->swd_npgbad) {
-		error = EBUSY;
-	}
 
-	if (error) {
 		simple_lock(&uvm.swap_data_lock);
 		sdp->swd_flags |= SWF_ENABLE;
 		uvmexp.swpgavail += npages;
 		simple_unlock(&uvm.swap_data_lock);
-
-		return error;
+		return ENOMEM;
 	}
+	KASSERT(sdp->swd_npginuse == sdp->swd_npgbad);
 
 	/*
 	 * done with the vnode.
@@ -1026,6 +1037,9 @@ swap_off(p, sdp)
 	if (sdp->swd_vp != rootvp) {
 		(void) VOP_CLOSE(sdp->swd_vp, FREAD|FWRITE, p->p_ucred, p);
 	}
+
+	/* remove anons from the system */
+	uvm_anon_remove(npages);
 
 	simple_lock(&uvm.swap_data_lock);
 	uvmexp.swpages -= npages;
@@ -1041,7 +1055,7 @@ swap_off(p, sdp)
 	 */
 	extent_free(swapmap, sdp->swd_drumoffset, sdp->swd_drumsize,
 		    EX_WAITOK);
-	blist_destroy(sdp->swd_blist);
+	extent_destroy(sdp->swd_ex);
 	bufq_free(&sdp->swd_tab);
 	free(sdp, M_VMSWAP);
 	return (0);
@@ -1449,6 +1463,7 @@ uvm_swap_alloc(nslots, lessok)
 {
 	struct swapdev *sdp;
 	struct swappri *spp;
+	u_long	result;
 	UVMHIST_FUNC("uvm_swap_alloc"); UVMHIST_CALLED(pdhist);
 
 	/*
@@ -1465,18 +1480,16 @@ uvm_swap_alloc(nslots, lessok)
 ReTry:	/* XXXMRG */
 	LIST_FOREACH(spp, &swap_priority, spi_swappri) {
 		CIRCLEQ_FOREACH(sdp, &spp->spi_swapdev, swd_next) {
-			uint64_t result;
-
 			/* if it's not enabled, then we can't swap from it */
 			if ((sdp->swd_flags & SWF_ENABLE) == 0)
 				continue;
 			if (sdp->swd_npginuse + *nslots > sdp->swd_npages)
 				continue;
-			result = blist_alloc(sdp->swd_blist, *nslots);
-			if (result == BLIST_NONE) {
+			if (extent_alloc(sdp->swd_ex, *nslots, EX_NOALIGN,
+					 EX_NOBOUNDARY, EX_MALLOCOK|EX_NOWAIT,
+					 &result) != 0) {
 				continue;
 			}
-			KASSERT(result < sdp->swd_drumsize);
 
 			/*
 			 * successful allocation!  now rotate the circleq.
@@ -1497,8 +1510,7 @@ ReTry:	/* XXXMRG */
 	/* XXXMRG: BEGIN HACK */
 	if (*nslots > 1 && lessok) {
 		*nslots = 1;
-		/* XXXMRG: ugh!  blist should support this for us */
-		goto ReTry;
+		goto ReTry;	/* XXXMRG: ugh!  extent should support this for us */
 	}
 	/* XXXMRG: END HACK */
 
@@ -1586,7 +1598,11 @@ uvm_swap_free(startslot, nslots)
 	KASSERT(uvmexp.nswapdev >= 1);
 	KASSERT(sdp != NULL);
 	KASSERT(sdp->swd_npginuse >= nslots);
-	blist_free(sdp->swd_blist, startslot - sdp->swd_drumoffset, nslots);
+	if (extent_free(sdp->swd_ex, startslot - sdp->swd_drumoffset, nslots,
+			EX_MALLOCOK|EX_NOWAIT) != 0) {
+		printf("warning: resource shortage: %d pages of swap lost\n",
+			nslots);
+	}
 	sdp->swd_npginuse -= nslots;
 	uvmexp.swpginuse -= nslots;
 	simple_unlock(&uvm.swap_data_lock);

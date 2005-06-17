@@ -16,7 +16,6 @@ closelog(void)
 int
 setlogmask(int mask)
 {
-	return 0xff;
 }
 
 __strong_alias(_syslog, syslog)

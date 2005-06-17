@@ -1,4 +1,4 @@
-/*      $NetBSD: pccons.c,v 1.21 2005/06/03 13:14:09 scw Exp $       */
+/*      $NetBSD: pccons.c,v 1.20 2005/01/05 10:25:43 tsutsui Exp $       */
 
 /*
  * Copyright 1997
@@ -135,7 +135,7 @@
 */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pccons.c,v 1.21 2005/06/03 13:14:09 scw Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pccons.c,v 1.20 2005/01/05 10:25:43 tsutsui Exp $");
 
 #include "opt_ddb.h"
 #include "opt_xserver.h"
@@ -311,7 +311,7 @@ void                   pcattach            __P((struct device *,
 int                    pcintr              __P((void *));
 char                   *sget               __P((struct pc_softc *));
 void                   sput                __P((struct pc_softc *,
-                                                const u_char *, 
+                                                u_char *, 
                                                 int,
                                                 u_char));
 void                   pcstart             __P((struct tty *));
@@ -2378,10 +2378,10 @@ pcparam(struct tty     *tp,
 */
 #define wrtchar(sc, c, at) \
 do { \
-    char *__cp = (char *)crtat; \
+    char *cp = (char *)crtat; \
 \
-    *__cp++    = (c); \
-    *__cp      = (at); \
+    *cp++    = (c); \
+    *cp      = (at); \
     crtat++; sc->vs.col++; \
 } while (0)
 
@@ -2427,7 +2427,7 @@ static char bgansitopc[] = {
 */
 void
 sput(struct pc_softc   *sc,
-     const u_char      *cp, 
+     u_char            *cp, 
      int               n,
      u_char            nowait)
 {
@@ -2439,7 +2439,7 @@ sput(struct pc_softc   *sc,
     /* Initialise the display if not done already */
     if (crtat == 0) 
     {
-        u_short volatile *cp2;
+        u_short volatile *cp;
 #ifdef DOESNT_ALWAYS_DO_THE_RIGHT_THING
         u_short was;
 #endif
@@ -2453,19 +2453,19 @@ sput(struct pc_softc   *sc,
         ** we operate in color mode otherwise
         ** mono.
         */
-        cp2 = (void *)((u_long)(CGA_BUF) + vam_mem_data);
+        cp = (void *)((u_long)(CGA_BUF) + vam_mem_data);
 #ifdef DOESNT_ALWAYS_DO_THE_RIGHT_THING
-        was = *cp2;              /* save whatever is at CGA_BUF */
-        *cp2 = (u_short) 0xA55A;
-        if (*cp2 != 0xA55A) 
+        was = *cp;              /* save whatever is at CGA_BUF */
+        *cp = (u_short) 0xA55A;
+        if (*cp != 0xA55A) 
         {
-            cp2 = (void *)((u_long)(MONO_BUF) + vam_mem_data);
+            cp = (void *)((u_long)(MONO_BUF) + vam_mem_data);
             addr_6845 = MONO_BASE;
             sc->vs.color = 0;
         } 
         else 
         {
-            *cp2 = was;          /* restore previous contents of CGA_BUF */
+            *cp = was;          /* restore previous contents of CGA_BUF */
             addr_6845 = CGA_BASE;
             sc->vs.color = 1;
         }
@@ -2484,8 +2484,8 @@ sput(struct pc_softc   *sc,
         cursor_shape = 0x0012;
 #endif
         /* Save cursor locations */
-        Crtat = __UNVOLATILE(cp2);
-        crtat = __UNVOLATILE(cp2 + cursorat);
+        Crtat = (u_short *)cp;
+        crtat = (u_short *)(cp + cursorat);
         
         /* Set up screen size and colours */
         sc->vs.ncol = COL;

@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs_bmap.c,v 1.19 2005/03/24 20:13:17 bouyer Exp $	*/
+/*	$NetBSD: ext2fs_bmap.c,v 1.18.2.1 2005/03/27 16:32:00 tron Exp $	*/
 
 /*
  * Copyright (c) 1989, 1991, 1993
@@ -70,7 +70,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ext2fs_bmap.c,v 1.19 2005/03/24 20:13:17 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ext2fs_bmap.c,v 1.18.2.1 2005/03/27 16:32:00 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

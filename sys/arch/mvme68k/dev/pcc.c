@@ -1,4 +1,4 @@
-/*	$NetBSD: pcc.c,v 1.26 2005/06/03 08:45:08 scw Exp $	*/
+/*	$NetBSD: pcc.c,v 1.25 2003/07/15 02:43:46 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -71,7 +71,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pcc.c,v 1.26 2005/06/03 08:45:08 scw Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pcc.c,v 1.25 2003/07/15 02:43:46 lukem Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -106,14 +106,14 @@ static void pccsoftintrassert __P((void));
  * Structure used to describe a device for autoconfiguration purposes.
  */
 struct pcc_device {
-	const char *pcc_name;	/* name of device (e.g. "clock") */
+	char *pcc_name;		/* name of device (e.g. "clock") */
 	bus_addr_t pcc_offset;	/* offset from PCC base */
 };
 
 /*
  * Devices that live on the PCC, attached in this order.
  */
-static const struct pcc_device pcc_devices[] = {
+static struct pcc_device pcc_devices[] = {
 	{"clock", 0},
 	{"zsc", PCC_ZS0_OFF},
 	{"zsc", PCC_ZS1_OFF},

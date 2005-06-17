@@ -1,4 +1,4 @@
-/*	$NetBSD: mfs_vfsops.c,v 1.67 2005/05/29 21:25:24 christos Exp $	*/
+/*	$NetBSD: mfs_vfsops.c,v 1.65 2005/02/26 22:32:20 perry Exp $	*/
 
 /*
  * Copyright (c) 1989, 1990, 1993, 1994
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mfs_vfsops.c,v 1.67 2005/05/29 21:25:24 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mfs_vfsops.c,v 1.65 2005/02/26 22:32:20 perry Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
@@ -106,7 +106,6 @@ struct vfsops mfs_vfsops = {
 	vfs_stdextattrctl,
 	mfs_vnodeopv_descs,
 };
-VFS_ATTACH(mfs_vfsops);
 
 SYSCTL_SETUP(sysctl_vfs_mfs_setup, "sysctl vfs.mfs subtree setup")
 {
@@ -259,6 +258,7 @@ mfs_mount(mp, path, data, ndp, p)
 
 	if (mp->mnt_flag & MNT_GETARGS) {
 		struct vnode *vp;
+		struct mfsnode *mfsp;
 
 		ump = VFSTOUFS(mp);
 		if (ump == NULL)

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.91 2005/06/12 20:24:14 dyoung Exp $
+#	$NetBSD: Makefile,v 1.88 2005/01/27 12:54:05 is Exp $
 
 .include <bsd.own.mk>
 
@@ -22,19 +22,14 @@ TOOLCHAIN_BITS+= .WAIT dbsym mdsetimage
 
 SUBDIR=	host-mkdep .WAIT compat .WAIT \
 	binstall .WAIT mktemp .WAIT \
-		cap_mkdb crunchgen ctags genassym gencat hexdump lint lint2 \
-		lorder m4 makewhatis mkdep mtree rpcgen tsort uudecode \
+		cap_mkdb crunchgen ctags gencat hexdump lint lint2 lorder \
+		m4 makewhatis mkdep mtree rpcgen tsort uudecode \
 	texinfo .WAIT \
 	yacc .WAIT \
 	lex .WAIT \
 	${TOOLCHAIN_BITS} \
-		asn1_compile cat cksum compile_et config db \
-		file lint1 \
-		makefs menuc mkcsmapper mkesdb mklocale mknod msgc \
-		pax .WAIT \
-		disklabel \
-		fdisk \
-		installboot \
+		asn1_compile cat cksum compile_et config db file installboot \
+		lint1 makefs menuc mkcsmapper mkesdb mklocale mknod msgc pax \
 		pwd_mkdb stat sunlabel zic
 
 .if ${MKMAN} != "no"

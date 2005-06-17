@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.161 2005/04/25 15:02:06 lukem Exp $	*/
+/*	$NetBSD: machdep.c,v 1.159 2005/02/11 15:03:56 yamt Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1987, 1990 The Regents of the University of California.
@@ -75,7 +75,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.161 2005/04/25 15:02:06 lukem Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.159 2005/02/11 15:03:56 yamt Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -193,8 +193,7 @@ cpu_startup()
 	/*
 	 * Initialize error message buffer (at end of core).
 	 */
-	msgbuf_vaddr =  uvm_km_alloc(kernel_map, ns532_round_page(MSGBUFSIZE),
-	    0, UVM_KMF_VAONLY);
+	msgbuf_vaddr =  uvm_km_valloc(kernel_map, ns532_round_page(MSGBUFSIZE));
 	if (msgbuf_vaddr == 0)
 		panic("failed to valloc msgbuf_vaddr");
 
@@ -206,7 +205,7 @@ cpu_startup()
 
 	initmsgbuf((caddr_t)msgbuf_vaddr, round_page(MSGBUFSIZE));
 
-	printf("%s%s", copyright, version);
+	printf(version);
 	format_bytes(pbuf, sizeof(pbuf), ctob(physmem));
 	printf("total memory = %s\n", pbuf);
 

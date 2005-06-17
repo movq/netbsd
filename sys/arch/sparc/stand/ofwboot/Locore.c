@@ -1,4 +1,4 @@
-/*	$NetBSD: Locore.c,v 1.5 2005/06/01 03:51:58 martin Exp $	*/
+/*	$NetBSD: Locore.c,v 1.4 2005/01/16 23:26:19 chs Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -82,7 +82,7 @@ OF_enter()
 
 int
 OF_finddevice(name)
-	const char *name;
+	char *name;
 {
 	struct {
 		cell_t name;
@@ -125,7 +125,7 @@ OF_instance_to_package(ihandle)
 int
 OF_getprop(handle, prop, buf, buflen)
 	int handle;
-	const char *prop;
+	char *prop;
 	void *buf;
 	int buflen;
 {
@@ -186,7 +186,7 @@ OF_setprop(handle, prop, buf, len)
 
 int
 OF_open(dname)
-	const char *dname;
+	char *dname;
 {
 	struct {
 		cell_t name;
@@ -227,7 +227,7 @@ OF_close(handle)
 int
 OF_write(handle, addr, len)
 	int handle;
-	const void *addr;
+	void *addr;
 	int len;
 {
 	struct {

@@ -1,4 +1,4 @@
-/*	$NetBSD: mpt_debug.c,v 1.3 2005/05/30 04:43:47 christos Exp $	*/
+/*	$NetBSD: mpt_debug.c,v 1.2 2003/07/14 15:47:11 lukem Exp $	*/
 
 /*
  * Copyright (c) 2000, 2001 by Greg Ansley
@@ -35,13 +35,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mpt_debug.c,v 1.3 2005/05/30 04:43:47 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mpt_debug.c,v 1.2 2003/07/14 15:47:11 lukem Exp $");
 
 #include <dev/ic/mpt.h>
 
 struct Error_Map {
 	int 	 Error_Code;
-	const char    *Error_String;
+	char    *Error_String;
 };
 
 static const struct Error_Map IOC_Status[] = {
@@ -176,98 +176,98 @@ static const struct Error_Map IOC_Diag[] = {
 
 static void mpt_dump_sgl(SGE_IO_UNION *sgl);
 
-static const char *
+static char *
 mpt_ioc_status(int code)
 {
 	const struct Error_Map *status = IOC_Status;
-	static char tbuf[64];
+	static char buf[64];
 	while (status->Error_Code >= 0) {
 		if (status->Error_Code == (code & MPI_IOCSTATUS_MASK))
 			return status->Error_String;
 		status++;
 	}
-	snprintf(tbuf, sizeof tbuf, "Unknown (0x%08x)", code);
-	return tbuf;
+	snprintf(buf, sizeof buf, "Unknown (0x%08x)", code);
+	return buf;
 }
 
 char *
 mpt_ioc_diag(u_int32_t code)
 {
 	const struct Error_Map *status = IOC_Diag;
-	static char tbuf[128];
-	char *ptr = tbuf;
-	char *end = &tbuf[128];
-	tbuf[0] = '\0';
-	ptr += snprintf(tbuf, sizeof tbuf, "(0x%08x)", code);
+	static char buf[128];
+	char *ptr = buf;
+	char *end = &buf[128];
+	buf[0] = '\0';
+	ptr += snprintf(buf, sizeof buf, "(0x%08x)", code);
 	while (status->Error_Code >= 0) {
 		if ((status->Error_Code & code) != 0)
 			ptr += snprintf(ptr, (size_t)(end-ptr), "%s ",
 				status->Error_String);
 		status++;
 	}
-	return tbuf;
+	return buf;
 }
 
-static const char *
+static char *
 mpt_ioc_function(int code)
 {
 	const struct Error_Map *status = IOC_Func;
-	static char tbuf[64];
+	static char buf[64];
 	while (status->Error_Code >= 0) {
 		if (status->Error_Code == code)
 			return status->Error_String;
 		status++;
 	}
-	snprintf(tbuf, sizeof tbuf, "Unknown (0x%08x)", code);
-	return tbuf;
+	snprintf(buf, sizeof buf, "Unknown (0x%08x)", code);
+	return buf;
 }
-static const char *
+static char *
 mpt_ioc_event(int code)
 {
 	const struct Error_Map *status = IOC_Event;
-	static char tbuf[64];
+	static char buf[64];
 	while (status->Error_Code >= 0) {
 		if (status->Error_Code == code)
 			return status->Error_String;
 		status++;
 	}
-	snprintf(tbuf, sizeof tbuf, "Unknown (0x%08x)", code);
-	return tbuf;
+	snprintf(buf, sizeof buf, "Unknown (0x%08x)", code);
+	return buf;
 }
 static char *
 mpt_scsi_state(int code)
 {
 	const struct Error_Map *status = IOC_SCSIState;
-	static char tbuf[128];
-	char *ptr = tbuf;
-	char *end = &tbuf[128];
-	tbuf[0] = '\0';
-	ptr += snprintf(tbuf, sizeof tbuf, "(0x%08x)", code);
+	static char buf[128];
+	char *ptr = buf;
+	char *end = &buf[128];
+	buf[0] = '\0';
+	ptr += snprintf(buf, sizeof buf, "(0x%08x)", code);
 	while (status->Error_Code >= 0) {
 		if ((status->Error_Code & code) != 0)
 			ptr += snprintf(ptr, (size_t)(end-ptr), "%s ",
 				status->Error_String);
 		status++;
 	}
-	return tbuf;
+	return buf;
 }
-static const char *
+static char *
 mpt_scsi_status(int code)
 {
 	const struct Error_Map *status = IOC_SCSIStatus;
-	static char tbuf[64];
+	static char buf[64];
 	while (status->Error_Code >= 0) {
 		if (status->Error_Code == code)
 			return status->Error_String;
 		status++;
 	}
-	snprintf(tbuf, sizeof tbuf, "Unknown (0x%08x)", code);
-	return tbuf;
+	snprintf(buf, sizeof buf, "Unknown (0x%08x)", code);
+	return buf;
 }
-static const char *
+static char *
 mpt_who(int who_init)
 {
-	const char *who;
+	char *who;
 
 	switch (who_init) {
 	case MPT_DB_INIT_NOONE:       who = "No One";        break;
@@ -281,10 +281,10 @@ mpt_who(int who_init)
 	return who;
 }
 
-static const char *
+static char *
 mpt_state(u_int32_t mb)
 {
-	const char *text;
+	char *text;
 
 	switch (MPT_STATE(mb)) {
 		case MPT_DB_STATE_RESET:  text = "Reset";   break;
@@ -533,10 +533,10 @@ mpt_print_request(void *vreq)
 	}
 }
 
-const char *
+char *
 mpt_req_state(enum mpt_req_state state)
 {
-	const char *text;
+	char *text;
 
 	switch (state) {
 	case REQ_FREE:         text = "Free";         break;

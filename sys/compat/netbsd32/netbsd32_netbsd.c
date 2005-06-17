@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_netbsd.c,v 1.89 2005/05/30 22:59:55 chs Exp $	*/
+/*	$NetBSD: netbsd32_netbsd.c,v 1.87.2.1 2005/09/18 20:09:50 tron Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Matthew R. Green
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_netbsd.c,v 1.89 2005/05/30 22:59:55 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_netbsd.c,v 1.87.2.1 2005/09/18 20:09:50 tron Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_ddb.h"
@@ -1954,7 +1954,7 @@ netbsd32_swapctl(l, v, retval)
 	struct sys_swapctl_args ua;
 
 	NETBSD32TO64_UAP(cmd);
-	NETBSD32TOP_UAP(arg, void);
+	NETBSD32TOP_UAP(arg, const void);
 	NETBSD32TO64_UAP(misc);
 	return (sys_swapctl(l, &ua, retval));
 }

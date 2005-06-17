@@ -1,4 +1,4 @@
-/*	$NetBSD: __getmntinfo13.c,v 1.2 2005/04/12 20:49:19 drochner Exp $	*/
+/*	$NetBSD: __getmntinfo13.c,v 1.1 2004/04/21 01:05:32 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)getmntinfo.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: __getmntinfo13.c,v 1.2 2005/04/12 20:49:19 drochner Exp $");
+__RCSID("$NetBSD: __getmntinfo13.c,v 1.1 2004/04/21 01:05:32 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -46,6 +46,10 @@ __RCSID("$NetBSD: __getmntinfo13.c,v 1.2 2005/04/12 20:49:19 drochner Exp $");
 #include <assert.h>
 #include <errno.h>
 #include <stdlib.h>
+
+#ifdef __weak_alias
+__weak_alias(getmntinfo,_getmntinfo)
+#endif
 
 /*
  * Return information about mounted filesystems.

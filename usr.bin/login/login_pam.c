@@ -1,4 +1,4 @@
-/*     $NetBSD: login_pam.c,v 1.8 2005/04/25 01:34:38 matt Exp $       */
+/*     $NetBSD: login_pam.c,v 1.4.2.4 2005/07/09 22:42:12 tron Exp $       */
 
 /*-
  * Copyright (c) 1980, 1987, 1988, 1991, 1993, 1994
@@ -40,7 +40,7 @@ __COPYRIGHT(
 #if 0
 static char sccsid[] = "@(#)login.c	8.4 (Berkeley) 4/2/94";
 #endif
-__RCSID("$NetBSD: login_pam.c,v 1.8 2005/04/25 01:34:38 matt Exp $");
+__RCSID("$NetBSD: login_pam.c,v 1.4.2.4 2005/07/09 22:42:12 tron Exp $");
 #endif /* not lint */
 
 /*

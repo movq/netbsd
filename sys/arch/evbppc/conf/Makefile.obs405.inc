@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.obs405.inc,v 1.2 2005/03/17 16:45:50 jmc Exp $
+#	$NetBSD: Makefile.obs405.inc,v 1.1.16.1 2005/03/22 19:26:38 tron Exp $
 
 MKIMG?=	${HOST_SH} ${THISPPC}/compile/walnut-mkimg.sh
 

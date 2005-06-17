@@ -115,11 +115,7 @@ int ASN1_TYPE_set_int_octetstring(ASN1_TYPE *a, long num, unsigned char *data,
 
 	if ((osp=ASN1_STRING_new()) == NULL) return(0);
 	/* Grow the 'string' */
-	if (!ASN1_STRING_set(osp,NULL,size))
-		{
-		ASN1_STRING_free(osp);
-		return(0);
-		}
+	ASN1_STRING_set(osp,NULL,size);
 
 	M_ASN1_STRING_length_set(osp, size);
 	p=M_ASN1_STRING_data(osp);

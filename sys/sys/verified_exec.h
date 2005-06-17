@@ -1,4 +1,4 @@
-/*	$NetBSD: verified_exec.h,v 1.12 2005/05/29 16:07:10 elad Exp $	*/
+/*	$NetBSD: verified_exec.h,v 1.6.2.9 2005/09/02 12:16:17 tron Exp $	*/
 
 /*-
  * Copyright 2005 Elad Efrat <elad@bsd.org.il>
@@ -29,27 +29,26 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: verified_exec.h,v 1.12 2005/05/29 16:07:10 elad Exp $");
-
 /*
  *
  * Definitions for the Verified Executables kernel function.
  *
  */
+#ifndef _SYS_VERIFIED_EXEC_H_
+#define _SYS_VERIFIED_EXEC_H_
+
+#include <sys/cdefs.h>
 #include <sys/param.h>
 #include <sys/hash.h>
 
-#ifndef V_EXEC_H
-#define V_EXEC_H 1
+__KERNEL_RCSID(0, "$NetBSD: verified_exec.h,v 1.6.2.9 2005/09/02 12:16:17 tron Exp $");
 
 /* Max length of the fingerprint type string, including terminating \0 char */
 #define VERIEXEC_TYPE_MAXLEN 9
 
 struct veriexec_params  {
 	unsigned char type;
-	unsigned char fp_type[VERIEXEC_TYPE_MAXLEN];  /* type of fingerprint
-							 this is */
+	unsigned char fp_type[VERIEXEC_TYPE_MAXLEN];
 	char file[MAXPATHLEN];
 	unsigned int size;  /* number of bytes in the fingerprint */
 	unsigned char *fingerprint;
@@ -61,11 +60,12 @@ struct veriexec_sizing_params {
 };
 
 /*
- * Types of veriexec inodes we can have
+ * Types of veriexec inodes we can have. Ordered from less strict to
+ * most strict -- this is enforced if a duplicate entry is loaded.
  */
-#define VERIEXEC_DIRECT		0 /* Allow direct execution */
-#define VERIEXEC_INDIRECT	1 /* Only allow indirect execution */
-#define VERIEXEC_FILE		2 /* Fingerprint of a plain file */
+#define VERIEXEC_DIRECT		0x01 /* Direct execution (exec) */
+#define VERIEXEC_INDIRECT	0x02 /* Indirect execution (#!) */
+#define VERIEXEC_FILE		0x04 /* Plain file (open) */
 
 #define VERIEXEC_LOAD _IOW('S', 0x1, struct veriexec_params)
 #define VERIEXEC_TABLESIZE _IOW('S', 0x2, struct veriexec_sizing_params)
@@ -119,10 +119,16 @@ struct veriexec_fp_ops {
 struct veriexec_hash_entry {
         ino_t         inode;                        /* Inode number. */
         unsigned char type;                         /* Entry type. */
+	unsigned char status;			    /* Evaluation status. */
         unsigned char *fp;                          /* Fingerprint. */
 	struct veriexec_fp_ops *ops;                /* Fingerprint ops vector*/
         LIST_ENTRY(veriexec_hash_entry) entries;    /* List pointer. */
 };
+
+/* Valid status field values. */
+#define FINGERPRINT_NOTEVAL  0  /* fingerprint has not been evaluated */
+#define FINGERPRINT_VALID    1  /* fingerprint evaluated and matches list */
+#define FINGERPRINT_NOMATCH  2  /* fingerprint evaluated but does not match */
 
 LIST_HEAD(veriexec_hashhead, veriexec_hash_entry) *hash_tbl;
 
@@ -144,6 +150,7 @@ LIST_HEAD(, veriexec_hashtbl) veriexec_tables;
 /* Readable values for veriexec_report(). */
 #define	REPORT_NOVERBOSE	0
 #define	REPORT_VERBOSE		1
+#define	REPORT_VERBOSE_HIGH	2
 #define	REPORT_NOPANIC		0
 #define	REPORT_PANIC		1
 #define	REPORT_NOALARM		0
@@ -175,24 +182,17 @@ struct veriexec_fp_ops *veriexec_find_ops(u_char *name);
 int veriexec_fp_calc(struct proc *, struct vnode *,
 		     struct veriexec_hash_entry *, uint64_t, u_char *);
 int veriexec_fp_cmp(struct veriexec_fp_ops *, u_char *, u_char *);
-
 struct veriexec_hashtbl *veriexec_tblfind(dev_t);
 struct veriexec_hash_entry *veriexec_lookup(dev_t, ino_t);
 int veriexec_hashadd(struct veriexec_hashtbl *, struct veriexec_hash_entry *);
-
 int veriexec_verify(struct proc *, struct vnode *, struct vattr *,
-		    const u_char *, int);
+		    const u_char *, int, struct veriexec_hash_entry **);
 int veriexec_removechk(struct proc *, struct vnode *, const char *);
+int veriexec_renamechk(struct vnode *, const char *, const char *);
 void veriexec_init_fp_ops(void);
 void veriexec_report(const u_char *, const u_char *, struct vattr *,
 		     struct proc *, int, int, int);
 
-#endif
+#endif /* _KERNEL */
 
-#ifdef VERIFIED_EXEC_DEBUG
-#define veriexec_dprintf(x) printf x
-#else
-#define veriexec_dprintf(x)
-#endif /* VERIFIED_EXEC_DEBUG */
-
-#endif
+#endif /* _SYS_VERIFIED_EXEC_H_ */

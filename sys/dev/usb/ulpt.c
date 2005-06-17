@@ -1,4 +1,4 @@
-/*	$NetBSD: ulpt.c,v 1.69 2005/05/30 04:21:39 christos Exp $	*/
+/*	$NetBSD: ulpt.c,v 1.66.2.1 2005/11/21 18:37:08 tron Exp $	*/
 /*	$FreeBSD: src/sys/dev/usb/ulpt.c,v 1.24 1999/11/17 22:33:44 n_hibma Exp $	*/
 
 /*
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ulpt.c,v 1.69 2005/05/30 04:21:39 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ulpt.c,v 1.66.2.1 2005/11/21 18:37:08 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -222,26 +222,24 @@ USB_ATTACH(ulpt)
 	usbd_device_handle dev = uaa->device;
 	usbd_interface_handle iface = uaa->iface;
 	usb_interface_descriptor_t *ifcd = usbd_get_interface_descriptor(iface);
-	const usb_interface_descriptor_t *id;
+	usb_interface_descriptor_t *id;
 	usbd_status err;
-	char *devinfop;
+	char devinfo[1024];
 	usb_endpoint_descriptor_t *ed;
 	u_int8_t epcount;
 	int i, altno;
 	usbd_desc_iter_t iter;
 
 	DPRINTFN(10,("ulpt_attach: sc=%p\n", sc));
-
-	devinfop = usbd_devinfo_alloc(dev, 0);
+	usbd_devinfo(dev, 0, devinfo, sizeof(devinfo));
 	USB_ATTACH_SETUP;
 	printf("%s: %s, iclass %d/%d\n", USBDEVNAME(sc->sc_dev),
-	       devinfop, ifcd->bInterfaceClass, ifcd->bInterfaceSubClass);
-	usbd_devinfo_free(devinfop);
+	       devinfo, ifcd->bInterfaceClass, ifcd->bInterfaceSubClass);
 
 	/* Loop through descriptors looking for a bidir mode. */
 	usb_desc_iter_init(dev, &iter);
 	for (altno = 0;;) {
-		id = (const usb_interface_descriptor_t *)usb_desc_iter_next(&iter);
+		id = (usb_interface_descriptor_t *)usb_desc_iter_next(&iter);
 		if (!id)
 			break;
 		if (id->bDescriptorType == UDESC_INTERFACE &&
@@ -324,8 +322,8 @@ USB_ATTACH(ulpt)
 	req.bRequest = UR_GET_DEVICE_ID;
 	USETW(req.wValue, cd->bConfigurationValue);
 	USETW2(req.wIndex, id->bInterfaceNumber, id->bAlternateSetting);
-	USETW(req.wLength, DEVINFOSIZE - 1);
-	err = usbd_do_request_flags(dev, &req, devinfop, USBD_SHORT_XFER_OK,
+	USETW(req.wLength, sizeof devinfo - 1);
+	err = usbd_do_request_flags(dev, &req, devinfo, USBD_SHORT_XFER_OK,
 		  &alen, USBD_DEFAULT_TIMEOUT);
 	if (err) {
 		printf("%s: cannot get device id\n", USBDEVNAME(sc->sc_dev));
@@ -333,13 +331,13 @@ USB_ATTACH(ulpt)
 		printf("%s: empty device id, no printer connected?\n",
 		       USBDEVNAME(sc->sc_dev));
 	} else {
-		/* devinfop now contains an IEEE-1284 device ID */
-		len = ((devinfop[0] & 0xff) << 8) | (devinfop[1] & 0xff);
-		if (len > DEVINFOSIZE - 3)
-			len = DEVINFOSIZE - 3;
-		devinfop[len] = 0;
+		/* devinfo now contains an IEEE-1284 device ID */
+		len = ((devinfo[0] & 0xff) << 8) | (devinfo[1] & 0xff);
+		if (len > sizeof devinfo - 3)
+			len = sizeof devinfo - 3;
+		devinfo[len] = 0;
 		printf("%s: device id <", USBDEVNAME(sc->sc_dev));
-		ieee1284_print_id(devinfop+2);
+		ieee1284_print_id(devinfo+2);
 		printf(">\n");
 	}
 	}
@@ -592,7 +590,7 @@ ulptopen(dev_t dev, int flag, int mode, usb_proc_ptr p)
 		}
 
 		/* If it's not opened for read then set up a reader. */
-		if (!(flags & FREAD)) {
+		if (!(flag & FREAD)) {
 			DPRINTF(("ulpt_open: start read callout\n"));
 			usb_callout_init(sc->sc_read_callout);
 			usb_callout(sc->sc_read_callout, hz/5, ulpt_tick, sc);

@@ -1,15 +1,15 @@
-#	$NetBSD: Makefile,v 1.6 2005/05/14 17:58:56 tshiozak Exp $
+#	$NetBSD: Makefile,v 1.5 2004/09/23 21:35:27 tshiozak Exp $
 
 .include <bsd.own.mk>
 
 LIB=	intl
 SRCS=	gettext.c textdomain.c gettext_iconv.c gettext_dummy.c strhash.c \
-	sysdep.c plural_parser.c
+	sysdep.c
 INCS=	libintl.h
 INCSDIR=/usr/include
 
 #CFLAGS+=-g
-CPPFLAGS+=-I${.CURDIR} -I${.CURDIR}/../libc
+CPPFLAGS+=-I${.CURDIR}
 
 MAN=	gettext.3
 MLINKS=	gettext.3 dgettext.3 gettext.3 dcgettext.3 \

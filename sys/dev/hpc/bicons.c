@@ -1,4 +1,4 @@
-/*	$NetBSD: bicons.c,v 1.9 2005/06/02 21:36:25 uwe Exp $	*/
+/*	$NetBSD: bicons.c,v 1.8 2005/02/27 00:26:59 perry Exp $	*/
 
 /*-
  * Copyright (c) 1999-2001
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bicons.c,v 1.9 2005/06/02 21:36:25 uwe Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bicons.c,v 1.8 2005/02/27 00:26:59 perry Exp $");
 
 #define HALF_FONT
 
@@ -71,7 +71,7 @@ static void put_oxel_D16_FFFF(u_int8_t *, u_int8_t, u_int8_t);
 
 static const struct {
 	int type;
-	const char *name;
+	char *name;
 	void (*func)(u_int8_t *, u_int8_t, u_int8_t);
 	u_int8_t clear_byte;
 	int16_t oxel_bytes;
@@ -130,7 +130,7 @@ int biconscngetc(dev_t);	/* harmless place holder */
 static void draw_char(int, int, int);
 static void clear(int, int);
 static void scroll(int, int, int);
-static void bicons_puts(const char *);
+static void bicons_puts(char *);
 static void bicons_printf(const char *, ...) __attribute__((__unused__));
 
 int
@@ -255,7 +255,7 @@ biconscnputc(dev_t dev, int c)
 }
 
 void
-bicons_puts(const char *s)
+bicons_puts(char *s)
 {
 	while (*s)
 		biconscnputc(0, *s++);

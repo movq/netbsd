@@ -2,7 +2,7 @@
 /******************************************************************************
  *
  * Module Name: exutils - interpreter/scanner utilities
- *              xRevision: 116 $
+ *              xRevision: 111 $
  *
  *****************************************************************************/
 
@@ -10,7 +10,7 @@
  *
  * 1. Copyright Notice
  *
- * Some or all of this work - Copyright (c) 1999 - 2005, Intel Corp.
+ * Some or all of this work - Copyright (c) 1999 - 2004, Intel Corp.
  * All rights reserved.
  *
  * 2. License
@@ -116,7 +116,7 @@
  *****************************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: exutils.c,v 1.11 2005/05/02 14:52:09 kochi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: exutils.c,v 1.10 2004/02/14 16:57:24 kochi Exp $");
 
 #define __EXUTILS_C__
 
@@ -144,22 +144,14 @@ __KERNEL_RCSID(0, "$NetBSD: exutils.c,v 1.11 2005/05/02 14:52:09 kochi Exp $");
 #define _COMPONENT          ACPI_EXECUTER
         ACPI_MODULE_NAME    ("exutils")
 
-/* Local prototypes */
-
-static UINT32
-AcpiExDigitsNeeded (
-    ACPI_INTEGER            Value,
-    UINT32                  Base);
-
 
 #ifndef ACPI_NO_METHOD_EXECUTION
+
 /*******************************************************************************
  *
  * FUNCTION:    AcpiExEnterInterpreter
  *
  * PARAMETERS:  None
- *
- * RETURN:      Status
  *
  * DESCRIPTION: Enter the interpreter execution region.  Failure to enter
  *              the interpreter region is a fatal system error
@@ -167,8 +159,7 @@ AcpiExDigitsNeeded (
  ******************************************************************************/
 
 ACPI_STATUS
-AcpiExEnterInterpreter (
-    void)
+AcpiExEnterInterpreter (void)
 {
     ACPI_STATUS             Status;
 
@@ -191,8 +182,6 @@ AcpiExEnterInterpreter (
  *
  * PARAMETERS:  None
  *
- * RETURN:      None
- *
  * DESCRIPTION: Exit the interpreter execution region
  *
  * Cases where the interpreter is unlocked:
@@ -208,8 +197,7 @@ AcpiExEnterInterpreter (
  ******************************************************************************/
 
 void
-AcpiExExitInterpreter (
-    void)
+AcpiExExitInterpreter (void)
 {
     ACPI_STATUS             Status;
 
@@ -308,8 +296,7 @@ AcpiExAcquireGlobalLock (
         }
         else
         {
-            ACPI_DEBUG_PRINT ((ACPI_DB_ERROR,
-                "Could not acquire Global Lock, %s\n",
+            ACPI_DEBUG_PRINT ((ACPI_DB_ERROR, "Could not acquire Global Lock, %s\n",
                 AcpiFormatException (Status)));
         }
     }
@@ -325,7 +312,7 @@ AcpiExAcquireGlobalLock (
  * PARAMETERS:  LockedByMe      - Return value from corresponding call to
  *                                AcquireGlobalLock.
  *
- * RETURN:      None
+ * RETURN:      Status
  *
  * DESCRIPTION: Release the global lock if it is locked.
  *
@@ -368,41 +355,38 @@ AcpiExReleaseGlobalLock (
  * PARAMETERS:  Value           - Value to be represented
  *              Base            - Base of representation
  *
- * RETURN:      The number of digits.
- *
- * DESCRIPTION: Calculate the number of digits needed to represent the Value
- *              in the given Base (Radix)
+ * RETURN:      the number of digits needed to represent Value in Base
  *
  ******************************************************************************/
 
-static UINT32
+UINT32
 AcpiExDigitsNeeded (
     ACPI_INTEGER            Value,
     UINT32                  Base)
 {
     UINT32                  NumDigits;
     ACPI_INTEGER            CurrentValue;
+    ACPI_INTEGER            Quotient;
 
 
     ACPI_FUNCTION_TRACE ("ExDigitsNeeded");
 
 
-    /* ACPI_INTEGER is unsigned, so we don't worry about a '-' prefix */
-
-    if (Value == 0)
+    /*
+     * ACPI_INTEGER is unsigned, so we don't worry about a '-'
+     */
+    if ((CurrentValue = Value) == 0)
     {
         return_VALUE (1);
     }
 
-    CurrentValue = Value;
     NumDigits = 0;
-
-    /* Count the digits in the requested base */
 
     while (CurrentValue)
     {
-        (void) AcpiUtShortDivide (CurrentValue, Base, &CurrentValue, NULL);
+        (void) AcpiUtShortDivide (&CurrentValue, Base, &Quotient, NULL);
         NumDigits++;
+        CurrentValue = Quotient;
     }
 
     return_VALUE (NumDigits);
@@ -415,8 +399,6 @@ AcpiExDigitsNeeded (
  *
  * PARAMETERS:  NumericId       - EISA ID to be converted
  *              OutString       - Where to put the converted string (8 bytes)
- *
- * RETURN:      None
  *
  * DESCRIPTION: Convert a numeric EISA ID to string representation
  *
@@ -455,10 +437,7 @@ AcpiExEisaIdToString (
  * PARAMETERS:  Value           - Value to be converted
  *              OutString       - Where to put the converted string (8 bytes)
  *
- * RETURN:      None, string
- *
- * DESCRIPTOIN: Convert a number to string representation. Assumes string
- *              buffer is large enough to hold the string.
+ * RETURN:      Convert a number to string representation
  *
  ******************************************************************************/
 
@@ -470,6 +449,7 @@ AcpiExUnsignedIntegerToString (
     UINT32                  Count;
     UINT32                  DigitsNeeded;
     UINT32                  Remainder;
+    ACPI_INTEGER            Quotient;
 
 
     ACPI_FUNCTION_ENTRY ();
@@ -480,8 +460,9 @@ AcpiExUnsignedIntegerToString (
 
     for (Count = DigitsNeeded; Count > 0; Count--)
     {
-        (void) AcpiUtShortDivide (Value, 10, &Value, &Remainder);
+        (void) AcpiUtShortDivide (&Value, 10, &Quotient, &Remainder);
         OutString[Count-1] = (char) ('0' + Remainder);\
+        Value = Quotient;
     }
 }
 

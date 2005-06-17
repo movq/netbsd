@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.563 2005/05/29 21:33:01 christos Exp $	*/
+/*	$NetBSD: machdep.c,v 1.560 2005/03/02 11:48:03 mycroft Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998, 2000, 2004 The NetBSD Foundation, Inc.
@@ -72,7 +72,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.563 2005/05/29 21:33:01 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.560 2005/03/02 11:48:03 mycroft Exp $");
 
 #include "opt_beep.h"
 #include "opt_compat_ibcs2.h"
@@ -290,8 +290,7 @@ cpu_startup()
 	/*
 	 * Initialize error message buffer (et end of core).
 	 */
-	msgbuf_vaddr = uvm_km_alloc(kernel_map, x86_round_page(MSGBUFSIZE), 0,
-	    UVM_KMF_VAONLY);
+	msgbuf_vaddr = uvm_km_valloc(kernel_map, x86_round_page(MSGBUFSIZE));
 	if (msgbuf_vaddr == 0)
 		panic("failed to valloc msgbuf_vaddr");
 
@@ -303,7 +302,7 @@ cpu_startup()
 
 	initmsgbuf((caddr_t)msgbuf_vaddr, round_page(MSGBUFSIZE));
 
-	printf("%s%s", copyright, version);
+	printf("%s", version);
 
 #ifdef TRAPLOG
 	/*
@@ -862,7 +861,7 @@ int
 cpu_dump()
 {
 	int (*dump)(dev_t, daddr_t, caddr_t, size_t);
-	char bf[dbtob(1)];
+	char buf[dbtob(1)];
 	kcore_seg_t *segp;
 	cpu_kcore_hdr_t *cpuhdrp;
 	phys_ram_seg_t *memsegp;
@@ -874,10 +873,10 @@ cpu_dump()
 		return (ENXIO);
 	dump = bdev->d_dump;
 
-	memset(bf, 0, sizeof bf);
-	segp = (kcore_seg_t *)bf;
-	cpuhdrp = (cpu_kcore_hdr_t *)&bf[ALIGN(sizeof(*segp))];
-	memsegp = (phys_ram_seg_t *)&bf[ ALIGN(sizeof(*segp)) +
+	memset(buf, 0, sizeof buf);
+	segp = (kcore_seg_t *)buf;
+	cpuhdrp = (cpu_kcore_hdr_t *)&buf[ALIGN(sizeof(*segp))];
+	memsegp = (phys_ram_seg_t *)&buf[ ALIGN(sizeof(*segp)) +
 	    ALIGN(sizeof(*cpuhdrp))];
 
 	/*
@@ -900,7 +899,7 @@ cpu_dump()
 		memsegp[i].size = mem_clusters[i].size;
 	}
 
-	return (dump(dumpdev, dumplo, (caddr_t)bf, dbtob(1)));
+	return (dump(dumpdev, dumplo, (caddr_t)buf, dbtob(1)));
 }
 
 /*
@@ -1741,8 +1740,9 @@ init386(paddr_t first_avail)
 		}
 #endif
 		paddr=realmode_reserved_start+realmode_reserved_size-PAGE_SIZE;
-		pmap_kenter_pa((vaddr_t)vtopte(0), paddr,
-			   VM_PROT_READ|VM_PROT_WRITE);
+		pmap_enter(pmap_kernel(), (vaddr_t)vtopte(0), paddr,
+			   VM_PROT_READ|VM_PROT_WRITE,
+			   PMAP_WIRED|VM_PROT_READ|VM_PROT_WRITE);
 		pmap_update(pmap_kernel());
 		/* make sure it is clean before using */
 		memset(vtopte(0), 0, PAGE_SIZE);
@@ -1810,13 +1810,15 @@ init386(paddr_t first_avail)
 	}
 #endif
 
-	pmap_kenter_pa(idt_vaddr, idt_paddr, VM_PROT_READ|VM_PROT_WRITE);
+	pmap_enter(pmap_kernel(), idt_vaddr, idt_paddr,
+	    VM_PROT_READ|VM_PROT_WRITE, PMAP_WIRED|VM_PROT_READ|VM_PROT_WRITE);
 	pmap_update(pmap_kernel());
 	memset((void *)idt_vaddr, 0, PAGE_SIZE);
 
 	idt = (struct gate_descriptor *)idt_vaddr;
 #ifdef I586_CPU
-	pmap_kenter_pa(pentium_idt_vaddr, idt_paddr, VM_PROT_READ);
+	pmap_enter(pmap_kernel(), pentium_idt_vaddr, idt_paddr,
+	    VM_PROT_READ, PMAP_WIRED|VM_PROT_READ);
 	pentium_idt = (union descriptor *)pentium_idt_vaddr;
 #endif
 	pmap_update(pmap_kernel());

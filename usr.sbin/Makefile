@@ -1,10 +1,10 @@
-#	$NetBSD: Makefile,v 1.203 2005/06/05 18:19:52 thorpej Exp $
+#	$NetBSD: Makefile,v 1.199.2.1 2005/04/20 11:15:13 tron Exp $
 #	from: @(#)Makefile	5.20 (Berkeley) 6/12/93
 
 .include <bsd.own.mk>
 
 SUBDIR=	ac accton altq amd apm apmd arp bad144 bind bootp catman \
-	chown chroot chrtbl cnwctl cron dev_mkdb \
+	chown chroot chrtbl cnwctl config cron dev_mkdb \
 	dhcp diskpart dumpfs dumplfs edquota eeprom \
 	envstat eshconfig etcupdate fssconfig grfconfig \
 	grfinfo gspa hilinfo ifwatchd inetd installboot \
@@ -35,11 +35,9 @@ SUBDIR+= rpc.yppasswdd ypbind yppoll ypserv ypset
 SUBDIR+= mdsetimage
 .endif
 
-.if (${MKINET6} != "no")
-SUBDIR+=faithd ifmcstat ndp rip6query rtsold
-.endif
-.if (${USE_INET6} != "no")
-SUBDIR+=mld6query route6d rtadvd traceroute6 
+.if (${MKINET6} != no)
+SUBDIR+=faithd ifmcstat mld6query ndp \
+	rip6query route6d rtadvd traceroute6 rtsold
 .endif
 
 # ATM PVC

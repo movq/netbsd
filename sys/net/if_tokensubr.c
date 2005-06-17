@@ -1,4 +1,4 @@
-/*	$NetBSD: if_tokensubr.c,v 1.32 2005/05/30 04:17:59 christos Exp $	*/
+/*	$NetBSD: if_tokensubr.c,v 1.30 2005/02/26 22:45:09 perry Exp $	*/
 
 /*
  * Copyright (c) 1982, 1989, 1993
@@ -99,7 +99,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_tokensubr.c,v 1.32 2005/05/30 04:17:59 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_tokensubr.c,v 1.30 2005/02/26 22:45:09 perry Exp $");
 
 #include "opt_inet.h"
 #include "opt_atalk.h"
@@ -213,7 +213,7 @@ token_output(ifp, m0, dst, rt0)
 	struct rtentry *rt0;
 {
 	u_int16_t etype;
-	int error = 0;
+	int s, len, error = 0;
 	u_char edst[ISO88025_ADDR_LEN];
 	struct mbuf *m = m0;
 	struct rtentry *rt;
@@ -226,6 +226,7 @@ token_output(ifp, m0, dst, rt0)
 	struct token_rif bcastrif;
 	size_t riflen = 0;
 	ALTQ_DECL(struct altq_pktattr pktattr;)
+	short mflags;
 
 	if ((ifp->if_flags & (IFF_UP|IFF_RUNNING)) != (IFF_UP|IFF_RUNNING))
 		senderr(ENETDOWN);
@@ -271,7 +272,8 @@ token_output(ifp, m0, dst, rt0)
 				rif = &bcastrif;
 				riflen = sizeof(rif->tr_rcf);
 			}
-			memcpy(edst, tokenbroadcastaddr, sizeof(edst));
+			bcopy((caddr_t)tokenbroadcastaddr, (caddr_t)edst,
+			    sizeof(edst));
 		}
 /*
  * XXX m->m_flags & M_MCAST   IEEE802_MAP_IP_MULTICAST ??
@@ -315,7 +317,8 @@ token_output(ifp, m0, dst, rt0)
 				rif = &bcastrif;
 				riflen = sizeof(rif->tr_rcf);
 			}
-			memcpy(edst, tokenbroadcastaddr, sizeof(edst));
+			bcopy((caddr_t)tokenbroadcastaddr, (caddr_t)edst,
+			    sizeof(edst));
 		}
 		else {
 			bcopy((caddr_t)ar_tha(ah), (caddr_t)edst, sizeof(edst));
@@ -516,7 +519,27 @@ token_output(ifp, m0, dst, rt0)
 send:
 #endif
 
-	return ifq_enqueue(ifp, m ALTQ_COMMA ALTQ_DECL(&pktattr));
+	mflags = m->m_flags;
+	len = m->m_pkthdr.len;
+	s = splnet();
+	/*
+	 * Queue message on interface, and start output if interface
+	 * not yet active.
+	 */
+	IFQ_ENQUEUE(&ifp->if_snd, m, &pktattr, error);
+	if (error) {
+		/* mbuf is already freed */
+		splx(s);
+		return (error);
+	}
+	ifp->if_obytes += len;
+	if (mflags & M_MCAST)
+		ifp->if_omcasts++;
+	if ((ifp->if_flags & IFF_OACTIVE) == 0)
+		(*ifp->if_start)(ifp);
+	splx(s);
+	return (error);
+
 bad:
 	if (m)
 		m_freem(m);
@@ -546,7 +569,7 @@ token_input(ifp, m)
 	trh = mtod(m, struct token_header *);
 
 	ifp->if_ibytes += m->m_pkthdr.len;
-	if (memcmp(tokenbroadcastaddr, trh->token_dhost,
+	if (bcmp((caddr_t)tokenbroadcastaddr, (caddr_t)trh->token_dhost,
 	    sizeof(tokenbroadcastaddr)) == 0)
 		m->m_flags |= M_BCAST;
 	else if (trh->token_dhost[0] & 1)

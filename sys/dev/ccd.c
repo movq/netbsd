@@ -1,4 +1,4 @@
-/*	$NetBSD: ccd.c,v 1.104 2005/05/22 15:54:46 christos Exp $	*/
+/*	$NetBSD: ccd.c,v 1.102.2.1 2005/04/06 11:57:27 tron Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998, 1999 The NetBSD Foundation, Inc.
@@ -125,7 +125,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ccd.c,v 1.104 2005/05/22 15:54:46 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ccd.c,v 1.102.2.1 2005/04/06 11:57:27 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -1082,7 +1082,7 @@ ccdioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
 #ifdef DEBUG
 		if (ccddebug & CCDB_INIT)
 			for (i = 0; i < ccio->ccio_ndisks; ++i)
-				printf("ccdioctl: component %d: %p\n",
+				printf("ccdioctl: component %d: 0x%p\n",
 				    i, cpp[i]);
 #endif
 

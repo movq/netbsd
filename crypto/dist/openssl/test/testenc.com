@@ -4,7 +4,7 @@ $	__arch := VAX
 $	if f$getsyi("cpu") .ge. 128 then __arch := AXP
 $	exe_dir := sys$disk:[-.'__arch'.exe.apps]
 $
-$	testsrc := makefile.
+$	testsrc := makefile.ssl
 $	test := p.txt
 $	cmd := mcr 'exe_dir'openssl
 $

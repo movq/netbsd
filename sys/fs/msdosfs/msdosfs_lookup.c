@@ -1,4 +1,4 @@
-/*	$NetBSD: msdosfs_lookup.c,v 1.5 2005/05/29 21:00:29 christos Exp $	*/
+/*	$NetBSD: msdosfs_lookup.c,v 1.4 2005/02/26 22:58:55 perry Exp $	*/
 
 /*-
  * Copyright (C) 1994, 1995, 1997 Wolfgang Solfrank.
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: msdosfs_lookup.c,v 1.5 2005/05/29 21:00:29 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: msdosfs_lookup.c,v 1.4 2005/02/26 22:58:55 perry Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -662,12 +662,12 @@ createde(dep, ddep, depp, cnp)
 		u_int8_t chksum = winChksum(ndep->deName);
 		const u_char *un = (const u_char *)cnp->cn_nameptr;
 		int unlen = cnp->cn_namelen;
-		u_long xhavecnt;
+		u_long havecnt;
 
 		fndoffset = ddep->de_fndoffset;
-		xhavecnt = ddep->de_fndcnt + 1;
+		havecnt = ddep->de_fndcnt + 1;
 
-		for(; wcnt < xhavecnt; wcnt++) {
+		for(; wcnt < havecnt; wcnt++) {
 			if ((fndoffset & pmp->pm_crbomask) == 0) {
 				/* we should never get here if ddep is root
 				 * directory */

@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.18 2005/06/10 22:34:05 he Exp $	*/
+/*	$NetBSD: vm_machdep.c,v 1.14 2004/09/17 14:11:21 skrll Exp $	*/
 
 /*	$OpenBSD: vm_machdep.c,v 1.25 2001/09/19 20:50:56 mickey Exp $	*/
 
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.18 2005/06/10 22:34:05 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.14 2004/09/17 14:11:21 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -60,20 +60,18 @@ __KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.18 2005/06/10 22:34:05 he Exp $");
  * Dump the machine specific header information at the start of a core dump.
  */
 int
-cpu_coredump(struct lwp *l, void *iocookie, struct core *core)
+cpu_coredump(struct lwp *l, struct vnode *vp, struct ucred *cred,
+    struct core *core)
 {
 	struct md_coredump md_core;
 	struct coreseg cseg;
+	off_t off;
 	int error;
 
-	if (iocookie == NULL) {
-		CORE_SETMAGIC(*core, COREMAGIC, MID_ZERO, 0);
-		core->c_hdrsize = ALIGN(sizeof(*core));
-		core->c_seghdrsize = ALIGN(sizeof(cseg));
-		core->c_cpusize = sizeof(md_core);
-		core->c_nseg++;
-		return 0;
-	}
+	CORE_SETMAGIC(*core, COREMAGIC, MID_ZERO, 0);
+	core->c_hdrsize = ALIGN(sizeof(*core));
+	core->c_seghdrsize = ALIGN(sizeof(cseg));
+	core->c_cpusize = sizeof(md_core);
 
 	process_read_regs(l, &md_core.md_reg);
 
@@ -81,13 +79,20 @@ cpu_coredump(struct lwp *l, void *iocookie, struct core *core)
 	cseg.c_addr = 0;
 	cseg.c_size = core->c_cpusize;
 
-	error = coredump_write(iocookie, UIO_SYSSPACE, &cseg,
-	    core->c_seghdrsize);
-	if (error)
+#define	write(vp, addr, n) vn_rdwr(UIO_WRITE, (vp), (caddr_t)(addr), (n), off, \
+			     UIO_SYSSPACE, IO_NODELOCKED|IO_UNIT, cred, NULL, NULL)
+	
+	off = core->c_hdrsize;
+	if ((error = write(vp, &cseg, core->c_seghdrsize)))
+		return error;
+	off += core->c_seghdrsize;
+	if ((error = write(vp, &md_core, sizeof md_core)))
 		return error;
 
-	return coredump_write(iocookie, UIO_SYSSPACE, &md_core,
-	    sizeof(md_core));
+#undef write
+	core->c_nseg++;
+
+	return error;
 }
 
 void
@@ -130,7 +135,7 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
 		panic("USPACE too small for user");
 #endif
 
-	/* Flush the parent LWP out of the FPU. */
+	/* Flush the parent process out of the FPU. */
 	hppa_fpu_flush(l1);
 
 	/* Now copy the parent PCB into the child. */
@@ -226,7 +231,10 @@ cpu_lwp_free(struct lwp *l, int proc)
 	 * that it's unused.
 	 */
 
-	hppa_fpu_flush(l);
+	if (fpu_cur_uspace == l->l_md.md_regs->tf_cr30) {
+		fpu_cur_uspace = 0;
+		mtctl(0, CR_CCR);
+	}
 }
 
 void
@@ -246,19 +254,24 @@ vmapbuf(struct buf *bp, vsize_t len)
 	paddr_t pa;
 	vsize_t size, off;
 	int npf;
+	struct proc *p;
+	struct vm_map *map;
 	struct pmap *upmap, *kpmap;
 
 #ifdef DIAGNOSTIC
 	if ((bp->b_flags & B_PHYS) == 0)
 		panic("vmapbuf");
 #endif
-	upmap = vm_map_pmap(&bp->b_proc->p_vmspace->vm_map);
+	p = bp->b_proc;
+	map = &p->p_vmspace->vm_map;
+	upmap = vm_map_pmap(map);
 	kpmap = vm_map_pmap(phys_map);
 	bp->b_saveaddr = bp->b_data;
 	uva = trunc_page((vaddr_t)bp->b_data);
 	off = (vaddr_t)bp->b_data - uva;
 	size = round_page(off + len);
-	kva = uvm_km_alloc(phys_map, len, 0, UVM_KMF_VAONLY | UVM_KMF_WAITVA);
+
+	kva = uvm_km_valloc_prefer_wait(phys_map, size, uva);
 	bp->b_data = (caddr_t)(kva + off);
 	npf = btoc(size);
 	while (npf--) {
@@ -279,20 +292,20 @@ void
 vunmapbuf(struct buf *bp, vsize_t len)
 {
 	struct pmap *pmap;
-	vaddr_t kva;
+	vaddr_t addr;
 	vsize_t off;
 
 #ifdef DIAGNOSTIC
 	if ((bp->b_flags & B_PHYS) == 0)
 		panic("vunmapbuf");
 #endif
-	kva = trunc_page((vaddr_t)bp->b_data);
-	off = (vaddr_t)bp->b_data - kva;
+	addr = trunc_page((vaddr_t)bp->b_data);
+	off = (vaddr_t)bp->b_data - addr;
 	len = round_page(off + len);
 	pmap = vm_map_pmap(phys_map);
-	pmap_remove(pmap, kva, kva + len);
+	pmap_remove(pmap, addr, addr + len);
 	pmap_update(pmap);
-	uvm_km_free(phys_map, kva, len, UVM_KMF_VAONLY);
+	uvm_km_free_wakeup(phys_map, addr, len);
 	bp->b_data = bp->b_saveaddr;
 	bp->b_saveaddr = NULL;
 }

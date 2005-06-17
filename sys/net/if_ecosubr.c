@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ecosubr.c,v 1.16 2005/03/31 15:48:13 christos Exp $	*/
+/*	$NetBSD: if_ecosubr.c,v 1.15 2005/02/26 22:45:09 perry Exp $	*/
 
 /*-
  * Copyright (c) 2001 Ben Harris
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ecosubr.c,v 1.16 2005/03/31 15:48:13 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ecosubr.c,v 1.15 2005/02/26 22:45:09 perry Exp $");
 
 #include "bpfilter.h"
 #include "opt_inet.h"
@@ -66,7 +66,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_ecosubr.c,v 1.16 2005/03/31 15:48:13 christos Exp
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: if_ecosubr.c,v 1.16 2005/03/31 15:48:13 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ecosubr.c,v 1.15 2005/02/26 22:45:09 perry Exp $");
 
 #include <sys/errno.h>
 #include <sys/kernel.h>
@@ -175,10 +175,11 @@ eco_output(struct ifnet *ifp, struct mbuf *m0, struct sockaddr *dst,
     struct rtentry *rt0)
 {
 	struct eco_header ehdr, *eh;
-	int error;
+	int error, s;
 	struct mbuf *m = m0, *mcopy = NULL;
 	struct rtentry *rt;
 	int hdrcmplt;
+	size_t len;
 	int delay, count;
 	struct m_tag *mtag;
 	struct eco_retryparms *erp;
@@ -333,7 +334,23 @@ eco_output(struct ifnet *ifp, struct mbuf *m0, struct sockaddr *dst,
 		return (0);
 #endif
 
-	return ifq_enqueue(&ifp->if_snd, m ALTQ_COMMA ALTQ_DECL(&pktattr));
+	/*
+	 * Queue message on interface, and start output if interface
+	 * not yet active.
+	 */
+
+	len = m->m_pkthdr.len;
+	s = splnet();
+	IFQ_ENQUEUE(&ifp->if_snd, m, &pktattr, error);
+	if (error) {
+		splx(s);
+		return (error);
+	}
+	ifp->if_obytes += len;
+	if ((ifp->if_flags & IFF_OACTIVE) == 0)
+		(*ifp->if_start)(ifp);
+	splx(s);
+	return (error);
 
 bad:
 	if (m)
@@ -865,11 +882,22 @@ eco_retry(void *arg)
 	struct eco_retry *er = arg;
 	struct mbuf *m;
 	struct ifnet *ifp;
+	int s, error, len;
 
 	ifp = er->er_ifp;
 	m = er->er_packet;
 	len = m->m_pkthdr.len;
 	LIST_REMOVE(er, er_link);
-	(void)ifq_enqueue(ifp, m ALTQ_COMMA ALTQ_DECL(NULL));
+	s = splnet();
+	IFQ_ENQUEUE(&ifp->if_snd, m, NULL, error);
+	if (error) {
+		splx(s);
+		/* XXX should defer again? */
+		m_freem(m);
+	}
+	ifp->if_obytes += len;
+	if ((ifp->if_flags & IFF_OACTIVE) == 0)
+		(*ifp->if_start)(ifp);
+	splx(s);
 	FREE(er, M_TEMP);
 }

@@ -1,7 +1,7 @@
-/*	$NetBSD: ehci.c,v 1.104 2005/05/30 04:21:39 christos Exp $ */
+/*	$NetBSD: ehci.c,v 1.91.2.7 2005/05/07 11:42:23 tron Exp $ */
 
 /*
- * Copyright (c) 2004,2005 The NetBSD Foundation, Inc.
+ * Copyright (c) 2004 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -50,18 +50,22 @@
  * TODO:
  * 1) hold off explorations by companion controllers until ehci has started.
  *
- * 2) The EHCI driver lacks support for isochronous transfers, so
+ * 2) The EHCI driver lacks support for interrupt isochronous transfers, so
  *    devices using them don't work.
+ *    Interrupt transfers are not difficult, it's just not done.
  *
- * 3) The hub driver needs to handle and schedule the transaction translator,
- *    to assign place in frame where different devices get to go. See chapter
+ * 3) The meaty part to implement is the support for USB 2.0 hubs.
+ *    They are quite complicated since the need to be able to do
+ *    "transaction translation", i.e., converting to/from USB 2 and USB 1.
+ *    So the hub driver needs to handle and schedule these things, to
+ *    assign place in frame where different devices get to go. See chapter
  *    on hubs in USB 2.0 for details.
  *
  * 4) command failures are not recovered correctly
 */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ehci.c,v 1.104 2005/05/30 04:21:39 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ehci.c,v 1.91.2.7 2005/05/07 11:42:23 tron Exp $");
 
 #include "ohci.h"
 #include "uhci.h"
@@ -186,7 +190,7 @@ Static void		ehci_device_isoc_done(usbd_xfer_handle);
 Static void		ehci_device_clear_toggle(usbd_pipe_handle pipe);
 Static void		ehci_noop(usbd_pipe_handle pipe);
 
-Static int		ehci_str(usb_string_descriptor_t *, int, const char *);
+Static int		ehci_str(usb_string_descriptor_t *, int, char *);
 Static void		ehci_pcd(ehci_softc_t *, usbd_xfer_handle);
 Static void		ehci_pcd_able(ehci_softc_t *, int);
 Static void		ehci_pcd_enable(void *);
@@ -322,7 +326,7 @@ static uint8_t revbits[EHCI_MAX_POLLRATE] = {
 usbd_status
 ehci_init(ehci_softc_t *sc)
 {
-	u_int32_t vers, sparams, cparams, hcr;
+	u_int32_t version, sparams, cparams, hcr;
 	u_int i;
 	usbd_status err;
 	ehci_soft_qh_t *sqh;
@@ -335,9 +339,9 @@ ehci_init(ehci_softc_t *sc)
 
 	sc->sc_offs = EREAD1(sc, EHCI_CAPLENGTH);
 
-	vers = EREAD2(sc, EHCI_HCIVERSION);
+	version = EREAD2(sc, EHCI_HCIVERSION);
 	aprint_normal("%s: EHCI version %x.%x\n", USBDEVNAME(sc->sc_bus.bdev),
-	       vers >> 8, vers & 0xff);
+	       version >> 8, version & 0xff);
 
 	sparams = EREAD4(sc, EHCI_HCSPARAMS);
 	DPRINTF(("ehci_init: sparams=0x%x\n", sparams));
@@ -888,11 +892,12 @@ ehci_idone(struct ehci_xfer *ex)
 void
 ehci_waitintr(ehci_softc_t *sc, usbd_xfer_handle xfer)
 {
-	int timo;
+	int timo = xfer->timeout;
+	int usecs;
 	u_int32_t intrs;
 
 	xfer->status = USBD_IN_PROGRESS;
-	for (timo = xfer->timeout; timo >= 0; timo--) {
+	for (usecs = timo * 1000000 / hz; usecs > 0; usecs -= 1000) {
 		usb_delay_ms(&sc->sc_bus, 1);
 		if (sc->sc_dying)
 			break;
@@ -1376,13 +1381,16 @@ ehci_open(usbd_pipe_handle pipe)
 	case USB_SPEED_HIGH: speed = EHCI_QH_SPEED_HIGH; break;
 	default: panic("ehci_open: bad device speed %d", dev->speed);
 	}
-	if (speed != EHCI_QH_SPEED_HIGH && xfertype == UE_ISOCHRONOUS) {
-		printf("%s: *** WARNING: opening low/full speed isoc device, "
-		       "this does not work yet.\n",
+	if (speed != EHCI_QH_SPEED_HIGH) {
+		printf("%s: *** WARNING: opening low/full speed device, this "
+		       "may not work yet.\n",
 		       USBDEVNAME(sc->sc_bus.bdev));
 		DPRINTFN(1,("ehci_open: hshubaddr=%d hshubport=%d\n",
 			    hshubaddr, hshubport));
-		return USBD_INVAL;
+#if 0
+		if (xfertype != UE_CONTROL)
+			return USBD_INVAL;
+#endif
 	}
 
 	naks = 8;		/* XXX */
@@ -1629,7 +1637,7 @@ Static usb_hub_descriptor_t ehci_hubd = {
 };
 
 Static int
-ehci_str(usb_string_descriptor_t *p, int l, const char *s)
+ehci_str(usb_string_descriptor_t *p, int l, char *s)
 {
 	int i;
 
@@ -2449,7 +2457,6 @@ ehci_abort_xfer(usbd_xfer_handle xfer, usbd_status status)
 	u_int32_t qhstatus;
 	int s;
 	int hit;
-	int wake;
 
 	DPRINTF(("ehci_abort_xfer: xfer=%p pipe=%p\n", xfer, epipe));
 
@@ -2465,26 +2472,6 @@ ehci_abort_xfer(usbd_xfer_handle xfer, usbd_status status)
 
 	if (xfer->device->bus->intr_context || !curproc)
 		panic("ehci_abort_xfer: not in process context");
-
-	/*
-	 * If an abort is already in progress then just wait for it to
-	 * complete and return.
-	 */
-	if (xfer->hcflags & UXFER_ABORTING) {
-		DPRINTFN(2, ("ehci_abort_xfer: already aborting\n"));
-#ifdef DIAGNOSTIC
-		if (status == USBD_TIMEOUT)
-			printf("ehci_abort_xfer: TIMEOUT while aborting\n");
-#endif
-		/* Override the status which might be USBD_TIMEOUT. */
-		xfer->status = status;
-		DPRINTFN(2, ("ehci_abort_xfer: waiting for abort to finish\n"));
-		xfer->hcflags |= UXFER_ABORTWAIT;
-		while (xfer->hcflags & UXFER_ABORTING)
-			tsleep(&xfer->hcflags, PZERO, "ehciaw", 0);
-		return;
-	}
-	xfer->hcflags |= UXFER_ABORTING;
 
 	/*
 	 * Step 1: Make interrupt routine and hardware ignore xfer.
@@ -2548,11 +2535,7 @@ ehci_abort_xfer(usbd_xfer_handle xfer, usbd_status status)
 #ifdef DIAGNOSTIC
 	exfer->isdone = 1;
 #endif
-	wake = xfer->hcflags & UXFER_ABORTWAIT;
-	xfer->hcflags &= ~(UXFER_ABORTING | UXFER_ABORTWAIT);
 	usb_transfer_complete(xfer);
-	if (wake)
-		wakeup(&xfer->hcflags);
 
 	splx(s);
 #undef exfer

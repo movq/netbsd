@@ -1,4 +1,4 @@
-/* $NetBSD: if_ti.c,v 1.68 2005/05/30 04:35:22 christos Exp $ */
+/* $NetBSD: if_ti.c,v 1.66 2005/02/27 00:27:33 perry Exp $ */
 
 /*
  * Copyright (c) 1997, 1998, 1999
@@ -81,7 +81,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ti.c,v 1.68 2005/05/30 04:35:22 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ti.c,v 1.66 2005/02/27 00:27:33 perry Exp $");
 
 #include "bpfilter.h"
 #include "opt_inet.h"
@@ -183,7 +183,7 @@ static void ti_add_mcast(struct ti_softc *, struct ether_addr *);
 static void ti_del_mcast(struct ti_softc *, struct ether_addr *);
 static void ti_setmulti(struct ti_softc *);
 
-static void ti_mem(struct ti_softc *, u_int32_t, u_int32_t, const void *);
+static void ti_mem(struct ti_softc *, u_int32_t, u_int32_t, caddr_t);
 static void ti_loadfw(struct ti_softc *);
 static void ti_cmd(struct ti_softc *, struct ti_cmd_desc *);
 static void ti_cmd_ext(struct ti_softc *, struct ti_cmd_desc *, caddr_t, int);
@@ -356,19 +356,19 @@ static int ti_read_eeprom(sc, dest, off, cnt)
 
 /*
  * NIC memory access function. Can be used to either clear a section
- * of NIC local memory or (if tbuf is non-NULL) copy data into it.
+ * of NIC local memory or (if buf is non-NULL) copy data into it.
  */
-static void ti_mem(sc, addr, len, xbuf)
+static void ti_mem(sc, addr, len, buf)
 	struct ti_softc		*sc;
 	u_int32_t		addr, len;
-	const void 		*xbuf;
+	caddr_t			buf;
 {
 	int			segptr, segsize, cnt;
-	const void		*ptr;
+	caddr_t			ptr;
 
 	segptr = addr;
 	cnt = len;
-	ptr = xbuf;
+	ptr = buf;
 
 	while(cnt) {
 		if (cnt < TI_WINLEN)
@@ -376,7 +376,7 @@ static void ti_mem(sc, addr, len, xbuf)
 		else
 			segsize = TI_WINLEN - (segptr % TI_WINLEN);
 		CSR_WRITE_4(sc, TI_WINBASE, (segptr & ~(TI_WINLEN - 1)));
-		if (xbuf == NULL) {
+		if (buf == NULL) {
 			bus_space_set_region_4(sc->ti_btag, sc->ti_bhandle,
 			    TI_WINDOW + (segptr & (TI_WINLEN - 1)), 0,
 			    segsize / 4);
@@ -385,13 +385,13 @@ static void ti_mem(sc, addr, len, xbuf)
 			bus_space_write_region_stream_4(sc->ti_btag,
 			    sc->ti_bhandle,
 			    TI_WINDOW + (segptr & (TI_WINLEN - 1)),
-			    (const u_int32_t *)ptr, segsize / 4);
+			    (u_int32_t *)ptr, segsize / 4);
 #else
 			bus_space_write_region_4(sc->ti_btag, sc->ti_bhandle,
 			    TI_WINDOW + (segptr & (TI_WINLEN - 1)),
-			    (const u_int32_t *)ptr, segsize / 4);
+			    (u_int32_t *)ptr, segsize / 4);
 #endif
-			ptr = (const char *)ptr + segsize;
+			ptr += segsize;
 		}
 		segptr += segsize;
 		cnt -= segsize;
@@ -420,9 +420,12 @@ static void ti_loadfw(sc)
 			    tigonFwReleaseMinor, tigonFwReleaseFix);
 			return;
 		}
-		ti_mem(sc, tigonFwTextAddr, tigonFwTextLen, tigonFwText);
-		ti_mem(sc, tigonFwDataAddr, tigonFwDataLen, tigonFwData);
-		ti_mem(sc, tigonFwRodataAddr, tigonFwRodataLen, tigonFwRodata);
+		ti_mem(sc, tigonFwTextAddr, tigonFwTextLen,
+		    (caddr_t)tigonFwText);
+		ti_mem(sc, tigonFwDataAddr, tigonFwDataLen,
+		    (caddr_t)tigonFwData);
+		ti_mem(sc, tigonFwRodataAddr, tigonFwRodataLen,
+		    (caddr_t)tigonFwRodata);
 		ti_mem(sc, tigonFwBssAddr, tigonFwBssLen, NULL);
 		ti_mem(sc, tigonFwSbssAddr, tigonFwSbssLen, NULL);
 		CSR_WRITE_4(sc, TI_CPU_PROGRAM_COUNTER, tigonFwStartAddr);
@@ -438,10 +441,12 @@ static void ti_loadfw(sc)
 			    tigon2FwReleaseMinor, tigon2FwReleaseFix);
 			return;
 		}
-		ti_mem(sc, tigon2FwTextAddr, tigon2FwTextLen, tigon2FwText);
-		ti_mem(sc, tigon2FwDataAddr, tigon2FwDataLen, tigon2FwData);
+		ti_mem(sc, tigon2FwTextAddr, tigon2FwTextLen,
+		    (caddr_t)tigon2FwText);
+		ti_mem(sc, tigon2FwDataAddr, tigon2FwDataLen,
+		    (caddr_t)tigon2FwData);
 		ti_mem(sc, tigon2FwRodataAddr, tigon2FwRodataLen,
-		    tigon2FwRodata);
+		    (caddr_t)tigon2FwRodata);
 		ti_mem(sc, tigon2FwBssAddr, tigon2FwBssLen, NULL);
 		ti_mem(sc, tigon2FwSbssAddr, tigon2FwSbssLen, NULL);
 		CSR_WRITE_4(sc, TI_CPU_PROGRAM_COUNTER, tigon2FwStartAddr);
@@ -678,9 +683,9 @@ static void *ti_jalloc(sc)
 /*
  * Release a jumbo buffer.
  */
-static void ti_jfree(m, tbuf, size, arg)
+static void ti_jfree(m, buf, size, arg)
 	struct mbuf		*m;
-	caddr_t			tbuf;
+	caddr_t			buf;
 	size_t			size;
 	void *arg;
 {
@@ -696,7 +701,7 @@ static void ti_jfree(m, tbuf, size, arg)
 
 	/* calculate the slot this buffer belongs to */
 
-	i = ((caddr_t)tbuf
+	i = ((caddr_t)buf
 	     - (caddr_t)sc->ti_cdata.ti_jumbo_buf) / TI_JLEN;
 
 	if ((i < 0) || (i >= TI_JSLOTS))
@@ -781,10 +786,10 @@ static int ti_newbuf_std(sc, i, m, dmamap)
 	TI_HOSTADDR(r->ti_addr) = dmamap->dm_segs[0].ds_addr;
 	r->ti_type = TI_BDTYPE_RECV_BD;
 	r->ti_flags = 0;
-	if (sc->ethercom.ec_if.if_capenable & IFCAP_CSUM_IPv4_Rx)
+	if (sc->ethercom.ec_if.if_capenable & IFCAP_CSUM_IPv4)
 		r->ti_flags |= TI_BDFLAG_IP_CKSUM;
 	if (sc->ethercom.ec_if.if_capenable &
-	    (IFCAP_CSUM_TCPv4_Rx | IFCAP_CSUM_UDPv4_Rx))
+	    (IFCAP_CSUM_TCPv4|IFCAP_CSUM_UDPv4))
 		r->ti_flags |= TI_BDFLAG_TCP_UDP_CKSUM;
 	r->ti_len = m_new->m_len; /* == ds_len */
 	r->ti_idx = i;
@@ -850,10 +855,10 @@ static int ti_newbuf_mini(sc, i, m, dmamap)
 	TI_HOSTADDR(r->ti_addr) = dmamap->dm_segs[0].ds_addr;
 	r->ti_type = TI_BDTYPE_RECV_BD;
 	r->ti_flags = TI_BDFLAG_MINI_RING;
-	if (sc->ethercom.ec_if.if_capenable & IFCAP_CSUM_IPv4_Rx)
+	if (sc->ethercom.ec_if.if_capenable & IFCAP_CSUM_IPv4)
 		r->ti_flags |= TI_BDFLAG_IP_CKSUM;
 	if (sc->ethercom.ec_if.if_capenable &
-	    (IFCAP_CSUM_TCPv4_Rx | IFCAP_CSUM_UDPv4_Rx))
+	    (IFCAP_CSUM_TCPv4|IFCAP_CSUM_UDPv4))
 		r->ti_flags |= TI_BDFLAG_TCP_UDP_CKSUM;
 	r->ti_len = m_new->m_len; /* == ds_len */
 	r->ti_idx = i;
@@ -874,7 +879,7 @@ static int ti_newbuf_jumbo(sc, i, m)
 	struct ti_rx_desc	*r;
 
 	if (m == NULL) {
-		caddr_t			tbuf = NULL;
+		caddr_t			buf = NULL;
 
 		/* Allocate the mbuf. */
 		MGETHDR(m_new, M_DONTWAIT, MT_DATA);
@@ -885,8 +890,8 @@ static int ti_newbuf_jumbo(sc, i, m)
 		}
 
 		/* Allocate the jumbo buffer */
-		tbuf = ti_jalloc(sc);
-		if (tbuf == NULL) {
+		buf = ti_jalloc(sc);
+		if (buf == NULL) {
 			m_freem(m_new);
 			printf("%s: jumbo allocation failed "
 			    "-- packet dropped!\n", sc->sc_dev.dv_xname);
@@ -894,7 +899,7 @@ static int ti_newbuf_jumbo(sc, i, m)
 		}
 
 		/* Attach the buffer to the mbuf. */
-		MEXTADD(m_new, tbuf, ETHER_MAX_LEN_JUMBO,
+		MEXTADD(m_new, buf, ETHER_MAX_LEN_JUMBO,
 		    M_DEVBUF, ti_jfree, sc);
 		m_new->m_flags |= M_EXT_RW;
 		m_new->m_len = m_new->m_pkthdr.len = ETHER_MAX_LEN_JUMBO;
@@ -913,10 +918,10 @@ static int ti_newbuf_jumbo(sc, i, m)
 		 - (caddr_t)sc->ti_cdata.ti_jumbo_buf);
 	r->ti_type = TI_BDTYPE_RECV_JUMBO_BD;
 	r->ti_flags = TI_BDFLAG_JUMBO_RING;
-	if (sc->ethercom.ec_if.if_capenable & IFCAP_CSUM_IPv4_Rx)
+	if (sc->ethercom.ec_if.if_capenable & IFCAP_CSUM_IPv4)
 		r->ti_flags |= TI_BDFLAG_IP_CKSUM;
 	if (sc->ethercom.ec_if.if_capenable &
-	    (IFCAP_CSUM_TCPv4_Rx | IFCAP_CSUM_UDPv4_Rx))
+	    (IFCAP_CSUM_TCPv4|IFCAP_CSUM_UDPv4))
 		r->ti_flags |= TI_BDFLAG_TCP_UDP_CKSUM;
 	r->ti_len = m_new->m_len;
 	r->ti_idx = i;
@@ -1411,9 +1416,7 @@ static int ti_chipinit(sc)
 	 * Incompatible with hardware assisted checksums.
 	 */
 	if ((sc->ethercom.ec_if.if_capenable &
-	    (IFCAP_CSUM_TCPv4_Tx | IFCAP_CSUM_TCPv4_Rx |
-	     IFCAP_CSUM_UDPv4_Tx | IFCAP_CSUM_UDPv4_Rx |
-	     IFCAP_CSUM_IPv4_Tx | IFCAP_CSUM_IPv4_Rx)) == 0)
+	    (IFCAP_CSUM_TCPv4|IFCAP_CSUM_UDPv4|IFCAP_CSUM_IPv4)) == 0)
 		TI_SETBIT(sc, TI_GCR_OPMODE, TI_OPMODE_1_DMA_ACTIVE);
 
 	/* Recommended settings from Tigon manual. */
@@ -1492,9 +1495,9 @@ static int ti_gibinit(sc)
 	TI_HOSTADDR(rcb->ti_hostaddr) = TI_CDRXSTDADDR(sc, 0);
 	rcb->ti_max_len = ETHER_MAX_LEN;
 	rcb->ti_flags = 0;
-	if (ifp->if_capenable & IFCAP_CSUM_IPv4_Rx)
+	if (ifp->if_capenable & IFCAP_CSUM_IPv4)
 		rcb->ti_flags |= TI_RCB_FLAG_IP_CKSUM;
-	if (ifp->if_capenable & (IFCAP_CSUM_TCPv4_Rx|IFCAP_CSUM_UDPv4_Rx))
+	if (ifp->if_capenable & (IFCAP_CSUM_TCPv4|IFCAP_CSUM_UDPv4))
 		rcb->ti_flags |= TI_RCB_FLAG_TCP_UDP_CKSUM;
 	if (VLAN_ATTACHED(&sc->ethercom))
 		rcb->ti_flags |= TI_RCB_FLAG_VLAN_ASSIST;
@@ -1504,9 +1507,9 @@ static int ti_gibinit(sc)
 	TI_HOSTADDR(rcb->ti_hostaddr) = TI_CDRXJUMBOADDR(sc, 0);
 	rcb->ti_max_len = ETHER_MAX_LEN_JUMBO;
 	rcb->ti_flags = 0;
-	if (ifp->if_capenable & IFCAP_CSUM_IPv4_Rx)
+	if (ifp->if_capenable & IFCAP_CSUM_IPv4)
 		rcb->ti_flags |= TI_RCB_FLAG_IP_CKSUM;
-	if (ifp->if_capenable & (IFCAP_CSUM_TCPv4_Rx|IFCAP_CSUM_UDPv4_Rx))
+	if (ifp->if_capenable & (IFCAP_CSUM_TCPv4|IFCAP_CSUM_UDPv4))
 		rcb->ti_flags |= TI_RCB_FLAG_TCP_UDP_CKSUM;
 	if (VLAN_ATTACHED(&sc->ethercom))
 		rcb->ti_flags |= TI_RCB_FLAG_VLAN_ASSIST;
@@ -1523,9 +1526,9 @@ static int ti_gibinit(sc)
 		rcb->ti_flags = TI_RCB_FLAG_RING_DISABLED;
 	else
 		rcb->ti_flags = 0;
-	if (ifp->if_capenable & IFCAP_CSUM_IPv4_Rx)
+	if (ifp->if_capenable & IFCAP_CSUM_IPv4)
 		rcb->ti_flags |= TI_RCB_FLAG_IP_CKSUM;
-	if (ifp->if_capenable & (IFCAP_CSUM_TCPv4_Rx|IFCAP_CSUM_UDPv4_Rx))
+	if (ifp->if_capenable & (IFCAP_CSUM_TCPv4|IFCAP_CSUM_UDPv4))
 		rcb->ti_flags |= TI_RCB_FLAG_TCP_UDP_CKSUM;
 	if (VLAN_ATTACHED(&sc->ethercom))
 		rcb->ti_flags |= TI_RCB_FLAG_VLAN_ASSIST;
@@ -1561,14 +1564,14 @@ static int ti_gibinit(sc)
 		rcb->ti_flags = 0;
 	else
 		rcb->ti_flags = TI_RCB_FLAG_HOST_RING;
-	if (ifp->if_capenable & IFCAP_CSUM_IPv4_Tx)
+	if (ifp->if_capenable & IFCAP_CSUM_IPv4)
 		rcb->ti_flags |= TI_RCB_FLAG_IP_CKSUM;
 	/*
 	 * When we get the packet, there is a pseudo-header seed already
 	 * in the th_sum or uh_sum field.  Make sure the firmware doesn't
 	 * compute the pseudo-header checksum again!
 	 */
-	if (ifp->if_capenable & (IFCAP_CSUM_TCPv4_Tx|IFCAP_CSUM_UDPv4_Tx))
+	if (ifp->if_capenable & (IFCAP_CSUM_TCPv4|IFCAP_CSUM_UDPv4))
 		rcb->ti_flags |= TI_RCB_FLAG_TCP_UDP_CKSUM|
 		    TI_RCB_FLAG_NO_PHDR_CKSUM;
 	if (VLAN_ATTACHED(&sc->ethercom))
@@ -1879,10 +1882,8 @@ static void ti_attach(parent, self, aux)
 	/*
 	 * We can do IPv4, TCPv4, and UDPv4 checksums in hardware.
 	 */
-	ifp->if_capabilities |=
-	    IFCAP_CSUM_IPv4_Tx | IFCAP_CSUM_IPv4_Rx |
-	    IFCAP_CSUM_TCPv4_Tx | IFCAP_CSUM_TCPv4_Rx |
-	    IFCAP_CSUM_UDPv4_Tx | IFCAP_CSUM_UDPv4_Rx;
+	ifp->if_capabilities |= IFCAP_CSUM_IPv4 | IFCAP_CSUM_TCPv4 |
+	    IFCAP_CSUM_UDPv4;
 
 	/* Set up ifmedia support. */
 	ifmedia_init(&sc->ifmedia, IFM_IMASK, ti_ifmedia_upd, ti_ifmedia_sts);
@@ -2282,11 +2283,11 @@ static int ti_encap_tigon1(sc, m_head, txidx)
 	    BUS_DMA_WRITE | BUS_DMA_NOWAIT);
 	if (error) {
 		struct mbuf *m;
-		int j = 0;
+		int i = 0;
 		for (m = m_head; m; m = m->m_next)
-			j++;
+			i++;
 		printf("ti_encap: bus_dmamap_load_mbuf (len %d, %d frags) "
-		       "error %d\n", m_head->m_pkthdr.len, j, error);
+		       "error %d\n", m_head->m_pkthdr.len, i, error);
 		return (ENOMEM);
 	}
 
@@ -2388,11 +2389,11 @@ static int ti_encap_tigon2(sc, m_head, txidx)
 	    BUS_DMA_WRITE | BUS_DMA_NOWAIT);
 	if (error) {
 		struct mbuf *m;
-		int j = 0;
+		int i = 0;
 		for (m = m_head; m; m = m->m_next)
-			j++;
+			i++;
 		printf("ti_encap: bus_dmamap_load_mbuf (len %d, %d frags) "
-		       "error %d\n", m_head->m_pkthdr.len, j, error);
+		       "error %d\n", m_head->m_pkthdr.len, i, error);
 		return (ENOMEM);
 	}
 

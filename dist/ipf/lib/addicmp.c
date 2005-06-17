@@ -1,4 +1,4 @@
-/*	$NetBSD: addicmp.c,v 1.7 2005/05/18 00:54:14 christos Exp $	*/
+/*	$NetBSD: addicmp.c,v 1.5 2005/02/08 07:01:53 martti Exp $	*/
 
 /*
  * Copyright (C) 1993-2001 by Darren Reed.

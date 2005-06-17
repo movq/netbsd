@@ -1,4 +1,4 @@
-#	$NetBSD: majors.sparc64,v 1.21 2005/06/03 13:16:02 blymn Exp $
+#	$NetBSD: majors.sparc64,v 1.20.10.1 2005/06/10 15:29:36 tron Exp $
 #
 # Device majors for sparc64
 #

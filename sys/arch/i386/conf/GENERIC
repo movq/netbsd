@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.674 2005/06/09 14:43:30 tsutsui Exp $
+# $NetBSD: GENERIC,v 1.661.2.8 2005/10/28 20:12:42 jmc Exp $
 #
 # GENERIC machine description file
 #
@@ -22,7 +22,7 @@ include 	"arch/i386/conf/std.i386"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.674 $"
+#ident 		"GENERIC-$Revision: 1.661.2.8 $"
 
 maxusers	32		# estimated number of users
 
@@ -102,8 +102,7 @@ options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
 
 # Enable experimental buffer queue strategy for better responsiveness under
 # high disk I/O load. Likely stable but not yet the default.
-#options 	BUFQ_READPRIO
-#options 	BUFQ_PRIOCSCAN
+#options 	NEW_BUFQ_STRATEGY
 
 # Diagnostic/debugging support options
 #options 	DIAGNOSTIC	# expensive kernel consistency checks
@@ -178,6 +177,7 @@ options 	INET		# IP + ICMP + TCP + UDP
 options 	INET6		# IPV6
 #options 	IPSEC		# IP security
 #options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
+#options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
 #options 	PIM		# Protocol Independent Multicast
@@ -266,12 +266,8 @@ options 	WSDISPLAY_COMPAT_PCVT		# emulate some ioctls
 options 	WSDISPLAY_COMPAT_SYSCONS	# emulate some ioctls
 options 	WSDISPLAY_COMPAT_USL		# VT handling
 options 	WSDISPLAY_COMPAT_RAWKBD		# can get raw scancodes
-#options 	WSKBD_EVENT_AUTOREPEAT		# auto repeat in event mode
-# don't attach pckbd as the console if no PS/2 keyboard is found
-options 	PCKBD_CNATTACH_MAY_FAIL
 # see dev/pckbc/wskbdmap_mfii.c for implemented layouts
-#options 	PCKBD_LAYOUT="(KB_DE | KB_NODEAD)" # for pckbd driver
-#options 	UKBD_LAYOUT="(KB_DE | KB_NODEAD)"  # for ukbd driver 
+#options 	PCKBD_LAYOUT="(KB_DE | KB_NODEAD)"
 # allocate a number of virtual screens at autoconfiguration time
 #options 	WSDISPLAY_DEFAULTSCREENS=4
 # use a large software cursor that doesn't blink
@@ -344,7 +340,6 @@ cpu* at mainbus?
 #acpitz* 	at acpi?		# ACPI Thermal Zone
 
 # Mainboard devices
-#attimer*	at acpi?		# AT Timer
 #com* 		at acpi?		# Serial communications interface
 #fdc* 		at acpi?		# Floppy disk controller
 #joy*		at acpi?		# Joystick/Game port
@@ -352,7 +347,6 @@ cpu* at mainbus?
 #mpu*		at acpi?		# Roland MPU-401 MIDI UART
 #npx*		at acpi?		# Math coprocessor
 #pckbc*  	at acpi?		# PC keyboard controller
-#pcppi*		at acpi?                # AT-style speaker sound
 #wss* 		at acpi?		# NeoMagic 256AV in wss mode
 
 # Sony Vaio jog dial
@@ -502,7 +496,6 @@ wsdisplay*	at pcdisplay? console ?
 wskbd*		at pckbd? console ?
 wsmouse*	at pms? mux 0
 
-attimer0	at isa?
 pcppi0		at isa?
 sysbeep0	at pcppi?
 
@@ -776,6 +769,7 @@ ath*	at pci? dev ? function ?	# Atheros 5210/5211/5212 802.11
 atw*	at pci? dev ? function ?	# ADMtek ADM8211 (802.11)
 bce* 	at pci? dev ? function ?	# Broadcom 4401 10/100 Ethernet
 bge* 	at pci? dev ? function ?	# Broadcom 570x gigabit Ethernet
+dge*	at pci? dev ? function ?	# Intel 82597 10GbE LR
 en*	at pci? dev ? function ?	# ENI/Adaptec ATM
 ep*	at pci? dev ? function ?	# 3Com 3c59x
 epic*	at pci? dev ? function ?	# SMC EPIC/100 Ethernet
@@ -786,7 +780,7 @@ fxp*	at pci? dev ? function ?	# Intel EtherExpress PRO 10+/100B
 ipw*	at pci? dev ? function ?	# Intel PRO/Wireless 2100
 iwi*	at pci? dev ? function ?	# Intel PRO/Wireless 2200BG
 gsip*	at pci? dev ? function ?	# NS83820 Gigabit Ethernet
-#hme*	at pci? dev ? function ?	# Sun Microelectronics STP2002-STQ
+hme*	at pci? dev ? function ?	# Sun Microelectronics STP2002-STQ
 le*	at pci? dev ? function ?	# PCnet-PCI Ethernet
 lmc*	at pci? dev ? function ?	# Lan Media Corp SSI/HSSI/DS3
 mtd*	at pci? dev ? function ?	# Myson MTD803 3-in-1 Ethernet
@@ -804,10 +798,12 @@ stge*	at pci? dev ? function ?	# Sundance/Tamarack TC9021 Gigabit
 ti*	at pci? dev ? function ?	# Alteon ACEnic gigabit Ethernet
 tl*	at pci? dev ? function ?	# ThunderLAN-based Ethernet
 tlp*	at pci? dev ? function ?	# DECchip 21x4x and clones
+txp*	at pci? dev ? function ?	# 3com 3cr990
 vge*	at pci? dev ? function ?	# VIATech VT612X Gigabit Ethernet
 vr*	at pci? dev ? function ?	# VIA Rhine Fast Ethernet
 wi*	at pci? dev ? function ?	# Intersil Prism Mini-PCI (802.11b)
 wm*	at pci? dev ? function ?	# Intel 8254x gigabit
+xge*	at pci? dev ? function ?	# Neterion (S2io) Xframe-I 10GbE
 
 # EISA network interfaces
 ep*	at eisa? slot ?			# 3Com 3c579 Ethernet
@@ -886,7 +882,6 @@ we*	at mca? slot ?			# WD/SMC Ethernet
 ate*	at mca? slot ?			# Allied Telesis AT1720
 ne*	at mca? slot ?			# Novell NE/2 and clones
 tr*	at mca? slot ?			# IBM Token Ring adapter
-tra*	at mca? slot ?			# Tiara LANCard/E and clones
 le*	at mca? slot ?			# SKNET Personal/MC2+
 
 # MII/PHY support
@@ -1072,6 +1067,7 @@ auich*	at pci? dev ? function ?	# Intel ICH integrated AC'97 Audio
 auixp*	at pci? dev ? function ?	# ATI IXP AC'97 Audio
 autri*	at pci? dev ? function ?	# Trident 4DWAVE based AC'97 Audio
 auvia*	at pci? dev ? function ?	# VIA VT82C686A integrated AC'97 Audio
+azalia*	at pci? dev ? function ?	# High Definition Audio
 clcs*	at pci? dev ? function ?	# Cirrus Logic CS4280
 clct*	at pci? dev ? function ?	# Cirrus Logic CS4281
 cmpci*	at pci? dev ? function ?	# C-Media CMI8338/8738
@@ -1242,6 +1238,7 @@ pseudo-device	fss		4	# file system snapshot device
 
 pseudo-device	md		1	# memory disk device (ramdisk)
 pseudo-device	vnd		4	# disk-like interface to files
+options 	VND_COMPRESSION		# compressed vnd(4)
 
 # network pseudo-devices
 pseudo-device	bpfilter	8	# Berkeley packet filter

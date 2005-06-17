@@ -1,4 +1,4 @@
-/*	$NetBSD: ptyfs_vfsops.c,v 1.8 2005/05/29 21:00:29 christos Exp $	*/
+/*	$NetBSD: ptyfs_vfsops.c,v 1.5 2005/02/26 22:58:55 perry Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993, 1995
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ptyfs_vfsops.c,v 1.8 2005/05/29 21:00:29 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ptyfs_vfsops.c,v 1.5 2005/02/26 22:58:55 perry Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -94,7 +94,7 @@ struct ptm_pty ptm_ptyfspty = {
 };
 
 static int
-ptyfs__makename(struct ptm_pty *pt, char *tbuf, size_t bufsiz, dev_t dev,
+ptyfs__makename(struct ptm_pty *pt, char *buf, size_t bufsiz, dev_t dev,
     char ms)
 {
 	struct mount *mp = pt->arg;
@@ -103,10 +103,10 @@ ptyfs__makename(struct ptm_pty *pt, char *tbuf, size_t bufsiz, dev_t dev,
 	switch (ms) {
 	case 'p':
 		/* We don't provide access to the master, should we? */
-		len = snprintf(tbuf, bufsiz, "/dev/null");
+		len = snprintf(buf, bufsiz, "/dev/null");
 		break;
 	case 't':
-		len = snprintf(tbuf, bufsiz, "%s/%d", mp->mnt_stat.f_mntonname,
+		len = snprintf(buf, bufsiz, "%s/%d", mp->mnt_stat.f_mntonname,
 		    minor(dev));
 		break;
 	default:
@@ -214,10 +214,9 @@ ptyfs_mount(struct mount *mp, const char *path, void *data,
 		if (args.version != PTYFS_ARGSVERSION)
 			return EINVAL;
 	} else {
-		/*
-		 * Arguments are mandatory.
-		 */
-		return EINVAL;
+		/* Compat code; remove and return an error */
+		args.gid = 4;	/* XXX tty gid */
+		args.mode = S_IRUSR|S_IWUSR|S_IWGRP;
 	}
 
 	pmnt = malloc(sizeof(struct ptyfsmount), M_UFSMNT, M_WAITOK);
@@ -401,4 +400,3 @@ struct vfsops ptyfs_vfsops = {
 	    struct proc *))eopnotsupp,
 	ptyfs_vnodeopv_descs,
 };
-VFS_ATTACH(ptyfs_vfsops);

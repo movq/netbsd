@@ -1,4 +1,4 @@
-/* $NetBSD: xbd.c,v 1.20 2005/04/17 22:59:37 bouyer Exp $ */
+/* $NetBSD: xbd.c,v 1.14.2.5 2005/04/28 10:28:42 tron Exp $ */
 
 /*
  *
@@ -33,7 +33,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xbd.c,v 1.20 2005/04/17 22:59:37 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xbd.c,v 1.14.2.5 2005/04/28 10:28:42 tron Exp $");
 
 #include "xbd.h"
 #include "rnd.h"
@@ -421,8 +421,8 @@ get_vbd_info(vdisk_t *disk_info)
 	blkif_response_t rsp;
 	paddr_t pa;
 
-	buf = (vdisk_t *)uvm_km_alloc(kmem_map, PAGE_SIZE, PAGE_SIZE,
-	    UVM_KMF_WIRED);
+	buf = (vdisk_t *)uvm_km_kmemalloc1(kmem_map, NULL,
+	    PAGE_SIZE, PAGE_SIZE, UVM_UNKNOWN_OFFSET, 0);
 	pmap_extract(pmap_kernel(), (vaddr_t)buf, &pa);
 	/* Probe for disk information. */
 	memset(&req, 0, sizeof(req));
@@ -438,7 +438,7 @@ get_vbd_info(vdisk_t *disk_info)
 
 	memcpy(disk_info, buf, nr * sizeof(vdisk_t));
 
-	uvm_km_free(kmem_map, (vaddr_t)buf, PAGE_SIZE, UVM_KMF_WIRED);
+	uvm_km_free(kmem_map, (vaddr_t)buf, PAGE_SIZE);
 
 	return nr;
 }
@@ -501,8 +501,7 @@ free_interface(void)
 
 	/* Free resources associated with old device channel. */
 	if (blk_ring) {
-		uvm_km_free(kmem_map, (vaddr_t)blk_ring, PAGE_SIZE,
-		    UVM_KMF_WIRED);
+		uvm_km_free(kmem_map, (vaddr_t)blk_ring, PAGE_SIZE);
 		blk_ring = NULL;
 	}
 
@@ -521,8 +520,8 @@ disconnect_interface(void)
 {
 
 	if (blk_ring == NULL)
-		blk_ring = (blkif_ring_t *)uvm_km_alloc(kmem_map,
-		    PAGE_SIZE, PAGE_SIZE, UVM_KMF_WIRED);
+		blk_ring = (blkif_ring_t *)uvm_km_kmemalloc1(kmem_map, NULL,
+		    PAGE_SIZE, PAGE_SIZE, UVM_UNKNOWN_OFFSET, 0);
 	memset(blk_ring, 0, PAGE_SIZE);
 	blk_ring->req_prod = blk_ring->resp_prod = resp_cons = req_prod =
 		last_req_prod = 0;
@@ -1147,8 +1146,9 @@ map_align(struct xbdreq *xr)
 	int s;
 
 	s = splvm();
-	xr->xr_aligned = uvm_km_alloc(kmem_map, xr->xr_bqueue, XEN_BSIZE,
-	    UVM_KMF_WIRED);
+	xr->xr_aligned = uvm_km_kmemalloc1(kmem_map, NULL,
+	    xr->xr_bqueue, XEN_BSIZE, UVM_UNKNOWN_OFFSET,
+	    0/*  UVM_KMF_NOWAIT */);
 	splx(s);
 	DPRINTF(XBDB_IO, ("map_align(%p): bp %p addr %p align 0x%08lx "
 	    "size 0x%04lx\n", xr, xr->xr_bp, xr->xr_bp->b_data,
@@ -1171,8 +1171,7 @@ unmap_align(struct xbdreq *xr)
 	    "size 0x%04x\n", xr, xr->xr_bp, xr->xr_bp->b_data,
 	    xr->xr_aligned, xr->xr_bp->b_bcount));
 	s = splvm();
-	uvm_km_free(kmem_map, xr->xr_aligned, xr->xr_bp->b_bcount,
-	    UVM_KMF_WIRED);
+	uvm_km_free(kmem_map, xr->xr_aligned, xr->xr_bp->b_bcount);
 	splx(s);
 	xr->xr_aligned = (vaddr_t)0;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_mmap.h,v 1.16 2005/05/03 16:26:29 manu Exp $	*/
+/*	$NetBSD: linux_mmap.h,v 1.15.16.1 2005/11/01 22:31:17 tron Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -43,6 +43,8 @@
 #define LINUX_PROT_READ		0x01
 #define LINUX_PROT_WRITE	0x02
 #define LINUX_PROT_EXEC		0x04
+#define LINUX_PROT_GROWSDOWN	0x01000000
+#define LINUX_PROT_GROWSUP	0x02000000
 
 #define LINUX_MAP_SHARED	0x0001
 #define LINUX_MAP_PRIVATE	0x0002
@@ -59,8 +61,6 @@
 #include <compat/linux/arch/mips/linux_mmap.h>
 #elif defined(__arm__)
 #include <compat/linux/arch/arm/linux_mmap.h>
-#elif defined(__amd64__)
-#include <compat/linux/arch/amd64/linux_mmap.h>
 /*
  * XXX ERH: All below here are guesses.  The header
  * XXX ERH: files are correct but the defined(*)

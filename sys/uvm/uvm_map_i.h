@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_map_i.h,v 1.34 2005/05/29 21:06:33 christos Exp $	*/
+/*	$NetBSD: uvm_map_i.h,v 1.32 2005/02/11 02:12:03 chs Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -84,13 +84,13 @@
  */
 
 MAP_INLINE struct vm_map *
-uvm_map_create(pmap_t pmap, vaddr_t vmin, vaddr_t vmax, int flags)
+uvm_map_create(pmap_t pmap, vaddr_t min, vaddr_t max, int flags)
 {
 	struct vm_map *result;
 
 	MALLOC(result, struct vm_map *, sizeof(struct vm_map),
 	    M_VMMAP, M_WAITOK);
-	uvm_map_setup(result, vmin, vmax, flags);
+	uvm_map_setup(result, min, max, flags);
 	result->pmap = pmap;
 	return(result);
 }
@@ -102,7 +102,7 @@ uvm_map_create(pmap_t pmap, vaddr_t vmin, vaddr_t vmax, int flags)
  */
 
 MAP_INLINE void
-uvm_map_setup(struct vm_map *map, vaddr_t vmin, vaddr_t vmax, int flags)
+uvm_map_setup(struct vm_map *map, vaddr_t min, vaddr_t max, int flags)
 {
 
 	RB_INIT(&map->rbhead);
@@ -110,8 +110,8 @@ uvm_map_setup(struct vm_map *map, vaddr_t vmin, vaddr_t vmax, int flags)
 	map->nentries = 0;
 	map->size = 0;
 	map->ref_count = 1;
-	vm_map_setmin(map, vmin);
-	vm_map_setmax(map, vmax);
+	vm_map_setmin(map, min);
+	vm_map_setmax(map, max);
 	map->flags = flags;
 	map->first_free = &map->header;
 	map->hint = &map->header;
@@ -150,7 +150,7 @@ uvm_unmap1(struct vm_map *map, vaddr_t start, vaddr_t end, int flags)
 	 */
 	uvm_mapent_reserve(map, &umr, 2, flags);
 	vm_map_lock(map);
-	uvm_unmap_remove(map, start, end, &dead_entries, &umr, flags);
+	uvm_unmap_remove(map, start, end, &dead_entries, &umr);
 	vm_map_unlock(map);
 	uvm_mapent_unreserve(map, &umr);
 

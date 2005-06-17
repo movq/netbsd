@@ -1,4 +1,4 @@
-/*	$NetBSD: in_gif.c,v 1.44 2005/06/02 15:21:35 tron Exp $	*/
+/*	$NetBSD: in_gif.c,v 1.41 2005/02/26 22:45:12 perry Exp $	*/
 /*	$KAME: in_gif.c,v 1.66 2001/07/29 04:46:09 itojun Exp $	*/
 
 /*
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: in_gif.c,v 1.44 2005/06/02 15:21:35 tron Exp $");
+__KERNEL_RCSID(0, "$NetBSD: in_gif.c,v 1.41 2005/02/26 22:45:12 perry Exp $");
 
 #include "opt_inet.h"
 #include "opt_iso.h"
@@ -266,18 +266,18 @@ in_gif_input(struct mbuf *m, ...)
 #ifdef INET
 	case IPPROTO_IPV4:
 	    {
-		struct ip *xip;
+		struct ip *ip;
 		af = AF_INET;
-		if (m->m_len < sizeof(*xip)) {
-			m = m_pullup(m, sizeof(*xip));
+		if (m->m_len < sizeof(*ip)) {
+			m = m_pullup(m, sizeof(*ip));
 			if (!m)
 				return;
 		}
-		xip = mtod(m, struct ip *);
+		ip = mtod(m, struct ip *);
 		if (gifp->if_flags & IFF_LINK1)
-			ip_ecn_egress(ECN_ALLOWED, &otos, &xip->ip_tos);
+			ip_ecn_egress(ECN_ALLOWED, &otos, &ip->ip_tos);
 		else
-			ip_ecn_egress(ECN_NOCARE, &otos, &xip->ip_tos);
+			ip_ecn_egress(ECN_NOCARE, &otos, &ip->ip_tos);
 		break;
 	    }
 #endif
@@ -386,7 +386,7 @@ gif_validate4(const struct ip *ip, struct gif_softc *sc, struct ifnet *ifp)
  * matched the physical addr family.  see gif_encapcheck().
  */
 int
-gif_encapcheck4(struct mbuf *m, int off, int proto, void *arg)
+gif_encapcheck4(const struct mbuf *m, int off, int proto, void *arg)
 {
 	struct ip ip;
 	struct gif_softc *sc;
@@ -395,7 +395,8 @@ gif_encapcheck4(struct mbuf *m, int off, int proto, void *arg)
 	/* sanity check done in caller */
 	sc = (struct gif_softc *)arg;
 
-	m_copydata(m, 0, sizeof(ip), (caddr_t)&ip);
+	/* LINTED const cast */
+	m_copydata((struct mbuf *)m, 0, sizeof(ip), (caddr_t)&ip);
 	ifp = ((m->m_flags & M_PKTHDR) != 0) ? m->m_pkthdr.rcvif : NULL;
 
 	return gif_validate4(&ip, sc, ifp);
@@ -416,7 +417,7 @@ in_gif_attach(struct gif_softc *sc)
 		return EINVAL;
 	sc->encap_cookie4 = encap_attach(AF_INET, -1, sc->gif_psrc,
 	    (struct sockaddr *)&mask4, sc->gif_pdst, (struct sockaddr *)&mask4,
-	    (const struct protosw *)&in_gif_protosw, sc);
+	    (struct protosw *)&in_gif_protosw, sc);
 #else
 	sc->encap_cookie4 = encap_attach_func(AF_INET, -1, gif_encapcheck,
 	    &in_gif_protosw, sc);

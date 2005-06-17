@@ -1,4 +1,4 @@
-/*	$NetBSD: darwin_attr.c,v 1.6 2005/05/29 22:08:16 christos Exp $ */
+/*	$NetBSD: darwin_attr.c,v 1.5 2005/02/26 23:10:18 perry Exp $ */
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: darwin_attr.c,v 1.6 2005/05/29 22:08:16 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: darwin_attr.c,v 1.5 2005/02/26 23:10:18 perry Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -104,7 +104,7 @@ darwin_sys_getattrlist(l, v, retval)
 	} */ *uap = v;
 	struct proc *p = l->l_proc;
 	struct darwin_attrlist kalist;
-	char *tbuf;
+	char *buf;
 	char *bp;
 	size_t len;
 	size_t shift = 0;
@@ -188,8 +188,8 @@ darwin_sys_getattrlist(l, v, retval)
 	/*
 	 * Prepare the buffer
 	 */
-	tbuf = malloc(len, M_TEMP, M_WAITOK);
-	bp = tbuf;
+	buf = malloc(len, M_TEMP, M_WAITOK);
+	bp = buf;
 
 	/*
 	 * vnode structure
@@ -433,10 +433,10 @@ darwin_sys_getattrlist(l, v, retval)
 	}
 
 	if (kalist.volattr & DARWIN_ATTR_VOL_SPACEFREE) {
-		off_t ofree;
+		off_t free;
 
-		ofree = f.f_bfree * f.f_bsize;
-		if (ATTR_APPEND(ofree, bp, len) != 0)
+		free = f.f_bfree * f.f_bsize;
+		if (ATTR_APPEND(free, bp, len) != 0)
 			goto out3;
 	}
 
@@ -449,10 +449,10 @@ darwin_sys_getattrlist(l, v, retval)
 	}
 
 	if (kalist.volattr & DARWIN_ATTR_VOL_MINALLOCATION) {
-		off_t omin;
+		off_t min;
 
-		omin = f.f_bsize; /* XXX proably wrong */
-		if (ATTR_APPEND(omin, bp, len) != 0)
+		min = f.f_bsize; /* XXX proably wrong */
+		if (ATTR_APPEND(min, bp, len) != 0)
 			goto out3;
 	}
 
@@ -793,12 +793,12 @@ darwin_sys_getattrlist(l, v, retval)
 	 * We are done! Copyout the stuff and get away
 	 */
 	if (error == 0)
-		error = copyout(tbuf, SCARG(uap, attributes), *whole_len_p);
+		error = copyout(buf, SCARG(uap, attributes), *whole_len_p);
 out3:
 	vput(vp);
 out2:
 	crfree(cred);
-	free(tbuf, M_TEMP);
+	free(buf, M_TEMP);
 
 	return error;
 }

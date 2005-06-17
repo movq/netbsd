@@ -1,6 +1,6 @@
-/*	$NetBSD: isakmp_agg.c,v 1.2 2005/04/10 21:20:55 manu Exp $	*/
+/*	$NetBSD: isakmp_agg.c,v 1.1.1.2.2.4 2005/11/21 21:12:30 tron Exp $	*/
 
-/* Id: isakmp_agg.c,v 1.20 2005/01/29 16:34:25 vanhu Exp */
+/* Id: isakmp_agg.c,v 1.20.2.5 2005/11/21 09:46:23 vanhu Exp */
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -113,7 +113,7 @@ agg_i1send(iph1, msg)
 	vchar_t *cr = NULL, *gsstoken = NULL;
 	int error = -1;
 #ifdef ENABLE_NATT
-	vchar_t *vid_natt[MAX_NATT_VID_COUNT];
+	vchar_t *vid_natt[MAX_NATT_VID_COUNT] = { NULL };
 	int i;
 #endif
 #ifdef ENABLE_HYBRID
@@ -252,11 +252,12 @@ agg_i1send(iph1, msg)
 		plist = isakmp_plist_append(plist, vid_frag, ISAKMP_NPTYPE_VID);
 #endif
 #ifdef ENABLE_NATT
-	/* set VID payload for NAT-T if NAT-T support allowed in the config file */
+	/* 
+	 * set VID payload for NAT-T if NAT-T 
+	 * support allowed in the config file 
+	 */
 	if (iph1->rmconf->nat_traversal) 
 		plist = isakmp_plist_append_natt_vids(plist, vid_natt);
-	else
-		vid_natt[0]=NULL;
 #endif
 #ifdef ENABLE_HYBRID
 	if (vid_xauth)
@@ -302,15 +303,15 @@ end:
 	for (i = 0; i < MAX_NATT_VID_COUNT && vid_natt[i] != NULL; i++)
 		vfree(vid_natt[i]);
 #endif
+#ifdef ENABLE_DPD
+	if (vid_dpd != NULL)
+		vfree(vid_dpd);
+#endif
 #ifdef ENABLE_HYBRID
 	if (vid_xauth != NULL)
 		vfree(vid_xauth);
 	if (vid_unity != NULL)
 		vfree(vid_unity);
-#endif
-#ifdef ENABLE_DPD
-	if (vid_dpd != NULL)
-		vfree(vid_dpd);
 #endif
 
 	return error;
@@ -458,7 +459,7 @@ agg_i2recv(iph1, msg)
 #ifdef ENABLE_NATT
 		case ISAKMP_NPTYPE_NATD_DRAFT:
 		case ISAKMP_NPTYPE_NATD_RFC:
-			if (NATT_AVAILABLE(iph1) && iph1->natt_options &&
+			if (NATT_AVAILABLE(iph1) && iph1->natt_options != NULL &&
 			    pa->type == iph1->natt_options->payload_nat_d) {
 				struct natd_payload *natd;
 				natd = (struct natd_payload *)racoon_malloc(sizeof(*natd));
@@ -489,7 +490,11 @@ agg_i2recv(iph1, msg)
 	}
 
 	/* payload existency check */
-	/* XXX to be checked each authentication method. */
+	if (iph1->dhpub_p == NULL || iph1->nonce_p == NULL) {
+		plog(LLV_ERROR, LOCATION, iph1->remote,
+			"few isakmp message received.\n");
+		goto end;
+	}
 
 	/* verify identifier */
 	if (ipsecdoi_checkid1(iph1) != 0) {
@@ -649,6 +654,10 @@ agg_i2send(iph1, msg)
 
 	switch (iph1->approval->authmethod) {
 	case OAKLEY_ATTR_AUTH_METHOD_PSKEY:
+#ifdef ENABLE_HYBRID
+	case OAKLEY_ATTR_AUTH_METHOD_HYBRID_RSA_R:
+	case OAKLEY_ATTR_AUTH_METHOD_HYBRID_DSS_R:
+#endif  
 		/* set HASH payload */
 		plist = isakmp_plist_append(plist, iph1->hash, ISAKMP_NPTYPE_HASH);
 		break;
@@ -694,6 +703,11 @@ agg_i2send(iph1, msg)
 		plist = isakmp_plist_append(plist, gsshash, ISAKMP_NPTYPE_HASH);
 		break;
 #endif
+	default:
+		plog(LLV_ERROR, LOCATION, NULL, "invalid authmethod %d\n",
+			iph1->approval->authmethod);
+		goto end;
+		break;
 	}
 
 #ifdef ENABLE_NATT
@@ -880,7 +894,11 @@ agg_r1recv(iph1, msg)
 	}
 
 	/* payload existency check */
-	/* XXX to be checked each authentication method. */
+	if (iph1->dhpub_p == NULL || iph1->nonce_p == NULL) {
+		plog(LLV_ERROR, LOCATION, iph1->remote,
+			"few isakmp message received.\n");
+		goto end;
+	}
 
 	/* verify identifier */
 	if (ipsecdoi_checkid1(iph1) != 0) {
@@ -1204,6 +1222,11 @@ agg_r1send(iph1, msg)
 
 		break;
 #endif
+	default:
+		plog(LLV_ERROR, LOCATION, NULL, "Invalid authmethod %d\n",
+			iph1->approval->authmethod);
+		goto end;
+		break;
 	}
 
 #ifdef ENABLE_NATT
@@ -1343,7 +1366,8 @@ agg_r2recv(iph1, msg0)
 #ifdef ENABLE_NATT
 		case ISAKMP_NPTYPE_NATD_DRAFT:
 		case ISAKMP_NPTYPE_NATD_RFC:
-			if (pa->type == iph1->natt_options->payload_nat_d)
+			if (NATT_AVAILABLE(iph1) && iph1->natt_options != NULL &&
+				pa->type == iph1->natt_options->payload_nat_d)
 			{
 				vchar_t *natd_received = NULL;
 				int natd_verified;

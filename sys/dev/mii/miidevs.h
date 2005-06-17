@@ -1,10 +1,10 @@
-/*	$NetBSD: miidevs.h,v 1.60 2005/03/16 17:22:11 briggs Exp $	*/
+/*	$NetBSD: miidevs.h,v 1.60.2.2 2005/09/12 12:35:22 tron Exp $	*/
 
 /*
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.
  *
  * generated from:
- *	NetBSD: miidevs,v 1.58 2005/03/16 17:20:28 briggs Exp
+ *	NetBSD: miidevs,v 1.58.2.2 2005/09/12 12:34:07 tron Exp
  */
 
 /*-
@@ -184,6 +184,8 @@
 /* AMD Am79C873 seems to be a relabeled DM9101 */
 #define	MII_MODEL_xxDAVICOM_DM9101	0x0000
 #define	MII_STR_xxDAVICOM_DM9101	"DM9101 (AMD Am79C873) 10/100 media interface"
+#define	MII_MODEL_xxDAVICOM_DM9102	0x0004
+#define	MII_STR_xxDAVICOM_DM9102	"DM9102 10/100 media interface"
 
 /* Integrated Circuit Systems PHYs */
 #define	MII_MODEL_ICS_1889	0x0001
@@ -235,6 +237,8 @@
 #define	MII_STR_xxMARVELL_E1000_3	"Marvell 88E1000 Gigabit PHY"
 #define	MII_MODEL_xxMARVELL_E1000_5	0x0005
 #define	MII_STR_xxMARVELL_E1000_5	"Marvell 88E1000 Gigabit PHY"
+#define	MII_MODEL_xxMARVELL_E1111	0x000c
+#define	MII_STR_xxMARVELL_E1111	"Marvell 88E1111 Gigabit PHY"
 
 /* Myson Technology PHYs */
 #define	MII_MODEL_xxMYSON_MTD972	0x0000

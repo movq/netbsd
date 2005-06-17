@@ -1,4 +1,4 @@
-#       $NetBSD: Makefile,v 1.171 2005/04/24 21:43:03 dyoung Exp $
+#       $NetBSD: Makefile,v 1.169.2.1 2005/07/21 21:22:37 tron Exp $
 
 #	Makefile for section 9 (kernel function and variable) manual pages.
 
@@ -16,9 +16,6 @@ MAN=	altq.9 arc4random.9 arp.9 audio.9 autoconf.9 \
 	errno.9 ethersubr.9 evcnt.9 extattr.9 extent.9 \
 	fetch.9 file.9 filedesc.9 fork1.9 fsetown.9 \
 	hash.9 hardclock.9 humanize_number.9 hz.9 \
-	ieee80211.9 ieee80211_crypto.9 ieee80211_input.9 ieee80211_ioctl.9 \
-	ieee80211_node.9 ieee80211_output.9 ieee80211_proto.9 \
-	ieee80211_radiotap.9 \
 	in4_cksum.9 inittodr.9 intro.9 ioasic.9 ioctl.9 ipkdb.9 isa.9 \
 	isapnp.9 itimerfix.9 kcopy.9 kcont.9 \
 	kfilter_register.9 knote.9 \
@@ -515,9 +512,10 @@ MLINKS+=uvm.9 uvm_init.9 uvm.9 uvm_init_limits.9 uvm.9 uvm_setpagesize.9 \
 	uvm.9 uvmspace_fork.9 uvm.9 uvmspace_free.9 uvm.9 uvmspace_share.9 \
 	uvm.9 uvmspace_unshare.9 uvm.9 uvm_fault.9 uvm.9 uvn_attach.9 \
 	uvm.9 uvm_vnp_setsize.9 \
-	uvm.9 uvm_io.9 uvm.9 uvm_km_alloc.9 \
-	uvm.9 uvm_km_suballoc.9 uvm.9 uvm_km_free.9 \
-	uvm.9 uvm_pagealloc.9 \
+	uvm.9 uvm_io.9 uvm.9 uvm_km_alloc.9 uvm.9 uvm_km_zalloc.9 \
+	uvm.9 uvm_km_alloc1.9 uvm.9 uvm_km_kmemalloc.9 uvm.9 uvm_km_valloc.9 \
+	uvm.9 uvm_km_valloc_wait.9 uvm.9 uvm_km_suballoc.9 uvm.9 uvm_km_free.9 \
+	uvm.9 uvm_km_free_wakeup.9 uvm.9 uvm_pagealloc.9 \
 	uvm.9 uvm_pagerealloc.9 uvm.9 uvm_pagefree.9 uvm.9 uvm_pglistalloc.9 \
 	uvm.9 uvm_pglistfree.9 uvm.9 uvm_page_physload.9 uvm.9 uvm_pageout.9 \
 	uvm.9 uvm_scheduler.9 uvm.9 uvm_swapin.9 uvm.9 uao_create.9 \
@@ -550,7 +548,7 @@ MLINKS+=vfsops.9 VFS_MOUNT.9 \
 	vfsops.9 VFS_UNMOUNT.9 \
 	vfsops.9 VFS_ROOT.9 \
 	vfsops.9 VFS_QUOTACTL.9 \
-	vfsops.9 VFS_STATFS.9 \
+	vfsops.9 VFS_STATVFS.9 \
 	vfsops.9 VFS_SYNC.9 \
 	vfsops.9 VFS_VGET.9 \
 	vfsops.9 VFS_FHTOVP.9 \

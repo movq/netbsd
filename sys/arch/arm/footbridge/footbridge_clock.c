@@ -1,4 +1,4 @@
-/*	$NetBSD: footbridge_clock.c,v 1.19 2005/06/02 17:45:59 he Exp $	*/
+/*	$NetBSD: footbridge_clock.c,v 1.18 2003/10/05 19:44:58 matt Exp $	*/
 
 /*
  * Copyright (c) 1997 Mark Brinicombe.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: footbridge_clock.c,v 1.19 2005/06/02 17:45:59 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: footbridge_clock.c,v 1.18 2003/10/05 19:44:58 matt Exp $");
 
 /* Include header files */
 
@@ -205,14 +205,14 @@ statclockhandler(aframe)
 }
 
 static int
-load_timer(base, herz)
+load_timer(base, hz)
 	int base;
-	int herz;
+	int hz;
 {
 	unsigned int timer_count;
 	int control;
 
-	timer_count = dc21285_fclk / herz;
+	timer_count = dc21285_fclk / hz;
 	if (timer_count > TIMER_MAX_VAL * 16) {
 		control = TIMER_FCLK_256;
 		timer_count >>= 8;
@@ -233,25 +233,25 @@ load_timer(base, herz)
 }
 
 /*
- * void setstatclockrate(int herz)
+ * void setstatclockrate(int hz)
  *
  * Set the stat clock rate. The stat clock uses timer2
  */
 
 void
-setstatclockrate(herz)
-	int herz;
+setstatclockrate(hz)
+	int hz;
 {
 	int statint;
 	int countpersecond;
 	int statvarticks;
 
-	/* statint == num in counter to drop by desired herz */
+	/* statint == num in counter to drop by desired hz */
 	statint = statprev = clock_sc->sc_statclock_count =
-	    load_timer(TIMER_2_BASE, herz);
+	    load_timer(TIMER_2_BASE, hz);
 	
 	/* Get the total ticks a second */
-	countpersecond = statint * herz;
+	countpersecond = statint * hz;
 	
 	/* now work out how many ticks per usec */
 	statcountperusec = countpersecond / 1000000;

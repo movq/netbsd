@@ -1,4 +1,4 @@
-/*	$NetBSD: namespace.h,v 1.101 2005/05/15 13:09:13 yamt Exp $	*/
+/*	$NetBSD: namespace.h,v 1.98.2.1 2005/07/11 21:22:21 tron Exp $	*/
 
 /*-
  * Copyright (c) 1997-2004 The NetBSD Foundation, Inc.
@@ -190,7 +190,6 @@
 #define execvp			_execvp
 #define fdopen			_fdopen
 #define fgetln			_fgetln
-#define fgetwln			_fgetwln
 #define fhstatvfs		_fhstatvfs
 #define flockfile		_flockfile
 #define ftrylockfile		_ftrylockfile
@@ -468,7 +467,7 @@
 #define sradixsort		_sradixsort
 #define srand48			_srand48
 #define srandom			_srandom
-#define statvfs(a, b)		_statvfs(a, b)
+#define statvfs			_statvfs
 #define strcasecmp		_strcasecmp
 #define strdup			_strdup
 #define strncasecmp		_strncasecmp

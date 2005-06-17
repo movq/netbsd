@@ -1,4 +1,4 @@
-/*	$NetBSD: acpi.c,v 1.71 2005/05/31 21:08:37 drochner Exp $	*/
+/*	$NetBSD: acpi.c,v 1.68 2005/02/27 00:26:58 perry Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi.c,v 1.71 2005/05/31 21:08:37 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi.c,v 1.68 2005/02/27 00:26:58 perry Exp $");
 
 #include "opt_acpi.h"
 
@@ -430,7 +430,7 @@ acpi_build_tree(struct acpi_softc *sc)
 
 		state.scope = as;
 
-		rv = AcpiGetHandle(ACPI_ROOT_OBJECT, scopes[i],
+		rv = AcpiGetHandle(ACPI_ROOT_OBJECT, (char *) scopes[i],
 		    &parent);
 		if (ACPI_SUCCESS(rv)) {
 			AcpiWalkNamespace(ACPI_TYPE_ANY, parent, 100,
@@ -651,7 +651,7 @@ acpi_print(void *aux, const char *pnp)
 		if (aa->aa_node->ad_devinfo->Valid & ACPI_VALID_HID) {
 			aprint_normal(" (%s", aa->aa_node->ad_devinfo->HardwareId.Value);
 			if (aa->aa_node->ad_devinfo->Valid & ACPI_VALID_UID) {
-				const char *uid;
+				char *uid;
 
 				uid = aa->aa_node->ad_devinfo->UniqueId.Value;
 				if (uid[0] == '\0')
@@ -786,7 +786,7 @@ acpi_fixed_button_pressed(void *context)
  *	Evaluate an integer object.
  */
 ACPI_STATUS
-acpi_eval_integer(ACPI_HANDLE handle, const char *path, ACPI_INTEGER *valp)
+acpi_eval_integer(ACPI_HANDLE handle, char *path, ACPI_INTEGER *valp)
 {
 	ACPI_STATUS rv;
 	ACPI_BUFFER buf;
@@ -811,7 +811,7 @@ acpi_eval_integer(ACPI_HANDLE handle, const char *path, ACPI_INTEGER *valp)
  *	Evaluate a (Unicode) string object.
  */
 ACPI_STATUS
-acpi_eval_string(ACPI_HANDLE handle, const char *path, char **stringp)
+acpi_eval_string(ACPI_HANDLE handle, char *path, char **stringp)
 {
 	ACPI_STATUS rv;
 	ACPI_BUFFER buf;
@@ -825,7 +825,7 @@ acpi_eval_string(ACPI_HANDLE handle, const char *path, char **stringp)
 	rv = AcpiEvaluateObjectTyped(handle, path, NULL, &buf, ACPI_TYPE_STRING);
 	if (ACPI_SUCCESS(rv)) {
 		ACPI_OBJECT *param = buf.Pointer;
-		const char *ptr = param->String.Pointer;
+		char *ptr = param->String.Pointer;
 		size_t len = param->String.Length;
 		if ((*stringp = AcpiOsAllocate(len)) == NULL)
 			rv = AE_NO_MEMORY;
@@ -845,7 +845,7 @@ acpi_eval_string(ACPI_HANDLE handle, const char *path, char **stringp)
  *	Caller must free buf.Pointer by AcpiOsFree().
  */
 ACPI_STATUS
-acpi_eval_struct(ACPI_HANDLE handle, const char *path, ACPI_BUFFER *bufp)
+acpi_eval_struct(ACPI_HANDLE handle, char *path, ACPI_BUFFER *bufp)
 {
 	ACPI_STATUS rv;
 
@@ -947,36 +947,6 @@ acpi_match_hid(ACPI_DEVICE_INFO *ad, const char * const *ids)
 	}
 
 	return 0;
-}
-
-/*
- * acpi_set_wake_gpe
- *
- *	Set GPE as both Runtime and Wake
- */
-void
-acpi_set_wake_gpe(ACPI_HANDLE handle)
-{
-	ACPI_BUFFER buf;
-	ACPI_STATUS rv;
-	ACPI_OBJECT *p, *elt;
-
-	rv = acpi_eval_struct(handle, METHOD_NAME__PRW, &buf);
-	if (ACPI_FAILURE(rv))
-		return;			/* just ignore */
-
-	p = buf.Pointer;
-	if (p->Type != ACPI_TYPE_PACKAGE || p->Package.Count < 2)
-		goto out;		/* just ignore */
-
-	elt = p->Package.Elements;
-
-	/* TBD: package support */
-	AcpiSetGpeType(NULL, elt[0].Integer.Value, ACPI_GPE_TYPE_WAKE_RUN);
-	AcpiEnableGpe(NULL, elt[0].Integer.Value, ACPI_NOT_ISR);
-
- out:
-	AcpiOsFree(buf.Pointer);
 }
 
 

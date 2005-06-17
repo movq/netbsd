@@ -1,4 +1,4 @@
-/*	$NetBSD: if_bgereg.h,v 1.24 2005/02/27 00:27:32 perry Exp $	*/
+/*	$NetBSD: if_bgereg.h,v 1.24.2.3 2005/11/27 22:41:42 riz Exp $	*/
 /*
  * Copyright (c) 2001 Wind River Systems
  * Copyright (c) 1997, 1998, 1999, 2001
@@ -249,6 +249,7 @@
 #define BGE_CHIPID_BCM5705_A3		0x30030000
 #define BGE_CHIPID_BCM5750_A0		0x40000000
 #define BGE_CHIPID_BCM5750_A1		0x40010000
+#define BGE_CHIPID_BCM5751_A1		0x41010000
 
 /* shorthand one */
 #define BGE_ASICREV(x)                  ((x) >> 28)
@@ -1739,17 +1740,10 @@
  */
 #define BGE_MAGIC_NUMBER                0x4B657654
 
-#if BYTE_ORDER == LITTLE_ENDIAN
 typedef struct {
 	u_int32_t		bge_addr_hi;
 	u_int32_t		bge_addr_lo;
 } bge_hostaddr;
-#else
-typedef struct {
-	u_int32_t		bge_addr_hi;
-	u_int32_t		bge_addr_lo;
-} bge_hostaddr;
-#endif
 
 #define BGE_HOSTADDR(x)	(x).bge_addr_lo
 
@@ -1770,11 +1764,7 @@ struct bge_rcb {
 	u_int32_t		bge_nicaddr;
 };
 
-#if BYTE_ORDER == BIG_ENDIAN
-#define	BGE_RCB_MAXLEN_FLAGS(maxlen, flags)	((flags) << 16 | (maxlen))
-#else
 #define	BGE_RCB_MAXLEN_FLAGS(maxlen, flags)	((maxlen) << 16 | (flags))
-#endif
 
 #define RCB_WRITE_4(sc, rcb, offset, val) \
 	bus_space_write_4(sc->bge_btag, sc->bge_bhandle, \
@@ -2327,6 +2317,7 @@ struct bge_softc {
     	u_int8_t		bge_rx_alignment_bug;
 	u_int8_t		bge_pcie;	/* on a PCI Express port */
 	u_int32_t		bge_return_ring_cnt;
+	u_int32_t		bge_tx_prodidx;
 	bus_dma_tag_t		bge_dmatag;
 	u_int32_t		bge_chipid;
 	u_int32_t		bge_quirks;

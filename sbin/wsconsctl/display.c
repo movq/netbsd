@@ -1,4 +1,4 @@
-/*	$NetBSD: display.c,v 1.11 2005/04/30 16:38:21 jmmv Exp $ */
+/*	$NetBSD: display.c,v 1.10.2.1 2005/05/01 18:41:01 tron Exp $ */
 
 /*-
  * Copyright (c) 1998, 2004 The NetBSD Foundation, Inc.

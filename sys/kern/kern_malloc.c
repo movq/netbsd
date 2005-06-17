@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_malloc.c,v 1.99 2005/05/30 23:04:53 chs Exp $	*/
+/*	$NetBSD: kern_malloc.c,v 1.96 2005/02/26 21:34:55 perry Exp $	*/
 
 /*
  * Copyright (c) 1987, 1991, 1993
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_malloc.c,v 1.99 2005/05/30 23:04:53 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_malloc.c,v 1.96 2005/02/26 21:34:55 perry Exp $");
 
 #include "opt_lockdebug.h"
 
@@ -113,7 +113,7 @@ int	nkmempages = NKMEMPAGES;
 #include "opt_malloclog.h"
 #include "opt_malloc_debug.h"
 
-struct kmembuckets kmembuckets[MINBUCKET + 16];
+struct kmembuckets bucket[MINBUCKET + 16];
 struct kmemusage *kmemusage;
 char *kmembase, *kmemlimit;
 
@@ -279,7 +279,7 @@ malloc(unsigned long size, struct malloc_type *ksp, int flags)
 		return ((void *) va);
 #endif
 	indx = BUCKETINDX(size);
-	kbp = &kmembuckets[indx];
+	kbp = &bucket[indx];
 	s = splvm();
 	simple_lock(&malloc_slock);
 #ifdef KMEMSTATS
@@ -307,18 +307,17 @@ malloc(unsigned long size, struct malloc_type *ksp, int flags)
 			allocsize = 1 << indx;
 		npg = btoc(allocsize);
 		simple_unlock(&malloc_slock);
-		va = (caddr_t) uvm_km_alloc(kmem_map,
-		    (vsize_t)ctob(npg), 0,
+		va = (caddr_t) uvm_km_kmemalloc(kmem_map, NULL,
+		    (vsize_t)ctob(npg),
 		    ((flags & M_NOWAIT) ? UVM_KMF_NOWAIT : 0) |
-		    ((flags & M_CANFAIL) ? UVM_KMF_CANFAIL : 0) |
-		    UVM_KMF_WIRED);
+		    ((flags & M_CANFAIL) ? UVM_KMF_CANFAIL : 0));
 		if (__predict_false(va == NULL)) {
 			/*
 			 * Kmem_malloc() can return NULL, even if it can
 			 * wait, if there is no map space available, because
 			 * it can't fix that problem.  Neither can we,
 			 * right now.  (We should release pages which
-			 * are completely free and which are in kmembuckets
+			 * are completely free and which are in buckets
 			 * with too many free elements.)
 			 */
 			if ((flags & (M_NOWAIT|M_CANFAIL)) == 0)
@@ -348,7 +347,7 @@ malloc(unsigned long size, struct malloc_type *ksp, int flags)
 		/*
 		 * Just in case we blocked while allocating memory,
 		 * and someone else also allocated memory for this
-		 * kmembucket, don't assume the list is still empty.
+		 * bucket, don't assume the list is still empty.
 		 */
 		savedlist = kbp->kb_next;
 		kbp->kb_next = cp = va + (npg << PAGE_SHIFT) - allocsize;
@@ -498,7 +497,7 @@ free(void *addr, struct malloc_type *ksp)
 
 	kup = btokup(addr);
 	size = 1 << kup->ku_indx;
-	kbp = &kmembuckets[kup->ku_indx];
+	kbp = &bucket[kup->ku_indx];
 	s = splvm();
 	simple_lock(&malloc_slock);
 #ifdef MALLOCLOG
@@ -518,8 +517,7 @@ free(void *addr, struct malloc_type *ksp)
 		    addr, size, ksp->ks_shortdesc, alloc);
 #endif /* DIAGNOSTIC */
 	if (size > MAXALLOCSAVE) {
-		uvm_km_free(kmem_map, (vaddr_t)addr, ctob(kup->ku_pagecnt),
-		    UVM_KMF_WIRED);
+		uvm_km_free(kmem_map, (vaddr_t)addr, ctob(kup->ku_pagecnt));
 #ifdef KMEMSTATS
 		size = kup->ku_pagecnt << PGSHIFT;
 		ksp->ks_memuse -= size;
@@ -844,9 +842,8 @@ kmeminit(void)
 	 */
 	kmeminit_nkmempages();
 
-	kmemusage = (struct kmemusage *) uvm_km_alloc(kernel_map,
-	    (vsize_t)(nkmempages * sizeof(struct kmemusage)), 0,
-	    UVM_KMF_WIRED|UVM_KMF_ZERO);
+	kmemusage = (struct kmemusage *) uvm_km_zalloc(kernel_map,
+	    (vsize_t)(nkmempages * sizeof(struct kmemusage)));
 	kmb = 0;
 	kmem_map = uvm_km_suballoc(kernel_map, &kmb,
 	    &kml, ((vsize_t)nkmempages << PAGE_SHIFT),
@@ -857,11 +854,10 @@ kmeminit(void)
 #ifdef KMEMSTATS
 	for (indx = 0; indx < MINBUCKET + 16; indx++) {
 		if (1 << indx >= PAGE_SIZE)
-			kmembuckets[indx].kb_elmpercl = 1;
+			bucket[indx].kb_elmpercl = 1;
 		else
-			kmembuckets[indx].kb_elmpercl = PAGE_SIZE / (1 << indx);
-		kmembuckets[indx].kb_highwat =
-			5 * kmembuckets[indx].kb_elmpercl;
+			bucket[indx].kb_elmpercl = PAGE_SIZE / (1 << indx);
+		bucket[indx].kb_highwat = 5 * bucket[indx].kb_elmpercl;
 	}
 #endif
 
@@ -922,7 +918,7 @@ freelist_sanitycheck(void) {
 	int rv = 0;
 
 	for (i = MINBUCKET; i <= MINBUCKET + 15; i++) {
-		kbp = &kmembuckets[i];
+		kbp = &bucket[i];
 		freep = (struct freelist *)kbp->kb_next;
 		j = 0;
 		while(freep) {

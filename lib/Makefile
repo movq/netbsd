@@ -1,10 +1,10 @@
-#	$NetBSD: Makefile,v 1.97 2005/06/03 14:28:07 christos Exp $
+#	$NetBSD: Makefile,v 1.95 2005/02/20 00:52:02 manu Exp $
 #	from: @(#)Makefile	5.25.1.1 (Berkeley) 5/7/91
 
 .include <bsd.own.mk>
 
 SUBDIR=	csu libc .WAIT libarch libbsdmalloc libbz2 libcompat libcrypt \
-	libcurses libevent libform libintl libkvm libl libm libmagic \
+	libcurses libedit libevent libform libintl libkvm libl libm libmagic \
 	libmenu libossaudio libpcap libpci libpmc libposix libpthread \
 	libpthread_dbg libradius libresolv librmt librpcsvc librt libterm \
 	libusbhid libutil libwrap liby libz
@@ -57,31 +57,24 @@ SUBDIR+=	i18n_module
 # Libraries that depend upon any listed previously
 # (and those that depend upon these [and ...])
 #
-#==================== 1st library dependency barrier ====================
 SUBDIR+=	.WAIT
-
-SUBDIR+=	libedit		# depends on libterm
+SUBDIR+=	libcdk 
+.if (${MKCRYPTO} != "no")
+SUBDIR+=	libssl
+.endif
+.if (${MKKERBEROS} != "no")
+SUBDIR+=	libkrb5
+.endif
+.if (${MKKERBEROS4} != "no")
+SUBDIR+=	libkrb
+.endif
 
 .if (${MKCRYPTO} != "no")
-SUBDIR+=	libssl		# depends on libcrypto
-SUBDIR+=	libssh		# depends on libcrypto
+SUBDIR+=	.WAIT libssh
 .endif
-
-.if (${MKKERBEROS} != "no")
-SUBDIR+=	libkrb5		# depends on libcrypto and more
-.endif
-
-.if (${MKKERBEROS4} != "no")
-SUBDIR+=	libkrb		# depends on libdes
-.endif
-
-#==================== 2nd library dependency barrier ====================
-SUBDIR+=	.WAIT
-
-SUBDIR+=	libcdk 		# depends on libedit
 
 .if (${MKPAM} != "no")
-SUBDIR+=	libpam		# depends on libkrb5 and more
+SUBDIR+=	.WAIT libpam
 .endif
 
 .include <bsd.subdir.mk>

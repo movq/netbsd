@@ -1,6 +1,6 @@
-/*	$NetBSD: cfparse.y,v 1.2 2005/05/10 09:54:43 manu Exp $	*/
+/*	$NetBSD: cfparse.y,v 1.1.1.4.2.4 2005/11/21 21:12:30 tron Exp $	*/
 
-/* $Id: cfparse.y,v 1.2 2005/05/10 09:54:43 manu Exp $ */
+/* Id: cfparse.y,v 1.37.2.6 2005/10/17 16:23:50 monas Exp */
 
 %{
 /*
@@ -823,7 +823,9 @@ sainfo_id
 					return -1;
 				}
 				$$ = ipsecdoi_sockaddr2id(saddr,
-					$3 == ~0 ? (sizeof(struct in_addr) << 3): $3,
+					$3 == (sizeof(struct in_addr) << 3) &&
+						$1 == IDTYPE_ADDRESS
+					  ? ~0 : $3,
 					$5);
 				break;
 #ifdef INET6
@@ -834,7 +836,9 @@ sainfo_id
 					return -1;
 				}
 				$$ = ipsecdoi_sockaddr2id(saddr,
-					$3 == ~0 ? (sizeof(struct in6_addr) << 3) : $3,
+					$3 == (sizeof(struct in6_addr) << 3) &&
+						$1 == IDTYPE_ADDRESS
+					  ? ~0 : $3,
 					$5);
 				break;
 #endif
@@ -1259,6 +1263,7 @@ remote_spec
 		{
 #ifdef ENABLE_HYBRID
 			/* formerly identifier type login */
+			cur_rmconf->idvtype = IDTYPE_LOGIN;
 			if (set_identifier(&cur_rmconf->idv, IDTYPE_LOGIN, $2) != 0) {
 				yyerror("failed to set identifer.\n");
 				return -1;
@@ -1702,7 +1707,7 @@ set_isakmp_proposal(rmconf, prspec)
 	struct secprotospec *s;
 	int prop_no = 1; 
 	int trns_no = 1;
-	u_int32_t types[MAXALGCLASS];
+	int32_t types[MAXALGCLASS];
 
 	p = prspec;
 	if (p->next != 0) {

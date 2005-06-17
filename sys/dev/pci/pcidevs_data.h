@@ -1,10 +1,10 @@
-/*	$NetBSD: pcidevs_data.h,v 1.718 2005/06/15 17:59:14 bouyer Exp $	*/
+/*	$NetBSD: pcidevs_data.h,v 1.700.2.17 2005/12/15 20:08:52 tron Exp $	*/
 
 /*
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.
  *
  * generated from:
- *	NetBSD: pcidevs,v 1.719 2005/06/15 17:58:02 bouyer Exp
+ *	NetBSD: pcidevs,v 1.701.2.17 2005/12/15 20:08:01 tron Exp
  */
 
 /*
@@ -2028,10 +2028,6 @@ const struct pci_vendor pci_vendors[] = {
 	    "eTIMedia Technology",
 	},
 	{
-	    PCI_VENDOR_ICENSEMBLE,
-	    "IC Ensemble / VIA Technologies",
-	},
-	{
 	    PCI_VENDOR_MICROSOFT,
 	    "Microsoft",
 	},
@@ -2316,7 +2312,7 @@ const struct pci_vendor pci_vendors[] = {
 	    "INVALID VENDOR ID",
 	},
 };
-const int pci_nvendors = 569;
+const int pci_nvendors = 568;
 
 const struct pci_product pci_products[] = {
 	{
@@ -3408,12 +3404,20 @@ const struct pci_product pci_products[] = {
 	    "Radeon Mobility A3",
 	},
 	{
+	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_RADEON_9600_LE,
+	    "Radeon 9600 LE",
+	},
+	{
 	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_RADEON_9600_XT,
 	    "Radeon 9600 XT",
 	},
 	{
 	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_MACH32,
 	    "Mach32",
+	},
+	{
+	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_RADEON_9600_LE_S,
+	    "Radeon 9600 LE Secondary",
 	},
 	{
 	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_RADEON_9600_XT_S,
@@ -3654,10 +3658,6 @@ const struct pci_product pci_products[] = {
 	{
 	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_RADEON_9800_PRO,
 	    "Radeon 9800 Pro",
-	},
-	{
-	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_RADEON_MOB_9700,
-	    "Mobility Radeon 9700",
 	},
 	{
 	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_RADEON_MOB_T2,
@@ -4134,6 +4134,10 @@ const struct pci_product pci_products[] = {
 	{
 	    PCI_VENDOR_BROADCOM, PCI_PRODUCT_BROADCOM_BCM5750M,
 	    "BCM5750M 10/100/1000 Ethernet",
+	},
+	{
+	    PCI_VENDOR_BROADCOM, PCI_PRODUCT_BROADCOM_BCM5751M,
+	    "BCM5751M 10/100/1000 Ethernet",
 	},
 	{
 	    PCI_VENDOR_BROADCOM, PCI_PRODUCT_BROADCOM_BCM5782,
@@ -5272,14 +5276,6 @@ const struct pci_product pci_products[] = {
 	    "MSVCC01/02/03/04 Video Capture Cards",
 	},
 	{
-	    PCI_VENDOR_HITACHI, PCI_PRODUCT_HITACHI_SH7751,
-	    "SH7751 PCI Controller",
-	},
-	{
-	    PCI_VENDOR_HITACHI, PCI_PRODUCT_HITACHI_SH7751R,
-	    "SH7751R PCI Controller",
-	},
-	{
 	    PCI_VENDOR_IBM, PCI_PRODUCT_IBM_MCABRIDGE,
 	    "MCA Bridge",
 	},
@@ -5354,14 +5350,6 @@ const struct pci_product pci_products[] = {
 	{
 	    PCI_VENDOR_IBM, PCI_PRODUCT_IBM_MPIC2,
 	    "MPIC-II",
-	},
-	{
-	    PCI_VENDOR_ICENSEMBLE, PCI_PRODUCT_ICENSEMBLE_ICE1712,
-	    "Envy24 Multichannel Audio Controller",
-	},
-	{
-	    PCI_VENDOR_ICENSEMBLE, PCI_PRODUCT_ICENSEMBLE_VT1720,
-	    "Envy24PT/HT Multi-Channel Audio Controller",
 	},
 	{
 	    PCI_VENDOR_ICOMPRESSION, PCI_PRODUCT_ICOMPRESSION_ITVC15,
@@ -5440,12 +5428,16 @@ const struct pci_product pci_products[] = {
 	    "80321 I/O Processor",
 	},
 	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_6700PXH_PCIE0,
-	    "6700PXH PCI Express-to-PCI Bridge #0",
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_SRCZCRX,
+	    "RAID controller",
 	},
 	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_6700PXH_PCIE1,
-	    "6700PXH PCI Express-to-PCI Bridge #1",
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_SRCU42E,
+	    "SCSI RAID controller",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_SRCS28X,
+	    "SATA RAID controller",
 	},
 	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_PCEB,
@@ -6304,6 +6296,10 @@ const struct pci_product pci_products[] = {
 	    "6300ESB PCI-X Bridge",
 	},
 	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_6300ESB_RAID,
+	    "6300ESB SATA RAID Controller",
+	},
+	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82801FB_LPC,
 	    "82801FB LPC Interface Bridge",
 	},
@@ -6368,16 +6364,20 @@ const struct pci_product pci_products[] = {
 	    "82801FB/FR IDE Controller",
 	},
 	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82945P_MCH,
+	    "82945G/P Memory Controller Hub",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82945P_EXP,
+	    "82945G/P PCI Express Bridge",
+	},
+	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82915G_IGDC,
 	    "82915G/GL IGD Companion",
 	},
 	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82801G_LPC,
 	    "82801GB/GR LPC Interface Bridge",
-	},
-	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82801G_IDE,
-	    "82801GB/GR IDE Controller",
 	},
 	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82801G_SATA,
@@ -6436,12 +6436,20 @@ const struct pci_product pci_products[] = {
 	    "82801GB/GR SMBus Controller",
 	},
 	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82801G_LAN,
+	    "82801GB/GR LAN Controller",
+	},
+	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82801G_ACM,
 	    "82801GB/GR AC'97 Modem Controller",
 	},
 	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82801G_ACA,
 	    "82801GB/GR AC'97 Audio Controller",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82801G_IDE,
+	    "82801GB/GR IDE Controller",
 	},
 	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82801G_EXP_5,
@@ -6468,22 +6476,6 @@ const struct pci_product pci_products[] = {
 	    "82855PM Power Management Controller",
 	},
 	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82830MP_IO_1,
-	    "82830MP CPU to I/O Bridge 1",
-	},
-	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82830MP_AGP,
-	    "82830MP CPU to AGP Bridge",
-	},
-	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82830MP_IV,
-	    "82830MP Integrated Video",
-	},
-	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82830MP_IO_2,
-	    "82830MP CPU to I/O Bridge 2",
-	},
-	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82855GM_MCH,
 	    "82855GM Host-Hub Controller",
 	},
@@ -6500,39 +6492,27 @@ const struct pci_product pci_products[] = {
 	    "82855GM GMCH Configuration Process",
 	},
 	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_E7525_MCH,
-	    "E7525 Memory Controller Hub",
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82830MP_IO_1,
+	    "82830MP CPU to I/O Bridge 1",
 	},
 	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_E7525_MCHER,
-	    "E7525 Error Reporting Device",
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82830MP_AGP,
+	    "82830MP CPU to AGP Bridge",
 	},
 	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_E7525_PCIE_A,
-	    "E7525 PCI Express Port A",
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82830MP_IV,
+	    "82830MP Integrated Video",
 	},
 	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_E7525_PCIE_A1,
-	    "E7525 PCI Express Port A1",
-	},
-	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_E7525_PCIE_B,
-	    "E7525 PCI Express Port B",
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82830MP_IO_2,
+	    "82830MP CPU to I/O Bridge 2",
 	},
 	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_PRO_WL_2200BG,
 	    "PRO/Wireless LAN 2200BG Mini-PCI Adapter",
 	},
 	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_PRO_WL_2225BG,
-	    "PRO/Wireless LAN 2225BG Mini-PCI Adapter",
-	},
-	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_PRO_WL_2915ABG_1,
-	    "PRO/Wireless LAN 2915ABG Mini-PCI Adapter",
-	},
-	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_PRO_WL_2915ABG_2,
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_PRO_WL_2915ABG,
 	    "PRO/Wireless LAN 2915ABG Mini-PCI Adapter",
 	},
 	{
@@ -7310,6 +7290,18 @@ const struct pci_product pci_products[] = {
 	{
 	    PCI_VENDOR_SYMBIOS, PCI_PRODUCT_SYMBIOS_PERC_4SC,
 	    "PERC 4/SC",
+	},
+	{
+	    PCI_VENDOR_SYMBIOS, PCI_PRODUCT_SYMBIOS_MEGARAID_320X,
+	    "LSI Megaraid SCSI 320-X",
+	},
+	{
+	    PCI_VENDOR_SYMBIOS, PCI_PRODUCT_SYMBIOS_MEGARAID_320E,
+	    "LSI Megaraid SCSI 320-E",
+	},
+	{
+	    PCI_VENDOR_SYMBIOS, PCI_PRODUCT_SYMBIOS_MEGARAID_300X,
+	    "LSI Megaraid SATA (300-6X/300-8X)",
 	},
 	{
 	    PCI_VENDOR_SYMBIOS, PCI_PRODUCT_SYMBIOS_PE_GNIC,
@@ -9372,10 +9364,6 @@ const struct pci_product pci_products[] = {
 	    "Fast Infrared Type DO",
 	},
 	{
-	    PCI_VENDOR_TRANSMETA, PCI_PRODUCT_TRANSMETA_TM8000NB,
-	    "TM8000 Integrated Northbridge",
-	},
-	{
 	    PCI_VENDOR_TRANSMETA, PCI_PRODUCT_TRANSMETA_NORTHBRIDGE,
 	    "Virtual Northbridge",
 	},
@@ -10332,4 +10320,4 @@ const struct pci_product pci_products[] = {
 	    "Video Controller",
 	},
 };
-const int pci_nproducts = 2003;
+const int pci_nproducts = 2001;

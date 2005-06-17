@@ -1,4 +1,4 @@
-/* $NetBSD: moused.c,v 1.15 2005/06/02 06:03:53 lukem Exp $ */
+/* $NetBSD: moused.c,v 1.14 2004/10/30 08:54:51 dsl Exp $ */
 /**
  ** Copyright (c) 1995 Michael Smith, All rights reserved.
  **
@@ -48,7 +48,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: moused.c,v 1.15 2005/06/02 06:03:53 lukem Exp $");
+__RCSID("$NetBSD: moused.c,v 1.14 2004/10/30 08:54:51 dsl Exp $");
 #endif /* not lint */
 
 #include <ctype.h>
@@ -897,7 +897,6 @@ moused(char *wsm)
 	zstate[i].count = 0;
 	zstate[i].tv = mouse_button_state_tv;
     }
-    flags = 0;
 
     /* process mouse data */
     for (;;) {

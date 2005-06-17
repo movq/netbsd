@@ -1,4 +1,4 @@
-/*	$NetBSD: if_sk.c,v 1.15 2005/05/30 04:35:22 christos Exp $	*/
+/*	$NetBSD: if_sk.c,v 1.14.2.3 2005/11/24 22:19:11 tron Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -250,7 +250,6 @@ static const struct sk_product {
 } sk_products[] = {
 	{ PCI_VENDOR_3COM, PCI_PRODUCT_3COM_3C940, },
 	{ PCI_VENDOR_DLINK, PCI_PRODUCT_DLINK_DGE530T, },
-	{ PCI_VENDOR_LINKSYS, PCI_PRODUCT_LINKSYS_EG1032, },
 	{ PCI_VENDOR_LINKSYS, PCI_PRODUCT_LINKSYS_EG1064, },
 	{ PCI_VENDOR_SCHNEIDERKOCH, PCI_PRODUCT_SCHNEIDERKOCH_SKNET_GE, },
 	{ PCI_VENDOR_SCHNEIDERKOCH, PCI_PRODUCT_SCHNEIDERKOCH_SK9821v2, },
@@ -258,6 +257,8 @@ static const struct sk_product {
 	{ PCI_VENDOR_GALILEO, PCI_PRODUCT_GALILEO_BELKIN, },
 	{ 0, 0, }
 };
+
+#define SK_LINKSYS_EG1032_SUBID	0x00151737
 
 static inline u_int32_t
 sk_win_read_4(struct sk_softc *sc, u_int32_t reg)
@@ -974,6 +975,15 @@ skc_probe(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct pci_attach_args *pa = (struct pci_attach_args *)aux;
 	const struct sk_product *psk;
+	pcireg_t subid;
+
+	subid = pci_conf_read(pa->pa_pc, pa->pa_tag, PCI_SUBSYS_ID_REG);
+
+	/* special-case Linksys EG1032, since rev 3 uses re(4) */
+	if (PCI_VENDOR(pa->pa_id) == PCI_VENDOR_LINKSYS &&
+	    PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_LINKSYS_EG1032 &&
+	    subid == SK_LINKSYS_EG1032_SUBID)
+		return(1);
 
 	if ((psk = sk_lookup(pa))) {
 		return(1);
@@ -1339,7 +1349,7 @@ skc_attach(struct device *parent, struct device *self, void *aux)
 	bus_size_t iosize;
 	int s;
 	u_int32_t command;
-	const char *revstr;
+	char *revstr;
 
 	DPRINTFN(2, ("begin skc_attach\n"));
 
@@ -1353,10 +1363,10 @@ skc_attach(struct device *parent, struct device *self, void *aux)
 	if (command == 0x01) {
 		command = pci_conf_read(pc, pa->pa_tag, SK_PCI_PWRMGMTCTRL);
 		if (command & SK_PSTATE_MASK) {
-			u_int32_t		xiobase, membase, irq;
+			u_int32_t		iobase, membase, irq;
 
 			/* Save important PCI config data. */
-			xiobase = pci_conf_read(pc, pa->pa_tag, SK_PCI_LOIO);
+			iobase = pci_conf_read(pc, pa->pa_tag, SK_PCI_LOIO);
 			membase = pci_conf_read(pc, pa->pa_tag, SK_PCI_LOMEM);
 			irq = pci_conf_read(pc, pa->pa_tag, SK_PCI_INTLINE);
 
@@ -1369,7 +1379,7 @@ skc_attach(struct device *parent, struct device *self, void *aux)
 			    SK_PCI_PWRMGMTCTRL, command);
 
 			/* Restore PCI config data. */
-			pci_conf_write(pc, pa->pa_tag, SK_PCI_LOIO, xiobase);
+			pci_conf_write(pc, pa->pa_tag, SK_PCI_LOIO, iobase);
 			pci_conf_write(pc, pa->pa_tag, SK_PCI_LOMEM, membase);
 			pci_conf_write(pc, pa->pa_tag, SK_PCI_INTLINE, irq);
 		}
@@ -1759,11 +1769,13 @@ sk_start(struct ifnet *ifp)
 		return;
 
 	/* Transmit */
-	sc_if->sk_cdata.sk_tx_prod = idx;
-	CSR_WRITE_4(sc, sc_if->sk_tx_bmu, SK_TXBMU_TX_START);
+	if (idx != sc_if->sk_cdata.sk_tx_prod) {
+		sc_if->sk_cdata.sk_tx_prod = idx;
+		CSR_WRITE_4(sc, sc_if->sk_tx_bmu, SK_TXBMU_TX_START);
 
-	/* Set a timeout in case the chip goes out to lunch. */
-	ifp->if_timer = 5;
+		/* Set a timeout in case the chip goes out to lunch. */
+		ifp->if_timer = 5;
+	}
 }
 
 
@@ -1888,7 +1900,7 @@ void
 sk_txeof(struct sk_if_softc *sc_if)
 {
 	struct sk_softc		*sc = sc_if->sk_softc;
-	struct sk_tx_desc	*cur_tx = NULL;
+	struct sk_tx_desc	*cur_tx;
 	struct ifnet		*ifp = &sc_if->sk_ethercom.ec_if;
 	u_int32_t		idx;
 	struct sk_txmap_entry	*entry;
@@ -1937,10 +1949,10 @@ sk_txeof(struct sk_if_softc *sc_if)
 	else /* nudge chip to keep tx ring moving */
 		CSR_WRITE_4(sc, sc_if->sk_tx_bmu, SK_TXBMU_TX_START);
 
-	sc_if->sk_cdata.sk_tx_cons = idx;
-
-	if (cur_tx != NULL)
+	if (sc_if->sk_cdata.sk_tx_cnt < SK_TX_RING_CNT - 2)
 		ifp->if_flags &= ~IFF_OACTIVE;
+
+	sc_if->sk_cdata.sk_tx_cons = idx;
 }
 
 void
@@ -2331,10 +2343,20 @@ void sk_init_yukon(sc_if)
 {
 	u_int32_t		/*mac, */phy;
 	u_int16_t		reg;
+	struct sk_softc		*sc;
 	int			i;
 
 	DPRINTFN(1, ("sk_init_yukon: start: sk_csr=%#x\n",
 		     CSR_READ_4(sc_if->sk_softc, SK_CSR)));
+
+	sc = sc_if->sk_softc;
+	if (sc->sk_type == SK_YUKON_LITE &&
+	    sc->sk_rev >= SK_YUKON_LITE_REV_A3) {
+		/* Take PHY out of reset. */
+		sk_win_write_4(sc, SK_GPIO,
+			(sk_win_read_4(sc, SK_GPIO) | SK_GPIO_DIR9) & ~SK_GPIO_DAT9);
+	}
+
 
 	/* GMAC and GPHY Reset */
 	SK_IF_WRITE_4(sc_if, 0, SK_GPHY_CTRL, SK_GPHY_RESET_SET);
@@ -2463,6 +2485,11 @@ sk_init(struct ifnet *ifp)
 	DPRINTFN(1, ("sk_init\n"));
 
 	s = splnet();
+
+	if (ifp->if_flags & IFF_RUNNING) {
+		splx(s);
+		return 0;
+	}
 
 	/* Cancel pending I/O and free all RX/TX buffers. */
 	sk_stop(ifp,0);

@@ -1,4 +1,4 @@
-/*	$NetBSD: kerberos5.c,v 1.14 2005/04/19 03:19:46 christos Exp $	*/
+/*	$NetBSD: kerberos5.c,v 1.12.6.2 2005/07/09 22:56:58 tron Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993

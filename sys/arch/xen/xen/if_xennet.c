@@ -1,4 +1,4 @@
-/*	$NetBSD: if_xennet.c,v 1.27 2005/06/06 11:51:41 yamt Exp $	*/
+/*	$NetBSD: if_xennet.c,v 1.13.2.15 2005/08/28 09:52:56 tron Exp $	*/
 
 /*
  *
@@ -33,9 +33,10 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_xennet.c,v 1.27 2005/06/06 11:51:41 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_xennet.c,v 1.13.2.15 2005/08/28 09:52:56 tron Exp $");
 
 #include "opt_inet.h"
+#include "opt_nfs_boot.h"
 #include "rnd.h"
 
 #include <sys/param.h>
@@ -69,12 +70,14 @@ __KERNEL_RCSID(0, "$NetBSD: if_xennet.c,v 1.27 2005/06/06 11:51:41 yamt Exp $");
 #include <netinet/ip.h>
 #endif
 
+#if defined(NFS_BOOT_BOOTSTATIC)
 #include <nfs/rpcv2.h>
 
 #include <nfs/nfsproto.h>
 #include <nfs/nfs.h>
 #include <nfs/nfsmount.h>
 #include <nfs/nfsdiskless.h>
+#endif /* defined(NFS_BOOT_BOOTSTATIC) */
 
 #include "bpfilter.h"
 #if NBPFILTER > 0
@@ -429,13 +432,11 @@ xennet_interface_status_change(netif_fe_interface_status_t *status)
 		if (sc->sc_backend_state == BEST_CLOSED) {
 			/* Move from CLOSED to DISCONNECTED state. */
 			sc->sc_tx = (netif_tx_interface_t *)
-			    uvm_km_alloc(kernel_map, PAGE_SIZE, PAGE_SIZE,
-			    UVM_KMF_VAONLY);
+				uvm_km_valloc_align(kernel_map, PAGE_SIZE, PAGE_SIZE);
 			if (sc->sc_tx == NULL)
 				panic("netif: no tx va");
 			sc->sc_rx = (netif_rx_interface_t *)
-			    uvm_km_alloc(kernel_map, PAGE_SIZE, PAGE_SIZE,
-			    UVM_KMF_VAONLY);
+				uvm_km_valloc_align(kernel_map, PAGE_SIZE, PAGE_SIZE);
 			if (sc->sc_rx == NULL)
 				panic("netif: no rx va");
 			sc->sc_pg_tx = uvm_pagealloc(NULL, 0, NULL, UVM_PGA_ZERO);
@@ -658,6 +659,7 @@ xen_network_handler(void *arg)
 	struct mbuf *m;
 
 	network_tx_buf_gc(sc);
+	ifp->if_flags &= ~IFF_OACTIVE;
 	xennet_start(ifp);
 
 #if NRND > 0
@@ -819,6 +821,13 @@ network_tx_buf_gc(struct xennet_softc *sc)
 			put_bufarray_entry(sc->sc_tx_bufa,
 			    sc->sc_tx->ring[MASK_NETIF_TX_IDX(idx)].resp.id);
 			sc->sc_tx_entries--; /* atomic */
+
+			if (sc->sc_tx->ring[MASK_NETIF_TX_IDX(idx)].resp.status
+			    == NETIF_RSP_OKAY) {
+				ifp->if_opackets++;
+			} else {
+				ifp->if_oerrors++;
+			}
 		}
 
 		sc->sc_tx_resp_cons = prod;
@@ -854,8 +863,8 @@ network_alloc_rx_buffers(struct xennet_softc *sc)
 
 	nr_pfns = 0;
 
-	rxpages = uvm_km_alloc(kernel_map, RX_ENTRIES * PAGE_SIZE,
-	    PAGE_SIZE, UVM_KMF_VAONLY);
+	rxpages = uvm_km_valloc_align(kernel_map, RX_ENTRIES * PAGE_SIZE,
+	    PAGE_SIZE);
 
 	snet = splnet();
 	for (va = rxpages; va < rxpages + RX_ENTRIES * PAGE_SIZE;
@@ -949,9 +958,8 @@ network_alloc_tx_buffers(struct xennet_softc *sc)
 	struct xennet_txbuf *txbuf;
 	int i;
 
-	txpages = uvm_km_alloc(kernel_map,
-	    (TX_ENTRIES / TXBUF_PER_PAGE) * PAGE_SIZE, PAGE_SIZE,
-	    UVM_KMF_VAONLY);
+	txpages = uvm_km_valloc_align(kernel_map,
+	    (TX_ENTRIES / TXBUF_PER_PAGE) * PAGE_SIZE, PAGE_SIZE);
 	for (va = txpages;
 	     va < txpages + (TX_ENTRIES / TXBUF_PER_PAGE) * PAGE_SIZE;
 	     va += PAGE_SIZE) {
@@ -996,12 +1004,19 @@ xennet_start(struct ifnet *ifp)
 	if ((ifp->if_flags & (IFF_RUNNING | IFF_OACTIVE)) != IFF_RUNNING)
 		return;
 
+	network_tx_buf_gc(sc);
+
 	idx = sc->sc_tx->req_prod;
 	while (/*CONSTCOND*/1) {
 
 		IFQ_POLL(&ifp->if_snd, m);
 		if (m == NULL)
 			break;
+
+		if (sc->sc_tx_entries >= NETIF_TX_RING_SIZE - 1) {
+			ifp->if_flags |= IFF_OACTIVE;
+			break;
+		}
 
 		switch (m->m_flags & (M_EXT|M_EXT_CLUSTER)) {
 		case M_EXT|M_EXT_CLUSTER:
@@ -1093,17 +1108,11 @@ xennet_start(struct ifnet *ifp)
 #endif
 	}
 
-	ifp->if_flags &= ~IFF_OACTIVE;
-
-	network_tx_buf_gc(sc);
-
 	x86_lfence();
 	if (sc->sc_tx->resp_prod != idx) {
 		hypervisor_notify_via_evtchn(sc->sc_evtchn);
 		ifp->if_timer = 5;
 	}
-
-	ifp->if_opackets++;
 
 	DPRINTFN(XEDB_FOLLOW, ("%s: xennet_start() done\n",
 	    sc->sc_dev.dv_xname));
@@ -1212,6 +1221,7 @@ xennet_mediastatus(struct ifnet *ifp, struct ifmediareq *ifmr)
 }
 #endif
 
+#if defined(NFS_BOOT_BOOTSTATIC)
 int
 xennet_bootstatic_callback(struct nfs_diskless *nd)
 {
@@ -1239,10 +1249,11 @@ xennet_bootstatic_callback(struct nfs_diskless *nd)
 	    NFS_BOOTSTATIC_HAS_MASK|NFS_BOOTSTATIC_HAS_SERVADDR|
 	    NFS_BOOTSTATIC_HAS_SERVER);
 }
+#endif /* defined(NFS_BOOT_BOOTSTATIC) */
 
 
 #ifdef XENNET_DEBUG_DUMP
-#define XCHR(x) hexdigits[(x) & 0xf]
+#define XCHR(x) "0123456789abcdef"[(x) & 0xf]
 static void
 xennet_hex_dump(unsigned char *pkt, size_t len, char *type, int id)
 {

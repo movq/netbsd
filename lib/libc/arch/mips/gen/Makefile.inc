@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.25 2005/04/15 22:39:11 kleink Exp $
+#	$NetBSD: Makefile.inc,v 1.24.6.1 2005/04/19 12:32:32 tron Exp $
 
 SRCS+=	fabs.S ldexp.S modf.S
 

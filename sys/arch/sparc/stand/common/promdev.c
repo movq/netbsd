@@ -1,4 +1,4 @@
-/*	$NetBSD: promdev.c,v 1.16 2005/04/27 07:59:47 martin Exp $ */
+/*	$NetBSD: promdev.c,v 1.15.14.1 2005/04/28 11:05:56 tron Exp $ */
 
 /*
  * Copyright (c) 1993 Paul Kranenburg

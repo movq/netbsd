@@ -1,4 +1,4 @@
-/*	$NetBSD: route.c,v 1.80 2005/05/19 15:46:02 ginsbach Exp $	*/
+/*	$NetBSD: route.c,v 1.75 2005/02/05 14:05:23 xtraeme Exp $	*/
 
 /*
  * Copyright (c) 1983, 1989, 1991, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1989, 1991, 1993\n\
 #if 0
 static char sccsid[] = "@(#)route.c	8.6 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: route.c,v 1.80 2005/05/19 15:46:02 ginsbach Exp $");
+__RCSID("$NetBSD: route.c,v 1.75 2005/02/05 14:05:23 xtraeme Exp $");
 #endif
 #endif /* not lint */
 
@@ -356,11 +356,7 @@ any_ntoa(const struct sockaddr *sa)
 	char *out;
 	int len;
 
-#if __GNUC__ > 2
 	len = sa->sa_len - offsetof(struct sockaddr, sa_data);
-#else
-	len = sa->sa_len;
-#endif
 	in  = sa->sa_data;
 	out = obuf;
 
@@ -1189,15 +1185,22 @@ getaddr(int which, char *s, struct hostent **hpp)
 				*slash = '/';
 				slash = 0;
 			}
-			if (getaddrinfo(s, "0", &hints, &res) != 0)
-				errx(1, "bad value: %s", s);
+			if (getaddrinfo(s, "0", &hints, &res) != 0) {
+				(void) fprintf(stderr, "%s: bad value\n", s);
+				exit(1);
+			}
 		}
 		if (slash)
 			*slash = '/';
-		if (sizeof(su->sin6) != res->ai_addrlen)
-			errx(1, "%s: bad value", s);
-		if (res->ai_next)
-			errx(1, "address resolved to multiple values: %s", s);
+		if (sizeof(su->sin6) != res->ai_addrlen) {
+			(void) fprintf(stderr, "%s: bad value\n", s);
+			exit(1);
+		}
+		if (res->ai_next) {
+			(void) fprintf(stderr,
+			    "%s: resolved to multiple values\n", s);
+			exit(1);
+		}
 		memcpy(&su->sin6, res->ai_addr, sizeof(su->sin6));
 		freeaddrinfo(res);
 #ifdef __KAME__
@@ -1286,22 +1289,15 @@ badataddr:
 
 	if ((t = strchr(s, '/')) != NULL && which == RTA_DST) {
 		*t = '\0';
-		if (forcenet == 0) {
-			if ((val = inet_addr(s)) != INADDR_NONE) {
-				inet_makenetandmask(htonl(val), &su->sin);
-				return prefixlen(&t[1]);
-			}
-		} else {
-			if ((val = inet_network(s)) != INADDR_NONE) {
-				inet_makenetandmask(val, &su->sin);
-				return prefixlen(&t[1]);
-			}
+		if ((val = inet_addr(s)) != INADDR_NONE) {
+			inet_makenetandmask(htonl(val), &su->sin);
+			return prefixlen(&t[1]);
 		}
 		*t = '/';
 	}
-	if (inet_aton(s, &su->sin.sin_addr) &&
+	if (((val = inet_addr(s)) != INADDR_NONE) &&
 	    (which != RTA_DST || forcenet == 0)) {
-		val = su->sin.sin_addr.s_addr;
+		su->sin.sin_addr.s_addr = val;
 		if (inet_lnaof(su->sin.sin_addr) != INADDR_ANY)
 			return (1);
 		else {
@@ -1327,7 +1323,8 @@ netdone:
 }
 
 int
-prefixlen(char *s)
+prefixlen(s)
+	char *s;
 {
 	int len = atoi(s), q, r;
 	int max;
@@ -1342,12 +1339,16 @@ prefixlen(char *s)
 		break;
 #endif
 	default:
-		errx(1, "prefixlen is not supported with af %d", af);
+		(void) fprintf(stderr,
+		    "prefixlen is not supported with af %d\n", af);
+		exit(1);
 	}
 
 	rtm_addrs |= RTA_NETMASK;	
-	if (len < -1 || len > max)
-		errx(1, "bad value: %s", s);
+	if (len < -1 || len > max) {
+		(void) fprintf(stderr, "%s: bad value\n", s);
+		exit(1);
+	}
 	
 	q = len >> 3;
 	r = len & 7;
@@ -1502,7 +1503,7 @@ rtmsg(int cmd, int flags)
 #define NEXTADDR(w, u) \
 	if (rtm_addrs & (w)) {\
 	    l = ROUNDUP(u.sa.sa_len); memmove(cp, &(u), l); cp += l;\
-	    if (verbose && ! shortoutput) sodump(&(u),#u);\
+	    if (verbose && ! shortoutput) sodump(&(u),"u");\
 	}
 
 	errno = 0;

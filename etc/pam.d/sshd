@@ -1,4 +1,4 @@
-# $NetBSD: sshd,v 1.7 2005/03/17 01:47:18 christos Exp $
+# $NetBSD: sshd,v 1.5.2.2 2005/03/19 17:45:49 tron Exp $
 #
 # PAM configuration for the "sshd" service
 #

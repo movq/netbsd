@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.c,v 1.88 2005/06/03 15:09:46 tsutsui Exp $	*/
+/*	$NetBSD: pmap.c,v 1.86.6.1 2005/06/06 12:16:37 tron Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -112,7 +112,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.88 2005/06/03 15:09:46 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.86.6.1 2005/06/06 12:16:37 tron Exp $");
 
 #include "opt_ddb.h"
 #include "opt_pmap_debug.h"
@@ -2905,11 +2905,11 @@ pmap_remove_kernel(vaddr_t sva, vaddr_t eva)
  * disaster.
  */
 void 
-pmap_remove(pmap_t pmap, vaddr_t sva, vaddr_t eva)
+pmap_remove(pmap_t pmap, vaddr_t start, vaddr_t end)
 {
 
 	if (pmap == pmap_kernel()) {
-		pmap_remove_kernel(sva, eva);
+		pmap_remove_kernel(start, end);
 		return;
 	}
 
@@ -2927,7 +2927,7 @@ pmap_remove(pmap_t pmap, vaddr_t sva, vaddr_t eva)
 	 * currently loaded pmap, the MMU root pointer must be reloaded
 	 * with the default 'kernel' map.
 	 */ 
-	if (pmap_remove_a(pmap->pm_a_tmgr, sva, eva)) {
+	if (pmap_remove_a(pmap->pm_a_tmgr, start, end)) {
 		if (kernel_crp.rp_addr == pmap->pm_a_phys) {
 			kernel_crp.rp_addr = kernAphys;
 			loadcrp(&kernel_crp);
@@ -2963,7 +2963,7 @@ pmap_remove(pmap_t pmap, vaddr_t sva, vaddr_t eva)
  * It's ugly but will do for now.
  */
 boolean_t 
-pmap_remove_a(a_tmgr_t *a_tbl, vaddr_t sva, vaddr_t eva)
+pmap_remove_a(a_tmgr_t *a_tbl, vaddr_t start, vaddr_t end)
 {
 	boolean_t empty;
 	int idx;
@@ -3001,10 +3001,10 @@ pmap_remove_a(a_tmgr_t *a_tbl, vaddr_t sva, vaddr_t eva)
 	 * 4.  The last step involves removing this range and is handled by
 	 * the code block 'if (nend < end)'.
 	 */
-	nstart = MMU_ROUND_UP_A(sva);
-	nend = MMU_ROUND_A(eva);
+	nstart = MMU_ROUND_UP_A(start);
+	nend = MMU_ROUND_A(end);
 
-	if (sva < nstart) {
+	if (start < nstart) {
 		/*
 		 * This block is executed if the range starts between
 		 * a granularity boundary.
@@ -3012,7 +3012,7 @@ pmap_remove_a(a_tmgr_t *a_tbl, vaddr_t sva, vaddr_t eva)
 		 * First find the DTE which is responsible for mapping
 		 * the start of the range.
 		 */
-		idx = MMU_TIA(sva);
+		idx = MMU_TIA(start);
 		a_dte = &a_tbl->at_dtbl[idx];
 
 		/*
@@ -3032,10 +3032,10 @@ pmap_remove_a(a_tmgr_t *a_tbl, vaddr_t sva, vaddr_t eva)
 			 * 2. The end of the full range, rounded down to the
 			 *    nearest granularity boundary.
 			 */
-			if (eva < nstart)
-				empty = pmap_remove_b(b_tbl, sva, eva);
+			if (end < nstart)
+				empty = pmap_remove_b(b_tbl, start, end);
 			else
-				empty = pmap_remove_b(b_tbl, sva, nstart);
+				empty = pmap_remove_b(b_tbl, start, nstart);
 
 			/*
 			 * If the removal resulted in an empty B table,
@@ -3086,7 +3086,7 @@ pmap_remove_a(a_tmgr_t *a_tbl, vaddr_t sva, vaddr_t eva)
 				a_tbl->at_ecnt--;
 			}
 	}
-	if (nend < eva) {
+	if (nend < end) {
 		/*
 		 * This block is executed if the range ends beyond a
 		 * granularity boundary.
@@ -3112,7 +3112,7 @@ pmap_remove_a(a_tmgr_t *a_tbl, vaddr_t sva, vaddr_t eva)
 			b_dte = mmu_ptov(a_dte->addr.raw);
 			b_tbl = mmuB2tmgr(b_dte);
 
-			empty = pmap_remove_b(b_tbl, nend, eva);
+			empty = pmap_remove_b(b_tbl, nend, end);
 
 			/*
 			 * If the removal resulted in an empty B table,
@@ -3150,7 +3150,7 @@ pmap_remove_a(a_tmgr_t *a_tbl, vaddr_t sva, vaddr_t eva)
  * If the operation results in an empty B table, the function returns TRUE.
  */
 boolean_t 
-pmap_remove_b(b_tmgr_t *b_tbl, vaddr_t sva, vaddr_t eva)
+pmap_remove_b(b_tmgr_t *b_tbl, vaddr_t start, vaddr_t end)
 {
 	boolean_t empty;
 	int idx;
@@ -3160,19 +3160,19 @@ pmap_remove_b(b_tmgr_t *b_tbl, vaddr_t sva, vaddr_t eva)
 	mmu_short_pte_t  *c_dte;
 	
 
-	nstart = MMU_ROUND_UP_B(sva);
-	nend = MMU_ROUND_B(eva);
+	nstart = MMU_ROUND_UP_B(start);
+	nend = MMU_ROUND_B(end);
 
-	if (sva < nstart) {
-		idx = MMU_TIB(sva);
+	if (start < nstart) {
+		idx = MMU_TIB(start);
 		b_dte = &b_tbl->bt_dtbl[idx];
 		if (MMU_VALID_DT(*b_dte)) {
 			c_dte = mmu_ptov(MMU_DTE_PA(*b_dte));
 			c_tbl = mmuC2tmgr(c_dte);
-			if (eva < nstart)
-				empty = pmap_remove_c(c_tbl, sva, eva);
+			if (end < nstart)
+				empty = pmap_remove_c(c_tbl, start, end);
 			else
-				empty = pmap_remove_c(c_tbl, sva, nstart);
+				empty = pmap_remove_c(c_tbl, start, nstart);
 			if (empty) {
 				b_dte->attr.raw = MMU_DT_INVALID;
 				b_tbl->bt_ecnt--;
@@ -3195,13 +3195,13 @@ pmap_remove_b(b_tmgr_t *b_tbl, vaddr_t sva, vaddr_t eva)
 			rstart += MMU_TIB_RANGE;
 		}
 	}
-	if (nend < eva) {
+	if (nend < end) {
 		idx = MMU_TIB(nend);
 		b_dte = &b_tbl->bt_dtbl[idx];
 		if (MMU_VALID_DT(*b_dte)) {
 			c_dte = mmu_ptov(MMU_DTE_PA(*b_dte));
 			c_tbl = mmuC2tmgr(c_dte);
-			empty = pmap_remove_c(c_tbl, nend, eva);
+			empty = pmap_remove_c(c_tbl, nend, end);
 			if (empty) {
 				b_dte->attr.raw = MMU_DT_INVALID;
 				b_tbl->bt_ecnt--;
@@ -3226,15 +3226,15 @@ pmap_remove_b(b_tmgr_t *b_tbl, vaddr_t sva, vaddr_t eva)
  * Remove a range of addresses from the given C table.
  */
 boolean_t 
-pmap_remove_c(c_tmgr_t *c_tbl, vaddr_t sva, vaddr_t eva)
+pmap_remove_c(c_tmgr_t *c_tbl, vaddr_t start, vaddr_t end)
 {
 	boolean_t empty;
 	int idx;
 	mmu_short_pte_t *c_pte;
 	
-	idx = MMU_TIC(sva);
+	idx = MMU_TIC(start);
 	c_pte = &c_tbl->ct_dtbl[idx];
-	for (;sva < eva; sva += MMU_PAGE_SIZE, c_pte++) {
+	for (;start < end; start += MMU_PAGE_SIZE, c_pte++) {
 		if (MMU_VALID_DT(*c_pte)) {
 			pmap_remove_pte(c_pte);
 			c_tbl->ct_ecnt--;

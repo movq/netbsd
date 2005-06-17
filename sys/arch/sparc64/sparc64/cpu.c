@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.c,v 1.41 2005/06/16 04:17:50 briggs Exp $ */
+/*	$NetBSD: cpu.c,v 1.38 2004/07/02 02:50:25 petrov Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -52,7 +52,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.41 2005/06/16 04:17:50 briggs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.38 2004/07/02 02:50:25 petrov Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -75,7 +75,7 @@ __KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.41 2005/06/16 04:17:50 briggs Exp $");
 struct cacheinfo cacheinfo;
 
 /* Linked list of all CPUs in system. */
-int sparc_ncpus = 0;
+int ncpus = 0;
 struct cpu_info *cpus = NULL;
 
 __volatile cpuset_t cpus_active;/* set of active cpus */
@@ -124,7 +124,7 @@ alloc_cpuinfo(cpu_node)
 			return cpi;
 
 	/* Allocate the aligned VA and determine the size. */
-	va = uvm_km_alloc(kernel_map, sz, sz, UVM_KMF_VAONLY);
+	va = uvm_km_valloc_align(kernel_map, sz, sz);
 	if (!va)
 		panic("alloc_cpuinfo: no virtual space");
 	va0 = va;
@@ -198,7 +198,7 @@ cpu_attach(parent, dev, aux)
 	struct mainbus_attach_args *ma = aux;
 	struct fpstate64 *fpstate;
 	struct fpstate64 fps[2];
-	const char *sep;
+	char *sep;
 	register int i, l;
 	uint64_t ver;
 	int bigcache, cachesize;

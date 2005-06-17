@@ -1,4 +1,4 @@
-/*	$NetBSD: if_stge.c,v 1.27 2005/05/16 21:35:32 bouyer Exp $	*/
+/*	$NetBSD: if_stge.c,v 1.24.2.2 2005/07/05 13:45:47 tron Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_stge.c,v 1.27 2005/05/16 21:35:32 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_stge.c,v 1.24.2.2 2005/07/05 13:45:47 tron Exp $");
 
 #include "bpfilter.h"
 
@@ -563,7 +563,7 @@ stge_attach(struct device *parent, struct device *self, void *aux)
 
 	/*
 	 * Reading the station address from the EEPROM doesn't seem
-	 * to work, at least on my sample boards.  Instead, since
+	 * to work, at least on my sample boards.  Instread, since
 	 * the reset sequence does AutoInit, read it from the station
 	 * address registers.
 	 */
@@ -646,10 +646,8 @@ stge_attach(struct device *parent, struct device *self, void *aux)
 	/*
 	 * We can do IPv4/TCPv4/UDPv4 checksums in hardware.
 	 */
-	sc->sc_ethercom.ec_if.if_capabilities |=
-	    IFCAP_CSUM_IPv4_Tx | IFCAP_CSUM_IPv4_Rx |
-	    IFCAP_CSUM_TCPv4_Tx | IFCAP_CSUM_TCPv4_Rx |
-	    IFCAP_CSUM_UDPv4_Tx | IFCAP_CSUM_UDPv4_Rx;
+	sc->sc_ethercom.ec_if.if_capabilities |= IFCAP_CSUM_IPv4 |
+	    IFCAP_CSUM_TCPv4 | IFCAP_CSUM_UDPv4;
 
 	/*
 	 * Attach the interface.
@@ -1541,12 +1539,9 @@ stge_init(struct ifnet *ifp)
 	STGE_RXCHAIN_RESET(sc);
 
 	/* Set the station address. */
-	bus_space_write_2(st, sh, STGE_StationAddress0,
-	    LLADDR(ifp->if_sadl)[0] | (LLADDR(ifp->if_sadl)[1] << 8));
-	bus_space_write_2(st, sh, STGE_StationAddress1,
-	    LLADDR(ifp->if_sadl)[2] | (LLADDR(ifp->if_sadl)[3] << 8));
-	bus_space_write_2(st, sh, STGE_StationAddress2,
-	    LLADDR(ifp->if_sadl)[4] | (LLADDR(ifp->if_sadl)[5] << 8));
+	for (i = 0; i < 6; i++)
+		bus_space_write_1(st, sh, STGE_StationAddress0 + i,
+		    LLADDR(ifp->if_sadl)[i]);
 
 	/*
 	 * Set the statistics masks.  Disable all the RMON stats,
@@ -1585,6 +1580,10 @@ stge_init(struct ifnet *ifp)
 
 	/* Initialize the Tx start threshold. */
 	bus_space_write_2(st, sh, STGE_TxStartThresh, sc->sc_txthresh);
+
+	/* RX DMA thresholds, from linux */
+	bus_space_write_1(st, sh, STGE_RxDMABurstThresh, 0x30);
+	bus_space_write_1(st, sh, STGE_RxDMAUrgentThresh, 0x30);
 
 	/*
 	 * Initialize the Rx DMA interrupt control register.  We
@@ -1649,6 +1648,9 @@ stge_init(struct ifnet *ifp)
 		/* Tx Poll Now bug work-around. */
 		bus_space_write_2(st, sh, STGE_DebugCtrl,
 		    bus_space_read_2(st, sh, STGE_DebugCtrl) | 0x0010);
+		/* XXX ? from linux */
+		bus_space_write_2(st, sh, STGE_DebugCtrl,
+		    bus_space_read_2(st, sh, STGE_DebugCtrl) | 0x0020);
 	}
 
 	/*
@@ -1858,16 +1860,6 @@ stge_set_filter(struct stge_softc *sc)
 	sc->sc_ReceiveMode = RM_ReceiveUnicast;
 	if (ifp->if_flags & IFF_BROADCAST)
 		sc->sc_ReceiveMode |= RM_ReceiveBroadcast;
-
-#ifdef	STGE_CU_BUG
-	/*
-	 * Some cards (Sundance TI, copper) only seem to work
-	 * right now if we put them into promiscuous mode. It
-	 * probably is the Marvell PHY stuff that isn't quite
-	 * right.
-	 */
-	ifp->if_flags |= IFF_PROMISC;
-#endif
 
 	if (ifp->if_flags & IFF_PROMISC) {
 		sc->sc_ReceiveMode |= RM_ReceiveAllFrames;

@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_file64.c,v 1.28 2005/05/29 22:08:16 christos Exp $	*/
+/*	$NetBSD: linux_file64.c,v 1.25.2.1 2005/10/01 10:39:27 tron Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998, 2000 The NetBSD Foundation, Inc.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_file64.c,v 1.28 2005/05/29 22:08:16 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_file64.c,v 1.25.2.1 2005/10/01 10:39:27 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -266,7 +266,7 @@ linux_sys_ftruncate64(l, v, retval)
 	return sys_ftruncate(l, &ta, retval);
 }
 
-#if !defined(__m68k__) && !defined(__amd64__)
+#if !defined(__m68k__)
 static void bsd_to_linux_flock64 __P((struct linux_flock64 *,
     const struct flock *));
 static void linux_to_bsd_flock64 __P((struct flock *,
@@ -375,7 +375,7 @@ linux_sys_fcntl64(l, v, retval)
 		return linux_sys_fcntl(l, v, retval);
 	}
 }
-#endif /* !m68k && !amd64 */
+#endif /* !m68k */
 
 #endif /* !alpha */
 
@@ -407,7 +407,7 @@ linux_sys_getdents64(l, v, retval)
 	struct proc *p = l->l_proc;
 	struct dirent *bdp;
 	struct vnode *vp;
-	caddr_t	inp, tbuf;		/* BSD-format */
+	caddr_t	inp, buf;		/* BSD-format */
 	int len, reclen;		/* BSD-format */
 	caddr_t outp;			/* Linux-format */
 	int resid, linux_reclen = 0;	/* Linux-format */
@@ -443,12 +443,12 @@ linux_sys_getdents64(l, v, retval)
 	buflen = min(MAXBSIZE, nbytes);
 	if (buflen < va.va_blocksize)
 		buflen = va.va_blocksize;
-	tbuf = malloc(buflen, M_TEMP, M_WAITOK);
+	buf = malloc(buflen, M_TEMP, M_WAITOK);
 
 	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 	off = fp->f_offset;
 again:
-	aiov.iov_base = tbuf;
+	aiov.iov_base = buf;
 	aiov.iov_len = buflen;
 	auio.uio_iov = &aiov;
 	auio.uio_iovcnt = 1;
@@ -466,7 +466,7 @@ again:
 	if (error)
 		goto out;
 
-	inp = tbuf;
+	inp = buf;
 	outp = (caddr_t)SCARG(uap, dent);
 	resid = nbytes;
 	if ((len = buflen - auio.uio_resid) == 0)
@@ -525,7 +525,7 @@ out:
 	VOP_UNLOCK(vp, 0);
 	if (cookiebuf)
 		free(cookiebuf, M_TEMP);
-	free(tbuf, M_TEMP);
+	free(buf, M_TEMP);
 out1:
 	FILE_UNUSE(fp, p);
 	return error;

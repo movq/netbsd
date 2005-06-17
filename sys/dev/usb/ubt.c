@@ -1,4 +1,4 @@
-/*	$NetBSD: ubt.c,v 1.12 2005/05/11 10:02:28 augustss Exp $	*/
+/*	$NetBSD: ubt.c,v 1.11 2004/04/23 17:25:25 itojun Exp $	*/
 
 /*
  * Copyright (c) 2002, 2003 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ubt.c,v 1.12 2005/05/11 10:02:28 augustss Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ubt.c,v 1.11 2004/04/23 17:25:25 itojun Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -165,17 +165,16 @@ USB_ATTACH(ubt)
 	usbd_interface_handle	iface = uaa->iface;
 	struct bt_attach_args	bt;
 	usb_interface_descriptor_t const *id;
-	char			*devinfop;
+	char			devinfo[1024];
 	usb_endpoint_descriptor_t const *ed;
 	u_int8_t		epcount;
 	int			i;
 
 	DPRINTFN(10,("ubt_attach: sc=%p\n", sc));
 
-	devinfop = usbd_devinfo_alloc(dev, 0);
+	usbd_devinfo(dev, 0, devinfo, sizeof(devinfo));
 	USB_ATTACH_SETUP;
-	printf("%s: %s\n", USBDEVNAME(sc->sc_dev), devinfop);
-	usbd_devinfo_free(devinfop);
+	printf("%s: %s\n", USBDEVNAME(sc->sc_dev), devinfo);
 
 	sc->sc_udev = dev;
 	sc->sc_ctl_iface = iface;

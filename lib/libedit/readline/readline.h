@@ -1,4 +1,4 @@
-/*	$NetBSD: readline.h,v 1.16 2005/06/11 18:18:59 christos Exp $	*/
+/*	$NetBSD: readline.h,v 1.12.2.1 2005/05/28 14:02:20 tron Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -103,7 +103,6 @@ extern char		*rl_completer_word_break_characters;
 extern char		*rl_completer_quote_characters;
 extern Function		*rl_completion_entry_function;
 extern CPPFunction	*rl_attempted_completion_function;
-extern int		 rl_attempted_completion_over;
 extern int		rl_completion_type;
 extern int		rl_completion_query_items;
 extern char		*rl_special_prefixes;
@@ -176,7 +175,6 @@ void		 rl_prep_terminal(int);
 void		 rl_deprep_terminal(void);
 int		 rl_read_init_file(const char *);
 int		 rl_parse_and_bind(const char *);
-int		 rl_variable_bind(const char *, const char *);
 void		 rl_stuff_char(int);
 int		 rl_add_defun(const char *, Function *, int);
 

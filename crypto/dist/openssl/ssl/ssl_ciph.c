@@ -59,7 +59,6 @@
 #include <stdio.h>
 #include <openssl/objects.h>
 #include <openssl/comp.h>
-#include <openssl/fips.h>
 #include "ssl_locl.h"
 
 #define SSL_ENC_DES_IDX		0
@@ -154,15 +153,13 @@ static const SSL_CIPHER cipher_aliases[]={
 	{0,SSL_TXT_LOW,   0, 0,   SSL_LOW, 0,0,0,0,SSL_STRONG_MASK},
 	{0,SSL_TXT_MEDIUM,0, 0,SSL_MEDIUM, 0,0,0,0,SSL_STRONG_MASK},
 	{0,SSL_TXT_HIGH,  0, 0,  SSL_HIGH, 0,0,0,0,SSL_STRONG_MASK},
-#ifdef OPENSSL_FIPS
-	{0,SSL_TXT_FIPS,  0, 0,  SSL_FIPS, 0,0,0,0,SSL_FIPS|SSL_STRONG_NONE},
-#endif
 	};
 
 static int init_ciphers=1;
 
 static void load_ciphers(void)
 	{
+	init_ciphers=0;
 	ssl_cipher_methods[SSL_ENC_DES_IDX]= 
 		EVP_get_cipherbyname(SN_des_cbc);
 	ssl_cipher_methods[SSL_ENC_3DES_IDX]=
@@ -186,10 +183,9 @@ static void load_ciphers(void)
 		EVP_get_digestbyname(SN_md5);
 	ssl_digest_methods[SSL_MD_SHA1_IDX]=
 		EVP_get_digestbyname(SN_sha1);
-	init_ciphers=0;
 	}
 
-int ssl_cipher_get_evp(const SSL_SESSION *s, const EVP_CIPHER **enc,
+int ssl_cipher_get_evp(SSL_SESSION *s, const EVP_CIPHER **enc,
 	     const EVP_MD **md, SSL_COMP **comp)
 	{
 	int i;
@@ -363,12 +359,7 @@ static void ssl_cipher_collect_ciphers(const SSL_METHOD *ssl_method,
 		{
 		c = ssl_method->get_cipher(i);
 		/* drop those that use any of that is not available */
-#ifdef OPENSSL_FIPS
-		if ((c != NULL) && c->valid && !(c->algorithms & mask)
-			&& (!FIPS_mode() || (c->algo_strength & SSL_FIPS)))
-#else
 		if ((c != NULL) && c->valid && !(c->algorithms & mask))
-#endif
 			{
 			co_list[co_list_num].cipher = c;
 			co_list[co_list_num].next = NULL;
@@ -863,11 +854,7 @@ STACK_OF(SSL_CIPHER) *ssl_create_cipher_list(const SSL_METHOD *ssl_method,
 	 */
 	for (curr = head; curr != NULL; curr = curr->next)
 		{
-#ifdef OPENSSL_FIPS
-		if (curr->active && (!FIPS_mode() || curr->cipher->algo_strength & SSL_FIPS))
-#else
 		if (curr->active)
-#endif
 			{
 			sk_SSL_CIPHER_push(cipherstack, curr->cipher);
 #ifdef CIPHER_DEBUG
@@ -1067,7 +1054,7 @@ char *SSL_CIPHER_description(SSL_CIPHER *cipher, char *buf, int len)
 	return(buf);
 	}
 
-char *SSL_CIPHER_get_version(const SSL_CIPHER *c)
+char *SSL_CIPHER_get_version(SSL_CIPHER *c)
 	{
 	int i;
 
@@ -1082,7 +1069,7 @@ char *SSL_CIPHER_get_version(const SSL_CIPHER *c)
 	}
 
 /* return the actual cipher being used */
-const char *SSL_CIPHER_get_name(const SSL_CIPHER *c)
+const char *SSL_CIPHER_get_name(SSL_CIPHER *c)
 	{
 	if (c != NULL)
 		return(c->name);
@@ -1090,7 +1077,7 @@ const char *SSL_CIPHER_get_name(const SSL_CIPHER *c)
 	}
 
 /* number of bits for symmetric cipher */
-int SSL_CIPHER_get_bits(const SSL_CIPHER *c, int *alg_bits)
+int SSL_CIPHER_get_bits(SSL_CIPHER *c, int *alg_bits)
 	{
 	int ret=0;
 

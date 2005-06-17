@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs_vfsops.c,v 1.164 2005/05/29 21:25:24 christos Exp $	*/
+/*	$NetBSD: ffs_vfsops.c,v 1.162.2.1 2005/08/24 18:43:37 riz Exp $	*/
 
 /*
  * Copyright (c) 1989, 1991, 1993, 1994
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ffs_vfsops.c,v 1.164 2005/05/29 21:25:24 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ffs_vfsops.c,v 1.162.2.1 2005/08/24 18:43:37 riz Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_ffs.h"
@@ -111,12 +111,12 @@ struct vfsops ffs_vfsops = {
 	vfs_stdextattrctl,
 	ffs_vnodeopv_descs,
 };
-VFS_ATTACH(ffs_vfsops);
 
-struct genfs_ops ffs_genfsops = {
-	ffs_gop_size,
-	ufs_gop_alloc,
-	genfs_gop_write,
+static const struct genfs_ops ffs_genfsops = {
+	.gop_size = ffs_gop_size,
+	.gop_alloc = ufs_gop_alloc,
+	.gop_write = genfs_gop_write,
+	.gop_markupdate = ufs_gop_markupdate,
 };
 
 POOL_INIT(ffs_inode_pool, sizeof(struct inode), 0, 0, 0, "ffsinopl",
@@ -266,7 +266,7 @@ ffs_mount(mp, path, data, ndp, p)
 	}
 
 	if (!update) {
-		int xflags;
+		int flags;
 
 		/*
 		 * Disallow multiple mounts of the same device.
@@ -282,16 +282,16 @@ ffs_mount(mp, path, data, ndp, p)
 			goto fail;
 		}
 		if (mp->mnt_flag & MNT_RDONLY)
-			xflags = FREAD;
+			flags = FREAD;
 		else
-			xflags = FREAD|FWRITE;
-		error = VOP_OPEN(devvp, xflags, FSCRED, p);
+			flags = FREAD|FWRITE;
+		error = VOP_OPEN(devvp, flags, FSCRED, p);
 		if (error)
 			goto fail;
 		error = ffs_mountfs(devvp, mp, p);
 		if (error) {
 			vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
-			(void)VOP_CLOSE(devvp, xflags, NOCRED, p);
+			(void)VOP_CLOSE(devvp, flags, NOCRED, p);
 			VOP_UNLOCK(devvp, 0);
 			goto fail;
 		}

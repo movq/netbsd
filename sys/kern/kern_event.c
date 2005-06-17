@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_event.c,v 1.23 2005/05/29 22:24:15 christos Exp $	*/
+/*	$NetBSD: kern_event.c,v 1.22 2005/02/26 21:34:55 perry Exp $	*/
 /*-
  * Copyright (c) 1999,2000,2001 Jonathan Lemon <jlemon@FreeBSD.org>
  * All rights reserved.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_event.c,v 1.23 2005/05/29 22:24:15 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_event.c,v 1.22 2005/02/26 21:34:55 perry Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -299,13 +299,13 @@ kfilter_unregister(const char *name)
 		return (ENOENT);
 
 	if (kfilter->name[0] != '\0') {
-		/* XXXUNCONST Cast away const (but we know it's safe. */
-		free(__UNCONST(kfilter->name), M_KEVENT);
+		/* XXX Cast away const (but we know it's safe. */
+		free((void *) kfilter->name, M_KEVENT);
 		kfilter->name = "";	/* mark as `not implemented' */
 	}
 	if (kfilter->filtops != NULL) {
-		/* XXXUNCONST Cast away const (but we know it's safe. */
-		free(__UNCONST(kfilter->filtops), M_KEVENT);
+		/* XXX Cast away const (but we know it's safe. */
+		free((void *) kfilter->filtops, M_KEVENT);
 		kfilter->filtops = NULL; /* mark as `not implemented' */
 	}
 	return (0);

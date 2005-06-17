@@ -863,7 +863,7 @@ start:
 		{
 		al=SSL_AD_UNEXPECTED_MESSAGE;
 		SSLerr(SSL_F_SSL3_READ_BYTES,SSL_R_DATA_BETWEEN_CCS_AND_FINISHED);
-		goto f_err;
+		goto err;
 		}
 
 	/* If the other end has shut down, throw anything we read away
@@ -970,7 +970,7 @@ start:
 			{
 			al=SSL_AD_DECODE_ERROR;
 			SSLerr(SSL_F_SSL3_READ_BYTES,SSL_R_BAD_HELLO_REQUEST);
-			goto f_err;
+			goto err;
 			}
 
 		if (s->msg_callback)
@@ -1081,17 +1081,17 @@ start:
 		if (	(rr->length != 1) || (rr->off != 0) ||
 			(rr->data[0] != SSL3_MT_CCS))
 			{
-			al=SSL_AD_ILLEGAL_PARAMETER;
+			i=SSL_AD_ILLEGAL_PARAMETER;
 			SSLerr(SSL_F_SSL3_READ_BYTES,SSL_R_BAD_CHANGE_CIPHER_SPEC);
-			goto f_err;
+			goto err;
 			}
 
 		/* Check we have a cipher to change to */
 		if (s->s3->tmp.new_cipher == NULL)
 			{
-			al=SSL_AD_UNEXPECTED_MESSAGE;
+			i=SSL_AD_UNEXPECTED_MESSAGE;
 			SSLerr(SSL_F_SSL3_GET_CERT_VERIFY,SSL_R_CCS_RECEIVED_EARLY);
-			goto f_err;
+			goto err;
 			}
 
 		rr->length=0;

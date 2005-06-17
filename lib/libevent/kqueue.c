@@ -1,4 +1,4 @@
-/*	$NetBSD: kqueue.c,v 1.5 2005/04/17 07:20:00 provos Exp $	*/
+/*	$NetBSD: kqueue.c,v 1.4 2003/10/11 18:30:09 provos Exp $	*/
 /*	$OpenBSD: kqueue.c,v 1.5 2002/07/10 14:41:31 art Exp $	*/
 
 /*
@@ -48,18 +48,29 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
+#include <err.h>
 #ifdef HAVE_INTTYPES_H
 #include <inttypes.h>
 #endif
 
-#if defined(HAVE_INTTYPES_H) && !defined(__OpenBSD__) && !defined(__FreeBSD__)
+#ifdef USE_LOG
+#include "log.h"
+#else
+#define LOG_DBG(x)
+#define log_error	warn
+#endif
+
+#ifdef HAVE_INTTYPES_H
 #define INTPTR(x)	(intptr_t)x
 #else
 #define INTPTR(x)	x
 #endif
 
 #include "event.h"
-#include "log.h"
+
+extern struct event_list timequeue;
+extern struct event_list eventqueue;
+extern struct event_list addqueue;
 
 #define EVLIST_X_KQINKERNEL	0x1000
 
@@ -71,16 +82,16 @@ struct kqop {
 	struct kevent *events;
 	int nevents;
 	int kq;
-};
+} kqueueop;
 
 void *kq_init	(void);
 int kq_add	(void *, struct event *);
 int kq_del	(void *, struct event *);
-int kq_recalc	(struct event_base *, void *, int);
-int kq_dispatch	(struct event_base *, void *, struct timeval *);
+int kq_recalc	(void *, int);
+int kq_dispatch	(void *, struct timeval *);
 int kq_insert	(struct kqop *, struct kevent *);
 
-const struct eventop kqops = {
+struct eventop kqops = {
 	"kqueue",
 	kq_init,
 	kq_add,
@@ -93,44 +104,38 @@ void *
 kq_init(void)
 {
 	int kq;
-	struct kqop *kqueueop;
 
 	/* Disable kqueue when this environment variable is set */
-	if (getenv("EVENT_NOKQUEUE"))
+	if (!issetugid() && getenv("EVENT_NOKQUEUE"))
 		return (NULL);
 
-	if (!(kqueueop = calloc(1, sizeof(struct kqop))))
-		return (NULL);
+	memset(&kqueueop, 0, sizeof(kqueueop));
 
 	/* Initalize the kernel queue */
 	
 	if ((kq = kqueue()) == -1) {
-		event_warn("kqueue");
-		free (kqueueop);
+		log_error("kqueue");
 		return (NULL);
 	}
 
-	kqueueop->kq = kq;
+	kqueueop.kq = kq;
 
 	/* Initalize fields */
-	kqueueop->changes = malloc(NEVENT * sizeof(struct kevent));
-	if (kqueueop->changes == NULL) {
-		free (kqueueop);
+	kqueueop.changes = malloc(NEVENT * sizeof(struct kevent));
+	if (kqueueop.changes == NULL)
+		return (NULL);
+	kqueueop.events = malloc(NEVENT * sizeof(struct kevent));
+	if (kqueueop.events == NULL) {
+		free (kqueueop.changes);
 		return (NULL);
 	}
-	kqueueop->events = malloc(NEVENT * sizeof(struct kevent));
-	if (kqueueop->events == NULL) {
-		free (kqueueop->changes);
-		free (kqueueop);
-		return (NULL);
-	}
-	kqueueop->nevents = NEVENT;
+	kqueueop.nevents = NEVENT;
 
-	return (kqueueop);
+	return (&kqueueop);
 }
 
 int
-kq_recalc(struct event_base *base, void *arg, int max)
+kq_recalc(void *arg, int max)
 {
 	return (0);
 }
@@ -149,7 +154,7 @@ kq_insert(struct kqop *kqop, struct kevent *kev)
 		newchange = realloc(kqop->changes,
 				    nevents * sizeof(struct kevent));
 		if (newchange == NULL) {
-			event_warn("%s: malloc", __func__);
+			log_error("%s: malloc", __func__);
 			return (-1);
 		}
 		kqop->changes = newchange;
@@ -162,17 +167,17 @@ kq_insert(struct kqop *kqop, struct kevent *kev)
 		 * the next realloc will pick it up.
 		 */
 		if (newresult == NULL) {
-			event_warn("%s: malloc", __func__);
+			log_error("%s: malloc", __func__);
 			return (-1);
 		}
-		kqop->events = newresult;
+		kqop->events = newchange;
 
 		kqop->nevents = nevents;
 	}
 
 	memcpy(&kqop->changes[kqop->nchanges++], kev, sizeof(struct kevent));
 
-	event_debug(("%s: fd %d %s%s",
+	LOG_DBG((LOG_MISC, 70, "%s: fd %d %s%s",
 		 __func__, kev->ident, 
 		 kev->filter == EVFILT_READ ? "EVFILT_READ" : "EVFILT_WRITE",
 		 kev->flags == EV_DELETE ? " (del)" : ""));
@@ -187,7 +192,7 @@ kq_sighandler(int sig)
 }
 
 int
-kq_dispatch(struct event_base *base, void *arg, struct timeval *tv)
+kq_dispatch(void *arg, struct timeval *tv)
 {
 	struct kqop *kqop = arg;
 	struct kevent *changes = kqop->changes;
@@ -203,14 +208,14 @@ kq_dispatch(struct event_base *base, void *arg, struct timeval *tv)
 	kqop->nchanges = 0;
 	if (res == -1) {
 		if (errno != EINTR) {
-                        event_warn("kevent");
+			log_error("kevent");
 			return (-1);
 		}
 
 		return (0);
 	}
 
-	event_debug(("%s: kevent reports %d", __func__, res));
+	LOG_DBG((LOG_MISC, 80, "%s: kevent reports %d", __func__, res));
 
 	for (i = 0; i < res; i++) {
 		int which = 0;
@@ -229,7 +234,6 @@ kq_dispatch(struct event_base *base, void *arg, struct timeval *tv)
 			if (events[i].data == EBADF ||
 			    events[i].data == ENOENT)
 				continue;
-			errno = events[i].data;
 			return (-1);
 		}
 
@@ -290,10 +294,6 @@ kq_add(void *arg, struct event *ev)
  		memset(&kev, 0, sizeof(kev));
 		kev.ident = ev->ev_fd;
 		kev.filter = EVFILT_READ;
-#ifdef NOTE_EOF
-		/* Make it behave like select() and poll() */
-		kev.fflags = NOTE_EOF;
-#endif
 		kev.flags = EV_ADD;
 		if (!(ev->ev_events & EV_PERSIST))
 			kev.flags |= EV_ONESHOT;

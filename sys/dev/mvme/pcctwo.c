@@ -1,4 +1,4 @@
-/*	$NetBSD: pcctwo.c,v 1.5 2005/06/03 08:49:03 scw Exp $	*/
+/*	$NetBSD: pcctwo.c,v 1.4 2005/02/04 02:10:44 perry Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2002 The NetBSD Foundation, Inc.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pcctwo.c,v 1.5 2005/06/03 08:49:03 scw Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pcctwo.c,v 1.4 2005/02/04 02:10:44 perry Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -66,7 +66,7 @@ int pcctwoprint(void *, const char *);
 void
 pcctwo_init(sc, pd, devoff)
 	struct pcctwo_softc *sc;
-	const struct pcctwo_device *pd;
+	struct pcctwo_device *pd;
 	int devoff;
 {
 	struct pcctwo_attach_args npa;

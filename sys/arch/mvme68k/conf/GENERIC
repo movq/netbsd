@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.55 2005/06/09 14:43:30 tsutsui Exp $
+# $NetBSD: GENERIC,v 1.54.2.3 2005/11/05 00:39:47 tron Exp $
 #
 # GENERIC machine description file
 # 
@@ -22,7 +22,7 @@ include		"arch/mvme68k/conf/std.mvme68k"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.55 $"
+#ident 		"GENERIC-$Revision: 1.54.2.3 $"
 
 # Boards this kernel supports
 options 	MVME147
@@ -40,7 +40,8 @@ options 	FPSP
 options 	M060SP
 
 #options 	DDB
-options 	DIAGNOSTIC, DEBUG
+#options 	DIAGNOSTIC
+#options 	DEBUG
 
 #options 	SYSVSHM
 options 	KTRACE
@@ -53,8 +54,7 @@ options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
 
 # Enable experimental buffer queue strategy for better responsiveness under 
 # high disk I/O load. Use it with caution - it's not proven to be stable yet.
-#options 	BUFQ_READPRIO
-#options 	BUFQ_PRIOCSCAN
+#options 	NEW_BUFQ_STRATEGY
 
 file-system 	FFS
 file-system 	NFS
@@ -75,6 +75,7 @@ options 	INET
 options 	INET6		# IPV6
 #options 	IPSEC		# IP security
 #options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
+#options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	GATEWAY		# IP packet forwarding
 #options 	ISO		# OSI networking
@@ -135,6 +136,7 @@ pseudo-device	bridge			# simple inter-network bridging
 pseudo-device	pty			# pseudo-terminals
 #pseudo-device	cgd		4	# cryptographic disk devices
 pseudo-device	vnd 2
+#options 	VND_COMPRESSION		# compressed vnd(4)
 pseudo-device	fss		4	# file system snapshot device
 pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	ksyms			# /dev/ksyms

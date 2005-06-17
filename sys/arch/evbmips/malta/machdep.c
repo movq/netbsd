@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.20 2005/04/25 15:02:04 lukem Exp $	*/
+/*	$NetBSD: machdep.c,v 1.19 2004/04/03 06:43:59 simonb Exp $	*/
 
 /*
  * Copyright 2001, 2002 Wasabi Systems, Inc.
@@ -112,7 +112,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.20 2005/04/25 15:02:04 lukem Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.19 2004/04/03 06:43:59 simonb Exp $");
 
 #include "opt_ddb.h"
 #include "opt_execfmt.h"
@@ -361,7 +361,7 @@ cpu_startup()
 	/*
 	 * Good {morning,afternoon,evening,night}.
 	 */
-	printf("%s%s", copyright, version);
+	printf(version);
 	format_bytes(pbuf, sizeof(pbuf), ctob(physmem));
 	printf("total memory = %s\n", pbuf);
 

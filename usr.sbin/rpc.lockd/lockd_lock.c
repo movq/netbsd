@@ -1,4 +1,4 @@
-/*	$NetBSD: lockd_lock.c,v 1.21 2005/06/02 09:30:27 lukem Exp $	*/
+/*	$NetBSD: lockd_lock.c,v 1.20.6.1 2005/06/15 05:52:28 snj Exp $	*/
 
 /*
  * Copyright (c) 2000 Manuel Bouyer.

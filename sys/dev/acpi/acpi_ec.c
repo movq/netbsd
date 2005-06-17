@@ -1,4 +1,4 @@
-/*	$NetBSD: acpi_ec.c,v 1.33 2005/05/02 14:54:00 kochi Exp $	*/
+/*	$NetBSD: acpi_ec.c,v 1.32 2004/06/25 11:15:15 yamt Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -172,7 +172,7 @@
  *****************************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi_ec.c,v 1.33 2005/05/02 14:54:00 kochi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi_ec.c,v 1.32 2004/06/25 11:15:15 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -246,7 +246,7 @@ typedef struct {
 	UINT8		Data;
 } EC_REQUEST;
 
-static UINT32		EcGpeHandler(void *Context);
+static void		EcGpeHandler(void *Context);
 static ACPI_STATUS	EcSpaceSetup(ACPI_HANDLE Region, UINT32 Function,
 			    void *Context, void **return_Context);
 static ACPI_STATUS	EcSpaceHandler(UINT32 Function,
@@ -426,25 +426,12 @@ acpiec_early_attach(struct device *parent)
 		ecdt_sc->sc_glk = 1;
 
 	rv = AcpiInstallGpeHandler(NULL, ecdt_sc->sc_gpebit,
-	    ACPI_GPE_EDGE_TRIGGERED, EcGpeHandler, ecdt_sc);
+	    ACPI_EVENT_EDGE_TRIGGERED, EcGpeHandler, ecdt_sc);
 	if (ACPI_FAILURE(rv)) {
 		printf("%s: unable to install GPE handler: %s\n",
-		    parent->dv_xname, AcpiFormatException(rv));
+		    parent->dv_xname,
+		    AcpiFormatException(rv));
 		goto out3;
-	}
-
-	rv = AcpiSetGpeType(NULL, ecdt_sc->sc_gpebit, ACPI_GPE_TYPE_RUNTIME);
-	if (ACPI_FAILURE(rv)) {
-		printf("%s: unable to set GPE type: %s\n",
-		    parent->dv_xname, AcpiFormatException(rv));
-		goto out4;
-	}
-
-	rv = AcpiEnableGpe(NULL, ecdt_sc->sc_gpebit, ACPI_NOT_ISR);
-	if (ACPI_FAILURE(rv)) {
-		printf("%s: unable to enable GPE: %s\n",
-		    parent->dv_xname, AcpiFormatException(rv));
-		goto out4;
 	}
 
 	rv = AcpiInstallAddressSpaceHandler(ACPI_ROOT_OBJECT,
@@ -605,25 +592,11 @@ acpiec_attach(struct device *parent, struct device *self, void *aux)
 	 * cleared before re-enabling the GPE.
 	 */
 	rv = AcpiInstallGpeHandler(NULL, sc->sc_gpebit,
-	    ACPI_GPE_EDGE_TRIGGERED, EcGpeHandler, sc);
+	     ACPI_EVENT_EDGE_TRIGGERED, EcGpeHandler, sc);
 	if (ACPI_FAILURE(rv)) {
 		printf("%s: unable to install GPE handler: %s\n",
 		    sc->sc_dev.dv_xname, AcpiFormatException(rv));
 		goto out;
-	}
-
-	rv = AcpiSetGpeType(NULL, sc->sc_gpebit, ACPI_GPE_TYPE_RUNTIME);
-	if (ACPI_FAILURE(rv)) {
-		printf("%s: unable to set GPE type: %s\n",
-		    sc->sc_dev.dv_xname, AcpiFormatException(rv));
-		goto out2;
-	}
-
-	rv = AcpiEnableGpe(NULL, sc->sc_gpebit, ACPI_NOT_ISR);
-	if (ACPI_FAILURE(rv)) {
-		printf("%s: unable to enable GPE: %s\n",
-		    sc->sc_dev.dv_xname, AcpiFormatException(rv));
-		goto out2;
 	}
 
 	/* Install address space handler. */
@@ -632,12 +605,9 @@ acpiec_attach(struct device *parent, struct device *self, void *aux)
 	if (ACPI_FAILURE(rv)) {
 		printf("%s: unable to install address space handler: %s\n",
 		    sc->sc_dev.dv_xname, AcpiFormatException(rv));
-		goto out2;
+		(void)AcpiRemoveGpeHandler(NULL, sc->sc_gpebit,
+		    EcGpeHandler);
 	}
-
-	return_VOID;
- out2:
-	(void)AcpiRemoveGpeHandler(NULL, sc->sc_gpebit, EcGpeHandler);
 
  out:
 	acpi_resource_cleanup(&res);
@@ -715,7 +685,7 @@ EcGpeQueryHandler(void *Context)
 	return_VOID;
 }
 
-static UINT32
+static void
 EcGpeHandler(void *Context)
 {
 	struct acpi_ec_softc *sc = Context;
@@ -746,8 +716,6 @@ EcGpeHandler(void *Context)
 			printf("%s: failed to enqueue query handler: %s\n",
 			    sc->sc_dev.dv_xname, AcpiFormatException(rv));
 	}
-
-	return 0;			/* XXX not yet used in ACPI-CA */
 }
 
 static ACPI_STATUS

@@ -1,4 +1,4 @@
-/*	$NetBSD: ibcs2_exec.c,v 1.63 2005/03/26 05:12:35 fvdl Exp $	*/
+/*	$NetBSD: ibcs2_exec.c,v 1.62.2.1 2005/09/18 20:09:51 tron Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995, 1998 Scott Bartram
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ibcs2_exec.c,v 1.63 2005/03/26 05:12:35 fvdl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ibcs2_exec.c,v 1.62.2.1 2005/09/18 20:09:51 tron Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_syscall_debug.h"

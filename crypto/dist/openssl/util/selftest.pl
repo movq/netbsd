@@ -34,9 +34,9 @@ foreach $_ (split("\n",$c)) {
     $platform0=$1 if (/Configuring for (.*)$/);
 }
 
-system "sh config" if (! -f "Makefile");
+system "sh config" if (! -f "Makefile.ssl");
 
-if (open(IN,"<Makefile")) {
+if (open(IN,"<Makefile.ssl")) {
     while (<IN>) {
 	$version=$1 if (/^VERSION=(.*)$/);
 	$platform=$1 if (/^PLATFORM=(.*)$/);

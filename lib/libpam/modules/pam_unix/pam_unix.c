@@ -1,4 +1,4 @@
-/*	$NetBSD: pam_unix.c,v 1.9 2005/04/19 03:40:16 lukem Exp $	*/
+/*	$NetBSD: pam_unix.c,v 1.5.2.4 2005/07/11 11:30:07 tron Exp $	*/
 
 /*-
  * Copyright 1998 Juniper Networks, Inc.
@@ -40,7 +40,7 @@
 #ifdef __FreeBSD__
 __FBSDID("$FreeBSD: src/lib/libpam/modules/pam_unix/pam_unix.c,v 1.49 2004/02/10 10:13:21 des Exp $");
 #else
-__RCSID("$NetBSD: pam_unix.c,v 1.9 2005/04/19 03:40:16 lukem Exp $");
+__RCSID("$NetBSD: pam_unix.c,v 1.5.2.4 2005/07/11 11:30:07 tron Exp $");
 #endif
 
 

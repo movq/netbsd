@@ -1,4 +1,4 @@
-/*	$NetBSD: fss.c,v 1.15 2005/04/17 16:28:26 hannken Exp $	*/
+/*	$NetBSD: fss.c,v 1.13.2.2 2005/04/21 19:01:40 tron Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fss.c,v 1.15 2005/04/17 16:28:26 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fss.c,v 1.13.2.2 2005/04/21 19:01:40 tron Exp $");
 
 #include "fss.h"
 

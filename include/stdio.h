@@ -1,4 +1,4 @@
-/*	$NetBSD: stdio.h,v 1.61 2005/05/25 20:45:38 kleink Exp $	*/
+/*	$NetBSD: stdio.h,v 1.58.2.3 2005/05/28 13:51:31 tron Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993

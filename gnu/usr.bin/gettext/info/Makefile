@@ -1,12 +1,10 @@
-#	$NetBSD: Makefile,v 1.3 2005/04/29 15:05:01 christos Exp $
+#	$NetBSD: Makefile,v 1.2 2002/09/19 03:09:37 lukem Exp $
 
 .include <bsd.own.mk>
 
-GETTEXTTOP=${NETBSDSRCDIR}/gnu/dist/gettext
 TEXINFO=	gettext.texi
-INFOFLAGS=	-I${GETTEXTTOP}/gettext-tools/doc \
-    -I${GETTEXTTOP}/gettext-runtime/doc
+INFOFLAGS=	-I${NETBSDSRCDIR}/gnu/dist/gettext/doc
 
 .include <bsd.info.mk>
 
-.PATH: ${GETTEXTTOP}/gettext-tools/doc
+.PATH: ${DIST}/gettext/doc

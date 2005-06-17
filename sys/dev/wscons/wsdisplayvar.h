@@ -1,4 +1,4 @@
-/* $NetBSD: wsdisplayvar.h,v 1.33 2005/05/29 21:56:35 christos Exp $ */
+/* $NetBSD: wsdisplayvar.h,v 1.30.4.2 2005/06/07 17:19:08 tron Exp $ */
 
 /*
  * Copyright (c) 1996, 1997 Christopher G. Demetriou.  All rights reserved.
@@ -85,7 +85,7 @@ struct wsdisplay_emulops {
 };
 
 struct wsscreen_descr {
-	const char *name;
+	char *name;
 	int ncols, nrows;
 	const struct wsdisplay_emulops *textops;
 	int fontwidth, fontheight;

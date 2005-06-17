@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_glue.c,v 1.88 2005/06/10 05:10:13 matt Exp $	*/
+/*	$NetBSD: uvm_glue.c,v 1.83.4.3 2005/12/06 20:00:12 riz Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_glue.c,v 1.88 2005/06/10 05:10:13 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_glue.c,v 1.83.4.3 2005/12/06 20:00:12 riz Exp $");
 
 #include "opt_kgdb.h"
 #include "opt_kstack.h"
@@ -319,8 +319,8 @@ uvm_uarea_alloc(vaddr_t *uaddrp)
 		return TRUE;
 	} else {
 		simple_unlock(&uvm_uareas_slock);
-		*uaddrp = uvm_km_alloc(kernel_map, USPACE, USPACE_ALIGN,
-		    UVM_KMF_PAGEABLE);
+		*uaddrp = uvm_km_valloc1(kernel_map, USPACE, USPACE_ALIGN,
+		    UVM_UNKNOWN_OFFSET, 0);
 		return FALSE;
 	}
 }
@@ -359,7 +359,7 @@ uvm_uarea_drain(boolean_t empty)
 		uvm_uareas = *(void **)uvm_uareas;
 		uvm_nuarea--;
 		simple_unlock(&uvm_uareas_slock);
-		uvm_km_free(kernel_map, uaddr, USPACE, UVM_KMF_PAGEABLE);
+		uvm_km_free(kernel_map, uaddr, USPACE);
 		simple_lock(&uvm_uareas_slock);
 	}
 	simple_unlock(&uvm_uareas_slock);
@@ -604,7 +604,6 @@ uvm_swapout_threads()
 			continue;
 		switch (l->l_stat) {
 		case LSONPROC:
-			KDASSERT(l->l_cpu != curcpu());
 			continue;
 
 		case LSRUN:
@@ -706,10 +705,12 @@ uvm_swapout(l)
  */
 
 int
-uvm_coredump_walkmap(p, iocookie, func, cookie)
+uvm_coredump_walkmap(p, vp, cred, func, cookie)
 	struct proc *p;
-	void *iocookie;
-	int (*func)(struct proc *, void *, struct uvm_coredump_state *);
+	struct vnode *vp;
+	struct ucred *cred;
+	int (*func)(struct proc *, struct vnode *, struct ucred *,
+	    struct uvm_coredump_state *);
 	void *cookie;
 {
 	struct uvm_coredump_state state;
@@ -720,7 +721,6 @@ uvm_coredump_walkmap(p, iocookie, func, cookie)
 
 	entry = NULL;
 	vm_map_lock_read(map);
-	state.end = 0;
 	for (;;) {
 		if (entry == NULL)
 			entry = map->header.next;
@@ -730,12 +730,7 @@ uvm_coredump_walkmap(p, iocookie, func, cookie)
 			break;
 
 		state.cookie = cookie;
-		if (state.end > entry->start) {
-			state.start = state.end;
-		} else {
-			state.start = entry->start;
-		}
-		state.realend = entry->end;
+		state.start = entry->start;
 		state.end = entry->end;
 		state.prot = entry->protection;
 		state.flags = 0;
@@ -759,61 +754,25 @@ uvm_coredump_walkmap(p, iocookie, func, cookie)
 		KASSERT(state.end <= VM_MAXUSER_ADDRESS);
 		if (entry->object.uvm_obj == NULL &&
 		    entry->aref.ar_amap == NULL) {
-			state.realend = state.start;
-		} else if ((entry->protection & VM_PROT_WRITE) == 0 &&
-		    entry->aref.ar_amap == NULL) {
-			state.realend = state.start;
-		} else if (entry->object.uvm_obj != NULL &&
-		    UVM_OBJ_IS_DEVICE(entry->object.uvm_obj)) {
-			state.realend = state.start;
-		} else if ((entry->protection & VM_PROT_READ) == 0) {
-			state.realend = state.start;
-		} else {
-			if (state.start >= (vaddr_t)vm->vm_maxsaddr)
-				state.flags |= UVM_COREDUMP_STACK;
-
-			/*
-			 * If this an anonymous entry, only dump instantiated
-			 * pages.
-			 */
-			if (entry->object.uvm_obj == NULL) {
-				vaddr_t end;
-
-				amap_lock(entry->aref.ar_amap);
-				for (end = state.start;
-				     end < state.end; end += PAGE_SIZE) {
-					struct vm_anon *anon;
-					anon = amap_lookup(&entry->aref,
-					    end - entry->start);
-					/*
-					 * If we have already encountered an
-					 * uninstantiated page, stop at the
-					 * first instantied page.
-					 */
-					if (anon != NULL &&
-					    state.realend != state.end) {
-						state.end = end;
-						break;
-					}
-
-					/*
-					 * If this page is the first
-					 * uninstantiated page, mark this as
-					 * the real ending point.  Continue to
-					 * counting uninstantiated pages.
-					 */
-					if (anon == NULL &&
-					    state.realend == state.end) {
-						state.realend = end;
-					}
-				}
-				amap_unlock(entry->aref.ar_amap);
-			}
+			state.flags |= UVM_COREDUMP_NODUMP;
 		}
-		
+		if ((entry->protection & VM_PROT_WRITE) == 0 &&
+		    entry->aref.ar_amap == NULL) {
+			state.flags |= UVM_COREDUMP_NODUMP;
+		}
+		if (entry->object.uvm_obj != NULL &&
+		    UVM_OBJ_IS_DEVICE(entry->object.uvm_obj)) {
+			state.flags |= UVM_COREDUMP_NODUMP;
+		}
+		if ((entry->protection & VM_PROT_READ) == 0) {
+			state.flags |= UVM_COREDUMP_NODUMP;
+		}
+		if (state.start >= (vaddr_t)vm->vm_maxsaddr) {
+			state.flags |= UVM_COREDUMP_STACK;
+		}
 
 		vm_map_unlock_read(map);
-		error = (*func)(p, iocookie, &state);
+		error = (*func)(p, vp, cred, &state);
 		if (error)
 			return (error);
 		vm_map_lock_read(map);

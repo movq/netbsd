@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_vnops.c,v 1.222 2005/05/29 20:58:13 christos Exp $	*/
+/*	$NetBSD: nfs_vnops.c,v 1.220.2.1 2005/09/27 10:31:29 tron Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nfs_vnops.c,v 1.222 2005/05/29 20:58:13 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nfs_vnops.c,v 1.220.2.1 2005/09/27 10:31:29 tron Exp $");
 
 #include "opt_inet.h"
 #include "opt_nfs.h"
@@ -334,9 +334,10 @@ nfs_access(v)
 #endif
 	int cachevalid;
 	struct nfsnode *np = VTONFS(vp);
+	struct nfsmount *nmp = VFSTONFS(vp->v_mount);
 
 	cachevalid = (np->n_accstamp != -1 &&
-	    (mono_time.tv_sec - np->n_accstamp) < NFS_ATTRTIMEO(np) &&
+	    (mono_time.tv_sec - np->n_accstamp) < NFS_ATTRTIMEO(nmp, np) &&
 	    np->n_accuid == ap->a_cred->cr_uid);
 
 	/*
@@ -1313,7 +1314,7 @@ struct nfs_writerpc_context {
  * called at splvm.
  */
 static void
-nfs_writerpc_extfree(struct mbuf *m, caddr_t tbuf, size_t size, void *arg)
+nfs_writerpc_extfree(struct mbuf *m, caddr_t buf, size_t size, void *arg)
 {
 	struct nfs_writerpc_context *ctx = arg;
 
@@ -2935,7 +2936,7 @@ nfs_readdirplusrpc(vp, uiop, cred)
 					newvp = NFSTOV(np);
 				}
 				if (!error) {
-				    const char *xcp;
+				    const char *cp;
 
 				    nfs_loadattrcache(&newvp, &fattr, 0, 0);
 				    if (bigenough) {
@@ -2943,10 +2944,10 @@ nfs_readdirplusrpc(vp, uiop, cred)
 					   IFTODT(VTTOIF(np->n_vattr->va_type));
 					if (cnp->cn_namelen <= NCHNAMLEN) {
 					    ndp->ni_vp = newvp;
-					    xcp = cnp->cn_nameptr +
+					    cp = cnp->cn_nameptr +
 						cnp->cn_namelen;
 					    cnp->cn_hash =
-					       namei_hash(cnp->cn_nameptr, &xcp);
+					       namei_hash(cnp->cn_nameptr, &cp);
 					    nfs_cache_enter(ndp->ni_dvp,
 						ndp->ni_vp, cnp);
 					}
@@ -3020,6 +3021,8 @@ nfsmout:
 }
 #endif
 
+static char hextoasc[] = "0123456789abcdef";
+
 /*
  * Silly rename. To make the NFS filesystem that is stateless look a little
  * more like the "ufs" a remove of an active vnode is translated to a rename
@@ -3054,10 +3057,10 @@ nfs_sillyrename(dvp, vp, cnp)
 	pid = cnp->cn_proc->p_pid;
 	memcpy(sp->s_name, ".nfsAxxxx4.4", 13);
 	sp->s_namlen = 12;
-	sp->s_name[8] = hexdigits[pid & 0xf];
-	sp->s_name[7] = hexdigits[(pid >> 4) & 0xf];
-	sp->s_name[6] = hexdigits[(pid >> 8) & 0xf];
-	sp->s_name[5] = hexdigits[(pid >> 12) & 0xf];
+	sp->s_name[8] = hextoasc[pid & 0xf];
+	sp->s_name[7] = hextoasc[(pid >> 4) & 0xf];
+	sp->s_name[6] = hextoasc[(pid >> 8) & 0xf];
+	sp->s_name[5] = hextoasc[(pid >> 12) & 0xf];
 
 	/* Try lookitups until we get one that isn't there */
 	while (nfs_lookitup(dvp, sp->s_name, sp->s_namlen, sp->s_cred,

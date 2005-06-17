@@ -1,4 +1,4 @@
-/*	$NetBSD: uscanner.c,v 1.48 2005/05/11 10:02:29 augustss Exp $	*/
+/*	$NetBSD: uscanner.c,v 1.47 2005/02/27 00:27:51 perry Exp $	*/
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uscanner.c,v 1.48 2005/05/11 10:02:29 augustss Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uscanner.c,v 1.47 2005/02/27 00:27:51 perry Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -320,14 +320,13 @@ USB_ATTACH(uscanner)
 	USB_ATTACH_START(uscanner, sc, uaa);
 	usb_interface_descriptor_t *id = 0;
 	usb_endpoint_descriptor_t *ed, *ed_bulkin = NULL, *ed_bulkout = NULL;
-	char *devinfop;
+	char devinfo[1024];
 	int i;
 	usbd_status err;
 
-	devinfop = usbd_devinfo_alloc(uaa->device, 0);
+	usbd_devinfo(uaa->device, 0, devinfo, sizeof(devinfo));
 	USB_ATTACH_SETUP;
-	printf("%s: %s\n", USBDEVNAME(sc->sc_dev), devinfop);
-	usbd_devinfo_free(devinfop);
+	printf("%s: %s\n", USBDEVNAME(sc->sc_dev), devinfo);
 
 	sc->sc_dev_flags = uscanner_lookup(uaa->vendor, uaa->product)->flags;
 

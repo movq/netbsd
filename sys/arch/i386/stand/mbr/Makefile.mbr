@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.mbr,v 1.6 2005/05/01 02:41:08 christos Exp $
+#	$NetBSD: Makefile.mbr,v 1.5 2004/08/31 22:57:13 uwe Exp $
 
 S=	${.CURDIR}/../../../../../
 
@@ -29,10 +29,11 @@ AFLAGS+=   -m32
 .endif
 
 .if !make(obj) && !make(clean) && !make(cleandir)
+.BEGIN: machine x86
 .NOPATH: machine x86
 .endif
 
-depend realall: machine x86
+realdepend realall: machine x86
 CLEANFILES+= machine x86
 
 machine::

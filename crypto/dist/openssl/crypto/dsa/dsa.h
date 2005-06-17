@@ -73,10 +73,6 @@
 
 #define DSA_FLAG_CACHE_MONT_P	0x01
 
-#if defined(OPENSSL_FIPS)
-#define FIPS_DSA_SIZE_T	int
-#endif
-
 #ifdef  __cplusplus
 extern "C" {
 #endif

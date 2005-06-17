@@ -1,4 +1,4 @@
-/*	$NetBSD: socketvar.h,v 1.82 2005/05/07 17:42:09 christos Exp $	*/
+/*	$NetBSD: socketvar.h,v 1.80 2004/09/03 18:14:09 darrenr Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -34,14 +34,12 @@
 #ifndef _SYS_SOCKETVAR_H_
 #define	_SYS_SOCKETVAR_H_
 
-#include <sys/select.h>
-#include <sys/selinfo.h>		/* for struct selinfo */
+#include <sys/select.h>			/* for struct selinfo */
 #include <sys/queue.h>
 
 #if !defined(_KERNEL) || defined(LKM)
 struct uio;
 struct proc;
-struct uidinfo;
 #endif
 
 TAILQ_HEAD(soqhead, socket);
@@ -132,7 +130,7 @@ struct socket {
 					struct uio *, struct mbuf **,
 					struct mbuf **, int *);
 	struct mowner	*so_mowner;	/* who owns mbufs for this socket */
-	struct uidinfo	*so_uidinfo;	/* who opened the socket */
+	uid_t		so_uid;		/* who opened the socket */
 };
 
 #define	SB_EMPTY_FIXUP(sb)						\

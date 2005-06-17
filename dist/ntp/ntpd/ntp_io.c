@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_io.c,v 1.12 2005/06/03 16:13:33 lukem Exp $	*/
+/*	$NetBSD: ntp_io.c,v 1.11.2.1 2005/06/15 06:00:47 snj Exp $	*/
 
 /*
  * ntp_io.c - input/output routines for ntpd.	The socket-opening code

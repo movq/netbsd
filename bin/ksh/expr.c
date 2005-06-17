@@ -1,4 +1,4 @@
-/*	$NetBSD: expr.c,v 1.7 2005/04/19 20:14:29 rillig Exp $	*/
+/*	$NetBSD: expr.c,v 1.6 2004/07/07 19:20:09 mycroft Exp $	*/
 
 /*
  * Korn expression evaluation
@@ -9,7 +9,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: expr.c,v 1.7 2005/04/19 20:14:29 rillig Exp $");
+__RCSID("$NetBSD: expr.c,v 1.6 2004/07/07 19:20:09 mycroft Exp $");
 #endif
 
 
@@ -471,7 +471,7 @@ token(es)
 	char *tvar;
 
 	/* skip white space */
-	for (cp = es->tokp; (c = *cp), isspace((unsigned char)c); cp++)
+	for (cp = es->tokp; (c = *cp), isspace(c); cp++)
 		;
 	es->tokp = cp;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: tar.c,v 1.62 2005/04/24 01:23:21 christos Exp $	*/
+/*	$NetBSD: tar.c,v 1.61.2.1 2005/11/09 16:16:33 tron Exp $	*/
 
 /*-
  * Copyright (c) 1992 Keith Muller.
@@ -42,7 +42,7 @@
 #if 0
 static char sccsid[] = "@(#)tar.c	8.2 (Berkeley) 4/18/94";
 #else
-__RCSID("$NetBSD: tar.c,v 1.62 2005/04/24 01:23:21 christos Exp $");
+__RCSID("$NetBSD: tar.c,v 1.61.2.1 2005/11/09 16:16:33 tron Exp $");
 #endif
 #endif /* not lint */
 

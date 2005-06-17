@@ -1,4 +1,4 @@
-/* $NetBSD: fsck.h,v 1.14 2005/04/11 23:19:24 perseant Exp $	 */
+/* $NetBSD: fsck.h,v 1.13.2.1 2005/05/07 11:21:29 tron Exp $	 */
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
