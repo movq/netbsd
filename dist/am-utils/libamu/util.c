@@ -1,4 +1,4 @@
-/*	$NetBSD: util.c,v 1.2 2005/04/24 13:34:18 kleink Exp $	*/
+/*	$NetBSD: util.c,v 1.1.1.7.2.1 2005/08/16 13:02:24 tron Exp $	*/
 
 /*
  * Copyright (c) 1997-2005 Erez Zadok

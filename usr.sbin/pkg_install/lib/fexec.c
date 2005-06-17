@@ -35,22 +35,75 @@
  */
 
 
+#if HAVE_CONFIG_H
+#include "config.h"
+#endif
+#include <nbcompat.h>
+#if HAVE_SYS_CDEFS_H
 #include <sys/cdefs.h>
+#endif
+#if HAVE_SYS_WAIT_H
 #include <sys/wait.h>
+#endif
 
+#if HAVE_ERR_H
 #include <err.h>
+#endif
+#if HAVE_ERRNO_H
 #include <errno.h>
+#endif
+#if HAVE_STDARG_H
 #include <stdarg.h>
+#endif
+#if HAVE_STDLIB_H
 #include <stdlib.h>
+#endif
+#if HAVE_UNISTD_H
 #include <unistd.h>
+#endif
 
 #include "lib.h"
 
 #ifndef lint
-__RCSID("$NetBSD: fexec.c,v 1.7 2003/09/23 15:07:43 christos Exp $");
+__RCSID("$NetBSD: fexec.c,v 1.7.6.2 2005/11/27 15:46:04 riz Exp $");
 #endif
 
 static int	vfcexec(const char *, int, const char *, va_list);
+
+/*
+ * fork, then change current working directory to path and
+ * execute the command and arguments in the argv array.
+ * wait for the command to finish, then return the exit status.
+ */
+int
+pfcexec(const char *path, const char **argv)
+{
+	pid_t			child;
+	int			status;
+
+	child = vfork();
+	switch (child) {
+	case 0:
+		if ((path != NULL) && (chdir(path) < 0))
+			_exit(127);
+
+		(void) execvp(argv[0], (char ** const)argv);
+		_exit(127);
+		/* NOTREACHED */
+	case -1:
+		return -1;
+	}
+
+	while (waitpid(child, &status, 0) < 0) {
+		if (errno != EINTR)
+			return -1;
+	}
+
+	if (!WIFEXITED(status))
+		return -1;
+
+	return WEXITSTATUS(status);
+}
 
 static int
 vfcexec(const char *path, int skipempty, const char *arg, va_list ap)
@@ -58,8 +111,6 @@ vfcexec(const char *path, int skipempty, const char *arg, va_list ap)
 	static unsigned int	max = 4;
 	static const char	**argv = NULL;
 	unsigned int		argc;
-	pid_t			child;
-	int			status;
 
 	if (argv == NULL) {
 		argv = malloc(max * sizeof(const char *));
@@ -95,28 +146,7 @@ vfcexec(const char *path, int skipempty, const char *arg, va_list ap)
 		argv[argc++] = arg;
 	} while (arg != NULL);
 
-	child = vfork();
-	switch (child) {
-	case 0:
-		if ((path != NULL) && (chdir(path) < 0))
-			_exit(127);
-
-		(void) execvp(argv[0], (char ** const)argv);
-		_exit(127);
-		/* NOTREACHED */
-	case -1:
-		return -1;
-	}
-
-	while (waitpid(child, &status, 0) < 0) {
-		if (errno != EINTR)
-			return -1;
-	}
-
-	if (!WIFEXITED(status))
-		return -1;
-
-	return WEXITSTATUS(status);
+	return pfcexec(path, argv);
 }
 
 int

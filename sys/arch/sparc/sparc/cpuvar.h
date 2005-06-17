@@ -1,4 +1,4 @@
-/*	$NetBSD: cpuvar.h,v 1.65 2005/06/16 04:17:49 briggs Exp $ */
+/*	$NetBSD: cpuvar.h,v 1.63 2004/09/22 11:32:03 yamt Exp $ */
 
 /*
  *  Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -274,7 +274,7 @@ struct cpu_info {
 	int		mid;		/* Module ID for MP systems */
 	int		mbus;		/* 1 if CPU is on MBus */
 	int		mxcc;		/* 1 if a MBus-level MXCC is present */
-	const char	*cpu_name;	/* CPU model */
+	char		*cpu_name;	/* CPU model */
 	int		cpu_impl;	/* CPU implementation code */
 	int		cpu_vers;	/* CPU version code */
 	int		mmu_impl;	/* MMU implementation code */
@@ -299,7 +299,7 @@ struct cpu_info {
 	/* FPU information */
 	int		fpupresent;	/* true if FPU is present */
 	int		fpuvers;	/* FPU revision */
-	const char	*fpu_name;	/* FPU model */
+	char		*fpu_name;	/* FPU model */
 	char		fpu_namebuf[32];/* Buffer for FPU name, if necessary */
 
 	/* XXX */
@@ -419,7 +419,7 @@ struct cpu_info {
 
 
 #define CPU_INFO_ITERATOR		int
-#define CPU_INFO_FOREACH(cii, ci)	cii = 0; ci = cpus[cii], cii < sparc_ncpus; cii++
+#define CPU_INFO_FOREACH(cii, ci)	cii = 0; ci = cpus[cii], cii < ncpu; cii++
 
 /*
  * Useful macros.

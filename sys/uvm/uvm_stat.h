@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_stat.h,v 1.36 2005/06/01 18:03:50 drochner Exp $	*/
+/*	$NetBSD: uvm_stat.h,v 1.35 2004/11/23 05:08:33 yamt Exp $	*/
 
 /*
  *
@@ -176,11 +176,11 @@ do { \
 #define UVMHIST_CALLED(NAME) \
 do { \
 	{ \
-		int _s = splhigh(); \
+		int s = splhigh(); \
 		simple_lock(&(NAME).l); \
 		_uvmhist_call = _uvmhist_cnt++; \
 		simple_unlock(&(NAME).l); \
-		splx(_s); \
+		splx(s); \
 	} \
 	UVMHIST_LOG(NAME,"called!", 0, 0, 0, 0); \
 } while (/*CONSTCOND*/ 0)

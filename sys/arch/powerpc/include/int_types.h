@@ -1,4 +1,4 @@
-/*	$NetBSD: int_types.h,v 1.8 2005/05/25 20:58:00 kleink Exp $	*/
+/*	$NetBSD: int_types.h,v 1.7.14.1 2005/05/28 13:48:18 tron Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993

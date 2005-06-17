@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.23 2005/04/25 15:02:04 lukem Exp $	*/
+/*	$NetBSD: machdep.c,v 1.21 2005/01/17 17:14:56 shige Exp $	*/
 
 /*
  * Copyright 2001, 2002 Wasabi Systems, Inc.
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.23 2005/04/25 15:02:04 lukem Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.21 2005/01/17 17:14:56 shige Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_ddb.h"
@@ -365,8 +365,7 @@ cpu_startup(void)
 	 * Besides, do we really have to put it at the end of core?
 	 * Let's use static buffer for now
 	 */
-	if (!(msgbuf_vaddr = uvm_km_alloc(kernel_map, round_page(MSGBUFSIZE), 0,
-	    UVM_KMF_VAONLY)))
+	if (!(msgbuf_vaddr = uvm_km_alloc(kernel_map, round_page(MSGBUFSIZE))))
 		panic("startup: no room for message buffer");
 	for (i = 0; i < btoc(MSGBUFSIZE); i++)
 		pmap_kenter_pa(msgbuf_vaddr + i * PAGE_SIZE,
@@ -376,7 +375,7 @@ cpu_startup(void)
 	initmsgbuf((caddr_t)msgbuf, round_page(MSGBUFSIZE));
 #endif
 
-	printf("%s%s", copyright, version);
+	printf("%s", version);
 	printf("Walnut PowerPC 405GP Evaluation Board\n");
 
 	format_bytes(pbuf, sizeof(pbuf), ctob(physmem));

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_hippisubr.c,v 1.20 2005/05/30 04:17:59 christos Exp $	*/
+/*	$NetBSD: if_hippisubr.c,v 1.18 2005/02/26 22:45:09 perry Exp $	*/
 
 /*
  * Copyright (c) 1982, 1989, 1993
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_hippisubr.c,v 1.20 2005/05/30 04:17:59 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_hippisubr.c,v 1.18 2005/02/26 22:45:09 perry Exp $");
 
 #include "opt_inet.h"
 
@@ -96,7 +96,7 @@ hippi_output(ifp, m0, dst, rt0)
 {
 	u_int16_t htype;
 	u_int32_t ifield = 0;
-	int error = 0;
+	int s, len, error = 0;
 	struct mbuf *m = m0;
 	struct rtentry *rt;
 	struct hippi_header *hh;
@@ -226,7 +226,23 @@ hippi_output(ifp, m0, dst, rt0)
 		m_copyback(m, m->m_pkthdr.len, 8 - d2_len % 8, (caddr_t) buffer);
 	}
 
-	return ifq_enqueue(ifp, m ALTQ_COMMA ALTQ_DECL(&pktattr));
+	len = m->m_pkthdr.len;
+	s = splnet();
+	/*
+	 * Queue message on interface, and start output if interface
+	 * not yet active.
+	 */
+	IFQ_ENQUEUE(&ifp->if_snd, m, &pktattr, error);
+	if (error) {
+		/* mbuf is already free */
+		splx(s);
+		return (error);
+	}
+	ifp->if_obytes += len;
+	if ((ifp->if_flags & IFF_OACTIVE) == 0)
+		(*ifp->if_start)(ifp);
+	splx(s);
+	return (error);
 
  bad:
 	if (m)
@@ -262,8 +278,9 @@ hippi_input(ifp, m)
 
 	ifp->if_ibytes += m->m_pkthdr.len;
 	if (hh->hi_le.le_dest_addr[0] & 1) {
-		if (memcmp(etherbroadcastaddr, hh->hi_le.le_dest_addr,
-		    sizeof(etherbroadcastaddr)) == 0)
+		if (bcmp((caddr_t)etherbroadcastaddr,
+			 (caddr_t)hh->hi_le.le_dest_addr,
+			 sizeof(etherbroadcastaddr)) == 0)
 			m->m_flags |= M_BCAST;
 		else
 			m->m_flags |= M_MCAST;

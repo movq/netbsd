@@ -84,10 +84,7 @@ int ASN1_BIT_STRING_set_asc(ASN1_BIT_STRING *bs, char *name, int value,
 	int bitnum;
 	bitnum = ASN1_BIT_STRING_num_asc(name, tbl);
 	if(bitnum < 0) return 0;
-	if(bs) {
-		if(!ASN1_BIT_STRING_set_bit(bs, bitnum, value))
-			return 0;
-	}
+	if(bs) ASN1_BIT_STRING_set_bit(bs, bitnum, value);
 	return 1;
 }
 

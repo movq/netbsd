@@ -1,4 +1,4 @@
-/*	$NetBSD: denode.h,v 1.4 2003/09/07 22:09:11 itojun Exp $	*/
+/*	$NetBSD: denode.h,v 1.4.14.3 2005/11/06 13:32:22 tron Exp $	*/
 
 /*-
  * Copyright (C) 1994, 1995, 1997 Wolfgang Solfrank.
@@ -177,6 +177,9 @@ struct denode {
  */
 #define	WIN_MAXLEN	255
 
+/* Maximum size of a file on a FAT filesystem */
+#define MSDOSFS_FILESIZE_MAX	0xFFFFFFFFLL
+
 /*
  * Transfer directory entries between internal and external form.
  * dep is a struct denode * (internal form),
@@ -199,6 +202,8 @@ struct denode {
 
 #define DE_EXTERNALIZE32(dp, dep)			\
 	 putushort((dp)->deHighClust, (dep)->de_StartCluster >> 16)
+#define DE_EXTERNALIZE16(dp, dep)			\
+	 putushort((dp)->deHighClust, 0)
 #define DE_EXTERNALIZE(dp, dep)				\
 	(memcpy((dp)->deName, (dep)->de_Name, 11),	\
 	 (dp)->deAttributes = (dep)->de_Attributes,	\
@@ -211,7 +216,7 @@ struct denode {
 	 putushort((dp)->deStartCluster, (dep)->de_StartCluster), \
 	 putulong((dp)->deFileSize,			\
 	     ((dep)->de_Attributes & ATTR_DIRECTORY) ? 0 : (dep)->de_FileSize), \
-	 (FAT32((dep)->de_pmp) ? DE_EXTERNALIZE32((dp), (dep)) : 0))
+	 (FAT32((dep)->de_pmp) ? DE_EXTERNALIZE32((dp), (dep)) : DE_EXTERNALIZE16((dp), (dep))))
 
 #define	de_forw		de_chain[0]
 #define	de_back		de_chain[1]
@@ -307,4 +312,5 @@ int removede __P((struct denode *, struct denode *));
 int uniqdosname __P((struct denode *, struct componentname *, u_char *));
 int findwin95 __P((struct denode *));
 int msdosfs_gop_alloc __P((struct vnode *, off_t, off_t, int, struct ucred *));
+void msdosfs_gop_markupdate __P((struct vnode *, int));
 #endif	/* _KERNEL */

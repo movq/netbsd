@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_var.h,v 1.72 2005/05/06 04:28:37 matt Exp $	*/
+/*	$NetBSD: ip_var.h,v 1.69.8.1 2005/04/13 21:34:57 tron Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -178,8 +178,6 @@ struct ipflow {
 #include "opt_mbuftrace.h"
 #endif
 
-#include <sys/protosw.h>
-
 /* flags passed to ip_output as last parameter */
 #define	IP_FORWARDING		0x1		/* most of ip header exists */
 #define	IP_RAWOUTPUT		0x2		/* raw ip header exists */
@@ -194,6 +192,7 @@ struct ipflow {
 #define	IP_HDR_ALIGNED_P(ip)	((((vaddr_t) (ip)) & 3) == 0)
 #endif
 
+extern const struct protosw inetsw[];
 extern struct domain inetdomain;
 
 extern struct ipstat ipstat;		/* ip statistics */

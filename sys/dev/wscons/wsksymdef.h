@@ -1,4 +1,4 @@
-/*	$NetBSD: wsksymdef.h,v 1.54 2005/06/08 09:11:09 martin Exp $ */
+/*	$NetBSD: wsksymdef.h,v 1.51.2.1 2005/04/04 18:21:06 tron Exp $ */
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -390,8 +390,6 @@
 #define KS_F19			0xf352
 #define KS_F20			0xf353
 
-#define KS_Power		0xf36d
-
 #define KS_Home			0xf381
 #define KS_Prior		0xf382
 #define KS_Next			0xf383
@@ -523,7 +521,6 @@ action(KB_SV,	0,	0x0900,	"sv",	,	"Swedish")	\
 action(KB_SF,	0,	0x1000,	"sf",	,	"Swiss French")	\
 action(KB_SG,	0,	0x0f00,	"sg",	,	"Swiss German")	\
 action(KB_UA,	0,	0x1200,	"ua",	,	"Ukrainian")
-#define KB_NONE 0x0000
 
 /* Define all the KB_xx numeric values using above table */
 #define KBF_ENUM(tag, tagf, value, cc, ccf, country) tag=value,

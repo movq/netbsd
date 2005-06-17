@@ -1,4 +1,4 @@
-/*	$NetBSD: if_arcsubr.c,v 1.49 2005/06/05 22:31:40 he Exp $	*/
+/*	$NetBSD: if_arcsubr.c,v 1.46 2005/02/26 22:45:09 perry Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Ignatios Souvatzis
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_arcsubr.c,v 1.49 2005/06/05 22:31:40 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_arcsubr.c,v 1.46 2005/02/26 22:45:09 perry Exp $");
 
 #include "opt_inet.h"
 
@@ -125,7 +125,7 @@ arc_output(ifp, m0, dst, rt0)
 	struct arccom		*ac;
 	struct arc_header	*ah;
 	struct arphdr		*arph;
-	int			error, newencoding;
+	int			s, error, newencoding, len;
 	u_int8_t		atype, adst, myself;
 	int			tfrags, sflag, fsflag, rsflag;
 	ALTQ_DECL(struct altq_pktattr pktattr;)
@@ -298,9 +298,22 @@ arc_output(ifp, m0, dst, rt0)
 			ah->arc_flag = rsflag;
 			ah->arc_seqid = ac->ac_seqid;
 
-			if ((error = ifq_enqueue(ifp, m ALTQ_COMMA
-			    ALTQ_DECL(&pktattr))) != 0)
+			len = m->m_pkthdr.len;
+			s = splnet();
+			/*
+			 * Queue message on interface, and start output if
+			 * interface not yet active.
+			 */
+			IFQ_ENQUEUE(&ifp->if_snd, m, &pktattr, error);
+			if (error) {
+				/* mbuf is already freed */
+				splx(s);
 				return (error);
+			}
+			ifp->if_obytes += len;
+			if ((ifp->if_flags & IFF_OACTIVE) == 0)
+				(*ifp->if_start)(ifp);
+			splx(s);
 
 			m = m1;
 			sflag += 2;
@@ -347,7 +360,24 @@ arc_output(ifp, m0, dst, rt0)
 		ah->arc_shost = myself;
 	}
 
-	return ifq_enqueue(ifp, m ALTQ_COMMA ALTQ_DECL(&pktattr));
+	len = m->m_pkthdr.len;
+	s = splnet();
+	/*
+	 * Queue message on interface, and start output if interface
+	 * not yet active.
+	 */
+	IFQ_ENQUEUE(&ifp->if_snd, m, &pktattr, error);
+	if (error) {
+		/* mbuf is already freed */
+		splx(s);
+		return (error);
+	}
+	ifp->if_obytes += len;
+	if ((ifp->if_flags & IFF_OACTIVE) == 0)
+		(*ifp->if_start)(ifp);
+	splx(s);
+
+	return (error);
 
 bad:
 	if (m1)
@@ -371,7 +401,7 @@ arc_defrag(ifp, m)
 	struct arccom *ac;
 	struct ac_frag *af;
 	struct mbuf *m1;
-	const char *s;
+	char *s;
 	int newflen;
 	u_char src, dst, typ;
 
@@ -612,6 +642,7 @@ arc_input(ifp, m)
 /*
  * Convert Arcnet address to printable (loggable) representation.
  */
+static char digits[] = "0123456789abcdef";
 char *
 arc_sprintf(ap)
 	u_int8_t *ap;
@@ -619,8 +650,8 @@ arc_sprintf(ap)
 	static char arcbuf[3];
 	char *cp = arcbuf;
 
-	*cp++ = hexdigits[*ap >> 4];
-	*cp++ = hexdigits[*ap++ & 0xf];
+	*cp++ = digits[*ap >> 4];
+	*cp++ = digits[*ap++ & 0xf];
 	*cp   = 0;
 	return (arcbuf);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: core_elf32.c,v 1.18 2005/06/10 05:10:13 matt Exp $	*/
+/*	$NetBSD: core_elf32.c,v 1.14 2004/09/17 14:11:24 skrll Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(1, "$NetBSD: core_elf32.c,v 1.18 2005/06/10 05:10:13 matt Exp $");
+__KERNEL_RCSID(1, "$NetBSD: core_elf32.c,v 1.14 2004/09/17 14:11:24 skrll Exp $");
 
 /* If not included by core_elf64.c, ELFSIZE won't be defined. */
 #ifndef ELFSIZE
@@ -51,10 +51,8 @@ __KERNEL_RCSID(1, "$NetBSD: core_elf32.c,v 1.18 2005/06/10 05:10:13 matt Exp $")
 #include <sys/systm.h>
 #include <sys/proc.h>
 #include <sys/vnode.h>
-#include <sys/exec.h>
 #include <sys/exec_elf.h>
 #include <sys/ptrace.h>
-#include <sys/malloc.h>
 
 #include <machine/reg.h>
 
@@ -64,40 +62,39 @@ struct countsegs_state {
 	int	npsections;
 };
 
-int	ELFNAMEEND(coredump_countsegs)(struct proc *, void *,
-	    struct uvm_coredump_state *);
+int	ELFNAMEEND(coredump_countsegs)(struct proc *, struct vnode *,
+	    struct ucred *, struct uvm_coredump_state *);
 
 struct writesegs_state {
-	Elf_Phdr *psections;
+	off_t	offset;
 	off_t	secoff;
 };
 
-int	ELFNAMEEND(coredump_writeseghdrs)(struct proc *, void *,
-	    struct uvm_coredump_state *);
-int	ELFNAMEEND(coredump_writesegs)(struct proc *, void *,
-	    struct uvm_coredump_state *);
+int	ELFNAMEEND(coredump_writeseghdrs)(struct proc *, struct vnode *,
+	    struct ucred *, struct uvm_coredump_state *);
+int	ELFNAMEEND(coredump_writesegs)(struct proc *, struct vnode *,
+	    struct ucred *, struct uvm_coredump_state *);
 
-int	ELFNAMEEND(coredump_notes)(struct proc *, struct lwp *, void *,
-	    size_t *);
-int	ELFNAMEEND(coredump_note)(struct proc *, struct lwp *, void *,
-	    size_t *);
+int	ELFNAMEEND(coredump_notes)(struct proc *, struct lwp *, struct vnode *,
+	    struct ucred *, size_t *, off_t);
+int	ELFNAMEEND(coredump_note)(struct proc *, struct lwp *, struct vnode *,
+	    struct ucred *, size_t *, off_t);
 
 #define	ELFROUNDSIZE	4	/* XXX Should it be sizeof(Elf_Word)? */
 #define	elfround(x)	roundup((x), ELFROUNDSIZE)
 
 int
-ELFNAMEEND(coredump)(struct lwp *l, void *cookie)
+ELFNAMEEND(coredump)(struct lwp *l, struct vnode *vp, struct ucred *cred)
 {
 	struct proc *p;
 	Elf_Ehdr ehdr;
-	Elf_Phdr phdr, *psections;
+	Elf_Phdr phdr;
 	struct countsegs_state cs;
 	struct writesegs_state ws;
-	off_t notestart, secstart, offset;
+	off_t notestart, secstart;
 	size_t notesize;
-	int error, i;
+	int error;
 
-	psections = NULL;
 	p = l->l_proc;
 	/*
 	 * We have to make a total of 3 passes across the map:
@@ -112,20 +109,19 @@ ELFNAMEEND(coredump)(struct lwp *l, void *cookie)
 
 	/* Pass 1: count the entries. */
 	cs.npsections = 0;
-	error = uvm_coredump_walkmap(p, NULL,
+	error = uvm_coredump_walkmap(p, vp, cred,
 	    ELFNAMEEND(coredump_countsegs), &cs);
 	if (error)
-		goto out;
+		return (error);
+
+	/* Get the size of the notes. */
+	error = ELFNAMEEND(coredump_notes)(p, l, vp, cred, &notesize, 0);
+	if (error)
+		return (error);
 
 	/* Count the PT_NOTE section. */
 	cs.npsections++;
 
-	/* Get the size of the notes. */
-	error = ELFNAMEEND(coredump_notes)(p, l, NULL, &notesize);
-	if (error)
-		goto out;
-
-	memset(&ehdr.e_ident[EI_PAD], 0, sizeof(ehdr.e_ident) - EI_PAD);
 	memcpy(ehdr.e_ident, ELFMAG, SELFMAG);
 #if ELFSIZE == 32
 	ehdr.e_ident[EI_CLASS] = ELFCLASS32;
@@ -154,92 +150,70 @@ ELFNAMEEND(coredump)(struct lwp *l, void *cookie)
 	ehdr.e_shstrndx = 0;
 
 	/* Write out the ELF header. */
-	error = coredump_write(cookie, UIO_SYSSPACE, &ehdr, sizeof(ehdr));
-	if (error)
-		goto out;
+	error = vn_rdwr(UIO_WRITE, vp, (caddr_t)&ehdr,
+	    (int)sizeof(ehdr), (off_t)0,
+	    UIO_SYSSPACE, IO_NODELOCKED|IO_UNIT, cred, NULL, NULL);
 
-	offset = sizeof(ehdr);
-
-	notestart = offset + sizeof(phdr) * cs.npsections;
-	secstart = notestart + notesize;
-
-	psections = malloc(cs.npsections * sizeof(Elf_Phdr),
-	    M_TEMP, M_WAITOK|M_ZERO);
+	ws.offset = ehdr.e_phoff;
+	notestart = ws.offset + (sizeof(phdr) * cs.npsections);
+	secstart = round_page(notestart + notesize);
 
 	/* Pass 2: now write the P-section headers. */
 	ws.secoff = secstart;
-	ws.psections = psections;
-	error = uvm_coredump_walkmap(p, cookie,
+	error = uvm_coredump_walkmap(p, vp, cred,
 	    ELFNAMEEND(coredump_writeseghdrs), &ws);
 	if (error)
-		goto out;
+		return (error);
 
 	/* Write out the PT_NOTE header. */
-	ws.psections->p_type = PT_NOTE;
-	ws.psections->p_offset = notestart;
-	ws.psections->p_vaddr = 0;
-	ws.psections->p_paddr = 0;
-	ws.psections->p_filesz = notesize;
-	ws.psections->p_memsz = 0;
-	ws.psections->p_flags = PF_R;
-	ws.psections->p_align = ELFROUNDSIZE;
+	phdr.p_type = PT_NOTE;
+	phdr.p_offset = notestart;
+	phdr.p_vaddr = 0;
+	phdr.p_paddr = 0;
+	phdr.p_filesz = notesize;
+	phdr.p_memsz = 0;
+	phdr.p_flags = PF_R;
+	phdr.p_align = ELFROUNDSIZE;
 
-	error = coredump_write(cookie, UIO_SYSSPACE, psections,
-	    cs.npsections * sizeof(Elf_Phdr));
+	error = vn_rdwr(UIO_WRITE, vp,
+	    (caddr_t)&phdr, sizeof(phdr),
+	    ws.offset, UIO_SYSSPACE,
+	    IO_NODELOCKED|IO_UNIT, cred, NULL, NULL);
 	if (error)
-		goto out;
+		return (error);
+
+	ws.offset += sizeof(phdr);
 
 #ifdef DIAGNOSTIC
-	offset += cs.npsections * sizeof(Elf_Phdr);
-	if (offset != notestart)
+	if (ws.offset != notestart)
 		panic("coredump: offset %lld != notestart %lld",
-		    (long long) offset, (long long) notestart);
+		    (long long) ws.offset, (long long) notestart);
 #endif
 
 	/* Write out the notes. */
-	error = ELFNAMEEND(coredump_notes)(p, l, cookie, &notesize);
-	if (error)
-		goto out;
+	error = ELFNAMEEND(coredump_notes)(p, l, vp, cred, &notesize, ws.offset);
+
+	ws.offset += notesize;
 
 #ifdef DIAGNOSTIC
-	offset += notesize;
-	if (offset != secstart)
+	if (round_page(ws.offset) != secstart)
 		panic("coredump: offset %lld != secstart %lld",
-		    (long long) offset, (long long) secstart);
+		    (long long) round_page(ws.offset), (long long) secstart);
 #endif
 
 	/* Pass 3: finally, write the sections themselves. */
-	for (i = 0; i < cs.npsections - 1; i++) {
-		if (psections[i].p_filesz == 0)
-			continue;
+	ws.secoff = secstart;
+	error = uvm_coredump_walkmap(p, vp, cred,
+	    ELFNAMEEND(coredump_writesegs), &ws);
+	if (error)
+		return (error);
 
-#ifdef DIAGNOSTIC
-		if (offset != psections[i].p_offset)
-			panic("coredump: offset %lld != p_offset[%d] %lld",
-			    (long long) offset, i,
-			    (long long) psections[i].p_filesz);
-#endif
-
-		error = coredump_write(cookie, UIO_USERSPACE,
-		    (void *)(vaddr_t)psections[i].p_vaddr,
-		    psections[i].p_filesz);
-		if (error)
-			goto out;
-
-#ifdef DIAGNOSTIC
-		offset += psections[i].p_filesz;
-#endif
-	}
-
-  out:
-	if (psections)
-		free(psections, M_TEMP);
 	return (error);
 }
 
 int
-ELFNAMEEND(coredump_countsegs)(struct proc *p, void *iocookie,
-    struct uvm_coredump_state *us)
+ELFNAMEEND(coredump_countsegs)(struct proc *p, struct vnode *vp,
+    struct ucred *cred, struct uvm_coredump_state *us)
 {
 	struct countsegs_state *cs = us->cookie;
 
@@ -248,45 +222,21 @@ ELFNAMEEND(coredump_countsegs)(struct proc *p, void *iocookie,
 }
 
 int
-ELFNAMEEND(coredump_writeseghdrs)(struct proc *p, void *iocookie,
-    struct uvm_coredump_state *us)
+ELFNAMEEND(coredump_writeseghdrs)(struct proc *p, struct vnode *vp,
+    struct ucred *cred, struct uvm_coredump_state *us)
 {
 	struct writesegs_state *ws = us->cookie;
 	Elf_Phdr phdr;
-	vsize_t size, realsize;
-	vaddr_t end;
+	vsize_t size;
 	int error;
 
 	size = us->end - us->start;
-	realsize = us->realend - us->start;
-	end = us->realend;
-
-	while (realsize > 0) {
-		long buf[1024 / sizeof(long)];
-		size_t slen = realsize > sizeof(buf) ? sizeof(buf) : realsize;
-		const long *ep;
-		int i;
-
-		end -= slen;
-		error = copyin((void *) end, buf, slen);
-		if (error)
-			return (error);
-
-		ep = (const long *) &buf[slen / sizeof(buf[0])];
-		for (i = 0, ep--; buf <= ep; ep--, i++) {
-			if (*ep)
-				break;
-		}
-		realsize -= i * sizeof(buf[0]);
-		if (i * sizeof(buf[0]) < slen)
-			break;
-	}
 
 	phdr.p_type = PT_LOAD;
 	phdr.p_offset = ws->secoff;
 	phdr.p_vaddr = us->start;
 	phdr.p_paddr = 0;
-	phdr.p_filesz = realsize;
+	phdr.p_filesz = (us->flags & UVM_COREDUMP_NODUMP) ? 0 : size;
 	phdr.p_memsz = size;
 	phdr.p_flags = 0;
 	if (us->prot & VM_PROT_READ)
@@ -297,15 +247,47 @@ ELFNAMEEND(coredump_writeseghdrs)(struct proc *p, void *iocookie,
 		phdr.p_flags |= PF_X;
 	phdr.p_align = PAGE_SIZE;
 
+	error = vn_rdwr(UIO_WRITE, vp,
+	    (caddr_t)&phdr, sizeof(phdr),
+	    ws->offset, UIO_SYSSPACE,
+	    IO_NODELOCKED|IO_UNIT, cred, NULL, NULL);
+	if (error)
+		return (error);
+
+	ws->offset += sizeof(phdr);
 	ws->secoff += phdr.p_filesz;
-	*ws->psections++ = phdr;
 
 	return (0);
 }
 
 int
-ELFNAMEEND(coredump_notes)(struct proc *p, struct lwp *l,
-    void *iocookie, size_t *sizep)
+ELFNAMEEND(coredump_writesegs)(struct proc *p, struct vnode *vp,
+    struct ucred *cred, struct uvm_coredump_state *us)
+{
+	struct writesegs_state *ws = us->cookie;
+	vsize_t size;
+	int error;
+
+	if (us->flags & UVM_COREDUMP_NODUMP)
+		return (0);
+
+	size = us->end - us->start;
+
+	error = vn_rdwr(UIO_WRITE, vp,
+	    (caddr_t) us->start, size,
+	    ws->secoff, UIO_USERSPACE,
+	    IO_NODELOCKED|IO_UNIT, cred, NULL, p);
+	if (error)
+		return (error);
+
+	ws->secoff += size;
+
+	return (0);
+}
+
+int
+ELFNAMEEND(coredump_notes)(struct proc *p, struct lwp *l, struct vnode *vp,
+    struct ucred *cred, size_t *sizep, off_t offset)
 {
 	struct netbsd_elfcore_procinfo cpi;
 	Elf_Nhdr nhdr;
@@ -318,7 +300,7 @@ ELFNAMEEND(coredump_notes)(struct proc *p, struct lwp *l,
 	/* First, write an elfcore_procinfo. */
 	notesize = sizeof(nhdr) + elfround(sizeof(ELF_NOTE_NETBSD_CORE_NAME)) +
 	    elfround(sizeof(cpi));
-	if (iocookie) {
+	if (offset) {
 		cpi.cpi_version = NETBSD_ELFCORE_PROCINFO_VERSION;
 		cpi.cpi_cpisize = sizeof(cpi);
 		cpi.cpi_signo = p->p_sigctx.ps_signo;
@@ -354,10 +336,12 @@ ELFNAMEEND(coredump_notes)(struct proc *p, struct lwp *l,
 		nhdr.n_descsz = sizeof(cpi);
 		nhdr.n_type = ELF_NOTE_NETBSD_CORE_PROCINFO;
 
-		error = ELFNAMEEND(coredump_writenote)(p, iocookie, &nhdr,
-		    ELF_NOTE_NETBSD_CORE_NAME "\0\0\0", &cpi);
+		error = ELFNAMEEND(coredump_writenote)(p, vp, cred, offset,
+		    &nhdr, ELF_NOTE_NETBSD_CORE_NAME, &cpi);
 		if (error)
 			return (error);
+
+		offset += notesize;
 	}
 
 	size += notesize;
@@ -368,9 +352,11 @@ ELFNAMEEND(coredump_notes)(struct proc *p, struct lwp *l,
 	 * Now write the register info for the thread that caused the
 	 * coredump.
 	 */
-	error = ELFNAMEEND(coredump_note)(p, l, iocookie, &notesize);
+	error = ELFNAMEEND(coredump_note)(p, l, vp, cred, &notesize, offset);
 	if (error)
 		return (error);
+	if (offset)
+		offset += notesize;
 	size += notesize;
 
 	/*
@@ -380,9 +366,12 @@ ELFNAMEEND(coredump_notes)(struct proc *p, struct lwp *l,
 	LIST_FOREACH(l0, &p->p_lwps, l_sibling) {
 		if (l0 == l)		/* we've taken care of this thread */
 			continue;
-		error = ELFNAMEEND(coredump_note)(p, l0, iocookie, &notesize);
+		error = ELFNAMEEND(coredump_note)(p, l0, vp, cred,
+		    &notesize, offset);
 		if (error)
 			return (error);
+		if (offset)
+			offset += notesize;
 		size += notesize;
 	}
 
@@ -391,13 +380,13 @@ ELFNAMEEND(coredump_notes)(struct proc *p, struct lwp *l,
 }
 
 int
-ELFNAMEEND(coredump_note)(struct proc *p, struct lwp *l, void *iocookie,
-    size_t *sizep)
+ELFNAMEEND(coredump_note)(struct proc *p, struct lwp *l, struct vnode *vp,
+    struct ucred *cred, size_t *sizep, off_t offset)
 {
 	Elf_Nhdr nhdr;
 	int size, notesize, error;
 	int namesize;
-	char name[64+ELFROUNDSIZE];
+	char name[64];
 	struct reg intreg;
 #ifdef PT_GETFPREGS
 	struct fpreg freg;
@@ -405,13 +394,12 @@ ELFNAMEEND(coredump_note)(struct proc *p, struct lwp *l, void *iocookie,
 
 	size = 0;
 
-	snprintf(name, sizeof(name)-ELFROUNDSIZE, "%s@%d",
-	    ELF_NOTE_NETBSD_CORE_NAME, l->l_lid);
+	snprintf(name, sizeof(name), "%s@%d", ELF_NOTE_NETBSD_CORE_NAME,
+	    l->l_lid);
 	namesize = strlen(name) + 1;
-	memset(name + namesize, 0, elfround(namesize) - namesize);
 
 	notesize = sizeof(nhdr) + elfround(namesize) + elfround(sizeof(intreg));
-	if (iocookie) {
+	if (offset) {
 		PHOLD(l);
 		error = process_read_regs(l, &intreg);
 		PRELE(l);
@@ -422,17 +410,18 @@ ELFNAMEEND(coredump_note)(struct proc *p, struct lwp *l, void *iocookie,
 		nhdr.n_descsz = sizeof(intreg);
 		nhdr.n_type = PT_GETREGS;
 
-		error = ELFNAMEEND(coredump_writenote)(p, iocookie, &nhdr,
-		    name, &intreg);
+		error = ELFNAMEEND(coredump_writenote)(p, vp, cred,
+		    offset, &nhdr, name, &intreg);
 		if (error)
 			return (error);
 
+		offset += notesize;
 	}
 	size += notesize;
 
 #ifdef PT_GETFPREGS
 	notesize = sizeof(nhdr) + elfround(namesize) + elfround(sizeof(freg));
-	if (iocookie) {
+	if (offset) {
 		PHOLD(l);
 		error = process_read_fpregs(l, &freg);
 		PRELE(l);
@@ -443,10 +432,12 @@ ELFNAMEEND(coredump_note)(struct proc *p, struct lwp *l, void *iocookie,
 		nhdr.n_descsz = sizeof(freg);
 		nhdr.n_type = PT_GETFPREGS;
 
-		error = ELFNAMEEND(coredump_writenote)(p, iocookie, &nhdr,
-		    name, &freg);
+		error = ELFNAMEEND(coredump_writenote)(p, vp, cred,
+		    offset, &nhdr, name, &freg);
 		if (error)
 			return (error);
+
+		offset += notesize;
 	}
 	size += notesize;
 #endif
@@ -456,19 +447,34 @@ ELFNAMEEND(coredump_note)(struct proc *p, struct lwp *l, void *iocookie,
 }
 
 int
-ELFNAMEEND(coredump_writenote)(struct proc *p, void *cookie, Elf_Nhdr *nhdr,
-    const char *name, void *data)
+ELFNAMEEND(coredump_writenote)(struct proc *p, struct vnode *vp,
+    struct ucred *cred, off_t offset, Elf_Nhdr *nhdr, const char *name,
+    void *data)
 {
 	int error;
 
-	error = coredump_write(cookie, UIO_SYSSPACE, nhdr, sizeof(*nhdr));
+	error = vn_rdwr(UIO_WRITE, vp,
+	    (caddr_t) nhdr, sizeof(*nhdr),
+	    offset, UIO_SYSSPACE,
+	    IO_NODELOCKED|IO_UNIT, cred, NULL, NULL);
 	if (error)
-		return error;
+		return (error);
 
-	error = coredump_write(cookie, UIO_SYSSPACE, name,
-	    elfround(nhdr->n_namesz));
+	offset += sizeof(*nhdr);
+
+	error = vn_rdwr(UIO_WRITE, vp,
+	    (caddr_t)name, nhdr->n_namesz,
+	    offset, UIO_SYSSPACE,
+	    IO_NODELOCKED|IO_UNIT, cred, NULL, NULL);
 	if (error)
-		return error;
+		return (error);
 
-	return coredump_write(cookie, UIO_SYSSPACE, data, nhdr->n_descsz);
+	offset += elfround(nhdr->n_namesz);
+
+	error = vn_rdwr(UIO_WRITE, vp,
+	    data, nhdr->n_descsz,
+	    offset, UIO_SYSSPACE,
+	    IO_NODELOCKED|IO_UNIT, cred, NULL, NULL);
+
+	return (error);
 }

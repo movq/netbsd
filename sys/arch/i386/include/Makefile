@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.28 2005/05/03 08:24:16 tron Exp $
+#	$NetBSD: Makefile,v 1.26 2004/05/08 21:51:49 kleink Exp $
 
 INCSDIR= /usr/include/i386
 

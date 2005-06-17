@@ -1,4 +1,4 @@
-/*	$NetBSD: s3c24x0_clk.c,v 1.4 2005/06/04 22:37:51 he Exp $ */
+/*	$NetBSD: s3c24x0_clk.c,v 1.3 2003/08/27 03:57:05 bsh Exp $ */
 
 /*
  * Copyright (c) 2003  Genetec corporation.  All rights reserved.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: s3c24x0_clk.c,v 1.4 2005/06/04 22:37:51 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: s3c24x0_clk.c,v 1.3 2003/08/27 03:57:05 bsh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -254,7 +254,8 @@ resettodr(void)
 }
 
 void
-setstatclockrate(int newhz)
+setstatclockrate(hz)
+	int hz;
 {
 }
 

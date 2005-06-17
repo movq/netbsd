@@ -1,4 +1,4 @@
-/*	$NetBSD: pam_lastlog.c,v 1.8 2005/04/19 03:15:35 christos Exp $	*/
+/*	$NetBSD: pam_lastlog.c,v 1.6.2.2 2005/07/11 11:23:34 tron Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1987, 1988, 1991, 1993, 1994
@@ -47,7 +47,7 @@
 #ifdef __FreeBSD__
 __FBSDID("$FreeBSD: src/lib/libpam/modules/pam_lastlog/pam_lastlog.c,v 1.20 2004/01/26 19:28:37 des Exp $");
 #else
-__RCSID("$NetBSD: pam_lastlog.c,v 1.8 2005/04/19 03:15:35 christos Exp $");
+__RCSID("$NetBSD: pam_lastlog.c,v 1.6.2.2 2005/07/11 11:23:34 tron Exp $");
 #endif
 
 #include <sys/param.h>

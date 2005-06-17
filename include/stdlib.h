@@ -1,4 +1,4 @@
-/*	$NetBSD: stdlib.h,v 1.70 2005/06/11 22:58:42 christos Exp $	*/
+/*	$NetBSD: stdlib.h,v 1.69 2005/02/03 04:39:32 perry Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -179,11 +179,9 @@ void	 srandom(unsigned long);
 
 char	*mkdtemp(char *);
 int	 mkstemp(char *);
-char	*mktemp(char *)
-#ifdef __MKTEMP_OK__
-	__RENAME(_mktemp)
+#ifndef __AUDIT__
+char	*mktemp(char *);
 #endif
-	;
 
 int	 setkey(const char *);
 

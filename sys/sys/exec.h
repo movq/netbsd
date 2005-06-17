@@ -1,4 +1,4 @@
-/*	$NetBSD: exec.h,v 1.109 2005/06/10 11:36:38 tron Exp $	*/
+/*	$NetBSD: exec.h,v 1.106.4.1 2005/09/08 21:04:14 tron Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -131,8 +131,6 @@ struct ps_strings {
  * in creating the new process's vmspace.
  */
 
-#include <sys/uio.h>
-
 struct lwp;
 struct proc;
 struct exec_package;
@@ -148,7 +146,7 @@ struct execsw {
 		int (*elf_probe_func)(struct proc *,
 			struct exec_package *, void *, char *, vaddr_t *);
 		int (*ecoff_probe_func)(struct proc *, struct exec_package *);
-		int (*mach_probe_func)(const char **);
+		int (*mach_probe_func)(char **);
 	} u;
 	const struct  emul *es_emul;	/* os emulation */
 	int	es_prio;		/* entry priority */
@@ -159,7 +157,7 @@ struct execsw {
 					/* Set registers before execution */
 	void	(*es_setregs)(struct lwp *, struct exec_package *, u_long);
 					/* Dump core */
-	int	(*es_coredump)(struct lwp *, void *);
+	int	(*es_coredump)(struct lwp *, struct vnode *, struct ucred *);
 	int	(*es_setup_stack)(struct proc *, struct exec_package *);
 };
 
@@ -245,26 +243,13 @@ int	vmcmd_map_zero		(struct proc *, struct exec_vmcmd *);
 int	copyargs		(struct proc *, struct exec_package *,
 				    struct ps_strings *, char **, void *);
 void	setregs			(struct lwp *, struct exec_package *, u_long);
-#ifdef VERIFIED_EXEC
 int	check_veriexec		(struct proc *, struct vnode *,
 				     struct exec_package *, int);
 int	check_exec		(struct proc *, struct exec_package *, int);
-#else
-int	check_exec		(struct proc *, struct exec_package *);
-#endif
 int	exec_init		(int);
 int	exec_read_from		(struct proc *, struct vnode *, u_long off,
 				    void *, size_t);
 int	exec_setup_stack	(struct proc *, struct exec_package *);
-
-int	coredump_write		(void *, enum uio_seg, const void *, size_t);
-/*
- * Machine dependent functions
- */
-struct core;
-struct core32;
-int	cpu_coredump(struct lwp *, void *, struct core *);
-int	cpu_coredump32(struct lwp *, void *, struct core32 *);
 
 
 #ifdef LKM

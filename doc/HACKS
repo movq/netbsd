@@ -1,4 +1,4 @@
-# $NetBSD: HACKS,v 1.50 2005/06/02 14:38:05 he Exp $
+# $NetBSD: HACKS,v 1.42 2005/02/22 18:47:09 christos Exp $
 #
 # This file is intended to document workarounds for currently unsolved
 # (mostly) compiler bugs.
@@ -113,28 +113,6 @@ kcah
 
 port	vax
 
-	hack	gcc 2.95/vax doesn't have stdbool.h and gettext needs it
-	cdate	Mon May  9 12:16:22 CDT 2005
-	who	jmc
-	file	gnu/usr.bin/gettext/Makefile.inc.prog 1.5
-		gnu/usr.bin/gettext/libgrep/Makefile 1.3
-		gnu/usr.bin/gettext/libnlspr/Makefile 1.5
-		gnu/usr.bin/gettext/libnlsut/Makefile 1.3   
-	descr
-		The latest gettext assumes a C99 environment or at least
-		configure checks to work around this. As we don't use configure
-		provide a stdbool.h for vax builds locally in directories from
-		the template provided by the gettext code.
-	
-	hack	gcc 2.95/vax can't handle __used__ in mcount.c
-	cdate	Fri May  6 14:30:53 CDT 2005
-	who	jmc
-	file	src/lib/libc/gmon/mcount.c 1.17
-	descr
-                Recent changes to mark this as __used__ to prevent optimization
-                away on sparc64 don't work on 2.95 vax. Ifdef'd back in the
-                old __unused__ if on vax.
-	
 	hack	gcc 2.95/vax cannot handle __builtin_ffs()
 	cdate	Fri Aug 23 21:31:15 CEST 2002
 	who	ragge
@@ -142,7 +120,7 @@ port	vax
 	descr
 		__builtin_ffs() is ifdef'd away if __vax__. Matt Thomas has
 		added this feature to GCC 3 so it can be removed when switching.
-	
+	kcah
 
 	hack	gcc-vax-libbz2
 	mdate	27 Jun 2002
@@ -203,15 +181,6 @@ port	vax
 		It appears necessary to add -I. to CPPFLAGS when building
 		nslesxer.c.  This may be caused by gcc 2.95.3 being used.
 		Should be reverted when a newer gcc is ready for vax.
-	kcah
-
-	hack	vax gcc 2.95.3 doesn't understand "-std=c99"
-	cdat	5 April 2005
-	who	tron
-	file	src/share/mk/bsd.sys.mk
-	descr
-		We cannot use "-std=c99" for compiler warning level 4 and above
-		because gcc 2.95.3 doesn't support that option.
 	kcah
 
 port	sparc64
@@ -386,14 +355,6 @@ port	sh5
 		Drop to -O1 for now when building for sh5.
 	kcah
 
-	hack	gcc 3.3.3 nb3 on sh5 - ICE compiling bsd-comp.c
-	cdate	Thu May 25 23:05:20 UTC 2005
-	who	he
-	file	sys/lkm/net/bsdcomp/Makefile : 1.3
-	descr
-		Gcc3 for sh5 gets an ICE compiling this at -O2,
-		"could not split insn".  Drop to -O1 for sh5.
-	kcah
 
 port	sun2
 
@@ -416,12 +377,12 @@ port	sun2
 	kcah
 
 
-port	sun2 m68k
+port	sun2, m68k
 
 	hack	gcc 3.3.2/gcc/ra-colorize.c
 	cdate	Wed Nov  5 11:03:13 EST 2003
 	who	mrg
-	file	gnu/usr.bin/gcc3/backend/Makefile : 1.11
+	file	gnu/usr.bin/gcc/backend/Makefile : 1.11
 	descr
 		ra-colorize.c causes a whole spew of unreferenced .L* local
 		symbols.  using -O0 (or even -O2 reportedly) avoids the problem.
@@ -451,26 +412,4 @@ port	macppc
 		.* named[368]: rbt.c:1584: INSIST(child != (void *)0) >failed
 		.* named[368]: exiting (due to assertion failure)
 		This is reportedly fixed in gcc-3.4
-	kcah
-
-port	hppa
-
-	hack	hppa-gcc-3.3.3/grep/dfa.c
-	cdate	Sun Aug  8 08:34:32 PDT 2004
-	who	chs
-	file	gnu/usr.bin/grep/grep/Makefile : 1.4
-	descr
-		gcc 3.3.3 generates bad code for dfa.c with -O2,
-		reduce optimization to -O1 to avoid the bug.
-	kcah
-
-	hack	hppa boot-from-disk memory corruption
-	cdate	Wed May 18 06:56:07 PDT 2005
-	who	chs
-	file	src/sys/dev/scsipi/scsipiconf.h : 1.98
-	descr
-		There is some bug with DMA on hppa that corrupts scsipi_xfer
-		structures, but it only shows up when booting from disk.
-		For now, we'll add some padding to scsipi_xfer so that
-		the corrupted memory is not otherwise used.
 	kcah

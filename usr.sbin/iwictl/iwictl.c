@@ -1,4 +1,4 @@
-/*	$NetBSD: iwictl.c,v 1.3 2005/04/03 17:21:29 christos Exp $	*/
+/*	$NetBSD: iwictl.c,v 1.2 2005/01/11 18:52:11 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2004, 2005
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: iwictl.c,v 1.3 2005/04/03 17:21:29 christos Exp $");
+__RCSID("$NetBSD: iwictl.c,v 1.2 2005/01/11 18:52:11 skrll Exp $");
 
 #include <sys/types.h>
 #include <sys/ioctl.h>
@@ -66,23 +66,24 @@ struct header {
 	u_int32_t	mode;
 } __attribute__((__packed__));
 
-static void usage(void) __attribute__((__noreturn__));
-static int do_req(const char *, unsigned long, void *);
-static void mmap_file(const char *, void **, size_t *);
-static void load_firmware(const char *, const char *, const char *);
-static void kill_firmware(const char *);
-static void get_radio_state(const char *);
-static void get_statistics(const char *);
+extern char *optarg;
+extern int optind;
+
+static void usage(void);
+static int do_req(char *, unsigned long, void *);
+static void mmap_file(char *, void **, size_t *);
+static void load_firmware(char *, char *, char *);
+static void kill_firmware(char *);
+static void get_radio_state(char *);
+static void get_statistics(char *);
 
 int
 main(int argc, char **argv)
 {
 	int ch;
-	char *iface = NULL, *path = NULL;
-	const char *mode = "bss";
+	char *iface = NULL, *mode = "bss", *path = NULL;
 	int noflag = 1, kflag = 0, rflag = 0;
 
-	setprogname(argv[0]);
 	if (argc > 1 && argv[1][0] != '-') {
 		iface = argv[1];
 		optind++;
@@ -142,38 +143,39 @@ main(int argc, char **argv)
 static void
 usage(void)
 {
-	(void)fprintf(stderr, "Usage:  %s iface\n"
+	extern char *__progname;
+
+	(void)fprintf(stderr, "usage:  %s iface\n"
 	    "\t%s iface -d path [-m bss|ibss]\n"
 	    "\t%s iface -k\n"
-	    "\t%s iface -r\n", getprogname(), getprogname(), getprogname(),
-	    getprogname());
+	    "\t%s iface -r\n", __progname, __progname, __progname,
+	    __progname);
 
 	exit(EX_USAGE);
 }
 
 static int
-do_req(const char *iface, unsigned long req, void *data)
+do_req(char *iface, unsigned long req, void *data)
 {
 	int s;
 	struct ifreq ifr;
-	int error, serrno;
+	int error;
 
 	if ((s = socket(AF_INET, SOCK_DGRAM, 0)) == -1)
 		err(EX_OSERR, "Can't create socket");
 
-	(void)memset(&ifr, 0, sizeof(ifr));
-	(void)strncpy(ifr.ifr_name, iface, sizeof(ifr.ifr_name));
+	(void)memset(&ifr, 0, sizeof ifr);
+	(void)strncpy(ifr.ifr_name, iface, sizeof ifr.ifr_name);
 	ifr.ifr_data = data;
 	error = ioctl(s, req, &ifr);
-	serrno = errno;
+
 	(void)close(s);
-	errno = serrno;
 
 	return error;
 }
 
 static void
-mmap_file(const char *filename, void **addr, size_t *len)
+mmap_file(char *filename, void **addr, size_t *len)
 {
 	int fd;
 	struct stat st;
@@ -184,32 +186,31 @@ mmap_file(const char *filename, void **addr, size_t *len)
 	if (fstat(fd, &st) == -1)
 		err(EX_OSERR, "Unable to stat %s", filename);
 
-	*len = (size_t)st.st_size;
+	*len = st.st_size;
 
-	*addr = mmap(NULL, st.st_size, PROT_READ, MAP_PRIVATE, fd, (off_t)0);
-	if (*addr == MAP_FAILED)
+	if ((*addr = mmap(NULL, st.st_size, PROT_READ, 0, fd, 0)) == NULL)
 		err(EX_OSERR, "Can't map %s into memory", filename);
 
-	*(char **)addr += sizeof(struct header);
-	*len -= sizeof(struct header);
+	*(char **)addr += sizeof (struct header);
+	*len -= sizeof (struct header);
 
 	(void)close(fd);
 }
 
 static void
-load_firmware(const char *iface, const char *path, const char *mode)
+load_firmware(char *iface, char *path, char *mode)
 {
 	char filename[FILENAME_MAX];
 	struct firmware fw;
 
-	(void)snprintf(filename, sizeof(filename), "%s/iwi-boot.fw", path);
+	(void)snprintf(filename, sizeof filename, "%s/iwi-boot.fw", path);
 	mmap_file(filename, &fw.boot, &fw.boot_size);
 
-	(void)snprintf(filename, sizeof(filename), "%s/iwi-ucode-%s.fw", path,
+	(void)snprintf(filename, sizeof filename, "%s/iwi-ucode-%s.fw", path,
 	    mode);
 	mmap_file(filename, &fw.ucode, &fw.ucode_size);
 
-	(void)snprintf(filename, sizeof(filename), "%s/iwi-%s.fw", path, mode);
+	(void)snprintf(filename, sizeof filename, "%s/iwi-%s.fw", path, mode);
 	mmap_file(filename, &fw.main, &fw.main_size);
 
 	if (do_req(iface, SIOCSLOADFW, &fw) == -1)
@@ -217,14 +218,14 @@ load_firmware(const char *iface, const char *path, const char *mode)
 }
 
 static void
-kill_firmware(const char *iface)
+kill_firmware(char *iface)
 {
 	if (do_req(iface, SIOCSKILLFW, NULL) == -1)
 		err(EX_OSERR, "Can't kill firmware");
 }
 
 static void
-get_radio_state(const char *iface)
+get_radio_state(char *iface)
 {
 	int radio;
 
@@ -297,14 +298,15 @@ static const struct statistic tbl[] = {
 };
 
 static void
-get_statistics(const char *iface)
+get_statistics(char *iface)
 {
 	static u_int32_t stats[256];
-	const struct statistic *st;
+	const struct statistic *stat;
 
 	if (do_req(iface, SIOCGTABLE0, stats) == -1)
 		err(EX_OSERR, "Can't read statistics");
 
-	for (st = tbl; st->index != 0; st++)
-		(void)printf("%-60s[%u]\n", st->desc, stats[st->index]);
+	for (stat = tbl; stat->index != 0; stat++)
+		(void)printf("%-60s[%u]\n", stat->desc, stats[stat->index]);
 }
+

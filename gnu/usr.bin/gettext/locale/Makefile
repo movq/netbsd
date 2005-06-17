@@ -1,18 +1,14 @@
-#	$NetBSD: Makefile,v 1.2 2005/04/29 15:05:01 christos Exp $
+#	$NetBSD: Makefile,v 1.1 2000/11/02 01:09:03 itojun Exp $
 
 .include <bsd.own.mk>
 
-GMOFILES= be.gmo ca.gmo cs.gmo da.gmo de.gmo el.gmo en@boldquot.gmo \
-    en@quot.gmo es.gmo et.gmo fi.gmo fr.gmo gl.gmo id.gmo it.gmo \
-    ja.gmo ko.gmo nl.gmo nn.gmo no.gmo pl.gmo pt.gmo pt_BR.gmo ro.gmo \
-    ru.gmo sk.gmo sl.gmo sr.gmo sv.gmo tr.gmo uk.gmo zh_CN.gmo zh_TW.gmo 
-
-.for F in ${GMOFILES}
+.for F in da.gmo de.gmo es.gmo fr.gmo ko.gmo nl.gmo no.gmo no@nynorsk.gmo \
+	pl.gmo pt.gmo sl.gmo sv.gmo
 FILES+=		${F}
 FILESDIR_${F}=	/usr/share/locale/${F:.gmo=}/LC_MESSAGES
-FILESNAME_${F}=	gettext-tools.mo
+FILESNAME_${F}=	gettext.mo
 .endfor
 
 .include <bsd.prog.mk>
 
-.PATH: ${DIST}/gettext/gettext-tools/po
+.PATH: ${DIST}/gettext/po

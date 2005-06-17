@@ -1,4 +1,4 @@
-/*	$NetBSD: malloc.h,v 1.92 2005/05/30 23:04:53 chs Exp $	*/
+/*	$NetBSD: malloc.h,v 1.90 2004/09/04 23:30:07 manu Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993
@@ -160,8 +160,8 @@ extern struct simplelock malloc_slock;
 #else /* do not collect statistics */
 #define	MALLOC(space, cast, size, type, flags)				\
 do {									\
-	struct kmembuckets *__kbp = &kmembuckets[BUCKETINDX((size))];	\
-	int __s = splvm();						\
+	register struct kmembuckets *__kbp = &bucket[BUCKETINDX((size))]; \
+	long __s = splvm();						\
 	simple_lock(&malloc_slock);					\
 	if (__kbp->kb_next == NULL) {					\
 		simple_unlock(&malloc_slock);				\
@@ -179,14 +179,14 @@ do {									\
 
 #define	FREE(addr, type)						\
 do {									\
-	struct kmembuckets *__kbp;					\
-	struct kmemusage *__kup = btokup((addr));			\
-	int __s = splvm();						\
+	register struct kmembuckets *__kbp;				\
+	register struct kmemusage *__kup = btokup((addr));		\
+	long __s = splvm();						\
 	if (1 << __kup->ku_indx > MAXALLOCSAVE) {			\
 		free((caddr_t)(addr), (type));				\
 	} else {							\
 		simple_lock(&malloc_slock);				\
-		__kbp = &kmembuckets[__kup->ku_indx];			\
+		__kbp = &bucket[__kup->ku_indx];			\
 		if (__kbp->kb_next == NULL)				\
 			__kbp->kb_next = (caddr_t)(addr);		\
 		else							\
@@ -201,7 +201,7 @@ do {									\
 
 extern struct kmemusage		*kmemusage;
 extern char			*kmembase;
-extern struct kmembuckets	kmembuckets[];
+extern struct kmembuckets	bucket[];
 
 #ifdef MALLOCLOG
 void	*_malloc(unsigned long, struct malloc_type *, int, const char *, long);

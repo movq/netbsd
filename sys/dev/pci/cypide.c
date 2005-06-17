@@ -1,4 +1,4 @@
-/*	$NetBSD: cypide.c,v 1.15 2005/05/24 05:25:15 lukem Exp $	*/
+/*	$NetBSD: cypide.c,v 1.14 2005/02/27 00:27:32 perry Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000, 2001 Manuel Bouyer.
@@ -29,9 +29,6 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
-
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cypide.c,v 1.15 2005/05/24 05:25:15 lukem Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: devopen.c,v 1.5 2005/04/21 13:59:14 tsutsui Exp $	*/
+/*	$NetBSD: devopen.c,v 1.4 2003/09/28 08:21:08 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -42,12 +42,13 @@
  * file name if any.
  */
 int
-devopen(struct open_file *f, const char *fname, char **file)
+devopen(f, fname, file)
+	struct open_file *f;
+	const char *fname;
+	char **file;	/* out */
 {
-#if 0
-	int ctlr = 0, unit = 0, part = 0;
-#endif
-	int error;
+/*	int ctlr = 0, unit = 0, part = 0; */
+	int rc;
 	char namebuf[128];
 	char devtype[16];
 	const char *cp;
@@ -60,7 +61,7 @@ devopen(struct open_file *f, const char *fname, char **file)
 	cp = fname;
 	ncp = (char *)fname;
 
-	/*
+	/* 
 	 * If device starts with a PCI bus specifier, skip past it so the
 	 * device-matching code below gets the actual device type. Leave
 	 * fname as is, since it'll be passed back to ARCS to open the
@@ -98,11 +99,11 @@ devopen(struct open_file *f, const char *fname, char **file)
 
 	printf("devopen: %s type %s file %s\n", namebuf, devtype, cp);
 #ifdef LIBSA_SINGLE_DEVICE
-	error = DEV_OPEN(dp)(f, fname);
+	rc = DEV_OPEN(dp)(f, fname);
 #else /* !LIBSA_SINGLE_DEVICE */
 	for (dp = devsw, i = 0; i < ndevs; dp++, i++)
 		if (dp->dv_name && strcmp(devtype, dp->dv_name) == 0)
-			goto found;
+			goto fnd;
 	printf("Unknown device '%s'\nKnown devices are:", devtype);
 	for (dp = devsw, i = 0; i < ndevs; dp++, i++)
 		if (dp->dv_name)
@@ -110,11 +111,11 @@ devopen(struct open_file *f, const char *fname, char **file)
 	printf("\n");
 	return ENXIO;
 
- found:
-	error = (dp->dv_open)(f, namebuf);
+fnd:
+	rc = (dp->dv_open)(f, namebuf);
 #endif /* !LIBSA_SINGLE_DEVICE */
-	if (error)
-		return error;
+	if (rc)
+		return rc;
 
 #ifndef LIBSA_SINGLE_DEVICE
 	f->f_dev = dp;

@@ -176,11 +176,10 @@ static long md_ctrl(BIO *b, int cmd, long num, void *ptr)
 		{
 	case BIO_CTRL_RESET:
 		if (b->init)
-			ret = EVP_DigestInit_ex(ctx,ctx->digest, NULL);
+			EVP_DigestInit_ex(ctx,ctx->digest, NULL);
 		else
 			ret=0;
-		if (ret > 0)
-			ret=BIO_ctrl(b->next_bio,cmd,num,ptr);
+		ret=BIO_ctrl(b->next_bio,cmd,num,ptr);
 		break;
 	case BIO_C_GET_MD:
 		if (b->init)
@@ -192,12 +191,11 @@ static long md_ctrl(BIO *b, int cmd, long num, void *ptr)
 			ret=0;
 		break;
 	case BIO_C_GET_MD_CTX:
-		pctx=ptr;
-		*pctx=ctx;
-		break;
-	case BIO_C_SET_MD_CTX:
 		if (b->init)
-			b->ptr=ptr;
+			{
+			pctx=ptr;
+			*pctx=ctx;
+			}
 		else
 			ret=0;
 		break;
@@ -209,9 +207,8 @@ static long md_ctrl(BIO *b, int cmd, long num, void *ptr)
 
 	case BIO_C_SET_MD:
 		md=ptr;
-		ret = EVP_DigestInit_ex(ctx,md, NULL);
-		if (ret > 0)
-			b->init=1;
+		EVP_DigestInit_ex(ctx,md, NULL);
+		b->init=1;
 		break;
 	case BIO_CTRL_DUP:
 		dbio=ptr;

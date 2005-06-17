@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.210 2005/06/16 04:17:49 briggs Exp $ */
+/*	$NetBSD: autoconf.c,v 1.208 2004/10/23 17:12:23 thorpej Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.210 2005/06/16 04:17:49 briggs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.208 2004/10/23 17:12:23 thorpej Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -123,9 +123,9 @@ extern void *bootinfo;
 void bootinfo_relocate(void *);
 #endif
 
-static	const char *str2hex __P((const char *, int *));
+static	char *str2hex __P((char *, int *));
 static	int mbprint __P((void *, const char *));
-static	void crazymap __P((const char *, int *));
+static	void crazymap __P((char *, int *));
 int	st_crazymap __P((int));
 int	sd_crazymap __P((int));
 void	sync_crash __P((void));
@@ -135,7 +135,7 @@ static	void mainbus_attach __P((struct device *, struct device *, void *));
 struct	bootpath bootpath[8];
 int	nbootpath;
 static	void bootpath_build __P((void));
-static	void bootpath_fake __P((struct bootpath *, const char *));
+static	void bootpath_fake __P((struct bootpath *, char *));
 static	void bootpath_print __P((struct bootpath *));
 static	struct bootpath	*bootpath_store __P((int, struct bootpath *));
 int	find_cpus __P((void));
@@ -224,15 +224,15 @@ find_cpus()
  * Convert hex ASCII string to a value.  Returns updated pointer.
  * Depends on ASCII order (this *is* machine-dependent code, you know).
  */
-static const char *
+static char *
 str2hex(str, vp)
-	const char *str;
+	char *str;
 	int *vp;
 {
 	int v, c;
 
 	for (v = 0;; v = v * 16 + c, str++) {
-		c = (u_char)*str;
+		c = *(u_char *)str;
 		if (c <= '9') {
 			if ((c -= '0') < 0)
 				break;
@@ -276,7 +276,7 @@ bootstrap()
 	prom_init();
 
 	/* Find the number of CPUs as early as possible */
-	sparc_ncpus = find_cpus();
+	ncpu = find_cpus();
 
 	/* Attach user structure to proc0 */
 	lwp0.l_addr = proc0paddr;
@@ -508,8 +508,7 @@ bootstrapIIep()
 static void
 bootpath_build()
 {
-	const char *cp;
-	char *pp;
+	char *cp, *pp;
 	struct bootpath *bp;
 	int fl;
 
@@ -634,9 +633,9 @@ bootpath_build()
 static void
 bootpath_fake(bp, cp)
 	struct bootpath *bp;
-	const char *cp;
+	char *cp;
 {
-	const char *pp;
+	char *pp;
 	int v0val[3];
 
 #define BP_APPEND(BP,N,V0,V1,V2) { \
@@ -857,7 +856,7 @@ bootpath_store(storep, bp)
  */
 static void
 crazymap(prop, map)
-	const char *prop;
+	char *prop;
 	int *map;
 {
 	int i;
@@ -1510,7 +1509,7 @@ romgetcursoraddr(rowp, colp)
  */
 struct device *
 getdevunit(name, unit)
-	const char *name;
+	char *name;
 	int unit;
 {
 	struct device *dev = alldevs.tqh_first;
@@ -1554,12 +1553,12 @@ getdevunit(name, unit)
 #define BUSCLASS_PCI		10
 
 static int bus_class __P((struct device *));
-static const char *bus_compatible __P((const char *));
+static char *bus_compatible __P((char *));
 static int instance_match __P((struct device *, void *, struct bootpath *));
 static void nail_bootdev __P((struct device *, struct bootpath *));
 
 static struct {
-	const char	*name;
+	char	*name;
 	int	class;
 } bus_class_tab[] = {
 	{ "mainbus",	BUSCLASS_MAINBUS },
@@ -1588,8 +1587,8 @@ static struct {
  * device names.
  */
 static struct {
-	const char	*bpname;
-	const char	*cfname;
+	char	*bpname;
+	char	*cfname;
 } dev_compat_tab[] = {
 	{ "espdma",	"dma" },
 	{ "SUNW,fas",   "esp" },
@@ -1601,9 +1600,9 @@ static struct {
 	{ "SUNW,hme",   "hme" },
 };
 
-static const char *
+static char *
 bus_compatible(bpname)
-	const char *bpname;
+	char *bpname;
 {
 	int i;
 
@@ -1772,7 +1771,8 @@ device_register(dev, aux)
 	void *aux;
 {
 	struct bootpath *bp = bootpath_store(0, NULL);
-	const char *dvname, *bpname;
+	const char *dvname;
+	char *bpname;
 
 	/*
 	 * If device name does not match current bootpath component

@@ -226,7 +226,7 @@ int i2d_SSL_SESSION(SSL_SESSION *in, unsigned char **pp)
 	M_ASN1_I2D_finish();
 	}
 
-SSL_SESSION *d2i_SSL_SESSION(SSL_SESSION **a, const unsigned char * const *pp,
+SSL_SESSION *d2i_SSL_SESSION(SSL_SESSION **a, unsigned char **pp,
 	     long length)
 	{
 	int version,ssl_version=0,i;
@@ -266,7 +266,7 @@ SSL_SESSION *d2i_SSL_SESSION(SSL_SESSION **a, const unsigned char * const *pp,
 			((unsigned long)os.data[1]<< 8L)|
 			 (unsigned long)os.data[2];
 		}
-	else if ((ssl_version>>8) == SSL3_VERSION_MAJOR)
+	else if ((ssl_version>>8) == 3)
 		{
 		if (os.length != 2)
 			{
@@ -287,9 +287,9 @@ SSL_SESSION *d2i_SSL_SESSION(SSL_SESSION **a, const unsigned char * const *pp,
 	ret->cipher_id=id;
 
 	M_ASN1_D2I_get(osp,d2i_ASN1_OCTET_STRING);
-	if ((ssl_version>>8) == SSL3_VERSION_MAJOR)
+	if ((ssl_version>>8) == SSL3_VERSION)
 		i=SSL3_MAX_SSL_SESSION_ID_LENGTH;
-	else /* if (ssl_version == SSL2_VERSION_MAJOR) */
+	else /* if (ssl_version == SSL2_VERSION) */
 		i=SSL2_MAX_SSL_SESSION_ID_LENGTH;
 
 	if (os.length > i)

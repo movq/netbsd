@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2005/03/23 01:00:33 rtr Exp $
+#	$NetBSD: Makefile,v 1.1.2.2 2005/04/06 21:38:12 tron Exp $
 
 XMODULEDIR=	${X11USRLIBDIR}/modules/input
 

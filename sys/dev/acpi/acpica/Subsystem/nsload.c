@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Module Name: nsload - namespace loading/expanding/contracting procedures
- *              xRevision: 72 $
+ *              xRevision: 67 $
  *
  *****************************************************************************/
 
@@ -9,7 +9,7 @@
  *
  * 1. Copyright Notice
  *
- * Some or all of this work - Copyright (c) 1999 - 2005, Intel Corp.
+ * Some or all of this work - Copyright (c) 1999 - 2004, Intel Corp.
  * All rights reserved.
  *
  * 2. License
@@ -115,7 +115,7 @@
  *****************************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nsload.c,v 1.11 2005/05/02 14:52:09 kochi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nsload.c,v 1.10 2004/02/14 16:57:24 kochi Exp $");
 
 #define __NSLOAD_C__
 
@@ -127,24 +127,9 @@ __KERNEL_RCSID(0, "$NetBSD: nsload.c,v 1.11 2005/05/02 14:52:09 kochi Exp $");
 #define _COMPONENT          ACPI_NAMESPACE
         ACPI_MODULE_NAME    ("nsload")
 
-/* Local prototypes */
-
-static ACPI_STATUS
-AcpiNsLoadTableByType (
-    ACPI_TABLE_TYPE         TableType);
-
-#ifdef ACPI_FUTURE_IMPLEMENTATION
-ACPI_STATUS
-AcpiNsUnloadNamespace (
-    ACPI_HANDLE             Handle);
-
-static ACPI_STATUS
-AcpiNsDeleteSubtree (
-    ACPI_HANDLE             StartHandle);
-#endif
-
 
 #ifndef ACPI_NO_METHOD_EXECUTION
+
 /*******************************************************************************
  *
  * FUNCTION:    AcpiNsLoadTable
@@ -186,15 +171,13 @@ AcpiNsLoadTable (
         return_ACPI_STATUS (AE_BAD_PARAMETER);
     }
 
-    ACPI_DEBUG_PRINT ((ACPI_DB_INFO, "AML block at %p\n",
-        TableDesc->AmlStart));
+    ACPI_DEBUG_PRINT ((ACPI_DB_INFO, "AML block at %p\n", TableDesc->AmlStart));
 
     /* Ignore table if there is no AML contained within */
 
     if (!TableDesc->AmlLength)
     {
-        ACPI_REPORT_WARNING (("Zero-length AML block in table [%4.4s]\n",
-            TableDesc->Pointer->Signature));
+        ACPI_REPORT_WARNING (("Zero-length AML block in table [%4.4s]\n", TableDesc->Pointer->Signature));
         return_ACPI_STATUS (AE_OK);
     }
 
@@ -207,8 +190,7 @@ AcpiNsLoadTable (
      * to another control method, we can't continue parsing
      * because we don't know how many arguments to parse next!
      */
-    ACPI_DEBUG_PRINT ((ACPI_DB_INFO,
-        "**** Loading table into namespace ****\n"));
+    ACPI_DEBUG_PRINT ((ACPI_DB_INFO, "**** Loading table into namespace ****\n"));
 
     Status = AcpiUtAcquireMutex (ACPI_MTX_NAMESPACE);
     if (ACPI_FAILURE (Status))
@@ -256,7 +238,7 @@ AcpiNsLoadTable (
  *
  ******************************************************************************/
 
-static ACPI_STATUS
+ACPI_STATUS
 AcpiNsLoadTableByType (
     ACPI_TABLE_TYPE         TableType)
 {
@@ -300,6 +282,7 @@ AcpiNsLoadTableByType (
         {
             TableDesc->LoadedIntoNamespace = TRUE;
         }
+
         break;
 
 
@@ -361,6 +344,7 @@ AcpiNsLoadTableByType (
 
             TableDesc = TableDesc->Next;
         }
+
         break;
 
 
@@ -430,7 +414,6 @@ AcpiNsLoadNamespace (
 }
 
 
-#ifdef ACPI_FUTURE_IMPLEMENTATION
 /*******************************************************************************
  *
  * FUNCTION:    AcpiNsDeleteSubtree
@@ -447,7 +430,7 @@ AcpiNsLoadNamespace (
  *
  ******************************************************************************/
 
-static ACPI_STATUS
+ACPI_STATUS
 AcpiNsDeleteSubtree (
     ACPI_HANDLE             StartHandle)
 {
@@ -463,7 +446,7 @@ AcpiNsDeleteSubtree (
 
 
     ParentHandle = StartHandle;
-    ChildHandle  = NULL;
+    ChildHandle  = 0;
     Level        = 1;
 
     /*
@@ -486,7 +469,7 @@ AcpiNsDeleteSubtree (
             /* Check if this object has any children */
 
             if (ACPI_SUCCESS (AcpiGetNextObject (ACPI_TYPE_ANY, ChildHandle,
-                                    NULL, &Dummy)))
+                                    0, &Dummy)))
             {
                 /*
                  * There is at least one child of this object,
@@ -494,7 +477,7 @@ AcpiNsDeleteSubtree (
                  */
                 Level++;
                 ParentHandle = ChildHandle;
-                ChildHandle  = NULL;
+                ChildHandle  = 0;
             }
         }
         else
@@ -568,6 +551,6 @@ AcpiNsUnloadNamespace (
 
     return_ACPI_STATUS (Status);
 }
-#endif
+
 #endif
 

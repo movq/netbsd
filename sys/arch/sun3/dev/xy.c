@@ -1,4 +1,4 @@
-/*	$NetBSD: xy.c,v 1.51 2005/06/03 15:04:21 tsutsui Exp $	*/
+/*	$NetBSD: xy.c,v 1.50 2005/01/22 15:36:10 chs Exp $	*/
 
 /*
  *
@@ -52,7 +52,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xy.c,v 1.51 2005/06/03 15:04:21 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xy.c,v 1.50 2005/01/22 15:36:10 chs Exp $");
 
 #undef XYC_DEBUG		/* full debug */
 #undef XYC_DIAG			/* extra sanity checks */
@@ -160,7 +160,7 @@ __KERNEL_RCSID(0, "$NetBSD: xy.c,v 1.51 2005/06/03 15:04:21 tsutsui Exp $");
 /* internals */
 struct xy_iopb *xyc_chain(struct xyc_softc *, struct xy_iorq *);
 int	xyc_cmd(struct xyc_softc *, int, int, int, int, int, char *, int);
-const char *xyc_e2str(int);
+char   *xyc_e2str(int);
 int	xyc_entoact(int);
 int	xyc_error(struct xyc_softc *, struct xy_iorq *, struct xy_iopb *, int);
 int	xyc_ioctlcmd(struct xy_softc *, dev_t dev, struct xd_iocmd *);
@@ -1981,7 +1981,7 @@ done:
 /*
  * xyc_e2str: convert error code number into an error string
  */
-const char *
+char *
 xyc_e2str(int no)
 {
 	switch (no) {

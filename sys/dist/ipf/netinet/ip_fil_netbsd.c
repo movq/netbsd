@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_fil_netbsd.c,v 1.14 2005/05/29 21:57:49 christos Exp $	*/
+/*	$NetBSD: ip_fil_netbsd.c,v 1.11.2.1 2005/04/04 18:25:38 tron Exp $	*/
 
 /*
  * Copyright (C) 1993-2003 by Darren Reed.
@@ -18,7 +18,7 @@ static const char rcsid[] = "@(#)Id: ip_fil_netbsd.c,v 2.55.2.27 2005/02/21 22:5
 #endif
 #include <sys/param.h>
 #if (NetBSD >= 199905) && !defined(IPFILTER_LKM) && defined(_KERNEL)
-# include "opt_ipfilter.h"
+# include "opt_ipfilter_log.h"
 # include "opt_pfil_hooks.h"
 # include "opt_ipsec.h"
 #endif
@@ -660,13 +660,13 @@ struct proc *p;
 dev_t dev;
 int flags;
 {
-	u_int xmin = GET_MINOR(dev);
+	u_int min = GET_MINOR(dev);
 
-	if (IPL_LOGMAX < xmin)
-		xmin = ENXIO;
+	if (IPL_LOGMAX < min)
+		min = ENXIO;
 	else
-		xmin = 0;
-	return xmin;
+		min = 0;
+	return min;
 }
 
 
@@ -681,13 +681,13 @@ struct proc *p;
 dev_t dev;
 int flags;
 {
-	u_int	xmin = GET_MINOR(dev);
+	u_int	min = GET_MINOR(dev);
 
-	if (IPL_LOGMAX < xmin)
-		xmin = ENXIO;
+	if (IPL_LOGMAX < min)
+		min = ENXIO;
 	else
-		xmin = 0;
-	return xmin;
+		min = 0;
+	return min;
 }
 
 /*
@@ -1771,13 +1771,13 @@ struct mbuf *m0;
 /* We assume that 'min' is a pointer to a buffer that is part of the chain  */
 /* of buffers that starts at *fin->fin_mp.                                  */
 /* ------------------------------------------------------------------------ */
-void *fr_pullup(xmin, fin, len)
-mb_t *xmin;
+void *fr_pullup(min, fin, len)
+mb_t *min;
 fr_info_t *fin;
 int len;
 {
 	int out = fin->fin_out, dpoff, ipoff;
-	mb_t *m = xmin;
+	mb_t *m = min;
 	char *ip;
 
 	if (m == NULL)

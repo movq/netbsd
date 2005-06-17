@@ -1,4 +1,4 @@
-# $NetBSD: INSTALL_XENU,v 1.3 2005/04/21 16:33:29 bouyer Exp $
+# $NetBSD: INSTALL_XENU,v 1.1.2.2 2005/04/25 13:41:24 tron Exp $
 
 include 	"arch/xen/conf/std.xen"
 

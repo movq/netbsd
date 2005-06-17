@@ -1,4 +1,4 @@
-/*	$NetBSD: parser.c,v 1.59 2005/03/21 20:10:29 dsl Exp $	*/
+/*	$NetBSD: parser.c,v 1.57 2004/06/27 10:27:57 dsl Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)parser.c	8.7 (Berkeley) 5/16/95";
 #else
-__RCSID("$NetBSD: parser.c,v 1.59 2005/03/21 20:10:29 dsl Exp $");
+__RCSID("$NetBSD: parser.c,v 1.57 2004/06/27 10:27:57 dsl Exp $");
 #endif
 #endif /* not lint */
 

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.32 2005/04/19 07:26:38 hannken Exp $
+#	$NetBSD: Makefile,v 1.31.6.1 2005/04/21 19:04:20 tron Exp $
 #	@(#)Makefile	8.1 (Berkeley) 6/5/93
 
 #	dump.h			header file

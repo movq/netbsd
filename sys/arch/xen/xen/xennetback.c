@@ -1,4 +1,4 @@
-/*      $NetBSD: xennetback.c,v 1.11 2005/05/18 16:19:23 bouyer Exp $      */
+/*      $NetBSD: xennetback.c,v 1.4.2.6 2005/05/27 23:05:44 riz Exp $      */
 
 /*
  * Copyright (c) 2005 Manuel Bouyer.
@@ -146,8 +146,8 @@ xennetback_init()
 
 	XENPRINTF(("xennetback_init\n"));
 
-	xmit_pages_vaddr_base = uvm_km_alloc(kernel_map,
-	    NB_XMIT_PAGES_BATCH * PAGE_SIZE, 0, UVM_KMF_VAONLY);
+	xmit_pages_vaddr_base = uvm_km_valloc(kernel_map,
+	    NB_XMIT_PAGES_BATCH * PAGE_SIZE);
 	xmit_pages_vaddr_base = xmit_pages_vaddr_base >> PAGE_SHIFT;
 	xmit_pages_alloc = -1;
 	if (xmit_pages_vaddr_base == 0)
@@ -297,21 +297,18 @@ xnetback_ctrlif_rx(ctrl_msg_t *msg, unsigned long id)
 			req->status = NETIF_BE_STATUS_INTERFACE_CONNECTED;
 			goto end;
 		}
-		ring_rxaddr = uvm_km_alloc(kernel_map, PAGE_SIZE, 0,
-		    UVM_KMF_VAONLY);
+		ring_rxaddr = uvm_km_alloc(kernel_map, PAGE_SIZE);
 		if (ring_rxaddr == 0) {
 			printf("%s: can't alloc ring VM\n",
 			    xneti->xni_if.if_xname);
 			req->status = NETIF_BE_STATUS_OUT_OF_MEMORY;
 			goto end;
 		}
-		ring_txaddr = uvm_km_alloc(kernel_map, PAGE_SIZE, 0,
-		    UVM_KMF_VAONLY);
+		ring_txaddr = uvm_km_alloc(kernel_map, PAGE_SIZE);
 		if (ring_txaddr == 0) {
 			printf("%s: can't alloc ring VM\n",
 			    xneti->xni_if.if_xname);
-			uvm_km_free(kernel_map, ring_rxaddr, PAGE_SIZE,
-			    UVM_KMF_VAONLY);
+			uvm_km_free(kernel_map, ring_rxaddr, PAGE_SIZE);
 			req->status = NETIF_BE_STATUS_OUT_OF_MEMORY;
 			goto end;
 		}
@@ -320,21 +317,13 @@ xnetback_ctrlif_rx(ctrl_msg_t *msg, unsigned long id)
 		error = pmap_remap_pages(pmap_kernel(), ring_rxaddr,
 		   xneti->xni_ma_rxring, 1, PMAP_WIRED | PMAP_CANFAIL,
 		   req->domid);
+		if (error == 0)
+			error = pmap_remap_pages(pmap_kernel(), ring_txaddr,
+			   xneti->xni_ma_txring, 1, PMAP_WIRED | PMAP_CANFAIL,
+			   req->domid);
 		if (error) {
-			goto fail_1;
-		}
-		error = pmap_remap_pages(pmap_kernel(), ring_txaddr,
-		   xneti->xni_ma_txring, 1, PMAP_WIRED | PMAP_CANFAIL,
-		   req->domid);
-		if (error) {
-			pmap_remove(pmap_kernel(), ring_rxaddr,
-			    ring_rxaddr + PAGE_SIZE);
-			pmap_update();
-fail_1:
-			uvm_km_free(kernel_map, ring_rxaddr, PAGE_SIZE,
-			    UVM_KMF_VAONLY);
-			uvm_km_free(kernel_map, ring_txaddr, PAGE_SIZE,
-			    UVM_KMF_VAONLY);
+			uvm_km_free(kernel_map, ring_rxaddr, PAGE_SIZE);
+			uvm_km_free(kernel_map, ring_txaddr, PAGE_SIZE);
 			printf("%s: can't remap ring: error %d\n",
 			    xneti->xni_if.if_xname, error);
 			if (error == ENOMEM)
@@ -380,12 +369,10 @@ fail_1:
 		    xennetback_evthandler, xneti);
 		ring_addr = (vaddr_t)xneti->xni_rxring;
 		pmap_remove(pmap_kernel(), ring_addr, ring_addr + PAGE_SIZE);
-		uvm_km_free(kernel_map, ring_addr, PAGE_SIZE,
-		    UVM_KMF_VAONLY);
+		uvm_km_free(kernel_map, ring_addr, PAGE_SIZE);
 		ring_addr = (vaddr_t)xneti->xni_txring;
 		pmap_remove(pmap_kernel(), ring_addr, ring_addr + PAGE_SIZE);
-		uvm_km_free(kernel_map, ring_addr, PAGE_SIZE,
-		    UVM_KMF_VAONLY);
+		uvm_km_free(kernel_map, ring_addr, PAGE_SIZE);
 
 		req->status = NETIF_BE_STATUS_OKAY;
 		break;

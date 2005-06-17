@@ -1,4 +1,4 @@
-/*	$NetBSD: db_trace.c,v 1.41 2005/05/30 21:15:28 he Exp $	*/
+/*	$NetBSD: db_trace.c,v 1.40 2004/08/28 22:06:28 thorpej Exp $	*/
 
 /* 
  * Mach Operating System
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.41 2005/05/30 21:15:28 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.40 2004/08/28 22:06:28 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -396,12 +396,12 @@ findregs(struct stackpos *sp, db_addr_t addr)
  */
 void
 db_stack_trace_print(db_expr_t addr, int have_addr, db_expr_t count,
-    const char *modif, void (*pr)(const char *, ...))
+    char *modif, void (*pr)(const char *, ...))
 {
 	int i, nargs;
 	long val;
 	db_addr_t	regp;
-	const char *	name;
+	char *		name;
 	struct stackpos pos;
 	struct pcb	*pcb = curpcb;
 	boolean_t	kernel_only = TRUE;
@@ -409,7 +409,7 @@ db_stack_trace_print(db_expr_t addr, int have_addr, db_expr_t count,
 	int		fault_pc = 0;
 
 	{
-		const char *cp = modif;
+		char *cp = modif;
 		char c;
 
 		while ((c = *cp++) != 0)
@@ -521,7 +521,7 @@ db_stack_trace_print(db_expr_t addr, int have_addr, db_expr_t count,
 
 		(*pr)("%s", name);
 		if (pos.k_entry != MAXINT && name) {
-			const char *entry_name;
+			char *	entry_name;
 			long	e_val;
 
 			db_find_sym_and_offset(pos.k_entry, &entry_name,

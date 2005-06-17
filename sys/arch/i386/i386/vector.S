@@ -1,4 +1,4 @@
-/*	$NetBSD: vector.S,v 1.19 2005/06/12 05:32:45 yamt Exp $	*/
+/*	$NetBSD: vector.S,v 1.17.10.2 2005/10/11 21:04:19 tron Exp $	*/
 
 /*
  * Copyright 2002 (c) Wasabi Systems, Inc.
@@ -592,6 +592,19 @@ _C_LABEL(ioapic_level_stubs):
 #endif
 
 /*
+ * Symbols that vmstat -i wants, even though they're not used.
+ */
+.globl	_C_LABEL(intrnames)
+_C_LABEL(intrnames):
+.globl	_C_LABEL(eintrnames)
+_C_LABEL(eintrnames):
+
+.globl	_C_LABEL(intrcnt)
+_C_LABEL(intrcnt):
+.globl	_C_LABEL(eintrcnt)
+_C_LABEL(eintrcnt):
+
+/*
  * Soft interrupt handlers
  */
 
@@ -778,7 +791,9 @@ IDTVEC(trap10)
 IDTVEC(trap11)
 	TRAP(T_ALIGNFLT)
 IDTVEC(trap12)
+	ZTRAP(T_MCA)
 IDTVEC(trap13)
+	ZTRAP(T_XMM)
 IDTVEC(trap14)
 IDTVEC(trap15)
 IDTVEC(trap16)
@@ -791,7 +806,7 @@ IDTVEC(trap1c)
 IDTVEC(trap1d)
 IDTVEC(trap1e)
 IDTVEC(trap1f)
-	/* 18 - 31 reserved for future exp */
+	/* 20 - 31 reserved for future exp */
 	ZTRAP(T_RESERVED)
 
 IDTVEC(exceptions)

@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Module Name: evgpe - General Purpose Event handling and dispatch
- *              xRevision: 49 $
+ *              xRevision: 33 $
  *
  *****************************************************************************/
 
@@ -9,7 +9,7 @@
  *
  * 1. Copyright Notice
  *
- * Some or all of this work - Copyright (c) 1999 - 2005, Intel Corp.
+ * Some or all of this work - Copyright (c) 1999 - 2004, Intel Corp.
  * All rights reserved.
  *
  * 2. License
@@ -115,7 +115,7 @@
  *****************************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: evgpe.c,v 1.8 2005/05/02 14:52:09 kochi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: evgpe.c,v 1.7 2004/02/14 16:57:24 kochi Exp $");
 
 #include "acpi.h"
 #include "acevents.h"
@@ -123,270 +123,6 @@ __KERNEL_RCSID(0, "$NetBSD: evgpe.c,v 1.8 2005/05/02 14:52:09 kochi Exp $");
 
 #define _COMPONENT          ACPI_EVENTS
         ACPI_MODULE_NAME    ("evgpe")
-
-/* Local prototypes */
-
-static void ACPI_SYSTEM_XFACE
-AcpiEvAsynchExecuteGpeMethod (
-    void                    *Context);
-
-
-/*******************************************************************************
- *
- * FUNCTION:    AcpiEvSetGpeType
- *
- * PARAMETERS:  GpeEventInfo            - GPE to set
- *              Type                    - New type
- *
- * RETURN:      Status
- *
- * DESCRIPTION: Sets the new type for the GPE (wake, run, or wake/run)
- *
- ******************************************************************************/
-
-ACPI_STATUS
-AcpiEvSetGpeType (
-    ACPI_GPE_EVENT_INFO     *GpeEventInfo,
-    UINT8                   Type)
-{
-    ACPI_STATUS             Status;
-
-
-    ACPI_FUNCTION_TRACE ("EvSetGpeType");
-
-
-    /* Validate type and update register enable masks */
-
-    switch (Type)
-    {
-    case ACPI_GPE_TYPE_WAKE:
-    case ACPI_GPE_TYPE_RUNTIME:
-    case ACPI_GPE_TYPE_WAKE_RUN:
-        break;
-
-    default:
-        return_ACPI_STATUS (AE_BAD_PARAMETER);
-    }
-
-    /* Disable the GPE if currently enabled */
-
-    Status = AcpiEvDisableGpe (GpeEventInfo);
-
-    /* Type was validated above */
-
-    GpeEventInfo->Flags &= ~ACPI_GPE_TYPE_MASK; /* Clear type bits */
-    GpeEventInfo->Flags |= Type;                /* Insert type */
-    return_ACPI_STATUS (Status);
-}
-
-
-/*******************************************************************************
- *
- * FUNCTION:    AcpiEvUpdateGpeEnableMasks
- *
- * PARAMETERS:  GpeEventInfo            - GPE to update
- *              Type                    - What to do: ACPI_GPE_DISABLE or
- *                                        ACPI_GPE_ENABLE
- *
- * RETURN:      Status
- *
- * DESCRIPTION: Updates GPE register enable masks based on the GPE type
- *
- ******************************************************************************/
-
-ACPI_STATUS
-AcpiEvUpdateGpeEnableMasks (
-    ACPI_GPE_EVENT_INFO     *GpeEventInfo,
-    UINT8                   Type)
-{
-    ACPI_GPE_REGISTER_INFO  *GpeRegisterInfo;
-    UINT8                   RegisterBit;
-
-
-    ACPI_FUNCTION_TRACE ("EvUpdateGpeEnableMasks");
-
-
-    GpeRegisterInfo = GpeEventInfo->RegisterInfo;
-    if (!GpeRegisterInfo)
-    {
-        return_ACPI_STATUS (AE_NOT_EXIST);
-    }
-    RegisterBit = GpeEventInfo->RegisterBit;
-
-    /* 1) Disable case.  Simply clear all enable bits */
-
-    if (Type == ACPI_GPE_DISABLE)
-    {
-        ACPI_CLEAR_BIT (GpeRegisterInfo->EnableForWake, RegisterBit);
-        ACPI_CLEAR_BIT (GpeRegisterInfo->EnableForRun, RegisterBit);
-        return_ACPI_STATUS (AE_OK);
-    }
-
-    /* 2) Enable case.  Set/Clear the appropriate enable bits */
-
-    switch (GpeEventInfo->Flags & ACPI_GPE_TYPE_MASK)
-    {
-    case ACPI_GPE_TYPE_WAKE:
-        ACPI_SET_BIT   (GpeRegisterInfo->EnableForWake, RegisterBit);
-        ACPI_CLEAR_BIT (GpeRegisterInfo->EnableForRun, RegisterBit);
-        break;
-
-    case ACPI_GPE_TYPE_RUNTIME:
-        ACPI_CLEAR_BIT (GpeRegisterInfo->EnableForWake, RegisterBit);
-        ACPI_SET_BIT   (GpeRegisterInfo->EnableForRun, RegisterBit);
-        break;
-
-    case ACPI_GPE_TYPE_WAKE_RUN:
-        ACPI_SET_BIT   (GpeRegisterInfo->EnableForWake, RegisterBit);
-        ACPI_SET_BIT   (GpeRegisterInfo->EnableForRun, RegisterBit);
-        break;
-
-    default:
-        return_ACPI_STATUS (AE_BAD_PARAMETER);
-    }
-
-    return_ACPI_STATUS (AE_OK);
-}
-
-
-/*******************************************************************************
- *
- * FUNCTION:    AcpiEvEnableGpe
- *
- * PARAMETERS:  GpeEventInfo            - GPE to enable
- *              WriteToHardware         - Enable now, or just mark data structs
- *                                        (WAKE GPEs should be deferred)
- *
- * RETURN:      Status
- *
- * DESCRIPTION: Enable a GPE based on the GPE type
- *
- ******************************************************************************/
-
-ACPI_STATUS
-AcpiEvEnableGpe (
-    ACPI_GPE_EVENT_INFO     *GpeEventInfo,
-    BOOLEAN                 WriteToHardware)
-{
-    ACPI_STATUS             Status;
-
-
-    ACPI_FUNCTION_TRACE ("EvEnableGpe");
-
-
-    /* Make sure HW enable masks are updated */
-
-    Status = AcpiEvUpdateGpeEnableMasks (GpeEventInfo, ACPI_GPE_ENABLE);
-    if (ACPI_FAILURE (Status))
-    {
-        return_ACPI_STATUS (Status);
-    }
-
-    /* Mark wake-enabled or HW enable, or both */
-
-    switch (GpeEventInfo->Flags & ACPI_GPE_TYPE_MASK)
-    {
-    case ACPI_GPE_TYPE_WAKE:
-
-        ACPI_SET_BIT (GpeEventInfo->Flags, ACPI_GPE_WAKE_ENABLED);
-        break;
-
-    case ACPI_GPE_TYPE_WAKE_RUN:
-
-        ACPI_SET_BIT (GpeEventInfo->Flags, ACPI_GPE_WAKE_ENABLED);
-
-        /*lint -fallthrough */
-
-    case ACPI_GPE_TYPE_RUNTIME:
-
-        ACPI_SET_BIT (GpeEventInfo->Flags, ACPI_GPE_RUN_ENABLED);
-
-        if (WriteToHardware)
-        {
-            /* Clear the GPE (of stale events), then enable it */
-
-            Status = AcpiHwClearGpe (GpeEventInfo);
-            if (ACPI_FAILURE (Status))
-            {
-                return_ACPI_STATUS (Status);
-            }
-
-            /* Enable the requested runtime GPE */
-
-            Status = AcpiHwWriteGpeEnableReg (GpeEventInfo);
-        }
-        break;
-
-    default:
-        return_ACPI_STATUS (AE_BAD_PARAMETER);
-    }
-
-    return_ACPI_STATUS (AE_OK);
-}
-
-
-/*******************************************************************************
- *
- * FUNCTION:    AcpiEvDisableGpe
- *
- * PARAMETERS:  GpeEventInfo            - GPE to disable
- *
- * RETURN:      Status
- *
- * DESCRIPTION: Disable a GPE based on the GPE type
- *
- ******************************************************************************/
-
-ACPI_STATUS
-AcpiEvDisableGpe (
-    ACPI_GPE_EVENT_INFO     *GpeEventInfo)
-{
-    ACPI_STATUS             Status;
-
-
-    ACPI_FUNCTION_TRACE ("EvDisableGpe");
-
-
-    if (!(GpeEventInfo->Flags & ACPI_GPE_ENABLE_MASK))
-    {
-        return_ACPI_STATUS (AE_OK);
-    }
-
-    /* Make sure HW enable masks are updated */
-
-    Status = AcpiEvUpdateGpeEnableMasks (GpeEventInfo, ACPI_GPE_DISABLE);
-    if (ACPI_FAILURE (Status))
-    {
-        return_ACPI_STATUS (Status);
-    }
-
-    /* Mark wake-disabled or HW disable, or both */
-
-    switch (GpeEventInfo->Flags & ACPI_GPE_TYPE_MASK)
-    {
-    case ACPI_GPE_TYPE_WAKE:
-        ACPI_CLEAR_BIT (GpeEventInfo->Flags, ACPI_GPE_WAKE_ENABLED);
-        break;
-
-    case ACPI_GPE_TYPE_WAKE_RUN:
-        ACPI_CLEAR_BIT (GpeEventInfo->Flags, ACPI_GPE_WAKE_ENABLED);
-
-        /*lint -fallthrough */
-
-    case ACPI_GPE_TYPE_RUNTIME:
-
-        /* Disable the requested runtime GPE */
-
-        ACPI_CLEAR_BIT (GpeEventInfo->Flags, ACPI_GPE_RUN_ENABLED);
-        Status = AcpiHwWriteGpeEnableReg (GpeEventInfo);
-        break;
-
-    default:
-        return_ACPI_STATUS (AE_BAD_PARAMETER);
-    }
-
-    return_ACPI_STATUS (AE_OK);
-}
 
 
 /*******************************************************************************
@@ -431,11 +167,9 @@ AcpiEvGetGpeEventInfo (
             if (GpeBlock)
             {
                 if ((GpeNumber >= GpeBlock->BlockBaseNumber) &&
-                    (GpeNumber < GpeBlock->BlockBaseNumber +
-                        (GpeBlock->RegisterCount * 8)))
+                    (GpeNumber < GpeBlock->BlockBaseNumber + (GpeBlock->RegisterCount * 8)))
                 {
-                    return (&GpeBlock->EventInfo[GpeNumber -
-                        GpeBlock->BlockBaseNumber]);
+                    return (&GpeBlock->EventInfo[GpeNumber - GpeBlock->BlockBaseNumber]);
                 }
             }
         }
@@ -445,8 +179,9 @@ AcpiEvGetGpeEventInfo (
         return (NULL);
     }
 
-    /* A Non-NULL GpeDevice means this is a GPE Block Device */
-
+    /*
+     * A Non-null GpeDevice means this is a GPE Block Device.
+     */
     ObjDesc = AcpiNsGetAttachedObject ((ACPI_NAMESPACE_NODE *) GpeDevice);
     if (!ObjDesc ||
         !ObjDesc->Device.GpeBlock)
@@ -487,22 +222,15 @@ AcpiEvGpeDetect (
     UINT32                  IntStatus = ACPI_INTERRUPT_NOT_HANDLED;
     UINT8                   EnabledStatusByte;
     ACPI_GPE_REGISTER_INFO  *GpeRegisterInfo;
-    UINT32                  StatusReg;
-    UINT32                  EnableReg;
+    UINT32                  InValue;
     ACPI_STATUS             Status;
     ACPI_GPE_BLOCK_INFO     *GpeBlock;
-    ACPI_NATIVE_UINT        i;
-    ACPI_NATIVE_UINT        j;
+    UINT32                  i;
+    UINT32                  j;
 
 
     ACPI_FUNCTION_NAME ("EvGpeDetect");
 
-    /* Check for the case where there are no GPEs */
-
-    if (!GpeXruptList)
-    {
-        return (IntStatus);
-    }
 
     /* Examine all GPE blocks attached to this interrupt level */
 
@@ -523,8 +251,9 @@ AcpiEvGpeDetect (
 
             /* Read the Status Register */
 
-            Status = AcpiHwLowLevelRead (ACPI_GPE_REGISTER_WIDTH, &StatusReg,
+            Status = AcpiHwLowLevelRead (ACPI_GPE_REGISTER_WIDTH, &InValue,
                         &GpeRegisterInfo->StatusAddress);
+            GpeRegisterInfo->Status = (UINT8) InValue;
             if (ACPI_FAILURE (Status))
             {
                 goto UnlockAndExit;
@@ -532,20 +261,25 @@ AcpiEvGpeDetect (
 
             /* Read the Enable Register */
 
-            Status = AcpiHwLowLevelRead (ACPI_GPE_REGISTER_WIDTH, &EnableReg,
+            Status = AcpiHwLowLevelRead (ACPI_GPE_REGISTER_WIDTH, &InValue,
                         &GpeRegisterInfo->EnableAddress);
+            GpeRegisterInfo->Enable = (UINT8) InValue;
             if (ACPI_FAILURE (Status))
             {
                 goto UnlockAndExit;
             }
 
             ACPI_DEBUG_PRINT ((ACPI_DB_INTERRUPTS,
-                "Read GPE Register at GPE%X: Status=%02X, Enable=%02X\n",
-                GpeRegisterInfo->BaseGpeNumber, StatusReg, EnableReg));
+                "GPE pair: Status %8.8X%8.8X = %02X, Enable %8.8X%8.8X = %02X\n",
+                ACPI_FORMAT_UINT64 (ACPI_GET_ADDRESS (GpeRegisterInfo->StatusAddress.Address)),
+                GpeRegisterInfo->Status,
+                ACPI_FORMAT_UINT64 (ACPI_GET_ADDRESS (GpeRegisterInfo->EnableAddress.Address)),
+                GpeRegisterInfo->Enable));
 
-            /* Check if there is anything active at all in this register */
+            /* First check if there is anything active at all in this register */
 
-            EnabledStatusByte = (UINT8) (StatusReg & EnableReg);
+            EnabledStatusByte = (UINT8) (GpeRegisterInfo->Status &
+                                         GpeRegisterInfo->Enable);
             if (!EnabledStatusByte)
             {
                 /* No active GPEs in this register, move on */
@@ -566,8 +300,8 @@ AcpiEvGpeDetect (
                      * or method.
                      */
                     IntStatus |= AcpiEvGpeDispatch (
-                        &GpeBlock->EventInfo[(i * ACPI_GPE_REGISTER_WIDTH) + j],
-                        (UINT32) j + GpeRegisterInfo->BaseGpeNumber);
+                                    &GpeBlock->EventInfo[(i * ACPI_GPE_REGISTER_WIDTH) + j],
+                                    j + GpeRegisterInfo->BaseGpeNumber);
                 }
             }
         }
@@ -606,7 +340,6 @@ AcpiEvAsynchExecuteGpeMethod (
     UINT32                  GpeNumber = 0;
     ACPI_STATUS             Status;
     ACPI_GPE_EVENT_INFO     LocalGpeEventInfo;
-    ACPI_PARAMETER_INFO     Info;
 
 
     ACPI_FUNCTION_TRACE ("EvAsynchExecuteGpeMethod");
@@ -626,16 +359,11 @@ AcpiEvAsynchExecuteGpeMethod (
         return_VOID;
     }
 
-    /* Set the GPE flags for return to enabled state */
-
-    (void) AcpiEvEnableGpe (GpeEventInfo, FALSE);
-
     /*
      * Take a snapshot of the GPE info for this level - we copy the
      * info to prevent a race condition with RemoveHandler/RemoveBlock.
      */
-    ACPI_MEMCPY (&LocalGpeEventInfo, GpeEventInfo,
-        sizeof (ACPI_GPE_EVENT_INFO));
+    ACPI_MEMCPY (&LocalGpeEventInfo, GpeEventInfo, sizeof (ACPI_GPE_EVENT_INFO));
 
     Status = AcpiUtReleaseMutex (ACPI_MTX_EVENTS);
     if (ACPI_FAILURE (Status))
@@ -643,38 +371,26 @@ AcpiEvAsynchExecuteGpeMethod (
         return_VOID;
     }
 
-    /*
-     * Must check for control method type dispatch one more
-     * time to avoid race with EvGpeInstallHandler
-     */
-    if ((LocalGpeEventInfo.Flags & ACPI_GPE_DISPATCH_MASK) ==
-            ACPI_GPE_DISPATCH_METHOD)
+    if (LocalGpeEventInfo.MethodNode)
     {
         /*
-         * Invoke the GPE Method (_Lxx, _Exx) i.e., evaluate the _Lxx/_Exx
-         * control method that corresponds to this GPE
+         * Invoke the GPE Method (_Lxx, _Exx):
+         * (Evaluate the _Lxx/_Exx control method that corresponds to this GPE.)
          */
-        Info.Node = LocalGpeEventInfo.Dispatch.MethodNode;
-        Info.Parameters = ACPI_CAST_PTR (ACPI_OPERAND_OBJECT *, GpeEventInfo);
-        Info.ParameterType = ACPI_PARAM_GPE;
-
-        Status = AcpiNsEvaluateByHandle (&Info);
+        Status = AcpiNsEvaluateByHandle (LocalGpeEventInfo.MethodNode, NULL, NULL);
         if (ACPI_FAILURE (Status))
         {
-            ACPI_REPORT_ERROR ((
-                "%s while evaluating method [%4.4s] for GPE[%2X]\n",
+            ACPI_REPORT_ERROR (("%s while evaluating method [%4.4s] for GPE[%2X]\n",
                 AcpiFormatException (Status),
-                AcpiUtGetNodeName (LocalGpeEventInfo.Dispatch.MethodNode),
-                GpeNumber));
+                AcpiUtGetNodeName (LocalGpeEventInfo.MethodNode), GpeNumber));
         }
     }
 
-    if ((LocalGpeEventInfo.Flags & ACPI_GPE_XRUPT_TYPE_MASK) ==
-            ACPI_GPE_LEVEL_TRIGGERED)
+    if (LocalGpeEventInfo.Flags & ACPI_EVENT_LEVEL_TRIGGERED)
     {
         /*
-         * GPE is level-triggered, we clear the GPE status bit after
-         * handling the event.
+         * GPE is level-triggered, we clear the GPE status bit after handling
+         * the event.
          */
         Status = AcpiHwClearGpe (&LocalGpeEventInfo);
         if (ACPI_FAILURE (Status))
@@ -685,7 +401,7 @@ AcpiEvAsynchExecuteGpeMethod (
 
     /* Enable this GPE */
 
-    (void) AcpiHwWriteGpeEnableReg (&LocalGpeEventInfo);
+    (void) AcpiHwEnableGpe (&LocalGpeEventInfo);
     return_VOID;
 }
 
@@ -694,7 +410,7 @@ AcpiEvAsynchExecuteGpeMethod (
  *
  * FUNCTION:    AcpiEvGpeDispatch
  *
- * PARAMETERS:  GpeEventInfo    - Info for this GPE
+ * PARAMETERS:  GpeEventInfo    - info for this GPE
  *              GpeNumber       - Number relative to the parent GPE block
  *
  * RETURN:      INTERRUPT_HANDLED or INTERRUPT_NOT_HANDLED
@@ -721,28 +437,15 @@ AcpiEvGpeDispatch (
      * If edge-triggered, clear the GPE status bit now.  Note that
      * level-triggered events are cleared after the GPE is serviced.
      */
-    if ((GpeEventInfo->Flags & ACPI_GPE_XRUPT_TYPE_MASK) ==
-            ACPI_GPE_EDGE_TRIGGERED)
+    if (GpeEventInfo->Flags & ACPI_EVENT_EDGE_TRIGGERED)
     {
         Status = AcpiHwClearGpe (GpeEventInfo);
         if (ACPI_FAILURE (Status))
         {
-            ACPI_REPORT_ERROR ((
-                "AcpiEvGpeDispatch: %s, Unable to clear GPE[%2X]\n",
-                AcpiFormatException (Status), GpeNumber));
+            ACPI_REPORT_ERROR (("AcpiEvGpeDispatch: Unable to clear GPE[%2X]\n",
+                GpeNumber));
             return_VALUE (ACPI_INTERRUPT_NOT_HANDLED);
         }
-    }
-
-    /* Save current system state */
-
-    if (AcpiGbl_SystemAwakeAndRunning)
-    {
-        ACPI_SET_BIT (GpeEventInfo->Flags, ACPI_GPE_SYSTEM_RUNNING);
-    }
-    else
-    {
-        ACPI_CLEAR_BIT (GpeEventInfo->Flags, ACPI_GPE_SYSTEM_RUNNING);
     }
 
     /*
@@ -752,45 +455,38 @@ AcpiEvGpeDispatch (
      * If there is neither a handler nor a method, we disable the level to
      * prevent further events from coming in here.
      */
-    switch (GpeEventInfo->Flags & ACPI_GPE_DISPATCH_MASK)
+    if (GpeEventInfo->Handler)
     {
-    case ACPI_GPE_DISPATCH_HANDLER:
+        /* Invoke the installed handler (at interrupt level) */
 
-        /*
-         * Invoke the installed handler (at interrupt level)
-         * Ignore return status for now.  TBD: leave GPE disabled on error?
-         */
-        (void) GpeEventInfo->Dispatch.Handler->Address (
-                        GpeEventInfo->Dispatch.Handler->Context);
+        GpeEventInfo->Handler (GpeEventInfo->Context);
 
         /* It is now safe to clear level-triggered events. */
 
-        if ((GpeEventInfo->Flags & ACPI_GPE_XRUPT_TYPE_MASK) ==
-                ACPI_GPE_LEVEL_TRIGGERED)
+        if (GpeEventInfo->Flags & ACPI_EVENT_LEVEL_TRIGGERED)
         {
             Status = AcpiHwClearGpe (GpeEventInfo);
             if (ACPI_FAILURE (Status))
             {
                 ACPI_REPORT_ERROR ((
-                    "AcpiEvGpeDispatch: %s, Unable to clear GPE[%2X]\n",
-                    AcpiFormatException (Status), GpeNumber));
+                    "AcpiEvGpeDispatch: Unable to clear GPE[%2X]\n",
+                    GpeNumber));
                 return_VALUE (ACPI_INTERRUPT_NOT_HANDLED);
             }
         }
-        break;
-
-    case ACPI_GPE_DISPATCH_METHOD:
-
+    }
+    else if (GpeEventInfo->MethodNode)
+    {
         /*
          * Disable GPE, so it doesn't keep firing before the method has a
          * chance to run.
          */
-        Status = AcpiEvDisableGpe (GpeEventInfo);
+        Status = AcpiHwDisableGpe (GpeEventInfo);
         if (ACPI_FAILURE (Status))
         {
             ACPI_REPORT_ERROR ((
-                "AcpiEvGpeDispatch: %s, Unable to disable GPE[%2X]\n",
-                AcpiFormatException (Status), GpeNumber));
+                "AcpiEvGpeDispatch: Unable to disable GPE[%2X]\n",
+                GpeNumber));
             return_VALUE (ACPI_INTERRUPT_NOT_HANDLED);
         }
 
@@ -798,18 +494,17 @@ AcpiEvGpeDispatch (
          * Execute the method associated with the GPE
          * NOTE: Level-triggered GPEs are cleared after the method completes.
          */
-        Status = AcpiOsQueueForExecution (OSD_PRIORITY_GPE,
-                    AcpiEvAsynchExecuteGpeMethod, GpeEventInfo);
-        if (ACPI_FAILURE (Status))
+        if (ACPI_FAILURE (AcpiOsQueueForExecution (OSD_PRIORITY_GPE,
+                                AcpiEvAsynchExecuteGpeMethod,
+                                GpeEventInfo)))
         {
             ACPI_REPORT_ERROR ((
-                "AcpiEvGpeDispatch: %s, Unable to queue handler for GPE[%2X] - event disabled\n",
-                AcpiFormatException (Status), GpeNumber));
+                "AcpiEvGpeDispatch: Unable to queue handler for GPE[%2X], event is disabled\n",
+                GpeNumber));
         }
-        break;
-
-    default:
-
+    }
+    else
+    {
         /* No handler or method to run! */
 
         ACPI_REPORT_ERROR ((
@@ -820,69 +515,16 @@ AcpiEvGpeDispatch (
          * Disable the GPE.  The GPE will remain disabled until the ACPI
          * Core Subsystem is restarted, or a handler is installed.
          */
-        Status = AcpiEvDisableGpe (GpeEventInfo);
+        Status = AcpiHwDisableGpe (GpeEventInfo);
         if (ACPI_FAILURE (Status))
         {
             ACPI_REPORT_ERROR ((
-                "AcpiEvGpeDispatch: %s, Unable to disable GPE[%2X]\n",
-                AcpiFormatException (Status), GpeNumber));
+                "AcpiEvGpeDispatch: Unable to disable GPE[%2X]\n",
+                GpeNumber));
             return_VALUE (ACPI_INTERRUPT_NOT_HANDLED);
         }
-        break;
     }
 
     return_VALUE (ACPI_INTERRUPT_HANDLED);
 }
-
-
-#ifdef ACPI_GPE_NOTIFY_CHECK
-/*******************************************************************************
- * TBD: NOT USED, PROTOTYPE ONLY AND WILL PROBABLY BE REMOVED
- *
- * FUNCTION:    AcpiEvCheckForWakeOnlyGpe
- *
- * PARAMETERS:  GpeEventInfo    - info for this GPE
- *
- * RETURN:      Status
- *
- * DESCRIPTION: Determine if a a GPE is "wake-only".
- *
- *              Called from Notify() code in interpreter when a "DeviceWake"
- *              Notify comes in.
- *
- ******************************************************************************/
-
-ACPI_STATUS
-AcpiEvCheckForWakeOnlyGpe (
-    ACPI_GPE_EVENT_INFO     *GpeEventInfo)
-{
-    ACPI_STATUS             Status;
-
-
-    ACPI_FUNCTION_TRACE ("EvCheckForWakeOnlyGpe");
-
-
-    if ((GpeEventInfo)   &&  /* Only >0 for _Lxx/_Exx */
-       ((GpeEventInfo->Flags & ACPI_GPE_SYSTEM_MASK) == ACPI_GPE_SYSTEM_RUNNING)) /* System state at GPE time */
-    {
-        /* This must be a wake-only GPE, disable it */
-
-        Status = AcpiEvDisableGpe (GpeEventInfo);
-
-        /* Set GPE to wake-only.  Do not change wake disabled/enabled status */
-
-        AcpiEvSetGpeType (GpeEventInfo, ACPI_GPE_TYPE_WAKE);
-
-        ACPI_REPORT_INFO (("GPE %p was updated from wake/run to wake-only\n",
-                GpeEventInfo));
-
-        /* This was a wake-only GPE */
-
-        return_ACPI_STATUS (AE_WAKE_ONLY_GPE);
-    }
-
-    return_ACPI_STATUS (AE_OK);
-}
-#endif
-
 

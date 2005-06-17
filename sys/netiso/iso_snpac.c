@@ -1,4 +1,4 @@
-/*	$NetBSD: iso_snpac.c,v 1.33 2005/05/31 01:37:06 christos Exp $	*/
+/*	$NetBSD: iso_snpac.c,v 1.31 2004/04/19 05:16:46 matt Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -59,7 +59,7 @@ SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iso_snpac.c,v 1.33 2005/05/31 01:37:06 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iso_snpac.c,v 1.31 2004/04/19 05:16:46 matt Exp $");
 
 #include "opt_iso.h"
 #ifdef ISO
@@ -118,7 +118,7 @@ static struct sockaddr_iso
 static struct sockaddr_dl blank_dl = {sizeof(blank_dl), AF_LINK};
 static struct sockaddr_dl gte_dl;
 #define zap_linkaddr(a, b, c, i) \
-	(*a = blank_dl, memcpy(a->sdl_data, b, a->sdl_alen = c), a->sdl_index = i)
+	(*a = blank_dl, bcopy(b, a->sdl_data, a->sdl_alen = c), a->sdl_index = i)
 
 static void snpac_fixdstandmask (int);
 
@@ -213,12 +213,10 @@ llc_rtrequest(int req, struct rtentry *rt, struct rt_addrinfo *info)
 			lc->lc_rt = rt;
 			rt->rt_flags |= RTF_LLINFO;
 			LIST_INSERT_HEAD(&llinfo_llc, lc, lc_list);
-			if (gate->sdl.sdl_alen == sizeof(struct esis_req)
-			    + addrlen) {
+			if (gate->sdl.sdl_alen == sizeof(struct esis_req) + addrlen) {
 				gate->sdl.sdl_alen -= sizeof(struct esis_req);
-				(void)memcpy(&lc->lc_er,
-				    (const char *)CLLADDR(&gate->sdl) +
-				    addrlen, sizeof(lc->lc_er));
+				bcopy(addrlen + LLADDR(&gate->sdl),
+				  (caddr_t) & lc->lc_er, sizeof(lc->lc_er));
 			} else if (gate->sdl.sdl_alen == addrlen)
 				lc->lc_flags = (SNPA_ES | SNPA_VALID | SNPA_PERM);
 			break;
@@ -252,11 +250,11 @@ iso_setmcasts(struct ifnet *ifp, int req)
 	static const char * const addrlist[] =
 	{all_es_snpa, all_is_snpa, all_l1is_snpa, all_l2is_snpa, 0};
 	struct ifreq ifr;
-	const char *const *cpp;
+	caddr_t *cpp;
 
-	(void)memset(&ifr, 0, sizeof(ifr));
-	for (cpp = addrlist; *cpp; cpp++) {
-		(void)memcpy(ifr.ifr_addr.sa_data, *cpp, 6);
+	bzero((caddr_t) &ifr, sizeof(ifr));
+	for (cpp = (caddr_t *) addrlist; *cpp; cpp++) {
+		bcopy(*cpp, (caddr_t) ifr.ifr_addr.sa_data, 6);
 		if (req == RTM_ADD && (ifp->if_ioctl == 0 ||
 		    (*ifp->if_ioctl)(ifp, SIOCADDMULTI, (caddr_t)&ifr) != 0))
 			printf("iso_setmcasts: %s unable to add mcast\n",
@@ -298,7 +296,7 @@ iso_snparesolve(
 	int            *snpa_len)	/* RESULT: length of snpa */
 {
 	struct llinfo_llc *sc;	/* ptr to snpa table entry */
-	const char *found_snpa;
+	caddr_t         found_snpa;
 	int             addrlen;
 
 	/*
@@ -315,7 +313,7 @@ iso_snparesolve(
 		}
 #endif
 		addrlen = dest->siso_nlen - 1;	/* subtract size of AFI */
-		found_snpa = (const char *)dest->siso_data + 1;
+		found_snpa = (caddr_t) dest->siso_data + 1;
 		/*
 		 * If we are an IS, we can't do much with the packet; Check
 		 * if we know about an IS.
@@ -339,10 +337,10 @@ iso_snparesolve(
 		 * where we always transmit the CLNP packet to "all es"
 		 */
 		addrlen = ifp->if_addrlen;
-		found_snpa = (const char *) all_es_snpa;
+		found_snpa = (caddr_t) all_es_snpa;
 	} else
 		return (ENETUNREACH);
-	memcpy(snpa, found_snpa, *snpa_len = addrlen);
+	bcopy(found_snpa, snpa, *snpa_len = addrlen);
 	return (0);
 }
 
@@ -648,9 +646,9 @@ int
 snpac_ownmulti(caddr_t snpa, u_int len)
 {
 	return (((iso_systype & SNPA_ES) &&
-		 (!memcmp(snpa, all_es_snpa, len))) ||
+		 (!bcmp(snpa, (caddr_t) all_es_snpa, len))) ||
 		((iso_systype & SNPA_IS) &&
-		 (!memcmp(snpa, all_is_snpa, len))));
+		 (!bcmp(snpa, (caddr_t) all_is_snpa, len))));
 }
 
 /*

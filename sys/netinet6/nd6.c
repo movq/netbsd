@@ -1,4 +1,4 @@
-/*	$NetBSD: nd6.c,v 1.94 2005/05/29 21:43:51 christos Exp $	*/
+/*	$NetBSD: nd6.c,v 1.91.10.1 2005/04/07 17:06:56 jmc Exp $	*/
 /*	$KAME: nd6.c,v 1.279 2002/06/08 11:16:51 itojun Exp $	*/
 
 /*
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nd6.c,v 1.94 2005/05/29 21:43:51 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nd6.c,v 1.91.10.1 2005/04/07 17:06:56 jmc Exp $");
 
 #include "opt_ipsec.h"
 
@@ -380,27 +380,27 @@ skip1:
  * ND6 timer routine to handle ND6 entries
  */
 void
-nd6_llinfo_settimer(ln, xtick)
+nd6_llinfo_settimer(ln, tick)
 	struct llinfo_nd6 *ln;
-	long xtick;
+	long tick;
 {
 	int s;
 
 	s = splsoftnet();
 
-	if (xtick < 0) {
+	if (tick < 0) {
 		ln->ln_expire = 0;
 		ln->ln_ntick = 0;
 		callout_stop(&ln->ln_timer_ch);
 	} else {
-		ln->ln_expire = time.tv_sec + xtick / hz;
-		if (xtick > INT_MAX) {
-			ln->ln_ntick = xtick - INT_MAX;
+		ln->ln_expire = time.tv_sec + tick / hz;
+		if (tick > INT_MAX) {
+			ln->ln_ntick = tick - INT_MAX;
 			callout_reset(&ln->ln_timer_ch, INT_MAX,
 			    nd6_llinfo_timer, ln);
 		} else {
 			ln->ln_ntick = 0;
-			callout_reset(&ln->ln_timer_ch, xtick,
+			callout_reset(&ln->ln_timer_ch, tick,
 			    nd6_llinfo_timer, ln);
 		}
 	}
@@ -885,9 +885,9 @@ nd6_free(rt, gc)
 			 * XXX: the check for ln_state would be redundant,
 			 *      but we intentionally keep it just in case.
 			 */
-			if (dr->expire > time.tv_sec)
+			if (dr->expire > time.tv_sec * hz)
 				nd6_llinfo_settimer(ln,
-				    (dr->expire - time.tv_sec) * hz);
+				    dr->expire - time.tv_sec * hz);
 			else
 				nd6_llinfo_settimer(ln, (long)nd6_gctimer * hz);
 			splx(s);
@@ -1383,15 +1383,15 @@ nd6_ioctl(cmd, data, ifp)
 	case SIOCSPFXFLUSH_IN6:
 	{
 		/* flush all the prefix advertised by routers */
-		struct nd_prefix *pfx, *next;
+		struct nd_prefix *pr, *next;
 
 		s = splsoftnet();
-		for (pfx = nd_prefix.lh_first; pfx; pfx = next) {
+		for (pr = nd_prefix.lh_first; pr; pr = next) {
 			struct in6_ifaddr *ia, *ia_next;
 
-			next = pfx->ndpr_next;
+			next = pr->ndpr_next;
 
-			if (IN6_IS_ADDR_LINKLOCAL(&pfx->ndpr_prefix.sin6_addr))
+			if (IN6_IS_ADDR_LINKLOCAL(&pr->ndpr_prefix.sin6_addr))
 				continue; /* XXX */
 
 			/* do we really have to remove addresses as well? */
@@ -1402,10 +1402,10 @@ nd6_ioctl(cmd, data, ifp)
 				if ((ia->ia6_flags & IN6_IFF_AUTOCONF) == 0)
 					continue;
 
-				if (ia->ia6_ndpr == pfx)
+				if (ia->ia6_ndpr == pr)
 					in6_purgeaddr(&ia->ia_ifa);
 			}
-			prelist_remove(pfx);
+			prelist_remove(pr);
 		}
 		splx(s);
 		break;
@@ -1413,13 +1413,13 @@ nd6_ioctl(cmd, data, ifp)
 	case SIOCSRTRFLUSH_IN6:
 	{
 		/* flush all the default routers */
-		struct nd_defrouter *drtr, *next;
+		struct nd_defrouter *dr, *next;
 
 		s = splsoftnet();
 		defrouter_reset();
-		for (drtr = TAILQ_FIRST(&nd_defrouter); drtr; drtr = next) {
-			next = TAILQ_NEXT(drtr, dr_entry);
-			defrtrlist_del(drtr);
+		for (dr = TAILQ_FIRST(&nd_defrouter); dr; dr = next) {
+			next = TAILQ_NEXT(dr, dr_entry);
+			defrtrlist_del(dr);
 		}
 		defrouter_select();
 		splx(s);

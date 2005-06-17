@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_exec_elf32.c,v 1.69 2005/05/29 22:08:16 christos Exp $	*/
+/*	$NetBSD: linux_exec_elf32.c,v 1.67 2005/02/26 23:10:19 perry Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998, 2000, 2001 The NetBSD Foundation, Inc.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_exec_elf32.c,v 1.69 2005/05/29 22:08:16 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_exec_elf32.c,v 1.67 2005/02/26 23:10:19 perry Exp $");
 
 #ifndef ELFSIZE
 /* XXX should die */
@@ -186,7 +186,7 @@ ELFNAME2(linux,gcc_signature)(p, epp, eh)
 	size_t shsize;
 	size_t i;
 	static const char signature[] = "\0GCC: (GNU) ";
-	char tbuf[sizeof(signature) - 1];
+	char buf[sizeof(signature) - 1];
 	Elf_Shdr *sh;
 	int error;
 
@@ -210,7 +210,7 @@ ELFNAME2(linux,gcc_signature)(p, epp, eh)
 		    s->sh_size < sizeof(signature) - 1)
 			continue;
 
-		error = exec_read_from(p, epp->ep_vp, s->sh_offset, tbuf,
+		error = exec_read_from(p, epp->ep_vp, s->sh_offset, buf,
 		    sizeof(signature) - 1);
 		if (error)
 			continue;
@@ -218,8 +218,8 @@ ELFNAME2(linux,gcc_signature)(p, epp, eh)
 		/*
 		 * error is 0, if the signatures match we are done.
 		 */
-		DPRINTF(("linux_gcc_sig: sig=%s\n", tbuf));
-		if (!memcmp(tbuf, signature, sizeof(signature) - 1)) {
+		DPRINTF(("linux_gcc_sig: sig=%s\n", buf));
+		if (!memcmp(buf, signature, sizeof(signature) - 1)) {
 			error = 0;
 			goto out;
 		}
@@ -296,9 +296,6 @@ ELFNAME2(linux,signature)(p, epp, eh, itp)
 	/* Check for certain intepreter names. */
 	if (itp) {
 		if (!strncmp(itp, "/lib/ld-linux", 13) ||
-#if (ELFSIZE == 64)
-		    !strncmp(itp, "/lib64/ld-linux", 15) ||
-#endif
 		    !strncmp(itp, "/lib/ld.so.", 11))
 			error = 0;
 		else

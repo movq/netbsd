@@ -1,4 +1,4 @@
-/*	$NetBSD: hypervisor.h,v 1.14 2005/05/11 13:53:41 yamt Exp $	*/
+/*	$NetBSD: hypervisor.h,v 1.10.2.4 2005/05/22 19:27:28 snj Exp $	*/
 
 /*
  * 

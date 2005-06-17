@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.5 2005/04/04 19:11:19 peter Exp $
+#	$NetBSD: Makefile,v 1.4.2.3 2005/09/02 12:29:37 tron Exp $
 
 .include <bsd.own.mk>
 
@@ -6,10 +6,6 @@ SUBDIR=		authpf
 SUBDIR+=	ftp-proxy
 SUBDIR+=	pfctl
 SUBDIR+=	pflogd
-SUBDIR+=	spamd
-SUBDIR+=	spamd-setup
-SUBDIR+=	spamdb
-SUBDIR+=	spamlogd
 
 SUBDIR+=	man
 
@@ -19,5 +15,6 @@ SUBDIR+=	examples
 
 configinstall:
 	${MAKEDIRTARGET} etc configinstall
+	${MAKEDIRTARGET} etc/defaults configinstall
 
 .include <bsd.subdir.mk>

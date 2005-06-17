@@ -1,4 +1,4 @@
-$NetBSD: pcidevs,v 1.719 2005/06/15 17:58:02 bouyer Exp $
+$NetBSD: pcidevs,v 1.701.2.17 2005/12/15 20:08:01 tron Exp $
 
 /*
  * Copyright (c) 1995, 1996 Christopher G. Demetriou
@@ -547,7 +547,6 @@ vendor SUNDANCETI	0x13f0	Sundance Technology
 vendor CMEDIA		0x13f6	C-Media Electronics
 vendor LAVA		0x1407	Lava Semiconductor Manufacturing
 vendor ETIMEDIA		0x1409	eTIMedia Technology
-vendor ICENSEMBLE	0x1412	IC Ensemble / VIA Technologies
 vendor MICROSOFT	0x1414	Microsoft
 vendor OXFORDSEMI	0x1415	Oxford Semiconductor
 vendor TAMARACK		0x143d	Tamarack Microelectronics
@@ -953,8 +952,10 @@ product ASUSTEK HFCPCI		0x0675	ISDN
 
 /* ATI products */
 product ATI RADEON_A3		0x4136	Radeon Mobility A3
+product	ATI RADEON_9600_LE	0x4151	Radeon 9600 LE
 product	ATI RADEON_9600_XT	0x4152	Radeon 9600 XT
 product ATI MACH32		0x4158	Mach32
+product	ATI RADEON_9600_LE_S	0x4171	Radeon 9600 LE Secondary
 product	ATI RADEON_9600_XT_S	0x4172	Radeon 9600 XT Secondary
 product ATI RADEON_U1		0x4336	Radeon Mobility U1
 product ATI RADEON_M6_U2	0x4337	Radeon Mobility M6
@@ -1015,7 +1016,6 @@ product ATI RADEON_9700_9500_2	0x4e45	Radeon 9700/9500 Series
 product ATI RADEON_9600		0x4e46	Radeon 9600TX
 product ATI RADEON_9700_PRO	0x4e47	Radeon 9700 Pro
 product ATI RADEON_9800_PRO	0x4e48	Radeon 9800 Pro
-product ATI RADEON_MOB_9700	0x4e50	Mobility Radeon 9700
 product ATI RADEON_MOB_T2	0x4e54	Radeon Mobility T2 (M10) NT
 product ATI RADEON_9700_9500_S	0x4e64	Radeon 9700/9500 Series Secondary
 product ATI RADEON_9700_9500_S2	0x4e65	Radeon 9700/9500 Series Secondary
@@ -1163,6 +1163,7 @@ product BROADCOM BCM5721	0x1659	BCM5721 10/100/1000 Ethernet
 product BROADCOM BCM5750	0x1676	BCM5750 10/100/1000 Ethernet
 product BROADCOM BCM5751	0x1677	BCM5751 10/100/1000 Ethernet
 product BROADCOM BCM5750M	0x167c	BCM5750M 10/100/1000 Ethernet
+product BROADCOM BCM5751M	0x167d	BCM5751M 10/100/1000 Ethernet
 product BROADCOM BCM5782	0x1696	BCM5782 10/100/1000 Ethernet
 product BROADCOM BCM5788	0x169c	BCM5788 10/100/1000 Ethernet
 product BROADCOM BCM4401_B0	0x170c	BCM4401-B0 10/100 Ethernet
@@ -1569,8 +1570,6 @@ product HINT HB4	0x0022	HB4 PCI-PCI Bridge
 
 /* Hitachi products */
 product HITACHI SWC	0x0101	MSVCC01/02/03/04 Video Capture Cards
-product HITACHI SH7751	0x3505	SH7751 PCI Controller
-product HITACHI SH7751R	0x350e	SH7751R PCI Controller
 
 /* IBM products */
 product IBM MCABRIDGE 	0x0002	MCA Bridge
@@ -1592,10 +1591,6 @@ product IBM GXT800P	0x005e	GXT-800P
 product IBM 405GP	0x0156	PPC 405GP PCI Bridge
 product IBM 133PCIX	0x01a7	133 PCI-X Bridge
 product IBM MPIC2	0xffff	MPIC-II
-
-/* IC Ensemble / VIA Technologies products */
-product ICENSEMBLE ICE1712	0x1712	Envy24 Multichannel Audio Controller
-product ICENSEMBLE VT1720	0x1724	Envy24PT/HT Multi-Channel Audio Controller
 
 /* Conexant (iCompression, GlobeSpan) products */
 product ICOMPRESSION ITVC15	0x0803	iTVC15 MPEG2 codec
@@ -1629,8 +1624,9 @@ product IMS TT128M	0x9128	TwinTurbo 128M
 /* Intel products */
 product INTEL 80312		0x030d	80312 I/O Companion Chip
 product INTEL 80321		0x0319	80321 I/O Processor
-product INTEL 6700PXH_PCIE0	0x0329	6700PXH PCI Express-to-PCI Bridge #0
-product INTEL 6700PXH_PCIE1	0x032a	6700PXH PCI Express-to-PCI Bridge #1
+product INTEL SRCZCRX		0x0407	RAID controller
+product INTEL SRCU42E		0x0408	SCSI RAID controller
+product INTEL SRCS28X		0x0409	SATA RAID controller
 product INTEL PCEB		0x0482	82375EB/SB PCI-EISA Bridge
 product INTEL CDC		0x0483	82424ZX Cache and DRAM controller
 product INTEL SIO		0x0484	82378ZB System I/O
@@ -1845,6 +1841,7 @@ product INTEL 6300ESB_WDT	0x25ab	6300ESB Watchdog Timer
 product INTEL 6300ESB_APIC	0x25ac	6300ESB Advanced Interrupt Controller
 product INTEL 6300ESB_EHCI	0x25ad	6300ESB USB EHCI Controller
 product INTEL 6300ESB_PCIX	0x25ae	6300ESB PCI-X Bridge
+product INTEL 6300ESB_RAID	0x25b0	6300ESB SATA RAID Controller
 product INTEL 82801FB_LPC	0x2640	82801FB LPC Interface Bridge
 product INTEL 82801FB_SATA	0x2651	82801FB Serial ATA Controller
 product INTEL 82801FR_SATA	0x2652	82801FR Serial ATA Controller
@@ -1861,9 +1858,10 @@ product INTEL 82801FB_SMB	0x266a	82801FB/FR SMBus Controller
 product INTEL 82801FB_ACM	0x266d	82801FB/FR AC'97 Modem Controller
 product INTEL 82801FB_AC	0x266e	82801FB/FR AC'97 Audio Controller
 product INTEL 82801FB_IDE	0x266f	82801FB/FR IDE Controller
+product INTEL 82945P_MCH	0x2770	82945G/P Memory Controller Hub
+product INTEL 82945P_EXP	0x2771	82945G/P PCI Express Bridge
 product INTEL 82915G_IGDC	0x2782	82915G/GL IGD Companion
 product INTEL 82801G_LPC	0x27b8	82801GB/GR LPC Interface Bridge
-product INTEL 82801G_IDE	0x27df	82801GB/GR IDE Controller
 product INTEL 82801G_SATA	0x27c0	82801GB/GR SATA Controller
 product INTEL 82801G_SATA_AHCI	0x27c1	82801GB/GR AHCI SATA Controller
 product INTEL 82801G_SATA_RAID	0x27c3	82801GB/GR RAID SATA Controller
@@ -1878,31 +1876,26 @@ product INTEL 82801G_EXP_3	0x27d4	82801GB/GR PCI Express Port #3
 product INTEL 82801G_EXP_4	0x27d6	82801GB/GR PCI Express Port #4
 product INTEL 82801G_HDA	0x27d8	82801GB/GR High Definition Audio Controller
 product INTEL 82801G_SMB	0x27da	82801GB/GR SMBus Controller
+product INTEL 82801G_LAN	0x27dc	82801GB/GR LAN Controller
 product INTEL 82801G_ACM	0x27dd	82801GB/GR AC'97 Modem Controller
 product INTEL 82801G_ACA	0x27de	82801GB/GR AC'97 Audio Controller
+product INTEL 82801G_IDE	0x27df	82801GB/GR IDE Controller
 product INTEL 82801G_EXP_5	0x27e0	82801GB/GR PCI Express Port #5
 product INTEL 82801G_EXP_6	0x27e2	82801GB/GR PCI Express Port #6
 product INTEL 31244		0x3200	31244 Serial ATA Controller
 product INTEL 82855PM_DDR	0x3340	82855PM MCH Host Controller
 product INTEL 82855PM_AGP	0x3341	82855PM Host-AGP Bridge
 product INTEL 82855PM_PM	0x3342	82855PM Power Management Controller
-product INTEL 82830MP_IO_1	0x3575	82830MP CPU to I/O Bridge 1
-product INTEL 82830MP_AGP	0x3576	82830MP CPU to AGP Bridge
-product INTEL 82830MP_IV	0x3577	82830MP Integrated Video
-product INTEL 82830MP_IO_2	0x3578	82830MP CPU to I/O Bridge 2
 product INTEL 82855GM_MCH	0x3580	82855GM Host-Hub Controller
 product INTEL 82855GM_IGD	0x3582	82855GM GMCH Integrated Graphics Device
 product INTEL 82855GM_MC	0x3584	82855GM GMCH Memory Controller
 product INTEL 82855GM_CP	0x3585	82855GM GMCH Configuration Process
-product INTEL E7525_MCH		0x3590	E7525 Memory Controller Hub
-product INTEL E7525_MCHER	0x3591	E7525 Error Reporting Device
-product INTEL E7525_PCIE_A	0x3595	E7525 PCI Express Port A
-product INTEL E7525_PCIE_A1	0x3596	E7525 PCI Express Port A1
-product INTEL E7525_PCIE_B	0x3597	E7525 PCI Express Port B
+product INTEL 82830MP_IO_1	0x3575	82830MP CPU to I/O Bridge 1
+product INTEL 82830MP_AGP	0x3576	82830MP CPU to AGP Bridge
+product INTEL 82830MP_IV	0x3577	82830MP Integrated Video
+product INTEL 82830MP_IO_2	0x3578	82830MP CPU to I/O Bridge 2
 product INTEL PRO_WL_2200BG	0x4220	PRO/Wireless LAN 2200BG Mini-PCI Adapter
-product INTEL PRO_WL_2225BG	0x4221	PRO/Wireless LAN 2225BG Mini-PCI Adapter
-product INTEL PRO_WL_2915ABG_1	0x4223	PRO/Wireless LAN 2915ABG Mini-PCI Adapter
-product INTEL PRO_WL_2915ABG_2	0x4224	PRO/Wireless LAN 2915ABG Mini-PCI Adapter
+product INTEL PRO_WL_2915ABG	0x4223	PRO/Wireless LAN 2915ABG Mini-PCI Adapter
 product INTEL 80312_ATU		0x530d	80310 ATU
 product INTEL 82371SB_ISA	0x7000	82371SB (PIIX3) PCI-ISA Bridge
 product INTEL 82371SB_IDE	0x7010	82371SB (PIIX3) IDE Interface
@@ -2165,6 +2158,9 @@ product SYMBIOS FC919_1		0x0625	FC919
 product SYMBIOS FC929X		0x0626	FC929X
 product SYMBIOS FC919X		0x0628	FC919X
 product SYMBIOS PERC_4SC	0x1960	PERC 4/SC
+product SYMBIOS MEGARAID_320X	0x0407	LSI Megaraid SCSI 320-X
+product SYMBIOS MEGARAID_320E	0x0408	LSI Megaraid SCSI 320-E
+product SYMBIOS MEGARAID_300X	0x0409	LSI Megaraid SATA (300-6X/300-8X) 
 
 /* Packet Engines products */
 product SYMBIOS PE_GNIC	0x0702	Packet Engines G-NIC Ethernet
@@ -2806,7 +2802,6 @@ product TOSHIBA2 OBOE		0x0701	Fast Infrared Type O
 product TOSHIBA2 DONAUOBOE	0x0d01	Fast Infrared Type DO
 
 /* Transmeta products */
-product TRANSMETA TM8000NB	0x0061	TM8000 Integrated Northbridge
 product TRANSMETA NORTHBRIDGE	0x0295	Virtual Northbridge
 product TRANSMETA LONGRUN	0x0395	LongRun Northbridge
 product TRANSMETA SDRAM		0x0396	SDRAM Controller

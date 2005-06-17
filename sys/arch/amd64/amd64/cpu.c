@@ -1,4 +1,4 @@
-/* $NetBSD: cpu.c,v 1.8 2005/04/01 11:59:22 yamt Exp $ */
+/* $NetBSD: cpu.c,v 1.7 2004/06/28 08:23:21 fvdl Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -71,7 +71,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.8 2005/04/01 11:59:22 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.7 2004/06/28 08:23:21 fvdl Exp $");
 
 #include "opt_ddb.h"
 #include "opt_multiprocessor.h"
@@ -289,7 +289,7 @@ cpu_attach(parent, self, aux)
 	/*
 	 * Allocate UPAGES contiguous pages for the idle PCB and stack.
 	 */
-	kstack = uvm_km_alloc(kernel_map, USPACE, 0, UVM_KMF_WIRED);
+	kstack = uvm_km_alloc (kernel_map, USPACE);
 	if (kstack == 0) {
 		if (caa->cpu_role != CPU_ROLE_AP) {
 			panic("cpu_attach: unable to allocate idle stack for"

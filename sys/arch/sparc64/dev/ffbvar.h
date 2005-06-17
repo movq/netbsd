@@ -1,4 +1,4 @@
-/*	$NetBSD: ffbvar.h,v 1.5 2005/05/31 02:48:37 macallan Exp $	*/
+/*	$NetBSD: ffbvar.h,v 1.3.10.2 2005/06/07 18:03:48 tron Exp $	*/
 /*	$OpenBSD: creatorvar.h,v 1.6 2002/07/30 19:48:15 jason Exp $	*/
 
 /*

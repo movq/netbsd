@@ -1,4 +1,4 @@
-/*	$NetBSD: apmdev.c,v 1.3 2005/05/31 23:05:47 uwe Exp $ */
+/*	$NetBSD: apmdev.c,v 1.2 2005/02/27 00:27:00 perry Exp $ */
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: apmdev.c,v 1.3 2005/05/31 23:05:47 uwe Exp $");
+__KERNEL_RCSID(0, "$NetBSD: apmdev.c,v 1.2 2005/02/27 00:27:00 perry Exp $");
 
 #include "opt_apmdev.h"
 
@@ -422,7 +422,7 @@ static void
 apm_event_handle(struct apm_softc *sc, u_int event_code, u_int event_info)
 {
 	int error;
-	const char *code;
+	char *code;
 	struct apm_power_info pi;
 
 	switch (event_code) {

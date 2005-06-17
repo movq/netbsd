@@ -1,4 +1,4 @@
-/*	$NetBSD: tty_conf.c,v 1.46 2005/06/04 22:45:12 uwe Exp $	*/
+/*	$NetBSD: tty_conf.c,v 1.44 2004/03/23 13:22:33 junyoung Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1991, 1993
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tty_conf.c,v 1.46 2005/06/04 22:45:12 uwe Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tty_conf.c,v 1.44 2004/03/23 13:22:33 junyoung Exp $");
 
 #include "opt_compat_freebsd.h"
 #include "opt_compat_43.h"
@@ -143,9 +143,9 @@ struct  linesw strip_disc =
 #endif
 #if NIRFRAMETTY > 0
 struct  linesw irframet_disc =
-	{ "irframe", -1, irframetopen, irframetclose, ttyerrio,
+	{ "irframe", IRFRAMEDISC, irframetopen, irframetclose, ttyerrio,
 	  ttyerrio, irframetioctl, irframetinput, irframetstart,
-	  ttymodem, ttyerrpoll };			/* irframe */
+	  ttymodem, ttyerrpoll };			/* 10- IRFRAMEDISC */
 #endif
 
 /*
@@ -242,7 +242,7 @@ ttyldisc_add(disc, no)
  */
 struct linesw *
 ttyldisc_remove(name)
-	const char *name;
+	char *name;
 {
 	struct linesw *disc;
 	int i;
@@ -272,7 +272,7 @@ ttyldisc_remove(name)
  */
 struct linesw *
 ttyldisc_lookup(name)
-	const char *name;
+	char *name;
 {
 	int i;
 

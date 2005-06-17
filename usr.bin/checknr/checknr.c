@@ -1,4 +1,4 @@
-/*	$NetBSD: checknr.c,v 1.17 2005/03/30 18:01:32 xtraeme Exp $	*/
+/*	$NetBSD: checknr.c,v 1.15 2005/02/02 17:14:29 wiz Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
 #if 0
 static char sccsid[] = "@(#)checknr.c	8.1 (Berkeley) 6/6/93";
 #else 
-__RCSID("$NetBSD: checknr.c,v 1.17 2005/03/30 18:01:32 xtraeme Exp $");
+__RCSID("$NetBSD: checknr.c,v 1.15 2005/02/02 17:14:29 wiz Exp $");
 #endif
 #endif /* not lint */
 
@@ -51,7 +51,6 @@ __RCSID("$NetBSD: checknr.c,v 1.17 2005/03/30 18:01:32 xtraeme Exp $");
  * structured typesetting.
  */
 #include <ctype.h>
-#include <err.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -139,7 +138,7 @@ struct brstr {
 	{"TS",	"TE"},
 	/* Refer */
 	{"[",	"]"},
-	{0,	0}
+	{0,	0},
 };
 
 /*
@@ -236,14 +235,10 @@ main(int argc, char **argv)
 			for (i=0; br[i].opbr; i++)
 				;
 			for (cp=argv[1]+3; cp[-1]; cp += 6) {
-				if (i >= MAXBR)
-					errx(1, "too many pairs");
-				if ((br[i].opbr = malloc(3)) == NULL)
-					err(1, "malloc");
-				strlcpy(br[i].opbr, cp, 3);
-				if ((br[i].clbr = malloc(3)) == NULL)
-					err(1, "malloc");
-				strlcpy(br[i].clbr, cp+3, 3);
+				br[i].opbr = malloc(3);
+				strncpy(br[i].opbr, cp, 2);
+				br[i].clbr = malloc(3);
+				strncpy(br[i].clbr, cp+3, 2);
 				addmac(br[i].opbr);	/* knows pairs are also known cmds */
 				addmac(br[i].clbr);
 				i++;
@@ -597,8 +592,8 @@ addmac(char *mac)
 	dest = src+1;
 	while (dest > loc)
 		*dest-- = *src--;
-	if ((*loc = strdup(mac)) == NULL)
-		err(1, "strdup");
+	*loc = malloc(3);
+	strcpy(*loc, mac);
 	ncmds++;
 #ifdef DEBUG
 	printf("after: %s %s %s %s %s, %d cmds\n", knowncmds[slot-2],

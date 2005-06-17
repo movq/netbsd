@@ -1,4 +1,4 @@
-/*	$NetBSD: fpsetmask.c,v 1.6 2005/06/12 05:21:26 lukem Exp $	*/
+/*	$NetBSD: fpsetmask.c,v 1.5 2004/04/04 19:28:13 matt Exp $	*/
 
 /*
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -37,9 +37,6 @@
  */
 
 #include <sys/cdefs.h>
-#if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: fpsetmask.c,v 1.6 2005/06/12 05:21:26 lukem Exp $");
-#endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
 

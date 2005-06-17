@@ -1,4 +1,4 @@
-/*	$NetBSD: complete.c,v 1.40 2005/06/09 16:38:29 lukem Exp $	*/
+/*	$NetBSD: complete.c,v 1.38.12.2 2005/07/24 10:28:25 tron Exp $	*/
 
 /*-
  * Copyright (c) 1997-2000,2005 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: complete.c,v 1.40 2005/06/09 16:38:29 lukem Exp $");
+__RCSID("$NetBSD: complete.c,v 1.38.12.2 2005/07/24 10:28:25 tron Exp $");
 #endif /* not lint */
 
 /*

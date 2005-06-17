@@ -1,4 +1,4 @@
-/*	$NetBSD: ukbdmap.c,v 1.15 2005/06/08 09:11:09 martin Exp $	*/
+/*	$NetBSD: ukbdmap.c,v 1.13.10.1 2005/05/09 17:21:48 tron Exp $	*/
 
 /*
  * Copyright (c) 1999,2001 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ukbdmap.c,v 1.15 2005/06/08 09:11:09 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ukbdmap.c,v 1.13.10.1 2005/05/09 17:21:48 tron Exp $");
 
 #include <sys/types.h>
 #include <dev/wscons/wsksymdef.h>
@@ -148,8 +148,6 @@ Static const keysym_t ukbd_keydesc_us[] = {
     KC(99), 			KS_KP_Delete,	KS_KP_Decimal,
     KC(100),			KS_backslash,	KS_bar,
     KC(101),			KS_Menu,
-/* ... */
-    KC(109),			KS_Power,
 /* ... many unmapped keys ... */
     KC(224),  KS_Cmd1,		KS_Control_L,
     KC(225), 			KS_Shift_L,

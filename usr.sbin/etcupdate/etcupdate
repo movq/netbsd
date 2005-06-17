@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: etcupdate,v 1.22 2005/04/17 23:12:40 lukem Exp $
+# $NetBSD: etcupdate,v 1.21.6.1 2005/04/20 11:40:07 tron Exp $
 #
 # Copyright (c) 2001 The NetBSD Foundation, Inc.
 # All rights reserved.

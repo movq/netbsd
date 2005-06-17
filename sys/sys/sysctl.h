@@ -1,4 +1,4 @@
-/*	$NetBSD: sysctl.h,v 1.137 2005/06/16 14:55:58 christos Exp $	*/
+/*	$NetBSD: sysctl.h,v 1.133.2.1 2005/06/10 15:10:51 tron Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -269,8 +269,7 @@ struct ctlname {
 #define	KERN_BUF		76	/* struct: buffers */
 #define	KERN_FILE2		77	/* struct: file entries */
 #define	KERN_VERIEXEC		78	/* node: verified exec */
-#define	KERN_CP_ID		79	/* struct: cpu id numbers */
-#define	KERN_MAXID		80	/* number of valid kern ids */
+#define	KERN_MAXID		79	/* number of valid kern ids */
 
 
 #define	CTL_KERN_NAMES { \
@@ -353,7 +352,6 @@ struct ctlname {
 	{ "buf", CTLTYPE_NODE }, \
 	{ "file2", CTLTYPE_STRUCT }, \
 	{ "veriexec", CTLTYPE_NODE }, \
-	{ "cp_id", CTLTYPE_STRUCT }, \
 }
 
 /*
@@ -928,7 +926,7 @@ struct sysctllog;
  * infrastructure is retained for backwards compatibility.
  */
 struct ctldebug {
-	const char *debugname;	/* name of debugging variable */
+	char	*debugname;	/* name of debugging variable */
 	int	*debugvar;	/* pointer to debugging variable */
 };
 #ifdef	DEBUG
@@ -952,7 +950,7 @@ extern struct ctldebug debug15, debug16, debug17, debug18, debug19;
 	const int *oname, struct lwp *l, struct sysctlnode *rnode
 #define SYSCTLFN_CALL(node) name, namelen, oldp, \
 	oldlenp, newp, newlen, \
-	oname, l, __UNCONST(node) /*XXXUNCONST*/
+	oname, l, (struct sysctlnode *)node
 
 #ifdef _LKM
 
@@ -1194,8 +1192,8 @@ struct sysctldesc {
 
 #define __sysc_desc_roundup(x) ((((x) - 1) | (sizeof(int32_t) - 1)) + 1)
 #define __sysc_desc_adv(d, l) \
-	(/*XXXUNCONST ptr cast*/(struct sysctldesc *) \
-	__UNCONST(((const char*)(d)) + offsetof(struct sysctldesc, descr_str) +\
+	(/*LINTED ptr cast*/(struct sysctldesc *) \
+	(((const char*)(d)) + offsetof(struct sysctldesc, descr_str) + \
 		__sysc_desc_roundup(l)))
 #define NEXT_DESCR(d) __sysc_desc_adv((d), (d)->descr_len)
 

@@ -1,7 +1,7 @@
 /******************************************************************************
  *
  * Module Name: evevent - Fixed Event handling and dispatch
- *              xRevision: 117 $
+ *              xRevision: 112 $
  *
  *****************************************************************************/
 
@@ -9,7 +9,7 @@
  *
  * 1. Copyright Notice
  *
- * Some or all of this work - Copyright (c) 1999 - 2005, Intel Corp.
+ * Some or all of this work - Copyright (c) 1999 - 2004, Intel Corp.
  * All rights reserved.
  *
  * 2. License
@@ -115,7 +115,7 @@
  *****************************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: evevent.c,v 1.11 2005/05/02 14:52:09 kochi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: evevent.c,v 1.10 2004/02/14 16:57:24 kochi Exp $");
 
 #include "acpi.h"
 #include "acevents.h"
@@ -123,37 +123,27 @@ __KERNEL_RCSID(0, "$NetBSD: evevent.c,v 1.11 2005/05/02 14:52:09 kochi Exp $");
 #define _COMPONENT          ACPI_EVENTS
         ACPI_MODULE_NAME    ("evevent")
 
-/* Local prototypes */
-
-static ACPI_STATUS
-AcpiEvFixedEventInitialize (
-    void);
-
-static UINT32
-AcpiEvFixedEventDispatch (
-    UINT32                  Event);
-
 
 /*******************************************************************************
  *
- * FUNCTION:    AcpiEvInitializeEvents
+ * FUNCTION:    AcpiEvInitialize
  *
  * PARAMETERS:  None
  *
  * RETURN:      Status
  *
- * DESCRIPTION: Initialize global data structures for ACPI events (Fixed, GPE)
+ * DESCRIPTION: Initialize global data structures for events.
  *
  ******************************************************************************/
 
 ACPI_STATUS
-AcpiEvInitializeEvents (
+AcpiEvInitialize (
     void)
 {
     ACPI_STATUS             Status;
 
 
-    ACPI_FUNCTION_TRACE ("EvInitializeEvents");
+    ACPI_FUNCTION_TRACE ("EvInitialize");
 
 
     /* Make sure we have ACPI tables */
@@ -165,9 +155,9 @@ AcpiEvInitializeEvents (
     }
 
     /*
-     * Initialize the Fixed and General Purpose Events. This is done prior to
-     * enabling SCIs to prevent interrupts from occurring before the handlers are
-     * installed.
+     * Initialize the Fixed and General Purpose Events. This is
+     * done prior to enabling SCIs to prevent interrupts from
+     * occurring before handers are installed.
      */
     Status = AcpiEvFixedEventInitialize ();
     if (ACPI_FAILURE (Status))
@@ -193,7 +183,7 @@ AcpiEvInitializeEvents (
 
 /*******************************************************************************
  *
- * FUNCTION:    AcpiEvInstallXruptHandlers
+ * FUNCTION:    AcpiEvHandlerInitialize
  *
  * PARAMETERS:  None
  *
@@ -204,13 +194,13 @@ AcpiEvInitializeEvents (
  ******************************************************************************/
 
 ACPI_STATUS
-AcpiEvInstallXruptHandlers (
+AcpiEvHandlerInitialize (
     void)
 {
     ACPI_STATUS             Status;
 
 
-    ACPI_FUNCTION_TRACE ("EvInstallXruptHandlers");
+    ACPI_FUNCTION_TRACE ("EvHandlerInitialize");
 
 
     /* Install the SCI handler */
@@ -252,7 +242,7 @@ AcpiEvInstallXruptHandlers (
  *
  ******************************************************************************/
 
-static ACPI_STATUS
+ACPI_STATUS
 AcpiEvFixedEventInitialize (
     void)
 {
@@ -273,9 +263,8 @@ AcpiEvFixedEventInitialize (
 
         if (AcpiGbl_FixedEventInfo[i].EnableRegisterId != 0xFF)
         {
-            Status = AcpiSetRegister (
-                        AcpiGbl_FixedEventInfo[i].EnableRegisterId,
-                        0, ACPI_MTX_LOCK);
+            Status = AcpiSetRegister (AcpiGbl_FixedEventInfo[i].EnableRegisterId,
+                                    0, ACPI_MTX_LOCK);
             if (ACPI_FAILURE (Status))
             {
                 return (Status);
@@ -295,7 +284,7 @@ AcpiEvFixedEventInitialize (
  *
  * RETURN:      INTERRUPT_HANDLED or INTERRUPT_NOT_HANDLED
  *
- * DESCRIPTION: Checks the PM status register for active fixed events
+ * DESCRIPTION: Checks the PM status register for fixed events
  *
  ******************************************************************************/
 
@@ -316,10 +305,8 @@ AcpiEvFixedEventDetect (
      * Read the fixed feature status and enable registers, as all the cases
      * depend on their values.  Ignore errors here.
      */
-    (void) AcpiHwRegisterRead (ACPI_MTX_DO_NOT_LOCK, ACPI_REGISTER_PM1_STATUS,
-                &FixedStatus);
-    (void) AcpiHwRegisterRead (ACPI_MTX_DO_NOT_LOCK, ACPI_REGISTER_PM1_ENABLE,
-                &FixedEnable);
+    (void) AcpiHwRegisterRead (ACPI_MTX_DO_NOT_LOCK, ACPI_REGISTER_PM1_STATUS, &FixedStatus);
+    (void) AcpiHwRegisterRead (ACPI_MTX_DO_NOT_LOCK, ACPI_REGISTER_PM1_ENABLE, &FixedEnable);
 
     ACPI_DEBUG_PRINT ((ACPI_DB_INTERRUPTS,
         "Fixed Event Block: Enable %08X Status %08X\n",
@@ -358,7 +345,7 @@ AcpiEvFixedEventDetect (
  *
  ******************************************************************************/
 
-static UINT32
+UINT32
 AcpiEvFixedEventDispatch (
     UINT32                  Event)
 {

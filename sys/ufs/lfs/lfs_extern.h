@@ -1,4 +1,4 @@
-/*	$NetBSD: lfs_extern.h,v 1.68 2005/05/29 21:25:24 christos Exp $	*/
+/*	$NetBSD: lfs_extern.h,v 1.64.2.2 2005/08/24 18:43:37 riz Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001, 2002, 2003 The NetBSD Foundation, Inc.
@@ -150,7 +150,7 @@ void lfs_flush(struct lfs *, int, int);
 int lfs_check(struct vnode *, daddr_t, int);
 void lfs_freebuf(struct lfs *, struct buf *);
 struct buf *lfs_newbuf(struct lfs *, struct vnode *, daddr_t, size_t, int);
-void lfs_countlocked(int *, long *, const char *);
+void lfs_countlocked(int *, long *, char *);
 int lfs_reserve(struct lfs *, struct vnode *, struct vnode *, int);
 
 /* lfs_cksum.c */
@@ -161,7 +161,7 @@ u_int32_t lfs_sb_cksum(struct dlfs *);
 
 /* lfs_debug.c */
 #ifdef DEBUG
-int lfs_bwrite_log(struct buf *, const char *, int);
+int lfs_bwrite_log(struct buf *, char *, int);
 void lfs_dumplog(void);
 void lfs_dump_super(struct lfs *);
 void lfs_dump_dinode(struct ufs1_dinode *);
@@ -283,6 +283,6 @@ extern int lfs_mount_type;
 extern int (**lfs_vnodeop_p)(void *);
 extern int (**lfs_specop_p)(void *);
 extern int (**lfs_fifoop_p)(void *);
-extern struct genfs_ops lfs_genfsops;
+extern const struct genfs_ops lfs_genfsops;
 
 #endif /* !_UFS_LFS_LFS_EXTERN_H_ */

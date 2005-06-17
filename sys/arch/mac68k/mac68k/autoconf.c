@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.63 2005/06/09 22:00:40 rjs Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.62 2005/01/15 16:00:59 chs Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -49,7 +49,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.63 2005/06/09 22:00:40 rjs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.62 2005/01/15 16:00:59 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -83,7 +83,7 @@ cpu_configure(void)
 	mrg_init();		/* Init Mac ROM Glue */
 	startrtclock();		/* start before ADB attached */
 
-	if (config_rootfound("mainbus", NULL) == NULL)
+	if (config_rootfound("mainbus", "mainbus") == NULL)
 		panic("No mainbus found!");
 
 	(void)spl0();

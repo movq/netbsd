@@ -1,4 +1,4 @@
-/*	$NetBSD: disksubr_mbr.c,v 1.6 2005/06/02 17:45:59 he Exp $	*/
+/*	$NetBSD: disksubr_mbr.c,v 1.5 2004/11/03 12:21:04 scw Exp $	*/
 
 /*
  * Copyright (c) 1998 Christopher G. Demetriou.  All rights reserved.
@@ -68,7 +68,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: disksubr_mbr.c,v 1.6 2005/06/02 17:45:59 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: disksubr_mbr.c,v 1.5 2004/11/03 12:21:04 scw Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -93,7 +93,7 @@ mbr_label_read(dev, strat, lp, osdep, msgp, cylp, netbsd_label_offp)
 	void (*strat) __P((struct buf *));
 	struct disklabel *lp;
 	struct cpu_disklabel *osdep;
-	const char **msgp;
+	char **msgp;
 	int *cylp, *netbsd_label_offp;
 {
 	struct mbr_partition *mbrp;

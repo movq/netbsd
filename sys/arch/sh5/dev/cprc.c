@@ -1,4 +1,4 @@
-/*	$NetBSD: cprc.c,v 1.8 2005/06/01 10:55:07 scw Exp $	*/
+/*	$NetBSD: cprc.c,v 1.7 2003/07/15 03:35:58 lukem Exp $	*/
 
 /*
  * Copyright 2002 Wasabi Systems, Inc.
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cprc.c,v 1.8 2005/06/01 10:55:07 scw Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cprc.c,v 1.7 2003/07/15 03:35:58 lukem Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -128,9 +128,7 @@ cprcattach(struct device *parent, struct device *self, void *args)
 	printf(": Clock, Power and Watchdog/Reset Controller\n");
 
 	for (i = 0; cprc_subdevs[i] != NULL; i++) {
-		char name[16];
-		strlcpy(name, cprc_subdevs[i], sizeof(name));
-		child = config_found(self, name, cprcprint);
+		child = config_found(self, (void *)cprc_subdevs[i], cprcprint);
 		if (i == 0 && child == NULL)
 			panic("%s: no clock driver configured!",self->dv_xname);
 	}

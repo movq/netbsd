@@ -1,4 +1,4 @@
-/*	$NetBSD: ipfstat.c,v 1.11 2005/06/02 09:53:00 lukem Exp $	*/
+/*	$NetBSD: ipfstat.c,v 1.9.2.1 2005/04/04 18:25:11 tron Exp $	*/
 
 /*
  * Copyright (C) 1993-2001, 2003 by Darren Reed.
@@ -1010,7 +1010,7 @@ int topclosed;
 	int maxtsentries = 0, reverse = 0, sorting = STSORT_DEFAULT;
 	int i, j, winy, tsentry, maxx, maxy, redraw = 0;
 	int len, srclen, dstlen, forward = 1, c = 0, ret = 0;
-	const char *errstr = NULL;
+	const char *errstr;
 	ips_stat_t ipsst, *ipsstp = &ipsst;
 	statetop_t *tstable = NULL, *tp;
 	ipstate_t ips;

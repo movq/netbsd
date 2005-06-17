@@ -1,4 +1,4 @@
-/*	$NetBSD: lfs_balloc.c,v 1.56 2005/04/19 20:59:05 perseant Exp $	*/
+/*	$NetBSD: lfs_balloc.c,v 1.51.2.1 2005/05/07 11:21:29 tron Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001, 2002, 2003 The NetBSD Foundation, Inc.
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lfs_balloc.c,v 1.56 2005/04/19 20:59:05 perseant Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lfs_balloc.c,v 1.51.2.1 2005/05/07 11:21:29 tron Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_quota.h"

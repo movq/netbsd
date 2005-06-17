@@ -1,4 +1,4 @@
-/*	$NetBSD: union_vfsops.c,v 1.27 2005/05/29 21:00:29 christos Exp $	*/
+/*	$NetBSD: union_vfsops.c,v 1.25.2.1 2005/08/28 09:58:59 tron Exp $	*/
 
 /*
  * Copyright (c) 1994 The Regents of the University of California.
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: union_vfsops.c,v 1.27 2005/05/29 21:00:29 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: union_vfsops.c,v 1.25.2.1 2005/08/28 09:58:59 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -125,8 +125,7 @@ union_mount(mp, path, data, ndp, p)
 	struct vnode *upperrootvp = NULLVP;
 	struct union_mount *um = 0;
 	struct ucred *cred = 0;
-	const char *cp;
-	char *xp;
+	char *cp;
 	int len;
 	size_t size;
 
@@ -285,11 +284,11 @@ union_mount(mp, path, data, ndp, p)
 	len = strlen(cp);
 	memcpy(mp->mnt_stat.f_mntfromname, cp, len);
 
-	xp = mp->mnt_stat.f_mntfromname + len;
+	cp = mp->mnt_stat.f_mntfromname + len;
 	len = MNAMELEN - len;
 
-	(void) copyinstr(args.target, xp, len - 1, &size);
-	memset(xp + size, 0, len - size);
+	(void) copyinstr(args.target, cp, len - 1, &size);
+	memset(cp + size, 0, len - size);
 
 #ifdef UNION_DIAGNOSTIC
 	printf("union_mount: from %s, on %s\n",
@@ -483,7 +482,7 @@ union_statvfs(mp, sbp, p)
 {
 	int error;
 	struct union_mount *um = MOUNTTOUNIONMOUNT(mp);
-	struct statvfs *sbuf = malloc(sizeof(*sbuf), M_TEMP, M_WAITOK);
+	struct statvfs *sbuf = malloc(sizeof(*sbuf), M_TEMP, M_WAITOK | M_ZERO);
 	unsigned long lbsize;
 
 #ifdef UNION_DIAGNOSTIC
@@ -644,4 +643,3 @@ struct vfsops union_vfsops = {
 	vfs_stdextattrctl,
 	union_vnodeopv_descs,
 };
-VFS_ATTACH(union_vfsops);

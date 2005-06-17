@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.c,v 1.152 2005/04/26 16:03:08 scw Exp $	*/
+/*	$NetBSD: pmap.c,v 1.150 2005/01/14 02:28:54 joff Exp $	*/
 
 /*
  * Copyright 2003 Wasabi Systems, Inc.
@@ -212,7 +212,7 @@
 #include <machine/param.h>
 #include <arm/arm32/katelib.h>
 
-__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.152 2005/04/26 16:03:08 scw Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.150 2005/01/14 02:28:54 joff Exp $");
 
 #ifdef PMAP_DEBUG
 
@@ -1872,17 +1872,10 @@ pmap_page_remove(struct vm_page *pg)
 	PMAP_HEAD_TO_MAP_UNLOCK();
 
 	if (flush) {
-		/*
-		 * Note: We can't use pmap_tlb_flush{I,}D() here since that
-		 * would need a subsequent call to pmap_update() to ensure
-		 * curpm->pm_cstate.cs_all is reset. Our callers are not
-		 * required to do that (see pmap(9)), so we can't modify
-		 * the current pmap's state.
-		 */
 		if (PV_BEEN_EXECD(flags))
-			cpu_tlb_flushID();
+			pmap_tlb_flushID(curpm);
 		else
-			cpu_tlb_flushD();
+			pmap_tlb_flushD(curpm);
 	}
 	cpu_cpwait();
 }
@@ -4130,8 +4123,8 @@ pmap_bootstrap_pv_page_alloc(struct pool *pp, int flags)
 		return (rv);
 	}
 
-	new_page = uvm_km_alloc(kernel_map, PAGE_SIZE, 0,
-	    UVM_KMF_WIRED | ((flags & PR_WAITOK) ? 0 : UVM_KMF_NOWAIT));
+	new_page = uvm_km_kmemalloc(kernel_map, NULL, PAGE_SIZE,
+	    (flags & PR_WAITOK) ? 0 : UVM_KMF_NOWAIT);
 
 	KASSERT(new_page > last_bootstrap_page);
 	last_bootstrap_page = new_page;
@@ -4188,7 +4181,7 @@ pmap_postinit(void)
 
 	for (loop = 0; loop < needed; loop++, l1++) {
 		/* Allocate a L1 page table */
-		va = uvm_km_alloc(kernel_map, L1_TABLE_SIZE, 0, UVM_KMF_VAONLY);
+		va = uvm_km_valloc(kernel_map, L1_TABLE_SIZE);
 		if (va == 0)
 			panic("Cannot allocate L1 KVM");
 

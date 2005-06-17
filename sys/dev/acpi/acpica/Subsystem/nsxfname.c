@@ -2,7 +2,7 @@
  *
  * Module Name: nsxfname - Public interfaces to the ACPI subsystem
  *                         ACPI Namespace oriented interfaces
- *              xRevision: 104 $
+ *              xRevision: 99 $
  *
  *****************************************************************************/
 
@@ -10,7 +10,7 @@
  *
  * 1. Copyright Notice
  *
- * Some or all of this work - Copyright (c) 1999 - 2005, Intel Corp.
+ * Some or all of this work - Copyright (c) 1999 - 2004, Intel Corp.
  * All rights reserved.
  *
  * 2. License
@@ -116,7 +116,7 @@
  *****************************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nsxfname.c,v 1.12 2005/05/29 20:56:02 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nsxfname.c,v 1.10 2004/02/14 16:57:25 kochi Exp $");
 
 #define __NSXFNAME_C__
 
@@ -133,9 +133,9 @@ __KERNEL_RCSID(0, "$NetBSD: nsxfname.c,v 1.12 2005/05/29 20:56:02 christos Exp $
  * FUNCTION:    AcpiGetHandle
  *
  * PARAMETERS:  Parent          - Object to search under (search scope).
- *              Pathname        - Pointer to an asciiz string containing the
- *                                name
- *              RetHandle       - Where the return handle is returned
+ *              PathName        - Pointer to an asciiz string containing the
+ *                                  name
+ *              RetHandle       - Where the return handle is placed
  *
  * RETURN:      Status
  *
@@ -149,7 +149,7 @@ __KERNEL_RCSID(0, "$NetBSD: nsxfname.c,v 1.12 2005/05/29 20:56:02 christos Exp $
 ACPI_STATUS
 AcpiGetHandle (
     ACPI_HANDLE             Parent,
-    ACPI_CONST_STRING       Pathname,
+    ACPI_STRING             Pathname,
     ACPI_HANDLE             *RetHandle)
 {
     ACPI_STATUS             Status;
@@ -307,7 +307,7 @@ UnlockAndExit:
  * FUNCTION:    AcpiGetObjectInfo
  *
  * PARAMETERS:  Handle          - Object Handle
- *              Buffer          - Where the info is returned
+ *              Info            - Where the info is returned
  *
  * RETURN:      Status
  *
@@ -324,7 +324,7 @@ AcpiGetObjectInfo (
 {
     ACPI_STATUS             Status;
     ACPI_NAMESPACE_NODE     *Node;
-    ACPI_DEVICE_INFO        *Info;
+    ACPI_DEVICE_INFO        Info;
     ACPI_DEVICE_INFO        *ReturnInfo;
     ACPI_COMPATIBLE_ID_LIST *CidList = NULL;
     ACPI_SIZE               Size;
@@ -343,66 +343,61 @@ AcpiGetObjectInfo (
         return (Status);
     }
 
-    Info = ACPI_MEM_CALLOCATE (sizeof (ACPI_DEVICE_INFO));
-    if (!Info)
-    {
-        return (AE_NO_MEMORY);
-    }
-
     Status = AcpiUtAcquireMutex (ACPI_MTX_NAMESPACE);
     if (ACPI_FAILURE (Status))
     {
-        goto Cleanup;
+        return (Status);
     }
 
     Node = AcpiNsMapHandleToNode (Handle);
     if (!Node)
     {
         (void) AcpiUtReleaseMutex (ACPI_MTX_NAMESPACE);
-        goto Cleanup;
+        return (AE_BAD_PARAMETER);
     }
 
     /* Init return structure */
 
     Size = sizeof (ACPI_DEVICE_INFO);
+    ACPI_MEMSET (&Info, 0, Size);
 
-    Info->Type  = Node->Type;
-    Info->Name  = Node->Name.Integer;
-    Info->Valid = 0;
+    Info.Type  = Node->Type;
+    Info.Name  = Node->Name.Integer;
+    Info.Valid = 0;
 
     Status = AcpiUtReleaseMutex (ACPI_MTX_NAMESPACE);
     if (ACPI_FAILURE (Status))
     {
-        goto Cleanup;
+        return (Status);
     }
 
     /* If not a device, we are all done */
 
-    if (Info->Type == ACPI_TYPE_DEVICE)
+    if (Info.Type == ACPI_TYPE_DEVICE)
     {
         /*
          * Get extra info for ACPI Devices objects only:
-         * Run the Device _HID, _UID, _CID, _STA, _ADR and _SxD methods.
+         * Run the Device _HID, _UID, _CID, _STA, and _ADR methods.
          *
          * Note: none of these methods are required, so they may or may
-         * not be present for this device.  The Info->Valid bitfield is used
+         * not be present for this device.  The Info.Valid bitfield is used
          * to indicate which methods were found and ran successfully.
          */
 
         /* Execute the Device._HID method */
 
-        Status = AcpiUtExecute_HID (Node, &Info->HardwareId);
+        Status = AcpiUtExecute_HID (Node, &Info.HardwareId);
         if (ACPI_SUCCESS (Status))
         {
-            Info->Valid |= ACPI_VALID_HID;
+            Info.Valid |= ACPI_VALID_HID;
         }
 
         /* Execute the Device._UID method */
 
-        Status = AcpiUtExecute_UID (Node, &Info->UniqueId);
+        Status = AcpiUtExecute_UID (Node, &Info.UniqueId);
         if (ACPI_SUCCESS (Status))
         {
-            Info->Valid |= ACPI_VALID_UID;
+            Info.Valid |= ACPI_VALID_UID;
         }
 
         /* Execute the Device._CID method */
@@ -412,33 +407,27 @@ AcpiGetObjectInfo (
         {
             Size += ((ACPI_SIZE) CidList->Count - 1) *
                                  sizeof (ACPI_COMPATIBLE_ID);
-            Info->Valid |= ACPI_VALID_CID;
+            Info.Valid |= ACPI_VALID_CID;
         }
 
         /* Execute the Device._STA method */
 
-        Status = AcpiUtExecute_STA (Node, &Info->CurrentStatus);
+        Status = AcpiUtExecute_STA (Node, &Info.CurrentStatus);
         if (ACPI_SUCCESS (Status))
         {
-            Info->Valid |= ACPI_VALID_STA;
+            Info.Valid |= ACPI_VALID_STA;
         }
 
         /* Execute the Device._ADR method */
 
         Status = AcpiUtEvaluateNumericObject (METHOD_NAME__ADR, Node,
-                        &Info->Address);
+                        &Info.Address);
         if (ACPI_SUCCESS (Status))
         {
-            Info->Valid |= ACPI_VALID_ADR;
+            Info.Valid |= ACPI_VALID_ADR;
         }
 
-        /* Execute the Device._SxD methods */
-
-        Status = AcpiUtExecute_Sxds (Node, Info->HighestDstates);
-        if (ACPI_SUCCESS (Status))
-        {
-            Info->Valid |= ACPI_VALID_SXDS;
-        }
+        Status = AE_OK;
     }
 
     /* Validate/Allocate/Clear caller buffer */
@@ -452,7 +441,7 @@ AcpiGetObjectInfo (
     /* Populate the return buffer */
 
     ReturnInfo = Buffer->Pointer;
-    ACPI_MEMCPY (ReturnInfo, Info, sizeof (ACPI_DEVICE_INFO));
+    ACPI_MEMCPY (ReturnInfo, &Info, sizeof (ACPI_DEVICE_INFO));
 
     if (CidList)
     {
@@ -461,7 +450,6 @@ AcpiGetObjectInfo (
 
 
 Cleanup:
-    ACPI_MEM_FREE (Info);
     if (CidList)
     {
         ACPI_MEM_FREE (CidList);

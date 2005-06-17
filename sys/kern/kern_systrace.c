@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_systrace.c,v 1.44 2005/02/26 21:34:55 perry Exp $	*/
+/*	$NetBSD: kern_systrace.c,v 1.44.2.2 2005/07/02 18:50:06 tron Exp $	*/
 
 /*
  * Copyright 2002, 2003 Niels Provos <provos@citi.umich.edu>
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_systrace.c,v 1.44 2005/02/26 21:34:55 perry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_systrace.c,v 1.44.2.2 2005/07/02 18:50:06 tron Exp $");
 
 #include "opt_systrace.h"
 

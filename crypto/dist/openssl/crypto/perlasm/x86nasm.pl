@@ -86,7 +86,7 @@ sub get_mem
 	{
 	my($size,$addr,$reg1,$reg2,$idx)=@_;
 	my($t,$post);
-	my($ret)="$size [";
+	my($ret)="[";
 	$addr =~ s/^\s+//;
 	if ($addr =~ /^(.+)\+(.+)$/)
 		{
@@ -169,7 +169,6 @@ sub main'not	{ &out1("not",@_); }
 sub main'call	{ &out1("call",($_[0]=~/^\$L/?'':'_').$_[0]); }
 sub main'ret	{ &out0("ret"); }
 sub main'nop	{ &out0("nop"); }
-sub main'movz	{ &out2("movzx",@_); }
 
 sub out2
 	{
@@ -177,11 +176,6 @@ sub out2
 	my($l,$t);
 
 	push(@out,"\t$name\t");
-	if ($name eq "lea")
-		{
-		$p1 =~ s/^[^\[]*\[/\[/;
-		$p2 =~ s/^[^\[]*\[/\[/;
-		}
 	$t=&conv($p1).",";
 	$l=length($t);
 	push(@out,$t);

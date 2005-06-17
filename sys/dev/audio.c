@@ -1,4 +1,4 @@
-/*	$NetBSD: audio.c,v 1.196 2005/06/11 08:14:19 is Exp $	*/
+/*	$NetBSD: audio.c,v 1.192.4.2 2005/06/11 11:18:32 tron Exp $	*/
 
 /*
  * Copyright (c) 1991-1993 Regents of the University of California.
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: audio.c,v 1.196 2005/06/11 08:14:19 is Exp $");
+__KERNEL_RCSID(0, "$NetBSD: audio.c,v 1.192.4.2 2005/06/11 11:18:32 tron Exp $");
 
 #include "audio.h"
 #if NAUDIO > 0
@@ -1288,10 +1288,9 @@ audio_open(dev_t dev, struct audio_softc *sc, int flags, int ifmt,
 	DPRINTF(("audio_open: flags=0x%x sc=%p hdl=%p\n",
 		 flags, sc, sc->hw_hdl));
 
-	if (((flags & FREAD) && (sc->sc_open & AUOPEN_READ)) ||
-	    ((flags & FWRITE) && (sc->sc_open & AUOPEN_WRITE)))
+	if ((sc->sc_open & (AUOPEN_READ|AUOPEN_WRITE)) != 0)
 		return EBUSY;
-	
+
 	if (hw->open != NULL) {
 		error = hw->open(sc->hw_hdl, flags);
 		if (error)
@@ -1506,8 +1505,15 @@ audio_close(struct audio_softc *sc, int flags, int ifmt, struct proc *p)
 	if (hw->close != NULL)
 		hw->close(sc->hw_hdl);
 
-	sc->sc_open = 0;
-	sc->sc_mode = 0;
+	if (flags & FREAD) {
+		sc->sc_open &= ~AUOPEN_READ;
+		sc->sc_mode &= ~AUMODE_RECORD;
+	}
+	if (flags & FWRITE) {
+		sc->sc_open &= ~AUOPEN_WRITE;
+		sc->sc_mode &= ~(AUMODE_PLAY|AUMODE_PLAY_ALL);
+	}
+
 	sc->sc_async_audio = 0;
 	sc->sc_full_duplex = 0;
 	splx(s);

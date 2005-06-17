@@ -1,10 +1,6 @@
-#	$NetBSD: Makefile.inc,v 1.4 2005/05/18 14:04:26 chs Exp $
+#	$NetBSD: Makefile.inc,v 1.3 2002/12/02 13:31:18 lukem Exp $
 #
 #	etc.hp700/Makefile.inc -- hp700-specific etc Makefile targets
 #
 
-KERNEL_SETS=		GENERIC
-
-BUILD_KERNELS=		RAMDISK
-
-INSTALLATION_DIRS+=     installation
+KERNEL_SETS=	GENERIC

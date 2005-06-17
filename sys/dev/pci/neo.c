@@ -1,4 +1,4 @@
-/*	$NetBSD: neo.c,v 1.28 2005/04/08 14:30:57 kent Exp $	*/
+/*	$NetBSD: neo.c,v 1.27.2.1 2005/04/08 15:39:38 he Exp $	*/
 
 /*
  * Copyright (c) 1999 Cameron Grant <gandalf@vilnya.demon.co.uk>
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: neo.c,v 1.28 2005/04/08 14:30:57 kent Exp $");
+__KERNEL_RCSID(0, "$NetBSD: neo.c,v 1.27.2.1 2005/04/08 15:39:38 he Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

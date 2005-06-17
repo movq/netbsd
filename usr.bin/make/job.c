@@ -1,4 +1,4 @@
-/*	$NetBSD: job.c,v 1.93 2005/06/16 18:07:45 jmc Exp $	*/
+/*	$NetBSD: job.c,v 1.89 2005/02/16 15:11:52 christos Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990 The Regents of the University of California.
@@ -70,14 +70,14 @@
  */
 
 #ifndef MAKE_NATIVE
-static char rcsid[] = "$NetBSD: job.c,v 1.93 2005/06/16 18:07:45 jmc Exp $";
+static char rcsid[] = "$NetBSD: job.c,v 1.89 2005/02/16 15:11:52 christos Exp $";
 #else
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)job.c	8.2 (Berkeley) 3/19/94";
 #else
-__RCSID("$NetBSD: job.c,v 1.93 2005/06/16 18:07:45 jmc Exp $");
+__RCSID("$NetBSD: job.c,v 1.89 2005/02/16 15:11:52 christos Exp $");
 #endif
 #endif /* not lint */
 #endif
@@ -829,9 +829,8 @@ JobPrintCommand(ClientData cmdp, ClientData jobp)
 			DBPRINTF(commandShell->errCheck, escCmd);
 			shutUp = TRUE;
 		}
-		/* If it's a comment line or blank, treat as an ignored error */
-		if ((escCmd[0] == commandShell->commentChar) ||
-		    (escCmd[0] == 0))
+		/* If it's a comment line, treat it like an ignored error */
+		if (escCmd[0] == commandShell->commentChar)
 			cmdTemplate = commandShell->ignErr;
 		else
 			cmdTemplate = commandShell->errOut;
@@ -950,6 +949,7 @@ JobClose(Job *job)
  *	None
  *
  * Side Effects:
+ *	Some nodes may be put on the toBeMade queue.
  *	Final commands for the job are placed on postCommands.
  *
  *	If we got an error and are aborting (aborting == ABORT_ERROR) and
@@ -1354,7 +1354,7 @@ Job_CheckCommands(GNode *gn, void (*abortProc)(const char *, ...))
 	    Var_Set(IMPSRC, Var_Value(TARGET, gn, &p1), gn, 0);
 	    if (p1)
 		free(p1);
-	} else if (Dir_MTime(gn) == 0 && (gn->type & OP_SPECIAL) == 0) {
+	} else if (Dir_MTime(gn) == 0) {
 	    /*
 	     * The node wasn't the target of an operator we have no .DEFAULT
 	     * rule to go on and the target doesn't already exist. There's
@@ -1930,8 +1930,6 @@ JobStart(GNode *gn, int flags, Job *previous)
 	}
 	flags |= JOB_FIRST;
     }
-    if (gn->type & OP_SPECIAL)
-	flags |= JOB_SPECIAL;
 
     job->node = gn;
     job->tailCmds = NILLNODE;
@@ -2456,35 +2454,6 @@ end_loop:
     }
 }
 
-static void
-JobRun(GNode *targ)
-{
-#ifdef notyet
-    /*
-     * Unfortunately it is too complicated to run .BEGIN, .END,
-     * and .INTERRUPT job in the parallel job module. This has
-     * the nice side effect that it avoids a lot of other problems.
-     */
-    Lst lst = Lst_Init(FALSE);
-    Lst_AtEnd(lst, targ);
-    (void)Make_Run(lst);
-    Lst_Destroy(lst, NOFREE);
-    JobStart(targ, JOB_SPECIAL, (Job *)0);
-    while (nJobs) {
-	Job_CatchOutput();
-#ifndef RMT_WILL_WATCH
-	Job_CatchChildren(!usePipes);
-#endif /* RMT_WILL_WATCH */
-    }
-#else
-    Compat_Make(targ, targ);
-    if (targ->made == ERROR) {
-	PrintOnError("\n\nStop.");
-	exit(1);
-    }
-#endif
-}
-
 /*-
  *-----------------------------------------------------------------------
  * Job_CatchChildren --
@@ -2790,10 +2759,12 @@ Job_Init(int maxproc, int maxlocal)
     begin = Targ_FindNode(".BEGIN", TARG_NOCREATE);
 
     if (begin != NILGNODE) {
-	JobRun(begin);
-	if (begin->made == ERROR) {
-	    PrintOnError("\n\nStop.");
-	    exit(1);
+	JobStart(begin, JOB_SPECIAL, (Job *)0);
+	while (nJobs) {
+	    Job_CatchOutput();
+#ifndef RMT_WILL_WATCH
+	    Job_CatchChildren(!usePipes);
+#endif /* RMT_WILL_WATCH */
 	}
     }
     postCommands = Targ_FindNode(".END", TARG_CREATE);
@@ -3212,7 +3183,14 @@ JobInterrupt(int runINTERRUPT, int signo)
 	interrupt = Targ_FindNode(".INTERRUPT", TARG_NOCREATE);
 	if (interrupt != NILGNODE) {
 	    ignoreErrors = FALSE;
-	    JobRun(interrupt);
+
+	    JobStart(interrupt, JOB_IGNDOTS, (Job *)0);
+	    while (nJobs) {
+		Job_CatchOutput();
+#ifndef RMT_WILL_WATCH
+		Job_CatchChildren(!usePipes);
+#endif /* RMT_WILL_WATCH */
+	    }
 	}
     }
     Trace_Log(MAKEINTR, 0);
@@ -3239,7 +3217,14 @@ Job_Finish(void)
 	if (errors) {
 	    Error("Errors reported so .END ignored");
 	} else {
-	    JobRun(postCommands);
+	    JobStart(postCommands, JOB_SPECIAL | JOB_IGNDOTS, NULL);
+
+	    while (nJobs) {
+		Job_CatchOutput();
+#ifndef RMT_WILL_WATCH
+		Job_CatchChildren(!usePipes);
+#endif /* RMT_WILL_WATCH */
+	    }
 	}
     }
     Job_TokenFlush();

@@ -1,4 +1,4 @@
-/*	$NetBSD: cd9660.c,v 1.18 2005/06/13 12:06:36 junyoung Exp $	*/
+/*	$NetBSD: cd9660.c,v 1.16 2005/02/26 22:58:56 perry Exp $	*/
 
 /*
  * Copyright (C) 1996 Wolfgang Solfrank.
@@ -73,11 +73,13 @@ struct ptable_ent {
 
 #define	cdb2devb(bno)	((bno) * ISO_DEFAULT_BLOCK_SIZE / DEV_BSIZE)
 
-static int	pnmatch(const char *, struct ptable_ent *);
-static int	dirmatch(const char *, struct iso_directory_record *);
+static int	pnmatch __P((const char *, struct ptable_ent *));
+static int	dirmatch __P((const char *, struct iso_directory_record *));
 
 static int
-pnmatch(const char *path, struct ptable_ent *pp)
+pnmatch(path, pp)
+	const char *path;
+	struct ptable_ent *pp;
 {
 	char *cp;
 	int i;
@@ -94,7 +96,9 @@ pnmatch(const char *path, struct ptable_ent *pp)
 }
 
 static int
-dirmatch(const char *path, struct iso_directory_record *dp)
+dirmatch(path, dp)
+	const char *path;
+	struct iso_directory_record *dp;
 {
 	char *cp;
 	int i;
@@ -130,7 +134,9 @@ dirmatch(const char *path, struct iso_directory_record *dp)
 }
 
 int
-cd9660_open(const char *path, struct open_file *f)
+cd9660_open(path, f)
+	const char *path;
+	struct open_file *f;
 {
 	struct file *fp = 0;
 	void *buf;
@@ -143,8 +149,7 @@ cd9660_open(const char *path, struct open_file *f)
 	int rc;
 
 	/* First find the volume descriptor */
-	buf_size = ISO_DEFAULT_BLOCK_SIZE;
-	buf = alloc(buf_size);
+	buf = alloc(buf_size = ISO_DEFAULT_BLOCK_SIZE);
 	vd = buf;
 	for (bno = 16;; bno++) {
 #if !defined(LIBSA_NO_TWIDDLE)
@@ -159,7 +164,7 @@ cd9660_open(const char *path, struct open_file *f)
 			goto out;
 		}
 		rc = EINVAL;
-		if (memcmp(vd->id, ISO_STANDARD_ID, sizeof vd->id) != 0)
+		if (bcmp(vd->id, ISO_STANDARD_ID, sizeof vd->id) != 0)
 			goto out;
 		if (isonum_711(vd->type) == ISO_VD_END)
 			goto out;
@@ -266,7 +271,7 @@ cd9660_open(const char *path, struct open_file *f)
 
 	/* allocate file system specific data structure */
 	fp = alloc(sizeof(struct file));
-	memset(fp, 0, sizeof(struct file));
+	bzero(fp, sizeof(struct file));
 	f->f_fsdata = (void *)fp;
 
 	fp->off = 0;
@@ -286,7 +291,8 @@ out:
 
 #if !defined(LIBSA_NO_FS_CLOSE)
 int
-cd9660_close(struct open_file *f)
+cd9660_close(f)
+	struct open_file *f;
 {
 	struct file *fp = (struct file *)f->f_fsdata;
 
@@ -298,7 +304,11 @@ cd9660_close(struct open_file *f)
 #endif /* !defined(LIBSA_NO_FS_CLOSE) */
 
 int
-cd9660_read(struct open_file *f, void *start, size_t size, size_t *resid)
+cd9660_read(f, start, size, resid)
+	struct open_file *f;
+	void *start;
+	size_t size;
+	size_t *resid;
 {
 	struct file *fp = (struct file *)f->f_fsdata;
 	int rc = 0;
@@ -330,7 +340,7 @@ cd9660_read(struct open_file *f, void *start, size_t size, size_t *resid)
 			if (nread > off + size)
 				nread = off + size;
 			nread -= off;
-			memcpy(start, buf + off, nread);
+			bcopy(buf + off, start, nread);
 			start = (caddr_t)start + nread;
 			fp->off += nread;
 			size -= nread;
@@ -347,7 +357,11 @@ cd9660_read(struct open_file *f, void *start, size_t size, size_t *resid)
 
 #if !defined(LIBSA_NO_FS_WRITE)
 int
-cd9660_write(struct open_file *f, void *start, size_t size, size_t *resid)
+cd9660_write(f, start, size, resid)
+	struct open_file *f;
+	void *start;
+	size_t size;
+	size_t *resid;
 {
 	return EROFS;
 }
@@ -355,7 +369,10 @@ cd9660_write(struct open_file *f, void *start, size_t size, size_t *resid)
 
 #if !defined(LIBSA_NO_FS_SEEK)
 off_t
-cd9660_seek(struct open_file *f, off_t offset, int where)
+cd9660_seek(f, offset, where)
+	struct open_file *f;
+	off_t offset;
+	int where;
 {
 	struct file *fp = (struct file *)f->f_fsdata;
 
@@ -377,7 +394,9 @@ cd9660_seek(struct open_file *f, off_t offset, int where)
 #endif /* !defined(LIBSA_NO_FS_SEEK) */
 
 int
-cd9660_stat(struct open_file *f, struct stat *sb)
+cd9660_stat(f, sb)
+	struct open_file *f;
+	struct stat *sb;
 {
 	struct file *fp = (struct file *)f->f_fsdata;
 

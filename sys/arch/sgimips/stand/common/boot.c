@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.11 2005/06/03 18:55:12 martin Exp $	*/
+/*	$NetBSD: boot.c,v 1.10 2004/01/03 10:29:37 sekiya Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -127,8 +127,8 @@ struct btinfo_bootpath bi_bpath;
 int
 main(int argc, char **argv)
 {
-	const char      *kernel = NULL;
-	const char      *bootpath = NULL;
+	char           *kernel = NULL;
+	char           *bootpath = NULL;
 	char            bootfile[PATH_MAX];
 	void            (*entry) (int, char *[], int, void *);
 	u_long          marks[MARK_MAX];

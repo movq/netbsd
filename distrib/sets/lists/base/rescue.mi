@@ -1,4 +1,4 @@
-# $NetBSD: rescue.mi,v 1.12 2005/05/22 03:45:30 lukem Exp $
+# $NetBSD: rescue.mi,v 1.9 2005/01/10 10:47:36 lukem Exp $
 ./rescue/[					base-rescue-root
 ./rescue/atactl					base-rescue-root
 ./rescue/badsect				base-rescue-root
@@ -29,7 +29,6 @@
 ./rescue/echo					base-rescue-root
 ./rescue/ed					base-rescue-root
 ./rescue/expr					base-rescue-root
-./rescue/fdisk					base-rescue-root
 ./rescue/fsck					base-rescue-root
 ./rescue/fsck_ext2fs				base-rescue-root
 ./rescue/fsck_ffs				base-rescue-root
@@ -92,7 +91,7 @@
 ./rescue/newfs_msdos				base-rescue-root
 ./rescue/pax					base-rescue-root
 ./rescue/ping					base-rescue-root
-./rescue/ping6					base-rescue-root	use_inet6
+./rescue/ping6					base-rescue-root	inet6
 ./rescue/pppoectl				base-rescue-root
 ./rescue/ps					base-rescue-root
 ./rescue/pwd					base-rescue-root
@@ -110,7 +109,7 @@
 ./rescue/route					base-rescue-root
 ./rescue/routed					base-rescue-root
 ./rescue/rrestore				base-rescue-root
-./rescue/rtsol					base-rescue-root	use_inet6
+./rescue/rtsol					base-rescue-root	inet6
 ./rescue/savecore				base-rescue-root
 ./rescue/scp					base-rescue-root	crypto
 ./rescue/scsictl				base-rescue-root
@@ -129,7 +128,6 @@
 ./rescue/systrace				base-rescue-root
 ./rescue/tar					base-rescue-root
 ./rescue/test					base-rescue-root
-./rescue/tetris					base-rescue-root
 ./rescue/ttyflags				base-rescue-root
 ./rescue/tunefs					base-rescue-root
 ./rescue/umount					base-rescue-root

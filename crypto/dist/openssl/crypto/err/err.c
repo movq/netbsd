@@ -149,7 +149,6 @@ static ERR_STRING_DATA ERR_str_libraries[]=
 {ERR_PACK(ERR_LIB_DSO,0,0)		,"DSO support routines"},
 {ERR_PACK(ERR_LIB_ENGINE,0,0)		,"engine routines"},
 {ERR_PACK(ERR_LIB_OCSP,0,0)		,"OCSP routines"},
-{ERR_PACK(ERR_LIB_FIPS,0,0)		,"FIPS routines"},
 {0,NULL},
 	};
 
@@ -168,7 +167,6 @@ static ERR_STRING_DATA ERR_str_functs[]=
 #endif
 	{ERR_PACK(0,SYS_F_OPENDIR,0),		"opendir"},
 	{ERR_PACK(0,SYS_F_FREAD,0),		"fread"},
-	{ERR_PACK(0,SYS_F_GETADDRINFO,0),	"getaddrinfo"},
 	{0,NULL},
 	};
 

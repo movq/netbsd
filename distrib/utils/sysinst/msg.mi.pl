@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.mi.pl,v 1.46 2005/05/08 19:46:33 christos Exp $	*/
+/*	$NetBSD: msg.mi.pl,v 1.45.2.3 2005/09/19 21:03:13 tron Exp $	*/
 /*	Based on english version: */
 /*	NetBSD: msg.mi.pl,v 1.36 2004/04/17 18:55:35 atatat Exp       */
 
@@ -516,6 +516,7 @@ message localdir
 Pamietaj, ze katalog musi zawierac pliki .tgz.
 
 katalog:	%s
+katalog:	%s
 }
 
 message filesys
@@ -936,7 +937,7 @@ i dlatego jest puste. Czy chcesz ustawic haslo dla root'a teraz?}
 
 message rootsh
 {Mozesz  teraz wybrac, ktorej powloki ma uzywac uzytkownik root. Domyslnie
-jest to /bin/csh, ale moze preferujesz inna.}
+jest to /bin/sh, ale moze preferujesz inna.}
 
 message postuseexisting
 {

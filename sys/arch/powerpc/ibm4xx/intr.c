@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.c,v 1.7 2005/06/03 11:58:02 scw Exp $	*/
+/*	$NetBSD: intr.c,v 1.6 2003/07/15 02:54:43 lukem Exp $	*/
 
 /*
  * Copyright 2002 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.7 2005/06/03 11:58:02 scw Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.6 2003/07/15 02:54:43 lukem Exp $");
 
 #include <sys/param.h>
 #include <sys/malloc.h>
@@ -64,7 +64,7 @@ __KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.7 2005/06/03 11:58:02 scw Exp $");
 static inline void disable_irq(int irq);
 static inline void enable_irq(int irq);
 static void intr_calculatemasks(void);
-static const char *intr_typename(int);
+static char *intr_typename(int);
 
 static int fakeintr(void *);
 static inline int cntlzw(int);
@@ -182,7 +182,7 @@ enable_irq(int irq)
 #endif
 }
 
-static const char *
+static char *
 intr_typename(int type)
 {
 

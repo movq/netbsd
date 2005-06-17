@@ -1,4 +1,4 @@
-/*	$NetBSD: fsi_lex.l,v 1.7 2005/04/23 18:38:18 christos Exp $	*/
+/*	$NetBSD: fsi_lex.l,v 1.6.2.1 2005/08/16 13:02:24 tron Exp $	*/
 
 %{
 /*

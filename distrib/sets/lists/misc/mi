@@ -1,4 +1,4 @@
-# $NetBSD: mi,v 1.119 2005/05/14 20:03:31 dsl Exp $
+# $NetBSD: mi,v 1.113.2.6 2005/10/15 16:48:04 riz Exp $
 ./etc/mtree/set.misc				misc-sys-root
 ./usr/share/dict/README				misc-reference-share	share
 ./usr/share/dict/eign				misc-reference-share	share
@@ -114,6 +114,16 @@
 ./usr/share/doc/html/ntp/tickadj.htm		misc-obsolete		obsolete
 ./usr/share/doc/html/ntp/vxworks.htm		misc-obsolete		obsolete
 ./usr/share/doc/html/ntp/y2k.htm		misc-obsolete		obsolete
+./usr/share/doc/html/bind9/arm/Bv9ARM.ch01.html	misc-bind-htmldoc	doc
+./usr/share/doc/html/bind9/arm/Bv9ARM.ch02.html	misc-bind-htmldoc	doc
+./usr/share/doc/html/bind9/arm/Bv9ARM.ch03.html	misc-bind-htmldoc	doc
+./usr/share/doc/html/bind9/arm/Bv9ARM.ch04.html	misc-bind-htmldoc	doc
+./usr/share/doc/html/bind9/arm/Bv9ARM.ch05.html	misc-bind-htmldoc	doc
+./usr/share/doc/html/bind9/arm/Bv9ARM.ch06.html	misc-bind-htmldoc	doc
+./usr/share/doc/html/bind9/arm/Bv9ARM.ch07.html	misc-bind-htmldoc	doc
+./usr/share/doc/html/bind9/arm/Bv9ARM.ch08.html	misc-bind-htmldoc	doc
+./usr/share/doc/html/bind9/arm/Bv9ARM.ch09.html	misc-bind-htmldoc	doc
+./usr/share/doc/html/bind9/arm/Bv9ARM.html	misc-bind-htmldoc	doc
 ./usr/share/doc/html/postfix/ADDRESS_CLASS_README.html	misc-postfix-htmldoc	postfix,doc
 ./usr/share/doc/html/postfix/ADDRESS_REWRITING_README.html	misc-postfix-htmldoc	postfix,doc
 ./usr/share/doc/html/postfix/ADDRESS_VERIFICATION_README.html	misc-postfix-htmldoc	postfix,doc
@@ -534,7 +544,7 @@
 ./usr/share/examples/named/named.conf		misc-obsolete		obsolete
 ./usr/share/examples/openssl/CA.pl		misc-crypto-examples	crypto,share
 ./usr/share/examples/openssl/CA.sh		misc-crypto-examples	crypto,share
-./usr/share/examples/openssl/der_chop		misc-obsolete		obsolete
+./usr/share/examples/openssl/der_chop		misc-crypto-examples	crypto,share
 ./usr/share/examples/openssl/openssl.cnf	misc-crypto-examples	crypto,share
 ./usr/share/examples/pf/ackpri			misc-netutil-examples	pf,share
 ./usr/share/examples/pf/faq-example1		misc-netutil-examples	pf,share
@@ -544,7 +554,7 @@
 ./usr/share/examples/pf/queue2			misc-netutil-examples	pf,share
 ./usr/share/examples/pf/queue3			misc-netutil-examples	pf,share
 ./usr/share/examples/pf/queue4			misc-netutil-examples	pf,share
-./usr/share/examples/pf/spamd			misc-netutil-examples	pf,share
+./usr/share/examples/pf/spamd			misc-obsolete		obsolete
 ./usr/share/examples/postfix/ADDRESS_CLASS_README	misc-postfix-examples	postfix,doc
 ./usr/share/examples/postfix/ADDRESS_REWRITING_README	misc-postfix-examples	postfix,doc
 ./usr/share/examples/postfix/ADDRESS_VERIFICATION_README	misc-postfix-examples	postfix,doc
@@ -641,7 +651,7 @@
 ./usr/share/examples/racoon/roadwarrior/server/phase1-down.sh	misc-obsolete		obsolete
 ./usr/share/examples/racoon/roadwarrior/server/racoon.conf		misc-netutil-examples	crypto,share
 ./usr/share/examples/racoon/roadwarrior/server/racoon.conf-radius	misc-netutil-examples	crypto,share
-./usr/share/examples/rtadvd/rtadvd.conf		misc-router-examples	use_inet6,share
+./usr/share/examples/rtadvd/rtadvd.conf		misc-router-examples	inet6,share
 ./usr/share/examples/smbfs/dot.nsmbrc		misc-sysutil-examples	share
 ./usr/share/examples/supfiles/ftp.cs.umn.edu	misc-obsolete		obsolete
 ./usr/share/examples/supfiles/skarven.itea.unit.no	misc-obsolete		obsolete

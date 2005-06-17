@@ -1,4 +1,4 @@
-/*	$NetBSD: msdosfs_vnops.c,v 1.14 2005/02/26 22:58:55 perry Exp $	*/
+/*	$NetBSD: msdosfs_vnops.c,v 1.14.2.2 2005/11/06 13:32:22 tron Exp $	*/
 
 /*-
  * Copyright (C) 1994, 1995, 1997 Wolfgang Solfrank.
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: msdosfs_vnops.c,v 1.14 2005/02/26 22:58:55 perry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: msdosfs_vnops.c,v 1.14.2.2 2005/11/06 13:32:22 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -596,6 +596,10 @@ msdosfs_write(v)
 	if (uio->uio_resid == 0)
 		return (0);
 
+	/* Don't bother to try to write files larger than the fs limit */
+	if (uio->uio_offset + uio->uio_resid > MSDOSFS_FILESIZE_MAX)
+		return (EFBIG);
+
 	/*
 	 * If they've exceeded their filesize limit, tell them about it.
 	 */
@@ -1142,6 +1146,8 @@ abortit:
 		if (FAT32(pmp)) {
 			putushort(dotdotp->deHighClust,
 				dp->de_StartCluster >> 16);
+		} else {
+			putushort(dotdotp->deHighClust, 0);
 		}
 		if ((error = bwrite(bp)) != 0) {
 			/* XXX should really panic here, fs is corrupt */
@@ -1269,6 +1275,9 @@ msdosfs_mkdir(v)
 	if (FAT32(pmp)) {
 		putushort(denp[0].deHighClust, newcluster >> 16);
 		putushort(denp[1].deHighClust, pdep->de_StartCluster >> 16);
+	} else {
+		putushort(denp[0].deHighClust, 0);
+		putushort(denp[1].deHighClust, 0);
 	}
 
 	if (async)

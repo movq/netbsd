@@ -1,4 +1,4 @@
-/*	$NetBSD: in_pcb.c,v 1.100 2005/05/29 21:41:23 christos Exp $	*/
+/*	$NetBSD: in_pcb.c,v 1.98 2005/02/03 03:49:01 perry Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -98,7 +98,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: in_pcb.c,v 1.100 2005/05/29 21:41:23 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: in_pcb.c,v 1.98 2005/02/03 03:49:01 perry Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -278,7 +278,7 @@ in_pcbbind(void *v, struct mbuf *nam, struct proc *p)
 		if (t6 && (reuseport & t6->in6p_socket->so_options) == 0)
 			return (EADDRINUSE);
 #endif
-		if (so->so_uidinfo->ui_uid && !IN_MULTICAST(sin->sin_addr.s_addr)) {
+		if (so->so_uid && !IN_MULTICAST(sin->sin_addr.s_addr)) {
 			t = in_pcblookup_port(table, sin->sin_addr, lport, 1);
 		/*
 		 * XXX:	investigate ramifications of loosening this
@@ -289,7 +289,7 @@ in_pcbbind(void *v, struct mbuf *nam, struct proc *p)
 			    (!in_nullhost(sin->sin_addr) ||
 			     !in_nullhost(t->inp_laddr) ||
 			     (t->inp_socket->so_options & SO_REUSEPORT) == 0)
-			    && (so->so_uidinfo->ui_uid != t->inp_socket->so_uidinfo->ui_uid)) {
+			    && (so->so_uid != t->inp_socket->so_uid)) {
 				return (EADDRINUSE);
 			}
 		}
@@ -302,7 +302,7 @@ in_pcbbind(void *v, struct mbuf *nam, struct proc *p)
 noname:
 	if (lport == 0) {
 		int	   cnt;
-		u_int16_t  mymin, mymax;
+		u_int16_t  min, max;
 		u_int16_t *lastport;
 
 		if (inp->inp_flags & INP_LOWPORT) {
@@ -310,26 +310,26 @@ noname:
 			if (p == 0 || suser(p->p_ucred, &p->p_acflag))
 				return (EACCES);
 #endif
-			mymin = lowportmin;
-			mymax = lowportmax;
+			min = lowportmin;
+			max = lowportmax;
 			lastport = &table->inpt_lastlow;
 		} else {
-			mymin = anonportmin;
-			mymax = anonportmax;
+			min = anonportmin;
+			max = anonportmax;
 			lastport = &table->inpt_lastport;
 		}
-		if (mymin > mymax) {	/* sanity check */
+		if (min > max) {	/* sanity check */
 			u_int16_t swp;
 
-			swp = mymin;
-			mymin = mymax;
-			mymax = swp;
+			swp = min;
+			min = max;
+			max = swp;
 		}
 
 		lport = *lastport - 1;
-		for (cnt = mymax - mymin + 1; cnt; cnt--, lport--) {
-			if (lport < mymin || lport > mymax)
-				lport = mymax;
+		for (cnt = max - min + 1; cnt; cnt--, lport--) {
+			if (lport < min || lport > max)
+				lport = max;
 			if (!in_pcblookup_port(table, inp->inp_laddr,
 			    htons(lport), 1))
 				goto found;
@@ -409,13 +409,13 @@ in_pcbconnect(void *v, struct mbuf *nam)
 	 * destinations.
 	 */
 	if (in_nullhost(inp->inp_laddr)) {
-		int xerror;
+		int error;
 		ifaddr = in_selectsrc(sin, &inp->inp_route,
-		    inp->inp_socket->so_options, inp->inp_moptions, &xerror);
+			inp->inp_socket->so_options, inp->inp_moptions, &error);
 		if (ifaddr == NULL) {
-			if (xerror == 0)
-				xerror = EADDRNOTAVAIL;
-			return xerror;
+			if (error == 0)
+				error = EADDRNOTAVAIL;
+			return error;
 		}
 		INADDR_TO_IA(ifaddr->sin_addr, ia);
 		if (ia == NULL)

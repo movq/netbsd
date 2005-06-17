@@ -3,7 +3,6 @@
 #include <string.h>
 #include <openssl/objects.h>
 #include <openssl/comp.h>
-#include <openssl/err.h>
 
 COMP_METHOD *COMP_zlib(void );
 
@@ -190,17 +189,7 @@ COMP_METHOD *COMP_zlib(void)
 	if (!zlib_loaded)
 		{
 #if defined(OPENSSL_SYS_WINDOWS) || defined(OPENSSL_SYS_WIN32)
-		zlib_dso = DSO_load(NULL, "ZLIB1", NULL, 0);
-		if (!zlib_dso)
-			{
-			zlib_dso = DSO_load(NULL, "ZLIB", NULL, 0);
-			if (zlib_dso)
-				{
-				/* Clear the errors from the first failed
-				   DSO_load() */
-				ERR_clear_error();
-				}
-			}
+		zlib_dso = DSO_load(NULL, "ZLIB", NULL, 0);
 #else
 		zlib_dso = DSO_load(NULL, "z", NULL, 0);
 #endif

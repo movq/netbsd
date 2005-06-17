@@ -9,11 +9,9 @@ while(<STDIN>) {
     } elsif ($name) {
 	if (/ - /) {
 	    s/ - .*//;
-	    s/,\s+/,/g;
-	    s/\s+,/,/g;
-	    s/^\s+//g;
-	    s/\s+$//g;
-	    s/\s/_/g;
+	    s/,[ \t]+/,/g;
+	    s/^[ \t]+//g;
+	    s/[ \t]+$//g;
 	    push @words, split ',';
 	}
     }

@@ -1,4 +1,4 @@
-/*	$NetBSD: ruserpass.c,v 1.30 2005/06/10 00:18:47 lukem Exp $	*/
+/*	$NetBSD: ruserpass.c,v 1.29.6.1 2005/07/24 10:29:47 tron Exp $	*/
 
 /*
  * Copyright (c) 1985, 1993, 1994
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)ruserpass.c	8.4 (Berkeley) 4/27/95";
 #else
-__RCSID("$NetBSD: ruserpass.c,v 1.30 2005/06/10 00:18:47 lukem Exp $");
+__RCSID("$NetBSD: ruserpass.c,v 1.29.6.1 2005/07/24 10:29:47 tron Exp $");
 #endif
 #endif /* not lint */
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: atactl.c,v 1.38 2005/04/12 11:40:46 drochner Exp $	*/
+/*	$NetBSD: atactl.c,v 1.37.2.1 2005/04/15 22:07:53 tron Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -42,7 +42,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: atactl.c,v 1.38 2005/04/12 11:40:46 drochner Exp $");
+__RCSID("$NetBSD: atactl.c,v 1.37.2.1 2005/04/15 22:07:53 tron Exp $");
 #endif
 
 

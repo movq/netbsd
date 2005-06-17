@@ -1,4 +1,4 @@
-/*	$NetBSD: oakley.h,v 1.1.1.2 2005/02/23 14:54:23 manu Exp $	*/
+/*	$NetBSD: oakley.h,v 1.1.1.2.2.2 2005/11/21 21:12:30 tron Exp $	*/
 
 /* Id: oakley.h,v 1.9 2004/10/24 17:37:00 manubsd Exp */
 

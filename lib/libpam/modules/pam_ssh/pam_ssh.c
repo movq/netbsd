@@ -1,4 +1,4 @@
-/*	$NetBSD: pam_ssh.c,v 1.11 2005/04/19 03:15:36 christos Exp $	*/
+/*	$NetBSD: pam_ssh.c,v 1.8.2.3 2005/07/11 11:19:26 tron Exp $	*/
 
 /*-
  * Copyright (c) 2003 Networks Associates Technology, Inc.
@@ -38,7 +38,7 @@
 #ifdef __FreeBSD__
 __FBSDID("$FreeBSD: src/lib/libpam/modules/pam_ssh/pam_ssh.c,v 1.40 2004/02/10 10:13:21 des Exp $");
 #else
-__RCSID("$NetBSD: pam_ssh.c,v 1.11 2005/04/19 03:15:36 christos Exp $");
+__RCSID("$NetBSD: pam_ssh.c,v 1.8.2.3 2005/07/11 11:19:26 tron Exp $");
 #endif
 
 #include <sys/param.h>

@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.README,v 1.169 2005/05/31 02:25:36 thorpej Exp $
+#	$NetBSD: bsd.README,v 1.165.2.2 2005/07/02 23:38:05 tron Exp $
 #	@(#)bsd.README	8.2 (Berkeley) 4/2/94
 
 This is the README file for the new make "include" files for the BSD
@@ -161,10 +161,6 @@ MKIEEEFP	If "no", don't add code for IEEE754/IEC60559 conformance.
 		Has no effect on most platforms.
 		Default: yes
 
-MKINET6		If "no", disables building of INET6 (IPv6) infrastructure
-		(libraries and support programs).
-		Default: yes
-
 MKINFO		If "no", don't build or install Info documentation from
 		Texinfo source files.
 		Default: yes
@@ -215,7 +211,7 @@ MKPAM		If "no", disables building of PAM authentication
 		infrastructure (libraries and support programs).
 		Default: no
 
-MKPF		If "no", don't build or install the pf programs, LKM and spamd.
+MKPF		If "no", don't build or install the pf programs and LKM.
 		Default: yes
 
 MKPIC		If "no", don't build or install shared libraries, and
@@ -285,11 +281,6 @@ MKYP		If "no", disables building of YP (NIS)
 USE_HESIOD	If "no", disables building Hesiod support into
 		various system utilities/libraries that support it.
 		If ${MKHESIOD} is "no", USE_HESIOD will also be
-		forced to "no".
-
-USE_INET6	If "no", disables building INET6 (IPv6) support into
-		various system utilities/libraries that support it.
-		If ${MKINET6} is "no", USE_INET6 will also be
 		forced to "no".
 
 USE_KERBEROS4	If "no", disables building Kerberos v4
@@ -1073,9 +1064,6 @@ SUBDIR		A list of subdirectories that should be built as well.
 SCRIPTS		A list of interpreter scripts [file.{sh,csh,pl,awk,...}].
 		These are installed exactly like programs.
 
-SCRIPTSDIR	The location to install the scripts.  Each script can be
-		installed to a separate path by setting SCRIPTSDIR_<script>.
-
 SCRIPTSNAME	The name that the above program will be installed as, if
 		different from ${SCRIPTS}. These can be further specialized
 		by setting SCRIPTSNAME_<script>.
@@ -1294,8 +1282,6 @@ TOOL_DB			Manipulate db(3) databases.  [db]
 TOOL_EQN		Format equations for groff.  [eqn]
 
 TOOL_FGEN		IEEE 1275 Open Firmware FCode Tokenizer.  [fgen]
-
-TOOL_GENASSYM		Generate constants for assembly files.  [genassym]
 
 TOOL_GENCAT		Generate NLS message catalogs.  [gencat]
 

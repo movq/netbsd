@@ -1,4 +1,4 @@
-/*	$NetBSD: make_lfs.c,v 1.4 2005/06/02 00:54:42 lukem Exp $	*/
+/*	$NetBSD: make_lfs.c,v 1.1.2.1 2005/05/07 11:21:29 tron Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -69,7 +69,7 @@
 #if 0
 static char sccsid[] = "@(#)lfs.c	8.5 (Berkeley) 5/24/95";
 #else
-__RCSID("$NetBSD: make_lfs.c,v 1.4 2005/06/02 00:54:42 lukem Exp $");
+__RCSID("$NetBSD: make_lfs.c,v 1.1.2.1 2005/05/07 11:21:29 tron Exp $");
 #endif
 #endif /* not lint */
 
@@ -325,7 +325,7 @@ make_lfs(int devfd, uint secsize, struct partition *partp, int minfree,
 	struct ufs1_dinode *dip;	/* Pointer to a disk inode */
 	CLEANERINFO *cip;	/* Segment cleaner information table */
 	IFILE *ip;		/* Pointer to array of ifile structures */
-	IFILE_V1 *ip_v1 = NULL;
+	IFILE_V1 *ip_v1;
 	struct lfs *fs;		/* Superblock */
 	SEGUSE *segp;		/* Segment usage table */
 	daddr_t	sb_addr;	/* Address of superblocks */

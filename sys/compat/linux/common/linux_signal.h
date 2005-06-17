@@ -1,4 +1,4 @@
-/* 	$NetBSD: linux_signal.h,v 1.23 2005/06/02 13:03:27 drochner Exp $	*/
+/* 	$NetBSD: linux_signal.h,v 1.21 2003/08/08 18:55:26 christos Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -51,8 +51,6 @@
 #include <compat/linux/arch/mips/linux_signal.h>
 #elif defined(__arm__)
 #include <compat/linux/arch/arm/linux_signal.h>
-#elif defined(__amd64__)
-#include <compat/linux/arch/amd64/linux_signal.h>
 #endif
 
 #ifdef _KERNEL
@@ -74,11 +72,10 @@ void native_to_linux_old_extra_sigset __P((linux_old_sigset_t *,
 
 #else	/* LINUX__NSIG_WORDS == 1 */
 
-/* XXXmanu (const linux_sigset_t *)(void *) temporary hack to get it building */
 #define linux_old_to_native_sigset(x,y) \
-    linux_to_native_sigset(x, (const linux_sigset_t *)(const void *)y)
+    linux_to_native_sigset(x, (const linux_sigset_t *)y)
 #define native_to_linux_old_sigset(x,y) \
-    native_to_linux_sigset((linux_sigset_t *)(void *)x, y)
+    native_to_linux_sigset((linux_sigset_t *)x, y)
 #endif
 
 #ifdef LINUX_SS_ONSTACK

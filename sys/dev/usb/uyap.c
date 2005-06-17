@@ -1,4 +1,4 @@
-/*	$NetBSD: uyap.c,v 1.8 2005/05/11 10:02:29 augustss Exp $	*/
+/*	$NetBSD: uyap.c,v 1.7 2004/04/23 17:25:27 itojun Exp $	*/
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uyap.c,v 1.8 2005/05/11 10:02:29 augustss Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uyap.c,v 1.7 2004/04/23 17:25:27 itojun Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -83,13 +83,11 @@ USB_ATTACH(uyap)
 	USB_ATTACH_START(uyap, sc, uaa);
 	usbd_device_handle dev = uaa->device;
 	usbd_status err;
-	char *devinfop;
+	char devinfo[1024];
 
-	devinfop = usbd_devinfo_alloc(dev, 0);
+	usbd_devinfo(dev, 0, devinfo, sizeof(devinfo));
 	USB_ATTACH_SETUP;
-	printf("%s: %s\n", USBDEVNAME(sc->sc_dev), devinfop);
-	usbd_devinfo_free(devinfop);
-
+	printf("%s: %s\n", USBDEVNAME(sc->sc_dev), devinfo);
 	printf("%s: downloading firmware\n", USBDEVNAME(sc->sc_dev));
 
 	err = ezload_downloads_and_reset(dev, uyap_firmwares);

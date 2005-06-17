@@ -1,5 +1,5 @@
-#	$NetBSD: Makefile,v 1.2 2005/03/23 17:28:55 he Exp $
+#	$NetBSD: Makefile,v 1.1 2005/01/13 12:26:12 yamt Exp $
 
-SUBDIR+= end1 end2 string1
+SUBDIR+= string1
 
 .include <bsd.subdir.mk>

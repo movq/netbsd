@@ -1,4 +1,4 @@
-/*	$NetBSD: ixp425_space.c,v 1.4 2005/04/01 11:59:25 yamt Exp $ */
+/*	$NetBSD: ixp425_space.c,v 1.3 2003/11/16 12:41:03 scw Exp $ */
 
 /*
  * Copyright (c) 2003
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ixp425_space.c,v 1.4 2005/04/01 11:59:25 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ixp425_space.c,v 1.3 2003/11/16 12:41:03 scw Exp $");
 
 /*
  * bus_space I/O functions for ixp425
@@ -157,8 +157,7 @@ ixp425_bs_map(void *t, bus_addr_t bpa, bus_size_t size,
 	startpa = trunc_page(bpa);
 
 	/* Get some VM.  */
-	va = uvm_km_alloc(kernel_map, endpa - startpa, 0, UVM_KMF_VAONLY);
-	if (va == 0)
+	if ((va = uvm_km_valloc(kernel_map, endpa - startpa)) == 0)
 		return ENOMEM;
 
 	/* Store the bus space handle */
@@ -189,9 +188,7 @@ ixp425_bs_unmap(void *t, bus_space_handle_t bsh, bus_size_t size)
 	endva = round_page(bsh + size);
 	va = trunc_page(bsh);
 
-	pmap_remove(pmap_kernel(), va, endva);
-	pmap_update(pmap_kernel());
-	uvm_km_free(kernel_map, va, endva - va, UVM_KMF_VAONLY);
+	uvm_km_free(kernel_map, va, endva - va);
 }
 
 int

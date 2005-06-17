@@ -1,4 +1,4 @@
-/*	$NetBSD: pecoff_exec.c,v 1.28 2005/05/29 22:08:16 christos Exp $	*/
+/*	$NetBSD: pecoff_exec.c,v 1.27 2005/02/26 23:10:21 perry Exp $	*/
 
 /*
  * Copyright (c) 2000 Masaru OKI
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pecoff_exec.c,v 1.28 2005/05/29 22:08:16 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pecoff_exec.c,v 1.27 2005/02/26 23:10:21 perry Exp $");
 
 /*#define DEBUG_PECOFF*/
 
@@ -123,16 +123,16 @@ pecoff_signature(p, vp, dp)
 	struct pecoff_dos_filehdr *dp;
 {
 	int error;
-	char tbuf[sizeof(signature) - 1];
+	char buf[sizeof(signature) - 1];
 
 	if (DOS_BADMAG(dp)) {
 		return ENOEXEC;
 	}
-	error = exec_read_from(p, vp, dp->d_peofs, tbuf, sizeof(tbuf));
+	error = exec_read_from(p, vp, dp->d_peofs, buf, sizeof(buf));
 	if (error) {
 		return error;
 	}
-	if (memcmp(tbuf, signature, sizeof(signature) - 1) == 0) {
+	if (memcmp(buf, signature, sizeof(signature) - 1) == 0) {
 		return 0;
 	}
 	return EFTYPE;
@@ -181,8 +181,7 @@ pecoff_load_file(p, epp, path, vcset, entry, argp)
 
 	NDINIT(&nd, LOOKUP, FOLLOW | LOCKLEAF, UIO_SYSSPACE, bp, p);
 	if ((error = namei(&nd)) != 0) {
-		/*XXXUNCONST*/
-		free(__UNCONST(bp), M_TEMP);
+		free((void *)bp, M_TEMP);
 		return error;
 	}
 	vp = nd.ni_vp;
@@ -269,8 +268,7 @@ pecoff_load_file(p, epp, path, vcset, entry, argp)
 
 	free(fp, M_TEMP);
 	free(sh, M_TEMP);
-	/*XXXUNCONST*/
-	free(__UNCONST(bp), M_TEMP);
+	free((void *)bp, M_TEMP);
 	vrele(vp);
 	return 0;
 
@@ -282,8 +280,7 @@ bad:
 		free(fp, M_TEMP);
 	if (sh != 0)
 		free(sh, M_TEMP);
-	/*XXXUNCONST*/
-	free(__UNCONST(bp), M_TEMP);
+	free((void *)bp, M_TEMP);
 	vrele(vp);
 	return error;
 }

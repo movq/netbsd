@@ -1,4 +1,4 @@
-#	$NetBSD: files.xen,v 1.22 2005/05/16 12:05:50 yamt Exp $
+#	$NetBSD: files.xen,v 1.18.2.6 2005/08/25 20:49:54 tron Exp $
 #	NetBSD: files.x86,v 1.10 2003/10/08 17:30:00 bouyer Exp 
 #	NetBSD: files.i386,v 1.254 2004/03/25 23:32:10 jmc Exp 
 
@@ -82,8 +82,9 @@ include	"dev/ata/files.ata"
 # Memory Disk for install floppy
 file	dev/md_root.c			memory_disk_hooks
 
-file	arch/x86/x86/bus_dma.c		dom0ops
-file	arch/xen/x86/bus_space.c	dom0ops
+file	arch/x86/x86/bus_dma.c		pci
+file	arch/xen/x86/xen_bus_dma.c	pci
+file	arch/xen/x86/bus_space.c	pci
 file	arch/x86/x86/cacheinfo.c
 file	arch/xen/x86/consinit.c
 file	arch/xen/x86/intr.c
@@ -127,6 +128,22 @@ file	arch/xen/xen/xencons.c		xencons needs-flag
 
 # Xen event peudo-device
 defpseudo xenevt
+
+# Xen Network driver
+device	xennet: arp, ether, ifnet
+attach	xennet at hypervisor
+file	arch/xen/xen/if_xennet.c	xennet needs-flag
+
+# Xen Block device driver and wd/sd/cd identities
+device	xbd: disk
+attach	xbd at hypervisor
+file	arch/xen/xen/xbd.c		xbd | wd_xen | sd_xen | cd_xen needs-flag
+
+#attach	wd at hypervisor with wd_xen
+#attach	sd at hypervisor with sd_xen
+#attach	cd at hypervisor with cd_xen
+
+# Non-Xen specific devices and options
 
 include	"dev/wscons/files.wscons"
 include	"dev/wsfont/files.wsfont"
@@ -213,7 +230,7 @@ include	"compat/linux/files.linux"
 include	"compat/linux/arch/i386/files.linux_i386"
 file	arch/i386/i386/linux_sigcode.S		compat_linux
 file	arch/i386/i386/linux_syscall.c		compat_linux
-file	arch/x86/x86/linux_trap.c		compat_linux
+file	arch/i386/i386/linux_trap.c		compat_linux
 
 # FreeBSD binary compatibility (COMPAT_FREEBSD)
 include	"compat/freebsd/files.freebsd"
@@ -227,21 +244,17 @@ include	"compat/pecoff/files.pecoff"
 # OSS audio driver compatibility
 include	"compat/ossaudio/files.ossaudio"
 
-# Xen devices
+#
+# CARDBUS
+#
+include	"dev/cardbus/files.cardbus"
+file	arch/i386/i386/rbus_machdep.c	cardbus
 
-# Network driver
-device	xennet: arp, ether, ifnet
-attach	xennet at hypervisor
-file	arch/xen/xen/if_xennet.c	xennet needs-flag
-
-# Block device driver and wd/sd/cd identities
-device	xbd: disk
-attach	xbd at hypervisor
-file	arch/xen/xen/xbd.c		xbd | wd_xen | sd_xen | cd_xen needs-flag
-
-#attach	wd at hypervisor with wd_xen
-#attach	sd at hypervisor with sd_xen
-#attach	cd at hypervisor with cd_xen
+# this wants to be probed as late as possible.
+#
+# Machine-independent PCMCIA drivers
+#
+include	"dev/pcmcia/files.pcmcia"
 
 # Domain-0 operations
 defflag	opt_xen.h			DOM0OPS
@@ -249,7 +262,7 @@ file	arch/xen/xen/privcmd.c		dom0ops
 file 	arch/xen/i386/xen_shm_machdep.c	dom0ops
 file	arch/xen/xen/xbdback.c		dom0ops
 file	arch/xen/xen/xennetback.c	dom0ops
-file	arch/xen/xen/pci_machdep.c	hypervisor & dom0ops
+file	arch/xen/xen/pci_machdep.c	hypervisor & pci
 file	arch/xen/xen/isa_machdep.c	hypervisor & dom0ops
 file	arch/xen/xen/xenevt.c		xenevt & dom0ops
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_diskqueue.c,v 1.41 2005/05/29 22:03:09 christos Exp $	*/
+/*	$NetBSD: rf_diskqueue.c,v 1.40.2.1 2005/06/17 13:36:39 tron Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -66,7 +66,7 @@
  ****************************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_diskqueue.c,v 1.41 2005/05/29 22:03:09 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_diskqueue.c,v 1.40.2.1 2005/06/17 13:36:39 tron Exp $");
 
 #include <dev/raidframe/raidframevar.h>
 

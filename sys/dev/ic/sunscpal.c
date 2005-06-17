@@ -1,4 +1,4 @@
-/*	$NetBSD: sunscpal.c,v 1.18 2005/06/03 21:20:51 tsutsui Exp $	*/
+/*	$NetBSD: sunscpal.c,v 1.17 2005/02/27 00:27:02 perry Exp $	*/
 
 /*
  * Copyright (c) 2001 Matthew Fredette
@@ -76,7 +76,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sunscpal.c,v 1.18 2005/06/03 21:20:51 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sunscpal.c,v 1.17 2005/02/27 00:27:02 perry Exp $");
 
 #include "opt_ddb.h"
 
@@ -163,7 +163,7 @@ void	sunscpal_show_state(void);
 
 #endif	/* SUNSCPAL_DEBUG */
 
-static const char *
+static char *
 phase_names[8] = {
 	"DATA_OUT",
 	"DATA_IN",

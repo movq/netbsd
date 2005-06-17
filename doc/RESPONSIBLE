@@ -1,4 +1,4 @@
-#	$NetBSD: RESPONSIBLE,v 1.54 2005/06/12 12:30:25 wiz Exp $
+#	$NetBSD: RESPONSIBLE,v 1.48 2005/02/19 16:55:04 thorpej Exp $
 
 List of sections of the system, and who is responsible for them (or at
 least considered an expert on them).
@@ -30,6 +30,7 @@ make		christos, sjg
 named(bind)	itojun
 ntp		simonb, jonathan
 openssh		itojun, lukem
+sort		jdolecek
 pax/tar		christos
 ping		christos
 ping6		itojun
@@ -42,7 +43,6 @@ racoon		manu
 routed		christos
 sendmail	atatat
 sh		christos, dsl
-sort		jdolecek
 sysctl		atatat
 tcpdump		itojun
 texinfo		wiz
@@ -56,7 +56,6 @@ Userland Libraries:
 
 citrus		itojun
 curses		blymn, jdc
-edit		christos, jdolecek
 kerberos	lha, assar, joda
 openssl		thorpej, itojun
 pcap		itojun
@@ -64,13 +63,14 @@ pthread		nathanw
 resolver(bind)	lukem, itojun
 softfloat	bjh21
 tz		kleink
+edit		christos, jdolecek
 
 
 Userland Misc:
 
+[uw]tmp{,x}	christos
 root.cache	perry
 termcap		blymn, jdc
-[uw]tmp{,x}	christos
 
 
 X:
@@ -86,12 +86,11 @@ device support:
 acpi		mycroft, thorpej, kochi
 audio		augustss, mycroft, jmcneill
 cgd		elric
-firewire	jmc
 ide/atapi	bouyer, mycroft
 irda		augustss, kenh
 isdn		martin
+firewire	jmc
 mca		jdolecek
-net80211	dyoung
 podulebus	bjh21
 scsi		mycroft, bouyer, thorpej
 raid(hard)	ad
@@ -104,20 +103,15 @@ audio device drivers:
 
 auich		kent
 eap		pooka
-esa		jmcneill
-esl		jmcneill
 
 network device drivers:
 
-ath		dyoung
-atw		dyoung
 bge		fvdl, jonathan, thorpej
 gsip		thorpej
 mb86960		tsutsui
-rtw		dyoung
 seeq8005	bjh21
-ti		bouyer
 tl		bouyer
+ti		bouyer
 
 scsi device drivers:
 
@@ -157,15 +151,14 @@ kern/compat:
 linux-alpha	erh
 linux-i386	fvdl, jdolecek
 linux-m68k	itohy
-linux-mips	manu
 linux-powerpc	manu
+linux-mips	manu
 
 networking:
 
-general net	thorpej, matt, mycroft
 ipf		darrenr, martti
 kame/ipv6	itojun
-pf		itojun, peter, yamt
+general net	thorpej, matt, mycroft
 ppp(async)	christos
 ppp(sync)	martin
 
@@ -221,7 +214,7 @@ sun2		fredette
 sun3		nathanw, jeremy
 vax		ragge
 x68k		nsmrtks
-xen		cl, bouyer
+xen		cl
 
 
 MD Misc:
@@ -235,3 +228,4 @@ Build Tools	lukem
 Man Pages	wiz
 Release Tools	lukem
 Standards Guru	kleink
+i386 pkg ISOs	hubertf

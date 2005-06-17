@@ -125,7 +125,6 @@
 #include <openssl/krb5_asn.h>
 #endif
 #include <openssl/md5.h>
-#include <openssl/fips.h>
 
 static SSL_METHOD *ssl3_get_server_method(int ver);
 static int ssl3_get_client_hello(SSL *s);
@@ -956,8 +955,7 @@ static int ssl3_send_server_hello(SSL *s)
 		p=s->s3->server_random;
 		Time=time(NULL);			/* Time */
 		l2n(Time,p);
-		if(RAND_pseudo_bytes(p,SSL3_RANDOM_SIZE-4) <= 0)
-			return -1;
+		RAND_pseudo_bytes(p,SSL3_RANDOM_SIZE-sizeof(Time));
 		/* Do the message type and length last */
 		d=p= &(buf[4]);
 
@@ -1213,8 +1211,6 @@ static int ssl3_send_server_key_exchange(SSL *s)
 				j=0;
 				for (num=2; num > 0; num--)
 					{
-					EVP_MD_CTX_set_flags(&md_ctx,
-						EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
 					EVP_DigestInit_ex(&md_ctx,(num == 2)
 						?s->ctx->md5:s->ctx->sha1, NULL);
 					EVP_DigestUpdate(&md_ctx,&(s->s3->client_random[0]),SSL3_RANDOM_SIZE);
@@ -1495,8 +1491,7 @@ static int ssl3_get_client_key_exchange(SSL *s)
 			i = SSL_MAX_MASTER_KEY_LENGTH;
 			p[0] = s->client_version >> 8;
 			p[1] = s->client_version & 0xff;
-			if(RAND_pseudo_bytes(p+2, i-2) <= 0)  /* should be RAND_bytes, but we cannot work around a failure */
-				goto err;
+			RAND_pseudo_bytes(p+2, i-2); /* should be RAND_bytes, but we cannot work around a failure */
 			}
 	
 		s->session->master_key_length=
@@ -1594,7 +1589,7 @@ static int ssl3_get_client_key_exchange(SSL *s)
 		n2s(p,i);
 		enc_ticket.length = i;
 
-		if (n < (long)enc_ticket.length + 6)
+		if (n < enc_ticket.length + 6)
 			{
 			SSLerr(SSL_F_SSL3_GET_CLIENT_KEY_EXCHANGE,
 				SSL_R_DATA_LENGTH_TOO_LONG);
@@ -1607,7 +1602,7 @@ static int ssl3_get_client_key_exchange(SSL *s)
 		n2s(p,i);
 		authenticator.length = i;
 
-		if (n < (long)(enc_ticket.length + authenticator.length + 6))
+		if (n < enc_ticket.length + authenticator.length + 6)
 			{
 			SSLerr(SSL_F_SSL3_GET_CLIENT_KEY_EXCHANGE,
 				SSL_R_DATA_LENGTH_TOO_LONG);
@@ -1632,8 +1627,8 @@ static int ssl3_get_client_key_exchange(SSL *s)
 			goto err;
 			}
 
-		if (n != (long)(enc_ticket.length + authenticator.length +
-						enc_pms.length + 6))
+		if (n != enc_ticket.length + authenticator.length +
+						enc_pms.length + 6)
 			{
 			SSLerr(SSL_F_SSL3_GET_CLIENT_KEY_EXCHANGE,
 				SSL_R_DATA_LENGTH_TOO_LONG);

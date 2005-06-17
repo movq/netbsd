@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.121 2005/06/12 00:24:32 matt Exp $	*/
+/*	$NetBSD: vm_machdep.c,v 1.118 2004/09/17 14:11:21 skrll Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986 The Regents of the University of California.
@@ -80,13 +80,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.121 2005/06/12 00:24:32 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.118 2004/09/17 14:11:21 skrll Exp $");
 
 #include "opt_user_ldt.h"
 #include "opt_largepages.h"
 #include "opt_mtrr.h"
 #include "opt_noredzone.h"
-#include "opt_execfmt.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -266,8 +265,6 @@ cpu_lwp_free(struct lwp *l, int proc)
 #endif
 }
 
-#if defined(EXEC_AOUT) || defined(EXEC_COFF) || defined(EXEC_ECOFF) || \
-    defined(EXEC_MACHO) || defined(LKM)
 /*
  * Dump the machine specific segment at the start of a core dump.
  */
@@ -277,20 +274,17 @@ struct md_core {
 };
 
 int
-cpu_coredump(struct lwp *l, void *iocookie, struct core *chdr)
+cpu_coredump(struct lwp *l, struct vnode *vp, struct ucred *cred,
+    struct core *chdr)
 {
 	struct md_core md_core;
 	struct coreseg cseg;
 	int error;
 
-	if (iocookie == NULL) {
-		CORE_SETMAGIC(*chdr, COREMAGIC, MID_MACHINE, 0);
-		chdr->c_hdrsize = ALIGN(sizeof(*chdr));
-		chdr->c_seghdrsize = ALIGN(sizeof(cseg));
-		chdr->c_cpusize = sizeof(md_core);
-		chdr->c_nseg++;
-		return 0;
-	}
+	CORE_SETMAGIC(*chdr, COREMAGIC, MID_MACHINE, 0);
+	chdr->c_hdrsize = ALIGN(sizeof(*chdr));
+	chdr->c_seghdrsize = ALIGN(sizeof(cseg));
+	chdr->c_cpusize = sizeof(md_core);
 
 	/* Save integer registers. */
 	error = process_read_regs(l, &md_core.intreg);
@@ -306,15 +300,21 @@ cpu_coredump(struct lwp *l, void *iocookie, struct core *chdr)
 	cseg.c_addr = 0;
 	cseg.c_size = chdr->c_cpusize;
 
-	error = coredump_write(iocookie, UIO_SYSSPACE, &cseg,
-	    chdr->c_seghdrsize);
+	error = vn_rdwr(UIO_WRITE, vp, (caddr_t)&cseg, chdr->c_seghdrsize,
+	    (off_t)chdr->c_hdrsize, UIO_SYSSPACE, IO_NODELOCKED|IO_UNIT, cred,
+	    NULL, NULL);
 	if (error)
 		return error;
 
-	return coredump_write(iocookie, UIO_SYSSPACE,
-	    &md_core, sizeof(md_core));
+	error = vn_rdwr(UIO_WRITE, vp, (caddr_t)&md_core, sizeof(md_core),
+	    (off_t)(chdr->c_hdrsize + chdr->c_seghdrsize), UIO_SYSSPACE,
+	    IO_NODELOCKED|IO_UNIT, cred, NULL, NULL);
+	if (error)
+		return error;
+
+	chdr->c_nseg++;
+	return 0;
 }
-#endif
 
 #ifndef NOREDZONE
 /*
@@ -358,7 +358,7 @@ vmapbuf(struct buf *bp, vsize_t len)
 	faddr = trunc_page((vaddr_t)(bp->b_saveaddr = bp->b_data));
 	off = (vaddr_t)bp->b_data - faddr;
 	len = round_page(off + len);
-	taddr = uvm_km_alloc(phys_map, len, 0, UVM_KMF_VAONLY|UVM_KMF_WAITVA);
+	taddr= uvm_km_valloc_wait(phys_map, len);
 	bp->b_data = (caddr_t)(taddr + off);
 	/*
 	 * The region is locked, so we expect that pmap_pte() will return
@@ -398,7 +398,7 @@ vunmapbuf(struct buf *bp, vsize_t len)
 	len = round_page(off + len);
 	pmap_kremove(addr, len);
 	pmap_update(pmap_kernel());
-	uvm_km_free(phys_map, addr, len, UVM_KMF_VAONLY);
+	uvm_km_free_wakeup(phys_map, addr, len);
 	bp->b_data = bp->b_saveaddr;
 	bp->b_saveaddr = 0;
 }

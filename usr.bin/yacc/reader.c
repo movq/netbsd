@@ -1,4 +1,4 @@
-/*	$NetBSD: reader.c,v 1.14 2005/04/17 17:16:37 christos Exp $	*/
+/*	$NetBSD: reader.c,v 1.13 2003/08/07 11:17:54 agc Exp $	*/
 
 /*
  * Copyright (c) 1989 The Regents of the University of California.
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)reader.c	5.7 (Berkeley) 1/20/91";
 #else
-__RCSID("$NetBSD: reader.c,v 1.14 2005/04/17 17:16:37 christos Exp $");
+__RCSID("$NetBSD: reader.c,v 1.13 2003/08/07 11:17:54 agc Exp $");
 #endif
 #endif /* not lint */
 
@@ -291,7 +291,7 @@ nextc()
 int
 keyword()
 {
-    unsigned char c;
+    int c;
     char *t_cptr = cptr;
 
     c = *++cptr;

@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_sysctl.c,v 1.182 2005/06/09 02:19:59 atatat Exp $	*/
+/*	$NetBSD: kern_sysctl.c,v 1.179.2.1 2005/08/28 09:55:17 tron Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -75,7 +75,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_sysctl.c,v 1.182 2005/06/09 02:19:59 atatat Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_sysctl.c,v 1.179.2.1 2005/08/28 09:55:17 tron Exp $");
 
 #include "opt_defcorename.h"
 #include "opt_insecure.h"
@@ -619,7 +619,7 @@ sysctl_query(SYSCTLFN_ARGS)
 	 * if the request specifies a version, check it
 	 */
 	if (qnode.sysctl_ver != 0) {
-		enode = __UNCONST(rnode); /* XXXUNCONST discard const */
+		enode = (struct sysctlnode *)rnode; /* discard const */
 		if (qnode.sysctl_ver != enode->sysctl_ver &&
 		    qnode.sysctl_ver != sysctl_rootof(enode)->sysctl_ver)
 			return (EINVAL);
@@ -920,35 +920,27 @@ sysctl_create(SYSCTLFN_RWARGS)
 				return (EINVAL);
 			}
 			else {
-				char *vp, *e;
+				char v[PAGE_SIZE], *e;
 				size_t s;
 
 				/*
 				 * we want a rough idea of what the
 				 * size is now
 				 */
-				vp = malloc(PAGE_SIZE, M_SYSCTLDATA,
-					     M_WAITOK|M_CANFAIL);
-				if (vp == NULL)
-					return (ENOMEM);
 				e = nnode.sysctl_data;
 				do {
-					error = copyinstr(e, vp, PAGE_SIZE, &s);
+					error = copyinstr(e, &v[0], sizeof(v),
+							  &s);
 					if (error) {
-						if (error != ENAMETOOLONG) {
-							free(vp, M_SYSCTLDATA);
+						if (error != ENAMETOOLONG)
 							return (error);
-						}
 						e += PAGE_SIZE;
 						if ((e - 32 * PAGE_SIZE) >
-						    (char*)nnode.sysctl_data) {
-							free(vp, M_SYSCTLDATA);
+						    (char*)nnode.sysctl_data)
 							return (ERANGE);
-						}
 					}
 				} while (error != 0);
 				sz = s + (e - (char*)nnode.sysctl_data);
-				free(vp, M_SYSCTLDATA);
 			}
 		}
 		break;
@@ -1326,8 +1318,7 @@ sysctl_destroy(SYSCTLFN_RWARGS)
 	}
 	if (node->sysctl_flags & CTLFLAG_OWNDESC) {
 		if (node->sysctl_desc != NULL)
-			/*XXXUNCONST*/
-			FREE(__UNCONST(node->sysctl_desc), M_SYSCTLDATA);
+			FREE(node->sysctl_desc, M_SYSCTLDATA);
 		node->sysctl_desc = NULL;
 	}
 
@@ -1612,7 +1603,7 @@ int
 sysctl_describe(SYSCTLFN_ARGS)
 {
 	struct sysctldesc *d;
-	char bf[1024];
+	char buf[1024];
 	size_t sz, left, tot;
 	int i, error, v = -1;
 	struct sysctlnode *node;
@@ -1632,7 +1623,7 @@ sysctl_describe(SYSCTLFN_ARGS)
 	 * get ready...
 	 */
 	error = 0;
-	d = (void*)bf;
+	d = (void*)&buf[0];
 	tot = 0;
 	node = rnode->sysctl_child;
 	left = *oldlenp;
@@ -1736,8 +1727,7 @@ sysctl_describe(SYSCTLFN_ARGS)
 			 */
 			if ((node->sysctl_flags & CTLFLAG_OWNDESC) &&
 			    node->sysctl_desc != NULL)
-				/*XXXUNCONST*/
-				free(__UNCONST(node->sysctl_desc), M_SYSCTLDATA);
+				free((void*)node->sysctl_desc, M_SYSCTLDATA);
 			node->sysctl_desc = dnode.sysctl_desc;
 			node->sysctl_flags |=
 				(dnode.sysctl_flags & CTLFLAG_OWNDESC);
@@ -1770,15 +1760,15 @@ sysctl_describe(SYSCTLFN_ARGS)
 		/*
 		 * is this description "valid"?
 		 */
-		memset(bf, 0, sizeof(bf));
+		memset(&buf[0], 0, sizeof(buf));
 		if (node[i].sysctl_desc == NULL)
 			sz = 1;
 		else if (copystr(node[i].sysctl_desc, &d->descr_str[0],
-				 sizeof(bf) - sizeof(*d), &sz) != 0) {
+				 sizeof(buf) - sizeof(*d), &sz) != 0) {
 			/*
 			 * erase possible partial description
 			 */
-			memset(bf, 0, sizeof(bf));
+			memset(&buf[0], 0, sizeof(buf));
 			sz = 1;
 		}
 
@@ -1794,7 +1784,7 @@ sysctl_describe(SYSCTLFN_ARGS)
 			if (error)
 				return (error);
 			left -= sz;
-			oldp = (void *)__sysc_desc_adv(oldp, d->descr_len);
+			oldp = (void*)__sysc_desc_adv(oldp, d->descr_len);
 		}
 		tot += sz;
 
@@ -2356,8 +2346,7 @@ sysctl_free(struct sysctlnode *rnode)
 				if (SYSCTL_FLAGS(node->sysctl_flags) &
 				    CTLFLAG_OWNDESC) {
 					if (node->sysctl_desc != NULL) {
-						/*XXXUNCONST*/
-						FREE(__UNCONST(node->sysctl_desc),
+						FREE(node->sysctl_desc,
 						     M_SYSCTLDATA);
 						node->sysctl_desc = NULL;
 					}
@@ -2527,16 +2516,26 @@ old_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 	   void *newp, size_t newlen, struct lwp *l)
 {
 	int error;
-	size_t savelen = *oldlenp;
+	size_t oldlen = 0;
+	size_t savelen;
+
+	if (oldlenp) {
+		oldlen = *oldlenp;
+	}
+	savelen = oldlen;
 
 	error = sysctl_lock(l, oldp, savelen);
 	if (error)
 		return (error);
-	error = sysctl_dispatch(name, namelen, oldp, oldlenp,
+	error = sysctl_dispatch(name, namelen, oldp, &oldlen,
 				newp, newlen, name, l, NULL);
 	sysctl_unlock(l);
-	if (error == 0 && oldp != NULL && savelen < *oldlenp)
+	if (error == 0 && oldp != NULL && savelen < oldlen)
 		error = ENOMEM;
+
+	if (oldlenp) {
+		*oldlenp = oldlen;
+	}
 
 	return (error);
 }

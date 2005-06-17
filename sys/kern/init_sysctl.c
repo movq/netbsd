@@ -1,4 +1,4 @@
-/*	$NetBSD: init_sysctl.c,v 1.45 2005/06/16 14:55:58 christos Exp $ */
+/*	$NetBSD: init_sysctl.c,v 1.36.2.6 2005/09/08 21:06:30 tron Exp $ */
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -37,11 +37,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: init_sysctl.c,v 1.45 2005/06/16 14:55:58 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: init_sysctl.c,v 1.36.2.6 2005/09/08 21:06:30 tron Exp $");
 
 #include "opt_sysv.h"
 #include "opt_multiprocessor.h"
 #include "opt_posix.h"
+#include "opt_verified_exec.h"
 #include "pty.h"
 #include "rnd.h"
 
@@ -141,7 +142,6 @@ static int sysctl_kern_file2(SYSCTLFN_PROTO);
 #ifdef VERIFIED_EXEC
 static int sysctl_kern_veriexec(SYSCTLFN_PROTO);
 #endif
-static int sysctl_kern_cpid(SYSCTLFN_PROTO);
 static int sysctl_doeproc(SYSCTLFN_PROTO);
 static int sysctl_kern_proc_args(SYSCTLFN_PROTO);
 static int sysctl_hw_usermem(SYSCTLFN_PROTO);
@@ -378,7 +378,7 @@ SYSCTL_SETUP(sysctl_kern_setup, "sysctl kern subtree setup")
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_IMMEDIATE,
 		       CTLTYPE_INT, "saved_ids",
-		       SYSCTL_DESCR("Whether POSIX saved set-group/user ID is "
+		       SYSCTL_DESCR("Whether saved set-group/user ID is "
 				    "available"), NULL,
 #ifdef _POSIX_SAVED_IDS
 		       1,
@@ -767,12 +767,6 @@ SYSCTL_SETUP(sysctl_kern_setup, "sysctl kern subtree setup")
 		       NULL, 0, NULL, 0,
 		       CTL_KERN, KERN_VERIEXEC, VERIEXEC_COUNT, CTL_EOL);
 #endif /* VERIFIED_EXEC */
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT,
-		       CTLTYPE_STRUCT, "cp_id",
-		       SYSCTL_DESCR("Mapping of CPU number to CPU id"),
-		       sysctl_kern_cpid, 0, NULL, 0,
-		       CTL_KERN, KERN_CP_ID, CTL_EOL);
 }
 
 SYSCTL_SETUP(sysctl_kern_proc_setup,
@@ -984,8 +978,7 @@ SYSCTL_SETUP(sysctl_debug_setup, "sysctl debug subtree setup")
 		sysctl_createv(clog, 0, NULL, NULL,
 			       CTLFLAG_PERMANENT|CTLFLAG_HIDDEN,
 			       CTLTYPE_STRING, "name", NULL,
-			       /*XXXUNCONST*/
-			       NULL, 0, __UNCONST(cdp->debugname), 0,
+			       NULL, 0, cdp->debugname, 0,
 			       CTL_DEBUG, i, CTL_DEBUG_NAME, CTL_EOL);
 		sysctl_createv(clog, 0, NULL, NULL,
 			       CTLFLAG_PERMANENT|CTLFLAG_HIDDEN,
@@ -1542,7 +1535,7 @@ sysctl_kern_sysvipc(SYSCTLFN_ARGS)
 	struct shm_sysctl_info *shmsi = NULL;
 #endif
 	size_t infosize, dssize, tsize, buflen;
-	void *bf = NULL;
+	void *buf = NULL;
 	char *start;
 	int32_t nds;
 	int i, error, ret;
@@ -1603,25 +1596,25 @@ sysctl_kern_sysvipc(SYSCTLFN_ARGS)
 		*sizep = 0;
 		return (ENOMEM);
 	}
-	bf = malloc(min(tsize, buflen), M_TEMP, M_WAITOK);
-	memset(bf, 0, min(tsize, buflen));
+	buf = malloc(min(tsize, buflen), M_TEMP, M_WAITOK);
+	memset(buf, 0, min(tsize, buflen));
 
 	switch (*name) {
 #ifdef SYSVMSG
 	case KERN_SYSVIPC_MSG_INFO:
-		msgsi = (struct msg_sysctl_info *)bf;
+		msgsi = (struct msg_sysctl_info *)buf;
 		msgsi->msginfo = msginfo;
 		break;
 #endif
 #ifdef SYSVSEM
 	case KERN_SYSVIPC_SEM_INFO:
-		semsi = (struct sem_sysctl_info *)bf;
+		semsi = (struct sem_sysctl_info *)buf;
 		semsi->seminfo = seminfo;
 		break;
 #endif
 #ifdef SYSVSHM
 	case KERN_SYSVIPC_SHM_INFO:
-		shmsi = (struct shm_sysctl_info *)bf;
+		shmsi = (struct shm_sysctl_info *)buf;
 		shmsi->shminfo = shminfo;
 		break;
 #endif
@@ -1657,12 +1650,12 @@ sysctl_kern_sysvipc(SYSCTLFN_ARGS)
 		}
 	}
 	*sizep -= buflen;
-	error = copyout(bf, start, *sizep);
+	error = copyout(buf, start, *sizep);
 	/* If copyout succeeded, use return code set earlier. */
 	if (error == 0)
 		error = ret;
-	if (bf)
-		free(bf, M_TEMP);
+	if (buf)
+		free(buf, M_TEMP);
 	return (error);
 }
 
@@ -1682,19 +1675,19 @@ static int
 sysctl_kern_maxptys(SYSCTLFN_ARGS)
 {
 	int pty_maxptys(int, int);		/* defined in kern/tty_pty.c */
-	int error, xmax;
+	int error, max;
 	struct sysctlnode node;
 
 	/* get current value of maxptys */
-	xmax = pty_maxptys(0, 0);
+	max = pty_maxptys(0, 0);
 
 	node = *rnode;
-	node.sysctl_data = &xmax;
+	node.sysctl_data = &max;
 	error = sysctl_lookup(SYSCTLFN_CALL(&node));
 	if (error || newp == NULL)
 		return (error);
 
-	if (xmax != pty_maxptys(xmax, 1))
+	if (max != pty_maxptys(max, 1))
 		return (EINVAL);
 
 	return (0);
@@ -2443,101 +2436,6 @@ sysctl_kern_veriexec(SYSCTLFN_ARGS)
 	return (error);
 }
 #endif /* VERIFIED_EXEC */
-
-/*
- * sysctl helper routine for kern.cp_id node.  maps cpus to their
- * cpuids.
- */
-static int
-sysctl_kern_cpid(SYSCTLFN_ARGS)
-{
-	struct sysctlnode node = *rnode;
-
-#ifndef MULTIPROCESSOR
-	u_int64_t id;
-
-	if (namelen == 1) {
-		if (name[0] != 0)
-			return (ENOENT);
-		/*
-		 * you're allowed to ask for the zero'th processor
-		 */
-		name++;
-		namelen--;
-	}
-	node.sysctl_data = &id;
-	node.sysctl_size = sizeof(id);
-	id = cpu_number();
-	return (sysctl_lookup(SYSCTLFN_CALL(&node)));
-
-#else /* MULTIPROCESSOR */
-	u_int64_t *cp_id = NULL;
-	int error, n = sysctl_ncpus();
-	struct cpu_info *ci;
-	CPU_INFO_ITERATOR cii;
-
-	/*
-	 * if you specifically pass a buffer that is the size of a single cpuid
-	 * sum, or if you are probing for the size, you get the "sum"
-	 * of cp_time (and the size thereof) across all processors.
-	 *
-	 * alternately, you can pass an additional mib number and get
-	 * cp_time for that particular processor.
-	 */
-	switch (namelen) {
-	case 0:
-		node.sysctl_size = n * sizeof(u_int64_t);
-		n = -2; /* ALL */
-		break;
-	case 1:
-		if (name[0] < 0 || name[0] >= n)
-			return (ENOENT); /* ENOSUCHPROCESSOR */
-		node.sysctl_size = sizeof(u_int64_t);
-		n = name[0];
-		/*
-		 * adjust these so that sysctl_lookup() will be happy
-		 */
-		name++;
-		namelen--;
-		break;
-	default:
-		return (EINVAL);
-	}
-
-	cp_id = malloc(node.sysctl_size, M_TEMP, M_WAITOK|M_CANFAIL);
-	if (cp_id == NULL)
-		return (ENOMEM);
-	node.sysctl_data = cp_id;
-	memset(cp_id, 0, node.sysctl_size);
-
-	for (CPU_INFO_FOREACH(cii, ci)) {
-		if (n <= 0)
-			cp_id[0] = ci->ci_cpuid;
-		/*
-		 * if a specific processor was requested and we just
-		 * did it, we're done here
-		 */
-		if (n == 0)
-			break;
-		/*
-		 * if doing "all", skip to next cp_id slot for next processor
-		 */
-		if (n == -2)
-			cp_id++;
-		/*
-		 * if we're doing a specific processor, we're one
-		 * processor closer
-		 */
-		if (n > 0)
-			n--;
-	}
-
-	error = sysctl_lookup(SYSCTLFN_CALL(&node));
-	free(node.sysctl_data, M_TEMP);
-	return (error);
-
-#endif /* MULTIPROCESSOR */
-}
 
 /*
  * sysctl helper routine for hw.usermem and hw.usermem64.  values are

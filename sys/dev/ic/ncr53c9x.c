@@ -1,4 +1,4 @@
-/*	$NetBSD: ncr53c9x.c,v 1.115 2005/05/30 04:43:47 christos Exp $	*/
+/*	$NetBSD: ncr53c9x.c,v 1.114 2005/02/27 00:27:02 perry Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2002 The NetBSD Foundation, Inc.
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ncr53c9x.c,v 1.115 2005/05/30 04:43:47 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ncr53c9x.c,v 1.114 2005/02/27 00:27:02 perry Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -1351,15 +1351,15 @@ static int
 ncr53c9x_rdfifo(struct ncr53c9x_softc *sc, int how)
 {
 	int i, n;
-	u_char *ibuf;
+	u_char *buf;
 
 	switch(how) {
 	case NCR_RDFIFO_START:
-		ibuf = sc->sc_imess;
+		buf = sc->sc_imess;
 		sc->sc_imlen = 0;
 		break;
 	case NCR_RDFIFO_CONTINUE:
-		ibuf = sc->sc_imess + sc->sc_imlen;
+		buf = sc->sc_imess + sc->sc_imlen;
 		break;
 	default:
 		panic("ncr53c9x_rdfifo: bad flag");
@@ -1376,12 +1376,12 @@ ncr53c9x_rdfifo(struct ncr53c9x_softc *sc, int how)
 		n *= 2;
 
 		for (i = 0; i < n; i++)
-			ibuf[i] = NCR_READ_REG(sc, NCR_FIFO);
+			buf[i] = NCR_READ_REG(sc, NCR_FIFO);
 
 		if (sc->sc_espstat2 & NCRFAS_STAT2_ISHUTTLE) {
 
 			NCR_WRITE_REG(sc, NCR_FIFO, 0);
-			ibuf[i++] = NCR_READ_REG(sc, NCR_FIFO);
+			buf[i++] = NCR_READ_REG(sc, NCR_FIFO);
 
 			NCR_READ_REG(sc, NCR_FIFO);
 
@@ -1389,7 +1389,7 @@ ncr53c9x_rdfifo(struct ncr53c9x_softc *sc, int how)
 		}
 	} else {
 		for (i = 0; i < n; i++)
-			ibuf[i] = NCR_READ_REG(sc, NCR_FIFO);
+			buf[i] = NCR_READ_REG(sc, NCR_FIFO);
 	}
 
 	sc->sc_imlen += i;

@@ -1,4 +1,4 @@
-/*	$NetBSD: machines.c,v 1.27 2005/06/12 20:25:26 dyoung Exp $	*/
+/*	$NetBSD: machines.c,v 1.25 2004/08/15 22:00:12 dsl Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -42,7 +42,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(__lint)
-__RCSID("$NetBSD: machines.c,v 1.27 2005/06/12 20:25:26 dyoung Exp $");
+__RCSID("$NetBSD: machines.c,v 1.25 2004/08/15 22:00:12 dsl Exp $");
 #endif	/* !__lint */
 
 #include <sys/types.h>
@@ -56,10 +56,10 @@ struct ib_mach machines[] = {
 		IB_KEYMAP | IB_PASSWORD | IB_TIMEOUT },
 	{ "amiga",	amiga_setboot,	no_clearboot,
 		IB_STAGE1START | IB_STAGE2START | IB_COMMAND },
+#if 0
 	{ "hp300",	hp300_setboot,	no_clearboot,
 		IB_APPEND },
-	{ "hp700",	hp700_setboot,	hp700_clearboot,
-		0 },
+#endif
 	{ "i386",	i386_setboot,	no_clearboot,
 		IB_RESETVIDEO | IB_CONSOLE | IB_CONSPEED | IB_CONSADDR |
 		IB_KEYMAP | IB_PASSWORD | IB_TIMEOUT },

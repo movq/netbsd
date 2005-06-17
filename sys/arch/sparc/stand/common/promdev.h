@@ -1,4 +1,4 @@
-/*	$NetBSD: promdev.h,v 1.10 2005/04/27 07:59:47 martin Exp $ */
+/*	$NetBSD: promdev.h,v 1.9.16.1 2005/04/28 11:05:50 tron Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.

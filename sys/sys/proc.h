@@ -1,4 +1,4 @@
-/*	$NetBSD: proc.h,v 1.201 2005/05/29 21:18:25 christos Exp $	*/
+/*	$NetBSD: proc.h,v 1.197.2.2 2005/10/04 14:16:42 tron Exp $	*/
 
 /*-
  * Copyright (c) 1986, 1989, 1991, 1993
@@ -128,9 +128,6 @@ struct emul {
 	int		(*e_fault)(struct proc *, vaddr_t, int, int);
 
 	vaddr_t		(*e_vm_default_addr)(struct proc *, vaddr_t, vsize_t);
-
-	/* Emulation-specific hook for userspace page faults */
-	int		(*e_usertrap)(struct lwp *, vaddr_t, void *);
 };
 
 /*
@@ -151,6 +148,7 @@ struct emul {
  *
  * Fields marked 'p:' are protected by the process's own p_lock.
  * Fields marked 'l:' are protected by the proclist_lock
+ * Fields marked 's:' are protected by the SCHED_LOCK.
  */
 struct proc {
 	LIST_ENTRY(proc) p_list;	/* List of all processes */
@@ -191,7 +189,7 @@ struct proc {
 #define	p_startzero	p_nlwps
 
 	int 		p_nlwps;	/* p: Number of LWPs */
-	int 		p_nrlwps;	/* p: Number of running LWPs */
+	int 		p_nrlwps;	/* s: Number of running LWPs */
 	int 		p_nzlwps;	/* p: Number of zombie LWPs */
 	int 		p_nlwpid;	/* p: Next LWP ID */
 
@@ -295,7 +293,6 @@ struct proc {
 #define	P_FSTRACE	0x00010000 /* Debugger process being traced by procfs */
 #define	P_NOCLDWAIT	0x00020000 /* No zombies if child dies */
 #define	P_32		0x00040000 /* 32-bit process (used on 64-bit kernels) */
-#define	P_CLDSIGIGN	0x00080000 /* Process is ignoring SIGCHLD */
 #define	P_INEXEC	0x00100000 /* Process is exec'ing and can't be traced */
 #define	P_SYSTRACE	0x00200000 /* Process system call tracing active */
 #define	P_CHTRACED	0x00400000 /* Child has been traced & reparented */
@@ -443,10 +440,10 @@ void	pgdelete(struct pgrp *);
 void	procinit(void);
 void	resetprocpriority(struct proc *);
 void	suspendsched(void);
-int	ltsleep(__volatile const void *, int, const char *, int,
+int	ltsleep(const void *, int, const char *, int,
 	    __volatile struct simplelock *);
-void	wakeup(__volatile const void *);
-void	wakeup_one(__volatile const void *);
+void	wakeup(const void *);
+void	wakeup_one(const void *);
 void	exit1(struct lwp *, int);
 int	find_stopped_child(struct proc *, pid_t, int, struct proc **);
 struct proc *proc_alloc(void);

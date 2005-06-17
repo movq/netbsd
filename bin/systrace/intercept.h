@@ -1,4 +1,4 @@
-/*	$NetBSD: intercept.h,v 1.13 2003/08/25 09:12:45 cb Exp $	*/
+/*	$NetBSD: intercept.h,v 1.13.6.2 2005/07/02 18:50:06 tron Exp $	*/
 /*	$OpenBSD: intercept.h,v 1.11 2002/08/04 04:15:50 provos Exp $	*/
 /*
  * Copyright 2002 Niels Provos <provos@citi.umich.edu>

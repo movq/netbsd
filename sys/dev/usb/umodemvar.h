@@ -1,4 +1,4 @@
-/*	$NetBSD: umodemvar.h,v 1.2 2005/04/15 14:43:05 itohy Exp $	*/
+/*	$NetBSD: umodemvar.h,v 1.2.2.3 2005/04/17 10:29:49 tron Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/* $NetBSD: vfs_getcwd.c,v 1.27 2005/06/05 23:47:48 thorpej Exp $ */
+/* $NetBSD: vfs_getcwd.c,v 1.26 2004/09/17 14:11:25 skrll Exp $ */
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_getcwd.c,v 1.27 2005/06/05 23:47:48 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_getcwd.c,v 1.26 2004/09/17 14:11:25 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -56,6 +56,13 @@ __KERNEL_RCSID(0, "$NetBSD: vfs_getcwd.c,v 1.27 2005/06/05 23:47:48 thorpej Exp 
 
 #include <sys/sa.h>
 #include <sys/syscallargs.h>
+
+static int
+getcwd_scandir(struct vnode **, struct vnode **,
+    char **, char *, struct proc *);
+static int
+getcwd_getcache(struct vnode **, struct vnode **,
+    char **, char *);
 
 #define DIRENT_MINSIZE (sizeof(struct dirent) - (MAXNAMLEN + 1) + 4)
 
@@ -95,8 +102,12 @@ __KERNEL_RCSID(0, "$NetBSD: vfs_getcwd.c,v 1.27 2005/06/05 23:47:48 thorpej Exp 
  * On exit, *uvpp is either NULL or is a locked vnode reference.
  */
 static int
-getcwd_scandir(struct vnode **lvpp, struct vnode **uvpp, char **bpp,
-    char *bufp, struct proc *p)
+getcwd_scandir(lvpp, uvpp, bpp, bufp, p)
+	struct vnode **lvpp;
+	struct vnode **uvpp;
+	char **bpp;
+	char *bufp;
+	struct proc *p;
 {
 	int     error = 0;
 	int     eofflag;
@@ -293,8 +304,10 @@ out:
  */
 
 static int
-getcwd_getcache(struct vnode **lvpp, struct vnode **uvpp, char **bpp,
-    char *bufp)
+getcwd_getcache(lvpp, uvpp, bpp, bufp)
+	struct vnode **lvpp, **uvpp;
+	char **bpp;
+	char *bufp;
 {
 	struct vnode *lvp, *uvp = NULL;
 	char *obp = *bpp;
@@ -354,8 +367,14 @@ getcwd_getcache(struct vnode **lvpp, struct vnode **uvpp, char **bpp,
  */
 
 int
-getcwd_common(struct vnode *lvp, struct vnode *rvp, char **bpp, char *bufp,
-    int limit, int flags, struct proc *p)
+getcwd_common(lvp, rvp, bpp, bufp, limit, flags, p)
+	struct vnode *lvp;
+	struct vnode *rvp;
+	char **bpp;
+	char *bufp;
+	int limit;
+	int flags;
+	struct proc *p;
 {
 	struct cwdinfo *cwdi = p->p_cwdi;
 	struct vnode *uvp = NULL;
@@ -484,7 +503,10 @@ out:
  * chroot() actually means something.
  */
 int
-vn_isunder(struct vnode *lvp, struct vnode *rvp, struct proc *p)
+vn_isunder(lvp, rvp, p)
+	struct vnode *lvp;
+	struct vnode *rvp;
+	struct proc *p;
 {
 	int error;
 
@@ -504,7 +526,9 @@ vn_isunder(struct vnode *lvp, struct vnode *rvp, struct proc *p)
  */
 
 int
-proc_isunder(struct proc *p1, struct proc *p2)
+proc_isunder(p1, p2)
+	struct proc *p1;
+	struct proc *p2;
 {
 	struct vnode *r1 = p1->p_cwdi->cwdi_rdir;
 	struct vnode *r2 = p2->p_cwdi->cwdi_rdir;
@@ -525,7 +549,10 @@ proc_isunder(struct proc *p1, struct proc *p2)
  */
 
 int
-sys___getcwd(struct lwp *l, void *v, register_t *retval)
+sys___getcwd(l, v, retval)
+	struct lwp *l;
+	void   *v;
+	register_t *retval;
 {
 	struct sys___getcwd_args /* {
 		syscallarg(char *) bufp;

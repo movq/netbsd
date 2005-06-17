@@ -1,4 +1,4 @@
-/*	$NetBSD: statfs.c,v 1.5 2005/06/12 05:21:28 lukem Exp $	*/
+/*	$NetBSD: statfs.c,v 1.2.2.1 2005/04/08 13:38:06 tron Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -35,12 +35,6 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-
-#include <sys/cdefs.h>
-#if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: statfs.c,v 1.5 2005/06/12 05:21:28 lukem Exp $");
-#endif /* LIBC_SCCS and not lint */
-
 #define __LIBC12_SOURCE__
 
 #include "namespace.h"
@@ -61,6 +55,8 @@ __warn_references(fhstatfs,
 
 __warn_references(getfsstat,
     "warning: reference to obsolete getfsstat(); use getvfsstat()")
+
+int _getfsstat(struct statfs12 *, long, int);
 
 /*
  * Convert from a new statvfs to an old statfs structure.
@@ -166,7 +162,7 @@ fhstatfs(const fhandle_t *fh, struct statfs12 *ost)
 }
 
 int
-getfsstat(struct statfs12 *ost, long size, int flags)
+_getfsstat(struct statfs12 *ost, long size, int flags)
 {
 	struct statvfs *nst;
 	int ret, i;
@@ -187,4 +183,10 @@ done:
 	if (nst)
 		free(nst);
 	return ret;
+}
+
+int
+getfsstat(struct statfs12 *ost, long size, int flags)
+{
+	return _getfsstat(ost, size, flags);
 }

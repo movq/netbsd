@@ -1,4 +1,4 @@
-/*	$NetBSD: ar_subs.c,v 1.42 2005/05/22 17:41:50 christos Exp $	*/
+/*	$NetBSD: ar_subs.c,v 1.35 2005/01/23 06:19:03 jmc Exp $	*/
 
 /*-
  * Copyright (c) 1992 Keith Muller.
@@ -42,7 +42,7 @@
 #if 0
 static char sccsid[] = "@(#)ar_subs.c	8.2 (Berkeley) 4/18/94";
 #else
-__RCSID("$NetBSD: ar_subs.c,v 1.42 2005/05/22 17:41:50 christos Exp $");
+__RCSID("$NetBSD: ar_subs.c,v 1.35 2005/01/23 06:19:03 jmc Exp $");
 #endif
 #endif /* not lint */
 
@@ -62,13 +62,9 @@ __RCSID("$NetBSD: ar_subs.c,v 1.42 2005/05/22 17:41:50 christos Exp $");
 #include "pax.h"
 #include "extern.h"
 
-static int path_check(ARCHD *, int);
 static void wr_archive(ARCHD *, int is_app);
 static int get_arc(void);
 static int next_head(ARCHD *);
-#if !HAVE_NBTOOL_CONFIG_H
-static int fdochroot(int);
-#endif
 extern sigset_t s_mask;
 
 /*
@@ -79,81 +75,6 @@ extern sigset_t s_mask;
 static char hdbuf[BLKMULT];		/* space for archive header on read */
 u_long flcnt;				/* number of files processed */
 ARCHD archd;
-
-static char	cwdpath[MAXPATHLEN];	/* current working directory path */
-static size_t	cwdpathlen;		/* current working directory path len */
-
-int
-updatepath(void)
-{
-	if (getcwd(cwdpath, sizeof(cwdpath)) == NULL) {
-		syswarn(1, errno, "Cannot get working directory");
-		return -1;
-	}
-	cwdpathlen = strlen(cwdpath);
-	return 0;
-}
-
-int
-fdochdir(int fcwd)
-{
-	if (fchdir(fcwd) == -1) {
-		syswarn(1, errno, "Cannot chdir to `.'");
-		return -1;
-	}
-	return updatepath();
-}
-
-int
-dochdir(const char *name)
-{
-	if (chdir(name) == -1)
-		syswarn(1, errno, "Cannot chdir to `%s'", name);
-	return updatepath();
-}
-
-#if !HAVE_NBTOOL_CONFIG_H
-static int
-fdochroot(int fcwd)
-{
-	if (fchroot(fcwd) != 0) {
-		syswarn(1, errno, "Can't fchroot to \".\"");
-		return -1;
-	}
-	return updatepath();
-}
-#endif
-
-static int
-path_check(ARCHD *arcn, int level)
-{
-	char buf[MAXPATHLEN];
-	char *p;
-
-	if ((p = strrchr(arcn->name, '/')) == NULL)
-		return 0;
-	*p = '\0';
-
-	if (realpath(arcn->name, buf) == NULL) {
-		int error;
-		error = path_check(arcn, level + 1);
-		*p = '/';
-		if (error == 0)
-			return 0;
-		if (level == 0)
-			syswarn(1, 0, "Cannot resolve `%s'", arcn->name);
-		return -1;
-	}
-	if (strncmp(buf, cwdpath, cwdpathlen) != 0) {
-		*p = '/';
-		syswarn(1, 0, "Attempt to write file `%s' that resolves into "
-		    "`%s/%s' outside current working directory `%s' ignored",
-		    arcn->name, buf, p + 1, cwdpath);
-		return -1;
-	}
-	*p = '/';
-	return 0;
-}
 
 /*
  * list()
@@ -191,7 +112,8 @@ list(void)
 			 * we need to read, to get the real filename
 			 */
 			off_t cnt;
-			if (!(*frmt->rd_data)(arcn, -arcn->type, &cnt))
+			if (!(*frmt->rd_data)(arcn, arcn->type == PAX_GLF
+			    ? -1 : -2, &cnt))
 				(void)rd_skip(cnt + arcn->pad);
 			continue;
 		}
@@ -279,8 +201,10 @@ extract(void)
 
 	now = time((time_t *)NULL);
 #if !HAVE_NBTOOL_CONFIG_H
-	if (do_chroot)
-		(void)fdochroot(cwdfd);
+	if (do_chroot && fchroot(cwdfd) != 0) {
+		syswarn(1, errno, "Can't fchroot to \".\"");
+		return;
+	}
 #endif
 
 	/*
@@ -301,7 +225,8 @@ extract(void)
 			/*
 			 * we need to read, to get the real filename
 			 */
-			if (!(*frmt->rd_data)(arcn, -arcn->type, &cnt))
+			if (!(*frmt->rd_data)(arcn, arcn->type == PAX_GLF
+			    ? -1 : -2, &cnt))
 				(void)rd_skip(cnt + arcn->pad);
 			continue;
 		}
@@ -404,14 +329,9 @@ extract(void)
 		 */
 		if ((arcn->pat != NULL) && (arcn->pat->chdname != NULL) &&
 		    !to_stdout)
-			dochdir(arcn->pat->chdname);
-
-		if (secure && path_check(arcn, 0) != 0) {
-			(void)rd_skip(arcn->skip + arcn->pad);
-			continue;
-		}
-
-			
+			if (chdir(arcn->pat->chdname) != 0)
+				syswarn(1, errno, "Cannot chdir to %s",
+				    arcn->pat->chdname);
 		/*
 		 * all ok, extract this member based on type
 		 */
@@ -472,7 +392,9 @@ extract(void)
 		 * if required, chdir around.
 		 */
 		if ((arcn->pat != NULL) && (arcn->pat->chdname != NULL))
-			fdochdir(cwdfd);
+			if (fchdir(cwdfd) != 0)
+				syswarn(1, errno,
+				    "Can't fchdir to starting directory");
 	}
 
 	/*

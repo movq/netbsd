@@ -1,4 +1,4 @@
-/*	$NetBSD: session.c,v 1.41 2005/05/08 21:15:04 christos Exp $	*/
+/*	$NetBSD: session.c,v 1.39 2005/02/22 02:29:32 elric Exp $	*/
 /*
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
  *                    All rights reserved
@@ -34,8 +34,8 @@
  */
 
 #include "includes.h"
-RCSID("$OpenBSD: session.c,v 1.181 2004/12/23 17:35:48 markus Exp $");
-__RCSID("$NetBSD: session.c,v 1.41 2005/05/08 21:15:04 christos Exp $");
+RCSID("$OpenBSD: session.c,v 1.180 2004/07/28 09:40:29 markus Exp $");
+__RCSID("$NetBSD: session.c,v 1.39 2005/02/22 02:29:32 elric Exp $");
 
 #include "ssh.h"
 #include "ssh1.h"
@@ -244,10 +244,6 @@ do_authenticated1(Authctxt *authctxt)
 	u_int proto_len, data_len, dlen, compression_level = 0;
 
 	s = session_new();
-	if (s == NULL) {
-		error("no more sessions");
-		return;
-	}
 	s->authctxt = authctxt;
 	s->pw = authctxt->pw;
 
@@ -1337,20 +1333,7 @@ do_child(Session *s, const char *command)
 	if (!options.use_login) {
 		do_nologin(pw);
 		do_setusercontext(pw);
-		/*
-		 * PAM session modules in do_setusercontext may have
-		 * generated messages, so if this in an interactive
-		 * login then display them too.
-		 */
-		if (!check_quietlogin(s, command))
-			display_loginmsg();
 	}
-#ifdef USE_PAM
-	if (options.use_pam && !is_pam_session_open()) {
-		display_loginmsg();
-		exit(254);
-	}
-#endif
 
 	/*
 	 * Get the shell from the password data.  An empty shell field is

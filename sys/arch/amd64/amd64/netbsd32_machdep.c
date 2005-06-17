@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_machdep.c,v 1.15 2005/06/10 05:10:12 matt Exp $	*/
+/*	$NetBSD: netbsd32_machdep.c,v 1.11.10.1 2005/09/18 20:09:49 tron Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_machdep.c,v 1.15 2005/06/10 05:10:12 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_machdep.c,v 1.11.10.1 2005/09/18 20:09:49 tron Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_execfmt.h"
@@ -301,7 +301,7 @@ netbsd32_sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 	frame.sf_signum = sig;
 	frame.sf_sip = (uint32_t)(uintptr_t)&fp->sf_si;
 	frame.sf_ucp = (uint32_t)(uintptr_t)&fp->sf_uc;
-	netbsd32_si_to_si32(&frame.sf_si, (const siginfo_t *)&ksi->ksi_info);
+	netbsd32_si_to_si32(&frame.sf_si, (siginfo_t *)&ksi->ksi_info);
 	frame.sf_uc.uc_flags = _UC_SIGMASK;
 	frame.sf_uc.uc_sigmask = *mask;
 	frame.sf_uc.uc_link = 0;
@@ -419,20 +419,17 @@ struct md_core32 {
 };
 
 int
-cpu_coredump32(struct lwp *l, void *iocookie, struct core32 *chdr)
+cpu_coredump32(struct lwp *l, struct vnode *vp, struct ucred *cred,
+	     struct core32 *chdr)
 {
 	struct md_core32 md_core;
 	struct coreseg cseg;
 	int error;
 
-	if (iocookie == NULL) {
-		CORE_SETMAGIC(*chdr, COREMAGIC, MID_I386, 0);
-		chdr->c_hdrsize = ALIGN32(sizeof(*chdr));
-		chdr->c_seghdrsize = ALIGN32(sizeof(cseg));
-		chdr->c_cpusize = sizeof(md_core);
-		chdr->c_nseg++;
-		return 0;
-	}
+	CORE_SETMAGIC(*chdr, COREMAGIC, MID_I386, 0);
+	chdr->c_hdrsize = ALIGN32(sizeof(*chdr));
+	chdr->c_seghdrsize = ALIGN32(sizeof(cseg));
+	chdr->c_cpusize = sizeof(md_core);
 
 	/* Save integer registers. */
 	error = process_read_regs32(l, &md_core.intreg);
@@ -448,13 +445,20 @@ cpu_coredump32(struct lwp *l, void *iocookie, struct core32 *chdr)
 	cseg.c_addr = 0;
 	cseg.c_size = chdr->c_cpusize;
 
-	error = coredump_write(iocookie, UIO_SYSSPACE, &cseg,
-	    chdr->c_seghdrsize);
+	error = vn_rdwr(UIO_WRITE, vp, (caddr_t)&cseg, chdr->c_seghdrsize,
+	    (off_t)chdr->c_hdrsize, UIO_SYSSPACE, IO_NODELOCKED|IO_UNIT, cred,
+	    NULL, NULL);
 	if (error)
 		return error;
 
-	return coredump_write(iocookie, UIO_SYSSPACE, &md_core,
-	    sizeof(md_core));
+	error = vn_rdwr(UIO_WRITE, vp, (caddr_t)&md_core, sizeof(md_core),
+	    (off_t)(chdr->c_hdrsize + chdr->c_seghdrsize), UIO_SYSSPACE,
+	    IO_NODELOCKED|IO_UNIT, cred, NULL, NULL);
+	if (error)
+		return error;
+
+	chdr->c_nseg++;
+	return 0;
 }
 
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: pam_krb5.c,v 1.9 2005/04/19 03:38:47 lukem Exp $	*/
+/*	$NetBSD: pam_krb5.c,v 1.6.2.3 2005/07/11 11:29:04 tron Exp $	*/
 
 /*-
  * This pam_krb5 module contains code that is:
@@ -53,7 +53,7 @@
 #ifdef __FreeBSD__
 __FBSDID("$FreeBSD: src/lib/libpam/modules/pam_krb5/pam_krb5.c,v 1.22 2005/01/24 16:49:50 rwatson Exp $");
 #else
-__RCSID("$NetBSD: pam_krb5.c,v 1.9 2005/04/19 03:38:47 lukem Exp $");
+__RCSID("$NetBSD: pam_krb5.c,v 1.6.2.3 2005/07/11 11:29:04 tron Exp $");
 #endif
 
 #include <sys/types.h>

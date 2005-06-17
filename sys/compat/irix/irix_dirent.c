@@ -1,4 +1,4 @@
-/*	$NetBSD: irix_dirent.c,v 1.14 2005/04/19 19:00:25 christos Exp $ */
+/*	$NetBSD: irix_dirent.c,v 1.13.2.1 2005/10/01 10:39:27 tron Exp $ */
 
 /*-
  * Copyright (c) 1994, 2001 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: irix_dirent.c,v 1.14 2005/04/19 19:00:25 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: irix_dirent.c,v 1.13.2.1 2005/10/01 10:39:27 tron Exp $");
 
 #include <sys/types.h>
 #include <sys/signal.h>

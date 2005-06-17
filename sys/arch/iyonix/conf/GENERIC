@@ -1,4 +1,4 @@
-#	$NetBSD: GENERIC,v 1.10 2005/05/31 22:23:53 tron Exp $
+#	$NetBSD: GENERIC,v 1.8.4.5 2005/11/05 00:39:47 tron Exp $
 #
 #	GENERIC -- Generic kernel
 #
@@ -67,6 +67,7 @@ options 	INET		# IP + ICMP + TCP + UDP
 #options 	INET6		# IPV6
 #options 	IPSEC		# IP security
 #options 	IPSEC_ESP	# IP security (encryption part; define w/ IPSEC)
+#options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
 #options 	NS		# XNS
@@ -137,8 +138,8 @@ options 	USERCONF	# userconf(4) support
 # Development and Debugging options
 
 options 	PERFCTRS	# performance counters
-options 	DIAGNOSTIC	# internally consistency checks
-options 	DEBUG
+#options 	DIAGNOSTIC	# internally consistency checks
+#options 	DEBUG
 #options 	PMAP_DEBUG	# Enable pmap_debug_level code
 #options 	IPKDB		# remote kernel debugging
 #options 	VERBOSE_INIT_ARM # verbose bootstraping messages
@@ -488,6 +489,7 @@ com0	at obio? addr 0x900002f8 xint 1 # on-board UART
 # disk/mass storage pseudo-devices
 pseudo-device	md		1	# memory disk device (ramdisk)
 #pseudo-device	vnd		4	# disk-like interface to files
+#options 	VND_COMPRESSION		# compressed vnd(4)
 pseudo-device	fss		4	# file system snapshot device
 
 # network pseudo-devices

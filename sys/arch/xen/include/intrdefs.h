@@ -1,4 +1,4 @@
-/*	$NetBSD: intrdefs.h,v 1.2 2005/04/20 22:01:24 bouyer Exp $	*/
+/*	$NetBSD: intrdefs.h,v 1.2.2.3 2005/04/28 11:26:06 tron Exp $	*/
 /*	NetBSD intrdefs.h,v 1.3 2003/06/16 20:01:06 thorpej Exp 	*/
 
 #ifndef _XEN_INTRDEFS_H

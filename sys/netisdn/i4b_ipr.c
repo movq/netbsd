@@ -27,7 +27,7 @@
  *	i4b_ipr.c - isdn4bsd IP over raw HDLC ISDN network driver
  *	---------------------------------------------------------
  *
- *	$Id: i4b_ipr.c,v 1.18 2005/06/13 20:34:16 jmc Exp $
+ *	$Id: i4b_ipr.c,v 1.17 2005/02/26 22:39:49 perry Exp $
  *
  * $FreeBSD$
  *
@@ -59,7 +59,7 @@
  *---------------------------------------------------------------------------*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i4b_ipr.c,v 1.18 2005/06/13 20:34:16 jmc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i4b_ipr.c,v 1.17 2005/02/26 22:39:49 perry Exp $");
 
 #include "irip.h"
 #include "opt_irip.h"
@@ -818,16 +818,16 @@ ipr_connect(void *softc, void *cdp)
 
 	if(sc->sc_cdp->isdntxdelay > 0)
 	{
-		int xdelay;
+		int delay;
 
 		if (hz == 100) {
-			xdelay = sc->sc_cdp->isdntxdelay;	/* avoid any rounding */
+			delay = sc->sc_cdp->isdntxdelay;	/* avoid any rounding */
 		} else {
-			xdelay = sc->sc_cdp->isdntxdelay*hz;
-			xdelay /= 100;
+			delay = sc->sc_cdp->isdntxdelay*hz;
+			delay /= 100;
 		}
 
-		START_TIMER(sc->sc_callout, (TIMEOUT_FUNC_T)i4bipr_connect_startio, (void *)sc,  xdelay);
+		START_TIMER(sc->sc_callout, (TIMEOUT_FUNC_T)i4bipr_connect_startio, (void *)sc,  delay);
 	}
 	else
 	{

@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_state.h,v 1.3 2005/04/03 15:05:30 martti Exp $	*/
+/*	$NetBSD: ip_state.h,v 1.2.4.1 2005/04/04 18:25:05 tron Exp $	*/
 
 /*
  * Copyright (C) 1995-2001 by Darren Reed.

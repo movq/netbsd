@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.sys.mk,v 1.119 2005/06/04 12:17:45 lukem Exp $
+#	$NetBSD: bsd.sys.mk,v 1.115.2.2 2005/09/04 20:04:04 tron Exp $
 #
 # Build definitions used for NetBSD source tree builds.
 
@@ -16,9 +16,9 @@ CFLAGS+=	-Wall -Wstrict-prototypes -Wmissing-prototypes -Wpointer-arith
 # differently in traditional and ansi environments' which is the warning
 # we wanted, and now we don't get anymore.
 CFLAGS+=	-Wno-sign-compare -Wno-traditional
-.if !defined(HAVE_GCC3) || (${HAVE_GCC3} == "no")
+# XXX Delete -Wuninitialized by default for now -- the compiler doesn't
+# XXX always get it right.
 CFLAGS+=	-Wno-uninitialized
-.endif
 .endif
 .if ${WARNS} > 1
 CFLAGS+=	-Wreturn-type -Wswitch -Wshadow
@@ -26,7 +26,7 @@ CFLAGS+=	-Wreturn-type -Wswitch -Wshadow
 .if ${WARNS} > 2
 CFLAGS+=	-Wcast-qual -Wwrite-strings
 .endif
-.if ${WARNS} > 3 && ${MACHINE_ARCH} != "vax"
+.if ${WARNS} > 3
 CFLAGS+=	-std=c99
 .endif
 .endif
@@ -64,7 +64,12 @@ AFLAGS+=	${CPUFLAGS}
 HOST_CC?=	cc
 HOST_CFLAGS?=	-O
 HOST_COMPILE.c?=${HOST_CC} ${HOST_CFLAGS} ${HOST_CPPFLAGS} -c
+HOST_COMPILE.cc?=      ${HOST_CXX} ${HOST_CXXFLAGS} ${HOST_CPPFLAGS} -c
+.if defined(HOSTPROG_CXX) 
+HOST_LINK.c?=	${HOST_CXX} ${HOST_CXXFLAGS} ${HOST_CPPFLAGS} ${HOST_LDFLAGS}
+.else
 HOST_LINK.c?=	${HOST_CC} ${HOST_CFLAGS} ${HOST_CPPFLAGS} ${HOST_LDFLAGS}
+.endif
 
 HOST_CXX?=	c++
 HOST_CXXFLAGS?=	-O
@@ -105,7 +110,6 @@ TOOL_CTAGS?=		ctags
 TOOL_DB?=		db
 TOOL_EQN?=		eqn
 TOOL_FGEN?=		fgen
-TOOL_GENASSYM?=		genassym
 TOOL_GENCAT?=		gencat
 TOOL_GROFF?=		groff
 TOOL_HEXDUMP?=		hexdump
@@ -145,7 +149,7 @@ TOOL_UUDECODE?=		uudecode
 TOOL_VGRIND?=		vgrind -f
 TOOL_ZIC?=		zic
 
-.SUFFIXES:	.o .ln .lo .c ${YHEADER:D.h}
+.SUFFIXES:	.o .ln .lo .c .cc .cpp .cxx .C ${YHEADER:D.h}
 
 # C
 .c.o:
@@ -177,6 +181,12 @@ TOOL_ZIC?=		zic
 .c.lo:
 	${_MKTARGET_COMPILE}
 	${HOST_COMPILE.c} -o ${.TARGET}.o ${COPTS.${.IMPSRC:T}} ${CPUFLAGS.${.IMPSRC:T}} ${CPPFLAGS.${.IMPSRC:T}} ${.IMPSRC}
+	mv ${.TARGET}.o ${.TARGET}
+
+# C++
+.cc.lo .cpp.lo .cxx.lo .C.lo:
+	${_MKTARGET_COMPILE}
+	${HOST_COMPILE.cc} -o ${.TARGET}.o ${COPTS.${.IMPSRC:T}} ${CPUFLAGS.${.IMPSRC:T}} ${CPPFLAGS.${.IMPSRC:T}} ${.IMPSRC}
 	mv ${.TARGET}.o ${.TARGET}
 
 # Assembly

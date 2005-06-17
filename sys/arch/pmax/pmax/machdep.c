@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.211 2005/06/01 18:34:12 drochner Exp $	*/
+/*	$NetBSD: machdep.c,v 1.209 2005/01/11 08:05:14 simonb Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.211 2005/06/01 18:34:12 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.209 2005/01/11 08:05:14 simonb Exp $");
 
 #include "fs_mfs.h"
 #include "opt_ddb.h"
@@ -201,8 +201,7 @@ mach_init(argc, argv, code, cv, bim, bip)
 	u_int bim;
 	char *bip;
 {
-	char *cp;
-	const char *bootinfo_msg;
+	char *cp, *bootinfo_msg;
 	u_long first, last;
 	int i;
 	caddr_t kernend;
@@ -446,7 +445,7 @@ cpu_startup()
 	/*
 	 * Good {morning,afternoon,evening,night}.
 	 */
-	printf("%s%s", copyright, version);
+	printf(version);
 	printf("%s\n", cpu_model);
 	format_bytes(pbuf, sizeof(pbuf), ctob(physmem));
 	printf("total memory = %s\n", pbuf);

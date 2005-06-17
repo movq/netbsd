@@ -1,4 +1,4 @@
-/*	$NetBSD: aic7xxx.c,v 1.114 2005/05/30 04:43:46 christos Exp $	*/
+/*	$NetBSD: aic7xxx.c,v 1.112.2.2 2005/11/29 10:23:14 tron Exp $	*/
 
 /*
  * Core routines and tables shareable across OS platforms.
@@ -39,7 +39,7 @@
  * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGES.
  *
- * $Id: aic7xxx.c,v 1.114 2005/05/30 04:43:46 christos Exp $
+ * $Id: aic7xxx.c,v 1.112.2.2 2005/11/29 10:23:14 tron Exp $
  *
  * //depot/aic7xxx/aic7xxx/aic7xxx.c#112 $
  *
@@ -50,7 +50,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aic7xxx.c,v 1.114 2005/05/30 04:43:46 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aic7xxx.c,v 1.112.2.2 2005/11/29 10:23:14 tron Exp $");
 
 #include <dev/ic/aic7xxx_osm.h>
 #include <dev/ic/aic7xxx_inline.h>
@@ -60,7 +60,7 @@ __KERNEL_RCSID(0, "$NetBSD: aic7xxx.c,v 1.114 2005/05/30 04:43:46 christos Exp $
 struct ahc_softc_tailq ahc_tailq = TAILQ_HEAD_INITIALIZER(ahc_tailq);
 
 /***************************** Lookup Tables **********************************/
-const char *ahc_chip_names[] =
+char *ahc_chip_names[] =
 {
 	"NONE",
 	"aic7770",
@@ -83,7 +83,7 @@ const char *ahc_chip_names[] =
  */
 struct ahc_hard_error_entry {
         uint8_t errno;
-	const char *errmesg;
+	char *errmesg;
 };
 
 static struct ahc_hard_error_entry ahc_hard_errors[] = {
@@ -202,8 +202,7 @@ static void		ahc_handle_ign_wide_residue(struct ahc_softc *ahc,
 static void		ahc_reinitialize_dataptrs(struct ahc_softc *ahc);
 static void		ahc_handle_devreset(struct ahc_softc *ahc,
 					    struct ahc_devinfo *devinfo,
-					    cam_status status,
-					    const char *message,
+					    cam_status status, char *message,
 					    int verbose_level);
 #if AHC_TARGET_MODE
 static void		ahc_setup_target_msgin(struct ahc_softc *ahc,
@@ -685,7 +684,7 @@ ahc_handle_seqint(struct ahc_softc *ahc, u_int intstat)
 		 * loop.
 		 */
 		if (ahc->msg_type == MSG_TYPE_NONE) {
-			struct scb *scb1;
+			struct scb *scb;
 			u_int scb_index;
 			u_int bus_phase;
 
@@ -705,16 +704,16 @@ ahc_handle_seqint(struct ahc_softc *ahc, u_int intstat)
 			}
 
 			scb_index = ahc_inb(ahc, SCB_TAG);
-			scb1 = ahc_lookup_scb(ahc, scb_index);
+			scb = ahc_lookup_scb(ahc, scb_index);
 			if (devinfo.role == ROLE_INITIATOR) {
-				if (scb1 == NULL)
+				if (scb == NULL)
 					panic("HOST_MSG_LOOP with "
 					      "invalid SCB %x\n", scb_index);
 
 				if (bus_phase == P_MESGOUT)
 					ahc_setup_initiator_msgout(ahc,
 								   &devinfo,
-								   scb1);
+								   scb);
 				else {
 					ahc->msg_type =
 					    MSG_TYPE_INITIATOR_MSGIN;
@@ -731,7 +730,7 @@ ahc_handle_seqint(struct ahc_softc *ahc, u_int intstat)
 				else
 					ahc_setup_target_msgin(ahc,
 							       &devinfo,
-							       scb1);
+							       scb);
 			}
 #endif
 		}
@@ -789,16 +788,16 @@ ahc_handle_seqint(struct ahc_softc *ahc, u_int intstat)
 				ahc_outb(ahc, SXFRCTL1,
 					 ahc_inb(ahc, SXFRCTL1) & ~BITBUCKET);
 				if (wait == 0) {
-					struct	scb *scb1;
+					struct	scb *scb;
 					u_int	scb_index;
 
 					ahc_print_devinfo(ahc, &devinfo);
 					printf("Unable to clear parity error.  "
 					       "Resetting bus.\n");
 					scb_index = ahc_inb(ahc, SCB_TAG);
-					scb1 = ahc_lookup_scb(ahc, scb_index);
-					if (scb1 != NULL)
-						ahc_set_transaction_status(scb1,
+					scb = ahc_lookup_scb(ahc, scb_index);
+					if (scb != NULL)
+						ahc_set_transaction_status(scb,
 						    CAM_UNCOR_PARITY);
 					ahc_reset_channel(ahc, devinfo.channel,
 							  /*init reset*/TRUE);
@@ -3726,7 +3725,7 @@ ahc_reinitialize_dataptrs(struct ahc_softc *ahc)
  */
 static void
 ahc_handle_devreset(struct ahc_softc *ahc, struct ahc_devinfo *devinfo,
-		    cam_status status, const char *message, int verbose_level)
+		    cam_status status, char *message, int verbose_level)
 {
 #ifdef AHC_TARGET_MODE
 	struct ahc_tmode_tstate* tstate;
@@ -3965,7 +3964,7 @@ ahc_free(struct ahc_softc *ahc)
 #endif
 	if (ahc->seep_config != NULL)
 		free(ahc->seep_config, M_DEVBUF);
-#ifndef __FreeBSD__
+#if !defined(__FreeBSD__) && !defined(__NetBSD__)
 	free(ahc, M_DEVBUF);
 #endif
 	return;
@@ -4016,16 +4015,16 @@ ahc_reset(struct ahc_softc *ahc)
 	}
 	sxfrctl1_b = 0;
 	if ((ahc->chip & AHC_CHIPID_MASK) == AHC_AIC7770) {
-		u_int sblkctl1;
+		u_int sblkctl;
 
 		/*
 		 * Save channel B's settings in case this chip
 		 * is setup for TWIN channel operation.
 		 */
-		sblkctl1 = ahc_inb(ahc, SBLKCTL);
-		ahc_outb(ahc, SBLKCTL, sblkctl1 | SELBUSB);
+		sblkctl = ahc_inb(ahc, SBLKCTL);
+		ahc_outb(ahc, SBLKCTL, sblkctl | SELBUSB);
 		sxfrctl1_b = ahc_inb(ahc, SXFRCTL1);
-		ahc_outb(ahc, SBLKCTL, sblkctl1 & ~SELBUSB);
+		ahc_outb(ahc, SBLKCTL, sblkctl & ~SELBUSB);
 	}
 	sxfrctl1_a = ahc_inb(ahc, SXFRCTL1);
 
@@ -4079,12 +4078,12 @@ ahc_reset(struct ahc_softc *ahc)
 	 * by turning it on.
 	 */
 	if ((ahc->features & AHC_TWIN) != 0) {
-		u_int sblkctl1;
+		u_int sblkctl;
 
-		sblkctl1 = ahc_inb(ahc, SBLKCTL);
-		ahc_outb(ahc, SBLKCTL, sblkctl1 | SELBUSB);
+		sblkctl = ahc_inb(ahc, SBLKCTL);
+		ahc_outb(ahc, SBLKCTL, sblkctl | SELBUSB);
 		ahc_outb(ahc, SXFRCTL1, sxfrctl1_b);
-		ahc_outb(ahc, SBLKCTL, sblkctl1 & ~SELBUSB);
+		ahc_outb(ahc, SBLKCTL, sblkctl & ~SELBUSB);
 	}
 	ahc_outb(ahc, SXFRCTL1, sxfrctl1_a);
 
@@ -4307,7 +4306,7 @@ ahc_fini_scbdata(struct ahc_softc *ahc)
 		free(scb_data->scbarray, M_DEVBUF);
 }
 
-void
+int
 ahc_alloc_scbs(struct ahc_softc *ahc)
 {
 	struct scb_data *scb_data;
@@ -4321,14 +4320,14 @@ ahc_alloc_scbs(struct ahc_softc *ahc)
 	scb_data = ahc->scb_data;
 	if (scb_data->numscbs >= AHC_SCB_MAX_ALLOC)
 		/* Can't allocate any more */
-		return;
+		return (0);
 
 	next_scb = &scb_data->scbarray[scb_data->numscbs];
 
-	sg_map = malloc(sizeof(*sg_map), M_DEVBUF, M_NOWAIT);
+	sg_map = malloc(sizeof(*sg_map), M_DEVBUF, M_WAITOK);
 
 	if (sg_map == NULL)
-		return;
+		return (0);
 
 	/* Allocate S/G space for the next batch of SCBS */
 	if (ahc_createdmamem(ahc->parent_dmat, PAGE_SIZE, ahc->sc_dmaflags,
@@ -4337,7 +4336,7 @@ ahc_alloc_scbs(struct ahc_softc *ahc)
 			     &sg_map->sg_dmasegs, &sg_map->sg_nseg, ahc_name(ahc),
 			     "SG space") < 0) {
 		free(sg_map, M_DEVBUF);
-		return;
+		return (0);
 	}
 
 	SLIST_INSERT_HEAD(&scb_data->sg_maps, sg_map, links);
@@ -4352,7 +4351,7 @@ ahc_alloc_scbs(struct ahc_softc *ahc)
 		int error;
 
 		pdata = (struct scb_platform_data *)malloc(sizeof(*pdata),
-							   M_DEVBUF, M_NOWAIT);
+							   M_DEVBUF, M_WAITOK);
 		if (pdata == NULL)
 			break;
 		next_scb->platform_data = pdata;
@@ -4368,7 +4367,7 @@ ahc_alloc_scbs(struct ahc_softc *ahc)
 
 		error = bus_dmamap_create(ahc->parent_dmat,
 			  AHC_MAXTRANSFER_SIZE, AHC_NSEG, MAXPHYS, 0,
-			  BUS_DMA_NOWAIT|BUS_DMA_ALLOCNOW|ahc->sc_dmaflags,
+			  BUS_DMA_WAITOK|BUS_DMA_ALLOCNOW|ahc->sc_dmaflags,
 			  &next_scb->dmamap);
 		if (error != 0)
 			break;
@@ -4382,21 +4381,22 @@ ahc_alloc_scbs(struct ahc_softc *ahc)
 		next_scb++;
 		ahc->scb_data->numscbs++;
 	}
+	return (newcount);
 }
 
 void
-ahc_controller_info(struct ahc_softc *ahc, char *tbuf, size_t l)
+ahc_controller_info(struct ahc_softc *ahc, char *buf, size_t l)
 {
 	int len;
 	char *ep;
 
-	ep = tbuf + l;
+	ep = buf + l;
 
-	len = snprintf(tbuf, ep - tbuf, "%s: ",
+	len = snprintf(buf, ep - buf, "%s: ",
 	    ahc_chip_names[ahc->chip & AHC_CHIPID_MASK]);
-	tbuf += len;
+	buf += len;
 	if ((ahc->features & AHC_TWIN) != 0)
- 		len = snprintf(tbuf, ep - tbuf, "Twin Channel, A SCSI Id=%d, "
+ 		len = snprintf(buf, ep - buf, "Twin Channel, A SCSI Id=%d, "
 			      "B SCSI Id=%d, primary %c, ",
 			      ahc->our_id, ahc->our_id_b,
 			      (ahc->flags & AHC_PRIMARY_CHANNEL) + 'A');
@@ -4417,16 +4417,16 @@ ahc_controller_info(struct ahc_softc *ahc, char *tbuf, size_t l)
 		} else {
 			type = "Single";
 		}
-		len = snprintf(tbuf, ep - tbuf, "%s%s Channel %c, SCSI Id=%d, ",
+		len = snprintf(buf, ep - buf, "%s%s Channel %c, SCSI Id=%d, ",
 			      speed, type, ahc->channel, ahc->our_id);
 	}
-	tbuf += len;
+	buf += len;
 
 	if ((ahc->flags & AHC_PAGESCBS) != 0)
-		snprintf(tbuf, ep - tbuf, "%d/%d SCBs",
+		snprintf(buf, ep - buf, "%d/%d SCBs",
 			ahc->scb_data->maxhscbs, AHC_MAX_QUEUE);
 	else
-		snprintf(tbuf, ep - tbuf, "%d SCBs", ahc->scb_data->maxhscbs);
+		snprintf(buf, ep - buf, "%d SCBs", ahc->scb_data->maxhscbs);
 }
 
 /*
@@ -5906,7 +5906,7 @@ ahc_reset_current_bus(struct ahc_softc *ahc)
 int
 ahc_reset_channel(struct ahc_softc *ahc, char channel, int initiate_reset)
 {
-	struct	ahc_devinfo dinfo;
+	struct	ahc_devinfo devinfo;
 	u_int	initiator, target, max_scsiid;
 	u_int	sblkctl;
 	u_int	scsiseq;
@@ -5917,7 +5917,7 @@ ahc_reset_channel(struct ahc_softc *ahc, char channel, int initiate_reset)
 
 	ahc->pending_device = NULL;
 
-	ahc_compile_devinfo(&dinfo,
+	ahc_compile_devinfo(&devinfo,
 			    CAM_TARGET_WILDCARD,
 			    CAM_TARGET_WILDCARD,
 			    CAM_LUN_WILDCARD,
@@ -7380,7 +7380,7 @@ ahc_createdmamem(tag, size, flags, mapp, vaddr, baddr, seg, nseg, myname, what)
 	int error, level = 0;
 
 	if ((error = bus_dmamem_alloc(tag, size, PAGE_SIZE, 0,
-				      seg, 1, nseg, BUS_DMA_NOWAIT)) != 0) {
+				      seg, 1, nseg, BUS_DMA_WAITOK)) != 0) {
 		printf("%s: failed to allocate DMA mem for %s, error = %d\n",
 			myname, what, error);
 		goto out;
@@ -7388,7 +7388,7 @@ ahc_createdmamem(tag, size, flags, mapp, vaddr, baddr, seg, nseg, myname, what)
 	level++;
 
 	if ((error = bus_dmamem_map(tag, seg, *nseg, size, vaddr,
-				    BUS_DMA_NOWAIT|BUS_DMA_COHERENT)) != 0) {
+				    BUS_DMA_WAITOK|BUS_DMA_COHERENT)) != 0) {
 		printf("%s: failed to map DMA mem for %s, error = %d\n",
 			myname, what, error);
 		goto out;
@@ -7396,7 +7396,7 @@ ahc_createdmamem(tag, size, flags, mapp, vaddr, baddr, seg, nseg, myname, what)
 	level++;
 
 	if ((error = bus_dmamap_create(tag, size, 1, size, 0,
-				       BUS_DMA_NOWAIT | flags, mapp)) != 0) {
+				       BUS_DMA_WAITOK | flags, mapp)) != 0) {
                 printf("%s: failed to create DMA map for %s, error = %d\n",
 			myname, what, error);
 		goto out;
@@ -7405,7 +7405,7 @@ ahc_createdmamem(tag, size, flags, mapp, vaddr, baddr, seg, nseg, myname, what)
 
 
 	if ((error = bus_dmamap_load(tag, *mapp, *vaddr, size, NULL,
-				     BUS_DMA_NOWAIT)) != 0) {
+				     BUS_DMA_WAITOK)) != 0) {
                 printf("%s: failed to load DMA map for %s, error = %d\n",
 			myname, what, error);
 		goto out;
@@ -7430,7 +7430,7 @@ out:
 		break;
 	}
 
-	return -1;
+	return error;
 }
 
 static void

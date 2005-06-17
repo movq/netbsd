@@ -1,4 +1,4 @@
-/*	$NetBSD: s3c2xx0_space.c,v 1.6 2005/04/13 03:39:18 yamt Exp $ */
+/*	$NetBSD: s3c2xx0_space.c,v 1.4 2005/03/16 05:02:12 bsh Exp $ */
 
 /*
  * Copyright (c) 2002 Fujitsu Component Limited
@@ -74,7 +74,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: s3c2xx0_space.c,v 1.6 2005/04/13 03:39:18 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: s3c2xx0_space.c,v 1.4 2005/03/16 05:02:12 bsh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -185,7 +185,7 @@ s3c2xx0_bs_map(void *t, bus_addr_t bpa, bus_size_t size,
 
 	/* XXX use extent manager to check duplicate mapping */
 
-	va = uvm_km_alloc(kernel_map, endpa - startpa, 0, UVM_KMF_VAONLY);
+	va = uvm_km_valloc(kernel_map, endpa - startpa);
 	if (!va)
 		return (ENOMEM);
 
@@ -216,9 +216,7 @@ s3c2xx0_bs_unmap(void *t, bus_space_handle_t bsh, bus_size_t size)
 	endva = round_page(bsh + size);
 	va = trunc_page(bsh);
 
-	pmap_kremove(va, endva - va);
-	pmap_update(pmap_kernel());
-	uvm_km_free(kernel_map, va, endva - va, UVM_KMF_VAONLY);
+	uvm_km_free(kernel_map, va, endva - va);
 }
 
 

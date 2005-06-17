@@ -1,4 +1,4 @@
-/*	$NetBSD: lfs_vnops.c,v 1.152 2005/05/29 21:25:24 christos Exp $	*/
+/*	$NetBSD: lfs_vnops.c,v 1.137.2.4 2005/05/07 11:21:30 tron Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001, 2002, 2003 The NetBSD Foundation, Inc.
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lfs_vnops.c,v 1.152 2005/05/29 21:25:24 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lfs_vnops.c,v 1.137.2.4 2005/05/07 11:21:30 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -1811,10 +1811,8 @@ lfs_putpages(void *v)
 		simple_unlock(&fs->lfs_interlock);
 
 		simple_lock(&vp->v_interlock);
-		if (locked) {
+		if (locked)
 			VOP_LOCK(vp, LK_EXCLUSIVE | LK_INTERLOCK);
-			simple_lock(&vp->v_interlock);
-		}
 		lfs_writer_leave(fs);
 
 		/* XXX the flush should have taken care of this one too! */
@@ -1977,6 +1975,8 @@ again:
 	 * aiodoned might not have got around to our buffers yet.
 	 */
 	if (sync) {
+		int s;
+
 		s = splbio();
 		simple_lock(&global_v_numoutput_slock);
 		while (vp->v_numoutput > 0) {

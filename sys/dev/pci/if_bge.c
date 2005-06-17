@@ -1,4 +1,4 @@
-/*	$NetBSD: if_bge.c,v 1.89 2005/05/22 15:54:46 christos Exp $	*/
+/*	$NetBSD: if_bge.c,v 1.87.2.4 2005/11/22 20:44:22 tron Exp $	*/
 
 /*
  * Copyright (c) 2001 Wind River Systems
@@ -79,7 +79,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_bge.c,v 1.89 2005/05/22 15:54:46 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_bge.c,v 1.87.2.4 2005/11/22 20:44:22 tron Exp $");
 
 #include "bpfilter.h"
 #include "vlan.h"
@@ -745,7 +745,7 @@ bge_alloc_jumbo_mem(sc)
 
 	state = 4;
 	sc->bge_cdata.bge_jumbo_buf = (caddr_t)kva;
-	DPRINTFN(1,("bge_jumbo_buf = %p\n", sc->bge_cdata.bge_jumbo_buf));
+	DPRINTFN(1,("bge_jumbo_buf = 0x%p\n", sc->bge_cdata.bge_jumbo_buf));
 
 	SLIST_INIT(&sc->bge_jfree_listhead);
 	SLIST_INIT(&sc->bge_jinuse_listhead);
@@ -1128,10 +1128,14 @@ bge_init_tx_ring(sc)
 
 	sc->bge_txcnt = 0;
 	sc->bge_tx_saved_considx = 0;
-	CSR_WRITE_4(sc, BGE_MBX_TX_HOST_PROD0_LO, 0);
-	if (sc->bge_quirks & BGE_QUIRK_PRODUCER_BUG)	/* 5700 b2 errata */
-		CSR_WRITE_4(sc, BGE_MBX_TX_HOST_PROD0_LO, 0);
 
+	/* Initialize transmit producer index for host-memory send ring. */
+	sc->bge_tx_prodidx = 0;
+	CSR_WRITE_4(sc, BGE_MBX_TX_HOST_PROD0_LO, sc->bge_tx_prodidx);
+	if (sc->bge_quirks & BGE_QUIRK_PRODUCER_BUG)	/* 5700 b2 errata */
+		CSR_WRITE_4(sc, BGE_MBX_TX_HOST_PROD0_LO, sc->bge_tx_prodidx);
+
+	/* NIC-memory send ring  not used; initialize to zero. */
 	CSR_WRITE_4(sc, BGE_MBX_TX_NIC_PROD0_LO, 0);
 	if (sc->bge_quirks & BGE_QUIRK_PRODUCER_BUG)	/* 5700 b2 errata */
 		CSR_WRITE_4(sc, BGE_MBX_TX_HOST_PROD0_LO, 0);
@@ -1942,6 +1946,10 @@ static const struct bge_revision {
 	  BGE_QUIRK_ONLY_PHY_1|BGE_QUIRK_5705_CORE,
 	  "BCM5750 A1" },
 
+	{ BGE_CHIPID_BCM5751_A1,
+	  BGE_QUIRK_ONLY_PHY_1|BGE_QUIRK_5705_CORE,
+	  "BCM5751 A1" },
+
 	{ 0, 0, NULL }
 };
 
@@ -2104,6 +2112,11 @@ static const struct bge_product {
 	{ PCI_VENDOR_BROADCOM,
 	  PCI_PRODUCT_BROADCOM_BCM5751,
 	  "Broadcom BCM5751 Gigabit Ethernet",
+	  },
+
+	{ PCI_VENDOR_BROADCOM,
+	  PCI_PRODUCT_BROADCOM_BCM5751M,
+	  "Broadcom BCM5751M Gigabit Ethernet",
 	  },
 
    	{ PCI_VENDOR_BROADCOM,
@@ -2471,9 +2484,7 @@ bge_attach(parent, self, aux)
 
 	if ((sc->bge_quirks & BGE_QUIRK_CSUM_BROKEN) == 0)
 		sc->ethercom.ec_if.if_capabilities |=
-		    IFCAP_CSUM_IPv4_Tx | IFCAP_CSUM_IPv4_Rx |
-		    IFCAP_CSUM_TCPv4_Tx | IFCAP_CSUM_TCPv4_Rx |
-		    IFCAP_CSUM_UDPv4_Tx | IFCAP_CSUM_UDPv4_Rx;
+		    IFCAP_CSUM_IPv4 | IFCAP_CSUM_TCPv4 | IFCAP_CSUM_UDPv4;
 	sc->ethercom.ec_capabilities |=
 	    ETHERCAP_VLAN_HWTAGGING | ETHERCAP_VLAN_MTU;
 
@@ -3462,7 +3473,7 @@ bge_start(ifp)
 {
 	struct bge_softc *sc;
 	struct mbuf *m_head = NULL;
-	u_int32_t prodidx = 0;
+	u_int32_t prodidx;
 	int pkts = 0;
 
 	sc = ifp->if_softc;
@@ -3470,7 +3481,7 @@ bge_start(ifp)
 	if (!sc->bge_link && ifp->if_snd.ifq_len < 10)
 		return;
 
-	prodidx = CSR_READ_4(sc, BGE_MBX_TX_HOST_PROD0_LO);
+	prodidx = sc->bge_tx_prodidx;
 
 	while(sc->bge_cdata.bge_tx_chain[prodidx] == NULL) {
 		IFQ_POLL(&ifp->if_snd, m_head);
@@ -3527,6 +3538,8 @@ bge_start(ifp)
 	if (sc->bge_quirks & BGE_QUIRK_PRODUCER_BUG)	/* 5700 b2 errata */
 		CSR_WRITE_4(sc, BGE_MBX_TX_HOST_PROD0_LO, prodidx);
 
+	sc->bge_tx_prodidx = prodidx;
+
 	/*
 	 * Set a timeout in case the chip goes out to lunch.
 	 */
@@ -3566,7 +3579,7 @@ bge_init(ifp)
 
 	/* Specify MTU. */
 	CSR_WRITE_4(sc, BGE_RX_MTU, ifp->if_mtu +
-	    ETHER_HDR_LEN + ETHER_CRC_LEN);
+	    ETHER_HDR_LEN + ETHER_CRC_LEN + ETHER_VLAN_ENCAP_LEN); 
 
 	/* Load our MAC address. */
 	m = (u_int16_t *)&(LLADDR(ifp->if_sadl)[0]);

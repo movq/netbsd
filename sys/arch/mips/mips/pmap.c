@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.c,v 1.159 2005/06/01 16:53:51 drochner Exp $	*/
+/*	$NetBSD: pmap.c,v 1.157.2.1 2005/11/21 20:02:26 tron Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2001 The NetBSD Foundation, Inc.
@@ -74,7 +74,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.159 2005/06/01 16:53:51 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.157.2.1 2005/11/21 20:02:26 tron Exp $");
 
 /*
  *	Manages physical address maps.
@@ -726,6 +726,8 @@ pmap_remove(pmap, sva, eva)
 	remove_stats.calls++;
 #endif
 	if (pmap == pmap_kernel()) {
+		pt_entry_t *pte;
+
 		/* remove entries from kernel pmap */
 #ifdef PARANOIADIAG
 		if (sva < VM_MIN_KERNEL_ADDRESS || eva >= virtual_end)

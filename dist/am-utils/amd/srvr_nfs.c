@@ -1,4 +1,4 @@
-/*	$NetBSD: srvr_nfs.c,v 1.10 2005/04/23 18:38:18 christos Exp $	*/
+/*	$NetBSD: srvr_nfs.c,v 1.9.2.1 2005/08/16 13:02:14 tron Exp $	*/
 
 /*
  * Copyright (c) 1997-2005 Erez Zadok

@@ -1,4 +1,4 @@
-/*	$NetBSD: db_trace.c,v 1.4 2005/06/01 13:06:46 blymn Exp $	*/
+/*	$NetBSD: db_trace.c,v 1.3 2004/04/16 14:21:56 fvdl Exp $	*/
 
 /* 
  * Mach Operating System
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.4 2005/06/01 13:06:46 blymn Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.3 2004/04/16 14:21:56 fvdl Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -124,8 +124,7 @@ void db_find_trace_symbols(void);
 int db_numargs(long *);
 int db_nextframe(long **, long **, long **, db_addr_t *, long *, int,
     void (*) (const char *, ...));
-db_sym_t db_frame_info(long *, db_addr_t, const char **, db_expr_t *,
-                       int *, int *);
+db_sym_t db_frame_info(long *, db_addr_t, char **, db_expr_t *, int *, int *);
 
 
 void
@@ -245,13 +244,13 @@ db_nextframe(long **nextframe, long **retaddr, long **arg0, db_addr_t *ip,
 }
 
 db_sym_t
-db_frame_info(long *frame, db_addr_t callpc, const char **namep, db_expr_t *offp,
+db_frame_info(long *frame, db_addr_t callpc, char **namep, db_expr_t *offp,
 	      int *is_trap, int *nargp)
 {
 	db_expr_t	offset;
 	db_sym_t	sym;
 	int narg;
-	const char *name;
+	char *name;
 
 	sym = db_search_symbol(callpc, DB_STGY_ANY, &offset);
 	db_symbol_values(sym, &name, NULL);
@@ -300,7 +299,7 @@ db_frame_info(long *frame, db_addr_t callpc, const char **namep, db_expr_t *offp
 
 void
 db_stack_trace_print(db_expr_t addr, boolean_t have_addr, db_expr_t count,
-		     const char *modif, void (*pr)(const char *, ...))
+		     char *modif, void (*pr)(const char *, ...))
 {
 	long *frame, *lastframe;
 	long *retaddr, *arg0;
@@ -316,8 +315,8 @@ db_stack_trace_print(db_expr_t addr, boolean_t have_addr, db_expr_t count,
 #endif
 
 	{
-		const char *cp = modif;
-		char c;
+		register char *cp = modif;
+		register char c;
 
 		while ((c = *cp++) != 0) {
 			if (c == 't')
@@ -371,7 +370,7 @@ db_stack_trace_print(db_expr_t addr, boolean_t have_addr, db_expr_t count,
 	lastframe = 0;
 	while (count && frame != 0) {
 		int		narg;
-		const char *	name;
+		char *	name;
 		db_expr_t	offset;
 		db_sym_t	sym;
 		char	*argnames[16], **argnp = NULL;

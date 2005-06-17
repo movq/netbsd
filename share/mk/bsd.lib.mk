@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.lib.mk,v 1.261 2005/05/10 14:54:02 lukem Exp $
+#	$NetBSD: bsd.lib.mk,v 1.259 2005/01/10 02:42:34 lukem Exp $
 #	@(#)bsd.lib.mk	8.3 (Berkeley) 4/22/94
 
 .include <bsd.init.mk>
@@ -583,7 +583,7 @@ ${DESTDIR}${_LIBSODIR}/lib${LIB}.so.${SHLIB_FULLVERSION}: lib${LIB}.so.${SHLIB_F
 		${SYSPKGTAG} ${.ALLSRC} ${.TARGET}
 .if ${_LIBSODIR} != ${LIBDIR}
 	${INSTALL_SYMLINK} ${SYSPKGTAG} \
-		-l r ${DESTDIR}${_LIBSODIR}/lib${LIB}.so.${SHLIB_FULLVERSION} \
+		${_LIBSODIR}/lib${LIB}.so.${SHLIB_FULLVERSION} \
 		${DESTDIR}${LIBDIR}/lib${LIB}.so.${SHLIB_FULLVERSION}
 .endif
 .if ${OBJECT_FMT} == "a.out" && !defined(DESTDIR)
@@ -604,7 +604,7 @@ ${DESTDIR}${_LIBSODIR}/lib${LIB}.so.${SHLIB_FULLVERSION}: lib${LIB}.so.${SHLIB_F
 		${DESTDIR}${_LIBSODIR}/lib${LIB}.so
 .if ${_LIBSODIR} != ${LIBDIR}
 	${INSTALL_SYMLINK} ${SYSPKGTAG} \
-		-l r ${DESTDIR}${_LIBSODIR}/lib${LIB}.so.${SHLIB_FULLVERSION} \
+		${_LIBSODIR}/lib${LIB}.so.${SHLIB_FULLVERSION} \
 		${DESTDIR}${LIBDIR}/lib${LIB}.so
 .endif
 .endif

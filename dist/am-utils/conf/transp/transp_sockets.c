@@ -1,4 +1,4 @@
-/*	$NetBSD: transp_sockets.c,v 1.8 2005/04/23 18:38:18 christos Exp $	*/
+/*	$NetBSD: transp_sockets.c,v 1.7.2.1 2005/08/16 13:02:23 tron Exp $	*/
 
 /*
  * Copyright (c) 1997-2005 Erez Zadok

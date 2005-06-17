@@ -1,4 +1,4 @@
-/*	$NetBSD: systrace.h,v 1.12 2003/10/31 03:28:14 simonb Exp $	*/
+/*	$NetBSD: systrace.h,v 1.12.14.2 2005/07/02 18:50:06 tron Exp $	*/
 
 /*
  * Copyright 2002 Niels Provos <provos@citi.umich.edu>

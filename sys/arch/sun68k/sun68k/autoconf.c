@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.15 2005/06/03 21:57:16 tsutsui Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.14 2005/01/22 15:36:12 chs Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -45,7 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.15 2005/06/03 21:57:16 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.14 2005/01/22 15:36:12 chs Exp $");
 
 #include "opt_kgdb.h"
 
@@ -309,7 +309,7 @@ str2hex(const char *p, int *_val)
 	int c;
 	
 	for(val = 0;; val = (val << 4) + c, p++) {
-		c = *((const unsigned char *) p);
+		c = *((unsigned char *) p);
 		if (c >= 'a') c-= ('a' + 10);
 		else if (c >= 'A') c -= ('A' + 10);
 		else if (c >= '0') c -= '0';
@@ -328,7 +328,7 @@ cpu_rootconf(void)
 	struct prom_n2f *nf;
 	struct device *boot_device;
 	int boot_partition;
-	const char *devname;
+	char *devname;
 	findfunc_t find;
 	char promname[4];
 	char partname[4];

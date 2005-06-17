@@ -1,4 +1,4 @@
-.\"	$NetBSD: ahc.4,v 1.28 2005/06/05 15:21:23 soren Exp $
+.\"	$NetBSD: ahc.4,v 1.26 2003/06/27 18:07:51 wiz Exp $
 .\"
 .\" Copyright (c) 1995, 1996, 1997, 1998, 2000
 .\" 	Justin T. Gibbs.  All rights reserved.
@@ -27,7 +27,7 @@
 .\"
 .\" $FreeBSD: src/share/man/man4/ahc.4,v 1.22 2000/02/14 16:40:58 gibbs Exp $
 .\"
-.Dd May 12, 2005
+.Dd February 13, 2000
 .Dt AHC 4
 .Os
 .\".Os FreeBSD
@@ -62,9 +62,6 @@ To allow PCI adapters to use memory mapped I/O if enabled:
 .Pp
 Disable tagged queuing (avoids hangs on some hardware under load)
 .Cd options AHC_NO_TAGS
-.Pp
-Change the default SCSI id for cards without a SEEPROM (default 7):
-.Cd options AHC_CARDBUS_DEFAULT_SCSI_ID=integer
 .Pp
 .if 0 \{
 To configure one or more controllers to assume the target role:
@@ -437,7 +434,6 @@ and restoring SCB data.
 .Sh SEE ALSO
 .Xr aha 4 ,
 .Xr ahb 4 ,
-.Xr ahd 4 ,
 .Xr cd 4 ,
 .Xr ch 4 ,
 .Xr intro 4 ,

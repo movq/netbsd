@@ -1,4 +1,4 @@
-/*	$NetBSD: obs405_machdep.c,v 1.1 2005/03/18 14:12:34 shige Exp $	*/
+/*	$NetBSD: obs405_machdep.c,v 1.1.10.2 2005/09/14 20:54:00 tron Exp $	*/
 
 /*
  * Copyright (c) 2004 Shigeyuki Fukushima.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: obs405_machdep.c,v 1.1 2005/03/18 14:12:34 shige Exp $");
+__KERNEL_RCSID(0, "$NetBSD: obs405_machdep.c,v 1.1.10.2 2005/09/14 20:54:00 tron Exp $");
 
 #include <sys/param.h>
 

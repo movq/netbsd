@@ -1,4 +1,4 @@
-/* $NetBSD: lib.h,v 1.76 2005/05/31 22:29:41 wiz Exp $ */
+/* $NetBSD: lib.h,v 1.74.2.6 2005/11/28 15:38:41 tron Exp $ */
 
 /* from FreeBSD Id: lib.h,v 1.25 1997/10/08 07:48:03 charnier Exp */
 
@@ -25,18 +25,44 @@
 #ifndef _INST_LIB_LIB_H_
 #define _INST_LIB_LIB_H_
 
+#if HAVE_CONFIG_H
+#include "config.h"
+#endif
+#include <nbcompat.h>
+#if HAVE_SYS_PARAM_H
 #include <sys/param.h>
+#endif
+#if HAVE_SYS_STAT_H
 #include <sys/stat.h>
+#endif
+#if HAVE_SYS_FILE_H
 #include <sys/file.h>
+#endif
+#if HAVE_SYS_QUEUE_H
 #include <sys/queue.h>
+#endif
 
+#if HAVE_CTYPE_H
 #include <ctype.h>
+#endif
+#if HAVE_DIRENT_H
 #include <dirent.h>
+#endif
+#if HAVE_STDIO_H
 #include <stdio.h>
+#endif
+#if HAVE_STDLIB_H
 #include <stdlib.h>
+#endif
+#if HAVE_STDARG_H
 #include <stdarg.h>
+#endif
+#if HAVE_STRING_H
 #include <string.h>
+#endif
+#if HAVE_UNISTD_H
 #include <unistd.h>
+#endif
 
 #include "path.h"
 
@@ -69,6 +95,11 @@
 /* Define tar as a string, in case it's called gtar or something */
 #ifndef TAR_CMD
 #define TAR_CMD	"tar"
+#endif
+
+/* Define pax as a string, used to copy files from staging area */              
+#ifndef PAX_CMD        
+#define PAX_CMD "pax"
 #endif
 
 /* Define gzip and bzip2, used to unpack binary packages */
@@ -126,11 +157,15 @@ enum {
 #define MTREE_FNAME		"+MTREE_DIRS"
 #define BUILD_VERSION_FNAME	"+BUILD_VERSION"
 #define BUILD_INFO_FNAME	"+BUILD_INFO"
+#define INSTALLED_INFO_FNAME	"+INSTALLED_INFO"
 #define SIZE_PKG_FNAME		"+SIZE_PKG"
 #define SIZE_ALL_FNAME		"+SIZE_ALL"
 #define PRESERVE_FNAME		"+PRESERVE"
 #define VIEWS_FNAME		"+VIEWS"
 #define DEPOT_FNAME		"+DEPOT"
+
+/* The names of special variables */
+#define AUTOMATIC_VARNAME	"automatic"
 
 /*
  * files which we expect to be in every package, passed to
@@ -225,6 +260,19 @@ enum {
 	LegibleChecksumLen = 33
 };
 
+/* List of files */
+typedef struct _lfile_t {
+        TAILQ_ENTRY(_lfile_t) lf_link;
+        char *lf_name;
+} lfile_t;
+TAILQ_HEAD(_lfile_head_t, _lfile_t);
+typedef struct _lfile_head_t lfile_head_t;
+#define	LFILE_ADD(lfhead,lfp,str) do {		\
+	lfp = malloc(sizeof(lfile_t));		\
+	lfp->lf_name = str;			\
+	TAILQ_INSERT_TAIL(lfhead,lfp,lf_link);	\
+	} while(0)
+
 /* List of packages */
 typedef struct _lpkg_t {
 	TAILQ_ENTRY(_lpkg_t) lp_link;
@@ -236,6 +284,14 @@ typedef struct _lpkg_head_t lpkg_head_t;
 /* Type of function to be handed to findmatchingname; return value of this
  * is currently ignored */
 typedef int (*matchfn) (const char *, void *);
+
+/* This structure describes a pipe to a child process */
+typedef struct {
+	int fds[2];	/* pipe, 0=child stdin, 1=parent output */
+	FILE *fp;	/* output from parent process */
+	pid_t pid;	/* process id of child process */
+	void (*cleanup)(void);	/* called on non-zero child exit status */
+} pipe_to_system_t;
 
 /* If URLlength()>0, then there is a ftp:// or http:// in the string,
  * and this must be an URL. Hide this behind a more obvious name. */
@@ -257,6 +313,19 @@ void    show_version(void);
 int	fexec(const char *, ...);
 int	fexec_skipempty(const char *, ...);
 int	fcexec(const char *, const char *, ...);
+int	pfcexec(const char *path, const char **argv);
+pipe_to_system_t	*pipe_to_system_begin(const char *, char *const *, void (*)(void));
+int	pipe_to_system_end(pipe_to_system_t *);
+
+/* variables file handling */
+
+char   *var_get(const char *, const char *);
+int	var_set(const char *, const char *, const char *);
+
+/* automatically installed as dependency */
+
+Boolean	is_automatic_installed(const char *);
+int	mark_as_automatic_installed(const char *, int);
 
 /* String */
 char   *get_dash_string(char **);
@@ -297,7 +366,7 @@ void    move_file(char *, char *, char *);
 void    move_files(const char *, const char *, const char *);
 void    remove_files(const char *, const char *);
 int     delete_hierarchy(char *, Boolean, Boolean);
-int     unpack(const char *, const char *);
+int     unpack(const char *, const lfile_head_t *);
 void    format_cmd(char *, size_t, char *, char *, char *);
 
 /* ftpio.c: FTP handling */

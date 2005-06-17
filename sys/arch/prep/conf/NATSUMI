@@ -1,4 +1,4 @@
-#	$NetBSD: NATSUMI,v 1.35 2005/04/15 17:27:21 itohy Exp $
+#	$NetBSD: NATSUMI,v 1.33.2.2 2005/07/18 21:13:50 riz Exp $
 #
 #	for development
 #
@@ -87,6 +87,7 @@ options 	INET		# IP + ICMP + TCP + UDP
 options 	INET6		# IPv6
 #options 	IPSEC		# IP security
 #options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
+#options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
 #options 	PIM		# Protocol Independent Multicast
@@ -181,7 +182,6 @@ wsdisplay*	at vga? console ?
 wskbd*		at pckbd? console ?
 wsmouse*	at pms? mux 0
 
-attimer0	at isa?			# AT Timer
 pcppi0	at isa?				# PC prog. periph. interface
 isabeep0 at pcppi?			# "keyboard" beep
 

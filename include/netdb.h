@@ -1,4 +1,4 @@
-/*	$NetBSD: netdb.h,v 1.51 2005/04/18 19:39:45 kleink Exp $	*/
+/*	$NetBSD: netdb.h,v 1.48.2.2 2005/04/21 16:59:28 tron Exp $	*/
 
 /*
  * Copyright (c) 1980, 1983, 1988, 1993
@@ -256,6 +256,16 @@ struct addrinfo {
 /* valid flags for addrinfo (not a standard def, apps should not use it) */
 #define	AI_MASK	\
     (AI_PASSIVE | AI_CANONNAME | AI_NUMERICHOST | AI_NUMERICSERV)
+
+#if 0
+/*
+ * Flag values for getipnodebyname()
+ */
+#define	AI_V4MAPPED	0x00000008
+#define	AI_ALL		0x00000010
+#define	AI_ADDRCONFIG	0x00000020
+#define	AI_DEFAULT	(AI_V4MAPPED|AI_ADDRCONFIG)
+#endif
 #endif
 
 #if (_POSIX_C_SOURCE - 0) >= 200112L || (_XOPEN_SOURCE - 0) >= 520 || \
@@ -303,6 +313,13 @@ struct hostent	*gethostbyname(const char *);
 struct hostent	*gethostbyname2(const char *, int);
 #endif
 struct hostent	*gethostent(void);
+#if (_XOPEN_SOURCE - 0) >= 520 && (_XOPEN_SOURCE - 0) < 600 || \
+    defined(_NETBSD_SOURCE)
+#if 0 /* we do not ship these */
+struct hostent	*getipnodebyaddr(const void *, size_t, int, int *);
+struct hostent	*getipnodebyname(const char *, int, int, int *);
+#endif
+#endif
 struct netent	*getnetbyaddr(uint32_t, int);
 struct netent	*getnetbyname(const char *);
 struct netent	*getnetent(void);

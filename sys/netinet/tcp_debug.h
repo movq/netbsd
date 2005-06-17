@@ -1,4 +1,4 @@
-/*	$NetBSD: tcp_debug.h,v 1.15 2005/06/02 04:40:46 riz Exp $	*/
+/*	$NetBSD: tcp_debug.h,v 1.14 2003/08/07 16:33:15 agc Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -64,7 +64,7 @@ struct	tcp_debug {
 #define	TA_DROP		4
 
 #ifdef TANAMES
-const char	*tanames[] =
+char	*tanames[] =
     { "input", "output", "user", "respond", "drop" };
 #endif
 

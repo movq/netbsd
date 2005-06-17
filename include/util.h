@@ -1,4 +1,4 @@
-/*	$NetBSD: util.h,v 1.36 2005/06/12 19:46:15 dyoung Exp $	*/
+/*	$NetBSD: util.h,v 1.34.2.1 2005/05/19 16:15:00 tron Exp $	*/
 
 /*-
  * Copyright (c) 1995
@@ -33,9 +33,7 @@
 #define	_UTIL_H_
 
 #include <sys/cdefs.h>
-#if !HAVE_NBTOOL_CONFIG_H
 #include <sys/ttycom.h>
-#endif /* !HAVE_NBTOOL_CONFIG_H */
 #include <sys/types.h>
 #include <stdio.h>
 #include <pwd.h>

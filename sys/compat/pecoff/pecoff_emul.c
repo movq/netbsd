@@ -1,4 +1,4 @@
-/*	$NetBSD: pecoff_emul.c,v 1.12 2005/06/14 22:35:20 christos Exp $	*/
+/*	$NetBSD: pecoff_emul.c,v 1.10.14.1 2005/09/18 20:09:49 tron Exp $	*/
 
 /*
  * Copyright (c) 2000 Masaru OKI
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pecoff_emul.c,v 1.12 2005/06/14 22:35:20 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pecoff_emul.c,v 1.10.14.1 2005/09/18 20:09:49 tron Exp $");
 
 /*#define DEBUG_PECOFF*/
 
@@ -70,16 +70,14 @@ extern struct sysent pecoff_sysent[];
 #ifdef SYSCALL_DEBUG
 extern const char * const pecoff_syscallnames[];
 #endif
+extern char sigcode[], esigcode[];
 #ifdef __HAVE_SYSCALL_INTERN
 void syscall_intern(struct proc *);
 #else
 void syscall(void);
 #endif
 
-#ifdef COMPAT_16
-extern char sigcode[], esigcode[];
 struct uvm_object *emul_pecoff_object;
-#endif
 
 const struct emul emul_pecoff = {
 	"pecoff",
@@ -99,15 +97,9 @@ const struct emul emul_pecoff = {
 	sendsig,
 	trapsignal,
 	NULL,
-#ifdef COMPAT_16
 	sigcode,
 	esigcode,
 	&emul_pecoff_object,
-#else
-	NULL,
-	NULL,
-	NULL,
-#endif
 	setregs,
 	NULL,
 	NULL,

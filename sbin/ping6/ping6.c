@@ -1,4 +1,4 @@
-/*	$NetBSD: ping6.c,v 1.64 2005/06/07 09:10:33 he Exp $	*/
+/*	$NetBSD: ping6.c,v 1.62 2005/02/09 14:09:46 xtraeme Exp $	*/
 /*	$KAME: ping6.c,v 1.164 2002/11/16 14:05:37 itojun Exp $	*/
 
 /*
@@ -77,7 +77,7 @@ static char sccsid[] = "@(#)ping.c	8.1 (Berkeley) 6/5/93";
 #else
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: ping6.c,v 1.64 2005/06/07 09:10:33 he Exp $");
+__RCSID("$NetBSD: ping6.c,v 1.62 2005/02/09 14:09:46 xtraeme Exp $");
 #endif
 #endif
 
@@ -1362,8 +1362,6 @@ dnsdecode(const u_char **sp, const u_char *ep, const u_char *base, char *buf,
 	const u_char *comp;
 	int l;
 
-	i = 0;		/* XXXGCC -Wuninitialized [sun2] */
-
 	cp = *sp;
 	*buf = '\0';
 
@@ -1980,7 +1978,7 @@ pr_nodeaddr(struct icmp6_nodeinfo *ni, /* ni->qtype must be NODEADDR */
 	if (nilen % (sizeof(u_int32_t) + sizeof(struct in6_addr)) == 0)
 		withttl = 1;
 	while (nilen > 0) {
-		u_int32_t ttl = 0;
+		u_int32_t ttl;
 
 		if (withttl) {
 			/* XXX: alignment? */

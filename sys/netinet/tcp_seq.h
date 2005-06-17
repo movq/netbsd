@@ -1,4 +1,4 @@
-/*	$NetBSD: tcp_seq.h,v 1.15 2005/04/05 01:07:17 kurahone Exp $	*/
+/*	$NetBSD: tcp_seq.h,v 1.14.4.1 2005/05/06 08:35:12 tron Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993, 1995

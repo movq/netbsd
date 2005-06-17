@@ -1,4 +1,4 @@
-/*	$NetBSD: hd64461video.c,v 1.30 2005/03/26 22:41:12 uwe Exp $	*/
+/*	$NetBSD: hd64461video.c,v 1.29.2.1 2005/09/15 20:37:16 tron Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2002, 2004 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hd64461video.c,v 1.30 2005/03/26 22:41:12 uwe Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hd64461video.c,v 1.29.2.1 2005/09/15 20:37:16 tron Exp $");
 
 #include "debug_hpcsh.h"
 // #define HD64461VIDEO_HWACCEL
@@ -348,6 +348,11 @@ hd64461video_setup_hpcfbif(struct hd64461video_chip *hvc)
 		fb->hf_pack_width = 16;
 		fb->hf_pixels_per_pack = 1;
 		fb->hf_pixel_width = 16;
+		/*
+		 * XXX: uwe: if I RTFS correctly, this really means
+		 * that uint16_t pixel is fetched as little endian.
+		 */
+		fb->hf_order_flags = HPCFB_REVORDER_BYTE;
 
 		fb->hf_class_data_length = sizeof(struct hf_rgb_tag);
 		/* reserved for future use */
@@ -1227,7 +1232,7 @@ hd64461video_info(struct hd64461video_softc *sc)
 	printf("---[LCD]---\n");
 	/* Base Address Register */
 	r = hd64461_reg_read_2(HD64461_LCDCBAR_REG16);
-	printf("LCDCBAR Frame buffer base address (4KB align): 0x%08x\n",
+	printf("LCDCBAR Frame buffer base address (4k Byte align): 0x%08x\n",
 	    HD64461_LCDCBAR_BASEADDR(r));
 
 	/* Line Address Offset Register */
@@ -1247,7 +1252,7 @@ hd64461video_info(struct hd64461video_softc *sc)
 	DBG_BITMASK_PRINT(r, SPON);
 	printf("\n");
 #undef	DBG_BITMASK_PRINT
-	printf("LCDCCR Display select LCD[%c] CRT[%c]\n",
+	printf("LCDCCR Display selct LCD[%c] CRT[%c]\n",
 	    i == HD64461_LCDCCR_DSPSEL_LCD_CRT ||
 	    i == HD64461_LCDCCR_DSPSEL_LCD ? 'x' : '_',
 	    i == HD64461_LCDCCR_DSPSEL_LCD_CRT ||

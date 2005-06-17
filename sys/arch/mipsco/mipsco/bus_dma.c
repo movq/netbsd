@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_dma.c,v 1.16 2005/04/01 11:59:33 yamt Exp $	*/
+/*	$NetBSD: bus_dma.c,v 1.15 2005/03/09 19:04:44 matt Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.16 2005/04/01 11:59:33 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.15 2005/03/09 19:04:44 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -687,7 +687,7 @@ _bus_dmamem_map(t, segs, nsegs, size, kvap, flags)
 
 	size = round_page(size);
 
-	va = uvm_km_alloc(kernel_map, size, 0, UVM_KMF_VAONLY);
+	va = uvm_km_valloc(kernel_map, size);
 
 	if (va == 0)
 		return (ENOMEM);
@@ -737,9 +737,8 @@ _bus_dmamem_unmap(t, kva, size)
 	    kva < (caddr_t)MIPS_KSEG2_START)
 		return;
 
-	pmap_remove(pmap_kernel(), (vaddr_t)kva, (vaddr_t)kva + size);
-	pmap_update(pmap_kernel());
-	uvm_km_free(kernel_map, (vaddr_t)kva, size, UVM_KMF_VAONLY);
+	size = round_page(size);
+	uvm_km_free(kernel_map, (vaddr_t)kva, size);
 }
 
 /*

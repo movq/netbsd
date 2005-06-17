@@ -1,4 +1,4 @@
-/* $NetBSD: pcppi.c,v 1.16 2005/03/25 23:09:00 cube Exp $ */
+/* $NetBSD: pcppi.c,v 1.13 2005/02/27 00:27:17 perry Exp $ */
 
 /*
  * Copyright (c) 1996 Carnegie-Mellon University.
@@ -28,9 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pcppi.c,v 1.16 2005/03/25 23:09:00 cube Exp $");
-
-#include "attimer.h"
+__KERNEL_RCSID(0, "$NetBSD: pcppi.c,v 1.13 2005/02/27 00:27:17 perry Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -42,12 +40,12 @@ __KERNEL_RCSID(0, "$NetBSD: pcppi.c,v 1.16 2005/03/25 23:09:00 cube Exp $");
 
 #include <machine/bus.h>
 
-#include <dev/ic/attimervar.h>
-
 #include <dev/isa/isareg.h>
 #include <dev/isa/isavar.h>
 #include <dev/isa/pcppireg.h>
 #include <dev/isa/pcppivar.h>
+
+#include <dev/ic/i8253reg.h>
 
 #include "pckbd.h"
 #if NPCKBD > 0
@@ -56,26 +54,38 @@ __KERNEL_RCSID(0, "$NetBSD: pcppi.c,v 1.16 2005/03/25 23:09:00 cube Exp $");
 void	pcppi_pckbd_bell(void *, u_int, u_int, u_int, int);
 #endif
 
+struct pcppi_softc {
+	struct device sc_dv;
+
+	bus_space_tag_t sc_iot;
+	bus_space_handle_t sc_ppi_ioh, sc_pit1_ioh;
+
+	struct callout sc_bell_ch;
+
+	int sc_bellactive, sc_bellpitch;
+	int sc_slp;
+	int sc_timeout;
+};
+
 int	pcppi_match(struct device *, struct cfdata *, void *);
-void	pcppi_isa_attach(struct device *, struct device *, void *);
+void	pcppi_attach(struct device *, struct device *, void *);
 
 CFATTACH_DECL(pcppi, sizeof(struct pcppi_softc),
-    pcppi_match, pcppi_isa_attach, NULL, NULL);
+    pcppi_match, pcppi_attach, NULL, NULL);
 
 static void pcppi_bell_stop(void*);
-
-#if NATTIMER > 0
-static void pcppi_attach_speaker(struct device *);
-#endif
 
 #define PCPPIPRI (PZERO - 1)
 
 int
-pcppi_match(struct device *parent, struct cfdata *match, void *aux)
+pcppi_match(parent, match, aux)
+	struct device *parent;
+	struct cfdata *match;
+	void *aux;
 {
 	struct isa_attach_args *ia = aux;
-	bus_space_handle_t ppi_ioh;
-	int have_ppi, rv;
+	bus_space_handle_t ppi_ioh, pit1_ioh;
+	int have_pit1, have_ppi, rv;
 	u_int8_t v, nv;
 
 	if (ISA_DIRECT_CONFIG(ia))
@@ -100,8 +110,11 @@ pcppi_match(struct device *parent, struct cfdata *match, void *aux)
 		return (0);
 
 	rv = 0;
-	have_ppi = 0;
+	have_pit1 = have_ppi = 0;
 
+	if (bus_space_map(ia->ia_iot, IO_TIMER1, 4, 0, &pit1_ioh))
+		goto lose;
+	have_pit1 = 1;
 	if (bus_space_map(ia->ia_iot, IO_PPI, 1, 0, &ppi_ioh))
 		goto lose;
 	have_ppi = 1;
@@ -134,6 +147,8 @@ pcppi_match(struct device *parent, struct cfdata *match, void *aux)
 	 */
 
 lose:
+	if (have_pit1)
+		bus_space_unmap(ia->ia_iot, pit1_ioh, 4);
 	if (have_ppi)
 		bus_space_unmap(ia->ia_iot, ppi_ioh, 1);
 	if (rv) {
@@ -149,65 +164,46 @@ lose:
 }
 
 void
-pcppi_isa_attach(struct device *parent, struct device *self, void *aux)
+pcppi_attach(parent, self, aux)
+	struct device *parent, *self;
+	void *aux;
 {
-        struct pcppi_softc *sc = (struct pcppi_softc *)self;
-        struct isa_attach_args *ia = aux;
-        bus_space_tag_t iot;
+	struct pcppi_softc *sc = (struct pcppi_softc *)self;
+	struct isa_attach_args *ia = aux;
+	bus_space_tag_t iot;
+	struct pcppi_attach_args pa;
 
-        sc->sc_iot = iot = ia->ia_iot;
+	callout_init(&sc->sc_bell_ch);
 
-        if (bus_space_map(iot, IO_PPI, 1, 0, &sc->sc_ppi_ioh))
-                panic("pcppi_attach: couldn't map");
+	sc->sc_iot = iot = ia->ia_iot;
 
-        printf("\n");
+	if (bus_space_map(iot, IO_TIMER1, 4, 0, &sc->sc_pit1_ioh) ||
+	    bus_space_map(iot, IO_PPI, 1, 0, &sc->sc_ppi_ioh))
+		panic("pcppi_attach: couldn't map");
 
-        pcppi_attach(sc);
-}
+	printf("\n");
 
-void
-pcppi_attach(struct pcppi_softc *sc)
-{
-        struct pcppi_attach_args pa;
-
-        callout_init(&sc->sc_bell_ch);
-
-        sc->sc_bellactive = sc->sc_bellpitch = sc->sc_slp = 0;
+	sc->sc_bellactive = sc->sc_bellpitch = sc->sc_slp = 0;
 
 #if NPCKBD > 0
 	/* Provide a beeper for the PC Keyboard, if there isn't one already. */
 	pckbd_hookup_bell(pcppi_pckbd_bell, sc);
 #endif
-#if NATTIMER > 0
-	config_defer((struct device *)sc, pcppi_attach_speaker);
-#endif
 
 	pa.pa_cookie = sc;
-	while (config_found((struct device *)sc, &pa, 0));
+	while (config_found(self, &pa, 0));
 }
-
-#if NATTIMER > 0
-static void
-pcppi_attach_speaker(struct device *self)
-{
-	struct pcppi_softc *sc = (struct pcppi_softc *)self;
-
-	if ((sc->sc_timer = attimer_attach_speaker()) == NULL)
-		aprint_error("%s: could not find any available timer\n",
-		    sc->sc_dv.dv_xname);
-	else
-		aprint_normal("%s: attached to %s\n", sc->sc_dv.dv_xname,
-		    sc->sc_timer->sc_dev.dv_xname);
-}
-#endif
 
 void
-pcppi_bell(pcppi_tag_t self, int pitch, int period, int slp)
+pcppi_bell(self, pitch, period, slp)
+	pcppi_tag_t self;
+	int pitch, period;
+	int slp;
 {
 	struct pcppi_softc *sc = self;
-	int s;
+	int s1, s2;
 
-	s = spltty(); /* ??? */
+	s1 = spltty(); /* ??? */
 	if (sc->sc_bellactive) {
 		if (sc->sc_timeout) {
 			sc->sc_timeout = 0;
@@ -219,14 +215,18 @@ pcppi_bell(pcppi_tag_t self, int pitch, int period, int slp)
 	if (pitch == 0 || period == 0) {
 		pcppi_bell_stop(sc);
 		sc->sc_bellpitch = 0;
-		splx(s);
+		splx(s1);
 		return;
 	}
 	if (!sc->sc_bellactive || sc->sc_bellpitch != pitch) {
-#if NATTIMER > 0
-		if (sc->sc_timer != NULL)
-			attimer_set_pitch(sc->sc_timer, pitch);
-#endif
+		s2 = splhigh();
+		bus_space_write_1(sc->sc_iot, sc->sc_pit1_ioh, TIMER_MODE,
+		    TIMER_SEL2 | TIMER_16BIT | TIMER_SQWAVE);
+		bus_space_write_1(sc->sc_iot, sc->sc_pit1_ioh, TIMER_CNTR2,
+		    TIMER_DIV(pitch) % 256);
+		bus_space_write_1(sc->sc_iot, sc->sc_pit1_ioh, TIMER_CNTR2,
+		    TIMER_DIV(pitch) / 256);
+		splx(s2);
 		/* enable speaker */
 		bus_space_write_1(sc->sc_iot, sc->sc_ppi_ioh, 0,
 			bus_space_read_1(sc->sc_iot, sc->sc_ppi_ioh, 0)
@@ -247,11 +247,12 @@ pcppi_bell(pcppi_tag_t self, int pitch, int period, int slp)
 			sc->sc_slp = 0;
 		}
 	}
-	splx(s);
+	splx(s1);
 }
 
 static void
-pcppi_bell_stop(void *arg)
+pcppi_bell_stop(arg)
+	void *arg;
 {
 	struct pcppi_softc *sc = arg;
 	int s;
@@ -271,7 +272,10 @@ pcppi_bell_stop(void *arg)
 
 #if NPCKBD > 0
 void
-pcppi_pckbd_bell(void *arg, u_int pitch, u_int period, u_int volume, int poll)
+pcppi_pckbd_bell(arg, pitch, period, volume, poll)
+	void *arg;
+	u_int pitch, period, volume;
+	int poll;
 {
 
 	/*

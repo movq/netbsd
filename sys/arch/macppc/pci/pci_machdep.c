@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_machdep.c,v 1.28 2005/06/03 18:19:11 matt Exp $	*/
+/*	$NetBSD: pci_machdep.c,v 1.27 2004/12/07 15:42:08 briggs Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.28 2005/06/03 18:19:11 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.27 2004/12/07 15:42:08 briggs Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -395,14 +395,13 @@ find_node_intr(node, addr, intr)
 	int match, i;
 	u_int32_t map[160];
 	const u_int32_t *mp;
-	u_int32_t imapmask[8], maskedaddr[8];
+	u_int32_t imask[8], maskedaddr[8];
 	u_int32_t acells, icells;
 	char name[32];
 
 	parent = OF_parent(node);
 	len = OF_getprop(parent, "interrupt-map", map, sizeof(map));
-	mlen = OF_getprop(parent, "interrupt-map-mask", imapmask,
-	    sizeof(imapmask));
+	mlen = OF_getprop(parent, "interrupt-map-mask", imask, sizeof(imask));
 
 	if (mlen != -1)
 		memcpy(maskedaddr, addr, mlen);
@@ -411,7 +410,7 @@ again:
 		goto nomap;
 
 #ifdef DIAGNOSTIC
-	if (mlen == sizeof(imapmask)) {
+	if (mlen == sizeof(imask)) {
 		printf("interrupt-map too long\n");
 		return -1;
 	}
@@ -419,7 +418,7 @@ again:
 
 	/* mask addr by "interrupt-map-mask" */
 	for (i = 0; i < mlen / 4; i++)
-		maskedaddr[i] &= imapmask[i];
+		maskedaddr[i] &= imask[i];
 
 	mp = map;
 	i = 0;
@@ -462,7 +461,7 @@ again:
 			 * supplied address/interrupt via its map.
 			 */
 			mlen = OF_getprop(iparent, "interrupt-map-mask",
-			    imapmask, sizeof(imapmask));
+			    imask, sizeof(imask));
 #ifdef DIAGNOSTIC
 			if (mlen != (acells + icells)*4) {
 				printf("interrupt-map inconsistent (%d, %d)\n",

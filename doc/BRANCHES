@@ -1,4 +1,4 @@
-#	$NetBSD: BRANCHES,v 1.47 2005/04/15 13:39:00 kent Exp $
+#	$NetBSD: BRANCHES,v 1.35.2.1 2005/03/17 09:21:29 tron Exp $
 #
 # This file contains a list of branches that exist in the NetBSD CVS
 # tree and their current state.
@@ -199,8 +199,8 @@ Scope:		kernel
 Notes:		Superseded by thorpej_scsipi
 
 Branch:		chs-ubc
-Description:	Unified Buffer Cache
-Status:		Terminated
+Description:	? Unified Buffer Cache
+Status:		?
 Start Date:
 End Date:
 Base Tag:	chs-ubc-base
@@ -209,8 +209,8 @@ Scope:		kernel
 Notes:
 
 Branch:		chs-ubc2
-Description:	 Unified Buffer Cache
-Status:		Terminated; merged to -current
+Description:	? Unified Buffer Cache
+Status:		?
 Start Date:
 End Date:
 Base Tag:	chs-ubc2-base, chs-ubc2-newbase
@@ -229,18 +229,18 @@ Scope:		Entire tree.
 Notes:
 
 Branch:		eeh-paddr_t
-Description:	use separate types for virtual vs. physical addresses
-Status:		Terminated; merged to -current
+Description:	?
+Status:		?
 Start Date:
 End Date:
 Base Tag:	eeh-paddr_t-base
 Maintainer:	Eduardo Horvath <eeh@NetBSD.org>
 Scope:		kernel
-Notes:		This is needed to support 32-bit kernels on sparc64.
+Notes:
 
 Branch:		fvdl-softdep
 Description:	FFS soft dependencies
-Status:		Terminated; merged to -current
+Status:		?Terminated
 Start Date:
 End Date:
 Base Tag:	fvdl-softdep-base
@@ -342,7 +342,6 @@ Scope:		kernel (audio device drivers)
 Notes:		http://mail-index.netbsd.org/tech-kern/2004/12/03/0007.html
 		Please consult with the maintainer before committing
 		to this branch.
-		This branch is not expected to be compilable yet.
 
 Branch:		kqueue
 Description:	kqueue kernel event notification mechanism (from FreeBSD)
@@ -413,7 +412,7 @@ Notes:
 
 Branch:		nathanw_sa
 Description:	Scheduler activations
-Status:		Terminated; merged to -current
+Status:		Active
 Start Date:	5 March 2001
 End Date:	18 January 2003
 Base Tag:	nathanw_sa_base
@@ -421,6 +420,7 @@ Maintainer:	Nathan Williams <nathanw@NetBSD.org>
 Scope:		kernel, libc, libkvm, libpthread, libpthread_dbg, include, 
 		bin/ps usr.bin/systat usr.bin/top usr.bin/w
 		gnu/dist/toolchain/gdb gnu/usr.bin/gdb
+
 Notes:		The idea of scheduler activations is described in the
 		classic paper by Anderson et al., in ACM Transactions
 		a on Computer Systems volume 10 issue 1 (1992),which
@@ -454,6 +454,7 @@ End Date:
 Base Tag:	newlock-base
 Maintainer:	Jason R. Thorpe <thorpej@NetBSD.org>
 Scope:		Kernel
+
 Notes:		The goal is to replace the existing lockmgr() and
 		simple_lock() based locking mechanisms with the
 		primitives found in Solaris: mutexes and rwlocks.
@@ -684,10 +685,10 @@ Notes:		Requires parts of xsrc/xfree (HEAD)
 
 Branch:		yamt-km, yamt-km-doc
 Description:	simplify/improve kernel memory management and bootstrap
-Status:		Terminated; merged to -current
+Status:		Active
 Start Date:	Tue Jan 25 2005
-End Date:	Fri Apr  1 2005
-Base Tag:	yamt-km-base{,2,3,4}, yamt-km-doc-base
+End Date:	
+Base Tag:	yamt-km-base{,2}, yamt-km-doc-base
 Maintainer:	YAMAMOTO Takashi <yamt@NetBSD.org>
 Scope:		yamt-km: src/sys
 		yamt-km-doc: src/share/man/man9/uvm.9
@@ -697,25 +698,22 @@ Notes:		http://mail-index.NetBSD.org/tech-kern/2004/12/25/0005.html
 		(account names mean "tested by".)
 
 		works enough to go to multiuser:
-			alpha, i386, xen (yamt@)
+			alpha, i386 (yamt@)
 			pc532 (simonb@)
 			alpha, i386, mac68k, macppc, pmax, shark,
 			    sparc, sparc64, sun3, x68k (chs@)
-			cobalt, dreamcast, hp300, news68k, newsmips,
-			    sun3x (tsutsui@)
+			cobalt, dreamcast, hp300, news68k, newsmips (tsutsui@)
 			amiga (mhitch@)
 			cats, hp700 (skrll@)
-			xen (bouyer@)
 
 		known to have the same problem as trunk:
 			vax (chs@, stuck while running kvm_mkdb)
 
 		known to have a problem:
+			hp300 (chs@, hang immediately after loading kernel)
+
 			luna68k (and, if any, other m68k ports which use TTR)
 			needs to be revisited.
-			-> for luna68k, although not tested,
-			   Sysmap has been moved to avoid kva conflict with
-			   I/O ranges.
 
 		buildable:
 			src/sys/arch/acorn26/conf/GENERIC
@@ -736,6 +734,7 @@ Notes:		http://mail-index.NetBSD.org/tech-kern/2004/12/25/0005.html
 			src/sys/arch/evbarm/conf/TS7200
 			src/sys/arch/evbppc/conf/WALNUT
 			src/sys/arch/evbsh3/conf/COMPUTEXEVB
+			(with a patch in port-evbsh3/29334)
 			src/sys/arch/evbsh5/conf/CAYMAN64
 			src/sys/arch/hp300/conf/GENERIC
 			src/sys/arch/hp700/conf/GENERIC
@@ -745,8 +744,6 @@ Notes:		http://mail-index.NetBSD.org/tech-kern/2004/12/25/0005.html
 			src/sys/arch/hpcsh/conf/HPW650PA
 			src/sys/arch/i386/conf/GENERIC
 			src/sys/arch/i386/conf/GENERIC.MP
-			src/sys/arch/i386/conf/XEN0
-			src/sys/arch/i386/conf/XENU
 			src/sys/arch/ibmnws/conf/GENERIC
 			src/sys/arch/iyonix/conf/GENERIC
 			src/sys/arch/luna68k/conf/GENERIC
@@ -754,7 +751,6 @@ Notes:		http://mail-index.NetBSD.org/tech-kern/2004/12/25/0005.html
 			src/sys/arch/macppc/conf/GENERIC
 			src/sys/arch/macppc/conf/GENERIC.MP
 			src/sys/arch/mipsco/conf/GENERIC
-			src/sys/arch/mmeye/conf/GENERIC
 			src/sys/arch/mvme68k/conf/GENERIC
 			src/sys/arch/netwinder/conf/GENERIC
 			src/sys/arch/news68k/conf/GENERIC
@@ -777,8 +773,12 @@ Notes:		http://mail-index.NetBSD.org/tech-kern/2004/12/25/0005.html
 			src/sys/arch/vax/conf/GENERIC
 			src/sys/arch/vax/conf/GENERIC.MP
 			src/sys/arch/x68k/conf/GENERIC
+			src/sys/arch/xen/conf/GENERIC
 
-			src/sys/arch/playstation2/conf/GENERIC
+		not tested at all:
+			mmeye
+			pdp10
+			playstation2
 
 
 Branch:		bouyer-xen2

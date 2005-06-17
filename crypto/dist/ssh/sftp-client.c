@@ -1,4 +1,4 @@
-/*	$NetBSD: sftp-client.c,v 1.24 2005/06/02 04:59:17 lukem Exp $	*/
+/*	$NetBSD: sftp-client.c,v 1.22 2005/02/13 05:57:26 christos Exp $	*/
 /*
  * Copyright (c) 2001-2004 Damien Miller <djm@openbsd.org>
  *
@@ -21,8 +21,8 @@
 /* XXX: copy between two remote sites */
 
 #include "includes.h"
-RCSID("$OpenBSD: sftp-client.c,v 1.52 2004/11/25 22:22:14 markus Exp $");
-__RCSID("$NetBSD: sftp-client.c,v 1.24 2005/06/02 04:59:17 lukem Exp $");
+RCSID("$OpenBSD: sftp-client.c,v 1.51 2004/07/11 17:48:47 deraadt Exp $");
+__RCSID("$NetBSD: sftp-client.c,v 1.22 2005/02/13 05:57:26 christos Exp $");
 
 #include <sys/queue.h>
 
@@ -174,7 +174,6 @@ get_handle(int fd, u_int expected_id, u_int *len)
 		int status = buffer_get_int(&msg);
 
 		error("Couldn't get handle: %s", fx2txt(status));
-		buffer_free(&msg);
 		return(NULL);
 	} else if (type != SSH2_FXP_HANDLE)
 		fatal("Expected SSH2_FXP_HANDLE(%u) packet, got %u",
@@ -209,7 +208,6 @@ get_decode_stat(int fd, u_int expected_id, int quiet)
 			debug("Couldn't stat remote file: %s", fx2txt(status));
 		else
 			error("Couldn't stat remote file: %s", fx2txt(status));
-		buffer_free(&msg);
 		return(NULL);
 	} else if (type != SSH2_FXP_ATTRS) {
 		fatal("Expected SSH2_FXP_ATTRS(%u) packet, got %u",
@@ -759,7 +757,6 @@ do_download(struct sftp_conn *conn, char *remote_path, char *local_path,
 	TAILQ_HEAD(reqhead, request) requests;
 	struct request *req;
 
-	status = -1;
 	TAILQ_INIT(&requests);
 
 	a = do_stat(conn, remote_path, 0);

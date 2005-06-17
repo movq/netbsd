@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_pdaemon.c,v 1.64 2005/05/11 13:02:26 yamt Exp $	*/
+/*	$NetBSD: uvm_pdaemon.c,v 1.61 2005/01/30 17:23:05 chs Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -71,7 +71,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_pdaemon.c,v 1.64 2005/05/11 13:02:26 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_pdaemon.c,v 1.61 2005/01/30 17:23:05 chs Exp $");
 
 #include "opt_uvmhist.h"
 
@@ -423,9 +423,6 @@ uvmpd_scan_inactive(pglst)
 	anonreact = anonunder || (!anonover && (fileover || execover));
 	filereact = fileunder || (!fileover && (anonover || execover));
 	execreact = execunder || (!execover && (anonover || fileover));
-	if (filereact && execreact && (anonreact || uvm_swapisfull())) {
-		anonreact = filereact = execreact = FALSE;
-	}
 	for (p = TAILQ_FIRST(pglst); p != NULL || swslot != 0; p = nextpg) {
 		uobj = NULL;
 		anon = NULL;
@@ -598,7 +595,7 @@ uvmpd_scan_inactive(pglst)
 
 				if (anon) {
 					KASSERT(anon->an_swslot != 0);
-					anon->an_page = NULL;
+					anon->u.an_page = NULL;
 					slot = anon->an_swslot;
 				} else {
 					slot = uao_find_swslot(uobj, pageidx);
@@ -913,49 +910,4 @@ uvmpd_scan(void)
 
 		simple_unlock(slock);
 	}
-}
-
-/*
- * uvm_reclaimable: decide whether to wait for pagedaemon.
- *
- * => return TRUE if it seems to be worth to do uvm_wait.
- *
- * XXX should be tunable.
- * XXX should consider pools, etc?
- */
-
-boolean_t
-uvm_reclaimable(void)
-{
-	int filepages;
-
-	/*
-	 * if swap is not full, no problem.
-	 */
-
-	if (!uvm_swapisfull()) {
-		return TRUE;
-	}
-
-	/*
-	 * file-backed pages can be reclaimed even when swap is full.
-	 * if we have more than 1/16 of pageable memory or 5MB, try to reclaim.
-	 *
-	 * XXX assume the worst case, ie. all wired pages are file-backed.
-	 *
-	 * XXX should consider about other reclaimable memory.
-	 * XXX ie. pools, traditional buffer cache.
-	 */
-
-	filepages = uvmexp.filepages + uvmexp.execpages - uvmexp.wired;
-	if (filepages >= MIN((uvmexp.active + uvmexp.inactive) >> 4,
-	    5 * 1024 * 1024 >> PAGE_SHIFT)) {
-		return TRUE;
-	}
-
-	/*
-	 * kill the process, fail allocation, etc..
-	 */
-
-	return FALSE;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: mount.h,v 1.129 2005/05/29 21:19:41 christos Exp $	*/
+/*	$NetBSD: mount.h,v 1.127 2005/02/03 19:20:01 perry Exp $	*/
 
 /*
  * Copyright (c) 1989, 1991, 1993
@@ -255,8 +255,6 @@ struct vfsops {
 	LIST_ENTRY(vfsops) vfs_list;
 };
 
-#define	VFS_ATTACH(vfs)		__link_set_add_data(vfsops, vfs)
-
 #define VFS_MOUNT(MP, PATH, DATA, NDP, P) \
 	(*(MP)->mnt_op->vfs_mount)(MP, PATH, DATA, NDP, P)
 #define VFS_START(MP, FLAGS, P)	  (*(MP)->mnt_op->vfs_start)(MP, FLAGS, P)
@@ -343,7 +341,7 @@ int	vfs_mountroot(void);
 void	vfs_shutdown(void);	    /* unmount and sync file systems */
 void	vfs_unmountall(struct proc *);	    /* unmount file systems */
 int 	vfs_busy(struct mount *, int, struct simplelock *);
-int	vfs_rootmountalloc(const char *, const char *, struct mount **);
+int	vfs_rootmountalloc(char *, char *, struct mount **);
 void	vfs_unbusy(struct mount *);
 int	vfs_attach(struct vfsops *);
 int	vfs_detach(struct vfsops *);

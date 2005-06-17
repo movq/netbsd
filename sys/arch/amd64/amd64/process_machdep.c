@@ -1,4 +1,4 @@
-/*	$NetBSD: process_machdep.c,v 1.6 2005/06/01 13:01:36 scw Exp $	*/
+/*	$NetBSD: process_machdep.c,v 1.4 2003/11/30 12:59:30 fvdl Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -60,7 +60,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.6 2005/06/01 13:01:36 scw Exp $");
+__KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.4 2003/11/30 12:59:30 fvdl Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -150,7 +150,7 @@ process_read_fpregs(l, regs)
 int
 process_write_regs(l, regp)
 	struct lwp *l;
-	const struct reg *regp;
+	struct reg *regp;
 {
 	struct trapframe *tf = process_frame(l);
 	int error;
@@ -161,7 +161,7 @@ process_write_regs(l, regp)
 	 * Note that struct regs is compatible with
 	 * the __gregs array in mcontext_t.
 	 */
-	error = check_mcontext(l, (mcontext_t *)regs, tf);
+	error = check_mcontext((mcontext_t *)regs, tf);
 	if (error != 0)
 		return error;
 
@@ -173,7 +173,7 @@ process_write_regs(l, regp)
 int
 process_write_fpregs(l, regs)
 	struct lwp *l;
-	const struct fpreg *regs;
+	struct fpreg *regs;
 {
 	struct fxsave64 *frame = process_fpframe(l);
 
