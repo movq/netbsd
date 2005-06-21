@@ -33,7 +33,7 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
 # THE POSSIBILITY OF SUCH DAMAGES.
 #
-# $Id: athhal-armv4-be-elf.inc,v 1.1 2005/06/21 20:38:01 dyoung Exp $
+# $Id: athhal-armv4-be-elf.inc,v 1.1.1.1 2005/06/21 20:38:01 dyoung Exp $
 #
 
 #

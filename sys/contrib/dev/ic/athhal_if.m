@@ -33,7 +33,7 @@
 # OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 # SUCH DAMAGES.
 #
-# $Id: athhal_if.m,v 1.1 2005/06/21 20:37:50 dyoung Exp $
+# $Id: athhal_if.m,v 1.1.1.1 2005/06/21 20:37:50 dyoung Exp $
 #
 
 INTERFACE ath_hal;

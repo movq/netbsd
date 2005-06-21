@@ -33,7 +33,7 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
 # THE POSSIBILITY OF SUCH DAMAGES.
 #
-# $Id: athhal-i386-elf.inc,v 1.1 2005/06/21 20:38:13 dyoung Exp $
+# $Id: athhal-i386-elf.inc,v 1.1.1.1 2005/06/21 20:38:13 dyoung Exp $
 #
 
 #
