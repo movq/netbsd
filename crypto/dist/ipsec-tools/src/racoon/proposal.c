@@ -1,6 +1,4 @@
-/*	$NetBSD: proposal.c,v 1.3 2005/05/20 01:28:13 manu Exp $	*/
-
-/* Id: proposal.c,v 1.13 2004/09/13 14:09:19 ludvigm Exp */
+/* $Id: proposal.c,v 1.1 2005/02/12 11:12:51 manu Exp $ */
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -222,7 +220,6 @@ cmpsaprop_alloc(ph1, pp1, pp2, side)
 		newpp->lifebyte = pp1->lifebyte;
 		newpp->pfs_group = pp1->pfs_group;
 		break;
-
 	case PROP_CHECK_STRICT:
 		if (pp1->lifetime > pp2->lifetime) {
 			plog(LLV_ERROR, LOCATION, NULL,
@@ -251,7 +248,6 @@ cmpsaprop_alloc(ph1, pp1, pp2, side)
 		}
 		newpp->pfs_group = pp1->pfs_group;
 		break;
-
 	case PROP_CHECK_CLAIM:
 		/* lifetime */
 		if (pp1->lifetime <= pp2->lifetime) {
@@ -278,7 +274,6 @@ cmpsaprop_alloc(ph1, pp1, pp2, side)
 
     		goto prop_pfs_check;
 		break;
-
 	case PROP_CHECK_EXACT:
 		if (pp1->lifetime != pp2->lifetime) {
 			plog(LLV_ERROR, LOCATION, NULL,
@@ -287,7 +282,6 @@ cmpsaprop_alloc(ph1, pp1, pp2, side)
 				(int)pp2->lifetime, (int)pp1->lifetime);
 			goto err;
 		}
-
 		if (pp1->lifebyte != pp2->lifebyte) {
 			plog(LLV_ERROR, LOCATION, NULL,
 				"lifebyte mismatched: "
@@ -306,7 +300,6 @@ cmpsaprop_alloc(ph1, pp1, pp2, side)
 		newpp->lifebyte = pp1->lifebyte;
 		newpp->pfs_group = pp1->pfs_group;
 		break;
-
 	default:
 		plog(LLV_ERROR, LOCATION, NULL,
 			"invalid pcheck_level why?.\n");
@@ -372,8 +365,8 @@ cmpsaprop_alloc(ph1, pp1, pp2, side)
 			if (pr1->spisize == sizeof(u_int16_t) &&
 			    pr2->spisize == sizeof(u_int32_t)) {
 				spisizematch = 1;
-			} else if (pr2->spisize == sizeof(u_int16_t) &&
-				 pr1->spisize == sizeof(u_int32_t)) {
+			} else if (pr1->spisize == sizeof(u_int16_t) &&
+				 pr2->spisize == sizeof(u_int32_t)) {
 				spisizematch = 1;
 			}
 			if (spisizematch) {

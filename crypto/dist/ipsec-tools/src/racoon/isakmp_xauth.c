@@ -1,6 +1,4 @@
-/*	$NetBSD: isakmp_xauth.c,v 1.2 2005/05/20 07:34:47 manu Exp $	*/
-
-/* Id: isakmp_xauth.c,v 1.17.2.3 2005/03/16 00:13:38 manubsd Exp */
+/* $Id: isakmp_xauth.c,v 1.1 2005/02/12 11:12:33 manu Exp $ */
 
 /*
  * Copyright (C) 2004 Emmanuel Dreyfus
@@ -90,8 +88,7 @@
 #ifdef HAVE_LIBRADIUS
 #include <radlib.h>
 
-struct rad_handle *radius_auth_state = NULL;
-struct rad_handle *radius_acct_state = NULL;
+static struct rad_handle *radius_state = NULL;
 #endif
 
 #ifdef HAVE_LIBPAM
@@ -427,38 +424,19 @@ int
 xauth_radius_init(void)
 {
 	/* For first time use, initialize Radius */
-	if ((isakmp_cfg_config.authsource == ISAKMP_CFG_AUTH_RADIUS) &&
-	    (radius_auth_state == NULL)) {
-		if ((radius_auth_state = rad_auth_open()) == NULL) {
+	if (radius_state == NULL) {
+		if ((radius_state = rad_auth_open()) == NULL) {
 			plog(LLV_ERROR, LOCATION, NULL, 
-			    "Cannot init libradius\n");
+			    "Cannot init librradius\n");
 			return -1;
 		}
 
-		if (rad_config(radius_auth_state, NULL) != 0) {
+		if (rad_config(radius_state, NULL) != 0) {
 			plog(LLV_ERROR, LOCATION, NULL, 
 			    "Cannot open librarius config file: %s\n", 
-			    rad_strerror(radius_auth_state));
-			rad_close(radius_auth_state);
-			radius_auth_state = NULL;
-			return -1;
-		}
-	}
-
-	if ((isakmp_cfg_config.accounting == ISAKMP_CFG_ACCT_RADIUS) &&
-	    (radius_acct_state == NULL)) {
-		if ((radius_acct_state = rad_auth_open()) == NULL) {
-			plog(LLV_ERROR, LOCATION, NULL, 
-			    "Cannot init libradius\n");
-			return -1;
-		}
-
-		if (rad_config(radius_acct_state, NULL) != 0) {
-			plog(LLV_ERROR, LOCATION, NULL, 
-			    "Cannot open librarius config file: %s\n", 
-			    rad_strerror(radius_acct_state));
-			rad_close(radius_acct_state);
-			radius_acct_state = NULL;
+			    rad_strerror(radius_state));
+			rad_close(radius_state);
+			radius_state = NULL;
 			return -1;
 		}
 	}
@@ -472,38 +450,39 @@ xauth_login_radius(iph1, usr, pwd)
 	char *usr;
 	char *pwd;
 {
+	static struct rad_handle *radius_state = NULL;
 	int res;
 	const void *data;
 	size_t len;
 	int type;
 
-	if (rad_create_request(radius_auth_state, RAD_ACCESS_REQUEST) != 0) {
+	if (rad_create_request(radius_state, RAD_ACCESS_REQUEST) != 0) {
 		plog(LLV_ERROR, LOCATION, NULL, 
 		    "rad_create_request failed: %s\n", 
-		    rad_strerror(radius_auth_state));
+		    rad_strerror(radius_state));
 		return -1;
 	}
 	
-	if (rad_put_string(radius_auth_state, RAD_USER_NAME, usr) != 0) {
+	if (rad_put_string(radius_state, RAD_USER_NAME, usr) != 0) {
 		plog(LLV_ERROR, LOCATION, NULL, 
 		    "rad_put_string failed: %s\n", 
-		    rad_strerror(radius_auth_state));
+		    rad_strerror(radius_state));
 		return -1;
 	}
 
-	if (rad_put_string(radius_auth_state, RAD_USER_PASSWORD, pwd) != 0) {
+	if (rad_put_string(radius_state, RAD_USER_PASSWORD, pwd) != 0) {
 		plog(LLV_ERROR, LOCATION, NULL, 
 		    "rad_put_string failed: %s\n", 
-		    rad_strerror(radius_auth_state));
+		    rad_strerror(radius_state));
 		return -1;
 	}
 
-	if (isakmp_cfg_radius_common(radius_auth_state, iph1->mode_cfg->port) != 0)
+	if (isakmp_cfg_radius_common(radius_state, iph1->mode_cfg->port) != 0)
 		return -1;
 
-	switch (res = rad_send_request(radius_auth_state)) {
+	switch (res = rad_send_request(radius_state)) {
 	case RAD_ACCESS_ACCEPT:
-		while ((type = rad_get_attr(radius_auth_state, &data, &len)) != 0) {
+		while ((type = rad_get_attr(radius_state, &data, &len)) != 0) {
 			switch (type) {
 			case RAD_FRAMED_IP_ADDRESS:
 				iph1->mode_cfg->addr4 = rad_cvt_addr(data);
@@ -534,7 +513,7 @@ xauth_login_radius(iph1, usr, pwd)
 	case -1:
 		plog(LLV_ERROR, LOCATION, NULL, 
 		    "rad_send_request failed: %s\n", 
-		    rad_strerror(radius_auth_state));
+		    rad_strerror(radius_state));
 		return -1;
 		break;
 	default:
@@ -915,7 +894,7 @@ isakmp_xauth_set(iph1, attr)
 			EVT_PUSH(iph1->local, iph1->remote, 
 			    EVTT_XAUTH_FAILED, NULL);
 
-			iph1->mode_cfg->flags |= ISAKMP_CFG_DELETE_PH1;
+			iph1->mode_cfg->flags &= ISAKMP_CFG_DELETE_PH1;
 		} else {
 			EVT_PUSH(iph1->local, 
 			    iph1->remote, EVTT_XAUTH_SUCCESS, NULL);

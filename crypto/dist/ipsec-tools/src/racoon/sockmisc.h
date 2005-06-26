@@ -1,6 +1,4 @@
-/*	$NetBSD: sockmisc.h,v 1.2 2005/05/08 08:57:26 manu Exp $	*/
-
-/* Id: sockmisc.h,v 1.5 2004/07/12 20:43:51 ludvigm Exp */
+/* $Id: sockmisc.h,v 1.1 2005/02/12 11:13:05 manu Exp $ */
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -48,12 +46,6 @@ extern const int niflags;
 extern int cmpsaddrwop __P((const struct sockaddr *, const struct sockaddr *));
 extern int cmpsaddrwild __P((const struct sockaddr *, const struct sockaddr *));
 extern int cmpsaddrstrict __P((const struct sockaddr *, const struct sockaddr *));
-
-#ifdef ENABLE_NATT 
-#define CMPSADDR(saddr1, saddr2) cmpsaddrstrict((saddr1), (saddr2))
-#else 
-#define CMPSADDR(saddr1, saddr2) cmpsaddrwop((saddr1), (saddr2))
-#endif
 
 extern struct sockaddr *getlocaladdr __P((struct sockaddr *));
 

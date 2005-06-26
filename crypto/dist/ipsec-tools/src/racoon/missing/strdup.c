@@ -1,5 +1,3 @@
-/*	$NetBSD: strdup.c,v 1.1.1.2 2005/02/23 14:54:36 manu Exp $	*/
-
 /*	$KAME: strdup.c,v 1.2 2000/10/04 17:41:07 itojun Exp $	*/
 
 /*

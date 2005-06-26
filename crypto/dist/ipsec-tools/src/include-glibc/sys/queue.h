@@ -1,5 +1,3 @@
-/*	$NetBSD: queue.h,v 1.1.1.2 2005/02/23 14:54:07 manu Exp $	*/
-
 /*
  * Copyright (c) 1991, 1993
  *	The Regents of the University of California.  All rights reserved.

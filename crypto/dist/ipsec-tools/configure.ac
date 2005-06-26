@@ -1,5 +1,5 @@
 dnl -*- mode: m4 -*-
-dnl Id: configure.ac,v 1.47.2.3 2005/03/14 07:55:03 manubsd Exp
+dnl $Id: configure.ac,v 1.1 2005/02/12 11:11:16 manu Exp $
 
 AC_PREREQ(2.52)
 AC_INIT(ipsec-tools, 0.5pre)
@@ -191,36 +191,6 @@ if test $enable_adminport = "yes"; then
 fi
 AC_MSG_RESULT($enable_adminport)
 
-# Option RC5
-AC_MSG_CHECKING(if --enable-rc5 option is specified)
-AC_ARG_ENABLE(rc5,
-	[  --enable-rc5		enable RC5 encryption (patented)],
-	[], [enable_rc5=no])
-AC_MSG_RESULT($enable_rc5)
-
-if test $enable_rc5 = "yes"; then
-	AC_CHECK_HEADERS([openssl/rc5.h])
-	AC_CHECK_LIB([crypto_rc5], [RC5_32_encrypt],
-	    [EXTRA_CRYPTO="$EXTRA_CRYPTO -lcrypto_rc5"])
-fi
-
-# Option IDEA
-AC_MSG_CHECKING(if --enable-idea option is specified)
-AC_ARG_ENABLE(idea,
-	[  --enable-idea	enable IDEA encryption (patented)],
-	[], [enable_idea=no])
-AC_MSG_RESULT($enable_idea)
-
-if test $enable_idea = "yes"; then
-	AC_CHECK_HEADERS([openssl/idea.h])
-	AC_CHECK_LIB([crypto_idea], [idea_encrypt], 
-	    [EXTRA_CRYPTO="$EXTRA_CRYPTO -lcrypto_idea"])
-fi
-AC_SUBST(EXTRA_CRYPTO)
-
-# For dynamic libradius
-RACOON_PATH_LIBS(MD5_Init, crypto)
-
 # Check for Kerberos5 support
 AC_MSG_CHECKING(if --enable-gssapi option is specified)
 AC_ARG_ENABLE(gssapi,
@@ -287,11 +257,11 @@ if test "$libradius_dir" != "no"; then
 		  libradius_dir="";
 	fi;
 	if test "x$libradius_dir" = "x"; then
-		RACOON_PATH_LIBS(rad_create_request, radius)
+		RACOON_PATH_LIBS(rad_create_request, lradius)
 	else
 		if test -d "$libradius_dir/lib" -a \
 		    -d "$libradius_dir/include" ; then
-			RACOON_PATH_LIBS(rad_create_request, radius, "$libradius_dir/lib")
+			RACOON_PATH_LIBS(rad_create_request, lradius, "$libradius_dir/lib")
 			CPPFLAGS_ADD="$CPPFLAGS_ADD -I$libradius_dir/include"
 		else
 			AC_MSG_ERROR([RADIUS libs or includes not found. Aborting.])
@@ -313,11 +283,11 @@ if test "$libpam_dir" != "no"; then
 		  libpam_dir="";
 	fi;
 	if test "x$libpam_dir" = "x"; then
-		RACOON_PATH_LIBS(pam_start, pam)
+		RACOON_PATH_LIBS(rad_create_request, lpam)
 	else
 		if test -d "$libpam_dir/lib" -a \
 		    -d "$libpam_dir/include" ; then
-			RACOON_PATH_LIBS(pam_start, pam, "$libpam_dir/lib")
+			RACOON_PATH_LIBS(rad_create_request, lpam, "$libpam_dir/lib")
 			CPPFLAGS_ADD="$CPPFLAGS_ADD -I$libpam_dir/include"
 		else
 			AC_MSG_ERROR([PAM libs or includes not found. Aborting.])
@@ -325,7 +295,7 @@ if test "$libpam_dir" != "no"; then
 	fi
 	AC_DEFINE([HAVE_LIBPAM], [], [Hybrid authentication uses PAM])
 	LIBS="$LIBS -L$libpam_dir/lib -R$libpam_dir/lib -lpam"
-	AC_CHECK_FUNCS(pam_start)
+	AC_CHECK_FUNCS(rad_create_request)
 fi
 
 AC_MSG_CHECKING(if --enable-stats option is specified)
@@ -453,34 +423,95 @@ if test "$enable_natt" = "yes"; then
 	fi
 fi
 
-# Set up defines for supported NAT-T versions.
-natt_versions_default="00,02,rfc"
-AC_MSG_CHECKING(which NAT-T versions to support)
-AC_ARG_ENABLE(natt_versions,
-	[  --enable-natt-versions=list    list of supported NAT-T versions delimited by coma.],
-	[ test "$enable_natt_versions" = "yes" && enable_natt_versions=$natt_versions_default ],
-	[ enable_natt_versions=$natt_versions_default ])
-if test "$enable_natt" = "yes"; then
-	AC_MSG_RESULT($enable_natt_versions)
-	for i in `echo $enable_natt_versions | tr ',cfr' ' CFR'`; do
-		case $i in 
-			0|00) AC_DEFINE([ENABLE_NATT_00], [], [Enable NAT-Traversal draft 00]) ;;
-			1|01) AC_DEFINE([ENABLE_NATT_01], [], [Enable NAT-Traversal draft 01]) ;;
-			2|02) AC_DEFINE([ENABLE_NATT_02], [], [Enable NAT-Traversal draft 02]) ;;
-			3|03) AC_DEFINE([ENABLE_NATT_03], [], [Enable NAT-Traversal draft 03]) ;;
-			4|04) AC_DEFINE([ENABLE_NATT_04], [], [Enable NAT-Traversal draft 04]) ;;
-			5|05) AC_DEFINE([ENABLE_NATT_05], [], [Enable NAT-Traversal draft 05]) ;;
-			6|06) AC_DEFINE([ENABLE_NATT_06], [], [Enable NAT-Traversal draft 06]) ;;
-			7|07) AC_DEFINE([ENABLE_NATT_07], [], [Enable NAT-Traversal draft 07]) ;;
-			8|08) AC_DEFINE([ENABLE_NATT_08], [], [Enable NAT-Traversal draft 08]) ;;
-			RFC)  AC_DEFINE([ENABLE_NATT_RFC], [], [Enable NAT-Traversal RFC version]) ;;
-			*) AC_MSG_ERROR([Unknown NAT-T version. Aborting.]) ;;
-		esac
-	done
-	unset i
-else
-	AC_MSG_RESULT([none])
+AC_ARG_ENABLE(natt_00,
+	[  --enable-natt_00           enable NAT-Traversal Draft 00 (yes/no)],
+	[],
+	[enable_natt_00=no])
+
+if test "$enable_natt_00" = "yes"; then
+	AC_DEFINE([ENABLE_NATT_00], [], [Enable NAT-Traversal draft 00])
 fi
+
+
+AC_ARG_ENABLE(natt_01,
+	[  --enable-natt_01           enable NAT-Traversal Draft 01 (yes/no)],
+	[],
+	[enable_natt_01=no])
+
+if test "$enable_natt_01" = "yes"; then
+	AC_DEFINE([ENABLE_NATT_01], [], [Enable NAT-Traversal draft 01])
+fi
+
+
+AC_ARG_ENABLE(natt_02,
+	[  --enable-natt_02           enable NAT-Traversal Draft 02 (yes/no)],
+	[],
+	[enable_natt_02=no])
+
+if test "$enable_natt_02" = "yes"; then
+	AC_DEFINE([ENABLE_NATT_02], [], [Enable NAT-Traversal draft 02])
+fi
+
+
+AC_ARG_ENABLE(natt_03,
+	[  --enable-natt_03           enable NAT-Traversal Draft 03 (yes/no)],
+	[],
+	[enable_natt_03=no])
+
+if test "$enable_natt_03" = "yes"; then
+	AC_DEFINE([ENABLE_NATT_03], [], [Enable NAT-Traversal draft 03])
+fi
+
+
+AC_ARG_ENABLE(natt_04,
+	[  --enable-natt_04           enable NAT-Traversal Draft 04 (yes/no)],
+	[],
+	[enable_natt_05=no])
+
+if test "$enable_natt_04" = "yes"; then
+	AC_DEFINE([ENABLE_NATT_04], [], [Enable NAT-Traversal draft 04])
+fi
+
+
+AC_ARG_ENABLE(natt_05,
+	[  --enable-natt_05           enable NAT-Traversal Draft 05 (yes/no)],
+	[],
+	[enable_natt_05=no])
+
+if test "$enable_natt_05" = "yes"; then
+	AC_DEFINE([ENABLE_NATT_05], [], [Enable NAT-Traversal draft 05])
+fi
+
+
+AC_ARG_ENABLE(natt_06,
+	[  --enable-natt_06           enable NAT-Traversal Draft 06 (yes/no)],
+	[],
+	[enable_natt_06=no])
+
+if test "$enable_natt_06" = "yes"; then
+	AC_DEFINE([ENABLE_NATT_06], [], [Enable NAT-Traversal draft 06])
+fi
+
+
+AC_ARG_ENABLE(natt_07,
+	[  --enable-natt_07           enable NAT-Traversal Draft 07 (yes/no)],
+	[],
+	[enable_natt_07=no])
+
+if test "$enable_natt_07" = "yes"; then
+	AC_DEFINE([ENABLE_NATT_07], [], [Enable NAT-Traversal draft 07])
+fi
+
+
+AC_ARG_ENABLE(natt_08,
+	[  --enable-natt_08           enable NAT-Traversal Draft 08 (yes/no)],
+	[],
+	[enable_natt_08=no])
+
+if test "$enable_natt_08" = "yes"; then
+	AC_DEFINE([ENABLE_NATT_08], [], [Enable NAT-Traversal draft 08])
+fi
+
 
 AC_MSG_CHECKING(whether we support FWD policy)
 case $host in

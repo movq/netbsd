@@ -1,6 +1,4 @@
-/*	$NetBSD: remoteconf.c,v 1.3 2005/05/20 00:54:55 manu Exp $	*/
-
-/* Id: remoteconf.c,v 1.26.2.2 2005/03/16 23:18:43 manubsd Exp */
+/* $Id: remoteconf.c,v 1.1 2005/02/12 11:12:59 manu Exp $ */
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -106,16 +104,6 @@ getrmconf_strict(remote, allow_anon)
 
 	withport = 0;
 
-#ifndef ENABLE_NATT
-	/* 
-	 * We never have ports set in our remote configurations, but when
-	 * NAT-T is enabled, the kernel can have policies with ports and
-	 * send us an acquire message for a destination that has a port set.
-	 * If we do this port check here, we don't find the remote config.
-	 *
-	 * In an ideal world, we would be able to have remote conf with
-	 * port, and the port could be a wildcard. That test could be used.
-	 */
 	switch (remote->sa_family) {
 	case AF_INET:
 		if (((struct sockaddr_in *)remote)->sin_port != IPSEC_PORT_ANY)
@@ -135,7 +123,6 @@ getrmconf_strict(remote, allow_anon)
 			"invalid family: %d\n", remote->sa_family);
 		exit(1);
 	}
-#endif /* ENABLE_NATT */
 
 	if (remote->sa_family == AF_UNSPEC)
 		snprintf (buf, sizeof(buf), "%s", "anonymous");
@@ -215,7 +202,7 @@ newrmconf()
 	new->send_cr = TRUE;
 	new->support_proxy = FALSE;
 	for (i = 0; i <= SCRIPT_MAX; i++)
-		new->script[i] = -1;
+		new->script[0] = -1;
 	new->gen_policy = FALSE;
 	new->retry_counter = lcconf->retry_counter;
 	new->retry_interval = lcconf->retry_interval;
@@ -618,33 +605,10 @@ int
 script_path_add(path)
 	vchar_t *path;
 {
-	char *script_dir;
 	vchar_t *new_storage;
-	vchar_t *new_path;
 	vchar_t **sp;
 	size_t len;
 	size_t size;
-
-	script_dir = lcconf->pathinfo[LC_PATHTYPE_SCRIPT];
-
-	/* Try to find the script in the script directory */
-	if ((path->v[0] != '/') && (script_dir != NULL)) {
-		len = strlen(script_dir) + sizeof("/") + path->l + 1;
-
-		if ((new_path = vmalloc(len)) == NULL) {
-			plog(LLV_ERROR, LOCATION, NULL,
-			    "Cannot allocate memory: %s\n", strerror(errno));
-			return -1;
-		}
-
-		new_path->v[0] = '\0';
-		(void)strncat(new_path->v, script_dir, len);
-		(void)strncat(new_path->v, "/", len);
-		(void)strncat(new_path->v, path->v, len);
-
-		vfree(path);
-		path = new_path;
-	}
 
 	/* First time, initialize */
 	if (script_paths == NULL)
@@ -667,32 +631,4 @@ script_path_add(path)
 	sp[size - 2] = path;
 
 	return (size - 2);
-}
-
-struct isakmpsa *
-dupisakmpsa(sa)
-	struct isakmpsa *sa;
-{
-	struct isakmpsa *res = NULL;
-
-	if (sa == NULL)
-		return NULL;
-
-	res = newisakmpsa();
-	if(res == NULL)
-		return NULL;
-
-	*res = *sa;
-#ifdef HAVE_GSSAPI
-	/* 
-	 * XXX gssid
-	 */
-#endif
-	res->next=NULL;
-
-	if (sa->dhgrp != NULL)
-		oakley_setdhgroup(sa->dh_group, &(res->dhgrp));
-
-	return res;
-
 }

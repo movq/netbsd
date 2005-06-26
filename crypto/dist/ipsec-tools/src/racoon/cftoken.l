@@ -1,6 +1,4 @@
-/*	$NetBSD: cftoken.l,v 1.2 2005/05/10 09:54:43 manu Exp $	*/
-
-/* $Id: cftoken.l,v 1.2 2005/05/10 09:54:43 manu Exp $ */
+/* $Id: cftoken.l,v 1.1 2005/02/12 11:11:45 manu Exp $ */
 
 %{
 /*
@@ -154,7 +152,6 @@ hexstring	0x{hexdigit}+
 <S_PRIV>{bcl}		{ return(BOC); }
 <S_PRIV>user		{ YYD; return(USER); }
 <S_PRIV>group		{ YYD; return(GROUP); }
-<S_PRIV>chroot		{ YYD; return(CHROOT); }
 <S_PRIV>{ecl}		{ BEGIN S_INI; return(EOC); }
 
 	/* path */
@@ -164,8 +161,6 @@ hexstring	0x{hexdigit}+
 <S_PTH>pre_shared_key	{ YYD; yylval.num = LC_PATHTYPE_PSK;
 				return(PATHTYPE); }
 <S_PTH>certificate	{ YYD; yylval.num = LC_PATHTYPE_CERT;
-				return(PATHTYPE); }
-<S_PTH>script 		{ YYD; yylval.num = LC_PATHTYPE_SCRIPT;
 				return(PATHTYPE); }
 <S_PTH>backupsa		{ YYD; yylval.num = LC_PATHTYPE_BACKUPSA;
 				return(PATHTYPE); }
@@ -230,8 +225,6 @@ hexstring	0x{hexdigit}+
 <S_CFG>pool_size	{ YYD; return(CFG_POOL_SIZE); }
 <S_CFG>banner		{ YYD; return(CFG_MOTD); }
 <S_CFG>auth_throttle	{ YYD; return(CFG_AUTH_THROTTLE); }
-<S_CFG>pfs_group	{ YYD; return(CFG_PFS_GROUP); }
-<S_CFG>save_passwd	{ YYD; return(CFG_SAVE_PASSWD); }
 <S_CFG>{ecl}		{ BEGIN S_INI; return(EOC); }
 
 	/* timer */

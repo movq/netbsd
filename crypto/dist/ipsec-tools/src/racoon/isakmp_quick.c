@@ -1,6 +1,4 @@
-/*	$NetBSD: isakmp_quick.c,v 1.5 2005/06/04 21:55:05 manu Exp $	*/
-
-/* Id: isakmp_quick.c,v 1.13.2.1 2005/03/02 20:00:03 vanhu Exp */
+/* $Id: isakmp_quick.c,v 1.1 2005/02/12 11:12:30 manu Exp $ */
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -90,6 +88,9 @@
 static vchar_t *quick_ir1mx __P((struct ph2handle *, vchar_t *, vchar_t *));
 static int get_sainfo_r __P((struct ph2handle *));
 static int get_proposal_r __P((struct ph2handle *));
+#ifdef INET6
+static u_int32_t setscopeid __P((struct sockaddr *, struct sockaddr *));
+#endif
 
 /* %%%
  * Quick Mode
@@ -447,13 +448,6 @@ quick_i2recv(iph2, msg0)
 		case ISAKMP_NPTYPE_N:
 			isakmp_check_notify(pa->ptr, iph2->ph1);
 			break;
-
-#ifdef ENABLE_NATT
-		case ISAKMP_NPTYPE_NATOA_DRAFT:
-		case ISAKMP_NPTYPE_NATOA_RFC:
-			/* Ignore original source/destination messages */
-			break;
-#endif
 
 		default:
 			/* don't send information, see ident_r1recv() */
@@ -1518,7 +1512,7 @@ quick_r3send(iph2, msg0)
 	n = (struct isakmp_pl_n *)notify->v;
 	n->h.np = ISAKMP_NPTYPE_NONE;
 	n->h.len = htons(tlen);
-	n->doi = htonl(IPSEC_DOI);
+	n->doi = htons(IPSEC_DOI);
 	n->proto_id = iph2->approval->head->proto_id;
 	n->spi_size = sizeof(iph2->approval->head->spisize);
 	n->type = htons(ISAKMP_NTYPE_CONNECTED);
@@ -1585,7 +1579,7 @@ end:
 	return error;
 }
 
-int
+static int
 tunnel_mode_prop(p)
 	struct saprop *p;
 {
@@ -1704,7 +1698,6 @@ quick_r3prep(iph2, msg0)
 		delsp_bothdir((struct policyindex *)iph2->spidx_gen);
 		racoon_free(iph2->spidx_gen);
 		iph2->spidx_gen = NULL;
-		iph2->generated_spidx=1;
 	}
 
 	error = 0;
@@ -2124,3 +2117,37 @@ get_proposal_r(iph2)
 
 	return 0;
 }
+
+#ifdef INET6
+static u_int32_t
+setscopeid(sp_addr0, sa_addr0)
+	struct sockaddr *sp_addr0, *sa_addr0;
+{
+	struct sockaddr_in6 *sp_addr, *sa_addr;
+    
+	sp_addr = (struct sockaddr_in6 *)sp_addr0;
+	sa_addr = (struct sockaddr_in6 *)sa_addr0;
+
+	if (!IN6_IS_ADDR_LINKLOCAL(&sp_addr->sin6_addr)
+	 && !IN6_IS_ADDR_SITELOCAL(&sp_addr->sin6_addr)
+	 && !IN6_IS_ADDR_MULTICAST(&sp_addr->sin6_addr))
+		return 0;
+
+	/* this check should not be here ? */
+	if (sa_addr->sin6_family != AF_INET6) {
+		plog(LLV_ERROR, LOCATION, NULL,
+			"can't get scope ID: family mismatch\n");
+		return -1;
+	}
+
+	if (!IN6_IS_ADDR_LINKLOCAL(&sa_addr->sin6_addr)) {
+		plog(LLV_ERROR, LOCATION, NULL,
+			"scope ID is not supported except of lladdr.\n");
+		return -1;
+	}
+
+	sp_addr->sin6_scope_id = sa_addr->sin6_scope_id;
+
+	return 0;
+}
+#endif

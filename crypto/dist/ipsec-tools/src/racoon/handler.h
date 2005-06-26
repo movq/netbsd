@@ -1,6 +1,4 @@
-/*	$NetBSD: handler.h,v 1.5 2005/05/08 14:14:18 he Exp $	*/
-
-/* Id: handler.h,v 1.11 2004/11/16 15:44:46 ludvigm Exp */
+/* $Id: handler.h,v 1.1 2005/02/12 11:12:01 manu Exp $ */
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -306,8 +304,6 @@ struct ph2handle {
 
 	struct isakmp_ivm *ivm;		/* IVs */
 
-	int generated_spidx;	/* mark handlers whith generated policy */
-
 #ifdef ENABLE_STATS
 	struct timeval start;
 	struct timeval end;
@@ -423,9 +419,7 @@ extern struct ph1handle *getph1byindex __P((isakmp_index *));
 extern struct ph1handle *getph1byindex0 __P((isakmp_index *));
 extern struct ph1handle *getph1byaddr __P((struct sockaddr *,
 	struct sockaddr *));
-extern struct ph1handle *getph1byaddrwop __P((struct sockaddr *,
-	struct sockaddr *));
-extern struct ph1handle *getph1bydstaddrwop __P((struct sockaddr *));
+extern struct ph1handle *getph1bydstaddr __P((struct sockaddr *));
 extern vchar_t *dumpph1 __P((void));
 extern struct ph1handle *newph1 __P((void));
 extern void delph1 __P((struct ph1handle *));
@@ -437,11 +431,7 @@ extern void initph1tree __P((void));
 extern struct ph2handle *getph2byspidx __P((struct policyindex *));
 extern struct ph2handle *getph2byspid __P((u_int32_t));
 extern struct ph2handle *getph2byseq __P((u_int32_t));
-extern struct ph2handle *getph2bysaddr __P((struct sockaddr *,
-	struct sockaddr *));
 extern struct ph2handle *getph2bymsgid __P((struct ph1handle *, u_int32_t));
-extern struct ph2handle *getph2byid __P((struct sockaddr *,
-	struct sockaddr *, u_int32_t));
 extern struct ph2handle *getph2bysaidx __P((struct sockaddr *,
 	struct sockaddr *, u_int, u_int32_t));
 extern struct ph2handle *newph2 __P((void));

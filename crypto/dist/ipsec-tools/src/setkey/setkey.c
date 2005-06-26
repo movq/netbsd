@@ -1,6 +1,4 @@
-/* $NetBSD: setkey.c,v 1.6 2005/06/26 23:49:31 christos Exp $ */
-
-/*	KAME: setkey.c,v 1.36 2003/09/24 23:52:51 itojun Exp	*/
+/*	$KAME: setkey.c,v 1.36 2003/09/24 23:52:51 itojun Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, 1998, and 1999 WIDE Project.
@@ -69,9 +67,7 @@
 
 #include "config.h"
 #include "libpfkey.h"
-#include "package_version.h"
-#define extern
-#include "extern.h"
+#include "../../package_version.h"
 
 #define strlcpy(d,s,l) (strncpy(d,s,l), (d)[(l)-1] = '\0')
 
@@ -80,6 +76,7 @@ int main __P((int, char **));
 int get_supported __P((void));
 void sendkeyshort __P((u_int));
 void promisc __P((void));
+int sendkeymsg __P((char *, size_t));
 int postproc __P((struct sadb_msg *, int));
 int verifypriority __P((struct sadb_msg *m));
 int fileproc __P((const char *));
@@ -89,6 +86,8 @@ void shortdump __P((struct sadb_msg *));
 static void printdate __P((void));
 static int32_t gmt2local __P((time_t));
 void stdin_loop __P((void));
+
+extern void parse_init __P((void));
 
 #define MODE_SCRIPT	1
 #define MODE_CMDDUMP	2
@@ -107,16 +106,14 @@ int f_policy = 0;
 int f_hexdump = 0;
 int f_tflag = 0;
 int f_notreally = 0;
-int f_withports = 0;
 #ifdef HAVE_POLICY_FWD
 int f_rfcmode = 1;
 #define RK_OPTS "rk"
 #else
 int f_rkwarn = 0;
 #define RK_OPTS ""
-static void rkwarn(void);
 static void
-rkwarn(void)
+rkwarn()
 {
 	if (!f_rkwarn) {
 		f_rkwarn = 1;
@@ -126,6 +123,22 @@ rkwarn(void)
 
 #endif
 static time_t thiszone;
+
+extern int lineno;
+
+#ifdef HAVE_PFKEY_POLICY_PRIORITY
+extern int last_msg_type;
+int last_msg_type = -1;
+
+extern u_int32_t last_priority;
+u_int32_t last_priority = 0;
+#endif
+
+extern int exit_now;
+int exit_now = 0;
+
+extern int parse __P((FILE **));
+extern int parse_string __P((char *));
 
 void
 usage(int only_version)
@@ -150,6 +163,8 @@ main(argc, argv)
 {
 	FILE *fp = stdin;
 	int c;
+	struct stat sb;
+	int error;
 
 	if (argc == 1) {
 		usage(0);
@@ -158,7 +173,7 @@ main(argc, argv)
 
 	thiszone = gmt2local(0);
 
-	while ((c = getopt(argc, argv, "acdf:HlnvxDFPphVrk?")) != -1) {
+	while ((c = getopt(argc, argv, "acdf:HlnvxDFPhVrk?")) != -1) {
 		switch (c) {
 		case 'c':
 			f_mode = MODE_STDIN;
@@ -197,9 +212,6 @@ main(argc, argv)
 			break;
 		case 'P':
 			f_policy = 1;
-			break;
-		case 'p':
-			f_withports = 1;
 			break;
 		case 'v':
 			f_verbose = 1;
@@ -312,23 +324,23 @@ stdin_loop()
 		if (! read)
 			break;
 #else
-		char rbuf[1024];
-		rbuf[0] = '\0';
-		fgets (rbuf, sizeof(rbuf), stdin);
-		if (! rbuf[0])
+		char read[1024];
+		read[0] = '\0';
+		fgets (read, sizeof(read), stdin);
+		if (! read[0])
 			break;
-		if (rbuf[strlen(rbuf)-1] == '\n')
-			rbuf[strlen(rbuf)-1] = '\0';
+		if (read[strlen(read)-1] == '\n')
+			read[strlen(read)-1] = '\0';
 #endif
-		comment = strchr(rbuf, '#');
+		comment = strchr(read, '#');
 		if (comment)
 			*comment = '\0';
 
-		if (! rbuf[0])
+		if (! read[0])
 			continue;
 
 		linelen += snprintf (&line[linelen], sizeof(line) - linelen,
-				     "%s%s", linelen > 0 ? " " : "", rbuf);
+				     "%s%s", linelen > 0 ? " " : "", read);
 
 		semicolon = strchr(line, ';');
 		while (semicolon) {
@@ -594,17 +606,11 @@ postproc(msg, len)
 		break;
 
 	case SADB_X_SPDGET:
-		if (f_withports) 
-			pfkey_spdump_withports(msg);
-		else
-			pfkey_spdump(msg);
+		pfkey_spdump(msg);
 		break;
 
 	case SADB_X_SPDDUMP:
-		if (f_withports) 
-			pfkey_spdump_withports(msg);
-		else
-			pfkey_spdump(msg);
+		pfkey_spdump(msg);
 		if (msg->sadb_msg_seq == 0) break;
 		msg = (struct sadb_msg *)((caddr_t)msg +
 				     PFKEY_UNUNIT64(msg->sadb_msg_len));

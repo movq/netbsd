@@ -1,6 +1,4 @@
-/*	$NetBSD: genlist.h,v 1.1.1.2 2005/02/23 14:54:14 manu Exp $	*/
-
-/* Id: genlist.h,v 1.2 2004/07/12 20:43:50 ludvigm Exp */
+/* $Id: genlist.h,v 1.1 2005/02/12 11:11:54 manu Exp $ */
 
 /*
  * Copyright (C) 2004 SuSE Linux AG, Nuernberg, Germany.

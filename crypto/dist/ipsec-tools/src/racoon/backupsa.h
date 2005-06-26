@@ -1,6 +1,4 @@
-/*	$NetBSD: backupsa.h,v 1.1.1.2 2005/02/23 14:54:11 manu Exp $	*/
-
-/* Id: backupsa.h,v 1.3 2004/06/11 16:00:15 ludvigm Exp */
+/* $Id: backupsa.h,v 1.1 2005/02/12 11:11:40 manu Exp $ */
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.

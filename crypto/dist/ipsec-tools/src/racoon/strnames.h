@@ -1,6 +1,4 @@
-/*	$NetBSD: strnames.h,v 1.1.1.2 2005/02/23 14:54:28 manu Exp $	*/
-
-/* Id: strnames.h,v 1.5 2004/07/12 20:37:13 ludvigm Exp */
+/* $Id: strnames.h,v 1.1 2005/02/12 11:13:07 manu Exp $ */
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
