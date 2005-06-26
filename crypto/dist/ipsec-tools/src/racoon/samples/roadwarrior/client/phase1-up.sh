@@ -16,9 +16,7 @@ esac
 
 echo $@
 echo "LOCAL_ADDR = ${LOCAL_ADDR}"
-echo "LOCAL_PORT = ${LOCAL_PORT}"
 echo "REMOTE_ADDR = ${REMOTE_ADDR}"
-echo "REMOTE_PORT = ${REMOTE_PORT}"
 echo "DEFAULT_GW = ${DEFAULT_GW}"
 echo "INTERNAL_ADDR4 = ${INTERNAL_ADDR4}"
 echo "INTERNAL_DNS4 = ${INTERNAL_DNS4}"
@@ -46,14 +44,11 @@ Linux)
 	;;
 esac
 
-LOCAL="${LOCAL_ADDR}[${LOCAL_PORT}]"
-REMOTE="${REMOTE_ADDR}[${REMOTE_PORT}]"
-
 echo "
 spdadd ${INTERNAL_ADDR4}/32[any] 0.0.0.0/0[any] any
-       -P out ipsec esp/tunnel/${LOCAL}-${REMOTE}/require;
+       -P out ipsec esp/tunnel/${LOCAL_ADDR}-${REMOTE_ADDR}/require;
 spdadd 0.0.0.0/0[any] ${INTERNAL_ADDR4}[any] any
-       -P in ipsec esp/tunnel/${REMOTE}-${LOCAL}/require;
+       -P in ipsec esp/tunnel/${REMOTE_ADDR}-${LOCAL_ADDR}/require;
 " | setkey -c
 
 #
@@ -64,7 +59,7 @@ case `uname -s` in
 Linux)
 	echo "
 	spddelete 0.0.0.0/0[any] ${INTERNAL_ADDR4}[any] any
-		-P fwd ipsec esp/tunnel/${REMOTE}-${LOCAL}/require;
+		-P fwd ipsec esp/tunnel/${REMOTE_ADDR}-${LOCAL_ADDR}/require;
 	" | setkey -c
 	;;
 esac

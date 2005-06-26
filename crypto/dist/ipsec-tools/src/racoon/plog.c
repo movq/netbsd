@@ -1,6 +1,4 @@
-/*	$NetBSD: plog.c,v 1.1.1.2 2005/02/23 14:54:24 manu Exp $	*/
-
-/* Id: plog.c,v 1.6 2004/07/12 20:15:08 ludvigm Exp */
+/* $Id: plog.c,v 1.1 2005/02/12 11:12:47 manu Exp $ */
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.

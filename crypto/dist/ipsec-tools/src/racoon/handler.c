@@ -1,6 +1,4 @@
-/*	$NetBSD: handler.c,v 1.4 2005/05/20 00:54:55 manu Exp $	*/
-
-/* Id: handler.c,v 1.13 2004/11/21 19:36:26 manubsd Exp */
+/* $Id: handler.c,v 1.1 2005/02/12 11:12:00 manu Exp $ */
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -143,23 +141,6 @@ getph1byaddr(local, remote)
 	LIST_FOREACH(p, &ph1tree, chain) {
 		if (p->status == PHASE1ST_EXPIRED)
 			continue;
-		if (CMPSADDR(local, p->local) == 0
-		 && CMPSADDR(remote, p->remote) == 0)
-			return p;
-	}
-
-	return NULL;
-}
-
-struct ph1handle *
-getph1byaddrwop(local, remote)
-	struct sockaddr *local, *remote;
-{
-	struct ph1handle *p;
-
-	LIST_FOREACH(p, &ph1tree, chain) {
-		if (p->status == PHASE1ST_EXPIRED)
-			continue;
 		if (cmpsaddrwop(local, p->local) == 0
 		 && cmpsaddrwop(remote, p->remote) == 0)
 			return p;
@@ -174,7 +155,7 @@ getph1byaddrwop(local, remote)
  * with phase 2's destinaion.
  */
 struct ph1handle *
-getph1bydstaddrwop(remote)
+getph1bydstaddr(remote)
 	struct sockaddr *remote;
 {
 	struct ph1handle *p;
@@ -284,11 +265,6 @@ delph1(iph1)
 	if (iph1->local) {
 		racoon_free(iph1->local);
 		iph1->local = NULL;
-	}
-
-	if (iph1->approval) {
-		delisakmpsa(iph1->approval);
-		iph1->approval = NULL;
 	}
 
 #ifdef ENABLE_HYBRID
@@ -420,21 +396,6 @@ getph2byspid(spid)
 	return NULL;
 }
 
-struct ph2handle *
-getph2bysaddr(src, dst)
-	struct sockaddr *src, *dst;
-{
-	struct ph2handle *p;
-
-	LIST_FOREACH(p, &ph2tree, chain) {
-		if (cmpsaddrstrict(src, p->src) == 0 &&
-		    cmpsaddrstrict(dst, p->dst) == 0)
-			return p;
-	}
-
-	return NULL;
-}
-
 /*
  * search ph2handle with sequence number.
  */
@@ -464,23 +425,6 @@ getph2bymsgid(iph1, msgid)
 
 	LIST_FOREACH(p, &ph2tree, chain) {
 		if (p->msgid == msgid)
-			return p;
-	}
-
-	return NULL;
-}
-
-struct ph2handle *
-getph2byid(src, dst, spid)
-	struct sockaddr *src, *dst;
-	u_int32_t spid;
-{
-	struct ph2handle *p;
-
-	LIST_FOREACH(p, &ph2tree, chain) {
-		if (spid == p->spid &&
-		    cmpsaddrwop(src, p->src) == 0 &&
-		    cmpsaddrwop(dst, p->dst) == 0)
 			return p;
 	}
 
@@ -671,7 +615,6 @@ flushph2()
 		if (p->status == PHASE2ST_ESTABLISHED) 
 			isakmp_info_send_d2(p);
 
-		delete_spd(p);
 		unbindph12(p);
 		remph2(p);
 		delph2(p);

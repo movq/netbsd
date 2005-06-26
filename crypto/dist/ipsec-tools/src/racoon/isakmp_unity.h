@@ -1,5 +1,3 @@
-/*	$NetBSD: isakmp_unity.h,v 1.1.1.2 2005/02/23 14:54:21 manu Exp $	*/
-
 /*	$KAME$ */
 
 /*

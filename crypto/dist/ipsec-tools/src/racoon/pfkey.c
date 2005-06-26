@@ -1,6 +1,4 @@
-/*	$NetBSD: pfkey.c,v 1.4 2005/05/03 21:08:47 manu Exp $	*/
-
-/* Id: pfkey.c,v 1.31.2.1 2005/02/18 10:01:40 vanhu Exp */
+/* $Id: pfkey.c,v 1.1 2005/02/12 11:12:46 manu Exp $ */
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -1613,7 +1611,6 @@ pk_recvacquire(mhp)
 	struct secpolicy *sp_out = NULL, *sp_in = NULL;
 #define MAXNESTEDSA	5	/* XXX */
 	struct ph2handle *iph2[MAXNESTEDSA];
-	struct sockaddr *src, *dst;
 	int n;	/* # of phase 2 handler */
 
 	/* ignore this message because of local test mode. */
@@ -1631,8 +1628,6 @@ pk_recvacquire(mhp)
 	}
 	msg = (struct sadb_msg *)mhp[0];
 	xpl = (struct sadb_x_policy *)mhp[SADB_X_EXT_POLICY];
-	src = PFKEY_ADDR_SADDR(mhp[SADB_EXT_ADDRESS_SRC]);
-	dst = PFKEY_ADDR_SADDR(mhp[SADB_EXT_ADDRESS_DST]);
 
 	/* ignore if type is not IPSEC_POLICY_IPSEC */
 	if (xpl->sadb_x_policy_type != IPSEC_POLICY_IPSEC) {
@@ -1697,7 +1692,7 @@ pk_recvacquire(mhp)
 	 *       has to prcesss such a acquire message because racoon may
 	 *       lost the expire message.
 	 */
-	iph2[0] = getph2byid(src, dst, xpl->sadb_x_policy_id);
+	iph2[0] = getph2byspid(xpl->sadb_x_policy_id);
 	if (iph2[0] != NULL) {
 		if (iph2[0]->status < PHASE2ST_ESTABLISHED) {
 			plog(LLV_DEBUG, LOCATION, NULL,
@@ -2843,13 +2838,13 @@ sadbsecas2str(src, dst, proto, spi, mode)
 	p += i;
 	blen -= i;
 
-	i = snprintf(p, blen, "%s->", saddr2str(src));
+	i = snprintf(p, blen, "%s->", saddrwop2str(src));
 	if (i < 0 || i >= blen)
 		return NULL;
 	p += i;
 	blen -= i;
 
-	i = snprintf(p, blen, "%s ", saddr2str(dst));
+	i = snprintf(p, blen, "%s ", saddrwop2str(dst));
 	if (i < 0 || i >= blen)
 		return NULL;
 	p += i;

@@ -1,6 +1,4 @@
-/*	$NetBSD: isakmp_inf.c,v 1.4 2005/05/08 08:57:26 manu Exp $	*/
-
-/* Id: isakmp_inf.c,v 1.14.4.2 2005/03/02 20:00:03 vanhu Exp */
+/* $Id: isakmp_inf.c,v 1.1 2005/02/12 11:12:27 manu Exp $ */
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -103,6 +101,7 @@ static int isakmp_info_recv_r_u __P((struct ph1handle *,
 static int isakmp_info_recv_r_u_ack __P((struct ph1handle *,
 	struct isakmp_pl_ru *, u_int32_t));
 static void isakmp_info_send_r_u __P((void *));
+static void purge_remote __P((struct ph1handle *));
 #endif
 
 static void purge_isakmp_spi __P((int, isakmp_index *, size_t));
@@ -608,10 +607,8 @@ isakmp_info_send_common(iph1, payload, np, flags)
 	iph2->src = dupsaddr(iph1->local);
 	switch (iph1->remote->sa_family) {
 	case AF_INET:
-#ifndef ENABLE_NATT
 		((struct sockaddr_in *)iph2->dst)->sin_port = 0;
 		((struct sockaddr_in *)iph2->src)->sin_port = 0;
-#endif
 		break;
 #ifdef INET6
 	case AF_INET6:
@@ -906,7 +903,7 @@ isakmp_info_recv_n(iph1, msg)
 	return(0);
 }
 
-void
+static void
 purge_isakmp_spi(proto, spi, n)
 	int proto;
 	isakmp_index *spi;	/*network byteorder*/
@@ -993,7 +990,7 @@ purge_ipsec_spi(dst0, proto, spi, n)
 
 		/* don't delete inbound SAs at the moment */
 		/* XXX should we remove SAs with opposite direction as well? */
-		if (CMPSADDR(dst0, dst)) {
+		if (cmpsaddrwop(dst0, dst)) {
 			msg = next;
 			continue;
 		}
@@ -1017,7 +1014,6 @@ purge_ipsec_spi(dst0, proto, spi, n)
 			 */
 			iph2 = getph2bysaidx(src, dst, proto, spi[i]);
 			if (iph2) {
-				delete_spd(iph2);
 				unbindph12(iph2);
 				remph2(iph2);
 				delph2(iph2);
@@ -1163,11 +1159,11 @@ info_recv_initialcontact(iph1)
 		 * racoon only deletes SA which is matched both the
 		 * source address and the destination accress.
 		 */
-		if (CMPSADDR(iph1->local, src) == 0 &&
-		    CMPSADDR(iph1->remote, dst) == 0)
+		if (cmpsaddrwop(iph1->local, src) == 0 &&
+		    cmpsaddrwop(iph1->remote, dst) == 0)
 			;
-		else if (CMPSADDR(iph1->remote, src) == 0 &&
-		    CMPSADDR(iph1->local, dst) == 0)
+		else if (cmpsaddrwop(iph1->remote, src) == 0 &&
+		    cmpsaddrwop(iph1->local, dst) == 0)
 			;
 		else {
 			msg = next;
@@ -1203,7 +1199,6 @@ info_recv_initialcontact(iph1)
 		proto_id = pfkey2ipsecdoi_proto(msg->sadb_msg_satype);
 		iph2 = getph2bysaidx(src, dst, proto_id, sa->sadb_sa_spi);
 		if (iph2) {
-			delete_spd(iph2);
 			unbindph12(iph2);
 			remph2(iph2);
 			delph2(iph2);
@@ -1314,11 +1309,8 @@ isakmp_info_recv_d(iph1, msg)
 					d->spi_size, d->proto_id);
 				continue;
 			}
-
-			if (iph1->scr)
-				SCHED_KILL(iph1->scr);
-
-			purge_remote(iph1);
+			purge_isakmp_spi(d->proto_id,
+					(isakmp_index *)(d + 1), num_spi);
 			break;
 
 		case IPSECDOI_PROTO_IPSEC_AH:
@@ -1503,6 +1495,94 @@ isakmp_info_recv_r_u_ack (iph1, ru, msgid)
 	return 0;
 }
 
+
+
+static void
+purge_remote(iph1)
+	struct ph1handle *iph1;
+{
+	vchar_t *buf = NULL;
+	struct sadb_msg *msg, *next, *end;
+	struct sadb_sa *sa;
+	struct sockaddr *src, *dst;
+	caddr_t mhp[SADB_EXT_MAX + 1];
+
+	/* Delete all phase2 SAs */
+	buf = pfkey_dump_sadb(SADB_SATYPE_UNSPEC);
+	if (buf == NULL) {
+		plog(LLV_DEBUG, LOCATION, NULL,
+			"pfkey_dump_sadb returned nothing.\n");
+		return;
+	}
+
+	msg = (struct sadb_msg *)buf->v;
+	end = (struct sadb_msg *)(buf->v + buf->l);
+
+	while (msg < end) {
+		if ((msg->sadb_msg_len << 3) < sizeof(*msg))
+			break;
+		next = (struct sadb_msg *)((caddr_t)msg + (msg->sadb_msg_len << 3));
+		if (msg->sadb_msg_type != SADB_DUMP) {
+			msg = next;
+			continue;
+		}
+
+		if (pfkey_align(msg, mhp) || pfkey_check(mhp)) {
+			plog(LLV_ERROR, LOCATION, NULL,
+				"pfkey_check (%s)\n", ipsec_strerror());
+			msg = next;
+			continue;
+		}
+
+		sa = (struct sadb_sa *)(mhp[SADB_EXT_SA]);
+		if (!sa ||
+		    !mhp[SADB_EXT_ADDRESS_SRC] ||
+		    !mhp[SADB_EXT_ADDRESS_DST]) {
+			msg = next;
+			continue;
+		}
+		src = PFKEY_ADDR_SADDR(mhp[SADB_EXT_ADDRESS_SRC]);
+		dst = PFKEY_ADDR_SADDR(mhp[SADB_EXT_ADDRESS_DST]);
+
+		if (sa->sadb_sa_state != SADB_SASTATE_MATURE &&
+		    sa->sadb_sa_state != SADB_SASTATE_DYING) {
+			msg = next;
+			continue;
+		}
+
+		/* delete in/outbound SAs */
+		if (cmpsaddrwop(iph1->remote, dst) &&
+		    cmpsaddrwop(iph1->remote, src)) {
+			msg = next;
+			continue;
+		}
+
+		pfkey_send_delete(lcconf->sock_pfkey,
+				  msg->sadb_msg_satype,
+				  IPSEC_MODE_ANY,
+				  src, dst, sa->sadb_sa_spi);
+
+		plog(LLV_INFO, LOCATION, NULL,
+			 "purged IPsec-SA spi=%u.\n",
+			 ntohl(sa->sadb_sa_spi));
+
+		msg = next;
+	}
+
+	if (buf)
+		vfree(buf);
+
+	/* Mark the phase1 handler as EXPIRED */
+	plog(LLV_INFO, LOCATION, NULL,
+		 "purged ISAKMP-SA spi=%s.\n",
+		 isakmp_pindex(&(iph1->index), iph1->msgid));
+
+	if (iph1->sce)
+		SCHED_KILL(iph1->sce);
+
+	iph1->status = PHASE1ST_EXPIRED;
+	iph1->sce = sched_new(1, isakmp_ph1delete_stub, iph1);
+}
 
 /*
  * send Delete payload (for ISAKMP SA) in Informational exchange.

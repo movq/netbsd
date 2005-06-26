@@ -1,6 +1,4 @@
-/*	$NetBSD: throttle.c,v 1.1.1.2 2005/02/23 14:54:28 manu Exp $	*/
-
-/* Id: throttle.c,v 1.2 2004/11/30 07:40:13 manubsd Exp */
+/* $Id: throttle.c,v 1.1 2005/02/12 11:13:07 manu Exp $ */
 
 /*
  * Copyright (C) 2004 Emmanuel Dreyfus

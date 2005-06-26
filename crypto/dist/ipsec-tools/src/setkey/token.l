@@ -1,5 +1,3 @@
-/*	$NetBSD: token.l,v 1.4 2005/06/26 23:49:31 christos Exp $	*/
-
 /*	$KAME: token.l,v 1.44 2003/10/21 07:20:58 itojun Exp $	*/
 
 /*
@@ -61,7 +59,19 @@
 #else
 #include "y.tab.h"
 #endif
-#include "extern.h"
+
+int lineno = 1;
+
+extern u_char m_buf[BUFSIZ];
+extern u_int m_len;
+extern int f_debug;
+
+int yylex __P((void));
+void yyfatal __P((const char *s));
+void yyerror __P((const char *s));
+extern void parse_init __P((void));
+int parse __P((FILE **));
+int yyparse __P((void));
 
 /* make the code compile on *BSD-current */
 #ifndef SADB_X_AALG_SHA2_256
@@ -129,7 +139,7 @@ spddump		{ return(SPDDUMP); }
 spdflush	{ return(SPDFLUSH); }
 tagged		{ return(TAGGED); }
 {hyphen}P	{ BEGIN S_PL; return(F_POLICY); }
-<S_PL>[a-zA-Z0-9:\.\-_/ \n\t][a-zA-Z0-9:\.%\-+_/ \n\t\]\[]* {
+<S_PL>[a-zA-Z0-9:\.\-_/ \n\t][a-zA-Z0-9:\.%\-+_/ \n\t]* {
 			yymore();
 
 			/* count up for nl */
@@ -165,11 +175,6 @@ ah-old		{ yylval.num = 1; return(PR_AH); }
 esp-old		{ yylval.num = 1; return(PR_ESP); }
 esp-udp		{ yylval.num = 0; return(PR_ESPUDP); }
 ipcomp		{ yylval.num = 0; return(PR_IPCOMP); }
-tcp		{ 
-#ifdef SADB_X_SATYPE_TCPSIGNATURE
-			yylval.num = 0; return(PR_TCP); 
-#endif
-		}
 
 	/* authentication alogorithm */
 {hyphen}A	{ BEGIN S_AUTHALG; return(F_AUTH); }
@@ -323,7 +328,6 @@ parse(fp)
 {
 	yyin = *fp;
 
-	lineno = 1;
 	parse_init();
 
 	if (yyparse()) {

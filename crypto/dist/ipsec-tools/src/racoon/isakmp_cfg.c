@@ -1,6 +1,4 @@
-/*	$NetBSD: isakmp_cfg.c,v 1.5 2005/05/10 09:54:43 manu Exp $	*/
-
-/* $Id: isakmp_cfg.c,v 1.5 2005/05/10 09:54:43 manu Exp $ */
+/* $Id: isakmp_cfg.c,v 1.1 2005/02/12 11:12:20 manu Exp $ */
 
 /*
  * Copyright (C) 2004 Emmanuel Dreyfus
@@ -101,8 +99,6 @@ struct isakmp_cfg_config isakmp_cfg_config = {
 	ISAKMP_CFG_MAX_CNX,		/* pool_size */
 	THROTTLE_PENALTY,		/* auth_throttle */
 	ISAKMP_CFG_MOTD,		/* motd */
-	0,				/* pfs_group */
-	0,				/* save_passwd */
 };
 
 static vchar_t *buffer_cat(vchar_t *s, vchar_t *append);
@@ -132,7 +128,7 @@ isakmp_cfg_r(iph1, msg)
 {
 	struct isakmp *packet;
 	struct isakmp_gen *ph;
-	int tlen;
+	size_t tlen;
 	char *npp;
 	int np;
 	vchar_t *dmsg;
@@ -305,7 +301,7 @@ isakmp_cfg_reply(iph1, attrpl)
 	struct isakmp_pl_attr *attrpl;
 {
 	struct isakmp_data *attr;
-	int tlen;
+	size_t tlen;
 	size_t alen;
 	char *npp;
 	int type;
@@ -442,7 +438,7 @@ isakmp_cfg_request(iph1, attrpl)
 	struct isakmp_pl_attr *attrpl;
 {
 	struct isakmp_data *attr;
-	int tlen;
+	size_t tlen;
 	size_t alen;
 	char *npp;
 	vchar_t *payload;
@@ -588,7 +584,7 @@ isakmp_cfg_set(iph1, attrpl)
 	struct isakmp_pl_attr *attrpl;
 {
 	struct isakmp_data *attr;
-	int tlen;
+	size_t tlen;
 	size_t alen;
 	char *npp;
 	vchar_t *payload;
@@ -639,7 +635,7 @@ isakmp_cfg_set(iph1, attrpl)
 			attr++;
 		} else {
 			alen = ntohs(attr->lorv);
-			tlen -= (sizeof(*attr) + alen);
+			tlen -= alen;
 			npp = (char *)attr;
 			attr = (struct isakmp_data *)
 			    (npp + sizeof(*attr) + alen);
@@ -973,10 +969,8 @@ isakmp_cfg_send(iph1, payload, np, flags, new_exchange)
 	iph2->src = dupsaddr(iph1->local);
 	switch (iph1->remote->sa_family) {
 	case AF_INET:
-#ifndef ENABLE_NATT
 		((struct sockaddr_in *)iph2->dst)->sin_port = 0;
 		((struct sockaddr_in *)iph2->src)->sin_port = 0;
-#endif
 		break;
 #ifdef INET6
 	case AF_INET6:
@@ -1204,8 +1198,7 @@ isakmp_cfg_putport(iph1, index)
 
 #ifdef HAVE_LIBPAM
 	/* Cleanup PAM status associated with the port */
-	if (isakmp_cfg_config.authsource == ISAKMP_CFG_AUTH_PAM)
-		privsep_cleanup_pam(index);
+	privsep_cleanup_pam(index);
 #endif
 	isakmp_cfg_config.port_pool[index].used = 0;
 	iph1->mode_cfg->flags &= ISAKMP_CFG_PORT_ALLOCATED;
@@ -1299,37 +1292,38 @@ isakmp_cfg_accounting_radius(iph1, inout)
 	struct ph1handle *iph1;
 	int inout;
 {
+	static struct rad_handle *radius_state = NULL;
+
 	/* For first time use, initialize Radius */
-	if (radius_acct_state == NULL) {
-		if ((radius_acct_state = rad_acct_open()) == NULL) {
+	if (radius_state == NULL) {
+		if ((radius_state = rad_acct_open()) == NULL) {
 			plog(LLV_ERROR, LOCATION, NULL,
 			    "Cannot init librradius\n");
 			return -1;
 		}
 
-		if (rad_config(radius_acct_state, NULL) != 0) {
+		if (rad_config(radius_state, NULL) != 0) {
 			 plog(LLV_ERROR, LOCATION, NULL,
 			     "Cannot open librarius config file: %s\n",
-			     rad_strerror(radius_acct_state));
-			  rad_close(radius_acct_state);
-			  radius_acct_state = NULL;
+			     rad_strerror(radius_state));
+			  rad_close(radius_state);
+			  radius_state = NULL;
 			  return -1;
 		}
 	}
 
-	if (rad_create_request(radius_acct_state, 
-	    RAD_ACCOUNTING_REQUEST) != 0) {
+	if (rad_create_request(radius_state, RAD_ACCOUNTING_REQUEST) != 0) {
 		plog(LLV_ERROR, LOCATION, NULL,
 		    "rad_create_request failed: %s\n",
-		    rad_strerror(radius_acct_state));
+		    rad_strerror(radius_state));
 		return -1;
 	}
 
-	if (rad_put_string(radius_acct_state, RAD_USER_NAME, 
+	if (rad_put_string(radius_state, RAD_USER_NAME, 
 	    iph1->mode_cfg->login) != 0) {
 		plog(LLV_ERROR, LOCATION, NULL,
 		    "rad_put_string failed: %s\n",
-		    rad_strerror(radius_acct_state));
+		    rad_strerror(radius_state));
 		return -1;
 	}
 
@@ -1345,37 +1339,36 @@ isakmp_cfg_accounting_radius(iph1, inout)
 		break;
 	}
 
-	if (rad_put_addr(radius_acct_state, 
+	if (rad_put_addr(radius_state, 
 	    RAD_FRAMED_IP_ADDRESS, iph1->mode_cfg->addr4) != 0) {
 		plog(LLV_ERROR, LOCATION, NULL,
 		    "rad_put_addr failed: %s\n",
-		    rad_strerror(radius_acct_state));
+		    rad_strerror(radius_state));
 		return -1;
 	}
 
-	if (rad_put_addr(radius_acct_state, 
+	if (rad_put_addr(radius_state, 
 	    RAD_LOGIN_IP_HOST, iph1->mode_cfg->addr4) != 0) {
 		plog(LLV_ERROR, LOCATION, NULL,
 		    "rad_put_addr failed: %s\n",
-		    rad_strerror(radius_acct_state));
+		    rad_strerror(radius_state));
 		return -1;
 	}
 
-	if (rad_put_int(radius_acct_state, RAD_ACCT_STATUS_TYPE, inout) != 0) {
+	if (rad_put_int(radius_state, RAD_ACCT_STATUS_TYPE, inout) != 0) {
 		plog(LLV_ERROR, LOCATION, NULL,
 		    "rad_put_int failed: %s\n",
-		    rad_strerror(radius_acct_state));
+		    rad_strerror(radius_state));
 		return -1;
 	}
 
-	if (isakmp_cfg_radius_common(radius_acct_state, 
-	    iph1->mode_cfg->port) != 0)
+	if (isakmp_cfg_radius_common(radius_state, iph1->mode_cfg->port) != 0)
 		return -1;
 
-	if (rad_send_request(radius_acct_state) != RAD_ACCOUNTING_RESPONSE) {
+	if (rad_send_request(radius_state) != RAD_ACCOUNTING_RESPONSE) {
 		plog(LLV_ERROR, LOCATION, NULL,
 		    "rad_send_request failed: %s\n",
-		    rad_strerror(radius_acct_state));
+		    rad_strerror(radius_state));
 		return -1;
 	}
 

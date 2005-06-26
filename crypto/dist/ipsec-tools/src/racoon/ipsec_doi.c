@@ -1,6 +1,4 @@
-/*	$NetBSD: ipsec_doi.c,v 1.7 2005/06/03 22:27:06 manu Exp $	*/
-
-/* Id: ipsec_doi.c,v 1.38 2005/05/31 16:07:55 monas Exp */
+/* $Id: ipsec_doi.c,v 1.1 2005/02/12 11:12:09 manu Exp $ */
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -215,23 +213,19 @@ get_ph1approval(iph1, pair)
 	int prophlen;
 	int i;
 
-	if (iph1->approval) {
-		delisakmpsa(iph1->approval);
-		iph1->approval = NULL;
-	}
+	iph1->approval = NULL;
 
 	for (i = 0; i < MAXPROPPAIRLEN; i++) {
 		if (pair[i] == NULL)
 			continue;
 		for (s = pair[i]; s; s = s->next) {
-			prophlen = 
-			    sizeof(struct isakmp_pl_p) + s->prop->spi_size;
-
+			prophlen = sizeof(struct isakmp_pl_p)
+					+ s->prop->spi_size;
 			/* compare proposal and select one */
 			for (p = s; p; p = p->tnext) {
-				if ((sa = get_ph1approvalx(p, 
-				    iph1->rmconf->proposal, &tsa, 
-				    iph1->rmconf->pcheck_level)) != NULL)
+				sa = get_ph1approvalx(p, iph1->rmconf->proposal,
+						      &tsa, iph1->rmconf->pcheck_level);
+				if (sa != NULL)
 					goto found;
 			}
 		}
@@ -309,10 +303,8 @@ saok:
 #endif
 
 	newsa = get_sabyproppair(p, iph1);
-	if (newsa == NULL) {
-		delisakmpsa(iph1->approval);
+	if (newsa == NULL)
 		iph1->approval = NULL;
-	}
 
 	return newsa;
 }
@@ -394,71 +386,30 @@ get_ph1approvalx(p, proposal, sap, check_level)
 		    tsap->authmethod == authmethod &&
 		    tsap->hashtype == s->hashtype &&
 		    tsap->dh_group == s->dh_group &&
-		    tsap->encklen == s->encklen) {
-			switch(check_level) {
+		    tsap->encklen == s->encklen)
+			switch(check_level){
 			case PROP_CHECK_OBEY:
+				s->lifetime=tsap->lifetime;
 				goto found;
 				break;
-
 			case PROP_CHECK_STRICT:
-				if ((tsap->lifetime > s->lifetime) ||
-				    (tsap->lifebyte > s->lifebyte))
-					continue;
-				goto found;
-				break;
-
 			case PROP_CHECK_CLAIM:
-				if (tsap->lifetime < s->lifetime)
-					s->lifetime = tsap->lifetime;
-				if (tsap->lifebyte < s->lifebyte)
-					s->lifebyte = tsap->lifebyte;
+				if (tsap->lifetime > s->lifetime) 
+					continue ;
+				s->lifetime=tsap->lifetime;
 				goto found;
 				break;
-
 			case PROP_CHECK_EXACT:
-				if ((tsap->lifetime != s->lifetime) ||
-				    (tsap->lifebyte != s->lifebyte))
-					continue;
+				if (tsap->lifetime != s->lifetime) 
+					continue ;
 				goto found;
-				break;
-
-			default:
-				plog(LLV_ERROR, LOCATION, NULL, 
-				    "Unexpected proposal_check value\n");
-				continue;
 				break;
 			}
-		}
 	}
 
 found:
 	if (tsap->dhgrp != NULL)
 		oakley_dhgrp_free(tsap->dhgrp);
-
-	if ((s = dupisakmpsa(s)) != NULL) {
-		switch(check_level) {
-		case PROP_CHECK_OBEY:
-			s->lifetime = tsap->lifetime;
-			s->lifebyte = tsap->lifebyte;
-			break;
-
-		case PROP_CHECK_STRICT:
-			s->lifetime = tsap->lifetime;
-			s->lifebyte = tsap->lifebyte;
-			break;
-
-		case PROP_CHECK_CLAIM:
-			if (tsap->lifetime < s->lifetime)
-				s->lifetime = tsap->lifetime;
-			if (tsap->lifebyte < s->lifebyte)
-				s->lifebyte = tsap->lifebyte;
-			break;
-
-		default:
-			break;
-		}
-	}
-
 	return s;
 }
 
@@ -699,7 +650,7 @@ t2isakmpsa(trns, sa)
 			case IPSECDOI_ATTR_SA_LD_TYPE_KB:
 				sa->lifebyte = ipsecdoi_set_ld(val);
 				vfree(val);
-				if (sa->lifebyte == 0) {
+				if (sa->lifetime == 0) {
 					plog(LLV_ERROR, LOCATION, NULL,
 						"invalid life duration.\n");
 					goto err;
@@ -2434,15 +2385,6 @@ check_attr_ipcomp(trns)
 			case IPSECDOI_ATTR_ENC_MODE_TUNNEL:
 			case IPSECDOI_ATTR_ENC_MODE_TRNS:
 				break;
-#ifdef ENABLE_NATT
-			case IPSECDOI_ATTR_ENC_MODE_UDPTUNNEL_RFC:
-			case IPSECDOI_ATTR_ENC_MODE_UDPTRNS_RFC:
-			case IPSECDOI_ATTR_ENC_MODE_UDPTUNNEL_DRAFT:
-			case IPSECDOI_ATTR_ENC_MODE_UDPTRNS_DRAFT:
-				plog(LLV_DEBUG, LOCATION, NULL,
-				     "UDP encapsulation requested\n");
-				break;
-#endif
 			default:
 				plog(LLV_ERROR, LOCATION, NULL,
 					"invalid encryption mode=%u.\n",
@@ -2665,19 +2607,17 @@ setph1attr(sa, buf)
 	int attrlen = 0;
 
 	if (sa->lifetime) {
-		u_int32_t lifetime = htonl((u_int32_t)sa->lifetime);
-
 		attrlen += sizeof(struct isakmp_data)
 			+ sizeof(struct isakmp_data);
 		if (sa->lifetime > 0xffff)
-			attrlen += sizeof(lifetime);
+			attrlen += sizeof(sa->lifetime);
 		if (buf) {
 			p = isakmp_set_attr_l(p, OAKLEY_ATTR_SA_LD_TYPE,
 						OAKLEY_ATTR_SA_LD_TYPE_SEC);
 			if (sa->lifetime > 0xffff) {
+				u_int32_t v = htonl((u_int32_t)sa->lifetime);
 				p = isakmp_set_attr_v(p, OAKLEY_ATTR_SA_LD,
-						(caddr_t)&lifetime, 
-						sizeof(lifetime));
+						(caddr_t)&v, sizeof(v));
 			} else {
 				p = isakmp_set_attr_l(p, OAKLEY_ATTR_SA_LD,
 							sa->lifetime);
@@ -2686,19 +2626,17 @@ setph1attr(sa, buf)
 	}
 
 	if (sa->lifebyte) {
-		u_int32_t lifebyte = htonl((u_int32_t)sa->lifebyte);
-		
 		attrlen += sizeof(struct isakmp_data)
 			+ sizeof(struct isakmp_data);
 		if (sa->lifebyte > 0xffff)
-			attrlen += sizeof(lifebyte);
+			attrlen += sizeof(sa->lifebyte);
 		if (buf) {
 			p = isakmp_set_attr_l(p, OAKLEY_ATTR_SA_LD_TYPE,
 						OAKLEY_ATTR_SA_LD_TYPE_KB);
 			if (sa->lifebyte > 0xffff) {
+				u_int32_t v = htonl((u_int32_t)sa->lifebyte);
 				p = isakmp_set_attr_v(p, OAKLEY_ATTR_SA_LD,
-							(caddr_t)&lifebyte,
-							sizeof(lifebyte));
+							(caddr_t)&v, sizeof(v));
 			} else {
 				p = isakmp_set_attr_l(p, OAKLEY_ATTR_SA_LD,
 							sa->lifebyte);
@@ -4158,23 +4096,36 @@ struct isakmpsa *
 fixup_initiator_sa(match, received)
 	struct isakmpsa *match, *received;
 {
-	if (received->gssid != NULL)
-		match->gssid = vdup(received->gssid);
+	struct isakmpsa *newsa;
 
-	return match;
+	if (received->gssid == NULL)
+		return match;
+
+	newsa = newisakmpsa();
+	memcpy(newsa, match, sizeof *newsa);
+
+	if (match->dhgrp != NULL) {
+		newsa->dhgrp = racoon_calloc(1, sizeof(struct dhgroup));
+		memcpy(newsa->dhgrp, match->dhgrp, sizeof (struct dhgroup));
+	}
+	newsa->next = NULL;
+	newsa->rmconf = NULL;
+
+	newsa->gssid = vdup(received->gssid);
+
+	return newsa;
 }
 #endif
 
 static int rm_idtype2doi[] = {
-	255,				/* IDTYPE_UNDEFINED, 0	*/
-	IPSECDOI_ID_FQDN,		/* IDTYPE_FQDN, 1 */
-	IPSECDOI_ID_USER_FQDN,		/* IDTYPE_USERFQDN, 2 */
-	IPSECDOI_ID_KEY_ID,		/* IDTYPE_KEYID, 3 */ 
-	255,	/* 			   IDTYPE_ADDRESS, 4
+	IPSECDOI_ID_FQDN,
+	IPSECDOI_ID_USER_FQDN,
+	IPSECDOI_ID_KEY_ID,
+	255,	/* it's type of "address"
 		 * it expands into 4 types by another function. */
-	IPSECDOI_ID_DER_ASN1_DN,	/* IDTYPE_ASN1DN, 5 */
+	IPSECDOI_ID_DER_ASN1_DN,
 #ifdef ENABLE_HYBRID
-	255,				/* IDTYPE_LOGIN, 6 */
+	255,	/* It's type LOGIN */
 #endif
 };
 
