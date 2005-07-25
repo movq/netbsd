@@ -1,4 +1,4 @@
-/* $Id: vndcompress.c,v 1.1 2005/07/25 12:17:59 hubertf Exp $ */
+/* $Id: vndcompress.c,v 1.1.1.1 2005/07/25 12:17:59 hubertf Exp $ */
 
 /*
  * Copyright (c) 2005 by Florian Stoehr <netbsd@wolfnode.de>
