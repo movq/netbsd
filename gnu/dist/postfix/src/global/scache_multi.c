@@ -1,4 +1,4 @@
-/*	$NetBSD: scache_multi.c,v 1.1 2005/08/18 21:07:14 rpaulo Exp $	*/
+/*	$NetBSD: scache_multi.c,v 1.1.1.1 2005/08/18 21:07:14 rpaulo Exp $	*/
 
 /*++
 /* NAME

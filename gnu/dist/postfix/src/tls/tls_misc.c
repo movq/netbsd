@@ -1,4 +1,4 @@
-/*	$NetBSD: tls_misc.c,v 1.1 2005/08/18 21:11:06 rpaulo Exp $	*/
+/*	$NetBSD: tls_misc.c,v 1.1.1.1 2005/08/18 21:11:06 rpaulo Exp $	*/
 
 /*++
 /* NAME

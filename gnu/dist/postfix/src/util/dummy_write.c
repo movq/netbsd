@@ -1,4 +1,4 @@
-/*	$NetBSD: dummy_write.c,v 1.1 2005/08/18 21:10:54 rpaulo Exp $	*/
+/*	$NetBSD: dummy_write.c,v 1.1.1.1 2005/08/18 21:10:54 rpaulo Exp $	*/
 
 /*++
 /* NAME

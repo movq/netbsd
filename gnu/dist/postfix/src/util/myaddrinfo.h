@@ -1,4 +1,4 @@
-/*	$NetBSD: myaddrinfo.h,v 1.1 2005/08/18 21:10:58 rpaulo Exp $	*/
+/*	$NetBSD: myaddrinfo.h,v 1.1.1.1 2005/08/18 21:10:58 rpaulo Exp $	*/
 
 #ifndef _MYADDRINFO_H_INCLUDED_
 #define _MYADDRINFO_H_INCLUDED_

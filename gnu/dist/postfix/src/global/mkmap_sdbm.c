@@ -1,4 +1,4 @@
-/*	$NetBSD: mkmap_sdbm.c,v 1.1 2005/08/18 21:06:08 rpaulo Exp $	*/
+/*	$NetBSD: mkmap_sdbm.c,v 1.1.1.1 2005/08/18 21:06:08 rpaulo Exp $	*/
 
 /*++
 /* NAME

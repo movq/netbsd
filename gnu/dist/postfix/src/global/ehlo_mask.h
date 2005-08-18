@@ -1,4 +1,4 @@
-/*	$NetBSD: ehlo_mask.h,v 1.1 2005/08/18 21:07:12 rpaulo Exp $	*/
+/*	$NetBSD: ehlo_mask.h,v 1.1.1.1 2005/08/18 21:07:12 rpaulo Exp $	*/
 
 #ifndef _EHLO_MASK_H_INCLUDED_
 #define _EHLO_MASK_H_INCLUDED_

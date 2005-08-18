@@ -1,80 +1,70 @@
+/*	$NetBSD: wildcard_inet_addr.c,v 1.1.1.1 2005/08/18 21:07:16 rpaulo Exp $	*/
+
+/*++
+/* NAME
+/*	wildcard_inet_addr 3
+/* SUMMARY
+/*	expand wild-card address
+/* SYNOPSIS
+/*	#include <wildcard_inet_addr.h>
+/*
+/*	INET_ADDR_LIST *wildcard_inet_addr(void)
+/* DESCRIPTION
+/*	wildcard_inet_addr() determines all wild-card addresses
+/*	for all supported address families.
+/* DIAGNOSTICS
+/*	Fatal errors: out of memory.
+/* SEE ALSO
+/*	inet_addr_list(3) address list management
+/* LICENSE
+/* .ad
+/* .fi
+/*	The Secure Mailer license must be distributed with this software.
+/* AUTHOR(S)
+/*	Wietse Venema
+/*	IBM T.J. Watson Research
+/*	P.O. Box 704
+/*	Yorktown Heights, NY 10598, USA
+/*
+/*	Dean C. Strik
+/*	Department ICT
+/*	Eindhoven University of Technology
+/*	P.O. Box 513
+/*	5600 MB  Eindhoven, Netherlands
+/*	E-mail: <dean@ipnet6.org>
+/*--*/
+
 /* System library. */
 
 #include <sys_defs.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <string.h>
-#ifdef INET6
-#include <sys/socket.h>
-#endif
-#include <netdb.h>
-
-#ifdef STRCASECMP_IN_STRINGS_H
-#include <strings.h>
-#endif
 
 /* Utility library. */
 
 #include <msg.h>
-#include <mymalloc.h>
 #include <inet_addr_list.h>
-#include <inet_addr_local.h>
 #include <inet_addr_host.h>
-#include <stringops.h>
 
 /* Global library. */
 
-#include <mail_params.h>
 #include <wildcard_inet_addr.h>
 
 /* Application-specific. */
-static INET_ADDR_LIST addr_list;
 
-/* wildcard_inet_addr_init - initialize my own address list */
+static INET_ADDR_LIST wild_addr_list;
 
 static void wildcard_inet_addr_init(INET_ADDR_LIST *addr_list)
 {
-#ifdef INET6
-    struct addrinfo hints, *res, *res0;
-    char hbuf[NI_MAXHOST];
-    int error;
-#ifdef NI_WITHSCOPEID
-    const int niflags = NI_NUMERICHOST | NI_WITHSCOPEID;
-#else
-    const int niflags = NI_NUMERICHOST;
-#endif
-
     inet_addr_list_init(addr_list);
-
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_family = PF_UNSPEC;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_flags = AI_PASSIVE;
-    error = getaddrinfo(NULL, "0", &hints, &res0);
-    if (error)
+    if (inet_addr_host(addr_list, "") == 0)
 	msg_fatal("could not get list of wildcard addresses");
-    for (res = res0; res; res = res->ai_next) {
-	if (getnameinfo(res->ai_addr, res->ai_addrlen, hbuf, sizeof(hbuf),
-	    NULL, 0, niflags) != 0)
-	    continue;
-	if (inet_addr_host(addr_list, hbuf) == 0)
-	    msg_fatal("config variable %s: host not found: %s",
-		      VAR_INET_INTERFACES, hbuf);
-    }
-    freeaddrinfo(res0);
-#else
-    if (inet_addr_host(addr_list, "0.0.0.0") == 0)
-	msg_fatal("config variable %s: host not found: %s",
-		  VAR_INET_INTERFACES, "0.0.0.0");
-#endif
 }
 
 /* wildcard_inet_addr_list - return list of addresses */
 
-struct INET_ADDR_LIST *wildcard_inet_addr_list(void)
+INET_ADDR_LIST *wildcard_inet_addr_list(void)
 {
-    if (addr_list.used == 0)
-	wildcard_inet_addr_init(&addr_list);
+    if (wild_addr_list.used == 0)
+	wildcard_inet_addr_init(&wild_addr_list);
 
-    return (&addr_list);
+    return (&wild_addr_list);
 }

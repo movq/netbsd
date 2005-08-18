@@ -1,4 +1,4 @@
-/*	$NetBSD: scache.h,v 1.1 2005/08/18 21:07:13 rpaulo Exp $	*/
+/*	$NetBSD: scache.h,v 1.1.1.1 2005/08/18 21:07:13 rpaulo Exp $	*/
 
 #ifndef _SCACHE_H_INCLUDED_
 #define _SCACHE_H_INCLUDED_

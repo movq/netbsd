@@ -1,4 +1,4 @@
-/*	$NetBSD: anvil_clnt.h,v 1.1 2005/08/18 21:07:11 rpaulo Exp $	*/
+/*	$NetBSD: anvil_clnt.h,v 1.1.1.1 2005/08/18 21:07:11 rpaulo Exp $	*/
 
 #ifndef _ANVIL_CLNT_H_INCLUDED_
 #define _ANVIL_CLNT_H_INCLUDED_

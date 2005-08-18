@@ -1,4 +1,4 @@
-/*	$NetBSD: smtp_map11.c,v 1.1 2005/08/18 21:08:58 rpaulo Exp $	*/
+/*	$NetBSD: smtp_map11.c,v 1.1.1.1 2005/08/18 21:08:58 rpaulo Exp $	*/
 
 /*++
 /* NAME

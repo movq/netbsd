@@ -1,24 +1,23 @@
+/*	$NetBSD: wildcard_inet_addr.h,v 1.1.1.1 2005/08/18 21:07:16 rpaulo Exp $	*/
+
 #ifndef _WILDCARD_INET_ADDR_H_INCLUDED_
 #define _WILDCARD_INET_ADDR_H_INCLUDED_
 
 /*++
 /* NAME
-/*	wildcard_inet_addr_list 3h
+/*	wildcard_inet_addr 3h
 /* SUMMARY
 /*	grab the list of wildcard IP addresses.
 /* SYNOPSIS
-/*	#include <own_inet_addr.h>
+/*	#include <wildcard_inet_addr.h>
 /* DESCRIPTION
 /* .nf
 /*--*/
 
  /*
-  * System library.
+  * Utility library.
   */
-#include <netinet/in.h>
-#ifdef INET6
-#include <sys/socket.h>
-#endif
+#include <inet_addr_list.h>
 
  /*
   * External interface.

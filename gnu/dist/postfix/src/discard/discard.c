@@ -1,4 +1,4 @@
-/*	$NetBSD: discard.c,v 1.1 2005/08/18 21:11:02 rpaulo Exp $	*/
+/*	$NetBSD: discard.c,v 1.1.1.1 2005/08/18 21:11:02 rpaulo Exp $	*/
 
 /*++
 /* NAME

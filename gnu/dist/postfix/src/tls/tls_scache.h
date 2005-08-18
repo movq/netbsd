@@ -1,4 +1,4 @@
-/*	$NetBSD: tls_scache.h,v 1.1 2005/08/18 21:11:08 rpaulo Exp $	*/
+/*	$NetBSD: tls_scache.h,v 1.1.1.1 2005/08/18 21:11:08 rpaulo Exp $	*/
 
 #ifndef _TLS_SCACHE_H_INCLUDED_
 #define _TLS_SCACHE_H_INCLUDED_
