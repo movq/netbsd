@@ -1,4 +1,4 @@
-/*	$NetBSD: mask_addr.c,v 1.1 2005/08/18 21:10:55 rpaulo Exp $	*/
+/*	$NetBSD: mask_addr.c,v 1.1.1.1 2005/08/18 21:10:55 rpaulo Exp $	*/
 
 /*++
 /* NAME

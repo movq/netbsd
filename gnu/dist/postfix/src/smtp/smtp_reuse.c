@@ -1,4 +1,4 @@
-/*	$NetBSD: smtp_reuse.c,v 1.1 2005/08/18 21:08:59 rpaulo Exp $	*/
+/*	$NetBSD: smtp_reuse.c,v 1.1.1.1 2005/08/18 21:08:59 rpaulo Exp $	*/
 
 /*++
 /* NAME

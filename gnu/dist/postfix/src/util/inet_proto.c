@@ -1,4 +1,4 @@
-/*	$NetBSD: inet_proto.c,v 1.1 2005/08/18 21:10:54 rpaulo Exp $	*/
+/*	$NetBSD: inet_proto.c,v 1.1.1.1 2005/08/18 21:10:54 rpaulo Exp $	*/
 
 /*++
 /* NAME

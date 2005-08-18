@@ -1,4 +1,4 @@
-/*	$NetBSD: tlsmgr.c,v 1.1 2005/08/18 21:11:13 rpaulo Exp $	*/
+/*	$NetBSD: tlsmgr.c,v 1.1.1.1 2005/08/18 21:11:13 rpaulo Exp $	*/
 
 /*++
 /* NAME

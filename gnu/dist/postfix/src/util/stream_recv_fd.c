@@ -1,4 +1,4 @@
-/*	$NetBSD: stream_recv_fd.c,v 1.1 2005/08/18 21:10:58 rpaulo Exp $	*/
+/*	$NetBSD: stream_recv_fd.c,v 1.1.1.1 2005/08/18 21:10:58 rpaulo Exp $	*/
 
 /*++
 /* NAME

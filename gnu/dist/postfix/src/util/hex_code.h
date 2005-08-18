@@ -1,4 +1,4 @@
-/*	$NetBSD: hex_code.h,v 1.1 2005/08/18 21:10:54 rpaulo Exp $	*/
+/*	$NetBSD: hex_code.h,v 1.1.1.1 2005/08/18 21:10:54 rpaulo Exp $	*/
 
 #ifndef _HEX_CODE_H_INCLUDED_
 #define _HEX_CODE_H_INCLUDED_

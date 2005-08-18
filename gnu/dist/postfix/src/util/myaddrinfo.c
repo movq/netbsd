@@ -1,4 +1,4 @@
-/*	$NetBSD: myaddrinfo.c,v 1.1 2005/08/18 21:10:56 rpaulo Exp $	*/
+/*	$NetBSD: myaddrinfo.c,v 1.1.1.1 2005/08/18 21:10:56 rpaulo Exp $	*/
 
 /*++
 /* NAME

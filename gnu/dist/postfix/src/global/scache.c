@@ -1,4 +1,4 @@
-/*	$NetBSD: scache.c,v 1.1 2005/08/18 21:06:09 rpaulo Exp $	*/
+/*	$NetBSD: scache.c,v 1.1.1.1 2005/08/18 21:06:09 rpaulo Exp $	*/
 
 /*++
 /* NAME

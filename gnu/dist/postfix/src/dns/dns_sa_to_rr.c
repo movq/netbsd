@@ -1,4 +1,4 @@
-/*	$NetBSD: dns_sa_to_rr.c,v 1.1 2005/08/18 21:05:59 rpaulo Exp $	*/
+/*	$NetBSD: dns_sa_to_rr.c,v 1.1.1.1 2005/08/18 21:05:59 rpaulo Exp $	*/
 
 /*++
 /* NAME

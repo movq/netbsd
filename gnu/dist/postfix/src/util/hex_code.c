@@ -1,4 +1,4 @@
-/*	$NetBSD: hex_code.c,v 1.1 2005/08/18 21:10:54 rpaulo Exp $	*/
+/*	$NetBSD: hex_code.c,v 1.1.1.1 2005/08/18 21:10:54 rpaulo Exp $	*/
 
 /*++
 /* NAME

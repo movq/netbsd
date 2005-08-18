@@ -1,4 +1,4 @@
-/*	$NetBSD: tls_mgr.h,v 1.1 2005/08/18 21:11:06 rpaulo Exp $	*/
+/*	$NetBSD: tls_mgr.h,v 1.1.1.1 2005/08/18 21:11:06 rpaulo Exp $	*/
 
 #ifndef _TLS_MGR_CLNT_H_INCLUDED_
 #define _TLS_MGR_CLNT_H_INCLUDED_

@@ -1,4 +1,4 @@
-/*	$NetBSD: mask_addr.h,v 1.1 2005/08/18 21:10:55 rpaulo Exp $	*/
+/*	$NetBSD: mask_addr.h,v 1.1.1.1 2005/08/18 21:10:55 rpaulo Exp $	*/
 
 #ifndef _MASK_ADDR_H_INCLUDED_
 #define _MASK_ADDR_H_INCLUDED_

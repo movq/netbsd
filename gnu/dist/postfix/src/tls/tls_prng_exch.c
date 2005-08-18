@@ -1,4 +1,4 @@
-/*	$NetBSD: tls_prng_exch.c,v 1.1 2005/08/18 21:11:07 rpaulo Exp $	*/
+/*	$NetBSD: tls_prng_exch.c,v 1.1.1.1 2005/08/18 21:11:07 rpaulo Exp $	*/
 
 /*++
 /* NAME

@@ -1,4 +1,4 @@
-/*	$NetBSD: tls_seed.c,v 1.1 2005/08/18 21:11:08 rpaulo Exp $	*/
+/*	$NetBSD: tls_seed.c,v 1.1.1.1 2005/08/18 21:11:08 rpaulo Exp $	*/
 
 /*++
 /* NAME
