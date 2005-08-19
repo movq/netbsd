@@ -1,4 +1,4 @@
-/*	$NetBSD: stat.c,v 1.4 2005/06/12 05:21:28 lukem Exp $	*/
+/*	$NetBSD: stat.c,v 1.5 2005/08/19 02:04:54 christos Exp $	*/
 
 /*
  * Copyright (c) 1997 Frank van der Linden
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: stat.c,v 1.4 2005/06/12 05:21:28 lukem Exp $");
+__RCSID("$NetBSD: stat.c,v 1.5 2005/08/19 02:04:54 christos Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #define __LIBC12_SOURCE__
@@ -63,7 +63,7 @@ cvtstat(st, ost)
 {
 
 	ost->st_dev = st->st_dev;
-	ost->st_ino = st->st_ino;
+	ost->st_ino = (u_int32_t)st->st_ino;
 	ost->st_mode = st->st_mode;
 	if (st->st_nlink >= (1 << 15))
 		ost->st_nlink = (1 << 15) - 1;
@@ -90,7 +90,7 @@ stat(file, ost)
 	struct stat nst;
 	int ret;
 
-	if ((ret = __stat13(file, &nst)) < 0)
+	if ((ret = __stat30(file, &nst)) < 0)
 		return ret;
 	cvtstat(&nst, ost);
 	return ret;
@@ -104,7 +104,7 @@ fstat(f, ost)
 	struct stat nst;
 	int ret;
 
-	if ((ret = __fstat13(f, &nst)) < 0)
+	if ((ret = __fstat30(f, &nst)) < 0)
 		return ret;
 	cvtstat(&nst, ost);
 	return ret;
@@ -118,7 +118,7 @@ lstat(file, ost)
 	struct stat nst;
 	int ret;
 
-	if ((ret = __lstat13(file, &nst)) < 0)
+	if ((ret = __lstat30(file, &nst)) < 0)
 		return ret;
 	cvtstat(&nst, ost);
 	return ret;
