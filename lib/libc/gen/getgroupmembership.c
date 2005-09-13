@@ -1,4 +1,4 @@
-/*	$NetBSD: getgroupmembership.c,v 1.1 2005/01/06 15:10:45 lukem Exp $	*/
+/*	$NetBSD: getgroupmembership.c,v 1.4 2008/04/28 20:22:59 martin Exp $	*/
 
 /*-
  * Copyright (c) 2004-2005 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: getgroupmembership.c,v 1.1 2005/01/06 15:10:45 lukem Exp $");
+__RCSID("$NetBSD: getgroupmembership.c,v 1.4 2008/04/28 20:22:59 martin Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 /*
@@ -83,7 +76,8 @@ __gr_addgid(gid_t gid, gid_t *groups, int maxgrp, int *groupc)
 {
 	int	ret, dupc;
 
-	_DIAGASSERT(grpcnt != NULL);
+	_DIAGASSERT(groupc != NULL);
+	_DIAGASSERT(groups != NULL);
 
 						/* skip duplicates */
 	for (dupc = 0; dupc < MIN(maxgrp, *groupc); dupc++) {
@@ -302,7 +296,7 @@ _compat_ggm_search(void *cookie, struct group **groupres)
 		NS_DNS_CB(_dns_getgroupmembership, NULL)
 		NS_NIS_CB(_nis_getgroupmembership, NULL)
 		NS_COMPAT_CB(__grbad_compat, "compat")
-		{ 0 }
+		NS_NULL_CB
 	};
 
 	*groupres = NULL;	/* we don't care about this */
@@ -383,7 +377,7 @@ getgroupmembership(const char *uname, gid_t agroup,
 		NS_DNS_CB(_dns_getgroupmembership, NULL)
 		NS_NIS_CB(_nis_getgroupmembership, NULL)
 		NS_COMPAT_CB(_compat_getgroupmembership, NULL)
-		{ 0 }
+		NS_NULL_CB
 	};
 
 	_DIAGASSERT(uname != NULL);

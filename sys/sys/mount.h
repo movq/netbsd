@@ -1,4 +1,4 @@
-/*	$NetBSD: mount.h,v 1.131 2005/09/13 01:42:51 christos Exp $	*/
+/*	$NetBSD: mount.h,v 1.181 2008/07/31 05:38:05 simonb Exp $	*/
 
 /*
  * Copyright (c) 1989, 1991, 1993
@@ -36,21 +36,25 @@
 
 #ifndef _KERNEL
 #include <sys/featuretest.h>
-#include <sys/ucred.h>
 #if defined(_NETBSD_SOURCE)
 #include <sys/stat.h>
 #endif /* _NETBSD_SOURCE */
 #endif
+
+#ifndef _STANDALONE
+#include <sys/ucred.h>
 #include <sys/fstypes.h>
 #include <sys/queue.h>
-#include <sys/lock.h>
+#include <sys/rwlock.h>
 #include <sys/statvfs.h>
+#include <sys/specificdata.h>
+#include <sys/condvar.h>
+#endif	/* !_STANDALONE */
 
 /*
  * file system statistics
  */
 
-#define	MFSNAMELEN	16	/* length of fs type name, including nul */
 #define	MNAMELEN	90	/* length of buffer for returned name */
 
 /*
@@ -81,34 +85,47 @@
 #define	MOUNT_SMBFS	"smbfs"		/* CIFS (SMB) */
 #define	MOUNT_PTYFS	"ptyfs"		/* Pseudo tty filesystem */
 #define	MOUNT_TMPFS	"tmpfs"		/* Efficient memory file-system */
+#define MOUNT_UDF	"udf"		/* UDF CD/DVD filesystem */
+#define	MOUNT_SYSVBFS	"sysvbfs"	/* System V Boot Filesystem */
+#define MOUNT_PUFFS	"puffs"		/* Pass-to-Userspace filesystem */
+#define MOUNT_HFS	"hfs"		/* Apple HFS+ Filesystem */
+#define MOUNT_EFS	"efs"		/* SGI's Extent Filesystem */
+#define MOUNT_ZFS	"zfs"		/* Sun ZFS */
+
+#ifndef _STANDALONE
+
+struct vnode;
 
 /*
  * Structure per mounted file system.  Each mounted file system has an
  * array of operations and an instance record.  The file systems are
  * put on a doubly linked list.
  */
-LIST_HEAD(vnodelst, vnode);
-
 struct mount {
 	CIRCLEQ_ENTRY(mount) mnt_list;		/* mount list */
+	TAILQ_HEAD(, vnode) mnt_vnodelist;	/* list of vnodes this mount */
 	struct vfsops	*mnt_op;		/* operations on fs */
 	struct vnode	*mnt_vnodecovered;	/* vnode we mounted on */
 	struct vnode	*mnt_syncer;		/* syncer vnode */
-	struct vnodelst	mnt_vnodelist;		/* list of vnodes this mount */
-	struct lock	mnt_lock;		/* mount structure lock */
+	void		*mnt_transinfo;		/* for FS-internal use */
+	void		*mnt_data;		/* private data */
+	krwlock_t	mnt_unmounting;		/* to prevent new activity */
+	kmutex_t	mnt_renamelock;		/* per-fs rename lock */
+	int		mnt_refcnt;		/* ref count on this structure */
+	int		mnt_recursecnt;		/* count of write locks */
 	int		mnt_flag;		/* flags */
 	int		mnt_iflag;		/* internal flags */
 	int		mnt_fs_bshift;		/* offset shift for lblkno */
 	int		mnt_dev_bshift;		/* shift for device sectors */
 	struct statvfs	mnt_stat;		/* cache of filesystem stats */
-	void		*mnt_data;		/* private data */
-	int		mnt_wcnt;		/* count of vfs_busy waiters */
-	struct proc	*mnt_unmounter;		/* who is unmounting */
-	int		mnt_writeopcountupper;	/* upper writeops in progress */
-	int		mnt_writeopcountlower;	/* lower writeops in progress */
-	struct simplelock mnt_slock;		/* mutex for wcnt and
-						   writeops counters */
-	struct mount	*mnt_leaf;		/* leaf fs we mounted on */
+	specificdata_reference
+			mnt_specdataref;	/* subsystem specific data */
+	kmutex_t	mnt_updating;		/* to serialize updates */
+	struct wapbl_ops
+			*mnt_wapbl_op;		/* logging ops */
+	struct wapbl	*mnt_wapbl;		/* log info */
+	struct wapbl_replay
+			*mnt_wapbl_replay;	/* replay support XXX: what? */
 };
 
 /*
@@ -125,7 +142,8 @@ struct mount {
 #define VFS_CONF	2		/* struct: vfsconf for filesystem given
 					   as next argument */
 #define VFS_USERMOUNT	3		/* enable/disable fs mnt by non-root */
-#define	VFSGEN_MAXID	4		/* number of valid vfs.generic ids */
+#define	VFS_MAGICLINKS  4		/* expand 'magic' symlinks */
+#define	VFSGEN_MAXID	5		/* number of valid vfs.generic ids */
 
 /*
  * USE THE SAME NAMES AS MOUNT_*!
@@ -164,100 +182,172 @@ struct mount {
 	{ "maxtypenum", CTLTYPE_INT }, \
 	{ "conf", CTLTYPE_NODE }, 	/* Special */ \
 	{ "usermount", CTLTYPE_INT }, \
+	{ "magiclinks", CTLTYPE_INT }, \
 }
+
+#if defined(_KERNEL)
+#if __STDC__
+struct nameidata;
+#endif
 
 /*
  * Operations supported on mounted file system.
  */
-#ifdef _KERNEL
-
-#if __STDC__
-struct nameidata;
-struct mbuf;
-struct vnodeopv_desc;
-#endif
 
 struct vfsops {
 	const char *vfs_name;
+	size_t	vfs_min_mount_data;
 	int	(*vfs_mount)	(struct mount *, const char *, void *,
-				    struct nameidata *, struct proc *);
-	int	(*vfs_start)	(struct mount *, int, struct proc *);
-	int	(*vfs_unmount)	(struct mount *, int, struct proc *);
+				    size_t *);
+	int	(*vfs_start)	(struct mount *, int);
+	int	(*vfs_unmount)	(struct mount *, int);
 	int	(*vfs_root)	(struct mount *, struct vnode **);
-	int	(*vfs_quotactl)	(struct mount *, int, uid_t, void *,
-				    struct proc *);
-	int	(*vfs_statvfs)	(struct mount *, struct statvfs *,
-				    struct proc *);
-	int	(*vfs_sync)	(struct mount *, int, struct ucred *,
-				    struct proc *);
+	int	(*vfs_quotactl)	(struct mount *, int, uid_t, void *);
+	int	(*vfs_statvfs)	(struct mount *, struct statvfs *);
+	int	(*vfs_sync)	(struct mount *, int, struct kauth_cred *);
 	int	(*vfs_vget)	(struct mount *, ino_t, struct vnode **);
 	int	(*vfs_fhtovp)	(struct mount *, struct fid *,
 				    struct vnode **);
-	int	(*vfs_vptofh)	(struct vnode *, struct fid *);
+	int	(*vfs_vptofh)	(struct vnode *, struct fid *, size_t *);
 	void	(*vfs_init)	(void);
 	void	(*vfs_reinit)	(void);
 	void	(*vfs_done)	(void);
-	int	*vfs_wassysctl;			/* @@@ no longer useful */
 	int	(*vfs_mountroot)(void);
-	int	(*vfs_checkexp) (struct mount *, struct mbuf *, int *,
-				    struct ucred **);
 	int	(*vfs_snapshot)	(struct mount *, struct vnode *,
 				    struct timespec *);
 	int	(*vfs_extattrctl) (struct mount *, int,
-				    struct vnode *, int, const char *,
-				    struct proc *);
+				    struct vnode *, int, const char *);
+	int	(*vfs_suspendctl) (struct mount *, int);
+	int	(*vfs_renamelock_enter)(struct mount *);
+	void	(*vfs_renamelock_exit)(struct mount *);
+	int	(*vfs_fsync)	(struct vnode *, int);
 	const struct vnodeopv_desc * const *vfs_opv_descs;
 	int	vfs_refcount;
 	LIST_ENTRY(vfsops) vfs_list;
 };
 
-#define	VFS_ATTACH(vfs)		__link_set_add_data(vfsops, vfs)
+/* XXX vget is actually file system internal. */
+#define VFS_VGET(MP, INO, VPP)    (*(MP)->mnt_op->vfs_vget)(MP, INO, VPP)
 
-#define VFS_MOUNT(MP, PATH, DATA, NDP, P) \
-	(*(MP)->mnt_op->vfs_mount)(MP, PATH, DATA, NDP, P)
-#define VFS_START(MP, FLAGS, P)	  (*(MP)->mnt_op->vfs_start)(MP, FLAGS, P)
-#define VFS_UNMOUNT(MP, FORCE, P) (*(MP)->mnt_op->vfs_unmount)(MP, FORCE, P)
-#define VFS_ROOT(MP, VPP)	  (*(MP)->mnt_op->vfs_root)(MP, VPP)
-#define VFS_QUOTACTL(MP,C,U,A,P)  (*(MP)->mnt_op->vfs_quotactl)(MP, C, U, A, P)
-#define VFS_STATVFS(MP, SBP, P)	  (*(MP)->mnt_op->vfs_statvfs)(MP, SBP, P)
-#define VFS_SYNC(MP, WAIT, C, P)  (*(MP)->mnt_op->vfs_sync)(MP, WAIT, C, P)
-#define VFS_VGET(MP, INO, VPP)	  (*(MP)->mnt_op->vfs_vget)(MP, INO, VPP)
-#define VFS_FHTOVP(MP, FIDP, VPP) (*(MP)->mnt_op->vfs_fhtovp)(MP, FIDP, VPP)
-#define VFS_CHECKEXP(MP, NAM, EXFLG, CRED) \
-	(*(MP)->mnt_op->vfs_checkexp)(MP, NAM, EXFLG, CRED)
-#define	VFS_VPTOFH(VP, FIDP)	  (*(VP)->v_mount->mnt_op->vfs_vptofh)(VP, FIDP)
-#define VFS_SNAPSHOT(MP, VP, TS)  (*(MP)->mnt_op->vfs_snapshot)(MP, VP, TS)
-#define	VFS_EXTATTRCTL(MP, C, VP, AS, AN, P) \
-	(*(MP)->mnt_op->vfs_extattrctl)(MP, C, VP, AS, AN, P)
+#define VFS_RENAMELOCK_ENTER(MP)  (*(MP)->mnt_op->vfs_renamelock_enter)(MP)
+#define VFS_RENAMELOCK_EXIT(MP)   (*(MP)->mnt_op->vfs_renamelock_exit)(MP)
+#define VFS_FSYNC(MP, VP, FLG)	  (*(MP)->mnt_op->vfs_fsync)(VP, FLG)
+
+int	VFS_MOUNT(struct mount *, const char *, void *, size_t *);
+int	VFS_START(struct mount *, int);
+int	VFS_UNMOUNT(struct mount *, int);
+int	VFS_ROOT(struct mount *, struct vnode **);
+int	VFS_QUOTACTL(struct mount *, int, uid_t, void *);
+int	VFS_STATVFS(struct mount *, struct statvfs *);
+int	VFS_SYNC(struct mount *, int, struct kauth_cred *);
+int	VFS_FHTOVP(struct mount *, struct fid *, struct vnode **);
+int	VFS_VPTOFH(struct vnode *, struct fid *, size_t *);
+void	VFS_INIT(void);
+void	VFS_REINIT(void);
+void	VFS_DONE(void);
+int	VFS_MOUNTROOT(void);
+int	VFS_SNAPSHOT(struct mount *, struct vnode *, struct timespec *);
+int	VFS_EXTATTRCTL(struct mount *, int, struct vnode *, int, const char *);
+int	VFS_SUSPENDCTL(struct mount *, int);
+
 #endif /* _KERNEL */
 
 #ifdef _KERNEL
-#include <net/radix.h>
-#include <sys/socket.h>		/* XXX for AF_MAX */
+#if __STDC__
+struct mbuf;
+struct vnodeopv_desc;
+struct kauth_cred;
+#endif
+
+#define	VFS_MAX_MOUNT_DATA	8192
+
+#define VFS_PROTOS(fsname)						\
+int	fsname##_mount(struct mount *, const char *, void *,		\
+		size_t *);						\
+int	fsname##_start(struct mount *, int);				\
+int	fsname##_unmount(struct mount *, int);				\
+int	fsname##_root(struct mount *, struct vnode **);			\
+int	fsname##_quotactl(struct mount *, int, uid_t, void *);		\
+int	fsname##_statvfs(struct mount *, struct statvfs *);		\
+int	fsname##_sync(struct mount *, int, struct kauth_cred *);	\
+int	fsname##_vget(struct mount *, ino_t, struct vnode **);		\
+int	fsname##_fhtovp(struct mount *, struct fid *, struct vnode **);	\
+int	fsname##_vptofh(struct vnode *, struct fid *, size_t *);	\
+void	fsname##_init(void);						\
+void	fsname##_reinit(void);						\
+void	fsname##_done(void);						\
+int	fsname##_mountroot(void);					\
+int	fsname##_snapshot(struct mount *, struct vnode *,		\
+		struct timespec *);					\
+int	fsname##_extattrctl(struct mount *, int, struct vnode *, int,	\
+		const char *);						\
+int	fsname##_suspendctl(struct mount *, int)
 
 /*
- * Network address lookup element
+ * This operations vector is so wapbl can be wrapped into a filesystem lkm.
+ * XXX Eventually, we want to move this functionality
+ * down into the filesystems themselves so that this isn't needed.
  */
-struct netcred {
-	struct	radix_node netc_rnodes[2];
-	int	netc_refcnt;
-	int	netc_exflags;
-	struct	ucred netc_anon;
+struct wapbl_ops {
+	void (*wo_wapbl_discard)(struct wapbl *);
+	int (*wo_wapbl_replay_isopen)(struct wapbl_replay *);
+	int (*wo_wapbl_replay_read)(struct wapbl_replay *, void *, daddr_t, long);
+	void (*wo_wapbl_add_buf)(struct wapbl *, struct buf *);
+	void (*wo_wapbl_remove_buf)(struct wapbl *, struct buf *);
+	void (*wo_wapbl_resize_buf)(struct wapbl *, struct buf *, long, long);
+	int (*wo_wapbl_begin)(struct wapbl *, const char *, int);
+	void (*wo_wapbl_end)(struct wapbl *);
+	void (*wo_wapbl_junlock_assert)(struct wapbl *);
+	void (*wo_wapbl_biodone)(struct buf *);
+};
+#define WAPBL_DISCARD(MP)						\
+    (*(MP)->mnt_wapbl_op->wo_wapbl_discard)((MP)->mnt_wapbl)
+#define WAPBL_REPLAY_ISOPEN(MP)						\
+    (*(MP)->mnt_wapbl_op->wo_wapbl_replay_isopen)((MP)->mnt_wapbl_replay)
+#define WAPBL_REPLAY_READ(MP, DATA, BLK, LEN)				\
+    (*(MP)->mnt_wapbl_op->wo_wapbl_replay_read)((MP)->mnt_wapbl_replay,	\
+    (DATA), (BLK), (LEN))
+#define WAPBL_ADD_BUF(MP, BP)						\
+    (*(MP)->mnt_wapbl_op->wo_wapbl_add_buf)((MP)->mnt_wapbl, (BP))
+#define WAPBL_REMOVE_BUF(MP, BP)					\
+    (*(MP)->mnt_wapbl_op->wo_wapbl_remove_buf)((MP)->mnt_wapbl, (BP))
+#define WAPBL_RESIZE_BUF(MP, BP, OLDSZ, OLDCNT)				\
+    (*(MP)->mnt_wapbl_op->wo_wapbl_resize_buf)((MP)->mnt_wapbl, (BP),	\
+    (OLDSZ), (OLDCNT))
+#define WAPBL_BEGIN(MP)							\
+    (*(MP)->mnt_wapbl_op->wo_wapbl_begin)((MP)->mnt_wapbl,		\
+    __FILE__, __LINE__)
+#define WAPBL_END(MP)							\
+    (*(MP)->mnt_wapbl_op->wo_wapbl_end)((MP)->mnt_wapbl)
+#define WAPBL_JUNLOCK_ASSERT(MP)					\
+    (*(MP)->mnt_wapbl_op->wo_wapbl_junlock_assert)((MP)->mnt_wapbl)
+
+struct vfs_hooks {
+	void	(*vh_unmount)(struct mount *);
+	LIST_ENTRY(vfs_hooks) vfs_hooks_list;
 };
 
-/*
- * Network export information
- */
-struct netexport {
-	struct	netcred ne_defexported;		      /* Default export */
-	struct	radix_node_head *ne_rtable[AF_MAX+1]; /* Individual exports */
-};
+void	vfs_hooks_init(void);
+int	vfs_hooks_attach(struct vfs_hooks *);
+int	vfs_hooks_detach(struct vfs_hooks *);
+void	vfs_hooks_unmount(struct mount *);
+
 #endif /* _KERNEL */
 
 /*
  * Export arguments for local filesystem mount calls.
+ *
+ * This structure is deprecated and is only provided for compatibility
+ * reasons with old binary utilities; several file systems expose an
+ * instance of this structure in their mount arguments structure, thus
+ * needing a padding in place of the old values.  This definition cannot
+ * change in the future due to this reason.
+ * XXX: This should be moved to the compat subtree but cannot be done
+ * until we can move the mount args structures themselves.
+ *
+ * The current export_args structure can be found in nfs/nfs.h.
  */
-struct export_args {
+struct export_args30 {
 	int	ex_flags;		/* export related flags */
 	uid_t	ex_root;		/* mapping for root uid */
 	struct	uucred ex_anon;		/* mapping for anonymous user */
@@ -268,15 +358,9 @@ struct export_args {
 	char	*ex_indexfile;		/* index file for WebNFS URLs */
 };
 
-/*
- * Structure holding information for a publicly exported filesystem
- * (WebNFS). Currently the specs allow just for one such filesystem.
- */
-struct nfs_public {
-	int		np_valid;	/* Do we hold valid information */
-	fhandle_t	np_handle;	/* Filehandle for pub fs (internal) */
-	struct mount	*np_mount;	/* Mountpoint of exported fs */
-	char		*np_index;	/* Index file */
+struct mnt_export_args30 {
+	const char *fspec;		/* Always NULL */
+	struct export_args30 eargs;
 };
 
 #ifdef _KERNEL
@@ -287,42 +371,51 @@ MALLOC_DECLARE(M_MOUNT);
  * exported VFS interface (see vfssubr(9))
  */
 struct	mount *vfs_getvfs(fsid_t *);    /* return vfs given fsid */
-int	vfs_export			    /* process mount export info */
-	 (struct mount *, struct netexport *, struct export_args *);
-#define	vfs_showexport(a, b, c)	(void)memset((b), 0, sizeof(*(b)))
-struct	netcred *vfs_export_lookup	    /* lookup host in fs export list */
-	 (struct mount *, struct netexport *, struct mbuf *);
-int	vfs_setpublicfs			    /* set publicly exported fs */
-	 (struct mount *, struct netexport *, struct export_args *);
+int	vfs_composefh(struct vnode *, fhandle_t *, size_t *);
+int	vfs_composefh_alloc(struct vnode *, fhandle_t **);
+void	vfs_composefh_free(fhandle_t *);
+int	vfs_fhtovp(fhandle_t *, struct vnode **);
 int	vfs_mountedon(struct vnode *);/* is a vfs mounted on vp */
 int	vfs_mountroot(void);
 void	vfs_shutdown(void);	    /* unmount and sync file systems */
-void	vfs_unmountall(struct proc *);	    /* unmount file systems */
-int 	vfs_busy(struct mount *, int, struct simplelock *);
+void	vfs_unmountall(struct lwp *);	    /* unmount file systems */
+int 	vfs_busy(struct mount *, struct mount **);
 int	vfs_rootmountalloc(const char *, const char *, struct mount **);
-void	vfs_unbusy(struct mount *);
+void	vfs_unbusy(struct mount *, bool, struct mount **);
 int	vfs_attach(struct vfsops *);
 int	vfs_detach(struct vfsops *);
 void	vfs_reinit(void);
 struct vfsops *vfs_getopsbyname(const char *);
+void	vfs_delref(struct vfsops *);
+void	vfs_destroy(struct mount *);
+void	vfs_scrubvnlist(struct mount *);
 
 int	vfs_stdextattrctl(struct mount *, int, struct vnode *,
-	    int, const char *, struct proc *);
+	    int, const char *);
 
 extern	CIRCLEQ_HEAD(mntlist, mount) mountlist;	/* mounted filesystem list */
 extern	struct vfsops *vfssw[];			/* filesystem type table */
 extern	int nvfssw;
-extern	struct nfs_public nfs_pub;
-extern	struct simplelock mountlist_slock;
-extern	struct simplelock spechash_slock;
+extern  kmutex_t mountlist_lock;
+extern	kmutex_t vfs_list_lock;
+
 long	makefstype(const char *);
-int	dounmount(struct mount *, int, struct proc *);
+int	dounmount(struct mount *, int, struct lwp *);
+int	do_sys_mount(struct lwp *, struct vfsops *, const char *, const char *,
+	    int, void *, enum uio_seg, size_t, register_t *);
 void	vfsinit(void);
 void	vfs_opv_init(const struct vnodeopv_desc * const *);
 void	vfs_opv_free(const struct vnodeopv_desc * const *);
 #ifdef DEBUG
 void	vfs_bufstats(void);
 #endif
+
+int	mount_specific_key_create(specificdata_key_t *, specificdata_dtor_t);
+void	mount_specific_key_delete(specificdata_key_t);
+void 	mount_initspecific(struct mount *);
+void 	mount_finispecific(struct mount *);
+void *	mount_getspecific(struct mount *, specificdata_key_t);
+void	mount_setspecific(struct mount *, specificdata_key_t, void *);
 
 LIST_HEAD(vfs_list_head, vfsops);
 extern struct vfs_list_head vfs_list;
@@ -332,15 +425,22 @@ extern struct vfs_list_head vfs_list;
 #include <sys/cdefs.h>
 
 __BEGIN_DECLS
-int	getfh(const char *, fhandle_t *);
-int	mount(const char *, const char *, int, void *);
+#if !defined(__LIBC12_SOURCE__) && !defined(_STANDALONE)
+int	getfh(const char *, void *, size_t *)
+	__RENAME(__getfh30);
+#endif
+
 int	unmount(const char *, int);
 #if defined(_NETBSD_SOURCE)
-int	fhopen(const fhandle_t *, int);
-int	fhstat(const fhandle_t *, struct stat *);
+#ifndef __LIBC12_SOURCE__
+int mount(const char *, const char *, int, void *, size_t) __RENAME(__mount50);
+int	fhopen(const void *, size_t, int) __RENAME(__fhopen40);
+int	fhstat(const void *, size_t, struct stat *) __RENAME(__fhstat40);
+#endif
 #endif /* _NETBSD_SOURCE */
 __END_DECLS
 
 #endif /* _KERNEL */
+#endif /* !_STANDALONE */
 
 #endif /* !_SYS_MOUNT_H_ */

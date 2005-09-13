@@ -1,4 +1,4 @@
-/*	$NetBSD: citrus_stdenc_local.h,v 1.2 2003/06/26 12:09:57 tshiozak Exp $	*/
+/*	$NetBSD: citrus_stdenc_local.h,v 1.4 2008/02/09 14:56:20 junyoung Exp $	*/
 
 /*-
  * Copyright (c)2003 Citrus Project,
@@ -31,7 +31,7 @@
 #define _CITRUS_STDENC_LOCAL_H_
 
 #define _CITRUS_STDENC_GETOPS_FUNC_BASE(n)			\
-int n(struct _citrus_stdenc_ops *, size_t, u_int32_t)
+int n(struct _citrus_stdenc_ops *, size_t, uint32_t)
 #define _CITRUS_STDENC_GETOPS_FUNC(_e_)					\
 _CITRUS_STDENC_GETOPS_FUNC_BASE(_citrus_##_e_##_stdenc_getops)
 typedef _CITRUS_STDENC_GETOPS_FUNC_BASE((*_citrus_stdenc_getops_t));
@@ -63,7 +63,10 @@ static int	_citrus_##_e_##_stdenc_wctomb				\
 	 _citrus_wc_t, void * __restrict, size_t * __restrict);		\
 static int	_citrus_##_e_##_stdenc_put_state_reset			\
 	(struct _citrus_stdenc * __restrict, char * __restrict, size_t,	\
-	 void * __restrict, size_t * __restrict)
+	 void * __restrict, size_t * __restrict);			\
+static int	_citrus_##_e_##_stdenc_get_state_desc			\
+	(struct _citrus_stdenc * __restrict, void * __restrict, int,	\
+	 struct _citrus_stdenc_state_desc * __restrict)
 
 #define _CITRUS_STDENC_DEF_OPS(_e_)					\
 struct _citrus_stdenc_ops _citrus_##_e_##_stdenc_ops = {		\
@@ -75,7 +78,8 @@ struct _citrus_stdenc_ops _citrus_##_e_##_stdenc_ops = {		\
 	/* eo_cstomb */		&_citrus_##_e_##_stdenc_cstomb,		\
 	/* eo_mbtowc */		&_citrus_##_e_##_stdenc_mbtowc,		\
 	/* eo_wctomb */		&_citrus_##_e_##_stdenc_wctomb,		\
-	/* eo_put_state_reset */&_citrus_##_e_##_stdenc_put_state_reset \
+	/* eo_put_state_reset */&_citrus_##_e_##_stdenc_put_state_reset,\
+	/* eo_get_state_desc */	&_citrus_##_e_##_stdenc_get_state_desc	\
 }
 
 typedef int	(*_citrus_stdenc_init_t)
@@ -104,15 +108,17 @@ typedef int	(*_citrus_stdenc_wctomb_t)
 typedef int	(*_citrus_stdenc_put_state_reset_t)
 	(struct _citrus_stdenc *__restrict, char * __restrict, size_t,
 	 void * __restrict, size_t * __restrict);
-
+typedef int	(*_citrus_stdenc_get_state_desc_t)
+	(struct _citrus_stdenc * __restrict, void * __restrict, int,
+	 struct _citrus_stdenc_state_desc * __restrict);
 /*
  * ABI version change log
  *   0x00000001
  *     initial version
  */
-#define _CITRUS_STDENC_ABI_VERSION	0x00000001
+#define _CITRUS_STDENC_ABI_VERSION	0x00000002
 struct _citrus_stdenc_ops {
-	u_int32_t			eo_abi_version;
+	uint32_t			eo_abi_version;
 	/* version 0x00000001 */
 	_citrus_stdenc_init_t		eo_init;
 	_citrus_stdenc_uninit_t		eo_uninit;
@@ -122,6 +128,8 @@ struct _citrus_stdenc_ops {
 	_citrus_stdenc_mbtowc_t		eo_mbtowc;
 	_citrus_stdenc_wctomb_t		eo_wctomb;
 	_citrus_stdenc_put_state_reset_t eo_put_state_reset;
+	/* version 0x00000002 */
+	_citrus_stdenc_get_state_desc_t	eo_get_state_desc;
 };
 
 struct _citrus_stdenc_traits {

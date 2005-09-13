@@ -1,4 +1,4 @@
-/*	$NetBSD: lwp.h,v 1.4 2005/02/03 04:39:32 perry Exp $	*/
+/*	$NetBSD: lwp.h,v 1.10 2008/04/28 20:22:54 martin Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,6 +35,9 @@
 #include <sys/cdefs.h>
 #include <sys/types.h>
 #include <sys/ucontext.h>
+#include <sys/time.h>
+
+struct lwpctl;
 
 __BEGIN_DECLS
 lwpid_t	_lwp_self(void);
@@ -55,6 +51,14 @@ void	_lwp_makecontext(ucontext_t *, void (*)(void *), void *, void *,
 	    caddr_t, size_t);
 void	*_lwp_getprivate(void);
 void	_lwp_setprivate(void *);
+int	_lwp_kill(lwpid_t, int);
+int	_lwp_detach(lwpid_t);
+int	_lwp_park(const struct timespec *, lwpid_t, const void *, const void *);
+int	_lwp_unpark(lwpid_t, const void *);
+ssize_t	_lwp_unpark_all(const lwpid_t *, size_t, const void *);
+int	_lwp_setname(lwpid_t, const char *);
+int	_lwp_getname(lwpid_t, char *, size_t);
+int	_lwp_ctl(int, struct lwpctl **);
 __END_DECLS
 
 #endif /* !_LWP_H_ */

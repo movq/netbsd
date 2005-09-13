@@ -1,4 +1,4 @@
-/*	$NetBSD: rec_seq.c,v 1.11 2003/08/07 16:42:44 agc Exp $	*/
+/*	$NetBSD: rec_seq.c,v 1.14 2008/09/11 12:58:00 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993, 1994
@@ -29,18 +29,17 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-#if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)rec_seq.c	8.3 (Berkeley) 7/14/94";
-#else
-__RCSID("$NetBSD: rec_seq.c,v 1.11 2003/08/07 16:42:44 agc Exp $");
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
 #endif
-#endif /* LIBC_SCCS and not lint */
+
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: rec_seq.c,v 1.14 2008/09/11 12:58:00 joerg Exp $");
 
 #include "namespace.h"
 #include <sys/types.h>
 
+#include <assert.h>
 #include <errno.h>
 #include <limits.h>
 #include <stdio.h>
@@ -62,10 +61,7 @@ __RCSID("$NetBSD: rec_seq.c,v 1.11 2003/08/07 16:42:44 agc Exp $");
  *	RET_ERROR, RET_SUCCESS or RET_SPECIAL if there's no next key.
  */
 int
-__rec_seq(dbp, key, data, flags)
-	const DB *dbp;
-	DBT *key, *data;
-	u_int flags;
+__rec_seq(const DB *dbp, DBT *key, DBT *data, u_int flags)
 {
 	BTREE *t;
 	EPG *e;

@@ -1,7 +1,8 @@
-/*	$NetBSD: lfs_syscalls.c,v 1.107 2005/05/25 01:50:01 perseant Exp $	*/
+/*	$NetBSD: lfs_syscalls.c,v 1.128 2008/01/30 11:47:04 ad Exp $	*/
 
 /*-
- * Copyright (c) 1999, 2000, 2001, 2002, 2003 The NetBSD Foundation, Inc.
+ * Copyright (c) 1999, 2000, 2001, 2002, 2003, 2007, 2007
+ *    The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -67,7 +68,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lfs_syscalls.c,v 1.107 2005/05/25 01:50:01 perseant Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lfs_syscalls.c,v 1.128 2008/01/30 11:47:04 ad Exp $");
 
 #ifndef LFS
 # define LFS		/* for prototypes in syscallargs.h */
@@ -80,8 +81,7 @@ __KERNEL_RCSID(0, "$NetBSD: lfs_syscalls.c,v 1.107 2005/05/25 01:50:01 perseant 
 #include <sys/mount.h>
 #include <sys/vnode.h>
 #include <sys/kernel.h>
-
-#include <sys/sa.h>
+#include <sys/kauth.h>
 #include <sys/syscallargs.h>
 
 #include <ufs/ufs/inode.h>
@@ -91,12 +91,10 @@ __KERNEL_RCSID(0, "$NetBSD: lfs_syscalls.c,v 1.107 2005/05/25 01:50:01 perseant 
 #include <ufs/lfs/lfs.h>
 #include <ufs/lfs/lfs_extern.h>
 
-struct buf *lfs_fakebuf(struct lfs *, struct vnode *, int, size_t, caddr_t);
+struct buf *lfs_fakebuf(struct lfs *, struct vnode *, int, size_t, void *);
 int lfs_fasthashget(dev_t, ino_t, struct vnode **);
 
 pid_t lfs_cleaner_pid = 0;
-
-#define LFS_FORCE_WRITE UNASSIGNED
 
 /*
  * sys_lfs_markv:
@@ -113,20 +111,21 @@ pid_t lfs_cleaner_pid = 0;
  */
 #ifdef USE_64BIT_SYSCALLS
 int
-sys_lfs_markv(struct proc *p, void *v, register_t *retval)
+sys_lfs_markv(struct lwp *l, const struct sys_lfs_markv_args *uap, register_t *retval)
 {
-	struct sys_lfs_markv_args /* {
+	/* {
 		syscallarg(fsid_t *) fsidp;
 		syscallarg(struct block_info *) blkiov;
 		syscallarg(int) blkcnt;
-	} */ *uap = v;
+	} */
 	BLOCK_INFO *blkiov;
 	int blkcnt, error;
 	fsid_t fsid;
 	struct lfs *fs;
 	struct mount *mntp;
 
-	if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
+	if ((error = kauth_authorize_generic(l->l_cred, KAUTH_GENERIC_ISSUSER,
+	    NULL)) != 0)
 		return (error);
 
 	if ((error = copyin(SCARG(uap, fsidp), &fsid, sizeof(fsid_t))) != 0)
@@ -154,13 +153,13 @@ sys_lfs_markv(struct proc *p, void *v, register_t *retval)
 }
 #else
 int
-sys_lfs_markv(struct lwp *l, void *v, register_t *retval)
+sys_lfs_markv(struct lwp *l, const struct sys_lfs_markv_args *uap, register_t *retval)
 {
-	struct sys_lfs_markv_args /* {
+	/* {
 		syscallarg(fsid_t *) fsidp;
 		syscallarg(struct block_info *) blkiov;
 		syscallarg(int) blkcnt;
-	} */ *uap = v;
+	} */
 	BLOCK_INFO *blkiov;
 	BLOCK_INFO_15 *blkiov15;
 	int i, blkcnt, error;
@@ -168,7 +167,8 @@ sys_lfs_markv(struct lwp *l, void *v, register_t *retval)
 	struct lfs *fs;
 	struct mount *mntp;
 
-	if ((error = suser(l->l_proc->p_ucred, &l->l_proc->p_acflag)) != 0)
+	if ((error = kauth_authorize_generic(l->l_cred, KAUTH_GENERIC_ISSUSER,
+	    NULL)) != 0)
 		return (error);
 
 	if ((error = copyin(SCARG(uap, fsidp), &fsid, sizeof(fsid_t))) != 0)
@@ -221,7 +221,8 @@ sys_lfs_markv(struct lwp *l, void *v, register_t *retval)
 #define	LFS_MARKV_MAX_BLOCKS	(LFS_MAX_BUFS)
 
 int
-lfs_markv(struct proc *p, fsid_t *fsidp, BLOCK_INFO *blkiov, int blkcnt)
+lfs_markv(struct proc *p, fsid_t *fsidp, BLOCK_INFO *blkiov,
+    int blkcnt)
 {
 	BLOCK_INFO *blkp;
 	IFILE *ifp;
@@ -229,7 +230,7 @@ lfs_markv(struct proc *p, fsid_t *fsidp, BLOCK_INFO *blkiov, int blkcnt)
 	struct inode *ip = NULL;
 	struct lfs *fs;
 	struct mount *mntp;
-	struct vnode *vp;
+	struct vnode *vp = NULL;
 	ino_t lastino;
 	daddr_t b_daddr, v_daddr;
 	int cnt, error;
@@ -254,7 +255,7 @@ lfs_markv(struct proc *p, fsid_t *fsidp, BLOCK_INFO *blkiov, int blkcnt)
 
 	cnt = blkcnt;
 
-	if ((error = vfs_busy(mntp, LK_NOWAIT, NULL)) != 0)
+	if ((error = vfs_trybusy(mntp, RW_READER, NULL)) != 0)
 		return (error);
 
 	/*
@@ -277,10 +278,6 @@ lfs_markv(struct proc *p, fsid_t *fsidp, BLOCK_INFO *blkiov, int blkcnt)
 	nblkwritten = ninowritten = 0;
 	for (blkp = blkiov; cnt--; ++blkp)
 	{
-		if (blkp->bi_daddr == LFS_FORCE_WRITE)
-			DLOG((DLOG_CLEAN, "lfs_markv: warning: force-writing"
-			      " ino %d lbn %lld\n", blkp->bi_inode,
-			      (long long)blkp->bi_lbn));
 		/* Bounds-check incoming data, avoid panic for failed VGET */
 		if (blkp->bi_inode <= 0 || blkp->bi_inode >= maxino) {
 			error = EINVAL;
@@ -310,19 +307,10 @@ lfs_markv(struct proc *p, fsid_t *fsidp, BLOCK_INFO *blkiov, int blkcnt)
 				LFS_IENTRY(ifp, fs, blkp->bi_inode, bp);
 				/* XXX fix for force write */
 				v_daddr = ifp->if_daddr;
-				brelse(bp);
+				brelse(bp, 0);
 			}
-			/* Don't force-write the ifile */
-			if (blkp->bi_inode == LFS_IFILE_INUM
-			    && blkp->bi_daddr == LFS_FORCE_WRITE)
-			{
+			if (v_daddr == LFS_UNUSED_DADDR)
 				continue;
-			}
-			if (v_daddr == LFS_UNUSED_DADDR
-			    && blkp->bi_daddr != LFS_FORCE_WRITE)
-			{
-				continue;
-			}
 
 			/* Get the vnode/inode. */
 			error = lfs_fastvget(mntp, blkp->bi_inode, v_daddr,
@@ -379,36 +367,41 @@ lfs_markv(struct proc *p, fsid_t *fsidp, BLOCK_INFO *blkiov, int blkcnt)
 
 		/* Past this point we are guaranteed that vp, ip are valid. */
 
+		/* Can't clean VU_DIROP directories in case of truncation */
+		/* XXX - maybe we should mark removed dirs specially? */
+		if (vp->v_type == VDIR && (vp->v_uflag & VU_DIROP)) {
+			do_again++;
+			continue;
+		}
+
 		/* If this BLOCK_INFO didn't contain a block, keep going. */
 		if (blkp->bi_lbn == LFS_UNUSED_LBN) {
 			/* XXX need to make sure that the inode gets written in this case */
 			/* XXX but only write the inode if it's the right one */
 			if (blkp->bi_inode != LFS_IFILE_INUM) {
 				LFS_IENTRY(ifp, fs, blkp->bi_inode, bp);
-				if (ifp->if_daddr == blkp->bi_daddr
-				   || blkp->bi_daddr == LFS_FORCE_WRITE)
-				{
+				if (ifp->if_daddr == blkp->bi_daddr) {
+					mutex_enter(&lfs_lock);
 					LFS_SET_UINO(ip, IN_CLEANING);
+					mutex_exit(&lfs_lock);
 				}
-				brelse(bp);
+				brelse(bp, 0);
 			}
 			continue;
 		}
 
 		b_daddr = 0;
-		if (blkp->bi_daddr != LFS_FORCE_WRITE) {
-			if (VOP_BMAP(vp, blkp->bi_lbn, NULL, &b_daddr, NULL) ||
-			    dbtofsb(fs, b_daddr) != blkp->bi_daddr)
+		if (VOP_BMAP(vp, blkp->bi_lbn, NULL, &b_daddr, NULL) ||
+		    dbtofsb(fs, b_daddr) != blkp->bi_daddr)
+		{
+			if (dtosn(fs, dbtofsb(fs, b_daddr)) ==
+			    dtosn(fs, blkp->bi_daddr))
 			{
-				if (dtosn(fs,dbtofsb(fs, b_daddr))
-				   == dtosn(fs,blkp->bi_daddr))
-				{
-					DLOG((DLOG_CLEAN, "lfs_markv: wrong da same seg: %llx vs %llx\n",
-					      (long long)blkp->bi_daddr, (long long)dbtofsb(fs, b_daddr)));
-				}
-				do_again++;
-				continue;
+				DLOG((DLOG_CLEAN, "lfs_markv: wrong da same seg: %llx vs %llx\n",
+				      (long long)blkp->bi_daddr, (long long)dbtofsb(fs, b_daddr)));
 			}
+			do_again++;
+			continue;
 		}
 
 		/*
@@ -454,7 +447,7 @@ lfs_markv(struct proc *p, fsid_t *fsidp, BLOCK_INFO *blkiov, int blkcnt)
 				panic("lfs_markv: partial indirect block?"
 				    " size=%d\n", blkp->bi_size);
 			bp = getblk(vp, blkp->bi_lbn, blkp->bi_size, 0, 0);
-			if (!(bp->b_flags & (B_DONE|B_DELWRI))) { /* B_CACHE */
+			if (!(bp->b_oflags & (BO_DONE|BO_DELWRI))) {
 				/*
 				 * The block in question was not found
 				 * in the cache; i.e., the block that
@@ -513,7 +506,7 @@ lfs_markv(struct proc *p, fsid_t *fsidp, BLOCK_INFO *blkiov, int blkcnt)
 
 	lfs_segunlock(fs);
 
-	vfs_unbusy(mntp);
+	vfs_unbusy(mntp, false);
 	if (error)
 		return (error);
 	else if (do_again)
@@ -541,7 +534,7 @@ err3:
 	}
 
 	lfs_segunlock(fs);
-	vfs_unbusy(mntp);
+	vfs_unbusy(mntp, false);
 #ifdef DIAGNOSTIC
 	if (numrefed != 0)
 		panic("lfs_markv: numrefed=%d", numrefed);
@@ -560,20 +553,21 @@ err3:
  */
 #ifdef USE_64BIT_SYSCALLS
 int
-sys_lfs_bmapv(struct proc *p, void *v, register_t *retval)
+sys_lfs_bmapv(struct lwp *l, const struct sys_lfs_bmapv_args *uap, register_t *retval)
 {
-	struct sys_lfs_bmapv_args /* {
+	/* {
 		syscallarg(fsid_t *) fsidp;
 		syscallarg(struct block_info *) blkiov;
 		syscallarg(int) blkcnt;
-	} */ *uap = v;
+	} */
 	BLOCK_INFO *blkiov;
 	int blkcnt, error;
 	fsid_t fsid;
 	struct lfs *fs;
 	struct mount *mntp;
 
-	if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
+	if ((error = kauth_authorize_generic(l->l_cred, KAUTH_GENERIC_ISSUSER,
+	    NULL)) != 0)
 		return (error);
 
 	if ((error = copyin(SCARG(uap, fsidp), &fsid, sizeof(fsid_t))) != 0)
@@ -600,14 +594,13 @@ sys_lfs_bmapv(struct proc *p, void *v, register_t *retval)
 }
 #else
 int
-sys_lfs_bmapv(struct lwp *l, void *v, register_t *retval)
+sys_lfs_bmapv(struct lwp *l, const struct sys_lfs_bmapv_args *uap, register_t *retval)
 {
-	struct sys_lfs_bmapv_args /* {
+	/* {
 		syscallarg(fsid_t *) fsidp;
 		syscallarg(struct block_info *) blkiov;
 		syscallarg(int) blkcnt;
-	} */ *uap = v;
-	struct proc *p = l->l_proc;
+	} */
 	BLOCK_INFO *blkiov;
 	BLOCK_INFO_15 *blkiov15;
 	int i, blkcnt, error;
@@ -615,7 +608,8 @@ sys_lfs_bmapv(struct lwp *l, void *v, register_t *retval)
 	struct lfs *fs;
 	struct mount *mntp;
 
-	if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
+	if ((error = kauth_authorize_generic(l->l_cred, KAUTH_GENERIC_ISSUSER,
+	    NULL)) != 0)
 		return (error);
 
 	if ((error = copyin(SCARG(uap, fsidp), &fsid, sizeof(fsid_t))) != 0)
@@ -644,7 +638,7 @@ sys_lfs_bmapv(struct lwp *l, void *v, register_t *retval)
 		blkiov[i].bi_size      = blkiov15[i].bi_size;
 	}
 
-	if ((error = lfs_bmapv(p, &fsid, blkiov, blkcnt)) == 0) {
+	if ((error = lfs_bmapv(l->l_proc, &fsid, blkiov, blkcnt)) == 0) {
 		for (i = 0; i < blkcnt; i++) {
 			blkiov15[i].bi_inode	 = blkiov[i].bi_inode;
 			blkiov15[i].bi_lbn	 = blkiov[i].bi_lbn;
@@ -686,7 +680,7 @@ lfs_bmapv(struct proc *p, fsid_t *fsidp, BLOCK_INFO *blkiov, int blkcnt)
 		return (ENOENT);
 
 	ump = VFSTOUFS(mntp);
-	if ((error = vfs_busy(mntp, LK_NOWAIT, NULL)) != 0)
+	if ((error = vfs_trybusy(mntp, RW_READER, NULL)) != 0)
 		return (error);
 
 	cnt = blkcnt;
@@ -724,7 +718,7 @@ lfs_bmapv(struct proc *p, fsid_t *fsidp, BLOCK_INFO *blkiov, int blkcnt)
 			else {
 				LFS_IENTRY(ifp, fs, blkp->bi_inode, bp);
 				v_daddr = ifp->if_daddr;
-				brelse(bp);
+				brelse(bp, 0);
 			}
 			if (v_daddr == LFS_UNUSED_DADDR) {
 				blkp->bi_daddr = LFS_UNUSED_DADDR;
@@ -734,15 +728,19 @@ lfs_bmapv(struct proc *p, fsid_t *fsidp, BLOCK_INFO *blkiov, int blkcnt)
 			 * A regular call to VFS_VGET could deadlock
 			 * here.  Instead, we try an unlocked access.
 			 */
+			mutex_enter(&ufs_ihash_lock);
 			vp = ufs_ihashlookup(ump->um_dev, blkp->bi_inode);
-			if (vp != NULL && !(vp->v_flag & VXLOCK)) {
+			if (vp != NULL && !(vp->v_iflag & VI_XLOCK)) {
 				ip = VTOI(vp);
+				mutex_enter(&vp->v_interlock);
+				mutex_exit(&ufs_ihash_lock);
 				if (lfs_vref(vp)) {
 					v_daddr = LFS_UNUSED_DADDR;
 					continue;
 				}
 				numrefed++;
 			} else {
+				mutex_exit(&ufs_ihash_lock);
 				/*
 				 * Don't VFS_VGET if we're being unmounted,
 				 * since we hold vfs_busy().
@@ -822,7 +820,7 @@ lfs_bmapv(struct proc *p, fsid_t *fsidp, BLOCK_INFO *blkiov, int blkcnt)
 		panic("lfs_bmapv: numrefed=%d", numrefed);
 #endif
 
-	vfs_unbusy(mntp);
+	vfs_unbusy(mntp, false);
 
 	return 0;
 }
@@ -836,20 +834,20 @@ lfs_bmapv(struct proc *p, fsid_t *fsidp, BLOCK_INFO *blkiov, int blkcnt)
  * -1/errno is return on error.
  */
 int
-sys_lfs_segclean(struct lwp *l, void *v, register_t *retval)
+sys_lfs_segclean(struct lwp *l, const struct sys_lfs_segclean_args *uap, register_t *retval)
 {
-	struct sys_lfs_segclean_args /* {
+	/* {
 		syscallarg(fsid_t *) fsidp;
 		syscallarg(u_long) segment;
-	} */ *uap = v;
+	} */
 	struct lfs *fs;
 	struct mount *mntp;
 	fsid_t fsid;
 	int error;
 	unsigned long segnum;
-	struct proc *p = l->l_proc;
 
-	if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
+	if ((error = kauth_authorize_generic(l->l_cred, KAUTH_GENERIC_ISSUSER,
+	    NULL)) != 0)
 		return (error);
 
 	if ((error = copyin(SCARG(uap, fsidp), &fsid, sizeof(fsid_t))) != 0)
@@ -860,13 +858,13 @@ sys_lfs_segclean(struct lwp *l, void *v, register_t *retval)
 	fs = VFSTOUFS(mntp)->um_lfs;
 	segnum = SCARG(uap, segment);
 
-	if ((error = vfs_busy(mntp, LK_NOWAIT, NULL)) != 0)
+	if ((error = vfs_trybusy(mntp, RW_READER, NULL)) != 0)
 		return (error);
 
 	lfs_seglock(fs, SEGM_PROT);
 	error = lfs_do_segclean(fs, segnum);
 	lfs_segunlock(fs);
-	vfs_unbusy(mntp);
+	vfs_unbusy(mntp, false);
 	return error;
 }
 
@@ -890,19 +888,19 @@ lfs_do_segclean(struct lfs *fs, unsigned long segnum)
 	if (sup->su_nbytes) {
 		DLOG((DLOG_CLEAN, "lfs_segclean: not cleaning segment %lu:"
 		      " %d live bytes\n", segnum, sup->su_nbytes));
-		brelse(bp);
+		brelse(bp, 0);
 		return (EBUSY);
 	}
 	if (sup->su_flags & SEGUSE_ACTIVE) {
 		DLOG((DLOG_CLEAN, "lfs_segclean: not cleaning segment %lu:"
 		      " segment is active\n", segnum));
-		brelse(bp);
+		brelse(bp, 0);
 		return (EBUSY);
 	}
 	if (!(sup->su_flags & SEGUSE_DIRTY)) {
 		DLOG((DLOG_CLEAN, "lfs_segclean: not cleaning segment %lu:"
 		      " segment is already clean\n", segnum));
-		brelse(bp);
+		brelse(bp, 0);
 		return (EALREADY);
 	}
 
@@ -912,14 +910,14 @@ lfs_do_segclean(struct lfs *fs, unsigned long segnum)
 	if (fs->lfs_version > 1 && segnum == 0 &&
 	    fs->lfs_start < btofsb(fs, LFS_LABELPAD))
 		fs->lfs_avail -= btofsb(fs, LFS_LABELPAD) - fs->lfs_start;
-	simple_lock(&fs->lfs_interlock);
+	mutex_enter(&lfs_lock);
 	fs->lfs_bfree += sup->su_nsums * btofsb(fs, fs->lfs_sumsize) +
 		btofsb(fs, sup->su_ninos * fs->lfs_ibsize);
-	simple_unlock(&fs->lfs_interlock);
 	fs->lfs_dmeta -= sup->su_nsums * btofsb(fs, fs->lfs_sumsize) +
 		btofsb(fs, sup->su_ninos * fs->lfs_ibsize);
 	if (fs->lfs_dmeta < 0)
 		fs->lfs_dmeta = 0;
+	mutex_exit(&lfs_lock);
 	sup->su_flags &= ~SEGUSE_DIRTY;
 	LFS_WRITESEGENTRY(sup, fs, segnum, bp);
 
@@ -928,11 +926,11 @@ lfs_do_segclean(struct lfs *fs, unsigned long segnum)
 	--cip->dirty;
 	fs->lfs_nclean = cip->clean;
 	cip->bfree = fs->lfs_bfree;
-	simple_lock(&fs->lfs_interlock);
+	mutex_enter(&lfs_lock);
 	cip->avail = fs->lfs_avail - fs->lfs_ravail - fs->lfs_favail;
-	simple_unlock(&fs->lfs_interlock);
-	(void) LFS_BWRITE_LOG(bp);
 	wakeup(&fs->lfs_avail);
+	mutex_exit(&lfs_lock);
+	(void) LFS_BWRITE_LOG(bp);
 
 	if (lfs_dostats)
 		++lfs_stats.segs_reclaimed;
@@ -951,7 +949,7 @@ lfs_segwait(fsid_t *fsidp, struct timeval *tv)
 	struct mount *mntp;
 	void *addr;
 	u_long timeout;
-	int error, s;
+	int error;
 
 	if (fsidp == NULL || (mntp = vfs_getvfs(fsidp)) == NULL)
 		addr = &lfs_allclean_wakeup;
@@ -961,11 +959,8 @@ lfs_segwait(fsid_t *fsidp, struct timeval *tv)
 	 * XXX THIS COULD SLEEP FOREVER IF TIMEOUT IS {0,0}!
 	 * XXX IS THAT WHAT IS INTENDED?
 	 */
-	s = splclock();
-	timeradd(tv, &time, tv);
-	timeout = hzto(tv);
-	splx(s);
-	error = tsleep(addr, PCATCH | PUSER, "segment", timeout);
+	timeout = tvtohz(tv);
+	error = tsleep(addr, PCATCH | PVFS, "segment", timeout);
 	return (error == ERESTART ? EINTR : 0);
 }
 
@@ -979,21 +974,20 @@ lfs_segwait(fsid_t *fsidp, struct timeval *tv)
  * -1/errno is return on error.
  */
 int
-sys_lfs_segwait(struct lwp *l, void *v, register_t *retval)
+sys_lfs_segwait(struct lwp *l, const struct sys_lfs_segwait_args *uap, register_t *retval)
 {
-	struct sys_lfs_segwait_args /* {
+	/* {
 		syscallarg(fsid_t *) fsidp;
 		syscallarg(struct timeval *) tv;
-	} */ *uap = v;
-	struct proc *p = l->l_proc;
+	} */
 	struct timeval atv;
 	fsid_t fsid;
 	int error;
 
 	/* XXX need we be su to segwait? */
-	if ((error = suser(p->p_ucred, &p->p_acflag)) != 0) {
+	if ((error = kauth_authorize_generic(l->l_cred, KAUTH_GENERIC_ISSUSER,
+	    NULL)) != 0)
 		return (error);
-	}
 	if ((error = copyin(SCARG(uap, fsidp), &fsid, sizeof(fsid_t))) != 0)
 		return (error);
 
@@ -1017,32 +1011,41 @@ sys_lfs_segwait(struct lwp *l, void *v, register_t *retval)
  * we lfs_vref, and it is the caller's responsibility to lfs_vunref
  * when finished.
  */
-extern struct lock ufs_hashlock;
+extern kmutex_t ufs_hashlock;
 
 int
 lfs_fasthashget(dev_t dev, ino_t ino, struct vnode **vpp)
 {
-	if ((*vpp = ufs_ihashlookup(dev, ino)) != NULL) {
-		if ((*vpp)->v_flag & VXLOCK) {
-			DLOG((DLOG_CLEAN, "lfs_fastvget: ino %d VXLOCK\n",
+	struct vnode *vp;
+
+	mutex_enter(&ufs_ihash_lock);
+	if ((vp = ufs_ihashlookup(dev, ino)) != NULL) {
+		mutex_enter(&vp->v_interlock);
+		mutex_exit(&ufs_ihash_lock);
+		if (vp->v_iflag & VI_XLOCK) {
+			DLOG((DLOG_CLEAN, "lfs_fastvget: ino %d VI_XLOCK\n",
 			      ino));
 			lfs_stats.clean_vnlocked++;
+			mutex_exit(&vp->v_interlock);
 			return EAGAIN;
 		}
-		if (lfs_vref(*vpp)) {
+		if (lfs_vref(vp)) {
 			DLOG((DLOG_CLEAN, "lfs_fastvget: lfs_vref failed"
 			      " for ino %d\n", ino));
 			lfs_stats.clean_inlocked++;
 			return EAGAIN;
 		}
-	} else
-		*vpp = NULL;
+	} else {
+		mutex_exit(&ufs_ihash_lock);
+	}
+	*vpp = vp;
 
 	return (0);
 }
 
 int
-lfs_fastvget(struct mount *mp, ino_t ino, daddr_t daddr, struct vnode **vpp, struct ufs1_dinode *dinp)
+lfs_fastvget(struct mount *mp, ino_t ino, daddr_t daddr, struct vnode **vpp,
+	     struct ufs1_dinode *dinp)
 {
 	struct inode *ip;
 	struct ufs1_dinode *dip;
@@ -1061,12 +1064,12 @@ lfs_fastvget(struct mount *mp, ino_t ino, daddr_t daddr, struct vnode **vpp, str
 	 * Wait until the filesystem is fully mounted before allowing vget
 	 * to complete.	 This prevents possible problems with roll-forward.
 	 */
-	simple_lock(&fs->lfs_interlock);
+	mutex_enter(&lfs_lock);
 	while (fs->lfs_flags & LFS_NOTYET) {
-		ltsleep(&fs->lfs_flags, PRIBIO+1, "lfs_fnotyet", 0,
-			&fs->lfs_interlock);
+		mtsleep(&fs->lfs_flags, PRIBIO+1, "lfs_fnotyet", 0,
+			&lfs_lock);
 	}
-	simple_unlock(&fs->lfs_interlock);
+	mutex_exit(&lfs_lock);
 
 	/*
 	 * This is playing fast and loose.  Someone may have the inode
@@ -1093,13 +1096,13 @@ lfs_fastvget(struct mount *mp, ino_t ino, daddr_t daddr, struct vnode **vpp, str
 		return (error);
 	}
 
-	do {
-		error = lfs_fasthashget(dev, ino, vpp);
-		if (error != 0 || *vpp != NULL) {
-			ungetnewvnode(vp);
-			return (error);
-		}
-	} while (lockmgr(&ufs_hashlock, LK_EXCLUSIVE|LK_SLEEPFAIL, 0));
+	mutex_enter(&ufs_hashlock);
+	error = lfs_fasthashget(dev, ino, vpp);
+	if (error != 0 || *vpp != NULL) {
+		mutex_exit(&ufs_hashlock);
+		ungetnewvnode(vp);
+		return (error);
+	}
 
 	/* Allocate new vnode/inode. */
 	lfs_vcreate(mp, ino, vp);
@@ -1112,7 +1115,7 @@ lfs_fastvget(struct mount *mp, ino_t ino, daddr_t daddr, struct vnode **vpp, str
 	 */
 	ip = VTOI(vp);
 	ufs_ihashins(ip);
-	lockmgr(&ufs_hashlock, LK_RELEASE, 0);
+	mutex_exit(&ufs_hashlock);
 
 	/*
 	 * XXX
@@ -1131,7 +1134,7 @@ lfs_fastvget(struct mount *mp, ino_t ino, daddr_t daddr, struct vnode **vpp, str
 			ufs_ihashrem(ip);
 
 			/* Unlock and discard unneeded inode. */
-			lockmgr(&vp->v_lock, LK_RELEASE, &vp->v_interlock);
+			vlockmgr(&vp->v_lock, LK_RELEASE);
 			lfs_vunref(vp);
 			*vpp = NULL;
 			return (error);
@@ -1154,17 +1157,16 @@ lfs_fastvget(struct mount *mp, ino_t ino, daddr_t daddr, struct vnode **vpp, str
 			ufs_ihashrem(ip);
 
 			/* Unlock and discard unneeded inode. */
-			lockmgr(&vp->v_lock, LK_RELEASE, &vp->v_interlock);
+			vlockmgr(&vp->v_lock, LK_RELEASE);
 			lfs_vunref(vp);
-			brelse(bp);
+			brelse(bp, 0);
 			*vpp = NULL;
 			return (error);
 		}
 		dip = lfs_ifind(ump->um_lfs, ino, bp);
 		if (dip == NULL) {
 			/* Assume write has not completed yet; try again */
-			bp->b_flags |= B_INVAL;
-			brelse(bp);
+			brelse(bp, BC_INVAL);
 			++retries;
 			if (retries > LFS_IFIND_RETRIES)
 				panic("lfs_fastvget: dinode not found");
@@ -1173,7 +1175,7 @@ lfs_fastvget(struct mount *mp, ino_t ino, daddr_t daddr, struct vnode **vpp, str
 			goto again;
 		}
 		*ip->i_din.ffs1_din = *dip;
-		brelse(bp);
+		brelse(bp, 0);
 	}
 	lfs_vinit(mp, &vp);
 
@@ -1189,7 +1191,7 @@ lfs_fastvget(struct mount *mp, ino_t ino, daddr_t daddr, struct vnode **vpp, str
  * Make up a "fake" cleaner buffer, copy the data from userland into it.
  */
 struct buf *
-lfs_fakebuf(struct lfs *fs, struct vnode *vp, int lbn, size_t size, caddr_t uaddr)
+lfs_fakebuf(struct lfs *fs, struct vnode *vp, int lbn, size_t size, void *uaddr)
 {
 	struct buf *bp;
 	int error;
@@ -1205,9 +1207,9 @@ lfs_fakebuf(struct lfs *fs, struct vnode *vp, int lbn, size_t size, caddr_t uadd
 	KDASSERT(bp->b_iodone == lfs_callback);
 
 #if 0
-	simple_lock(&fs->lfs_interlock);
+	mutex_enter(&lfs_lock);
 	++fs->lfs_iocount;
-	simple_unlock(&fs->lfs_interlock);
+	mutex_exit(&lfs_lock);
 #endif
 	bp->b_bufsize = size;
 	bp->b_bcount = size;

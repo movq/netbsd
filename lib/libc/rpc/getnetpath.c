@@ -1,4 +1,4 @@
-/*	$NetBSD: getnetpath.c,v 1.9 2005/02/09 21:35:47 kleink Exp $	*/
+/*	$NetBSD: getnetpath.c,v 1.14 2008/05/24 16:04:15 christos Exp $	*/
 
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
@@ -35,7 +35,7 @@
 #if 0
 static        char sccsid[] = "@(#)getnetpath.c	1.11 91/12/19 SMI";
 #else
-__RCSID("$NetBSD: getnetpath.c,v 1.9 2005/02/09 21:35:47 kleink Exp $");
+__RCSID("$NetBSD: getnetpath.c,v 1.14 2008/05/24 16:04:15 christos Exp $");
 #endif
 #endif
 
@@ -44,7 +44,6 @@ __RCSID("$NetBSD: getnetpath.c,v 1.9 2005/02/09 21:35:47 kleink Exp $");
  */
 
 #include "namespace.h"
-#include <sys/cdefs.h>
 #include <stdio.h>
 #include <assert.h>
 #include <errno.h>
@@ -103,10 +102,10 @@ setnetpath()
 	malloc_debug(1);
 #endif
 
-	if ((np_sessionp = (struct netpath_vars *)
-	    malloc(sizeof (struct netpath_vars))) == NULL)
+	if ((np_sessionp = malloc(sizeof(*np_sessionp))) == NULL)
 		return (NULL);
 	if ((np_sessionp->nc_handlep = setnetconfig()) == NULL) {
+		free(np_sessionp);
 		syslog (LOG_ERR, "rpc: failed to open " NETCONFIG);
 		return (NULL);
 	}
@@ -184,8 +183,11 @@ getnetpath(handlep)
 		 */
 		if ((ncp = getnetconfigent(npp)) != NULL) {
 					/* cobble alloc chain entry */
-			chainp = (struct netpath_chain *)
-			    malloc(sizeof (struct netpath_chain));
+			chainp = malloc(sizeof (struct netpath_chain));
+			if (chainp == NULL) {
+				freenetconfigent(ncp);
+				return NULL;
+			}
 			chainp->ncp = ncp;
 			chainp->nchain_next = NULL;
 			if (np_sessionp->ncp_list == NULL)
@@ -241,16 +243,16 @@ endnetpath(handlep)
  */
 
 char *
-_get_next_token(npp, token)
-	char *npp;		/* string */
-	int token;		/* char to parse string for */
+_get_next_token(
+	char *npp,		/* string */
+	int token		/* char to parse string for */
+)
 {
 	char  *cp;		/* char pointer */
 	char  *np;		/* netpath pointer */
 	char  *ep;		/* escape pointer */
 
 	_DIAGASSERT(npp != NULL);
-	_DIAGASSERT(token != NULL);
 
 	if ((cp = strchr(npp, token)) == NULL)
 		return (NULL);

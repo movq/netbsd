@@ -1,4 +1,4 @@
-/*	$NetBSD: gethnamaddr.c,v 1.65 2005/06/01 04:39:36 lukem Exp $	*/
+/*	$NetBSD: gethnamaddr.c,v 1.73 2007/01/27 22:27:35 christos Exp $	*/
 
 /*
  * ++Copyright++ 1985, 1988, 1993
@@ -57,7 +57,7 @@
 static char sccsid[] = "@(#)gethostnamadr.c	8.1 (Berkeley) 6/4/93";
 static char rcsid[] = "Id: gethnamaddr.c,v 8.21 1997/06/01 20:34:37 vixie Exp ";
 #else
-__RCSID("$NetBSD: gethnamaddr.c,v 1.65 2005/06/01 04:39:36 lukem Exp $");
+__RCSID("$NetBSD: gethnamaddr.c,v 1.73 2007/01/27 22:27:35 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -133,16 +133,14 @@ typedef union {
 } align;
 
 #ifdef DEBUG
-static void dprintf(char *, res_state *, ...)
+static void dprintf(const char *, res_state, ...)
 	__attribute__((__format__(__printf__, 1, 3)));
 #endif
 static struct hostent *getanswer(const querybuf *, int, const char *, int,
     res_state);
 static void map_v4v6_address(const char *, char *);
 static void map_v4v6_hostent(struct hostent *, char **, char *);
-#ifdef RESOLVSORT
-static void addrsort(char **, int, res_state *);
-#endif
+static void addrsort(char **, int, res_state);
 
 void _sethtent(int);
 void _endhtent(void);
@@ -170,13 +168,13 @@ static struct hostent *gethostbyname_internal(const char *, int, res_state);
 static const ns_src default_dns_files[] = {
 	{ NSSRC_FILES, 	NS_SUCCESS },
 	{ NSSRC_DNS, 	NS_SUCCESS },
-	{ 0 }
+	{ 0, 0 }
 };
 
 
 #ifdef DEBUG
 static void
-dprintf(char *msg, res_state res, ...)
+dprintf(const char *msg, res_state res, ...)
 {
 	_DIAGASSERT(msg != NULL);
 
@@ -184,7 +182,7 @@ dprintf(char *msg, res_state res, ...)
 		int save = errno;
 		va_list ap;
 
-		va_start (ap, msg);
+		va_start (ap, res);
 		vprintf(msg, ap);
 		va_end (ap);
 		
@@ -457,9 +455,10 @@ getanswer(const querybuf *answer, int anslen, const char *qname, int qtype,
 				continue;
 			}
 			if (hap >= &h_addr_ptrs[MAXADDRS-1]) {
-				if (!toobig++)
+				if (!toobig++) {
 					dprintf("Too many addresses (%d)\n",
 						res, MAXADDRS);
+				}
 				cp += n;
 				continue;
 			}
@@ -480,7 +479,6 @@ getanswer(const querybuf *answer, int anslen, const char *qname, int qtype,
 	if (haveanswer) {
 		*ap = NULL;
 		*hap = NULL;
-# if defined(RESOLVSORT)
 		/*
 		 * Note: we sort even if host can take only one address
 		 * in its return structures - should give it the "best"
@@ -488,7 +486,6 @@ getanswer(const querybuf *answer, int anslen, const char *qname, int qtype,
 		 */
 		if (res->nsort && haveanswer > 1 && qtype == T_A)
 			addrsort(h_addr_ptrs, haveanswer, res);
-# endif /*RESOLVSORT*/
 		if (!host.h_name) {
 			n = strlen(qname) + 1;	/* for the \0 */
 			if (n > ep - bp || n >= MAXHOSTNAMELEN)
@@ -554,7 +551,7 @@ gethostbyname_internal(const char *name, int af, res_state res)
 		NS_FILES_CB(_gethtbyname, NULL)
 		{ NSSRC_DNS, _dns_gethtbyname, NULL },	/* force -DHESIOD */
 		NS_NIS_CB(_yp_gethtbyname, NULL)
-		{ 0 }
+		NS_NULL_CB
 	};
 
 	_DIAGASSERT(name != NULL);
@@ -673,7 +670,7 @@ gethostbyaddr(const char *addr,	/* XXX should have been def'd as u_char! */
 		NS_FILES_CB(_gethtbyaddr, NULL)
 		{ NSSRC_DNS, _dns_gethtbyaddr, NULL },	/* force -DHESIOD */
 		NS_NIS_CB(_yp_gethtbyaddr, NULL)
-		{ 0 }
+		NS_NULL_CB
 	};
 	
 	_DIAGASSERT(addr != NULL);
@@ -1019,7 +1016,6 @@ map_v4v6_hostent(struct hostent *hp, char **bpp, char *ep)
 	}
 }
 
-#ifdef RESOLVSORT
 static void
 addrsort(char **ap, int num, res_state res)
 {
@@ -1062,7 +1058,6 @@ addrsort(char **ap, int num, res_state res)
 	    needsort++;
 	}
 }
-#endif
 
 struct hostent *
 gethostent(void)
@@ -1105,8 +1100,10 @@ _dns_gethtbyname(void *rv, void *cb_data, va_list ap)
 		return NS_NOTFOUND;
 	}
 	res = __res_get_state();
-	if (res == NULL)
+	if (res == NULL) {
+		free(buf);
 		return NS_NOTFOUND;
+	}
 	n = res_nsearch(res, name, C_IN, type, buf->buf, sizeof(buf->buf));
 	if (n < 0) {
 		free(buf);
@@ -1184,8 +1181,10 @@ _dns_gethtbyaddr(void *rv, void	*cb_data, va_list ap)
 		return NS_NOTFOUND;
 	}
 	res = __res_get_state();
-	if (res == NULL)
+	if (res == NULL) {
+		free(buf);
 		return NS_NOTFOUND;
+	}
 	n = res_nquery(res, qbuf, C_IN, T_PTR, buf->buf, sizeof(buf->buf));
 	if (n < 0) {
 		free(buf);

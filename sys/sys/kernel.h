@@ -1,4 +1,4 @@
-/*	$NetBSD: kernel.h,v 1.22 2003/10/02 12:14:00 christos Exp $	*/
+/*	$NetBSD: kernel.h,v 1.27 2008/01/20 18:09:13 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -48,22 +48,17 @@ extern int hostnamelen;
 extern char domainname[MAXHOSTNAMELEN];
 extern int domainnamelen;
 
-extern volatile struct timeval mono_time;
 extern struct timeval boottime;
-extern volatile struct timeval time;
 
 extern int rtc_offset;		/* offset of rtc from UTC in minutes */
 
 extern int cold;		/* still working on startup */
 extern int tick;		/* usec per tick (1000000 / hz) */
-extern int hardclock_ticks;	/* # of hardclock ticks */
-extern int tickfix;		/* periodic tick adj. tick not integral */
-extern int tickfixinterval;	/* interval at which to apply adjustment */
 extern int tickadj;		/* "standard" clock skew, us./tick */
+extern int hardclock_ticks;	/* # of hardclock ticks */
 extern int hz;			/* system clock's frequency */
 extern int stathz;		/* statistics clock's frequency */
 extern int profhz;		/* profiling clock's frequency */
-extern int lbolt;		/* once a second sleep address */
 
 extern int profsrc;		/* profiling source */
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: types.h,v 1.68 2005/08/19 02:04:04 christos Exp $	*/
+/*	$NetBSD: types.h,v 1.80 2008/02/26 13:37:09 simonb Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1991, 1993, 1994
@@ -107,8 +107,6 @@ typedef unsigned char	unchar;		/* Sys V compatibility */
 typedef	unsigned short	ushort;		/* Sys V compatibility */
 typedef	unsigned int	uint;		/* Sys V compatibility */
 typedef unsigned long	ulong;		/* Sys V compatibility */
-
-typedef	u_long		cpuid_t;
 #endif
 
 typedef	uint64_t	u_quad_t;	/* quads */
@@ -141,9 +139,12 @@ typedef	__fsfilcnt_t	fsfilcnt_t;	/* fs file count */
 #define fsfilcnt_t	__fsfilcnt_t
 #endif
 
+#if !defined(_KERNEL) && !defined(_STANDALONE)
+/* We don't and shouldn't use caddr_t in the kernel anymore */
 #ifndef	caddr_t
 typedef	__caddr_t	caddr_t;	/* core address */
 #define	caddr_t		__caddr_t
+#endif
 #endif
 
 #ifdef __daddr_t
@@ -161,6 +162,7 @@ typedef	__gid_t		gid_t;		/* group id */
 #define	gid_t		__gid_t
 #endif
 
+typedef	int		idtype_t;	/* type of the id */
 typedef	uint32_t	id_t;		/* group id, process id or user id */
 typedef	uint64_t	ino_t;		/* inode number */
 typedef	long		key_t;		/* IPC key (for Sys V IPC) */
@@ -191,9 +193,24 @@ typedef	__uid_t		uid_t;		/* user id */
 #define	uid_t		__uid_t
 #endif
 
-typedef	int32_t		dtime_t;	/* on-disk time_t */
+typedef int		mqd_t;
 
-#if defined(_KERNEL)
+typedef	unsigned long	cpuid_t;
+
+typedef	int		psetid_t;
+
+#if defined(_KERNEL) || defined(_STANDALONE)
+/*
+ * Boolean type definitions for the kernel environment.  User-space
+ * boolean definitions are found in <stdbool.h>.
+ */
+#define bool	_Bool
+#define true	1
+#define false	0
+
+/*
+ * Deprecated Mach-style boolean_t type.  Should not be used by new code.
+ */
 typedef int	boolean_t;
 #ifndef TRUE
 #define	TRUE	1
@@ -201,7 +218,8 @@ typedef int	boolean_t;
 #ifndef FALSE
 #define	FALSE	0
 #endif
-#endif
+
+#endif /* _KERNEL || _STANDALONE */
 
 #if defined(_KERNEL) || defined(_LIBC)
 /*
@@ -292,6 +310,11 @@ typedef	_BSD_USECONDS_T_	useconds_t;
 #ifdef _NETBSD_SOURCE
 #include <sys/fd_set.h>
 #define	NBBY	__NBBY
+
+typedef struct kauth_cred *kauth_cred_t;
+
+typedef int pri_t;
+
 #endif
 
 #if defined(__STDC__) && defined(_KERNEL)
@@ -301,16 +324,25 @@ typedef	_BSD_USECONDS_T_	useconds_t;
  * used in the same place that the structure is defined.
  */
 struct	lwp;
+typedef struct lwp lwp_t;
 struct	user;
 struct	__ucontext;
 struct	proc;
+typedef struct proc proc_t;
 struct	pgrp;
-struct	ucred;
 struct	rusage;
 struct	file;
+typedef struct file file_t;
 struct	buf;
+typedef struct buf buf_t;
 struct	tty;
 struct	uio;
+#endif
+
+#ifdef _KERNEL
+#define SET(t, f)	((t) |= (f))
+#define	ISSET(t, f)	((t) & (f))
+#define	CLR(t, f)	((t) &= ~(f))
 #endif
 
 #if !defined(_KERNEL) && !defined(_STANDALONE)

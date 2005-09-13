@@ -1,4 +1,4 @@
-/*	$NetBSD: ansi.h,v 1.21 2003/09/24 02:39:56 matt Exp $	*/
+/*	$NetBSD: ansi.h,v 1.25 2007/10/17 19:56:40 garbled Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -71,27 +71,8 @@ typedef struct {
 	char *__stack, *__base;
 } __va_list;
 #endif
-
-/*
- * NOTE: rune_t is not covered by ANSI nor other standards, and should not
- * be instantiated outside of lib/libc/locale.  use wchar_t.
- *
- * Runes (wchar_t) is declared to be an ``int'' instead of the more natural
- * ``unsigned long'' or ``long''.  Two things are happening here.  It is not
- * unsigned so that EOF (-1) can be naturally assigned to it and used.  Also,
- * it looks like 10646 will be a 31 bit standard.  This means that if your
- * ints cannot hold 32 bits, you will be in trouble.  The reason an int was
- * chosen over a long is that the is*() and to*() routines take ints (says
- * ANSI C), but they use _RUNE_T_ instead of int.  By changing it here, you
- * lose a bit of ANSI conformance, but your programs will still work.
- *    
- * Note that _WCHAR_T_ and _RUNE_T_ must be of the same type.  When wchar_t
- * and rune_t are typedef'd, _WCHAR_T_ will be undef'd, but _RUNE_T remains
- * defined for ctype.h.
- */
 #define	_BSD_WCHAR_T_		int		/* wchar_t */
 #define	_BSD_WINT_T_		int		/* wint_t */
-#define	_BSD_RUNE_T_		int		/* rune_t */
 #define _BSD_WCTRANS_T_		void *		/* wctrans_t */
 #define _BSD_WCTYPE_T_		void *		/* wctype_t */
 
@@ -100,8 +81,8 @@ typedef struct {
  * stream conversions.  The content must not be referenced by user programs.
  */
 typedef union {
-	char __mbstate8[128];
 	__int64_t __mbstateL;	/* for alignment */
+	char __mbstate8[128];
 } __mbstate_t;
 #define	_BSD_MBSTATE_T_		__mbstate_t	/* mbstate_t */
 

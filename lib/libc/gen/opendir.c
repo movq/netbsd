@@ -1,4 +1,4 @@
-/*	$NetBSD: opendir.c,v 1.28 2005/09/13 01:44:09 christos Exp $	*/
+/*	$NetBSD: opendir.c,v 1.33 2008/01/10 09:49:04 elad Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,12 +34,13 @@
 #if 0
 static char sccsid[] = "@(#)opendir.c	8.7 (Berkeley) 12/10/94";
 #else
-__RCSID("$NetBSD: opendir.c,v 1.28 2005/09/13 01:44:09 christos Exp $");
+__RCSID("$NetBSD: opendir.c,v 1.33 2008/01/10 09:49:04 elad Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
 #include "reentrant.h"
+#include "extern.h"
 #include <sys/param.h>
 #include <sys/mount.h>
 #include <sys/stat.h>
@@ -52,12 +53,15 @@ __RCSID("$NetBSD: opendir.c,v 1.28 2005/09/13 01:44:09 christos Exp $");
 #include <string.h>
 #include <unistd.h>
 
+#include "dirent_private.h"
+
+#define	MAXITERATIONS	100
+
 /*
  * Open a directory.
  */
 DIR *
-opendir(name)
-	const char *name;
+opendir(const char *name)
 {
 
 	_DIAGASSERT(name != NULL);
@@ -66,9 +70,7 @@ opendir(name)
 }
 
 DIR *
-__opendir2(name, flags)
-	const char *name;
-	int flags;
+__opendir2(const char *name, int flags)
 {
 	DIR *dirp = NULL;
 	int fd;
@@ -112,11 +114,11 @@ __opendir2(name, flags)
 
 	if (flags & DTF_NODUP)
 		unionstack = !(strncmp(sfb.f_fstypename, MOUNT_UNION,
-		    MFSNAMELEN)) || (sfb.f_flag & MNT_UNION);
+		    sizeof(sfb.f_fstypename))) || (sfb.f_flag & MNT_UNION);
 	else
 		unionstack = 0;
 
-	nfsdir = !(strncmp(sfb.f_fstypename, MOUNT_NFS, MFSNAMELEN));
+	nfsdir = !(strncmp(sfb.f_fstypename, MOUNT_NFS, sizeof(sfb.f_fstypename)));
 
 	if (unionstack || nfsdir) {
 		size_t len;
@@ -126,6 +128,7 @@ __opendir2(name, flags)
 		char *ddeptr;
 		int n;
 		struct dirent **dpv;
+		int i;
 
 		/*
 		 * The strategy here for directories on top of a union stack
@@ -140,6 +143,7 @@ __opendir2(name, flags)
 		 * the directory was modified). These errors should not
 		 * happen often, but need to be dealt with.
 		 */
+		i = 0;
 retry:
 		len = 0;
 		space = 0;
@@ -174,6 +178,8 @@ retry:
 			if (n == -1 && errno == EINVAL && nfsdir) {
 				free(buf);
 				lseek(fd, (off_t)0, SEEK_SET);
+				if (++i > MAXITERATIONS)
+					goto error;
 				goto retry;
 			}
 			if (n > 0) {
@@ -303,7 +309,8 @@ retry:
 		mutex_init((mutex_t *)dirp->dd_lock, NULL);
 	}
 #endif
-	dirp->dd_rewind = telldir(dirp);
+	dirp->dd_internal = NULL;
+	(void)_telldir_unlocked(dirp);
 	return (dirp);
 error:
 	serrno = errno;

@@ -1,4 +1,4 @@
-/*	$NetBSD: fseeko.c,v 1.5 2005/03/04 16:04:58 dsl Exp $	*/
+/*	$NetBSD: fseeko.c,v 1.7 2008/03/13 15:40:00 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -34,7 +34,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: fseeko.c,v 1.5 2005/03/04 16:04:58 dsl Exp $");
+__RCSID("$NetBSD: fseeko.c,v 1.7 2008/03/13 15:40:00 christos Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -69,11 +69,6 @@ fseeko(FILE *fp, off_t offset, int whence)
 	int havepos;
 
 	_DIAGASSERT(fp != NULL);
-
-#ifdef __GNUC__
-	/* This outrageous construct just to shut up a GCC warning. */
-	(void) &curoff;
-#endif
 
 	/* make sure stdio is set up */
 	if (!__sdidinit)
@@ -150,7 +145,7 @@ fseeko(FILE *fp, off_t offset, int whence)
 		goto dumb;
 	if ((fp->_flags & __SOPT) == 0) {
 		if (seekfn != __sseek ||
-		    fp->_file < 0 || fstat(fp->_file, &st) ||
+		    __sfileno(fp) == -1 || fstat(__sfileno(fp), &st) ||
 		    !S_ISREG(st.st_mode)) {
 			fp->_flags |= __SNPT;
 			goto dumb;
@@ -166,7 +161,7 @@ fseeko(FILE *fp, off_t offset, int whence)
 	if (whence == SEEK_SET)
 		target = offset;
 	else {
-		if (fstat(fp->_file, &st))
+		if (fstat(__sfileno(fp), &st))
 			goto dumb;
 		target = st.st_size + offset;
 	}

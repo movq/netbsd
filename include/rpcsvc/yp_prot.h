@@ -1,4 +1,4 @@
-/*	$NetBSD: yp_prot.h,v 1.14 2005/02/03 04:39:33 perry Exp $	*/
+/*	$NetBSD: yp_prot.h,v 1.17 2007/10/06 16:17:34 yamt Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993 Theo de Raadt <deraadt@fsa.ca>
@@ -52,7 +52,7 @@
  * 			tells ypserv to check if there is a new version of
  *			the map.
  * YPPROC_CLEAR		takes (void), returns (void).
- * 			tells ypserv to flush it's file cache, so that
+ * 			tells ypserv to flush its file cache, so that
  *			newly transferred files will get read.
  * YPPROC_ALL		takes (struct ypreq_nokey), returns (bool_t and
  *			struct ypresp_key_val).
@@ -63,12 +63,6 @@
  * YPPROC_ORDER		takes (struct ypreq_nokey), returns (ypresp_order).
  * YPPROC_MAPLIST	takes (char *), returns (struct ypmaplist *).
  */
-
-#ifndef BOOL_DEFINED
-typedef u_int bool;
-#define BOOL_DEFINED
-#endif
-
 
 /* Program and version symbols, magic numbers */
 #define YPPROG		((unsigned long)100004)
@@ -237,7 +231,7 @@ enum ypbind_resptype {
 /* network order, of course */
 struct ypbind_binding {
 	struct in_addr	ypbind_binding_addr;
-	u_int16_t	ypbind_binding_port;
+	uint16_t	ypbind_binding_port;
 };
 
 struct ypbind_resp {

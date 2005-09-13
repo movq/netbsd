@@ -1,4 +1,4 @@
-/* $NetBSD: fpgetsticky.c,v 1.7 2005/06/12 05:21:25 lukem Exp $ */
+/* $NetBSD: fpgetsticky.c,v 1.9 2008/05/10 15:31:04 martin Exp $ */
 
 /*-
  * Copyright (c) 2001 Ross Harvey
@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: fpgetsticky.c,v 1.7 2005/06/12 05:21:25 lukem Exp $");
+__RCSID("$NetBSD: fpgetsticky.c,v 1.9 2008/05/10 15:31:04 martin Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"

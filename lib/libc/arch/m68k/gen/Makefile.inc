@@ -1,11 +1,10 @@
-#	$NetBSD: Makefile.inc,v 1.26 2005/04/15 22:39:11 kleink Exp $
+#	$NetBSD: Makefile.inc,v 1.28 2006/07/03 12:54:34 drochner Exp $
 
 SRCS+=	alloca.S fabs.S
 
 # Common ieee754 constants and functions
 SRCS+=	infinityf_ieee754.c infinity_ieee754.c
 SRCS+=	fpclassifyf_ieee754.c fpclassifyd_ieee754.c
-SRCS+=	frexp_ieee754.c
 SRCS+=	isinff_ieee754.c isinfd_ieee754.c
 SRCS+=	isnanf_ieee754.c isnand_ieee754.c
 SRCS+=	isfinitef_ieee754.c isfinited_ieee754.c
@@ -45,9 +44,9 @@ SRCS+=	adddf3.S addsf3.S cmpdf2.S cmpsf2.S divdf3.S \
 	umodsi3.S umulsi3.S
 .endif
 
-SRCS+=	setjmp.S __setjmp14.S __longjmp14.c
+SRCS+=	setjmp.S longjmp.c
 SRCS+=	_setjmp.S
-SRCS+=	sigsetjmp.S __sigsetjmp14.S
+SRCS+=	sigsetjmp.S
 
 SRCS+=	makecontext.c resumecontext.S swapcontext.S
 

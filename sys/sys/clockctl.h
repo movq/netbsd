@@ -1,4 +1,4 @@
-/*      $NetBSD: clockctl.h,v 1.11 2005/08/25 15:58:38 drochner Exp $ */
+/*      $NetBSD: clockctl.h,v 1.14 2007/03/04 06:03:40 christos Exp $ */
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -35,32 +35,42 @@
 #ifndef _SYS_CLOCKCTL_H_
 #define _SYS_CLOCKCTL_H_
 
-#include <sys/types.h>
-#include <sys/param.h>
 #include <sys/time.h>
 #include <sys/timex.h>
-#include <sys/ioctl.h>
-#include <sys/mount.h>	/* For fhandle_t */
-#include <sys/sa.h>	/* for sa_upcall_t */
-#include <sys/syscallargs.h>
 
-#if defined(NTP) || !defined(_KERNEL)
-struct clockctl_ntp_adjtime_args {
-	struct sys_ntp_adjtime_args uas;
+struct clockctl_settimeofday {
+	const struct timeval *tv;
+	const void *tzp;
+};
+
+#define CLOCKCTL_SETTIMEOFDAY _IOW('C', 0x1, struct clockctl_settimeofday)
+
+struct clockctl_adjtime {
+	const struct timeval *delta;
+	struct timeval *olddelta;
+};
+
+#define CLOCKCTL_ADJTIME _IOWR('C', 0x2, struct clockctl_adjtime)
+
+struct clockctl_clock_settime {
+	clockid_t clock_id;
+	const struct timespec *tp;
+};
+
+#define CLOCKCTL_CLOCK_SETTIME _IOW('C', 0x3, struct clockctl_clock_settime)
+
+struct clockctl_ntp_adjtime {
+	struct timex *tp;
 	register_t retval;
 };
-#define CLOCKCTL_NTP_ADJTIME _IOWR('C', 0x4, struct clockctl_ntp_adjtime_args)
-#endif
 
-#define CLOCKCTL_SETTIMEOFDAY _IOW('C', 0x1, struct sys_settimeofday_args)
-#define CLOCKCTL_ADJTIME _IOWR('C', 0x2, struct sys_adjtime_args)
-#define CLOCKCTL_CLOCK_SETTIME _IOW('C', 0x3, struct sys_clock_settime_args)
+#define CLOCKCTL_NTP_ADJTIME _IOWR('C', 0x4, struct clockctl_ntp_adjtime)
 
 #ifdef _KERNEL
 void    clockctlattach(int);
-int     clockctlopen(dev_t, int, int, struct proc *);
-int     clockctlclose(dev_t, int, int, struct proc *);
-int     clockctlioctl(dev_t, u_long, caddr_t, int, struct proc *);
+int     clockctlopen(dev_t, int, int, struct lwp *);
+int     clockctlclose(dev_t, int, int, struct lwp *);
+int     clockctlioctl(dev_t, u_long, void *, int, struct lwp *);
 #endif
 
 #endif /* _SYS_CLOCKCTL_H_ */

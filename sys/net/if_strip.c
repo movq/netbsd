@@ -1,4 +1,4 @@
-/*	$NetBSD: if_strip.c,v 1.61 2005/08/18 00:30:58 yamt Exp $	*/
+/*	$NetBSD: if_strip.c,v 1.85 2008/02/20 17:05:53 matt Exp $	*/
 /*	from: NetBSD: if_sl.c,v 1.38 1996/02/13 22:00:23 christos Exp $	*/
 
 /*
@@ -87,7 +87,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_strip.c,v 1.61 2005/08/18 00:30:58 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_strip.c,v 1.85 2008/02/20 17:05:53 matt Exp $");
 
 #include "opt_inet.h"
 #include "bpfilter.h"
@@ -106,11 +106,11 @@ __KERNEL_RCSID(0, "$NetBSD: if_strip.c,v 1.61 2005/08/18 00:30:58 yamt Exp $");
 #if __NetBSD__
 #include <sys/systm.h>
 #include <sys/callout.h>
+#include <sys/kauth.h>
 #endif
 #include <sys/syslog.h>
-
-#include <machine/cpu.h>
-#include <machine/intr.h>
+#include <sys/cpu.h>
+#include <sys/intr.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -220,13 +220,10 @@ struct if_clone strip_cloner =
 
 #define STRIP_FRAME_END		0x0D		/* carriage return */
 
-#ifndef __HAVE_GENERIC_SOFT_INTERRUPTS
-void	stripnetisr(void);
-#endif
-void	stripintr(void *);
+static void	stripintr(void *);
 
-static int stripinit __P((struct strip_softc *));
-static 	struct mbuf *strip_btom __P((struct strip_softc *, int));
+static int	stripinit(struct strip_softc *);
+static struct mbuf *strip_btom(struct strip_softc *, int);
 
 /*
  * STRIP header: '*' + modem address (dddd-dddd) + '*' + mactype ('SIP0')
@@ -255,23 +252,23 @@ struct st_header {
  * different STRIP implementations: *BSD, Linux, etc.
  *
  */
-static u_char* UnStuffData __P((u_char *src, u_char *end, u_char
-				*dest, u_long dest_length));
+static u_char* UnStuffData(u_char *src, u_char *end, u_char
+				*dest, u_long dest_length);
 
-static u_char* StuffData __P((u_char *src, u_long length, u_char *dest,
-			      u_char **code_ptr_ptr));
+static u_char* StuffData(u_char *src, u_long length, u_char *dest,
+			      u_char **code_ptr_ptr);
 
-static void RecvErr __P((const char *msg, struct strip_softc *sc));
-static void RecvErr_Message __P((struct strip_softc *strip_info,
-				u_char *sendername, const u_char *msg));
-void	strip_resetradio __P((struct strip_softc *sc, struct tty *tp));
-void	strip_proberadio __P((struct strip_softc *sc, struct tty *tp));
-void	strip_watchdog __P((struct ifnet *ifp));
-void	strip_sendbody __P((struct strip_softc *sc, struct mbuf *m));
-int	strip_newpacket __P((struct strip_softc *sc, u_char *ptr, u_char *end));
-void	strip_send __P((struct strip_softc *sc, struct mbuf *m0));
+static void RecvErr(const char *msg, struct strip_softc *sc);
+static void RecvErr_Message(struct strip_softc *strip_info,
+				u_char *sendername, const u_char *msg);
+void	strip_resetradio(struct strip_softc *sc, struct tty *tp);
+void	strip_proberadio(struct strip_softc *sc, struct tty *tp);
+void	strip_watchdog(struct ifnet *ifp);
+void	strip_sendbody(struct strip_softc *sc, struct mbuf *m);
+int	strip_newpacket(struct strip_softc *sc, u_char *ptr, u_char *end);
+void	strip_send(struct strip_softc *sc, struct mbuf *m0);
 
-void	strip_timeout __P((void *x));
+void	strip_timeout(void *x);
 
 #ifdef DEBUG
 #define DPRINTF(x)	printf x
@@ -313,7 +310,7 @@ void	strip_timeout __P((void *x));
 #define CLEAR_RESET_TIMER(sc) \
  do {\
     (sc)->sc_state = ST_ALIVE;	\
-    (sc)->sc_statetimo = time.tv_sec + ST_PROBE_INTERVAL;	\
+    (sc)->sc_statetimo = time_second + ST_PROBE_INTERVAL;	\
 } while (/*CONSTCOND*/ 0)
 
 /*
@@ -322,19 +319,41 @@ void	strip_timeout __P((void *x));
  */
 #define FORCE_RESET(sc) \
  do {\
-    (sc)->sc_statetimo = time.tv_sec - 1; \
+    (sc)->sc_statetimo = time_second - 1; \
     (sc)->sc_state = ST_DEAD;	\
     /*(sc)->sc_if.if_timer = 0;*/ \
  } while (/*CONSTCOND*/ 0)
 
 #define RADIO_PROBE_TIMEOUT(sc) \
-	 ((sc)-> sc_statetimo > time.tv_sec)
+	 ((sc)-> sc_statetimo > time_second)
 
+static int	stripclose(struct tty *, int);
+static int	stripinput(int, struct tty *);
+static int	stripioctl(struct ifnet *, u_long, void *);
+static int	stripopen(dev_t, struct tty *);
+static int	stripoutput(struct ifnet *,
+		    struct mbuf *, const struct sockaddr *, struct rtentry *);
+static int	stripstart(struct tty *);
+static int	striptioctl(struct tty *, u_long, void *, int, struct lwp *);
 
+static struct linesw strip_disc = {
+	.l_name = "strip",
+	.l_open = stripopen,
+	.l_close = stripclose,
+	.l_read = ttyerrio,
+	.l_write = ttyerrio,
+	.l_ioctl = striptioctl,
+	.l_rint = stripinput,
+	.l_start = stripstart,
+	.l_modem = nullmodem,
+	.l_poll = ttyerrpoll
+};
 
 void
 stripattach(void)
 {
+	if (ttyldisc_attach(&strip_disc) != 0)
+		panic("stripattach");
 	LIST_INIT(&strip_softc_list);
 	if_clone_attach(&strip_cloner);
 }
@@ -348,7 +367,7 @@ strip_clone_create(struct if_clone *ifc, int unit)
 	sc->sc_unit = unit;
 	(void)snprintf(sc->sc_if.if_xname, sizeof(sc->sc_if.if_xname),
 	    "%s%d", ifc->ifc_name, unit);
-	callout_init(&sc->sc_timo_ch);
+	callout_init(&sc->sc_timo_ch, 0);
 	sc->sc_if.if_softc = sc;
 	sc->sc_if.if_mtu = SLMTU;
 	sc->sc_if.if_flags = 0;
@@ -393,8 +412,7 @@ strip_clone_destroy(struct ifnet *ifp)
 }
 
 static int
-stripinit(sc)
-	struct strip_softc *sc;
+stripinit(struct strip_softc *sc)
 {
 	u_char *p;
 
@@ -440,7 +458,7 @@ stripinit(sc)
 
 	/* Initialize radio probe/reset state machine */
 	sc->sc_state = ST_DEAD;		/* assumet the worst. */
-	sc->sc_statetimo = time.tv_sec; /* do reset immediately */
+	sc->sc_statetimo = time_second; /* do reset immediately */
 
 	return (1);
 }
@@ -451,40 +469,32 @@ stripinit(sc)
  */
 /* ARGSUSED */
 int
-stripopen(dev, tp)
-	dev_t dev;
-	struct tty *tp;
+stripopen(dev_t dev, struct tty *tp)
 {
-	struct proc *p = curproc;		/* XXX */
+	struct lwp *l = curlwp;		/* XXX */
 	struct strip_softc *sc;
 	int error;
-#ifdef __NetBSD__
-	int s;
-#endif
 
-	if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
+	if ((error = kauth_authorize_generic(l->l_cred,
+	    KAUTH_GENERIC_ISSUSER, NULL)) != 0)
 		return (error);
 
-	if (tp->t_linesw->l_no == STRIPDISC)
+	if (tp->t_linesw == &strip_disc)
 		return (0);
 
 	LIST_FOREACH(sc, &strip_softc_list, sc_iflist) {
 		if (sc->sc_ttyp == NULL) {
-#ifdef __HAVE_GENERIC_SOFT_INTERRUPTS
-			sc->sc_si = softintr_establish(IPL_SOFTNET,
+			sc->sc_si = softint_establish(SOFTINT_NET,
 			    stripintr, sc);
-#endif
 			if (stripinit(sc) == 0) {
-#ifdef __HAVE_GENERIC_SOFT_INTERRUPTS
-				softintr_disestablish(sc->sc_si);
-#endif
+				softint_disestablish(sc->sc_si);
 				return (ENOBUFS);
 			}
-			tp->t_sc = (caddr_t)sc;
+			mutex_spin_enter(&tty_lock);
+			tp->t_sc = (void *)sc;
 			sc->sc_ttyp = tp;
 			sc->sc_if.if_baudrate = tp->t_ospeed;
 			ttyflush(tp, FREAD | FWRITE);
-#ifdef __NetBSD__
 			/*
 			 * Make sure tty output queue is large enough
 			 * to hold a full-sized packet (including frame
@@ -493,18 +503,15 @@ stripopen(dev, tp)
 			 * of escapes and clever RLL bytestuffing),
 			 * plus frame header, and add two on for frame ends.
 			 */
-			s = spltty();
 			if (tp->t_outq.c_cn < STRIP_MTU_ONWIRE) {
 				sc->sc_oldbufsize = tp->t_outq.c_cn;
 				sc->sc_oldbufquot = tp->t_outq.c_cq != 0;
 
+				mutex_spin_exit(&tty_lock);
 				clfree(&tp->t_outq);
 				error = clalloc(&tp->t_outq, 3*SLMTU, 0);
 				if (error) {
-					splx(s);
-#ifdef __HAVE_GENERIC_SOFT_INTERRUPTS
-					softintr_disestablish(sc->sc_si);
-#endif
+					softint_disestablish(sc->sc_si);
 					/*
 					 * clalloc() might return -1 which
 					 * is no good, so we need to return
@@ -512,13 +519,11 @@ stripopen(dev, tp)
 					 */
 					return (ENOMEM);
 				}
-			} else
+				mutex_spin_enter(&tty_lock);
+			} else 
 				sc->sc_oldbufsize = sc->sc_oldbufquot = 0;
-			splx(s);
-#endif /* __NetBSD__ */
-			s = spltty();
 			strip_resetradio(sc, tp);
-			splx(s);
+			mutex_spin_exit(&tty_lock);
 
 			/*
 			 * Start the watchdog timer to get the radio
@@ -536,9 +541,8 @@ stripopen(dev, tp)
  * Line specific close routine.
  * Detach the tty from the strip unit.
  */
-void
-stripclose(tp)
-	struct tty *tp;
+static int
+stripclose(struct tty *tp, int flag)
 {
 	struct strip_softc *sc;
 	int s;
@@ -547,9 +551,7 @@ stripclose(tp)
 	sc = tp->t_sc;
 
 	if (sc != NULL) {
-#ifdef __HAVE_GENERIC_SOFT_INTERRUPTS
-		softintr_disestablish(sc->sc_si);
-#endif
+		softint_disestablish(sc->sc_si);
 		s = splnet();
 		/*
 		 * Cancel watchdog timer, which stops the "probe-for-death"/
@@ -561,7 +563,8 @@ stripclose(tp)
 		splx(s);
 
 		s = spltty();
-		tp->t_linesw = linesw[0];	/* default line disc. */
+		ttyldisc_release(tp->t_linesw);
+		tp->t_linesw = ttyldisc_default();
 		tp->t_state = 0;
 
 		sc->sc_ttyp = NULL;
@@ -573,11 +576,11 @@ stripclose(tp)
 		IF_PURGE(&sc->sc_inq);
 
 		/* XXX */
-		free((caddr_t)(sc->sc_rxbuf - SLBUFSIZE + SLMAX), M_DEVBUF);
+		free((void *)(sc->sc_rxbuf - SLBUFSIZE + SLMAX), M_DEVBUF);
 		sc->sc_rxbuf = NULL;
 
 		/* XXX */
-		free((caddr_t)(sc->sc_txbuf - SLBUFSIZE + SLMAX), M_DEVBUF);
+		free((void *)(sc->sc_txbuf - SLBUFSIZE + SLMAX), M_DEVBUF);
 		sc->sc_txbuf = NULL;
 
 		if (sc->sc_flags & SC_TIMEOUT) {
@@ -596,6 +599,8 @@ stripclose(tp)
 		}
 		splx(s);
 	}
+
+	return (0);
 }
 
 /*
@@ -604,11 +609,8 @@ stripclose(tp)
  */
 /* ARGSUSED */
 int
-striptioctl(tp, cmd, data, flag)
-	struct tty *tp;
-	u_long cmd;
-	caddr_t data;
-	int flag;
+striptioctl(struct tty *tp, u_long cmd, void *data, int flag,
+    struct lwp *l)
 {
 	struct strip_softc *sc = (struct strip_softc *)tp->t_sc;
 
@@ -628,9 +630,7 @@ striptioctl(tp, cmd, data, flag)
  * byte-stuff (escape) it, and enqueue it on the tty send queue.
  */
 void
-strip_sendbody(sc, m)
-	struct strip_softc  *sc;
-	struct mbuf *m;
+strip_sendbody(struct strip_softc *sc, struct mbuf *m)
 {
 	struct tty *tp = sc->sc_ttyp;
 	u_char *dp = sc->sc_txbuf;
@@ -671,9 +671,7 @@ strip_sendbody(sc, m)
  * Send a STRIP packet.  Must be called at spltty().
  */
 void
-strip_send(sc, m0)
-	struct strip_softc *sc;
-	struct mbuf *m0;
+strip_send(struct strip_softc *sc, struct mbuf *m0)
 {
 	struct tty *tp = sc->sc_ttyp;
 	struct st_header *hdr;
@@ -715,7 +713,7 @@ strip_send(sc, m0)
 	 * If a radio probe is due now, append it to this packet rather
 	 * than waiting until the watchdog routine next runs.
 	 */
-	if (time.tv_sec >= sc->sc_statetimo && sc->sc_state == ST_ALIVE)
+	if (time_second >= sc->sc_statetimo && sc->sc_state == ST_ALIVE)
 		strip_proberadio(sc, tp);
 }
 
@@ -726,11 +724,8 @@ strip_send(sc, m0)
  * ordering gets trashed.  It can be done for all packets in stripintr().
  */
 int
-stripoutput(ifp, m, dst, rt)
-	struct ifnet *ifp;
-	struct mbuf *m;
-	struct sockaddr *dst;
-	struct rtentry *rt;
+stripoutput(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
+    struct rtentry *rt)
 {
 	struct strip_softc *sc = ifp->if_softc;
 	struct ip *ip;
@@ -754,15 +749,13 @@ stripoutput(ifp, m, dst, rt)
 		return (EHOSTUNREACH);
 	}
 
-#define SDL(a)          ((struct sockaddr_dl *) (a))
-
 #ifdef DEBUG
 	if (rt) {
 	   	printf("stripout, rt: dst af%d gw af%d",
-		    rt_key(rt)->sa_family, rt->rt_gateway->sa_family);
-		if (rt_key(rt)->sa_family == AF_INET)
+		    rt_getkey(rt)->sa_family, rt->rt_gateway->sa_family);
+		if (rt_getkey(rt)->sa_family == AF_INET)
 		  printf(" dst %x",
-		      ((struct sockaddr_in *)rt_key(rt))->sin_addr.s_addr);
+		      satocsin(rt_getkey(rt))->sin_addr.s_addr);
 		printf("\n");
 	}
 #endif
@@ -773,19 +766,17 @@ stripoutput(ifp, m, dst, rt)
 
                 /* assume rt is never NULL */
                 if (rt == NULL || rt->rt_gateway->sa_family != AF_LINK
-                    || SDL(rt->rt_gateway)->sdl_alen != ifp->if_addrlen) {
+                    || satocsdl(rt->rt_gateway)->sdl_alen != ifp->if_addrlen) {
 		  	DPRINTF(("strip: could not arp starmode addr %x\n",
-			 ((struct sockaddr_in *)dst)->sin_addr.s_addr));
+			 satocsin(dst)->sin_addr.s_addr));
 			m_freem(m);
 			return (EHOSTUNREACH);
 		}
-		/*bcopy(LLADDR(SDL(rt->rt_gateway)), dldst, ifp->if_addrlen);*/
-                dldst = LLADDR(SDL(rt->rt_gateway));
+                dldst = CLLADDR(satocsdl(rt->rt_gateway));
                 break;
 
 	case AF_LINK:
-		/*bcopy(LLADDR(SDL(rt->rt_gateway)), dldst, ifp->if_addrlen);*/
-		dldst = LLADDR(SDL(dst));
+		dldst = CLLADDR(satocsdl(dst));
 		break;
 
 	default:
@@ -856,11 +847,12 @@ stripoutput(ifp, m, dst, rt)
 
 	s = spltty();
 	if (sc->sc_oqlen && sc->sc_ttyp->t_outq.c_cc == sc->sc_oqlen) {
-		struct timeval tv;
+		struct bintime bt;
 
 		/* if output's been stalled for too long, and restart */
-		timersub(&time, &sc->sc_lastpacket, &tv);
-		if (tv.tv_sec > 0) {
+		getbinuptime(&bt);
+		bintime_sub(&bt, &sc->sc_lastpacket);
+		if (bt.sec > 0) {
 			DPRINTF(("stripoutput: stalled, resetting\n"));
 			sc->sc_otimeout++;
 			stripstart(sc->sc_ttyp);
@@ -874,7 +866,7 @@ stripoutput(ifp, m, dst, rt)
 		splx(s);
 		return error;
 	}
-	sc->sc_lastpacket = time;
+	getbinuptime(&sc->sc_lastpacket);
 	splx(s);
 
 	s = spltty();
@@ -891,9 +883,8 @@ stripoutput(ifp, m, dst, rt)
  * the interface before starting output.
  *
  */
-void
-stripstart(tp)
-	struct tty *tp;
+int
+stripstart(struct tty *tp)
 {
 	struct strip_softc *sc = tp->t_sc;
 
@@ -905,32 +896,23 @@ stripstart(tp)
 	if (tp->t_outq.c_cc != 0) {
 		(*tp->t_oproc)(tp);
 		if (tp->t_outq.c_cc > SLIP_HIWAT)
-			return;
+			return (0);
 	}
 
 	/*
 	 * This happens briefly when the line shuts down.
 	 */
 	if (sc == NULL)
-		return;
-#ifdef __HAVE_GENERIC_SOFT_INTERRUPTS
-	softintr_schedule(sc->sc_si);
-#else
-    {
-	int s = splhigh();
-	schednetisr(NETISR_STRIP);
-	splx(s);
-    }
-#endif
+		return (0);
+	softint_schedule(sc->sc_si);
+	return (0);
 }
 
 /*
  * Copy data buffer to mbuf chain; add ifnet pointer.
  */
 static struct mbuf *
-strip_btom(sc, len)
-	struct strip_softc *sc;
-	int len;
+strip_btom(struct strip_softc *sc, int len)
 {
 	struct mbuf *m;
 
@@ -967,10 +949,8 @@ strip_btom(sc, len)
  * char is a packet delimiter, decapsulate the packet, wrap it in
  * an mbuf, and put it on the protocol input queue.
 */
-void
-stripinput(c, tp)
-	int c;
-	struct tty *tp;
+int
+stripinput(int c, struct tty *tp)
 {
 	struct strip_softc *sc;
 	struct mbuf *m;
@@ -979,12 +959,12 @@ stripinput(c, tp)
 	tk_nin++;
 	sc = (struct strip_softc *)tp->t_sc;
 	if (sc == NULL)
-		return;
+		return (0);
 	if (c & TTY_ERRORMASK || ((tp->t_state & TS_CARR_ON) == 0 &&
 	    (tp->t_cflag & CLOCAL) == 0)) {
 		sc->sc_flags |= SC_ERROR;
 		DPRINTF(("strip: input, error %x\n", c));	 /* XXX */
-		return;
+		return (0);
 	}
 	c &= TTY_CHARMASK;
 
@@ -1014,7 +994,7 @@ stripinput(c, tp)
 			sc->sc_flags |= SC_ERROR;
 			goto error;
 		}
-		return;
+		return (0);
 
 	case STRIP_FRAME_END:
 		break;
@@ -1055,15 +1035,7 @@ stripinput(c, tp)
 		goto error;
 
 	IF_ENQUEUE(&sc->sc_inq, m);
-#ifdef __HAVE_GENERIC_SOFT_INTERRUPTS
-	softintr_schedule(sc->sc_si);
-#else
-    {
-	int s = splhigh();
-	schednetisr(NETISR_STRIP);
-	splx(s);
-    }
-#endif
+	softint_schedule(sc->sc_si);
 	goto newpack;
 
 error:
@@ -1072,23 +1044,11 @@ error:
 newpack:
 	sc->sc_mp = sc->sc_pktstart = (u_char *) sc->sc_mbuf->m_ext.ext_buf +
 	    BUFOFFSET;
+
+	return (0);
 }
 
-#ifndef __HAVE_GENERIC_SOFT_INTERRUPTS
-void
-stripnetisr(void)
-{
-	struct strip_softc *sc;
-
-	LIST_FOREACH(sc, &strip_softc_list, sc_iflist) {
-		if (sc->sc_ttyp == NULL)
-			continue;
-		stripintr(sc);
-	}
-}
-#endif
-
-void
+static void
 stripintr(void *arg)
 {
 	struct strip_softc *sc = arg;
@@ -1180,7 +1140,7 @@ stripintr(void *arg)
 			bpf_mtap_sl_out(sc->sc_if.if_bpf, mtod(m, u_char *),
 			    bpf_m);
 #endif
-		sc->sc_lastpacket = time;
+		getbinuptime(&sc->sc_lastpacket);
 
 		s = spltty();
 		strip_send(sc, m);
@@ -1255,9 +1215,9 @@ stripintr(void *arg)
 			}
 		}
 #endif
-		m->m_data = (caddr_t) pktstart;
+		m->m_data = (void *) pktstart;
 		m->m_pkthdr.len = m->m_len = len;
-#if NPBFILTER > 0
+#if NBPFILTER > 0
 		if (sc->sc_if.if_bpf) {
 			bpf_mtap_sl_in(sc->sc_if.if_bpf, chdr, &m);
 			if (m == NULL)
@@ -1276,14 +1236,14 @@ stripintr(void *arg)
 			MGETHDR(n, M_DONTWAIT, MT_DATA);
 			pktlen = m->m_pkthdr.len;
 			M_MOVE_PKTHDR(n, m);
-			memcpy(mtod(n, caddr_t), mtod(m, caddr_t), pktlen);
+			memcpy(mtod(n, void *), mtod(m, void *), pktlen);
 			n->m_len = m->m_len;
 			m_freem(m);
 			m = n;
 		}
 
 		sc->sc_if.if_ipackets++;
-		sc->sc_lastpacket = time;
+		getbinuptime(&sc->sc_lastpacket);
 
 #ifdef INET
 		s = splnet();
@@ -1305,10 +1265,7 @@ stripintr(void *arg)
  * Process an ioctl request.
  */
 int
-stripioctl(ifp, cmd, data)
-	struct ifnet *ifp;
-	u_long cmd;
-	caddr_t data;
+stripioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
 	struct ifaddr *ifa = (struct ifaddr *)data;
 	struct ifreq *ifr;
@@ -1337,7 +1294,7 @@ stripioctl(ifp, cmd, data)
 			error = EAFNOSUPPORT;		/* XXX */
 			break;
 		}
-		switch (ifr->ifr_addr.sa_family) {
+		switch (ifreq_getaddr(cmd, ifr)->sa_family) {
 
 #ifdef INET
 		case AF_INET:
@@ -1367,9 +1324,7 @@ stripioctl(ifp, cmd, data)
  * Must be called at spltty().
  */
 void
-strip_resetradio(sc, tp)
-	struct strip_softc *sc;
-	struct tty *tp;
+strip_resetradio(struct strip_softc *sc, struct tty *tp)
 {
 #if 0
 	static ttychar_t InitString[] =
@@ -1396,8 +1351,8 @@ strip_resetradio(sc, tp)
 	 * is so badlyhung it needs  powercycling.
 	 */
 	sc->sc_state = ST_DEAD;
-	sc->sc_lastpacket = time;
-	sc->sc_statetimo = time.tv_sec + STRIP_RESET_INTERVAL;
+	getbinuptime(&sc->sc_lastpacket);
+	sc->sc_statetimo = time_second + STRIP_RESET_INTERVAL;
 
 	/*
 	 * XXX Does calling the tty output routine now help resets?
@@ -1417,9 +1372,7 @@ strip_resetradio(sc, tp)
  * should be caled at spl >= spltty.
  */
 void
-strip_proberadio(sc, tp)
-	struct strip_softc *sc;
-	struct tty *tp;
+strip_proberadio(struct strip_softc *sc, struct tty *tp)
 {
 
 	int overflow;
@@ -1435,7 +1388,7 @@ strip_proberadio(sc, tp)
 			       sc->sc_if.if_xname);
 		/* Go to probe-sent state, set timeout accordingly. */
 		sc->sc_state = ST_PROBE_SENT;
-		sc->sc_statetimo = time.tv_sec + ST_PROBERESPONSE_INTERVAL;
+		sc->sc_statetimo = time_second + ST_PROBERESPONSE_INTERVAL;
 	} else {
 		addlog("%s: incomplete probe, tty queue %d bytes overfull\n",
 			sc->sc_if.if_xname, overflow);
@@ -1457,8 +1410,7 @@ static const char *strip_statenames[] = {
  * Will be needed to make strip work on ptys.
  */
 void
-strip_timeout(x)
-    void *x;
+strip_timeout(void *x)
 {
     struct strip_softc *sc = (struct strip_softc *) x;
     struct tty *tp =  sc->sc_ttyp;
@@ -1493,8 +1445,7 @@ strip_timeout(x)
  * so we send a probe on its behalf.
  */
 void
-strip_watchdog(ifp)
-	struct ifnet *ifp;
+strip_watchdog(struct ifnet *ifp)
 {
 	struct strip_softc *sc = ifp->if_softc;
 	struct tty *tp =  sc->sc_ttyp;
@@ -1511,13 +1462,13 @@ strip_watchdog(ifp)
 		       ifp->if_xname,
  		       ((unsigned) sc->sc_state < 3) ?
 		       strip_statenames[sc->sc_state] : "<<illegal state>>",
-		       sc->sc_statetimo - time.tv_sec);
+		       sc->sc_statetimo - time_second);
 #endif
 
 	/*
 	 * If time in this state hasn't yet expired, return.
 	 */
-	if ((ifp->if_flags & IFF_UP) ==  0 || sc->sc_statetimo > time.tv_sec) {
+	if ((ifp->if_flags & IFF_UP) ==  0 || sc->sc_statetimo > time_second) {
 		goto done;
 	}
 
@@ -1587,9 +1538,7 @@ strip_watchdog(ifp)
  * Process a received packet.
  */
 int
-strip_newpacket(sc, ptr, end)
-	struct strip_softc *sc;
-	u_char *ptr, *end;
+strip_newpacket(struct strip_softc *sc, u_char *ptr, u_char *end)
 {
 	int len = ptr - end;
 	u_char *name, *name_end;
@@ -1658,7 +1607,7 @@ strip_newpacket(sc, ptr, end)
 	 * of the decoded packet.  Decode start of IP header, get the
 	 * IP header length and decode that many bytes in total.
 	 */
-	packetlen = ((u_int16_t)sc->sc_rxbuf[2] << 8) | sc->sc_rxbuf[3];
+	packetlen = ((uint16_t)sc->sc_rxbuf[2] << 8) | sc->sc_rxbuf[3];
 
 #ifdef DIAGNOSTIC
 #if 0
@@ -1934,9 +1883,7 @@ UnStuffData(u_char *src, u_char *end, u_char *dst, u_long dst_length)
  * from the STRIP driver.
  */
 static void
-RecvErr(msg, sc)
-	const char *msg;
-	struct strip_softc *sc;
+RecvErr(const char *msg, struct strip_softc *sc)
 {
 #define MAX_RecErr	80
 	u_char *ptr = sc->sc_pktstart;
@@ -1969,10 +1916,8 @@ RecvErr(msg, sc)
  * Parse an error message from the radio.
  */
 static void
-RecvErr_Message(strip_info, sendername, msg)
-	struct strip_softc *strip_info;
-	u_char *sendername;
-	const u_char *msg;
+RecvErr_Message(struct strip_softc *strip_info, u_char *sendername,
+    const u_char *msg)
 {
 	static const char ERR_001[] = "001"; /* Not in StarMode! */
 	static const char ERR_002[] = "002"; /* Remap handle */

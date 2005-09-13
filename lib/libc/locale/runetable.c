@@ -1,4 +1,4 @@
-/*	$NetBSD: runetable.c,v 1.12 2003/08/07 16:43:04 agc Exp $	*/
+/*	$NetBSD: runetable.c,v 1.17 2008/08/12 21:25:31 tnozaki Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -39,11 +39,12 @@
 #if 0
 static char sccsid[] = "@(#)table.c	8.1 (Berkeley) 6/27/93";
 #else
-__RCSID("$NetBSD: runetable.c,v 1.12 2003/08/07 16:43:04 agc Exp $");
+__RCSID("$NetBSD: runetable.c,v 1.17 2008/08/12 21:25:31 tnozaki Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
 #include <stdlib.h>
+#define _CTYPE_PRIVATE
 #include <ctype.h>
 #include <locale.h>
 #include <assert.h>
@@ -52,7 +53,6 @@ __RCSID("$NetBSD: runetable.c,v 1.12 2003/08/07 16:43:04 agc Exp $");
 #include <citrus/citrus_ctype.h>
 #include "rune.h"
 #include "rune_local.h"
-#include <stdlib.h>
 
 _RuneLocale _DefaultRuneLocale = {
     _RUNE_MAGIC_1,
@@ -187,6 +187,72 @@ _RuneLocale _DefaultRuneLocale = {
 		_CTYPE_P|_CTYPE_R|_CTYPE_G|_CTYPE_SW1,
 		_CTYPE_P|_CTYPE_R|_CTYPE_G|_CTYPE_SW1,
 		_CTYPE_C,
+#ifdef ALL_80_TO_FF_SW1
+	/*80*/	_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+	/*90*/	_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+	/*A0*/	_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+	/*B0*/	_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+	/*C0*/	_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+	/*D0*/	_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+	/*E0*/	_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+	/*F0*/	_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+		_CTYPE_R|_CTYPE_SW1, _CTYPE_R|_CTYPE_SW1,
+#endif
     },
     {	0x00,	0x01,	0x02,	0x03,	0x04,	0x05,	0x06,	0x07,
      	0x08,	0x09,	0x0a,	0x0b,	0x0c,	0x0d,	0x0e,	0x0f,
@@ -277,9 +343,12 @@ _RuneLocale _DefaultRuneLocale = {
 	    { "space", _CTYPE_S },
 	    { "upper", _CTYPE_U },
 	    { "xdigit", _CTYPE_X },
-    }
+    },
+    _C_ctype_,
+    _C_tolower_,
+    _C_toupper_
 };
 
 _RuneLocale *_CurrentRuneLocale = &_DefaultRuneLocale;
 
-char	*_PathLocale;
+const char *_PathLocale;

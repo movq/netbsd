@@ -1,4 +1,4 @@
-/*	$NetBSD: regexec.c,v 1.17 2003/08/07 16:43:21 agc Exp $	*/
+/*	$NetBSD: regexec.c,v 1.20 2007/02/09 23:44:18 junyoung Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993, 1994
@@ -76,7 +76,7 @@
 #if 0
 static char sccsid[] = "@(#)regexec.c	8.3 (Berkeley) 3/20/94";
 #else
-__RCSID("$NetBSD: regexec.c,v 1.17 2003/08/07 16:43:21 agc Exp $");
+__RCSID("$NetBSD: regexec.c,v 1.20 2007/02/09 23:44:18 junyoung Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -93,10 +93,10 @@ __RCSID("$NetBSD: regexec.c,v 1.17 2003/08/07 16:43:21 agc Exp $");
 #include <assert.h>
 #include <ctype.h>
 #include <limits.h>
-#include <regex.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <regex.h>
 
 #ifdef __weak_alias
 __weak_alias(regexec,_regexec)
@@ -200,12 +200,12 @@ __weak_alias(regexec,_regexec)
  * have been prototyped.
  */
 int				/* 0 success, REG_NOMATCH failure */
-regexec(preg, string, nmatch, pmatch, eflags)
-const regex_t *preg;
-const char *string;
-size_t nmatch;
-regmatch_t pmatch[];
-int eflags;
+regexec(
+    const regex_t *preg,
+    const char *string,
+    size_t nmatch,
+    regmatch_t pmatch[],
+    int eflags)
 {
 	struct re_guts *g = preg->re_g;
 	char *s;
@@ -225,8 +225,7 @@ int eflags;
 		return(REG_BADPAT);
 	eflags = GOODFLAGS(eflags);
 
-	/* LINTED we believe that the regex routines do not change the string */
-	s = (char *)string;
+	s = __UNCONST(string);
 
 	if (g->nstates <= CHAR_BIT*sizeof(states1) && !(eflags&REG_LARGE))
 		return(smatcher(g, s, nmatch, pmatch, eflags));

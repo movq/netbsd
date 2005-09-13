@@ -1,4 +1,4 @@
-/*	$NetBSD: setrunelocale.c,v 1.14 2003/08/07 16:43:07 agc Exp $	*/
+/*	$NetBSD: setrunelocale.c,v 1.18 2008/04/28 20:23:00 martin Exp $	*/
 
 /*-
  * Copyright (c)1999 Citrus Project,
@@ -41,13 +41,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -96,13 +89,14 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: setrunelocale.c,v 1.14 2003/08/07 16:43:07 agc Exp $");
+__RCSID("$NetBSD: setrunelocale.c,v 1.18 2008/04/28 20:23:00 martin Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
 
 #include "rune.h"
 #include <assert.h>
+#include <ctype.h>
 #include <errno.h>
 #include <limits.h>
 #include <string.h>
@@ -148,10 +142,10 @@ _newrunelocale(path)
 	_RuneLocale *rl;
 	int ret;
 
-	/* path may be NULL (actually, it's checked below) */
+	_DIAGASSERT(path != NULL);
 
-	if (!path || strlen(path) + 1 > sizeof(lt->path))
-		return EFAULT;
+	if (strlen(path) + 1 > sizeof(lt->path))
+		return EINVAL;
 
 	rl = _findrunelocale(path);
 	if (rl)
@@ -176,6 +170,8 @@ found:
 	ret = _citrus_ctype_open(&rl->rl_citrus_ctype, rl->rl_encoding,
 				 rl->rl_variable, rl->rl_variable_len,
 				 _PRIVSIZE);
+	if (!ret)
+		ret = __runetable_to_netbsd_ctype(rl);
 	if (ret) {
 		_NukeRune(rl);
 		return ret;
@@ -237,7 +233,7 @@ delrunelocale(path)
 
 int
 _xpg4_setrunelocale(encoding)
-	char *encoding;
+	const char *encoding;
 {
 	char path[PATH_MAX];
 	_RuneLocale *rl;
@@ -260,6 +256,9 @@ _xpg4_setrunelocale(encoding)
 		return ENOENT;
 
 found:
+	_ctype_ = rl->rl_ctype_tab;
+	_tolower_tab_ = rl->rl_tolower_tab;
+	_toupper_tab_ = rl->rl_toupper_tab;
 	_CurrentRuneLocale = rl;
 	__mb_cur_max = _citrus_ctype_get_mb_cur_max(rl->rl_citrus_ctype);
 

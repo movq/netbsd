@@ -1,4 +1,4 @@
-/*	$NetBSD: sysv_shm_14.c,v 1.6 2005/02/26 23:10:18 perry Exp $	*/
+/*	$NetBSD: sysv_shm_14.c,v 1.15 2008/04/28 20:23:41 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sysv_shm_14.c,v 1.6 2005/02/26 23:10:18 perry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sysv_shm_14.c,v 1.15 2008/04/28 20:23:41 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -51,16 +44,15 @@ __KERNEL_RCSID(0, "$NetBSD: sysv_shm_14.c,v 1.6 2005/02/26 23:10:18 perry Exp $"
 #define	SYSVSHM
 #endif
 
-#include <sys/sa.h>
 #include <sys/syscallargs.h>
 
-static void shmid_ds14_to_native __P((struct shmid_ds14 *, struct shmid_ds *));
-static void native_to_shmid_ds14 __P((struct shmid_ds *, struct shmid_ds14 *));
+#include <compat/sys/shm.h>
+
+static void shmid_ds14_to_native(struct shmid_ds14 *, struct shmid_ds *);
+static void native_to_shmid_ds14(struct shmid_ds *, struct shmid_ds14 *);
 
 static void
-shmid_ds14_to_native(oshmbuf, shmbuf)
-	struct shmid_ds14 *oshmbuf;
-	struct shmid_ds *shmbuf;
+shmid_ds14_to_native(struct shmid_ds14 *oshmbuf, struct shmid_ds *shmbuf)
 {
 
 	ipc_perm14_to_native(&oshmbuf->shm_perm, &shmbuf->shm_perm);
@@ -77,9 +69,7 @@ shmid_ds14_to_native(oshmbuf, shmbuf)
 }
 
 static void
-native_to_shmid_ds14(shmbuf, oshmbuf)
-	struct shmid_ds *shmbuf;
-	struct shmid_ds14 *oshmbuf;
+native_to_shmid_ds14(struct shmid_ds *shmbuf, struct shmid_ds14 *oshmbuf)
 {
 
 	native_to_ipc_perm14(&shmbuf->shm_perm, &oshmbuf->shm_perm);
@@ -96,14 +86,13 @@ native_to_shmid_ds14(shmbuf, oshmbuf)
 }
 
 int
-compat_14_sys_shmctl(struct lwp *l, void *v, register_t *retval)
+compat_14_sys_shmctl(struct lwp *l, const struct compat_14_sys_shmctl_args *uap, register_t *retval)
 {
-	struct compat_14_sys_shmctl_args /* {
+	/* {
 		syscallarg(int) shmid;
 		syscallarg(int) cmd;
 		syscallarg(struct shmid_ds14 *) buf;
-	} */ *uap = v;
-	struct proc *p = l->l_proc;
+	} */
 	struct shmid_ds shmbuf;
 	struct shmid_ds14 oshmbuf;
 	int cmd, error;
@@ -117,7 +106,7 @@ compat_14_sys_shmctl(struct lwp *l, void *v, register_t *retval)
 		shmid_ds14_to_native(&oshmbuf, &shmbuf);
 	}
 
-	error = shmctl1(p, SCARG(uap, shmid), cmd,
+	error = shmctl1(l, SCARG(uap, shmid), cmd,
 	    (cmd == IPC_SET || cmd == IPC_STAT) ? &shmbuf : NULL);
 
 	if (error == 0 && cmd == IPC_STAT) {

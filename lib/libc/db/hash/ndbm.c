@@ -1,4 +1,4 @@
-/*	$NetBSD: ndbm.c,v 1.20 2005/09/13 01:44:09 christos Exp $	*/
+/*	$NetBSD: ndbm.c,v 1.23 2008/09/11 12:58:00 joerg Exp $	*/
 /*	from: NetBSD: ndbm.c,v 1.18 2004/04/27 20:03:45 kleink Exp 	*/
 
 /*-
@@ -33,14 +33,12 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-#if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)ndbm.c	8.4 (Berkeley) 7/21/94";
-#else
-__RCSID("$NetBSD: ndbm.c,v 1.20 2005/09/13 01:44:09 christos Exp $");
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
 #endif
-#endif /* LIBC_SCCS and not lint */
+
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: ndbm.c,v 1.23 2008/09/11 12:58:00 joerg Exp $");
 
 /*
  * This package provides a dbm compatible interface to the new hashing
@@ -61,11 +59,8 @@ __RCSID("$NetBSD: ndbm.c,v 1.20 2005/09/13 01:44:09 christos Exp $");
  * 	*DBM on success
  *	 NULL on failure
  */
-extern DBM *
-dbm_open(file, flags, mode)
-	const char *file;
-	int flags;
-	mode_t mode;
+DBM *
+dbm_open(const char *file, int flags, mode_t mode)
 {
 	HASHINFO info;
 	char path[MAXPATHLEN];
@@ -85,37 +80,36 @@ dbm_open(file, flags, mode)
 	return ((DBM *)__hash_open(path, flags, mode, &info, 0));
 }
 
-extern void
-dbm_close(db)
-	DBM *db;
+void
+dbm_close(DBM *db)
 {
 	(void)(db->close)(db);
 }
 
-extern int
-dbm_error(db)
-	DBM *db;
+int
+dbm_error(DBM *db)
 {
 	HTAB *hp;
 
-	hp = (HTAB *)db->internal;
+	hp = db->internal;
 	return (hp->err);
 }
 
-extern int
-dbm_clearerr(db)
-	DBM *db;
+int
+dbm_clearerr(DBM *db)
 {
 	HTAB *hp;
 
-	hp = (HTAB *)db->internal;
+	hp = db->internal;
 	hp->err = 0;
 	return (0);
 }
 
-extern int
-dbm_dirfno(db)
-	DBM *db;
+int
+dbm_dirfno(DBM *db)
 {
-	return(((HTAB *)db->internal)->fp);
+	HTAB *hp;
+
+	hp = db->internal;
+	return hp->fp;
 }

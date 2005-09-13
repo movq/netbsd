@@ -1,7 +1,7 @@
-/*	$NetBSD: darwin_mount.c,v 1.6 2005/09/13 01:42:32 christos Exp $ */
+/*	$NetBSD: darwin_mount.c,v 1.16 2008/03/21 21:54:58 ad Exp $ */
 
 /*-
- * Copyright (c) 2003 The NetBSD Foundation, Inc.
+ * Copyright (c) 2003, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -37,12 +37,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: darwin_mount.c,v 1.6 2005/09/13 01:42:32 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: darwin_mount.c,v 1.16 2008/03/21 21:54:58 ad Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/sa.h>
 #include <sys/mount.h>
 #include <sys/proc.h>
 #include <sys/vnode.h>
@@ -64,30 +63,26 @@ static void native_to_darwin_statvfs(const struct statvfs *,
     struct darwin_statfs *);
 
 int
-darwin_sys_fstatfs(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+darwin_sys_fstatfs(struct lwp *l, const struct darwin_sys_fstatfs_args *uap, register_t *retval)
 {
-	struct darwin_sys_fstatfs_args /* {
+	/* {
 		syscallarg(int) fd;
 		syscallarg(struct darwin_statfs *) buf;
-	} */ *uap = v;
-	struct proc *p = l->l_proc;
-	struct file *fp;
+	} */
+	file_t *fp;
 	struct mount *mp;
 	struct statvfs *bs;
 	struct darwin_statfs ds;
 	int error;
 
 	/* getvnode() will use the descriptor for us */
-	if ((error = getvnode(p->p_fd, SCARG(uap, fd), &fp)))
+	if ((error = fd_getvnode(SCARG(uap, fd), &fp)))
 		return (error);
 
 	mp = ((struct vnode *)fp->f_data)->v_mount;
 	bs = &mp->mnt_stat;
 
-	if ((error = VFS_STATVFS(mp, bs, p)) != 0)
+	if ((error = VFS_STATVFS(mp, bs)) != 0)
 		goto out;
 
 	native_to_darwin_statvfs(bs, &ds);
@@ -95,22 +90,18 @@ darwin_sys_fstatfs(l, v, retval)
 	error = copyout(&ds, SCARG(uap, buf), sizeof(ds));
 
 out:
-	FILE_UNUSE(fp, p);
+	fd_putfile(SCARG(uap, fd));
 	return (error);
 }
 
 int
-darwin_sys_getfsstat(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+darwin_sys_getfsstat(struct lwp *l, const struct darwin_sys_getfsstat_args *uap, register_t *retval)
 {
-	struct darwin_sys_getfsstat_args /* {
+	/* {
 		syscallarg(struct darwin_statfs *) buf;
 		syscallarg(long) bufsize;
 		syscallarg(int) flags;
-	} */ *uap = v;
-	struct proc *p = l->l_proc;
+	} */
 	struct mount *mp, *nmp;
 	struct statvfs *bs;
 	struct darwin_statfs ds;
@@ -129,7 +120,7 @@ darwin_sys_getfsstat(l, v, retval)
 
 			if (((SCARG(uap, flags) & MNT_NOWAIT) == 0 ||
 			    (SCARG(uap, flags) & MNT_WAIT)) &&
-			    (error = VFS_STATVFS(mp, bs, p)))
+			    (error = VFS_STATVFS(mp, bs)))
 				continue;
 
 			native_to_darwin_statvfs(bs, &ds);
@@ -150,23 +141,20 @@ darwin_sys_getfsstat(l, v, retval)
 }
 
 int
-darwin_sys_statfs(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+darwin_sys_statfs(struct lwp *l, const struct darwin_sys_statfs_args *uap, register_t *retval)
 {
-	struct darwin_sys_statfs_args /* {
+	/* {
 		syscallarg(char *) path;
 		syscallarg(struct statfs *) buf;
-	} */ *uap = v;
-	struct proc *p = l->l_proc;
+	} */
 	struct mount *mp;
 	struct statvfs *bs;
 	struct darwin_statfs ds;
 	struct nameidata nd;
 	int error;
 
-	NDINIT(&nd, LOOKUP, FOLLOW, UIO_USERSPACE, SCARG(uap, path), p);
+	NDINIT(&nd, LOOKUP, FOLLOW | TRYEMULROOT, UIO_USERSPACE,
+	    SCARG(uap, path));
 	if ((error = namei(&nd)) != 0)
 		return error;
 
@@ -174,7 +162,7 @@ darwin_sys_statfs(l, v, retval)
 	bs = &mp->mnt_stat;
 	vrele(nd.ni_vp);
 
-	if ((error = VFS_STATVFS(mp, bs, p)) != 0)
+	if ((error = VFS_STATVFS(mp, bs)) != 0)
 		return error;
 
 	native_to_darwin_statvfs(bs, &ds);
@@ -186,9 +174,7 @@ darwin_sys_statfs(l, v, retval)
 
 
 static void
-native_to_darwin_statvfs(bs, ds)
-	const struct statvfs *bs;
-	struct darwin_statfs *ds;
+native_to_darwin_statvfs(const struct statvfs *bs, struct darwin_statfs *ds)
 {
 	long dflags = 0;
 	long sflags = bs->f_flag & MNT_VISFLAGMASK;

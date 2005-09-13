@@ -1,4 +1,4 @@
-/*	$NetBSD: citrus_none.c,v 1.13 2005/03/27 18:51:19 christos Exp $	*/
+/*	$NetBSD: citrus_none.c,v 1.18 2008/06/14 16:01:07 tnozaki Exp $	*/
 
 /*-
  * Copyright (c)2002 Citrus Project,
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: citrus_none.c,v 1.13 2005/03/27 18:51:19 christos Exp $");
+__RCSID("$NetBSD: citrus_none.c,v 1.18 2008/06/14 16:01:07 tnozaki Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <assert.h>
@@ -37,7 +37,6 @@ __RCSID("$NetBSD: citrus_none.c,v 1.13 2005/03/27 18:51:19 christos Exp $");
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
-#include <locale.h>
 #include <wchar.h>
 #include <sys/types.h>
 
@@ -190,7 +189,9 @@ _citrus_NONE_ctype_mbstowcs(void * __restrict cl, wchar_t * __restrict wcs,
 			    const char * __restrict s, size_t n,
 			    size_t * __restrict nresult)
 {
-	return (_citrus_NONE_ctype_mbsrtowcs(cl, wcs, (const char **)&s, n, NULL, nresult));
+	const char *rs = s;
+
+	return (_citrus_NONE_ctype_mbsrtowcs(cl, wcs, &rs, n, NULL, nresult));
 }
 
 static int
@@ -285,7 +286,9 @@ _citrus_NONE_ctype_wcstombs(void * __restrict cl, char * __restrict s,
 			    const wchar_t * __restrict pwcs, size_t n,
 			    size_t * __restrict nresult)
 {
-	return (_citrus_NONE_ctype_wcsrtombs(cl, s, (const wchar_t **)&pwcs, n, NULL, nresult));
+	const wchar_t *rpwcs = pwcs;
+
+	return (_citrus_NONE_ctype_wcsrtombs(cl, s, &rpwcs, n, NULL, nresult));
 }
 
 static int
@@ -477,4 +480,24 @@ _citrus_NONE_stdenc_put_state_reset(struct _citrus_stdenc * __restrict ce,
 	*nresult = 0;
 
 	return (0);
+}
+
+static int
+/*ARGSUSED*/
+_citrus_NONE_stdenc_get_state_desc(struct _stdenc * __restrict ce,
+				   void * __restrict ps,
+				   int id,
+				   struct _stdenc_state_desc * __restrict d)
+{
+	int ret = 0;
+
+	switch (id) {
+	case _STDENC_SDID_GENERIC:
+		d->u.generic.state = _STDENC_SDGEN_INITIAL;
+		break;
+	default:
+		ret = EOPNOTSUPP;
+	}
+
+	return ret;
 }

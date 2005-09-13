@@ -1,4 +1,4 @@
-/*	$NetBSD: citrus_utf1632.c,v 1.3 2003/06/27 12:55:13 yamt Exp $	*/
+/*	$NetBSD: citrus_utf1632.c,v 1.9 2008/06/14 16:01:08 tnozaki Exp $	*/
 
 /*-
  * Copyright (c)2003 Citrus Project,
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: citrus_utf1632.c,v 1.3 2003/06/27 12:55:13 yamt Exp $");
+__RCSID("$NetBSD: citrus_utf1632.c,v 1.9 2008/06/14 16:01:08 tnozaki Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <assert.h>
@@ -37,11 +37,10 @@ __RCSID("$NetBSD: citrus_utf1632.c,v 1.3 2003/06/27 12:55:13 yamt Exp $");
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
-#include <locale.h>
 #include <limits.h>
 #include <wchar.h>
 #include <sys/types.h>
-#include <sys/endian.h>
+#include <machine/endian.h>
 
 #include "citrus_namespace.h"
 #include "citrus_types.h"
@@ -173,6 +172,8 @@ refetch:
 				wc = (psenc->ch[1] |
 				      ((wchar_t)psenc->ch[0] << 8));
 				break;
+			default:
+				goto ilseq;
 			}
 			if (wc >= 0xD800 && wc <= 0xDBFF) {
 				/* surrogate high */
@@ -196,6 +197,8 @@ refetch:
 				wc |= psenc->ch[3];
 				wc |= (wchar_t)(psenc->ch[2] & 3) << 8;
 				break;
+			default:
+				goto ilseq;
 			}
 			wc += 0x10000;
 		}
@@ -214,7 +217,11 @@ refetch:
 			      ((wchar_t)psenc->ch[1] << 16) |
 			      ((wchar_t)psenc->ch[0] << 24));
 			break;
+		default:
+			goto ilseq;
 		}
+		if (wc >= 0xD800 && wc <= 0xDFFF)
+			goto ilseq;
 	}
 
 
@@ -244,38 +251,60 @@ _citrus_UTF1632_wcrtomb_priv(_UTF1632EncodingInfo *ei, char *s, size_t n,
 {
 	int ret;
 	wchar_t wc2;
+	static const char _bom[4] = {
+#if BYTE_ORDER == BIG_ENDIAN
+	    0x00, 0x00, 0xFE, 0xFF,
+#else
+	    0xFF, 0xFE, 0x00, 0x00,
+#endif
+	};
+	const char *bom = &_bom[0];
+	size_t cnt;
 
 	_DIAGASSERT(ei != NULL);
 	_DIAGASSERT(nresult != 0);
 	_DIAGASSERT(s != NULL);
+
+	cnt = (size_t)0;
+	if (psenc->current_endian == _ENDIAN_UNKNOWN) {
+		if ((ei->mode & _MODE_FORCE_ENDIAN) == 0) {
+			if (ei->mode & _MODE_UTF32) {
+				cnt = 4;
+			} else {
+				cnt = 2;
+#if BYTE_ORDER == BIG_ENDIAN
+				bom += 2;
+#endif
+			}
+			if (n < cnt)
+				goto e2big;
+			memcpy(s, bom, cnt);
+			s += cnt, n -= cnt;
+		}
+		psenc->current_endian = ei->preffered_endian;
+	}
 
 	wc2 = 0;
 	if ((ei->mode & _MODE_UTF32)==0) {
 		/* UTF16 */
 		if (wc>0xFFFF) {
 			/* surrogate */
-			if (wc>0x10FFFF) {
-				ret = EILSEQ;
-				goto err;
-			}
-			if (n < 4) {
-				ret = E2BIG;
-				goto err;
-			}
+			if (wc>0x10FFFF)
+				goto ilseq;
+			if (n < 4)
+				goto e2big;
+			cnt += 4;
 			wc -= 0x10000;
 			wc2 = (wc & 0x3FF) | 0xDC00;
 			wc = (wc>>10) | 0xD800;
-			*nresult = (size_t)4;
 		} else {
-			if (n < 2) {
-				ret = E2BIG;
-				goto err;
-			}
-			*nresult = (size_t)2;
+			if (n < 2)
+				goto e2big;
+			cnt += 2;
 		}
 
 surrogate:
-		switch (ei->preffered_endian) {
+		switch (psenc->current_endian) {
 		case _ENDIAN_BIG:
 			s[1] = wc;
 			s[0] = (wc >>= 8);
@@ -293,11 +322,12 @@ surrogate:
 		}
 	} else {
 		/* UTF32 */
-		if (n < 4) {
-			ret = E2BIG;
-			goto err;
-		}
-		switch (ei->preffered_endian) {
+		if (wc >= 0xD800 && wc <= 0xDFFF)
+			goto ilseq;
+		if (n < 4)
+			goto e2big;
+		cnt += 4;
+		switch (psenc->current_endian) {
 		case _ENDIAN_BIG:
 			s[3] = wc;
 			s[2] = (wc >>= 8);
@@ -311,14 +341,17 @@ surrogate:
 			s[3] = (wc >>= 8);
 			break;
 		}
-		*nresult = (size_t)4;
 	}
+	*nresult = cnt;
 
 	return 0;
 
-err:
+ilseq:
 	*nresult = (size_t)-1;
-	return ret;
+	return EILSEQ;
+e2big:
+	*nresult = (size_t)-1;
+	return E2BIG;
 }
 
 static void
@@ -427,6 +460,20 @@ _citrus_UTF1632_stdenc_cstowc(_UTF1632EncodingInfo * __restrict ei,
 	return (0);
 }
 
+static __inline int
+/*ARGSUSED*/
+_citrus_UTF1632_stdenc_get_state_desc_generic(_UTF1632EncodingInfo * __restrict ei,
+					      _UTF1632State * __restrict psenc,
+					      int * __restrict rstate)
+{
+
+	if (psenc->chlen == 0)
+		*rstate = _STDENC_SDGEN_INITIAL;
+	else
+		*rstate = _STDENC_SDGEN_INCOMPLETE_CHAR;
+
+	return 0;
+}
 
 /* ----------------------------------------------------------------------
  * public interface for stdenc

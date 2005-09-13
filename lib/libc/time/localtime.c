@@ -1,4 +1,4 @@
-/*	$NetBSD: localtime.c,v 1.37 2005/07/16 19:48:09 christos Exp $	*/
+/*	$NetBSD: localtime.c,v 1.41 2008/08/27 08:49:03 christos Exp $	*/
 
 /*
 ** This file is in the public domain, so clarified as of
@@ -10,7 +10,7 @@
 #if 0
 static char	elsieid[] = "@(#)localtime.c	7.78";
 #else
-__RCSID("$NetBSD: localtime.c,v 1.37 2005/07/16 19:48:09 christos Exp $");
+__RCSID("$NetBSD: localtime.c,v 1.41 2008/08/27 08:49:03 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -283,16 +283,6 @@ settzname P((void))
 
 		tzname[ttisp->tt_isdst] =
 			&sp->chars[ttisp->tt_abbrind];
-#ifdef USG_COMPAT
-		if (ttisp->tt_isdst)
-			daylight = 1;
-		if (i == 0 || !ttisp->tt_isdst)
-			timezone = -(ttisp->tt_gmtoff);
-#endif /* defined USG_COMPAT */
-#ifdef ALTZONE
-		if (i == 0 || ttisp->tt_isdst)
-			altzone = -(ttisp->tt_gmtoff);
-#endif /* defined ALTZONE */
 	}
 	/*
 	** And to get the latest zone names into tzname. . .
@@ -304,6 +294,16 @@ settzname P((void))
 
 		tzname[ttisp->tt_isdst] =
 			&sp->chars[ttisp->tt_abbrind];
+#ifdef USG_COMPAT
+		if (ttisp->tt_isdst)
+			daylight = 1;
+		if (i == 0 || !ttisp->tt_isdst)
+			timezone = -(ttisp->tt_gmtoff);
+#endif /* defined USG_COMPAT */
+#ifdef ALTZONE
+		if (i == 0 || ttisp->tt_isdst)
+			altzone = -(ttisp->tt_gmtoff);
+#endif /* defined ALTZONE */
 	}
 }
 
@@ -849,16 +849,14 @@ const int			lastditch;
 			}
 		} else {
 			register long	theirstdoffset;
-			register long	theirdstoffset;
 			register long	theiroffset;
-			register int	isdst;
 			register int	i;
 			register int	j;
 
 			if (*name != '\0')
 				return -1;
 			/*
-			** Initial values of theirstdoffset and theirdstoffset.
+			** Initial values of theirstdoffset
 			*/
 			theirstdoffset = 0;
 			for (i = 0; i < sp->timecnt; ++i) {
@@ -869,19 +867,9 @@ const int			lastditch;
 					break;
 				}
 			}
-			theirdstoffset = 0;
-			for (i = 0; i < sp->timecnt; ++i) {
-				j = sp->types[i];
-				if (sp->ttis[j].tt_isdst) {
-					theirdstoffset =
-						-sp->ttis[j].tt_gmtoff;
-					break;
-				}
-			}
 			/*
 			** Initially we're assumed to be in standard time.
 			*/
-			isdst = FALSE;
 			theiroffset = theirstdoffset;
 			/*
 			** Now juggle transition times and types
@@ -907,18 +895,12 @@ const int			lastditch;
 					** POSIX provides for only one DST
 					** offset.
 					*/
-					if (isdst && !sp->ttis[j].tt_ttisstd) {
-						sp->ats[i] += dstoffset -
-							theirdstoffset;
-					} else {
-						sp->ats[i] += stdoffset -
-							theirstdoffset;
-					}
+					sp->ats[i] += stdoffset -
+					    theirstdoffset;
 				}
 				theiroffset = -sp->ttis[j].tt_gmtoff;
-				if (sp->ttis[j].tt_isdst)
-					theirdstoffset = theiroffset;
-				else	theirstdoffset = theiroffset;
+				if (!sp->ttis[j].tt_isdst)
+					theirstdoffset = theiroffset;
 			}
 			/*
 			** Finally, fill in ttis.
@@ -973,7 +955,9 @@ tzsetwall_unlocked P((void))
 
 #ifdef ALL_STATE
 	if (lclptr == NULL) {
+		int saveerrno = errno;
 		lclptr = (struct state *) malloc(sizeof *lclptr);
+		errno = saveerrno;
 		if (lclptr == NULL) {
 			settzname();	/* all we can do */
 			return;
@@ -1004,8 +988,11 @@ static void
 tzset_unlocked P((void))
 {
 	register const char *	name;
+	int saveerrno;
 
+	saveerrno = errno;
 	name = getenv("TZ");
+	errno = saveerrno;
 	if (name == NULL) {
 		tzsetwall_unlocked();
 		return;
@@ -1019,7 +1006,9 @@ tzset_unlocked P((void))
 
 #ifdef ALL_STATE
 	if (lclptr == NULL) {
+		saveerrno = errno;
 		lclptr = (struct state *) malloc(sizeof *lclptr);
+		errno = saveerrno;
 		if (lclptr == NULL) {
 			settzname();	/* all we can do */
 			return;
@@ -1150,9 +1139,14 @@ struct tm * const	tmp;
 
 	mutex_lock(&gmt_mutex);
 	if (!gmt_is_set) {
+#ifdef ALL_STATE
+		int saveerrno;
+#endif
 		gmt_is_set = TRUE;
 #ifdef ALL_STATE
+		saveerrno = errno;
 		gmtptr = (struct state *) malloc(sizeof *gmtptr);
+		errno = saveerrno;
 		if (gmtptr != NULL)
 #endif /* defined ALL_STATE */
 			gmtload(gmtptr);

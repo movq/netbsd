@@ -1,4 +1,4 @@
-/*	$NetBSD: syncicache.c,v 1.12 2003/08/11 02:11:23 matt Exp $	*/
+/*	$NetBSD: syncicache.c,v 1.15 2008/03/18 20:11:43 he Exp $	*/
 
 /*
  * Copyright (C) 1995-1997, 1999 Wolfgang Solfrank.
@@ -31,12 +31,14 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/param.h>
-#if	defined(_KERNEL) || defined(_STANDALONE)
+#if	defined(_KERNEL)
 #include <sys/time.h>
 #include <sys/proc.h>
 #include <uvm/uvm_extern.h>
 #endif
+#if	!defined(_STANDALONE)
 #include <sys/sysctl.h>
+#endif
 
 #include <machine/cpu.h>
 
@@ -118,11 +120,11 @@ __syncicache(void *from, size_t len)
 		l = (len + off + linesz - 1) & ~(linesz - 1);
 		p = (char *)from - off;
 		do {
-			__asm__ __volatile ("dcbst 0,%0" :: "r"(p));
+			__asm volatile ("dcbst 0,%0" :: "r"(p));
 			p += linesz;
 		} while ((l -= linesz) != 0);
 	}
-	__asm__ __volatile ("sync");
+	__asm volatile ("sync");
 
 	if (CACHEINFO.icache_size > 0 ) {
 		linesz = CACHEINFO.icache_line_size;
@@ -130,9 +132,9 @@ __syncicache(void *from, size_t len)
 		l = (len + off + linesz - 1) & ~(linesz - 1);
 		p = (char *)from - off;
 		do {
-			__asm__ __volatile ("icbi 0,%0" :: "r"(p));
+			__asm volatile ("icbi 0,%0" :: "r"(p));
 			p += linesz;
 		} while ((l -= linesz) != 0);
 	}
-	__asm__ __volatile ("sync; isync");
+	__asm volatile ("sync; isync");
 }

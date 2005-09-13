@@ -1,4 +1,4 @@
-/*	$NetBSD: svc.c,v 1.25 2005/09/09 15:41:27 christos Exp $	*/
+/*	$NetBSD: svc.c,v 1.28 2008/04/25 17:44:44 christos Exp $	*/
 
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
@@ -35,7 +35,7 @@
 static char *sccsid = "@(#)svc.c 1.44 88/02/08 Copyr 1984 Sun Micro";
 static char *sccsid = "@(#)svc.c	2.4 88/08/11 4.0 RPCSRC";
 #else
-__RCSID("$NetBSD: svc.c,v 1.25 2005/09/09 15:41:27 christos Exp $");
+__RCSID("$NetBSD: svc.c,v 1.28 2008/04/25 17:44:44 christos Exp $");
 #endif
 #endif
 
@@ -57,6 +57,7 @@ __RCSID("$NetBSD: svc.c,v 1.25 2005/09/09 15:41:27 christos Exp $");
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#include <err.h>
 
 #include <rpc/rpc.h>
 #ifdef PORTMAP
@@ -136,10 +137,11 @@ xprt_register(xprt)
 
 	rwlock_wrlock(&svc_fd_lock);
 	if (__svc_xports == NULL) {
-		__svc_xports = (SVCXPRT **)
-			mem_alloc(FD_SETSIZE * sizeof(SVCXPRT *));
-		if (__svc_xports == NULL)
-			return;
+		__svc_xports = mem_alloc(FD_SETSIZE * sizeof(SVCXPRT *));
+		if (__svc_xports == NULL) {
+			warn("xprt_register");
+			goto out;
+		}
 		memset(__svc_xports, '\0', FD_SETSIZE * sizeof(SVCXPRT *));
 	}
 	if (sock < FD_SETSIZE) {
@@ -147,6 +149,7 @@ xprt_register(xprt)
 		FD_SET(sock, &svc_fdset);
 		svc_maxfd = max(svc_maxfd, sock);
 	}
+out:
 	rwlock_unlock(&svc_fd_lock);
 }
 
@@ -248,6 +251,14 @@ svc_reg(xprt, prog, vers, dispatch, nconf)
 		return (FALSE);
 	}
 
+	if ((xprt->xp_netid == NULL) && (flag == 1) && netid)
+		if ((((SVCXPRT *) xprt)->xp_netid = strdup(netid)) == NULL) {
+			warn("svc_reg");
+			mem_free(s, sizeof(struct svc_callout));
+			rwlock_unlock(&svc_lock);
+			return FALSE;
+		}
+
 	s->sc_prog = prog;
 	s->sc_vers = vers;
 	s->sc_dispatch = dispatch;
@@ -255,15 +266,11 @@ svc_reg(xprt, prog, vers, dispatch, nconf)
 	s->sc_next = svc_head;
 	svc_head = s;
 
-	if ((xprt->xp_netid == NULL) && (flag == 1) && netid)
-		((SVCXPRT *) xprt)->xp_netid = strdup(netid);
-
 rpcb_it:
 	rwlock_unlock(&svc_lock);
 	/* now register the information with the local binder service */
 	if (nconf) {
-		/*LINTED const castaway*/
-		dummy = rpcb_set(prog, vers, (struct netconfig *) nconf,
+		dummy = rpcb_set(prog, vers, __UNCONST(nconf),
 		&((SVCXPRT *) xprt)->xp_ltaddr);
 		return (dummy);
 	}
@@ -406,7 +413,7 @@ bool_t
 svc_sendreply(xprt, xdr_results, xdr_location)
 	SVCXPRT *xprt;
 	xdrproc_t xdr_results;
-	caddr_t xdr_location;
+	const char *xdr_location;
 {
 	struct rpc_msg rply; 
 

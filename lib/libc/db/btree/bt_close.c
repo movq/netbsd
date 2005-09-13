@@ -1,4 +1,4 @@
-/*	$NetBSD: bt_close.c,v 1.11 2003/08/07 16:42:40 agc Exp $	*/
+/*	$NetBSD: bt_close.c,v 1.14 2008/09/11 12:58:00 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -32,17 +32,16 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-#if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)bt_close.c	8.7 (Berkeley) 8/17/94";
-#else
-__RCSID("$NetBSD: bt_close.c,v 1.11 2003/08/07 16:42:40 agc Exp $");
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
 #endif
-#endif /* LIBC_SCCS and not lint */
+
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: bt_close.c,v 1.14 2008/09/11 12:58:00 joerg Exp $");
 
 #include "namespace.h"
 
+#include <assert.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -52,7 +51,7 @@ __RCSID("$NetBSD: bt_close.c,v 1.11 2003/08/07 16:42:40 agc Exp $");
 #include <db.h>
 #include "btree.h"
 
-static int bt_meta __P((BTREE *));
+static int bt_meta(BTREE *);
 
 /*
  * BT_CLOSE -- Close a btree.
@@ -64,8 +63,7 @@ static int bt_meta __P((BTREE *));
  *	RET_ERROR, RET_SUCCESS
  */
 int
-__bt_close(dbp)
-	DB *dbp;
+__bt_close(DB *dbp)
 {
 	BTREE *t;
 	int fd;
@@ -119,9 +117,7 @@ __bt_close(dbp)
  *	RET_SUCCESS, RET_ERROR.
  */
 int
-__bt_sync(dbp, flags)
-	const DB *dbp;
-	u_int flags;
+__bt_sync(const DB *dbp, u_int flags)
 {
 	BTREE *t;
 	int status;
@@ -162,8 +158,7 @@ __bt_sync(dbp, flags)
  *	RET_ERROR, RET_SUCCESS
  */
 static int
-bt_meta(t)
-	BTREE *t;
+bt_meta(BTREE *t)
 {
 	BTMETA m;
 	void *p;

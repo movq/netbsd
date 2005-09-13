@@ -1,4 +1,4 @@
-/*	$NetBSD: socket.h,v 1.75 2005/03/09 19:02:22 tron Exp $	*/
+/*	$NetBSD: socket.h,v 1.89 2007/09/19 04:33:45 dyoung Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -122,6 +122,7 @@ typedef	_BSD_SSIZE_T_	ssize_t;
 #define	SO_REUSEPORT	0x0200		/* allow local address & port reuse */
 #define	SO_TIMESTAMP	0x0400		/* timestamp received dgram traffic */
 
+
 /*
  * Additional options, not kept in so_options.
  */
@@ -135,6 +136,10 @@ typedef	_BSD_SSIZE_T_	ssize_t;
 #define	SO_TYPE		0x1008		/* get socket type */
 #define	SO_OVERFLOWED	0x1009		/* datagrams: return packets dropped */
 
+#define	SO_NOHEADER	0x100a		/* user supplies no header to kernel;
+					 * kernel removes header and supplies
+					 * payload
+					 */
 /*
  * Structure used for manipulating linger option.
  */
@@ -194,8 +199,9 @@ struct	linger {
 #define	pseudo_AF_HDRCMPLT 30		/* Used by BPF to not rewrite hdrs
 					   in interface output routine */
 #endif
+#define AF_BLUETOOTH	31		/* Bluetooth: HCI, SCO, L2CAP, RFCOMM */
 
-#define	AF_MAX		31
+#define	AF_MAX		32
 
 /*
  * Structure used by kernel to store most
@@ -236,6 +242,8 @@ struct sockaddr_storage {
 	__int64_t     __ss_align;/* force desired structure storage alignment */
 	char		__ss_pad2[_SS_PAD2SIZE];
 };
+#define	sstosa(__ss)	((struct sockaddr *)(__ss))
+#define	sstocsa(__ss)	((const struct sockaddr *)(__ss))
 #endif /* _XOPEN_SOURCE >= 500 || _NETBSD_SOURCE */
 #endif /* 1 */
 
@@ -281,6 +289,7 @@ struct sockaddr_storage {
 #if defined(_NETBSD_SOURCE)
 #define PF_KEY 		pseudo_AF_KEY	/* like PF_ROUTE, only for key mgmt */
 #endif
+#define PF_BLUETOOTH	AF_BLUETOOTH
 
 #define	PF_MAX		AF_MAX
 
@@ -447,16 +456,24 @@ struct msghdr {
 	int		msg_flags;	/* flags on received message */
 };
 
-#define	MSG_OOB		0x1		/* process out-of-band data */
-#define	MSG_PEEK	0x2		/* peek at incoming message */
-#define	MSG_DONTROUTE	0x4		/* send without using routing tables */
-#define	MSG_EOR		0x8		/* data completes record */
-#define	MSG_TRUNC	0x10		/* data discarded before delivery */
-#define	MSG_CTRUNC	0x20		/* control data lost before delivery */
-#define	MSG_WAITALL	0x40		/* wait for full request or error */
-#define	MSG_DONTWAIT	0x80		/* this message should be nonblocking */
-#define	MSG_BCAST	0x100		/* this message was rcvd using link-level brdcst */
-#define	MSG_MCAST	0x200		/* this message was rcvd using link-level mcast */
+#define	MSG_OOB		0x0001		/* process out-of-band data */
+#define	MSG_PEEK	0x0002		/* peek at incoming message */
+#define	MSG_DONTROUTE	0x0004		/* send without using routing tables */
+#define	MSG_EOR		0x0008		/* data completes record */
+#define	MSG_TRUNC	0x0010		/* data discarded before delivery */
+#define	MSG_CTRUNC	0x0020		/* control data lost before delivery */
+#define	MSG_WAITALL	0x0040		/* wait for full request or error */
+#define	MSG_DONTWAIT	0x0080		/* this message should be nonblocking */
+#define	MSG_BCAST	0x0100		/* this message was rcvd using link-level brdcst */
+#define	MSG_MCAST	0x0200		/* this message was rcvd using link-level mcast */
+#define	MSG_NOSIGNAL	0x0400		/* do not generate SIGPIPE on EOF */
+
+/* Extra flags used internally only */
+#define	MSG_USERFLAGS	0x0ffffff
+#define MSG_NAMEMBUF	0x1000000	/* msg_name is an mbuf */
+#define MSG_CONTROLMBUF	0x2000000	/* msg_control is an mbuf */
+#define MSG_IOVUSRSPACE	0x4000000	/* msg_iov is in user space */
+#define MSG_LENUSRSPACE	0x8000000	/* address length is in user space */
 
 /*
  * Header for ancillary data objects in msg_control buffer.
@@ -474,6 +491,9 @@ struct cmsghdr {
 /* given pointer to struct cmsghdr, return pointer to data */
 #define	CMSG_DATA(cmsg) \
 	((u_char *)(void *)(cmsg) + __CMSG_ALIGN(sizeof(struct cmsghdr)))
+#define	CCMSG_DATA(cmsg) \
+	((const u_char *)(const void *)(cmsg) + \
+	__CMSG_ALIGN(sizeof(struct cmsghdr)))
 
 /*
  * Alignment requirement for CMSG struct manipulation.
@@ -491,11 +511,11 @@ struct cmsghdr {
 
 /* given pointer to struct cmsghdr, return pointer to next cmsghdr */
 #define	CMSG_NXTHDR(mhdr, cmsg)	\
-	(((__caddr_t)(cmsg) + __CMSG_ALIGN((cmsg)->cmsg_len) + \
+	(((char *)(cmsg) + __CMSG_ALIGN((cmsg)->cmsg_len) + \
 			    __CMSG_ALIGN(sizeof(struct cmsghdr)) > \
-	    (((__caddr_t)(mhdr)->msg_control) + (mhdr)->msg_controllen)) ? \
-	    (struct cmsghdr *)NULL : \
-	    (struct cmsghdr *)((__caddr_t)(cmsg) + \
+	    (((char *)(mhdr)->msg_control) + (mhdr)->msg_controllen)) ? \
+	    (struct cmsghdr *)0 : \
+	    (struct cmsghdr *)((char *)(cmsg) + \
 	        __CMSG_ALIGN((cmsg)->cmsg_len)))
 
 /*
@@ -505,7 +525,7 @@ struct cmsghdr {
 #define	CMSG_FIRSTHDR(mhdr) \
 	((mhdr)->msg_controllen >= sizeof(struct cmsghdr) ? \
 	 (struct cmsghdr *)(mhdr)->msg_control : \
-	 (struct cmsghdr *)NULL)
+	 (struct cmsghdr *)0)
 
 #define CMSG_SPACE(l)	(__CMSG_ALIGN(sizeof(struct cmsghdr)) + __CMSG_ALIGN(l))
 #define CMSG_LEN(l)	(__CMSG_ALIGN(sizeof(struct cmsghdr)) + (l))
@@ -524,33 +544,32 @@ struct cmsghdr {
 #define	SHUT_WR		1		/* Disallow further sends. */
 #define	SHUT_RDWR	2		/* Disallow further sends/receives. */
 
-#if defined(_NETBSD_SOURCE)
-/*
- * 4.3 compat sockaddr, move to compat file later
- */
-struct osockaddr {
-	__uint16_t	sa_family;	/* address family */
-	char		sa_data[14];	/* up to 14 bytes of direct address */
-};
-
-/*
- * 4.3-compat message header (move to compat file later).
- */
-struct omsghdr {
-	__caddr_t	msg_name;	/* optional address */
-	int		msg_namelen;	/* size of address */
-	struct iovec	*msg_iov;	/* scatter/gather array */
-	int		msg_iovlen;	/* # elements in msg_iov */
-	__caddr_t	msg_accrights;	/* access rights sent/received */
-	int		msg_accrightslen;
-};
-#endif
-
 #include <sys/cdefs.h>
 
 __BEGIN_DECLS
 int	__cmsg_alignbytes(void);
 __END_DECLS
+
+#ifdef	_KERNEL
+static inline socklen_t
+sockaddr_getlen(const struct sockaddr *sa)
+{
+	return sa->sa_len;
+}
+
+__BEGIN_DECLS
+struct sockaddr *sockaddr_copy(struct sockaddr *, socklen_t,
+    const struct sockaddr *);
+struct sockaddr *sockaddr_alloc(sa_family_t, socklen_t, int);
+const void *sockaddr_const_addr(const struct sockaddr *, socklen_t *);
+void *sockaddr_addr(struct sockaddr *, socklen_t *);
+const struct sockaddr *sockaddr_any(const struct sockaddr *);
+const void *sockaddr_anyaddr(const struct sockaddr *, socklen_t *);
+int sockaddr_cmp(const struct sockaddr *, const struct sockaddr *);
+struct sockaddr *sockaddr_dup(const struct sockaddr *, int);
+void sockaddr_free(struct sockaddr *);
+__END_DECLS
+#endif /* _KERNEL */
 
 #ifndef	_KERNEL
 
@@ -560,10 +579,10 @@ int	bind(int, const struct sockaddr *, socklen_t);
 int	connect(int, const struct sockaddr *, socklen_t);
 int	getpeername(int, struct sockaddr * __restrict, socklen_t * __restrict);
 int	getsockname(int, struct sockaddr * __restrict, socklen_t * __restrict);
-int	getsockopt(int, int, int, void * __restrict, socklen_t * __restrict);
+int	getsockopt(int, int, int, void *__restrict, socklen_t * __restrict);
 int	listen(int, int);
 ssize_t	recv(int, void *, size_t, int);
-ssize_t	recvfrom(int, void * __restrict, size_t, int,
+ssize_t	recvfrom(int, void *__restrict, size_t, int,
 	    struct sockaddr * __restrict, socklen_t * __restrict);
 ssize_t	recvmsg(int, struct msghdr *, int);
 ssize_t	send(int, const void *, size_t, int);
@@ -573,7 +592,11 @@ ssize_t	sendmsg(int, const struct msghdr *, int);
 int	setsockopt(int, int, int, const void *, socklen_t);
 int	shutdown(int, int);
 int	sockatmark(int);
-int	socket(int, int, int);
+int	socket(int, int, int)
+#if !defined(__LIBC12_SOURCE__) && !defined(_STANDALONE)
+__RENAME(__socket30)
+#endif
+			     ;
 int	socketpair(int, int, int, int *);
 __END_DECLS
 #endif /* !_KERNEL */

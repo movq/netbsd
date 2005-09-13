@@ -1,4 +1,4 @@
-/*	$NetBSD: svc_vc.c,v 1.13 2005/09/09 15:41:27 christos Exp $	*/
+/*	$NetBSD: svc_vc.c,v 1.21 2008/04/25 17:44:44 christos Exp $	*/
 
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
@@ -35,7 +35,7 @@
 static char *sccsid = "@(#)svc_tcp.c 1.21 87/08/11 Copyr 1984 Sun Micro";
 static char *sccsid = "@(#)svc_tcp.c	2.2 88/08/01 4.0 RPCSRC";
 #else
-__RCSID("$NetBSD: svc_vc.c,v 1.13 2005/09/09 15:41:27 christos Exp $");
+__RCSID("$NetBSD: svc_vc.c,v 1.21 2008/04/25 17:44:44 christos Exp $");
 #endif
 #endif
 
@@ -56,7 +56,6 @@ __RCSID("$NetBSD: svc_vc.c,v 1.13 2005/09/09 15:41:27 christos Exp $");
 #include <sys/un.h>
 #include <sys/time.h>
 #include <netinet/in.h>
-#include <netinet/tcp.h>
 
 #include <assert.h>
 #include <err.h>
@@ -94,9 +93,9 @@ static bool_t svc_vc_freeargs __P((SVCXPRT *, xdrproc_t, caddr_t));
 static bool_t svc_vc_reply __P((SVCXPRT *, struct rpc_msg *));
 static void svc_vc_rendezvous_ops __P((SVCXPRT *));
 static void svc_vc_ops __P((SVCXPRT *));
-static bool_t svc_vc_control __P((SVCXPRT *xprt, const u_int rq, void *in));
-static bool_t svc_vc_rendezvous_control __P((SVCXPRT *xprt, const u_int rq,
-					     void *in));
+static bool_t svc_vc_control __P((SVCXPRT *, const u_int, void *));
+static bool_t svc_vc_rendezvous_control __P((SVCXPRT *, const u_int,
+					     void *));
 
 struct cf_rendezvous { /* kept in xprt->xp_p1 for rendezvouser */
 	u_int sendsize;
@@ -145,13 +144,14 @@ svc_vc_create(fd, sendsize, recvsize)
 	socklen_t slen;
 	int one = 1;
 
+	if (!__rpc_fd2sockinfo(fd, &si))
+		return NULL;
+
 	r = mem_alloc(sizeof(*r));
 	if (r == NULL) {
 		warnx("svc_vc_create: out of memory");
-		goto cleanup_svc_vc_create;
-	}
-	if (!__rpc_fd2sockinfo(fd, &si))
 		return NULL;
+	}
 	r->sendsize = __rpc_get_t_size(si.si_af, si.si_proto, (int)sendsize);
 	r->recvsize = __rpc_get_t_size(si.si_af, si.si_proto, (int)recvsize);
 	r->maxrec = __svc_maxrec;
@@ -194,6 +194,8 @@ svc_vc_create(fd, sendsize, recvsize)
 	xprt_register(xprt);
 	return (xprt);
 cleanup_svc_vc_create:
+	if (xprt)
+		mem_free(xprt, sizeof(*xprt));
 	if (r != NULL)
 		mem_free(r, sizeof(*r));
 	return (NULL);
@@ -274,18 +276,12 @@ makefd_xprt(fd, sendsize, recvsize)
 	_DIAGASSERT(fd != -1);
 
 	xprt = mem_alloc(sizeof(SVCXPRT));
-	if (xprt == NULL) {
-		warnx("svc_vc: makefd_xprt: out of memory");
-		goto done;
-	}
+	if (xprt == NULL)
+		goto out;
 	memset(xprt, 0, sizeof *xprt);
 	cd = mem_alloc(sizeof(struct cf_conn));
-	if (cd == NULL) {
-		warnx("svc_tcp: makefd_xprt: out of memory");
-		mem_free(xprt, sizeof(SVCXPRT));
-		xprt = NULL;
-		goto done;
-	}
+	if (cd == NULL)
+		goto out;
 	cd->strm_stat = XPRT_IDLE;
 	xdrrec_create(&(cd->xdrs), sendsize, recvsize,
 	    (caddr_t)(void *)xprt, read_vc, write_vc);
@@ -295,11 +291,16 @@ makefd_xprt(fd, sendsize, recvsize)
 	xprt->xp_port = 0;  /* this is a connection, not a rendezvouser */
 	xprt->xp_fd = fd;
 	if (__rpc_fd2sockinfo(fd, &si) && __rpc_sockinfo2netid(&si, &netid))
-		xprt->xp_netid = strdup(netid);
+		if ((xprt->xp_netid = strdup(netid)) == NULL)
+			goto out;
 
 	xprt_register(xprt);
-done:
 	return (xprt);
+out:
+	warn("svc_tcp: makefd_xprt");
+	if (xprt)
+		mem_free(xprt, sizeof(SVCXPRT));
+	return NULL;
 }
 
 /*ARGSUSED*/
@@ -333,8 +334,8 @@ again:
 		 */
 		if (errno == EMFILE || errno == ENFILE) {
 			cleanfds = svc_fdset;
-			__svc_clean_idle(&cleanfds, 0, FALSE);
-			goto again;
+			if (__svc_clean_idle(&cleanfds, 0, FALSE))
+				goto again;
 		}
 		return (FALSE);
 	}
@@ -342,9 +343,11 @@ again:
 	 * make a new transporter (re-uses xprt)
 	 */
 	newxprt = makefd_xprt(sock, r->sendsize, r->recvsize);
+	if (newxprt == NULL)
+		goto out;
 	newxprt->xp_rtaddr.buf = mem_alloc(len);
 	if (newxprt->xp_rtaddr.buf == NULL)
-		return (FALSE);
+		goto out;
 	memcpy(newxprt->xp_rtaddr.buf, &addr, len);
 	newxprt->xp_rtaddr.len = len;
 #ifdef PORTMAP
@@ -353,11 +356,8 @@ again:
 		newxprt->xp_addrlen = sizeof (struct sockaddr_in);
 	}
 #endif
-	if (__rpc_fd2sockinfo(sock, &si) && si.si_proto == IPPROTO_TCP) {
-		len = 1;
-		/* XXX fvdl - is this useful? */
-		setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &len, sizeof (len));
-	}
+	if (__rpc_fd2sockinfo(sock, &si))
+		__rpc_setnodelay(sock, &si);
 
 	cd = (struct cf_conn *)newxprt->xp_p1;
 
@@ -368,9 +368,9 @@ again:
 	if (cd->maxrec != 0) {
 		flags = fcntl(sock, F_GETFL, 0);
 		if (flags  == -1)
-			return (FALSE);
+			goto out;
 		if (fcntl(sock, F_SETFL, flags | O_NONBLOCK) == -1)
-			return (FALSE);
+			goto out;
 		if (cd->recvsize > cd->maxrec)
 			cd->recvsize = cd->maxrec;
 		cd->nonblock = TRUE;
@@ -378,9 +378,12 @@ again:
 	} else
 		cd->nonblock = FALSE;
 
-	gettimeofday(&cd->last_recv_time, NULL);
+	(void)gettimeofday(&cd->last_recv_time, NULL);
 
 	return (FALSE); /* there is never an rpc msg to be processed */
+out:
+	(void)close(sock);
+	return (FALSE); /* there was an error */
 }
 
 /*ARGSUSED*/
@@ -762,6 +765,10 @@ svc_vc_rendezvous_ops(xprt)
 #ifdef _REENTRANT
 	extern mutex_t ops_lock;
 #endif
+/* XXXGCC vax compiler unhappy otherwise */
+#ifdef __vax__     
+extern void abort(void);
+#endif
 
 	mutex_lock(&ops_lock);
 	if (ops.xp_recv == NULL) {
@@ -772,7 +779,7 @@ svc_vc_rendezvous_ops(xprt)
 		ops.xp_reply =
 		    (bool_t (*) __P((SVCXPRT *, struct rpc_msg *)))abort;
 		ops.xp_freeargs =
-		    (bool_t (*) __P((SVCXPRT *, xdrproc_t, caddr_t)))abort,
+		    (bool_t (*) __P((SVCXPRT *, xdrproc_t, caddr_t)))abort;
 		ops.xp_destroy = svc_vc_destroy;
 		ops2.xp_control = svc_vc_rendezvous_control;
 	}

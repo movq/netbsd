@@ -1,4 +1,4 @@
-/*	$NetBSD: sysctl.c,v 1.27 2004/09/07 13:20:39 jrf Exp $	*/
+/*	$NetBSD: sysctl.c,v 1.30 2008/08/27 08:56:49 christos Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)sysctl.c	8.2 (Berkeley) 1/4/94";
 #else
-__RCSID("$NetBSD: sysctl.c,v 1.27 2004/09/07 13:20:39 jrf Exp $");
+__RCSID("$NetBSD: sysctl.c,v 1.30 2008/08/27 08:56:49 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -57,7 +57,8 @@ __weak_alias(sysctl,_sysctl)
 /*
  * handles requests off the user subtree
  */
-static int user_sysctl(int *, u_int, void *, size_t *, const void *, size_t);
+static int user_sysctl(const int *, u_int, void *, size_t *,
+			const void *, size_t);
 
 /*
  * copies out individual nodes taking target version into account
@@ -69,7 +70,7 @@ static size_t __cvt_node_out(uint, const struct sysctlnode *, void **,
 
 int
 sysctl(name, namelen, oldp, oldlenp, newp, newlen)
-	int *name;
+	const int *name;
 	unsigned int namelen;
 	void *oldp;
 	const void *newp;
@@ -79,10 +80,8 @@ sysctl(name, namelen, oldp, oldlenp, newp, newlen)
 	int error;
 
 	if (name[0] != CTL_USER)
-		/* LINTED will fix when sysctl interface gets corrected */
-		/* XXX when will that be? */
 		return (__sysctl(name, namelen, oldp, oldlenp,
-				 (void *)newp, newlen));
+				 newp, newlen));
 
 	oldlen = (oldlenp == NULL) ? 0 : *oldlenp;
 	savelen = oldlen;
@@ -106,7 +105,7 @@ sysctl(name, namelen, oldp, oldlenp, newp, newlen)
 
 static int
 user_sysctl(name, namelen, oldp, oldlenp, newp, newlen)
-	int *name;
+	const int *name;
 	unsigned int namelen;
 	void *oldp;
 	const void *newp;
@@ -147,7 +146,8 @@ user_sysctl(name, namelen, oldp, oldlenp, newp, newlen)
 			 *	.sysctl_desc = NULL,
 			 */
 			.sysctl_un = { .scu_data = { 
-				sysc_init_field(_sud_data, _PATH_STDPATH),
+				sysc_init_field(_sud_data,
+				__UNCONST(_PATH_STDPATH)),
 				}, },
 			sysc_init_field(_sysctl_desc,
 				"A value for the PATH environment variable "
@@ -176,7 +176,7 @@ user_sysctl(name, namelen, oldp, oldlenp, newp, newlen)
 		_INT("posix2_version", USER_POSIX2_VERSION, _POSIX2_VERSION,
 		     "The version of POSIX 1003.2 with which the system "
 		     "attempts to comply"),
-#ifdef POSIX2_C_BIND
+#ifdef _POSIX2_C_BIND
 		_INT("posix2_c_bind", USER_POSIX2_C_BIND, 1,
 		     "Whether the system's C-language development facilities "
 		     "support the C-Language Bindings Option"),

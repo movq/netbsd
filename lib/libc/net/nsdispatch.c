@@ -1,4 +1,4 @@
-/*	$NetBSD: nsdispatch.c,v 1.29 2005/06/26 16:27:36 thorpej Exp $	*/
+/*	$NetBSD: nsdispatch.c,v 1.33 2008/08/17 10:51:19 gmcgarry Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 1999, 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -70,7 +63,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: nsdispatch.c,v 1.29 2005/06/26 16:27:36 thorpej Exp $");
+__RCSID("$NetBSD: nsdispatch.c,v 1.33 2008/08/17 10:51:19 gmcgarry Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -110,37 +103,37 @@ __weak_alias(nsdispatch,_nsdispatch)
  */
 const ns_src __nsdefaultsrc[] = {
 	{ NSSRC_FILES,	NS_SUCCESS },
-	{ 0 },
+	{ 0, 0 },
 };
 
 const ns_src __nsdefaultcompat[] = {
 	{ NSSRC_COMPAT,	NS_SUCCESS },
-	{ 0 }
+	{ 0, 0 }
 };
 
 const ns_src __nsdefaultcompat_forceall[] = {
 	{ NSSRC_COMPAT,	NS_SUCCESS | NS_FORCEALL },
-	{ 0 }
+	{ 0, 0 }
 };
 
 const ns_src __nsdefaultfiles[] = {
 	{ NSSRC_FILES,	NS_SUCCESS },
-	{ 0 },
+	{ 0, 0 },
 };
 
 const ns_src __nsdefaultfiles_forceall[] = {
 	{ NSSRC_FILES,	NS_SUCCESS | NS_FORCEALL },
-	{ 0 },
+	{ 0, 0 },
 };
 
 const ns_src __nsdefaultnis[] = {
 	{ NSSRC_NIS,	NS_SUCCESS },
-	{ 0 }
+	{ 0, 0 }
 };
 
 const ns_src __nsdefaultnis_forceall[] = {
 	{ NSSRC_NIS,	NS_SUCCESS | NS_FORCEALL },
-	{ 0 }
+	{ 0, 0 }
 };
 
 
@@ -180,7 +173,7 @@ static mutex_t _ns_drec_lock = MUTEX_INITIALIZER;
  * Runtime determination of whether we are dynamically linked or not.
  */
 #ifdef __ELF__
-extern	int			_DYNAMIC __attribute__((__weak__));
+extern	int			_DYNAMIC __weak_reference(_DYNAMIC);
 #define	is_dynamic()		(&_DYNAMIC != NULL)
 #else
 #define	is_dynamic()		(0)	/* don't bother - switch to ELF! */
@@ -281,8 +274,7 @@ static void
 _nsmodfree(ns_mod *mod)
 {
 
-	/*LINTED const cast*/
-	free((void *)mod->name);
+	free(__UNCONST(mod->name));
 	if (mod->handle == NULL)
 		return;
 	if (mod->unregister != NULL)
@@ -441,10 +433,8 @@ _nssrclist_free(ns_src **src, u_int srclistsize)
 	u_int	i;
 
 	for (i = 0; i < srclistsize; i++) {
-		if ((*src)[i].name != NULL) {
-			/*LINTED const cast*/
-			free((void *)(*src)[i].name);
-		}
+		if ((*src)[i].name != NULL)
+			free(__UNCONST((*src)[i].name));
 	}
 	free(*src);
 	*src = NULL;
@@ -455,10 +445,8 @@ _nsdbtfree(ns_dbt *dbt)
 {
 
 	_nssrclist_free(&dbt->srclist, dbt->srclistsize);
-	if (dbt->name != NULL) {
-		/*LINTED const cast*/
-		free((void *)dbt->name);
-	}
+	if (dbt->name != NULL)
+		free(__UNCONST(dbt->name));
 }
 
 int

@@ -1,7 +1,7 @@
-/*	$NetBSD: ccd.c,v 1.105 2005/08/20 12:01:04 yamt Exp $	*/
+/*	$NetBSD: ccd.c,v 1.128 2008/03/21 21:54:59 ad Exp $	*/
 
 /*-
- * Copyright (c) 1996, 1997, 1998, 1999 The NetBSD Foundation, Inc.
+ * Copyright (c) 1996, 1997, 1998, 1999, 2007 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -125,7 +125,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ccd.c,v 1.105 2005/08/20 12:01:04 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ccd.c,v 1.128 2008/03/21 21:54:59 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -145,10 +145,12 @@ __KERNEL_RCSID(0, "$NetBSD: ccd.c,v 1.105 2005/08/20 12:01:04 yamt Exp $");
 #include <sys/fcntl.h>
 #include <sys/vnode.h>
 #include <sys/conf.h>
-#include <sys/lock.h>
+#include <sys/mutex.h>
 #include <sys/queue.h>
+#include <sys/kauth.h>
 
 #include <dev/ccdvar.h>
+#include <dev/dkvar.h>
 
 #if defined(CCDDEBUG) && !defined(DEBUG)
 #define DEBUG
@@ -192,10 +194,9 @@ static void	ccdstart(struct ccd_softc *);
 static void	ccdinterleave(struct ccd_softc *);
 static void	ccdintr(struct ccd_softc *, struct buf *);
 static int	ccdinit(struct ccd_softc *, char **, struct vnode **,
-		    struct proc *);
-static int	ccdlookup(char *, struct proc *p, struct vnode **);
+		    struct lwp *);
 static struct ccdbuf *ccdbuffer(struct ccd_softc *, struct buf *,
-		    daddr_t, caddr_t, long);
+		    daddr_t, void *, long);
 static void	ccdgetdefaultlabel(struct ccd_softc *, struct disklabel *);
 static void	ccdgetdisklabel(dev_t);
 static void	ccdmakedisklabel(struct ccd_softc *);
@@ -222,9 +223,10 @@ const struct cdevsw ccd_cdevsw = {
 static	void printiinfo(struct ccdiinfo *);
 #endif
 
-/* Non-private for the benefit of libkvm. */
-struct	ccd_softc *ccd_softc;
-int	numccd = 0;
+/* Publically visible for the benefit of libkvm and ccdconfig(8). */
+struct ccd_softc 	*ccd_softc;
+const int		ccd_softc_elemsize = sizeof(struct ccd_softc);
+int			numccd = 0;
 
 /*
  * Called by main() during pseudo-device attachment.  All we need
@@ -243,7 +245,7 @@ ccdattach(int num)
 		return;
 	}
 
-	ccd_softc = (struct ccd_softc *)malloc(num * sizeof(struct ccd_softc),
+	ccd_softc = (struct ccd_softc *)malloc(num * ccd_softc_elemsize,
 	    M_DEVBUF, M_NOWAIT|M_ZERO);
 	if (ccd_softc == NULL) {
 		printf("WARNING: no memory for concatenated disks\n");
@@ -253,21 +255,20 @@ ccdattach(int num)
 
 	/* Initialize the component buffer pool. */
 	pool_init(&ccd_cbufpool, sizeof(struct ccdbuf), 0,
-	    0, 0, "ccdpl", NULL);
+	    0, 0, "ccdpl", NULL, IPL_BIO);
 
 	/* Initialize per-softc structures. */
 	for (i = 0; i < num; i++) {
 		cs = &ccd_softc[i];
 		snprintf(cs->sc_xname, sizeof(cs->sc_xname), "ccd%d", i);
-		cs->sc_dkdev.dk_name = cs->sc_xname;	/* XXX */
-		lockinit(&cs->sc_lock, PRIBIO, "ccdlk", 0, 0);
-		pseudo_disk_init(&cs->sc_dkdev);
+		mutex_init(&cs->sc_lock, MUTEX_DEFAULT, IPL_NONE);
+		disk_init(&cs->sc_dkdev, cs->sc_xname, NULL); /* XXX */
 	}
 }
 
 static int
 ccdinit(struct ccd_softc *cs, char **cpaths, struct vnode **vpp,
-    struct proc *p)
+    struct lwp *l)
 {
 	struct ccdcinfo *ci = NULL;
 	size_t size;
@@ -277,7 +278,7 @@ ccdinit(struct ccd_softc *cs, char **cpaths, struct vnode **vpp,
 	int maxsecsize;
 	struct partinfo dpart;
 	struct ccdgeom *ccg = &cs->sc_geom;
-	char tmppath[MAXPATHLEN];
+	char *tmppath;
 	int error, path_alloced;
 
 #ifdef DEBUG
@@ -288,6 +289,8 @@ ccdinit(struct ccd_softc *cs, char **cpaths, struct vnode **vpp,
 	/* Allocate space for the component info. */
 	cs->sc_cinfo = malloc(cs->sc_nccdisks * sizeof(struct ccdcinfo),
 	    M_DEVBUF, M_WAITOK);
+
+	tmppath = malloc(MAXPATHLEN, M_TEMP, M_WAITOK);
 
 	cs->sc_size = 0;
 
@@ -322,7 +325,7 @@ ccdinit(struct ccd_softc *cs, char **cpaths, struct vnode **vpp,
 		/*
 		 * XXX: Cache the component's dev_t.
 		 */
-		if ((error = VOP_GETATTR(vpp[ix], &va, p->p_ucred, p)) != 0) {
+		if ((error = VOP_GETATTR(vpp[ix], &va, l->l_cred)) != 0) {
 #ifdef DEBUG
 			if (ccddebug & (CCDB_FOLLOW|CCDB_INIT))
 				printf("%s: %s: getattr failed %s = %d\n",
@@ -337,7 +340,7 @@ ccdinit(struct ccd_softc *cs, char **cpaths, struct vnode **vpp,
 		 * Get partition information for the component.
 		 */
 		error = VOP_IOCTL(vpp[ix], DIOCGPART, &dpart,
-		    FREAD, p->p_ucred, p);
+		    FREAD, l->l_cred);
 		if (error) {
 #ifdef DEBUG
 			if (ccddebug & (CCDB_FOLLOW|CCDB_INIT))
@@ -428,12 +431,15 @@ ccdinit(struct ccd_softc *cs, char **cpaths, struct vnode **vpp,
 
 	cs->sc_flags |= CCDF_INITED;
 
+	free(tmppath, M_TEMP);
+
 	return (0);
 
  out:
 	for (ix = 0; ix < path_alloced; ix++)
 		free(cs->sc_cinfo[ix].ci_path, M_DEVBUF);
 	free(cs->sc_cinfo, M_DEVBUF);
+	free(tmppath, M_TEMP);
 	return (error);
 }
 
@@ -541,7 +547,7 @@ ccdinterleave(struct ccd_softc *cs)
 
 /* ARGSUSED */
 static int
-ccdopen(dev_t dev, int flags, int fmt, struct proc *p)
+ccdopen(dev_t dev, int flags, int fmt, struct lwp *l)
 {
 	int unit = ccdunit(dev);
 	struct ccd_softc *cs;
@@ -556,8 +562,7 @@ ccdopen(dev_t dev, int flags, int fmt, struct proc *p)
 		return (ENXIO);
 	cs = &ccd_softc[unit];
 
-	if ((error = lockmgr(&cs->sc_lock, LK_EXCLUSIVE, NULL)) != 0)
-		return (error);
+	mutex_enter(&cs->sc_lock);
 
 	lp = cs->sc_dkdev.dk_label;
 
@@ -598,17 +603,17 @@ ccdopen(dev_t dev, int flags, int fmt, struct proc *p)
 	    cs->sc_dkdev.dk_copenmask | cs->sc_dkdev.dk_bopenmask;
 
  done:
-	(void) lockmgr(&cs->sc_lock, LK_RELEASE, NULL);
+	mutex_exit(&cs->sc_lock);
 	return (error);
 }
 
 /* ARGSUSED */
 static int
-ccdclose(dev_t dev, int flags, int fmt, struct proc *p)
+ccdclose(dev_t dev, int flags, int fmt, struct lwp *l)
 {
 	int unit = ccdunit(dev);
 	struct ccd_softc *cs;
-	int error = 0, part;
+	int part;
 
 #ifdef DEBUG
 	if (ccddebug & CCDB_FOLLOW)
@@ -619,8 +624,7 @@ ccdclose(dev_t dev, int flags, int fmt, struct proc *p)
 		return (ENXIO);
 	cs = &ccd_softc[unit];
 
-	if ((error = lockmgr(&cs->sc_lock, LK_EXCLUSIVE, NULL)) != 0)
-		return (error);
+	mutex_enter(&cs->sc_lock);
 
 	part = DISKPART(dev);
 
@@ -642,7 +646,7 @@ ccdclose(dev_t dev, int flags, int fmt, struct proc *p)
 			cs->sc_flags &= ~CCDF_VLABEL;
 	}
 
-	(void) lockmgr(&cs->sc_lock, LK_RELEASE, NULL);
+	mutex_exit(&cs->sc_lock);
 	return (0);
 }
 
@@ -666,7 +670,6 @@ ccdstrategy(struct buf *bp)
 			printf("ccdstrategy: unit %d: not inited\n", unit);
 #endif
 		bp->b_error = ENXIO;
-		bp->b_flags |= B_ERROR;
 		goto done;
 	}
 
@@ -692,7 +695,7 @@ ccdstrategy(struct buf *bp)
 
 	/* Place it in the queue and start I/O on the unit. */
 	s = splbio();
-	BUFQ_PUT(&cs->sc_bufq, bp);
+	BUFQ_PUT(cs->sc_bufq, bp);
 	ccdstart(cs);
 	splx(s);
 	return;
@@ -708,7 +711,7 @@ ccdstart(struct ccd_softc *cs)
 	long bcount, rcount;
 	struct buf *bp;
 	struct ccdbuf *cbp;
-	caddr_t addr;
+	char *addr;
 	daddr_t bn;
 	SIMPLEQ_HEAD(, ccdbuf) cbufq;
 
@@ -718,7 +721,7 @@ ccdstart(struct ccd_softc *cs)
 #endif
 
 	/* See if there is work for us to do. */
-	while ((bp = BUFQ_PEEK(&cs->sc_bufq)) != NULL) {
+	while ((bp = BUFQ_PEEK(cs->sc_bufq)) != NULL) {
 		/* Instrumentation. */
 		disk_busy(&cs->sc_dkdev);
 
@@ -754,14 +757,14 @@ ccdstart(struct ccd_softc *cs)
 		}
 
 		/* Transfer all set up, remove job from the queue. */
-		(void) BUFQ_GET(&cs->sc_bufq);
+		(void) BUFQ_GET(cs->sc_bufq);
 
 		/* Now fire off the requests. */
 		while ((cbp = SIMPLEQ_FIRST(&cbufq)) != NULL) {
 			SIMPLEQ_REMOVE_HEAD(&cbufq, cb_q);
 			if ((cbp->cb_buf.b_flags & B_READ) == 0)
 				cbp->cb_buf.b_vp->v_numoutput++;
-			DEV_STRATEGY(&cbp->cb_buf);
+			bdev_strategy(&cbp->cb_buf);
 		}
 	}
 }
@@ -770,7 +773,7 @@ ccdstart(struct ccd_softc *cs)
  * Build a component buffer header.
  */
 static struct ccdbuf *
-ccdbuffer(struct ccd_softc *cs, struct buf *bp, daddr_t bn, caddr_t addr,
+ccdbuffer(struct ccd_softc *cs, struct buf *bp, daddr_t bn, void *addr,
     long bcount)
 {
 	struct ccdcinfo *ci;
@@ -834,14 +837,17 @@ ccdbuffer(struct ccd_softc *cs, struct buf *bp, daddr_t bn, caddr_t addr,
 	cbp = CCD_GETBUF();
 	if (cbp == NULL)
 		return (NULL);
-	BUF_INIT(&cbp->cb_buf);
-	cbp->cb_buf.b_flags = bp->b_flags | B_CALL;
+	buf_init(&cbp->cb_buf);
+	cbp->cb_buf.b_flags = bp->b_flags;
+	cbp->cb_buf.b_oflags = bp->b_oflags;
+	cbp->cb_buf.b_cflags = bp->b_cflags;
 	cbp->cb_buf.b_iodone = ccdiodone;
 	cbp->cb_buf.b_proc = bp->b_proc;
 	cbp->cb_buf.b_dev = ci->ci_dev;
 	cbp->cb_buf.b_blkno = cbn + cboff;
 	cbp->cb_buf.b_data = addr;
 	cbp->cb_buf.b_vp = ci->ci_vp;
+	cbp->cb_buf.b_objlock = &ci->ci_vp->v_interlock;
 	if (cs->sc_ileave == 0)
 		cbc = dbtob((u_int64_t)(ci->ci_size - cbn));
 	else
@@ -880,7 +886,7 @@ ccdintr(struct ccd_softc *cs, struct buf *bp)
 	/*
 	 * Request is done for better or worse, wakeup the top half.
 	 */
-	if (bp->b_flags & B_ERROR)
+	if (bp->b_error != 0)
 		bp->b_resid = bp->b_bcount;
 	disk_unbusy(&cs->sc_dkdev, (bp->b_bcount - bp->b_resid),
 	    (bp->b_flags & B_READ));
@@ -915,15 +921,13 @@ ccdiodone(struct buf *vbp)
 	}
 #endif
 
-	if (cbp->cb_buf.b_flags & B_ERROR) {
-		bp->b_flags |= B_ERROR;
-		bp->b_error = cbp->cb_buf.b_error ?
-		    cbp->cb_buf.b_error : EIO;
-
+	if (cbp->cb_buf.b_error != 0) {
+		bp->b_error = cbp->cb_buf.b_error;
 		printf("%s: error %d on component %d\n",
 		       cs->sc_xname, bp->b_error, cbp->cb_comp);
 	}
 	count = cbp->cb_buf.b_bcount;
+	buf_destroy(&cbp->cb_buf);
 	CCD_PUTBUF(cbp);
 
 	/*
@@ -980,14 +984,14 @@ ccdwrite(dev_t dev, struct uio *uio, int flags)
 }
 
 static int
-ccdioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
+ccdioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
 	int unit = ccdunit(dev);
-	int s, i, j, lookedup = 0, error;
+	int s, i, j, lookedup = 0, error = 0;
 	int part, pmask;
 	struct ccd_softc *cs;
 	struct ccd_ioctl *ccio = (struct ccd_ioctl *)data;
-	struct ucred *uc;
+	kauth_cred_t uc;
 	char **cpp;
 	struct vnode **vpp;
 #ifdef __HAVE_OLD_DISKLABEL
@@ -997,6 +1001,8 @@ ccdioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
 	if (unit >= numccd)
 		return (ENXIO);
 	cs = &ccd_softc[unit];
+
+	uc = (l != NULL) ? l->l_cred : NOCRED;
 
 	/* Must be open for writes for these commands... */
 	switch (cmd) {
@@ -1014,8 +1020,7 @@ ccdioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
 			return (EBADF);
 	}
 
-	if ((error = lockmgr(&cs->sc_lock, LK_EXCLUSIVE, NULL)) != 0)
-		return (error);
+	mutex_enter(&cs->sc_lock);
 
 	/* Must be initialized for these... */
 	switch (cmd) {
@@ -1092,10 +1097,11 @@ ccdioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
 			if (ccddebug & CCDB_INIT)
 				printf("ccdioctl: lookedup = %d\n", lookedup);
 #endif
-			if ((error = ccdlookup(cpp[i], p, &vpp[i])) != 0) {
+			if ((error = dk_lookup(cpp[i], l, &vpp[i],
+			    UIO_USERSPACE)) != 0) {
 				for (j = 0; j < lookedup; ++j)
 					(void)vn_close(vpp[j], FREAD|FWRITE,
-					    p->p_ucred, p);
+					    uc);
 				free(vpp, M_DEVBUF);
 				free(cpp, M_DEVBUF);
 				goto out;
@@ -1106,10 +1112,10 @@ ccdioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
 		/*
 		 * Initialize the ccd.  Fills in the softc for us.
 		 */
-		if ((error = ccdinit(cs, cpp, vpp, p)) != 0) {
+		if ((error = ccdinit(cs, cpp, vpp, l)) != 0) {
 			for (j = 0; j < lookedup; ++j)
 				(void)vn_close(vpp[j], FREAD|FWRITE,
-				    p->p_ucred, p);
+				    uc);
 			free(vpp, M_DEVBUF);
 			free(cpp, M_DEVBUF);
 			goto out;
@@ -1129,10 +1135,10 @@ ccdioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
 		ccio->ccio_unit = unit;
 		ccio->ccio_size = cs->sc_size;
 
-		bufq_alloc(&cs->sc_bufq, BUFQ_FCFS);
+		bufq_alloc(&cs->sc_bufq, "fcfs", 0);
 
 		/* Attach the disk. */
-		pseudo_disk_attach(&cs->sc_dkdev);
+		disk_attach(&cs->sc_dkdev);
 
 		/* Try and read the disklabel. */
 		ccdgetdisklabel(dev);
@@ -1155,10 +1161,10 @@ ccdioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
 
 		/* Kill off any queued buffers. */
 		s = splbio();
-		bufq_drain(&cs->sc_bufq);
+		bufq_drain(cs->sc_bufq);
 		splx(s);
 
-		bufq_free(&cs->sc_bufq);
+		bufq_free(cs->sc_bufq);
 
 		/*
 		 * Free ccd_softc information and clear entry.
@@ -1177,7 +1183,7 @@ ccdioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
 				    cs->sc_cinfo[i].ci_vp);
 #endif
 			(void)vn_close(cs->sc_cinfo[i].ci_vp, FREAD|FWRITE,
-			    p->p_ucred, p);
+			    uc);
 			free(cs->sc_cinfo[i].ci_path, M_DEVBUF);
 		}
 
@@ -1191,7 +1197,7 @@ ccdioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
 		cs->sc_flags &= ~(CCDF_INITED|CCDF_VLABEL);
 
 		/* Detatch the disk. */
-		pseudo_disk_detach(&cs->sc_dkdev);
+		disk_detach(&cs->sc_dkdev);
 		break;
 
 	case DIOCGDINFO:
@@ -1224,10 +1230,9 @@ ccdioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
 		 * We pass this call down to all components and report
 		 * the first error we encounter.
 		 */
-		uc = (p != NULL) ? p->p_ucred : NOCRED;
 		for (error = 0, i = 0; i < cs->sc_nccdisks; i++) {
 			j = VOP_IOCTL(cs->sc_cinfo[i].ci_vp, cmd, data,
-				      flag, uc, p);
+				      flag, uc);
 			if (j != 0 && error == 0)
 				error = j;
 		}
@@ -1301,7 +1306,7 @@ ccdioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
 	}
 
  out:
-	(void) lockmgr(&cs->sc_lock, LK_RELEASE, NULL);
+	mutex_exit(&cs->sc_lock);
 	return (error);
 }
 
@@ -1324,7 +1329,7 @@ ccdsize(dev_t dev)
 	omask = cs->sc_dkdev.dk_openmask & (1 << part);
 	lp = cs->sc_dkdev.dk_label;
 
-	if (omask == 0 && ccdopen(dev, 0, S_IFBLK, curproc))
+	if (omask == 0 && ccdopen(dev, 0, S_IFBLK, curlwp))
 		return (-1);
 
 	if (lp->d_partitions[part].p_fstype != FS_SWAP)
@@ -1333,74 +1338,19 @@ ccdsize(dev_t dev)
 		size = lp->d_partitions[part].p_size *
 		    (lp->d_secsize / DEV_BSIZE);
 
-	if (omask == 0 && ccdclose(dev, 0, S_IFBLK, curproc))
+	if (omask == 0 && ccdclose(dev, 0, S_IFBLK, curlwp))
 		return (-1);
 
 	return (size);
 }
 
 static int
-ccddump(dev_t dev, daddr_t blkno, caddr_t va, size_t size)
+ccddump(dev_t dev, daddr_t blkno, void *va,
+    size_t size)
 {
 
 	/* Not implemented. */
 	return ENXIO;
-}
-
-/*
- * Lookup the provided name in the filesystem.  If the file exists,
- * is a valid block device, and isn't being used by anyone else,
- * set *vpp to the file's vnode.
- */
-static int
-ccdlookup(char *path, struct proc *p, struct vnode **vpp /* result */)
-{
-	struct nameidata nd;
-	struct vnode *vp;
-	struct vattr va;
-	int error;
-
-	NDINIT(&nd, LOOKUP, FOLLOW, UIO_USERSPACE, path, p);
-	if ((error = vn_open(&nd, FREAD|FWRITE, 0)) != 0) {
-#ifdef DEBUG
-		if (ccddebug & (CCDB_FOLLOW|CCDB_INIT))
-			printf("ccdlookup: vn_open error = %d\n", error);
-#endif
-		return (error);
-	}
-	vp = nd.ni_vp;
-
-	if (vp->v_usecount > 1) {
-		VOP_UNLOCK(vp, 0);
-		(void)vn_close(vp, FREAD|FWRITE, p->p_ucred, p);
-		return (EBUSY);
-	}
-
-	if ((error = VOP_GETATTR(vp, &va, p->p_ucred, p)) != 0) {
-#ifdef DEBUG
-		if (ccddebug & (CCDB_FOLLOW|CCDB_INIT))
-			printf("ccdlookup: getattr error = %d\n", error);
-#endif
-		VOP_UNLOCK(vp, 0);
-		(void)vn_close(vp, FREAD|FWRITE, p->p_ucred, p);
-		return (error);
-	}
-
-	/* XXX: eventually we should handle VREG, too. */
-	if (va.va_type != VBLK) {
-		VOP_UNLOCK(vp, 0);
-		(void)vn_close(vp, FREAD|FWRITE, p->p_ucred, p);
-		return (ENOTBLK);
-	}
-
-#ifdef DEBUG
-	if (ccddebug & CCDB_VNODE)
-		vprint("ccdlookup: vnode info", vp);
-#endif
-
-	VOP_UNLOCK(vp, 0);
-	*vpp = vp;
-	return (0);
 }
 
 static void

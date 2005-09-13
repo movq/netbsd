@@ -1,7 +1,7 @@
-/*	$NetBSD: kern_time.c,v 1.92 2005/07/23 18:54:07 cube Exp $	*/
+/*	$NetBSD: kern_time.c,v 1.141 2008/02/25 12:25:03 yamt Exp $	*/
 
 /*-
- * Copyright (c) 2000, 2004, 2005 The NetBSD Foundation, Inc.
+ * Copyright (c) 2000, 2004, 2005, 2007 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -68,39 +68,42 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_time.c,v 1.92 2005/07/23 18:54:07 cube Exp $");
-
-#include "fs_nfs.h"
-#include "opt_nfs.h"
-#include "opt_nfsserver.h"
+__KERNEL_RCSID(0, "$NetBSD: kern_time.c,v 1.141 2008/02/25 12:25:03 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/resourcevar.h>
 #include <sys/kernel.h>
 #include <sys/systm.h>
-#include <sys/malloc.h>
 #include <sys/proc.h>
-#include <sys/sa.h>
-#include <sys/savar.h>
 #include <sys/vnode.h>
 #include <sys/signalvar.h>
 #include <sys/syslog.h>
+#include <sys/timetc.h>
+#include <sys/kauth.h>
 
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
 
 #include <uvm/uvm_extern.h>
 
-#if defined(NFS) || defined(NFSSERVER)
-#include <nfs/rpcv2.h>
-#include <nfs/nfsproto.h>
-#include <nfs/nfs_var.h>
-#endif
+#include <sys/cpu.h>
 
-#include <machine/cpu.h>
+kmutex_t	time_lock;
 
-static void timerupcall(struct lwp *, void *);
+POOL_INIT(ptimer_pool, sizeof(struct ptimer), 0, 0, 0, "ptimerpl",
+    &pool_allocator_nointr, IPL_NONE);
+POOL_INIT(ptimers_pool, sizeof(struct ptimers), 0, 0, 0, "ptimerspl",
+    &pool_allocator_nointr, IPL_NONE);
 
+/*
+ * Initialize timekeeping.
+ */
+void
+time_init(void)
+{
+
+	mutex_init(&time_lock, MUTEX_DEFAULT, IPL_NONE);
+}
 
 /* Time of day and interval timer support.
  *
@@ -112,71 +115,86 @@ static void timerupcall(struct lwp *, void *);
  */
 
 /* This function is used by clock_settime and settimeofday */
-int
-settime(struct timeval *tv)
+static int
+settime1(struct proc *p, struct timespec *ts, bool check_kauth)
 {
-	struct timeval delta;
-	struct cpu_info *ci;
+	struct timeval delta, tv;
+	struct timeval now;
+	struct timespec ts1;
+	struct bintime btdelta;
+	lwp_t *l;
 	int s;
+
+	TIMESPEC_TO_TIMEVAL(&tv, ts);
 
 	/* WHAT DO WE DO ABOUT PENDING REAL-TIME TIMEOUTS??? */
 	s = splclock();
-	timersub(tv, &time, &delta);
-	if ((delta.tv_sec < 0 || delta.tv_usec < 0) && securelevel > 1) {
+	microtime(&now);
+	timersub(&tv, &now, &delta);
+
+	if (check_kauth && kauth_authorize_system(kauth_cred_get(),
+	    KAUTH_SYSTEM_TIME, KAUTH_REQ_SYSTEM_TIME_SYSTEM, ts, &delta,
+	    KAUTH_ARG(check_kauth ? false : true)) != 0) {
 		splx(s);
 		return (EPERM);
 	}
+
 #ifdef notyet
-	if ((delta.tv_sec < 86400) && securelevel > 0) {
+	if ((delta.tv_sec < 86400) && securelevel > 0) { /* XXX elad - notyet */
 		splx(s);
 		return (EPERM);
 	}
 #endif
-	time = *tv;
-	(void) spllowersoftclock();
+
+	TIMEVAL_TO_TIMESPEC(&tv, &ts1);
+	tc_setclock(&ts1);
+
 	timeradd(&boottime, &delta, &boottime);
+
 	/*
-	 * XXXSMP
-	 * This is wrong.  We should traverse a list of all
-	 * CPUs and add the delta to the runtime of those
-	 * CPUs which have a process on them.
+	 * XXXSMP: There is a short race between setting the time above
+	 * and adjusting LWP's run times.  Fixing this properly means
+	 * pausing all CPUs while we adjust the clock.
 	 */
-	ci = curcpu();
-	timeradd(&ci->ci_schedstate.spc_runtime, &delta,
-	    &ci->ci_schedstate.spc_runtime);
-#	if (defined(NFS) && !defined (NFS_V2_ONLY)) || defined(NFSSERVER)
-		nqnfs_lease_updatetime(delta.tv_sec);
-#	endif
-	splx(s);
+	timeval2bintime(&delta, &btdelta);
+	mutex_enter(&proclist_lock);
+	LIST_FOREACH(l, &alllwp, l_list) {
+		lwp_lock(l);
+		bintime_add(&l->l_stime, &btdelta);
+		lwp_unlock(l);
+	}
+	mutex_exit(&proclist_lock);
 	resettodr();
+	splx(s);
+
 	return (0);
+}
+
+int
+settime(struct proc *p, struct timespec *ts)
+{
+	return (settime1(p, ts, true));
 }
 
 /* ARGSUSED */
 int
-sys_clock_gettime(struct lwp *l, void *v, register_t *retval)
+sys_clock_gettime(struct lwp *l, const struct sys_clock_gettime_args *uap,
+    register_t *retval)
 {
-	struct sys_clock_gettime_args /* {
+	/* {
 		syscallarg(clockid_t) clock_id;
 		syscallarg(struct timespec *) tp;
-	} */ *uap = v;
+	} */
 	clockid_t clock_id;
-	struct timeval atv;
 	struct timespec ats;
-	int s;
 
 	clock_id = SCARG(uap, clock_id);
 	switch (clock_id) {
 	case CLOCK_REALTIME:
-		microtime(&atv);
-		TIMEVAL_TO_TIMESPEC(&atv,&ats);
+		nanotime(&ats);
 		break;
 	case CLOCK_MONOTONIC:
-		/* XXX "hz" granularity */
-		s = splclock();
-		atv = mono_time;
-		splx(s);
-		TIMEVAL_TO_TIMESPEC(&atv,&ats);
+		nanouptime(&ats);
 		break;
 	default:
 		return (EINVAL);
@@ -187,27 +205,24 @@ sys_clock_gettime(struct lwp *l, void *v, register_t *retval)
 
 /* ARGSUSED */
 int
-sys_clock_settime(struct lwp *l, void *v, register_t *retval)
+sys_clock_settime(struct lwp *l, const struct sys_clock_settime_args *uap,
+    register_t *retval)
 {
-	struct sys_clock_settime_args /* {
+	/* {
 		syscallarg(clockid_t) clock_id;
 		syscallarg(const struct timespec *) tp;
-	} */ *uap = v;
-	struct proc *p = l->l_proc;
-	int error;
+	} */
 
-	if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
-		return (error);
-
-	return (clock_settime1(SCARG(uap, clock_id), SCARG(uap, tp)));
+	return clock_settime1(l->l_proc, SCARG(uap, clock_id), SCARG(uap, tp),
+	    true);
 }
 
 
 int
-clock_settime1(clockid_t clock_id, const struct timespec *tp)
+clock_settime1(struct proc *p, clockid_t clock_id, const struct timespec *tp,
+    bool check_kauth)
 {
 	struct timespec ats;
-	struct timeval atv;
 	int error;
 
 	if ((error = copyin(tp, &ats, sizeof(ats))) != 0)
@@ -215,8 +230,7 @@ clock_settime1(clockid_t clock_id, const struct timespec *tp)
 
 	switch (clock_id) {
 	case CLOCK_REALTIME:
-		TIMESPEC_TO_TIMEVAL(&atv, &ats);
-		if ((error = settime(&atv)) != 0)
+		if ((error = settime1(p, &ats, check_kauth)) != 0)
 			return (error);
 		break;
 	case CLOCK_MONOTONIC:
@@ -229,12 +243,13 @@ clock_settime1(clockid_t clock_id, const struct timespec *tp)
 }
 
 int
-sys_clock_getres(struct lwp *l, void *v, register_t *retval)
+sys_clock_getres(struct lwp *l, const struct sys_clock_getres_args *uap,
+    register_t *retval)
 {
-	struct sys_clock_getres_args /* {
+	/* {
 		syscallarg(clockid_t) clock_id;
 		syscallarg(struct timespec *) tp;
-	} */ *uap = v;
+	} */
 	clockid_t clock_id;
 	struct timespec ts;
 	int error = 0;
@@ -244,7 +259,10 @@ sys_clock_getres(struct lwp *l, void *v, register_t *retval)
 	case CLOCK_REALTIME:
 	case CLOCK_MONOTONIC:
 		ts.tv_sec = 0;
-		ts.tv_nsec = 1000000000 / hz;
+		if (tc_getfrequency() > 1000000000)
+			ts.tv_nsec = 1;
+		else
+			ts.tv_nsec = 1000000000 / tc_getfrequency();
 		break;
 	default:
 		return (EINVAL);
@@ -258,71 +276,81 @@ sys_clock_getres(struct lwp *l, void *v, register_t *retval)
 
 /* ARGSUSED */
 int
-sys_nanosleep(struct lwp *l, void *v, register_t *retval)
+sys_nanosleep(struct lwp *l, const struct sys_nanosleep_args *uap,
+    register_t *retval)
 {
-	static int nanowait;
-	struct sys_nanosleep_args/* {
+	/* {
 		syscallarg(struct timespec *) rqtp;
 		syscallarg(struct timespec *) rmtp;
-	} */ *uap = v;
-	struct timespec rqt;
-	struct timespec rmt;
-	struct timeval atv, utv;
-	int error, s, timo;
+	} */
+	struct timespec rmt, rqt;
+	int error, error1;
 
 	error = copyin(SCARG(uap, rqtp), &rqt, sizeof(struct timespec));
 	if (error)
 		return (error);
 
-	TIMESPEC_TO_TIMEVAL(&atv,&rqt);
-	if (itimerfix(&atv))
+	error = nanosleep1(l, &rqt, SCARG(uap, rmtp) ? &rmt : NULL);
+	if (SCARG(uap, rmtp) == NULL || (error != 0 && error != EINTR))
+		return error;
+
+	error1 = copyout(&rmt, SCARG(uap, rmtp), sizeof(rmt));
+	return error1 ? error1 : error;
+}
+
+int
+nanosleep1(struct lwp *l, struct timespec *rqt, struct timespec *rmt)
+{
+	struct timespec rmtstart;
+	int error, timo;
+
+	if (itimespecfix(rqt))
 		return (EINVAL);
 
-	s = splclock();
-	timeradd(&atv,&time,&atv);
-	timo = hzto(&atv);
+	timo = tstohz(rqt);
 	/*
 	 * Avoid inadvertantly sleeping forever
 	 */
 	if (timo == 0)
 		timo = 1;
-	splx(s);
+	getnanouptime(&rmtstart);
+again:
+	error = kpause("nanoslp", true, timo, NULL);
+	if (rmt != NULL || error == 0) {
+		struct timespec rmtend;
+		struct timespec t0;
+		struct timespec *t;
 
-	error = tsleep(&nanowait, PWAIT | PCATCH, "nanosleep", timo);
+		getnanouptime(&rmtend);
+		t = (rmt != NULL) ? rmt : &t0;
+		timespecsub(&rmtend, &rmtstart, t);
+		timespecsub(rqt, t, t);
+		if (t->tv_sec < 0)
+			timespecclear(t);
+		if (error == 0) {
+			timo = tstohz(t);
+			if (timo > 0)
+				goto again;
+		}
+	}
+
 	if (error == ERESTART)
 		error = EINTR;
 	if (error == EWOULDBLOCK)
 		error = 0;
-
-	if (SCARG(uap, rmtp)) {
-		int error1;
-
-		s = splclock();
-		utv = time;
-		splx(s);
-
-		timersub(&atv, &utv, &utv);
-		if (utv.tv_sec < 0)
-			timerclear(&utv);
-
-		TIMEVAL_TO_TIMESPEC(&utv,&rmt);
-		error1 = copyout((caddr_t)&rmt, (caddr_t)SCARG(uap,rmtp),
-			sizeof(rmt));
-		if (error1)
-			return (error1);
-	}
 
 	return error;
 }
 
 /* ARGSUSED */
 int
-sys_gettimeofday(struct lwp *l, void *v, register_t *retval)
+sys_gettimeofday(struct lwp *l, const struct sys_gettimeofday_args *uap,
+    register_t *retval)
 {
-	struct sys_gettimeofday_args /* {
+	/* {
 		syscallarg(struct timeval *) tp;
-		syscallarg(void *) tzp;		really "struct timezone *"
-	} */ *uap = v;
+		syscallarg(void *) tzp;		really "struct timezone *";
+	} */
 	struct timeval atv;
 	int error = 0;
 	struct timezone tzfake;
@@ -347,127 +375,101 @@ sys_gettimeofday(struct lwp *l, void *v, register_t *retval)
 
 /* ARGSUSED */
 int
-sys_settimeofday(struct lwp *l, void *v, register_t *retval)
+sys_settimeofday(struct lwp *l, const struct sys_settimeofday_args *uap,
+    register_t *retval)
 {
-	struct sys_settimeofday_args /* {
+	/* {
 		syscallarg(const struct timeval *) tv;
-		syscallarg(const void *) tzp;	really "const struct timezone *"
-	} */ *uap = v;
-	struct proc *p = l->l_proc;
-	int error;
+		syscallarg(const void *) tzp; really "const struct timezone *";
+	} */
 
-	if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
-		return (error);
-
-	return settimeofday1(SCARG(uap, tv), SCARG(uap, tzp), p);
+	return settimeofday1(SCARG(uap, tv), true, SCARG(uap, tzp), l, true);
 }
 
 int
-settimeofday1(const struct timeval *utv, const struct timezone *utzp,
-    struct proc *p)
+settimeofday1(const struct timeval *utv, bool userspace,
+    const void *utzp, struct lwp *l, bool check_kauth)
 {
 	struct timeval atv;
-	struct timezone atz;
-	struct timeval *tv = NULL;
-	struct timezone *tzp = NULL;
+	struct timespec ts;
 	int error;
 
 	/* Verify all parameters before changing time. */
-	if (utv) {
-		if ((error = copyin(utv, &atv, sizeof(atv))) != 0)
-			return (error);
-		tv = &atv;
-	}
-	/* XXX since we don't use tz, probably no point in doing copyin. */
-	if (utzp) {
-		if ((error = copyin(utzp, &atz, sizeof(atz))) != 0)
-			return (error);
-		tzp = &atz;
-	}
 
-	if (tv)
-		if ((error = settime(tv)) != 0)
-			return (error);
 	/*
 	 * NetBSD has no kernel notion of time zone, and only an
 	 * obsolete program would try to set it, so we log a warning.
 	 */
-	if (tzp)
+	if (utzp)
 		log(LOG_WARNING, "pid %d attempted to set the "
-		    "(obsolete) kernel time zone\n", p->p_pid);
-	return (0);
+		    "(obsolete) kernel time zone\n", l->l_proc->p_pid);
+
+	if (utv == NULL) 
+		return 0;
+
+	if (userspace) {
+		if ((error = copyin(utv, &atv, sizeof(atv))) != 0)
+			return error;
+		utv = &atv;
+	}
+
+	TIMEVAL_TO_TIMESPEC(utv, &ts);
+	return settime1(l->l_proc, &ts, check_kauth);
 }
 
-int	tickdelta;			/* current clock skew, us. per tick */
-long	timedelta;			/* unapplied time correction, us. */
-long	bigadj = 1000000;		/* use 10x skew above bigadj us. */
 int	time_adjusted;			/* set if an adjustment is made */
 
 /* ARGSUSED */
 int
-sys_adjtime(struct lwp *l, void *v, register_t *retval)
+sys_adjtime(struct lwp *l, const struct sys_adjtime_args *uap,
+    register_t *retval)
 {
-	struct sys_adjtime_args /* {
+	/* {
 		syscallarg(const struct timeval *) delta;
 		syscallarg(struct timeval *) olddelta;
-	} */ *uap = v;
-	struct proc *p = l->l_proc;
+	} */
 	int error;
 
-	if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
+	if ((error = kauth_authorize_system(l->l_cred, KAUTH_SYSTEM_TIME,
+	    KAUTH_REQ_SYSTEM_TIME_ADJTIME, NULL, NULL, NULL)) != 0)
 		return (error);
 
-	return adjtime1(SCARG(uap, delta), SCARG(uap, olddelta), p);
+	return adjtime1(SCARG(uap, delta), SCARG(uap, olddelta), l->l_proc);
 }
 
 int
 adjtime1(const struct timeval *delta, struct timeval *olddelta, struct proc *p)
 {
 	struct timeval atv;
-	long ndelta, ntickdelta, odelta;
-	int error;
-	int s;
+	int error = 0;
 
-	error = copyin(delta, &atv, sizeof(struct timeval));
-	if (error)
-		return (error);
-
-	/*
-	 * Compute the total correction and the rate at which to apply it.
-	 * Round the adjustment down to a whole multiple of the per-tick
-	 * delta, so that after some number of incremental changes in
-	 * hardclock(), tickdelta will become zero, lest the correction
-	 * overshoot and start taking us away from the desired final time.
-	 */
-	ndelta = atv.tv_sec * 1000000 + atv.tv_usec;
-	if (ndelta > bigadj || ndelta < -bigadj)
-		ntickdelta = 10 * tickadj;
-	else
-		ntickdelta = tickadj;
-	if (ndelta % ntickdelta)
-		ndelta = ndelta / ntickdelta * ntickdelta;
-
-	/*
-	 * To make hardclock()'s job easier, make the per-tick delta negative
-	 * if we want time to run slower; then hardclock can simply compute
-	 * tick + tickdelta, and subtract tickdelta from timedelta.
-	 */
-	if (ndelta < 0)
-		ntickdelta = -ntickdelta;
-	if (ndelta != 0)
-		/* We need to save the system clock time during shutdown */
-		time_adjusted |= 1;
-	s = splclock();
-	odelta = timedelta;
-	timedelta = ndelta;
-	tickdelta = ntickdelta;
-	splx(s);
+	extern int64_t time_adjtime;  /* in kern_ntptime.c */
 
 	if (olddelta) {
-		atv.tv_sec = odelta / 1000000;
-		atv.tv_usec = odelta % 1000000;
+		atv.tv_sec = time_adjtime / 1000000;
+		atv.tv_usec = time_adjtime % 1000000;
+		if (atv.tv_usec < 0) {
+			atv.tv_usec += 1000000;
+			atv.tv_sec--;
+		}
 		error = copyout(&atv, olddelta, sizeof(struct timeval));
+		if (error)
+			return (error);
 	}
+	
+	if (delta) {
+		error = copyin(delta, &atv, sizeof(struct timeval));
+		if (error)
+			return (error);
+
+		time_adjtime = (int64_t)atv.tv_sec * 1000000 +
+			atv.tv_usec;
+
+		if (time_adjtime)
+			/* We need to save the system time during shutdown */
+			time_adjusted |= 1;
+	}
+
 	return error;
 }
 
@@ -496,25 +498,29 @@ adjtime1(const struct timeval *delta, struct timeval *olddelta, struct proc *p)
 
 /* Allocate a POSIX realtime timer. */
 int
-sys_timer_create(struct lwp *l, void *v, register_t *retval)
+sys_timer_create(struct lwp *l, const struct sys_timer_create_args *uap,
+    register_t *retval)
 {
-	struct sys_timer_create_args /* {
+	/* {
 		syscallarg(clockid_t) clock_id;
 		syscallarg(struct sigevent *) evp;
 		syscallarg(timer_t *) timerid;
-	} */ *uap = v;
+	} */
 
 	return timer_create1(SCARG(uap, timerid), SCARG(uap, clock_id),
-	    SCARG(uap, evp), copyin, l->l_proc);
+	    SCARG(uap, evp), copyin, l);
 }
 
 int
 timer_create1(timer_t *tid, clockid_t id, struct sigevent *evp,
-    copyinout_t fetch_event, struct proc *p)
+    copyin_t fetch_event, struct lwp *l)
 {
 	int error;
 	timer_t timerid;
 	struct ptimer *pt;
+	struct proc *p;
+
+	p = l->l_proc;
 
 	if (id < CLOCK_REALTIME ||
 	    id > CLOCK_PROF)
@@ -559,8 +565,8 @@ timer_create1(timer_t *tid, clockid_t id, struct sigevent *evp,
 	pt->pt_info.ksi_errno = 0;
 	pt->pt_info.ksi_code = 0;
 	pt->pt_info.ksi_pid = p->p_pid;
-	pt->pt_info.ksi_uid = p->p_cred->p_ruid;
-	pt->pt_info.ksi_sigval = pt->pt_ev.sigev_value;
+	pt->pt_info.ksi_uid = kauth_cred_getuid(l->l_cred);
+	pt->pt_info.ksi_value = pt->pt_ev.sigev_value;
 
 	pt->pt_type = id;
 	pt->pt_proc = p;
@@ -569,7 +575,7 @@ timer_create1(timer_t *tid, clockid_t id, struct sigevent *evp,
 	pt->pt_entry = timerid;
 	timerclear(&pt->pt_time.it_value);
 	if (id == CLOCK_REALTIME)
-		callout_init(&pt->pt_ch);
+		callout_init(&pt->pt_ch, 0);
 	else
 		pt->pt_active = 0;
 
@@ -580,11 +586,12 @@ timer_create1(timer_t *tid, clockid_t id, struct sigevent *evp,
 
 /* Delete a POSIX realtime timer */
 int
-sys_timer_delete(struct lwp *l, void *v, register_t *retval)
+sys_timer_delete(struct lwp *l, const struct sys_timer_delete_args *uap,
+    register_t *retval)
 {
-	struct sys_timer_delete_args /*  {
+	/* {
 		syscallarg(timer_t) timerid;
-	} */ *uap = v;
+	} */
 	struct proc *p = l->l_proc;
 	timer_t timerid;
 	struct ptimer *pt, *ptn;
@@ -597,9 +604,10 @@ sys_timer_delete(struct lwp *l, void *v, register_t *retval)
 	    ((pt = p->p_timers->pts_timers[timerid]) == NULL))
 		return (EINVAL);
 
-	if (pt->pt_type == CLOCK_REALTIME)
+	if (pt->pt_type == CLOCK_REALTIME) {
 		callout_stop(&pt->pt_ch);
-	else if (pt->pt_active) {
+		callout_destroy(&pt->pt_ch);
+	} else if (pt->pt_active) {
 		s = splclock();
 		ptn = LIST_NEXT(pt, pt_list);
 		LIST_REMOVE(pt, pt_list);
@@ -679,6 +687,7 @@ timer_settime(struct ptimer *pt)
 void
 timer_gettime(struct ptimer *pt, struct itimerval *aitv)
 {
+	struct timeval now;
 	struct ptimer *ptn;
 
 	*aitv = pt->pt_time;
@@ -691,10 +700,11 @@ timer_gettime(struct ptimer *pt, struct itimerval *aitv)
 		 * off.
 		 */
 		if (timerisset(&aitv->it_value)) {
-			if (timercmp(&aitv->it_value, &time, <))
+			getmicrotime(&now);
+			if (timercmp(&aitv->it_value, &now, <))
 				timerclear(&aitv->it_value);
 			else
-				timersub(&aitv->it_value, &time,
+				timersub(&aitv->it_value, &now,
 				    &aitv->it_value);
 		}
 	} else if (pt->pt_active) {
@@ -714,14 +724,15 @@ timer_gettime(struct ptimer *pt, struct itimerval *aitv)
 
 /* Set and arm a POSIX realtime timer */
 int
-sys_timer_settime(struct lwp *l, void *v, register_t *retval)
+sys_timer_settime(struct lwp *l, const struct sys_timer_settime_args *uap,
+    register_t *retval)
 {
-	struct sys_timer_settime_args /* {
+	/* {
 		syscallarg(timer_t) timerid;
 		syscallarg(int) flags;
 		syscallarg(const struct itimerspec *) value;
 		syscallarg(struct itimerspec *) ovalue;
-	} */ *uap = v;
+	} */
 	int error;
 	struct itimerspec value, ovalue, *ovp = NULL;
 
@@ -746,9 +757,10 @@ int
 dotimer_settime(int timerid, struct itimerspec *value,
     struct itimerspec *ovalue, int flags, struct proc *p)
 {
-	int s;
+	struct timeval now;
 	struct itimerval val, oval;
 	struct ptimer *pt;
+	int s;
 
 	if ((p->p_timers == NULL) ||
 	    (timerid < 2) || (timerid >= TIMER_MAX) ||
@@ -773,12 +785,15 @@ dotimer_settime(int timerid, struct itimerspec *value,
 	 */
 	if (timerisset(&pt->pt_time.it_value)) {
 		if (pt->pt_type == CLOCK_REALTIME) {
-			if ((flags & TIMER_ABSTIME) == 0)
-				timeradd(&pt->pt_time.it_value, &time,
+			if ((flags & TIMER_ABSTIME) == 0) {
+				getmicrotime(&now);
+				timeradd(&pt->pt_time.it_value, &now,
 				    &pt->pt_time.it_value);
+			}
 		} else {
 			if ((flags & TIMER_ABSTIME) != 0) {
-				timersub(&pt->pt_time.it_value, &time,
+				getmicrotime(&now);
+				timersub(&pt->pt_time.it_value, &now,
 				    &pt->pt_time.it_value);
 				if (!timerisset(&pt->pt_time.it_value) ||
 				    pt->pt_time.it_value.tv_sec < 0) {
@@ -802,12 +817,13 @@ dotimer_settime(int timerid, struct itimerspec *value,
 
 /* Return the time remaining until a POSIX timer fires. */
 int
-sys_timer_gettime(struct lwp *l, void *v, register_t *retval)
+sys_timer_gettime(struct lwp *l, const struct sys_timer_gettime_args *uap,
+    register_t *retval)
 {
-	struct sys_timer_gettime_args /* {
+	/* {
 		syscallarg(timer_t) timerid;
 		syscallarg(struct itimerspec *) value;
-	} */ *uap = v;
+	} */
 	struct itimerspec its;
 	int error;
 
@@ -846,11 +862,12 @@ dotimer_gettime(int timerid, struct proc *p, struct itimerspec *its)
  * a timer expires and a notification can be posted.
  */
 int
-sys_timer_getoverrun(struct lwp *l, void *v, register_t *retval)
+sys_timer_getoverrun(struct lwp *l, const struct sys_timer_getoverrun_args *uap,
+    register_t *retval)
 {
-	struct sys_timer_getoverrun_args /* {
+	/* {
 		syscallarg(timer_t) timerid;
-	} */ *uap = v;
+	} */
 	struct proc *p = l->l_proc;
 	int timerid;
 	struct ptimer *pt;
@@ -867,49 +884,6 @@ sys_timer_getoverrun(struct lwp *l, void *v, register_t *retval)
 	return (0);
 }
 
-/* Glue function that triggers an upcall; called from userret(). */
-static void
-timerupcall(struct lwp *l, void *arg)
-{
-	struct ptimers *pt = (struct ptimers *)arg;
-	unsigned int i, fired, done;
-	extern struct pool siginfo_pool;	/* XXX Ew. */
-
-	KDASSERT(l->l_proc->p_sa);
-	/* Bail out if we do not own the virtual processor */
-	if (l->l_savp->savp_lwp != l)
-		return ;
-
-	KERNEL_PROC_LOCK(l);
-
-	fired = pt->pts_fired;
-	done = 0;
-	while ((i = ffs(fired)) != 0) {
-		siginfo_t *si;
-		int mask = 1 << --i;
-		int f;
-
-		f = l->l_flag & L_SA;
-		l->l_flag &= ~L_SA;
-		si = pool_get(&siginfo_pool, PR_WAITOK);
-		si->_info = pt->pts_timers[i]->pt_info.ksi_info;
-		if (sa_upcall(l, SA_UPCALL_SIGEV | SA_UPCALL_DEFER, NULL, l,
-		    sizeof(*si), si) != 0) {
-			pool_put(&siginfo_pool, si);
-			/* XXX What do we do here?? */
-		} else
-			done |= mask;
-		fired &= ~mask;
-		l->l_flag |= f;
-	}
-	pt->pts_fired &= ~done;
-	if (pt->pts_fired == 0)
-		l->l_proc->p_userret = NULL;
-
-	KERNEL_PROC_UNLOCK(l);
-}
-
-
 /*
  * Real interval timer expired:
  * send process whose timer expired an alarm signal.
@@ -921,6 +895,7 @@ timerupcall(struct lwp *l, void *arg)
 void
 realtimerexpire(void *arg)
 {
+	struct timeval now;
 	struct ptimer *pt;
 	int s;
 
@@ -933,10 +908,11 @@ realtimerexpire(void *arg)
 		return;
 	}
 	for (;;) {
-		s = splclock();
+		s = splclock();	/* XXX need spl now? */
 		timeradd(&pt->pt_time.it_value,
 		    &pt->pt_time.it_interval, &pt->pt_time.it_value);
-		if (timercmp(&pt->pt_time.it_value, &time, >)) {
+		getmicrotime(&now);
+		if (timercmp(&pt->pt_time.it_value, &now, >)) {
 			/*
 			 * Don't need to check hzto() return value, here.
 			 * callout_reset() does it for us.
@@ -954,12 +930,13 @@ realtimerexpire(void *arg)
 /* BSD routine to get the value of an interval timer. */
 /* ARGSUSED */
 int
-sys_getitimer(struct lwp *l, void *v, register_t *retval)
+sys_getitimer(struct lwp *l, const struct sys_getitimer_args *uap,
+    register_t *retval)
 {
-	struct sys_getitimer_args /* {
+	/* {
 		syscallarg(int) which;
 		syscallarg(struct itimerval *) itv;
-	} */ *uap = v;
+	} */
 	struct proc *p = l->l_proc;
 	struct itimerval aitv;
 	int error;
@@ -993,13 +970,14 @@ dogetitimer(struct proc *p, int which, struct itimerval *itvp)
 /* BSD routine to set/arm an interval timer. */
 /* ARGSUSED */
 int
-sys_setitimer(struct lwp *l, void *v, register_t *retval)
+sys_setitimer(struct lwp *l, const struct sys_setitimer_args *uap,
+    register_t *retval)
 {
-	struct sys_setitimer_args /* {
+	/* {
 		syscallarg(int) which;
 		syscallarg(const struct itimerval *) itv;
 		syscallarg(struct itimerval *) oitv;
-	} */ *uap = v;
+	} */
 	struct proc *p = l->l_proc;
 	int which = SCARG(uap, which);
 	struct sys_getitimer_args getargs;
@@ -1028,6 +1006,7 @@ sys_setitimer(struct lwp *l, void *v, register_t *retval)
 int
 dosetitimer(struct proc *p, int which, struct itimerval *itvp)
 {
+	struct timeval now;
 	struct ptimer *pt;
 	int s;
 
@@ -1054,7 +1033,7 @@ dosetitimer(struct proc *p, int which, struct itimerval *itvp)
 		pt->pt_entry = which;
 		switch (which) {
 		case ITIMER_REAL:
-			callout_init(&pt->pt_ch);
+			callout_init(&pt->pt_ch, 0);
 			pt->pt_ev.sigev_signo = SIGALRM;
 			break;
 		case ITIMER_VIRTUAL:
@@ -1075,7 +1054,9 @@ dosetitimer(struct proc *p, int which, struct itimerval *itvp)
 	s = splclock();
 	if ((which == ITIMER_REAL) && timerisset(&pt->pt_time.it_value)) {
 		/* Convert to absolute time */
-		timeradd(&pt->pt_time.it_value, &time, &pt->pt_time.it_value);
+		/* XXX need to wrap in splclock for timecounters case? */
+		getmicrotime(&now);
+		timeradd(&pt->pt_time.it_value, &now, &pt->pt_time.it_value);
 	}
 	timer_settime(pt);
 	splx(s);
@@ -1090,7 +1071,7 @@ timers_alloc(struct proc *p)
 	int i;
 	struct ptimers *pts;
 
-	pts = malloc(sizeof (struct ptimers), M_SUBPROC, 0);
+	pts = pool_get(&ptimers_pool, PR_WAITOK);
 	LIST_INIT(&pts->pts_virtual);
 	LIST_INIT(&pts->pts_prof);
 	for (i = 0; i < TIMER_MAX; i++)
@@ -1150,8 +1131,10 @@ timers_free(struct proc *p, int which)
 		}
 		for ( ; i < TIMER_MAX; i++)
 			if ((pt = pts->pts_timers[i]) != NULL) {
-				if (pt->pt_type == CLOCK_REALTIME)
+				if (pt->pt_type == CLOCK_REALTIME) {
 					callout_stop(&pt->pt_ch);
+					callout_destroy(&pt->pt_ch);
+				}
 				pts->pts_timers[i] = NULL;
 				pool_put(&ptimer_pool, pt);
 			}
@@ -1159,26 +1142,9 @@ timers_free(struct proc *p, int which)
 		    (pts->pts_timers[1] == NULL) &&
 		    (pts->pts_timers[2] == NULL)) {
 			p->p_timers = NULL;
-			free(pts, M_SUBPROC);
+			pool_put(&ptimers_pool, pts);
 		}
 	}
-}
-
-/*
- * Check that a proposed value to load into the .it_value or
- * .it_interval part of an interval timer is acceptable, and
- * fix it to have at least minimal value (i.e. if it is less
- * than the resolution of the clock, round it up.)
- */
-int
-itimerfix(struct timeval *tv)
-{
-
-	if (tv->tv_sec < 0 || tv->tv_usec < 0 || tv->tv_usec >= 1000000)
-		return (EINVAL);
-	if (tv->tv_sec == 0 && tv->tv_usec != 0 && tv->tv_usec < tick)
-		tv->tv_usec = tick;
-	return (0);
 }
 
 /*
@@ -1229,9 +1195,6 @@ void
 itimerfire(struct ptimer *pt)
 {
 	struct proc *p = pt->pt_proc;
-	struct sadata_vp *vp;
-	int s;
-	unsigned int i;
 
 	if (pt->pt_ev.sigev_notify == SIGEV_SIGNAL) {
 		/*
@@ -1239,62 +1202,21 @@ itimerfire(struct ptimer *pt)
 		 * just post the signal number and throw away the
 		 * value.
 		 */
-		if (sigismember(&p->p_sigctx.ps_siglist, pt->pt_ev.sigev_signo))
+		if (sigismember(&p->p_sigpend.sp_set, pt->pt_ev.sigev_signo))
 			pt->pt_overruns++;
 		else {
 			ksiginfo_t ksi;
-			(void)memset(&ksi, 0, sizeof(ksi));
+			KSI_INIT(&ksi);
 			ksi.ksi_signo = pt->pt_ev.sigev_signo;
 			ksi.ksi_code = SI_TIMER;
-			ksi.ksi_sigval = pt->pt_ev.sigev_value;
+			ksi.ksi_value = pt->pt_ev.sigev_value;
 			pt->pt_poverruns = pt->pt_overruns;
 			pt->pt_overruns = 0;
+			mutex_enter(&proclist_mutex);
 			kpsignal(p, &ksi, NULL);
-		}
-	} else if (pt->pt_ev.sigev_notify == SIGEV_SA && (p->p_flag & P_SA)) {
-		/* Cause the process to generate an upcall when it returns. */
-
-		if (p->p_userret == NULL) {
-			/*
-			 * XXX stop signals can be processed inside tsleep,
-			 * which can be inside sa_yield's inner loop, which
-			 * makes testing for sa_idle alone insuffucent to
-			 * determine if we really should call setrunnable.
-			 */
-			pt->pt_poverruns = pt->pt_overruns;
-			pt->pt_overruns = 0;
-			i = 1 << pt->pt_entry;
-			p->p_timers->pts_fired = i;
-			p->p_userret = timerupcall;
-			p->p_userret_arg = p->p_timers;
-
-			SCHED_LOCK(s);
-			SLIST_FOREACH(vp, &p->p_sa->sa_vps, savp_next) {
-				if (vp->savp_lwp->l_flag & L_SA_IDLE) {
-					vp->savp_lwp->l_flag &= ~L_SA_IDLE;
-					sched_wakeup(vp->savp_lwp);
-					break;
-				}
-			}
-			SCHED_UNLOCK(s);
-		} else if (p->p_userret == timerupcall) {
-			i = 1 << pt->pt_entry;
-			if ((p->p_timers->pts_fired & i) == 0) {
-				pt->pt_poverruns = pt->pt_overruns;
-				pt->pt_overruns = 0;
-				p->p_timers->pts_fired |= i;
-			} else
-				pt->pt_overruns++;
-		} else {
-			pt->pt_overruns++;
-			if ((p->p_flag & P_WEXIT) == 0)
-				printf("itimerfire(%d): overrun %d on timer %x (userret is %p)\n",
-				    p->p_pid, pt->pt_overruns,
-				    pt->pt_ev.sigev_value.sival_int,
-				    p->p_userret);
+			mutex_exit(&proclist_mutex);
 		}
 	}
-
 }
 
 /*
@@ -1305,12 +1227,9 @@ int
 ratecheck(struct timeval *lasttime, const struct timeval *mininterval)
 {
 	struct timeval tv, delta;
-	int s, rv = 0;
+	int rv = 0;
 
-	s = splclock();
-	tv = mono_time;
-	splx(s);
-
+	getmicrouptime(&tv);
 	timersub(&tv, lasttime, &delta);
 
 	/*
@@ -1333,12 +1252,9 @@ int
 ppsratecheck(struct timeval *lasttime, int *curpps, int maxpps)
 {
 	struct timeval tv, delta;
-	int s, rv;
+	int rv;
 
-	s = splclock();
-	tv = mono_time;
-	splx(s);
-
+	getmicrouptime(&tv);
 	timersub(&tv, lasttime, &delta);
 
 	/*

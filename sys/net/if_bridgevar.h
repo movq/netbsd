@@ -1,4 +1,4 @@
-/*	$NetBSD: if_bridgevar.h,v 1.7 2005/06/28 20:09:44 seanb Exp $	*/
+/*	$NetBSD: if_bridgevar.h,v 1.11 2007/07/09 21:11:00 ad Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -71,6 +71,9 @@
 /*
  * Data structure and control definitions for bridge interfaces.
  */
+
+#ifndef _NET_IF_BRIDGEVAR_H_
+#define _NET_IF_BRIDGEVAR_H_
 
 #include <sys/callout.h>
 #include <sys/queue.h>
@@ -146,7 +149,7 @@ struct ifbreq {
 struct ifbifconf {
 	uint32_t	ifbic_len;	/* buffer size */
 	union {
-		caddr_t	ifbicu_buf;
+		void *	ifbicu_buf;
 		struct ifbreq *ifbicu_req;
 	} ifbic_ifbicu;
 #define	ifbic_buf	ifbic_ifbicu.ifbicu_buf
@@ -175,7 +178,7 @@ struct ifbareq {
 struct ifbaconf {
 	uint32_t	ifbac_len;	/* buffer size */
 	union {
-		caddr_t ifbacu_buf;
+		void *ifbacu_buf;
 		struct ifbareq *ifbacu_req;
 	} ifbac_ifbacu;
 #define	ifbac_buf	ifbac_ifbacu.ifbacu_buf
@@ -290,8 +293,8 @@ struct bridge_softc {
 	uint32_t		sc_brtmax;	/* max # of addresses */
 	uint32_t		sc_brtcnt;	/* cur. # of addresses */
 	uint32_t		sc_brttimeout;	/* rt timeout in seconds */
-	struct callout		sc_brcallout;	/* bridge callout */
-	struct callout		sc_bstpcallout;	/* STP callout */
+	callout_t		sc_brcallout;	/* bridge callout */
+	callout_t		sc_bstpcallout;	/* STP callout */
 	LIST_HEAD(, bridge_iflist) sc_iflist;	/* member interface list */
 	LIST_HEAD(, bridge_rtnode) *sc_rthash;	/* our forwarding table */
 	LIST_HEAD(, bridge_rtnode) sc_rtlist;	/* list version of above */
@@ -303,7 +306,7 @@ extern const uint8_t bstp_etheraddr[];
 
 void	bridge_ifdetach(struct ifnet *);
 
-int	bridge_output(struct ifnet *, struct mbuf *, struct sockaddr *,
+int	bridge_output(struct ifnet *, struct mbuf *, const struct sockaddr *,
 	    struct rtentry *);
 struct mbuf *bridge_input(struct ifnet *, struct mbuf *);
 
@@ -315,3 +318,4 @@ void	bridge_enqueue(struct bridge_softc *, struct ifnet *, struct mbuf *,
 	    int);
 
 #endif /* _KERNEL */
+#endif /* !_NET_IF_BRIDGEVAR_H_ */

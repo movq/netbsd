@@ -1,4 +1,4 @@
-/*	$NetBSD: citrus_ctype_template.h,v 1.32 2005/03/05 17:31:03 tnozaki Exp $	*/
+/*	$NetBSD: citrus_ctype_template.h,v 1.35 2008/02/09 14:56:20 junyoung Exp $	*/
 
 /*-
  * Copyright (c)2002 Citrus Project,
@@ -202,20 +202,20 @@ _FUNCNAME(mbtowc_priv)(_ENCODING_INFO * __restrict ei,
 	_DIAGASSERT(psenc != NULL);
 
 	if (s == NULL) {
+		_FUNCNAME(init_state)(ei, psenc);
 		*nresult = _ENCODING_IS_STATE_DEPENDENT;
 		return (0);
 	}
 
 	state = *psenc;
 	err = _FUNCNAME(mbrtowc_priv)(ei, pwc, (const char **)&s, n, psenc, &nr);
+	if (nr == (size_t)-2)
+		err = EILSEQ;
 	if (err) {
-		*nresult = -1;
-		return (err);
-	}
-	if (nr == (size_t)-2) {
+		/* In error case, we should restore the state. */
 		*psenc = state;
 		*nresult = -1;
-		return (EILSEQ);
+		return (err);
 	}
 
 	*nresult = (int)nr;
@@ -372,7 +372,7 @@ do {									\
 
 int
 _FUNCNAME(ctype_getops)(_citrus_ctype_ops_rec_t *ops, size_t lenops,
-			u_int32_t expected_version)
+			uint32_t expected_version)
 {
 	if (expected_version<_CITRUS_CTYPE_ABI_VERSION || lenops<sizeof(*ops))
 		return (EINVAL);

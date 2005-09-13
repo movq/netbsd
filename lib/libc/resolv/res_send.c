@@ -1,4 +1,4 @@
-/*	$NetBSD: res_send.c,v 1.8 2005/02/09 21:35:46 kleink Exp $	*/
+/*	$NetBSD: res_send.c,v 1.15 2008/06/21 23:37:53 christos Exp $	*/
 
 /*
  * Copyright (c) 1985, 1989, 1993
@@ -54,7 +54,7 @@
  */
 
 /*
- * Copyright (c) 2004 by Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (c) 2005 by Internet Systems Consortium, Inc. ("ISC")
  * Portions Copyright (c) 1996-1999 by Internet Software Consortium.
  *
  * Permission to use, copy, modify, and distribute this software for any
@@ -74,13 +74,14 @@
 #if defined(LIBC_SCCS) && !defined(lint)
 #ifdef notdef
 static const char sccsid[] = "@(#)res_send.c	8.1 (Berkeley) 6/4/93";
-static const char rcsid[] = "Id: res_send.c,v 1.5.2.2.4.5 2004/08/10 02:19:56 marka Exp";
+static const char rcsid[] = "Id: res_send.c,v 1.18.10.1 2008/01/27 02:06:46 marka Exp";
 #else
-__RCSID("$NetBSD: res_send.c,v 1.8 2005/02/09 21:35:46 kleink Exp $");
+__RCSID("$NetBSD: res_send.c,v 1.15 2008/06/21 23:37:53 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
-/*
+/*! \file
+ * \brief
  * Send query to name server and wait for reply.
  */
 
@@ -120,14 +121,28 @@ __weak_alias(res_nsend,__res_nsend)
 #endif
 #endif
 
+
+#ifdef USE_POLL
+#ifdef HAVE_STROPTS_H
+#include <stropts.h>
+#endif
+#include <poll.h>
+#endif /* USE_POLL */
+
 /* Options.  Leave them on. */
+#ifndef DEBUG
 #define DEBUG
+#endif
 #include "res_debug.h"
 #include "res_private.h"
 
 #define EXT(res) ((res)->_u._ext)
 
+#ifndef USE_POLL
 static const int highestFD = FD_SETSIZE - 1;
+#else
+static int highestFD = 0;
+#endif
 
 /* Forward. */
 
@@ -136,13 +151,13 @@ static struct sockaddr * get_nsaddr __P((res_state, size_t));
 static int		send_vc(res_state, const u_char *, int,
 				u_char *, int, int *, int);
 static int		send_dg(res_state, const u_char *, int,
-				u_char *, int, int *, int,
+				u_char *, int, int *, int, int,
 				int *, int *);
 static void		Aerror(const res_state, FILE *, const char *, int,
 			       const struct sockaddr *, int);
 static void		Perror(const res_state, FILE *, const char *, int);
 static int		sock_eq(struct sockaddr *, struct sockaddr *);
-#ifdef NEED_PSELECT
+#if defined(NEED_PSELECT) && !defined(USE_POLL)
 static int		pselect(int, void *, void *, void *,
 				struct timespec *,
 				const sigset_t *);
@@ -153,14 +168,15 @@ static const int niflags = NI_NUMERICHOST | NI_NUMERICSERV;
 
 /* Public. */
 
-/* int
- * res_isourserver(ina)
+/*%
  *	looks up "ina" in _res.ns_addr_list[]
+ *
  * returns:
- *	0  : not found
- *	>0 : found
+ *\li	0  : not found
+ *\li	>0 : found
+ *
  * author:
- *	paul vixie, 29may94
+ *\li	paul vixie, 29may94
  */
 int
 res_ourserver_p(const res_state statp, const struct sockaddr *sa) {
@@ -203,17 +219,19 @@ res_ourserver_p(const res_state statp, const struct sockaddr *sa) {
 	return (0);
 }
 
-/* int
- * res_nameinquery(name, type, class, buf, eom)
+/*%
  *	look for (name,type,class) in the query section of packet (buf,eom)
+ *
  * requires:
- *	buf + HFIXEDSZ <= eom
+ *\li	buf + HFIXEDSZ <= eom
+ *
  * returns:
- *	-1 : format error
- *	0  : not found
- *	>0 : found
+ *\li	-1 : format error
+ *\li	0  : not found
+ *\li	>0 : found
+ *
  * author:
- *	paul vixie, 29may94
+ *\li	paul vixie, 29may94
  */
 int
 res_nameinquery(const char *name, int type, int class,
@@ -241,16 +259,17 @@ res_nameinquery(const char *name, int type, int class,
 	return (0);
 }
 
-/* int
- * res_queriesmatch(buf1, eom1, buf2, eom2)
+/*%
  *	is there a 1:1 mapping of (name,type,class)
  *	in (buf1,eom1) and (buf2,eom2)?
+ *
  * returns:
- *	-1 : format error
- *	0  : not a 1:1 mapping
- *	>0 : is a 1:1 mapping
+ *\li	-1 : format error
+ *\li	0  : not a 1:1 mapping
+ *\li	>0 : is a 1:1 mapping
+ *
  * author:
- *	paul vixie, 29may94
+ *\li	paul vixie, 29may94
  */
 int
 res_queriesmatch(const u_char *buf1, const u_char *eom1,
@@ -294,10 +313,15 @@ int
 res_nsend(res_state statp,
 	  const u_char *buf, int buflen, u_char *ans, int anssiz)
 {
-	int gotsomewhere, terrno, try, v_circuit, resplen, ns, n;
+	int gotsomewhere, terrno, tries, v_circuit, resplen, ns, n;
 	char abuf[NI_MAXHOST];
 
-	if (statp->nscount == 0) {
+#ifdef USE_POLL
+	highestFD = sysconf(_SC_OPEN_MAX) - 1;
+#endif
+
+	/* No name servers or res_init() failure */
+	if (statp->nscount == 0 || EXT(statp).ext == NULL) {
 		errno = ESRCH;
 		return (-1);
 	}
@@ -401,7 +425,7 @@ res_nsend(res_state statp,
 	/*
 	 * Send request, RETRY times, or until successful.
 	 */
-	for (try = 0; try < statp->retry; try++) {
+	for (tries = 0; tries < statp->retry; tries++) {
 	    for (ns = 0; ns < statp->nscount; ns++) {
 		struct sockaddr *nsap;
 		int nsaplen;
@@ -449,7 +473,7 @@ res_nsend(res_state statp,
 
 		if (v_circuit) {
 			/* Use VC; at most one attempt per server. */
-			try = statp->retry;
+			tries = statp->retry;
 			n = send_vc(statp, buf, buflen, ans, anssiz, &terrno,
 				    ns);
 			if (n < 0)
@@ -460,7 +484,7 @@ res_nsend(res_state statp,
 		} else {
 			/* Use datagrams. */
 			n = send_dg(statp, buf, buflen, ans, anssiz, &terrno,
-				    ns, &v_circuit, &gotsomewhere);
+				    ns, tries, &v_circuit, &gotsomewhere);
 			if (n < 0)
 				goto fail;
 			if (n == 0)
@@ -525,9 +549,9 @@ res_nsend(res_state statp,
 	res_nclose(statp);
 	if (!v_circuit) {
 		if (!gotsomewhere)
-			errno = ECONNREFUSED;	/* no nameservers found */
+			errno = ECONNREFUSED;	/*%< no nameservers found */
 		else
-			errno = ETIMEDOUT;	/* no answer obtained */
+			errno = ETIMEDOUT;	/*%< no answer obtained */
 	} else
 		errno = terrno;
 	return (-1);
@@ -554,10 +578,10 @@ get_salen(sa)
 	else if (sa->sa_family == AF_INET6)
 		return (sizeof(struct sockaddr_in6));
 	else
-		return (0);	/* unknown, die on connect */
+		return (0);	/*%< unknown, die on connect */
 }
 
-/*
+/*%
  * pick appropriate nsaddr_list for use.  see res_init() for initialization.
  */
 static struct sockaddr *
@@ -597,6 +621,9 @@ send_vc(res_state statp,
 	u_short len;
 	u_char *cp;
 	void *tmp;
+#ifdef SO_NOSIGPIPE
+	int on = 1;
+#endif
 
 	nsap = get_nsaddr(statp, (size_t)ns);
 	nsaplen = get_salen(nsap);
@@ -642,6 +669,17 @@ send_vc(res_state statp,
 				return (-1);
 			}
 		}
+#ifdef SO_NOSIGPIPE
+		/*
+		 * Disable generation of SIGPIPE when writing to a closed
+		 * socket.  Write should return -1 and set errno to EPIPE
+		 * instead. 
+		 *
+		 * Push on even if setsockopt(SO_NOSIGPIPE) fails.
+		 */
+		(void)setsockopt(statp->_vcsock, SOL_SOCKET, SO_NOSIGPIPE, &on,
+			         sizeof(on));
+#endif
 		errno = 0;
 		if (connect(statp->_vcsock, nsap, (socklen_t)nsaplen) < 0) {
 			*terrno = errno;
@@ -768,19 +806,24 @@ send_vc(res_state statp,
 }
 
 static int
-send_dg(res_state statp,
-	const u_char *buf, int buflen, u_char *ans, int anssiz,
-	int *terrno, int ns, int *v_circuit, int *gotsomewhere)
+send_dg(res_state statp, const u_char *buf, int buflen, u_char *ans,
+	int anssiz, int *terrno, int ns, int tries, int *v_circuit,
+	int *gotsomewhere)
 {
 	const HEADER *hp = (const HEADER *)(const void *)buf;
 	HEADER *anhp = (HEADER *)(void *)ans;
 	const struct sockaddr *nsap;
 	int nsaplen;
 	struct timespec now, timeout, finish;
-	fd_set dsmask;
 	struct sockaddr_storage from;
 	ISC_SOCKLEN_T fromlen;
 	int resplen, seconds, n, s;
+#ifdef USE_POLL
+	int     polltimeout;
+	struct pollfd   pollfd;
+#else
+	fd_set dsmask;
+#endif
 
 	nsap = get_nsaddr(statp, (size_t)ns);
 	nsaplen = get_salen(nsap);
@@ -846,7 +889,7 @@ send_dg(res_state statp,
 	/*
 	 * Wait for reply.
 	 */
-	seconds = (statp->retrans << ns);
+	seconds = (statp->retrans << tries);
 	if (ns > 0)
 		seconds /= statp->nscount;
 	if (seconds <= 0)
@@ -858,6 +901,7 @@ send_dg(res_state statp,
  wait:
 	now = evNowTime();
  nonow:
+#ifndef USE_POLL
 	FD_ZERO(&dsmask);
 	FD_SET(s, &dsmask);
 	if (evCmpTime(finish, now) > 0)
@@ -865,6 +909,17 @@ send_dg(res_state statp,
 	else
 		timeout = evConsTime(0L, 0L);
 	n = pselect(s + 1, &dsmask, NULL, NULL, &timeout, NULL);
+#else
+	timeout = evSubTime(finish, now);
+	if (timeout.tv_sec < 0)
+		timeout = evConsTime(0L, 0L);
+	polltimeout = 1000*timeout.tv_sec +
+		timeout.tv_nsec/1000000;
+	pollfd.fd = s;
+	pollfd.events = POLLRDNORM;
+	n = poll(&pollfd, 1, polltimeout);
+#endif /* USE_POLL */
+
 	if (n == 0) {
 		Dprint(statp->options & RES_DEBUG, (stdout, ";; timeout\n"));
 		*gotsomewhere = 1;
@@ -873,7 +928,11 @@ send_dg(res_state statp,
 	if (n < 0) {
 		if (errno == EINTR)
 			goto wait;
+#ifndef USE_POLL
 		Perror(statp, stderr, "select", errno);
+#else
+		Perror(statp, stderr, "poll", errno);
+#endif /* USE_POLL */
 		res_nclose(statp);
 		return (0);
 	}
@@ -1042,7 +1101,7 @@ sock_eq(struct sockaddr *a, struct sockaddr *b) {
 	}
 }
 
-#ifdef NEED_PSELECT
+#if defined(NEED_PSELECT) && !defined(USE_POLL)
 /* XXX needs to move to the porting library. */
 static int
 pselect(int nfds, void *rfds, void *wfds, void *efds,

@@ -1,4 +1,4 @@
-/*	$NetBSD: dump.c,v 1.23 2005/08/19 02:09:22 christos Exp $	*/
+/*	$NetBSD: dump.c,v 1.31 2008/12/29 21:30:51 christos Exp $	*/
 
 /*-
  * Copyright (c) 1988, 1993
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1988, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1988, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)kdump.c	8.4 (Berkeley) 4/28/95";
 #endif
-__RCSID("$NetBSD: dump.c,v 1.23 2005/08/19 02:09:22 christos Exp $");
+__RCSID("$NetBSD: dump.c,v 1.31 2008/12/29 21:30:51 christos Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -183,9 +183,9 @@ getrecord(FILE *fp)
 		return (NULL);
 	}
 
+	if (kth->ktr_len < 0)
+		errx(EXIT_FAILURE, "bogus length 0x%x", kth->ktr_len);
 	len = kth->ktr_len;
-	if (len < 0)
-		errx(EXIT_FAILURE, "bogus length 0x%lx", (long)len);
 	if (len > 0) {
 		/* + 1 to ensure room for NUL terminate */
 		kte = xrealloc(kte, &siz, sizeof(struct ktr_entry) + len + 1);
@@ -198,11 +198,12 @@ getrecord(FILE *fp)
 	return (kte);
 }
 
-/* XXX: lwp. */
 #define	KTE_TYPE(kte)		((kte)->kte_kth.ktr_type)
 #define	KTE_PID(kte)		((kte)->kte_kth.ktr_pid)
-#define	KTE_MATCH(kte, type, pid)				\
-	(KTE_TYPE(kte) == (type) && KTE_PID(kte) == (pid))
+#define	KTE_LID(kte)		((kte)->kte_kth.ktr_lid)
+#define	KTE_MATCH(kte, type, pid, lid)				\
+	(KTE_TYPE(kte) == (type) && KTE_PID(kte) == (pid) &&	\
+	KTE_LID(kte) == (lid))
 
 void
 putpendq(struct ktr_entry *kte)
@@ -230,13 +231,13 @@ struct ktr_entry *
 getpendq(struct ktr_header *us, int type, struct kteq *kteq)
 {
 	struct ktr_entry *kte, *kte_next;
-	int pid = us->ktr_pid;
+	int pid = us->ktr_pid, lid = us->ktr_lid;
 
 	if (kteq != NULL)
 		TAILQ_INIT(kteq);
 	for (kte = TAILQ_FIRST(&ktependq); kte != NULL; kte = kte_next) {
 		kte_next = TAILQ_NEXT(kte, kte_list);
-		if (KTE_MATCH(kte, type, pid)) {
+		if (KTE_MATCH(kte, type, pid, lid)) {
 			TAILQ_REMOVE(&ktependq, kte, kte_list);
 			if (kteq != NULL)
 				TAILQ_INSERT_TAIL(kteq, kte, kte_list);
@@ -341,19 +342,46 @@ fread_tail(void *buf, int size, int num, FILE *fp)
 void
 dumpheader(struct ktr_header *kth)
 {
-	static struct timeval prevtime;
-	struct timeval temp;
+	union timeholder {
+		struct timeval tv;
+		struct timespec ts;
+	};
+	static union timeholder prevtime;
+	union timeholder temp;
 
-	wprintf("%6d %-8.*s ", kth->ktr_pid, MAXCOMLEN, kth->ktr_comm);
-
+	wprintf("%6d ", kth->ktr_pid);
+	if (kth->ktr_version > KTRFACv0)
+		wprintf("%6d ", kth->ktr_lid);
+	wprintf("%-8.*s ", MAXCOMLEN, kth->ktr_comm);
 	if (timestamp) {
 		if (timestamp == 2) {
-			timersub(&kth->ktr_time, &prevtime, &temp);
-			prevtime = kth->ktr_time;
-		} else
-			temp = kth->ktr_time;
-		wprintf("%ld.%06ld ",
-		    (long int)temp.tv_sec, (long int)temp.tv_usec);
+			if (kth->ktr_version == KTRFACv0) {
+				if (prevtime.tv.tv_sec == 0)
+					temp.tv.tv_sec = temp.tv.tv_usec = 0;
+				else
+					timersub(&kth->ktr_tv,
+					    &prevtime.tv, &temp.tv);
+				prevtime.tv = kth->ktr_tv;
+			} else {
+				if (prevtime.ts.tv_sec == 0)
+					temp.ts.tv_sec = temp.ts.tv_nsec = 0;
+				else
+					timespecsub(&kth->ktr_time,
+					    &prevtime.ts, &temp.ts);
+				prevtime.ts = kth->ktr_time;
+			}
+		} else {
+			if (kth->ktr_version == KTRFACv0)
+				temp.tv = kth->ktr_tv;
+			else
+				temp.ts = kth->ktr_time;
+		}
+		if (kth->ktr_version == KTRFACv0)
+			wprintf("%ld.%06ld ",
+			    (long)temp.tv.tv_sec, (long)temp.tv.tv_usec);
+		else
+			wprintf("%ld.%09ld ",
+			    (long)temp.ts.tv_sec, (long)temp.ts.tv_nsec);
 	}
 }
 
@@ -473,7 +501,7 @@ syscallprint(struct ktr_header *kth)
 	case SYS_utimes:
 	case SYS_quotactl:
 	case SYS_statvfs1:
-	case SYS_getfh:
+	case SYS_compat_30_getfh:
 	case SYS_pathconf:
 	case SYS_truncate:
 	case SYS_undelete:
@@ -486,6 +514,7 @@ syscallprint(struct ktr_header *kth)
 	case SYS___posix_chown:
 	case SYS___posix_lchown:
 	case SYS_lchflags:
+	case SYS___getfh30:
 		nameiargprint("(", kth, &ap, &argsize);
 
 		/*
@@ -517,7 +546,7 @@ syscallprint(struct ktr_header *kth)
 		break;
 
 	case SYS_ptrace :
-		if (*ap >= 0 &&
+		if ((long)*ap >= 0 &&
 		    *ap < sizeof(ptrace_ops) / sizeof(ptrace_ops[0]))
 			wprintf("(%s", ptrace_ops[*ap]);
 		else
@@ -601,13 +630,13 @@ ktrsysret(struct ktr_entry *kte)
 
 	/* Print syscall name and arguments. */
 	syscall_ent = getpendq(kth, KTR_SYSCALL, NULL);
-	if (syscall_ent == NULL)
+	if (syscall_ent == NULL) {
 		/*
 		 * Possibilly a child of fork/vfork, or tracing of
 		 * process started during system call.
 		 */
 		syscallnameprint(ktr->ktr_code);
-	else {
+	} else {
 		syscallprint(&syscall_ent->kte_kth);
 		free(syscall_ent);
 	}
@@ -621,7 +650,9 @@ ktrsysret(struct ktr_entry *kte)
 		free(genio);
 	}
 
+#if 0 /* Why? */
 	flushpendq(kte);
+#endif
 	free(kte);
 }
 

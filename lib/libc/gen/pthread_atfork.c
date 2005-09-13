@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread_atfork.c,v 1.5 2005/09/13 01:44:09 christos Exp $	*/
+/*	$NetBSD: pthread_atfork.c,v 1.8 2008/04/28 20:22:59 martin Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: pthread_atfork.c,v 1.5 2005/09/13 01:44:09 christos Exp $");
+__RCSID("$NetBSD: pthread_atfork.c,v 1.8 2008/04/28 20:22:59 martin Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -67,12 +60,31 @@ struct atfork_callback {
  * since the intended use of the functions is obtaining locks to hold
  * across the fork, forking is going to be serialized anyway.
  */
+static struct atfork_callback atfork_builtin;
 static mutex_t atfork_lock = MUTEX_INITIALIZER;
 SIMPLEQ_HEAD(atfork_callback_q, atfork_callback);
 
 static struct atfork_callback_q prepareq = SIMPLEQ_HEAD_INITIALIZER(prepareq);
 static struct atfork_callback_q parentq = SIMPLEQ_HEAD_INITIALIZER(parentq);
 static struct atfork_callback_q childq = SIMPLEQ_HEAD_INITIALIZER(childq);
+
+static struct atfork_callback *
+af_alloc(void)
+{
+
+	if (atfork_builtin.fn == NULL)
+		return &atfork_builtin;
+
+	return malloc(sizeof(atfork_builtin));
+}
+
+static void
+af_free(struct atfork_callback *af)
+{
+
+	if (af != &atfork_builtin)
+		free(af);
+}
 
 int
 pthread_atfork(void (*prepare)(void), void (*parent)(void),
@@ -82,36 +94,40 @@ pthread_atfork(void (*prepare)(void), void (*parent)(void),
 
 	newprepare = newparent = newchild = NULL;
 
+	mutex_lock(&atfork_lock);
 	if (prepare != NULL) {
-		newprepare = malloc(sizeof(struct atfork_callback));
-		if (newprepare == NULL)
+		newprepare = af_alloc();
+		if (newprepare == NULL) {
+			mutex_unlock(&atfork_lock);
 			return ENOMEM;
+		}
 		newprepare->fn = prepare;
 	}
 
 	if (parent != NULL) {
-		newparent = malloc(sizeof(struct atfork_callback));
+		newparent = af_alloc();
 		if (newparent == NULL) {
 			if (newprepare != NULL)
-				free(newprepare);
+				af_free(newprepare);
+			mutex_unlock(&atfork_lock);
 			return ENOMEM;
 		}
 		newparent->fn = parent;
 	}
 
 	if (child != NULL) {
-		newchild = malloc(sizeof(struct atfork_callback));
+		newchild = af_alloc();
 		if (newchild == NULL) {
 			if (newprepare != NULL)
-				free(newprepare);
+				af_free(newprepare);
 			if (newparent != NULL)
-				free(newparent);
+				af_free(newparent);
+			mutex_unlock(&atfork_lock);
 			return ENOMEM;
 		}
 		newchild->fn = child;
 	}
 
-	mutex_lock(&atfork_lock);
 	/*
 	 * The order in which the functions are called is specified as
 	 * LIFO for the prepare handler and FIFO for the others; insert
@@ -137,7 +153,7 @@ fork(void)
 
 	mutex_lock(&atfork_lock);
 	SIMPLEQ_FOREACH(iter, &prepareq, next)
-	    (*iter->fn)();
+		(*iter->fn)();
 
 	ret = __fork();
 
@@ -147,12 +163,12 @@ fork(void)
 		 * the fork call succeeded or failed.
 		 */
 		SIMPLEQ_FOREACH(iter, &parentq, next)
-		    (*iter->fn)();
+			(*iter->fn)();
 		mutex_unlock(&atfork_lock);
 	} else {
 		/* We are the child */
 		SIMPLEQ_FOREACH(iter, &childq, next)
-		    (*iter->fn)();
+			(*iter->fn)();
 		/*
 		 * Note: We are explicitly *not* unlocking
 		 * atfork_lock.  Unlocking atfork_lock is problematic,

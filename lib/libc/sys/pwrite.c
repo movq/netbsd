@@ -1,4 +1,4 @@
-/*	$NetBSD: pwrite.c,v 1.7 2003/08/07 16:44:04 agc Exp $	*/
+/*	$NetBSD: pwrite.c,v 1.9 2007/11/22 21:11:32 dsl Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: pwrite.c,v 1.7 2003/08/07 16:44:04 agc Exp $");
+__RCSID("$NetBSD: pwrite.c,v 1.9 2007/11/22 21:11:32 dsl Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -43,28 +43,20 @@ __RCSID("$NetBSD: pwrite.c,v 1.7 2003/08/07 16:44:04 agc Exp $");
 __weak_alias(pwrite,_sys_pwrite)
 __weak_alias(_pwrite,_sys_pwrite)
 #endif
+#ifdef __lint__
+#define _sys_pwrite pwrite
+#endif
 
-ssize_t	 _sys_pwrite __P((int, const void *, size_t, off_t));
+ssize_t	 _sys_pwrite(int, const void *, size_t, off_t);
+ssize_t	 __pwrite(int, const void *, size_t, int, off_t);
 
 /*
  * This function provides 64-bit offset padding that
  * is not supplied by GCC 1.X but is supplied by GCC 2.X.
  */
 ssize_t
-_sys_pwrite(fd, buf, nbyte, offset)
-	int fd;
-	const void *buf;
-	size_t nbyte;
-	off_t offset;
+_sys_pwrite(int fd, const void *buf, size_t nbyte, off_t offset)
 {
-	quad_t q;
-	int rv;
 
-	q = __syscall((quad_t)SYS_pwrite, fd, buf, nbyte, 0, offset);
-	if (/* LINTED constant */ sizeof (quad_t) == sizeof (register_t) ||
-	    /* LINTED constant */ BYTE_ORDER == LITTLE_ENDIAN)
-		rv = (int)q;
-	else
-		rv = (int)((u_quad_t)q >> 32);
-	return rv;
+	return __pwrite(fd, buf, nbyte, 0, offset);
 }

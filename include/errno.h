@@ -1,4 +1,4 @@
-/*	$NetBSD: errno.h,v 1.7 2005/02/03 04:39:32 perry Exp $	*/
+/*	$NetBSD: errno.h,v 1.11 2008/03/03 06:57:48 dholland Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -44,14 +44,22 @@
 #include <sys/featuretest.h>
 
 __BEGIN_DECLS
-#ifndef errno
+
+/* note: this appears in both errno.h and signal.h */
+#ifndef __errno
 int *__errno(void);
+#define __errno __errno
+#endif
+
+#ifndef errno
 #define errno (*__errno())
 #endif
 
 #if defined(_NETBSD_SOURCE)
-extern __const int sys_nerr __RENAME(__sys_nerr14);
-extern __const char *__const *sys_errlist __RENAME(__sys_errlist14);
+#ifndef __LIBC12_SOURCE__
+extern const int sys_nerr __RENAME(__sys_nerr14);
+extern const char *const *sys_errlist __RENAME(__sys_errlist14);
+#endif
 #endif
 __END_DECLS
 

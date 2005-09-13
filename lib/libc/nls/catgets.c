@@ -1,4 +1,4 @@
-/*	$NetBSD: catgets.c,v 1.16 2005/06/12 05:21:27 lukem Exp $	*/
+/*	$NetBSD: catgets.c,v 1.18 2008/04/28 20:23:00 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: catgets.c,v 1.16 2005/06/12 05:21:27 lukem Exp $");
+__RCSID("$NetBSD: catgets.c,v 1.18 2008/04/28 20:23:00 martin Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #define _NLS_PRIVATE
@@ -67,8 +60,7 @@ _catgets(catd, set_id, msg_id, s)
 
 	if (catd == (nl_catd) -1) {
 		errno = EBADF;
-		/* LINTED interface problem */
-		return (char *) s;
+		return __UNCONST(s);
 	}
 
 	cat_hdr = (struct _nls_cat_hdr *)catd->__data; 
@@ -121,6 +113,5 @@ _catgets(catd, set_id, msg_id, s)
 notfound:
 	/* not found */
 	errno = ENOMSG;
-	/* LINTED interface problem */
-	return (char *) s;
+	return __UNCONST(s);
 }

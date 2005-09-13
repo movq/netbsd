@@ -1,4 +1,4 @@
-/*	$NetBSD: setemul.c,v 1.20 2005/01/15 17:55:38 jdolecek Exp $	*/
+/*	$NetBSD: setemul.c,v 1.26 2008/04/28 20:24:13 martin Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -69,7 +62,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: setemul.c,v 1.20 2005/01/15 17:55:38 jdolecek Exp $");
+__RCSID("$NetBSD: setemul.c,v 1.26 2008/04/28 20:24:13 martin Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -90,10 +83,10 @@ __RCSID("$NetBSD: setemul.c,v 1.20 2005/01/15 17:55:38 jdolecek Exp $");
 
 #include "../../sys/compat/netbsd32/netbsd32_syscall.h"
 #include "../../sys/compat/freebsd/freebsd_syscall.h"
-#include "../../sys/compat/hpux/hpux_syscall.h"
 #include "../../sys/compat/ibcs2/ibcs2_syscall.h"
 #include "../../sys/compat/irix/irix_syscall.h"
 #include "../../sys/compat/linux/linux_syscall.h"
+#include "../../sys/compat/linux32/linux32_syscall.h"
 #include "../../sys/compat/mach/mach_syscall.h"
 #include "../../sys/compat/darwin/darwin_syscall.h"
 #include "../../sys/compat/mach/arch/powerpc/ppccalls/mach_ppccalls_syscall.h"
@@ -104,16 +97,19 @@ __RCSID("$NetBSD: setemul.c,v 1.20 2005/01/15 17:55:38 jdolecek Exp $");
 #include "../../sys/compat/svr4/svr4_syscall.h"
 #include "../../sys/compat/svr4_32/svr4_32_syscall.h"
 #include "../../sys/compat/ultrix/ultrix_syscall.h"
+#ifdef __m68k__
+#include "../../sys/compat/aoutm68k/aoutm68k_syscall.h"
+#endif
 
 #define KTRACE
 #include "../../sys/kern/syscalls.c"
 
 #include "../../sys/compat/netbsd32/netbsd32_syscalls.c"
 #include "../../sys/compat/freebsd/freebsd_syscalls.c"
-#include "../../sys/compat/hpux/hpux_syscalls.c"
 #include "../../sys/compat/ibcs2/ibcs2_syscalls.c"
 #include "../../sys/compat/irix/irix_syscalls.c"
 #include "../../sys/compat/linux/linux_syscalls.c"
+#include "../../sys/compat/linux32/linux32_syscalls.c"
 #include "../../sys/compat/darwin/darwin_syscalls.c"
 #include "../../sys/compat/mach/mach_syscalls.c"
 #include "../../sys/compat/mach/arch/powerpc/ppccalls/mach_ppccalls_syscalls.c"
@@ -124,8 +120,10 @@ __RCSID("$NetBSD: setemul.c,v 1.20 2005/01/15 17:55:38 jdolecek Exp $");
 #include "../../sys/compat/svr4/svr4_syscalls.c"
 #include "../../sys/compat/svr4_32/svr4_32_syscalls.c"
 #include "../../sys/compat/ultrix/ultrix_syscalls.c"
+#ifdef __m68k__
+#include "../../sys/compat/aoutm68k/aoutm68k_syscalls.c"
+#endif
 
-#include "../../sys/compat/hpux/hpux_errno.c"
 #include "../../sys/compat/svr4/svr4_errno.c"
 #include "../../sys/compat/ibcs2/ibcs2_errno.c"
 #include "../../sys/compat/irix/irix_errno.c"
@@ -134,7 +132,6 @@ __RCSID("$NetBSD: setemul.c,v 1.20 2005/01/15 17:55:38 jdolecek Exp $");
 #undef KTRACE
 
 #define SIGRTMIN	33	/* XXX */
-#include "../../sys/compat/hpux/hpux_signo.c"
 #include "../../sys/compat/svr4/svr4_signo.c"
 #include "../../sys/compat/ibcs2/ibcs2_signo.c"
 /* irix uses svr4 */
@@ -162,10 +159,6 @@ const struct emulation emulations[] = {
 	  NULL,				0,
 	  NULL,				0,	0 },
 
-	{ "hpux",	hpux_syscallnames,	HPUX_SYS_MAXSYSCALL,
-	  native_to_hpux_errno,		NELEM(native_to_hpux_errno),
-	  hpux_to_native_signo,		NSIG,	0 },
-
 	{ "ibcs2",	ibcs2_syscallnames,	IBCS2_SYS_MAXSYSCALL,
 	  native_to_ibcs2_errno,	NELEM(native_to_ibcs2_errno),
 	  ibcs2_to_native_signo,	NSIG,	0 },
@@ -181,6 +174,10 @@ const struct emulation emulations[] = {
 	{ "linux",	linux_syscallnames,	LINUX_SYS_MAXSYSCALL,
 	  native_to_linux_errno,	NELEM(native_to_linux_errno),
 	  linux_to_native_signo,	NSIG,	0 },
+
+	{ "linux32",	linux32_syscallnames,	LINUX32_SYS_MAXSYSCALL,
+	  native_to_linux_errno,	NELEM(native_to_linux_errno),
+	  linux_to_native_signo,	NSIG,	EMUL_FLAG_NETBSD32 },
 
 	{ "darwin",	darwin_syscallnames,	DARWIN_SYS_MAXSYSCALL,
 	  NULL,				0,
@@ -227,6 +224,12 @@ const struct emulation emulations[] = {
 	{ "pecoff",	syscallnames,		SYS_MAXSYSCALL,
 	  NULL,				0,
 	  NULL,				0,	0 },
+
+#ifdef __m68k__
+	{ "aoutm68k",	aoutm68k_syscallnames,	AOUTM68K_SYS_MAXSYSCALL,
+	  NULL,				0,
+	  NULL,				0,	0 },
+#endif
 
 	{ NULL,		NULL,			0,
 	  NULL,				0,
@@ -398,7 +401,7 @@ mach_traps_dispatch(int *code, const struct emulation **emul)
 		return 1;
 
 	default:
-		if (*code < 0) {
+		if (*code < 0 && *code > -MACH_SYS_MAXSYSCALL) {
 			*emul = mach;
 			*code = -*code;
 			return 1;

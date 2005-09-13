@@ -1,4 +1,4 @@
-/*	$NetBSD: citrus_module.c,v 1.4 2004/12/21 09:00:01 yamt Exp $	*/
+/*	$NetBSD: citrus_module.c,v 1.7 2008/06/14 16:01:07 tnozaki Exp $	*/
 
 /*-
  * Copyright (c)1999, 2000, 2001, 2002 Citrus Project,
@@ -41,13 +41,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -96,7 +89,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: citrus_module.c,v 1.4 2004/12/21 09:00:01 yamt Exp $");
+__RCSID("$NetBSD: citrus_module.c,v 1.7 2008/06/14 16:01:07 tnozaki Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <assert.h>
@@ -106,7 +99,6 @@ __RCSID("$NetBSD: citrus_module.c,v 1.4 2004/12/21 09:00:01 yamt Exp $");
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <locale.h>
 #include <stddef.h>
 #include <paths.h>
 #include "citrus_module.h"
@@ -121,7 +113,7 @@ static int _getdewey(int [], char *);
 static int _cmpndewey(int [], int, int [], int);
 static const char *_findshlib(char *, int *, int *);
 
-static char *_pathI18nModule = NULL;
+static const char *_pathI18nModule = NULL;
 
 /* from libexec/ld.aout_so/shlib.c */
 #undef major
