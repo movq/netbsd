@@ -1,4 +1,4 @@
-/*	$NetBSD: bt_split.c,v 1.13 2003/08/07 16:42:41 agc Exp $	*/
+/*	$NetBSD: bt_split.c,v 1.17 2008/09/11 12:58:00 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -32,18 +32,17 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-#if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)bt_split.c	8.9 (Berkeley) 7/26/94";
-#else
-__RCSID("$NetBSD: bt_split.c,v 1.13 2003/08/07 16:42:41 agc Exp $");
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
 #endif
-#endif /* LIBC_SCCS and not lint */
+
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: bt_split.c,v 1.17 2008/09/11 12:58:00 joerg Exp $");
 
 #include "namespace.h"
 #include <sys/types.h>
 
+#include <assert.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -52,19 +51,16 @@ __RCSID("$NetBSD: bt_split.c,v 1.13 2003/08/07 16:42:41 agc Exp $");
 #include <db.h>
 #include "btree.h"
 
-static int	 bt_broot __P((BTREE *, PAGE *, PAGE *, PAGE *));
-static PAGE	*bt_page
-		    __P((BTREE *, PAGE *, PAGE **, PAGE **, indx_t *, size_t));
-static int	 bt_preserve __P((BTREE *, pgno_t));
-static PAGE	*bt_psplit
-		    __P((BTREE *, PAGE *, PAGE *, PAGE *, indx_t *, size_t));
-static PAGE	*bt_root
-		    __P((BTREE *, PAGE *, PAGE **, PAGE **, indx_t *, size_t));
-static int	 bt_rroot __P((BTREE *, PAGE *, PAGE *, PAGE *));
-static recno_t	 rec_total __P((PAGE *));
+static int	 bt_broot(BTREE *, PAGE *, PAGE *, PAGE *);
+static PAGE	*bt_page(BTREE *, PAGE *, PAGE **, PAGE **, indx_t *, size_t);
+static int	 bt_preserve(BTREE *, pgno_t);
+static PAGE	*bt_psplit(BTREE *, PAGE *, PAGE *, PAGE *, indx_t *, size_t);
+static PAGE	*bt_root(BTREE *, PAGE *, PAGE **, PAGE **, indx_t *, size_t);
+static int	 bt_rroot(BTREE *, PAGE *, PAGE *, PAGE *);
+static recno_t	 rec_total(PAGE *);
 
 #ifdef STATISTICS
-u_long	bt_rootsplit, bt_split, bt_sortsplit, bt_pfxsaved;
+unsigned long	bt_rootsplit, bt_split, bt_sortsplit, bt_pfxsaved;
 #endif
 
 /*
@@ -83,13 +79,8 @@ u_long	bt_rootsplit, bt_split, bt_sortsplit, bt_pfxsaved;
  *	RET_ERROR, RET_SUCCESS
  */
 int
-__bt_split(t, sp, key, data, flags, ilen, argskip)
-	BTREE *t;
-	PAGE *sp;
-	const DBT *key, *data;
-	int flags;
-	size_t ilen;
-	u_int32_t argskip;
+__bt_split(BTREE *t, PAGE *sp, const DBT *key, const DBT *data, int flags,
+    size_t ilen, uint32_t argskip)
 {
 	BINTERNAL *bi = NULL;	/* pacify gcc */
 	BLEAF *bl = NULL, *tbl;	/* pacify gcc */
@@ -97,8 +88,8 @@ __bt_split(t, sp, key, data, flags, ilen, argskip)
 	EPGNO *parent;
 	PAGE *h, *l, *r, *lchild, *rchild;
 	indx_t nxtindex;
-	u_int16_t skip;
-	u_int32_t n, nbytes, nksize = 0; /* pacify gcc */
+	uint16_t skip;
+	uint32_t n, nbytes, nksize = 0; /* pacify gcc */
 	int parentsplit;
 	char *dest;
 
@@ -119,12 +110,14 @@ __bt_split(t, sp, key, data, flags, ilen, argskip)
 	 * Insert the new key/data pair into the leaf page.  (Key inserts
 	 * always cause a leaf page to split first.)
 	 */
-	h->linp[skip] = h->upper -= ilen;
+	_DBFIT(ilen, indx_t);
+	h->upper -= (indx_t)ilen;
+	h->linp[skip] = h->upper;
 	dest = (char *)(void *)h + h->upper;
 	if (F_ISSET(t, R_RECNO))
-		WR_RLEAF(dest, data, flags)
+		WR_RLEAF(dest, data, flags);
 	else
-		WR_BLEAF(dest, key, data, flags)
+		WR_BLEAF(dest, key, data, flags);
 
 	/* If the root page was split, make it look right. */
 	if (sp->pgno == P_ROOT &&
@@ -193,12 +186,15 @@ __bt_split(t, sp, key, data, flags, ilen, argskip)
 			nbytes = NBINTERNAL(bl->ksize);
 			if (t->bt_pfx && !(bl->flags & P_BIGKEY) &&
 			    (h->prevpg != P_INVALID || skip > 1)) {
+				size_t temp;
 				tbl = GETBLEAF(lchild, NEXTINDEX(lchild) - 1);
 				a.size = tbl->ksize;
 				a.data = tbl->bytes;
 				b.size = bl->ksize;
 				b.data = bl->bytes;
-				nksize = t->bt_pfx(&a, &b);
+				temp = t->bt_pfx(&a, &b);
+				_DBFIT(temp, uint32_t);
+				nksize = (uint32_t)temp;
 				n = NBINTERNAL(nksize);
 				if (n < nbytes) {
 #ifdef STATISTICS
@@ -346,11 +342,7 @@ err2:	mpool_put(t->bt_mp, l, 0);
  *	Pointer to page in which to insert or NULL on error.
  */
 static PAGE *
-bt_page(t, h, lp, rp, skip, ilen)
-	BTREE *t;
-	PAGE *h, **lp, **rp;
-	indx_t *skip;
-	size_t ilen;
+bt_page(BTREE *t, PAGE *h, PAGE **lp, PAGE **rp, indx_t *skip, size_t ilen)
 {
 	PAGE *l, *r, *tp;
 	pgno_t npg;
@@ -451,11 +443,7 @@ bt_page(t, h, lp, rp, skip, ilen)
  *	Pointer to page in which to insert or NULL on error.
  */
 static PAGE *
-bt_root(t, h, lp, rp, skip, ilen)
-	BTREE *t;
-	PAGE *h, **lp, **rp;
-	indx_t *skip;
-	size_t ilen;
+bt_root(BTREE *t, PAGE *h, PAGE **lp, PAGE **rp, indx_t *skip, size_t ilen)
 {
 	PAGE *l, *r, *tp;
 	pgno_t lnpg, rnpg;
@@ -498,14 +486,19 @@ bt_root(t, h, lp, rp, skip, ilen)
  *	RET_ERROR, RET_SUCCESS
  */
 static int
-bt_rroot(t, h, l, r)
-	BTREE *t;
-	PAGE *h, *l, *r;
+bt_rroot(BTREE *t, PAGE *h, PAGE *l, PAGE *r)
 {
 	char *dest;
+	uint32_t sz;
+	size_t temp;
+
+	temp = t->bt_psize - NRINTERNAL;
+	_DBFIT(temp, uint32_t);
+	sz = (uint32_t)temp;
 
 	/* Insert the left and right keys, set the header information. */
-	h->linp[0] = h->upper = t->bt_psize - NRINTERNAL;
+	_DBFIT(sz, indx_t);
+	h->linp[0] = h->upper = (indx_t)sz;
 	dest = (char *)(void *)h + h->upper;
 	WR_RINTERNAL(dest,
 	    l->flags & P_RLEAF ? NEXTINDEX(l) : rec_total(l), l->pgno);
@@ -538,13 +531,11 @@ bt_rroot(t, h, l, r)
  *	RET_ERROR, RET_SUCCESS
  */
 static int
-bt_broot(t, h, l, r)
-	BTREE *t;
-	PAGE *h, *l, *r;
+bt_broot(BTREE *t, PAGE *h, PAGE *l, PAGE *r)
 {
 	BINTERNAL *bi = NULL;	/* pacify gcc */
 	BLEAF *bl;
-	u_int32_t nbytes;
+	uint32_t nbytes;
 	char *dest;
 
 	/*
@@ -615,11 +606,7 @@ bt_broot(t, h, l, r)
  *	Pointer to page in which to insert.
  */
 static PAGE *
-bt_psplit(t, h, l, r, pskip, ilen)
-	BTREE *t;
-	PAGE *h, *l, *r;
-	indx_t *pskip;
-	size_t ilen;
+bt_psplit(BTREE *t, PAGE *h, PAGE *l, PAGE *r, indx_t *pskip, size_t ilen)
 {
 	BINTERNAL *bi;
 	BLEAF *bl;
@@ -628,7 +615,8 @@ bt_psplit(t, h, l, r, pskip, ilen)
 	PAGE *rval;
 	void *src = NULL;	/* pacify gcc */
 	indx_t full, half, nxt, off, skip, top, used;
-	u_int32_t nbytes;
+	uint32_t nbytes;
+	size_t temp;
 	int bigkeycnt, isbigkey;
 
 	/*
@@ -639,12 +627,15 @@ bt_psplit(t, h, l, r, pskip, ilen)
 	 */
 	bigkeycnt = 0;
 	skip = *pskip;
-	full = t->bt_psize - BTDATAOFF;
+	temp = t->bt_psize - BTDATAOFF;
+	_DBFIT(temp, indx_t);
+	full = (indx_t)temp;
 	half = full / 2;
 	used = 0;
 	for (nxt = off = 0, top = NEXTINDEX(h); nxt < top; ++off) {
 		if (skip == off) {
-			nbytes = ilen;
+			_DBFIT(ilen, uint32_t);
+			nbytes = (uint32_t)ilen;
 			isbigkey = 0;		/* XXX: not really known. */
 		} else
 			switch (h->flags & P_TYPE) {
@@ -692,7 +683,9 @@ bt_psplit(t, h, l, r, pskip, ilen)
 			memmove((char *)(void *)l + l->upper, src, nbytes);
 		}
 
-		used += nbytes + sizeof(indx_t);
+		temp = nbytes + sizeof(indx_t);
+		_DBFIT(temp, indx_t);
+		used += (indx_t)temp;
 		if (used >= half) {
 			if (!isbigkey || bigkeycnt == 3)
 				break;
@@ -705,7 +698,9 @@ bt_psplit(t, h, l, r, pskip, ilen)
 	 * Off is the last offset that's valid for the left page.
 	 * Nxt is the first offset to be placed on the right page.
 	 */
-	l->lower += (off + 1) * sizeof(indx_t);
+	temp = (off + 1) * sizeof(indx_t);
+	_DBFIT(temp, indx_t);
+	l->lower += (indx_t)temp;
 
 	/*
 	 * If splitting the page that the cursor was on, the cursor has to be
@@ -768,7 +763,9 @@ bt_psplit(t, h, l, r, pskip, ilen)
 		r->linp[off] = r->upper -= nbytes;
 		memmove((char *)(void *)r + r->upper, src, nbytes);
 	}
-	r->lower += off * sizeof(indx_t);
+	temp = off * sizeof(indx_t);
+	_DBFIT(temp, indx_t);
+	r->lower += (indx_t)temp;
 
 	/* If the key is being appended to the page, adjust the index. */
 	if (skip == top)
@@ -793,9 +790,7 @@ bt_psplit(t, h, l, r, pskip, ilen)
  *	RET_SUCCESS, RET_ERROR.
  */
 static int
-bt_preserve(t, pg)
-	BTREE *t;
-	pgno_t pg;
+bt_preserve(BTREE *t, pgno_t pg)
 {
 	PAGE *h;
 
@@ -821,8 +816,7 @@ bt_preserve(t, pg)
  * all the way back to bt_split/bt_rroot and it's not very clean.
  */
 static recno_t
-rec_total(h)
-	PAGE *h;
+rec_total(PAGE *h)
 {
 	recno_t recs;
 	indx_t nxt, top;

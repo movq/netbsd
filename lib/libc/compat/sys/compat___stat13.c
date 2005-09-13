@@ -1,4 +1,4 @@
-/*	$NetBSD: compat___stat13.c,v 1.1 2005/09/13 01:44:09 christos Exp $	*/
+/*	$NetBSD: compat___stat13.c,v 1.3 2006/07/31 16:34:42 martin Exp $	*/
 
 /*
  * Copyright (c) 1997 Frank van der Linden
@@ -33,14 +33,17 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: compat___stat13.c,v 1.1 2005/09/13 01:44:09 christos Exp $");
+__RCSID("$NetBSD: compat___stat13.c,v 1.3 2006/07/31 16:34:42 martin Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #define __LIBC12_SOURCE__
 
 #include <sys/types.h>
+#include <sys/param.h>
 #include <sys/stat.h>
+#include <sys/mount.h>
 #include <compat/sys/stat.h>
+#include <compat/sys/mount.h>
 
 __warn_references(__stat13,
     "warning: reference to compatibility __stat13(); include <sys/stat.h> to generate correct reference")
@@ -50,6 +53,10 @@ __warn_references(__fstat13,
 
 __warn_references(__lstat13,
     "warning: reference to compatibility __lstat13(); include <sys/stat.h> to generate correct reference")
+
+__warn_references(fhstat,
+    "warning: reference to compatibility fhstat(); include <sys/mount.h> to generate correct reference")
+
 
 /*
  * Convert from a new to an old stat structure.
@@ -110,6 +117,18 @@ __lstat13(const char *file, struct stat13 *ost)
 	int ret;
 
 	if ((ret = __lstat30(file, &nst)) == -1)
+		return ret;
+	cvtstat(ost, &nst);
+	return ret;
+}
+
+int
+fhstat(const struct compat_30_fhandle *fh, struct stat13 *ost)
+{
+	struct stat nst;
+	int ret;
+
+	if ((ret = __fhstat30(fh, &nst)) == -1)
 		return ret;
 	cvtstat(ost, &nst);
 	return ret;

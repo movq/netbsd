@@ -1,4 +1,4 @@
-/*	$NetBSD: clnt_vc.c,v 1.12 2005/09/09 15:41:27 christos Exp $	*/
+/*	$NetBSD: clnt_vc.c,v 1.15 2008/04/25 17:44:44 christos Exp $	*/
 
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
@@ -36,7 +36,7 @@ static char *sccsid = "@(#)clnt_tcp.c 1.37 87/10/05 Copyr 1984 Sun Micro";
 static char *sccsid = "@(#)clnt_tcp.c	2.2 88/08/01 4.0 RPCSRC";
 static char sccsid[] = "@(#)clnt_vc.c 1.19 89/03/16 Copyr 1988 Sun Micro";
 #else
-__RCSID("$NetBSD: clnt_vc.c,v 1.12 2005/09/09 15:41:27 christos Exp $");
+__RCSID("$NetBSD: clnt_vc.c,v 1.15 2008/04/25 17:44:44 christos Exp $");
 #endif
 #endif
  
@@ -85,8 +85,8 @@ __weak_alias(clnt_vc_create,_clnt_vc_create)
 
 #define MCALL_MSG_SIZE 24
 
-static enum clnt_stat clnt_vc_call __P((CLIENT *, rpcproc_t, xdrproc_t, caddr_t,
-    xdrproc_t, caddr_t, struct timeval));
+static enum clnt_stat clnt_vc_call __P((CLIENT *, rpcproc_t, xdrproc_t,
+    const char *, xdrproc_t, caddr_t, struct timeval));
 static void clnt_vc_geterr __P((CLIENT *, struct rpc_err *));
 static bool_t clnt_vc_freeres __P((CLIENT *, xdrproc_t, caddr_t));
 static void clnt_vc_abort __P((CLIENT *));
@@ -134,7 +134,7 @@ static cond_t   *vc_cv;
 	mutex_lock(&clnt_fd_lock);      \
 	vc_fd_locks[fd] = 0;            \
 	mutex_unlock(&clnt_fd_lock);    \
-	thr_sigsetmask(SIG_SETMASK, &(mask), (sigset_t *) NULL);        \
+	thr_sigsetmask(SIG_SETMASK, &(mask), NULL);        \
 	cond_signal(&vc_cv[fd]);        \
 }
 #else
@@ -195,25 +195,25 @@ clnt_vc_create(fd, raddr, prog, vers, sendsz, recvsz)
 	thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
 #ifdef _REENTRANT
 	mutex_lock(&clnt_fd_lock);
-	if (vc_fd_locks == (int *) NULL) {
+	if (vc_fd_locks == NULL) {
 		size_t cv_allocsz, fd_allocsz;
 		int dtbsize = __rpc_dtbsize();
 
 		fd_allocsz = dtbsize * sizeof (int);
-		vc_fd_locks = (int *) mem_alloc(fd_allocsz);
-		if (vc_fd_locks == (int *) NULL) {
+		vc_fd_locks = mem_alloc(fd_allocsz);
+		if (vc_fd_locks == NULL) {
 			mutex_unlock(&clnt_fd_lock);
 			thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
 			goto fooy;
 		} else
 			memset(vc_fd_locks, '\0', fd_allocsz);
 
-		assert(vc_cv == (cond_t *) NULL);
+		assert(vc_cv == NULL);
 		cv_allocsz = dtbsize * sizeof (cond_t);
-		vc_cv = (cond_t *) mem_alloc(cv_allocsz);
-		if (vc_cv == (cond_t *) NULL) {
+		vc_cv = mem_alloc(cv_allocsz);
+		if (vc_cv == NULL) {
 			mem_free(vc_fd_locks, fd_allocsz);
-			vc_fd_locks = (int *) NULL;
+			vc_fd_locks = NULL;
 			mutex_unlock(&clnt_fd_lock);
 			thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
 			goto fooy;
@@ -224,7 +224,7 @@ clnt_vc_create(fd, raddr, prog, vers, sendsz, recvsz)
 				cond_init(&vc_cv[i], 0, (void *) 0);
 		}
 	} else
-		assert(vc_cv != (cond_t *) NULL);
+		assert(vc_cv != NULL);
 #endif
 
 	/*
@@ -236,19 +236,21 @@ clnt_vc_create(fd, raddr, prog, vers, sendsz, recvsz)
 			rpc_createerr.cf_stat = RPC_SYSTEMERROR;
 			rpc_createerr.cf_error.re_errno = errno;
 			mutex_unlock(&clnt_fd_lock);
+			thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
 			goto fooy;
 		}
 		if (connect(fd, (struct sockaddr *)raddr->buf, raddr->len) < 0){
 			rpc_createerr.cf_stat = RPC_SYSTEMERROR;
 			rpc_createerr.cf_error.re_errno = errno;
 			mutex_unlock(&clnt_fd_lock);
+			thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
 			goto fooy;
 		}
 	}
 	mutex_unlock(&clnt_fd_lock);
+	thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
 	if (!__rpc_fd2sockinfo(fd, &si))
 		goto fooy;
-	thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
 
 	ct->ct_closeit = FALSE;
 
@@ -317,7 +319,7 @@ clnt_vc_call(h, proc, xdr_args, args_ptr, xdr_results, results_ptr, timeout)
 	CLIENT *h;
 	rpcproc_t proc;
 	xdrproc_t xdr_args;
-	caddr_t args_ptr;
+	const char *args_ptr;
 	xdrproc_t xdr_results;
 	caddr_t results_ptr;
 	struct timeval timeout;
@@ -366,7 +368,7 @@ call_again:
 	if ((! XDR_PUTBYTES(xdrs, ct->ct_u.ct_mcallc, ct->ct_mpos)) ||
 	    (! XDR_PUTINT32(xdrs, (int32_t *)&proc)) ||
 	    (! AUTH_MARSHALL(h->cl_auth, xdrs)) ||
-	    (! (*xdr_args)(xdrs, args_ptr))) {
+	    (! (*xdr_args)(xdrs, __UNCONST(args_ptr)))) {
 		if (ct->ct_error.re_status == RPC_SUCCESS)
 			ct->ct_error.re_status = RPC_CANTENCODEARGS;
 		(void)xdrrec_endofrecord(xdrs, TRUE);

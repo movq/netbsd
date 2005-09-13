@@ -1,4 +1,4 @@
-/*	$NetBSD: rec_utils.c,v 1.10 2004/06/20 22:20:14 jmc Exp $	*/
+/*	$NetBSD: rec_utils.c,v 1.12 2008/09/10 17:52:36 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -34,16 +34,11 @@
 #endif
 
 #include <sys/cdefs.h>
-#if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)rec_utils.c	8.6 (Berkeley) 7/16/94";
-#else
-__RCSID("$NetBSD: rec_utils.c,v 1.10 2004/06/20 22:20:14 jmc Exp $");
-#endif
-#endif /* LIBC_SCCS and not lint */
+__RCSID("$NetBSD: rec_utils.c,v 1.12 2008/09/10 17:52:36 joerg Exp $");
 
 #include <sys/param.h>
 
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -66,11 +61,7 @@ __RCSID("$NetBSD: rec_utils.c,v 1.10 2004/06/20 22:20:14 jmc Exp $");
  *	RET_SUCCESS, RET_ERROR.
  */
 int
-__rec_ret(t, e, nrec, key, data)
-	BTREE *t;
-	EPG *e;
-	recno_t nrec;
-	DBT *key, *data;
+__rec_ret(BTREE *t, EPG *e, recno_t nrec, DBT *key, DBT *data)
 {
 	RLEAF *rl;
 	void *p;

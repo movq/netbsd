@@ -1,7 +1,7 @@
-/*	$NetBSD: unistd.h,v 1.104 2005/06/11 22:54:43 christos Exp $	*/
+/*	$NetBSD: unistd.h,v 1.118 2008/06/25 11:45:38 ad Exp $	*/
 
 /*-
- * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 1999, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -88,7 +81,7 @@
 #include <sys/null.h>
 
 __BEGIN_DECLS
-__dead	 void _exit(int) __attribute__((__noreturn__));
+__dead	 void _exit(int);
 int	 access(const char *, int);
 unsigned int alarm(unsigned int);
 int	 chdir(const char *);
@@ -120,6 +113,7 @@ uid_t	 geteuid(void);
 gid_t	 getgid(void);
 int	 getgroups(int, gid_t []);
 __aconst char *getlogin(void);
+int	 getlogin_r(char *, int);
 pid_t	 getpgrp(void);
 pid_t	 getpid(void);
 pid_t	 getppid(void);
@@ -147,7 +141,7 @@ ssize_t	 write(int, const void *, size_t);
 /*
  * IEEE Std 1003.2-92, adopted in X/Open Portability Guide Issue 4 and later
  */
-#if (_POSIX_C_SOURCE - 0) >= 2 || (_XOPEN_SOURCE - 0) >= 4 || \
+#if (_POSIX_C_SOURCE - 0) >= 2 || defined(_XOPEN_SOURCE) || \
     defined(_NETBSD_SOURCE)
 int	 getopt(int, char * const [], const char *);
 
@@ -197,6 +191,15 @@ int	 fsync(int);
 
 
 /*
+ * IEEE Std 1003.1c-95, also adopted by X/Open CAE Spec Issue 5 Version 2
+ */
+#if (_POSIX_C_SOURCE - 0) >= 199506L || (_XOPEN_SOURCE - 0) >= 500 || \
+    defined(_REENTRANT) || defined(_NETBSD_SOURCE)
+int	 ttyname_r(int, char *, size_t);
+int	 pthread_atfork(void (*)(void), void (*)(void), void (*)(void));
+#endif
+
+/*
  * X/Open Portability Guide, all issues
  */
 #if defined(_XOPEN_SOURCE) || defined(_NETBSD_SOURCE)
@@ -206,17 +209,9 @@ int	 nice(int);
 
 
 /*
- * X/Open Portability Guide <= Issue 3
- */
-#if defined(_XOPEN_SOURCE) && (_XOPEN_SOURCE - 0) <= 3
-int	 rename(const char *, const char *) __RENAME(__posix_rename);
-#endif
-
-
-/*
  * X/Open Portability Guide >= Issue 4
  */
-#if (_XOPEN_SOURCE - 0) >= 4 || defined(_NETBSD_SOURCE)
+#if defined(_XOPEN_SOURCE) || defined(_NETBSD_SOURCE)
 __aconst char *crypt(const char *, const char *);
 int	 encrypt(char *, int);
 char	*getpass(const char *);
@@ -269,10 +264,7 @@ int	 symlink(const char *, const char *);
 void	 sync(void);
 useconds_t ualarm(useconds_t, useconds_t);
 int	 usleep(useconds_t);
-#ifdef __LIBC12_SOURCE__
-pid_t	 vfork(void);
-pid_t	 __vfork14(void);
-#else
+#ifndef __LIBC12_SOURCE__
 pid_t	 vfork(void) __RENAME(__vfork14);
 #endif
 
@@ -307,10 +299,11 @@ int	 getdomainname(char *, size_t);
 int	 getgrouplist(const char *, gid_t, gid_t *, int *);
 int	 getgroupmembership(const char *, gid_t, gid_t *, int, int *);
 mode_t	 getmode(const void *, mode_t);
+int	 getpeereid(int, uid_t *, gid_t *);
 int	 getsubopt(char **, char * const *, char **);
 __aconst char *getusershell(void);
 int	 initgroups(const char *, gid_t);
-int	 iruserok(u_int32_t, int, const char *, const char *);
+int	 iruserok(uint32_t, int, const char *, const char *);
 int      issetugid(void);
 int	 nfssvc(int, void *);
 int	 profil(char *, size_t, u_long, u_int);
@@ -351,7 +344,7 @@ int	 iruserok_sa(const void *, int, int, const char *, const char *);
 #ifndef __SYS_SIGLIST_DECLARED
 #define __SYS_SIGLIST_DECLARED
 /* also in signal.h */
-extern __const char *__const *sys_siglist __RENAME(__sys_siglist14);
+extern const char *const *sys_siglist __RENAME(__sys_siglist14);
 #endif /* __SYS_SIGLIST_DECLARED */
 extern	 int optreset;		/* getopt(3) external variable */
 extern	 char *suboptarg;	/* getsubopt(3) external variable */
@@ -359,4 +352,7 @@ extern	 char *suboptarg;	/* getsubopt(3) external variable */
 
 __END_DECLS
 
+#if _FORTIFY_SOURCE > 0
+#include <ssp/unistd.h>
+#endif
 #endif /* !_UNISTD_H_ */

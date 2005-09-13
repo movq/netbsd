@@ -1,4 +1,4 @@
-/*	$NetBSD: clnt_simple.c,v 1.25 2003/10/21 00:00:34 fvdl Exp $	*/
+/*	$NetBSD: clnt_simple.c,v 1.29 2006/11/03 23:16:12 christos Exp $	*/
 
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
@@ -39,7 +39,7 @@
 #if 0
 static char sccsid[] = "@(#)clnt_simple.c 1.49 89/01/31 Copyr 1984 Sun Micro";
 #else
-__RCSID("$NetBSD: clnt_simple.c,v 1.25 2003/10/21 00:00:34 fvdl Exp $");
+__RCSID("$NetBSD: clnt_simple.c,v 1.29 2006/11/03 23:16:12 christos Exp $");
 #endif
 #endif
 
@@ -192,7 +192,7 @@ rpc_call(host, prognum, versnum, procnum, inproc, in, outproc, out, nettype)
 		(void) CLNT_CONTROL(rcp->client,
 				CLSET_RETRY_TIMEOUT, (char *)(void *)&timeout);
 		if (CLNT_CONTROL(rcp->client, CLGET_FD, (char *)(void *)&fd))
-			fcntl(fd, F_SETFD, 1);	/* make it "close on exec" */
+			(void)fcntl(fd, F_SETFD, FD_CLOEXEC);
 		rcp->prognum = prognum;
 		rcp->versnum = versnum;
 		if ((strlen(host) < (size_t)MAXHOSTNAMELEN) &&
@@ -206,8 +206,7 @@ rpc_call(host, prognum, versnum, procnum, inproc, in, outproc, out, nettype)
 	} /* else reuse old client */
 	tottimeout.tv_sec = 25;
 	tottimeout.tv_usec = 0;
-	/*LINTED const castaway*/
-	clnt_stat = CLNT_CALL(rcp->client, procnum, inproc, (char *) in,
+	clnt_stat = CLNT_CALL(rcp->client, procnum, inproc, in,
 	    outproc, out, tottimeout);
 	/*
 	 * if call failed, empty cache

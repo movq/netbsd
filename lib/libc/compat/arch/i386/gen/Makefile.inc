@@ -1,10 +1,7 @@
-#	$NetBSD: Makefile.inc,v 1.1 2005/09/13 01:44:08 christos Exp $
+#	$NetBSD: Makefile.inc,v 1.3 2006/06/27 18:19:57 drochner Exp $
 
 # objects built from assembler sources (need lint stubs)
-SRCS+=	compat_setjmp.S compat__setjmp.S compat_sigsetjmp.S
+SRCS+=	compat_setjmp.S compat_sigsetjmp.S
 
-SRCS.i386.gen=Lint__setjmp.c
-
-LSRCS+=		${SRCS.i386.gen}
-DPSRCS+=	${SRCS.i386.gen}
-CLEANFILES+=	${SRCS.i386.gen}
+# objects built from C sources in compat/gen
+SRCS+=  compat_frexp_ieee754.c compat_ldexp_ieee754.c compat_modf_ieee754.c

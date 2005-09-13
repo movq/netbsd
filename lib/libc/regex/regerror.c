@@ -1,4 +1,4 @@
-/*	$NetBSD: regerror.c,v 1.18 2003/08/07 16:43:20 agc Exp $	*/
+/*	$NetBSD: regerror.c,v 1.23 2007/02/09 23:44:18 junyoung Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993, 1994
@@ -76,7 +76,7 @@
 #if 0
 static char sccsid[] = "@(#)regerror.c	8.4 (Berkeley) 3/20/94";
 #else
-__RCSID("$NetBSD: regerror.c,v 1.18 2003/08/07 16:43:20 agc Exp $");
+__RCSID("$NetBSD: regerror.c,v 1.23 2007/02/09 23:44:18 junyoung Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -86,10 +86,10 @@ __RCSID("$NetBSD: regerror.c,v 1.18 2003/08/07 16:43:20 agc Exp $");
 #include <assert.h>
 #include <ctype.h>
 #include <limits.h>
-#include <regex.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <regex.h>
 
 #ifdef __weak_alias
 __weak_alias(regerror,_regerror)
@@ -103,7 +103,7 @@ extern "C" {
 #endif
 
 /* === regerror.c === */
-static char *regatoi __P((const regex_t *preg, char *localbuf, size_t buflen));
+static const char *regatoi(const regex_t *preg, char *localbuf, size_t buflen);
 
 #ifdef __cplusplus
 }
@@ -159,11 +159,11 @@ static const struct rerr {
  */
 /* ARGSUSED */
 size_t
-regerror(errcode, preg, errbuf, errbuf_size)
-int errcode;
-const regex_t *preg;
-char *errbuf;
-size_t errbuf_size;
+regerror(
+    int errcode,
+    const regex_t *preg,
+    char *errbuf,
+    size_t errbuf_size)
 {
 	const struct rerr *r;
 	size_t len;
@@ -201,13 +201,14 @@ size_t errbuf_size;
 
 /*
  * regatoi - internal routine to implement REG_ATOI
- * static char *regatoi(const regex_t *preg, char *localbuf, size_t buflen);
+ * static const char *regatoi(const regex_t *preg, char *localbuf,
+ * size_t buflen);
  */
-static char *
-regatoi(preg, localbuf, buflen)
-const regex_t *preg;
-char *localbuf;
-size_t buflen;
+static const char *
+regatoi(
+    const regex_t *preg,
+    char *localbuf,
+    size_t buflen)
 {
 	const struct rerr *r;
 
@@ -215,8 +216,8 @@ size_t buflen;
 		if (strcmp(r->name, preg->re_endp) == 0)
 			break;
 	if (r->code == 0)
-		return("0");
+		return "0";
 
 	(void)snprintf(localbuf, buflen, "%d", r->code);
-	return(localbuf);
+	return localbuf;
 }

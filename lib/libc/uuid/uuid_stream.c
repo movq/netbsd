@@ -1,4 +1,4 @@
-/*	$NetBSD: uuid_stream.c,v 1.1 2004/09/13 21:44:54 thorpej Exp $	*/
+/*	$NetBSD: uuid_stream.c,v 1.3 2008/04/19 18:21:38 plunky Exp $	*/
 
 /*
  * Copyright (c) 2002 Marcel Moolenaar
@@ -28,12 +28,12 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: uuid_stream.c,v 1.1 2004/09/13 21:44:54 thorpej Exp $");
+__RCSID("$NetBSD: uuid_stream.c,v 1.3 2008/04/19 18:21:38 plunky Exp $");
 #endif
 
 #include "namespace.h"
 
-#include <sys/endian.h>
+#include <machine/endian.h>
 #include <uuid.h>
 
 /*
@@ -108,7 +108,7 @@ uuid_dec_be(const void *buf, uuid_t *uuid)
 	int i;
 
 	uuid->time_low = be32dec(p);
-	uuid->time_mid = le16dec(p + 4);
+	uuid->time_mid = be16dec(p + 4);
 	uuid->time_hi_and_version = be16dec(p + 6);
 	uuid->clock_seq_hi_and_reserved = p[8];
 	uuid->clock_seq_low = p[9];

@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread_md.h,v 1.1 2004/07/19 03:39:02 chs Exp $	*/
+/*	$NetBSD: pthread_md.h,v 1.6 2008/04/28 20:23:02 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,10 +34,12 @@
 
 #include <machine/frame.h>
 
-static __inline long
+#define	PTHREAD__ASM_RASOPS
+
+static inline long
 pthread__sp(void)
 {
-	register long sp __asm__("r30");
+	register long sp __asm("r30");
 
 	return sp;
 }
@@ -95,5 +90,8 @@ do {						       	       		\
 	    sizeof(struct fpreg));					\
 	(uc)->uc_flags = ((uc)->uc_flags | _UC_FPU) & ~_UC_USER;       	\
 } while (/*CONSTCOND*/0)
+
+/* Don't need additional memory barriers. */
+#define	PTHREAD__ATOMIC_IS_MEMBAR
 
 #endif /* !_LIB_PTHREAD_HPPA_MD_H */

@@ -1,4 +1,4 @@
-/*	$NetBSD: math.h,v 1.41 2005/07/21 12:56:29 christos Exp $	*/
+/*	$NetBSD: math.h,v 1.47 2008/04/25 21:20:57 christos Exp $	*/
 
 /*
  * ====================================================
@@ -59,7 +59,7 @@ union __long_double_u {
  * ANSI/POSIX
  */
 /* 7.12#3 HUGE_VAL, HUGELF, HUGE_VALL */
-extern __const union __double_u __infinity;
+extern const union __double_u __infinity;
 #define HUGE_VAL	__infinity.__val
 
 /*
@@ -72,10 +72,10 @@ extern __const union __double_u __infinity;
     ((_XOPEN_SOURCE  - 0) >= 600) || \
     defined(_ISOC99_SOURCE) || defined(_NETBSD_SOURCE)
 /* 7.12#3 HUGE_VAL, HUGELF, HUGE_VALL */
-extern __const union __float_u __infinityf;
+extern const union __float_u __infinityf;
 #define	HUGE_VALF	__infinityf.__val
 
-extern __const union __long_double_u __infinityl;
+extern const union __long_double_u __infinityl;
 #define	HUGE_VALL	__infinityl.__val
 
 /* 7.12#4 INFINITY */
@@ -87,7 +87,7 @@ extern __const union __long_double_u __infinityl;
 
 /* 7.12#5 NAN: a quiet NaN, if supported */
 #ifdef __HAVE_NANF
-extern __const union __float_u __nanf;
+extern const union __float_u __nanf;
 #define	NAN		__nanf.__val
 #endif /* __HAVE_NANF */
 
@@ -148,7 +148,7 @@ extern  _LIB_VERSION_TYPE  _LIB_VERSION;
 #ifndef __cplusplus
 struct exception {
 	int type;
-	char *name;
+	const char *name;
 	double arg1;
 	double arg2;
 	double retval;
@@ -311,6 +311,8 @@ float	floorf(float);
 float	rintf(float);
 double	round(double);
 float	roundf(float);
+double	trunc(double);
+float	truncf(float);
 long int	lrint(double);
 long int	lrintf(float);
 /* LONGLONG */
@@ -329,11 +331,23 @@ long long int	llroundf(float);
 float	fmodf(float, float);
 float	remainderf(float, float);
 
-/* 7.2.11 manipulation */
+/* 7.12.11 manipulation */
 
 float	copysignf(float, float);
+double	nan(const char *);
+float	nanf(const char *);
+long double	nanl(const char *);
 float	nextafterf(float, float);
 
+/* 7.12.14 comparision */
+
+#define isunordered(x, y)	(isnan(x) || isnan(y))
+#define isgreater(x, y)		(!isunordered((x), (y)) && (x) > (y))
+#define isgreaterequal(x, y)	(!isunordered((x), (y)) && (x) >= (y))
+#define isless(x, y)		(!isunordered((x), (y)) && (x) < (y))
+#define islessequal(x, y)	(!isunordered((x), (y)) && (x) <= (y))
+#define islessgreater(x, y)	(!isunordered((x), (y)) && \
+				 ((x) > (y) || (y) > (x)))
 
 #endif /* !_ANSI_SOURCE && ... */
 
@@ -376,9 +390,6 @@ double	scalbn(double, int);
 /*
  * BSD math library entry points
  */
-#ifndef __MATH_PRIVATE__
-double	cabs(/* struct complex { double r; double i; } */);
-#endif
 double	drem(double, double);
 
 #endif /* _NETBSD_SOURCE */
@@ -418,9 +429,6 @@ float	significandf(float);
 /*
  * float versions of BSD math library entry points
  */
-#ifndef __MATH_PRIVATE__
-float	cabsf(/* struct complex { float r; float i; } */);
-#endif
 float	dremf(float, float);
 #endif /* _NETBSD_SOURCE */
 

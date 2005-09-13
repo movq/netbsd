@@ -1,4 +1,4 @@
-.\"	$NetBSD: select.2,v 1.29 2005/03/09 22:28:52 kleink Exp $
+.\"	$NetBSD: select.2,v 1.36 2008/10/19 16:54:19 wiz Exp $
 .\"
 .\" Copyright (c) 1983, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"     @(#)select.2	8.2 (Berkeley) 3/25/94
 .\"
-.Dd March 5, 2005
+.Dd October 18, 2008
 .Dt SELECT 2
 .Os
 .Sh NAME
@@ -66,6 +66,9 @@ descriptors are checked in each set;
 i.e., the descriptors from 0 through
 .Fa nfds Ns No \-1
 in the descriptor sets are examined.
+This means that
+.Fa nfds
+must be set to the highest file descriptor of the three sets, plus one.
 On return,
 .Fn select
 and
@@ -113,7 +116,7 @@ selection to complete.
 If
 .Fa timeout
 is a null pointer, the select blocks indefinitely.
-To affect a poll, the
+To poll without blocking, the
 .Fa timeout
 argument should be non-null, pointing to a zero-valued timeval or timespec
 structure, as appropriate.
@@ -140,6 +143,10 @@ Any of
 and
 .Fa exceptfds
 may be given as null pointers if no descriptors are of interest.
+.Sh NOTES
+It is recommended to use the
+.Xr poll 2
+interface instead, which tends to be more portable and efficient.
 .Sh RETURN VALUES
 .Fn select
 returns the number of ready descriptors that are contained in
@@ -153,11 +160,84 @@ If
 returns with an error,
 including one due to an interrupted call,
 the descriptor sets will be unmodified.
+.Sh EXAMPLES
+.Bd -literal
+#include \*[Lt]stdio.h\*[Gt]
+#include \*[Lt]stdlib.h\*[Gt]
+#include \*[Lt]unistd.h\*[Gt]
+#include \*[Lt]string.h\*[Gt]
+#include \*[Lt]err.h\*[Gt]
+#include \*[Lt]errno.h\*[Gt]
+#include \*[Lt]sys/types.h\*[Gt]
+#include \*[Lt]sys/time.h\*[Gt]
+
+int
+main(int argc, char **argv)
+{
+	fd_set read_set;
+	struct timeval timeout;
+	int ret, fd, i;
+
+	/* file descriptor 1 is stdout */
+	fd = 1;
+
+	/* Wait for ten seconds. */
+	timeout.tv_sec = 10;
+	timeout.tv_usec = 0;
+
+	/* Initialize the read set to null */
+	FD_ZERO(\*[Am]read_set);
+
+	/* Add file descriptor 1 to read_set */
+	FD_SET(fd, \*[Am]read_set);
+
+	/*
+	 * Check if data is ready to be readen on
+	 * file descriptor 1, give up after 10 seconds.
+	 */
+	ret = select(fd + 1, \*[Am]read_set, NULL, NULL, \*[Am]timeout);
+
+	/*
+	 * Returned value is the number of file
+	 * descriptors ready for I/O, or -1 on error.
+	 */
+	switch (ret) {
+	case \-1:
+		err(EXIT_FAILURE, "select() failed");
+		break;
+
+	case 0:
+		printf("Timeout, no data received.\\n");
+		break;
+
+	default:
+		printf("Data received on %d file desciptor(s)\\n", ret);
+
+		/*
+		 * select(2) hands back a file descriptor set where
+		 * only descriptors ready for I/O are set. These can
+		 * be tested using FD_ISSET
+		 */
+		for (i = 0; i \*[Lt]= fd; i++) {
+			if (FD_ISSET(i, \*[Am]read_set)) {
+				printf("Data on file descriptor %d\\n", i);
+				/* Remove the file descriptor from the set */
+				FD_CLR(fd, \*[Am]read_set);
+			}
+		}
+		break;
+	}
+
+	return 0;
+}
+.Ed
 .Sh ERRORS
 An error return from
 .Fn select
 indicates:
 .Bl -tag -width Er
+.It Bq Er EBADF
+One of the descriptor sets specified an invalid descriptor.
 .It Bq Er EFAULT
 One or more of
 .Fa readfds ,
@@ -165,8 +245,6 @@ One or more of
 or
 .Fa exceptfds
 points outside the process's allocated address space.
-.It Bq Er EBADF
-One of the descriptor sets specified an invalid descriptor.
 .It Bq Er EINTR
 A signal was delivered before the time limit expired and
 before any of the selected events occurred.
@@ -248,17 +326,6 @@ userland libraries:
 	...
 	free(fdsr);
 .Ed
-.Pp
-Alternatively, it is possible to use the
-.Xr poll 2
-interface.
-.Xr poll 2
-is more efficient when the size of
-.Fn select Ns 's
-.Ft fd_set
-bit-arrays are very large, and for fixed numbers of
-file descriptors one need not size and dynamically allocate a
-memory object.
 .Pp
 .Fn select
 should probably have been designed to return the time remaining from the

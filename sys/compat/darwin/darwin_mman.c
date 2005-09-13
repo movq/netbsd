@@ -1,9 +1,9 @@
 #undef DEBUG_DARWIN
 #undef DEBUG_MACH
-/*	$NetBSD: darwin_mman.c,v 1.18 2005/09/13 01:42:32 christos Exp $ */
+/*	$NetBSD: darwin_mman.c,v 1.28 2008/03/21 21:54:58 ad Exp $ */
 
 /*-
- * Copyright (c) 2002 The NetBSD Foundation, Inc.
+ * Copyright (c) 2002, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: darwin_mman.c,v 1.18 2005/09/13 01:42:32 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: darwin_mman.c,v 1.28 2008/03/21 21:54:58 ad Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -53,13 +53,10 @@ __KERNEL_RCSID(0, "$NetBSD: darwin_mman.c,v 1.18 2005/09/13 01:42:32 christos Ex
 #include <sys/filedesc.h>
 #include <sys/vnode.h>
 #include <sys/exec.h>
-#include <sys/sa.h>
 
 #include <sys/syscallargs.h>
 
 #include <compat/sys/signal.h>
-
-#include <compat/common/compat_file.h>
 
 #include <compat/mach/mach_types.h>
 #include <compat/mach/mach_vm.h>
@@ -68,28 +65,24 @@ __KERNEL_RCSID(0, "$NetBSD: darwin_mman.c,v 1.18 2005/09/13 01:42:32 christos Ex
 #include <compat/darwin/darwin_syscallargs.h>
 
 int
-darwin_sys_load_shared_file(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+darwin_sys_load_shared_file(struct lwp *l, const struct darwin_sys_load_shared_file_args *uap, register_t *retval)
 {
-	struct darwin_sys_load_shared_file_args /* {
+	/* {
 		syscallarg(char *) filename;
-		syscallarg(caddr_t) addr;
+		syscallarg(void *) addr;
 		syscallarg(u_long) len;
-		syscallarg(caddr_t *) base;
+		syscallarg(void **) base;
 		syscallarg(int) count:
 		syscallarg(mach_sf_mapping_t *) mappings;
 		syscallarg(int *) flags;
-	} */ *uap = v;
+	} */
 	struct file *fp;
-	struct filedesc *fdp;
 	struct vnode *vp = NULL;
 	vaddr_t base;
 	struct proc *p = l->l_proc;
 	int flags;
-	char filename[MAXPATHLEN + 1];
-	mach_sf_mapping_t *mapp;
+	char *filename;
+	mach_sf_mapping_t *mapp = NULL;
 	size_t maplen;
 	struct sys_open_args open_cup;
 	struct sys_close_args close_cup;
@@ -103,14 +96,15 @@ darwin_sys_load_shared_file(l, v, retval)
 	int need_relocation;
 	struct exec_vmcmd evc;
 
-	if ((error = copyin(SCARG(uap, filename), &filename, MAXPATHLEN)) != 0)
-		return error;
+	filename = malloc(MAXPATHLEN, M_TEMP, M_WAITOK);
+	if ((error = copyin(SCARG(uap, filename), filename, MAXPATHLEN)) != 0)
+		goto bad1;
 
 	if ((error = copyin(SCARG(uap, base), &base, sizeof(base))) != 0)
-		return error;
+		goto bad1;
 
 	if ((error = copyin(SCARG(uap, flags), &flags, sizeof(base))) != 0)
-		return error;
+		goto bad1;
 
 #ifdef DEBUG_DARWIN
 	DPRINTF(("darwin_sys_load_shared_file: filename = %p ",
@@ -126,26 +120,25 @@ darwin_sys_load_shared_file(l, v, retval)
 	SCARG(&open_cup, path) = SCARG(uap, filename);
 	SCARG(&open_cup, flags) = O_RDONLY;
 	SCARG(&open_cup, mode) = 0;
-	if ((error = bsd_sys_open(l, &open_cup, &fdc)) != 0)
-		return error;
+	if ((error = sys_open(l, &open_cup, &fdc)) != 0)
+		goto bad1;
 
 	fd = (int)fdc;
-	fdp = p->p_fd;
-	fp = fd_getfile(fdp, fd);
+	fp = fd_getfile(fd);
 	if (fp == NULL) {
 		error = EBADF;
-		goto bad3;
+		goto bad1point5;
 	}
-	FILE_USE(fp);
-	vp = (struct vnode *)fp->f_data;
+	vp = fp->f_data;
 	vref(vp);
 
 	if (SCARG(uap, count) < 0 ||
 	    SCARG(uap, count) > PAGE_SIZE / sizeof(*mapp)) {
 		error = EINVAL;
-		goto bad3;
+		goto bad2;
 	}
-	mapp = malloc(sizeof(*mapp) * SCARG(uap, count), M_TEMP, M_WAITOK);
+	maplen = SCARG(uap, count) * sizeof(*mapp);
+	mapp = malloc(maplen, M_TEMP, M_WAITOK);
 
 	if ((error = copyin(SCARG(uap, mappings), mapp, maplen)) != 0)
 		goto bad2;
@@ -222,7 +215,7 @@ darwin_sys_load_shared_file(l, v, retval)
 		    i, evc.ev_addr, evc.ev_len));
 
 		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
-		if ((error = (*evc.ev_proc)(p, &evc)) != 0) {
+		if ((error = (*evc.ev_proc)(l, &evc)) != 0) {
 			VOP_UNLOCK(vp, 0);
 			DPRINTF(("Failed\n"));
 			goto bad2;
@@ -231,19 +224,22 @@ darwin_sys_load_shared_file(l, v, retval)
 		DPRINTF(("Success\n"));
 	}
 bad2:
-	free(mapp, M_TEMP);
-bad3:
+	if (mapp)
+		free(mapp, M_TEMP);
 	vrele(vp);
-	FILE_UNUSE(fp, p);
+	fd_putfile(fd);
+bad1point5:
 	SCARG(&close_cup, fd) = fd;
 	if ((error = sys_close(l, &close_cup, retval)) != 0)
-		return error;
+		goto bad1;
 
 	if ((error = copyout(&base, SCARG(uap, base), sizeof(base))) != 0)
-		return error;
+		goto bad1;
 
 	if ((error = copyout(&flags, SCARG(uap, flags), sizeof(base))) != 0)
-		return error;
+		goto bad1;
+bad1:
+	free(filename, M_TEMP);
 
 	return error;
 }

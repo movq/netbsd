@@ -1,4 +1,4 @@
-/*	$NetBSD: citrus_iso2022.c,v 1.13 2005/02/10 19:03:51 tnozaki Exp $	*/
+/*	$NetBSD: citrus_iso2022.c,v 1.19 2008/06/14 16:01:07 tnozaki Exp $	*/
 
 /*-
  * Copyright (c)1999, 2002 Citrus Project,
@@ -30,7 +30,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: citrus_iso2022.c,v 1.13 2005/02/10 19:03:51 tnozaki Exp $");
+__RCSID("$NetBSD: citrus_iso2022.c,v 1.19 2008/06/14 16:01:07 tnozaki Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <assert.h>
@@ -39,7 +39,6 @@ __RCSID("$NetBSD: citrus_iso2022.c,v 1.13 2005/02/10 19:03:51 tnozaki Exp $");
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
-#include <locale.h>
 #include <wchar.h>
 #include <sys/types.h>
 #include <limits.h>
@@ -86,6 +85,9 @@ typedef struct {
 	u_char	interm;
 	u_char	vers;
 } _ISO2022Charset;
+
+static const _ISO2022Charset ascii    = { CS94, 'B', '\0', '\0' };
+static const _ISO2022Charset iso88591 = { CS96, 'A', '\0', '\0' };
 
 typedef struct {
 	_ISO2022Charset	g[4];
@@ -561,9 +563,9 @@ terminate:
 
 static wchar_t
 _ISO2022_sgetwchar(_ISO2022EncodingInfo * __restrict ei,
-			  const char * __restrict string, size_t n,
-			  const char ** __restrict result,
-			  _ISO2022State * __restrict psenc)
+		const char * __restrict string, size_t n,
+		const char ** __restrict result,
+		_ISO2022State * __restrict psenc)
 {
 	wchar_t wchar = 0;
 	int cur;
@@ -627,6 +629,8 @@ _ISO2022_sgetwchar(_ISO2022EncodingInfo * __restrict ei,
 				case CS96MULTI:
 					i = string[sp->csoff] - ',';
 					break;
+				default:
+					return (_ISO2022INVALID);
 				}
 			}
 			psenc->g[i].type = sp->type;
@@ -853,6 +857,11 @@ _citrus_ISO2022_mbrtowc_priv(_ISO2022EncodingInfo * __restrict ei,
 	_DIAGASSERT(psenc != NULL);
 	_DIAGASSERT(s != NULL);
 
+	if (*s == NULL) {
+		_citrus_ISO2022_init_state(ei, psenc);
+		*nresult = _ENCODING_IS_STATE_DEPENDENT;
+		return 0;
+	}
 	s0 = *s;
 	c = 0;
 	chlenbak = psenc->chlen;
@@ -879,8 +888,8 @@ _citrus_ISO2022_mbrtowc_priv(_ISO2022EncodingInfo * __restrict ei,
 
 		wchar = _ISO2022_sgetwchar(ei, p, psenc->chlen - (p-psenc->ch),
 					   &result, psenc);
+		c += result - p;
 		if (wchar != _ISO2022INVALID) {
-			c += result - p;
 			if (psenc->chlen > c)
 				memmove(psenc->ch, result, psenc->chlen - c);
 			if (psenc->chlen < c)
@@ -890,11 +899,14 @@ _citrus_ISO2022_mbrtowc_priv(_ISO2022EncodingInfo * __restrict ei,
 			goto output;
 		}
 
-		c += result - p;
-		p = result;
-
-		if (n == 0)
+		if (n == 0) {
+			if ((result - p) == psenc->chlen)
+				/* complete shift sequence. */
+				psenc->chlen = 0;
 			goto restart;
+		}
+
+		p = result;
 	}
 
 	/* escape sequence too long? */
@@ -908,11 +920,14 @@ emptybuf:
 		s0 = result;
 		goto output;
 	}
-	if (result > s0 && n > result - s0) {
+	if (result > s0) {
 		c += (result - s0);
 		n -= (result - s0);
 		s0 = result;
-		goto emptybuf;
+		if (n>0)
+			goto emptybuf;
+		/* complete shift sequence. */
+		goto restart;
 	}
 	n += c;
 	if (n < sizeof(psenc->ch)) {
@@ -1008,9 +1023,11 @@ static int
 _ISO2022_sputwchar(_ISO2022EncodingInfo * __restrict ei, wchar_t wc,
 		   char * __restrict string, size_t n,
 		   char ** __restrict result,
-		   _ISO2022State * __restrict psenc)
+		   _ISO2022State * __restrict psenc,
+		   size_t * __restrict nresult)
 {
-	int i = 0, len;
+	int i = 0;
+	size_t len;
 	_ISO2022Charset cs;
 	char *p;
 	char tmp[MB_LEN_MAX];
@@ -1021,24 +1038,22 @@ _ISO2022_sputwchar(_ISO2022EncodingInfo * __restrict ei, wchar_t wc,
 	_DIAGASSERT(ei != NULL);
 	_DIAGASSERT(string != NULL);
 	/* result may be NULL */
-	/* state appears to be unused */
+	_DIAGASSERT(psenc != NULL);
+	_DIAGASSERT(nresult != NULL);
 
-	if (iscntl(wc & 0xff)) {
-		/* go back to ASCII on control chars */
-		cs.type = CS94;
-		cs.final = 'B';
-		cs.interm = '\0';
+	if (isc0(wc & 0xff)) {
+		/* go back to INIT0 or ASCII on control chars */
+		cs = ei->initg[0].final ? ei->initg[0] : ascii;
+	} else if (isc1(wc & 0xff)) {
+		/* go back to INIT1 or ISO-8859-1 on control chars */
+		cs = ei->initg[1].final ? ei->initg[1] : iso88591;
 	} else if (!(wc & ~0xff)) {
 		if (wc & 0x80) {
 			/* special treatment for ISO-8859-1 */
-			cs.type = CS96;
-			cs.final = 'A';
-			cs.interm = '\0';
+			cs = iso88591;
 		} else {
 			/* special treatment for ASCII */
-			cs.type = CS94;
-			cs.final = 'B';
-			cs.interm = '\0';
+			cs = ascii;
 		}
 	} else {
 		cs.final = (wc >> 24) & 0x7f;
@@ -1130,7 +1145,7 @@ planeok:
 		*p++ = 'O';
 		psenc->singlegl = psenc->singlegr = 3;
 	} else
-		abort();
+		goto ilseq;
 
 sideok:
 	if (psenc->singlegl == target)
@@ -1142,7 +1157,7 @@ sideok:
 	else if ((ei->flags & F_8BIT) && psenc->gr == target)
 		mask = 0x80;
 	else
-		abort();
+		goto ilseq;
 
 	switch (cs.type) {
 	case CS94:
@@ -1151,7 +1166,8 @@ sideok:
 		break;
 	case CS94MULTI:
 	case CS96MULTI:
-		i = isthree(cs.final) ? 3 : 2;
+		i = !iscntl(wc & 0xff) ?
+		    (isthree(cs.final) ? 3 : 2) : 1;
 		break;
 	}
 	while (i-- > 0)
@@ -1160,16 +1176,23 @@ sideok:
 	/* reset single shift state */
 	psenc->singlegl = psenc->singlegr = -1;
 
-	len = p - tmp;
+	len = (size_t)(p - tmp);
 	if (n < len) {
 		if (result)
 			*result = (char *)0;
-	} else {
-		if (result)
-			*result = string + len;
-		memcpy(string, tmp, len);
+		*nresult = (size_t)-1;
+		return E2BIG;
 	}
-	return len;
+	if (result)
+		*result = string + len;
+	memcpy(string, tmp, len);
+	*nresult = len;
+
+	return 0;
+
+ilseq:
+	*nresult = (size_t)-1;
+	return EILSEQ;
 }
 
 static int
@@ -1180,32 +1203,30 @@ _citrus_ISO2022_put_state_reset(_ISO2022EncodingInfo * __restrict ei,
 {
 	char buf[MB_LEN_MAX];
 	char *result;
-	int len, ret;
+	int ret;
+	size_t len;
 
 	_DIAGASSERT(ei != NULL);
 	_DIAGASSERT(nresult != 0);
 	_DIAGASSERT(s != NULL);
 
 	/* XXX state will be modified after this operation... */
-	len = _ISO2022_sputwchar(ei, L'\0', buf, sizeof(buf), &result, psenc);
-	if (len==0) {
-		ret = EINVAL;
-		goto err;
+	ret = _ISO2022_sputwchar(ei, L'\0', buf, sizeof(buf), &result, psenc,
+	    &len);
+	if (ret) {
+		*nresult = len;
+		return ret;
 	}
+
 	if (sizeof(buf) < len || n < len-1) {
 		/* XXX should recover state? */
-		ret = E2BIG;
-		goto err;
+		*nresult = (size_t)-1;
+		return E2BIG;
 	}
 
 	memcpy(s, buf, len-1);
-	*nresult = (size_t)(len-1);
+	*nresult = len-1;
 	return (0);
-
-err:
-	/* bound check failure */
-	*nresult = (size_t)-1;
-	return ret;
 }
 
 static int
@@ -1216,28 +1237,31 @@ _citrus_ISO2022_wcrtomb_priv(_ISO2022EncodingInfo * __restrict ei,
 {
 	char buf[MB_LEN_MAX];
 	char *result;
-	int len, ret;
+	int ret;
+	size_t len;
 
 	_DIAGASSERT(ei != NULL);
-	_DIAGASSERT(nresult != 0);
 	_DIAGASSERT(s != NULL);
+	_DIAGASSERT(psenc != NULL);
+	_DIAGASSERT(nresult != 0);
 
 	/* XXX state will be modified after this operation... */
-	len = _ISO2022_sputwchar(ei, wc, buf, sizeof(buf), &result, psenc);
+	ret = _ISO2022_sputwchar(ei, wc, buf, sizeof(buf), &result, psenc,
+	    &len);
+	if (ret) {
+		*nresult = len;
+		return ret;
+	}
+
 	if (sizeof(buf) < len || n < len) {
 		/* XXX should recover state? */
-		ret = E2BIG;
-		goto err;
+		*nresult = (size_t)-1;
+		return E2BIG;
 	}
 
 	memcpy(s, buf, len);
-	*nresult = (size_t)len;
+	*nresult = len;
 	return (0);
-
-err:
-	/* bound check failure */
-	*nresult = (size_t)-1;
-	return ret;
 }
 
 static __inline int
@@ -1282,6 +1306,26 @@ _citrus_ISO2022_stdenc_cstowc(_ISO2022EncodingInfo * __restrict ei,
 	*wc = (wchar_t)(csid & 0x7F808080) | (wchar_t)idx;
 
 	return (0);
+}
+
+static __inline int
+/*ARGSUSED*/
+_citrus_ISO2022_stdenc_get_state_desc_generic(_ISO2022EncodingInfo * __restrict ei,
+					      _ISO2022State * __restrict psenc,
+					      int * __restrict rstate)
+{
+
+	if (psenc->chlen == 0) {
+		/* XXX: it should distinguish initial and stable. */
+		*rstate = _STDENC_SDGEN_STABLE;
+	} else {
+		if (psenc->ch[0] == '\033')
+			*rstate = _STDENC_SDGEN_INCOMPLETE_SHIFT;
+		else
+			*rstate = _STDENC_SDGEN_INCOMPLETE_CHAR;
+	}
+
+	return 0;
 }
 
 /* ----------------------------------------------------------------------

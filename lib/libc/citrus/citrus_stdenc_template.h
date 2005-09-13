@@ -1,4 +1,4 @@
-/*	$NetBSD: citrus_stdenc_template.h,v 1.2 2003/06/26 12:09:57 tshiozak Exp $	*/
+/*	$NetBSD: citrus_stdenc_template.h,v 1.4 2008/02/09 14:56:20 junyoung Exp $	*/
 
 /*-
  * Copyright (c)2003 Citrus Project,
@@ -50,7 +50,7 @@
 
 int
 _FUNCNAME(stdenc_getops)(struct _citrus_stdenc_ops *ops, size_t lenops,
-			 u_int32_t expected_version)
+			 uint32_t expected_version)
 {
 	if (expected_version<_CITRUS_STDENC_ABI_VERSION || lenops<sizeof(*ops))
 		return (EINVAL);
@@ -183,4 +183,24 @@ _FUNCNAME(stdenc_put_state_reset)(struct _citrus_stdenc * __restrict ce,
 	*nresult = 0;
 	return 0;
 #endif
+}
+
+static int
+_FUNCNAME(stdenc_get_state_desc)(struct _citrus_stdenc * __restrict ce,
+				 void * __restrict ps,
+				 int id,
+				 struct _citrus_stdenc_state_desc * __restrict d)
+{
+	int ret;
+
+	switch (id) {
+	case _STDENC_SDID_GENERIC:
+		ret = _FUNCNAME(stdenc_get_state_desc_generic)(
+			_CE_TO_EI(ce), _TO_STATE(ps), &d->u.generic.state);
+		break;
+	default:
+		ret = EOPNOTSUPP;
+	}
+
+	return ret;
 }

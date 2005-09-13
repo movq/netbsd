@@ -1,7 +1,7 @@
-/*	$NetBSD: pthread_md.h,v 1.3 2003/07/26 19:25:07 salo Exp $	*/
+/*	$NetBSD: pthread_md.h,v 1.10 2008/04/28 20:23:02 martin Exp $	*/
 
 /*-
- * Copyright (c) 2001 The NetBSD Foundation, Inc.
+ * Copyright (c) 2001, 2007, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -43,7 +36,7 @@
 
 #include <sys/ucontext.h>
 
-static __inline long
+static inline long
 pthread__sp(void)
 {
 	long ret;
@@ -102,5 +95,36 @@ pthread__sp(void)
 	/*LINTED precision loss */					\
 	(uc)->uc_flags = ((uc)->uc_flags | _UC_FPU) & ~_UC_USER;	\
 	} while (/*CONSTCOND*/0)
+
+#define	pthread__smt_pause()	__asm __volatile("rep; nop" ::: "memory")
+
+/* Don't need additional memory barriers. */
+#define	PTHREAD__ATOMIC_IS_MEMBAR
+
+static inline void *
+_atomic_cas_ptr(volatile void *ptr, void *old, void *new)
+{
+	volatile uintptr_t *cast = ptr;
+	void *ret;
+
+	__asm __volatile ("lock; cmpxchgq %2, %1"
+		: "=a" (ret), "=m" (*cast)
+		: "r" (new), "m" (*cast), "0" (old));
+
+	return ret;
+}
+
+static inline void *
+_atomic_cas_ptr_ni(volatile void *ptr, void *old, void *new)
+{
+	volatile uintptr_t *cast = ptr;
+	void *ret;
+
+	__asm __volatile ("cmpxchgq %2, %1"
+		: "=a" (ret), "=m" (*cast)
+		: "r" (new), "m" (*cast), "0" (old));
+
+	return ret;
+}
 
 #endif /* _LIB_PTHREAD_X86_64_MD_H */

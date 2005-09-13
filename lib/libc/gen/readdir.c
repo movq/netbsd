@@ -1,4 +1,4 @@
-/*	$NetBSD: readdir.c,v 1.20 2005/09/13 01:44:09 christos Exp $	*/
+/*	$NetBSD: readdir.c,v 1.24 2008/05/04 18:53:26 tonnerre Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,12 +34,13 @@
 #if 0
 static char sccsid[] = "@(#)readdir.c	8.3 (Berkeley) 9/29/94";
 #else
-__RCSID("$NetBSD: readdir.c,v 1.20 2005/09/13 01:44:09 christos Exp $");
+__RCSID("$NetBSD: readdir.c,v 1.24 2008/05/04 18:53:26 tonnerre Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
 #include "reentrant.h"
+#include "extern.h"
 #include <sys/param.h>
 
 #include <dirent.h>
@@ -47,11 +48,13 @@ __RCSID("$NetBSD: readdir.c,v 1.20 2005/09/13 01:44:09 christos Exp $");
 #include <string.h>
 #include <unistd.h>
 
+#include "dirent_private.h"
+
 /*
  * get next entry in a directory.
  */
-static struct dirent *
-_readdir_unlocked(DIR *dirp)
+struct dirent *
+_readdir_unlocked(DIR *dirp, int skipdeleted)
 {
 	struct dirent *dp;
 
@@ -77,7 +80,7 @@ _readdir_unlocked(DIR *dirp)
 		if (dp->d_reclen > dirp->dd_len + 1 - dirp->dd_loc)
 			return (NULL);
 		dirp->dd_loc += dp->d_reclen;
-		if (dp->d_ino == 0)
+		if (dp->d_ino == 0 && skipdeleted)
 			continue;
 		if (dp->d_type == DT_WHT && (dirp->dd_flags & DTF_HIDEW))
 			continue;
@@ -94,12 +97,12 @@ readdir(dirp)
 #ifdef _REENTRANT
 	if (__isthreaded) {
 		mutex_lock((mutex_t *)dirp->dd_lock);
-		dp = _readdir_unlocked(dirp);
+		dp = _readdir_unlocked(dirp, 1);
 		mutex_unlock((mutex_t *)dirp->dd_lock);
 	}
 	else
 #endif
-		dp = _readdir_unlocked(dirp);
+		dp = _readdir_unlocked(dirp, 1);
 	return (dp);
 }
 
@@ -117,13 +120,13 @@ readdir_r(dirp, entry, result)
 #ifdef _REENTRANT
 	if (__isthreaded) {
 		mutex_lock((mutex_t *)dirp->dd_lock);
-		if ((dp = _readdir_unlocked(dirp)) != NULL)
+		if ((dp = _readdir_unlocked(dirp, 1)) != NULL)
 			memcpy(entry, dp, (size_t)_DIRENT_SIZE(dp));
 		mutex_unlock((mutex_t *)dirp->dd_lock);
 	}
 	else 
 #endif
-		if ((dp = _readdir_unlocked(dirp)) != NULL)
+		if ((dp = _readdir_unlocked(dirp, 1)) != NULL)
 			memcpy(entry, dp, (size_t)_DIRENT_SIZE(dp));
 
 	if (errno != 0) {

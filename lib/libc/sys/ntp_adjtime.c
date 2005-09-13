@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_adjtime.c,v 1.6 2005/06/12 05:21:28 lukem Exp $ */
+/*	$NetBSD: ntp_adjtime.c,v 1.11 2007/11/23 12:39:15 uebayasi Exp $ */
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.      
@@ -33,97 +33,75 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: ntp_adjtime.c,v 1.6 2005/06/12 05:21:28 lukem Exp $");
+__RCSID("$NetBSD: ntp_adjtime.c,v 1.11 2007/11/23 12:39:15 uebayasi Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
-#include <errno.h>
-#include <fcntl.h>
-#include <paths.h>
-#include <unistd.h>
 #include <sys/types.h>
 #include <sys/time.h>
 #include <sys/timex.h>
 #include <sys/ioctl.h>
 #include <sys/syscall.h>
-#include <sys/systm.h>
 
 #include <sys/clockctl.h>
 
+#include <errno.h>
 #include <fcntl.h>
 #include <paths.h>
 #include <string.h>
 #include <unistd.h>
- 
+
 #ifdef __weak_alias
 __weak_alias(ntp_adjtime,_ntp_adjtime)
-#endif 
+#endif
 
 extern int __clockctl_fd;
+
+int __ntp_adjtime(struct timex *);
 
 int
 ntp_adjtime(tp)
 	struct timex *tp;
 {
-	struct clockctl_ntp_adjtime_args args;
+	struct clockctl_ntp_adjtime args;
 	int error;
-	quad_t q;
 	int rv;
 
 	/*
-	 * if __clockctl_fd == -1, then this is not our first time, 
-	 * and we know root is the calling user. We use the system call
+	 * we always attempt to use the syscall unless we had to
+	 * use the clockctl device before
+	 *
+	 * ntp_adjtime() is callable for mortals if tp->modes == 0 !
 	 */
 	if (__clockctl_fd == -1) {
-try_syscall:
-		q = __syscall((quad_t)SYS_ntp_adjtime, tp);
-		if (/* LINTED constant */ sizeof (quad_t) == sizeof (register_t)
-		    || /* LINTED constant */ BYTE_ORDER == LITTLE_ENDIAN)
-			rv = (int)q;
-		else
-			rv = (int)((u_quad_t)q >> 32); 
+		rv = __ntp_adjtime(tp);
 	
 		/*
-		 * If credentials changed from root to an unprivilegied 
-		 * user, and we already had __clockctl_fd = -1, then we 
-		 * tried the system call as a non root user, it failed 
-		 * with EPERM, and we will try clockctl.
+		 * if we fail with EPERM we try the clockctl device
 		 */
 		if (rv != -1 || errno != EPERM)
 			return rv;
-		__clockctl_fd = -2;
-	}
-
-	/*
-	 * If __clockctl_fd = -2 then this is our first time here, 
-	 * or credentials have changed (the calling process dropped root 
-	 * root privilege). Check if root is the calling user. If it is,
-	 * we try the system call, if it is not, we try clockctl.
-	 */
-	if (__clockctl_fd == -2) {
-		/* 
-		 * Root always uses the syscall
-		 */
-		if (geteuid() == 0) {
-			__clockctl_fd = -1;
-			goto try_syscall;
-		}
 
 		/*
 		 * If this fails, it means that we are not root
-		 * and we cannot open clockctl. This is a failure.
+		 * and we cannot open clockctl. This is a true
+		 * failure.
 		 */
 		__clockctl_fd = open(_PATH_CLOCKCTL, O_WRONLY, 0);
-		if (__clockctl_fd == -1)
+		if (__clockctl_fd == -1) {
+			/* original error was EPERM - don't leak open errors */
+			errno = EPERM;
 			return -1;
+		}
+
 		(void) fcntl(__clockctl_fd, F_SETFD, FD_CLOEXEC);
 	}
 
-	/* 
+	/*
 	 * If __clockctl_fd >=0, clockctl has already been open
 	 * and used, so we carry on using it.
 	 */
-	SCARG(&args.uas, tp) = tp;
+	args.tp = tp;
 	error = ioctl(__clockctl_fd, CLOCKCTL_NTP_ADJTIME, &args);
 
 	/*
@@ -134,6 +112,6 @@ try_syscall:
 		rv = (int)args.retval;
 		return rv;
 	}
-	return error;
 
+	return error;
 }

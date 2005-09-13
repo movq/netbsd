@@ -1,4 +1,4 @@
-/*	$NetBSD: stdlib.h,v 1.70 2005/06/11 22:58:42 christos Exp $	*/
+/*	$NetBSD: stdlib.h,v 1.85 2008/06/21 00:58:00 gmcgarry Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -93,8 +93,8 @@ extern size_t __mb_cur_max;
 #define	MB_CUR_MAX	__mb_cur_max
 
 __BEGIN_DECLS
-__dead	 void _Exit(int) __attribute__((__noreturn__));
-__dead	 void abort(void) __attribute__((__noreturn__));
+__dead	 void _Exit(int);
+__dead	 void abort(void);
 __pure	 int abs(int);
 int	 atexit(void (*)(void));
 double	 atof(const char *);
@@ -108,7 +108,7 @@ void	*bsearch(const void *, const void *, size_t, size_t,
 #endif /* __BSEARCH_DECLARED */
 void	*calloc(size_t, size_t);
 div_t	 div(int, int);
-__dead	 void exit(int) __attribute__((__noreturn__));
+__dead	 void exit(int);
 void	 free(void *);
 __aconst char *getenv(const char *);
 __pure long
@@ -148,7 +148,7 @@ int	 rand_r(unsigned int *);
 /*
  * X/Open Portability Guide >= Issue 4
  */
-#if (_XOPEN_SOURCE - 0) >= 4 || defined(_NETBSD_SOURCE)
+#if defined(_XOPEN_SOURCE) || defined(_NETBSD_SOURCE)
 double	 drand48(void);
 double	 erand48(unsigned short[3]);
 long	 jrand48(unsigned short[3]);
@@ -176,6 +176,9 @@ char	*initstate(unsigned long, char *, size_t);
 long	 random(void);
 char	*setstate(char *);
 void	 srandom(unsigned long);
+#ifdef _NETBSD_SOURCE
+#define	RANDOM_MAX	0x7fffffff	/* (((long)1 << 31) - 1) */
+#endif
 
 char	*mkdtemp(char *);
 int	 mkstemp(char *);
@@ -214,6 +217,8 @@ long long int	strtoll(const char * __restrict, char ** __restrict, int);
 /* LONGLONG */
 unsigned long long int
 		strtoull(const char * __restrict, char ** __restrict, int);
+float		strtof(const char * __restrict, char ** __restrict);
+long double	strtold(const char * __restrict, char ** __restrict);
 #endif
 
 /*
@@ -222,27 +227,28 @@ unsigned long long int
 #if (_POSIX_C_SOURCE - 0) >= 200112L || (_XOPEN_SOURCE - 0) >= 600 || \
     defined(_NETBSD_SOURCE)
 int	 setenv(const char *, const char *, int);
-#ifdef __LIBC12_SOURCE__
-void	 unsetenv(const char *);
-int	 __unsetenv13(const char *);
-#else
+#ifndef __LIBC12_SOURCE__
 int	 unsetenv(const char *) __RENAME(__unsetenv13);
 #endif
 
 int	 posix_openpt(int);
+int	 posix_memalign(void **, size_t, size_t);
 #endif
 
 /*
  * Implementation-defined extensions
  */
 #if defined(_NETBSD_SOURCE)
-#if defined(alloca) && (alloca == __builtin_alloca) && (__GNUC__ < 2)
-void	*alloca(int);     /* built-in for gcc */ 
-#else 
-void	*alloca(size_t); 
-#endif /* __GNUC__ */ 
+#if defined(alloca) && (alloca == __builtin_alloca) && \
+	defined(__GNUC__) && (__GNUC__ < 2)
+void	*alloca(int);     /* built-in for gcc */
+#elif defined(__PCC__)
+#define alloca(size) __builtin_alloca(size)
+#else
+void	*alloca(size_t);
+#endif /* __GNUC__ */
 
-u_int32_t arc4random(void);
+uint32_t arc4random(void);
 void	 arc4random_stir(void);
 void	 arc4random_addrandom(u_char *, int);
 char	*getbsize(int *, long *);
@@ -256,11 +262,26 @@ int	 cgetnum(char *, const char *, long *);
 int	 cgetset(const char *);
 int	 cgetstr(char *, const char *, char **);
 int	 cgetustr(char *, const char *, char **);
+void	 csetexpandtc(int);
 
 int	 daemon(int, int);
 __aconst char *devname(dev_t, mode_t);
+
+#define	HN_DECIMAL		0x01
+#define	HN_NOSPACE		0x02
+#define	HN_B			0x04
+#define	HN_DIVISOR_1000		0x08
+
+#define	HN_GETSCALE		0x10
+#define	HN_AUTOSCALE		0x20
+
+int	 humanize_number(char *, size_t, int64_t, const char *, int, int);
+int	 dehumanize_number(const char *, int64_t *);
+
 dev_t	 getdevmajor(const char *, mode_t);
 int	 getloadavg(double [], int);
+
+int	 getenv_r(const char *, char *, size_t);
 
 void	 cfree(void *);
 
@@ -274,7 +295,7 @@ int	 sradixsort(const unsigned char **, int, const unsigned char *,
 
 void	 setproctitle(const char *, ...)
 	    __attribute__((__format__(__printf__, 1, 2)));
-const char *getprogname(void) __attribute__((__const__));
+const char *getprogname(void) __attribute__((const));
 void	setprogname(const char *);
 
 quad_t	 qabs(quad_t);

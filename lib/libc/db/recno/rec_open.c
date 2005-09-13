@@ -1,4 +1,4 @@
-/*	$NetBSD: rec_open.c,v 1.14 2005/06/01 05:39:17 lukem Exp $	*/
+/*	$NetBSD: rec_open.c,v 1.17 2008/09/11 12:58:00 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -32,20 +32,19 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-#if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)rec_open.c	8.10 (Berkeley) 9/1/94";
-#else
-__RCSID("$NetBSD: rec_open.c,v 1.14 2005/06/01 05:39:17 lukem Exp $");
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
 #endif
-#endif /* LIBC_SCCS and not lint */
+
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: rec_open.c,v 1.17 2008/09/11 12:58:00 joerg Exp $");
 
 #include "namespace.h"
 #include <sys/types.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 
+#include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -57,12 +56,8 @@ __RCSID("$NetBSD: rec_open.c,v 1.14 2005/06/01 05:39:17 lukem Exp $");
 #include "recno.h"
 
 DB *
-__rec_open(fname, flags, mode, openinfo, dflags)
-	const char *fname;
-	int flags;
-	mode_t mode;
-	const RECNOINFO *openinfo;
-	int dflags;
+__rec_open(const char *fname, int flags, mode_t mode, const RECNOINFO *openinfo,
+    int dflags)
 {
 	BTREE *t;
 	BTREEINFO btopeninfo;
@@ -230,8 +225,7 @@ err:	sverrno = errno;
 }
 
 int
-__rec_fd(dbp)
-	const DB *dbp;
+__rec_fd(const DB *dbp)
 {
 	BTREE *t;
 

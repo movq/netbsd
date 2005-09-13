@@ -1,7 +1,7 @@
-/* $NetBSD: dksubr.c,v 1.16 2005/08/20 12:03:52 yamt Exp $ */
+/* $NetBSD: dksubr.c,v 1.35 2008/03/21 21:54:59 ad Exp $ */
 
 /*-
- * Copyright (c) 1996, 1997, 1998, 1999, 2002 The NetBSD Foundation, Inc.
+ * Copyright (c) 1996, 1997, 1998, 1999, 2002, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dksubr.c,v 1.16 2005/08/20 12:03:52 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dksubr.c,v 1.35 2008/03/21 21:54:59 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -89,7 +89,7 @@ dk_sc_init(struct dk_softc *dksc, void *osc, char *xname)
 /* ARGSUSED */
 int
 dk_open(struct dk_intf *di, struct dk_softc *dksc, dev_t dev,
-	   int flags, int fmt, struct proc *p)
+    int flags, int fmt, struct lwp *l)
 {
 	struct	disklabel *lp = dksc->sc_dkdev.dk_label;
 	int	part = DISKPART(dev);
@@ -100,9 +100,7 @@ dk_open(struct dk_intf *di, struct dk_softc *dksc, dev_t dev,
 	DPRINTF_FOLLOW(("dk_open(%s, %p, 0x%x, 0x%x)\n",
 	    di->di_dkname, dksc, dev, flags));
 
-	if ((ret = lockmgr(&dk->dk_openlock, LK_EXCLUSIVE, NULL)) != 0)
-		return ret;
-
+	mutex_enter(&dk->dk_openlock);
 	part = DISKPART(dev);
 
 	/*
@@ -149,25 +147,23 @@ dk_open(struct dk_intf *di, struct dk_softc *dksc, dev_t dev,
 	dk->dk_openmask = dk->dk_copenmask | dk->dk_bopenmask;
 
 done:
-	lockmgr(&dk->dk_openlock, LK_RELEASE, NULL);
+	mutex_exit(&dk->dk_openlock);
 	return ret;
 }
 
 /* ARGSUSED */
 int
 dk_close(struct dk_intf *di, struct dk_softc *dksc, dev_t dev,
-	    int flags, int fmt, struct proc *p)
+    int flags, int fmt, struct lwp *l)
 {
 	int	part = DISKPART(dev);
 	int	pmask = 1 << part;
-	int	ret;
 	struct disk *dk = &dksc->sc_dkdev;
 
 	DPRINTF_FOLLOW(("dk_close(%s, %p, 0x%x, 0x%x)\n",
 	    di->di_dkname, dksc, dev, flags));
 
-	if ((ret = lockmgr(&dk->dk_openlock, LK_EXCLUSIVE, NULL)) != 0)
-		return ret;
+	mutex_enter(&dk->dk_openlock);
 
 	switch (fmt) {
 	case S_IFCHR:
@@ -179,7 +175,7 @@ dk_close(struct dk_intf *di, struct dk_softc *dksc, dev_t dev,
 	}
 	dk->dk_openmask = dk->dk_copenmask | dk->dk_bopenmask;
 
-	lockmgr(&dk->dk_openlock, LK_RELEASE, NULL);
+	mutex_exit(&dk->dk_openlock);
 	return 0;
 }
 
@@ -188,14 +184,14 @@ dk_strategy(struct dk_intf *di, struct dk_softc *dksc, struct buf *bp)
 {
 	int	s;
 	int	wlabel;
+	daddr_t	blkno;
 
 	DPRINTF_FOLLOW(("dk_strategy(%s, %p, %p)\n",
 	    di->di_dkname, dksc, bp));
 
 	if (!(dksc->sc_flags & DKF_INITED)) {
-		DPRINTF_FOLLOW(("dk_stragy: not inited\n"));
+		DPRINTF_FOLLOW(("dk_strategy: not inited\n"));
 		bp->b_error  = ENXIO;
-		bp->b_flags |= B_ERROR;
 		biodone(bp);
 		return;
 	}
@@ -217,12 +213,22 @@ dk_strategy(struct dk_intf *di, struct dk_softc *dksc, struct buf *bp)
 		return;
 	}
 
+	blkno = bp->b_blkno;
+	if (DISKPART(bp->b_dev) != RAW_PART) {
+		struct partition *pp;
+
+		pp =
+		    &dksc->sc_dkdev.dk_label->d_partitions[DISKPART(bp->b_dev)];
+		blkno += pp->p_offset;
+	}
+	bp->b_rawblkno = blkno;
+
 	/*
 	 * Start the unit by calling the start routine
 	 * provided by the individual driver.
 	 */
 	s = splbio();
-	BUFQ_PUT(&dksc->sc_bufq, bp);
+	BUFQ_PUT(dksc->sc_bufq, bp);
 	dk_start(di, dksc);
 	splx(s);
 	return;
@@ -236,9 +242,9 @@ dk_start(struct dk_intf *di, struct dk_softc *dksc)
 	DPRINTF_FOLLOW(("dk_start(%s, %p)\n", di->di_dkname, dksc));
 
 	/* Process the work queue */
-	while ((bp = BUFQ_GET(&dksc->sc_bufq)) != NULL) {
+	while ((bp = BUFQ_GET(dksc->sc_bufq)) != NULL) {
 		if (di->di_diskstart(dksc, bp) != 0) {
-			BUFQ_PUT(&dksc->sc_bufq, bp);
+			BUFQ_PUT(dksc->sc_bufq, bp);
 			break;
 		}
 	}
@@ -268,7 +274,7 @@ dk_size(struct dk_intf *di, struct dk_softc *dksc, dev_t dev)
 	part = DISKPART(dev);
 	is_open = dksc->sc_dkdev.dk_openmask & (1 << part);
 
-	if (!is_open && di->di_open(dev, 0, S_IFBLK, curproc))
+	if (!is_open && di->di_open(dev, 0, S_IFBLK, curlwp))
 		return -1;
 
 	lp = dksc->sc_dkdev.dk_label;
@@ -278,7 +284,7 @@ dk_size(struct dk_intf *di, struct dk_softc *dksc, dev_t dev)
 		size = lp->d_partitions[part].p_size *
 		    (lp->d_secsize / DEV_BSIZE);
 
-	if (!is_open && di->di_close(dev, 0, S_IFBLK, curproc))
+	if (!is_open && di->di_close(dev, 0, S_IFBLK, curlwp))
 		return 1;
 
 	return size;
@@ -286,7 +292,7 @@ dk_size(struct dk_intf *di, struct dk_softc *dksc, dev_t dev)
 
 int
 dk_ioctl(struct dk_intf *di, struct dk_softc *dksc, dev_t dev,
-	    u_long cmd, caddr_t data, int flag, struct proc *p)
+	    u_long cmd, void *data, int flag, struct lwp *l)
 {
 	struct	disklabel *lp;
 	struct	disk *dk;
@@ -365,11 +371,7 @@ dk_ioctl(struct dk_intf *di, struct dk_softc *dksc, dev_t dev,
 		lp = (struct disklabel *)data;
 
 		dk = &dksc->sc_dkdev;
-		error = lockmgr(&dk->dk_openlock, LK_EXCLUSIVE, NULL);
-		if (error) {
-			break;
-		}
-
+		mutex_enter(&dk->dk_openlock);
 		dksc->sc_flags |= DKF_LABELLING;
 
 		error = setdisklabel(dksc->sc_dkdev.dk_label,
@@ -386,7 +388,7 @@ dk_ioctl(struct dk_intf *di, struct dk_softc *dksc, dev_t dev,
 		}
 
 		dksc->sc_flags &= ~DKF_LABELLING;
-		error = lockmgr(&dk->dk_openlock, LK_RELEASE, NULL);
+		mutex_exit(&dk->dk_openlock);
 		break;
 
 	case DIOCWLABEL:
@@ -437,7 +439,50 @@ dk_ioctl(struct dk_intf *di, struct dk_softc *dksc, dev_t dev,
 	    {
 	    	struct dkwedge_list *dkwl = (void *)data;
 
-		return (dkwedge_list(&dksc->sc_dkdev, dkwl, p));
+		return (dkwedge_list(&dksc->sc_dkdev, dkwl, l));
+	    }
+
+	case DIOCGSTRATEGY:
+	    {
+		struct disk_strategy *dks = (void *)data;
+		int s;
+
+		s = splbio();
+		strlcpy(dks->dks_name, bufq_getstrategyname(dksc->sc_bufq),
+		    sizeof(dks->dks_name));
+		splx(s);
+		dks->dks_paramlen = 0;
+
+		return 0;
+	    }
+	
+	case DIOCSSTRATEGY:
+	    {
+		struct disk_strategy *dks = (void *)data;
+		struct bufq_state *new;
+		struct bufq_state *old;
+		int s;
+
+		if ((flag & FWRITE) == 0) {
+			return EBADF;
+		}
+		if (dks->dks_param != NULL) {
+			return EINVAL;
+		}
+		dks->dks_name[sizeof(dks->dks_name) - 1] = 0; /* ensure term */
+		error = bufq_alloc(&new, dks->dks_name,
+		    BUFQ_EXACT|BUFQ_SORT_RAWBLOCK);
+		if (error) {
+			return error;
+		}
+		s = splbio();
+		old = dksc->sc_bufq;
+		bufq_move(new, old);
+		dksc->sc_bufq = new;
+		splx(s);
+		bufq_free(old);
+
+		return 0;
 	    }
 
 	default:
@@ -462,7 +507,7 @@ static volatile int	dk_dumping = 0;
 /* ARGSUSED */
 int
 dk_dump(struct dk_intf *di, struct dk_softc *dksc, dev_t dev,
-	   daddr_t blkno, caddr_t va, size_t size)
+    daddr_t blkno, void *va, size_t size)
 {
 
 	/*
@@ -581,48 +626,44 @@ dk_makedisklabel(struct dk_intf *di, struct dk_softc *dksc)
  * set *vpp to the file's vnode.
  */
 int
-dk_lookup(path, p, vpp)
-	const char *path;
-	struct proc *p;
-	struct vnode **vpp;	/* result */
+dk_lookup(const char *path, struct lwp *l, struct vnode **vpp,
+    enum uio_seg segflg)
 {
 	struct nameidata nd;
 	struct vnode *vp;
 	struct vattr va;
-	int error;
+	int     error;
 
-	NDINIT(&nd, LOOKUP, FOLLOW, UIO_USERSPACE, path, p);
-	if ((error = vn_open(&nd, FREAD|FWRITE, 0)) != 0) {
+	if (l == NULL)
+		return ESRCH;	/* Is ESRCH the best choice? */
+
+	NDINIT(&nd, LOOKUP, FOLLOW, segflg, path);
+	if ((error = vn_open(&nd, FREAD | FWRITE, 0)) != 0) {
 		DPRINTF((DKDB_FOLLOW|DKDB_INIT),
 		    ("dk_lookup: vn_open error = %d\n", error));
-		return (error);
+		return error;
 	}
+
 	vp = nd.ni_vp;
-
-	if (vp->v_usecount > 1) {
-		VOP_UNLOCK(vp, 0);
-		(void)vn_close(vp, FREAD|FWRITE, p->p_ucred, p);
-		return (EBUSY);
-	}
-
-	if ((error = VOP_GETATTR(vp, &va, p->p_ucred, p)) != 0) {
+	if ((error = VOP_GETATTR(vp, &va, l->l_cred)) != 0) {
 		DPRINTF((DKDB_FOLLOW|DKDB_INIT),
 		    ("dk_lookup: getattr error = %d\n", error));
-		VOP_UNLOCK(vp, 0);
-		(void)vn_close(vp, FREAD|FWRITE, p->p_ucred, p);
-		return (error);
+		goto out;
 	}
 
 	/* XXX: eventually we should handle VREG, too. */
 	if (va.va_type != VBLK) {
-		VOP_UNLOCK(vp, 0);
-		(void)vn_close(vp, FREAD|FWRITE, p->p_ucred, p);
-		return (ENOTBLK);
+		error = ENOTBLK;
+		goto out;
 	}
 
 	IFDEBUG(DKDB_VNODE, vprint("dk_lookup: vnode info", vp));
 
 	VOP_UNLOCK(vp, 0);
 	*vpp = vp;
-	return (0);
+	return 0;
+out:
+	VOP_UNLOCK(vp, 0);
+	(void) vn_close(vp, FREAD | FWRITE, l->l_cred);
+	return error;
 }

@@ -1,11 +1,11 @@
-/*	$NetBSD: _context_u.S,v 1.2 2003/01/18 10:34:18 thorpej Exp $	*/
+/*	$NetBSD: _context_u.S,v 1.9 2008/04/28 20:23:02 martin Exp $	*/
 
 /*-
- * Copyright (c) 2001 The NetBSD Foundation, Inc.
+ * Copyright (c) 2001, 2007 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Nathan J. Williams.
+ * by Nathan J. Williams, and by Andrew Doran.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,12 +32,13 @@
 #include <machine/asm.h>
 #include "assym.h"
 
+#define	STUB(n)		ENTRY(n); .hidden _C_LABEL(n)
 
 #define FPSAVE(reg)	fnsave UC_FPREGS(reg)
 #define FPLOAD(reg)	frstor UC_FPREGS(reg)
 #include "_getsetc.S"
 	
-ENTRY(_getcontext_u_s87)
+STUB(_getcontext_u_s87)
 	movl	4(%esp), %ecx
 	movl	0(%esp), %edx
 	GETC
@@ -54,11 +48,11 @@ ENTRY(_getcontext_u_s87)
 	xorl	%eax,  %eax
 	ret
 
-ENTRY(_setcontext_u_s87)					
+STUB(_setcontext_u_s87)					
 	movl	4(%esp), %ecx
 	SETC
 
-ENTRY(_swapcontext_u_s87)
+STUB(_swapcontext_u_s87)
 	movl	4(%esp), %ecx
 	movl	0(%esp), %edx
 	GETC
@@ -76,7 +70,7 @@ ENTRY(_swapcontext_u_s87)
 #define FPLOAD(reg)	fxrstor UC_FXSAVEREGS(reg)
 #include "_getsetc.S"
 
-ENTRY(_getcontext_u_xmm)
+STUB(_getcontext_u_xmm)
 	movl	4(%esp), %ecx
 	movl	0(%esp), %edx
 	GETC
@@ -86,11 +80,11 @@ ENTRY(_getcontext_u_xmm)
 	xorl	%eax,  %eax
 	ret
 
-ENTRY(_setcontext_u_xmm)					
+STUB(_setcontext_u_xmm)					
 	movl	4(%esp), %ecx
 	SETC
 
-ENTRY(_swapcontext_u_xmm)
+STUB(_swapcontext_u_xmm)
 	movl	4(%esp), %ecx
 	movl	0(%esp), %edx
 	GETC

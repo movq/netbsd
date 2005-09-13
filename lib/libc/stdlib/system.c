@@ -1,4 +1,4 @@
-/*	$NetBSD: system.c,v 1.19 2003/08/07 16:43:45 agc Exp $	*/
+/*	$NetBSD: system.c,v 1.22 2008/08/27 06:45:02 christos Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)system.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: system.c,v 1.19 2003/08/07 16:43:45 agc Exp $");
+__RCSID("$NetBSD: system.c,v 1.22 2008/08/27 06:45:02 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -61,10 +61,18 @@ system(command)
 	struct sigaction intsa, quitsa, sa;
 	sigset_t nmask, omask;
 	int pstat;
-	char *argp[] = {"sh", "-c", /* LINTED */(char *)command, NULL};
+	const char *argp[] = {"sh", "-c", NULL, NULL};
+	argp[2] = command;
 
-	if (command == NULL)		/* just checking... */
-		return(1);
+	/*
+	 * ISO/IEC 9899:1999 in 7.20.4.6 describes this special case.
+	 * We need to check availability of a command interpreter.
+	 */
+	if (command == NULL) {
+		if (access(_PATH_BSHELL, X_OK) == 0)
+			return 1;
+		return 0;
+	}
 
 	sa.sa_handler = SIG_IGN;
 	sigemptyset(&sa.sa_mask);
@@ -72,13 +80,18 @@ system(command)
 
 	if (sigaction(SIGINT, &sa, &intsa) == -1)
 		return -1;
-	if (sigaction(SIGQUIT, &sa, &quitsa) == -1)
+	if (sigaction(SIGQUIT, &sa, &quitsa) == -1) {
+		sigaction(SIGINT, &intsa, NULL);
 		return -1;
+	}
 
 	sigemptyset(&nmask);
 	sigaddset(&nmask, SIGCHLD);
-	if (sigprocmask(SIG_BLOCK, &nmask, &omask) == -1)
+	if (sigprocmask(SIG_BLOCK, &nmask, &omask) == -1) {
+		sigaction(SIGINT, &intsa, NULL);
+		sigaction(SIGQUIT, &quitsa, NULL);
 		return -1;
+	}
 
 	rwlock_rdlock(&__environ_lock);
 	switch(pid = vfork()) {
@@ -92,7 +105,7 @@ system(command)
 		sigaction(SIGINT, &intsa, NULL);
 		sigaction(SIGQUIT, &quitsa, NULL);
 		(void)sigprocmask(SIG_SETMASK, &omask, NULL);
-		execve(_PATH_BSHELL, argp, environ);
+		execve(_PATH_BSHELL, __UNCONST(argp), environ);
 		_exit(127);
 	}
 	rwlock_unlock(&__environ_lock);

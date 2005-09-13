@@ -1,4 +1,4 @@
-/*	$NetBSD: execvp.c,v 1.25 2005/06/01 04:40:46 lukem Exp $	*/
+/*	$NetBSD: execvp.c,v 1.30 2007/07/20 12:41:07 yamt Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)exec.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: execvp.c,v 1.25 2005/06/01 04:40:46 lukem Exp $");
+__RCSID("$NetBSD: execvp.c,v 1.30 2007/07/20 12:41:07 yamt Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -127,13 +127,16 @@ retry:		(void)execve(bp, argv, environ);
 		case ENOEXEC:
 			for (cnt = 0; argv[cnt] != NULL; ++cnt)
 				continue;
+			/*
+			 * we can't use malloc here because, if we are doing
+			 * vfork+exec, it leaks memory in the parent.
+			 */
 			if ((memp = alloca((cnt + 2) * sizeof(*memp))) == NULL)
 				goto done;
 			memp[0] = _PATH_BSHELL;
 			memp[1] = bp;
 			(void)memcpy(&memp[2], &argv[1], cnt * sizeof(*memp));
-			(void)execve(_PATH_BSHELL, (char * const *)memp,
-			    environ);
+			(void)execve(_PATH_BSHELL, __UNCONST(memp), environ);
 			goto done;
 		case ETXTBSY:
 			if (etxtbsy < 3)

@@ -1,4 +1,4 @@
-/*	$NetBSD: _def_time.c,v 1.8 2005/06/12 05:21:27 lukem Exp $	*/
+/*	$NetBSD: _def_time.c,v 1.10 2008/05/17 03:49:54 ginsbach Exp $	*/
 
 /*
  * Written by J.T. Conklin <jtc@NetBSD.org>.
@@ -7,7 +7,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: _def_time.c,v 1.8 2005/06/12 05:21:27 lukem Exp $");
+__RCSID("$NetBSD: _def_time.c,v 1.10 2008/05/17 03:49:54 ginsbach Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/localedef.h>

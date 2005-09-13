@@ -1,4 +1,4 @@
-/*	$NetBSD: assert.h,v 1.18 2005/02/03 04:39:32 perry Exp $	*/
+/*	$NetBSD: assert.h,v 1.20 2008/11/02 14:27:44 christos Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -43,6 +43,7 @@
 
 #include <sys/cdefs.h>
 #include <sys/featuretest.h>
+#include <sys/null.h>
 
 #undef assert
 
@@ -84,7 +85,9 @@
 #endif /* _DIAGNOSTIC */
 
 
-#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L
+#if defined(__lint__)
+#define	__assert_function__	(__static_cast(const void *,0))
+#elif defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L
 #define	__assert_function__	__func__
 #elif __GNUC_PREREQ__(2, 6)
 #define	__assert_function__	__PRETTY_FUNCTION__

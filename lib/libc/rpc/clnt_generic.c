@@ -1,4 +1,4 @@
-/*	$NetBSD: clnt_generic.c,v 1.23 2004/12/30 05:07:43 christos Exp $	*/
+/*	$NetBSD: clnt_generic.c,v 1.27 2008/04/25 17:44:44 christos Exp $	*/
 
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
@@ -39,7 +39,7 @@
 #if 0
 static char sccsid[] = "@(#)clnt_generic.c 1.32 89/03/16 Copyr 1988 Sun Micro";
 #else
-__RCSID("$NetBSD: clnt_generic.c,v 1.23 2004/12/30 05:07:43 christos Exp $");
+__RCSID("$NetBSD: clnt_generic.c,v 1.27 2008/04/25 17:44:44 christos Exp $");
 #endif
 #endif
 
@@ -48,7 +48,6 @@ __RCSID("$NetBSD: clnt_generic.c,v 1.23 2004/12/30 05:07:43 christos Exp $");
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <netinet/tcp.h>
 #include <assert.h>
 #include <stdio.h>
 #include <errno.h>
@@ -97,7 +96,7 @@ clnt_create_vers(hostname, prog, vers_out, vers_low, vers_high, nettype)
 	to.tv_sec = 10;
 	to.tv_usec = 0;
 	rpc_stat = clnt_call(clnt, NULLPROC, (xdrproc_t) xdr_void,
-			(char *) NULL, (xdrproc_t) xdr_void, (char *) NULL, to);
+	    NULL, (xdrproc_t) xdr_void, NULL, to);
 	if (rpc_stat == RPC_SUCCESS) {
 		*vers_out = vers_high;
 		return (clnt);
@@ -117,8 +116,7 @@ clnt_create_vers(hostname, prog, vers_out, vers_low, vers_high, nettype)
 		}
 		CLNT_CONTROL(clnt, CLSET_VERS, (char *)(void *)&vers_high);
 		rpc_stat = clnt_call(clnt, NULLPROC, (xdrproc_t) xdr_void,
-				(char *) NULL, (xdrproc_t) xdr_void,
-				(char *) NULL, to);
+		    NULL, (xdrproc_t) xdr_void, NULL, to);
 		if (rpc_stat == RPC_SUCCESS) {
 			*vers_out = vers_high;
 			return (clnt);
@@ -251,10 +249,16 @@ clnt_tp_create(hostname, prog, vers, nconf)
 	} else {
 		/* Reuse the CLIENT handle and change the appropriate fields */
 		if (CLNT_CONTROL(cl, CLSET_SVC_ADDR, (void *)svcaddr) == TRUE) {
-			if (cl->cl_netid == NULL)
+			if (cl->cl_netid == NULL) {
 				cl->cl_netid = strdup(nconf->nc_netid);
-			if (cl->cl_tp == NULL)
+				if (cl->cl_netid == NULL)
+					goto out;
+			}
+			if (cl->cl_tp == NULL) {
 				cl->cl_tp = strdup(nconf->nc_device);
+				if (cl->cl_tp == NULL)
+					goto out;
+			}
 			(void) CLNT_CONTROL(cl, CLSET_PROG, (void *)&prog);
 			(void) CLNT_CONTROL(cl, CLSET_VERS, (void *)&vers);
 		} else {
@@ -266,6 +270,9 @@ clnt_tp_create(hostname, prog, vers, nconf)
 	free(svcaddr->buf);
 	free(svcaddr);
 	return (cl);
+out:
+	clnt_destroy(cl);
+	return NULL;
 }
 
 /*
@@ -289,7 +296,6 @@ clnt_tli_create(fd, nconf, svcaddr, prog, vers, sendsz, recvsz)
 	CLIENT *cl;			/* client handle */
 	bool_t madefd = FALSE;		/* whether fd opened here */
 	long servtype;
-	int one = 1;
 	struct __rpc_sockinfo si;
 
 	/* nconf is handled below */
@@ -333,10 +339,7 @@ clnt_tli_create(fd, nconf, svcaddr, prog, vers, sendsz, recvsz)
 		cl = clnt_vc_create(fd, svcaddr, prog, vers, sendsz, recvsz);
 		if (!nconf || !cl)
 			break;
-		/* XXX fvdl - is this useful? */
-		if (strncmp(nconf->nc_protofmly, "inet", (size_t)4) == 0)
-			setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one,
-			    (socklen_t)sizeof (one));
+		__rpc_setnodelay(fd, &si);
 		break;
 	case NC_TPI_CLTS:
 		cl = clnt_dg_create(fd, svcaddr, prog, vers, sendsz, recvsz);
@@ -349,18 +352,24 @@ clnt_tli_create(fd, nconf, svcaddr, prog, vers, sendsz, recvsz)
 		goto err1; /* borrow errors from clnt_dg/vc creates */
 	if (nconf) {
 		cl->cl_netid = strdup(nconf->nc_netid);
+		if (cl->cl_netid == NULL)
+			goto err0;
 		cl->cl_tp = strdup(nconf->nc_device);
+		if (cl->cl_tp == NULL)
+			goto err0;
 	} else {
-		cl->cl_netid = "";
-		cl->cl_tp = "";
+		cl->cl_netid = __UNCONST("");
+		cl->cl_tp = __UNCONST("");
 	}
 	if (madefd) {
 		(void) CLNT_CONTROL(cl, CLSET_FD_CLOSE, NULL);
-/*		(void) CLNT_CONTROL(cl, CLSET_POP_TIMOD, (char *) NULL);  */
+/*		(void) CLNT_CONTROL(cl, CLSET_POP_TIMOD, NULL);  */
 	};
 
 	return (cl);
 
+err0:
+	clnt_destroy(cl);
 err:
 	rpc_createerr.cf_stat = RPC_SYSTEMERROR;
 	rpc_createerr.cf_error.re_errno = errno;

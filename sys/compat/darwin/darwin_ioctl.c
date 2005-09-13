@@ -1,7 +1,7 @@
-/*	$NetBSD: darwin_ioctl.c,v 1.4 2005/09/13 01:42:32 christos Exp $ */
+/*	$NetBSD: darwin_ioctl.c,v 1.9 2008/03/21 21:54:58 ad Exp $ */
 
 /*-
- * Copyright (c) 2003 The NetBSD Foundation, Inc.
+ * Copyright (c) 2003, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: darwin_ioctl.c,v 1.4 2005/09/13 01:42:32 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: darwin_ioctl.c,v 1.9 2008/03/21 21:54:58 ad Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -48,7 +48,6 @@ __KERNEL_RCSID(0, "$NetBSD: darwin_ioctl.c,v 1.4 2005/09/13 01:42:32 christos Ex
 #include <sys/dirent.h>
 #include <sys/vnode.h>
 #include <sys/proc.h>
-#include <sys/sa.h>
 
 #include <sys/syscallargs.h>
 
@@ -64,34 +63,30 @@ __KERNEL_RCSID(0, "$NetBSD: darwin_ioctl.c,v 1.4 2005/09/13 01:42:32 christos Ex
 static int vtype_to_dtype(int);
 
 int
-darwin_sys_ioctl(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+darwin_sys_ioctl(struct lwp *l, const struct darwin_sys_ioctl_args *uap, register_t *retval)
 {
-	struct darwin_sys_ioctl_args /* {
+	/* {
 		syscallarg(int) fd;
 		syscallarg(u_long) com;
 		syscallarg(void *) data;
-	} */ *uap = v;
+	} */
 	struct sys_ioctl_args cup;
 	int error;
 
 	switch (SCARG(uap, com)) {
 	case DARWIN_FIODTYPE: { /* Get file d_type */
-		struct proc *p = l->l_proc;
-		struct file *fp;
+		file_t *fp;
 		struct vnode *vp;
 		int *data = SCARG(uap, data);
 		int type;
 
 		/* getvnode() will use the descriptor for us */
-		if ((error = getvnode(p->p_fd, SCARG(uap, fd), &fp)))
+		if ((error = fd_getvnode(SCARG(uap, fd), &fp)))
 			return (error);
 
 		vp = fp->f_data;
 		type = vtype_to_dtype(vp->v_type);
-		FILE_UNUSE(fp, p);
+		fd_putfile(SCARG(uap, fd));
 
 		error = copyout(&type, data, sizeof(*data));
 
@@ -114,8 +109,7 @@ darwin_sys_ioctl(l, v, retval)
 }
 
 static int
-vtype_to_dtype(dtype)
-	int dtype;
+vtype_to_dtype(int dtype)
 {
 	switch (dtype) {
 	case VNON:

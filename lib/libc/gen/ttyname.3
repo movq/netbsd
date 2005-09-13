@@ -1,4 +1,4 @@
-.\"	$NetBSD: ttyname.3,v 1.16 2004/11/11 00:57:57 wiz Exp $
+.\"	$NetBSD: ttyname.3,v 1.21 2008/06/25 11:47:29 ad Exp $
 .\"
 .\" Copyright (c) 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,11 +29,12 @@
 .\"
 .\"     @(#)ttyname.3	8.1 (Berkeley) 6/4/93
 .\"
-.Dd November 11, 2004
+.Dd June 25, 2008
 .Dt TTYNAME 3
 .Os
 .Sh NAME
 .Nm ttyname ,
+.Nm ttyname_r ,
 .Nm isatty ,
 .Nm ttyslot
 .Nd get name of associated terminal (tty) from file descriptor
@@ -43,6 +44,8 @@
 .In unistd.h
 .Ft char *
 .Fn ttyname "int fd"
+.Ft int
+.Fn ttyname_r "int fd" "char *buf" "size_t len"
 .Ft int
 .Fn isatty "int fd"
 .In stdlib.h
@@ -58,8 +61,7 @@ typedef, but refer to the special device files found in
 .Pa /dev
 and named
 .Pa /dev/tty Ns Em xx
-and for which an entry exists
-in the initialization file
+and for which an entry exists in the initialization file
 .Pa /etc/ttys
 (see
 .Xr ttys 5 ) ,
@@ -71,16 +73,21 @@ The
 function
 determines if the file descriptor
 .Fa fd
-refers to a valid
-terminal type device.
+refers to a valid terminal type device.
 .Pp
 The
 .Fn ttyname
-function
-gets the related device name of
-a file descriptor for which
+function gets the related device name of a file descriptor for
+which
 .Fn isatty
 is true.
+The
+.Fn ttyname_r
+is the reentrant version of the above, and it places the results in
+.Fa buf .
+If there is not enough space to place the results (indicated by
+.Fa len ) ,
+then it returns an error.
 .Pp
 The
 .Fn ttyslot
@@ -91,15 +98,25 @@ file entry.
 If the terminal is a pseudo-terminal, and there is no special entry
 in the
 .Xr ttys 5
-file for it, the slot number returned is 1 + (last slot number) + minor(tty).
+file for it, the slot number returned is 1 + (last slot number) +
+minor(tty).
 This will return a consistent and unique number for each pseudo-terminal
 device without requiring one to enumerate all of them in
 .Xr ttys 5 .
+.Sh IMPLEMENTATION NOTES
+As an optimisation, these functions attempt to obtain information about
+all devices from the
+.Pa /var/run/dev.db
+database, if it exists.
+If the database exists but is out of date, then these functions
+may produce incorrect results.
+The database should be updated using the
+.Xr dev_mkdb 8
+command.
 .Sh RETURN VALUES
 The
 .Fn ttyname
-function
-returns the null terminated name if the device is found and
+function returns the NUL-terminated name if the device is found and
 .Fn isatty
 is true; otherwise
 a
@@ -107,6 +124,10 @@ a
 pointer is returned and
 .Va errno
 is set to indicate the error.
+.Pp
+The
+.Fn ttyname_r
+functions returns 0 on success and an error code on failure.
 .Pp
 The
 .Fn isatty
@@ -128,7 +149,8 @@ the value zero is returned.
 .El
 .Sh ERRORS
 The
-.Fn ttyname
+.Fn ttyname ,
+.Fn ttyname_r ,
 and
 .Fn isatty
 functions will fail if:
@@ -142,9 +164,21 @@ The
 .Fa fd
 argument does not refer to a terminal device.
 .El
+.Pp
+The
+.Fn ttyname_r
+function will also fail if:
+.Bl -tag -width Er
+.It Bq Er ERANGE
+The buffer provided is not large enough to fit the result.
+.It Bq Er ENOENT
+The terminal device is not found.
+This can happen if the device node has been removed after it was opened.
+.El
 .Sh SEE ALSO
 .Xr ioctl 2 ,
-.Xr ttys 5
+.Xr ttys 5 ,
+.Xr dev_mkdb 8
 .Sh STANDARDS
 The
 .Fn ttyname
@@ -153,14 +187,13 @@ and
 functions conform to
 .St -p1003.1-90 .
 .Sh HISTORY
-A
 .Fn isatty ,
 .Fn ttyname ,
 and
 .Fn ttyslot
-function
-appeared in
+functions appeared in
 .At v7 .
+.\" Use of the .Pa /var/run/dev.db file was added in ???.
 .Sh BUGS
 The
 .Fn ttyname

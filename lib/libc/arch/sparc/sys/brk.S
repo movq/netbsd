@@ -1,4 +1,4 @@
-/*	$NetBSD: brk.S,v 1.11 2003/12/26 11:21:48 martin Exp $	*/
+/*	$NetBSD: brk.S,v 1.15 2008/11/06 13:42:55 nakayama Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -40,7 +40,7 @@
 #if 0
 	.asciz "@(#)brk.s	8.1 (Berkeley) 6/4/93"
 #else
-	RCSID("$NetBSD: brk.S,v 1.11 2003/12/26 11:21:48 martin Exp $")
+	RCSID("$NetBSD: brk.S,v 1.15 2008/11/06 13:42:55 nakayama Exp $")
 #endif
 #endif /* SYSLIBC_SCCS and not lint */
 
@@ -62,7 +62,8 @@ _C_LABEL(__minbrk):
 ENTRY(_brk)
 #ifdef PIC
 	PIC_PROLOGUE(%o5,%o4)
-	ld	[%o5 + _C_LABEL(__minbrk)], %o4
+	set	_C_LABEL(__minbrk), %o4
+	ld	[%o5 + %o4], %o4
 	ld	[%o4], %o1		! %o1 = minbrk
 	cmp	%o1, %o0		! if (minbrk > %o0)
 	bgu,a	0f
@@ -71,8 +72,9 @@ ENTRY(_brk)
 	mov	%o0, %o2		! save argument to syscall
 	mov	SYS_break, %g1
 	t	ST_SYSCALL
+	set	CURBRK, %o3
 	bcc,a	1f
-	ld	[%o5 + CURBRK], %o4
+	 ld	[%o5 + %o3], %o4
 	ERROR()
 1:
 	retl				! success, return 0 & record new break

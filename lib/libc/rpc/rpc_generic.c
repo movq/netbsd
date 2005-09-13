@@ -1,4 +1,4 @@
-/*	$NetBSD: rpc_generic.c,v 1.19 2005/06/01 05:41:48 lukem Exp $	*/
+/*	$NetBSD: rpc_generic.c,v 1.23 2008/04/25 17:44:44 christos Exp $	*/
 
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
@@ -41,7 +41,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: rpc_generic.c,v 1.19 2005/06/01 05:41:48 lukem Exp $");
+__RCSID("$NetBSD: rpc_generic.c,v 1.23 2008/04/25 17:44:44 christos Exp $");
 #endif
 
 #include "namespace.h"
@@ -52,6 +52,7 @@ __RCSID("$NetBSD: rpc_generic.c,v 1.19 2005/06/01 05:41:48 lukem Exp $");
 #include <sys/un.h>
 #include <sys/resource.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <arpa/inet.h>
 #include <rpc/rpc.h>
 #include <assert.h>
@@ -251,8 +252,8 @@ __rpc_getconfip(nettype)
 	const char *nettype;
 {
 	char *netid;
-	char *netid_tcp = (char *) NULL;
-	char *netid_udp = (char *) NULL;
+	char *netid_tcp = NULL;
+	char *netid_udp = NULL;
 	static char *netid_tcp_main;
 	static char *netid_udp_main;
 	struct netconfig *dummy;
@@ -286,6 +287,8 @@ __rpc_getconfip(nettype)
 			if (strcmp(nconf->nc_protofmly, NC_INET) == 0) {
 				if (strcmp(nconf->nc_proto, NC_TCP) == 0) {
 					netid_tcp = strdup(nconf->nc_netid);
+					if (netid_tcp == NULL)
+						return NULL;
 #ifdef _REENTRANT
 					if (__isthreaded == 0)
 						netid_tcp_main = netid_tcp;
@@ -298,6 +301,8 @@ __rpc_getconfip(nettype)
 				} else
 				if (strcmp(nconf->nc_proto, NC_UDP) == 0) {
 					netid_udp = strdup(nconf->nc_netid);
+					if (netid_udp == NULL)
+						return NULL;
 #ifdef _REENTRANT
 					if (__isthreaded == 0)
 						netid_udp_main = netid_udp;
@@ -338,7 +343,7 @@ __rpc_setconf(nettype)
 
 	/* nettype may be NULL; getnettype() supports that */
 
-	handle = (struct handle *) malloc(sizeof (struct handle));
+	handle = malloc(sizeof(*handle));
 	if (handle == NULL) {
 		return (NULL);
 	}
@@ -365,6 +370,7 @@ __rpc_setconf(nettype)
 		handle->nflag = FALSE;
 		break;
 	default:
+		free(handle);
 		return (NULL);
 	}
 
@@ -504,8 +510,7 @@ __rpcgettp(fd)
 	if (!__rpc_sockinfo2netid(&si, &netid))
 		return NULL;
 
-	/*LINTED const castaway*/
-	return getnetconfigent((char *)netid);
+	return getnetconfigent(__UNCONST(netid));
 }
 
 int
@@ -716,13 +721,13 @@ __rpc_uaddr2taddr_af(int af, const char *uaddr)
 		port = (porthi << 8) | portlo;
 	}
 
-	ret = (struct netbuf *)malloc(sizeof *ret);
+	ret = malloc(sizeof(*ret));
 	if (ret == NULL)
 		goto out;
 	
 	switch (af) {
 	case AF_INET:
-		sinp = (struct sockaddr_in *)malloc(sizeof *sinp);
+		sinp = malloc(sizeof(*sinp));
 		if (sinp == NULL)
 			goto out;
 		memset(sinp, 0, sizeof *sinp);
@@ -739,7 +744,7 @@ __rpc_uaddr2taddr_af(int af, const char *uaddr)
 		break;
 #ifdef INET6
 	case AF_INET6:
-		sin6 = (struct sockaddr_in6 *)malloc(sizeof *sin6);
+		sin6 = malloc(sizeof(*sin6));
 		if (sin6 == NULL)
 			goto out;
 		memset(sin6, 0, sizeof *sin6);
@@ -756,7 +761,7 @@ __rpc_uaddr2taddr_af(int af, const char *uaddr)
 		break;
 #endif
 	case AF_LOCAL:
-		sun = (struct sockaddr_un *)malloc(sizeof *sun);
+		sun = malloc(sizeof(*sun));
 		if (sun == NULL)
 			goto out;
 		memset(sun, 0, sizeof *sun);
@@ -872,4 +877,23 @@ __rpc_sockisbound(int fd)
 	}
 
 	return 0;
+}
+
+/*
+ * For TCP transport, Host Requirements RFCs mandate
+ * Nagle (RFC-896) processing.  But for RPC, Nagle
+ * processing adds adds unwanted latency to the last,
+ * partial TCP segment of each RPC message. See:
+ *   R. W. Scheifler and J. Gettys, The X Window System,
+ *   ACM Transactions on Graphics 16:8 (Aug. 1983), pp. 57-69. 
+ * So for TCP transport, disable Nagle via TCP_NODELAY.
+ * XXX: moral equivalent for non-TCP protocols?
+ */
+int
+__rpc_setnodelay(int fd, const struct __rpc_sockinfo *si)
+{
+	int one = 1;
+	if (si->si_proto != IPPROTO_TCP)
+		return 0;
+	return setsockopt(fd, si->si_proto, TCP_NODELAY, &one, sizeof(one));
 }

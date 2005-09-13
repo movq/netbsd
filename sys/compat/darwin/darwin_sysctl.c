@@ -1,4 +1,4 @@
-/*	$NetBSD: darwin_sysctl.c,v 1.37 2005/09/13 01:42:32 christos Exp $ */
+/*	$NetBSD: darwin_sysctl.c,v 1.56 2008/01/07 16:12:52 ad Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: darwin_sysctl.c,v 1.37 2005/09/13 01:42:32 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: darwin_sysctl.c,v 1.56 2008/01/07 16:12:52 ad Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -49,8 +49,9 @@ __KERNEL_RCSID(0, "$NetBSD: darwin_sysctl.c,v 1.37 2005/09/13 01:42:32 christos 
 #include <sys/proc.h>
 #include <sys/malloc.h>
 #include <sys/sysctl.h>
-#include <sys/sa.h>
+#include <sys/ktrace.h>
 #include <sys/tty.h>
+#include <sys/kauth.h>
 
 #include <sys/syscallargs.h>
 
@@ -80,7 +81,7 @@ static const char *darwin_sysctl_hw_machine = "Power Macintosh";
 
 static int darwin_sysctl_dokproc(SYSCTLFN_PROTO);
 static void darwin_fill_kproc(struct proc *, struct darwin_kinfo_proc *);
-static void native_to_darwin_pflag(int *, int);
+static void native_to_darwin_pflag(int *, struct proc *);
 static int darwin_sysctl_procargs(SYSCTLFN_PROTO);
 static int darwin_sysctl_net(SYSCTLFN_PROTO);
 static int darwin_sysctl_kdebug(SYSCTLFN_PROTO);
@@ -285,9 +286,8 @@ SYSCTL_SETUP(sysctl_darwin_emul_setup, "darwin emulated sysctl tree setup")
 
 
 int
-darwin_sys___sysctl(struct lwp *l, void *v, register_t *retval)
+darwin_sys___sysctl(struct lwp *l, const struct darwin_sys___sysctl_args *uap, register_t *retval)
 {
-	struct darwin_sys___sysctl_args *uap = v;
 	int error, nerror, name[CTL_MAXNAME];
 	size_t savelen = 0, oldlen = 0;
 
@@ -313,36 +313,17 @@ darwin_sys___sysctl(struct lwp *l, void *v, register_t *retval)
 	if (error)
 		return (error);
 
-#ifdef DEBUG_DARWIN
-	if (1) {
-		int i;
-
-		printf("darwin_sys___sysctl: ");
-		for (i = 0; i < SCARG(uap, namelen); i++)
-			printf("%d ", name[i]);
-		printf("\n");
-	}
-#endif
-
-	/*
-	 * wire old so that copyout() is less likely to fail?
-	 */
-	error = sysctl_lock(l, SCARG(uap, oldp), savelen);
-	if (error)
-		return (error);
+	ktrmib(name, SCARG(uap, namelen));
 
 	/*
 	 * dispatch request into darwin sysctl tree
 	 */
+	sysctl_lock(SCARG(uap, newp) != NULL);
 	error = sysctl_dispatch(&name[0], SCARG(uap, namelen),
 				SCARG(uap, oldp), &oldlen,
 				SCARG(uap, newp), SCARG(uap, newlen),
 				&name[0], l, &darwin_sysctl_root);
-
-	/*
-	 * release the sysctl lock
-	 */
-	sysctl_unlock(l);
+	sysctl_unlock();
 
 	/*
 	 * reset caller's oldlen, even if we got an error
@@ -447,10 +428,7 @@ SYSCTL_SETUP(sysctl_emul_darwin_setup, "sysctl emul.darwin subtree setup")
  * of course).
  */
 int
-darwin_sys_getpid(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+darwin_sys_getpid(struct lwp *l, const void *v, register_t *retval)
 {
 	struct darwin_emuldata *ded;
 	struct proc *p = l->l_proc;
@@ -652,7 +630,7 @@ darwin_sysctl_dokproc(SYSCTLFN_ARGS)
 		elem_count = name[3];
 	}
 
-	proclist_lock_read();
+	mutex_enter(&proclist_lock);
 
 	pd = proclists;
 again:
@@ -687,11 +665,11 @@ again:
 
 		case DARWIN_KERN_PROC_TTY:
 			if (arg == (int) KERN_PROC_TTY_REVOKE) {
-				if ((p->p_flag & P_CONTROLT) == 0 ||
+				if ((p->p_lflag & PL_CONTROLT) == 0 ||
 				    p->p_session->s_ttyp == NULL ||
 				    p->p_session->s_ttyvp != NULL)
 					continue;
-			} else if ((p->p_flag & P_CONTROLT) == 0 ||
+			} else if ((p->p_lflag & PL_CONTROLT) == 0 ||
 			    p->p_session->s_ttyp == NULL) {
 					continue;
 			} else if (p->p_session->s_ttyp->t_dev !=
@@ -700,12 +678,12 @@ again:
 			break;
 
 		case DARWIN_KERN_PROC_UID:
-			if (p->p_ucred->cr_uid != (uid_t)arg)
+			if (kauth_cred_geteuid(p->p_cred) != (uid_t)arg)
 				continue;
 			break;
 
 		case DARWIN_KERN_PROC_RUID:
-			if (p->p_cred->p_ruid != (uid_t)arg)
+			if (kauth_cred_getuid(p->p_cred) != (uid_t)arg)
 				continue;
 			break;
 
@@ -719,7 +697,7 @@ again:
 		}
 		if (buflen >= sizeof(struct darwin_kinfo_proc)) {
 			darwin_fill_kproc(p, &kproc);
-			error = copyout((caddr_t)&kproc, dp, sizeof(kproc));
+			error = copyout((void *)&kproc, dp, sizeof(kproc));
 			if (error)
 				goto cleanup;
 			dp++;
@@ -730,10 +708,10 @@ again:
 	pd++;
 	if (pd->pd_list != NULL)
 		goto again;
-	proclist_unlock_read();
+	mutex_exit(&proclist_lock);
 
 	if (where != NULL) {
-		*oldlenp = (caddr_t)dp - where;
+		*oldlenp = (char *)dp - where;
 		if (needed > *oldlenp)
 			return (ENOMEM);
 	} else {
@@ -742,7 +720,7 @@ again:
 	}
 	return (0);
  cleanup:
-	proclist_unlock_read();
+	mutex_exit(&proclist_lock);
 	return (error);
 }
 
@@ -750,16 +728,14 @@ again:
  * Native struct proc to Darwin's struct kinfo_proc
  */
 static void
-darwin_fill_kproc(p, dkp)
-	struct proc *p;
-	struct darwin_kinfo_proc *dkp;
+darwin_fill_kproc(struct proc *p, struct darwin_kinfo_proc *dkp)
 {
 	struct lwp *l;
 	struct darwin_extern_proc *dep;
 	struct darwin_eproc *de;
 
 	printf("fillkproc: pid %d\n", p->p_pid);
-	l = proc_representative_lwp(p);
+	l = proc_representative_lwp(p, NULL, 1);
 	(void)memset(dkp, 0, sizeof(*dkp));
 
 	dep = (struct darwin_extern_proc *)&dkp->kp_proc;
@@ -768,7 +744,7 @@ darwin_fill_kproc(p, dkp)
 	/* (ptr) dep->p_un */
 	/* (ptr) dep->p_vmspace */
 	/* (ptr) dep->p_sigacts */
-	native_to_darwin_pflag(&dep->p_flag, p->p_flag);
+	native_to_darwin_pflag(&dep->p_flag, p);
 	dep->p_stat = p->p_stat; /* XXX Neary the same */
 	dep->p_pid = p->p_pid;
 	dep->p_oppid = p->p_opptr->p_pid;
@@ -778,7 +754,7 @@ darwin_fill_kproc(p, dkp)
 	/* dep->p_debugger */
 	/* dep->p_sigwait */
 	dep->p_estcpu = p->p_estcpu;
-	dep->p_cpticks = p->p_cpticks;
+	/* dep->p_cpticks */
 	dep->p_pctcpu = p->p_pctcpu;
 	/* (ptr) dep->p_wchan */
 	/* (ptr) dep->p_wmesg */
@@ -791,12 +767,10 @@ darwin_fill_kproc(p, dkp)
 	dep->p_iticks = p->p_iticks;
 	dep->p_traceflag = p->p_traceflag; /* XXX */
 	/* (ptr) dep->p_tracep */
-	native_sigset13_to_sigset(&dep->p_siglist,
-	    &p->p_sigctx.ps_siglist);
+	native_sigset13_to_sigset(&dep->p_siglist, &l->l_sigpendset->sp_set);
 	/* (ptr) dep->p_textvp */
 	/* dep->p_holdcnt */
-	native_sigset13_to_sigset(&dep->p_sigmask,
-	    &p->p_sigctx.ps_sigmask);
+	native_sigset13_to_sigset(&dep->p_sigmask, &l->l_sigmask);
 	native_sigset13_to_sigset(&dep->p_sigignore,
 	    &p->p_sigctx.ps_sigignore);
 	native_sigset13_to_sigset(&dep->p_sigcatch,
@@ -813,16 +787,18 @@ darwin_fill_kproc(p, dkp)
 	/* (ptr) */ de->e_paddr = (struct darwin_proc *)p;
 	/* (ptr) */ de->e_sess =
 	    (struct darwin_session *)p->p_session;
-	de->e_pcred.pc_ruid = p->p_cred->p_ruid;
-	de->e_pcred.pc_svuid = p->p_cred->p_svuid;
-	de->e_pcred.pc_rgid = p->p_cred->p_rgid;
-	de->e_pcred.pc_svgid = p->p_cred->p_svgid;
-	de->e_pcred.pc_refcnt = p->p_cred->p_refcnt;
-	de->e_ucred.cr_ref = p->p_ucred->cr_ref;
-	de->e_ucred.cr_uid = p->p_ucred->cr_uid;
-	de->e_ucred.cr_ngroups = p->p_ucred->cr_ngroups;
-	(void)memcpy(de->e_ucred.cr_groups,
-	    p->p_ucred->cr_groups, sizeof(gid_t) * DARWIN_NGROUPS);
+	de->e_pcred.pc_ruid = kauth_cred_getuid(p->p_cred);
+	de->e_pcred.pc_svuid = kauth_cred_getsvuid(p->p_cred);
+	de->e_pcred.pc_rgid = kauth_cred_getgid(p->p_cred);
+	de->e_pcred.pc_svgid = kauth_cred_getsvgid(p->p_cred);
+	de->e_pcred.pc_refcnt = kauth_cred_getrefcnt(p->p_cred);
+	/* XXX elad ? de->e_ucred.cr_ref = p->p_ucred->cr_ref; */
+	/* XXX elad ? de->e_ucred.cr_ref = kauth_cred_getrefcnt(p->p_cred); */
+	de->e_ucred.cr_uid = kauth_cred_geteuid(p->p_cred);
+	de->e_ucred.cr_ngroups = kauth_cred_ngroups(p->p_cred);
+	kauth_cred_getgroups(p->p_cred, de->e_ucred.cr_groups,
+	    sizeof(de->e_ucred.cr_groups) / sizeof(de->e_ucred.cr_groups[0]),
+	    UIO_SYSSPACE);
 	de->e_vm.vm_refcnt = p->p_vmspace->vm_refcnt;
 	de->e_vm.vm_rssize = p->p_vmspace->vm_rssize;
 	de->e_vm.vm_swrss = p->p_vmspace->vm_swrss;
@@ -835,7 +811,7 @@ darwin_fill_kproc(p, dkp)
 	de->e_ppid = p->p_pptr->p_pid;
 	de->e_pgid = p->p_pgid;
 	de->e_jobc = p->p_pgrp->pg_jobc;
-	if ((p->p_flag & P_CONTROLT) && (p->p_session->s_ttyp != NULL)) {
+	if ((p->p_lflag & PL_CONTROLT) && (p->p_session->s_ttyp != NULL)) {
 		de->e_tdev =
 		    native_to_darwin_dev(p->p_session->s_ttyp->t_dev);
 		de->e_tpgid = p->p_session->s_ttyp->t_pgrp ?
@@ -865,43 +841,45 @@ darwin_fill_kproc(p, dkp)
 }
 
 static void
-native_to_darwin_pflag(dfp, bf)
-	int *dfp;
-	int bf;
+native_to_darwin_pflag(int *dfp, struct proc *p)
 {
 	int df = 0;
+	int bf = p->p_flag;
+	int bsf = p->p_sflag;
+	int bslf = p->p_slflag;
+	struct lwp *l = proc_representative_lwp(p, NULL, 1);
+	int lf = l->l_flag;
 
-	if (bf & P_ADVLOCK)
+	if (bf & PK_ADVLOCK)
 		df |= DARWIN_P_ADVLOCK;
-	if (bf & P_CONTROLT)
+	if (bf & PL_CONTROLT)			/* XXXAD */
 		df |= DARWIN_P_CONTROLT;
-	if (bf & P_NOCLDSTOP)
+	if (bsf & PS_NOCLDSTOP)
 		df |= DARWIN_P_NOCLDSTOP;
-	if (bf & P_PPWAIT)
+	if (bsf & PS_PPWAIT)
 		df |= DARWIN_P_PPWAIT;
-	if (bf & P_PROFIL)
+	if (bsf & PST_PROFIL)
 		df |= DARWIN_P_PROFIL;
-	if (bf & P_SUGID)
+	if (bf & PK_SUGID)
 		df |= DARWIN_P_SUGID;
-	if (bf & P_SYSTEM)
+	if (bf & PK_SYSTEM)
 		df |= DARWIN_P_SYSTEM;
-	if (bf & P_TRACED)
+	if (bslf & PSL_TRACED)
 		df |= DARWIN_P_TRACED;
-	if (bf & P_WAITED)
+#if 0
+	if (lf & LP_WAITED)
 		df |= DARWIN_P_WAITED;
-	if (bf & P_WEXIT)
+#endif
+	if (bsf & PS_WEXIT)
 		df |= DARWIN_P_WEXIT;
-	if (bf & P_EXEC)
+	if (bf & PK_EXEC)
 		df |= DARWIN_P_EXEC;
-	if (bf & P_OWEUPC)
+	if (lf & LP_OWEUPC)
 		df |= DARWIN_P_OWEUPC;
-	if (bf & P_FSTRACE)
+	if (bslf & PSL_FSTRACE)
 		df |= DARWIN_P_FSTRACE;
-	if (bf & P_NOCLDWAIT)
+	if (bf & PK_NOCLDWAIT)
 		df |= DARWIN_P_NOCLDWAIT;
-	if (bf & P_NOCLDWAIT)
-		df |= DARWIN_P_NOCLDWAIT;
-
 	*dfp = df;
 	return;
 }
@@ -911,7 +889,7 @@ static int
 darwin_sysctl_procargs(SYSCTLFN_ARGS)
 {
 	struct ps_strings pss;
-	struct proc *p, *up = l->l_proc;
+	struct proc *p;
 	size_t len, upper_bound, xlen, i;
 	struct uio auio;
 	struct iovec aiov;
@@ -930,9 +908,11 @@ darwin_sysctl_procargs(SYSCTLFN_ARGS)
 		return (EINVAL);
 
 	/* only root or same user change look at the environment */
-	if (up->p_ucred->cr_uid != 0) {
-		if (up->p_cred->p_ruid != p->p_cred->p_ruid ||
-		    up->p_cred->p_ruid != p->p_cred->p_svuid)
+	if (kauth_cred_geteuid(l->l_cred) != 0) {
+		if (kauth_cred_getuid(l->l_cred) !=
+		    kauth_cred_getuid(p->p_cred) ||
+		    kauth_cred_getuid(l->l_cred) !=
+		    kauth_cred_getsvuid(p->p_cred))
 			return (EPERM);
 	}
 
@@ -945,14 +925,14 @@ darwin_sysctl_procargs(SYSCTLFN_ARGS)
 	 * Zombies don't have a stack, so we can't read their psstrings.
 	 * System processes also don't have a user stack.
 	 */
-	if (P_ZOMBIE(p) || (p->p_flag & P_SYSTEM) != 0)
+	if (P_ZOMBIE(p) || (p->p_flag & PK_SYSTEM) != 0)
 		return (EINVAL);
 
 	/*
 	 * Lock the process down in memory.
 	 */
 	/* XXXCDC: how should locking work here? */
-	if ((p->p_flag & P_WEXIT) || (p->p_vmspace->vm_refcnt < 1))
+	if ((p->p_sflag & PS_WEXIT) || (p->p_vmspace->vm_refcnt < 1))
 		return (EFAULT);
 
 	p->p_vmspace->vm_refcnt++;	/* XXX */
@@ -989,9 +969,8 @@ darwin_sysctl_procargs(SYSCTLFN_ARGS)
 	auio.uio_iovcnt = 1;
 	auio.uio_offset = (vaddr_t)p->p_psstr;
 	auio.uio_resid = sizeof(pss);
-	auio.uio_segflg = UIO_SYSSPACE;
 	auio.uio_rw = UIO_READ;
-	auio.uio_procp = NULL;
+	UIO_SETUP_SYSSPACE(&auio);
 	if ((error = uvm_io(&p->p_vmspace->vm_map, &auio)) != 0)
 		goto done;
 
@@ -1010,9 +989,8 @@ darwin_sysctl_procargs(SYSCTLFN_ARGS)
 	auio.uio_iov = &aiov;
 	auio.uio_iovcnt = 1;
 	auio.uio_resid = sizeof(argv);
-	auio.uio_segflg = UIO_SYSSPACE;
 	auio.uio_rw = UIO_READ;
-	auio.uio_procp = NULL;
+	UIO_SETUP_SYSSPACE(&auio);
 	if ((error = uvm_io(&p->p_vmspace->vm_map, &auio)) != 0)
 		goto done;
 
@@ -1032,9 +1010,8 @@ darwin_sysctl_procargs(SYSCTLFN_ARGS)
 		auio.uio_offset = argv + len;
 		xlen = PAGE_SIZE - ((argv + len) & PAGE_MASK);
 		auio.uio_resid = xlen;
-		auio.uio_segflg = UIO_SYSSPACE;
 		auio.uio_rw = UIO_READ;
-		auio.uio_procp = NULL;
+		UIO_SETUP_SYSSPACE(&auio);
 		error = uvm_io(&p->p_vmspace->vm_map, &auio);
 		if (error)
 			goto done;
@@ -1069,8 +1046,8 @@ darwin_sysctl_procargs(SYSCTLFN_ARGS)
 	 */
 	len = (((u_long)oldp + len - 1) & ~0x3UL) - (u_long)oldp;
 	len = len - strlen(p->p_comm);
-	if (len < 0)
-		len = 0;
+	if (len > upper_bound)
+		len = upper_bound;
 
 	error = copyout(p->p_comm, (char *)oldp + len, strlen(p->p_comm) + 1);
 	if (error != 0)
@@ -1094,9 +1071,8 @@ darwin_sysctl_procargs(SYSCTLFN_ARGS)
 		auio.uio_offset = argv + len;
 		xlen = PAGE_SIZE - ((argv + len) & PAGE_MASK);
 		auio.uio_resid = xlen;
-		auio.uio_segflg = UIO_SYSSPACE;
 		auio.uio_rw = UIO_READ;
-		auio.uio_procp = NULL;
+		UIO_SETUP_SYSSPACE(&auio);
 		error = uvm_io(&p->p_vmspace->vm_map, &auio);
 		if (error)
 			goto done;

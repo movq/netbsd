@@ -1,4 +1,4 @@
-/*	$NetBSD: rec_close.c,v 1.12 2003/08/07 16:42:44 agc Exp $	*/
+/*	$NetBSD: rec_close.c,v 1.15 2008/09/11 12:58:00 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -29,20 +29,19 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-#if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)rec_close.c	8.6 (Berkeley) 8/18/94";
-#else
-__RCSID("$NetBSD: rec_close.c,v 1.12 2003/08/07 16:42:44 agc Exp $");
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
 #endif
-#endif /* LIBC_SCCS and not lint */
+
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: rec_close.c,v 1.15 2008/09/11 12:58:00 joerg Exp $");
 
 #include "namespace.h"
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <sys/mman.h>
 
+#include <assert.h>
 #include <errno.h>
 #include <limits.h>
 #include <stdio.h>
@@ -61,8 +60,7 @@ __RCSID("$NetBSD: rec_close.c,v 1.12 2003/08/07 16:42:44 agc Exp $");
  *	RET_ERROR, RET_SUCCESS
  */
 int
-__rec_close(dbp)
-	DB *dbp;
+__rec_close(DB *dbp)
 {
 	BTREE *t;
 	int status;
@@ -109,9 +107,7 @@ __rec_close(dbp)
  *	RET_SUCCESS, RET_ERROR.
  */
 int
-__rec_sync(dbp, flags)
-	const DB *dbp;
-	u_int flags;
+__rec_sync(const DB *dbp, u_int flags)
 {
 	struct iovec iov[2];
 	BTREE *t;

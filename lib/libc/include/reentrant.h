@@ -1,4 +1,4 @@
-/*	$NetBSD: reentrant.h,v 1.10 2004/12/14 00:23:19 nathanw Exp $	*/
+/*	$NetBSD: reentrant.h,v 1.13 2008/04/28 20:23:00 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -94,7 +87,7 @@
 #ifdef _REENTRANT
 
 /*
- * Abtract thread interface for thread-safe libraries.  These routines
+ * Abstract thread interface for thread-safe libraries.  These routines
  * will use stubs in libc if the application is not linked against the
  * pthread library, and the real function in the pthread library if it
  * is.
@@ -211,6 +204,7 @@ void	__libc_thr_create(thr_t *, const thrattr_t *,
 void	__libc_thr_exit(void *) __attribute__((__noreturn__));
 int	*__libc_thr_errno(void);
 int	__libc_thr_setcancelstate(int, int *);
+unsigned int	__libc_thr_curcpu(void);
 
 extern int __isthreaded;
 __END_DECLS
@@ -224,6 +218,7 @@ __END_DECLS
 #define	thr_errno()		__libc_thr_errno()
 #define	thr_enabled()		(__isthreaded)
 #define thr_setcancelstate(n, o) __libc_thr_setcancelstate((n),(o))
+#define thr_curcpu()		__libc_thr_curcpu()
 #endif /* __LIBC_THREAD_STUBS */
 
 #define	FLOCKFILE(fp)		__flockfile_internal(fp, 1)
@@ -261,6 +256,7 @@ __END_DECLS
 #define	thr_sigsetmask(f, n, o)
 #define	thr_self()
 #define	thr_errno()
+#define	thr_curcpu()		((unsigned int)0)
 
 #define	FLOCKFILE(fp)		
 #define	FUNLOCKFILE(fp)		

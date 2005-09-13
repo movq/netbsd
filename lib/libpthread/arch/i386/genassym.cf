@@ -1,4 +1,4 @@
-#	$NetBSD: genassym.cf,v 1.5 2003/09/07 14:47:48 cl Exp $
+#	$NetBSD: genassym.cf,v 1.7 2008/04/28 20:23:02 martin Exp $
 
 # Copyright (c) 2001 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -14,13 +14,6 @@
 # 2. Redistributions in binary form must reproduce the above copyright
 #    notice, this list of conditions and the following disclaimer in the
 #    documentation and/or other materials provided with the distribution.
-# 3. All advertising materials mentioning features or use of this software
-#    must display the following acknowledgement:
-#        This product includes software developed by the NetBSD
-#        Foundation, Inc. and its contributors.
-# 4. Neither the name of The NetBSD Foundation nor the names of its
-#    contributors may be used to endorse or promote products derived
-#    from this software without specific prior written permission.
 #
 # THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 # ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,13 +35,7 @@ include "pthread.h"
 include "pthread_int.h"
 include "pthread_md.h"
 
-define PT_NEXT		offsetof(struct __pthread_st, pt_next)
-define PT_SWITCHTO	offsetof(struct __pthread_st, pt_switchto)
-define PT_SWITCHTOUC	offsetof(struct __pthread_st, pt_switchtouc)
-define PT_SPINLOCKS	offsetof(struct __pthread_st, pt_spinlocks)
-define PT_HELDLOCK	offsetof(struct __pthread_st, pt_heldlock)
 define PT_UC		offsetof(struct __pthread_st, pt_uc)
-define PT_TRAPUC	offsetof(struct __pthread_st, pt_trapuc)
 define CONTEXTSIZE	sizeof(ucontext_t)
 define UC_FLAGS		offsetof(ucontext_t, uc_flags)
 define UC_REGS		offsetof(ucontext_t, uc_mcontext.__gregs)

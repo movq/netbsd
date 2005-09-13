@@ -1,4 +1,4 @@
-/*	$NetBSD: sunos.h,v 1.19 2005/08/19 02:03:58 christos Exp $	*/
+/*	$NetBSD: sunos.h,v 1.22 2007/12/04 18:40:21 dsl Exp $	*/
 
 #ifndef _COMPAT_SUNOS_SUNOS_H_
 #define _COMPAT_SUNOS_SUNOS_H_
@@ -21,7 +21,7 @@ typedef char *		sunos_charp;
 
 struct sunos_nfs_args {
 	struct	sockaddr_in *addr;	/* file server address */
-	caddr_t	fh;			/* file handle to be mounted */
+	void *	fh;			/* file handle to be mounted */
 	int	flags;			/* flags */
 	int	wsize;			/* write size in bytes */
 	int	rsize;			/* read size in bytes */
@@ -154,7 +154,7 @@ struct sunos_audio_info {
 
 __BEGIN_DECLS
 /* Defined in arch/<arch>/sunos_machdep.c */
-void	sunos_sendsig __P((const ksiginfo_t *, const sigset_t *));
+void	sunos_sendsig(const ksiginfo_t *, const sigset_t *);
 __END_DECLS
 
 #endif /* _COMPAT_SUNOS_SUNOS_H_ */

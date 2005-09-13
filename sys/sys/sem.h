@@ -1,4 +1,4 @@
-/*	$NetBSD: sem.h,v 1.19 2005/09/13 01:42:51 christos Exp $	*/
+/*	$NetBSD: sem.h,v 1.24 2007/11/04 11:20:35 rmind Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -100,8 +100,6 @@ struct sembuf {
 #define SEMVMX	32767		/* semaphore maximum value */
 #define SEMAEM	16384		/* adjust on exit max value */
 
-#define MAX_SOPS	5	/* maximum # of sembuf's per semop call */
-
 /*
  * Permissions
  */
@@ -201,11 +199,6 @@ extern struct seminfo seminfo;
 extern struct semid_ds *sema;		/* semaphore id pool */
 
 /*
- * Macro to find a particular sem_undo vector
- */
-#define SEMU(ix)	((struct sem_undo *)(((long)semu)+ix * SEMUSZ))
-
-/*
  * Parameters to the semconfig system call
  */
 #define	SEM_CONFIG_FREEZE	0	/* Freeze the semaphore facility. */
@@ -229,7 +222,11 @@ __END_DECLS
 void	seminit(void);
 void	semexit(struct proc *, void *);
 
-int	semctl1(struct proc *, int, int, int, void *, register_t *);
+int	semctl1(struct lwp *, int, int, int, void *, register_t *);
+#define get_semctl_arg(cmd, sembuf, arg) \
+    ((cmd) == IPC_SET || (cmd) == IPC_STAT ? (void *)sembuf \
+    : (cmd) == GETALL || (cmd) == SETVAL || (cmd) == SETALL ? (void *)arg \
+    : NULL)
 #endif /* !_KERNEL */
 
 #endif /* !_SYS_SEM_H_ */

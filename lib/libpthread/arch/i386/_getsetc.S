@@ -1,4 +1,4 @@
-/*	$NetBSD: _getsetc.S,v 1.5 2004/11/30 21:05:01 nathanw Exp $	*/
+/*	$NetBSD: _getsetc.S,v 1.8 2008/07/07 13:07:55 gmcgarry Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,8 +33,8 @@
 #undef SETC
 
 #define GETC \
-	movl	%gs,  (UC_REGS + _REG_GS * 4)(%ecx)	; \
-	movl	%fs,  (UC_REGS + _REG_FS * 4)(%ecx)	; \
+	movw	%gs,  (UC_REGS + _REG_GS * 4)(%ecx)	; \
+	movw	%fs,  (UC_REGS + _REG_FS * 4)(%ecx)	; \
 	movl	%edi,  (UC_REGS + _REG_EDI * 4)(%ecx)	; \
 	movl	%esi,  (UC_REGS + _REG_ESI * 4)(%ecx)	; \
 	movl	%ebp,  (UC_REGS + _REG_EBP * 4)(%ecx)	; \
@@ -57,8 +50,8 @@
 	jnc	1f					; \
 							; \
 	FPLOAD(%ecx)					; \
-	movl	(UC_REGS + _REG_GS * 4)(%ecx), %gs	; \
-	movl	(UC_REGS + _REG_FS * 4)(%ecx), %fs	; \
+	movw	(UC_REGS + _REG_GS * 4)(%ecx), %gs	; \
+	movw	(UC_REGS + _REG_FS * 4)(%ecx), %fs	; \
 	movl	(UC_REGS + _REG_EDI * 4)(%ecx), %edi	; \
 	movl	(UC_REGS + _REG_ESI * 4)(%ecx), %esi	; \
 	movl	(UC_REGS + _REG_EBP * 4)(%ecx), %ebp	; \
@@ -72,13 +65,13 @@
 1:	btl	$8, (UC_REGS + _REG_EFL * 4)(%ecx)	; \
 	jnc	2f					; \
 	pushl %ecx					; \
-	call    PIC_GOT(_C_LABEL(setcontext))		; \
+	call    *PIC_GOT(_C_LABEL(setcontext))		; \
 2:	and 	$_UC_FPU, %eax				; \
 	jz	3f					; \
 	FPLOAD(%ecx)					; \
-3:	movl	(UC_REGS + _REG_GS * 4)(%ecx), %gs	; \
-	movl	(UC_REGS + _REG_FS * 4)(%ecx), %fs	; \
-	movl	(UC_REGS + _REG_ES * 4)(%ecx), %es	; \
+3:	movw	(UC_REGS + _REG_GS * 4)(%ecx), %gs	; \
+	movw	(UC_REGS + _REG_FS * 4)(%ecx), %fs	; \
+	movw	(UC_REGS + _REG_ES * 4)(%ecx), %es	; \
 	movl	(UC_REGS + _REG_EDI * 4)(%ecx), %edi	; \
 	movl	(UC_REGS + _REG_ESI * 4)(%ecx), %esi	; \
 	movl	(UC_REGS + _REG_EBP * 4)(%ecx), %ebp	; \
@@ -98,7 +91,7 @@
 	movl	%eax, -24(%edx)				; \
 	movl	(UC_REGS + _REG_EFL * 4)(%ecx), %eax	; \
 	movl	%eax, -28(%edx)				; \
-	movl	(UC_REGS + _REG_SS * 4)(%ecx), %ss	; \
+	movw	(UC_REGS + _REG_SS * 4)(%ecx), %ss	; \
 	leal	-28(%edx), %esp				; \
 	popfl						; \
 	popl	%eax					; \

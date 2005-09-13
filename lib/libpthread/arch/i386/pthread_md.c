@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread_md.c,v 1.3 2003/03/08 08:03:37 lukem Exp $	*/
+/*	$NetBSD: pthread_md.c,v 1.5 2008/04/28 20:23:02 martin Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,10 +30,12 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: pthread_md.c,v 1.3 2003/03/08 08:03:37 lukem Exp $");
+__RCSID("$NetBSD: pthread_md.c,v 1.5 2008/04/28 20:23:02 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/sysctl.h>
+
+#include <machine/sysarch.h>
 #include <machine/cpu.h>
 
 #include "pthread.h"
@@ -54,7 +49,8 @@ int (*_md_swapcontext_u)(ucontext_t *, const ucontext_t *);
  * Initialize the function pointers for get/setcontext to the
  * old-fp-save (s87) or new-fxsave (xmm) FP routines.
  */
-void pthread__i386_init(void)
+void
+pthread__i386_init(void)
 {
 	int mib[2];
 	size_t len;
@@ -76,4 +72,11 @@ void pthread__i386_init(void)
 		_md_swapcontext_u = _swapcontext_u_s87;
 	}
 
+}
+
+void
+pthread__threadreg_set(pthread_t self)
+{
+
+	sysarch(I386_SET_GSBASE, &self);
 }

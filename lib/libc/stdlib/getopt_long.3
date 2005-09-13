@@ -1,4 +1,4 @@
-.\"	$NetBSD: getopt_long.3,v 1.15 2005/04/18 10:56:33 wiz Exp $
+.\"	$NetBSD: getopt_long.3,v 1.18 2007/07/02 17:56:17 ginsbach Exp $
 .\"
 .\" Copyright (c) 1988, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"     @(#)getopt.3	8.5 (Berkeley) 4/27/95
 .\"
-.Dd April 18, 2005
+.Dd July 2, 2007
 .Dt GETOPT_LONG 3
 .Os
 .Sh NAME
@@ -85,6 +85,11 @@ shortcuts is not backwards compatible with
 It is possible to combine these methods, providing for long options
 processing with short option equivalents for some options.
 Less frequently used options would be processed as long options only.
+.Pp
+Abbreviated long option names are accepted when
+.Fn getopt_long
+processes long options if the abbreviation is unique.
+An exact match is always preferred for a defined long option.
 .Pp
 The
 .Fn getopt_long
@@ -163,7 +168,7 @@ int daggerset;
 /* options descriptor */
 static struct option longopts[] = {
 	{ "buffy",	no_argument,		0, 		'b' },
-	{ "floride",	required_argument,	0, 	       	'f' },
+	{ "fluoride",	required_argument,	0, 	       	'f' },
 	{ "daggerset",	no_argument,		\*[Am]daggerset,	1 },
 	{ NULL,		0,			NULL, 		0 }
 };
@@ -184,7 +189,7 @@ while ((ch = getopt_long(argc, argv, "bf:", longopts, NULL)) != -1)
 	case 0:
 		if(daggerset) {
 			fprintf(stderr,"Buffy will use her dagger to "
-				       "apply floride to dracula's teeth\en");
+				       "apply fluoride to dracula's teeth\en");
 		}
 		break;
 	case '?':
@@ -299,3 +304,7 @@ implementation appeared in 1.5.
 The implementation can completely replace
 .Xr getopt 3 ,
 but right now we are using separate code.
+.Pp
+The
+.Fa argv
+argument is not really const.

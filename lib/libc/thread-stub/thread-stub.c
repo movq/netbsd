@@ -1,4 +1,4 @@
-/*	$NetBSD: thread-stub.c,v 1.13 2005/06/12 05:21:28 lukem Exp $	*/
+/*	$NetBSD: thread-stub.c,v 1.20 2008/04/28 20:23:01 martin Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: thread-stub.c,v 1.13 2005/06/12 05:21:28 lukem Exp $");
+__RCSID("$NetBSD: thread-stub.c,v 1.20 2008/04/28 20:23:01 martin Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 /*
@@ -73,6 +66,20 @@ do {					\
 #else
 #define	CHECK_NOT_THREADED()	/* nothing */
 #endif
+
+/* libpthread init */
+
+void	__libc_thr_init(void);
+void	__libc_thr_init_stub(void);
+
+__weak_alias(__libc_thr_init,__libc_thr_init_stub)
+
+void
+__libc_thr_init_stub(void)
+{
+
+	/* nothing, may be overridden by libpthread */
+}
 
 /* mutexes */
 
@@ -302,8 +309,7 @@ int
 __libc_thr_setspecific_stub(thread_key_t k, const void *v)
 {
 
-	/* LINTED cast away const */
-	__libc_tsd[k].tsd_val = (void *) v;
+	__libc_tsd[k].tsd_val = __UNCONST(v);
 
 	return (0);
 }
@@ -340,6 +346,8 @@ int	__libc_thr_create_stub(thr_t *, const thrattr_t *,
 void	__libc_thr_exit_stub(void *);
 int	*__libc_thr_errno_stub(void);
 int	__libc_thr_setcancelstate_stub(int, int *);
+int	__libc_thr_equal_stub(pthread_t, pthread_t);
+unsigned int __libc_thr_curcpu_stub(void);
 
 __weak_alias(__libc_thr_once,__libc_thr_once_stub)
 __weak_alias(__libc_thr_sigsetmask,__libc_thr_sigsetmask_stub)
@@ -349,6 +357,8 @@ __weak_alias(__libc_thr_create,__libc_thr_create_stub)
 __weak_alias(__libc_thr_exit,__libc_thr_exit_stub)
 __weak_alias(__libc_thr_errno,__libc_thr_errno_stub)
 __weak_alias(__libc_thr_setcancelstate,__libc_thr_setcancelstate_stub)
+__weak_alias(__libc_thr_equal,__libc_thr_equal_stub)
+__weak_alias(__libc_thr_curcpu,__libc_thr_curcpu_stub)
 
 
 int
@@ -429,6 +439,14 @@ __libc_thr_setcancelstate_stub(int new, int *old)
 	return (0);
 }
 
+int
+__libc_thr_equal_stub(pthread_t t1, pthread_t t2)
+{
+
+	/* assert that t1=t2=pthread_self() */
+	return (t1 == t2);
+}
+
 int *
 __libc_thr_errno_stub(void)
 {
@@ -436,6 +454,13 @@ __libc_thr_errno_stub(void)
 	DIE();
 
 	return (NULL);
+}
+
+unsigned int
+__libc_thr_curcpu_stub(void)
+{
+
+	return (0);
 }
 
 #endif /* _REENTRANT */

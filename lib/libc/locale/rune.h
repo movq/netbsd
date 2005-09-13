@@ -1,4 +1,4 @@
-/*	$NetBSD: rune.h,v 1.9 2003/08/07 16:43:04 agc Exp $	*/
+/*	$NetBSD: rune.h,v 1.12 2007/09/03 20:31:56 drochner Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -73,7 +73,6 @@
  * Other namespace conversion.
  */
 
-#define rune_t			__nbrune_t
 #define _RUNE_ISCACHED		_NB_RUNE_ISCACHED
 #define _CACHED_RUNES		_NB_CACHED_RUNES
 #define _DEFAULT_INVALID_RUNE	_NB_DEFAULT_INVALID_RUNE
@@ -92,6 +91,8 @@ extern size_t __mb_len_max_runtime;
 
 extern _RuneLocale _DefaultRuneLocale;
 extern _RuneLocale *_CurrentRuneLocale;
-extern char *_PathLocale;
+extern const char *_PathLocale;
+
+#define _LOCALE_ALIAS_NAME	"locale.alias"
 
 #endif	/*! _RUNE_H_ */

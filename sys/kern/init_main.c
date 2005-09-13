@@ -1,4 +1,37 @@
-/*	$NetBSD: init_main.c,v 1.251 2005/08/05 11:03:18 junyoung Exp $	*/
+/*	$NetBSD: init_main.c,v 1.347 2008/03/27 19:11:05 ad Exp $	*/
+
+/*-
+ * Copyright (c) 2008 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by the NetBSD
+ *	Foundation, Inc. and its contributors.
+ * 4. Neither the name of The NetBSD Foundation nor the names of its
+ *    contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1991, 1992, 1993
@@ -71,24 +104,24 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.251 2005/08/05 11:03:18 junyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.347 2008/03/27 19:11:05 ad Exp $");
 
-#include "fs_nfs.h"
-#include "opt_nfsserver.h"
 #include "opt_ipsec.h"
-#include "opt_sysv.h"
-#include "opt_maxuprc.h"
-#include "opt_multiprocessor.h"
+#include "opt_ntp.h"
 #include "opt_pipe.h"
-#include "opt_syscall_debug.h"
-#include "opt_systrace.h"
 #include "opt_posix.h"
-#include "opt_kcont.h"
-#include "opt_rootfs_magiclinks.h"
-#include "opt_verified_exec.h"
+#include "opt_syscall_debug.h"
+#include "opt_sysv.h"
+#include "opt_fileassoc.h"
+#include "opt_ktrace.h"
+#include "opt_pax.h"
 
-#include "opencrypto.h"
 #include "rnd.h"
+#include "sysmon_envsys.h"
+#include "sysmon_power.h"
+#include "sysmon_taskq.h"
+#include "sysmon_wdog.h"
+#include "veriexec.h"
 
 #include <sys/param.h>
 #include <sys/acct.h>
@@ -96,8 +129,9 @@ __KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.251 2005/08/05 11:03:18 junyoung Exp
 #include <sys/file.h>
 #include <sys/errno.h>
 #include <sys/callout.h>
+#include <sys/cpu.h>
 #include <sys/kernel.h>
-#include <sys/kcont.h>
+#include <sys/kmem.h>
 #include <sys/mount.h>
 #include <sys/proc.h>
 #include <sys/kthread.h>
@@ -105,6 +139,7 @@ __KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.251 2005/08/05 11:03:18 junyoung Exp
 #include <sys/signalvar.h>
 #include <sys/systm.h>
 #include <sys/vnode.h>
+#include <sys/fstrans.h>
 #include <sys/tty.h>
 #include <sys/conf.h>
 #include <sys/disklabel.h>
@@ -113,11 +148,25 @@ __KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.251 2005/08/05 11:03:18 junyoung Exp
 #include <sys/exec.h>
 #include <sys/socketvar.h>
 #include <sys/protosw.h>
+#include <sys/percpu.h>
+#include <sys/pset.h>
+#include <sys/sysctl.h>
 #include <sys/reboot.h>
 #include <sys/user.h>
 #include <sys/sysctl.h>
 #include <sys/event.h>
 #include <sys/mbuf.h>
+#include <sys/sched.h>
+#include <sys/sleepq.h>
+#include <sys/iostat.h>
+#include <sys/vmem.h>
+#include <sys/uuid.h>
+#include <sys/extent.h>
+#include <sys/disk.h>
+#include <sys/mqueue.h>
+#include <sys/msgbuf.h>
+#include <sys/module.h>
+#include <sys/event.h>
 #ifdef FAST_IPSEC
 #include <netipsec/ipsec.h>
 #endif
@@ -133,48 +182,59 @@ __KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.251 2005/08/05 11:03:18 junyoung Exp
 #ifdef P1003_1B_SEMAPHORE
 #include <sys/ksem.h>
 #endif
-#ifdef SYSTRACE
-#include <sys/systrace.h>
-#endif
 #include <sys/domain.h>
 #include <sys/namei.h>
-#if NOPENCRYPTO > 0
-#include <opencrypto/cryptodev.h>	/* XXX really the framework */
-#endif
 #if NRND > 0
 #include <sys/rnd.h>
 #endif
-#ifndef PIPE_SOCKETPAIR
 #include <sys/pipe.h>
-#endif
 #ifdef LKM
 #include <sys/lkm.h>
 #endif
-#ifdef VERIFIED_EXEC
+#if NVERIEXEC > 0
 #include <sys/verified_exec.h>
+#endif /* NVERIEXEC > 0 */
+#ifdef KTRACE
+#include <sys/ktrace.h>
 #endif
+#include <sys/kauth.h>
+#include <net80211/ieee80211_netbsd.h>
 
 #include <sys/syscall.h>
-#include <sys/sa.h>
 #include <sys/syscallargs.h>
+
+#if defined(PAX_MPROTECT) || defined(PAX_SEGVGUARD) || defined(PAX_ASLR)
+#include <sys/pax.h>
+#endif /* PAX_MPROTECT || PAX_SEGVGUARD || PAX_ASLR */
 
 #include <ufs/ufs/quota.h>
 
 #include <miscfs/genfs/genfs.h>
 #include <miscfs/syncfs/syncfs.h>
 
-#include <machine/cpu.h>
+#include <sys/cpu.h>
 
 #include <uvm/uvm.h>
 
+#if NSYSMON_TASKQ > 0
+#include <dev/sysmon/sysmon_taskq.h>
+#endif
+
 #include <dev/cons.h>
+
+#if NSYSMON_ENVSYS > 0 || NSYSMON_POWER > 0 || NSYSMON_WDOG > 0
+#include <dev/sysmon/sysmonvar.h>
+#endif
 
 #include <net/if.h>
 #include <net/raw_cb.h>
 
+#include <secmodel/secmodel.h>
+
 extern struct proc proc0;
 extern struct lwp lwp0;
 extern struct cwdinfo cwdi0;
+extern time_t rootfstime;
 
 #ifndef curlwp
 struct	lwp *curlwp = &lwp0;
@@ -184,14 +244,32 @@ struct	proc *initproc;
 struct	vnode *rootvp, *swapdev_vp;
 int	boothowto;
 int	cold = 1;			/* still working on startup */
-struct	timeval boottime;
-time_t	rootfstime;			/* recorded root fs time, if known */
+struct timeval boottime;	        /* time at system startup - will only follow settime deltas */
 
-__volatile int start_init_exec;		/* semaphore for start_init() */
+volatile int start_init_exec;		/* semaphore for start_init() */
 
-static void check_console(struct proc *p);
+static void check_console(struct lwp *l);
 static void start_init(void *);
 void main(void);
+
+#if defined(__SSP__) || defined(__SSP_ALL__)
+long __stack_chk_guard[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+void __stack_chk_fail(void);
+
+void
+__stack_chk_fail(void)
+{
+	panic("stack overflow detected; terminated");
+}
+#endif
+
+void __secmodel_none(void);
+__weak_alias(secmodel_start,__secmodel_none);
+void
+__secmodel_none(void)
+{
+	return;
+}
 
 /*
  * System startup; initialize the world, create process 0, mount root
@@ -202,28 +280,22 @@ void main(void);
 void
 main(void)
 {
+	struct timeval time;
 	struct lwp *l;
 	struct proc *p;
 	struct pdevinit *pdev;
 	int s, error;
 	extern struct pdevinit pdevinit[];
-	extern void schedcpu(void *);
-#if defined(NFSSERVER) || defined(NFS)
-	extern void nfs_init(void);
-#endif
 #ifdef NVNODE_IMPLICIT
 	int usevnodes;
 #endif
+	CPU_INFO_ITERATOR cii;
+	struct cpu_info *ci;
 
-	/*
-	 * Initialize the current LWP pointer (curlwp) before
-	 * any possible traps/probes to simplify trap processing.
-	 */
 	l = &lwp0;
-	curlwp = l;
+#ifndef LWP0_CPU_INFO
 	l->l_cpu = curcpu();
-	l->l_proc = &proc0;
-	l->l_lid = 1;
+#endif
 
 	/*
 	 * Attempt to find console and initialize
@@ -231,18 +303,88 @@ main(void)
 	 */
 	consinit();
 
-	KERNEL_LOCK_INIT();
+	kernel_lock_init();
 
 	uvm_init();
+
+	kmem_init();
+
+	percpu_init();
+
+	/* Initialize lock caches. */
+	mutex_obj_init();
+
+	/* Initialize the extent manager. */
+	extent_init();
 
 	/* Do machine-dependent initialization. */
 	cpu_startup();
 
-	/* Initialize callouts. */
+	/* Start module system. */
+	module_init();
+
+	/* Initialize callouts, part 1. */
 	callout_startup();
+
+	/*
+	 * Initialize the kernel authorization subsystem and start the
+	 * default security model, if any. We need to do this early
+	 * enough so that subsystems relying on any of the aforementioned
+	 * can work properly. Since the security model may dictate the
+	 * credential inheritance policy, it is needed at least before
+	 * any process is created, specifically proc0.
+	 */
+	kauth_init();
+	secmodel_start();
 
 	/* Initialize the buffer cache */
 	bufinit();
+
+	/* Initialize sockets. */
+	soinit();
+
+	/*
+	 * The following things must be done before autoconfiguration.
+	 */
+	evcnt_init();		/* initialize event counters */
+#if NRND > 0
+	rnd_init();		/* initialize RNG */
+#endif
+
+	/* Initialize process and pgrp structures. */
+	procinit();
+	lwpinit();
+
+	/* Initialize signal-related data structures. */
+	signal_init();
+
+	/* Initialize resource management. */
+	resource_init();
+
+	/* Create process 0 (the swapper). */
+	proc0_init();
+
+	/* Initialize the UID hash table. */
+	uid_init();
+
+	/* Charge root for one process. */
+	(void)chgproccnt(0, 1);
+
+	/* Initialize timekeeping. */
+	time_init();
+
+	/* Initialize the run queues, turnstiles and sleep queues. */
+	mutex_init(&cpu_lock, MUTEX_DEFAULT, IPL_NONE);
+	sched_rqinit();
+	turnstile_init();
+	sleeptab_init(&sleeptab);
+
+	/* Initialize processor-sets */
+	psets_init();
+
+	/* MI initialization of the boot cpu */
+	error = mi_cpu_attach(curcpu());
+	KASSERT(error == 0);
 
 	/*
 	 * Initialize mbuf's.  Do this now because we might attempt to
@@ -250,73 +392,107 @@ main(void)
 	 */
 	mbinit();
 
-	/* Initialize sockets. */
-	soinit();
-
-#ifdef KCONT
-	/* Initialize kcont. */
-        kcont_init();
-#endif
-
-	/*
-	 * The following things must be done before autoconfiguration.
-	 */
-	evcnt_init();		/* initialize event counters */
-	tty_init();		/* initialize tty list */
-#if NRND > 0
-	rnd_init();		/* initialize RNG */
-#endif
-#if NOPENCRYPTO > 0
-	/* Initialize crypto subsystem before configuring crypto hardware. */
-	(void)crypto_init();
-#endif
 	/* Initialize the sysctl subsystem. */
 	sysctl_init();
 
-	/* Initialize process and pgrp structures. */
-	procinit();
+	/* Initialize I/O statistics. */
+	iostat_init();
 
-#ifdef LKM
-	/* Initialize the LKM system. */
-	lkm_init();
-#endif
-
-	/* Initialize signal-related data structures. */
-	signal_init();
-
-	/* Create process 0 (the swapper). */
-	proc0_init();
-
-	/*
-	 * Charge root for one process.
-	 */
-	(void)chgproccnt(0, 1);
-
-	rqinit();
+	/* Initialize the log device. */
+	loginit();
 
 	/* Initialize the file systems. */
-#if defined(NFSSERVER) || defined(NFS)
-	nfs_init();			/* initialize server/shared data */
-#endif
 #ifdef NVNODE_IMPLICIT
 	/*
 	 * If maximum number of vnodes in namei vnode cache is not explicitly
 	 * defined in kernel config, adjust the number such as we use roughly
 	 * 1.0% of memory for vnode cache (but not less than NVNODE vnodes).
 	 */
-	usevnodes = (ptoa((unsigned)physmem) / 100) / sizeof(struct vnode);
+	usevnodes =
+	    calc_cache_size(kernel_map, 1, VNODE_VA_MAXPCT) / sizeof(vnode_t);
 	if (usevnodes > desiredvnodes)
 		desiredvnodes = usevnodes;
 #endif
 	vfsinit();
 
+	/* Initialize fstrans. */
+	fstrans_init();
+
+	/* Initialize the file descriptor system. */
+	fd_sys_init();
+
+	/* Initialize kqueue. */
+	kqueue_init();
+
+	/* Initialize asynchronous I/O. */
+	aio_sysinit();
+
+	/* Initialize message queues. */
+	mqueue_sysinit();
+
+	/* Initialize the system monitor subsystems. */
+#if NSYSMON_TASKQ > 0
+	sysmon_task_queue_preinit();
+#endif
+
+#if NSYSMON_ENVSYS > 0
+	sysmon_envsys_init();
+#endif
+
+#if NSYSMON_POWER > 0
+	sysmon_power_init();
+#endif
+
+#if NSYSMON_WDOG > 0
+	sysmon_wdog_init();
+#endif
+
+	inittimecounter();
+	ntp_init();
+
+	/* Initialize the device switch tables. */
+	devsw_init();
+
+	/* Initialize tty subsystem. */
+	tty_init();
+	ttyldisc_init();
+
+	/* Initialize the buffer cache, part 2. */
+	bufinit2();
+
+	/* Initialize the disk wedge subsystem. */
+	dkwedge_init();
+
 	/* Configure the system hardware.  This will enable interrupts. */
 	configure();
 
+#if defined(__SSP__) || defined(__SSP_ALL__)
+	{
+#ifdef DIAGNOSTIC
+		printf("Initializing SSP:");
+#endif
+		/*
+		 * We initialize ssp here carefully:
+		 *	1. after we got some entropy
+		 *	2. without calling a function
+		 */
+		size_t i;
+		long guard[__arraycount(__stack_chk_guard)];
+
+		arc4randbytes(guard, sizeof(guard));
+		for (i = 0; i < __arraycount(guard); i++)
+			__stack_chk_guard[i] = guard[i];
+#ifdef DIAGNOSTIC
+		for (i = 0; i < __arraycount(guard); i++)
+			printf("%lx ", guard[i]);
+		printf("\n");
+#endif
+	}
+#endif
 	ubc_init();		/* must be after autoconfig */
 
 	/* Lock the kernel on behalf of proc0. */
-	KERNEL_PROC_LOCK(l);
+	KERNEL_LOCK(1, l);
 
 #ifdef SYSVSHM
 	/* Initialize System V style shared memory. */
@@ -338,13 +514,16 @@ main(void)
 	ksem_init();
 #endif
 
-#ifdef VERIFIED_EXEC
-	  /*
-	   * Initialise the fingerprint operations vectors before
-	   * fingerprints can be loaded.
-	   */
-	veriexec_init_fp_ops();
-#endif
+#if NVERIEXEC > 0
+	/*
+	 * Initialise the Veriexec subsystem.
+	 */
+	veriexec_init();
+#endif /* NVERIEXEC > 0 */
+
+#if defined(PAX_MPROTECT) || defined(PAX_SEGVGUARD) || defined(PAX_ASLR)
+	pax_init();
+#endif /* PAX_MPROTECT || PAX_SEGVGUARD || PAX_ASLR */
 
 	/* Attach pseudo-devices. */
 	for (pdev = pdevinit; pdev->pdev_attach != NULL; pdev++)
@@ -373,12 +552,21 @@ main(void)
 	/* Initialize system accouting. */
 	acct_init();
 
-#ifdef SYSTRACE
-	systrace_init();
+#ifndef PIPE_SOCKETPAIR
+	/* Initialize pipes. */
+	pipe_init();
 #endif
 
-	/* Kick off timeout driven events by calling first time. */
-	schedcpu(NULL);
+	/* Setup the scheduler */
+	sched_init();
+
+#ifdef KTRACE
+	/* Initialize ktrace. */
+	ktrinit();
+#endif
+
+	/* Initialize the UUID system calls. */
+	uuid_init();
 
 	/*
 	 * Create process 1 (init(8)).  We do this now, as Unix has
@@ -393,19 +581,18 @@ main(void)
 		panic("fork init");
 
 	/*
-	 * Create any kernel threads who's creation was deferred because
-	 * initproc had not yet been created.
-	 */
-	kthread_run_deferred_queue();
-
-	/*
 	 * Now that device driver threads have been created, wait for
-	 * them to finish any deferred autoconfiguration.  Note we don't
-	 * need to lock this semaphore, since we haven't booted any
-	 * secondary processors, yet.
+	 * them to finish any deferred autoconfiguration.
 	 */
 	while (config_pending)
-		(void) tsleep(&config_pending, PWAIT, "cfpend", 0);
+		(void) tsleep(&config_pending, PWAIT, "cfpend", hz);
+
+	/*
+	 * Load any remaining builtin modules, and hand back temporary
+	 * storage to the VM system.
+	 */
+	module_init_class(MODULE_CLASS_ANY);
+	module_jettison();
 
 	/*
 	 * Finalize configuration now that all real devices have been
@@ -441,9 +628,6 @@ main(void)
 	inittodr(rootfstime);
 
 	CIRCLEQ_FIRST(&mountlist)->mnt_flag |= MNT_ROOTFS;
-#ifdef ROOTFS_MAGICLINKS
-	CIRCLEQ_FIRST(&mountlist)->mnt_flag |= MNT_MAGICLINKS;
-#endif
 	CIRCLEQ_FIRST(&mountlist)->mnt_op->vfs_refcount++;
 
 	/*
@@ -469,41 +653,47 @@ main(void)
 
 	/*
 	 * Now can look at time, having had a chance to verify the time
-	 * from the file system.  Reset p->p_rtime as it may have been
+	 * from the file system.  Reset l->l_rtime as it may have been
 	 * munched in mi_switch() after the time got set.
 	 */
-	proclist_lock_read();
-	s = splsched();
+	getmicrotime(&time);
+	boottime = time;
+	mutex_enter(&proclist_lock);
 	LIST_FOREACH(p, &allproc, p_list) {
-		KASSERT((p->p_flag & P_MARKER) == 0);
-		p->p_stats->p_start = mono_time = boottime = time;
+		KASSERT((p->p_flag & PK_MARKER) == 0);
+		mutex_enter(&p->p_smutex);
+		p->p_stats->p_start = time;
 		LIST_FOREACH(l, &p->p_lwps, l_sibling) {
-			if (l->l_cpu != NULL)
-				l->l_cpu->ci_schedstate.spc_runtime = time;
+			lwp_lock(l);
+			memset(&l->l_rtime, 0, sizeof(l->l_rtime));
+			lwp_unlock(l);
 		}
-		p->p_rtime.tv_sec = p->p_rtime.tv_usec = 0;
+		mutex_exit(&p->p_smutex);
 	}
-	splx(s);
-	proclist_unlock_read();
+	mutex_exit(&proclist_lock);
+	binuptime(&curlwp->l_stime);
+
+	for (CPU_INFO_FOREACH(cii, ci)) {
+		ci->ci_schedstate.spc_lastmod = time_second;
+	}
 
 	/* Create the pageout daemon kernel thread. */
 	uvm_swap_init();
-	if (kthread_create1(uvm_pageout, NULL, NULL, "pagedaemon"))
+	if (kthread_create(PRI_PGDAEMON, KTHREAD_MPSAFE, NULL, uvm_pageout,
+	    NULL, NULL, "pgdaemon"))
 		panic("fork pagedaemon");
 
 	/* Create the filesystem syncer kernel thread. */
-	if (kthread_create1(sched_sync, NULL, NULL, "ioflush"))
+	if (kthread_create(PRI_IOFLUSH, KTHREAD_MPSAFE, NULL, sched_sync,
+	    NULL, NULL, "ioflush"))
 		panic("fork syncer");
 
 	/* Create the aiodone daemon kernel thread. */
-	if (kthread_create1(uvm_aiodone_daemon, NULL, &uvm.aiodoned_proc,
-	    "aiodoned"))
+	if (workqueue_create(&uvm.aiodone_queue, "aiodoned",
+	    uvm_aiodone_worker, NULL, PRI_VM, IPL_NONE, WQ_MPSAFE))
 		panic("fork aiodoned");
 
-#if defined(MULTIPROCESSOR)
-	/* Boot the secondary processors. */
-	cpu_boot_secondary_processors();
-#endif
+	vmem_rehash_start();
 
 	/* Initialize exec structures */
 	exec_init(1);
@@ -519,20 +709,13 @@ main(void)
 	/* NOTREACHED */
 }
 
-void
-setrootfstime(time_t t)
-{
-
-	rootfstime = t;
-}
-
 static void
-check_console(struct proc *p)
+check_console(struct lwp *l)
 {
 	struct nameidata nd;
 	int error;
 
-	NDINIT(&nd, LOOKUP, FOLLOW, UIO_SYSSPACE, "/dev/console", p);
+	NDINIT(&nd, LOOKUP, FOLLOW, UIO_SYSSPACE, "/dev/console");
 	error = namei(&nd);
 	if (error == 0)
 		vrele(nd.ni_vp);
@@ -545,7 +728,7 @@ check_console(struct proc *p)
 /*
  * List of paths to try when searching for "init".
  */
-static const char *initpaths[] = {
+static const char * const initpaths[] = {
 	"/sbin/init",
 	"/sbin/oinit",
 	"/sbin/init.bak",
@@ -592,7 +775,7 @@ start_init(void *arg)
 	 * but that's a _lot_ more work, and the benefit from this easy
 	 * hack makes up for the "good is the enemy of the best" effect.
 	 */
-	check_console(p);
+	check_console(l);
 
 	/*
 	 * Need just enough stack to hold the faked-up "execve()" arguments.
@@ -604,7 +787,7 @@ start_init(void *arg)
 		    UVM_ADV_NORMAL,
                     UVM_FLAG_FIXED|UVM_FLAG_OVERLAY|UVM_FLAG_COPYONW)) != 0)
 		panic("init: couldn't allocate argument space");
-	p->p_vmspace->vm_maxsaddr = (caddr_t)STACK_MAX(addr, PAGE_SIZE);
+	p->p_vmspace->vm_maxsaddr = (void *)STACK_MAX(addr, PAGE_SIZE);
 
 	ipx = 0;
 	while (1) {
@@ -659,7 +842,7 @@ start_init(void *arg)
 #endif
 			arg1 = STACK_ALLOC(ucp, i);
 			ucp = STACK_MAX(arg1, i);
-			(void)copyout((caddr_t)flags, arg1, i);
+			(void)copyout((void *)flags, arg1, i);
 		}
 
 		/*
@@ -679,32 +862,55 @@ start_init(void *arg)
 		/*
 		 * Move out the arg pointers.
 		 */
-		ucp = (caddr_t)STACK_ALIGN(ucp, ALIGNBYTES);
+		ucp = (void *)STACK_ALIGN(ucp, ALIGNBYTES);
 		uap = (char **)STACK_ALLOC(ucp, sizeof(char *) * 3);
 		SCARG(&args, path) = arg0;
 		SCARG(&args, argp) = uap;
 		SCARG(&args, envp) = NULL;
 		slash = strrchr(path, '/');
 		if (slash)
-			(void)suword((caddr_t)uap++,
+			(void)suword((void *)uap++,
 			    (long)arg0 + (slash + 1 - path));
 		else
-			(void)suword((caddr_t)uap++, (long)arg0);
+			(void)suword((void *)uap++, (long)arg0);
 		if (options != 0)
-			(void)suword((caddr_t)uap++, (long)arg1);
-		(void)suword((caddr_t)uap++, 0);	/* terminator */
+			(void)suword((void *)uap++, (long)arg1);
+		(void)suword((void *)uap++, 0);	/* terminator */
 
 		/*
 		 * Now try to exec the program.  If can't for any reason
 		 * other than it doesn't exist, complain.
 		 */
-		error = sys_execve(LIST_FIRST(&p->p_lwps), &args, retval);
+		error = sys_execve(l, &args, retval);
 		if (error == 0 || error == EJUSTRETURN) {
-			KERNEL_PROC_UNLOCK(l);
+			KERNEL_UNLOCK_LAST(l);
 			return;
 		}
 		printf("exec %s: error %d\n", path, error);
 	}
 	printf("init: not found\n");
 	panic("no init");
+}
+
+/*
+ * calculate cache size from physmem and vm_map size.
+ */
+vaddr_t
+calc_cache_size(struct vm_map *map, int pct, int va_pct)
+{
+	paddr_t t;
+
+	/* XXX should consider competing cache if any */
+	/* XXX should consider submaps */
+	t = (uintmax_t)physmem * pct / 100 * PAGE_SIZE;
+	if (map != NULL) {
+		vsize_t vsize;
+
+		vsize = vm_map_max(map) - vm_map_min(map);
+		vsize = (uintmax_t)vsize * va_pct / 100;
+		if (t > vsize) {
+			t = vsize;
+		}
+	}
+	return t;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: runetype.h,v 1.18 2003/08/07 16:43:04 agc Exp $	*/
+/*	$NetBSD: runetype.h,v 1.21 2007/09/29 08:10:17 tnozaki Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -89,14 +89,14 @@ typedef struct {
 	int32_t		fre_map;	/* What first maps to in maps */
 	uint32_t	fre_pad1;	/* backward compatibility */
 	__runepad_t	fre_pad2;	/* backward compatibility */
-} __attribute__((__packed__)) _FileRuneEntry;
+} __packed _FileRuneEntry;
 
 
 typedef struct {
 	uint32_t	frr_nranges;	/* Number of ranges stored */
 	uint32_t	frr_pad1;	/* backward compatibility */
 	__runepad_t	frr_pad2;	/* backward compatibility */
-} __attribute__((__packed__)) _FileRuneRange;
+} __packed _FileRuneRange;
 
 
 typedef struct {
@@ -126,7 +126,7 @@ typedef struct {
 	uint32_t	frl_pad5;	/* backward compatibility */
 
 	/* variable size data follows */
-} __attribute__((__packed__)) _FileRuneLocale;
+} __packed _FileRuneLocale;
 
 
 /*
@@ -150,7 +150,7 @@ typedef struct {
  * wctrans stuffs.
  */
 typedef struct _WCTransEntry {
-	char		*te_name;
+	const char	*te_name;
 	__nbrune_t	*te_cached;
 	_NBRuneRange	*te_extmap;
 } _WCTransEntry;
@@ -162,7 +162,7 @@ typedef struct _WCTransEntry {
  * wctype stuffs.
  */
 typedef struct _WCTypeEntry {
-	char		*te_name;
+	const char	*te_name;
 	_RuneType	te_mask;
 } _WCTypeEntry;
 #define _WCTYPE_INDEX_ALNUM	0
@@ -203,10 +203,14 @@ typedef struct _NBRuneLocale {
 	/*
 	 * the following portion is generated on the fly
 	 */
-	char				*rl_codeset;
+	const char			*rl_codeset;
 	struct _citrus_ctype_rec	*rl_citrus_ctype;
 	_WCTransEntry			rl_wctrans[_WCTRANS_NINDEXES];
 	_WCTypeEntry			rl_wctype[_WCTYPE_NINDEXES];
+
+	const unsigned char		*rl_ctype_tab;
+	const short			*rl_tolower_tab;
+	const short			*rl_toupper_tab;
 } _NBRuneLocale;
 
 

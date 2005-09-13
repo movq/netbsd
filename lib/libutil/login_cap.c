@@ -1,4 +1,4 @@
-/*	$NetBSD: login_cap.c,v 1.22 2005/08/27 17:24:42 elad Exp $	*/
+/*	$NetBSD: login_cap.c,v 1.29 2007/12/04 22:09:02 mjf Exp $	*/
 
 /*-
  * Copyright (c) 1995,1997 Berkeley Software Design, Inc. All rights reserved.
@@ -36,13 +36,14 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: login_cap.c,v 1.22 2005/08/27 17:24:42 elad Exp $");
+__RCSID("$NetBSD: login_cap.c,v 1.29 2007/12/04 22:09:02 mjf Exp $");
 #endif /* LIBC_SCCS and not lint */
  
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/resource.h>
+#include <sys/param.h>
 
 #include <assert.h>
 #include <ctype.h>
@@ -60,13 +61,12 @@ __RCSID("$NetBSD: login_cap.c,v 1.22 2005/08/27 17:24:42 elad Exp $");
 #include <unistd.h>
 #include <util.h>
 
-static void	setuserpath(login_cap_t *, const char *);
 static u_quad_t	multiply(u_quad_t, u_quad_t);
 static u_quad_t	strtolimit(const char *, char **, int);
 static u_quad_t	strtosize(const char *, char **, int);
 static int	gsetrl(login_cap_t *, int, const char *, int type);
-static int	setuserenv(login_cap_t *);
 static int	isinfinite(const char *);
+static int	envset(void *, const char *, const char *, int);
 
 login_cap_t *
 login_getclass(const char *class)
@@ -436,8 +436,8 @@ gsetrl(login_cap_t *lc, int what, const char *name, int type)
 
 	_DIAGASSERT(name != NULL);
 
-	sprintf(name_cur, "%s-cur", name);
-	sprintf(name_max, "%s-max", name);
+	(void)snprintf(name_cur, sizeof(name_cur), "%s-cur", name);
+	(void)snprintf(name_max, sizeof(name_max), "%s-max", name);
 
 	if (getrlimit(what, &r)) {
 		syslog(LOG_ERR, "getting resource limit: %m");
@@ -467,6 +467,8 @@ gsetrl(login_cap_t *lc, int what, const char *name, int type)
 		rl.rlim_max = login_getcapnum(lc, name_max, RMAX, RMAX);
 		break;
 	default:
+		syslog(LOG_ERR, "%s: invalid type %d setting resource limit %s",
+		    lc->lc_class, type, name);
 		return (-1);
 	}
 
@@ -481,10 +483,17 @@ gsetrl(login_cap_t *lc, int what, const char *name, int type)
 }
 
 static int
-setuserenv(login_cap_t *lc)
+/*ARGSUSED*/
+envset(void *envp __unused, const char *name, const char *value, int overwrite)
+{
+	return setenv(name, value, overwrite);	
+}
+
+int
+setuserenv(login_cap_t *lc, envfunc_t senv, void *envp)
 {
 	const char *stop = ", \t";
-	int i, count;
+	size_t i, count;
 	char *ptr;
 	char **res;
 	char *str = login_getcapstr(lc, "setenv", NULL, NULL);
@@ -492,7 +501,10 @@ setuserenv(login_cap_t *lc)
 	if (str == NULL || *str == '\0')
 		return 0;
 	
-	/* count the sub-strings */
+	/*
+	 * count the sub-strings, this may over-count since we don't
+	 * account for escaped delimiters.
+	 */
 	for (i = 1, ptr = str; *ptr; i++) {
 		ptr += strcspn(ptr, stop);
 		if (*ptr)
@@ -506,27 +518,22 @@ setuserenv(login_cap_t *lc)
 	if (!res)
 		return -1;
 	
-	ptr = (char *)(void *)res + count * sizeof(char *);
-	strcpy(ptr, str);
+	ptr = (char *)(void *)&res[count];
+	(void)strcpy(ptr, str);
 
 	/* split string */
-	for (i = 0; *ptr && i < count; i++) {
-		res[i] = ptr;
-		ptr += strcspn(ptr, stop);
-		if (*ptr)
-			*ptr++ = '\0';
-	}
+	for (i = 0; (res[i] = stresep(&ptr, stop, '\\')) != NULL; )
+		if (*res[i])
+			i++;
 	
-	res[i] = NULL;
+	count = i;
 
-	for (i = 0; i < count && res[i]; i++) {
-		if (*res[i] != '\0') {
-			if ((ptr = strchr(res[i], '=')) != NULL)
-				*ptr++ = '\0';
-			else 
-				ptr = NULL;
-			setenv(res[i], ptr ? ptr : "", 1);
-		}
+	for (i = 0; i < count; i++) {
+		if ((ptr = strchr(res[i], '=')) != NULL)
+			*ptr++ = '\0';
+		else 
+			ptr = NULL;
+		(void)(*senv)(envp, res[i], ptr ? ptr : "", 1);
 	}
 	
 	free(res);
@@ -551,9 +558,12 @@ setclasscontext(const char *class, u_int flags)
 int
 setusercontext(login_cap_t *lc, struct passwd *pwd, uid_t uid, u_int flags)
 {
+	char per_user_tmp[MAXPATHLEN + 1];
+	const char *component_name;
 	login_cap_t *flc;
 	quad_t p;
 	int i;
+	ssize_t len;
 
 	flc = NULL;
 
@@ -567,33 +577,40 @@ setusercontext(login_cap_t *lc, struct passwd *pwd, uid_t uid, u_int flags)
 	if (pwd == NULL)
 		flags &= ~(LOGIN_SETGROUP|LOGIN_SETLOGIN);
 
+#ifdef LOGIN_OSETGROUP
+	if (pwd == NULL)
+		flags &= ~LOGIN_OSETGROUP;
+	if (flags & LOGIN_OSETGROUP)
+		flags = (flags & ~LOGIN_OSETGROUP) | LOGIN_SETGROUP;
+#endif
 	if (flags & LOGIN_SETRESOURCES)
 		for (i = 0; r_list[i].name; ++i) 
-			if (gsetrl(lc, r_list[i].what, r_list[i].name,
-			    r_list[i].type))
-				/* XXX - call syslog()? */;
+			(void)gsetrl(lc, r_list[i].what, r_list[i].name,
+			    r_list[i].type);
 
 	if (flags & LOGIN_SETPRIORITY) {
 		p = login_getcapnum(lc, "priority", (quad_t)0, (quad_t)0);
 
-		if (setpriority(PRIO_PROCESS, 0, (int)p) < 0)
+		if (setpriority(PRIO_PROCESS, 0, (int)p) == -1)
 			syslog(LOG_ERR, "%s: setpriority: %m", lc->lc_class);
 	}
 
 	if (flags & LOGIN_SETUMASK) {
 		p = login_getcapnum(lc, "umask", (quad_t) LOGIN_DEFUMASK,
-												   (quad_t) LOGIN_DEFUMASK);
+		    (quad_t)LOGIN_DEFUMASK);
 		umask((mode_t)p);
 	}
 
-	if (flags & LOGIN_SETGROUP) {
-		if (setgid(pwd->pw_gid) < 0) {
+	if (flags & LOGIN_SETGID) {
+		if (setgid(pwd->pw_gid) == -1) {
 			syslog(LOG_ERR, "setgid(%d): %m", pwd->pw_gid);
 			login_close(flc);
 			return (-1);
 		}
+	}
 
-		if (initgroups(pwd->pw_name, pwd->pw_gid) < 0) {
+	if (flags & LOGIN_SETGROUPS) {
+		if (initgroups(pwd->pw_name, pwd->pw_gid) == -1) {
 			syslog(LOG_ERR, "initgroups(%s,%d): %m",
 			    pwd->pw_name, pwd->pw_gid);
 			login_close(flc);
@@ -601,8 +618,81 @@ setusercontext(login_cap_t *lc, struct passwd *pwd, uid_t uid, u_int flags)
 		}
 	}
 
+	/* Create per-user temporary directories if needed. */
+	if ((len = readlink("/tmp", per_user_tmp, 
+	    sizeof(per_user_tmp) - 6)) != -1) {
+
+		static const char atuid[] = "/@ruid";
+		char *lp;
+
+		/* readlink does not nul-terminate the string */
+		per_user_tmp[len] = '\0';
+
+		/* Check if it's magic symlink. */
+		lp = strstr(per_user_tmp, atuid);
+		if (lp != NULL && *(lp + (sizeof(atuid) - 1)) == '\0') {
+			lp++;
+
+			if (snprintf(lp, 11, "/%u", pwd->pw_uid) > 10) {
+				syslog(LOG_ERR, "real temporary path too long");
+				login_close(flc);
+				return (-1);
+			}
+			if (mkdir(per_user_tmp, S_IRWXU) != -1) {
+				if (chown(per_user_tmp, pwd->pw_uid,
+				    pwd->pw_gid)) {
+					component_name = "chown";
+					goto out;
+				}
+
+				/* 
+			 	 * Must set sticky bit for tmp directory, some
+			 	 * programs rely on this.
+			 	 */
+				if(chmod(per_user_tmp, S_IRWXU | S_ISVTX)) {
+					component_name = "chmod";
+					goto out;
+				}
+			} else {
+				if (errno != EEXIST) {
+					component_name = "mkdir";
+					goto out;
+				} else {
+					/* 
+					 * We must ensure that we own the
+					 * directory and that is has the correct
+					 * permissions, otherwise a DOS attack
+					 * is possible.
+					 */
+					struct stat sb;
+					if (stat(per_user_tmp, &sb) == -1) {
+						component_name = "stat";
+						goto out;
+					}
+
+					if (sb.st_uid != pwd->pw_uid) {
+						if (chown(per_user_tmp, 
+						    pwd->pw_uid, pwd->pw_gid)) {
+							component_name = "chown";
+							goto out;
+						}
+					}
+
+					if (sb.st_mode != (S_IRWXU | S_ISVTX)) {
+						if (chmod(per_user_tmp, 
+						    S_IRWXU | S_ISVTX)) {
+							component_name = "chmod";
+							goto out;
+						}
+					}
+				}
+			}
+		}
+	}
+	errno = 0;
+
 	if (flags & LOGIN_SETLOGIN)
-		if (setlogin(pwd->pw_name) < 0) {
+		if (setlogin(pwd->pw_name) == -1) {
 			syslog(LOG_ERR, "setlogin(%s) failure: %m",
 			    pwd->pw_name);
 			login_close(flc);
@@ -610,24 +700,35 @@ setusercontext(login_cap_t *lc, struct passwd *pwd, uid_t uid, u_int flags)
 		}
 
 	if (flags & LOGIN_SETUSER)
-		if (setuid(uid) < 0) {
+		if (setuid(uid) == -1) {
 			syslog(LOG_ERR, "setuid(%d): %m", uid);
 			login_close(flc);
 			return (-1);
 		}
 
 	if (flags & LOGIN_SETENV)
-		setuserenv(lc);
+		setuserenv(lc, envset, NULL);
 
 	if (flags & LOGIN_SETPATH)
-		setuserpath(lc, pwd ? pwd->pw_dir : "");
+		setuserpath(lc, pwd ? pwd->pw_dir : "", envset, NULL);
 
 	login_close(flc);
 	return (0);
+
+out:
+	if (component_name != NULL) {
+		syslog(LOG_ERR, "%s %s: %m", component_name, per_user_tmp);
+		login_close(flc);
+		return (-1);
+	} else {
+		syslog(LOG_ERR, "%s: %m", per_user_tmp);
+		login_close(flc);
+		return (-1);
+	}
 }
 
-static void
-setuserpath(login_cap_t *lc, const char *home)
+void
+setuserpath(login_cap_t *lc, const char *home, envfunc_t senv, void *envp)
 {
 	size_t hlen, plen;
 	int cnt = 0;
@@ -675,7 +776,7 @@ setuserpath(login_cap_t *lc, const char *home)
 			cpath = _PATH_DEFPATH;
 	} else
 		cpath = _PATH_DEFPATH;
-	if (setenv("PATH", cpath, 1))
+	if ((*senv)(envp, "PATH", cpath, 1))
 		warn("could not set PATH");
 }
 

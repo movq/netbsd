@@ -1,4 +1,4 @@
-/*	$NetBSD: mount.h,v 1.1 2005/09/13 01:42:32 christos Exp $	*/
+/*	$NetBSD: mount.h,v 1.7 2007/07/17 20:31:03 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1991, 1993
@@ -38,6 +38,7 @@
 #include "opt_compat_43.h"
 #endif
 
+#define MFSNAMELEN	16
 
 struct statfs12 {
 	short	f_type;			/* type of file system */
@@ -79,6 +80,17 @@ struct vfsconf {
 	struct	vfsconf *vfc_next; 	/* next in list */
 };
 
+/* Old, fixed size filehandle structures (used upto (including) 3.x) */
+struct compat_30_fid {
+	unsigned short	fid_len;
+	unsigned short	fid_reserved;
+	char		fid_data[16];
+};
+struct compat_30_fhandle {
+	fsid_t	fh_fsid;
+	struct compat_30_fid fh_fid;
+};
+
 #else
 
 __BEGIN_DECLS
@@ -87,7 +99,12 @@ int	getfsstat(struct statfs12 *, long, int);
 int	statfs(const char *, struct statfs12 *);
 int	getmntinfo(struct statfs12 **, int);
 #if defined(_NETBSD_SOURCE)
-int	fhstatfs(const fhandle_t *, struct statfs12 *);
+struct compat_30_fhandle;
+int	fhstatfs(const struct compat_30_fhandle *, struct statfs12 *);
+struct stat13;
+int	fhstat(const struct compat_30_fhandle *, struct stat13 *);
+struct stat;
+int	__fhstat30(const struct compat_30_fhandle *, struct stat *);
 #endif /* _NETBSD_SOURCE */
 __END_DECLS
 

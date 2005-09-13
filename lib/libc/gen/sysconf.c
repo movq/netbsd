@@ -1,4 +1,4 @@
-/*	$NetBSD: sysconf.c,v 1.21 2004/11/10 04:46:01 lukem Exp $	*/
+/*	$NetBSD: sysconf.c,v 1.33 2008/08/06 17:17:04 matt Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)sysconf.c	8.2 (Berkeley) 3/20/94";
 #else
-__RCSID("$NetBSD: sysconf.c,v 1.21 2004/11/10 04:46:01 lukem Exp $");
+__RCSID("$NetBSD: sysconf.c,v 1.33 2008/08/06 17:17:04 matt Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -51,6 +51,8 @@ __RCSID("$NetBSD: sysconf.c,v 1.21 2004/11/10 04:46:01 lukem Exp $");
 #include <limits.h>
 #include <time.h>
 #include <unistd.h>
+#include <paths.h>
+#include <pwd.h>
 
 #ifdef __weak_alias
 __weak_alias(sysconf,__sysconf)
@@ -69,16 +71,19 @@ __weak_alias(sysconf,__sysconf)
  * less useful than returning up-to-date values, however.
  */
 long
-sysconf(name)
-	int name;
+sysconf(int name)
 {
 	struct rlimit rl;
 	size_t len;
-	int mib[2], value;
+	int mib[CTL_MAXNAME], value;
+	unsigned int mib_len;
 	struct clockinfo tmpclock;
 	static int clk_tck;
 
 	len = sizeof(value);
+
+	/* Default length of the MIB */
+	mib_len = 2;
 
 	switch (name) {
 
@@ -140,9 +145,7 @@ sysconf(name)
 
 /* 1003.1b */
 	case _SC_PAGESIZE:
-		mib[0] = CTL_HW;
-		mib[1] = HW_PAGESIZE;
-		break;
+		return _getpagesize();
 	case _SC_FSYNC:
 		mib[0] = CTL_KERN;
 		mib[1] = KERN_FSYNC;
@@ -282,10 +285,47 @@ sysconf(name)
 		break;
 	case _SC_XOPEN_SHM:
 		mib[0] = CTL_KERN;
-		mib[1] = KERN_SYSVSHM;
+		mib[1] = KERN_SYSVIPC;
+		mib[2] = KERN_SYSVIPC_SHM;
+		mib_len = 3;
 		goto yesno;
 
 /* 1003.1-2001, XSI Option Group */
+	case _SC_AIO_LISTIO_MAX:
+		if (sysctlgetmibinfo("kern.aio_listio_max", &mib[0], &mib_len,
+		    NULL, NULL, NULL, SYSCTL_VERSION))
+			return -1;
+		break; 
+	case _SC_AIO_MAX:
+		if (sysctlgetmibinfo("kern.aio_max", &mib[0], &mib_len,
+		    NULL, NULL, NULL, SYSCTL_VERSION))
+			return -1;
+		break; 
+	case _SC_ASYNCHRONOUS_IO:
+		if (sysctlgetmibinfo("kern.posix_aio", &mib[0], &mib_len,
+		    NULL, NULL, NULL, SYSCTL_VERSION))
+			return -1;
+		goto yesno;
+	case _SC_MESSAGE_PASSING:
+		if (sysctlgetmibinfo("kern.posix_msg", &mib[0], &mib_len,
+		    NULL, NULL, NULL, SYSCTL_VERSION))
+			return -1;
+		goto yesno;
+	case _SC_MQ_OPEN_MAX:
+		if (sysctlgetmibinfo("kern.mqueue.mq_open_max", &mib[0],
+		    &mib_len, NULL, NULL, NULL, SYSCTL_VERSION))
+			return -1;
+		break; 
+	case _SC_MQ_PRIO_MAX:
+		if (sysctlgetmibinfo("kern.mqueue.mq_prio_max", &mib[0],
+		    &mib_len, NULL, NULL, NULL, SYSCTL_VERSION))
+			return -1;
+		break; 
+	case _SC_PRIORITY_SCHEDULING:
+		if (sysctlgetmibinfo("kern.posix_sched", &mib[0], &mib_len,
+		    NULL, NULL, NULL, SYSCTL_VERSION))
+			return -1;
+		goto yesno;
 	case _SC_ATEXIT_MAX:
 		mib[0] = CTL_USER;
 		mib[1] = USER_ATEXIT_MAX;
@@ -297,16 +337,77 @@ sysconf(name)
 	case _SC_GETPW_R_SIZE_MAX:
 		return _GETPW_R_SIZE_MAX;
 
-yesno:		if (sysctl(mib, 2, &value, &len, NULL, 0) == -1)
+/* Unsorted */
+	case _SC_HOST_NAME_MAX:
+		return MAXHOSTNAMELEN;
+	case _SC_PASS_MAX:
+		return _PASSWORD_LEN;
+	case _SC_REGEXP:
+		return _POSIX_REGEXP;
+	case _SC_SHELL:
+		return _POSIX_SHELL;
+	case _SC_SYMLOOP_MAX:
+		return MAXSYMLINKS;
+
+yesno:		if (sysctl(mib, mib_len, &value, &len, NULL, 0) == -1)
 			return (-1);
 		if (value == 0)
 			return (-1);
 		return (value);
-		/*NOTREACHED*/
+
+/* Extensions */
+	case _SC_NPROCESSORS_CONF:
+		mib[0] = CTL_HW;
+		mib[1] = HW_NCPU;
 		break;
+	case _SC_NPROCESSORS_ONLN:
+		mib[0] = CTL_HW;
+		mib[1] = HW_NCPUONLINE;
+		break;
+
+/* Native */
+	case _SC_SCHED_RT_TS:
+		if (sysctlgetmibinfo("kern.sched.rtts", &mib[0], &mib_len,
+		    NULL, NULL, NULL, SYSCTL_VERSION))      
+			return -1;              
+		break;
+	case _SC_SCHED_PRI_MIN:
+		if (sysctlgetmibinfo("kern.sched.pri_min", &mib[0], &mib_len,
+		    NULL, NULL, NULL, SYSCTL_VERSION))
+			return -1;
+		break;
+	case _SC_SCHED_PRI_MAX:
+		if (sysctlgetmibinfo("kern.sched.pri_max", &mib[0], &mib_len,
+		    NULL, NULL, NULL, SYSCTL_VERSION))
+			return -1;
+		break;
+	case _SC_THREAD_DESTRUCTOR_ITERATIONS:
+		return _POSIX_THREAD_DESTRUCTOR_ITERATIONS;
+	case _SC_THREAD_KEYS_MAX:
+		return _POSIX_THREAD_KEYS_MAX;
+	case _SC_THREAD_STACK_MIN:
+		return _getpagesize();
+	case _SC_THREAD_THREADS_MAX:
+		if (sysctlgetmibinfo("kern.maxproc", &mib[0], &mib_len,
+		    NULL, NULL, NULL, SYSCTL_VERSION))	/* XXX */
+			return -1;
+		goto yesno;
+	case _SC_THREAD_ATTR_STACKADDR:
+		return _POSIX_THREAD_ATTR_STACKADDR;
+	case _SC_THREAD_ATTR_STACKSIZE:
+		return _POSIX_THREAD_ATTR_STACKSIZE;
+	case _SC_THREAD_SAFE_FUNCTIONS:
+		return _POSIX_THREAD_SAFE_FUNCTIONS;
+	case _SC_THREAD_PRIORITY_SCHEDULING:
+	case _SC_THREAD_PRIO_INHERIT:
+	case _SC_THREAD_PRIO_PROTECT:
+	case _SC_THREAD_PROCESS_SHARED:
+		return -1;
+	case _SC_TTY_NAME_MAX:
+		return pathconf(_PATH_DEV, _PC_NAME_MAX);
 	default:
 		errno = EINVAL;
 		return (-1);
 	}
-	return (sysctl(mib, 2, &value, &len, NULL, 0) == -1 ? -1 : value); 
+	return (sysctl(mib, mib_len, &value, &len, NULL, 0) == -1 ? -1 : value); 
 }

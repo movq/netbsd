@@ -1,4 +1,4 @@
-/*	$NetBSD: makecontext.c,v 1.2 2003/01/18 11:17:45 thorpej Exp $	*/
+/*	$NetBSD: makecontext.c,v 1.4 2008/04/28 20:22:57 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: makecontext.c,v 1.2 2003/01/18 11:17:45 thorpej Exp $");
+__RCSID("$NetBSD: makecontext.c,v 1.4 2008/04/28 20:22:57 martin Exp $");
 #endif
 
 #include <inttypes.h>
@@ -57,9 +50,9 @@ makecontext(ucontext_t *ucp, void (*func)(void), int argc, ...)
 	ulong *sp;
 	va_list ap;
 
-	sp  = (ulong *)((caddr_t)ucp->uc_stack.ss_sp + ucp->uc_stack.ss_size);
+	sp = (ulong *)((caddr_t)ucp->uc_stack.ss_sp + ucp->uc_stack.ss_size);
 	/* Align on quad-word boundary. */
-	sp = (long *)((ulong)sp & ~0xf);
+	sp = (ulong *)((ulong)sp & ~0xf);
 
 	/* Make room for: argx, argd, struct return pointer(?), rwindow. */
 	sp -= (argc > 6 ? argc - 6 : 0) + 6 + 8 + 8;

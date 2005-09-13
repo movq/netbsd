@@ -1,4 +1,4 @@
-/*	$NetBSD: __sigaction14_sigtramp.c,v 1.5 2005/06/12 05:21:25 lukem Exp $	*/
+/*	$NetBSD: __sigaction14_sigtramp.c,v 1.7 2008/04/28 20:22:55 martin Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: __sigaction14_sigtramp.c,v 1.5 2005/06/12 05:21:25 lukem Exp $");
+__RCSID("$NetBSD: __sigaction14_sigtramp.c,v 1.7 2008/04/28 20:22:55 martin Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>
@@ -53,9 +46,7 @@ __weak_alias(__sigaction14, __libc_sigaction14)
 int
 __libc_sigaction14(int sig, const struct sigaction *act, struct sigaction *oact)
 {
-	extern const int __sigtramp_sigcontext_1[];
 	extern const int __sigtramp_siginfo_2[];
-	int rv;
 
 	/*
 	 * If no sigaction, use the "default" trampoline since it won't
@@ -64,18 +55,21 @@ __libc_sigaction14(int sig, const struct sigaction *act, struct sigaction *oact)
 	if (act == NULL)
 		return  __sigaction_sigtramp(sig, act, oact, NULL, 0);
 
+#ifdef __LIBC12_SOURCE__
 	/*
 	 * We select the non-SA_SIGINFO trampoline if SA_SIGINFO is not
 	 * set in the sigaction.
 	 */
 	if ((act->sa_flags & SA_SIGINFO) == 0) {
+		extern const int __sigtramp_sigcontext_1[];
 		int sav = errno;
-		rv =  __sigaction_sigtramp(sig, act, oact,
+		int rv =  __sigaction_sigtramp(sig, act, oact,
 		    __sigtramp_sigcontext_1, 1);
 		if (rv >= 0 || errno != EINVAL)
 			return rv;
 		errno = sav;
 	}
+#endif
 
 	/*
 	 * If SA_SIGINFO was specificed or the compatibility trampolines

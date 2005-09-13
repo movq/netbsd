@@ -1,4 +1,4 @@
-/*	$NetBSD: rec_delete.c,v 1.13 2003/08/07 16:42:44 agc Exp $	*/
+/*	$NetBSD: rec_delete.c,v 1.17 2008/09/11 12:58:00 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -32,18 +32,17 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-#if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)rec_delete.c	8.7 (Berkeley) 7/14/94";
-#else
-__RCSID("$NetBSD: rec_delete.c,v 1.13 2003/08/07 16:42:44 agc Exp $");
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
 #endif
-#endif /* LIBC_SCCS and not lint */
+
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: rec_delete.c,v 1.17 2008/09/11 12:58:00 joerg Exp $");
 
 #include "namespace.h"
 #include <sys/types.h>
 
+#include <assert.h>
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
@@ -51,7 +50,7 @@ __RCSID("$NetBSD: rec_delete.c,v 1.13 2003/08/07 16:42:44 agc Exp $");
 #include <db.h>
 #include "recno.h"
 
-static int rec_rdelete __P((BTREE *, recno_t));
+static int rec_rdelete(BTREE *, recno_t);
 
 /*
  * __REC_DELETE -- Delete the item(s) referenced by a key.
@@ -65,10 +64,7 @@ static int rec_rdelete __P((BTREE *, recno_t));
  *	RET_ERROR, RET_SUCCESS and RET_SPECIAL if the key not found.
  */
 int
-__rec_delete(dbp, key, flags)
-	const DB *dbp;
-	const DBT *key;
-	u_int flags;
+__rec_delete(const DB *dbp, const DBT *key, u_int flags)
 {
 	BTREE *t;
 	recno_t nrec;
@@ -121,9 +117,7 @@ einval:		errno = EINVAL;
  *	RET_ERROR, RET_SUCCESS and RET_SPECIAL if the key not found.
  */
 static int
-rec_rdelete(t, nrec)
-	BTREE *t;
-	recno_t nrec;
+rec_rdelete(BTREE *t, recno_t nrec)
 {
 	EPG *e;
 	PAGE *h;
@@ -135,7 +129,7 @@ rec_rdelete(t, nrec)
 
 	/* Delete the record. */
 	h = e->page;
-	status = __rec_dleaf(t, h, (u_int32_t)e->index);
+	status = __rec_dleaf(t, h, (uint32_t)e->index);
 	if (status != RET_SUCCESS) {
 		mpool_put(t->bt_mp, h, 0);
 		return (status);
@@ -155,16 +149,14 @@ rec_rdelete(t, nrec)
  *	RET_SUCCESS, RET_ERROR.
  */
 int
-__rec_dleaf(t, h, idx)
-	BTREE *t;
-	PAGE *h;
-	u_int32_t idx;
+__rec_dleaf(BTREE *t, PAGE *h, uint32_t idx)
 {
 	RLEAF *rl;
 	indx_t *ip, cnt, offset;
-	u_int32_t nbytes;
+	uint32_t nbytes;
 	char *from;
 	void *to;
+	size_t temp;
 
 	/*
 	 * Delete a record from a recno leaf page.  Internal records are never
@@ -190,10 +182,14 @@ __rec_dleaf(t, h, idx)
 	h->upper += nbytes;
 
 	offset = h->linp[idx];
-	for (cnt = &h->linp[idx] - (ip = &h->linp[0]); cnt--; ++ip)
+	temp = &h->linp[idx] - (ip = &h->linp[0]);
+	_DBFIT(temp, uint16_t);
+	for (cnt = (uint16_t)temp;  cnt--; ++ip)
 		if (ip[0] < offset)
 			ip[0] += nbytes;
-	for (cnt = &h->linp[NEXTINDEX(h)] - ip; --cnt; ++ip)
+	temp = &h->linp[NEXTINDEX(h)] - ip;
+	_DBFIT(temp, uint16_t);
+	for (cnt = (uint16_t)temp;  --cnt; ++ip)
 		ip[0] = ip[1] < offset ? ip[1] + nbytes : ip[1];
 	h->lower -= sizeof(indx_t);
 	--t->bt_nrecs;

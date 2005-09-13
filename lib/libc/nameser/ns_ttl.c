@@ -1,4 +1,4 @@
-/*	$NetBSD: ns_ttl.c,v 1.2 2004/05/20 20:35:05 christos Exp $	*/
+/*	$NetBSD: ns_ttl.c,v 1.6 2008/06/21 20:41:48 christos Exp $	*/
 
 /*
  * Copyright (c) 2004 by Internet Systems Consortium, Inc. ("ISC")
@@ -20,9 +20,9 @@
 #include <sys/cdefs.h>
 #ifndef lint
 #ifdef notdef
-static const char rcsid[] = "Id: ns_ttl.c,v 1.1.206.1 2004/03/09 08:33:45 marka Exp";
+static const char rcsid[] = "Id: ns_ttl.c,v 1.4 2005/07/28 06:51:49 marka Exp";
 #else
-__RCSID("$NetBSD: ns_ttl.c,v 1.2 2004/05/20 20:35:05 christos Exp $");
+__RCSID("$NetBSD: ns_ttl.c,v 1.6 2008/06/21 20:41:48 christos Exp $");
 #endif
 #endif
 
@@ -51,7 +51,7 @@ static int	fmt1(int t, char s, char **buf, size_t *buflen);
 
 /* Macros. */
 
-#define T(x) if ((x) < 0) return (-1); else
+#define T(x) if ((x) < 0) return (-1)
 
 /* Public. */
 
@@ -141,7 +141,8 @@ ns_parse_ttl(const char *src, u_long *dst) {
 			goto einval;
 		else
 			ttl += tmp;
-	}
+	} else if (!dirty)
+		goto einval;
 	*dst = ttl;
 	return (0);
 
@@ -166,3 +167,5 @@ fmt1(int t, char s, char **buf, size_t *buflen) {
 	*buflen -= len;
 	return (0);
 }
+
+/*! \file */

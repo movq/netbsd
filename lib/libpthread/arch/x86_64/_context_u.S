@@ -1,4 +1,4 @@
-/*	$NetBSD: _context_u.S,v 1.4 2004/10/21 16:49:47 fvdl Exp $	*/
+/*	$NetBSD: _context_u.S,v 1.11 2008/04/28 20:23:02 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,6 +33,8 @@
 
 #include <machine/asm.h>
 #include "assym.h"
+
+#define	STUB(n)		ENTRY(n); .hidden _C_LABEL(n)
 
 #define GETC \
 	movq	(%rsp), %r11					; \
@@ -119,17 +114,17 @@
 	popq	%rax						; \
 	lretqm(128)
 
-ENTRY(_getcontext_u)
+STUB(_getcontext_u)
 	GETC
 	leaq	8(%rsp), %r11
 	movq	%r11, (UC_REGS + _REG_URSP * 8)(%rdi)
 	xorl	%eax, %eax
 	ret
 
-ENTRY(_setcontext_u)					
+STUB(_setcontext_u)					
 	SETC
 
-ENTRY(_swapcontext_u)
+STUB(_swapcontext_u)
 	GETC
 	leaq	8(%rsp),%rax
 	movq	%rax, (UC_REGS + _REG_URSP * 8)(%rdi)

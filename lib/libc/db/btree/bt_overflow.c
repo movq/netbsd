@@ -1,4 +1,4 @@
-/*	$NetBSD: bt_overflow.c,v 1.12 2003/08/07 16:42:41 agc Exp $	*/
+/*	$NetBSD: bt_overflow.c,v 1.16 2008/09/11 12:58:00 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -32,18 +32,17 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-#if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)bt_overflow.c	8.5 (Berkeley) 7/16/94";
-#else
-__RCSID("$NetBSD: bt_overflow.c,v 1.12 2003/08/07 16:42:41 agc Exp $");
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
 #endif
-#endif /* LIBC_SCCS and not lint */
+
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: bt_overflow.c,v 1.16 2008/09/11 12:58:00 joerg Exp $");
 
 #include "namespace.h"
 #include <sys/param.h>
 
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -73,7 +72,7 @@ __RCSID("$NetBSD: bt_overflow.c,v 1.12 2003/08/07 16:42:41 agc Exp $");
  *
  * Parameters:
  *	t:	tree
- *	p:	pointer to { pgno_t, u_int32_t }
+ *	p:	pointer to { pgno_t, uint32_t }
  *	buf:	storage address
  *	bufsz:	storage size
  *
@@ -81,20 +80,15 @@ __RCSID("$NetBSD: bt_overflow.c,v 1.12 2003/08/07 16:42:41 agc Exp $");
  *	RET_ERROR, RET_SUCCESS
  */
 int
-__ovfl_get(t, p, ssz, buf, bufsz)
-	BTREE *t;
-	void *p;
-	size_t *ssz;
-	void **buf;
-	size_t *bufsz;
+__ovfl_get(BTREE *t, void *p, size_t *ssz, void **buf, size_t *bufsz)
 {
 	PAGE *h;
 	pgno_t pg;
-	size_t nb, plen;
-	u_int32_t sz;
+	uint32_t sz, nb, plen;
+	size_t temp;
 
 	memmove(&pg, p, sizeof(pgno_t));
-	memmove(&sz, (char *)p + sizeof(pgno_t), sizeof(u_int32_t));
+	memmove(&sz, (char *)p + sizeof(pgno_t), sizeof(uint32_t));
 	*ssz = sz;
 
 #ifdef DEBUG
@@ -113,7 +107,9 @@ __ovfl_get(t, p, ssz, buf, bufsz)
 	 * Step through the linked list of pages, copying the data on each one
 	 * into the buffer.  Never copy more than the data's length.
 	 */
-	plen = t->bt_psize - BTDATAOFF;
+	temp = t->bt_psize - BTDATAOFF;
+	_DBFIT(temp, uint32_t);
+	plen = (uint32_t)temp;
 	for (p = *buf;; p = (char *)p + nb, pg = h->nextpg) {
 		if ((h = mpool_get(t->bt_mp, pg, 0)) == NULL)
 			return (RET_ERROR);
@@ -140,24 +136,27 @@ __ovfl_get(t, p, ssz, buf, bufsz)
  *	RET_ERROR, RET_SUCCESS
  */
 int
-__ovfl_put(t, dbt, pg)
-	BTREE *t;
-	const DBT *dbt;
-	pgno_t *pg;
+__ovfl_put(BTREE *t, const DBT *dbt, pgno_t *pg)
 {
 	PAGE *h, *last;
 	void *p;
 	pgno_t npg;
-	size_t nb, plen;
-	u_int32_t sz;
+	uint32_t sz, nb, plen;
+	size_t temp;
 
 	/*
 	 * Allocate pages and copy the key/data record into them.  Store the
 	 * number of the first page in the chain.
 	 */
-	plen = t->bt_psize - BTDATAOFF;
-	for (last = NULL, p = dbt->data, sz = dbt->size;;
-	    p = (char *)p + plen, last = h) {
+	temp = t->bt_psize - BTDATAOFF;
+	_DBFIT(temp, uint32_t);
+	plen = (uint32_t)temp;
+	last = NULL;
+	p = dbt->data;
+	temp = dbt->size;
+	_DBFIT(temp, uint32_t);
+	sz = temp;
+	for (;; p = (char *)p + plen, last = h) {
 		if ((h = __bt_new(t, &npg)) == NULL)
 			return (RET_ERROR);
 
@@ -167,7 +166,7 @@ __ovfl_put(t, dbt, pg)
 		h->lower = h->upper = 0;
 
 		nb = MIN(sz, plen);
-		memmove((char *)(void *)h + BTDATAOFF, p, nb);
+		(void)memmove((char *)(void *)h + BTDATAOFF, p, (size_t)nb);
 
 		if (last) {
 			last->nextpg = h->pgno;
@@ -188,23 +187,21 @@ __ovfl_put(t, dbt, pg)
  *
  * Parameters:
  *	t:	tree
- *	p:	pointer to { pgno_t, u_int32_t }
+ *	p:	pointer to { pgno_t, uint32_t }
  *
  * Returns:
  *	RET_ERROR, RET_SUCCESS
  */
 int
-__ovfl_delete(t, p)
-	BTREE *t;
-	void *p;
+__ovfl_delete(BTREE *t, void *p)
 {
 	PAGE *h;
 	pgno_t pg;
-	size_t plen;
-	u_int32_t sz;
+	uint32_t sz, plen;
+	size_t temp;
 
-	memmove(&pg, p, sizeof(pgno_t));
-	memmove(&sz, (char *)p + sizeof(pgno_t), sizeof(u_int32_t));
+	(void)memmove(&pg, p, sizeof(pgno_t));
+	(void)memmove(&sz, (char *)p + sizeof(pgno_t), sizeof(uint32_t));
 
 #ifdef DEBUG
 	if (pg == P_INVALID || sz == 0)
@@ -220,7 +217,10 @@ __ovfl_delete(t, p)
 	}
 
 	/* Step through the chain, calling the free routine for each page. */
-	for (plen = t->bt_psize - BTDATAOFF;; sz -= plen) {
+	temp = t->bt_psize - BTDATAOFF;
+	_DBFIT(temp, uint32_t);
+	plen = (uint32_t)temp;
+	for (;; sz -= plen) {
 		pg = h->nextpg;
 		__bt_free(t, h);
 		if (sz <= plen)

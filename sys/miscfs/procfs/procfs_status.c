@@ -1,4 +1,4 @@
-/*	$NetBSD: procfs_status.c,v 1.25 2005/05/29 21:55:34 christos Exp $	*/
+/*	$NetBSD: procfs_status.c,v 1.32 2007/03/09 14:11:23 ad Exp $	*/
 
 /*
  * Copyright (c) 1993
@@ -72,7 +72,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: procfs_status.c,v 1.25 2005/05/29 21:55:34 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: procfs_status.c,v 1.32 2007/03/09 14:11:23 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -84,27 +84,34 @@ __KERNEL_RCSID(0, "$NetBSD: procfs_status.c,v 1.25 2005/05/29 21:55:34 christos 
 #include <sys/tty.h>
 #include <sys/resource.h>
 #include <sys/resourcevar.h>
+#include <sys/kauth.h>
+
 #include <miscfs/procfs/procfs.h>
 
 int
-procfs_dostatus(curp, l, pfs, uio)
-	struct proc *curp;
-	struct lwp *l;
-	struct pfsnode *pfs;
-	struct uio *uio;
+procfs_dostatus(
+    struct lwp *curl,
+    struct lwp *l,
+    struct pfsnode *pfs,
+    struct uio *uio
+)
 {
 	struct session *sess;
 	struct tty *tp;
-	struct ucred *cr;
+	kauth_cred_t cr;
 	struct proc *p = l->l_proc;
 	char *ps;
 	const char *sep;
 	int pid, ppid, pgid, sid;
 	u_int i;
 	char psbuf[256+MAXHOSTNAMELEN];		/* XXX - conservative */
+	uint16_t ngroups;
 
 	if (uio->uio_rw != UIO_READ)
 		return (EOPNOTSUPP);
+
+	mutex_enter(&proclist_lock);
+	mutex_enter(&p->p_mutex);
 
 	pid = p->p_pid;
 	ppid = p->p_pptr ? p->p_pptr->p_pid : 0,
@@ -121,7 +128,7 @@ procfs_dostatus(curp, l, pfs, uio)
 	ps += snprintf(ps, sizeof(psbuf) - (ps - psbuf), " %d %d %d %d ",
 	    pid, ppid, pgid, sid);
 
-	if ((p->p_flag&P_CONTROLT) && (tp = sess->s_ttyp))
+	if ((p->p_lflag & PL_CONTROLT) && (tp = sess->s_ttyp))
 		ps += snprintf(ps, sizeof(psbuf) - (ps - psbuf), "%d,%d ",
 		    major(tp->t_dev), minor(tp->t_dev));
 	else
@@ -140,7 +147,8 @@ procfs_dostatus(curp, l, pfs, uio)
 	if (*sep != ',')
 		ps += snprintf(ps, sizeof(psbuf) - (ps - psbuf), "noflags");
 
-	if (l->l_flag & L_INMEM)
+	mutex_enter(&p->p_smutex);
+	if (l->l_flag & LW_INMEM)
 		ps += snprintf(ps, sizeof(psbuf) - (ps - psbuf), " %ld,%ld",
 		    p->p_stats->p_start.tv_sec, p->p_stats->p_start.tv_usec);
 	else
@@ -149,23 +157,32 @@ procfs_dostatus(curp, l, pfs, uio)
 	{
 		struct timeval ut, st;
 
-		calcru(p, &ut, &st, (void *) 0);
+		calcru(p, &ut, &st, (void *) 0, NULL);
 		ps += snprintf(ps, sizeof(psbuf) - (ps - psbuf),
 		    " %ld,%ld %ld,%ld", ut.tv_sec, ut.tv_usec, st.tv_sec,
 		    st.tv_usec);
 	}
+	mutex_exit(&p->p_smutex);
 
+	lwp_lock(l);
 	ps += snprintf(ps, sizeof(psbuf) - (ps - psbuf), " %s",
 	    (l->l_wchan && l->l_wmesg) ? l->l_wmesg : "nochan");
+	lwp_unlock(l);
 
-	cr = p->p_ucred;
+	cr = p->p_cred;
 
-	ps += snprintf(ps, sizeof(psbuf) - (ps - psbuf), " %d", cr->cr_uid);
-	ps += snprintf(ps, sizeof(psbuf) - (ps - psbuf), " %d", cr->cr_gid);
-	for (i = 0; i < cr->cr_ngroups; i++)
+	ps += snprintf(ps, sizeof(psbuf) - (ps - psbuf), " %d",
+		       kauth_cred_geteuid(cr));
+	ps += snprintf(ps, sizeof(psbuf) - (ps - psbuf), " %d",
+		       kauth_cred_getegid(cr));
+	ngroups = kauth_cred_ngroups(cr);
+	for (i = 0; i < ngroups; i++)
 		ps += snprintf(ps, sizeof(psbuf) - (ps - psbuf), ",%d",
-		    cr->cr_groups[i]);
+		    kauth_cred_group(cr, i));
 	ps += snprintf(ps, sizeof(psbuf) - (ps - psbuf), "\n");
+
+	mutex_exit(&p->p_mutex);
+	mutex_exit(&proclist_lock);
 
 	return (uiomove_frombuf(psbuf, ps - psbuf, uio));
 }

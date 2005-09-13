@@ -1,4 +1,4 @@
-/*	$NetBSD: resumecontext.S,v 1.2 2004/02/27 21:23:05 drochner Exp $	*/
+/*	$NetBSD: resumecontext.S,v 1.4 2008/04/28 20:22:58 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,9 +32,10 @@
  */
 
 #include <machine/asm.h>
+#include "SYS.h"
 
 #if defined(LIBC_SCCS) && !defined(lint)
-	RCSID("$NetBSD: resumecontext.S,v 1.2 2004/02/27 21:23:05 drochner Exp $")
+	RCSID("$NetBSD: resumecontext.S,v 1.4 2008/04/28 20:22:58 martin Exp $")
 #endif /* LIBC_SCCS && !lint */
 
 /*
@@ -59,10 +53,27 @@ NENTRY(_resumecontext)	/* profiling prologue would clobber TOS */
 #else
 	call	_C_LABEL(_getcontext)
 #endif
-	movq	8(%rsp),%rdi
+	movq	8(%rsp),%rdi	/* uc_link */
+	testq	%rdi,%rdi	/* link end? */
+	jnz	9f
+
+	/* normal exit */
+#ifdef PIC
+	call	PIC_PLT(_C_LABEL(exit))
+#else
+	call	_C_LABEL(exit)
+#endif
+
+9:
 #ifdef PIC
 	call	PIC_PLT(_C_LABEL(setcontext))
 #else
 	call	_C_LABEL(setcontext)
 #endif
+	/* NOTREACHED */
+
+	/* something is wrong, pull the brake */
+	movq	$-1,%rdi
+	movq	$SYS_exit,%rax
+	syscall
 	/* NOTREACHED */

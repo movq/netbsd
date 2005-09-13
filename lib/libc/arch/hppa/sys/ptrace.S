@@ -1,4 +1,4 @@
-/*	$NetBSD: ptrace.S,v 1.4 2004/07/01 06:50:04 skrll Exp $	*/
+/*	$NetBSD: ptrace.S,v 1.6 2008/04/28 20:22:56 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,8 +34,26 @@
 
 	.import __cerror, code
 
-/* XXX - this is unimplemented at this time. */
-ENTRY(ptrace, 0)
-	ldi	EINVAL, %t1
-	b,n	__cerror
+/*
+ * int ptrace(int request, pid_t pid, void * addr, int data);
+ */
+
+ENTRY(ptrace, HPPA_FRAME_SIZE)
+	stw	%rp, HPPA_FRAME_CRP(%sp)
+	stw	%arg0, HPPA_FRAME_ARG(0)(%sp)
+	stw	%arg1, HPPA_FRAME_ARG(1)(%sp)
+	stw	%arg2, HPPA_FRAME_ARG(2)(%sp)
+	stw	%arg3, HPPA_FRAME_ARG(3)(%sp)
+	ldo	HPPA_FRAME_SIZE(%sp),%sp
+	bl	__cerror, %rp
+	 copy	%r0, %t1
+	ldo	-HPPA_FRAME_SIZE(%sp), %sp
+	ldw	HPPA_FRAME_ARG(0)(%sp), %arg0
+	ldw	HPPA_FRAME_ARG(1)(%sp), %arg1
+	ldw	HPPA_FRAME_ARG(2)(%sp), %arg2
+	ldw	HPPA_FRAME_ARG(3)(%sp), %arg3
+	ldw	HPPA_FRAME_CRP(%sp), %rp
+
+	SYSCALL(ptrace)
+	bv,n	%r0(%rp)
 EXIT(ptrace)

@@ -1,4 +1,4 @@
-/*	$NetBSD: kernfs_vnops.c,v 1.112 2005/09/01 06:25:26 christos Exp $	*/
+/*	$NetBSD: kernfs_vnops.c,v 1.134 2008/01/02 11:49:00 ad Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kernfs_vnops.c,v 1.112 2005/09/01 06:25:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kernfs_vnops.c,v 1.134 2008/01/02 11:49:00 ad Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_ipsec.h"
@@ -151,21 +151,28 @@ int nkern_dirs = 2;
 #endif
 
 int kernfs_try_fileop(kfstype, kfsfileop, void *, int);
+int kernfs_try_xread(kfstype, const struct kernfs_node *, char **,
+    size_t, int);
 int kernfs_try_xwrite(kfstype, const struct kernfs_node *, char *,
     size_t, int);
 
+static int kernfs_default_xread(void *v);
 static int kernfs_default_xwrite(void *v);
 static int kernfs_default_fileop_getattr(void *);
 
 /* must include all fileop's */
 const struct kernfs_fileop kernfs_default_fileops[] = {
+  { .kf_fileop = KERNFS_XREAD },
   { .kf_fileop = KERNFS_XWRITE },
   { .kf_fileop = KERNFS_FILEOP_OPEN },
   { .kf_fileop = KERNFS_FILEOP_GETATTR,
-    .kf_genop = {kernfs_default_fileop_getattr} },
+    .kf_vop = kernfs_default_fileop_getattr },
   { .kf_fileop = KERNFS_FILEOP_IOCTL },
   { .kf_fileop = KERNFS_FILEOP_CLOSE },
-  { .kf_fileop = KERNFS_FILEOP_WRITE, .kf_genop = {kernfs_default_xwrite} },
+  { .kf_fileop = KERNFS_FILEOP_READ, 
+    .kf_vop = kernfs_default_xread },
+  { .kf_fileop = KERNFS_FILEOP_WRITE, 
+    .kf_vop = kernfs_default_xwrite },
 };
 
 int	kernfs_lookup(void *);
@@ -203,11 +210,6 @@ int	kernfs_print(void *);
 #define	kernfs_islocked	genfs_islocked
 int	kernfs_pathconf(void *);
 #define	kernfs_advlock	genfs_einval
-#define	kernfs_blkatoff	genfs_eopnotsupp
-#define	kernfs_valloc	genfs_eopnotsupp
-#define	kernfs_vfree	genfs_nullop
-#define	kernfs_truncate	genfs_eopnotsupp
-#define	kernfs_update	genfs_nullop
 #define	kernfs_bwrite	genfs_eopnotsupp
 #define	kernfs_putpages	genfs_putpages
 
@@ -253,11 +255,6 @@ const struct vnodeopv_entry_desc kernfs_vnodeop_entries[] = {
 	{ &vop_islocked_desc, kernfs_islocked },	/* islocked */
 	{ &vop_pathconf_desc, kernfs_pathconf },	/* pathconf */
 	{ &vop_advlock_desc, kernfs_advlock },		/* advlock */
-	{ &vop_blkatoff_desc, kernfs_blkatoff },	/* blkatoff */
-	{ &vop_valloc_desc, kernfs_valloc },		/* valloc */
-	{ &vop_vfree_desc, kernfs_vfree },		/* vfree */
-	{ &vop_truncate_desc, kernfs_truncate },	/* truncate */
-	{ &vop_update_desc, kernfs_update },		/* update */
 	{ &vop_bwrite_desc, kernfs_bwrite },		/* bwrite */
 	{ &vop_putpages_desc, kernfs_putpages },	/* putpages */
 	{ NULL, NULL }
@@ -265,7 +262,7 @@ const struct vnodeopv_entry_desc kernfs_vnodeop_entries[] = {
 const struct vnodeopv_desc kernfs_vnodeop_opv_desc =
 	{ &kernfs_vnodeop_p, kernfs_vnodeop_entries };
 
-static __inline int
+static inline int
 kernfs_fileop_compare(struct kernfs_fileop *a, struct kernfs_fileop *b)
 {
 	if (a->kf_type < b->kf_type)
@@ -306,7 +303,7 @@ kernfs_alloctype(int nkf, const struct kernfs_fileop *kf)
 		skf.kf_type = nextfreetype;
 		skf.kf_fileop = kf[i].kf_fileop;
 		if ((fkf = SPLAY_FIND(kfsfileoptree, &kfsfileoptree, &skf)))
-			fkf->kf_genop = kf[i].kf_genop;
+			fkf->kf_vop = kf[i].kf_vop;
 	}
 
 	return nextfreetype++;
@@ -322,6 +319,20 @@ kernfs_try_fileop(kfstype type, kfsfileop fileop, void *v, int error)
 	if ((kf = SPLAY_FIND(kfsfileoptree, &kfsfileoptree, &skf)))
 		if (kf->kf_vop)
 			return kf->kf_vop(v);
+	return error;
+}
+
+int
+kernfs_try_xread(kfstype type, const struct kernfs_node *kfs, char **bfp,
+    size_t len, int error)
+{
+	struct kernfs_fileop *kf, skf;
+
+	skf.kf_type = type;
+	skf.kf_fileop = KERNFS_XREAD;
+	if ((kf = SPLAY_FIND(kfsfileoptree, &kfsfileoptree, &skf)))
+		if (kf->kf_xread)
+			return kf->kf_xread(kfs, bfp, len);
 	return error;
 }
 
@@ -380,6 +391,7 @@ kernfs_xread(kfs, off, bufp, len, wrlen)
 #ifdef IPSEC
 	struct mbuf *m;
 #endif
+	int err;
 
 	kt = kfs->kfs_kt;
 
@@ -442,7 +454,7 @@ kernfs_xread(kfs, off, bufp, len, wrlen)
 
 	case KFShostname: {
 		char *cp = hostname;
-		int xlen = hostnamelen;
+		size_t xlen = hostnamelen;
 
 		if (xlen >= (len - 2))
 			return (EINVAL);
@@ -514,8 +526,10 @@ kernfs_xread(kfs, off, bufp, len, wrlen)
 #endif
 
 	default:
-		*wrlen = 0;
-		return (0);
+		err = kernfs_try_xread(kfs->kfs_type, kfs, bufp, len,
+		    EOPNOTSUPP);
+		if (err)
+			return err;
 	}
 
 	len = strlen(*bufp);
@@ -571,14 +585,13 @@ kernfs_lookup(v)
 	const struct kern_target *kt;
 	const struct dyn_kern_target *dkt;
 	const struct kernfs_subdir *ks;
-	int error, i, wantpunlock;
+	int error, i;
 #ifdef IPSEC
 	char *ep;
 	u_int32_t id;
 #endif
 
 	*vpp = NULLVP;
-	cnp->cn_flags &= ~PDIRUNLOCK;
 
 	if (cnp->cn_nameiop == DELETE || cnp->cn_nameiop == RENAME)
 		return (EROFS);
@@ -589,7 +602,6 @@ kernfs_lookup(v)
 		return (0);
 	}
 
-	wantpunlock = (~cnp->cn_flags & (LOCKPARENT | ISLASTCN));
 	kfs = VTOKERN(dvp);
 	switch (kfs->kfs_type) {
 	case KFSkern:
@@ -616,10 +628,6 @@ kernfs_lookup(v)
 
 	found:
 		error = kernfs_allocvp(dvp->v_mount, vpp, kt->kt_tag, kt, 0);
-		if ((error == 0) && wantpunlock) {
-			VOP_UNLOCK(dvp, 0);
-			cnp->cn_flags |= PDIRUNLOCK;
-		}
 		return (error);
 
 	case KFSsubdir:
@@ -658,10 +666,6 @@ kernfs_lookup(v)
 			break;
 
 		error = kernfs_allocvp(dvp->v_mount, vpp, KFSipsecsa, &ipsecsa_kt, id);
-		if ((error == 0) && wantpunlock) {
-			VOP_UNLOCK(dvp, 0);
-			cnp->cn_flags |= PDIRUNLOCK;
-		}
 		return (error);
 
 	case KFSipsecspdir:
@@ -683,10 +687,6 @@ kernfs_lookup(v)
 			break;
 
 		error = kernfs_allocvp(dvp->v_mount, vpp, KFSipsecsp, &ipsecsp_kt, id);
-		if ((error == 0) && wantpunlock) {
-			VOP_UNLOCK(dvp, 0);
-			cnp->cn_flags |= PDIRUNLOCK;
-		}
 		return (error);
 #endif
 
@@ -704,8 +704,7 @@ kernfs_open(v)
 	struct vop_open_args /* {
 		struct vnode *a_vp;
 		int a_mode;
-		struct ucred *a_cred;
-		struct proc *a_p;
+		kauth_cred_t a_cred;
 	} */ *ap = v;
 	struct kernfs_node *kfs = VTOKERN(ap->a_vp);
 #ifdef IPSEC
@@ -745,8 +744,7 @@ kernfs_close(v)
 	struct vop_close_args /* {
 		struct vnode *a_vp;
 		int a_fflag;
-		struct ucred *a_cred;
-		struct proc *a_p;
+		kauth_cred_t a_cred;
 	} */ *ap = v;
 	struct kernfs_node *kfs = VTOKERN(ap->a_vp);
 
@@ -772,13 +770,12 @@ kernfs_access(v)
 	struct vop_access_args /* {
 		struct vnode *a_vp;
 		int a_mode;
-		struct ucred *a_cred;
-		struct proc *a_p;
+		kauth_cred_t a_cred;
 	} */ *ap = v;
 	struct vattr va;
 	int error;
 
-	if ((error = VOP_GETATTR(ap->a_vp, &va, ap->a_cred, ap->a_p)) != 0)
+	if ((error = VOP_GETATTR(ap->a_vp, &va, ap->a_cred)) != 0)
 		return (error);
 
 	return (vaccess(va.va_type, va.va_mode, va.va_uid, va.va_gid,
@@ -792,8 +789,7 @@ kernfs_default_fileop_getattr(v)
 	struct vop_getattr_args /* {
 		struct vnode *a_vp;
 		struct vattr *a_vap;
-		struct ucred *a_cred;
-		struct proc *a_p;
+		kauth_cred_t a_cred;
 	} */ *ap = v;
 	struct vattr *vap = ap->a_vap;
 
@@ -810,8 +806,7 @@ kernfs_getattr(v)
 	struct vop_getattr_args /* {
 		struct vnode *a_vp;
 		struct vattr *a_vap;
-		struct ucred *a_cred;
-		struct proc *a_p;
+		kauth_cred_t a_cred;
 	} */ *ap = v;
 	struct kernfs_node *kfs = VTOKERN(ap->a_vp);
 	struct kernfs_subdir *ks;
@@ -829,17 +824,12 @@ kernfs_getattr(v)
 	vap->va_flags = 0;
 	vap->va_size = 0;
 	vap->va_blocksize = DEV_BSIZE;
-	/*
-	 * Make all times be current TOD, except for the "boottime" node.
-	 * Avoid microtime(9), it's slow.
-	 * We don't guard the read from time(9) with splclock(9) since we
-	 * don't actually need to be THAT sure the access is atomic.
-	 */
-	if (kfs->kfs_kt && kfs->kfs_kt->kt_namlen == 8 &&
+	/* Make all times be current TOD, except for the "boottime" node. */
+	if (kfs->kfs_kt->kt_namlen == 8 &&
 	    !memcmp(kfs->kfs_kt->kt_name, "boottime", 8)) {
 		TIMEVAL_TO_TIMESPEC(&boottime, &vap->va_ctime);
 	} else {
-		TIMEVAL_TO_TIMESPEC(&time, &vap->va_ctime);
+		getnanotime(&vap->va_ctime);
 	}
 	vap->va_atime = vap->va_mtime = vap->va_ctime;
 	vap->va_gen = 0;
@@ -906,8 +896,7 @@ kernfs_getattr(v)
 
 /*ARGSUSED*/
 int
-kernfs_setattr(v)
-	void *v;
+kernfs_setattr(void *v)
 {
 
 	/*
@@ -920,6 +909,37 @@ kernfs_setattr(v)
 }
 
 int
+kernfs_default_xread(v)
+	void *v;
+{
+	struct vop_read_args /* {
+		struct vnode *a_vp;
+		struct uio *a_uio;
+		int  a_ioflag;
+		kauth_cred_t a_cred;
+	} */ *ap = v;
+	struct uio *uio = ap->a_uio;
+	struct kernfs_node *kfs = VTOKERN(ap->a_vp);
+	char strbuf[KSTRING], *bf;
+	int off;
+	size_t len;
+	int error;
+
+	if (ap->a_vp->v_type == VDIR)
+		return (EOPNOTSUPP);
+
+	off = (int)uio->uio_offset;
+	/* Don't allow negative offsets */
+	if (off < 0)
+		return EINVAL;
+
+	bf = strbuf;
+	if ((error = kernfs_xread(kfs, off, &bf, sizeof(strbuf), &len)) == 0)
+		error = uiomove(bf, len, uio);
+	return (error);
+}
+
+int
 kernfs_read(v)
 	void *v;
 {
@@ -929,25 +949,14 @@ kernfs_read(v)
 		int  a_ioflag;
 		struct ucred *a_cred;
 	} */ *ap = v;
-	struct uio *uio = ap->a_uio;
 	struct kernfs_node *kfs = VTOKERN(ap->a_vp);
-	char strbuf[KSTRING], *bf;
-	off_t off;
-	size_t len;
-	int error;
 
-	if (ap->a_vp->v_type == VDIR)
-		return (EOPNOTSUPP);
-
-	/* Don't allow negative offsets */
-	if (uio->uio_offset < 0)
-		return EINVAL;
-
-	off = uio->uio_offset;
-	bf = strbuf;
-	if ((error = kernfs_xread(kfs, off, &bf, sizeof(strbuf), &len)) == 0)
-		error = uiomove(bf, len, uio);
-	return (error);
+	if (kfs->kfs_type < KFSlasttype) {
+		/* use default function */
+		return kernfs_default_xread(v);
+	}
+	return kernfs_try_fileop(kfs->kfs_type, KERNFS_FILEOP_READ, v,
+	   EOPNOTSUPP);
 }
 
 static int
@@ -958,11 +967,12 @@ kernfs_default_xwrite(v)
 		struct vnode *a_vp;
 		struct uio *a_uio;
 		int  a_ioflag;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 	} */ *ap = v;
 	struct kernfs_node *kfs = VTOKERN(ap->a_vp);
 	struct uio *uio = ap->a_uio;
-	int error, xlen;
+	int error;
+	size_t xlen;
 	char strbuf[KSTRING];
 
 	if (uio->uio_offset != 0)
@@ -988,11 +998,16 @@ kernfs_write(v)
 		struct vnode *a_vp;
 		struct uio *a_uio;
 		int  a_ioflag;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 	} */ *ap = v;
 	struct kernfs_node *kfs = VTOKERN(ap->a_vp);
 
-	return kernfs_try_fileop(kfs->kfs_type, KERNFS_FILEOP_WRITE, v, 0);
+	if (kfs->kfs_type < KFSlasttype) {
+		/* use default function */
+		return kernfs_default_xwrite(v);
+	}
+	return kernfs_try_fileop(kfs->kfs_type, KERNFS_FILEOP_WRITE, v,
+	    EOPNOTSUPP);
 }
 
 int
@@ -1005,8 +1020,7 @@ kernfs_ioctl(v)
 		u_long a_command;
 		void *a_data;
 		int a_fflag;
-		struct ucred *a_cred;
-		struct proc *a_p;
+		kauth_cred_t a_cred;
 	} */ *ap = v;
 	struct kernfs_node *kfs = VTOKERN(ap->a_vp);
 
@@ -1027,10 +1041,11 @@ kernfs_setdirentfileno_kt(struct dirent *d, const struct kern_target *kt,
 		return error;
 	if (kt->kt_tag == KFSdevice) {
 		struct vattr va;
-		if ((error = VOP_GETATTR(vp, &va, ap->a_cred,
-		    ap->a_uio->uio_segflg == UIO_USERSPACE ?
-		    ap->a_uio->uio_procp : &proc0)) != 0)
-			return (error);
+
+		error = VOP_GETATTR(vp, &va, ap->a_cred);
+		if (error != 0) {
+			return error;
+		}
 		d->d_fileno = va.va_fileid;
 	} else {
 		kfs = VTOKERN(vp);
@@ -1074,7 +1089,7 @@ kernfs_readdir(v)
 	struct vop_readdir_args /* {
 		struct vnode *a_vp;
 		struct uio *a_uio;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 		int *a_eofflag;
 		off_t **a_cookies;
 		int a_*ncookies;
@@ -1131,9 +1146,9 @@ kernfs_readdir(v)
 						break;
 				} else {
 					dkt = SIMPLEQ_NEXT(dkt, dkt_queue);
-					if (dkt == NULL)
-						break;
 				}
+				if (dkt == NULL)
+					break;
 				kt = &dkt->dkt_kt;
 			}
 			if (kt->kt_tag == KFSdevice) {
@@ -1392,7 +1407,7 @@ kernfs_inactive(v)
 {
 	struct vop_inactive_args /* {
 		struct vnode *a_vp;
-		struct proc *a_p;
+		bool *a_recycle;
 	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
 	const struct kernfs_node *kfs = VTOKERN(ap->a_vp);
@@ -1401,7 +1416,7 @@ kernfs_inactive(v)
 	struct secpolicy *sp;
 #endif
 
-	VOP_UNLOCK(vp, 0);
+	*ap->a_recycle = false;
 	switch (kfs->kfs_type) {
 #ifdef IPSEC
 	case KFSipsecsa:
@@ -1409,21 +1424,21 @@ kernfs_inactive(v)
 		if (m)
 			m_freem(m);
 		else
-			vgone(vp);
+			*ap->a_recycle = true;
 		break;
 	case KFSipsecsp:
 		sp = key_getspbyid(kfs->kfs_value);
 		if (sp)
 			key_freesp(sp);
 		else {
-			/* should never happen as we hold a refcnt */
-			vgone(vp);
+			*ap->a_recycle = true;
 		}
 		break;
 #endif
 	default:
 		break;
 	}
+	VOP_UNLOCK(vp, 0);
 	return (0);
 }
 
@@ -1484,8 +1499,7 @@ kernfs_pathconf(v)
  */
 /* ARGSUSED */
 int
-kernfs_print(v)
-	void *v;
+kernfs_print(void *v)
 {
 
 	printf("tag VT_KERNFS, kernfs vnode\n");

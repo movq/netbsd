@@ -1,4 +1,4 @@
-/*	$NetBSD: timed.h,v 1.9 2005/07/05 21:57:08 he Exp $	*/
+/*	$NetBSD: timed.h,v 1.11 2008/02/16 07:30:15 matt Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -42,9 +42,9 @@
 #define ANYADDR 	NULL
 
 struct tsp {
-	u_int8_t tsp_type;
-	u_int8_t tsp_vers;
-	u_int16_t tsp_seq;
+	uint8_t tsp_type;
+	uint8_t tsp_vers;
+	uint16_t tsp_seq;
 	union {
 		struct {
 			int32_t tv_sec;
@@ -90,7 +90,7 @@ struct tsp {
 #define	TSPTYPENUMBER		25
 
 #ifdef TSPTYPES
-const char *tsptype[TSPTYPENUMBER] =
+const char * const tsptype[TSPTYPENUMBER] =
   { "ANY", "ADJTIME", "ACK", "MASTERREQ", "MASTERACK", "SETTIME", "MASTERUP", 
   "SLAVEUP", "ELECTION", "ACCEPT", "REFUSE", "CONFLICT", "RESOLVE", "QUIT", 
   "DATE", "DATEREQ", "DATEACK", "TRACEON", "TRACEOFF", "MSITE", "MSITEREQ",

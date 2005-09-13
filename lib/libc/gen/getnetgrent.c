@@ -1,4 +1,4 @@
-/*	$NetBSD: getnetgrent.c,v 1.30 2005/07/25 14:38:48 christos Exp $	*/
+/*	$NetBSD: getnetgrent.c,v 1.40 2008/04/05 08:01:54 rtr Exp $	*/
 
 /*
  * Copyright (c) 1994 Christos Zoulas
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: getnetgrent.c,v 1.30 2005/07/25 14:38:48 christos Exp $");
+__RCSID("$NetBSD: getnetgrent.c,v 1.40 2008/04/05 08:01:54 rtr Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -45,13 +45,13 @@ __RCSID("$NetBSD: getnetgrent.c,v 1.30 2005/07/25 14:38:48 christos Exp $");
 #include <err.h>
 #include <fcntl.h>
 #define _NETGROUP_PRIVATE
+#include <stringlist.h>
 #include <netgroup.h>
 #include <nsswitch.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stringlist.h>
 
 #ifdef YP
 #include <rpc/rpc.h>
@@ -86,13 +86,15 @@ static int in_find(StringList *, char *, const char *, const char *,
 static char *in_lookup1(const char *, const char *, int);
 static int in_lookup(const char *, const char *, const char *, int);
 
+#ifdef NSSRC_FILES
 static const ns_src default_files_nis[] = {
 	{ NSSRC_FILES,	NS_SUCCESS | NS_NOTFOUND },
 #ifdef YP
 	{ NSSRC_NIS,	NS_SUCCESS },
 #endif
-	{ 0 }
+	{ 0, 0 },
 };
+#endif
 
 /*
  * getstring(): Get a string delimited by the character, skipping leading and
@@ -187,6 +189,16 @@ badhost:
 	return NULL;
 }
 
+void
+_ng_cycle(const char *grp, const StringList *sl)
+{
+	size_t i;
+	warnx("netgroup: Cycle in group `%s'", grp);
+	(void)fprintf(stderr, "groups: ");
+	for (i = 0; i < sl->sl_cur; i++)
+		(void)fprintf(stderr, "%s ", sl->sl_str[i]);
+	(void)fprintf(stderr, "\n");
+}
 
 static int _local_lookup(void *, void *, va_list);
 
@@ -295,7 +307,7 @@ _nis_lookup(void *rv, void *cb_data, va_list ap)
 }
 #endif
 
-
+#ifdef NSSRC_FILES
 /*
  * lookup(): Find the given key in the database or yp, and return its value
  * in *line; returns 1 if key was found, 0 otherwise
@@ -307,7 +319,7 @@ lookup(char *name, char	**line, int bywhat)
 	static const ns_dtab dtab[] = {
 		NS_FILES_CB(_local_lookup, NULL)
 		NS_NIS_CB(_nis_lookup, NULL)
-		{ 0 }
+		NS_NULL_CB
 	};
 
 	_DIAGASSERT(name != NULL);
@@ -317,6 +329,27 @@ lookup(char *name, char	**line, int bywhat)
 	    name, line, bywhat);
 	return (r == NS_SUCCESS) ? 1 : 0;
 }
+#else
+static int
+_local_lookupv(int *rv, void *cbdata, ...)
+{
+	int e;
+	va_list ap;
+	va_start(ap, cbdata);
+	e = _local_lookup(rv, cbdata, ap);
+	va_end(ap);
+	return e;
+}
+
+static int
+lookup(name, line, bywhat)
+	char	 *name;
+	char	**line;
+	int	  bywhat;
+{
+	return _local_lookupv(NULL, NULL, name, line, bywhat) == NS_SUCCESS;
+}
+#endif
 
 /*
  * _ng_parse(): Parse a line and return: _NG_ERROR: Syntax Error _NG_NONE:
@@ -389,7 +422,7 @@ addgroup(StringList *sl, char *grp)
 #endif
 	/* check for cycles */
 	if (sl_find(sl, grp) != NULL) {
-		warnx("netgroup: Cycle in group `%s'", grp);
+		_ng_cycle(grp, sl);
 		free(grp);
 		return 0;
 	}
@@ -401,7 +434,7 @@ addgroup(StringList *sl, char *grp)
 	/* Lookup this netgroup */
 	line = NULL;
 	if (!lookup(grp, &line, _NG_KEYBYNAME)) {
-		if (line != NULL)
+		if (line)
 			free(line);
 		return 0;
 	}
@@ -492,7 +525,7 @@ in_find(StringList *sl, char *grp, const char *host, const char *user,
 #endif
 	/* check for cycles */
 	if (sl_find(sl, grp) != NULL) {
-		warnx("netgroup: Cycle in group `%s'", grp);
+		_ng_cycle(grp, sl);
 		free(grp);
 		return 0;
 	}
@@ -652,9 +685,9 @@ in_lookup(const char *group, const char *key, const char *domain, int map)
 	return 0;
 }
 
-
-void
-endnetgrent(void)
+/*ARGSUSED*/
+static int
+_local_endnetgrent(void *rv, void *cb_data, va_list ap)
 {
 	for (_nglist = _nghead; _nglist != NULL; _nglist = _nghead) {
 		_nghead = _nglist->ng_next;
@@ -671,12 +704,15 @@ endnetgrent(void)
 		(void)(*_ng_db->close)(_ng_db);
 		_ng_db = NULL;
 	}
+
+	return NS_SUCCESS;
 }
 
-
-void
-setnetgrent(const char *ng)
+/*ARGSUSED*/
+static int
+_local_setnetgrent(void *rv, void *cb_data, va_list ap)
 {
+	const char	*ng = va_arg(ap, const char *);
 	StringList	*sl;
 	char		*ng_copy;
 
@@ -684,7 +720,7 @@ setnetgrent(const char *ng)
 
 	sl = sl_init();
 	if (sl == NULL)
-		return;
+		return NS_TRYAGAIN;
 
 	/* Cleanup any previous storage */
 	if (_nghead != NULL)
@@ -698,18 +734,27 @@ setnetgrent(const char *ng)
 		addgroup(sl, ng_copy);
 	_nghead = _nglist;
 	sl_free(sl, 1);
+
+	return NS_SUCCESS;
 }
 
-
-int
-getnetgrent(const char **host, const char **user, const char **domain)
+/*ARGSUSED*/
+static int
+_local_getnetgrent(void *rv, void *cb_data, va_list ap)
 {
+	int *retval = va_arg(ap, int *);
+	const char **host = va_arg(ap, const char **);
+	const char **user = va_arg(ap, const char **);
+	const char **domain = va_arg(ap, const char **);
+
 	_DIAGASSERT(host != NULL);
 	_DIAGASSERT(user != NULL);
 	_DIAGASSERT(domain != NULL);
 
+	*retval = 0;
+
 	if (_nglist == NULL)
-		return 0;
+		return NS_TRYAGAIN;
 
 	*host   = _nglist->ng_host;
 	*user   = _nglist->ng_user;
@@ -717,13 +762,21 @@ getnetgrent(const char **host, const char **user, const char **domain)
 
 	_nglist = _nglist->ng_next;
 
-	return 1;
+	*retval = 1;
+
+	return NS_SUCCESS;
 }
 
-
-int
-innetgr(const char *grp, const char *host, const char *user, const char *domain)
+/*ARGSUSED*/
+static int
+_local_innetgr(void *rv, void *cb_data, va_list ap)
 {
+	int *retval = va_arg(ap, int *);
+	const char *grp = va_arg(ap, const char *);
+	const char *host = va_arg(ap, const char *);
+	const char *user = va_arg(ap, const char *);
+	const char *domain = va_arg(ap, const char *);
+
 	int	 found;
 	StringList *sl;
 	char *grcpy;
@@ -738,24 +791,206 @@ innetgr(const char *grp, const char *host, const char *user, const char *domain)
 
 	/* Try the fast lookup first */
 	if (host != NULL && user == NULL) {
-		if (in_lookup(grp, host, domain, _NG_KEYBYHOST))
-			return 1;
+		if (in_lookup(grp, host, domain, _NG_KEYBYHOST)) {
+			*retval = 1;
+			return NS_SUCCESS;
+		}
 	} else if (host == NULL && user != NULL) {
-		if (in_lookup(grp, user, domain, _NG_KEYBYUSER))
-			return 1;
+		if (in_lookup(grp, user, domain, _NG_KEYBYUSER)) {
+			*retval = 1;
+			return NS_SUCCESS;
+		}
 	}
 	/* If a domainname is given, we would have found a match */
-	if (domain != NULL)
-		return 0;
+	if (domain != NULL) {
+		*retval = 0;
+		return NS_SUCCESS;
+	}
 
 	/* Too bad need the slow recursive way */
 	sl = sl_init();
-	if (sl == NULL)
-		return 0;
-	if ((grcpy = strdup(grp)) == NULL)
-		return 0;
+	if (sl == NULL) {
+		*retval = 0;
+		return NS_SUCCESS;
+	}
+	if ((grcpy = strdup(grp)) == NULL) {
+		sl_free(sl, 1);
+		*retval = 0;
+		return NS_SUCCESS;
+	}
 	found = in_find(sl, grcpy, host, user, domain);
 	sl_free(sl, 1);
 
-	return found;
+	*retval = found;
+	return NS_SUCCESS;
 }
+
+#ifdef YP
+
+/*ARGSUSED*/
+static int
+_nis_endnetgrent(void *rv, void *cb_data, va_list ap)
+{
+	return _local_endnetgrent(rv, cb_data, ap);
+}
+
+/*ARGSUSED*/
+static int
+_nis_setnetgrent(void *rv, void *cb_data, va_list ap)
+{
+	return _local_setnetgrent(rv, cb_data, ap);
+}
+
+/*ARGSUSED*/
+static int
+_nis_getnetgrent(void *rv, void *cb_data, va_list ap)
+{
+	return _local_getnetgrent(rv, cb_data, ap);
+}
+
+/*ARGSUSED*/
+static int
+_nis_innetgr(void *rv, void *cb_data, va_list ap)
+{
+	return _local_innetgr(rv, cb_data, ap);
+}
+
+#endif
+
+
+#ifdef NSSRC_FILES
+void
+endnetgrent(void)
+{
+	static const ns_dtab dtab[] = {
+		NS_FILES_CB(_local_endnetgrent, NULL)
+		NS_NIS_CB(_nis_endnetgrent, NULL)
+		NS_NULL_CB
+	};
+
+	(void) nsdispatch(NULL, dtab, NSDB_NETGROUP, "endnetgrent",
+			  __nsdefaultcompat);
+}
+#else
+static int
+_local_endnetgrentv(int *rv, void *cbdata, ...)
+{
+	int e;
+	va_list ap;
+	va_start(ap, cbdata);
+	e = _local_endnetgrent(rv, cbdata, ap);
+	va_end(ap);
+	return e;
+}
+
+void
+endnetgrent(void)
+{
+	(void)_local_endnetgrentv(NULL, NULL, NULL);
+}
+#endif
+
+#ifdef NSSRC_FILES
+void
+setnetgrent(const char *ng)
+{
+	static const ns_dtab dtab[] = {
+		NS_FILES_CB(_local_setnetgrent, NULL)
+		NS_NIS_CB(_nis_setnetgrent, NULL)
+		NS_NULL_CB
+	};
+
+	(void) nsdispatch(NULL, dtab, NSDB_NETGROUP, "setnetgrent",
+			   __nsdefaultnis, ng);
+}
+#else
+static int
+_local_setnetgrentv(int *rv, void *cbdata, ...)
+{
+	int e;
+	va_list ap;
+	va_start(ap, cbdata);
+	e = _local_setnetgrent(rv, cbdata, ap);
+	va_end(ap);
+	return e;
+}
+
+void
+setnetgrent(const char *ng)
+{
+	(void) _local_setnetgrentv(NULL, NULL,ng);
+}
+
+#endif
+
+#ifdef NSSRC_FILES
+int
+getnetgrent(const char **host, const char **user, const char **domain)
+{
+	int     r, retval;
+	static const ns_dtab dtab[] = {
+		NS_FILES_CB(_local_getnetgrent, NULL)
+		NS_NIS_CB(_nis_getnetgrent, NULL)
+		NS_NULL_CB
+	};
+
+	r = nsdispatch(NULL, dtab, NSDB_NETGROUP, "getnetgrent",
+		       __nsdefaultnis, &retval, host, user, domain);
+
+	return (r == NS_SUCCESS) ? retval : 0;
+}
+#else
+static int
+_local_getnetgrentv(int *rv, void *cbdata, ...)
+{
+	int e;
+	va_list ap;
+	va_start(ap, cbdata);
+	e = _local_getnetgrent(rv, cbdata, ap);
+	va_end(ap);
+	return e;
+}
+
+int
+getnetgrent(const char **host, const char **user, const char **domain)
+{
+	return _local_getnetgrentv(NULL, NULL, host, user, domain) == NS_SUCCESS;
+}
+#endif
+
+#ifdef NSSRC_FILES
+int
+innetgr(const char *grp, const char *host, const char *user, 
+	const char *domain)
+{
+	int     r, retval;
+	static const ns_dtab dtab[] = {
+		NS_FILES_CB(_local_innetgr, NULL)
+		NS_NIS_CB(_nis_innetgr, NULL)
+		NS_NULL_CB
+	};
+
+	r = nsdispatch(NULL, dtab, NSDB_NETGROUP, "innetgr",
+		       __nsdefaultnis, &retval, grp, host, user, domain);
+
+	return (r == NS_SUCCESS) ? retval : 0;
+}
+#else
+static int
+_local_innetgrv(int *rv, void *cbdata, ...)
+{
+	int e;
+	va_list ap;
+	va_start(ap, cbdata);
+	e = _local_innetgr(rv, cbdata, ap);
+	va_end(ap);
+	return e;
+}
+
+int
+innetgr(const char *grp, const char *host, const char *user, 
+	const char *domain)
+{
+	return _local_innetgrv(NULL, NULL, grp, host, user, domain) == NS_SUCCESS;
+}
+#endif

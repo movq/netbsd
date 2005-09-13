@@ -1,4 +1,4 @@
-.\"	$NetBSD: ntp_adjtime.2,v 1.6 2003/04/16 13:34:55 wiz Exp $
+.\"	$NetBSD: ntp_adjtime.2,v 1.9 2008/04/30 13:10:51 martin Exp $
 .\"
 .\" Copyright (c) 2001 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,6 +37,7 @@
 .Sh LIBRARY
 .Lb libc
 .Sh SYNOPSIS
+.In sys/time.h
 .In sys/timex.h
 .Ft int
 .Fn ntp_adjtime "struct timex *"
@@ -245,9 +239,12 @@ has as argument a
 with the following members:
 .Bd -literal
 struct ntptimeval {
-	struct timeval time;	/* current time (ro) */
+	struct timespec time;	/* current time (ro) */
 	long maxerror;		/* maximum error (us) (ro) */
 	long esterror;		/* estimated error (us) (ro) */
+	/* the following are placeholders for now */
+	long tai;		/* TAI offset */
+	int time_state;		/* time status */
 };
 .Ed
 .Pp
@@ -298,3 +295,13 @@ Clock not synchronized.
 .Xr ntpd 8 ,
 .Xr hardclock 9 ,
 .Xr hz 9
+.Rs
+.%A J. Mogul
+.%A D. Mills
+.%A J. Brittenson
+.%A J. Stone
+.%A U. Windl
+.%T Pulse-Per-Second API for UNIX-like Operating Systems
+.%R RFC 2783
+.%D March 2000
+.Re

@@ -1,4 +1,4 @@
-/*	$NetBSD: getcwd.c,v 1.40 2005/08/13 21:16:58 elad Exp $	*/
+/*	$NetBSD: getcwd.c,v 1.45 2007/10/26 19:48:14 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1991, 1993, 1995
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)getcwd.c	8.5 (Berkeley) 2/7/95";
 #else
-__RCSID("$NetBSD: getcwd.c,v 1.40 2005/08/13 21:16:58 elad Exp $");
+__RCSID("$NetBSD: getcwd.c,v 1.45 2007/10/26 19:48:14 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -96,7 +96,8 @@ realpath(const char *path, char *resolved)
 
 	/* If relative path, start from current working directory. */
 	if (*path != '/') {
-		if (getcwd(resolved, MAXPATHLEN) == NULL) {
+		/* check for resolved pointer to appease coverity */
+		if (resolved && getcwd(resolved, MAXPATHLEN) == NULL) {
 			p[0] = '.';
 			p[1] = 0;
 			return (NULL);
@@ -198,6 +199,12 @@ loop:
 	path = q;
 	goto loop;
 }
+
+
+#if defined(_FORTIFY_SOURCE) && !defined(__lint__)
+#undef getcwd
+#define getcwd _getcwd
+#endif
 
 char *
 getcwd(char *pt, size_t size)

@@ -1,11 +1,14 @@
-#	$NetBSD: Makefile.siginfo-c,v 1.4 2003/11/13 13:07:01 dsl Exp $
+#	$NetBSD: Makefile.siginfo-c,v 1.6 2008/10/19 22:05:23 apb Exp $
 
 # NOTE: <bsd.own.mk> needs to be previously .included for NETBSDSRCDIR
 
 SIGINFO_H= ${DESTDIR}/usr/include/sys/siginfo.h
 siginfo.c: mksiginfos ${SIGINFO_H}
 	${_MKTARGET_CREATE}
-	DESTDIR=${DESTDIR} \
+	AWK=${TOOL_AWK:Q} DESTDIR=${DESTDIR} \
 	${HOST_SH} ${NETBSDSRCDIR}/usr.bin/kdump/mksiginfos > siginfo.c
+
+DPSRCS+= siginfo.c
+
 
 ${SIGINFO_H}: .PRECIOUS

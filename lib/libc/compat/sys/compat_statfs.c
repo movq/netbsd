@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_statfs.c,v 1.1 2005/09/13 01:44:09 christos Exp $	*/
+/*	$NetBSD: compat_statfs.c,v 1.4 2008/04/28 20:22:59 martin Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: compat_statfs.c,v 1.1 2005/09/13 01:44:09 christos Exp $");
+__RCSID("$NetBSD: compat_statfs.c,v 1.4 2008/04/28 20:22:59 martin Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #define __LIBC12_SOURCE__
@@ -48,6 +41,7 @@ __RCSID("$NetBSD: compat_statfs.c,v 1.1 2005/09/13 01:44:09 christos Exp $");
 #include <sys/param.h>
 #include <sys/mount.h>
 #include <compat/sys/mount.h>
+#include <compat/include/fstypes.h>
 #include <string.h>
 #include <stdlib.h>
 
@@ -154,13 +148,16 @@ fstatfs(int f, struct statfs12 *ost)
 	return ret;
 }
 
+int __fhstatvfs140(const void *fhp, size_t fh_size, struct statvfs *buf,
+    int flags);
+
 int
-fhstatfs(const fhandle_t *fh, struct statfs12 *ost)
+fhstatfs(const struct compat_30_fhandle *fh, struct statfs12 *ost)
 {
 	struct statvfs nst;
 	int ret;
 
-	if ((ret = fhstatvfs(fh, &nst)) == -1)
+	if ((ret = __fhstatvfs140(fh, FHANDLE30_SIZE, &nst, ST_WAIT)) == -1)
 		return ret;
 	vfs2fs(ost, &nst);
 	return ret;

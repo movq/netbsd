@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_info_43.c,v 1.20 2005/02/26 23:10:18 perry Exp $	*/
+/*	$NetBSD: kern_info_43.c,v 1.32 2008/01/08 22:08:45 elad Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1991, 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_info_43.c,v 1.20 2005/02/26 23:10:18 perry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_info_43.c,v 1.32 2008/01/08 22:08:45 elad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -49,27 +49,29 @@ __KERNEL_RCSID(0, "$NetBSD: kern_info_43.c,v 1.20 2005/02/26 23:10:18 perry Exp 
 #include <sys/syslog.h>
 #include <sys/unistd.h>
 #include <sys/resourcevar.h>
+#include <sys/kauth.h>
 
 #include <uvm/uvm_extern.h>
 #include <sys/sysctl.h>
 
 #include <sys/mount.h>
-#include <sys/sa.h>
 #include <sys/syscallargs.h>
 
 int
-compat_43_sys_getdtablesize(struct lwp *l, void *v, register_t *retval)
+compat_43_sys_getdtablesize(struct lwp *l, const void *v, register_t *retval)
 {
 	struct proc *p = l->l_proc;
 
+	mutex_enter(&p->p_mutex);
 	*retval = min((int)p->p_rlimit[RLIMIT_NOFILE].rlim_cur, maxfiles);
+	mutex_exit(&p->p_mutex);
 	return (0);
 }
 
 
 /* ARGSUSED */
 int
-compat_43_sys_gethostid(struct lwp *l, void *v, register_t *retval)
+compat_43_sys_gethostid(struct lwp *l, const void *v, register_t *retval)
 {
 
 	*(int32_t *)retval = hostid;
@@ -79,12 +81,12 @@ compat_43_sys_gethostid(struct lwp *l, void *v, register_t *retval)
 
 /*ARGSUSED*/
 int
-compat_43_sys_gethostname(struct lwp *l, void *v, register_t *retval)
+compat_43_sys_gethostname(struct lwp *l, const struct compat_43_sys_gethostname_args *uap, register_t *retval)
 {
-	struct compat_43_sys_gethostname_args /* {
+	/* {
 		syscallarg(char *) hostname;
 		syscallarg(u_int) len;
-	} */ *uap = v;
+	} */
 	int name[2];
 	size_t sz;
 
@@ -137,19 +139,19 @@ struct bsdi_si {
 };
 
 int
-compat_43_sys_getkerninfo(struct lwp *l, void *v, register_t *retval)
+compat_43_sys_getkerninfo(struct lwp *l, const struct compat_43_sys_getkerninfo_args *uap, register_t *retval)
 {
-	struct compat_43_sys_getkerninfo_args /* {
+	/* {
 		syscallarg(int) op;
 		syscallarg(char *) where;
 		syscallarg(int *) size;
 		syscallarg(int) arg;
-	} */ *uap = v;
+	} */
 	int error, name[6];
 	size_t size;
 
-	if (SCARG(uap, size) && (error = copyin((caddr_t)SCARG(uap, size),
-	    (caddr_t)&size, sizeof(size))))
+	if (SCARG(uap, size) && (error = copyin((void *)SCARG(uap, size),
+	    (void *)&size, sizeof(size))))
 		return (error);
 
 	switch (SCARG(uap, op) & 0xff00) {
@@ -235,7 +237,7 @@ compat_43_sys_getkerninfo(struct lwp *l, void *v, register_t *retval)
 
 			COPY(machine);
 			COPY(cpu_model);
-			ksi.ncpu = 1;			/* XXX */
+			ksi.ncpu = ncpu;		/* XXX */
 			ksi.cpuspeed = 40;		/* XXX */
 			ksi.hwflags = 0;		/* XXX */
 			ksi.physmem = ctob(physmem);
@@ -272,7 +274,7 @@ compat_43_sys_getkerninfo(struct lwp *l, void *v, register_t *retval)
 		return (error);
 	*retval = size;
 	if (SCARG(uap, size))
-		error = copyout((caddr_t)&size, (caddr_t)SCARG(uap, size),
+		error = copyout((void *)&size, (void *)SCARG(uap, size),
 		    sizeof(size));
 	return (error);
 }
@@ -280,26 +282,23 @@ compat_43_sys_getkerninfo(struct lwp *l, void *v, register_t *retval)
 
 /* ARGSUSED */
 int
-compat_43_sys_sethostid(struct lwp *l, void *v, register_t *retval)
+compat_43_sys_sethostid(struct lwp *l, const struct compat_43_sys_sethostid_args *uap, register_t *retval)
 {
-	struct compat_43_sys_sethostid_args /* {
-		syscallarg(int32_t) hostid;
-	} */ *uap = v;
-	struct proc *p = l->l_proc;
-	int error;
+	long uhostid;
+	int name[2];
 
-	if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
-		return (error);
-	hostid = SCARG(uap, hostid);
-	return (0);
+	uhostid = SCARG(uap, hostid);
+	name[0] = CTL_KERN;
+	name[1] = KERN_HOSTID;
+
+	return (old_sysctl(&name[0], 2, 0, 0, &uhostid, sizeof(long), l));
 }
 
 
 /* ARGSUSED */
 int
-compat_43_sys_sethostname(struct lwp *l, void *v, register_t *retval)
+compat_43_sys_sethostname(struct lwp *l, const struct compat_43_sys_sethostname_args *uap, register_t *retval)
 {
-	struct compat_43_sys_sethostname_args *uap = v;
 	int name[2];
 
 	name[0] = CTL_KERN;

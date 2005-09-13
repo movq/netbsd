@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread.h,v 1.21 2005/03/21 17:55:07 kleink Exp $	*/
+/*	$NetBSD: pthread.h,v 1.32 2008/07/18 16:17:11 pooka Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -43,6 +36,7 @@
 
 #include <time.h>	/* For timespec */
 #include <sched.h>
+#include <sys/featuretest.h>
 
 #include <pthread_types.h>
 
@@ -137,6 +131,8 @@ int 	pthread_attr_setcreatesuspend_np(pthread_attr_t *);
 int	pthread_suspend_np(pthread_t);
 int	pthread_resume_np(pthread_t);
 
+unsigned int	pthread_curcpu_np(void);
+
 struct pthread_cleanup_store {
 	void	*pad[4];
 };
@@ -184,8 +180,24 @@ int	pthread_barrierattr_destroy(pthread_barrierattr_t *);
 int	pthread_getschedparam(pthread_t, int * __restrict,
 	    struct sched_param * __restrict);
 int	pthread_setschedparam(pthread_t, int, const struct sched_param *);
+int	pthread_setschedprio(pthread_t, int);
 
 int 	*pthread__errno(void);
+
+#if defined(_NETBSD_SOURCE)
+int	pthread_getaffinity_np(pthread_t, size_t, cpuset_t *);
+int	pthread_setaffinity_np(pthread_t, size_t, cpuset_t *);
+
+int	pthread_mutex_held_np(pthread_mutex_t *);
+pthread_t pthread_mutex_owner_np(pthread_mutex_t *);
+
+int	pthread_rwlock_held_np(pthread_rwlock_t *);
+int	pthread_rwlock_wrheld_np(pthread_rwlock_t *);
+int	pthread_rwlock_rdheld_np(pthread_rwlock_t *);
+
+int	pthread_cond_has_waiters_np(pthread_cond_t *);
+#endif	/* _NETBSD_SOURCE */
+
 __END_DECLS
 
 #define	PTHREAD_CREATE_JOINABLE	0
@@ -346,12 +358,16 @@ int	__libc_thr_once(pthread_once_t *, void (*)(void));
 pthread_t	__libc_thr_self(void);
 void	__libc_thr_exit(void *) __attribute__((__noreturn__));
 int	__libc_thr_setcancelstate(int, int *);
+int	__libc_thr_equal(pthread_t, pthread_t);
+unsigned int	__libc_thr_curcpu(void);
 __END_DECLS
 
 #define	pthread_once			__libc_thr_once
 #define	pthread_self			__libc_thr_self
 #define	pthread_exit			__libc_thr_exit
 #define	pthread_setcancelstate		__libc_thr_setcancelstate
+#define pthread_equal			__libc_thr_equal
+#define pthread_curcpu_np		__libc_thr_curcpu
 
 #endif /* __LIBPTHREAD_SOURCE__ */
 

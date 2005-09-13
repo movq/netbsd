@@ -1,4 +1,4 @@
-/*	$NetBSD: snprintf.c,v 1.20 2005/02/09 21:35:47 kleink Exp $	*/
+/*	$NetBSD: snprintf.c,v 1.22 2007/10/26 19:48:14 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)snprintf.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: snprintf.c,v 1.20 2005/02/09 21:35:47 kleink Exp $");
+__RCSID("$NetBSD: snprintf.c,v 1.22 2007/10/26 19:48:14 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -50,6 +50,11 @@ __RCSID("$NetBSD: snprintf.c,v 1.20 2005/02/09 21:35:47 kleink Exp $");
 
 #include "reentrant.h"
 #include "local.h"
+
+#if defined(_FORTIFY_SOURCE) && !defined(__lint__)
+#undef snprintf
+#define snprintf _snprintf
+#endif
 
 #ifdef __weak_alias
 __weak_alias(snprintf,_snprintf)

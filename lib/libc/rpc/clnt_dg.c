@@ -1,4 +1,4 @@
-/*	$NetBSD: clnt_dg.c,v 1.17 2005/09/10 09:04:11 jmmv Exp $	*/
+/*	$NetBSD: clnt_dg.c,v 1.22 2008/04/25 17:44:44 christos Exp $	*/
 
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
@@ -39,7 +39,7 @@
 #if 0
 static char sccsid[] = "@(#)clnt_dg.c 1.19 89/03/16 Copyr 1988 Sun Micro";
 #else
-__RCSID("$NetBSD: clnt_dg.c,v 1.17 2005/09/10 09:04:11 jmmv Exp $");
+__RCSID("$NetBSD: clnt_dg.c,v 1.22 2008/04/25 17:44:44 christos Exp $");
 #endif
 #endif
 
@@ -73,8 +73,8 @@ __weak_alias(clnt_dg_create,_clnt_dg_create)
 
 static struct clnt_ops *clnt_dg_ops __P((void));
 static bool_t time_not_ok __P((struct timeval *));
-static enum clnt_stat clnt_dg_call __P((CLIENT *, rpcproc_t, xdrproc_t, caddr_t,
-					xdrproc_t, caddr_t, struct timeval));
+static enum clnt_stat clnt_dg_call __P((CLIENT *, rpcproc_t, xdrproc_t,
+    const char *, xdrproc_t, caddr_t, struct timeval));
 static void clnt_dg_geterr __P((CLIENT *, struct rpc_err *));
 static bool_t clnt_dg_freeres __P((CLIENT *, xdrproc_t, caddr_t));
 static void clnt_dg_abort __P((CLIENT *));
@@ -107,7 +107,7 @@ static cond_t	*dg_cv;
 	mutex_lock(&clnt_fd_lock);	\
 	dg_fd_locks[fd] = 0;		\
 	mutex_unlock(&clnt_fd_lock);	\
-	thr_sigsetmask(SIG_SETMASK, &(mask), (sigset_t *) NULL);	\
+	thr_sigsetmask(SIG_SETMASK, &(mask), NULL);	\
 	cond_signal(&dg_cv[fd]);	\
 }
 #else
@@ -135,7 +135,7 @@ struct cu_data {
 	u_int			cu_sendsz;	/* send size */
 	char			*cu_outbuf;
 	u_int			cu_recvsz;	/* recv size */
-	struct pollfd		pfdp;
+	struct pollfd		cu_pfdp;
 	char			cu_inbuf[1];
 };
 
@@ -175,7 +175,7 @@ clnt_dg_create(fd, svcaddr, program, version, sendsz, recvsz)
 	sigfillset(&newmask);
 	thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
 	mutex_lock(&clnt_fd_lock);
-	if (dg_fd_locks == (int *) NULL) {
+	if (dg_fd_locks == NULL) {
 #ifdef _REENTRANT
 		size_t cv_allocsz;
 #endif
@@ -183,8 +183,8 @@ clnt_dg_create(fd, svcaddr, program, version, sendsz, recvsz)
 		int dtbsize = __rpc_dtbsize();
 
 		fd_allocsz = dtbsize * sizeof (int);
-		dg_fd_locks = (int *) mem_alloc(fd_allocsz);
-		if (dg_fd_locks == (int *) NULL) {
+		dg_fd_locks = mem_alloc(fd_allocsz);
+		if (dg_fd_locks == NULL) {
 			mutex_unlock(&clnt_fd_lock);
 			thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
 			goto err1;
@@ -193,10 +193,10 @@ clnt_dg_create(fd, svcaddr, program, version, sendsz, recvsz)
 
 #ifdef _REENTRANT
 		cv_allocsz = dtbsize * sizeof (cond_t);
-		dg_cv = (cond_t *) mem_alloc(cv_allocsz);
-		if (dg_cv == (cond_t *) NULL) {
+		dg_cv = mem_alloc(cv_allocsz);
+		if (dg_cv == NULL) {
 			mem_free(dg_fd_locks, fd_allocsz);
-			dg_fd_locks = (int *) NULL;
+			dg_fd_locks = NULL;
 			mutex_unlock(&clnt_fd_lock);
 			thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
 			goto err1;
@@ -278,13 +278,13 @@ clnt_dg_create(fd, svcaddr, program, version, sendsz, recvsz)
 	 */
 	cu->cu_closeit = FALSE;
 	cu->cu_fd = fd;
+	cu->cu_pfdp.fd = cu->cu_fd;
+	cu->cu_pfdp.events = POLLIN | POLLPRI | POLLRDNORM | POLLRDBAND;
 	cl->cl_ops = clnt_dg_ops();
 	cl->cl_private = (caddr_t)(void *)cu;
 	cl->cl_auth = authnone_create();
 	cl->cl_tp = NULL;
 	cl->cl_netid = NULL;
-	cu->pfdp.fd = cu->cu_fd;
-	cu->pfdp.events = POLLIN | POLLPRI | POLLRDNORM | POLLRDBAND;
 	return (cl);
 err1:
 	warnx(mem_err_clnt_dg);
@@ -304,7 +304,7 @@ clnt_dg_call(cl, proc, xargs, argsp, xresults, resultsp, utimeout)
 	CLIENT	*cl;			/* client handle */
 	rpcproc_t	proc;		/* procedure number */
 	xdrproc_t	xargs;		/* xdr routine for args */
-	caddr_t		argsp;		/* pointer to args */
+	const char *	argsp;		/* pointer to args */
 	xdrproc_t	xresults;	/* xdr routine for results */
 	caddr_t		resultsp;	/* pointer to results */
 	struct timeval	utimeout;	/* seconds to wait before giving up */
@@ -314,13 +314,11 @@ clnt_dg_call(cl, proc, xargs, argsp, xresults, resultsp, utimeout)
 	size_t outlen;
 	struct rpc_msg reply_msg;
 	XDR reply_xdrs;
-	struct timeval time_waited;
 	bool_t ok;
 	int nrefreshes = 2;		/* number of times to refresh cred */
 	struct timeval timeout;
 	struct timeval retransmit_time;
-	struct timeval startime, curtime;
-	int firsttimeout = 1;
+	struct timeval next_sendtime, starttime, time_waited, tv;
 #ifdef _REENTRANT
 	sigset_t mask, *maskp = &mask;
 #else
@@ -329,6 +327,7 @@ clnt_dg_call(cl, proc, xargs, argsp, xresults, resultsp, utimeout)
 	sigset_t newmask;
 	ssize_t recvlen = 0;
 	struct timespec ts;
+	int n;
 
 	_DIAGASSERT(cl != NULL);
 
@@ -349,7 +348,8 @@ clnt_dg_call(cl, proc, xargs, argsp, xresults, resultsp, utimeout)
 
 	time_waited.tv_sec = 0;
 	time_waited.tv_usec = 0;
-	retransmit_time = cu->cu_wait;
+	retransmit_time = next_sendtime = cu->cu_wait;
+	gettimeofday(&starttime, NULL);
 
 call_again:
 	xdrs = &(cu->cu_outxdrs);
@@ -361,9 +361,9 @@ call_again:
 	(*(u_int32_t *)(void *)(cu->cu_outbuf))++;
 	if ((! XDR_PUTINT32(xdrs, (int32_t *)&proc)) ||
 	    (! AUTH_MARSHALL(cl->cl_auth, xdrs)) ||
-	    (! (*xargs)(xdrs, argsp))) {
-		release_fd_lock(cu->cu_fd, mask);
-		return (cu->cu_error.re_status = RPC_CANTENCODEARGS);
+	    (! (*xargs)(xdrs, __UNCONST(argsp)))) {
+		cu->cu_error.re_status = RPC_CANTENCODEARGS;
+		goto out;
 	}
 	outlen = (size_t)XDR_GETPOS(xdrs);
 
@@ -372,16 +372,16 @@ send_again:
 	    (struct sockaddr *)(void *)&cu->cu_raddr, (socklen_t)cu->cu_rlen)
 	    != outlen) {
 		cu->cu_error.re_errno = errno;
-		release_fd_lock(cu->cu_fd, mask);
-		return (cu->cu_error.re_status = RPC_CANTSEND);
+		cu->cu_error.re_status = RPC_CANTSEND;
+		goto out;
 	}
 
 	/*
 	 * Hack to provide rpc-based message passing
 	 */
 	if (timeout.tv_sec == 0 && timeout.tv_usec == 0) {
-		release_fd_lock(cu->cu_fd, mask);
-		return (cu->cu_error.re_status = RPC_TIMEDOUT);
+		cu->cu_error.re_status = RPC_TIMEDOUT;
+		goto out;
 	}
 	/*
 	 * sub-optimal code appears here because we have
@@ -394,139 +394,60 @@ send_again:
 
 
 	for (;;) {
-		TIMEVAL_TO_TIMESPEC(&retransmit_time, &ts);
-		switch (pollts(&cu->pfdp, 1, &ts, maskp)) {
-		case 0:
-			time_waited.tv_sec += retransmit_time.tv_sec;
-			time_waited.tv_usec += retransmit_time.tv_usec;
-			while (time_waited.tv_usec >= 1000000) {
-				time_waited.tv_sec++;
-				time_waited.tv_usec -= 1000000;
-			}
-			/* update retransmit_time */
-			if (retransmit_time.tv_sec < RPC_MAX_BACKOFF) {
-				retransmit_time.tv_usec *= 2;
-				retransmit_time.tv_sec *= 2;
-				while (retransmit_time.tv_usec >= 1000000) {
-					retransmit_time.tv_sec++;
-					retransmit_time.tv_usec -= 1000000;
-				}
-			}
+		/* Decide how long to wait. */
+		if (timercmp(&next_sendtime, &timeout, <))
+			timersub(&next_sendtime, &time_waited, &tv);
+		else
+			timersub(&timeout, &time_waited, &tv);
+		if (tv.tv_sec < 0 || tv.tv_usec < 0)
+			tv.tv_sec = tv.tv_usec = 0;
+		TIMEVAL_TO_TIMESPEC(&tv, &ts);
 
-			if ((time_waited.tv_sec < timeout.tv_sec) ||
-			    ((time_waited.tv_sec == timeout.tv_sec) &&
-				(time_waited.tv_usec < timeout.tv_usec)))
-				goto send_again;
-			release_fd_lock(cu->cu_fd, mask);
-			return (cu->cu_error.re_status = RPC_TIMEDOUT);
-
-		case -1:
-			if (errno == EBADF) {
+		n = pollts(&cu->cu_pfdp, 1, &ts, maskp);
+		if (n == 1) {
+			/* We have some data now */
+			do {
+				recvlen = recvfrom(cu->cu_fd, cu->cu_inbuf,
+				    cu->cu_recvsz, 0, NULL, NULL);
+			} while (recvlen < 0 && errno == EINTR);
+			
+			if (recvlen < 0 && errno != EWOULDBLOCK) {
 				cu->cu_error.re_errno = errno;
-				release_fd_lock(cu->cu_fd, mask);
-				return (cu->cu_error.re_status = RPC_CANTRECV);
+				cu->cu_error.re_status = RPC_CANTRECV;
+				goto out;
 			}
-			if (errno != EINTR) {
-				errno = 0; /* reset it */
-				continue;
-			}
-			/* interrupted by another signal, update time_waited */
-			if (firsttimeout) {
-				/*
-				 * Could have done gettimeofday before clnt_call
-				 * but that means 1 more system call per each
-				 * clnt_call, so do it after first time out
-				 */
-				if (gettimeofday(&startime,
-					(struct timezone *) NULL) == -1) {
-					errno = 0;
-					continue;
-				}
-				firsttimeout = 0;
-				errno = 0;
-				continue;
-			};
-			if (gettimeofday(&curtime,
-				(struct timezone *) NULL) == -1) {
-				errno = 0;
-				continue;
-			};
-			time_waited.tv_sec += curtime.tv_sec - startime.tv_sec;
-			time_waited.tv_usec += curtime.tv_usec -
-							startime.tv_usec;
-			while (time_waited.tv_usec < 0) {
-				time_waited.tv_sec--;
-				time_waited.tv_usec += 1000000;
-			};
-			while (time_waited.tv_usec >= 1000000) {
-				time_waited.tv_sec++;
-				time_waited.tv_usec -= 1000000;
-			}
-			startime.tv_sec = curtime.tv_sec;
-			startime.tv_usec = curtime.tv_usec;
-			if ((time_waited.tv_sec > timeout.tv_sec) ||
-				((time_waited.tv_sec == timeout.tv_sec) &&
-				(time_waited.tv_usec > timeout.tv_usec))) {
-				release_fd_lock(cu->cu_fd, mask);
-				return (cu->cu_error.re_status = RPC_TIMEDOUT);
-			}
-#ifdef _REENTRANT
-			if (errno == EINTR) {
-				sigset_t rmask;
-				if (sigpending(&rmask) == -1) {
-					cu->cu_error.re_errno = errno;
-					release_fd_lock(cu->cu_fd, mask);
-					return cu->cu_error.re_status =
-					    RPC_SYSTEMERROR;
-				}
-				(void)sigsuspend(&rmask);
-			}
-#endif
-			errno = 0; /* reset it */
-			continue;
-		};
-
-		if (cu->pfdp.revents & POLLNVAL || (cu->pfdp.revents == 0)) {
-			cu->cu_error.re_status = RPC_CANTRECV;
-			/*
-			 *	Note:  we're faking errno here because we
-			 *	previously would have expected pollts() to
-			 *	return -1 with errno EBADF.  Poll(BA_OS)
-			 *	returns 0 and sets the POLLNVAL revents flag
-			 *	instead.
-			 */
-			cu->cu_error.re_errno = errno = EBADF;
-			release_fd_lock(cu->cu_fd, mask);
-			return (-1);
+			if (recvlen >= sizeof(uint32_t) &&
+			    (*((uint32_t *)(void *)(cu->cu_inbuf)) == 
+				*((uint32_t *)(void *)(cu->cu_outbuf)))) {
+				/* We now assume we have the proper reply. */
+				break;
+			}	       
 		}
-
-		/* We have some data now */
-		do {
-			if (errno == EINTR) {
-				/*
-				 * Must make sure errno was not already
-				 * EINTR in case recvfrom() returns -1.
-				 */
-				errno = 0;
-			}
-			recvlen = recvfrom(cu->cu_fd, cu->cu_inbuf,
-			    (socklen_t)cu->cu_recvsz, 0, NULL, NULL);
-		} while (recvlen < 0 && errno == EINTR);
-		if (recvlen < 0) {
-			if (errno == EWOULDBLOCK)
-				continue;
+		if (n == -1) {
 			cu->cu_error.re_errno = errno;
-			release_fd_lock(cu->cu_fd, mask);
-			return (cu->cu_error.re_status = RPC_CANTRECV);
+			cu->cu_error.re_status = RPC_CANTRECV;
+			goto out;
 		}
-		if (recvlen < sizeof (u_int32_t))
-			continue;
-		/* see if reply transaction id matches sent id */
-		if (*((u_int32_t *)(void *)(cu->cu_inbuf)) !=
-		    *((u_int32_t *)(void *)(cu->cu_outbuf)))
-			continue;
-		/* we now assume we have the proper reply */
-		break;
+
+		gettimeofday(&tv, NULL);
+		timersub(&tv, &starttime, &time_waited);
+
+		/* Check for timeout. */
+		if (timercmp(&time_waited, &timeout, >)) {
+			cu->cu_error.re_status = RPC_TIMEDOUT;
+			goto out;
+		}
+
+		/* Retransmit if necessary. */
+		if (timercmp(&time_waited, &next_sendtime, >)) {
+			/* update retransmit_time */
+			if (retransmit_time.tv_sec < RPC_MAX_BACKOFF)
+				timeradd(&retransmit_time, &retransmit_time,
+				    &retransmit_time);
+			timeradd(&next_sendtime, &retransmit_time,
+			    &next_sendtime);
+			goto send_again;
+		}
 	}
 
 	/*
@@ -571,6 +492,7 @@ send_again:
 		cu->cu_error.re_status = RPC_CANTDECODERES;
 
 	}
+out:
 	release_fd_lock(cu->cu_fd, mask);
 	return (cu->cu_error.re_status);
 }

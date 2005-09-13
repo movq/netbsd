@@ -1,7 +1,7 @@
-/*	$NetBSD: darwin_stat.c,v 1.4 2005/09/13 01:42:32 christos Exp $ */
+/*	$NetBSD: darwin_stat.c,v 1.13 2008/03/21 21:54:58 ad Exp $ */
 
 /*-
- * Copyright (c) 2003 The NetBSD Foundation, Inc.
+ * Copyright (c) 2003, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -37,16 +37,18 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: darwin_stat.c,v 1.4 2005/09/13 01:42:32 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: darwin_stat.c,v 1.13 2008/03/21 21:54:58 ad Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/filedesc.h>
 #include <sys/mount.h>
-#include <sys/sa.h>
+#include <sys/namei.h>
 #include <sys/proc.h>
 #include <sys/stat.h>
 #include <sys/syscallargs.h>
+#include <sys/vfs_syscalls.h>
 
 #include <compat/sys/signal.h>
 #include <compat/sys/stat.h>
@@ -61,134 +63,80 @@ __KERNEL_RCSID(0, "$NetBSD: darwin_stat.c,v 1.4 2005/09/13 01:42:32 christos Exp
 #include <compat/darwin/darwin_syscallargs.h>
 
 int
-darwin_sys_stat(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+darwin_sys_stat(struct lwp *l, const struct darwin_sys_stat_args *uap, register_t *retval)
 {
-	struct darwin_sys_stat_args /* {
+	/* {
 		syscallarg(char *) path;
 		syscallarg(struct stat12 *) ub;
-	} */ *uap = v;
-	struct compat_12_sys_stat_args cup;
-	struct proc *p = l->l_proc;
-	caddr_t sg = stackgap_init(p, 0);
-	struct stat12 st;
-	struct stat12 *stp;
+	} */
+	struct stat12 sb12;
+	struct stat sb;
 	int error;
 
-	CHECK_ALT_EXIST(p, &sg, SCARG(uap, path));
-	stp = stackgap_alloc(p, &sg, sizeof(*stp));
-
-	SCARG(&cup, path) = SCARG(uap, path);
-	SCARG(&cup, ub) = stp;
-
-	if ((error = compat_12_sys_stat(l, &cup, retval)) != 0)
+	error = do_sys_stat(SCARG(uap, path), FOLLOW, &sb);
+	if (error != 0)
 		return error;
 
-	if ((error = copyin(stp, &st, sizeof(st))) != 0)
-		return error;
+	compat_12_stat_conv(&sb, &sb12);
+	sb12.st_dev = native_to_darwin_dev(sb12.st_dev);
+	sb12.st_rdev = native_to_darwin_dev(sb12.st_rdev);
 
-	st.st_dev = native_to_darwin_dev(st.st_dev);
-	st.st_rdev = native_to_darwin_dev(st.st_rdev);
-
-	if ((error = copyout(&st, SCARG(uap, ub), sizeof(st))) != 0)
-		return error;
-
-	return 0;
+	return copyout(&sb12, SCARG(uap, ub), sizeof(sb12));
 }
 
 int
-darwin_sys_fstat(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+darwin_sys_fstat(struct lwp *l, const struct darwin_sys_fstat_args *uap, register_t *retval)
 {
-	struct darwin_sys_fstat_args /* {
+	/* {
 		syscallarg(int) fd;
-		syscallarg(struct stat12 *) ub;
-	} */ *uap = v;
-	struct compat_12_sys_fstat_args cup;
-	struct proc *p = l->l_proc;
-	caddr_t sg = stackgap_init(p, 0);
-	struct stat12 st;
-	struct stat12 *stp;
+		syscallarg(struct stat12 *) sb;
+	} */
+	struct stat12 sb12;
+	struct stat sb;
 	int error;
 
-	stp = stackgap_alloc(p, &sg, sizeof(*stp));
-
-	SCARG(&cup, fd) = SCARG(uap, fd);
-	SCARG(&cup, sb) = stp;
-
-	if ((error = compat_12_sys_fstat(l, &cup, retval)) != 0)
+	error = do_sys_fstat(SCARG(uap, fd), &sb);
+	if (error != 0)
 		return error;
 
-	if ((error = copyin(stp, &st, sizeof(st))) != 0)
-		return error;
+	compat_12_stat_conv(&sb, &sb12);
+	sb12.st_dev = native_to_darwin_dev(sb12.st_dev);
+	sb12.st_rdev = native_to_darwin_dev(sb12.st_rdev);
 
-	st.st_dev = native_to_darwin_dev(st.st_dev);
-	st.st_rdev = native_to_darwin_dev(st.st_rdev);
-
-	if ((error = copyout(&st, SCARG(uap, sb), sizeof(st))) != 0)
-		return error;
-
-	return 0;
+	return copyout(&sb12, SCARG(uap, sb), sizeof(sb12));
 }
 
 int
-darwin_sys_lstat(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+darwin_sys_lstat(struct lwp *l, const struct darwin_sys_lstat_args *uap, register_t *retval)
 {
-	struct darwin_sys_lstat_args /* {
+	/* {
 		syscallarg(char *) path;
 		syscallarg(struct stat12 *) ub;
-	} */ *uap = v;
-	struct compat_12_sys_lstat_args cup;
-	struct proc *p = l->l_proc;
-	caddr_t sg = stackgap_init(p, 0);
-	struct stat12 st;
-	struct stat12 *stp;
+	} */
+	struct stat12 sb12;
+	struct stat sb;
 	int error;
 
-	CHECK_ALT_EXIST(p, &sg, SCARG(uap, path));
-	stp = stackgap_alloc(p, &sg, sizeof(*stp));
-
-	SCARG(&cup, path) = SCARG(uap, path);
-	SCARG(&cup, ub) = stp;
-
-	if ((error = compat_12_sys_lstat(l, &cup, retval)) != 0)
+	error = do_sys_stat(SCARG(uap, path), NOFOLLOW, &sb);
+	if (error != 0)
 		return error;
 
-	if ((error = copyin(stp, &st, sizeof(st))) != 0)
-		return error;
+	compat_12_stat_conv(&sb, &sb12);
+	sb12.st_dev = native_to_darwin_dev(sb12.st_dev);
+	sb12.st_rdev = native_to_darwin_dev(sb12.st_rdev);
 
-	st.st_dev = native_to_darwin_dev(st.st_dev);
-	st.st_rdev = native_to_darwin_dev(st.st_rdev);
-
-	if ((error = copyout(&st, SCARG(uap, ub), sizeof(st))) != 0)
-		return error;
-
-	return 0;
+	return copyout(&sb12, SCARG(uap, ub), sizeof(sb12));
 }
 
 int
-darwin_sys_mknod(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+darwin_sys_mknod(struct lwp *l, const struct darwin_sys_mknod_args *uap, register_t *retval)
 {
-	struct darwin_sys_mknod_args /* {
+	/* {
 		syscallarg(char) path;
 		syscallarg(mode_t) mode;
 		syscallarg(dev_t) dev:
-	} */ *uap = v;
+	} */
 	struct sys_mknod_args cup;
-	struct proc *p = l->l_proc;
-	caddr_t sg = stackgap_init(p, 0);
-
-	CHECK_ALT_CREAT(p, &sg, SCARG(uap, path));
 
 	SCARG(&cup, path) = SCARG(uap, path);
 	SCARG(&cup, mode) = SCARG(uap, mode);

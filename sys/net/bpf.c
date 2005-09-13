@@ -1,4 +1,4 @@
-/*	$NetBSD: bpf.c,v 1.111 2005/09/05 18:32:24 rpaulo Exp $	*/
+/*	$NetBSD: bpf.c,v 1.137 2008/03/26 02:21:52 christos Exp $	*/
 
 /*
  * Copyright (c) 1990, 1991, 1993
@@ -39,7 +39,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bpf.c,v 1.111 2005/09/05 18:32:24 rpaulo Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bpf.c,v 1.137 2008/03/26 02:21:52 christos Exp $");
+
+#if defined(_KERNEL_OPT)
+#include "opt_bpf.h"
+#include "sl.h"
+#include "strip.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -64,6 +70,7 @@ __KERNEL_RCSID(0, "$NetBSD: bpf.c,v 1.111 2005/09/05 18:32:24 rpaulo Exp $");
 #include <sys/kernel.h>
 #include <sys/poll.h>
 #include <sys/sysctl.h>
+#include <sys/kauth.h>
 
 #include <net/if.h>
 #include <net/slip.h>
@@ -77,11 +84,8 @@ __KERNEL_RCSID(0, "$NetBSD: bpf.c,v 1.111 2005/09/05 18:32:24 rpaulo Exp $");
 #include <netinet/in.h>
 #include <netinet/if_inarp.h>
 
-#if defined(_KERNEL_OPT)
-#include "opt_bpf.h"
-#include "sl.h"
-#include "strip.h"
-#endif
+
+#include <compat/sys/sockio.h>
 
 #ifndef BPF_BUFSIZE
 /*
@@ -111,7 +115,7 @@ struct bpf_stat	bpf_gstats;
  * Use a mutex to avoid a race condition between gathering the stats/peers
  * and opening/closing the device.
  */
-struct simplelock bpf_slock;
+static kmutex_t bpf_mtx;
 
 /*
  *  bpf_iflist is the list of interfaces; each corresponds to an ifnet
@@ -133,21 +137,21 @@ static void	bpf_attachd(struct bpf_d *, struct bpf_if *);
 static void	bpf_detachd(struct bpf_d *);
 static int	bpf_setif(struct bpf_d *, struct ifreq *);
 static void	bpf_timed_out(void *);
-static __inline void
+static inline void
 		bpf_wakeup(struct bpf_d *);
 static void	catchpacket(struct bpf_d *, u_char *, u_int, u_int,
-				 void *(*)(void *, const void *, size_t));
+    void *(*)(void *, const void *, size_t), struct timeval *);
 static void	reset_d(struct bpf_d *);
 static int	bpf_getdltlist(struct bpf_d *, struct bpf_dltlist *);
 static int	bpf_setdlt(struct bpf_d *, u_int);
 
-static int	bpf_read(struct file *, off_t *, struct uio *, struct ucred *,
+static int	bpf_read(struct file *, off_t *, struct uio *, kauth_cred_t,
     int);
-static int	bpf_write(struct file *, off_t *, struct uio *, struct ucred *,
+static int	bpf_write(struct file *, off_t *, struct uio *, kauth_cred_t,
     int);
-static int	bpf_ioctl(struct file *, u_long, void *, struct proc *);
-static int	bpf_poll(struct file *, int, struct proc *);
-static int	bpf_close(struct file *, struct proc *);
+static int	bpf_ioctl(struct file *, u_long, void *);
+static int	bpf_poll(struct file *, int);
+static int	bpf_close(struct file *);
 static int	bpf_kqfilter(struct file *, struct knote *);
 
 static const struct fileops bpf_fileops = {
@@ -165,7 +169,7 @@ dev_type_open(bpfopen);
 
 const struct cdevsw bpf_cdevsw = {
 	bpfopen, noclose, noread, nowrite, noioctl,
-	nostop, notty, nopoll, nommap, nokqfilter,
+	nostop, notty, nopoll, nommap, nokqfilter, D_OTHER
 };
 
 static int
@@ -366,11 +370,11 @@ bpf_detachd(struct bpf_d *d)
 void
 bpfilterattach(int n)
 {
-	simple_lock_init(&bpf_slock);
-	
-	simple_lock(&bpf_slock);
+	mutex_init(&bpf_mtx, MUTEX_DEFAULT, IPL_NONE);
+
+	mutex_enter(&bpf_mtx);
 	LIST_INIT(&bpf_list);
-	simple_unlock(&bpf_slock);
+	mutex_exit(&bpf_mtx);
 
 	bpf_gstats.bs_recv = 0;
 	bpf_gstats.bs_drop = 0;
@@ -382,28 +386,29 @@ bpfilterattach(int n)
  */
 /* ARGSUSED */
 int
-bpfopen(dev_t dev, int flag, int mode, struct proc *p)
+bpfopen(dev_t dev, int flag, int mode, struct lwp *l)
 {
 	struct bpf_d *d;
 	struct file *fp;
 	int error, fd;
 
 	/* falloc() will use the descriptor for us. */
-	if ((error = falloc(p, &fp, &fd)) != 0)
+	if ((error = fd_allocfile(&fp, &fd)) != 0)
 		return error;
 
 	d = malloc(sizeof(*d), M_DEVBUF, M_WAITOK);
 	(void)memset(d, 0, sizeof(*d));
 	d->bd_bufsize = bpf_bufsize;
 	d->bd_seesent = 1;
-	d->bd_pid = p->p_pid;
-	callout_init(&d->bd_callout);
+	d->bd_pid = l->l_proc->p_pid;
+	callout_init(&d->bd_callout, 0);
+	selinit(&d->bd_sel);
 
-	simple_lock(&bpf_slock);
+	mutex_enter(&bpf_mtx);
 	LIST_INSERT_HEAD(&bpf_list, d, bd_list);
-	simple_unlock(&bpf_slock);
+	mutex_exit(&bpf_mtx);
 
-	return fdclone(p, fp, fd, flag, &bpf_fileops, d);
+	return fd_clone(fp, fd, flag, &bpf_fileops, d);
 }
 
 /*
@@ -412,7 +417,7 @@ bpfopen(dev_t dev, int flag, int mode, struct proc *p)
  */
 /* ARGSUSED */
 static int
-bpf_close(struct file *fp, struct proc *p)
+bpf_close(struct file *fp)
 {
 	struct bpf_d *d = fp->f_data;
 	int s;
@@ -420,7 +425,7 @@ bpf_close(struct file *fp, struct proc *p)
 	/*
 	 * Refresh the PID associated with this bpf file.
 	 */
-	d->bd_pid = p->p_pid;
+	d->bd_pid = curproc->p_pid;
 
 	s = splnet();
 	if (d->bd_state == BPF_WAITING)
@@ -430,9 +435,11 @@ bpf_close(struct file *fp, struct proc *p)
 		bpf_detachd(d);
 	splx(s);
 	bpf_freed(d);
-	simple_lock(&bpf_slock);
+	mutex_enter(&bpf_mtx);
 	LIST_REMOVE(d, bd_list);
-	simple_unlock(&bpf_slock);
+	mutex_exit(&bpf_mtx);
+	callout_destroy(&d->bd_callout);
+	seldestroy(&d->bd_sel);
 	free(d, M_DEVBUF);
 	fp->f_data = NULL;
 
@@ -455,7 +462,7 @@ bpf_close(struct file *fp, struct proc *p)
  */
 static int
 bpf_read(struct file *fp, off_t *offp, struct uio *uio,
-	 struct ucred *cred, int flags)
+    kauth_cred_t cred, int flags)
 {
 	struct bpf_d *d = fp->f_data;
 	int timed_out;
@@ -464,7 +471,7 @@ bpf_read(struct file *fp, off_t *offp, struct uio *uio,
 
 	/*
 	 * Restrict application to use a buffer the same size as
-	 * as kernel buffers.
+	 * the kernel buffers.
 	 */
 	if (uio->uio_resid != d->bd_bufsize)
 		return (EINVAL);
@@ -553,16 +560,14 @@ done:
 /*
  * If there are processes sleeping on this descriptor, wake them up.
  */
-static __inline void
+static inline void
 bpf_wakeup(struct bpf_d *d)
 {
 	wakeup(d);
 	if (d->bd_async)
 		fownsignal(d->bd_pgid, SIGIO, 0, 0, NULL);
 
-	selnotify(&d->bd_sel, 0);
-	/* XXX */
-	d->bd_sel.sel_pid = 0;
+	selnotify(&d->bd_sel, 0, 0);
 }
 
 
@@ -584,13 +589,15 @@ bpf_timed_out(void *arg)
 
 static int
 bpf_write(struct file *fp, off_t *offp, struct uio *uio,
-	  struct ucred *cred, int flags)
+    kauth_cred_t cred, int flags)
 {
 	struct bpf_d *d = fp->f_data;
 	struct ifnet *ifp;
 	struct mbuf *m;
 	int error, s;
 	static struct sockaddr_storage dst;
+
+	m = NULL;	/* XXX gcc */
 
 	if (d->bd_bif == 0)
 		return (ENXIO);
@@ -641,11 +648,6 @@ reset_d(struct bpf_d *d)
 	d->bd_ccount = 0;
 }
 
-#ifdef BPF_KERN_FILTER
-extern struct bpf_insn *bpf_tcp_filter;
-extern struct bpf_insn *bpf_udp_filter;
-#endif
-
 /*
  *  FIONREAD		Check for read packet available.
  *  BIOCGBLEN		Get buffer len [for read()].
@@ -660,24 +662,21 @@ extern struct bpf_insn *bpf_udp_filter;
  *  BIOCGSTATS		Get packet stats.
  *  BIOCIMMEDIATE	Set immediate mode.
  *  BIOCVERSION		Get filter language version.
- *  BIOGHDRCMPLT	Get "header already complete" flag.
- *  BIOSHDRCMPLT	Set "header already complete" flag.
+ *  BIOCGHDRCMPLT	Get "header already complete" flag.
+ *  BIOCSHDRCMPLT	Set "header already complete" flag.
  */
 /* ARGSUSED */
 static int
-bpf_ioctl(struct file *fp, u_long cmd, void *addr, struct proc *p)
+bpf_ioctl(struct file *fp, u_long cmd, void *addr)
 {
 	struct bpf_d *d = fp->f_data;
 	int s, error = 0;
-#ifdef BPF_KERN_FILTER
-	struct bpf_insn **p;
-#endif
 
 	/*
 	 * Refresh the PID associated with this bpf file.
 	 */
-	d->bd_pid = p->p_pid;
-	
+	d->bd_pid = curproc->p_pid;
+
 	s = splnet();
 	if (d->bd_state == BPF_WAITING)
 		callout_stop(&d->bd_callout);
@@ -737,36 +736,6 @@ bpf_ioctl(struct file *fp, u_long cmd, void *addr, struct proc *p)
 	case BIOCSETF:
 		error = bpf_setf(d, addr);
 		break;
-
-#ifdef BPF_KERN_FILTER
-	/*
-	 * Set TCP or UDP reject filter.
-	 */
-	case BIOCSTCPF:
-	case BIOCSUDPF:
-		if (!suser()) {
-			error = EPERM;
-			break;
-		}
-
-		/* Validate and store filter */
-		error = bpf_setf(d, addr);
-
-		/* Free possible old filter */
-		if (cmd == BIOCSTCPF)
-			p = &bpf_tcp_filter;
-		else
-			p = &bpf_udp_filter;
-		if (*p != NULL)
-			free(*p, M_DEVBUF);
-
-		/* Steal new filter (noop if error) */
-		s = splnet();
-		*p = d->bd_filter;
-		d->bd_filter = NULL;
-		splx(s);
-		break;
-#endif
 
 	/*
 	 * Flush read packet buffer.
@@ -830,6 +799,9 @@ bpf_ioctl(struct file *fp, u_long cmd, void *addr, struct proc *p)
 	/*
 	 * Set interface name.
 	 */
+#ifdef OBIOCGETIF
+	case OBIOCGETIF:
+#endif
 	case BIOCGETIF:
 		if (d->bd_bif == 0)
 			error = EINVAL;
@@ -840,6 +812,9 @@ bpf_ioctl(struct file *fp, u_long cmd, void *addr, struct proc *p)
 	/*
 	 * Set interface.
 	 */
+#ifdef OBIOCSETIF
+	case OBIOCSETIF:
+#endif
 	case BIOCSETIF:
 		error = bpf_setif(d, addr);
 		break;
@@ -944,12 +919,12 @@ bpf_ioctl(struct file *fp, u_long cmd, void *addr, struct proc *p)
 
 	case TIOCSPGRP:		/* Process or group to send signals to */
 	case FIOSETOWN:
-		error = fsetown(p, &d->bd_pgid, cmd, addr);
+		error = fsetown(&d->bd_pgid, cmd, addr);
 		break;
 
 	case TIOCGPGRP:
 	case FIOGETOWN:
-		error = fgetown(p, d->bd_pgid, cmd, addr);
+		error = fgetown(d->bd_pgid, cmd, addr);
 		break;
 	}
 	return (error);
@@ -1044,7 +1019,7 @@ bpf_setif(struct bpf_d *d, struct ifreq *ifr)
 		    strcmp(ifp->if_xname, ifr->ifr_name) != 0)
 			continue;
 		/* skip additional entry */
-		if (bp->bif_driverp != (struct bpf_if **)&ifp->if_bpf)
+		if ((void **)bp->bif_driverp != &ifp->if_bpf)
 			continue;
 		/*
 		 * We found the requested interface.
@@ -1090,10 +1065,10 @@ bpf_ifname(struct ifnet *ifp, struct ifreq *ifr)
  * Return true iff the specific operation will not block indefinitely - with
  * the assumption that it is safe to positively acknowledge a request for the
  * ability to write to the BPF device.
- * Otherwise, return false but make a note that a selwakeup() must be done.
+ * Otherwise, return false but make a note that a selnotify() must be done.
  */
 static int
-bpf_poll(struct file *fp, int events, struct proc *p)
+bpf_poll(struct file *fp, int events)
 {
 	struct bpf_d *d = fp->f_data;
 	int s = splnet();
@@ -1102,8 +1077,8 @@ bpf_poll(struct file *fp, int events, struct proc *p)
 	/*
 	 * Refresh the PID associated with this bpf file.
 	 */
-	d->bd_pid = p->p_pid;
-	
+	d->bd_pid = curproc->p_pid;
+
 	revents = events & (POLLOUT | POLLWRNORM);
 	if (events & (POLLIN | POLLRDNORM)) {
 		/*
@@ -1118,7 +1093,7 @@ bpf_poll(struct file *fp, int events, struct proc *p)
 			else
 				revents |= events & POLLIN;
 		} else {
-			selrecord(p, &d->bd_sel);
+			selrecord(curlwp, &d->bd_sel);
 			/* Start the read timeout if necessary */
 			if (d->bd_rtout > 0 && d->bd_state == BPF_IDLE) {
 				callout_reset(&d->bd_callout, d->bd_rtout,
@@ -1171,7 +1146,7 @@ bpf_kqfilter(struct file *fp, struct knote *kn)
 		break;
 
 	default:
-		return (1);
+		return (EINVAL);
 	}
 
 	kn->kn_hook = d;
@@ -1195,6 +1170,9 @@ bpf_tap(void *arg, u_char *pkt, u_int pktlen)
 	struct bpf_if *bp;
 	struct bpf_d *d;
 	u_int slen;
+	struct timeval tv;
+	int gottime=0;
+
 	/*
 	 * Note that the ipl does not have to be raised at this point.
 	 * The only problem that could arise here is that if two different
@@ -1205,8 +1183,13 @@ bpf_tap(void *arg, u_char *pkt, u_int pktlen)
 		++d->bd_rcount;
 		++bpf_gstats.bs_recv;
 		slen = bpf_filter(d->bd_filter, pkt, pktlen, pktlen);
-		if (slen != 0)
-			catchpacket(d, pkt, pktlen, slen, memcpy);
+		if (slen != 0) {
+			if (!gottime) {
+				microtime(&tv);
+				gottime = 1;
+			}
+		catchpacket(d, pkt, pktlen, slen, (void *)memcpy, &tv);
+		}
 	}
 }
 
@@ -1224,15 +1207,15 @@ bpf_mcpy(void *dst_arg, const void *src_arg, size_t len)
 	m = src_arg;
 	dst = dst_arg;
 	while (len > 0) {
-		if (m == 0)
+		if (m == NULL)
 			panic("bpf_mcpy");
 		count = min(m->m_len, len);
-		memcpy(dst, mtod(m, void *), count);
+		memcpy(dst, mtod(m, const void *), count);
 		m = m->m_next;
 		dst += count;
 		len -= count;
 	}
-	return (dst_arg);
+	return dst_arg;
 }
 
 /*
@@ -1244,12 +1227,14 @@ bpf_mcpy(void *dst_arg, const void *src_arg, size_t len)
  * pktlen  length of the packet
  * rcvif   either NULL or the interface the packet came in on.
  */
-static __inline void
+static inline void
 bpf_deliver(struct bpf_if *bp, void *(*cpfn)(void *, const void *, size_t),
 	    void *marg, u_int pktlen, u_int buflen, struct ifnet *rcvif)
 {
 	u_int slen;
 	struct bpf_d *d;
+	struct timeval tv;
+	int gottime = 0;
 
 	for (d = bp->bif_dlist; d != 0; d = d->bd_next) {
 		if (!d->bd_seesent && (rcvif == NULL))
@@ -1257,8 +1242,13 @@ bpf_deliver(struct bpf_if *bp, void *(*cpfn)(void *, const void *, size_t),
 		++d->bd_rcount;
 		++bpf_gstats.bs_recv;
 		slen = bpf_filter(d->bd_filter, marg, pktlen, buflen);
-		if (slen != 0)
-			catchpacket(d, marg, pktlen, slen, cpfn);
+		if (slen != 0) {
+			if(!gottime) {
+				microtime(&tv);
+				gottime = 1;
+			}
+			catchpacket(d, marg, pktlen, slen, cpfn, &tv);
+		}
 	}
 }
 
@@ -1285,6 +1275,7 @@ bpf_mtap2(void *arg, void *data, u_int dlen, struct mbuf *m)
 	mb.m_data = data;
 	mb.m_len = dlen;
 
+/*###1278 [cc] warning: passing argument 2 of 'bpf_deliver' from incompatible pointer type%%%*/
 	bpf_deliver(bp, bpf_mcpy, &mb, pktlen, 0, m->m_pkthdr.rcvif);
 }
 
@@ -1302,10 +1293,11 @@ bpf_mtap(void *arg, struct mbuf *m)
 	pktlen = m_length(m);
 
 	if (pktlen == m->m_len) {
-		cpfn = memcpy;
+		cpfn = (void *)memcpy;
 		marg = mtod(m, void *);
 		buflen = pktlen;
 	} else {
+/*###1299 [cc] warning: assignment from incompatible pointer type%%%*/
 		cpfn = bpf_mcpy;
 		marg = m;
 		buflen = 0;
@@ -1322,7 +1314,7 @@ bpf_mtap(void *arg, struct mbuf *m)
  * try to free it or keep a pointer a to it).
  */
 void
-bpf_mtap_af(void *arg, u_int32_t af, struct mbuf *m)
+bpf_mtap_af(void *arg, uint32_t af, struct mbuf *m)
 {
 	struct mbuf m0;
 
@@ -1335,7 +1327,7 @@ bpf_mtap_af(void *arg, u_int32_t af, struct mbuf *m)
 }
 
 void
-bpf_mtap_et(void *arg, u_int16_t et, struct mbuf *m)
+bpf_mtap_et(void *arg, uint16_t et, struct mbuf *m)
 {
 	struct mbuf m0;
 
@@ -1344,10 +1336,10 @@ bpf_mtap_et(void *arg, u_int16_t et, struct mbuf *m)
 	m0.m_len = 14;
 	m0.m_data = m0.m_dat;
 
-	((u_int32_t *)m0.m_data)[0] = 0;
-	((u_int32_t *)m0.m_data)[1] = 0;
-	((u_int32_t *)m0.m_data)[2] = 0;
-	((u_int16_t *)m0.m_data)[6] = et;
+	((uint32_t *)m0.m_data)[0] = 0;
+	((uint32_t *)m0.m_data)[1] = 0;
+	((uint32_t *)m0.m_data)[2] = 0;
+	((uint16_t *)m0.m_data)[6] = et;
 
 	bpf_mtap(arg, &m0);
 }
@@ -1419,7 +1411,7 @@ bpf_mtap_sl_out(void *arg, u_char *chdr, struct mbuf *m)
  */
 static void
 catchpacket(struct bpf_d *d, u_char *pkt, u_int pktlen, u_int snaplen,
-	    void *(*cpfn)(void *, const void *, size_t))
+    void *(*cpfn)(void *, const void *, size_t), struct timeval *tv)
 {
 	struct bpf_hdr *hp;
 	int totlen, curlen;
@@ -1464,8 +1456,8 @@ catchpacket(struct bpf_d *d, u_char *pkt, u_int pktlen, u_int snaplen,
 	/*
 	 * Append the bpf header.
 	 */
-	hp = (struct bpf_hdr *)(d->bd_sbuf + curlen);
-	microtime(&hp->bh_tstamp);
+	hp = (struct bpf_hdr *)((char *)d->bd_sbuf + curlen);
+	hp->bh_tstamp = *tv;
 	hp->bh_datalen = pktlen;
 	hp->bh_hdrlen = hdrlen;
 	/*
@@ -1588,7 +1580,7 @@ bpfdetach(struct ifnet *ifp)
 	int s;
 
 	/* Nuke the vnodes for any open instances */
-	for (d = LIST_FIRST(&bpf_list); d != NULL; d = LIST_NEXT(d, bd_list)) {
+	LIST_FOREACH(d, &bpf_list, bd_list) {
 		if (d->bd_bif != NULL && d->bd_bif->bif_ifp == ifp) {
 			/*
 			 * Detach the descriptor from an interface now.
@@ -1621,7 +1613,7 @@ bpf_change_type(struct ifnet *ifp, u_int dlt, u_int hdrlen)
 	struct bpf_if *bp;
 
 	for (bp = bpf_iflist; bp != NULL; bp = bp->bif_next) {
-		if (bp->bif_driverp == (struct bpf_if **)&ifp->if_bpf)
+		if ((void **)bp->bif_driverp == &ifp->if_bpf)
 			break;
 	}
 	if (bp == NULL)
@@ -1738,8 +1730,11 @@ sysctl_net_bpf_peers(SYSCTLFN_ARGS)
 	if (namelen != 2)
 		return (EINVAL);
 
-	if ((error = suser(l->l_proc->p_ucred, &l->l_proc->p_acflag)))
-		return (error);
+	/* BPF peers is privileged information. */
+	error = kauth_authorize_network(l->l_cred, KAUTH_NETWORK_INTERFACE,
+	    KAUTH_REQ_NETWORK_INTERFACE_GETPRIV, NULL, NULL, NULL);
+	if (error)
+		return (EPERM);
 
 	len = (oldp != NULL) ? *oldlenp : 0;
 	sp = oldp;
@@ -1750,8 +1745,8 @@ sysctl_net_bpf_peers(SYSCTLFN_ARGS)
 
 	if (elem_size < 1 || elem_count < 0)
 		return (EINVAL);
-	
-	simple_lock(&bpf_slock);
+
+	mutex_enter(&bpf_mtx);
 	LIST_FOREACH(dp, &bpf_list, bd_list) {
 		if (len >= elem_size && elem_count > 0) {
 #define BPF_EXT(field)	dpe.bde_ ## field = dp->bd_ ## field
@@ -1773,7 +1768,7 @@ sysctl_net_bpf_peers(SYSCTLFN_ARGS)
 				    IFNAMSIZ - 1);
 			else
 				dpe.bde_ifname[0] = '\0';
-			
+
 			error = copyout(&dpe, sp, out_size);
 			if (error)
 				break;
@@ -1786,10 +1781,10 @@ sysctl_net_bpf_peers(SYSCTLFN_ARGS)
 				elem_count--;
 		}
 	}
-	simple_unlock(&bpf_slock);
+	mutex_exit(&bpf_mtx);
 
 	*oldlenp = needed;
-	
+
 	return (error);
 }
 
@@ -1830,5 +1825,5 @@ SYSCTL_SETUP(sysctl_net_bpf_setup, "sysctl net.bpf subtree setup")
 			sysctl_net_bpf_peers, 0, NULL, 0,
 			CTL_NET, node->sysctl_num, CTL_CREATE, CTL_EOL);
 	}
-		
+
 }
