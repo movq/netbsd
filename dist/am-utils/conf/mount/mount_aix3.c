@@ -1,4 +1,4 @@
-/*	$NetBSD: mount_aix3.c,v 1.1 2005/09/20 17:15:07 rpaulo Exp $	*/
+/*	$NetBSD: mount_aix3.c,v 1.1.1.1 2005/09/20 17:15:07 rpaulo Exp $	*/
 
 /*
  * Copyright (c) 1997-2005 Erez Zadok

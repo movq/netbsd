@@ -1,4 +1,4 @@
-/*	$NetBSD: strlcat.c,v 1.1 2005/09/20 17:16:13 rpaulo Exp $	*/
+/*	$NetBSD: strlcat.c,v 1.1.1.1 2005/09/20 17:16:13 rpaulo Exp $	*/
 
 /*
  * Copyright (c) 1997-2005 Erez Zadok
