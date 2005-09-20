@@ -1,4 +1,4 @@
-/*	$NetBSD: umount_aix.c,v 1.1 2005/09/20 17:15:27 rpaulo Exp $	*/
+/*	$NetBSD: umount_aix.c,v 1.1.1.1 2005/09/20 17:15:27 rpaulo Exp $	*/
 
 /*
  * Copyright (c) 1997-2005 Erez Zadok
